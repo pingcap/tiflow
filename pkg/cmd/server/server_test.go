@@ -16,10 +16,8 @@ package server
 import (
 	"fmt"
 	"math"
-	"math/rand"
 	"os"
 	"path/filepath"
-	"sync"
 	"testing"
 	"time"
 
@@ -108,7 +106,7 @@ func TestDefaultCfg(t *testing.T) {
 }
 
 func TestParseCfg(t *testing.T) {
-	dataDir := newTempDir()
+	dataDir := t.TempDir()
 	cmd := new(cobra.Command)
 	o := newOptions()
 	o.addFlags(cmd)
@@ -160,7 +158,7 @@ func TestParseCfg(t *testing.T) {
 		Sorter: &config.SorterConfig{
 			NumConcurrentWorker:    80,
 			ChunkSizeLimit:         50000000,
-			MaxMemoryPressure:      70,
+			MaxMemoryPercentage:    70,
 			MaxMemoryConsumption:   60000,
 			NumWorkerPoolGoroutine: 90,
 			SortDir:                config.DefaultSortDir,
@@ -177,11 +175,15 @@ func TestParseCfg(t *testing.T) {
 			RegionScanLimit:  40,
 		},
 		Debug: &config.DebugConfig{
-			EnableTableActor: false,
-			EnableDBSorter:   false,
+			EnableTableActor: true,
+			TableActor: &config.TableActorConfig{
+				EventBatchSize: 32,
+			},
+			EnableDBSorter:     true,
+			EnableNewScheduler: true,
 			DB: &config.DBConfig{
-				Count:                       16,
-				Concurrency:                 256,
+				Count:                       8,
+				Concurrency:                 128,
 				MaxOpenFiles:                10000,
 				BlockSize:                   65536,
 				BlockCacheSize:              4294967296,
@@ -191,13 +193,15 @@ func TestParseCfg(t *testing.T) {
 				WriteL0SlowdownTrigger:      math.MaxInt32,
 				WriteL0PauseTrigger:         math.MaxInt32,
 				CompactionL0Trigger:         160,
-				CompactionDeletionThreshold: 160000,
-				CleanupSpeedLimit:           10000,
+				CompactionDeletionThreshold: 10485760,
+				CompactionPeriod:            1800,
+				IteratorMaxAliveDuration:    10000,
+				IteratorSlowReadDuration:    256,
 			},
 			// We expect the default configuration here.
 			Messages: &config.MessagesConfig{
-				ClientMaxBatchInterval:       config.TomlDuration(time.Millisecond * 100),
-				ClientMaxBatchSize:           8 * 1024,
+				ClientMaxBatchInterval:       config.TomlDuration(time.Millisecond * 10),
+				ClientMaxBatchSize:           8 * 1024 * 1024,
 				ClientMaxBatchCount:          128,
 				ClientRetryRateLimit:         1.0,
 				ServerMaxPendingMessageCount: 102400,
@@ -209,8 +213,8 @@ func TestParseCfg(t *testing.T) {
 }
 
 func TestDecodeCfg(t *testing.T) {
-	dataDir := newTempDir()
-	tmpDir := newTempDir()
+	dataDir := t.TempDir()
+	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "ticdc.toml")
 	configContent := fmt.Sprintf(`
 addr = "128.0.0.1:1234"
@@ -253,9 +257,9 @@ compression = "none"
 target-file-size-base = 10
 compaction-l0-trigger = 11
 compaction-deletion-threshold = 15
+compaction-period = 16
 write-l0-slowdown-trigger = 12
 write-l0-pause-trigger = 13
-cleanup-speed-limit = 14
 
 [debug.messages]
 client-max-batch-interval = "500ms"
@@ -301,7 +305,7 @@ server-worker-pool-size = 16
 		Sorter: &config.SorterConfig{
 			NumConcurrentWorker:    4,
 			ChunkSizeLimit:         10000000,
-			MaxMemoryPressure:      3,
+			MaxMemoryPercentage:    3,
 			MaxMemoryConsumption:   2000000,
 			NumWorkerPoolGoroutine: 5,
 			SortDir:                config.DefaultSortDir,
@@ -314,8 +318,12 @@ server-worker-pool-size = 16
 			RegionScanLimit:  40,
 		},
 		Debug: &config.DebugConfig{
-			EnableTableActor: false,
-			EnableDBSorter:   false,
+			EnableTableActor: true,
+			TableActor: &config.TableActorConfig{
+				EventBatchSize: 32,
+			},
+			EnableDBSorter:     false,
+			EnableNewScheduler: true,
 			DB: &config.DBConfig{
 				Count:                       5,
 				Concurrency:                 6,
@@ -328,8 +336,10 @@ server-worker-pool-size = 16
 				CompactionL0Trigger:         11,
 				WriteL0SlowdownTrigger:      12,
 				WriteL0PauseTrigger:         13,
-				CleanupSpeedLimit:           14,
+				IteratorMaxAliveDuration:    10000,
+				IteratorSlowReadDuration:    256,
 				CompactionDeletionThreshold: 15,
+				CompactionPeriod:            16,
 			},
 			Messages: &config.MessagesConfig{
 				ClientMaxBatchInterval:       config.TomlDuration(500 * time.Millisecond),
@@ -345,8 +355,8 @@ server-worker-pool-size = 16
 }
 
 func TestDecodeCfgWithFlags(t *testing.T) {
-	dataDir := newTempDir()
-	tmpDir := newTempDir()
+	dataDir := t.TempDir()
+	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "ticdc.toml")
 	configContent := fmt.Sprintf(`
 addr = "128.0.0.1:1234"
@@ -432,7 +442,7 @@ cert-allowed-cn = ["dd","ee"]
 		Sorter: &config.SorterConfig{
 			NumConcurrentWorker:    3,
 			ChunkSizeLimit:         50000000,
-			MaxMemoryPressure:      70,
+			MaxMemoryPercentage:    70,
 			MaxMemoryConsumption:   60000000,
 			NumWorkerPoolGoroutine: 5,
 			SortDir:                config.DefaultSortDir,
@@ -449,11 +459,15 @@ cert-allowed-cn = ["dd","ee"]
 			RegionScanLimit:  40,
 		},
 		Debug: &config.DebugConfig{
-			EnableTableActor: false,
-			EnableDBSorter:   false,
+			EnableTableActor: true,
+			TableActor: &config.TableActorConfig{
+				EventBatchSize: 32,
+			},
+			EnableDBSorter:     true,
+			EnableNewScheduler: true,
 			DB: &config.DBConfig{
-				Count:                       16,
-				Concurrency:                 256,
+				Count:                       8,
+				Concurrency:                 128,
 				MaxOpenFiles:                10000,
 				BlockSize:                   65536,
 				BlockCacheSize:              4294967296,
@@ -463,13 +477,15 @@ cert-allowed-cn = ["dd","ee"]
 				WriteL0SlowdownTrigger:      math.MaxInt32,
 				WriteL0PauseTrigger:         math.MaxInt32,
 				CompactionL0Trigger:         160,
-				CompactionDeletionThreshold: 160000,
-				CleanupSpeedLimit:           10000,
+				CompactionDeletionThreshold: 10485760,
+				CompactionPeriod:            1800,
+				IteratorMaxAliveDuration:    10000,
+				IteratorSlowReadDuration:    256,
 			},
 			// We expect the default configuration here.
 			Messages: &config.MessagesConfig{
-				ClientMaxBatchInterval:       config.TomlDuration(time.Millisecond * 100),
-				ClientMaxBatchSize:           8 * 1024,
+				ClientMaxBatchInterval:       config.TomlDuration(time.Millisecond * 10),
+				ClientMaxBatchSize:           8 * 1024 * 1024,
 				ClientMaxBatchCount:          128,
 				ClientRetryRateLimit:         1.0,
 				ServerMaxPendingMessageCount: 102400,
@@ -480,14 +496,61 @@ cert-allowed-cn = ["dd","ee"]
 	}, o.serverConfig)
 }
 
-var lck sync.Mutex
+func TestDecodeUnkownDebugCfg(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "ticdc.toml")
+	configContent := `
+[debug]
+unknown1 = 1
+[debug.unknown2]
+unknown3 = 3
+`
+	err := os.WriteFile(configPath, []byte(configContent), 0o644)
+	require.Nil(t, err)
 
-func newTempDir() string {
-	lck.Lock()
-	defer lck.Unlock()
-	path := fmt.Sprintf("%s%ccheck-%d-%d", os.TempDir(), os.PathSeparator, time.Now().Unix(), rand.Uint64())
-	if err := os.Mkdir(path, 0o700); err != nil {
-		panic("Couldn't create temporary directory: " + err.Error())
-	}
-	return path
+	cmd := new(cobra.Command)
+	o := newOptions()
+	o.addFlags(cmd)
+
+	require.Nil(t, cmd.ParseFlags([]string{"--config", configPath}))
+
+	err = o.complete(cmd)
+	require.Nil(t, err)
+	err = o.validate()
+	require.Nil(t, err)
+	require.Equal(t, &config.DebugConfig{
+		EnableTableActor: true,
+		TableActor: &config.TableActorConfig{
+			EventBatchSize: 32,
+		},
+		EnableDBSorter:     true,
+		EnableNewScheduler: true,
+		DB: &config.DBConfig{
+			Count:                       8,
+			Concurrency:                 128,
+			MaxOpenFiles:                10000,
+			BlockSize:                   65536,
+			BlockCacheSize:              4294967296,
+			WriterBufferSize:            8388608,
+			Compression:                 "snappy",
+			TargetFileSizeBase:          8388608,
+			WriteL0SlowdownTrigger:      math.MaxInt32,
+			WriteL0PauseTrigger:         math.MaxInt32,
+			CompactionL0Trigger:         160,
+			CompactionDeletionThreshold: 10485760,
+			CompactionPeriod:            1800,
+			IteratorMaxAliveDuration:    10000,
+			IteratorSlowReadDuration:    256,
+		},
+		// We expect the default configuration here.
+		Messages: &config.MessagesConfig{
+			ClientMaxBatchInterval:       config.TomlDuration(time.Millisecond * 10),
+			ClientMaxBatchSize:           8 * 1024 * 1024,
+			ClientMaxBatchCount:          128,
+			ClientRetryRateLimit:         1.0,
+			ServerMaxPendingMessageCount: 102400,
+			ServerAckInterval:            config.TomlDuration(time.Millisecond * 100),
+			ServerWorkerPoolSize:         4,
+		},
+	}, o.serverConfig.Debug)
 }

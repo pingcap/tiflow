@@ -7,10 +7,10 @@ source $cur/../_utils/test_prepare
 WORK_DIR=$TEST_DIR/$TEST_NAME
 
 function check_dashboard_datasource() {
-	echo "check dashboard datasource"
-	check_grafana_dashboard_datasource "dm/dm-ansible/scripts/DM-Monitor-Standard.json"
-	check_grafana_dashboard_datasource "dm/dm-ansible/scripts/DM-Monitor-Professional.json"
-	echo "check dashboard datasource success"
+	echo "check dashboard data source"
+	check_grafana_dashboard_datasource "metrics/grafana/DM-Monitor-Standard.json"
+	check_grafana_dashboard_datasource "metrics/grafana/DM-Monitor-Professional.json"
+	echo "check dashboard data source success"
 }
 
 function run() {
@@ -19,7 +19,8 @@ function run() {
 
 	inject_points=(
 		"github.com/pingcap/tiflow/dm/syncer/BlockDDLJob=return(1)"
-		"github.com/pingcap/tiflow/dm/syncer/ShowLagInLog=return(1)" # test lag metric >= 1 beacuse we inject BlockDDLJob(ddl) to sleep(1)
+		"github.com/pingcap/tiflow/dm/syncer/ShowLagInLog=return(1)" # test lag metric >= 1 because we inject BlockDDLJob(ddl) to sleep(1)
+		"github.com/pingcap/tiflow/dm/dm/worker/PrintStatusCheckSeconds=return(1)"
 	)
 	export GO_FAILPOINTS="$(join_string \; ${inject_points[@]})"
 
@@ -54,6 +55,11 @@ function run() {
 	check_metric $WORKER1_PORT 'dm_worker_task_state{source_id="mysql-replica-01",task="test",worker="worker1"}' 10 1 3
 	check_metric $WORKER2_PORT 'dm_worker_task_state{source_id="mysql-replica-02",task="test",worker="worker2"}' 10 1 3
 
+	# check dm_syncer_binlog_file is updated timely
+	run_sql_source1 "flush logs;"
+	check_metric $WORKER1_PORT 'dm_syncer_binlog_file{node="syncer",source_id="mysql-replica-01",task="test"}' 10 1 3
+	check_metric $WORKER1_PORT 'dm_syncer_binlog_file{node="master",source_id="mysql-replica-01",task="test"}' 10 1 3
+
 	# check ddl job lag
 	run_sql_source1 "alter table metrics.t1 add column new_col1 int;"
 	run_sql_source2 "alter table metrics.t2 add column new_col1 int;"
@@ -64,6 +70,12 @@ function run() {
 
 	check_metric $WORKER1_PORT 'dm_syncer_replication_lag_sum{source_id="mysql-replica-01",task="test",worker="worker1"}' 5 0 999
 	check_metric $WORKER2_PORT 'dm_syncer_replication_lag_sum{source_id="mysql-replica-02",task="test",worker="worker2"}' 5 0 999
+
+	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
+	# check the after ddl query-status lag should be set to 0
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		"\"secondsBehindMaster\": \"0\"" 2
 	echo "check ddl lag done!"
 
 	# check new metric dm_syncer_flush_checkpoints_time_interval exists
@@ -76,7 +88,7 @@ function run() {
 	rm -rf $WORK_DIR/worker2/log/dm-worker.log # clean up the old log
 	inject_points=(
 		"github.com/pingcap/tiflow/dm/syncer/BlockExecuteSQLs=return(2)"
-		"github.com/pingcap/tiflow/dm/syncer/ShowLagInLog=return(2)" # test lag metric >= 2 beacuse we inject BlockExecuteSQLs to sleep(2) although skip lag is 0 (locally), but we use that lag of all dml/skip lag, so lag still >= 2
+		"github.com/pingcap/tiflow/dm/syncer/ShowLagInLog=return(2)" # test lag metric >= 2 because we inject BlockExecuteSQLs to sleep(2) although skip lag is 0 (locally), but we use that lag of all dml/skip lag, so lag still >= 2
 	)
 	export GO_FAILPOINTS="$(join_string \; ${inject_points[@]})"
 
@@ -94,6 +106,10 @@ function run() {
 	check_log_contain_with_retry "[ShowLagInLog]" $WORK_DIR/worker2/log/dm-worker.log
 	check_metric $WORKER1_PORT 'dm_syncer_replication_lag_sum{source_id="mysql-replica-01",task="test",worker="worker1"}' 5 1 999
 	check_metric $WORKER2_PORT 'dm_syncer_replication_lag_sum{source_id="mysql-replica-02",task="test",worker="worker2"}' 5 1 999
+	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
+	# this updated will blocked for 10s by failpoints(BlockExecuteSQLs), but during this time, dm_syncer_replication_lag_sum will continue increasing
+	run_sql_source1 'UPDATE metrics.t1 SET name="ehco" WHERE id = 1001'
+	check_metric $WORKER1_PORT 'dm_syncer_replication_lag_sum{source_id="mysql-replica-01",task="test",worker="worker1"}' 5 2 999
 	echo "check dml/skip lag done!"
 
 	# check new metric: dm_syncer_replication_lag_sum,dm_syncer_replication_lag_gauge,
@@ -101,8 +117,8 @@ function run() {
 	check_metric $WORKER1_PORT 'dm_syncer_replication_lag_sum{source_id="mysql-replica-01",task="test",worker="worker1"}' 5 -1 999
 	check_metric $WORKER2_PORT 'dm_syncer_replication_lag_sum{source_id="mysql-replica-02",task="test",worker="worker2"}' 5 -1 999
 
-	check_metric $WORKER1_PORT 'dm_syncer_replication_lag_gauge{source_id="mysql-replica-01",task="test",worker="worker1"}' 5 1 999
-	check_metric $WORKER2_PORT 'dm_syncer_replication_lag_gauge{source_id="mysql-replica-02",task="test",worker="worker2"}' 5 1 999
+	check_metric $WORKER1_PORT 'dm_syncer_replication_lag_gauge{source_id="mysql-replica-01",task="test",worker="worker1"}' 5 -1 999
+	check_metric $WORKER2_PORT 'dm_syncer_replication_lag_gauge{source_id="mysql-replica-02",task="test",worker="worker2"}' 5 -1 999
 
 	check_metric $WORKER1_PORT 'dm_syncer_finished_transaction_total{source_id="mysql-replica-01",task="test",worker="worker1"}' 5 1 99999
 	check_metric $WORKER2_PORT 'dm_syncer_finished_transaction_total{source_id="mysql-replica-02",task="test",worker="worker2"}' 5 1 99999

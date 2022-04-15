@@ -17,13 +17,14 @@ import (
 	"testing"
 
 	. "github.com/pingcap/check"
-	"github.com/pingcap/tidb-tools/pkg/schemacmp"
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/util/mock"
-	"go.etcd.io/etcd/integration"
+	"go.etcd.io/etcd/tests/v3/integration"
 
-	"github.com/pingcap/tiflow/dm/pkg/utils"
+	"github.com/pingcap/tiflow/dm/dm/config"
+	"github.com/pingcap/tiflow/dm/pkg/conn"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
 type testKeeper struct{}
@@ -31,6 +32,7 @@ type testKeeper struct{}
 var _ = Suite(&testKeeper{})
 
 func TestKeeper(t *testing.T) {
+	integration.BeforeTestExternal(t)
 	mockCluster := integration.NewClusterV3(t, &integration.ClusterConfig{Size: 1})
 	defer mockCluster.Terminate(t)
 
@@ -41,7 +43,7 @@ func TestKeeper(t *testing.T) {
 
 func (t *testKeeper) TestLockKeeper(c *C) {
 	var (
-		lk         = NewLockKeeper()
+		lk         = NewLockKeeper(getDownstreamMeta)
 		upSchema   = "foo_1"
 		upTable    = "bar_1"
 		downSchema = "foo"
@@ -81,6 +83,13 @@ func (t *testKeeper) TestLockKeeper(c *C) {
 	c.Assert(lock1, NotNil)
 	c.Assert(lock1.ID, Equals, lockID1)
 	c.Assert(lk.FindLockByInfo(i11).ID, Equals, lockID1)
+
+	lks := lk.FindLocksByTask("hahaha")
+	c.Assert(len(lks), Equals, 0)
+	lks = lk.FindLocksByTask(task1)
+	c.Assert(len(lks), Equals, 1)
+	c.Assert(lks[0].ID, Equals, lockID1)
+
 	synced, remain := lock1.IsSynced()
 	c.Assert(synced, IsFalse)
 	c.Assert(remain, Equals, 1)
@@ -110,6 +119,13 @@ func (t *testKeeper) TestLockKeeper(c *C) {
 	c.Assert(synced, IsTrue)
 	c.Assert(remain, Equals, 0)
 
+	lks = lk.FindLocksByTask(task1)
+	c.Assert(len(lks), Equals, 1)
+	c.Assert(lks[0].ID, Equals, lockID1)
+	lks = lk.FindLocksByTask(task2)
+	c.Assert(len(lks), Equals, 1)
+	c.Assert(lks[0].ID, Equals, lockID2)
+
 	// try to find not-exists lock.
 	lockIDNotExists := "lock-not-exists"
 	c.Assert(lk.FindLock(lockIDNotExists), IsNil)
@@ -134,7 +150,7 @@ func (t *testKeeper) TestLockKeeper(c *C) {
 
 func (t *testKeeper) TestLockKeeperMultipleTarget(c *C) {
 	var (
-		lk         = NewLockKeeper()
+		lk         = NewLockKeeper(getDownstreamMeta)
 		task       = "test-lock-keeper-multiple-target"
 		source     = "mysql-replica-1"
 		upSchema   = "foo"
@@ -277,6 +293,11 @@ func (t *testKeeper) TestTableKeeper(c *C) {
 
 	// no tables exist before Init/Update.
 	c.Assert(tk.FindTables(task1, downSchema, downTable), IsNil)
+	for schema, tables := range tt11.UpTables {
+		for table := range tables {
+			c.Assert(tk.SourceTableExist(tt11.Task, tt11.Source, schema, table, downSchema, downTable), IsFalse)
+		}
+	}
 
 	// Init with `nil` is fine.
 	tk.Init(nil)
@@ -288,34 +309,65 @@ func (t *testKeeper) TestTableKeeper(c *C) {
 	c.Assert(tts, HasLen, 2)
 	c.Assert(tts[0], DeepEquals, tt11)
 	c.Assert(tts[1], DeepEquals, tt12)
+	for schema, tables := range tt11.UpTables {
+		for table := range tables {
+			c.Assert(tk.SourceTableExist(tt11.Task, tt11.Source, schema, table, downSchema, downTable), IsTrue)
+		}
+	}
 
 	// adds new tables.
-	c.Assert(tk.Update(st21), IsTrue)
+	addTables, dropTables := tk.Update(st21)
+	c.Assert(addTables, HasLen, 1)
+	c.Assert(dropTables, HasLen, 0)
 	tts = tk.FindTables(task2, downSchema, downTable)
 	c.Assert(tts, HasLen, 1)
 	c.Assert(tts[0], DeepEquals, tt21)
 
 	// updates/appends new tables.
-	c.Assert(tk.Update(st22), IsTrue)
+	addTables, dropTables = tk.Update(st22)
+	c.Assert(addTables, HasLen, 1)
+	c.Assert(dropTables, HasLen, 0)
 	tts = tk.FindTables(task2, downSchema, downTable)
 	c.Assert(tts, HasLen, 1)
 	c.Assert(tts[0], DeepEquals, tt22)
+	for schema, tables := range tt22.UpTables {
+		for table := range tables {
+			c.Assert(tk.SourceTableExist(tt22.Task, tt22.Source, schema, table, downSchema, downTable), IsTrue)
+		}
+	}
 
 	// deletes tables.
 	st22.IsDeleted = true
-	c.Assert(tk.Update(st22), IsTrue)
+	addTables, dropTables = tk.Update(st22)
+	c.Assert(addTables, HasLen, 0)
+	c.Assert(dropTables, HasLen, 2)
 	c.Assert(tk.FindTables(task2, downSchema, downTable), IsNil)
+	for schema, tables := range tt22.UpTables {
+		for table := range tables {
+			c.Assert(tk.SourceTableExist(tt22.Task, tt22.Source, schema, table, downSchema, downTable), IsFalse)
+		}
+	}
 
 	// try to delete, but not exist.
-	c.Assert(tk.Update(st22), IsFalse)
+	addTables, dropTables = tk.Update(st22)
+	c.Assert(addTables, HasLen, 0)
+	c.Assert(dropTables, HasLen, 0)
+
 	st22.Task = "not-exist"
-	c.Assert(tk.Update(st22), IsFalse)
+	addTables, dropTables = tk.Update(st22)
+	c.Assert(addTables, HasLen, 0)
+	c.Assert(dropTables, HasLen, 0)
 
 	// tables for task1 not affected.
 	tts = tk.FindTables(task1, downSchema, downTable)
 	c.Assert(tts, HasLen, 2)
 	c.Assert(tts[0], DeepEquals, tt11)
 	c.Assert(tts[1], DeepEquals, tt12)
+	for schema, tables := range tt11.UpTables {
+		for table := range tables {
+			c.Assert(tk.SourceTableExist(tt11.Task, tt11.Source, schema, table, downSchema, downTable), IsTrue)
+		}
+	}
 
 	// add a table for st11.
 	c.Assert(tk.AddTable(task1, st11.Source, "db-2", "tbl-3", downSchema, downTable), IsTrue)
@@ -346,6 +398,19 @@ func (t *testKeeper) TestTableKeeper(c *C) {
 	c.Assert(tk.RemoveTable(task1, "not-exit", "db", "tbl-1", downSchema, downTable), IsFalse)
 	tts = tk.FindTables(task1, downSchema, downTable)
 	c.Assert(tts[1], DeepEquals, tt12)
+
+	c.Assert(tk.RemoveTableByTask("hahaha"), IsFalse)
+	tk.RemoveTableByTaskAndSources("hahaha", nil)
+	tts = tk.FindTables(task1, downSchema, downTable)
+	c.Assert(tts, HasLen, 3)
+	tk.RemoveTableByTaskAndSources(task1, []string{"hahaha"})
+	tts = tk.FindTables(task1, downSchema, downTable)
+	c.Assert(tts, HasLen, 3)
+	tk.RemoveTableByTaskAndSources(task1, []string{source1, source2})
+	tts = tk.FindTables(task1, downSchema, downTable)
+	c.Assert(tts, HasLen, 1)
+	c.Assert(tts[0].Source, Equals, "new-source")
+	c.Assert(tts[0].UpTables["db-2"], HasKey, "tbl-3")
 }
 
 func (t *testKeeper) TestTargetTablesForTask(c *C) {
@@ -414,72 +479,134 @@ func (t *testKeeper) TestTargetTablesForTask(c *C) {
 	})
 }
 
-func (t *testKeeper) TestRebuildLocksAndTables(c *C) {
-	defer clearTestInfoOperation(c)
+func getDownstreamMeta(string) (*config.DBConfig, string) {
+	return nil, ""
+}
+
+func (t *testKeeper) TestGetDownstreamMeta(c *C) {
 	var (
-		lk               = NewLockKeeper()
-		task             = "task"
-		source1          = "mysql-replica-1"
-		source2          = "mysql-replica-2"
-		upSchema         = "foo"
-		upTable          = "bar"
-		downSchema       = "db"
-		downTable        = "tbl"
-		DDLs1            = []string{"ALTER TABLE bar ADD COLUMN c1 INT"}
-		DDLs2            = []string{"ALTER TABLE bar DROP COLUMN c1"}
-		p                = parser.New()
-		se               = mock.NewContext()
-		tblID      int64 = 111
-		ti0              = createTableInfo(c, p, se, tblID, `CREATE TABLE bar (id INT PRIMARY KEY)`)
-		ti1              = createTableInfo(c, p, se, tblID, `CREATE TABLE bar (id INT PRIMARY KEY, c1 INT)`)
-		ti2              = createTableInfo(c, p, se, tblID, `CREATE TABLE bar (id INT PRIMARY KEY, c1 INT, c2 INT)`)
-		ti3              = createTableInfo(c, p, se, tblID, `CREATE TABLE bar (id INT PRIMARY KEY, c2 INT)`)
-
-		i11 = NewInfo(task, source1, upSchema, upTable, downSchema, downTable, DDLs1, ti0, []*model.TableInfo{ti1})
-		i21 = NewInfo(task, source2, upSchema, upTable, downSchema, downTable, DDLs2, ti2, []*model.TableInfo{ti3})
-
-		tts = []TargetTable{
-			newTargetTable(task, source1, downSchema, downTable, map[string]map[string]struct{}{upSchema: {upTable: struct{}{}}}),
-			newTargetTable(task, source2, downSchema, downTable, map[string]map[string]struct{}{upSchema: {upTable: struct{}{}}}),
-		}
-
-		lockID = utils.GenDDLLockID(task, downSchema, downTable)
-
-		ifm = map[string]map[string]map[string]map[string]Info{
-			task: {
-				source1: {upSchema: {upTable: i11}},
-				source2: {upSchema: {upTable: i21}},
-			},
-		}
-		colm = map[string]map[string]map[string]map[string]map[string]DropColumnStage{
-			lockID: {
-				"c3": {
-					source1: {upSchema: {upTable: DropNotDone}},
-					source2: {upSchema: {upTable: DropNotDone}},
-				},
-			},
-		}
-		lockJoined = map[string]schemacmp.Table{
-			lockID: schemacmp.Encode(ti2),
-		}
-		lockTTS = map[string][]TargetTable{
-			lockID: tts,
-		}
+		task1 = "hahaha"
+		task2 = "hihihi"
+		task3 = "hehehe"
 	)
+	getDownstreamMetaFunc := func(task string) (*config.DBConfig, string) {
+		switch task {
+		case task1, task2:
+			return &config.DBConfig{}, "meta"
+		default:
+			return nil, ""
+		}
+	}
 
-	lk.RebuildLocksAndTables(etcdTestCli, ifm, colm, lockJoined, lockTTS, nil)
-	locks := lk.Locks()
-	c.Assert(len(locks), Equals, 1)
-	lock, ok := locks[lockID]
-	c.Assert(ok, IsTrue)
-	cmp, err := lock.Joined().Compare(schemacmp.Encode(ti2))
+	conn.InitMockDB(c)
+	lk := NewLockKeeper(getDownstreamMetaFunc)
+	c.Assert(lk.downstreamMetaMap, HasLen, 0)
+
+	downstreamMeta, err := lk.getDownstreamMeta(task3)
+	c.Assert(downstreamMeta, IsNil)
+	c.Assert(terror.ErrMasterOptimisticDownstreamMetaNotFound.Equal(err), IsTrue)
+
+	downstreamMeta, err = lk.getDownstreamMeta(task1)
 	c.Assert(err, IsNil)
-	c.Assert(cmp, Equals, 0)
-	cmp, err = lock.tables[source1][upSchema][upTable].Compare(schemacmp.Encode(ti0))
+	c.Assert(lk.downstreamMetaMap, HasLen, 1)
+	c.Assert(downstreamMeta, Equals, lk.downstreamMetaMap[task1])
+	downstreamMeta2, err := lk.getDownstreamMeta(task1)
 	c.Assert(err, IsNil)
-	c.Assert(cmp, Equals, 0)
-	cmp, err = lock.tables[source2][upSchema][upTable].Compare(schemacmp.Encode(ti2))
+	c.Assert(lk.downstreamMetaMap, HasLen, 1)
+	c.Assert(downstreamMeta, Equals, downstreamMeta2)
+
+	downstreamMeta3, err := lk.getDownstreamMeta(task2)
 	c.Assert(err, IsNil)
-	c.Assert(cmp, Equals, 0)
-	c.Assert(lock.columns, DeepEquals, colm[lockID])
+	c.Assert(lk.downstreamMetaMap, HasLen, 2)
+	c.Assert(lk.downstreamMetaMap, HasKey, task1)
+	c.Assert(lk.downstreamMetaMap, HasKey, task2)
+	c.Assert(downstreamMeta3, Equals, lk.downstreamMetaMap[task2])
+
+	lk.RemoveDownstreamMeta(task3)
+	c.Assert(lk.downstreamMetaMap, HasLen, 2)
+	c.Assert(lk.downstreamMetaMap, HasKey, task1)
+	c.Assert(lk.downstreamMetaMap, HasKey, task2)
+
+	lk.RemoveDownstreamMeta(task1)
+	c.Assert(lk.downstreamMetaMap, HasLen, 1)
+	c.Assert(lk.downstreamMetaMap, HasKey, task2)
+	c.Assert(downstreamMeta3, Equals, lk.downstreamMetaMap[task2])
+
+	downstreamMeta, err = lk.getDownstreamMeta(task1)
+	c.Assert(err, IsNil)
+	c.Assert(lk.downstreamMetaMap, HasLen, 2)
+	c.Assert(downstreamMeta, Equals, lk.downstreamMetaMap[task1])
+	c.Assert(downstreamMeta3, Equals, lk.downstreamMetaMap[task2])
+
+	lk.Clear()
+	c.Assert(lk.downstreamMetaMap, HasLen, 0)
+}
+
+func (t *testKeeper) TestUpdateSourceTables(c *C) {
+	var (
+		tk         = NewTableKeeper()
+		task1      = "task-1"
+		source1    = "mysql-replica-1"
+		source2    = "mysql-replica-2"
+		downSchema = "db"
+		downTable  = "tbl"
+
+		tt11 = newTargetTable(task1, source1, downSchema, downTable, map[string]map[string]struct{}{
+			"db": {"tbl-1": struct{}{}, "tbl-2": struct{}{}},
+		})
+		tt12 = newTargetTable(task1, source2, downSchema, downTable, map[string]map[string]struct{}{
+			"db": {"tbl-1": struct{}{}, "tbl-2": struct{}{}},
+		})
+
+		st11 = NewSourceTables(task1, source1)
+		st12 = NewSourceTables(task1, source2)
+	)
+	for schema, tables := range tt11.UpTables {
+		for table := range tables {
+			st11.AddTable(schema, table, tt11.DownSchema, tt11.DownTable)
+		}
+	}
+	for schema, tables := range tt12.UpTables {
+		for table := range tables {
+			st12.AddTable(schema, table, tt12.DownSchema, tt12.DownTable)
+		}
+	}
+
+	// put st11
+	addTables, dropTables := tk.Update(st11)
+	c.Assert(addTables, HasLen, 2)
+	c.Assert(dropTables, HasLen, 0)
+
+	// put st11 again
+	addTables, dropTables = tk.Update(st11)
+	c.Assert(addTables, HasLen, 0)
+	c.Assert(dropTables, HasLen, 0)
+
+	// put st12
+	addTables, dropTables = tk.Update(st12)
+	c.Assert(addTables, HasLen, 2)
+	c.Assert(dropTables, HasLen, 0)
+
+	// update and put st12
+	newST := NewSourceTables(task1, source2)
+	for schema, tables := range tt12.UpTables {
+		for table := range tables {
+			newST.AddTable(schema, table, tt12.DownSchema, tt12.DownTable)
+		}
+	}
+	newST.RemoveTable("db", "tbl-1", downSchema, downTable)
+	newST.AddTable("db", "tbl-3", downSchema, downTable)
+	addTables, dropTables = tk.Update(newST)
+	c.Assert(addTables, HasLen, 1)
+	c.Assert(dropTables, HasLen, 1)
+	// put st12 again
+	addTables, dropTables = tk.Update(newST)
+	c.Assert(addTables, HasLen, 0)
+	c.Assert(dropTables, HasLen, 0)
+
+	// delete source table
+	newST.IsDeleted = true
+	addTables, dropTables = tk.Update(newST)
+	c.Assert(addTables, HasLen, 0)
+	c.Assert(dropTables, HasLen, 2)
 }

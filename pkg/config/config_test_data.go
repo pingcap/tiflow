@@ -108,11 +108,14 @@ const (
     "region-scan-limit": 40
   },
   "debug": {
-    "enable-table-actor": false,
-    "enable-db-sorter": false,
+    "enable-table-actor": true,
+    "table-actor": {
+      "event-batch-size": 32
+    },
+    "enable-db-sorter": true,
     "db": {
-      "count": 16,
-      "concurrency": 256,
+      "count": 8,
+      "concurrency": 128,
       "max-open-files": 10000,
       "block-size": 65536,
       "block-cache-size": 4294967296,
@@ -122,12 +125,15 @@ const (
       "write-l0-slowdown-trigger": 2147483647,
       "write-l0-pause-trigger": 2147483647,
       "compaction-l0-trigger": 160,
-      "compaction-deletion-threshold": 160000,
-      "cleanup-speed-limit": 10000
+      "compaction-deletion-threshold": 10485760,
+      "compaction-period": 1800,
+      "iterator-max-alive-duration": 10000,
+      "iterator-slow-read-duration": 256
     },
+    "enable-new-scheduler": true,
     "messages": {
-      "client-max-batch-interval": 100000000,
-      "client-max-batch-size": 8192,
+      "client-max-batch-interval": 10000000,
+      "client-max-batch-size": 8388608,
       "client-max-batch-count": 128,
       "client-retry-rate-limit": 1,
       "server-max-pending-message-count": 102400,

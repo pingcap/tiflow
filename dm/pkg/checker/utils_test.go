@@ -28,8 +28,8 @@ func (t *testCheckSuite) TestVersionComparsion(c *tc.C) {
 		{"5.6.0", true, false, true, true},
 		{"5.7.0", true, true, true, true},
 		{"5.8.0", true, true, true, true}, // although it does not exist
-		{"8.0.1", true, true, true, true},
-		{"255.255.255", true, true, false, true}, // max version
+		{"8.0.1", true, true, false, false},
+		{"255.255.255", true, true, false, false}, // max version
 	}
 
 	var (
@@ -45,9 +45,6 @@ func (t *testCheckSuite) TestVersionComparsion(c *tc.C) {
 		c.Assert(version.Lt(SupportedVersion["mysql"].Max), tc.Equals, cs.lt)
 		c.Assert(version.Le(SupportedVersion["mysql"].Max), tc.Equals, cs.le)
 	}
-
-	c.Assert(version.Lt(SupportedVersion["mariadb"].Max), tc.Equals, false)
-	c.Assert(version.Le(SupportedVersion["mariadb"].Max), tc.Equals, true)
 }
 
 func (t *testCheckSuite) TestToVersion(c *tc.C) {
@@ -72,9 +69,4 @@ func (t *testCheckSuite) TestToVersion(c *tc.C) {
 		c.Assert(version, tc.Equals, cs.expectedVersion)
 		c.Assert(err != nil, tc.Equals, cs.hasError)
 	}
-}
-
-func (t *testCheckSuite) TestIsMariaDB(c *tc.C) {
-	c.Assert(IsMariaDB("5.5.50-MariaDB-1~wheezy"), tc.IsTrue)
-	c.Assert(IsMariaDB("5.7.19-17-log"), tc.IsFalse)
 }

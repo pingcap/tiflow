@@ -16,15 +16,28 @@ package cdc
 import (
 	"context"
 	"fmt"
+	"io"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	tidbkv "github.com/pingcap/tidb/kv"
+	"github.com/prometheus/client_golang/prometheus"
+	pd "github.com/tikv/pd/client"
+	"go.etcd.io/etcd/client/pkg/v3/logutil"
+	clientv3 "go.etcd.io/etcd/client/v3"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"golang.org/x/sync/errgroup"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/backoff"
+
 	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/sorter/unified"
@@ -38,15 +51,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/pingcap/tiflow/pkg/version"
 	p2pProto "github.com/pingcap/tiflow/proto/p2p"
-	"github.com/prometheus/client_golang/prometheus"
-	pd "github.com/tikv/pd/client"
-	"go.etcd.io/etcd/clientv3"
-	"go.etcd.io/etcd/pkg/logutil"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
-	"golang.org/x/sync/errgroup"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/backoff"
 )
 
 const (
@@ -73,7 +77,7 @@ type Server struct {
 func NewServer(pdEndpoints []string) (*Server, error) {
 	conf := config.GetGlobalServerConfig()
 	log.Info("creating CDC server",
-		zap.Strings("pd-addrs", pdEndpoints),
+		zap.Strings("pd", pdEndpoints),
 		zap.Stringer("config", conf),
 	)
 
@@ -206,6 +210,31 @@ func (s *Server) Run(ctx context.Context) error {
 	return s.run(ctx)
 }
 
+// startStatusHTTP starts the HTTP server.
+// `lis` is a listener that gives us plain-text HTTP requests.
+// TODO can we decouple the HTTP server from the capture server?
+func (s *Server) startStatusHTTP(lis net.Listener) error {
+	conf := config.GetGlobalServerConfig()
+
+	// discard gin log output
+	gin.DefaultWriter = io.Discard
+	router := gin.New()
+	// Register APIs.
+	RegisterRoutes(router, s.capture, registry)
+
+	// No need to configure TLS because it is already handled by `s.tcpServer`.
+	s.statusServer = &http.Server{Handler: router}
+
+	go func() {
+		log.Info("http server is running", zap.String("addr", conf.Addr))
+		err := s.statusServer.Serve(lis)
+		if err != nil && err != http.ErrServerClosed {
+			log.Error("http server error", zap.Error(cerror.WrapError(cerror.ErrServeHTTP, err)))
+		}
+	}()
+	return nil
+}
+
 func (s *Server) etcdHealthChecker(ctx context.Context) error {
 	ticker := time.NewTicker(time.Second * 3)
 	defer ticker.Stop()
@@ -218,7 +247,7 @@ func (s *Server) etcdHealthChecker(ctx context.Context) error {
 	defer httpCli.CloseIdleConnections()
 	metrics := make(map[string]prometheus.Observer)
 	for _, pdEndpoint := range s.pdEndpoints {
-		metrics[pdEndpoint] = etcdHealthCheckDuration.WithLabelValues(conf.AdvertiseAddr, pdEndpoint)
+		metrics[pdEndpoint] = etcdHealthCheckDuration.WithLabelValues(pdEndpoint)
 	}
 
 	for {
@@ -230,7 +259,7 @@ func (s *Server) etcdHealthChecker(ctx context.Context) error {
 				start := time.Now()
 				ctx, cancel := context.WithTimeout(ctx, time.Second*10)
 				req, err := http.NewRequestWithContext(
-					ctx, http.MethodGet, fmt.Sprintf("%s/health", pdEndpoint), nil)
+					ctx, http.MethodGet, fmt.Sprintf("%s/pd/api/v1/health", pdEndpoint), nil)
 				if err != nil {
 					log.Warn("etcd health check failed", zap.Error(err))
 					cancel()
@@ -274,7 +303,8 @@ func (s *Server) run(ctx context.Context) (err error) {
 		return s.tcpServer.Run(cctx)
 	})
 
-	if config.SchedulerV2Enabled {
+	conf := config.GetGlobalServerConfig()
+	if conf.Debug.EnableNewScheduler {
 		grpcServer := grpc.NewServer()
 		p2pProto.RegisterCDCPeerToPeerServer(grpcServer, s.grpcService)
 

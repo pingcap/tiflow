@@ -9,6 +9,7 @@ heartbeat-update-interval: 1
 heartbeat-report-interval: 1
 timezone: Asia/Shanghai
 case-sensitive: false
+collation_compatible: loose
 target-database:
   host: 127.0.0.1
   port: 4000
@@ -39,6 +40,7 @@ mysql-instances:
   syncer-config-name: sync-01
   syncer: null
   syncer-thread: 0
+  continuous-validator-config-name: validator-01
 - source-id: mysql-replica-02
   meta: null
   filter-rules: []
@@ -56,6 +58,7 @@ mysql-instances:
   syncer-config-name: sync-02
   syncer: null
   syncer-thread: 0
+  continuous-validator-config-name: validator-01
 online-ddl: false
 shadow-table-rules: []
 trash-table-rules: []
@@ -86,6 +89,8 @@ loaders:
   load-01:
     pool-size: 16
     dir: ./dumped_data
+    import-mode: sql
+    on-duplicate: replace
 syncers:
   sync-01:
     meta-file: ""
@@ -115,7 +120,15 @@ syncers:
     disable-detect: false
     safe-mode: false
     enable-ansi-quotes: false
+validators:
+  validator-01:
+    mode: none
+    worker-count: 4
+    row-error-delay: 30m0s
+    meta-flush-interval: 1m0s
+    batch-query-size: 100
 clean-dump-file: false
 ansi-quotes: false
 remove-meta: false
-tidb: null
+experimental:
+  async-checkpoint-flush: false

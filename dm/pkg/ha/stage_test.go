@@ -218,29 +218,32 @@ func (t *testForEtcd) TestGetSubTaskStageConfigEtcd(c *C) {
 	defer clearTestInfoOperation(c)
 
 	cfg := config.SubTaskConfig{}
-	c.Assert(cfg.DecodeFile(subTaskSampleFile, true), IsNil)
+	c.Assert(cfg.Decode(config.SampleSubtaskConfig, true), IsNil)
 	source := cfg.SourceID
 	task := cfg.Name
 	stage := NewSubTaskStage(pb.Stage_Running, source, task)
 
 	// no subtask stage and config
-	stm, scm, rev1, err := GetSubTaskStageConfig(etcdTestCli, source)
+	stm, validatorM, scm, rev1, err := GetSubTaskStageConfig(etcdTestCli, source)
 	c.Assert(err, IsNil)
 	c.Assert(rev1, Greater, int64(0))
 	c.Assert(stm, HasLen, 0)
+	c.Assert(validatorM, HasLen, 0)
 	c.Assert(scm, HasLen, 0)
 
 	// put subtask config and stage at the same time
-	rev2, err := PutSubTaskCfgStage(etcdTestCli, []config.SubTaskConfig{cfg}, []Stage{stage})
+	rev2, err := PutSubTaskCfgStage(etcdTestCli, []config.SubTaskConfig{cfg}, []Stage{stage}, []Stage{stage})
 	c.Assert(err, IsNil)
 	c.Assert(rev2, Greater, rev1)
 
 	// get subtask config and stage at the same time
-	stm, scm, rev3, err := GetSubTaskStageConfig(etcdTestCli, source)
+	stm, validatorM, scm, rev3, err := GetSubTaskStageConfig(etcdTestCli, source)
 	c.Assert(err, IsNil)
 	c.Assert(rev3, Equals, rev2)
 	c.Assert(stm, HasLen, 1)
+	c.Assert(validatorM, HasLen, 1)
 	stage.Revision = rev2
 	c.Assert(stm[task], DeepEquals, stage)
+	c.Assert(validatorM[task], DeepEquals, stage)
 	c.Assert(scm[task], DeepEquals, cfg)
 }

@@ -26,9 +26,9 @@ import (
 	. "github.com/pingcap/check"
 	"github.com/pingcap/failpoint"
 	"github.com/tikv/pd/pkg/tempurl"
-	"go.etcd.io/etcd/clientv3"
-	"go.etcd.io/etcd/embed"
-	v3rpc "go.etcd.io/etcd/etcdserver/api/v3rpc/rpctypes"
+	v3rpc "go.etcd.io/etcd/api/v3/v3rpc/rpctypes"
+	clientv3 "go.etcd.io/etcd/client/v3"
+	"go.etcd.io/etcd/server/v3/embed"
 	"google.golang.org/grpc"
 
 	"github.com/pingcap/tiflow/dm/dm/config"
@@ -45,9 +45,7 @@ import (
 
 // do not forget to update this path if the file removed/renamed.
 const (
-	sourceSampleFile  = "./source.yaml"
-	subtaskSampleFile = "./subtask.toml"
-	mydumperPath      = "../../bin/mydumper"
+	mydumperPath = "../../bin/mydumper"
 )
 
 var etcdErrCompacted = v3rpc.ErrCompacted
@@ -63,14 +61,11 @@ var _ = Suite(&testServer{})
 func (t *testServer) SetUpSuite(c *C) {
 	err := log.InitLogger(&log.Config{})
 	c.Assert(err, IsNil)
-
 	getMinLocForSubTaskFunc = getFakeLocForSubTask
-	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/dm/worker/MockGetSourceCfgFromETCD", `return(true)`), IsNil)
 }
 
 func (t *testServer) TearDownSuite(c *C) {
 	getMinLocForSubTaskFunc = getMinLocForSubTask
-	c.Assert(failpoint.Disable("github.com/pingcap/tiflow/dm/dm/worker/MockGetSourceCfgFromETCD"), IsNil)
 }
 
 func createMockETCD(dir string, host string) (*embed.Etcd, error) {
@@ -109,7 +104,6 @@ func (t *testServer) TestServer(c *C) {
 	etcdDir := c.MkDir()
 	ETCD, err := createMockETCD(etcdDir, "http://"+masterAddr)
 	c.Assert(err, IsNil)
-	defer ETCD.Close()
 	cfg := NewConfig()
 	c.Assert(cfg.Parse([]string{"-config=./dm-worker.toml"}), IsNil)
 	cfg.Join = masterAddr
@@ -166,13 +160,12 @@ func (t *testServer) TestServer(c *C) {
 
 	// start task
 	subtaskCfg := config.SubTaskConfig{}
-	err = subtaskCfg.DecodeFile(subtaskSampleFile, true)
+	err = subtaskCfg.Decode(config.SampleSubtaskConfig, true)
 	c.Assert(err, IsNil)
 	subtaskCfg.MydumperPath = mydumperPath
 
 	sourceCfg := loadSourceConfigWithoutPassword(c)
-	_, err = ha.PutSubTaskCfgStage(s.etcdClient, []config.SubTaskConfig{subtaskCfg},
-		[]ha.Stage{ha.NewSubTaskStage(pb.Stage_Running, sourceCfg.SourceID, subtaskCfg.Name)})
+	_, err = ha.PutSubTaskCfgStage(s.etcdClient, []config.SubTaskConfig{subtaskCfg}, []ha.Stage{ha.NewSubTaskStage(pb.Stage_Running, sourceCfg.SourceID, subtaskCfg.Name)}, nil)
 	c.Assert(err, IsNil)
 
 	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
@@ -199,17 +192,45 @@ func (t *testServer) TestServer(c *C) {
 	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
 		return checkSubTaskStatus(cli, pb.Stage_Paused)
 	}), IsTrue)
+
+	// test refresh source cfg
+	sourceCfg.MetaDir = "new meta"
+	_, err = ha.PutSourceCfg(s.etcdClient, sourceCfg)
+	c.Assert(err, IsNil)
+	c.Assert(s.worker.refreshSourceCfg(), IsNil)
+	c.Assert(s.worker.cfg.MetaDir, Equals, sourceCfg.MetaDir)
+
+	// check update subtask cfg failed
+	tomlStr, tomlErr := subtaskCfg.Toml()
+	c.Assert(tomlErr, IsNil)
+	ctx := context.Background()
+	checkReq := &pb.CheckSubtasksCanUpdateRequest{SubtaskCfgTomlString: tomlStr}
+	checkResp, checkErr := s.CheckSubtasksCanUpdate(ctx, checkReq)
+	c.Assert(checkErr, IsNil)
+	c.Assert(checkResp.Success, IsFalse)
+
+	// test refresh subtask cfg
+	subtaskCfg.SyncerConfig.Batch = 111
+	_, err = ha.PutSubTaskCfgStage(s.etcdClient, []config.SubTaskConfig{subtaskCfg}, []ha.Stage{}, []ha.Stage{})
+	c.Assert(err, IsNil)
+	subTask := s.worker.subTaskHolder.findSubTask(subtaskCfg.Name)
+	subTask.setCurrUnit(subTask.units[2]) // set to syncer unit
+	c.Assert(s.worker.tryRefreshSubTaskAndSourceConfig(subTask), IsNil)
+	subtaskCfgInWorker := s.worker.subTaskHolder.findSubTask(subtaskCfg.Name)
+	c.Assert(subtaskCfgInWorker.cfg.SyncerConfig.Batch, Equals, subtaskCfg.SyncerConfig.Batch)
+
 	// resume task
 	_, err = ha.PutSubTaskStage(s.etcdClient, ha.NewSubTaskStage(pb.Stage_Running, sourceCfg.SourceID, subtaskCfg.Name))
 	c.Assert(err, IsNil)
 	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
 		return checkSubTaskStatus(cli, pb.Stage_Running)
 	}), IsTrue)
+
 	// stop task
 	_, err = ha.DeleteSubTaskStage(s.etcdClient, ha.NewSubTaskStage(pb.Stage_Stopped, sourceCfg.SourceID, subtaskCfg.Name))
 	c.Assert(err, IsNil)
 	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
-		return s.getWorker(true).subTaskHolder.findSubTask(subtaskCfg.Name) == nil
+		return s.getSourceWorker(true).subTaskHolder.findSubTask(subtaskCfg.Name) == nil
 	}), IsTrue)
 
 	dupServer := NewServer(cfg)
@@ -218,15 +239,14 @@ func (t *testServer) TestServer(c *C) {
 	c.Assert(err.Error(), Matches, ".*bind: address already in use.*")
 
 	t.testStopWorkerWhenLostConnect(c, s, ETCD)
-	// close
 	s.Close()
 
 	c.Assert(utils.WaitSomething(30, 10*time.Millisecond, func() bool {
 		return s.closed.Load()
 	}), IsTrue)
 
-	// test worker, just make sure testing sort
-	t.testWorker(c)
+	// test source worker, just make sure testing sort
+	t.testSourceWorker(c)
 }
 
 func (t *testServer) TestHandleSourceBoundAfterError(c *C) {
@@ -338,14 +358,80 @@ func (t *testServer) TestHandleSourceBoundAfterError(c *C) {
 	_, err = ha.PutSourceCfg(etcdCli, sourceCfg)
 	c.Assert(err, IsNil)
 	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
-		return s.getWorker(true) != nil
+		return s.getSourceWorker(true) != nil
 	}), IsTrue)
 
 	_, err = ha.DeleteSourceBound(etcdCli, s.cfg.Name)
 	c.Assert(err, IsNil)
 	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
-		return s.getWorker(true) == nil
+		return s.getSourceWorker(true) == nil
 	}), IsTrue)
+}
+
+func (t *testServer) TestServerQueryValidator(c *C) {
+	var (
+		masterAddr   = tempurl.Alloc()[len("http://"):]
+		keepAliveTTL = int64(1)
+	)
+	etcdDir := c.MkDir()
+	ETCD, err := createMockETCD(etcdDir, "http://"+masterAddr)
+	c.Assert(err, IsNil)
+	defer ETCD.Close()
+	cfg := NewConfig()
+	c.Assert(cfg.Parse([]string{"-config=./dm-worker.toml"}), IsNil)
+	cfg.Join = masterAddr
+	cfg.KeepAliveTTL = keepAliveTTL
+	cfg.RelayKeepAliveTTL = keepAliveTTL
+
+	s := NewServer(cfg)
+	resp, err := s.GetWorkerValidatorStatus(context.Background(), &pb.GetValidationStatusRequest{})
+	c.Assert(err, IsNil)
+	c.Assert(resp.Result, IsFalse)
+	c.Assert(resp.Msg, Matches, ".*no mysql source is being handled in the worker.*")
+}
+
+func (t *testServer) TestServerQueryValidatorError(c *C) {
+	var (
+		masterAddr   = tempurl.Alloc()[len("http://"):]
+		keepAliveTTL = int64(1)
+	)
+	etcdDir := c.MkDir()
+	ETCD, err := createMockETCD(etcdDir, "http://"+masterAddr)
+	c.Assert(err, IsNil)
+	defer ETCD.Close()
+	cfg := NewConfig()
+	c.Assert(cfg.Parse([]string{"-config=./dm-worker.toml"}), IsNil)
+	cfg.Join = masterAddr
+	cfg.KeepAliveTTL = keepAliveTTL
+	cfg.RelayKeepAliveTTL = keepAliveTTL
+
+	s := NewServer(cfg)
+	resp, err := s.GetValidatorError(context.Background(), &pb.GetValidationErrorRequest{})
+	c.Assert(err, IsNil)
+	c.Assert(resp.Result, IsFalse)
+	c.Assert(resp.Msg, Matches, ".*no mysql source is being handled in the worker.*")
+}
+
+func (t *testServer) TestServerOperateValidatorError(c *C) {
+	var (
+		masterAddr   = tempurl.Alloc()[len("http://"):]
+		keepAliveTTL = int64(1)
+	)
+	etcdDir := c.MkDir()
+	ETCD, err := createMockETCD(etcdDir, "http://"+masterAddr)
+	c.Assert(err, IsNil)
+	defer ETCD.Close()
+	cfg := NewConfig()
+	c.Assert(cfg.Parse([]string{"-config=./dm-worker.toml"}), IsNil)
+	cfg.Join = masterAddr
+	cfg.KeepAliveTTL = keepAliveTTL
+	cfg.RelayKeepAliveTTL = keepAliveTTL
+
+	s := NewServer(cfg)
+	resp, err := s.OperateValidatorError(context.Background(), &pb.OperateValidationErrorRequest{})
+	c.Assert(err, IsNil)
+	c.Assert(resp.Result, IsFalse)
+	c.Assert(resp.Msg, Matches, ".*no mysql source is being handled in the worker.*")
 }
 
 func (t *testServer) TestWatchSourceBoundEtcdCompact(c *C) {
@@ -414,19 +500,19 @@ func (t *testServer) TestWatchSourceBoundEtcdCompact(c *C) {
 	}()
 	// step 4.1: should stop the running worker, source bound has been deleted, should stop this worker
 	c.Assert(utils.WaitSomething(20, 100*time.Millisecond, func() bool {
-		return s.getWorker(true) == nil
+		return s.getSourceWorker(true) == nil
 	}), IsTrue)
 	// step 4.2: put a new source bound, source should be started
 	_, err = ha.PutSourceBound(etcdCli, sourceBound)
 	c.Assert(err, IsNil)
 	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
-		return s.getWorker(true) != nil
+		return s.getSourceWorker(true) != nil
 	}), IsTrue)
-	cfg2 := s.getWorker(true).cfg
+	cfg2 := s.getSourceWorker(true).cfg
 	c.Assert(cfg2, DeepEquals, sourceCfg)
 	cancel1()
 	wg.Wait()
-	c.Assert(s.stopWorker(sourceCfg.SourceID, true), IsNil)
+	c.Assert(s.stopSourceWorker(sourceCfg.SourceID, true, true), IsNil)
 	// step 5: start observeSourceBound from compacted revision again, should start worker
 	ctx2, cancel2 := context.WithCancel(ctx)
 	wg.Add(1)
@@ -435,9 +521,9 @@ func (t *testServer) TestWatchSourceBoundEtcdCompact(c *C) {
 		c.Assert(s.observeSourceBound(ctx2, startRev), IsNil)
 	}()
 	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
-		return s.getWorker(true) != nil
+		return s.getSourceWorker(true) != nil
 	}), IsTrue)
-	cfg2 = s.getWorker(true).cfg
+	cfg2 = s.getSourceWorker(true).cfg
 	c.Assert(cfg2, DeepEquals, sourceCfg)
 	cancel2()
 	wg.Wait()
@@ -481,13 +567,13 @@ func (t *testServer) testOperateWorker(c *C, s *Server, dir string, start bool) 
 		c.Assert(err, IsNil)
 		// worker should be started and without error
 		c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
-			w := s.getWorker(true)
+			w := s.getSourceWorker(true)
 			return w != nil && !w.closed.Load()
 		}), IsTrue)
 		c.Assert(s.getSourceStatus(true).Result, IsNil)
 	} else {
 		// worker should be started before stopped
-		w := s.getWorker(true)
+		w := s.getSourceWorker(true)
 		c.Assert(w, NotNil)
 		c.Assert(w.closed.Load(), IsFalse)
 		_, err := ha.DeleteRelayConfig(s.etcdClient, w.name)
@@ -496,7 +582,7 @@ func (t *testServer) testOperateWorker(c *C, s *Server, dir string, start bool) 
 		c.Assert(err, IsNil)
 		// worker should be closed and without error
 		c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
-			currentWorker := s.getWorker(true)
+			currentWorker := s.getSourceWorker(true)
 			return currentWorker == nil && w.closed.Load()
 		}), IsTrue)
 		c.Assert(s.getSourceStatus(true).Result, IsNil)
@@ -507,7 +593,7 @@ func (t *testServer) testRetryConnectMaster(c *C, s *Server, etcd *embed.Etcd, d
 	etcd.Close()
 	time.Sleep(6 * time.Second)
 	// When worker server fail to keepalive with etcd, server should close its worker
-	c.Assert(s.getWorker(true), IsNil)
+	c.Assert(s.getSourceWorker(true), IsNil)
 	c.Assert(s.getSourceStatus(true).Result, IsNil)
 	ETCD, err := createMockETCD(dir, "http://"+hostName)
 	c.Assert(err, IsNil)
@@ -552,9 +638,9 @@ func (t *testServer) testSubTaskRecover(c *C, s *Server, dir string) {
 func (t *testServer) testStopWorkerWhenLostConnect(c *C, s *Server, etcd *embed.Etcd) {
 	etcd.Close()
 	c.Assert(utils.WaitSomething(int(defaultKeepAliveTTL+3), time.Second, func() bool {
-		return s.getWorker(true) == nil
+		return s.getSourceWorker(true) == nil
 	}), IsTrue)
-	c.Assert(s.getWorker(true), IsNil)
+	c.Assert(s.getSourceWorker(true), IsNil)
 }
 
 func (t *testServer) TestGetMinLocInAllSubTasks(c *C) {
@@ -639,7 +725,7 @@ func checkRelayStatus(cli pb.WorkerClient, expect pb.Stage) bool {
 }
 
 func loadSourceConfigWithoutPassword(c *C) *config.SourceConfig {
-	sourceCfg, err := config.LoadFromFile(sourceSampleFile)
+	sourceCfg, err := config.ParseYamlAndVerify(config.SampleSourceConfig)
 	c.Assert(err, IsNil)
 	sourceCfg.From.Password = "" // no password set
 	return sourceCfg

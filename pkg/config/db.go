@@ -13,7 +13,9 @@
 
 package config
 
-import cerror "github.com/pingcap/tiflow/pkg/errors"
+import (
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+)
 
 // DBConfig represents leveldb sorter config.
 type DBConfig struct {
@@ -60,6 +62,7 @@ type DBConfig struct {
 	//
 	// The default value is 1<<31 - 1.
 	WriteL0PauseTrigger int `toml:"write-l0-pause-trigger" json:"write-l0-pause-trigger"`
+
 	// CompactionL0Trigger defines number of leveldb sst file at level-0 that will
 	// trigger compaction.
 	//
@@ -68,23 +71,31 @@ type DBConfig struct {
 	// CompactionDeletionThreshold defines the threshold of the number of deletion that
 	// trigger compaction.
 	//
-	// The default value is 160000.
-	// Iterator.First() takes about 27ms to 149ms in this case,
-	// see pkg/db.BenchmarkNext.
+	// The default value is 10 * 1024 * 1024, 10485760.
+	// Assume every key-value is about 1KB, 10485760 is about deleting 10GB data.
 	CompactionDeletionThreshold int `toml:"compaction-deletion-threshold" json:"compaction-deletion-threshold"`
-	// CleanupSpeedLimit limits clean up speed, based on key value entry count.
+	// CompactionDeletionThreshold defines the threshold of the number of deletion that
+	// trigger compaction.
 	//
-	// The default value is 10000.
-	CleanupSpeedLimit int `toml:"cleanup-speed-limit" json:"cleanup-speed-limit"`
+	// The default value is 30 minutes, 1800.
+	CompactionPeriod int `toml:"compaction-period" json:"compaction-period"`
+
+	// IteratorMaxAliveDuration the maximum iterator alive duration in ms.
+	//
+	// The default value is 10000, 10s
+	IteratorMaxAliveDuration int `toml:"iterator-max-alive-duration" json:"iterator-max-alive-duration"`
+
+	// IteratorSlowReadDuration is the iterator slow read threshold.
+	// A reading that exceeds the duration triggers a db compaction.
+	//
+	// The default value is 256, 256ms.
+	IteratorSlowReadDuration int `toml:"iterator-slow-read-duration" json:"iterator-slow-read-duration"`
 }
 
 // ValidateAndAdjust validates and adjusts the db configuration
 func (c *DBConfig) ValidateAndAdjust() error {
 	if c.Compression != "none" && c.Compression != "snappy" {
 		return cerror.ErrIllegalSorterParameter.GenWithStackByArgs("sorter.leveldb.compression must be \"none\" or \"snappy\"")
-	}
-	if c.CleanupSpeedLimit <= 1 {
-		return cerror.ErrIllegalSorterParameter.GenWithStackByArgs("sorter.leveldb.cleanup-speed-limit must be larger than 1")
 	}
 
 	return nil

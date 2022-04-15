@@ -20,13 +20,13 @@ import (
 
 	"github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tidb-tools/pkg/dbutil"
-	tddl "github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/errno"
 	"github.com/pingcap/tidb/infoschema"
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/ast"
 	tmysql "github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tidb/util/dbterror"
+	"github.com/pingcap/tidb/util/dbutil"
 	"go.uber.org/zap"
 
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
@@ -41,7 +41,7 @@ func ignoreTrackerDDLError(err error) bool {
 	switch {
 	case infoschema.ErrDatabaseExists.Equal(err), infoschema.ErrDatabaseDropExists.Equal(err),
 		infoschema.ErrTableDropExists.Equal(err),
-		tddl.ErrCantDropFieldOrKey.Equal(err):
+		dbterror.ErrCantDropFieldOrKey.Equal(err):
 		return true
 	default:
 		return false
@@ -57,7 +57,8 @@ func isDropColumnWithIndexError(err error) bool {
 	return (mysqlErr.Number == errno.ErrUnsupportedDDLOperation || mysqlErr.Number == tmysql.ErrUnknown) &&
 		strings.Contains(mysqlErr.Message, "drop column") &&
 		(strings.Contains(mysqlErr.Message, "with index") ||
-			strings.Contains(mysqlErr.Message, "with composite index"))
+			strings.Contains(mysqlErr.Message, "with composite index") ||
+			strings.Contains(mysqlErr.Message, "with tidb_enable_change_multi_schema is disable"))
 }
 
 // handleSpecialDDLError handles special errors for DDL execution.

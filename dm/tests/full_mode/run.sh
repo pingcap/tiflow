@@ -52,12 +52,11 @@ function fail_acquire_global_lock() {
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
-		"\"stage\": \"Paused\"" 3 \
+		"\"stage\": \"Paused\"" 2 \
 		"you need (at least one of) the RELOAD privilege(s) for this operation" 2
 
-	cleanup_data full_mode
-	cleanup_data_upstream full_mode
 	cleanup_process $*
+	cleanup_data full_mode
 }
 
 function escape_schema() {
@@ -101,6 +100,7 @@ function escape_schema() {
 
 	# start DM task only
 	dmctl_start_task "$WORK_DIR/dm-task.yaml" "--remove-meta"
+	check_sync_diff $WORK_DIR $WORK_DIR/diff_config.toml
 
 	check_log_contain_with_retry 'clean dump files' $WORK_DIR/worker1/log/dm-worker.log
 	check_log_contain_with_retry 'clean dump files' $WORK_DIR/worker2/log/dm-worker.log
@@ -113,9 +113,8 @@ function escape_schema() {
 	check_metric $WORKER1_PORT 'dumpling_dump_finished_tables' 3 0 3
 	check_metric $WORKER2_PORT 'dumpling_dump_finished_tables' 3 0 3
 
-	cleanup_data full/mode
-	cleanup_data_upstream full/mode
 	cleanup_process $*
+	cleanup_data full/mode
 }
 
 function empty_data() {
@@ -127,9 +126,9 @@ function empty_data() {
 	init_cluster
 
 	dmctl_start_task "$cur/conf/dm-task.yaml" "--remove-meta"
-	check_sync_diff $WORK_DIR $cur/conf/diff_config_revert_1.toml
-	check_sync_diff $WORK_DIR $cur/conf/diff_config_revert_2.toml
+	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 
+	sleep 1
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
 		"\"stage\": \"Finished\"" 2 \
@@ -139,9 +138,8 @@ function empty_data() {
 	check_log_contains $WORK_DIR/worker1/log/dm-worker.log "progress=\"100.00 %\""
 	check_log_contains $WORK_DIR/worker2/log/dm-worker.log "progress=\"100.00 %\""
 
-	cleanup_data full_mode
-	cleanup_data_upstream full_mode
 	cleanup_process $*
+	cleanup_data full_mode
 }
 
 function run() {
@@ -189,8 +187,7 @@ function run() {
 	dmctl_start_task "$cur/conf/dm-task.yaml" "--remove-meta"
 
 	# use sync_diff_inspector to check full dump loader
-	check_sync_diff $WORK_DIR $cur/conf/diff_config_revert_1.toml
-	check_sync_diff $WORK_DIR $cur/conf/diff_config_revert_2.toml
+	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 
 	echo "check dump files have been cleaned"
 	ls $WORK_DIR/worker1/dumped_data.test && exit 1 || echo "worker1 auto removed dump files"

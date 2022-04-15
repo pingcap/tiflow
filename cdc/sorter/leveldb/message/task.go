@@ -15,8 +15,10 @@ package message
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sorter/encoding"
 	"github.com/pingcap/tiflow/pkg/db"
 	"golang.org/x/sync/semaphore"
@@ -27,17 +29,56 @@ type Task struct {
 	UID     uint32
 	TableID uint64
 
-	// encoded key -> serde.marshal(event)
-	// If a value is empty, it deletes the key/value entry in db.
-	Events map[Key][]byte
-	// Must be buffered channel to avoid blocking.
-	SnapCh chan LimitedSnapshot `json:"-"` // Make Task JSON printable.
-	// Set NeedSnap whenever caller wants to read something from a snapshot.
-	NeedSnap bool
+	// Input unsorted event for writers.
+	// Sorter.AddEntry -> writer.
+	InputEvent *model.PolymorphicEvent
+	// Latest resolved ts / commit ts for readers.
+	// An empty ReadTs works like a tick.
+	// writer -> reader
+	ReadTs ReadTs
+	// A batch of events (bytes encoded) need to be wrote.
+	// writer -> leveldb
+	WriteReq map[Key][]byte
+	// Requests an iterator when it is not nil.
+	// reader -> leveldb
+	IterReq *IterRequest
+	// Deletes all of the key-values in the range.
+	// reader -> leveldb and leveldb -> compactor
+	DeleteReq *DeleteRequest
 
-	// For clean-up table task.
-	Cleanup            bool
-	CleanupRatelimited bool
+	// A test message.
+	Test *Test
+}
+
+// DeleteRequest a request to delete range.
+type DeleteRequest struct {
+	Range [2][]byte
+	// Approximately key value pairs in the range.
+	Count int
+}
+
+// ReadTs wraps the latest resolved ts and commit ts.
+type ReadTs struct {
+	MaxCommitTs   uint64
+	MaxResolvedTs uint64
+}
+
+// IterRequest contains parameters that necessary to build an iterator.
+type IterRequest struct {
+	UID uint32
+
+	// The resolved ts at the time of issuing the request.
+	ResolvedTs uint64
+	// Range of a requested iterator.
+	Range [2][]byte
+	// IterCallback is callback to send iterator back.
+	// It must be buffered channel to avoid blocking.
+	IterCallback func(*LimitedIterator) `json:"-"` // Make Task JSON printable.
+}
+
+// Test is a message for testing actors.
+type Test struct {
+	Sleep time.Duration
 }
 
 // Key is the key that is written to db.
@@ -51,24 +92,16 @@ func (k Key) String() string {
 		uid, tableID, startTs, CRTs)
 }
 
-// LimitedSnapshot is a wrapper of db.Snapshot that has a sema to limit
-// the total number of alive snapshots.
-type LimitedSnapshot struct {
-	db.Snapshot
-	Sema *semaphore.Weighted
+// LimitedIterator is a wrapper of db.Iterator that has a sema to limit
+// the total number of alive iterator.
+type LimitedIterator struct {
+	db.Iterator
+	Sema       *semaphore.Weighted
+	ResolvedTs uint64
 }
 
 // Release resources of the snapshot.
-func (s *LimitedSnapshot) Release() error {
+func (s *LimitedIterator) Release() error {
 	s.Sema.Release(1)
-	return errors.Trace(s.Snapshot.Release())
-}
-
-// NewCleanupTask returns a clean up task to clean up table data.
-func NewCleanupTask(uid uint32, tableID uint64) Task {
-	return Task{
-		TableID: tableID,
-		UID:     uid,
-		Cleanup: true,
-	}
+	return errors.Trace(s.Iterator.Release())
 }

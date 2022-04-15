@@ -23,6 +23,8 @@ import (
 	"github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb-tools/pkg/utils"
+	"github.com/pingcap/tidb/parser"
+	"github.com/pingcap/tidb/parser/ast"
 )
 
 // MySQLVersion represents MySQL version number.
@@ -118,9 +120,9 @@ func (v MySQLVersion) String() string {
 	return fmt.Sprintf("%d.%d.%d", v[0], v[1], v[2])
 }
 
-// IsMariaDB tells whether the version is from mariadb.
-func IsMariaDB(version string) bool {
-	return strings.Contains(strings.ToUpper(version), "MARIADB")
+// IsTiDBFromVersion tells whether the version is tidb.
+func IsTiDBFromVersion(version string) bool {
+	return strings.Contains(strings.ToUpper(version), "TIDB")
 }
 
 func markCheckError(result *Result, err error) {
@@ -131,7 +133,10 @@ func markCheckError(result *Result, err error) {
 		} else {
 			state = StateFailure
 		}
-		result.State = state
+		// `StateWarning` can't cover `StateFailure`.
+		if result.State != StateFailure {
+			result.State = state
+		}
 		result.Errors = append(result.Errors, &Error{Severity: state, ShortErr: err.Error()})
 	}
 }
@@ -140,4 +145,17 @@ func isMySQLError(err error, code uint16) bool {
 	err = errors.Cause(err)
 	e, ok := err.(*mysql.MySQLError)
 	return ok && e.Number == code
+}
+
+func getCreateTableStmt(p *parser.Parser, statement string) (*ast.CreateTableStmt, error) {
+	stmt, err := p.ParseOneStmt(statement, "", "")
+	if err != nil {
+		return nil, errors.Annotatef(err, "statement %s", statement)
+	}
+
+	ctStmt, ok := stmt.(*ast.CreateTableStmt)
+	if !ok {
+		return nil, errors.Errorf("Expect CreateTableStmt but got %T", stmt)
+	}
+	return ctStmt, nil
 }

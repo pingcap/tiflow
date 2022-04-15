@@ -61,23 +61,16 @@ func newBufferSink(
 type runState struct {
 	batch [maxFlushBatchSize]flushMsg
 
-	metricFlushDuration   prometheus.Observer
-	metricEmitRowDuration prometheus.Observer
-	metricTotalRows       prometheus.Counter
+	metricTotalRows prometheus.Counter
 }
 
 func (b *bufferSink) run(ctx context.Context, errCh chan error) {
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
-	advertiseAddr := util.CaptureAddrFromCtx(ctx)
 	state := runState{
-		metricFlushDuration:   flushRowChangedDuration.WithLabelValues(advertiseAddr, changefeedID, "Flush"),
-		metricEmitRowDuration: flushRowChangedDuration.WithLabelValues(advertiseAddr, changefeedID, "EmitRow"),
-		metricTotalRows:       bufferSinkTotalRowsCountCounter.WithLabelValues(advertiseAddr, changefeedID),
+		metricTotalRows: bufferSinkTotalRowsCountCounter.WithLabelValues(changefeedID),
 	}
 	defer func() {
-		flushRowChangedDuration.DeleteLabelValues(advertiseAddr, changefeedID, "Flush")
-		flushRowChangedDuration.DeleteLabelValues(advertiseAddr, changefeedID, "EmitRow")
-		bufferSinkTotalRowsCountCounter.DeleteLabelValues(advertiseAddr, changefeedID)
+		bufferSinkTotalRowsCountCounter.DeleteLabelValues(changefeedID)
 	}()
 
 	for {
@@ -119,8 +112,8 @@ func (b *bufferSink) runOnce(ctx context.Context, state *runState) (bool, error)
 		}
 	}
 
+	start := time.Now()
 	b.bufferMu.Lock()
-	startEmit := time.Now()
 	// find all rows before resolvedTs and emit to backend sink
 	for i := 0; i < batchSize; i++ {
 		tableID, resolvedTs := batch[i].tableID, batch[i].resolvedTs
@@ -144,9 +137,7 @@ func (b *bufferSink) runOnce(ctx context.Context, state *runState) (bool, error)
 		b.buffer[tableID] = append(make([]*model.RowChangedEvent, 0, len(rows[i:])), rows[i:]...)
 	}
 	b.bufferMu.Unlock()
-	state.metricEmitRowDuration.Observe(time.Since(startEmit).Seconds())
 
-	startFlush := time.Now()
 	for i := 0; i < batchSize; i++ {
 		tableID, resolvedTs := batch[i].tableID, batch[i].resolvedTs
 		checkpointTs, err := b.Sink.FlushRowChangedEvents(ctx, tableID, resolvedTs)
@@ -155,15 +146,22 @@ func (b *bufferSink) runOnce(ctx context.Context, state *runState) (bool, error)
 		}
 		b.tableCheckpointTsMap.Store(tableID, checkpointTs)
 	}
-	now := time.Now()
-	state.metricFlushDuration.Observe(now.Sub(startFlush).Seconds())
-	if now.Sub(startEmit) > time.Second {
+	elapsed := time.Since(start)
+	if elapsed > time.Second {
 		log.Warn("flush row changed events too slow",
 			zap.Int("batchSize", batchSize),
-			zap.Duration("duration", now.Sub(startEmit)),
+			zap.Duration("duration", elapsed),
 			util.ZapFieldChangefeed(ctx))
 	}
 
+	return true, nil
+}
+
+func (b *bufferSink) TryEmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) (bool, error) {
+	err := b.EmitRowChangedEvents(ctx, rows...)
+	if err != nil {
+		return false, err
+	}
 	return true, nil
 }
 

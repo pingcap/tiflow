@@ -67,7 +67,7 @@ type backEndPool struct {
 	isTerminating bool
 }
 
-func newBackEndPool(dir string, captureAddr string) (*backEndPool, error) {
+func newBackEndPool(dir string) (*backEndPool, error) {
 	ret := &backEndPool{
 		memoryUseEstimate: 0,
 		fileNameCounter:   0,
@@ -95,9 +95,9 @@ func newBackEndPool(dir string, captureAddr string) (*backEndPool, error) {
 		defer ticker.Stop()
 
 		id := "0" // A placeholder for ID label in metrics.
-		metricSorterInMemoryDataSizeGauge := sorter.InMemoryDataSizeGauge.WithLabelValues(captureAddr, id)
-		metricSorterOnDiskDataSizeGauge := sorter.OnDiskDataSizeGauge.WithLabelValues(captureAddr, id)
-		metricSorterOpenFileCountGauge := sorter.OpenFileCountGauge.WithLabelValues(captureAddr, id)
+		metricSorterInMemoryDataSizeGauge := sorter.InMemoryDataSizeGauge.WithLabelValues(id)
+		metricSorterOnDiskDataSizeGauge := sorter.OnDiskDataSizeGauge.WithLabelValues(id)
+		metricSorterOpenFileCountGauge := sorter.OpenFileCountGauge.WithLabelValues(id)
 
 		// TODO: The underlaying implementation only recognizes cgroups set by
 		// containers, we need to support cgroups set by systemd or manually.
@@ -165,7 +165,7 @@ func newBackEndPool(dir string, captureAddr string) (*backEndPool, error) {
 func (p *backEndPool) alloc(ctx context.Context) (backEnd, error) {
 	sorterConfig := config.GetGlobalServerConfig().Sorter
 	if p.sorterMemoryUsage() < int64(sorterConfig.MaxMemoryConsumption) &&
-		p.memoryPressure() < int32(sorterConfig.MaxMemoryPressure) {
+		p.memoryPressure() < int32(sorterConfig.MaxMemoryPercentage) {
 
 		ret := newMemoryBackEnd()
 		return ret, nil
@@ -190,8 +190,8 @@ func (p *backEndPool) alloc(ctx context.Context) (backEnd, error) {
 	tableID, tableName := util.TableIDFromCtx(ctx)
 	log.Debug("Unified Sorter: trying to create file backEnd",
 		zap.String("filename", fname),
-		zap.Int64("table-id", tableID),
-		zap.String("table-name", tableName))
+		zap.Int64("tableID", tableID),
+		zap.String("tableName", tableName))
 
 	if err := checkDataDirSatisfied(); err != nil {
 		return nil, errors.Trace(err)
@@ -296,7 +296,8 @@ func (p *backEndPool) terminate() {
 		log.Debug("Unified Sorter backEnd removing file", zap.String("file", file))
 		err = os.RemoveAll(file)
 		if err != nil {
-			log.Warn("Unified Sorter clean-up failed: failed to remove", zap.String("file-name", file), zap.Error(err))
+			log.Warn("Unified Sorter clean-up failed: failed to remove",
+				zap.String("fileName", file), zap.Error(err))
 		}
 	}
 
@@ -331,7 +332,7 @@ func (p *backEndPool) lockSortDir() error {
 				"Make sure that another instance of TiCDC, or any other program, is not using the directory. "+
 				"If you believe you should not see this error, try deleting the lock file and resume the changefeed. "+
 				"Report a bug or contact support if the problem persists.",
-				zap.String("lock-file", lockFileName))
+				zap.String("lockFile", lockFileName))
 			return errors.Trace(err)
 		}
 		return cerrors.ErrSortDirLockError.Wrap(err).GenWithStackByCause()
@@ -352,7 +353,7 @@ func (p *backEndPool) unlockSortDir() error {
 func (p *backEndPool) cleanUpStaleFiles() error {
 	if p.dir == "" {
 		// guard against programmer error. Must be careful when we are deleting user files.
-		log.Panic("unexpected sort-dir", zap.String("sort-dir", p.dir))
+		log.Panic("unexpected sort-dir", zap.String("sortDir", p.dir))
 	}
 
 	files, err := filepath.Glob(filepath.Join(p.dir, fmt.Sprintf("%s-*", sortDirDataFileMagicPrefix)))

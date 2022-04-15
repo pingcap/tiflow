@@ -35,7 +35,7 @@ func NewOperateSchemaCmd() *cobra.Command {
 	cmd.Flags().StringP("database", "d", "", "database name of the table")
 	cmd.Flags().StringP("table", "t", "", "table name")
 	cmd.Flags().Bool("flush", true, "flush the table info and checkpoint immediately")
-	cmd.Flags().Bool("sync", false, "sync the table info to master to resolve shard ddl lock, only for optimistic mode now")
+	cmd.Flags().Bool("sync", true, "sync the table info to master to resolve shard ddl lock, only for optimistic mode now")
 	return cmd
 }
 
@@ -115,14 +115,22 @@ func operateSchemaCmd(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
-	if sync && op != pb.SchemaOp_SetSchema {
-		return errors.New("--sync flag is only used to set schema")
+	request := &pb.OperateSchemaRequest{
+		Op:         op,
+		Task:       taskName,
+		Sources:    sources,
+		Database:   database,
+		Table:      table,
+		Schema:     string(schemaContent),
+		Flush:      flush,
+		Sync:       sync,
+		FromSource: false,
+		FromTarget: false,
 	}
-	return sendOperateSchemaRequest(op, taskName, sources, database, table, string(schemaContent), flush, sync)
+	return sendOperateSchemaRequest(request)
 }
 
-func sendOperateSchemaRequest(op pb.SchemaOp, taskName string, sources []string,
-	database, table, schemaContent string, flush, sync bool) error {
+func sendOperateSchemaRequest(request *pb.OperateSchemaRequest) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -130,16 +138,7 @@ func sendOperateSchemaRequest(op pb.SchemaOp, taskName string, sources []string,
 	err := common.SendRequest(
 		ctx,
 		"OperateSchema",
-		&pb.OperateSchemaRequest{
-			Op:       op,
-			Task:     taskName,
-			Sources:  sources,
-			Database: database,
-			Table:    table,
-			Schema:   schemaContent,
-			Flush:    flush,
-			Sync:     sync,
-		},
+		request,
 		&resp,
 	)
 	if err != nil {

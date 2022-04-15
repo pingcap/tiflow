@@ -79,7 +79,7 @@ func (s *checkpointTsSenderImpl) SendCheckpoint(ctx context.Context, provider ch
 	if s.enRouteCheckpointTs != noEnRouteCheckpointTs {
 		if !s.communicator.Barrier(ctx) {
 			s.logger.Debug("not sending checkpoint due to pending barrier",
-				zap.Duration("since-last-sent", time.Since(s.lastSendCheckpointTime)))
+				zap.Duration("sinceLastSent", time.Since(s.lastSendCheckpointTime)))
 			// We cannot proceed because the last checkpoint has not been acknowledged to have
 			// been received.
 			return nil

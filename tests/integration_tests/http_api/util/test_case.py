@@ -241,15 +241,19 @@ def list_processor():
     print("pass test: list processors")
 
 
-# must at least one table is sync will the test success
 def get_processor():
-    url = BASE_URL0 + "/processors"
-    resp = rq.get(url, cert=CERT, verify=VERIFY)
+    base_url = BASE_URL0 + "/processors"
+    resp = rq.get(base_url, cert=CERT, verify=VERIFY)
     assert resp.status_code == rq.codes.ok
     data = resp.json()[0]
-    url = url + "/" + data["changefeed_id"] + "/" + data["capture_id"]
+    url = base_url + "/" + data["changefeed_id"] + "/" + data["capture_id"]
     resp = rq.get(url, cert=CERT, verify=VERIFY)
     assert resp.status_code == rq.codes.ok
+
+    # test capture_id error and cdc server no panic
+    url = base_url + "/" + data["changefeed_id"] + "/" + "non-exist-capture-id"
+    resp = rq.get(url, cert=CERT, verify=VERIFY)
+    assert resp.status_code == rq.codes.bad_request
 
     print("pass test: get processors")
 

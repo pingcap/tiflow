@@ -14,7 +14,6 @@
 package codec
 
 import (
-	"context"
 	"encoding/binary"
 	"time"
 
@@ -32,27 +31,13 @@ type EventBatchEncoder interface {
 	// This event will be broadcast to all partitions to signal a global checkpoint.
 	EncodeCheckpointEvent(ts uint64) (*MQMessage, error)
 	// AppendRowChangedEvent appends a row changed event into the batch
-	AppendRowChangedEvent(e *model.RowChangedEvent) (EncoderResult, error)
-	// AppendResolvedEvent appends a resolved event into the batch.
-	// This event is used to tell the encoder that no event prior to ts will be sent.
-	AppendResolvedEvent(ts uint64) (EncoderResult, error)
+	AppendRowChangedEvent(e *model.RowChangedEvent) error
 	// EncodeDDLEvent appends a DDL event into the batch
 	EncodeDDLEvent(e *model.DDLEvent) (*MQMessage, error)
 	// Build builds the batch and returns the bytes of key and value.
 	Build() []*MQMessage
-	// MixedBuild builds the batch and returns the bytes of mixed keys and values.
-	// This is used for cdc log, to merge key and value into one byte slice
-	// when first create file, we should set withVersion to true, to tell us that
-	// the first 8 byte represents the encoder version
-	// TODO decouple it out
-	MixedBuild(withVersion bool) []byte
 	// Size returns the size of the batch(bytes)
-	// Deprecated: Size is deprecated
 	Size() int
-	// Reset reset the kv buffer
-	Reset()
-	// SetParams provides the encoder with more info on the sink
-	SetParams(params map[string]string) error
 }
 
 // MQMessage represents an MQ message to the mqSink
@@ -155,32 +140,32 @@ type EncoderResult uint8
 
 // Enum types of EncoderResult
 const (
-	EncoderNoOperation EncoderResult = iota
-	EncoderNeedAsyncWrite
+	EncoderNeedAsyncWrite EncoderResult = iota
 	EncoderNeedSyncWrite
 )
 
+// EncoderBuilder builds encoder with context.
 type EncoderBuilder interface {
-	Build(ctx context.Context) (EventBatchEncoder, error)
+	Build() EventBatchEncoder
 }
 
 // NewEventBatchEncoderBuilder returns an EncoderBuilder
-func NewEventBatchEncoderBuilder(p config.Protocol, credential *security.Credential, opts map[string]string) (EncoderBuilder, error) {
-	switch p {
+func NewEventBatchEncoderBuilder(c *Config, credential *security.Credential) (EncoderBuilder, error) {
+	switch c.protocol {
 	case config.ProtocolDefault, config.ProtocolOpen:
-		return newJSONEventBatchEncoderBuilder(opts), nil
+		return newJSONEventBatchEncoderBuilder(c), nil
 	case config.ProtocolCanal:
-		return newCanalEventBatchEncoderBuilder(opts), nil
+		return newCanalEventBatchEncoderBuilder(), nil
 	case config.ProtocolAvro:
-		return newAvroEventBatchEncoderBuilder(credential, opts)
+		return newAvroEventBatchEncoderBuilder(credential, c)
 	case config.ProtocolMaxwell:
-		return newMaxwellEventBatchEncoderBuilder(opts), nil
+		return newMaxwellEventBatchEncoderBuilder(), nil
 	case config.ProtocolCanalJSON:
-		return newCanalFlatEventBatchEncoderBuilder(opts), nil
+		return newCanalFlatEventBatchEncoderBuilder(c), nil
 	case config.ProtocolCraft:
-		return newCraftEventBatchEncoderBuilder(opts), nil
+		return newCraftEventBatchEncoderBuilder(c), nil
 	default:
-		log.Warn("unknown codec protocol value of EventBatchEncoder, use open-protocol as the default", zap.Int("protocol_value", int(p)))
-		return newJSONEventBatchEncoderBuilder(opts), nil
+		log.Warn("unknown codec protocol value of EventBatchEncoder, use open-protocol as the default", zap.Any("protocolValue", int(c.protocol)))
+		return newJSONEventBatchEncoderBuilder(c), nil
 	}
 }

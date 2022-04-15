@@ -44,7 +44,7 @@ func (s *maxwellbatchSuite) testmaxwellBatchCodec(c *check.C, newEncoder func() 
 	for _, cs := range s.rowCases {
 		encoder := newEncoder()
 		for _, row := range cs {
-			_, err := encoder.AppendRowChangedEvent(row)
+			err := encoder.AppendRowChangedEvent(row)
 			c.Assert(err, check.IsNil)
 		}
 		size := encoder.Size()
@@ -54,6 +54,7 @@ func (s *maxwellbatchSuite) testmaxwellBatchCodec(c *check.C, newEncoder func() 
 			continue
 		}
 		c.Assert(messages, check.HasLen, 1)
+		c.Assert(messages[0].GetRowsCount(), check.Equals, len(cs))
 		c.Assert(len(messages[0].Key)+len(messages[0].Value), check.Equals, size)
 	}
 

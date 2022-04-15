@@ -33,6 +33,15 @@ type tableSink struct {
 
 var _ Sink = (*tableSink)(nil)
 
+func (t *tableSink) TryEmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) (bool, error) {
+	t.buffer = append(t.buffer, rows...)
+	t.manager.metricsTableSinkTotalRows.Add(float64(len(rows)))
+	if t.redoManager.Enabled() {
+		return t.redoManager.TryEmitRowChangedEvents(ctx, t.tableID, rows...)
+	}
+	return true, nil
+}
+
 func (t *tableSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
 	t.buffer = append(t.buffer, rows...)
 	t.manager.metricsTableSinkTotalRows.Add(float64(len(rows)))
@@ -66,7 +75,7 @@ func (t *tableSink) FlushRowChangedEvents(ctx context.Context, tableID model.Tab
 
 	err := t.manager.bufSink.EmitRowChangedEvents(ctx, resolvedRows...)
 	if err != nil {
-		return t.manager.getCheckpointTs(tableID), errors.Trace(err)
+		return 0, errors.Trace(err)
 	}
 	return t.flushResolvedTs(ctx, resolvedTs)
 }
@@ -74,7 +83,7 @@ func (t *tableSink) FlushRowChangedEvents(ctx context.Context, tableID model.Tab
 func (t *tableSink) flushResolvedTs(ctx context.Context, resolvedTs uint64) (uint64, error) {
 	redoTs, err := t.flushRedoLogs(ctx, resolvedTs)
 	if err != nil {
-		return t.manager.getCheckpointTs(t.tableID), err
+		return 0, errors.Trace(err)
 	}
 	if redoTs < resolvedTs {
 		resolvedTs = redoTs
@@ -95,7 +104,7 @@ func (t *tableSink) flushRedoLogs(ctx context.Context, resolvedTs uint64) (uint6
 	return resolvedTs, nil
 }
 
-func (t *tableSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
+func (t *tableSink) EmitCheckpointTs(_ context.Context, _ uint64, _ []model.TableName) error {
 	// the table sink doesn't receive the checkpoint event
 	return nil
 }

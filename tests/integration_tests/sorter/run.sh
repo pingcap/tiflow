@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -e
+set -eu
 
 CUR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 source $CUR/../_utils/test_prepare
@@ -60,7 +60,7 @@ function run() {
 	reset_and_prepare_data
 
 	# Run cdc server with unified sorter.
-	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
+	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --config $CUR/conf/ticdc_unified_sorter.toml
 
 	TOPIC_NAME="ticdc-unified-sorter-test-$RANDOM"
 	CF_NAME=$TOPIC_NAME
@@ -83,7 +83,7 @@ function run() {
 	reset_and_prepare_data
 
 	# Run cdc server with leveldb sorter.
-	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --config $CUR/conf/ticdc_leveldb_sorter.toml
+	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
 
 	TOPIC_NAME="ticdc-leveldb-sorter-test-$RANDOM"
 	CF_NAME=$TOPIC_NAME

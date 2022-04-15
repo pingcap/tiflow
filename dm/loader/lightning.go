@@ -22,8 +22,9 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/br/pkg/lightning"
+	"github.com/pingcap/tidb/br/pkg/lightning/checkpoints"
 	lcfg "github.com/pingcap/tidb/br/pkg/lightning/config"
-	"go.etcd.io/etcd/clientv3"
+	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
@@ -34,6 +35,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/storage"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
 
@@ -41,6 +43,7 @@ const (
 	// checkpoint file name for lightning loader
 	// this file is used to store the real checkpoint data for lightning.
 	lightningCheckpointFileName = "tidb_lightning_checkpoint.pb"
+	TmpTLSConfigPath            = "lightning_tls"
 )
 
 // LightningLoader can load your mydumper data into TiDB database.
@@ -48,6 +51,7 @@ type LightningLoader struct {
 	sync.RWMutex
 
 	timeZone              string
+	sqlMode               string
 	lightningGlobalConfig *lcfg.GlobalConfig
 	cfg                   *config.SubTaskConfig
 
@@ -95,12 +99,9 @@ func makeGlobalConfig(cfg *config.SubTaskConfig) *lcfg.GlobalConfig {
 	lightningCfg.TiDB.Psw = cfg.To.Password
 	lightningCfg.TiDB.User = cfg.To.User
 	lightningCfg.TiDB.Port = cfg.To.Port
-	lightningCfg.TiDB.StatusPort = cfg.TiDB.StatusPort
-	lightningCfg.TiDB.PdAddr = cfg.TiDB.PdAddr
-	lightningCfg.TiDB.LogLevel = cfg.LogLevel
-	lightningCfg.TikvImporter.Backend = cfg.TiDB.Backend
+	lightningCfg.TikvImporter.Backend = lcfg.BackendTiDB
 	lightningCfg.PostRestore.Checksum = lcfg.OpLevelOff
-	if cfg.TiDB.Backend == lcfg.BackendLocal {
+	if lightningCfg.TikvImporter.Backend == lcfg.BackendLocal {
 		lightningCfg.TikvImporter.SortedKVDir = cfg.Dir
 	}
 	lightningCfg.Mydumper.SourceDir = cfg.Dir
@@ -148,7 +149,41 @@ func (l *LightningLoader) Init(ctx context.Context) (err error) {
 		}
 	}
 	l.timeZone = timeZone
+
+	for k, v := range l.cfg.To.Session {
+		if strings.ToLower(k) == "sql_mode" {
+			l.sqlMode = v
+			break
+		}
+	}
+
+	if len(l.sqlMode) == 0 {
+		sqlModes, err3 := utils.AdjustSQLModeCompatible(l.cfg.LoaderConfig.SQLMode)
+		if err3 != nil {
+			l.logger.Warn("cannot adjust sql_mode compatible, the sql_mode will stay the same", log.ShortError(err3))
+		}
+		l.sqlMode = sqlModes
+	}
+
 	return nil
+}
+
+func (l *LightningLoader) ignoreCheckpointError(ctx context.Context, cfg *lcfg.Config) error {
+	status, err := l.checkPointList.taskStatus(ctx)
+	if err != nil {
+		return err
+	}
+	if status != lightningStatusRunning {
+		return nil
+	}
+	cpdb, err := checkpoints.OpenCheckpointsDB(ctx, cfg)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_ = cpdb.Close()
+	}()
+	return errors.Trace(cpdb.IgnoreErrorCheckpoint(ctx, "all"))
 }
 
 func (l *LightningLoader) runLightning(ctx context.Context, cfg *lcfg.Config) error {
@@ -156,17 +191,30 @@ func (l *LightningLoader) runLightning(ctx context.Context, cfg *lcfg.Config) er
 	l.Lock()
 	l.cancel = cancel
 	l.Unlock()
-	if err := l.checkPointList.UpdateStatus(ctx, lightningStatusRunning); err != nil {
+
+	// always try to skill all checkpoint errors so we can resume this phase.
+	err := l.ignoreCheckpointError(ctx, cfg)
+	if err != nil {
+		l.logger.Warn("check lightning checkpoint status failed, skip this error", log.ShortError(err))
+	}
+	if err = l.checkPointList.UpdateStatus(ctx, lightningStatusRunning); err != nil {
 		return err
 	}
-	err := l.core.RunOnce(taskCtx, cfg, nil)
-	failpoint.Inject("LightningLoadDataSlowDown", nil)
-	failpoint.Inject("LightningLoadDataSlowDownByTask", func(val failpoint.Value) {
+
+	var opts []lightning.Option
+	if l.cfg.ExtStorage != nil {
+		opts = append(opts,
+			lightning.WithDumpFileStorage(l.cfg.ExtStorage),
+			lightning.WithCheckpointStorage(l.cfg.ExtStorage, lightningCheckpointFileName))
+	}
+	err = l.core.RunOnceWithOptions(taskCtx, cfg, opts...)
+	failpoint.Inject("LoadDataSlowDown", nil)
+	failpoint.Inject("LoadDataSlowDownByTask", func(val failpoint.Value) {
 		tasks := val.(string)
 		taskNames := strings.Split(tasks, ",")
 		for _, taskName := range taskNames {
 			if l.cfg.Name == taskName {
-				l.logger.Info("inject failpoint LightningLoadDataSlowDownByTask", zap.String("task", taskName))
+				l.logger.Info("inject failpoint LoadDataSlowDownByTask in lightning loader", zap.String("task", taskName))
 				<-taskCtx.Done()
 			}
 		}
@@ -193,18 +241,31 @@ func (l *LightningLoader) restore(ctx context.Context) error {
 			return err
 		}
 		cfg.Routes = l.cfg.RouteRules
+
 		cfg.Checkpoint.Driver = lcfg.CheckpointDriverFile
-		cpPath := filepath.Join(l.cfg.LoaderConfig.Dir, lightningCheckpointFileName)
+		var cpPath string
+		// l.cfg.LoaderConfig.Dir may be a s3 path, and Lightning supports checkpoint in s3, we can use storage.AdjustPath to adjust path both local and s3.
+		cpPath, err = storage.AdjustPath(l.cfg.LoaderConfig.Dir, string(filepath.Separator)+lightningCheckpointFileName)
+		if err != nil {
+			return err
+		}
 		cfg.Checkpoint.DSN = cpPath
 		cfg.Checkpoint.KeepAfterSuccess = lcfg.CheckpointOrigin
+
+		cfg.TikvImporter.OnDuplicate = string(l.cfg.OnDuplicate)
 		cfg.TiDB.Vars = make(map[string]string)
+		cfg.Routes = l.cfg.RouteRules
 		if l.cfg.To.Session != nil {
 			for k, v := range l.cfg.To.Session {
 				cfg.TiDB.Vars[k] = v
 			}
 		}
-		cfg.TiDB.StrSQLMode = l.cfg.LoaderConfig.SQLMode
-		cfg.TiDB.Vars = map[string]string{"time_zone": l.timeZone}
+		cfg.TiDB.StrSQLMode = l.sqlMode
+		cfg.TiDB.Vars = map[string]string{
+			"time_zone": l.timeZone,
+			// always set transaction mode to optimistic
+			"tidb_txn_mode": "optimistic",
+		}
 		err = l.runLightning(ctx, cfg)
 		if err == nil {
 			l.finish.Store(true)
@@ -222,7 +283,7 @@ func (l *LightningLoader) restore(ctx context.Context) error {
 	}
 	if l.finish.Load() {
 		if l.cfg.CleanDumpFile {
-			cleanDumpFiles(l.cfg)
+			cleanDumpFiles(ctx, l.cfg)
 		}
 	}
 	return err
@@ -239,7 +300,8 @@ func (l *LightningLoader) Process(ctx context.Context, pr chan pb.ProcessResult)
 		}
 		failpoint.Return()
 	})
-	binlog, gtid, err := getMydumpMetadata(l.cli, l.cfg, l.workerName)
+
+	binlog, gtid, err := getMydumpMetadata(ctx, l.cli, l.cfg, l.workerName)
 	if err != nil {
 		loaderExitWithErrorCounter.WithLabelValues(l.cfg.Name, l.cfg.SourceID).Inc()
 		pr <- pb.ProcessResult{
@@ -264,7 +326,12 @@ func (l *LightningLoader) Process(ctx context.Context, pr chan pb.ProcessResult)
 		isCanceled = true
 	default:
 	}
-	l.logger.Info("lightning load end", zap.Bool("IsCanceled", isCanceled))
+	s := l.status()
+	l.logger.Info("lightning load end",
+		zap.Bool("IsCanceled", isCanceled),
+		zap.Int64("finished_bytes", s.FinishedBytes),
+		zap.Int64("total_bytes", s.TotalBytes),
+		zap.String("progress", s.Progress))
 	pr <- pb.ProcessResult{IsCanceled: isCanceled, Errors: errs}
 }
 
@@ -283,6 +350,12 @@ func (l *LightningLoader) Close() {
 	l.Pause()
 	l.checkPointList.Close()
 	l.closed.Store(true)
+}
+
+// Kill does ungraceful shutdown.
+func (l *LightningLoader) Kill() {
+	// TODO: implement kill
+	l.Close()
 }
 
 // Pause pauses the process, and it can be resumed later
@@ -324,8 +397,7 @@ func (l *LightningLoader) Update(ctx context.Context, cfg *config.SubTaskConfig)
 	return nil
 }
 
-// Status returns the unit's current status.
-func (l *LightningLoader) Status(_ *binlog.SourceStatus) interface{} {
+func (l *LightningLoader) status() *pb.LoadStatus {
 	finished, total := l.core.Status()
 	progress := percent(finished, total, l.finish.Load())
 	s := &pb.LoadStatus{
@@ -336,4 +408,9 @@ func (l *LightningLoader) Status(_ *binlog.SourceStatus) interface{} {
 		MetaBinlogGTID: l.metaBinlogGTID.Load(),
 	}
 	return s
+}
+
+// Status returns the unit's current status.
+func (l *LightningLoader) Status(_ *binlog.SourceStatus) interface{} {
+	return l.status()
 }

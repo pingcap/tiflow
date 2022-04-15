@@ -186,8 +186,8 @@ func (s *utilsSuite) TestAndWriteExampleReplicaTOML(c *check.C) {
 	})
 	c.Assert(cfg.Sink, check.DeepEquals, &config.SinkConfig{
 		DispatchRules: []*config.DispatchRule{
-			{Dispatcher: "ts", Matcher: []string{"test1.*", "test2.*"}},
-			{Dispatcher: "rowid", Matcher: []string{"test3.*", "test4.*"}},
+			{PartitionRule: "ts", TopicRule: "hello_{schema}", Matcher: []string{"test1.*", "test2.*"}},
+			{PartitionRule: "rowid", TopicRule: "{schema}_world", Matcher: []string{"test3.*", "test4.*"}},
 		},
 		ColumnSelectors: []*config.ColumnSelector{
 			{Matcher: []string{"test1.*", "test2.*"}, Columns: []string{"column1", "column2"}},
@@ -273,4 +273,15 @@ max-backups = 1
 
 	err = StrictDecodeFile(configPath, "test", conf, "unknown")
 	c.Assert(err, check.ErrorMatches, ".*contained unknown configuration options: unknown2.*")
+
+	configContent = fmt.Sprintf(`
+data-dir = "%+v"
+[debug]
+unknown = 1
+`, dataDir)
+	err = os.WriteFile(configPath, []byte(configContent), 0o644)
+	c.Assert(err, check.IsNil)
+
+	err = StrictDecodeFile(configPath, "test", conf, "debug")
+	c.Assert(err, check.IsNil)
 }

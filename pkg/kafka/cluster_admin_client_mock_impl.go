@@ -26,8 +26,25 @@ const (
 	defaultMockControllerID = 1
 )
 
-// defaultMaxMessageBytes specifies the default max message bytes.
-var defaultMaxMessageBytes = "10485760"
+const (
+	// defaultMaxMessageBytes specifies the default max message bytes,
+	// default to 1048576, identical to kafka broker's `message.max.bytes` and topic's `max.message.bytes`
+	// see: https://kafka.apache.org/documentation/#brokerconfigs_message.max.bytes
+	// see: https://kafka.apache.org/documentation/#topicconfigs_max.message.bytes
+	defaultMaxMessageBytes = "1048576"
+
+	// defaultMinInsyncReplicas specifies the default `min.insync.replicas` for broker and topic.
+	defaultMinInsyncReplicas = "1"
+)
+
+var (
+	// BrokerMessageMaxBytes is the broker's `message.max.bytes`
+	BrokerMessageMaxBytes = defaultMaxMessageBytes
+	// TopicMaxMessageBytes is the topic's `max.message.bytes`
+	TopicMaxMessageBytes = defaultMaxMessageBytes
+	// MinInSyncReplicas is the `min.insync.replicas`
+	MinInSyncReplicas = defaultMinInsyncReplicas
+)
 
 // ClusterAdminClientMockImpl mock implements the admin client interface.
 type ClusterAdminClientMockImpl struct {
@@ -41,16 +58,23 @@ type ClusterAdminClientMockImpl struct {
 func NewClusterAdminClientMockImpl() *ClusterAdminClientMockImpl {
 	topics := make(map[string]sarama.TopicDetail)
 	configEntries := make(map[string]*string)
-	configEntries[TopicMaxMessageBytesConfigName] = &defaultMaxMessageBytes
+	configEntries[TopicMaxMessageBytesConfigName] = &TopicMaxMessageBytes
+	configEntries[MinInsyncReplicasConfigName] = &MinInSyncReplicas
 	topics[DefaultMockTopicName] = sarama.TopicDetail{
 		NumPartitions: 3,
 		ConfigEntries: configEntries,
 	}
 
-	brokerConfigs := []sarama.ConfigEntry{{
-		Name:  BrokerMessageMaxBytesConfigName,
-		Value: defaultMaxMessageBytes,
-	}}
+	brokerConfigs := []sarama.ConfigEntry{
+		{
+			Name:  BrokerMessageMaxBytesConfigName,
+			Value: BrokerMessageMaxBytes,
+		},
+		{
+			Name:  MinInsyncReplicasConfigName,
+			Value: MinInSyncReplicas,
+		},
+	}
 
 	return &ClusterAdminClientMockImpl{
 		topics:        topics,
@@ -70,8 +94,16 @@ func (c *ClusterAdminClientMockImpl) DescribeCluster() (brokers []*sarama.Broker
 }
 
 // DescribeConfig return brokerConfigs directly.
-func (c *ClusterAdminClientMockImpl) DescribeConfig(_ sarama.ConfigResource) ([]sarama.ConfigEntry, error) {
-	return c.brokerConfigs, nil
+func (c *ClusterAdminClientMockImpl) DescribeConfig(resource sarama.ConfigResource) ([]sarama.ConfigEntry, error) {
+	var result []sarama.ConfigEntry
+	for _, name := range resource.ConfigNames {
+		for _, config := range c.brokerConfigs {
+			if name == config.Name {
+				result = append(result, config)
+			}
+		}
+	}
+	return result, nil
 }
 
 // CreateTopic adds topic into map.
@@ -85,13 +117,30 @@ func (c *ClusterAdminClientMockImpl) Close() error {
 	return nil
 }
 
+// SetMinInsyncReplicas sets the MinInsyncReplicas for broker and default topic.
+func (c *ClusterAdminClientMockImpl) SetMinInsyncReplicas(minInsyncReplicas string) {
+	c.topics[DefaultMockTopicName].ConfigEntries[MinInsyncReplicasConfigName] = &minInsyncReplicas
+
+	for i, config := range c.brokerConfigs {
+		if config.Name == MinInsyncReplicasConfigName {
+			c.brokerConfigs[i].Value = minInsyncReplicas
+		}
+	}
+}
+
 // GetDefaultMockTopicName returns the default topic name
 func (c *ClusterAdminClientMockImpl) GetDefaultMockTopicName() string {
 	return DefaultMockTopicName
 }
 
-// GetDefaultMaxMessageBytes returns defaultMaxMessageBytes as a number.
-func (c *ClusterAdminClientMockImpl) GetDefaultMaxMessageBytes() int {
-	topicMaxMessage, _ := strconv.Atoi(defaultMaxMessageBytes)
-	return topicMaxMessage
+// GetBrokerMessageMaxBytes returns broker's `message.max.bytes`
+func (c *ClusterAdminClientMockImpl) GetBrokerMessageMaxBytes() int {
+	messageMaxBytes, _ := strconv.Atoi(BrokerMessageMaxBytes)
+	return messageMaxBytes
+}
+
+// GetTopicMaxMessageBytes returns topic's `max.message.bytes`
+func (c *ClusterAdminClientMockImpl) GetTopicMaxMessageBytes() int {
+	maxMessageBytes, _ := strconv.Atoi(TopicMaxMessageBytes)
+	return maxMessageBytes
 }

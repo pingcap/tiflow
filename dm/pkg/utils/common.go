@@ -22,21 +22,24 @@ import (
 	"sync"
 
 	"github.com/pingcap/failpoint"
-	"github.com/pingcap/tidb-tools/pkg/dbutil"
-	"github.com/pingcap/tidb-tools/pkg/filter"
-	router "github.com/pingcap/tidb-tools/pkg/table-router"
 	"github.com/pingcap/tidb/parser/model"
 	tmysql "github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tidb/table"
 	"github.com/pingcap/tidb/types"
-	"github.com/shopspring/decimal"
+	"github.com/pingcap/tidb/util/dbutil"
+	"github.com/pingcap/tidb/util/filter"
+	regexprrouter "github.com/pingcap/tidb/util/regexpr-router"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
+
+func init() {
+	ZeroSessionCtx = NewSessionCtx(nil)
+}
 
 // TrimCtrlChars returns a slice of the string s with all leading
 // and trailing control characters removed.
@@ -120,7 +123,7 @@ func FetchAllDoTables(ctx context.Context, db *sql.DB, bw *filter.Filter) (map[s
 }
 
 // FetchTargetDoTables returns all need to do tables after filtered and routed (fetches from upstream MySQL).
-func FetchTargetDoTables(ctx context.Context, db *sql.DB, bw *filter.Filter, router *router.Table) (map[string][]*filter.Table, error) {
+func FetchTargetDoTables(ctx context.Context, db *sql.DB, bw *filter.Filter, router *regexprrouter.RouteTable) (map[string][]*filter.Table, error) {
 	// fetch tables from source and filter them
 	sourceTables, err := FetchAllDoTables(ctx, db, bw)
 
@@ -323,6 +326,11 @@ func (se *session) GetBuiltinFunctionUsage() map[string]uint32 {
 	return se.builtinFunctionUsage
 }
 
+func (se *session) BuiltinFunctionUsageInc(scalarFuncSigName string) {}
+
+// ZeroSessionCtx is used when the session variables is not important.
+var ZeroSessionCtx sessionctx.Context
+
 // NewSessionCtx return a session context with specified session variables.
 func NewSessionCtx(vars map[string]string) sessionctx.Context {
 	variables := variable.NewSessionVars()
@@ -343,29 +351,8 @@ func NewSessionCtx(vars map[string]string) sessionctx.Context {
 
 // AdjustBinaryProtocolForDatum converts the data in binlog to TiDB datum.
 func AdjustBinaryProtocolForDatum(ctx sessionctx.Context, data []interface{}, cols []*model.ColumnInfo) ([]types.Datum, error) {
-	log.L().Debug("AdjustBinaryProtocolForChunk",
-		zap.Any("data", data),
-		zap.Any("columns", cols))
 	ret := make([]types.Datum, 0, len(data))
 	for i, d := range data {
-		switch v := d.(type) {
-		case int8:
-			d = int64(v)
-		case int16:
-			d = int64(v)
-		case int32:
-			d = int64(v)
-		case uint8:
-			d = uint64(v)
-		case uint16:
-			d = uint64(v)
-		case uint32:
-			d = uint64(v)
-		case uint:
-			d = uint64(v)
-		case decimal.Decimal:
-			d = v.String()
-		}
 		datum := types.NewDatum(d)
 		castDatum, err := table.CastValue(ctx, datum, cols[i], false, false)
 		if err != nil {

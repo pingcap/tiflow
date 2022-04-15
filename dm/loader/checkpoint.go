@@ -25,10 +25,11 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/cputil"
+	fr "github.com/pingcap/tiflow/dm/pkg/func-rollback"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 
-	"github.com/pingcap/tidb-tools/pkg/dbutil"
+	"github.com/pingcap/tidb/util/dbutil"
 	"go.uber.org/zap"
 )
 
@@ -101,7 +102,18 @@ type RemoteCheckPoint struct {
 }
 
 func newRemoteCheckPoint(tctx *tcontext.Context, cfg *config.SubTaskConfig, id string) (CheckPoint, error) {
-	db, dbConns, err := createConns(tctx, cfg, cfg.Name, cfg.SourceID, 1)
+	var err error
+	var db *conn.BaseDB
+	var dbConns []*DBConn
+
+	rollbackHolder := fr.NewRollbackHolder("loader")
+	defer func() {
+		if err != nil {
+			rollbackHolder.RollbackReverseOrder()
+		}
+	}()
+
+	db, dbConns, err = createConns(tctx, cfg, cfg.Name, cfg.SourceID, 1)
 	if err != nil {
 		return nil, err
 	}
@@ -116,6 +128,7 @@ func newRemoteCheckPoint(tctx *tcontext.Context, cfg *config.SubTaskConfig, id s
 		logger:         tctx.L().WithFields(zap.String("component", "remote checkpoint")),
 	}
 	cp.restoringFiles.pos = make(map[string]map[string]FilePosSet)
+	rollbackHolder.Add(fr.FuncRollback{Name: "CloseRemoteCheckPoint", Fn: cp.Close})
 
 	err = cp.prepare(tctx)
 	if err != nil {
@@ -595,6 +608,7 @@ func (cp *LightningCheckpointList) taskStatus(ctx context.Context) (lightingLoad
 
 	query := fmt.Sprintf("SELECT status FROM %s WHERE `task_name` = ? AND `source_name` = ?", cp.tableName)
 	tctx := tcontext.NewContext(ctx, log.With(zap.String("job", "lightning-checkpoint")))
+	// nolint:rowserrcheck
 	rows, err := connection.QuerySQL(tctx, query, cp.taskName, cp.sourceName)
 	if err != nil {
 		return lightningStatusInit, err

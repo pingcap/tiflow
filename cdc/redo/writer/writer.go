@@ -163,7 +163,7 @@ func NewLogWriter(ctx context.Context, cfg *LogWriterConfig) (*LogWriter, error)
 	err = logWriter.initMeta(ctx)
 	if err != nil {
 		log.Warn("init redo meta fail",
-			zap.String("change feed", cfg.ChangeFeedID),
+			zap.String("changefeed", cfg.ChangeFeedID),
 			zap.Error(err))
 	}
 	if cfg.S3Storage {
@@ -188,7 +188,7 @@ func NewLogWriter(ctx context.Context, cfg *LogWriterConfig) (*LogWriter, error)
 		}
 	}
 
-	logWriter.metricTotalRowsCount = redoTotalRowsCountGauge.WithLabelValues(cfg.CaptureID, cfg.ChangeFeedID)
+	logWriter.metricTotalRowsCount = redoTotalRowsCountGauge.WithLabelValues(cfg.ChangeFeedID)
 	logWriters[cfg.ChangeFeedID] = logWriter
 	go logWriter.runGC(ctx)
 	return logWriter, nil
@@ -274,12 +274,12 @@ func (l *LogWriter) runGC(ctx context.Context) {
 		case <-ctx.Done():
 			err := l.Close()
 			if err != nil {
-				log.Error("runGC close fail", zap.String("changefeedID", l.cfg.ChangeFeedID), zap.Error(err))
+				log.Error("runGC close fail", zap.String("changefeed", l.cfg.ChangeFeedID), zap.Error(err))
 			}
 		case <-ticker.C:
 			err := l.gc()
 			if err != nil {
-				log.Error("redo log GC fail", zap.String("changefeedID", l.cfg.ChangeFeedID), zap.Error(err))
+				log.Error("redo log GC fail", zap.String("changefeed", l.cfg.ChangeFeedID), zap.Error(err))
 			}
 		}
 	}
@@ -546,7 +546,7 @@ var getAllFilesInS3 = func(ctx context.Context, l *LogWriter) ([]string, error) 
 
 // Close implements RedoLogWriter.Close.
 func (l *LogWriter) Close() error {
-	redoTotalRowsCountGauge.DeleteLabelValues(l.cfg.CaptureID, l.cfg.ChangeFeedID)
+	redoTotalRowsCountGauge.DeleteLabelValues(l.cfg.ChangeFeedID)
 
 	var err error
 	err = multierr.Append(err, l.rowWriter.Close())

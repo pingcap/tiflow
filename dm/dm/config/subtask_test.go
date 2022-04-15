@@ -17,7 +17,9 @@ import (
 	"reflect"
 
 	. "github.com/pingcap/check"
-	"github.com/pingcap/tidb-tools/pkg/filter"
+	"github.com/pingcap/tidb/util/filter"
+
+	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
 func (t *testConfig) TestSubTask(c *C) {
@@ -69,6 +71,14 @@ func (t *testConfig) TestSubTask(c *C) {
 
 	err = cfg.Adjust(true)
 	c.Assert(err, IsNil)
+
+	cfg.ValidatorCfg = ValidatorConfig{Mode: ValidationFast}
+	err = cfg.Adjust(true)
+	c.Assert(err, IsNil)
+
+	cfg.ValidatorCfg = ValidatorConfig{Mode: "invalid-mode"}
+	err = cfg.Adjust(true)
+	c.Assert(terror.ErrConfigValidationMode.Equal(err), IsTrue)
 }
 
 func (t *testConfig) TestSubTaskAdjustFail(c *C) {
@@ -169,6 +179,106 @@ func (t *testConfig) TestSubTaskBlockAllowList(c *C) {
 	err = cfg.Adjust(false)
 	c.Assert(err, IsNil)
 	c.Assert(cfg.BAList, Equals, filterRules2)
+}
+
+func (t *testConfig) TestSubTaskAdjustLoaderS3Dir(c *C) {
+	cfg := &SubTaskConfig{
+		Name:     "test",
+		SourceID: "source-1",
+		Mode:     ModeAll,
+	}
+
+	// default loader
+	cfg.LoaderConfig = DefaultLoaderConfig()
+	err := cfg.Adjust(false)
+	c.Assert(err, IsNil)
+	c.Assert(cfg.LoaderConfig.Dir, Equals, defaultDir+"."+cfg.Name)
+
+	// file
+	cfg.LoaderConfig = LoaderConfig{
+		PoolSize:   defaultPoolSize,
+		Dir:        "file:///tmp/storage",
+		ImportMode: LoadModeSQL,
+	}
+	err = cfg.Adjust(false)
+	c.Assert(err, IsNil)
+	c.Assert(cfg.LoaderConfig.Dir, Equals, "file:///tmp/storage"+"."+cfg.Name)
+
+	cfg.LoaderConfig = LoaderConfig{
+		PoolSize:   defaultPoolSize,
+		Dir:        "./dump_data",
+		ImportMode: LoadModeSQL,
+	}
+	err = cfg.Adjust(false)
+	c.Assert(err, IsNil)
+	c.Assert(cfg.LoaderConfig.Dir, Equals, "./dump_data"+"."+cfg.Name)
+
+	// s3
+	cfg.LoaderConfig = LoaderConfig{
+		PoolSize:   defaultPoolSize,
+		Dir:        "s3://bucket2/prefix",
+		ImportMode: LoadModeSQL,
+	}
+	err = cfg.Adjust(false)
+	c.Assert(err, IsNil)
+	c.Assert(cfg.LoaderConfig.Dir, Equals, "s3://bucket2/prefix"+"/"+cfg.Name+"."+cfg.SourceID)
+
+	cfg.LoaderConfig = LoaderConfig{
+		PoolSize:   defaultPoolSize,
+		Dir:        "s3://bucket3/prefix/path?endpoint=https://127.0.0.1:9000&force_path_style=0&SSE=aws:kms&sse-kms-key-id=TestKey&xyz=abc",
+		ImportMode: LoadModeSQL,
+	}
+	err = cfg.Adjust(false)
+	c.Assert(err, IsNil)
+	c.Assert(cfg.LoaderConfig.Dir, Equals, "s3://bucket3/prefix/path"+"/"+cfg.Name+"."+cfg.SourceID+"?endpoint=https://127.0.0.1:9000&force_path_style=0&SSE=aws:kms&sse-kms-key-id=TestKey&xyz=abc")
+
+	// invaild dir
+	cfg.LoaderConfig = LoaderConfig{
+		PoolSize:   defaultPoolSize,
+		Dir:        "1invalid:",
+		ImportMode: LoadModeSQL,
+	}
+	err = cfg.Adjust(false)
+	c.Assert(err, ErrorMatches, "\\[.*\\], Message: loader's dir 1invalid: is invalid.*")
+
+	// use loader and not s3
+	cfg.LoaderConfig = LoaderConfig{
+		PoolSize:   defaultPoolSize,
+		Dir:        "file:///tmp/storage",
+		ImportMode: LoadModeSQL,
+	}
+	err = cfg.Adjust(false)
+	c.Assert(err, IsNil)
+	c.Assert(cfg.LoaderConfig.Dir, Equals, "file:///tmp/storage"+"."+cfg.Name)
+
+	cfg.LoaderConfig = LoaderConfig{
+		PoolSize:   defaultPoolSize,
+		Dir:        "./dumpdir",
+		ImportMode: LoadModeSQL,
+	}
+	err = cfg.Adjust(false)
+	c.Assert(err, IsNil)
+	c.Assert(cfg.LoaderConfig.Dir, Equals, "./dumpdir"+"."+cfg.Name)
+
+	// use loader and s3
+	cfg.LoaderConfig = LoaderConfig{
+		PoolSize:   defaultPoolSize,
+		Dir:        "s3://bucket2/prefix",
+		ImportMode: LoadModeLoader,
+	}
+	err = cfg.Adjust(false)
+	c.Assert(err, ErrorMatches, "\\[.*\\], Message: loader's dir s3://bucket2/prefix is s3 dir, but s3 is not supported.*")
+
+	// not all or full mode
+	cfg.Mode = ModeIncrement
+	cfg.LoaderConfig = LoaderConfig{
+		PoolSize:   defaultPoolSize,
+		Dir:        "1invalid:",
+		ImportMode: LoadModeSQL,
+	}
+	err = cfg.Adjust(false)
+	c.Assert(err, IsNil)
+	c.Assert(cfg.LoaderConfig.Dir, Equals, "1invalid:")
 }
 
 func (t *testConfig) TestDBConfigClone(c *C) {

@@ -16,13 +16,13 @@ package unified
 import (
 	"context"
 	"sync/atomic"
+	"testing"
 	"time"
 
-	"github.com/pingcap/check"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/util/testleak"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"golang.org/x/sync/errgroup"
@@ -91,8 +91,7 @@ func (b *mockFlushTaskBuilder) build() *flushTask {
 
 // TestMergerSingleHeap simulates a situation where there is only one data stream
 // It tests the most basic scenario.
-func (s *sorterSuite) TestMergerSingleHeap(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestMergerSingleHeap(t *testing.T) {
 	err := failpoint.Enable("github.com/pingcap/tiflow/cdc/sorter/unified/sorterDebug", "return(true)")
 	if err != nil {
 		log.Panic("Could not enable failpoint", zap.Error(err))
@@ -142,28 +141,27 @@ func (s *sorterSuite) TestMergerSingleHeap(c *check.C) {
 				switch event.RawKV.OpType {
 				case model.OpTypePut:
 					count++
-					c.Assert(event.CRTs, check.GreaterEqual, lastTs)
-					c.Assert(event.CRTs, check.GreaterEqual, lastResolved)
+					require.GreaterOrEqual(t, event.CRTs, lastTs)
+					require.GreaterOrEqual(t, event.CRTs, lastResolved)
 					lastTs = event.CRTs
 				case model.OpTypeResolved:
-					c.Assert(event.CRTs, check.GreaterEqual, lastResolved)
+					require.GreaterOrEqual(t, event.CRTs, lastResolved)
 					lastResolved = event.CRTs
 				}
 				if lastResolved >= 300001 {
-					c.Assert(count, check.Equals, totalCount)
+					require.Equal(t, totalCount, count)
 					cancel()
 					return nil
 				}
 			}
 		}
 	})
-	c.Assert(wg.Wait(), check.ErrorMatches, ".*context canceled.*")
-	c.Assert(atomic.LoadInt64(&backEndCounterForTest), check.Equals, int64(0))
+	require.Regexp(t, ".*context canceled.*", wg.Wait())
+	require.Equal(t, int64(0), atomic.LoadInt64(&backEndCounterForTest))
 }
 
 // TestMergerSingleHeapRetire simulates a situation where the resolved event is not the last event in a flushTask
-func (s *sorterSuite) TestMergerSingleHeapRetire(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestMergerSingleHeapRetire(t *testing.T) {
 	err := failpoint.Enable("github.com/pingcap/tiflow/cdc/sorter/unified/sorterDebug", "return(true)")
 	if err != nil {
 		log.Panic("Could not enable failpoint", zap.Error(err))
@@ -213,15 +211,15 @@ func (s *sorterSuite) TestMergerSingleHeapRetire(c *check.C) {
 				switch event.RawKV.OpType {
 				case model.OpTypePut:
 					count++
-					c.Assert(event.CRTs, check.GreaterEqual, lastResolved)
-					c.Assert(event.CRTs, check.GreaterEqual, lastTs)
+					require.GreaterOrEqual(t, event.CRTs, lastResolved)
+					require.GreaterOrEqual(t, event.CRTs, lastTs)
 					lastTs = event.CRTs
 				case model.OpTypeResolved:
-					c.Assert(event.CRTs, check.GreaterEqual, lastResolved)
+					require.GreaterOrEqual(t, event.CRTs, lastResolved)
 					lastResolved = event.CRTs
 				}
 				if lastResolved >= 300001 {
-					c.Assert(count, check.Equals, totalCount)
+					require.Equal(t, totalCount, count)
 					cancel()
 					return nil
 				}
@@ -229,20 +227,19 @@ func (s *sorterSuite) TestMergerSingleHeapRetire(c *check.C) {
 		}
 	})
 
-	c.Assert(wg.Wait(), check.ErrorMatches, ".*context canceled.*")
-	c.Assert(atomic.LoadInt64(&backEndCounterForTest), check.Equals, int64(0))
+	require.Regexp(t, ".*context canceled.*", wg.Wait())
+	require.Equal(t, int64(0), atomic.LoadInt64(&backEndCounterForTest))
 }
 
 // TestMergerSortDelay simulates a situation where merging takes a long time.
 // Expects intermediate resolved events to be generated, so that the sink would not get stuck in a real life situation.
-func (s *sorterSuite) TestMergerSortDelay(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestMergerSortDelay(t *testing.T) {
 	err := failpoint.Enable("github.com/pingcap/tiflow/cdc/sorter/unified/sorterDebug", "return(true)")
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 
 	// enable the failpoint to simulate delays
 	err = failpoint.Enable("github.com/pingcap/tiflow/cdc/sorter/unified/sorterMergeDelay", "sleep(5)")
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	defer func() {
 		_ = failpoint.Disable("github.com/pingcap/tiflow/cdc/sorter/unified/sorterMergeDelay")
 	}()
@@ -286,20 +283,20 @@ func (s *sorterSuite) TestMergerSortDelay(c *check.C) {
 				switch event.RawKV.OpType {
 				case model.OpTypePut:
 					count++
-					c.Assert(event.CRTs, check.GreaterEqual, lastResolved)
-					c.Assert(event.CRTs, check.GreaterEqual, lastTs)
+					require.GreaterOrEqual(t, event.CRTs, lastResolved)
+					require.GreaterOrEqual(t, event.CRTs, lastTs)
 					lastTs = event.CRTs
 				case model.OpTypeResolved:
-					c.Assert(event.CRTs, check.GreaterEqual, lastResolved)
+					require.GreaterOrEqual(t, event.CRTs, lastResolved)
 					if !lastResolvedTime.IsZero() {
-						c.Assert(time.Since(lastResolvedTime), check.LessEqual, 2*time.Second)
+						require.LessOrEqual(t, time.Since(lastResolvedTime), 2*time.Second)
 					}
 					log.Debug("resolved event received", zap.Uint64("ts", event.CRTs))
 					lastResolvedTime = time.Now()
 					lastResolved = event.CRTs
 				}
 				if lastResolved >= 1000001 {
-					c.Assert(count, check.Equals, totalCount)
+					require.Equal(t, totalCount, count)
 					cancel()
 					return nil
 				}
@@ -307,22 +304,21 @@ func (s *sorterSuite) TestMergerSortDelay(c *check.C) {
 		}
 	})
 
-	c.Assert(wg.Wait(), check.ErrorMatches, ".*context canceled.*")
+	require.Regexp(t, ".*context canceled.*", wg.Wait())
 	close(inChan)
 	mergerCleanUp(inChan)
-	c.Assert(atomic.LoadInt64(&backEndCounterForTest), check.Equals, int64(0))
+	require.Equal(t, int64(0), atomic.LoadInt64(&backEndCounterForTest))
 }
 
 // TestMergerCancel simulates a situation where the merger is cancelled with pending data.
 // Expects proper clean-up of the data.
-func (s *sorterSuite) TestMergerCancel(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestMergerCancel(t *testing.T) {
 	err := failpoint.Enable("github.com/pingcap/tiflow/cdc/sorter/unified/sorterDebug", "return(true)")
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 
 	// enable the failpoint to simulate delays
 	err = failpoint.Enable("github.com/pingcap/tiflow/cdc/sorter/unified/sorterMergeDelay", "sleep(10)")
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	defer func() {
 		_ = failpoint.Disable("github.com/pingcap/tiflow/cdc/sorter/unified/sorterMergeDelay")
 	}()
@@ -370,18 +366,17 @@ func (s *sorterSuite) TestMergerCancel(c *check.C) {
 
 	time.Sleep(5 * time.Second)
 	cancel()
-	c.Assert(wg.Wait(), check.ErrorMatches, ".*context canceled.*")
+	require.Regexp(t, ".*context canceled.*", wg.Wait())
 	close(inChan)
 	mergerCleanUp(inChan)
-	c.Assert(atomic.LoadInt64(&backEndCounterForTest), check.Equals, int64(0))
+	require.Equal(t, int64(0), atomic.LoadInt64(&backEndCounterForTest))
 }
 
 // TestMergerCancel simulates a situation where the merger is cancelled with pending data.
 // Expects proper clean-up of the data.
-func (s *sorterSuite) TestMergerCancelWithUnfinishedFlushTasks(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestMergerCancelWithUnfinishedFlushTasks(t *testing.T) {
 	err := failpoint.Enable("github.com/pingcap/tiflow/cdc/sorter/unified/sorterDebug", "return(true)")
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 
 	log.SetLevel(zapcore.DebugLevel)
 	defer log.SetLevel(zapcore.InfoLevel)
@@ -424,20 +419,19 @@ func (s *sorterSuite) TestMergerCancelWithUnfinishedFlushTasks(c *check.C) {
 		}
 	})
 
-	c.Assert(wg.Wait(), check.ErrorMatches, ".*context canceled.*")
+	require.Regexp(t, ".*context canceled.*", wg.Wait())
 	close(inChan)
 	mergerCleanUp(inChan)
 	// Leaking one task is expected
-	c.Assert(atomic.LoadInt64(&backEndCounterForTest), check.Equals, int64(1))
+	require.Equal(t, int64(1), atomic.LoadInt64(&backEndCounterForTest))
 	atomic.StoreInt64(&backEndCounterForTest, 0)
 }
 
 // TestMergerCancel simulates a situation where the input channel is abruptly closed.
 // There is expected to be NO fatal error.
-func (s *sorterSuite) TestMergerCloseChannel(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestMergerCloseChannel(t *testing.T) {
 	err := failpoint.Enable("github.com/pingcap/tiflow/cdc/sorter/unified/sorterDebug", "return(true)")
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 
 	log.SetLevel(zapcore.DebugLevel)
 	defer log.SetLevel(zapcore.InfoLevel)
@@ -473,17 +467,16 @@ func (s *sorterSuite) TestMergerCloseChannel(c *check.C) {
 	close(inChan)
 	time.Sleep(5 * time.Second)
 	cancel()
-	c.Assert(wg.Wait(), check.ErrorMatches, ".*context canceled.*")
+	require.Regexp(t, ".*context canceled.*", wg.Wait())
 	mergerCleanUp(inChan)
-	c.Assert(atomic.LoadInt64(&backEndCounterForTest), check.Equals, int64(0))
+	require.Equal(t, int64(0), atomic.LoadInt64(&backEndCounterForTest))
 }
 
 // TestMergerOutputBlocked simulates a situation where the output channel is blocked for
 // a significant period of time.
-func (s *sorterSuite) TestMergerOutputBlocked(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestMergerOutputBlocked(t *testing.T) {
 	err := failpoint.Enable("github.com/pingcap/tiflow/cdc/sorter/unified/sorterDebug", "return(true)")
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	defer failpoint.Disable("github.com/pingcap/tiflow/cdc/sorter/unified/sorterDebug") //nolint:errcheck
 
 	ctx, cancel := context.WithTimeout(context.TODO(), time.Second*25)
@@ -533,21 +526,21 @@ func (s *sorterSuite) TestMergerOutputBlocked(c *check.C) {
 				switch event.RawKV.OpType {
 				case model.OpTypePut:
 					count++
-					c.Assert(event.CRTs, check.GreaterEqual, lastTs)
-					c.Assert(event.CRTs, check.GreaterEqual, lastResolved)
+					require.GreaterOrEqual(t, event.CRTs, lastTs)
+					require.GreaterOrEqual(t, event.CRTs, lastResolved)
 					lastTs = event.CRTs
 				case model.OpTypeResolved:
-					c.Assert(event.CRTs, check.GreaterEqual, lastResolved)
+					require.GreaterOrEqual(t, event.CRTs, lastResolved)
 					lastResolved = event.CRTs
 				}
 				if lastResolved >= 300001 {
-					c.Assert(count, check.Equals, totalCount)
+					require.Equal(t, totalCount, count)
 					cancel()
 					return nil
 				}
 			}
 		}
 	})
-	c.Assert(wg.Wait(), check.ErrorMatches, ".*context canceled.*")
-	c.Assert(atomic.LoadInt64(&backEndCounterForTest), check.Equals, int64(0))
+	require.Regexp(t, ".*context canceled.*", wg.Wait())
+	require.Equal(t, int64(0), atomic.LoadInt64(&backEndCounterForTest))
 }

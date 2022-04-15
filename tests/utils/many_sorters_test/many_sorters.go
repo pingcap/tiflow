@@ -55,7 +55,7 @@ func main() {
 	conf.Sorter = &config.SorterConfig{
 		NumConcurrentWorker:    8,
 		ChunkSizeLimit:         1 * 1024 * 1024 * 1024,
-		MaxMemoryPressure:      60,
+		MaxMemoryPercentage:    60,
 		MaxMemoryConsumption:   16 * 1024 * 1024 * 1024,
 		NumWorkerPoolGoroutine: 16,
 	}
@@ -81,10 +81,7 @@ func main() {
 	var finishCount int32
 	for i := 0; i < *numSorters; i++ {
 		sorters[i], err = unified.NewUnifiedSorter(*sorterDir,
-			"test-cf",
-			fmt.Sprintf("test-%d", i),
-			model.TableID(i),
-			"0.0.0.0:0")
+			"test-cf", fmt.Sprintf("test-%d", i), model.TableID(i))
 		if err != nil {
 			log.Panic("many_sorters", zap.Error(err))
 		}
@@ -122,7 +119,7 @@ func main() {
 				}
 
 				if ev.CRTs == uint64(((*numEvents)<<5)+1) {
-					log.Info("Sorter finished", zap.Int("sorter-id", finalI))
+					log.Info("Sorter finished", zap.Int("sorterID", finalI))
 					if atomic.AddInt32(&finishCount, 1) == int32(*numSorters) {
 						log.Info("Many Sorters test finished, cancelling all goroutines")
 						cancel()

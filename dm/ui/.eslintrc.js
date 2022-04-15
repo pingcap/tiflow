@@ -1,5 +1,6 @@
 module.exports = {
   extends: ['@ti-fe/eslint-config'],
+  ignorePatterns: ['src/routes.tsx'],
   env: {
     // Your custom env variables, e.g., browser: true, jest: true
   },

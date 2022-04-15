@@ -43,10 +43,6 @@ func init() {
 	StoreGlobalServerConfig(GetDefaultServerConfig())
 }
 
-// SchedulerV2Enabled determines wether to used the peer-message based scheduler.
-// TODO set this to true
-const SchedulerV2Enabled = false
-
 // SecurityConfig represents security config for server
 type SecurityConfig = security.Credential
 
@@ -89,7 +85,7 @@ var defaultServerConfig = &ServerConfig{
 	Sorter: &SorterConfig{
 		NumConcurrentWorker:    4,
 		ChunkSizeLimit:         128 * 1024 * 1024,       // 128MB
-		MaxMemoryPressure:      30,                      // 30% is safe on machines with memory capacity <= 16GB
+		MaxMemoryPercentage:    30,                      // 30% is safe on machines with memory capacity <= 16GB
 		MaxMemoryConsumption:   16 * 1024 * 1024 * 1024, // 16GB
 		NumWorkerPoolGoroutine: 16,
 		SortDir:                DefaultSortDir,
@@ -102,14 +98,18 @@ var defaultServerConfig = &ServerConfig{
 		RegionScanLimit:  40,
 	},
 	Debug: &DebugConfig{
-		EnableTableActor: false,
+		EnableTableActor: true,
+		TableActor: &TableActorConfig{
+			EventBatchSize: 32,
+		},
+		EnableNewScheduler: true,
 		// Default leveldb sorter config
-		EnableDBSorter: false,
+		EnableDBSorter: true,
 		DB: &DBConfig{
-			Count: 16,
-			// Following configs are optimized for write throughput.
+			Count: 8,
+			// Following configs are optimized for write/read throughput.
 			// Users should not change them.
-			Concurrency:                 256,
+			Concurrency:                 128,
 			MaxOpenFiles:                10000,
 			BlockSize:                   65536,
 			BlockCacheSize:              4294967296,
@@ -119,8 +119,10 @@ var defaultServerConfig = &ServerConfig{
 			WriteL0SlowdownTrigger:      math.MaxInt32,
 			WriteL0PauseTrigger:         math.MaxInt32,
 			CompactionL0Trigger:         160,
-			CompactionDeletionThreshold: 160000,
-			CleanupSpeedLimit:           10000,
+			CompactionDeletionThreshold: 10485760,
+			CompactionPeriod:            1800,
+			IteratorMaxAliveDuration:    10000,
+			IteratorSlowReadDuration:    256,
 		},
 		Messages: defaultMessageConfig.Clone(),
 	},

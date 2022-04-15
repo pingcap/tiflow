@@ -101,7 +101,7 @@ func (w *mysqlSinkWorker) run(ctx context.Context) (err error) {
 			stackSize := runtime.Stack(buf, false)
 			buf = buf[:stackSize]
 			err = cerror.ErrMySQLWorkerPanic.GenWithStack("mysql sink concurrent execute panic, stack: %v", string(buf))
-			log.Error("mysql sink worker panic", zap.Reflect("r", r), zap.Stack("stack trace"))
+			log.Error("mysql sink worker panic", zap.Reflect("r", r), zap.Stack("stacktrace"))
 		}
 	}()
 
@@ -109,9 +109,7 @@ func (w *mysqlSinkWorker) run(ctx context.Context) (err error) {
 		if len(toExecRows) == 0 {
 			return nil
 		}
-		rows := make([]*model.RowChangedEvent, len(toExecRows))
-		copy(rows, toExecRows)
-		err := w.execDMLs(ctx, rows, replicaID, w.bucket)
+		err := w.execDMLs(ctx, toExecRows, replicaID, w.bucket)
 		if err != nil {
 			txnNum = 0
 			return err

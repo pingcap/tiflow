@@ -17,6 +17,7 @@ import (
 	"context"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -31,14 +32,12 @@ import (
 // Manager is thread-safe.
 type Manager struct {
 	bufSink                *bufferSink
-	tableCheckpointTsMap   sync.Map
 	tableSinks             map[model.TableID]*tableSink
 	tableSinksMu           sync.Mutex
 	changeFeedCheckpointTs uint64
 
 	drawbackChan chan drawbackMsg
 
-	captureAddr               string
 	changefeedID              model.ChangeFeedID
 	metricsTableSinkTotalRows prometheus.Counter
 }
@@ -56,9 +55,8 @@ func NewManager(
 		changeFeedCheckpointTs:    checkpointTs,
 		tableSinks:                make(map[model.TableID]*tableSink),
 		drawbackChan:              drawbackChan,
-		captureAddr:               captureAddr,
 		changefeedID:              changefeedID,
-		metricsTableSinkTotalRows: tableSinkTotalRowsCountCounter.WithLabelValues(captureAddr, changefeedID),
+		metricsTableSinkTotalRows: tableSinkTotalRowsCountCounter.WithLabelValues(changefeedID),
 	}
 }
 
@@ -83,9 +81,20 @@ func (m *Manager) CreateTableSink(tableID model.TableID, checkpointTs model.Ts, 
 func (m *Manager) Close(ctx context.Context) error {
 	m.tableSinksMu.Lock()
 	defer m.tableSinksMu.Unlock()
-	tableSinkTotalRowsCountCounter.DeleteLabelValues(m.captureAddr, m.changefeedID)
+	tableSinkTotalRowsCountCounter.DeleteLabelValues(m.changefeedID)
 	if m.bufSink != nil {
-		return m.bufSink.Close(ctx)
+		log.Info("sinkManager try close bufSink",
+			zap.String("changefeed", m.changefeedID))
+		start := time.Now()
+		if err := m.bufSink.Close(ctx); err != nil {
+			log.Info("close bufSink failed",
+				zap.String("changefeed", m.changefeedID),
+				zap.Duration("duration", time.Since(start)))
+			return err
+		}
+		log.Info("close bufSink success",
+			zap.String("changefeed", m.changefeedID),
+			zap.Duration("duration", time.Since(start)))
 	}
 	return nil
 }
@@ -93,9 +102,8 @@ func (m *Manager) Close(ctx context.Context) error {
 func (m *Manager) flushBackendSink(ctx context.Context, tableID model.TableID, resolvedTs uint64) (model.Ts, error) {
 	checkpointTs, err := m.bufSink.FlushRowChangedEvents(ctx, tableID, resolvedTs)
 	if err != nil {
-		return m.getCheckpointTs(tableID), errors.Trace(err)
+		return 0, errors.Trace(err)
 	}
-	m.tableCheckpointTsMap.Store(tableID, checkpointTs)
 	return checkpointTs, nil
 }
 
@@ -117,16 +125,8 @@ func (m *Manager) destroyTableSink(ctx context.Context, tableID model.TableID) e
 	return m.bufSink.Barrier(ctx, tableID)
 }
 
-func (m *Manager) getCheckpointTs(tableID model.TableID) uint64 {
-	checkPoints, ok := m.tableCheckpointTsMap.Load(tableID)
-	if ok {
-		return checkPoints.(uint64)
-	}
-	// cannot find table level checkpointTs because of no table level resolvedTs flush task finished successfully,
-	// for example: first time to flush resolvedTs but cannot get the flush lock, return changefeed level checkpointTs is safe
-	return atomic.LoadUint64(&m.changeFeedCheckpointTs)
-}
-
+// UpdateChangeFeedCheckpointTs updates changedfeed level checkpointTs,
+// this value is used in getCheckpointTs func
 func (m *Manager) UpdateChangeFeedCheckpointTs(checkpointTs uint64) {
 	atomic.StoreUint64(&m.changeFeedCheckpointTs, checkpointTs)
 	if m.bufSink != nil {

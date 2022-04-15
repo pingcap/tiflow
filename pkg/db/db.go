@@ -15,11 +15,12 @@ package db
 
 // DB is an interface of a leveldb-like database.
 type DB interface {
-	Snapshot() (Snapshot, error)
+	Iterator(lowerBound, upperBound []byte) Iterator
 	Batch(cap int) Batch
+	DeleteRange(start, end []byte) error
 	Compact(start, end []byte) error
 	Close() error
-	CollectMetrics(captureAddr string, id int)
+	CollectMetrics(id int)
 }
 
 // A Batch is a sequence of Puts and Deletes that Commit to DB.
@@ -32,16 +33,9 @@ type Batch interface {
 	Reset()
 }
 
-// Snapshot is an interface of a point-in-time view of the current DB state.
-type Snapshot interface {
-	Iterator(lowerBound, upperBound []byte) Iterator
-	Release() error
-}
-
 // Iterator is an interface of an iterator of a DB.
 type Iterator interface {
 	Valid() bool
-	First() bool
 	Seek([]byte) bool
 	Next() bool
 	Key() []byte

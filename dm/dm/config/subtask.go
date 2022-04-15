@@ -15,6 +15,7 @@ package config
 
 import (
 	"bytes"
+	_ "embed"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -24,13 +25,15 @@ import (
 	"github.com/BurntSushi/toml"
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
 	"github.com/pingcap/tidb-tools/pkg/column-mapping"
-	"github.com/pingcap/tidb-tools/pkg/filter"
-	router "github.com/pingcap/tidb-tools/pkg/table-router"
-	lcfg "github.com/pingcap/tidb/br/pkg/lightning/config"
+	extstorage "github.com/pingcap/tidb/br/pkg/storage"
+	"github.com/pingcap/tidb/util/filter"
 	"go.uber.org/zap"
 
+	regexprrouter "github.com/pingcap/tidb/util/regexpr-router"
+	router "github.com/pingcap/tidb/util/table-router"
 	"github.com/pingcap/tiflow/dm/pkg/dumpling"
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/storage"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
@@ -174,37 +177,6 @@ func GetDBConfigForTest() DBConfig {
 	return DBConfig{Host: "localhost", User: "root", Password: "not a real password", Port: 3306}
 }
 
-// TiDBExtraConfig is the extra DB configuration only for TiDB.
-type TiDBExtraConfig struct {
-	StatusPort int    `toml:"status-port" json:"status-port" yaml:"status-port"`
-	PdAddr     string `toml:"pd-addr" json:"pd-addr" yaml:"pd-addr"`
-	Backend    string `toml:"backend" json:"backend" yaml:"backend"`
-}
-
-func (db *TiDBExtraConfig) String() string {
-	cfg, err := json.Marshal(db)
-	if err != nil {
-		log.L().Error("fail to marshal config to json", log.ShortError(err))
-	}
-	return string(cfg)
-}
-
-// Toml returns TOML format representation of config.
-func (db *TiDBExtraConfig) Toml() (string, error) {
-	var b bytes.Buffer
-	enc := toml.NewEncoder(&b)
-	if err := enc.Encode(db); err != nil {
-		return "", terror.ErrConfigTomlTransform.Delegate(err, "encode db config to toml")
-	}
-	return b.String(), nil
-}
-
-// Decode loads config from file data.
-func (db *TiDBExtraConfig) Decode(data string) error {
-	_, err := toml.Decode(data, db)
-	return terror.ErrConfigTomlTransform.Delegate(err, "decode db config")
-}
-
 // SubTaskConfig is the configuration for SubTask.
 type SubTaskConfig struct {
 	// BurntSushi/toml seems have a bug for flag "-"
@@ -229,6 +201,10 @@ type SubTaskConfig struct {
 	// if case insensitive, we would convert schema/table name/pattern to lower case
 	CaseSensitive bool `toml:"case-sensitive" json:"case-sensitive"`
 
+	// default "loose" handle create sql by original sql, will not add default collation as upstream
+	// "strict" will add default collation as upstream, and downstream will occur error when downstream don't support
+	CollationCompatible string `yaml:"collation_compatible" toml:"collation_compatible" json:"collation_compatible"`
+
 	Name string `toml:"name" json:"name"`
 	Mode string `toml:"mode" json:"mode"`
 	//  treat it as hidden configuration
@@ -252,10 +228,9 @@ type SubTaskConfig struct {
 	RelayDir string `toml:"relay-dir" json:"relay-dir"`
 
 	// UseRelay get value from dm-worker's relayEnabled
-	UseRelay bool            `toml:"use-relay" json:"use-relay"`
-	From     DBConfig        `toml:"from" json:"from"`
-	To       DBConfig        `toml:"to" json:"to"`
-	TiDB     TiDBExtraConfig `toml:"tidb" json:"tidb"`
+	UseRelay bool     `toml:"use-relay" json:"use-relay"`
+	From     DBConfig `toml:"from" json:"from"`
+	To       DBConfig `toml:"to" json:"to"`
 
 	RouteRules         []*router.TableRule   `toml:"route-rules" json:"route-rules"`
 	FilterRules        []*bf.BinlogEventRule `toml:"filter-rules" json:"filter-rules"`
@@ -269,6 +244,7 @@ type SubTaskConfig struct {
 	MydumperConfig // Mydumper configuration
 	LoaderConfig   // Loader configuration
 	SyncerConfig   // Syncer configuration
+	ValidatorCfg   ValidatorConfig
 
 	// compatible with standalone dm unit
 	LogLevel  string `toml:"log-level" json:"log-level"`
@@ -291,7 +267,18 @@ type SubTaskConfig struct {
 
 	// which DM worker is running the subtask, this will be injected when the real worker starts running the subtask(StartSubTask).
 	WorkerName string `toml:"-" json:"-"`
+	// task experimental configs
+	Experimental struct {
+		AsyncCheckpointFlush bool `yaml:"async-checkpoint-flush" toml:"async-checkpoint-flush" json:"async-checkpoint-flush"`
+	} `yaml:"experimental" toml:"experimental" json:"experimental"`
+
+	// dataflow engine can inject an ExternalStorage to units
+	ExtStorage extstorage.ExternalStorage `toml:"-" json:"-"`
 }
+
+// SampleSubtaskConfig is the content of subtask.toml in current folder.
+//go:embed subtask.toml
+var SampleSubtaskConfig string
 
 // NewSubTaskConfig creates a new SubTaskConfig.
 func NewSubTaskConfig() *SubTaskConfig {
@@ -419,10 +406,27 @@ func (c *SubTaskConfig) Adjust(verifyDecryptPassword bool) error {
 		c.MetaSchema = defaultMetaSchema
 	}
 
-	dirSuffix := "." + c.Name
-	if !strings.HasSuffix(c.LoaderConfig.Dir, dirSuffix) { // check to support multiple times calling
-		// if not ends with the task name, we append the task name to the tail
-		c.LoaderConfig.Dir += dirSuffix
+	// adjust dir
+	if c.Mode == ModeAll || c.Mode == ModeFull {
+		// check
+		isS3 := storage.IsS3Path(c.LoaderConfig.Dir)
+		if isS3 && c.ImportMode == LoadModeLoader {
+			return terror.ErrConfigLoaderS3NotSupport.Generate(c.LoaderConfig.Dir)
+		}
+		// add suffix
+		var dirSuffix string
+		if isS3 {
+			// we will dump files to s3 dir's subdirectory
+			dirSuffix = "/" + c.Name + "." + c.SourceID
+		} else {
+			// TODO we will dump local file to dir's subdirectory, but it may have risk of compatibility, we will fix in other pr
+			dirSuffix = "." + c.Name
+		}
+		newDir, err := storage.AdjustPath(c.LoaderConfig.Dir, dirSuffix)
+		if err != nil {
+			return terror.ErrConfigLoaderDirInvalid.Delegate(err, c.LoaderConfig.Dir)
+		}
+		c.LoaderConfig.Dir = newDir
 	}
 
 	if c.SyncerConfig.QueueSize == 0 {
@@ -450,7 +454,7 @@ func (c *SubTaskConfig) Adjust(verifyDecryptPassword bool) error {
 	if _, err := filter.New(c.CaseSensitive, c.BAList); err != nil {
 		return terror.ErrConfigGenBAList.Delegate(err)
 	}
-	if _, err := router.NewTableRouter(c.CaseSensitive, c.RouteRules); err != nil {
+	if _, err := regexprrouter.NewRegExprRouter(c.CaseSensitive, c.RouteRules); err != nil {
 		return terror.ErrConfigGenTableRouter.Delegate(err)
 	}
 	// NewMapping will fill arguments with the default values.
@@ -461,11 +465,14 @@ func (c *SubTaskConfig) Adjust(verifyDecryptPassword bool) error {
 		return terror.ErrConfigInvalidChunkFileSize.Generate(c.MydumperConfig.ChunkFilesize)
 	}
 
-	if c.TiDB.Backend != "" && c.TiDB.Backend != lcfg.BackendLocal && c.TiDB.Backend != lcfg.BackendTiDB {
-		return terror.ErrLoadBackendNotSupport.Generate(c.TiDB.Backend)
-	}
 	if _, err := bf.NewBinlogEvent(c.CaseSensitive, c.FilterRules); err != nil {
 		return terror.ErrConfigBinlogEventFilter.Delegate(err)
+	}
+	if err := c.LoaderConfig.adjust(); err != nil {
+		return err
+	}
+	if err := c.ValidatorCfg.Adjust(); err != nil {
+		return err
 	}
 
 	// TODO: check every member
@@ -550,5 +557,5 @@ func (c *SubTaskConfig) Clone() (*SubTaskConfig, error) {
 
 // NeedUseLightning returns whether need to use lightning loader.
 func (c *SubTaskConfig) NeedUseLightning() bool {
-	return (c.Mode == ModeAll || c.Mode == ModeFull) && c.TiDB.Backend != ""
+	return (c.Mode == ModeAll || c.Mode == ModeFull) && c.ImportMode == LoadModeSQL
 }

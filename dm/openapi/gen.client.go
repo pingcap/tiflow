@@ -90,6 +90,9 @@ func WithRequestEditorFn(fn RequestEditorFn) ClientOption {
 
 // The interface specification for the client above.
 type ClientInterface interface {
+	// DMAPIGetClusterInfo request
+	DMAPIGetClusterInfo(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// DMAPIGetClusterMasterList request
 	DMAPIGetClusterMasterList(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -119,11 +122,34 @@ type ClientInterface interface {
 	// DMAPIDeleteSource request
 	DMAPIDeleteSource(ctx context.Context, sourceName string, params *DMAPIDeleteSourceParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// DMAPIPauseRelay request
-	DMAPIPauseRelay(ctx context.Context, sourceName string, reqEditors ...RequestEditorFn) (*http.Response, error)
+	// DMAPIGetSource request
+	DMAPIGetSource(ctx context.Context, sourceName string, params *DMAPIGetSourceParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// DMAPIResumeRelay request
-	DMAPIResumeRelay(ctx context.Context, sourceName string, reqEditors ...RequestEditorFn) (*http.Response, error)
+	// DMAPIUpdateSource request with any body
+	DMAPIUpdateSourceWithBody(ctx context.Context, sourceName string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	DMAPIUpdateSource(ctx context.Context, sourceName string, body DMAPIUpdateSourceJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DMAPIDisableSource request
+	DMAPIDisableSource(ctx context.Context, sourceName string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DMAPIEnableSource request
+	DMAPIEnableSource(ctx context.Context, sourceName string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DMAPIDisableRelay request with any body
+	DMAPIDisableRelayWithBody(ctx context.Context, sourceName string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	DMAPIDisableRelay(ctx context.Context, sourceName string, body DMAPIDisableRelayJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DMAPIEnableRelay request with any body
+	DMAPIEnableRelayWithBody(ctx context.Context, sourceName string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	DMAPIEnableRelay(ctx context.Context, sourceName string, body DMAPIEnableRelayJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DMAPIPurgeRelay request with any body
+	DMAPIPurgeRelayWithBody(ctx context.Context, sourceName string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	DMAPIPurgeRelay(ctx context.Context, sourceName string, body DMAPIPurgeRelayJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// DMAPIGetSourceSchemaList request
 	DMAPIGetSourceSchemaList(ctx context.Context, sourceName string, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -131,66 +157,62 @@ type ClientInterface interface {
 	// DMAPIGetSourceTableList request
 	DMAPIGetSourceTableList(ctx context.Context, sourceName string, schemaName string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// DMAPIStartRelay request with any body
-	DMAPIStartRelayWithBody(ctx context.Context, sourceName string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	DMAPIStartRelay(ctx context.Context, sourceName string, body DMAPIStartRelayJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
-
 	// DMAPIGetSourceStatus request
 	DMAPIGetSourceStatus(ctx context.Context, sourceName string, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// DMAPIStopRelay request with any body
-	DMAPIStopRelayWithBody(ctx context.Context, sourceName string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	DMAPIStopRelay(ctx context.Context, sourceName string, body DMAPIStopRelayJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// DMAPITransferSource request with any body
 	DMAPITransferSourceWithBody(ctx context.Context, sourceName string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	DMAPITransferSource(ctx context.Context, sourceName string, body DMAPITransferSourceJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// DMAPIGetTaskConfigList request
-	DMAPIGetTaskConfigList(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// DMAPICreateTaskConfig request with any body
-	DMAPICreateTaskConfigWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	DMAPICreateTaskConfig(ctx context.Context, body DMAPICreateTaskConfigJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// DMAPIImportTaskConfig request with any body
-	DMAPIImportTaskConfigWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	DMAPIImportTaskConfig(ctx context.Context, body DMAPIImportTaskConfigJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// DMAPIDeleteTaskConfig request
-	DMAPIDeleteTaskConfig(ctx context.Context, taskName string, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// DMAPIGetTaskConfig request
-	DMAPIGetTaskConfig(ctx context.Context, taskName string, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// DMAPUpdateTaskConfig request
-	DMAPUpdateTaskConfig(ctx context.Context, taskName string, reqEditors ...RequestEditorFn) (*http.Response, error)
-
 	// DMAPIGetTaskList request
-	DMAPIGetTaskList(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+	DMAPIGetTaskList(ctx context.Context, params *DMAPIGetTaskListParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// DMAPIStartTask request with any body
-	DMAPIStartTaskWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+	// DMAPICreateTask request with any body
+	DMAPICreateTaskWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	DMAPIStartTask(ctx context.Context, body DMAPIStartTaskJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+	DMAPICreateTask(ctx context.Context, body DMAPICreateTaskJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DMAPIConvertTask request with any body
+	DMAPIConvertTaskWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	DMAPIConvertTask(ctx context.Context, body DMAPIConvertTaskJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DMAPIGetTaskTemplateList request
+	DMAPIGetTaskTemplateList(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DMAPICreateTaskTemplate request with any body
+	DMAPICreateTaskTemplateWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	DMAPICreateTaskTemplate(ctx context.Context, body DMAPICreateTaskTemplateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DMAPIImportTaskTemplate request with any body
+	DMAPIImportTaskTemplateWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	DMAPIImportTaskTemplate(ctx context.Context, body DMAPIImportTaskTemplateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DMAPIDeleteTaskTemplate request
+	DMAPIDeleteTaskTemplate(ctx context.Context, taskName string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DMAPIGetTaskTemplate request
+	DMAPIGetTaskTemplate(ctx context.Context, taskName string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DMAPUpdateTaskTemplate request
+	DMAPUpdateTaskTemplate(ctx context.Context, taskName string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// DMAPIDeleteTask request
 	DMAPIDeleteTask(ctx context.Context, taskName string, params *DMAPIDeleteTaskParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// DMAPIPauseTask request with any body
-	DMAPIPauseTaskWithBody(ctx context.Context, taskName string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+	// DMAPIGetTask request
+	DMAPIGetTask(ctx context.Context, taskName string, params *DMAPIGetTaskParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	DMAPIPauseTask(ctx context.Context, taskName string, body DMAPIPauseTaskJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+	// DMAPIUpdateTask request with any body
+	DMAPIUpdateTaskWithBody(ctx context.Context, taskName string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// DMAPIResumeTask request with any body
-	DMAPIResumeTaskWithBody(ctx context.Context, taskName string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+	DMAPIUpdateTask(ctx context.Context, taskName string, body DMAPIUpdateTaskJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	DMAPIResumeTask(ctx context.Context, taskName string, body DMAPIResumeTaskJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+	// DMAPIGetTaskMigrateTargets request
+	DMAPIGetTaskMigrateTargets(ctx context.Context, taskName string, sourceName string, params *DMAPIGetTaskMigrateTargetsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// DMAPIGetSchemaListByTaskAndSource request
 	DMAPIGetSchemaListByTaskAndSource(ctx context.Context, taskName string, sourceName string, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -209,8 +231,30 @@ type ClientInterface interface {
 
 	DMAPIOperateTableStructure(ctx context.Context, taskName string, sourceName string, schemaName string, tableName string, body DMAPIOperateTableStructureJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// DMAPIStartTask request with any body
+	DMAPIStartTaskWithBody(ctx context.Context, taskName string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	DMAPIStartTask(ctx context.Context, taskName string, body DMAPIStartTaskJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// DMAPIGetTaskStatus request
 	DMAPIGetTaskStatus(ctx context.Context, taskName string, params *DMAPIGetTaskStatusParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DMAPIStopTask request with any body
+	DMAPIStopTaskWithBody(ctx context.Context, taskName string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	DMAPIStopTask(ctx context.Context, taskName string, body DMAPIStopTaskJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+}
+
+func (c *Client) DMAPIGetClusterInfo(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDMAPIGetClusterInfoRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
 }
 
 func (c *Client) DMAPIGetClusterMasterList(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -333,8 +377,8 @@ func (c *Client) DMAPIDeleteSource(ctx context.Context, sourceName string, param
 	return c.Client.Do(req)
 }
 
-func (c *Client) DMAPIPauseRelay(ctx context.Context, sourceName string, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewDMAPIPauseRelayRequest(c.Server, sourceName)
+func (c *Client) DMAPIGetSource(ctx context.Context, sourceName string, params *DMAPIGetSourceParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDMAPIGetSourceRequest(c.Server, sourceName, params)
 	if err != nil {
 		return nil, err
 	}
@@ -345,8 +389,116 @@ func (c *Client) DMAPIPauseRelay(ctx context.Context, sourceName string, reqEdit
 	return c.Client.Do(req)
 }
 
-func (c *Client) DMAPIResumeRelay(ctx context.Context, sourceName string, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewDMAPIResumeRelayRequest(c.Server, sourceName)
+func (c *Client) DMAPIUpdateSourceWithBody(ctx context.Context, sourceName string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDMAPIUpdateSourceRequestWithBody(c.Server, sourceName, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) DMAPIUpdateSource(ctx context.Context, sourceName string, body DMAPIUpdateSourceJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDMAPIUpdateSourceRequest(c.Server, sourceName, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) DMAPIDisableSource(ctx context.Context, sourceName string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDMAPIDisableSourceRequest(c.Server, sourceName)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) DMAPIEnableSource(ctx context.Context, sourceName string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDMAPIEnableSourceRequest(c.Server, sourceName)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) DMAPIDisableRelayWithBody(ctx context.Context, sourceName string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDMAPIDisableRelayRequestWithBody(c.Server, sourceName, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) DMAPIDisableRelay(ctx context.Context, sourceName string, body DMAPIDisableRelayJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDMAPIDisableRelayRequest(c.Server, sourceName, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) DMAPIEnableRelayWithBody(ctx context.Context, sourceName string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDMAPIEnableRelayRequestWithBody(c.Server, sourceName, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) DMAPIEnableRelay(ctx context.Context, sourceName string, body DMAPIEnableRelayJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDMAPIEnableRelayRequest(c.Server, sourceName, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) DMAPIPurgeRelayWithBody(ctx context.Context, sourceName string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDMAPIPurgeRelayRequestWithBody(c.Server, sourceName, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) DMAPIPurgeRelay(ctx context.Context, sourceName string, body DMAPIPurgeRelayJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDMAPIPurgeRelayRequest(c.Server, sourceName, body)
 	if err != nil {
 		return nil, err
 	}
@@ -381,56 +533,8 @@ func (c *Client) DMAPIGetSourceTableList(ctx context.Context, sourceName string,
 	return c.Client.Do(req)
 }
 
-func (c *Client) DMAPIStartRelayWithBody(ctx context.Context, sourceName string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewDMAPIStartRelayRequestWithBody(c.Server, sourceName, contentType, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) DMAPIStartRelay(ctx context.Context, sourceName string, body DMAPIStartRelayJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewDMAPIStartRelayRequest(c.Server, sourceName, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
 func (c *Client) DMAPIGetSourceStatus(ctx context.Context, sourceName string, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewDMAPIGetSourceStatusRequest(c.Server, sourceName)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) DMAPIStopRelayWithBody(ctx context.Context, sourceName string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewDMAPIStopRelayRequestWithBody(c.Server, sourceName, contentType, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) DMAPIStopRelay(ctx context.Context, sourceName string, body DMAPIStopRelayJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewDMAPIStopRelayRequest(c.Server, sourceName, body)
 	if err != nil {
 		return nil, err
 	}
@@ -465,8 +569,8 @@ func (c *Client) DMAPITransferSource(ctx context.Context, sourceName string, bod
 	return c.Client.Do(req)
 }
 
-func (c *Client) DMAPIGetTaskConfigList(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewDMAPIGetTaskConfigListRequest(c.Server)
+func (c *Client) DMAPIGetTaskList(ctx context.Context, params *DMAPIGetTaskListParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDMAPIGetTaskListRequest(c.Server, params)
 	if err != nil {
 		return nil, err
 	}
@@ -477,8 +581,8 @@ func (c *Client) DMAPIGetTaskConfigList(ctx context.Context, reqEditors ...Reque
 	return c.Client.Do(req)
 }
 
-func (c *Client) DMAPICreateTaskConfigWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewDMAPICreateTaskConfigRequestWithBody(c.Server, contentType, body)
+func (c *Client) DMAPICreateTaskWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDMAPICreateTaskRequestWithBody(c.Server, contentType, body)
 	if err != nil {
 		return nil, err
 	}
@@ -489,8 +593,8 @@ func (c *Client) DMAPICreateTaskConfigWithBody(ctx context.Context, contentType 
 	return c.Client.Do(req)
 }
 
-func (c *Client) DMAPICreateTaskConfig(ctx context.Context, body DMAPICreateTaskConfigJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewDMAPICreateTaskConfigRequest(c.Server, body)
+func (c *Client) DMAPICreateTask(ctx context.Context, body DMAPICreateTaskJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDMAPICreateTaskRequest(c.Server, body)
 	if err != nil {
 		return nil, err
 	}
@@ -501,8 +605,8 @@ func (c *Client) DMAPICreateTaskConfig(ctx context.Context, body DMAPICreateTask
 	return c.Client.Do(req)
 }
 
-func (c *Client) DMAPIImportTaskConfigWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewDMAPIImportTaskConfigRequestWithBody(c.Server, contentType, body)
+func (c *Client) DMAPIConvertTaskWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDMAPIConvertTaskRequestWithBody(c.Server, contentType, body)
 	if err != nil {
 		return nil, err
 	}
@@ -513,8 +617,8 @@ func (c *Client) DMAPIImportTaskConfigWithBody(ctx context.Context, contentType 
 	return c.Client.Do(req)
 }
 
-func (c *Client) DMAPIImportTaskConfig(ctx context.Context, body DMAPIImportTaskConfigJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewDMAPIImportTaskConfigRequest(c.Server, body)
+func (c *Client) DMAPIConvertTask(ctx context.Context, body DMAPIConvertTaskJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDMAPIConvertTaskRequest(c.Server, body)
 	if err != nil {
 		return nil, err
 	}
@@ -525,8 +629,8 @@ func (c *Client) DMAPIImportTaskConfig(ctx context.Context, body DMAPIImportTask
 	return c.Client.Do(req)
 }
 
-func (c *Client) DMAPIDeleteTaskConfig(ctx context.Context, taskName string, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewDMAPIDeleteTaskConfigRequest(c.Server, taskName)
+func (c *Client) DMAPIGetTaskTemplateList(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDMAPIGetTaskTemplateListRequest(c.Server)
 	if err != nil {
 		return nil, err
 	}
@@ -537,8 +641,8 @@ func (c *Client) DMAPIDeleteTaskConfig(ctx context.Context, taskName string, req
 	return c.Client.Do(req)
 }
 
-func (c *Client) DMAPIGetTaskConfig(ctx context.Context, taskName string, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewDMAPIGetTaskConfigRequest(c.Server, taskName)
+func (c *Client) DMAPICreateTaskTemplateWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDMAPICreateTaskTemplateRequestWithBody(c.Server, contentType, body)
 	if err != nil {
 		return nil, err
 	}
@@ -549,8 +653,8 @@ func (c *Client) DMAPIGetTaskConfig(ctx context.Context, taskName string, reqEdi
 	return c.Client.Do(req)
 }
 
-func (c *Client) DMAPUpdateTaskConfig(ctx context.Context, taskName string, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewDMAPUpdateTaskConfigRequest(c.Server, taskName)
+func (c *Client) DMAPICreateTaskTemplate(ctx context.Context, body DMAPICreateTaskTemplateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDMAPICreateTaskTemplateRequest(c.Server, body)
 	if err != nil {
 		return nil, err
 	}
@@ -561,8 +665,8 @@ func (c *Client) DMAPUpdateTaskConfig(ctx context.Context, taskName string, reqE
 	return c.Client.Do(req)
 }
 
-func (c *Client) DMAPIGetTaskList(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewDMAPIGetTaskListRequest(c.Server)
+func (c *Client) DMAPIImportTaskTemplateWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDMAPIImportTaskTemplateRequestWithBody(c.Server, contentType, body)
 	if err != nil {
 		return nil, err
 	}
@@ -573,8 +677,8 @@ func (c *Client) DMAPIGetTaskList(ctx context.Context, reqEditors ...RequestEdit
 	return c.Client.Do(req)
 }
 
-func (c *Client) DMAPIStartTaskWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewDMAPIStartTaskRequestWithBody(c.Server, contentType, body)
+func (c *Client) DMAPIImportTaskTemplate(ctx context.Context, body DMAPIImportTaskTemplateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDMAPIImportTaskTemplateRequest(c.Server, body)
 	if err != nil {
 		return nil, err
 	}
@@ -585,8 +689,32 @@ func (c *Client) DMAPIStartTaskWithBody(ctx context.Context, contentType string,
 	return c.Client.Do(req)
 }
 
-func (c *Client) DMAPIStartTask(ctx context.Context, body DMAPIStartTaskJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewDMAPIStartTaskRequest(c.Server, body)
+func (c *Client) DMAPIDeleteTaskTemplate(ctx context.Context, taskName string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDMAPIDeleteTaskTemplateRequest(c.Server, taskName)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) DMAPIGetTaskTemplate(ctx context.Context, taskName string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDMAPIGetTaskTemplateRequest(c.Server, taskName)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) DMAPUpdateTaskTemplate(ctx context.Context, taskName string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDMAPUpdateTaskTemplateRequest(c.Server, taskName)
 	if err != nil {
 		return nil, err
 	}
@@ -609,8 +737,8 @@ func (c *Client) DMAPIDeleteTask(ctx context.Context, taskName string, params *D
 	return c.Client.Do(req)
 }
 
-func (c *Client) DMAPIPauseTaskWithBody(ctx context.Context, taskName string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewDMAPIPauseTaskRequestWithBody(c.Server, taskName, contentType, body)
+func (c *Client) DMAPIGetTask(ctx context.Context, taskName string, params *DMAPIGetTaskParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDMAPIGetTaskRequest(c.Server, taskName, params)
 	if err != nil {
 		return nil, err
 	}
@@ -621,8 +749,8 @@ func (c *Client) DMAPIPauseTaskWithBody(ctx context.Context, taskName string, co
 	return c.Client.Do(req)
 }
 
-func (c *Client) DMAPIPauseTask(ctx context.Context, taskName string, body DMAPIPauseTaskJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewDMAPIPauseTaskRequest(c.Server, taskName, body)
+func (c *Client) DMAPIUpdateTaskWithBody(ctx context.Context, taskName string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDMAPIUpdateTaskRequestWithBody(c.Server, taskName, contentType, body)
 	if err != nil {
 		return nil, err
 	}
@@ -633,8 +761,8 @@ func (c *Client) DMAPIPauseTask(ctx context.Context, taskName string, body DMAPI
 	return c.Client.Do(req)
 }
 
-func (c *Client) DMAPIResumeTaskWithBody(ctx context.Context, taskName string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewDMAPIResumeTaskRequestWithBody(c.Server, taskName, contentType, body)
+func (c *Client) DMAPIUpdateTask(ctx context.Context, taskName string, body DMAPIUpdateTaskJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDMAPIUpdateTaskRequest(c.Server, taskName, body)
 	if err != nil {
 		return nil, err
 	}
@@ -645,8 +773,8 @@ func (c *Client) DMAPIResumeTaskWithBody(ctx context.Context, taskName string, c
 	return c.Client.Do(req)
 }
 
-func (c *Client) DMAPIResumeTask(ctx context.Context, taskName string, body DMAPIResumeTaskJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewDMAPIResumeTaskRequest(c.Server, taskName, body)
+func (c *Client) DMAPIGetTaskMigrateTargets(ctx context.Context, taskName string, sourceName string, params *DMAPIGetTaskMigrateTargetsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDMAPIGetTaskMigrateTargetsRequest(c.Server, taskName, sourceName, params)
 	if err != nil {
 		return nil, err
 	}
@@ -729,6 +857,30 @@ func (c *Client) DMAPIOperateTableStructure(ctx context.Context, taskName string
 	return c.Client.Do(req)
 }
 
+func (c *Client) DMAPIStartTaskWithBody(ctx context.Context, taskName string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDMAPIStartTaskRequestWithBody(c.Server, taskName, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) DMAPIStartTask(ctx context.Context, taskName string, body DMAPIStartTaskJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDMAPIStartTaskRequest(c.Server, taskName, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 func (c *Client) DMAPIGetTaskStatus(ctx context.Context, taskName string, params *DMAPIGetTaskStatusParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewDMAPIGetTaskStatusRequest(c.Server, taskName, params)
 	if err != nil {
@@ -739,6 +891,57 @@ func (c *Client) DMAPIGetTaskStatus(ctx context.Context, taskName string, params
 		return nil, err
 	}
 	return c.Client.Do(req)
+}
+
+func (c *Client) DMAPIStopTaskWithBody(ctx context.Context, taskName string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDMAPIStopTaskRequestWithBody(c.Server, taskName, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) DMAPIStopTask(ctx context.Context, taskName string, body DMAPIStopTaskJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDMAPIStopTaskRequest(c.Server, taskName, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// NewDMAPIGetClusterInfoRequest generates requests for DMAPIGetClusterInfo
+func NewDMAPIGetClusterInfoRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/cluster/info")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
 }
 
 // NewDMAPIGetClusterMasterListRequest generates requests for DMAPIGetClusterMasterList
@@ -952,6 +1155,20 @@ func NewDMAPIGetSourceListRequest(server string, params *DMAPIGetSourceListParam
 		}
 	}
 
+	if params.EnableRelay != nil {
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "enable_relay", runtime.ParamLocationQuery, *params.EnableRelay); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+	}
+
 	queryURL.RawQuery = queryValues.Encode()
 
 	req, err := http.NewRequest("GET", queryURL.String(), nil)
@@ -1054,8 +1271,8 @@ func NewDMAPIDeleteSourceRequest(server string, sourceName string, params *DMAPI
 	return req, nil
 }
 
-// NewDMAPIPauseRelayRequest generates requests for DMAPIPauseRelay
-func NewDMAPIPauseRelayRequest(server string, sourceName string) (*http.Request, error) {
+// NewDMAPIGetSourceRequest generates requests for DMAPIGetSource
+func NewDMAPIGetSourceRequest(server string, sourceName string, params *DMAPIGetSourceParams) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -1070,7 +1287,106 @@ func NewDMAPIPauseRelayRequest(server string, sourceName string) (*http.Request,
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/api/v1/sources/%s/pause-relay", pathParam0)
+	operationPath := fmt.Sprintf("/api/v1/sources/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	queryValues := queryURL.Query()
+
+	if params.WithStatus != nil {
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "with_status", runtime.ParamLocationQuery, *params.WithStatus); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+	}
+
+	queryURL.RawQuery = queryValues.Encode()
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewDMAPIUpdateSourceRequest calls the generic DMAPIUpdateSource builder with application/json body
+func NewDMAPIUpdateSourceRequest(server string, sourceName string, body DMAPIUpdateSourceJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewDMAPIUpdateSourceRequestWithBody(server, sourceName, "application/json", bodyReader)
+}
+
+// NewDMAPIUpdateSourceRequestWithBody generates requests for DMAPIUpdateSource with any type of body
+func NewDMAPIUpdateSourceRequestWithBody(server string, sourceName string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "source-name", runtime.ParamLocationPath, sourceName)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/sources/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("PUT", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewDMAPIDisableSourceRequest generates requests for DMAPIDisableSource
+func NewDMAPIDisableSourceRequest(server string, sourceName string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "source-name", runtime.ParamLocationPath, sourceName)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/sources/%s/disable", pathParam0)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -1088,8 +1404,8 @@ func NewDMAPIPauseRelayRequest(server string, sourceName string) (*http.Request,
 	return req, nil
 }
 
-// NewDMAPIResumeRelayRequest generates requests for DMAPIResumeRelay
-func NewDMAPIResumeRelayRequest(server string, sourceName string) (*http.Request, error) {
+// NewDMAPIEnableSourceRequest generates requests for DMAPIEnableSource
+func NewDMAPIEnableSourceRequest(server string, sourceName string) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -1104,7 +1420,7 @@ func NewDMAPIResumeRelayRequest(server string, sourceName string) (*http.Request
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/api/v1/sources/%s/resume-relay", pathParam0)
+	operationPath := fmt.Sprintf("/api/v1/sources/%s/enable", pathParam0)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -1118,6 +1434,147 @@ func NewDMAPIResumeRelayRequest(server string, sourceName string) (*http.Request
 	if err != nil {
 		return nil, err
 	}
+
+	return req, nil
+}
+
+// NewDMAPIDisableRelayRequest calls the generic DMAPIDisableRelay builder with application/json body
+func NewDMAPIDisableRelayRequest(server string, sourceName string, body DMAPIDisableRelayJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewDMAPIDisableRelayRequestWithBody(server, sourceName, "application/json", bodyReader)
+}
+
+// NewDMAPIDisableRelayRequestWithBody generates requests for DMAPIDisableRelay with any type of body
+func NewDMAPIDisableRelayRequestWithBody(server string, sourceName string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "source-name", runtime.ParamLocationPath, sourceName)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/sources/%s/relay/disable", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewDMAPIEnableRelayRequest calls the generic DMAPIEnableRelay builder with application/json body
+func NewDMAPIEnableRelayRequest(server string, sourceName string, body DMAPIEnableRelayJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewDMAPIEnableRelayRequestWithBody(server, sourceName, "application/json", bodyReader)
+}
+
+// NewDMAPIEnableRelayRequestWithBody generates requests for DMAPIEnableRelay with any type of body
+func NewDMAPIEnableRelayRequestWithBody(server string, sourceName string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "source-name", runtime.ParamLocationPath, sourceName)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/sources/%s/relay/enable", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewDMAPIPurgeRelayRequest calls the generic DMAPIPurgeRelay builder with application/json body
+func NewDMAPIPurgeRelayRequest(server string, sourceName string, body DMAPIPurgeRelayJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewDMAPIPurgeRelayRequestWithBody(server, sourceName, "application/json", bodyReader)
+}
+
+// NewDMAPIPurgeRelayRequestWithBody generates requests for DMAPIPurgeRelay with any type of body
+func NewDMAPIPurgeRelayRequestWithBody(server string, sourceName string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "source-name", runtime.ParamLocationPath, sourceName)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/sources/%s/relay/purge", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	return req, nil
 }
@@ -1197,53 +1654,6 @@ func NewDMAPIGetSourceTableListRequest(server string, sourceName string, schemaN
 	return req, nil
 }
 
-// NewDMAPIStartRelayRequest calls the generic DMAPIStartRelay builder with application/json body
-func NewDMAPIStartRelayRequest(server string, sourceName string, body DMAPIStartRelayJSONRequestBody) (*http.Request, error) {
-	var bodyReader io.Reader
-	buf, err := json.Marshal(body)
-	if err != nil {
-		return nil, err
-	}
-	bodyReader = bytes.NewReader(buf)
-	return NewDMAPIStartRelayRequestWithBody(server, sourceName, "application/json", bodyReader)
-}
-
-// NewDMAPIStartRelayRequestWithBody generates requests for DMAPIStartRelay with any type of body
-func NewDMAPIStartRelayRequestWithBody(server string, sourceName string, contentType string, body io.Reader) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "source-name", runtime.ParamLocationPath, sourceName)
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/sources/%s/start-relay", pathParam0)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("POST", queryURL.String(), body)
-	if err != nil {
-		return nil, err
-	}
-
-	req.Header.Add("Content-Type", contentType)
-
-	return req, nil
-}
-
 // NewDMAPIGetSourceStatusRequest generates requests for DMAPIGetSourceStatus
 func NewDMAPIGetSourceStatusRequest(server string, sourceName string) (*http.Request, error) {
 	var err error
@@ -1274,53 +1684,6 @@ func NewDMAPIGetSourceStatusRequest(server string, sourceName string) (*http.Req
 	if err != nil {
 		return nil, err
 	}
-
-	return req, nil
-}
-
-// NewDMAPIStopRelayRequest calls the generic DMAPIStopRelay builder with application/json body
-func NewDMAPIStopRelayRequest(server string, sourceName string, body DMAPIStopRelayJSONRequestBody) (*http.Request, error) {
-	var bodyReader io.Reader
-	buf, err := json.Marshal(body)
-	if err != nil {
-		return nil, err
-	}
-	bodyReader = bytes.NewReader(buf)
-	return NewDMAPIStopRelayRequestWithBody(server, sourceName, "application/json", bodyReader)
-}
-
-// NewDMAPIStopRelayRequestWithBody generates requests for DMAPIStopRelay with any type of body
-func NewDMAPIStopRelayRequestWithBody(server string, sourceName string, contentType string, body io.Reader) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "source-name", runtime.ParamLocationPath, sourceName)
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/sources/%s/stop-relay", pathParam0)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("POST", queryURL.String(), body)
-	if err != nil {
-		return nil, err
-	}
-
-	req.Header.Add("Content-Type", contentType)
 
 	return req, nil
 }
@@ -1372,8 +1735,8 @@ func NewDMAPITransferSourceRequestWithBody(server string, sourceName string, con
 	return req, nil
 }
 
-// NewDMAPIGetTaskConfigListRequest generates requests for DMAPIGetTaskConfigList
-func NewDMAPIGetTaskConfigListRequest(server string) (*http.Request, error) {
+// NewDMAPIGetTaskListRequest generates requests for DMAPIGetTaskList
+func NewDMAPIGetTaskListRequest(server string, params *DMAPIGetTaskListParams) (*http.Request, error) {
 	var err error
 
 	serverURL, err := url.Parse(server)
@@ -1381,7 +1744,160 @@ func NewDMAPIGetTaskConfigListRequest(server string) (*http.Request, error) {
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/api/v1/task/configs")
+	operationPath := fmt.Sprintf("/api/v1/tasks")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	queryValues := queryURL.Query()
+
+	if params.WithStatus != nil {
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "with_status", runtime.ParamLocationQuery, *params.WithStatus); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+	}
+
+	if params.Stage != nil {
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "stage", runtime.ParamLocationQuery, *params.Stage); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+	}
+
+	if params.SourceNameList != nil {
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "source_name_list", runtime.ParamLocationQuery, *params.SourceNameList); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+	}
+
+	queryURL.RawQuery = queryValues.Encode()
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewDMAPICreateTaskRequest calls the generic DMAPICreateTask builder with application/json body
+func NewDMAPICreateTaskRequest(server string, body DMAPICreateTaskJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewDMAPICreateTaskRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewDMAPICreateTaskRequestWithBody generates requests for DMAPICreateTask with any type of body
+func NewDMAPICreateTaskRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/tasks")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewDMAPIConvertTaskRequest calls the generic DMAPIConvertTask builder with application/json body
+func NewDMAPIConvertTaskRequest(server string, body DMAPIConvertTaskJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewDMAPIConvertTaskRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewDMAPIConvertTaskRequestWithBody generates requests for DMAPIConvertTask with any type of body
+func NewDMAPIConvertTaskRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/tasks/converters")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewDMAPIGetTaskTemplateListRequest generates requests for DMAPIGetTaskTemplateList
+func NewDMAPIGetTaskTemplateListRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/tasks/templates")
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -1399,19 +1915,19 @@ func NewDMAPIGetTaskConfigListRequest(server string) (*http.Request, error) {
 	return req, nil
 }
 
-// NewDMAPICreateTaskConfigRequest calls the generic DMAPICreateTaskConfig builder with application/json body
-func NewDMAPICreateTaskConfigRequest(server string, body DMAPICreateTaskConfigJSONRequestBody) (*http.Request, error) {
+// NewDMAPICreateTaskTemplateRequest calls the generic DMAPICreateTaskTemplate builder with application/json body
+func NewDMAPICreateTaskTemplateRequest(server string, body DMAPICreateTaskTemplateJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
 	buf, err := json.Marshal(body)
 	if err != nil {
 		return nil, err
 	}
 	bodyReader = bytes.NewReader(buf)
-	return NewDMAPICreateTaskConfigRequestWithBody(server, "application/json", bodyReader)
+	return NewDMAPICreateTaskTemplateRequestWithBody(server, "application/json", bodyReader)
 }
 
-// NewDMAPICreateTaskConfigRequestWithBody generates requests for DMAPICreateTaskConfig with any type of body
-func NewDMAPICreateTaskConfigRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+// NewDMAPICreateTaskTemplateRequestWithBody generates requests for DMAPICreateTaskTemplate with any type of body
+func NewDMAPICreateTaskTemplateRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	serverURL, err := url.Parse(server)
@@ -1419,7 +1935,7 @@ func NewDMAPICreateTaskConfigRequestWithBody(server string, contentType string, 
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/api/v1/task/configs")
+	operationPath := fmt.Sprintf("/api/v1/tasks/templates")
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -1439,19 +1955,19 @@ func NewDMAPICreateTaskConfigRequestWithBody(server string, contentType string, 
 	return req, nil
 }
 
-// NewDMAPIImportTaskConfigRequest calls the generic DMAPIImportTaskConfig builder with application/json body
-func NewDMAPIImportTaskConfigRequest(server string, body DMAPIImportTaskConfigJSONRequestBody) (*http.Request, error) {
+// NewDMAPIImportTaskTemplateRequest calls the generic DMAPIImportTaskTemplate builder with application/json body
+func NewDMAPIImportTaskTemplateRequest(server string, body DMAPIImportTaskTemplateJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
 	buf, err := json.Marshal(body)
 	if err != nil {
 		return nil, err
 	}
 	bodyReader = bytes.NewReader(buf)
-	return NewDMAPIImportTaskConfigRequestWithBody(server, "application/json", bodyReader)
+	return NewDMAPIImportTaskTemplateRequestWithBody(server, "application/json", bodyReader)
 }
 
-// NewDMAPIImportTaskConfigRequestWithBody generates requests for DMAPIImportTaskConfig with any type of body
-func NewDMAPIImportTaskConfigRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+// NewDMAPIImportTaskTemplateRequestWithBody generates requests for DMAPIImportTaskTemplate with any type of body
+func NewDMAPIImportTaskTemplateRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	serverURL, err := url.Parse(server)
@@ -1459,7 +1975,7 @@ func NewDMAPIImportTaskConfigRequestWithBody(server string, contentType string, 
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/api/v1/task/configs/import")
+	operationPath := fmt.Sprintf("/api/v1/tasks/templates/import")
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -1479,8 +1995,8 @@ func NewDMAPIImportTaskConfigRequestWithBody(server string, contentType string, 
 	return req, nil
 }
 
-// NewDMAPIDeleteTaskConfigRequest generates requests for DMAPIDeleteTaskConfig
-func NewDMAPIDeleteTaskConfigRequest(server string, taskName string) (*http.Request, error) {
+// NewDMAPIDeleteTaskTemplateRequest generates requests for DMAPIDeleteTaskTemplate
+func NewDMAPIDeleteTaskTemplateRequest(server string, taskName string) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -1495,7 +2011,7 @@ func NewDMAPIDeleteTaskConfigRequest(server string, taskName string) (*http.Requ
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/api/v1/task/configs/%s", pathParam0)
+	operationPath := fmt.Sprintf("/api/v1/tasks/templates/%s", pathParam0)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -1513,8 +2029,8 @@ func NewDMAPIDeleteTaskConfigRequest(server string, taskName string) (*http.Requ
 	return req, nil
 }
 
-// NewDMAPIGetTaskConfigRequest generates requests for DMAPIGetTaskConfig
-func NewDMAPIGetTaskConfigRequest(server string, taskName string) (*http.Request, error) {
+// NewDMAPIGetTaskTemplateRequest generates requests for DMAPIGetTaskTemplate
+func NewDMAPIGetTaskTemplateRequest(server string, taskName string) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -1529,7 +2045,7 @@ func NewDMAPIGetTaskConfigRequest(server string, taskName string) (*http.Request
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/api/v1/task/configs/%s", pathParam0)
+	operationPath := fmt.Sprintf("/api/v1/tasks/templates/%s", pathParam0)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -1547,8 +2063,8 @@ func NewDMAPIGetTaskConfigRequest(server string, taskName string) (*http.Request
 	return req, nil
 }
 
-// NewDMAPUpdateTaskConfigRequest generates requests for DMAPUpdateTaskConfig
-func NewDMAPUpdateTaskConfigRequest(server string, taskName string) (*http.Request, error) {
+// NewDMAPUpdateTaskTemplateRequest generates requests for DMAPUpdateTaskTemplate
+func NewDMAPUpdateTaskTemplateRequest(server string, taskName string) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -1563,7 +2079,7 @@ func NewDMAPUpdateTaskConfigRequest(server string, taskName string) (*http.Reque
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/api/v1/task/configs/%s", pathParam0)
+	operationPath := fmt.Sprintf("/api/v1/tasks/templates/%s", pathParam0)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -1577,73 +2093,6 @@ func NewDMAPUpdateTaskConfigRequest(server string, taskName string) (*http.Reque
 	if err != nil {
 		return nil, err
 	}
-
-	return req, nil
-}
-
-// NewDMAPIGetTaskListRequest generates requests for DMAPIGetTaskList
-func NewDMAPIGetTaskListRequest(server string) (*http.Request, error) {
-	var err error
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/tasks")
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("GET", queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
-// NewDMAPIStartTaskRequest calls the generic DMAPIStartTask builder with application/json body
-func NewDMAPIStartTaskRequest(server string, body DMAPIStartTaskJSONRequestBody) (*http.Request, error) {
-	var bodyReader io.Reader
-	buf, err := json.Marshal(body)
-	if err != nil {
-		return nil, err
-	}
-	bodyReader = bytes.NewReader(buf)
-	return NewDMAPIStartTaskRequestWithBody(server, "application/json", bodyReader)
-}
-
-// NewDMAPIStartTaskRequestWithBody generates requests for DMAPIStartTask with any type of body
-func NewDMAPIStartTaskRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
-	var err error
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/tasks")
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("POST", queryURL.String(), body)
-	if err != nil {
-		return nil, err
-	}
-
-	req.Header.Add("Content-Type", contentType)
 
 	return req, nil
 }
@@ -1676,8 +2125,8 @@ func NewDMAPIDeleteTaskRequest(server string, taskName string, params *DMAPIDele
 
 	queryValues := queryURL.Query()
 
-	if params.SourceNameList != nil {
-		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "source_name_list", runtime.ParamLocationQuery, *params.SourceNameList); err != nil {
+	if params.Force != nil {
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "force", runtime.ParamLocationQuery, *params.Force); err != nil {
 			return nil, err
 		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
 			return nil, err
@@ -1700,19 +2149,8 @@ func NewDMAPIDeleteTaskRequest(server string, taskName string, params *DMAPIDele
 	return req, nil
 }
 
-// NewDMAPIPauseTaskRequest calls the generic DMAPIPauseTask builder with application/json body
-func NewDMAPIPauseTaskRequest(server string, taskName string, body DMAPIPauseTaskJSONRequestBody) (*http.Request, error) {
-	var bodyReader io.Reader
-	buf, err := json.Marshal(body)
-	if err != nil {
-		return nil, err
-	}
-	bodyReader = bytes.NewReader(buf)
-	return NewDMAPIPauseTaskRequestWithBody(server, taskName, "application/json", bodyReader)
-}
-
-// NewDMAPIPauseTaskRequestWithBody generates requests for DMAPIPauseTask with any type of body
-func NewDMAPIPauseTaskRequestWithBody(server string, taskName string, contentType string, body io.Reader) (*http.Request, error) {
+// NewDMAPIGetTaskRequest generates requests for DMAPIGetTask
+func NewDMAPIGetTaskRequest(server string, taskName string, params *DMAPIGetTaskParams) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -1727,7 +2165,7 @@ func NewDMAPIPauseTaskRequestWithBody(server string, taskName string, contentTyp
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/api/v1/tasks/%s/pause", pathParam0)
+	operationPath := fmt.Sprintf("/api/v1/tasks/%s", pathParam0)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -1737,7 +2175,70 @@ func NewDMAPIPauseTaskRequestWithBody(server string, taskName string, contentTyp
 		return nil, err
 	}
 
-	req, err := http.NewRequest("POST", queryURL.String(), body)
+	queryValues := queryURL.Query()
+
+	if params.WithStatus != nil {
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "with_status", runtime.ParamLocationQuery, *params.WithStatus); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+	}
+
+	queryURL.RawQuery = queryValues.Encode()
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewDMAPIUpdateTaskRequest calls the generic DMAPIUpdateTask builder with application/json body
+func NewDMAPIUpdateTaskRequest(server string, taskName string, body DMAPIUpdateTaskJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewDMAPIUpdateTaskRequestWithBody(server, taskName, "application/json", bodyReader)
+}
+
+// NewDMAPIUpdateTaskRequestWithBody generates requests for DMAPIUpdateTask with any type of body
+func NewDMAPIUpdateTaskRequestWithBody(server string, taskName string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "task-name", runtime.ParamLocationPath, taskName)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/tasks/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("PUT", queryURL.String(), body)
 	if err != nil {
 		return nil, err
 	}
@@ -1747,19 +2248,8 @@ func NewDMAPIPauseTaskRequestWithBody(server string, taskName string, contentTyp
 	return req, nil
 }
 
-// NewDMAPIResumeTaskRequest calls the generic DMAPIResumeTask builder with application/json body
-func NewDMAPIResumeTaskRequest(server string, taskName string, body DMAPIResumeTaskJSONRequestBody) (*http.Request, error) {
-	var bodyReader io.Reader
-	buf, err := json.Marshal(body)
-	if err != nil {
-		return nil, err
-	}
-	bodyReader = bytes.NewReader(buf)
-	return NewDMAPIResumeTaskRequestWithBody(server, taskName, "application/json", bodyReader)
-}
-
-// NewDMAPIResumeTaskRequestWithBody generates requests for DMAPIResumeTask with any type of body
-func NewDMAPIResumeTaskRequestWithBody(server string, taskName string, contentType string, body io.Reader) (*http.Request, error) {
+// NewDMAPIGetTaskMigrateTargetsRequest generates requests for DMAPIGetTaskMigrateTargets
+func NewDMAPIGetTaskMigrateTargetsRequest(server string, taskName string, sourceName string, params *DMAPIGetTaskMigrateTargetsParams) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -1769,12 +2259,19 @@ func NewDMAPIResumeTaskRequestWithBody(server string, taskName string, contentTy
 		return nil, err
 	}
 
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithLocation("simple", false, "source-name", runtime.ParamLocationPath, sourceName)
+	if err != nil {
+		return nil, err
+	}
+
 	serverURL, err := url.Parse(server)
 	if err != nil {
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/api/v1/tasks/%s/resume", pathParam0)
+	operationPath := fmt.Sprintf("/api/v1/tasks/%s/sources/%s/migrate_targets", pathParam0, pathParam1)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -1784,12 +2281,42 @@ func NewDMAPIResumeTaskRequestWithBody(server string, taskName string, contentTy
 		return nil, err
 	}
 
-	req, err := http.NewRequest("POST", queryURL.String(), body)
+	queryValues := queryURL.Query()
+
+	if params.SchemaPattern != nil {
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "schema_pattern", runtime.ParamLocationQuery, *params.SchemaPattern); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+	}
+
+	if params.TablePattern != nil {
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "table_pattern", runtime.ParamLocationQuery, *params.TablePattern); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+	}
+
+	queryURL.RawQuery = queryValues.Encode()
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
 	if err != nil {
 		return nil, err
 	}
-
-	req.Header.Add("Content-Type", contentType)
 
 	return req, nil
 }
@@ -2061,6 +2588,53 @@ func NewDMAPIOperateTableStructureRequestWithBody(server string, taskName string
 	return req, nil
 }
 
+// NewDMAPIStartTaskRequest calls the generic DMAPIStartTask builder with application/json body
+func NewDMAPIStartTaskRequest(server string, taskName string, body DMAPIStartTaskJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewDMAPIStartTaskRequestWithBody(server, taskName, "application/json", bodyReader)
+}
+
+// NewDMAPIStartTaskRequestWithBody generates requests for DMAPIStartTask with any type of body
+func NewDMAPIStartTaskRequestWithBody(server string, taskName string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "task-name", runtime.ParamLocationPath, taskName)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/tasks/%s/start", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 // NewDMAPIGetTaskStatusRequest generates requests for DMAPIGetTaskStatus
 func NewDMAPIGetTaskStatusRequest(server string, taskName string, params *DMAPIGetTaskStatusParams) (*http.Request, error) {
 	var err error
@@ -2113,6 +2687,53 @@ func NewDMAPIGetTaskStatusRequest(server string, taskName string, params *DMAPIG
 	return req, nil
 }
 
+// NewDMAPIStopTaskRequest calls the generic DMAPIStopTask builder with application/json body
+func NewDMAPIStopTaskRequest(server string, taskName string, body DMAPIStopTaskJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewDMAPIStopTaskRequestWithBody(server, taskName, "application/json", bodyReader)
+}
+
+// NewDMAPIStopTaskRequestWithBody generates requests for DMAPIStopTask with any type of body
+func NewDMAPIStopTaskRequestWithBody(server string, taskName string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "task-name", runtime.ParamLocationPath, taskName)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/tasks/%s/stop", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 func (c *Client) applyEditors(ctx context.Context, req *http.Request, additionalEditors []RequestEditorFn) error {
 	for _, r := range c.RequestEditors {
 		if err := r(ctx, req); err != nil {
@@ -2156,6 +2777,9 @@ func WithBaseURL(baseURL string) ClientOption {
 
 // ClientWithResponsesInterface is the interface specification for the client with responses above.
 type ClientWithResponsesInterface interface {
+	// DMAPIGetClusterInfo request
+	DMAPIGetClusterInfoWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*DMAPIGetClusterInfoResponse, error)
+
 	// DMAPIGetClusterMasterList request
 	DMAPIGetClusterMasterListWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*DMAPIGetClusterMasterListResponse, error)
 
@@ -2185,11 +2809,34 @@ type ClientWithResponsesInterface interface {
 	// DMAPIDeleteSource request
 	DMAPIDeleteSourceWithResponse(ctx context.Context, sourceName string, params *DMAPIDeleteSourceParams, reqEditors ...RequestEditorFn) (*DMAPIDeleteSourceResponse, error)
 
-	// DMAPIPauseRelay request
-	DMAPIPauseRelayWithResponse(ctx context.Context, sourceName string, reqEditors ...RequestEditorFn) (*DMAPIPauseRelayResponse, error)
+	// DMAPIGetSource request
+	DMAPIGetSourceWithResponse(ctx context.Context, sourceName string, params *DMAPIGetSourceParams, reqEditors ...RequestEditorFn) (*DMAPIGetSourceResponse, error)
 
-	// DMAPIResumeRelay request
-	DMAPIResumeRelayWithResponse(ctx context.Context, sourceName string, reqEditors ...RequestEditorFn) (*DMAPIResumeRelayResponse, error)
+	// DMAPIUpdateSource request with any body
+	DMAPIUpdateSourceWithBodyWithResponse(ctx context.Context, sourceName string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*DMAPIUpdateSourceResponse, error)
+
+	DMAPIUpdateSourceWithResponse(ctx context.Context, sourceName string, body DMAPIUpdateSourceJSONRequestBody, reqEditors ...RequestEditorFn) (*DMAPIUpdateSourceResponse, error)
+
+	// DMAPIDisableSource request
+	DMAPIDisableSourceWithResponse(ctx context.Context, sourceName string, reqEditors ...RequestEditorFn) (*DMAPIDisableSourceResponse, error)
+
+	// DMAPIEnableSource request
+	DMAPIEnableSourceWithResponse(ctx context.Context, sourceName string, reqEditors ...RequestEditorFn) (*DMAPIEnableSourceResponse, error)
+
+	// DMAPIDisableRelay request with any body
+	DMAPIDisableRelayWithBodyWithResponse(ctx context.Context, sourceName string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*DMAPIDisableRelayResponse, error)
+
+	DMAPIDisableRelayWithResponse(ctx context.Context, sourceName string, body DMAPIDisableRelayJSONRequestBody, reqEditors ...RequestEditorFn) (*DMAPIDisableRelayResponse, error)
+
+	// DMAPIEnableRelay request with any body
+	DMAPIEnableRelayWithBodyWithResponse(ctx context.Context, sourceName string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*DMAPIEnableRelayResponse, error)
+
+	DMAPIEnableRelayWithResponse(ctx context.Context, sourceName string, body DMAPIEnableRelayJSONRequestBody, reqEditors ...RequestEditorFn) (*DMAPIEnableRelayResponse, error)
+
+	// DMAPIPurgeRelay request with any body
+	DMAPIPurgeRelayWithBodyWithResponse(ctx context.Context, sourceName string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*DMAPIPurgeRelayResponse, error)
+
+	DMAPIPurgeRelayWithResponse(ctx context.Context, sourceName string, body DMAPIPurgeRelayJSONRequestBody, reqEditors ...RequestEditorFn) (*DMAPIPurgeRelayResponse, error)
 
 	// DMAPIGetSourceSchemaList request
 	DMAPIGetSourceSchemaListWithResponse(ctx context.Context, sourceName string, reqEditors ...RequestEditorFn) (*DMAPIGetSourceSchemaListResponse, error)
@@ -2197,66 +2844,62 @@ type ClientWithResponsesInterface interface {
 	// DMAPIGetSourceTableList request
 	DMAPIGetSourceTableListWithResponse(ctx context.Context, sourceName string, schemaName string, reqEditors ...RequestEditorFn) (*DMAPIGetSourceTableListResponse, error)
 
-	// DMAPIStartRelay request with any body
-	DMAPIStartRelayWithBodyWithResponse(ctx context.Context, sourceName string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*DMAPIStartRelayResponse, error)
-
-	DMAPIStartRelayWithResponse(ctx context.Context, sourceName string, body DMAPIStartRelayJSONRequestBody, reqEditors ...RequestEditorFn) (*DMAPIStartRelayResponse, error)
-
 	// DMAPIGetSourceStatus request
 	DMAPIGetSourceStatusWithResponse(ctx context.Context, sourceName string, reqEditors ...RequestEditorFn) (*DMAPIGetSourceStatusResponse, error)
-
-	// DMAPIStopRelay request with any body
-	DMAPIStopRelayWithBodyWithResponse(ctx context.Context, sourceName string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*DMAPIStopRelayResponse, error)
-
-	DMAPIStopRelayWithResponse(ctx context.Context, sourceName string, body DMAPIStopRelayJSONRequestBody, reqEditors ...RequestEditorFn) (*DMAPIStopRelayResponse, error)
 
 	// DMAPITransferSource request with any body
 	DMAPITransferSourceWithBodyWithResponse(ctx context.Context, sourceName string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*DMAPITransferSourceResponse, error)
 
 	DMAPITransferSourceWithResponse(ctx context.Context, sourceName string, body DMAPITransferSourceJSONRequestBody, reqEditors ...RequestEditorFn) (*DMAPITransferSourceResponse, error)
 
-	// DMAPIGetTaskConfigList request
-	DMAPIGetTaskConfigListWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*DMAPIGetTaskConfigListResponse, error)
-
-	// DMAPICreateTaskConfig request with any body
-	DMAPICreateTaskConfigWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*DMAPICreateTaskConfigResponse, error)
-
-	DMAPICreateTaskConfigWithResponse(ctx context.Context, body DMAPICreateTaskConfigJSONRequestBody, reqEditors ...RequestEditorFn) (*DMAPICreateTaskConfigResponse, error)
-
-	// DMAPIImportTaskConfig request with any body
-	DMAPIImportTaskConfigWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*DMAPIImportTaskConfigResponse, error)
-
-	DMAPIImportTaskConfigWithResponse(ctx context.Context, body DMAPIImportTaskConfigJSONRequestBody, reqEditors ...RequestEditorFn) (*DMAPIImportTaskConfigResponse, error)
-
-	// DMAPIDeleteTaskConfig request
-	DMAPIDeleteTaskConfigWithResponse(ctx context.Context, taskName string, reqEditors ...RequestEditorFn) (*DMAPIDeleteTaskConfigResponse, error)
-
-	// DMAPIGetTaskConfig request
-	DMAPIGetTaskConfigWithResponse(ctx context.Context, taskName string, reqEditors ...RequestEditorFn) (*DMAPIGetTaskConfigResponse, error)
-
-	// DMAPUpdateTaskConfig request
-	DMAPUpdateTaskConfigWithResponse(ctx context.Context, taskName string, reqEditors ...RequestEditorFn) (*DMAPUpdateTaskConfigResponse, error)
-
 	// DMAPIGetTaskList request
-	DMAPIGetTaskListWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*DMAPIGetTaskListResponse, error)
+	DMAPIGetTaskListWithResponse(ctx context.Context, params *DMAPIGetTaskListParams, reqEditors ...RequestEditorFn) (*DMAPIGetTaskListResponse, error)
 
-	// DMAPIStartTask request with any body
-	DMAPIStartTaskWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*DMAPIStartTaskResponse, error)
+	// DMAPICreateTask request with any body
+	DMAPICreateTaskWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*DMAPICreateTaskResponse, error)
 
-	DMAPIStartTaskWithResponse(ctx context.Context, body DMAPIStartTaskJSONRequestBody, reqEditors ...RequestEditorFn) (*DMAPIStartTaskResponse, error)
+	DMAPICreateTaskWithResponse(ctx context.Context, body DMAPICreateTaskJSONRequestBody, reqEditors ...RequestEditorFn) (*DMAPICreateTaskResponse, error)
+
+	// DMAPIConvertTask request with any body
+	DMAPIConvertTaskWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*DMAPIConvertTaskResponse, error)
+
+	DMAPIConvertTaskWithResponse(ctx context.Context, body DMAPIConvertTaskJSONRequestBody, reqEditors ...RequestEditorFn) (*DMAPIConvertTaskResponse, error)
+
+	// DMAPIGetTaskTemplateList request
+	DMAPIGetTaskTemplateListWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*DMAPIGetTaskTemplateListResponse, error)
+
+	// DMAPICreateTaskTemplate request with any body
+	DMAPICreateTaskTemplateWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*DMAPICreateTaskTemplateResponse, error)
+
+	DMAPICreateTaskTemplateWithResponse(ctx context.Context, body DMAPICreateTaskTemplateJSONRequestBody, reqEditors ...RequestEditorFn) (*DMAPICreateTaskTemplateResponse, error)
+
+	// DMAPIImportTaskTemplate request with any body
+	DMAPIImportTaskTemplateWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*DMAPIImportTaskTemplateResponse, error)
+
+	DMAPIImportTaskTemplateWithResponse(ctx context.Context, body DMAPIImportTaskTemplateJSONRequestBody, reqEditors ...RequestEditorFn) (*DMAPIImportTaskTemplateResponse, error)
+
+	// DMAPIDeleteTaskTemplate request
+	DMAPIDeleteTaskTemplateWithResponse(ctx context.Context, taskName string, reqEditors ...RequestEditorFn) (*DMAPIDeleteTaskTemplateResponse, error)
+
+	// DMAPIGetTaskTemplate request
+	DMAPIGetTaskTemplateWithResponse(ctx context.Context, taskName string, reqEditors ...RequestEditorFn) (*DMAPIGetTaskTemplateResponse, error)
+
+	// DMAPUpdateTaskTemplate request
+	DMAPUpdateTaskTemplateWithResponse(ctx context.Context, taskName string, reqEditors ...RequestEditorFn) (*DMAPUpdateTaskTemplateResponse, error)
 
 	// DMAPIDeleteTask request
 	DMAPIDeleteTaskWithResponse(ctx context.Context, taskName string, params *DMAPIDeleteTaskParams, reqEditors ...RequestEditorFn) (*DMAPIDeleteTaskResponse, error)
 
-	// DMAPIPauseTask request with any body
-	DMAPIPauseTaskWithBodyWithResponse(ctx context.Context, taskName string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*DMAPIPauseTaskResponse, error)
+	// DMAPIGetTask request
+	DMAPIGetTaskWithResponse(ctx context.Context, taskName string, params *DMAPIGetTaskParams, reqEditors ...RequestEditorFn) (*DMAPIGetTaskResponse, error)
 
-	DMAPIPauseTaskWithResponse(ctx context.Context, taskName string, body DMAPIPauseTaskJSONRequestBody, reqEditors ...RequestEditorFn) (*DMAPIPauseTaskResponse, error)
+	// DMAPIUpdateTask request with any body
+	DMAPIUpdateTaskWithBodyWithResponse(ctx context.Context, taskName string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*DMAPIUpdateTaskResponse, error)
 
-	// DMAPIResumeTask request with any body
-	DMAPIResumeTaskWithBodyWithResponse(ctx context.Context, taskName string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*DMAPIResumeTaskResponse, error)
+	DMAPIUpdateTaskWithResponse(ctx context.Context, taskName string, body DMAPIUpdateTaskJSONRequestBody, reqEditors ...RequestEditorFn) (*DMAPIUpdateTaskResponse, error)
 
-	DMAPIResumeTaskWithResponse(ctx context.Context, taskName string, body DMAPIResumeTaskJSONRequestBody, reqEditors ...RequestEditorFn) (*DMAPIResumeTaskResponse, error)
+	// DMAPIGetTaskMigrateTargets request
+	DMAPIGetTaskMigrateTargetsWithResponse(ctx context.Context, taskName string, sourceName string, params *DMAPIGetTaskMigrateTargetsParams, reqEditors ...RequestEditorFn) (*DMAPIGetTaskMigrateTargetsResponse, error)
 
 	// DMAPIGetSchemaListByTaskAndSource request
 	DMAPIGetSchemaListByTaskAndSourceWithResponse(ctx context.Context, taskName string, sourceName string, reqEditors ...RequestEditorFn) (*DMAPIGetSchemaListByTaskAndSourceResponse, error)
@@ -2275,8 +2918,40 @@ type ClientWithResponsesInterface interface {
 
 	DMAPIOperateTableStructureWithResponse(ctx context.Context, taskName string, sourceName string, schemaName string, tableName string, body DMAPIOperateTableStructureJSONRequestBody, reqEditors ...RequestEditorFn) (*DMAPIOperateTableStructureResponse, error)
 
+	// DMAPIStartTask request with any body
+	DMAPIStartTaskWithBodyWithResponse(ctx context.Context, taskName string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*DMAPIStartTaskResponse, error)
+
+	DMAPIStartTaskWithResponse(ctx context.Context, taskName string, body DMAPIStartTaskJSONRequestBody, reqEditors ...RequestEditorFn) (*DMAPIStartTaskResponse, error)
+
 	// DMAPIGetTaskStatus request
 	DMAPIGetTaskStatusWithResponse(ctx context.Context, taskName string, params *DMAPIGetTaskStatusParams, reqEditors ...RequestEditorFn) (*DMAPIGetTaskStatusResponse, error)
+
+	// DMAPIStopTask request with any body
+	DMAPIStopTaskWithBodyWithResponse(ctx context.Context, taskName string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*DMAPIStopTaskResponse, error)
+
+	DMAPIStopTaskWithResponse(ctx context.Context, taskName string, body DMAPIStopTaskJSONRequestBody, reqEditors ...RequestEditorFn) (*DMAPIStopTaskResponse, error)
+}
+
+type DMAPIGetClusterInfoResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *GetClusterInfoResponse
+}
+
+// Status returns HTTPResponse.Status
+func (r DMAPIGetClusterInfoResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DMAPIGetClusterInfoResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
 }
 
 type DMAPIGetClusterMasterListResponse struct {
@@ -2459,7 +3134,6 @@ func (r DMAPICreateSourceResponse) StatusCode() int {
 type DMAPIDeleteSourceResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON204      *DeleteSourceResponse
 	JSON400      *ErrorWithMessage
 }
 
@@ -2479,14 +3153,14 @@ func (r DMAPIDeleteSourceResponse) StatusCode() int {
 	return 0
 }
 
-type DMAPIPauseRelayResponse struct {
+type DMAPIGetSourceResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON400      *ErrorWithMessage
+	JSON200      *Source
 }
 
 // Status returns HTTPResponse.Status
-func (r DMAPIPauseRelayResponse) Status() string {
+func (r DMAPIGetSourceResponse) Status() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Status
 	}
@@ -2494,21 +3168,22 @@ func (r DMAPIPauseRelayResponse) Status() string {
 }
 
 // StatusCode returns HTTPResponse.StatusCode
-func (r DMAPIPauseRelayResponse) StatusCode() int {
+func (r DMAPIGetSourceResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
 	return 0
 }
 
-type DMAPIResumeRelayResponse struct {
+type DMAPIUpdateSourceResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
+	JSON200      *Source
 	JSON400      *ErrorWithMessage
 }
 
 // Status returns HTTPResponse.Status
-func (r DMAPIResumeRelayResponse) Status() string {
+func (r DMAPIUpdateSourceResponse) Status() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Status
 	}
@@ -2516,7 +3191,117 @@ func (r DMAPIResumeRelayResponse) Status() string {
 }
 
 // StatusCode returns HTTPResponse.StatusCode
-func (r DMAPIResumeRelayResponse) StatusCode() int {
+func (r DMAPIUpdateSourceResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type DMAPIDisableSourceResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON400      *ErrorWithMessage
+}
+
+// Status returns HTTPResponse.Status
+func (r DMAPIDisableSourceResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DMAPIDisableSourceResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type DMAPIEnableSourceResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON400      *ErrorWithMessage
+}
+
+// Status returns HTTPResponse.Status
+func (r DMAPIEnableSourceResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DMAPIEnableSourceResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type DMAPIDisableRelayResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON400      *ErrorWithMessage
+}
+
+// Status returns HTTPResponse.Status
+func (r DMAPIDisableRelayResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DMAPIDisableRelayResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type DMAPIEnableRelayResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON400      *ErrorWithMessage
+}
+
+// Status returns HTTPResponse.Status
+func (r DMAPIEnableRelayResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DMAPIEnableRelayResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type DMAPIPurgeRelayResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON400      *ErrorWithMessage
+}
+
+// Status returns HTTPResponse.Status
+func (r DMAPIPurgeRelayResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DMAPIPurgeRelayResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -2569,28 +3354,6 @@ func (r DMAPIGetSourceTableListResponse) StatusCode() int {
 	return 0
 }
 
-type DMAPIStartRelayResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON400      *ErrorWithMessage
-}
-
-// Status returns HTTPResponse.Status
-func (r DMAPIStartRelayResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r DMAPIStartRelayResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
 type DMAPIGetSourceStatusResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -2614,28 +3377,6 @@ func (r DMAPIGetSourceStatusResponse) StatusCode() int {
 	return 0
 }
 
-type DMAPIStopRelayResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON400      *ErrorWithMessage
-}
-
-// Status returns HTTPResponse.Status
-func (r DMAPIStopRelayResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r DMAPIStopRelayResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
 type DMAPITransferSourceResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -2652,143 +3393,6 @@ func (r DMAPITransferSourceResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r DMAPITransferSourceResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type DMAPIGetTaskConfigListResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *GetTaskListResponse
-	JSON400      *ErrorWithMessage
-}
-
-// Status returns HTTPResponse.Status
-func (r DMAPIGetTaskConfigListResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r DMAPIGetTaskConfigListResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type DMAPICreateTaskConfigResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON201      *Task
-	JSON400      *ErrorWithMessage
-}
-
-// Status returns HTTPResponse.Status
-func (r DMAPICreateTaskConfigResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r DMAPICreateTaskConfigResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type DMAPIImportTaskConfigResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON202      *TaskConfigResponse
-	JSON400      *ErrorWithMessage
-}
-
-// Status returns HTTPResponse.Status
-func (r DMAPIImportTaskConfigResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r DMAPIImportTaskConfigResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type DMAPIDeleteTaskConfigResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON400      *ErrorWithMessage
-}
-
-// Status returns HTTPResponse.Status
-func (r DMAPIDeleteTaskConfigResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r DMAPIDeleteTaskConfigResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type DMAPIGetTaskConfigResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *Task
-	JSON400      *ErrorWithMessage
-}
-
-// Status returns HTTPResponse.Status
-func (r DMAPIGetTaskConfigResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r DMAPIGetTaskConfigResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type DMAPUpdateTaskConfigResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *Task
-	JSON400      *ErrorWithMessage
-}
-
-// Status returns HTTPResponse.Status
-func (r DMAPUpdateTaskConfigResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r DMAPUpdateTaskConfigResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -2818,7 +3422,7 @@ func (r DMAPIGetTaskListResponse) StatusCode() int {
 	return 0
 }
 
-type DMAPIStartTaskResponse struct {
+type DMAPICreateTaskResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON201      *Task
@@ -2826,7 +3430,7 @@ type DMAPIStartTaskResponse struct {
 }
 
 // Status returns HTTPResponse.Status
-func (r DMAPIStartTaskResponse) Status() string {
+func (r DMAPICreateTaskResponse) Status() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Status
 	}
@@ -2834,7 +3438,167 @@ func (r DMAPIStartTaskResponse) Status() string {
 }
 
 // StatusCode returns HTTPResponse.StatusCode
-func (r DMAPIStartTaskResponse) StatusCode() int {
+func (r DMAPICreateTaskResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type DMAPIConvertTaskResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON201      *ConverterTaskResponse
+	JSON400      *ErrorWithMessage
+}
+
+// Status returns HTTPResponse.Status
+func (r DMAPIConvertTaskResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DMAPIConvertTaskResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type DMAPIGetTaskTemplateListResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *GetTaskListResponse
+	JSON400      *ErrorWithMessage
+}
+
+// Status returns HTTPResponse.Status
+func (r DMAPIGetTaskTemplateListResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DMAPIGetTaskTemplateListResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type DMAPICreateTaskTemplateResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON201      *Task
+	JSON400      *ErrorWithMessage
+}
+
+// Status returns HTTPResponse.Status
+func (r DMAPICreateTaskTemplateResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DMAPICreateTaskTemplateResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type DMAPIImportTaskTemplateResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON202      *TaskTemplateResponse
+	JSON400      *ErrorWithMessage
+}
+
+// Status returns HTTPResponse.Status
+func (r DMAPIImportTaskTemplateResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DMAPIImportTaskTemplateResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type DMAPIDeleteTaskTemplateResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON400      *ErrorWithMessage
+}
+
+// Status returns HTTPResponse.Status
+func (r DMAPIDeleteTaskTemplateResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DMAPIDeleteTaskTemplateResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type DMAPIGetTaskTemplateResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *Task
+	JSON400      *ErrorWithMessage
+}
+
+// Status returns HTTPResponse.Status
+func (r DMAPIGetTaskTemplateResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DMAPIGetTaskTemplateResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type DMAPUpdateTaskTemplateResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *Task
+	JSON400      *ErrorWithMessage
+}
+
+// Status returns HTTPResponse.Status
+func (r DMAPUpdateTaskTemplateResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DMAPUpdateTaskTemplateResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -2863,14 +3627,14 @@ func (r DMAPIDeleteTaskResponse) StatusCode() int {
 	return 0
 }
 
-type DMAPIPauseTaskResponse struct {
+type DMAPIGetTaskResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON400      *ErrorWithMessage
+	JSON200      *Task
 }
 
 // Status returns HTTPResponse.Status
-func (r DMAPIPauseTaskResponse) Status() string {
+func (r DMAPIGetTaskResponse) Status() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Status
 	}
@@ -2878,21 +3642,22 @@ func (r DMAPIPauseTaskResponse) Status() string {
 }
 
 // StatusCode returns HTTPResponse.StatusCode
-func (r DMAPIPauseTaskResponse) StatusCode() int {
+func (r DMAPIGetTaskResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
 	return 0
 }
 
-type DMAPIResumeTaskResponse struct {
+type DMAPIUpdateTaskResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
+	JSON200      *Task
 	JSON400      *ErrorWithMessage
 }
 
 // Status returns HTTPResponse.Status
-func (r DMAPIResumeTaskResponse) Status() string {
+func (r DMAPIUpdateTaskResponse) Status() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Status
 	}
@@ -2900,7 +3665,30 @@ func (r DMAPIResumeTaskResponse) Status() string {
 }
 
 // StatusCode returns HTTPResponse.StatusCode
-func (r DMAPIResumeTaskResponse) StatusCode() int {
+func (r DMAPIUpdateTaskResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type DMAPIGetTaskMigrateTargetsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *GetTaskMigrateTargetsResponse
+	JSON400      *ErrorWithMessage
+}
+
+// Status returns HTTPResponse.Status
+func (r DMAPIGetTaskMigrateTargetsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DMAPIGetTaskMigrateTargetsResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -3020,6 +3808,28 @@ func (r DMAPIOperateTableStructureResponse) StatusCode() int {
 	return 0
 }
 
+type DMAPIStartTaskResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON400      *ErrorWithMessage
+}
+
+// Status returns HTTPResponse.Status
+func (r DMAPIStartTaskResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DMAPIStartTaskResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type DMAPIGetTaskStatusResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -3041,6 +3851,37 @@ func (r DMAPIGetTaskStatusResponse) StatusCode() int {
 		return r.HTTPResponse.StatusCode
 	}
 	return 0
+}
+
+type DMAPIStopTaskResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON400      *ErrorWithMessage
+}
+
+// Status returns HTTPResponse.Status
+func (r DMAPIStopTaskResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DMAPIStopTaskResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// DMAPIGetClusterInfoWithResponse request returning *DMAPIGetClusterInfoResponse
+func (c *ClientWithResponses) DMAPIGetClusterInfoWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*DMAPIGetClusterInfoResponse, error) {
+	rsp, err := c.DMAPIGetClusterInfo(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDMAPIGetClusterInfoResponse(rsp)
 }
 
 // DMAPIGetClusterMasterListWithResponse request returning *DMAPIGetClusterMasterListResponse
@@ -3132,22 +3973,99 @@ func (c *ClientWithResponses) DMAPIDeleteSourceWithResponse(ctx context.Context,
 	return ParseDMAPIDeleteSourceResponse(rsp)
 }
 
-// DMAPIPauseRelayWithResponse request returning *DMAPIPauseRelayResponse
-func (c *ClientWithResponses) DMAPIPauseRelayWithResponse(ctx context.Context, sourceName string, reqEditors ...RequestEditorFn) (*DMAPIPauseRelayResponse, error) {
-	rsp, err := c.DMAPIPauseRelay(ctx, sourceName, reqEditors...)
+// DMAPIGetSourceWithResponse request returning *DMAPIGetSourceResponse
+func (c *ClientWithResponses) DMAPIGetSourceWithResponse(ctx context.Context, sourceName string, params *DMAPIGetSourceParams, reqEditors ...RequestEditorFn) (*DMAPIGetSourceResponse, error) {
+	rsp, err := c.DMAPIGetSource(ctx, sourceName, params, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseDMAPIPauseRelayResponse(rsp)
+	return ParseDMAPIGetSourceResponse(rsp)
 }
 
-// DMAPIResumeRelayWithResponse request returning *DMAPIResumeRelayResponse
-func (c *ClientWithResponses) DMAPIResumeRelayWithResponse(ctx context.Context, sourceName string, reqEditors ...RequestEditorFn) (*DMAPIResumeRelayResponse, error) {
-	rsp, err := c.DMAPIResumeRelay(ctx, sourceName, reqEditors...)
+// DMAPIUpdateSourceWithBodyWithResponse request with arbitrary body returning *DMAPIUpdateSourceResponse
+func (c *ClientWithResponses) DMAPIUpdateSourceWithBodyWithResponse(ctx context.Context, sourceName string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*DMAPIUpdateSourceResponse, error) {
+	rsp, err := c.DMAPIUpdateSourceWithBody(ctx, sourceName, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseDMAPIResumeRelayResponse(rsp)
+	return ParseDMAPIUpdateSourceResponse(rsp)
+}
+
+func (c *ClientWithResponses) DMAPIUpdateSourceWithResponse(ctx context.Context, sourceName string, body DMAPIUpdateSourceJSONRequestBody, reqEditors ...RequestEditorFn) (*DMAPIUpdateSourceResponse, error) {
+	rsp, err := c.DMAPIUpdateSource(ctx, sourceName, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDMAPIUpdateSourceResponse(rsp)
+}
+
+// DMAPIDisableSourceWithResponse request returning *DMAPIDisableSourceResponse
+func (c *ClientWithResponses) DMAPIDisableSourceWithResponse(ctx context.Context, sourceName string, reqEditors ...RequestEditorFn) (*DMAPIDisableSourceResponse, error) {
+	rsp, err := c.DMAPIDisableSource(ctx, sourceName, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDMAPIDisableSourceResponse(rsp)
+}
+
+// DMAPIEnableSourceWithResponse request returning *DMAPIEnableSourceResponse
+func (c *ClientWithResponses) DMAPIEnableSourceWithResponse(ctx context.Context, sourceName string, reqEditors ...RequestEditorFn) (*DMAPIEnableSourceResponse, error) {
+	rsp, err := c.DMAPIEnableSource(ctx, sourceName, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDMAPIEnableSourceResponse(rsp)
+}
+
+// DMAPIDisableRelayWithBodyWithResponse request with arbitrary body returning *DMAPIDisableRelayResponse
+func (c *ClientWithResponses) DMAPIDisableRelayWithBodyWithResponse(ctx context.Context, sourceName string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*DMAPIDisableRelayResponse, error) {
+	rsp, err := c.DMAPIDisableRelayWithBody(ctx, sourceName, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDMAPIDisableRelayResponse(rsp)
+}
+
+func (c *ClientWithResponses) DMAPIDisableRelayWithResponse(ctx context.Context, sourceName string, body DMAPIDisableRelayJSONRequestBody, reqEditors ...RequestEditorFn) (*DMAPIDisableRelayResponse, error) {
+	rsp, err := c.DMAPIDisableRelay(ctx, sourceName, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDMAPIDisableRelayResponse(rsp)
+}
+
+// DMAPIEnableRelayWithBodyWithResponse request with arbitrary body returning *DMAPIEnableRelayResponse
+func (c *ClientWithResponses) DMAPIEnableRelayWithBodyWithResponse(ctx context.Context, sourceName string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*DMAPIEnableRelayResponse, error) {
+	rsp, err := c.DMAPIEnableRelayWithBody(ctx, sourceName, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDMAPIEnableRelayResponse(rsp)
+}
+
+func (c *ClientWithResponses) DMAPIEnableRelayWithResponse(ctx context.Context, sourceName string, body DMAPIEnableRelayJSONRequestBody, reqEditors ...RequestEditorFn) (*DMAPIEnableRelayResponse, error) {
+	rsp, err := c.DMAPIEnableRelay(ctx, sourceName, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDMAPIEnableRelayResponse(rsp)
+}
+
+// DMAPIPurgeRelayWithBodyWithResponse request with arbitrary body returning *DMAPIPurgeRelayResponse
+func (c *ClientWithResponses) DMAPIPurgeRelayWithBodyWithResponse(ctx context.Context, sourceName string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*DMAPIPurgeRelayResponse, error) {
+	rsp, err := c.DMAPIPurgeRelayWithBody(ctx, sourceName, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDMAPIPurgeRelayResponse(rsp)
+}
+
+func (c *ClientWithResponses) DMAPIPurgeRelayWithResponse(ctx context.Context, sourceName string, body DMAPIPurgeRelayJSONRequestBody, reqEditors ...RequestEditorFn) (*DMAPIPurgeRelayResponse, error) {
+	rsp, err := c.DMAPIPurgeRelay(ctx, sourceName, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDMAPIPurgeRelayResponse(rsp)
 }
 
 // DMAPIGetSourceSchemaListWithResponse request returning *DMAPIGetSourceSchemaListResponse
@@ -3168,23 +4086,6 @@ func (c *ClientWithResponses) DMAPIGetSourceTableListWithResponse(ctx context.Co
 	return ParseDMAPIGetSourceTableListResponse(rsp)
 }
 
-// DMAPIStartRelayWithBodyWithResponse request with arbitrary body returning *DMAPIStartRelayResponse
-func (c *ClientWithResponses) DMAPIStartRelayWithBodyWithResponse(ctx context.Context, sourceName string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*DMAPIStartRelayResponse, error) {
-	rsp, err := c.DMAPIStartRelayWithBody(ctx, sourceName, contentType, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseDMAPIStartRelayResponse(rsp)
-}
-
-func (c *ClientWithResponses) DMAPIStartRelayWithResponse(ctx context.Context, sourceName string, body DMAPIStartRelayJSONRequestBody, reqEditors ...RequestEditorFn) (*DMAPIStartRelayResponse, error) {
-	rsp, err := c.DMAPIStartRelay(ctx, sourceName, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseDMAPIStartRelayResponse(rsp)
-}
-
 // DMAPIGetSourceStatusWithResponse request returning *DMAPIGetSourceStatusResponse
 func (c *ClientWithResponses) DMAPIGetSourceStatusWithResponse(ctx context.Context, sourceName string, reqEditors ...RequestEditorFn) (*DMAPIGetSourceStatusResponse, error) {
 	rsp, err := c.DMAPIGetSourceStatus(ctx, sourceName, reqEditors...)
@@ -3192,23 +4093,6 @@ func (c *ClientWithResponses) DMAPIGetSourceStatusWithResponse(ctx context.Conte
 		return nil, err
 	}
 	return ParseDMAPIGetSourceStatusResponse(rsp)
-}
-
-// DMAPIStopRelayWithBodyWithResponse request with arbitrary body returning *DMAPIStopRelayResponse
-func (c *ClientWithResponses) DMAPIStopRelayWithBodyWithResponse(ctx context.Context, sourceName string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*DMAPIStopRelayResponse, error) {
-	rsp, err := c.DMAPIStopRelayWithBody(ctx, sourceName, contentType, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseDMAPIStopRelayResponse(rsp)
-}
-
-func (c *ClientWithResponses) DMAPIStopRelayWithResponse(ctx context.Context, sourceName string, body DMAPIStopRelayJSONRequestBody, reqEditors ...RequestEditorFn) (*DMAPIStopRelayResponse, error) {
-	rsp, err := c.DMAPIStopRelay(ctx, sourceName, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseDMAPIStopRelayResponse(rsp)
 }
 
 // DMAPITransferSourceWithBodyWithResponse request with arbitrary body returning *DMAPITransferSourceResponse
@@ -3228,100 +4112,117 @@ func (c *ClientWithResponses) DMAPITransferSourceWithResponse(ctx context.Contex
 	return ParseDMAPITransferSourceResponse(rsp)
 }
 
-// DMAPIGetTaskConfigListWithResponse request returning *DMAPIGetTaskConfigListResponse
-func (c *ClientWithResponses) DMAPIGetTaskConfigListWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*DMAPIGetTaskConfigListResponse, error) {
-	rsp, err := c.DMAPIGetTaskConfigList(ctx, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseDMAPIGetTaskConfigListResponse(rsp)
-}
-
-// DMAPICreateTaskConfigWithBodyWithResponse request with arbitrary body returning *DMAPICreateTaskConfigResponse
-func (c *ClientWithResponses) DMAPICreateTaskConfigWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*DMAPICreateTaskConfigResponse, error) {
-	rsp, err := c.DMAPICreateTaskConfigWithBody(ctx, contentType, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseDMAPICreateTaskConfigResponse(rsp)
-}
-
-func (c *ClientWithResponses) DMAPICreateTaskConfigWithResponse(ctx context.Context, body DMAPICreateTaskConfigJSONRequestBody, reqEditors ...RequestEditorFn) (*DMAPICreateTaskConfigResponse, error) {
-	rsp, err := c.DMAPICreateTaskConfig(ctx, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseDMAPICreateTaskConfigResponse(rsp)
-}
-
-// DMAPIImportTaskConfigWithBodyWithResponse request with arbitrary body returning *DMAPIImportTaskConfigResponse
-func (c *ClientWithResponses) DMAPIImportTaskConfigWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*DMAPIImportTaskConfigResponse, error) {
-	rsp, err := c.DMAPIImportTaskConfigWithBody(ctx, contentType, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseDMAPIImportTaskConfigResponse(rsp)
-}
-
-func (c *ClientWithResponses) DMAPIImportTaskConfigWithResponse(ctx context.Context, body DMAPIImportTaskConfigJSONRequestBody, reqEditors ...RequestEditorFn) (*DMAPIImportTaskConfigResponse, error) {
-	rsp, err := c.DMAPIImportTaskConfig(ctx, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseDMAPIImportTaskConfigResponse(rsp)
-}
-
-// DMAPIDeleteTaskConfigWithResponse request returning *DMAPIDeleteTaskConfigResponse
-func (c *ClientWithResponses) DMAPIDeleteTaskConfigWithResponse(ctx context.Context, taskName string, reqEditors ...RequestEditorFn) (*DMAPIDeleteTaskConfigResponse, error) {
-	rsp, err := c.DMAPIDeleteTaskConfig(ctx, taskName, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseDMAPIDeleteTaskConfigResponse(rsp)
-}
-
-// DMAPIGetTaskConfigWithResponse request returning *DMAPIGetTaskConfigResponse
-func (c *ClientWithResponses) DMAPIGetTaskConfigWithResponse(ctx context.Context, taskName string, reqEditors ...RequestEditorFn) (*DMAPIGetTaskConfigResponse, error) {
-	rsp, err := c.DMAPIGetTaskConfig(ctx, taskName, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseDMAPIGetTaskConfigResponse(rsp)
-}
-
-// DMAPUpdateTaskConfigWithResponse request returning *DMAPUpdateTaskConfigResponse
-func (c *ClientWithResponses) DMAPUpdateTaskConfigWithResponse(ctx context.Context, taskName string, reqEditors ...RequestEditorFn) (*DMAPUpdateTaskConfigResponse, error) {
-	rsp, err := c.DMAPUpdateTaskConfig(ctx, taskName, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseDMAPUpdateTaskConfigResponse(rsp)
-}
-
 // DMAPIGetTaskListWithResponse request returning *DMAPIGetTaskListResponse
-func (c *ClientWithResponses) DMAPIGetTaskListWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*DMAPIGetTaskListResponse, error) {
-	rsp, err := c.DMAPIGetTaskList(ctx, reqEditors...)
+func (c *ClientWithResponses) DMAPIGetTaskListWithResponse(ctx context.Context, params *DMAPIGetTaskListParams, reqEditors ...RequestEditorFn) (*DMAPIGetTaskListResponse, error) {
+	rsp, err := c.DMAPIGetTaskList(ctx, params, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
 	return ParseDMAPIGetTaskListResponse(rsp)
 }
 
-// DMAPIStartTaskWithBodyWithResponse request with arbitrary body returning *DMAPIStartTaskResponse
-func (c *ClientWithResponses) DMAPIStartTaskWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*DMAPIStartTaskResponse, error) {
-	rsp, err := c.DMAPIStartTaskWithBody(ctx, contentType, body, reqEditors...)
+// DMAPICreateTaskWithBodyWithResponse request with arbitrary body returning *DMAPICreateTaskResponse
+func (c *ClientWithResponses) DMAPICreateTaskWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*DMAPICreateTaskResponse, error) {
+	rsp, err := c.DMAPICreateTaskWithBody(ctx, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseDMAPIStartTaskResponse(rsp)
+	return ParseDMAPICreateTaskResponse(rsp)
 }
 
-func (c *ClientWithResponses) DMAPIStartTaskWithResponse(ctx context.Context, body DMAPIStartTaskJSONRequestBody, reqEditors ...RequestEditorFn) (*DMAPIStartTaskResponse, error) {
-	rsp, err := c.DMAPIStartTask(ctx, body, reqEditors...)
+func (c *ClientWithResponses) DMAPICreateTaskWithResponse(ctx context.Context, body DMAPICreateTaskJSONRequestBody, reqEditors ...RequestEditorFn) (*DMAPICreateTaskResponse, error) {
+	rsp, err := c.DMAPICreateTask(ctx, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseDMAPIStartTaskResponse(rsp)
+	return ParseDMAPICreateTaskResponse(rsp)
+}
+
+// DMAPIConvertTaskWithBodyWithResponse request with arbitrary body returning *DMAPIConvertTaskResponse
+func (c *ClientWithResponses) DMAPIConvertTaskWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*DMAPIConvertTaskResponse, error) {
+	rsp, err := c.DMAPIConvertTaskWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDMAPIConvertTaskResponse(rsp)
+}
+
+func (c *ClientWithResponses) DMAPIConvertTaskWithResponse(ctx context.Context, body DMAPIConvertTaskJSONRequestBody, reqEditors ...RequestEditorFn) (*DMAPIConvertTaskResponse, error) {
+	rsp, err := c.DMAPIConvertTask(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDMAPIConvertTaskResponse(rsp)
+}
+
+// DMAPIGetTaskTemplateListWithResponse request returning *DMAPIGetTaskTemplateListResponse
+func (c *ClientWithResponses) DMAPIGetTaskTemplateListWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*DMAPIGetTaskTemplateListResponse, error) {
+	rsp, err := c.DMAPIGetTaskTemplateList(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDMAPIGetTaskTemplateListResponse(rsp)
+}
+
+// DMAPICreateTaskTemplateWithBodyWithResponse request with arbitrary body returning *DMAPICreateTaskTemplateResponse
+func (c *ClientWithResponses) DMAPICreateTaskTemplateWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*DMAPICreateTaskTemplateResponse, error) {
+	rsp, err := c.DMAPICreateTaskTemplateWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDMAPICreateTaskTemplateResponse(rsp)
+}
+
+func (c *ClientWithResponses) DMAPICreateTaskTemplateWithResponse(ctx context.Context, body DMAPICreateTaskTemplateJSONRequestBody, reqEditors ...RequestEditorFn) (*DMAPICreateTaskTemplateResponse, error) {
+	rsp, err := c.DMAPICreateTaskTemplate(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDMAPICreateTaskTemplateResponse(rsp)
+}
+
+// DMAPIImportTaskTemplateWithBodyWithResponse request with arbitrary body returning *DMAPIImportTaskTemplateResponse
+func (c *ClientWithResponses) DMAPIImportTaskTemplateWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*DMAPIImportTaskTemplateResponse, error) {
+	rsp, err := c.DMAPIImportTaskTemplateWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDMAPIImportTaskTemplateResponse(rsp)
+}
+
+func (c *ClientWithResponses) DMAPIImportTaskTemplateWithResponse(ctx context.Context, body DMAPIImportTaskTemplateJSONRequestBody, reqEditors ...RequestEditorFn) (*DMAPIImportTaskTemplateResponse, error) {
+	rsp, err := c.DMAPIImportTaskTemplate(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDMAPIImportTaskTemplateResponse(rsp)
+}
+
+// DMAPIDeleteTaskTemplateWithResponse request returning *DMAPIDeleteTaskTemplateResponse
+func (c *ClientWithResponses) DMAPIDeleteTaskTemplateWithResponse(ctx context.Context, taskName string, reqEditors ...RequestEditorFn) (*DMAPIDeleteTaskTemplateResponse, error) {
+	rsp, err := c.DMAPIDeleteTaskTemplate(ctx, taskName, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDMAPIDeleteTaskTemplateResponse(rsp)
+}
+
+// DMAPIGetTaskTemplateWithResponse request returning *DMAPIGetTaskTemplateResponse
+func (c *ClientWithResponses) DMAPIGetTaskTemplateWithResponse(ctx context.Context, taskName string, reqEditors ...RequestEditorFn) (*DMAPIGetTaskTemplateResponse, error) {
+	rsp, err := c.DMAPIGetTaskTemplate(ctx, taskName, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDMAPIGetTaskTemplateResponse(rsp)
+}
+
+// DMAPUpdateTaskTemplateWithResponse request returning *DMAPUpdateTaskTemplateResponse
+func (c *ClientWithResponses) DMAPUpdateTaskTemplateWithResponse(ctx context.Context, taskName string, reqEditors ...RequestEditorFn) (*DMAPUpdateTaskTemplateResponse, error) {
+	rsp, err := c.DMAPUpdateTaskTemplate(ctx, taskName, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDMAPUpdateTaskTemplateResponse(rsp)
 }
 
 // DMAPIDeleteTaskWithResponse request returning *DMAPIDeleteTaskResponse
@@ -3333,38 +4234,39 @@ func (c *ClientWithResponses) DMAPIDeleteTaskWithResponse(ctx context.Context, t
 	return ParseDMAPIDeleteTaskResponse(rsp)
 }
 
-// DMAPIPauseTaskWithBodyWithResponse request with arbitrary body returning *DMAPIPauseTaskResponse
-func (c *ClientWithResponses) DMAPIPauseTaskWithBodyWithResponse(ctx context.Context, taskName string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*DMAPIPauseTaskResponse, error) {
-	rsp, err := c.DMAPIPauseTaskWithBody(ctx, taskName, contentType, body, reqEditors...)
+// DMAPIGetTaskWithResponse request returning *DMAPIGetTaskResponse
+func (c *ClientWithResponses) DMAPIGetTaskWithResponse(ctx context.Context, taskName string, params *DMAPIGetTaskParams, reqEditors ...RequestEditorFn) (*DMAPIGetTaskResponse, error) {
+	rsp, err := c.DMAPIGetTask(ctx, taskName, params, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseDMAPIPauseTaskResponse(rsp)
+	return ParseDMAPIGetTaskResponse(rsp)
 }
 
-func (c *ClientWithResponses) DMAPIPauseTaskWithResponse(ctx context.Context, taskName string, body DMAPIPauseTaskJSONRequestBody, reqEditors ...RequestEditorFn) (*DMAPIPauseTaskResponse, error) {
-	rsp, err := c.DMAPIPauseTask(ctx, taskName, body, reqEditors...)
+// DMAPIUpdateTaskWithBodyWithResponse request with arbitrary body returning *DMAPIUpdateTaskResponse
+func (c *ClientWithResponses) DMAPIUpdateTaskWithBodyWithResponse(ctx context.Context, taskName string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*DMAPIUpdateTaskResponse, error) {
+	rsp, err := c.DMAPIUpdateTaskWithBody(ctx, taskName, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseDMAPIPauseTaskResponse(rsp)
+	return ParseDMAPIUpdateTaskResponse(rsp)
 }
 
-// DMAPIResumeTaskWithBodyWithResponse request with arbitrary body returning *DMAPIResumeTaskResponse
-func (c *ClientWithResponses) DMAPIResumeTaskWithBodyWithResponse(ctx context.Context, taskName string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*DMAPIResumeTaskResponse, error) {
-	rsp, err := c.DMAPIResumeTaskWithBody(ctx, taskName, contentType, body, reqEditors...)
+func (c *ClientWithResponses) DMAPIUpdateTaskWithResponse(ctx context.Context, taskName string, body DMAPIUpdateTaskJSONRequestBody, reqEditors ...RequestEditorFn) (*DMAPIUpdateTaskResponse, error) {
+	rsp, err := c.DMAPIUpdateTask(ctx, taskName, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseDMAPIResumeTaskResponse(rsp)
+	return ParseDMAPIUpdateTaskResponse(rsp)
 }
 
-func (c *ClientWithResponses) DMAPIResumeTaskWithResponse(ctx context.Context, taskName string, body DMAPIResumeTaskJSONRequestBody, reqEditors ...RequestEditorFn) (*DMAPIResumeTaskResponse, error) {
-	rsp, err := c.DMAPIResumeTask(ctx, taskName, body, reqEditors...)
+// DMAPIGetTaskMigrateTargetsWithResponse request returning *DMAPIGetTaskMigrateTargetsResponse
+func (c *ClientWithResponses) DMAPIGetTaskMigrateTargetsWithResponse(ctx context.Context, taskName string, sourceName string, params *DMAPIGetTaskMigrateTargetsParams, reqEditors ...RequestEditorFn) (*DMAPIGetTaskMigrateTargetsResponse, error) {
+	rsp, err := c.DMAPIGetTaskMigrateTargets(ctx, taskName, sourceName, params, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseDMAPIResumeTaskResponse(rsp)
+	return ParseDMAPIGetTaskMigrateTargetsResponse(rsp)
 }
 
 // DMAPIGetSchemaListByTaskAndSourceWithResponse request returning *DMAPIGetSchemaListByTaskAndSourceResponse
@@ -3420,6 +4322,23 @@ func (c *ClientWithResponses) DMAPIOperateTableStructureWithResponse(ctx context
 	return ParseDMAPIOperateTableStructureResponse(rsp)
 }
 
+// DMAPIStartTaskWithBodyWithResponse request with arbitrary body returning *DMAPIStartTaskResponse
+func (c *ClientWithResponses) DMAPIStartTaskWithBodyWithResponse(ctx context.Context, taskName string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*DMAPIStartTaskResponse, error) {
+	rsp, err := c.DMAPIStartTaskWithBody(ctx, taskName, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDMAPIStartTaskResponse(rsp)
+}
+
+func (c *ClientWithResponses) DMAPIStartTaskWithResponse(ctx context.Context, taskName string, body DMAPIStartTaskJSONRequestBody, reqEditors ...RequestEditorFn) (*DMAPIStartTaskResponse, error) {
+	rsp, err := c.DMAPIStartTask(ctx, taskName, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDMAPIStartTaskResponse(rsp)
+}
+
 // DMAPIGetTaskStatusWithResponse request returning *DMAPIGetTaskStatusResponse
 func (c *ClientWithResponses) DMAPIGetTaskStatusWithResponse(ctx context.Context, taskName string, params *DMAPIGetTaskStatusParams, reqEditors ...RequestEditorFn) (*DMAPIGetTaskStatusResponse, error) {
 	rsp, err := c.DMAPIGetTaskStatus(ctx, taskName, params, reqEditors...)
@@ -3427,6 +4346,48 @@ func (c *ClientWithResponses) DMAPIGetTaskStatusWithResponse(ctx context.Context
 		return nil, err
 	}
 	return ParseDMAPIGetTaskStatusResponse(rsp)
+}
+
+// DMAPIStopTaskWithBodyWithResponse request with arbitrary body returning *DMAPIStopTaskResponse
+func (c *ClientWithResponses) DMAPIStopTaskWithBodyWithResponse(ctx context.Context, taskName string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*DMAPIStopTaskResponse, error) {
+	rsp, err := c.DMAPIStopTaskWithBody(ctx, taskName, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDMAPIStopTaskResponse(rsp)
+}
+
+func (c *ClientWithResponses) DMAPIStopTaskWithResponse(ctx context.Context, taskName string, body DMAPIStopTaskJSONRequestBody, reqEditors ...RequestEditorFn) (*DMAPIStopTaskResponse, error) {
+	rsp, err := c.DMAPIStopTask(ctx, taskName, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDMAPIStopTaskResponse(rsp)
+}
+
+// ParseDMAPIGetClusterInfoResponse parses an HTTP response from a DMAPIGetClusterInfoWithResponse call
+func ParseDMAPIGetClusterInfoResponse(rsp *http.Response) (*DMAPIGetClusterInfoResponse, error) {
+	bodyBytes, err := ioutil.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DMAPIGetClusterInfoResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest GetClusterInfoResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+	}
+
+	return response, nil
 }
 
 // ParseDMAPIGetClusterMasterListResponse parses an HTTP response from a DMAPIGetClusterMasterListWithResponse call
@@ -3649,12 +4610,62 @@ func ParseDMAPIDeleteSourceResponse(rsp *http.Response) (*DMAPIDeleteSourceRespo
 	}
 
 	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 204:
-		var dest DeleteSourceResponse
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest ErrorWithMessage
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
-		response.JSON204 = &dest
+		response.JSON400 = &dest
+	}
+
+	return response, nil
+}
+
+// ParseDMAPIGetSourceResponse parses an HTTP response from a DMAPIGetSourceWithResponse call
+func ParseDMAPIGetSourceResponse(rsp *http.Response) (*DMAPIGetSourceResponse, error) {
+	bodyBytes, err := ioutil.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DMAPIGetSourceResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Source
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+	}
+
+	return response, nil
+}
+
+// ParseDMAPIUpdateSourceResponse parses an HTTP response from a DMAPIUpdateSourceWithResponse call
+func ParseDMAPIUpdateSourceResponse(rsp *http.Response) (*DMAPIUpdateSourceResponse, error) {
+	bodyBytes, err := ioutil.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DMAPIUpdateSourceResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Source
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
 		var dest ErrorWithMessage
@@ -3668,15 +4679,15 @@ func ParseDMAPIDeleteSourceResponse(rsp *http.Response) (*DMAPIDeleteSourceRespo
 	return response, nil
 }
 
-// ParseDMAPIPauseRelayResponse parses an HTTP response from a DMAPIPauseRelayWithResponse call
-func ParseDMAPIPauseRelayResponse(rsp *http.Response) (*DMAPIPauseRelayResponse, error) {
+// ParseDMAPIDisableSourceResponse parses an HTTP response from a DMAPIDisableSourceWithResponse call
+func ParseDMAPIDisableSourceResponse(rsp *http.Response) (*DMAPIDisableSourceResponse, error) {
 	bodyBytes, err := ioutil.ReadAll(rsp.Body)
 	defer func() { _ = rsp.Body.Close() }()
 	if err != nil {
 		return nil, err
 	}
 
-	response := &DMAPIPauseRelayResponse{
+	response := &DMAPIDisableSourceResponse{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}
@@ -3693,15 +4704,90 @@ func ParseDMAPIPauseRelayResponse(rsp *http.Response) (*DMAPIPauseRelayResponse,
 	return response, nil
 }
 
-// ParseDMAPIResumeRelayResponse parses an HTTP response from a DMAPIResumeRelayWithResponse call
-func ParseDMAPIResumeRelayResponse(rsp *http.Response) (*DMAPIResumeRelayResponse, error) {
+// ParseDMAPIEnableSourceResponse parses an HTTP response from a DMAPIEnableSourceWithResponse call
+func ParseDMAPIEnableSourceResponse(rsp *http.Response) (*DMAPIEnableSourceResponse, error) {
 	bodyBytes, err := ioutil.ReadAll(rsp.Body)
 	defer func() { _ = rsp.Body.Close() }()
 	if err != nil {
 		return nil, err
 	}
 
-	response := &DMAPIResumeRelayResponse{
+	response := &DMAPIEnableSourceResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest ErrorWithMessage
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+	}
+
+	return response, nil
+}
+
+// ParseDMAPIDisableRelayResponse parses an HTTP response from a DMAPIDisableRelayWithResponse call
+func ParseDMAPIDisableRelayResponse(rsp *http.Response) (*DMAPIDisableRelayResponse, error) {
+	bodyBytes, err := ioutil.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DMAPIDisableRelayResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest ErrorWithMessage
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+	}
+
+	return response, nil
+}
+
+// ParseDMAPIEnableRelayResponse parses an HTTP response from a DMAPIEnableRelayWithResponse call
+func ParseDMAPIEnableRelayResponse(rsp *http.Response) (*DMAPIEnableRelayResponse, error) {
+	bodyBytes, err := ioutil.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DMAPIEnableRelayResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest ErrorWithMessage
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+	}
+
+	return response, nil
+}
+
+// ParseDMAPIPurgeRelayResponse parses an HTTP response from a DMAPIPurgeRelayWithResponse call
+func ParseDMAPIPurgeRelayResponse(rsp *http.Response) (*DMAPIPurgeRelayResponse, error) {
+	bodyBytes, err := ioutil.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DMAPIPurgeRelayResponse{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}
@@ -3784,31 +4870,6 @@ func ParseDMAPIGetSourceTableListResponse(rsp *http.Response) (*DMAPIGetSourceTa
 	return response, nil
 }
 
-// ParseDMAPIStartRelayResponse parses an HTTP response from a DMAPIStartRelayWithResponse call
-func ParseDMAPIStartRelayResponse(rsp *http.Response) (*DMAPIStartRelayResponse, error) {
-	bodyBytes, err := ioutil.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &DMAPIStartRelayResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest ErrorWithMessage
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
-	}
-
-	return response, nil
-}
-
 // ParseDMAPIGetSourceStatusResponse parses an HTTP response from a DMAPIGetSourceStatusWithResponse call
 func ParseDMAPIGetSourceStatusResponse(rsp *http.Response) (*DMAPIGetSourceStatusResponse, error) {
 	bodyBytes, err := ioutil.ReadAll(rsp.Body)
@@ -3842,31 +4903,6 @@ func ParseDMAPIGetSourceStatusResponse(rsp *http.Response) (*DMAPIGetSourceStatu
 	return response, nil
 }
 
-// ParseDMAPIStopRelayResponse parses an HTTP response from a DMAPIStopRelayWithResponse call
-func ParseDMAPIStopRelayResponse(rsp *http.Response) (*DMAPIStopRelayResponse, error) {
-	bodyBytes, err := ioutil.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &DMAPIStopRelayResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest ErrorWithMessage
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
-	}
-
-	return response, nil
-}
-
 // ParseDMAPITransferSourceResponse parses an HTTP response from a DMAPITransferSourceWithResponse call
 func ParseDMAPITransferSourceResponse(rsp *http.Response) (*DMAPITransferSourceResponse, error) {
 	bodyBytes, err := ioutil.ReadAll(rsp.Body)
@@ -3887,196 +4923,6 @@ func ParseDMAPITransferSourceResponse(rsp *http.Response) (*DMAPITransferSourceR
 			return nil, err
 		}
 		response.JSON400 = &dest
-	}
-
-	return response, nil
-}
-
-// ParseDMAPIGetTaskConfigListResponse parses an HTTP response from a DMAPIGetTaskConfigListWithResponse call
-func ParseDMAPIGetTaskConfigListResponse(rsp *http.Response) (*DMAPIGetTaskConfigListResponse, error) {
-	bodyBytes, err := ioutil.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &DMAPIGetTaskConfigListResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest GetTaskListResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest ErrorWithMessage
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseDMAPICreateTaskConfigResponse parses an HTTP response from a DMAPICreateTaskConfigWithResponse call
-func ParseDMAPICreateTaskConfigResponse(rsp *http.Response) (*DMAPICreateTaskConfigResponse, error) {
-	bodyBytes, err := ioutil.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &DMAPICreateTaskConfigResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
-		var dest Task
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON201 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest ErrorWithMessage
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseDMAPIImportTaskConfigResponse parses an HTTP response from a DMAPIImportTaskConfigWithResponse call
-func ParseDMAPIImportTaskConfigResponse(rsp *http.Response) (*DMAPIImportTaskConfigResponse, error) {
-	bodyBytes, err := ioutil.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &DMAPIImportTaskConfigResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
-		var dest TaskConfigResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON202 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest ErrorWithMessage
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseDMAPIDeleteTaskConfigResponse parses an HTTP response from a DMAPIDeleteTaskConfigWithResponse call
-func ParseDMAPIDeleteTaskConfigResponse(rsp *http.Response) (*DMAPIDeleteTaskConfigResponse, error) {
-	bodyBytes, err := ioutil.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &DMAPIDeleteTaskConfigResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest ErrorWithMessage
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
-	}
-
-	return response, nil
-}
-
-// ParseDMAPIGetTaskConfigResponse parses an HTTP response from a DMAPIGetTaskConfigWithResponse call
-func ParseDMAPIGetTaskConfigResponse(rsp *http.Response) (*DMAPIGetTaskConfigResponse, error) {
-	bodyBytes, err := ioutil.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &DMAPIGetTaskConfigResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest Task
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest ErrorWithMessage
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseDMAPUpdateTaskConfigResponse parses an HTTP response from a DMAPUpdateTaskConfigWithResponse call
-func ParseDMAPUpdateTaskConfigResponse(rsp *http.Response) (*DMAPUpdateTaskConfigResponse, error) {
-	bodyBytes, err := ioutil.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &DMAPUpdateTaskConfigResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest Task
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest ErrorWithMessage
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
-
 	}
 
 	return response, nil
@@ -4115,15 +4961,15 @@ func ParseDMAPIGetTaskListResponse(rsp *http.Response) (*DMAPIGetTaskListRespons
 	return response, nil
 }
 
-// ParseDMAPIStartTaskResponse parses an HTTP response from a DMAPIStartTaskWithResponse call
-func ParseDMAPIStartTaskResponse(rsp *http.Response) (*DMAPIStartTaskResponse, error) {
+// ParseDMAPICreateTaskResponse parses an HTTP response from a DMAPICreateTaskWithResponse call
+func ParseDMAPICreateTaskResponse(rsp *http.Response) (*DMAPICreateTaskResponse, error) {
 	bodyBytes, err := ioutil.ReadAll(rsp.Body)
 	defer func() { _ = rsp.Body.Close() }()
 	if err != nil {
 		return nil, err
 	}
 
-	response := &DMAPIStartTaskResponse{
+	response := &DMAPICreateTaskResponse{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}
@@ -4135,6 +4981,229 @@ func ParseDMAPIStartTaskResponse(rsp *http.Response) (*DMAPIStartTaskResponse, e
 			return nil, err
 		}
 		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest ErrorWithMessage
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseDMAPIConvertTaskResponse parses an HTTP response from a DMAPIConvertTaskWithResponse call
+func ParseDMAPIConvertTaskResponse(rsp *http.Response) (*DMAPIConvertTaskResponse, error) {
+	bodyBytes, err := ioutil.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DMAPIConvertTaskResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest ConverterTaskResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest ErrorWithMessage
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseDMAPIGetTaskTemplateListResponse parses an HTTP response from a DMAPIGetTaskTemplateListWithResponse call
+func ParseDMAPIGetTaskTemplateListResponse(rsp *http.Response) (*DMAPIGetTaskTemplateListResponse, error) {
+	bodyBytes, err := ioutil.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DMAPIGetTaskTemplateListResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest GetTaskListResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest ErrorWithMessage
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseDMAPICreateTaskTemplateResponse parses an HTTP response from a DMAPICreateTaskTemplateWithResponse call
+func ParseDMAPICreateTaskTemplateResponse(rsp *http.Response) (*DMAPICreateTaskTemplateResponse, error) {
+	bodyBytes, err := ioutil.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DMAPICreateTaskTemplateResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest Task
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest ErrorWithMessage
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseDMAPIImportTaskTemplateResponse parses an HTTP response from a DMAPIImportTaskTemplateWithResponse call
+func ParseDMAPIImportTaskTemplateResponse(rsp *http.Response) (*DMAPIImportTaskTemplateResponse, error) {
+	bodyBytes, err := ioutil.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DMAPIImportTaskTemplateResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest TaskTemplateResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest ErrorWithMessage
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseDMAPIDeleteTaskTemplateResponse parses an HTTP response from a DMAPIDeleteTaskTemplateWithResponse call
+func ParseDMAPIDeleteTaskTemplateResponse(rsp *http.Response) (*DMAPIDeleteTaskTemplateResponse, error) {
+	bodyBytes, err := ioutil.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DMAPIDeleteTaskTemplateResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest ErrorWithMessage
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+	}
+
+	return response, nil
+}
+
+// ParseDMAPIGetTaskTemplateResponse parses an HTTP response from a DMAPIGetTaskTemplateWithResponse call
+func ParseDMAPIGetTaskTemplateResponse(rsp *http.Response) (*DMAPIGetTaskTemplateResponse, error) {
+	bodyBytes, err := ioutil.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DMAPIGetTaskTemplateResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Task
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest ErrorWithMessage
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseDMAPUpdateTaskTemplateResponse parses an HTTP response from a DMAPUpdateTaskTemplateWithResponse call
+func ParseDMAPUpdateTaskTemplateResponse(rsp *http.Response) (*DMAPUpdateTaskTemplateResponse, error) {
+	bodyBytes, err := ioutil.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DMAPUpdateTaskTemplateResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Task
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
 		var dest ErrorWithMessage
@@ -4173,51 +5242,92 @@ func ParseDMAPIDeleteTaskResponse(rsp *http.Response) (*DMAPIDeleteTaskResponse,
 	return response, nil
 }
 
-// ParseDMAPIPauseTaskResponse parses an HTTP response from a DMAPIPauseTaskWithResponse call
-func ParseDMAPIPauseTaskResponse(rsp *http.Response) (*DMAPIPauseTaskResponse, error) {
+// ParseDMAPIGetTaskResponse parses an HTTP response from a DMAPIGetTaskWithResponse call
+func ParseDMAPIGetTaskResponse(rsp *http.Response) (*DMAPIGetTaskResponse, error) {
 	bodyBytes, err := ioutil.ReadAll(rsp.Body)
 	defer func() { _ = rsp.Body.Close() }()
 	if err != nil {
 		return nil, err
 	}
 
-	response := &DMAPIPauseTaskResponse{
+	response := &DMAPIGetTaskResponse{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}
 
 	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest ErrorWithMessage
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Task
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
-		response.JSON400 = &dest
+		response.JSON200 = &dest
 	}
 
 	return response, nil
 }
 
-// ParseDMAPIResumeTaskResponse parses an HTTP response from a DMAPIResumeTaskWithResponse call
-func ParseDMAPIResumeTaskResponse(rsp *http.Response) (*DMAPIResumeTaskResponse, error) {
+// ParseDMAPIUpdateTaskResponse parses an HTTP response from a DMAPIUpdateTaskWithResponse call
+func ParseDMAPIUpdateTaskResponse(rsp *http.Response) (*DMAPIUpdateTaskResponse, error) {
 	bodyBytes, err := ioutil.ReadAll(rsp.Body)
 	defer func() { _ = rsp.Body.Close() }()
 	if err != nil {
 		return nil, err
 	}
 
-	response := &DMAPIResumeTaskResponse{
+	response := &DMAPIUpdateTaskResponse{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}
 
 	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Task
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
 		var dest ErrorWithMessage
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON400 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseDMAPIGetTaskMigrateTargetsResponse parses an HTTP response from a DMAPIGetTaskMigrateTargetsWithResponse call
+func ParseDMAPIGetTaskMigrateTargetsResponse(rsp *http.Response) (*DMAPIGetTaskMigrateTargetsResponse, error) {
+	bodyBytes, err := ioutil.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DMAPIGetTaskMigrateTargetsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest GetTaskMigrateTargetsResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest ErrorWithMessage
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
 	}
 
 	return response, nil
@@ -4372,6 +5482,31 @@ func ParseDMAPIOperateTableStructureResponse(rsp *http.Response) (*DMAPIOperateT
 	return response, nil
 }
 
+// ParseDMAPIStartTaskResponse parses an HTTP response from a DMAPIStartTaskWithResponse call
+func ParseDMAPIStartTaskResponse(rsp *http.Response) (*DMAPIStartTaskResponse, error) {
+	bodyBytes, err := ioutil.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DMAPIStartTaskResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest ErrorWithMessage
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+	}
+
+	return response, nil
+}
+
 // ParseDMAPIGetTaskStatusResponse parses an HTTP response from a DMAPIGetTaskStatusWithResponse call
 func ParseDMAPIGetTaskStatusResponse(rsp *http.Response) (*DMAPIGetTaskStatusResponse, error) {
 	bodyBytes, err := ioutil.ReadAll(rsp.Body)
@@ -4400,6 +5535,31 @@ func ParseDMAPIGetTaskStatusResponse(rsp *http.Response) (*DMAPIGetTaskStatusRes
 		}
 		response.JSON400 = &dest
 
+	}
+
+	return response, nil
+}
+
+// ParseDMAPIStopTaskResponse parses an HTTP response from a DMAPIStopTaskWithResponse call
+func ParseDMAPIStopTaskResponse(rsp *http.Response) (*DMAPIStopTaskResponse, error) {
+	bodyBytes, err := ioutil.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DMAPIStopTaskResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest ErrorWithMessage
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
 	}
 
 	return response, nil

@@ -16,7 +16,6 @@ package common
 import (
 	"net"
 	"path"
-	"strings"
 	"testing"
 
 	. "github.com/pingcap/check"
@@ -62,11 +61,6 @@ func (t *testCommon) TestKeyAdapter(c *C) {
 			want:    "/dm-master/upstream/subtask/6d7973716c31/74657374",
 		},
 		{
-			keys:    []string{"test", "target_db", "target_table"},
-			adapter: ShardDDLOptimismInitSchemaKeyAdapter,
-			want:    "/dm-master/shardddl-optimism/init-schema/74657374/7461726765745f6462/7461726765745f7461626c65",
-		},
-		{
 			keys:    []string{"test", "mysql_replica_01", "target_db", "target_table"},
 			adapter: ShardDDLOptimismInfoKeyAdapter,
 			want:    "/dm-master/shardddl-optimism/info/74657374/6d7973716c5f7265706c6963615f3031/7461726765745f6462/7461726765745f7461626c65",
@@ -83,8 +77,8 @@ func (t *testCommon) TestKeyAdapter(c *C) {
 		},
 		{
 			keys:    []string{"task-1"},
-			adapter: OpenAPITaskConfigKeyAdapter,
-			want:    "/dm-master/openapi-task-config/7461736b2d31",
+			adapter: OpenAPITaskTemplateKeyAdapter,
+			want:    "/dm-master/openapi-task-template/7461736b2d31",
 		},
 	}
 
@@ -108,11 +102,6 @@ func (t *testCommon) TestEncodeAsPrefix(c *C) {
 			adapter: UpstreamSubTaskKeyAdapter,
 			want:    "/dm-master/upstream/subtask/6d7973716c31/",
 		},
-		{
-			keys:    []string{"test", "target_db"},
-			adapter: ShardDDLOptimismInitSchemaKeyAdapter,
-			want:    "/dm-master/shardddl-optimism/init-schema/74657374/7461726765745f6462/",
-		},
 	}
 
 	for _, ca := range testCases {
@@ -121,18 +110,6 @@ func (t *testCommon) TestEncodeAsPrefix(c *C) {
 		_, err := ca.adapter.Decode(encKey)
 		c.Assert(err, NotNil)
 	}
-
-	keys := []string{"test", "target_db", "target_table"}
-	fullEncodedKey := ShardDDLOptimismInitSchemaKeyAdapter.Encode(keys...)
-	prefixEncodedKey := ShardDDLOptimismInitSchemaKeyAdapter.Encode(keys[:len(keys)-1]...)
-	c.Assert(strings.HasPrefix(fullEncodedKey, prefixEncodedKey), IsTrue)
-
-	keys2 := []string{"test", "target_db_2", "target_table_2"}
-	fullEncodedKey2 := ShardDDLOptimismInitSchemaKeyAdapter.Encode(keys2...)
-	prefixEncodedKey2 := ShardDDLOptimismInitSchemaKeyAdapter.Encode(keys2[:len(keys2)-1]...)
-
-	c.Assert(strings.HasPrefix(fullEncodedKey, prefixEncodedKey2), IsFalse)
-	c.Assert(strings.HasPrefix(fullEncodedKey2, prefixEncodedKey), IsFalse)
 }
 
 func (t *testCommon) TestIsErrNetClosing(c *C) {

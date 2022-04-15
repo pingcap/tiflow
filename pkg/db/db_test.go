@@ -43,7 +43,7 @@ func TestDB(t *testing.T) {
 	require.Nil(t, err)
 	testDB(t, db)
 
-	db, err = OpenPebble(ctx, 1, filepath.Join(t.TempDir(), "2"), cfg)
+	db, err = OpenPebble(ctx, 1, filepath.Join(t.TempDir(), "2"), 0, cfg)
 	require.Nil(t, err)
 	testDB(t, db)
 }
@@ -53,7 +53,7 @@ func testDB(t *testing.T, db DB) {
 	require.Nil(t, err)
 
 	// Collect metrics
-	db.CollectMetrics("", 0)
+	db.CollectMetrics(0)
 
 	// Batch
 	lbatch := leveldb.MakeBatch(0)
@@ -75,21 +75,15 @@ func testDB(t *testing.T, db DB) {
 	batch.Reset()
 	require.EqualValues(t, lbatch.Len(), batch.Count())
 
-	// Snapshot
-	lsnap, err := ldb.GetSnapshot()
-	require.Nil(t, err)
-	snap, err := db.Snapshot()
-	require.Nil(t, err)
-
 	// Iterator
-	liter := lsnap.NewIterator(&util.Range{
+	liter := ldb.NewIterator(&util.Range{
 		Start: []byte(""),
 		Limit: []byte("k4"),
 	}, nil)
-	iter := snap.Iterator([]byte(""), []byte("k4"))
-	// First
-	require.True(t, liter.First())
-	require.True(t, iter.First())
+	iter := db.Iterator([]byte(""), []byte("k4"))
+	// Seek
+	require.True(t, liter.Seek([]byte{}))
+	require.True(t, iter.Seek([]byte{}))
 	// Valid
 	require.True(t, liter.Valid())
 	require.True(t, iter.Valid())
@@ -115,8 +109,6 @@ func testDB(t *testing.T, db DB) {
 	// Release
 	liter.Release()
 	require.Nil(t, iter.Release())
-	lsnap.Release()
-	require.Nil(t, snap.Release())
 
 	// Compact
 	require.Nil(t, db.Compact([]byte{0x00}, []byte{0xff}))
@@ -133,7 +125,7 @@ func TestPebbleMetrics(t *testing.T) {
 	cfg.Count = 1
 
 	id := 1
-	option, ws := buildPebbleOption(id, cfg)
+	option, ws := buildPebbleOption(id, 0, cfg)
 	db, err := pebble.Open(t.TempDir(), &option)
 	require.Nil(t, err)
 	pdb := &pebbleDB{
@@ -142,7 +134,7 @@ func TestPebbleMetrics(t *testing.T) {
 	}
 
 	// Collect empty metrics.
-	pdb.CollectMetrics("", id)
+	pdb.CollectMetrics(id)
 
 	// Write stall.
 	option.EventListener.WriteStallBegin(pebble.WriteStallBeginInfo{})
@@ -152,7 +144,7 @@ func TestPebbleMetrics(t *testing.T) {
 	require.Less(t, time.Duration(0), ws.duration.Load().(time.Duration))
 
 	// Collect write stall metrics.
-	pdb.CollectMetrics("", id)
+	pdb.CollectMetrics(id)
 	require.EqualValues(t, 1, ws.counter)
 	require.Equal(t, time.Duration(0), ws.duration.Load().(time.Duration))
 
@@ -212,7 +204,8 @@ func BenchmarkNext(b *testing.B) {
 	}, {
 		name: "pebble",
 		dbfn: func(name string) DB {
-			db, err := OpenPebble(ctx, 1, filepath.Join(b.TempDir(), name), cfg)
+			gb := 1024 * 1024 * 1024
+			db, err := OpenPebble(ctx, 1, filepath.Join(b.TempDir(), name), gb, cfg)
 			require.Nil(b, err)
 			return db
 		},
@@ -248,11 +241,10 @@ func BenchmarkNext(b *testing.B) {
 				b.ResetTimer()
 
 				b.Run(fmt.Sprintf("next %d event(s)", count), func(b *testing.B) {
-					snap, err := db.Snapshot()
-					require.Nil(b, err)
-					iter := snap.Iterator([]byte{}, bytes.Repeat([]byte{0xff}, len(key)))
+					iter := db.Iterator([]byte{}, bytes.Repeat([]byte{0xff}, len(key)))
+					require.Nil(b, iter.Error())
 					for i := 0; i < b.N; i++ {
-						for ok := iter.First(); ok; ok = iter.Next() {
+						for ok := iter.Seek([]byte{}); ok; ok = iter.Next() {
 						}
 					}
 				})

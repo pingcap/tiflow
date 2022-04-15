@@ -80,13 +80,14 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/cputil"
+	fr "github.com/pingcap/tiflow/dm/pkg/func-rollback"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/syncer/dbconn"
 	shardmeta "github.com/pingcap/tiflow/dm/syncer/sharding-meta"
 
-	"github.com/pingcap/tidb-tools/pkg/dbutil"
-	"github.com/pingcap/tidb-tools/pkg/filter"
+	"github.com/pingcap/tidb/util/dbutil"
+	"github.com/pingcap/tidb/util/filter"
 	"go.uber.org/zap"
 )
 
@@ -238,7 +239,11 @@ func (sg *ShardingGroup) CheckSyncing(source string, location binlog.Location) (
 	if activeDDLItem == nil {
 		return true
 	}
-	return binlog.CompareLocation(activeDDLItem.FirstLocation, location, sg.enableGTID) > 0
+	// this function only affects dml
+	// activeDDLItem.FirstLocation is ddl's startLocation
+	// location is dml's currentLocation
+	// dml should be synced when the comparation is equal
+	return binlog.CompareLocation(activeDDLItem.FirstLocation, location, sg.enableGTID) >= 0
 }
 
 // UnresolvedGroupInfo returns pb.ShardingGroup if is unresolved, else returns nil.
@@ -427,17 +432,31 @@ func (k *ShardingGroupKeeper) AddGroup(targetTable *filter.Table, sourceIDs []st
 }
 
 // Init does initialization staff.
-func (k *ShardingGroupKeeper) Init() error {
+func (k *ShardingGroupKeeper) Init() (err error) {
+	var db *conn.BaseDB
+	var dbConns []*dbconn.DBConn
+
+	rollbackHolder := fr.NewRollbackHolder("syncer")
+	defer func() {
+		if err != nil {
+			rollbackHolder.RollbackReverseOrder()
+		}
+	}()
+
 	k.clear()
 	sgkDB := k.cfg.To
 	sgkDB.RawDBCfg = config.DefaultRawDBConfig().SetReadTimeout(maxCheckPointTimeout)
-	db, dbConns, err := dbconn.CreateConns(k.tctx, k.cfg, &sgkDB, 1)
+	db, dbConns, err = dbconn.CreateConns(k.tctx, k.cfg, &sgkDB, 1)
 	if err != nil {
-		return err
+		return
 	}
 	k.db = db
 	k.dbConn = dbConns[0]
-	return k.prepare()
+	rollbackHolder.Add(fr.FuncRollback{Name: "CloseShardingGroupKeeper", Fn: k.Close})
+
+	err = k.prepare()
+
+	return
 }
 
 // clear clears all sharding groups.
@@ -494,7 +513,8 @@ func (k *ShardingGroupKeeper) LeaveGroup(targetTable *filter.Table, sources []st
 //   remain: remain un-synced source table's count
 func (k *ShardingGroupKeeper) TrySync(
 	sourceTable, targetTable *filter.Table, location, endLocation binlog.Location, ddls []string) (
-	needShardingHandle bool, group *ShardingGroup, synced, active bool, remain int, err error) {
+	needShardingHandle bool, group *ShardingGroup, synced, active bool, remain int, err error,
+) {
 	targetTableID, schemaOnly := utils.GenTableIDAndCheckSchemaOnly(targetTable)
 	sourceTableID := utils.GenTableID(sourceTable)
 	if schemaOnly {

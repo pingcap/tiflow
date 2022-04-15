@@ -14,12 +14,12 @@
 package leveldb
 
 import (
+	"container/list"
 	"context"
 	"strconv"
 	"sync"
 	"time"
 
-	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/sorter/leveldb/message"
 	"github.com/pingcap/tiflow/pkg/actor"
@@ -32,6 +32,47 @@ import (
 	"golang.org/x/sync/semaphore"
 )
 
+// Queue of IterRequest
+type iterQueue struct {
+	*list.List
+	// TableID set.
+	tables map[tableKey]struct{}
+}
+
+type iterItem struct {
+	key tableKey
+	req *message.IterRequest
+}
+
+type tableKey struct {
+	UID     uint32
+	TableID uint64
+}
+
+func (q *iterQueue) push(uid uint32, tableID uint64, req *message.IterRequest) {
+	key := tableKey{UID: uid, TableID: tableID}
+	_, ok := q.tables[key]
+	if ok {
+		log.Panic("A table should not issue two concurrent iterator requests",
+			zap.Uint64("tableID", tableID),
+			zap.Uint32("UID", uid),
+			zap.Uint64("resolvedTs", req.ResolvedTs))
+	}
+	q.tables[key] = struct{}{}
+	q.List.PushBack(iterItem{req: req, key: key})
+}
+
+func (q *iterQueue) pop() (*message.IterRequest, bool) {
+	item := q.List.Front()
+	if item == nil {
+		return nil, false
+	}
+	q.List.Remove(item)
+	req := item.Value.(iterItem)
+	delete(q.tables, req.key)
+	return req.req, true
+}
+
 // DBActor is a db actor, it reads, writes and deletes key value pair in its db.
 type DBActor struct {
 	id      actor.ID
@@ -39,24 +80,26 @@ type DBActor struct {
 	wb      db.Batch
 	wbSize  int
 	wbCap   int
-	snapSem *semaphore.Weighted
+	iterSem *semaphore.Weighted
+	iterQ   iterQueue
 
 	deleteCount int
 	compact     *CompactScheduler
 
+	stopped  bool
 	closedWg *sync.WaitGroup
 
 	metricWriteDuration prometheus.Observer
 	metricWriteBytes    prometheus.Observer
 }
 
-var _ actor.Actor = (*DBActor)(nil)
+var _ actor.Actor[message.Task] = (*DBActor)(nil)
 
 // NewDBActor returns a db actor.
 func NewDBActor(
 	id int, db db.DB, cfg *config.DBConfig, compact *CompactScheduler,
-	wg *sync.WaitGroup, captureAddr string,
-) (*DBActor, actor.Mailbox, error) {
+	wg *sync.WaitGroup,
+) (*DBActor, actor.Mailbox[message.Task], error) {
 	idTag := strconv.Itoa(id)
 	// Write batch size should be larger than block size to save CPU.
 	const writeBatchSizeFactor = 16
@@ -68,29 +111,35 @@ func NewDBActor(
 	// IterCount limits the total number of opened iterators to release db
 	// resources in time.
 	iterSema := semaphore.NewWeighted(int64(cfg.Concurrency))
-	mb := actor.NewMailbox(actor.ID(id), cfg.Concurrency)
+	mb := actor.NewMailbox[message.Task](actor.ID(id), cfg.Concurrency)
 	wg.Add(1)
 
-	dba := &DBActor{
+	return &DBActor{
 		id:      actor.ID(id),
 		db:      db,
 		wb:      wb,
-		snapSem: iterSema,
+		iterSem: iterSema,
+		iterQ: iterQueue{
+			List:   list.New(),
+			tables: make(map[tableKey]struct{}),
+		},
 		wbSize:  wbSize,
 		wbCap:   wbCap,
 		compact: compact,
 
 		closedWg: wg,
 
-		metricWriteDuration: sorterWriteDurationHistogram.WithLabelValues(captureAddr, idTag),
-		metricWriteBytes:    sorterWriteBytesHistogram.WithLabelValues(captureAddr, idTag),
-	}
-	return dba, mb, nil
+		metricWriteDuration: sorterWriteDurationHistogram.WithLabelValues(idTag),
+		metricWriteBytes:    sorterWriteBytesHistogram.WithLabelValues(idTag),
+	}, mb, nil
 }
 
-func (ldb *DBActor) close(err error) {
-	log.Info("db actor quit", zap.Uint64("ID", uint64(ldb.id)), zap.Error(err))
-	ldb.closedWg.Done()
+func (ldb *DBActor) tryScheduleCompact() {
+	// Schedule a compact task when there are too many deletion.
+	if ldb.compact.tryScheduleCompact(ldb.id, ldb.deleteCount) {
+		// Reset delete key count if schedule compaction successfully.
+		ldb.deleteCount = 0
+	}
 }
 
 func (ldb *DBActor) maybeWrite(force bool) error {
@@ -110,41 +159,55 @@ func (ldb *DBActor) maybeWrite(force bool) error {
 		} else {
 			ldb.wb = ldb.db.Batch(ldb.wbCap)
 		}
-
-		// Schedule a compact task when there are too many deletion.
-		if ldb.compact.maybeCompact(ldb.id, ldb.deleteCount) {
-			// Reset delete key count if schedule compaction successfully.
-			ldb.deleteCount = 0
-		}
 	}
 	return nil
 }
 
+// Batch acquire iterators for requests in the queue.
+func (ldb *DBActor) acquireIterators() {
+	for {
+		succeed := ldb.iterSem.TryAcquire(1)
+		if !succeed {
+			break
+		}
+		req, ok := ldb.iterQ.pop()
+		if !ok {
+			ldb.iterSem.Release(1)
+			break
+		}
+
+		iterRange := req.Range
+		iter := ldb.db.Iterator(iterRange[0], iterRange[1])
+		req.IterCallback(&message.LimitedIterator{
+			Iterator:   iter,
+			Sema:       ldb.iterSem,
+			ResolvedTs: req.ResolvedTs,
+		})
+	}
+}
+
 // Poll implements actor.Actor.
 // It handles tasks by writing kv, deleting kv and taking iterators.
-func (ldb *DBActor) Poll(ctx context.Context, tasks []actormsg.Message) bool {
+func (ldb *DBActor) Poll(ctx context.Context, tasks []actormsg.Message[message.Task]) bool {
 	select {
 	case <-ctx.Done():
-		ldb.close(ctx.Err())
 		return false
 	default:
 	}
-	snapChs := make([]chan message.LimitedSnapshot, 0, len(tasks))
+	requireIter := false
 	for i := range tasks {
 		var task message.Task
 		msg := tasks[i]
 		switch msg.Tp {
-		case actormsg.TypeSorterTask:
-			task = msg.SorterTask
+		case actormsg.TypeValue:
+			task = msg.Value
 		case actormsg.TypeStop:
-			ldb.close(nil)
 			return false
 		default:
 			log.Panic("unexpected message", zap.Any("message", msg))
 		}
-		events, needSnap, snapCh := task.Events, task.NeedSnap, task.SnapCh
 
-		for k, v := range events {
+		for k, v := range task.WriteReq {
 			if len(v) != 0 {
 				ldb.wb.Put([]byte(k), v)
 			} else {
@@ -158,42 +221,47 @@ func (ldb *DBActor) Poll(ctx context.Context, tasks []actormsg.Message) bool {
 				log.Panic("db error", zap.Error(err))
 			}
 		}
-		if needSnap {
+		if task.DeleteReq != nil {
+			ldb.deleteCount += task.DeleteReq.Count
+			if len(task.DeleteReq.Range[0]) != 0 && len(task.DeleteReq.Range[1]) != 0 {
+				// Force write pending write batch before delete range.
+				if err := ldb.maybeWrite(true); err != nil {
+					log.Panic("db error",
+						zap.Error(err), zap.Uint64("tableID", task.TableID))
+				}
+				start, end := task.DeleteReq.Range[0], task.DeleteReq.Range[1]
+				if err := ldb.db.DeleteRange(start, end); err != nil {
+					log.Panic("db error",
+						zap.Error(err), zap.Uint64("tableID", task.TableID))
+				}
+				ldb.tryScheduleCompact()
+			}
+		}
+		if task.IterReq != nil {
 			// Append to slice for later batch acquiring iterators.
-			snapChs = append(snapChs, snapCh)
-		} else {
-			// Or close channel to notify caller that that its task is done.
-			close(snapCh)
+			ldb.iterQ.push(task.UID, task.TableID, task.IterReq)
+			requireIter = true
+		}
+		if task.Test != nil {
+			time.Sleep(task.Test.Sleep)
 		}
 	}
 
 	// Force write only if there is a task requires an iterator.
-	forceWrite := len(snapChs) != 0
-	err := ldb.maybeWrite(forceWrite)
-	if err != nil {
+	if err := ldb.maybeWrite(requireIter); err != nil {
 		log.Panic("db error", zap.Error(err))
 	}
-	// Batch acquire iterators.
-	for i := range snapChs {
-		snapCh := snapChs[i]
-		err := ldb.snapSem.Acquire(ctx, 1)
-		if err != nil {
-			if errors.Cause(err) == context.Canceled ||
-				errors.Cause(err) == context.DeadlineExceeded {
-				return false
-			}
-			log.Panic("db unreachable error, acquire iter", zap.Error(err))
-		}
-		snap, err := ldb.db.Snapshot()
-		if err != nil {
-			log.Panic("db error", zap.Error(err))
-		}
-		snapCh <- message.LimitedSnapshot{
-			Snapshot: snap,
-			Sema:     ldb.snapSem,
-		}
-		close(snapCh)
-	}
+	ldb.acquireIterators()
 
 	return true
+}
+
+// OnClose releases DBActor resource.
+func (ldb *DBActor) OnClose() {
+	if ldb.stopped {
+		return
+	}
+	ldb.stopped = true
+	log.Info("db actor quit", zap.Uint64("ID", uint64(ldb.id)))
+	ldb.closedWg.Done()
 }

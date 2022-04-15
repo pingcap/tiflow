@@ -38,7 +38,7 @@ func TestFlushTable(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.TODO())
 	defer cancel()
-	b := newBufferSink(newBlackHoleSink(ctx, make(map[string]string)), 5, make(chan drawbackMsg))
+	b := newBufferSink(newBlackHoleSink(ctx), 5, make(chan drawbackMsg))
 	go b.run(ctx, make(chan error))
 
 	require.Equal(t, uint64(5), b.getTableCheckpointTs(2))
@@ -82,7 +82,7 @@ func TestFlushFailed(t *testing.T) {
 	t.Parallel()
 
 	ctx, cancel := context.WithCancel(context.TODO())
-	b := newBufferSink(newBlackHoleSink(ctx, make(map[string]string)), 5, make(chan drawbackMsg))
+	b := newBufferSink(newBlackHoleSink(ctx), 5, make(chan drawbackMsg))
 	go b.run(ctx, make(chan error))
 
 	checkpoint, err := b.FlushRowChangedEvents(ctx, 3, 8)
@@ -121,9 +121,7 @@ func BenchmarkRun(b *testing.B) {
 	defer cancel()
 
 	state := runState{
-		metricFlushDuration:   flushRowChangedDuration.WithLabelValues(b.Name(), b.Name(), "Flush"),
-		metricEmitRowDuration: flushRowChangedDuration.WithLabelValues(b.Name(), b.Name(), "EmitRow"),
-		metricTotalRows:       bufferSinkTotalRowsCountCounter.WithLabelValues(b.Name(), b.Name()),
+		metricTotalRows: bufferSinkTotalRowsCountCounter.WithLabelValues(b.Name()),
 	}
 
 	for exp := 0; exp < 9; exp++ {

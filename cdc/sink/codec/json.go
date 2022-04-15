@@ -15,7 +15,6 @@ package codec
 
 import (
 	"bytes"
-	"context"
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
@@ -37,8 +36,6 @@ import (
 const (
 	// BatchVersion1 represents the version of batch format
 	BatchVersion1 uint64 = 1
-	// DefaultMaxBatchSize sets the default value for max-batch-size
-	DefaultMaxBatchSize int = 16
 )
 
 type column struct {
@@ -51,7 +48,7 @@ type column struct {
 	Value       interface{}          `json:"v"`
 }
 
-func NewColumn(value interface{}, tp byte) *column {
+func newColumn(value interface{}, tp byte) *column {
 	return &column{
 		Value: value,
 		Type:  tp,
@@ -103,6 +100,15 @@ func (c *column) decodeCanalJSONColumn(name string, javaType JavaSQLType) *model
 	value, ok := col.Value.(string)
 	if !ok {
 		log.Panic("canal-json encoded message should have type in `string`")
+	}
+
+	if javaType == JavaSQLTypeBIT {
+		val, err := strconv.ParseUint(value, 10, 64)
+		if err != nil {
+			log.Panic("invalid column value for bit", zap.Any("col", c), zap.Error(err))
+		}
+		col.Value = val
+		return col
 	}
 
 	if javaType != JavaSQLTypeBLOB {
@@ -373,11 +379,6 @@ func mqMessageToDDLEvent(key *mqMessageKey, value *mqMessageDDL) *model.DDLEvent
 
 // JSONEventBatchEncoder encodes the events into the byte of a batch into.
 type JSONEventBatchEncoder struct {
-	// TODO remove deprecated fields
-	keyBuf            *bytes.Buffer // Deprecated: only used for MixedBuild for now
-	valueBuf          *bytes.Buffer // Deprecated: only used for MixedBuild for now
-	supportMixedBuild bool          // TODO decouple this out
-
 	messageBuf   []*MQMessage
 	curBatchSize int
 	// configs
@@ -395,16 +396,6 @@ func (d *JSONEventBatchEncoder) GetMaxBatchSize() int {
 	return d.maxBatchSize
 }
 
-// SetMixedBuildSupport is used by CDC Log
-func (d *JSONEventBatchEncoder) SetMixedBuildSupport(enabled bool) {
-	d.supportMixedBuild = enabled
-}
-
-// AppendResolvedEvent is no-op
-func (d *JSONEventBatchEncoder) AppendResolvedEvent(ts uint64) (EncoderResult, error) {
-	return EncoderNoOperation, nil
-}
-
 // EncodeCheckpointEvent implements the EventBatchEncoder interface
 func (d *JSONEventBatchEncoder) EncodeCheckpointEvent(ts uint64) (*MQMessage, error) {
 	keyMsg := newResolvedMessage(ts)
@@ -417,13 +408,6 @@ func (d *JSONEventBatchEncoder) EncodeCheckpointEvent(ts uint64) (*MQMessage, er
 	binary.BigEndian.PutUint64(keyLenByte[:], uint64(len(key)))
 	var valueLenByte [8]byte
 	binary.BigEndian.PutUint64(valueLenByte[:], 0)
-
-	if d.supportMixedBuild {
-		d.keyBuf.Write(keyLenByte[:])
-		d.keyBuf.Write(key)
-		d.valueBuf.Write(valueLenByte[:])
-		return nil, nil
-	}
 
 	keyBuf := new(bytes.Buffer)
 	var versionByte [8]byte
@@ -440,15 +424,15 @@ func (d *JSONEventBatchEncoder) EncodeCheckpointEvent(ts uint64) (*MQMessage, er
 }
 
 // AppendRowChangedEvent implements the EventBatchEncoder interface
-func (d *JSONEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) (EncoderResult, error) {
+func (d *JSONEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) error {
 	keyMsg, valueMsg := rowEventToMqMessage(e)
 	key, err := keyMsg.Encode()
 	if err != nil {
-		return EncoderNoOperation, errors.Trace(err)
+		return errors.Trace(err)
 	}
 	value, err := valueMsg.Encode()
 	if err != nil {
-		return EncoderNoOperation, errors.Trace(err)
+		return errors.Trace(err)
 	}
 
 	var keyLenByte [8]byte
@@ -456,51 +440,43 @@ func (d *JSONEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) 
 	var valueLenByte [8]byte
 	binary.BigEndian.PutUint64(valueLenByte[:], uint64(len(value)))
 
-	if d.supportMixedBuild {
-		d.keyBuf.Write(keyLenByte[:])
-		d.keyBuf.Write(key)
-
-		d.valueBuf.Write(valueLenByte[:])
-		d.valueBuf.Write(value)
-	} else {
-		// for single message that longer than max-message-size, do not send it.
-		// 16 is the length of `keyLenByte` and `valueLenByte`, 8 is the length of `versionHead`
-		length := len(key) + len(value) + maximumRecordOverhead + 16 + 8
-		if length > d.maxMessageBytes {
-			log.Warn("Single message too large",
-				zap.Int("max-message-size", d.maxMessageBytes), zap.Int("length", length), zap.Any("table", e.Table))
-			return EncoderNoOperation, cerror.ErrJSONCodecRowTooLarge.GenWithStackByArgs()
-		}
-
-		if len(d.messageBuf) == 0 ||
-			d.curBatchSize >= d.maxBatchSize ||
-			d.messageBuf[len(d.messageBuf)-1].Length()+len(key)+len(value)+16 > d.maxMessageBytes {
-
-			versionHead := make([]byte, 8)
-			binary.BigEndian.PutUint64(versionHead, BatchVersion1)
-
-			d.messageBuf = append(d.messageBuf, NewMQMessage(config.ProtocolOpen, versionHead, nil, 0, model.MqMessageTypeRow, nil, nil))
-			d.curBatchSize = 0
-		}
-
-		message := d.messageBuf[len(d.messageBuf)-1]
-		message.Key = append(message.Key, keyLenByte[:]...)
-		message.Key = append(message.Key, key...)
-		message.Value = append(message.Value, valueLenByte[:]...)
-		message.Value = append(message.Value, value...)
-		message.Ts = e.CommitTs
-		message.Schema = &e.Table.Schema
-		message.Table = &e.Table.Table
-		message.IncRowsCount()
-
-		if message.Length() > d.maxMessageBytes {
-			// `len(d.messageBuf) == 1` is implied
-			log.Debug("Event does not fit into max-message-bytes. Adjust relevant configurations to avoid service interruptions.",
-				zap.Int("event-len", message.Length()), zap.Int("max-message-bytes", d.maxMessageBytes))
-		}
-		d.curBatchSize++
+	// for single message that longer than max-message-size, do not send it.
+	// 16 is the length of `keyLenByte` and `valueLenByte`, 8 is the length of `versionHead`
+	length := len(key) + len(value) + maximumRecordOverhead + 16 + 8
+	if length > d.maxMessageBytes {
+		log.Warn("Single message too large",
+			zap.Int("max-message-size", d.maxMessageBytes), zap.Int("length", length), zap.Any("table", e.Table))
+		return cerror.ErrJSONCodecRowTooLarge.GenWithStackByArgs()
 	}
-	return EncoderNoOperation, nil
+
+	if len(d.messageBuf) == 0 ||
+		d.curBatchSize >= d.maxBatchSize ||
+		d.messageBuf[len(d.messageBuf)-1].Length()+len(key)+len(value)+16 > d.maxMessageBytes {
+
+		versionHead := make([]byte, 8)
+		binary.BigEndian.PutUint64(versionHead, BatchVersion1)
+
+		d.messageBuf = append(d.messageBuf, NewMQMessage(config.ProtocolOpen, versionHead, nil, 0, model.MqMessageTypeRow, nil, nil))
+		d.curBatchSize = 0
+	}
+
+	message := d.messageBuf[len(d.messageBuf)-1]
+	message.Key = append(message.Key, keyLenByte[:]...)
+	message.Key = append(message.Key, key...)
+	message.Value = append(message.Value, valueLenByte[:]...)
+	message.Value = append(message.Value, value...)
+	message.Ts = e.CommitTs
+	message.Schema = &e.Table.Schema
+	message.Table = &e.Table.Table
+	message.IncRowsCount()
+
+	if message.Length() > d.maxMessageBytes {
+		// `len(d.messageBuf) == 1` is implied
+		log.Debug("Event does not fit into max-message-bytes. Adjust relevant configurations to avoid service interruptions.",
+			zap.Int("eventLen", message.Length()), zap.Int("max-message-bytes", d.maxMessageBytes))
+	}
+	d.curBatchSize++
+	return nil
 }
 
 // EncodeDDLEvent implements the EventBatchEncoder interface
@@ -520,14 +496,6 @@ func (d *JSONEventBatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*MQMessage, e
 	var valueLenByte [8]byte
 	binary.BigEndian.PutUint64(valueLenByte[:], uint64(len(value)))
 
-	if d.supportMixedBuild {
-		d.keyBuf.Write(keyLenByte[:])
-		d.keyBuf.Write(key)
-		d.valueBuf.Write(valueLenByte[:])
-		d.valueBuf.Write(value)
-		return nil, nil
-	}
-
 	keyBuf := new(bytes.Buffer)
 	var versionByte [8]byte
 	binary.BigEndian.PutUint64(versionByte[:], BatchVersion1)
@@ -545,130 +513,36 @@ func (d *JSONEventBatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*MQMessage, e
 
 // Build implements the EventBatchEncoder interface
 func (d *JSONEventBatchEncoder) Build() (mqMessages []*MQMessage) {
-	if d.supportMixedBuild {
-		if d.valueBuf.Len() == 0 {
-			return nil
-		}
-		/* there could be multiple types of event encoded within a single message which means the type is not sure */
-		ret := NewMQMessage(config.ProtocolOpen, d.keyBuf.Bytes(), d.valueBuf.Bytes(), 0, model.MqMessageTypeUnknown, nil, nil)
-		return []*MQMessage{ret}
-	}
-
 	ret := d.messageBuf
 	d.messageBuf = make([]*MQMessage, 0)
 	return ret
 }
 
-// MixedBuild implements the EventBatchEncoder interface
-func (d *JSONEventBatchEncoder) MixedBuild(withVersion bool) []byte {
-	if !d.supportMixedBuild {
-		log.Panic("mixedBuildSupport not enabled!")
-		return nil
-	}
-	keyBytes := d.keyBuf.Bytes()
-	valueBytes := d.valueBuf.Bytes()
-	mixedBytes := make([]byte, len(keyBytes)+len(valueBytes))
-
-	index := uint64(0)
-	keyIndex := uint64(0)
-	valueIndex := uint64(0)
-
-	if withVersion {
-		// the first 8 bytes is the version, we should copy directly
-		// then skip 8 bytes for next round key value parse
-		copy(mixedBytes[:8], keyBytes[:8])
-		index = uint64(8)    // skip version
-		keyIndex = uint64(8) // skip version
-	}
-
-	for {
-		if keyIndex >= uint64(len(keyBytes)) {
-			break
-		}
-		keyLen := binary.BigEndian.Uint64(keyBytes[keyIndex : keyIndex+8])
-		offset := keyLen + 8
-		copy(mixedBytes[index:index+offset], keyBytes[keyIndex:keyIndex+offset])
-		keyIndex += offset
-		index += offset
-
-		valueLen := binary.BigEndian.Uint64(valueBytes[valueIndex : valueIndex+8])
-		offset = valueLen + 8
-		copy(mixedBytes[index:index+offset], valueBytes[valueIndex:valueIndex+offset])
-		valueIndex += offset
-		index += offset
-	}
-	return mixedBytes
-}
-
 // Size implements the EventBatchEncoder interface
 func (d *JSONEventBatchEncoder) Size() int {
-	return d.keyBuf.Len() + d.valueBuf.Len()
-}
-
-// Reset implements the EventBatchEncoder interface
-func (d *JSONEventBatchEncoder) Reset() {
-	d.keyBuf.Reset()
-	d.valueBuf.Reset()
-}
-
-// SetParams reads relevant parameters for Open Protocol
-func (d *JSONEventBatchEncoder) SetParams(params map[string]string) error {
-	var err error
-
-	maxMessageBytes, ok := params["max-message-bytes"]
-	if !ok {
-		return cerror.ErrSinkInvalidConfig.Wrap(errors.New("max-message-bytes not found"))
-	}
-
-	d.maxMessageBytes, err = strconv.Atoi(maxMessageBytes)
-	if err != nil {
-		return cerror.ErrSinkInvalidConfig.Wrap(err)
-	}
-	if d.maxMessageBytes <= 0 {
-		return cerror.ErrSinkInvalidConfig.Wrap(errors.Errorf("invalid max-message-bytes %d", d.maxMessageBytes))
-	}
-
-	d.maxBatchSize = DefaultMaxBatchSize
-	if maxBatchSize, ok := params["max-batch-size"]; ok {
-		d.maxBatchSize, err = strconv.Atoi(maxBatchSize)
-		if err != nil {
-			return cerror.ErrSinkInvalidConfig.Wrap(err)
-		}
-	}
-	if d.maxBatchSize <= 0 {
-		return cerror.ErrSinkInvalidConfig.Wrap(errors.Errorf("invalid max-batch-size %d", d.maxBatchSize))
-	}
-
-	return nil
+	return -1
 }
 
 type jsonEventBatchEncoderBuilder struct {
-	opts map[string]string
+	config *Config
 }
 
 // Build a JSONEventBatchEncoder
-func (b *jsonEventBatchEncoderBuilder) Build(ctx context.Context) (EventBatchEncoder, error) {
+func (b *jsonEventBatchEncoderBuilder) Build() EventBatchEncoder {
 	encoder := NewJSONEventBatchEncoder()
-	if err := encoder.SetParams(b.opts); err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
-	}
+	encoder.(*JSONEventBatchEncoder).maxMessageBytes = b.config.maxMessageBytes
+	encoder.(*JSONEventBatchEncoder).maxBatchSize = b.config.maxBatchSize
 
-	return encoder, nil
+	return encoder
 }
 
-func newJSONEventBatchEncoderBuilder(opts map[string]string) EncoderBuilder {
-	return &jsonEventBatchEncoderBuilder{opts: opts}
+func newJSONEventBatchEncoderBuilder(config *Config) EncoderBuilder {
+	return &jsonEventBatchEncoderBuilder{config: config}
 }
 
 // NewJSONEventBatchEncoder creates a new JSONEventBatchEncoder.
 func NewJSONEventBatchEncoder() EventBatchEncoder {
-	batch := &JSONEventBatchEncoder{
-		keyBuf:   &bytes.Buffer{},
-		valueBuf: &bytes.Buffer{},
-	}
-	var versionByte [8]byte
-	binary.BigEndian.PutUint64(versionByte[:], BatchVersion1)
-	batch.keyBuf.Write(versionByte[:])
+	batch := &JSONEventBatchEncoder{}
 	return batch
 }
 

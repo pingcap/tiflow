@@ -32,7 +32,7 @@ import (
 	toolutils "github.com/pingcap/tidb-tools/pkg/utils"
 	"github.com/pingcap/tidb/parser"
 	"github.com/spf13/cobra"
-	"go.etcd.io/etcd/clientv3"
+	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -94,7 +94,8 @@ func (c *CtlClient) sendRequest(
 	reqName string,
 	req interface{},
 	respPointer interface{},
-	opts ...interface{}) error {
+	opts ...interface{},
+) error {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
@@ -232,20 +233,20 @@ func PrettyPrintResponseWithCheckTask(resp proto.Message, subStr string) bool {
 	)
 	switch chr := resp.(type) {
 	case *pb.StartTaskResponse:
-		if strings.Contains(chr.Msg, subStr) {
+		if strings.Contains(chr.CheckResult, subStr) {
 			found = true
-			rawMsg := chr.Msg
-			chr.Msg = placeholder // replace Msg with placeholder
+			rawMsg := chr.CheckResult
+			chr.CheckResult = placeholder // replace Msg with placeholder
 			marshaledStr, err = marshResponseToString(chr)
 			if err == nil {
 				replacedStr = strings.Replace(marshaledStr, placeholder, rawMsg, 1)
 			}
 		}
 	case *pb.UpdateTaskResponse:
-		if strings.Contains(chr.Msg, subStr) {
+		if strings.Contains(chr.CheckResult, subStr) {
 			found = true
-			rawMsg := chr.Msg
-			chr.Msg = placeholder // replace Msg with placeholder
+			rawMsg := chr.CheckResult
+			chr.CheckResult = placeholder // replace Msg with placeholder
 			marshaledStr, err = marshResponseToString(chr)
 			if err == nil {
 				replacedStr = strings.Replace(marshaledStr, placeholder, rawMsg, 1)

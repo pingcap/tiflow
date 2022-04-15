@@ -18,7 +18,8 @@ import (
 	"sync"
 
 	"github.com/pingcap/tidb/parser/model"
-	"go.etcd.io/etcd/clientv3"
+	filter "github.com/pingcap/tidb/util/table-filter"
+	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -70,6 +71,25 @@ func (o *Optimist) Init(sourceTables map[string]map[string]map[string]map[string
 	return err
 }
 
+// Tables clone and return tables
+// first one is sourceTable, second one is targetTable.
+func (o *Optimist) Tables() [][]filter.Table {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+
+	tbls := make([][]filter.Table, 0)
+	for downSchema, downTables := range o.tables.Tables {
+		for downTable, upSchemas := range downTables {
+			for upSchema, upTables := range upSchemas {
+				for upTable := range upTables {
+					tbls = append(tbls, []filter.Table{{Schema: upSchema, Name: upTable}, {Schema: downSchema, Name: downTable}})
+				}
+			}
+		}
+	}
+	return tbls
+}
+
 // Reset resets the internal state of the optimist.
 func (o *Optimist) Reset() {
 	o.mu.Lock()
@@ -81,7 +101,8 @@ func (o *Optimist) Reset() {
 
 // ConstructInfo constructs a shard DDL info.
 func (o *Optimist) ConstructInfo(upSchema, upTable, downSchema, downTable string,
-	ddls []string, tiBefore *model.TableInfo, tisAfter []*model.TableInfo) optimism.Info {
+	ddls []string, tiBefore *model.TableInfo, tisAfter []*model.TableInfo,
+) optimism.Info {
 	return optimism.NewInfo(o.task, o.source, upSchema, upTable, downSchema, downTable, ddls, tiBefore, tisAfter)
 }
 
@@ -99,28 +120,18 @@ func (o *Optimist) PutInfo(info optimism.Info) (int64, error) {
 	return rev, nil
 }
 
-// PutInfoAddTable puts the shard DDL info into etcd and adds the table for the info into source tables,
+// AddTable adds the table for the info into source tables,
 // this is often called for `CREATE TABLE`.
-func (o *Optimist) PutInfoAddTable(info optimism.Info) (int64, error) {
+func (o *Optimist) AddTable(info optimism.Info) (int64, error) {
 	o.tables.AddTable(info.UpSchema, info.UpTable, info.DownSchema, info.DownTable)
-	rev, err := optimism.PutSourceTablesInfo(o.cli, o.tables, info)
-	if err != nil {
-		return 0, err
-	}
-
-	o.mu.Lock()
-	o.pendingInfo = &info // record shard DDL info for `CREATE TABLE`.
-	o.mu.Unlock()
-
-	return rev, nil
+	return optimism.PutSourceTables(o.cli, o.tables)
 }
 
-// DeleteInfoRemoveTable deletes the shard DDL info from etcd and removes the table for the info from source tables,
+// RemoveTable removes the table for the info from source tables,
 // this is often called for `DROP TABLE`.
-func (o *Optimist) DeleteInfoRemoveTable(info optimism.Info) (int64, error) {
+func (o *Optimist) RemoveTable(info optimism.Info) (int64, error) {
 	o.tables.RemoveTable(info.UpSchema, info.UpTable, info.DownSchema, info.DownTable)
-	// don't record shard DDL info for `DROP TABLE` because we do not replicate it to the downstream now.
-	return optimism.PutSourceTablesDeleteInfo(o.cli, o.tables, info)
+	return optimism.PutSourceTables(o.cli, o.tables)
 }
 
 // GetOperation gets the shard DDL lock operation relative to the shard DDL info.
@@ -159,24 +170,6 @@ func (o *Optimist) DoneOperation(op optimism.Operation) error {
 	o.mu.Unlock()
 
 	return nil
-}
-
-// GetTableInfo tries to get the init schema of the downstream table.
-func (o *Optimist) GetTableInfo(downSchema, downTable string) (*model.TableInfo, error) {
-	if downTable == "" {
-		return nil, nil
-	}
-
-	is, rev, err := optimism.GetInitSchema(o.cli, o.task, downSchema, downTable)
-	if err != nil {
-		return nil, err
-	}
-	if is.IsEmpty() {
-		o.logger.Info("no init schema exists", zap.String("schema", downSchema), zap.String("table", downTable), zap.Int64("revision", rev))
-	} else {
-		o.logger.Info("got init schema", zap.Stringer("init schema", is))
-	}
-	return is.TableInfo, nil
 }
 
 // PendingInfo returns the shard DDL info which is pending to handle.

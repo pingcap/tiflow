@@ -18,9 +18,9 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"testing"
 	"time"
 
-	"github.com/pingcap/check"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
@@ -28,13 +28,9 @@ import (
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
-	"github.com/pingcap/tiflow/pkg/util/testleak"
+	"github.com/stretchr/testify/require"
 	"github.com/tikv/client-go/v2/oracle"
 )
-
-var _ = check.Suite(&ownerSuite{})
-
-type ownerSuite struct{}
 
 type mockManager struct {
 	gc.Manager
@@ -48,7 +44,7 @@ func (m *mockManager) CheckStaleCheckpointTs(
 
 var _ gc.Manager = (*mockManager)(nil)
 
-func createOwner4Test(ctx cdcContext.Context, c *check.C) (*Owner, *orchestrator.GlobalReactorState, *orchestrator.ReactorStateTester) {
+func createOwner4Test(ctx cdcContext.Context, t *testing.T) (*ownerImpl, *orchestrator.GlobalReactorState, *orchestrator.ReactorStateTester) {
 	ctx.GlobalVars().PDClient = &gc.MockPDClient{
 		UpdateServiceGCSafePointFunc: func(ctx context.Context, serviceID string, ttl int64, safePoint uint64) (uint64, error) {
 			return safePoint, nil
@@ -62,7 +58,7 @@ func createOwner4Test(ctx cdcContext.Context, c *check.C) (*Owner, *orchestrator
 		ctx.GlobalVars().PDClient,
 	)
 	state := orchestrator.NewGlobalState()
-	tester := orchestrator.NewReactorStateTester(c, state, nil)
+	tester := orchestrator.NewReactorStateTester(t, state, nil)
 
 	// set captures
 	cdcKey := etcd.CDCKey{
@@ -70,18 +66,17 @@ func createOwner4Test(ctx cdcContext.Context, c *check.C) (*Owner, *orchestrator
 		CaptureID: ctx.GlobalVars().CaptureInfo.ID,
 	}
 	captureBytes, err := ctx.GlobalVars().CaptureInfo.Marshal()
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	tester.MustUpdate(cdcKey.String(), captureBytes)
-	return owner, state, tester
+	return owner.(*ownerImpl), state, tester
 }
 
-func (s *ownerSuite) TestCreateRemoveChangefeed(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestCreateRemoveChangefeed(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(false)
 	ctx, cancel := cdcContext.WithCancel(ctx)
 	defer cancel()
 
-	owner, state, tester := createOwner4Test(ctx, c)
+	owner, state, tester := createOwner4Test(ctx, t)
 
 	changefeedID := "test-changefeed"
 	changefeedInfo := &model.ChangeFeedInfo{
@@ -89,7 +84,7 @@ func (s *ownerSuite) TestCreateRemoveChangefeed(c *check.C) {
 		Config:  config.GetDefaultReplicaConfig(),
 	}
 	changefeedStr, err := changefeedInfo.Marshal()
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	cdcKey := etcd.CDCKey{
 		Tp:           etcd.CDCKeyTypeChangefeedInfo,
 		ChangefeedID: changefeedID,
@@ -97,29 +92,28 @@ func (s *ownerSuite) TestCreateRemoveChangefeed(c *check.C) {
 	tester.MustUpdate(cdcKey.String(), []byte(changefeedStr))
 	_, err = owner.Tick(ctx, state)
 	tester.MustApplyPatches()
-	c.Assert(err, check.IsNil)
-	c.Assert(owner.changefeeds, check.HasKey, changefeedID)
+	require.Nil(t, err)
+	require.Contains(t, owner.changefeeds, changefeedID)
 
 	// delete changefeed info key to remove changefeed
 	tester.MustUpdate(cdcKey.String(), nil)
 	// this tick to clean the leak info fo the removed changefeed
 	_, err = owner.Tick(ctx, state)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	// this tick to remove the changefeed state in memory
 	tester.MustApplyPatches()
 	_, err = owner.Tick(ctx, state)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	tester.MustApplyPatches()
-	c.Assert(err, check.IsNil)
-	c.Assert(owner.changefeeds, check.Not(check.HasKey), changefeedID)
-	c.Assert(state.Changefeeds, check.Not(check.HasKey), changefeedID)
+
+	require.NotContains(t, owner.changefeeds, changefeedID)
+	require.NotContains(t, state.Changefeeds, changefeedID)
 
 	tester.MustUpdate(cdcKey.String(), []byte(changefeedStr))
 	_, err = owner.Tick(ctx, state)
 	tester.MustApplyPatches()
-	c.Assert(err, check.IsNil)
-	c.Assert(owner.changefeeds, check.HasKey, changefeedID)
-
+	require.Nil(t, err)
+	require.Contains(t, owner.changefeeds, changefeedID)
 	removeJob := model.AdminJob{
 		CfID:  changefeedID,
 		Type:  model.AdminRemove,
@@ -131,24 +125,25 @@ func (s *ownerSuite) TestCreateRemoveChangefeed(c *check.C) {
 	mockedManager := &mockManager{Manager: owner.gcManager}
 	owner.gcManager = mockedManager
 	err = owner.gcManager.CheckStaleCheckpointTs(ctx, changefeedID, 0)
-	c.Assert(err, check.NotNil)
+	require.NotNil(t, err)
 
 	// this tick create remove changefeed patches
-	owner.EnqueueJob(removeJob)
+	done := make(chan error, 1)
+	owner.EnqueueJob(removeJob, done)
 	_, err = owner.Tick(ctx, state)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
+	require.Nil(t, <-done)
 
 	// apply patches and update owner's in memory changefeed states
 	tester.MustApplyPatches()
 	_, err = owner.Tick(ctx, state)
-	c.Assert(err, check.IsNil)
-	c.Assert(owner.changefeeds, check.Not(check.HasKey), changefeedID)
+	require.Nil(t, err)
+	require.NotContains(t, owner.changefeeds, changefeedID)
 }
 
-func (s *ownerSuite) TestStopChangefeed(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestStopChangefeed(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(false)
-	owner, state, tester := createOwner4Test(ctx, c)
+	owner, state, tester := createOwner4Test(ctx, t)
 	ctx, cancel := cdcContext.WithCancel(ctx)
 	defer cancel()
 
@@ -158,7 +153,7 @@ func (s *ownerSuite) TestStopChangefeed(c *check.C) {
 		Config:  config.GetDefaultReplicaConfig(),
 	}
 	changefeedStr, err := changefeedInfo.Marshal()
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	cdcKey := etcd.CDCKey{
 		Tp:           etcd.CDCKeyTypeChangefeedInfo,
 		ChangefeedID: changefeedID,
@@ -166,37 +161,36 @@ func (s *ownerSuite) TestStopChangefeed(c *check.C) {
 	tester.MustUpdate(cdcKey.String(), []byte(changefeedStr))
 	_, err = owner.Tick(ctx, state)
 	tester.MustApplyPatches()
-	c.Assert(err, check.IsNil)
-	c.Assert(owner.changefeeds, check.HasKey, changefeedID)
-
+	require.Nil(t, err)
+	require.Contains(t, owner.changefeeds, changefeedID)
 	// remove changefeed forcibly
+	done := make(chan error, 1)
 	owner.EnqueueJob(model.AdminJob{
 		CfID: changefeedID,
 		Type: model.AdminRemove,
 		Opts: &model.AdminJobOption{
 			ForceRemove: true,
 		},
-	})
+	}, done)
 
 	// this tick to clean the leak info fo the removed changefeed
 	_, err = owner.Tick(ctx, state)
-	c.Assert(err, check.IsNil)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
+	require.Nil(t, <-done)
+
 	// this tick to remove the changefeed state in memory
 	tester.MustApplyPatches()
 	_, err = owner.Tick(ctx, state)
-	c.Assert(err, check.IsNil)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	tester.MustApplyPatches()
-	c.Assert(err, check.IsNil)
-	c.Assert(owner.changefeeds, check.Not(check.HasKey), changefeedID)
-	c.Assert(state.Changefeeds, check.Not(check.HasKey), changefeedID)
+	require.Nil(t, err)
+	require.NotContains(t, owner.changefeeds, changefeedID)
+	require.NotContains(t, state.Changefeeds, changefeedID)
 }
 
-func (s *ownerSuite) TestFixChangefeedState(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestFixChangefeedState(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(false)
-	owner, state, tester := createOwner4Test(ctx, c)
+	owner, state, tester := createOwner4Test(ctx, t)
 	// We need to do bootstrap.
 	owner.bootstrapped = false
 	changefeedID := "test-changefeed"
@@ -208,7 +202,7 @@ func (s *ownerSuite) TestFixChangefeedState(c *check.C) {
 		Config:       config.GetDefaultReplicaConfig(),
 	}
 	changefeedStr, err := changefeedInfo.Marshal()
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	cdcKey := etcd.CDCKey{
 		Tp:           etcd.CDCKeyTypeChangefeedInfo,
 		ChangefeedID: changefeedID,
@@ -217,23 +211,21 @@ func (s *ownerSuite) TestFixChangefeedState(c *check.C) {
 	// For the first tick, we do a bootstrap, and it tries to fix the meta information.
 	_, err = owner.Tick(ctx, state)
 	tester.MustApplyPatches()
-	c.Assert(err, check.IsNil)
-	c.Assert(owner.bootstrapped, check.IsTrue)
-	c.Assert(owner.changefeeds, check.Not(check.HasKey), changefeedID)
-
+	require.Nil(t, err)
+	require.True(t, owner.bootstrapped)
+	require.NotContains(t, owner.changefeeds, changefeedID)
 	// Start tick normally.
 	_, err = owner.Tick(ctx, state)
 	tester.MustApplyPatches()
-	c.Assert(err, check.IsNil)
-	c.Assert(owner.changefeeds, check.HasKey, changefeedID)
+	require.Nil(t, err)
+	require.Contains(t, owner.changefeeds, changefeedID)
 	// The meta information is fixed correctly.
-	c.Assert(owner.changefeeds[changefeedID].state.Info.State, check.Equals, model.StateStopped)
+	require.Equal(t, owner.changefeeds[changefeedID].state.Info.State, model.StateStopped)
 }
 
-func (s *ownerSuite) TestFixChangefeedSinkProtocol(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestFixChangefeedSinkProtocol(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(false)
-	owner, state, tester := createOwner4Test(ctx, c)
+	owner, state, tester := createOwner4Test(ctx, t)
 	// We need to do bootstrap.
 	owner.bootstrapped = false
 	changefeedID := "test-changefeed"
@@ -249,7 +241,7 @@ func (s *ownerSuite) TestFixChangefeedSinkProtocol(c *check.C) {
 		},
 	}
 	changefeedStr, err := changefeedInfo.Marshal()
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	cdcKey := etcd.CDCKey{
 		Tp:           etcd.CDCKeyTypeChangefeedInfo,
 		ChangefeedID: changefeedID,
@@ -258,25 +250,23 @@ func (s *ownerSuite) TestFixChangefeedSinkProtocol(c *check.C) {
 	// For the first tick, we do a bootstrap, and it tries to fix the meta information.
 	_, err = owner.Tick(ctx, state)
 	tester.MustApplyPatches()
-	c.Assert(err, check.IsNil)
-	c.Assert(owner.bootstrapped, check.IsTrue)
-	c.Assert(owner.changefeeds, check.Not(check.HasKey), changefeedID)
+	require.Nil(t, err)
+	require.True(t, owner.bootstrapped)
+	require.NotContains(t, owner.changefeeds, changefeedID)
 
 	// Start tick normally.
 	_, err = owner.Tick(ctx, state)
 	tester.MustApplyPatches()
-	c.Assert(err, check.IsNil)
-	c.Assert(owner.changefeeds, check.HasKey, changefeedID)
+	require.Nil(t, err)
+	require.Contains(t, owner.changefeeds, changefeedID)
 	// The meta information is fixed correctly.
-	c.Assert(owner.changefeeds[changefeedID].state.Info.SinkURI,
-		check.Equals,
+	require.Equal(t, owner.changefeeds[changefeedID].state.Info.SinkURI,
 		"kafka://127.0.0.1:9092/ticdc-test2?protocol=open-protocol")
 }
 
-func (s *ownerSuite) TestCheckClusterVersion(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestCheckClusterVersion(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(false)
-	owner, state, tester := createOwner4Test(ctx, c)
+	owner, state, tester := createOwner4Test(ctx, t)
 	ctx, cancel := cdcContext.WithCancel(ctx)
 	defer cancel()
 
@@ -288,7 +278,7 @@ func (s *ownerSuite) TestCheckClusterVersion(c *check.C) {
 		Config:  config.GetDefaultReplicaConfig(),
 	}
 	changefeedStr, err := changefeedInfo.Marshal()
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	cdcKey := etcd.CDCKey{
 		Tp:           etcd.CDCKeyTypeChangefeedInfo,
 		ChangefeedID: changefeedID,
@@ -298,8 +288,8 @@ func (s *ownerSuite) TestCheckClusterVersion(c *check.C) {
 	// check the tick is skipped and the changefeed will not be handled
 	_, err = owner.Tick(ctx, state)
 	tester.MustApplyPatches()
-	c.Assert(err, check.IsNil)
-	c.Assert(owner.changefeeds, check.Not(check.HasKey), changefeedID)
+	require.Nil(t, err)
+	require.NotContains(t, owner.changefeeds, changefeedID)
 
 	tester.MustUpdate("/tidb/cdc/capture/6bbc01c8-0605-4f86-a0f9-b3119109b225",
 		[]byte(`{"id":"6bbc01c8-0605-4f86-a0f9-b3119109b225","address":"127.0.0.1:8300","version":"`+ctx.GlobalVars().CaptureInfo.Version+`"}`))
@@ -307,85 +297,89 @@ func (s *ownerSuite) TestCheckClusterVersion(c *check.C) {
 	// check the tick is not skipped and the changefeed will be handled normally
 	_, err = owner.Tick(ctx, state)
 	tester.MustApplyPatches()
-	c.Assert(err, check.IsNil)
-	c.Assert(owner.changefeeds, check.HasKey, changefeedID)
+	require.Nil(t, err)
+	require.Contains(t, owner.changefeeds, changefeedID)
 }
 
-func (s *ownerSuite) TestAdminJob(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestAdminJob(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(false)
 	ctx, cancel := cdcContext.WithCancel(ctx)
 	defer cancel()
 
-	owner, _, _ := createOwner4Test(ctx, c)
+	done1 := make(chan error, 1)
+	owner, _, _ := createOwner4Test(ctx, t)
 	owner.EnqueueJob(model.AdminJob{
 		CfID: "test-changefeed1",
 		Type: model.AdminResume,
-	})
-	owner.TriggerRebalance("test-changefeed2")
-	owner.ManualSchedule("test-changefeed3", "test-caputre1", 10)
+	}, done1)
+	done2 := make(chan error, 1)
+	owner.RebalanceTables("test-changefeed2", done2)
+	done3 := make(chan error, 1)
+	owner.ScheduleTable("test-changefeed3", "test-caputre1", 10, done3)
+	done4 := make(chan error, 1)
 	var buf bytes.Buffer
-	owner.WriteDebugInfo(&buf)
+	owner.WriteDebugInfo(&buf, done4)
 
 	// remove job.done, it's hard to check deep equals
 	jobs := owner.takeOwnerJobs()
 	for _, job := range jobs {
-		c.Assert(job.done, check.NotNil)
+		require.NotNil(t, job.done)
 		close(job.done)
 		job.done = nil
 	}
-	c.Assert(jobs, check.DeepEquals, []*ownerJob{
+	require.Equal(t, jobs, []*ownerJob{
 		{
-			tp: ownerJobTypeAdminJob,
-			adminJob: &model.AdminJob{
+			Tp: ownerJobTypeAdminJob,
+			AdminJob: &model.AdminJob{
 				CfID: "test-changefeed1",
 				Type: model.AdminResume,
 			},
-			changefeedID: "test-changefeed1",
+			ChangefeedID: "test-changefeed1",
 		}, {
-			tp:           ownerJobTypeRebalance,
-			changefeedID: "test-changefeed2",
+			Tp:           ownerJobTypeRebalance,
+			ChangefeedID: "test-changefeed2",
 		}, {
-			tp:              ownerJobTypeManualSchedule,
-			changefeedID:    "test-changefeed3",
-			targetCaptureID: "test-caputre1",
-			tableID:         10,
+			Tp:              ownerJobTypeScheduleTable,
+			ChangefeedID:    "test-changefeed3",
+			TargetCaptureID: "test-caputre1",
+			TableID:         10,
 		}, {
-			tp:              ownerJobTypeDebugInfo,
+			Tp:              ownerJobTypeDebugInfo,
 			debugInfoWriter: &buf,
 		},
 	})
-	c.Assert(owner.takeOwnerJobs(), check.HasLen, 0)
+	require.Len(t, owner.takeOwnerJobs(), 0)
 }
 
-func (s *ownerSuite) TestUpdateGCSafePoint(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestUpdateGCSafePoint(t *testing.T) {
 	mockPDClient := &gc.MockPDClient{}
-	o := NewOwner(mockPDClient)
+	o := NewOwner(mockPDClient).(*ownerImpl)
 	o.gcManager = gc.NewManager(mockPDClient)
 	ctx := cdcContext.NewBackendContext4Test(true)
 	ctx, cancel := cdcContext.WithCancel(ctx)
 	defer cancel()
 	state := orchestrator.NewGlobalState()
-	tester := orchestrator.NewReactorStateTester(c, state, nil)
+	tester := orchestrator.NewReactorStateTester(t, state, nil)
 
 	// no changefeed, the gc safe point should be max uint64
-	mockPDClient.UpdateServiceGCSafePointFunc =
-		func(ctx context.Context, serviceID string, ttl int64, safePoint uint64) (uint64, error) {
-			// Owner will do a snapshot read at (checkpointTs - 1) from TiKV,
-			// set GC safepoint to (checkpointTs - 1)
-			c.Assert(safePoint, check.Equals, uint64(math.MaxUint64-1))
-			return 0, nil
-		}
+	mockPDClient.UpdateServiceGCSafePointFunc = func(
+		ctx context.Context, serviceID string, ttl int64, safePoint uint64,
+	) (uint64, error) {
+		// Owner will do a snapshot read at (checkpointTs - 1) from TiKV,
+		// set GC safepoint to (checkpointTs - 1)
+		require.Equal(t, safePoint, uint64(math.MaxUint64-1))
+		return 0, nil
+	}
 	err := o.updateGCSafepoint(ctx, state)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 
 	// add a failed changefeed, it must not trigger update GC safepoint.
-	mockPDClient.UpdateServiceGCSafePointFunc =
-		func(ctx context.Context, serviceID string, ttl int64, safePoint uint64) (uint64, error) {
-			c.Fatal("must not update")
-			return 0, nil
-		}
+	mockPDClient.UpdateServiceGCSafePointFunc = func(
+		ctx context.Context, serviceID string, ttl int64, safePoint uint64,
+	) (uint64, error) {
+		t.Fatal("must not update")
+		return 0, nil
+	}
 	changefeedID1 := "changefeed-test1"
 	tester.MustUpdate(
 		fmt.Sprintf("/tidb/cdc/changefeed/info/%s", changefeedID1),
@@ -397,20 +391,21 @@ func (s *ownerSuite) TestUpdateGCSafePoint(c *check.C) {
 		})
 	tester.MustApplyPatches()
 	err = o.updateGCSafepoint(ctx, state)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 
 	// switch the state of changefeed to normal, it must update GC safepoint to
 	// 1 (checkpoint Ts of changefeed-test1).
 	ch := make(chan struct{}, 1)
-	mockPDClient.UpdateServiceGCSafePointFunc =
-		func(ctx context.Context, serviceID string, ttl int64, safePoint uint64) (uint64, error) {
-			// Owner will do a snapshot read at (checkpointTs - 1) from TiKV,
-			// set GC safepoint to (checkpointTs - 1)
-			c.Assert(safePoint, check.Equals, uint64(1))
-			c.Assert(serviceID, check.Equals, gc.CDCServiceSafePointID)
-			ch <- struct{}{}
-			return 0, nil
-		}
+	mockPDClient.UpdateServiceGCSafePointFunc = func(
+		ctx context.Context, serviceID string, ttl int64, safePoint uint64,
+	) (uint64, error) {
+		// Owner will do a snapshot read at (checkpointTs - 1) from TiKV,
+		// set GC safepoint to (checkpointTs - 1)
+		require.Equal(t, safePoint, uint64(1))
+		require.Equal(t, serviceID, gc.CDCServiceSafePointID)
+		ch <- struct{}{}
+		return 0, nil
+	}
 	state.Changefeeds[changefeedID1].PatchInfo(
 		func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 			info.State = model.StateNormal
@@ -418,10 +413,10 @@ func (s *ownerSuite) TestUpdateGCSafePoint(c *check.C) {
 		})
 	tester.MustApplyPatches()
 	err = o.updateGCSafepoint(ctx, state)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	select {
 	case <-time.After(5 * time.Second):
-		c.Fatal("timeout")
+		t.Fatal("timeout")
 	case <-ch:
 	}
 
@@ -440,32 +435,32 @@ func (s *ownerSuite) TestUpdateGCSafePoint(c *check.C) {
 			return &model.ChangeFeedStatus{CheckpointTs: 30}, true, nil
 		})
 	tester.MustApplyPatches()
-	mockPDClient.UpdateServiceGCSafePointFunc =
-		func(ctx context.Context, serviceID string, ttl int64, safePoint uint64) (uint64, error) {
-			// Owner will do a snapshot read at (checkpointTs - 1) from TiKV,
-			// set GC safepoint to (checkpointTs - 1)
-			c.Assert(safePoint, check.Equals, uint64(19))
-			c.Assert(serviceID, check.Equals, gc.CDCServiceSafePointID)
-			ch <- struct{}{}
-			return 0, nil
-		}
+	mockPDClient.UpdateServiceGCSafePointFunc = func(
+		ctx context.Context, serviceID string, ttl int64, safePoint uint64,
+	) (uint64, error) {
+		// Owner will do a snapshot read at (checkpointTs - 1) from TiKV,
+		// set GC safepoint to (checkpointTs - 1)
+		require.Equal(t, safePoint, uint64(19))
+		require.Equal(t, serviceID, gc.CDCServiceSafePointID)
+		ch <- struct{}{}
+		return 0, nil
+	}
 	err = o.updateGCSafepoint(ctx, state)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	select {
 	case <-time.After(5 * time.Second):
-		c.Fatal("timeout")
+		t.Fatal("timeout")
 	case <-ch:
 	}
 }
 
 // make sure handleJobs works well even if there is two different
 // version of captures in the cluster
-func (s *ownerSuite) TestHandleJobsDontBlock(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestHandleJobsDontBlock(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(false)
 	ctx, cancel := cdcContext.WithCancel(ctx)
 	defer cancel()
-	owner, state, tester := createOwner4Test(ctx, c)
+	owner, state, tester := createOwner4Test(ctx, t)
 
 	statusProvider := owner.StatusProvider()
 	// work well
@@ -476,7 +471,7 @@ func (s *ownerSuite) TestHandleJobsDontBlock(c *check.C) {
 		State:   model.StateNormal,
 	}
 	changefeedStr, err := cfInfo1.Marshal()
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	cdcKey := etcd.CDCKey{
 		Tp:           etcd.CDCKeyTypeChangefeedInfo,
 		ChangefeedID: cf1,
@@ -484,9 +479,9 @@ func (s *ownerSuite) TestHandleJobsDontBlock(c *check.C) {
 	tester.MustUpdate(cdcKey.String(), []byte(changefeedStr))
 	_, err = owner.Tick(ctx, state)
 	tester.MustApplyPatches()
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 
-	c.Assert(owner.changefeeds, check.HasKey, cf1)
+	require.Contains(t, owner.changefeeds, cf1)
 
 	// add an non-consistent version capture
 	captureInfo := &model.CaptureInfo{
@@ -499,7 +494,7 @@ func (s *ownerSuite) TestHandleJobsDontBlock(c *check.C) {
 		CaptureID: captureInfo.ID,
 	}
 	v, err := captureInfo.Marshal()
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	tester.MustUpdate(cdcKey.String(), v)
 
 	// try to add another changefeed
@@ -510,7 +505,7 @@ func (s *ownerSuite) TestHandleJobsDontBlock(c *check.C) {
 		State:   model.StateNormal,
 	}
 	changefeedStr1, err := cfInfo2.Marshal()
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	cdcKey = etcd.CDCKey{
 		Tp:           etcd.CDCKeyTypeChangefeedInfo,
 		ChangefeedID: cf2,
@@ -518,10 +513,10 @@ func (s *ownerSuite) TestHandleJobsDontBlock(c *check.C) {
 	tester.MustUpdate(cdcKey.String(), []byte(changefeedStr1))
 	_, err = owner.Tick(ctx, state)
 	tester.MustApplyPatches()
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	// make sure this changefeed add failed, which means that owner are return
 	// in clusterVersionConsistent check
-	c.Assert(owner.changefeeds[cf2], check.IsNil)
+	require.Nil(t, owner.changefeeds[cf2])
 
 	// make sure statusProvider works well
 	ctx1, cancel := context.WithTimeout(context.Background(), time.Second*5)
@@ -543,13 +538,13 @@ WorkLoop:
 		case <-done:
 			break WorkLoop
 		case <-ctx1.Done():
-			c.Fatal(ctx1.Err())
+			t.Fatal(ctx1.Err())
 		case <-ticker.C:
 			_, err = owner.Tick(ctx, state)
-			c.Assert(err, check.IsNil)
+			require.Nil(t, err)
 		}
 	}
-	c.Assert(errIn, check.IsNil)
-	c.Assert(infos[cf1], check.NotNil)
-	c.Assert(infos[cf2], check.IsNil)
+	require.Nil(t, errIn)
+	require.NotNil(t, infos[cf1])
+	require.Nil(t, infos[cf2])
 }

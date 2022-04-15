@@ -1,7 +1,7 @@
 #!/bin/sh
 
-# This script file uses enviroment variable to create config of canal adapter. The format of config file `application.yml`
-# is only suitable for canal adapter release version v1.1.5-alpha-2, if you want build from lastest master branch, please rewrite the
+# This script file uses environment variable to create config of canal adapter. The format of config file `application.yml`
+# is only suitable for canal adapter release version v1.1.5-alpha-2, if you want build from latest master branch, please rewrite the
 # config file from canal/client-adapter/launcher/src/main/bin/conf/application.yml
 
 KAFKA_SERVER=${KAFKA_SERVER:-localhost:9092}
@@ -15,6 +15,17 @@ echo "db name ${DB_NAME}"
 echo "downstream db host ${DOWNSTREAM_DB_HOST}"
 echo "downstream db port ${DOWNSTREAM_DB_PORT}"
 echo "use flatMessage: ${USE_FLAT_MESSAGE}"
+
+echo "Verifying downstream TiDB is started..."
+i=0
+while ! mysql -uroot -h${DOWNSTREAM_DB_HOST} -P${DOWNSTREAM_DB_PORT} --default-character-set utf8mb4 -e 'select * from mysql.tidb;'; do
+	i=$((i + 1))
+	if [ "$i" -gt 200 ]; then
+		echo 'Connection to downstream TiDB failed'
+		exit 2
+	fi
+	sleep 5
+done
 
 WORK_DIR=$(pwd)
 cat - >"${WORK_DIR}/conf/application.yml" <<EOF

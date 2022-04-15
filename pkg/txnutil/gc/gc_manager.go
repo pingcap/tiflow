@@ -115,7 +115,7 @@ func (m *gcManager) CheckStaleCheckpointTs(
 		if !ok {
 			return cerror.ErrOwnerUnknown.GenWithStack("ctx not an cdcContext.Context, it should be")
 		}
-		pdTime, err := cctx.GlobalVars().TimeAcquirer.CurrentTimeFromCached()
+		pdTime, err := cctx.GlobalVars().PDClock.CurrentTime()
 		// TODO: should we return err here, or just log it?
 		if err != nil {
 			return errors.Trace(err)

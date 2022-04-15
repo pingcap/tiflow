@@ -16,16 +16,15 @@ package scheduler
 import (
 	"sort"
 	"sync"
+	"testing"
 	"time"
 
-	. "github.com/pingcap/check"
+	"github.com/stretchr/testify/require"
 )
 
-type testLatch struct{}
+func TestOneAcquireSuccess(t *testing.T) {
+	t.Parallel()
 
-var _ = Suite(&testLatch{})
-
-func (t *testLatch) TestOneAcquireSuccess(c *C) {
 	var (
 		l       = newLatches()
 		fire    = make(chan struct{})
@@ -62,16 +61,18 @@ func (t *testLatch) TestOneAcquireSuccess(c *C) {
 	}
 	wg.Wait()
 
-	c.Assert(fail, HasLen, 8)
+	require.Len(t, fail, 8)
 
 	var succNames []string
 	succNames = append(succNames, <-success)
 	succNames = append(succNames, <-success)
 	sort.Strings(succNames)
-	c.Assert(succNames, DeepEquals, []string{group1, group2})
+	require.Equal(t, []string{group1, group2}, succNames)
 }
 
-func (t *testLatch) TestAcquireAfterRelease(c *C) {
+func TestAcquireAfterRelease(t *testing.T) {
+	t.Parallel()
+
 	var (
 		l       = newLatches()
 		fire    = make(chan struct{})
@@ -105,10 +106,12 @@ func (t *testLatch) TestAcquireAfterRelease(c *C) {
 	}
 
 	wg.Wait()
-	c.Assert(success, Equals, 5)
+	require.Equal(t, 5, success)
 }
 
-func (t *testLatch) TestMultiRelease(c *C) {
+func TestMultiRelease(t *testing.T) {
+	t.Parallel()
+
 	var (
 		l     = newLatches()
 		names = []string{"name1", "name2", "name3"}
@@ -123,7 +126,7 @@ func (t *testLatch) TestMultiRelease(c *C) {
 				defer wg.Done()
 				<-fire
 				release, err := l.tryAcquire(name)
-				c.Assert(err, IsNil)
+				require.NoError(t, err)
 				release()
 				// will not panic or cause other error
 				release()
@@ -137,26 +140,28 @@ func (t *testLatch) TestMultiRelease(c *C) {
 	}
 }
 
-func (t *testLatch) TestWontReleaseOther(c *C) {
+func TestWontReleaseOther(t *testing.T) {
+	t.Parallel()
+
 	var (
 		l     = newLatches()
 		group = "group1"
 	)
 
 	release1, err := l.tryAcquire(group)
-	c.Assert(err, IsNil)
+	require.NoError(t, err)
 	release1()
 
 	// because release1 is called, another tryAcquire should succeed
 	release2, err := l.tryAcquire(group)
-	c.Assert(err, IsNil)
+	require.NoError(t, err)
 
 	// release1 should not release the latch of release2, we test this by tryAcquire
 	release1()
 	_, err = l.tryAcquire(group)
-	c.Assert(err, NotNil)
+	require.Error(t, err)
 
 	release2()
 	_, err = l.tryAcquire(group)
-	c.Assert(err, IsNil)
+	require.NoError(t, err)
 }

@@ -351,7 +351,7 @@ func genBinlogEventsWithGTIDs(c *C, flavor string, previousGTIDSet, latestGTID1,
 	c.Assert(err, IsNil)
 
 	// file header with FormatDescriptionEvent and PreviousGTIDsEvent
-	events, data, err := g.GenFileHeader()
+	events, data, err := g.GenFileHeader(0)
 	c.Assert(err, IsNil)
 	allEvents = append(allEvents, events...)
 	allData.Write(data)
@@ -363,7 +363,7 @@ func genBinlogEventsWithGTIDs(c *C, flavor string, previousGTIDSet, latestGTID1,
 		"CREATE TABLE `db`.`tbl2` (c1 INT)",
 	}
 	for _, query := range queries {
-		events, data, err = g.GenDDLEvents("db", query)
+		events, data, err = g.GenDDLEvents("db", query, 0)
 		c.Assert(err, IsNil)
 		allEvents = append(allEvents, events...)
 		allData.Write(data)
@@ -390,7 +390,7 @@ func genBinlogEventsWithGTIDs(c *C, flavor string, previousGTIDSet, latestGTID1,
 				Rows:       insertRows,
 			},
 		}
-		events, data, err = g.GenDMLEvents(eventType, dmlData)
+		events, data, err = g.GenDMLEvents(eventType, dmlData, 0)
 		c.Assert(err, IsNil)
 		allEvents = append(allEvents, events...)
 		allData.Write(data)
@@ -623,7 +623,8 @@ func (t *testRelaySuite) TestReSetupMeta(c *C) {
 }
 
 func (t *testRelaySuite) verifyMetadata(c *C, r *Relay, uuidExpected string,
-	posExpected gmysql.Position, gsStrExpected string, uuidsExpected []string) {
+	posExpected gmysql.Position, gsStrExpected string, uuidsExpected []string,
+) {
 	uuid, pos := r.meta.Pos()
 	_, gs := r.meta.GTID()
 	gsExpected, err := gtid.ParserGTID(gmysql.MySQLFlavor, gsStrExpected)
@@ -759,7 +760,7 @@ func (t *testRelaySuite) TestPreprocessEvent(c *C) {
 	})
 
 	// other event type without LOG_EVENT_ARTIFICIAL_F
-	ev, err = event.GenCommonGTIDEvent(gmysql.MySQLFlavor, header.ServerID, latestPos, gtidSet)
+	ev, err = event.GenCommonGTIDEvent(gmysql.MySQLFlavor, header.ServerID, latestPos, gtidSet, false, 0)
 	c.Assert(err, IsNil)
 	cases = append(cases, Case{
 		event: ev,
@@ -835,7 +836,7 @@ func (t *testRelaySuite) TestRecoverMySQL(c *C) {
 	c.Assert(fs.Size(), Equals, int64(len(baseData)))
 
 	// generate another transaction, DDL
-	extraEvents, extraData, err := g.GenDDLEvents("db2", "CREATE DATABASE db2")
+	extraEvents, extraData, err := g.GenDDLEvents("db2", "CREATE DATABASE db2", 0)
 	c.Assert(err, IsNil)
 	c.Assert(extraEvents, HasLen, 2) // [GTID, Query]
 

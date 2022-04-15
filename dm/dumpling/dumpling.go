@@ -15,15 +15,14 @@ package dumpling
 
 import (
 	"context"
-	"os"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
-	filter "github.com/pingcap/tidb-tools/pkg/table-filter"
 	"github.com/pingcap/tidb/dumpling/export"
+	filter "github.com/pingcap/tidb/util/table-filter"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
@@ -35,6 +34,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	dutils "github.com/pingcap/tiflow/dm/pkg/dumpling"
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/storage"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
@@ -102,7 +102,7 @@ func (m *Dumpling) Process(ctx context.Context, pr chan pb.ProcessResult) {
 
 	// NOTE: remove output dir before start dumping
 	// every time re-dump, loader should re-prepare
-	err := os.RemoveAll(m.cfg.Dir)
+	err := storage.RemoveAll(ctx, m.cfg.Dir, nil)
 	if err != nil {
 		m.logger.Error("fail to remove output directory", zap.String("directory", m.cfg.Dir), log.ShortError(err))
 		errs = append(errs, unit.NewProcessError(terror.ErrDumpUnitRuntime.Delegate(err, "fail to remove output directory: "+m.cfg.Dir)))
@@ -175,6 +175,12 @@ func (m *Dumpling) Close() {
 	m.closed.Store(true)
 }
 
+// Kill implements Unit.Kill.
+func (m *Dumpling) Kill() {
+	// TODO: implement kill
+	m.Close()
+}
+
 // Pause implements Unit.Pause.
 func (m *Dumpling) Pause() {
 	if m.closed.Load() {
@@ -244,6 +250,7 @@ func (m *Dumpling) constructArgs(ctx context.Context) (*export.Config, error) {
 	dumpConfig.User = db.User
 	dumpConfig.Password = db.Password
 	dumpConfig.OutputDirPath = cfg.Dir // use LoaderConfig.Dir as output dir
+	dumpConfig.CollationCompatible = cfg.CollationCompatible
 	tableFilter, err := filter.ParseMySQLReplicationRules(cfg.BAList)
 	if err != nil {
 		return nil, err
@@ -322,6 +329,7 @@ func (m *Dumpling) constructArgs(ctx context.Context) (*export.Config, error) {
 	dumpConfig.Labels = prometheus.Labels{"task": m.cfg.Name, "source_id": m.cfg.SourceID}
 	// update sql_mode if needed
 	m.detectSQLMode(ctx, dumpConfig)
+	dumpConfig.ExtStorage = cfg.ExtStorage
 
 	return dumpConfig, nil
 }

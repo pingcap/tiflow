@@ -17,7 +17,7 @@ import (
 	"context"
 
 	. "github.com/pingcap/check"
-	"github.com/pingcap/tidb-tools/pkg/filter"
+	"github.com/pingcap/tidb/util/filter"
 
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -93,7 +93,7 @@ create table t (
 	)
 	c.Assert(log.InitLogger(&log.Config{Level: "debug"}), IsNil)
 
-	dbConn := &dbconn.DBConn{Cfg: &config.SubTaskConfig{}, BaseConn: s.baseConn}
+	dbConn := dbconn.NewDBConn(&config.SubTaskConfig{}, s.baseConn)
 	for _, ca := range cases {
 		schemaTracker, err := schema.NewTracker(ctx, "unit-test", defaultTestSessionCfg, dbConn)
 		c.Assert(err, IsNil)
@@ -116,6 +116,9 @@ create table t (
 		c.Assert(err, IsNil)
 		c.Assert(exprs, HasLen, 1)
 		expr := exprs[0]
+
+		ca.skippedRow = extractValueFromData(ca.skippedRow, ti.Columns, ti)
+		ca.passedRow = extractValueFromData(ca.passedRow, ti.Columns, ti)
 
 		skip, err := SkipDMLByExpression(sessCtx, ca.skippedRow, expr, ti.Columns)
 		c.Assert(err, IsNil)
@@ -352,7 +355,7 @@ create table t (
 	)
 	c.Assert(log.InitLogger(&log.Config{Level: "debug"}), IsNil)
 
-	dbConn := &dbconn.DBConn{Cfg: &config.SubTaskConfig{}, BaseConn: s.baseConn}
+	dbConn := dbconn.NewDBConn(&config.SubTaskConfig{}, s.baseConn)
 	for _, ca := range cases {
 		c.Log(ca.tableStr)
 		schemaTracker, err := schema.NewTracker(ctx, "unit-test", defaultTestSessionCfg, dbConn)
@@ -376,6 +379,9 @@ create table t (
 		c.Assert(err, IsNil)
 		c.Assert(exprs, HasLen, 1)
 		expr := exprs[0]
+
+		ca.skippedRow = extractValueFromData(ca.skippedRow, ti.Columns, ti)
+		ca.passedRow = extractValueFromData(ca.passedRow, ti.Columns, ti)
 
 		skip, err := SkipDMLByExpression(sessCtx, ca.skippedRow, expr, ti.Columns)
 		c.Assert(err, IsNil)
@@ -405,7 +411,7 @@ create table t (
 		exprStr = "d > 1"
 	)
 
-	dbConn := &dbconn.DBConn{Cfg: &config.SubTaskConfig{}, BaseConn: s.baseConn}
+	dbConn := dbconn.NewDBConn(&config.SubTaskConfig{}, s.baseConn)
 	schemaTracker, err := schema.NewTracker(ctx, "unit-test", defaultTestSessionCfg, dbConn)
 	c.Assert(err, IsNil)
 	c.Assert(schemaTracker.CreateSchemaIfNotExists(dbName), IsNil)

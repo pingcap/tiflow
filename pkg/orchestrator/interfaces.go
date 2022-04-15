@@ -67,11 +67,3 @@ func (s *SingleDataPatch) Patch(valueMap map[util.EtcdKey][]byte, changedSet map
 	}
 	return nil
 }
-
-// MultiDataPatch represents an update to many keys
-type MultiDataPatch func(valueMap map[util.EtcdKey][]byte, changedSet map[util.EtcdKey]struct{}) error
-
-// Patch implements the DataPatch interface
-func (m MultiDataPatch) Patch(valueMap map[util.EtcdKey][]byte, changedSet map[util.EtcdKey]struct{}) error {
-	return m(valueMap, changedSet)
-}

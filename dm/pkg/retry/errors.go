@@ -28,6 +28,7 @@ var (
 	// UnsupportedDDLMsgs list the error messages of some unsupported DDL in TiDB.
 	UnsupportedDDLMsgs = []string{
 		"can't drop column with index",
+		"with tidb_enable_change_multi_schema is disable", // https://github.com/pingcap/tidb/pull/29526
 		"unsupported add column",
 		"unsupported modify column",
 		"unsupported modify charset",

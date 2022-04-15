@@ -18,8 +18,10 @@ import (
 	"database/sql"
 	"fmt"
 
-	"github.com/pingcap/tidb-tools/pkg/dbutil"
-	"github.com/pingcap/tidb-tools/pkg/utils"
+	toolsutils "github.com/pingcap/tidb-tools/pkg/utils"
+	"github.com/pingcap/tidb/util/dbutil"
+
+	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
 
 // MySQLVersionChecker checks mysql/mariadb/rds,... version.
@@ -34,19 +36,14 @@ func NewMySQLVersionChecker(db *sql.DB, dbinfo *dbutil.DBConfig) RealChecker {
 }
 
 // SupportedVersion defines the MySQL/MariaDB version that DM/syncer supports
-// * 5.6.0 <= MySQL Version
-// * 10.1.2 <= Mariadb Version.
+// * 5.6.0 <= MySQL Version < 8.0.0.
 var SupportedVersion = map[string]struct {
 	Min MySQLVersion
 	Max MySQLVersion
 }{
 	"mysql": {
 		MySQLVersion{5, 6, 0},
-		MaxVersion,
-	},
-	"mariadb": {
-		MySQLVersion{10, 1, 2},
-		MaxVersion,
+		MySQLVersion{8, 0, 0},
 	},
 }
 
@@ -56,7 +53,7 @@ func (pc *MySQLVersionChecker) Check(ctx context.Context) *Result {
 	result := &Result{
 		Name:  pc.Name(),
 		Desc:  "check whether mysql version is satisfied",
-		State: StateFailure,
+		State: StateWarning,
 		Extra: fmt.Sprintf("address of db instance - %s:%d", pc.dbinfo.Host, pc.dbinfo.Port),
 	}
 
@@ -66,34 +63,38 @@ func (pc *MySQLVersionChecker) Check(ctx context.Context) *Result {
 		return result
 	}
 
-	pc.checkVersion(value, result)
+	err2 := pc.checkVersion(value, result)
+	if err2 != nil {
+		result.Errors = append(result.Errors, err2)
+	}
 	return result
 }
 
-func (pc *MySQLVersionChecker) checkVersion(value string, result *Result) {
+func (pc *MySQLVersionChecker) checkVersion(value string, result *Result) *Error {
 	needVersion := SupportedVersion["mysql"]
-	if IsMariaDB(value) {
-		needVersion = SupportedVersion["mariadb"]
+	if utils.IsMariaDB(value) {
+		return NewWarn("Migrating from MariaDB is experimentally supported. If you must use DM to migrate data from MariaDB, we suggest make your MariaDB >= 10.1.2")
+	}
+	if IsTiDBFromVersion(value) {
+		return NewWarn("Not support migrate from TiDB")
 	}
 
 	version, err := toMySQLVersion(value)
 	if err != nil {
 		markCheckError(result, err)
-		return
+		return nil
 	}
 
 	if !version.Ge(needVersion.Min) {
-		result.Errors = append(result.Errors, NewError("version required at least %v but got %v", needVersion.Min, version))
-		result.Instruction = "Please upgrade your database system"
-		return
+		return NewWarn("version suggested at least %v but got %v", needVersion.Min, version)
 	}
 
 	if !version.Lt(needVersion.Max) {
-		result.Errors = append(result.Errors, NewError("version required less than %v but got %v", needVersion.Max, version))
-		return
+		return NewWarn("version suggested less than %v but got %v", needVersion.Max, version)
 	}
 
 	result.State = StateSuccess
+	return nil
 }
 
 // Name implements the RealChecker interface.
@@ -125,13 +126,12 @@ func (pc *MySQLServerIDChecker) Check(ctx context.Context) *Result {
 
 	serverID, err := dbutil.ShowServerID(ctx, pc.db)
 	if err != nil {
-		if utils.OriginError(err) == sql.ErrNoRows {
-			result.Errors = append(result.Errors, NewError("server_id not set"))
-			result.Instruction = "please set server_id in your database"
-		} else {
+		if toolsutils.OriginError(err) != sql.ErrNoRows {
 			markCheckError(result, err)
+			return result
 		}
-
+		result.Errors = append(result.Errors, NewError("server_id not set"))
+		result.Instruction = "please set server_id in your database"
 		return result
 	}
 

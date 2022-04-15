@@ -3,6 +3,7 @@ name: sync_collation
 task-mode: all
 is-sharding: false
 meta-schema: "dm_meta"
+collation_compatible: "strict"
 
 target-database:
   host: "127.0.0.1"

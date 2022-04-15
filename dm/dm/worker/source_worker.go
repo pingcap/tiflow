@@ -24,7 +24,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
-	"go.etcd.io/etcd/clientv3"
+	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
@@ -195,12 +195,15 @@ func (w *SourceWorker) Start() {
 			if w.l.Core().Enabled(zap.DebugLevel) {
 				w.l.Debug("runtime status", zap.String("status", w.GetUnitAndSourceStatusJSON("", sourceStatus)))
 			}
+
+			// periodically print the status and update metrics
+			w.Status("", sourceStatus)
 		}
 	}
 }
 
 // Close stops working and releases resources.
-func (w *SourceWorker) Close() {
+func (w *SourceWorker) Stop(graceful bool) {
 	if w.closed.Load() {
 		w.l.Warn("already closed")
 		return
@@ -215,8 +218,12 @@ func (w *SourceWorker) Close() {
 	w.Lock()
 	defer w.Unlock()
 
-	// close all sub tasks
-	w.subTaskHolder.closeAllSubTasks()
+	// close or kill all subtasks
+	if graceful {
+		w.subTaskHolder.closeAllSubTasks()
+	} else {
+		w.subTaskHolder.killAllSubTasks()
+	}
 
 	if w.relayHolder != nil {
 		w.relayHolder.Close()
@@ -255,7 +262,7 @@ func (w *SourceWorker) updateSourceStatus(ctx context.Context) error {
 	var status binlog.SourceStatus
 	ctx, cancel := context.WithTimeout(ctx, utils.DefaultDBTimeout)
 	defer cancel()
-	pos, gtidSet, err := utils.GetMasterStatus(ctx, w.sourceDB.DB, w.cfg.Flavor)
+	pos, gtidSet, err := utils.GetPosAndGs(ctx, w.sourceDB.DB, w.cfg.Flavor)
 	if err != nil {
 		return err
 	}
@@ -298,27 +305,20 @@ func (w *SourceWorker) EnableRelay(startBySourceCfg bool) (err error) {
 
 	w.startedRelayBySourceCfg = startBySourceCfg
 
-	var sourceCfg *config.SourceConfig
 	failpoint.Inject("MockGetSourceCfgFromETCD", func(_ failpoint.Value) {
 		failpoint.Goto("bypass")
 	})
-
-	if !w.startedRelayBySourceCfg {
-		// we need update worker source config from etcd first
-		// because the configuration of the relay part of the data source may be changed via scheduler.UpdateSourceCfg
-		sourceCfg, _, err = ha.GetRelayConfig(w.etcdClient, w.name)
-		if err != nil {
-			return err
-		}
-		w.cfg = sourceCfg
+	// we need update config from etcd first in case this cfg is updated by master
+	if refreshErr := w.refreshSourceCfg(); refreshErr != nil {
+		return refreshErr
 	}
-
 	failpoint.Label("bypass")
 
 	w.relayCtx, w.relayCancel = context.WithCancel(w.ctx)
 	// 1. adjust relay starting position, to the earliest of subtasks
 	var subTaskCfgs map[string]config.SubTaskConfig
-	_, subTaskCfgs, _, err = w.fetchSubTasksAndAdjust()
+	//nolint:dogsled
+	_, _, subTaskCfgs, _, err = w.fetchSubTasksAndAdjust()
 	if err != nil {
 		return err
 	}
@@ -452,7 +452,7 @@ func (w *SourceWorker) EnableHandleSubtasks() error {
 
 	// we get the newest subtask stages directly which will omit the subtask stage PUT/DELETE event
 	// because triggering these events is useless now
-	subTaskStages, subTaskCfgM, revSubTask, err := w.fetchSubTasksAndAdjust()
+	subTaskStages, validatorStages, subTaskCfgM, revSubTask, err := w.fetchSubTasksAndAdjust()
 	if err != nil {
 		return err
 	}
@@ -464,10 +464,14 @@ func (w *SourceWorker) EnableHandleSubtasks() error {
 		if expectStage.IsDeleted {
 			continue
 		}
-		w.l.Info("start to create subtask", zap.String("sourceID", subTaskCfg.SourceID), zap.String("task", subTaskCfg.Name))
+		validatorStage := pb.Stage_InvalidStage
+		if s, ok := validatorStages[subTaskCfg.Name]; ok {
+			validatorStage = s.Expect
+		}
+		w.l.Info("start to create subtask in EnableHandleSubtasks", zap.String("sourceID", subTaskCfg.SourceID), zap.String("task", subTaskCfg.Name))
 		// "for range" of a map will use same value address, so we'd better not pass value address to other function
 		clone := subTaskCfg
-		if err2 := w.StartSubTask(&clone, expectStage.Expect, false); err2 != nil {
+		if err2 := w.StartSubTask(&clone, expectStage.Expect, validatorStage, false); err2 != nil {
 			w.subTaskHolder.closeAllSubTasks()
 			return err2
 		}
@@ -479,6 +483,13 @@ func (w *SourceWorker) EnableHandleSubtasks() error {
 		// TODO: handle fatal error from observeSubtaskStage
 		//nolint:errcheck
 		w.observeSubtaskStage(w.subTaskCtx, w.etcdClient, revSubTask)
+	}()
+	w.subTaskWg.Add(1)
+	go func() {
+		defer w.subTaskWg.Done()
+		// TODO: handle fatal error from observeValidatorStage
+		//nolint:errcheck
+		w.observeValidatorStage(w.subTaskCtx, revSubTask)
 	}()
 
 	w.subTaskEnabled.Store(true)
@@ -507,23 +518,24 @@ func (w *SourceWorker) DisableHandleSubtasks() {
 
 // fetchSubTasksAndAdjust gets source's subtask stages and configs, adjust some values by worker's config and status
 // source **must not be empty**
-// return map{task name -> subtask stage}, map{task name -> subtask config}, revision, error.
-func (w *SourceWorker) fetchSubTasksAndAdjust() (map[string]ha.Stage, map[string]config.SubTaskConfig, int64, error) {
+// return map{task name -> subtask stage}, map{task name -> validator stage}, map{task name -> subtask config}, revision, error.
+func (w *SourceWorker) fetchSubTasksAndAdjust() (map[string]ha.Stage, map[string]ha.Stage, map[string]config.SubTaskConfig, int64, error) {
 	// we get the newest subtask stages directly which will omit the subtask stage PUT/DELETE event
 	// because triggering these events is useless now
-	subTaskStages, subTaskCfgM, revSubTask, err := ha.GetSubTaskStageConfig(w.etcdClient, w.cfg.SourceID)
+	subTaskStages, validatorStages, subTaskCfgM, revSubTask, err := ha.GetSubTaskStageConfig(w.etcdClient, w.cfg.SourceID)
 	if err != nil {
-		return nil, nil, 0, err
+		return nil, nil, nil, 0, err
 	}
 
 	if err = copyConfigFromSourceForEach(subTaskCfgM, w.cfg, w.relayEnabled.Load()); err != nil {
-		return nil, nil, 0, err
+		return nil, nil, nil, 0, err
 	}
-	return subTaskStages, subTaskCfgM, revSubTask, nil
+	return subTaskStages, validatorStages, subTaskCfgM, revSubTask, nil
 }
 
 // StartSubTask creates a subtask and run it.
-func (w *SourceWorker) StartSubTask(cfg *config.SubTaskConfig, expectStage pb.Stage, needLock bool) error {
+// TODO(ehco) rename this func.
+func (w *SourceWorker) StartSubTask(cfg *config.SubTaskConfig, expectStage, validatorStage pb.Stage, needLock bool) error {
 	if needLock {
 		w.Lock()
 		defer w.Unlock()
@@ -536,7 +548,7 @@ func (w *SourceWorker) StartSubTask(cfg *config.SubTaskConfig, expectStage pb.St
 	}
 
 	// directly put cfg into subTaskHolder
-	// the unique of subtask should be assured by etcd
+	// the uniqueness of subtask should be assured by etcd
 	st := NewSubTask(cfg, w.etcdClient, w.name)
 	w.subTaskHolder.recordSubTask(st)
 	if w.closed.Load() {
@@ -560,7 +572,7 @@ func (w *SourceWorker) StartSubTask(cfg *config.SubTaskConfig, expectStage pb.St
 	}
 
 	w.l.Info("subtask created", zap.Stringer("config", cfg2))
-	st.Run(expectStage, w.getRelayWithoutLock())
+	st.Run(expectStage, validatorStage, w.getRelayWithoutLock())
 	return nil
 }
 
@@ -573,9 +585,11 @@ func (w *SourceWorker) getRelayWithoutLock() relay.Process {
 }
 
 // UpdateSubTask update config for a sub task.
-func (w *SourceWorker) UpdateSubTask(ctx context.Context, cfg *config.SubTaskConfig) error {
-	w.Lock()
-	defer w.Unlock()
+func (w *SourceWorker) UpdateSubTask(ctx context.Context, cfg *config.SubTaskConfig, needLock bool) error {
+	if needLock {
+		w.Lock()
+		defer w.Unlock()
+	}
 
 	if w.closed.Load() {
 		return terror.ErrWorkerAlreadyClosed.Generate()
@@ -604,25 +618,35 @@ func (w *SourceWorker) OperateSubTask(name string, op pb.TaskOp) error {
 		return terror.ErrWorkerSubTaskNotFound.Generate(name)
 	}
 
+	w.l.Info("OperateSubTask start", zap.Stringer("op", op), zap.String("task", name))
 	var err error
 	switch op {
-	case pb.TaskOp_Stop:
-		w.l.Info("stop sub task", zap.String("task", name))
+	case pb.TaskOp_Delete:
+		w.l.Info("delete subtask", zap.String("task", name))
 		st.Close()
 		w.subTaskHolder.removeSubTask(name)
-	case pb.TaskOp_Pause:
-		w.l.Info("pause sub task", zap.String("task", name))
+	case pb.TaskOp_Pause, pb.TaskOp_Stop:
+		w.l.Info("pause subtask", zap.String("task", name))
 		err = st.Pause()
 	case pb.TaskOp_Resume:
-		w.l.Info("resume sub task", zap.String("task", name))
+		failpoint.Inject("SkipRefreshFromETCDInUT", func(_ failpoint.Value) {
+			failpoint.Goto("bypassRefresh")
+		})
+		if refreshErr := w.tryRefreshSubTaskAndSourceConfig(st); refreshErr != nil {
+			// NOTE: for current unit is not syncer unit or is in shard merge.
+			w.l.Warn("can not update subtask config now", zap.Error(refreshErr))
+		}
+		failpoint.Label("bypassRefresh")
+		w.l.Info("resume subtask", zap.String("task", name))
 		err = st.Resume(w.getRelayWithoutLock())
 	case pb.TaskOp_AutoResume:
-		w.l.Info("auto_resume sub task", zap.String("task", name))
+		// TODO(ehco) change to auto_restart
+		w.l.Info("auto_resume subtask", zap.String("task", name))
 		err = st.Resume(w.getRelayWithoutLock())
 	default:
 		err = terror.ErrWorkerUpdateTaskStage.Generatef("invalid operate %s on subtask %v", op, name)
 	}
-
+	w.l.Info("OperateSubTask finished", zap.Stringer("op", op), zap.String("task", name))
 	return err
 }
 
@@ -659,7 +683,7 @@ func (w *SourceWorker) QueryStatus(ctx context.Context, name string) ([]*pb.SubT
 }
 
 func (w *SourceWorker) resetSubtaskStage() (int64, error) {
-	subTaskStages, subTaskCfgm, revSubTask, err := w.fetchSubTasksAndAdjust()
+	subTaskStages, _, subTaskCfgm, revSubTask, err := w.fetchSubTasksAndAdjust()
 	if err != nil {
 		return 0, err
 	}
@@ -682,9 +706,9 @@ func (w *SourceWorker) resetSubtaskStage() (int64, error) {
 	}
 	// remove subtasks without subtask config or subtask stage
 	for name := range sts {
-		err = w.OperateSubTask(name, pb.TaskOp_Stop)
+		err = w.OperateSubTask(name, pb.TaskOp_Delete)
 		if err != nil {
-			opErrCounter.WithLabelValues(w.name, pb.TaskOp_Stop.String()).Inc()
+			opErrCounter.WithLabelValues(w.name, pb.TaskOp_Delete.String()).Inc()
 			log.L().Error("fail to stop subtask", zap.String("task", name), zap.Error(err))
 		}
 	}
@@ -779,21 +803,36 @@ func (w *SourceWorker) handleSubTaskStage(ctx context.Context, stageCh chan ha.S
 // operateSubTaskStage returns TaskOp.String() additionally to record metrics.
 func (w *SourceWorker) operateSubTaskStage(stage ha.Stage, subTaskCfg config.SubTaskConfig) (string, error) {
 	var op pb.TaskOp
-	switch {
-	case stage.Expect == pb.Stage_Running, stage.Expect == pb.Stage_Paused:
-		if st := w.subTaskHolder.findSubTask(stage.Task); st == nil {
-			// create the subtask for expected running and paused stage.
-			log.L().Info("start to create subtask", zap.String("sourceID", subTaskCfg.SourceID), zap.String("task", subTaskCfg.Name))
-			err := w.StartSubTask(&subTaskCfg, stage.Expect, true)
-			return opErrTypeBeforeOp, err
+	log.L().Info("operateSubTaskStage",
+		zap.String("sourceID", subTaskCfg.SourceID),
+		zap.String("task", subTaskCfg.Name),
+		zap.Stringer("stage", stage))
+
+	// for new added subtask
+	if st := w.subTaskHolder.findSubTask(stage.Task); st == nil {
+		switch stage.Expect {
+		case pb.Stage_Running, pb.Stage_Paused, pb.Stage_Stopped:
+			// todo refactor here deciding if the expected stage is valid should be put inside StartSubTask and OperateSubTask
+			log.L().Info("start to create subtask in operateSubTaskStage", zap.String("sourceID", subTaskCfg.SourceID), zap.String("task", subTaskCfg.Name))
+			expectValidatorStage, err := getExpectValidatorStage(subTaskCfg.ValidatorCfg, w.etcdClient, stage.Source, stage.Task, stage.Revision)
+			if err != nil {
+				return opErrTypeBeforeOp, terror.Annotate(err, "fail to get validator stage from etcd")
+			}
+			return opErrTypeBeforeOp, w.StartSubTask(&subTaskCfg, stage.Expect, expectValidatorStage, true)
+		default:
+			// not valid stage
+			return op.String(), w.OperateSubTask(stage.Task, op)
 		}
-		if stage.Expect == pb.Stage_Running {
-			op = pb.TaskOp_Resume
-		} else if stage.Expect == pb.Stage_Paused {
-			op = pb.TaskOp_Pause
-		}
-	case stage.IsDeleted:
-		op = pb.TaskOp_Stop
+	}
+	// todo(ehco) remove pause and resume after using openapi to impl dmctl
+	switch stage.Expect {
+	case pb.Stage_Stopped, pb.Stage_Paused:
+		op = pb.TaskOp_Pause
+	case pb.Stage_Running:
+		op = pb.TaskOp_Resume
+	}
+	if stage.IsDeleted {
+		op = pb.TaskOp_Delete
 	}
 	return op.String(), w.OperateSubTask(stage.Task, op)
 }
@@ -801,7 +840,7 @@ func (w *SourceWorker) operateSubTaskStage(stage ha.Stage, subTaskCfg config.Sub
 // operateSubTaskStageWithoutConfig returns TaskOp additionally to record metrics.
 func (w *SourceWorker) operateSubTaskStageWithoutConfig(stage ha.Stage) (string, error) {
 	var subTaskCfg config.SubTaskConfig
-	if stage.Expect == pb.Stage_Running {
+	if stage.Expect == pb.Stage_Running || stage.Expect == pb.Stage_Stopped {
 		if st := w.subTaskHolder.findSubTask(stage.Task); st == nil {
 			tsm, _, err := ha.GetSubTaskCfg(w.etcdClient, stage.Source, stage.Task, stage.Revision)
 			if err != nil {
@@ -954,7 +993,7 @@ func (w *SourceWorker) PurgeRelay(ctx context.Context, req *pb.PurgeRelayRequest
 
 		uuid := w.relayHolder.Status(nil).RelaySubDir
 
-		_, subTaskCfgs, _, err := w.fetchSubTasksAndAdjust()
+		_, _, subTaskCfgs, _, err := w.fetchSubTasksAndAdjust()
 		if err != nil {
 			return err
 		}
@@ -1020,9 +1059,6 @@ func copyConfigFromSource(cfg *config.SubTaskConfig, sourceCfg *config.SourceCon
 	cfg.EnableGTID = sourceCfg.EnableGTID
 	cfg.UseRelay = enableRelay
 
-	// we can remove this from SubTaskConfig later, because syncer will always read from relay
-	cfg.AutoFixGTID = sourceCfg.AutoFixGTID
-
 	if cfg.CaseSensitive != sourceCfg.CaseSensitive {
 		log.L().Warn("different case-sensitive config between task config and source config, use `true` for it.")
 	}
@@ -1079,18 +1115,239 @@ func (w *SourceWorker) getAllSubTaskStatus() map[string]*pb.SubTaskStatus {
 }
 
 // HandleError handle worker error.
-func (w *SourceWorker) HandleError(ctx context.Context, req *pb.HandleWorkerErrorRequest) error {
+func (w *SourceWorker) HandleError(ctx context.Context, req *pb.HandleWorkerErrorRequest) (string, error) {
 	w.Lock()
 	defer w.Unlock()
 
 	if w.closed.Load() {
-		return terror.ErrWorkerAlreadyClosed.Generate()
+		return "", terror.ErrWorkerAlreadyClosed.Generate()
 	}
 
 	st := w.subTaskHolder.findSubTask(req.Task)
 	if st == nil {
-		return terror.ErrWorkerSubTaskNotFound.Generate(req.Task)
+		return "", terror.ErrWorkerSubTaskNotFound.Generate(req.Task)
 	}
 
 	return st.HandleError(ctx, req, w.getRelayWithoutLock())
+}
+
+func (w *SourceWorker) observeValidatorStage(ctx context.Context, lastUsedRev int64) error {
+	var wg sync.WaitGroup
+
+	startRevision := lastUsedRev + 1
+	for {
+		stageCh := make(chan ha.Stage, 10)
+		errCh := make(chan error, 10)
+		wg.Add(1)
+		watchCtx, watchCancel := context.WithCancel(ctx)
+		go func() {
+			defer func() {
+				close(stageCh)
+				close(errCh)
+				wg.Done()
+			}()
+			ha.WatchValidatorStage(watchCtx, w.etcdClient, w.cfg.SourceID, startRevision, stageCh, errCh)
+		}()
+		err := w.handleValidatorStage(watchCtx, stageCh, errCh)
+		watchCancel()
+		wg.Wait()
+
+		if etcdutil.IsRetryableError(err) {
+			startRevision = 0
+			retryNum := 1
+			for startRevision == 0 {
+				select {
+				case <-ctx.Done():
+					return nil
+				case <-time.After(500 * time.Millisecond):
+					startRevision, err = w.getCurrentValidatorRevision(w.cfg.SourceID)
+					if err != nil {
+						log.L().Error("reset validator stage failed, will retry later", zap.Error(err), zap.Int("retryNum", retryNum))
+					}
+				}
+				retryNum++
+			}
+		} else {
+			if err != nil {
+				log.L().Error("observe validator stage failed, quit now", zap.Error(err))
+			} else {
+				log.L().Info("observe validator stage will quit now")
+			}
+			return err
+		}
+	}
+}
+
+func (w *SourceWorker) handleValidatorStage(ctx context.Context, stageCh chan ha.Stage, errCh chan error) error {
+	closed := false
+	for {
+		select {
+		case <-ctx.Done():
+			closed = true
+		case stage, ok := <-stageCh:
+			if !ok {
+				closed = true
+				break
+			}
+			log.L().Info("receive validator stage change", zap.Stringer("stage", stage), zap.Bool("is deleted", stage.IsDeleted))
+			err := w.operateValidatorStage(stage)
+			if err != nil {
+				opType := w.getValidatorOp(stage)
+				opErrCounter.WithLabelValues(w.name, opType).Inc()
+				log.L().Error("fail to operate validator stage", zap.Stringer("stage", stage), zap.Bool("is deleted", stage.IsDeleted), zap.Error(err))
+				if etcdutil.IsRetryableError(err) {
+					return err
+				}
+			}
+		case err, ok := <-errCh:
+			if !ok {
+				closed = true
+				break
+			}
+			// TODO: deal with err
+			log.L().Error("watch validator stage received an error", zap.Error(err))
+			if etcdutil.IsRetryableError(err) {
+				return err
+			}
+		}
+		if closed {
+			log.L().Info("worker is closed, handle validator stage will quit now")
+			return nil
+		}
+	}
+}
+
+func (w *SourceWorker) getCurrentValidatorRevision(source string) (int64, error) {
+	_, rev, err := ha.GetValidatorStage(w.etcdClient, source, "", 0)
+	if err != nil {
+		return 0, err
+	}
+	return rev, nil
+}
+
+func (w *SourceWorker) getValidatorOp(stage ha.Stage) string {
+	if stage.IsDeleted {
+		return "validator-delete"
+	}
+	if stage.Expect == pb.Stage_Running {
+		return pb.ValidatorOp_StartValidator.String()
+	} else if stage.Expect == pb.Stage_Stopped {
+		return pb.ValidatorOp_StopValidator.String()
+	}
+	// should not happen
+	return ""
+}
+
+func (w *SourceWorker) operateValidatorStage(stage ha.Stage) error {
+	// if the key it's deleted, the subtask is deleted too, let subtask clean it up.
+	if stage.IsDeleted {
+		return nil
+	}
+
+	subtask := w.subTaskHolder.findSubTask(stage.Task)
+	if subtask == nil {
+		// when a new subtask start with validator, both subtask and validator stage observer will observe it,
+		// if validator observe it first, we may not have the subtask.
+		log.L().Info("cannot find subtask. maybe it's a new task, let subtask stage observer handles it")
+		return nil
+	}
+
+	// stage of validator can only be Running or Stopped
+	switch stage.Expect {
+	case pb.Stage_Stopped:
+		subtask.StopValidator()
+	case pb.Stage_Running:
+		// validator's config is stored with subtask config, we need to update subtask config as validator may start
+		// on the fly.
+		subTaskCfg, _, err := ha.GetSubTaskCfg(w.etcdClient, stage.Source, stage.Task, stage.Revision)
+		if err != nil {
+			return err
+		}
+		if _, ok := subTaskCfg[stage.Task]; !ok {
+			log.L().Error("failed to get subtask config", zap.Reflect("stage", stage))
+			return errors.New("failed to get subtask config")
+		}
+
+		subtask.SetCfg(subTaskCfg[stage.Task])
+		subtask.StartValidator(stage.Expect, false)
+	default:
+		// should not happen
+		log.L().Warn("invalid validator stage", zap.Reflect("stage", stage))
+	}
+	return nil
+}
+
+func (w *SourceWorker) refreshSourceCfg() error {
+	oldCfg := w.cfg
+	sourceCfgM, _, err := ha.GetSourceCfg(w.etcdClient, oldCfg.SourceID, 0)
+	if err != nil {
+		return err
+	}
+	w.cfg = sourceCfgM[oldCfg.SourceID]
+	return nil
+}
+
+func (w *SourceWorker) tryRefreshSubTaskAndSourceConfig(subTask *SubTask) error {
+	// try refresh source config first
+	if err := w.refreshSourceCfg(); err != nil {
+		return err
+	}
+	sourceName := subTask.cfg.SourceID
+	taskName := subTask.cfg.Name
+	tsm, _, err := ha.GetSubTaskCfg(w.etcdClient, sourceName, taskName, 0)
+	if err != nil {
+		return terror.Annotate(err, "fail to get subtask config from etcd")
+	}
+
+	var cfg config.SubTaskConfig
+	var ok bool
+	if cfg, ok = tsm[taskName]; !ok {
+		return terror.ErrWorkerFailToGetSubtaskConfigFromEtcd.Generate(taskName)
+	}
+
+	// copy some config item from dm-worker's source config
+	if err := copyConfigFromSource(&cfg, w.cfg, w.relayEnabled.Load()); err != nil {
+		return err
+	}
+	if checkErr := subTask.CheckUnitCfgCanUpdate(&cfg); checkErr != nil {
+		return checkErr
+	}
+	return w.UpdateSubTask(w.ctx, &cfg, false)
+}
+
+// CheckCfgCanUpdated check if current subtask config can be updated.
+func (w *SourceWorker) CheckCfgCanUpdated(cfg *config.SubTaskConfig) error {
+	w.RLock()
+	defer w.RUnlock()
+
+	subTask := w.subTaskHolder.findSubTask(cfg.Name)
+	if subTask == nil {
+		return terror.ErrWorkerSubTaskNotFound.Generate(cfg.Name)
+	}
+	// copy some config item from dm-worker's source config
+	if err := copyConfigFromSource(cfg, w.cfg, w.relayEnabled.Load()); err != nil {
+		return err
+	}
+	return subTask.CheckUnitCfgCanUpdate(cfg)
+}
+
+func (w *SourceWorker) GetWorkerValidatorErr(taskName string, errState pb.ValidateErrorState) []*pb.ValidationError {
+	w.RLock()
+	defer w.RUnlock()
+	st := w.subTaskHolder.findSubTask(taskName)
+	if st != nil {
+		return st.GetValidatorError(errState)
+	}
+	log.L().Warn("get validator err", zap.Error(terror.ErrWorkerSubTaskNotFound.Generate(taskName)))
+	return []*pb.ValidationError{}
+}
+
+func (w *SourceWorker) OperateWorkerValidatorErr(taskName string, op pb.ValidationErrOp, errID uint64, isAll bool) error {
+	w.RLock()
+	defer w.RUnlock()
+	st := w.subTaskHolder.findSubTask(taskName)
+	if st != nil {
+		return st.OperateValidatorError(op, errID, isAll)
+	}
+	return terror.ErrWorkerSubTaskNotFound.Generate(taskName)
 }

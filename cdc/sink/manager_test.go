@@ -48,6 +48,10 @@ func newCheckSink(c *check.C) *checkSink {
 	}
 }
 
+func (c *checkSink) TryEmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) (bool, error) {
+	return true, nil
+}
+
 func (c *checkSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
 	c.rowsMu.Lock()
 	defer c.rowsMu.Unlock()
@@ -82,7 +86,7 @@ func (c *checkSink) FlushRowChangedEvents(ctx context.Context, tableID model.Tab
 	return c.lastResolvedTs[tableID], nil
 }
 
-func (c *checkSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
+func (c *checkSink) EmitCheckpointTs(_ context.Context, _ uint64, _ []model.TableName) error {
 	panic("unreachable")
 }
 
@@ -244,16 +248,16 @@ func (s *managerSuite) TestManagerDestroyTableSink(c *check.C) {
 	manager := NewManager(ctx, newCheckSink(c), errCh, 0, "", "")
 	defer manager.Close(ctx)
 
-	tableID := int64(49)
-	tableSink := manager.CreateTableSink(tableID, 100, redo.NewDisabledManager())
+	table := &model.TableName{TableID: int64(49)}
+	tableSink := manager.CreateTableSink(table.TableID, 100, redo.NewDisabledManager())
 	err := tableSink.EmitRowChangedEvents(ctx, &model.RowChangedEvent{
-		Table:    &model.TableName{TableID: tableID},
+		Table:    table,
 		CommitTs: uint64(110),
 	})
 	c.Assert(err, check.IsNil)
-	_, err = tableSink.FlushRowChangedEvents(ctx, tableID, 110)
+	_, err = tableSink.FlushRowChangedEvents(ctx, table.TableID, 110)
 	c.Assert(err, check.IsNil)
-	err = manager.destroyTableSink(ctx, tableID)
+	err = manager.destroyTableSink(ctx, table.TableID)
 	c.Assert(err, check.IsNil)
 }
 
@@ -340,6 +344,10 @@ type errorSink struct {
 	*check.C
 }
 
+func (e *errorSink) TryEmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) (bool, error) {
+	return true, nil
+}
+
 func (e *errorSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
 	return errors.New("error in emit row changed events")
 }
@@ -352,7 +360,7 @@ func (e *errorSink) FlushRowChangedEvents(ctx context.Context, tableID model.Tab
 	return 0, errors.New("error in flush row changed events")
 }
 
-func (e *errorSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
+func (e *errorSink) EmitCheckpointTs(_ context.Context, _ uint64, _ []model.TableName) error {
 	panic("unreachable")
 }
 

@@ -21,14 +21,12 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tiflow/cdc"
-	"github.com/pingcap/tiflow/cdc/entry"
+	"github.com/pingcap/tiflow/cdc/api"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/cmd/util"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/etcd"
-	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/httputil"
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/spf13/cobra"
@@ -86,33 +84,7 @@ func getTables(cliPdAddr string, credential *security.Credential, cfg *config.Re
 		return nil, nil, err
 	}
 
-	meta, err := kv.GetSnapshotMeta(kvStore, startTs)
-	if err != nil {
-		return nil, nil, errors.Trace(err)
-	}
-
-	filter, err := filter.NewFilter(cfg)
-	if err != nil {
-		return nil, nil, errors.Trace(err)
-	}
-
-	snap, err := entry.NewSingleSchemaSnapshotFromMeta(meta, startTs, false /* explicitTables */)
-	if err != nil {
-		return nil, nil, errors.Trace(err)
-	}
-
-	for _, tableInfo := range snap.Tables() {
-		if filter.ShouldIgnoreTable(tableInfo.TableName.Schema, tableInfo.TableName.Table) {
-			continue
-		}
-		if !tableInfo.IsEligible(false /* forceReplicate */) {
-			ineligibleTables = append(ineligibleTables, tableInfo.TableName)
-		} else {
-			eligibleTables = append(eligibleTables, tableInfo.TableName)
-		}
-	}
-
-	return
+	return api.VerifyTables(cfg, kvStore, startTs)
 }
 
 // sendOwnerChangefeedQuery sends owner changefeed query request.
@@ -136,7 +108,7 @@ func sendOwnerChangefeedQuery(ctx context.Context, etcdClient *etcd.CDCEtcdClien
 	}
 
 	resp, err := httpClient.PostForm(url, map[string][]string{
-		cdc.APIOpVarChangefeedID: {id},
+		api.OpVarChangefeedID: {id},
 	})
 	if err != nil {
 		return "", err
@@ -178,9 +150,9 @@ func sendOwnerAdminChangeQuery(ctx context.Context, etcdClient *etcd.CDCEtcdClie
 	}
 
 	resp, err := httpClient.PostForm(url, map[string][]string{
-		cdc.APIOpVarAdminJob:           {fmt.Sprint(int(job.Type))},
-		cdc.APIOpVarChangefeedID:       {job.CfID},
-		cdc.APIOpForceRemoveChangefeed: {forceRemoveOpt},
+		api.OpVarAdminJob:           {fmt.Sprint(int(job.Type))},
+		api.OpVarChangefeedID:       {job.CfID},
+		api.OpForceRemoveChangefeed: {forceRemoveOpt},
 	})
 	if err != nil {
 		return err
