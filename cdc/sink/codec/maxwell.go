@@ -278,6 +278,7 @@ func (d *MaxwellEventBatchEncoder) Build() []*MQMessage {
 	}
 
 	ret := NewMQMessage(ProtocolMaxwell, d.keyBuf.Bytes(), d.valueBuf.Bytes(), 0, model.MqMessageTypeRow, nil, nil)
+	ret.SetRowsCount(d.batchSize)
 	d.Reset()
 	return []*MQMessage{ret}
 }
