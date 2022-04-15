@@ -310,7 +310,7 @@ type SyncerConfig struct {
 	// deprecated
 	MaxRetry int `yaml:"max-retry" toml:"max-retry" json:"max-retry"`
 
-	// refine following configs to top level configs?
+	// deprecated
 	AutoFixGTID bool `yaml:"auto-fix-gtid" toml:"auto-fix-gtid" json:"auto-fix-gtid"`
 	EnableGTID  bool `yaml:"enable-gtid" toml:"enable-gtid" json:"enable-gtid"`
 	// deprecated
@@ -1035,7 +1035,6 @@ type SyncerConfigForDowngrade struct {
 	QueueSize               int    `yaml:"queue-size"`
 	CheckpointFlushInterval int    `yaml:"checkpoint-flush-interval"`
 	MaxRetry                int    `yaml:"max-retry"`
-	AutoFixGTID             bool   `yaml:"auto-fix-gtid"`
 	EnableGTID              bool   `yaml:"enable-gtid"`
 	DisableCausality        bool   `yaml:"disable-detect"`
 	SafeMode                bool   `yaml:"safe-mode"`
@@ -1056,7 +1055,6 @@ func NewSyncerConfigsForDowngrade(syncerConfigs map[string]*SyncerConfig) map[st
 			QueueSize:               syncerConfig.QueueSize,
 			CheckpointFlushInterval: syncerConfig.CheckpointFlushInterval,
 			MaxRetry:                syncerConfig.MaxRetry,
-			AutoFixGTID:             syncerConfig.AutoFixGTID,
 			EnableGTID:              syncerConfig.EnableGTID,
 			DisableCausality:        syncerConfig.DisableCausality,
 			SafeMode:                syncerConfig.SafeMode,
