@@ -34,8 +34,7 @@ import (
 
 var _ = check.Suite(&ownerSuite{})
 
-type ownerSuite struct {
-}
+type ownerSuite struct{}
 
 type mockManager struct {
 	gc.Manager
@@ -57,8 +56,8 @@ func createOwner4Test(ctx cdcContext.Context, c *check.C) (*Owner, *model.Global
 	}
 	cf := NewOwner4Test(func(ctx cdcContext.Context, startTs uint64) (DDLPuller, error) {
 		return &mockDDLPuller{resolvedTs: startTs - 1}, nil
-	}, func(ctx cdcContext.Context) (AsyncSink, error) {
-		return &mockAsyncSink{}, nil
+	}, func() DDLSink {
+		return &mockDDLSink{}
 	},
 		ctx.GlobalVars().PDClient,
 	)
@@ -79,6 +78,9 @@ func createOwner4Test(ctx cdcContext.Context, c *check.C) (*Owner, *model.Global
 func (s *ownerSuite) TestCreateRemoveChangefeed(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx := cdcContext.NewBackendContext4Test(false)
+	ctx, cancel := cdcContext.WithCancel(ctx)
+	defer cancel()
+
 	owner, state, tester := createOwner4Test(ctx, c)
 	changefeedID := "test-changefeed"
 	changefeedInfo := &model.ChangeFeedInfo{
@@ -146,6 +148,9 @@ func (s *ownerSuite) TestStopChangefeed(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx := cdcContext.NewBackendContext4Test(false)
 	owner, state, tester := createOwner4Test(ctx, c)
+	ctx, cancel := cdcContext.WithCancel(ctx)
+	defer cancel()
+
 	changefeedID := "test-changefeed"
 	changefeedInfo := &model.ChangeFeedInfo{
 		StartTs: oracle.GoTimeToTS(time.Now()),
@@ -187,10 +192,51 @@ func (s *ownerSuite) TestStopChangefeed(c *check.C) {
 	c.Assert(state.Changefeeds, check.Not(check.HasKey), changefeedID)
 }
 
+func (s *ownerSuite) TestFixChangefeedInfos(c *check.C) {
+	defer testleak.AfterTest(c)()
+	ctx := cdcContext.NewBackendContext4Test(false)
+	owner, state, tester := createOwner4Test(ctx, c)
+	// We need to do bootstrap.
+	owner.bootstrapped = false
+	changefeedID := "test-changefeed"
+	// Mismatched state and admin job.
+	changefeedInfo := &model.ChangeFeedInfo{
+		State:          model.StateNormal,
+		AdminJobType:   model.AdminStop,
+		StartTs:        oracle.GoTimeToTS(time.Now()),
+		Config:         config.GetDefaultReplicaConfig(),
+		CreatorVersion: "4.0.14",
+	}
+	changefeedStr, err := changefeedInfo.Marshal()
+	c.Assert(err, check.IsNil)
+	cdcKey := etcd.CDCKey{
+		Tp:           etcd.CDCKeyTypeChangefeedInfo,
+		ChangefeedID: changefeedID,
+	}
+	tester.MustUpdate(cdcKey.String(), []byte(changefeedStr))
+	// For the first tick, we do a bootstrap, and it tries to fix the meta information.
+	_, err = owner.Tick(ctx, state)
+	tester.MustApplyPatches()
+	c.Assert(err, check.IsNil)
+	c.Assert(owner.bootstrapped, check.IsTrue)
+	c.Assert(owner.changefeeds, check.Not(check.HasKey), changefeedID)
+
+	// Start tick normally.
+	_, err = owner.Tick(ctx, state)
+	tester.MustApplyPatches()
+	c.Assert(err, check.IsNil)
+	c.Assert(owner.changefeeds, check.HasKey, changefeedID)
+	// The meta information is fixed correctly.
+	c.Assert(owner.changefeeds[changefeedID].state.Info.State, check.Equals, model.StateStopped)
+}
+
 func (s *ownerSuite) TestCheckClusterVersion(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx := cdcContext.NewBackendContext4Test(false)
 	owner, state, tester := createOwner4Test(ctx, c)
+	ctx, cancel := cdcContext.WithCancel(ctx)
+	defer cancel()
+
 	tester.MustUpdate("/tidb/cdc/capture/6bbc01c8-0605-4f86-a0f9-b3119109b225", []byte(`{"id":"6bbc01c8-0605-4f86-a0f9-b3119109b225","address":"127.0.0.1:8300","version":"v6.0.0"}`))
 
 	changefeedID := "test-changefeed"
@@ -225,6 +271,9 @@ func (s *ownerSuite) TestCheckClusterVersion(c *check.C) {
 func (s *ownerSuite) TestAdminJob(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx := cdcContext.NewBackendContext4Test(false)
+	ctx, cancel := cdcContext.WithCancel(ctx)
+	defer cancel()
+
 	owner, _, _ := createOwner4Test(ctx, c)
 	owner.EnqueueJob(model.AdminJob{
 		CfID: "test-changefeed1",
@@ -272,26 +321,26 @@ func (s *ownerSuite) TestUpdateGCSafePoint(c *check.C) {
 	o := NewOwner(mockPDClient)
 	o.gcManager = gc.NewManager(mockPDClient)
 	ctx := cdcContext.NewBackendContext4Test(true)
+	ctx, cancel := cdcContext.WithCancel(ctx)
+	defer cancel()
 	state := model.NewGlobalState().(*model.GlobalReactorState)
 	tester := orchestrator.NewReactorStateTester(c, state, nil)
 
 	// no changefeed, the gc safe point should be max uint64
-	mockPDClient.UpdateServiceGCSafePointFunc =
-		func(ctx context.Context, serviceID string, ttl int64, safePoint uint64) (uint64, error) {
-			// Owner will do a snapshot read at (checkpointTs - 1) from TiKV,
-			// set GC safepoint to (checkpointTs - 1)
-			c.Assert(safePoint, check.Equals, uint64(math.MaxUint64-1))
-			return 0, nil
-		}
+	mockPDClient.UpdateServiceGCSafePointFunc = func(ctx context.Context, serviceID string, ttl int64, safePoint uint64) (uint64, error) {
+		// Owner will do a snapshot read at (checkpointTs - 1) from TiKV,
+		// set GC safepoint to (checkpointTs - 1)
+		c.Assert(safePoint, check.Equals, uint64(math.MaxUint64-1))
+		return 0, nil
+	}
 	err := o.updateGCSafepoint(ctx, state)
 	c.Assert(err, check.IsNil)
 
 	// add a failed changefeed, it must not trigger update GC safepoint.
-	mockPDClient.UpdateServiceGCSafePointFunc =
-		func(ctx context.Context, serviceID string, ttl int64, safePoint uint64) (uint64, error) {
-			c.Fatal("must not update")
-			return 0, nil
-		}
+	mockPDClient.UpdateServiceGCSafePointFunc = func(ctx context.Context, serviceID string, ttl int64, safePoint uint64) (uint64, error) {
+		c.Fatal("must not update")
+		return 0, nil
+	}
 	changefeedID1 := "changefeed-test1"
 	tester.MustUpdate(
 		fmt.Sprintf("/tidb/cdc/changefeed/info/%s", changefeedID1),
@@ -308,15 +357,14 @@ func (s *ownerSuite) TestUpdateGCSafePoint(c *check.C) {
 	// switch the state of changefeed to normal, it must update GC safepoint to
 	// 1 (checkpoint Ts of changefeed-test1).
 	ch := make(chan struct{}, 1)
-	mockPDClient.UpdateServiceGCSafePointFunc =
-		func(ctx context.Context, serviceID string, ttl int64, safePoint uint64) (uint64, error) {
-			// Owner will do a snapshot read at (checkpointTs - 1) from TiKV,
-			// set GC safepoint to (checkpointTs - 1)
-			c.Assert(safePoint, check.Equals, uint64(1))
-			c.Assert(serviceID, check.Equals, gc.CDCServiceSafePointID)
-			ch <- struct{}{}
-			return 0, nil
-		}
+	mockPDClient.UpdateServiceGCSafePointFunc = func(ctx context.Context, serviceID string, ttl int64, safePoint uint64) (uint64, error) {
+		// Owner will do a snapshot read at (checkpointTs - 1) from TiKV,
+		// set GC safepoint to (checkpointTs - 1)
+		c.Assert(safePoint, check.Equals, uint64(1))
+		c.Assert(serviceID, check.Equals, gc.CDCServiceSafePointID)
+		ch <- struct{}{}
+		return 0, nil
+	}
 	state.Changefeeds[changefeedID1].PatchInfo(
 		func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 			info.State = model.StateNormal
@@ -346,15 +394,14 @@ func (s *ownerSuite) TestUpdateGCSafePoint(c *check.C) {
 			return &model.ChangeFeedStatus{CheckpointTs: 30}, true, nil
 		})
 	tester.MustApplyPatches()
-	mockPDClient.UpdateServiceGCSafePointFunc =
-		func(ctx context.Context, serviceID string, ttl int64, safePoint uint64) (uint64, error) {
-			// Owner will do a snapshot read at (checkpointTs - 1) from TiKV,
-			// set GC safepoint to (checkpointTs - 1)
-			c.Assert(safePoint, check.Equals, uint64(19))
-			c.Assert(serviceID, check.Equals, gc.CDCServiceSafePointID)
-			ch <- struct{}{}
-			return 0, nil
-		}
+	mockPDClient.UpdateServiceGCSafePointFunc = func(ctx context.Context, serviceID string, ttl int64, safePoint uint64) (uint64, error) {
+		// Owner will do a snapshot read at (checkpointTs - 1) from TiKV,
+		// set GC safepoint to (checkpointTs - 1)
+		c.Assert(safePoint, check.Equals, uint64(19))
+		c.Assert(serviceID, check.Equals, gc.CDCServiceSafePointID)
+		ch <- struct{}{}
+		return 0, nil
+	}
 	err = o.updateGCSafepoint(ctx, state)
 	c.Assert(err, check.IsNil)
 	select {

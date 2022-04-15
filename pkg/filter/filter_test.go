@@ -138,6 +138,11 @@ func (s *filterSuite) TestShouldDiscardDDL(c *check.C) {
 	c.Assert(filter.ShouldDiscardDDL(model.ActionDropSchema), check.IsFalse)
 	c.Assert(filter.ShouldDiscardDDL(model.ActionAddForeignKey), check.IsFalse)
 	c.Assert(filter.ShouldDiscardDDL(model.ActionCreateSequence), check.IsTrue)
+
+	// Discard sequence DDL.
+	c.Assert(filter.ShouldDiscardDDL(model.ActionCreateSequence), check.IsTrue)
+	c.Assert(filter.ShouldDiscardDDL(model.ActionAlterSequence), check.IsTrue)
+	c.Assert(filter.ShouldDiscardDDL(model.ActionDropSequence), check.IsTrue)
 }
 
 func (s *filterSuite) TestShouldIgnoreDDL(c *check.C) {

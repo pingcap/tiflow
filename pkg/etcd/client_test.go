@@ -15,6 +15,7 @@ package etcd
 
 import (
 	"context"
+	"sync/atomic"
 	"time"
 
 	"github.com/benbjohnson/clock"
@@ -22,10 +23,10 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/pkg/util/testleak"
 	"go.etcd.io/etcd/clientv3"
+	"go.etcd.io/etcd/etcdserver/api/v3rpc/rpctypes"
 )
 
-type clientSuite struct {
-}
+type clientSuite struct{}
 
 var _ = check.Suite(&clientSuite{})
 
@@ -46,20 +47,30 @@ func (m *mockClient) Put(ctx context.Context, key, val string, opts ...clientv3.
 	return nil, errors.New("mock error")
 }
 
+func (m *mockClient) Txn(ctx context.Context) clientv3.Txn {
+	return &mockTxn{ctx: ctx}
+}
+
 type mockWatcher struct {
 	clientv3.Watcher
 	watchCh      chan clientv3.WatchResponse
-	resetCount   *int
-	requestCount *int
+	resetCount   *int32
+	requestCount *int32
+	rev          *int64
 }
 
 func (m mockWatcher) Watch(ctx context.Context, key string, opts ...clientv3.OpOption) clientv3.WatchChan {
-	*m.resetCount++
+	atomic.AddInt32(m.resetCount, 1)
+	op := &clientv3.Op{}
+	for _, opt := range opts {
+		opt(op)
+	}
+	atomic.StoreInt64(m.rev, op.Rev())
 	return m.watchCh
 }
 
 func (m mockWatcher) RequestProgress(ctx context.Context) error {
-	*m.requestCount++
+	atomic.AddInt32(m.requestCount, 1)
 	return nil
 }
 
@@ -79,6 +90,32 @@ func (s *clientSuite) TestRetry(c *check.C) {
 	_, err = retrycli.Put(context.TODO(), "", "")
 	c.Assert(err, check.NotNil)
 	c.Assert(errors.Cause(err), check.ErrorMatches, "mock error", check.Commentf("err:%v", err.Error()))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Test Txn case
+	// case 0: normal
+	rsp, err := retrycli.Txn(ctx, nil, nil, nil)
+	c.Assert(err, check.IsNil)
+	c.Assert(rsp.Succeeded, check.IsFalse)
+
+	// case 1: errors.ErrReachMaxTry
+	_, err = retrycli.Txn(ctx, TxnEmptyCmps, nil, nil)
+	c.Assert(err, check.ErrorMatches, ".*CDC:ErrReachMaxTry.*")
+
+	// case 2: errors.ErrReachMaxTry
+	_, err = retrycli.Txn(ctx, nil, TxnEmptyOpsThen, nil)
+	c.Assert(err, check.ErrorMatches, ".*CDC:ErrReachMaxTry.*")
+
+	// case 3: context.DeadlineExceeded
+	_, err = retrycli.Txn(ctx, TxnEmptyCmps, TxnEmptyOpsThen, nil)
+	c.Assert(err, check.Equals, context.DeadlineExceeded)
+
+	// other case: mock error
+	_, err = retrycli.Txn(ctx, TxnEmptyCmps, TxnEmptyOpsThen, TxnEmptyOpsElse)
+	c.Assert(errors.Cause(err), check.ErrorMatches, "mock error", check.Commentf("err:%v", err.Error()))
+
 	maxTries = originValue
 }
 
@@ -115,10 +152,11 @@ func (s *etcdSuite) TestWatchChBlocked(c *check.C) {
 	defer testleak.AfterTest(c)()
 	defer s.TearDownTest(c)
 	cli := clientv3.NewCtxClient(context.TODO())
-	resetCount := 0
-	requestCount := 0
+	resetCount := int32(0)
+	requestCount := int32(0)
+	rev := int64(0)
 	watchCh := make(chan clientv3.WatchResponse, 1)
-	watcher := mockWatcher{watchCh: watchCh, resetCount: &resetCount, requestCount: &requestCount}
+	watcher := mockWatcher{watchCh: watchCh, resetCount: &resetCount, requestCount: &requestCount, rev: &rev}
 	cli.Watcher = watcher
 
 	sentRes := []clientv3.WatchResponse{
@@ -147,7 +185,7 @@ func (s *etcdSuite) TestWatchChBlocked(c *check.C) {
 	defer cancel()
 
 	go func() {
-		watchCli.WatchWithChan(ctx, outCh, key, clientv3.WithPrefix(), clientv3.WithRev(revision))
+		watchCli.WatchWithChan(ctx, outCh, key, "", clientv3.WithPrefix(), clientv3.WithRev(revision))
 	}()
 	receivedRes := make([]clientv3.WatchResponse, 0)
 	// wait for WatchWithChan set up
@@ -162,9 +200,9 @@ func (s *etcdSuite) TestWatchChBlocked(c *check.C) {
 
 	c.Check(sentRes, check.DeepEquals, receivedRes)
 	// make sure watchCh has been reset since timeout
-	c.Assert(*watcher.resetCount > 1, check.IsTrue)
+	c.Assert(atomic.LoadInt32(watcher.resetCount) > 1, check.IsTrue)
 	// make sure RequestProgress has been call since timeout
-	c.Assert(*watcher.requestCount > 1, check.IsTrue)
+	c.Assert(atomic.LoadInt32(watcher.requestCount) > 1, check.IsTrue)
 	// make sure etcdRequestProgressDuration is less than etcdWatchChTimeoutDuration
 	c.Assert(etcdRequestProgressDuration, check.Less, etcdWatchChTimeoutDuration)
 }
@@ -175,10 +213,11 @@ func (s *etcdSuite) TestOutChBlocked(c *check.C) {
 	defer s.TearDownTest(c)
 
 	cli := clientv3.NewCtxClient(context.TODO())
-	resetCount := 0
-	requestCount := 0
+	resetCount := int32(0)
+	requestCount := int32(0)
+	rev := int64(0)
 	watchCh := make(chan clientv3.WatchResponse, 1)
-	watcher := mockWatcher{watchCh: watchCh, resetCount: &resetCount, requestCount: &requestCount}
+	watcher := mockWatcher{watchCh: watchCh, resetCount: &resetCount, requestCount: &requestCount, rev: &rev}
 	cli.Watcher = watcher
 
 	mockClock := clock.NewMock()
@@ -204,7 +243,7 @@ func (s *etcdSuite) TestOutChBlocked(c *check.C) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*2)
 	defer cancel()
 	go func() {
-		watchCli.WatchWithChan(ctx, outCh, key, clientv3.WithPrefix(), clientv3.WithRev(revision))
+		watchCli.WatchWithChan(ctx, outCh, key, "", clientv3.WithPrefix(), clientv3.WithRev(revision))
 	}()
 	receivedRes := make([]clientv3.WatchResponse, 0)
 	// wait for WatchWithChan set up
@@ -218,4 +257,91 @@ func (s *etcdSuite) TestOutChBlocked(c *check.C) {
 	}
 
 	c.Check(sentRes, check.DeepEquals, receivedRes)
+}
+
+func (s *clientSuite) TestRevisionNotFallBack(c *check.C) {
+	defer testleak.AfterTest(c)()
+	cli := clientv3.NewCtxClient(context.TODO())
+
+	resetCount := int32(0)
+	requestCount := int32(0)
+	rev := int64(0)
+	watchCh := make(chan clientv3.WatchResponse, 1)
+	watcher := mockWatcher{watchCh: watchCh, resetCount: &resetCount, requestCount: &requestCount, rev: &rev}
+	cli.Watcher = watcher
+	mockClock := clock.NewMock()
+	watchCli := Wrap(cli, nil)
+	watchCli.clock = mockClock
+
+	key := "testRevisionNotFallBack"
+	outCh := make(chan clientv3.WatchResponse, 1)
+	// watch from revision = 2
+	revision := int64(2)
+
+	sentRes := []clientv3.WatchResponse{
+		{CompactRevision: 1},
+	}
+
+	go func() {
+		for _, r := range sentRes {
+			watchCh <- r
+		}
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*2)
+	defer cancel()
+	go func() {
+		watchCli.WatchWithChan(ctx, outCh, key, "test", clientv3.WithPrefix(), clientv3.WithRev(revision))
+	}()
+	// wait for WatchWithChan set up
+	<-outCh
+	// move time forward
+	mockClock.Add(time.Second * 30)
+	// make sure watchCh has been reset since timeout
+	c.Assert(atomic.LoadInt32(watcher.resetCount) > 1, check.IsTrue)
+	// make sure revision in WatchWitchChan does not fall back
+	// even if there has not any response been received from WatchCh
+	// while WatchCh was reset
+	c.Assert(atomic.LoadInt64(watcher.rev), check.Equals, revision)
+}
+
+type mockTxn struct {
+	ctx  context.Context
+	mode int
+}
+
+func (txn *mockTxn) If(cs ...clientv3.Cmp) clientv3.Txn {
+	if cs != nil {
+		txn.mode += 1
+	}
+	return txn
+}
+
+func (txn *mockTxn) Then(ops ...clientv3.Op) clientv3.Txn {
+	if ops != nil {
+		txn.mode += 1 << 1
+	}
+	return txn
+}
+
+func (txn *mockTxn) Else(ops ...clientv3.Op) clientv3.Txn {
+	if ops != nil {
+		txn.mode += 1 << 2
+	}
+	return txn
+}
+
+func (txn *mockTxn) Commit() (*clientv3.TxnResponse, error) {
+	switch txn.mode {
+	case 0:
+		return &clientv3.TxnResponse{}, nil
+	case 1:
+		return nil, rpctypes.ErrNoSpace
+	case 2:
+		return nil, rpctypes.ErrTimeoutDueToLeaderFail
+	case 3:
+		return nil, context.DeadlineExceeded
+	default:
+		return nil, errors.New("mock error")
+	}
 }

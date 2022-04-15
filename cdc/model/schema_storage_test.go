@@ -401,9 +401,19 @@ func (s *schemaStorageSuite) TestTableInfoGetterFuncs(c *check.C) {
 	info = WrapTableInfo(1, "test", 0, &t)
 	c.Assert(info.IsEligible(false), check.IsFalse)
 	c.Assert(info.IsEligible(true), check.IsTrue)
+
+	// View is eligible.
 	t.View = &timodel.ViewInfo{}
 	info = WrapTableInfo(1, "test", 0, &t)
+	c.Assert(info.IsView(), check.IsTrue)
 	c.Assert(info.IsEligible(false), check.IsTrue)
+
+	// Sequence is ineligible.
+	t.Sequence = &timodel.SequenceInfo{}
+	info = WrapTableInfo(1, "test", 0, &t)
+	c.Assert(info.IsSequence(), check.IsTrue)
+	c.Assert(info.IsEligible(false), check.IsFalse)
+	c.Assert(info.IsEligible(true), check.IsFalse)
 }
 
 func (s *schemaStorageSuite) TestTableInfoClone(c *check.C) {

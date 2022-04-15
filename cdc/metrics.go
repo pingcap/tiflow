@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/puller"
 	"github.com/pingcap/tiflow/cdc/puller/sorter"
 	"github.com/pingcap/tiflow/cdc/sink"
+	"github.com/pingcap/tiflow/cdc/sink/producer/kafka"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/prometheus/client_golang/prometheus"
 )
@@ -42,4 +43,5 @@ func init() {
 	tablepipeline.InitMetrics(registry)
 	owner.InitMetrics(registry)
 	initServerMetrics(registry)
+	kafka.InitMetrics(registry)
 }

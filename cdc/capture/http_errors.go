@@ -25,7 +25,8 @@ var httpBadRequestError = []*errors.Error{
 	cerror.ErrAPIInvalidParam, cerror.ErrSinkURIInvalid, cerror.ErrStartTsBeforeGC,
 	cerror.ErrChangeFeedNotExists, cerror.ErrTargetTsBeforeStartTs, cerror.ErrTableIneligible,
 	cerror.ErrFilterRuleInvalid, cerror.ErrChangefeedUpdateRefused, cerror.ErrMySQLConnectionError,
-	cerror.ErrMySQLInvalidConfig,
+	cerror.ErrMySQLInvalidConfig, cerror.ErrCaptureNotExist, cerror.ErrTaskStatusNotExists,
+	cerror.ErrTaskPositionNotExists,
 }
 
 // IsHTTPBadRequestError check if a error is a http bad request error

@@ -99,7 +99,7 @@ func verifyCreateChangefeedConfig(ctx context.Context, changefeedConfig model.Ch
 		return nil, err
 	}
 	// set sortEngine and EnableOldValue
-	cdcClusterVer, err := version.GetTiCDCClusterVersion(captureInfos)
+	cdcClusterVer, err := version.GetTiCDCClusterVersion(model.ListVersionsFromCaptureInfos(captureInfos))
 	if err != nil {
 		return nil, err
 	}
@@ -128,7 +128,7 @@ func verifyCreateChangefeedConfig(ctx context.Context, changefeedConfig model.Ch
 	}
 
 	if !replicaConfig.ForceReplicate && !changefeedConfig.IgnoreIneligibleTable {
-		ineligibleTables, _, err := verifyTables(replicaConfig, capture.kvStorage, changefeedConfig.StartTS)
+		ineligibleTables, _, err := VerifyTables(replicaConfig, capture.kvStorage, changefeedConfig.StartTS)
 		if err != nil {
 			return nil, err
 		}
@@ -201,7 +201,9 @@ func verifyUpdateChangefeedConfig(ctx context.Context, changefeedConfig model.Ch
 	return newInfo, nil
 }
 
-func verifyTables(replicaConfig *config.ReplicaConfig, storage tidbkv.Storage, startTs uint64) (ineligibleTables, eligibleTables []model.TableName, err error) {
+// VerifyTables catalog tables specified by ReplicaConfig into
+// eligible (has an unique index or primary key) and ineligible tables.
+func VerifyTables(replicaConfig *config.ReplicaConfig, storage tidbkv.Storage, startTs uint64) (ineligibleTables, eligibleTables []model.TableName, err error) {
 	filter, err := filter.NewFilter(replicaConfig)
 	if err != nil {
 		return nil, nil, errors.Trace(err)
@@ -217,6 +219,11 @@ func verifyTables(replicaConfig *config.ReplicaConfig, storage tidbkv.Storage, s
 
 	for _, tableInfo := range snap.Tables() {
 		if filter.ShouldIgnoreTable(tableInfo.TableName.Schema, tableInfo.TableName.Table) {
+			continue
+		}
+		// Sequence is not supported yet, TiCDC needs to filter all sequence tables.
+		// See https://github.com/pingcap/tiflow/issues/4559
+		if tableInfo.IsSequence() {
 			continue
 		}
 		if !tableInfo.IsEligible(false /* forceReplicate */) {

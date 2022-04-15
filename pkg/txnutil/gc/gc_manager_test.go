@@ -34,8 +34,7 @@ func Test(t *testing.T) {
 
 var _ = check.Suite(&gcManagerSuite{})
 
-type gcManagerSuite struct {
-}
+type gcManagerSuite struct{}
 
 func (s *gcManagerSuite) TestUpdateGCSafePoint(c *check.C) {
 	defer testleak.AfterTest(c)()

@@ -36,7 +36,8 @@ import (
 func init() {
 	failpoint.Inject("SimpleMySQLSinkTester", func() {
 		sinkIniterMap["simple-mysql"] = func(ctx context.Context, changefeedID model.ChangeFeedID, sinkURI *url.URL,
-			filter *filter.Filter, config *config.ReplicaConfig, opts map[string]string, errCh chan error) (Sink, error) {
+			filter *filter.Filter, config *config.ReplicaConfig, opts map[string]string, errCh chan error,
+		) (Sink, error) {
 			return newSimpleMySQLSink(ctx, sinkURI, config)
 		}
 	})
@@ -102,11 +103,6 @@ func newSimpleMySQLSink(ctx context.Context, sinkURI *url.URL, config *config.Re
 		log.Info("the old value checker is enabled")
 	}
 	return sink, nil
-}
-
-func (s *simpleMySQLSink) Initialize(ctx context.Context, tableInfo []*model.SimpleTableInfo) error {
-	// do nothing
-	return nil
 }
 
 // EmitRowChangedEvents sends Row Changed Event to Sink

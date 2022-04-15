@@ -165,8 +165,10 @@ func NewTablePipeline(ctx cdcContext.Context,
 	tableName string,
 	replicaInfo *model.TableReplicaInfo,
 	sink sink.Sink,
-	targetTs model.Ts) TablePipeline {
+	targetTs model.Ts,
+) TablePipeline {
 	ctx, cancel := cdcContext.WithCancel(ctx)
+	changefeed := ctx.ChangefeedVars().ID
 	tablePipeline := &tablePipelineImpl{
 		tableID:     tableID,
 		markTableID: replicaInfo.MarkTableID,
@@ -188,7 +190,7 @@ func NewTablePipeline(ctx cdcContext.Context,
 		runnerSize++
 	}
 	p := pipeline.NewPipeline(ctx, 500*time.Millisecond, runnerSize, defaultOutputChannelSize)
-	p.AppendNode(ctx, "puller", newPullerNode(tableID, replicaInfo, tableName))
+	p.AppendNode(ctx, "puller", newPullerNode(tableID, replicaInfo, tableName, changefeed))
 	p.AppendNode(ctx, "sorter", newSorterNode(tableName, tableID, flowController, mounter))
 	p.AppendNode(ctx, "mounter", newMounterNode())
 	if cyclicEnabled {

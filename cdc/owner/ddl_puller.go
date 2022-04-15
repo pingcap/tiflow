@@ -65,7 +65,13 @@ func newDDLPuller(ctx cdcContext.Context, startTs uint64) (DDLPuller, error) {
 	kvStorage := ctx.GlobalVars().KVStorage
 	// kvStorage can be nil only in the test
 	if kvStorage != nil {
-		plr = puller.NewPuller(ctx, pdCli, ctx.GlobalVars().GrpcPool, kvStorage, startTs,
+		plr = puller.NewPuller(
+			ctx, pdCli,
+			ctx.GlobalVars().GrpcPool,
+			kvStorage,
+			// Add "_ddl_puller" to make it different from table pullers.
+			ctx.ChangefeedVars().ID+"_ddl_puller",
+			startTs,
 			[]regionspan.Span{regionspan.GetDDLSpan(), regionspan.GetAddIndexDDLSpan()}, false)
 	}
 
@@ -163,5 +169,6 @@ func (h *ddlPullerImpl) PopFrontDDL() (uint64, *timodel.Job) {
 }
 
 func (h *ddlPullerImpl) Close() {
+	log.Info("Close the ddl puller")
 	h.cancel()
 }
