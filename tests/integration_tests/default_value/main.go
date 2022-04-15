@@ -739,10 +739,12 @@ func testMultiDDLs(srcs []*sql.DB, wg *sync.WaitGroup) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*180)
 	defer cancel()
 	pool := workerpool.NewDefaultAsyncPool(8)
-	if err := pool.Run(ctx); err != nil {
-		log.S().Error("start async pool fail")
-		return
-	}
+	go func() {
+		if err := pool.Run(ctx); err != nil {
+			log.S().Error("start async pool fail")
+			return
+		}
+	}()
 
 	// seperate every case to different table
 	for i, unit := range Units {
