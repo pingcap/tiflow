@@ -1,0 +1,2 @@
+- name: Copy prometheus config
+  template: src=prometheus.yml.j2 dest={{ df_config_dir }}/prometheus.yml

@@ -9,3 +9,7 @@
 - hosts: df_executor_servers
   roles:
   - role: executor
+
+- hosts: all
+  roles:
+  - role: metrics
