@@ -105,9 +105,8 @@ func NewWorkerMetadataClient(
 }
 
 func (c *WorkerMetadataClient) LoadAllWorkers(ctx context.Context) (map[libModel.WorkerID]*libModel.WorkerStatus, error) {
-	// We still use the raw adapter for now. This file will be refactored soon using pkg/dataset.
-	loadPrefix := adapter.WorkerKeyAdapter.Encode(c.masterID)
-	resp, err := c.metaKVClient.Get(ctx, loadPrefix, metaclient.WithPrefix())
+	loadPrefix := adapter.WorkerKeyAdapter.Curry(c.masterID)
+	resp, err := c.metaKVClient.Get(ctx, loadPrefix.Path(), metaclient.WithPrefix())
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

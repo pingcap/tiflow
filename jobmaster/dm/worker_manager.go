@@ -23,12 +23,12 @@ var (
 )
 
 type WorkerAgent interface {
-	CreateWorker(ctx context.Context, taskID string, workerType lib.WorkerType, taskCfg *config.TaskCfg) (libModel.WorkerID, error)
+	CreateWorker(ctx context.Context, taskID string, workerType libModel.WorkerType, taskCfg *config.TaskCfg) (libModel.WorkerID, error)
 	StopWorker(ctx context.Context, taskID string, workerID libModel.WorkerID) error
 }
 
 type CheckpointAgent interface {
-	IsFresh(ctx context.Context, workerType lib.WorkerType, taskCfg *metadata.Task) (bool, error)
+	IsFresh(ctx context.Context, workerType libModel.WorkerType, taskCfg *metadata.Task) (bool, error)
 }
 
 type WorkerManager struct {
@@ -122,7 +122,7 @@ func (wm *WorkerManager) onJobNotExist(ctx context.Context) error {
 	var recordError error
 	wm.workerStatusMap.Range(func(key, value interface{}) bool {
 		log.L().Info("destroy worker", zap.String("task_id", key.(string)), zap.String("worker_id", value.(runtime.WorkerStatus).ID))
-		if err := wm.stopWorker(ctx, key.(string), value.(runtime.WorkerStatus).ID); err != nil {
+		if err := wm.destroyWorker(ctx, key.(string), value.(runtime.WorkerStatus).ID); err != nil {
 			recordError = err
 		}
 		return true
@@ -137,7 +137,7 @@ func (wm *WorkerManager) destroyUnneededWorkers(ctx context.Context, job *metada
 		taskID := key.(string)
 		if _, ok := job.Tasks[taskID]; !ok {
 			log.L().Info("destroy unneeded worker", zap.String("task_id", taskID), zap.String("worker_id", value.(runtime.WorkerStatus).ID))
-			if err := wm.stopWorker(ctx, taskID, value.(runtime.WorkerStatus).ID); err != nil {
+			if err := wm.destroyWorker(ctx, taskID, value.(runtime.WorkerStatus).ID); err != nil {
 				recordError = err
 			}
 		}
@@ -154,7 +154,7 @@ func (wm *WorkerManager) destroyUnneededWorkers(ctx context.Context, job *metada
 func (wm *WorkerManager) checkAndScheduleWorkers(ctx context.Context, job *metadata.Job) error {
 	var (
 		runningWorker runtime.WorkerStatus
-		nextUnit      lib.WorkerType
+		nextUnit      libModel.WorkerType
 		err           error
 		recordError   error
 	)
@@ -191,18 +191,18 @@ func (wm *WorkerManager) checkAndScheduleWorkers(ctx context.Context, job *metad
 	return recordError
 }
 
-func (wm *WorkerManager) getCurrentUnit(ctx context.Context, task *metadata.Task) (lib.WorkerType, error) {
-	var workerSeq []lib.WorkerType
+func (wm *WorkerManager) getCurrentUnit(ctx context.Context, task *metadata.Task) (libModel.WorkerType, error) {
+	var workerSeq []libModel.WorkerType
 
 	switch task.Cfg.TaskMode {
 	case dmconfig.ModeAll:
-		workerSeq = []lib.WorkerType{
+		workerSeq = []libModel.WorkerType{
 			lib.WorkerDMDump,
 			lib.WorkerDMLoad,
 			lib.WorkerDMSync,
 		}
 	case dmconfig.ModeFull:
-		workerSeq = []lib.WorkerType{
+		workerSeq = []libModel.WorkerType{
 			lib.WorkerDMDump,
 			lib.WorkerDMLoad,
 		}
@@ -223,7 +223,7 @@ func (wm *WorkerManager) getCurrentUnit(ctx context.Context, task *metadata.Task
 	return workerSeq[0], nil
 }
 
-func getNextUnit(task *metadata.Task, worker runtime.WorkerStatus) lib.WorkerType {
+func getNextUnit(task *metadata.Task, worker runtime.WorkerStatus) libModel.WorkerType {
 	if worker.Stage != runtime.WorkerFinished {
 		return worker.Unit
 	}
@@ -234,7 +234,7 @@ func getNextUnit(task *metadata.Task, worker runtime.WorkerStatus) lib.WorkerTyp
 	return lib.WorkerDMSync
 }
 
-func (wm *WorkerManager) createWorker(ctx context.Context, taskID string, unit lib.WorkerType, taskCfg *config.TaskCfg) error {
+func (wm *WorkerManager) createWorker(ctx context.Context, taskID string, unit libModel.WorkerType, taskCfg *config.TaskCfg) error {
 	workerID, err := wm.workerAgent.CreateWorker(ctx, taskID, unit, taskCfg)
 	if err != nil {
 		log.L().Error("failed to create workers", zap.String("task_id", taskID), zap.Int64("unit", int64(unit)), zap.Error(err))
@@ -253,7 +253,7 @@ func (wm *WorkerManager) createWorker(ctx context.Context, taskID string, unit l
 	return err
 }
 
-func (wm *WorkerManager) stopWorker(ctx context.Context, taskID string, workerID libModel.WorkerID) error {
+func (wm *WorkerManager) destroyWorker(ctx context.Context, taskID string, workerID libModel.WorkerID) error {
 	if err := wm.workerAgent.StopWorker(ctx, taskID, workerID); err != nil {
 		log.L().Error("failed to destroy worker", zap.String("task_id", taskID), zap.String("worker_id", workerID), zap.Error(err))
 		return err

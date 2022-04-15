@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/pkg/deps"
 	"github.com/hanfei1991/microcosm/pkg/externalresource/storagecfg"
 	extkv "github.com/hanfei1991/microcosm/pkg/meta/extension"
@@ -29,8 +30,6 @@ import (
 	"github.com/hanfei1991/microcosm/client"
 	"github.com/hanfei1991/microcosm/executor/runtime"
 	"github.com/hanfei1991/microcosm/executor/worker"
-	"github.com/hanfei1991/microcosm/lib"
-	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/lib/registry"
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
@@ -224,7 +223,7 @@ func (s *Server) DispatchTask(ctx context.Context, req *pb.DispatchTaskRequest) 
 	masterMeta := &libModel.MasterMetaKVData{
 		// GetWorkerId here returns id of current unit
 		ID:     req.GetWorkerId(),
-		Tp:     lib.WorkerType(req.GetTaskTypeId()),
+		Tp:     libModel.WorkerType(req.GetTaskTypeId()),
 		Config: req.GetTaskConfig(),
 	}
 	metaBytes, err := masterMeta.Marshal()
@@ -235,7 +234,7 @@ func (s *Server) DispatchTask(ctx context.Context, req *pb.DispatchTaskRequest) 
 
 	newWorker, err := registry.GlobalWorkerRegistry().CreateWorker(
 		dctx,
-		lib.WorkerType(req.GetTaskTypeId()),
+		libModel.WorkerType(req.GetTaskTypeId()),
 		req.GetWorkerId(),
 		req.GetMasterId(),
 		req.GetTaskConfig())

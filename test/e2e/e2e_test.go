@@ -134,7 +134,7 @@ func testSubmitTest(t *testing.T, cfg *cvs.Config, config *Config) {
 	for {
 		ctx1, cancel := context.WithTimeout(ctx, 3*time.Second)
 		queryResp, err := masterclient.QueryJob(ctx1, queryReq)
-		require.Nil(t, err)
+		require.NoError(t, err)
 		require.Nil(t, queryResp.Err)
 		require.Equal(t, queryResp.Tp, int64(lib.CvsJobMaster))
 		cancel()

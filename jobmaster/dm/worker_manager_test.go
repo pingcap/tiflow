@@ -232,7 +232,7 @@ func (t *testDMJobmasterSuite) TestGetUnit() {
 	mockAgent.SetResult([]CheckpointResult{{false, errors.New("checkpoint error")}})
 	unit, err := workerManager.getCurrentUnit(ctx, task)
 	require.Error(t.T(), err)
-	require.Equal(t.T(), unit, lib.WorkerType(0))
+	require.Equal(t.T(), unit, libModel.WorkerType(0))
 	mockAgent.SetResult([]CheckpointResult{{true, nil}, {true, nil}})
 	unit, err = workerManager.getCurrentUnit(ctx, task)
 	require.NoError(t.T(), err)
@@ -548,7 +548,7 @@ func (mockAgent *MockCheckpointAgent) SetResult(results []CheckpointResult) {
 	mockAgent.results = append(mockAgent.results, results...)
 }
 
-func (mockAgent *MockCheckpointAgent) IsFresh(ctx context.Context, workerType lib.WorkerType, taskCfg *metadata.Task) (bool, error) {
+func (mockAgent *MockCheckpointAgent) IsFresh(ctx context.Context, workerType libModel.WorkerType, taskCfg *metadata.Task) (bool, error) {
 	mockAgent.Lock()
 	defer mockAgent.Unlock()
 	if len(mockAgent.results) == 0 {

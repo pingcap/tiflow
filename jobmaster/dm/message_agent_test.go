@@ -6,6 +6,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/hanfei1991/microcosm/lib/master"
+
 	"github.com/stretchr/testify/require"
 
 	"github.com/hanfei1991/microcosm/jobmaster/dm/config"
@@ -19,8 +21,8 @@ import (
 func TestUpdateWorkerHandle(t *testing.T) {
 	messageAgent := NewMessageAgent(nil, "mock-jobmaster", nil)
 	require.Equal(t, lenSyncMap(&messageAgent.sendHandles), 0)
-	workerHandle1 := lib.NewTombstoneWorkerHandle("worker1", libModel.WorkerStatus{}, nil)
-	workerHandle2 := lib.NewTombstoneWorkerHandle("worker2", libModel.WorkerStatus{}, nil)
+	workerHandle1 := &master.MockHandle{WorkerID: "worker1", WorkerStatus: &libModel.WorkerStatus{}, IsTombstone: true}
+	workerHandle2 := &master.MockHandle{WorkerID: "worker2", WorkerStatus: &libModel.WorkerStatus{}, IsTombstone: true}
 
 	// add worker handle
 	messageAgent.UpdateWorkerHandle("task1", workerHandle1)
@@ -78,7 +80,7 @@ func TestOperateWorker(t *testing.T) {
 	_, err = messageAgent.CreateWorker(context.Background(), task1, lib.WorkerDMDump, &config.TaskCfg{})
 	require.NoError(t, err)
 	// create again
-	workerHandle := lib.NewTombstoneWorkerHandle(worker1, libModel.WorkerStatus{}, nil)
+	workerHandle := &master.MockHandle{WorkerID: "worker1", WorkerStatus: &libModel.WorkerStatus{}, IsTombstone: true}
 	messageAgent.UpdateWorkerHandle(task1, workerHandle)
 	_, err = messageAgent.CreateWorker(context.Background(), task1, lib.WorkerDMDump, &config.TaskCfg{})
 	require.EqualError(t, err, fmt.Sprintf("worker for task %s already exist", task1))
@@ -99,7 +101,7 @@ func TestOperateTask(t *testing.T) {
 	task1 := "task1"
 	worker1 := "worker1"
 
-	workerHandle := lib.NewTombstoneWorkerHandle(worker1, libModel.WorkerStatus{}, nil)
+	workerHandle := &master.MockHandle{WorkerID: "worker1", WorkerStatus: &libModel.WorkerStatus{}, IsTombstone: true}
 	messageAgent.UpdateWorkerHandle(task1, workerHandle)
 	// worker offline
 	require.Error(t, messageAgent.OperateTask(context.Background(), task1, metadata.StagePaused))

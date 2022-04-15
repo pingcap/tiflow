@@ -63,8 +63,14 @@ func (jm *JobManagerImplV2) PauseJob(ctx context.Context, req *pb.PauseJobReques
 		Epoch:        jm.BaseMaster.MasterMeta().Epoch,
 		ExpectState:  libModel.WorkerStatusStopped,
 	}
-	err := job.WorkerHandle.SendMessage(ctx, topic, msg, true /*nonblocking*/)
-	return &pb.PauseJobResponse{Err: derrors.ToPBError(err)}
+	if handle := job.WorkerHandle.Unwrap(); handle != nil {
+		err := handle.SendMessage(ctx, topic, msg, true /*nonblocking*/)
+		return &pb.PauseJobResponse{Err: derrors.ToPBError(err)}
+	}
+	// The job is a tombstone, which means that the job has already exited.
+	return &pb.PauseJobResponse{Err: &pb.Error{
+		Code: pb.ErrorCode_UnKnownJob,
+	}}
 }
 
 func (jm *JobManagerImplV2) CancelJob(ctx context.Context, req *pb.CancelJobRequest) *pb.CancelJobResponse {
@@ -206,6 +212,7 @@ func NewJobManagerImplV2(
 	}
 	err = impl.BaseMaster.Init(dctx)
 	if err != nil {
+		_ = impl.BaseMaster.Close(dctx)
 		return nil, err
 	}
 	return impl, nil

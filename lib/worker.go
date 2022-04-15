@@ -420,7 +420,8 @@ func (w *DefaultBaseWorker) initMessageHandlers(ctx context.Context) (retErr err
 		&libModel.HeartbeatPongMessage{},
 		func(sender p2p.NodeID, value p2p.MessageValue) error {
 			msg := value.(*libModel.HeartbeatPongMessage)
-			log.L().Debug("heartbeat pong received",
+			log.L().Info("heartbeat pong received",
+				zap.String("master-id", w.masterID),
 				zap.Any("msg", msg))
 			w.masterClient.HandleHeartbeat(sender, msg)
 			return nil
@@ -626,7 +627,8 @@ func (m *masterClient) SendHeartBeat(ctx context.Context, clock clock.Clock) err
 	if err != nil {
 		return errors.Trace(err)
 	}
-	log.L().Debug("sending heartbeat success", zap.String("worker", m.workerID))
+	log.L().Info("sending heartbeat success", zap.String("worker", m.workerID),
+		zap.String("master-id", m.masterID))
 	if !ok {
 		log.L().Warn("sending heartbeat ping encountered ErrPeerMessageSendTryAgain")
 	}

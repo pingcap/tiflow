@@ -14,24 +14,23 @@ import (
 	"github.com/hanfei1991/microcosm/jobmaster/dm/runtime"
 	"github.com/hanfei1991/microcosm/lib"
 	libMetadata "github.com/hanfei1991/microcosm/lib/metadata"
+	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/lib/registry"
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 	"github.com/hanfei1991/microcosm/pkg/deps"
+	dmpkg "github.com/hanfei1991/microcosm/pkg/dm"
 	"github.com/hanfei1991/microcosm/pkg/externalresource/broker"
 	extkv "github.com/hanfei1991/microcosm/pkg/meta/extension"
-
-	"go.uber.org/dig"
-
-	libModel "github.com/hanfei1991/microcosm/lib/model"
-	dmpkg "github.com/hanfei1991/microcosm/pkg/dm"
 	kvmock "github.com/hanfei1991/microcosm/pkg/meta/kvclient/mock"
 	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
+
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"go.uber.org/dig"
 )
 
 func TestDMJobmasterSuite(t *testing.T) {
@@ -176,6 +175,7 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	bytes1, err := json.Marshal(taskStatus1)
 	require.NoError(t.T(), err)
 	workerHandle1.On("Status").Return(&libModel.WorkerStatus{ExtBytes: bytes1}).Once()
+	workerHandle1.On("IsTombStone").Return(false)
 	jm.OnWorkerOnline(workerHandle1)
 	jm.OnWorkerDispatched(workerHandle2, errors.New("dispatch error"))
 	worker3 := "worker3"
@@ -194,6 +194,7 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	}
 	bytes2, err := json.Marshal(taskStatus2)
 	require.NoError(t.T(), err)
+	workerHandle2.On("IsTombStone").Return(false)
 	workerHandle2.On("Status").Return(&libModel.WorkerStatus{ExtBytes: bytes2}).Once()
 	jm.OnWorkerOnline(workerHandle2)
 	workerHandle1.On("Status").Return(&libModel.WorkerStatus{ExtBytes: bytes1}).Once()

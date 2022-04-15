@@ -3,9 +3,10 @@ package lib
 import (
 	"time"
 
-	"github.com/hanfei1991/microcosm/lib/model"
-
 	"github.com/pingcap/errors"
+
+	"github.com/hanfei1991/microcosm/lib/master"
+	"github.com/hanfei1991/microcosm/lib/model"
 )
 
 type (
@@ -14,7 +15,7 @@ type (
 )
 
 const (
-	JobManager = WorkerType(iota + 1)
+	JobManager = model.WorkerType(iota + 1)
 	// job master
 	CvsJobMaster
 	FakeJobMaster
@@ -68,6 +69,8 @@ type MasterFailoverReason struct {
 	Code         MasterFailoverReasonCode
 	ErrorMessage string
 }
+
+type WorkerHandle = master.WorkerHandle
 
 // nolint:revive
 var StopAfterTick = errors.New("stop after tick")

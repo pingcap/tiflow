@@ -22,6 +22,10 @@ func NewReader(init *libModel.WorkerStatus) *Reader {
 	}
 }
 
+func (r *Reader) HasNewUpdate() bool {
+	return r.q.Size() > 0
+}
+
 func (r *Reader) Receive() (*libModel.WorkerStatus, bool) {
 	st, ok := r.q.Pop()
 	if !ok {

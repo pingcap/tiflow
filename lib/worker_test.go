@@ -30,6 +30,13 @@ func putMasterMeta(ctx context.Context, t *testing.T, metaclient metaclient.KVCl
 	require.NoError(t, err)
 }
 
+func fastMarshalDummyStatus(t *testing.T, val int) []byte {
+	dummySt := &dummyStatus{Val: val}
+	bytes, err := dummySt.Marshal()
+	require.NoError(t, err)
+	return bytes
+}
+
 func TestWorkerInitAndClose(t *testing.T) {
 	t.Parallel()
 
@@ -152,7 +159,8 @@ func TestWorkerHeartbeatPingPong(t *testing.T) {
 			ToWorkerID: workerID1,
 			Epoch:      1,
 		}
-		err = worker.messageHandlerManager.InvokeHandler(t, libModel.HeartbeatPongTopic(masterName, workerID1), masterNodeName, pongMsg)
+		err = worker.messageHandlerManager.InvokeHandler(
+			t, libModel.HeartbeatPongTopic(masterName, workerID1), masterNodeName, pongMsg)
 		require.NoError(t, err)
 	}
 }
@@ -196,7 +204,8 @@ func TestWorkerMasterFailover(t *testing.T) {
 		ToWorkerID: workerID1,
 		Epoch:      1,
 	}
-	err = worker.messageHandlerManager.InvokeHandler(t, libModel.HeartbeatPongTopic(masterName, workerID1), masterNodeName, pongMsg)
+	err = worker.messageHandlerManager.InvokeHandler(t,
+		libModel.HeartbeatPongTopic(masterName, workerID1), masterNodeName, pongMsg)
 	require.NoError(t, err)
 	masterAckedTimeAfterPing := worker.masterClient.getLastMasterAckedPingTime()
 

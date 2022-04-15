@@ -8,12 +8,11 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/hanfei1991/microcosm/lib/metadata"
-
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	"github.com/hanfei1991/microcosm/client"
+	"github.com/hanfei1991/microcosm/lib/metadata"
 	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/lib/statusutil"
 	"github.com/hanfei1991/microcosm/model"
@@ -57,7 +56,7 @@ func MockBaseMaster(id libModel.MasterID, masterImpl MasterImpl) *DefaultBaseMas
 func MockBaseMasterCreateWorker(
 	t *testing.T,
 	master *DefaultBaseMaster,
-	workerType WorkerType,
+	workerType libModel.WorkerType,
 	config WorkerConfig,
 	cost model.RescUnit,
 	masterID libModel.MasterID,
@@ -111,7 +110,7 @@ func MockBaseMasterCreateWorker(
 func MockBaseMasterCreateWorkerMetScheduleTaskError(
 	t *testing.T,
 	master *DefaultBaseMaster,
-	workerType WorkerType,
+	workerType libModel.WorkerType,
 	config WorkerConfig,
 	cost model.RescUnit,
 	masterID libModel.MasterID,

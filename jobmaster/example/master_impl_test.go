@@ -57,6 +57,9 @@ func TestExampleMaster(t *testing.T) {
 
 	// master.Init will asynchronously create a worker
 	require.Eventually(t, func() bool {
+		err = master.Poll(ctx)
+		require.NoError(t, err)
+
 		master.worker.mu.Lock()
 		require.NoError(t, master.worker.receivedErr)
 		handle := master.worker.handle
@@ -81,6 +84,9 @@ func TestExampleMaster(t *testing.T) {
 
 	// worker is online after one heartbeat
 	require.Eventually(t, func() bool {
+		err = master.Poll(ctx)
+		require.NoError(t, err)
+
 		master.worker.mu.Lock()
 		online := master.worker.online
 		master.worker.mu.Unlock()

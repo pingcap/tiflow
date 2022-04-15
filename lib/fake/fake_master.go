@@ -76,7 +76,12 @@ func (m *Master) OnJobManagerMessage(topic p2p.Topic, message p2p.MessageValue) 
 					ExpectState:  libModel.WorkerStatusStopped,
 				}
 				ctx, cancel := context.WithTimeout(m.ctx, time.Second*2)
-				if err := worker.SendMessage(ctx, wTopic, wMessage, false /*nonblocking*/); err != nil {
+				runningHandle := worker.Unwrap()
+				if runningHandle == nil {
+					cancel()
+					continue
+				}
+				if err := runningHandle.SendMessage(ctx, wTopic, wMessage, false /*nonblocking*/); err != nil {
 					cancel()
 					m.workerListMu.Unlock()
 					return err

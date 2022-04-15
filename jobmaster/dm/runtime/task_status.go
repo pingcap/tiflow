@@ -7,21 +7,22 @@ import (
 
 	"github.com/hanfei1991/microcosm/jobmaster/dm/metadata"
 	"github.com/hanfei1991/microcosm/lib"
+	libModel "github.com/hanfei1991/microcosm/lib/model"
 )
 
 type TaskStatus interface {
-	GetUnit() lib.WorkerType
+	GetUnit() libModel.WorkerType
 	GetTask() string
 	GetStage() metadata.TaskStage
 }
 
 type DefaultTaskStatus struct {
-	Unit  lib.WorkerType
+	Unit  libModel.WorkerType
 	Task  string
 	Stage metadata.TaskStage
 }
 
-func (s *DefaultTaskStatus) GetUnit() lib.WorkerType {
+func (s *DefaultTaskStatus) GetUnit() libModel.WorkerType {
 	return s.Unit
 }
 
@@ -86,7 +87,7 @@ func NewOfflineStatus(taskID string) *DefaultTaskStatus {
 // UnmarshalTaskStatus unmarshal a task status base on the unit.
 func UnmarshalTaskStatus(data []byte) (TaskStatus, error) {
 	var typ struct {
-		Unit lib.WorkerType
+		Unit libModel.WorkerType
 	}
 	if err := json.Unmarshal(data, &typ); err != nil {
 		return nil, errors.Trace(err)

@@ -7,13 +7,14 @@ import (
 
 	"github.com/hanfei1991/microcosm/jobmaster/dm/metadata"
 	"github.com/hanfei1991/microcosm/lib"
+	libModel "github.com/hanfei1991/microcosm/lib/model"
 )
 
 func TestTaskStatus(t *testing.T) {
 	t.Parallel()
 
 	offlineStatus := NewOfflineStatus("task_status_test")
-	require.Equal(t, offlineStatus.GetUnit(), lib.WorkerType(0))
+	require.Equal(t, offlineStatus.GetUnit(), libModel.WorkerType(0))
 	require.Equal(t, offlineStatus.GetTask(), "task_status_test")
 	require.Equal(t, offlineStatus.GetStage(), metadata.StageUnscheduled)
 	bytes, err := MarshalTaskStatus(offlineStatus)

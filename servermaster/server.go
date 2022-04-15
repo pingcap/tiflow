@@ -8,9 +8,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hanfei1991/microcosm/lib/metadata"
-	libModel "github.com/hanfei1991/microcosm/lib/model"
-
 	"github.com/google/uuid"
 	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -28,6 +25,8 @@ import (
 
 	"github.com/hanfei1991/microcosm/client"
 	"github.com/hanfei1991/microcosm/lib"
+	"github.com/hanfei1991/microcosm/lib/metadata"
+	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
 	"github.com/hanfei1991/microcosm/pkg/adapter"
@@ -662,12 +661,6 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 		return err
 	}
 
-	dctx = dctx.WithDeps(dp)
-	s.jobManager, err = NewJobManagerImplV2(dctx, metadata.JobManagerUUID)
-	if err != nil {
-		return
-	}
-
 	s.leader.Store(&Member{
 		Name:          s.name(),
 		IsServLeader:  true,
@@ -677,6 +670,14 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 	defer func() {
 		s.leader.Store(&Member{})
 		s.resign()
+	}()
+
+	dctx = dctx.WithDeps(dp)
+	s.jobManager, err = NewJobManagerImplV2(dctx, metadata.JobManagerUUID)
+	if err != nil {
+		return
+	}
+	defer func() {
 		err := s.jobManager.Close(ctx)
 		if err != nil {
 			log.L().Warn("job manager close with error", zap.Error(err))
@@ -700,6 +701,7 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 			}
 			err := s.jobManager.Poll(ctx)
 			if err != nil {
+				log.L().Warn("Polling JobManager failed", zap.Error(err))
 				return err
 			}
 		case <-leaderTicker.C:

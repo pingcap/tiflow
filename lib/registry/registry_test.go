@@ -7,6 +7,7 @@ import (
 
 	"github.com/hanfei1991/microcosm/lib"
 	"github.com/hanfei1991/microcosm/lib/fake"
+	libModel "github.com/hanfei1991/microcosm/lib/model"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 )
 
@@ -16,7 +17,7 @@ var (
 )
 
 const (
-	fakeWorkerType = lib.WorkerType(100)
+	fakeWorkerType = libModel.WorkerType(100)
 )
 
 func TestGlobalRegistry(t *testing.T) {

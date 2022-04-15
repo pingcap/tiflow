@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"sync"
 
+	"github.com/hanfei1991/microcosm/lib/master"
+
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/stretchr/testify/mock"
 	"go.uber.org/atomic"
@@ -36,6 +38,7 @@ type MockMasterImpl struct {
 
 	dispatchedWorkers chan WorkerHandle
 	dispatchedResult  chan error
+	updatedStatuses   chan *libModel.WorkerStatus
 
 	messageHandlerManager *p2p.MockMessageHandlerManager
 	messageSender         p2p.MessageSender
@@ -49,8 +52,9 @@ func NewMockMasterImpl(masterID, id libModel.MasterID) *MockMasterImpl {
 	ret := &MockMasterImpl{
 		masterID:          masterID,
 		id:                id,
-		dispatchedWorkers: make(chan WorkerHandle),
+		dispatchedWorkers: make(chan WorkerHandle, 1),
 		dispatchedResult:  make(chan error, 1),
+		updatedStatuses:   make(chan *libModel.WorkerStatus, 1024),
 	}
 	ret.DefaultBaseMaster = MockBaseMaster(id, ret)
 	ret.messageHandlerManager = ret.DefaultBaseMaster.messageHandlerManager.(*p2p.MockMessageHandlerManager)
@@ -129,6 +133,11 @@ func (m *MockMasterImpl) OnMasterRecovered(ctx context.Context) error {
 func (m *MockMasterImpl) OnWorkerStatusUpdated(worker WorkerHandle, newStatus *libModel.WorkerStatus) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+
+	select {
+	case m.updatedStatuses <- newStatus:
+	default:
+	}
 
 	args := m.Called(worker, newStatus)
 	return args.Error(0)
@@ -215,6 +224,20 @@ type MockWorkerHandler struct {
 	WorkerID libModel.WorkerID
 }
 
+func (m *MockWorkerHandler) GetTombstone() master.TombstoneHandle {
+	if m.IsTombStone() {
+		return m
+	}
+	return nil
+}
+
+func (m *MockWorkerHandler) Unwrap() master.RunningHandle {
+	if !m.IsTombStone() {
+		return m
+	}
+	return nil
+}
+
 func (m *MockWorkerHandler) SendMessage(ctx context.Context, topic p2p.Topic, message interface{}, nonblocking bool) error {
 	args := m.Called(ctx, topic, message, nonblocking)
 	return args.Error(0)
@@ -239,7 +262,7 @@ func (m *MockWorkerHandler) ToPB() (*pb.WorkerInfo, error) {
 	return args.Get(0).(*pb.WorkerInfo), args.Error(1)
 }
 
-func (m *MockWorkerHandler) DeleteTombStone(ctx context.Context) (bool, error) {
+func (m *MockWorkerHandler) CleanTombstone(ctx context.Context) error {
 	args := m.Called()
-	return args.Bool(0), args.Error(1)
+	return args.Error(0)
 }

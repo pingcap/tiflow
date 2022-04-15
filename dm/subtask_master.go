@@ -25,7 +25,7 @@ type SubTaskMaster struct {
 
 	cfg *config.SubTaskConfig
 	// workerSeq are different WorkerTypes that should be run one after another
-	workerSeq    []lib.WorkerType
+	workerSeq    []libModel.WorkerType
 	currWorkerID libModel.WorkerID
 }
 
@@ -41,18 +41,18 @@ func newSubTaskMaster(
 func (s *SubTaskMaster) InitImpl(ctx context.Context) error {
 	switch s.cfg.Mode {
 	case config.ModeAll:
-		s.workerSeq = []lib.WorkerType{
+		s.workerSeq = []libModel.WorkerType{
 			lib.WorkerDMDump,
 			lib.WorkerDMLoad,
 			lib.WorkerDMSync,
 		}
 	case config.ModeFull:
-		s.workerSeq = []lib.WorkerType{
+		s.workerSeq = []libModel.WorkerType{
 			lib.WorkerDMDump,
 			lib.WorkerDMLoad,
 		}
 	case config.ModeIncrement:
-		s.workerSeq = []lib.WorkerType{
+		s.workerSeq = []libModel.WorkerType{
 			lib.WorkerDMSync,
 		}
 	default:
@@ -96,7 +96,7 @@ func (s *SubTaskMaster) InitImpl(ctx context.Context) error {
 	return errors.Trace(err)
 }
 
-func (s *SubTaskMaster) buildDMUnit(tp lib.WorkerType) unit.Unit {
+func (s *SubTaskMaster) buildDMUnit(tp libModel.WorkerType) unit.Unit {
 	switch tp {
 	case lib.WorkerDMDump:
 		return dumpling.NewDumpling(s.cfg)

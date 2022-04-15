@@ -5,12 +5,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hanfei1991/microcosm/lib/metadata"
-
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	"github.com/hanfei1991/microcosm/lib"
+	"github.com/hanfei1991/microcosm/lib/master"
+	"github.com/hanfei1991/microcosm/lib/metadata"
 	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pb"
@@ -47,15 +47,17 @@ func TestJobManagerSubmitJob(t *testing.T) {
 	}
 	resp := mgr.SubmitJob(ctx, req)
 	require.Nil(t, resp.Err)
-	time.Sleep(time.Millisecond * 10)
+	err = mockMaster.Poll(ctx)
+	require.NoError(t, err)
+
 	require.Eventually(t, func() bool {
 		return mgr.JobFsm.JobCount(pb.QueryJobResponse_online) == 0 &&
-			mgr.JobFsm.JobCount(pb.QueryJobResponse_dispatched) == 0 &&
-			mgr.JobFsm.JobCount(pb.QueryJobResponse_pending) == 1
+			mgr.JobFsm.JobCount(pb.QueryJobResponse_dispatched) == 1 &&
+			mgr.JobFsm.JobCount(pb.QueryJobResponse_pending) == 0
 	}, time.Second*2, time.Millisecond*20)
 	queryResp := mgr.QueryJob(ctx, &pb.QueryJobRequest{JobId: resp.JobIdStr})
 	require.Nil(t, queryResp.Err)
-	require.Equal(t, pb.QueryJobResponse_pending, queryResp.Status)
+	require.Equal(t, pb.QueryJobResponse_dispatched, queryResp.Status)
 }
 
 type mockBaseMasterCreateWorkerFailed struct {
@@ -113,10 +115,8 @@ func TestJobManagerPauseJob(t *testing.T) {
 	meta := &libModel.MasterMetaKVData{ID: pauseWorkerID}
 	mgr.JobFsm.JobDispatched(meta, false)
 
-	mockWorkerHandler := &lib.MockWorkerHandler{WorkerID: pauseWorkerID}
-	mockWorkerHandler.On("SendMessage",
-		mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
-	err := mgr.JobFsm.JobOnline(mockWorkerHandler)
+	mockWorkerHandle := &master.MockHandle{WorkerID: pauseWorkerID, ExecutorID: "executor-1"}
+	err := mgr.JobFsm.JobOnline(mockWorkerHandle)
 	require.Nil(t, err)
 
 	req := &pb.PauseJobRequest{
@@ -124,6 +124,8 @@ func TestJobManagerPauseJob(t *testing.T) {
 	}
 	resp := mgr.PauseJob(ctx, req)
 	require.Nil(t, resp.Err)
+
+	require.Equal(t, 1, mockWorkerHandle.SendMessageCount())
 
 	req.JobIdStr = pauseWorkerID + "-unknown"
 	resp = mgr.PauseJob(ctx, req)
@@ -211,9 +213,10 @@ func TestJobManagerOnlineJob(t *testing.T) {
 	resp := mgr.SubmitJob(ctx, req)
 	require.Nil(t, resp.Err)
 
-	mockWorkerHandler := &lib.MockWorkerHandler{WorkerID: resp.JobIdStr}
-	mockWorkerHandler.On("ToPB").Return(&pb.WorkerInfo{Id: resp.JobIdStr}, nil)
-	err = mgr.JobFsm.JobOnline(mockWorkerHandler)
+	err = mgr.JobFsm.JobOnline(&master.MockHandle{
+		WorkerID:   resp.JobIdStr,
+		ExecutorID: "executor-1",
+	})
 	require.Nil(t, err)
 	queryResp := mgr.QueryJob(ctx, &pb.QueryJobRequest{JobId: resp.JobIdStr})
 	require.Nil(t, queryResp.Err)
