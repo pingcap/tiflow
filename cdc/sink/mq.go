@@ -277,8 +277,12 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 }
 
 func (k *mqSink) Close(ctx context.Context) error {
-	err := k.mqProducer.Close()
-	return errors.Trace(err)
+	select {
+	case <-ctx.Done():
+		return errors.Trace(ctx.Err())
+	case err := <-k.mqProducer.AsyncClose():
+		return errors.Trace(err)
+	}
 }
 
 func (k *mqSink) Barrier(cxt context.Context, tableID model.TableID) error {

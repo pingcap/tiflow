@@ -197,6 +197,14 @@ func (k *kafkaSaramaProducer) stop() {
 	close(k.closeCh)
 }
 
+func (k *kafkaSaramaProducer) AsyncClose() chan error {
+	ret := make(chan error)
+	go func() {
+		ret <- k.Close()
+	}()
+	return ret
+}
+
 // Close closes the sync and async clients.
 func (k *kafkaSaramaProducer) Close() error {
 	log.Info("stop the kafka producer", zap.String("changefeed", k.id), zap.Any("role", k.role))

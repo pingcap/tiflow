@@ -142,3 +142,11 @@ func (p *Producer) Close() error {
 	p.client.Close()
 	return nil
 }
+
+func (p *Producer) AsyncClose() chan error {
+	ret := make(chan error)
+	go func() {
+		ret <- p.Close()
+	}()
+	return ret
+}
