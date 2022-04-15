@@ -2650,7 +2650,7 @@ func (s *etcdSuite) TestFailRegionReentrant(c *check.C) {
 		_ = failpoint.Disable("github.com/pingcap/tiflow/cdc/kv/kvClientRegionReentrantErrorDelay")
 	}()
 	baseAllocatedID := currentRequestID()
-	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
+	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage), "changefeed-test", util.RoleTester)
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
@@ -2874,7 +2874,7 @@ func (s *etcdSuite) testKVClientForceReconnect(c *check.C) {
 		reconnectInterval = originalReconnectInterval
 	}()
 
-	lockresolver := txnutil.NewLockerResolver(kvStorage)
+	lockresolver := txnutil.NewLockerResolver(kvStorage, "changefeed-test", util.RoleTester)
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
