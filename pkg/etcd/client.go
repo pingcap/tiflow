@@ -102,7 +102,10 @@ func retryRPC(rpcName string, metric prometheus.Counter, etcdRPC func() error) e
 			metric.Inc()
 		}
 		return err
-	}, retry.WithBackoffBaseDelay(backoffBaseDelayInMs), retry.WithBackoffMaxDelay(backoffMaxDelayInMs), retry.WithMaxTries(maxTries), retry.WithIsRetryableErr(isRetryableError(rpcName)))
+	}, retry.WithBackoffBaseDelay(backoffBaseDelayInMs),
+		retry.WithBackoffMaxDelay(backoffMaxDelayInMs),
+		retry.WithMaxTries(maxTries),
+		retry.WithIsRetryableErr(isRetryableError(rpcName)))
 }
 
 // Put delegates request to clientv3.KV.Put

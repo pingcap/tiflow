@@ -343,7 +343,7 @@ func (s *etcdSuite) TestConnectOfflineTiKV(c *check.C) {
 	cluster.Bootstrap(3, []uint64{1, 2}, []uint64{4, 5}, 4)
 
 	baseAllocatedID := currentRequestID()
-	lockresolver := txnutil.NewLockerResolver(kvStorage)
+	lockresolver := txnutil.NewLockerResolver(kvStorage, "changefeed-test", util.RoleTester)
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
@@ -442,7 +442,7 @@ func (s *etcdSuite) TestRecvLargeMessageSize(c *check.C) {
 	cluster.Bootstrap(3, []uint64{2}, []uint64{4}, 4)
 
 	baseAllocatedID := currentRequestID()
-	lockresolver := txnutil.NewLockerResolver(kvStorage)
+	lockresolver := txnutil.NewLockerResolver(kvStorage, "changefeed-test", util.RoleTester)
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
@@ -540,7 +540,7 @@ func (s *etcdSuite) TestHandleError(c *check.C) {
 	cluster.SplitRaw(region4, region5, []byte("c"), []uint64{8, 9}, 9)
 
 	baseAllocatedID := currentRequestID()
-	lockresolver := txnutil.NewLockerResolver(kvStorage)
+	lockresolver := txnutil.NewLockerResolver(kvStorage, "changefeed-test", util.RoleTester)
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
@@ -697,7 +697,7 @@ func (s *etcdSuite) TestCompatibilityWithSameConn(c *check.C) {
 	cluster.Bootstrap(3, []uint64{1}, []uint64{4}, 4)
 
 	baseAllocatedID := currentRequestID()
-	lockresolver := txnutil.NewLockerResolver(kvStorage)
+	lockresolver := txnutil.NewLockerResolver(kvStorage, "changefeed-test", util.RoleTester)
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
@@ -759,7 +759,7 @@ func (s *etcdSuite) testHandleFeedEvent(c *check.C) {
 	cluster.Bootstrap(3, []uint64{1}, []uint64{4}, 4)
 
 	baseAllocatedID := currentRequestID()
-	lockresolver := txnutil.NewLockerResolver(kvStorage)
+	lockresolver := txnutil.NewLockerResolver(kvStorage, "changefeed-test", util.RoleTester)
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
@@ -1208,7 +1208,7 @@ func (s *etcdSuite) TestStreamSendWithError(c *check.C) {
 	cluster.Bootstrap(regionID3, []uint64{1}, []uint64{4}, 4)
 	cluster.SplitRaw(regionID3, regionID4, []byte("b"), []uint64{5}, 5)
 
-	lockerResolver := txnutil.NewLockerResolver(kvStorage)
+	lockerResolver := txnutil.NewLockerResolver(kvStorage, "changefeed-test", util.RoleTester)
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
@@ -1318,7 +1318,7 @@ func (s *etcdSuite) testStreamRecvWithError(c *check.C, failpointStr string) {
 		_ = failpoint.Disable("github.com/pingcap/tiflow/cdc/kv/kvClientStreamRecvError")
 	}()
 	baseAllocatedID := currentRequestID()
-	lockresolver := txnutil.NewLockerResolver(kvStorage)
+	lockresolver := txnutil.NewLockerResolver(kvStorage, "changefeed-test", util.RoleTester)
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
@@ -1447,7 +1447,7 @@ func (s *etcdSuite) TestStreamRecvWithErrorAndResolvedGoBack(c *check.C) {
 	cluster.Bootstrap(regionID, []uint64{1}, []uint64{4}, 4)
 
 	baseAllocatedID := currentRequestID()
-	lockresolver := txnutil.NewLockerResolver(kvStorage)
+	lockresolver := txnutil.NewLockerResolver(kvStorage, "changefeed-test", util.RoleTester)
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
@@ -1656,7 +1656,7 @@ func (s *etcdSuite) TestIncompatibleTiKV(c *check.C) {
 	defer func() {
 		_ = failpoint.Disable("github.com/pingcap/tiflow/cdc/kv/kvClientDelayWhenIncompatible")
 	}()
-	lockresolver := txnutil.NewLockerResolver(kvStorage)
+	lockresolver := txnutil.NewLockerResolver(kvStorage, "changefeed-test", util.RoleTester)
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
@@ -1732,7 +1732,7 @@ func (s *etcdSuite) TestNoPendingRegionError(c *check.C) {
 	cluster.Bootstrap(3, []uint64{1}, []uint64{4}, 4)
 
 	baseAllocatedID := currentRequestID()
-	lockresolver := txnutil.NewLockerResolver(kvStorage)
+	lockresolver := txnutil.NewLockerResolver(kvStorage, "changefeed-test", util.RoleTester)
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
@@ -1809,7 +1809,7 @@ func (s *etcdSuite) TestDropStaleRequest(c *check.C) {
 	cluster.Bootstrap(regionID, []uint64{1}, []uint64{4}, 4)
 
 	baseAllocatedID := currentRequestID()
-	lockresolver := txnutil.NewLockerResolver(kvStorage)
+	lockresolver := txnutil.NewLockerResolver(kvStorage, "changefeed-test", util.RoleTester)
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
@@ -1918,7 +1918,7 @@ func (s *etcdSuite) TestResolveLock(c *check.C) {
 		_ = failpoint.Disable("github.com/pingcap/tiflow/cdc/kv/kvClientResolveLockInterval")
 	}()
 	baseAllocatedID := currentRequestID()
-	lockresolver := txnutil.NewLockerResolver(kvStorage)
+	lockresolver := txnutil.NewLockerResolver(kvStorage, "changefeed-test", util.RoleTester)
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
@@ -2017,7 +2017,7 @@ func (s *etcdSuite) testEventCommitTsFallback(c *check.C, events []*cdcpb.Change
 		_ = failpoint.Disable("github.com/pingcap/tiflow/cdc/kv/kvClientErrUnreachable")
 	}()
 	baseAllocatedID := currentRequestID()
-	lockresolver := txnutil.NewLockerResolver(kvStorage)
+	lockresolver := txnutil.NewLockerResolver(kvStorage, "changefeed-test", util.RoleTester)
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
@@ -2164,7 +2164,7 @@ func (s *etcdSuite) testEventAfterFeedStop(c *check.C) {
 		_ = failpoint.Disable("github.com/pingcap/tiflow/cdc/kv/kvClientSingleFeedProcessDelay")
 	}()
 	baseAllocatedID := currentRequestID()
-	lockresolver := txnutil.NewLockerResolver(kvStorage)
+	lockresolver := txnutil.NewLockerResolver(kvStorage, "changefeed-test", util.RoleTester)
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
@@ -2342,7 +2342,7 @@ func (s *etcdSuite) TestOutOfRegionRangeEvent(c *check.C) {
 	cluster.Bootstrap(3, []uint64{1}, []uint64{4}, 4)
 
 	baseAllocatedID := currentRequestID()
-	lockresolver := txnutil.NewLockerResolver(kvStorage)
+	lockresolver := txnutil.NewLockerResolver(kvStorage, "changefeed-test", util.RoleTester)
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
@@ -2556,7 +2556,7 @@ func (s *etcdSuite) TestResolveLockNoCandidate(c *check.C) {
 	cluster.Bootstrap(regionID, []uint64{storeID}, []uint64{peerID}, peerID)
 
 	baseAllocatedID := currentRequestID()
-	lockresolver := txnutil.NewLockerResolver(kvStorage)
+	lockresolver := txnutil.NewLockerResolver(kvStorage, "changefeed-test", util.RoleTester)
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
@@ -2650,7 +2650,7 @@ func (s *etcdSuite) TestFailRegionReentrant(c *check.C) {
 		_ = failpoint.Disable("github.com/pingcap/tiflow/cdc/kv/kvClientRegionReentrantErrorDelay")
 	}()
 	baseAllocatedID := currentRequestID()
-	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
+	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage), "changefeed-test", util.RoleTester)
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
@@ -2731,7 +2731,7 @@ func (s *etcdSuite) TestClientV1UnlockRangeReentrant(c *check.C) {
 		_ = failpoint.Disable("github.com/pingcap/tiflow/cdc/kv/kvClientStreamRecvError")
 		_ = failpoint.Disable("github.com/pingcap/tiflow/cdc/kv/kvClientPendingRegionDelay")
 	}()
-	lockresolver := txnutil.NewLockerResolver(kvStorage)
+	lockresolver := txnutil.NewLockerResolver(kvStorage, "changefeed-test", util.RoleTester)
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
@@ -2797,7 +2797,7 @@ func (s *etcdSuite) testClientErrNoPendingRegion(c *check.C) {
 		_ = failpoint.Disable("github.com/pingcap/tiflow/cdc/kv/kvClientPendingRegionDelay")
 		_ = failpoint.Disable("github.com/pingcap/tiflow/cdc/kv/kvClientStreamCloseDelay")
 	}()
-	lockresolver := txnutil.NewLockerResolver(kvStorage)
+	lockresolver := txnutil.NewLockerResolver(kvStorage, "changefeed-test", util.RoleTester)
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
@@ -2874,7 +2874,7 @@ func (s *etcdSuite) testKVClientForceReconnect(c *check.C) {
 		reconnectInterval = originalReconnectInterval
 	}()
 
-	lockresolver := txnutil.NewLockerResolver(kvStorage)
+	lockresolver := txnutil.NewLockerResolver(kvStorage, "changefeed-test", util.RoleTester)
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
@@ -3024,7 +3024,7 @@ func (s *etcdSuite) TestConcurrentProcessRangeRequest(c *check.C) {
 	defer func() {
 		_ = failpoint.Disable("github.com/pingcap/tiflow/cdc/kv/kvClientMockRangeLock")
 	}()
-	lockresolver := txnutil.NewLockerResolver(kvStorage)
+	lockresolver := txnutil.NewLockerResolver(kvStorage, "changefeed-test", util.RoleTester)
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
@@ -3140,7 +3140,7 @@ func (s *etcdSuite) TestEvTimeUpdate(c *check.C) {
 	}()
 
 	baseAllocatedID := currentRequestID()
-	lockresolver := txnutil.NewLockerResolver(kvStorage)
+	lockresolver := txnutil.NewLockerResolver(kvStorage, "changefeed-test", util.RoleTester)
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
@@ -3259,7 +3259,7 @@ func (s *etcdSuite) TestRegionWorkerExitWhenIsIdle(c *check.C) {
 	cluster.Bootstrap(regionID, []uint64{1}, []uint64{4}, 4)
 
 	baseAllocatedID := currentRequestID()
-	lockresolver := txnutil.NewLockerResolver(kvStorage)
+	lockresolver := txnutil.NewLockerResolver(kvStorage, "changefeed-test", util.RoleTester)
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
@@ -3351,7 +3351,7 @@ func (s *etcdSuite) TestPrewriteNotMatchError(c *check.C) {
 	cluster.SplitRaw(regionID3, regionID4, []byte("b"), []uint64{5}, 5)
 
 	isPullInit := &mockPullerInit{}
-	lockResolver := txnutil.NewLockerResolver(kvStorage)
+	lockResolver := txnutil.NewLockerResolver(kvStorage, "changefeed-test", util.RoleTester)
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, "")

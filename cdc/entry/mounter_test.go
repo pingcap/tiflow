@@ -41,6 +41,10 @@ type mountTxnsSuite struct{}
 
 var _ = check.Suite(&mountTxnsSuite{})
 
+const (
+	dummyChangeFeedID = "dummy_changefeed"
+)
+
 func (s *mountTxnsSuite) TestMounterDisableOldValue(c *check.C) {
 	defer testleak.AfterTest(c)()
 	testCases := []struct {
@@ -242,7 +246,7 @@ func testMounterDisableOldValue(c *check.C, tc struct {
 
 	jobs, err := getAllHistoryDDLJob(store)
 	c.Assert(err, check.IsNil)
-	scheamStorage, err := NewSchemaStorage(nil, 0, nil, false)
+	scheamStorage, err := NewSchemaStorage(nil, 0, nil, false, dummyChangeFeedID)
 	c.Assert(err, check.IsNil)
 	for _, job := range jobs {
 		err := scheamStorage.HandleDDLJob(job)
