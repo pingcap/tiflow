@@ -1552,7 +1552,7 @@ func (s *Scheduler) StopRelay(source string, workers []string) error {
 	}
 
 	// 2. delete from etcd and update memory cache
-	if _, err := ha.DeleteRelayConfig(s.etcdCli, workers...); err != nil {
+	if _, err := ha.DeleteRelayConfig(s.etcdCli, source, workers...); err != nil {
 		return err
 	}
 	for _, workerName := range workers {
@@ -1862,7 +1862,7 @@ func (s *Scheduler) recoverRelayConfigs() error {
 		}
 		if sourceCfg.EnableRelay {
 			// current etcd max-txn-op is 2048
-			_, err2 := ha.DeleteRelayConfig(s.etcdCli, utils.SetToSlice(workers)...)
+			_, err2 := ha.DeleteRelayConfig(s.etcdCli, source, utils.SetToSlice(workers)...)
 			if err2 != nil {
 				return err2
 			}

@@ -54,10 +54,10 @@ func PutRelayConfig(cli *clientv3.Client, source string, workers ...string) (int
 }
 
 // DeleteRelayConfig deletes the relay config for given workers.
-func DeleteRelayConfig(cli *clientv3.Client, workers ...string) (int64, error) {
+func DeleteRelayConfig(cli *clientv3.Client, source string, workers ...string) (int64, error) {
 	ops := make([]clientv3.Op, 0, len(workers))
 	for _, worker := range workers {
-		ops = append(ops, deleteRelayConfigOp(worker))
+		ops = append(ops, deleteRelayConfigOp(worker, source))
 	}
 	_, rev, err := etcdutil.DoOpsInOneTxnWithRetry(cli, ops...)
 	return rev, err
@@ -146,7 +146,7 @@ func GetRelayConfig(cli *clientv3.Client, worker string) (map[string]*config.Sou
 	for retryCnt := 1; retryCnt <= retryNum; retryCnt++ {
 		ops := make([]clientv3.Op, 1, len(sources)+1)
 		ops[0] = clientv3.OpGet(common.UpstreamRelayWorkerKeyAdapter.Encode(worker), clientv3.WithPrefix())
-		appendGetUpstreamCfgOps(sources, ops)
+		ops = appendGetUpstreamCfgOps(sources, ops)
 		txnResp, _, err2 := etcdutil.DoOpsInOneTxnWithRetry(cli, ops...)
 		if err2 != nil {
 			return nil, 0, err
@@ -211,8 +211,8 @@ func putRelayConfigOp(worker, source string) clientv3.Op {
 }
 
 // deleteRelayConfigOp returns a DELETE etcd operation for the relay relationship of the specified DM-worker.
-func deleteRelayConfigOp(worker string) clientv3.Op {
-	return clientv3.OpDelete(common.UpstreamRelayWorkerKeyAdapter.Encode(worker), clientv3.WithPrefix())
+func deleteRelayConfigOp(worker, source string) clientv3.Op {
+	return clientv3.OpDelete(common.UpstreamRelayWorkerKeyAdapter.Encode(worker, source))
 }
 
 // WatchRelayConfig watches PUT & DELETE operations for the relay relationship of the specified DM-worker.
