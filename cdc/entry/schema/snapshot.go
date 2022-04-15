@@ -194,8 +194,8 @@ func NewSnapshotFromMeta(meta *timeta.Meta, currentTs uint64, forceReplicate boo
 				target: tableInfo.ID,
 			})
 
-			isEligible := tableInfo.IsEligible(forceReplicate)
-			if !isEligible {
+			ineligible := !tableInfo.IsEligible(forceReplicate)
+			if ineligible {
 				snap.ineligibleTables.ReplaceOrInsert(versionedID{id: tableInfo.ID, tag: tag})
 			}
 			if pi := tableInfo.GetPartitionInfo(); pi != nil {
@@ -203,7 +203,7 @@ func NewSnapshotFromMeta(meta *timeta.Meta, currentTs uint64, forceReplicate boo
 					vid := newVersionedID(partition.ID, tag)
 					vid.target = unsafe.Pointer(tableInfo)
 					snap.partitions.ReplaceOrInsert(vid)
-					if !isEligible {
+					if ineligible {
 						snap.ineligibleTables.ReplaceOrInsert(versionedID{id: partition.ID, tag: tag})
 					}
 				}
@@ -496,7 +496,7 @@ func (s *Snapshot) createSchema(dbInfo *timodel.DBInfo, currentTs uint64) error 
 }
 
 // Replace a schema. dbInfo will be deep copied.
-// Callers should ensure `dbInfo` information not confict with other schemas.
+// Callers should ensure `dbInfo` information not conflict with other schemas.
 func (s *Snapshot) replaceSchema(dbInfo *timodel.DBInfo, currentTs uint64) error {
 	old, ok := s.SchemaByID(dbInfo.ID)
 	if !ok {
@@ -762,8 +762,8 @@ func (s *Snapshot) Drop() {
 		x := s.tables.Delete(vid).(versionedID)
 		info := (*model.TableInfo)(x.target)
 		if info != nil {
-			isEligible := info.IsEligible(s.forceReplicate)
-			if !isEligible {
+			ineligible := !info.IsEligible(s.forceReplicate)
+			if ineligible {
 				s.ineligibleTables.Delete(vid)
 			}
 		} else {
@@ -793,8 +793,8 @@ func (s *Snapshot) Drop() {
 		x := s.partitions.Delete(vid).(versionedID)
 		info := (*model.TableInfo)(x.target)
 		if info != nil {
-			isEligible := info.IsEligible(s.forceReplicate)
-			if !isEligible {
+			ineligible := !info.IsEligible(s.forceReplicate)
+			if ineligible {
 				s.ineligibleTables.Delete(vid)
 			}
 		}
@@ -1018,7 +1018,7 @@ func newVersionedID(id int64, tag uint64) versionedID {
 	return versionedID{id, tag, target}
 }
 
-// DoHandleDDL is like HandleDDL but doesn't fill schema name into job. It's only for tests.
+// DoHandleDDL is like HandleDDL but doesn't fill schema name into job.
 func (s *Snapshot) DoHandleDDL(job *timodel.Job) error {
 	if s.lock(false) {
 		defer s.unlock()
