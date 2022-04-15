@@ -467,6 +467,7 @@ func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.S
 		ctx.GlobalVars().PDClient,
 		ctx.GlobalVars().GrpcPool,
 		ctx.GlobalVars().KVStorage,
+		ctx.ChangefeedVars().ID,
 		checkpointTs, ddlspans, false)
 	meta, err := kv.GetSnapshotMeta(kvStorage, checkpointTs)
 	if err != nil {

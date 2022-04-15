@@ -52,6 +52,10 @@ type EventHandle interface {
 	// Unregister returns. Unregister WILL NOT attempt to wait for pending events to complete, which means the last few events can be lost.
 	Unregister()
 
+	// GracefulUnregister removes the EventHandle after
+	// all pending events have been processed.
+	GracefulUnregister(ctx context.Context, timeout time.Duration) error
+
 	// ErrCh returns a channel that outputs the first non-nil result of events submitted to this EventHandle.
 	// Note that a non-nil result of an event cancels the EventHandle, so there is at most one error.
 	ErrCh() <-chan error

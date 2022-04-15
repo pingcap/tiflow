@@ -90,7 +90,7 @@ func unlockRange(l *RegionRangeLock, startKey, endKey string, regionID, version 
 func (s *regionRangeLockSuite) TestRegionRangeLock(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx := context.TODO()
-	l := NewRegionRangeLock([]byte("a"), []byte("h"), math.MaxUint64)
+	l := NewRegionRangeLock([]byte("a"), []byte("h"), math.MaxUint64, "")
 	mustLockRangeSuccess(ctx, c, l, "a", "e", 1, 1, math.MaxUint64)
 	unlockRange(l, "a", "e", 1, 1, 100)
 
@@ -106,7 +106,7 @@ func (s *regionRangeLockSuite) TestRegionRangeLock(c *check.C) {
 
 func (s *regionRangeLockSuite) TestRegionRangeLockStale(c *check.C) {
 	defer testleak.AfterTest(c)()
-	l := NewRegionRangeLock([]byte("a"), []byte("z"), math.MaxUint64)
+	l := NewRegionRangeLock([]byte("a"), []byte("z"), math.MaxUint64, "")
 	ctx := context.TODO()
 	mustLockRangeSuccess(ctx, c, l, "c", "g", 1, 10, math.MaxUint64)
 	mustLockRangeSuccess(ctx, c, l, "j", "n", 2, 8, math.MaxUint64)
@@ -128,7 +128,7 @@ func (s *regionRangeLockSuite) TestRegionRangeLockStale(c *check.C) {
 func (s *regionRangeLockSuite) TestRegionRangeLockLockingRegionID(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx := context.TODO()
-	l := NewRegionRangeLock([]byte("a"), []byte("z"), math.MaxUint64)
+	l := NewRegionRangeLock([]byte("a"), []byte("z"), math.MaxUint64, "")
 	mustLockRangeSuccess(ctx, c, l, "c", "d", 1, 10, math.MaxUint64)
 
 	mustLockRangeStale(ctx, c, l, "e", "f", 1, 5, "e", "f")
@@ -163,7 +163,7 @@ func (s *regionRangeLockSuite) TestRegionRangeLockLockingRegionID(c *check.C) {
 func (s *regionRangeLockSuite) TestRegionRangeLockCanBeCancelled(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx, cancel := context.WithCancel(context.Background())
-	l := NewRegionRangeLock([]byte("a"), []byte("z"), math.MaxUint64)
+	l := NewRegionRangeLock([]byte("a"), []byte("z"), math.MaxUint64, "")
 	mustLockRangeSuccess(ctx, c, l, "g", "h", 1, 10, math.MaxUint64)
 	wait := mustLockRangeWait(ctx, c, l, "g", "h", 1, 12)
 	cancel()

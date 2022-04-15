@@ -31,17 +31,20 @@ type pullerNode struct {
 
 	tableID     model.TableID
 	replicaInfo *model.TableReplicaInfo
+	changefeed  string
 	cancel      context.CancelFunc
 	wg          errgroup.Group
 }
 
 func newPullerNode(
-	tableID model.TableID, replicaInfo *model.TableReplicaInfo, tableName string,
+	tableID model.TableID, replicaInfo *model.TableReplicaInfo,
+	tableName, changefeed string,
 ) pipeline.Node {
 	return &pullerNode{
 		tableID:     tableID,
 		replicaInfo: replicaInfo,
 		tableName:   tableName,
+		changefeed:  changefeed,
 	}
 }
 
@@ -64,8 +67,13 @@ func (n *pullerNode) Init(ctx pipeline.NodeContext) error {
 	ctxC = util.PutChangefeedIDInCtx(ctxC, ctx.ChangefeedVars().ID)
 	ctxC = util.PutRoleInCtx(ctxC, util.RoleProcessor)
 	// NOTICE: always pull the old value internally
-	// See also: TODO(hi-rustin): add issue link here.
-	plr := puller.NewPuller(ctxC, ctx.GlobalVars().PDClient, ctx.GlobalVars().GrpcPool, ctx.GlobalVars().KVStorage,
+	// See also: https://github.com/pingcap/tiflow/issues/2301.
+	plr := puller.NewPuller(
+		ctxC,
+		ctx.GlobalVars().PDClient,
+		ctx.GlobalVars().GrpcPool,
+		ctx.GlobalVars().KVStorage,
+		n.changefeed,
 		n.replicaInfo.StartTs, n.tableSpan(ctx), true)
 	n.wg.Go(func() error {
 		ctx.Throw(errors.Trace(plr.Run(ctxC)))
