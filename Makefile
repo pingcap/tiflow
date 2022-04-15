@@ -416,9 +416,6 @@ tools/bin/protoc-gen-gogofaster: tools/check/go.mod
 tools/bin/protoc-gen-grpc-gateway: tools/check/go.mod
 	cd tools/check && $(GO) build -mod=mod -o ../bin/protoc-gen-grpc-gateway github.com/grpc-ecosystem/grpc-gateway/protoc-gen-grpc-gateway
 
-tools/bin/statik: tools/check/go.mod
-	cd tools/check && $(GO) build -mod=mod -o ../bin/statik github.com/rakyll/statik
-
 tools/bin/gofumports: tools/check/go.mod
 	cd tools/check && $(GO) build -mod=mod -o ../bin/gofumports mvdan.cc/gofumpt
 

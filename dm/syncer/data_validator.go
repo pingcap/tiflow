@@ -71,7 +71,8 @@ const (
 	rowUpdated
 	flushCheckpoint
 
-	rowChangeTypeCount = 3
+	rowChangeTypeCount  = 3
+	errorStateTypeCount = 5 // pb.ValidateErrorState_*
 )
 
 // change of table
@@ -186,7 +187,7 @@ func (v *DataValidator) initialize() error {
 	// todo: enhance error handling
 	v.errChan = make(chan error, 10)
 	v.pendingRowCounts = make([]atomic.Int64, rowChangeTypeCount)
-	v.errorRowCounts = make([]atomic.Int64, rowChangeTypeCount)
+	v.errorRowCounts = make([]atomic.Int64, errorStateTypeCount)
 
 	if err := v.persistHelper.init(v.tctx); err != nil {
 		return err
@@ -288,9 +289,9 @@ func (v *DataValidator) printStatusRoutine() {
 				v.pendingRowCounts[rowDeleted].Load(),
 			}
 			errorCounts := []int64{
-				v.errorRowCounts[newValidateErrorRow].Load(),
-				v.errorRowCounts[ignoredValidateErrorRow].Load(),
-				v.errorRowCounts[resolvedValidateErrorRow].Load(),
+				v.errorRowCounts[pb.ValidateErrorState_NewErr].Load(),
+				v.errorRowCounts[pb.ValidateErrorState_IgnoredErr].Load(),
+				v.errorRowCounts[pb.ValidateErrorState_ResolvedErr].Load(),
 			}
 			v.L.Info("validator status",
 				zap.Int64s("processed(i, u, d)", processed),
@@ -812,12 +813,12 @@ func (v *DataValidator) loadPersistedData(tctx *tcontext.Context) error {
 		return err
 	}
 	for i := range v.errorRowCounts {
-		v.errorRowCounts[i].Store(countMap[validateErrorStatus(i)])
+		v.errorRowCounts[i].Store(countMap[pb.ValidateErrorState(i)])
 	}
 	return nil
 }
 
-func (v *DataValidator) incrErrorRowCount(status validateErrorStatus, cnt int) {
+func (v *DataValidator) incrErrorRowCount(status pb.ValidateErrorState, cnt int) {
 	v.errorRowCounts[status].Add(int64(cnt))
 }
 
@@ -895,4 +896,42 @@ func (v *DataValidator) GetValidationStatus() []*pb.ValidationStatus {
 		})
 	}
 	return result
+}
+
+func (v *DataValidator) GetValidatorError(errState pb.ValidateErrorState) []*pb.ValidationError {
+	failpoint.Inject("MockValidationQuery", func() {
+		failpoint.Return(
+			[]*pb.ValidationError{
+				{Id: "1"}, {Id: "2"},
+			},
+		)
+	})
+	// todo: validation error in workers cannot be returned
+	// because the errID is only allocated when the error rows are flushed
+	// user cannot handle errorRows without errID
+	ret, err := v.persistHelper.loadError(errState)
+	if err != nil {
+		v.L.Warn("fail to load validator error", zap.Error(err))
+	}
+	return ret
+}
+
+func (v *DataValidator) OperateValidatorError(validateOp pb.ValidationErrOp, errID uint64, isAll bool) error {
+	failpoint.Inject("MockValidationOperation", func() {
+		failpoint.Return(nil)
+	})
+	return v.persistHelper.operateError(validateOp, errID, isAll)
+}
+
+// return snapshot of the current table status.
+func (v *DataValidator) getTableStatus() map[string]*tableValidateStatus {
+	v.RLock()
+	defer v.RUnlock()
+	tblStatus := make(map[string]*tableValidateStatus)
+	for key, tblStat := range v.tableStatus {
+		stat := &tableValidateStatus{}
+		*stat = *tblStat // deep copy
+		tblStatus[key] = stat
+	}
+	return tblStatus
 }

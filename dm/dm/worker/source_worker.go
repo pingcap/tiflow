@@ -1059,9 +1059,6 @@ func copyConfigFromSource(cfg *config.SubTaskConfig, sourceCfg *config.SourceCon
 	cfg.EnableGTID = sourceCfg.EnableGTID
 	cfg.UseRelay = enableRelay
 
-	// we can remove this from SubTaskConfig later, because syncer will always read from relay
-	cfg.AutoFixGTID = sourceCfg.AutoFixGTID
-
 	if cfg.CaseSensitive != sourceCfg.CaseSensitive {
 		log.L().Warn("different case-sensitive config between task config and source config, use `true` for it.")
 	}
@@ -1332,4 +1329,25 @@ func (w *SourceWorker) CheckCfgCanUpdated(cfg *config.SubTaskConfig) error {
 		return err
 	}
 	return subTask.CheckUnitCfgCanUpdate(cfg)
+}
+
+func (w *SourceWorker) GetWorkerValidatorErr(taskName string, errState pb.ValidateErrorState) []*pb.ValidationError {
+	w.RLock()
+	defer w.RUnlock()
+	st := w.subTaskHolder.findSubTask(taskName)
+	if st != nil {
+		return st.GetValidatorError(errState)
+	}
+	log.L().Warn("get validator err", zap.Error(terror.ErrWorkerSubTaskNotFound.Generate(taskName)))
+	return []*pb.ValidationError{}
+}
+
+func (w *SourceWorker) OperateWorkerValidatorErr(taskName string, op pb.ValidationErrOp, errID uint64, isAll bool) error {
+	w.RLock()
+	defer w.RUnlock()
+	st := w.subTaskHolder.findSubTask(taskName)
+	if st != nil {
+		return st.OperateValidatorError(op, errID, isAll)
+	}
+	return terror.ErrWorkerSubTaskNotFound.Generate(taskName)
 }
