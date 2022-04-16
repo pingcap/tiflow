@@ -128,7 +128,6 @@ func createSorter(ctx pipeline.NodeContext, tableName string, tableID model.Tabl
 
 func (n *sorterNode) start(
 	ctx pipeline.NodeContext, isTableActorMode bool, eg *errgroup.Group,
-	tableActorID actor.ID, tableActorRouter *actor.Router[pmessage.Message],
 ) error {
 	n.isTableActorMode = isTableActorMode
 	n.eg = eg
@@ -145,7 +144,8 @@ func (n *sorterNode) start(
 	return nil
 }
 
-func (n *sorterNode) output(ctx context.Context, globalResolvedTs model.Ts, message []pmessage.Message) error {
+func (n *sorterNode) output(ctx context.Context, globalResolvedTs model.Ts, message []pmessage.Message,
+	tableActorID actor.ID, tableActorRouter *actor.Router[pmessage.Message]) error {
 	i := 0
 	for i < len(message) {
 		// We must call `sorter.Output` before receiving resolved events.
