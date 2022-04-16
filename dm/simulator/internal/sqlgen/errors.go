@@ -22,4 +22,7 @@ var (
 	ErrUKColValueNotProvided = errors.New("some UK column values are not provided")
 	// ErrMissingUKValue means the input unique key is nil.
 	ErrMissingUKValue = errors.New("missing the UK values")
+	// ErrWhereConditionsEmpty means the WHERE clause compare conditions is empty.
+	// It is usually caused when there is no filter clause generated on generating a WHERE clause.
+	ErrWhereFiltersEmpty = errors.New("`WHERE` condition filters is empty")
 )

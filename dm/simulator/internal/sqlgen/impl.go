@@ -78,7 +78,7 @@ func (g *sqlGeneratorImpl) GenTruncateTable() (string, error) {
 }
 
 func (g *sqlGeneratorImpl) generateWhereClause(theUK map[string]interface{}) (ast.ExprNode, error) {
-	compareExprs := make([]*ast.BinaryOperationExpr, 0)
+	compareExprs := make([]ast.ExprNode, 0)
 	// iterate the existing UKs, to make sure all the uk columns has values
 	for ukColName := range g.ukMap {
 		val, ok := theUK[ukColName]
@@ -86,20 +86,36 @@ func (g *sqlGeneratorImpl) generateWhereClause(theUK map[string]interface{}) (as
 			log.L().Error(ErrUKColValueNotProvided.Error(), zap.String("column_name", ukColName))
 			return nil, errors.Trace(ErrUKColValueNotProvided)
 		}
-		compareExprs = append(compareExprs, &ast.BinaryOperationExpr{
-			Op: opcode.EQ,
-			L: &ast.ColumnNameExpr{
-				Name: &ast.ColumnName{
-					Name: model.NewCIStr(ukColName),
+		var compareExpr ast.ExprNode
+		if val == nil {
+			compareExpr = &ast.IsNullExpr{
+				Expr: &ast.ColumnNameExpr{
+					Name: &ast.ColumnName{
+						Name: model.NewCIStr(ukColName),
+					},
 				},
-			},
-			R: ast.NewValueExpr(val, "", ""),
-		})
+			}
+		} else {
+			compareExpr = &ast.BinaryOperationExpr{
+				Op: opcode.EQ,
+				L: &ast.ColumnNameExpr{
+					Name: &ast.ColumnName{
+						Name: model.NewCIStr(ukColName),
+					},
+				},
+				R: ast.NewValueExpr(val, "", ""),
+			}
+		}
+		compareExprs = append(compareExprs, compareExpr)
 	}
-	return generateCompoundBinaryOpExpr(compareExprs), nil
+	resultExpr := generateCompoundBinaryOpExpr(compareExprs)
+	if resultExpr == nil {
+		return nil, ErrWhereFiltersEmpty
+	}
+	return resultExpr, nil
 }
 
-func generateCompoundBinaryOpExpr(compExprs []*ast.BinaryOperationExpr) ast.ExprNode {
+func generateCompoundBinaryOpExpr(compExprs []ast.ExprNode) ast.ExprNode {
 	switch len(compExprs) {
 	case 0:
 		return nil
@@ -124,6 +140,7 @@ func (g *sqlGeneratorImpl) GenUpdateRow(theUK *mcp.UniqueKey) (string, error) {
 	for _, colInfo := range g.columnMap {
 		if _, ok := g.ukMap[colInfo.ColumnName]; ok {
 			// this is a UK column, skip from modifying it
+			// TODO: support UK modification in the future
 			continue
 		}
 		assignments = append(assignments, &ast.Assignment{
