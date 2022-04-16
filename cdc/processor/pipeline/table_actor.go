@@ -268,12 +268,19 @@ func (t *tableActor) start(sdtTableContext context.Context) error {
 	//	zap.Uint64("quota", t.memoryQuota))
 	//
 	//flowController := flow.NewTableFlowController(t.memoryQuota)
-	sorterNode := newSorterNode(t.tableName, t.tableID, t.replicaInfo.StartTs,
-		t.mounter, t.replicaConfig, t.flowController)
-	t.sortNode = sorterNode
 	sortActorNodeContext := newContext(sdtTableContext, t.tableName,
 		t.globalVars.TableActorSystem.Router(),
 		t.actorID, t.changefeedVars, t.globalVars, t.reportErr)
+	eventSorter, err := createSorter(sortActorNodeContext, t.tableName, t.tableID)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	sorterNode := newSorterNode(t.tableName, t.tableID, t.replicaInfo.StartTs,
+		t.mounter, t.replicaConfig, t.flowController)
+	sorterNode.sorter = eventSorter
+	t.sortNode = sorterNode
+
 	if err := startSorter(t, sortActorNodeContext); err != nil {
 		log.Error("sorter fails to start",
 			zap.String("tableName", t.tableName),
