@@ -14,17 +14,17 @@ type DDL struct {
 // DDLStore manages the state of ddls.
 // Write by DDLCoordinator.
 type DDLStore struct {
-	*DefaultStore
+	*TomlStore
 
 	id libModel.MasterID
 }
 
 func NewDDLStore(id libModel.MasterID, kvClient metaclient.KVClient) *DDLStore {
 	ddlStore := &DDLStore{
-		DefaultStore: NewDefaultStore(kvClient),
-		id:           id,
+		TomlStore: NewTomlStore(kvClient),
+		id:        id,
 	}
-	ddlStore.DefaultStore.Store = ddlStore
+	ddlStore.TomlStore.Store = ddlStore
 	return ddlStore
 }
 

@@ -1,10 +1,11 @@
 package metadata
 
 import (
+	"bytes"
 	"context"
-	"encoding/json"
 	"testing"
 
+	"github.com/BurntSushi/toml"
 	"github.com/stretchr/testify/require"
 
 	"github.com/hanfei1991/microcosm/pkg/meta/kvclient/mock"
@@ -20,7 +21,7 @@ func (ds *DummyState) String() string {
 }
 
 type DummyStore struct {
-	*DefaultStore
+	*TomlStore
 }
 
 func (ds *DummyStore) CreateState() State {
@@ -38,7 +39,7 @@ type FailedState struct {
 }
 
 type FailedStore struct {
-	*DefaultStore
+	*TomlStore
 }
 
 func (fs *FailedStore) CreateState() State {
@@ -55,9 +56,9 @@ func TestDefaultStore(t *testing.T) {
 	kvClient := mock.NewMetaMock()
 	dummyState := &DummyState{I: 1}
 	dummyStore := &DummyStore{
-		DefaultStore: NewDefaultStore(kvClient),
+		TomlStore: NewTomlStore(kvClient),
 	}
-	dummyStore.DefaultStore.Store = dummyStore
+	dummyStore.TomlStore.Store = dummyStore
 
 	state, err := dummyStore.Get(context.Background())
 	require.Error(t, err)
@@ -80,9 +81,10 @@ func TestDefaultStore(t *testing.T) {
 	require.Error(t, err)
 	require.Nil(t, state)
 
-	v, err := json.Marshal(dummyState)
+	var b bytes.Buffer
+	err = toml.NewEncoder(&b).Encode(dummyState)
 	require.NoError(t, err)
-	kvClient.Put(context.Background(), dummyStore.Key(), string(v))
+	kvClient.Put(context.Background(), dummyStore.Key(), b.String())
 	state, err = dummyStore.Get(context.Background())
 	require.NoError(t, err)
 	require.Equal(t, dummyState, state)
@@ -95,8 +97,8 @@ func TestDefaultStore(t *testing.T) {
 
 	failedState := &FailedState{I: 1, i: 2}
 	failedStore := &FailedStore{
-		DefaultStore: NewDefaultStore(kvClient),
+		TomlStore: NewTomlStore(kvClient),
 	}
-	failedStore.DefaultStore.Store = failedStore
+	failedStore.TomlStore.Store = failedStore
 	require.EqualError(t, failedStore.Put(context.Background(), failedState), "fields of state should all be public")
 }

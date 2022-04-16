@@ -41,7 +41,8 @@ func RegisterWorker() {
 	constructor := func(ctx *dcontext.Context, id libModel.WorkerID, masterID libModel.MasterID, config lib.WorkerConfig) lib.WorkerImpl {
 		return NewDMJobMaster(ctx, id, masterID, config)
 	}
-	factory := registry.NewSimpleWorkerFactory(constructor, &config.JobCfg{})
+
+	factory := registry.NewTomlWorkerFactory(constructor, &config.JobCfg{})
 	registry.GlobalWorkerRegistry().MustRegisterWorkerType(lib.DMJobMaster, factory)
 }
 

@@ -60,17 +60,17 @@ func NewTask(taskCfg *config.TaskCfg) *Task {
 
 // JobStore manages the state of a job.
 type JobStore struct {
-	*DefaultStore
+	*TomlStore
 
 	id libModel.MasterID
 }
 
 func NewJobStore(id libModel.MasterID, kvClient metaclient.KVClient) *JobStore {
 	jobStore := &JobStore{
-		DefaultStore: NewDefaultStore(kvClient),
-		id:           id,
+		TomlStore: NewTomlStore(kvClient),
+		id:        id,
 	}
-	jobStore.DefaultStore.Store = jobStore
+	jobStore.TomlStore.Store = jobStore
 	return jobStore
 }
 

@@ -1,11 +1,12 @@
 package metadata
 
 import (
+	"bytes"
 	"context"
-	"encoding/json"
 	"reflect"
 	"sync"
 
+	"github.com/BurntSushi/toml"
 	"github.com/pingcap/errors"
 
 	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
@@ -21,8 +22,8 @@ type Store interface {
 	Key() string
 }
 
-// DefaultStore implements some default methods of Store.
-type DefaultStore struct {
+// TomlStore implements some default methods of Store. It uses TOML serialization.
+type TomlStore struct {
 	Store
 
 	state    State
@@ -31,18 +32,22 @@ type DefaultStore struct {
 	mu sync.RWMutex
 }
 
-func NewDefaultStore(kvClient metaclient.KVClient) *DefaultStore {
-	return &DefaultStore{
+func NewTomlStore(kvClient metaclient.KVClient) *TomlStore {
+	return &TomlStore{
 		kvClient: kvClient,
 	}
 }
 
-func (ds *DefaultStore) PutOp(state State) (metaclient.Op, error) {
-	v, err := json.Marshal(state)
-	return metaclient.OpPut(ds.Key(), string(v)), errors.Trace(err)
+func (ds *TomlStore) PutOp(state State) (metaclient.Op, error) {
+	var b bytes.Buffer
+	err := toml.NewEncoder(&b).Encode(state)
+	if err != nil {
+		return metaclient.Op{}, errors.Trace(err)
+	}
+	return metaclient.OpPut(ds.Key(), b.String()), nil
 }
 
-func (ds *DefaultStore) DeleteOp() metaclient.Op {
+func (ds *TomlStore) DeleteOp() metaclient.Op {
 	return metaclient.OpDelete(ds.Key())
 }
 
@@ -63,7 +68,7 @@ func checkAllFieldsIsPublic(state State) bool {
 	return true
 }
 
-func (ds *DefaultStore) Put(ctx context.Context, state State) error {
+func (ds *TomlStore) Put(ctx context.Context, state State) error {
 	if !checkAllFieldsIsPublic(state) {
 		return errors.New("fields of state should all be public")
 	}
@@ -84,7 +89,7 @@ func (ds *DefaultStore) Put(ctx context.Context, state State) error {
 	return nil
 }
 
-func (ds *DefaultStore) Delete(ctx context.Context) error {
+func (ds *TomlStore) Delete(ctx context.Context) error {
 	ds.mu.Lock()
 	defer ds.mu.Unlock()
 
@@ -102,7 +107,7 @@ func (ds *DefaultStore) Delete(ctx context.Context) error {
 }
 
 // Notice: get always return clone of a state.
-func (ds *DefaultStore) Get(ctx context.Context) (State, error) {
+func (ds *TomlStore) Get(ctx context.Context) (State, error) {
 	ds.mu.RLock()
 	if ds.state != nil {
 		clone, err := ds.cloneState()
@@ -129,23 +134,27 @@ func (ds *DefaultStore) Get(ctx context.Context) (State, error) {
 	}
 
 	ds.state = ds.CreateState()
-	if err := json.Unmarshal(resp.Kvs[0].Value, ds.state); err != nil {
+	if _, err := toml.Decode(string(resp.Kvs[0].Value), ds.state); err != nil {
 		return nil, errors.Trace(err)
 	}
 
 	return ds.cloneState()
 }
 
-func (ds *DefaultStore) cloneState() (State, error) {
+func (ds *TomlStore) cloneState() (State, error) {
 	if ds.state == nil {
 		return nil, nil
 	}
 
 	clone := ds.CreateState()
-	v, err := json.Marshal(ds.state)
+	var b bytes.Buffer
+	err := toml.NewEncoder(&b).Encode(ds.state)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	err = json.Unmarshal(v, clone)
+	if _, err = toml.Decode(b.String(), clone); err != nil {
+		return nil, err
+	}
+
 	return clone, errors.Trace(err)
 }

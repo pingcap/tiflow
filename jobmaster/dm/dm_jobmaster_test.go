@@ -1,6 +1,7 @@
 package dm
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -8,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/BurntSushi/toml"
 	"github.com/hanfei1991/microcosm/client"
 	"github.com/hanfei1991/microcosm/jobmaster/dm/config"
 	"github.com/hanfei1991/microcosm/jobmaster/dm/metadata"
@@ -86,8 +88,10 @@ func (t *testDMJobmasterSuite) TestRunDMJobMaster() {
 	// submit-job
 	jobCfg := &config.JobCfg{}
 	require.NoError(t.T(), jobCfg.DecodeFile(jobTemplatePath))
-	cfgBytes, err := json.Marshal(jobCfg)
+	var b bytes.Buffer
+	err := toml.NewEncoder(&b).Encode(jobCfg)
 	require.NoError(t.T(), err)
+	cfgBytes := b.Bytes()
 	jobmaster, err := registry.GlobalWorkerRegistry().CreateWorker(dctx, lib.DMJobMaster, "dm-jobmaster", libMetadata.JobManagerUUID, cfgBytes)
 	require.NoError(t.T(), err)
 
@@ -180,6 +184,7 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	jm.OnWorkerDispatched(workerHandle2, errors.New("dispatch error"))
 	worker3 := "worker3"
 	mockBaseJobmaster.On("CreateWorker", mock.Anything, mock.Anything, mock.Anything).Return(worker3, nil).Once()
+	workerHandle1.On("SendMessage", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
 	require.NoError(t.T(), jm.Tick(context.Background()))
 
 	// worker1 offline, worker3 online
@@ -201,6 +206,7 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	jm.OnWorkerOffline(workerHandle1, errors.New("offline error"))
 	worker4 := "worker4"
 	mockBaseJobmaster.On("CreateWorker", mock.Anything, mock.Anything, mock.Anything).Return(worker4, nil).Once()
+	workerHandle2.On("SendMessage", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
 	require.NoError(t.T(), jm.Tick(context.Background()))
 
 	// worker4 online
@@ -222,6 +228,8 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	workerHandle2.On("Status").Return(&libModel.WorkerStatus{ExtBytes: bytes2}).Once()
 	workerHandle1.On("IsTombStone").Return(false).Once()
 	workerHandle2.On("IsTombStone").Return(false).Once()
+	workerHandle1.On("SendMessage", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
+	workerHandle2.On("SendMessage", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
 	jm.OnMasterRecovered(context.Background())
 	require.NoError(t.T(), jm.Tick(context.Background()))
 	// placeholder
