@@ -26,10 +26,10 @@ import (
 )
 
 const (
-	// When errors occurred and we need to do backoff, we start an exponential backoff
+	// When errors occurred, and we need to do backoff, we start an exponential backoff
 	// with an interval from 10s to 30min (10s, 20s, 40s, 80s, 160s, 320s, 640s, 1280s, 1800s).
 	// And the backoff will be stopped after 72 min (about 9 tries) because if we do another 30min backoff,
-	// the total duration (72+30=102min) will exceeds the MaxElapsedTime (90min).
+	// the total duration (72+30=102min) will exceed the MaxElapsedTime (90min).
 	// To avoid thunderherd, a random factor is also added.
 	defaultBackoffInitInterval        = 10 * time.Second
 	defaultBackoffMaxInterval         = 30 * time.Minute
@@ -37,7 +37,7 @@ const (
 	defaultBackoffRandomizationFactor = 0.1
 	defaultBackoffMultiplier          = 2.0
 
-	// If all states recorded in window are 'normal', it can be assumed that the changfeed
+	// If all states recorded in window are 'normal', it can be assumed that the changefeed
 	// is running steady. And then if we enter a state other than normal at next tick,
 	// the backoff must be reset.
 	defaultStateWindowSize = 512

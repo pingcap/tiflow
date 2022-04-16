@@ -23,8 +23,8 @@ import (
 
 	"github.com/chaos-mesh/go-sqlsmith"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tidb-tools/pkg/dbutil"
 	"github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tidb/util/dbutil"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 
@@ -66,7 +66,8 @@ type task struct {
 
 // newTask creates a new task instance.
 func newTask(ctx context.Context, cli pb.MasterClient, taskFile string, schema string,
-	targetCfg config2.DBConfig, sourcesCfg ...config2.DBConfig) (*task, error) {
+	targetCfg config2.DBConfig, sourcesCfg ...config2.DBConfig,
+) (*task, error) {
 	var taskCfg config2.TaskConfig
 	err := taskCfg.DecodeFile(taskFile)
 	if err != nil {

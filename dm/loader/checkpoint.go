@@ -29,7 +29,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 
-	"github.com/pingcap/tidb-tools/pkg/dbutil"
+	"github.com/pingcap/tidb/util/dbutil"
 	"go.uber.org/zap"
 )
 
@@ -608,6 +608,7 @@ func (cp *LightningCheckpointList) taskStatus(ctx context.Context) (lightingLoad
 
 	query := fmt.Sprintf("SELECT status FROM %s WHERE `task_name` = ? AND `source_name` = ?", cp.tableName)
 	tctx := tcontext.NewContext(ctx, log.With(zap.String("job", "lightning-checkpoint")))
+	// nolint:rowserrcheck
 	rows, err := connection.QuerySQL(tctx, query, cp.taskName, cp.sourceName)
 	if err != nil {
 		return lightningStatusInit, err

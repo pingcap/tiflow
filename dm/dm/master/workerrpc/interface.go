@@ -47,6 +47,11 @@ const (
 	CmdOperateV1Meta
 	CmdHandleError
 	CmdGetWorkerCfg
+	CmdCheckSubtasksCanUpdate
+
+	CmdGetValidationStatus
+	CmdGetValidationError
+	CmdOperateValidationError
 )
 
 // Request wraps all dm-worker rpc requests.
@@ -62,6 +67,12 @@ type Request struct {
 	OperateV1Meta *pb.OperateV1MetaRequest
 	HandleError   *pb.HandleWorkerErrorRequest
 	GetWorkerCfg  *pb.GetWorkerCfgRequest
+
+	CheckSubtasksCanUpdate *pb.CheckSubtasksCanUpdateRequest
+
+	GetValidationStatus    *pb.GetValidationStatusRequest
+	GetValidationError     *pb.GetValidationErrorRequest
+	OperateValidationError *pb.OperateValidationErrorRequest
 }
 
 // Response wraps all dm-worker rpc responses.
@@ -77,6 +88,12 @@ type Response struct {
 	OperateV1Meta *pb.OperateV1MetaResponse
 	HandleError   *pb.CommonWorkerResponse
 	GetWorkerCfg  *pb.GetWorkerCfgResponse
+
+	CheckSubtasksCanUpdate *pb.CheckSubtasksCanUpdateResponse
+
+	GetValidationStatus    *pb.GetValidationStatusResponse
+	GetValidationError     *pb.GetValidationErrorResponse
+	OperateValidationError *pb.OperateValidationErrorResponse
 }
 
 // Client is a client that sends RPC.

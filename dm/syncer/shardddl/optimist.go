@@ -17,8 +17,8 @@ import (
 	"context"
 	"sync"
 
-	filter "github.com/pingcap/tidb-tools/pkg/table-filter"
 	"github.com/pingcap/tidb/parser/model"
+	filter "github.com/pingcap/tidb/util/table-filter"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/zap"
 
@@ -101,7 +101,8 @@ func (o *Optimist) Reset() {
 
 // ConstructInfo constructs a shard DDL info.
 func (o *Optimist) ConstructInfo(upSchema, upTable, downSchema, downTable string,
-	ddls []string, tiBefore *model.TableInfo, tisAfter []*model.TableInfo) optimism.Info {
+	ddls []string, tiBefore *model.TableInfo, tisAfter []*model.TableInfo,
+) optimism.Info {
 	return optimism.NewInfo(o.task, o.source, upSchema, upTable, downSchema, downTable, ddls, tiBefore, tisAfter)
 }
 
@@ -119,28 +120,18 @@ func (o *Optimist) PutInfo(info optimism.Info) (int64, error) {
 	return rev, nil
 }
 
-// PutInfoAddTable puts the shard DDL info into etcd and adds the table for the info into source tables,
+// AddTable adds the table for the info into source tables,
 // this is often called for `CREATE TABLE`.
-func (o *Optimist) PutInfoAddTable(info optimism.Info) (int64, error) {
+func (o *Optimist) AddTable(info optimism.Info) (int64, error) {
 	o.tables.AddTable(info.UpSchema, info.UpTable, info.DownSchema, info.DownTable)
-	rev, err := optimism.PutSourceTablesInfo(o.cli, o.tables, info)
-	if err != nil {
-		return 0, err
-	}
-
-	o.mu.Lock()
-	o.pendingInfo = &info // record shard DDL info for `CREATE TABLE`.
-	o.mu.Unlock()
-
-	return rev, nil
+	return optimism.PutSourceTables(o.cli, o.tables)
 }
 
-// DeleteInfoRemoveTable deletes the shard DDL info from etcd and removes the table for the info from source tables,
+// RemoveTable removes the table for the info from source tables,
 // this is often called for `DROP TABLE`.
-func (o *Optimist) DeleteInfoRemoveTable(info optimism.Info) (int64, error) {
+func (o *Optimist) RemoveTable(info optimism.Info) (int64, error) {
 	o.tables.RemoveTable(info.UpSchema, info.UpTable, info.DownSchema, info.DownTable)
-	// don't record shard DDL info for `DROP TABLE` because we do not replicate it to the downstream now.
-	return optimism.PutSourceTablesDeleteInfo(o.cli, o.tables, info)
+	return optimism.PutSourceTables(o.cli, o.tables)
 }
 
 // GetOperation gets the shard DDL lock operation relative to the shard DDL info.

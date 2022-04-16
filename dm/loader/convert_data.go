@@ -22,9 +22,9 @@ import (
 	"strings"
 	"unsafe"
 
+	regexprrouter "github.com/pingcap/tidb/util/regexpr-router"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	parserpkg "github.com/pingcap/tiflow/dm/pkg/parser"
-	"github.com/pingcap/tiflow/dm/pkg/router"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 
@@ -234,7 +234,7 @@ func tableName(schema, table string) string {
 	return fmt.Sprintf("`%s`.`%s`", schema, table)
 }
 
-func parseTable(ctx *tcontext.Context, r *router.RouteTable, schema, table, file, sqlMode, sourceID string) (*tableInfo, error) {
+func parseTable(ctx *tcontext.Context, r *regexprrouter.RouteTable, schema, table, file, sqlMode, sourceID string) (*tableInfo, error) {
 	statement, err := exportStatement(file)
 	if err != nil {
 		return nil, err

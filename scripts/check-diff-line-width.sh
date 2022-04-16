@@ -19,19 +19,22 @@ set -e
 # The hash of the latest commit with a commit message matching
 # the pattern `\(#[0-9]+\)$`. It's usually a master branch commit.
 BASE_HASH=$(git --no-pager log -E --grep='\(#[0-9]+\)$' -n 1 --format=format:%H)
+# Please contact TiFlow maintainers before changing following settings.
+WARN_THRESHOLD=80
+ERROR_THRESHOLD=100
 
-git --no-pager diff $BASE_HASH -U0 -- cdc pkg |
+git --no-pager diff $BASE_HASH -U0 -- cdc pkg cmd -- ':(exclude)*_gen.go' -- ':(exclude)*_gen_test.go' |
 	grep -E '^\+' | grep -vE '^\+\+\+' |
 	sed 's/\t/    /g' |
-	awk '
+	awk "
 {
-    # Minus 1 for +
-    width = length($0) - 1;
-    if (width > 100) {
-        print "\033[0;31m[ERROR]\033[0m width too long, " length ": " $0 ;
+    # Minus 1 for '+'
+    width = length(\$0) - 1;
+    if (width > $ERROR_THRESHOLD) {
+        print \"\033[0;31m[ERROR]\033[0m width too long, \" length \": \" \$0 ;
         fail=1 ;
-    } else if (width > 80) {
-        print "\033[0;33m[WARN]\033[0m  width too long, " length ": " $0 ;
+    } else if (width > $WARN_THRESHOLD) {
+        print \"\033[0;33m[WARN]\033[0m  width too long, \" length \": \" \$0 ;
     }
 }
-END { if (fail != 0) { exit 1 } }'
+END { if (fail != 0) { exit 1 } }"

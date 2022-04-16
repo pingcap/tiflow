@@ -24,6 +24,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/linkedin/goavro/v2"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/parser/mysql"
@@ -227,11 +228,11 @@ func ColumnInfoToAvroSchema(name string, columnInfo []*model.Column) (string, er
 		}
 		field := make(map[string]interface{})
 		field["name"] = col.Name
-		if col.Flag.IsHandleKey() {
-			field["type"] = avroType
-		} else {
+		if col.Flag.IsNullable() {
 			field["type"] = []interface{}{"null", avroType}
 			field["default"] = nil
+		} else {
+			field["type"] = avroType
 		}
 
 		top.Fields = append(top.Fields, field)
@@ -256,13 +257,12 @@ func rowToAvroNativeData(cols []*model.Column, colInfos []rowcodec.ColInfo, tz *
 			return nil, err
 		}
 
-		if col.Flag.IsHandleKey() {
+		// https://pkg.go.dev/github.com/linkedin/goavro/v2#Union
+		if col.Flag.IsNullable() {
+			ret[col.Name] = goavro.Union(str, data)
+		} else {
 			ret[col.Name] = data
-			continue
 		}
-		union := make(map[string]interface{}, 1)
-		union[str] = data
-		ret[col.Name] = union
 	}
 	return ret, nil
 }

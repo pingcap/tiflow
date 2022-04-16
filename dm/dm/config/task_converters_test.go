@@ -14,13 +14,16 @@ package config
 
 import (
 	"fmt"
+	"testing"
 
 	"github.com/pingcap/check"
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
-	"github.com/pingcap/tidb-tools/pkg/filter"
+	"github.com/pingcap/tidb/util/filter"
+	"github.com/stretchr/testify/require"
 
 	"github.com/pingcap/tiflow/dm/openapi"
 	"github.com/pingcap/tiflow/dm/openapi/fixtures"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
 func (t *testConfig) TestTaskGetTargetDBCfg(c *check.C) {
@@ -62,6 +65,9 @@ func testNoShardTaskToSubTaskConfigs(c *check.C) {
 		User:     task.TargetConfig.User,
 		Password: task.TargetConfig.Password,
 	}
+	// change meta
+	newMeta := "new_dm_meta"
+	task.MetaSchema = &newMeta
 	subTaskConfigList, err := OpenAPITaskToSubTaskConfigs(&task, toDBCfg, sourceCfgMap)
 	c.Assert(err, check.IsNil)
 	c.Assert(subTaskConfigList, check.HasLen, 1)
@@ -99,14 +105,13 @@ func testNoShardTaskToSubTaskConfigs(c *check.C) {
 
 	c.Assert(rule.SchemaPattern, check.Equals, sourceSchema)
 	c.Assert(rule.TablePattern, check.Equals, sourceTable)
-	c.Assert(rule.TargetSchema, check.Equals, tartgetSchema)
-	c.Assert(rule.TargetTable, check.Equals, tartgetTable)
+	c.Assert(rule.TargetSchema, check.Equals, *tartgetSchema)
+	c.Assert(rule.TargetTable, check.Equals, *tartgetTable)
 	// check filter
 	c.Assert(subTaskConfig.FilterRules, check.HasLen, 0)
 	// check balist
 	c.Assert(subTaskConfig.BAList, check.NotNil)
 	bAListFromOpenAPITask := &filter.Rules{
-		DoDBs:    []string{sourceSchema},
 		DoTables: []*filter.Table{{Schema: sourceSchema, Name: sourceTable}},
 	}
 	c.Assert(subTaskConfig.BAList, check.DeepEquals, bAListFromOpenAPITask)
@@ -172,8 +177,8 @@ func testShardAndFilterTaskToSubTaskConfigs(c *check.C) {
 	tartgetTable := task.TableMigrateRule[0].Target.Table
 	c.Assert(rule.SchemaPattern, check.Equals, source1Schema)
 	c.Assert(rule.TablePattern, check.Equals, source1Table)
-	c.Assert(rule.TargetSchema, check.Equals, tartgetSchema)
-	c.Assert(rule.TargetTable, check.Equals, tartgetTable)
+	c.Assert(rule.TargetSchema, check.Equals, *tartgetSchema)
+	c.Assert(rule.TargetTable, check.Equals, *tartgetTable)
 	// check filter
 	filterARule, ok := task.BinlogFilterRule.Get("filterA")
 	c.Assert(ok, check.IsTrue)
@@ -194,7 +199,6 @@ func testShardAndFilterTaskToSubTaskConfigs(c *check.C) {
 	// check balist
 	c.Assert(subTask1Config.BAList, check.NotNil)
 	bAListFromOpenAPITask := &filter.Rules{
-		DoDBs:    []string{source1Schema},
 		DoTables: []*filter.Table{{Schema: source1Schema, Name: source1Table}},
 	}
 	c.Assert(subTask1Config.BAList, check.DeepEquals, bAListFromOpenAPITask)
@@ -233,8 +237,8 @@ func testShardAndFilterTaskToSubTaskConfigs(c *check.C) {
 	source2Table := task.TableMigrateRule[1].Source.Table
 	c.Assert(rule.SchemaPattern, check.Equals, source2Schema)
 	c.Assert(rule.TablePattern, check.Equals, source2Table)
-	c.Assert(rule.TargetSchema, check.Equals, tartgetSchema)
-	c.Assert(rule.TargetTable, check.Equals, tartgetTable)
+	c.Assert(rule.TargetSchema, check.Equals, *tartgetSchema)
+	c.Assert(rule.TargetTable, check.Equals, *tartgetTable)
 	// check filter
 	_, ok = task.BinlogFilterRule.Get("filterB")
 	c.Assert(ok, check.IsFalse)
@@ -242,7 +246,6 @@ func testShardAndFilterTaskToSubTaskConfigs(c *check.C) {
 	// check balist
 	c.Assert(subTask2Config.BAList, check.NotNil)
 	bAListFromOpenAPITask = &filter.Rules{
-		DoDBs:    []string{source2Schema},
 		DoTables: []*filter.Table{{Schema: source2Schema, Name: source2Table}},
 	}
 	c.Assert(subTask2Config.BAList, check.DeepEquals, bAListFromOpenAPITask)
@@ -272,15 +275,14 @@ func testNoShardSubTaskConfigsToOpenAPITask(c *check.C) {
 	c.Assert(subTaskConfigList, check.HasLen, 1)
 
 	// prepare sub task config
-	subTaskConfigMap := make(map[string]map[string]SubTaskConfig)
-	subTaskConfigMap[task.Name] = make(map[string]SubTaskConfig)
-	subTaskConfigMap[task.Name][source1Name] = *subTaskConfigList[0]
+	subTaskConfigMap := make(map[string]map[string]*SubTaskConfig)
+	subTaskConfigMap[task.Name] = make(map[string]*SubTaskConfig)
+	subTaskConfigMap[task.Name][source1Name] = subTaskConfigList[0]
 
-	taskList := SubTaskConfigsToOpenAPITask(subTaskConfigMap)
+	taskList := SubTaskConfigsToOpenAPITaskList(subTaskConfigMap)
 	c.Assert(taskList, check.HasLen, 1)
 	newTask := taskList[0]
-
-	c.Assert(task, check.DeepEquals, newTask)
+	c.Assert(&task, check.DeepEquals, newTask)
 }
 
 func testShardAndFilterSubTaskConfigsToOpenAPITask(c *check.C) {
@@ -307,12 +309,12 @@ func testShardAndFilterSubTaskConfigsToOpenAPITask(c *check.C) {
 	c.Assert(subTaskConfigList, check.HasLen, 2)
 
 	// prepare sub task config
-	subTaskConfigMap := make(map[string]map[string]SubTaskConfig)
-	subTaskConfigMap[task.Name] = make(map[string]SubTaskConfig)
-	subTaskConfigMap[task.Name][source1Name] = *subTaskConfigList[0]
-	subTaskConfigMap[task.Name][source2Name] = *subTaskConfigList[1]
+	subTaskConfigMap := make(map[string]map[string]*SubTaskConfig)
+	subTaskConfigMap[task.Name] = make(map[string]*SubTaskConfig)
+	subTaskConfigMap[task.Name][source1Name] = subTaskConfigList[0]
+	subTaskConfigMap[task.Name][source2Name] = subTaskConfigList[1]
 
-	taskList := SubTaskConfigsToOpenAPITask(subTaskConfigMap)
+	taskList := SubTaskConfigsToOpenAPITaskList(subTaskConfigMap)
 	c.Assert(taskList, check.HasLen, 1)
 	newTask := taskList[0]
 
@@ -335,5 +337,255 @@ func testShardAndFilterSubTaskConfigsToOpenAPITask(c *check.C) {
 		task.TableMigrateRule[0], task.TableMigrateRule[1] = task.TableMigrateRule[1], task.TableMigrateRule[0]
 	}
 
-	c.Assert(task, check.DeepEquals, newTask)
+	c.Assert(&task, check.DeepEquals, newTask)
+}
+
+func TestConvertBetweenOpenAPITaskAndTaskConfig(t *testing.T) {
+	// one source task
+	task, err := fixtures.GenNoShardOpenAPITaskForTest()
+	require.NoError(t, err)
+
+	sourceCfg1, err := ParseYamlAndVerify(SampleSourceConfig)
+	require.NoError(t, err)
+	source1Name := task.SourceConfig.SourceConf[0].SourceName
+	sourceCfg1.SourceID = source1Name
+	sourceCfgMap := map[string]*SourceConfig{source1Name: sourceCfg1}
+
+	taskCfg, err := OpenAPITaskToTaskConfig(&task, sourceCfgMap)
+	require.NoError(t, err)
+	require.NotNil(t, taskCfg)
+	task1, err := TaskConfigToOpenAPITask(taskCfg, sourceCfgMap)
+	require.NoError(t, err)
+	require.NotNil(t, task1)
+	require.EqualValues(t, task1, &task)
+
+	// test update some fields in task
+	{
+		batch := 1000
+		task.SourceConfig.IncrMigrateConf.ReplBatch = &batch
+		taskCfg2, err2 := OpenAPITaskToTaskConfig(&task, sourceCfgMap)
+		require.NoError(t, err2)
+		require.Equal(t, batch, taskCfg2.MySQLInstances[0].Syncer.Batch)
+		for _, cfg := range taskCfg2.Syncers {
+			require.Equal(t, batch, cfg.Batch)
+		}
+
+		// test update some fields in taskConfig
+		batch = 1
+		for _, cfg := range taskCfg2.Syncers {
+			cfg.Batch = batch
+		}
+		task2, err3 := TaskConfigToOpenAPITask(taskCfg2, sourceCfgMap)
+		require.NoError(t, err3)
+		require.Equal(t, batch, *task2.SourceConfig.IncrMigrateConf.ReplBatch)
+	}
+
+	// test update route
+	{
+		require.Len(t, task.TableMigrateRule, 1)
+		sourceSchema := task.TableMigrateRule[0].Source.Schema
+		targetSchema := *task.TableMigrateRule[0].Target.Schema
+		// only route schema
+		task.TableMigrateRule[0].Source = struct {
+			Schema     string `json:"schema"`
+			SourceName string `json:"source_name"`
+			Table      string `json:"table"`
+		}{
+			SourceName: source1Name,
+			Schema:     sourceSchema,
+		}
+		task.TableMigrateRule[0].Target = &struct {
+			Schema *string `json:"schema,omitempty"`
+			Table  *string `json:"table,omitempty"`
+		}{
+			Schema: &targetSchema,
+		}
+		taskCfg, err = OpenAPITaskToTaskConfig(&task, sourceCfgMap)
+		require.NoError(t, err)
+		require.Len(t, taskCfg.Routes, 1)
+		var routeKey string
+		for k := range taskCfg.Routes {
+			routeKey = k
+		}
+
+		// validate route rule in taskCfg
+		require.Equal(t, sourceSchema, taskCfg.Routes[routeKey].SchemaPattern)
+		require.Equal(t, "", taskCfg.Routes[routeKey].TablePattern)
+		require.Equal(t, targetSchema, taskCfg.Routes[routeKey].TargetSchema)
+		require.Equal(t, "", taskCfg.Routes[routeKey].TargetTable)
+
+		// validate baList in taskCfg, just do DBs because there is no table route rule
+		require.Len(t, taskCfg.BAList, 1)
+		require.Len(t, taskCfg.MySQLInstances, 1)
+		baListName := taskCfg.MySQLInstances[0].BAListName
+		require.Len(t, taskCfg.BAList[baListName].DoTables, 0)
+		require.Len(t, taskCfg.BAList[baListName].DoDBs, 1)
+		require.Equal(t, sourceSchema, taskCfg.BAList[baListName].DoDBs[0])
+
+		// convert back to openapi.Task
+		taskAfterConvert, err2 := TaskConfigToOpenAPITask(taskCfg, sourceCfgMap)
+		require.NoError(t, err2)
+		require.NotNil(t, taskAfterConvert)
+		require.EqualValues(t, taskAfterConvert, &task)
+
+		// only route table will meet error
+		sourceTable := "tb"
+		targetTable := "tb1"
+		task.TableMigrateRule[0].Source = struct {
+			Schema     string `json:"schema"`
+			SourceName string `json:"source_name"`
+			Table      string `json:"table"`
+		}{
+			SourceName: source1Name,
+			Schema:     sourceSchema,
+			Table:      sourceTable,
+		}
+		task.TableMigrateRule[0].Target = &struct {
+			Schema *string `json:"schema,omitempty"`
+			Table  *string `json:"table,omitempty"`
+		}{
+			Table: &targetTable,
+		}
+		_, err = OpenAPITaskToTaskConfig(&task, sourceCfgMap)
+		require.True(t, terror.ErrConfigGenTableRouter.Equal(err))
+
+		// route both
+		task.TableMigrateRule[0].Source = struct {
+			Schema     string `json:"schema"`
+			SourceName string `json:"source_name"`
+			Table      string `json:"table"`
+		}{
+			SourceName: source1Name,
+			Schema:     sourceSchema,
+			Table:      sourceTable,
+		}
+		task.TableMigrateRule[0].Target = &struct {
+			Schema *string `json:"schema,omitempty"`
+			Table  *string `json:"table,omitempty"`
+		}{
+			Schema: &targetSchema,
+			Table:  &targetTable,
+		}
+		taskCfg, err = OpenAPITaskToTaskConfig(&task, sourceCfgMap)
+		require.NoError(t, err)
+
+		// validate route rule in taskCfg
+		require.Equal(t, sourceSchema, taskCfg.Routes[routeKey].SchemaPattern)
+		require.Equal(t, sourceTable, taskCfg.Routes[routeKey].TablePattern)
+		require.Equal(t, targetSchema, taskCfg.Routes[routeKey].TargetSchema)
+		require.Equal(t, targetTable, taskCfg.Routes[routeKey].TargetTable)
+
+		// validate baList in taskCfg, just do Tables because there is a table route rule
+		require.Len(t, taskCfg.BAList[baListName].DoDBs, 0)
+		require.Len(t, taskCfg.BAList[baListName].DoTables, 1)
+		require.Equal(t, sourceSchema, taskCfg.BAList[baListName].DoTables[0].Schema)
+		require.Equal(t, sourceTable, taskCfg.BAList[baListName].DoTables[0].Name)
+
+		// convert back to openapi.Task
+		taskAfterConvert, err = TaskConfigToOpenAPITask(taskCfg, sourceCfgMap)
+		require.NoError(t, err)
+		require.NotNil(t, taskAfterConvert)
+		require.EqualValues(t, taskAfterConvert, &task)
+
+		// no route and only sync one table
+		task.TableMigrateRule[0].Target = nil
+		taskCfg, err = OpenAPITaskToTaskConfig(&task, sourceCfgMap)
+		require.NoError(t, err)
+		require.Len(t, taskCfg.Routes, 0)
+
+		// validate baList in taskCfg, just do Tables because there is a table route rule
+		require.Len(t, taskCfg.BAList[baListName].DoDBs, 0)
+		require.Len(t, taskCfg.BAList[baListName].DoTables, 1)
+		require.Equal(t, sourceSchema, taskCfg.BAList[baListName].DoTables[0].Schema)
+		require.Equal(t, sourceTable, taskCfg.BAList[baListName].DoTables[0].Name)
+
+		taskAfterConvert, err = TaskConfigToOpenAPITask(taskCfg, sourceCfgMap)
+		require.NoError(t, err)
+		require.NotNil(t, taskAfterConvert)
+		require.EqualValues(t, taskAfterConvert, &task)
+
+		// no route and sync one schema
+		task.TableMigrateRule[0].Source = struct {
+			Schema     string `json:"schema"`
+			SourceName string `json:"source_name"`
+			Table      string `json:"table"`
+		}{
+			SourceName: source1Name,
+			Schema:     sourceSchema,
+			Table:      "",
+		}
+		taskCfg, err = OpenAPITaskToTaskConfig(&task, sourceCfgMap)
+		require.NoError(t, err)
+		require.Len(t, taskCfg.Routes, 0)
+
+		// validate baList in taskCfg, just do DBs because there is no table route rule
+		require.Len(t, taskCfg.BAList[baListName].DoTables, 0)
+		require.Len(t, taskCfg.BAList[baListName].DoDBs, 1)
+		require.Equal(t, sourceSchema, taskCfg.BAList[baListName].DoDBs[0])
+
+		taskAfterConvert, err = TaskConfigToOpenAPITask(taskCfg, sourceCfgMap)
+		require.NoError(t, err)
+		require.NotNil(t, taskAfterConvert)
+		require.EqualValues(t, taskAfterConvert, &task)
+	}
+
+	// test update filter
+	{
+		// no filter no change
+		require.Nil(t, task.BinlogFilterRule)
+		taskCfg, err = OpenAPITaskToTaskConfig(&task, sourceCfgMap)
+		require.NoError(t, err)
+		taskAfterConvert, err := TaskConfigToOpenAPITask(taskCfg, sourceCfgMap)
+		require.NoError(t, err)
+		require.NotNil(t, taskAfterConvert)
+		require.EqualValues(t, taskAfterConvert, &task)
+
+		// filter both
+		sourceSchema := task.TableMigrateRule[0].Source.Schema
+		sourceTable := task.TableMigrateRule[0].Source.Table
+		ignoreEvent := []string{"drop database"}
+		ignoreSQL := []string{"^Drop"}
+		ruleName := genFilterRuleName(source1Name, 0)
+		ruleNameList := []string{ruleName}
+		rule := openapi.TaskBinLogFilterRule{IgnoreEvent: &ignoreEvent, IgnoreSql: &ignoreSQL}
+		ruleM := &openapi.Task_BinlogFilterRule{}
+		ruleM.Set(ruleName, rule)
+		task.BinlogFilterRule = ruleM
+		task.TableMigrateRule[0].BinlogFilterRule = &ruleNameList
+
+		taskCfg, err = OpenAPITaskToTaskConfig(&task, sourceCfgMap)
+		require.NoError(t, err)
+		require.Len(t, taskCfg.Filters, 1)
+		require.Len(t, taskCfg.MySQLInstances[0].FilterRules, 1)
+		filterName := taskCfg.MySQLInstances[0].FilterRules[0]
+		require.Equal(t, bf.Ignore, taskCfg.Filters[filterName].Action)
+		require.Equal(t, sourceSchema, taskCfg.Filters[filterName].SchemaPattern)
+		require.Equal(t, sourceTable, taskCfg.Filters[filterName].TablePattern)
+		require.Len(t, taskCfg.Filters[filterName].SQLPattern, 1)
+		require.Equal(t, ignoreSQL[0], taskCfg.Filters[filterName].SQLPattern[0])
+		require.Len(t, taskCfg.Filters[filterName].Events, 1)
+		require.Equal(t, ignoreEvent[0], string(taskCfg.Filters[filterName].Events[0]))
+
+		// convert back to openapi.Task
+		taskAfterConvert, err = TaskConfigToOpenAPITask(taskCfg, sourceCfgMap)
+		require.NoError(t, err)
+		require.NotNil(t, taskAfterConvert)
+		require.EqualValues(t, taskAfterConvert, &task)
+
+		// only filter events
+		rule = openapi.TaskBinLogFilterRule{IgnoreEvent: &ignoreEvent}
+		ruleM.Set(ruleName, rule)
+		taskCfg, err = OpenAPITaskToTaskConfig(&task, sourceCfgMap)
+		require.NoError(t, err)
+		require.Len(t, taskCfg.Filters[filterName].SQLPattern, 0)
+
+		taskAfterConvert, err = TaskConfigToOpenAPITask(taskCfg, sourceCfgMap)
+		ruleMAfterConvert := taskAfterConvert.BinlogFilterRule
+		ruleAfterConvert, ok := ruleMAfterConvert.Get(ruleName)
+		require.True(t, ok)
+		require.Nil(t, ruleAfterConvert.IgnoreSql)
+		require.NoError(t, err)
+		require.NotNil(t, taskAfterConvert)
+		require.EqualValues(t, taskAfterConvert, &task)
+	}
 }

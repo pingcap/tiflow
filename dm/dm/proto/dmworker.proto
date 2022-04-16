@@ -19,6 +19,15 @@ service Worker {
     rpc HandleError(HandleWorkerErrorRequest) returns(CommonWorkerResponse) {}
 
     rpc GetWorkerCfg(GetWorkerCfgRequest) returns(GetWorkerCfgResponse) {}
+
+    // only some fields of the configuration of the subtask in the sync phase can be updated
+    rpc CheckSubtasksCanUpdate(CheckSubtasksCanUpdateRequest) returns (CheckSubtasksCanUpdateResponse) {}
+
+    rpc GetWorkerValidatorStatus(GetValidationStatusRequest) returns (GetValidationStatusResponse) {}
+
+    rpc GetValidatorError(GetValidationErrorRequest) returns(GetValidationErrorResponse) {}
+
+    rpc OperateValidatorError(OperateValidationErrorRequest) returns(OperateValidationErrorResponse) {}
 }
 
 enum TaskOp {
@@ -146,6 +155,8 @@ message SyncStatus {
     bool synced = 10;  // whether sync is catched-up in this moment
     string binlogType = 11;
     int64 secondsBehindMaster = 12; // sync unit delay seconds behind master.
+    string blockDDLOwner = 13; // block ddl upstream info, format "task-`upstreamDatabase`.`upstreamTable`"
+    string conflictMsg = 14; // block ddl conflict reason
 }
 
 // SourceStatus represents status for source runing on dm-worker
@@ -324,6 +335,7 @@ enum SchemaOp {
     RemoveSchema = 3;
     ListSchema = 4;
     ListTable = 5;
+    ListMigrateTargets = 6;
 }
 
 message OperateWorkerSchemaRequest {
@@ -390,4 +402,79 @@ enum ValidatorOp {
     InvalidValidatorOp = 0;
     StartValidator = 1;
     StopValidator = 2;
+}
+
+message CheckSubtasksCanUpdateRequest { string subtaskCfgTomlString = 1; }
+
+message CheckSubtasksCanUpdateResponse {
+  bool success = 1;
+  string msg = 2; // message when error occurred
+}
+
+message GetValidationStatusRequest {
+    string taskName = 1;
+    Stage filterStatus = 2;
+}
+
+message ValidationStatus {
+    string source = 1;
+    string srcTable = 2;
+    string dstTable = 3;
+    string validationStatus = 4;
+    string message = 5;
+}
+
+message GetValidationStatusResponse {
+    bool result = 1;
+    string msg = 2;
+    repeated ValidationStatus status = 3;
+}
+message GetValidationErrorRequest {
+    ValidateErrorState errState = 1;
+    string taskName = 2;
+}
+
+message ValidationError {
+    string id = 1; // error-id
+    string source = 2;
+    string srcTable = 3;
+    string srcData = 4;
+    string dstTable = 5;
+    string dstData = 6;
+    string errorType = 7;
+    ValidateErrorState status = 8;
+    string time = 9;
+    string message = 10;
+}
+
+message GetValidationErrorResponse {
+    bool result = 1;
+    string msg = 2;
+    repeated ValidationError error = 3;
+}
+
+enum ValidateErrorState {
+    InvalidErr = 0;
+    NewErr = 1;
+    IgnoredErr = 2;
+    ResolvedErr = 3;
+}
+
+message OperateValidationErrorRequest {
+    ValidationErrOp op = 1;
+    bool isAllError = 2;
+    string taskName = 3;
+    uint64 errId = 4; // error-id
+}
+
+message OperateValidationErrorResponse {
+    bool result = 1;
+    string msg = 2;
+}
+
+enum ValidationErrOp {
+  InvalidErrOp = 0;
+  IgnoreErrOp = 1;
+  ResolveErrOp = 2;
+  ClearErrOp = 3;
 }

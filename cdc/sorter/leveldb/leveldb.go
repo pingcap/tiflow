@@ -86,19 +86,20 @@ type DBActor struct {
 	deleteCount int
 	compact     *CompactScheduler
 
+	stopped  bool
 	closedWg *sync.WaitGroup
 
 	metricWriteDuration prometheus.Observer
 	metricWriteBytes    prometheus.Observer
 }
 
-var _ actor.Actor = (*DBActor)(nil)
+var _ actor.Actor[message.Task] = (*DBActor)(nil)
 
 // NewDBActor returns a db actor.
 func NewDBActor(
 	id int, db db.DB, cfg *config.DBConfig, compact *CompactScheduler,
 	wg *sync.WaitGroup,
-) (*DBActor, actor.Mailbox, error) {
+) (*DBActor, actor.Mailbox[message.Task], error) {
 	idTag := strconv.Itoa(id)
 	// Write batch size should be larger than block size to save CPU.
 	const writeBatchSizeFactor = 16
@@ -110,7 +111,7 @@ func NewDBActor(
 	// IterCount limits the total number of opened iterators to release db
 	// resources in time.
 	iterSema := semaphore.NewWeighted(int64(cfg.Concurrency))
-	mb := actor.NewMailbox(actor.ID(id), cfg.Concurrency)
+	mb := actor.NewMailbox[message.Task](actor.ID(id), cfg.Concurrency)
 	wg.Add(1)
 
 	return &DBActor{
@@ -131,11 +132,6 @@ func NewDBActor(
 		metricWriteDuration: sorterWriteDurationHistogram.WithLabelValues(idTag),
 		metricWriteBytes:    sorterWriteBytesHistogram.WithLabelValues(idTag),
 	}, mb, nil
-}
-
-func (ldb *DBActor) close(err error) {
-	log.Info("db actor quit", zap.Uint64("ID", uint64(ldb.id)), zap.Error(err))
-	ldb.closedWg.Done()
 }
 
 func (ldb *DBActor) tryScheduleCompact() {
@@ -192,10 +188,9 @@ func (ldb *DBActor) acquireIterators() {
 
 // Poll implements actor.Actor.
 // It handles tasks by writing kv, deleting kv and taking iterators.
-func (ldb *DBActor) Poll(ctx context.Context, tasks []actormsg.Message) bool {
+func (ldb *DBActor) Poll(ctx context.Context, tasks []actormsg.Message[message.Task]) bool {
 	select {
 	case <-ctx.Done():
-		ldb.close(ctx.Err())
 		return false
 	default:
 	}
@@ -204,12 +199,9 @@ func (ldb *DBActor) Poll(ctx context.Context, tasks []actormsg.Message) bool {
 		var task message.Task
 		msg := tasks[i]
 		switch msg.Tp {
-		case actormsg.TypeTick:
-			continue
-		case actormsg.TypeSorterTask:
-			task = msg.SorterTask
+		case actormsg.TypeValue:
+			task = msg.Value
 		case actormsg.TypeStop:
-			ldb.close(nil)
 			return false
 		default:
 			log.Panic("unexpected message", zap.Any("message", msg))
@@ -250,6 +242,9 @@ func (ldb *DBActor) Poll(ctx context.Context, tasks []actormsg.Message) bool {
 			ldb.iterQ.push(task.UID, task.TableID, task.IterReq)
 			requireIter = true
 		}
+		if task.Test != nil {
+			time.Sleep(task.Test.Sleep)
+		}
 	}
 
 	// Force write only if there is a task requires an iterator.
@@ -259,4 +254,14 @@ func (ldb *DBActor) Poll(ctx context.Context, tasks []actormsg.Message) bool {
 	ldb.acquireIterators()
 
 	return true
+}
+
+// OnClose releases DBActor resource.
+func (ldb *DBActor) OnClose() {
+	if ldb.stopped {
+		return
+	}
+	ldb.stopped = true
+	log.Info("db actor quit", zap.Uint64("ID", uint64(ldb.id)))
+	ldb.closedWg.Done()
 }

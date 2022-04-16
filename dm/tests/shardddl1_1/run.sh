@@ -251,12 +251,9 @@ function DM_027_CASE() {
 	run_sql_source1 "insert into ${shardddl1}.${tb1} values (3)"
 	run_sql_source1 "insert into ${shardddl1}.${tb2} values (4)"
 	run_sql_source1 "insert into ${shardddl1}.${tb3} values (5,6)"
-	# we now haven't checked table struct when create sharding table
-	# and we'll attach IF NOT EXISTS to every CREATE TABLE and fetch downstream table first, so downstream table strcuture
-	# is in use indeed. This leads to the error below.
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
-		"Column count doesn't match value count: 1 (columns) vs 2 (values)" 1
+		"Error 1054: Unknown column 'val' in 'field list'" 1
 }
 
 function DM_027() {
@@ -302,7 +299,8 @@ function DM_031_CASE() {
 	else
 		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 			"query-status test" \
-			"because schema conflict detected" 1
+			'ALTER TABLE `shardddl`.`tb` ADD COLUMN `new_col1` VARCHAR(10)' 1 \
+			"\"${SOURCE_ID2}-\`${shardddl1}\`.\`${tb1}\`\"" 1
 	fi
 }
 

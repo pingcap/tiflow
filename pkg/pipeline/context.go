@@ -13,26 +13,31 @@
 
 package pipeline
 
-import "github.com/pingcap/tiflow/pkg/context"
+import (
+	"github.com/pingcap/tiflow/pkg/context"
+	pmessage "github.com/pingcap/tiflow/pkg/pipeline/message"
+)
 
 // NodeContext adds two functions to `context.Context` and is created by pipeline
 type NodeContext interface {
 	context.Context
 
 	// Message returns the message sent by the previous node
-	Message() Message
+	Message() pmessage.Message
 	// SendToNextNode sends the message to the next node
-	SendToNextNode(msg Message)
+	SendToNextNode(msg pmessage.Message)
 }
 
 type nodeContext struct {
 	context.Context
-	msg      Message
-	outputCh chan<- Message
+	msg      pmessage.Message
+	outputCh chan<- pmessage.Message
 }
 
 // NewNodeContext returns a new NodeContext.
-func NewNodeContext(ctx context.Context, msg Message, outputCh chan<- Message) NodeContext {
+func NewNodeContext(
+	ctx context.Context, msg pmessage.Message, outputCh chan<- pmessage.Message,
+) NodeContext {
 	return &nodeContext{
 		Context:  ctx,
 		msg:      msg,
@@ -40,21 +45,28 @@ func NewNodeContext(ctx context.Context, msg Message, outputCh chan<- Message) N
 	}
 }
 
-func (ctx *nodeContext) Message() Message {
+// MockNodeContext4Test creates a node context with a message and an output channel for tests.
+func MockNodeContext4Test(
+	ctx context.Context, msg pmessage.Message, outputCh chan pmessage.Message,
+) NodeContext {
+	return NewNodeContext(ctx, msg, outputCh)
+}
+
+func (ctx *nodeContext) Message() pmessage.Message {
 	return ctx.msg
 }
 
-func (ctx *nodeContext) SendToNextNode(msg Message) {
+func (ctx *nodeContext) SendToNextNode(msg pmessage.Message) {
 	// The header channel should never be blocked
 	ctx.outputCh <- msg
 }
 
 type messageContext struct {
 	NodeContext
-	message Message
+	message pmessage.Message
 }
 
-func withMessage(ctx NodeContext, msg Message) NodeContext {
+func withMessage(ctx NodeContext, msg pmessage.Message) NodeContext {
 	// Optimize for `nodeContext` to save one allocation.
 	if ctx, ok := ctx.(*nodeContext); ok {
 		ctx.msg = msg
@@ -66,6 +78,6 @@ func withMessage(ctx NodeContext, msg Message) NodeContext {
 	}
 }
 
-func (ctx messageContext) Message() Message {
+func (ctx messageContext) Message() pmessage.Message {
 	return ctx.message
 }

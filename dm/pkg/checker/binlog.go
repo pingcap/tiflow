@@ -19,7 +19,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/pingcap/tidb-tools/pkg/dbutil"
+	"github.com/pingcap/tidb/util/dbutil"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
 
@@ -106,7 +106,10 @@ func (pc *MySQLBinlogFormatChecker) Name() string {
 
 /*****************************************************/
 
-var mysqlBinlogRowImageRequired MySQLVersion = [3]uint{5, 6, 2}
+var (
+	mysqlBinlogRowImageRequired   MySQLVersion = [3]uint{5, 6, 2}
+	mariaDBBinlogRowImageRequired MySQLVersion = [3]uint{10, 1, 6}
+)
 
 // MySQLBinlogRowImageChecker checks mysql binlog_row_image.
 type MySQLBinlogRowImageChecker struct {
@@ -140,6 +143,7 @@ func (pc *MySQLBinlogRowImageChecker) Check(ctx context.Context) *Result {
 		markCheckError(result, err)
 		return result
 	}
+
 	version, err := toMySQLVersion(value)
 	if err != nil {
 		markCheckError(result, err)
@@ -148,6 +152,12 @@ func (pc *MySQLBinlogRowImageChecker) Check(ctx context.Context) *Result {
 
 	// for mysql.version < 5.6.2,  we don't need to check binlog_row_image.
 	if !version.Ge(mysqlBinlogRowImageRequired) {
+		result.State = StateSuccess
+		return result
+	}
+
+	// for mariadb.version < 10.1.6.,  we don't need to check binlog_row_image.
+	if utils.IsMariaDB(value) && !version.Ge(mariaDBBinlogRowImageRequired) {
 		result.State = StateSuccess
 		return result
 	}

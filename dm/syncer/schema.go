@@ -16,16 +16,18 @@ package syncer
 import (
 	"context"
 	"encoding/json"
+	"regexp"
 	"strings"
 
-	"github.com/pingcap/tidb-tools/pkg/filter"
 	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/parser/format"
 	"github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tidb/util/filter"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/dm/pb"
+	"github.com/pingcap/tiflow/dm/openapi"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/schema"
@@ -40,6 +42,8 @@ func (s *Syncer) OperateSchema(ctx context.Context, req *pb.OperateWorkerSchemaR
 		Name:   req.Table,
 	}
 	switch req.Op {
+	case pb.SchemaOp_ListMigrateTargets:
+		return s.listMigrateTargets(req)
 	case pb.SchemaOp_ListSchema:
 		allSchema := s.schemaTracker.AllSchemas()
 		schemaList := make([]string, len(allSchema))
@@ -146,7 +150,7 @@ func (s *Syncer) OperateSchema(ctx context.Context, req *pb.OperateWorkerSchemaR
 
 		if req.Sync {
 			if s.cfg.ShardMode != config.ShardOptimistic {
-				log.L().Warn("ignore --sync flag", zap.String("shard mode", s.cfg.ShardMode))
+				log.L().Info("ignore --sync flag", zap.String("shard mode", s.cfg.ShardMode))
 				break
 			}
 			targetTable := s.route(sourceTable)
@@ -166,4 +170,64 @@ func (s *Syncer) OperateSchema(ctx context.Context, req *pb.OperateWorkerSchemaR
 		return "", s.schemaTracker.DropTable(sourceTable)
 	}
 	return "", nil
+}
+
+// listMigrateTargets list all synced schema and table names in tracker.
+func (s *Syncer) listMigrateTargets(req *pb.OperateWorkerSchemaRequest) (string, error) {
+	var schemaList []string
+	if req.Schema != "" {
+		schemaR, err := regexp.Compile(req.Schema)
+		if err != nil {
+			return "", err
+		}
+		for _, schema := range s.schemaTracker.AllSchemas() {
+			if schemaR.MatchString(schema.Name.String()) {
+				schemaList = append(schemaList, schema.Name.String())
+			}
+		}
+	} else {
+		for _, schema := range s.schemaTracker.AllSchemas() {
+			schemaList = append(schemaList, schema.Name.String())
+		}
+	}
+
+	var targets []openapi.TaskMigrateTarget
+	routeAndAppendTarget := func(schema, table string) {
+		sourceTable := &filter.Table{Schema: schema, Name: table}
+		targetTable := s.route(sourceTable)
+		if targetTable != nil {
+			targets = append(targets, openapi.TaskMigrateTarget{
+				SourceSchema: schema,
+				SourceTable:  table,
+				TargetSchema: targetTable.Schema,
+				TargetTable:  targetTable.Name,
+			})
+		}
+	}
+	for _, schemaName := range schemaList {
+		tables, err := s.schemaTracker.ListSchemaTables(schemaName)
+		if err != nil {
+			return "", err
+		}
+		if req.Table != "" {
+			tableR, err := regexp.Compile(req.Table)
+			if err != nil {
+				return "", err
+			}
+			for _, tableName := range tables {
+				if tableR.MatchString(tableName) {
+					routeAndAppendTarget(schemaName, tableName)
+				}
+			}
+		} else {
+			for _, tableName := range tables {
+				routeAndAppendTarget(schemaName, tableName)
+			}
+		}
+	}
+	targetsJSON, err := json.Marshal(targets)
+	if err != nil {
+		return "", terror.ErrSchemaTrackerMarshalJSON.Delegate(err, targets)
+	}
+	return string(targetsJSON), err
 }

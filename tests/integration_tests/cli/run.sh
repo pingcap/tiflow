@@ -9,17 +9,6 @@ CDC_BINARY=cdc.test
 SINK_TYPE=$1
 TLS_DIR=$(cd $CUR/../_certificates && pwd)
 
-function check_changefeed_state() {
-	changefeedid=$1
-	expected=$2
-	output=$(cdc cli changefeed query --simple --changefeed-id $changefeedid --pd=http://$UP_PD_HOST_1:$UP_PD_PORT_1 2>&1)
-	state=$(echo $output | grep -oE "\"state\": \"[a-z]+\"" | tr -d '" ' | awk -F':' '{print $(NF)}')
-	if [ "$state" != "$expected" ]; then
-		echo "unexpected state $output, expected $expected"
-		exit 1
-	fi
-}
-
 function check_changefeed_count() {
 	pd_addr=$1
 	expected=$2
@@ -65,7 +54,7 @@ function run() {
 	check_table_exists tidb_cdc.repl_mark_test_simple ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 	check_table_exists tidb_cdc."\`repl_mark_test_simple-dash\`" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 
-	check_changefeed_state $uuid "normal"
+	check_changefeed_state "http://${UP_PD_HOST_1}:${UP_PD_PORT_1}" $uuid "normal" "null" ""
 
 	check_changefeed_count http://${UP_PD_HOST_1}:${UP_PD_PORT_1} 1
 	check_changefeed_count http://${UP_PD_HOST_2}:${UP_PD_PORT_2} 1
@@ -101,7 +90,7 @@ EOF
 		echo "[$(date)] <<<<< unexpect admin job type! expect 1 got ${jobtype} >>>>>"
 		exit 1
 	fi
-	check_changefeed_state $uuid "stopped"
+	check_changefeed_state "http://${UP_PD_HOST_1}:${UP_PD_PORT_1}" $uuid "stopped" "null" ""
 
 	# Update changefeed
 	run_cdc_cli changefeed update --pd=$pd_addr --config="$WORK_DIR/changefeed.toml" --no-confirm --changefeed-id $uuid
@@ -132,14 +121,14 @@ EOF
 		echo "[$(date)] <<<<< unexpect admin job type! expect 0 got ${jobtype} >>>>>"
 		exit 1
 	fi
-	check_changefeed_state $uuid "normal"
+	check_changefeed_state "http://${UP_PD_HOST_1}:${UP_PD_PORT_1}" $uuid "normal" "null" ""
 
 	# Remove changefeed
 	run_cdc_cli changefeed --changefeed-id $uuid remove && sleep 3
 	check_changefeed_count http://${UP_PD_HOST_1}:${UP_PD_PORT_1} 0
 
 	run_cdc_cli changefeed create --sink-uri="$SINK_URI" --tz="Asia/Shanghai" -c="$uuid" && sleep 3
-	check_changefeed_state $uuid "normal"
+	check_changefeed_state "http://${UP_PD_HOST_1}:${UP_PD_PORT_1}" $uuid "normal" "null" ""
 
 	# Make sure bad sink url fails at creating changefeed.
 	badsink=$(run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="mysql://badsink" 2>&1 | grep -oE 'fail')

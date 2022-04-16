@@ -20,6 +20,14 @@ import (
 )
 
 var (
+	changefeedBarrierTsGauge = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "ticdc",
+			Subsystem: "owner",
+			Name:      "barrier_ts",
+			Help:      "barrier ts of changefeeds",
+		}, []string{"changefeed"})
+
 	changefeedCheckpointTsGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
@@ -101,6 +109,7 @@ const (
 
 // InitMetrics registers all metrics used in owner
 func InitMetrics(registry *prometheus.Registry) {
+	registry.MustRegister(changefeedBarrierTsGauge)
 	registry.MustRegister(changefeedCheckpointTsGauge)
 	registry.MustRegister(changefeedResolvedTsGauge)
 	registry.MustRegister(changefeedCheckpointTsLagGauge)

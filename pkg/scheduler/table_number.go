@@ -44,7 +44,8 @@ func (t *TableNumberScheduler) Skewness() float64 {
 
 // CalRebalanceOperates implements the Scheduler interface
 func (t *TableNumberScheduler) CalRebalanceOperates(targetSkewness float64) (
-	skewness float64, moveTableJobs map[model.TableID]*model.MoveTableJob) {
+	skewness float64, moveTableJobs map[model.TableID]*model.MoveTableJob,
+) {
 	var totalTableNumber uint64
 	for _, captureWorkloads := range t.workloads {
 		totalTableNumber += uint64(len(captureWorkloads))

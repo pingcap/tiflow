@@ -33,20 +33,18 @@ func TestMain(m *testing.M) {
 	leakutil.SetUpLeakTest(m)
 }
 
-func makeTestSystem(name string, t interface {
-	Fatalf(format string, args ...interface{})
-}) (*System, *Router) {
-	return NewSystemBuilder(name).
+func makeTestSystem[T any](name string) (*System[T], *Router[T]) {
+	return NewSystemBuilder[T](name).
 		WorkerNumber(2).
 		handleFatal(func(s string, i ID) {
-			t.Fatalf("%s actorID: %d", s, i)
+			panic(fmt.Sprintf("%s actorID: %d", s, i))
 		}).
 		Build()
 }
 
 func TestSystemBuilder(t *testing.T) {
 	t.Parallel()
-	b := NewSystemBuilder("test")
+	b := NewSystemBuilder[any]("test")
 	require.LessOrEqual(t, b.numWorker, maxWorkerNum)
 	require.Greater(t, b.numWorker, 0)
 
@@ -70,24 +68,24 @@ func TestSystemBuilder(t *testing.T) {
 
 func TestMailboxSendAndSendB(t *testing.T) {
 	t.Parallel()
-	mb := NewMailbox(ID(0), 1)
-	err := mb.Send(message.TickMessage())
+	mb := NewMailbox[any](ID(0), 1)
+	err := mb.Send(message.ValueMessage[any](nil))
 	require.Nil(t, err)
 
-	err = mb.Send(message.TickMessage())
+	err = mb.Send(message.ValueMessage[any](nil))
 	require.True(t, strings.Contains(err.Error(), "mailbox is full"))
 
 	msg, ok := mb.Receive()
 	require.Equal(t, true, ok)
-	require.Equal(t, message.TickMessage(), msg)
+	require.Equal(t, message.ValueMessage[any](nil), msg)
 
 	// Test SendB can be canceled by context.
 	ch := make(chan error)
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
-		err := mb.Send(message.TickMessage())
+		err := mb.Send(message.ValueMessage[any](nil))
 		ch <- err
-		err = mb.SendB(ctx, message.TickMessage())
+		err = mb.SendB(ctx, message.ValueMessage[any](nil))
 		ch <- err
 	}()
 
@@ -99,27 +97,27 @@ func TestMailboxSendAndSendB(t *testing.T) {
 func TestRouterSendAndSendB(t *testing.T) {
 	t.Parallel()
 	id := ID(0)
-	mb := NewMailbox(id, 1)
-	router := NewRouter(t.Name())
-	err := router.insert(id, &proc{mb: mb})
+	mb := NewMailbox[any](id, 1)
+	router := NewRouter[any](t.Name())
+	err := router.insert(id, &proc[any]{mb: mb})
 	require.Nil(t, err)
-	err = router.Send(id, message.TickMessage())
+	err = router.Send(id, message.ValueMessage[any](nil))
 	require.Nil(t, err)
 
-	err = router.Send(id, message.TickMessage())
+	err = router.Send(id, message.ValueMessage[any](nil))
 	require.True(t, strings.Contains(err.Error(), "mailbox is full"))
 
 	msg, ok := mb.Receive()
 	require.Equal(t, true, ok)
-	require.Equal(t, message.TickMessage(), msg)
+	require.Equal(t, message.ValueMessage[any](nil), msg)
 
 	// Test SendB can be canceled by context.
 	ch := make(chan error)
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
-		err := router.Send(id, message.TickMessage())
+		err := router.Send(id, message.ValueMessage[any](nil))
 		ch <- err
-		err = router.SendB(ctx, id, message.TickMessage())
+		err = router.SendB(ctx, id, message.ValueMessage[any](nil))
 		ch <- err
 	}()
 
@@ -145,37 +143,34 @@ func wait(t *testing.T, f func()) {
 func TestSystemStartStop(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	sys, _ := makeTestSystem(t.Name(), t)
+	sys, _ := makeTestSystem[any](t.Name())
 	sys.Start(ctx)
-	err := sys.Stop()
-	require.Nil(t, err)
+	sys.Stop()
 }
 
 func TestSystemSpawnDuplicateActor(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	sys, _ := makeTestSystem(t.Name(), t)
+	sys, _ := makeTestSystem[any](t.Name())
 	sys.Start(ctx)
 
 	id := 1
-	fa := &forwardActor{}
-	mb := NewMailbox(ID(id), 1)
+	fa := &forwardActor[any]{ch: make(chan<- message.Message[any], 1)}
+	mb := NewMailbox[any](ID(id), 1)
 	require.Nil(t, sys.Spawn(mb, fa))
 	require.NotNil(t, sys.Spawn(mb, fa))
 
-	wait(t, func() {
-		err := sys.Stop()
-		require.Nil(t, err)
-	})
+	wait(t, sys.Stop)
 }
 
-type forwardActor struct {
+type forwardActor[T any] struct {
 	contextAware bool
 
-	ch chan<- message.Message
+	id ID
+	ch chan<- message.Message[T]
 }
 
-func (f *forwardActor) Poll(ctx context.Context, msgs []message.Message) bool {
+func (f *forwardActor[T]) Poll(ctx context.Context, msgs []message.Message[T]) bool {
 	for _, msg := range msgs {
 		if f.contextAware {
 			select {
@@ -189,65 +184,64 @@ func (f *forwardActor) Poll(ctx context.Context, msgs []message.Message) bool {
 	return true
 }
 
+func (f *forwardActor[T]) OnClose() {}
+
 func TestActorSendReceive(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	sys, router := makeTestSystem(t.Name(), t)
+	sys, router := makeTestSystem[int](t.Name())
 	sys.Start(ctx)
 
 	// Send to a non-existing actor.
 	id := ID(777)
-	err := router.Send(id, message.BarrierMessage(0))
+	err := router.Send(id, message.ValueMessage(0))
 	require.Equal(t, errActorNotFound, err)
 
-	ch := make(chan message.Message, 1)
-	fa := &forwardActor{
+	ch := make(chan message.Message[int], 1)
+	fa := &forwardActor[int]{
 		ch: ch,
 	}
-	mb := NewMailbox(id, 1)
+	mb := NewMailbox[int](id, 1)
 
 	// The actor is not in router yet.
-	err = router.Send(id, message.BarrierMessage(1))
+	err = router.Send(id, message.ValueMessage(1))
 	require.Equal(t, errActorNotFound, err)
 
 	// Spawn adds the actor to the router.
 	require.Nil(t, sys.Spawn(mb, fa))
-	err = router.Send(id, message.BarrierMessage(2))
+	err = router.Send(id, message.ValueMessage(2))
 	require.Nil(t, err)
 	select {
 	case msg := <-ch:
-		require.Equal(t, message.BarrierMessage(2), msg)
+		require.Equal(t, message.ValueMessage(2), msg)
 	case <-time.After(time.Second):
 		t.Fatal("Timed out")
 	}
 
-	wait(t, func() {
-		err := sys.Stop()
-		require.Nil(t, err)
-	})
+	wait(t, sys.Stop)
 }
 
 func testBroadcast(t *testing.T, actorNum, workerNum int) {
 	ctx := context.Background()
-	sys, router := NewSystemBuilder("test").WorkerNumber(workerNum).Build()
+	sys, router := NewSystemBuilder[any]("test").WorkerNumber(workerNum).Build()
 	sys.Start(ctx)
 
-	ch := make(chan message.Message, 1)
+	ch := make(chan message.Message[any], actorNum)
 
 	for id := 0; id < actorNum; id++ {
-		fa := &forwardActor{
+		fa := &forwardActor[any]{
 			ch: ch,
 		}
-		mb := NewMailbox(ID(id), 1)
+		mb := NewMailbox[any](ID(id), 1)
 		require.Nil(t, sys.Spawn(mb, fa))
 	}
 
 	// Broadcase tick to actors.
-	router.Broadcast(message.TickMessage())
+	router.Broadcast(context.TODO(), message.ValueMessage[any](nil))
 	for i := 0; i < actorNum; i++ {
 		select {
 		case msg := <-ch:
-			require.Equal(t, message.TickMessage(), msg)
+			require.Equal(t, message.ValueMessage[any](nil), msg)
 		case <-time.After(time.Second):
 			t.Fatal("Timed out")
 		}
@@ -258,10 +252,7 @@ func testBroadcast(t *testing.T, actorNum, workerNum int) {
 	case <-time.After(200 * time.Millisecond):
 	}
 
-	wait(t, func() {
-		err := sys.Stop()
-		require.Nil(t, err)
-	})
+	wait(t, sys.Stop)
 }
 
 func TestBroadcast(t *testing.T) {
@@ -276,58 +267,57 @@ func TestBroadcast(t *testing.T) {
 func TestSystemStopCancelActors(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	sys, router := makeTestSystem(t.Name(), t)
+	sys, router := makeTestSystem[any](t.Name())
 	sys.Start(ctx)
 
 	id := ID(777)
-	ch := make(chan message.Message, 1)
-	fa := &forwardActor{
+	ch := make(chan message.Message[any], 1)
+	fa := &forwardActor[any]{
+		id:           id,
 		ch:           ch,
 		contextAware: true,
 	}
-	mb := NewMailbox(id, 1)
+	mb := NewMailbox[any](id, 1)
 	require.Nil(t, sys.Spawn(mb, fa))
-	err := router.Send(id, message.TickMessage())
+	err := router.Send(id, message.ValueMessage[any](nil))
 	require.Nil(t, err)
 
 	id = ID(778)
-	fa = &forwardActor{
+	fa = &forwardActor[any]{
+		id:           id,
 		ch:           ch,
 		contextAware: true,
 	}
-	mb = NewMailbox(id, 1)
+	mb = NewMailbox[any](id, 1)
 	require.Nil(t, sys.Spawn(mb, fa))
-	err = router.Send(id, message.TickMessage())
+	err = router.Send(id, message.ValueMessage[any](nil))
 	require.Nil(t, err)
 
 	// Do not receive ch.
 	_ = ch
 
-	wait(t, func() {
-		err := sys.Stop()
-		require.Nil(t, err)
-	})
+	wait(t, sys.Stop)
 }
 
 func TestActorManyMessageOneSchedule(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	sys, router := makeTestSystem(t.Name(), t)
+	sys, router := makeTestSystem[any](t.Name())
 	sys.Start(ctx)
 
 	id := ID(777)
 	// To avoid blocking, use a large buffer.
 	size := DefaultMsgBatchSizePerActor * 4
-	ch := make(chan message.Message, size)
-	fa := &forwardActor{
+	ch := make(chan message.Message[any], size)
+	fa := &forwardActor[any]{
 		ch: ch,
 	}
-	mb := NewMailbox(id, size)
+	mb := NewMailbox[any](id, size)
 	require.Nil(t, sys.Spawn(mb, fa))
 
 	for total := 1; total < size; total *= 2 {
 		for j := 0; j < total-1; j++ {
-			require.Nil(t, mb.Send(message.TickMessage()))
+			require.Nil(t, mb.Send(message.ValueMessage[any](nil)))
 		}
 
 		// Sending to mailbox does not trigger scheduling.
@@ -337,7 +327,7 @@ func TestActorManyMessageOneSchedule(t *testing.T) {
 		case <-time.After(100 * time.Millisecond):
 		}
 
-		require.Nil(t, router.Send(id, message.TickMessage()))
+		require.Nil(t, router.Send(id, message.ValueMessage[any](nil)))
 
 		acc := 0
 		for i := 0; i < total; i++ {
@@ -355,10 +345,7 @@ func TestActorManyMessageOneSchedule(t *testing.T) {
 		}
 	}
 
-	wait(t, func() {
-		err := sys.Stop()
-		require.Nil(t, err)
-	})
+	wait(t, sys.Stop)
 }
 
 type flipflopActor struct {
@@ -370,7 +357,7 @@ type flipflopActor struct {
 	acc       int64
 }
 
-func (f *flipflopActor) Poll(ctx context.Context, msgs []message.Message) bool {
+func (f *flipflopActor) Poll(ctx context.Context, msgs []message.Message[any]) bool {
 	for range msgs {
 		level := atomic.LoadInt64(&f.level)
 		newLevel := 0
@@ -389,11 +376,13 @@ func (f *flipflopActor) Poll(ctx context.Context, msgs []message.Message) bool {
 	return true
 }
 
+func (f *flipflopActor) OnClose() {}
+
 // An actor can only be polled by one goroutine at the same time.
 func TestConcurrentPollSameActor(t *testing.T) {
 	t.Parallel()
 	concurrency := 4
-	sys, router := NewSystemBuilder("test").WorkerNumber(concurrency).Build()
+	sys, router := NewSystemBuilder[any]("test").WorkerNumber(concurrency).Build()
 	sys.Start(context.Background())
 
 	syncCount := 1_000_000
@@ -404,7 +393,7 @@ func TestConcurrentPollSameActor(t *testing.T) {
 		syncCount: syncCount,
 	}
 	id := ID(777)
-	mb := NewMailbox(id, DefaultMsgBatchSizePerActor)
+	mb := NewMailbox[any](id, DefaultMsgBatchSizePerActor)
 	require.Nil(t, sys.Spawn(mb, fa))
 
 	// Test 5 seconds
@@ -412,17 +401,14 @@ func TestConcurrentPollSameActor(t *testing.T) {
 	for {
 		total := int64(0)
 		for i := 0; i < syncCount; i++ {
-			_ = router.Send(id, message.TickMessage())
+			_ = router.Send(id, message.ValueMessage[any](nil))
 		}
 		total += int64(syncCount)
 		select {
 		case acc := <-ch:
 			require.Equal(t, total, acc)
 		case <-timer:
-			wait(t, func() {
-				err := sys.Stop()
-				require.Nil(t, err)
-			})
+			wait(t, sys.Stop)
 			return
 		}
 	}
@@ -433,30 +419,32 @@ type closedActor struct {
 	ch  chan int
 }
 
-func (c *closedActor) Poll(ctx context.Context, msgs []message.Message) bool {
+func (c *closedActor) Poll(ctx context.Context, msgs []message.Message[any]) bool {
 	c.acc += len(msgs)
 	c.ch <- c.acc
 	// closed
 	return false
 }
 
+func (c *closedActor) OnClose() {}
+
 func TestPollStoppedActor(t *testing.T) {
 	ctx := context.Background()
-	sys, router := makeTestSystem(t.Name(), t)
+	sys, router := makeTestSystem[any](t.Name())
 	sys.Start(ctx)
 
 	id := ID(777)
 	// To avoid blocking, use a large buffer.
 	cap := DefaultMsgBatchSizePerActor * 4
-	mb := NewMailbox(id, cap)
+	mb := NewMailbox[any](id, cap)
 	ch := make(chan int)
 	require.Nil(t, sys.Spawn(mb, &closedActor{ch: ch}))
 
 	for i := 0; i < (cap - 1); i++ {
-		require.Nil(t, mb.Send(message.TickMessage()))
+		require.Nil(t, mb.Send(message.ValueMessage[any](nil)))
 	}
 	// Trigger scheduling
-	require.Nil(t, router.Send(id, message.TickMessage()))
+	require.Nil(t, router.Send(id, message.ValueMessage[any](nil)))
 
 	<-ch
 	select {
@@ -464,25 +452,22 @@ func TestPollStoppedActor(t *testing.T) {
 	case <-ch:
 		t.Fatal("must timeout")
 	}
-	wait(t, func() {
-		err := sys.Stop()
-		require.Nil(t, err)
-	})
+	wait(t, sys.Stop)
 }
 
 func TestStoppedActorIsRemovedFromRouter(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	sys, router := makeTestSystem(t.Name(), t)
+	sys, router := makeTestSystem[any](t.Name())
 	sys.Start(ctx)
 
 	id := ID(777)
-	mb := NewMailbox(id, DefaultMsgBatchSizePerActor)
+	mb := NewMailbox[any](id, DefaultMsgBatchSizePerActor)
 	ch := make(chan int)
 	require.Nil(t, sys.Spawn(mb, &closedActor{ch: ch}))
 
 	// Trigger scheduling
-	require.Nil(t, router.Send(id, message.TickMessage()))
+	require.Nil(t, router.Send(id, message.ValueMessage[any](nil)))
 	timeout := time.After(5 * time.Second)
 	select {
 	case <-timeout:
@@ -493,7 +478,7 @@ func TestStoppedActorIsRemovedFromRouter(t *testing.T) {
 	for i := 0; i < 50; i++ {
 		// Wait for actor to be removed.
 		time.Sleep(100 * time.Millisecond)
-		err := router.Send(id, message.TickMessage())
+		err := router.Send(id, message.ValueMessage[any](nil))
 		if strings.Contains(err.Error(), "actor not found") {
 			break
 		}
@@ -502,22 +487,21 @@ func TestStoppedActorIsRemovedFromRouter(t *testing.T) {
 		}
 	}
 
-	wait(t, func() {
-		err := sys.Stop()
-		require.Nil(t, err)
-	})
+	wait(t, sys.Stop)
 }
 
 type slowActor struct {
 	ch chan struct{}
 }
 
-func (c *slowActor) Poll(ctx context.Context, msgs []message.Message) bool {
+func (c *slowActor) Poll(ctx context.Context, msgs []message.Message[any]) bool {
 	c.ch <- struct{}{}
 	<-c.ch
 	// closed
 	return false
 }
+
+func (c *slowActor) OnClose() {}
 
 // Test router send during actor poll and before close.
 //
@@ -528,22 +512,22 @@ func (c *slowActor) Poll(ctx context.Context, msgs []message.Message) bool {
 func TestSendBeforeClose(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	sys, router := makeTestSystem(t.Name(), t)
+	sys, router := makeTestSystem[any](t.Name())
 	sys.Start(ctx)
 
 	id := ID(777)
-	mb := NewMailbox(id, DefaultMsgBatchSizePerActor)
+	mb := NewMailbox[any](id, DefaultMsgBatchSizePerActor)
 	ch := make(chan struct{})
 	require.Nil(t, sys.Spawn(mb, &slowActor{ch: ch}))
 
 	// Trigger scheduling
-	require.Nil(t, router.Send(id, message.TickMessage()))
+	require.Nil(t, router.Send(id, message.ValueMessage[any](nil)))
 
 	// Wait for actor to be polled.
 	a := <-ch
 
 	// Send message before close.
-	err := router.Send(id, message.TickMessage())
+	err := router.Send(id, message.ValueMessage[any](nil))
 	require.Nil(t, err)
 
 	// Unblock poll.
@@ -566,10 +550,7 @@ func TestSendBeforeClose(t *testing.T) {
 	// Let send and close race
 	// sys.rd.Lock()
 
-	wait(t, func() {
-		err := sys.Stop()
-		require.Nil(t, err)
-	})
+	wait(t, sys.Stop)
 }
 
 // Test router send after close and before enqueue.
@@ -582,24 +563,24 @@ func TestSendBeforeClose(t *testing.T) {
 func TestSendAfterClose(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	sys, router := makeTestSystem(t.Name(), t)
+	sys, router := makeTestSystem[any](t.Name())
 	sys.Start(ctx)
 
 	id := ID(777)
 	dropCount := 1
 	cap := DefaultMsgBatchSizePerActor + dropCount
-	mb := NewMailbox(id, cap)
+	mb := NewMailbox[any](id, cap)
 	ch := make(chan struct{})
 	require.Nil(t, sys.Spawn(mb, &slowActor{ch: ch}))
 	pi, ok := router.procs.Load(id)
 	require.True(t, ok)
-	p := pi.(*proc)
+	p := pi.(*proc[any])
 
 	for i := 0; i < cap-1; i++ {
-		require.Nil(t, mb.Send(message.TickMessage()))
+		require.Nil(t, mb.Send(message.ValueMessage[any](nil)))
 	}
 	// Trigger scheduling
-	require.Nil(t, router.Send(id, message.TickMessage()))
+	require.Nil(t, router.Send(id, message.ValueMessage[any](nil)))
 
 	// Wait for actor to be polled.
 	a := <-ch
@@ -639,9 +620,60 @@ func TestSendAfterClose(t *testing.T) {
 	dropped := int(*m.Counter.Value)
 	require.Equal(t, dropCount, dropped)
 
+	wait(t, sys.Stop)
+}
+
+type stopActor struct {
+	wait *int64
+}
+
+func (s *stopActor) Poll(ctx context.Context, msgs []message.Message[any]) bool {
+	return true
+}
+
+func (s *stopActor) OnClose() {
+	atomic.AddInt64(s.wait, 1)
+}
+
+func TestStopSystem(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	sys, _ := makeTestSystem[any](t.Name())
+	sys.Start(ctx)
+
+	w := new(int64)
+	for i := 0; i < 20_000; i++ {
+		mb := NewMailbox[any](ID(i), 1)
+		require.Nil(t, sys.Spawn(mb, &stopActor{w}))
+	}
+
+	wait(t, sys.Stop)
+	require.EqualValues(t, 20_000, atomic.LoadInt64(w))
+}
+
+func TestSendAfterMailboxClosed(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	router := NewRouter[any](t.Name())
+
+	id := ID(1)
+	cap := 1
+	mb := NewMailbox[any](id, cap)
+	router.InsertMailbox4Test(mb.ID(), mb)
+
+	val, _ := router.procs.Load(id)
+	proc := val.(*proc[any])
+	msg := message.ValueMessage[any](nil)
+	// To avoid racing between send and close, fill mailbox first,
+	// so later Send and SendB always return actor stop.
+	require.Nil(t, router.Send(id, msg))
+	proc.onSystemStop()
+	require.EqualValues(t, errActorStopped, router.Send(id, msg))
+	require.EqualValues(t, errActorStopped, router.SendB(ctx, id, msg))
 	wait(t, func() {
-		err := sys.Stop()
-		require.Nil(t, err)
+		router.Broadcast(ctx, msg)
 	})
 }
 
@@ -649,16 +681,16 @@ func TestSendAfterClose(t *testing.T) {
 // go test -benchmem -run='^$' -bench '^(BenchmarkActorSendReceive)$' github.com/pingcap/tiflow/pkg/actor
 func BenchmarkActorSendReceive(b *testing.B) {
 	ctx := context.Background()
-	sys, router := makeTestSystem(b.Name(), b)
+	sys, router := makeTestSystem[any](b.Name())
 	sys.Start(ctx)
 
 	id := ID(777)
 	size := DefaultMsgBatchSizePerActor * 4
-	ch := make(chan message.Message, size)
-	fa := &forwardActor{
+	ch := make(chan message.Message[any], size)
+	fa := &forwardActor[any]{
 		ch: ch,
 	}
-	mb := NewMailbox(id, size)
+	mb := NewMailbox[any](id, size)
 	err := sys.Spawn(mb, fa)
 	if err != nil {
 		b.Fatal(err)
@@ -669,7 +701,7 @@ func BenchmarkActorSendReceive(b *testing.B) {
 			b.Run(fmt.Sprintf("%d message(s)", total), func(b *testing.B) {
 				for i := 0; i < b.N; i++ {
 					for j := 0; j < total; j++ {
-						err = router.Send(id, message.TickMessage())
+						err = router.Send(id, message.ValueMessage[any](nil))
 						if err != nil {
 							b.Fatal(err)
 						}
@@ -682,30 +714,28 @@ func BenchmarkActorSendReceive(b *testing.B) {
 		}
 	})
 
-	if err := sys.Stop(); err != nil {
-		b.Fatal(err)
-	}
+	sys.Stop()
 }
 
 // Run the benchmark
 // go test -benchmem -run='^$' -bench '^(BenchmarkPollActor)$' github.com/pingcap/tiflow/pkg/actor
 func BenchmarkPollActor(b *testing.B) {
 	ctx := context.Background()
-	sys, router := makeTestSystem(b.Name(), b)
+	sys, router := makeTestSystem[any](b.Name())
 	sys.Start(ctx)
 
 	actorCount := int(math.Exp2(15))
 	// To avoid blocking, use a large buffer.
-	ch := make(chan message.Message, actorCount)
+	ch := make(chan message.Message[any], actorCount)
 
 	b.Run("BenchmarkPollActor", func(b *testing.B) {
 		id := 1
 		for total := 1; total <= actorCount; total *= 2 {
 			for ; id <= total; id++ {
-				fa := &forwardActor{
+				fa := &forwardActor[any]{
 					ch: ch,
 				}
-				mb := NewMailbox(ID(id), 1)
+				mb := NewMailbox[any](ID(id), 1)
 				err := sys.Spawn(mb, fa)
 				if err != nil {
 					b.Fatal(err)
@@ -716,7 +746,7 @@ func BenchmarkPollActor(b *testing.B) {
 			b.Run(fmt.Sprintf("%d actor(s)", total), func(b *testing.B) {
 				for i := 0; i < b.N; i++ {
 					for j := 1; j <= total; j++ {
-						err := router.Send(ID(j), message.TickMessage())
+						err := router.Send(ID(j), message.ValueMessage[any](nil))
 						if err != nil {
 							b.Fatal(err)
 						}
@@ -730,7 +760,5 @@ func BenchmarkPollActor(b *testing.B) {
 		}
 	})
 
-	if err := sys.Stop(); err != nil {
-		b.Fatal(err)
-	}
+	sys.Stop()
 }

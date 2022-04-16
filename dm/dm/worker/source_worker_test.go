@@ -32,6 +32,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	"github.com/pingcap/tiflow/dm/pkg/ha"
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/relay"
 	"github.com/pingcap/tiflow/dm/syncer"
@@ -46,81 +47,6 @@ func mockShowMasterStatus(mockDB sqlmock.Sqlmock) {
 	mockDB.ExpectQuery(`SHOW MASTER STATUS`).WillReturnRows(rows)
 }
 
-func (t *testServer) testWorker(c *C) {
-	cfg := loadSourceConfigWithoutPassword(c)
-
-	dir := c.MkDir()
-	cfg.EnableRelay = true
-	cfg.RelayDir = dir
-	cfg.MetaDir = dir
-
-	var (
-		masterAddr   = tempurl.Alloc()[len("http://"):]
-		keepAliveTTL = int64(1)
-	)
-	etcdDir := c.MkDir()
-	ETCD, err := createMockETCD(etcdDir, "http://"+masterAddr)
-	c.Assert(err, IsNil)
-	defer ETCD.Close()
-	workerCfg := NewConfig()
-	c.Assert(workerCfg.Parse([]string{"-config=./dm-worker.toml"}), IsNil)
-	workerCfg.Join = masterAddr
-	workerCfg.KeepAliveTTL = keepAliveTTL
-	workerCfg.RelayKeepAliveTTL = keepAliveTTL
-
-	etcdCli, err := clientv3.New(clientv3.Config{
-		Endpoints:            GetJoinURLs(workerCfg.Join),
-		DialTimeout:          dialTimeout,
-		DialKeepAliveTime:    keepaliveTime,
-		DialKeepAliveTimeout: keepaliveTimeout,
-	})
-	c.Assert(err, IsNil)
-
-	NewRelayHolder = NewDummyRelayHolderWithInitError
-	defer func() {
-		NewRelayHolder = NewRealRelayHolder
-	}()
-	w, err := NewSourceWorker(cfg, etcdCli, "", "")
-	c.Assert(err, IsNil)
-	c.Assert(w.EnableRelay(false), ErrorMatches, "init error")
-
-	NewRelayHolder = NewDummyRelayHolder
-	w, err = NewSourceWorker(cfg, etcdCli, "", "")
-	c.Assert(err, IsNil)
-	c.Assert(w.GetUnitAndSourceStatusJSON("", nil), HasLen, emptyWorkerStatusInfoJSONLength)
-
-	// stop twice
-	w.Stop(true)
-	c.Assert(w.closed.Load(), IsTrue)
-	c.Assert(w.subTaskHolder.getAllSubTasks(), HasLen, 0)
-	w.Stop(true)
-	c.Assert(w.closed.Load(), IsTrue)
-	c.Assert(w.subTaskHolder.getAllSubTasks(), HasLen, 0)
-	c.Assert(w.closed.Load(), IsTrue)
-
-	c.Assert(w.StartSubTask(&config.SubTaskConfig{
-		Name: "testStartTask",
-	}, pb.Stage_Running, pb.Stage_Stopped, true), IsNil)
-	task := w.subTaskHolder.findSubTask("testStartTask")
-	c.Assert(task, NotNil)
-	c.Assert(task.Result().String(), Matches, ".*worker already closed.*")
-
-	c.Assert(w.StartSubTask(&config.SubTaskConfig{
-		Name: "testStartTask-in-stopped",
-	}, pb.Stage_Stopped, pb.Stage_Stopped, true), IsNil)
-	task = w.subTaskHolder.findSubTask("testStartTask-in-stopped")
-	c.Assert(task, NotNil)
-	c.Assert(task.Result().String(), Matches, ".*worker already closed.*")
-
-	err = w.UpdateSubTask(context.Background(), &config.SubTaskConfig{
-		Name: "testStartTask",
-	})
-	c.Assert(err, ErrorMatches, ".*worker already closed.*")
-
-	err = w.OperateSubTask("testSubTask", pb.TaskOp_Delete)
-	c.Assert(err, ErrorMatches, ".*worker already closed.*")
-}
-
 type testServer2 struct{}
 
 var _ = Suite(&testServer2{})
@@ -131,11 +57,13 @@ func (t *testServer2) SetUpSuite(c *C) {
 
 	getMinLocForSubTaskFunc = getFakeLocForSubTask
 	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/dm/worker/MockGetSourceCfgFromETCD", `return(true)`), IsNil)
+	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/dm/worker/SkipRefreshFromETCDInUT", `return()`), IsNil)
 }
 
 func (t *testServer2) TearDownSuite(c *C) {
 	getMinLocForSubTaskFunc = getMinLocForSubTask
 	c.Assert(failpoint.Disable("github.com/pingcap/tiflow/dm/dm/worker/MockGetSourceCfgFromETCD"), IsNil)
+	c.Assert(failpoint.Disable("github.com/pingcap/tiflow/dm/dm/worker/SkipRefreshFromETCDInUT"), IsNil)
 }
 
 func (t *testServer2) TestTaskAutoResume(c *C) {
@@ -370,7 +298,8 @@ func (t *testWorkerFunctionalities) TestWorkerFunctionalities(c *C) {
 }
 
 func (t *testWorkerFunctionalities) testEnableRelay(c *C, w *SourceWorker, etcdCli *clientv3.Client,
-	sourceCfg *config.SourceConfig, cfg *Config) {
+	sourceCfg *config.SourceConfig, cfg *Config,
+) {
 	c.Assert(w.EnableRelay(false), IsNil)
 
 	c.Assert(w.relayEnabled.Load(), IsTrue)
@@ -400,7 +329,8 @@ func (t *testWorkerFunctionalities) testDisableRelay(c *C, w *SourceWorker) {
 }
 
 func (t *testWorkerFunctionalities) testEnableHandleSubtasks(c *C, w *SourceWorker, etcdCli *clientv3.Client,
-	subtaskCfg config.SubTaskConfig, sourceCfg *config.SourceConfig) {
+	subtaskCfg config.SubTaskConfig, sourceCfg *config.SourceConfig,
+) {
 	c.Assert(w.EnableHandleSubtasks(), IsNil)
 	c.Assert(w.subTaskEnabled.Load(), IsTrue)
 
@@ -752,4 +682,178 @@ func (t *testWorkerEtcdCompact) TestWatchRelayStageEtcdCompact(c *C) {
 	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
 		return w.relayHolder.Stage() == pb.Stage_Stopped
 	}), IsTrue)
+}
+
+func (t *testServer) testSourceWorker(c *C) {
+	cfg := loadSourceConfigWithoutPassword(c)
+
+	dir := c.MkDir()
+	cfg.EnableRelay = true
+	cfg.RelayDir = dir
+	cfg.MetaDir = dir
+
+	var (
+		masterAddr   = tempurl.Alloc()[len("http://"):]
+		keepAliveTTL = int64(1)
+	)
+	etcdDir := c.MkDir()
+	ETCD, err := createMockETCD(etcdDir, "http://"+masterAddr)
+	c.Assert(err, IsNil)
+	defer ETCD.Close()
+	workerCfg := NewConfig()
+	c.Assert(workerCfg.Parse([]string{"-config=./dm-worker.toml"}), IsNil)
+	workerCfg.Join = masterAddr
+	workerCfg.KeepAliveTTL = keepAliveTTL
+	workerCfg.RelayKeepAliveTTL = keepAliveTTL
+
+	etcdCli, err := clientv3.New(clientv3.Config{
+		Endpoints:            GetJoinURLs(workerCfg.Join),
+		DialTimeout:          dialTimeout,
+		DialKeepAliveTime:    keepaliveTime,
+		DialKeepAliveTimeout: keepaliveTimeout,
+	})
+	c.Assert(err, IsNil)
+
+	NewRelayHolder = NewDummyRelayHolderWithInitError
+	defer func() {
+		NewRelayHolder = NewRealRelayHolder
+	}()
+	w, err := NewSourceWorker(cfg, etcdCli, "", "")
+	c.Assert(err, IsNil)
+	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/dm/worker/MockGetSourceCfgFromETCD", `return(true)`), IsNil)
+	c.Assert(w.EnableRelay(false), ErrorMatches, "init error")
+	c.Assert(failpoint.Disable("github.com/pingcap/tiflow/dm/dm/worker/MockGetSourceCfgFromETCD"), IsNil)
+
+	NewRelayHolder = NewDummyRelayHolder
+	w, err = NewSourceWorker(cfg, etcdCli, "", "")
+	c.Assert(err, IsNil)
+	c.Assert(w.GetUnitAndSourceStatusJSON("", nil), HasLen, emptyWorkerStatusInfoJSONLength)
+
+	// stop twice
+	w.Stop(true)
+	c.Assert(w.closed.Load(), IsTrue)
+	c.Assert(w.subTaskHolder.getAllSubTasks(), HasLen, 0)
+	w.Stop(true)
+	c.Assert(w.closed.Load(), IsTrue)
+	c.Assert(w.subTaskHolder.getAllSubTasks(), HasLen, 0)
+	c.Assert(w.closed.Load(), IsTrue)
+
+	c.Assert(w.StartSubTask(&config.SubTaskConfig{
+		Name: "testStartTask",
+	}, pb.Stage_Running, pb.Stage_Stopped, true), IsNil)
+	task := w.subTaskHolder.findSubTask("testStartTask")
+	c.Assert(task, NotNil)
+	c.Assert(task.Result().String(), Matches, ".*worker already closed.*")
+
+	c.Assert(w.StartSubTask(&config.SubTaskConfig{
+		Name: "testStartTask-in-stopped",
+	}, pb.Stage_Stopped, pb.Stage_Stopped, true), IsNil)
+	task = w.subTaskHolder.findSubTask("testStartTask-in-stopped")
+	c.Assert(task, NotNil)
+	c.Assert(task.Result().String(), Matches, ".*worker already closed.*")
+
+	err = w.UpdateSubTask(context.Background(), &config.SubTaskConfig{
+		Name: "testStartTask",
+	}, true)
+	c.Assert(err, ErrorMatches, ".*worker already closed.*")
+
+	err = w.OperateSubTask("testSubTask", pb.TaskOp_Delete)
+	c.Assert(err, ErrorMatches, ".*worker already closed.*")
+}
+
+func (t *testServer) TestQueryValidator(c *C) {
+	cfg := loadSourceConfigWithoutPassword(c)
+
+	dir := c.MkDir()
+	cfg.EnableRelay = true
+	cfg.RelayDir = dir
+	cfg.MetaDir = dir
+
+	w, err := NewSourceWorker(cfg, nil, "", "")
+	w.closed.Store(false)
+	c.Assert(err, IsNil)
+	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/syncer/MockValidationQuery", `return(true)`), IsNil)
+	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/dm/worker/MockValidationQuery", `return(true)`), IsNil)
+	defer func() {
+		c.Assert(failpoint.Disable("github.com/pingcap/tiflow/dm/syncer/MockValidationQuery"), IsNil)
+		c.Assert(failpoint.Disable("github.com/pingcap/tiflow/dm/dm/worker/MockValidationQuery"), IsNil)
+	}()
+	st := NewSubTaskWithStage(&config.SubTaskConfig{
+		Name: "testQueryValidator",
+		ValidatorCfg: config.ValidatorConfig{
+			Mode: config.ValidationFull,
+		},
+	}, pb.Stage_Running, nil, "")
+	st.StartValidator(pb.Stage_Running, false)
+	w.subTaskHolder.recordSubTask(st)
+	expected := []*pb.ValidationStatus{
+		{
+			Source:           "127.0.0.1:3306",
+			SrcTable:         "`testdb1`.`testtable1`",
+			DstTable:         "`dstdb`.`dsttable`",
+			ValidationStatus: pb.Stage_Running.String(),
+		},
+		{
+			Source:           "127.0.0.1:3306",
+			SrcTable:         "`testdb2`.`testtable2`",
+			DstTable:         "`dstdb`.`dsttable`",
+			ValidationStatus: pb.Stage_Stopped.String(),
+			Message:          "no primary key",
+		},
+	}
+	ret := w.GetValidateStatus("testQueryValidator", pb.Stage_Running)
+	c.Assert(len(ret), Equals, 1)
+	c.Assert(ret[0], DeepEquals, expected[0])
+	ret = w.GetValidateStatus("testQueryValidator", pb.Stage_Stopped)
+	c.Assert(len(ret), Equals, 1)
+	c.Assert(ret[0], DeepEquals, expected[1])
+	ret = w.GetValidateStatus("testQueryValidator", pb.Stage_InvalidStage)
+	c.Assert(len(ret), Equals, 2)
+	c.Assert(ret, DeepEquals, expected)
+}
+
+func (t *testServer) setupValidator(c *C) *SourceWorker {
+	cfg := loadSourceConfigWithoutPassword(c)
+
+	dir := c.MkDir()
+	cfg.EnableRelay = true
+	cfg.RelayDir = dir
+	cfg.MetaDir = dir
+	st := NewSubTaskWithStage(&config.SubTaskConfig{
+		Name: "testQueryValidator",
+		ValidatorCfg: config.ValidatorConfig{
+			Mode: config.ValidationFull,
+		},
+	}, pb.Stage_Running, nil, "")
+	w, err := NewSourceWorker(cfg, nil, "", "")
+	st.StartValidator(pb.Stage_Running, false)
+	w.subTaskHolder.recordSubTask(st)
+	w.closed.Store(false)
+	c.Assert(err, IsNil)
+	return w
+}
+
+func (t *testServer) TestGetWorkerValidatorErr(c *C) {
+	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/syncer/MockValidationQuery", `return(true)`), IsNil)
+	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/dm/worker/MockValidationQuery", `return(true)`), IsNil)
+	defer func() {
+		c.Assert(failpoint.Disable("github.com/pingcap/tiflow/dm/syncer/MockValidationQuery"), IsNil)
+		c.Assert(failpoint.Disable("github.com/pingcap/tiflow/dm/dm/worker/MockValidationQuery"), IsNil)
+	}()
+	w := t.setupValidator(c)
+	// when subtask name not exists
+	// return empty array
+	c.Assert(len(w.GetWorkerValidatorErr("invalidTask", pb.ValidateErrorState_InvalidErr)), Equals, 0)
+	// subtask match
+	c.Assert(len(w.GetWorkerValidatorErr("testQueryValidator", pb.ValidateErrorState_InvalidErr)), Equals, 2)
+}
+
+func (t *testServer) TestOperateWorkerValidatorErr(c *C) {
+	w := t.setupValidator(c)
+	// when subtask name not exists
+	// return empty array
+	taskNotFound := terror.ErrWorkerSubTaskNotFound.Generate("invalidTask")
+	c.Assert(w.OperateWorkerValidatorErr("invalidTask", pb.ValidationErrOp_ClearErrOp, 0, true).Error(), Equals, taskNotFound.Error())
+	// subtask match
+	c.Assert(w.OperateWorkerValidatorErr("testQueryValidator", pb.ValidationErrOp_ClearErrOp, 0, true), IsNil)
 }

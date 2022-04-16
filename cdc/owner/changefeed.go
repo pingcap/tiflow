@@ -73,11 +73,12 @@ type changefeed struct {
 	// `wg` is used to manage those backend goroutines.
 	wg sync.WaitGroup
 
+	metricsChangefeedBarrierTsGauge       prometheus.Gauge
 	metricsChangefeedCheckpointTsGauge    prometheus.Gauge
 	metricsChangefeedCheckpointTsLagGauge prometheus.Gauge
 	metricsChangefeedResolvedTsGauge      prometheus.Gauge
 	metricsChangefeedResolvedTsLagGauge   prometheus.Gauge
-	metricChangefeedTickDuration          prometheus.Observer
+	metricsChangefeedTickDuration         prometheus.Observer
 
 	newDDLPuller func(ctx cdcContext.Context, startTs uint64) (DDLPuller, error)
 	newSink      func() DDLSink
@@ -130,7 +131,7 @@ func (c *changefeed) Tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 		if costTime > changefeedLogsWarnDuration {
 			log.Warn("changefeed tick took too long", zap.String("changefeed", c.id), zap.Duration("duration", costTime))
 		}
-		c.metricChangefeedTickDuration.Observe(costTime.Seconds())
+		c.metricsChangefeedTickDuration.Observe(costTime.Seconds())
 	}
 
 	if err != nil {
@@ -197,8 +198,13 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 	// and we need to use the latest table names.
 	if c.currentTableNames == nil {
 		c.currentTableNames = c.schema.AllTableNames()
+		log.Debug("changefeed current table names updated",
+			zap.String("changefeed", c.id),
+			zap.Any("tables", c.currentTableNames),
+		)
 	}
 	c.sink.emitCheckpointTs(checkpointTs, c.currentTableNames)
+
 	barrierTs, err := c.handleBarrier(ctx)
 	if err != nil {
 		return errors.Trace(err)
@@ -207,8 +213,12 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 		// This condition implies that the DDL resolved-ts has not yet reached checkpointTs,
 		// which implies that it would be premature to schedule tables or to update status.
 		// So we return here.
+		log.Debug("barrierTs < checkpointTs, premature to schedule tables or update status",
+			zap.String("changefeed", c.id),
+			zap.Uint64("barrierTs", barrierTs), zap.Uint64("checkpointTs", checkpointTs))
 		return nil
 	}
+
 	startTime := time.Now()
 	newCheckpointTs, newResolvedTs, err := c.scheduler.Tick(ctx, c.state, c.schema.AllPhysicalTables(), captures)
 	costTime := time.Since(startTime)
@@ -297,7 +307,8 @@ LOOP:
 	// So we need to process all DDLs from the range [checkpointTs, ...), but since the semantics of start-ts requires
 	// the lower bound of an open interval, i.e. (startTs, ...), we pass checkpointTs-1 as the start-ts to initialize
 	// the schema cache.
-	c.schema, err = newSchemaWrap4Owner(ctx.GlobalVars().KVStorage, checkpointTs-1, c.state.Info.Config)
+	c.schema, err = newSchemaWrap4Owner(ctx.GlobalVars().KVStorage,
+		checkpointTs-1, c.state.Info.Config, ctx.ChangefeedVars().ID)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -328,11 +339,12 @@ LOOP:
 	c.redoManager = redoManager
 
 	// init metrics
+	c.metricsChangefeedBarrierTsGauge = changefeedBarrierTsGauge.WithLabelValues(c.id)
 	c.metricsChangefeedCheckpointTsGauge = changefeedCheckpointTsGauge.WithLabelValues(c.id)
 	c.metricsChangefeedCheckpointTsLagGauge = changefeedCheckpointTsLagGauge.WithLabelValues(c.id)
 	c.metricsChangefeedResolvedTsGauge = changefeedResolvedTsGauge.WithLabelValues(c.id)
 	c.metricsChangefeedResolvedTsLagGauge = changefeedResolvedTsLagGauge.WithLabelValues(c.id)
-	c.metricChangefeedTickDuration = changefeedTickDuration.WithLabelValues(c.id)
+	c.metricsChangefeedTickDuration = changefeedTickDuration.WithLabelValues(c.id)
 
 	// create scheduler
 	c.scheduler, err = c.newScheduler(ctx, checkpointTs)
@@ -376,7 +388,10 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 	c.metricsChangefeedResolvedTsLagGauge = nil
 
 	changefeedTickDuration.DeleteLabelValues(c.id)
-	c.metricChangefeedTickDuration = nil
+	c.metricsChangefeedTickDuration = nil
+
+	changefeedBarrierTsGauge.DeleteLabelValues(c.id)
+	c.metricsChangefeedBarrierTsGauge = nil
 
 	c.initialized = false
 }
@@ -471,6 +486,8 @@ func (c *changefeed) preflightCheck(captures map[model.CaptureID]*model.CaptureI
 
 func (c *changefeed) handleBarrier(ctx cdcContext.Context) (uint64, error) {
 	barrierTp, barrierTs := c.barriers.Min()
+	phyBarrierTs := oracle.ExtractPhysical(barrierTs)
+	c.metricsChangefeedBarrierTsGauge.Set(float64(phyBarrierTs))
 	blocked := (barrierTs == c.state.Status.CheckpointTs) && (barrierTs == c.state.Status.ResolvedTs)
 	switch barrierTp {
 	case ddlJobBarrier:
@@ -519,16 +536,21 @@ func (c *changefeed) handleBarrier(ctx cdcContext.Context) (uint64, error) {
 
 func (c *changefeed) asyncExecDDL(ctx cdcContext.Context, job *timodel.Job) (done bool, err error) {
 	if job.BinlogInfo == nil {
-		log.Warn("ignore the invalid DDL job", zap.Reflect("job", job))
+		log.Warn("ignore the invalid DDL job", zap.String("changefeed", c.id),
+			zap.Reflect("job", job))
 		return true, nil
 	}
 	cyclicConfig := c.state.Info.Config.Cyclic
 	if cyclicConfig.IsEnabled() && !cyclicConfig.SyncDDL {
+		log.Info("ignore the DDL job because cyclic config is enabled and syncDDL is false",
+			zap.String("changefeed", c.id), zap.Reflect("job", job))
 		return true, nil
 	}
 	if c.ddlEventCache == nil || c.ddlEventCache.CommitTs != job.BinlogInfo.FinishedTS {
 		ddlEvent, err := c.schema.BuildDDLEvent(job)
 		if err != nil {
+			log.Error("build DDL event fail", zap.String("changefeed", c.id),
+				zap.Reflect("job", job), zap.Error(err))
 			return false, errors.Trace(err)
 		}
 		// We can't use the latest schema directly,
@@ -541,6 +563,8 @@ func (c *changefeed) asyncExecDDL(ctx cdcContext.Context, job *timodel.Job) (don
 		}
 		ddlEvent.Query, err = addSpecialComment(ddlEvent.Query)
 		if err != nil {
+			log.Error("add special comment fail", zap.String("changefeed", c.id),
+				zap.String("Query", ddlEvent.Query), zap.Error(err))
 			return false, errors.Trace(err)
 		}
 
@@ -553,7 +577,8 @@ func (c *changefeed) asyncExecDDL(ctx cdcContext.Context, job *timodel.Job) (don
 		}
 	}
 	if job.BinlogInfo.TableInfo != nil && c.schema.IsIneligibleTableID(job.BinlogInfo.TableInfo.ID) {
-		log.Warn("ignore the DDL job of ineligible table", zap.Reflect("job", job))
+		log.Warn("ignore the DDL job of ineligible table",
+			zap.String("changefeed", c.id), zap.Reflect("job", job))
 		return true, nil
 	}
 	done, err = c.sink.emitDDLEvent(ctx, c.ddlEventCache)
@@ -634,6 +659,8 @@ func addSpecialComment(ddlQuery string) (string, error) {
 	restoreFlags |= format.RestoreKeyWordUppercase
 	// wrap string with single quote
 	restoreFlags |= format.RestoreStringSingleQuotes
+	// remove placement rule
+	restoreFlags |= format.SkipPlacementRuleForRestore
 	if err = stms[0].Restore(format.NewRestoreCtx(restoreFlags, &sb)); err != nil {
 		return "", errors.Trace(err)
 	}

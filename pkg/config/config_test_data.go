@@ -108,11 +108,11 @@ const (
     "region-scan-limit": 40
   },
   "debug": {
-    "enable-table-actor": false,
+    "enable-table-actor": true,
     "table-actor": {
       "event-batch-size": 32
     },
-    "enable-db-sorter": false,
+    "enable-db-sorter": true,
     "db": {
       "count": 8,
       "concurrency": 128,
@@ -130,9 +130,9 @@ const (
       "iterator-max-alive-duration": 10000,
       "iterator-slow-read-duration": 256
     },
-    "enable-new-scheduler": false,
+    "enable-new-scheduler": true,
     "messages": {
-      "client-max-batch-interval": 200000000,
+      "client-max-batch-interval": 10000000,
       "client-max-batch-size": 8388608,
       "client-max-batch-count": 128,
       "client-retry-rate-limit": 1,

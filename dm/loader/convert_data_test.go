@@ -16,8 +16,9 @@ package loader
 import (
 	cm "github.com/pingcap/tidb-tools/pkg/column-mapping"
 
+	regexprrouter "github.com/pingcap/tidb/util/regexpr-router"
+	router "github.com/pingcap/tidb/util/table-router"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
-	"github.com/pingcap/tiflow/dm/pkg/router"
 
 	. "github.com/pingcap/check"
 )
@@ -165,7 +166,7 @@ func (t *testConvertDataSuite) TestParseTable(c *C) {
 		insertHeadStmt: "INSERT INTO `t` VALUES",
 	}
 
-	r, err := router.NewRouter(false, rules)
+	r, err := regexprrouter.NewRegExprRouter(false, rules)
 	c.Assert(err, IsNil)
 
 	tableInfo, err := parseTable(tcontext.Background(), r, "test1", "t2", "./dumpfile/test1.t2-schema.sql", "ANSI_QUOTES", "source-mysql-01")
@@ -193,7 +194,7 @@ func (t *testConvertDataSuite) TestParseTableWithGeneratedColumn(c *C) {
 		insertHeadStmt: "INSERT INTO `t` (`id`,`t_json`) VALUES",
 	}
 
-	r, err := router.NewRouter(false, rules)
+	r, err := regexprrouter.NewRegExprRouter(false, rules)
 	c.Assert(err, IsNil)
 
 	tableInfo, err := parseTable(tcontext.Background(), r, "test1", "t3", "./dumpfile/test1.t3-schema.sql", "", "source-mysql-01")
@@ -411,7 +412,7 @@ func (t *testConvertDataSuite) TestParseTableWithExtendColumn(c *C) {
 		extendVal:      []string{"t2", "test1", "source1"},
 	}
 
-	r, err := router.NewRouter(false, rules)
+	r, err := regexprrouter.NewRegExprRouter(false, rules)
 	c.Assert(err, IsNil)
 
 	tableInfo, err := parseTable(tcontext.Background(), r, "test1", "t2", "./dumpfile/test1.t2-schema.sql", "ANSI_QUOTES", "source1")
@@ -456,7 +457,7 @@ func (t *testConvertDataSuite) TestParseTableWithGeneratedColumnExtendColumn(c *
 		extendVal:      []string{"t3", "test1", "source1"},
 	}
 
-	r, err := router.NewRouter(false, rules)
+	r, err := regexprrouter.NewRegExprRouter(false, rules)
 	c.Assert(err, IsNil)
 
 	tableInfo, err := parseTable(tcontext.Background(), r, "test1", "t3", "./dumpfile/test1.t3-schema.sql", "", "source1")
