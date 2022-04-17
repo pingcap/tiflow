@@ -10,7 +10,6 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
-	"github.com/pingcap/tiflow/pkg/workerpool"
 	"go.uber.org/atomic"
 	"go.uber.org/dig"
 	"go.uber.org/zap"
@@ -108,7 +107,6 @@ type DefaultBaseMaster struct {
 	userRawKVClient       extKV.KVClientEx
 	executorClientManager client.ClientsManager
 	serverMasterClient    client.MasterClient
-	pool                  workerpool.AsyncPool
 
 	clock clock.Clock
 
@@ -191,7 +189,6 @@ func NewBaseMaster(
 		userRawKVClient:       params.UserRawKVClient,
 		executorClientManager: params.ExecutorClientManager,
 		serverMasterClient:    params.ServerMasterClient,
-		pool:                  workerpool.NewDefaultAsyncPool(4),
 		id:                    id,
 		clock:                 clock.New(),
 
@@ -246,12 +243,6 @@ func (m *DefaultBaseMaster) doInit(ctx context.Context) (isFirstStartUp bool, er
 	}
 	m.currentEpoch.Store(epoch)
 
-	if err := m.deps.Provide(func() workerpool.AsyncPool {
-		return m.pool
-	}); err != nil {
-		return false, errors.Trace(err)
-	}
-
 	m.workerManager = master.NewWorkerManager(
 		m.id,
 		epoch,
@@ -273,8 +264,6 @@ func (m *DefaultBaseMaster) doInit(ctx context.Context) (isFirstStartUp bool, er
 	if err := m.registerMessageHandlers(ctx); err != nil {
 		return false, errors.Trace(err)
 	}
-
-	m.startBackgroundTasks()
 
 	if !isInit {
 		if err := m.workerManager.InitAfterRecover(ctx); err != nil {
@@ -402,24 +391,6 @@ func (m *DefaultBaseMaster) Close(ctx context.Context) error {
 
 	m.doClose()
 	return nil
-}
-
-func (m *DefaultBaseMaster) startBackgroundTasks() {
-	cctx, cancel := context.WithCancel(context.Background())
-	m.wg.Add(1)
-	go func() {
-		defer m.wg.Done()
-		<-m.closeCh
-		cancel()
-	}()
-
-	m.wg.Add(1)
-	go func() {
-		defer m.wg.Done()
-		if err := m.pool.Run(cctx); err != nil {
-			m.OnError(err)
-		}
-	}()
 }
 
 func (m *DefaultBaseMaster) OnError(err error) {

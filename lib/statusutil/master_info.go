@@ -3,31 +3,26 @@ package statusutil
 import (
 	"sync"
 
+	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
-)
-
-type (
-	MasterID = string
-	WorkerID = string
-	Epoch    = int64
 )
 
 // MasterInfoProvider is an object that can provide necessary
 // information so that the Writer can contact the master.
 type MasterInfoProvider interface {
-	MasterID() MasterID
+	MasterID() libModel.MasterID
 	MasterNode() p2p.NodeID
-	Epoch() Epoch
+	Epoch() libModel.Epoch
 }
 
 type MockMasterInfoProvider struct {
 	mu         sync.RWMutex
-	masterID   MasterID
+	masterID   libModel.MasterID
 	masterNode p2p.NodeID
-	epoch      Epoch
+	epoch      libModel.Epoch
 }
 
-func (p *MockMasterInfoProvider) MasterID() MasterID {
+func (p *MockMasterInfoProvider) MasterID() libModel.MasterID {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
@@ -41,14 +36,14 @@ func (p *MockMasterInfoProvider) MasterNode() p2p.NodeID {
 	return p.masterNode
 }
 
-func (p *MockMasterInfoProvider) Epoch() Epoch {
+func (p *MockMasterInfoProvider) Epoch() libModel.Epoch {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
 	return p.epoch
 }
 
-func (p *MockMasterInfoProvider) Set(masterID MasterID, masterNode p2p.NodeID, epoch Epoch) {
+func (p *MockMasterInfoProvider) Set(masterID libModel.MasterID, masterNode p2p.NodeID, epoch libModel.Epoch) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 

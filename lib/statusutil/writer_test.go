@@ -6,7 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/hanfei1991/microcosm/lib/model"
+	libModel "github.com/hanfei1991/microcosm/lib/model"
 	derror "github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/meta/kvclient/mock"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
@@ -19,7 +19,12 @@ type writerTestSuite struct {
 	masterInfo    *MockMasterInfoProvider
 }
 
-func newWriterTestSuite(masterID MasterID, masterNode p2p.NodeID, masterEpoch Epoch, workerID WorkerID) *writerTestSuite {
+func newWriterTestSuite(
+	masterID libModel.MasterID,
+	masterNode p2p.NodeID,
+	masterEpoch libModel.Epoch,
+	workerID libModel.WorkerID,
+) *writerTestSuite {
 	kv := mock.NewMetaMock()
 	messageSender := p2p.NewMockMessageSender()
 	masterInfo := &MockMasterInfoProvider{
@@ -39,8 +44,8 @@ func TestWriterUpdate(t *testing.T) {
 	suite := newWriterTestSuite("master-1", "executor-1", 1, "worker-1")
 	ctx := context.Background()
 
-	st := &model.WorkerStatus{
-		Code:         model.WorkerStatusNormal,
+	st := &libModel.WorkerStatus{
+		Code:         libModel.WorkerStatusNormal,
 		ErrorMessage: "test",
 	}
 	err := suite.writer.UpdateStatus(ctx, st)
@@ -49,7 +54,7 @@ func TestWriterUpdate(t *testing.T) {
 	rawBytes, err := st.Marshal()
 	require.NoError(t, err)
 
-	resp, err := suite.kv.Get(ctx, model.EncodeWorkerStatusKey("master-1", "worker-1"))
+	resp, err := suite.kv.Get(ctx, libModel.EncodeWorkerStatusKey("master-1", "worker-1"))
 	require.NoError(t, err)
 	require.Len(t, resp.Kvs, 1)
 	require.Equal(t, rawBytes, resp.Kvs[0].Value)
@@ -65,7 +70,7 @@ func TestWriterUpdate(t *testing.T) {
 
 	// Deletes the persisted status for testing purpose.
 	// TODO make a better mock KV that can inspect calls.
-	_, err = suite.kv.Delete(ctx, model.EncodeWorkerStatusKey("master-1", "worker-1"))
+	_, err = suite.kv.Delete(ctx, libModel.EncodeWorkerStatusKey("master-1", "worker-1"))
 	require.NoError(t, err)
 
 	// Repeated update. Should have a notification too, but no persistence.
@@ -79,7 +84,7 @@ func TestWriterUpdate(t *testing.T) {
 		MasterEpoch: 1,
 		Status:      st,
 	}, msg)
-	resp, err = suite.kv.Get(ctx, model.EncodeWorkerStatusKey("master-1", "worker-1"))
+	resp, err = suite.kv.Get(ctx, libModel.EncodeWorkerStatusKey("master-1", "worker-1"))
 	require.NoError(t, err)
 	require.Len(t, resp.Kvs, 0)
 }
@@ -88,8 +93,8 @@ func TestWriterSendRetry(t *testing.T) {
 	suite := newWriterTestSuite("master-1", "executor-1", 1, "worker-1")
 	ctx := context.Background()
 
-	st := &model.WorkerStatus{
-		Code:         model.WorkerStatusNormal,
+	st := &libModel.WorkerStatus{
+		Code:         libModel.WorkerStatusNormal,
 		ErrorMessage: "test",
 	}
 

@@ -7,11 +7,11 @@ import (
 )
 
 type WorkerStatusMessage struct {
-	Worker      WorkerID               `json:"worker"`
-	MasterEpoch Epoch                  `json:"master-epoch"`
+	Worker      libModel.WorkerID      `json:"worker"`
+	MasterEpoch libModel.Epoch         `json:"master-epoch"`
 	Status      *libModel.WorkerStatus `json:"status"`
 }
 
-func WorkerStatusTopic(masterID MasterID) string {
+func WorkerStatusTopic(masterID libModel.MasterID) string {
 	return fmt.Sprintf("worker-status-%s", masterID)
 }

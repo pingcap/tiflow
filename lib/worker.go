@@ -5,6 +5,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hanfei1991/microcosm/lib/config"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/pkg/workerpool"
@@ -96,7 +98,7 @@ type DefaultBaseWorker struct {
 	messageRouter    *MessageRouter
 
 	id            libModel.WorkerID
-	timeoutConfig TimeoutConfig
+	timeoutConfig config.TimeoutConfig
 
 	pool workerpool.AsyncPool
 
@@ -146,7 +148,7 @@ func NewBaseWorker(
 
 		masterID:      masterID,
 		id:            workerID,
-		timeoutConfig: defaultTimeoutConfig,
+		timeoutConfig: config.DefaultTimeoutConfig(),
 
 		pool: workerpool.NewDefaultAsyncPool(1),
 
@@ -371,7 +373,7 @@ func (w *DefaultBaseWorker) startBackgroundTasks() {
 }
 
 func (w *DefaultBaseWorker) runHeartbeatWorker(ctx context.Context) error {
-	ticker := w.clock.Ticker(w.timeoutConfig.workerHeartbeatInterval)
+	ticker := w.clock.Ticker(w.timeoutConfig.WorkerHeartbeatInterval)
 	for {
 		select {
 		case <-ctx.Done():
@@ -385,7 +387,7 @@ func (w *DefaultBaseWorker) runHeartbeatWorker(ctx context.Context) error {
 }
 
 func (w *DefaultBaseWorker) runWatchDog(ctx context.Context) error {
-	ticker := w.clock.Ticker(w.timeoutConfig.workerHeartbeatInterval)
+	ticker := w.clock.Ticker(w.timeoutConfig.WorkerHeartbeatInterval)
 	for {
 		select {
 		case <-ctx.Done():
@@ -476,7 +478,7 @@ type masterClient struct {
 	metaKVClient            metaclient.KVClient
 	lastMasterAckedPingTime clock.MonotonicTime
 
-	timeoutConfig TimeoutConfig
+	timeoutConfig config.TimeoutConfig
 
 	onMasterFailOver func() error
 }
@@ -495,7 +497,7 @@ func newMasterClient(
 		messageSender:           messageRouter,
 		metaKVClient:            metaKV,
 		lastMasterAckedPingTime: initTime,
-		timeoutConfig:           defaultTimeoutConfig,
+		timeoutConfig:           config.DefaultTimeoutConfig(),
 		onMasterFailOver:        onMasterFailOver,
 	}
 }
@@ -591,12 +593,12 @@ func (m *masterClient) CheckMasterTimeout(ctx context.Context, clock clock.Clock
 	m.mu.RUnlock()
 
 	sinceLastAcked := clock.Mono().Sub(lastMasterAckedPingTime)
-	if sinceLastAcked <= 2*m.timeoutConfig.workerHeartbeatInterval {
+	if sinceLastAcked <= 2*m.timeoutConfig.WorkerHeartbeatInterval {
 		return true, nil
 	}
 
-	if sinceLastAcked > 2*m.timeoutConfig.workerHeartbeatInterval &&
-		sinceLastAcked < m.timeoutConfig.workerTimeoutDuration {
+	if sinceLastAcked > 2*m.timeoutConfig.WorkerHeartbeatInterval &&
+		sinceLastAcked < m.timeoutConfig.WorkerTimeoutDuration {
 
 		if err := m.refreshMasterInfo(ctx, clock); err != nil {
 			return false, errors.Trace(err)

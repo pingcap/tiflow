@@ -10,7 +10,7 @@ type TimeoutConfig struct {
 	MasterHeartbeatCheckLoopInterval time.Duration
 }
 
-var defaultTimeoutConfig TimeoutConfig = TimeoutConfig{
+var defaultTimeoutConfig = TimeoutConfig{
 	WorkerTimeoutDuration:            time.Second * 15,
 	WorkerTimeoutGracefulDuration:    time.Second * 5,
 	WorkerHeartbeatInterval:          time.Second * 3,
