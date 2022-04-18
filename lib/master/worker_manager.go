@@ -148,6 +148,14 @@ func (m *WorkerManager) InitAfterRecover(ctx context.Context) error {
 		return err
 	}
 
+	if len(allPersistedWorkers) == 0 {
+		// Fast path when there is no worker.
+		m.mu.Lock()
+		m.state = workerManagerReady
+		m.mu.Unlock()
+		return nil
+	}
+
 	m.mu.Lock()
 	for workerID, status := range allPersistedWorkers {
 		entry := newWaitingWorkerEntry(workerID, status)

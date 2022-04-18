@@ -379,3 +379,19 @@ func TestRecoverAfterFailoverFast(t *testing.T) {
 	require.Contains(t, suite.manager.GetWorkers(), "worker-1")
 	suite.Close()
 }
+
+func TestRecoverWithNoWorker(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	suite := NewWorkerManageTestSuite(false)
+
+	// Since there is no worker info in the metastore,
+	// recovering should be very fast.
+	// Since we are using a mock clock, and we are NOT advancing it,
+	// InitAfterRecover returning at all would indicate a successful test.
+	err := suite.manager.InitAfterRecover(ctx)
+	require.NoError(t, err)
+
+	suite.Close()
+}
