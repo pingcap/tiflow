@@ -1758,7 +1758,10 @@ func (t *testMaster) TestOperateSource(c *check.C) {
 	s1 := NewServer(cfg1)
 	s1.leader.Store(oneselfLeader)
 	c.Assert(s1.Start(ctx), check.IsNil)
-	defer s1.Close()
+	defer func() {
+		cancel()
+		s1.Close()
+	}()
 	mysqlCfg, err := config.ParseYamlAndVerify(config.SampleSourceConfig)
 	c.Assert(err, check.IsNil)
 	mysqlCfg.From.Password = os.Getenv("MYSQL_PSWD")
@@ -1775,7 +1778,7 @@ func (t *testMaster) TestOperateSource(c *check.C) {
 	c.Assert(resp.Result, check.Equals, true)
 	c.Assert(resp.Sources, check.DeepEquals, []*pb.CommonWorkerResponse{{
 		Result: true,
-		Msg:    "source is added but there is no free worker to bound",
+		Msg:    "source is added but there is no online worker to bound",
 		Source: sourceID,
 	}})
 	sourceCfgs := s1.scheduler.GetSourceCfgs()
@@ -1808,11 +1811,11 @@ func (t *testMaster) TestOperateSource(c *check.C) {
 	})
 	c.Assert(resp.Sources, check.DeepEquals, []*pb.CommonWorkerResponse{{
 		Result: true,
-		Msg:    "source is added but there is no free worker to bound",
+		Msg:    "source is added but there is no online worker to bound",
 		Source: sourceID2,
 	}, {
 		Result: true,
-		Msg:    "source is added but there is no free worker to bound",
+		Msg:    "source is added but there is no online worker to bound",
 		Source: sourceID3,
 	}})
 	sourceCfgs = s1.scheduler.GetSourceCfgs()
