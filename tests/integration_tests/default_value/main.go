@@ -395,24 +395,27 @@ func testMultiDDLs(srcs []*sql.DB, wg *sync.WaitGroup) {
 			ddlZeroValueFunc,
 			false,
 		},
-		{
-			"alter table test.`%s` add column v1 datetime(5) not null",
-			"2020-10-10 10:10:10.9999",
-			ddlZeroValueFunc,
-			false,
-		},
-		{
-			"alter table test.`%s` add column v1 timestamp(5) not null",
-			"2020-10-10 10:10:10.9999",
-			ddlZeroValueFunc,
-			false,
-		},
-		{
-			"alter table test.`%s` add column v1 time(5) not null",
-			"10:10:10.9999",
-			ddlZeroValueFunc,
-			false,
-		},
+		/*
+			// normal cases, we may transfer to test-infra to reduce cost
+			{
+				"alter table test.`%s` add column v1 datetime(5) not null",
+				"2020-10-10 10:10:10.9999",
+				ddlZeroValueFunc,
+				false,
+			},
+			{
+				"alter table test.`%s` add column v1 timestamp(5) not null",
+				"2020-10-10 10:10:10.9999",
+				ddlZeroValueFunc,
+				false,
+			},
+			{
+				"alter table test.`%s` add column v1 time(5) not null",
+				"10:10:10.9999",
+				ddlZeroValueFunc,
+				false,
+			},
+		*/
 		// numeric data type
 		{
 			// default bit[1]
@@ -427,24 +430,26 @@ func testMultiDDLs(srcs []*sql.DB, wg *sync.WaitGroup) {
 			ddlZeroValueFunc,
 			false,
 		},
-		{
-			"alter table test.`%s` add column v1 mediumint not null",
-			-13,
-			ddlZeroValueFunc,
-			false,
-		},
-		{
-			"alter table test.`%s` add column v1 int not null",
-			-13,
-			ddlZeroValueFunc,
-			false,
-		},
-		{
-			"alter table test.`%s` add column v1 bigint not null",
-			-13,
-			ddlZeroValueFunc,
-			false,
-		},
+		/*
+			{
+				"alter table test.`%s` add column v1 mediumint not null",
+				-13,
+				ddlZeroValueFunc,
+				false,
+			},
+			{
+				"alter table test.`%s` add column v1 int not null",
+				-13,
+				ddlZeroValueFunc,
+				false,
+			},
+			{
+				"alter table test.`%s` add column v1 bigint not null",
+				-13,
+				ddlZeroValueFunc,
+				false,
+			},
+		*/
 		{
 			"alter table test.`%s` add column v1 decimal(5) not null",
 			-13,
@@ -463,54 +468,57 @@ func testMultiDDLs(srcs []*sql.DB, wg *sync.WaitGroup) {
 			ddlZeroValueFunc,
 			false,
 		},
-		{
-			"alter table test.`%s` add column v1 bit(4) not null",
-			[]byte{0x03},
-			ddlZeroValueFunc,
-			false,
-		},
-		{
-			"alter table test.`%s` add column v1 tinyint(4) unsigned not null",
-			13,
-			ddlZeroValueFunc,
-			false,
-		},
-		{
-			"alter table test.`%s` add column v1 mediumint(4) unsigned not null",
-			13,
-			ddlZeroValueFunc,
-			false,
-		},
-		{
-			"alter table test.`%s` add column v1 int(4) unsigned not null",
-			13,
-			ddlZeroValueFunc,
-			false,
-		},
-		{
-			"alter table test.`%s` add column v1 bigint(4) unsigned not null",
-			13,
-			ddlZeroValueFunc,
-			false,
-		},
-		{
-			"alter table test.`%s` add column v1 decimal(5,2) unsigned not null",
-			13.13,
-			ddlZeroValueFunc,
-			false,
-		},
-		{
-			"alter table test.`%s` add column v1 float(5,2) unsigned not null",
-			13.13,
-			ddlZeroValueFunc,
-			false,
-		},
-		{
-			"alter table test.`%s` add column v1 double(5,2) unsigned not null",
-			13.13,
-			ddlZeroValueFunc,
-			false,
-		},
+		/*
+			// normal cases, we may transfer to test-infra to reduce cost
+			{
+				"alter table test.`%s` add column v1 bit(4) not null",
+				[]byte{0x03},
+				ddlZeroValueFunc,
+				false,
+			},
+			{
+				"alter table test.`%s` add column v1 tinyint(4) unsigned not null",
+				13,
+				ddlZeroValueFunc,
+				false,
+			},
+			{
+				"alter table test.`%s` add column v1 mediumint(4) unsigned not null",
+				13,
+				ddlZeroValueFunc,
+				false,
+			},
+			{
+				"alter table test.`%s` add column v1 int(4) unsigned not null",
+				13,
+				ddlZeroValueFunc,
+				false,
+			},
+			{
+				"alter table test.`%s` add column v1 bigint(4) unsigned not null",
+				13,
+				ddlZeroValueFunc,
+				false,
+			},
+			{
+				"alter table test.`%s` add column v1 decimal(5,2) unsigned not null",
+				13.13,
+				ddlZeroValueFunc,
+				false,
+			},
+			{
+				"alter table test.`%s` add column v1 float(5,2) unsigned not null",
+				13.13,
+				ddlZeroValueFunc,
+				false,
+			},
+			{
+				"alter table test.`%s` add column v1 double(5,2) unsigned not null",
+				13.13,
+				ddlZeroValueFunc,
+				false,
+			},
+		*/
 		// string data type
 		{
 			"alter table test.`%s` add column v1 char(10) not null",
@@ -611,25 +619,26 @@ func testMultiDDLs(srcs []*sql.DB, wg *sync.WaitGroup) {
 			ddlDefaultValueFunc,
 			true,
 		},
-		{
-			"alter table test.`%s` add column v1 datetime(5) default ? %s",
-			"2020-10-10 10:10:10.9999",
-			ddlDefaultValueFunc,
-			true,
-		},
-		{
-			"alter table test.`%s` add column v1 timestamp(5) default ? %s",
-			"2020-10-10 10:10:10.9999",
-			ddlDefaultValueFunc,
-			true,
-		},
-		{
-			"alter table test.`%s` add column v1 time(5) default ? %s",
-			"10:10:10.9999",
-			ddlDefaultValueFunc,
-			true,
-		},
-
+		/*
+			{
+				"alter table test.`%s` add column v1 datetime(5) default ? %s",
+				"2020-10-10 10:10:10.9999",
+				ddlDefaultValueFunc,
+				true,
+			},
+			{
+				"alter table test.`%s` add column v1 timestamp(5) default ? %s",
+				"2020-10-10 10:10:10.9999",
+				ddlDefaultValueFunc,
+				true,
+			},
+			{
+				"alter table test.`%s` add column v1 time(5) default ? %s",
+				"10:10:10.9999",
+				ddlDefaultValueFunc,
+				true,
+			},
+		*/
 		// numeric data type
 		{
 			// default bit[1]
@@ -644,24 +653,27 @@ func testMultiDDLs(srcs []*sql.DB, wg *sync.WaitGroup) {
 			ddlDefaultValueFunc,
 			true,
 		},
-		{
-			"alter table test.`%s` add column v1 mediumint default ? %s",
-			-13,
-			ddlDefaultValueFunc,
-			true,
-		},
-		{
-			"alter table test.`%s` add column v1 int default ? %s",
-			-13,
-			ddlDefaultValueFunc,
-			true,
-		},
-		{
-			"alter table test.`%s` add column v1 bigint default ? %s",
-			-13,
-			ddlDefaultValueFunc,
-			true,
-		},
+		/*
+			// normal cases, we may transfer to test-infra to reduce cost
+			{
+				"alter table test.`%s` add column v1 mediumint default ? %s",
+				-13,
+				ddlDefaultValueFunc,
+				true,
+			},
+			{
+				"alter table test.`%s` add column v1 int default ? %s",
+				-13,
+				ddlDefaultValueFunc,
+				true,
+			},
+			{
+				"alter table test.`%s` add column v1 bigint default ? %s",
+				-13,
+				ddlDefaultValueFunc,
+				true,
+			},
+		*/
 		{
 			"alter table test.`%s` add column v1 decimal(5) default ? %s",
 			-13,
@@ -680,55 +692,56 @@ func testMultiDDLs(srcs []*sql.DB, wg *sync.WaitGroup) {
 			ddlDefaultValueFunc,
 			true,
 		},
-		{
-			"alter table test.`%s` add column v1 bit(4) default ? %s",
-			[]byte{0x03},
-			ddlDefaultValueFunc,
-			true,
-		},
-		{
-			"alter table test.`%s` add column v1 tinyint(4) unsigned default ? %s",
-			13,
-			ddlDefaultValueFunc,
-			true,
-		},
-		{
-			"alter table test.`%s` add column v1 mediumint(4) unsigned default ? %s",
-			13,
-			ddlDefaultValueFunc,
-			true,
-		},
-		{
-			"alter table test.`%s` add column v1 int(4) unsigned default ? %s",
-			13,
-			ddlDefaultValueFunc,
-			true,
-		},
-		{
-			"alter table test.`%s` add column v1 bigint(4) unsigned default ? %s",
-			13,
-			ddlDefaultValueFunc,
-			true,
-		},
-		{
-			"alter table test.`%s` add column v1 decimal(5,2) unsigned default ? %s",
-			13.13,
-			ddlDefaultValueFunc,
-			true,
-		},
-		{
-			"alter table test.`%s` add column v1 float(5,2) unsigned default ? %s",
-			13.13,
-			ddlDefaultValueFunc,
-			true,
-		},
-		{
-			"alter table test.`%s` add column v1 double(5,2) unsigned default ? %s",
-			13.13,
-			ddlDefaultValueFunc,
-			true,
-		},
-
+		/*
+			{
+				"alter table test.`%s` add column v1 bit(4) default ? %s",
+				[]byte{0x03},
+				ddlDefaultValueFunc,
+				true,
+			},
+			{
+				"alter table test.`%s` add column v1 tinyint(4) unsigned default ? %s",
+				13,
+				ddlDefaultValueFunc,
+				true,
+			},
+			{
+				"alter table test.`%s` add column v1 mediumint(4) unsigned default ? %s",
+				13,
+				ddlDefaultValueFunc,
+				true,
+			},
+			{
+				"alter table test.`%s` add column v1 int(4) unsigned default ? %s",
+				13,
+				ddlDefaultValueFunc,
+				true,
+			},
+			{
+				"alter table test.`%s` add column v1 bigint(4) unsigned default ? %s",
+				13,
+				ddlDefaultValueFunc,
+				true,
+			},
+			{
+				"alter table test.`%s` add column v1 decimal(5,2) unsigned default ? %s",
+				13.13,
+				ddlDefaultValueFunc,
+				true,
+			},
+			{
+				"alter table test.`%s` add column v1 float(5,2) unsigned default ? %s",
+				13.13,
+				ddlDefaultValueFunc,
+				true,
+			},
+			{
+				"alter table test.`%s` add column v1 double(5,2) unsigned default ? %s",
+				13.13,
+				ddlDefaultValueFunc,
+				true,
+			},
+		*/
 		// string data type
 		{
 			"alter table test.`%s` add column v1 char(10) default ? %s",
