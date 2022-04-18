@@ -21,8 +21,8 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
-	filter "github.com/pingcap/tidb-tools/pkg/table-filter"
 	"github.com/pingcap/tidb/dumpling/export"
+	filter "github.com/pingcap/tidb/util/table-filter"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
@@ -329,6 +329,7 @@ func (m *Dumpling) constructArgs(ctx context.Context) (*export.Config, error) {
 	dumpConfig.Labels = prometheus.Labels{"task": m.cfg.Name, "source_id": m.cfg.SourceID}
 	// update sql_mode if needed
 	m.detectSQLMode(ctx, dumpConfig)
+	dumpConfig.ExtStorage = cfg.ExtStorage
 
 	return dumpConfig, nil
 }

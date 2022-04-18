@@ -54,7 +54,7 @@ run() {
 
 	# try to get schema for the table, but the stage is not paused.
 	curl -X PUT ${API_URL} -d '{"op":1, "task":"sequence_sharding_optimistic", "sources": ["mysql-replica-01"], "database":"sharding_seq_opt", "table":"t1"}' >${WORK_DIR}/get_schema.log
-	check_log_contains ${WORK_DIR}/get_schema.log "current stage is Running but not paused, invalid" 1
+	check_log_contains ${WORK_DIR}/get_schema.log "current task or validator stage is Running but not paused, invalid" 1
 
 	# pause task manually.
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
@@ -89,10 +89,6 @@ run() {
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"shard-ddl-lock unlock non-exist-task-\`test_db\`.\`test_table\`" \
 		"lock with ID non-exist-task-\`test_db\`.\`test_table\` not found" 1
-
-	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"shard-ddl-lock unlock $task_name-\`shard_db\`.\`shard_table\`" \
-		"\`unlock-ddl-lock\` is only supported in pessimistic shard mode currently" 1
 
 	run_sql_file $cur/data/db1.increment.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
 	run_sql_file $cur/data/db2.increment.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2

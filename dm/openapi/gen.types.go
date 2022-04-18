@@ -12,7 +12,9 @@ import (
 const (
 	TaskOnDuplicateError TaskOnDuplicate = "error"
 
-	TaskOnDuplicateOverwrite TaskOnDuplicate = "overwrite"
+	TaskOnDuplicateIgnore TaskOnDuplicate = "ignore"
+
+	TaskOnDuplicateReplace TaskOnDuplicate = "replace"
 )
 
 // Defines values for TaskShardMode.
@@ -29,6 +31,15 @@ const (
 	TaskTaskModeFull TaskTaskMode = "full"
 
 	TaskTaskModeIncremental TaskTaskMode = "incremental"
+)
+
+// Defines values for TaskStage.
+const (
+	TaskStageFinished TaskStage = "Finished"
+
+	TaskStageRunning TaskStage = "Running"
+
+	TaskStageStopped TaskStage = "Stopped"
 )
 
 // ClusterMaster defines model for ClusterMaster.
@@ -57,22 +68,41 @@ type ClusterWorker struct {
 	Name       string `json:"name"`
 }
 
+// ConverterTaskRequest defines model for ConverterTaskRequest.
+type ConverterTaskRequest struct {
+	// task
+	Task *Task `json:"task,omitempty"`
+
+	// config file in yaml format https://docs.pingcap.com/zh/tidb/stable/task-configuration-file-full.
+	TaskConfigFile *string `json:"task_config_file,omitempty"`
+}
+
+// ConverterTaskResponse defines model for ConverterTaskResponse.
+type ConverterTaskResponse struct {
+	// task
+	Task Task `json:"task"`
+
+	// config file in yaml format https://docs.pingcap.com/zh/tidb/stable/task-configuration-file-full.
+	TaskConfigFile string `json:"task_config_file"`
+}
+
+// CreateSourceRequest defines model for CreateSourceRequest.
+type CreateSourceRequest struct {
+	// source
+	Source     Source  `json:"source"`
+	WorkerName *string `json:"worker_name,omitempty"`
+}
+
 // CreateTaskRequest defines model for CreateTaskRequest.
 type CreateTaskRequest struct {
-	// whether to remove meta database in downstream database
-	RemoveMeta bool `json:"remove_meta"`
-
-	// source name list
-	SourceNameList *SourceNameList `json:"source_name_list,omitempty"`
-
 	// task
 	Task Task `json:"task"`
 }
 
-// DeleteSourceResponse defines model for DeleteSourceResponse.
-type DeleteSourceResponse struct {
-	// task name list
-	TaskNameList *TaskNameList `json:"task_name_list,omitempty"`
+// action to stop a relay request
+type DisableRelayRequest struct {
+	// worker name list
+	WorkerNameList *WorkerNameList `json:"worker_name_list,omitempty"`
 }
 
 // status of dump unit
@@ -82,6 +112,21 @@ type DumpStatus struct {
 	FinishedBytes     float64 `json:"finished_bytes"`
 	FinishedRows      float64 `json:"finished_rows"`
 	TotalTables       int64   `json:"total_tables"`
+}
+
+// action to start a relay request
+type EnableRelayRequest struct {
+	// starting GTID of the upstream binlog
+	RelayBinlogGtid *string `json:"relay_binlog_gtid"`
+
+	// starting filename of the upstream binlog
+	RelayBinlogName *string `json:"relay_binlog_name"`
+
+	// the directory where the relay log is stored
+	RelayDir *string `json:"relay_dir"`
+
+	// worker name list
+	WorkerNameList *WorkerNameList `json:"worker_name_list,omitempty"`
 }
 
 // operation error
@@ -129,6 +174,12 @@ type GetTaskListResponse struct {
 	Total int    `json:"total"`
 }
 
+// GetTaskMigrateTargetsResponse defines model for GetTaskMigrateTargetsResponse.
+type GetTaskMigrateTargetsResponse struct {
+	Data  []TaskMigrateTarget `json:"data"`
+	Total int                 `json:"total"`
+}
+
 // GetTaskStatusResponse defines model for GetTaskStatusResponse.
 type GetTaskStatusResponse struct {
 	Data  []SubTaskStatus `json:"data"`
@@ -173,6 +224,15 @@ type Purge struct {
 
 	// Minimum free disk space, in GB
 	RemainSpace *int64 `json:"remain_space"`
+}
+
+// action to stop a relay request
+type PurgeRelayRequest struct {
+	// starting filename of the upstream binlog
+	RelayBinlogName string `json:"relay_binlog_name"`
+
+	// specify relay sub directory for relay_binlog_name. If not specified, the latest one will be used. Sample format: 2ae76434-f79f-11e8-bde2-0242ac130008.000001
+	RelayDir *string `json:"relay_dir"`
 }
 
 // the config of relay
@@ -239,8 +299,14 @@ type ShardingGroup struct {
 
 // source
 type Source struct {
+	// whether this source is enabled
+	Enable bool `json:"enable"`
+
 	// whether to use GTID to pull binlogs from upstream
 	EnableGtid bool `json:"enable_gtid"`
+
+	// flavor of this source
+	Flavor *string `json:"flavor,omitempty"`
 
 	// source address
 	Host string `json:"host"`
@@ -264,6 +330,9 @@ type Source struct {
 	SourceName string          `json:"source_name"`
 	StatusList *[]SourceStatus `json:"status_list,omitempty"`
 
+	// task name list
+	TaskNameList *TaskNameList `json:"task_name_list,omitempty"`
+
 	// source username
 	User string `json:"user"`
 }
@@ -286,25 +355,19 @@ type SourceStatus struct {
 	WorkerName string `json:"worker_name"`
 }
 
-// action to start a relay request
-type StartRelayRequest struct {
-	// starting GTID of the upstream binlog
-	RelayBinlogGtid *string `json:"relay_binlog_gtid"`
+// StartTaskRequest defines model for StartTaskRequest.
+type StartTaskRequest struct {
+	// whether to remove meta database in downstream database
+	RemoveMeta *bool `json:"remove_meta,omitempty"`
 
-	// starting filename of the upstream binlog
-	RelayBinlogName *string `json:"relay_binlog_name"`
-
-	// the directory where the relay log is stored
-	RelayDir *string `json:"relay_dir"`
-
-	// worker name list
-	WorkerNameList WorkerNameList `json:"worker_name_list"`
+	// source name list
+	SourceNameList *SourceNameList `json:"source_name_list,omitempty"`
 }
 
-// action to stop a relay request
-type StopRelayRequest struct {
-	// worker name list
-	WorkerNameList WorkerNameList `json:"worker_name_list"`
+// StopTaskRequest defines model for StopTaskRequest.
+type StopTaskRequest struct {
+	// source name list
+	SourceNameList *SourceNameList `json:"source_name_list,omitempty"`
 }
 
 // SubTaskStatus defines model for SubTaskStatus.
@@ -322,12 +385,10 @@ type SubTaskStatus struct {
 	Name string `json:"name"`
 
 	// source name
-	SourceName string `json:"source_name"`
+	SourceName string    `json:"source_name"`
+	Stage      TaskStage `json:"stage"`
 
-	// current stage of the task
-	Stage string `json:"stage"`
-
-	// status of sync uuit
+	// status of sync unit
 	SyncStatus *SyncStatus `json:"sync_status,omitempty"`
 
 	// task unit type
@@ -338,7 +399,7 @@ type SubTaskStatus struct {
 	WorkerName string `json:"worker_name"`
 }
 
-// status of sync uuit
+// status of sync unit
 type SyncStatus struct {
 	BinlogType string `json:"binlog_type"`
 
@@ -441,6 +502,14 @@ type TaskIncrMigrateConf struct {
 	ReplThreads *int `json:"repl_threads,omitempty"`
 }
 
+// task migrate targets
+type TaskMigrateTarget struct {
+	SourceSchema string `json:"source_schema"`
+	SourceTable  string `json:"source_table"`
+	TargetSchema string `json:"target_schema"`
+	TargetTable  string `json:"target_table"`
+}
+
 // task name list
 type TaskNameList []string
 
@@ -466,6 +535,9 @@ type TaskSourceConfig struct {
 	SourceConf []TaskSourceConf `json:"source_conf"`
 }
 
+// TaskStage defines model for TaskStage.
+type TaskStage string
+
 // upstream table to downstream migrate rules
 type TaskTableMigrateRule struct {
 	// filter rule name
@@ -486,10 +558,10 @@ type TaskTableMigrateRule struct {
 	// downstream-related configuration
 	Target *struct {
 		// schema name, does not support wildcards
-		Schema string `json:"schema"`
+		Schema *string `json:"schema,omitempty"`
 
 		// table name, does not support wildcards
-		Table string `json:"table"`
+		Table *string `json:"table,omitempty"`
 	} `json:"target,omitempty"`
 }
 
@@ -501,7 +573,7 @@ type TaskTargetDataBase struct {
 	// source password
 	Password string `json:"password"`
 
-	// ource port
+	// source port
 	Port int `json:"port"`
 
 	// data source ssl configuration, the field will be hidden when getting the data source configuration from the interface
@@ -526,6 +598,18 @@ type TaskTemplateResponse struct {
 	SuccessTaskList []string `json:"success_task_list"`
 }
 
+// UpdateSourceRequest defines model for UpdateSourceRequest.
+type UpdateSourceRequest struct {
+	// source
+	Source Source `json:"source"`
+}
+
+// UpdateTaskRequest defines model for UpdateTaskRequest.
+type UpdateTaskRequest struct {
+	// task
+	Task Task `json:"task"`
+}
+
 // worker name list
 type WorkerNameList []string
 
@@ -537,24 +621,39 @@ type WorkerNameRequest struct {
 
 // DMAPIGetSourceListParams defines parameters for DMAPIGetSourceList.
 type DMAPIGetSourceListParams struct {
-	// get source with status
+	// list source with status
 	WithStatus *bool `json:"with_status,omitempty"`
+
+	// only return the enable-relay source
+	EnableRelay *bool `json:"enable_relay,omitempty"`
 }
 
 // DMAPICreateSourceJSONBody defines parameters for DMAPICreateSource.
-type DMAPICreateSourceJSONBody Source
+type DMAPICreateSourceJSONBody CreateSourceRequest
 
 // DMAPIDeleteSourceParams defines parameters for DMAPIDeleteSource.
 type DMAPIDeleteSourceParams struct {
-	// force stop task also stop the related tasks
+	// force stop source also stop the related tasks
 	Force *bool `json:"force,omitempty"`
 }
 
-// DMAPIStartRelayJSONBody defines parameters for DMAPIStartRelay.
-type DMAPIStartRelayJSONBody StartRelayRequest
+// DMAPIGetSourceParams defines parameters for DMAPIGetSource.
+type DMAPIGetSourceParams struct {
+	// list source with status
+	WithStatus *bool `json:"with_status,omitempty"`
+}
 
-// DMAPIStopRelayJSONBody defines parameters for DMAPIStopRelay.
-type DMAPIStopRelayJSONBody StopRelayRequest
+// DMAPIUpdateSourceJSONBody defines parameters for DMAPIUpdateSource.
+type DMAPIUpdateSourceJSONBody UpdateSourceRequest
+
+// DMAPIDisableRelayJSONBody defines parameters for DMAPIDisableRelay.
+type DMAPIDisableRelayJSONBody DisableRelayRequest
+
+// DMAPIEnableRelayJSONBody defines parameters for DMAPIEnableRelay.
+type DMAPIEnableRelayJSONBody EnableRelayRequest
+
+// DMAPIPurgeRelayJSONBody defines parameters for DMAPIPurgeRelay.
+type DMAPIPurgeRelayJSONBody PurgeRelayRequest
 
 // DMAPITransferSourceJSONBody defines parameters for DMAPITransferSource.
 type DMAPITransferSourceJSONBody WorkerNameRequest
@@ -563,10 +662,19 @@ type DMAPITransferSourceJSONBody WorkerNameRequest
 type DMAPIGetTaskListParams struct {
 	// get task with status
 	WithStatus *bool `json:"with_status,omitempty"`
+
+	// filter by task stage
+	Stage *TaskStage `json:"stage,omitempty"`
+
+	// filter by source name
+	SourceNameList *SourceNameList `json:"source_name_list,omitempty"`
 }
 
-// DMAPIStartTaskJSONBody defines parameters for DMAPIStartTask.
-type DMAPIStartTaskJSONBody CreateTaskRequest
+// DMAPICreateTaskJSONBody defines parameters for DMAPICreateTask.
+type DMAPICreateTaskJSONBody CreateTaskRequest
+
+// DMAPIConvertTaskJSONBody defines parameters for DMAPIConvertTask.
+type DMAPIConvertTaskJSONBody ConverterTaskRequest
 
 // DMAPICreateTaskTemplateJSONBody defines parameters for DMAPICreateTaskTemplate.
 type DMAPICreateTaskTemplateJSONBody Task
@@ -576,18 +684,30 @@ type DMAPIImportTaskTemplateJSONBody TaskTemplateRequest
 
 // DMAPIDeleteTaskParams defines parameters for DMAPIDeleteTask.
 type DMAPIDeleteTaskParams struct {
-	// source name list
-	SourceNameList *[]string `json:"source_name_list,omitempty"`
+	// force stop task even if some subtask is running
+	Force *bool `json:"force,omitempty"`
 }
 
-// DMAPIPauseTaskJSONBody defines parameters for DMAPIPauseTask.
-type DMAPIPauseTaskJSONBody SourceNameList
+// DMAPIGetTaskParams defines parameters for DMAPIGetTask.
+type DMAPIGetTaskParams struct {
+	// get task with status
+	WithStatus *bool `json:"with_status,omitempty"`
+}
 
-// DMAPIResumeTaskJSONBody defines parameters for DMAPIResumeTask.
-type DMAPIResumeTaskJSONBody SourceNameList
+// DMAPIUpdateTaskJSONBody defines parameters for DMAPIUpdateTask.
+type DMAPIUpdateTaskJSONBody UpdateTaskRequest
+
+// DMAPIGetTaskMigrateTargetsParams defines parameters for DMAPIGetTaskMigrateTargets.
+type DMAPIGetTaskMigrateTargetsParams struct {
+	SchemaPattern *string `json:"schema_pattern,omitempty"`
+	TablePattern  *string `json:"table_pattern,omitempty"`
+}
 
 // DMAPIOperateTableStructureJSONBody defines parameters for DMAPIOperateTableStructure.
 type DMAPIOperateTableStructureJSONBody OperateTaskTableStructureRequest
+
+// DMAPIStartTaskJSONBody defines parameters for DMAPIStartTask.
+type DMAPIStartTaskJSONBody StartTaskRequest
 
 // DMAPIGetTaskStatusParams defines parameters for DMAPIGetTaskStatus.
 type DMAPIGetTaskStatusParams struct {
@@ -595,20 +715,32 @@ type DMAPIGetTaskStatusParams struct {
 	SourceNameList *SourceNameList `json:"source_name_list,omitempty"`
 }
 
+// DMAPIStopTaskJSONBody defines parameters for DMAPIStopTask.
+type DMAPIStopTaskJSONBody StopTaskRequest
+
 // DMAPICreateSourceJSONRequestBody defines body for DMAPICreateSource for application/json ContentType.
 type DMAPICreateSourceJSONRequestBody DMAPICreateSourceJSONBody
 
-// DMAPIStartRelayJSONRequestBody defines body for DMAPIStartRelay for application/json ContentType.
-type DMAPIStartRelayJSONRequestBody DMAPIStartRelayJSONBody
+// DMAPIUpdateSourceJSONRequestBody defines body for DMAPIUpdateSource for application/json ContentType.
+type DMAPIUpdateSourceJSONRequestBody DMAPIUpdateSourceJSONBody
 
-// DMAPIStopRelayJSONRequestBody defines body for DMAPIStopRelay for application/json ContentType.
-type DMAPIStopRelayJSONRequestBody DMAPIStopRelayJSONBody
+// DMAPIDisableRelayJSONRequestBody defines body for DMAPIDisableRelay for application/json ContentType.
+type DMAPIDisableRelayJSONRequestBody DMAPIDisableRelayJSONBody
+
+// DMAPIEnableRelayJSONRequestBody defines body for DMAPIEnableRelay for application/json ContentType.
+type DMAPIEnableRelayJSONRequestBody DMAPIEnableRelayJSONBody
+
+// DMAPIPurgeRelayJSONRequestBody defines body for DMAPIPurgeRelay for application/json ContentType.
+type DMAPIPurgeRelayJSONRequestBody DMAPIPurgeRelayJSONBody
 
 // DMAPITransferSourceJSONRequestBody defines body for DMAPITransferSource for application/json ContentType.
 type DMAPITransferSourceJSONRequestBody DMAPITransferSourceJSONBody
 
-// DMAPIStartTaskJSONRequestBody defines body for DMAPIStartTask for application/json ContentType.
-type DMAPIStartTaskJSONRequestBody DMAPIStartTaskJSONBody
+// DMAPICreateTaskJSONRequestBody defines body for DMAPICreateTask for application/json ContentType.
+type DMAPICreateTaskJSONRequestBody DMAPICreateTaskJSONBody
+
+// DMAPIConvertTaskJSONRequestBody defines body for DMAPIConvertTask for application/json ContentType.
+type DMAPIConvertTaskJSONRequestBody DMAPIConvertTaskJSONBody
 
 // DMAPICreateTaskTemplateJSONRequestBody defines body for DMAPICreateTaskTemplate for application/json ContentType.
 type DMAPICreateTaskTemplateJSONRequestBody DMAPICreateTaskTemplateJSONBody
@@ -616,14 +748,17 @@ type DMAPICreateTaskTemplateJSONRequestBody DMAPICreateTaskTemplateJSONBody
 // DMAPIImportTaskTemplateJSONRequestBody defines body for DMAPIImportTaskTemplate for application/json ContentType.
 type DMAPIImportTaskTemplateJSONRequestBody DMAPIImportTaskTemplateJSONBody
 
-// DMAPIPauseTaskJSONRequestBody defines body for DMAPIPauseTask for application/json ContentType.
-type DMAPIPauseTaskJSONRequestBody DMAPIPauseTaskJSONBody
-
-// DMAPIResumeTaskJSONRequestBody defines body for DMAPIResumeTask for application/json ContentType.
-type DMAPIResumeTaskJSONRequestBody DMAPIResumeTaskJSONBody
+// DMAPIUpdateTaskJSONRequestBody defines body for DMAPIUpdateTask for application/json ContentType.
+type DMAPIUpdateTaskJSONRequestBody DMAPIUpdateTaskJSONBody
 
 // DMAPIOperateTableStructureJSONRequestBody defines body for DMAPIOperateTableStructure for application/json ContentType.
 type DMAPIOperateTableStructureJSONRequestBody DMAPIOperateTableStructureJSONBody
+
+// DMAPIStartTaskJSONRequestBody defines body for DMAPIStartTask for application/json ContentType.
+type DMAPIStartTaskJSONRequestBody DMAPIStartTaskJSONBody
+
+// DMAPIStopTaskJSONRequestBody defines body for DMAPIStopTask for application/json ContentType.
+type DMAPIStopTaskJSONRequestBody DMAPIStopTaskJSONBody
 
 // Getter for additional properties for Task_BinlogFilterRule. Returns the specified
 // element and whether it was found

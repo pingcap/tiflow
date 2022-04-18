@@ -17,13 +17,13 @@ import (
 	"sort"
 	"sync"
 
-	"github.com/pingcap/tidb-tools/pkg/schemacmp"
-	clientv3 "go.etcd.io/etcd/client/v3"
-
+	"github.com/pingcap/tidb/util/schemacmp"
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
+	clientv3 "go.etcd.io/etcd/client/v3"
+	"go.uber.org/zap"
 )
 
 // DownstreamMeta used to fetch table info from downstream.
@@ -215,27 +215,38 @@ func (tk *TableKeeper) Init(stm map[string]map[string]SourceTables) {
 }
 
 // Update adds/updates tables into the keeper or removes tables from the keeper.
-// it returns whether added/updated or removed.
-func (tk *TableKeeper) Update(st SourceTables) bool {
+// it returns the newly added and dropped tables.
+func (tk *TableKeeper) Update(st SourceTables) (map[RouteTable]struct{}, map[RouteTable]struct{}) {
+	var (
+		oldST SourceTables
+		newST SourceTables
+	)
+
 	tk.mu.Lock()
 	defer tk.mu.Unlock()
 
+	// delete source tables
+	// this often happened when stop task with source
 	if st.IsDeleted {
-		if _, ok := tk.tables[st.Task]; !ok {
-			return false
+		log.L().Info("delete source tables", zap.Stringer("source table", st))
+		if _, ok := tk.tables[st.Task]; ok {
+			oldST = tk.tables[st.Task][st.Source]
+			delete(tk.tables[st.Task], st.Source)
 		}
-		if _, ok := tk.tables[st.Task][st.Source]; !ok {
-			return false
-		}
-		delete(tk.tables[st.Task], st.Source)
-		return true
+		return DiffSourceTables(oldST, newST)
 	}
 
+	// update source tables
+	// this often happen when create/drop table
 	if _, ok := tk.tables[st.Task]; !ok {
 		tk.tables[st.Task] = make(map[string]SourceTables)
 	}
+	oldST = tk.tables[st.Task][st.Source]
+	newST = st
 	tk.tables[st.Task][st.Source] = st
-	return true
+	log.L().Info("update source tables", zap.Stringer("old source table", oldST), zap.Stringer("new source table", newST))
+
+	return DiffSourceTables(oldST, newST)
 }
 
 // AddTable adds a table into the source tables.

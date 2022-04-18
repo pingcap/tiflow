@@ -75,7 +75,7 @@ func (t *tableSink) FlushRowChangedEvents(ctx context.Context, tableID model.Tab
 
 	err := t.manager.bufSink.EmitRowChangedEvents(ctx, resolvedRows...)
 	if err != nil {
-		return t.manager.getCheckpointTs(tableID), errors.Trace(err)
+		return 0, errors.Trace(err)
 	}
 	return t.flushResolvedTs(ctx, resolvedTs)
 }
@@ -83,7 +83,7 @@ func (t *tableSink) FlushRowChangedEvents(ctx context.Context, tableID model.Tab
 func (t *tableSink) flushResolvedTs(ctx context.Context, resolvedTs uint64) (uint64, error) {
 	redoTs, err := t.flushRedoLogs(ctx, resolvedTs)
 	if err != nil {
-		return t.manager.getCheckpointTs(t.tableID), err
+		return 0, errors.Trace(err)
 	}
 	if redoTs < resolvedTs {
 		resolvedTs = redoTs

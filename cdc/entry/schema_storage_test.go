@@ -410,9 +410,11 @@ func TestHandleRenameTables(t *testing.T) {
 	rawArgs, err := json.Marshal(args)
 	require.Nil(t, err)
 	var job *timodel.Job = &timodel.Job{
-		Type:       timodel.ActionRenameTables,
-		RawArgs:    rawArgs,
-		BinlogInfo: &timodel.HistoryInfo{},
+		Type:    timodel.ActionRenameTables,
+		RawArgs: rawArgs,
+		BinlogInfo: &timodel.HistoryInfo{
+			FinishedTS: 11112222,
+		},
 	}
 	job.BinlogInfo.MultipleTableInfos = append(job.BinlogInfo.MultipleTableInfos,
 		&timodel.TableInfo{
@@ -442,6 +444,7 @@ func TestHandleRenameTables(t *testing.T) {
 	t2 := model.TableName{Schema: "db_1", Table: "y"}
 	require.Equal(t, snap.tableNameToID[t1], int64(13))
 	require.Equal(t, snap.tableNameToID[t2], int64(14))
+	require.Equal(t, uint64(11112222), snap.currentTs)
 }
 
 func testDoDDLAndCheck(t *testing.T, snap *schemaSnapshot, job *timodel.Job, isErr bool) {
@@ -596,7 +599,7 @@ func TestMultiVersionStorage(t *testing.T) {
 	}
 
 	jobs = append(jobs, job)
-	storage, err := NewSchemaStorage(nil, 0, nil, false)
+	storage, err := NewSchemaStorage(nil, 0, nil, false, dummyChangeFeedID)
 	require.Nil(t, err)
 	for _, job := range jobs {
 		err := storage.HandleDDLJob(job)
@@ -953,10 +956,10 @@ func TestSchemaStorage(t *testing.T) {
 
 		jobs, err := getAllHistoryDDLJob(store)
 		require.Nil(t, err)
-		scheamStorage, err := NewSchemaStorage(nil, 0, nil, false)
+		schemaStorage, err := NewSchemaStorage(nil, 0, nil, false, dummyChangeFeedID)
 		require.Nil(t, err)
 		for _, job := range jobs {
-			err := scheamStorage.HandleDDLJob(job)
+			err := schemaStorage.HandleDDLJob(job)
 			require.Nil(t, err)
 		}
 
@@ -966,7 +969,7 @@ func TestSchemaStorage(t *testing.T) {
 			require.Nil(t, err)
 			snapFromMeta, err := newSchemaSnapshotFromMeta(meta, ts, false)
 			require.Nil(t, err)
-			snapFromSchemaStore, err := scheamStorage.GetSnapshot(ctx, ts)
+			snapFromSchemaStore, err := schemaStorage.GetSnapshot(ctx, ts)
 			require.Nil(t, err)
 
 			tidySchemaSnapshot(snapFromMeta)

@@ -27,6 +27,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tidb/parser/charset"
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -101,6 +102,7 @@ func newMySQLSink(
 	// [username[:password]@][protocol[(address)]]/dbname[?param1=value1&...&paramN=valueN]
 	username := sinkURI.User.Username()
 	password, _ := sinkURI.User.Password()
+	hostName := sinkURI.Hostname()
 	port := sinkURI.Port()
 	if username == "" {
 		username = "root"
@@ -109,7 +111,7 @@ func newMySQLSink(
 		port = "4000"
 	}
 
-	dsnStr := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s", username, password, sinkURI.Hostname(), port, params.tls)
+	dsnStr := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s", username, password, hostName, port, params.tls)
 	dsn, err := dmysql.ParseDSN(dsnStr)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
@@ -160,6 +162,16 @@ func newMySQLSink(
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	// check if GBK charset is supported by downstream
+	gbkSupported, err := checkCharsetSupport(ctx, testDB, charset.CharsetGBK)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	if !gbkSupported {
+		log.Warn("gbk charset is not supported by downstream, "+
+			"some types of DDL may fail to be executed",
+			zap.String("hostname", hostName), zap.String("port", port))
+	}
 	db, err := GetDBConnImpl(ctx, dsnStr)
 	if err != nil {
 		return nil, err
@@ -170,12 +182,12 @@ func newMySQLSink(
 	db.SetMaxIdleConns(params.workerCount)
 	db.SetMaxOpenConns(params.workerCount)
 
-	metricConflictDetectDurationHis :=
-		conflictDetectDurationHis.WithLabelValues(params.changefeedID)
+	metricConflictDetectDurationHis := conflictDetectDurationHis.
+		WithLabelValues(params.changefeedID)
 	metricBucketSizeCounters := make([]prometheus.Counter, params.workerCount)
 	for i := 0; i < params.workerCount; i++ {
-		metricBucketSizeCounters[i] =
-			bucketSizeCounter.WithLabelValues(params.changefeedID, strconv.Itoa(i))
+		metricBucketSizeCounters[i] = bucketSizeCounter.
+			WithLabelValues(params.changefeedID, strconv.Itoa(i))
 	}
 	ctx, cancel := context.WithCancel(ctx)
 
@@ -185,7 +197,7 @@ func newMySQLSink(
 		filter:                          filter,
 		cyclic:                          sinkCyclic,
 		txnCache:                        common.NewUnresolvedTxnCache(),
-		statistics:                      NewStatistics(ctx, "mysql"),
+		statistics:                      NewStatistics(ctx, sinkTypeDB),
 		metricConflictDetectDurationHis: metricConflictDetectDurationHis,
 		metricBucketSizeCounters:        metricBucketSizeCounters,
 		errCh:                           make(chan error, 1),
@@ -281,8 +293,9 @@ func (s *mysqlSink) flushRowChangedEvents(ctx context.Context, receiver *notify.
 	}
 }
 
-func (s *mysqlSink) EmitCheckpointTs(_ context.Context, _ uint64, _ []model.TableName) error {
+func (s *mysqlSink) EmitCheckpointTs(_ context.Context, ts uint64, _ []model.TableName) error {
 	// do nothing
+	log.Debug("emit checkpointTs", zap.Uint64("checkpointTs", ts))
 	return nil
 }
 
@@ -312,7 +325,10 @@ func (s *mysqlSink) execDDLWithMaxRetries(ctx context.Context, ddl *model.DDLEve
 			log.Warn("execute DDL with error, retry later", zap.String("query", ddl.Query), zap.Error(err))
 		}
 		return err
-	}, retry.WithBackoffBaseDelay(backoffBaseDelayInMs), retry.WithBackoffMaxDelay(backoffMaxDelayInMs), retry.WithMaxTries(defaultDDLMaxRetryTime), retry.WithIsRetryableErr(cerror.IsRetryableError))
+	}, retry.WithBackoffBaseDelay(backoffBaseDelayInMs),
+		retry.WithBackoffMaxDelay(backoffMaxDelayInMs),
+		retry.WithMaxTries(defaultDDLMaxRetryTime),
+		retry.WithIsRetryableErr(cerror.IsRetryableError))
 }
 
 func (s *mysqlSink) execDDL(ctx context.Context, ddl *model.DDLEvent) error {
@@ -326,6 +342,7 @@ func (s *mysqlSink) execDDL(ctx context.Context, ddl *model.DDLEvent) error {
 		}
 		failpoint.Return(nil)
 	})
+	log.Info("start exec DDL", zap.Any("DDL", ddl))
 	err := s.statistics.RecordDDLExecution(func() error {
 		tx, err := s.db.BeginTx(ctx, nil)
 		if err != nil {
@@ -378,6 +395,28 @@ func querySQLMode(ctx context.Context, db *sql.DB) (sqlMode string, err error) {
 	return
 }
 
+// check whether the target charset is supported
+func checkCharsetSupport(ctx context.Context, db *sql.DB, charsetName string) (bool, error) {
+	// validate charsetName
+	_, err := charset.GetCharsetInfo(charsetName)
+	if err != nil {
+		return false, errors.Trace(err)
+	}
+
+	var characterSetName string
+	querySQL := "select character_set_name from information_schema.character_sets " +
+		"where character_set_name = '" + charsetName + "';"
+	err = db.QueryRowContext(ctx, querySQL).Scan(&characterSetName)
+	if err != nil && err != sql.ErrNoRows {
+		return false, cerror.WrapError(cerror.ErrMySQLQueryError, err)
+	}
+	if err != nil {
+		return false, nil
+	}
+
+	return true, nil
+}
+
 func (s *mysqlSink) createSinkWorkers(ctx context.Context) error {
 	s.workers = make([]*mysqlSinkWorker, s.params.workerCount)
 	for i := range s.workers {
@@ -404,6 +443,15 @@ func (s *mysqlSink) createSinkWorkers(ctx context.Context) error {
 }
 
 func (s *mysqlSink) notifyAndWaitExec(ctx context.Context) {
+	// notifyAndWaitExec may return because of context cancellation,
+	// and s.flushSyncWg.Wait() goroutine is still running, check context first to
+	// avoid data race
+	select {
+	case <-ctx.Done():
+		log.Warn("context is done", zap.Error(ctx.Err()))
+		return
+	default:
+	}
 	s.broadcastFinishTxn()
 	s.execWaitNotifier.Notify()
 	done := make(chan struct{})
@@ -471,6 +519,22 @@ func (s *mysqlSink) Close(ctx context.Context) error {
 }
 
 func (s *mysqlSink) Barrier(ctx context.Context, tableID model.TableID) error {
+	// We need to clean up the old values of the table here,
+	// otherwise when the table is dispatched back again,
+	// it may read the old values.
+	// See: https://github.com/pingcap/tiflow/issues/4464#issuecomment-1085385382.
+	defer func() {
+		if resolvedTs, loaded := s.tableMaxResolvedTs.LoadAndDelete(tableID); loaded {
+			log.Info("clean up table max resolved ts",
+				zap.Int64("tableID", tableID),
+				zap.Uint64("resolvedTs", resolvedTs.(uint64)))
+		}
+		if checkpointTs, loaded := s.tableCheckpointTs.LoadAndDelete(tableID); loaded {
+			log.Info("clean up table checkpoint ts",
+				zap.Int64("tableID", tableID),
+				zap.Uint64("checkpointTs", checkpointTs.(uint64)))
+		}
+	}()
 	warnDuration := 3 * time.Minute
 	ticker := time.NewTicker(warnDuration)
 	defer ticker.Stop()
@@ -725,6 +789,25 @@ func (s *mysqlSink) execDMLs(ctx context.Context, rows []*model.RowChangedEvent,
 	return nil
 }
 
+// if the column value type is []byte and charset is not binary, we get its string
+// representation. Because if we use the byte array respresentation, the go-sql-driver
+// will automatically set `_binary` charset for that column, which is not expected.
+// See https://github.com/go-sql-driver/mysql/blob/ce134bfc/connection.go#L267
+func appendQueryArgs(args []interface{}, col *model.Column) []interface{} {
+	if col.Charset != "" && col.Charset != charset.CharsetBin {
+		colValBytes, ok := col.Value.([]byte)
+		if ok {
+			args = append(args, string(colValBytes))
+		} else {
+			args = append(args, col.Value)
+		}
+	} else {
+		args = append(args, col.Value)
+	}
+
+	return args
+}
+
 func prepareReplace(
 	quoteTable string,
 	cols []*model.Column,
@@ -739,7 +822,7 @@ func prepareReplace(
 			continue
 		}
 		columnNames = append(columnNames, col.Name)
-		args = append(args, col.Value)
+		args = appendQueryArgs(args, col)
 	}
 	if len(args) == 0 {
 		return "", nil
@@ -807,7 +890,7 @@ func prepareUpdate(quoteTable string, preCols, cols []*model.Column, forceReplic
 			continue
 		}
 		columnNames = append(columnNames, col.Name)
-		args = append(args, col.Value)
+		args = appendQueryArgs(args, col)
 	}
 	if len(args) == 0 {
 		return "", nil
@@ -873,7 +956,7 @@ func whereSlice(cols []*model.Column, forceReplicate bool) (colNames []string, a
 			continue
 		}
 		colNames = append(colNames, col.Name)
-		args = append(args, col.Value)
+		args = appendQueryArgs(args, col)
 	}
 	// if no explicit row id but force replicate, use all key-values in where condition
 	if len(colNames) == 0 && forceReplicate {
@@ -881,7 +964,7 @@ func whereSlice(cols []*model.Column, forceReplicate bool) (colNames []string, a
 		args = make([]interface{}, 0, len(cols))
 		for _, col := range cols {
 			colNames = append(colNames, col.Name)
-			args = append(args, col.Value)
+			args = appendQueryArgs(args, col)
 		}
 	}
 	return

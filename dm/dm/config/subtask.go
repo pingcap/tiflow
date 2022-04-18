@@ -25,12 +25,14 @@ import (
 	"github.com/BurntSushi/toml"
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
 	"github.com/pingcap/tidb-tools/pkg/column-mapping"
-	"github.com/pingcap/tidb-tools/pkg/filter"
+	extstorage "github.com/pingcap/tidb/br/pkg/storage"
+	"github.com/pingcap/tidb/util/filter"
 	"go.uber.org/zap"
 
+	regexprrouter "github.com/pingcap/tidb/util/regexpr-router"
+	router "github.com/pingcap/tidb/util/table-router"
 	"github.com/pingcap/tiflow/dm/pkg/dumpling"
 	"github.com/pingcap/tiflow/dm/pkg/log"
-	"github.com/pingcap/tiflow/dm/pkg/router"
 	"github.com/pingcap/tiflow/dm/pkg/storage"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
@@ -269,6 +271,9 @@ type SubTaskConfig struct {
 	Experimental struct {
 		AsyncCheckpointFlush bool `yaml:"async-checkpoint-flush" toml:"async-checkpoint-flush" json:"async-checkpoint-flush"`
 	} `yaml:"experimental" toml:"experimental" json:"experimental"`
+
+	// dataflow engine can inject an ExternalStorage to units
+	ExtStorage extstorage.ExternalStorage `toml:"-" json:"-"`
 }
 
 // SampleSubtaskConfig is the content of subtask.toml in current folder.
@@ -411,9 +416,11 @@ func (c *SubTaskConfig) Adjust(verifyDecryptPassword bool) error {
 		// add suffix
 		var dirSuffix string
 		if isS3 {
-			dirSuffix = c.Name + "." + c.SourceID
+			// we will dump files to s3 dir's subdirectory
+			dirSuffix = "/" + c.Name + "." + c.SourceID
 		} else {
-			dirSuffix = c.Name
+			// TODO we will dump local file to dir's subdirectory, but it may have risk of compatibility, we will fix in other pr
+			dirSuffix = "." + c.Name
 		}
 		newDir, err := storage.AdjustPath(c.LoaderConfig.Dir, dirSuffix)
 		if err != nil {
@@ -447,7 +454,7 @@ func (c *SubTaskConfig) Adjust(verifyDecryptPassword bool) error {
 	if _, err := filter.New(c.CaseSensitive, c.BAList); err != nil {
 		return terror.ErrConfigGenBAList.Delegate(err)
 	}
-	if _, err := router.NewRouter(c.CaseSensitive, c.RouteRules); err != nil {
+	if _, err := regexprrouter.NewRegExprRouter(c.CaseSensitive, c.RouteRules); err != nil {
 		return terror.ErrConfigGenTableRouter.Delegate(err)
 	}
 	// NewMapping will fill arguments with the default values.
@@ -464,7 +471,7 @@ func (c *SubTaskConfig) Adjust(verifyDecryptPassword bool) error {
 	if err := c.LoaderConfig.adjust(); err != nil {
 		return err
 	}
-	if err := c.ValidatorCfg.adjust(); err != nil {
+	if err := c.ValidatorCfg.Adjust(); err != nil {
 		return err
 	}
 

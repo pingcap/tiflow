@@ -17,9 +17,9 @@ import (
 	"context"
 
 	"github.com/pingcap/failpoint"
-	"github.com/pingcap/tidb-tools/pkg/filter"
 	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tidb/util/filter"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -146,18 +146,20 @@ func (s *Syncer) handleQueryEventOptimistic(qec *queryEventContext) error {
 		skipOp = true
 		s.osgk.RemoveSchema(upTable.Schema)
 	case *ast.CreateTableStmt:
-		info.TableInfoBefore = tiAfter // for `CREATE TABLE`, we use tiAfter as tiBefore.
-		rev, err = s.optimist.PutInfoAddTable(info)
-		if err != nil {
+		// need to execute the DDL to the downstream, but do not do the coordination with DM-master.
+		op.DDLs = qec.needHandleDDLs
+		skipOp = true
+		if err = s.checkpoint.FlushPointsWithTableInfos(qec.tctx, []*filter.Table{upTable}, []*model.TableInfo{tiAfter}); err != nil {
+			log.L().Error("failed to flush create table info", zap.Stringer("table", upTable), zap.Strings("ddls", qec.needHandleDDLs), log.ShortError(err))
+		}
+		if _, err = s.optimist.AddTable(info); err != nil {
 			return err
 		}
 	case *ast.DropTableStmt:
-		// no operation exist for `DROP TABLE` now.
-		_, err = s.optimist.DeleteInfoRemoveTable(info)
-		if err != nil {
+		skipOp = true
+		if _, err = s.optimist.RemoveTable(info); err != nil {
 			return err
 		}
-		skipOp = true
 		s.osgk.RemoveGroup(downTable, []string{utils.GenTableID(upTable)})
 	default:
 		rev, err = s.optimist.PutInfo(info)
@@ -166,22 +168,28 @@ func (s *Syncer) handleQueryEventOptimistic(qec *queryEventContext) error {
 		}
 	}
 
+	s.tctx.L().Info("putted a shard DDL info into etcd", zap.Stringer("info", info))
 	if !skipOp {
-		s.tctx.L().Info("putted a shard DDL info into etcd", zap.Stringer("info", info))
-		op, err = s.optimist.GetOperation(qec.tctx.Ctx, info, rev+1)
-		if err != nil {
-			return err
+		for {
+			op, err = s.optimist.GetOperation(qec.tctx.Ctx, info, rev+1)
+			if err != nil {
+				return err
+			}
+			s.tctx.L().Info("got a shard DDL lock operation", zap.Stringer("operation", op))
+			if op.ConflictStage != optimism.ConflictDetected {
+				break
+			}
+			rev = op.Revision
+			s.tctx.L().Info("operation conflict detected, waiting for resolve", zap.Stringer("info", info))
 		}
-		s.tctx.L().Info("got a shard DDL lock operation", zap.Stringer("operation", op))
 	}
 
-	if op.ConflictStage == optimism.ConflictDetected {
+	switch op.ConflictStage {
+	case optimism.ConflictError:
 		return terror.ErrSyncerShardDDLConflict.Generate(qec.needHandleDDLs, op.ConflictMsg)
-	}
-
 	// if this ddl is a ConflictSkipWaitRedirect ddl, we should skip all this worker's following ddls/dmls until the lock is resolved.
 	// To do this, we append this table to osgk to prevent the following ddl/dmls from being executed.
-	if op.ConflictStage == optimism.ConflictSkipWaitRedirect {
+	case optimism.ConflictSkipWaitRedirect:
 		first := s.osgk.appendConflictTable(upTable, downTable, qec.startLocation.Clone(), s.cfg.Flavor, s.cfg.EnableGTID)
 		if first {
 			s.optimist.GetRedirectOperation(qec.tctx.Ctx, info, op.Revision+1)

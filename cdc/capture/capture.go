@@ -50,12 +50,13 @@ import (
 
 // Capture represents a Capture server, it monitors the changefeed information in etcd and schedules Task on it.
 type Capture struct {
-	captureMu sync.Mutex
-	info      *model.CaptureInfo
-
-	ownerMu          sync.Mutex
-	owner            owner.Owner
+	// captureMu is used to protect the capture info and processorManager.
+	captureMu        sync.Mutex
+	info             *model.CaptureInfo
 	processorManager *processor.Manager
+
+	ownerMu sync.Mutex
+	owner   owner.Owner
 
 	// session keeps alive between the capture and etcd
 	session  *concurrency.Session
@@ -118,9 +119,17 @@ func NewCapture4Test(o owner.Owner) *Capture {
 }
 
 func (c *Capture) reset(ctx context.Context) error {
+	conf := config.GetGlobalServerConfig()
+	sess, err := concurrency.NewSession(c.EtcdClient.Client.Unwrap(),
+		concurrency.WithTTL(conf.CaptureSessionTTL))
+	if err != nil {
+		return errors.Annotate(
+			cerror.WrapError(cerror.ErrNewCaptureFailed, err),
+			"create capture session")
+	}
+
 	c.captureMu.Lock()
 	defer c.captureMu.Unlock()
-	conf := config.GetGlobalServerConfig()
 	c.info = &model.CaptureInfo{
 		ID:            uuid.New().String(),
 		AdvertiseAddr: conf.AdvertiseAddr,
@@ -130,13 +139,6 @@ func (c *Capture) reset(ctx context.Context) error {
 	if c.session != nil {
 		// It can't be handled even after it fails, so we ignore it.
 		_ = c.session.Close()
-	}
-	sess, err := concurrency.NewSession(c.EtcdClient.Client.Unwrap(),
-		concurrency.WithTTL(conf.CaptureSessionTTL))
-	if err != nil {
-		return errors.Annotate(
-			cerror.WrapError(cerror.ErrNewCaptureFailed, err),
-			"create capture session")
 	}
 	c.session = sess
 	c.election = concurrency.NewElection(sess, etcd.CaptureOwnerKey)
@@ -151,10 +153,7 @@ func (c *Capture) reset(ctx context.Context) error {
 	}
 
 	if c.tableActorSystem != nil {
-		err := c.tableActorSystem.Stop()
-		if err != nil {
-			log.Warn("stop table actor system failed", zap.Error(err))
-		}
+		c.tableActorSystem.Stop()
 	}
 	if conf.Debug.EnableTableActor {
 		c.tableActorSystem = system.NewSystem()
@@ -175,8 +174,7 @@ func (c *Capture) reset(ctx context.Context) error {
 		// Sorter dir has been set and checked when server starts.
 		// See https://github.com/pingcap/tiflow/blob/9dad09/cdc/server.go#L275
 		sortDir := config.GetGlobalServerConfig().Sorter.SortDir
-		memPercentage :=
-			float64(config.GetGlobalServerConfig().Sorter.MaxMemoryPercentage) / 100
+		memPercentage := float64(config.GetGlobalServerConfig().Sorter.MaxMemoryPercentage) / 100
 		c.sorterSystem = ssystem.NewSystem(sortDir, memPercentage, conf.Debug.DB)
 		err = c.sorterSystem.Start(ctx)
 		if err != nil {
@@ -551,10 +549,7 @@ func (c *Capture) AsyncClose() {
 		c.regionCache = nil
 	}
 	if c.tableActorSystem != nil {
-		err := c.tableActorSystem.Stop()
-		if err != nil {
-			log.Warn("stop table actor system failed", zap.Error(err))
-		}
+		c.tableActorSystem.Stop()
 		c.tableActorSystem = nil
 	}
 	if c.sorterSystem != nil {
@@ -601,11 +596,14 @@ func (c *Capture) WriteDebugInfo(ctx context.Context, w io.Writer) {
 
 	doneM := make(chan error, 1)
 	c.captureMu.Lock()
-	defer c.captureMu.Unlock()
 	if c.processorManager != nil {
 		fmt.Fprintf(w, "\n\n*** processors info ***:\n\n")
 		c.processorManager.WriteDebugInfo(ctx, w, doneM)
 	}
+	// NOTICE: we must release the lock before wait the debug info process down.
+	// Otherwise, the capture initialization and request response will compete
+	// for captureMu resulting in a deadlock.
+	c.captureMu.Unlock()
 	// wait the debug info printed
 	wait(doneM)
 }

@@ -15,6 +15,7 @@ package leveldb
 
 import (
 	"context"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -48,12 +49,13 @@ func allocID() uint32 {
 
 type common struct {
 	dbActorID actor.ID
-	dbRouter  *actor.Router
+	dbRouter  *actor.Router[message.Task]
 
-	uid     uint32
-	tableID uint64
-	serde   *encoding.MsgPackGenSerde
-	errCh   chan error
+	uid      uint32
+	tableID  uint64
+	serde    *encoding.MsgPackGenSerde
+	errCh    chan error
+	closedWg *sync.WaitGroup
 }
 
 // reportError notifies Sorter to return an error and close.
@@ -73,11 +75,11 @@ func (c *common) reportError(msg string, err error) {
 type Sorter struct {
 	common
 
-	writerRouter  *actor.Router
+	writerRouter  *actor.Router[message.Task]
 	writerActorID actor.ID
 
-	readerRouter  *actor.Router
-	readerActorID actor.ID
+	readerRouter  *actor.Router[message.Task]
+	ReaderActorID actor.ID
 
 	outputCh chan *model.PolymorphicEvent
 
@@ -87,9 +89,9 @@ type Sorter struct {
 // NewSorter creates a new Sorter
 func NewSorter(
 	ctx context.Context, tableID int64, startTs uint64,
-	dbRouter *actor.Router, dbActorID actor.ID,
-	writerSystem *actor.System, writerRouter *actor.Router,
-	readerSystem *actor.System, readerRouter *actor.Router,
+	dbRouter *actor.Router[message.Task], dbActorID actor.ID,
+	writerSystem *actor.System[message.Task], writerRouter *actor.Router[message.Task],
+	readerSystem *actor.System[message.Task], readerRouter *actor.Router[message.Task],
 	compact *CompactScheduler, cfg *config.DBConfig,
 ) (*Sorter, error) {
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
@@ -108,6 +110,7 @@ func NewSorter(
 		tableID:   uint64(tableID),
 		serde:     &encoding.MsgPackGenSerde{},
 		errCh:     make(chan error, 1),
+		closedWg:  &sync.WaitGroup{},
 	}
 
 	w := &writer{
@@ -118,11 +121,12 @@ func NewSorter(
 		metricTotalEventsKV:         metricTotalEventsKV,
 		metricTotalEventsResolvedTs: metricTotalEventsResolvedTs,
 	}
-	wmb := actor.NewMailbox(actorID, sorterInputCap)
+	wmb := actor.NewMailbox[message.Task](actorID, sorterInputCap)
 	err := writerSystem.Spawn(wmb, w)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	c.closedWg.Add(1)
 
 	outputCh := make(chan *model.PolymorphicEvent, sorterOutputCap)
 
@@ -158,18 +162,19 @@ func NewSorter(
 		metricIterReadDuration: metricIterDuration.WithLabelValues("read"),
 		metricIterNextDuration: metricIterDuration.WithLabelValues("next"),
 	}
-	rmb := actor.NewMailbox(actorID, sorterInputCap)
+	rmb := actor.NewMailbox[message.Task](actorID, sorterInputCap)
 	err = readerSystem.Spawn(rmb, r)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	c.closedWg.Add(1)
 
 	return &Sorter{
 		common:        c,
 		writerRouter:  writerRouter,
 		writerActorID: actorID,
 		readerRouter:  readerRouter,
-		readerActorID: actorID,
+		ReaderActorID: actorID,
 		outputCh:      outputCh,
 	}, nil
 }
@@ -182,15 +187,18 @@ func (ls *Sorter) Run(ctx context.Context) error {
 		err = ctx.Err()
 	case err = <-ls.errCh:
 	}
-	// TODO caller should pass context.
-	deadline := time.Now().Add(1 * time.Second)
-	ctx, cancel := context.WithDeadline(context.TODO(), deadline)
-	defer cancel()
 	atomic.StoreInt32(&ls.closed, 1)
+	// We should never lost message, make sure StopMessage is sent.
+	ctx1 := context.TODO()
+	// As the context can't be cancelled. SendB can only return an error
+	// ActorStopped or ActorNotFound, and they mean actors have closed.
 	_ = ls.writerRouter.SendB(
-		ctx, ls.writerActorID, actormsg.StopMessage())
+		ctx1, ls.writerActorID, actormsg.StopMessage[message.Task]())
 	_ = ls.readerRouter.SendB(
-		ctx, ls.readerActorID, actormsg.StopMessage())
+		ctx1, ls.ReaderActorID, actormsg.StopMessage[message.Task]())
+	ls.closedWg.Wait()
+
+	_ = ls.cleanup(ctx1)
 	return errors.Trace(err)
 }
 
@@ -199,7 +207,7 @@ func (ls *Sorter) AddEntry(ctx context.Context, event *model.PolymorphicEvent) {
 	if atomic.LoadInt32(&ls.closed) != 0 {
 		return
 	}
-	msg := actormsg.SorterMessage(message.Task{
+	msg := actormsg.ValueMessage(message.Task{
 		UID:        ls.uid,
 		TableID:    ls.tableID,
 		InputEvent: event,
@@ -214,7 +222,7 @@ func (ls *Sorter) TryAddEntry(
 	if atomic.LoadInt32(&ls.closed) != 0 {
 		return false, nil
 	}
-	msg := actormsg.SorterMessage(message.Task{
+	msg := actormsg.ValueMessage(message.Task{
 		UID:        ls.uid,
 		TableID:    ls.tableID,
 		InputEvent: event,
@@ -232,7 +240,7 @@ func (ls *Sorter) TryAddEntry(
 // Output returns the sorted raw kv output channel
 func (ls *Sorter) Output() <-chan *model.PolymorphicEvent {
 	// Notify reader to read sorted events
-	msg := actormsg.SorterMessage(message.Task{
+	msg := actormsg.ValueMessage(message.Task{
 		UID:     ls.uid,
 		TableID: ls.tableID,
 		ReadTs:  message.ReadTs{},
@@ -243,22 +251,20 @@ func (ls *Sorter) Output() <-chan *model.PolymorphicEvent {
 	//
 	// TODO: Consider if we are sending too many msgs here.
 	//       It may waste CPU and be a bottleneck.
-	_ = ls.readerRouter.Send(ls.readerActorID, msg)
+	_ = ls.readerRouter.Send(ls.ReaderActorID, msg)
 	return ls.outputCh
 }
 
-// CleanupFunc returns a function that cleans up sorter's data.
-func (ls *Sorter) CleanupFunc() func(context.Context) error {
-	return func(ctx context.Context) error {
-		task := message.Task{UID: ls.uid, TableID: ls.tableID}
-		task.DeleteReq = &message.DeleteRequest{
-			// We do not set task.Delete.Count, because we don't know
-			// how many key-value pairs in the range.
-			Range: [2][]byte{
-				encoding.EncodeTsKey(ls.uid, ls.tableID, 0),
-				encoding.EncodeTsKey(ls.uid, ls.tableID+1, 0),
-			},
-		}
-		return ls.dbRouter.SendB(ctx, ls.dbActorID, actormsg.SorterMessage(task))
+// cleanup cleans up sorter's data.
+func (ls *Sorter) cleanup(ctx context.Context) error {
+	task := message.Task{UID: ls.uid, TableID: ls.tableID}
+	task.DeleteReq = &message.DeleteRequest{
+		// We do not set task.Delete.Count, because we don't know
+		// how many key-value pairs in the range.
+		Range: [2][]byte{
+			encoding.EncodeTsKey(ls.uid, ls.tableID, 0),
+			encoding.EncodeTsKey(ls.uid, ls.tableID+1, 0),
+		},
 	}
+	return ls.dbRouter.SendB(ctx, ls.dbActorID, actormsg.ValueMessage(task))
 }

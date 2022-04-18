@@ -18,6 +18,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/util/timeutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/codec"
@@ -27,19 +28,35 @@ import (
 )
 
 type mockProducer struct {
-	mqEvent map[int32][]*codec.MQMessage
+	mqEvent map[topicPartitionKey][]*codec.MQMessage
 	flushed bool
+
+	mockErr chan error
 }
 
-func (m *mockProducer) AsyncSendMessage(ctx context.Context, message *codec.MQMessage, partition int32) error {
-	if _, ok := m.mqEvent[partition]; !ok {
-		m.mqEvent[partition] = make([]*codec.MQMessage, 0)
+func (m *mockProducer) AsyncSendMessage(
+	ctx context.Context, topic string, partition int32, message *codec.MQMessage,
+) error {
+	select {
+	case err := <-m.mockErr:
+		return err
+	default:
 	}
-	m.mqEvent[partition] = append(m.mqEvent[partition], message)
+
+	key := topicPartitionKey{
+		topic:     topic,
+		partition: partition,
+	}
+	if _, ok := m.mqEvent[key]; !ok {
+		m.mqEvent[key] = make([]*codec.MQMessage, 0)
+	}
+	m.mqEvent[key] = append(m.mqEvent[key], message)
 	return nil
 }
 
-func (m *mockProducer) SyncBroadcastMessage(ctx context.Context, message *codec.MQMessage) error {
+func (m *mockProducer) SyncBroadcastMessage(
+	ctx context.Context, topic string, partitionsNum int32, message *codec.MQMessage,
+) error {
 	panic("Not used")
 }
 
@@ -48,17 +65,18 @@ func (m *mockProducer) Flush(ctx context.Context) error {
 	return nil
 }
 
-func (m *mockProducer) GetPartitionNum() int32 {
-	panic("Not used")
-}
-
 func (m *mockProducer) Close() error {
 	panic("Not used")
 }
 
+func (m *mockProducer) InjectError(err error) {
+	m.mockErr <- err
+}
+
 func NewMockProducer() *mockProducer {
 	return &mockProducer{
-		mqEvent: make(map[int32][]*codec.MQMessage),
+		mqEvent: make(map[topicPartitionKey][]*codec.MQMessage),
+		mockErr: make(chan error, 1),
 	}
 }
 
@@ -75,51 +93,125 @@ func newTestWorker() (*flushWorker, *mockProducer) {
 		panic(err)
 	}
 	producer := NewMockProducer()
-	return newFlushWorker(encoder, producer, NewStatistics(context.Background(), "Test")), producer
+	return newFlushWorker(encoder, producer, NewStatistics(context.Background(), sinkTypeMQ)), producer
 }
 
 func TestBatch(t *testing.T) {
+	t.Parallel()
+
 	worker, _ := newTestWorker()
-	events := []mqEvent{
+	key := topicPartitionKey{
+		topic:     "test",
+		partition: 1,
+	}
+
+	tests := []struct {
+		name      string
+		events    []mqEvent
+		expectedN int
+	}{
 		{
-			resolvedTs: 0,
+			name: "Normal batching",
+			events: []mqEvent{
+				{
+					resolvedTs: 0,
+				},
+				{
+					row: &model.RowChangedEvent{
+						CommitTs: 1,
+						Table:    &model.TableName{Schema: "a", Table: "b"},
+						Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
+					},
+					key: key,
+				},
+				{
+					row: &model.RowChangedEvent{
+						CommitTs: 2,
+						Table:    &model.TableName{Schema: "a", Table: "b"},
+						Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
+					},
+					key: key,
+				},
+			},
+			expectedN: 2,
 		},
 		{
-			row: &model.RowChangedEvent{
-				CommitTs: 1,
-				Table:    &model.TableName{Schema: "a", Table: "b"},
-				Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
+			name: "No row change events",
+			events: []mqEvent{
+				{
+					resolvedTs: 1,
+				},
 			},
-			partition: 1,
+			expectedN: 0,
 		},
 		{
-			row: &model.RowChangedEvent{
-				CommitTs: 2,
-				Table:    &model.TableName{Schema: "a", Table: "b"},
-				Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
+			name: "The resolved ts event appears in the middle",
+			events: []mqEvent{
+				{
+					row: &model.RowChangedEvent{
+						CommitTs: 1,
+						Table:    &model.TableName{Schema: "a", Table: "b"},
+						Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
+					},
+					key: key,
+				},
+				{
+					resolvedTs: 1,
+				},
+				{
+					row: &model.RowChangedEvent{
+						CommitTs: 2,
+						Table:    &model.TableName{Schema: "a", Table: "b"},
+						Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
+					},
+					key: key,
+				},
 			},
-			partition: 1,
+			expectedN: 1,
 		},
 	}
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		result, err := worker.batch(context.Background())
-		require.NoError(t, err)
-		require.Len(t, result, 2)
-	}()
+	ctx := context.Background()
+	batch := make([]mqEvent, 3)
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				endIndex, err := worker.batch(ctx, batch)
+				require.NoError(t, err)
+				require.Equal(t, test.expectedN, endIndex)
+			}()
 
-	for _, event := range events {
-		worker.msgChan <- event
+			go func() {
+				for _, event := range test.events {
+					err := worker.addEvent(context.Background(), event)
+					require.NoError(t, err)
+				}
+			}()
+			wg.Wait()
+		})
 	}
-
-	wg.Wait()
 }
 
 func TestGroup(t *testing.T) {
+	t.Parallel()
+
+	key1 := topicPartitionKey{
+		topic:     "test",
+		partition: 1,
+	}
+	key2 := topicPartitionKey{
+		topic:     "test",
+		partition: 2,
+	}
+	key3 := topicPartitionKey{
+		topic:     "test1",
+		partition: 2,
+	}
 	worker, _ := newTestWorker()
+
 	events := []mqEvent{
 		{
 			row: &model.RowChangedEvent{
@@ -127,7 +219,7 @@ func TestGroup(t *testing.T) {
 				Table:    &model.TableName{Schema: "a", Table: "b"},
 				Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
 			},
-			partition: 1,
+			key: key1,
 		},
 		{
 			row: &model.RowChangedEvent{
@@ -135,7 +227,7 @@ func TestGroup(t *testing.T) {
 				Table:    &model.TableName{Schema: "a", Table: "b"},
 				Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
 			},
-			partition: 1,
+			key: key1,
 		},
 		{
 			row: &model.RowChangedEvent{
@@ -143,7 +235,7 @@ func TestGroup(t *testing.T) {
 				Table:    &model.TableName{Schema: "a", Table: "b"},
 				Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "cc"}},
 			},
-			partition: 1,
+			key: key1,
 		},
 		{
 			row: &model.RowChangedEvent{
@@ -151,19 +243,49 @@ func TestGroup(t *testing.T) {
 				Table:    &model.TableName{Schema: "aa", Table: "bb"},
 				Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
 			},
-			partition: 2,
+			key: key2,
+		},
+		{
+			row: &model.RowChangedEvent{
+				CommitTs: 2,
+				Table:    &model.TableName{Schema: "aaa", Table: "bbb"},
+				Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
+			},
+			key: key3,
 		},
 	}
 
-	paritionedEvents := worker.group(events)
-	require.Len(t, paritionedEvents, 2)
-	require.Len(t, paritionedEvents[1], 3)
+	paritionedRows := worker.group(events)
+	require.Len(t, paritionedRows, 3)
+	require.Len(t, paritionedRows[key1], 3)
 	// We must ensure that the sequence is not broken.
-	require.LessOrEqual(t, paritionedEvents[1][0].row.CommitTs, paritionedEvents[1][1].row.CommitTs, paritionedEvents[1][2].row.CommitTs)
-	require.Len(t, paritionedEvents[2], 1)
+	require.LessOrEqual(
+		t,
+		paritionedRows[key1][0].CommitTs, paritionedRows[key1][1].CommitTs,
+		paritionedRows[key1][2].CommitTs,
+	)
+	require.Len(t, paritionedRows[key2], 1)
+	require.Len(t, paritionedRows[key3], 1)
 }
 
 func TestAsyncSend(t *testing.T) {
+	t.Parallel()
+
+	key1 := topicPartitionKey{
+		topic:     "test",
+		partition: 1,
+	}
+
+	key2 := topicPartitionKey{
+		topic:     "test",
+		partition: 2,
+	}
+
+	key3 := topicPartitionKey{
+		topic:     "test",
+		partition: 3,
+	}
+
 	worker, producer := newTestWorker()
 	events := []mqEvent{
 		{
@@ -172,7 +294,7 @@ func TestAsyncSend(t *testing.T) {
 				Table:    &model.TableName{Schema: "a", Table: "b"},
 				Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
 			},
-			partition: 1,
+			key: key1,
 		},
 		{
 			row: &model.RowChangedEvent{
@@ -180,7 +302,7 @@ func TestAsyncSend(t *testing.T) {
 				Table:    &model.TableName{Schema: "a", Table: "b"},
 				Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
 			},
-			partition: 1,
+			key: key1,
 		},
 		{
 			row: &model.RowChangedEvent{
@@ -188,7 +310,7 @@ func TestAsyncSend(t *testing.T) {
 				Table:    &model.TableName{Schema: "a", Table: "b"},
 				Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "cc"}},
 			},
-			partition: 1,
+			key: key1,
 		},
 		{
 			row: &model.RowChangedEvent{
@@ -196,7 +318,7 @@ func TestAsyncSend(t *testing.T) {
 				Table:    &model.TableName{Schema: "aa", Table: "bb"},
 				Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
 			},
-			partition: 2,
+			key: key2,
 		},
 		{
 			row: &model.RowChangedEvent{
@@ -204,7 +326,7 @@ func TestAsyncSend(t *testing.T) {
 				Table:    &model.TableName{Schema: "aaa", Table: "bbb"},
 				Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
 			},
-			partition: 3,
+			key: key3,
 		},
 		{
 			row: &model.RowChangedEvent{
@@ -212,21 +334,28 @@ func TestAsyncSend(t *testing.T) {
 				Table:    &model.TableName{Schema: "aaa", Table: "bbb"},
 				Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
 			},
-			partition: 3,
+			key: key3,
 		},
 	}
 
-	paritionedEvents := worker.group(events)
-	err := worker.asyncSend(context.Background(), paritionedEvents)
+	paritionedRows := worker.group(events)
+	err := worker.asyncSend(context.Background(), paritionedRows)
 	require.NoError(t, err)
 	require.Len(t, producer.mqEvent, 3)
-	require.Len(t, producer.mqEvent[1], 3)
-	require.Len(t, producer.mqEvent[2], 1)
-	require.Len(t, producer.mqEvent[3], 2)
+	require.Len(t, producer.mqEvent[key1], 3)
+	require.Len(t, producer.mqEvent[key2], 1)
+	require.Len(t, producer.mqEvent[key3], 2)
 }
 
 func TestFlush(t *testing.T) {
+	t.Parallel()
+
+	key1 := topicPartitionKey{
+		topic:     "test",
+		partition: 1,
+	}
 	worker, producer := newTestWorker()
+
 	events := []mqEvent{
 		{
 			row: &model.RowChangedEvent{
@@ -234,7 +363,7 @@ func TestFlush(t *testing.T) {
 				Table:    &model.TableName{Schema: "a", Table: "b"},
 				Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
 			},
-			partition: 1,
+			key: key1,
 		},
 		{
 			row: &model.RowChangedEvent{
@@ -242,7 +371,7 @@ func TestFlush(t *testing.T) {
 				Table:    &model.TableName{Schema: "a", Table: "b"},
 				Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
 			},
-			partition: 1,
+			key: key1,
 		},
 		{
 			row: &model.RowChangedEvent{
@@ -250,7 +379,7 @@ func TestFlush(t *testing.T) {
 				Table:    &model.TableName{Schema: "a", Table: "b"},
 				Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "cc"}},
 			},
-			partition: 1,
+			key: key1,
 		},
 		{
 			resolvedTs: 1,
@@ -261,26 +390,31 @@ func TestFlush(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+		batchBuf := make([]mqEvent, 4)
 		ctx := context.Background()
-		batch, err := worker.batch(ctx)
+		endIndex, err := worker.batch(ctx, batchBuf)
 		require.NoError(t, err)
-		require.Len(t, batch, 3)
+		require.Equal(t, 3, endIndex)
 		require.True(t, worker.needSyncFlush)
-		paritionedEvents := worker.group(batch)
-		err = worker.asyncSend(ctx, paritionedEvents)
+		msgs := batchBuf[:endIndex]
+		paritionedRows := worker.group(msgs)
+		err = worker.asyncSend(ctx, paritionedRows)
 		require.NoError(t, err)
 		require.True(t, producer.flushed)
 		require.False(t, worker.needSyncFlush)
 	}()
 
 	for _, event := range events {
-		worker.msgChan <- event
+		err := worker.addEvent(context.Background(), event)
+		require.NoError(t, err)
 	}
 
 	wg.Wait()
 }
 
 func TestAbort(t *testing.T) {
+	t.Parallel()
+
 	worker, _ := newTestWorker()
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -294,4 +428,46 @@ func TestAbort(t *testing.T) {
 
 	cancel()
 	wg.Wait()
+}
+
+func TestProducerError(t *testing.T) {
+	t.Parallel()
+
+	worker, prod := newTestWorker()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := worker.run(ctx)
+		require.Error(t, err)
+		require.Regexp(t, ".*fake.*", err.Error())
+	}()
+
+	prod.InjectError(errors.New("fake"))
+	err := worker.addEvent(ctx, mqEvent{
+		row: &model.RowChangedEvent{
+			CommitTs: 1,
+			Table:    &model.TableName{Schema: "a", Table: "b"},
+			Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
+		},
+		key: topicPartitionKey{
+			topic:     "test",
+			partition: 1,
+		},
+	})
+	require.NoError(t, err)
+	err = worker.addEvent(ctx, mqEvent{resolvedTs: 100})
+	require.NoError(t, err)
+	wg.Wait()
+
+	err = worker.addEvent(ctx, mqEvent{resolvedTs: 200})
+	require.Error(t, err)
+	require.Regexp(t, ".*fake.*", err.Error())
+
+	err = worker.addEvent(ctx, mqEvent{resolvedTs: 300})
+	require.Error(t, err)
+	require.Regexp(t, ".*ErrMQWorkerClosed.*", err.Error())
 }

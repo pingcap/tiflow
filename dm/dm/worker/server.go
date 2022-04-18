@@ -938,6 +938,9 @@ func (s *Server) GetWorkerCfg(ctx context.Context, req *pb.GetWorkerCfgRequest) 
 func (s *Server) CheckSubtasksCanUpdate(ctx context.Context, req *pb.CheckSubtasksCanUpdateRequest) (*pb.CheckSubtasksCanUpdateResponse, error) {
 	log.L().Info("", zap.String("request", "CheckSubtasksCanUpdate"), zap.Stringer("payload", req))
 	resp := &pb.CheckSubtasksCanUpdateResponse{}
+	defer func() {
+		log.L().Info("", zap.String("request", "CheckSubtasksCanUpdate"), zap.Stringer("resp", resp))
+	}()
 	w := s.getSourceWorker(true)
 	if w == nil {
 		msg := "fail to call CheckSubtasksCanUpdate, because no mysql source is being handled in the worker"
@@ -957,5 +960,60 @@ func (s *Server) CheckSubtasksCanUpdate(ctx context.Context, req *pb.CheckSubtas
 		return resp, nil
 	}
 	resp.Success = true
+	return resp, nil
+}
+
+func (s *Server) GetWorkerValidatorStatus(ctx context.Context, req *pb.GetValidationStatusRequest) (*pb.GetValidationStatusResponse, error) {
+	log.L().Info("", zap.String("request", "GetWorkerValidateStatus"), zap.Stringer("payload", req))
+
+	resp := &pb.GetValidationStatusResponse{
+		Result: true,
+	}
+	w := s.getSourceWorker(true)
+	if w == nil {
+		log.L().Warn("fail to call GetWorkerValidateStatus, because no mysql source is being handled in the worker")
+		resp.Result = false
+		resp.Msg = terror.ErrWorkerNoStart.Error()
+		return resp, nil
+	}
+	res := w.GetValidateStatus(req.TaskName, req.FilterStatus)
+	resp.Status = res
+	return resp, nil
+}
+
+func (s *Server) GetValidatorError(ctx context.Context, req *pb.GetValidationErrorRequest) (*pb.GetValidationErrorResponse, error) {
+	w := s.getSourceWorker(true)
+	resp := &pb.GetValidationErrorResponse{
+		Result: true,
+	}
+	if w == nil {
+		log.L().Warn("fail to get validator error, because no mysql source is being handled in the worker")
+		resp.Result = false
+		resp.Msg = terror.ErrWorkerNoStart.Error()
+		return resp, nil
+	}
+	resp.Error = w.GetWorkerValidatorErr(req.TaskName, req.ErrState)
+	return resp, nil
+}
+
+func (s *Server) OperateValidatorError(ctx context.Context, req *pb.OperateValidationErrorRequest) (*pb.OperateValidationErrorResponse, error) {
+	w := s.getSourceWorker(true)
+	resp := &pb.OperateValidationErrorResponse{
+		Result: true,
+	}
+	if w == nil {
+		log.L().Warn("fail to operate validator error, because no mysql source is being handled in the worker")
+		resp.Result = false
+		resp.Msg = terror.ErrWorkerNoStart.Error()
+		return resp, nil
+	}
+	err := w.OperateWorkerValidatorErr(req.TaskName, req.Op, req.ErrId, req.IsAllError)
+	if err != nil {
+		resp.Result = false
+		resp.Msg = err.Error()
+		//nolint:nilerr
+		return resp, nil
+	}
+	//nolint:nilerr
 	return resp, nil
 }

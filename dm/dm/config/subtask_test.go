@@ -17,7 +17,7 @@ import (
 	"reflect"
 
 	. "github.com/pingcap/check"
-	"github.com/pingcap/tidb-tools/pkg/filter"
+	"github.com/pingcap/tidb/util/filter"
 
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
@@ -221,7 +221,7 @@ func (t *testConfig) TestSubTaskAdjustLoaderS3Dir(c *C) {
 	}
 	err = cfg.Adjust(false)
 	c.Assert(err, IsNil)
-	c.Assert(cfg.LoaderConfig.Dir, Equals, "s3://bucket2/prefix"+"."+cfg.Name+"."+cfg.SourceID)
+	c.Assert(cfg.LoaderConfig.Dir, Equals, "s3://bucket2/prefix"+"/"+cfg.Name+"."+cfg.SourceID)
 
 	cfg.LoaderConfig = LoaderConfig{
 		PoolSize:   defaultPoolSize,
@@ -230,7 +230,7 @@ func (t *testConfig) TestSubTaskAdjustLoaderS3Dir(c *C) {
 	}
 	err = cfg.Adjust(false)
 	c.Assert(err, IsNil)
-	c.Assert(cfg.LoaderConfig.Dir, Equals, "s3://bucket3/prefix/path"+"."+cfg.Name+"."+cfg.SourceID+"?endpoint=https://127.0.0.1:9000&force_path_style=0&SSE=aws:kms&sse-kms-key-id=TestKey&xyz=abc")
+	c.Assert(cfg.LoaderConfig.Dir, Equals, "s3://bucket3/prefix/path"+"/"+cfg.Name+"."+cfg.SourceID+"?endpoint=https://127.0.0.1:9000&force_path_style=0&SSE=aws:kms&sse-kms-key-id=TestKey&xyz=abc")
 
 	// invaild dir
 	cfg.LoaderConfig = LoaderConfig{

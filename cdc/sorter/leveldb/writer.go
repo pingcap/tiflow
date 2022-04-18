@@ -30,8 +30,9 @@ import (
 // and writes to leveldb.
 type writer struct {
 	common
+	stopped bool
 
-	readerRouter  *actor.Router
+	readerRouter  *actor.Router[message.Task]
 	readerActorID actor.ID
 
 	maxResolvedTs uint64
@@ -41,21 +42,21 @@ type writer struct {
 	metricTotalEventsResolvedTs prometheus.Counter
 }
 
-var _ actor.Actor = (*writer)(nil)
+var _ actor.Actor[message.Task] = (*writer)(nil)
 
-func (w *writer) Poll(ctx context.Context, msgs []actormsg.Message) (running bool) {
+func (w *writer) Poll(ctx context.Context, msgs []actormsg.Message[message.Task]) (running bool) {
 	kvEventCount, resolvedEventCount := 0, 0
 	writes := make(map[message.Key][]byte)
 	for i := range msgs {
 		switch msgs[i].Tp {
-		case actormsg.TypeSorterTask:
+		case actormsg.TypeValue:
 		case actormsg.TypeStop:
 			return false
 		default:
 			log.Panic("unexpected message", zap.Any("message", msgs[i]))
 		}
 
-		ev := msgs[i].SorterTask.InputEvent
+		ev := msgs[i].Value.InputEvent
 		if ev.RawKV.OpType == model.OpTypeResolved {
 			if w.maxResolvedTs < ev.CRTs {
 				w.maxResolvedTs = ev.CRTs
@@ -83,7 +84,7 @@ func (w *writer) Poll(ctx context.Context, msgs []actormsg.Message) (running boo
 	if len(writes) != 0 {
 		// Send write task to leveldb.
 		task := message.Task{UID: w.uid, TableID: w.tableID, WriteReq: writes}
-		err := w.dbRouter.SendB(ctx, w.dbActorID, actormsg.SorterMessage(task))
+		err := w.dbRouter.SendB(ctx, w.dbActorID, actormsg.ValueMessage(task))
 		if err != nil {
 			w.reportError("failed to send write request", err)
 			return false
@@ -102,7 +103,7 @@ func (w *writer) Poll(ctx context.Context, msgs []actormsg.Message) (running boo
 	//   2. ReadTs will trigger reader to take iterator from leveldb,
 	//      it happens after writer send writes to leveldb.
 	//   3. Before leveldb takes iterator, it flushes all buffered writes.
-	msg := actormsg.SorterMessage(message.Task{
+	msg := actormsg.ValueMessage(message.Task{
 		UID:     w.uid,
 		TableID: w.tableID,
 		ReadTs: message.ReadTs{
@@ -124,4 +125,13 @@ func (w *writer) Poll(ctx context.Context, msgs []actormsg.Message) (running boo
 	// It's ok if send fails, as resolved ts events are received periodically.
 	_ = w.readerRouter.Send(w.readerActorID, msg)
 	return true
+}
+
+// OnClose releases writer resource.
+func (w *writer) OnClose() {
+	if w.stopped {
+		return
+	}
+	w.stopped = true
+	w.common.closedWg.Done()
 }

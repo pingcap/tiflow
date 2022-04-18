@@ -31,23 +31,23 @@ import (
 	serverConfig "github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/pipeline"
+	pmessage "github.com/pingcap/tiflow/pkg/pipeline/message"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
 
 var (
-	_       TablePipeline = (*tableActor)(nil)
-	_       actor.Actor   = (*tableActor)(nil)
-	stopped               = uint32(1)
+	_       TablePipeline                 = (*tableActor)(nil)
+	_       actor.Actor[pmessage.Message] = (*tableActor)(nil)
+	stopped                               = uint32(1)
 )
 
 const sinkFlushInterval = 500 * time.Millisecond
 
 type tableActor struct {
 	actorID actor.ID
-	mb      actor.Mailbox
-	router  *actor.Router
+	mb      actor.Mailbox[pmessage.Message]
+	router  *actor.Router[pmessage.Message]
 	// all goroutines in tableActor should be spawned from this wg
 	wg *errgroup.Group
 	// backend mounter
@@ -65,14 +65,14 @@ type tableActor struct {
 	started  bool
 	stopped  uint32
 	stopLock sync.Mutex
-	// TODO: try to reduce these config fileds below in the future
+	// TODO: try to reduce these config fields below in the future
 	tableID        int64
 	markTableID    int64
 	cyclicEnabled  bool
 	targetTs       model.Ts
 	memoryQuota    uint64
 	replicaInfo    *model.TableReplicaInfo
-	replicConfig   *serverConfig.ReplicaConfig
+	replicaConfig  *serverConfig.ReplicaConfig
 	changefeedVars *cdcContext.ChangefeedVars
 	globalVars     *cdcContext.GlobalVars
 	// these fields below are used in logs and metrics only
@@ -98,14 +98,13 @@ func NewTableActor(cdcCtx cdcContext.Context,
 	sink sink.Sink,
 	targetTs model.Ts,
 ) (TablePipeline, error) {
-
 	config := cdcCtx.ChangefeedVars().Info.Config
 	cyclicEnabled := config.Cyclic != nil && config.Cyclic.IsEnabled()
 	changefeedVars := cdcCtx.ChangefeedVars()
 	globalVars := cdcCtx.GlobalVars()
 
 	actorID := globalVars.TableActorSystem.ActorID()
-	mb := actor.NewMailbox(actorID, defaultOutputChannelSize)
+	mb := actor.NewMailbox[pmessage.Message](actorID, defaultOutputChannelSize)
 	// Cancel should be able to release all sub-goroutines in this actor.
 	ctx, cancel := context.WithCancel(cdcCtx)
 	// All sub-goroutines should be spawn in this wait group.
@@ -125,11 +124,12 @@ func NewTableActor(cdcCtx cdcContext.Context,
 		memoryQuota:   serverConfig.GetGlobalServerConfig().PerTableMemoryQuota,
 		mounter:       mounter,
 		replicaInfo:   replicaInfo,
-		replicConfig:  config,
+		replicaConfig: config,
 		tableSink:     sink,
 		targetTs:      targetTs,
 		started:       false,
 
+		changefeedID:   changefeedVars.ID,
 		changefeedVars: changefeedVars,
 		globalVars:     globalVars,
 		router:         globalVars.TableActorSystem.Router(),
@@ -140,7 +140,7 @@ func NewTableActor(cdcCtx cdcContext.Context,
 
 	startTime := time.Now()
 	log.Info("table actor starting",
-		zap.String("changfeed", changefeedVars.ID),
+		zap.String("changefeed", changefeedVars.ID),
 		zap.String("tableName", tableName),
 		zap.Int64("tableID", tableID))
 	if err := table.start(cctx); err != nil {
@@ -152,14 +152,19 @@ func NewTableActor(cdcCtx cdcContext.Context,
 		return nil, errors.Trace(err)
 	}
 	log.Info("table actor started",
-		zap.String("changfeed", changefeedVars.ID),
+		zap.String("changefeed", changefeedVars.ID),
 		zap.String("tableName", tableName),
 		zap.Int64("tableID", tableID),
 		zap.Duration("duration", time.Since(startTime)))
 	return table, nil
 }
 
-func (t *tableActor) Poll(ctx context.Context, msgs []message.Message) bool {
+// OnClose implements Actor interface.
+// TODO: implements table actor stop here.
+func (t *tableActor) OnClose() {
+}
+
+func (t *tableActor) Poll(ctx context.Context, msgs []message.Message[pmessage.Message]) bool {
 	for i := range msgs {
 		if atomic.LoadUint32(&t.stopped) == stopped {
 			// No need to handle remaining messages.
@@ -168,10 +173,13 @@ func (t *tableActor) Poll(ctx context.Context, msgs []message.Message) bool {
 
 		var err error
 		switch msgs[i].Tp {
-		case message.TypeBarrier:
-			err = t.handleBarrierMsg(ctx, msgs[i].BarrierTs)
-		case message.TypeTick:
-			err = t.handleTickMsg(ctx)
+		case message.TypeValue:
+			switch msgs[i].Value.Tp {
+			case pmessage.MessageTypeBarrier:
+				err = t.handleBarrierMsg(ctx, msgs[i].Value.BarrierTs)
+			case pmessage.MessageTypeTick:
+				err = t.handleTickMsg(ctx)
+			}
 		case message.TypeStop:
 			t.handleStopMsg(ctx)
 		}
@@ -221,7 +229,7 @@ func (t *tableActor) handleBarrierMsg(ctx context.Context, barrierTs model.Ts) e
 func (t *tableActor) handleTickMsg(ctx context.Context) error {
 	// tick message flush the raw event to sink, follow the old pipeline implementation, batch flush the events  every 500ms
 	if time.Since(t.lastFlushSinkTime) > sinkFlushInterval {
-		_, err := t.sinkNode.HandleMessage(ctx, pipeline.TickMessage())
+		_, err := t.sinkNode.HandleMessage(ctx, pmessage.TickMessage())
 		if err != nil {
 			return err
 		}
@@ -234,7 +242,7 @@ func (t *tableActor) handleStopMsg(ctx context.Context) {
 	// async stops sinkNode and tableSink
 	go func() {
 		_, err := t.sinkNode.HandleMessage(ctx,
-			pipeline.CommandMessage(&pipeline.Command{Tp: pipeline.CommandTypeStop}),
+			pmessage.CommandMessage(&pmessage.Command{Tp: pmessage.CommandTypeStop}),
 		)
 		if err != nil {
 			t.handleError(err)
@@ -258,7 +266,7 @@ func (t *tableActor) start(sdtTableContext context.Context) error {
 	flowController := common.NewTableFlowController(t.memoryQuota)
 	sorterNode := newSorterNode(t.tableName, t.tableID,
 		t.replicaInfo.StartTs, flowController,
-		t.mounter, t.replicConfig,
+		t.mounter, t.replicaConfig,
 	)
 	t.sortNode = sorterNode
 	sortActorNodeContext := newContext(sdtTableContext, t.tableName,
@@ -294,13 +302,13 @@ func (t *tableActor) start(sdtTableContext context.Context) error {
 	actorSinkNode := newSinkNode(t.tableID, t.tableSink,
 		t.replicaInfo.StartTs,
 		t.targetTs, flowController)
-	actorSinkNode.initWithReplicaConfig(true, t.replicConfig)
+	actorSinkNode.initWithReplicaConfig(true, t.replicaConfig)
 	t.sinkNode = actorSinkNode
 
 	// construct sink actor node, it gets message from sortNode or cyclicNode
 	var messageProcessFunc asyncMessageProcessorFunc = func(
-		ctx context.Context,
-		msg pipeline.Message) (bool, error) {
+		ctx context.Context, msg pmessage.Message,
+	) (bool, error) {
 		return actorSinkNode.HandleMessage(sdtTableContext, msg)
 	}
 	t.nodes = append(t.nodes, NewActorNode(messageFetchFunc, messageProcessFunc))
@@ -314,9 +322,9 @@ func (t *tableActor) start(sdtTableContext context.Context) error {
 
 func (t *tableActor) getSinkAsyncMessageHolder(
 	sdtTableContext context.Context,
-	sortActorNodeContext *actorNodeContext) (AsyncMessageHolder, error) {
-
-	var messageFetchFunc asyncMessageHolderFunc = func() *pipeline.Message {
+	sortActorNodeContext *actorNodeContext) (AsyncMessageHolder, error,
+) {
+	var messageFetchFunc asyncMessageHolderFunc = func() *pmessage.Message {
 		return sortActorNodeContext.tryGetProcessedMessage()
 	}
 	// check if cyclic feature is enabled
@@ -337,12 +345,12 @@ func (t *tableActor) getSinkAsyncMessageHolder(
 
 		// construct cyclic actor node if it's enabled, it gets message from sortNode
 		var messageProcessFunc asyncMessageProcessorFunc = func(
-			ctx context.Context,
-			msg pipeline.Message) (bool, error) {
+			ctx context.Context, msg pmessage.Message,
+		) (bool, error) {
 			return cyclicNode.TryHandleDataMessage(cyclicActorNodeContext, msg)
 		}
 		t.nodes = append(t.nodes, NewActorNode(messageFetchFunc, messageProcessFunc))
-		messageFetchFunc = func() *pipeline.Message {
+		messageFetchFunc = func() *pmessage.Message {
 			return cyclicActorNodeContext.tryGetProcessedMessage()
 		}
 	}
@@ -374,7 +382,7 @@ func (t *tableActor) stop(err error) {
 			log.Warn("close sink failed",
 				zap.String("changefeed", t.changefeedID),
 				zap.String("tableName", t.tableName),
-				zap.Error(err), zap.Error(err))
+				zap.Error(err))
 		}
 	}
 	log.Info("table actor stopped",
@@ -387,7 +395,9 @@ func (t *tableActor) stop(err error) {
 // handleError stops the table actor at first and then reports the error to processor
 func (t *tableActor) handleError(err error) {
 	t.stop(err)
-	t.reportErr(err)
+	if !cerror.ErrTableProcessorStoppedSafely.Equal(err) {
+		t.reportErr(err)
+	}
 }
 
 // ============ Implement TablePipline, must be threadsafe ============
@@ -398,7 +408,7 @@ func (t *tableActor) ResolvedTs() model.Ts {
 	// will be able to cooperate replication status directly. Then we will add
 	// another replication barrier for consistent replication instead of reusing
 	// the global resolved-ts.
-	if redo.IsConsistentEnabled(t.replicConfig.Consistent.Level) {
+	if redo.IsConsistentEnabled(t.replicaConfig.Consistent.Level) {
 		return t.sinkNode.ResolvedTs()
 	}
 	return t.sortNode.ResolvedTs()
@@ -411,8 +421,8 @@ func (t *tableActor) CheckpointTs() model.Ts {
 
 // UpdateBarrierTs updates the barrier ts in this table pipeline
 func (t *tableActor) UpdateBarrierTs(ts model.Ts) {
-	msg := message.BarrierMessage(ts)
-	err := t.router.Send(t.actorID, msg)
+	msg := pmessage.BarrierMessage(ts)
+	err := t.router.Send(t.actorID, message.ValueMessage(msg))
 	if err != nil {
 		log.Warn("send fails",
 			zap.Reflect("msg", msg),
@@ -426,7 +436,7 @@ func (t *tableActor) UpdateBarrierTs(ts model.Ts) {
 func (t *tableActor) AsyncStop(targetTs model.Ts) bool {
 	// TypeStop stop the sinkNode only ,the processor stop the sink to release some resource
 	// and then stop the whole table pipeline by call Cancel
-	msg := message.StopMessage()
+	msg := message.StopMessage[pmessage.Message]()
 	err := t.router.Send(t.actorID, msg)
 	log.Info("send async stop signal to table",
 		zap.String("tableName", t.tableName),
@@ -471,7 +481,8 @@ func (t *tableActor) Cancel() {
 	// cancel wait group, release resource and mark the status as stopped
 	t.stop(nil)
 	// actor is closed, tick actor to remove this actor router
-	if err := t.router.Send(t.mb.ID(), message.TickMessage()); err != nil {
+	msg := pmessage.TickMessage()
+	if err := t.router.Send(t.mb.ID(), message.ValueMessage(msg)); err != nil {
 		log.Warn("fails to send Stop message",
 			zap.String("tableName", t.tableName),
 			zap.Int64("tableID", t.tableID),

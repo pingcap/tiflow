@@ -20,11 +20,11 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	. "github.com/pingcap/check"
-	"github.com/pingcap/tidb-tools/pkg/schemacmp"
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/util/mock"
+	"github.com/pingcap/tidb/util/schemacmp"
 	"go.etcd.io/etcd/tests/v3/integration"
 
 	"github.com/pingcap/tiflow/dm/dm/config"
@@ -1440,7 +1440,13 @@ func (t *testLock) TestTryRemoveTable(c *C) {
 	c.Assert(ready[source][db][tbl2], IsFalse)
 
 	// TryRemoveTable for the second table.
-	c.Assert(l.TryRemoveTable(source, db, tbl2), IsTrue)
+	l.columns = map[string]map[string]map[string]map[string]DropColumnStage{
+		"col": {
+			source: {db: {tbl2: DropNotDone}},
+		},
+	}
+	col := l.TryRemoveTable(source, db, tbl2)
+	c.Assert(col, DeepEquals, []string{"col"})
 	delete(vers[source][db], tbl2)
 	ready = l.Ready()
 	c.Assert(ready, HasLen, 1)
@@ -1466,7 +1472,7 @@ func (t *testLock) TestTryRemoveTable(c *C) {
 	c.Assert(ready[source][db][tbl2], IsTrue)
 
 	// TryRemoveTable for the second table.
-	c.Assert(l.TryRemoveTable(source, db, tbl2), IsTrue)
+	c.Assert(l.TryRemoveTable(source, db, tbl2), HasLen, 0)
 	delete(vers[source][db], tbl2)
 	ready = l.Ready()
 	c.Assert(ready, HasLen, 1)
@@ -1476,9 +1482,9 @@ func (t *testLock) TestTryRemoveTable(c *C) {
 	c.Assert(l.versions, DeepEquals, vers)
 
 	// CASE: try to remove for not-exists table.
-	c.Assert(l.TryRemoveTable(source, db, "not-exist"), IsFalse)
-	c.Assert(l.TryRemoveTable(source, "not-exist", tbl1), IsFalse)
-	c.Assert(l.TryRemoveTable("not-exist", db, tbl1), IsFalse)
+	c.Assert(l.TryRemoveTable(source, db, "not-exist"), HasLen, 0)
+	c.Assert(l.TryRemoveTable(source, "not-exist", tbl1), HasLen, 0)
+	c.Assert(l.TryRemoveTable("not-exist", db, tbl1), HasLen, 0)
 }
 
 func (t *testLock) TestTryRemoveTableWithSources(c *C) {
@@ -1925,7 +1931,8 @@ func (t *testLock) TestAddNotFullyDroppedColumns(c *C) {
 }
 
 func (t *testLock) trySyncForAllTablesLarger(c *C, l *Lock,
-	ddls []string, tableInfoBefore *model.TableInfo, tis []*model.TableInfo, tts []TargetTable, vers map[string]map[string]map[string]int64) {
+	ddls []string, tableInfoBefore *model.TableInfo, tis []*model.TableInfo, tts []TargetTable, vers map[string]map[string]map[string]int64,
+) {
 	for source, schemaTables := range l.Ready() {
 		for schema, tables := range schemaTables {
 			for table := range tables {
@@ -1967,7 +1974,8 @@ func (t *testLock) checkLockNoDone(c *C, l *Lock) {
 }
 
 func newInfoWithVersion(task, source, upSchema, upTable, downSchema, downTable string, ddls []string, tableInfoBefore *model.TableInfo,
-	tableInfosAfter []*model.TableInfo, vers map[string]map[string]map[string]int64) Info {
+	tableInfosAfter []*model.TableInfo, vers map[string]map[string]map[string]int64,
+) Info {
 	info := NewInfo(task, source, upSchema, upTable, downSchema, downTable, ddls, tableInfoBefore, tableInfosAfter)
 	vers[source][upSchema][upTable]++
 	info.Version = vers[source][upSchema][upTable]

@@ -27,6 +27,7 @@ import (
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/pipeline"
+	pmessage "github.com/pingcap/tiflow/pkg/pipeline/message"
 	"go.uber.org/zap"
 )
 
@@ -102,7 +103,7 @@ func (t *tablePipelineImpl) CheckpointTs() model.Ts {
 
 // UpdateBarrierTs updates the barrier ts in this table pipeline
 func (t *tablePipelineImpl) UpdateBarrierTs(ts model.Ts) {
-	err := t.p.SendToFirstNode(pipeline.BarrierMessage(ts))
+	err := t.p.SendToFirstNode(pmessage.BarrierMessage(ts))
 	if err != nil && !cerror.ErrSendToClosedPipeline.Equal(err) && !cerror.ErrPipelineTryAgain.Equal(err) {
 		log.Panic("unexpect error from send to first node", zap.Error(err))
 	}
@@ -110,8 +111,8 @@ func (t *tablePipelineImpl) UpdateBarrierTs(ts model.Ts) {
 
 // AsyncStop tells the pipeline to stop, and returns true if the pipeline is already stopped.
 func (t *tablePipelineImpl) AsyncStop(targetTs model.Ts) bool {
-	err := t.p.SendToFirstNode(pipeline.CommandMessage(&pipeline.Command{
-		Tp: pipeline.CommandTypeStop,
+	err := t.p.SendToFirstNode(pmessage.CommandMessage(&pmessage.Command{
+		Tp: pmessage.CommandTypeStop,
 	}))
 	log.Info("send async stop signal to table", zap.Int64("tableID", t.tableID), zap.Uint64("targetTs", targetTs))
 	if err != nil {
@@ -176,7 +177,8 @@ func NewTablePipeline(ctx cdcContext.Context,
 	tableName string,
 	replicaInfo *model.TableReplicaInfo,
 	sink sink.Sink,
-	targetTs model.Ts) TablePipeline {
+	targetTs model.Ts,
+) TablePipeline {
 	ctx, cancel := cdcContext.WithCancel(ctx)
 	changefeed := ctx.ChangefeedVars().ID
 	replConfig := ctx.ChangefeedVars().Info.Config
@@ -203,8 +205,8 @@ func NewTablePipeline(ctx cdcContext.Context,
 	}
 
 	p := pipeline.NewPipeline(ctx, 500*time.Millisecond, runnerSize, defaultOutputChannelSize)
-	sorterNode :=
-		newSorterNode(tableName, tableID, replicaInfo.StartTs, flowController, mounter, replConfig)
+	sorterNode := newSorterNode(tableName, tableID, replicaInfo.StartTs,
+		flowController, mounter, replConfig)
 	sinkNode := newSinkNode(tableID, sink, replicaInfo.StartTs, targetTs, flowController)
 
 	p.AppendNode(ctx, "puller", newPullerNode(tableID, replicaInfo, tableName, changefeed))

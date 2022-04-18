@@ -32,6 +32,7 @@ import (
 // reader accepts out-of-order raw kv entries and output sorted entries
 type reader struct {
 	common
+	stopped bool
 
 	state pollState
 
@@ -46,7 +47,7 @@ type reader struct {
 	metricIterNextDuration prometheus.Observer
 }
 
-var _ actor.Actor = (*reader)(nil)
+var _ actor.Actor[message.Task] = (*reader)(nil)
 
 // setTaskDelete set delete range if there are too many events can be deleted or
 // it has been a long time since last delete.
@@ -241,7 +242,7 @@ type pollState struct {
 
 	// ID and router of the reader itself.
 	readerID     actor.ID
-	readerRouter *actor.Router
+	readerRouter *actor.Router[message.Task]
 
 	// Compactor actor ID.
 	compactorID actor.ID
@@ -334,7 +335,7 @@ func (state *pollState) tryGetIterator(uid uint32, tableID uint64) (*message.Ite
 				iterCh <- iter
 				close(iterCh)
 				// Notify itself that iterator has acquired.
-				_ = readerRouter.Send(readerID, actormsg.SorterMessage(
+				_ = readerRouter.Send(readerID, actormsg.ValueMessage(
 					message.Task{
 						UID:     uid,
 						TableID: tableID,
@@ -391,18 +392,24 @@ func (state *pollState) tryReleaseIterator() error {
 }
 
 // Poll receives ReadTs and send resolved events.
-func (r *reader) Poll(ctx context.Context, msgs []actormsg.Message) (running bool) {
+func (r *reader) Poll(ctx context.Context, msgs []actormsg.Message[message.Task]) (running bool) {
 	for i := range msgs {
 		switch msgs[i].Tp {
-		case actormsg.TypeSorterTask:
+		case actormsg.TypeValue:
 		case actormsg.TypeStop:
+			r.reportError("receive stop message", nil)
 			return false
 		default:
 			log.Panic("unexpected message", zap.Any("message", msgs[i]))
 		}
 		// Update the max commit ts and resolved ts of all received events.
-		ts := msgs[i].SorterTask.ReadTs
+		ts := msgs[i].Value.ReadTs
 		r.state.advanceMaxTs(ts.MaxCommitTs, ts.MaxResolvedTs)
+
+		// Test only message.
+		if msgs[i].Value.Test != nil {
+			time.Sleep(msgs[i].Value.Test.Sleep)
+		}
 	}
 
 	// Length of buffered resolved events.
@@ -443,7 +450,7 @@ func (r *reader) Poll(ctx context.Context, msgs []actormsg.Message) (running boo
 		}
 		// Send delete task to leveldb.
 		if task.DeleteReq != nil {
-			err = r.dbRouter.SendB(ctx, r.dbActorID, actormsg.SorterMessage(task))
+			err = r.dbRouter.SendB(ctx, r.dbActorID, actormsg.ValueMessage(task))
 			if err != nil {
 				r.reportError("failed to send delete request", err)
 				return false
@@ -455,7 +462,7 @@ func (r *reader) Poll(ctx context.Context, msgs []actormsg.Message) (running boo
 	var hasIter bool
 	task.IterReq, hasIter = r.state.tryGetIterator(r.uid, r.tableID)
 	// Send delete/read task to leveldb.
-	err := r.dbRouter.SendB(ctx, r.dbActorID, actormsg.SorterMessage(task))
+	err := r.dbRouter.SendB(ctx, r.dbActorID, actormsg.ValueMessage(task))
 	if err != nil {
 		r.reportError("failed to send delete request", err)
 		return false
@@ -482,4 +489,15 @@ func (r *reader) Poll(ctx context.Context, msgs []actormsg.Message) (running boo
 		return false
 	}
 	return true
+}
+
+// OnClose releases reader resource.
+func (r *reader) OnClose() {
+	if r.stopped {
+		return
+	}
+	r.stopped = true
+	// Must release iterator before stopping, otherwise it leaks iterator.
+	_ = r.state.tryReleaseIterator()
+	r.common.closedWg.Done()
 }

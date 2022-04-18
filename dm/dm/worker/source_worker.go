@@ -312,7 +312,6 @@ func (w *SourceWorker) EnableRelay(startBySourceCfg bool) (err error) {
 	if refreshErr := w.refreshSourceCfg(); refreshErr != nil {
 		return refreshErr
 	}
-
 	failpoint.Label("bypass")
 
 	w.relayCtx, w.relayCancel = context.WithCancel(w.ctx)
@@ -620,7 +619,6 @@ func (w *SourceWorker) OperateSubTask(name string, op pb.TaskOp) error {
 	}
 
 	w.l.Info("OperateSubTask start", zap.Stringer("op", op), zap.String("task", name))
-
 	var err error
 	switch op {
 	case pb.TaskOp_Delete:
@@ -1061,9 +1059,6 @@ func copyConfigFromSource(cfg *config.SubTaskConfig, sourceCfg *config.SourceCon
 	cfg.EnableGTID = sourceCfg.EnableGTID
 	cfg.UseRelay = enableRelay
 
-	// we can remove this from SubTaskConfig later, because syncer will always read from relay
-	cfg.AutoFixGTID = sourceCfg.AutoFixGTID
-
 	if cfg.CaseSensitive != sourceCfg.CaseSensitive {
 		log.L().Warn("different case-sensitive config between task config and source config, use `true` for it.")
 	}
@@ -1274,7 +1269,7 @@ func (w *SourceWorker) operateValidatorStage(stage ha.Stage) error {
 		}
 
 		subtask.SetCfg(subTaskCfg[stage.Task])
-		subtask.StartValidator(stage.Expect)
+		subtask.StartValidator(stage.Expect, false)
 	default:
 		// should not happen
 		log.L().Warn("invalid validator stage", zap.Reflect("stage", stage))
@@ -1303,15 +1298,21 @@ func (w *SourceWorker) tryRefreshSubTaskAndSourceConfig(subTask *SubTask) error 
 	if err != nil {
 		return terror.Annotate(err, "fail to get subtask config from etcd")
 	}
-	var subTaskCfg config.SubTaskConfig
+
+	var cfg config.SubTaskConfig
 	var ok bool
-	if subTaskCfg, ok = tsm[taskName]; !ok {
+	if cfg, ok = tsm[taskName]; !ok {
 		return terror.ErrWorkerFailToGetSubtaskConfigFromEtcd.Generate(taskName)
 	}
-	if checkErr := subTask.CheckUnitCfgCanUpdate(&subTaskCfg); checkErr != nil {
+
+	// copy some config item from dm-worker's source config
+	if err := copyConfigFromSource(&cfg, w.cfg, w.relayEnabled.Load()); err != nil {
+		return err
+	}
+	if checkErr := subTask.CheckUnitCfgCanUpdate(&cfg); checkErr != nil {
 		return checkErr
 	}
-	return w.UpdateSubTask(w.ctx, &subTaskCfg, false)
+	return w.UpdateSubTask(w.ctx, &cfg, false)
 }
 
 // CheckCfgCanUpdated check if current subtask config can be updated.
@@ -1319,13 +1320,34 @@ func (w *SourceWorker) CheckCfgCanUpdated(cfg *config.SubTaskConfig) error {
 	w.RLock()
 	defer w.RUnlock()
 
-	st := w.subTaskHolder.findSubTask(cfg.Name)
-	if st == nil {
+	subTask := w.subTaskHolder.findSubTask(cfg.Name)
+	if subTask == nil {
 		return terror.ErrWorkerSubTaskNotFound.Generate(cfg.Name)
 	}
 	// copy some config item from dm-worker's source config
 	if err := copyConfigFromSource(cfg, w.cfg, w.relayEnabled.Load()); err != nil {
 		return err
 	}
-	return st.CheckUnitCfgCanUpdate(cfg)
+	return subTask.CheckUnitCfgCanUpdate(cfg)
+}
+
+func (w *SourceWorker) GetWorkerValidatorErr(taskName string, errState pb.ValidateErrorState) []*pb.ValidationError {
+	w.RLock()
+	defer w.RUnlock()
+	st := w.subTaskHolder.findSubTask(taskName)
+	if st != nil {
+		return st.GetValidatorError(errState)
+	}
+	log.L().Warn("get validator err", zap.Error(terror.ErrWorkerSubTaskNotFound.Generate(taskName)))
+	return []*pb.ValidationError{}
+}
+
+func (w *SourceWorker) OperateWorkerValidatorErr(taskName string, op pb.ValidationErrOp, errID uint64, isAll bool) error {
+	w.RLock()
+	defer w.RUnlock()
+	st := w.subTaskHolder.findSubTask(taskName)
+	if st != nil {
+		return st.OperateValidatorError(op, errID, isAll)
+	}
+	return terror.ErrWorkerSubTaskNotFound.Generate(taskName)
 }

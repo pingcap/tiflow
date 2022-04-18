@@ -52,6 +52,7 @@ const (
 	defaultDialTimeout         = "2m"
 	defaultSafeMode            = true
 	defaultTxnIsolationRC      = "READ-COMMITTED"
+	defaultCharacterSet        = "utf8mb4"
 )
 
 var defaultParams = &sinkParams{
@@ -298,6 +299,16 @@ func generateDSNByParams(
 		dsnCfg.Params["tx_isolation"] = fmt.Sprintf(`"%s"`, defaultTxnIsolationRC)
 	}
 
+	// equals to executing "SET NAMES utf8mb4"
+	dsnCfg.Params["charset"] = defaultCharacterSet
+
+	tidbPlacementMode, err := checkTiDBVariable(ctx, testDB, "tidb_placement_mode", "ignore")
+	if err != nil {
+		return "", err
+	}
+	if tidbPlacementMode != "" {
+		dsnCfg.Params["tidb_placement_mode"] = fmt.Sprintf(`"%s"`, tidbPlacementMode)
+	}
 	dsnClone := dsnCfg.Clone()
 	dsnClone.Passwd = "******"
 	log.Info("sink uri is configured", zap.String("dsn", dsnClone.FormatDSN()))

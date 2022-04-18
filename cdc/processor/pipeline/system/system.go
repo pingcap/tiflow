@@ -18,12 +18,13 @@ import (
 	"sync/atomic"
 
 	"github.com/pingcap/tiflow/pkg/actor"
+	pmessage "github.com/pingcap/tiflow/pkg/pipeline/message"
 )
 
 // System manages table pipeline global resource.
 type System struct {
-	tableActorSystem *actor.System
-	tableActorRouter *actor.Router
+	tableActorSystem *actor.System[pmessage.Message]
+	tableActorRouter *actor.Router[pmessage.Message]
 
 	lastID uint64
 }
@@ -38,23 +39,24 @@ func NewSystem() *System {
 // Start starts a system.
 func (s *System) Start(ctx context.Context) error {
 	// todo: make the table actor system configurable
-	s.tableActorSystem, s.tableActorRouter = actor.NewSystemBuilder("table").Build()
+	sys, router := actor.NewSystemBuilder[pmessage.Message]("table").Build()
+	s.tableActorSystem, s.tableActorRouter = sys, router
 	s.tableActorSystem.Start(ctx)
 	return nil
 }
 
 // Stop stops a system.
-func (s *System) Stop() error {
-	return s.tableActorSystem.Stop()
+func (s *System) Stop() {
+	s.tableActorSystem.Stop()
 }
 
 // Router returns the table actor router.
-func (s *System) Router() *actor.Router {
+func (s *System) Router() *actor.Router[pmessage.Message] {
 	return s.tableActorRouter
 }
 
 // System returns the system.
-func (s *System) System() *actor.System {
+func (s *System) System() *actor.System[pmessage.Message] {
 	return s.tableActorSystem
 }
 

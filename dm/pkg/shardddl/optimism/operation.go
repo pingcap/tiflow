@@ -39,9 +39,15 @@ const (
 	// ConflictResolved indicates a conflict DDL be resolved.
 	// in this stage, DM-worker should redirect to the conflict DDL.
 	ConflictResolved ConflictStage = "resolved"
+	// ConflictUnlocked indicates a conflict will be unlocked after applied the shard DDL.
+	// in this stage, DM-worker should directly execute/skip DDLs.
+	ConflictUnlocked ConflictStage = "unlocked"
 	// ConflictSkipWaitRedirect indicates a conflict happened and will be skipped and redirected until all tables has no conflict
 	// in this stage, DM-worker should skip all DML and DDL for the conflict table until redirect.
 	ConflictSkipWaitRedirect ConflictStage = "skip and wait for redirect" // #nosec
+	// ConflictError indicates an error happened when we try to sync the DDLs
+	// in this stage, DM-worker should retry and can skip ddls for this error.
+	ConflictError ConflictStage = "error"
 )
 
 // Operation represents a shard DDL coordinate operation.
@@ -64,13 +70,14 @@ type Operation struct {
 	Cols          []string      `json:"cols"`             // drop columns' name
 
 	// only set it when get from etcd
-	// use for get new redirect revisions
+	// use for sort infos in recovering locks
 	Revision int64 `json:"-"`
 }
 
 // NewOperation creates a new Operation instance.
 func NewOperation(id, task, source, upSchema, upTable string,
-	ddls []string, conflictStage ConflictStage, conflictMsg string, done bool, cols []string) Operation {
+	ddls []string, conflictStage ConflictStage, conflictMsg string, done bool, cols []string,
+) Operation {
 	return Operation{
 		ID:            id,
 		Task:          task,
@@ -190,6 +197,7 @@ func GetAllOperations(cli *clientv3.Client) (map[string]map[string]map[string]ma
 		if _, ok := opm[op.Task][op.Source][op.UpSchema]; !ok {
 			opm[op.Task][op.Source][op.UpSchema] = make(map[string]Operation)
 		}
+		op.Revision = kv.ModRevision
 		opm[op.Task][op.Source][op.UpSchema][op.UpTable] = op
 	}
 
@@ -234,7 +242,8 @@ func GetInfosOperationsByTask(cli *clientv3.Client, task string) ([]Info, []Oper
 // This function can be called by DM-worker and DM-master.
 func WatchOperationPut(ctx context.Context, cli *clientv3.Client,
 	task, source, upSchema, upTable string, revision int64,
-	outCh chan<- Operation, errCh chan<- error) {
+	outCh chan<- Operation, errCh chan<- error,
+) {
 	var ch clientv3.WatchChan
 	wCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -269,6 +278,7 @@ func WatchOperationPut(ctx context.Context, cli *clientv3.Client,
 				}
 
 				op, err := operationFromJSON(string(ev.Kv.Value))
+				op.Revision = ev.Kv.ModRevision
 				if err != nil {
 					select {
 					case errCh <- err:

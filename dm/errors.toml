@@ -791,10 +791,16 @@ workaround = "Please check if session `binlog_row_image` variable is not FULL, r
 tags = ["upstream", "high"]
 
 [error.DM-functional-11127]
-message = "receive conflict DDL for the optimistic shard ddl lock %s: %s"
+message = "receive conflict DDL for the optimistic shard ddl lock %s: %s. Now DM does not support conflicting DDLs, such as 'modify column'/'rename column'/'add column not null non default'."
 description = ""
 workaround = ""
-tags = ["internal", "low"]
+tags = ["internal", "high"]
+
+[error.DM-functional-11128]
+message = "fail to resolve adding not fully dropped columns for optimistic shard ddl lock %s: %s"
+description = ""
+workaround = "Please use `binlog skip` command to skip this error."
+tags = ["internal", "medium"]
 
 [error.DM-config-20001]
 message = "checking item %s is not supported\n%s"
@@ -2428,6 +2434,12 @@ description = ""
 workaround = ""
 tags = ["internal", "high"]
 
+[error.DM-dm-master-38058]
+message = "can not start task: %s reason: %s"
+description = ""
+workaround = ""
+tags = ["internal", "high"]
+
 [error.DM-dm-worker-40001]
 message = "parse dm-worker config flag set"
 description = ""
@@ -2729,7 +2741,7 @@ workaround = ""
 tags = ["internal", "high"]
 
 [error.DM-dm-worker-40051]
-message = "current stage is %s but not paused, invalid"
+message = "current task or validator stage is %s but not paused, invalid"
 description = ""
 workaround = ""
 tags = ["internal", "high"]
@@ -3233,7 +3245,7 @@ workaround = "Please try again later"
 tags = ["internal", "low"]
 
 [error.DM-scheduler-46025]
-message = "source can only update when not enable relay and no running tasks for now"
+message = "source %s can only be updated when relay is disabled and no tasks are running for now"
 description = ""
 workaround = ""
 tags = ["internal", "low"]

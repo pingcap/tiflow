@@ -509,8 +509,8 @@ func (s *eventFeedSession) eventFeed(ctx context.Context, ts uint64) error {
 	eventFeedGauge.Inc()
 	defer eventFeedGauge.Dec()
 
-	log.Debug("event feed started",
-		zap.Stringer("span", s.totalSpan), zap.Uint64("ts", ts),
+	log.Info("event feed started",
+		zap.Stringer("span", s.totalSpan), zap.Uint64("startTs", ts),
 		zap.String("changefeed", s.client.changefeed))
 
 	g, ctx := errgroup.WithContext(ctx)
@@ -546,7 +546,6 @@ func (s *eventFeedSession) eventFeed(ctx context.Context, ts uint64) error {
 	})
 
 	tableID, tableName := util.TableIDFromCtx(ctx)
-	cfID := util.ChangefeedIDFromCtx(ctx)
 	g.Go(func() error {
 		timer := time.NewTimer(defaultCheckRegionRateLimitInterval)
 		defer timer.Stop()
@@ -573,8 +572,8 @@ func (s *eventFeedSession) eventFeed(ctx context.Context, ts uint64) error {
 							zap.String("changefeed", s.client.changefeed),
 							zap.Uint64("regionID", errInfo.singleRegionInfo.verID.GetID()),
 							zap.Uint64("ts", errInfo.singleRegionInfo.ts),
-							zap.String("changefeed", cfID), zap.Stringer("span", errInfo.span),
 							zap.Int64("tableID", tableID), zap.String("tableName", tableName),
+							zap.Any("errInfo", errInfo),
 							zapFieldAddr)
 					}
 					// rate limit triggers, add the error info to the rate limit queue.
@@ -627,7 +626,8 @@ func (s *eventFeedSession) scheduleRegionRequest(ctx context.Context, sri single
 				zap.String("changefeed", s.client.changefeed),
 				zap.Uint64("regionID", sri.verID.GetID()),
 				zap.Stringer("span", sri.span),
-				zap.Reflect("retrySpans", res.RetryRanges))
+				zap.Reflect("retrySpans", res.RetryRanges),
+				zap.Any("sri", sri))
 			for _, r := range res.RetryRanges {
 				// This call is always blocking, otherwise if scheduling in a new
 				// goroutine, it won't block the caller of `schedulerRegionRequest`.
@@ -673,9 +673,10 @@ func (s *eventFeedSession) scheduleRegionRequest(ctx context.Context, sri single
 // CAUTION: Note that this should only be called in a context that the region has locked it's range.
 func (s *eventFeedSession) onRegionFail(ctx context.Context, errorInfo regionErrorInfo, revokeToken bool) {
 	log.Debug("region failed",
+		zap.String("changefeed", s.client.changefeed),
 		zap.Uint64("regionID", errorInfo.verID.GetID()),
 		zap.Error(errorInfo.err),
-		zap.String("changefeed", s.client.changefeed))
+		zap.Any("errorInfo", errorInfo))
 	s.rangeLock.UnlockRange(errorInfo.span.Start, errorInfo.span.End, errorInfo.verID.GetID(), errorInfo.verID.GetVer(), errorInfo.ts)
 	if revokeToken {
 		s.regionRouter.Release(errorInfo.rpcCtx.Addr)
@@ -901,7 +902,8 @@ func (s *eventFeedSession) dispatchRequest(
 			log.Info("cannot get rpcCtx, retry span",
 				zap.String("changefeed", s.client.changefeed),
 				zap.Uint64("regionID", sri.verID.GetID()),
-				zap.Stringer("span", sri.span))
+				zap.Stringer("span", sri.span),
+				zap.Any("sri", sri))
 			errInfo := newRegionErrorInfo(sri, &rpcCtxUnavailableErr{verID: sri.verID})
 			s.onRegionFail(ctx, errInfo, false /* revokeToken */)
 			continue
@@ -980,9 +982,10 @@ func (s *eventFeedSession) divideAndSendEventFeedToRegions(
 			sri := newSingleRegionInfo(tiRegion.VerID(), partialSpan, ts, nil)
 			s.scheduleRegionRequest(ctx, sri)
 			log.Debug("partialSpan scheduled",
+				zap.String("changefeed", s.client.changefeed),
 				zap.Stringer("span", partialSpan),
 				zap.Uint64("regionID", region.Id),
-				zap.String("changefeed", s.client.changefeed))
+				zap.Any("sri", sri))
 
 			// return if no more regions
 			if regionspan.EndCompare(nextSpan.Start, span.End) >= 0 {

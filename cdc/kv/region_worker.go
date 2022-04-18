@@ -245,7 +245,8 @@ func (w *regionWorker) handleSingleRegionError(err error, state *regionFeedState
 		zap.Uint64("requestID", state.requestID),
 		zap.Stringer("span", state.sri.span),
 		zap.Uint64("checkpoint", state.sri.ts),
-		zap.String("error", err.Error()))
+		zap.String("error", err.Error()),
+		zap.Any("sri", state.sri))
 	// if state is already marked stopped, it must have been or would be processed by `onRegionFail`
 	if state.isStopped() {
 		return w.checkShouldExit()
@@ -282,7 +283,7 @@ func (w *regionWorker) handleSingleRegionError(err error, state *regionFeedState
 }
 
 func (w *regionWorker) resolveLock(ctx context.Context) error {
-	// tikv resolved update interval is 1s, use half of the resolck lock interval
+	// tikv resolved update interval is 1s, use half of the resolve lock interval
 	// as lock penalty.
 	resolveLockPenalty := 10
 	resolveLockInterval := 20 * time.Second
@@ -600,25 +601,36 @@ func (w *regionWorker) run(parentCtx context.Context) error {
 		}
 	}()
 	w.parentCtx = parentCtx
-	wg, ctx := errgroup.WithContext(parentCtx)
+	ctx, cancel := context.WithCancel(parentCtx)
+	wg, ctx := errgroup.WithContext(ctx)
 	w.initMetrics(ctx)
 	w.initPoolHandles(w.concurrent)
+
+	var retErr error
+	once := sync.Once{}
+	handleError := func(err error) error {
+		if err != nil {
+			once.Do(func() {
+				cancel()
+				retErr = err
+			})
+		}
+		return err
+	}
 	wg.Go(func() error {
-		return w.checkErrorReconnect(w.resolveLock(ctx))
+		return handleError(w.checkErrorReconnect(w.resolveLock(ctx)))
 	})
 	wg.Go(func() error {
-		return w.eventHandler(ctx)
+		return handleError(w.eventHandler(ctx))
 	})
-	wg.Go(func() error {
-		return w.collectWorkpoolError(ctx)
-	})
-	err := wg.Wait()
+	_ = handleError(w.collectWorkpoolError(ctx))
+	_ = wg.Wait()
 	// ErrRegionWorkerExit means the region worker exits normally, but we don't
 	// need to terminate the other goroutines in errgroup
-	if cerror.ErrRegionWorkerExit.Equal(err) {
+	if cerror.ErrRegionWorkerExit.Equal(retErr) {
 		return nil
 	}
-	return err
+	return retErr
 }
 
 func (w *regionWorker) handleEventEntry(
@@ -737,7 +749,7 @@ func (w *regionWorker) handleResolvedTs(
 		return nil
 	}
 	regionID := state.sri.verID.GetID()
-	// Send resolved ts update in non blocking way, since we can re-query real
+	// Send resolved ts update in non-blocking way, since we can re-query real
 	// resolved ts from region state even if resolved ts update is discarded.
 	// NOTICE: We send any regionTsInfo to resolveLock thread to give us a chance to trigger resolveLock logic
 	// (1) if it is a fallback resolvedTs event, it will be discarded and accumulate penalty on the progress;

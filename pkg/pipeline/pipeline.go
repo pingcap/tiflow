@@ -21,6 +21,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	pmessage "github.com/pingcap/tiflow/pkg/pipeline/message"
 	"go.uber.org/zap"
 )
 
@@ -59,7 +60,7 @@ func NewPipeline(
 		for {
 			select {
 			case <-tickCh:
-				err := p.SendToFirstNode(TickMessage()) //nolint:errcheck
+				err := p.SendToFirstNode(pmessage.TickMessage()) //nolint:errcheck
 				if err != nil {
 					// Errors here are innocent. It's okay for tick messages to get lost.
 					log.Debug("Error encountered when calling SendToFirstNode", zap.Error(err))
@@ -105,7 +106,7 @@ func (p *Pipeline) driveRunner(ctx context.Context, previousRunner, runner runne
 var pipelineTryAgainError error = cerror.ErrPipelineTryAgain.FastGenByArgs()
 
 // SendToFirstNode sends the message to the first node
-func (p *Pipeline) SendToFirstNode(msg Message) error {
+func (p *Pipeline) SendToFirstNode(msg pmessage.Message) error {
 	p.closeMu.Lock()
 	defer p.closeMu.Unlock()
 	if p.isClosed {
