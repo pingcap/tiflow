@@ -243,16 +243,6 @@ var mockRestarted = false
 
 // GetEvent returns binlog event, should only have one thread call this function.
 func (c *StreamerController) GetEvent(tctx *tcontext.Context) (event *replication.BinlogEvent, err error) {
-	//ctx, cancel := context.WithTimeout(tctx.Context(), common.SlaveReadTimeout)
-	ctx := tctx.Context()
-	failpoint.Inject("SyncerEventTimeout", func(val failpoint.Value) {
-		if seconds, ok := val.(int); ok {
-			//cancel()
-			//ctx, cancel = context.WithTimeout(tctx.Context(), time.Duration(seconds)*time.Second)
-			tctx.L().Info("set fetch binlog event timeout", zap.String("failpoint", "SyncerEventTimeout"), zap.Int("value", seconds))
-		}
-	})
-
 	failpoint.Inject("SyncerGetEventError", func(_ failpoint.Value) {
 		if !mockRestarted {
 			mockRestarted = true
@@ -266,8 +256,7 @@ func (c *StreamerController) GetEvent(tctx *tcontext.Context) (event *replicatio
 	streamer := c.streamer
 	c.RUnlock()
 
-	event, err = streamer.GetEvent(ctx)
-	//cancel()
+	event, err = streamer.GetEvent(tctx.Context())
 	failpoint.Inject("GetEventError", func() {
 		err = errors.New("go-mysql returned an error")
 	})
