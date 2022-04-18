@@ -272,7 +272,8 @@ func (l *Lock) TrySync(info Info, tts []TargetTable) (newDDLs []string, cols []s
 		case ConflictSkipWaitRedirect:
 			return newDDLs, cols, terror.ErrShardDDLOptimismNeedSkipAndRedirect.Generate(l.ID, ddls[idx])
 		case ConflictResolved:
-			log.L().Info("all conflict DDL resolved", zap.String("DDL", ddls[idx]))
+			log.L().Info("all conflict DDL resolved", zap.String("DDL", ddls[idx]), zap.String("callerSource", callerSource),
+				zap.String("callerSchema", callerSchema), zap.String("callerTable", callerTable))
 		}
 
 		if schemaChanged {

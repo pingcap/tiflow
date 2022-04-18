@@ -1883,17 +1883,17 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			//   │                       │  │      │  │     │
 			//   │       ...             │  │      │  │     │
 			//   │                       │  │      │  │     │
-			//   │ tb2 conflict DDL1     │  │      │  │     │
-			//   │                       │  │      │  │     │
-			//   │       ...             │  │      │  │     │
-			//   │                       │  │      │  │     │
-			//   │ tb2 conflict DDL2     │  │      ▼  │     │
-			//   │                       │  │               │
-			//   │       ...             │  │    redirect   │
-			//   │                       │  │               │
-			//   │  other dml events     ▼  │               ▼
+			//   │ tb2 conflict DDL1     ▼  │      │  │     │
+			//   │                                 │  │     │
+			//   │       ...           redirect    │  │     │
+			//   │                                 │  │     │
+			//   │ tb2 conflict DDL2               ▼  │     │
+			//   │                                          │
+			//   │       ...                     redirect   │
+			//   │                                          │
+			//   │  other dml events                        ▼
 			//   │
-			//   │                     redirect          continue
+			//   │                                       continue
 			//   ▼                                      replicating
 			//
 			// newer
