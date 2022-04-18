@@ -195,10 +195,12 @@ func (k *kafkaSaramaProducer) stop() {
 	close(k.closeCh)
 }
 
+// AsyncClose close the produce in an asynchronous way.
 func (k *kafkaSaramaProducer) AsyncClose() chan error {
-	ret := make(chan error)
+	ret := make(chan error, 1)
 	go func() {
 		ret <- k.Close()
+		close(ret)
 	}()
 	return ret
 }
