@@ -41,9 +41,30 @@ function run() {
 	sed -i "/relay-binlog-name/i\relay-dir: $WORK_DIR/worker1/relay_log" $WORK_DIR/source1.yaml
 	dmctl_operate_source create $WORK_DIR/source1.yaml $SOURCE_ID1
 
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"start-relay -s $SOURCE_ID1 worker1" \
+		"\"result\": true" 1
+
 	dmctl_start_task_standalone
 	wait_until_sync $WORK_DIR "127.0.0.1:$MASTER_PORT"
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
+
+	# check https://github.com/pingcap/tiflow/issues/5063
+	check_time=20
+	sleep 5
+	while [ $check_time -gt 0 ]; do
+		syncer_recv_event_num=$(grep '"receive binlog event"' $WORK_DIR/worker1/log/dm-worker.log | wc -l)
+		if [ $syncer_recv_event_num -eq 3 ]; then
+			break
+		fi
+		echo "syncer_recv_event_num: $syncer_recv_event_num, will retry later"
+		sleep 1
+		((check_time--))
+	done
+
+	if [ $syncer_recv_event_num -ne 3 ]; then
+		exit 1
+	fi
 
 	echo "start incremental_data"
 	incremental_data
