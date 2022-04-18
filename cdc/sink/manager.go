@@ -83,9 +83,6 @@ func (m *Manager) Close(ctx context.Context) error {
 	defer m.tableSinksMu.Unlock()
 	tableSinkTotalRowsCountCounter.DeleteLabelValues(m.changefeedID)
 	if m.bufSink != nil {
-		// We don't need to wait sink Close, pass a canceled context is ok
-		ctx, cancel := context.WithCancel(context.Background())
-		cancel()
 		if err := m.bufSink.Close(ctx); err != nil && errors.Cause(err) != context.Canceled {
 			log.Warn("close bufSink failed",
 				zap.String("changefeed", m.changefeedID),
