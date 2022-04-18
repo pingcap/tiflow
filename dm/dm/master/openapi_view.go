@@ -91,11 +91,11 @@ func (s *Server) GetDocJSON(c *gin.Context) {
 		return
 	} else if info.Topology.MasterTopologyList != nil && len(*info.Topology.MasterTopologyList) > 0 {
 		masterTopos := *info.Topology.MasterTopologyList
-		schema := "http"
+		protocol := "http"
 		if useTLS.Load() {
 			protocol = "https"
 		}
-		masterURL = fmt.Sprintf("%s://%s:%d", schema, masterTopos[0].Host, masterTopos[0].Port)
+		masterURL = fmt.Sprintf("%s://%s:%d", protocol, masterTopos[0].Host, masterTopos[0].Port)
 	}
 	swagger, err := openapi.GetSwagger()
 	if err != nil {
