@@ -240,7 +240,7 @@ Finished dump at: 2020-09-30 12:16:49
 	for _, tc := range testCases {
 		err2 := os.WriteFile(f.Name(), []byte(tc.source), 0o644)
 		c.Assert(err2, IsNil)
-		loc, loc2, err2 := ParseMetaData(ctx, fdir, fname, "mysql")
+		loc, loc2, err2 := ParseMetaData(ctx, fdir, fname, "mysql", nil)
 		c.Assert(err2, IsNil)
 		c.Assert(loc.Position, DeepEquals, tc.pos)
 		gs, _ := gtid.ParserGTID("mysql", tc.gsetStr)
@@ -259,7 +259,7 @@ Finished dump at: 2020-12-02 17:13:56
 `
 	err = os.WriteFile(f.Name(), []byte(noBinlogLoc), 0o644)
 	c.Assert(err, IsNil)
-	_, _, err = ParseMetaData(ctx, fdir, fname, "mysql")
+	_, _, err = ParseMetaData(ctx, fdir, fname, "mysql", nil)
 	c.Assert(terror.ErrMetadataNoBinlogLoc.Equal(err), IsTrue)
 }
 
