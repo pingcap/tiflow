@@ -525,6 +525,8 @@ func (s *mysqlSink) Init(tableID model.TableID) error {
 			zap.Int64("tableID", tableID),
 			zap.Uint64("checkpointTs", checkpointTs.(uint64)))
 	}
+	// try to remove table txn cache
+	s.txnCache.RemoveTableTxn(tableID)
 	return nil
 }
 
