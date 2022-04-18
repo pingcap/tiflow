@@ -241,13 +241,9 @@ func (w *DMLWorker) executeBatchJobs(queueID int, jobs []*job) {
 		time.Sleep(time.Duration(t) * time.Second)
 	})
 	// use background context to execute sqls as much as possible
-<<<<<<< HEAD
-	ctx, cancel := w.tctx.WithTimeout(maxDMLExecutionDuration)
-=======
 	// set timeout to maxDMLConnectionDuration to make sure dmls can be replicated to downstream event if the latency is high
 	// if users need to quit this asap, we can support pause-task/stop-task --force in the future
-	ctx, cancel := w.syncCtx.WithTimeout(maxDMLConnectionDuration)
->>>>>>> cf8f76bee (syncer/: set dml worker timeout to 5 minutes (#4896))
+	ctx, cancel := w.tctx.WithTimeout(maxDMLConnectionDuration)
 	defer cancel()
 	affect, err = db.ExecuteSQL(ctx, queries, args...)
 	failpoint.Inject("SafeModeExit", func(val failpoint.Value) {
