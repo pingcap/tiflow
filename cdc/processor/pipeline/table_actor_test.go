@@ -71,7 +71,7 @@ func TestTableActorInterface(t *testing.T) {
 		sinkNode:    sink,
 		sortNode:    sorter,
 		tableName:   "t1",
-		replicConfig: &serverConfig.ReplicaConfig{
+		replicaConfig: &serverConfig.ReplicaConfig{
 			Consistent: &serverConfig.ConsistentConfig{
 				Level: "node",
 			},
@@ -90,7 +90,7 @@ func TestTableActorInterface(t *testing.T) {
 	require.Equal(t, model.Ts(3), tbl.CheckpointTs())
 
 	require.Equal(t, model.Ts(5), tbl.ResolvedTs())
-	tbl.replicConfig.Consistent.Level = string(redo.ConsistentLevelEventual)
+	tbl.replicaConfig.Consistent.Level = string(redo.ConsistentLevelEventual)
 	atomic.StoreUint64(&sink.resolvedTs, 6)
 	require.Equal(t, model.Ts(6), tbl.ResolvedTs())
 }
