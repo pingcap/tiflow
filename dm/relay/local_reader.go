@@ -451,9 +451,10 @@ type binlogFileParseState struct {
 	f *os.File
 
 	// states may change
-	replaceWithHeartbeat bool
-	formatDescEventRead  bool
-	latestPos            int64
+	skipGTID            bool
+	lastSkipGTIDHeader  *replication.EventHeader
+	formatDescEventRead bool
+	latestPos           int64
 }
 
 // parseFileAsPossible parses single relay log file as far as possible.
@@ -468,13 +469,13 @@ func (r *BinlogReader) parseFileAsPossible(ctx context.Context, s *LocalStreamer
 	defer f.Close()
 
 	state := &binlogFileParseState{
-		possibleLast:         possibleLast,
-		fullPath:             fullPath,
-		relayLogFile:         relayLogFile,
-		relayLogDir:          relayLogDir,
-		f:                    f,
-		latestPos:            offset,
-		replaceWithHeartbeat: false,
+		possibleLast: possibleLast,
+		fullPath:     fullPath,
+		relayLogFile: relayLogFile,
+		relayLogDir:  relayLogDir,
+		f:            f,
+		latestPos:    offset,
+		skipGTID:     false,
 	}
 
 	for {
@@ -517,6 +518,8 @@ func (r *BinlogReader) parseFile(
 		}
 		r.latestServerID = e.Header.ServerID // record server_id
 
+		lastSkipGTID := state.skipGTID
+
 		switch ev := e.Event.(type) {
 		case *replication.FormatDescriptionEvent:
 			state.formatDescEventRead = true
@@ -554,7 +557,7 @@ func (r *BinlogReader) parseFile(
 			if err2 != nil {
 				return errors.Trace(err2)
 			}
-			state.replaceWithHeartbeat, err = r.advanceCurrentGtidSet(gtidStr)
+			state.skipGTID, err = r.advanceCurrentGtidSet(gtidStr)
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -568,7 +571,7 @@ func (r *BinlogReader) parseFile(
 			if err2 != nil {
 				return errors.Trace(err2)
 			}
-			state.replaceWithHeartbeat, err = r.advanceCurrentGtidSet(gtidStr)
+			state.skipGTID, err = r.advanceCurrentGtidSet(gtidStr)
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -585,18 +588,24 @@ func (r *BinlogReader) parseFile(
 		}
 
 		// align with MySQL
-		// if an event's gtid has been contained by given gset
-		// replace it with HEARTBEAT event
-		// for Mariadb, it will bee replaced with MARIADB_GTID_LIST_EVENT
-		// In DM, we replace both of them with HEARTBEAT event
-		if state.replaceWithHeartbeat {
+		// ref https://github.com/pingcap/tiflow/issues/5063#issuecomment-1082678211
+		// heartbeat period is implemented in LocalStreamer.GetEvent
+		if state.skipGTID {
 			switch e.Event.(type) {
 			// Only replace transaction event
 			// Other events such as FormatDescriptionEvent, RotateEvent, etc. should be the same as before
-			case *replication.RowsEvent, *replication.QueryEvent, *replication.GTIDEvent, *replication.XIDEvent, *replication.TableMapEvent:
+			case *replication.RowsEvent, *replication.QueryEvent, *replication.GTIDEvent,
+				*replication.MariadbGTIDEvent, *replication.XIDEvent, *replication.TableMapEvent:
 				// replace with heartbeat event
-				e = event.GenHeartbeatEvent(e.Header)
+				state.lastSkipGTIDHeader = e.Header
 			default:
+			}
+			return nil
+		} else if lastSkipGTID && state.lastSkipGTIDHeader != nil {
+			// skipGTID is turned off after this event
+			select {
+			case s.ch <- event.GenHeartbeatEvent(state.lastSkipGTIDHeader):
+			case <-ctx.Done():
 			}
 		}
 

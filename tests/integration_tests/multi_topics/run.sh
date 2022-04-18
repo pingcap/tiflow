@@ -30,7 +30,7 @@ function run() {
 
 	run_sql_file $CUR/data/data.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	# NOTICE: we need to wait for the kafka topic to be created.
-	sleep 1m
+	sleep 2m
 
 	for i in $(seq 1 3); do
 		run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/test_test${i}?protocol=canal-json&version=${KAFKA_VERSION}&enable-tidb-extension=true" "" ${i}

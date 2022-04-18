@@ -56,6 +56,26 @@ func (mr *MockWorkerClientMockRecorder) CheckSubtasksCanUpdate(arg0, arg1 interf
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckSubtasksCanUpdate", reflect.TypeOf((*MockWorkerClient)(nil).CheckSubtasksCanUpdate), varargs...)
 }
 
+// GetValidatorError mocks base method.
+func (m *MockWorkerClient) GetValidatorError(arg0 context.Context, arg1 *pb.GetValidationErrorRequest, arg2 ...grpc.CallOption) (*pb.GetValidationErrorResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{arg0, arg1}
+	for _, a := range arg2 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "GetValidatorError", varargs...)
+	ret0, _ := ret[0].(*pb.GetValidationErrorResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetValidatorError indicates an expected call of GetValidatorError.
+func (mr *MockWorkerClientMockRecorder) GetValidatorError(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{arg0, arg1}, arg2...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetValidatorError", reflect.TypeOf((*MockWorkerClient)(nil).GetValidatorError), varargs...)
+}
+
 // GetWorkerCfg mocks base method.
 func (m *MockWorkerClient) GetWorkerCfg(arg0 context.Context, arg1 *pb.GetWorkerCfgRequest, arg2 ...grpc.CallOption) (*pb.GetWorkerCfgResponse, error) {
 	m.ctrl.T.Helper()
@@ -76,24 +96,24 @@ func (mr *MockWorkerClientMockRecorder) GetWorkerCfg(arg0, arg1 interface{}, arg
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkerCfg", reflect.TypeOf((*MockWorkerClient)(nil).GetWorkerCfg), varargs...)
 }
 
-// GetWorkerValidateStatus mocks base method.
-func (m *MockWorkerClient) GetWorkerValidateStatus(arg0 context.Context, arg1 *pb.GetValidationStatusRequest, arg2 ...grpc.CallOption) (*pb.GetValidationStatusResponse, error) {
+// GetWorkerValidatorStatus mocks base method.
+func (m *MockWorkerClient) GetWorkerValidatorStatus(arg0 context.Context, arg1 *pb.GetValidationStatusRequest, arg2 ...grpc.CallOption) (*pb.GetValidationStatusResponse, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{arg0, arg1}
 	for _, a := range arg2 {
 		varargs = append(varargs, a)
 	}
-	ret := m.ctrl.Call(m, "GetWorkerValidateStatus", varargs...)
+	ret := m.ctrl.Call(m, "GetWorkerValidatorStatus", varargs...)
 	ret0, _ := ret[0].(*pb.GetValidationStatusResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// GetWorkerValidateStatus indicates an expected call of GetWorkerValidateStatus.
-func (mr *MockWorkerClientMockRecorder) GetWorkerValidateStatus(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
+// GetWorkerValidatorStatus indicates an expected call of GetWorkerValidatorStatus.
+func (mr *MockWorkerClientMockRecorder) GetWorkerValidatorStatus(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{arg0, arg1}, arg2...)
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkerValidateStatus", reflect.TypeOf((*MockWorkerClient)(nil).GetWorkerValidateStatus), varargs...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkerValidatorStatus", reflect.TypeOf((*MockWorkerClient)(nil).GetWorkerValidatorStatus), varargs...)
 }
 
 // HandleError mocks base method.
@@ -154,6 +174,26 @@ func (mr *MockWorkerClientMockRecorder) OperateV1Meta(arg0, arg1 interface{}, ar
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{arg0, arg1}, arg2...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OperateV1Meta", reflect.TypeOf((*MockWorkerClient)(nil).OperateV1Meta), varargs...)
+}
+
+// OperateValidatorError mocks base method.
+func (m *MockWorkerClient) OperateValidatorError(arg0 context.Context, arg1 *pb.OperateValidationErrorRequest, arg2 ...grpc.CallOption) (*pb.OperateValidationErrorResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{arg0, arg1}
+	for _, a := range arg2 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "OperateValidatorError", varargs...)
+	ret0, _ := ret[0].(*pb.OperateValidationErrorResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// OperateValidatorError indicates an expected call of OperateValidatorError.
+func (mr *MockWorkerClientMockRecorder) OperateValidatorError(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{arg0, arg1}, arg2...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OperateValidatorError", reflect.TypeOf((*MockWorkerClient)(nil).OperateValidatorError), varargs...)
 }
 
 // PurgeRelay mocks base method.
@@ -234,6 +274,21 @@ func (mr *MockWorkerServerMockRecorder) CheckSubtasksCanUpdate(arg0, arg1 interf
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckSubtasksCanUpdate", reflect.TypeOf((*MockWorkerServer)(nil).CheckSubtasksCanUpdate), arg0, arg1)
 }
 
+// GetValidatorError mocks base method.
+func (m *MockWorkerServer) GetValidatorError(arg0 context.Context, arg1 *pb.GetValidationErrorRequest) (*pb.GetValidationErrorResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetValidatorError", arg0, arg1)
+	ret0, _ := ret[0].(*pb.GetValidationErrorResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetValidatorError indicates an expected call of GetValidatorError.
+func (mr *MockWorkerServerMockRecorder) GetValidatorError(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetValidatorError", reflect.TypeOf((*MockWorkerServer)(nil).GetValidatorError), arg0, arg1)
+}
+
 // GetWorkerCfg mocks base method.
 func (m *MockWorkerServer) GetWorkerCfg(arg0 context.Context, arg1 *pb.GetWorkerCfgRequest) (*pb.GetWorkerCfgResponse, error) {
 	m.ctrl.T.Helper()
@@ -249,19 +304,19 @@ func (mr *MockWorkerServerMockRecorder) GetWorkerCfg(arg0, arg1 interface{}) *go
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkerCfg", reflect.TypeOf((*MockWorkerServer)(nil).GetWorkerCfg), arg0, arg1)
 }
 
-// GetWorkerValidateStatus mocks base method.
-func (m *MockWorkerServer) GetWorkerValidateStatus(arg0 context.Context, arg1 *pb.GetValidationStatusRequest) (*pb.GetValidationStatusResponse, error) {
+// GetWorkerValidatorStatus mocks base method.
+func (m *MockWorkerServer) GetWorkerValidatorStatus(arg0 context.Context, arg1 *pb.GetValidationStatusRequest) (*pb.GetValidationStatusResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetWorkerValidateStatus", arg0, arg1)
+	ret := m.ctrl.Call(m, "GetWorkerValidatorStatus", arg0, arg1)
 	ret0, _ := ret[0].(*pb.GetValidationStatusResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// GetWorkerValidateStatus indicates an expected call of GetWorkerValidateStatus.
-func (mr *MockWorkerServerMockRecorder) GetWorkerValidateStatus(arg0, arg1 interface{}) *gomock.Call {
+// GetWorkerValidatorStatus indicates an expected call of GetWorkerValidatorStatus.
+func (mr *MockWorkerServerMockRecorder) GetWorkerValidatorStatus(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkerValidateStatus", reflect.TypeOf((*MockWorkerServer)(nil).GetWorkerValidateStatus), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkerValidatorStatus", reflect.TypeOf((*MockWorkerServer)(nil).GetWorkerValidatorStatus), arg0, arg1)
 }
 
 // HandleError mocks base method.
@@ -307,6 +362,21 @@ func (m *MockWorkerServer) OperateV1Meta(arg0 context.Context, arg1 *pb.OperateV
 func (mr *MockWorkerServerMockRecorder) OperateV1Meta(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OperateV1Meta", reflect.TypeOf((*MockWorkerServer)(nil).OperateV1Meta), arg0, arg1)
+}
+
+// OperateValidatorError mocks base method.
+func (m *MockWorkerServer) OperateValidatorError(arg0 context.Context, arg1 *pb.OperateValidationErrorRequest) (*pb.OperateValidationErrorResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "OperateValidatorError", arg0, arg1)
+	ret0, _ := ret[0].(*pb.OperateValidationErrorResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// OperateValidatorError indicates an expected call of OperateValidatorError.
+func (mr *MockWorkerServerMockRecorder) OperateValidatorError(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OperateValidatorError", reflect.TypeOf((*MockWorkerServer)(nil).OperateValidatorError), arg0, arg1)
 }
 
 // PurgeRelay mocks base method.
