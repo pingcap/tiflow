@@ -129,19 +129,18 @@ func NewTableActor(cdcCtx cdcContext.Context,
 		targetTs:      targetTs,
 		started:       false,
 
+		changefeedID:   changefeedVars.ID,
 		changefeedVars: changefeedVars,
 		globalVars:     globalVars,
 		router:         globalVars.TableActorSystem.Router(),
 		actorID:        actorID,
-
-		changefeedID: changefeedVars.ID,
 
 		stopCtx: cctx,
 	}
 
 	startTime := time.Now()
 	log.Info("table actor starting",
-		zap.String("changefeed", changefeedVars.ID),
+		zap.String("changefeed", table.changefeedID),
 		zap.String("tableName", tableName),
 		zap.Int64("tableID", tableID))
 	if err := table.start(cctx); err != nil {
@@ -153,14 +152,14 @@ func NewTableActor(cdcCtx cdcContext.Context,
 		return nil, errors.Trace(err)
 	}
 	log.Info("table actor started",
-		zap.String("changefeed", changefeedVars.ID),
+		zap.String("changefeed", table.changefeedID),
 		zap.String("tableName", tableName),
 		zap.Int64("tableID", tableID),
 		zap.Duration("duration", time.Since(startTime)))
 	return table, nil
 }
 
-// Close implements Actor interface.
+// OnClose implements Actor interface.
 // TODO: implements table actor stop here.
 func (t *tableActor) OnClose() {
 }
