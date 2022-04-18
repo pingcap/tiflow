@@ -129,6 +129,7 @@ func NewTableActor(cdcCtx cdcContext.Context,
 		targetTs:      targetTs,
 		started:       false,
 
+		changefeedID:   changefeedVars.ID,
 		changefeedVars: changefeedVars,
 		globalVars:     globalVars,
 		router:         globalVars.TableActorSystem.Router(),
@@ -381,7 +382,7 @@ func (t *tableActor) stop(err error) {
 			log.Warn("close sink failed",
 				zap.String("changefeed", t.changefeedID),
 				zap.String("tableName", t.tableName),
-				zap.Error(err), zap.Error(err))
+				zap.Error(err))
 		}
 	}
 	log.Info("table actor stopped",
