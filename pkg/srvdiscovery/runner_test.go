@@ -70,9 +70,8 @@ func TestDiscoveryRunner(t *testing.T) {
 					break check
 				}
 			case <-time.After(time.Second):
-				require.Fail(t,
-					"not enough peer update received, received: %d, expected: %d",
-					nodesOn, runnerN-i-1)
+				require.Failf(t, "not enough peer update received",
+					"received: %d, expected: %d", nodesOn, runnerN-i-1)
 			}
 		}
 	}
@@ -101,9 +100,8 @@ func TestDiscoveryRunner(t *testing.T) {
 					break check2
 				}
 			case <-time.After(time.Second):
-				require.Fail(t,
-					"not enough peer update received, received: %d, expected: %d",
-					nodesOn, runnerN)
+				require.Failf(t, "not enough peer update received",
+					"received: %d, expected: %d", nodesOn, runnerN)
 			}
 		}
 	}
