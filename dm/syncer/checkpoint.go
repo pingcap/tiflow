@@ -272,12 +272,9 @@ type CheckPoint interface {
 	// corresponding to to Meta.Pos and gtid
 	FlushedGlobalPoint() binlog.Location
 
-	// CheckGlobalPoint checks whether we should save global checkpoint
-	// corresponding to Meta.Check
-	CheckGlobalPoint() bool
-
-	// CheckLastSnapshotCreationTime checks whether we should async flush checkpoint since last time async flush
-	CheckLastSnapshotCreationTime() bool
+	// LastFlushOutdated checks the start time of a flush (when call Snapshot) and finish time of a flush, if both of
+	// the two times are outdated, LastFlushOutdated returns true.
+	LastFlushOutdated() bool
 
 	// GetFlushedTableInfo gets flushed table info
 	// use for lazy create table in schemaTracker
@@ -825,18 +822,18 @@ func (cp *RemoteCheckPoint) String() string {
 	return cp.globalPoint.String()
 }
 
-// CheckGlobalPoint implements CheckPoint.CheckGlobalPoint.
-func (cp *RemoteCheckPoint) CheckGlobalPoint() bool {
+// LastFlushOutdated implements CheckPoint.LastFlushOutdated.
+func (cp *RemoteCheckPoint) LastFlushOutdated() bool {
 	cp.RLock()
 	defer cp.RUnlock()
-	return time.Since(cp.globalPointSaveTime) >= time.Duration(cp.cfg.CheckpointFlushInterval)*time.Second
-}
 
-// CheckLastSnapshotCreationTime implements CheckPoint.CheckLastSnapshotCreationTime.
-func (cp *RemoteCheckPoint) CheckLastSnapshotCreationTime() bool {
-	cp.RLock()
-	defer cp.RUnlock()
-	return time.Since(cp.lastSnapshotCreationTime) >= time.Duration(cp.cfg.CheckpointFlushInterval)*time.Second
+	if time.Since(cp.globalPointSaveTime) < time.Duration(cp.cfg.CheckpointFlushInterval)*time.Second {
+		return false
+	}
+	if time.Since(cp.lastSnapshotCreationTime) < time.Duration(cp.cfg.CheckpointFlushInterval)*time.Second {
+		return false
+	}
+	return true
 }
 
 // Rollback implements CheckPoint.Rollback.
