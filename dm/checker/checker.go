@@ -152,10 +152,16 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 		if len(c.stCfgs) > 0 && len(c.instances) > 0 {
 			switch c.stCfgs[0].Mode {
 			case config.ModeAll:
-				c.checkList = append(c.checkList, checker.NewLoaderConnAmountCheker(c.instances[0].targetDB, c.stCfgs))
+				c.checkList = append(c.checkList, checker.NewLoaderConnAmountChecker(c.instances[0].targetDB, c.stCfgs))
 				c.checkList = append(c.checkList, checker.NewSyncerConnAmountCheker(c.instances[0].targetDB, c.stCfgs))
+				for i, inst := range c.instances {
+					c.checkList = append(c.checkList, checker.NewDumperConnAmountChecker(inst.sourceDB, c.stCfgs[i].MydumperConfig.Threads))
+				}
 			case config.ModeFull:
-				c.checkList = append(c.checkList, checker.NewLoaderConnAmountCheker(c.instances[0].targetDB, c.stCfgs))
+				c.checkList = append(c.checkList, checker.NewLoaderConnAmountChecker(c.instances[0].targetDB, c.stCfgs))
+				for i, inst := range c.instances {
+					c.checkList = append(c.checkList, checker.NewDumperConnAmountChecker(inst.sourceDB, c.stCfgs[i].MydumperConfig.Threads))
+				}
 			case config.ModeIncrement:
 				c.checkList = append(c.checkList, checker.NewSyncerConnAmountCheker(c.instances[0].targetDB, c.stCfgs))
 			}

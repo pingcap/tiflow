@@ -92,7 +92,8 @@ func NewSyncerConnAmountCheker(targetDB *conn.BaseDB, stCfgs []*config.SubTaskCo
 		connAmountChecker: newConnAmountChecker(targetDB, stCfgs, func(stCfgs []*config.SubTaskConfig) int {
 			syncerConn := 0
 			for _, stCfg := range stCfgs {
-				syncerConn += stCfg.SyncerConfig.WorkerCount
+				// syncer's worker and checkpoint (always keeps one db connection)
+				syncerConn += stCfg.SyncerConfig.WorkerCount + 1
 			}
 			return syncerConn
 		}, "syncer"),
@@ -111,12 +112,13 @@ type LoaderConnAmountChecker struct {
 	connAmountChecker
 }
 
-func NewLoaderConnAmountCheker(targetDB *conn.BaseDB, stCfgs []*config.SubTaskConfig) RealChecker {
+func NewLoaderConnAmountChecker(targetDB *conn.BaseDB, stCfgs []*config.SubTaskConfig) RealChecker {
 	return &LoaderConnAmountChecker{
 		connAmountChecker: newConnAmountChecker(targetDB, stCfgs, func(stCfgs []*config.SubTaskConfig) int {
 			loaderConn := 0
 			for _, stCfg := range stCfgs {
-				loaderConn += stCfg.LoaderConfig.PoolSize
+				// loader's worker and checkpoint (always keeps one db connection)
+				loaderConn += stCfg.LoaderConfig.PoolSize + 1
 			}
 			return loaderConn
 		}, "loader"),
@@ -129,4 +131,24 @@ func (l *LoaderConnAmountChecker) Name() string {
 
 func (l *LoaderConnAmountChecker) Check(ctx context.Context) *Result {
 	return l.check(ctx, l.Name())
+}
+
+func NewDumperConnAmountChecker(targetDB *conn.BaseDB, dumperThreads int) RealChecker {
+	return &DumperConnAmountChecker{
+		connAmountChecker: newConnAmountChecker(targetDB, nil, func(_ []*config.SubTaskConfig) int {
+			return dumperThreads
+		}, "dumper"),
+	}
+}
+
+type DumperConnAmountChecker struct {
+	connAmountChecker
+}
+
+func (d *DumperConnAmountChecker) Check(ctx context.Context) *Result {
+	return d.check(ctx, d.Name())
+}
+
+func (d *DumperConnAmountChecker) Name() string {
+	return "dumper_conn_amount_checker"
 }

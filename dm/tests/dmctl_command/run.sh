@@ -99,6 +99,9 @@ function run() {
 		"not free" 1
 	dmctl_operate_source create $WORK_DIR/source2.yaml $SOURCE_ID2
 
+	source $cur/../dmctl_basic/check_list/check_task.sh
+	test_full_mode_conn
+	test_all_mode_conn
 	# check wrong do-tables
 	cp $cur/conf/dm-task.yaml $WORK_DIR/wrong-dm-task.yaml
 	sed -i "/do-dbs:/a\    do-tables:\n    - db-name: \"dmctl_command\"" $WORK_DIR/wrong-dm-task.yaml
@@ -140,6 +143,39 @@ function run() {
 		echo "query status failed with command: $running_task task"
 		exit 1
 	fi
+}
+
+function test_full_mode_conn() {
+	# full mode
+	# dumpers: 10 for each upstream
+	# loaders: 16 * 2 = 32 (+2 checkpoint)
+	run_sql_source1 "set @@GLOBAL.max_connections=8;"
+	run_sql_source2 "set @@GLOBAL.max_connections=8;"
+	check_task_not_pass $cur/conf/dm-task2.yaml # dumper threads too few
+	run_sql_source1 "set @@GLOBAL.max_connections=10;"
+	run_sql_source2 "set @@GLOBAL.max_connections=10;"
+	check_task_pass $cur/conf/dm-task2.yaml
+
+	run_sql "set @@GLOBAL.max_connections=32;" $TIDB_PORT $TIDB_PASSWORD # loader threads too few
+	check_task_not_pass $cur/conf/dm-task2.yaml
+	run_sql "set @@GLOBAL.max_connections=34;" $TIDB_PORT $TIDB_PASSWORD
+	check_task_pass $cur/conf/dm-task2.yaml
+
+	run_sql_source1 "set @@GLOBAL.max_connections=151;"
+	run_sql_source2 "set @@GLOBAL.max_connections=151;"
+}
+
+function test_all_mode_conn() {
+	# all mode
+	# loaders: 10 * 2 = 20 (+2 checkpoint)
+	# syncers: 16 * 2 = 32 (+2 checkpoint)
+	run_sql "set @@GLOBAL.max_connections=22;" $TIDB_PORT $TIDB_PASSWORD
+	check_task_not_pass $cur/conf/dm-task3.yaml # not enough connections for loader
+	run_sql "set @@GLOBAL.max_connections=34;" $TIDB_PORT $TIDB_PASSWORD
+	check_task_pass $cur/conf/dm-task3.yaml # pass
+
+	# set to default
+	run_sql "set @@GLOBAL.max_connections=151;" $TIDB_PORT $TIDB_PASSWORD
 }
 
 cleanup_data dmctl_command
