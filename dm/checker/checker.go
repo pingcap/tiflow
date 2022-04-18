@@ -147,6 +147,20 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 	if egErr := eg.Wait(); egErr != nil {
 		return egErr
 	}
+	// check connections
+	if _, ok := c.checkingItems[config.ConnAmountChecking]; ok {
+		if len(c.stCfgs) > 0 && len(c.instances) > 0 {
+			switch c.stCfgs[0].Mode {
+			case config.ModeAll:
+				c.checkList = append(c.checkList, checker.NewLoaderConnAmountCheker(c.instances[0].targetDB, c.stCfgs))
+				c.checkList = append(c.checkList, checker.NewSyncerConnAmountCheker(c.instances[0].targetDB, c.stCfgs))
+			case config.ModeFull:
+				c.checkList = append(c.checkList, checker.NewLoaderConnAmountCheker(c.instances[0].targetDB, c.stCfgs))
+			case config.ModeIncrement:
+				c.checkList = append(c.checkList, checker.NewSyncerConnAmountCheker(c.instances[0].targetDB, c.stCfgs))
+			}
+		}
+	}
 	// targetTableID => source => [tables]
 	sharding := make(map[string]map[string][]*filter.Table)
 	shardingCounter := make(map[string]int)
@@ -249,20 +263,6 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 				} else {
 					c.checkList = append(c.checkList, checker.NewOptimisticShardingTablesChecker(targetTableID, dbs, shardingSet, dumpThreads))
 				}
-			}
-		}
-	}
-
-	if _, ok := c.checkingItems[config.ConnAmountChecking]; ok {
-		if len(c.stCfgs) > 0 && len(c.instances) > 0 {
-			switch c.stCfgs[0].Mode {
-			case config.ModeAll:
-				c.checkList = append(c.checkList, checker.NewLoaderConnAmountCheker(c.instances[0].targetDB, c.stCfgs))
-				c.checkList = append(c.checkList, checker.NewSyncerConnAmountCheker(c.instances[0].targetDB, c.stCfgs))
-			case config.ModeFull:
-				c.checkList = append(c.checkList, checker.NewLoaderConnAmountCheker(c.instances[0].targetDB, c.stCfgs))
-			case config.ModeIncrement:
-				c.checkList = append(c.checkList, checker.NewSyncerConnAmountCheker(c.instances[0].targetDB, c.stCfgs))
 			}
 		}
 	}

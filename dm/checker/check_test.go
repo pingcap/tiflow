@@ -470,6 +470,107 @@ func (s *testCheckerSuite) TestSameTargetTableDetection(c *tc.C) {
 	c.Assert(len(msg), tc.Equals, 0)
 }
 
+func (s *testCheckerSuite) TestIncrModeConnAmount(c *tc.C) {
+	var (
+		msg string
+		err error
+	)
+	cfgs := []*config.SubTaskConfig{
+		{
+			IgnoreCheckingItems: ignoreExcept(map[string]struct{}{config.ConnAmountChecking: {}}),
+			Mode:                config.ModeIncrement,
+			SyncerConfig: config.SyncerConfig{
+				WorkerCount: 16,
+			},
+		},
+	}
+	mock := initMockDB(c)
+	mock.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'max_connections'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
+		AddRow("max_connections", 15))
+	_, err = CheckSyncConfig(context.Background(), cfgs, common.DefaultErrorCnt, common.DefaultWarnCnt)
+	c.Assert(err, tc.NotNil)
+	c.Assert(err, tc.ErrorMatches, "(.|\n)*is less than the amount syncer(.|\n)*")
+
+	mock = initMockDB(c)
+	mock.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'max_connections'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
+		AddRow("max_connections", 17))
+	msg, err = CheckSyncConfig(context.Background(), cfgs, common.DefaultErrorCnt, common.DefaultWarnCnt)
+	c.Assert(err, tc.IsNil)
+	c.Assert(msg, tc.Equals, CheckTaskSuccess)
+}
+
+func (s *testCheckerSuite) TestFullModeConnAmount(c *tc.C) {
+	var (
+		msg string
+		err error
+	)
+	cfgs := []*config.SubTaskConfig{
+		{
+			IgnoreCheckingItems: ignoreExcept(map[string]struct{}{config.ConnAmountChecking: {}}),
+			Mode:                config.ModeFull,
+			LoaderConfig: config.LoaderConfig{
+				PoolSize: 11,
+			},
+		},
+	}
+	mock := initMockDB(c)
+	mock.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'max_connections'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
+		AddRow("max_connections", 10))
+	_, err = CheckSyncConfig(context.Background(), cfgs, common.DefaultErrorCnt, common.DefaultWarnCnt)
+	c.Assert(err, tc.NotNil)
+	c.Assert(err, tc.ErrorMatches, "(.|\n)*is less than the amount loader(.|\n)*")
+
+	mock = initMockDB(c)
+	mock.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'max_connections'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
+		AddRow("max_connections", 12))
+	msg, err = CheckSyncConfig(context.Background(), cfgs, common.DefaultErrorCnt, common.DefaultWarnCnt)
+	c.Assert(err, tc.IsNil)
+	c.Assert(msg, tc.Equals, CheckTaskSuccess)
+}
+
+func (s *testCheckerSuite) TestAllModeConnAmount(c *tc.C) {
+	var (
+		msg string
+		err error
+	)
+	cfgs := []*config.SubTaskConfig{
+		{
+			IgnoreCheckingItems: ignoreExcept(map[string]struct{}{config.ConnAmountChecking: {}}),
+			Mode:                config.ModeAll,
+			LoaderConfig: config.LoaderConfig{
+				PoolSize: 11,
+			},
+			SyncerConfig: config.SyncerConfig{
+				WorkerCount: 12,
+			},
+		},
+	}
+	mock := initMockDB(c)
+	mock.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'max_connections'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
+		AddRow("max_connections", 10))
+	_, err = CheckSyncConfig(context.Background(), cfgs, common.DefaultErrorCnt, common.DefaultWarnCnt)
+	c.Assert(err, tc.NotNil)
+	c.Assert(err, tc.ErrorMatches, "(.|\n)*is less than the amount loader(.|\n)*")
+
+	mock = initMockDB(c)
+	mock.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'max_connections'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
+		AddRow("max_connections", 11))
+	mock.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'max_connections'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
+		AddRow("max_connections", 11))
+	_, err = CheckSyncConfig(context.Background(), cfgs, common.DefaultErrorCnt, common.DefaultWarnCnt)
+	c.Assert(err, tc.NotNil)
+	c.Assert(err, tc.ErrorMatches, "(.|\n)*is less than the amount syncer(.|\n)*")
+
+	mock = initMockDB(c)
+	mock.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'max_connections'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
+		AddRow("max_connections", 13))
+	mock.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'max_connections'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
+		AddRow("max_connections", 13))
+	msg, err = CheckSyncConfig(context.Background(), cfgs, common.DefaultErrorCnt, common.DefaultWarnCnt)
+	c.Assert(err, tc.IsNil)
+	c.Assert(msg, tc.Equals, CheckTaskSuccess)
+}
+
 func initMockDB(c *tc.C) sqlmock.Sqlmock {
 	mock := conn.InitMockDB(c)
 	mock.ExpectQuery("SHOW DATABASES").WillReturnRows(sqlmock.NewRows([]string{"DATABASE"}).AddRow(schema))

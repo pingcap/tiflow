@@ -52,7 +52,7 @@ func (c *connAmountChecker) check(ctx context.Context, checkerName string) *Resu
 		return result
 	}
 	var rows *sql.Rows
-	rows, err = baseConn.QuerySQL(tcontext.NewContext(ctx, log.L()), "SHOW VARIABLES LIKE '%max_connections%'")
+	rows, err = baseConn.QuerySQL(tcontext.NewContext(ctx, log.L()), "SHOW GLOBAL VARIABLES LIKE 'max_connections'")
 	if err != nil {
 		markCheckError(result, err)
 		return result
