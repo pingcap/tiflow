@@ -373,7 +373,7 @@ func (t *tableActor) stop(err error) {
 	atomic.StoreUint32(&t.stopped, stopped)
 	if t.sortNode != nil {
 		// releaseResource will send a message to sorter router
-		t.sortNode.releaseResource(t.stopCtx, t.changefeedID)
+		t.sortNode.releaseResource(t.changefeedID)
 	}
 	if t.sinkNode != nil {
 		if err := t.sinkNode.releaseResource(t.stopCtx); err != nil {
