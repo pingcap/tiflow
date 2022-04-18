@@ -48,6 +48,11 @@ func newCheckSink(c *check.C) *checkSink {
 	}
 }
 
+// Init table sink resources
+func (c *checkSink) Init(tableID model.TableID) error {
+	return nil
+}
+
 func (c *checkSink) TryEmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) (bool, error) {
 	return true, nil
 }
@@ -107,14 +112,19 @@ func (s *managerSuite) TestManagerRandom(c *check.C) {
 	defer manager.Close(ctx)
 	goroutineNum := 10
 	rowNum := 100
-	var wg sync.WaitGroup
+	var (
+		wg  sync.WaitGroup
+		err error
+	)
 	tableSinks := make([]Sink, goroutineNum)
 	for i := 0; i < goroutineNum; i++ {
 		i := i
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			tableSinks[i] = manager.CreateTableSink(model.TableID(i), 0, redo.NewDisabledManager())
+			tableSinks[i], err = manager.CreateTableSink(model.TableID(i),
+				redo.NewDisabledManager())
+			c.Assert(err, check.IsNil)
 		}()
 	}
 	wg.Wait()
@@ -207,7 +217,8 @@ func (s *managerSuite) TestManagerAddRemoveTable(c *check.C) {
 		for i := 0; i < goroutineNum; i++ {
 			if i%4 != 3 {
 				// add table
-				table := manager.CreateTableSink(model.TableID(i), maxResolvedTs, redoManager)
+				table, err := manager.CreateTableSink(model.TableID(i), redoManager)
+				c.Assert(err, check.IsNil)
 				ctx, cancel := context.WithCancel(ctx)
 				tableCancels = append(tableCancels, cancel)
 				tableSinks = append(tableSinks, table)
@@ -249,8 +260,9 @@ func (s *managerSuite) TestManagerDestroyTableSink(c *check.C) {
 	defer manager.Close(ctx)
 
 	table := &model.TableName{TableID: int64(49)}
-	tableSink := manager.CreateTableSink(table.TableID, 100, redo.NewDisabledManager())
-	err := tableSink.EmitRowChangedEvents(ctx, &model.RowChangedEvent{
+	tableSink, err := manager.CreateTableSink(table.TableID, redo.NewDisabledManager())
+	c.Assert(err, check.IsNil)
+	err = tableSink.EmitRowChangedEvents(ctx, &model.RowChangedEvent{
 		Table:    table,
 		CommitTs: uint64(110),
 	})
@@ -271,14 +283,19 @@ func BenchmarkManagerFlushing(b *testing.B) {
 	// Init table sinks.
 	goroutineNum := 2000
 	rowNum := 2000
-	var wg sync.WaitGroup
+	var (
+		wg  sync.WaitGroup
+		err error
+	)
 	tableSinks := make([]Sink, goroutineNum)
 	for i := 0; i < goroutineNum; i++ {
 		i := i
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			tableSinks[i] = manager.CreateTableSink(model.TableID(i), 0, redo.NewDisabledManager())
+			tableSinks[i], err = manager.CreateTableSink(model.TableID(i),
+				redo.NewDisabledManager())
+			panic(err)
 		}()
 	}
 	wg.Wait()
@@ -344,6 +361,10 @@ type errorSink struct {
 	*check.C
 }
 
+func (e *errorSink) Init(_ model.TableID) error {
+	return nil
+}
+
 func (e *errorSink) TryEmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) (bool, error) {
 	return true, nil
 }
@@ -379,8 +400,9 @@ func (s *managerSuite) TestManagerError(c *check.C) {
 	errCh := make(chan error, 16)
 	manager := NewManager(ctx, &errorSink{C: c}, errCh, 0, "", "")
 	defer manager.Close(ctx)
-	sink := manager.CreateTableSink(1, 0, redo.NewDisabledManager())
-	err := sink.EmitRowChangedEvents(ctx, &model.RowChangedEvent{
+	sink, err := manager.CreateTableSink(1, redo.NewDisabledManager())
+	c.Assert(err, check.IsNil)
+	err = sink.EmitRowChangedEvents(ctx, &model.RowChangedEvent{
 		CommitTs: 1,
 		Table:    &model.TableName{TableID: 1},
 	})

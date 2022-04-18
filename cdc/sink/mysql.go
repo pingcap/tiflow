@@ -510,6 +510,24 @@ func (s *mysqlSink) dispatchAndExecTxns(ctx context.Context, txnsGroup map[model
 	s.notifyAndWaitExec(ctx)
 }
 
+func (s *mysqlSink) Init(tableID model.TableID) error {
+	// We need to clean up the old values of the table here,
+	// otherwise when the table is dispatched back again,
+	// it may read the old values.
+	// See: https://github.com/pingcap/tiflow/issues/4464#issuecomment-1085385382.
+	if resolvedTs, loaded := s.tableMaxResolvedTs.LoadAndDelete(tableID); loaded {
+		log.Info("clean up table max resolved ts",
+			zap.Int64("tableID", tableID),
+			zap.Uint64("resolvedTs", resolvedTs.(uint64)))
+	}
+	if checkpointTs, loaded := s.tableCheckpointTs.LoadAndDelete(tableID); loaded {
+		log.Info("clean up table checkpoint ts",
+			zap.Int64("tableID", tableID),
+			zap.Uint64("checkpointTs", checkpointTs.(uint64)))
+	}
+	return nil
+}
+
 func (s *mysqlSink) Close(ctx context.Context) error {
 	s.execWaitNotifier.Close()
 	s.resolvedNotifier.Close()
@@ -519,22 +537,6 @@ func (s *mysqlSink) Close(ctx context.Context) error {
 }
 
 func (s *mysqlSink) Barrier(ctx context.Context, tableID model.TableID) error {
-	// We need to clean up the old values of the table here,
-	// otherwise when the table is dispatched back again,
-	// it may read the old values.
-	// See: https://github.com/pingcap/tiflow/issues/4464#issuecomment-1085385382.
-	defer func() {
-		if resolvedTs, loaded := s.tableMaxResolvedTs.LoadAndDelete(tableID); loaded {
-			log.Info("clean up table max resolved ts",
-				zap.Int64("tableID", tableID),
-				zap.Uint64("resolvedTs", resolvedTs.(uint64)))
-		}
-		if checkpointTs, loaded := s.tableCheckpointTs.LoadAndDelete(tableID); loaded {
-			log.Info("clean up table checkpoint ts",
-				zap.Int64("tableID", tableID),
-				zap.Uint64("checkpointTs", checkpointTs.(uint64)))
-		}
-	}()
 	warnDuration := 3 * time.Minute
 	ticker := time.NewTicker(warnDuration)
 	defer ticker.Stop()

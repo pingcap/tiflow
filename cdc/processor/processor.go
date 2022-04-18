@@ -979,7 +979,10 @@ func (p *processor) createTablePipelineImpl(ctx cdcContext.Context, tableID mode
 		tableNameStr = tableName.QuoteString()
 	}
 
-	sink := p.sinkManager.CreateTableSink(tableID, replicaInfo.StartTs, p.redoManager)
+	sink, err := p.sinkManager.CreateTableSink(tableID, p.redoManager)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
 	var table tablepipeline.TablePipeline
 	if config.GetGlobalServerConfig().Debug.EnableTableActor {
 		var err error

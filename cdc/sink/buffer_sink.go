@@ -39,13 +39,12 @@ type bufferSink struct {
 	buffer                 map[model.TableID][]*model.RowChangedEvent
 	bufferMu               sync.Mutex
 	flushTsChan            chan flushMsg
-	drawbackChan           chan drawbackMsg
 }
 
 var _ Sink = (*bufferSink)(nil)
 
 func newBufferSink(
-	backendSink Sink, checkpointTs model.Ts, drawbackChan chan drawbackMsg,
+	backendSink Sink, checkpointTs model.Ts,
 ) *bufferSink {
 	sink := &bufferSink{
 		Sink: backendSink,
@@ -53,7 +52,6 @@ func newBufferSink(
 		buffer:                 make(map[model.TableID][]*model.RowChangedEvent),
 		changeFeedCheckpointTs: checkpointTs,
 		flushTsChan:            make(chan flushMsg, maxFlushBatchSize),
-		drawbackChan:           drawbackChan,
 	}
 	return sink
 }
@@ -94,11 +92,6 @@ func (b *bufferSink) runOnce(ctx context.Context, state *runState) (bool, error)
 	select {
 	case <-ctx.Done():
 		return false, ctx.Err()
-	case drawback := <-b.drawbackChan:
-		b.bufferMu.Lock()
-		delete(b.buffer, drawback.tableID)
-		b.bufferMu.Unlock()
-		close(drawback.callback)
 	case event := <-b.flushTsChan:
 		push(event)
 	RecvBatch:
@@ -155,6 +148,14 @@ func (b *bufferSink) runOnce(ctx context.Context, state *runState) (bool, error)
 	}
 
 	return true, nil
+}
+
+// Init table sink resources
+func (b *bufferSink) Init(tableID model.TableID) error {
+	b.bufferMu.Lock()
+	delete(b.buffer, tableID)
+	b.bufferMu.Unlock()
+	return b.Sink.Init(tableID)
 }
 
 func (b *bufferSink) TryEmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) (bool, error) {

@@ -33,6 +33,9 @@ const (
 
 // Sink is an abstraction for anything that a changefeed may emit into.
 type Sink interface {
+	// Init table sink resources
+	Init(tableID model.TableID) error
+
 	// EmitRowChangedEvents sends Row Changed Event to Sink
 	// EmitRowChangedEvents may write rows to downstream directly;
 	//
