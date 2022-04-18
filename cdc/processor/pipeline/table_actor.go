@@ -376,6 +376,7 @@ func (t *tableActor) stop(err error) {
 		// releaseResource will send a message to sorter router
 		t.sortNode.releaseResource(t.changefeedID)
 	}
+	t.cancel()
 	if t.sinkNode != nil {
 		if err := t.sinkNode.releaseResource(t.stopCtx); err != nil {
 			log.Warn("close sink failed",
@@ -384,7 +385,6 @@ func (t *tableActor) stop(err error) {
 				zap.Error(err))
 		}
 	}
-	t.cancel()
 	log.Info("table actor stopped",
 		zap.String("changefeed", t.changefeedID),
 		zap.String("tableName", t.tableName),
