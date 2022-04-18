@@ -45,7 +45,7 @@ func (s *Server) getClusterInfo(ctx context.Context) (*openapi.GetClusterInfoRes
 		return nil, err
 	}
 
-	// already setted by tiup, load to info
+	// already set by tiup, load to info
 	if len(resp.Kvs) == 1 {
 		topo := &openapi.ClusterTopology{}
 		if err := json.Unmarshal(resp.Kvs[0].Value, topo); err != nil {

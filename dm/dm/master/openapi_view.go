@@ -93,7 +93,7 @@ func (s *Server) GetDocJSON(c *gin.Context) {
 		masterTopos := *info.Topology.MasterTopologyList
 		schema := "http"
 		if useTLS.Load() {
-			schema = "https"
+			protocol = "https"
 		}
 		masterURL = fmt.Sprintf("%s://%s:%d", schema, masterTopos[0].Host, masterTopos[0].Port)
 	}
