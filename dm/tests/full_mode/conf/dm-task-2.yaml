@@ -1,0 +1,42 @@
+---
+name: test
+task-mode: full
+is-sharding: false
+meta-schema: "dm_meta"
+
+target-database:
+  host: "127.0.0.1"
+  port: 4000
+  user: "root"
+  password: ""
+
+mysql-instances:
+  - source-id: "mysql-replica-01"
+    black-white-list: "instance" # compatible with deprecated config
+    mydumper-config-name: "global"
+    loader-config-name: "global"
+    syncer-config-name: "global"
+    route-rules: ["route-rule-1"]
+
+block-allow-list: # compatible with deprecated config
+  instance:
+    do-dbs: ["full_mode"]
+
+mydumpers:
+  global:
+    threads: 10
+
+loaders:
+  global:
+    pool-size: 10
+    dir: "./dumped_data"
+
+syncers:
+  global:
+    worker-count: 16
+    batch: 100
+
+routes:
+  route-rule-1:
+    schema-pattern: "full_mode"
+    target-schema: "full_mode_test"

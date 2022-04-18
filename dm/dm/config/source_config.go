@@ -62,8 +62,9 @@ type PurgeConfig struct {
 
 // SourceConfig is the configuration for source.
 type SourceConfig struct {
-	Enable      bool   `yaml:"enable" toml:"enable" json:"enable"`
-	EnableGTID  bool   `yaml:"enable-gtid" toml:"enable-gtid" json:"enable-gtid"`
+	Enable     bool `yaml:"enable" toml:"enable" json:"enable"`
+	EnableGTID bool `yaml:"enable-gtid" toml:"enable-gtid" json:"enable-gtid"`
+	// deprecated
 	AutoFixGTID bool   `yaml:"auto-fix-gtid" toml:"auto-fix-gtid" json:"auto-fix-gtid"`
 	RelayDir    string `yaml:"relay-dir" toml:"relay-dir" json:"relay-dir"`
 	MetaDir     string `yaml:"meta-dir" toml:"meta-dir" json:"meta-dir"`
@@ -204,6 +205,11 @@ func (c *SourceConfig) String() string {
 func (c *SourceConfig) adjust() {
 	c.From.Adjust()
 	c.Checker.Adjust()
+
+	if c.AutoFixGTID {
+		c.AutoFixGTID = false
+		log.L().Warn("auto-fix-gtid is deprecated, overwrite it to false")
+	}
 }
 
 // Verify verifies the config.
@@ -405,7 +411,6 @@ func (c *SourceConfig) YamlForDowngrade() (string, error) {
 type SourceConfigForDowngrade struct {
 	Enable          bool                   `yaml:"enable,omitempty"`
 	EnableGTID      bool                   `yaml:"enable-gtid"`
-	AutoFixGTID     bool                   `yaml:"auto-fix-gtid"`
 	RelayDir        string                 `yaml:"relay-dir"`
 	MetaDir         string                 `yaml:"meta-dir"`
 	Flavor          string                 `yaml:"flavor"`
@@ -430,7 +435,6 @@ func NewSourceConfigForDowngrade(sourceCfg *SourceConfig) *SourceConfigForDowngr
 	return &SourceConfigForDowngrade{
 		Enable:          sourceCfg.Enable,
 		EnableGTID:      sourceCfg.EnableGTID,
-		AutoFixGTID:     sourceCfg.AutoFixGTID,
 		RelayDir:        sourceCfg.RelayDir,
 		MetaDir:         sourceCfg.MetaDir,
 		Flavor:          sourceCfg.Flavor,
