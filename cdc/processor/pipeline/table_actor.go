@@ -140,7 +140,7 @@ func NewTableActor(cdcCtx cdcContext.Context,
 
 	startTime := time.Now()
 	log.Info("table actor starting",
-		zap.String("changefeed", changefeedVars.ID),
+		zap.String("changefeed", table.changefeedID),
 		zap.String("tableName", tableName),
 		zap.Int64("tableID", tableID))
 	if err := table.start(cctx); err != nil {
@@ -152,7 +152,7 @@ func NewTableActor(cdcCtx cdcContext.Context,
 		return nil, errors.Trace(err)
 	}
 	log.Info("table actor started",
-		zap.String("changefeed", changefeedVars.ID),
+		zap.String("changefeed", table.changefeedID),
 		zap.String("tableName", tableName),
 		zap.Int64("tableID", tableID),
 		zap.Duration("duration", time.Since(startTime)))

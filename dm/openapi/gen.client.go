@@ -93,6 +93,11 @@ type ClientInterface interface {
 	// DMAPIGetClusterInfo request
 	DMAPIGetClusterInfo(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// DMAPIUpdateClusterInfo request with any body
+	DMAPIUpdateClusterInfoWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	DMAPIUpdateClusterInfo(ctx context.Context, body DMAPIUpdateClusterInfoJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// DMAPIGetClusterMasterList request
 	DMAPIGetClusterMasterList(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -247,6 +252,30 @@ type ClientInterface interface {
 
 func (c *Client) DMAPIGetClusterInfo(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewDMAPIGetClusterInfoRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) DMAPIUpdateClusterInfoWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDMAPIUpdateClusterInfoRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) DMAPIUpdateClusterInfo(ctx context.Context, body DMAPIUpdateClusterInfoJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDMAPIUpdateClusterInfoRequest(c.Server, body)
 	if err != nil {
 		return nil, err
 	}
@@ -940,6 +969,46 @@ func NewDMAPIGetClusterInfoRequest(server string) (*http.Request, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	return req, nil
+}
+
+// NewDMAPIUpdateClusterInfoRequest calls the generic DMAPIUpdateClusterInfo builder with application/json body
+func NewDMAPIUpdateClusterInfoRequest(server string, body DMAPIUpdateClusterInfoJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewDMAPIUpdateClusterInfoRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewDMAPIUpdateClusterInfoRequestWithBody generates requests for DMAPIUpdateClusterInfo with any type of body
+func NewDMAPIUpdateClusterInfoRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/cluster/info")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("PUT", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	return req, nil
 }
@@ -2780,6 +2849,11 @@ type ClientWithResponsesInterface interface {
 	// DMAPIGetClusterInfo request
 	DMAPIGetClusterInfoWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*DMAPIGetClusterInfoResponse, error)
 
+	// DMAPIUpdateClusterInfo request with any body
+	DMAPIUpdateClusterInfoWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*DMAPIUpdateClusterInfoResponse, error)
+
+	DMAPIUpdateClusterInfoWithResponse(ctx context.Context, body DMAPIUpdateClusterInfoJSONRequestBody, reqEditors ...RequestEditorFn) (*DMAPIUpdateClusterInfoResponse, error)
+
 	// DMAPIGetClusterMasterList request
 	DMAPIGetClusterMasterListWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*DMAPIGetClusterMasterListResponse, error)
 
@@ -2948,6 +3022,28 @@ func (r DMAPIGetClusterInfoResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r DMAPIGetClusterInfoResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type DMAPIUpdateClusterInfoResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *GetClusterInfoResponse
+}
+
+// Status returns HTTPResponse.Status
+func (r DMAPIUpdateClusterInfoResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DMAPIUpdateClusterInfoResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -3884,6 +3980,23 @@ func (c *ClientWithResponses) DMAPIGetClusterInfoWithResponse(ctx context.Contex
 	return ParseDMAPIGetClusterInfoResponse(rsp)
 }
 
+// DMAPIUpdateClusterInfoWithBodyWithResponse request with arbitrary body returning *DMAPIUpdateClusterInfoResponse
+func (c *ClientWithResponses) DMAPIUpdateClusterInfoWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*DMAPIUpdateClusterInfoResponse, error) {
+	rsp, err := c.DMAPIUpdateClusterInfoWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDMAPIUpdateClusterInfoResponse(rsp)
+}
+
+func (c *ClientWithResponses) DMAPIUpdateClusterInfoWithResponse(ctx context.Context, body DMAPIUpdateClusterInfoJSONRequestBody, reqEditors ...RequestEditorFn) (*DMAPIUpdateClusterInfoResponse, error) {
+	rsp, err := c.DMAPIUpdateClusterInfo(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDMAPIUpdateClusterInfoResponse(rsp)
+}
+
 // DMAPIGetClusterMasterListWithResponse request returning *DMAPIGetClusterMasterListResponse
 func (c *ClientWithResponses) DMAPIGetClusterMasterListWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*DMAPIGetClusterMasterListResponse, error) {
 	rsp, err := c.DMAPIGetClusterMasterList(ctx, reqEditors...)
@@ -4374,6 +4487,31 @@ func ParseDMAPIGetClusterInfoResponse(rsp *http.Response) (*DMAPIGetClusterInfoR
 	}
 
 	response := &DMAPIGetClusterInfoResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest GetClusterInfoResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+	}
+
+	return response, nil
+}
+
+// ParseDMAPIUpdateClusterInfoResponse parses an HTTP response from a DMAPIUpdateClusterInfoWithResponse call
+func ParseDMAPIUpdateClusterInfoResponse(rsp *http.Response) (*DMAPIUpdateClusterInfoResponse, error) {
+	bodyBytes, err := ioutil.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DMAPIUpdateClusterInfoResponse{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}
