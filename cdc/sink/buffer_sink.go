@@ -152,10 +152,20 @@ func (b *bufferSink) runOnce(ctx context.Context, state *runState) (bool, error)
 
 // Init table sink resources
 func (b *bufferSink) Init(tableID model.TableID) error {
-	b.bufferMu.Lock()
-	delete(b.buffer, tableID)
-	b.bufferMu.Unlock()
+	b.clearBufferedTableData(tableID)
 	return b.Sink.Init(tableID)
+}
+
+// Barrier delete buffer
+func (b *bufferSink) Barrier(ctx context.Context, tableID model.TableID) error {
+	b.clearBufferedTableData(tableID)
+	return b.Sink.Barrier(ctx, tableID)
+}
+
+func (b *bufferSink) clearBufferedTableData(tableID model.TableID) {
+	b.bufferMu.Lock()
+	defer b.bufferMu.Unlock()
+	delete(b.buffer, tableID)
 }
 
 func (b *bufferSink) TryEmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) (bool, error) {

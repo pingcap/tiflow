@@ -511,7 +511,12 @@ func (s *mysqlSink) dispatchAndExecTxns(ctx context.Context, txnsGroup map[model
 }
 
 func (s *mysqlSink) Init(tableID model.TableID) error {
-	// We need to clean up the old values of the table here,
+	s.cleanTableResource(tableID)
+	return nil
+}
+
+func (s *mysqlSink) cleanTableResource(tableID model.TableID) {
+	// We need to clean up the old values of the table,
 	// otherwise when the table is dispatched back again,
 	// it may read the old values.
 	// See: https://github.com/pingcap/tiflow/issues/4464#issuecomment-1085385382.
@@ -527,7 +532,6 @@ func (s *mysqlSink) Init(tableID model.TableID) error {
 	}
 	// try to remove table txn cache
 	s.txnCache.RemoveTableTxn(tableID)
-	return nil
 }
 
 func (s *mysqlSink) Close(ctx context.Context) error {
@@ -539,6 +543,8 @@ func (s *mysqlSink) Close(ctx context.Context) error {
 }
 
 func (s *mysqlSink) Barrier(ctx context.Context, tableID model.TableID) error {
+	defer s.cleanTableResource(tableID)
+
 	warnDuration := 3 * time.Minute
 	ticker := time.NewTicker(warnDuration)
 	defer ticker.Stop()
