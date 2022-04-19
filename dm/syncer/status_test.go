@@ -18,10 +18,9 @@ import (
 
 	"github.com/go-mysql-org/go-mysql/mysql"
 	. "github.com/pingcap/check"
-	filter "github.com/pingcap/tidb-tools/pkg/filter"
-	"go.uber.org/zap"
-
 	"github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tidb/util/filter"
+	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/dm/pb"

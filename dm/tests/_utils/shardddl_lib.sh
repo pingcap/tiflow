@@ -92,10 +92,10 @@ function restart_task() {
 }
 
 function random_restart() {
-  modN=4
-  if [ $# -ge 1 ]; then
-    modN=$1
-  fi
+	modN=4
+	if [ $# -ge 1 ]; then
+		modN=$1
+	fi
 	mod=$(($RANDOM % $modN))
 	if [[ "$mod" == "0" ]]; then
 		echo "restart master"
