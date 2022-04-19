@@ -1127,6 +1127,24 @@ paths:
             "application/json":
               schema:
                 $ref: "#/components/schemas/GetClusterInfoResponse"
+    put:
+      tags:
+        - cluster
+      summary: "update cluster info."
+      operationId: "DMAPIUpdateClusterInfo"
+      requestBody:
+        description: "request body"
+        content:
+          "application/json":
+            schema:
+              $ref: "#/components/schemas/ClusterTopology"
+      responses:
+        "200":
+          description: "success"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/GetClusterInfoResponse"
   /api/v1/cluster/masters:
     get:
       tags:
@@ -1848,6 +1866,91 @@ components:
         - "bound_stage"
         - "bound_source_name"
 
+    MasterTopology:
+      type: object
+      properties:
+        name:
+          type: string
+          example: master
+        host:
+          type: string
+          example: "127.0.0.1"
+        port:
+          type: integer
+          example: 8261
+      required:
+        - "name"
+        - "host"
+        - "port"
+    WorkerTopology:
+      type: object
+      properties:
+        name:
+          type: string
+          example: worker1
+        host:
+          type: string
+          example: "127.0.0.1"
+        port:
+          type: integer
+          example: 8261
+      required:
+        - "name"
+        - "host"
+        - "port"
+    GrafanaTopology:
+      type: object
+      properties:
+        host:
+          type: string
+          example: "127.0.0.1"
+        port:
+          type: integer
+          example: 3000
+      required:
+        - "host"
+        - "port"
+    PrometheusTopology:
+      type: object
+      properties:
+        host:
+          type: string
+          example: "127.0.0.1"
+        port:
+          type: integer
+          example: 9090
+      required:
+        - "host"
+        - "port"
+    AlertManagerTopology:
+      type: object
+      properties:
+        host:
+          type: string
+          example: "127.0.0.1"
+        port:
+          type: integer
+          example: 9093
+      required:
+        - "host"
+        - "port"
+    ClusterTopology:
+      type: object
+      properties:
+        master_topology_list:
+          type: array
+          items:
+            $ref: "#/components/schemas/MasterTopology"
+        worker_topology_list:
+          type: array
+          items:
+            $ref: "#/components/schemas/WorkerTopology"
+        grafana_topology:
+          $ref: "#/components/schemas/GrafanaTopology"
+        prometheus_topology:
+          $ref: "#/components/schemas/PrometheusTopology"
+        alert_manager_topology:
+          $ref: "#/components/schemas/AlertManagerTopology"
     WorkerNameList:
       description: worker name list
       type: array
@@ -2208,5 +2311,7 @@ components:
           type: integer
           format: uint64
           description: "cluster id"
+        topology:
+          $ref: "#/components/schemas/ClusterTopology"
       required:
         - "cluster_id"
