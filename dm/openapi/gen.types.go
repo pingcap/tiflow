@@ -42,6 +42,12 @@ const (
 	TaskStageStopped TaskStage = "Stopped"
 )
 
+// AlertManagerTopology defines model for AlertManagerTopology.
+type AlertManagerTopology struct {
+	Host string `json:"host"`
+	Port int    `json:"port"`
+}
+
 // ClusterMaster defines model for ClusterMaster.
 type ClusterMaster struct {
 	// address of the current master node
@@ -53,6 +59,15 @@ type ClusterMaster struct {
 	// is this master the leader
 	Leader bool   `json:"leader"`
 	Name   string `json:"name"`
+}
+
+// ClusterTopology defines model for ClusterTopology.
+type ClusterTopology struct {
+	AlertManagerTopology *AlertManagerTopology `json:"alert_manager_topology,omitempty"`
+	GrafanaTopology      *GrafanaTopology      `json:"grafana_topology,omitempty"`
+	MasterTopologyList   *[]MasterTopology     `json:"master_topology_list,omitempty"`
+	PrometheusTopology   *PrometheusTopology   `json:"prometheus_topology,omitempty"`
+	WorkerTopologyList   *[]WorkerTopology     `json:"worker_topology_list,omitempty"`
 }
 
 // ClusterWorker defines model for ClusterWorker.
@@ -141,7 +156,8 @@ type ErrorWithMessage struct {
 // GetClusterInfoResponse defines model for GetClusterInfoResponse.
 type GetClusterInfoResponse struct {
 	// cluster id
-	ClusterId uint64 `json:"cluster_id"`
+	ClusterId uint64           `json:"cluster_id"`
+	Topology  *ClusterTopology `json:"topology,omitempty"`
 }
 
 // GetClusterMasterListResponse defines model for GetClusterMasterListResponse.
@@ -193,6 +209,12 @@ type GetTaskTableStructureResponse struct {
 	TableName       string  `json:"table_name"`
 }
 
+// GrafanaTopology defines model for GrafanaTopology.
+type GrafanaTopology struct {
+	Host string `json:"host"`
+	Port int    `json:"port"`
+}
+
 // status of load unit
 type LoadStatus struct {
 	FinishedBytes  int64  `json:"finished_bytes"`
@@ -200,6 +222,13 @@ type LoadStatus struct {
 	MetaBinlogGtid string `json:"meta_binlog_gtid"`
 	Progress       string `json:"progress"`
 	TotalBytes     int64  `json:"total_bytes"`
+}
+
+// MasterTopology defines model for MasterTopology.
+type MasterTopology struct {
+	Host string `json:"host"`
+	Name string `json:"name"`
+	Port int    `json:"port"`
 }
 
 // action to operate table request
@@ -212,6 +241,12 @@ type OperateTaskTableStructureRequest struct {
 
 	// Updates the optimistic sharding metadata with this schema only used when an error occurs in the optimistic sharding DDL mode
 	Sync *bool `json:"sync,omitempty"`
+}
+
+// PrometheusTopology defines model for PrometheusTopology.
+type PrometheusTopology struct {
+	Host string `json:"host"`
+	Port int    `json:"port"`
 }
 
 // relay log cleanup policy configuration
@@ -619,6 +654,16 @@ type WorkerNameRequest struct {
 	WorkerName string `json:"worker_name"`
 }
 
+// WorkerTopology defines model for WorkerTopology.
+type WorkerTopology struct {
+	Host string `json:"host"`
+	Name string `json:"name"`
+	Port int    `json:"port"`
+}
+
+// DMAPIUpdateClusterInfoJSONBody defines parameters for DMAPIUpdateClusterInfo.
+type DMAPIUpdateClusterInfoJSONBody ClusterTopology
+
 // DMAPIGetSourceListParams defines parameters for DMAPIGetSourceList.
 type DMAPIGetSourceListParams struct {
 	// list source with status
@@ -717,6 +762,9 @@ type DMAPIGetTaskStatusParams struct {
 
 // DMAPIStopTaskJSONBody defines parameters for DMAPIStopTask.
 type DMAPIStopTaskJSONBody StopTaskRequest
+
+// DMAPIUpdateClusterInfoJSONRequestBody defines body for DMAPIUpdateClusterInfo for application/json ContentType.
+type DMAPIUpdateClusterInfoJSONRequestBody DMAPIUpdateClusterInfoJSONBody
 
 // DMAPICreateSourceJSONRequestBody defines body for DMAPICreateSource for application/json ContentType.
 type DMAPICreateSourceJSONRequestBody DMAPICreateSourceJSONBody

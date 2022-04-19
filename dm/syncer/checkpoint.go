@@ -280,12 +280,9 @@ type CheckPoint interface {
 	// corresponding to to Meta.Pos and gtid
 	FlushedGlobalPoint() binlog.Location
 
-	// CheckGlobalPoint checks whether we should save global checkpoint
-	// corresponding to Meta.Check
-	CheckGlobalPoint() bool
-
-	// CheckLastSnapshotCreationTime checks whether we should async flush checkpoint since last time async flush
-	CheckLastSnapshotCreationTime() bool
+	// LastFlushOutdated checks the start time of a flush (when call Snapshot) and finish time of a flush, if both of
+	// the two times are outdated, LastFlushOutdated returns true.
+	LastFlushOutdated() bool
 
 	// Rollback rolls global checkpoint and all table checkpoints back to flushed checkpoints
 	Rollback(schemaTracker *schema.Tracker)
@@ -876,18 +873,18 @@ func (cp *RemoteCheckPoint) String() string {
 	return cp.globalPoint.String()
 }
 
-// CheckGlobalPoint implements CheckPoint.CheckGlobalPoint.
-func (cp *RemoteCheckPoint) CheckGlobalPoint() bool {
+// LastFlushOutdated implements CheckPoint.LastFlushOutdated.
+func (cp *RemoteCheckPoint) LastFlushOutdated() bool {
 	cp.RLock()
 	defer cp.RUnlock()
-	return time.Since(cp.globalPointSaveTime) >= time.Duration(cp.cfg.CheckpointFlushInterval)*time.Second
-}
 
-// CheckLastSnapshotCreationTime implements CheckPoint.CheckLastSnapshotCreationTime.
-func (cp *RemoteCheckPoint) CheckLastSnapshotCreationTime() bool {
-	cp.RLock()
-	defer cp.RUnlock()
-	return time.Since(cp.lastSnapshotCreationTime) >= time.Duration(cp.cfg.CheckpointFlushInterval)*time.Second
+	if time.Since(cp.globalPointSaveTime) < time.Duration(cp.cfg.CheckpointFlushInterval)*time.Second {
+		return false
+	}
+	if time.Since(cp.lastSnapshotCreationTime) < time.Duration(cp.cfg.CheckpointFlushInterval)*time.Second {
+		return false
+	}
+	return true
 }
 
 // Rollback implements CheckPoint.Rollback.
@@ -1258,7 +1255,7 @@ func (cp *RemoteCheckPoint) genUpdateSQL(cpSchema, cpTable string, location binl
 func (cp *RemoteCheckPoint) parseMetaData(ctx context.Context) (*binlog.Location, *binlog.Location, error) {
 	// `metadata` is mydumper's output meta file name
 	filename := "metadata"
-	loc, loc2, err := dumpling.ParseMetaData(ctx, cp.cfg.LoaderConfig.Dir, filename, cp.cfg.Flavor)
+	loc, loc2, err := dumpling.ParseMetaData(ctx, cp.cfg.LoaderConfig.Dir, filename, cp.cfg.Flavor, cp.cfg.ExtStorage)
 	if err != nil {
 		toPrint, err2 := storage.ReadFile(ctx, cp.cfg.LoaderConfig.Dir, filename, nil)
 		if err2 != nil {

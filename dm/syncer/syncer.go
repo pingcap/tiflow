@@ -989,9 +989,9 @@ func (s *Syncer) addJob(job *job) {
 	}
 }
 
-// checkShouldFlush checks whether syncer should flush now because last flushing is outdated.
-func (s *Syncer) checkShouldFlush() error {
-	if !s.checkpoint.CheckGlobalPoint() || !s.checkpoint.CheckLastSnapshotCreationTime() {
+// flushIfOutdated checks whether syncer should flush now because last flushing is outdated.
+func (s *Syncer) flushIfOutdated() error {
+	if !s.checkpoint.LastFlushOutdated() {
 		return nil
 	}
 
@@ -1013,7 +1013,7 @@ func (s *Syncer) handleJob(job *job) (added2Queue bool, err error) {
 	skipCheckFlush := false
 	defer func() {
 		if !skipCheckFlush && err == nil {
-			err = s.checkShouldFlush()
+			err = s.flushIfOutdated()
 		}
 	}()
 
@@ -1142,7 +1142,7 @@ func (s *Syncer) resetShardingGroup(table *filter.Table) {
 // and except rejecting to flush the checkpoint, we also need to rollback the checkpoint saved before
 // this should be handled when `s.Run` returned
 //
-// we may need to refactor the concurrency model to make the work-flow more clearer later.
+// we may need to refactor the concurrency model to make the work-flow more clear later.
 func (s *Syncer) flushCheckPoints() error {
 	err := s.execError.Load()
 	// TODO: for now, if any error occurred (including user canceled), checkpoint won't be updated. But if we have put
@@ -2237,7 +2237,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		case *replication.GenericEvent:
 			if e.Header.EventType == replication.HEARTBEAT_EVENT {
 				// flush checkpoint even if there are no real binlog events
-				if s.checkpoint.CheckGlobalPoint() {
+				if s.checkpoint.LastFlushOutdated() {
 					s.tctx.L().Info("meet heartbeat event and then flush jobs")
 					err2 = s.flushJobs()
 				}
@@ -2566,7 +2566,7 @@ func (s *Syncer) handleRowsEvent(ev *replication.RowsEvent, ec eventContext) (*f
 		}
 	})
 
-	return sourceTable, s.checkShouldFlush()
+	return sourceTable, s.flushIfOutdated()
 }
 
 type queryEventContext struct {
