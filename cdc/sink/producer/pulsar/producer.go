@@ -146,13 +146,3 @@ func (p *Producer) Close() error {
 	p.client.Close()
 	return nil
 }
-
-// AsyncClose close the produce in an asynchronous way.
-func (p *Producer) AsyncClose() chan error {
-	ret := make(chan error, 1)
-	go func() {
-		ret <- p.Close()
-		close(ret)
-	}()
-	return ret
-}
