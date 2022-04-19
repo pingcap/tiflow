@@ -20,9 +20,11 @@ package master
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"github.com/pingcap/tiflow/dm/checker"
+	dmcommon "github.com/pingcap/tiflow/dm/dm/common"
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/dm/ctl/common"
 	"github.com/pingcap/tiflow/dm/dm/master/workerrpc"
@@ -32,6 +34,39 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"go.uber.org/zap"
 )
+
+// nolint:unparam
+func (s *Server) getClusterInfo(ctx context.Context) (*openapi.GetClusterInfoResponse, error) {
+	info := &openapi.GetClusterInfoResponse{}
+	info.ClusterId = s.ClusterID()
+
+	resp, err := s.etcdClient.Get(ctx, dmcommon.ClusterTopologyKey)
+	if err != nil {
+		return nil, err
+	}
+
+	// already set by tiup, load to info
+	if len(resp.Kvs) == 1 {
+		topo := &openapi.ClusterTopology{}
+		if err := json.Unmarshal(resp.Kvs[0].Value, topo); err != nil {
+			return nil, err
+		}
+		info.Topology = topo
+	}
+	return info, nil
+}
+
+func (s *Server) updateClusterInfo(ctx context.Context, topo *openapi.ClusterTopology) (*openapi.GetClusterInfoResponse, error) {
+	if val, err := json.Marshal(topo); err != nil {
+		return nil, err
+	} else if _, err := s.etcdClient.Put(ctx, dmcommon.ClusterTopologyKey, string(val)); err != nil {
+		return nil, err
+	}
+	info := &openapi.GetClusterInfoResponse{}
+	info.ClusterId = s.ClusterID()
+	info.Topology = topo
+	return info, nil
+}
 
 func (s *Server) getSourceStatusListFromWorker(ctx context.Context, sourceName string, specifiedSource bool) ([]openapi.SourceStatus, error) {
 	workerStatusList := s.getStatusFromWorkers(ctx, []string{sourceName}, "", specifiedSource)
