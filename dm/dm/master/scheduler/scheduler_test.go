@@ -496,16 +496,7 @@ func (t *testSchedulerSuite) testSchedulerProgress(restart int) {
 	t.relayStageMatch(s, sourceID2, pb.Stage_InvalidStage)
 	rebuildScheduler(ctx)
 
-	// CASE 4.7.1: add source2 with specify worker1
-	// source2 not exist, worker1 is bound
-	t.sourceCfgNotExist(s, sourceID2)
-	t.workerBound(s, ha.NewSourceBound(sourceID1, workerName1))
-	require.True(t.T(), terror.ErrSchedulerWorkerOffline.Equal(s.AddSourceCfgWithWorker(&sourceCfg2, workerName1)))
-	// source2 is not created because expected worker1 is already bound
-	t.sourceCfgNotExist(s, sourceID2)
-	rebuildScheduler(ctx)
-
-	// CASE 4.7.2: add source2 with specify worker2
+	// CASE 4.7.1: add source2 with specify worker2
 	// source2 not exist, worker2 should be free
 	t.sourceCfgNotExist(s, sourceID2)
 	t.workerFree(s, workerName2)
@@ -516,7 +507,8 @@ func (t *testSchedulerSuite) testSchedulerProgress(restart int) {
 	t.relayStageMatch(s, sourceID2, pb.Stage_Running)
 	rebuildScheduler(ctx)
 
-	// CASE 4.7.3: remove source2 again.
+	// CASE 4.7.2: remove source2 again.
+	t.workerBound(s, ha.NewSourceBound(sourceID1, workerName1))
 	require.NoError(t.T(), s.StopRelay(sourceID2, []string{workerName2}))
 	require.NoError(t.T(), s.RemoveSourceCfg(sourceID2))
 	require.True(t.T(), terror.ErrSchedulerSourceCfgNotExist.Equal(s.RemoveSourceCfg(sourceID2))) // already removed.
@@ -540,6 +532,13 @@ func (t *testSchedulerSuite) testSchedulerProgress(restart int) {
 		return w.Stage() == WorkerOffline
 	}))
 	t.workerOffline(s, workerName1)
+	// add source2 with specify worker1
+	// source2 not exist, worker1 is offline
+	t.sourceCfgNotExist(s, sourceID2)
+	require.True(t.T(), terror.ErrSchedulerWorkerOffline.Equal(s.AddSourceCfgWithWorker(&sourceCfg2, workerName1)))
+	// source2 is not created because expected worker1 is already offline
+	t.sourceCfgNotExist(s, sourceID2)
+	rebuildScheduler(ctx)
 	// source1 should bound to worker2.
 	t.sourceBounds(s, []string{sourceID1}, []string{})
 	t.workerBound(s, ha.NewSourceBound(sourceID1, workerName2))
