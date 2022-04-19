@@ -74,6 +74,8 @@ func (s *schemaWrap4Owner) AllPhysicalTables() []model.TableID {
 	if s.allPhysicalTablesCache != nil {
 		return s.allPhysicalTablesCache
 	}
+	// NOTE: it's better to pre-allocate the vector. However in the current implementation
+	// we can't know how many valid tables in the snapshot.
 	s.allPhysicalTablesCache = make([]model.TableID, 0)
 	s.schemaSnapshot.IterTables(true, func(tblInfo *model.TableInfo) {
 		if s.shouldIgnoreTable(tblInfo) {
@@ -92,7 +94,7 @@ func (s *schemaWrap4Owner) AllPhysicalTables() []model.TableID {
 
 // AllTableNames returns the table names of all tables that are being replicated.
 func (s *schemaWrap4Owner) AllTableNames() []model.TableName {
-	names := make([]model.TableName, 0)
+	names := make([]model.TableName, 0, len(s.allPhysicalTablesCache))
 	s.schemaSnapshot.IterTables(true, func(tblInfo *model.TableInfo) {
 		if !s.shouldIgnoreTable(tblInfo) {
 			names = append(names, tblInfo.TableName)

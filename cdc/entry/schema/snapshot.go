@@ -20,8 +20,8 @@ import (
 	"unsafe"
 
 	"github.com/google/btree"
-	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"go.uber.org/zap"
 
@@ -80,6 +80,7 @@ func NewSingleSnapshotFromMeta(meta *timeta.Meta, currentTs uint64, forceReplica
 }
 
 // Snapshot stores the source TiDB all schema information and it should be READ-ONLY!
+// If no special comments, all public methods are thread-safe.
 type Snapshot struct {
 	// map[versionedEntityName] -> int64
 	// The ID can be `-1` which means the table is deleted.
@@ -217,6 +218,9 @@ func NewSnapshotFromMeta(meta *timeta.Meta, currentTs uint64, forceReplicate boo
 
 // Copy creates a new schema snapshot based on the given one.
 func (s *Snapshot) Copy() *Snapshot {
+	if s.lock(true) {
+		defer s.unlock()
+	}
 	return &Snapshot{
 		tableNameToID:    s.tableNameToID,
 		schemaNameToID:   s.schemaNameToID,
@@ -228,6 +232,7 @@ func (s *Snapshot) Copy() *Snapshot {
 		forceReplicate:   s.forceReplicate,
 		currentTs:        s.currentTs,
 		rwlock:           s.rwlock,
+		locked:           0,
 	}
 }
 
