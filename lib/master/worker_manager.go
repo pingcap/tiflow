@@ -15,6 +15,7 @@ import (
 	"github.com/hanfei1991/microcosm/lib/statusutil"
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pkg/clock"
+	"github.com/hanfei1991/microcosm/pkg/errctx"
 	derror "github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
@@ -43,7 +44,7 @@ type WorkerManager struct {
 
 	eventQueue chan *masterEvent
 	closeCh    chan struct{}
-	errCh      chan error
+	errCenter  *errctx.ErrCenter
 	// allWorkersReady is **closed** when a heartbeat has been received
 	// from all workers recorded in meta.
 	allWorkersReady chan struct{}
@@ -98,7 +99,7 @@ func NewWorkerManager(
 
 		eventQueue:      make(chan *masterEvent, 1024),
 		closeCh:         make(chan struct{}),
-		errCh:           make(chan error, 1),
+		errCenter:       errctx.NewErrCenter(),
 		allWorkersReady: make(chan struct{}),
 
 		clock:    clock,
@@ -109,16 +110,7 @@ func NewWorkerManager(
 	go func() {
 		defer ret.wg.Done()
 		if err := ret.runBackgroundChecker(); err != nil {
-			select {
-			case ret.errCh <- err:
-				log.L().Warn("runBackgroundChecker encountered error",
-					zap.String("master-id", masterID),
-					zap.Error(err))
-			default:
-				log.L().Warn("runBackgroundChecker error dropped",
-					zap.String("master-id", masterID),
-					zap.Error(err))
-			}
+			ret.errCenter.OnError(err)
 		}
 	}()
 
@@ -132,7 +124,15 @@ func (m *WorkerManager) Close() {
 
 // InitAfterRecover should be called after the master has failed over.
 // This method will block until a timeout period for heartbeats has passed.
-func (m *WorkerManager) InitAfterRecover(ctx context.Context) error {
+func (m *WorkerManager) InitAfterRecover(ctx context.Context) (retErr error) {
+	defer func() {
+		if retErr != nil {
+			m.errCenter.OnError(retErr)
+		}
+	}()
+
+	ctx = m.errCenter.WithCancelOnFirstError(ctx)
+
 	m.mu.Lock()
 	if m.state != workerManagerLoadingMeta {
 		// InitAfterRecover should only be called if
@@ -191,16 +191,16 @@ func (m *WorkerManager) InitAfterRecover(ctx context.Context) error {
 	return nil
 }
 
-func (m *WorkerManager) HandleHeartbeat(msg *libModel.HeartbeatPingMessage, fromNode p2p.NodeID) error {
+func (m *WorkerManager) HandleHeartbeat(msg *libModel.HeartbeatPingMessage, fromNode p2p.NodeID) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	if m.state == workerManagerLoadingMeta {
-		return nil
+		return
 	}
 
 	if !m.checkMasterEpochMatch(msg.Epoch) {
-		return nil
+		return
 	}
 
 	entry, exists := m.workerEntries[msg.FromWorkerID]
@@ -209,7 +209,7 @@ func (m *WorkerManager) HandleHeartbeat(msg *libModel.HeartbeatPingMessage, from
 			zap.String("master-id", m.masterID),
 			zap.Any("message", msg),
 			zap.String("from-node", fromNode))
-		return nil
+		return
 	}
 
 	entry.SetExpireTime(m.nextExpireTime())
@@ -238,7 +238,7 @@ func (m *WorkerManager) HandleHeartbeat(msg *libModel.HeartbeatPingMessage, from
 		}
 	} else {
 		if entry.State() != workerEntryCreated {
-			return nil
+			return
 		}
 
 		entry.MarkAsOnline(model.ExecutorID(fromNode), m.nextExpireTime())
@@ -253,17 +253,21 @@ func (m *WorkerManager) HandleHeartbeat(msg *libModel.HeartbeatPingMessage, from
 			},
 		})
 		if err != nil {
-			return nil
+			m.errCenter.OnError(err)
 		}
 	}
-	return nil
 }
 
 // Tick should be called by the BaseMaster so that the callbacks can be
 // run in the main goroutine.
 func (m *WorkerManager) Tick(ctx context.Context) error {
+	if err := m.errCenter.CheckError(); err != nil {
+		return err
+	}
+
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
+	ctx = m.errCenter.WithCancelOnFirstError(ctx)
 
 	for {
 		var event *masterEvent

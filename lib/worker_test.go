@@ -6,9 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hanfei1991/microcosm/lib/config"
-
 	runtime "github.com/hanfei1991/microcosm/executor/worker"
+	"github.com/hanfei1991/microcosm/lib/config"
 	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/lib/statusutil"
 	"github.com/hanfei1991/microcosm/pkg/adapter"

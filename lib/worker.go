@@ -5,6 +5,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hanfei1991/microcosm/pkg/errctx"
+
 	"github.com/hanfei1991/microcosm/lib/config"
 
 	"github.com/pingcap/errors"
@@ -102,8 +104,8 @@ type DefaultBaseWorker struct {
 
 	pool workerpool.AsyncPool
 
-	wg    sync.WaitGroup
-	errCh chan error
+	wg        sync.WaitGroup
+	errCenter *errctx.ErrCenter
 
 	cancelMu      sync.Mutex
 	cancelBgTasks context.CancelFunc
@@ -152,8 +154,8 @@ func NewBaseWorker(
 
 		pool: workerpool.NewDefaultAsyncPool(1),
 
-		errCh: make(chan error, 1),
-		clock: clock.New(),
+		errCenter: errctx.NewErrCenter(),
+		clock:     clock.New(),
 		// [TODO] use tenantID if support multi-tenant
 		userMetaKVClient: kvclient.NewPrefixKVClient(params.UserRawKVClient, tenant.DefaultUserTenantID),
 	}
@@ -164,6 +166,8 @@ func (w *DefaultBaseWorker) Workload() model.RescUnit {
 }
 
 func (w *DefaultBaseWorker) Init(ctx context.Context) error {
+	ctx = w.errCenter.WithCancelOnFirstError(ctx)
+
 	if err := w.doPreInit(ctx); err != nil {
 		return errors.Trace(err)
 	}
@@ -241,25 +245,19 @@ func (w *DefaultBaseWorker) doPostInit(ctx context.Context) error {
 
 func (w *DefaultBaseWorker) doPoll(ctx context.Context) error {
 	if err := w.messageHandlerManager.CheckError(ctx); err != nil {
-		return errors.Trace(err)
+		return err
 	}
 
-	select {
-	case err := <-w.errCh:
-		if err != nil {
-			return errors.Trace(err)
-		}
-	default:
+	if err := w.errCenter.CheckError(); err != nil {
+		return err
 	}
 
-	if err := w.messageRouter.Tick(ctx); err != nil {
-		return errors.Trace(err)
-	}
-
-	return nil
+	return w.messageRouter.Tick(ctx)
 }
 
 func (w *DefaultBaseWorker) Poll(ctx context.Context) error {
+	ctx = w.errCenter.WithCancelOnFirstError(ctx)
+
 	if err := w.doPoll(ctx); err != nil {
 		return errors.Trace(err)
 	}
@@ -317,6 +315,8 @@ func (w *DefaultBaseWorker) MetaKVClient() metaclient.KVClient {
 // Note that if the master cannot handle the notifications fast enough, notifications
 // can be lost.
 func (w *DefaultBaseWorker) UpdateStatus(ctx context.Context, status libModel.WorkerStatus) error {
+	ctx = w.errCenter.WithCancelOnFirstError(ctx)
+
 	err := w.statusSender.UpdateStatus(ctx, &status)
 	if err != nil {
 		return errors.Trace(err)
@@ -329,10 +329,12 @@ func (w *DefaultBaseWorker) SendMessage(
 	topic p2p.Topic,
 	message interface{},
 ) (bool, error) {
+	ctx = w.errCenter.WithCancelOnFirstError(ctx)
 	return w.messageSender.SendToNode(ctx, w.masterClient.MasterNode(), topic, message)
 }
 
 func (w *DefaultBaseWorker) OpenStorage(ctx context.Context, resourcePath resourcemeta.ResourceID) (broker.Handle, error) {
+	ctx = w.errCenter.WithCancelOnFirstError(ctx)
 	return w.resourceBroker.OpenStorage(ctx, w.id, w.masterID, resourcePath)
 }
 
@@ -350,6 +352,7 @@ func (w *DefaultBaseWorker) Exit(ctx context.Context, status libModel.WorkerStat
 
 func (w *DefaultBaseWorker) startBackgroundTasks() {
 	ctx, cancel := context.WithCancel(context.Background())
+	ctx = w.errCenter.WithCancelOnFirstError(ctx)
 
 	w.cancelMu.Lock()
 	w.cancelBgTasks = cancel
@@ -460,10 +463,7 @@ func (w *DefaultBaseWorker) initMessageHandlers(ctx context.Context) (retErr err
 }
 
 func (w *DefaultBaseWorker) onError(err error) {
-	select {
-	case w.errCh <- err:
-	default:
-	}
+	w.errCenter.OnError(err)
 }
 
 type masterClient struct {

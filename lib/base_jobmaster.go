@@ -3,6 +3,8 @@ package lib
 import (
 	"context"
 
+	"github.com/hanfei1991/microcosm/pkg/errctx"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 
@@ -45,9 +47,10 @@ type BaseJobMaster interface {
 }
 
 type DefaultBaseJobMaster struct {
-	master *DefaultBaseMaster
-	worker *DefaultBaseWorker
-	impl   JobMasterImpl
+	master    *DefaultBaseMaster
+	worker    *DefaultBaseWorker
+	impl      JobMasterImpl
+	errCenter *errctx.ErrCenter
 }
 
 // JobMasterImpl is the implementation of a job master of dataflow engine.
@@ -88,10 +91,14 @@ func NewBaseJobMaster(
 		ctx, &jobMasterImplAsMasterImpl{jobMasterImpl}, workerID)
 	baseWorker := NewBaseWorker(
 		ctx, &jobMasterImplAsWorkerImpl{jobMasterImpl}, workerID, masterID)
+	errCenter := errctx.NewErrCenter()
+	baseMaster.(*DefaultBaseMaster).errCenter = errCenter
+	baseWorker.(*DefaultBaseWorker).errCenter = errCenter
 	return &DefaultBaseJobMaster{
-		master: baseMaster.(*DefaultBaseMaster),
-		worker: baseWorker.(*DefaultBaseWorker),
-		impl:   jobMasterImpl,
+		master:    baseMaster.(*DefaultBaseMaster),
+		worker:    baseWorker.(*DefaultBaseWorker),
+		impl:      jobMasterImpl,
+		errCenter: errCenter,
 	}
 }
 
@@ -100,6 +107,8 @@ func (d *DefaultBaseJobMaster) MetaKVClient() metaclient.KVClient {
 }
 
 func (d *DefaultBaseJobMaster) Init(ctx context.Context) error {
+	ctx = d.errCenter.WithCancelOnFirstError(ctx)
+
 	if err := d.worker.doPreInit(ctx); err != nil {
 		return errors.Trace(err)
 	}
@@ -130,6 +139,8 @@ func (d *DefaultBaseJobMaster) Init(ctx context.Context) error {
 }
 
 func (d *DefaultBaseJobMaster) Poll(ctx context.Context) error {
+	ctx = d.errCenter.WithCancelOnFirstError(ctx)
+
 	if err := d.master.doPoll(ctx); err != nil {
 		return errors.Trace(err)
 	}
@@ -170,6 +181,8 @@ func (d *DefaultBaseJobMaster) CreateWorker(workerType WorkerType, config Worker
 }
 
 func (d *DefaultBaseJobMaster) UpdateStatus(ctx context.Context, status libModel.WorkerStatus) error {
+	ctx = d.errCenter.WithCancelOnFirstError(ctx)
+
 	return d.worker.UpdateStatus(ctx, status)
 }
 
@@ -186,6 +199,8 @@ func (d *DefaultBaseJobMaster) JobMasterID() libModel.MasterID {
 }
 
 func (d *DefaultBaseJobMaster) UpdateJobStatus(ctx context.Context, status libModel.WorkerStatus) error {
+	ctx = d.errCenter.WithCancelOnFirstError(ctx)
+
 	return d.worker.UpdateStatus(ctx, status)
 }
 
@@ -197,6 +212,8 @@ func (d *DefaultBaseJobMaster) IsBaseJobMaster() {
 }
 
 func (d *DefaultBaseJobMaster) SendMessage(ctx context.Context, topic p2p.Topic, message interface{}) (bool, error) {
+	ctx = d.errCenter.WithCancelOnFirstError(ctx)
+
 	// master will use WorkerHandle to send message
 	return d.worker.SendMessage(ctx, topic, message)
 }
@@ -206,6 +223,8 @@ func (d *DefaultBaseJobMaster) IsMasterReady() bool {
 }
 
 func (d *DefaultBaseJobMaster) Exit(ctx context.Context, status libModel.WorkerStatus, err error) error {
+	ctx = d.errCenter.WithCancelOnFirstError(ctx)
+
 	var err1 error
 	switch status.Code {
 	case libModel.WorkerStatusFinished:
