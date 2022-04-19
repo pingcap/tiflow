@@ -141,11 +141,11 @@ func (n *sinkNode) flushSink(ctx context.Context, resolvedTs model.Ts) (err erro
 			err = n.stop(ctx)
 		}
 	}()
-	currentBarrierTs := atomic.LoadUint64(&n.barrierTs)
+	// currentBarrierTs := atomic.LoadUint64(&n.barrierTs)
 	currentCheckpointTs := atomic.LoadUint64(&n.checkpointTs)
-	if resolvedTs > currentBarrierTs {
-		resolvedTs = currentBarrierTs
-	}
+	// if resolvedTs > currentBarrierTs {
+	// 	resolvedTs = currentBarrierTs
+	// }
 	if resolvedTs > n.targetTs {
 		resolvedTs = n.targetTs
 	}
