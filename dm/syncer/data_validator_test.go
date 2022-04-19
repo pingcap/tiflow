@@ -291,6 +291,9 @@ func TestValidatorDoValidate(t *testing.T) {
 		createTableSQL  = "CREATE TABLE `" + tableName + "`(id int primary key, v varchar(100))"
 		createTableSQL2 = "CREATE TABLE `" + tableName2 + "`(id int primary key)"
 		createTableSQL3 = "CREATE TABLE `" + tableName3 + "`(id int, v varchar(100))"
+		tableNameInfo   = filter.Table{Schema: schemaName, Name: tableName}
+		tableNameInfo2  = filter.Table{Schema: schemaName, Name: tableName2}
+		tableNameInfo3  = filter.Table{Schema: schemaName, Name: tableName3}
 	)
 	cfg := genSubtaskConfig(t)
 	_, dbMock, err := conn.InitMockDBFull()
@@ -326,8 +329,21 @@ func TestValidatorDoValidate(t *testing.T) {
 	}
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
+	mock.MatchExpectationsInOrder(false)
 	mock.ExpectQuery("SHOW VARIABLES LIKE 'sql_mode'").WillReturnRows(
 		mock.NewRows([]string{"Variable_name", "Value"}).AddRow("sql_mode", ""),
+	)
+	mock.ExpectBegin()
+	mock.ExpectExec("SET SESSION SQL_MODE.*").WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectCommit()
+	mock.ExpectQuery("SHOW CREATE TABLE " + tableNameInfo.String() + ".*").WillReturnRows(
+		mock.NewRows([]string{"Table", "Create Table"}).AddRow(tableName, createTableSQL),
+	)
+	mock.ExpectQuery("SHOW CREATE TABLE " + tableNameInfo2.String() + ".*").WillReturnRows(
+		mock.NewRows([]string{"Table", "Create Table"}).AddRow(tableName2, createTableSQL2),
+	)
+	mock.ExpectQuery("SHOW CREATE TABLE " + tableNameInfo3.String() + ".*").WillReturnRows(
+		mock.NewRows([]string{"Table", "Create Table"}).AddRow(tableName3, createTableSQL3),
 	)
 	dbConn, err := db.Conn(context.Background())
 	require.NoError(t, err)
