@@ -17,7 +17,7 @@ import (
 	"strings"
 
 	"github.com/pingcap/log"
-	filter "github.com/pingcap/tidb-tools/pkg/table-filter"
+	filter "github.com/pingcap/tidb/util/table-filter"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/dispatcher/partition"
 	"github.com/pingcap/tiflow/cdc/sink/dispatcher/topic"
@@ -181,7 +181,7 @@ func (s *EventRouter) GetActiveTopics(activeTables []model.TableName) []string {
 		topicDispatcher, _ := s.matchDispatcher(table.Schema, table.Table)
 		topicName := topicDispatcher.Substitute(table.Schema, table.Table)
 		if topicName == s.defaultTopic {
-			log.Warn("topic name corresponding to the table is the same as the default topic name",
+			log.Debug("topic name corresponding to the table is the same as the default topic name",
 				zap.String("table", table.String()),
 				zap.String("defaultTopic", s.defaultTopic),
 				zap.String("topicDispatcherExpression", topicDispatcher.String()),

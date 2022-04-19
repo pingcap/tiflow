@@ -1,4 +1,4 @@
-// Copyright 2020 PingCAP, Inc.
+// Copyright 2022 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -11,16 +11,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package security
+package util
 
-// SaslScram holds necessary path parameter to support sasl-scram
-type SaslScram struct {
-	SaslUser      string `toml:"sasl-user" json:"sasl-user"`
-	SaslPassword  string `toml:"sasl-password" json:"sasl-password"`
-	SaslMechanism string `toml:"sasl-mechanism" json:"sasl-mechanism"`
-}
+import (
+	"testing"
 
-// IsSaslScramEnabled checks whether SASL SCRAM is enabled or not.
-func (s *SaslScram) IsSaslScramEnabled() bool {
-	return len(s.SaslUser) != 0
+	"github.com/pingcap/tiflow/pkg/leakutil"
+)
+
+func TestMain(m *testing.M) {
+	leakutil.SetUpLeakTest(m)
 }

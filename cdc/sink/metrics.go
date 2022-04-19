@@ -25,7 +25,7 @@ var (
 			Name:      "txn_batch_size",
 			Help:      "Bucketed histogram of batch size of a txn.",
 			Buckets:   prometheus.ExponentialBuckets(1, 2, 18),
-		}, []string{"changefeed"})
+		}, []string{"changefeed", "type"}) // type is for `sinkType`
 	execTxnHistogram = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "ticdc",
@@ -33,7 +33,7 @@ var (
 			Name:      "txn_exec_duration",
 			Help:      "Bucketed histogram of processing time (s) of a txn.",
 			Buckets:   prometheus.ExponentialBuckets(0.002 /* 2 ms */, 2, 18),
-		}, []string{"changefeed"})
+		}, []string{"changefeed", "type"}) // type is for `sinkType`
 	execDDLHistogram = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "ticdc",
@@ -78,14 +78,6 @@ var (
 			Name:      "total_flushed_rows_count",
 			Help:      "The total count of rows that are flushed by sink",
 		}, []string{"changefeed"})
-	flushRowChangedDuration = prometheus.NewHistogramVec(
-		prometheus.HistogramOpts{
-			Namespace: "ticdc",
-			Subsystem: "sink",
-			Name:      "flush_event_duration_seconds",
-			Help:      "Bucketed histogram of processing time (s) of flushing events in processor",
-			Buckets:   prometheus.ExponentialBuckets(0.002 /* 2ms */, 2, 20),
-		}, []string{"changefeed", "type"})
 
 	tableSinkTotalRowsCountCounter = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
@@ -114,7 +106,6 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(bucketSizeCounter)
 	registry.MustRegister(totalRowsCountGauge)
 	registry.MustRegister(totalFlushedRowsCountGauge)
-	registry.MustRegister(flushRowChangedDuration)
 	registry.MustRegister(tableSinkTotalRowsCountCounter)
 	registry.MustRegister(bufferSinkTotalRowsCountCounter)
 }

@@ -24,7 +24,7 @@ import (
 	"sync"
 	"time"
 
-	regexprrouter "github.com/pingcap/tidb-tools/pkg/regexpr-router"
+	regexprrouter "github.com/pingcap/tidb/util/regexpr-router"
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/dm/pb"
 	"github.com/pingcap/tiflow/dm/dm/unit"
@@ -39,12 +39,13 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	onlineddl "github.com/pingcap/tiflow/dm/syncer/online-ddl-tools"
+	"golang.org/x/sync/errgroup"
 
 	_ "github.com/go-sql-driver/mysql" // for mysql
-	"github.com/pingcap/tidb-tools/pkg/dbutil"
-	"github.com/pingcap/tidb-tools/pkg/filter"
 	"github.com/pingcap/tidb/dumpling/export"
 	"github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tidb/util/dbutil"
+	"github.com/pingcap/tidb/util/filter"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 )
@@ -65,6 +66,8 @@ type mysqlInstance struct {
 
 	targetDB     *conn.BaseDB
 	targetDBInfo *dbutil.DBConfig
+
+	baList *filter.Filter
 }
 
 // Checker performs pre-check of data synchronization.
@@ -119,23 +122,36 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 	rollbackHolder.Add(fr.FuncRollback{Name: "close-DBs", Fn: c.closeDBs})
 
 	c.tctx = tcontext.NewContext(ctx, log.With(zap.String("unit", "task check")))
+
+	// prepare source target do dbs concurrently
+	eg, ctx2 := errgroup.WithContext(ctx)
+	// sourceID => source targetDB mapping, only writing need used mu to avoid concurrent write map
+	var mu sync.Mutex
+	sourceTargetM := make(map[string]map[string][]*filter.Table)
+	for idx := range c.instances {
+		i := idx
+		eg.Go(func() error {
+			mapping, fetchErr := c.fetchSourceTargetDB(ctx2, c.instances[i])
+			if fetchErr != nil {
+				return fetchErr
+			}
+			mu.Lock()
+			sourceTargetM[c.instances[i].cfg.SourceID] = mapping
+			mu.Unlock()
+			return nil
+		})
+	}
+	if egErr := eg.Wait(); egErr != nil {
+		return egErr
+	}
 	// targetTableID => source => [tables]
 	sharding := make(map[string]map[string][]*filter.Table)
 	shardingCounter := make(map[string]int)
 	// sourceID => []table
 	checkTablesMap := make(map[string][]*filter.Table)
 	dbs := make(map[string]*sql.DB)
-
 	for _, instance := range c.instances {
-		bw, err := filter.New(instance.cfg.CaseSensitive, instance.cfg.BAList)
-		if err != nil {
-			return terror.ErrTaskCheckGenBAList.Delegate(err)
-		}
-		r, err := regexprrouter.NewRegExprRouter(instance.cfg.CaseSensitive, instance.cfg.RouteRules)
-		if err != nil {
-			return terror.ErrTaskCheckGenTableRouter.Delegate(err)
-		}
-
+		// init online ddl for checker
 		if instance.cfg.OnlineDDL && c.onlineDDL == nil {
 			c.onlineDDL, err = onlineddl.NewRealOnlinePlugin(c.tctx, instance.cfg)
 			if err != nil {
@@ -143,51 +159,14 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 			}
 			rollbackHolder.Add(fr.FuncRollback{Name: "close-onlineDDL", Fn: c.closeOnlineDDL})
 		}
-
-		if err != nil {
-			return terror.ErrTaskCheckGenColumnMapping.Delegate(err)
-		}
-
-		instance.sourceDBinfo = &dbutil.DBConfig{
-			Host:     instance.cfg.From.Host,
-			Port:     instance.cfg.From.Port,
-			User:     instance.cfg.From.User,
-			Password: instance.cfg.From.Password,
-		}
-		dbCfg := instance.cfg.From
-		dbCfg.RawDBCfg = config.DefaultRawDBConfig().SetReadTimeout(readTimeout)
-		instance.sourceDB, err = conn.DefaultDBProvider.Apply(&dbCfg)
-		if err != nil {
-			return terror.WithScope(terror.ErrTaskCheckFailedOpenDB.Delegate(err, instance.cfg.From.User, instance.cfg.From.Host, instance.cfg.From.Port), terror.ScopeUpstream)
-		}
-
-		instance.targetDBInfo = &dbutil.DBConfig{
-			Host:     instance.cfg.To.Host,
-			Port:     instance.cfg.To.Port,
-			User:     instance.cfg.To.User,
-			Password: instance.cfg.To.Password,
-		}
-		dbCfg = instance.cfg.To
-		dbCfg.RawDBCfg = config.DefaultRawDBConfig().SetReadTimeout(readTimeout)
-		instance.targetDB, err = conn.DefaultDBProvider.Apply(&dbCfg)
-		if err != nil {
-			return terror.WithScope(terror.ErrTaskCheckFailedOpenDB.Delegate(err, instance.cfg.To.User, instance.cfg.To.Host, instance.cfg.To.Port), terror.ScopeDownstream)
-		}
-
 		if _, ok := c.checkingItems[config.VersionChecking]; ok {
 			c.checkList = append(c.checkList, checker.NewMySQLVersionChecker(instance.sourceDB.DB, instance.sourceDBinfo))
 		}
-
-		mapping, err := utils.FetchTargetDoTables(ctx, instance.sourceDB.DB, bw, r)
-		if err != nil {
-			return err
-		}
-
+		mapping := sourceTargetM[instance.cfg.SourceID]
 		err = sameTableNameDetection(mapping)
 		if err != nil {
 			return err
 		}
-
 		var checkTables []*filter.Table
 		checkSchemas := make(map[string]struct{}, len(mapping))
 		for targetTableID, tables := range mapping {
@@ -216,7 +195,6 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 				c.checkList = append(c.checkList, checker.NewSourceDumpPrivilegeChecker(instance.sourceDB.DB, instance.sourceDBinfo, checkTables, exportCfg.Consistency))
 			}
 		}
-
 		if instance.cfg.Mode != config.ModeFull {
 			// full mode needn't check follows
 			if _, ok := c.checkingItems[config.ServerIDChecking]; ok {
@@ -235,7 +213,7 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 				c.checkList = append(c.checkList, checker.NewSourceReplicationPrivilegeChecker(instance.sourceDB.DB, instance.sourceDBinfo))
 			}
 			if _, ok := c.checkingItems[config.OnlineDDLChecking]; c.onlineDDL != nil && ok {
-				c.checkList = append(c.checkList, checker.NewOnlineDDLChecker(instance.sourceDB.DB, checkSchemas, c.onlineDDL, bw))
+				c.checkList = append(c.checkList, checker.NewOnlineDDLChecker(instance.sourceDB.DB, checkSchemas, c.onlineDDL, instance.baList))
 			}
 			if _, ok := c.checkingItems[config.BinlogDBChecking]; ok {
 				c.checkList = append(c.checkList, checker.NewBinlogDBChecker(instance.sourceDB.DB, instance.sourceDBinfo, checkSchemas, instance.cfg.CaseSensitive))
@@ -274,6 +252,48 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 
 	c.tctx.Logger.Info(c.displayCheckingItems())
 	return nil
+}
+
+func (c *Checker) fetchSourceTargetDB(ctx context.Context, instance *mysqlInstance) (map[string][]*filter.Table, error) {
+	bAList, err := filter.New(instance.cfg.CaseSensitive, instance.cfg.BAList)
+	if err != nil {
+		return nil, terror.ErrTaskCheckGenBAList.Delegate(err)
+	}
+	instance.baList = bAList
+	r, err := regexprrouter.NewRegExprRouter(instance.cfg.CaseSensitive, instance.cfg.RouteRules)
+	if err != nil {
+		return nil, terror.ErrTaskCheckGenTableRouter.Delegate(err)
+	}
+
+	if err != nil {
+		return nil, terror.ErrTaskCheckGenColumnMapping.Delegate(err)
+	}
+
+	instance.sourceDBinfo = &dbutil.DBConfig{
+		Host:     instance.cfg.From.Host,
+		Port:     instance.cfg.From.Port,
+		User:     instance.cfg.From.User,
+		Password: instance.cfg.From.Password,
+	}
+	dbCfg := instance.cfg.From
+	dbCfg.RawDBCfg = config.DefaultRawDBConfig().SetReadTimeout(readTimeout)
+	instance.sourceDB, err = conn.DefaultDBProvider.Apply(&dbCfg)
+	if err != nil {
+		return nil, terror.WithScope(terror.ErrTaskCheckFailedOpenDB.Delegate(err, instance.cfg.From.User, instance.cfg.From.Host, instance.cfg.From.Port), terror.ScopeUpstream)
+	}
+	instance.targetDBInfo = &dbutil.DBConfig{
+		Host:     instance.cfg.To.Host,
+		Port:     instance.cfg.To.Port,
+		User:     instance.cfg.To.User,
+		Password: instance.cfg.To.Password,
+	}
+	dbCfg = instance.cfg.To
+	dbCfg.RawDBCfg = config.DefaultRawDBConfig().SetReadTimeout(readTimeout)
+	instance.targetDB, err = conn.DefaultDBProvider.Apply(&dbCfg)
+	if err != nil {
+		return nil, terror.WithScope(terror.ErrTaskCheckFailedOpenDB.Delegate(err, instance.cfg.To.User, instance.cfg.To.Host, instance.cfg.To.Port), terror.ScopeDownstream)
+	}
+	return utils.FetchTargetDoTables(ctx, instance.sourceDB.DB, instance.baList, r)
 }
 
 func (c *Checker) displayCheckingItems() string {

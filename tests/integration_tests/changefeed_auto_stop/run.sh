@@ -7,27 +7,7 @@ source $CUR/../_utils/test_prepare
 WORK_DIR=$OUT_DIR/$TEST_NAME
 CDC_BINARY=cdc.test
 SINK_TYPE=$1
-
-function check_changefeed_state() {
-	endpoints=$1
-	changefeedid=$2
-	expected=$3
-	error_msg=$4
-	info=$(cdc cli changefeed query --pd=$endpoints -c $changefeedid -s)
-	echo "$info"
-	state=$(echo $info | jq -r '.state')
-	if [[ ! "$state" == "$expected" ]]; then
-		echo "changefeed state $state does not equal to $expected"
-		exit 1
-	fi
-	message=$(echo $info | jq -r '.error.message')
-	if [[ ! "$message" =~ "$error_msg" ]]; then
-		echo "error message '$message' is not as expected '$error_msg'"
-		exit 1
-	fi
-}
-
-export -f check_changefeed_state
+MAX_RETRIES=10
 
 function run() {
 	DB_COUNT=4
@@ -58,7 +38,7 @@ function run() {
 		run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=open-protocol&partition-num=4&version=${KAFKA_VERSION}&max-message-bytes=10485760"
 	fi
 
-	ensure 10 check_changefeed_state "http://${UP_PD_HOST_1}:${UP_PD_PORT_1}" ${changefeedid} "normal" "null"
+	ensure $MAX_RETRIES check_changefeed_state "http://${UP_PD_HOST_1}:${UP_PD_PORT_1}" ${changefeedid} "normal" "null" ""
 
 	for i in $(seq $DB_COUNT); do
 		check_table_exists "changefeed_auto_stop_$i.USERTABLE" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
