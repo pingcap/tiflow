@@ -266,9 +266,10 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 	return errors.Trace(err)
 }
 
+// Close the producer asynchronously, does not care closed successfully or not.
 func (k *mqSink) Close(ctx context.Context) error {
-	err := k.mqProducer.Close()
-	return errors.Trace(err)
+	go k.mqProducer.Close()
+	return nil
 }
 
 func (k *mqSink) Barrier(cxt context.Context, tableID model.TableID) error {
