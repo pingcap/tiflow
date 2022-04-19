@@ -309,6 +309,8 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 	return errors.Trace(err)
 }
 
+// Close the mqSink
+// Caller can pass a canceled context to make sure this is non-blocking.
 func (k *mqSink) Close(ctx context.Context) error {
 	closedCh := k.mqProducer.AsyncClose()
 	select {
