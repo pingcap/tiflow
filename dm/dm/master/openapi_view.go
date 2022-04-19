@@ -85,10 +85,26 @@ func (s *Server) InitOpenAPIHandles() error {
 
 // GetDocJSON url is:(GET /api/v1/dm.json).
 func (s *Server) GetDocJSON(c *gin.Context) {
+	var masterURL string
+	if info, err := s.getClusterInfo(c.Request.Context()); err != nil {
+		_ = c.Error(err)
+		return
+	} else if info.Topology.MasterTopologyList != nil && len(*info.Topology.MasterTopologyList) > 0 {
+		masterTopos := *info.Topology.MasterTopologyList
+		protocol := "http"
+		if useTLS.Load() {
+			protocol = "https"
+		}
+		masterURL = fmt.Sprintf("%s://%s:%d", protocol, masterTopos[0].Host, masterTopos[0].Port)
+	}
 	swagger, err := openapi.GetSwagger()
 	if err != nil {
 		_ = c.Error(err)
 		return
+	} else if masterURL != "" {
+		for idx := range swagger.Servers {
+			swagger.Servers[idx].URL = masterURL
+		}
 	}
 	c.JSON(http.StatusOK, swagger)
 }
@@ -163,6 +179,31 @@ func (s *Server) DMAPIOfflineWorkerNode(c *gin.Context, workerName string) {
 		return
 	}
 	c.Status(http.StatusNoContent)
+}
+
+// DMAPIGetClusterInfo return cluster id of dm cluster url is: (GET /api/v1/cluster/info).
+func (s *Server) DMAPIGetClusterInfo(c *gin.Context) {
+	info, err := s.getClusterInfo(c.Request.Context())
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+	c.IndentedJSON(http.StatusOK, info)
+}
+
+// DMAPIGetClusterInfo return cluster id of dm cluster url is: (PUT /api/v1/cluster/info).
+func (s *Server) DMAPIUpdateClusterInfo(c *gin.Context) {
+	var req openapi.ClusterTopology
+	if err := c.Bind(&req); err != nil {
+		_ = c.Error(err)
+		return
+	}
+	info, err := s.updateClusterInfo(c.Request.Context(), &req)
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+	c.IndentedJSON(http.StatusOK, info)
 }
 
 // DMAPICreateSource url is:(POST /api/v1/sources).
@@ -842,13 +883,6 @@ func (s *Server) DMAPUpdateTaskTemplate(c *gin.Context, taskName string) {
 		return
 	}
 	c.IndentedJSON(http.StatusOK, task)
-}
-
-// DMAPIGetClusterInfo return cluster id of dm cluster.
-func (s *Server) DMAPIGetClusterInfo(c *gin.Context) {
-	r := &openapi.GetClusterInfoResponse{}
-	r.ClusterId = s.ClusterID()
-	c.IndentedJSON(http.StatusOK, r)
 }
 
 func terrorHTTPErrorHandler() gin.HandlerFunc {
