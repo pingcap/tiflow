@@ -32,6 +32,4 @@ type Producer interface {
 	GetPartitionNum() int32
 	// Close closes the producer and client(s).
 	Close() error
-	// AsyncClose close the produce in an asynchronous way.
-	AsyncClose() chan error
 }

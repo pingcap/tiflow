@@ -65,10 +65,6 @@ func (m *mockProducer) Close() error {
 	panic("Not used")
 }
 
-func (m *mockProducer) AsyncClose() chan error {
-	panic("Not used")
-}
-
 func (m *mockProducer) InjectError(err error) {
 	m.mockErr <- err
 }

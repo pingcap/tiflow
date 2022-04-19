@@ -278,14 +278,10 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 
 // Close the mqSink
 // Caller can pass a canceled context to make sure this is non-blocking.
+// Close the producer asynchronously, does not care closed successfully or not.
 func (k *mqSink) Close(ctx context.Context) error {
-	closedCh := k.mqProducer.AsyncClose()
-	select {
-	case <-ctx.Done():
-		return errors.Trace(ctx.Err())
-	case err := <-closedCh:
-		return errors.Trace(err)
-	}
+	go k.mqProducer.Close()
+	return nil
 }
 
 func (k *mqSink) Barrier(cxt context.Context, tableID model.TableID) error {
