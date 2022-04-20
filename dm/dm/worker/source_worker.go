@@ -202,7 +202,7 @@ func (w *SourceWorker) Start() {
 	}
 }
 
-// Close stops working and releases resources.
+// Stop stops working and releases resources.
 func (w *SourceWorker) Stop(graceful bool) {
 	if w.closed.Load() {
 		w.l.Warn("already closed")

@@ -67,9 +67,11 @@ type SourceConfig struct {
 	// deprecated
 	AutoFixGTID bool   `yaml:"auto-fix-gtid" toml:"auto-fix-gtid" json:"auto-fix-gtid"`
 	RelayDir    string `yaml:"relay-dir" toml:"relay-dir" json:"relay-dir"`
-	MetaDir     string `yaml:"meta-dir" toml:"meta-dir" json:"meta-dir"`
-	Flavor      string `yaml:"flavor" toml:"flavor" json:"flavor"`
-	Charset     string `yaml:"charset" toml:"charset" json:"charset"`
+	// deprecated
+	MetaDir string `yaml:"meta-dir" toml:"meta-dir" json:"meta-dir"`
+	Flavor  string `yaml:"flavor" toml:"flavor" json:"flavor"`
+	// deprecated
+	Charset string `yaml:"charset" toml:"charset" json:"charset"`
 
 	EnableRelay bool `yaml:"enable-relay" toml:"enable-relay" json:"enable-relay"`
 	// relay synchronous starting point (if specified)
@@ -412,7 +414,6 @@ type SourceConfigForDowngrade struct {
 	Enable          bool                   `yaml:"enable,omitempty"`
 	EnableGTID      bool                   `yaml:"enable-gtid"`
 	RelayDir        string                 `yaml:"relay-dir"`
-	MetaDir         string                 `yaml:"meta-dir"`
 	Flavor          string                 `yaml:"flavor"`
 	Charset         string                 `yaml:"charset"`
 	EnableRelay     bool                   `yaml:"enable-relay"`
@@ -436,7 +437,6 @@ func NewSourceConfigForDowngrade(sourceCfg *SourceConfig) *SourceConfigForDowngr
 		Enable:          sourceCfg.Enable,
 		EnableGTID:      sourceCfg.EnableGTID,
 		RelayDir:        sourceCfg.RelayDir,
-		MetaDir:         sourceCfg.MetaDir,
 		Flavor:          sourceCfg.Flavor,
 		Charset:         sourceCfg.Charset,
 		EnableRelay:     sourceCfg.EnableRelay,
