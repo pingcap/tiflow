@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -eu
+set -eux
 
 cur=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 source $cur/../_utils/test_prepare
@@ -100,6 +100,7 @@ function run() {
 	dmctl_operate_source create $WORK_DIR/source2.yaml $SOURCE_ID2
 
 	source $cur/../dmctl_basic/check_list/check_task.sh
+	test_check_contains
 	test_full_mode_conn
 	test_all_mode_conn
 	# check wrong do-tables
@@ -147,8 +148,8 @@ function run() {
 
 function test_full_mode_conn() {
 	# full mode
-	# dumpers: 10 for each upstream
-	# loaders: 16 * 2 = 32 (+2 checkpoint)
+	# dumpers: (10 + 2) for each upstream
+	# loaders: 16 * 2 = 32 (+2 checkpoint)(+2 DDL connections)
 	run_sql_source1 "set @@GLOBAL.max_connections=8;"
 	run_sql_source2 "set @@GLOBAL.max_connections=8;"
 	check_task_not_pass $cur/conf/dm-task2.yaml # dumper threads too few
@@ -167,7 +168,7 @@ function test_full_mode_conn() {
 
 function test_all_mode_conn() {
 	# all mode
-	# loaders: 10 * 2 = 20 (+2 checkpoint)
+	# loaders: 10 * 2 = 20 (+2 checkpoint)(+2 DDL connections)
 	# syncers: 16 * 2 = 32 (+2 checkpoint)
 	run_sql "set @@GLOBAL.max_connections=22;" $TIDB_PORT $TIDB_PASSWORD
 	check_task_not_pass $cur/conf/dm-task3.yaml # not enough connections for loader
@@ -177,6 +178,21 @@ function test_all_mode_conn() {
 	# set to default
 	run_sql "set @@GLOBAL.max_connections=151;" $TIDB_PORT $TIDB_PASSWORD
 }
+
+function test_check_contains() {
+	
+	dmctl_start_task "$cur/conf/dm-task2.yaml"
+	run_sql_source1 'SHOW PROCESSLIST;'
+	check_rows_equal 12 # one for SHOW PROCESSLIST
+
+	run_sql_source2 'SHOW PROCESSLIST;'
+	check_rows_equal 12 # one for SHOW PROCESSLIST
+
+	run_sql_tidb 'SHOW PROCESSLIST;'
+	check_rows_equal 37 # one for SHOW PROCESSLIST
+}
+
+function 
 
 cleanup_data dmctl_command
 # also cleanup dm processes in case of last run failed

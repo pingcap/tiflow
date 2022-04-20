@@ -92,8 +92,8 @@ func NewSyncerConnAmountCheker(targetDB *conn.BaseDB, stCfgs []*config.SubTaskCo
 		connAmountChecker: newConnAmountChecker(targetDB, stCfgs, func(stCfgs []*config.SubTaskConfig) int {
 			syncerConn := 0
 			for _, stCfg := range stCfgs {
-				// syncer's worker and checkpoint (always keeps one db connection)
-				syncerConn += stCfg.SyncerConfig.WorkerCount + 1
+				// syncer's worker, checkpoint, and DDL (always keeps one db connection)
+				syncerConn += stCfg.SyncerConfig.WorkerCount + 2
 			}
 			return syncerConn
 		}, "syncer"),
@@ -133,10 +133,11 @@ func (l *LoaderConnAmountChecker) Check(ctx context.Context) *Result {
 	return l.check(ctx, l.Name())
 }
 
-func NewDumperConnAmountChecker(targetDB *conn.BaseDB, dumperThreads int) RealChecker {
+func NewDumperConnAmountChecker(sourceDB *conn.BaseDB, dumperThreads int) RealChecker {
 	return &DumperConnAmountChecker{
-		connAmountChecker: newConnAmountChecker(targetDB, nil, func(_ []*config.SubTaskConfig) int {
-			return dumperThreads
+		connAmountChecker: newConnAmountChecker(sourceDB, nil, func(_ []*config.SubTaskConfig) int {
+			// one for generating SQL, another for consistency control
+			return dumperThreads + 2
 		}, "dumper"),
 	}
 }

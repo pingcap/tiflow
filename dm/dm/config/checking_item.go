@@ -53,7 +53,7 @@ var AllCheckingItems = map[string]string{
 	ShardAutoIncrementIDChecking: "conflict auto increment ID of shard tables checking item",
 	OnlineDDLChecking:            "online ddl checking item",
 	BinlogDBChecking:             "binlog db checking item",
-	ConnAmountChecking:           "conn amount checking item",
+	ConnAmountChecking:           "connection amount checking item",
 }
 
 // MaxSourceIDLength is the max length for dm-worker source id.

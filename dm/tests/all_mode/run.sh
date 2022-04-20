@@ -103,6 +103,12 @@ function test_query_timeout() {
 	run_sql_source2 'SHOW PROCESSLIST;'
 	check_rows_equal 2
 
+	dmctl_operate_source stop $WORK_DIR/source2.yaml $SOURCE_ID2
+	run_sql_source2 'SHOW PROCESSLIST;'
+	check_rows_equal 2
+
+	dmctl_operate_source create $WORK_DIR/source2.yaml $SOURCE_ID2
+
 	# there's only 1 row in result, which is for SHOW PROCESSLIST
 	run_sql_tidb 'SHOW PROCESSLIST;'
 	check_rows_equal 1
@@ -136,7 +142,7 @@ function test_query_timeout() {
 	check_rows_equal 2
 
 	run_sql_source2 'SHOW PROCESSLIST;'
-	check_rows_equal 2
+	check_rows_equal 3
 
 	# there's only 1 row in result, which is for SHOW PROCESSLIST
 	run_sql_tidb 'SHOW PROCESSLIST;'

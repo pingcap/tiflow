@@ -25,10 +25,10 @@ mysql-instances:
 
 block-allow-list:
   instance:
-    do-dbs: ["dmctl"]
+    do-dbs: ["dmctl_conn"]
     do-tables:
-    -  db-name: "dmctl"
-       tbl-name: "~^t_[\\d]+"
+    -  db-name: "dmctl_conn"
+       tbl-name: "*"
 
 mydumpers:
   global:
