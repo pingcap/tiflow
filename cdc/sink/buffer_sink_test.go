@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/sink/metrics"
 	"github.com/stretchr/testify/require"
 )
 
@@ -39,7 +40,7 @@ func TestFlushTable(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.TODO())
 	defer cancel()
 	b := newBufferSink(newBlackHoleSink(ctx), 5, make(chan drawbackMsg))
-	go b.run(ctx, make(chan error))
+	go b.run(ctx, "", make(chan error))
 
 	require.Equal(t, uint64(5), b.getTableCheckpointTs(2))
 	require.Nil(t, b.EmitRowChangedEvents(ctx))
@@ -83,7 +84,7 @@ func TestFlushFailed(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.TODO())
 	b := newBufferSink(newBlackHoleSink(ctx), 5, make(chan drawbackMsg))
-	go b.run(ctx, make(chan error))
+	go b.run(ctx, "", make(chan error))
 
 	checkpoint, err := b.FlushRowChangedEvents(ctx, 3, 8)
 	require.True(t, checkpoint <= 8)
@@ -121,7 +122,7 @@ func BenchmarkRun(b *testing.B) {
 	defer cancel()
 
 	state := runState{
-		metricTotalRows: bufferSinkTotalRowsCountCounter.WithLabelValues(b.Name()),
+		metricTotalRows: metrics.BufferSinkTotalRowsCountCounter.WithLabelValues(b.Name()),
 	}
 
 	for exp := 0; exp < 9; exp++ {
