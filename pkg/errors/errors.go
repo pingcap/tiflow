@@ -276,7 +276,7 @@ var (
 	ErrPeerMessageStaleConnection       = errors.Normalize("peer-to-peer message stale connection: old-epoch %d, new-epoch %d", errors.RFCCodeText("CDC:ErrPeerMessageStaleConnection"))
 	ErrPeerMessageDuplicateConnection   = errors.Normalize("peer-to-peer message duplicate connection: epoch %d", errors.RFCCodeText("CDC:ErrPeerMessageDuplicateConnection"))
 	ErrPeerMessageServerClosed          = errors.Normalize("peer-to-peer message server has closed connection: %s.", errors.RFCCodeText("CDC:ErrPeerMessageServerClosed"))
-	ErrPeerMessageDataLost              = errors.Normalize("peer-to-peer message data lost, topic: %s, seq: %s", errors.RFCCodeText("CDC:ErrPeerMessageDataLost"))
+	ErrPeerMessageDataLost              = errors.Normalize("peer-to-peer message data lost, topic: %s, seq: %d", errors.RFCCodeText("CDC:ErrPeerMessageDataLost"))
 	ErrPeerMessageToManyPeers           = errors.Normalize("peer-to-peer message server got too many peers: %d peers", errors.RFCCodeText("CDC:ErrPeerMessageToManyPeers"))
 	ErrPeerMessageDecodeError           = errors.Normalize("failed to decode peer-to-peer message", errors.RFCCodeText("CDC:ErrPeerMessageDecodeError"))
 	ErrPeerMessageTaskQueueCongested    = errors.Normalize("peer-to-peer message server has too many pending tasks", errors.RFCCodeText("CDC:ErrPeerMessageTaskQueueCongested"))

@@ -190,7 +190,7 @@ func (t *testShardingGroupSuite) TestSync(c *C) {
 
 	// active DDL is at pos21
 	beforeActiveDDL = g1.CheckSyncing(source2, pos21)
-	c.Assert(beforeActiveDDL, IsFalse)
+	c.Assert(beforeActiveDDL, IsTrue)
 
 	info = g1.UnresolvedGroupInfo()
 	sort.Strings(info.Synced)
@@ -313,7 +313,7 @@ func (t *testShardingGroupSuite) TestKeeper(c *C) {
 	c.Assert(k.InSyncing(sourceTbl1, targetTbl, endPos11), IsFalse)
 	// position at/after active DDL, in syncing
 	c.Assert(binlog.CompareLocation(pos12, loc, false), Equals, 0)
-	c.Assert(k.InSyncing(sourceTbl1, targetTbl, pos12), IsTrue)
+	c.Assert(k.InSyncing(sourceTbl1, targetTbl, pos12), IsFalse)
 	c.Assert(binlog.CompareLocation(endPos12, loc, false), Equals, 1)
 	c.Assert(k.InSyncing(sourceTbl1, targetTbl, endPos12), IsTrue)
 
