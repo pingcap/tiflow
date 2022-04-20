@@ -735,16 +735,16 @@ function DM_151_CASE {
 			"Running" 3
 	fi
 
-  # we alter database in source2 and the ddl lock will be resolved
-  run_sql_source2 "alter table ${shardddl1}.${tb1} modify column a double;"
-  run_sql_source2 "alter table ${shardddl1}.${tb2} modify column a double;"
+	# we alter database in source2 and the ddl lock will be resolved
+	run_sql_source2 "alter table ${shardddl1}.${tb1} modify column a double;"
+	run_sql_source2 "alter table ${shardddl1}.${tb2} modify column a double;"
 
-  # insert 3 recorde to make sure optimistic mode sharding resolve can finish fast
-  sleep 3
-  run_sql_source1 "insert into ${shardddl1}.${tb1} values(7,7.0);"
-  run_sql_source2 "insert into ${shardddl1}.${tb1} values(8,8.0);"
-  run_sql_source2 "insert into ${shardddl1}.${tb2} values(9,9.0);"
-  check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
+	# insert 3 recorde to make sure optimistic mode sharding resolve can finish fast
+	sleep 3
+	run_sql_source1 "insert into ${shardddl1}.${tb1} values(7,7.0);"
+	run_sql_source2 "insert into ${shardddl1}.${tb1} values(8,8.0);"
+	run_sql_source2 "insert into ${shardddl1}.${tb2} values(9,9.0);"
+	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 }
 
 function DM_151 {

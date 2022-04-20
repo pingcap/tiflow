@@ -108,11 +108,11 @@ function DM_049_CASE() {
 	run_sql_source2 "insert into ${shardddl1}.${tb1} values(8,'hhh');"
 	run_sql_source2 "insert into ${shardddl1}.${tb2} values(9,'iii');"
 
-  # insert 3 recorde to make sure optimistic mode sharding resolve can finish fast
-  sleep 3
-  run_sql_source1 "insert into ${shardddl1}.${tb1} values(10,'jjj');"
-  run_sql_source2 "insert into ${shardddl1}.${tb1} values(11,'kkk');"
-  run_sql_source2 "insert into ${shardddl1}.${tb2} values(12,'lll');"
+	# insert 3 recorde to make sure optimistic mode sharding resolve can finish fast
+	sleep 3
+	run_sql_source1 "insert into ${shardddl1}.${tb1} values(10,'jjj');"
+	run_sql_source2 "insert into ${shardddl1}.${tb1} values(11,'kkk');"
+	run_sql_source2 "insert into ${shardddl1}.${tb2} values(12,'lll');"
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 }
 

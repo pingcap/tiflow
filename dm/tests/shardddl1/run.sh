@@ -153,7 +153,7 @@ function DM_RENAME_COLUMN_OPTIMISTIC_CASE() {
 	run_sql_source2 "insert into ${shardddl1}.${tb1} values(20,'ttt',20);"
 	run_sql_source2 "insert into ${shardddl1}.${tb2} values(21,'uuu',21);"
 
-  # insert 3 recorde to make sure optimistic mode sharding resolve can finish fast
+	# insert 3 recorde to make sure optimistic mode sharding resolve can finish fast
 	sleep 3
 	run_sql_source1 "insert into ${shardddl1}.${tb1} values(22,'vvv',22);"
 	run_sql_source2 "insert into ${shardddl1}.${tb1} values(23,'www',23);"
@@ -332,12 +332,12 @@ function DM_UpdateBARule_CASE() {
 	run_sql_source2 "insert into ${shardddl1}.${tb1} values(12);"
 
 	# source2 db2.tb1, source1 db2.tb1 do unsupported DDLs and provoke a conflict
-  # source2 db2.tb1 do a rename ddl, should not provoke a conflict
+	# source2 db2.tb1 do a rename ddl, should not provoke a conflict
 	run_sql_source2 "alter table ${shardddl2}.${tb1} change id new_id int;"
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
 		"Running" 3
-  # source1 db2.tb1 do a different add column not null ddl, should provoke a conflict
+	# source1 db2.tb1 do a different add column not null ddl, should provoke a conflict
 	run_sql_source1 "alter table ${shardddl2}.${tb1} add column new_col4 int not null;"
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \

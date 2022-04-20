@@ -2388,7 +2388,7 @@ func (s *Syncer) getFlushSeq() int64 {
 	return s.flushSeq
 }
 
-// handleRowsEvent returns (affected table, error), affected table means this table's event is committed to handleJob
+// handleRowsEvent returns (affected table, error), affected table means this table's event is committed to handleJob.
 func (s *Syncer) handleRowsEvent(ev *replication.RowsEvent, ec eventContext) (*filter.Table, error) {
 	sourceTable := &filter.Table{
 		Schema: string(ev.Table.Schema),
