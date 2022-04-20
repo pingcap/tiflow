@@ -612,13 +612,19 @@ func (h *openAPI) GetProcessor(c *gin.Context) {
 		return
 	}
 
-	statuses, err := h.statusProvider().GetAllTaskStatuses(ctx, changefeedID)
+	procInfos, err := h.statusProvider().GetProcessors(ctx)
 	if err != nil {
 		_ = c.Error(err)
 		return
 	}
-	status, exist := statuses[captureID]
-	if !exist {
+	var procInfo *model.ProcInfoSnap
+	for _, info := range procInfos {
+		if info.CaptureID == captureID {
+			procInfo = info
+			break
+		}
+	}
+	if procInfo == nil {
 		_ = c.Error(cerror.ErrCaptureNotExist.GenWithStackByArgs(captureID))
 		return
 	}
@@ -640,7 +646,7 @@ func (h *openAPI) GetProcessor(c *gin.Context) {
 			Error:        position.Error,
 		}
 		tables := make([]int64, 0)
-		for tableID := range status.Tables {
+		for tableID := range procInfo.Tables {
 			tables = append(tables, tableID)
 		}
 		processorDetail.Tables = tables
