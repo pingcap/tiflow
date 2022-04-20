@@ -205,24 +205,34 @@ function DM_051() {
 
 function DM_056_CASE() {
 	run_sql_source1 "alter table ${shardddl1}.${tb1} change a c int after b;"
-	run_sql_source1 "insert into ${shardddl1}.${tb1} values(1,1);"
-	run_sql_source2 "insert into ${shardddl1}.${tb1} values(2,2);"
-	run_sql_source2 "insert into ${shardddl1}.${tb2} values(3,3);"
+	run_sql_source1 "insert into ${shardddl1}.${tb1} values(1,101);"
+	run_sql_source2 "insert into ${shardddl1}.${tb1} values(2,102);"
+	run_sql_source2 "insert into ${shardddl1}.${tb2} values(3,103);"
 	run_sql_source2 "alter table ${shardddl1}.${tb1} change a c int first;"
-	run_sql_source1 "insert into ${shardddl1}.${tb1} values(4,4);"
-	run_sql_source2 "insert into ${shardddl1}.${tb1} values(5,5);"
-	run_sql_source2 "insert into ${shardddl1}.${tb2} values(6,6);"
+	run_sql_source1 "insert into ${shardddl1}.${tb1} values(4,104);"
+	run_sql_source2 "insert into ${shardddl1}.${tb1} values(5,105);"
+	run_sql_source2 "insert into ${shardddl1}.${tb2} values(6,106);"
 	run_sql_source2 "alter table ${shardddl1}.${tb2} change a c int first;"
-	run_sql_source1 "insert into ${shardddl1}.${tb1} values(7,7);"
-	run_sql_source2 "insert into ${shardddl1}.${tb1} values(8,8);"
-	run_sql_source2 "insert into ${shardddl1}.${tb2} values(9,9);"
+	run_sql_source1 "insert into ${shardddl1}.${tb1} values(7,107);"
+	run_sql_source2 "insert into ${shardddl1}.${tb1} values(8,108);"
+	run_sql_source2 "insert into ${shardddl1}.${tb2} values(9,109);"
 
 	if [[ "$1" = "pessimistic" ]]; then
 		check_log_contain_with_retry "is different with" $WORK_DIR/master/log/dm-master.log
 	else
 		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 			"query-status test" \
-			'because schema conflict detected' 2
+			'Running' 3
+    run_sql_source1 "alter table ${shardddl1}.${tb1} change c c int first;"
+    run_sql_source1 "insert into ${shardddl1}.${tb1} values(10,110);"
+    run_sql_source2 "insert into ${shardddl1}.${tb1} values(11,111);"
+    run_sql_source2 "insert into ${shardddl1}.${tb2} values(12,112);"
+
+    sleep 3
+    run_sql_source1 "insert into ${shardddl1}.${tb1} values(13,113);"
+    run_sql_source2 "insert into ${shardddl1}.${tb1} values(14,114);"
+    run_sql_source2 "insert into ${shardddl1}.${tb2} values(15,115);"
+   	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 	fi
 }
 
@@ -545,8 +555,8 @@ function restart_worker() {
 function run() {
 	init_cluster
 	init_database
-	start=46
-	end=70
+	start=56
+	end=56
 	except=(052 053 054 055 060 061 069 070)
 	for i in $(seq -f "%03g" ${start} ${end}); do
 		if [[ ${except[@]} =~ $i ]]; then
