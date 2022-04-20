@@ -646,7 +646,7 @@ func (h *openAPI) GetProcessor(c *gin.Context) {
 	// Note: for the case that no tables are attached to a newly created changefeed,
 	//       we just do not report an error.
 	var processorDetail model.ProcessorDetail
-	if exist1 && exist2 {
+	if captureExist && positionsExist {
 		processorDetail = model.ProcessorDetail{
 			CheckPointTs: position.CheckPointTs,
 			ResolvedTs:   position.ResolvedTs,
