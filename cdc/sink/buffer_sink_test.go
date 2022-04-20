@@ -101,6 +101,19 @@ func TestFlushFailed(t *testing.T) {
 	require.Equal(t, uint64(5), b.getTableCheckpointTs(1))
 }
 
+func TestCleanBufferedData(t *testing.T) {
+	t.Parallel()
+
+	tblID := model.TableID(1)
+	b := newBufferSink(newBlackHoleSink(context.TODO()), 5)
+	b.buffer[tblID] = []*model.RowChangedEvent{}
+	_, ok := b.buffer[tblID]
+	require.True(t, ok)
+	require.Nil(t, b.Init(tblID))
+	_, ok = b.buffer[tblID]
+	require.False(t, ok)
+}
+
 type benchSink struct {
 	Sink
 }

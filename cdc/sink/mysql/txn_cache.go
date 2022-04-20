@@ -64,7 +64,7 @@ func newUnresolvedTxnCache() *unresolvedTxnCache {
 }
 
 // RemoveTableTxn removes  unresolved rows from cache
-func (c *UnresolvedTxnCache) RemoveTableTxn(tableID model.TableID) {
+func (c *unresolvedTxnCache) RemoveTableTxn(tableID model.TableID) {
 	c.unresolvedTxnsMu.Lock()
 	defer c.unresolvedTxnsMu.Unlock()
 	delete(c.unresolvedTxns, tableID)
