@@ -655,7 +655,6 @@ func (h *openAPI) GetProcessor(c *gin.Context) {
 		}
 		tables := make([]int64, 0)
 		for tableID := range status.Tables {
-			log.Info("fix_http_api", zap.Int64("tableID", tableID))
 			tables = append(tables, tableID)
 		}
 		processorDetail.Tables = tables
