@@ -59,7 +59,7 @@ func TestLeaderLoopSuccess(t *testing.T) {
 		s.id,
 		&s.leader,
 		s.masterCli,
-		&s.initialized,
+		&s.leaderInitialized,
 		s.rpcLogRL,
 	)
 	s.masterRPCHook = preRPCHook
@@ -114,7 +114,7 @@ func TestLeaderLoopMeetStaleData(t *testing.T) {
 		s.id,
 		&s.leader,
 		s.masterCli,
-		&s.initialized,
+		&s.leaderInitialized,
 		s.rpcLogRL,
 	)
 	s.masterRPCHook = preRPCHook
@@ -185,7 +185,7 @@ func TestLeaderLoopWatchLeader(t *testing.T) {
 			s.id,
 			&s.leader,
 			s.masterCli,
-			&s.initialized,
+			&s.leaderInitialized,
 			s.rpcLogRL,
 		)
 		s.masterRPCHook = preRPCHook

@@ -146,7 +146,8 @@ func (h PreRPCHook[T]) checkInitialized(respPointer interface{}) (shouldRet bool
 		errInRefelct := reflect.ValueOf(&pb.Error{
 			Code: pb.ErrorCode_MasterNotReady,
 		})
-		reflect.ValueOf(respPointer).Elem().FieldByName("Err").Set(errInRefelct)
+		reflect.Indirect(reflect.ValueOf(respPointer)).Elem().
+			FieldByName("Err").Set(errInRefelct)
 		return true
 	}
 	return false

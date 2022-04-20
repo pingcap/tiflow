@@ -148,19 +148,23 @@ func (m *WorkerManager) InitAfterRecover(ctx context.Context) (retErr error) {
 		return err
 	}
 
-	if len(allPersistedWorkers) == 0 {
-		// Fast path when there is no worker.
-		m.mu.Lock()
+	m.mu.Lock()
+	for workerID, status := range allPersistedWorkers {
+		entry := newWaitingWorkerEntry(workerID, status)
+		// TODO: refine mapping from worker status to worker entry state
+		if status.Code == libModel.WorkerStatusFinished {
+			continue
+		}
+		m.workerEntries[workerID] = entry
+	}
+
+	if len(m.workerEntries) == 0 {
+		// Fast path when there is no active worker.
 		m.state = workerManagerReady
 		m.mu.Unlock()
 		return nil
 	}
 
-	m.mu.Lock()
-	for workerID, status := range allPersistedWorkers {
-		entry := newWaitingWorkerEntry(workerID, status)
-		m.workerEntries[workerID] = entry
-	}
 	m.state = workerManagerWaitingHeartbeat
 	m.mu.Unlock()
 
@@ -420,6 +424,73 @@ func (m *WorkerManager) IsInitialized() bool {
 	return m.state == workerManagerReady
 }
 
+func (m *WorkerManager) checkWorkerEntriesOnce() error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for workerID, entry := range m.workerEntries {
+		entry := entry
+		state := entry.State()
+		if state == workerEntryOffline || state == workerEntryTombstone {
+			// Prevent repeated delivery of the workerOffline event.
+			continue
+		}
+
+		if entry.ExpireTime().After(m.clock.Now()) {
+			// Not timed out
+			if reader := entry.StatusReader(); reader != nil {
+				if _, ok := reader.Receive(); ok {
+					err := m.enqueueEvent(&masterEvent{
+						Tp:       workerStatusUpdatedEvent,
+						WorkerID: workerID,
+						Handle: &runningHandleImpl{
+							workerID:   workerID,
+							executorID: entry.executorID,
+							manager:    m,
+						},
+					})
+					if err != nil {
+						return err
+					}
+				}
+			}
+
+			continue
+		}
+
+		// The worker has timed out.
+		entry.MarkAsOffline()
+
+		var offlineError error
+		if reader := entry.StatusReader(); reader != nil {
+			switch reader.Status().Code {
+			case libModel.WorkerStatusFinished:
+				offlineError = derror.ErrWorkerFinish.FastGenByArgs()
+			case libModel.WorkerStatusStopped:
+				offlineError = derror.ErrWorkerStop.FastGenByArgs()
+			default:
+				offlineError = derror.ErrWorkerOffline.FastGenByArgs(workerID)
+			}
+		}
+
+		err := m.enqueueEvent(&masterEvent{
+			Tp:       workerOfflineEvent,
+			WorkerID: workerID,
+			Handle: &tombstoneHandleImpl{
+				workerID: workerID,
+				manager:  m,
+			},
+			Err: offlineError,
+			beforeHook: func() {
+				entry.MarkAsTombstone()
+			},
+		})
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (m *WorkerManager) runBackgroundChecker() error {
 	ticker := time.NewTicker(m.timeouts.MasterHeartbeatCheckLoopInterval)
 	defer ticker.Stop()
@@ -430,73 +501,10 @@ func (m *WorkerManager) runBackgroundChecker() error {
 			log.L().Info("timeout checker exited", zap.String("master-id", m.masterID))
 			return nil
 		case <-ticker.C:
-		}
-
-		m.mu.Lock()
-		for workerID, entry := range m.workerEntries {
-			entry := entry
-			state := entry.State()
-			if state == workerEntryOffline || state == workerEntryTombstone {
-				// Prevent repeated delivery of the workerOffline event.
-				continue
-			}
-
-			if entry.ExpireTime().After(m.clock.Now()) {
-				// Not timed out
-				if reader := entry.StatusReader(); reader != nil {
-					if _, ok := reader.Receive(); ok {
-						err := m.enqueueEvent(&masterEvent{
-							Tp:       workerStatusUpdatedEvent,
-							WorkerID: workerID,
-							Handle: &runningHandleImpl{
-								workerID:   workerID,
-								executorID: entry.executorID,
-								manager:    m,
-							},
-						})
-						if err != nil {
-							m.mu.Unlock()
-							return err
-						}
-					}
-				}
-
-				continue
-			}
-
-			// The worker has timed out.
-			entry.MarkAsOffline()
-
-			var offlineError error
-			if reader := entry.StatusReader(); reader != nil {
-				switch reader.Status().Code {
-				case libModel.WorkerStatusFinished:
-					offlineError = derror.ErrWorkerFinish.FastGenByArgs()
-				case libModel.WorkerStatusStopped:
-					offlineError = derror.ErrWorkerStop.FastGenByArgs()
-				default:
-					offlineError = derror.ErrWorkerOffline.FastGenByArgs(workerID)
-				}
-			}
-
-			err := m.enqueueEvent(&masterEvent{
-				Tp:       workerOfflineEvent,
-				WorkerID: workerID,
-				Handle: &tombstoneHandleImpl{
-					workerID: workerID,
-					manager:  m,
-				},
-				Err: offlineError,
-				beforeHook: func() {
-					entry.MarkAsTombstone()
-				},
-			})
-			if err != nil {
-				m.mu.Unlock()
+			if err := m.checkWorkerEntriesOnce(); err != nil {
 				return err
 			}
 		}
-		m.mu.Unlock()
 	}
 }
 

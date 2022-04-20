@@ -104,7 +104,7 @@ func TestUpdateServerMembers(t *testing.T) {
 		id,
 		&s.leader,
 		s.masterCli,
-		&s.initialized,
+		&s.leaderInitialized,
 		s.rpcLogRL,
 	)
 	s.masterRPCHook = preRPCHook

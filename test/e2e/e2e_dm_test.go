@@ -61,12 +61,13 @@ func TestDMSubtask(t *testing.T) {
 	// TODO: in #272, Server.jobManager is assigned after Server.leader.Store(), so even if we pass the PreRPC check,
 	// Server.jobManager may not be assigned yet. We simply sleep here
 	time.Sleep(time.Second)
-	resp, err := masterClient.SubmitJob(ctx, &pb.SubmitJobRequest{
-		Tp:     pb.JobType_DM,
-		Config: dmSubtask,
-	})
-	require.NoError(t, err)
-	require.Nil(t, resp.Err)
+	require.Eventually(t, func() bool {
+		resp, err := masterClient.SubmitJob(ctx, &pb.SubmitJobRequest{
+			Tp:     pb.JobType_DM,
+			Config: dmSubtask,
+		})
+		return err == nil && resp.Err == nil
+	}, time.Second*5, time.Millisecond*100)
 
 	// check full phase
 	waitRow := func(where string) {

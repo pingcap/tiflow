@@ -86,7 +86,7 @@ type Server struct {
 
 	metaStoreManager MetaStoreManager
 
-	initialized atomic.Bool
+	leaderInitialized atomic.Bool
 
 	// mocked server for test
 	mockGrpcServer mock.GrpcServer
@@ -155,26 +155,26 @@ func NewServer(cfg *Config, ctx *test.Context) (*Server, error) {
 	p2pMsgRouter := p2p.NewMessageRouter(p2p.NodeID(info.ID), info.Addr)
 
 	server := &Server{
-		id:               id,
-		cfg:              cfg,
-		info:             info,
-		executorManager:  executorManager,
-		initialized:      *atomic.NewBool(false),
-		testCtx:          ctx,
-		leader:           atomic.Value{},
-		masterCli:        &rpcutil.LeaderClientWithLock[pb.MasterClient]{},
-		resourceCli:      &rpcutil.LeaderClientWithLock[pb.ResourceManagerClient]{},
-		p2pMsgRouter:     p2pMsgRouter,
-		rpcLogRL:         rate.NewLimiter(rate.Every(time.Second*5), 3 /*burst*/),
-		metrics:          newServerMasterMetric(),
-		metaStoreManager: NewMetaStoreManager(),
+		id:                id,
+		cfg:               cfg,
+		info:              info,
+		executorManager:   executorManager,
+		leaderInitialized: *atomic.NewBool(false),
+		testCtx:           ctx,
+		leader:            atomic.Value{},
+		masterCli:         &rpcutil.LeaderClientWithLock[pb.MasterClient]{},
+		resourceCli:       &rpcutil.LeaderClientWithLock[pb.ResourceManagerClient]{},
+		p2pMsgRouter:      p2pMsgRouter,
+		rpcLogRL:          rate.NewLimiter(rate.Every(time.Second*5), 3 /*burst*/),
+		metrics:           newServerMasterMetric(),
+		metaStoreManager:  NewMetaStoreManager(),
 	}
 	server.leaderServiceFn = server.runLeaderService
 	masterRPCHook := rpcutil.NewPreRPCHook[pb.MasterClient](
 		id,
 		&server.leader,
 		server.masterCli,
-		&server.initialized,
+		&server.leaderInitialized,
 		server.rpcLogRL,
 	)
 	server.masterRPCHook = masterRPCHook
@@ -184,7 +184,7 @@ func NewServer(cfg *Config, ctx *test.Context) (*Server, error) {
 
 // Heartbeat implements pb interface.
 func (s *Server) Heartbeat(ctx context.Context, req *pb.HeartbeatRequest) (*pb.HeartbeatResponse, error) {
-	var resp2 *pb.HeartbeatResponse
+	resp2 := &pb.HeartbeatResponse{}
 	shouldRet, err := s.masterRPCHook.PreRPC(ctx, req, &resp2)
 	if shouldRet {
 		return resp2, err
@@ -209,7 +209,7 @@ func (s *Server) Heartbeat(ctx context.Context, req *pb.HeartbeatRequest) (*pb.H
 
 // SubmitJob passes request onto "JobManager".
 func (s *Server) SubmitJob(ctx context.Context, req *pb.SubmitJobRequest) (*pb.SubmitJobResponse, error) {
-	var resp2 *pb.SubmitJobResponse
+	resp2 := &pb.SubmitJobResponse{}
 	shouldRet, err := s.masterRPCHook.PreRPC(ctx, req, &resp2)
 	if shouldRet {
 		return resp2, err
@@ -218,7 +218,7 @@ func (s *Server) SubmitJob(ctx context.Context, req *pb.SubmitJobRequest) (*pb.S
 }
 
 func (s *Server) QueryJob(ctx context.Context, req *pb.QueryJobRequest) (*pb.QueryJobResponse, error) {
-	var resp2 *pb.QueryJobResponse
+	resp2 := &pb.QueryJobResponse{}
 	shouldRet, err := s.masterRPCHook.PreRPC(ctx, req, &resp2)
 	if shouldRet {
 		return resp2, err
@@ -227,7 +227,7 @@ func (s *Server) QueryJob(ctx context.Context, req *pb.QueryJobRequest) (*pb.Que
 }
 
 func (s *Server) CancelJob(ctx context.Context, req *pb.CancelJobRequest) (*pb.CancelJobResponse, error) {
-	var resp2 *pb.CancelJobResponse
+	resp2 := &pb.CancelJobResponse{}
 	shouldRet, err := s.masterRPCHook.PreRPC(ctx, req, &resp2)
 	if shouldRet {
 		return resp2, err
@@ -236,7 +236,7 @@ func (s *Server) CancelJob(ctx context.Context, req *pb.CancelJobRequest) (*pb.C
 }
 
 func (s *Server) PauseJob(ctx context.Context, req *pb.PauseJobRequest) (*pb.PauseJobResponse, error) {
-	var resp2 *pb.PauseJobResponse
+	resp2 := &pb.PauseJobResponse{}
 	shouldRet, err := s.masterRPCHook.PreRPC(ctx, req, &resp2)
 	if shouldRet {
 		return resp2, err
@@ -246,7 +246,7 @@ func (s *Server) PauseJob(ctx context.Context, req *pb.PauseJobRequest) (*pb.Pau
 
 // RegisterExecutor implements grpc interface, and passes request onto executor manager.
 func (s *Server) RegisterExecutor(ctx context.Context, req *pb.RegisterExecutorRequest) (*pb.RegisterExecutorResponse, error) {
-	var resp2 *pb.RegisterExecutorResponse
+	resp2 := &pb.RegisterExecutorResponse{}
 	shouldRet, err := s.masterRPCHook.PreRPC(ctx, req, &resp2)
 	if shouldRet {
 		return resp2, err
@@ -270,7 +270,7 @@ func (s *Server) RegisterExecutor(ctx context.Context, req *pb.RegisterExecutorR
 // - queries resource manager to allocate resource and maps tasks to executors
 // - returns scheduler response to job master
 func (s *Server) ScheduleTask(ctx context.Context, req *pb.TaskSchedulerRequest) (*pb.TaskSchedulerResponse, error) {
-	var resp2 *pb.TaskSchedulerResponse
+	resp2 := &pb.TaskSchedulerResponse{}
 	shouldRet, err := s.masterRPCHook.PreRPC(ctx, req, &resp2)
 	if shouldRet {
 		return resp2, err
@@ -346,7 +346,7 @@ func (s *Server) startForTest(ctx context.Context) (err error) {
 	s.executorManager.Start(ctx)
 	// TODO: start job manager
 	s.leader.Store(&Member{Name: s.name(), IsServLeader: true, IsEtcdLeader: true})
-	s.initialized.Store(true)
+	s.leaderInitialized.Store(true)
 	return
 }
 
@@ -404,7 +404,6 @@ func (s *Server) Run(ctx context.Context) (err error) {
 	if err != nil {
 		return
 	}
-	s.initialized.Store(true)
 
 	wg, ctx := errgroup.WithContext(ctx)
 
@@ -475,7 +474,7 @@ func (s *Server) startResourceManager() error {
 		s.id,
 		&s.leader,
 		s.resourceCli,
-		&s.initialized,
+		&s.leaderInitialized,
 		s.rpcLogRL,
 	)
 	s.resourceManager = manager.NewService(
@@ -671,6 +670,7 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 		AdvertiseAddr: s.cfg.AdvertiseAddr,
 	})
 	defer func() {
+		s.leaderInitialized.Store(false)
 		s.leader.Store(&Member{})
 		s.resign()
 	}()
@@ -686,6 +686,7 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 			log.L().Warn("job manager close with error", zap.Error(err))
 		}
 	}()
+	s.leaderInitialized.Store(true)
 
 	metricTicker := time.NewTicker(defaultMetricInterval)
 	defer metricTicker.Stop()
