@@ -57,7 +57,6 @@ func NewService(
 		accessor:          resourcemeta.NewMetadataAccessor(metaclient),
 		cache:             make(map[resourcemeta.ResourceID]*resourcemeta.ResourceMeta),
 		executors:         executorInfoProvider,
-		cancelCh:          make(chan struct{}),
 		offlinedExecutors: make(chan resourcemeta.ExecutorID, offlineExecutorQueueSize),
 		preRPCHook:        preRPCHook,
 	}
@@ -276,6 +275,7 @@ func (s *Service) OnExecutorOffline(executorID resourcemeta.ExecutorID) error {
 }
 
 func (s *Service) StartBackgroundWorker() {
+	s.cancelCh = make(chan struct{})
 	ctx, cancel := context.WithCancel(context.Background())
 	s.wg.Add(1)
 	go func() {
@@ -298,9 +298,11 @@ func (s *Service) StartBackgroundWorker() {
 	}()
 }
 
+// Stop can only be called after StartBackgroundWorker.
 func (s *Service) Stop() {
 	close(s.cancelCh)
 	s.wg.Wait()
+	s.isAllLoaded.Store(false)
 }
 
 func (s *Service) runBackgroundWorker(ctx context.Context) {

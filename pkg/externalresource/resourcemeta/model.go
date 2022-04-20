@@ -13,7 +13,9 @@ import (
 )
 
 type (
-	WorkerID   = string
+	WorkerID = string
+	// ResourceID should be in the form of `/<type>/<unique-name>`, currently
+	// only local type is available.
 	ResourceID = string
 	JobID      = string
 	ExecutorID = model.ExecutorID

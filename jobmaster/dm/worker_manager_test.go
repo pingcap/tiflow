@@ -161,7 +161,7 @@ func (t *testDMJobmasterSuite) TestClearWorkerStatus() {
 	require.Eventually(t.T(), func() bool {
 		workerManager.removeOfflineWorkers()
 		return len(workerManager.WorkerStatus()) == 1
-	}, 5*time.Second, 100*time.Millisecond)
+	}, 10*time.Second, 200*time.Millisecond)
 }
 
 func (t *testDMJobmasterSuite) TestCreateWorker() {

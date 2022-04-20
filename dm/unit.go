@@ -7,6 +7,7 @@ import (
 
 	"github.com/hanfei1991/microcosm/lib"
 	libModel "github.com/hanfei1991/microcosm/lib/model"
+	"github.com/hanfei1991/microcosm/pkg/externalresource/broker"
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/dm/pb"
 	"github.com/pingcap/tiflow/dm/dm/unit"
@@ -20,7 +21,8 @@ type unitHolder struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	autoResume *worker.AutoResumeInfo
+	autoResume         *worker.AutoResumeInfo
+	storageWriteHandle broker.Handle
 
 	unit        unit.Unit
 	resultCh    chan pb.ProcessResult
@@ -88,6 +90,15 @@ func (u *unitHolder) tryUpdateStatus(ctx context.Context, base lib.BaseWorker) e
 
 	// if task is finished
 	if len(result.Errors) == 0 {
+		if u.storageWriteHandle != nil {
+			// try to persist storage, if failed, retry next tick
+			err := u.storageWriteHandle.Persist(ctx)
+			if err != nil {
+				log.L().Error("persist storage failed", zap.Error(err))
+				return nil
+			}
+		}
+
 		s := libModel.WorkerStatus{
 			Code: libModel.WorkerStatusFinished,
 		}

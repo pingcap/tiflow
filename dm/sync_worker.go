@@ -2,12 +2,15 @@ package dm
 
 import (
 	"context"
+	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/syncer"
 	"go.uber.org/zap"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/hanfei1991/microcosm/lib"
 	"github.com/hanfei1991/microcosm/model"
@@ -32,6 +35,20 @@ func newSyncWorker(cfg lib.WorkerConfig) lib.WorkerImpl {
 
 func (s *syncWorker) InitImpl(ctx context.Context) error {
 	log.L().Info("init sync worker")
+
+	if s.cfg.Mode == config.ModeAll {
+		h, err := s.OpenStorage(ctx, "/local/"+s.cfg.Name)
+		for status.Code(err) == codes.Unavailable {
+			log.L().Info("simple retry", zap.Error(err))
+			time.Sleep(time.Second)
+			h, err = s.OpenStorage(ctx, "/local/"+s.cfg.Name)
+		}
+		if err != nil {
+			return errors.Trace(err)
+		}
+		s.cfg.ExtStorage = h.BrExternalStorage()
+	}
+
 	s.unitHolder = newUnitHolder(syncer.NewSyncer(s.cfg, nil, nil))
 	return errors.Trace(s.unitHolder.init(ctx))
 }

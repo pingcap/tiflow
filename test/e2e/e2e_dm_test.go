@@ -58,6 +58,9 @@ func TestDMSubtask(t *testing.T) {
 
 	dmSubtask, err := ioutil.ReadFile("./dm-subtask.toml")
 	require.NoError(t, err)
+	// TODO: in #272, Server.jobManager is assigned after Server.leader.Store(), so even if we pass the PreRPC check,
+	// Server.jobManager may not be assigned yet. We simply sleep here
+	time.Sleep(time.Second)
 	resp, err := masterClient.SubmitJob(ctx, &pb.SubmitJobRequest{
 		Tp:     pb.JobType_DM,
 		Config: dmSubtask,

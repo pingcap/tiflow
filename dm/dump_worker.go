@@ -2,12 +2,15 @@ package dm
 
 import (
 	"context"
+	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/dumpling"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/zap"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/hanfei1991/microcosm/lib"
 	"github.com/hanfei1991/microcosm/model"
@@ -32,7 +35,21 @@ func newDumpWorker(cfg lib.WorkerConfig) lib.WorkerImpl {
 
 func (d *dumpWorker) InitImpl(ctx context.Context) error {
 	log.L().Info("init dump worker")
+
+	h, err := d.OpenStorage(ctx, "/local/"+d.cfg.Name)
+	for status.Code(errors.Cause(err)) == codes.Unavailable {
+		// TODO: use backoff retry later
+		log.L().Info("simple retry", zap.Error(err))
+		time.Sleep(time.Second)
+		h, err = d.OpenStorage(ctx, "/local/"+d.cfg.Name)
+	}
+	if err != nil {
+		return errors.Trace(err)
+	}
+	d.cfg.ExtStorage = h.BrExternalStorage()
+
 	d.unitHolder = newUnitHolder(dumpling.NewDumpling(d.cfg))
+	d.unitHolder.storageWriteHandle = h
 	return errors.Trace(d.unitHolder.init(ctx))
 }
 
