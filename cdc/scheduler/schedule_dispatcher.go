@@ -19,10 +19,11 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"go.uber.org/zap"
+
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/scheduler/util"
 	"github.com/pingcap/tiflow/pkg/context"
-	"go.uber.org/zap"
 )
 
 const (
@@ -532,14 +533,9 @@ func (s *BaseScheduleDispatcher) OnAgentFinishedTableOperation(
 	defer s.mu.Unlock()
 
 	logger := s.logger.With(
-<<<<<<< HEAD
 		zap.String("capture-id", captureID),
 		zap.Int64("table-id", tableID),
-=======
-		zap.String("captureID", captureID),
-		zap.Int64("tableID", tableID),
 		zap.String("epoch", epoch),
->>>>>>> 0578db337 (scheduler(cdc): add ProcessorEpoch (#4768))
 	)
 
 	if _, ok := s.captures[captureID]; !ok {
@@ -593,15 +589,10 @@ func (s *BaseScheduleDispatcher) OnAgentSyncTaskStatuses(
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-<<<<<<< HEAD
 	logger := s.logger.With(zap.String("capture-id", captureID))
-	logger.Info("scheduler received sync", zap.String("capture-id", captureID))
-=======
-	logger := s.logger.With(zap.String("captureID", captureID))
 	logger.Info("scheduler received sync",
-		zap.String("captureID", captureID),
+		zap.String("capture-id", captureID),
 		zap.String("epoch", epoch))
->>>>>>> 0578db337 (scheduler(cdc): add ProcessorEpoch (#4768))
 
 	if ce := logger.Check(zap.DebugLevel, "OnAgentSyncTaskStatuses"); ce != nil {
 		// Print this information only in debug mode.

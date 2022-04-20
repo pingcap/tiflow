@@ -18,12 +18,13 @@ import (
 	"testing"
 
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/scheduler/util"
-	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/scheduler/util"
+	cdcContext "github.com/pingcap/tiflow/pkg/context"
 )
 
 var _ ScheduleDispatcherCommunicator = (*mockScheduleDispatcherCommunicator)(nil)
@@ -65,18 +66,11 @@ func (m *mockScheduleDispatcherCommunicator) DispatchTable(
 ) (done bool, err error) {
 	if !m.isBenchmark {
 		log.Info("dispatch table called",
-<<<<<<< HEAD
 			zap.String("changefeed-id", changeFeedID),
 			zap.Int64("table-id", tableID),
 			zap.String("capture-id", captureID),
-			zap.Bool("is-delete", isDelete))
-=======
-			zap.String("changefeed", changeFeedID),
-			zap.Int64("tableID", tableID),
-			zap.String("captureID", captureID),
-			zap.Bool("isDelete", isDelete),
+			zap.Bool("is-delete", isDelete),
 			zap.String("epoch", epoch))
->>>>>>> 0578db337 (scheduler(cdc): add ProcessorEpoch (#4768))
 		if !isDelete {
 			m.addTableRecords[captureID] = append(m.addTableRecords[captureID], tableID)
 		} else {

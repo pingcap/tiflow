@@ -21,12 +21,13 @@ import (
 	"github.com/google/uuid"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/uber-go/atomic"
+	"go.uber.org/zap"
+
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/scheduler/util"
 	"github.com/pingcap/tiflow/pkg/context"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/uber-go/atomic"
-	"go.uber.org/zap"
 )
 
 // Agent is an interface for an object inside Processor that is responsible
@@ -139,13 +140,8 @@ func NewBaseAgent(
 	messenger ProcessorMessenger,
 	config *BaseAgentConfig,
 ) *BaseAgent {
-<<<<<<< HEAD
-	logger := log.L().With(zap.String("changefeed-id", changeFeedID))
-	return &BaseAgent{
-=======
 	logger := log.L().With(zap.String("changefeed", changeFeedID))
 	ret := &BaseAgent{
->>>>>>> 0578db337 (scheduler(cdc): add ProcessorEpoch (#4768))
 		pendingOps:       deque.NewDeque(),
 		tableOperations:  map[model.TableID]*agentOperation{},
 		logger:           logger,
@@ -223,7 +219,7 @@ func (a *BaseAgent) Tick(ctx context.Context) error {
 		if op.Epoch != a.getEpoch() {
 			a.logger.Info("dispatch request epoch does not match",
 				zap.String("epoch", op.Epoch),
-				zap.String("expectedEpoch", a.getEpoch()))
+				zap.String("expected-epoch", a.getEpoch()))
 			continue
 		}
 		if _, ok := a.tableOperations[op.TableID]; ok {
@@ -388,15 +384,9 @@ func (a *BaseAgent) OnOwnerDispatchedTask(
 	}
 	a.pendingOps.PushBack(op)
 
-<<<<<<< HEAD
-	a.logger.Debug("OnOwnerDispatchedTask",
-		zap.String("owner-capture-id", ownerCaptureID),
-		zap.Int64("owner-rev", ownerRev),
-=======
 	a.logger.Info("OnOwnerDispatchedTask",
-		zap.String("ownerCaptureID", ownerCaptureID),
-		zap.Int64("ownerRev", ownerRev),
->>>>>>> 0578db337 (scheduler(cdc): add ProcessorEpoch (#4768))
+		zap.String("ownerCapture-id", ownerCaptureID),
+		zap.Int64("owner-rev", ownerRev),
 		zap.Any("op", op))
 }
 

@@ -16,10 +16,11 @@ package scheduler
 import (
 	"testing"
 
-	"github.com/pingcap/tiflow/cdc/model"
-	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+
+	"github.com/pingcap/tiflow/cdc/model"
+	cdcContext "github.com/pingcap/tiflow/pkg/context"
 )
 
 // read only
@@ -213,12 +214,7 @@ func TestAgentReceiveFromStaleOwner(t *testing.T) {
 	executor := NewMockTableExecutor(t)
 	messenger := &MockProcessorMessenger{}
 	agent := NewBaseAgent("test-cf", executor, messenger, agentConfigForTesting)
-<<<<<<< HEAD
 	agent.checkpointSender = &MockCheckpointSender{}
-	messenger.On("SyncTaskStatuses", mock.Anything, []model.TableID(nil), []model.TableID(nil), []model.TableID(nil)).
-		Return(true, nil)
-=======
-	agent.checkpointSender = &mockCheckpointSender{}
 
 	var epoch model.ProcessorEpoch
 	messenger.On("SyncTaskStatuses", mock.Anything, mock.AnythingOfType("string"),
@@ -226,7 +222,6 @@ func TestAgentReceiveFromStaleOwner(t *testing.T) {
 		Return(true, nil).Run(func(args mock.Arguments) {
 		epoch = args.String(1)
 	})
->>>>>>> 0578db337 (scheduler(cdc): add ProcessorEpoch (#4768))
 	err := agent.Tick(ctx)
 	require.NoError(t, err)
 	messenger.AssertExpectations(t)
@@ -265,14 +260,9 @@ func TestOwnerMismatchShouldPanic(t *testing.T) {
 	executor := NewMockTableExecutor(t)
 	messenger := &MockProcessorMessenger{}
 	agent := NewBaseAgent("test-cf", executor, messenger, agentConfigForTesting)
-<<<<<<< HEAD
 	agent.checkpointSender = &MockCheckpointSender{}
-	messenger.On("SyncTaskStatuses", mock.Anything, []model.TableID(nil), []model.TableID(nil), []model.TableID(nil)).
-=======
-	agent.checkpointSender = &mockCheckpointSender{}
 	messenger.On("SyncTaskStatuses", mock.Anything, mock.AnythingOfType("string"),
 		[]model.TableID(nil), []model.TableID(nil), []model.TableID(nil)).
->>>>>>> 0578db337 (scheduler(cdc): add ProcessorEpoch (#4768))
 		Return(true, nil)
 	err := agent.Tick(ctx)
 	require.NoError(t, err)
@@ -298,7 +288,7 @@ func TestIgnoreStaleEpoch(t *testing.T) {
 	executor := NewMockTableExecutor(t)
 	messenger := &MockProcessorMessenger{}
 	agent := NewBaseAgent("test-cf", executor, messenger, agentConfigForTesting)
-	agent.checkpointSender = &mockCheckpointSender{}
+	agent.checkpointSender = &MockCheckpointSender{}
 
 	var epoch, newEpoch model.ProcessorEpoch
 	messenger.On("SyncTaskStatuses", mock.Anything, mock.AnythingOfType("string"),
