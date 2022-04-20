@@ -28,7 +28,7 @@ import (
 func NewTransferSourceCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "transfer-source <source-id> <worker-id>",
-		Short: "Transfers a upstream MySQL/MariaDB source to a free worker",
+		Short: "Transfers a upstream MySQL/MariaDB source to an online worker",
 		RunE:  transferSourceFunc,
 	}
 	return cmd
