@@ -612,33 +612,41 @@ func (h *openAPI) GetProcessor(c *gin.Context) {
 		return
 	}
 
+	// check if this cpatureID exist
 	procInfos, err := h.statusProvider().GetProcessors(ctx)
 	if err != nil {
 		_ = c.Error(err)
 		return
 	}
-	var procInfo *model.ProcInfoSnap
+	var found bool
 	for _, info := range procInfos {
 		if info.CaptureID == captureID {
-			procInfo = info
+			found = true
 			break
 		}
 	}
-	if procInfo == nil {
+	if !found {
 		_ = c.Error(cerror.ErrCaptureNotExist.GenWithStackByArgs(captureID))
 		return
 	}
+
+	statuses, err := h.statusProvider().GetAllTaskStatuses(ctx, changefeedID)
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+	status, exist1 := statuses[captureID]
 
 	positions, err := h.statusProvider().GetTaskPositions(ctx, changefeedID)
 	if err != nil {
 		_ = c.Error(err)
 		return
 	}
-	position, exist := positions[captureID]
+	position, exist2 := positions[captureID]
 	// Note: for the case that no tables are attached to a newly created changefeed,
 	//       we just do not report an error.
 	var processorDetail model.ProcessorDetail
-	if exist {
+	if exist1 && exist2 {
 		processorDetail = model.ProcessorDetail{
 			CheckPointTs: position.CheckPointTs,
 			ResolvedTs:   position.ResolvedTs,
@@ -646,7 +654,8 @@ func (h *openAPI) GetProcessor(c *gin.Context) {
 			Error:        position.Error,
 		}
 		tables := make([]int64, 0)
-		for tableID := range procInfo.Tables {
+		for tableID := range status.Tables {
+			log.Info("fix_http_api", zap.Int64("tableID", tableID))
 			tables = append(tables, tableID)
 		}
 		processorDetail.Tables = tables
