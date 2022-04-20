@@ -2438,9 +2438,6 @@ func (s *Syncer) handleRowsEvent(ev *replication.RowsEvent, ec eventContext) (*f
 		log.WrapStringerField("location", ec.currentLocation),
 		zap.Reflect("raw event data", ev.Rows))
 
-	//if len(ev.Rows) > 0 && len(ev.Rows[0]) > 0 && ev.Rows[0][0].(int32) == 30 {
-	//	fmt.Println("hello")
-	//}
 	needSkip, err := s.skipRowsEvent(sourceTable, ec.header.EventType)
 	if err != nil {
 		return nil, err

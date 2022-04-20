@@ -108,14 +108,12 @@ function DM_049_CASE() {
 	run_sql_source2 "insert into ${shardddl1}.${tb1} values(8,'hhh');"
 	run_sql_source2 "insert into ${shardddl1}.${tb2} values(9,'iii');"
 
-	if [[ "$1" = "pessimistic" ]]; then
-		check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
-	else
-		# TODO: fix this after DM worker supports redirect
-		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-			"query-status test" \
-			"because schema conflict detected" 2
-	fi
+  # insert 3 recorde to make sure optimistic mode sharding resolve can finish fast
+  sleep 3
+  run_sql_source1 "insert into ${shardddl1}.${tb1} values(10,'jjj');"
+  run_sql_source2 "insert into ${shardddl1}.${tb1} values(11,'kkk');"
+  run_sql_source2 "insert into ${shardddl1}.${tb2} values(12,'lll');"
+	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 }
 
 function DM_049() {

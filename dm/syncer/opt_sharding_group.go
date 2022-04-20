@@ -129,7 +129,7 @@ func (k *OptShardingGroupKeeper) tableInConflict(targetTable *filter.Table) bool
 	return ok
 }
 
-// return whether sourceTable is the first conflict table for targetTable
+// appendConflictTable returns whether sourceTable is the first conflict table for targetTable.
 func (k *OptShardingGroupKeeper) appendConflictTable(sourceTable, targetTable *filter.Table,
 	conflictLocation binlog.Location, flavor string, enableGTID bool,
 ) bool {

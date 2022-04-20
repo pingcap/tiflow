@@ -198,16 +198,15 @@ func (s *Syncer) handleQueryEventOptimistic(qec *queryEventContext) error {
 		err = s.schemaTracker.DropTable(upTable)
 		if err != nil {
 			s.tctx.L().Error("fail to drop table to rollback table in schema tracker", zap.Stringer("table", upTable))
-			return err
 		} else {
 			err = s.schemaTracker.CreateTableIfNotExists(upTable, tiBefore)
 			if err != nil {
 				s.tctx.L().Error("fail to recreate table to rollback table in schema tracker", zap.Stringer("table", upTable))
-				return err
+			} else {
+				s.tctx.L().Info("skip conflict ddls in optimistic shard mode", zap.String("event", "query"), zap.Stringer("queryEventContext", qec))
 			}
 		}
-		s.tctx.L().Info("skip conflict ddls in optimistic shard mode", zap.String("event", "query"), zap.Stringer("queryEventContext", qec))
-		return nil
+		return err
 	}
 
 	// updated needHandleDDLs to DDLs received from DM-master.

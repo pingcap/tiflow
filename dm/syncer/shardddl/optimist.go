@@ -245,14 +245,6 @@ func (o *Optimist) PendingRedirectOperation() (*optimism.Operation, string) {
 
 // DoneRedirectOperation marks the redirect shard DDL lock operation as done.
 func (o *Optimist) DoneRedirectOperation(targetTableID string) {
-	//, op optimism.Operation, upload bool) error {
-	//if upload {
-	//	op.Done = true
-	//	_, _, err := optimism.PutOperation(o.cli, false, op, 0)
-	//	if err != nil {
-	//		return err
-	//	}
-	//}
 	o.mu.Lock()
 	if cancelFunc, ok := o.pendingRedirectCancelFunc[targetTableID]; ok {
 		cancelFunc()
