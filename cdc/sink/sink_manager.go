@@ -17,8 +17,8 @@ import (
 	"context"
 	"sync"
 	"sync/atomic"
-	"time"
 
+	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo"
@@ -85,18 +85,12 @@ func (m *Manager) Close(ctx context.Context) error {
 	defer m.tableSinksMu.Unlock()
 	metrics.TableSinkTotalRowsCountCounter.DeleteLabelValues(m.changefeedID)
 	if m.bufSink != nil {
-		log.Info("sinkManager try close bufSink",
-			zap.String("changefeed", m.changefeedID))
-		start := time.Now()
-		if err := m.bufSink.Close(ctx); err != nil {
-			log.Info("close bufSink failed",
+		if err := m.bufSink.Close(ctx); err != nil && errors.Cause(err) != context.Canceled {
+			log.Warn("close bufSink failed",
 				zap.String("changefeed", m.changefeedID),
-				zap.Duration("duration", time.Since(start)))
+				zap.Error(err))
 			return err
 		}
-		log.Info("close bufSink success",
-			zap.String("changefeed", m.changefeedID),
-			zap.Duration("duration", time.Since(start)))
 	}
 	return nil
 }
