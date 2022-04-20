@@ -612,7 +612,7 @@ func (h *openAPI) GetProcessor(c *gin.Context) {
 		return
 	}
 
-	// check if this cpatureID exist
+	// check if this captureID exist
 	procInfos, err := h.statusProvider().GetProcessors(ctx)
 	if err != nil {
 		_ = c.Error(err)
