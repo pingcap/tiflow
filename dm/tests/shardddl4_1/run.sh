@@ -976,7 +976,7 @@ function DM_155_CASE {
 	run_sql_source2 "insert into ${shardddl1}.${tb1} values(35,35,35,35,35);"
 	run_sql_source2 "insert into ${shardddl1}.${tb2} values(36,36,36,36);"
 
-	run_sql_source1 "alter table ${shardddl1}.${tb1} add column g int;"
+	run_sql_source2 "alter table ${shardddl1}.${tb2} add column g int;"
 	random_restart 3
 	run_sql_source1 "insert into ${shardddl1}.${tb1} values(37,37,37,37,37);"
 	run_sql_source2 "insert into ${shardddl1}.${tb1} values(38,38,38,38,38);"

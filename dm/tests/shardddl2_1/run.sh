@@ -223,16 +223,16 @@ function DM_056_CASE() {
 		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 			"query-status test" \
 			'Running' 3
-    run_sql_source1 "alter table ${shardddl1}.${tb1} change c c int first;"
-    run_sql_source1 "insert into ${shardddl1}.${tb1} values(10,110);"
-    run_sql_source2 "insert into ${shardddl1}.${tb1} values(11,111);"
-    run_sql_source2 "insert into ${shardddl1}.${tb2} values(12,112);"
+		run_sql_source1 "alter table ${shardddl1}.${tb1} change c c int first;"
+		run_sql_source1 "insert into ${shardddl1}.${tb1} values(10,110);"
+		run_sql_source2 "insert into ${shardddl1}.${tb1} values(11,111);"
+		run_sql_source2 "insert into ${shardddl1}.${tb2} values(12,112);"
 
-    sleep 3
-    run_sql_source1 "insert into ${shardddl1}.${tb1} values(13,113);"
-    run_sql_source2 "insert into ${shardddl1}.${tb1} values(14,114);"
-    run_sql_source2 "insert into ${shardddl1}.${tb2} values(15,115);"
-   	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
+		sleep 3
+		run_sql_source1 "insert into ${shardddl1}.${tb1} values(13,113);"
+		run_sql_source2 "insert into ${shardddl1}.${tb1} values(14,114);"
+		run_sql_source2 "insert into ${shardddl1}.${tb2} values(15,115);"
+		check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 	fi
 }
 
@@ -555,8 +555,8 @@ function restart_worker() {
 function run() {
 	init_cluster
 	init_database
-	start=56
-	end=56
+	start=46
+	end=70
 	except=(052 053 054 055 060 061 069 070)
 	for i in $(seq -f "%03g" ${start} ${end}); do
 		if [[ ${except[@]} =~ $i ]]; then

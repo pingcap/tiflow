@@ -1,4 +1,4 @@
-// Copyright 2021 PingCAP, Inc.
+// Copyright 2022 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -58,12 +58,6 @@ func (s *OptShardingGroup) inConflictStage(table *filter.Table) bool {
 	defer s.RUnlock()
 	_, ok := s.conflictTables[utils.GenTableID(table)]
 	return ok
-}
-
-func (s *OptShardingGroup) reset() {
-	s.Lock()
-	defer s.Unlock()
-	s.conflictTables = map[string]binlog.Location{}
 }
 
 func (s *OptShardingGroup) Remove(sourceTableIDs []string) {

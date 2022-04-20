@@ -169,25 +169,37 @@ func (o *Optimist) GetRedirectOperation(ctx context.Context, info optimism.Info,
 	ch := make(chan optimism.Operation, 1)
 	errCh := make(chan error, 1)
 	targetTableID := utils.GenTableID(&filter.Table{Schema: info.DownSchema, Name: info.DownTable})
+	o.mu.Lock()
 	o.pendingRedirectCancelFunc[targetTableID] = cancel2
+	o.mu.Unlock()
 
 	go func() {
-		go optimism.WatchOperationPut(ctx2, o.cli, o.task, o.source, info.UpSchema, info.UpTable, rev, ch, errCh)
+		for {
+			ctx3, cancel3 := context.WithCancel(ctx2)
+			go optimism.WatchOperationPut(ctx3, o.cli, o.task, o.source, info.UpSchema, info.UpTable, rev, ch, errCh)
 
-		select {
-		case op := <-ch:
-			o.mu.Lock()
-			if _, ok := o.pendingRedirectCancelFunc[targetTableID]; ok {
-				o.pendingRedirectCancelFunc[targetTableID]()
-				o.pendingRedirectOps[targetTableID] = &op
+			select {
+			case op := <-ch:
+				o.mu.Lock()
+				if _, ok := o.pendingRedirectCancelFunc[targetTableID]; ok {
+					o.pendingRedirectCancelFunc[targetTableID]()
+					o.pendingRedirectOps[targetTableID] = &op
+				}
+				o.mu.Unlock()
+				cancel3()
+				switch op.ConflictStage {
+				case optimism.ConflictResolved, optimism.ConflictNone:
+					return
+				}
+			case err := <-errCh:
+				// This operation won't be compacted. The only possible case is network problem.
+				// We can safely retry this error.
+				o.logger.Warn("fail to watch redirect operation", zap.Error(err))
+				cancel3()
+			case <-ctx.Done():
+				cancel3()
+				return
 			}
-			o.mu.Unlock()
-		// TODO: handle error situation
-		case err := <-errCh:
-			//	return optimism.Operation{}, err
-			o.logger.Warn("fail to watch redirect operation", zap.Error(err))
-		case <-ctx.Done():
-			//	return optimism.Operation{}, ctx.Err()
 		}
 	}()
 }
