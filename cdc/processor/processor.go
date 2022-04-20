@@ -32,6 +32,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/puller"
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/sink"
+	"github.com/pingcap/tiflow/cdc/sink/metrics"
 	"github.com/pingcap/tiflow/cdc/sorter/memory"
 	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
@@ -480,8 +481,8 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 		}
 		opts[mark.OptCyclicConfig] = cyclicCfg
 	}
-	opts[sink.OptChangefeedID] = p.changefeed.ID
-	opts[sink.OptCaptureAddr] = ctx.GlobalVars().CaptureInfo.AdvertiseAddr
+	opts[metrics.OptChangefeedID] = p.changefeed.ID
+	opts[metrics.OptCaptureAddr] = ctx.GlobalVars().CaptureInfo.AdvertiseAddr
 	log.Info("processor try new sink", zap.String("changefeed", p.changefeed.ID))
 
 	start := time.Now()

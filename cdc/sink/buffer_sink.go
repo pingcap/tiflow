@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/sink/metrics"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
@@ -62,13 +63,12 @@ type runState struct {
 	metricTotalRows prometheus.Counter
 }
 
-func (b *bufferSink) run(ctx context.Context, errCh chan error) {
-	changefeedID := util.ChangefeedIDFromCtx(ctx)
+func (b *bufferSink) run(ctx context.Context, changefeedID string, errCh chan error) {
 	state := runState{
-		metricTotalRows: bufferSinkTotalRowsCountCounter.WithLabelValues(changefeedID),
+		metricTotalRows: metrics.BufferSinkTotalRowsCountCounter.WithLabelValues(changefeedID),
 	}
 	defer func() {
-		bufferSinkTotalRowsCountCounter.DeleteLabelValues(changefeedID)
+		metrics.BufferSinkTotalRowsCountCounter.DeleteLabelValues(changefeedID)
 	}()
 
 	for {

@@ -88,7 +88,12 @@ func (t *tableSink) flushResolvedTs(ctx context.Context, resolvedTs uint64) (uin
 	if redoTs < resolvedTs {
 		resolvedTs = redoTs
 	}
-	return t.manager.flushBackendSink(ctx, t.tableID, resolvedTs)
+
+	checkpointTs, err := t.manager.bufSink.FlushRowChangedEvents(ctx, t.tableID, resolvedTs)
+	if err != nil {
+		return 0, errors.Trace(err)
+	}
+	return checkpointTs, nil
 }
 
 // flushRedoLogs flush redo logs and returns redo log resolved ts which means
