@@ -635,7 +635,7 @@ func (h *openAPI) GetProcessor(c *gin.Context) {
 		_ = c.Error(err)
 		return
 	}
-	status, exist1 := statuses[captureID]
+	status, captureExist := statuses[captureID]
 
 	positions, err := h.statusProvider().GetTaskPositions(ctx, changefeedID)
 	if err != nil {
