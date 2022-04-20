@@ -53,6 +53,7 @@ func TaskConfigToSubTaskConfigs(c *TaskConfig, sources map[string]DBConfig) ([]*
 		cfg.Timezone = c.Timezone
 		cfg.Meta = inst.Meta
 		cfg.CollationCompatible = c.CollationCompatible
+		cfg.Experimental.AsyncCheckpointFlush = c.Experimental.AsyncCheckpointFlush
 
 		fromClone := dbCfg.Clone()
 		if fromClone == nil {
@@ -303,6 +304,7 @@ func SubTaskConfigsToTaskConfig(stCfgs ...*SubTaskConfig) *TaskConfig {
 	c.Loaders = make(map[string]*LoaderConfig)
 	c.Syncers = make(map[string]*SyncerConfig)
 	c.ExprFilter = make(map[string]*ExpressionFilter)
+	c.Experimental = stCfg0.Experimental
 
 	baListMap := make(map[string]string, len(stCfgs))
 	routeMap := make(map[string]string, len(stCfgs))

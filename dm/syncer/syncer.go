@@ -1048,12 +1048,18 @@ func (s *Syncer) addJob(job *job) error {
 
 	// Periodically create checkpoint snapshot and async flush checkpoint snapshot
 	if s.checkpoint.CheckGlobalPoint() && s.checkpoint.CheckLastSnapshotCreationTime() {
-		s.jobWg.Add(1)
 		jobSeq := s.getFlushSeq()
-		s.tctx.L().Info("Start to async flush current checkpoint to downstream based on flush interval", zap.Int64("job sequence", jobSeq))
-		j := newAsyncFlushJob(s.cfg.WorkerCount, jobSeq)
-		s.dmlJobCh <- j
-		s.flushCheckPointsAsync(j)
+		s.jobWg.Add(1)
+		if s.cfg.Experimental.AsyncCheckpointFlush {
+			s.tctx.L().Info("Start to async flush current checkpoint to downstream based on flush interval", zap.Int64("job sequence", jobSeq))
+			j := newAsyncFlushJob(s.cfg.WorkerCount, jobSeq)
+			s.dmlJobCh <- j
+			s.flushCheckPointsAsync(j)
+		} else {
+			s.dmlJobCh <- newFlushJob(s.cfg.WorkerCount, jobSeq)
+			s.jobWg.Wait()
+			return s.flushCheckPoints()
+		}
 	}
 
 	return nil
@@ -1105,7 +1111,7 @@ func (s *Syncer) flushCheckPoints() error {
 	snapshotInfo, exceptTables, shardMetaSQLs, shardMetaArgs := s.createCheckpointSnapshot(true)
 
 	if snapshotInfo == nil {
-		log.L().Info("checkpoint has no change, skip sync flush checkpoint")
+		s.tctx.L().Debug("checkpoint has no change, skip sync flush checkpoint")
 		return nil
 	}
 
@@ -1141,7 +1147,7 @@ func (s *Syncer) flushCheckPointsAsync(asyncFlushJob *job) {
 	snapshotInfo, exceptTables, shardMetaSQLs, shardMetaArgs := s.createCheckpointSnapshot(false)
 
 	if snapshotInfo == nil {
-		log.L().Info("checkpoint has no change, skip async flush checkpoint", zap.Int64("job seq", asyncFlushJob.flushSeq))
+		s.tctx.L().Debug("checkpoint has no change, skip async flush checkpoint", zap.Int64("job seq", asyncFlushJob.flushSeq))
 		return
 	}
 
@@ -1188,7 +1194,7 @@ func (s *Syncer) afterFlushCheckpoint(task *checkpointFlushTask) error {
 		s.tctx.L().Info("after async flushed checkpoint, gc stale causality keys", zap.Int64("flush job seq", task.asyncflushJob.flushSeq))
 		s.dmlJobCh <- newGCJob(task.asyncflushJob.flushSeq)
 	} else {
-		s.tctx.L().Info("after async flushed checkpoint, gc all causality keys")
+		s.tctx.L().Info("after sync flushed checkpoint, gc all causality keys")
 		s.dmlJobCh <- newGCJob(math.MaxInt64)
 	}
 

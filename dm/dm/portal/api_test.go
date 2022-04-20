@@ -22,19 +22,16 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"sort"
-	"strconv"
-	"strings"
 	"testing"
 
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
-	"github.com/go-sql-driver/mysql"
 	. "github.com/pingcap/check"
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
 	"github.com/pingcap/tidb-tools/pkg/filter"
 	router "github.com/pingcap/tidb-tools/pkg/table-router"
-	"github.com/pingcap/tidb/br/pkg/mock"
 
 	"github.com/pingcap/tiflow/dm/dm/config"
+	"github.com/pingcap/tiflow/dm/pkg/conn"
 )
 
 var _ = Suite(&testPortalSuite{})
@@ -46,7 +43,7 @@ type testPortalSuite struct {
 
 	taskConfig *DMTaskConfig
 
-	mockCluster     *mock.Cluster
+	mockCluster     *conn.Cluster
 	mockClusterPort int
 }
 
@@ -73,14 +70,11 @@ func (t *testPortalSuite) SetUpSuite(c *C) {
 	}
 
 	t.initTaskCfg()
-	cluster, err := mock.NewCluster()
+	cluster, err := conn.NewCluster()
 	c.Assert(err, IsNil)
 	t.mockCluster = cluster
 	c.Assert(t.mockCluster.Start(), IsNil)
-	config, err := mysql.ParseDSN(cluster.DSN)
-	c.Assert(err, IsNil)
-	t.mockClusterPort, err = strconv.Atoi(strings.Split(config.Addr, ":")[1])
-	c.Assert(err, IsNil)
+	t.mockClusterPort = cluster.Port
 }
 
 func (t *testPortalSuite) TearDownSuite(c *C) {
