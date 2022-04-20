@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/redo/reader"
 	"github.com/pingcap/tiflow/cdc/sink"
+	"github.com/pingcap/tiflow/cdc/sink/mysql"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
@@ -33,8 +34,8 @@ import (
 
 const (
 	applierChangefeed = "redo-applier"
-	emitBatch         = sink.DefaultMaxTxnRow
-	readBatch         = sink.DefaultWorkerCount * emitBatch
+	emitBatch         = mysql.DefaultMaxTxnRow
+	readBatch         = mysql.DefaultWorkerCount * emitBatch
 )
 
 var errApplyFinished = errors.New("apply finished, can exit safely")
