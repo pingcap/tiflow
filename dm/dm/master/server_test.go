@@ -377,7 +377,6 @@ func (t *testMaster) testMockScheduler(ctx context.Context, wg *sync.WaitGroup, 
 		cfg := config.NewSourceConfig()
 		cfg.SourceID = sources[i]
 		cfg.From.Password = password
-		c.Assert(scheduler2.AddSourceCfg(cfg), check.IsNil, check.Commentf("all sources: %v", sources))
 		wg.Add(1)
 		ctx1, cancel1 := context.WithCancel(ctx)
 		cancels = append(cancels, cancel1)
@@ -385,6 +384,13 @@ func (t *testMaster) testMockScheduler(ctx context.Context, wg *sync.WaitGroup, 
 			defer wg.Done()
 			c.Assert(ha.KeepAlive(ctx, t.etcdTestCli, workerName, keepAliveTTL), check.IsNil)
 		}(ctx1, name)
+		// wait the mock worker has alive
+		c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
+			resp, err2 := t.etcdTestCli.Get(ctx, common2.WorkerKeepAliveKeyAdapter.Encode(name))
+			c.Assert(err2, check.IsNil)
+			return resp.Count == 1
+		}), check.IsTrue)
+		c.Assert(scheduler2.AddSourceCfg(cfg), check.IsNil, check.Commentf("all sources: %v", sources))
 		idx := i
 		c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
 			w := scheduler2.GetWorkerBySource(sources[idx])
@@ -409,7 +415,6 @@ func (t *testMaster) testMockSchedulerForRelay(ctx context.Context, wg *sync.Wai
 		cfg := config.NewSourceConfig()
 		cfg.SourceID = sources[i]
 		cfg.From.Password = password
-		c.Assert(scheduler2.AddSourceCfg(cfg), check.IsNil, check.Commentf("all sources: %v", sources))
 		wg.Add(1)
 		ctx1, cancel1 := context.WithCancel(ctx)
 		cancels = append(cancels, cancel1)
@@ -424,6 +429,7 @@ func (t *testMaster) testMockSchedulerForRelay(ctx context.Context, wg *sync.Wai
 			c.Assert(err2, check.IsNil)
 			return resp.Count == 1
 		}), check.IsTrue)
+		c.Assert(scheduler2.AddSourceCfg(cfg), check.IsNil, check.Commentf("all sources: %v", sources))
 
 		c.Assert(scheduler2.StartRelay(sources[i], []string{workers[i]}), check.IsNil)
 		idx := i
@@ -1752,7 +1758,10 @@ func (t *testMaster) TestOperateSource(c *check.C) {
 	s1 := NewServer(cfg1)
 	s1.leader.Store(oneselfLeader)
 	c.Assert(s1.Start(ctx), check.IsNil)
-	defer s1.Close()
+	defer func() {
+		cancel()
+		s1.Close()
+	}()
 	mysqlCfg, err := config.ParseYamlAndVerify(config.SampleSourceConfig)
 	c.Assert(err, check.IsNil)
 	mysqlCfg.From.Password = os.Getenv("MYSQL_PSWD")
@@ -1769,12 +1778,13 @@ func (t *testMaster) TestOperateSource(c *check.C) {
 	c.Assert(resp.Result, check.Equals, true)
 	c.Assert(resp.Sources, check.DeepEquals, []*pb.CommonWorkerResponse{{
 		Result: true,
-		Msg:    "source is added but there is no free worker to bound",
+		Msg:    "source is added but there is no online worker to bound",
 		Source: sourceID,
 	}})
-	unBoundSources := s1.scheduler.UnboundSources()
-	c.Assert(unBoundSources, check.HasLen, 1)
-	c.Assert(unBoundSources[0], check.Equals, sourceID)
+	sourceCfgs := s1.scheduler.GetSourceCfgs()
+	c.Assert(sourceCfgs, check.HasLen, 1)
+	c.Assert(sourceCfgs, check.HasKey, sourceID)
+	c.Assert(s1.scheduler.BoundSources(), check.HasLen, 0)
 
 	// 3. try to add multiple source
 	// 3.1 duplicated source id
@@ -1801,18 +1811,19 @@ func (t *testMaster) TestOperateSource(c *check.C) {
 	})
 	c.Assert(resp.Sources, check.DeepEquals, []*pb.CommonWorkerResponse{{
 		Result: true,
-		Msg:    "source is added but there is no free worker to bound",
+		Msg:    "source is added but there is no online worker to bound",
 		Source: sourceID2,
 	}, {
 		Result: true,
-		Msg:    "source is added but there is no free worker to bound",
+		Msg:    "source is added but there is no online worker to bound",
 		Source: sourceID3,
 	}})
-	unBoundSources = s1.scheduler.UnboundSources()
-	c.Assert(unBoundSources, check.HasLen, 3)
-	c.Assert(unBoundSources[0], check.Equals, sourceID)
-	c.Assert(unBoundSources[1], check.Equals, sourceID2)
-	c.Assert(unBoundSources[2], check.Equals, sourceID3)
+	sourceCfgs = s1.scheduler.GetSourceCfgs()
+	c.Assert(sourceCfgs, check.HasLen, 3)
+	c.Assert(sourceCfgs, check.HasKey, sourceID)
+	c.Assert(sourceCfgs, check.HasKey, sourceID2)
+	c.Assert(sourceCfgs, check.HasKey, sourceID3)
+	c.Assert(s1.scheduler.BoundSources(), check.HasLen, 0)
 
 	// 4. try to stop a non-exist-source
 	req.Op = pb.SourceOp_StopSource
@@ -1851,10 +1862,26 @@ func (t *testMaster) TestOperateSource(c *check.C) {
 		defer wg.Done()
 		c.Assert(ha.KeepAlive(ctx, s1.etcdClient, workerName, keepAliveTTL), check.IsNil)
 	}(ctx, workerName3)
+
 	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
 		w := s1.scheduler.GetWorkerBySource(sourceID)
 		return w != nil
 	}), check.IsTrue)
+	// Transfer source two make sources evenly started on three workers
+	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
+		w := s1.scheduler.GetWorkerByName(workerName2)
+		return w != nil && w.Stage() != scheduler.WorkerOffline
+	}), check.IsTrue)
+	c.Assert(s1.scheduler.TransferSource(ctx, sourceID2, workerName2), check.IsNil)
+	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
+		w := s1.scheduler.GetWorkerByName(workerName3)
+		return w != nil && w.Stage() != scheduler.WorkerOffline
+	}), check.IsTrue)
+	c.Assert(s1.scheduler.TransferSource(ctx, sourceID3, workerName3), check.IsNil)
+	for _, sourceID := range []string{sourceID, sourceID2, sourceID3} {
+		w := s1.scheduler.GetWorkerBySource(sourceID)
+		c.Assert(w, check.NotNil)
+	}
 
 	// 6. stop sources
 	req.Config = []string{task, task2, task3}

@@ -87,7 +87,7 @@ package ha
 // 2. DM-master GET the information of the DM-worker instance, and mark it as `free` status.
 // 3. the user adds an upstream config.
 //   - PUT the config of the upstream into etcd.
-// 4. DM-master schedules the upstream relevant operations to the free DM-worker.
+// 4. DM-master schedules the upstream relevant operations to the online DM-worker.
 //   - PUT the bound relationship.
 //   - PUT the expectant stage of the relay if not exists.
 // 5. DM-worker GET the bound relationship, the config of the upstream and the expectant stage of the relay.

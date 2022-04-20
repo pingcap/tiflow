@@ -3293,7 +3293,7 @@ workaround = "Please pause task by `dmctl pause-task`."
 tags = ["internal", "low"]
 
 [error.DM-scheduler-46033]
-message = "dm-worker with name %s not free"
+message = "dm-worker with name %s not online"
 description = ""
 workaround = ""
 tags = ["internal", "low"]

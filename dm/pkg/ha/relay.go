@@ -44,10 +44,10 @@ type RelaySource struct {
 // PutRelayConfig puts the relay config for given workers.
 // k/v: worker-name -> source-id.
 // TODO: let caller wait until worker has enabled relay.
-func PutRelayConfig(cli *clientv3.Client, source string, workers ...string) (int64, error) {
-	ops := make([]clientv3.Op, 0, len(workers))
-	for _, worker := range workers {
-		ops = append(ops, putRelayConfigOp(worker, source))
+func PutRelayConfig(cli *clientv3.Client, bounds ...SourceBound) (int64, error) {
+	ops := make([]clientv3.Op, 0, len(bounds))
+	for _, bound := range bounds {
+		ops = append(ops, putRelayConfigOp(bound))
 	}
 	_, rev, err := etcdutil.DoOpsInOneTxnWithRetry(cli, ops...)
 	return rev, err
@@ -57,7 +57,7 @@ func PutRelayConfig(cli *clientv3.Client, source string, workers ...string) (int
 func DeleteRelayConfig(cli *clientv3.Client, source string, workers ...string) (int64, error) {
 	ops := make([]clientv3.Op, 0, len(workers))
 	for _, worker := range workers {
-		ops = append(ops, deleteRelayConfigOp(worker, source))
+		ops = append(ops, deleteRelayConfigOp(NewSourceBound(source, worker)))
 	}
 	_, rev, err := etcdutil.DoOpsInOneTxnWithRetry(cli, ops...)
 	return rev, err
@@ -205,14 +205,14 @@ func GetRelayConfig(cli *clientv3.Client, worker string) (map[string]*config.Sou
 }
 
 // putRelayConfigOp returns PUT etcd operations for the relay relationship of the specified DM-worker.
-// k/v: worker-name -> source-id.
-func putRelayConfigOp(worker, source string) clientv3.Op {
-	return clientv3.OpPut(common.UpstreamRelayWorkerKeyAdapter.Encode(worker, source), source)
+// k/v: (worker-name, source-id) -> source-id.
+func putRelayConfigOp(bound SourceBound) clientv3.Op {
+	return clientv3.OpPut(common.UpstreamRelayWorkerKeyAdapter.Encode(bound.Worker, bound.Source), bound.Source)
 }
 
 // deleteRelayConfigOp returns a DELETE etcd operation for the relay relationship of the specified DM-worker.
-func deleteRelayConfigOp(worker, source string) clientv3.Op {
-	return clientv3.OpDelete(common.UpstreamRelayWorkerKeyAdapter.Encode(worker, source))
+func deleteRelayConfigOp(bound SourceBound) clientv3.Op {
+	return clientv3.OpDelete(common.UpstreamRelayWorkerKeyAdapter.Encode(bound.Worker, bound.Source))
 }
 
 // WatchRelayConfig watches PUT & DELETE operations for the relay relationship of the specified DM-worker.

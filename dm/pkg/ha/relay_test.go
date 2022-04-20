@@ -37,7 +37,7 @@ func (t *testForEtcd) TestGetRelayConfigEtcd(c *C) {
 	c.Assert(rev1, Greater, int64(0))
 	c.Assert(cfgs1, HasLen, 0)
 
-	rev2, err := PutRelayConfig(etcdTestCli, source, worker)
+	rev2, err := PutRelayConfig(etcdTestCli, NewSourceBound(source, worker))
 	c.Assert(err, IsNil)
 	c.Assert(rev2, Greater, rev1)
 
@@ -55,7 +55,7 @@ func (t *testForEtcd) TestGetRelayConfigEtcd(c *C) {
 	c.Assert(cfgs2, DeepEquals, cfgs)
 
 	// put another relay into etcd, check whether can PutRelayConfig return two configs
-	rev5, err := PutRelayConfig(etcdTestCli, source2, worker)
+	rev5, err := PutRelayConfig(etcdTestCli, NewSourceBound(source2, worker))
 	c.Assert(err, IsNil)
 	c.Assert(rev5, Greater, rev4)
 	cfg2 := cfg.Clone()
