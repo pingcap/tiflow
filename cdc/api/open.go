@@ -642,7 +642,7 @@ func (h *openAPI) GetProcessor(c *gin.Context) {
 		_ = c.Error(err)
 		return
 	}
-	position, exist2 := positions[captureID]
+	position, positionsExist := positions[captureID]
 	// Note: for the case that no tables are attached to a newly created changefeed,
 	//       we just do not report an error.
 	var processorDetail model.ProcessorDetail
