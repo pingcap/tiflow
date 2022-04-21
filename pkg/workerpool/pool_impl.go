@@ -167,6 +167,9 @@ func (h *defaultEventHandle) SetTimer(ctx context.Context, interval time.Duratio
 
 func (h *defaultEventHandle) Unregister() {
 	if !atomic.CompareAndSwapInt32(&h.status, handleRunning, handleCancelled) {
+		// call synchronize so that the returning of Unregister cannot race
+		// with the calling of the errorHandler, if an error is already being processed.
+		h.worker.synchronize()
 		// already cancelled
 		return
 	}
