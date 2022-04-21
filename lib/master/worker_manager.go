@@ -427,6 +427,14 @@ func (m *WorkerManager) IsInitialized() bool {
 func (m *WorkerManager) checkWorkerEntriesOnce() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+
+	if m.state != workerManagerReady {
+		// We should not check for timeout during the waiting period,
+		// because timeouts during the waiting period is handled inside
+		// InitAfterRecover.
+		return nil
+	}
+
 	for workerID, entry := range m.workerEntries {
 		entry := entry
 		state := entry.State()
@@ -492,7 +500,7 @@ func (m *WorkerManager) checkWorkerEntriesOnce() error {
 }
 
 func (m *WorkerManager) runBackgroundChecker() error {
-	ticker := time.NewTicker(m.timeouts.MasterHeartbeatCheckLoopInterval)
+	ticker := m.clock.Ticker(m.timeouts.MasterHeartbeatCheckLoopInterval)
 	defer ticker.Stop()
 
 	for {

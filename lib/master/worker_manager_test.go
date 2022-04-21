@@ -155,6 +155,7 @@ func (s *workerManageTestSuite) WaitForEvent(t *testing.T, workerID libModel.Wor
 			err := rl.Wait(timeoutCtx)
 			require.NoError(t, err)
 
+			s.AdvanceClockBy(1 * time.Second)
 			continue
 		}
 
