@@ -978,43 +978,6 @@ func (s *Syncer) addJob(job *job) error {
 			time.Sleep(100 * time.Millisecond)
 		})
 	}
-<<<<<<< HEAD
-=======
-}
-
-// flushIfOutdated checks whether syncer should flush now because last flushing is outdated.
-func (s *Syncer) flushIfOutdated() error {
-	if !s.checkpoint.LastFlushOutdated() {
-		return nil
-	}
-
-	if s.cfg.Experimental.AsyncCheckpointFlush {
-		jobSeq := s.getFlushSeq()
-		s.tctx.L().Info("Start to async flush current checkpoint to downstream based on flush interval", zap.Int64("job sequence", jobSeq))
-		j := newAsyncFlushJob(s.cfg.WorkerCount, jobSeq)
-		s.addJob(j)
-		s.flushCheckPointsAsync(j)
-		return nil
-	}
-	s.jobWg.Wait()
-	return s.flushCheckPoints()
-}
-
-// TODO: move to syncer/job.go
-// handleJob will do many actions based on job type.
-func (s *Syncer) handleJob(job *job) (added2Queue bool, err error) {
-	skipCheckFlush := false
-	defer func() {
-		if !skipCheckFlush && err == nil {
-			err = s.flushIfOutdated()
-		}
-	}()
-
-	// 1. handle jobs that not needed to be sent to queue
-
-	s.waitTransactionLock.Lock()
-	defer s.waitTransactionLock.Unlock()
->>>>>>> 4d6f44dfe (checkpoint(dm): check outdated should respect snapshot create time (#5160))
 
 	failpoint.Inject("flushFirstJob", func() {
 		if waitJobsDone {
@@ -1084,7 +1047,7 @@ func (s *Syncer) handleJob(job *job) (added2Queue bool, err error) {
 	}
 
 	// Periodically create checkpoint snapshot and async flush checkpoint snapshot
-	if s.checkpoint.CheckGlobalPoint() && s.checkpoint.CheckLastSnapshotCreationTime() {
+	if s.checkpoint.LastFlushOutdated() {
 		jobSeq := s.getFlushSeq()
 		s.jobWg.Add(1)
 		if s.cfg.Experimental.AsyncCheckpointFlush {
@@ -2053,13 +2016,8 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		case *replication.GenericEvent:
 			if e.Header.EventType == replication.HEARTBEAT_EVENT {
 				// flush checkpoint even if there are no real binlog events
-<<<<<<< HEAD
-				if s.checkpoint.CheckGlobalPoint() {
-					tctx.L().Info("meet heartbeat event and then flush jobs")
-=======
 				if s.checkpoint.LastFlushOutdated() {
-					s.tctx.L().Info("meet heartbeat event and then flush jobs")
->>>>>>> 4d6f44dfe (checkpoint(dm): check outdated should respect snapshot create time (#5160))
+					tctx.L().Info("meet heartbeat event and then flush jobs")
 					err2 = s.flushJobs()
 				}
 			}
@@ -2331,34 +2289,8 @@ func (s *Syncer) handleRowsEvent(ev *replication.RowsEvent, ec eventContext) err
 			return err
 		}
 	}
-<<<<<<< HEAD
 	metrics.DispatchBinlogDurationHistogram.WithLabelValues(jobType.String(), s.cfg.Name, s.cfg.SourceID).Observe(time.Since(startTime).Seconds())
 	return nil
-=======
-	metrics.DispatchBinlogDurationHistogram.WithLabelValues(metricTp, s.cfg.Name, s.cfg.SourceID).Observe(time.Since(startTime).Seconds())
-
-	if len(sourceTable.Schema) != 0 {
-		// when in position-based replication, now events before table checkpoint is sent to queue. But in GTID-based
-		// replication events may share one GTID, so event whose end position is equal to table checkpoint may not be
-		// sent to queue. We may need event index in GTID to resolve it.
-		s.saveTablePoint(sourceTable, *ec.currentLocation)
-	}
-
-	failpoint.Inject("flushFirstJob", func() {
-		if waitJobsDoneForTest {
-			s.tctx.L().Info("trigger flushFirstJob")
-			waitJobsDoneForTest = false
-
-			err2 := s.flushJobs()
-			if err2 != nil {
-				s.tctx.L().DPanic("flush checkpoint failed", zap.Error(err2))
-			}
-			failpoint.Return(nil)
-		}
-	})
-
-	return s.flushIfOutdated()
->>>>>>> 4d6f44dfe (checkpoint(dm): check outdated should respect snapshot create time (#5160))
 }
 
 type queryEventContext struct {
