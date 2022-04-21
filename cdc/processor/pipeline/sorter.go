@@ -194,11 +194,36 @@ func (n *sorterNode) Receive(ctx pipeline.NodeContext) error {
 	default:
 		ctx.SendToNextNode(msg)
 	}
+<<<<<<< HEAD
 	return nil
+=======
+}
+
+func (n *sorterNode) releaseResource(changefeedID string) {
+	defer tableMemoryHistogram.DeleteLabelValues(changefeedID)
+	// Since the flowController is implemented by `Cond`, it is not cancelable by a context
+	// the flowController will be blocked in a background goroutine,
+	// We need to abort the flowController manually in the nodeRunner
+	n.flowController.Abort()
+>>>>>>> c6966a492 (sink(ticdc): refine sink interface and add init method (#5196))
 }
 
 func (n *sorterNode) Destroy(ctx pipeline.NodeContext) error {
 	defer tableMemoryHistogram.DeleteLabelValues(ctx.ChangefeedVars().ID, ctx.GlobalVars().CaptureInfo.AdvertiseAddr)
 	n.cancel()
+<<<<<<< HEAD
 	return n.wg.Wait()
+=======
+	n.releaseResource(ctx.ChangefeedVars().ID)
+	return n.eg.Wait()
+}
+
+func (n *sorterNode) ResolvedTs() model.Ts {
+	return atomic.LoadUint64(&n.resolvedTs)
+}
+
+// BarrierTs returns the sorter barrierTs
+func (n *sorterNode) BarrierTs() model.Ts {
+	return atomic.LoadUint64(&n.barrierTs)
+>>>>>>> c6966a492 (sink(ticdc): refine sink interface and add init method (#5196))
 }

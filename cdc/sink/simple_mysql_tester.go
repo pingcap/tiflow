@@ -104,6 +104,18 @@ func newSimpleMySQLSink(ctx context.Context, sinkURI *url.URL, config *config.Re
 	return sink, nil
 }
 
+<<<<<<< HEAD:cdc/sink/simple_mysql_tester.go
+=======
+// Init table sink resources
+func (s *simpleMySQLSink) Init(tableID model.TableID) error {
+	return nil
+}
+
+func (s *simpleMySQLSink) TryEmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) (bool, error) {
+	return true, nil
+}
+
+>>>>>>> c6966a492 (sink(ticdc): refine sink interface and add init method (#5196)):cdc/sink/mysql/simple_mysql_tester.go
 // EmitRowChangedEvents sends Row Changed Event to Sink
 // EmitRowChangedEvents may write rows to downstream directly;
 func (s *simpleMySQLSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {

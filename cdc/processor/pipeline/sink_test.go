@@ -58,6 +58,18 @@ func (c *mockFlowController) GetConsumption() uint64 {
 	return 0
 }
 
+<<<<<<< HEAD
+=======
+func (s *mockSink) Init(tableID model.TableID) error {
+	return nil
+}
+
+func (s *mockSink) TryEmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) (bool, error) {
+	_ = s.EmitRowChangedEvents(ctx, rows...)
+	return true, nil
+}
+
+>>>>>>> c6966a492 (sink(ticdc): refine sink interface and add init method (#5196))
 func (s *mockSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
 	for _, row := range rows {
 		s.received = append(s.received, struct {

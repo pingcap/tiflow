@@ -1305,3 +1305,32 @@ func TestMySQLSinkFlushResovledTs(t *testing.T) {
 	err = sink.Close(ctx)
 	require.Nil(t, err)
 }
+
+func TestCleanTableResource(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.TODO())
+	defer cancel()
+	tblID := model.TableID(1)
+	f, err := filter.NewFilter(config.GetDefaultReplicaConfig())
+	require.Nil(t, err)
+	s := &mysqlSink{
+		txnCache:   newUnresolvedTxnCache(),
+		filter:     f,
+		statistics: metrics.NewStatistics(ctx, metrics.SinkTypeDB),
+	}
+	require.Nil(t, s.EmitRowChangedEvents(ctx, &model.RowChangedEvent{
+		Table: &model.TableName{TableID: tblID, Schema: "test", Table: "t1"},
+	}))
+	s.tableCheckpointTs.Store(tblID, uint64(1))
+	s.tableMaxResolvedTs.Store(tblID, uint64(2))
+	_, ok := s.txnCache.unresolvedTxns[tblID]
+	require.True(t, ok)
+	require.Nil(t, s.Init(tblID))
+	_, ok = s.txnCache.unresolvedTxns[tblID]
+	require.False(t, ok)
+	_, ok = s.tableCheckpointTs.Load(tblID)
+	require.False(t, ok)
+	_, ok = s.tableMaxResolvedTs.Load(tblID)
+	require.False(t, ok)
+}

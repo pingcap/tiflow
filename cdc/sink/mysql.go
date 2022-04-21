@@ -699,6 +699,7 @@ func (s *mysqlSink) dispatchAndExecTxns(ctx context.Context, txnsGroup map[model
 	s.notifyAndWaitExec(ctx)
 }
 
+<<<<<<< HEAD:cdc/sink/mysql.go
 type mysqlSinkWorker struct {
 	txnCh            chan *model.SingleTableTxn
 	maxTxnRow        int
@@ -843,6 +844,30 @@ func (w *mysqlSinkWorker) cleanup() {
 			return
 		}
 	}
+=======
+func (s *mysqlSink) Init(tableID model.TableID) error {
+	s.cleanTableResource(tableID)
+	return nil
+}
+
+func (s *mysqlSink) cleanTableResource(tableID model.TableID) {
+	// We need to clean up the old values of the table,
+	// otherwise when the table is dispatched back again,
+	// it may read the old values.
+	// See: https://github.com/pingcap/tiflow/issues/4464#issuecomment-1085385382.
+	if resolvedTs, loaded := s.tableMaxResolvedTs.LoadAndDelete(tableID); loaded {
+		log.Info("clean up table max resolved ts",
+			zap.Int64("tableID", tableID),
+			zap.Uint64("resolvedTs", resolvedTs.(uint64)))
+	}
+	if checkpointTs, loaded := s.tableCheckpointTs.LoadAndDelete(tableID); loaded {
+		log.Info("clean up table checkpoint ts",
+			zap.Int64("tableID", tableID),
+			zap.Uint64("checkpointTs", checkpointTs.(uint64)))
+	}
+	// try to remove table txn cache
+	s.txnCache.RemoveTableTxn(tableID)
+>>>>>>> c6966a492 (sink(ticdc): refine sink interface and add init method (#5196)):cdc/sink/mysql/mysql.go
 }
 
 func (s *mysqlSink) Close(ctx context.Context) error {
@@ -853,6 +878,11 @@ func (s *mysqlSink) Close(ctx context.Context) error {
 }
 
 func (s *mysqlSink) Barrier(ctx context.Context, tableID model.TableID) error {
+<<<<<<< HEAD:cdc/sink/mysql.go
+=======
+	defer s.cleanTableResource(tableID)
+
+>>>>>>> c6966a492 (sink(ticdc): refine sink interface and add init method (#5196)):cdc/sink/mysql/mysql.go
 	warnDuration := 3 * time.Minute
 	ticker := time.NewTicker(warnDuration)
 	defer ticker.Stop()
