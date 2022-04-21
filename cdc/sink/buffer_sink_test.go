@@ -31,10 +31,17 @@ func TestTableIsNotFlushed(t *testing.T) {
 
 func TestFlushTable(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.TODO())
+<<<<<<< HEAD
 	defer func() {
 		cancel()
 	}()
 	b := newBufferSink(ctx, newBlackHoleSink(ctx, make(map[string]string)), make(chan error), 5, make(chan drawbackMsg))
+=======
+	defer cancel()
+	b := newBufferSink(newBlackHoleSink(ctx), 5)
+	go b.run(ctx, "", make(chan error))
+
+>>>>>>> c6966a492 (sink(ticdc): refine sink interface and add init method (#5196))
 	require.Equal(t, uint64(5), b.getTableCheckpointTs(2))
 	require.Nil(t, b.EmitRowChangedEvents(ctx))
 	tbl1 := &model.TableName{TableID: 1}
@@ -74,7 +81,13 @@ func TestFlushTable(t *testing.T) {
 
 func TestFlushFailed(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.TODO())
+<<<<<<< HEAD
 	b := newBufferSink(ctx, newBlackHoleSink(ctx, make(map[string]string)), make(chan error), 5, make(chan drawbackMsg))
+=======
+	b := newBufferSink(newBlackHoleSink(ctx), 5)
+	go b.run(ctx, "", make(chan error))
+
+>>>>>>> c6966a492 (sink(ticdc): refine sink interface and add init method (#5196))
 	checkpoint, err := b.FlushRowChangedEvents(ctx, 3, 8)
 	require.True(t, checkpoint <= 8)
 	require.Nil(t, err)
@@ -89,3 +102,68 @@ func TestFlushFailed(t *testing.T) {
 	require.Equal(t, uint64(8), b.getTableCheckpointTs(3))
 	require.Equal(t, uint64(5), b.getTableCheckpointTs(1))
 }
+<<<<<<< HEAD
+=======
+
+func TestCleanBufferedData(t *testing.T) {
+	t.Parallel()
+
+	tblID := model.TableID(1)
+	b := newBufferSink(newBlackHoleSink(context.TODO()), 5)
+	b.buffer[tblID] = []*model.RowChangedEvent{}
+	_, ok := b.buffer[tblID]
+	require.True(t, ok)
+	require.Nil(t, b.Init(tblID))
+	_, ok = b.buffer[tblID]
+	require.False(t, ok)
+}
+
+type benchSink struct {
+	Sink
+}
+
+func (b *benchSink) EmitRowChangedEvents(
+	ctx context.Context, rows ...*model.RowChangedEvent,
+) error {
+	return nil
+}
+
+func (b *benchSink) FlushRowChangedEvents(
+	ctx context.Context, tableID model.TableID, resolvedTs uint64,
+) (uint64, error) {
+	return 0, nil
+}
+
+func BenchmarkRun(b *testing.B) {
+	ctx, cancel := context.WithCancel(context.TODO())
+	defer cancel()
+
+	state := runState{
+		metricTotalRows: metrics.BufferSinkTotalRowsCountCounter.WithLabelValues(b.Name()),
+	}
+
+	for exp := 0; exp < 9; exp++ {
+		count := int(math.Pow(4, float64(exp)))
+		s := newBufferSink(&benchSink{}, 5)
+		s.flushTsChan = make(chan flushMsg, count)
+		for i := 0; i < count; i++ {
+			s.buffer[int64(i)] = []*model.RowChangedEvent{{CommitTs: 5}}
+		}
+		b.ResetTimer()
+
+		b.Run(fmt.Sprintf("%d table(s)", count), func(b *testing.B) {
+			for i := 0; i < b.N; i++ {
+				for j := 0; j < count; j++ {
+					s.flushTsChan <- flushMsg{tableID: int64(0)}
+				}
+				for len(s.flushTsChan) != 0 {
+					keepRun, err := s.runOnce(ctx, &state)
+					if err != nil || !keepRun {
+						b.Fatal(keepRun, err)
+					}
+				}
+			}
+		})
+	}
+}
+>>>>>>> c6966a492 (sink(ticdc): refine sink interface and add init method (#5196))
