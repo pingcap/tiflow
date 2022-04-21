@@ -5,10 +5,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hanfei1991/microcosm/pkg/errctx"
-
-	"github.com/hanfei1991/microcosm/lib/config"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/pkg/workerpool"
@@ -16,12 +12,14 @@ import (
 	"go.uber.org/zap"
 
 	runtime "github.com/hanfei1991/microcosm/executor/worker"
+	"github.com/hanfei1991/microcosm/lib/config"
 	"github.com/hanfei1991/microcosm/lib/metadata"
 	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/lib/statusutil"
 	"github.com/hanfei1991/microcosm/model"
 	"github.com/hanfei1991/microcosm/pkg/clock"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
+	"github.com/hanfei1991/microcosm/pkg/errctx"
 	derror "github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/externalresource/broker"
 	"github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta"
@@ -199,12 +197,20 @@ func (w *DefaultBaseWorker) doPreInit(ctx context.Context) error {
 			zap.Error(err))
 	}()
 
+	w.startBackgroundTasks()
+
+	initTime := w.clock.Mono()
+	rctx, ok := runtime.ToRuntimeCtx(ctx)
+	if ok {
+		initTime = clock.ToMono(rctx.SubmitTime())
+	}
+
 	w.masterClient = newMasterClient(
 		w.masterID,
 		w.id,
 		w.messageSender,
 		w.metaKVClient,
-		w.clock.Mono(),
+		initTime,
 		func() error {
 			return errors.Trace(w.Impl.OnMasterFailover(MasterFailoverReason{
 				// TODO support other fail-over reasons
@@ -239,7 +245,6 @@ func (w *DefaultBaseWorker) doPostInit(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
-	w.startBackgroundTasks()
 	return nil
 }
 

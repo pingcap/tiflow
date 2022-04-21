@@ -326,6 +326,45 @@ func TestWorkerSuicide(t *testing.T) {
 	require.Regexp(t, ".*Suicide.*", exitErr.Error())
 }
 
+func TestWorkerSuicideAfterRuntimeDelay(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	submitTime := time.Now()
+	worker := newMockWorkerImpl(workerID1, masterName)
+	worker.clock = clock.NewMock()
+	worker.clock.(*clock.Mock).Set(submitTime.Add(worker.timeoutConfig.WorkerTimeoutDuration * 2))
+
+	putMasterMeta(ctx, t, worker.metaKVClient, &libModel.MasterMetaKVData{
+		ID:         masterName,
+		NodeID:     masterNodeName,
+		Epoch:      1,
+		StatusCode: libModel.MasterStatusInit,
+	})
+
+	worker.On("InitImpl", mock.Anything).Return(nil)
+	worker.On("Status").Return(libModel.WorkerStatus{
+		Code: libModel.WorkerStatusNormal,
+	}, nil)
+	worker.On("Tick", mock.Anything).Return(nil)
+
+	ctx = runtime.NewRuntimeCtxWithSubmitTime(ctx, submitTime)
+	err := worker.Init(ctx)
+	require.NoError(t, err)
+
+	time.Sleep(10 * time.Millisecond)
+	worker.clock.(*clock.Mock).Add(worker.timeoutConfig.WorkerHeartbeatInterval)
+	worker.clock.(*clock.Mock).Add(1 * time.Second)
+
+	var pollErr error
+	require.Eventually(t, func() bool {
+		pollErr = worker.Poll(ctx)
+		return pollErr != nil
+	}, 2*time.Second, 10*time.Millisecond)
+	require.Error(t, pollErr)
+	require.Regexp(t, ".*Suicide.*", pollErr)
+}
+
 func TestCloseBeforeInit(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

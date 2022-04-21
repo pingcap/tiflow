@@ -30,6 +30,13 @@ func newRuntimeCtx(ctx context.Context, info internal.RuntimeInfo) *RuntimeConte
 	}
 }
 
+// NewRuntimeCtxWithSubmitTime creates a RuntimeContext with a given submit-time.
+// This function is exposed for the purpose of unit-testing.
+// There is NO NEED to use this function in production code.
+func NewRuntimeCtxWithSubmitTime(ctx context.Context, submitTime time.Time) *RuntimeContext {
+	return newRuntimeCtx(ctx, internal.RuntimeInfo{SubmitTime: submitTime})
+}
+
 // ToRuntimeCtx tries to convert a plain context.Context to RuntimeContext.
 // Returns (nil, false) if the argument is not derived from a RuntimeContext.
 func ToRuntimeCtx(ctx context.Context) (rctx *RuntimeContext, ok bool) {

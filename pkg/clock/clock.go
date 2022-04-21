@@ -51,3 +51,7 @@ func (m MonotonicTime) Sub(other MonotonicTime) time.Duration {
 func MonoNow() MonotonicTime {
 	return MonotonicTime(monotime.Now())
 }
+
+func ToMono(t time.Time) MonotonicTime {
+	return MonotonicTime(t.Sub(unixEpoch))
+}
