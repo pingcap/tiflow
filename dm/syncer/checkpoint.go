@@ -617,9 +617,11 @@ func (cp *RemoteCheckPoint) IsOlderThanTablePoint(table *filter.Table, location 
 		return false
 	}
 	oldLocation := point.MySQLLocation()
-	cp.logCtx.L().Debug("compare table location whether is newer", zap.Stringer("location", location), zap.Stringer("old location", oldLocation))
+	// if we update enable-gtid = false to true, we need to compare binlog position instead of GTID before we save table point
+	cmpGTID := cp.cfg.EnableGTID && !(oldLocation.GTIDSetStr() == "" && binlog.ComparePosition(oldLocation.Position, binlog.MinPosition) > 0)
+	cp.logCtx.L().Debug("compare table location whether is newer", zap.Stringer("location", location), zap.Stringer("old location", oldLocation), zap.Bool("cmpGTID", cmpGTID))
 
-	return binlog.CompareLocation(location, oldLocation, cp.cfg.EnableGTID) <= 0
+	return binlog.CompareLocation(location, oldLocation, cmpGTID) <= 0
 }
 
 // SaveGlobalPoint implements CheckPoint.SaveGlobalPoint.
