@@ -170,6 +170,7 @@ func (k *mqSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowCha
 		rowsCount++
 	}
 	k.statistics.AddRowsCount(rowsCount)
+	k.statistics.ObserveRowSizes(rows...)
 	return nil
 }
 

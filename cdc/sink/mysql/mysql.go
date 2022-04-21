@@ -229,6 +229,7 @@ func (s *mysqlSink) TryEmitRowChangedEvents(ctx context.Context, rows ...*model.
 func (s *mysqlSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
 	count := s.txnCache.Append(s.filter, rows...)
 	s.statistics.AddRowsCount(count)
+	s.statistics.ObserveRowSizes(rows...)
 	return nil
 }
 

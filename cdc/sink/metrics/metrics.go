@@ -76,6 +76,15 @@ var (
 			Help:      "size of the DML bucket",
 		}, []string{"changefeed", "bucket"})
 
+	RowSizeHistogram = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Namespace: "ticdc",
+			Subsystem: "sink",
+			Name:      "received_row_changed_event_size",
+			Help:      "The size of all received row changed events (in kb)",
+			Buckets:   prometheus.ExponentialBuckets(1024 /* 1 kb */, 2, 8),
+		}, []string{"changefeed"})
+
 	// TotalRowsCountGauge is the total number of rows that are processed by sink.
 	TotalRowsCountGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{

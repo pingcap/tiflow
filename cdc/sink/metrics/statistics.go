@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
@@ -66,6 +67,7 @@ func NewStatistics(ctx context.Context, t sinkType) *Statistics {
 	statistics.metricExecBatchHis = ExecBatchHistogram.WithLabelValues(statistics.changefeedID, s)
 	statistics.metricExecDDLHis = ExecDDLHistogram.WithLabelValues(statistics.changefeedID)
 	statistics.metricExecErrCnt = ExecutionErrorCounter.WithLabelValues(statistics.changefeedID)
+	statistics.metricRowSizesHis = RowSizeHistogram.WithLabelValues(statistics.changefeedID)
 
 	// Flush metrics in background for better accuracy and efficiency.
 	changefeedID := statistics.changefeedID
@@ -107,6 +109,8 @@ type Statistics struct {
 	metricExecDDLHis   prometheus.Observer
 	metricExecBatchHis prometheus.Observer
 	metricExecErrCnt   prometheus.Counter
+
+	metricRowSizesHis prometheus.Observer
 }
 
 // AddRowsCount records total number of rows needs to flush
@@ -152,6 +156,13 @@ func (b *Statistics) RecordDDLExecution(executor func() error) error {
 
 	b.metricExecDDLHis.Observe(time.Since(start).Seconds())
 	return nil
+}
+
+// ObserveRowSizes record the size of all received `RowChangedEvent`
+func (b *Statistics) ObserveRowSizes(rows ...*model.RowChangedEvent) {
+	for _, row := range rows {
+		b.metricRowSizesHis.Observe(float64(row.ApproximateDataSize))
+	}
 }
 
 // PrintStatus prints the status of the Sink
