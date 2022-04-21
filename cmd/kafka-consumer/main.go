@@ -600,7 +600,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 				resolvedTs := atomic.LoadUint64(&sink.resolvedTs)
 				// `resolvedTs` should be monotonically increasing, it's allowed to receive redundant one.
 				if ts < resolvedTs {
-					log.Panic("partition resolved ts fallback",
+					log.Warn("partition resolved ts fallback",
 						zap.Uint64("ts", ts),
 						zap.Uint64("resolvedTs", resolvedTs),
 						zap.Int32("partition", partition))
