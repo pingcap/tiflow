@@ -150,9 +150,9 @@ func (w *flushWorker) group(events []mqEvent) map[topicPartitionKey][]*model.Row
 // asyncSend is responsible for sending messages to the Kafka producer.
 func (w *flushWorker) asyncSend(
 	ctx context.Context,
-	paritionedRows map[topicPartitionKey][]*model.RowChangedEvent,
+	partitionedRows map[topicPartitionKey][]*model.RowChangedEvent,
 ) error {
-	for key, events := range paritionedRows {
+	for key, events := range partitionedRows {
 		for _, event := range events {
 			err := w.encoder.AppendRowChangedEvent(event)
 			if err != nil {
@@ -175,6 +175,7 @@ func (w *flushWorker) asyncSend(
 		if err != nil {
 			return err
 		}
+
 	}
 
 	if w.needSyncFlush {
