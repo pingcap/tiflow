@@ -56,10 +56,6 @@ const (
     "id-buckets": 0,
     "sync-ddl": false
   },
-  "scheduler": {
-    "type": "table-number",
-    "polling-time": -1
-  },
   "consistent": {
     "level": "none",
     "max-log-size": 64,
