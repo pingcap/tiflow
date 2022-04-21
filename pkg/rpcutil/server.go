@@ -130,7 +130,7 @@ func (h PreRPCHook[T]) PreRPC(
 		return
 	}
 
-	shouldRet = h.checkInitialized(respPointer)
+	shouldRet, err = h.checkInitialized(respPointer)
 	return
 }
 
@@ -141,16 +141,21 @@ func (h PreRPCHook[T]) logRateLimit(methodName string, req interface{}) {
 	}
 }
 
-func (h PreRPCHook[T]) checkInitialized(respPointer interface{}) (shouldRet bool) {
-	if !h.initialized.Load() {
-		errInRefelct := reflect.ValueOf(&pb.Error{
-			Code: pb.ErrorCode_MasterNotReady,
-		})
-		reflect.Indirect(reflect.ValueOf(respPointer)).Elem().
-			FieldByName("Err").Set(errInRefelct)
-		return true
+func (h PreRPCHook[T]) checkInitialized(respPointer interface{}) (shouldRet bool, err error) {
+	if h.initialized.Load() {
+		return false, nil
 	}
-	return false
+
+	respStruct := reflect.ValueOf(respPointer).Elem().Elem()
+	errField := respStruct.FieldByName("Err")
+	if !errField.IsValid() {
+		return true, errors.ErrMasterNotInitialized.GenWithStackByArgs()
+	}
+
+	errField.Set(reflect.ValueOf(&pb.Error{
+		Code: pb.ErrorCode_MasterNotReady,
+	}))
+	return true, nil
 }
 
 func (h PreRPCHook[T]) forwardToLeader(
@@ -209,8 +214,13 @@ func (h PreRPCHook[T]) isLeaderAndNeedForward(ctx context.Context) (isLeader, ne
 			leader, exist = h.CheckLeader()
 		}
 	}
-	isLeader = leader.Name == h.id
+
+	isLeader = false
 	needForward = h.leaderCli.Get() != nil
+	if leader == nil {
+		return
+	}
+	isLeader = leader.Name == h.id
 	return
 }
 
