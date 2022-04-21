@@ -868,6 +868,7 @@ func (t *testServer) TestOperateWorkerValidatorErr(c *C) {
 func TestMasterBinlogOff(t *testing.T) {
 	ctx := context.Background()
 	cfg, err := config.ParseYamlAndVerify(config.SampleSourceConfig)
+	require.NoError(t, err)
 	cfg.From.Password = "no need to connect"
 
 	w, err := NewSourceWorker(cfg, nil, "", "")
@@ -880,6 +881,7 @@ func TestMasterBinlogOff(t *testing.T) {
 	require.NoError(t, w.StartSubTask(&subtaskCfg, pb.Stage_Running, pb.Stage_Stopped, true))
 
 	_, mockDB, err := conn.InitMockDBFull()
+	require.NoError(t, err)
 	mockShowMasterStatusNoRows(mockDB)
 	status, _, err := w.QueryStatus(ctx, subtaskCfg.Name)
 	require.NoError(t, err)
