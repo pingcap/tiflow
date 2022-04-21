@@ -14,14 +14,15 @@ import (
 	"github.com/hanfei1991/microcosm/jobmaster/dm/runtime"
 	"github.com/hanfei1991/microcosm/lib"
 	libModel "github.com/hanfei1991/microcosm/lib/model"
-	"github.com/hanfei1991/microcosm/pkg/meta/kvclient/mock"
+	kvmock "github.com/hanfei1991/microcosm/pkg/meta/kvclient/mock"
+	"github.com/stretchr/testify/mock"
 )
 
 func (t *testDMJobmasterSuite) TestUpdateWorkerStatus() {
 	jobCfg := &config.JobCfg{}
 	require.NoError(t.T(), jobCfg.DecodeFile(jobTemplatePath))
 	job := metadata.NewJob(jobCfg)
-	jobStore := metadata.NewJobStore("worker_manager_test", mock.NewMetaMock())
+	jobStore := metadata.NewJobStore("worker_manager_test", kvmock.NewMetaMock())
 	require.NoError(t.T(), jobStore.Put(context.Background(), job))
 	workerManager := NewWorkerManager(nil, jobStore, nil, nil)
 
@@ -123,19 +124,19 @@ func (t *testDMJobmasterSuite) TestClearWorkerStatus() {
 
 	job := metadata.NewJob(&config.JobCfg{})
 	job.Tasks[source2] = metadata.NewTask(&config.TaskCfg{})
-	err := workerManager.destroyUnneededWorkers(ctx, job)
+	err := workerManager.stopUnneededWorkers(ctx, job)
 	require.NoError(t.T(), err)
 	require.Len(t.T(), workerManager.WorkerStatus(), 1)
 
 	delete(job.Tasks, source2)
 	destroyError := errors.New("destroy error")
 	mockAgent.SetDestroyResult([]error{destroyError})
-	err = workerManager.destroyUnneededWorkers(ctx, job)
+	err = workerManager.stopUnneededWorkers(ctx, job)
 	require.EqualError(t.T(), err, destroyError.Error())
 	require.Len(t.T(), workerManager.WorkerStatus(), 1)
 
 	mockAgent.SetDestroyResult([]error{nil})
-	err = workerManager.destroyUnneededWorkers(ctx, job)
+	err = workerManager.stopUnneededWorkers(ctx, job)
 	require.NoError(t.T(), err)
 	require.Len(t.T(), workerManager.WorkerStatus(), 0)
 
@@ -229,39 +230,40 @@ func (t *testDMJobmasterSuite) TestGetUnit() {
 	require.Equal(t.T(), getNextUnit(task, workerStatus), lib.WorkerDMSync)
 
 	task.Cfg.TaskMode = dmconfig.ModeFull
-	mockAgent.SetResult([]CheckpointResult{{false, errors.New("checkpoint error")}})
+	mockAgent.On("IsFresh", mock.Anything, mock.Anything, mock.Anything).Return(false, errors.New("checkpoint error")).Once()
 	unit, err := workerManager.getCurrentUnit(ctx, task)
 	require.Error(t.T(), err)
 	require.Equal(t.T(), unit, libModel.WorkerType(0))
-	mockAgent.SetResult([]CheckpointResult{{true, nil}, {true, nil}})
+	mockAgent.On("IsFresh", mock.Anything, mock.Anything, mock.Anything).Return(true, nil).Twice()
 	unit, err = workerManager.getCurrentUnit(ctx, task)
 	require.NoError(t.T(), err)
 	require.Equal(t.T(), unit, lib.WorkerDMDump)
-	mockAgent.SetResult([]CheckpointResult{{false, nil}})
+	mockAgent.On("IsFresh", mock.Anything, mock.Anything, mock.Anything).Return(false, nil).Once()
 	unit, err = workerManager.getCurrentUnit(ctx, task)
 	require.NoError(t.T(), err)
 	require.Equal(t.T(), unit, lib.WorkerDMLoad)
 
 	task.Cfg.TaskMode = dmconfig.ModeAll
-	mockAgent.SetResult([]CheckpointResult{{true, nil}, {true, nil}, {true, nil}})
+	mockAgent.On("IsFresh", mock.Anything, mock.Anything, mock.Anything).Return(true, nil).Times(3)
 	unit, err = workerManager.getCurrentUnit(ctx, task)
 	require.NoError(t.T(), err)
 	require.Equal(t.T(), unit, lib.WorkerDMDump)
-	mockAgent.SetResult([]CheckpointResult{{true, nil}, {false, nil}})
+	mockAgent.On("IsFresh", mock.Anything, mock.Anything, mock.Anything).Return(true, nil).Once()
+	mockAgent.On("IsFresh", mock.Anything, mock.Anything, mock.Anything).Return(false, nil).Once()
 	unit, err = workerManager.getCurrentUnit(ctx, task)
 	require.NoError(t.T(), err)
 	require.Equal(t.T(), unit, lib.WorkerDMLoad)
-	mockAgent.SetResult([]CheckpointResult{{false, nil}})
+	mockAgent.On("IsFresh", mock.Anything, mock.Anything, mock.Anything).Return(false, nil).Once()
 	unit, err = workerManager.getCurrentUnit(ctx, task)
 	require.NoError(t.T(), err)
 	require.Equal(t.T(), unit, lib.WorkerDMSync)
 
 	task.Cfg.TaskMode = dmconfig.ModeIncrement
-	mockAgent.SetResult([]CheckpointResult{{true, nil}})
+	mockAgent.On("IsFresh", mock.Anything, mock.Anything, mock.Anything).Return(true, nil).Once()
 	unit, err = workerManager.getCurrentUnit(ctx, task)
 	require.NoError(t.T(), err)
 	require.Equal(t.T(), unit, lib.WorkerDMSync)
-	mockAgent.SetResult([]CheckpointResult{{false, nil}})
+	mockAgent.On("IsFresh", mock.Anything, mock.Anything, mock.Anything).Return(false, nil).Once()
 	unit, err = workerManager.getCurrentUnit(ctx, task)
 	require.NoError(t.T(), err)
 	require.Equal(t.T(), unit, lib.WorkerDMSync)
@@ -283,14 +285,15 @@ func (t *testDMJobmasterSuite) TestCheckAndScheduleWorkers() {
 	source2 := jobCfg.Upstreams[1].SourceID
 	checkpointError := errors.New("checkpoint error")
 	createError := errors.New("create error")
-	checkpointAgent.SetResult([]CheckpointResult{{true, nil}, {true, nil}, {true, nil}, {false, checkpointError}})
+	checkpointAgent.On("IsFresh", mock.Anything, mock.Anything, mock.Anything).Return(true, nil).Times(3)
+	checkpointAgent.On("IsFresh", mock.Anything, mock.Anything, mock.Anything).Return(false, checkpointError).Once()
 	workerAgent.SetCreateResult([]CreateResult{{worker1, nil}})
 	require.EqualError(t.T(), workerManager.checkAndScheduleWorkers(context.Background(), job), checkpointError.Error())
 	wokerStatusMap := workerManager.WorkerStatus()
 	require.Len(t.T(), wokerStatusMap, 1)
 
 	// check again
-	checkpointAgent.SetResult([]CheckpointResult{{true, nil}, {true, nil}, {true, nil}})
+	checkpointAgent.On("IsFresh", mock.Anything, mock.Anything, mock.Anything).Return(true, nil).Times(3)
 	workerAgent.SetCreateResult([]CreateResult{{worker2, createError}})
 	require.EqualError(t.T(), workerManager.checkAndScheduleWorkers(context.Background(), job), createError.Error())
 	wokerStatusMap = workerManager.WorkerStatus()
@@ -358,7 +361,7 @@ func (t *testDMJobmasterSuite) TestWorkerManager() {
 	jobCfg := &config.JobCfg{}
 	require.NoError(t.T(), jobCfg.DecodeFile(jobTemplatePath))
 	job := metadata.NewJob(jobCfg)
-	jobStore := metadata.NewJobStore("worker_manager_test", mock.NewMetaMock())
+	jobStore := metadata.NewJobStore("worker_manager_test", kvmock.NewMetaMock())
 	require.NoError(t.T(), jobStore.Put(context.Background(), job))
 
 	checkpointAgent := &MockCheckpointAgent{}
@@ -373,7 +376,9 @@ func (t *testDMJobmasterSuite) TestWorkerManager() {
 	worker1 := "worker1"
 	worker2 := "worker2"
 	checkpointError := errors.New("checkpoint error")
-	checkpointAgent.SetResult([]CheckpointResult{{true, nil}, {true, nil}, {true, nil}, {false, checkpointError}, {true, nil}, {true, nil}, {true, nil}, {true, nil}, {true, nil}, {true, nil}})
+	checkpointAgent.On("IsFresh", mock.Anything, mock.Anything, mock.Anything).Return(true, nil).Times(3)
+	checkpointAgent.On("IsFresh", mock.Anything, mock.Anything, mock.Anything).Return(false, checkpointError).Once()
+	checkpointAgent.On("IsFresh", mock.Anything, mock.Anything, mock.Anything).Return(true, nil).Times(6)
 	createError := errors.New("create error")
 	workerAgent.SetCreateResult([]CreateResult{{worker1, nil}, {"", createError}, {worker2, nil}})
 
@@ -395,11 +400,9 @@ func (t *testDMJobmasterSuite) TestWorkerManager() {
 
 	// first check
 	require.Eventually(t.T(), func() bool {
-		checkpointAgent.Lock()
-		defer checkpointAgent.Unlock()
 		workerAgent.Lock()
 		defer workerAgent.Unlock()
-		return len(checkpointAgent.results) == 0 && len(workerAgent.createResults) == 0 && len(workerManager.WorkerStatus()) == 2
+		return len(workerAgent.createResults) == 0 && len(workerManager.WorkerStatus()) == 2
 	}, 5*time.Second, 100*time.Millisecond)
 
 	workerStatus1 := workerManager.WorkerStatus()[source1]
@@ -427,7 +430,7 @@ func (t *testDMJobmasterSuite) TestWorkerManager() {
 	// check by offline
 	workerManager.UpdateWorkerStatus(workerStatus2)
 	workerManager.SetNextCheckTime(time.Now())
-	checkpointAgent.SetResult([]CheckpointResult{{true, nil}, {true, nil}, {true, nil}})
+	checkpointAgent.On("IsFresh", mock.Anything, mock.Anything, mock.Anything).Return(true, nil).Times(3)
 	workerAgent.SetCreateResult([]CreateResult{{worker3, nil}})
 
 	// scheduled eventually
@@ -455,7 +458,8 @@ func (t *testDMJobmasterSuite) TestWorkerManager() {
 	workerStatus.Stage = runtime.WorkerFinished
 	workerManager.UpdateWorkerStatus(workerStatus)
 	workerStatus4 := runtime.InitWorkerStatus(source1, lib.WorkerDMLoad, worker4)
-	checkpointAgent.SetResult([]CheckpointResult{{true, nil}, {false, nil}})
+	checkpointAgent.On("IsFresh", mock.Anything, mock.Anything, mock.Anything).Return(true, nil).Once()
+	checkpointAgent.On("IsFresh", mock.Anything, mock.Anything, mock.Anything).Return(false, nil).Once()
 	workerAgent.SetCreateResult([]CreateResult{{worker4, nil}})
 	// check by finished
 	workerManager.SetNextCheckTime(time.Now())
@@ -530,31 +534,4 @@ func (mockAgent *MockWorkerAgent) StopWorker(ctx context.Context, taskID string,
 	result := mockAgent.destroyResults[0]
 	mockAgent.destroyResults = mockAgent.destroyResults[1:]
 	return result
-}
-
-type CheckpointResult struct {
-	isFresh bool
-	err     error
-}
-
-type MockCheckpointAgent struct {
-	sync.Mutex
-	results []CheckpointResult
-}
-
-func (mockAgent *MockCheckpointAgent) SetResult(results []CheckpointResult) {
-	mockAgent.Lock()
-	defer mockAgent.Unlock()
-	mockAgent.results = append(mockAgent.results, results...)
-}
-
-func (mockAgent *MockCheckpointAgent) IsFresh(ctx context.Context, workerType libModel.WorkerType, taskCfg *metadata.Task) (bool, error) {
-	mockAgent.Lock()
-	defer mockAgent.Unlock()
-	if len(mockAgent.results) == 0 {
-		panic("no result in mock agent")
-	}
-	result := mockAgent.results[0]
-	mockAgent.results = mockAgent.results[1:]
-	return result.isFresh, result.err
 }

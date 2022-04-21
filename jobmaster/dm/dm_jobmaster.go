@@ -10,6 +10,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/hanfei1991/microcosm/executor/worker"
+	"github.com/hanfei1991/microcosm/jobmaster/dm/checkpoint"
 	"github.com/hanfei1991/microcosm/jobmaster/dm/config"
 	"github.com/hanfei1991/microcosm/jobmaster/dm/metadata"
 	"github.com/hanfei1991/microcosm/jobmaster/dm/runtime"
@@ -35,6 +36,7 @@ type JobMaster struct {
 	taskManager           *TaskManager
 	messageAgent          *MessageAgent
 	messageHandlerManager p2p.MessageHandlerManager
+	checkpointAgent       checkpoint.Agent
 }
 
 func RegisterWorker() {
@@ -49,9 +51,10 @@ func RegisterWorker() {
 func NewDMJobMaster(ctx *dcontext.Context, workerID libModel.WorkerID, masterID libModel.MasterID, conf lib.WorkerConfig) *JobMaster {
 	log.L().Info("new dm jobmaster", zap.String("id", workerID))
 	jm := &JobMaster{
-		workerID: workerID,
-		jobCfg:   conf.(*config.JobCfg),
-		closeCh:  make(chan struct{}),
+		workerID:        workerID,
+		jobCfg:          conf.(*config.JobCfg),
+		closeCh:         make(chan struct{}),
+		checkpointAgent: checkpoint.NewAgentImpl(conf.(*config.JobCfg)),
 	}
 
 	// TODO: we should expose the message handler register Func in base master.
@@ -64,6 +67,7 @@ func NewDMJobMaster(ctx *dcontext.Context, workerID libModel.WorkerID, masterID 
 }
 
 func (jm *JobMaster) createComponents() error {
+	log.L().Debug("create components", zap.String("id", jm.workerID))
 	taskStatus, workerStatus, workerHandles, err := jm.getInitStatus()
 	if err != nil {
 		return err
@@ -71,16 +75,19 @@ func (jm *JobMaster) createComponents() error {
 	jm.metadata = metadata.NewMetaData(jm.ID(), jm.MetaKVClient())
 	jm.messageAgent = NewMessageAgent(workerHandles, jm.ID(), jm.BaseJobMaster)
 	jm.taskManager = NewTaskManager(taskStatus, jm.metadata.JobStore(), jm.messageAgent)
-	jm.workerManager = NewWorkerManager(workerStatus, jm.metadata.JobStore(), jm.messageAgent, &CheckpointAgentImpl{})
+	jm.workerManager = NewWorkerManager(workerStatus, jm.metadata.JobStore(), jm.messageAgent, jm.checkpointAgent)
 	return nil
 }
 
 func (jm *JobMaster) InitImpl(ctx context.Context) error {
-	log.L().Info("initializing the dm jobmaster", zap.String("id", jm.workerID), zap.String("jobmaster id", jm.JobMasterID()))
+	log.L().Info("initializing the dm jobmaster", zap.String("id", jm.workerID), zap.String("jobmaster_id", jm.JobMasterID()))
 	if err := jm.createComponents(); err != nil {
 		return err
 	}
 	if err := jm.registerMessageHandler(ctx); err != nil {
+		return err
+	}
+	if err := jm.checkpointAgent.Init(ctx); err != nil {
 		return err
 	}
 	return jm.taskManager.OperateTask(ctx, Create, jm.jobCfg, nil)
@@ -93,11 +100,12 @@ func (jm *JobMaster) Tick(ctx context.Context) error {
 }
 
 func (jm *JobMaster) OnMasterRecovered(ctx context.Context) error {
-	log.L().Info("recovering the dm jobmaster", zap.String("id :", jm.workerID))
+	log.L().Info("recovering the dm jobmaster", zap.String("id", jm.workerID))
 	return jm.createComponents()
 }
 
 func (jm *JobMaster) OnWorkerDispatched(worker lib.WorkerHandle, result error) error {
+	log.L().Info("on worker dispatched", zap.String("id", jm.workerID), zap.String("worker_id", worker.ID()))
 	if result != nil {
 		log.L().Error("failed to create worker", zap.String("worker_id", worker.ID()), zap.Error(result))
 		jm.workerManager.removeWorkerStatusByWorkerID(worker.ID())
@@ -107,9 +115,10 @@ func (jm *JobMaster) OnWorkerDispatched(worker lib.WorkerHandle, result error) e
 }
 
 func (jm *JobMaster) OnWorkerOnline(worker lib.WorkerHandle) error {
+	log.L().Debug("on worker online", zap.String("id", jm.workerID), zap.String("worker_id", worker.ID()))
 	taskStatus, err := runtime.UnmarshalTaskStatus(worker.Status().ExtBytes)
 	if err != nil {
-		return errors.Trace(err)
+		return err
 	}
 
 	jm.taskManager.UpdateTaskStatus(taskStatus)
@@ -119,9 +128,10 @@ func (jm *JobMaster) OnWorkerOnline(worker lib.WorkerHandle) error {
 }
 
 func (jm *JobMaster) OnWorkerOffline(worker lib.WorkerHandle, reason error) error {
+	log.L().Info("on worker offline", zap.String("id", jm.workerID), zap.String("worker_id", worker.ID()))
 	taskStatus, err := runtime.UnmarshalTaskStatus(worker.Status().ExtBytes)
 	if err != nil {
-		return errors.Trace(err)
+		return err
 	}
 
 	if taskStatus.GetStage() == metadata.StageFinished {
@@ -135,6 +145,7 @@ func (jm *JobMaster) OnWorkerOffline(worker lib.WorkerHandle, reason error) erro
 }
 
 func (jm *JobMaster) onWorkerFinished(taskStatus runtime.TaskStatus, worker lib.WorkerHandle) error {
+	log.L().Info("on worker finished", zap.String("id", jm.workerID), zap.String("worker_id", worker.ID()))
 	jm.taskManager.UpdateTaskStatus(taskStatus)
 	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus(taskStatus.GetTask(), taskStatus.GetUnit(), worker.ID(), runtime.WorkerFinished))
 	jm.messageAgent.UpdateWorkerHandle(taskStatus.GetTask(), nil)
@@ -153,6 +164,7 @@ func (jm *JobMaster) OnJobManagerMessage(topic p2p.Topic, message interface{}) e
 }
 
 func (jm *JobMaster) OnWorkerMessage(worker lib.WorkerHandle, topic p2p.Topic, message interface{}) error {
+	log.L().Debug("on worker message", zap.String("id", jm.workerID), zap.String("worker_id", worker.ID()))
 	// TODO: handle DDL request
 	response, ok := message.(dmpkg.MessageWithID)
 	if !ok {
@@ -166,8 +178,9 @@ func (jm *JobMaster) OnMasterMessage(topic p2p.Topic, message interface{}) error
 }
 
 func (jm *JobMaster) CloseImpl(ctx context.Context) error {
+	log.L().Info("close the dm jobmaster", zap.String("id", jm.workerID))
 	if err := jm.taskManager.OperateTask(ctx, Delete, nil, nil); err != nil {
-		return errors.Trace(err)
+		return err
 	}
 
 outer:
@@ -181,6 +194,9 @@ outer:
 			// manually call Tick since outer event loop is closed.
 			jm.workerManager.Tick(ctx)
 			if len(jm.workerManager.WorkerStatus()) == 0 {
+				if err := jm.checkpointAgent.Remove(ctx); err != nil {
+					log.L().Error("failed to remove checkpoint", zap.Error(err))
+				}
 				break outer
 			}
 		}
@@ -216,6 +232,7 @@ func (jm *JobMaster) IsJobMasterImpl() {
 }
 
 func (jm *JobMaster) registerMessageHandler(ctx context.Context) error {
+	log.L().Debug("register message handler", zap.String("id", jm.workerID))
 	// TODO: register jobmanager request and worker request/response
 	//	ok, err := jm.messageHandlerManager.RegisterHandler(
 	//		ctx,
@@ -229,6 +246,7 @@ func (jm *JobMaster) registerMessageHandler(ctx context.Context) error {
 }
 
 func (jm *JobMaster) getInitStatus() ([]runtime.TaskStatus, []runtime.WorkerStatus, map[string]SendHandle, error) {
+	log.L().Debug("get init status", zap.String("id", jm.workerID))
 	// NOTE: GetWorkers should return all online workers,
 	// and no further OnWorkerOnline will be received if JobMaster doesn't CreateWorker.
 	workerHandles := jm.GetWorkers()

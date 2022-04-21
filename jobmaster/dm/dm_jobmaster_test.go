@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
+	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/hanfei1991/microcosm/client"
 	"github.com/hanfei1991/microcosm/jobmaster/dm/config"
 	"github.com/hanfei1991/microcosm/jobmaster/dm/metadata"
@@ -25,6 +26,9 @@ import (
 	dmpkg "github.com/hanfei1991/microcosm/pkg/dm"
 	"github.com/hanfei1991/microcosm/pkg/externalresource/broker"
 	extkv "github.com/hanfei1991/microcosm/pkg/meta/extension"
+	"github.com/pingcap/tiflow/dm/pkg/conn"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+
 	kvmock "github.com/hanfei1991/microcosm/pkg/meta/kvclient/mock"
 	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
@@ -49,6 +53,7 @@ func (t *testDMJobmasterSuite) SetupSuite() {
 	WorkerNormalInterval = time.Hour
 	WorkerErrorInterval = 100 * time.Millisecond
 	runtime.HeartbeatInterval = 1 * time.Second
+	require.NoError(t.T(), log.InitLogger(&log.Config{Level: "debug"}))
 }
 
 type masterParamListForTest struct {
@@ -96,6 +101,10 @@ func (t *testDMJobmasterSuite) TestRunDMJobMaster() {
 	require.NoError(t.T(), err)
 
 	// Init
+	_, mockDB, err := conn.InitMockDBFull()
+	require.NoError(t.T(), err)
+	mockDB.ExpectExec(".*").WillReturnResult(sqlmock.NewResult(1, 1))
+	mockDB.ExpectExec(".*").WillReturnResult(sqlmock.NewResult(1, 1))
 	require.NoError(t.T(), jobmaster.Init(context.Background()))
 
 	// mock master failed and recoverd after init
@@ -126,6 +135,7 @@ func (t *testDMJobmasterSuite) TestRunDMJobMaster() {
 func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	metaKVClient := kvmock.NewMetaMock()
 	mockBaseJobmaster := &MockBaseJobmaster{}
+	mockCheckpointAgent := &MockCheckpointAgent{}
 	jobCfg := &config.JobCfg{}
 	require.NoError(t.T(), jobCfg.DecodeFile(jobTemplatePath))
 	jm := &JobMaster{
@@ -134,6 +144,7 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 		closeCh:               make(chan struct{}),
 		messageHandlerManager: p2p.NewMockMessageHandlerManager(),
 		BaseJobMaster:         mockBaseJobmaster,
+		checkpointAgent:       mockCheckpointAgent,
 	}
 
 	// init
@@ -152,6 +163,7 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 		closeCh:               make(chan struct{}),
 		messageHandlerManager: p2p.NewMockMessageHandlerManager(),
 		BaseJobMaster:         mockBaseJobmaster,
+		checkpointAgent:       mockCheckpointAgent,
 	}
 	mockBaseJobmaster.On("GetWorkers").Return(map[string]lib.WorkerHandle{}).Once()
 	jm.OnMasterRecovered(context.Background())
@@ -161,57 +173,84 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	worker2 := "worker2"
 	mockBaseJobmaster.On("CreateWorker", mock.Anything, mock.Anything, mock.Anything).Return(worker1, nil).Once()
 	mockBaseJobmaster.On("CreateWorker", mock.Anything, mock.Anything, mock.Anything).Return(worker2, nil).Once()
+	mockCheckpointAgent.On("IsFresh", mock.Anything).Return(true, nil).Times(6)
 	require.NoError(t.T(), jm.Tick(context.Background()))
 	require.NoError(t.T(), jm.Tick(context.Background()))
 	require.NoError(t.T(), jm.Tick(context.Background()))
-
-	// worker1 online, worker2 dispatch error
-	workerHandle1 := &lib.MockWorkerHandler{WorkerID: worker1}
-	workerHandle2 := &lib.MockWorkerHandler{WorkerID: worker2}
-	task1 := jobCfg.Upstreams[0].SourceID
+	// make sure workerHandle1 bound to task status1, workerHandle2 bound to task status2.
 	taskStatus1 := runtime.DumpStatus{
 		DefaultTaskStatus: runtime.DefaultTaskStatus{
 			Unit:  lib.WorkerDMDump,
-			Task:  task1,
 			Stage: metadata.StageRunning,
 		},
 	}
+	taskStatus2 := runtime.DumpStatus{
+		DefaultTaskStatus: runtime.DefaultTaskStatus{
+			Unit:  lib.WorkerDMDump,
+			Stage: metadata.StageRunning,
+		},
+	}
+	jm.workerManager.workerStatusMap.Range(func(key, val interface{}) bool {
+		if val.(runtime.WorkerStatus).ID == worker1 {
+			taskStatus1.Task = key.(string)
+		} else {
+			taskStatus2.Task = key.(string)
+		}
+		return true
+	})
+	workerHandle1 := &lib.MockWorkerHandler{WorkerID: worker1}
+	workerHandle2 := &lib.MockWorkerHandler{WorkerID: worker2}
+
+	// worker1 online, worker2 dispatch error
 	bytes1, err := json.Marshal(taskStatus1)
 	require.NoError(t.T(), err)
 	workerHandle1.On("Status").Return(&libModel.WorkerStatus{ExtBytes: bytes1}).Once()
-	workerHandle1.On("IsTombStone").Return(false)
+	workerHandle1.On("IsTombStone").Return(false).Once()
 	jm.OnWorkerOnline(workerHandle1)
 	jm.OnWorkerDispatched(workerHandle2, errors.New("dispatch error"))
 	worker3 := "worker3"
 	mockBaseJobmaster.On("CreateWorker", mock.Anything, mock.Anything, mock.Anything).Return(worker3, nil).Once()
-	workerHandle1.On("SendMessage", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
+	mockCheckpointAgent.On("IsFresh", mock.Anything).Return(true, nil).Times(3)
 	require.NoError(t.T(), jm.Tick(context.Background()))
 
 	// worker1 offline, worker3 online
 	workerHandle2.WorkerID = worker3
-	task2 := jobCfg.Upstreams[1].SourceID
-	taskStatus2 := runtime.DumpStatus{
-		DefaultTaskStatus: runtime.DefaultTaskStatus{
-			Unit:  lib.WorkerDMDump,
-			Task:  task2,
-			Stage: metadata.StageRunning,
-		},
-	}
+
 	bytes2, err := json.Marshal(taskStatus2)
 	require.NoError(t.T(), err)
-	workerHandle2.On("IsTombStone").Return(false)
 	workerHandle2.On("Status").Return(&libModel.WorkerStatus{ExtBytes: bytes2}).Once()
+	workerHandle2.On("IsTombStone").Return(false).Once()
 	jm.OnWorkerOnline(workerHandle2)
 	workerHandle1.On("Status").Return(&libModel.WorkerStatus{ExtBytes: bytes1}).Once()
 	jm.OnWorkerOffline(workerHandle1, errors.New("offline error"))
 	worker4 := "worker4"
 	mockBaseJobmaster.On("CreateWorker", mock.Anything, mock.Anything, mock.Anything).Return(worker4, nil).Once()
-	workerHandle2.On("SendMessage", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
+	mockCheckpointAgent.On("IsFresh", mock.Anything).Return(true, nil).Times(3)
 	require.NoError(t.T(), jm.Tick(context.Background()))
 
 	// worker4 online
 	workerHandle1.WorkerID = worker4
 	workerHandle1.On("Status").Return(&libModel.WorkerStatus{ExtBytes: bytes1}).Once()
+	workerHandle1.On("IsTombStone").Return(false).Once()
+	jm.OnWorkerOnline(workerHandle1)
+	require.NoError(t.T(), jm.Tick(context.Background()))
+
+	// worker1 finished
+	taskStatus1.Stage = metadata.StageFinished
+	bytes1, err = json.Marshal(taskStatus1)
+	require.NoError(t.T(), err)
+	worker5 := "worker5"
+	workerHandle1.On("Status").Return(&libModel.WorkerStatus{ExtBytes: bytes1}).Once()
+	mockBaseJobmaster.On("CreateWorker", mock.Anything, mock.Anything, mock.Anything).Return(worker5, nil).Once()
+	jm.OnWorkerOffline(workerHandle1, nil)
+	require.NoError(t.T(), jm.Tick(context.Background()))
+	// worker5 online
+	workerHandle1.WorkerID = worker5
+	taskStatus1.Stage = metadata.StageRunning
+	bytes1, err = json.Marshal(taskStatus1)
+	require.NoError(t.T(), err)
+	workerHandle1.On("Status").Return(&libModel.WorkerStatus{ExtBytes: bytes1}).Once()
+	workerHandle1.On("IsTombStone").Return(false).Once()
 	jm.OnWorkerOnline(workerHandle1)
 	require.NoError(t.T(), jm.Tick(context.Background()))
 
@@ -222,14 +261,13 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 		closeCh:               make(chan struct{}),
 		messageHandlerManager: p2p.NewMockMessageHandlerManager(),
 		BaseJobMaster:         mockBaseJobmaster,
+		checkpointAgent:       mockCheckpointAgent,
 	}
 	mockBaseJobmaster.On("GetWorkers").Return(map[string]lib.WorkerHandle{worker4: workerHandle1, worker3: workerHandle2}).Once()
 	workerHandle1.On("Status").Return(&libModel.WorkerStatus{ExtBytes: bytes1}).Once()
 	workerHandle2.On("Status").Return(&libModel.WorkerStatus{ExtBytes: bytes2}).Once()
-	workerHandle1.On("IsTombStone").Return(false).Once()
-	workerHandle2.On("IsTombStone").Return(false).Once()
-	workerHandle1.On("SendMessage", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
-	workerHandle2.On("SendMessage", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
+	workerHandle1.On("IsTombStone").Return(false).Twice()
+	workerHandle2.On("IsTombStone").Return(false).Twice()
 	jm.OnMasterRecovered(context.Background())
 	require.NoError(t.T(), jm.Tick(context.Background()))
 	// placeholder
@@ -251,12 +289,17 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 		defer wg.Done()
 		require.NoError(t.T(), jm.CloseImpl(context.Background()))
 	}()
-	time.Sleep(time.Second)
+	time.Sleep(time.Second * 2)
 	workerHandle1.On("Status").Return(&libModel.WorkerStatus{ExtBytes: bytes1}).Once()
 	workerHandle2.On("Status").Return(&libModel.WorkerStatus{ExtBytes: bytes2}).Once()
 	jm.OnWorkerOffline(workerHandle1, errors.New("offline error"))
 	jm.OnWorkerOffline(workerHandle2, errors.New("offline error"))
 	wg.Wait()
+
+	mockBaseJobmaster.AssertExpectations(t.T())
+	workerHandle1.AssertExpectations(t.T())
+	workerHandle2.AssertExpectations(t.T())
+	mockCheckpointAgent.AssertExpectations(t.T())
 }
 
 // TODO: move to separate file
@@ -295,4 +338,24 @@ func (m *MockBaseJobmaster) CreateWorker(workerType lib.WorkerType, config lib.W
 
 func (m *MockBaseJobmaster) CurrentEpoch() int64 {
 	return 0
+}
+
+type MockCheckpointAgent struct {
+	mu sync.Mutex
+	mock.Mock
+}
+
+func (m *MockCheckpointAgent) Init(ctx context.Context) error {
+	return nil
+}
+
+func (m *MockCheckpointAgent) Remove(ctx context.Context) error {
+	return nil
+}
+
+func (m *MockCheckpointAgent) IsFresh(ctx context.Context, workerType lib.WorkerType, taskCfg *metadata.Task) (bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	args := m.Called()
+	return args.Get(0).(bool), args.Error(1)
 }
