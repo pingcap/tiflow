@@ -96,6 +96,127 @@ func GetAllRelayConfig(cli *clientv3.Client) (map[string]map[string]struct{}, in
 }
 
 // GetRelayConfig returns the source config which the given worker need to pull relay log from etcd, with revision.
+func GetRelayConfigs(cli *clientv3.Client, worker string) ([]*config.SourceConfig, int64, error) {
+	var (
+		sources    []string
+		newSources []string
+		rev        int64
+		retryNum   = defaultGetRelayConfigRetry
+	)
+	ctx, cancel := context.WithTimeout(cli.Ctx(), etcdutil.DefaultRequestTimeout)
+	defer cancel()
+
+	getSourceIDsFromResp := func(resp *clientv3.GetResponse) ([]string, int64, error) {
+		if resp.Count == 0 {
+			return nil, resp.Header.Revision, nil
+		}
+		sourceIDs := make([]string, 0, resp.Count)
+		// get all sourceID
+		for _, kv := range resp.Kvs {
+			keys, err2 := common.UpstreamRelayWorkerKeyAdapter.Decode(string(kv.Key))
+			if err2 != nil {
+				return nil, resp.Header.Revision, err2
+			}
+			if len(keys) != 2 {
+				// should not happened
+				return nil, resp.Header.Revision, terror.ErrDecodeEtcdKeyFail.Generate("illegal key of UpstreamRelayWorkerKeyAdapter")
+			}
+			sourceIDs = append(sourceIDs, keys[1])
+		}
+		return sourceIDs, resp.Header.Revision, nil
+	}
+
+	resp, err := cli.Get(ctx, common.UpstreamRelayWorkerKeyAdapter.Encode(worker), clientv3.WithPrefix())
+	if err != nil {
+		return nil, 0, err
+	}
+	sources, rev, err = getSourceIDsFromResp(resp)
+	if err != nil || len(sources) == 0 {
+		return nil, rev, err
+	}
+
+	for retryCnt := 1; retryCnt <= retryNum; retryCnt++ {
+		txnResp, _, err2 := etcdutil.DoOpsInOneTxnWithRetry(cli,
+			clientv3.OpGet(common.UpstreamRelayWorkerKeyAdapter.Encode(worker), clientv3.WithPrefix()),
+			clientv3.OpGet(common.UpstreamConfigKeyAdapter.Path(), clientv3.WithPrefix()))
+		if err2 != nil {
+			return nil, 0, err
+		}
+
+		var rev2 int64
+		sourceResp := txnResp.Responses[0].GetResponseRange()
+		newSources, rev2, err = getSourceIDsFromResp((*clientv3.GetResponse)(sourceResp))
+		if err != nil {
+			return nil, 0, err
+		}
+		// 1. newSources and souces are exactly the same, find source configs and return.
+		// 2. newSources and sources only have part of them is consistent, retry, but the last retry will return the consistent part.
+		// 3. newSources and sources have no consistent part, retry, when last retry still have no consistent return error.
+		newSourcesLen := len(newSources)
+		sourcesLen := len(sources)
+		if newSourcesLen == 0 && sourcesLen == 0 {
+			return nil, rev2, nil
+		}
+		consistents := make([]string, 0)
+		for _, newSource := range newSources {
+			for _, source := range sources {
+				if newSource == source {
+					consistents = append(consistents, newSource)
+					continue
+				}
+			}
+		}
+		consistentsLen := len(consistents)
+		// not exactly the same, will retry
+		if consistentsLen != newSourcesLen || consistentsLen != sourcesLen {
+			log.L().Warn("relay config has been changed, will take a retry",
+				zap.Strings("old relay sources", sources),
+				zap.Strings("new relay sources", newSources),
+				zap.Int("retryTime", retryCnt))
+			// if we are about to fail, don't update relay source to save the last source to error
+			if retryCnt != retryNum {
+				sources = newSources
+			}
+			select {
+			case <-cli.Ctx().Done():
+				retryNum = 0 // stop retry
+			case <-time.After(retryInterval):
+				// retryInterval shouldn't be too long because the longer we wait, bound is more
+				// possible to be different from newBound
+			}
+			if retryCnt != retryNum {
+				continue
+			}
+		}
+
+		// after retry or already the same
+		// 1. no consistent part, return error
+		// 2. consistent part( exactly the same or just a part), find source configs and retur
+		if consistentsLen == 0 {
+			return nil, 0, terror.ErrWorkerRelayConfigChanging.Generate(worker, sources, newSources)
+		}
+		cfgResp := txnResp.Responses[1].GetResponseRange()
+		scm, err3 := sourceCfgFromResp("", (*clientv3.GetResponse)(cfgResp))
+		if err3 != nil {
+			return nil, 0, err3
+		}
+		configs := make([]*config.SourceConfig, 0, consistentsLen)
+		for _, consistentID := range consistents {
+			cfg, ok := scm[consistentID]
+			// ok == false means we have got relay source but there is no source config, this shouldn't happen
+			if !ok {
+				// this should not happen.
+				return nil, 0, terror.ErrConfigMissingForBound.Generate(consistentID)
+			}
+			configs = append(configs, cfg)
+		}
+
+		return configs, rev2, nil
+	}
+	return nil, 0, terror.ErrWorkerRelayConfigChanging.Generate(worker, sources, newSources)
+}
+
+// GetRelayConfig returns the source config which the given worker need to pull relay log from etcd, with revision.
 func GetRelayConfig(cli *clientv3.Client, worker string) (*config.SourceConfig, int64, error) {
 	var (
 		source    string

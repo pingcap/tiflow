@@ -16,6 +16,7 @@ package ha
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/pingcap/failpoint"
@@ -182,6 +183,118 @@ func GetLastSourceBounds(cli *clientv3.Client) (map[string]SourceBound, int64, e
 	}
 
 	return sbm, resp.Header.Revision, nil
+}
+
+// GetSourceBoundConfig gets the source bound relationship and relative source config at the same time
+// for the specified DM-worker. The index worker **must not be empty**:
+// if source bound is empty, will return an empty sourceBound and an empty source config
+// if source bound is not empty but sourceConfig is empty, will return an error
+// if the source bound is different for over retryNum times, will return an error.
+func GetSourceBoundConfigs(cli *clientv3.Client, worker string) ([]SourceBound, []*config.SourceConfig, int64, error) {
+	var (
+		bounds    []SourceBound
+		newBounds []SourceBound
+		cfgs      []*config.SourceConfig
+		ok        bool
+		retryNum  = defaultGetSourceBoundConfigRetry
+		sbm       map[string]SourceBound
+	)
+	wbm, rev, err := GetSourceBound(cli, worker, "")
+	if err != nil {
+		return bounds, cfgs, 0, err
+	}
+	if sbm, ok = wbm[worker]; !ok {
+		return bounds, cfgs, rev, nil
+	}
+
+	GetSourceBoundFromMap := func(bondMap map[string]SourceBound) []SourceBound {
+		if bondMap == nil {
+			return nil
+		}
+		sourceBonds := make([]SourceBound, 0, len(bondMap))
+		for _, bound := range sbm {
+			sourceBonds = append(sourceBonds, bound)
+		}
+		return sourceBonds
+	}
+
+	bounds = GetSourceBoundFromMap(sbm)
+
+	for retryCnt := 1; retryCnt <= retryNum; retryCnt++ {
+		txnResp, rev2, err2 := etcdutil.DoOpsInOneTxnWithRetry(cli, clientv3.OpGet(common.UpstreamBoundWorkerKeyAdapter.Encode(worker), clientv3.WithPrefix()),
+			clientv3.OpGet(common.UpstreamConfigKeyAdapter.Path(), clientv3.WithPrefix()))
+		if err2 != nil {
+			return bounds, cfgs, 0, err2
+		}
+
+		boundResp := txnResp.Responses[0].GetResponseRange()
+		sbm2, err2 := sourceBoundFromResp((*clientv3.GetResponse)(boundResp))
+		if err2 != nil {
+			return bounds, cfgs, 0, err2
+		}
+		newBounds = GetSourceBoundFromMap(sbm2[worker])
+
+		// 1. newBounds and bounds are exactly the same, find source configs and return.
+		// 2. newBounds and bounds only have part of them is consistent, retry, but the last retry will return the consistent part.
+		// 3. newBounds and bounds have no consistent part, retry, when last retry still have no consistent return error.
+		newBoundsLen := len(newBounds)
+		boundsLen := len(bounds)
+		if newBoundsLen == 0 && boundsLen == 0 {
+			return nil, nil, rev2, nil
+		}
+		consistents := make([]SourceBound, 0)
+		for _, newBound := range newBounds {
+			for _, bound := range bounds {
+				if newBound == bound {
+					consistents = append(consistents, newBound)
+					continue
+				}
+			}
+		}
+		consistentsLen := len(consistents)
+		// not exactly the same, will retry
+		if consistentsLen != newBoundsLen || consistentsLen != boundsLen {
+			log.L().Warn("source bound has been changed, will take a retry", zap.String("oldBounds", fmt.Sprintf("%v", bounds)),
+				zap.String("newBounds", fmt.Sprintf("%v", newBounds)), zap.Int("retryTime", retryCnt))
+			// if we are about to fail, don't update bound to save the last bound to error
+			if retryCnt != retryNum {
+				bounds = newBounds
+			}
+			select {
+			case <-cli.Ctx().Done():
+				retryNum = 0 // stop retry
+			case <-time.After(retryInterval):
+				// retryInterval shouldn't be too long because the longer we wait, bound is more
+				// possible to be different from newBound
+			}
+			continue
+		}
+
+		// after retry or already the same
+		// 1. no consistent part, return error
+		// 2. consistent part( exactly the same or just a part), find source configs and retur
+		if consistentsLen == 0 {
+			return nil, nil, 0, terror.ErrMasterBoundChanging.Generate(bounds, newBounds)
+		}
+		cfgResp := txnResp.Responses[1].GetResponseRange()
+		scm, err2 := sourceCfgFromResp("", (*clientv3.GetResponse)(cfgResp))
+		if err2 != nil {
+			return nil, nil, 0, err2
+		}
+		cfgs := make([]*config.SourceConfig, 0, consistentsLen)
+		for _, consistent := range consistents {
+			cfg, ok := scm[consistent.Source]
+			// ok == false means we have got source bound but there is no source config, this shouldn't happen
+			if !ok {
+				// this should not happen.
+				return nil, nil, 0, terror.ErrConfigMissingForBound.Generate(consistent.Source)
+			}
+			cfgs = append(cfgs, cfg)
+		}
+		return consistents, cfgs, rev2, nil
+	}
+
+	return bounds, cfgs, 0, terror.ErrMasterBoundChanging.Generate(bounds, newBounds)
 }
 
 // GetSourceBoundConfig gets the source bound relationship and relative source config at the same time
