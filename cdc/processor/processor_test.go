@@ -112,15 +112,16 @@ func initProcessor4Test(ctx cdcContext.Context, t *testing.T) (*processor, *orch
 	})
 	p.changefeed = orchestrator.NewChangefeedReactorState(ctx.ChangefeedVars().ID)
 	captureID := ctx.GlobalVars().CaptureInfo.ID
+	changefeedID := ctx.ChangefeedVars().ID
 	return p, orchestrator.NewReactorStateTester(t, p.changefeed, map[string]string{
 		"/tidb/cdc/capture/" +
 			captureID: `{"id":"` + captureID + `","address":"127.0.0.1:8300"}`,
 		"/tidb/cdc/changefeed/info/" +
-			ctx.ChangefeedVars().ID: changefeedInfo,
+			changefeedID: changefeedInfo,
 		"/tidb/cdc/job/" +
 			ctx.ChangefeedVars().ID: `{"resolved-ts":0,"checkpoint-ts":0,"admin-job-type":0}`,
 		"/tidb/cdc/task/status/" +
-			captureID + "/" + captureID: `{"tables":{},"operation":null,"admin-job-type":0}`,
+			captureID + "/" + changefeedID: `{"tables":{},"operation":null,"admin-job-type":0}`,
 	})
 }
 
