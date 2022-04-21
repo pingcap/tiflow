@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/sink/metrics"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
@@ -39,13 +40,12 @@ type bufferSink struct {
 	buffer                 map[model.TableID][]*model.RowChangedEvent
 	bufferMu               sync.Mutex
 	flushTsChan            chan flushMsg
-	drawbackChan           chan drawbackMsg
 }
 
 var _ Sink = (*bufferSink)(nil)
 
 func newBufferSink(
-	backendSink Sink, checkpointTs model.Ts, drawbackChan chan drawbackMsg,
+	backendSink Sink, checkpointTs model.Ts,
 ) *bufferSink {
 	sink := &bufferSink{
 		Sink: backendSink,
@@ -53,7 +53,6 @@ func newBufferSink(
 		buffer:                 make(map[model.TableID][]*model.RowChangedEvent),
 		changeFeedCheckpointTs: checkpointTs,
 		flushTsChan:            make(chan flushMsg, maxFlushBatchSize),
-		drawbackChan:           drawbackChan,
 	}
 	return sink
 }
@@ -64,13 +63,12 @@ type runState struct {
 	metricTotalRows prometheus.Counter
 }
 
-func (b *bufferSink) run(ctx context.Context, errCh chan error) {
-	changefeedID := util.ChangefeedIDFromCtx(ctx)
+func (b *bufferSink) run(ctx context.Context, changefeedID string, errCh chan error) {
 	state := runState{
-		metricTotalRows: bufferSinkTotalRowsCountCounter.WithLabelValues(changefeedID),
+		metricTotalRows: metrics.BufferSinkTotalRowsCountCounter.WithLabelValues(changefeedID),
 	}
 	defer func() {
-		bufferSinkTotalRowsCountCounter.DeleteLabelValues(changefeedID)
+		metrics.BufferSinkTotalRowsCountCounter.DeleteLabelValues(changefeedID)
 	}()
 
 	for {
@@ -94,11 +92,6 @@ func (b *bufferSink) runOnce(ctx context.Context, state *runState) (bool, error)
 	select {
 	case <-ctx.Done():
 		return false, ctx.Err()
-	case drawback := <-b.drawbackChan:
-		b.bufferMu.Lock()
-		delete(b.buffer, drawback.tableID)
-		b.bufferMu.Unlock()
-		close(drawback.callback)
 	case event := <-b.flushTsChan:
 		push(event)
 	RecvBatch:
@@ -155,6 +148,24 @@ func (b *bufferSink) runOnce(ctx context.Context, state *runState) (bool, error)
 	}
 
 	return true, nil
+}
+
+// Init table sink resources
+func (b *bufferSink) Init(tableID model.TableID) error {
+	b.clearBufferedTableData(tableID)
+	return b.Sink.Init(tableID)
+}
+
+// Barrier delete buffer
+func (b *bufferSink) Barrier(ctx context.Context, tableID model.TableID) error {
+	b.clearBufferedTableData(tableID)
+	return b.Sink.Barrier(ctx, tableID)
+}
+
+func (b *bufferSink) clearBufferedTableData(tableID model.TableID) {
+	b.bufferMu.Lock()
+	defer b.bufferMu.Unlock()
+	delete(b.buffer, tableID)
 }
 
 func (b *bufferSink) TryEmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) (bool, error) {
