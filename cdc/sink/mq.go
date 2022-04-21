@@ -141,6 +141,11 @@ func (k *mqSink) TryEmitRowChangedEvents(ctx context.Context, rows ...*model.Row
 	return true, nil
 }
 
+// Init table sink resources
+func (k *mqSink) Init(tableID model.TableID) error {
+	return nil
+}
+
 func (k *mqSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
 	rowsCount := 0
 	for _, row := range rows {
