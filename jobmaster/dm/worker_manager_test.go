@@ -118,7 +118,9 @@ func (t *testDMJobmasterSuite) TestClearWorkerStatus() {
 	require.Len(t.T(), workerManager.WorkerStatus(), 2)
 
 	workerStatus1.Stage = runtime.WorkerOffline
+	workerStatus2.Stage = runtime.WorkerOnline
 	workerManager.UpdateWorkerStatus(workerStatus1)
+	workerManager.UpdateWorkerStatus(workerStatus2)
 	workerManager.removeOfflineWorkers()
 	require.Len(t.T(), workerManager.WorkerStatus(), 1)
 
