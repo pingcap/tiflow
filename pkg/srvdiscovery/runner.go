@@ -11,6 +11,10 @@ import (
 
 // DiscoveryRunner defines an interface to run Discovery service
 type DiscoveryRunner interface {
+	// ResetDiscovery creates a new discovery service, close the old discovery
+	// watcher and creates a new watcher.
+	// if resetSession is true, the session of discovery runner will be recreated
+	// and returned.
 	ResetDiscovery(ctx context.Context, resetSession bool) (Session, error)
 	GetWatcher() <-chan WatchResp
 	// returns current snapshot, DiscoveryRunner maintains this as snapshot plus
@@ -18,6 +22,7 @@ type DiscoveryRunner interface {
 	// consume more memory, but since it contains node address information only,
 	// the memory consumption is acceptable.
 	GetSnapshot() Snapshot
+	// ApplyWatchResult applies changed ServiceResource to the snapshot of runner
 	ApplyWatchResult(WatchResp)
 }
 

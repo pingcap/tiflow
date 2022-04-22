@@ -30,14 +30,14 @@ func TestDiscoveryRunner(t *testing.T) {
 		require.Nil(t, err)
 		return NewDiscoveryRunnerImpl(
 			client,
-			3,
+			5,
 			time.Millisecond*50,
 			adapter.NodeInfoKeyAdapter.Encode(string(res.ID)),
 			resStr,
 		)
 	}
 
-	runnerN := 20
+	runnerN := 5
 	runners := make([]DiscoveryRunner, 0, runnerN)
 	for i := 0; i < runnerN; i++ {
 		runners = append(runners, newNodeOnline(i))
