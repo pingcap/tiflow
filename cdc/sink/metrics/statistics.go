@@ -118,6 +118,13 @@ func (b *Statistics) AddRowsCount(count int) {
 	atomic.AddUint64(&b.totalRows, uint64(count))
 }
 
+// ObserveRows record the size of all received `RowChangedEvent`
+func (b *Statistics) ObserveRows(rows ...*model.RowChangedEvent) {
+	for _, row := range rows {
+		b.metricRowSizesHis.Observe(float64(row.ApproximateDataSize))
+	}
+}
+
 // SubRowsCount records total number of rows needs to flush
 func (b *Statistics) SubRowsCount(count int) {
 	atomic.AddUint64(&b.totalRows, ^uint64(count-1))
@@ -156,13 +163,6 @@ func (b *Statistics) RecordDDLExecution(executor func() error) error {
 
 	b.metricExecDDLHis.Observe(time.Since(start).Seconds())
 	return nil
-}
-
-// ObserveRowSizes record the size of all received `RowChangedEvent`
-func (b *Statistics) ObserveRowSizes(rows ...*model.RowChangedEvent) {
-	for _, row := range rows {
-		b.metricRowSizesHis.Observe(float64(row.ApproximateDataSize))
-	}
 }
 
 // PrintStatus prints the status of the Sink
