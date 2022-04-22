@@ -33,7 +33,6 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/binlog/event"
 	"github.com/pingcap/tiflow/dm/pkg/binlog/reader"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
-	"github.com/pingcap/tiflow/dm/pkg/gtid"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
@@ -132,7 +131,7 @@ func (r *BinlogReader) IsGTIDCoverPreviousFiles(ctx context.Context, filePath st
 		return false, err
 	}
 
-	var gs gtid.Set
+	var gs mysql.GTIDSet
 
 	for {
 		select {
@@ -165,7 +164,7 @@ func (r *BinlogReader) IsGTIDCoverPreviousFiles(ctx context.Context, filePath st
 		if err != nil {
 			return false, err
 		}
-		return gset.Contain(gs.Origin()), nil
+		return gset.Contain(gs), nil
 	}
 }
 

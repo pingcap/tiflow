@@ -35,7 +35,7 @@ type DDLItem struct {
 	DDLs          []string        `json:"ddls"`   // DDLs, these ddls are in the same QueryEvent
 	Source        string          `json:"source"` // source table ID
 
-	// just used for json's marshal and unmarshal, because gtid.Set in FirstLocation is interface,
+	// just used for json's marshal and unmarshal, because gtid set in FirstLocation is interface,
 	// can't be marshal and unmarshal
 	FirstPosition mysql.Position `json:"first-position"`
 	FirstGTIDSet  string         `json:"first-gtid-set"`

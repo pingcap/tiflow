@@ -34,7 +34,7 @@ func (t *testCommonSuite) TestGenCommonFileHeader(c *C) {
 		flavor          = gmysql.MySQLFlavor
 		serverID uint32 = 101
 		gSetStr         = "3ccc475b-2343-11e7-be21-6c0b84d59f30:1-14,406a3f61-690d-11e7-87c5-6c92bf46f384:1-94321383,53bfca22-690d-11e7-8a62-18ded7a37b78:1-495,686e1ab6-c47e-11e7-a42c-6c92bf46f384:1-34981190,03fc0263-28c7-11e7-a653-6c0b84d59f30:1-7041423,05474d3c-28c7-11e7-8352-203db246dd3d:1-170,10b039fc-c843-11e7-8f6a-1866daf8d810:1-308290454"
-		gSet     gtid.Set
+		gSet     gmysql.GTIDSet
 	)
 	gSet, err := gtid.ParserGTID(flavor, gSetStr)
 	c.Assert(err, IsNil)
@@ -102,7 +102,7 @@ func (t *testCommonSuite) TestGenCommonGTIDEvent(c *C) {
 	var (
 		flavor           = gmysql.MySQLFlavor
 		serverID  uint32 = 101
-		gSet      gtid.Set
+		gSet      gmysql.GTIDSet
 		latestPos uint32 = 123
 	)
 
@@ -201,8 +201,8 @@ func (t *testCommonSuite) TestGTIDIncrease(c *C) {
 	var (
 		flavor  = gmysql.MySQLFlavor
 		gSetStr = "03fc0263-28c7-11e7-a653-6c0b84d59f30:123"
-		gSetIn  gtid.Set
-		gSetOut gtid.Set
+		gSetIn  gmysql.GTIDSet
+		gSetOut gmysql.GTIDSet
 	)
 
 	// increase for MySQL

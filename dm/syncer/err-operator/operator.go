@@ -203,7 +203,7 @@ func (h *Holder) MatchAndApply(startLocation, endLocation binlog.Location, curre
 			ev.Header.Timestamp = currentEvent.Header.Timestamp
 			if e, ok := ev.Event.(*replication.QueryEvent); ok {
 				if startLocation.GetGTID() != nil {
-					e.GSet = startLocation.GetGTID().Origin()
+					e.GSet = startLocation.GetGTID()
 				}
 			}
 		}
@@ -215,7 +215,7 @@ func (h *Holder) MatchAndApply(startLocation, endLocation binlog.Location, curre
 			e.Header.LogPos = endLocation.Position.Pos
 			if e, ok := e.Event.(*replication.QueryEvent); ok {
 				if endLocation.GetGTID() != nil {
-					e.GSet = endLocation.GetGTID().Origin()
+					e.GSet = endLocation.GetGTID()
 				}
 			}
 		} else if operator.op == pb.ErrorOp_Inject {

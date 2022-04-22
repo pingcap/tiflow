@@ -214,7 +214,7 @@ func (r *binlogPosFinder) initTargetBinlogFile(ts int64) error {
 	return nil
 }
 
-func (r *binlogPosFinder) processGTIDRelatedEvent(ev *replication.BinlogEvent, prevSet gtid.Set) (gtid.Set, error) {
+func (r *binlogPosFinder) processGTIDRelatedEvent(ev *replication.BinlogEvent, prevSet mysql.GTIDSet) (mysql.GTIDSet, error) {
 	ev, err := r.parser.Parse(ev.RawData)
 	if err != nil {
 		return nil, err

@@ -727,8 +727,8 @@ func (t *testPositionSuite) TestSetGTID(c *C) {
 	GTIDSetStr2 := "3ccc475b-2343-11e7-be21-6c0b84d59f30:1-15"
 	gset, _ := gtid.ParserGTID("mysql", GTIDSetStr)
 	gset2, _ := gtid.ParserGTID("mysql", GTIDSetStr2)
-	mysqlSet := gset.Origin()
-	mysqlSet2 := gset2.Origin()
+	mysqlSet := gset
+	mysqlSet2 := gset2
 
 	loc := Location{
 		Position: gmysql.Position{
@@ -751,13 +751,12 @@ func (t *testPositionSuite) TestSetGTID(c *C) {
 	c.Assert(CompareLocation(loc, loc2, false), Equals, 1)
 
 	// WARN: will change other location's gtid
-	err := loc2.gtidSet.Set(mysqlSet2)
-	c.Assert(err, IsNil)
+	loc2.gtidSet = mysqlSet2
 	c.Assert(loc.gtidSet.String(), Equals, GTIDSetStr2)
 	c.Assert(loc2.gtidSet.String(), Equals, GTIDSetStr2)
 	c.Assert(CompareLocation(loc, loc2, true), Equals, 0)
 
-	err = loc2.SetGTID(mysqlSet)
+	err := loc2.SetGTID(mysqlSet)
 	c.Assert(err, IsNil)
 	c.Assert(loc.gtidSet.String(), Equals, GTIDSetStr2)
 	c.Assert(loc2.gtidSet.String(), Equals, GTIDSetStr)
@@ -773,7 +772,7 @@ func (t *testPositionSuite) TestSetGTIDMariaDB(c *C) {
 	gSetStr := "1-1-1,2-2-2"
 	gSet, err := gtid.ParserGTID("mariadb", gSetStr)
 	c.Assert(err, IsNil)
-	gSetOrigin := gSet.Origin()
+	gSetOrigin := gSet
 
 	loc := Location{
 		Position: gmysql.Position{

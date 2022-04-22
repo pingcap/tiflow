@@ -421,7 +421,7 @@ func (t *testDBSuite) TestTiDBVersion(c *C) {
 	}
 }
 
-func getGSetFromString(c *C, s string) gtid.Set {
+func getGSetFromString(c *C, s string) gmysql.GTIDSet {
 	gSet, err := gtid.ParserGTID("mysql", s)
 	c.Assert(err, IsNil)
 	return gSet
@@ -438,9 +438,9 @@ func (t *testDBSuite) TestAddGSetWithPurged(c *C) {
 	c.Assert(err, IsNil)
 
 	testCases := []struct {
-		originGSet  gtid.Set
-		purgedSet   gtid.Set
-		expectedSet gtid.Set
+		originGSet  gmysql.GTIDSet
+		purgedSet   gmysql.GTIDSet
+		expectedSet gmysql.GTIDSet
 		err         error
 	}{
 		{

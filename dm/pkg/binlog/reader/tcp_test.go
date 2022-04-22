@@ -100,7 +100,7 @@ func (t *testTCPReaderSuite) TestSyncPos(c *C) {
 func (t *testTCPReaderSuite) TestSyncGTID(c *C) {
 	var (
 		cfg  = replication.BinlogSyncerConfig{ServerID: serverIDs[1], Flavor: flavor}
-		gSet gtid.Set // nil GTID set
+		gSet gmysql.GTIDSet // nil GTID set
 	)
 
 	// the first reader

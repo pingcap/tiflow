@@ -226,14 +226,15 @@ func ComparePosition(pos1, pos2 gmysql.Position) int {
 	return adjustedPos1.Compare(adjustedPos2)
 }
 
-// Location is used for save binlog's position and gtid
-// TODO: encapsulate all attributes in Location.
+// Location identifies the location of binlog events.
 type Location struct {
+	// a structure represents the file offset in binlog file
 	Position gmysql.Position
-
-	gtidSet gtid.Set
-
-	Suffix int // use for replace event
+	// executed GTID set at this location
+	// TODO: it's an interface so should not copy?
+	gtidSet gmysql.GTIDSet
+	// used to distinguish injected events by DM when it's not 0
+	Suffix int
 }
 
 // NewLocation returns a new Location.
@@ -245,7 +246,7 @@ func NewLocation(flavor string) Location {
 }
 
 // InitLocation init a new Location.
-func InitLocation(pos gmysql.Position, gset gtid.Set) Location {
+func InitLocation(pos gmysql.Position, gset gmysql.GTIDSet) Location {
 	return Location{
 		Position: pos,
 		gtidSet:  gset,
@@ -276,7 +277,7 @@ func (l Location) Clone() Location {
 
 // CloneWithFlavor clones the location, and if the GTIDSet is nil, will create a GTIDSet with specified flavor.
 func (l Location) CloneWithFlavor(flavor string) Location {
-	var newGTIDSet gtid.Set
+	var newGTIDSet gmysql.GTIDSet
 	if l.gtidSet != nil {
 		newGTIDSet = l.gtidSet.Clone()
 	} else if len(flavor) != 0 {
@@ -351,7 +352,7 @@ func IsFreshPosition(location1 Location, flavor string, cmpGTID bool) bool {
 //   0, true if gSet1 is equal to gSet2
 //   -1, true if gSet1 is less than gSet2
 // but if can't compare gSet1 and gSet2, will returns 0, false.
-func CompareGTID(gSet1, gSet2 gtid.Set) (int, bool) {
+func CompareGTID(gSet1, gSet2 gmysql.GTIDSet) (int, bool) {
 	gSetIsEmpty1 := gSet1 == nil || len(gSet1.String()) == 0
 	gSetIsEmpty2 := gSet2 == nil || len(gSet2.String()) == 0
 
@@ -400,32 +401,15 @@ func (l *Location) ResetSuffix() {
 
 // SetGTID set new gtid for location
 // Use this func instead of GITSet.Set to avoid change other location.
+// TODO: copy on write?
 func (l *Location) SetGTID(gset gmysql.GTIDSet) error {
-	var flavor string
-
-	switch gset.(type) {
-	case *gmysql.MysqlGTIDSet:
-		flavor = gmysql.MySQLFlavor
-	case *gmysql.MariadbGTIDSet:
-		flavor = gmysql.MariaDBFlavor
-	case nil:
-		l.gtidSet = nil
-		return nil
-	default:
-		return fmt.Errorf("unknown GTIDSet type: %T", gset)
-	}
-
-	newGTID := gtid.MinGTIDSet(flavor)
-	if err := newGTID.Set(gset); err != nil {
-		return err
-	}
-
-	l.gtidSet = newGTID
+	l.gtidSet = gset
 	return nil
 }
 
 // GetGTID return gtidSet of Location.
-func (l *Location) GetGTID() gtid.Set {
+// TODO: Why we need this?
+func (l *Location) GetGTID() gmysql.GTIDSet {
 	return l.gtidSet
 }
 

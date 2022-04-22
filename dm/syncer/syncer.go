@@ -3817,7 +3817,7 @@ func (s *Syncer) adjustGlobalPointGTID(tctx *tcontext.Context) (bool, error) {
 		s.tctx.L().Warn("fail to merge purged gtidSet", zap.Stringer("pos", location), zap.Error(err))
 		return false, err
 	}
-	err = location.SetGTID(gs.Origin())
+	err = location.SetGTID(gs)
 	if err != nil {
 		s.tctx.L().Warn("fail to set gtid for global location", zap.Stringer("pos", location),
 			zap.String("adjusted_gtid", gs.String()), zap.Error(err))

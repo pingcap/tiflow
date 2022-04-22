@@ -25,7 +25,6 @@ import (
 	"github.com/pingcap/failpoint"
 
 	"github.com/pingcap/tiflow/dm/pkg/binlog/common"
-	"github.com/pingcap/tiflow/dm/pkg/gtid"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
@@ -89,7 +88,7 @@ func (r *TCPReader) StartSyncByPos(pos gmysql.Position) error {
 }
 
 // StartSyncByGTID implements Reader.StartSyncByGTID.
-func (r *TCPReader) StartSyncByGTID(gSet gtid.Set) error {
+func (r *TCPReader) StartSyncByGTID(gSet gmysql.GTIDSet) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -106,7 +105,7 @@ func (r *TCPReader) StartSyncByGTID(gSet gtid.Set) error {
 		failpoint.Return(nil)
 	})
 
-	streamer, err := r.syncer.StartSyncGTID(gSet.Origin())
+	streamer, err := r.syncer.StartSyncGTID(gSet)
 	if err != nil {
 		return terror.ErrRelayTCPReaderStartSyncGTID.Delegate(err, gSet)
 	}

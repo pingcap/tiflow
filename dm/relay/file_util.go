@@ -162,7 +162,7 @@ func checkIsDuplicateEvent(filename string, ev *replication.BinlogEvent) (bool, 
 // getTxnPosGTIDs gets position/GTID set for all completed transactions from a binlog file.
 // It is not safe if there other routine is writing the file.
 // NOTE: we use a int64 rather than a uint32 to represent the latest transaction's end log pos.
-func getTxnPosGTIDs(ctx context.Context, filename string, p *parser.Parser) (int64, gtid.Set, error) {
+func getTxnPosGTIDs(ctx context.Context, filename string, p *parser.Parser) (int64, gmysql.GTIDSet, error) {
 	// use a FileReader to parse the binlog file.
 	rCfg := &reader.FileReaderConfig{
 		EnableRawMode: false, // in order to get GTID set, we always disable RawMode.
@@ -179,7 +179,6 @@ func getTxnPosGTIDs(ctx context.Context, filename string, p *parser.Parser) (int
 		latestPos   int64
 		latestGSet  gmysql.GTIDSet
 		nextGTIDStr string // can be recorded if the coming transaction completed
-		flavor      string
 	)
 	for {
 		var e *replication.BinlogEvent
@@ -233,34 +232,21 @@ func getTxnPosGTIDs(ctx context.Context, filename string, p *parser.Parser) (int
 			// if GTID enabled, we can get a PreviousGTIDEvent after the FormatDescriptionEvent
 			// ref: https://github.com/mysql/mysql-server/blob/8cc757da3d87bf4a1f07dcfb2d3c96fed3806870/sql/binlog.cc#L4549
 			// ref: https://github.com/mysql/mysql-server/blob/8cc757da3d87bf4a1f07dcfb2d3c96fed3806870/sql/binlog.cc#L5161
-			var gSet gtid.Set
-			gSet, err = gtid.ParserGTID(gmysql.MySQLFlavor, ev.GTIDSets)
+			latestGSet, err = gtid.ParserGTID(gmysql.MySQLFlavor, ev.GTIDSets)
 			if err != nil {
 				return 0, nil, err
 			}
-			latestGSet = gSet.Origin()
-			flavor = gmysql.MySQLFlavor
 			latestPos = int64(e.Header.LogPos)
 		case *replication.MariadbGTIDListEvent:
 			// a MariadbGTIDListEvent logged in every binlog to record the current replication state if GTID enabled
 			// ref: https://mariadb.com/kb/en/library/gtid_list_event/
-			gSet, err2 := event.GTIDsFromMariaDBGTIDListEvent(e)
-			if err2 != nil {
-				return 0, nil, terror.Annotatef(err2, "get GTID set from MariadbGTIDListEvent %+v", e.Header)
+			latestGSet, err = event.GTIDsFromMariaDBGTIDListEvent(e)
+			if err != nil {
+				return 0, nil, terror.Annotatef(err, "get GTID set from MariadbGTIDListEvent %+v", e.Header)
 			}
-			latestGSet = gSet.Origin()
-			flavor = gmysql.MariaDBFlavor
 			latestPos = int64(e.Header.LogPos)
 		}
 	}
 
-	var latestGTIDs gtid.Set
-	if latestGSet != nil {
-		latestGTIDs, err = gtid.ParserGTID(flavor, latestGSet.String())
-		if err != nil {
-			return 0, nil, terror.Annotatef(err, "parse GTID set %s with flavor %s", latestGSet.String(), flavor)
-		}
-	}
-
-	return latestPos, latestGTIDs, ctx.Err() // return the error if the context is done.
+	return latestPos, latestGSet, ctx.Err() // return the error if the context is done.
 }

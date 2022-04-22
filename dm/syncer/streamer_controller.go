@@ -56,7 +56,7 @@ type localBinlogReader struct {
 
 func (l *localBinlogReader) generateStreamer(location binlog.Location) (reader.Streamer, error) {
 	if l.EnableGTID {
-		return l.reader.StartSyncByGTID(location.GetGTID().Origin().Clone())
+		return l.reader.StartSyncByGTID(location.GetGTID().Clone())
 	}
 	return l.reader.StartSyncByPos(location.Position)
 }
@@ -76,7 +76,7 @@ func (r *remoteBinlogReader) generateStreamer(location binlog.Location) (reader.
 	}()
 
 	if r.EnableGTID {
-		streamer, err := r.reader.StartSyncGTID(location.GetGTID().Origin().Clone())
+		streamer, err := r.reader.StartSyncGTID(location.GetGTID().Clone())
 		return streamer, terror.ErrSyncerUnitRemoteSteamerStartSync.Delegate(err)
 	}
 

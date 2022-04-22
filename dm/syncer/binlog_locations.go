@@ -114,7 +114,8 @@ func (l *locationRecorder) updateCurStartGTID() {
 	if gsetWrapped == nil {
 		return
 	}
-	gset := gsetWrapped.Origin()
+	// TODO: good example to think of COW
+	gset := gsetWrapped
 	err := l.curStartLocation.SetGTID(gset)
 	if err != nil {
 		log.L().DPanic("failed to set GTID set",
@@ -136,7 +137,7 @@ func (l *locationRecorder) setCurEndGTID(e *replication.BinlogEvent) {
 
 	if gset == nil {
 		gset, _ = gtid.ParserGTID("", gtidStr)
-		_ = l.curEndLocation.SetGTID(gset.Origin())
+		_ = l.curEndLocation.SetGTID(gset)
 		return
 	}
 
@@ -149,7 +150,7 @@ func (l *locationRecorder) setCurEndGTID(e *replication.BinlogEvent) {
 		return
 	}
 
-	err = l.curEndLocation.SetGTID(clone.Origin())
+	err = l.curEndLocation.SetGTID(clone)
 	if err != nil {
 		log.L().DPanic("failed to set GTID set",
 			zap.String("GTID", gtidStr),

@@ -17,9 +17,9 @@ import (
 	"bytes"
 	"time"
 
+	"github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/go-mysql-org/go-mysql/replication"
 
-	"github.com/pingcap/tiflow/dm/pkg/gtid"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
@@ -42,7 +42,7 @@ type DMLData struct {
 // if DMLData.Query is not empty:
 // 	 events: [GTIDEvent, QueryEvent, QueryEvent, ..., XIDEvent]
 //   NOTE: multi <QueryEvent> can be in events.
-func GenDMLEvents(flavor string, serverID uint32, latestPos uint32, latestGTID gtid.Set, eventType replication.EventType, xid uint64, dmlData []*DMLData, genGTID, anonymousGTID bool, ts int64) (*DDLDMLResult, error) {
+func GenDMLEvents(flavor string, serverID uint32, latestPos uint32, latestGTID mysql.GTIDSet, eventType replication.EventType, xid uint64, dmlData []*DMLData, genGTID, anonymousGTID bool, ts int64) (*DDLDMLResult, error) {
 	if len(dmlData) == 0 {
 		return nil, terror.ErrBinlogDMLEmptyData.Generate()
 	}

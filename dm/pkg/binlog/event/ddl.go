@@ -17,15 +17,15 @@ import (
 	"bytes"
 	"time"
 
+	"github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/go-mysql-org/go-mysql/replication"
 
-	"github.com/pingcap/tiflow/dm/pkg/gtid"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
 // GenDDLEvents generates binlog events for DDL statements.
 // events: [GTIDEvent, QueryEvent]
-func GenDDLEvents(flavor string, serverID, latestPos uint32, latestGTID gtid.Set, schema, query string, genGTID, anonymousGTID bool, ts int64) (*DDLDMLResult, error) {
+func GenDDLEvents(flavor string, serverID, latestPos uint32, latestGTID mysql.GTIDSet, schema, query string, genGTID, anonymousGTID bool, ts int64) (*DDLDMLResult, error) {
 	if ts == 0 {
 		ts = time.Now().Unix()
 	}

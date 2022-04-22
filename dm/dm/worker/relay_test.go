@@ -25,7 +25,6 @@ import (
 	"github.com/pingcap/tiflow/dm/dm/pb"
 	"github.com/pingcap/tiflow/dm/dm/unit"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
-	"github.com/pingcap/tiflow/dm/pkg/gtid"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	pkgstreamer "github.com/pingcap/tiflow/dm/pkg/streamer"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
@@ -132,7 +131,7 @@ func (d *DummyRelay) Close() {}
 func (d *DummyRelay) IsClosed() bool { return false }
 
 // SaveMeta implements Process interface.
-func (d *DummyRelay) SaveMeta(pos mysql.Position, gset gtid.Set) error {
+func (d *DummyRelay) SaveMeta(pos mysql.Position, gset mysql.GTIDSet) error {
 	return nil
 }
 

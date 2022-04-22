@@ -48,7 +48,7 @@ type Meta interface {
 	AdjustWithStartPos(binlogName string, binlogGTID string, enableGTID bool, latestBinlogName string, latestBinlogGTID string) (bool, error)
 
 	// Save saves meta information
-	Save(pos mysql.Position, gset gtid.Set) error
+	Save(pos mysql.Position, gset mysql.GTIDSet) error
 
 	// Flush flushes meta information
 	Flush() error
@@ -63,13 +63,13 @@ type Meta interface {
 	// and binlog pos will be set again when new binlog events received
 	// @serverUUID should be a server_uuid for MySQL or MariaDB
 	// if set @newPos / @newGTID, old value will be replaced
-	AddDir(serverUUID string, newPos *mysql.Position, newGTID gtid.Set, uuidSuffix int) error
+	AddDir(serverUUID string, newPos *mysql.Position, newGTID mysql.GTIDSet, uuidSuffix int) error
 
 	// Pos returns current (UUID with suffix, Position) pair
 	Pos() (string, mysql.Position)
 
 	// GTID returns current (UUID with suffix, GTID) pair
-	GTID() (string, gtid.Set)
+	GTID() (string, mysql.GTIDSet)
 
 	// UUID returns current UUID (with suffix)
 	UUID() string
@@ -93,8 +93,8 @@ type LocalMeta struct {
 	uuidIndexPath string
 	currentUUID   string   // current UUID with suffix
 	uuids         []string // all valid UUIDs
-	gset          gtid.Set
-	emptyGSet     gtid.Set
+	gset          mysql.GTIDSet
+	emptyGSet     mysql.GTIDSet
 	dirty         bool
 
 	BinLogName string `toml:"binlog-name" json:"binlog-name"`
@@ -198,7 +198,7 @@ func (lm *LocalMeta) AdjustWithStartPos(binlogName string, binlogGTID string, en
 }
 
 // Save implements Meta.Save.
-func (lm *LocalMeta) Save(pos mysql.Position, gset gtid.Set) error {
+func (lm *LocalMeta) Save(pos mysql.Position, gset mysql.GTIDSet) error {
 	lm.Lock()
 	defer lm.Unlock()
 
@@ -269,7 +269,7 @@ func (lm *LocalMeta) Dir() string {
 }
 
 // AddDir implements Meta.AddDir.
-func (lm *LocalMeta) AddDir(serverUUID string, newPos *mysql.Position, newGTID gtid.Set, uuidSuffix int) error {
+func (lm *LocalMeta) AddDir(serverUUID string, newPos *mysql.Position, newGTID mysql.GTIDSet, uuidSuffix int) error {
 	lm.Lock()
 	defer lm.Unlock()
 
@@ -345,7 +345,7 @@ func (lm *LocalMeta) Pos() (string, mysql.Position) {
 }
 
 // GTID implements Meta.GTID.
-func (lm *LocalMeta) GTID() (string, gtid.Set) {
+func (lm *LocalMeta) GTID() (string, mysql.GTIDSet) {
 	lm.RLock()
 	defer lm.RUnlock()
 
