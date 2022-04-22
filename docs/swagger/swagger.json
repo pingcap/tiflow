@@ -983,7 +983,7 @@
             "type": "object",
             "properties": {
                 "boundary_ts": {
-                    "description": "if the operation is a delete operation, BoundaryTs is checkpoint ts\nif the operation is a add operation, BoundaryTs is start ts",
+                    "description": "if the operation is a delete operation, BoundaryTs is checkpoint ts\nif the operation is an add operation, BoundaryTs is start ts",
                     "type": "integer"
                 },
                 "delete": {

@@ -40,10 +40,6 @@ var defaultReplicaConfig = &ReplicaConfig{
 	Cyclic: &CyclicConfig{
 		Enable: false,
 	},
-	Scheduler: &SchedulerConfig{
-		Tp:          "table-number",
-		PollingTime: -1,
-	},
 	Consistent: &ConsistentConfig{
 		Level:             "none",
 		MaxLogSize:        64,
@@ -64,7 +60,6 @@ type replicaConfig struct {
 	Mounter          *MounterConfig    `toml:"mounter" json:"mounter"`
 	Sink             *SinkConfig       `toml:"sink" json:"sink"`
 	Cyclic           *CyclicConfig     `toml:"cyclic-replication" json:"cyclic-replication"`
-	Scheduler        *SchedulerConfig  `toml:"scheduler" json:"scheduler"`
 	Consistent       *ConsistentConfig `toml:"consistent" json:"consistent"`
 }
 
