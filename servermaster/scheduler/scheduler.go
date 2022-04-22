@@ -29,6 +29,7 @@ func NewScheduler(
 	}
 }
 
+// ScheduleTask tries to assign an executor to a given task.
 func (s *Scheduler) ScheduleTask(
 	ctx context.Context,
 	request *schedModel.SchedulerRequest,
@@ -71,7 +72,11 @@ func (s *Scheduler) checkCostAllows(
 	request *schedModel.SchedulerRequest,
 	target model.ExecutorID,
 ) bool {
-	executorResc := s.capacityProvider.CapacityForExecutor(target)
+	executorResc, ok := s.capacityProvider.CapacityForExecutor(target)
+	if !ok {
+		// Executor is gone.
+		return false
+	}
 	remaining := executorResc.Remaining()
 	return remaining >= request.Cost
 }

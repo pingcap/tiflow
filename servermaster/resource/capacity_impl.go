@@ -5,17 +5,19 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hanfei1991/microcosm/model"
-	"github.com/hanfei1991/microcosm/pb"
-	"github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/zap"
+
+	"github.com/hanfei1991/microcosm/model"
+	"github.com/hanfei1991/microcosm/pkg/errors"
+	schedModel "github.com/hanfei1991/microcosm/servermaster/scheduler/model"
 )
 
 // CapRescMgr implements ResourceMgr interface, and it uses node capacity as
 // alloction algorithm
+// TODO Unit tests for this struct.
 type CapRescMgr struct {
-	mu        sync.Mutex
+	mu        sync.RWMutex
 	r         *rand.Rand // random generator for choosing node
 	executors map[model.ExecutorID]*ExecutorResource
 }
@@ -49,11 +51,6 @@ func (m *CapRescMgr) Unregister(id model.ExecutorID) {
 		zap.String("executor-id", string(id)))
 }
 
-// Allocate implements RescMgr.Allocate
-func (m *CapRescMgr) Allocate(tasks []*pb.ScheduleTask) (bool, *pb.TaskSchedulerResponse) {
-	return m.allocateTasksWithNaiveStrategy(tasks)
-}
-
 // Update implements RescMgr.Update
 func (m *CapRescMgr) Update(id model.ExecutorID, used, reserved model.RescUnit, status model.ExecutorStatus) error {
 	m.mu.Lock()
@@ -68,51 +65,42 @@ func (m *CapRescMgr) Update(id model.ExecutorID, used, reserved model.RescUnit, 
 	return nil
 }
 
-// getAvailableResource returns resources that are available
-func (m *CapRescMgr) getAvailableResource() []*ExecutorResource {
-	res := make([]*ExecutorResource, 0)
-	for _, exec := range m.executors {
-		if exec.Status == model.Running &&
-			exec.Capacity > exec.Reserved && exec.Capacity > exec.Used {
-			res = append(res, exec)
+// CapacitiesForAllExecutors implements scheduler.CapacityProvider.
+// The returned value is a deep copy, so there is no risk of accidental sharing.
+// Note the O(n) complexity.
+func (m *CapRescMgr) CapacitiesForAllExecutors() map[model.ExecutorID]*schedModel.ExecutorResourceStatus {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	ret := make(map[model.ExecutorID]*schedModel.ExecutorResourceStatus, len(m.executors))
+	// Note the complexity O(n), where n = count(executors).
+	// Currently this complexity does not seem to be a problem, because
+	// scheduling happens only sporadically, and the number of executors
+	// is limited to <= 100.
+	for executorID, resc := range m.executors {
+		resourceStatus := &schedModel.ExecutorResourceStatus{
+			Capacity: resc.Capacity,
+			Reserved: resc.Reserved,
+			Used:     resc.Used,
 		}
+		ret[executorID] = resourceStatus
 	}
-	return res
+	return ret
 }
 
-func (m *CapRescMgr) allocateTasksWithNaiveStrategy(
-	tasks []*pb.ScheduleTask,
-) (bool, *pb.TaskSchedulerResponse) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	result := make(map[int64]*pb.ScheduleResult)
-	resources := m.getAvailableResource()
-	if len(resources) == 0 {
-		// No resources in this cluster
-		return false, nil
+// CapacityForExecutor implements scheduler.CapacityProvider.
+func (m *CapRescMgr) CapacityForExecutor(executor model.ExecutorID) (*schedModel.ExecutorResourceStatus, bool) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	resc, exists := m.executors[executor]
+	if !exists {
+		return nil, false
 	}
-	idx := m.r.Intn(len(resources))
-	for _, task := range tasks {
-		originalIdx := idx
-		for {
-			exec := resources[idx]
-			used := exec.Used
-			if exec.Reserved > used {
-				used = exec.Reserved
-			}
-			rest := exec.Capacity - used
-			if rest >= model.RescUnit(task.Cost) {
-				result[task.GetTask().Id] = &pb.ScheduleResult{
-					ExecutorId: string(exec.ID),
-					Addr:       exec.Addr,
-				}
-				break
-			}
-			idx = (idx + 1) % len(resources)
-			if idx == originalIdx {
-				return false, nil
-			}
-		}
-	}
-	return true, &pb.TaskSchedulerResponse{Schedule: result}
+
+	return &schedModel.ExecutorResourceStatus{
+		Capacity: resc.Capacity,
+		Reserved: resc.Reserved,
+		Used:     resc.Used,
+	}, true
 }

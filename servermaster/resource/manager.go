@@ -2,19 +2,20 @@ package resource
 
 import (
 	"github.com/hanfei1991/microcosm/model"
-	"github.com/hanfei1991/microcosm/pb"
+	"github.com/hanfei1991/microcosm/servermaster/scheduler"
 )
 
 // RescMgr manages the resources of the clusters.
 type RescMgr interface {
+	// CapacityProvider is embedded to guarantee that any RescMgr can be used
+	// to provide capacity info to scheduler.Scheduler.
+	scheduler.CapacityProvider
+
 	// Register registers new executor, it is called when an executor joins
 	Register(id model.ExecutorID, addr string, capacity model.RescUnit)
 
 	// Unregister is called when an executor exits
 	Unregister(id model.ExecutorID)
-
-	// Allocate allocates executor resources to given tasks
-	Allocate(tasks []*pb.ScheduleTask) (bool, *pb.TaskSchedulerResponse)
 
 	// Update updates executor resource usage and running status
 	Update(id model.ExecutorID, used, reserved model.RescUnit, status model.ExecutorStatus) error
