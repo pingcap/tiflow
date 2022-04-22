@@ -235,6 +235,17 @@ func (jm *JobManagerImplV2) Tick(ctx context.Context) error {
 	}
 
 	if !jm.tombstoneCleaned && jm.BaseMaster.IsMasterReady() {
+		for _, worker := range jm.BaseMaster.GetWorkers() {
+			// ignore tombstone worker
+			if worker.GetTombstone() != nil {
+				continue
+			}
+			err := jm.JobFsm.JobOnline(worker)
+			// ignore worker that is not in WaitAck list
+			if err != nil && derrors.ErrWorkerNotFound.NotEqual(err) {
+				return err
+			}
+		}
 		err = jm.JobFsm.IterWaitAckJobs(
 			func(job *libModel.MasterMetaKVData) (string, error) {
 				return jm.BaseMaster.CreateWorker(
