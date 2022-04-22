@@ -49,6 +49,10 @@ type ScheduleDispatcher interface {
 	// Rebalance triggers a rebalance operation.
 	// It should be thread-safe
 	Rebalance()
+
+	// DrainCapture remove all tables from the target capture.
+	// It is called when a capture shuts down.
+	DrainCapture(target model.CaptureID)
 }
 
 // ScheduleDispatcherCommunicator is an interface for the BaseScheduleDispatcher to
@@ -523,6 +527,11 @@ func (s *BaseScheduleDispatcher) rebalance(ctx context.Context) (done bool, err 
 		s.tables.UpdateTableRecord(record)
 	}
 	return true, nil
+}
+
+// DrainCapture implements the interface ScheduleDispatcher.
+func (s *BaseScheduleDispatcher) DrainCapture(target model.CaptureID) {
+	return
 }
 
 // OnAgentFinishedTableOperation is called when a table operation has been finished by
