@@ -750,9 +750,9 @@ func (t *testPositionSuite) TestSetGTID(c *C) {
 	c.Assert(loc.Position.Name, Equals, "mysql-bin.00002")
 	c.Assert(CompareLocation(loc, loc2, false), Equals, 1)
 
-	// WARN: will change other location's gtid
+	// will not change other location's gtid
 	loc2.gtidSet = mysqlSet2
-	c.Assert(loc.gtidSet.String(), Equals, GTIDSetStr2)
+	c.Assert(loc.gtidSet.String(), Not(Equals), GTIDSetStr2)
 	c.Assert(loc2.gtidSet.String(), Equals, GTIDSetStr2)
 	c.Assert(CompareLocation(loc, loc2, true), Equals, 0)
 
@@ -833,62 +833,62 @@ func (t *testPositionSuite) TestIsFreshPosition(c *C) {
 		fresh   bool
 	}{
 		{
-			InitLocation(mysqlPos, mysqlGTIDSet),
+			NewLocation(mysqlPos, mysqlGTIDSet),
 			gmysql.MySQLFlavor,
 			true,
 			false,
 		},
 		{
-			InitLocation(mysqlPos, gtid.MinGTIDSet(gmysql.MySQLFlavor)),
+			NewLocation(mysqlPos, gtid.MustZeroGTIDSet(gmysql.MySQLFlavor)),
 			gmysql.MySQLFlavor,
 			true,
 			false,
 		},
 		{
-			InitLocation(MinPosition, mysqlGTIDSet),
+			NewLocation(MinPosition, mysqlGTIDSet),
 			gmysql.MySQLFlavor,
 			true,
 			false,
 		},
 		{
-			InitLocation(MinPosition, mysqlGTIDSet),
+			NewLocation(MinPosition, mysqlGTIDSet),
 			gmysql.MySQLFlavor,
 			false,
 			true,
 		},
 		{
-			InitLocation(MinPosition, gtid.MinGTIDSet(gmysql.MySQLFlavor)),
+			NewLocation(MinPosition, gtid.MustZeroGTIDSet(gmysql.MySQLFlavor)),
 			gmysql.MySQLFlavor,
 			true,
 			true,
 		},
 
 		{
-			InitLocation(mysqlPos, mariaGTIDSet),
+			NewLocation(mysqlPos, mariaGTIDSet),
 			gmysql.MariaDBFlavor,
 			true,
 			false,
 		},
 		{
-			InitLocation(mysqlPos, gtid.MinGTIDSet(gmysql.MariaDBFlavor)),
+			NewLocation(mysqlPos, gtid.MustZeroGTIDSet(gmysql.MariaDBFlavor)),
 			gmysql.MariaDBFlavor,
 			true,
 			false,
 		},
 		{
-			InitLocation(MinPosition, mariaGTIDSet),
+			NewLocation(MinPosition, mariaGTIDSet),
 			gmysql.MariaDBFlavor,
 			true,
 			false,
 		},
 		{
-			InitLocation(MinPosition, mariaGTIDSet),
+			NewLocation(MinPosition, mariaGTIDSet),
 			gmysql.MariaDBFlavor,
 			false,
 			true,
 		},
 		{
-			InitLocation(MinPosition, gtid.MinGTIDSet(gmysql.MariaDBFlavor)),
+			NewLocation(MinPosition, gtid.MustZeroGTIDSet(gmysql.MariaDBFlavor)),
 			gmysql.MariaDBFlavor,
 			true,
 			true,

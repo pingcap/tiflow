@@ -50,17 +50,16 @@ func ParserGTID(flavor, gtidStr string) (mysql.GTIDSet, error) {
 	return gtid, err
 }
 
-// MinGTIDSet returns the min GTID set which is empty. If the flavor is not
-// specified, it wil use mysql GTID.
-func MinGTIDSet(flavor string) mysql.GTIDSet {
-	if flavor != mysql.MariaDBFlavor && flavor != mysql.MySQLFlavor {
-		flavor = mysql.MySQLFlavor
-	}
+// ZeroGTIDSet returns an empty GTID set. The flavor must be specified.
+func ZeroGTIDSet(flavor string) (mysql.GTIDSet, error) {
+	return ParserGTID(flavor, "")
+}
 
-	gset, err := ParserGTID(flavor, "")
+// MustZeroGTIDSet is used when you can make sure the flavor is valid.
+func MustZeroGTIDSet(flavor string) mysql.GTIDSet {
+	gtid, err := ZeroGTIDSet(flavor)
 	if err != nil {
-		// this should not happen
 		panic(err)
 	}
-	return gset
+	return gtid
 }

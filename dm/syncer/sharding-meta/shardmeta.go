@@ -127,7 +127,7 @@ func (meta *ShardingMeta) RestoreFromData(sourceTableID string, activeIdx int, i
 		if err1 != nil {
 			return err1
 		}
-		item.FirstLocation = binlog.InitLocation(
+		item.FirstLocation = binlog.NewLocation(
 			item.FirstPosition,
 			gset,
 		)

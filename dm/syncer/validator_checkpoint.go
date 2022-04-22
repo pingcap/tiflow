@@ -360,7 +360,7 @@ func (c *validatorPersistHelper) loadCheckpoint(tctx *tcontext.Context) (*binlog
 		if err2 != nil {
 			return nil, err2
 		}
-		tmpLoc := binlog.InitLocation(mysql.Position{Name: binlogName, Pos: binlogPos}, gset)
+		tmpLoc := binlog.NewLocation(mysql.Position{Name: binlogName, Pos: binlogPos}, gset)
 		location = &tmpLoc
 	}
 	if err = rows.Err(); err != nil {

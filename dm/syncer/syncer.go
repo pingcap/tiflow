@@ -1958,7 +1958,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		startLocation = binlog.Location{}
 		switch ev := e.Event.(type) {
 		case *replication.QueryEvent, *replication.RowsEvent:
-			startLocation = binlog.InitLocation(
+			startLocation = binlog.NewLocation(
 				mysql.Position{
 					Name: lastLocation.Position.Name,
 					Pos:  e.Header.LogPos - e.Header.EventSize,
@@ -1971,7 +1971,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			if s.isReplacingOrInjectingErr {
 				endSuffix++
 			}
-			currentLocation = binlog.InitLocation(
+			currentLocation = binlog.NewLocation(
 				mysql.Position{
 					Name: lastLocation.Position.Name,
 					Pos:  e.Header.LogPos,
@@ -2253,7 +2253,7 @@ func (s *Syncer) handleRotateEvent(ev *replication.RotateEvent, ec eventContext)
 		}
 	}
 
-	*ec.currentLocation = binlog.InitLocation(
+	*ec.currentLocation = binlog.NewLocation(
 		mysql.Position{
 			Name: string(ev.NextLogName),
 			Pos:  uint32(ev.Position),
@@ -2299,7 +2299,7 @@ func (s *Syncer) handleRowsEvent(ev *replication.RowsEvent, ec eventContext) err
 	}
 	targetTable := s.route(sourceTable)
 
-	*ec.currentLocation = binlog.InitLocation(
+	*ec.currentLocation = binlog.NewLocation(
 		mysql.Position{
 			Name: ec.lastLocation.Position.Name,
 			Pos:  ec.header.LogPos,

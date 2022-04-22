@@ -545,7 +545,6 @@ func ExtractTiDBVersion(version string) (*semver.Version, error) {
 // because it doesn't cover all gtid_purged. The error of using it will be
 // ERROR 1236 (HY000): The slave is connecting using CHANGE MASTER TO MASTER_AUTO_POSITION = 1, but the master has purged binary logs containing GTIDs that the slave requires.
 // so we add gtid_purged to it.
-// TODO: can we update gtid set in-place.
 func AddGSetWithPurged(ctx context.Context, gset gmysql.GTIDSet, conn *sql.Conn) (gmysql.GTIDSet, error) {
 	if _, ok := gset.(*gmysql.MariadbGTIDSet); ok {
 		return gset, nil

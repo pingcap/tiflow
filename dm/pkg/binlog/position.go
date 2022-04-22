@@ -19,6 +19,7 @@ import (
 	"strings"
 
 	gmysql "github.com/go-mysql-org/go-mysql/mysql"
+	"github.com/pingcap/errors"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/dm/pkg/gtid"
@@ -230,23 +231,35 @@ func ComparePosition(pos1, pos2 gmysql.Position) int {
 type Location struct {
 	// a structure represents the file offset in binlog file
 	Position gmysql.Position
-	// executed GTID set at this location
-	// TODO: it's an interface so should not copy?
+	// executed GTID set at this location.
 	gtidSet gmysql.GTIDSet
 	// used to distinguish injected events by DM when it's not 0
 	Suffix int
 }
 
-// NewLocation returns a new Location.
-func NewLocation(flavor string) Location {
+// ZeroLocation returns a new Location. The flavor should not be empty.
+func ZeroLocation(flavor string) (Location, error) {
+	gset, err := gtid.ZeroGTIDSet(flavor)
+	if err != nil {
+		return Location{}, err
+	}
 	return Location{
 		Position: MinPosition,
-		gtidSet:  gtid.MinGTIDSet(flavor),
+		gtidSet:  gset,
+	}, nil
+}
+
+// MustZeroLocation returns a new Location. The flavor must not be empty.
+// in DM the flavor is adjusted before write to etcd.
+func MustZeroLocation(flavor string) Location {
+	return Location{
+		Position: MinPosition,
+		gtidSet:  gtid.MustZeroGTIDSet(flavor),
 	}
 }
 
-// InitLocation init a new Location.
-func InitLocation(pos gmysql.Position, gset gmysql.GTIDSet) Location {
+// NewLocation creates a new Location from given binlog position and GTID.
+func NewLocation(pos gmysql.Position, gset gmysql.GTIDSet) Location {
 	return Location{
 		Position: pos,
 		gtidSet:  gset,
@@ -281,7 +294,7 @@ func (l Location) CloneWithFlavor(flavor string) Location {
 	if l.gtidSet != nil {
 		newGTIDSet = l.gtidSet.Clone()
 	} else if len(flavor) != 0 {
-		newGTIDSet = gtid.MinGTIDSet(flavor)
+		newGTIDSet = gtid.MustZeroGTIDSet(flavor)
 	}
 
 	return Location{
@@ -320,31 +333,31 @@ func CompareLocation(location1, location2 Location, cmpGTID bool) int {
 }
 
 // IsFreshPosition returns true when location1 is a fresh location without any info.
-func IsFreshPosition(location1 Location, flavor string, cmpGTID bool) bool {
-	location2 := NewLocation(flavor)
+func IsFreshPosition(location Location, flavor string, cmpGTID bool) bool {
+	zeroLocation := MustZeroLocation(flavor)
 	if cmpGTID {
-		cmp, canCmp := CompareGTID(location1.gtidSet, location2.gtidSet)
+		cmp, canCmp := CompareGTID(location.gtidSet, zeroLocation.gtidSet)
 		if canCmp {
-			if cmp != 0 {
-				return cmp <= 0
-			}
-			// not supposed to happen, for safety here.
-			if location1.gtidSet != nil && location1.gtidSet.String() != "" {
+			if cmp > 0 {
 				return false
 			}
+			// should not happen
+			if cmp < 0 {
+				return true
+			}
 			// empty GTIDSet, then compare by position
-			log.L().Warn("both gtidSets are empty, will compare by position", zap.Stringer("location1", location1), zap.Stringer("location2", location2))
+			log.L().Warn("given gtidSets is empty, will compare by position", zap.Stringer("location", location))
 		} else {
 			// if can't compare by GTIDSet, then compare by position
-			log.L().Warn("gtidSet can't be compared, will compare by position", zap.Stringer("location1", location1), zap.Stringer("location2", location2))
+			log.L().Warn("gtidSet can't be compared, will compare by position", zap.Stringer("location", location))
 		}
 	}
 
-	cmp := ComparePosition(location1.Position, location2.Position)
+	cmp := ComparePosition(location.Position, zeroLocation.Position)
 	if cmp != 0 {
 		return cmp <= 0
 	}
-	return compareIndex(location1.Suffix, location2.Suffix) <= 0
+	return compareIndex(location.Suffix, zeroLocation.Suffix) <= 0
 }
 
 // CompareGTID returns:
@@ -399,20 +412,25 @@ func (l *Location) ResetSuffix() {
 	l.Suffix = 0
 }
 
-// SetGTID set new gtid for location
-// Use this func instead of GITSet.Set to avoid change other location.
-// TODO: copy on write?
+// SetGTID set new gtid for location.
 func (l *Location) SetGTID(gset gmysql.GTIDSet) error {
+	if gset == nil {
+		return errors.New("gtidSet is nil")
+	}
 	l.gtidSet = gset
 	return nil
 }
 
 // GetGTID return gtidSet of Location.
-// TODO: Why we need this?
+// NOTE: for most cases you should clone before call Update on the returned GTID
+// set, unless you know there's no other reference using the GTID set.
+// TODO: find a better API.
 func (l *Location) GetGTID() gmysql.GTIDSet {
 	return l.gtidSet
 }
 
+// Update will update GTIDSet of Location.
+// caller should be aware that this will change the GTID set of other copies.
 func (l *Location) Update(gtidStr string) error {
 	return l.gtidSet.Update(gtidStr)
 }

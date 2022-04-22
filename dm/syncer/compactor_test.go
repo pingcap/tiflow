@@ -18,6 +18,7 @@ import (
 	"math/rand"
 	"time"
 
+	"github.com/go-mysql-org/go-mysql/mysql"
 	. "github.com/pingcap/check"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/parser"
@@ -67,7 +68,7 @@ func (s *testSyncerSuite) TestCompactJob(c *C) {
 		updateJobMetricsFn: func(bool, string, *job) {},
 	}
 
-	location := binlog.NewLocation("")
+	location := binlog.MustZeroLocation(mysql.MySQLFlavor)
 	ec := &eventContext{startLocation: &location, currentLocation: &location, lastLocation: &location}
 	p := parser.New()
 	se := mock.NewContext()

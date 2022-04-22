@@ -38,15 +38,18 @@ func TestGTDISetSorted(t *testing.T) {
 func TestMinGTIDSet(t *testing.T) {
 	t.Parallel()
 
-	gset := MinGTIDSet(mysql.MySQLFlavor)
+	gset, err := ZeroGTIDSet(mysql.MySQLFlavor)
+	require.NoError(t, err)
 	require.IsType(t, &mysql.MysqlGTIDSet{}, gset)
+	require.Len(t, gset.String(), 0)
 
-	gset = MinGTIDSet(mysql.MariaDBFlavor)
+	gset, err = ZeroGTIDSet(mysql.MariaDBFlavor)
+	require.NoError(t, err)
 	require.IsType(t, &mysql.MariadbGTIDSet{}, gset)
+	require.Len(t, gset.String(), 0)
 
-	// will treat as mysql gtid set
-	gset = MinGTIDSet("wrong flavor")
-	require.IsType(t, &mysql.MysqlGTIDSet{}, gset)
+	gset, err = ZeroGTIDSet("wrong flavor")
+	require.Error(t, err)
 }
 
 func TestParseGTIDNoFlavor(t *testing.T) {
