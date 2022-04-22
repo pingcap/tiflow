@@ -249,9 +249,12 @@ func (w *SourceWorker) Stop(graceful bool) {
 // updateSourceStatus updates w.sourceStatus.
 func (w *SourceWorker) updateSourceStatus(ctx context.Context) error {
 	w.sourceDBMu.Lock()
+	w.RLock()
+	cfg := w.cfg
+	w.RUnlock()
 	if w.sourceDB == nil {
 		var err error
-		w.sourceDB, err = conn.DefaultDBProvider.Apply(&w.cfg.DecryptPassword().From)
+		w.sourceDB, err = conn.DefaultDBProvider.Apply(&cfg.DecryptPassword().From)
 		if err != nil {
 			w.sourceDBMu.Unlock()
 			return err
@@ -262,7 +265,7 @@ func (w *SourceWorker) updateSourceStatus(ctx context.Context) error {
 	var status binlog.SourceStatus
 	ctx, cancel := context.WithTimeout(ctx, utils.DefaultDBTimeout)
 	defer cancel()
-	pos, gtidSet, err := utils.GetPosAndGs(ctx, w.sourceDB.DB, w.cfg.Flavor)
+	pos, gtidSet, err := utils.GetPosAndGs(ctx, w.sourceDB.DB, cfg.Flavor)
 	if err != nil {
 		return err
 	}
@@ -1160,7 +1163,10 @@ func (w *SourceWorker) observeValidatorStage(ctx context.Context, lastUsedRev in
 				case <-ctx.Done():
 					return nil
 				case <-time.After(500 * time.Millisecond):
-					startRevision, err = w.getCurrentValidatorRevision(w.cfg.SourceID)
+					w.RLock()
+					sourceID := w.cfg.SourceID
+					w.RUnlock()
+					startRevision, err = w.getCurrentValidatorRevision(sourceID)
 					if err != nil {
 						log.L().Error("reset validator stage failed, will retry later", zap.Error(err), zap.Int("retryNum", retryNum))
 					}
