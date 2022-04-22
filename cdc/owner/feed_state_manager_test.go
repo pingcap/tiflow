@@ -271,12 +271,61 @@ func TestHandleFastFailError(t *testing.T) {
 }
 
 func TestChangefeedStatusNotExist(t *testing.T) {
+	changefeedInfo := `
+{
+    "sink-uri": "blackhole:///",
+    "opts": {},
+    "create-time": "2021-06-05T00:44:15.065939487+08:00",
+    "start-ts": 425381670108266496,
+    "target-ts": 0,
+    "admin-job-type": 1,
+    "sort-engine": "unified",
+    "config": {
+        "case-sensitive": true,
+        "enable-old-value": true,
+        "force-replicate": false,
+        "check-gc-safe-point": true,
+        "filter": {
+            "rules": [
+                "*.*"
+            ],
+            "ignore-txn-start-ts": null
+        },
+        "mounter": {
+            "worker-num": 16
+        },
+        "sink": {
+            "dispatchers": null,
+            "protocol": "open-protocol"
+        },
+        "cyclic-replication": {
+            "enable": false,
+            "replica-id": 0,
+            "filter-replica-ids": null,
+            "id-buckets": 0,
+            "sync-ddl": false
+        }
+    },
+    "state": "failed",
+    "history": [],
+    "error": {
+        "addr": "172.16.6.147:8300",
+        "code": "CDC:ErrSnapshotLostByGC",
+        "message": ` + "\"[CDC:ErrSnapshotLostByGC]fail to create or maintain changefeed " +
+		"due to snapshot loss caused by GC. checkpoint-ts 425381670108266496 " +
+		"is earlier than GC safepoint at 0\"" + `
+    },
+    "sync-point-enabled": false,
+    "sync-point-interval": 600000000000,
+    "creator-version": "v5.0.0-master-dirty"
+}
+`
 	ctx := cdcContext.NewBackendContext4Test(true)
 	manager := newFeedStateManager4Test()
 	state := orchestrator.NewChangefeedReactorState(ctx.ChangefeedVars().ID)
 	tester := orchestrator.NewReactorStateTester(t, state, map[string]string{
 		"/tidb/cdc/capture/d563bfc0-f406-4f34-bc7d-6dc2e35a44e5": `{"id":"d563bfc0-f406-4f34-bc7d-6dc2e35a44e5","address":"172.16.6.147:8300","version":"v5.0.0-master-dirty"}`,
-		"/tidb/cdc/changefeed/info/" + ctx.ChangefeedVars().ID:   `{"sink-uri":"blackhole:///","opts":{},"create-time":"2021-06-05T00:44:15.065939487+08:00","start-ts":425381670108266496,"target-ts":0,"admin-job-type":1,"sort-engine":"unified","config":{"case-sensitive":true,"enable-old-value":true,"force-replicate":false,"check-gc-safe-point":true,"filter":{"rules":["*.*"],"ignore-txn-start-ts":null},"mounter":{"worker-num":16},"sink":{"dispatchers":null,"protocol":"open-protocol"},"cyclic-replication":{"enable":false,"replica-id":0,"filter-replica-ids":null,"id-buckets":0,"sync-ddl":false},"scheduler":{"type":"table-number","polling-time":-1}},"state":"failed","history":[],"error":{"addr":"172.16.6.147:8300","code":"CDC:ErrSnapshotLostByGC","message":"[CDC:ErrSnapshotLostByGC]fail to create or maintain changefeed due to snapshot loss caused by GC. checkpoint-ts 425381670108266496 is earlier than GC safepoint at 0"},"sync-point-enabled":false,"sync-point-interval":600000000000,"creator-version":"v5.0.0-master-dirty"}`,
+		"/tidb/cdc/changefeed/info/" + ctx.ChangefeedVars().ID:   changefeedInfo,
 		"/tidb/cdc/owner/156579d017f84a68":                       "d563bfc0-f406-4f34-bc7d-6dc2e35a44e5",
 	})
 	manager.Tick(state)
