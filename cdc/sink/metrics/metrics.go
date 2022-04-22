@@ -17,6 +17,9 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
+// rowSizeLowBound is set to 1MB, only track data event with size not smaller than it.
+const rowSizeLowBound = 1024 * 1024
+
 var (
 	// ExecBatchHistogram records batch size of a txn.
 	ExecBatchHistogram = prometheus.NewHistogramVec(
@@ -45,7 +48,7 @@ var (
 			Subsystem: "sink",
 			Name:      "received_row_changed_event_size",
 			Help:      "The size of all received row changed events (in bytes)",
-			Buckets:   prometheus.ExponentialBuckets(16, 2.0, 20),
+			Buckets:   prometheus.LinearBuckets(rowSizeLowBound, rowSizeLowBound, 10),
 		}, []string{"changefeed", "type"}) // type is for `sinkType`
 
 	// ExecDDLHistogram records the exexution time of a DDL.
