@@ -5691,7 +5691,7 @@
           "dashLength": 10,
           "dashes": false,
           "datasource": "${DS_TEST-CLUSTER}",
-          "description": "Percentiles of MySQL received data events' size in KB.",
+          "description": "Percentiles of MySQL received data events' size.",
           "fieldConfig": {
             "defaults": {},
             "overrides": []
@@ -17566,7 +17566,7 @@
           "dashLength": 10,
           "dashes": false,
           "datasource": "${DS_TEST-CLUSTER}",
-          "description": "Percentiles of Kafka sink received data events' size in KB.",
+          "description": "Percentiles of Kafka sink received data events' size",
           "fieldConfig": {
             "defaults": {
               "unit": "none"
