@@ -209,12 +209,10 @@ func (s *Snapshot) Copy() *Snapshot {
 
 // PrintStatus prints the schema snapshot.
 func (s *Snapshot) PrintStatus(logger func(msg string, fields ...zap.Field)) {
-	s.rwlock.RLock()
-	defer s.rwlock.RUnlock()
 	logger("[SchemaSnap] Start to print status", zap.Uint64("currentTs", s.currentTs))
 
 	availableSchemas := make(map[int64]string, s.schemas.Len())
-	s.doIterSchemas(func(dbInfo *timodel.DBInfo) {
+	s.IterSchemas(func(dbInfo *timodel.DBInfo) {
 		availableSchemas[dbInfo.ID] = dbInfo.Name.O
 		logger("[SchemaSnap] --> Schemas", zap.Int64("schemaID", dbInfo.ID), zap.Reflect("dbInfo", dbInfo))
 		// check schemaNameToID
@@ -223,14 +221,14 @@ func (s *Snapshot) PrintStatus(logger func(msg string, fields ...zap.Field)) {
 			logger("[SchemaSnap] ----> schemaNameToID item lost", zap.String("name", dbInfo.Name.O), zap.Int64("schemaNameToID", id))
 		}
 	})
-	s.doIterSchemaNames(func(schema string, target int64) {
+	s.IterSchemaNames(func(schema string, target int64) {
 		if _, ok := availableSchemas[target]; !ok {
 			logger("[SchemaSnap] ----> schemas item lost", zap.String("name", schema), zap.Int64("schema", target))
 		}
 	})
 
 	availableTables := make(map[int64]struct{}, s.tables.Len())
-	s.doIterTables(true, func(tableInfo *model.TableInfo) {
+	s.IterTables(true, func(tableInfo *model.TableInfo) {
 		availableTables[tableInfo.ID] = struct{}{}
 		logger("[SchemaSnap] --> Tables", zap.Int64("tableID", tableInfo.ID),
 			zap.Stringer("tableInfo", tableInfo),
@@ -240,14 +238,14 @@ func (s *Snapshot) PrintStatus(logger func(msg string, fields ...zap.Field)) {
 			logger("[SchemaSnap] ----> tableNameToID item lost", zap.Stringer("name", tableInfo.TableName), zap.Int64("tableNameToID", id))
 		}
 	})
-	s.doIterTableNames(func(schemaID int64, table string, target int64) {
+	s.IterTableNames(func(schemaID int64, table string, target int64) {
 		if _, ok := availableTables[target]; !ok {
 			name := fmt.Sprintf("%s.%s", availableSchemas[schemaID], table)
 			logger("[SchemaSnap] ----> tables item lost", zap.String("name", name), zap.Int64("table", target))
 		}
 	})
 
-	s.doIterPartitions(true, func(pid int64, table *model.TableInfo) {
+	s.IterPartitions(true, func(pid int64, table *model.TableInfo) {
 		logger("[SchemaSnap] --> Partitions", zap.Int64("partitionID", pid), zap.Int64("tableID", table.ID),
 			zap.Bool("ineligible", s.doIsIneligibleTableID(pid)))
 	})
@@ -1100,40 +1098,40 @@ func (s *Snapshot) DoHandleDDL(job *timodel.Job) error {
 
 // TableCount counts tables in the snapshot. It's only for tests.
 func (s *Snapshot) TableCount(includeIneligible bool) (count int) {
-	s.doIterTables(includeIneligible, func(i *model.TableInfo) { count += 1 })
+	s.IterTables(includeIneligible, func(i *model.TableInfo) { count += 1 })
 	return
 }
 
 // SchemaCount counts schemas in the snapshot. It's only for tests.
 func (s *Snapshot) SchemaCount() (count int) {
-	s.doIterSchemas(func(i *timodel.DBInfo) { count += 1 })
+	s.IterSchemas(func(i *timodel.DBInfo) { count += 1 })
 	return
 }
 
 // DumpToString dumps the snapshot to a string.
 func (s *Snapshot) DumpToString() string {
 	schemas := make([]string, 0, s.schemas.Len())
-	s.doIterSchemas(func(dbInfo *timodel.DBInfo) {
+	s.IterSchemas(func(dbInfo *timodel.DBInfo) {
 		schemas = append(schemas, fmt.Sprintf("%v", dbInfo))
 	})
 
 	tables := make([]string, 0, s.tables.Len())
-	s.doIterTables(true, func(tbInfo *model.TableInfo) {
+	s.IterTables(true, func(tbInfo *model.TableInfo) {
 		tables = append(tables, fmt.Sprintf("%v", tbInfo))
 	})
 
 	partitions := make([]string, 0, s.partitions.Len())
-	s.doIterPartitions(true, func(id int64, _ *model.TableInfo) {
+	s.IterPartitions(true, func(id int64, _ *model.TableInfo) {
 		partitions = append(partitions, fmt.Sprintf("%d", id))
 	})
 
 	schemaNames := make([]string, 0, s.schemaNameToID.Len())
-	s.doIterSchemaNames(func(schema string, target int64) {
+	s.IterSchemaNames(func(schema string, target int64) {
 		schemaNames = append(schemaNames, fmt.Sprintf("%s:%d", schema, target))
 	})
 
 	tableNames := make([]string, 0, s.tableNameToID.Len())
-	s.doIterTableNames(func(schemaID int64, table string, target int64) {
+	s.IterTableNames(func(schemaID int64, table string, target int64) {
 		schema, _ := s.doSchemaByID(schemaID)
 		tableNames = append(tableNames, fmt.Sprintf("%s.%s:%d", schema.Name.O, table, target))
 	})
