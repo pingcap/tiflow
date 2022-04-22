@@ -38,6 +38,17 @@ var (
 			Buckets:   prometheus.ExponentialBuckets(0.002 /* 2 ms */, 2, 18),
 		}, []string{"changefeed", "type"}) // type is for `sinkType`
 
+	// RowSizeHistogram records the row size of events.
+	RowSizeHistogram = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Namespace: "ticdc",
+			Subsystem: "sink",
+			Name:      "received_row_changed_event_size",
+			Help:      "The size of all received row changed events",
+			// Buckets range from 1K to 8192K (8MB)
+			Buckets: prometheus.ExponentialBuckets(1024, 2, 14),
+		}, []string{"changefeed", "type"}) // type is for `sinkType`
+
 	// ExecDDLHistogram records the exexution time of a DDL.
 	ExecDDLHistogram = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
@@ -46,7 +57,7 @@ var (
 			Name:      "ddl_exec_duration",
 			Help:      "Bucketed histogram of processing time (s) of a ddl.",
 			Buckets:   prometheus.ExponentialBuckets(0.01, 2, 18),
-		}, []string{"changefeed"})
+		}, []string{"changefeed", "type"}) // type is for `sinkType`
 
 	// ExecutionErrorCounter is the counter of execution errors.
 	ExecutionErrorCounter = prometheus.NewCounterVec(
@@ -75,16 +86,6 @@ var (
 			Name:      "bucket_size",
 			Help:      "size of the DML bucket",
 		}, []string{"changefeed", "bucket"})
-	// RowSizeHistogram records the row size of events.
-	RowSizeHistogram = prometheus.NewHistogramVec(
-		prometheus.HistogramOpts{
-			Namespace: "ticdc",
-			Subsystem: "sink",
-			Name:      "received_row_changed_event_size",
-			Help:      "The size of all received row changed events",
-			// Buckets range from 1K to 8192K (8MB)
-			Buckets: prometheus.ExponentialBuckets(1024, 2, 14),
-		}, []string{"changefeed"})
 
 	// TotalRowsCountGauge is the total number of rows that are processed by sink.
 	TotalRowsCountGauge = prometheus.NewGaugeVec(
@@ -128,6 +129,7 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(ExecBatchHistogram)
 	registry.MustRegister(ExecTxnHistogram)
 	registry.MustRegister(ExecDDLHistogram)
+	registry.MustRegister(RowSizeHistogram)
 	registry.MustRegister(ExecutionErrorCounter)
 	registry.MustRegister(ConflictDetectDurationHis)
 	registry.MustRegister(BucketSizeCounter)

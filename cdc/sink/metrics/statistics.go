@@ -65,9 +65,9 @@ func NewStatistics(ctx context.Context, t sinkType) *Statistics {
 	s := t.String()
 	statistics.metricExecTxnHis = ExecTxnHistogram.WithLabelValues(statistics.changefeedID, s)
 	statistics.metricExecBatchHis = ExecBatchHistogram.WithLabelValues(statistics.changefeedID, s)
-	statistics.metricExecDDLHis = ExecDDLHistogram.WithLabelValues(statistics.changefeedID)
+	statistics.metricRowSizesHis = RowSizeHistogram.WithLabelValues(statistics.changefeedID, s)
+	statistics.metricExecDDLHis = ExecDDLHistogram.WithLabelValues(statistics.changefeedID, s)
 	statistics.metricExecErrCnt = ExecutionErrorCounter.WithLabelValues(statistics.changefeedID)
-	statistics.metricRowSizesHis = RowSizeHistogram.WithLabelValues(statistics.changefeedID)
 
 	// Flush metrics in background for better accuracy and efficiency.
 	changefeedID := statistics.changefeedID
