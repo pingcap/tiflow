@@ -5,11 +5,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hanfei1991/microcosm/pb"
-
-	derror "github.com/hanfei1991/microcosm/pkg/errors"
-
 	"github.com/hanfei1991/microcosm/model"
+	"github.com/hanfei1991/microcosm/pb"
+	derror "github.com/hanfei1991/microcosm/pkg/errors"
+	ormModel "github.com/hanfei1991/microcosm/pkg/orm/model"
+	"github.com/hanfei1991/microcosm/pkg/tenant"
 )
 
 type (
@@ -23,11 +23,13 @@ type (
 
 // ResourceMeta is the records stored in the metastore.
 type ResourceMeta struct {
-	ID       ResourceID `json:"id"`
-	Job      JobID      `json:"job"`
-	Worker   WorkerID   `json:"worker"`
-	Executor ExecutorID `json:"executor"`
-	Deleted  bool       `json:"deleted"`
+	ormModel.Model
+	ProjectID tenant.ProjectID `gorm:"column:project_id;type:char(36) not null"`
+	ID        ResourceID       `json:"id" gorm:"column:id;type:char(36) not null;uniqueIndex:uidx_id;index:idx_ji,priority:2;index:idx_ei,priority:2"`
+	Job       JobID            `json:"job" gorm:"column:job_id;type:char(36) not null;index:idx_ji,priority:1"`
+	Worker    WorkerID         `json:"worker" gorm:"column:worker_id;type:char(36) not null"`
+	Executor  ExecutorID       `json:"executor" gorm:"column:executor_id;type:char(36) not null;index:idx_ei,priority:1"`
+	Deleted   bool             `json:"deleted" gorm:"column:deleted;type:BOOLEAN"`
 }
 
 // GetID implements dataset.DataEntry

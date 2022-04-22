@@ -6,6 +6,7 @@ import (
 	"github.com/pingcap/errors"
 
 	"github.com/hanfei1991/microcosm/pkg/adapter"
+	ormModel "github.com/hanfei1991/microcosm/pkg/orm/model"
 )
 
 type WorkerStatusCode int32
@@ -24,13 +25,18 @@ const (
 )
 
 type WorkerStatus struct {
-	Code         WorkerStatusCode `json:"code"`
-	ErrorMessage string           `json:"error-message"`
+	ormModel.Model
+	ProjectID    string           `gorm:"column:project_id;type:char(36) not null"`
+	JobID        string           `gorm:"column:job_id;type:char(36) not null;uniqueIndex:uidx_id,priority:1;index:idx_st,priority:1"`
+	ID           string           `gorm:"column:id;type:char(36) not null;uniqueIndex:uidx_id,priority:2"`
+	Type         int              `gorm:"column:type;type:tinyint not null"`
+	Code         WorkerStatusCode `json:"code" gorm:"column:status;type:tinyint not null;index:idx_st,priority:2"`
+	ErrorMessage string           `json:"error-message" gorm:"column:errmsg;type:varchar(128)"`
 
 	// ExtBytes carries the serialized form of the Ext field, which is used in
 	// business logic only.
 	// Business logic can parse the raw bytes and decode into business Go object
-	ExtBytes []byte `json:"ext-bytes"`
+	ExtBytes []byte `json:"ext-bytes" gorm:"column:ext_bytes;type:blob"`
 }
 
 // HasSignificantChange indicates whether `s` has significant changes worth persisting.
