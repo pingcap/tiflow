@@ -40,18 +40,14 @@ func NewNodeContext(ctx context.Context, msg Message, outputCh chan<- Message) N
 	}
 }
 
-<<<<<<< HEAD
-func (ctx *nodeContext) Message() Message {
-=======
 // MockNodeContext4Test creates a node context with a message and an output channel for tests.
 func MockNodeContext4Test(
-	ctx context.Context, msg pmessage.Message, outputCh chan pmessage.Message,
+	ctx context.Context, msg Message, outputCh chan Message,
 ) NodeContext {
 	return NewNodeContext(ctx, msg, outputCh)
 }
 
-func (ctx *nodeContext) Message() pmessage.Message {
->>>>>>> 53e692ff0 (tests(ticdc): fix unstable test TestEtcdBank (#5108))
+func (ctx *nodeContext) Message() Message {
 	return ctx.msg
 }
 
