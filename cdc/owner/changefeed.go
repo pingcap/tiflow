@@ -32,6 +32,7 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
+	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/tikv/client-go/v2/oracle"
@@ -39,13 +40,14 @@ import (
 )
 
 type changefeed struct {
-	id    model.ChangeFeedID
-	state *orchestrator.ChangefeedReactorState
+	id        model.ChangeFeedID
+	clusterID uint64
+	state     *orchestrator.ChangefeedReactorState
 
+	upStream         *upstream.UpStream
 	scheduler        scheduler
 	barriers         *barriers
 	feedStateManager *feedStateManager
-	gcManager        gc.Manager
 	redoManager      redo.LogManager
 
 	schema      *schemaWrap4Owner
@@ -80,19 +82,19 @@ type changefeed struct {
 	metricsChangefeedResolvedTsLagGauge   prometheus.Gauge
 	metricsChangefeedTickDuration         prometheus.Observer
 
-	newDDLPuller func(ctx cdcContext.Context, startTs uint64) (DDLPuller, error)
+	newDDLPuller func(ctx cdcContext.Context, upStream *upstream.UpStream, startTs uint64) (DDLPuller, error)
 	newSink      func() DDLSink
 	newScheduler func(ctx cdcContext.Context, startTs uint64) (scheduler, error)
 }
 
-func newChangefeed(id model.ChangeFeedID, gcManager gc.Manager) *changefeed {
+func newChangefeed(id model.ChangeFeedID, upStream *upstream.UpStream) *changefeed {
 	c := &changefeed{
 		id: id,
 		// The scheduler will be created lazily.
 		scheduler:        nil,
 		barriers:         newBarriers(),
 		feedStateManager: newFeedStateManager(),
-		gcManager:        gcManager,
+		upStream:         upStream,
 
 		errCh:  make(chan error, defaultErrChSize),
 		cancel: func() {},
@@ -100,22 +102,28 @@ func newChangefeed(id model.ChangeFeedID, gcManager gc.Manager) *changefeed {
 		newDDLPuller: newDDLPuller,
 		newSink:      newDDLSink,
 	}
+	c.upStream.Count++
 	c.newScheduler = newScheduler
 	return c
 }
 
 func newChangefeed4Test(
-	id model.ChangeFeedID, gcManager gc.Manager,
-	newDDLPuller func(ctx cdcContext.Context, startTs uint64) (DDLPuller, error),
+	id model.ChangeFeedID, upStream *upstream.UpStream,
+	newDDLPuller func(ctx cdcContext.Context, upStream *upstream.UpStream, startTs uint64) (DDLPuller, error),
 	newSink func() DDLSink,
 ) *changefeed {
-	c := newChangefeed(id, gcManager)
+	c := newChangefeed(id, upStream)
 	c.newDDLPuller = newDDLPuller
 	c.newSink = newSink
 	return c
 }
 
 func (c *changefeed) Tick(ctx cdcContext.Context, state *orchestrator.ChangefeedReactorState, captures map[model.CaptureID]*model.CaptureInfo) {
+	// skip this Tick
+	if c.upStream.IsInitializing() || c.upStream.IsColse() {
+		return
+	}
+
 	startTime := time.Now()
 
 	ctx = cdcContext.WithErrorHandler(ctx, func(err error) error {
@@ -157,7 +165,7 @@ func (c *changefeed) checkStaleCheckpointTs(ctx cdcContext.Context, checkpointTs
 		failpoint.Inject("InjectChangefeedFastFailError", func() error {
 			return cerror.ErrGCTTLExceeded.FastGen("InjectChangefeedFastFailError")
 		})
-		if err := c.gcManager.CheckStaleCheckpointTs(ctx, c.id, checkpointTs); err != nil {
+		if err := c.upStream.GCManager.CheckStaleCheckpointTs(ctx, c.id, checkpointTs); err != nil {
 			return errors.Trace(err)
 		}
 	}
@@ -229,7 +237,7 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 		return errors.Trace(err)
 	}
 
-	pdTime, _ := ctx.GlobalVars().PDClock.CurrentTime()
+	pdTime, _ := c.upStream.PDClock.CurrentTime()
 	currentTs := oracle.GetPhysical(pdTime)
 
 	// CheckpointCannotProceed implies that not all tables are being replicated normally,
@@ -289,7 +297,7 @@ LOOP:
 		// See more gc doc.
 		ensureTTL := int64(10 * 60)
 		err := gc.EnsureChangefeedStartTsSafety(
-			ctx, ctx.GlobalVars().PDClient, c.state.ID, ensureTTL, checkpointTs)
+			ctx, c.upStream.PDClient, c.state.ID, ensureTTL, checkpointTs)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -307,12 +315,12 @@ LOOP:
 	// So we need to process all DDLs from the range [checkpointTs, ...), but since the semantics of start-ts requires
 	// the lower bound of an open interval, i.e. (startTs, ...), we pass checkpointTs-1 as the start-ts to initialize
 	// the schema cache.
-	c.schema, err = newSchemaWrap4Owner(ctx.GlobalVars().KVStorage,
+	c.schema, err = newSchemaWrap4Owner(c.upStream.KVStorage,
 		checkpointTs-1, c.state.Info.Config, ctx.ChangefeedVars().ID)
 	if err != nil {
 		return errors.Trace(err)
 	}
-
+	c.clusterID = c.upStream.PDClient.GetClusterID(ctx)
 	cancelCtx, cancel := cdcContext.WithCancel(ctx)
 	c.cancel = cancel
 
@@ -320,7 +328,7 @@ LOOP:
 	c.sink.run(cancelCtx, cancelCtx.ChangefeedVars().ID, cancelCtx.ChangefeedVars().Info)
 
 	// Refer to the previous comment on why we use (checkpointTs-1).
-	c.ddlPuller, err = c.newDDLPuller(cancelCtx, checkpointTs-1)
+	c.ddlPuller, err = c.newDDLPuller(cancelCtx, c.upStream, checkpointTs-1)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -376,6 +384,10 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 	}
 	c.wg.Wait()
 	c.scheduler.Close(ctx)
+
+	// TODO: 找一个更好的方式来释放 upStream
+	upstream.UpStreamManager.ReleaseUpStream(c.clusterID)
+	c.upStream = nil
 
 	changefeedCheckpointTsGauge.DeleteLabelValues(c.id)
 	changefeedCheckpointTsLagGauge.DeleteLabelValues(c.id)

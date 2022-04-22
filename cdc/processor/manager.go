@@ -27,6 +27,7 @@ import (
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
+	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
@@ -49,10 +50,11 @@ type command struct {
 // Manager is a manager of processor, which maintains the state and behavior of processors
 type Manager struct {
 	processors map[model.ChangeFeedID]*processor
+	upStreams  map[model.ChangeFeedID]*upstream.UpStream
 
 	commandQueue chan *command
 
-	newProcessor func(cdcContext.Context) *processor
+	newProcessor func(cdcContext.Context, *upstream.UpStream) *processor
 
 	enableNewScheduler bool
 
@@ -97,7 +99,11 @@ func (m *Manager) Tick(stdCtx context.Context, state orchestrator.ReactorState) 
 		if !exist {
 			if m.enableNewScheduler {
 				failpoint.Inject("processorManagerHandleNewChangefeedDelay", nil)
-				processor = m.newProcessor(ctx)
+				upStream, err := upstream.UpStreamManager.GetUpStream(0)
+				if err != nil {
+					return state, err
+				}
+				processor = m.newProcessor(ctx, upStream)
 				m.processors[changefeedID] = processor
 			} else {
 				if changefeedState.Status.AdminJobType.IsStopState() || changefeedState.TaskStatuses[captureID].AdminJobType.IsStopState() {
@@ -109,7 +115,11 @@ func (m *Manager) Tick(stdCtx context.Context, state orchestrator.ReactorState) 
 					continue
 				}
 				failpoint.Inject("processorManagerHandleNewChangefeedDelay", nil)
-				processor = m.newProcessor(ctx)
+				upStream, err := upstream.UpStreamManager.GetUpStream(0)
+				if err != nil {
+					return state, err
+				}
+				processor = m.newProcessor(ctx, upStream)
 				m.processors[changefeedID] = processor
 			}
 		}
