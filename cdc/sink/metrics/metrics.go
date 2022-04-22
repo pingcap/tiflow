@@ -44,9 +44,8 @@ var (
 			Namespace: "ticdc",
 			Subsystem: "sink",
 			Name:      "received_row_changed_event_size",
-			Help:      "The size of all received row changed events",
-			// Buckets range from 1K to 8192K (8MB)
-			Buckets: prometheus.ExponentialBuckets(1024, 2, 14),
+			Help:      "The size of all received row changed events (in bytes)",
+			Buckets:   prometheus.ExponentialBuckets(16, 2.0, 20),
 		}, []string{"changefeed", "type"}) // type is for `sinkType`
 
 	// ExecDDLHistogram records the exexution time of a DDL.

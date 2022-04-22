@@ -125,7 +125,7 @@
   "gnetId": null,
   "graphTooltip": 1,
   "id": null,
-  "iteration": 1650598832948,
+  "iteration": 1650605146175,
   "links": [],
   "panels": [
     {
@@ -5784,7 +5784,7 @@
           },
           "yaxes": [
             {
-              "format": "deckbytes",
+              "format": "bytes",
               "label": null,
               "logBase": 2,
               "max": null,
@@ -7272,7 +7272,7 @@
             "h": 6,
             "w": 8,
             "x": 0,
-            "y": 6
+            "y": 41
           },
           "hiddenSeries": false,
           "id": 271,
@@ -7366,7 +7366,7 @@
             "h": 6,
             "w": 8,
             "x": 8,
-            "y": 6
+            "y": 41
           },
           "hiddenSeries": false,
           "id": 273,
@@ -7474,7 +7474,7 @@
             "h": 6,
             "w": 8,
             "x": 16,
-            "y": 6
+            "y": 41
           },
           "hiddenSeries": false,
           "id": 272,
@@ -7578,7 +7578,7 @@
             "h": 6,
             "w": 8,
             "x": 0,
-            "y": 12
+            "y": 47
           },
           "heatmap": {},
           "hideZeroBuckets": true,
@@ -7654,7 +7654,7 @@
             "h": 6,
             "w": 8,
             "x": 8,
-            "y": 12
+            "y": 47
           },
           "hiddenSeries": false,
           "id": 288,
@@ -7782,7 +7782,7 @@
             "h": 6,
             "w": 8,
             "x": 16,
-            "y": 12
+            "y": 47
           },
           "hiddenSeries": false,
           "id": 286,
@@ -7894,7 +7894,7 @@
             "h": 6,
             "w": 8,
             "x": 0,
-            "y": 18
+            "y": 53
           },
           "heatmap": {},
           "hideZeroBuckets": true,
@@ -7970,7 +7970,7 @@
             "h": 6,
             "w": 8,
             "x": 8,
-            "y": 18
+            "y": 53
           },
           "hiddenSeries": false,
           "id": 279,
@@ -8073,7 +8073,7 @@
             "h": 6,
             "w": 8,
             "x": 16,
-            "y": 18
+            "y": 53
           },
           "hiddenSeries": false,
           "id": 275,
@@ -8196,7 +8196,7 @@
             "h": 6,
             "w": 8,
             "x": 0,
-            "y": 24
+            "y": 59
           },
           "heatmap": {},
           "hideZeroBuckets": true,
@@ -8280,7 +8280,7 @@
             "h": 6,
             "w": 8,
             "x": 8,
-            "y": 24
+            "y": 59
           },
           "heatmap": {},
           "hideZeroBuckets": true,
@@ -8364,7 +8364,7 @@
             "h": 6,
             "w": 8,
             "x": 16,
-            "y": 24
+            "y": 59
           },
           "heatmap": {},
           "hideZeroBuckets": true,
@@ -8440,7 +8440,7 @@
             "h": 6,
             "w": 8,
             "x": 0,
-            "y": 30
+            "y": 65
           },
           "hiddenSeries": false,
           "id": 280,
@@ -8540,7 +8540,7 @@
             "h": 6,
             "w": 8,
             "x": 8,
-            "y": 30
+            "y": 65
           },
           "hiddenSeries": false,
           "id": 283,
@@ -8640,7 +8640,7 @@
             "h": 6,
             "w": 8,
             "x": 16,
-            "y": 30
+            "y": 65
           },
           "hiddenSeries": false,
           "id": 287,
@@ -8748,7 +8748,7 @@
             "h": 6,
             "w": 8,
             "x": 0,
-            "y": 36
+            "y": 71
           },
           "heatmap": {},
           "hideZeroBuckets": true,
@@ -18911,7 +18911,7 @@
       "type": "row"
     }
   ],
-  "refresh": "5s",
+  "refresh": "1m",
   "schemaVersion": 27,
   "style": "dark",
   "tags": [],
@@ -18923,7 +18923,11 @@
         "datasource": "${DS_PLAYGROUND}",
         "definition": "",
         "description": null,
-        "error": null,
+        "error": {
+          "data": {
+            "message": "Unexpected error"
+          }
+        },
         "hide": 0,
         "includeAll": false,
         "label": "K8s-cluster",
@@ -18950,7 +18954,11 @@
         "datasource": "${DS_PLAYGROUND}",
         "definition": "",
         "description": null,
-        "error": null,
+        "error": {
+          "data": {
+            "message": "Unexpected error"
+          }
+        },
         "hide": 0,
         "includeAll": false,
         "label": "tidb_cluster",
@@ -18977,7 +18985,11 @@
         "datasource": "${DS_PLAYGROUND}",
         "definition": "label_values(ticdc_processor_resolved_ts{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\"}, changefeed)",
         "description": null,
-        "error": null,
+        "error": {
+          "data": {
+            "message": "Unexpected error"
+          }
+        },
         "hide": 0,
         "includeAll": true,
         "label": "Changefeed",
@@ -19004,7 +19016,11 @@
         "datasource": "${DS_PLAYGROUND}",
         "definition": "label_values(process_start_time_seconds{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", job=\"ticdc\"}, instance)",
         "description": null,
-        "error": null,
+        "error": {
+          "data": {
+            "message": "Unexpected error"
+          }
+        },
         "hide": 0,
         "includeAll": true,
         "label": "TiCDC",
@@ -19031,7 +19047,11 @@
         "datasource": "${DS_PLAYGROUND}",
         "definition": "label_values(tikv_engine_size_bytes{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\"}, instance)",
         "description": null,
-        "error": null,
+        "error": {
+          "data": {
+            "message": "Unexpected error"
+          }
+        },
         "hide": 0,
         "includeAll": true,
         "label": "TiKV",
@@ -19113,7 +19133,11 @@
         "datasource": "${DS_PLAYGROUND}",
         "definition": "label_values(process_start_time_seconds{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", job=\"ticdc\"}, instance)",
         "description": null,
-        "error": null,
+        "error": {
+          "data": {
+            "message": "Unexpected error"
+          }
+        },
         "hide": 0,
         "includeAll": true,
         "label": "Runtime metrics",
@@ -19140,7 +19164,11 @@
         "datasource": "${DS_PLAYGROUND}",
         "definition": "label_values(ticdc_actor_number_of_workers{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", job=\"ticdc\"}, name)",
         "description": null,
-        "error": null,
+        "error": {
+          "data": {
+            "message": "Unexpected error"
+          }
+        },
         "hide": 0,
         "includeAll": true,
         "label": "Actor",
@@ -19164,7 +19192,7 @@
     ]
   },
   "time": {
-    "from": "now-1h",
+    "from": "now-3h",
     "to": "now"
   },
   "timepicker": {
