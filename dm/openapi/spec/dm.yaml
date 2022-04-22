@@ -1810,6 +1810,11 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/SubTaskStatus"
+        ignore_checking_items:
+          type: array
+          description: "ignore precheck items"
+          items:
+            type: string
       required:
         - "name"
         - "task_mode"

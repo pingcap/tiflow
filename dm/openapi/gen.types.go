@@ -464,6 +464,9 @@ type Task struct {
 	// whether to enable support for the online ddl plugin
 	EnhanceOnlineSchemaChange bool `json:"enhance_online_schema_change"`
 
+	// ignore precheck items
+	IgnoreCheckingItems *[]string `json:"ignore_checking_items,omitempty"`
+
 	// downstream database for storing meta information
 	MetaSchema *string `json:"meta_schema,omitempty"`
 
