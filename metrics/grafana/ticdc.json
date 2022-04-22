@@ -18923,11 +18923,7 @@
         "datasource": "${DS_TEST-CLUSTER}",
         "definition": "",
         "description": null,
-        "error": {
-          "data": {
-            "message": "Unexpected error"
-          }
-        },
+        "error": null,
         "hide": 0,
         "includeAll": false,
         "label": "K8s-cluster",
@@ -18954,11 +18950,7 @@
         "datasource": "${DS_TEST-CLUSTER}",
         "definition": "",
         "description": null,
-        "error": {
-          "data": {
-            "message": "Unexpected error"
-          }
-        },
+        "error": null,
         "hide": 0,
         "includeAll": false,
         "label": "tidb_cluster",
@@ -18985,11 +18977,7 @@
         "datasource": "${DS_TEST-CLUSTER}",
         "definition": "label_values(ticdc_processor_resolved_ts{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\"}, changefeed)",
         "description": null,
-        "error": {
-          "data": {
-            "message": "Unexpected error"
-          }
-        },
+        "error": null,
         "hide": 0,
         "includeAll": true,
         "label": "Changefeed",
@@ -19016,11 +19004,7 @@
         "datasource": "${DS_TEST-CLUSTER}",
         "definition": "label_values(process_start_time_seconds{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", job=\"ticdc\"}, instance)",
         "description": null,
-        "error": {
-          "data": {
-            "message": "Unexpected error"
-          }
-        },
+        "error": null,
         "hide": 0,
         "includeAll": true,
         "label": "TiCDC",
@@ -19047,11 +19031,7 @@
         "datasource": "${DS_TEST-CLUSTER}",
         "definition": "label_values(tikv_engine_size_bytes{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\"}, instance)",
         "description": null,
-        "error": {
-          "data": {
-            "message": "Unexpected error"
-          }
-        },
+        "error": null,
         "hide": 0,
         "includeAll": true,
         "label": "TiKV",
@@ -19133,11 +19113,7 @@
         "datasource": "${DS_TEST-CLUSTER}",
         "definition": "label_values(process_start_time_seconds{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", job=\"ticdc\"}, instance)",
         "description": null,
-        "error": {
-          "data": {
-            "message": "Unexpected error"
-          }
-        },
+        "error": null,
         "hide": 0,
         "includeAll": true,
         "label": "Runtime metrics",
@@ -19164,11 +19140,7 @@
         "datasource": "${DS_TEST-CLUSTER}",
         "definition": "label_values(ticdc_actor_number_of_workers{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", job=\"ticdc\"}, name)",
         "description": null,
-        "error": {
-          "data": {
-            "message": "Unexpected error"
-          }
-        },
+        "error": null,
         "hide": 0,
         "includeAll": true,
         "label": "Actor",
