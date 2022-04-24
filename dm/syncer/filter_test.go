@@ -18,6 +18,7 @@ import (
 	"database/sql"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/go-mysql-org/go-mysql/replication"
 	. "github.com/pingcap/check"
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
@@ -56,6 +57,7 @@ func (s *testFilterSuite) TearDownSuite(c *C) {
 
 func (s *testFilterSuite) TestSkipQueryEvent(c *C) {
 	cfg := &config.SubTaskConfig{
+		Flavor: mysql.MySQLFlavor,
 		BAList: &filter.Rules{
 			IgnoreTables: []*filter.Table{{Schema: "s1", Name: "test"}},
 		},
@@ -193,6 +195,7 @@ func (s *testFilterSuite) TestSkipRowsEvent(c *C) {
 
 func (s *testFilterSuite) TestSkipByFilter(c *C) {
 	cfg := &config.SubTaskConfig{
+		Flavor: mysql.MySQLFlavor,
 		BAList: &filter.Rules{
 			IgnoreDBs: []string{"s1"},
 		},
@@ -263,6 +266,7 @@ func (s *testFilterSuite) TestSkipByFilter(c *C) {
 
 func (s *testFilterSuite) TestSkipByTable(c *C) {
 	cfg := &config.SubTaskConfig{
+		Flavor: mysql.MySQLFlavor,
 		BAList: &filter.Rules{
 			IgnoreDBs: []string{"s1"},
 		},

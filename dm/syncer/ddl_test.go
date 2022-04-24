@@ -212,6 +212,7 @@ func (s *testDDLSuite) TestResolveDDLSQL(c *C) {
 	tctx := tcontext.Background().WithLogger(log.With(zap.String("test", "TestResolveDDLSQL")))
 
 	cfg := &config.SubTaskConfig{
+		Flavor: mysql.MySQLFlavor,
 		BAList: &filter.Rules{
 			DoDBs: []string{"s1"},
 		},
@@ -378,7 +379,7 @@ func (s *testDDLSuite) TestResolveGeneratedColumnSQL(c *C) {
 	}
 
 	tctx := tcontext.Background().WithLogger(log.With(zap.String("test", "TestResolveGeneratedColumnSQL")))
-	syncer := NewSyncer(&config.SubTaskConfig{}, nil, nil)
+	syncer := NewSyncer(&config.SubTaskConfig{Flavor: mysql.MySQLFlavor}, nil, nil)
 	syncer.tctx = tctx
 	c.Assert(syncer.genRouter(), IsNil)
 	p := parser.New()

@@ -1065,7 +1065,7 @@ func (cp *RemoteCheckPoint) Load(tctx *tcontext.Context) error {
 						gset2,
 					)
 					cp.SaveSafeModeExitPoint(&exitSafeModeLoc)
-				}
+				} // TODO: we forget to handle else...
 			} else {
 				if exitSafeBinlogName != "" {
 					exitSafeModeLoc := binlog.Location{

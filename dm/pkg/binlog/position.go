@@ -424,7 +424,7 @@ func (l *Location) SetGTID(gset gmysql.GTIDSet) error {
 // GetGTID return gtidSet of Location.
 // NOTE: for most cases you should clone before call Update on the returned GTID
 // set, unless you know there's no other reference using the GTID set.
-// TODO: find a better API.
+// TODO: find a better API. Maybe don't use pointer of Location?
 func (l *Location) GetGTID() gmysql.GTIDSet {
 	return l.gtidSet
 }
