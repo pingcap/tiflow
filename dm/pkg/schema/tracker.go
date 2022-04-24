@@ -515,8 +515,7 @@ func (dt *downstreamTracker) remove(tctx *tcontext.Context, targetTable *filter.
 	defer dt.Unlock()
 
 	tableID := utils.GenTableID(targetTable)
-	_, ok := dt.tableInfos[tableID]
-	if !ok {
+	if _, ok := dt.tableInfos[tableID]; !ok {
 		// handle just have schema
 		if targetTable.Schema != "" && targetTable.Name == "" {
 			for k := range dt.tableInfos {

@@ -85,10 +85,6 @@ func TestValidatorCheckpointPersist(t *testing.T) {
 	}
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
-	//mock.MatchExpectationsInOrder(false)
-	//mock.ExpectQuery("SHOW VARIABLES LIKE 'sql_mode'").WillReturnRows(
-	//	mock.NewRows([]string{"Variable_name", "Value"}).AddRow("sql_mode", ""),
-	//)
 	mock.ExpectBegin()
 	mock.ExpectExec("SET SESSION SQL_MODE.*").WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectCommit()

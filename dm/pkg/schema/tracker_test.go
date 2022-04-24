@@ -732,7 +732,7 @@ func (s *trackerSuite) TestInitDownStreamSQLModeAndParser(c *C) {
 
 	tctx := tcontext.NewContext(context.Background(), dlog.L())
 
-	err = tracker.initDownStreamSQLModeAndParser(tctx)
+	err = tracker.dsTracker.initDownStreamSQLModeAndParser(tctx)
 	c.Assert(err, IsNil)
 	c.Assert(tracker.dsTracker.stmtParser, NotNil)
 }

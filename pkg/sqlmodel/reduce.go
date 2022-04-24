@@ -55,8 +55,9 @@ func (r *RowChange) IdentityValues() ([]interface{}, []interface{}) {
 	return pre, post
 }
 
-// RowIdentity returns the identity of this row change, caller should call IsIdentityUpdated/SplitUpdate
-// before calling this method to make sure it's not updating the identity itself.
+// RowIdentity returns the identity of this row change, caller should
+// call IsIdentityUpdated/SplitUpdate before calling this method to
+// make sure it's not updating the identity itself.
 // we extract identity from preValues for update/delete, postValues for insert.
 // if there's no primary key, return all values.
 func (r *RowChange) RowIdentity() []interface{} {
@@ -79,10 +80,11 @@ func (r *RowChange) RowIdentity() []interface{} {
 	return identityVals
 }
 
+// RowStrIdentity returns the identity of the row change as string slice
 func (r *RowChange) RowStrIdentity() []string {
 	identity := r.RowIdentity()
 	identifyStr := make([]string, len(identity))
-	for i, _ := range identity {
+	for i := range identity {
 		identifyStr[i] = ColValAsStr(identity[i])
 	}
 	return identifyStr

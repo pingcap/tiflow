@@ -88,7 +88,7 @@ func newTableChangeJob() *tableChangeJob {
 	return &tableChangeJob{jobs: make(map[string]*rowChangeJob)}
 }
 
-// return true if it's new added row job
+// return true if it's new added row job.
 func (tc *tableChangeJob) addOrUpdate(job *rowChangeJob) bool {
 	if val, ok := tc.jobs[job.Key]; ok {
 		val.row = job.row
@@ -716,11 +716,12 @@ func (v *DataValidator) processRowsEvent(header *replication.EventHeader, ev *re
 	}
 	for i := 0; i < len(ev.Rows); i += step {
 		var beforeImage, afterImage []interface{}
-		if changeType == rowInsert {
+		switch changeType {
+		case rowInsert:
 			afterImage = ev.Rows[i]
-		} else if changeType == rowUpdated {
+		case rowUpdated:
 			beforeImage, afterImage = ev.Rows[i], ev.Rows[i+1]
-		} else { // rowDeleted
+		default: // rowDeleted
 			beforeImage = ev.Rows[i]
 		}
 
@@ -809,12 +810,13 @@ func (v *DataValidator) loadPersistedData(tctx *tcontext.Context) error {
 		}
 		for _, row := range tblChange.jobs {
 			var beforeImage, afterImage []interface{}
-			if row.Tp == rowInsert {
+			switch row.Tp {
+			case rowInsert:
 				afterImage = row.Data
-			} else if row.Tp == rowUpdated {
+			case rowUpdated:
 				// set both to row.Data, since we only save one image on persist in order to save space
 				beforeImage, afterImage = row.Data, row.Data
-			} else {
+			default:
 				// rowDeleted
 				beforeImage = row.Data
 			}

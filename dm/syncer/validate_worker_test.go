@@ -37,11 +37,12 @@ import (
 
 func genRowChangeJob(tbl filter.Table, tblInfo *model.TableInfo, key string, tp rowChangeJobType, data []interface{}) *rowChangeJob {
 	var beforeImage, afterImage []interface{}
-	if tp == rowInsert {
+	switch tp {
+	case rowInsert:
 		afterImage = data
-	} else if tp == rowUpdated {
+	case rowUpdated:
 		beforeImage, afterImage = data, data
-	} else {
+	default:
 		beforeImage = data
 	}
 	return &rowChangeJob{
