@@ -41,8 +41,8 @@ var (
 			Buckets:   prometheus.ExponentialBuckets(0.002 /* 2 ms */, 2, 18),
 		}, []string{"changefeed", "type"}) // type is for `sinkType`
 
-	// RowSizeHistogram records the row size of events.
-	RowSizeHistogram = prometheus.NewHistogramVec(
+	// LargeRowSizeHistogram records the row size of events.
+	LargeRowSizeHistogram = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "ticdc",
 			Subsystem: "sink",
