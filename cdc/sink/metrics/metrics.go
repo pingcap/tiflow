@@ -48,7 +48,7 @@ var (
 			Subsystem: "sink",
 			Name:      "large_row_changed_event_size",
 			Help:      "The size of all received row changed events (in bytes)",
-			Buckets:   prometheus.LinearBuckets(rowSizeLowBound, rowSizeLowBound, 10),
+			Buckets:   prometheus.ExponentialBuckets(rowSizeLowBound, 2, 10),
 		}, []string{"changefeed", "type"}) // type is for `sinkType`
 
 	// ExecDDLHistogram records the exexution time of a DDL.
