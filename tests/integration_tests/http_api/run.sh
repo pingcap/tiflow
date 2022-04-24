@@ -70,7 +70,8 @@ function run() {
 	ensure $MAX_RETRIES check_changefeed_state "https://${TLS_PD_HOST}:${TLS_PD_PORT}" "changefeed-test3" "normal" "null" ${TLS_DIR}
 
 	# test processor query with no attached tables
-	python $CUR/util/test_case.py get_processor $TLS_DIR
+	#TODO: comment this test temporary
+	#python $CUR/util/test_case.py get_processor $TLS_DIR
 
 	run_sql "CREATE table test.simple0(id int primary key, val int);"
 	run_sql "CREATE table test.\`simple-dash\`(id int primary key, val int);"
@@ -103,9 +104,7 @@ function run() {
 		"resume_changefeed"
 		"rebalance_table"
 		"list_processor"
-		# TODO(dongmen): skip get_processor since it is too unstable.
-		# I will fix it ASAP.
-		#"get_processor"
+		"get_processor"
 		"move_table"
 		"set_log_level"
 		"remove_changefeed"
