@@ -18,7 +18,7 @@ import (
 )
 
 // rowSizeLowBound is set to 1MB, only track data event with size not smaller than it.
-const rowSizeLowBound = 1024 * 1024
+const rowSizeLowBound = 128 * 1024
 
 var (
 	// ExecBatchHistogram records batch size of a txn.
