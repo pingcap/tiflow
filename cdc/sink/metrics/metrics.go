@@ -46,7 +46,7 @@ var (
 		prometheus.HistogramOpts{
 			Namespace: "ticdc",
 			Subsystem: "sink",
-			Name:      "received_row_changed_event_size",
+			Name:      "large_row_changed_event_size",
 			Help:      "The size of all received row changed events (in bytes)",
 			Buckets:   prometheus.LinearBuckets(rowSizeLowBound, rowSizeLowBound, 10),
 		}, []string{"changefeed", "type"}) // type is for `sinkType`
