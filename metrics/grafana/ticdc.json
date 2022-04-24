@@ -5691,7 +5691,7 @@
           "dashLength": 10,
           "dashes": false,
           "datasource": "${DS_TEST-CLUSTER}",
-          "description": "Percentiles of MySQL received data events' size.",
+          "description": "Percentiles of MySQL received data events' size, only track data not smaller than 128k",
           "fieldConfig": {
             "defaults": {},
             "overrides": []
@@ -5768,7 +5768,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "MySQL sink data event size",
+          "title": "large data event size (MySQL)",
           "tooltip": {
             "shared": true,
             "sort": 0,
@@ -17566,7 +17566,7 @@
           "dashLength": 10,
           "dashes": false,
           "datasource": "${DS_TEST-CLUSTER}",
-          "description": "Percentiles of Kafka sink received data events' size",
+          "description": "Percentiles of Kafka sink received data events' size, only track data not smaller than 128k",
           "fieldConfig": {
             "defaults": {
               "unit": "none"
@@ -17645,7 +17645,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "Kafka sink data event size",
+          "title": "large data event size (Kafka)",
           "tooltip": {
             "shared": true,
             "sort": 0,

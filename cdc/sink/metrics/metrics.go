@@ -17,7 +17,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
-// rowSizeLowBound is set to 1MB, only track data event with size not smaller than it.
+// rowSizeLowBound is set to 128K, only track data event with size not smaller than it.
 const rowSizeLowBound = 128 * 1024
 
 var (
@@ -131,7 +131,7 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(ExecBatchHistogram)
 	registry.MustRegister(ExecTxnHistogram)
 	registry.MustRegister(ExecDDLHistogram)
-	registry.MustRegister(RowSizeHistogram)
+	registry.MustRegister(LargeRowSizeHistogram)
 	registry.MustRegister(ExecutionErrorCounter)
 	registry.MustRegister(ConflictDetectDurationHis)
 	registry.MustRegister(BucketSizeCounter)
