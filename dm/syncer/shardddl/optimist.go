@@ -16,6 +16,7 @@ package shardddl
 import (
 	"context"
 	"sync"
+	"time"
 
 	"github.com/pingcap/tidb/parser/model"
 	filter "github.com/pingcap/tidb/util/table-filter"
@@ -175,27 +176,34 @@ func (o *Optimist) GetRedirectOperation(ctx context.Context, info optimism.Info,
 
 	go func() {
 		for {
-			ctx3, cancel3 := context.WithCancel(ctx2)
-			go optimism.WatchOperationPut(ctx3, o.cli, o.task, o.source, info.UpSchema, info.UpTable, rev, ch, errCh)
-
-			select {
-			case op := <-ch:
-				o.mu.Lock()
-				if _, ok := o.pendingRedirectCancelFunc[targetTableID]; ok {
-					o.pendingRedirectCancelFunc[targetTableID]()
-					o.pendingRedirectOps[targetTableID] = &op
+			op, rev2, err := optimism.GetOperation(o.cli, o.task, o.source, info.UpSchema, info.UpTable)
+			if err != nil {
+				o.logger.Warn("fail to get redirect operation", zap.Error(err))
+				time.Sleep(time.Second)
+				continue
+			}
+			// check whether operation is valid
+			if op.Task == o.task && rev2 > rev {
+				switch op.ConflictStage {
+				case optimism.ConflictResolved, optimism.ConflictNone:
+					o.saveRedirectOperation(targetTableID, &op)
+					return
 				}
-				o.mu.Unlock()
+			}
+			ctx3, cancel3 := context.WithCancel(ctx2)
+			go optimism.WatchOperationPut(ctx3, o.cli, o.task, o.source, info.UpSchema, info.UpTable, rev2, ch, errCh)
+			select {
+			case op = <-ch:
 				cancel3()
 				switch op.ConflictStage {
 				case optimism.ConflictResolved, optimism.ConflictNone:
+					o.saveRedirectOperation(targetTableID, &op)
 					return
 				}
 			case err := <-errCh:
-				// This operation won't be compacted. The only possible case is network problem.
-				// We can safely retry this error.
-				o.logger.Warn("fail to watch redirect operation", zap.Error(err))
 				cancel3()
+				o.logger.Warn("fail to watch redirect operation", zap.Error(err))
+				time.Sleep(time.Second)
 			case <-ctx.Done():
 				cancel3()
 				return
@@ -253,6 +261,16 @@ func (o *Optimist) PendingRedirectOperation() (*optimism.Operation, string) {
 		return op, targetTableID
 	}
 	return nil, ""
+}
+
+// saveRedirectOperation saves the redirect shard DDL lock operation.
+func (o *Optimist) saveRedirectOperation(targetTableID string, op *optimism.Operation) {
+	o.mu.Lock()
+	if _, ok := o.pendingRedirectCancelFunc[targetTableID]; ok {
+		o.pendingRedirectCancelFunc[targetTableID]()
+		o.pendingRedirectOps[targetTableID] = op
+	}
+	o.mu.Unlock()
 }
 
 // DoneRedirectOperation marks the redirect shard DDL lock operation as done.

@@ -21,6 +21,8 @@ import (
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.etcd.io/etcd/client/v3/clientv3util"
 
+	"github.com/pingcap/errors"
+
 	"github.com/pingcap/tiflow/dm/dm/common"
 	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
 )
@@ -202,6 +204,31 @@ func GetAllOperations(cli *clientv3.Client) (map[string]map[string]map[string]ma
 	}
 
 	return opm, resp.Header.Revision, nil
+}
+
+// GetOperation gets shard DDL operation in etcd currently.
+// This function should often be called by DM-worker.
+// (task-name, source-ID, upstream-schema-name, upstream-table-name) -> shard DDL operation.
+func GetOperation(cli *clientv3.Client, task, source, upSchema, upTable string) (Operation, int64, error) {
+	respTxn, _, err := etcdutil.DoOpsInOneTxnWithRetry(cli, clientv3.OpGet(common.ShardDDLOptimismOperationKeyAdapter.Encode(task, source, upSchema, upTable)))
+	if err != nil {
+		return Operation{}, 0, err
+	}
+	resp := respTxn.Responses[0].GetResponseRange()
+
+	switch {
+	case resp.Count == 0:
+		return Operation{}, resp.Header.Revision, nil
+	case resp.Count > 1:
+		return Operation{}, 0, errors.Errorf("too many operations for %s/%s/%s/%s", task, source, upSchema, upTable)
+	default:
+		op, err2 := operationFromJSON(string(resp.Kvs[0].Value))
+		if err2 != nil {
+			return Operation{}, 0, err2
+		}
+		op.Revision = resp.Kvs[0].ModRevision
+		return op, op.Revision, nil
+	}
 }
 
 // GetInfosOperationsByTask gets all shard DDL info and operation in etcd currently.
