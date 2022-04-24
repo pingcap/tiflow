@@ -36,7 +36,9 @@ func (m *MockPDClient) GetTS(ctx context.Context) (int64, int64, error) {
 func TestTimeFromPD(t *testing.T) {
 	t.Parallel()
 	mockPDClient := &MockPDClient{}
-	TimeAcquirer := NewTimeAcquirer(mockPDClient)
+	TimeAcquirer, err := NewTimeAcquirer(context.Background(), mockPDClient)
+	require.NoError(t, err)
+
 	go TimeAcquirer.Run(context.Background())
 	defer TimeAcquirer.Stop()
 	time.Sleep(1 * time.Second)

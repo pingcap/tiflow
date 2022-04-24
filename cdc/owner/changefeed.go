@@ -24,6 +24,10 @@ import (
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/format"
 	timodel "github.com/pingcap/tidb/parser/model"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/tikv/client-go/v2/oracle"
+	"go.uber.org/zap"
+
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo"
 	schedulerv2 "github.com/pingcap/tiflow/cdc/scheduler"
@@ -32,9 +36,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	"github.com/pingcap/tiflow/pkg/util"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/tikv/client-go/v2/oracle"
-	"go.uber.org/zap"
 )
 
 type changefeed struct {
@@ -189,18 +190,25 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 	if err != nil {
 		return errors.Trace(err)
 	}
+
+	pdTime, _ := ctx.GlobalVars().TimeAcquirer.CurrentTimeFromCached()
+	currentTs := oracle.GetPhysical(pdTime)
+
 	// CheckpointCannotProceed implies that not all tables are being replicated normally,
 	// so in that case there is no need to advance the global watermarks.
 	if newCheckpointTs != schedulerv2.CheckpointCannotProceed {
-		pdTime, _ := ctx.GlobalVars().TimeAcquirer.CurrentTimeFromCached()
-		currentTs := oracle.GetPhysical(pdTime)
 		if newResolvedTs > barrierTs {
 			newResolvedTs = barrierTs
 		}
 		if newCheckpointTs > barrierTs {
 			newCheckpointTs = barrierTs
 		}
-		c.updateStatus(currentTs, newCheckpointTs, newResolvedTs)
+		c.updateStatus(newCheckpointTs, newResolvedTs)
+		c.updateMetrics(currentTs, newCheckpointTs, newResolvedTs)
+	} else if c.state.Status != nil {
+		// We should keep the metrics updated even if the scheduler cannot
+		// advance the watermarks for now.
+		c.updateMetrics(currentTs, c.state.Status.CheckpointTs, c.state.Status.ResolvedTs)
 	}
 	return nil
 }
@@ -522,7 +530,17 @@ func (c *changefeed) asyncExecDDL(ctx cdcContext.Context, job *timodel.Job) (don
 	return done, nil
 }
 
-func (c *changefeed) updateStatus(currentTs int64, checkpointTs, resolvedTs model.Ts) {
+func (c *changefeed) updateMetrics(currentTs int64, checkpointTs, resolvedTs model.Ts) {
+	phyCkpTs := oracle.ExtractPhysical(checkpointTs)
+	c.metricsChangefeedCheckpointTsGauge.Set(float64(phyCkpTs))
+	c.metricsChangefeedCheckpointTsLagGauge.Set(float64(currentTs-phyCkpTs) / 1e3)
+
+	phyRTs := oracle.ExtractPhysical(resolvedTs)
+	c.metricsChangefeedResolvedTsGauge.Set(float64(phyRTs))
+	c.metricsChangefeedResolvedTsLagGauge.Set(float64(currentTs-phyRTs) / 1e3)
+}
+
+func (c *changefeed) updateStatus(checkpointTs, resolvedTs model.Ts) {
 	c.state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
 		changed := false
 		if status == nil {
@@ -538,19 +556,13 @@ func (c *changefeed) updateStatus(currentTs int64, checkpointTs, resolvedTs mode
 		}
 		return status, changed, nil
 	})
-	phyCkpTs := oracle.ExtractPhysical(checkpointTs)
-	c.metricsChangefeedCheckpointTsGauge.Set(float64(phyCkpTs))
-	c.metricsChangefeedCheckpointTsLagGauge.Set(float64(currentTs-phyCkpTs) / 1e3)
-
-	phyRTs := oracle.ExtractPhysical(resolvedTs)
-	c.metricsChangefeedResolvedTsGauge.Set(float64(phyRTs))
-	c.metricsChangefeedResolvedTsLagGauge.Set(float64(currentTs-phyRTs) / 1e3)
 }
 
 func (c *changefeed) Close(ctx cdcContext.Context) {
 	c.releaseResources(ctx)
 }
 
+// GetInfoProvider returns an InfoProvider if one is available.
 func (c *changefeed) GetInfoProvider() schedulerv2.InfoProvider {
 	if provider, ok := c.scheduler.(schedulerv2.InfoProvider); ok {
 		return provider
