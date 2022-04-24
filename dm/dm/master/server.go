@@ -42,7 +42,6 @@ import (
 	dmcommon "github.com/pingcap/tiflow/dm/dm/common"
 	"github.com/pingcap/tiflow/dm/dm/config"
 	ctlcommon "github.com/pingcap/tiflow/dm/dm/ctl/common"
-	ctlmaster "github.com/pingcap/tiflow/dm/dm/ctl/master"
 	"github.com/pingcap/tiflow/dm/dm/master/metrics"
 	"github.com/pingcap/tiflow/dm/dm/master/scheduler"
 	"github.com/pingcap/tiflow/dm/dm/master/shardddl"
@@ -2736,48 +2735,15 @@ func (s *Server) GetValidationStatus(ctx context.Context, req *pb.GetValidationS
 		workerRespMu sync.Mutex
 		wg           sync.WaitGroup
 	)
-	appendResp := func(resp *pb.GetValidationStatusResponse) {
-		workerRespMu.Lock()
-		workerResps = append(workerResps, resp)
-		workerRespMu.Unlock()
-	}
-	handleError := func(err error, source, worker string) {
-		log.L().Error("query validation status error", zap.Error(err), zap.String("source", source), zap.String("worker", worker))
-		resp = &pb.GetValidationStatusResponse{
-			Result: false,
-			Msg:    err.Error(),
-		}
-		appendResp(resp)
-	}
 	for taskName, mSource := range subTaskCfgs {
 		for sourceID := range mSource {
-			worker := s.scheduler.GetWorkerBySource(sourceID)
-			if worker == nil {
-				err := terror.ErrMasterWorkerArgsExtractor.Generatef("%s relevant worker-client not found", sourceID)
-				handleError(err, sourceID, "")
-				continue
+			newReq := &workerrpc.Request{
+				GetValidationStatus: &pb.GetValidationStatusRequest{},
+				Type:                workerrpc.CmdGetValidationStatus,
 			}
-			wg.Add(1)
-			go s.ap.Emit(ctx, 0, func(args ...interface{}) {
-				// send request in parallel
-				defer wg.Done()
-				newReq := &workerrpc.Request{
-					GetValidationStatus: &pb.GetValidationStatusRequest{},
-					Type:                workerrpc.CmdGetValidationStatus,
-				}
-				*newReq.GetValidationStatus = *req
-				newReq.GetValidationStatus.TaskName = taskName
-				resp, err := worker.SendRequest(ctx, newReq, s.cfg.RPCTimeout)
-				if err != nil {
-					handleError(err, sourceID, worker.BaseInfo().Name)
-				} else {
-					appendResp(resp.GetValidationStatus)
-				}
-			}, func(args ...interface{}) {
-				defer wg.Done()
-				workerName := worker.BaseInfo().Name
-				handleError(terror.ErrMasterNoEmitToken.Generate(sourceID), sourceID, workerName)
-			})
+			*newReq.GetValidationStatus = *req
+			newReq.GetValidationStatus.TaskName = taskName
+			sendValidationRequest(ctx, s, newReq, sourceID, &wg, &workerRespMu, &workerResps, "get validation status")
 		}
 	}
 	wg.Wait()
@@ -2812,9 +2778,9 @@ func (s *Server) GetValidationError(ctx context.Context, req *pb.GetValidationEr
 		resp.Msg = "task name should be specified"
 		return resp, nil
 	}
-	if req.ErrState != ctlmaster.ValidationAllErr && req.ErrState != ctlmaster.ValidationIgnoredErr && req.ErrState != ctlmaster.ValidationUnprocessedErr {
+	if req.ErrState == pb.ValidateErrorState_ResolvedErr {
 		resp.Result = false
-		resp.Msg = fmt.Sprintf("error flag should be either `%s`, `%s`, or `%s`", ctlmaster.ValidationAllErr, ctlmaster.ValidationIgnoredErr, ctlmaster.ValidationUnprocessedErr)
+		resp.Msg = "only support querying `all`, `unprocessed`, and `ignored` error"
 		return resp, nil
 	}
 	subTaskCfgs = s.scheduler.GetSubTaskCfgsByTaskAndSource(req.TaskName, []string{})
@@ -2824,20 +2790,45 @@ func (s *Server) GetValidationError(ctx context.Context, req *pb.GetValidationEr
 		// nolint:nilerr
 		return resp, nil
 	}
-	// TODO: get validation error from worker
 	log.L().Info("query validation error", zap.Reflect("subtask", subTaskCfgs))
+	var (
+		workerResps  = make([]*pb.GetValidationErrorResponse, 0)
+		workerRespMu sync.Mutex
+		wg           sync.WaitGroup
+	)
+	for taskName, mSource := range subTaskCfgs {
+		for sourceID := range mSource {
+			newReq := workerrpc.Request{
+				GetValidationError: &pb.GetValidationErrorRequest{},
+				Type:               workerrpc.CmdGetValidationError,
+			}
+			*newReq.GetValidationError = *req
+			newReq.GetValidationError.TaskName = taskName
+			sendValidationRequest(ctx, s, &newReq, sourceID, &wg, &workerRespMu, &workerResps, "get validator error")
+		}
+	}
+	wg.Wait()
+	// todo: sort?
+	for _, wresp := range workerResps {
+		if !wresp.Result {
+			resp.Result = wresp.Result
+			resp.Msg += wresp.Msg + "; "
+			continue
+		}
+		resp.Error = append(resp.Error, wresp.Error...)
+	}
 	return resp, err
 }
 
 func (s *Server) OperateValidationError(ctx context.Context, req *pb.OperateValidationErrorRequest) (*pb.OperateValidationErrorResponse, error) {
 	var (
 		resp2       *pb.OperateValidationErrorResponse
-		err2, err   error
+		err         error
 		subTaskCfgs map[string]map[string]config.SubTaskConfig
 	)
-	shouldRet := s.sharedLogic(ctx, req, &resp2, &err2)
+	shouldRet := s.sharedLogic(ctx, req, &resp2, &err)
 	if shouldRet {
-		return resp2, err2
+		return resp2, err
 	}
 	resp := &pb.OperateValidationErrorResponse{
 		Result: true,
@@ -2847,11 +2838,6 @@ func (s *Server) OperateValidationError(ctx context.Context, req *pb.OperateVali
 		resp.Msg = "task name should be specified"
 		return resp, nil
 	}
-	if req.IsAllError && req.ErrId != "" {
-		resp.Result = false
-		resp.Msg = "either `all` error flags or `error id` should be set"
-		return resp, nil
-	}
 	subTaskCfgs = s.scheduler.GetSubTaskCfgsByTaskAndSource(req.TaskName, []string{})
 	if len(subTaskCfgs) == 0 {
 		resp.Result = false
@@ -2859,7 +2845,110 @@ func (s *Server) OperateValidationError(ctx context.Context, req *pb.OperateVali
 		// nolint:nilerr
 		return resp, nil
 	}
-	// TODO: operate validation error at worker
 	log.L().Info("operate validation error", zap.Reflect("subtask", subTaskCfgs))
-	return resp, err
+	var (
+		workerResps  = make([]*pb.OperateValidationErrorResponse, 0)
+		workerRespMu sync.Mutex
+		wg           sync.WaitGroup
+	)
+	for taskName, mSource := range subTaskCfgs {
+		for sourceID := range mSource {
+			newReq := workerrpc.Request{
+				Type:                   workerrpc.CmdOperateValidationError,
+				OperateValidationError: &pb.OperateValidationErrorRequest{},
+			}
+			*newReq.OperateValidationError = *req
+			newReq.OperateValidationError.TaskName = taskName
+			sendValidationRequest(ctx, s, &newReq, sourceID, &wg, &workerRespMu, &workerResps, "operate validator")
+		}
+	}
+	wg.Wait()
+	// todo: sort?
+	for _, wresp := range workerResps {
+		if !wresp.Result {
+			resp.Result = wresp.Result
+			resp.Msg += wresp.Msg + "; "
+		}
+	}
+	// nolint:nilerr
+	return resp, nil
+}
+
+func appendWorkerResp[T any](workerRespMu *sync.Mutex, workerResps *[]T, resp T) {
+	workerRespMu.Lock()
+	*workerResps = append(*workerResps, resp)
+	workerRespMu.Unlock()
+}
+
+func sendValidationRequest[T any](
+	ctx context.Context,
+	s *Server,
+	req *workerrpc.Request,
+	sourceID string,
+	wg *sync.WaitGroup,
+	workerRespMu *sync.Mutex,
+	workerResps *[]T,
+	logMsg string,
+) {
+	worker := s.scheduler.GetWorkerBySource(sourceID)
+	if worker == nil {
+		err := terror.ErrMasterWorkerArgsExtractor.Generatef("%s relevant worker-client not found", sourceID)
+		resp := genValidationWorkerErrorResp(req, err, logMsg, "", sourceID)
+		appendWorkerResp(workerRespMu, workerResps, resp.(T))
+		return
+	}
+	wg.Add(1)
+	go s.ap.Emit(ctx, 0, func(args ...interface{}) {
+		// send request in parallel
+		defer wg.Done()
+		workerResp, err := worker.SendRequest(ctx, req, s.cfg.RPCTimeout)
+		if err != nil {
+			resp := genValidationWorkerErrorResp(req, err, logMsg, worker.BaseInfo().Name, sourceID)
+			appendWorkerResp(workerRespMu, workerResps, resp.(T))
+		} else {
+			resp := getValidationWorkerResp(req, workerResp)
+			appendWorkerResp(workerRespMu, workerResps, resp.(T))
+		}
+	}, func(args ...interface{}) {
+		defer wg.Done()
+		err := terror.ErrMasterNoEmitToken.Generate(sourceID)
+		resp := genValidationWorkerErrorResp(req, err, logMsg, worker.BaseInfo().Name, sourceID)
+		appendWorkerResp(workerRespMu, workerResps, resp.(T))
+	})
+}
+
+func getValidationWorkerResp(req *workerrpc.Request, resp *workerrpc.Response) interface{} {
+	switch req.Type {
+	case workerrpc.CmdGetValidationStatus:
+		return resp.GetValidationStatus
+	case workerrpc.CmdGetValidationError:
+		return resp.GetValidationError
+	case workerrpc.CmdOperateValidationError:
+		return resp.OperateValidationError
+	default:
+		return nil
+	}
+}
+
+func genValidationWorkerErrorResp(req *workerrpc.Request, err error, logMsg, workerID, sourceID string) interface{} {
+	log.L().Error(logMsg, zap.Error(err), zap.String("source", sourceID), zap.String("worker", workerID))
+	switch req.Type {
+	case workerrpc.CmdGetValidationStatus:
+		return &pb.GetValidationStatusResponse{
+			Result: false,
+			Msg:    err.Error(),
+		}
+	case workerrpc.CmdGetValidationError:
+		return &pb.GetValidationErrorResponse{
+			Result: false,
+			Msg:    err.Error(),
+		}
+	case workerrpc.CmdOperateValidationError:
+		return &pb.OperateValidationErrorResponse{
+			Result: false,
+			Msg:    err.Error(),
+		}
+	default:
+		return nil
+	}
 }

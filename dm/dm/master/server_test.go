@@ -188,10 +188,6 @@ func TestMaster(t *testing.T) {
 	s := testSuite.(*testMaster)
 	s.testT = t
 
-	// inject *testing.T to openAPISuite
-	os := openAPITestSuite.(*openAPISuite)
-	os.testT = t
-
 	check.TestingT(t)
 }
 
@@ -2385,7 +2381,7 @@ func (t *testMaster) TestGetValidatorStatus(c *check.C) {
 	// test query all workers
 	for idx, worker := range workers {
 		mockWorkerClient := pbmock.NewMockWorkerClient(ctrl)
-		mockWorkerClient.EXPECT().GetWorkerValidateStatus(
+		mockWorkerClient.EXPECT().GetWorkerValidatorStatus(
 			gomock.Any(),
 			gomock.Any(),
 		).Return(&pb.GetValidationStatusResponse{
@@ -2396,6 +2392,17 @@ func (t *testMaster) TestGetValidatorStatus(c *check.C) {
 				},
 			},
 		}, nil)
+		mockWorkerClient.EXPECT().GetWorkerValidatorStatus(
+			gomock.Any(),
+			gomock.Any(),
+		).Return(&pb.GetValidationStatusResponse{
+			Result: false,
+			Msg:    "something wrong in worker",
+		}, nil)
+		mockWorkerClient.EXPECT().GetWorkerValidatorStatus(
+			gomock.Any(),
+			gomock.Any(),
+		).Return(&pb.GetValidationStatusResponse{}, errors.New("grpc error"))
 		mockRevelantWorkerClient(mockWorkerClient, taskName, sources[idx], startReq)
 		t.workerClients[worker] = newMockRPCClient(mockWorkerClient)
 	}
@@ -2439,4 +2446,199 @@ func (t *testMaster) TestGetValidatorStatus(c *check.C) {
 	c.Assert(err, check.IsNil)
 	c.Assert(resp.Msg, check.Matches, ".*filtering stage should be either.*")
 	c.Assert(resp.Result, check.IsFalse)
+	// 4. worker error
+	statusReq.FilterStatus = pb.Stage_Running
+	resp, err = server.GetValidationStatus(context.Background(), statusReq)
+	c.Assert(err, check.IsNil)
+	c.Assert(resp.Result, check.IsFalse)
+	c.Assert(resp.Msg, check.Matches, ".*something wrong in worker.*")
+	// 5. grpc error
+	statusReq.FilterStatus = pb.Stage_Running
+	resp, err = server.GetValidationStatus(context.Background(), statusReq)
+	c.Assert(err, check.IsNil)
+	c.Assert(resp.Result, check.IsFalse)
+	c.Assert(resp.Msg, check.Matches, ".*grpc error.*")
+}
+
+func (t *testMaster) TestGetValidationError(c *check.C) {
+	var (
+		wg       sync.WaitGroup
+		taskName = "test"
+	)
+	ctrl := gomock.NewController(c)
+	defer ctrl.Finish()
+	server := testDefaultMasterServer(c)
+	server.etcdClient = t.etcdTestCli
+	sources, workers := defaultWorkerSource()
+	startReq := &pb.StartTaskRequest{
+		Task:    taskConfig,
+		Sources: sources,
+	}
+	// test query all workers
+	for idx, worker := range workers {
+		mockWorkerClient := pbmock.NewMockWorkerClient(ctrl)
+		mockWorkerClient.EXPECT().GetValidatorError(
+			gomock.Any(),
+			gomock.Any(),
+		).Return(&pb.GetValidationErrorResponse{
+			Result: true,
+			Error: []*pb.ValidationError{
+				{
+					Id: "1",
+				},
+			},
+		}, nil)
+		mockWorkerClient.EXPECT().GetValidatorError(
+			gomock.Any(),
+			gomock.Any(),
+		).Return(&pb.GetValidationErrorResponse{
+			Result: false,
+			Msg:    "something wrong in worker",
+			Error:  []*pb.ValidationError{},
+		}, nil)
+		mockWorkerClient.EXPECT().GetValidatorError(
+			gomock.Any(),
+			gomock.Any(),
+		).Return(&pb.GetValidationErrorResponse{}, errors.New("grpc error"))
+		mockRevelantWorkerClient(mockWorkerClient, taskName, sources[idx], startReq)
+		t.workerClients[worker] = newMockRPCClient(mockWorkerClient)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer t.clearSchedulerEnv(c, cancel, &wg)
+	// start task without validation
+	sourceResps := []*pb.CommonWorkerResponse{{Result: true, Source: sources[0]}, {Result: true, Source: sources[1]}}
+	server.scheduler, _ = t.testMockScheduler(ctx, &wg, c, sources, workers, "", t.workerClients)
+	mock := conn.InitVersionDB(c)
+	defer func() {
+		conn.DefaultDBProvider = &conn.DefaultDBProviderImpl{}
+	}()
+	mock.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'version'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
+		AddRow("version", "5.7.25-TiDB-v4.0.2"))
+	stResp, err := server.StartTask(context.Background(), startReq)
+	c.Assert(err, check.IsNil)
+	c.Assert(stResp.Result, check.IsTrue)
+	for _, source := range sources {
+		t.subTaskStageMatch(c, server.scheduler, taskName, source, pb.Stage_Running)
+	}
+	c.Assert(stResp.Sources, check.DeepEquals, sourceResps)
+	// 1. query existing task's error
+	errReq := &pb.GetValidationErrorRequest{
+		TaskName: taskName,
+		ErrState: pb.ValidateErrorState_InvalidErr,
+	}
+	resp, err := server.GetValidationError(context.Background(), errReq)
+	c.Assert(err, check.IsNil)
+	c.Assert(resp.Msg, check.Equals, "")
+	c.Assert(resp.Result, check.IsTrue)
+	c.Assert(len(resp.Error), check.Equals, 2)
+	// 2. query invalid task's error
+	errReq.TaskName = "invalid-task"
+	resp, err = server.GetValidationError(context.Background(), errReq)
+	c.Assert(err, check.IsNil)
+	c.Assert(resp.Msg, check.Matches, ".*fail to get subtask config by task name.*")
+	c.Assert(resp.Result, check.IsFalse)
+	// 3. query invalid state
+	errReq.TaskName = taskName
+	errReq.ErrState = pb.ValidateErrorState_ResolvedErr // invalid state
+	resp, err = server.GetValidationError(context.Background(), errReq)
+	c.Assert(err, check.IsNil)
+	c.Assert(resp.Msg, check.Matches, ".*only support querying `all`, `unprocessed`, and `ignored` error.*")
+	c.Assert(resp.Result, check.IsFalse)
+	// 4. worker error
+	errReq.TaskName = taskName
+	errReq.ErrState = pb.ValidateErrorState_InvalidErr
+	resp, err = server.GetValidationError(context.Background(), errReq)
+	c.Assert(err, check.IsNil)
+	c.Assert(resp.Result, check.IsFalse)
+	c.Assert(resp.Msg, check.Matches, ".*something wrong in worker.*")
+	// 5. grpc error
+	resp, err = server.GetValidationError(context.Background(), errReq)
+	c.Assert(err, check.IsNil)
+	c.Assert(resp.Result, check.IsFalse)
+	c.Assert(resp.Msg, check.Matches, ".*grpc error.*")
+}
+
+func (t *testMaster) TestOperateValidationError(c *check.C) {
+	var (
+		wg       sync.WaitGroup
+		taskName = "test"
+	)
+	ctrl := gomock.NewController(c)
+	defer ctrl.Finish()
+	server := testDefaultMasterServer(c)
+	server.etcdClient = t.etcdTestCli
+	sources, workers := defaultWorkerSource()
+	startReq := &pb.StartTaskRequest{
+		Task:    taskConfig,
+		Sources: sources,
+	}
+	// test query all workers
+	for idx, worker := range workers {
+		mockWorkerClient := pbmock.NewMockWorkerClient(ctrl)
+		mockWorkerClient.EXPECT().OperateValidatorError(
+			gomock.Any(),
+			gomock.Any(),
+		).Return(&pb.OperateValidationErrorResponse{
+			Result: true,
+			Msg:    "",
+		}, nil)
+		mockWorkerClient.EXPECT().OperateValidatorError(
+			gomock.Any(),
+			gomock.Any(),
+		).Return(&pb.OperateValidationErrorResponse{
+			Result: false,
+			Msg:    "something wrong in worker",
+		}, nil)
+		mockWorkerClient.EXPECT().OperateValidatorError(
+			gomock.Any(),
+			gomock.Any(),
+		).Return(&pb.OperateValidationErrorResponse{}, errors.New("grpc error"))
+		mockRevelantWorkerClient(mockWorkerClient, taskName, sources[idx], startReq)
+		t.workerClients[worker] = newMockRPCClient(mockWorkerClient)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer t.clearSchedulerEnv(c, cancel, &wg)
+	// start task without validation
+	sourceResps := []*pb.CommonWorkerResponse{{Result: true, Source: sources[0]}, {Result: true, Source: sources[1]}}
+	server.scheduler, _ = t.testMockScheduler(ctx, &wg, c, sources, workers, "", t.workerClients)
+	mock := conn.InitVersionDB(c)
+	defer func() {
+		conn.DefaultDBProvider = &conn.DefaultDBProviderImpl{}
+	}()
+	mock.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'version'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
+		AddRow("version", "5.7.25-TiDB-v4.0.2"))
+	stResp, err := server.StartTask(context.Background(), startReq)
+	c.Assert(err, check.IsNil)
+	c.Assert(stResp.Result, check.IsTrue)
+	for _, source := range sources {
+		t.subTaskStageMatch(c, server.scheduler, taskName, source, pb.Stage_Running)
+	}
+	c.Assert(stResp.Sources, check.DeepEquals, sourceResps)
+	// 1. query existing task's error
+	opReq := &pb.OperateValidationErrorRequest{
+		TaskName:   taskName,
+		IsAllError: true,
+	}
+	resp, err := server.OperateValidationError(context.Background(), opReq)
+	c.Assert(err, check.IsNil)
+	c.Assert(resp.Msg, check.Equals, "")
+	c.Assert(resp.Result, check.IsTrue)
+	// 2. query invalid task's error
+	opReq.TaskName = "invalid-task"
+	resp, err = server.OperateValidationError(context.Background(), opReq)
+	c.Assert(err, check.IsNil)
+	c.Assert(resp.Msg, check.Matches, ".*fail to get subtask config by task name.*")
+	c.Assert(resp.Result, check.IsFalse)
+	// 3. worker error
+	opReq.TaskName = taskName
+	resp, err = server.OperateValidationError(context.Background(), opReq)
+	c.Assert(err, check.IsNil)
+	c.Assert(resp.Result, check.IsFalse)
+	c.Assert(resp.Msg, check.Matches, ".*something wrong in worker.*")
+	// 4. grpc error
+	opReq.TaskName = taskName
+	resp, err = server.OperateValidationError(context.Background(), opReq)
+	c.Assert(err, check.IsNil)
+	c.Assert(resp.Result, check.IsFalse)
+	c.Assert(resp.Msg, check.Matches, ".*grpc error.*")
 }

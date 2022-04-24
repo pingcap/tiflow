@@ -45,6 +45,13 @@ func NewNodeContext(
 	}
 }
 
+// MockNodeContext4Test creates a node context with a message and an output channel for tests.
+func MockNodeContext4Test(
+	ctx context.Context, msg pmessage.Message, outputCh chan pmessage.Message,
+) NodeContext {
+	return NewNodeContext(ctx, msg, outputCh)
+}
+
 func (ctx *nodeContext) Message() pmessage.Message {
 	return ctx.msg
 }

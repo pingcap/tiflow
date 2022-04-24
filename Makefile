@@ -362,6 +362,15 @@ dm_integration_test_build_master: check_failpoint_ctl
 	$(FAILPOINT_DISABLE)
 	./dm/tests/prepare_tools.sh
 
+dm_integration_test_build_ctl: check_failpoint_ctl
+	$(FAILPOINT_ENABLE)
+	$(GOTESTNORACE) -ldflags '$(LDFLAGS)' -c -cover -covermode=count \
+		-coverpkg=github.com/pingcap/tiflow/dm/... \
+		-o bin/dmctl.test github.com/pingcap/tiflow/dm/cmd/dm-ctl \
+		|| { $(FAILPOINT_DISABLE); exit 1; }
+	$(FAILPOINT_DISABLE)
+	./dm/tests/prepare_tools.sh
+
 install_test_python_dep:
 	@echo "install python requirments for test"
 	pip install --user -q -r ./dm/tests/requirements.txt
@@ -415,9 +424,6 @@ tools/bin/protoc-gen-gogofaster: tools/check/go.mod
 
 tools/bin/protoc-gen-grpc-gateway: tools/check/go.mod
 	cd tools/check && $(GO) build -mod=mod -o ../bin/protoc-gen-grpc-gateway github.com/grpc-ecosystem/grpc-gateway/protoc-gen-grpc-gateway
-
-tools/bin/statik: tools/check/go.mod
-	cd tools/check && $(GO) build -mod=mod -o ../bin/statik github.com/rakyll/statik
 
 tools/bin/gofumports: tools/check/go.mod
 	cd tools/check && $(GO) build -mod=mod -o ../bin/gofumports mvdan.cc/gofumpt
