@@ -26,6 +26,9 @@ const (
 	workerEntryTombstone
 )
 
+// The following is the state-transition diagram.
+// Refer to ../doc/worker_entry_fsm.puml for a UML version.
+//
 // workerEntryCreated            workerEntryWait
 //      │  │                            │  │
 //      │  │                            │  │
