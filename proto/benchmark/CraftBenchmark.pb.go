@@ -5,7 +5,7 @@ package benchmark
 
 import (
 	fmt "fmt"
-	proto "github.com/golang/protobuf/proto"
+	proto "github.com/gogo/protobuf/proto"
 	io "io"
 	math "math"
 	math_bits "math/bits"
@@ -20,18 +20,15 @@ var _ = math.Inf
 // is compatible with the proto package it is being compiled against.
 // A compilation error at this line likely means your copy of the
 // proto package needs to be updated.
-const _ = proto.ProtoPackageIsVersion3 // please upgrade the proto package
+const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 
 type Key struct {
-	Ts                   uint64   `protobuf:"varint,1,opt,name=ts,proto3" json:"ts,omitempty"`
-	Schema               string   `protobuf:"bytes,2,opt,name=schema,proto3" json:"schema,omitempty"`
-	Table                string   `protobuf:"bytes,3,opt,name=table,proto3" json:"table,omitempty"`
-	RowId                int64    `protobuf:"varint,4,opt,name=row_id,json=rowId,proto3" json:"row_id,omitempty"`
-	Type                 uint32   `protobuf:"varint,5,opt,name=type,proto3" json:"type,omitempty"`
-	Partition            int64    `protobuf:"varint,6,opt,name=partition,proto3" json:"partition,omitempty"`
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
+	Ts        uint64 `protobuf:"varint,1,opt,name=ts,proto3" json:"ts,omitempty"`
+	Schema    string `protobuf:"bytes,2,opt,name=schema,proto3" json:"schema,omitempty"`
+	Table     string `protobuf:"bytes,3,opt,name=table,proto3" json:"table,omitempty"`
+	RowId     int64  `protobuf:"varint,4,opt,name=row_id,json=rowId,proto3" json:"row_id,omitempty"`
+	Type      uint32 `protobuf:"varint,5,opt,name=type,proto3" json:"type,omitempty"`
+	Partition int64  `protobuf:"varint,6,opt,name=partition,proto3" json:"partition,omitempty"`
 }
 
 func (m *Key) Reset()         { *m = Key{} }
@@ -110,13 +107,10 @@ func (m *Key) GetPartition() int64 {
 }
 
 type Column struct {
-	Name                 string   `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Type                 uint32   `protobuf:"varint,2,opt,name=type,proto3" json:"type,omitempty"`
-	Flag                 uint32   `protobuf:"varint,3,opt,name=flag,proto3" json:"flag,omitempty"`
-	Value                []byte   `protobuf:"bytes,4,opt,name=value,proto3" json:"value,omitempty"`
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
+	Name  string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Type  uint32 `protobuf:"varint,2,opt,name=type,proto3" json:"type,omitempty"`
+	Flag  uint32 `protobuf:"varint,3,opt,name=flag,proto3" json:"flag,omitempty"`
+	Value []byte `protobuf:"bytes,4,opt,name=value,proto3" json:"value,omitempty"`
 }
 
 func (m *Column) Reset()         { *m = Column{} }
@@ -181,11 +175,8 @@ func (m *Column) GetValue() []byte {
 }
 
 type RowChanged struct {
-	OldValue             []*Column `protobuf:"bytes,1,rep,name=old_value,json=oldValue,proto3" json:"old_value,omitempty"`
-	NewValue             []*Column `protobuf:"bytes,2,rep,name=new_value,json=newValue,proto3" json:"new_value,omitempty"`
-	XXX_NoUnkeyedLiteral struct{}  `json:"-"`
-	XXX_unrecognized     []byte    `json:"-"`
-	XXX_sizecache        int32     `json:"-"`
+	OldValue []*Column `protobuf:"bytes,1,rep,name=old_value,json=oldValue,proto3" json:"old_value,omitempty"`
+	NewValue []*Column `protobuf:"bytes,2,rep,name=new_value,json=newValue,proto3" json:"new_value,omitempty"`
 }
 
 func (m *RowChanged) Reset()         { *m = RowChanged{} }
@@ -236,15 +227,12 @@ func (m *RowChanged) GetNewValue() []*Column {
 }
 
 type KeysColumnar struct {
-	Ts                   []uint64 `protobuf:"varint,1,rep,packed,name=ts,proto3" json:"ts,omitempty"`
-	Schema               []string `protobuf:"bytes,2,rep,name=schema,proto3" json:"schema,omitempty"`
-	Table                []string `protobuf:"bytes,3,rep,name=table,proto3" json:"table,omitempty"`
-	RowId                []int64  `protobuf:"varint,4,rep,packed,name=row_id,json=rowId,proto3" json:"row_id,omitempty"`
-	Type                 []uint32 `protobuf:"varint,5,rep,packed,name=type,proto3" json:"type,omitempty"`
-	Partition            []int64  `protobuf:"varint,6,rep,packed,name=partition,proto3" json:"partition,omitempty"`
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
+	Ts        []uint64 `protobuf:"varint,1,rep,packed,name=ts,proto3" json:"ts,omitempty"`
+	Schema    []string `protobuf:"bytes,2,rep,name=schema,proto3" json:"schema,omitempty"`
+	Table     []string `protobuf:"bytes,3,rep,name=table,proto3" json:"table,omitempty"`
+	RowId     []int64  `protobuf:"varint,4,rep,packed,name=row_id,json=rowId,proto3" json:"row_id,omitempty"`
+	Type      []uint32 `protobuf:"varint,5,rep,packed,name=type,proto3" json:"type,omitempty"`
+	Partition []int64  `protobuf:"varint,6,rep,packed,name=partition,proto3" json:"partition,omitempty"`
 }
 
 func (m *KeysColumnar) Reset()         { *m = KeysColumnar{} }
@@ -323,14 +311,11 @@ func (m *KeysColumnar) GetPartition() []int64 {
 }
 
 type ColumnsColumnar struct {
-	Name                 []string `protobuf:"bytes,1,rep,name=name,proto3" json:"name,omitempty"`
-	Type                 []uint32 `protobuf:"varint,2,rep,packed,name=type,proto3" json:"type,omitempty"`
-	WhereHandle          []bool   `protobuf:"varint,3,rep,packed,name=where_handle,json=whereHandle,proto3" json:"where_handle,omitempty"`
-	Flag                 []uint32 `protobuf:"varint,4,rep,packed,name=flag,proto3" json:"flag,omitempty"`
-	Value                [][]byte `protobuf:"bytes,5,rep,name=value,proto3" json:"value,omitempty"`
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
+	Name        []string `protobuf:"bytes,1,rep,name=name,proto3" json:"name,omitempty"`
+	Type        []uint32 `protobuf:"varint,2,rep,packed,name=type,proto3" json:"type,omitempty"`
+	WhereHandle []bool   `protobuf:"varint,3,rep,packed,name=where_handle,json=whereHandle,proto3" json:"where_handle,omitempty"`
+	Flag        []uint32 `protobuf:"varint,4,rep,packed,name=flag,proto3" json:"flag,omitempty"`
+	Value       [][]byte `protobuf:"bytes,5,rep,name=value,proto3" json:"value,omitempty"`
 }
 
 func (m *ColumnsColumnar) Reset()         { *m = ColumnsColumnar{} }
@@ -402,11 +387,8 @@ func (m *ColumnsColumnar) GetValue() [][]byte {
 }
 
 type RowChangedColumnar struct {
-	OldValue             []*ColumnsColumnar `protobuf:"bytes,1,rep,name=old_value,json=oldValue,proto3" json:"old_value,omitempty"`
-	NewValue             []*ColumnsColumnar `protobuf:"bytes,2,rep,name=new_value,json=newValue,proto3" json:"new_value,omitempty"`
-	XXX_NoUnkeyedLiteral struct{}           `json:"-"`
-	XXX_unrecognized     []byte             `json:"-"`
-	XXX_sizecache        int32              `json:"-"`
+	OldValue []*ColumnsColumnar `protobuf:"bytes,1,rep,name=old_value,json=oldValue,proto3" json:"old_value,omitempty"`
+	NewValue []*ColumnsColumnar `protobuf:"bytes,2,rep,name=new_value,json=newValue,proto3" json:"new_value,omitempty"`
 }
 
 func (m *RowChangedColumnar) Reset()         { *m = RowChangedColumnar{} }
@@ -468,34 +450,35 @@ func init() {
 func init() { proto.RegisterFile("CraftBenchmark.proto", fileDescriptor_14a6b0a2c8322bed) }
 
 var fileDescriptor_14a6b0a2c8322bed = []byte{
-	// 430 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x7c, 0x93, 0x31, 0x6f, 0xd4, 0x30,
-	0x14, 0xc7, 0x71, 0x9c, 0x8b, 0x9a, 0xd7, 0x6b, 0x11, 0x56, 0x41, 0x01, 0xa1, 0x53, 0xc8, 0x94,
-	0xc9, 0x03, 0x0c, 0x9d, 0x58, 0x7a, 0x4b, 0x51, 0x37, 0x0f, 0x0c, 0x2c, 0x27, 0x27, 0x76, 0x2f,
-	0x11, 0x89, 0x7d, 0x72, 0x5c, 0xa2, 0xfb, 0x02, 0x9d, 0x58, 0x91, 0xf8, 0x48, 0x8c, 0x7c, 0x04,
-	0x74, 0x7c, 0x11, 0x14, 0xe7, 0x9a, 0xf4, 0x74, 0x29, 0x9b, 0xdf, 0xf3, 0xff, 0x3d, 0xfd, 0xf5,
-	0xfb, 0xeb, 0xc1, 0xc5, 0xd2, 0xf0, 0x5b, 0x7b, 0x25, 0x55, 0x5e, 0xd4, 0xdc, 0x7c, 0xa5, 0x1b,
-	0xa3, 0xad, 0x26, 0x61, 0xf6, 0xd0, 0x48, 0xbe, 0x23, 0xc0, 0x37, 0x72, 0x4b, 0xce, 0xc1, 0xb3,
-	0x4d, 0x84, 0x62, 0x94, 0xfa, 0xcc, 0xb3, 0x0d, 0x79, 0x05, 0x41, 0x93, 0x17, 0xb2, 0xe6, 0x91,
-	0x17, 0xa3, 0x34, 0x64, 0xfb, 0x8a, 0x5c, 0xc0, 0xcc, 0xf2, 0xac, 0x92, 0x11, 0x76, 0xed, 0xbe,
-	0x20, 0x2f, 0x21, 0x30, 0xba, 0x5d, 0x95, 0x22, 0xf2, 0x63, 0x94, 0x62, 0x36, 0x33, 0xba, 0xfd,
-	0x24, 0x08, 0x01, 0xdf, 0x6e, 0x37, 0x32, 0x9a, 0xc5, 0x28, 0x3d, 0x63, 0xee, 0x4d, 0xde, 0x42,
-	0xb8, 0xe1, 0xc6, 0x96, 0xb6, 0xd4, 0x2a, 0x0a, 0x9c, 0x7a, 0x6c, 0x24, 0x5f, 0x20, 0x58, 0xea,
-	0xea, 0xae, 0x56, 0xdd, 0xac, 0xe2, 0xb5, 0x74, 0x96, 0x42, 0xe6, 0xde, 0xc3, 0x3e, 0xef, 0xd1,
-	0x3e, 0x02, 0xfe, 0x6d, 0xc5, 0xd7, 0xce, 0xcf, 0x19, 0x73, 0xef, 0xce, 0xe4, 0x37, 0x5e, 0xdd,
-	0x49, 0xe7, 0x66, 0xce, 0xfa, 0x22, 0xa9, 0x00, 0x98, 0x6e, 0x97, 0x05, 0x57, 0x6b, 0x29, 0x08,
-	0x85, 0x50, 0x57, 0x62, 0xd5, 0xeb, 0x50, 0x8c, 0xd3, 0xd3, 0xf7, 0x2f, 0xe8, 0xc0, 0x85, 0xf6,
-	0x2e, 0xd8, 0x89, 0xae, 0xc4, 0xe7, 0x4e, 0xd2, 0xe9, 0x95, 0x6c, 0xf7, 0x7a, 0xef, 0x49, 0xbd,
-	0x92, 0xad, 0xd3, 0x27, 0x3f, 0x10, 0xcc, 0x6f, 0xe4, 0xb6, 0xe9, 0x3f, 0xb8, 0x19, 0x08, 0xe3,
-	0x09, 0xc2, 0x78, 0x9a, 0x30, 0x9e, 0x26, 0x8c, 0xa7, 0x08, 0xe3, 0xa7, 0x08, 0xe3, 0x43, 0xc2,
-	0xf7, 0x08, 0x9e, 0xf7, 0x9e, 0x46, 0x6b, 0x23, 0x6b, 0x3c, 0xc1, 0x7a, 0xdc, 0xfc, 0x0e, 0xe6,
-	0x6d, 0x21, 0x8d, 0x5c, 0x15, 0x5c, 0x89, 0xbd, 0xc3, 0x13, 0x76, 0xea, 0x7a, 0xd7, 0xae, 0x35,
-	0xc4, 0xe1, 0xf7, 0x63, 0x87, 0x71, 0x74, 0x2e, 0x87, 0x38, 0xee, 0x11, 0x90, 0x31, 0x8f, 0xc1,
-	0xcb, 0xe5, 0x71, 0x2e, 0x6f, 0x8e, 0x38, 0x0f, 0xd6, 0x1f, 0x05, 0x74, 0x79, 0x1c, 0xd0, 0x7f,
-	0x07, 0x1f, 0x92, 0xba, 0xfa, 0xf8, 0x6b, 0xb7, 0x40, 0xbf, 0x77, 0x0b, 0xf4, 0x67, 0xb7, 0x40,
-	0x3f, 0xff, 0x2e, 0x9e, 0xc1, 0xeb, 0x52, 0x53, 0x5b, 0x8a, 0x8c, 0x66, 0xe5, 0x5a, 0x70, 0xcb,
-	0x69, 0x2e, 0x72, 0x9a, 0xbb, 0x4b, 0x3a, 0x3f, 0x3c, 0xa8, 0x6b, 0x94, 0x05, 0xee, 0xa6, 0x3e,
-	0xfc, 0x0b, 0x00, 0x00, 0xff, 0xff, 0x8e, 0xf5, 0x0b, 0xd6, 0x6b, 0x03, 0x00, 0x00,
+	// 438 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x7c, 0x93, 0xb1, 0x6e, 0xdb, 0x30,
+	0x10, 0x86, 0x4d, 0x51, 0x16, 0xa2, 0x8b, 0x93, 0xa2, 0x44, 0x5a, 0xa8, 0x45, 0x21, 0xa8, 0x9e,
+	0x34, 0x71, 0x68, 0x87, 0xec, 0x31, 0x0a, 0xa4, 0xc8, 0xc6, 0xa1, 0x43, 0x17, 0x83, 0x12, 0x19,
+	0x4b, 0xa8, 0x4c, 0x1a, 0x34, 0x53, 0xc1, 0x2f, 0x90, 0xa9, 0x43, 0x97, 0xbe, 0x53, 0xc7, 0x8c,
+	0x1d, 0x0b, 0xfb, 0x45, 0x0a, 0x51, 0x8e, 0x14, 0xc3, 0x4a, 0x37, 0xde, 0xf1, 0xbf, 0xc3, 0x8f,
+	0xef, 0xc7, 0xc1, 0xc5, 0xcc, 0xf0, 0x5b, 0x7b, 0x25, 0x55, 0x5e, 0x2c, 0xb9, 0xf9, 0x46, 0x57,
+	0x46, 0x5b, 0x4d, 0xc2, 0xec, 0xb1, 0x31, 0xfd, 0x81, 0x00, 0xdf, 0xc8, 0x0d, 0x39, 0x07, 0xcf,
+	0xae, 0x23, 0x94, 0xa0, 0xd4, 0x67, 0x9e, 0x5d, 0x93, 0xd7, 0x10, 0xac, 0xf3, 0x42, 0x2e, 0x79,
+	0xe4, 0x25, 0x28, 0x0d, 0xd9, 0xbe, 0x22, 0x17, 0x30, 0xb6, 0x3c, 0xab, 0x64, 0x84, 0x5d, 0xbb,
+	0x2d, 0xc8, 0x2b, 0x08, 0x8c, 0xae, 0xe7, 0xa5, 0x88, 0xfc, 0x04, 0xa5, 0x98, 0x8d, 0x8d, 0xae,
+	0x3f, 0x0b, 0x42, 0xc0, 0xb7, 0x9b, 0x95, 0x8c, 0xc6, 0x09, 0x4a, 0xcf, 0x98, 0x7b, 0x93, 0x77,
+	0x10, 0xae, 0xb8, 0xb1, 0xa5, 0x2d, 0xb5, 0x8a, 0x02, 0xa7, 0xee, 0x1b, 0xd3, 0xaf, 0x10, 0xcc,
+	0x74, 0x75, 0xb7, 0x54, 0xcd, 0xac, 0xe2, 0x4b, 0xe9, 0x2c, 0x85, 0xcc, 0xbd, 0xbb, 0x7d, 0xde,
+	0x93, 0x7d, 0x04, 0xfc, 0xdb, 0x8a, 0x2f, 0x9c, 0x9f, 0x33, 0xe6, 0xde, 0x8d, 0xc9, 0xef, 0xbc,
+	0xba, 0x93, 0xce, 0xcd, 0x84, 0xb5, 0xc5, 0xb4, 0x02, 0x60, 0xba, 0x9e, 0x15, 0x5c, 0x2d, 0xa4,
+	0x20, 0x14, 0x42, 0x5d, 0x89, 0x79, 0xab, 0x43, 0x09, 0x4e, 0x4f, 0x3f, 0xbc, 0xa4, 0x1d, 0x17,
+	0xda, 0xba, 0x60, 0x27, 0xba, 0x12, 0x5f, 0x1a, 0x49, 0xa3, 0x57, 0xb2, 0xde, 0xeb, 0xbd, 0x67,
+	0xf5, 0x4a, 0xd6, 0x4e, 0x3f, 0xfd, 0x85, 0x60, 0x72, 0x23, 0x37, 0xeb, 0xf6, 0x83, 0x9b, 0x8e,
+	0x30, 0x1e, 0x20, 0x8c, 0x87, 0x09, 0xe3, 0x61, 0xc2, 0x78, 0x88, 0x30, 0x7e, 0x8e, 0x30, 0x3e,
+	0x24, 0x7c, 0x8f, 0xe0, 0x45, 0xeb, 0xa9, 0xb7, 0xd6, 0xb3, 0xc6, 0x03, 0xac, 0xfb, 0xcd, 0xef,
+	0x61, 0x52, 0x17, 0xd2, 0xc8, 0x79, 0xc1, 0x95, 0xd8, 0x3b, 0x3c, 0x61, 0xa7, 0xae, 0x77, 0xed,
+	0x5a, 0x5d, 0x1c, 0x7e, 0x3b, 0x76, 0x18, 0x47, 0xe3, 0xb2, 0x8b, 0xe3, 0x1e, 0x01, 0xe9, 0xf3,
+	0xe8, 0xbc, 0x5c, 0x1e, 0xe7, 0xf2, 0xf6, 0x88, 0x73, 0x67, 0xfd, 0x49, 0x40, 0x97, 0xc7, 0x01,
+	0xfd, 0x77, 0xf0, 0x31, 0xa9, 0xab, 0x4f, 0xbf, 0xb7, 0x31, 0x7a, 0xd8, 0xc6, 0xe8, 0xef, 0x36,
+	0x46, 0x3f, 0x77, 0xf1, 0xe8, 0x61, 0x17, 0x8f, 0xfe, 0xec, 0xe2, 0x11, 0xbc, 0x29, 0x35, 0xb5,
+	0xa5, 0xc8, 0x68, 0x56, 0x2e, 0x04, 0xb7, 0x9c, 0xe6, 0x22, 0xa7, 0xb9, 0xbb, 0xa8, 0xf3, 0xc3,
+	0xc3, 0xba, 0x46, 0x59, 0xe0, 0x6e, 0xeb, 0xe3, 0xbf, 0x00, 0x00, 0x00, 0xff, 0xff, 0x29, 0xb1,
+	0x59, 0x1d, 0x73, 0x03, 0x00, 0x00,
 }
 
 func (m *Key) Marshal() (dAtA []byte, err error) {
@@ -518,10 +501,6 @@ func (m *Key) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
 	if m.Partition != 0 {
 		i = encodeVarintCraftBenchmark(dAtA, i, uint64(m.Partition))
 		i--
@@ -579,10 +558,6 @@ func (m *Column) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
 	if len(m.Value) > 0 {
 		i -= len(m.Value)
 		copy(dAtA[i:], m.Value)
@@ -630,10 +605,6 @@ func (m *RowChanged) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
 	if len(m.NewValue) > 0 {
 		for iNdEx := len(m.NewValue) - 1; iNdEx >= 0; iNdEx-- {
 			{
@@ -685,10 +656,6 @@ func (m *KeysColumnar) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
 	if len(m.Partition) > 0 {
 		dAtA2 := make([]byte, len(m.Partition)*10)
 		var j1 int
@@ -804,10 +771,6 @@ func (m *ColumnsColumnar) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
 	if len(m.Value) > 0 {
 		for iNdEx := len(m.Value) - 1; iNdEx >= 0; iNdEx-- {
 			i -= len(m.Value[iNdEx])
@@ -898,10 +861,6 @@ func (m *RowChangedColumnar) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
 	if len(m.NewValue) > 0 {
 		for iNdEx := len(m.NewValue) - 1; iNdEx >= 0; iNdEx-- {
 			{
@@ -970,9 +929,6 @@ func (m *Key) Size() (n int) {
 	if m.Partition != 0 {
 		n += 1 + sovCraftBenchmark(uint64(m.Partition))
 	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -996,9 +952,6 @@ func (m *Column) Size() (n int) {
 	if l > 0 {
 		n += 1 + l + sovCraftBenchmark(uint64(l))
 	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -1019,9 +972,6 @@ func (m *RowChanged) Size() (n int) {
 			l = e.Size()
 			n += 1 + l + sovCraftBenchmark(uint64(l))
 		}
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
@@ -1072,9 +1022,6 @@ func (m *KeysColumnar) Size() (n int) {
 		}
 		n += 1 + sovCraftBenchmark(uint64(l)) + l
 	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -1113,9 +1060,6 @@ func (m *ColumnsColumnar) Size() (n int) {
 			n += 1 + l + sovCraftBenchmark(uint64(l))
 		}
 	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
 	return n
 }
 
@@ -1136,9 +1080,6 @@ func (m *RowChangedColumnar) Size() (n int) {
 			l = e.Size()
 			n += 1 + l + sovCraftBenchmark(uint64(l))
 		}
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
@@ -1330,7 +1271,6 @@ func (m *Key) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -1485,7 +1425,6 @@ func (m *Column) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -1604,7 +1543,6 @@ func (m *RowChanged) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -2023,7 +1961,6 @@ func (m *KeysColumnar) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -2360,7 +2297,6 @@ func (m *ColumnsColumnar) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -2479,7 +2415,6 @@ func (m *RowChangedColumnar) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}

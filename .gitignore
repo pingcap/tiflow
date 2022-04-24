@@ -64,3 +64,5 @@ dm/ui/stats.html
 # npm dependencies
 node_modules
 
+tools/bin
+tools/include
