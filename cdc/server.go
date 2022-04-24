@@ -262,6 +262,7 @@ func (s *Server) etcdHealthChecker(ctx context.Context) error {
 				if err != nil {
 					log.Warn("etcd health check error", zap.Error(err))
 				} else {
+					_, _ = io.Copy(io.Discard, resp.Body)
 					_ = resp.Body.Close()
 					metrics[pdEndpoint].Observe(float64(time.Since(start)) / float64(time.Second))
 				}

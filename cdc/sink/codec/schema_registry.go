@@ -333,7 +333,10 @@ func (m *AvroSchemaManager) ClearRegistry(ctx context.Context, tableName model.T
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_, _ = io.Copy(io.Discard, resp.Body)
+		_ = resp.Body.Close()
+	}()
 
 	if resp.StatusCode == 200 {
 		log.Info("Clearing Registry successful")
@@ -383,6 +386,7 @@ func httpRetry(ctx context.Context, credential *security.Credential, r *http.Req
 			break
 		}
 		log.Warn("HTTP server returned with error", zap.Int("status", resp.StatusCode))
+		_, _ = io.Copy(io.Discard, resp.Body)
 		_ = resp.Body.Close()
 
 	checkCtx:
