@@ -307,6 +307,10 @@ func (s *Server) run(ctx context.Context) (err error) {
 		return s.tcpServer.Run(cctx)
 	})
 
+	wg.Go(func() error {
+		return upstream.UpStreamManager.Run(cctx)
+	})
+
 	conf := config.GetGlobalServerConfig()
 	if conf.Debug.EnableNewScheduler {
 		grpcServer := grpc.NewServer()

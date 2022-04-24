@@ -102,7 +102,6 @@ func newChangefeed(id model.ChangeFeedID, upStream *upstream.UpStream) *changefe
 		newDDLPuller: newDDLPuller,
 		newSink:      newDDLSink,
 	}
-	c.upStream.Count++
 	c.newScheduler = newScheduler
 	return c
 }
@@ -385,10 +384,6 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 	c.wg.Wait()
 	c.scheduler.Close(ctx)
 
-	// TODO: 找一个更好的方式来释放 upStream
-	upstream.UpStreamManager.ReleaseUpStream(c.clusterID)
-	c.upStream = nil
-
 	changefeedCheckpointTsGauge.DeleteLabelValues(c.id)
 	changefeedCheckpointTsLagGauge.DeleteLabelValues(c.id)
 	c.metricsChangefeedCheckpointTsGauge = nil
@@ -638,6 +633,8 @@ func (c *changefeed) Close(ctx cdcContext.Context) {
 	startTime := time.Now()
 
 	c.releaseResources(ctx)
+	upstream.UpStreamManager.Release(c.clusterID)
+
 	costTime := time.Since(startTime)
 	if costTime > changefeedLogsWarnDuration {
 		log.Warn("changefeed close took too long", zap.String("changefeed", c.id), zap.Duration("duration", costTime))

@@ -17,52 +17,94 @@ import (
 	"context"
 	"strings"
 	"sync"
+	"time"
 
+	"github.com/benbjohnson/clock"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/pkg/config"
+	"go.uber.org/zap"
+)
+
+const (
+	tickDuration = 10 * time.Second
 )
 
 var UpStreamManager *Manager
 
 type Manager struct {
-	upStreams map[uint64]*UpStream
-	ctx       context.Context
-	mu        sync.Mutex
+	ups sync.Map
+	c   clock.Clock
+	ctx context.Context
 }
 
+// NewManager create a new Manager.
 func NewManager(ctx context.Context) *Manager {
-	return &Manager{upStreams: make(map[uint64]*UpStream), ctx: ctx}
+	return &Manager{c: clock.New(), ctx: ctx}
 }
 
-func (m *Manager) GetUpStream(clusterID uint64) (*UpStream, error) {
-	if upStream, ok := m.upStreams[clusterID]; ok {
-		m.mu.Lock()
-		defer m.mu.Unlock()
-		upStream.Count++
-		return upStream, nil
-	}
-
-	pdEndpoints := strings.Split(config.GetGlobalServerConfig().Debug.ServerPdAddr, ",")
-	securityConfig := config.GetGlobalServerConfig().Security
-	upStream := newUpStream(pdEndpoints, securityConfig)
-	// 之后的实现需要检查错误
-	_ = upStream.Init(m.ctx)
-
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.upStreams[clusterID] = upStream
-	upStream.Count++
-	return upStream, nil
-}
-
-func (m *Manager) ReleaseUpStream(clusterID uint64) {
-	if upStream, ok := m.upStreams[clusterID]; ok {
-		m.mu.Lock()
-		defer m.mu.Unlock()
-		upStream.Count--
-
-		if upStream.Count == 0 {
-			upStream.close()
-			delete(m.upStreams, clusterID)
+// Run will check all upStream in Manager periodly, if one upStream has not been
+// use more than 30 mintues, close it.
+func (m *Manager) Run(ctx context.Context) error {
+	ticker := m.c.Ticker(tickDuration)
+	for {
+		select {
+		case <-ctx.Done():
+			m.closeUpstreams()
+			log.Info("upstream manager exit")
+			return ctx.Err()
+		case <-ticker.C:
+			m.checkUpstreams()
 		}
 	}
+}
+
+// Get gets a upStream by clusterID, if this upStream does not exis, create it.
+func (m *Manager) Get(clusterID uint64) (*UpStream, error) {
+	if up, ok := m.ups.Load(clusterID); ok {
+		up.(*UpStream).hold()
+		up.(*UpStream).clearIdealCount()
+		return up.(*UpStream), nil
+	}
+
+	// TODO: use changefeed's pd addr in the future
+	pdEndpoints := strings.Split(config.GetGlobalServerConfig().Debug.ServerPdAddr, ",")
+	securityConfig := config.GetGlobalServerConfig().Security
+	up := newUpStream(pdEndpoints, securityConfig)
+	up.hold()
+	// 之后的实现需要检查错误
+	_ = up.Init(m.ctx)
+	m.ups.Store(clusterID, up)
+	return up, nil
+}
+
+// Release releases a upStream by clusterID
+func (m *Manager) Release(clusterID uint64) {
+	if up, ok := m.ups.Load(clusterID); ok {
+		up.(*UpStream).unhold()
+	}
+}
+
+func (m *Manager) checkUpstreams() {
+	m.ups.Range(func(k, v interface{}) bool {
+		up := v.(*UpStream)
+		if !up.isHold() {
+			up.addIdealCount()
+		}
+		if up.shouldClose() {
+			up.close()
+			m.ups.Delete(k)
+		}
+		return true
+	})
+}
+
+func (m *Manager) closeUpstreams() {
+	m.ups.Range(func(k, v interface{}) bool {
+		id := k.(uint64)
+		up := v.(*UpStream)
+		up.close()
+		log.Info("upStream closed", zap.Uint64("cluster id", id))
+		m.ups.Delete(id)
+		return true
+	})
 }

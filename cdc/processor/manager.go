@@ -99,7 +99,7 @@ func (m *Manager) Tick(stdCtx context.Context, state orchestrator.ReactorState) 
 		if !exist {
 			if m.enableNewScheduler {
 				failpoint.Inject("processorManagerHandleNewChangefeedDelay", nil)
-				upStream, err := upstream.UpStreamManager.GetUpStream(0)
+				upStream, err := upstream.UpStreamManager.Get(0)
 				if err != nil {
 					return state, err
 				}
@@ -115,7 +115,7 @@ func (m *Manager) Tick(stdCtx context.Context, state orchestrator.ReactorState) 
 					continue
 				}
 				failpoint.Inject("processorManagerHandleNewChangefeedDelay", nil)
-				upStream, err := upstream.UpStreamManager.GetUpStream(0)
+				upStream, err := upstream.UpStreamManager.Get(0)
 				if err != nil {
 					return state, err
 				}

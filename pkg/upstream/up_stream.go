@@ -17,6 +17,7 @@ import (
 	"context"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/pingcap/log"
@@ -33,11 +34,6 @@ import (
 	"google.golang.org/grpc/backoff"
 )
 
-type Resource interface {
-	// Close closes resource
-	Close()
-}
-
 type status int
 
 const (
@@ -45,6 +41,9 @@ const (
 	initializing
 	initialized
 	closed
+
+	// 30 mins
+	idealTreshold = 180
 )
 
 type UpStream struct {
@@ -58,12 +57,14 @@ type UpStream struct {
 	PDClock     *pdtime.PDClock
 	GCManager   gc.Manager
 	// 用来计算有多少个 changefeed 持有该资源，当持有数为 0 时，owner 负责关闭该资源。
-	Count uint32
+	hc int32
+	// 如果 idealCount 超过
+	idealCount int32
 	// 0 or 1, 1 indicate this upStream is initlized
 	status status
 }
 
-// close closes all resource
+// close closes all resources
 func (up *UpStream) close() {
 	if up.status == closed {
 		return
@@ -92,7 +93,7 @@ func (up *UpStream) close() {
 }
 
 func newUpStream(pdEndpoints []string, securityConfig *config.SecurityConfig) *UpStream {
-	return &UpStream{pdEndpoints: pdEndpoints, securityConfig: securityConfig}
+	return &UpStream{pdEndpoints: pdEndpoints, securityConfig: securityConfig, status: nonInit}
 }
 
 func (up *UpStream) IsInitialized() bool {
@@ -114,9 +115,7 @@ func (up *UpStream) Init(ctx context.Context) chan error {
 	if up.IsInitialized() || up.IsInitializing() {
 		return errCh
 	}
-	// 之后需要改为 异步初始化
-	// go up.init(ctx, errCh)
-	// up.status = initializing
+	// 以后需要改为异步初始化
 	up.init(ctx)
 	return errCh
 }
@@ -159,7 +158,6 @@ func (up *UpStream) init(ctx context.Context) {
 	err = version.CheckClusterVersion(ctx, up.PDClient, up.pdEndpoints, up.securityConfig, errorTiKVIncompatible)
 	if err != nil {
 		log.Error("init upstream error", zap.Error(err))
-		return
 	}
 
 	kvStore, err := kv.CreateTiStore(strings.Join(up.pdEndpoints, ","), up.securityConfig)
@@ -192,4 +190,28 @@ func (up *UpStream) init(ctx context.Context) {
 	up.GCManager = gc.NewManager(up.PDClient, up.PDClock)
 	log.Warn("upStream gcManager created")
 	up.status = initialized
+}
+
+func (up *UpStream) hold() {
+	atomic.AddInt32(&up.hc, 1)
+}
+
+func (up *UpStream) unhold() {
+	atomic.AddInt32(&up.hc, -1)
+}
+
+func (up *UpStream) isHold() bool {
+	return atomic.LoadInt32(&up.hc) == 0
+}
+
+func (up *UpStream) addIdealCount() {
+	atomic.AddInt32(&up.idealCount, 1)
+}
+
+func (up *UpStream) clearIdealCount() {
+	atomic.StoreInt32(&up.idealCount, 0)
+}
+
+func (up *UpStream) shouldClose() bool {
+	return atomic.LoadInt32(&up.idealCount) >= idealTreshold
 }

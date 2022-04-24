@@ -191,7 +191,7 @@ func (o *ownerImpl) Tick(stdCtx context.Context, rawState orchestrator.ReactorSt
 		cfReactor, exist := o.changefeeds[changefeedID]
 		if !exist {
 			// 需要获取 clusterID 来划分 changefeed 所属集群
-			upStream, err := upstream.UpStreamManager.GetUpStream(0)
+			upStream, err := upstream.UpStreamManager.Get(0)
 			if err != nil {
 				return state, errors.Trace(err)
 			}
@@ -599,7 +599,7 @@ func (o *ownerImpl) updateGCSafepoint(
 		}
 	}
 	// 此处逻辑需要修改, 需要根据上游的不同来更新 safePoint
-	upStream, err := upstream.UpStreamManager.GetUpStream(0)
+	upStream, err := upstream.UpStreamManager.Get(0)
 	if err != nil {
 		return errors.Trace(err)
 	}
