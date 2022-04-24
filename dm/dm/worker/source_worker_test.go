@@ -18,11 +18,13 @@ import (
 	"fmt"
 	"sync"
 	"sync/atomic"
+	"testing"
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	. "github.com/pingcap/check"
 	"github.com/pingcap/failpoint"
+	"github.com/stretchr/testify/require"
 	"github.com/tikv/pd/pkg/tempurl"
 	clientv3 "go.etcd.io/etcd/client/v3"
 
@@ -44,6 +46,11 @@ func mockShowMasterStatus(mockDB sqlmock.Sqlmock) {
 	rows := mockDB.NewRows([]string{"File", "Position", "Binlog_Do_DB", "Binlog_Ignore_DB", "Executed_Gtid_Set"}).AddRow(
 		"mysql-bin.000009", 11232, nil, nil, "074be7f4-f0f1-11ea-95bd-0242ac120002:1-699",
 	)
+	mockDB.ExpectQuery(`SHOW MASTER STATUS`).WillReturnRows(rows)
+}
+
+func mockShowMasterStatusNoRows(mockDB sqlmock.Sqlmock) {
+	rows := mockDB.NewRows([]string{"File", "Position", "Binlog_Do_DB", "Binlog_Ignore_DB", "Executed_Gtid_Set"})
 	mockDB.ExpectQuery(`SHOW MASTER STATUS`).WillReturnRows(rows)
 }
 
@@ -856,4 +863,28 @@ func (t *testServer) TestOperateWorkerValidatorErr(c *C) {
 	c.Assert(w.OperateWorkerValidatorErr("invalidTask", pb.ValidationErrOp_ClearErrOp, 0, true).Error(), Equals, taskNotFound.Error())
 	// subtask match
 	c.Assert(w.OperateWorkerValidatorErr("testQueryValidator", pb.ValidationErrOp_ClearErrOp, 0, true), IsNil)
+}
+
+func TestMasterBinlogOff(t *testing.T) {
+	ctx := context.Background()
+	cfg, err := config.ParseYamlAndVerify(config.SampleSourceConfig)
+	require.NoError(t, err)
+	cfg.From.Password = "no need to connect"
+
+	w, err := NewSourceWorker(cfg, nil, "", "")
+	require.NoError(t, err)
+	w.closed.Store(false)
+
+	// start task
+	var subtaskCfg config.SubTaskConfig
+	require.NoError(t, subtaskCfg.Decode(config.SampleSubtaskConfig, true))
+	require.NoError(t, w.StartSubTask(&subtaskCfg, pb.Stage_Running, pb.Stage_Stopped, true))
+
+	_, mockDB, err := conn.InitMockDBFull()
+	require.NoError(t, err)
+	mockShowMasterStatusNoRows(mockDB)
+	status, _, err := w.QueryStatus(ctx, subtaskCfg.Name)
+	require.NoError(t, err)
+	require.Len(t, status, 1)
+	require.Equal(t, subtaskCfg.Name, status[0].Name)
 }
