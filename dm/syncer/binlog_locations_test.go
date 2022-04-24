@@ -244,7 +244,7 @@ func (s *testLocationSuite) TestDMLUpdateLocationsGTID(c *C) {
 
 func (s *testLocationSuite) TestDMLUpdateLocationsPos(c *C) {
 	loc := s.loc
-	err := loc.SetGTID(nil)
+	err := loc.SetGTID(gtid.MustZeroGTIDSet(mysql.MySQLFlavor))
 	c.Assert(err, IsNil)
 
 	events := s.generateDMLEvents(c)
@@ -277,7 +277,7 @@ func (s *testLocationSuite) TestDDLUpdateLocationsGTID(c *C) {
 
 func (s *testLocationSuite) TestDDLUpdateLocationsPos(c *C) {
 	loc := s.loc
-	err := loc.SetGTID(nil)
+	err := loc.SetGTID(gtid.MustZeroGTIDSet(mysql.MySQLFlavor))
 	c.Assert(err, IsNil)
 
 	events := s.generateDDLEvents(c)

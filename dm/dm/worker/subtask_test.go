@@ -18,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/dm/pb"
@@ -46,7 +47,8 @@ var _ = Suite(&testSubTask{})
 
 func (t *testSubTask) TestCreateUnits(c *C) {
 	cfg := &config.SubTaskConfig{
-		Mode: "xxx",
+		Mode:   "xxx",
+		Flavor: mysql.MySQLFlavor,
 	}
 	worker := "worker"
 	c.Assert(createUnits(cfg, nil, worker, nil), HasLen, 0)

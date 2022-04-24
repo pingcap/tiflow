@@ -19,6 +19,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -71,7 +72,15 @@ type tablePoint struct {
 }
 
 func (b *tablePoint) String() string {
-	return fmt.Sprintf("location(%v), tableInfo(ID: %d, Name:%s, ColNum: %d, IdxNum: %d, PKIsHandle: %t)", b.location, b.ti.ID, b.ti.Name, len(b.ti.Columns), len(b.ti.Indices), b.ti.PKIsHandle)
+	if b == nil {
+		return ""
+	}
+	var buf strings.Builder
+	buf.WriteString(fmt.Sprintf("location(%s)", b.location))
+	if b.ti != nil {
+		buf.WriteString(fmt.Sprintf(", tableInfo(ID: %d, Name:%s, ColNum: %d, IdxNum: %d, PKIsHandle: %t)", b.ti.ID, b.ti.Name, len(b.ti.Columns), len(b.ti.Indices), b.ti.PKIsHandle))
+	}
+	return buf.String()
 }
 
 type binlogPoint struct {
@@ -183,7 +192,7 @@ func (b *binlogPoint) String() string {
 	b.RLock()
 	defer b.RUnlock()
 
-	return fmt.Sprintf("%v(flushed %v)", b.savedPoint, b.flushedPoint)
+	return fmt.Sprintf("%s(flushed %s)", b.savedPoint.String(), b.flushedPoint.String())
 }
 
 // SnapshotInfo contains:

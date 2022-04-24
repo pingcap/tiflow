@@ -20,6 +20,7 @@ import (
 	"strings"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/go-mysql-org/go-mysql/mysql"
 	. "github.com/pingcap/check"
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/ast"
@@ -113,7 +114,7 @@ func (s *testDDLSuite) TestCommentQuote(c *C) {
 	qec.splitDDLs, err = parserpkg.SplitDDL(stmt, qec.ddlSchema)
 	c.Assert(err, IsNil)
 
-	syncer := NewSyncer(&config.SubTaskConfig{}, nil, nil)
+	syncer := NewSyncer(&config.SubTaskConfig{Flavor: mysql.MySQLFlavor}, nil, nil)
 	syncer.tctx = tctx
 	c.Assert(syncer.genRouter(), IsNil)
 
@@ -666,7 +667,10 @@ func (s *testDDLSuite) TestAdjustDatabaseCollation(c *C) {
 	}
 
 	tctx := tcontext.Background().WithLogger(log.With(zap.String("test", "TestAdjustTableCollation")))
-	syncer := NewSyncer(&config.SubTaskConfig{CollationCompatible: config.StrictCollationCompatible}, nil, nil)
+	syncer := NewSyncer(&config.SubTaskConfig{
+		Flavor:              mysql.MySQLFlavor,
+		CollationCompatible: config.StrictCollationCompatible,
+	}, nil, nil)
 	syncer.tctx = tctx
 	p := parser.New()
 	tab := &filter.Table{
@@ -740,7 +744,10 @@ func (s *testDDLSuite) TestAdjustCollation(c *C) {
 	}
 
 	tctx := tcontext.Background().WithLogger(log.With(zap.String("test", "TestAdjustTableCollation")))
-	syncer := NewSyncer(&config.SubTaskConfig{CollationCompatible: config.StrictCollationCompatible}, nil, nil)
+	syncer := NewSyncer(&config.SubTaskConfig{
+		Flavor:              mysql.MySQLFlavor,
+		CollationCompatible: config.StrictCollationCompatible,
+	}, nil, nil)
 	syncer.tctx = tctx
 	p := parser.New()
 	tab := &filter.Table{

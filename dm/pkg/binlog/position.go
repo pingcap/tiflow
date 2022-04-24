@@ -19,7 +19,6 @@ import (
 	"strings"
 
 	gmysql "github.com/go-mysql-org/go-mysql/mysql"
-	"github.com/pingcap/errors"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/dm/pkg/gtid"
@@ -414,9 +413,10 @@ func (l *Location) ResetSuffix() {
 
 // SetGTID set new gtid for location.
 func (l *Location) SetGTID(gset gmysql.GTIDSet) error {
-	if gset == nil {
-		return errors.New("gtidSet is nil")
-	}
+	// TODO
+	//if gset == nil {
+	//	return errors.New("gtidSet is nil")
+	//}
 	l.gtidSet = gset
 	return nil
 }

@@ -754,13 +754,12 @@ func (t *testPositionSuite) TestSetGTID(c *C) {
 	loc2.gtidSet = mysqlSet2
 	c.Assert(loc.gtidSet.String(), Not(Equals), GTIDSetStr2)
 	c.Assert(loc2.gtidSet.String(), Equals, GTIDSetStr2)
-	c.Assert(CompareLocation(loc, loc2, true), Equals, 0)
 
-	err := loc2.SetGTID(mysqlSet)
+	err := loc2.SetGTID(mysqlSet2)
 	c.Assert(err, IsNil)
-	c.Assert(loc.gtidSet.String(), Equals, GTIDSetStr2)
-	c.Assert(loc2.gtidSet.String(), Equals, GTIDSetStr)
-	c.Assert(CompareLocation(loc, loc2, true), Equals, 1)
+	c.Assert(loc.gtidSet.String(), Equals, GTIDSetStr)
+	c.Assert(loc2.gtidSet.String(), Equals, GTIDSetStr2)
+	c.Assert(CompareLocation(loc, loc2, true), Equals, -1)
 
 	loc2.gtidSet = nil
 	err = loc2.SetGTID(mysqlSet)
