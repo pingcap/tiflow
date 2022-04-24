@@ -149,7 +149,6 @@ type DataValidator struct {
 	L                  log.Logger
 	fromDB             *conn.BaseDB
 	toDB               *conn.BaseDB
-	toDBConns          []*dbconn.DBConn
 	timezone           *time.Location
 	syncCfg            replication.BinlogSyncerConfig
 	streamerController *StreamerController
@@ -237,7 +236,7 @@ func (v *DataValidator) initialize() error {
 	}()
 
 	dbCfg := v.cfg.From
-	dbCfg.RawDBCfg = config.DefaultRawDBConfig().SetReadTimeout(maxDMLConnectionTimeout)
+	dbCfg.RawDBCfg = config.DefaultRawDBConfig().SetReadTimeout(maxDMLConnectionTimeout).SetMaxIdleConns(1)
 	v.fromDB, _, err = dbconn.CreateConns(tctx, v.cfg, &dbCfg, 0)
 	if err != nil {
 		return err
@@ -245,7 +244,7 @@ func (v *DataValidator) initialize() error {
 
 	dbCfg = v.cfg.To
 	dbCfg.RawDBCfg = config.DefaultRawDBConfig().SetReadTimeout(maxDMLConnectionTimeout).SetMaxIdleConns(v.workerCnt)
-	v.toDB, v.toDBConns, err = dbconn.CreateConns(tctx, v.cfg, &dbCfg, v.workerCnt)
+	v.toDB, _, err = dbconn.CreateConns(tctx, v.cfg, &dbCfg, 0)
 	if err != nil {
 		return err
 	}

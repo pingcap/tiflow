@@ -16,6 +16,7 @@ package syncer
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
 	"fmt"
 	"math"
 	"strconv"
@@ -23,6 +24,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/parser/model"
 	tidbmysql "github.com/pingcap/tidb/parser/mysql"
@@ -32,10 +34,10 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/dm/dm/config"
-	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
+	"github.com/pingcap/tiflow/dm/pkg/conn"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
-	"github.com/pingcap/tiflow/dm/syncer/dbconn"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/pkg/sqlmodel"
 )
 
@@ -43,6 +45,7 @@ const (
 	workerChannelSize = 1000
 
 	MaxAccumulatedRowBeforeValidate = 1000 // todo: make it configurable
+	queryTimeout                    = time.Minute
 )
 
 type validateFailedType int
@@ -67,7 +70,7 @@ type validateWorker struct {
 	interval           time.Duration
 	validator          *DataValidator
 	L                  log.Logger
-	conn               *dbconn.DBConn
+	db                 *conn.BaseDB
 	rowChangeCh        chan *rowValidationJob
 	batchSize          int
 	rowErrorDelayInSec int64
@@ -87,7 +90,7 @@ func newValidateWorker(v *DataValidator, id int) *validateWorker {
 		interval:           v.validateInterval,
 		validator:          v,
 		L:                  workerLog,
-		conn:               v.toDBConns[id],
+		db:                 v.toDB,
 		rowChangeCh:        make(chan *rowValidationJob, workerChannelSize),
 		batchSize:          v.cfg.ValidatorCfg.BatchQuerySize,
 		rowErrorDelayInSec: rowErrorDelayInSec,
@@ -153,8 +156,7 @@ func (vw *validateWorker) updateRowChange(job *rowValidationJob) {
 func (vw *validateWorker) validateTableChange() {
 	var err error
 	defer func() {
-		if err != nil {
-			// todo: better error handling
+		if err != nil && !isRetryableDBError(err) {
 			vw.validator.sendError(terror.ErrValidatorValidateChange.Delegate(err))
 		}
 	}()
@@ -297,7 +299,6 @@ func (vw *validateWorker) batchValidateRowChanges(rows []*rowValidationJob, dele
 		failedRows, err = vw.validateInsertAndUpdateRows(rows, cond)
 	}
 	if err != nil {
-		vw.L.Warn("fail to validate row changes of table", zap.Error(err))
 		return nil, err
 	}
 	return failedRows, nil
@@ -379,7 +380,8 @@ func (vw *validateWorker) compareData(sourceData, targetData []*sql.NullString, 
 }
 
 func (vw *validateWorker) getTargetRows(cond *Cond) (map[string][]*sql.NullString, error) {
-	tctx := tcontext.NewContext(vw.ctx, vw.L)
+	ctx, cancelFunc := context.WithTimeout(vw.ctx, queryTimeout)
+	defer cancelFunc()
 	columnNames := make([]string, 0, len(cond.Columns))
 	for _, col := range cond.Columns {
 		columnNames = append(columnNames, dbutil.ColumnName(col.Name.O))
@@ -387,8 +389,17 @@ func (vw *validateWorker) getTargetRows(cond *Cond) (map[string][]*sql.NullStrin
 	columns := strings.Join(columnNames, ", ")
 	rowsQuery := fmt.Sprintf("SELECT /*!40001 SQL_NO_CACHE */ %s FROM %s WHERE %s",
 		columns, cond.TargetTbl, cond.GetWhere())
-	rows, err := vw.conn.QuerySQL(tctx, rowsQuery, cond.GetArgs()...)
+	// query using sql.DB directly, BaseConn is more than what we need
+	rows, err := vw.db.DB.QueryContext(ctx, rowsQuery, cond.GetArgs()...)
 	if err != nil {
+		if isRetryableDBError(err) {
+			vw.L.Info("met retryable error", zap.Error(err))
+		} else {
+			vw.L.Error("failed to query",
+				zap.String("query", utils.TruncateString(rowsQuery, -1)),
+				zap.String("args", utils.TruncateInterface(cond.GetArgs(), -1)))
+			err = errors.Trace(err)
+		}
 		return nil, err
 	}
 	defer rows.Close()
@@ -431,6 +442,18 @@ func (vw *validateWorker) setPendingRowCounts(newCounts []int64) {
 		vw.pendingRowCounts[tp] = val
 		vw.validator.addPendingRowCount(rowChangeJobType(tp), diff)
 	}
+}
+
+func isRetryableDBError(err error) bool {
+	err = errors.Cause(err)
+	if dbutil.IsRetryableError(err) {
+		return true
+	}
+	switch err {
+	case driver.ErrBadConn, context.DeadlineExceeded, mysql.ErrInvalidConn:
+		return true
+	}
+	return false
 }
 
 func scanRow(rows *sql.Rows) ([]*sql.NullString, error) {

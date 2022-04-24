@@ -87,7 +87,7 @@ func (c *validatorPersistHelper) init(tctx *tcontext.Context) error {
 	defer cancelFunc()
 
 	dbCfg := c.cfg.To
-	dbCfg.RawDBCfg = config.DefaultRawDBConfig().SetReadTimeout(maxDMLConnectionTimeout)
+	dbCfg.RawDBCfg = config.DefaultRawDBConfig().SetReadTimeout(maxDMLConnectionTimeout).SetMaxIdleConns(1)
 	db, conns, err := dbconn.CreateConns(newCtx, c.cfg, &dbCfg, 1)
 	if err != nil {
 		return err
