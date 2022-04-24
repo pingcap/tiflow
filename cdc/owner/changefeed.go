@@ -24,6 +24,10 @@ import (
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/format"
 	timodel "github.com/pingcap/tidb/parser/model"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/tikv/client-go/v2/oracle"
+	"go.uber.org/zap"
+
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo"
 	schedulerv2 "github.com/pingcap/tiflow/cdc/scheduler"
@@ -32,9 +36,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	"github.com/pingcap/tiflow/pkg/util"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/tikv/client-go/v2/oracle"
-	"go.uber.org/zap"
 )
 
 type changefeed struct {
@@ -190,17 +191,12 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 		return errors.Trace(err)
 	}
 
-	pdTime, _ := ctx.GlobalVars().PDClock.CurrentTime()
+	pdTime, _ := ctx.GlobalVars().TimeAcquirer.CurrentTimeFromCached()
 	currentTs := oracle.GetPhysical(pdTime)
 
 	// CheckpointCannotProceed implies that not all tables are being replicated normally,
 	// so in that case there is no need to advance the global watermarks.
 	if newCheckpointTs != schedulerv2.CheckpointCannotProceed {
-<<<<<<< HEAD
-		pdTime, _ := ctx.GlobalVars().TimeAcquirer.CurrentTimeFromCached()
-		currentTs := oracle.GetPhysical(pdTime)
-=======
->>>>>>> d141ee67f (owner(cdc): fix two metrics problems (#4703))
 		if newResolvedTs > barrierTs {
 			newResolvedTs = barrierTs
 		}

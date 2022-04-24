@@ -20,10 +20,11 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/tikv/client-go/v2/oracle"
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
+
+	"github.com/pingcap/tiflow/pkg/retry"
 )
 
 const pdTimeUpdateInterval = 200 * time.Millisecond
@@ -46,22 +47,16 @@ type TimeAcquirerImpl struct {
 	err       error
 }
 
-<<<<<<< HEAD:pkg/pdtime/acquirer.go
 // NewTimeAcquirer return a new TimeAcquirer
-func NewTimeAcquirer(pdClient pd.Client) TimeAcquirer {
-	return &TimeAcquirerImpl{
-=======
-// NewClock return a new PDClock
-func NewClock(ctx context.Context, pdClient pd.Client) (*PDClock, error) {
-	ret := &PDClock{
->>>>>>> d141ee67f (owner(cdc): fix two metrics problems (#4703)):pkg/pdtime/clock.go
+func NewTimeAcquirer(ctx context.Context, pdClient pd.Client) (TimeAcquirer, error) {
+	ret := &TimeAcquirerImpl{
 		pdClient: pdClient,
 	}
 	physical, _, err := pdClient.GetTS(ctx)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	ret.mu.timeCache = oracle.GetTimeFromTS(oracle.ComposeTS(physical, 0))
+	ret.timeCache = oracle.GetTimeFromTS(oracle.ComposeTS(physical, 0))
 	return ret, nil
 }
 
