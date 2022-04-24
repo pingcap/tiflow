@@ -18,3 +18,11 @@ function start_task_wrong_start_time_format() {
 		"start-task $task_conf --start-time '20060102 150405'" \
 		"error while parse start-time" 1
 }
+
+function start_task_not_pass_with_message() {
+	task_conf=$1
+	error_message=$2
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"start-task $task_conf" \
+		"$2" 1
+}
