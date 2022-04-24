@@ -72,6 +72,9 @@ func startStopRelay(cmd *cobra.Command, op pb.RelayOpV2) error {
 	}
 
 	workers := cmd.Flags().Args()
+	if len(workers) > 0 {
+		common.PrintLinesf("start-relay/stop-relay with worker name will be deprecated soon. You can try stopping relay first and use start-relay without worker name instead")
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

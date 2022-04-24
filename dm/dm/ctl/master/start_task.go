@@ -14,6 +14,7 @@
 package master
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"os"
@@ -67,6 +68,21 @@ func startTaskFunc(cmd *cobra.Command, _ []string) error {
 		}
 		content = []byte(task.String())
 	}
+
+	// we check if `is-sharding` is explicitly set, to distinguish between `false` from default value
+	isShardingSet := false
+	lines := bytes.Split(content, []byte("\n"))
+	for i := range lines {
+		if bytes.HasPrefix(lines[i], []byte("is-sharding")) {
+			isShardingSet = true
+			break
+		}
+	}
+	if isShardingSet && !task.IsSharding && task.ShardMode != "" {
+		common.PrintLinesf("The behaviour of `is-sharding` and `shard-mode` is conflicting. `is-sharding` is deprecated, please use `shard-mode` only.")
+		return errors.New("please check output to see error")
+	}
+
 	sources, err := common.GetSourceArgs(cmd)
 	if err != nil {
 		return err
