@@ -412,11 +412,8 @@ func (l *Location) ResetSuffix() {
 }
 
 // SetGTID set new gtid for location.
+// TODO: don't change old Location and return a new one to copy-on-write.
 func (l *Location) SetGTID(gset gmysql.GTIDSet) error {
-	// TODO
-	//if gset == nil {
-	//	return errors.New("gtidSet is nil")
-	//}
 	l.gtidSet = gset
 	return nil
 }
@@ -424,13 +421,13 @@ func (l *Location) SetGTID(gset gmysql.GTIDSet) error {
 // GetGTID return gtidSet of Location.
 // NOTE: for most cases you should clone before call Update on the returned GTID
 // set, unless you know there's no other reference using the GTID set.
-// TODO: find a better API. Maybe don't use pointer of Location?
 func (l *Location) GetGTID() gmysql.GTIDSet {
 	return l.gtidSet
 }
 
 // Update will update GTIDSet of Location.
 // caller should be aware that this will change the GTID set of other copies.
+// TODO: don't change old Location and return a new one to copy-on-write.
 func (l *Location) Update(gtidStr string) error {
 	return l.gtidSet.Update(gtidStr)
 }
