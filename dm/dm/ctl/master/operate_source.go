@@ -136,6 +136,9 @@ func operateSourceFunc(cmd *cobra.Command, _ []string) error {
 			}
 			content = []byte(yamlStr)
 		}
+		if cfg.RelayDir != "" {
+			common.PrintLinesf("`relay-dir` in source config will be deprecated soon, please use `relay-dir` in worker config instead")
+		}
 		contents = append(contents, string(content))
 	}
 
