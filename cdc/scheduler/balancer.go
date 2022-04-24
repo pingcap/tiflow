@@ -87,15 +87,12 @@ func (r *tableNumberBalancer) FindTarget(
 		return "", false
 	}
 
-	captureWorkload := make(map[model.CaptureID]int)
+	var (
+		candidate   string
+		minWorkload = math.MaxInt64
+	)
 	for captureID := range captures {
-		captureWorkload[captureID] = r.randomizeWorkload(tables.CountTableByCaptureID(captureID))
-	}
-
-	candidate := ""
-	minWorkload := math.MaxInt64
-
-	for captureID, workload := range captureWorkload {
+		workload := r.randomizeWorkload(tables.CountTableByCaptureID(captureID))
 		if workload < minWorkload {
 			minWorkload = workload
 			candidate = captureID
@@ -103,7 +100,7 @@ func (r *tableNumberBalancer) FindTarget(
 	}
 
 	if minWorkload == math.MaxInt64 {
-		r.logger.Panic("unexpected minWorkerload == math.MaxInt64")
+		r.logger.Panic("unexpected minWorkload == math.MaxInt64")
 	}
 
 	return candidate, true
