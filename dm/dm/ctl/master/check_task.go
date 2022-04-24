@@ -14,10 +14,12 @@
 package master
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"os"
 
+	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/spf13/cobra"
 
 	"github.com/pingcap/tiflow/dm/checker"
@@ -63,10 +65,26 @@ func checkTaskFunc(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
+	// we check if `is-sharding` is explicitly set, to distinguish between `false` from default value
+	isShardingSet := false
+	lines := bytes.Split(content, []byte("\n"))
+	for i := range lines {
+		if bytes.HasPrefix(lines[i], []byte("is-sharding")) {
+			isShardingSet = true
+			break
+		}
+	}
+	task := config.NewTaskConfig()
+	yamlErr := task.RawDecode(string(content))
+	// if can't parse yaml, we ignore this check
+	if yamlErr == nil && isShardingSet && !task.IsSharding && task.ShardMode != "" {
+		common.PrintLinesf("The behaviour of `is-sharding` and `shard-mode` is conflicting. `is-sharding` is deprecated, please use `shard-mode` only.")
+		return errors.New("please check output to see error")
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// start task
 	resp := &pb.CheckTaskResponse{}
 	err = common.SendRequest(
 		ctx,
