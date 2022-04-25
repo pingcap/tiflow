@@ -186,7 +186,7 @@ func (c *validatorPersistHelper) createTable(tctx *tcontext.Context) error {
 type tableChangeDataForPersist struct {
 	sourceTable *filter.Table
 	columnCount int
-	jobs        map[string]*rowChangeDataForPersist
+	rows        map[string]*rowChangeDataForPersist
 }
 
 type rowChangeDataForPersist struct {
@@ -429,11 +429,11 @@ func (c *validatorPersistHelper) loadPendingChange(tctx *tcontext.Context) (map[
 			tblChange = &tableChangeDataForPersist{
 				sourceTable: &sourceTbl,
 				columnCount: len(row.Data),
-				jobs:        make(map[string]*rowChangeDataForPersist),
+				rows:        make(map[string]*rowChangeDataForPersist),
 			}
 			res[fullTableName] = tblChange
 		}
-		tblChange.jobs[key] = row
+		tblChange.rows[key] = row
 		rev = revision
 		count++
 	}

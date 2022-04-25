@@ -35,7 +35,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/sqlmodel"
 )
 
-func genRowChangeJob(tbl filter.Table, tblInfo *model.TableInfo, key string, tp rowChangeJobType, data []interface{}) *rowChangeJob {
+func genRowChangeJob(tbl filter.Table, tblInfo *model.TableInfo, key string, tp rowChangeJobType, data []interface{}) *rowValidationJob {
 	var beforeImage, afterImage []interface{}
 	switch tp {
 	case rowInsert:
@@ -45,7 +45,7 @@ func genRowChangeJob(tbl filter.Table, tblInfo *model.TableInfo, key string, tp 
 	default:
 		beforeImage = data
 	}
-	return &rowChangeJob{
+	return &rowValidationJob{
 		Key: key,
 		Tp:  tp,
 		row: sqlmodel.NewRowChange(
@@ -502,7 +502,7 @@ func TestValidatorWorkerGetTargetRows(t *testing.T) {
 func TestValidatorWorkerGetSourceRowsForCompare(t *testing.T) {
 	tbl1 := filter.Table{Schema: "test", Name: "tbl1"}
 	tableInfo1 := genValidateTableInfo(t, "create table tbl1(a varchar(10) primary key, b int)")
-	rows := getSourceRowsForCompare([]*rowChangeJob{
+	rows := getSourceRowsForCompare([]*rowValidationJob{
 		genRowChangeJob(tbl1, tableInfo1, "a", rowInsert, []interface{}{nil, 1}),
 		genRowChangeJob(tbl1, tableInfo1, "b", rowInsert, []interface{}{1, 2}),
 	})

@@ -81,15 +81,15 @@ const (
 // binlog changes are clustered into table changes
 // the validator validates changes of table-grain at a time.
 type tableChangeJob struct {
-	jobs map[string]*rowChangeJob
+	jobs map[string]*rowValidationJob
 }
 
 func newTableChangeJob() *tableChangeJob {
-	return &tableChangeJob{jobs: make(map[string]*rowChangeJob)}
+	return &tableChangeJob{jobs: make(map[string]*rowValidationJob)}
 }
 
 // return true if it's new added row job.
-func (tc *tableChangeJob) addOrUpdate(job *rowChangeJob) bool {
+func (tc *tableChangeJob) addOrUpdate(job *rowValidationJob) bool {
 	if val, ok := tc.jobs[job.Key]; ok {
 		val.row = job.row
 		val.Tp = job.Tp
@@ -102,7 +102,7 @@ func (tc *tableChangeJob) addOrUpdate(job *rowChangeJob) bool {
 }
 
 // change of a row.
-type rowChangeJob struct {
+type rowValidationJob struct {
 	Key string
 	Tp  rowChangeJobType
 	row *sqlmodel.RowChange
@@ -509,7 +509,7 @@ func (v *DataValidator) doValidate() {
 		// wait until syncer synced current event
 		err = v.waitSyncerSynced(currLoc)
 		if err != nil {
-			// no need to wrapped it in error_list, since err can be context.Canceled only.
+			// no need to wrap it in error_list, since err can be context.Canceled only.
 			v.sendError(err)
 			return
 		}
@@ -604,7 +604,7 @@ func (v *DataValidator) startValidateWorkers() {
 	}
 }
 
-func (v *DataValidator) dispatchRowChange(key string, row *rowChangeJob) {
+func (v *DataValidator) dispatchRowChange(key string, row *rowValidationJob) {
 	hashVal := int(utils.GenHashKey(key)) % v.workerCnt
 	v.workers[hashVal].rowChangeCh <- row
 }
@@ -736,15 +736,15 @@ func (v *DataValidator) processRowsEvent(header *replication.EventHeader, ev *re
 		if changeType == rowUpdated && rowChange.IsIdentityUpdated() {
 			delRow, insRow := rowChange.SplitUpdate()
 			delRowKey := genRowKey(delRow)
-			v.dispatchRowChange(delRowKey, &rowChangeJob{Key: delRowKey, Tp: rowDeleted, row: delRow})
+			v.dispatchRowChange(delRowKey, &rowValidationJob{Key: delRowKey, Tp: rowDeleted, row: delRow})
 			v.processedRowCounts[rowDeleted].Inc()
 
 			insRowKey := genRowKey(insRow)
-			v.dispatchRowChange(insRowKey, &rowChangeJob{Key: insRowKey, Tp: rowInsert, row: insRow})
+			v.dispatchRowChange(insRowKey, &rowValidationJob{Key: insRowKey, Tp: rowInsert, row: insRow})
 			v.processedRowCounts[rowInsert].Inc()
 		} else {
 			rowKey := genRowKey(rowChange)
-			v.dispatchRowChange(rowKey, &rowChangeJob{Key: rowKey, Tp: changeType, row: rowChange})
+			v.dispatchRowChange(rowKey, &rowValidationJob{Key: rowKey, Tp: changeType, row: rowChange})
 			v.processedRowCounts[changeType].Inc()
 		}
 	}
@@ -766,7 +766,7 @@ func (v *DataValidator) checkAndPersistCheckpointAndData(loc binlog.Location) er
 func (v *DataValidator) persistCheckpointAndData(loc binlog.Location) error {
 	var wg sync.WaitGroup
 	wg.Add(v.workerCnt)
-	flushJob := &rowChangeJob{
+	flushJob := &rowValidationJob{
 		Tp: flushCheckpoint,
 		wg: &wg,
 	}
@@ -808,7 +808,7 @@ func (v *DataValidator) loadPersistedData(tctx *tcontext.Context) error {
 		if validateTbl.message != "" {
 			return errors.New("failed to get table info " + validateTbl.message)
 		}
-		for _, row := range tblChange.jobs {
+		for _, row := range tblChange.rows {
 			var beforeImage, afterImage []interface{}
 			switch row.Tp {
 			case rowInsert:
@@ -820,7 +820,7 @@ func (v *DataValidator) loadPersistedData(tctx *tcontext.Context) error {
 				// rowDeleted
 				beforeImage = row.Data
 			}
-			pendingTblChange.jobs[row.Key] = &rowChangeJob{
+			pendingTblChange.jobs[row.Key] = &rowValidationJob{
 				Key: row.Key,
 				Tp:  row.Tp,
 				row: sqlmodel.NewRowChange(

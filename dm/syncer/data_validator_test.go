@@ -559,7 +559,7 @@ func TestGetValidationStatus(t *testing.T) {
 	validator.ctx, validator.cancel = context.WithCancel(context.Background())
 	validator.tctx = tcontext.NewContext(validator.ctx, validator.L)
 	validator.workerCnt = 1
-	validator.workers = []*validateWorker{{rowChangeCh: make(chan *rowChangeJob, workerChannelSize)}}
+	validator.workers = []*validateWorker{{rowChangeCh: make(chan *rowValidationJob, workerChannelSize)}}
 	defer close(validator.workers[0].rowChangeCh)
 	require.NoError(t, syncerObj.schemaTracker.CreateSchemaIfNotExists("db"))
 	require.NoError(t, syncerObj.schemaTracker.Exec(context.Background(), "db", createTableSQL1))

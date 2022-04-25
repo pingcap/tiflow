@@ -58,7 +58,7 @@ type validateFailedRow struct {
 	tp      validateFailedType
 	dstData []*sql.NullString
 
-	srcJob *rowChangeJob
+	srcJob *rowValidationJob
 }
 
 type validateWorker struct {
@@ -69,7 +69,7 @@ type validateWorker struct {
 	validator          *DataValidator
 	L                  log.Logger
 	conn               *dbconn.DBConn
-	rowChangeCh        chan *rowChangeJob
+	rowChangeCh        chan *rowValidationJob
 	batchSize          int
 	rowErrorDelayInSec int64
 
@@ -89,7 +89,7 @@ func newValidateWorker(v *DataValidator, id int) *validateWorker {
 		validator:          v,
 		L:                  workerLog,
 		conn:               v.toDBConns[id],
-		rowChangeCh:        make(chan *rowChangeJob, workerChannelSize),
+		rowChangeCh:        make(chan *rowValidationJob, workerChannelSize),
 		batchSize:          v.cfg.ValidatorCfg.BatchQuerySize,
 		rowErrorDelayInSec: rowErrorDelayInSec,
 
@@ -133,7 +133,7 @@ outer:
 	}
 }
 
-func (vw *validateWorker) updateRowChange(job *rowChangeJob) {
+func (vw *validateWorker) updateRowChange(job *rowValidationJob) {
 	vw.Lock()
 	defer vw.Unlock()
 	// cluster using target table
@@ -165,7 +165,7 @@ func (vw *validateWorker) validateTableChange() {
 
 	failedChanges := make(map[string]map[string]*validateFailedRow)
 	for k, tblChange := range vw.pendingChangesMap {
-		var insertUpdateChanges, deleteChanges []*rowChangeJob
+		var insertUpdateChanges, deleteChanges []*rowValidationJob
 		for _, r := range tblChange.jobs {
 			if r.Tp == rowDeleted {
 				deleteChanges = append(deleteChanges, r)
@@ -174,7 +174,7 @@ func (vw *validateWorker) validateTableChange() {
 			}
 		}
 		allFailedRows := make(map[string]*validateFailedRow)
-		validateFunc := func(rows []*rowChangeJob, isDelete bool) error {
+		validateFunc := func(rows []*rowValidationJob, isDelete bool) error {
 			if len(rows) == 0 {
 				return nil
 			}
@@ -211,7 +211,7 @@ func (vw *validateWorker) updatePendingAndErrorRows(failedChanges map[string]map
 	validateTS := time.Now().Unix()
 	for tblKey, rows := range failedChanges {
 		tblChange := vw.pendingChangesMap[tblKey]
-		newPendingRows := make(map[string]*rowChangeJob)
+		newPendingRows := make(map[string]*rowValidationJob)
 		for pk, row := range rows {
 			job := tblChange.jobs[pk]
 			if vw.validator.hasReachedSyncer() {
@@ -247,7 +247,7 @@ func (vw *validateWorker) updatePendingAndErrorRows(failedChanges map[string]map
 	vw.validator.incrErrorRowCount(pb.ValidateErrorState_NewErr, len(allErrorRows))
 }
 
-func (vw *validateWorker) validateRowChanges(rows []*rowChangeJob, deleteChange bool) (map[string]*validateFailedRow, error) {
+func (vw *validateWorker) validateRowChanges(rows []*rowValidationJob, deleteChange bool) (map[string]*validateFailedRow, error) {
 	res := make(map[string]*validateFailedRow)
 	for start := 0; start < len(rows); start += vw.batchSize {
 		end := start + vw.batchSize
@@ -278,7 +278,7 @@ func (vw *validateWorker) getErrorRows() []*validateFailedRow {
 	return vw.errorRows
 }
 
-func (vw *validateWorker) batchValidateRowChanges(rows []*rowChangeJob, deleteChange bool) (map[string]*validateFailedRow, error) {
+func (vw *validateWorker) batchValidateRowChanges(rows []*rowValidationJob, deleteChange bool) (map[string]*validateFailedRow, error) {
 	pkValues := make([][]string, 0, len(rows))
 	for _, r := range rows {
 		pkValues = append(pkValues, r.row.RowStrIdentity())
@@ -317,7 +317,7 @@ func (vw *validateWorker) validateDeletedRows(cond *Cond) (map[string]*validateF
 	return failedRows, nil
 }
 
-func (vw *validateWorker) validateInsertAndUpdateRows(rows []*rowChangeJob, cond *Cond) (map[string]*validateFailedRow, error) {
+func (vw *validateWorker) validateInsertAndUpdateRows(rows []*rowValidationJob, cond *Cond) (map[string]*validateFailedRow, error) {
 	failedRows := make(map[string]*validateFailedRow)
 	sourceRows := getSourceRowsForCompare(rows)
 	targetRows, err := vw.getTargetRows(cond)
@@ -462,7 +462,7 @@ func scanRow(rows *sql.Rows) ([]*sql.NullString, error) {
 	return result, nil
 }
 
-func getSourceRowsForCompare(jobs []*rowChangeJob) map[string][]*sql.NullString {
+func getSourceRowsForCompare(jobs []*rowValidationJob) map[string][]*sql.NullString {
 	rowMap := make(map[string][]*sql.NullString, len(jobs))
 	for _, j := range jobs {
 		r := j.row
