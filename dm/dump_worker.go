@@ -48,7 +48,7 @@ func (d *dumpWorker) InitImpl(ctx context.Context) error {
 	}
 	d.cfg.ExtStorage = h.BrExternalStorage()
 
-	d.unitHolder = newUnitHolder(dumpling.NewDumpling(d.cfg))
+	d.unitHolder = newUnitHolder(lib.WorkerDMDump, d.cfg.SourceID, dumpling.NewDumpling(d.cfg))
 	d.unitHolder.storageWriteHandle = h
 	return errors.Trace(d.unitHolder.init(ctx))
 }

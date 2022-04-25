@@ -60,7 +60,7 @@ jobs:
           $GITHUB_WORKSPACE/test/utils/wait_mysql_online.sh --host 127.0.0.1 --port 3306 --password 123456
           $GITHUB_WORKSPACE/test/utils/wait_mysql_online.sh --host 127.0.0.1 --port 4000
           cd $GITHUB_WORKSPACE/test/e2e
-          go test -count=1 -v -run=TestDMSubtask
+          go test -count=1 -v -run=TestDMJob
 
       - name: Try to dump container logs
         if: ${{ failure() }}

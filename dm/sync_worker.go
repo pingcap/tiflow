@@ -49,7 +49,7 @@ func (s *syncWorker) InitImpl(ctx context.Context) error {
 		s.cfg.ExtStorage = h.BrExternalStorage()
 	}
 
-	s.unitHolder = newUnitHolder(syncer.NewSyncer(s.cfg, nil, nil))
+	s.unitHolder = newUnitHolder(lib.WorkerDMSync, s.cfg.SourceID, syncer.NewSyncer(s.cfg, nil, nil))
 	return errors.Trace(s.unitHolder.init(ctx))
 }
 

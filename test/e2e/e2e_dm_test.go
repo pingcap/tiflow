@@ -13,7 +13,7 @@ import (
 	"github.com/hanfei1991/microcosm/pb"
 )
 
-func TestDMSubtask(t *testing.T) {
+func TestDMJob(t *testing.T) {
 	ctx := context.Background()
 	masterClient, err := client.NewMasterClient(ctx, []string{"127.0.0.1:10240"})
 	require.NoError(t, err)
@@ -47,7 +47,7 @@ func TestDMSubtask(t *testing.T) {
 	}()
 
 	// clean up
-	noError(tidb.Exec("drop database if exists dmmeta"))
+	noError(tidb.Exec("drop database if exists dm_meta"))
 	noError(tidb.Exec("drop database if exists test"))
 	noError(mysql.Exec("drop database if exists test"))
 
@@ -56,7 +56,7 @@ func TestDMSubtask(t *testing.T) {
 	noError(mysql.Exec("create table test.t1(c int primary key)"))
 	noError(mysql.Exec("insert into test.t1 values(1)"))
 
-	dmSubtask, err := ioutil.ReadFile("./dm-subtask.toml")
+	dmJobCfg, err := ioutil.ReadFile("./dm-job.yaml")
 	require.NoError(t, err)
 	// TODO: in #272, Server.jobManager is assigned after Server.leader.Store(), so even if we pass the PreRPC check,
 	// Server.jobManager may not be assigned yet. We simply sleep here
@@ -64,7 +64,7 @@ func TestDMSubtask(t *testing.T) {
 	require.Eventually(t, func() bool {
 		resp, err := masterClient.SubmitJob(ctx, &pb.SubmitJobRequest{
 			Tp:     pb.JobType_DM,
-			Config: dmSubtask,
+			Config: dmJobCfg,
 		})
 		return err == nil && resp.Err == nil
 	}, time.Second*5, time.Millisecond*100)
@@ -86,7 +86,7 @@ func TestDMSubtask(t *testing.T) {
 				return false
 			}
 			return true
-		}, 10*time.Second, 500*time.Millisecond)
+		}, 30*time.Second, 500*time.Millisecond)
 	}
 	waitRow("c = 1")
 

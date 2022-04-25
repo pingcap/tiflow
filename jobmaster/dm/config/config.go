@@ -6,7 +6,7 @@ import (
 	"github.com/pingcap/errors"
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
 	"github.com/pingcap/tidb-tools/pkg/column-mapping"
-	"github.com/pingcap/tidb-tools/pkg/filter"
+	"github.com/pingcap/tidb/util/filter"
 	router "github.com/pingcap/tidb/util/table-router"
 	dmconfig "github.com/pingcap/tiflow/dm/dm/config"
 	"gopkg.in/yaml.v2"
@@ -79,6 +79,15 @@ func (c *JobCfg) DecodeFile(fpath string) error {
 	}
 
 	if err = yaml.UnmarshalStrict(bs, c); err != nil {
+		return err
+	}
+	return c.adjust()
+}
+
+// TODO: unify config type
+// Now, dmJobmaster use yaml, dmWorker use toml, and lib use json...
+func (c *JobCfg) Decode(content []byte) error {
+	if err := yaml.UnmarshalStrict(content, c); err != nil {
 		return err
 	}
 	return c.adjust()
@@ -167,6 +176,7 @@ func (c *TaskCfg) ToDMSubTaskCfg() *dmconfig.SubTaskConfig {
 	cfg.Experimental = c.Experimental
 	cfg.CollationCompatible = c.CollationCompatible
 	cfg.SourceID = c.Upstreams[0].SourceID
+	cfg.BAList = c.BAList[c.Upstreams[0].BAListName]
 
 	cfg.RouteRules = make([]*router.TableRule, len(c.Upstreams[0].RouteRules))
 	for j, name := range c.Upstreams[0].RouteRules {

@@ -36,7 +36,8 @@ upstreams:
   route-rules:
   - route-01
   - route-02
-  expression-filters: []
+  expression-filters:
+    - "bit"
   black-white-list: ""
   block-allow-list: balist-01
   mydumper-config-name: dump-01
@@ -64,7 +65,8 @@ upstreams:
   route-rules:
   - route-01
   - route-02
-  expression-filters: []
+  expression-filters:
+    - "c_null"
   black-white-list: ""
   block-allow-list: balist-01
   mydumper-config-name: dump-01
@@ -132,7 +134,15 @@ column-mappings:
     - t_
     - ""
     create-table-query: ""
-expression-filter: {}
+expression-filter:
+  c_null:
+    schema: "expr_filter"
+    table: "t1"
+    insert-value-expr: "c_null IS NOT NULL"
+  bit:
+    schema: "expr_filter"
+    table: "t1"
+    insert-value-expr: "c_bit = b'1111'"
 #black-white-list: {}
 block-allow-list:
   balist-01:

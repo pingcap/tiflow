@@ -39,16 +39,19 @@ type JobMaster struct {
 	checkpointAgent       checkpoint.Agent
 }
 
-func RegisterWorker() {
-	constructor := func(ctx *dcontext.Context, id libModel.WorkerID, masterID libModel.MasterID, config lib.WorkerConfig) lib.WorkerImpl {
-		return NewDMJobMaster(ctx, id, masterID, config)
-	}
+type dmJobMasterFactory struct{}
 
-	factory := registry.NewTomlWorkerFactory(constructor, &config.JobCfg{})
-	registry.GlobalWorkerRegistry().MustRegisterWorkerType(lib.DMJobMaster, factory)
+func RegisterWorker() {
+	registry.GlobalWorkerRegistry().MustRegisterWorkerType(lib.DMJobMaster, dmJobMasterFactory{})
 }
 
-func NewDMJobMaster(ctx *dcontext.Context, workerID libModel.WorkerID, masterID libModel.MasterID, conf lib.WorkerConfig) *JobMaster {
+func (j dmJobMasterFactory) DeserializeConfig(configBytes []byte) (registry.WorkerConfig, error) {
+	cfg := &config.JobCfg{}
+	err := cfg.Decode(configBytes)
+	return cfg, err
+}
+
+func (j dmJobMasterFactory) NewWorkerImpl(ctx *dcontext.Context, workerID libModel.WorkerID, masterID libModel.MasterID, conf lib.WorkerConfig) (lib.WorkerImpl, error) {
 	log.L().Info("new dm jobmaster", zap.String("id", workerID))
 	jm := &JobMaster{
 		workerID:        workerID,
@@ -63,7 +66,7 @@ func NewDMJobMaster(ctx *dcontext.Context, workerID libModel.WorkerID, masterID 
 		jm.messageHandlerManager = m
 		return m, nil
 	})
-	return jm
+	return jm, nil
 }
 
 func (jm *JobMaster) createComponents() error {

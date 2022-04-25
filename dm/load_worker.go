@@ -50,7 +50,7 @@ func (l *loadWorker) InitImpl(ctx context.Context) error {
 	// `workerName` and `etcdClient` of `NewLightning` are not used in dataflow
 	// scenario, we just use readable values here.
 	workerName := "dataflow-worker"
-	l.unitHolder = newUnitHolder(loader.NewLightning(l.cfg, nil, workerName))
+	l.unitHolder = newUnitHolder(lib.WorkerDMLoad, l.cfg.SourceID, loader.NewLightning(l.cfg, nil, workerName))
 	return errors.Trace(l.unitHolder.init(ctx))
 }
 

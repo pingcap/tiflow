@@ -384,7 +384,8 @@ func (m *WorkerManager) OnWorkerStatusUpdateMessage(msg *statusutil.WorkerStatus
 		if err != nil {
 			log.L().Warn("Error encountered when processing status update",
 				zap.String("master-id", m.masterID),
-				zap.Any("message", msg))
+				zap.Any("message", msg),
+				zap.Error(err))
 		}
 		return
 	}

@@ -19,7 +19,6 @@ enable-heartbeat = false
 timezone = ""
 relay-dir = ""
 use-relay = false
-expression-filter = []
 mydumper-path = "./bin/mydumper"
 threads = 4
 chunk-filesize = "64"
@@ -97,9 +96,29 @@ ansi-quotes = false
   arguments = ["1", "", "t_", ""]
   create-table-query = ""
 
+[[expression-filter]]
+  schema = "expr_filter"
+  table = "t1"
+  insert-value-expr = "c_bit = b'1111'"
+  update-old-value-expr = ""
+  update-new-value-expr = ""
+  delete-value-expr = ""
+
+[block-allow-list]
+  do-dbs = ["dmctl"]
+  ignore-tables = []
+  ignore-dbs = []
+
+  [[block-allow-list.do-tables]]
+    db-name = "dmctl"
+    tbl-name = "~^t_[\\d]+"
+
 [ValidatorCfg]
   mode = ""
   worker-count = 0
+  row-error-delay = "0s"
+  meta-flush-interval = "0s"
+  batch-query-size = 0
 
 [experimental]
   async-checkpoint-flush = false

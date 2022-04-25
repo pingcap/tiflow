@@ -1,15 +1,14 @@
 package dm
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"io/ioutil"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/BurntSushi/toml"
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -92,18 +91,15 @@ func (t *testDMJobmasterSuite) TestRunDMJobMaster() {
 	dctx = dctx.WithDeps(dp)
 
 	// submit-job
-	jobCfg := &config.JobCfg{}
-	require.NoError(t.T(), jobCfg.DecodeFile(jobTemplatePath))
-	var b bytes.Buffer
-	err := toml.NewEncoder(&b).Encode(jobCfg)
+	cfgBytes, err := ioutil.ReadFile(jobTemplatePath)
 	require.NoError(t.T(), err)
-	cfgBytes := b.Bytes()
 	jobmaster, err := registry.GlobalWorkerRegistry().CreateWorker(dctx, lib.DMJobMaster, "dm-jobmaster", libMetadata.JobManagerUUID, cfgBytes)
 	require.NoError(t.T(), err)
 
 	// Init
 	_, mockDB, err := conn.InitMockDBFull()
 	require.NoError(t.T(), err)
+	mockDB.ExpectExec(".*").WillReturnResult(sqlmock.NewResult(1, 1))
 	mockDB.ExpectExec(".*").WillReturnResult(sqlmock.NewResult(1, 1))
 	mockDB.ExpectExec(".*").WillReturnResult(sqlmock.NewResult(1, 1))
 	require.NoError(t.T(), jobmaster.Init(context.Background()))
@@ -309,7 +305,6 @@ type MockBaseJobmaster struct {
 	mock.Mock
 
 	lib.BaseJobMaster
-	metaKVClient metaclient.KVClient
 }
 
 func (m *MockBaseJobmaster) JobMasterID() libModel.MasterID {

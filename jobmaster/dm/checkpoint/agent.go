@@ -84,6 +84,10 @@ func (c *AgentImpl) Init(ctx context.Context) error {
 	}
 	defer db.Close()
 
+	if err := createMetaDatabase(ctx, cfg, db); err != nil {
+		return err
+	}
+
 	// NOTE: update-job changes the TaskMode is not supported now.
 	if cfg.TaskMode != dmconfig.ModeIncrement {
 		if err := createLoadCheckpointTable(ctx, cfg, db); err != nil {
@@ -130,13 +134,19 @@ func (c *AgentImpl) IsFresh(ctx context.Context, workerType lib.WorkerType, task
 	return isSyncFresh(ctx, task.Cfg, db)
 }
 
+func createMetaDatabase(ctx context.Context, cfg *config.JobCfg, db *conn.BaseDB) error {
+	query := fmt.Sprintf("CREATE DATABASE IF NOT EXISTS %s", dbutil.ColumnName(cfg.MetaSchema))
+	_, err := db.DB.ExecContext(ctx, query)
+	return err
+}
+
 func createLoadCheckpointTable(ctx context.Context, cfg *config.JobCfg, db *conn.BaseDB) error {
-	_, err := db.DB.ExecContext(ctx, loadCheckpointTable, loadTableName(cfg))
+	_, err := db.DB.ExecContext(ctx, fmt.Sprintf(loadCheckpointTable, loadTableName(cfg)))
 	return err
 }
 
 func createSyncCheckpointTable(ctx context.Context, cfg *config.JobCfg, db *conn.BaseDB) error {
-	_, err := db.DB.ExecContext(ctx, syncCheckpointTable, syncTableName(cfg))
+	_, err := db.DB.ExecContext(ctx, fmt.Sprintf(syncCheckpointTable, syncTableName(cfg)))
 	return err
 }
 
@@ -178,9 +188,10 @@ func onlineDDLName(cfg *config.JobCfg) string {
 }
 
 func isLoadFresh(ctx context.Context, taskCfg *config.TaskCfg, db *conn.BaseDB) (bool, error) {
-	query := "SELECT status FROM %s WHERE `task_name` = ? AND `source_name` = ?"
+	// nolint:gosec
+	query := fmt.Sprintf("SELECT status FROM %s WHERE `task_name` = ? AND `source_name` = ?", loadTableName((*config.JobCfg)(taskCfg)))
 	var status string
-	err := db.DB.QueryRowContext(ctx, query, loadTableName((*config.JobCfg)(taskCfg)), taskCfg.Name, taskCfg.Upstreams[0].SourceID).Scan(&status)
+	err := db.DB.QueryRowContext(ctx, query, taskCfg.Name, taskCfg.Upstreams[0].SourceID).Scan(&status)
 	switch {
 	case err == nil:
 		return status == "init", nil
@@ -192,9 +203,10 @@ func isLoadFresh(ctx context.Context, taskCfg *config.TaskCfg, db *conn.BaseDB) 
 }
 
 func isSyncFresh(ctx context.Context, taskCfg *config.TaskCfg, db *conn.BaseDB) (bool, error) {
-	query := "SELECT 1 FROM %s WHERE `id` = ? AND `is_global` = true"
+	// nolint:gosec
+	query := fmt.Sprintf("SELECT 1 FROM %s WHERE `id` = ? AND `is_global` = true", syncTableName((*config.JobCfg)(taskCfg)))
 	var status string
-	err := db.DB.QueryRowContext(ctx, query, syncTableName((*config.JobCfg)(taskCfg)), taskCfg.Upstreams[0].SourceID).Scan(&status)
+	err := db.DB.QueryRowContext(ctx, query, taskCfg.Upstreams[0].SourceID).Scan(&status)
 	switch {
 	case err == nil:
 		return false, nil

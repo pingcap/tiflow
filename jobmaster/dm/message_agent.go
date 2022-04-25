@@ -71,7 +71,9 @@ func (agent *MessageAgent) CreateWorker(ctx context.Context, taskID string, work
 	if _, ok := agent.sendHandles.Load(taskID); ok {
 		return "", errors.Errorf("worker for task %s already exist", taskID)
 	}
-	return agent.master.CreateWorker(workerType, taskCfg, 1)
+	// TODO: deprecated subtask cfg
+	subTaskCfg := taskCfg.ToDMSubTaskCfg()
+	return agent.master.CreateWorker(workerType, subTaskCfg, 1)
 }
 
 func (agent *MessageAgent) StopWorker(ctx context.Context, taskID libModel.WorkerID, workerID libModel.WorkerID) error {

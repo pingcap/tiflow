@@ -2,9 +2,12 @@ package dm
 
 import (
 	"context"
+	"encoding/json"
 	"sync"
 	"time"
 
+	"github.com/hanfei1991/microcosm/jobmaster/dm/metadata"
+	"github.com/hanfei1991/microcosm/jobmaster/dm/runtime"
 	"github.com/hanfei1991/microcosm/lib"
 	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/pkg/externalresource/broker"
@@ -17,6 +20,7 @@ import (
 	"go.uber.org/zap"
 )
 
+// unitHolder wrap the dm-worker unit.
 type unitHolder struct {
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -24,13 +28,16 @@ type unitHolder struct {
 	autoResume         *worker.AutoResumeInfo
 	storageWriteHandle broker.Handle
 
+	workerType  lib.WorkerType
+	task        string
 	unit        unit.Unit
 	resultCh    chan pb.ProcessResult
 	lastResult  *pb.ProcessResult // TODO: check if framework can persist result
+	lastStage   worker.ResumeStrategy
 	processOnce sync.Once
 }
 
-func newUnitHolder(u unit.Unit) *unitHolder {
+func newUnitHolder(workerType lib.WorkerType, task string, u unit.Unit) *unitHolder {
 	ctx, cancel := context.WithCancel(context.Background())
 	// TODO: support config later
 	// nolint:errcheck
@@ -47,8 +54,11 @@ func newUnitHolder(u unit.Unit) *unitHolder {
 	return &unitHolder{
 		ctx:        ctx,
 		cancel:     cancel,
+		workerType: workerType,
+		task:       task,
 		autoResume: autoResume,
 		unit:       u,
+		lastStage:  -1, // -1 represents init stage, refactor later.
 		resultCh:   make(chan pb.ProcessResult, 1),
 	}
 }
@@ -77,19 +87,41 @@ func (u *unitHolder) getResult() (bool, *pb.ProcessResult) {
 }
 
 func (u *unitHolder) tryUpdateStatus(ctx context.Context, base lib.BaseWorker) error {
+	// TODO: refactor in later pr
+	status := runtime.DefaultTaskStatus{
+		Unit:  u.workerType,
+		Task:  u.task,
+		Stage: metadata.StageRunning,
+	}
+
 	hasResult, result := u.getResult()
 	if !hasResult {
-		// also need to clean old result
-		s := libModel.WorkerStatus{
-			Code: libModel.WorkerStatusNormal,
+		// update status when task first runs.
+		if u.lastStage == 0 {
+			return nil
 		}
-		// nolint:errcheck
-		_ = base.UpdateStatus(ctx, s)
+		statusBytes, err := json.Marshal(status)
+		if err != nil {
+			return err
+		}
+		s := libModel.WorkerStatus{
+			Code:     libModel.WorkerStatusNormal,
+			ExtBytes: statusBytes,
+		}
+		err = base.UpdateStatus(ctx, s)
+		if err == nil {
+			u.lastStage = 0 // 0 represents task is running
+		}
 		return nil
 	}
 
 	// if task is finished
 	if len(result.Errors) == 0 {
+		status.Stage = metadata.StageFinished
+		statusBytes, err := json.Marshal(status)
+		if err != nil {
+			return err
+		}
 		if u.storageWriteHandle != nil {
 			// try to persist storage, if failed, retry next tick
 			err := u.storageWriteHandle.Persist(ctx)
@@ -100,12 +132,14 @@ func (u *unitHolder) tryUpdateStatus(ctx context.Context, base lib.BaseWorker) e
 		}
 
 		s := libModel.WorkerStatus{
-			Code: libModel.WorkerStatusFinished,
+			Code:     libModel.WorkerStatusFinished,
+			ExtBytes: statusBytes,
 		}
 		return base.Exit(ctx, s, nil)
 	}
 
-	u.unit.Pause()
+	log.L().Info("task runs with error", zap.Any("error msg", result.Errors))
+
 	subtaskStage := &pb.SubTaskStatus{
 		Stage:  pb.Stage_Paused,
 		Result: result,
@@ -116,24 +150,44 @@ func (u *unitHolder) tryUpdateStatus(ctx context.Context, base lib.BaseWorker) e
 
 	switch strategy {
 	case worker.ResumeSkip:
+		// update status on first skip
+		if u.lastStage == worker.ResumeSkip {
+			return nil
+		}
+		u.unit.Pause()
+		u.lastStage = worker.ResumeSkip
 		// wait on next auto resume
+		status.Stage = metadata.StagePaused
+		statusBytes, err := json.Marshal(status)
+		if err != nil {
+			return err
+		}
 		s := libModel.WorkerStatus{
 			Code:         libModel.WorkerStatusError,
 			ErrorMessage: unit.JoinProcessErrors(result.Errors),
+			ExtBytes:     statusBytes,
 		}
 		// TODO: UpdateStatus too frequently?
 		// nolint:errcheck
 		_ = base.UpdateStatus(ctx, s)
 		return nil
 	case worker.ResumeDispatch:
+		u.unit.Pause()
+		u.lastStage = worker.ResumeDispatch
 		// can try auto resume
 		u.lastResult = nil
 		go u.unit.Resume(u.ctx, u.resultCh)
 		return nil
 	default:
+		status.Stage = metadata.StagePaused
+		statusBytes, err := json.Marshal(status)
+		if err != nil {
+			return err
+		}
 		s := libModel.WorkerStatus{
 			Code:         libModel.WorkerStatusError,
 			ErrorMessage: unit.JoinProcessErrors(result.Errors),
+			ExtBytes:     statusBytes,
 		}
 		return base.Exit(ctx, s, nil)
 	}

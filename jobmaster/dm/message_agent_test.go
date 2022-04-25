@@ -72,17 +72,21 @@ func TestOperateWorker(t *testing.T) {
 	messageAgent := NewMessageAgent(nil, "mock-jobmaster", mockMasterImpl)
 	task1 := "task1"
 	worker1 := "worker1"
+	jobCfg := &config.JobCfg{}
+	require.NoError(t, jobCfg.DecodeFile(jobTemplatePath))
+	taskCfgs := jobCfg.ToTaskConfigs()
+	taskCfg := taskCfgs[jobCfg.Upstreams[0].SourceID]
 
 	// create worker
-	_, err := messageAgent.CreateWorker(context.Background(), task1, lib.WorkerDMDump, &config.TaskCfg{})
+	_, err := messageAgent.CreateWorker(context.Background(), task1, lib.WorkerDMDump, taskCfg)
 	require.NoError(t, err)
 	// create again
-	_, err = messageAgent.CreateWorker(context.Background(), task1, lib.WorkerDMDump, &config.TaskCfg{})
+	_, err = messageAgent.CreateWorker(context.Background(), task1, lib.WorkerDMDump, taskCfg)
 	require.NoError(t, err)
 	// create again
 	workerHandle := &master.MockHandle{WorkerID: "worker1", WorkerStatus: &libModel.WorkerStatus{}, IsTombstone: true}
 	messageAgent.UpdateWorkerHandle(task1, workerHandle)
-	_, err = messageAgent.CreateWorker(context.Background(), task1, lib.WorkerDMDump, &config.TaskCfg{})
+	_, err = messageAgent.CreateWorker(context.Background(), task1, lib.WorkerDMDump, taskCfg)
 	require.EqualError(t, err, fmt.Sprintf("worker for task %s already exist", task1))
 
 	// destroy worker

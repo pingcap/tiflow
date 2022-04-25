@@ -3,6 +3,7 @@ package checkpoint
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"regexp"
 	"testing"
 
@@ -30,15 +31,18 @@ func TestCheckpoint(t *testing.T) {
 	jobCfg := &config.JobCfg{Name: "test", MetaSchema: "meta", TaskMode: dmconfig.ModeAll}
 	db, mock, err := conn.InitMockDBFull()
 	require.NoError(t, err)
-	mock.ExpectExec(regexp.QuoteMeta(`CREATE TABLE IF NOT EXISTS %s (
+	mock.ExpectExec(regexp.QuoteMeta(fmt.Sprintf(`CREATE DATABASE IF NOT EXISTS %s`, "`meta`"))).WillReturnResult(sqlmock.NewResult(1, 1))
+	require.NoError(t, createMetaDatabase(context.Background(), jobCfg, conn.NewBaseDB(db)))
+
+	mock.ExpectExec(regexp.QuoteMeta(fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s (
 		task_name varchar(255) NOT NULL,
 		source_name varchar(255) NOT NULL,
 		status varchar(10) NOT NULL DEFAULT 'init' COMMENT 'init,running,finished',
 		PRIMARY KEY (task_name, source_name)
-	);`)).WithArgs("`meta`.`test_lightning_checkpoint_list`").WillReturnResult(sqlmock.NewResult(1, 1))
+	);`, "`meta`.`test_lightning_checkpoint_list`"))).WillReturnResult(sqlmock.NewResult(1, 1))
 	require.NoError(t, createLoadCheckpointTable(context.Background(), jobCfg, conn.NewBaseDB(db)))
 
-	mock.ExpectExec(regexp.QuoteMeta(`CREATE TABLE IF NOT EXISTS %s (
+	mock.ExpectExec(regexp.QuoteMeta(fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s (
 		id VARCHAR(32) NOT NULL,
 		cp_schema VARCHAR(128) NOT NULL,
 		cp_table VARCHAR(128) NOT NULL,
@@ -53,7 +57,7 @@ func TestCheckpoint(t *testing.T) {
 		create_time timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
 		update_time timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 		UNIQUE KEY uk_id_schema_table (id, cp_schema, cp_table)
-	)`)).WithArgs("`meta`.`test_syncer_checkpoint`").WillReturnResult(sqlmock.NewResult(1, 1))
+	)`, "`meta`.`test_syncer_checkpoint`"))).WillReturnResult(sqlmock.NewResult(1, 1))
 	require.NoError(t, createSyncCheckpointTable(context.Background(), jobCfg, conn.NewBaseDB(db)))
 
 	mock.ExpectExec(regexp.QuoteMeta("DROP TABLE IF EXISTS `meta`.`test_lightning_checkpoint_list`")).WillReturnResult(sqlmock.NewResult(1, 1))
@@ -74,9 +78,17 @@ func TestCheckpointLifeCycle(t *testing.T) {
 	require.Equal(t, checkpointAgent.GetConfig(), jobCfg2)
 	require.NotEqual(t, jobCfg, jobCfg2)
 
-	// create load checkpoint error
+	// create meta database error
 	_, mock, err := conn.InitMockDBFull()
 	require.NoError(t, err)
+	mock.ExpectExec(".*").WillReturnError(errors.New("invalid connection"))
+	require.Error(t, checkpointAgent.Init(context.Background()))
+	require.NoError(t, mock.ExpectationsWereMet())
+
+	// create load checkpoint error
+	_, mock, err = conn.InitMockDBFull()
+	require.NoError(t, err)
+	mock.ExpectExec(".*").WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectExec(".*").WillReturnError(errors.New("invalid connection"))
 	require.Error(t, checkpointAgent.Init(context.Background()))
 	require.NoError(t, mock.ExpectationsWereMet())
@@ -85,6 +97,7 @@ func TestCheckpointLifeCycle(t *testing.T) {
 	_, mock, err = conn.InitMockDBFull()
 	require.NoError(t, err)
 	mock.ExpectExec(".*").WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectExec(".*").WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectExec(".*").WillReturnError(errors.New("invalid connection"))
 	require.Error(t, checkpointAgent.Init(context.Background()))
 	require.NoError(t, mock.ExpectationsWereMet())
@@ -92,6 +105,7 @@ func TestCheckpointLifeCycle(t *testing.T) {
 	// create all checkpoint tables
 	_, mock, err = conn.InitMockDBFull()
 	require.NoError(t, err)
+	mock.ExpectExec(".*").WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectExec(".*").WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectExec(".*").WillReturnResult(sqlmock.NewResult(1, 1))
 	require.NoError(t, checkpointAgent.Init(context.Background()))
@@ -103,6 +117,7 @@ func TestCheckpointLifeCycle(t *testing.T) {
 	_, mock, err = conn.InitMockDBFull()
 	require.NoError(t, err)
 	mock.ExpectExec(".*").WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectExec(".*").WillReturnResult(sqlmock.NewResult(1, 1))
 	require.NoError(t, checkpointAgent.Init(context.Background()))
 	require.NoError(t, mock.ExpectationsWereMet())
 
@@ -111,6 +126,7 @@ func TestCheckpointLifeCycle(t *testing.T) {
 	checkpointAgent.UpdateConfig(jobCfg)
 	_, mock, err = conn.InitMockDBFull()
 	require.NoError(t, err)
+	mock.ExpectExec(".*").WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectExec(".*").WillReturnResult(sqlmock.NewResult(1, 1))
 	require.NoError(t, checkpointAgent.Init(context.Background()))
 	require.NoError(t, mock.ExpectationsWereMet())
@@ -174,60 +190,60 @@ func TestIsFresh(t *testing.T) {
 
 	loadTableName := "`meta`.`test_lightning_checkpoint_list`"
 	syncTableName := "`meta`.`test_syncer_checkpoint`"
-	query := "SELECT status FROM %s WHERE `task_name` = ? AND `source_name` = ?"
+	query := fmt.Sprintf("SELECT status FROM %s WHERE `task_name` = ? AND `source_name` = ?", loadTableName)
 	_, mock, err := conn.InitMockDBFull()
 	require.NoError(t, err)
-	mock.ExpectQuery(regexp.QuoteMeta(query)).WithArgs(loadTableName, "test", source1).WillReturnRows(sqlmock.NewRows([]string{"status"}).AddRow("init"))
+	mock.ExpectQuery(regexp.QuoteMeta(query)).WithArgs("test", source1).WillReturnRows(sqlmock.NewRows([]string{"status"}).AddRow("init"))
 	isFresh, err = checkpointAgent.IsFresh(context.Background(), lib.WorkerDMLoad, &metadata.Task{Cfg: taskCfg})
 	require.NoError(t, err)
 	require.True(t, isFresh)
 
 	_, mock, err = conn.InitMockDBFull()
 	require.NoError(t, err)
-	mock.ExpectQuery(regexp.QuoteMeta(query)).WithArgs(loadTableName, "test", source1).WillReturnRows(sqlmock.NewRows([]string{"status"}).AddRow("running"))
+	mock.ExpectQuery(regexp.QuoteMeta(query)).WithArgs("test", source1).WillReturnRows(sqlmock.NewRows([]string{"status"}).AddRow("running"))
 	isFresh, err = checkpointAgent.IsFresh(context.Background(), lib.WorkerDMLoad, &metadata.Task{Cfg: taskCfg})
 	require.NoError(t, err)
 	require.False(t, isFresh)
 
 	_, mock, err = conn.InitMockDBFull()
 	require.NoError(t, err)
-	mock.ExpectQuery(regexp.QuoteMeta(query)).WithArgs(loadTableName, "test", source1).WillReturnError(sql.ErrNoRows)
+	mock.ExpectQuery(regexp.QuoteMeta(query)).WithArgs("test", source1).WillReturnError(sql.ErrNoRows)
 	isFresh, err = checkpointAgent.IsFresh(context.Background(), lib.WorkerDMLoad, &metadata.Task{Cfg: taskCfg})
 	require.NoError(t, err)
 	require.True(t, isFresh)
 
 	_, mock, err = conn.InitMockDBFull()
 	require.NoError(t, err)
-	mock.ExpectQuery(regexp.QuoteMeta(query)).WithArgs(loadTableName, "test", source1).WillReturnError(errors.New("invalid connection"))
+	mock.ExpectQuery(regexp.QuoteMeta(query)).WithArgs("test", source1).WillReturnError(errors.New("invalid connection"))
 	isFresh, err = checkpointAgent.IsFresh(context.Background(), lib.WorkerDMLoad, &metadata.Task{Cfg: taskCfg})
 	require.Error(t, err)
 	require.False(t, isFresh)
 
 	_, mock, err = conn.InitMockDBFull()
 	require.NoError(t, err)
-	mock.ExpectQuery(regexp.QuoteMeta(query)).WithArgs(loadTableName, "test", source1).WillReturnError(errors.New("invalid connection"))
+	mock.ExpectQuery(regexp.QuoteMeta(query)).WithArgs("test", source1).WillReturnError(errors.New("invalid connection"))
 	isFresh, err = checkpointAgent.IsFresh(context.Background(), lib.WorkerDMLoad, &metadata.Task{Cfg: taskCfg})
 	require.Error(t, err)
 	require.False(t, isFresh)
 
-	query = "SELECT 1 FROM %s WHERE `id` = ? AND `is_global` = true"
+	query = fmt.Sprintf("SELECT 1 FROM %s WHERE `id` = ? AND `is_global` = true", syncTableName)
 	_, mock, err = conn.InitMockDBFull()
 	require.NoError(t, err)
-	mock.ExpectQuery(regexp.QuoteMeta(query)).WithArgs(syncTableName, source1).WillReturnRows(sqlmock.NewRows([]string{"1"}).AddRow(1))
+	mock.ExpectQuery(regexp.QuoteMeta(query)).WithArgs(source1).WillReturnRows(sqlmock.NewRows([]string{"1"}).AddRow(1))
 	isFresh, err = checkpointAgent.IsFresh(context.Background(), lib.WorkerDMSync, &metadata.Task{Cfg: taskCfg})
 	require.NoError(t, err)
 	require.False(t, isFresh)
 
 	_, mock, err = conn.InitMockDBFull()
 	require.NoError(t, err)
-	mock.ExpectQuery(regexp.QuoteMeta(query)).WithArgs(syncTableName, source1).WillReturnError(sql.ErrNoRows)
+	mock.ExpectQuery(regexp.QuoteMeta(query)).WithArgs(source1).WillReturnError(sql.ErrNoRows)
 	isFresh, err = checkpointAgent.IsFresh(context.Background(), lib.WorkerDMSync, &metadata.Task{Cfg: taskCfg})
 	require.NoError(t, err)
 	require.True(t, isFresh)
 
 	_, mock, err = conn.InitMockDBFull()
 	require.NoError(t, err)
-	mock.ExpectQuery(regexp.QuoteMeta(query)).WithArgs(syncTableName, source1).WillReturnError(errors.New("invalid connection"))
+	mock.ExpectQuery(regexp.QuoteMeta(query)).WithArgs(source1).WillReturnError(errors.New("invalid connection"))
 	isFresh, err = checkpointAgent.IsFresh(context.Background(), lib.WorkerDMSync, &metadata.Task{Cfg: taskCfg})
 	require.Error(t, err)
 	require.False(t, isFresh)

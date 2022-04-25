@@ -422,7 +422,7 @@ func (t *testDMJobmasterSuite) TestWorkerManager() {
 	workerManager.SetNextCheckTime(time.Now().Add(10 * time.Millisecond))
 
 	// expected, no panic in mock agent
-	time.Sleep(1)
+	time.Sleep(1 * time.Second)
 
 	// worker2 offline
 	source := workerStatus2.TaskID

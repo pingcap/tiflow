@@ -20,6 +20,11 @@ func TestJobCfg(t *testing.T) {
 	jobCfg := &JobCfg{}
 	require.NoError(t, jobCfg.DecodeFile(jobTemplatePath))
 	require.Equal(t, "test", jobCfg.Name)
+	content, err := jobCfg.Yaml()
+	require.NoError(t, err)
+	jobCfg2 := &JobCfg{}
+	require.NoError(t, jobCfg2.Decode([]byte(content)))
+	require.Equal(t, jobCfg, jobCfg2)
 
 	clone, err := jobCfg.Clone()
 	require.NoError(t, err)
