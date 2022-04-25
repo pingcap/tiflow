@@ -337,11 +337,11 @@ func IsFreshPosition(location Location, flavor string, cmpGTID bool) bool {
 	if cmpGTID {
 		cmp, canCmp := CompareGTID(location.gtidSet, zeroLocation.gtidSet)
 		if canCmp {
-			if cmp > 0 {
+			switch {
+			case cmp > 0:
 				return false
-			}
-			// should not happen
-			if cmp < 0 {
+			case cmp < 0:
+				// should not happen
 				return true
 			}
 			// empty GTIDSet, then compare by position

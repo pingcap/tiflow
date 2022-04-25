@@ -19,6 +19,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"io"
 	"strings"
 	"sync"
 	"time"
@@ -71,15 +72,22 @@ type tablePoint struct {
 	ti       *model.TableInfo
 }
 
-func (b *tablePoint) String() string {
-	if b == nil {
+func (t *tablePoint) writeString(buf io.Writer) {
+	if t == nil {
+		return
+	}
+	fmt.Fprintf(buf, "location(%s)", t.location)
+	if t.ti != nil {
+		fmt.Fprintf(buf, ", tableInfo(ID: %d, Name:%s, ColNum: %d, IdxNum: %d, PKIsHandle: %t)", t.ti.ID, t.ti.Name, len(t.ti.Columns), len(t.ti.Indices), t.ti.PKIsHandle)
+	}
+}
+
+func (t *tablePoint) String() string {
+	if t == nil {
 		return ""
 	}
 	var buf strings.Builder
-	buf.WriteString(fmt.Sprintf("location(%s)", b.location))
-	if b.ti != nil {
-		buf.WriteString(fmt.Sprintf(", tableInfo(ID: %d, Name:%s, ColNum: %d, IdxNum: %d, PKIsHandle: %t)", b.ti.ID, b.ti.Name, len(b.ti.Columns), len(b.ti.Indices), b.ti.PKIsHandle))
-	}
+	t.writeString(&buf)
 	return buf.String()
 }
 
@@ -192,7 +200,13 @@ func (b *binlogPoint) String() string {
 	b.RLock()
 	defer b.RUnlock()
 
-	return fmt.Sprintf("%s(flushed %s)", b.savedPoint.String(), b.flushedPoint.String())
+	var buf strings.Builder
+	b.savedPoint.writeString(&buf)
+	buf.WriteString("(flushed ")
+	b.flushedPoint.writeString(&buf)
+	buf.WriteString(")")
+
+	return buf.String()
 }
 
 // SnapshotInfo contains:
