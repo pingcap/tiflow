@@ -138,6 +138,8 @@ type captureStatus struct {
 	CheckpointTs model.Ts
 	ResolvedTs   model.Ts
 	// We can add more fields here in the future, such as: RedoLogTs.
+
+	runningStatus captureRunningStatus
 }
 
 type captureSyncStatus int32
@@ -152,6 +154,16 @@ const (
 	// captureSyncFinished indicates that the capture has been fully initialized and is ready to
 	// accept `DispatchTable` messages.
 	captureSyncFinished
+)
+
+type captureRunningStatus int32
+
+const (
+	// captureRunning indicates that the capture is running
+	captureRunning = captureRunningStatus(iota) + 1
+	// captureClosing indicates that the capture is closing, should not dispatch
+	// any new tables to it.
+	captureClosing
 )
 
 // Tick implements the interface ScheduleDispatcher.
