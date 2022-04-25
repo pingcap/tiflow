@@ -538,62 +538,10 @@ func TestValidatorGenRowKey(t *testing.T) {
 	}
 }
 
-func TestGetValidationStatus(t *testing.T) {
-	var err error
-	createTableSQL1 := "CREATE TABLE `db`.`tbl1` (id int primary key, v varchar(100))"
-	createTableSQL2 := "CREATE TABLE `db`.`tbl2` (id int primary key, v varchar(100))"
+func TestValidatorGetValidationStatus(t *testing.T) {
 	cfg := genSubtaskConfig(t)
-	generator := genEventGenerator(t)
-	defer func() {
-		conn.DefaultDBProvider = &conn.DefaultDBProviderImpl{}
-	}()
-	require.Equal(t, log.InitLogger(&log.Config{}), nil)
 	syncerObj := NewSyncer(cfg, nil, nil)
-	syncerObj.schemaLoaded.Store(true)
-	syncerObj.schemaTracker, err = schema.NewTracker(context.Background(), cfg.Name, defaultTestSessionCfg, syncerObj.downstreamTrackConn)
-	require.NoError(t, err)
-	defer syncerObj.schemaTracker.Close()
-	syncerObj.tableRouter, err = regexprrouter.NewRegExprRouter(cfg.CaseSensitive, []*router.TableRule{})
-	require.NoError(t, err)
 	validator := NewContinuousDataValidator(cfg, syncerObj, false)
-	validator.ctx, validator.cancel = context.WithCancel(context.Background())
-	validator.tctx = tcontext.NewContext(validator.ctx, validator.L)
-	validator.workerCnt = 1
-	validator.workers = []*validateWorker{{rowChangeCh: make(chan *rowValidationJob, workerChannelSize)}}
-	defer close(validator.workers[0].rowChangeCh)
-	require.NoError(t, syncerObj.schemaTracker.CreateSchemaIfNotExists("db"))
-	require.NoError(t, syncerObj.schemaTracker.Exec(context.Background(), "db", createTableSQL1))
-	require.NoError(t, syncerObj.schemaTracker.Exec(context.Background(), "db", createTableSQL2))
-	dmlData := []*event.DMLData{
-		{
-			TableID:    11,
-			Schema:     "db",
-			Table:      "tbl1",
-			ColumnType: []byte{mysql.MYSQL_TYPE_LONG, mysql.MYSQL_TYPE_STRING},
-			Rows: [][]interface{}{
-				{int32(3), "c"},
-				{int32(3), "d"},
-			},
-		},
-		{
-			TableID:    12,
-			Schema:     "db",
-			Table:      "tbl2",
-			ColumnType: []byte{mysql.MYSQL_TYPE_LONG, mysql.MYSQL_TYPE_STRING},
-			Rows: [][]interface{}{
-				{int32(3), "c"},
-				{int32(3), "d"},
-			},
-		},
-	}
-	dmlEvents, _, err := generator.GenDMLEvents(replication.WRITE_ROWS_EVENTv2, dmlData, 0)
-	require.NoError(t, err)
-	for _, ev := range dmlEvents {
-		if _, ok := ev.Event.(*replication.RowsEvent); ok {
-			err = validator.processRowsEvent(ev.Header, ev.Event.(*replication.RowsEvent))
-			require.NoError(t, err)
-		}
-	}
 	expected := map[string]*pb.ValidationStatus{
 		"`db`.`tbl1`": {
 			SrcTable:         "`db`.`tbl1`",
@@ -601,11 +549,12 @@ func TestGetValidationStatus(t *testing.T) {
 			ValidationStatus: pb.Stage_Running.String(),
 			Message:          "",
 		},
-		"`db`.`tbl2`": {
-			SrcTable:         "`db`.`tbl2`",
-			DstTable:         "`db`.`tbl2`",
-			ValidationStatus: pb.Stage_Running.String(),
-			Message:          "",
+	}
+	validator.tableStatus = map[string]*tableValidateStatus{
+		"`db`.`tbl1`": {
+			source: filter.Table{Schema: "db", Name: "tbl1"},
+			target: filter.Table{Schema: "db", Name: "tbl1"},
+			stage:  pb.Stage_Running,
 		},
 	}
 	ret := validator.GetValidationStatus()
