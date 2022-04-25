@@ -30,7 +30,7 @@ type OptShardingGroup struct {
 	sync.RWMutex
 
 	// the conflict tableIDs hash set to quickly check whether this table is in conflict stage
-	// sourceTableID -> each table's conflicted ddl's lastLocation
+	// sourceTableID -> each table's conflicted ddl's startLocation
 	conflictTables map[string]binlog.Location
 
 	firstConflictLocation binlog.Location

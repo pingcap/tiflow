@@ -58,7 +58,7 @@ function restart_master() {
 function restart_worker1() {
 	echo "restart dm-worker1"
 	ps aux | grep worker1 | awk '{print $2}' | xargs kill || true
-	check_process_exit worker.test worker1 20
+	check_process_exit worker1 20
 	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
 }
@@ -66,7 +66,7 @@ function restart_worker1() {
 function restart_worker2() {
 	echo "restart dm-worker2"
 	ps aux | grep worker2 | awk '{print $2}' | xargs kill || true
-	check_process_exit worker.test worker2 20
+	check_process_exit worker2 20
 	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
 }

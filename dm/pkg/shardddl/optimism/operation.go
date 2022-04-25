@@ -199,7 +199,6 @@ func GetAllOperations(cli *clientv3.Client) (map[string]map[string]map[string]ma
 		if _, ok := opm[op.Task][op.Source][op.UpSchema]; !ok {
 			opm[op.Task][op.Source][op.UpSchema] = make(map[string]Operation)
 		}
-		op.Revision = kv.ModRevision
 		opm[op.Task][op.Source][op.UpSchema][op.UpTable] = op
 	}
 
@@ -305,7 +304,6 @@ func WatchOperationPut(ctx context.Context, cli *clientv3.Client,
 				}
 
 				op, err := operationFromJSON(string(ev.Kv.Value))
-				op.Revision = ev.Kv.ModRevision
 				if err != nil {
 					select {
 					case errCh <- err:
