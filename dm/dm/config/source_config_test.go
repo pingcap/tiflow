@@ -244,8 +244,8 @@ func (t *testConfig) TestSourceConfigForDowngrade(c *C) {
 	cfgForDowngrade := NewSourceConfigForDowngrade(cfg)
 	cfgReflect := reflect.Indirect(reflect.ValueOf(cfg))
 	cfgForDowngradeReflect := reflect.Indirect(reflect.ValueOf(cfgForDowngrade))
-	// auto-fix-gtid is not written when downgrade
-	c.Assert(cfgReflect.NumField(), Equals, cfgForDowngradeReflect.NumField()+1)
+	// auto-fix-gtid, meta-dir are not written when downgrade
+	c.Assert(cfgReflect.NumField(), Equals, cfgForDowngradeReflect.NumField()+2)
 
 	// make sure all field were copied
 	cfgForClone := &SourceConfigForDowngrade{}

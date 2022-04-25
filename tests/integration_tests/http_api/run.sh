@@ -104,9 +104,7 @@ function run() {
 		"resume_changefeed"
 		"rebalance_table"
 		"list_processor"
-		# TODO(dongmen): skip get_processor since it is too unstable.
-		# I will fix it ASAP.
-		#"get_processor"
+		"get_processor"
 		"move_table"
 		"set_log_level"
 		"remove_changefeed"
