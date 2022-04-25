@@ -84,7 +84,6 @@ func newValidatorCheckpointHelper(validator *DataValidator) *validatorPersistHel
 	c := &validatorPersistHelper{
 		cfg:       cfg,
 		validator: validator,
-		db:        validator.toDB,
 		retryer:   retryer,
 
 		checkpointTableName:    dbutil.TableName(cfg.MetaSchema, cputil.ValidatorCheckpoint(cfg.Name)),
@@ -99,6 +98,7 @@ func newValidatorCheckpointHelper(validator *DataValidator) *validatorPersistHel
 func (c *validatorPersistHelper) init(tctx *tcontext.Context) error {
 	c.tctx = tctx
 	c.L = tctx.L()
+	c.db = c.validator.toDB
 
 	newCtx, cancelFunc := c.tctx.WithTimeout(unit.DefaultInitTimeout)
 	defer cancelFunc()
@@ -350,6 +350,8 @@ func (c *validatorPersistHelper) persist(loc binlog.Location) error {
 	// todo: performance issue when using insert on duplicate? https://asktug.com/t/topic/33147
 	// todo: will this transaction too big? but checkpoint & pending changes should be saved in one tx
 	var err error
+	newCtx, cancelFunc := c.tctx.WithTimeout(validationDBTimeout)
+	defer cancelFunc()
 	failpoint.Inject("ValidatorCheckPointSkipExecuteSQL", func(val failpoint.Value) {
 		str := val.(string)
 		if str != "" {
@@ -357,8 +359,6 @@ func (c *validatorPersistHelper) persist(loc binlog.Location) error {
 		}
 		failpoint.Goto("afterExecuteSQL")
 	})
-	newCtx, cancelFunc := c.tctx.WithTimeout(validationDBTimeout)
-	defer cancelFunc()
 	err = c.db.DoTxWithRetry(newCtx, queries, args, c.retryer)
 	failpoint.Label("afterExecuteSQL")
 	if err != nil {

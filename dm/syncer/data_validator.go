@@ -217,10 +217,6 @@ func (v *DataValidator) initialize() error {
 	// todo: enhance error handling
 	v.reset()
 
-	if err := v.persistHelper.init(v.tctx); err != nil {
-		return err
-	}
-
 	newCtx, cancelFunc := context.WithTimeout(v.ctx, unit.DefaultInitTimeout)
 	defer cancelFunc()
 	tctx := tcontext.NewContext(newCtx, v.L)
@@ -247,6 +243,10 @@ func (v *DataValidator) initialize() error {
 	dbCfg.RawDBCfg = config.DefaultRawDBConfig().SetReadTimeout(maxDMLConnectionTimeout).SetMaxIdleConns(v.workerCnt + 1)
 	v.toDB, err = dbconn.CreateBaseDB(&dbCfg)
 	if err != nil {
+		return err
+	}
+
+	if err = v.persistHelper.init(v.tctx); err != nil {
 		return err
 	}
 

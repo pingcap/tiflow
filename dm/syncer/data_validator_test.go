@@ -16,7 +16,6 @@ package syncer
 import (
 	"context"
 	"crypto/sha256"
-	"database/sql"
 	"encoding/hex"
 	"testing"
 	"time"
@@ -91,14 +90,6 @@ func genSubtaskConfig(t *testing.T) *config.SubTaskConfig {
 	cfg.UseRelay = false
 
 	return cfg
-}
-
-func genDBConn(t *testing.T, db *sql.DB, cfg *config.SubTaskConfig) *dbconn.DBConn {
-	t.Helper()
-	baseDB := conn.NewBaseDB(db, func() {})
-	baseConn, err := baseDB.GetBaseConn(context.Background())
-	require.NoError(t, err)
-	return dbconn.NewDBConn(cfg, baseConn)
 }
 
 func TestValidatorStartStop(t *testing.T) {
