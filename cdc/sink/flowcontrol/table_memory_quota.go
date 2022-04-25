@@ -39,9 +39,9 @@ type tableMemoryQuota struct {
 	consumedCond *sync.Cond
 }
 
-// NewTableMemoryQuota creates a new tableMemoryQuota
+// newTableMemoryQuota creates a new tableMemoryQuota
 // quota: max advised memory consumption in bytes.
-func NewTableMemoryQuota(quota uint64) *tableMemoryQuota {
+func newTableMemoryQuota(quota uint64) *tableMemoryQuota {
 	ret := &tableMemoryQuota{
 		quota: quota,
 	}
@@ -50,11 +50,11 @@ func NewTableMemoryQuota(quota uint64) *tableMemoryQuota {
 	return ret
 }
 
-// ConsumeWithBlocking is called when a hard-limit is needed. The method will
-// block until enough memory has been freed up by Release.
+// consumeWithBlocking is called when a hard-limit is needed. The method will
+// block until enough memory has been freed up by release.
 // blockCallBack will be called if the function will block.
 // Should be used with care to prevent deadlock.
-func (c *tableMemoryQuota) ConsumeWithBlocking(nBytes uint64, blockCallBack func() error) error {
+func (c *tableMemoryQuota) consumeWithBlocking(nBytes uint64, blockCallBack func() error) error {
 	if nBytes >= c.quota {
 		return cerrors.ErrFlowControllerEventLargerThanQuota.GenWithStackByArgs(nBytes, c.quota)
 	}
@@ -88,9 +88,9 @@ func (c *tableMemoryQuota) ConsumeWithBlocking(nBytes uint64, blockCallBack func
 	return nil
 }
 
-// ForceConsume is called when blocking is not acceptable and the limit can be violated
+// forceConsume is called when blocking is not acceptable and the limit can be violated
 // for the sake of avoid deadlock. It merely records the increased memory consumption.
-func (c *tableMemoryQuota) ForceConsume(nBytes uint64) error {
+func (c *tableMemoryQuota) forceConsume(nBytes uint64) error {
 	c.consumed.Lock()
 	defer c.consumed.Unlock()
 
@@ -102,8 +102,8 @@ func (c *tableMemoryQuota) ForceConsume(nBytes uint64) error {
 	return nil
 }
 
-// Release is called when a chuck of memory is done being used.
-func (c *tableMemoryQuota) Release(nBytes uint64) {
+// release is called when a chuck of memory is done being used.
+func (c *tableMemoryQuota) release(nBytes uint64) {
 	c.consumed.Lock()
 
 	if c.consumed.bytes < nBytes {
@@ -123,14 +123,14 @@ func (c *tableMemoryQuota) Release(nBytes uint64) {
 	c.consumed.Unlock()
 }
 
-// Abort interrupts any ongoing ConsumeWithBlocking call
-func (c *tableMemoryQuota) Abort() {
+// abort interrupts any ongoing consumeWithBlocking call
+func (c *tableMemoryQuota) abort() {
 	c.isAborted.Store(true)
 	c.consumedCond.Signal()
 }
 
-// GetConsumption returns the current memory consumption
-func (c *tableMemoryQuota) GetConsumption() uint64 {
+// getConsumption returns the current memory consumption
+func (c *tableMemoryQuota) getConsumption() uint64 {
 	c.consumed.Lock()
 	defer c.consumed.Unlock()
 

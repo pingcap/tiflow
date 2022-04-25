@@ -43,7 +43,7 @@ type commitTsSizeEntry struct {
 // NewTableFlowController creates a new TableFlowController
 func NewTableFlowController(quota uint64) *TableFlowController {
 	return &TableFlowController{
-		memoryQuota: NewTableMemoryQuota(quota),
+		memoryQuota: newTableMemoryQuota(quota),
 		queueMu: struct {
 			sync.Mutex
 			queue deque.Deque
@@ -66,17 +66,17 @@ func (c *TableFlowController) Consume(commitTs uint64, size uint64, blockCallBac
 
 	if commitTs > lastCommitTs {
 		atomic.StoreUint64(&c.lastCommitTs, commitTs)
-		err := c.memoryQuota.ConsumeWithBlocking(size, blockCallBack)
+		err := c.memoryQuota.consumeWithBlocking(size, blockCallBack)
 		if err != nil {
 			return errors.Trace(err)
 		}
 	} else {
 		// Here commitTs == lastCommitTs, which means that we are not crossing
-		// a transaction boundary. In this situation, we use `ForceConsume` because
+		// a transaction boundary. In this situation, we use `forceConsume` because
 		// blocking the event stream mid-transaction is highly likely to cause
 		// a deadlock.
 		// TODO fix this in the future, after we figure out how to elegantly support large txns.
-		err := c.memoryQuota.ForceConsume(size)
+		err := c.memoryQuota.forceConsume(size)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -107,15 +107,15 @@ func (c *TableFlowController) Release(resolvedTs uint64) {
 	}
 	c.queueMu.Unlock()
 
-	c.memoryQuota.Release(nBytesToRelease)
+	c.memoryQuota.release(nBytesToRelease)
 }
 
 // Abort interrupts any ongoing Consume call
 func (c *TableFlowController) Abort() {
-	c.memoryQuota.Abort()
+	c.memoryQuota.abort()
 }
 
 // GetConsumption returns the current memory consumption
 func (c *TableFlowController) GetConsumption() uint64 {
-	return c.memoryQuota.GetConsumption()
+	return c.memoryQuota.getConsumption()
 }

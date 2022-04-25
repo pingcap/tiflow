@@ -40,7 +40,7 @@ func (c *mockCallBacker) cb() error {
 }
 
 func TestMemoryQuotaBasic(t *testing.T) {
-	controller := NewTableMemoryQuota(1024)
+	controller := newTableMemoryQuota(1024)
 	sizeCh := make(chan uint64, 1024)
 	var (
 		wg       sync.WaitGroup
@@ -53,7 +53,7 @@ func TestMemoryQuotaBasic(t *testing.T) {
 
 		for i := 0; i < 100000; i++ {
 			size := (rand.Int() % 128) + 128
-			err := controller.ConsumeWithBlocking(uint64(size), dummyCallBack)
+			err := controller.consumeWithBlocking(uint64(size), dummyCallBack)
 			require.Nil(t, err)
 
 			require.Less(t, atomic.AddUint64(&consumed, uint64(size)), uint64(1024))
@@ -70,17 +70,17 @@ func TestMemoryQuotaBasic(t *testing.T) {
 		for size := range sizeCh {
 			require.GreaterOrEqual(t, atomic.LoadUint64(&consumed), size)
 			atomic.AddUint64(&consumed, -size)
-			controller.Release(size)
+			controller.release(size)
 		}
 	}()
 
 	wg.Wait()
 	require.Equal(t, uint64(0), atomic.LoadUint64(&consumed))
-	require.Equal(t, uint64(0), controller.GetConsumption())
+	require.Equal(t, uint64(0), controller.getConsumption())
 }
 
 func TestMemoryQuotaForceConsume(t *testing.T) {
-	controller := NewTableMemoryQuota(1024)
+	controller := newTableMemoryQuota(1024)
 	sizeCh := make(chan uint64, 1024)
 	var (
 		wg       sync.WaitGroup
@@ -95,11 +95,11 @@ func TestMemoryQuotaForceConsume(t *testing.T) {
 			size := (rand.Int() % 128) + 128
 
 			if rand.Int()%3 == 0 {
-				err := controller.ConsumeWithBlocking(uint64(size), dummyCallBack)
+				err := controller.consumeWithBlocking(uint64(size), dummyCallBack)
 				require.Nil(t, err)
 				require.Less(t, atomic.AddUint64(&consumed, uint64(size)), uint64(1024))
 			} else {
-				err := controller.ForceConsume(uint64(size))
+				err := controller.forceConsume(uint64(size))
 				require.Nil(t, err)
 				atomic.AddUint64(&consumed, uint64(size))
 			}
@@ -116,7 +116,7 @@ func TestMemoryQuotaForceConsume(t *testing.T) {
 		for size := range sizeCh {
 			require.GreaterOrEqual(t, atomic.LoadUint64(&consumed), size)
 			atomic.AddUint64(&consumed, -size)
-			controller.Release(size)
+			controller.release(size)
 		}
 	}()
 
@@ -124,33 +124,33 @@ func TestMemoryQuotaForceConsume(t *testing.T) {
 	require.Equal(t, uint64(0), atomic.LoadUint64(&consumed))
 }
 
-// TestMemoryQuotaAbort verifies that Abort works
+// TestMemoryQuotaAbort verifies that abort works
 func TestMemoryQuotaAbort(t *testing.T) {
-	controller := NewTableMemoryQuota(1024)
+	controller := newTableMemoryQuota(1024)
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		err := controller.ConsumeWithBlocking(700, dummyCallBack)
+		err := controller.consumeWithBlocking(700, dummyCallBack)
 		require.Nil(t, err)
 
-		err = controller.ConsumeWithBlocking(700, dummyCallBack)
+		err = controller.consumeWithBlocking(700, dummyCallBack)
 		require.Regexp(t, ".*ErrFlowControllerAborted.*", err)
 
-		err = controller.ForceConsume(700)
+		err = controller.forceConsume(700)
 		require.Regexp(t, ".*ErrFlowControllerAborted.*", err)
 	}()
 
 	time.Sleep(2 * time.Second)
-	controller.Abort()
+	controller.abort()
 
 	wg.Wait()
 }
 
 // TestMemoryQuotaReleaseZero verifies that releasing 0 bytes is successful
 func TestMemoryQuotaReleaseZero(t *testing.T) {
-	controller := NewTableMemoryQuota(1024)
-	controller.Release(0)
+	controller := newTableMemoryQuota(1024)
+	controller.release(0)
 }
 
 type mockedEvent struct {
