@@ -409,6 +409,10 @@ type schedulerV1CompatWrapper struct {
 	inner *oldScheduler
 }
 
+func (w *schedulerV1CompatWrapper) Drain(target model.CaptureID) {
+	panic("not implement")
+}
+
 func (w *schedulerV1CompatWrapper) Tick(
 	_ cdcContext.Context,
 	state *orchestrator.ChangefeedReactorState,

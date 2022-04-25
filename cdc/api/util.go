@@ -120,13 +120,31 @@ func handleOwnerScheduleTable(
 	ctx context.Context, capture *capture.Capture,
 	changefeedID string, captureID string, tableID int64,
 ) error {
-	// Use buffered channel to prevernt blocking owner.
+	// Use buffered channel to prevent blocking owner.
 	done := make(chan error, 1)
 	o, err := capture.GetOwner()
 	if err != nil {
 		return errors.Trace(err)
 	}
 	o.ScheduleTable(changefeedID, captureID, tableID, done)
+	select {
+	case <-ctx.Done():
+		return errors.Trace(ctx.Err())
+	case err := <-done:
+		return errors.Trace(err)
+	}
+}
+
+func handleOwnerDrainCapture(
+	ctx context.Context, capture *capture.Capture, captureID string,
+) error {
+	// Use buffered channel to prevent blocking owner.
+	done := make(chan error, 1)
+	o, err := capture.GetOwner()
+	if err != nil {
+		return errors.Trace(err)
+	}
+	o.DrainCapture(captureID, done)
 	select {
 	case <-ctx.Done():
 		return errors.Trace(ctx.Err())

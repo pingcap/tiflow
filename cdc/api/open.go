@@ -103,6 +103,7 @@ func RegisterOpenAPIRoutes(router *gin.Engine, api openAPI) {
 	// capture API
 	captureGroup := v1.Group("/captures")
 	captureGroup.GET("", api.ListCapture)
+	captureGroup.POST("/drain", api.DrainCapture)
 }
 
 // ListChangefeed lists all changgefeeds in cdc cluster
@@ -502,6 +503,57 @@ func (h *openAPI) RebalanceTables(c *gin.Context) {
 		_ = c.Error(err)
 		return
 	}
+	c.Status(http.StatusAccepted)
+}
+
+// DrainCapture remove all tables at the given capture.
+// @Summary Drain captures
+// @Description Drain all tables at the target captures in cdc cluster
+// @Tags capture
+// @Accept json
+// @Produce json
+// @Success 200
+// @Failure 500,400 {object} model.HTTPError
+// @Router	/api/v1/captures/drain [post]
+func (h *openAPI) DrainCapture(c *gin.Context) {
+	if !h.capture.IsOwner() {
+		h.forwardToOwner(c)
+		return
+	}
+
+	target := c.Param(apiOpVarCaptureID)
+	if err := model.ValidateChangefeedID(target); err != nil {
+		_ = c.Error(cerror.ErrAPIInvalidParam.GenWithStack("invalid capture_id: %s", target))
+		return
+	}
+
+	ctx := c.Request.Context()
+	captures, err := h.statusProvider().GetCaptures(ctx)
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+
+	checkCaptureFound := func() bool {
+		// make sure the target capture exist
+		for _, capture := range captures {
+			if capture.ID == target {
+				return true
+			}
+		}
+		return false
+	}
+
+	if !checkCaptureFound() {
+		_ = c.Error(cerror.ErrAPIInvalidParam.GenWithStack("capture not found: %s", target))
+		return
+	}
+
+	if err := handleOwnerDrainCapture(ctx, h.capture, target); err != nil {
+		_ = c.Error(err)
+		return
+	}
+
 	c.Status(http.StatusAccepted)
 }
 
