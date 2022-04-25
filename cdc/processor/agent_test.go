@@ -498,21 +498,22 @@ func TestNoFinishOperationBeforeSyncIsReceived(t *testing.T) {
 	suite.tableExecutor.On("GetCheckpoint").
 		Return(model.Ts(1000), model.Ts(1000))
 
-	require.Never(t, func() bool {
+	start := time.Now()
+	for time.Since(start) < 100*time.Millisecond {
 		err := agent.Tick(suite.cdcCtx)
 		require.NoError(t, err)
 
 		select {
 		case <-suite.ctx.Done():
-			return true
+			require.FailNow(t, "context is canceled")
 		case <-suite.dispatchResponseCh:
-			return true
+			require.FailNow(t, "Dispatch Response is received")
 		case <-suite.syncCh:
-			return true
+			require.FailNow(t, "Sync is received")
 		default:
-			return false
 		}
-	}, 100*time.Millisecond, 1*time.Millisecond)
+		time.Sleep(10 * time.Millisecond)
+	}
 	suite.UnblockSync()
 
 	require.Eventually(t, func() bool {
