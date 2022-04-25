@@ -43,9 +43,10 @@ import (
 
 // SourceWorker manages a source(upstream) which is mainly related to subtasks and relay.
 type SourceWorker struct {
-	// ensure no other operation can be done when closing (we can use `WatGroup`/`Context` to archive this)
+	// ensure no other operation can be done when closing (we can use `WaitGroup`/`Context` to archive this)
 	// TODO: check what does it guards. Now it's used to guard relayHolder and relayPurger (maybe subTaskHolder?) since
 	// query-status maybe access them when closing/disable functionalities
+	// This lock is used to guards source worker's source config and subtask holder(subtask configs)
 	sync.RWMutex
 
 	wg     sync.WaitGroup
