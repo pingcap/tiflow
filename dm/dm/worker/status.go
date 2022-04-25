@@ -131,7 +131,10 @@ func (w *SourceWorker) GetValidateStatus(stName string, filterStatus pb.Stage) [
 	if st == nil {
 		return res
 	}
-	sourceIP := w.cfg.From.Host + ":" + strconv.Itoa(w.cfg.From.Port)
+	w.RLock()
+	cfg := w.cfg
+	w.RUnlock()
+	sourceIP := cfg.From.Host + ":" + strconv.Itoa(cfg.From.Port)
 	tblStats := st.GetValidatorStatus()
 	for _, stat := range tblStats {
 		if filterStatus == pb.Stage_InvalidStage || stat.ValidationStatus == filterStatus.String() {
