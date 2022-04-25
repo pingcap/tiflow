@@ -18,14 +18,16 @@ import (
 	"time"
 
 	"github.com/edwingeng/deque"
+	"github.com/google/uuid"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/uber-go/atomic"
+	"go.uber.org/zap"
+
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/scheduler/util"
 	"github.com/pingcap/tiflow/pkg/context"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/uber-go/atomic"
-	"go.uber.org/zap"
 )
 
 // Agent is an interface for an object inside Processor that is responsible
@@ -70,16 +72,17 @@ type TableExecutor interface {
 // by the owner.
 type ProcessorMessenger interface {
 	// FinishTableOperation notifies the owner that a table operation has finished.
-	FinishTableOperation(ctx context.Context, tableID model.TableID) (done bool, err error)
+	FinishTableOperation(ctx context.Context, tableID model.TableID, epoch model.ProcessorEpoch) (done bool, err error)
 	// SyncTaskStatuses informs the owner of the processor's current internal state.
-	SyncTaskStatuses(ctx context.Context, running, adding, removing []model.TableID) (done bool, err error)
+	SyncTaskStatuses(ctx context.Context, epoch model.ProcessorEpoch, adding, removing, running []model.TableID) (done bool, err error)
 	// SendCheckpoint sends the owner the processor's local watermarks, i.e., checkpoint-ts and resolved-ts.
 	SendCheckpoint(ctx context.Context, checkpointTs model.Ts, resolvedTs model.Ts) (done bool, err error)
-
 	// Barrier returns whether there is a pending message not yet acknowledged by the owner.
 	Barrier(ctx context.Context) (done bool)
 	// OnOwnerChanged is called when the owner is changed.
-	OnOwnerChanged(ctx context.Context, newOwnerCaptureID model.CaptureID)
+	OnOwnerChanged(ctx context.Context,
+		newOwnerCaptureID model.CaptureID,
+		newOwnerRevision int64)
 	// Close closes the messenger and does the necessary cleanup.
 	Close() error
 }
@@ -96,6 +99,10 @@ type BaseAgentConfig struct {
 type BaseAgent struct {
 	executor     TableExecutor
 	communicator ProcessorMessenger
+
+	epochMu sync.RWMutex
+	// epoch is reset on each Sync message.
+	epoch model.ProcessorEpoch
 
 	// pendingOpsMu protects pendingOps.
 	// Note that we need a mutex because some methods are expected
@@ -135,8 +142,8 @@ func NewBaseAgent(
 	messenger ProcessorMessenger,
 	config *BaseAgentConfig,
 ) *BaseAgent {
-	logger := log.L().With(zap.String("changefeed-id", changeFeedID))
-	return &BaseAgent{
+	logger := log.L().With(zap.String("changefeed", changeFeedID))
+	ret := &BaseAgent{
 		pendingOps:       deque.NewDeque(),
 		tableOperations:  map[model.TableID]*agentOperation{},
 		logger:           logger,
@@ -148,6 +155,8 @@ func NewBaseAgent(
 		ownerHasChanged:  atomic.NewBool(false),
 		config:           config,
 	}
+	ret.resetEpoch()
+	return ret
 }
 
 type agentOperationStatus int32
@@ -161,6 +170,10 @@ const (
 type agentOperation struct {
 	TableID  model.TableID
 	IsDelete bool
+	Epoch    model.ProcessorEpoch
+
+	// FromOwnerID is for debugging purposesFromOwnerID
+	FromOwnerID model.CaptureID
 
 	status agentOperationStatus
 }
@@ -181,10 +194,12 @@ func (a *BaseAgent) Tick(ctx context.Context) error {
 		// We need to notify the communicator if the owner has changed.
 		// This is necessary because the communicator might be waiting for
 		// messages to be received by the previous owner.
-		a.communicator.OnOwnerChanged(ctx, a.currentOwner())
+		ownerID, ownerRev := a.currentOwner()
+		a.communicator.OnOwnerChanged(ctx, ownerID, ownerRev)
 	}
 
 	if a.needSyncNow.Load() {
+		a.resetEpoch()
 		done, err := a.sendSync(ctx)
 		if err != nil {
 			return errors.Trace(err)
@@ -204,6 +219,12 @@ func (a *BaseAgent) Tick(ctx context.Context) error {
 
 	opsToApply := a.popPendingOps()
 	for _, op := range opsToApply {
+		if op.Epoch != a.getEpoch() {
+			a.logger.Info("dispatch request epoch does not match",
+				zap.String("epoch", op.Epoch),
+				zap.String("expected-epoch", a.getEpoch()))
+			continue
+		}
 		if _, ok := a.tableOperations[op.TableID]; ok {
 			a.logger.DPanic("duplicate operation", zap.Any("op", op))
 			return cerrors.ErrProcessorDuplicateOperations.GenWithStackByArgs(op.TableID)
@@ -259,7 +280,7 @@ func (a *BaseAgent) sendSync(ctx context.Context) (bool, error) {
 	util.SortTableIDs(running)
 	util.SortTableIDs(adding)
 	util.SortTableIDs(removing)
-	done, err := a.communicator.SyncTaskStatuses(ctx, running, adding, removing)
+	done, err := a.communicator.SyncTaskStatuses(ctx, a.getEpoch(), adding, removing, running)
 	if err != nil {
 		return false, errors.Trace(err)
 	}
@@ -272,6 +293,7 @@ func (a *BaseAgent) processOperations(ctx context.Context) error {
 	for tableID, op := range a.tableOperations {
 		switch op.status {
 		case operationReceived:
+			a.logger.Info("Agent start processing operation", zap.Any("op", op))
 			if !op.IsDelete {
 				// add table
 				done, err := a.executor.AddTable(ctx, op.TableID)
@@ -306,7 +328,8 @@ func (a *BaseAgent) processOperations(ctx context.Context) error {
 			op.status = operationFinished
 			fallthrough
 		case operationFinished:
-			done, err := a.communicator.FinishTableOperation(ctx, op.TableID)
+			a.logger.Info("Agent finish processing operation", zap.Any("op", op))
+			done, err := a.communicator.FinishTableOperation(ctx, op.TableID, a.getEpoch())
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -343,6 +366,7 @@ func (a *BaseAgent) OnOwnerDispatchedTask(
 	ownerRev int64,
 	tableID model.TableID,
 	isDelete bool,
+	epoch model.ProcessorEpoch,
 ) {
 	if !a.updateOwnerInfo(ownerCaptureID, ownerRev) {
 		a.logger.Info("task from stale owner ignored",
@@ -355,14 +379,16 @@ func (a *BaseAgent) OnOwnerDispatchedTask(
 	defer a.pendingOpsMu.Unlock()
 
 	op := &agentOperation{
-		TableID:  tableID,
-		IsDelete: isDelete,
-		status:   operationReceived,
+		TableID:     tableID,
+		IsDelete:    isDelete,
+		Epoch:       epoch,
+		FromOwnerID: ownerCaptureID,
+		status:      operationReceived,
 	}
 	a.pendingOps.PushBack(op)
 
-	a.logger.Debug("OnOwnerDispatchedTask",
-		zap.String("owner-capture-id", ownerCaptureID),
+	a.logger.Info("OnOwnerDispatchedTask",
+		zap.String("ownerCapture-id", ownerCaptureID),
 		zap.Int64("owner-rev", ownerRev),
 		zap.Any("op", op))
 }
@@ -450,9 +476,32 @@ func (a *BaseAgent) updateOwnerInfo(ownerCaptureID model.CaptureID, ownerRev int
 	return true
 }
 
-func (a *BaseAgent) currentOwner() model.CaptureID {
+func (a *BaseAgent) currentOwner() (model.CaptureID, int64 /* revision */) {
 	a.ownerInfoMu.RLock()
 	defer a.ownerInfoMu.RUnlock()
 
-	return a.ownerInfo.OwnerCaptureID
+	return a.ownerInfo.OwnerCaptureID, a.ownerInfo.OwnerRev
+}
+
+func (a *BaseAgent) resetEpoch() {
+	a.epochMu.Lock()
+	defer a.epochMu.Unlock()
+
+	// We are using UUIDs because we only need uniqueness guarantee for the epoch,
+	// BUT NOT ordering guarantees. The reason is that the Sync messages are themselves
+	// barriers, so there is no need to accommodate messages from future epochs.
+	a.epoch = uuid.New().String()
+}
+
+func (a *BaseAgent) getEpoch() model.ProcessorEpoch {
+	a.epochMu.RLock()
+	defer a.epochMu.RUnlock()
+
+	return a.epoch
+}
+
+// CurrentEpoch is a public function used in unit tests for
+// checking epoch-related invariants.
+func (a *BaseAgent) CurrentEpoch() model.ProcessorEpoch {
+	return a.getEpoch()
 }
