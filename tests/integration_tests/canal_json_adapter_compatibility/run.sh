@@ -8,7 +8,8 @@ WORK_DIR=$OUT_DIR/$TEST_NAME
 CDC_BINARY=cdc.test
 SINK_TYPE=$1
 
-# use kafka-consumer with canal-json decoder to sync data from kafka to mysql
+# use canal-adapter to sync data from kafka to mysql,
+# make sure that `canal-json` output can be consumed by the canal-adapter.
 function run() {
 	if [ "$SINK_TYPE" == "mysql" ]; then
 		return
@@ -20,22 +21,19 @@ function run() {
 
 	cd $WORK_DIR
 
-	TOPIC_NAME="ticdc-canal-json-test"
 	# record tso before we create tables to skip the system table DDLs
 	start_ts=$(run_cdc_cli_tso_query ${UP_PD_HOST_1} ${UP_PD_PORT_1})
 
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
 
-	SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=canal-json&enable-tidb-extension=true&kafka-version=${KAFKA_VERSION}"
+	SINK_URI="kafka://127.0.0.1:9092/test?protocol=canal-json&kafka-version=${KAFKA_VERSION}&max-message-bytes=10485760"
 
 	run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI"
-	if [ "$SINK_TYPE" == "kafka" ]; then
-		run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=canal-json&version=${KAFKA_VERSION}&enable-tidb-extension=true"
-	fi
+
 	run_sql_file $CUR/data/data.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
 	# sync_diff can't check non-exist table, so we check expected tables are created in downstream first
-	check_table_exists test.finish_mark ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 200
+	check_table_exists test.multi_data_type ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 200
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
 
 	cleanup_process $CDC_BINARY
