@@ -15,20 +15,17 @@ package mysql
 
 import (
 	"bytes"
+	"fmt"
 	"sort"
+	"testing"
 
-	"github.com/pingcap/check"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/util/testleak"
+	"github.com/stretchr/testify/require"
 )
 
-type testCausalitySuite struct{}
+func TestCausality(t *testing.T) {
 
-var _ = check.Suite(&testCausalitySuite{})
-
-func (s *testCausalitySuite) TestCausality(c *check.C) {
-	defer testleak.AfterTest(c)()
 	rows := [][][]byte{
 		{[]byte("a")},
 		{[]byte("b")},
@@ -37,15 +34,15 @@ func (s *testCausalitySuite) TestCausality(c *check.C) {
 	ca := newCausality()
 	for i, row := range rows {
 		conflict, idx := ca.detectConflict(row)
-		c.Assert(conflict, check.IsFalse)
-		c.Assert(idx, check.Equals, -1)
+		require.False(t, conflict)
+		require.Equal(t, -1, idx)
 		ca.add(row, i)
 		// Test for single key index conflict.
 		conflict, idx = ca.detectConflict(row)
-		c.Assert(conflict, check.IsTrue)
-		c.Assert(idx, check.Equals, i)
+		require.True(t, conflict)
+		require.Equal(t, i, idx)
 	}
-	c.Assert(len(ca.relations), check.Equals, 3)
+	require.Equal(t, 3, len(ca.relations))
 	cases := []struct {
 		keys     [][]byte
 		conflict bool
@@ -64,16 +61,16 @@ func (s *testCausalitySuite) TestCausality(c *check.C) {
 	}
 	for _, cas := range cases {
 		conflict, idx := ca.detectConflict(cas.keys)
-		comment := check.Commentf("keys: %v", cas.keys)
-		c.Assert(conflict, check.Equals, cas.conflict, comment)
-		c.Assert(idx, check.Equals, cas.idx, comment)
+		comment := fmt.Sprintf("keys: %v", cas.keys)
+		require.Equal(t, cas.conflict, conflict, comment)
+		require.Equal(t, cas.idx, idx, comment)
 	}
 	ca.reset()
-	c.Assert(len(ca.relations), check.Equals, 0)
+	require.Equal(t, 0, len(ca.relations))
 }
 
-func (s *testCausalitySuite) TestGenKeys(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestGenKeys(t *testing.T) {
+
 	testCases := []struct {
 		txn      *model.SingleTableTxn
 		expected [][]byte
@@ -215,6 +212,6 @@ func (s *testCausalitySuite) TestGenKeys(c *check.C) {
 		sort.Slice(keys, func(i, j int) bool {
 			return bytes.Compare(keys[i], keys[j]) > 0
 		})
-		c.Assert(keys, check.DeepEquals, tc.expected)
+		require.Equal(t, tc.expected, keys)
 	}
 }

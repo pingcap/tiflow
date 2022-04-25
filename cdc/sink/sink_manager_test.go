@@ -99,7 +99,7 @@ func (c *checkSink) Barrier(ctx context.Context, tableID model.TableID) error {
 }
 
 func TestManagerRandom(t *testing.T) {
-
+	t.Parallel()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	errCh := make(chan error, 16)
@@ -158,7 +158,7 @@ func TestManagerRandom(t *testing.T) {
 }
 
 func TestManagerAddRemoveTable(t *testing.T) {
-
+	t.Parallel()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	errCh := make(chan error, 16)
@@ -246,7 +246,7 @@ func TestManagerAddRemoveTable(t *testing.T) {
 }
 
 func TestManagerDestroyTableSink(t *testing.T) {
-
+	t.Parallel()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -393,7 +393,7 @@ func (e *errorSink) Barrier(ctx context.Context, tableID model.TableID) error {
 }
 
 func TestManagerError(t *testing.T) {
-
+	t.Parallel()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	errCh := make(chan error, 16)
