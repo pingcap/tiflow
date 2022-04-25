@@ -136,14 +136,14 @@ func (c *MockServerMasterClient) GetLeaderClient() pb.MasterClient {
 
 func (c *MockServerMasterClient) ScheduleTask(
 	ctx context.Context,
-	req *pb.TaskSchedulerRequest,
+	req *pb.ScheduleTaskRequest,
 	timeout time.Duration,
-) (resp *pb.TaskSchedulerResponse, err error) {
+) (resp *pb.ScheduleTaskResponse, err error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	args := c.Called(ctx, req, timeout)
-	return args.Get(0).(*pb.TaskSchedulerResponse), args.Error(1)
+	return args.Get(0).(*pb.ScheduleTaskResponse), args.Error(1)
 }
 
 func (c *MockServerMasterClient) PersistResource(

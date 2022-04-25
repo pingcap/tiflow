@@ -22,6 +22,8 @@ import (
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/time/rate"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/hanfei1991/microcosm/client"
 	"github.com/hanfei1991/microcosm/lib"
@@ -32,7 +34,7 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/adapter"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 	"github.com/hanfei1991/microcosm/pkg/deps"
-	"github.com/hanfei1991/microcosm/pkg/errors"
+	derrors "github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/etcdutils"
 	externRescManager "github.com/hanfei1991/microcosm/pkg/externalresource/manager"
 	extKV "github.com/hanfei1991/microcosm/pkg/meta/extension"
@@ -260,7 +262,7 @@ func (s *Server) RegisterExecutor(ctx context.Context, req *pb.RegisterExecutorR
 	if err != nil {
 		log.L().Logger.Error("add executor failed", zap.Error(err))
 		return &pb.RegisterExecutorResponse{
-			Err: errors.ToPBError(err),
+			Err: derrors.ToPBError(err),
 		}, nil
 	}
 	return &pb.RegisterExecutorResponse{
@@ -272,43 +274,34 @@ func (s *Server) RegisterExecutor(ctx context.Context, req *pb.RegisterExecutorR
 // - receives request from job master
 // - queries resource manager to allocate resource and maps tasks to executors
 // - returns scheduler response to job master
-func (s *Server) ScheduleTask(ctx context.Context, req *pb.TaskSchedulerRequest) (*pb.TaskSchedulerResponse, error) {
-	resp2 := &pb.TaskSchedulerResponse{}
+func (s *Server) ScheduleTask(ctx context.Context, req *pb.ScheduleTaskRequest) (*pb.ScheduleTaskResponse, error) {
+	resp2 := &pb.ScheduleTaskResponse{}
 	shouldRet, err := s.masterRPCHook.PreRPC(ctx, req, &resp2)
 	if shouldRet {
 		return resp2, err
 	}
 
-	// NOTE This is a temporary implementation before we update the proto.
-	// We first need to make sure that the scheduler.Scheduler works properly.
-	// TODO (zixiong) re-implement this chunk of code in a subsequent PR.
-	results := make(map[int64]*pb.ScheduleResult)
-	for _, task := range req.GetTasks() {
-		schedulerReq := &schedModel.SchedulerRequest{
-			Cost: schedModel.ResourceUnit(task.GetCost()),
-			// TODO fill ExternalResources properly after proto is updated.
-			ExternalResources: nil,
-		}
-		schedulerResp, err := s.scheduler.ScheduleTask(ctx, schedulerReq)
-		if err != nil {
-			// TODO proper error handling
-			return nil, err
-		}
-
-		addr, ok := s.executorManager.GetAddr(schedulerResp.ExecutorID)
-		if !ok {
-			log.L().Warn("Executor is gone, RPC call needs retry",
-				zap.Any("request", req),
-				zap.String("executor-id", string(schedulerResp.ExecutorID)))
-			return nil, errors.ErrUnknownExecutorID.GenWithStackByArgs(string(schedulerResp.ExecutorID))
-		}
-		results[task.GetTask().Id] = &pb.ScheduleResult{
-			ExecutorId: string(schedulerResp.ExecutorID),
-			Addr:       addr,
-		}
+	schedulerReq := &schedModel.SchedulerRequest{
+		Cost:              schedModel.ResourceUnit(req.GetCost()),
+		ExternalResources: req.GetResourceRequirements(),
 	}
-	return &pb.TaskSchedulerResponse{
-		Schedule: results,
+	schedulerResp, err := s.scheduler.ScheduleTask(ctx, schedulerReq)
+	if err != nil {
+		return nil, schedModel.SchedulerErrorToGRPCError(err)
+	}
+
+	addr, ok := s.executorManager.GetAddr(schedulerResp.ExecutorID)
+	if !ok {
+		log.L().Warn("Executor is gone, RPC call needs retry",
+			zap.Any("request", req),
+			zap.String("executor-id", string(schedulerResp.ExecutorID)))
+		errOut := derrors.ErrUnknownExecutorID.GenWithStackByArgs(string(schedulerResp.ExecutorID))
+		return nil, status.Error(codes.Internal, errOut.Error())
+	}
+
+	return &pb.ScheduleTaskResponse{
+		ExecutorId:   string(schedulerResp.ExecutorID),
+		ExecutorAddr: addr,
 	}, nil
 }
 
@@ -488,7 +481,7 @@ func (s *Server) registerMetaStore() error {
 func (s *Server) startResourceManager() error {
 	storeConf := s.metaStoreManager.GetMetaStore(metaclient.FrameMetaID)
 	if storeConf == nil {
-		return errors.ErrMetaStoreUnfounded.GenWithStackByArgs(metaclient.FrameMetaID)
+		return derrors.ErrMetaStoreUnfounded.GenWithStackByArgs(metaclient.FrameMetaID)
 	}
 	frameCliEx, err := kvclient.NewKVClient(storeConf)
 	if err != nil {
@@ -581,17 +574,17 @@ func (s *Server) reset(ctx context.Context) error {
 	sess, err := concurrency.NewSession(
 		s.etcdClient, concurrency.WithTTL(int(defaultSessionTTL.Seconds())))
 	if err != nil {
-		return errors.Wrap(errors.ErrMasterNewServer, err)
+		return derrors.Wrap(derrors.ErrMasterNewServer, err)
 	}
 
 	// register NodeInfo key used in service discovery
 	value, err := s.info.ToJSON()
 	if err != nil {
-		return errors.Wrap(errors.ErrMasterNewServer, err)
+		return derrors.Wrap(derrors.ErrMasterNewServer, err)
 	}
 	_, err = s.etcdClient.Put(ctx, s.info.EtcdKey(), value, clientv3.WithLease(sess.Lease()))
 	if err != nil {
-		return errors.Wrap(errors.ErrEtcdAPIError, err)
+		return derrors.Wrap(derrors.ErrEtcdAPIError, err)
 	}
 
 	s.session = sess
@@ -635,7 +628,7 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 
 	storeConf := s.metaStoreManager.GetMetaStore(metaclient.FrameMetaID)
 	if storeConf == nil {
-		return errors.ErrMetaStoreUnfounded.GenWithStackByArgs(metaclient.FrameMetaID)
+		return derrors.ErrMetaStoreUnfounded.GenWithStackByArgs(metaclient.FrameMetaID)
 	}
 
 	// job manager user framework metastore as user metastore
@@ -730,7 +723,7 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 			if !s.isEtcdLeader() {
 				log.L().Info("etcd leader changed, resigns server master leader",
 					zap.String("old-leader-name", s.name()))
-				return errors.ErrEtcdLeaderChanged.GenWithStackByArgs()
+				return derrors.ErrEtcdLeaderChanged.GenWithStackByArgs()
 			}
 			err := s.jobManager.Poll(ctx)
 			if err != nil {

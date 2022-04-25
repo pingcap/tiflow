@@ -49,6 +49,7 @@ func TestExampleMaster(t *testing.T) {
 		masterID,
 		workerID,
 		executorNodeID,
+		nil,
 	)
 
 	ctx := context.Background()

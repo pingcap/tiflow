@@ -11,6 +11,9 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/pingcap/tiflow/dm/pkg/conn"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+
 	"github.com/hanfei1991/microcosm/client"
 	"github.com/hanfei1991/microcosm/jobmaster/dm/config"
 	"github.com/hanfei1991/microcosm/jobmaster/dm/metadata"
@@ -26,8 +29,6 @@ import (
 	dmpkg "github.com/hanfei1991/microcosm/pkg/dm"
 	"github.com/hanfei1991/microcosm/pkg/externalresource/broker"
 	extkv "github.com/hanfei1991/microcosm/pkg/meta/extension"
-	"github.com/pingcap/tiflow/dm/pkg/conn"
-	"github.com/pingcap/tiflow/dm/pkg/log"
 
 	kvmock "github.com/hanfei1991/microcosm/pkg/meta/kvclient/mock"
 	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
@@ -121,9 +122,9 @@ func (t *testDMJobmasterSuite) TestRunDMJobMaster() {
 
 	// Poll
 	mockServerMasterClient.On("ScheduleTask", mock.Anything, mock.Anything, mock.Anything).
-		Return(&pb.TaskSchedulerResponse{Schedule: map[int64]*pb.ScheduleResult{0: {}}}, nil).Once()
+		Return(&pb.ScheduleTaskResponse{}, nil).Once()
 	mockServerMasterClient.On("ScheduleTask", mock.Anything, mock.Anything, mock.Anything).
-		Return(&pb.TaskSchedulerResponse{Schedule: map[int64]*pb.ScheduleResult{0: {}}}, nil).Once()
+		Return(&pb.ScheduleTaskResponse{}, nil).Once()
 	require.NoError(t.T(), jobmaster.Poll(context.Background()))
 	require.NoError(t.T(), jobmaster.Poll(context.Background()))
 	require.NoError(t.T(), jobmaster.Poll(context.Background()))

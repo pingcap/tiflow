@@ -64,13 +64,3 @@ func (t *Task) ToPB() *pb.TaskRequest {
 	}
 	return req
 }
-
-// ToScheduleTaskPB converts a task to a schedule task request
-func (t *Task) ToScheduleTaskPB() *pb.ScheduleTask {
-	req := &pb.ScheduleTask{
-		Task:              t.ToPB(),
-		Cost:              int64(t.Cost),
-		PreferredLocation: t.PreferredLocation,
-	}
-	return req
-}

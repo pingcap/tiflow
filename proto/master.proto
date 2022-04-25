@@ -3,7 +3,6 @@ syntax = "proto3";
 package pb;
 
 import "error.proto";
-import "executor.proto";
 import "metastore.proto";
 
 // I'm trying to phase out the communication protocal.
@@ -36,7 +35,7 @@ service Master {
 
     // - PutClusterConfig
 
-    rpc ScheduleTask(TaskSchedulerRequest) returns(TaskSchedulerResponse) {}
+    rpc ScheduleTask(ScheduleTaskRequest) returns(ScheduleTaskResponse) {}
 
     /* Metastore manager API */
     // RegisterMetaStore is called from backend metastore and
@@ -153,29 +152,15 @@ message RegisterExecutorResponse {
     string  executor_id = 2;
 }
 
-message ScheduleTask{
-    TaskRequest task = 1;
+message ScheduleTaskRequest {
+    string task_id = 1;
     int64 cost = 2;
-    string preferred_location = 3;
+    repeated string resource_requirements = 3;
 }
 
-// TaskSchedulerRequest is sent from job master to server master, server master
-// applies resource from resource manager, allocates executor to tasks.
-// The request contains an array of ScheduleTask.
-message TaskSchedulerRequest {
-    repeated ScheduleTask tasks = 1;
-}
-
-// ScheduleResult represents the where the task(sub job) will be running.
-// Currently it contains an executor id.
-message ScheduleResult {
+message ScheduleTaskResponse {
     string executor_id = 1;
-    string addr = 2;
-}
-
-message TaskSchedulerResponse {
-    map<int64, ScheduleResult> schedule = 1;
-    Error err = 2;
+    string executor_addr = 2;
 }
 
 message ExecWorkload {

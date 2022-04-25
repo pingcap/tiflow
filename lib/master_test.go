@@ -15,6 +15,7 @@ import (
 	"github.com/hanfei1991/microcosm/lib/statusutil"
 	"github.com/hanfei1991/microcosm/pkg/adapter"
 	derror "github.com/hanfei1991/microcosm/pkg/errors"
+	"github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta"
 	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
 	"github.com/hanfei1991/microcosm/pkg/uuid"
 )
@@ -152,9 +153,15 @@ func TestMasterCreateWorker(t *testing.T) {
 		100,
 		masterName,
 		workerID1,
-		executorNodeID1)
+		executorNodeID1,
+		[]resourcemeta.ResourceID{"resource-1", "resource-2"})
 
-	workerID, err := master.CreateWorker(workerTypePlaceholder, &dummyConfig{param: 1}, 100)
+	workerID, err := master.CreateWorker(
+		workerTypePlaceholder,
+		&dummyConfig{param: 1},
+		100,
+		"resource-1",
+		"resource-2")
 	require.NoError(t, err)
 	require.Equal(t, workerID1, workerID)
 

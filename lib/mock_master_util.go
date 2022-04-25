@@ -21,6 +21,7 @@ import (
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 	"github.com/hanfei1991/microcosm/pkg/deps"
 	"github.com/hanfei1991/microcosm/pkg/errors"
+	"github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta"
 	mockkv "github.com/hanfei1991/microcosm/pkg/meta/kvclient/mock"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 	"github.com/hanfei1991/microcosm/pkg/uuid"
@@ -62,26 +63,21 @@ func MockBaseMasterCreateWorker(
 	masterID libModel.MasterID,
 	workerID libModel.WorkerID,
 	executorID model.ExecutorID,
+	resources []resourcemeta.ResourceID,
 ) {
 	master.uuidGen = uuid.NewMock()
-
-	expectedSchedulerReq := &pb.TaskSchedulerRequest{Tasks: []*pb.ScheduleTask{{
-		Task: &pb.TaskRequest{
-			Id: 0,
-		},
-		Cost: int64(cost),
-	}}}
+	expectedSchedulerReq := &pb.ScheduleTaskRequest{
+		TaskId:               workerID,
+		Cost:                 int64(cost),
+		ResourceRequirements: resources,
+	}
 	master.serverMasterClient.(*client.MockServerMasterClient).On(
 		"ScheduleTask",
 		mock.Anything,
 		expectedSchedulerReq,
 		mock.Anything).Return(
-		&pb.TaskSchedulerResponse{
-			Schedule: map[int64]*pb.ScheduleResult{
-				0: {
-					ExecutorId: string(executorID),
-				},
-			},
+		&pb.ScheduleTaskResponse{
+			ExecutorId: string(executorID),
 		}, nil)
 
 	mockExecutorClient := &client.MockExecutorClient{}
@@ -118,19 +114,16 @@ func MockBaseMasterCreateWorkerMetScheduleTaskError(
 	executorID model.ExecutorID,
 ) {
 	master.uuidGen = uuid.NewMock()
-
-	expectedSchedulerReq := &pb.TaskSchedulerRequest{Tasks: []*pb.ScheduleTask{{
-		Task: &pb.TaskRequest{
-			Id: 0,
-		},
-		Cost: int64(cost),
-	}}}
+	expectedSchedulerReq := &pb.ScheduleTaskRequest{
+		TaskId: workerID,
+		Cost:   int64(cost),
+	}
 	master.serverMasterClient.(*client.MockServerMasterClient).On(
 		"ScheduleTask",
 		mock.Anything,
 		expectedSchedulerReq,
 		mock.Anything).Return(
-		&pb.TaskSchedulerResponse{}, errors.ErrClusterResourceNotEnough.FastGenByArgs())
+		&pb.ScheduleTaskResponse{}, errors.ErrClusterResourceNotEnough.FastGenByArgs())
 	master.uuidGen.(*uuid.MockGenerator).Push(workerID)
 }
 

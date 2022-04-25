@@ -4,8 +4,9 @@ import (
 	"context"
 	"time"
 
-	"github.com/hanfei1991/microcosm/pkg/rpcutil"
 	"google.golang.org/grpc"
+
+	"github.com/hanfei1991/microcosm/pkg/rpcutil"
 
 	"github.com/hanfei1991/microcosm/pb"
 	"github.com/hanfei1991/microcosm/pkg/errors"
@@ -33,9 +34,9 @@ type MasterClient interface {
 	) (resp *pb.QueryMetaStoreResponse, err error)
 	ScheduleTask(
 		ctx context.Context,
-		req *pb.TaskSchedulerRequest,
+		req *pb.ScheduleTaskRequest,
 		timeout time.Duration,
-	) (resp *pb.TaskSchedulerResponse, err error)
+	) (resp *pb.ScheduleTaskResponse, err error)
 	PersistResource(
 		ctx context.Context,
 		request *pb.PersistResourceRequest,
@@ -116,9 +117,9 @@ func (c *MasterClientImpl) QueryMetaStore(
 // will ask resource manager for resource and allocates executors to given tasks
 func (c *MasterClientImpl) ScheduleTask(
 	ctx context.Context,
-	req *pb.TaskSchedulerRequest,
+	req *pb.ScheduleTaskRequest,
 	timeout time.Duration,
-) (resp *pb.TaskSchedulerResponse, err error) {
+) (resp *pb.ScheduleTaskResponse, err error) {
 	ctx1, cancel := context.WithCancel(ctx)
 	defer cancel()
 	return rpcutil.DoFailoverRPC(ctx1, c.FailoverRPCClients, req, pb.MasterClient.ScheduleTask)

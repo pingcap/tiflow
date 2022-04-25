@@ -56,8 +56,6 @@ func (s *masterServerConn) sendRequest(ctx context.Context, req interface{}) (in
 		return s.server.SubmitJob(ctx, x)
 	case *pb.HeartbeatRequest:
 		return s.server.Heartbeat(ctx, x)
-	case *pb.TaskSchedulerRequest:
-		return s.server.ScheduleTask(ctx, x)
 	case *pb.CancelJobRequest:
 		return s.server.CancelJob(ctx, x)
 	}
@@ -66,6 +64,11 @@ func (s *masterServerConn) sendRequest(ctx context.Context, req interface{}) (in
 
 type masterServerClient struct {
 	conn Conn
+}
+
+func (c *masterServerClient) ScheduleTask(ctx context.Context, req *pb.ScheduleTaskRequest, opts ...grpc.CallOption) (*pb.ScheduleTaskResponse, error) {
+	resp, err := c.conn.sendRequest(ctx, req)
+	return resp.(*pb.ScheduleTaskResponse), err
 }
 
 func (c *masterServerClient) RegisterExecutor(ctx context.Context, req *pb.RegisterExecutorRequest, opts ...grpc.CallOption) (*pb.RegisterExecutorResponse, error) {
@@ -91,14 +94,6 @@ func (c *masterServerClient) CancelJob(ctx context.Context, req *pb.CancelJobReq
 func (c *masterServerClient) Heartbeat(ctx context.Context, req *pb.HeartbeatRequest, opts ...grpc.CallOption) (*pb.HeartbeatResponse, error) {
 	resp, err := c.conn.sendRequest(ctx, req)
 	return resp.(*pb.HeartbeatResponse), err
-}
-
-func (c *masterServerClient) ScheduleTask(ctx context.Context, req *pb.TaskSchedulerRequest, opts ...grpc.CallOption) (*pb.TaskSchedulerResponse, error) {
-	resp, err := c.conn.sendRequest(ctx, req)
-	if err != nil {
-		return nil, err
-	}
-	return resp.(*pb.TaskSchedulerResponse), nil
 }
 
 func (c *masterServerClient) RegisterMetaStore(

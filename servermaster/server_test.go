@@ -259,10 +259,6 @@ func (m *mockExecutorManager) HandleHeartbeat(req *pb.HeartbeatRequest) (*pb.Hea
 	panic("not implemented")
 }
 
-func (m *mockExecutorManager) Allocate(tasks []*pb.ScheduleTask) (bool, *pb.TaskSchedulerResponse) {
-	panic("not implemented")
-}
-
 func (m *mockExecutorManager) AllocateNewExec(req *pb.RegisterExecutorRequest) (*model.NodeInfo, error) {
 	panic("not implemented")
 }
