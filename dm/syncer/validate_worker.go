@@ -156,7 +156,7 @@ func (vw *validateWorker) updateRowChange(job *rowValidationJob) {
 func (vw *validateWorker) validateTableChange() {
 	var err error
 	defer func() {
-		if err != nil && !isRetryableDBError(err) {
+		if err != nil && !isRetryableValidateError(err) {
 			vw.validator.sendError(terror.ErrValidatorValidateChange.Delegate(err))
 		}
 	}()
@@ -392,7 +392,7 @@ func (vw *validateWorker) getTargetRows(cond *Cond) (map[string][]*sql.NullStrin
 	// query using sql.DB directly, BaseConn is more than what we need
 	rows, err := vw.db.DB.QueryContext(ctx, rowsQuery, cond.GetArgs()...)
 	if err != nil {
-		if isRetryableDBError(err) {
+		if isRetryableValidateError(err) {
 			vw.L.Info("met retryable error", zap.Error(err))
 		} else {
 			vw.L.Error("failed to query",
@@ -442,6 +442,11 @@ func (vw *validateWorker) setPendingRowCounts(newCounts []int64) {
 		vw.pendingRowCounts[tp] = val
 		vw.validator.addPendingRowCount(rowChangeJobType(tp), diff)
 	}
+}
+
+func isRetryableValidateError(err error) bool {
+	err = errors.Cause(err)
+	return err == context.DeadlineExceeded || isRetryableDBError(err)
 }
 
 func isRetryableDBError(err error) bool {

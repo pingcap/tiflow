@@ -237,14 +237,15 @@ func (v *DataValidator) initialize() error {
 
 	dbCfg := v.cfg.From
 	dbCfg.RawDBCfg = config.DefaultRawDBConfig().SetReadTimeout(maxDMLConnectionTimeout).SetMaxIdleConns(1)
-	v.fromDB, _, err = dbconn.CreateConns(tctx, v.cfg, &dbCfg, 0)
+	v.fromDB, err = dbconn.CreateBaseDB(&dbCfg)
 	if err != nil {
 		return err
 	}
 
 	dbCfg = v.cfg.To
-	dbCfg.RawDBCfg = config.DefaultRawDBConfig().SetReadTimeout(maxDMLConnectionTimeout).SetMaxIdleConns(v.workerCnt)
-	v.toDB, _, err = dbconn.CreateConns(tctx, v.cfg, &dbCfg, 0)
+	// worker count + checkpoint connection, others concurrent access can create it on the fly
+	dbCfg.RawDBCfg = config.DefaultRawDBConfig().SetReadTimeout(maxDMLConnectionTimeout).SetMaxIdleConns(v.workerCnt + 1)
+	v.toDB, err = dbconn.CreateBaseDB(&dbCfg)
 	if err != nil {
 		return err
 	}
@@ -418,7 +419,7 @@ func (v *DataValidator) doValidate() {
 		return
 	}
 
-	if err := v.loadPersistedData(v.tctx); err != nil {
+	if err := v.loadPersistedData(); err != nil {
 		v.sendError(terror.ErrValidatorLoadPersistedData.Delegate(err))
 		return
 	}
@@ -579,7 +580,6 @@ func (v *DataValidator) stopInner() {
 	v.streamerController.Close()
 	v.fromDB.Close()
 	v.toDB.Close()
-	v.persistHelper.close()
 
 	v.wg.Wait()
 	close(v.errChan) // close error chan after all possible sender goroutines stopped
@@ -793,20 +793,14 @@ func (v *DataValidator) persistCheckpointAndData(loc binlog.Location) error {
 	return nil
 }
 
-func (v *DataValidator) loadPersistedData(tctx *tcontext.Context) error {
-	var err error
-	v.location, err = v.persistHelper.loadCheckpoint(tctx)
-	if err != nil {
-		return err
-	}
-
-	loadedPendingChanges, rev, err := v.persistHelper.loadPendingChange(tctx)
+func (v *DataValidator) loadPersistedData() error {
+	data, err := v.persistHelper.loadPersistedDataRetry()
 	if err != nil {
 		return err
 	}
 	// table info of pending change is not persisted in order to save space, so need to init them after load.
 	pendingChanges := make(map[string]*tableChangeJob)
-	for tblName, tblChange := range loadedPendingChanges {
+	for tblName, tblChange := range data.pendingChanges {
 		pendingTblChange := newTableChangeJob()
 		pendingChanges[tblName] = pendingTblChange
 		// todo: if table is dropped since last run, we should skip rows related to this table & update table status
@@ -846,15 +840,12 @@ func (v *DataValidator) loadPersistedData(tctx *tcontext.Context) error {
 			}
 		}
 	}
+
+	v.location = data.checkpoint
 	v.loadedPendingChanges = pendingChanges
+	v.persistHelper.setRevision(data.rev)
+	v.initTableStatus(data.tableStatus)
 
-	v.persistHelper.setRevision(rev)
-
-	tableStatus, err := v.persistHelper.loadTableStatus(tctx)
-	if err != nil {
-		return err
-	}
-	v.initTableStatus(tableStatus)
 	return nil
 }
 

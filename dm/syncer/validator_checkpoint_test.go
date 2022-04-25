@@ -105,7 +105,7 @@ func TestValidatorCheckpointPersist(t *testing.T) {
 	validator.persistHelper.schemaInitialized.Store(true)
 	validator.Start(pb.Stage_Stopped)
 	validator.Stop()
-	require.NoError(t, validator.loadPersistedData(tcontext.Background()))
+	require.NoError(t, validator.loadPersistedData())
 	require.Equal(t, int64(1), validator.persistHelper.revision)
 	require.Equal(t, 1, len(validator.loadedPendingChanges))
 	require.Equal(t, 3, len(validator.loadedPendingChanges[tbl.String()].jobs))

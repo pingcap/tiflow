@@ -652,7 +652,7 @@ func TestGetValidationError(t *testing.T) {
 			},
 		},
 	}
-	validator.persistHelper.dbConn = genDBConn(t, db, cfg)
+	validator.persistHelper.db = conn.NewBaseDB(db, func() {})
 	res := validator.GetValidatorError(pb.ValidateErrorState_InvalidErr)
 	require.EqualValues(t, expected[0], res)
 	res = validator.GetValidatorError(pb.ValidateErrorState_IgnoredErr)
@@ -670,7 +670,7 @@ func TestOperateValidationError(t *testing.T) {
 	validator.ctx, validator.cancel = context.WithCancel(context.Background())
 	validator.tctx = tcontext.NewContext(validator.ctx, validator.L)
 	validator.persistHelper.tctx = validator.tctx
-	validator.persistHelper.dbConn = genDBConn(t, db, cfg)
+	validator.persistHelper.db = conn.NewBaseDB(db, func() {})
 	sourceID := validator.cfg.SourceID
 	// 1. clear all error
 	dbMock.ExpectQuery("DELETE FROM " + validator.persistHelper.errorChangeTableName + " WHERE source=?").WillReturnRows()
