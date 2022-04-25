@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package codec
+package avro
 
 import (
 	"bytes"
@@ -26,7 +26,6 @@ import (
 	"github.com/jarcoal/httpmock"
 	"github.com/linkedin/goavro/v2"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/stretchr/testify/require"
 )
 
@@ -169,7 +168,7 @@ func TestSchemaRegistry(t *testing.T) {
 		Table:  "test1",
 	}
 
-	manager, err := NewAvroSchemaManager(getTestingContext(), &security.Credential{}, "http://127.0.0.1:8081", "-value")
+	manager, err := NewAvroSchemaManager(getTestingContext(), nil, "http://127.0.0.1:8081", "-value")
 	require.Nil(t, err)
 
 	err = manager.ClearRegistry(getTestingContext(), table)
@@ -234,10 +233,10 @@ func TestSchemaRegistryBad(t *testing.T) {
 	startHTTPInterceptForTestingRegistry(t)
 	defer stopHTTPInterceptForTestingRegistry()
 
-	_, err := NewAvroSchemaManager(getTestingContext(), &security.Credential{}, "http://127.0.0.1:808", "-value")
+	_, err := NewAvroSchemaManager(getTestingContext(), nil, "http://127.0.0.1:808", "-value")
 	require.NotNil(t, err)
 
-	_, err = NewAvroSchemaManager(getTestingContext(), &security.Credential{}, "https://127.0.0.1:8080", "-value")
+	_, err = NewAvroSchemaManager(getTestingContext(), nil, "https://127.0.0.1:8080", "-value")
 	require.NotNil(t, err)
 }
 
@@ -249,7 +248,7 @@ func TestSchemaRegistryIdempotent(t *testing.T) {
 		Table:  "test1",
 	}
 
-	manager, err := NewAvroSchemaManager(getTestingContext(), &security.Credential{}, "http://127.0.0.1:8081", "-value")
+	manager, err := NewAvroSchemaManager(getTestingContext(), nil, "http://127.0.0.1:8081", "-value")
 	require.Nil(t, err)
 	for i := 0; i < 20; i++ {
 		err = manager.ClearRegistry(getTestingContext(), table)
@@ -294,7 +293,7 @@ func TestGetCachedOrRegister(t *testing.T) {
 		Table:  "test1",
 	}
 
-	manager, err := NewAvroSchemaManager(getTestingContext(), &security.Credential{}, "http://127.0.0.1:8081", "-value")
+	manager, err := NewAvroSchemaManager(getTestingContext(), nil, "http://127.0.0.1:8081", "-value")
 	require.Nil(t, err)
 
 	called := 0

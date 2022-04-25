@@ -17,7 +17,6 @@ import (
 	"net/url"
 	"testing"
 
-	"github.com/pingcap/tidb/util/timeutil"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
@@ -25,11 +24,12 @@ import (
 
 func TestNewConfig(t *testing.T) {
 	t.Parallel()
-	c := NewConfig(config.ProtocolDefault, timeutil.SystemLocation())
+	c := NewConfig(config.ProtocolDefault)
 	require.Equal(t, c.protocol, config.ProtocolDefault)
 	require.Equal(t, c.maxMessageBytes, config.DefaultMaxMessageBytes)
 	require.Equal(t, c.maxBatchSize, defaultMaxBatchSize)
 	require.Equal(t, c.enableTiDBExtension, false)
+	require.Equal(t, c.avroDecimalHandlingMode, "precise")
 	require.Equal(t, c.avroRegistry, "")
 }
 
@@ -46,7 +46,7 @@ func TestConfigApplyValidate(t *testing.T) {
 	err = p.FromString(protocol)
 	require.Nil(t, err)
 
-	c := NewConfig(p, timeutil.SystemLocation())
+	c := NewConfig(p)
 	require.Equal(t, c.protocol, config.ProtocolCanalJSON)
 
 	opts := make(map[string]string)
@@ -73,7 +73,7 @@ func TestConfigApplyValidate(t *testing.T) {
 	err = p.FromString(protocol)
 	require.Nil(t, err)
 
-	c = NewConfig(p, timeutil.SystemLocation())
+	c = NewConfig(p)
 	err = c.Apply(sinkURI, opts)
 	require.Nil(t, err)
 	require.True(t, c.enableTiDBExtension)
@@ -90,7 +90,7 @@ func TestConfigApplyValidate(t *testing.T) {
 	require.Equal(t, protocol, "avro")
 	err = p.FromString(protocol)
 	require.Nil(t, err)
-	c = NewConfig(p, timeutil.SystemLocation())
+	c = NewConfig(p)
 	require.Equal(t, c.protocol, config.ProtocolAvro)
 
 	err = c.Apply(sinkURI, opts)
@@ -134,7 +134,7 @@ func TestConfigApplyValidate(t *testing.T) {
 	sinkURI, err = url.Parse(uri)
 	require.Nil(t, err)
 
-	c = NewConfig(config.ProtocolOpen, timeutil.SystemLocation())
+	c = NewConfig(config.ProtocolOpen)
 	err = c.Apply(sinkURI, opts)
 	require.Nil(t, err)
 

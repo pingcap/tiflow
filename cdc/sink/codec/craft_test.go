@@ -17,7 +17,6 @@ import (
 	"testing"
 
 	"github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tidb/util/timeutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/stretchr/testify/require"
@@ -121,7 +120,7 @@ func testBatchCodec(
 
 func TestCraftMaxMessageBytes(t *testing.T) {
 	t.Parallel()
-	config := NewConfig(config.ProtocolCraft, timeutil.SystemLocation()).WithMaxMessageBytes(256)
+	config := NewConfig(config.ProtocolCraft).WithMaxMessageBytes(256)
 	encoder := newCraftEventBatchEncoderBuilder(config).Build()
 
 	testEvent := &model.RowChangedEvent{
@@ -143,7 +142,7 @@ func TestCraftMaxMessageBytes(t *testing.T) {
 
 func TestCraftMaxBatchSize(t *testing.T) {
 	t.Parallel()
-	config := NewConfig(config.ProtocolCraft, timeutil.SystemLocation()).WithMaxMessageBytes(10485760)
+	config := NewConfig(config.ProtocolCraft).WithMaxMessageBytes(10485760)
 	config.maxBatchSize = 64
 	encoder := newCraftEventBatchEncoderBuilder(config).Build()
 
@@ -183,14 +182,14 @@ func TestCraftMaxBatchSize(t *testing.T) {
 }
 
 func TestDefaultCraftEventBatchCodec(t *testing.T) {
-	config := NewConfig(config.ProtocolCraft, timeutil.SystemLocation()).WithMaxMessageBytes(8192)
+	config := NewConfig(config.ProtocolCraft).WithMaxMessageBytes(8192)
 	config.maxBatchSize = 64
 	testBatchCodec(t, newCraftEventBatchEncoderBuilder(config), NewCraftEventBatchDecoder)
 }
 
 func TestBuildCraftEventBatchEncoder(t *testing.T) {
 	t.Parallel()
-	config := NewConfig(config.ProtocolCraft, timeutil.SystemLocation())
+	config := NewConfig(config.ProtocolCraft)
 
 	builder := &craftEventBatchEncoderBuilder{config: config}
 	encoder, ok := builder.Build().(*CraftEventBatchEncoder)

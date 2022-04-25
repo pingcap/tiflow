@@ -18,7 +18,6 @@ import (
 	"testing"
 
 	mm "github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/util/timeutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/stretchr/testify/require"
@@ -70,7 +69,7 @@ var testCaseDDL = &model.DDLEvent{
 
 func TestBuildCanalFlatEventBatchEncoder(t *testing.T) {
 	t.Parallel()
-	config := NewConfig(config.ProtocolCanalJSON, timeutil.SystemLocation())
+	config := NewConfig(config.ProtocolCanalJSON)
 
 	builder := &canalFlatEventBatchEncoderBuilder{config: config}
 	encoder, ok := builder.Build().(*CanalFlatEventBatchEncoder)

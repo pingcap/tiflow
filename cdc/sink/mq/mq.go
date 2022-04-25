@@ -36,7 +36,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
-	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -73,7 +72,6 @@ type mqSink struct {
 
 func newMqSink(
 	ctx context.Context,
-	credential *security.Credential,
 	topicManager manager.TopicManager,
 	mqProducer producer.Producer,
 	filter *filter.Filter,
@@ -81,7 +79,7 @@ func newMqSink(
 	replicaConfig *config.ReplicaConfig, encoderConfig *codec.Config,
 	errCh chan error,
 ) (*mqSink, error) {
-	encoderBuilder, err := codec.NewEventBatchEncoderBuilder(encoderConfig, credential)
+	encoderBuilder, err := codec.NewEventBatchEncoderBuilder(encoderConfig)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
@@ -414,8 +412,8 @@ func NewKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
 
-	encoderConfig := codec.NewConfig(protocol, contextutil.TimezoneFromCtx(ctx))
-	if err := encoderConfig.Apply(sinkURI, opts); err != nil {
+	encoderConfig := codec.NewConfig(protocol)
+	if err := encoderConfig.Apply(sinkURI, replicaConfig); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
 	// always set encoder's `MaxMessageBytes` equal to producer's `MaxMessageBytes`
@@ -454,7 +452,6 @@ func NewKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 
 	sink, err := newMqSink(
 		ctx,
-		baseConfig.Credential,
 		topicManager,
 		sProducer,
 		filter,
@@ -487,8 +484,8 @@ func NewPulsarSink(ctx context.Context, sinkURI *url.URL, filter *filter.Filter,
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
 
-	encoderConfig := codec.NewConfig(protocol, contextutil.TimezoneFromCtx(ctx))
-	if err := encoderConfig.Apply(sinkURI, opts); err != nil {
+	encoderConfig := codec.NewConfig(protocol)
+	if err := encoderConfig.Apply(sinkURI, replicaConfig); err != nil {
 		return nil, errors.Trace(err)
 	}
 	// todo: set by pulsar producer's `max.message.bytes`
@@ -501,15 +498,11 @@ func NewPulsarSink(ctx context.Context, sinkURI *url.URL, filter *filter.Filter,
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	// For now, it's a placeholder. Avro format have to make connection to Schema Registry,
-	// and it may need credential.
-	credential := &security.Credential{}
 	fakeTopicManager := pulsarmanager.NewTopicManager(
 		producer.GetPartitionNum(),
 	)
 	sink, err := newMqSink(
 		ctx,
-		credential,
 		fakeTopicManager,
 		producer,
 		filter,

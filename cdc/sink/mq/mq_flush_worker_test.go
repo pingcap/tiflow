@@ -83,8 +83,7 @@ func NewMockProducer() *mockProducer {
 
 func newTestWorker() (*flushWorker, *mockProducer) {
 	// 200 is about the size of a row change.
-	encoderConfig := codec.NewConfig(config.ProtocolOpen, timeutil.SystemLocation()).
-		WithMaxMessageBytes(200)
+	encoderConfig := codec.NewConfig(config.ProtocolOpen).WithMaxMessageBytes(200)
 	builder, err := codec.NewEventBatchEncoderBuilder(encoderConfig, &security.Credential{})
 	if err != nil {
 		panic(err)

@@ -330,6 +330,32 @@ func (r *RowChangedEvent) HandleKeyColumns() []*Column {
 	return pkeyCols
 }
 
+func (r *RowChangedEvent) HandleKeyColInfos() ([]*Column, []rowcodec.ColInfo) {
+	pkeyCols := make([]*Column, 0)
+	pkeyColInfos := make([]rowcodec.ColInfo, 0)
+
+	var cols []*Column
+	if r.IsDelete() {
+		cols = r.PreColumns
+	} else {
+		cols = r.Columns
+	}
+
+	for i, col := range cols {
+		if col != nil && col.Flag.IsHandleKey() {
+			pkeyCols = append(pkeyCols, col)
+			pkeyColInfos = append(pkeyColInfos, r.ColInfos[i])
+		}
+	}
+
+	if len(pkeyCols) == 0 {
+		// TODO redact the message
+		log.Panic("Cannot find handle key columns, bug?", zap.Reflect("event", r))
+	}
+
+	return pkeyCols, pkeyColInfos
+}
+
 // WithHandlePrimaryFlag set `HandleKeyFlag` and `PrimaryKeyFlag`
 func (r *RowChangedEvent) WithHandlePrimaryFlag(colNames map[string]struct{}) {
 	for _, col := range r.Columns {
