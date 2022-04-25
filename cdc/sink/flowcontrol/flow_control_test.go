@@ -22,18 +22,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-
-	"github.com/pingcap/check"
 	"golang.org/x/sync/errgroup"
 )
-
-func Test(t *testing.T) {
-	check.TestingT(t)
-}
-
-type flowControlSuite struct{}
-
-var _ = check.Suite(&flowControlSuite{})
 
 func dummyCallBack() error {
 	return nil
