@@ -118,11 +118,6 @@ func newChangefeed4Test(
 }
 
 func (c *changefeed) Tick(ctx cdcContext.Context, state *orchestrator.ChangefeedReactorState, captures map[model.CaptureID]*model.CaptureInfo) {
-	// skip this Tick
-	if c.upStream.IsInitializing() || c.upStream.IsColse() {
-		return
-	}
-
 	startTime := time.Now()
 
 	ctx = cdcContext.WithErrorHandler(ctx, func(err error) error {
@@ -172,6 +167,15 @@ func (c *changefeed) checkStaleCheckpointTs(ctx cdcContext.Context, checkpointTs
 }
 
 func (c *changefeed) tick(ctx cdcContext.Context, state *orchestrator.ChangefeedReactorState, captures map[model.CaptureID]*model.CaptureInfo) error {
+	if !c.upStream.IsNormal() {
+		err := c.upStream.CheckError()
+		if err != nil {
+			return errors.Trace(err)
+		}
+		// skip this tick if upstream is unnormal
+		return nil
+	}
+
 	c.state = state
 	c.feedStateManager.Tick(state)
 

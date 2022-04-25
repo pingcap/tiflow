@@ -26,7 +26,8 @@ import (
 )
 
 const (
-	tickDuration = 10 * time.Second
+	tickDuration     = 10 * time.Second
+	notifierChanSize = 32
 )
 
 var UpStreamManager *Manager
@@ -34,12 +35,13 @@ var UpStreamManager *Manager
 type Manager struct {
 	ups sync.Map
 	c   clock.Clock
-	ctx context.Context
+	// 用于通知需要初始化一个 upStream
+	notifier chan uint64
 }
 
 // NewManager create a new Manager.
-func NewManager(ctx context.Context) *Manager {
-	return &Manager{c: clock.New(), ctx: ctx}
+func NewManager() *Manager {
+	return &Manager{c: clock.New(), notifier: make(chan uint64, notifierChanSize)}
 }
 
 // Run will check all upStream in Manager periodly, if one upStream has not been
@@ -49,62 +51,77 @@ func (m *Manager) Run(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
-			m.closeUpstreams()
-			log.Info("upstream manager exit")
+			m.close()
+			log.Info("upstream manager exited", zap.Error(ctx.Err()))
 			return ctx.Err()
 		case <-ticker.C:
-			m.checkUpstreams()
+			m.check(ctx)
+		case id := <-m.notifier:
+			if up, ok := m.ups.Load(id); ok {
+				up.(*UpStream).asyncInit(ctx)
+			}
 		}
 	}
 }
 
-// Get gets a upStream by clusterID, if this upStream does not exis, create it.
+// Get a upStream by clusterID, if this upStream does not exis, create it.
 func (m *Manager) Get(clusterID uint64) (*UpStream, error) {
 	if up, ok := m.ups.Load(clusterID); ok {
 		up.(*UpStream).hold()
-		up.(*UpStream).clearIdealCount()
+		up.(*UpStream).clearIc()
 		return up.(*UpStream), nil
 	}
 
-	// TODO: use changefeed's pd addr in the future
+	// TODO: use changefeed's pd addr in the future.
 	pdEndpoints := strings.Split(config.GetGlobalServerConfig().Debug.ServerPdAddr, ",")
 	securityConfig := config.GetGlobalServerConfig().Security
-	up := newUpStream(pdEndpoints, securityConfig)
-	up.hold()
-	// 之后的实现需要检查错误
-	_ = up.Init(m.ctx)
+	up := newUpStream(clusterID, pdEndpoints, securityConfig)
 	m.ups.Store(clusterID, up)
+	up.hold()
+
+	select {
+	case m.notifier <- clusterID:
+		log.Info("async init upstream", zap.Uint64("clusterID", clusterID))
+	default:
+	}
 	return up, nil
 }
 
-// Release releases a upStream by clusterID
+// Release a upStream by clusterID
 func (m *Manager) Release(clusterID uint64) {
 	if up, ok := m.ups.Load(clusterID); ok {
 		up.(*UpStream).unhold()
 	}
 }
 
-func (m *Manager) checkUpstreams() {
+// check go throuht all upStreams in Manager and check if it should be initialize
+// or closed.
+func (m *Manager) check(ctx context.Context) {
 	m.ups.Range(func(k, v interface{}) bool {
 		up := v.(*UpStream)
-		if !up.isHold() {
-			up.addIdealCount()
+		if up.IsNormal() && !up.isHold() {
+			up.addIc()
 		}
 		if up.shouldClose() {
 			up.close()
+			m.ups.Delete(k)
+		}
+		if up.IsReady() {
+			up.asyncInit(ctx)
+		}
+		if up.IsColse() {
 			m.ups.Delete(k)
 		}
 		return true
 	})
 }
 
-func (m *Manager) closeUpstreams() {
+// close closes all upStreams in Manager.
+func (m *Manager) close() {
 	m.ups.Range(func(k, v interface{}) bool {
-		id := k.(uint64)
 		up := v.(*UpStream)
 		up.close()
-		log.Info("upStream closed", zap.Uint64("cluster id", id))
-		m.ups.Delete(id)
+		m.ups.Delete(k)
 		return true
 	})
 }

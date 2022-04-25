@@ -341,6 +341,16 @@ func (p *processor) tick(ctx cdcContext.Context, state *orchestrator.ChangefeedR
 	if !p.checkChangefeedNormal() {
 		return nil, cerror.ErrAdminStopProcessor.GenWithStackByArgs()
 	}
+
+	if !p.upStream.IsNormal() {
+		err := p.upStream.CheckError()
+		if err != nil {
+			return p.changefeed, errors.Trace(err)
+		}
+		// skip this tick if upstream is unnormal
+		return p.changefeed, nil
+	}
+
 	// we should skip this tick after create a task position
 	if p.createTaskPosition() {
 		return p.changefeed, nil

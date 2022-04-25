@@ -209,7 +209,7 @@ func (s *Server) Run(ctx context.Context) error {
 	}
 
 	// 全局变量
-	upstream.UpStreamManager = upstream.NewManager(ctx)
+	upstream.UpStreamManager = upstream.NewManager()
 
 	return s.run(ctx)
 }

@@ -606,8 +606,8 @@ func (o *ownerImpl) updateGCSafepoint(
 	if upStream == nil {
 		log.Panic("upStream is nil")
 	}
-	if !upStream.IsInitialized() {
-		log.Panic("upStream not initialized")
+	if !upStream.IsNormal() {
+		log.Panic("upStream is unnormal")
 	}
 	if upStream.GCManager == nil {
 		log.Panic("gcManager is nil")

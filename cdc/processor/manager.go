@@ -50,7 +50,6 @@ type command struct {
 // Manager is a manager of processor, which maintains the state and behavior of processors
 type Manager struct {
 	processors map[model.ChangeFeedID]*processor
-	upStreams  map[model.ChangeFeedID]*upstream.UpStream
 
 	commandQueue chan *command
 
