@@ -1847,7 +1847,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 	eventIndex := 0
 	// affectedSourceTables is used for gtid mode to update table point's gtid set after receiving a xid event,
 	// which means this whole event is finished
-	affectedSourceTables := make(map[string]struct{}, 0)
+	affectedSourceTables := make(map[string]map[string]struct{}, 0)
 	// the relay log file may be truncated(not end with an RotateEvent), in this situation, we may read some rows events
 	// and then read from the gtid again, so we force enter safe-mode for one more transaction to avoid failure due to
 	// conflict
@@ -2183,7 +2183,10 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			metrics.BinlogEventRowHistogram.WithLabelValues(s.cfg.WorkerName, s.cfg.Name, s.cfg.SourceID).Observe(float64(len(ev.Rows)))
 			sourceTable, err2 = s.handleRowsEvent(ev, ec)
 			if sourceTable != nil && err2 == nil && s.cfg.EnableGTID {
-				affectedSourceTables[sourceTable.String()] = struct{}{}
+				if _, ok := affectedSourceTables[sourceTable.Schema]; !ok {
+					affectedSourceTables[sourceTable.Schema] = make(map[string]struct{})
+				}
+				affectedSourceTables[sourceTable.Schema][sourceTable.Name] = struct{}{}
 			}
 		case *replication.QueryEvent:
 			originSQL = strings.TrimSpace(string(ev.Query))
@@ -2227,10 +2230,12 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			if err != nil {
 				return terror.Annotatef(err, "fail to record GTID %v", ev.GSet)
 			}
-			for tb := range affectedSourceTables {
-				s.saveTablePoint(utils.UnpackTableID(tb), currentLocation)
+			for schemaName, tableMap := range affectedSourceTables {
+				for table := range tableMap {
+					s.saveTablePoint(&filter.Table{Schema: schemaName, Name: table}, currentLocation)
+				}
 			}
-			affectedSourceTables = make(map[string]struct{})
+			affectedSourceTables = make(map[string]map[string]struct{})
 
 			job := newXIDJob(currentLocation, startLocation, currentLocation)
 			_, err2 = s.handleJobFunc(job)
