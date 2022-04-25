@@ -40,7 +40,7 @@ func (s *Snapshot) PreTableInfo(job *timodel.Job) (*model.TableInfo, error) {
 		return nil, nil
 	case timodel.ActionRenameTable, timodel.ActionDropTable, timodel.ActionDropView, timodel.ActionTruncateTable:
 		// get the table will be dropped
-		table, ok := s.doPhysicalTableByID(job.TableID)
+		table, ok := s.physicalTableByIDLocked(job.TableID)
 		if !ok {
 			return nil, cerror.ErrSchemaStorageTableMiss.GenWithStackByArgs(job.TableID)
 		}
@@ -60,7 +60,7 @@ func (s *Snapshot) PreTableInfo(job *timodel.Job) (*model.TableInfo, error) {
 			return nil, nil
 		}
 		tableID := tbInfo.ID
-		table, ok := s.doPhysicalTableByID(tableID)
+		table, ok := s.physicalTableByIDLocked(tableID)
 		if !ok {
 			return nil, cerror.ErrSchemaStorageTableMiss.GenWithStackByArgs(job.TableID)
 		}
@@ -139,6 +139,7 @@ func NewSnapshotFromMeta(meta *timeta.Meta, currentTs uint64, forceReplicate boo
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrMetaListDatabases, err)
 	}
+    // `tag` is used to reverse sort all versions in the generated snapshot.
 	tag := negative(currentTs)
 
 	for _, dbinfo := range dbinfos {
@@ -146,7 +147,7 @@ func NewSnapshotFromMeta(meta *timeta.Meta, currentTs uint64, forceReplicate boo
 		vid.target = unsafe.Pointer(dbinfo)
 		snap.schemas.ReplaceOrInsert(vid)
 
-		vname := newVersionedEntityName(-1, dbinfo.Name.O, tag)
+		vname := newVersionedEntityName(-1, dbinfo.Name.O, tag) // -1 means the entity is a schema.
 		vname.target = dbinfo.ID
 		snap.schemaNameToID.ReplaceOrInsert(vname)
 
@@ -216,7 +217,7 @@ func (s *Snapshot) PrintStatus(logger func(msg string, fields ...zap.Field)) {
 		availableSchemas[dbInfo.ID] = dbInfo.Name.O
 		logger("[SchemaSnap] --> Schemas", zap.Int64("schemaID", dbInfo.ID), zap.Reflect("dbInfo", dbInfo))
 		// check schemaNameToID
-		id, ok := s.doSchemaIDByName(dbInfo.Name.O)
+		id, ok := s.schemaIDByNameLocked(dbInfo.Name.O)
 		if !ok || id != dbInfo.ID {
 			logger("[SchemaSnap] ----> schemaNameToID item lost", zap.String("name", dbInfo.Name.O), zap.Int64("schemaNameToID", id))
 		}
@@ -232,8 +233,8 @@ func (s *Snapshot) PrintStatus(logger func(msg string, fields ...zap.Field)) {
 		availableTables[tableInfo.ID] = struct{}{}
 		logger("[SchemaSnap] --> Tables", zap.Int64("tableID", tableInfo.ID),
 			zap.Stringer("tableInfo", tableInfo),
-			zap.Bool("ineligible", s.doIsIneligibleTableID(tableInfo.ID)))
-		id, ok := s.doTableIDByName(tableInfo.TableName.Schema, tableInfo.TableName.Table)
+			zap.Bool("ineligible", s.isIneligibleTableIDLocked(tableInfo.ID)))
+		id, ok := s.tableIDByNameLocked(tableInfo.TableName.Schema, tableInfo.TableName.Table)
 		if !ok || id != tableInfo.ID {
 			logger("[SchemaSnap] ----> tableNameToID item lost", zap.Stringer("name", tableInfo.TableName), zap.Int64("tableNameToID", id))
 		}
@@ -247,7 +248,7 @@ func (s *Snapshot) PrintStatus(logger func(msg string, fields ...zap.Field)) {
 
 	s.IterPartitions(true, func(pid int64, table *model.TableInfo) {
 		logger("[SchemaSnap] --> Partitions", zap.Int64("partitionID", pid), zap.Int64("tableID", table.ID),
-			zap.Bool("ineligible", s.doIsIneligibleTableID(pid)))
+			zap.Bool("ineligible", s.isIneligibleTableIDLocked(pid)))
 	})
 }
 
@@ -257,10 +258,10 @@ func (s *Snapshot) PrintStatus(logger func(msg string, fields ...zap.Field)) {
 func (s *Snapshot) SchemaByID(id int64) (*timodel.DBInfo, bool) {
 	s.rwlock.RLock()
 	defer s.rwlock.RUnlock()
-	return s.doSchemaByID(id)
+	return s.schemaByIDLocked(id)
 }
 
-func (s *Snapshot) doSchemaByID(id int64) (val *timodel.DBInfo, ok bool) {
+func (s *Snapshot) schemaByIDLocked(id int64) (val *timodel.DBInfo, ok bool) {
 	tag := negative(s.currentTs)
 	start := versionedID{id: id, tag: tag, target: nil}
 	end := versionedID{id: id, tag: negative(uint64(0)), target: nil}
@@ -278,10 +279,10 @@ func (s *Snapshot) doSchemaByID(id int64) (val *timodel.DBInfo, ok bool) {
 func (s *Snapshot) PhysicalTableByID(id int64) (*model.TableInfo, bool) {
 	s.rwlock.RLock()
 	defer s.rwlock.RUnlock()
-	return s.doPhysicalTableByID(id)
+	return s.physicalTableByIDLocked(id)
 }
 
-func (s *Snapshot) doPhysicalTableByID(id int64) (tableInfo *model.TableInfo, ok bool) {
+func (s *Snapshot) physicalTableByIDLocked(id int64) (tableInfo *model.TableInfo, ok bool) {
 	tag := negative(s.currentTs)
 	start := versionedID{id: id, tag: tag, target: nil}
 	end := versionedID{id: id, tag: negative(uint64(0)), target: nil}
@@ -305,10 +306,10 @@ func (s *Snapshot) doPhysicalTableByID(id int64) (tableInfo *model.TableInfo, ok
 func (s *Snapshot) SchemaIDByName(schema string) (int64, bool) {
 	s.rwlock.RLock()
 	defer s.rwlock.RUnlock()
-	return s.doSchemaIDByName(schema)
+	return s.schemaIDByNameLocked(schema)
 }
 
-func (s *Snapshot) doSchemaIDByName(schema string) (id int64, ok bool) {
+func (s *Snapshot) schemaIDByNameLocked(schema string) (id int64, ok bool) {
 	tag := negative(s.currentTs)
 	start := newVersionedEntityName(-1, schema, tag)
 	end := newVersionedEntityName(-1, schema, negative(uint64(0)))
@@ -325,12 +326,12 @@ func (s *Snapshot) doSchemaIDByName(schema string) (id int64, ok bool) {
 func (s *Snapshot) TableIDByName(schema string, table string) (int64, bool) {
 	s.rwlock.RLock()
 	defer s.rwlock.RUnlock()
-	return s.doTableIDByName(schema, table)
+	return s.tableIDByNameLocked(schema, table)
 }
 
-func (s *Snapshot) doTableIDByName(schema string, table string) (id int64, ok bool) {
+func (s *Snapshot) tableIDByNameLocked(schema string, table string) (id int64, ok bool) {
 	var prefix int64
-	prefix, ok = s.doSchemaIDByName(schema)
+	prefix, ok = s.schemaIDByNameLocked(schema)
 	if ok {
 		tag := negative(s.currentTs)
 		start := newVersionedEntityName(prefix, table, tag)
@@ -350,26 +351,26 @@ func (s *Snapshot) doTableIDByName(schema string, table string) (id int64, ok bo
 func (s *Snapshot) TableByName(schema, table string) (*model.TableInfo, bool) {
 	s.rwlock.RLock()
 	defer s.rwlock.RUnlock()
-	return s.doTableByName(schema, table)
+	return s.tableByNameLocked(schema, table)
 }
 
-func (s *Snapshot) doTableByName(schema, table string) (info *model.TableInfo, ok bool) {
-	id, ok := s.doTableIDByName(schema, table)
+func (s *Snapshot) tableByNameLocked(schema, table string) (info *model.TableInfo, ok bool) {
+	id, ok := s.tableIDByNameLocked(schema, table)
 	if !ok {
 		return nil, ok
 	}
-	return s.doPhysicalTableByID(id)
+	return s.physicalTableByIDLocked(id)
 }
 
 // SchemaByTableID returns the schema ID by table ID.
 func (s *Snapshot) SchemaByTableID(tableID int64) (*timodel.DBInfo, bool) {
 	s.rwlock.RLock()
 	defer s.rwlock.RUnlock()
-	tableInfo, ok := s.doPhysicalTableByID(tableID)
+	tableInfo, ok := s.physicalTableByIDLocked(tableID)
 	if !ok {
 		return nil, false
 	}
-	return s.doSchemaByID(tableInfo.SchemaID)
+	return s.schemaByIDLocked(tableInfo.SchemaID)
 }
 
 // IsTruncateTableID returns true if the table id have been truncated by truncate table DDL.
@@ -384,10 +385,10 @@ func (s *Snapshot) IsTruncateTableID(id int64) bool {
 func (s *Snapshot) IsIneligibleTableID(id int64) bool {
 	s.rwlock.RLock()
 	defer s.rwlock.RUnlock()
-	return s.doIsIneligibleTableID(id)
+	return s.isIneligibleTableIDLocked(id)
 }
 
-func (s *Snapshot) doIsIneligibleTableID(id int64) (ok bool) {
+func (s *Snapshot) isIneligibleTableIDLocked(id int64) (ok bool) {
 	tag, ok := s.tableTagByID(id, false)
 	return ok && s.ineligibleTables.Get(newVersionedID(id, tag)) != nil
 }
@@ -435,7 +436,7 @@ func (s *Snapshot) FillSchemaName(job *timodel.Job) error {
 		job.SchemaName = job.BinlogInfo.DBInfo.Name.O
 		return nil
 	}
-	dbInfo, exist := s.doSchemaByID(job.SchemaID)
+	dbInfo, exist := s.schemaByIDLocked(job.SchemaID)
 	if !exist {
 		return cerror.ErrSnapshotSchemaNotFound.GenWithStackByArgs(job.SchemaID)
 	}
@@ -446,7 +447,7 @@ func (s *Snapshot) FillSchemaName(job *timodel.Job) error {
 // dropSchema removes a schema from the snapshot.
 // Tables in the schema will also be dropped.
 func (s *Snapshot) dropSchema(id int64, currentTs uint64) error {
-	dbInfo, ok := s.doSchemaByID(id)
+	dbInfo, ok := s.schemaByIDLocked(id)
 	if !ok {
 		return cerror.ErrSnapshotSchemaNotFound.GenWithStackByArgs(id)
 	}
@@ -454,7 +455,7 @@ func (s *Snapshot) dropSchema(id int64, currentTs uint64) error {
 	s.schemas.ReplaceOrInsert(newVersionedID(id, tag))
 	s.schemaNameToID.ReplaceOrInsert(newVersionedEntityName(-1, dbInfo.Name.O, tag))
 	for _, id := range s.tablesInSchema(dbInfo.Name.O) {
-		tbInfo, _ := s.doPhysicalTableByID(id)
+		tbInfo, _ := s.physicalTableByIDLocked(id)
 		s.doDropTable(tbInfo, currentTs)
 	}
 	s.currentTs = currentTs
@@ -464,11 +465,11 @@ func (s *Snapshot) dropSchema(id int64, currentTs uint64) error {
 
 // Create a new schema in the snapshot. `dbInfo` will be deep copied.
 func (s *Snapshot) createSchema(dbInfo *timodel.DBInfo, currentTs uint64) error {
-	x, ok := s.doSchemaByID(dbInfo.ID)
+	x, ok := s.schemaByIDLocked(dbInfo.ID)
 	if ok {
 		return cerror.ErrSnapshotSchemaExists.GenWithStackByArgs(x.Name, x.ID)
 	}
-	if id, ok := s.doSchemaIDByName(dbInfo.Name.O); ok {
+	if id, ok := s.schemaIDByNameLocked(dbInfo.Name.O); ok {
 		return cerror.ErrSnapshotSchemaExists.GenWithStackByArgs(dbInfo.Name.O, id)
 	}
 	s.doCreateSchema(dbInfo, currentTs)
@@ -480,7 +481,7 @@ func (s *Snapshot) createSchema(dbInfo *timodel.DBInfo, currentTs uint64) error 
 // Replace a schema. dbInfo will be deep copied.
 // Callers should ensure `dbInfo` information not conflict with other schemas.
 func (s *Snapshot) replaceSchema(dbInfo *timodel.DBInfo, currentTs uint64) error {
-	old, ok := s.doSchemaByID(dbInfo.ID)
+	old, ok := s.schemaByIDLocked(dbInfo.ID)
 	if !ok {
 		return cerror.ErrSnapshotSchemaNotFound.GenWithStack("schema %s(%d) not found", dbInfo.Name, dbInfo.ID)
 	}
@@ -506,7 +507,7 @@ func (s *Snapshot) doCreateSchema(dbInfo *timodel.DBInfo, currentTs uint64) {
 
 // dropTable removes a table(NOT partition) from the snapshot.
 func (s *Snapshot) dropTable(id int64, currentTs uint64) error {
-	tbInfo, ok := s.doPhysicalTableByID(id)
+	tbInfo, ok := s.physicalTableByIDLocked(id)
 	if !ok {
 		return cerror.ErrSnapshotTableNotFound.GenWithStackByArgs(id)
 	}
@@ -532,10 +533,10 @@ func (s *Snapshot) doDropTable(tbInfo *model.TableInfo, currentTs uint64) {
 
 // truncateTable truncate the table with the given ID, and replace it with a new `tbInfo`.
 // NOTE: after a table is truncated:
-//   * doPhysicalTableByID(id) will return nil;
+//   * physicalTableByIDLocked(id) will return nil;
 //   * IsTruncateTableID(id) should return true.
 func (s *Snapshot) truncateTable(id int64, tbInfo *model.TableInfo, currentTs uint64) (err error) {
-	old, ok := s.doPhysicalTableByID(id)
+	old, ok := s.physicalTableByIDLocked(id)
 	if !ok {
 		return cerror.ErrSnapshotTableNotFound.GenWithStackByArgs(id)
 	}
@@ -552,10 +553,10 @@ func (s *Snapshot) truncateTable(id int64, tbInfo *model.TableInfo, currentTs ui
 
 // Create a new table in the snapshot. `tbInfo` will be deep copied.
 func (s *Snapshot) createTable(tbInfo *model.TableInfo, currentTs uint64) error {
-	if _, ok := s.doSchemaByID(tbInfo.SchemaID); !ok {
+	if _, ok := s.schemaByIDLocked(tbInfo.SchemaID); !ok {
 		return cerror.ErrSnapshotSchemaNotFound.GenWithStack("table's schema(%d)", tbInfo.SchemaID)
 	}
-	if _, ok := s.doPhysicalTableByID(tbInfo.ID); ok {
+	if _, ok := s.physicalTableByIDLocked(tbInfo.ID); ok {
 		return cerror.ErrSnapshotTableExists.GenWithStackByArgs(tbInfo.TableName.Schema, tbInfo.TableName.Table)
 	}
 	s.doCreateTable(tbInfo, currentTs)
@@ -567,10 +568,10 @@ func (s *Snapshot) createTable(tbInfo *model.TableInfo, currentTs uint64) error 
 
 // ReplaceTable replace the table by new tableInfo
 func (s *Snapshot) replaceTable(tbInfo *model.TableInfo, currentTs uint64) error {
-	if _, ok := s.doSchemaByID(tbInfo.SchemaID); !ok {
+	if _, ok := s.schemaByIDLocked(tbInfo.SchemaID); !ok {
 		return cerror.ErrSnapshotSchemaNotFound.GenWithStack("table's schema(%d)", tbInfo.SchemaID)
 	}
-	if _, ok := s.doPhysicalTableByID(tbInfo.ID); !ok {
+	if _, ok := s.physicalTableByIDLocked(tbInfo.ID); !ok {
 		return cerror.ErrSnapshotTableNotFound.GenWithStack("table %s(%d)", tbInfo.Name, tbInfo.ID)
 	}
 	s.doCreateTable(tbInfo, currentTs)
@@ -615,7 +616,7 @@ func (s *Snapshot) doCreateTable(tbInfo *model.TableInfo, currentTs uint64) {
 
 // updatePartition updates partition info for `tbInfo`.
 func (s *Snapshot) updatePartition(tbInfo *model.TableInfo, currentTs uint64) error {
-	oldTbInfo, ok := s.doPhysicalTableByID(tbInfo.ID)
+	oldTbInfo, ok := s.physicalTableByIDLocked(tbInfo.ID)
 	if !ok {
 		return cerror.ErrSnapshotTableNotFound.GenWithStackByArgs(tbInfo.ID)
 	}
@@ -672,7 +673,7 @@ func (s *Snapshot) renameTables(job *timodel.Job, currentTs uint64) error {
 		}
 	}
 	for i, tableInfo := range job.BinlogInfo.MultipleTableInfos {
-		newSchema, ok := s.doSchemaByID(newSchemaIDs[i])
+		newSchema, ok := s.schemaByIDLocked(newSchemaIDs[i])
 		if !ok {
 			return cerror.ErrSnapshotSchemaNotFound.GenWithStackByArgs(newSchemaIDs[i])
 		}
@@ -835,10 +836,10 @@ func (s *Snapshot) CurrentTs() uint64 {
 func (s *Snapshot) IterTables(includeIneligible bool, f func(i *model.TableInfo)) {
 	s.rwlock.RLock()
 	defer s.rwlock.RUnlock()
-	s.doIterTables(includeIneligible, f)
+	s.iterTablesLocked(includeIneligible, f)
 }
 
-func (s *Snapshot) doIterTables(includeIneligible bool, f func(i *model.TableInfo)) {
+func (s *Snapshot) iterTablesLocked(includeIneligible bool, f func(i *model.TableInfo)) {
 	tag := negative(s.currentTs)
 	var tableID int64 = -1
 	s.tables.Ascend(func(i btree.Item) bool {
@@ -858,10 +859,10 @@ func (s *Snapshot) doIterTables(includeIneligible bool, f func(i *model.TableInf
 func (s *Snapshot) IterPartitions(includeIneligible bool, f func(id int64, i *model.TableInfo)) {
 	s.rwlock.RLock()
 	defer s.rwlock.RUnlock()
-	s.doIterPartitions(includeIneligible, f)
+	s.iterPartitionsLocked(includeIneligible, f)
 }
 
-func (s *Snapshot) doIterPartitions(includeIneligible bool, f func(id int64, i *model.TableInfo)) {
+func (s *Snapshot) iterPartitionsLocked(includeIneligible bool, f func(id int64, i *model.TableInfo)) {
 	tag := negative(s.currentTs)
 	var partitionID int64 = -1
 	s.partitions.Ascend(func(i btree.Item) bool {
@@ -881,10 +882,10 @@ func (s *Snapshot) doIterPartitions(includeIneligible bool, f func(id int64, i *
 func (s *Snapshot) IterSchemas(f func(i *timodel.DBInfo)) {
 	s.rwlock.RLock()
 	defer s.rwlock.RUnlock()
-	s.doIterSchemas(f)
+	s.iterSchemasLocked(f)
 }
 
-func (s *Snapshot) doIterSchemas(f func(i *timodel.DBInfo)) {
+func (s *Snapshot) iterSchemasLocked(f func(i *timodel.DBInfo)) {
 	tag := negative(s.currentTs)
 	var schemaID int64 = -1
 	s.schemas.Ascend(func(i btree.Item) bool {
@@ -903,10 +904,10 @@ func (s *Snapshot) doIterSchemas(f func(i *timodel.DBInfo)) {
 func (s *Snapshot) IterTableNames(f func(schema int64, table string, target int64)) {
 	s.rwlock.RLock()
 	defer s.rwlock.RUnlock()
-	s.doIterTableNames(f)
+	s.iterTableNamesLocked(f)
 }
 
-func (s *Snapshot) doIterTableNames(f func(schema int64, table string, target int64)) {
+func (s *Snapshot) iterTableNamesLocked(f func(schema int64, table string, target int64)) {
 	tag := negative(s.currentTs)
 	var prefix int64 = -1
 	entity := ""
@@ -927,10 +928,10 @@ func (s *Snapshot) doIterTableNames(f func(schema int64, table string, target in
 func (s *Snapshot) IterSchemaNames(f func(schema string, target int64)) {
 	s.rwlock.RLock()
 	defer s.rwlock.RUnlock()
-	s.doIterSchemaNames(f)
+	s.iterSchemaNamesLocked(f)
 }
 
-func (s *Snapshot) doIterSchemaNames(f func(schema string, target int64)) {
+func (s *Snapshot) iterSchemaNamesLocked(f func(schema string, target int64)) {
 	tag := negative(s.currentTs)
 	entity := ""
 	s.schemaNameToID.Ascend(func(i btree.Item) bool {
@@ -946,7 +947,7 @@ func (s *Snapshot) doIterSchemaNames(f func(schema string, target int64)) {
 }
 
 func (s *Snapshot) tablesInSchema(schema string) (tables []int64) {
-	schemaID, ok := s.doSchemaIDByName(schema)
+	schemaID, ok := s.schemaIDByNameLocked(schema)
 	if !ok {
 		return
 	}
@@ -995,15 +996,20 @@ func (v1 versionedID) Less(than btree.Item) bool {
 	return v1.id < v2.id || (v1.id == v2.id && v1.tag < v2.tag)
 }
 
+// negative transforms `x` for reverse sorting based on it.
 func negative(x uint64) uint64 {
 	return 0xFFFFFFFFFFFFFFFF - x
 }
 
+// newVersionedEntityName creates an instance with target -1, which means it's deleted from
+// the associated snapshot.
 func newVersionedEntityName(prefix int64, entity string, tag uint64) versionedEntityName {
 	var target int64 = -1
 	return versionedEntityName{prefix, entity, tag, target}
 }
 
+// newVersionedID creates an instance with target nil, which means it's deleted from the
+// associated snapshot.
 func newVersionedID(id int64, tag uint64) versionedID {
 	var target unsafe.Pointer = unsafe.Pointer(nil)
 	return versionedID{id, tag, target}
@@ -1132,7 +1138,7 @@ func (s *Snapshot) DumpToString() string {
 
 	tableNames := make([]string, 0, s.tableNameToID.Len())
 	s.IterTableNames(func(schemaID int64, table string, target int64) {
-		schema, _ := s.doSchemaByID(schemaID)
+		schema, _ := s.schemaByIDLocked(schemaID)
 		tableNames = append(tableNames, fmt.Sprintf("%s.%s:%d", schema.Name.O, table, target))
 	})
 
