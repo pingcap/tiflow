@@ -24,7 +24,7 @@ import (
 )
 
 type txnsWithTheSameCommitTs struct {
-	txns     map[model.Ts]*model.SingleTableTxn
+	txns     []*model.SingleTableTxn
 	commitTs model.Ts
 }
 
@@ -35,17 +35,23 @@ func (t *txnsWithTheSameCommitTs) Append(row *model.RowChangedEvent) {
 			zap.Any("row", row))
 	}
 	if t.txns == nil {
-		t.txns = make(map[model.Ts]*model.SingleTableTxn)
+		t.txns = make([]*model.SingleTableTxn, 0)
 	}
-	txn, exist := t.txns[row.StartTs]
-	if !exist {
+	var txn *model.SingleTableTxn
+	if len(t.txns) == 0 || t.txns[len(t.txns)-1].StartTs < row.StartTs {
 		txn = &model.SingleTableTxn{
 			StartTs:   row.StartTs,
 			CommitTs:  row.CommitTs,
 			Table:     row.Table,
 			ReplicaID: row.ReplicaID,
 		}
-		t.txns[row.StartTs] = txn
+		t.txns = append(t.txns, txn)
+	} else if t.txns[len(t.txns)-1].StartTs == row.StartTs {
+		txn = t.txns[len(t.txns)-1]
+	} else {
+		log.Panic("Row changed event received by the sink module should be ordered",
+			zap.Any("previousTxn", t.txns[len(t.txns)-1]),
+			zap.Any("currentRow", row))
 	}
 	txn.Append(row)
 }
@@ -149,9 +155,7 @@ func splitResolvedTxn(
 		}
 		resolvedTxns := make([]*model.SingleTableTxn, 0, txnsLength)
 		for _, txns := range resolvedTxnsWithTheSameCommitTs {
-			for _, txn := range txns.txns {
-				resolvedTxns = append(resolvedTxns, txn)
-			}
+			resolvedTxns = append(resolvedTxns, txns.txns...)
 		}
 		resolvedRowsMap[tableID] = resolvedTxns
 		flushedResolvedTsMap[tableID] = resolvedTs

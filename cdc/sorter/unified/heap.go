@@ -24,15 +24,7 @@ type sortHeap []*sortItem
 
 func (h sortHeap) Len() int { return len(h) }
 func (h sortHeap) Less(i, j int) bool {
-	if h[i].entry.CRTs == h[j].entry.CRTs {
-		if h[j].entry.RawKV.OpType == model.OpTypeResolved && h[i].entry.RawKV.OpType != model.OpTypeResolved {
-			return true
-		}
-		if h[i].entry.RawKV.OpType == model.OpTypeDelete && h[j].entry.RawKV.OpType != model.OpTypeDelete {
-			return true
-		}
-	}
-	return h[i].entry.CRTs < h[j].entry.CRTs
+	return model.ComparePolymorphicEvents(h[i].entry, h[j].entry)
 }
 func (h sortHeap) Swap(i, j int) { h[i], h[j] = h[j], h[i] }
 func (h *sortHeap) Push(x interface{}) {

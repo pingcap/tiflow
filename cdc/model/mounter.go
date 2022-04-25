@@ -48,3 +48,25 @@ func NewResolvedPolymorphicEvent(regionID uint64, resolvedTs uint64) *Polymorphi
 func (e *PolymorphicEvent) RegionID() uint64 {
 	return e.RawKV.RegionID
 }
+
+// ComparePolymorphicEvents compares two events by CRTs, Resolved, StartTs, Put/Delete order.
+func ComparePolymorphicEvents(i, j *PolymorphicEvent) bool {
+	if i.CRTs == j.CRTs {
+		if j.RawKV.OpType == OpTypeResolved && i.RawKV.OpType != OpTypeResolved {
+			return true
+		} else if i.RawKV.OpType == OpTypeResolved {
+			return false
+		}
+
+		if i.StartTs < j.StartTs {
+			return true
+		} else if i.StartTs > j.StartTs {
+			return false
+		}
+
+		if i.RawKV.OpType == OpTypeDelete && j.RawKV.OpType != OpTypeDelete {
+			return true
+		}
+	}
+	return i.CRTs < j.CRTs
+}
