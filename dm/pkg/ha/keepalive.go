@@ -16,6 +16,7 @@ package ha
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"sync/atomic"
 	"time"
 
@@ -26,6 +27,7 @@ import (
 	"github.com/pingcap/tiflow/dm/dm/common"
 	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
 var (
@@ -55,14 +57,14 @@ func (w WorkerEvent) String() string {
 func (w WorkerEvent) toJSON() (string, error) {
 	data, err := json.Marshal(w)
 	if err != nil {
-		return "", err
+		return "", terror.ErrHAInvalidItem.Delegate(err, fmt.Sprintf("failed to marshal worker event %+v", w))
 	}
 	return string(data), nil
 }
 
 // workerEventFromJSON constructs WorkerEvent from its JSON represent.
 func workerEventFromJSON(s string) (w WorkerEvent, err error) {
-	err = json.Unmarshal([]byte(s), &w)
+	err = terror.ErrHAInvalidItem.Delegate(json.Unmarshal([]byte(s), &w), fmt.Sprintf("failed to unmarshal worker event %s", s))
 	return
 }
 
@@ -101,11 +103,11 @@ func KeepAlive(ctx context.Context, cli *clientv3.Client, workerName string, kee
 		defer cancel()
 		lease, err2 := cli.Grant(cliCtx, ttl)
 		if err2 != nil {
-			return 0, err2
+			return 0, terror.ErrHAFailLeaseOperation.Delegate(err2, "failed to grant lease for worker keepalive")
 		}
 		_, err = cli.Put(cliCtx, k, v, clientv3.WithLease(lease.ID))
 		if err != nil {
-			return 0, err
+			return 0, terror.ErrHAFailTxnOperation.Delegate(err, "failed to put worker keepalive with lease")
 		}
 		return lease.ID, nil
 	}
@@ -128,7 +130,7 @@ func KeepAlive(ctx context.Context, cli *clientv3.Client, workerName string, kee
 
 	ch, err := cli.KeepAlive(keepAliveCtx, leaseID)
 	if err != nil {
-		return err
+		return terror.ErrHAFailKeepalive.Delegate(err, "failed to worker keepalive")
 	}
 	for {
 		select {
@@ -157,7 +159,7 @@ func KeepAlive(ctx context.Context, cli *clientv3.Client, workerName string, kee
 			ch, err = cli.KeepAlive(keepAliveCtx, leaseID)
 			if err != nil {
 				log.L().Error("meet error when change keepalive TTL", zap.Error(err))
-				return err
+				return terror.ErrHAFailKeepalive.Delegate(err, "failed to worker keepalive")
 			}
 			currentKeepAliveTTL = newTTL
 			log.L().Info("dynamically changed keepalive TTL to", zap.Int64("ttl in seconds", newTTL))
@@ -177,7 +179,8 @@ func KeepAlive(ctx context.Context, cli *clientv3.Client, workerName string, kee
 func revokeLease(cli *clientv3.Client, id clientv3.LeaseID) (*clientv3.LeaseRevokeResponse, error) {
 	ctx, cancel := context.WithTimeout(cli.Ctx(), etcdutil.DefaultRevokeLeaseTimeout)
 	defer cancel()
-	return cli.Revoke(ctx, id)
+	resp, err := cli.Revoke(ctx, id)
+	return resp, terror.ErrHAFailLeaseOperation.Delegate(err, "failed to revoke lease")
 }
 
 // WatchWorkerEvent watches the online and offline of workers from etcd.
@@ -199,7 +202,7 @@ func WatchWorkerEvent(ctx context.Context, cli *clientv3.Client, rev int64, outC
 			}
 			if resp.Canceled {
 				select {
-				case errCh <- resp.Err():
+				case errCh <- terror.ErrHAFailWatchEtcd.Delegate(resp.Err(), "watch worker event canceled"):
 				case <-ctx.Done():
 				}
 				return
@@ -249,7 +252,7 @@ func GetKeepAliveWorkers(cli *clientv3.Client) (map[string]WorkerEvent, int64, e
 	var wwm map[string]WorkerEvent
 	resp, err := cli.Get(ctx, common.WorkerKeepAliveKeyAdapter.Path(), clientv3.WithPrefix())
 	if err != nil {
-		return wwm, 0, err
+		return wwm, 0, terror.ErrHAFailTxnOperation.Delegate(err, "failed to get keepalive workers")
 	}
 
 	wwm = make(map[string]WorkerEvent, len(resp.Kvs))

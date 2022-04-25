@@ -23,6 +23,7 @@ import (
 
 	"github.com/pingcap/tiflow/dm/dm/common"
 	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
 // ConflictStage represents the current shard DDL conflict stage in the optimistic mode.
@@ -142,7 +143,7 @@ func PutOperation(cli *clientv3.Client, skipDone bool, op Operation, infoModRev 
 	// txn 1: try to PUT if the key "not exist".
 	resp, err := cli.Txn(ctx).If(cmpsNotExist...).Then(opPut).Commit()
 	if err != nil {
-		return 0, false, err
+		return 0, false, terror.ErrHAFailTxnOperation.Delegate(err, "fail to put operation not exist")
 	} else if resp.Succeeded {
 		return resp.Header.Revision, resp.Succeeded, nil
 	}
@@ -150,7 +151,7 @@ func PutOperation(cli *clientv3.Client, skipDone bool, op Operation, infoModRev 
 	// txn 2: try to PUT if the key "the `done`" field is not `true`.
 	resp, err = cli.Txn(ctx).If(cmpsNotDone...).Then(opPut).Commit()
 	if err != nil {
-		return 0, false, err
+		return 0, false, terror.ErrHAFailTxnOperation.Delegate(err, "fail to put operation not done")
 	} else if resp.Succeeded {
 		return resp.Header.Revision, resp.Succeeded, nil
 	}
@@ -164,7 +165,7 @@ func PutOperation(cli *clientv3.Client, skipDone bool, op Operation, infoModRev 
 	// 5. dm-worker didn't receive a DDL operation, will get blocked forever
 	resp, err = cli.Txn(ctx).If(cmpsLessRev...).Then(opPut).Commit()
 	if err != nil {
-		return 0, false, err
+		return 0, false, terror.ErrHAFailTxnOperation.Delegate(err, "fail to put operation less rev")
 	}
 	return resp.Header.Revision, resp.Succeeded, nil
 }

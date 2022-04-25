@@ -16,6 +16,7 @@ package ha
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 
 	"go.etcd.io/etcd/api/v3/mvccpb"
 	clientv3 "go.etcd.io/etcd/client/v3"
@@ -75,7 +76,7 @@ func (s Stage) String() string {
 func (s Stage) toJSON() (string, error) {
 	data, err := json.Marshal(s)
 	if err != nil {
-		return "", err
+		return "", terror.ErrHAInvalidItem.Delegate(err, fmt.Sprintf("failed to marshal stage %+v", s))
 	}
 	return string(data), nil
 }
@@ -88,7 +89,7 @@ func (s Stage) IsEmpty() bool {
 
 // stageFromJSON constructs Stage from its JSON represent.
 func stageFromJSON(str string) (s Stage, err error) {
-	err = json.Unmarshal([]byte(str), &s)
+	err = terror.ErrHAInvalidItem.Delegate(json.Unmarshal([]byte(str), &s), fmt.Sprintf("failed to unmarshal stage %s", str))
 	return
 }
 
@@ -129,7 +130,7 @@ func GetRelayStage(cli *clientv3.Client, source string) (Stage, int64, error) {
 	var stage Stage
 	resp, err := cli.Get(ctx, common.StageRelayKeyAdapter.Encode(source))
 	if err != nil {
-		return stage, 0, err
+		return stage, 0, terror.ErrHAFailTxnOperation.Delegate(err, "failed to get relay stage for source %s", source)
 	}
 
 	if resp.Count == 0 {
@@ -156,7 +157,7 @@ func GetAllRelayStage(cli *clientv3.Client) (map[string]Stage, int64, error) {
 
 	resp, err := cli.Get(ctx, common.StageRelayKeyAdapter.Path(), clientv3.WithPrefix())
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, terror.ErrHAFailTxnOperation.Delegate(err, "failed to get all relay stages")
 	}
 
 	stages := make(map[string]Stage)
@@ -200,7 +201,7 @@ func getStageByKey(cli *clientv3.Client, key common.KeyAdapter, source, task str
 	}
 
 	if err != nil {
-		return stm, 0, err
+		return stm, 0, terror.ErrHAFailTxnOperation.Delegate(err, "failed to get subtask stage for source %s, task %s", source, task)
 	}
 
 	stages, err := getStagesFromResp(source, task, resp)
@@ -228,7 +229,7 @@ func getAllStagesInner(cli *clientv3.Client, key common.KeyAdapter) (map[string]
 
 	resp, err := cli.Get(ctx, key.Path(), clientv3.WithPrefix())
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, terror.ErrHAFailTxnOperation.Delegate(err, "failed to get all subtask stages")
 	}
 
 	stages, err := getStagesFromResp("", "", resp)
@@ -399,7 +400,7 @@ func watchStage(ctx context.Context, watchCh clientv3.WatchChan,
 				// TODO(csuzhangxc): do retry here.
 				if resp.Err() != nil {
 					select {
-					case errCh <- resp.Err():
+					case errCh <- terror.ErrHAFailWatchEtcd.Delegate(resp.Err(), "watch stage canceled"):
 					case <-ctx.Done():
 					}
 				}

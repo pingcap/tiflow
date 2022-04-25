@@ -2986,6 +2986,36 @@ description = ""
 workaround = ""
 tags = ["internal", "high"]
 
+[error.DM-unknown error class: 21-43001]
+message = "fail to do etcd txn operation: %s"
+description = ""
+workaround = "Please check dm-master's node status and the network between this node and dm-master"
+tags = ["internal", "high"]
+
+[error.DM-unknown error class: 21-43002]
+message = "meets invalid ha item: %s"
+description = ""
+workaround = "Please check if there is any compatible problem and invalid manual etcd operations"
+tags = ["internal", "high"]
+
+[error.DM-unknown error class: 21-43003]
+message = "fail to watch etcd: %s"
+description = ""
+workaround = "Please check dm-master's node status and the network between this node and dm-master"
+tags = ["internal", "high"]
+
+[error.DM-unknown error class: 21-43004]
+message = "fail to do etcd lease operation: %s"
+description = ""
+workaround = "Please check dm-master's node status and the network between this node and dm-master"
+tags = ["internal", "high"]
+
+[error.DM-unknown error class: 21-43005]
+message = "fail to keepalive to etcd: %s"
+description = ""
+workaround = "Please check dm-master's node status and the network between this node and dm-master"
+tags = ["internal", "high"]
+
 [error.DM-schema-tracker-44001]
 message = "saved schema of `%s`.`%s` is not proper JSON"
 description = ""

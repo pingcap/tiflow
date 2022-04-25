@@ -15,6 +15,7 @@ package ha
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/pingcap/failpoint"
 	clientv3 "go.etcd.io/etcd/client/v3"
@@ -51,7 +52,7 @@ func GetAllSourceCfgBeforeV202(cli *clientv3.Client) (map[string]*config.SourceC
 	resp, err = cli.Get(ctx, common.UpstreamConfigKeyAdapterV1.Path(), clientv3.WithPrefix())
 
 	if err != nil {
-		return scm, 0, err
+		return scm, 0, terror.ErrHAFailTxnOperation.Delegate(err, "fail to get upstream source configs <= v2.0.2")
 	}
 
 	scm, err = sourceCfgFromResp("", resp)
@@ -86,7 +87,7 @@ func GetSourceCfg(cli *clientv3.Client, source string, rev int64) (map[string]*c
 	}
 
 	if err != nil {
-		return scm, 0, err
+		return scm, 0, terror.ErrHAFailTxnOperation.Delegate(err, fmt.Sprintf("fail get upstream source configs, source %s", source))
 	}
 
 	scm, err = sourceCfgFromResp(source, resp)

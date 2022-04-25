@@ -16,11 +16,13 @@ package ha
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 
 	clientv3 "go.etcd.io/etcd/client/v3"
 
 	"github.com/pingcap/tiflow/dm/dm/common"
 	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
 // WorkerInfo represents the node information of the DM-worker.
@@ -47,14 +49,14 @@ func (i WorkerInfo) String() string {
 func (i WorkerInfo) toJSON() (string, error) {
 	data, err := json.Marshal(i)
 	if err != nil {
-		return "", err
+		return "", terror.ErrHAInvalidItem.Delegate(err, fmt.Sprintf("failed to marshal worker info: %+v", i))
 	}
 	return string(data), nil
 }
 
 // workerInfoFromJSON constructs WorkerInfo from its JSON represent.
 func workerInfoFromJSON(s string) (i WorkerInfo, err error) {
-	err = json.Unmarshal([]byte(s), &i)
+	err = terror.ErrHAInvalidItem.Delegate(json.Unmarshal([]byte(s), &i), fmt.Sprintf("failed to unmarshal worker info: %s", s))
 	return
 }
 
@@ -78,7 +80,7 @@ func GetAllWorkerInfo(cli *clientv3.Client) (map[string]WorkerInfo, int64, error
 
 	resp, err := cli.Get(ctx, common.WorkerRegisterKeyAdapter.Path(), clientv3.WithPrefix())
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, terror.ErrHAFailTxnOperation.Delegate(err, "failed to get all worker info")
 	}
 
 	ifm := make(map[string]WorkerInfo)

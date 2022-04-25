@@ -52,6 +52,7 @@ const (
 	ClassDMCtl
 	ClassNotSet
 	ClassOpenAPI
+	ClassHA
 )
 
 var errClass2Str = map[ErrClass]string{

@@ -23,6 +23,7 @@ import (
 
 	"github.com/pingcap/tiflow/dm/dm/common"
 	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
 // LoadTask uses to watch load worker events.
@@ -40,7 +41,7 @@ func GetLoadTask(cli *clientv3.Client, task, sourceID string) (string, int64, er
 	defer cancel()
 	resp, err := cli.Get(ctx, common.LoadTaskKeyAdapter.Encode(task, sourceID))
 	if err != nil {
-		return "", 0, err
+		return "", 0, terror.ErrHAFailTxnOperation.Delegate(err, fmt.Sprintf("fail to get load task, task: %s, sourceID: %s", task, sourceID))
 	}
 
 	if resp.Count <= 0 {
@@ -50,7 +51,7 @@ func GetLoadTask(cli *clientv3.Client, task, sourceID string) (string, int64, er
 	var worker string
 	err = json.Unmarshal(resp.Kvs[0].Value, &worker)
 
-	return worker, resp.Header.Revision, err
+	return worker, resp.Header.Revision, terror.ErrHAInvalidItem.Delegate(err, "fail to unmarshal load task")
 }
 
 // GetAllLoadTask gets all the worker which in load stage.
@@ -64,7 +65,7 @@ func GetAllLoadTask(cli *clientv3.Client) (map[string]map[string]string, int64, 
 	defer cancel()
 	resp, err := cli.Get(ctx, common.LoadTaskKeyAdapter.Path(), clientv3.WithPrefix())
 	if err != nil {
-		return loadTaskMap, 0, err
+		return loadTaskMap, 0, terror.ErrHAFailTxnOperation.Delegate(err, "fail to get all load task")
 	}
 
 	for _, kv := range resp.Kvs {
@@ -78,7 +79,7 @@ func GetAllLoadTask(cli *clientv3.Client) (map[string]map[string]string, int64, 
 
 		err = json.Unmarshal(kv.Value, &worker)
 		if err != nil {
-			return loadTaskMap, 0, err
+			return loadTaskMap, 0, terror.ErrHAInvalidItem.Delegate(err, "fail to unmarshal load task")
 		}
 
 		if _, ok := loadTaskMap[task]; !ok {
@@ -87,7 +88,7 @@ func GetAllLoadTask(cli *clientv3.Client) (map[string]map[string]string, int64, 
 		loadTaskMap[task][source] = worker
 	}
 
-	return loadTaskMap, resp.Header.Revision, err
+	return loadTaskMap, resp.Header.Revision, nil
 }
 
 // WatchLoadTask watches PUT & DELETE operations for worker in load stage.
@@ -111,7 +112,7 @@ func WatchLoadTask(ctx context.Context, cli *clientv3.Client, revision int64,
 			}
 			if resp.Canceled {
 				select {
-				case errCh <- resp.Err():
+				case errCh <- terror.ErrHAFailWatchEtcd.Delegate(resp.Err(), "watch load task canceled"):
 				case <-ctx.Done():
 				}
 				return

@@ -15,6 +15,7 @@ package ha
 
 import (
 	"context"
+	"fmt"
 
 	clientv3 "go.etcd.io/etcd/client/v3"
 
@@ -55,7 +56,7 @@ func GetTaskCliArgs(cli *clientv3.Client, taskName, source string) (*config.Task
 
 	resp, err := cli.Get(ctx, common.TaskCliArgsKeyAdapter.Encode(taskName, source))
 	if err != nil {
-		return nil, err
+		return nil, terror.ErrHAFailTxnOperation.Delegate(err, fmt.Sprintf("fail to get task cli args, taskName: %s, source: %s", taskName, source))
 	}
 
 	if resp.Count == 0 {

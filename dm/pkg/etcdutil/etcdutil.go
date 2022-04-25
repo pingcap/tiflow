@@ -29,6 +29,7 @@ import (
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/retry"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/pkg/errorutil"
 )
 
@@ -94,7 +95,7 @@ func DoOpsInOneTxnWithRetry(cli *clientv3.Client, ops ...clientv3.Op) (*clientv3
 	ret, _, err := etcdDefaultTxnStrategy.Apply(tctx, etcdDefaultTxnRetryParam, func(t *tcontext.Context) (ret interface{}, err error) {
 		resp, err := cli.Txn(ctx).Then(ops...).Commit()
 		if err != nil {
-			return nil, errors.Trace(err)
+			return nil, terror.ErrHAFailTxnOperation.Delegate(err, "txn commit failed")
 		}
 		return resp, nil
 	})

@@ -15,6 +15,7 @@ package ha
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"go.etcd.io/etcd/api/v3/mvccpb"
@@ -68,7 +69,7 @@ func GetAllRelayConfig(cli *clientv3.Client) (map[string]map[string]struct{}, in
 
 	resp, err := cli.Get(ctx, common.UpstreamRelayWorkerKeyAdapter.Path(), clientv3.WithPrefix())
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, terror.ErrHAFailTxnOperation.Delegate(err, "fail to get all relay config")
 	}
 
 	ret := map[string]map[string]struct{}{}
@@ -119,7 +120,7 @@ func GetRelayConfig(cli *clientv3.Client, worker string) (*config.SourceConfig, 
 
 	resp, err := cli.Get(ctx, common.UpstreamRelayWorkerKeyAdapter.Encode(worker))
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, terror.ErrHAFailTxnOperation.Delegate(err, "fail to get relay config")
 	}
 	source, rev, err = getSourceIDFromResp(resp)
 	if err != nil || source == "" {
@@ -213,7 +214,7 @@ func WatchRelayConfig(ctx context.Context, cli *clientv3.Client,
 				// TODO(csuzhangxc): do retry here.
 				if resp.Err() != nil {
 					select {
-					case errCh <- resp.Err():
+					case errCh <- terror.ErrHAFailWatchEtcd.Delegate(resp.Err(), fmt.Sprintf("watch relay config canceled, worker %s", worker)):
 					case <-ctx.Done():
 					}
 				}

@@ -16,6 +16,7 @@ package ha
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/pingcap/failpoint"
@@ -69,7 +70,7 @@ func (b SourceBound) String() string {
 func (b SourceBound) toJSON() (string, error) {
 	data, err := json.Marshal(b)
 	if err != nil {
-		return "", err
+		return "", terror.ErrHAInvalidItem.Delegate(err, fmt.Sprintf("fail to marshal SourceBound %+v", b))
 	}
 	return string(data), nil
 }
@@ -82,7 +83,7 @@ func (b SourceBound) IsEmpty() bool {
 
 // sourceBoundFromJSON constructs SourceBound from its JSON represent.
 func sourceBoundFromJSON(s string) (b SourceBound, err error) {
-	err = json.Unmarshal([]byte(s), &b)
+	err = terror.ErrHAInvalidItem.Delegate(json.Unmarshal([]byte(s), &b), fmt.Sprintf("fail to unmarshal SourceBound %s", s))
 	return
 }
 
@@ -149,7 +150,7 @@ func GetSourceBound(cli *clientv3.Client, worker string) (map[string]SourceBound
 	}
 
 	if err != nil {
-		return sbm, 0, err
+		return sbm, 0, terror.ErrHAFailTxnOperation.Delegate(err, "fail to get bound relationship")
 	}
 
 	sbm, err = sourceBoundFromResp(worker, resp)
@@ -169,7 +170,7 @@ func GetLastSourceBounds(cli *clientv3.Client) (map[string]SourceBound, int64, e
 	sbm := make(map[string]SourceBound)
 	resp, err := cli.Get(ctx, common.UpstreamLastBoundWorkerKeyAdapter.Path(), clientv3.WithPrefix())
 	if err != nil {
-		return sbm, 0, err
+		return sbm, 0, terror.ErrHAFailTxnOperation.Delegate(err, "fail to get last bound relationship")
 	}
 
 	sbm, err = sourceBoundFromResp("", resp)
@@ -276,7 +277,7 @@ func WatchSourceBound(ctx context.Context, cli *clientv3.Client, worker string, 
 				// TODO(csuzhangxc): do retry here.
 				if resp.Err() != nil {
 					select {
-					case errCh <- resp.Err():
+					case errCh <- terror.ErrHAFailWatchEtcd.Delegate(resp.Err(), "watch source bound key canceled"):
 					case <-ctx.Done():
 					}
 				}
