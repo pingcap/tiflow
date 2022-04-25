@@ -139,7 +139,7 @@ func NewSnapshotFromMeta(meta *timeta.Meta, currentTs uint64, forceReplicate boo
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrMetaListDatabases, err)
 	}
-    // `tag` is used to reverse sort all versions in the generated snapshot.
+	// `tag` is used to reverse sort all versions in the generated snapshot.
 	tag := negative(currentTs)
 
 	for _, dbinfo := range dbinfos {
