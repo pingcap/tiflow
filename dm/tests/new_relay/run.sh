@@ -23,7 +23,8 @@ function test_restart_relay_status() {
 	dmctl_operate_source create $cur/conf/source1.yaml $SOURCE_ID1
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"start-relay -s $SOURCE_ID1 worker1"
+		"start-relay -s $SOURCE_ID1 worker1" \
+		"will be deprecated soon" 1
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status -s $SOURCE_ID1" \
 		"\"result\": true" 2 \
