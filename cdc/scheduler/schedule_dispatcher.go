@@ -385,6 +385,23 @@ func (s *BaseScheduleDispatcher) descheduleTablesFromDownCaptures() {
 	}
 }
 
+func (s *BaseScheduleDispatcher) drainTablesFromCapture(target model.CaptureID) {
+	// If the capture is not in the current list of captures, it means that
+	// the capture has been removed from the system.
+	if _, ok := s.captures[target]; ok {
+		log.Warn("drainTablesFromCapture: capture not found",
+			zap.String("captureID", target))
+		return
+	}
+	// Remove records for all table previously replicated by the
+	// gone capture.
+	removed := s.tables.RemoveTableRecordByCaptureID(target)
+	s.logger.Info("drain the capture, removing tables",
+		zap.String("captureID", target),
+		zap.Any("removedTables", removed))
+	s.moveTableManager.OnCaptureRemoved(target)
+}
+
 func (s *BaseScheduleDispatcher) findDiffTables(
 	shouldReplicateTables map[model.TableID]struct{},
 ) (toAdd, toRemove []model.TableID) {
