@@ -12,6 +12,7 @@ import (
 	"golang.org/x/time/rate"
 
 	"github.com/hanfei1991/microcosm/lib/config"
+	"github.com/hanfei1991/microcosm/lib/metadata"
 	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/lib/statusutil"
 	"github.com/hanfei1991/microcosm/pkg/adapter"
@@ -385,6 +386,37 @@ func TestRecoverWithNoWorker(t *testing.T) {
 	// InitAfterRecover returning at all would indicate a successful test.
 	err := suite.manager.InitAfterRecover(ctx)
 	require.NoError(t, err)
+
+	suite.Close()
+}
+
+func TestCleanTombstone(t *testing.T) {
+	ctx := context.Background()
+
+	suite := NewWorkerManageTestSuite(true)
+	suite.manager.OnCreatingWorker("worker-1", "executor-1")
+	suite.AdvanceClockBy(30 * time.Second)
+	suite.AdvanceClockBy(30 * time.Second)
+	suite.AdvanceClockBy(30 * time.Second)
+
+	event := suite.WaitForEvent(t, "worker-1")
+	require.Equal(t, workerOfflineEvent, event.Tp)
+	require.NotNil(t, event.Handle.GetTombstone())
+	err := event.Handle.GetTombstone().CleanTombstone(ctx)
+	require.NoError(t, err)
+
+	workerMetaClient := metadata.NewWorkerMetadataClient("master-1", suite.meta)
+	_, err = workerMetaClient.Load(ctx, "worker-1")
+	// Asserts that the meta for the worker is indeed deleted.
+	require.Error(t, err)
+	require.Regexp(t, ".*ErrWorkerNoMeta", err)
+
+	// CleanTombstone should be idempotent for robustness.
+	err = event.Handle.GetTombstone().CleanTombstone(ctx)
+	require.NoError(t, err)
+
+	// Recreating a worker with the same name should work fine.
+	suite.manager.OnCreatingWorker("worker-1", "executor-1")
 
 	suite.Close()
 }

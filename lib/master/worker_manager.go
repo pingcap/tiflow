@@ -555,3 +555,24 @@ func (m *WorkerManager) enqueueEvent(event *masterEvent) error {
 
 	return nil
 }
+
+// removeTombstoneEntry removes a tombstone workerEntry from the in-memory map.
+// NOTE: removeTombstoneEntry is expected to be used by tombstoneHandleImpl only,
+// and it should NOT be called with m.mu taken.
+func (m *WorkerManager) removeTombstoneEntry(id libModel.WorkerID) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	// Checks precondition.
+	entry, exists := m.workerEntries[id]
+	if !exists {
+		// Return here. We intend this method to be idempotent.
+		return
+	}
+
+	if !entry.IsTombstone() {
+		log.L().Panic("Unreachable: not a tombstone", zap.Stringer("entry", entry))
+	}
+
+	delete(m.workerEntries, id)
+}

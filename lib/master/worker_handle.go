@@ -32,10 +32,16 @@ type RunningHandle interface {
 	) error
 }
 
+// TombstoneHandle represents a dead worker.
 type TombstoneHandle interface {
 	Status() *libModel.WorkerStatus
 	ID() libModel.WorkerID
 	ToPB() (*pb.WorkerInfo, error)
+
+	// CleanTombstone cleans the metadata from the metastore,
+	// and cleans the state managed by the framework.
+	// Do not call any other methods on this handle after
+	// CleanTombstone is called.
 	CleanTombstone(ctx context.Context) error
 }
 
@@ -139,6 +145,11 @@ func (h *tombstoneHandleImpl) CleanTombstone(ctx context.Context) error {
 	}
 	if !ok {
 		log.L().Info("Tombstone already cleaned", zap.String("worker-id", h.workerID))
+		// Idempotent for robustness.
+		return nil
 	}
+	log.L().Info("Worker tombstone is cleaned", zap.String("worker-id", h.workerID))
+	h.manager.removeTombstoneEntry(h.workerID)
+
 	return nil
 }
