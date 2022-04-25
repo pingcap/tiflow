@@ -82,7 +82,7 @@ func (n *pullerNode) start(ctx pipeline.NodeContext, wg *errgroup.Group, isActor
 		ctx.GlobalVars().KVStorage,
 		ctx.GlobalVars().PDClock,
 		n.changefeed,
-		n.replicaInfo.StartTs, n.tableSpan(ctx), true)
+		n.replicaInfo.StartTs, n.tableSpan(ctx))
 	n.wg.Go(func() error {
 		ctx.Throw(errors.Trace(plr.Run(ctxC)))
 		return nil

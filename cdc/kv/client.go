@@ -294,7 +294,6 @@ type CDCKVClient interface {
 		ctx context.Context,
 		span regionspan.ComparableSpan,
 		ts uint64,
-		enableOldValue bool,
 		lockResolver txnutil.LockResolver,
 		isPullerInit PullerInitialization,
 		eventCh chan<- model.RegionFeedEvent,
@@ -308,6 +307,7 @@ var NewCDCKVClient = NewCDCClient
 type CDCClient struct {
 	pd pd.Client
 
+	config    *config.KVClientConfig
 	clusterID uint64
 
 	grpcPool GrpcPool
@@ -404,14 +404,12 @@ type PullerInitialization interface {
 // The `Start` and `End` field in input span must be memcomparable encoded.
 func (c *CDCClient) EventFeed(
 	ctx context.Context, span regionspan.ComparableSpan, ts uint64,
-	enableOldValue bool,
 	lockResolver txnutil.LockResolver,
 	isPullerInit PullerInitialization,
 	eventCh chan<- model.RegionFeedEvent,
 ) error {
-	s := newEventFeedSession(ctx, c, span,
-		lockResolver, isPullerInit,
-		enableOldValue, ts, eventCh)
+	s := newEventFeedSession(
+		ctx, c, span, lockResolver, isPullerInit, ts, eventCh)
 	return s.eventFeed(ctx, ts)
 }
 
@@ -475,7 +473,6 @@ func newEventFeedSession(
 	totalSpan regionspan.ComparableSpan,
 	lockResolver txnutil.LockResolver,
 	isPullerInit PullerInitialization,
-	enableOldValue bool,
 	startTs uint64,
 	eventCh chan<- model.RegionFeedEvent,
 ) *eventFeedSession {
@@ -493,7 +490,6 @@ func newEventFeedSession(
 		requestRangeCh:    make(chan rangeRequestTask, defaultRegionChanSize),
 		rateLimitQueue:    make([]regionErrorInfo, 0, defaultRegionRateLimitQueueSize),
 		rangeLock:         rangeLock,
-		enableOldValue:    enableOldValue,
 		lockResolver:      lockResolver,
 		isPullerInit:      isPullerInit,
 		id:                id,
@@ -922,6 +918,8 @@ func (s *eventFeedSession) divideAndSendEventFeedToRegions(
 	limit := 20
 	nextSpan := span
 
+	// Max backoff 500ms.
+	scanRegionMaxBackoff := int64(500)
 	for {
 		var (
 			regions []*tikv.Region
@@ -961,7 +959,8 @@ func (s *eventFeedSession) divideAndSendEventFeedToRegions(
 				zap.Reflect("regions", metas),
 				zap.String("changefeed", s.client.changefeed))
 			return nil
-		}, retry.WithBackoffMaxDelay(50), retry.WithMaxTries(100), retry.WithIsRetryableErr(cerror.IsRetryableError))
+		}, retry.WithBackoffMaxDelay(scanRegionMaxBackoff),
+			retry.WithTotalRetryDuratoin(time.Duration(s.client.config.RegionRetryDuration)))
 		if retryErr != nil {
 			return retryErr
 		}

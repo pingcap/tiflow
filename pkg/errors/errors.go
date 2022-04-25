@@ -886,7 +886,7 @@ var (
 	)
 
 	// retry error
-	ErrReachMaxTry = errors.Normalize("reach maximum try: %d",
+	ErrReachMaxTry = errors.Normalize("reach maximum try: %s, error: %s",
 		errors.RFCCodeText("CDC:ErrReachMaxTry"),
 	)
 

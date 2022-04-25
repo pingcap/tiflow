@@ -84,7 +84,7 @@ func newDDLPuller(ctx cdcContext.Context, startTs uint64) (DDLPuller, error) {
 			// Add "_ddl_puller" to make it different from table pullers.
 			ctx.ChangefeedVars().ID+"_ddl_puller",
 			startTs,
-			[]regionspan.Span{regionspan.GetDDLSpan(), regionspan.GetAddIndexDDLSpan()}, false)
+			[]regionspan.Span{regionspan.GetDDLSpan(), regionspan.GetAddIndexDDLSpan()})
 	}
 
 	return &ddlPullerImpl{

@@ -160,3 +160,44 @@ func TestDoCornerCases(t *testing.T) {
 		}
 	}
 }
+
+func TestTotalRetryDuration(t *testing.T) {
+	t.Parallel()
+
+	f := func() error {
+		return errors.New("test")
+	}
+
+	start := time.Now()
+	err := Do(
+		context.Background(), f,
+		WithBackoffBaseDelay(math.MinInt64),
+		WithTotalRetryDuratoin(time.Second),
+	)
+	require.Regexp(t, "test", errors.Cause(err))
+	require.LessOrEqual(t, 1, int(math.Round(time.Since(start).Seconds())))
+
+	start = time.Now()
+	err = Do(
+		context.Background(), f,
+		WithBackoffBaseDelay(math.MinInt64),
+		WithTotalRetryDuratoin(2*time.Second),
+	)
+	require.Regexp(t, "test", errors.Cause(err))
+	require.LessOrEqual(t, 2, int(math.Round(time.Since(start).Seconds())))
+}
+
+func TestRetryError(t *testing.T) {
+	t.Parallel()
+
+	f := func() error {
+		return errors.New("some error info")
+	}
+
+	err := Do(
+		context.Background(), f, WithBackoffBaseDelay(math.MinInt64), WithMaxTries(2),
+	)
+	require.Regexp(t, "some error info", errors.Cause(err))
+	require.Regexp(t, ".*some error info.*", err.Error())
+	require.Regexp(t, ".*CDC:ErrReachMaxTry.*", err.Error())
+}

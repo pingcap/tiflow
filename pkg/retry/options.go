@@ -15,14 +15,16 @@ package retry
 
 import (
 	"math"
+	"time"
 )
 
 const (
 	// defaultBackoffBaseInMs is the initial duration, in Millisecond
 	defaultBackoffBaseInMs = 10.0
 	// defaultBackoffCapInMs is the max amount of duration, in Millisecond
-	defaultBackoffCapInMs = 100.0
-	defaultMaxTries       = 3
+	defaultBackoffCapInMs   = 100.0
+	defaultMaxTries         = 3
+	defaultMaxRetryDuration = time.Duration(0)
 )
 
 // Option ...
@@ -32,18 +34,20 @@ type Option func(*retryOptions)
 type IsRetryable func(error) bool
 
 type retryOptions struct {
-	maxTries        int64
-	backoffBaseInMs float64
-	backoffCapInMs  float64
-	isRetryable     IsRetryable
+	totalRetryDuration time.Duration
+	maxTries           int64
+	backoffBaseInMs    float64
+	backoffCapInMs     float64
+	isRetryable        IsRetryable
 }
 
 func newRetryOptions() *retryOptions {
 	return &retryOptions{
-		maxTries:        defaultMaxTries,
-		backoffBaseInMs: defaultBackoffBaseInMs,
-		backoffCapInMs:  defaultBackoffCapInMs,
-		isRetryable:     func(err error) bool { return true },
+		totalRetryDuration: defaultMaxRetryDuration,
+		maxTries:           defaultMaxTries,
+		backoffBaseInMs:    defaultBackoffBaseInMs,
+		backoffCapInMs:     defaultBackoffCapInMs,
+		isRetryable:        func(err error) bool { return true },
 	}
 }
 
@@ -71,6 +75,13 @@ func WithMaxTries(tries int64) Option {
 		if tries > 0 {
 			o.maxTries = tries
 		}
+	}
+}
+
+// WithTotalRetryDuratoin configures the total retry duration.
+func WithTotalRetryDuratoin(retryDuration time.Duration) Option {
+	return func(o *retryOptions) {
+		o.totalRetryDuration = retryDuration
 	}
 }
 

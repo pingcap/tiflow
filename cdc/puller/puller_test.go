@@ -72,7 +72,6 @@ func (mc *mockCDCKVClient) EventFeed(
 	ctx context.Context,
 	span regionspan.ComparableSpan,
 	ts uint64,
-	enableOldValue bool,
 	lockResolver txnutil.LockResolver,
 	isPullerInit kv.PullerInitialization,
 	eventCh chan<- model.RegionFeedEvent,
@@ -115,7 +114,6 @@ func newPullerForTest(
 	ctx, cancel := context.WithCancel(context.Background())
 	store, err := mockstore.NewMockStore()
 	require.Nil(t, err)
-	enableOldValue := true
 	backupNewCDCKVClient := kv.NewCDCKVClient
 	kv.NewCDCKVClient = newMockCDCKVClient
 	defer func() {
@@ -128,7 +126,7 @@ func newPullerForTest(
 	defer regionCache.Close()
 	plr := NewPuller(
 		ctx, pdCli, grpcPool, regionCache, store, pdtime.NewClock4Test(), "",
-		checkpointTs, spans, enableOldValue)
+		checkpointTs, spans)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()

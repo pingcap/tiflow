@@ -351,7 +351,7 @@ func TestConnectOfflineTiKV(t *testing.T) {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
 			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
-			1, false, lockResolver, isPullInit, eventCh)
+			1, lockResolver, isPullInit, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
 
@@ -449,7 +449,7 @@ func TestRecvLargeMessageSize(t *testing.T) {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
 			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
-			1, false, lockResolver, isPullInit, eventCh)
+			1, lockResolver, isPullInit, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
 
@@ -547,7 +547,7 @@ func TestHandleError(t *testing.T) {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
 			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("d")},
-			100, false, lockResolver, isPullInit, eventCh)
+			100, lockResolver, isPullInit, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
 
@@ -705,7 +705,7 @@ func TestCompatibilityWithSameConn(t *testing.T) {
 		defer wg2.Done()
 		err := cdcClient.EventFeed(ctx,
 			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
-			100, false, lockResolver, isPullInit, eventCh)
+			100, lockResolver, isPullInit, eventCh)
 		require.True(t, cerror.ErrVersionIncompatible.Equal(err))
 	}()
 
@@ -772,7 +772,7 @@ func TestClusterIDMismatch(t *testing.T) {
 		defer wg2.Done()
 		err := cdcClient.EventFeed(ctx,
 			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
-			100, false, lockResolver, isPullInit, eventCh)
+			100, lockResolver, isPullInit, eventCh)
 		require.True(t, cerror.ErrClusterIDMismatch.Equal(err))
 	}()
 
@@ -837,7 +837,7 @@ func testHandleFeedEvent(t *testing.T) {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
 			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
-			100, false, lockResolver, isPullInit, eventCh)
+			100, lockResolver, isPullInit, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
 
@@ -1291,7 +1291,7 @@ func TestStreamSendWithError(t *testing.T) {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
 			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")},
-			100, false, lockerResolver, isPullInit, eventCh)
+			100, lockerResolver, isPullInit, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
 
@@ -1402,7 +1402,7 @@ func testStreamRecvWithError(t *testing.T, failpointStr string) {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
 			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
-			100, false, lockResolver, isPullInit, eventCh)
+			100, lockResolver, isPullInit, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
 
@@ -1532,7 +1532,7 @@ func TestStreamRecvWithErrorAndResolvedGoBack(t *testing.T) {
 		defer close(eventCh)
 		err := cdcClient.EventFeed(ctx,
 			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
-			100, false, lockResolver, isPullInit, eventCh)
+			100, lockResolver, isPullInit, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
 
@@ -1738,7 +1738,7 @@ func TestIncompatibleTiKV(t *testing.T) {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
 			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
-			100, false, lockResolver, isPullInit, eventCh)
+			100, lockResolver, isPullInit, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
 
@@ -1814,7 +1814,7 @@ func TestNoPendingRegionError(t *testing.T) {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
 			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
-			100, false, lockResolver, isPullInit, eventCh)
+			100, lockResolver, isPullInit, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
 
@@ -1890,7 +1890,7 @@ func TestDropStaleRequest(t *testing.T) {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
 			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
-			100, false, lockResolver, isPullInit, eventCh)
+			100, lockResolver, isPullInit, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
 
@@ -1999,7 +1999,7 @@ func TestResolveLock(t *testing.T) {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
 			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
-			100, false, lockResolver, isPullInit, eventCh)
+			100, lockResolver, isPullInit, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
 
@@ -2101,7 +2101,7 @@ func testEventCommitTsFallback(t *testing.T, events []*cdcpb.ChangeDataEvent) {
 		defer clientWg.Done()
 		err := cdcClient.EventFeed(ctx,
 			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
-			100, false, lockResolver, isPullInit, eventCh)
+			100, lockResolver, isPullInit, eventCh)
 		require.Equal(t, errUnreachable, err)
 	}()
 
@@ -2251,7 +2251,7 @@ func testEventAfterFeedStop(t *testing.T) {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
 			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
-			100, false, lockResolver, isPullInit, eventCh)
+			100, lockResolver, isPullInit, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
 
@@ -2430,7 +2430,7 @@ func TestOutOfRegionRangeEvent(t *testing.T) {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
 			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
-			100, false, lockResolver, isPullInit, eventCh)
+			100, lockResolver, isPullInit, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
 
@@ -2644,7 +2644,7 @@ func TestResolveLockNoCandidate(t *testing.T) {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
 			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
-			100, false, lockResolver, isPullInit, eventCh)
+			100, lockResolver, isPullInit, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
 
@@ -2738,7 +2738,7 @@ func TestFailRegionReentrant(t *testing.T) {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
 			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
-			100, false, lockResolver, isPullInit, eventCh)
+			100, lockResolver, isPullInit, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
 
@@ -2818,7 +2818,7 @@ func TestClientV1UnlockRangeReentrant(t *testing.T) {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
 			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")},
-			100, false, lockResolver, isPullInit, eventCh)
+			100, lockResolver, isPullInit, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
 
@@ -2883,7 +2883,7 @@ func testClientErrNoPendingRegion(t *testing.T) {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
 			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")},
-			100, false, lockResolver, isPullInit, eventCh)
+			100, lockResolver, isPullInit, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
 
@@ -2959,7 +2959,7 @@ func testKVClientForceReconnect(t *testing.T) {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
 			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")},
-			100, false, lockResolver, isPullInit, eventCh)
+			100, lockResolver, isPullInit, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
 
@@ -3106,7 +3106,7 @@ func TestConcurrentProcessRangeRequest(t *testing.T) {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
 			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("z")},
-			100, false, lockResolver, isPullInit, eventCh)
+			100, lockResolver, isPullInit, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
 
@@ -3221,7 +3221,7 @@ func TestEvTimeUpdate(t *testing.T) {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
 			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
-			100, false, lockResolver, isPullInit, eventCh)
+			100, lockResolver, isPullInit, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
 
@@ -3341,7 +3341,7 @@ func TestRegionWorkerExitWhenIsIdle(t *testing.T) {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
 			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
-			100, false, lockResolver, isPullInit, eventCh)
+			100, lockResolver, isPullInit, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
 
@@ -3433,7 +3433,7 @@ func TestPrewriteNotMatchError(t *testing.T) {
 		defer wg.Done()
 		err = cdcClient.EventFeed(ctx,
 			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")},
-			100, false, lockResolver, isPullInit, eventCh)
+			100, lockResolver, isPullInit, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
 
@@ -3508,10 +3508,9 @@ func createFakeEventFeedSession(ctx context.Context) *eventFeedSession {
 	return newEventFeedSession(ctx,
 		&CDCClient{regionLimiters: defaultRegionEventFeedLimiters},
 		regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
-		nil,   /*lockResolver*/
-		nil,   /*isPullerInit*/
-		false, /*enableOldValue*/
-		100,   /*startTs*/
+		nil, /*lockResolver*/
+		nil, /*isPullerInit*/
+		100, /*startTs*/
 		nil /*eventCh*/)
 }
 
