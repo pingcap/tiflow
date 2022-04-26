@@ -22,9 +22,10 @@ import (
 
 // CaptureInfo store in etcd.
 type CaptureInfo struct {
-	ID            CaptureID `json:"id"`
-	AdvertiseAddr string    `json:"address"`
-	Version       string    `json:"version"`
+	ID            CaptureID     `json:"id"`
+	AdvertiseAddr string        `json:"address"`
+	Version       string        `json:"version"`
+	Status        CaptureStatus `json:"status"`
 }
 
 // Marshal using json.Marshal.
@@ -52,4 +53,27 @@ func ListVersionsFromCaptureInfos(captureInfos []*CaptureInfo) []string {
 	}
 
 	return captureVersions
+}
+
+// CaptureID is the type for capture ID
+type CaptureID = string
+
+type CaptureStatus int
+
+const (
+	CaptureStatusHealthy CaptureStatus = iota
+	CaptureStatusDraining
+	CaptureStatusClosing
+)
+
+func (s CaptureStatus) String() string {
+	switch s {
+	case CaptureStatusHealthy:
+		return "healthy"
+	case CaptureStatusDraining:
+		return "draining"
+	case CaptureStatusClosing:
+		return "closing"
+	}
+	panic("unreachable")
 }
