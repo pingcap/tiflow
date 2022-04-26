@@ -123,25 +123,6 @@ func (tp *TaskPosition) Clone() *TaskPosition {
 	return ret
 }
 
-// MoveTableStatus represents for the status of a MoveTableJob
-type MoveTableStatus int
-
-// All MoveTable status
-const (
-	MoveTableStatusNone MoveTableStatus = iota
-	MoveTableStatusDeleted
-	MoveTableStatusFinished
-)
-
-// MoveTableJob records a move operation of a table
-type MoveTableJob struct {
-	From             CaptureID
-	To               CaptureID
-	TableID          TableID
-	TableReplicaInfo *TableReplicaInfo
-	Status           MoveTableStatus
-}
-
 // All TableOperation flags
 const (
 	// Move means after the delete operation, the table will be re added.
