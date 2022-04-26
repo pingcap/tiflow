@@ -509,11 +509,7 @@ func (s *mysqlSink) Close(ctx context.Context) error {
 }
 
 func (s *mysqlSink) Barrier(ctx context.Context, tableID model.TableID) error {
-<<<<<<< HEAD:cdc/sink/mysql.go
-=======
 	defer s.cleanTableResource(tableID)
-
->>>>>>> c6966a492 (sink(ticdc): refine sink interface and add init method (#5196)):cdc/sink/mysql/mysql.go
 	warnDuration := 3 * time.Minute
 	ticker := time.NewTicker(warnDuration)
 	defer ticker.Stop()

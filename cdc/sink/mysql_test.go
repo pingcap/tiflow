@@ -1214,56 +1214,6 @@ func TestMySQLSinkFlushResolvedTs(t *testing.T) {
 	require.True(t, sink.getTableCheckpointTs(model.TableID(2)) <= 5)
 	_ = sink.Close(ctx)
 }
-<<<<<<< HEAD:cdc/sink/mysql_test.go
-=======
-
-func TestGBKSupported(t *testing.T) {
-	dbIndex := 0
-	mockGetDBConn := func(ctx context.Context, dsnStr string) (*sql.DB, error) {
-		defer func() {
-			dbIndex++
-		}()
-		if dbIndex == 0 {
-			// test db
-			db, err := mockTestDB(true)
-			require.Nil(t, err)
-			return db, nil
-		}
-		// normal db
-		db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
-		mock.ExpectClose()
-		require.Nil(t, err)
-		return db, nil
-	}
-	backupGetDBConn := GetDBConnImpl
-	GetDBConnImpl = mockGetDBConn
-	defer func() {
-		GetDBConnImpl = backupGetDBConn
-	}()
-
-	zapcore, logs := observer.New(zap.WarnLevel)
-	conf := &log.Config{Level: "warn", File: log.FileLogConfig{}}
-	_, r, _ := log.InitLogger(conf)
-	logger := zap.New(zapcore)
-	restoreFn := log.ReplaceGlobals(logger, r)
-	defer restoreFn()
-
-	ctx := context.Background()
-	changefeed := "test-changefeed"
-	sinkURI, err := url.Parse("mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=4")
-	require.Nil(t, err)
-	rc := config.GetDefaultReplicaConfig()
-	f, err := filter.NewFilter(rc)
-	require.Nil(t, err)
-	sink, err := NewMySQLSink(ctx, changefeed, sinkURI, f, rc, map[string]string{})
-	require.Nil(t, err)
-
-	// no gbk-related warning log will be output because GBK charset is supported
-	require.Equal(t, logs.FilterMessage("gbk charset is not supported").Len(), 0)
-
-	err = sink.Close(ctx)
-	require.Nil(t, err)
-}
 
 func TestCleanTableResource(t *testing.T) {
 	t.Parallel()
@@ -1274,23 +1224,22 @@ func TestCleanTableResource(t *testing.T) {
 	f, err := filter.NewFilter(config.GetDefaultReplicaConfig())
 	require.Nil(t, err)
 	s := &mysqlSink{
-		txnCache:   newUnresolvedTxnCache(),
+		txnCache:   common.NewUnresolvedTxnCache(),
 		filter:     f,
-		statistics: metrics.NewStatistics(ctx, metrics.SinkTypeDB),
+		statistics: NewStatistics(ctx, "db"),
 	}
 	require.Nil(t, s.EmitRowChangedEvents(ctx, &model.RowChangedEvent{
 		Table: &model.TableName{TableID: tblID, Schema: "test", Table: "t1"},
 	}))
 	s.tableCheckpointTs.Store(tblID, uint64(1))
 	s.tableMaxResolvedTs.Store(tblID, uint64(2))
-	_, ok := s.txnCache.unresolvedTxns[tblID]
-	require.True(t, ok)
 	require.Nil(t, s.Init(tblID))
-	_, ok = s.txnCache.unresolvedTxns[tblID]
-	require.False(t, ok)
-	_, ok = s.tableCheckpointTs.Load(tblID)
+	m := &sync.Map{}
+	m.Store(tblID, uint64(10))
+	ret, _ := s.txnCache.Resolved(m)
+	require.True(t, len(ret) == 0)
+	_, ok := s.tableCheckpointTs.Load(tblID)
 	require.False(t, ok)
 	_, ok = s.tableMaxResolvedTs.Load(tblID)
 	require.False(t, ok)
 }
->>>>>>> c6966a492 (sink(ticdc): refine sink interface and add init method (#5196)):cdc/sink/mysql/mysql_test.go
