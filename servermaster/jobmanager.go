@@ -3,6 +3,7 @@ package servermaster
 import (
 	"context"
 	"encoding/json"
+	"time"
 
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/zap"
@@ -306,6 +307,11 @@ func (jm *JobManagerImplV2) OnWorkerOffline(worker lib.WorkerHandle, reason erro
 		needFailover = false
 	} else {
 		log.L().Info("on worker offline", zap.Any("id", worker.ID()), zap.Any("reason", reason))
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+	if err := worker.GetTombstone().CleanTombstone(ctx); err != nil {
+		return err
 	}
 	jm.JobFsm.JobOffline(worker, needFailover)
 	return nil
