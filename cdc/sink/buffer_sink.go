@@ -37,27 +37,17 @@ type bufferSink struct {
 }
 
 func newBufferSink(
-<<<<<<< HEAD
 	ctx context.Context,
 	backendSink Sink,
 	errCh chan error,
 	checkpointTs model.Ts,
-	drawbackChan chan drawbackMsg,
-=======
-	backendSink Sink, checkpointTs model.Ts,
->>>>>>> c6966a492 (sink(ticdc): refine sink interface and add init method (#5196))
 ) *bufferSink {
 	sink := &bufferSink{
 		Sink: backendSink,
 		// buffer shares the same flow control with table sink
 		buffer:                 make(map[model.TableID][]*model.RowChangedEvent),
 		changeFeedCheckpointTs: checkpointTs,
-<<<<<<< HEAD
 		flushTsChan:            make(chan flushMsg, 128),
-		drawbackChan:           drawbackChan,
-=======
-		flushTsChan:            make(chan flushMsg, maxFlushBatchSize),
->>>>>>> c6966a492 (sink(ticdc): refine sink interface and add init method (#5196))
 	}
 	go sink.run(ctx, errCh)
 	return sink
@@ -84,12 +74,6 @@ func (b *bufferSink) run(ctx context.Context, errCh chan error) {
 				errCh <- err
 			}
 			return
-<<<<<<< HEAD
-		case drawback := <-b.drawbackChan:
-			b.bufferMu.Lock()
-			delete(b.buffer, drawback.tableID)
-			b.bufferMu.Unlock()
-			close(drawback.callback)
 		case flushEvent := <-b.flushTsChan:
 			b.bufferMu.Lock()
 			resolvedTs := flushEvent.resolvedTs
@@ -115,30 +99,6 @@ func (b *bufferSink) run(ctx context.Context, errCh chan error) {
 				// put remaining rows back to buffer
 				// append to a new, fixed slice to avoid lazy GC
 				b.buffer[tableID] = append(make([]*model.RowChangedEvent, 0, len(rows[i:])), rows[i:]...)
-=======
-		}
-	}
-}
-
-func (b *bufferSink) runOnce(ctx context.Context, state *runState) (bool, error) {
-	batchSize, batch := 0, state.batch
-	push := func(event flushMsg) {
-		batch[batchSize] = event
-		batchSize++
-	}
-	select {
-	case <-ctx.Done():
-		return false, ctx.Err()
-	case event := <-b.flushTsChan:
-		push(event)
-	RecvBatch:
-		for batchSize < maxFlushBatchSize {
-			select {
-			case event := <-b.flushTsChan:
-				push(event)
-			default:
-				break RecvBatch
->>>>>>> c6966a492 (sink(ticdc): refine sink interface and add init method (#5196))
 			}
 			b.bufferMu.Unlock()
 
@@ -162,19 +122,7 @@ func (b *bufferSink) runOnce(ctx context.Context, state *runState) (bool, error)
 		case <-time.After(defaultMetricInterval):
 			metricBufferSize.Set(float64(len(b.buffer)))
 		}
-<<<<<<< HEAD
-=======
-		b.tableCheckpointTsMap.Store(tableID, checkpointTs)
 	}
-	elapsed := time.Since(start)
-	if elapsed > time.Second {
-		log.Warn("flush row changed events too slow",
-			zap.Int("batchSize", batchSize),
-			zap.Duration("duration", elapsed),
-			util.ZapFieldChangefeed(ctx))
-	}
-
-	return true, nil
 }
 
 // Init table sink resources
@@ -193,14 +141,6 @@ func (b *bufferSink) clearBufferedTableData(tableID model.TableID) {
 	b.bufferMu.Lock()
 	defer b.bufferMu.Unlock()
 	delete(b.buffer, tableID)
-}
-
-func (b *bufferSink) TryEmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) (bool, error) {
-	err := b.EmitRowChangedEvents(ctx, rows...)
-	if err != nil {
-		return false, err
->>>>>>> c6966a492 (sink(ticdc): refine sink interface and add init method (#5196))
-	}
 }
 
 func (b *bufferSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {

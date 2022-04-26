@@ -48,18 +48,11 @@ func newCheckSink(c *check.C) *checkSink {
 	}
 }
 
-<<<<<<< HEAD:cdc/sink/manager_test.go
-=======
 // Init table sink resources
 func (c *checkSink) Init(tableID model.TableID) error {
 	return nil
 }
 
-func (c *checkSink) TryEmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) (bool, error) {
-	return true, nil
-}
-
->>>>>>> c6966a492 (sink(ticdc): refine sink interface and add init method (#5196)):cdc/sink/sink_manager_test.go
 func (c *checkSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
 	c.rowsMu.Lock()
 	defer c.rowsMu.Unlock()
@@ -126,7 +119,7 @@ func (s *managerSuite) TestManagerRandom(c *check.C) {
 		go func() {
 			defer wg.Done()
 			tableSinks[i], err = manager.CreateTableSink(model.TableID(i),
-				redo.NewDisabledManager())
+				0, redo.NewDisabledManager())
 			c.Assert(err, check.IsNil)
 		}()
 	}
@@ -220,7 +213,7 @@ func (s *managerSuite) TestManagerAddRemoveTable(c *check.C) {
 		for i := 0; i < goroutineNum; i++ {
 			if i%4 != 3 {
 				// add table
-				table, err := manager.CreateTableSink(model.TableID(i), redoManager)
+				table, err := manager.CreateTableSink(model.TableID(i), maxResolvedTs, redoManager)
 				c.Assert(err, check.IsNil)
 				ctx, cancel := context.WithCancel(ctx)
 				tableCancels = append(tableCancels, cancel)
@@ -262,18 +255,12 @@ func (s *managerSuite) TestManagerDestroyTableSink(c *check.C) {
 	manager := NewManager(ctx, newCheckSink(c), errCh, 0, "", "")
 	defer manager.Close(ctx)
 
-<<<<<<< HEAD:cdc/sink/manager_test.go
 	tableID := int64(49)
-	tableSink := manager.CreateTableSink(tableID, 100, redo.NewDisabledManager())
-	err := tableSink.EmitRowChangedEvents(ctx, &model.RowChangedEvent{
-		Table:    &model.TableName{TableID: tableID},
-=======
 	table := &model.TableName{TableID: int64(49)}
-	tableSink, err := manager.CreateTableSink(table.TableID, redo.NewDisabledManager())
+	tableSink, err := manager.CreateTableSink(table.TableID, 100, redo.NewDisabledManager())
 	c.Assert(err, check.IsNil)
 	err = tableSink.EmitRowChangedEvents(ctx, &model.RowChangedEvent{
 		Table:    table,
->>>>>>> c6966a492 (sink(ticdc): refine sink interface and add init method (#5196)):cdc/sink/sink_manager_test.go
 		CommitTs: uint64(110),
 	})
 	c.Assert(err, check.IsNil)
@@ -304,7 +291,7 @@ func BenchmarkManagerFlushing(b *testing.B) {
 		go func() {
 			defer wg.Done()
 			tableSinks[i], err = manager.CreateTableSink(model.TableID(i),
-				redo.NewDisabledManager())
+				0, redo.NewDisabledManager())
 			panic(err)
 		}()
 	}
@@ -371,17 +358,10 @@ type errorSink struct {
 	*check.C
 }
 
-<<<<<<< HEAD:cdc/sink/manager_test.go
-=======
 func (e *errorSink) Init(_ model.TableID) error {
 	return nil
 }
 
-func (e *errorSink) TryEmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) (bool, error) {
-	return true, nil
-}
-
->>>>>>> c6966a492 (sink(ticdc): refine sink interface and add init method (#5196)):cdc/sink/sink_manager_test.go
 func (e *errorSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
 	return errors.New("error in emit row changed events")
 }
@@ -413,7 +393,7 @@ func (s *managerSuite) TestManagerError(c *check.C) {
 	errCh := make(chan error, 16)
 	manager := NewManager(ctx, &errorSink{C: c}, errCh, 0, "", "")
 	defer manager.Close(ctx)
-	sink, err := manager.CreateTableSink(1, redo.NewDisabledManager())
+	sink, err := manager.CreateTableSink(1, 0, redo.NewDisabledManager())
 	c.Assert(err, check.IsNil)
 	err = sink.EmitRowChangedEvents(ctx, &model.RowChangedEvent{
 		CommitTs: 1,

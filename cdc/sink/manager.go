@@ -17,11 +17,8 @@ import (
 	"context"
 	"math"
 	"sync"
-<<<<<<< HEAD:cdc/sink/manager.go
 	"sync/atomic"
 	"time"
-=======
->>>>>>> c6966a492 (sink(ticdc): refine sink interface and add init method (#5196)):cdc/sink/sink_manager.go
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -37,7 +34,6 @@ const (
 
 // Manager manages table sinks, maintains the relationship between table sinks and backendSink.
 type Manager struct {
-<<<<<<< HEAD:cdc/sink/manager.go
 	backendSink            *bufferSink
 	tableCheckpointTsMap   sync.Map
 	tableSinks             map[model.TableID]*tableSink
@@ -46,13 +42,6 @@ type Manager struct {
 
 	flushMu  sync.Mutex
 	flushing int64
-
-	drawbackChan chan drawbackMsg
-=======
-	bufSink      *bufferSink
-	tableSinks   map[model.TableID]*tableSink
-	tableSinksMu sync.Mutex
->>>>>>> c6966a492 (sink(ticdc): refine sink interface and add init method (#5196)):cdc/sink/sink_manager.go
 
 	captureAddr               string
 	changefeedID              model.ChangeFeedID
@@ -64,41 +53,22 @@ func NewManager(
 	ctx context.Context, backendSink Sink, errCh chan error, checkpointTs model.Ts,
 	captureAddr string, changefeedID model.ChangeFeedID,
 ) *Manager {
-<<<<<<< HEAD:cdc/sink/manager.go
-	drawbackChan := make(chan drawbackMsg, 16)
 	return &Manager{
-		backendSink:               newBufferSink(ctx, backendSink, errCh, checkpointTs, drawbackChan),
+		backendSink:               newBufferSink(ctx, backendSink, errCh, checkpointTs),
 		changeFeedCheckpointTs:    checkpointTs,
 		tableSinks:                make(map[model.TableID]*tableSink),
-		drawbackChan:              drawbackChan,
 		captureAddr:               captureAddr,
-=======
-	bufSink := newBufferSink(backendSink, checkpointTs)
-	go bufSink.run(ctx, changefeedID, errCh)
-	counter := metrics.TableSinkTotalRowsCountCounter.WithLabelValues(changefeedID)
-	return &Manager{
-		bufSink:                   bufSink,
-		tableSinks:                make(map[model.TableID]*tableSink),
->>>>>>> c6966a492 (sink(ticdc): refine sink interface and add init method (#5196)):cdc/sink/sink_manager.go
 		changefeedID:              changefeedID,
 		metricsTableSinkTotalRows: tableSinkTotalRowsCountCounter.WithLabelValues(captureAddr, changefeedID),
 	}
 }
 
 // CreateTableSink creates a table sink
-<<<<<<< HEAD:cdc/sink/manager.go
-func (m *Manager) CreateTableSink(tableID model.TableID, checkpointTs model.Ts, redoManager redo.LogManager) Sink {
-	m.tableSinksMu.Lock()
-	defer m.tableSinksMu.Unlock()
-	if _, exist := m.tableSinks[tableID]; exist {
-		log.Panic("the table sink already exists", zap.Uint64("tableID", uint64(tableID)))
-	}
-=======
 func (m *Manager) CreateTableSink(
 	tableID model.TableID,
+	checkpointTs model.Ts,
 	redoManager redo.LogManager,
 ) (Sink, error) {
->>>>>>> c6966a492 (sink(ticdc): refine sink interface and add init method (#5196)):cdc/sink/sink_manager.go
 	sink := &tableSink{
 		tableID:     tableID,
 		manager:     m,
@@ -106,8 +76,6 @@ func (m *Manager) CreateTableSink(
 		emittedTs:   checkpointTs,
 		redoManager: redoManager,
 	}
-<<<<<<< HEAD:cdc/sink/manager.go
-=======
 
 	m.tableSinksMu.Lock()
 	defer m.tableSinksMu.Unlock()
@@ -117,7 +85,6 @@ func (m *Manager) CreateTableSink(
 	if err := sink.Init(tableID); err != nil {
 		return nil, errors.Trace(err)
 	}
->>>>>>> c6966a492 (sink(ticdc): refine sink interface and add init method (#5196)):cdc/sink/sink_manager.go
 	m.tableSinks[tableID] = sink
 	return sink, nil
 }
@@ -186,18 +153,6 @@ func (m *Manager) destroyTableSink(ctx context.Context, tableID model.TableID) e
 	m.tableSinksMu.Lock()
 	delete(m.tableSinks, tableID)
 	m.tableSinksMu.Unlock()
-<<<<<<< HEAD:cdc/sink/manager.go
-	callback := make(chan struct{})
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case m.drawbackChan <- drawbackMsg{tableID: tableID, callback: callback}:
-	}
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-callback:
-	}
 	return m.backendSink.Barrier(ctx, tableID)
 }
 
@@ -209,20 +164,12 @@ func (m *Manager) getCheckpointTs(tableID model.TableID) uint64 {
 	// cannot find table level checkpointTs because of no table level resolvedTs flush task finished successfully,
 	// for example: first time to flush resolvedTs but cannot get the flush lock, return changefeed level checkpointTs is safe
 	return atomic.LoadUint64(&m.changeFeedCheckpointTs)
-=======
-	return m.bufSink.Barrier(ctx, tableID)
->>>>>>> c6966a492 (sink(ticdc): refine sink interface and add init method (#5196)):cdc/sink/sink_manager.go
 }
 
 // UpdateChangeFeedCheckpointTs update the changeFeedCheckpointTs every processor tick
 func (m *Manager) UpdateChangeFeedCheckpointTs(checkpointTs uint64) {
-<<<<<<< HEAD:cdc/sink/manager.go
 	atomic.StoreUint64(&m.changeFeedCheckpointTs, checkpointTs)
 	if m.backendSink != nil {
 		m.backendSink.UpdateChangeFeedCheckpointTs(checkpointTs)
-=======
-	if m.bufSink != nil {
-		m.bufSink.UpdateChangeFeedCheckpointTs(checkpointTs)
->>>>>>> c6966a492 (sink(ticdc): refine sink interface and add init method (#5196)):cdc/sink/sink_manager.go
 	}
 }
