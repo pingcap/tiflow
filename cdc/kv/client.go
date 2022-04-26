@@ -329,11 +329,13 @@ func NewCDCClient(
 	regionCache *tikv.RegionCache,
 	pdClock pdtime.Clock,
 	changefeed string,
+	cfg *config.KVClientConfig,
 ) (c CDCKVClient) {
 	clusterID := pd.GetClusterID(ctx)
 
 	c = &CDCClient{
 		clusterID:      clusterID,
+		config:         cfg,
 		pd:             pd,
 		kvStorage:      kvStorage,
 		grpcPool:       grpcPool,
@@ -477,14 +479,13 @@ func newEventFeedSession(
 	eventCh chan<- model.RegionFeedEvent,
 ) *eventFeedSession {
 	id := strconv.FormatUint(allocID(), 10)
-	kvClientCfg := config.GetGlobalServerConfig().KVClient
 	rangeLock := regionspan.NewRegionRangeLock(
 		totalSpan.Start, totalSpan.End, startTs, client.changefeed)
 	return &eventFeedSession{
 		client:            client,
 		totalSpan:         totalSpan,
 		eventCh:           eventCh,
-		regionRouter:      NewSizedRegionRouter(ctx, kvClientCfg.RegionScanLimit),
+		regionRouter:      NewSizedRegionRouter(ctx, client.config.RegionScanLimit),
 		regionCh:          make(chan singleRegionInfo, defaultRegionChanSize),
 		errCh:             make(chan regionErrorInfo, defaultRegionChanSize),
 		requestRangeCh:    make(chan rangeRequestTask, defaultRegionChanSize),

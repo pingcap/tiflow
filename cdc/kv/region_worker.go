@@ -159,7 +159,6 @@ type regionWorker struct {
 }
 
 func newRegionWorker(s *eventFeedSession, addr string) *regionWorker {
-	cfg := config.GetGlobalServerConfig().KVClient
 	worker := &regionWorker{
 		session:        s,
 		inputCh:        make(chan *regionStatefulEvent, regionWorkerInputChanSize),
@@ -170,7 +169,7 @@ func newRegionWorker(s *eventFeedSession, addr string) *regionWorker {
 		rtsUpdateCh:    make(chan *regionTsInfo, 1024),
 		enableOldValue: s.enableOldValue,
 		storeAddr:      addr,
-		concurrent:     cfg.WorkerConcurrent,
+		concurrent:     s.client.config.WorkerConcurrent,
 	}
 	return worker
 }

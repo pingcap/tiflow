@@ -23,7 +23,7 @@ const (
 	defaultBackoffBaseInMs = 10.0
 	// defaultBackoffCapInMs is the max amount of duration, in Millisecond
 	defaultBackoffCapInMs   = 100.0
-	defaultMaxTries         = 3
+	defaultMaxTries         = math.MaxInt64
 	defaultMaxRetryDuration = time.Duration(0)
 )
 
@@ -35,7 +35,7 @@ type IsRetryable func(error) bool
 
 type retryOptions struct {
 	totalRetryDuration time.Duration
-	maxTries           int64
+	maxTries           uint64
 	backoffBaseInMs    float64
 	backoffCapInMs     float64
 	isRetryable        IsRetryable
@@ -70,11 +70,12 @@ func WithBackoffMaxDelay(delayInMs int64) Option {
 }
 
 // WithMaxTries configures maximum tries, if tries <= 0 "defaultMaxTries" will be used
-func WithMaxTries(tries int64) Option {
+func WithMaxTries(tries uint64) Option {
 	return func(o *retryOptions) {
-		if tries > 0 {
-			o.maxTries = tries
+		if tries == 0 {
+			tries = 1
 		}
+		o.maxTries = tries
 	}
 }
 
@@ -82,13 +83,6 @@ func WithMaxTries(tries int64) Option {
 func WithTotalRetryDuratoin(retryDuration time.Duration) Option {
 	return func(o *retryOptions) {
 		o.totalRetryDuration = retryDuration
-	}
-}
-
-// WithInfiniteTries configures to retry forever (math.MaxInt64 times) till success or got canceled
-func WithInfiniteTries() Option {
-	return func(o *retryOptions) {
-		o.maxTries = math.MaxInt64
 	}
 }
 

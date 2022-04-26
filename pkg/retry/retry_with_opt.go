@@ -17,6 +17,7 @@ import (
 	"context"
 	"math"
 	"math/rand"
+	"strconv"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -47,16 +48,9 @@ func run(ctx context.Context, op Operation, retryOption *retryOptions) error {
 	default:
 	}
 
-	if retryOption.totalRetryDuration != time.Duration(0) {
-		maxTries := getApproximateMaxTryBasedOnTotalRetryDuration(
-			retryOption.backoffBaseInMs, retryOption.backoffCapInMs, retryOption.totalRetryDuration)
-		if retryOption.maxTries < int64(maxTries) {
-			retryOption.maxTries = int64(maxTries)
-		}
-	}
-
 	var t *time.Timer
-	try := 0
+	var start time.Time
+	try := uint64(0)
 	backOff := time.Duration(0)
 	for {
 		err := op()
@@ -69,13 +63,17 @@ func run(ctx context.Context, op Operation, retryOption *retryOptions) error {
 		}
 
 		try++
-		if int64(try) >= retryOption.maxTries {
-			if retryOption.totalRetryDuration == time.Duration(0) {
-				return cerror.ErrReachMaxTry.
-					Wrap(err).GenWithStackByArgs(retryOption.maxTries, err)
-			}
+		if try >= retryOption.maxTries {
 			return cerror.ErrReachMaxTry.
-				Wrap(err).GenWithStackByArgs(retryOption.totalRetryDuration, err)
+				Wrap(err).GenWithStackByArgs(strconv.Itoa(int(retryOption.maxTries)), err)
+		}
+		if retryOption.totalRetryDuration > 0 {
+			if start.IsZero() {
+				start = time.Now()
+			} else if time.Since(start) > retryOption.totalRetryDuration {
+				return cerror.ErrReachMaxTry.
+					Wrap(err).GenWithStackByArgs(retryOption.totalRetryDuration, err)
+			}
 		}
 
 		backOff = getBackoffInMs(retryOption.backoffBaseInMs, retryOption.backoffCapInMs, float64(try))
@@ -107,16 +105,4 @@ func getBackoffInMs(backoffBaseInMs, backoffCapInMs, try float64) time.Duration 
 	}
 	backOff := math.Min(backoffCapInMs, float64(rand.Int63n(sleep))+backoffBaseInMs)
 	return time.Duration(backOff) * time.Millisecond
-}
-
-func getApproximateMaxTryBasedOnTotalRetryDuration(
-	backoffBaseInMs, backoffCapInMs float64, totalRetryDuration time.Duration,
-) int {
-	try := 0
-	acc := time.Duration(0)
-	for totalRetryDuration >= acc {
-		try++
-		acc += getBackoffInMs(backoffBaseInMs, backoffCapInMs, float64(try))
-	}
-	return try
 }

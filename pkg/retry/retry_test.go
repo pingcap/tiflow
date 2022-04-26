@@ -97,7 +97,7 @@ func TestDoCancelInfiniteRetry(t *testing.T) {
 		return errors.New("test")
 	}
 
-	err := Do(ctx, f, WithInfiniteTries(), WithBackoffBaseDelay(2), WithBackoffMaxDelay(10))
+	err := Do(ctx, f, WithBackoffBaseDelay(2), WithBackoffMaxDelay(10))
 	require.Equal(t, errors.Cause(err), context.DeadlineExceeded)
 	require.GreaterOrEqual(t, callCount, 1, "tries: %d", callCount)
 	require.Less(t, callCount, math.MaxInt64)
@@ -114,7 +114,7 @@ func TestDoCancelAtBeginning(t *testing.T) {
 		return errors.New("test")
 	}
 
-	err := Do(ctx, f, WithInfiniteTries(), WithBackoffBaseDelay(2), WithBackoffMaxDelay(10))
+	err := Do(ctx, f, WithBackoffBaseDelay(2), WithBackoffMaxDelay(10))
 	require.Equal(t, errors.Cause(err), context.Canceled)
 	require.Equal(t, callCount, 0, "tries:%d", callCount)
 }
@@ -147,16 +147,17 @@ func TestDoCornerCases(t *testing.T) {
 	require.Regexp(t, "test", errors.Cause(err))
 	require.Equal(t, callCount, 2)
 
-	var i int64
-	for i = -10; i < 10; i++ {
+	var i uint64
+	for i = 0; i < 10; i++ {
 		callCount = 0
-		err = Do(context.Background(), f, WithBackoffBaseDelay(i), WithBackoffMaxDelay(i), WithMaxTries(i))
+		err = Do(context.Background(), f,
+			WithBackoffBaseDelay(int64(i)), WithBackoffMaxDelay(int64(i)), WithMaxTries(i))
 		require.Regexp(t, "test", errors.Cause(err))
 		require.Regexp(t, ".*CDC:ErrReachMaxTry.*", err)
-		if i > 0 {
-			require.Equal(t, int64(callCount), i)
+		if i == 0 {
+			require.Equal(t, 1, callCount)
 		} else {
-			require.Equal(t, callCount, defaultMaxTries)
+			require.Equal(t, int(i), callCount)
 		}
 	}
 }

@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/tidb/store/mockstore"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/pdtime"
 	"github.com/pingcap/tiflow/pkg/regionspan"
@@ -62,6 +63,7 @@ func newMockCDCKVClient(
 	regionCache *tikv.RegionCache,
 	pdClock pdtime.Clock,
 	changefeed string,
+	cfg *config.KVClientConfig,
 ) kv.CDCKVClient {
 	return &mockCDCKVClient{
 		expectations: make(chan model.RegionFeedEvent, 1024),
@@ -126,7 +128,7 @@ func newPullerForTest(
 	defer regionCache.Close()
 	plr := NewPuller(
 		ctx, pdCli, grpcPool, regionCache, store, pdtime.NewClock4Test(), "",
-		checkpointTs, spans)
+		checkpointTs, spans, config.GetDefaultServerConfig().KVClient)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
