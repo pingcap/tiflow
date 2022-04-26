@@ -283,7 +283,9 @@ func BenchmarkManagerFlushing(b *testing.B) {
 			defer wg.Done()
 			var err error
 			tableSinks[i], err = manager.CreateTableSink(model.TableID(i), 0)
-			panic(err)
+			if err != nil {
+				b.Error(err)
+			}
 		}()
 	}
 	wg.Wait()

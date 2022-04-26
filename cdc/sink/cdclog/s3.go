@@ -210,6 +210,10 @@ type s3Sink struct {
 	ddlEncoder codec.EventBatchEncoder
 }
 
+func (s *s3Sink) Init(_ model.TableID) error {
+	return nil
+}
+
 func (s *s3Sink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
 	return s.emitRowChangedEvents(ctx, newTableBuffer, rows...)
 }

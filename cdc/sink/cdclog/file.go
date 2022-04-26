@@ -192,6 +192,10 @@ type fileSink struct {
 	ddlEncoder codec.EventBatchEncoder
 }
 
+func (f *fileSink) Init(_ model.TableID) error {
+	return nil
+}
+
 func (f *fileSink) flushLogMeta() error {
 	data, err := f.logMeta.Marshal()
 	if err != nil {
