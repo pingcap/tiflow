@@ -18,7 +18,6 @@ import (
 	"math"
 	"strings"
 	"sync"
-	"unsafe"
 
 	"github.com/google/btree"
 	"github.com/pingcap/errors"
@@ -116,7 +115,7 @@ func NewSnapshotFromMeta(meta *timeta.Meta, currentTs uint64, forceReplicate boo
 
 	for _, dbinfo := range dbinfos {
 		vid := newVersionedID(dbinfo.ID, tag)
-		vid.target = unsafe.Pointer(dbinfo)
+		vid.target = dbinfo
 		snap.inner.schemas.ReplaceOrInsert(vid)
 
 		vname := newVersionedEntityName(-1, dbinfo.Name.O, tag) // -1 means the entity is a schema.
@@ -132,7 +131,7 @@ func NewSnapshotFromMeta(meta *timeta.Meta, currentTs uint64, forceReplicate boo
 			snap.inner.tables.ReplaceOrInsert(versionedID{
 				id:     tableInfo.ID,
 				tag:    tag,
-				target: unsafe.Pointer(tableInfo),
+				target: tableInfo,
 			})
 			snap.inner.tableNameToID.ReplaceOrInsert(versionedEntityName{
 				prefix: dbinfo.ID,
@@ -148,7 +147,7 @@ func NewSnapshotFromMeta(meta *timeta.Meta, currentTs uint64, forceReplicate boo
 			if pi := tableInfo.GetPartitionInfo(); pi != nil {
 				for _, partition := range pi.Definitions {
 					vid := newVersionedID(partition.ID, tag)
-					vid.target = unsafe.Pointer(tableInfo)
+					vid.target = tableInfo
 					snap.inner.partitions.ReplaceOrInsert(vid)
 					if ineligible {
 						snap.inner.ineligibleTables.ReplaceOrInsert(versionedID{id: partition.ID, tag: tag})
@@ -530,7 +529,7 @@ func (s *snapshot) schemaByID(id int64) (val *timodel.DBInfo, ok bool) {
 	start := versionedID{id: id, tag: tag, target: nil}
 	end := versionedID{id: id, tag: negative(uint64(0)), target: nil}
 	s.schemas.AscendRange(start, end, func(i btree.Item) bool {
-		val = (*timodel.DBInfo)(i.(versionedID).target)
+		val = targetToDBInfo(i.(versionedID).target)
 		ok = val != nil
 		return false
 	})
@@ -542,14 +541,14 @@ func (s *snapshot) physicalTableByID(id int64) (tableInfo *model.TableInfo, ok b
 	start := versionedID{id: id, tag: tag, target: nil}
 	end := versionedID{id: id, tag: negative(uint64(0)), target: nil}
 	s.tables.AscendRange(start, end, func(i btree.Item) bool {
-		tableInfo = (*model.TableInfo)(i.(versionedID).target)
+		tableInfo = targetToTableInfo(i.(versionedID).target)
 		ok = tableInfo != nil
 		return false
 	})
 	if !ok {
 		// Try partition, it could be a partition table.
 		s.partitions.AscendRange(start, end, func(i btree.Item) bool {
-			tableInfo = (*model.TableInfo)(i.(versionedID).target)
+			tableInfo = targetToTableInfo(i.(versionedID).target)
 			ok = tableInfo != nil
 			return false
 		})
@@ -603,7 +602,7 @@ func (s *snapshot) tableTagByID(id int64, nilAcceptable bool) (foundTag uint64, 
 	start := newVersionedID(id, tag)
 	end := newVersionedID(id, negative(uint64(0)))
 	s.tables.AscendRange(start, end, func(i btree.Item) bool {
-		tableInfo := (*model.TableInfo)(i.(versionedID).target)
+		tableInfo := targetToTableInfo(i.(versionedID).target)
 		if nilAcceptable || tableInfo != nil {
 			foundTag = i.(versionedID).tag
 			ok = true
@@ -613,7 +612,7 @@ func (s *snapshot) tableTagByID(id int64, nilAcceptable bool) (foundTag uint64, 
 	if !ok {
 		// Try partition, it could be a partition table.
 		s.partitions.AscendRange(start, end, func(i btree.Item) bool {
-			tableInfo := (*model.TableInfo)(i.(versionedID).target)
+			tableInfo := targetToTableInfo(i.(versionedID).target)
 			if nilAcceptable || tableInfo != nil {
 				foundTag = i.(versionedID).tag
 				ok = true
@@ -678,7 +677,7 @@ func (s *snapshot) replaceSchema(dbInfo *timodel.DBInfo, currentTs uint64) error
 func (s *snapshot) doCreateSchema(dbInfo *timodel.DBInfo, currentTs uint64) {
 	tag := negative(currentTs)
 	vid := newVersionedID(dbInfo.ID, tag)
-	vid.target = unsafe.Pointer(dbInfo.Clone())
+	vid.target = dbInfo.Clone()
 	s.schemas.ReplaceOrInsert(vid)
 	vname := newVersionedEntityName(-1, dbInfo.Name.O, tag)
 	vname.target = dbInfo.ID
@@ -764,7 +763,7 @@ func (s *snapshot) doCreateTable(tbInfo *model.TableInfo, currentTs uint64) {
 	tbInfo = tbInfo.Clone()
 	tag := negative(currentTs)
 	vid := newVersionedID(tbInfo.ID, tag)
-	vid.target = unsafe.Pointer(tbInfo)
+	vid.target = tbInfo
 	s.tables.ReplaceOrInsert(vid)
 
 	vname := newVersionedEntityName(tbInfo.SchemaID, tbInfo.TableName.Table, tag)
@@ -785,7 +784,7 @@ func (s *snapshot) doCreateTable(tbInfo *model.TableInfo, currentTs uint64) {
 	if pi := tbInfo.GetPartitionInfo(); pi != nil {
 		for _, partition := range pi.Definitions {
 			vid := newVersionedID(partition.ID, tag)
-			vid.target = unsafe.Pointer(tbInfo)
+			vid.target = tbInfo
 			s.partitions.ReplaceOrInsert(vid)
 			if ineligible {
 				s.ineligibleTables.ReplaceOrInsert(newVersionedID(partition.ID, tag))
@@ -811,7 +810,7 @@ func (s *snapshot) updatePartition(tbInfo *model.TableInfo, currentTs uint64) er
 
 	tag := negative(currentTs)
 	vid := newVersionedID(tbInfo.ID, tag)
-	vid.target = unsafe.Pointer(tbInfo.Clone())
+	vid.target = tbInfo.Clone()
 	s.tables.ReplaceOrInsert(vid)
 	ineligible := !tbInfo.IsEligible(s.forceReplicate)
 	if ineligible {
@@ -822,7 +821,7 @@ func (s *snapshot) updatePartition(tbInfo *model.TableInfo, currentTs uint64) er
 	}
 	for _, partition := range newPi.Definitions {
 		vid := newVersionedID(partition.ID, tag)
-		vid.target = unsafe.Pointer(tbInfo)
+		vid.target = tbInfo
 		s.partitions.ReplaceOrInsert(vid)
 		if ineligible {
 			s.ineligibleTables.ReplaceOrInsert(newVersionedID(partition.ID, tag))
@@ -875,7 +874,7 @@ func (s *snapshot) iterTables(includeIneligible bool, f func(i *model.TableInfo)
 		if x.id != tableID && x.tag >= tag {
 			tableID = x.id
 			if x.target != nil && (includeIneligible || s.ineligibleTables.Get(newVersionedID(x.id, x.tag)) == nil) {
-				f((*model.TableInfo)(x.target))
+				f(targetToTableInfo(x.target))
 			}
 		}
 		return true
@@ -891,7 +890,7 @@ func (s *snapshot) iterPartitions(includeIneligible bool, f func(id int64, i *mo
 		if x.id != partitionID && x.tag >= tag {
 			partitionID = x.id
 			if x.target != nil && (includeIneligible || s.ineligibleTables.Get(newVersionedID(x.id, x.tag)) == nil) {
-				f(partitionID, (*model.TableInfo)(x.target))
+				f(partitionID, targetToTableInfo(x.target))
 			}
 		}
 		return true
@@ -907,7 +906,7 @@ func (s *snapshot) iterSchemas(f func(i *timodel.DBInfo)) {
 		if x.id != schemaID && x.tag >= tag {
 			schemaID = x.id
 			if x.target != nil {
-				f((*timodel.DBInfo)(x.target))
+				f(targetToDBInfo(x.target))
 			}
 		}
 		return true
@@ -1011,7 +1010,7 @@ func (s *snapshot) drop() {
 	})
 	for _, vid := range tables {
 		x := s.tables.Delete(vid).(versionedID)
-		info := (*model.TableInfo)(x.target)
+		info := targetToTableInfo(x.target)
 		if info != nil {
 			ineligible := !info.IsEligible(s.forceReplicate)
 			if ineligible {
@@ -1042,7 +1041,7 @@ func (s *snapshot) drop() {
 	})
 	for _, vid := range partitions {
 		x := s.partitions.Delete(vid).(versionedID)
-		info := (*model.TableInfo)(x.target)
+		info := targetToTableInfo(x.target)
 		if info != nil {
 			ineligible := !info.IsEligible(s.forceReplicate)
 			if ineligible {
@@ -1110,7 +1109,7 @@ type versionedID struct {
 	id  int64
 	tag uint64 // A transform of timestamp to reverse sort versions.
 	// the associated entity pointer.
-	target unsafe.Pointer
+	target interface{}
 }
 
 func (v1 versionedEntityName) Less(than btree.Item) bool {
@@ -1138,6 +1137,20 @@ func newVersionedEntityName(prefix int64, entity string, tag uint64) versionedEn
 // newVersionedID creates an instance with target nil, which means it's deleted from the
 // associated snapshot.
 func newVersionedID(id int64, tag uint64) versionedID {
-	var target unsafe.Pointer = unsafe.Pointer(nil)
+	var target interface{} = nil
 	return versionedID{id, tag, target}
+}
+
+func targetToTableInfo(target interface{}) *model.TableInfo {
+	if target == nil {
+		return nil
+	}
+	return target.(*model.TableInfo)
+}
+
+func targetToDBInfo(target interface{}) *timodel.DBInfo {
+	if target == nil {
+		return nil
+	}
+	return target.(*timodel.DBInfo)
 }
