@@ -628,7 +628,7 @@ func SetupEmbedEtcd(dir string) (clientURL *url.URL, e *embed.Etcd, err error) {
 }
 
 // extractKeySuffix extracts the suffix of an etcd key, such as extracting
-// "6a6c6dd290bc8732" from /tidb/cdc/changefeed/config/6a6c6dd290bc8732
+// "6a6c6dd290bc8732" from /tidb/cdc/changefeed/info/6a6c6dd290bc8732
 func extractKeySuffix(key string) (string, error) {
 	subs := strings.Split(key, "/")
 	if len(subs) < 2 {
