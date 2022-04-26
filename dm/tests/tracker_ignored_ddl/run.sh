@@ -35,6 +35,10 @@ function run() {
 		"query-status test" \
 		"Error 1054: Unknown column" 1
 
+	# force a resume, the error is still there, but we want to check https://github.com/pingcap/tiflow/issues/5272#issuecomment-1109283279
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"resume-task test"
+
 	# need operate tidb
 	run_sql_tidb "alter table $TEST_NAME.t1 add column ignore_1 int;"
 
@@ -42,7 +46,7 @@ function run() {
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"resume-task test" \
 		"\"result\": true" 2
-	sleep 1
+	sleep 3
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
 		"\"stage\": \"Running\"" 2
