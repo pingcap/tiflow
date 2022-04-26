@@ -24,49 +24,49 @@ import (
 
 func TestTablesInSchema(t *testing.T) {
 	snap := NewEmptySnapshot(true)
-	require.Nil(t, snap.createSchema(newDBInfo(1), 100))
+	require.Nil(t, snap.inner.createSchema(newDBInfo(1), 100))
 	var vname versionedEntityName
 
 	vname = newVersionedEntityName(1, "tb1", negative(80))
 	vname.target = 1
-	snap.tableNameToID.ReplaceOrInsert(vname)
+	snap.inner.tableNameToID.ReplaceOrInsert(vname)
 
 	vname = newVersionedEntityName(1, "tb1", negative(90))
 	vname.target = 2
-	snap.tableNameToID.ReplaceOrInsert(vname)
+	snap.inner.tableNameToID.ReplaceOrInsert(vname)
 
 	vname = newVersionedEntityName(1, "tb1", negative(110))
 	vname.target = 3
-	snap.tableNameToID.ReplaceOrInsert(vname)
+	snap.inner.tableNameToID.ReplaceOrInsert(vname)
 
 	vname = newVersionedEntityName(1, "tb2", negative(100))
 	vname.target = 4
-	snap.tableNameToID.ReplaceOrInsert(vname)
+	snap.inner.tableNameToID.ReplaceOrInsert(vname)
 
 	vname = newVersionedEntityName(1, "tb3", negative(120))
 	vname.target = 5
-	snap.tableNameToID.ReplaceOrInsert(vname)
+	snap.inner.tableNameToID.ReplaceOrInsert(vname)
 
 	vname = newVersionedEntityName(2, "tb1", negative(80))
 	vname.target = 6
-	snap.tableNameToID.ReplaceOrInsert(vname)
+	snap.inner.tableNameToID.ReplaceOrInsert(vname)
 
-	require.Equal(t, []int64{2, 4}, snap.tablesInSchema("DB_1"))
+	require.Equal(t, []int64{2, 4}, snap.inner.tablesInSchema("DB_1"))
 
 	vname = newVersionedEntityName(1, "tb1", negative(130))
 	vname.target = -1
-	snap.tableNameToID.ReplaceOrInsert(vname)
-	snap.currentTs = 130
-	require.Equal(t, []int64{4, 5}, snap.tablesInSchema("DB_1"))
+	snap.inner.tableNameToID.ReplaceOrInsert(vname)
+	snap.inner.currentTs = 130
+	require.Equal(t, []int64{4, 5}, snap.inner.tablesInSchema("DB_1"))
 }
 
 func TestIterSchemas(t *testing.T) {
 	snap := NewEmptySnapshot(true)
-	require.Nil(t, snap.createSchema(newDBInfo(1), 90))
-	require.Nil(t, snap.replaceSchema(newDBInfo(1), 100))
-	require.Nil(t, snap.createSchema(newDBInfo(2), 110))
-	require.Nil(t, snap.createSchema(newDBInfo(3), 90))
-	snap.currentTs = 100
+	require.Nil(t, snap.inner.createSchema(newDBInfo(1), 90))
+	require.Nil(t, snap.inner.replaceSchema(newDBInfo(1), 100))
+	require.Nil(t, snap.inner.createSchema(newDBInfo(2), 110))
+	require.Nil(t, snap.inner.createSchema(newDBInfo(3), 90))
+	snap.inner.currentTs = 100
 
 	var schemas []int64 = make([]int64, 0, 3)
 	snap.IterSchemas(func(i *timodel.DBInfo) {
@@ -80,21 +80,21 @@ func TestSchema(t *testing.T) {
 
 	// createSchema fails if the schema ID or name already exist.
 	dbName := timodel.CIStr{O: "DB_1", L: "db_1"}
-	require.Nil(t, snap.createSchema(&timodel.DBInfo{ID: 1, Name: dbName}, 100))
-	require.Nil(t, snap.createTable(newTbInfo(1, "DB_1", 11), 100))
-	require.Error(t, snap.createSchema(&timodel.DBInfo{ID: 1}, 110))
-	require.Error(t, snap.createSchema(&timodel.DBInfo{ID: 2, Name: dbName}, 120))
+	require.Nil(t, snap.inner.createSchema(&timodel.DBInfo{ID: 1, Name: dbName}, 100))
+	require.Nil(t, snap.inner.createTable(newTbInfo(1, "DB_1", 11), 100))
+	require.Error(t, snap.inner.createSchema(&timodel.DBInfo{ID: 1}, 110))
+	require.Error(t, snap.inner.createSchema(&timodel.DBInfo{ID: 2, Name: dbName}, 120))
 	snap1 := snap.Copy()
 
 	// replaceSchema only success if the schema ID exists.
 	dbName = timodel.CIStr{O: "DB_2", L: "db_2"}
-	require.Error(t, snap.replaceSchema(&timodel.DBInfo{ID: 2}, 130))
-	require.Nil(t, snap.replaceSchema(&timodel.DBInfo{ID: 1, Name: dbName}, 140))
+	require.Error(t, snap.inner.replaceSchema(&timodel.DBInfo{ID: 2}, 130))
+	require.Nil(t, snap.inner.replaceSchema(&timodel.DBInfo{ID: 1, Name: dbName}, 140))
 	snap2 := snap.Copy()
 
 	// dropSchema only success if the schema ID exists.
-	require.Error(t, snap.dropSchema(2, 150))
-	require.Nil(t, snap.dropSchema(1, 170))
+	require.Error(t, snap.inner.dropSchema(2, 150))
+	require.Nil(t, snap.inner.dropSchema(1, 170))
 	snap3 := snap.Copy()
 
 	var db *timodel.DBInfo
@@ -135,10 +135,10 @@ func TestTable(t *testing.T) {
 		snap := NewEmptySnapshot(forceReplicate)
 
 		// createTable should check whether the schema or table exist or not.
-		require.Error(t, snap.createTable(newTbInfo(1, "DB_1", 11), 100))
-		snap.createSchema(newDBInfo(1), 110)
-		require.Nil(t, snap.createTable(newTbInfo(1, "DB_1", 11), 120))
-		require.Error(t, snap.createTable(newTbInfo(1, "DB_1", 11), 130))
+		require.Error(t, snap.inner.createTable(newTbInfo(1, "DB_1", 11), 100))
+		snap.inner.createSchema(newDBInfo(1), 110)
+		require.Nil(t, snap.inner.createTable(newTbInfo(1, "DB_1", 11), 120))
+		require.Error(t, snap.inner.createTable(newTbInfo(1, "DB_1", 11), 130))
 		_, ok = snap.PhysicalTableByID(11)
 		require.True(t, ok)
 		_, ok = snap.PhysicalTableByID(11 + 65536)
@@ -151,9 +151,9 @@ func TestTable(t *testing.T) {
 		}
 
 		// replaceTable should check whether the schema or table exist or not.
-		require.Error(t, snap.replaceTable(newTbInfo(2, "DB_2", 11), 140))
-		require.Error(t, snap.replaceTable(newTbInfo(1, "DB_1", 12), 150))
-		require.Nil(t, snap.replaceTable(newTbInfo(1, "DB_1", 11), 160))
+		require.Error(t, snap.inner.replaceTable(newTbInfo(2, "DB_2", 11), 140))
+		require.Error(t, snap.inner.replaceTable(newTbInfo(1, "DB_1", 12), 150))
+		require.Nil(t, snap.inner.replaceTable(newTbInfo(1, "DB_1", 11), 160))
 		_, ok = snap.PhysicalTableByID(11)
 		require.True(t, ok)
 		_, ok = snap.PhysicalTableByID(11 + 65536)
@@ -166,8 +166,8 @@ func TestTable(t *testing.T) {
 		}
 
 		// truncateTable should replace the old one.
-		require.Error(t, snap.truncateTable(12, newTbInfo(1, "DB_1", 13), 170))
-		require.Nil(t, snap.truncateTable(11, newTbInfo(1, "DB_1", 12), 180))
+		require.Error(t, snap.inner.truncateTable(12, newTbInfo(1, "DB_1", 13), 170))
+		require.Nil(t, snap.inner.truncateTable(11, newTbInfo(1, "DB_1", 12), 180))
 		_, ok = snap.PhysicalTableByID(11)
 		require.False(t, ok)
 		_, ok = snap.PhysicalTableByID(11 + 65536)
@@ -187,8 +187,8 @@ func TestTable(t *testing.T) {
 		}
 
 		// dropTable should check the table exists or not.
-		require.Error(t, snap.dropTable(11, 190))
-		require.Nil(t, snap.dropTable(12, 200))
+		require.Error(t, snap.inner.dropTable(11, 190))
+		require.Nil(t, snap.inner.dropTable(12, 200))
 		_, ok = snap.PhysicalTableByID(12)
 		require.False(t, ok)
 		_, ok = snap.PhysicalTableByID(12 + 65536)
@@ -212,25 +212,25 @@ func TestUpdatePartition(t *testing.T) {
 	var ok bool
 
 	snap := NewEmptySnapshot(false)
-	require.Nil(t, snap.createSchema(newDBInfo(1), 100))
+	require.Nil(t, snap.inner.createSchema(newDBInfo(1), 100))
 
 	// updatePartition fails if the old table is not partitioned.
 	oldTb = newTbInfo(1, "DB_1", 11)
 	oldTb.Partition = nil
-	require.Nil(t, snap.createTable(oldTb, 110))
-	require.Error(t, snap.updatePartition(newTbInfo(1, "DB_1", 11), 120))
+	require.Nil(t, snap.inner.createTable(oldTb, 110))
+	require.Error(t, snap.inner.updatePartition(newTbInfo(1, "DB_1", 11), 120))
 
 	// updatePartition fails if the new table is not partitioned.
-	require.Nil(t, snap.dropTable(11, 130))
-	require.Nil(t, snap.createTable(newTbInfo(1, "DB_1", 11), 140))
+	require.Nil(t, snap.inner.dropTable(11, 130))
+	require.Nil(t, snap.inner.createTable(newTbInfo(1, "DB_1", 11), 140))
 	newTb = newTbInfo(1, "DB_1", 11)
 	newTb.Partition = nil
-	require.Error(t, snap.updatePartition(newTb, 150))
+	require.Error(t, snap.inner.updatePartition(newTb, 150))
 	snap1 = snap.Copy()
 
 	newTb = newTbInfo(1, "DB_1", 11)
 	newTb.Partition.Definitions[0] = timodel.PartitionDefinition{ID: 11 + 65536*2}
-	require.Nil(t, snap.updatePartition(newTb, 160))
+	require.Nil(t, snap.inner.updatePartition(newTb, 160))
 	snap2 = snap.Copy()
 
 	info, _ = snap1.PhysicalTableByID(11)
@@ -255,26 +255,26 @@ func TestUpdatePartition(t *testing.T) {
 func TestDrop(t *testing.T) {
 	snap := NewEmptySnapshot(false)
 
-	require.Nil(t, snap.createSchema(newDBInfo(1), 11))
-	require.Nil(t, snap.createSchema(newDBInfo(2), 12))
-	require.Nil(t, snap.replaceSchema(newDBInfo(2), 13))
-	require.Nil(t, snap.dropSchema(2, 14))
+	require.Nil(t, snap.inner.createSchema(newDBInfo(1), 11))
+	require.Nil(t, snap.inner.createSchema(newDBInfo(2), 12))
+	require.Nil(t, snap.inner.replaceSchema(newDBInfo(2), 13))
+	require.Nil(t, snap.inner.dropSchema(2, 14))
 
-	require.Nil(t, snap.createTable(newTbInfo(1, "DB_1", 3), 15))
-	require.Nil(t, snap.createTable(newTbInfo(1, "DB_1", 4), 16))
-	require.Nil(t, snap.replaceTable(newTbInfo(1, "DB_1", 4), 17))
-	require.Nil(t, snap.truncateTable(4, newTbInfo(1, "DB_1", 5), 18))
-	require.Nil(t, snap.dropTable(5, 19))
+	require.Nil(t, snap.inner.createTable(newTbInfo(1, "DB_1", 3), 15))
+	require.Nil(t, snap.inner.createTable(newTbInfo(1, "DB_1", 4), 16))
+	require.Nil(t, snap.inner.replaceTable(newTbInfo(1, "DB_1", 4), 17))
+	require.Nil(t, snap.inner.truncateTable(4, newTbInfo(1, "DB_1", 5), 18))
+	require.Nil(t, snap.inner.dropTable(5, 19))
 	snap.Drop()
 
 	// After the latest snapshot is dropped, check schema and table count.
-	require.Equal(t, 1, snap.schemas.Len())
-	require.Equal(t, 1, snap.tables.Len())
-	require.Equal(t, 1, snap.schemaNameToID.Len())
-	require.Equal(t, 1, snap.tableNameToID.Len())
-	require.Equal(t, 1, snap.partitions.Len())
-	require.Equal(t, 0, snap.truncatedTables.Len())
-	require.Equal(t, 2, snap.ineligibleTables.Len())
+	require.Equal(t, 1, snap.inner.schemas.Len())
+	require.Equal(t, 1, snap.inner.tables.Len())
+	require.Equal(t, 1, snap.inner.schemaNameToID.Len())
+	require.Equal(t, 1, snap.inner.tableNameToID.Len())
+	require.Equal(t, 1, snap.inner.partitions.Len())
+	require.Equal(t, 0, snap.inner.truncatedTables.Len())
+	require.Equal(t, 2, snap.inner.ineligibleTables.Len())
 }
 
 func newDBInfo(id int64) *timodel.DBInfo {
