@@ -30,6 +30,8 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 )
 
+// Snapshot stores the source TiDB all schema information.
+// If no special comments, all public methods are thread-safe.
 type Snapshot struct {
 	inner  snapshot
 	rwlock *sync.RWMutex
@@ -489,8 +491,6 @@ func (s *Snapshot) DumpToString() string {
 		strings.Join(tableNames, "\t"))
 }
 
-// snapshot stores the source TiDB all schema information and it should be READ-ONLY!
-// If no special comments, all public methods are thread-safe.
 type snapshot struct {
 	// map[versionedEntityName] -> int64
 	// The ID can be `-1` which means the table is deleted.
