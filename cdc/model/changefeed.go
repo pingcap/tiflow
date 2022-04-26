@@ -31,6 +31,9 @@ import (
 	"go.uber.org/zap"
 )
 
+// ChangeFeedID is the type for change feed ID
+type ChangeFeedID = string
+
 // SortEngine is the sorter engine
 type SortEngine = string
 
@@ -244,9 +247,6 @@ func (info *ChangeFeedInfo) VerifyAndComplete() error {
 	}
 	if info.Config.Cyclic == nil {
 		info.Config.Cyclic = defaultConfig.Cyclic
-	}
-	if info.Config.Scheduler == nil {
-		info.Config.Scheduler = defaultConfig.Scheduler
 	}
 	if info.Config.Consistent == nil {
 		info.Config.Consistent = defaultConfig.Consistent

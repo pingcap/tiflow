@@ -19,21 +19,27 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/sink/metrics"
 	"go.uber.org/zap"
 )
 
 // newBlackHoleSink creates a black hole sink
 func newBlackHoleSink(ctx context.Context) *blackHoleSink {
 	return &blackHoleSink{
-		// use `sinkTypeDB` to record metrics
-		statistics: NewStatistics(ctx, sinkTypeDB),
+		// use `SinkTypeDB` to record metrics
+		statistics: metrics.NewStatistics(ctx, metrics.SinkTypeDB),
 	}
 }
 
 type blackHoleSink struct {
-	statistics      *Statistics
+	statistics      *metrics.Statistics
 	accumulated     uint64
 	lastAccumulated uint64
+}
+
+// Init table sink resources
+func (b *blackHoleSink) Init(tableID model.TableID) error {
+	return nil
 }
 
 func (b *blackHoleSink) TryEmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) (bool, error) {

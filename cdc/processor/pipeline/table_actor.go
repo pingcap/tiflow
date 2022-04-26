@@ -25,7 +25,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/sink"
-	"github.com/pingcap/tiflow/cdc/sink/common"
+	"github.com/pingcap/tiflow/cdc/sink/flowcontrol"
 	"github.com/pingcap/tiflow/pkg/actor"
 	"github.com/pingcap/tiflow/pkg/actor/message"
 	serverConfig "github.com/pingcap/tiflow/pkg/config"
@@ -140,7 +140,7 @@ func NewTableActor(cdcCtx cdcContext.Context,
 
 	startTime := time.Now()
 	log.Info("table actor starting",
-		zap.String("changefeed", changefeedVars.ID),
+		zap.String("changefeed", table.changefeedID),
 		zap.String("tableName", tableName),
 		zap.Int64("tableID", tableID))
 	if err := table.start(cctx); err != nil {
@@ -152,7 +152,7 @@ func NewTableActor(cdcCtx cdcContext.Context,
 		return nil, errors.Trace(err)
 	}
 	log.Info("table actor started",
-		zap.String("changefeed", changefeedVars.ID),
+		zap.String("changefeed", table.changefeedID),
 		zap.String("tableName", tableName),
 		zap.Int64("tableID", tableID),
 		zap.Duration("duration", time.Since(startTime)))
@@ -263,7 +263,7 @@ func (t *tableActor) start(sdtTableContext context.Context) error {
 		zap.String("tableName", t.tableName),
 		zap.Uint64("quota", t.memoryQuota))
 
-	flowController := common.NewTableFlowController(t.memoryQuota)
+	flowController := flowcontrol.NewTableFlowController(t.memoryQuota)
 	sorterNode := newSorterNode(t.tableName, t.tableID,
 		t.replicaInfo.StartTs, flowController,
 		t.mounter, t.replicaConfig,
@@ -374,7 +374,7 @@ func (t *tableActor) stop(err error) {
 	atomic.StoreUint32(&t.stopped, stopped)
 	if t.sortNode != nil {
 		// releaseResource will send a message to sorter router
-		t.sortNode.releaseResource(t.stopCtx, t.changefeedID)
+		t.sortNode.releaseResource(t.changefeedID)
 	}
 	t.cancel()
 	if t.sinkNode != nil {

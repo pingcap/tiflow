@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/sink/metrics"
 	"github.com/stretchr/testify/require"
 )
 
@@ -38,8 +39,8 @@ func TestFlushTable(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.TODO())
 	defer cancel()
-	b := newBufferSink(newBlackHoleSink(ctx), 5, make(chan drawbackMsg))
-	go b.run(ctx, make(chan error))
+	b := newBufferSink(newBlackHoleSink(ctx), 5)
+	go b.run(ctx, "", make(chan error))
 
 	require.Equal(t, uint64(5), b.getTableCheckpointTs(2))
 	require.Nil(t, b.EmitRowChangedEvents(ctx))
@@ -82,8 +83,8 @@ func TestFlushFailed(t *testing.T) {
 	t.Parallel()
 
 	ctx, cancel := context.WithCancel(context.TODO())
-	b := newBufferSink(newBlackHoleSink(ctx), 5, make(chan drawbackMsg))
-	go b.run(ctx, make(chan error))
+	b := newBufferSink(newBlackHoleSink(ctx), 5)
+	go b.run(ctx, "", make(chan error))
 
 	checkpoint, err := b.FlushRowChangedEvents(ctx, 3, 8)
 	require.True(t, checkpoint <= 8)
@@ -98,6 +99,19 @@ func TestFlushFailed(t *testing.T) {
 	time.Sleep(200 * time.Millisecond)
 	require.Equal(t, uint64(8), b.getTableCheckpointTs(3))
 	require.Equal(t, uint64(5), b.getTableCheckpointTs(1))
+}
+
+func TestCleanBufferedData(t *testing.T) {
+	t.Parallel()
+
+	tblID := model.TableID(1)
+	b := newBufferSink(newBlackHoleSink(context.TODO()), 5)
+	b.buffer[tblID] = []*model.RowChangedEvent{}
+	_, ok := b.buffer[tblID]
+	require.True(t, ok)
+	require.Nil(t, b.Init(tblID))
+	_, ok = b.buffer[tblID]
+	require.False(t, ok)
 }
 
 type benchSink struct {
@@ -121,12 +135,12 @@ func BenchmarkRun(b *testing.B) {
 	defer cancel()
 
 	state := runState{
-		metricTotalRows: bufferSinkTotalRowsCountCounter.WithLabelValues(b.Name()),
+		metricTotalRows: metrics.BufferSinkTotalRowsCountCounter.WithLabelValues(b.Name()),
 	}
 
 	for exp := 0; exp < 9; exp++ {
 		count := int(math.Pow(4, float64(exp)))
-		s := newBufferSink(&benchSink{}, 5, make(chan drawbackMsg))
+		s := newBufferSink(&benchSink{}, 5)
 		s.flushTsChan = make(chan flushMsg, count)
 		for i := 0; i < count; i++ {
 			s.buffer[int64(i)] = []*model.RowChangedEvent{{CommitTs: 5}}

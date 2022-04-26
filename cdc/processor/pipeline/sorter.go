@@ -305,7 +305,7 @@ func (n *sorterNode) updateBarrierTs(barrierTs model.Ts) {
 	}
 }
 
-func (n *sorterNode) releaseResource(_ context.Context, changefeedID string) {
+func (n *sorterNode) releaseResource(changefeedID string) {
 	defer tableMemoryHistogram.DeleteLabelValues(changefeedID)
 	// Since the flowController is implemented by `Cond`, it is not cancelable by a context
 	// the flowController will be blocked in a background goroutine,
@@ -315,7 +315,7 @@ func (n *sorterNode) releaseResource(_ context.Context, changefeedID string) {
 
 func (n *sorterNode) Destroy(ctx pipeline.NodeContext) error {
 	n.cancel()
-	n.releaseResource(ctx, ctx.ChangefeedVars().ID)
+	n.releaseResource(ctx.ChangefeedVars().ID)
 	return n.eg.Wait()
 }
 

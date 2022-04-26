@@ -54,6 +54,10 @@ func (c *mockFlowController) GetConsumption() uint64 {
 	return 0
 }
 
+func (s *mockSink) Init(tableID model.TableID) error {
+	return nil
+}
+
 func (s *mockSink) TryEmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) (bool, error) {
 	_ = s.EmitRowChangedEvents(ctx, rows...)
 	return true, nil

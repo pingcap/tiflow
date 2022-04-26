@@ -201,7 +201,7 @@ definitions:
       boundary_ts:
         description: |-
           if the operation is a delete operation, BoundaryTs is checkpoint ts
-          if the operation is a add operation, BoundaryTs is start ts
+          if the operation is an add operation, BoundaryTs is start ts
         type: integer
       delete:
         type: boolean

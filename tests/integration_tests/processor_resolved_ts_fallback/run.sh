@@ -18,7 +18,7 @@ function run() {
 	start_tidb_cluster --workdir $WORK_DIR
 	cd $WORK_DIR
 
-	export GO_FAILPOINTS='github.com/pingcap/tiflow/cdc/sink/SinkFlushDMLPanic=return(true);github.com/pingcap/tiflow/cdc/sink/producer/kafka/SinkFlushDMLPanic=return(true)'
+	export GO_FAILPOINTS='github.com/pingcap/tiflow/cdc/sink/mysql/SinkFlushDMLPanic=return(true);github.com/pingcap/tiflow/cdc/sink/mq/producer/kafka/SinkFlushDMLPanic=return(true)'
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --logsuffix "1" --addr "127.0.0.1:8301" --pd "http://${UP_PD_HOST_1}:${UP_PD_PORT_1}"
 
 	TOPIC_NAME="ticdc-processor-resolved-ts-fallback-test-$RANDOM"

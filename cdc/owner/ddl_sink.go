@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink"
+	"github.com/pingcap/tiflow/cdc/sink/mysql"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
@@ -56,7 +57,7 @@ type DDLSink interface {
 
 type ddlSinkImpl struct {
 	lastSyncPoint  model.Ts
-	syncPointStore sink.SyncpointStore
+	syncPointStore mysql.SyncpointStore
 
 	// It is used to record the checkpointTs and the names of the table at that time.
 	mu struct {
@@ -107,7 +108,7 @@ func ddlSinkInitializer(ctx cdcContext.Context, a *ddlSinkImpl, id model.ChangeF
 	if !info.SyncPointEnabled {
 		return nil
 	}
-	syncPointStore, err := sink.NewSyncpointStore(stdCtx, id, info.SinkURI)
+	syncPointStore, err := mysql.NewSyncpointStore(stdCtx, id, info.SinkURI)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -264,5 +265,8 @@ func (s *ddlSinkImpl) close(ctx context.Context) (err error) {
 		err = s.syncPointStore.Close()
 	}
 	s.wg.Wait()
-	return err
+	if err != nil && errors.Cause(err) != context.Canceled {
+		return err
+	}
+	return nil
 }

@@ -57,6 +57,50 @@ func newProcessor4Test(
 }
 
 func initProcessor4Test(ctx cdcContext.Context, t *testing.T) (*processor, *orchestrator.ReactorStateTester) {
+	changefeedInfo := `
+{
+    "sink-uri": "blackhole://",
+    "opts": {},
+    "create-time": "2020-02-02T00:00:00.000000+00:00",
+    "start-ts": 0,
+    "target-ts": 0,
+    "admin-job-type": 0,
+    "sort-engine": "memory",
+    "sort-dir": ".",
+    "config": {
+        "case-sensitive": true,
+        "enable-old-value": false,
+        "force-replicate": false,
+        "check-gc-safe-point": true,
+        "filter": {
+            "rules": [
+                "*.*"
+            ],
+            "ignore-txn-start-ts": null,
+            "ddl-allow-list": null
+        },
+        "mounter": {
+            "worker-num": 16
+        },
+        "sink": {
+            "dispatchers": null,
+            "protocol": "open-protocol"
+        },
+        "cyclic-replication": {
+            "enable": false,
+            "replica-id": 0,
+            "filter-replica-ids": null,
+            "id-buckets": 0,
+            "sync-ddl": false
+        }
+    },
+    "state": "normal",
+    "history": null,
+    "error": null,
+    "sync-point-enabled": false,
+    "sync-point-interval": 600000000000
+}
+`
 	p := newProcessor4Test(ctx, t, func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error) {
 		return &mockTablePipeline{
 			tableID:      tableID,
@@ -67,11 +111,17 @@ func initProcessor4Test(ctx cdcContext.Context, t *testing.T) (*processor, *orch
 		}, nil
 	})
 	p.changefeed = orchestrator.NewChangefeedReactorState(ctx.ChangefeedVars().ID)
+	captureID := ctx.GlobalVars().CaptureInfo.ID
+	changefeedID := ctx.ChangefeedVars().ID
 	return p, orchestrator.NewReactorStateTester(t, p.changefeed, map[string]string{
-		"/tidb/cdc/capture/" + ctx.GlobalVars().CaptureInfo.ID:                                     `{"id":"` + ctx.GlobalVars().CaptureInfo.ID + `","address":"127.0.0.1:8300"}`,
-		"/tidb/cdc/changefeed/info/" + ctx.ChangefeedVars().ID:                                     `{"sink-uri":"blackhole://","opts":{},"create-time":"2020-02-02T00:00:00.000000+00:00","start-ts":0,"target-ts":0,"admin-job-type":0,"sort-engine":"memory","sort-dir":".","config":{"case-sensitive":true,"enable-old-value":false,"force-replicate":false,"check-gc-safe-point":true,"filter":{"rules":["*.*"],"ignore-txn-start-ts":null,"ddl-allow-list":null},"mounter":{"worker-num":16},"sink":{"dispatchers":null,"protocol":"open-protocol"},"cyclic-replication":{"enable":false,"replica-id":0,"filter-replica-ids":null,"id-buckets":0,"sync-ddl":false},"scheduler":{"type":"table-number","polling-time":-1}},"state":"normal","history":null,"error":null,"sync-point-enabled":false,"sync-point-interval":600000000000}`,
-		"/tidb/cdc/job/" + ctx.ChangefeedVars().ID:                                                 `{"resolved-ts":0,"checkpoint-ts":0,"admin-job-type":0}`,
-		"/tidb/cdc/task/status/" + ctx.GlobalVars().CaptureInfo.ID + "/" + ctx.ChangefeedVars().ID: `{"tables":{},"operation":null,"admin-job-type":0}`,
+		"/tidb/cdc/capture/" +
+			captureID: `{"id":"` + captureID + `","address":"127.0.0.1:8300"}`,
+		"/tidb/cdc/changefeed/info/" +
+			changefeedID: changefeedInfo,
+		"/tidb/cdc/job/" +
+			ctx.ChangefeedVars().ID: `{"resolved-ts":0,"checkpoint-ts":0,"admin-job-type":0}`,
+		"/tidb/cdc/task/status/" +
+			captureID + "/" + changefeedID: `{"tables":{},"operation":null,"admin-job-type":0}`,
 	})
 }
 
