@@ -305,14 +305,6 @@ func (n *sorterNode) TryHandleDataMessage(ctx context.Context, msg pipeline.Mess
 	}
 }
 
-func (n *sorterNode) releaseResource(changefeedID string) {
-	defer tableMemoryHistogram.DeleteLabelValues(changefeedID)
-	// Since the flowController is implemented by `Cond`, it is not cancelable by a context
-	// the flowController will be blocked in a background goroutine,
-	// We need to abort the flowController manually in the nodeRunner
-	n.flowController.Abort()
-}
-
 func (n *sorterNode) Destroy(ctx pipeline.NodeContext) error {
 	defer tableMemoryHistogram.DeleteLabelValues(ctx.ChangefeedVars().ID, ctx.GlobalVars().CaptureInfo.AdvertiseAddr)
 	n.cancel()
@@ -323,7 +315,6 @@ func (n *sorterNode) Destroy(ctx pipeline.NodeContext) error {
 			log.Warn("schedule table cleanup task failed", zap.Error(err))
 		}
 	}
-	n.releaseResource(ctx.ChangefeedVars().ID)
 	return n.eg.Wait()
 }
 

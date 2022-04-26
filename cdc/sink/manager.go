@@ -50,9 +50,10 @@ func NewManager(
 	bufSink := newBufferSink(backendSink, checkpointTs)
 	go bufSink.run(ctx, errCh)
 	return &Manager{
-		bufSink:     bufSink,
-		tableSinks:  make(map[model.TableID]*tableSink),
-		captureAddr: captureAddr,
+		bufSink:                bufSink,
+		changeFeedCheckpointTs: checkpointTs,
+		tableSinks:             make(map[model.TableID]*tableSink),
+		captureAddr:            captureAddr,
 
 		changefeedID:              changefeedID,
 		metricsTableSinkTotalRows: tableSinkTotalRowsCountCounter.WithLabelValues(captureAddr, changefeedID),
@@ -66,14 +67,14 @@ func (m *Manager) CreateTableSink(
 ) (Sink, error) {
 	m.tableSinksMu.Lock()
 	defer m.tableSinksMu.Unlock()
+	if _, exist := m.tableSinks[tableID]; exist {
+		log.Panic("the table sink already exists", zap.Uint64("tableID", uint64(tableID)))
+	}
 	sink := &tableSink{
 		tableID:     tableID,
 		manager:     m,
 		buffer:      make([]*model.RowChangedEvent, 0, 128),
 		redoManager: redoManager,
-	}
-	if _, exist := m.tableSinks[tableID]; exist {
-		log.Panic("the table sink already exists", zap.Uint64("tableID", uint64(tableID)))
 	}
 	if err := sink.Init(tableID); err != nil {
 		return nil, errors.Trace(err)
@@ -131,6 +132,7 @@ func (m *Manager) getCheckpointTs(tableID model.TableID) uint64 {
 }
 
 func (m *Manager) UpdateChangeFeedCheckpointTs(checkpointTs uint64) {
+	atomic.StoreUint64(&m.changeFeedCheckpointTs, checkpointTs)
 	if m.bufSink != nil {
 		m.bufSink.UpdateChangeFeedCheckpointTs(checkpointTs)
 	}

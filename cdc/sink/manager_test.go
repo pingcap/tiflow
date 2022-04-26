@@ -53,10 +53,6 @@ func (c *checkSink) Init(tableID model.TableID) error {
 	return nil
 }
 
-func (c *checkSink) TryEmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) (bool, error) {
-	return true, nil
-}
-
 func (c *checkSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
 	c.rowsMu.Lock()
 	defer c.rowsMu.Unlock()

@@ -57,11 +57,6 @@ func (s *mockSink) Init(tableID model.TableID) error {
 	return nil
 }
 
-func (s *mockSink) TryEmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) (bool, error) {
-	_ = s.EmitRowChangedEvents(ctx, rows...)
-	return true, nil
-}
-
 func (s *mockSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
 	for _, row := range rows {
 		s.received = append(s.received, struct {

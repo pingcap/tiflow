@@ -976,6 +976,17 @@ func (p *processor) createTablePipelineImpl(ctx cdcContext.Context, tableID mode
 		sink,
 		p.changefeed.Info.GetTargetTs(),
 	)
+	p.wg.Add(1)
+	p.metricSyncTableNumGauge.Inc()
+	go func() {
+		table.Wait()
+		p.wg.Done()
+		p.metricSyncTableNumGauge.Dec()
+		log.Debug("Table pipeline exited", zap.Int64("tableID", tableID),
+			cdcContext.ZapFieldChangefeed(ctx),
+			zap.String("name", table.Name()),
+			zap.Any("replicaInfo", replicaInfo))
+	}()
 
 	if p.redoManager.Enabled() {
 		p.redoManager.AddTable(tableID, replicaInfo.StartTs)
