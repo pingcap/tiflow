@@ -289,20 +289,29 @@ func TestEntrySorterRandomly(t *testing.T) {
 func TestEventLess(t *testing.T) {
 	t.Parallel()
 	testCases := []struct {
+		order    int
 		i        *model.PolymorphicEvent
 		j        *model.PolymorphicEvent
 		expected bool
 	}{
 		{
+			0,
 			&model.PolymorphicEvent{
 				CRTs: 1,
+				RawKV: &model.RawKVEntry{
+					OpType: model.OpTypePut,
+				},
 			},
 			&model.PolymorphicEvent{
 				CRTs: 2,
+				RawKV: &model.RawKVEntry{
+					OpType: model.OpTypePut,
+				},
 			},
 			true,
 		},
 		{
+			1,
 			&model.PolymorphicEvent{
 				CRTs: 2,
 				RawKV: &model.RawKVEntry{
@@ -315,9 +324,10 @@ func TestEventLess(t *testing.T) {
 					OpType: model.OpTypeDelete,
 				},
 			},
-			true,
+			false,
 		},
 		{
+			2,
 			&model.PolymorphicEvent{
 				CRTs: 2,
 				RawKV: &model.RawKVEntry{
@@ -330,9 +340,10 @@ func TestEventLess(t *testing.T) {
 					OpType: model.OpTypeResolved,
 				},
 			},
-			true,
+			false,
 		},
 		{
+			3,
 			&model.PolymorphicEvent{
 				CRTs: 2,
 				RawKV: &model.RawKVEntry{
@@ -348,6 +359,7 @@ func TestEventLess(t *testing.T) {
 			false,
 		},
 		{
+			4,
 			&model.PolymorphicEvent{
 				CRTs: 3,
 				RawKV: &model.RawKVEntry{
@@ -364,8 +376,8 @@ func TestEventLess(t *testing.T) {
 		},
 	}
 
-	for _, tc := range testCases {
-		require.Equal(t, tc.expected, eventLess(tc.i, tc.j))
+	for i, tc := range testCases {
+		require.Equal(t, tc.expected, eventLess(tc.i, tc.j), "case %d", i)
 	}
 }
 
