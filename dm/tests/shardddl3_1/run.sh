@@ -280,7 +280,7 @@ function DM_107_CASE() {
 	run_sql_source2 "alter table ${shardddl1}.${tb2} add column col1 int not null"
 	run_sql_source2 "insert into ${shardddl1}.${tb2} values (6,6);"
 
-	# insert 3 recorde to make sure optimistic mode sharding resolve can finish fast
+	# insert 3 record to make sure optimistic mode sharding resolve can finish fast
 	sleep 3
 	run_sql_source1 "insert into ${shardddl1}.${tb1} values(7,7);"
 	run_sql_source2 "insert into ${shardddl1}.${tb1} values(8,8);"
