@@ -450,12 +450,6 @@ func (s *System[T]) Start(ctx context.Context) {
 	for i := 0; i < s.numWorker; i++ {
 		id := i
 		s.wg.Go(func() error {
-			defer func() {
-				log.Info("actor goroutine exited",
-					zap.Int("id", id), zap.String("name", s.name))
-			}()
-			log.Info("actor goroutine started",
-				zap.Int("id", id), zap.String("name", s.name))
 			pctx := pprof.WithLabels(ctx, pprof.Labels("actor", s.name))
 			pprof.SetGoroutineLabels(pctx)
 
