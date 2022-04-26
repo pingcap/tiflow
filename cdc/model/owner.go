@@ -342,12 +342,6 @@ func (ts *TaskStatus) Clone() *TaskStatus {
 	return &clone
 }
 
-// CaptureID is the type for capture ID
-type CaptureID = string
-
-// ChangeFeedID is the type for change feed ID
-type ChangeFeedID = string
-
 // TableID is the ID of the table
 type TableID = int64
 

@@ -31,6 +31,9 @@ import (
 	"go.uber.org/zap"
 )
 
+// ChangeFeedID is the type for change feed ID
+type ChangeFeedID = string
+
 // SortEngine is the sorter engine
 type SortEngine = string
 
