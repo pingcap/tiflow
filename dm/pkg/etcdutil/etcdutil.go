@@ -130,6 +130,18 @@ func DoOpsInOneCmpsTxnWithRetry(cli *clientv3.Client, cmps []clientv3.Cmp, opsTh
 	return resp, resp.Header.Revision, nil
 }
 
+// DoEtcdOpsWithRetry do etcd operations function with retry
+func DoEtcdOpsWithRetry(cli *clientv3.Client, operateFunc func() error) error {
+	ctx, cancel := context.WithTimeout(cli.Ctx(), DefaultRequestTimeout)
+	defer cancel()
+	tctx := tcontext.NewContext(ctx, log.L())
+
+	_, _, err := etcdDefaultTxnStrategy.Apply(tctx, etcdDefaultTxnRetryParam, func(t *tcontext.Context) (ret interface{}, err error) {
+		return nil, operateFunc()
+	})
+	return err
+}
+
 // IsRetryableError check whether error is retryable error for etcd to build again.
 func IsRetryableError(err error) bool {
 	switch errors.Cause(err) {
