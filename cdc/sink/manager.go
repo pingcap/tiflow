@@ -58,7 +58,7 @@ func NewManager(
 ) *Manager {
 	drawbackChan := make(chan drawbackMsg, 16)
 	return &Manager{
-		backendSink:               newBufferSink(ctx, backendSink, errCh, checkpointTs, drawbackChan),
+		backendSink:               newBufferSink(ctx, backendSink, errCh, checkpointTs),
 		changeFeedCheckpointTs:    checkpointTs,
 		tableSinks:                make(map[model.TableID]*tableSink),
 		drawbackChan:              drawbackChan,
@@ -69,7 +69,7 @@ func NewManager(
 }
 
 // CreateTableSink creates a table sink
-func (m *Manager) CreateTableSink(tableID model.TableID, checkpointTs model.Ts) Sink {
+func (m *Manager) CreateTableSink(tableID model.TableID, checkpointTs model.Ts) (Sink, error) {
 	m.tableSinksMu.Lock()
 	defer m.tableSinksMu.Unlock()
 	if _, exist := m.tableSinks[tableID]; exist {
@@ -81,8 +81,11 @@ func (m *Manager) CreateTableSink(tableID model.TableID, checkpointTs model.Ts) 
 		buffer:    make([]*model.RowChangedEvent, 0, 128),
 		emittedTs: checkpointTs,
 	}
+	if err := sink.Init(tableID); err != nil {
+		return nil, errors.Trace(err)
+	}
 	m.tableSinks[tableID] = sink
-	return sink
+	return sink, nil
 }
 
 // Close closes the Sink manager and backend Sink, this method can be reentrantly called
@@ -257,6 +260,11 @@ func (t *tableSink) Close(ctx context.Context) error {
 	return t.manager.destroyTableSink(ctx, t.tableID)
 }
 
+// Init table sink resources
+func (t *tableSink) Init(tableID model.TableID) error {
+	return t.manager.backendSink.Init(tableID)
+}
+
 // getResolvedTs returns resolved ts, which means all events before resolved ts
 // have been sent to sink manager
 func (t *tableSink) getResolvedTs() uint64 {
@@ -289,7 +297,6 @@ func newBufferSink(
 	backendSink Sink,
 	errCh chan error,
 	checkpointTs model.Ts,
-	drawbackChan chan drawbackMsg,
 ) *bufferSink {
 	sink := &bufferSink{
 		Sink: backendSink,
@@ -297,7 +304,6 @@ func newBufferSink(
 		buffer:                 make(map[model.TableID][]*model.RowChangedEvent),
 		changeFeedCheckpointTs: checkpointTs,
 		flushTsChan:            make(chan flushMsg, 128),
-		drawbackChan:           drawbackChan,
 	}
 	go sink.run(ctx, errCh)
 	return sink
@@ -324,11 +330,6 @@ func (b *bufferSink) run(ctx context.Context, errCh chan error) {
 				errCh <- err
 			}
 			return
-		case drawback := <-b.drawbackChan:
-			b.bufferMu.Lock()
-			delete(b.buffer, drawback.tableID)
-			b.bufferMu.Unlock()
-			close(drawback.callback)
 		case flushEvent := <-b.flushTsChan:
 			b.bufferMu.Lock()
 			resolvedTs := flushEvent.resolvedTs
@@ -406,6 +407,24 @@ func (b *bufferSink) FlushRowChangedEvents(ctx context.Context, tableID model.Ta
 	}:
 	}
 	return b.getTableCheckpointTs(tableID), nil
+}
+
+// Init table sink resources
+func (b *bufferSink) Init(tableID model.TableID) error {
+	b.clearBufferedTableData(tableID)
+	return b.Sink.Init(tableID)
+}
+
+// Barrier delete buffer
+func (b *bufferSink) Barrier(ctx context.Context, tableID model.TableID) error {
+	b.clearBufferedTableData(tableID)
+	return b.Sink.Barrier(ctx, tableID)
+}
+
+func (b *bufferSink) clearBufferedTableData(tableID model.TableID) {
+	b.bufferMu.Lock()
+	defer b.bufferMu.Unlock()
+	delete(b.buffer, tableID)
 }
 
 type flushMsg struct {
