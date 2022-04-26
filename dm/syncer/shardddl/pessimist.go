@@ -22,6 +22,7 @@ import (
 
 	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/shardddl"
 	"github.com/pingcap/tiflow/dm/pkg/shardddl/pessimism"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
@@ -142,7 +143,7 @@ func (p *Pessimist) DoneOperationDeleteInfo(op pessimism.Operation, info pessimi
 			return terror.ErrWorkerDDLLockInfoNotFound.Generatef("DDL info for (%s, %s) not found", info.Task, info.Source)
 		}
 		return nil
-	})
+	}, shardddl.IsEtcdPutOpRetryable)
 	if err != nil {
 		return err
 	}

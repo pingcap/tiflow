@@ -295,3 +295,7 @@ func putOperationOp(o Operation) (clientv3.Op, error) {
 func deleteOperationOp(op Operation) clientv3.Op {
 	return clientv3.OpDelete(common.ShardDDLPessimismOperationKeyAdapter.Encode(op.Task, op.Source))
 }
+
+func getOperationOp(op Operation) clientv3.Op {
+	return clientv3.OpGet(common.ShardDDLPessimismOperationKeyAdapter.Encode(op.Task, op.Source))
+}

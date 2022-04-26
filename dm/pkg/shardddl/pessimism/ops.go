@@ -36,12 +36,25 @@ func PutOperationDeleteExistInfo(cli *clientv3.Client, op Operation, info Info) 
 
 	infoCmp := infoExistCmp(info)
 
+	getOp := getOperationOp(op)
+
 	ctx, cancel := context.WithTimeout(cli.Ctx(), etcdutil.DefaultRequestTimeout)
 	defer cancel()
 
-	resp, err := cli.Txn(ctx).If(infoCmp).Then(putOp, delOp).Commit()
+	resp, err := cli.Txn(ctx).If(infoCmp).Then(putOp, delOp).Else(getOp).Commit()
 	if err != nil {
 		return false, 0, err
+	}
+
+	if !resp.Succeeded && len(resp.Responses) == 1 {
+		if getResponse := resp.Responses[0].GetResponseRange(); getResponse.GetCount() == 1 {
+			// err must be nil here, or the last putOperationOp will return an error.
+			opBytes, _ := op.toJSON()
+			// we may successfully delete the info in the previous txn but fail to get the result
+			// before the connection is broken. If we check the operation is the same with the put
+			// operation, we can safely assume the done operation is okay.
+			return opBytes == string(getResponse.Kvs[0].Value), resp.Header.Revision, nil
+		}
 	}
 	return resp.Succeeded, resp.Header.Revision, nil
 }

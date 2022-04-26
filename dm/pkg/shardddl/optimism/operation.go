@@ -143,7 +143,7 @@ func PutOperation(cli *clientv3.Client, skipDone bool, op Operation, infoModRev 
 	// txn 1: try to PUT if the key "not exist".
 	resp, err := cli.Txn(ctx).If(cmpsNotExist...).Then(opPut).Commit()
 	if err != nil {
-		return 0, false, terror.ErrHAFailTxnOperation.Delegate(err, "fail to put operation not exist")
+		return 0, false, terror.ErrHAFailTxnOperation.Delegate(err, "fail to put operation at not exist")
 	} else if resp.Succeeded {
 		return resp.Header.Revision, resp.Succeeded, nil
 	}
@@ -151,7 +151,7 @@ func PutOperation(cli *clientv3.Client, skipDone bool, op Operation, infoModRev 
 	// txn 2: try to PUT if the key "the `done`" field is not `true`.
 	resp, err = cli.Txn(ctx).If(cmpsNotDone...).Then(opPut).Commit()
 	if err != nil {
-		return 0, false, terror.ErrHAFailTxnOperation.Delegate(err, "fail to put operation not done")
+		return 0, false, terror.ErrHAFailTxnOperation.Delegate(err, "fail to put operation at not done")
 	} else if resp.Succeeded {
 		return resp.Header.Revision, resp.Succeeded, nil
 	}
@@ -165,7 +165,7 @@ func PutOperation(cli *clientv3.Client, skipDone bool, op Operation, infoModRev 
 	// 5. dm-worker didn't receive a DDL operation, will get blocked forever
 	resp, err = cli.Txn(ctx).If(cmpsLessRev...).Then(opPut).Commit()
 	if err != nil {
-		return 0, false, terror.ErrHAFailTxnOperation.Delegate(err, "fail to put operation less rev")
+		return 0, false, terror.ErrHAFailTxnOperation.Delegate(err, "fail to put operation at less rev")
 	}
 	return resp.Header.Revision, resp.Succeeded, nil
 }

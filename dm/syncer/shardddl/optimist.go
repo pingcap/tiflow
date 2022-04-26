@@ -24,6 +24,7 @@ import (
 
 	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/shardddl"
 	"github.com/pingcap/tiflow/dm/pkg/shardddl/optimism"
 )
 
@@ -163,7 +164,7 @@ func (o *Optimist) DoneOperation(op optimism.Operation) error {
 	err := etcdutil.DoEtcdOpsWithRetry(o.cli, func() error {
 		_, _, err := optimism.PutOperation(o.cli, false, op, 0)
 		return err
-	})
+	}, shardddl.IsEtcdPutOpRetryable)
 	if err != nil {
 		return err
 	}
