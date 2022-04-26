@@ -109,15 +109,12 @@ func NewServer(pdEndpoints []string) (*Server, error) {
 	return s, nil
 }
 
-// Run runs the server.
-func (s *Server) Run(ctx context.Context) error {
+func (s *Server) prepare(ctx context.Context) error {
 	conf := config.GetGlobalServerConfig()
-
 	grpcTLSOption, err := conf.Security.ToGRPCDialOption()
 	if err != nil {
 		return errors.Trace(err)
 	}
-
 	pdClient, err := pd.NewClientWithContext(
 		ctx, s.pdEndpoints, conf.Security.PDSecurityOption(),
 		pd.WithGRPCDialOptions(
@@ -142,10 +139,8 @@ func (s *Server) Run(ctx context.Context) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-
 	logConfig := logutil.DefaultZapLoggerConfig
 	logConfig.Level = zap.NewAtomicLevelAt(zapcore.ErrorLevel)
-
 	etcdCli, err := clientv3.New(clientv3.Config{
 		Endpoints:   s.pdEndpoints,
 		TLS:         tlsConfig,
@@ -169,15 +164,12 @@ func (s *Server) Run(ctx context.Context) error {
 	if err != nil {
 		return errors.Annotate(cerror.WrapError(cerror.ErrNewCaptureFailed, err), "new etcd client")
 	}
-
 	cdcEtcdClient := etcd.NewCDCEtcdClient(ctx, etcdCli)
 	s.etcdClient = &cdcEtcdClient
 
-	err = s.initDir(ctx)
-	if err != nil {
+	if err := s.initDir(ctx); err != nil {
 		return errors.Trace(err)
 	}
-
 	// To not block CDC server startup, we need to warn instead of error
 	// when TiKV is incompatible.
 	errorTiKVIncompatible := false
@@ -202,7 +194,40 @@ func (s *Server) Run(ctx context.Context) error {
 
 	s.capture = capture.NewCapture(s.pdClient, s.kvStorage, s.etcdClient, s.grpcService)
 
-	err = s.startStatusHTTP(s.tcpServer.HTTP1Listener())
+	return nil
+}
+
+// Run runs the server.
+func (s *Server) Run() error {
+
+	tz, err := ticdcutil.GetTimezone(o.serverConfig.TZ)
+	if err != nil {
+		return errors.Annotate(err, "can not load timezone, Please specify the time zone through environment variable `TZ` or command line parameters `--tz`")
+	}
+	config.StoreGlobalServerConfig(o.serverConfig)
+
+	//sc := make(chan os.Signal, 1)
+	//signal.Notify(sc,
+	//	syscall.SIGHUP,
+	//	syscall.SIGINT,
+	//	syscall.SIGTERM,
+	//	syscall.SIGQUIT)
+
+	//ctx, cancel := context.WithCancel(context.Background())
+	//go func() {
+	//	sig := <-sc
+	//	log.Info("got signal to exit", zap.Stringer("signal", sig))
+	//	cancel()
+	//}()
+	//defer cancel()
+	//cmdcontext.SetDefaultContext(ctx)
+	//ctx = ticdcutil.PutTimezoneInCtx(cmdcontext.GetDefaultContext(), tz)
+	//ctx = ticdcutil.PutCaptureAddrInCtx(ctx, o.serverConfig.AdvertiseAddr)
+
+	if err := s.prepare(ctx); err != nil {
+		return errors.Trace(err)
+	}
+	err := s.startStatusHTTP(s.tcpServer.HTTP1Listener())
 	if err != nil {
 		return err
 	}

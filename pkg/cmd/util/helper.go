@@ -23,8 +23,8 @@ import (
 	"syscall"
 
 	"github.com/BurntSushi/toml"
+	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	cmdconetxt "github.com/pingcap/tiflow/pkg/cmd/context"
 	"github.com/pingcap/tiflow/pkg/etcd"
@@ -43,13 +43,13 @@ const (
 
 // InitCmd initializes the logger, the default context and returns its cancel function.
 func InitCmd(cmd *cobra.Command, logCfg *logutil.Config) context.CancelFunc {
-	// Init log.
-	err := logutil.InitLogger(logCfg)
-	if err != nil {
-		cmd.Printf("init logger error %v\n", errors.ErrorStack(err))
-		os.Exit(1)
-	}
-	log.Info("init log", zap.String("file", logCfg.File), zap.String("level", logCfg.Level))
+	//// Init log.
+	//err := logutil.InitLogger(logCfg)
+	//if err != nil {
+	//	cmd.Printf("init logger error %v\n", errors.ErrorStack(err))
+	//	os.Exit(1)
+	//}
+	//log.Info("init log", zap.String("file", logCfg.File), zap.String("level", logCfg.Level))
 
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc,
