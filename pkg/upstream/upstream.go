@@ -63,6 +63,7 @@ func newUpstream(clusterID uint64, pdEndpoints []string, securityConfig *config.
 	return &Upstream{
 		clusterID: clusterID, pdEndpoints: pdEndpoints,
 		securityConfig: securityConfig, status: ready,
+		wg: new(sync.WaitGroup),
 	}
 }
 

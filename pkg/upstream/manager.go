@@ -24,7 +24,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// DefaultClusterID is a pseudo cluster for now. It will remove in the future.
+// DefaultClusterID is a pseudo cluster id for now. It will be removed in the future.
 const DefaultClusterID = 0
 
 // UpManager is a global variable.

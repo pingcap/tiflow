@@ -496,13 +496,7 @@ func (c *Capture) AsyncClose() {
 	if c.processorManager != nil {
 		c.processorManager.AsyncClose()
 	}
-	// if c.grpcPool != nil {
-	// 	c.grpcPool.Close()
-	// }
-	// if c.regionCache != nil {
-	// 	c.regionCache.Close()
-	// 	c.regionCache = nil
-	// }
+
 	if c.tableActorSystem != nil {
 		c.tableActorSystem.Stop()
 		c.tableActorSystem = nil
