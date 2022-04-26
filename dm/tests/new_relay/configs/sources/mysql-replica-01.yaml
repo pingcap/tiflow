@@ -1,6 +1,5 @@
 enable-gtid: true
 relay-dir: relay-dir
-meta-dir: ""
 flavor: mysql
 charset: ""
 enable-relay: false
