@@ -74,7 +74,6 @@ func TestFlushTable(t *testing.T) {
 func TestFlushFailed(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.TODO())
 	b := newBufferSink(ctx, newBlackHoleSink(ctx), make(chan error), 5)
-	go b.run(ctx, make(chan error))
 
 	checkpoint, err := b.FlushRowChangedEvents(ctx, 3, 8)
 	require.True(t, checkpoint <= 8)
