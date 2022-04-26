@@ -379,22 +379,6 @@ type Ts = uint64
 // ProcessorsInfos maps from capture IDs to TaskStatus
 type ProcessorsInfos map[CaptureID]*TaskStatus
 
-// ChangeFeedDDLState is the type for change feed status
-type ChangeFeedDDLState int
-
-const (
-	// ChangeFeedUnknown stands for all unknown status
-	ChangeFeedUnknown ChangeFeedDDLState = iota
-	// ChangeFeedSyncDML means DMLs are being processed
-	ChangeFeedSyncDML
-	// ChangeFeedWaitToExecDDL means we are waiting to execute a DDL
-	ChangeFeedWaitToExecDDL
-	// ChangeFeedExecDDL means a DDL is being executed
-	ChangeFeedExecDDL
-	// ChangeFeedDDLExecuteFailed means that an error occurred when executing a DDL
-	ChangeFeedDDLExecuteFailed
-)
-
 // String implements fmt.Stringer interface.
 func (p ProcessorsInfos) String() string {
 	s := "{"
@@ -405,21 +389,6 @@ func (p ProcessorsInfos) String() string {
 	s += "}"
 
 	return s
-}
-
-// String implements fmt.Stringer interface.
-func (s ChangeFeedDDLState) String() string {
-	switch s {
-	case ChangeFeedSyncDML:
-		return "SyncDML"
-	case ChangeFeedWaitToExecDDL:
-		return "WaitToExecDDL"
-	case ChangeFeedExecDDL:
-		return "ExecDDL"
-	case ChangeFeedDDLExecuteFailed:
-		return "DDLExecuteFailed"
-	}
-	return "Unknown"
 }
 
 // ChangeFeedStatus stores information about a ChangeFeed
