@@ -50,6 +50,7 @@ func (e *PolymorphicEvent) RegionID() uint64 {
 }
 
 // ComparePolymorphicEvents compares two events by CRTs, Resolved, StartTs, Delete/Put order.
+// It returns true if and only if i should precede j.
 func ComparePolymorphicEvents(i, j *PolymorphicEvent) bool {
 	if i.CRTs == j.CRTs {
 		if i.RawKV.OpType == OpTypeResolved {
