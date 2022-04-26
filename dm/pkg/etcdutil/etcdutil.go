@@ -145,7 +145,7 @@ func DoOpsInOneCmpsTxnWithRetry(cli *clientv3.Client, cmps []clientv3.Cmp, opsTh
 	return resp, resp.Header.Revision, nil
 }
 
-// DoEtcdOpsWithRepeatableRetry do etcd operations function with repeatable retry
+// DoEtcdOpsWithRepeatableRetry do etcd operations function with repeatable retry.
 func DoEtcdOpsWithRepeatableRetry(cli *clientv3.Client, operateFunc func() error) error {
 	ctx, cancel := context.WithTimeout(cli.Ctx(), DefaultRequestTimeout)
 	defer cancel()
