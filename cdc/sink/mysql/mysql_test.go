@@ -1879,3 +1879,23 @@ func TestCleanTableResource(t *testing.T) {
 	_, ok = s.tableMaxResolvedTs.Load(tblID)
 	require.False(t, ok)
 }
+
+func TestHolderString(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		count    int
+		expected string
+	}{
+		{1, "?"},
+		{2, "?,?"},
+		{10, "?,?,?,?,?,?,?,?,?,?"},
+	}
+	for _, tc := range testCases {
+		s := placeHolder(tc.count)
+		require.Equal(t, tc.expected, s)
+	}
+	// test invalid input
+	require.Panics(t, func() { placeHolder(0) }, "strings.Builder.Grow: negative count")
+	require.Panics(t, func() { placeHolder(-1) }, "strings.Builder.Grow: negative count")
+}
