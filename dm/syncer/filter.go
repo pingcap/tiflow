@@ -62,6 +62,7 @@ func (s *Syncer) skipQueryEvent(qec *queryEventContext, ddlInfo *ddlInfo) (bool,
 			if err != nil {
 				s.tctx.L().Warn("track ddl failed", zap.Stringer("ddl info", ddlInfo))
 			}
+			s.saveTablePoint(table, *qec.lastLocation)
 			s.tctx.L().Warn("track skipped ddl and return empty string", zap.String("origin sql", qec.originSQL), zap.Stringer("ddl info", ddlInfo))
 			ddlInfo.originDDL = ""
 			return true, nil
