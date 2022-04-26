@@ -26,7 +26,9 @@ type (
 	Worker = dummyWorker
 
 	WorkerConfig struct {
+		ID         int   `json:"id"`
 		TargetTick int64 `json:"target-tick"`
+		StartTick  int64 `json:"start-tick"`
 	}
 
 	dummyWorker struct {
@@ -47,7 +49,8 @@ type (
 )
 
 type dummyWorkerStatus struct {
-	Tick int64 `json:"tick"`
+	BusinessID int   `json:"business-id"`
+	Tick       int64 `json:"tick"`
 }
 
 func (s *dummyWorkerStatus) tick() {
@@ -166,9 +169,10 @@ func NewDummyWorker(
 	id libModel.WorkerID, masterID libModel.MasterID,
 	cfg lib.WorkerConfig,
 ) lib.WorkerImpl {
+	wcfg := cfg.(*WorkerConfig)
 	return &dummyWorker{
 		statusRateLimiter: rate.NewLimiter(rate.Every(time.Second*3), 1),
-		status:            &dummyWorkerStatus{},
-		config:            cfg.(*WorkerConfig),
+		status:            &dummyWorkerStatus{BusinessID: wcfg.ID, Tick: wcfg.StartTick},
+		config:            wcfg,
 	}
 }

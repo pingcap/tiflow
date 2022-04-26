@@ -3,6 +3,7 @@ package fake
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"sync"
 	"time"
 
@@ -28,6 +29,18 @@ type Config struct {
 	TargetTick  int    `json:"target-tick"`
 }
 
+type checkpoint struct {
+	Ticks map[int]int64 `json:"ticks"`
+}
+
+func (cp *checkpoint) String() string {
+	data, err := json.Marshal(cp)
+	if err != nil {
+		log.L().Warn("checkpoint marshal failed", zap.Error(err))
+	}
+	return string(data)
+}
+
 var _ lib.BaseJobMaster = (*Master)(nil)
 
 type Master struct {
@@ -36,19 +49,21 @@ type Master struct {
 	// workerID stores the ID of the Master AS A WORKER.
 	workerID libModel.WorkerID
 
-	workerListMu      sync.Mutex
-	workerList        []lib.WorkerHandle
-	pendingWorkerSet  map[libModel.WorkerID]int
-	statusRateLimiter *rate.Limiter
-	status            map[libModel.WorkerID]int64
-	finishedSet       map[libModel.WorkerID]int
-	config            *Config
-	statusCode        struct {
+	workerListMu        sync.Mutex
+	workerList          []lib.WorkerHandle
+	workerID2BusinessID map[libModel.WorkerID]int
+	pendingWorkerSet    map[libModel.WorkerID]int
+	statusRateLimiter   *rate.Limiter
+	status              map[libModel.WorkerID]int64
+	finishedSet         map[libModel.WorkerID]int
+	config              *Config
+	statusCode          struct {
 		sync.RWMutex
 		code libModel.WorkerStatusCode
 	}
-	ctx     context.Context
-	clocker clock.Clock
+	ctx         context.Context
+	clocker     clock.Clock
+	initialized bool
 }
 
 func (m *Master) OnJobManagerFailover(reason lib.MasterFailoverReason) error {
@@ -112,20 +127,18 @@ func (m *Master) Workload() model.RescUnit {
 
 func (m *Master) InitImpl(ctx context.Context) error {
 	log.L().Info("FakeMaster: Init", zap.Any("config", m.config))
-	m.workerList = make([]lib.WorkerHandle, m.config.WorkerCount)
 	return m.createWorkers()
 }
 
-func (m *Master) createWorker(index int) error {
-	workerID, err := m.CreateWorker(
-		lib.FakeTask, &WorkerConfig{TargetTick: int64(m.config.TargetTick)}, 1)
+func (m *Master) createWorker(wcfg *WorkerConfig) error {
+	workerID, err := m.CreateWorker(lib.FakeTask, wcfg, 1)
 	if err != nil {
 		return errors.Trace(err)
 	}
 	log.L().Info("CreateWorker called",
-		zap.Int("index", index),
+		zap.Int("BusinessID", wcfg.ID),
 		zap.String("worker-id", workerID))
-	m.pendingWorkerSet[workerID] = index
+	m.pendingWorkerSet[workerID] = wcfg.ID
 	return nil
 }
 
@@ -140,7 +153,11 @@ OUT:
 					continue OUT
 				}
 			}
-			err := m.createWorker(i)
+			wcfg := &WorkerConfig{
+				ID:         i,
+				TargetTick: int64(m.config.TargetTick),
+			}
+			err := m.createWorker(wcfg)
 			if err != nil {
 				return err
 			}
@@ -149,15 +166,75 @@ OUT:
 	return nil
 }
 
-func (m *Master) Tick(ctx context.Context) error {
+func (m *Master) tickedCheckWorkers(ctx context.Context) error {
 	m.workerListMu.Lock()
 	defer m.workerListMu.Unlock()
+
+	// handle failover if needed
+	if !m.initialized {
+		if !m.IsMasterReady() {
+			if m.statusRateLimiter.Allow() {
+				log.L().Info("master is not ready, wait")
+			}
+			return nil
+		}
+		m.initialized = true
+		for _, worker := range m.GetWorkers() {
+			if worker.GetTombstone() != nil {
+				continue
+			}
+			var businessID int
+			if _, ok := m.workerID2BusinessID[worker.ID()]; ok {
+				businessID = m.workerID2BusinessID[worker.ID()]
+			} else {
+				ws, err := parseExtBytes(worker.Status().ExtBytes)
+				if err != nil {
+					return errors.Trace(err)
+				}
+				businessID = ws.BusinessID
+			}
+			// found active worker after fake_master failover
+			if m.workerList[businessID] == nil {
+				m.workerList[businessID] = worker
+			}
+		}
+		// load checkpoint if it exists
+		ckpt := &checkpoint{}
+		resp, metaErr := m.MetaKVClient().Get(ctx, m.checkpointKey())
+		if metaErr != nil {
+			log.L().Warn("failed to load checkpoint", zap.Error(metaErr))
+		} else {
+			if len(resp.Kvs) > 0 {
+				if err := json.Unmarshal(resp.Kvs[0].Value, ckpt); err != nil {
+					return errors.Trace(err)
+				}
+			}
+		}
+		for i, worker := range m.workerList {
+			// create new worker for non-active worker
+			if worker == nil {
+				wcfg := &WorkerConfig{
+					ID:         i,
+					TargetTick: int64(m.config.TargetTick),
+				}
+				if tick, ok := ckpt.Ticks[i]; ok {
+					wcfg.StartTick = tick
+				}
+				if err := m.createWorker(wcfg); err != nil {
+					return errors.Trace(err)
+				}
+			}
+		}
+	}
+
+	// load worker status from Status API
 	for _, worker := range m.workerList {
 		if worker != nil {
 			status := worker.Status()
 			dws := &dummyWorkerStatus{}
 			if status.ExtBytes != nil {
-				err := dws.Unmarshal(status.ExtBytes)
+				var err error
+				dws, err = parseExtBytes(status.ExtBytes)
 				if err != nil {
 					return err
 				}
@@ -165,8 +242,19 @@ func (m *Master) Tick(ctx context.Context) error {
 			m.status[worker.ID()] = dws.Tick
 		}
 	}
+
+	return nil
+}
+
+func (m *Master) tickedCheckStatus(ctx context.Context) error {
 	if m.statusRateLimiter.Allow() {
 		log.L().Info("FakeMaster: Tick", zap.Any("status", m.status))
+		// save checkpoint, which is used in business only
+		_, metaErr := m.MetaKVClient().Put(ctx, m.checkpointKey(), m.genCheckpoint().String())
+		if metaErr != nil {
+			log.L().Warn("update checkpoint with error", zap.Error(metaErr))
+		}
+		// update status via framework provided API
 		err := m.BaseJobMaster.UpdateJobStatus(ctx, m.Status())
 		if derrors.ErrWorkerUpdateStatusTryAgain.Equal(err) {
 			log.L().Warn("update status try again later", zap.String("error", err.Error()))
@@ -175,6 +263,7 @@ func (m *Master) Tick(ctx context.Context) error {
 		return err
 	}
 
+	// check for special worker status
 	if m.getStatusCode() == libModel.WorkerStatusStopped {
 		log.L().Info("FakeMaster: received pause command, stop now")
 		m.setStatusCode(libModel.WorkerStatusStopped)
@@ -187,6 +276,13 @@ func (m *Master) Tick(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func (m *Master) Tick(ctx context.Context) error {
+	if err := m.tickedCheckWorkers(ctx); err != nil {
+		return err
+	}
+	return m.tickedCheckStatus(ctx)
 }
 
 func (m *Master) OnMasterRecovered(ctx context.Context) error {
@@ -214,6 +310,7 @@ func (m *Master) OnWorkerDispatched(worker lib.WorkerHandle, result error) error
 	}
 	delete(m.pendingWorkerSet, worker.ID())
 	m.workerList[idx] = worker
+	m.workerID2BusinessID[worker.ID()] = idx
 
 	return nil
 }
@@ -245,7 +342,18 @@ func (m *Master) OnWorkerOffline(worker lib.WorkerHandle, reason error) error {
 
 	log.L().Info("FakeMaster: OnWorkerOffline",
 		zap.String("worker-id", worker.ID()), zap.Error(reason))
-	return m.createWorker(index)
+	var startTick int64
+	if ws, err := parseExtBytes(worker.Status().ExtBytes); err != nil {
+		log.L().Warn("failed to parse worker ext bytes", zap.Error(err))
+	} else {
+		startTick = ws.Tick
+	}
+	wcfg := &WorkerConfig{
+		ID:         index,
+		StartTick:  startTick,
+		TargetTick: int64(m.config.TargetTick),
+	}
+	return m.createWorker(wcfg)
 }
 
 func (m *Master) OnWorkerMessage(worker lib.WorkerHandle, topic p2p.Topic, message interface{}) error {
@@ -297,16 +405,43 @@ func (m *Master) getStatusCode() libModel.WorkerStatusCode {
 	return m.statusCode.code
 }
 
+func parseExtBytes(data []byte) (*dummyWorkerStatus, error) {
+	dws := &dummyWorkerStatus{}
+	err := json.Unmarshal(data, dws)
+	return dws, err
+}
+
+func (m *Master) checkpointKey() string {
+	return strings.Join([]string{"fake-master", "checkpoint", m.workerID}, "/")
+}
+
+func (m *Master) genCheckpoint() *checkpoint {
+	m.workerListMu.Lock()
+	defer m.workerListMu.Unlock()
+	cp := &checkpoint{Ticks: make(map[int]int64)}
+	for wid, tick := range m.status {
+		if businessID, ok := m.workerID2BusinessID[wid]; ok {
+			cp.Ticks[businessID] = tick
+		}
+	}
+	return cp
+}
+
 func NewFakeMaster(ctx *dcontext.Context, workerID libModel.WorkerID, masterID libModel.MasterID, config lib.WorkerConfig) *Master {
 	log.L().Info("new fake master", zap.Any("config", config))
+	masterConfig := config.(*Config)
 	ret := &Master{
-		pendingWorkerSet:  make(map[libModel.WorkerID]int),
-		config:            config.(*Config),
-		statusRateLimiter: rate.NewLimiter(rate.Every(time.Second*3), 1),
-		status:            make(map[libModel.WorkerID]int64),
-		finishedSet:       make(map[libModel.WorkerID]int),
-		ctx:               ctx.Context,
-		clocker:           clock.New(),
+		workerID:            workerID,
+		pendingWorkerSet:    make(map[libModel.WorkerID]int),
+		workerList:          make([]lib.WorkerHandle, masterConfig.WorkerCount),
+		workerID2BusinessID: make(map[libModel.WorkerID]int),
+		config:              masterConfig,
+		statusRateLimiter:   rate.NewLimiter(rate.Every(time.Second*3), 1),
+		status:              make(map[libModel.WorkerID]int64),
+		finishedSet:         make(map[libModel.WorkerID]int),
+		ctx:                 ctx.Context,
+		clocker:             clock.New(),
+		initialized:         false,
 	}
 	ret.setStatusCode(libModel.WorkerStatusNormal)
 	return ret
