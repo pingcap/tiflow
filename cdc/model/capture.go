@@ -16,9 +16,33 @@ package model
 import (
 	"encoding/json"
 
+	"github.com/google/uuid"
 	"github.com/pingcap/errors"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 )
+
+// CaptureID is the type for capture ID
+type CaptureID = string
+
+type CaptureStatus int
+
+const (
+	CaptureStatusHealthy CaptureStatus = iota
+	CaptureStatusDraining
+	CaptureStatusClosing
+)
+
+func (s CaptureStatus) String() string {
+	switch s {
+	case CaptureStatusHealthy:
+		return "healthy"
+	case CaptureStatusDraining:
+		return "draining"
+	case CaptureStatusClosing:
+		return "closing"
+	}
+	panic("unreachable")
+}
 
 // CaptureInfo store in etcd.
 type CaptureInfo struct {
@@ -26,6 +50,16 @@ type CaptureInfo struct {
 	AdvertiseAddr string        `json:"address"`
 	Version       string        `json:"version"`
 	Status        CaptureStatus `json:"status"`
+}
+
+// NewCaptureInfo return the basic capture info.
+func NewCaptureInfo(addr, version string) *CaptureInfo {
+	return &CaptureInfo{
+		ID:            uuid.New().String(),
+		AdvertiseAddr: addr,
+		Version:       version,
+		Status:        CaptureStatusHealthy,
+	}
 }
 
 // Marshal using json.Marshal.
@@ -53,27 +87,4 @@ func ListVersionsFromCaptureInfos(captureInfos []*CaptureInfo) []string {
 	}
 
 	return captureVersions
-}
-
-// CaptureID is the type for capture ID
-type CaptureID = string
-
-type CaptureStatus int
-
-const (
-	CaptureStatusHealthy CaptureStatus = iota
-	CaptureStatusDraining
-	CaptureStatusClosing
-)
-
-func (s CaptureStatus) String() string {
-	switch s {
-	case CaptureStatusHealthy:
-		return "healthy"
-	case CaptureStatusDraining:
-		return "draining"
-	case CaptureStatusClosing:
-		return "closing"
-	}
-	panic("unreachable")
 }

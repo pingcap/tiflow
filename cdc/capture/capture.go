@@ -20,7 +20,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
@@ -130,11 +129,7 @@ func (c *Capture) reset(ctx context.Context) error {
 
 	c.captureMu.Lock()
 	defer c.captureMu.Unlock()
-	c.info = &model.CaptureInfo{
-		ID:            uuid.New().String(),
-		AdvertiseAddr: conf.AdvertiseAddr,
-		Version:       version.ReleaseVersion,
-	}
+	c.info = model.NewCaptureInfo(conf.AdvertiseAddr, version.ReleaseVersion)
 	c.processorManager = c.newProcessorManager()
 	if c.session != nil {
 		// It can't be handled even after it fails, so we ignore it.
