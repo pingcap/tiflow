@@ -112,16 +112,14 @@ func (s *managerSuite) TestManagerRandom(c *check.C) {
 	defer manager.Close(ctx)
 	goroutineNum := 10
 	rowNum := 100
-	var (
-		wg  sync.WaitGroup
-		err error
-	)
+	var wg sync.WaitGroup
 	tableSinks := make([]Sink, goroutineNum)
 	for i := 0; i < goroutineNum; i++ {
 		i := i
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			var err error
 			tableSinks[i], err = manager.CreateTableSink(model.TableID(i),
 				redo.NewDisabledManager())
 			c.Assert(err, check.IsNil)
@@ -283,19 +281,19 @@ func BenchmarkManagerFlushing(b *testing.B) {
 	// Init table sinks.
 	goroutineNum := 2000
 	rowNum := 2000
-	var (
-		wg  sync.WaitGroup
-		err error
-	)
+	var wg sync.WaitGroup
 	tableSinks := make([]Sink, goroutineNum)
 	for i := 0; i < goroutineNum; i++ {
 		i := i
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			var err error
 			tableSinks[i], err = manager.CreateTableSink(model.TableID(i),
 				redo.NewDisabledManager())
-			panic(err)
+			if err != nil {
+				b.Error(err)
+			}
 		}()
 	}
 	wg.Wait()
