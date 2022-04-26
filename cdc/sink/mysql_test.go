@@ -1344,7 +1344,7 @@ func TestCleanTableResource(t *testing.T) {
 	s := &mysqlSink{
 		txnCache:   common.NewUnresolvedTxnCache(),
 		filter:     f,
-		statistics: NewStatistics(ctx, "db"),
+		statistics: NewStatistics(ctx, "test", map[string]string{}),
 	}
 	require.Nil(t, s.EmitRowChangedEvents(ctx, &model.RowChangedEvent{
 		Table: &model.TableName{TableID: tblID, Schema: "test", Table: "t1"},
