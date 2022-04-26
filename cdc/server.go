@@ -20,8 +20,10 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -198,31 +200,19 @@ func (s *Server) prepare(ctx context.Context) error {
 }
 
 // Run runs the server.
-func (s *Server) Run() error {
-
-	tz, err := ticdcutil.GetTimezone(o.serverConfig.TZ)
-	if err != nil {
-		return errors.Annotate(err, "can not load timezone, Please specify the time zone through environment variable `TZ` or command line parameters `--tz`")
-	}
-	config.StoreGlobalServerConfig(o.serverConfig)
-
-	//sc := make(chan os.Signal, 1)
-	//signal.Notify(sc,
-	//	syscall.SIGHUP,
-	//	syscall.SIGINT,
-	//	syscall.SIGTERM,
-	//	syscall.SIGQUIT)
-
-	//ctx, cancel := context.WithCancel(context.Background())
-	//go func() {
-	//	sig := <-sc
-	//	log.Info("got signal to exit", zap.Stringer("signal", sig))
-	//	cancel()
-	//}()
-	//defer cancel()
-	//cmdcontext.SetDefaultContext(ctx)
-	//ctx = ticdcutil.PutTimezoneInCtx(cmdcontext.GetDefaultContext(), tz)
-	//ctx = ticdcutil.PutCaptureAddrInCtx(ctx, o.serverConfig.AdvertiseAddr)
+func (s *Server) Run(ctx context.Context) error {
+	ctx, cancel := context.WithCancel(ctx)
+	sc := make(chan os.Signal, 1)
+	signal.Notify(sc,
+		syscall.SIGHUP,
+		syscall.SIGINT,
+		syscall.SIGTERM,
+		syscall.SIGQUIT)
+	go func() {
+		sig := <-sc
+		log.Info("got signal to exit", zap.Stringer("signal", sig))
+		cancel()
+	}()
 
 	if err := s.prepare(ctx); err != nil {
 		return errors.Trace(err)
@@ -456,4 +446,63 @@ func findBestDataDir(candidates []string) (result string, ok bool) {
 	}
 
 	return result, ok
+}
+
+func handleSignals() {
+
+	//	func waitForSignals(
+	//		ctx context.Context, stopper *stop.Stopper, errChan chan error,
+	//) (returnErr error) {
+	//		// Need to alias the signals if this has to run on non-unix OSes too.
+	//		signalCh := make(chan os.Signal, 1)
+	//		signal.Notify(signalCh, drainSignals...)
+	//
+	//		select {
+	//		case err := <-errChan:
+	//			log.StartAlwaysFlush()
+	//			return err
+	//		case <-stopper.ShouldQuiesce():
+	//			// Stop has been requested through the stopper's Stop
+	//			<-stopper.IsStopped()
+	//			// StartAlwaysFlush both flushes and ensures that subsequent log
+	//			// writes are flushed too.
+	//			log.StartAlwaysFlush()
+	//		case sig := <-signalCh: // INT or TERM
+	//			log.StartAlwaysFlush() // In case the caller follows up with KILL
+	//			log.Ops.Infof(ctx, "received signal '%s'", sig)
+	//			if sig == os.Interrupt {
+	//				returnErr = errors.New("interrupted")
+	//			}
+	//			go func() {
+	//				log.Infof(ctx, "server stopping")
+	//				stopper.Stop(ctx)
+	//			}()
+	//		case <-log.FatalChan():
+	//			stopper.Stop(ctx)
+	//			select {} // Block and wait for logging go routine to shut down the process
+	//		}
+	//
+	//		for {
+	//			select {
+	//			case sig := <-signalCh:
+	//				switch sig {
+	//				case os.Interrupt: // SIGTERM after SIGTERM
+	//					log.Ops.Infof(ctx, "received additional signal '%s'; continuing graceful shutdown", sig)
+	//					continue
+	//				}
+	//
+	//				log.Ops.Shoutf(ctx, severity.ERROR,
+	//					"received signal '%s' during shutdown, initiating hard shutdown", redact.Safe(sig))
+	//				panic("terminate")
+	//			case <-stopper.IsStopped():
+	//				const msgDone = "server shutdown completed"
+	//				log.Ops.Infof(ctx, msgDone)
+	//				fmt.Fprintln(os.Stdout, msgDone)
+	//			}
+	//			break
+	//		}
+	//
+	//		return returnErr
+	//	}
+
 }

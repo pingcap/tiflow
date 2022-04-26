@@ -26,6 +26,7 @@ import (
 	ticonfig "github.com/pingcap/tidb/config"
 	"github.com/pingcap/tiflow/cdc"
 	"github.com/pingcap/tiflow/cdc/sorter/unified"
+	cmdconetxt "github.com/pingcap/tiflow/pkg/cmd/context"
 	"github.com/pingcap/tiflow/pkg/cmd/util"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -124,6 +125,9 @@ func (o *options) run(cmd *cobra.Command) error {
 	}
 	log.Info("init log", zap.String("file", logConfig.File), zap.String("level", logConfig.Level))
 
+	util.LogHTTPProxies()
+	cdc.RecordGoRuntimeSettings()
+
 	version.LogVersionInfo()
 	if ticdcutil.FailpointBuild {
 		for _, path := range failpoint.List() {
@@ -135,14 +139,22 @@ func (o *options) run(cmd *cobra.Command) error {
 		}
 	}
 
-	util.LogHTTPProxies()
-	cdc.RecordGoRuntimeSettings()
+	tz, err := ticdcutil.GetTimezone(o.serverConfig.TZ)
+	if err != nil {
+		return errors.Annotate(err, "can not load timezone, Please specify the time zone through environment variable `TZ` or command line parameters `--tz`")
+	}
+	config.StoreGlobalServerConfig(o.serverConfig)
+
+	cmdconetxt.SetDefaultContext(context.Background())
+	ctx := ticdcutil.PutTimezoneInCtx(cmdconetxt.GetDefaultContext(), tz)
+	ctx = ticdcutil.PutCaptureAddrInCtx(ctx, o.serverConfig.AdvertiseAddr)
+
 	server, err := cdc.NewServer(strings.Split(o.serverPdAddr, ","))
 	if err != nil {
 		return errors.Annotate(err, "new server")
 	}
 
-	err = server.Run()
+	err = server.Run(ctx)
 	if err != nil && errors.Cause(err) != context.Canceled {
 		log.Error("run server", zap.String("error", errors.ErrorStack(err)))
 		return errors.Annotate(err, "run server")
