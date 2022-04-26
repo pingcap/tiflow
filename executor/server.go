@@ -17,6 +17,8 @@ import (
 	"golang.org/x/time/rate"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/hanfei1991/microcosm/client"
 	"github.com/hanfei1991/microcosm/executor/worker"
@@ -50,7 +52,8 @@ type Server struct {
 	masterClient   client.MasterClient
 	resourceClient *rpcutil.FailoverRPCClients[pb.ResourceManagerClient]
 	cliUpdateCh    chan cliUpdateInfo
-	workerRtm      *worker.TaskRunner
+	taskRunner     *worker.TaskRunner
+	taskCommitter  *worker.TaskCommitter
 	msgServer      *p2p.MessageRPCService
 	info           *model.NodeInfo
 
@@ -157,6 +160,7 @@ func (s *Server) buildDeps() (*deps.Deps, error) {
 	return deps, nil
 }
 
+// DispatchTask is deprecated.
 func (s *Server) DispatchTask(ctx context.Context, req *pb.DispatchTaskRequest) (*pb.DispatchTaskResponse, error) {
 	log.L().Info("dispatch task", zap.String("req", req.String()))
 
@@ -203,7 +207,7 @@ func (s *Server) DispatchTask(ctx context.Context, req *pb.DispatchTaskRequest) 
 		return nil, err
 	}
 
-	if err := s.workerRtm.AddTask(newWorker); err != nil {
+	if err := s.taskRunner.AddTask(newWorker); err != nil {
 		errCode := pb.DispatchTaskErrorCode_Other
 		if errors.ErrRuntimeReachedCapacity.Equal(err) || errors.ErrRuntimeIncomingQueueFull.Equal(err) {
 			errCode = pb.DispatchTaskErrorCode_NoResource
@@ -220,6 +224,81 @@ func (s *Server) DispatchTask(ctx context.Context, req *pb.DispatchTaskRequest) 
 		ErrorCode: pb.DispatchTaskErrorCode_OK,
 		WorkerId:  req.GetWorkerId(),
 	}, nil
+}
+
+func (s *Server) makeTask(
+	ctx context.Context,
+	workerID libModel.WorkerID,
+	masterID libModel.MasterID,
+	workerType libModel.WorkerType,
+	workerConfig []byte,
+) (worker.Runnable, error) {
+	dctx := dcontext.NewContext(ctx, log.L())
+	dp, err := s.buildDeps()
+	if err != nil {
+		return nil, err
+	}
+	dctx = dctx.WithDeps(dp)
+	dctx.Environ.NodeID = p2p.NodeID(s.info.ID)
+	dctx.Environ.Addr = s.info.Addr
+
+	masterMeta := &libModel.MasterMetaKVData{
+		ID:     workerID,
+		Tp:     workerType,
+		Config: workerConfig,
+	}
+	metaBytes, err := masterMeta.Marshal()
+	if err != nil {
+		return nil, err
+	}
+	dctx.Environ.MasterMetaBytes = metaBytes
+
+	newWorker, err := registry.GlobalWorkerRegistry().CreateWorker(
+		dctx,
+		workerType,
+		workerID,
+		masterID,
+		workerConfig)
+	if err != nil {
+		log.L().Error("Failed to create worker", zap.Error(err))
+		return nil, err
+	}
+	return newWorker, nil
+}
+
+func (s *Server) PreDispatchTask(ctx context.Context, req *pb.PreDispatchTaskRequest) (*pb.PreDispatchTaskResponse, error) {
+	task, err := s.makeTask(
+		ctx,
+		req.GetWorkerId(),
+		req.GetMasterId(),
+		libModel.WorkerType(req.GetTaskTypeId()),
+		req.GetTaskConfig())
+	if err != nil {
+		// We use the code Aborted here per the suggestion in gRPC's documentation
+		// "Use Aborted if the client should retry at a higher-level".
+		// Failure to make task is usually a problem that the business logic
+		// should be notified of.
+		return nil, status.Error(codes.Aborted, err.Error())
+	}
+
+	if !s.taskCommitter.PreDispatchTask(req.GetRequestId(), task) {
+		// The TaskCommitter failed to accept the task.
+		// Currently, the only reason is duplicate requestID.
+		return nil, status.Error(codes.AlreadyExists, "Duplicate request ID")
+	}
+
+	return &pb.PreDispatchTaskResponse{}, nil
+}
+
+func (s *Server) ConfirmDispatchTask(ctx context.Context, req *pb.ConfirmDispatchTaskRequest) (*pb.ConfirmDispatchTaskResponse, error) {
+	ok, err := s.taskCommitter.ConfirmDispatchTask(req.GetRequestId(), req.GetWorkerId())
+	if err != nil {
+		return nil, status.Error(codes.Aborted, err.Error())
+	}
+	if !ok {
+		return nil, status.Error(codes.NotFound, "RequestID not found")
+	}
+	return &pb.ConfirmDispatchTaskResponse{}, nil
 }
 
 func (s *Server) Stop() {
@@ -301,8 +380,9 @@ const (
 	// TODO since we introduced queuing in the TaskRunner, it is no longer
 	// easy to implement the capacity. Think of a better solution later.
 	// defaultRuntimeCapacity      = 65536
-	defaultRuntimeIncomingQueueLen = 256
-	defaultRuntimeInitConcurrency  = 256
+	defaultRuntimeIncomingQueueLen   = 256
+	defaultRuntimeInitConcurrency    = 256
+	defaultTaskPreDispatchRequestTTL = 10 * time.Second
 )
 
 func (s *Server) Run(ctx context.Context) error {
@@ -313,10 +393,14 @@ func (s *Server) Run(ctx context.Context) error {
 	registerMetrics()
 
 	wg, ctx := errgroup.WithContext(ctx)
-	s.workerRtm = worker.NewTaskRunner(defaultRuntimeIncomingQueueLen, defaultRuntimeInitConcurrency)
+	s.taskRunner = worker.NewTaskRunner(defaultRuntimeIncomingQueueLen, defaultRuntimeInitConcurrency)
+	s.taskCommitter = worker.NewTaskCommitter(s.taskRunner, defaultTaskPreDispatchRequestTTL)
+	defer func() {
+		s.taskCommitter.Close()
+	}()
 
 	wg.Go(func() error {
-		return s.workerRtm.Run(ctx)
+		return s.taskRunner.Run(ctx)
 	})
 
 	err := s.initClients(ctx)
@@ -688,7 +772,7 @@ func (s *Server) collectMetricLoop(ctx context.Context, tickInterval time.Durati
 		case <-ctx.Done():
 			return nil
 		case <-ticker.C:
-			metricRunningTask.Set(float64(s.workerRtm.TaskCount()))
+			metricRunningTask.Set(float64(s.taskRunner.TaskCount()))
 		}
 	}
 }

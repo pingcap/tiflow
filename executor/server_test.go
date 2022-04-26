@@ -9,12 +9,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hanfei1991/microcosm/executor/worker"
 	"github.com/phayes/freeport"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
+
+	"github.com/hanfei1991/microcosm/executor/worker"
 )
 
 func init() {
@@ -93,7 +94,7 @@ func TestCollectMetric(t *testing.T) {
 	addr := fmt.Sprintf("127.0.0.1:%d", port)
 	cfg.WorkerAddr = addr
 	s := NewServer(cfg, nil)
-	s.workerRtm = worker.NewTaskRunner(defaultRuntimeIncomingQueueLen, defaultRuntimeInitConcurrency)
+	s.taskRunner = worker.NewTaskRunner(defaultRuntimeIncomingQueueLen, defaultRuntimeInitConcurrency)
 
 	s.grpcSrv = grpc.NewServer()
 	registerMetrics()

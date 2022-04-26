@@ -4,14 +4,15 @@ import (
 	"context"
 
 	grpc_zap "github.com/grpc-ecosystem/go-grpc-middleware/logging/zap"
-	"github.com/hanfei1991/microcosm/pb"
-	"github.com/hanfei1991/microcosm/pkg/errors"
-	"github.com/hanfei1991/microcosm/test"
-	"github.com/hanfei1991/microcosm/test/mock"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
+
+	"github.com/hanfei1991/microcosm/pb"
+	"github.com/hanfei1991/microcosm/pkg/errors"
+	"github.com/hanfei1991/microcosm/test"
+	"github.com/hanfei1991/microcosm/test/mock"
 )
 
 type ExecutorClient interface {
@@ -39,6 +40,10 @@ func (c *executorClient) Send(ctx context.Context, req *ExecutorRequest) (*Execu
 		resp.Resp, err = c.client.PauseBatchTasks(ctx, req.PauseBatchTasks())
 	case CmdDispatchTask:
 		resp.Resp, err = c.client.DispatchTask(ctx, req.DispatchTask())
+	case CmdPreDispatchTask:
+		resp.Resp, err = c.client.PreDispatchTask(ctx, req.PreDispatchTask())
+	case CmdConfirmDispatchTask:
+		resp.Resp, err = c.client.ConfirmDispatchTask(ctx, req.ConfirmDispatchTask())
 	}
 	if err != nil {
 		log.L().Logger.Error("send req meet error", zap.Error(err))
@@ -86,6 +91,8 @@ const (
 	CmdCancelBatchTasks
 	CmdPauseBatchTasks
 	CmdDispatchTask
+	CmdPreDispatchTask
+	CmdConfirmDispatchTask
 )
 
 type ExecutorRequest struct {
@@ -107,6 +114,14 @@ func (e *ExecutorRequest) PauseBatchTasks() *pb.PauseBatchTasksRequest {
 
 func (e *ExecutorRequest) DispatchTask() *pb.DispatchTaskRequest {
 	return e.Req.(*pb.DispatchTaskRequest)
+}
+
+func (e *ExecutorRequest) PreDispatchTask() *pb.PreDispatchTaskRequest {
+	return e.Req.(*pb.PreDispatchTaskRequest)
+}
+
+func (e *ExecutorRequest) ConfirmDispatchTask() *pb.ConfirmDispatchTaskRequest {
+	return e.Req.(*pb.ConfirmDispatchTaskRequest)
 }
 
 type ExecutorResponse struct {

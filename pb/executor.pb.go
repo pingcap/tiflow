@@ -197,6 +197,215 @@ func (m *DispatchTaskResponse) GetWorkerId() string {
 	return ""
 }
 
+type PreDispatchTaskRequest struct {
+	TaskTypeId int64  `protobuf:"varint,1,opt,name=task_type_id,json=taskTypeId,proto3" json:"task_type_id,omitempty"`
+	TaskConfig []byte `protobuf:"bytes,2,opt,name=task_config,json=taskConfig,proto3" json:"task_config,omitempty"`
+	MasterId   string `protobuf:"bytes,3,opt,name=master_id,json=masterId,proto3" json:"master_id,omitempty"`
+	WorkerId   string `protobuf:"bytes,4,opt,name=worker_id,json=workerId,proto3" json:"worker_id,omitempty"`
+	UserId     string `protobuf:"bytes,5,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	// request_id should be a UUID unique for each RPC call.
+	RequestId string `protobuf:"bytes,6,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+}
+
+func (m *PreDispatchTaskRequest) Reset()         { *m = PreDispatchTaskRequest{} }
+func (m *PreDispatchTaskRequest) String() string { return proto.CompactTextString(m) }
+func (*PreDispatchTaskRequest) ProtoMessage()    {}
+func (*PreDispatchTaskRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_12d1cdcda51e000f, []int{2}
+}
+func (m *PreDispatchTaskRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *PreDispatchTaskRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_PreDispatchTaskRequest.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *PreDispatchTaskRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_PreDispatchTaskRequest.Merge(m, src)
+}
+func (m *PreDispatchTaskRequest) XXX_Size() int {
+	return m.Size()
+}
+func (m *PreDispatchTaskRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_PreDispatchTaskRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_PreDispatchTaskRequest proto.InternalMessageInfo
+
+func (m *PreDispatchTaskRequest) GetTaskTypeId() int64 {
+	if m != nil {
+		return m.TaskTypeId
+	}
+	return 0
+}
+
+func (m *PreDispatchTaskRequest) GetTaskConfig() []byte {
+	if m != nil {
+		return m.TaskConfig
+	}
+	return nil
+}
+
+func (m *PreDispatchTaskRequest) GetMasterId() string {
+	if m != nil {
+		return m.MasterId
+	}
+	return ""
+}
+
+func (m *PreDispatchTaskRequest) GetWorkerId() string {
+	if m != nil {
+		return m.WorkerId
+	}
+	return ""
+}
+
+func (m *PreDispatchTaskRequest) GetUserId() string {
+	if m != nil {
+		return m.UserId
+	}
+	return ""
+}
+
+func (m *PreDispatchTaskRequest) GetRequestId() string {
+	if m != nil {
+		return m.RequestId
+	}
+	return ""
+}
+
+type PreDispatchTaskResponse struct {
+}
+
+func (m *PreDispatchTaskResponse) Reset()         { *m = PreDispatchTaskResponse{} }
+func (m *PreDispatchTaskResponse) String() string { return proto.CompactTextString(m) }
+func (*PreDispatchTaskResponse) ProtoMessage()    {}
+func (*PreDispatchTaskResponse) Descriptor() ([]byte, []int) {
+	return fileDescriptor_12d1cdcda51e000f, []int{3}
+}
+func (m *PreDispatchTaskResponse) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *PreDispatchTaskResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_PreDispatchTaskResponse.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *PreDispatchTaskResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_PreDispatchTaskResponse.Merge(m, src)
+}
+func (m *PreDispatchTaskResponse) XXX_Size() int {
+	return m.Size()
+}
+func (m *PreDispatchTaskResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_PreDispatchTaskResponse.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_PreDispatchTaskResponse proto.InternalMessageInfo
+
+type ConfirmDispatchTaskRequest struct {
+	WorkerId  string `protobuf:"bytes,1,opt,name=worker_id,json=workerId,proto3" json:"worker_id,omitempty"`
+	RequestId string `protobuf:"bytes,2,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+}
+
+func (m *ConfirmDispatchTaskRequest) Reset()         { *m = ConfirmDispatchTaskRequest{} }
+func (m *ConfirmDispatchTaskRequest) String() string { return proto.CompactTextString(m) }
+func (*ConfirmDispatchTaskRequest) ProtoMessage()    {}
+func (*ConfirmDispatchTaskRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_12d1cdcda51e000f, []int{4}
+}
+func (m *ConfirmDispatchTaskRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *ConfirmDispatchTaskRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_ConfirmDispatchTaskRequest.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *ConfirmDispatchTaskRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ConfirmDispatchTaskRequest.Merge(m, src)
+}
+func (m *ConfirmDispatchTaskRequest) XXX_Size() int {
+	return m.Size()
+}
+func (m *ConfirmDispatchTaskRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_ConfirmDispatchTaskRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ConfirmDispatchTaskRequest proto.InternalMessageInfo
+
+func (m *ConfirmDispatchTaskRequest) GetWorkerId() string {
+	if m != nil {
+		return m.WorkerId
+	}
+	return ""
+}
+
+func (m *ConfirmDispatchTaskRequest) GetRequestId() string {
+	if m != nil {
+		return m.RequestId
+	}
+	return ""
+}
+
+type ConfirmDispatchTaskResponse struct {
+}
+
+func (m *ConfirmDispatchTaskResponse) Reset()         { *m = ConfirmDispatchTaskResponse{} }
+func (m *ConfirmDispatchTaskResponse) String() string { return proto.CompactTextString(m) }
+func (*ConfirmDispatchTaskResponse) ProtoMessage()    {}
+func (*ConfirmDispatchTaskResponse) Descriptor() ([]byte, []int) {
+	return fileDescriptor_12d1cdcda51e000f, []int{5}
+}
+func (m *ConfirmDispatchTaskResponse) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *ConfirmDispatchTaskResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_ConfirmDispatchTaskResponse.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *ConfirmDispatchTaskResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ConfirmDispatchTaskResponse.Merge(m, src)
+}
+func (m *ConfirmDispatchTaskResponse) XXX_Size() int {
+	return m.Size()
+}
+func (m *ConfirmDispatchTaskResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_ConfirmDispatchTaskResponse.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ConfirmDispatchTaskResponse proto.InternalMessageInfo
+
 type CancelBatchTasksRequest struct {
 	TaskIdList []int64 `protobuf:"varint,1,rep,packed,name=task_id_list,json=taskIdList,proto3" json:"task_id_list,omitempty"`
 }
@@ -205,7 +414,7 @@ func (m *CancelBatchTasksRequest) Reset()         { *m = CancelBatchTasksRequest
 func (m *CancelBatchTasksRequest) String() string { return proto.CompactTextString(m) }
 func (*CancelBatchTasksRequest) ProtoMessage()    {}
 func (*CancelBatchTasksRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_12d1cdcda51e000f, []int{2}
+	return fileDescriptor_12d1cdcda51e000f, []int{6}
 }
 func (m *CancelBatchTasksRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -249,7 +458,7 @@ func (m *PauseBatchTasksRequest) Reset()         { *m = PauseBatchTasksRequest{}
 func (m *PauseBatchTasksRequest) String() string { return proto.CompactTextString(m) }
 func (*PauseBatchTasksRequest) ProtoMessage()    {}
 func (*PauseBatchTasksRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_12d1cdcda51e000f, []int{3}
+	return fileDescriptor_12d1cdcda51e000f, []int{7}
 }
 func (m *PauseBatchTasksRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -293,7 +502,7 @@ func (m *SubmitBatchTasksRequest) Reset()         { *m = SubmitBatchTasksRequest
 func (m *SubmitBatchTasksRequest) String() string { return proto.CompactTextString(m) }
 func (*SubmitBatchTasksRequest) ProtoMessage()    {}
 func (*SubmitBatchTasksRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_12d1cdcda51e000f, []int{4}
+	return fileDescriptor_12d1cdcda51e000f, []int{8}
 }
 func (m *SubmitBatchTasksRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -341,7 +550,7 @@ func (m *TaskRequest) Reset()         { *m = TaskRequest{} }
 func (m *TaskRequest) String() string { return proto.CompactTextString(m) }
 func (*TaskRequest) ProtoMessage()    {}
 func (*TaskRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_12d1cdcda51e000f, []int{5}
+	return fileDescriptor_12d1cdcda51e000f, []int{9}
 }
 func (m *TaskRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -413,7 +622,7 @@ func (m *SubmitBatchTasksResponse) Reset()         { *m = SubmitBatchTasksRespon
 func (m *SubmitBatchTasksResponse) String() string { return proto.CompactTextString(m) }
 func (*SubmitBatchTasksResponse) ProtoMessage()    {}
 func (*SubmitBatchTasksResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_12d1cdcda51e000f, []int{6}
+	return fileDescriptor_12d1cdcda51e000f, []int{10}
 }
 func (m *SubmitBatchTasksResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -457,7 +666,7 @@ func (m *CancelBatchTasksResponse) Reset()         { *m = CancelBatchTasksRespon
 func (m *CancelBatchTasksResponse) String() string { return proto.CompactTextString(m) }
 func (*CancelBatchTasksResponse) ProtoMessage()    {}
 func (*CancelBatchTasksResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_12d1cdcda51e000f, []int{7}
+	return fileDescriptor_12d1cdcda51e000f, []int{11}
 }
 func (m *CancelBatchTasksResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -501,7 +710,7 @@ func (m *PauseBatchTasksResponse) Reset()         { *m = PauseBatchTasksResponse
 func (m *PauseBatchTasksResponse) String() string { return proto.CompactTextString(m) }
 func (*PauseBatchTasksResponse) ProtoMessage()    {}
 func (*PauseBatchTasksResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_12d1cdcda51e000f, []int{8}
+	return fileDescriptor_12d1cdcda51e000f, []int{12}
 }
 func (m *PauseBatchTasksResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -541,6 +750,10 @@ func init() {
 	proto.RegisterEnum("pb.DispatchTaskErrorCode", DispatchTaskErrorCode_name, DispatchTaskErrorCode_value)
 	proto.RegisterType((*DispatchTaskRequest)(nil), "pb.DispatchTaskRequest")
 	proto.RegisterType((*DispatchTaskResponse)(nil), "pb.DispatchTaskResponse")
+	proto.RegisterType((*PreDispatchTaskRequest)(nil), "pb.PreDispatchTaskRequest")
+	proto.RegisterType((*PreDispatchTaskResponse)(nil), "pb.PreDispatchTaskResponse")
+	proto.RegisterType((*ConfirmDispatchTaskRequest)(nil), "pb.ConfirmDispatchTaskRequest")
+	proto.RegisterType((*ConfirmDispatchTaskResponse)(nil), "pb.ConfirmDispatchTaskResponse")
 	proto.RegisterType((*CancelBatchTasksRequest)(nil), "pb.CancelBatchTasksRequest")
 	proto.RegisterType((*PauseBatchTasksRequest)(nil), "pb.PauseBatchTasksRequest")
 	proto.RegisterType((*SubmitBatchTasksRequest)(nil), "pb.SubmitBatchTasksRequest")
@@ -553,45 +766,50 @@ func init() {
 func init() { proto.RegisterFile("executor.proto", fileDescriptor_12d1cdcda51e000f) }
 
 var fileDescriptor_12d1cdcda51e000f = []byte{
-	// 594 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x9c, 0x54, 0xcb, 0x6e, 0xd3, 0x40,
-	0x14, 0xf5, 0xa3, 0x49, 0x9a, 0xeb, 0x90, 0x5a, 0x53, 0x68, 0x4c, 0x82, 0x8c, 0x65, 0x84, 0x14,
-	0xb1, 0xe8, 0x22, 0x48, 0x80, 0x60, 0x83, 0x1a, 0x8a, 0x64, 0x51, 0x28, 0x32, 0x45, 0x62, 0x17,
-	0x39, 0xf6, 0xd0, 0x5a, 0x69, 0x3c, 0x83, 0x67, 0xac, 0xd2, 0xbf, 0x40, 0xfc, 0x06, 0x1f, 0xc1,
-	0x96, 0x65, 0x97, 0x2c, 0x51, 0xb2, 0xe1, 0x33, 0xd0, 0xcc, 0xc4, 0x55, 0x9e, 0x52, 0xc5, 0x2e,
-	0xf7, 0x9e, 0x7b, 0x4f, 0xce, 0x9c, 0x33, 0x63, 0x68, 0xe2, 0xaf, 0x38, 0x2e, 0x38, 0xc9, 0xf7,
-	0x69, 0x4e, 0x38, 0x41, 0x06, 0x1d, 0xb6, 0x2d, 0x9c, 0xe7, 0x65, 0xc3, 0xff, 0xa1, 0xc3, 0xee,
-	0xab, 0x94, 0xd1, 0x88, 0xc7, 0x67, 0x27, 0x11, 0x1b, 0x85, 0xf8, 0x4b, 0x81, 0x19, 0x47, 0x1e,
-	0x34, 0x78, 0xc4, 0x46, 0x03, 0x7e, 0x49, 0xf1, 0x20, 0x4d, 0x1c, 0xdd, 0xd3, 0xbb, 0x66, 0x08,
-	0xa2, 0x77, 0x72, 0x49, 0x71, 0x90, 0xa0, 0xfb, 0x60, 0xc9, 0x89, 0x98, 0x64, 0x9f, 0xd3, 0x53,
-	0xc7, 0xf0, 0xf4, 0x6e, 0x43, 0x0d, 0xf4, 0x65, 0x07, 0x75, 0xa0, 0x3e, 0x8e, 0x18, 0xc7, 0xb9,
-	0xd8, 0x37, 0x3d, 0xbd, 0x5b, 0x0f, 0xb7, 0x55, 0x23, 0x48, 0x04, 0x78, 0x41, 0xf2, 0x91, 0x02,
-	0xb7, 0x14, 0xa8, 0x1a, 0x41, 0x82, 0x5a, 0x50, 0x2b, 0x98, 0x82, 0x2a, 0x12, 0xaa, 0x8a, 0x32,
-	0x48, 0xfc, 0xef, 0x3a, 0xdc, 0x5e, 0x54, 0xcb, 0x28, 0xc9, 0x18, 0x46, 0xcf, 0x00, 0xe4, 0xa9,
-	0x06, 0x31, 0x49, 0xb0, 0x14, 0xdb, 0xec, 0xdd, 0xdd, 0xa7, 0xc3, 0xfd, 0xf9, 0xe9, 0x43, 0x31,
-	0xd1, 0x27, 0x09, 0x0e, 0xeb, 0xb8, 0xfc, 0x89, 0x1e, 0xc0, 0x2d, 0xb5, 0x39, 0xc6, 0x8c, 0x45,
-	0xa7, 0x58, 0x1e, 0xa4, 0x1e, 0x36, 0x64, 0xf3, 0xad, 0xea, 0x2d, 0xaa, 0x35, 0x17, 0xd5, 0xfa,
-	0x2f, 0xa0, 0xd5, 0x8f, 0xb2, 0x18, 0x9f, 0x1f, 0x94, 0x7f, 0xc4, 0x96, 0x5d, 0x4c, 0x93, 0xc1,
-	0x79, 0xca, 0xb8, 0xa3, 0x7b, 0x66, 0xe9, 0x62, 0x90, 0x1c, 0xa5, 0x8c, 0xfb, 0xcf, 0x61, 0xef,
-	0x7d, 0x54, 0x30, 0xfc, 0x3f, 0xbb, 0x2f, 0xa1, 0xf5, 0xa1, 0x18, 0x8e, 0x53, 0xbe, 0xba, 0xfc,
-	0x10, 0x2a, 0x62, 0x90, 0x39, 0x86, 0x67, 0x76, 0xad, 0xde, 0x8e, 0xb0, 0x62, 0x2e, 0xde, 0x50,
-	0xa1, 0x3e, 0x07, 0x6b, 0x3e, 0xf4, 0x26, 0x18, 0xd7, 0x51, 0x1b, 0x69, 0x82, 0xf6, 0xa0, 0x9a,
-	0x66, 0xb4, 0xe0, 0x8a, 0xc6, 0x0c, 0x67, 0x15, 0x72, 0xa0, 0x46, 0x0a, 0x2e, 0x01, 0x53, 0x02,
-	0x65, 0x29, 0x18, 0x08, 0x95, 0x79, 0x36, 0x42, 0x83, 0x50, 0xb4, 0x0b, 0x15, 0x42, 0x07, 0x9c,
-	0xca, 0x1c, 0x2b, 0xe1, 0x16, 0xa1, 0x27, 0xd4, 0x7f, 0x0a, 0xce, 0xaa, 0xee, 0x59, 0x90, 0x1d,
-	0x30, 0x71, 0x9e, 0x4b, 0x0d, 0x56, 0xaf, 0x2e, 0x64, 0xcb, 0xd4, 0x42, 0xd1, 0x15, 0x8b, 0xab,
-	0x4e, 0xdf, 0x64, 0xf1, 0x09, 0xb4, 0x56, 0x5c, 0xbe, 0xc1, 0xde, 0xa3, 0x4f, 0x70, 0x67, 0xed,
-	0x05, 0x42, 0x16, 0xd4, 0x3e, 0x66, 0xa3, 0x8c, 0x5c, 0x64, 0xb6, 0x86, 0xaa, 0x60, 0x1c, 0xbf,
-	0xb1, 0x75, 0xd4, 0x04, 0x78, 0x47, 0x42, 0xcc, 0x48, 0x91, 0xc7, 0xd8, 0x36, 0x44, 0x1d, 0x64,
-	0x29, 0x7f, 0x1d, 0xa5, 0xe7, 0x38, 0xb1, 0x4d, 0x04, 0x50, 0x39, 0xe6, 0x67, 0x38, 0xb7, 0xff,
-	0xd6, 0x7a, 0x3f, 0x0d, 0xd8, 0x3e, 0x9c, 0xbd, 0x4d, 0x74, 0x0c, 0xf6, 0xb2, 0x21, 0xa8, 0x23,
-	0xa4, 0x6c, 0x88, 0xb7, 0x7d, 0x6f, 0x3d, 0xa8, 0x8e, 0xe4, 0x6b, 0x82, 0x70, 0xd9, 0x28, 0x45,
-	0xb8, 0xe1, 0xa2, 0x2a, 0xc2, 0x4d, 0xde, 0xfa, 0x1a, 0x3a, 0x82, 0x9d, 0x25, 0x03, 0x51, 0x5b,
-	0xac, 0xac, 0xbf, 0xbb, 0xed, 0xce, 0x5a, 0xec, 0x9a, 0xad, 0x0f, 0x8d, 0x79, 0x5b, 0x51, 0x6b,
-	0xf9, 0xa5, 0x96, 0x3c, 0xce, 0x2a, 0x50, 0x92, 0x1c, 0x38, 0xbf, 0x26, 0xae, 0x7e, 0x35, 0x71,
-	0xf5, 0x3f, 0x13, 0x57, 0xff, 0x36, 0x75, 0xb5, 0xab, 0xa9, 0xab, 0xfd, 0x9e, 0xba, 0xda, 0xb0,
-	0x2a, 0x3f, 0x6d, 0x8f, 0xff, 0x05, 0x00, 0x00, 0xff, 0xff, 0xa5, 0x8d, 0x69, 0x63, 0xfd, 0x04,
-	0x00, 0x00,
+	// 684 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xd4, 0x55, 0x41, 0x6f, 0xd3, 0x30,
+	0x14, 0x6e, 0x92, 0xb5, 0x5d, 0x5f, 0x4b, 0x57, 0x79, 0xb0, 0x66, 0x2d, 0xcb, 0xaa, 0x20, 0xa4,
+	0x8a, 0xc3, 0x0e, 0x45, 0x02, 0x04, 0x17, 0xb4, 0x32, 0xa4, 0x88, 0xc1, 0xa6, 0x30, 0xa4, 0xdd,
+	0xaa, 0xb4, 0x31, 0x5b, 0xd4, 0x35, 0x36, 0xb1, 0xa3, 0xb1, 0x7f, 0x81, 0xf8, 0x1b, 0xfc, 0x11,
+	0x2e, 0x48, 0x3b, 0x72, 0x44, 0xdb, 0x01, 0x7e, 0x06, 0xb2, 0x9d, 0x4c, 0x4d, 0x9a, 0x4a, 0x13,
+	0x37, 0x6e, 0xf1, 0xfb, 0xde, 0xfb, 0xfc, 0xf9, 0xf3, 0xf3, 0x0b, 0x34, 0xf1, 0x67, 0x3c, 0x89,
+	0x39, 0x89, 0x76, 0x68, 0x44, 0x38, 0x41, 0x3a, 0x1d, 0x77, 0xea, 0x38, 0x8a, 0xd2, 0x80, 0xfd,
+	0x4d, 0x83, 0xf5, 0x57, 0x01, 0xa3, 0x1e, 0x9f, 0x9c, 0x1e, 0x79, 0x6c, 0xea, 0xe2, 0x4f, 0x31,
+	0x66, 0x1c, 0xf5, 0xa0, 0xc1, 0x3d, 0x36, 0x1d, 0xf1, 0x0b, 0x8a, 0x47, 0x81, 0x6f, 0x6a, 0x3d,
+	0xad, 0x6f, 0xb8, 0x20, 0x62, 0x47, 0x17, 0x14, 0x3b, 0x3e, 0xda, 0x86, 0xba, 0xcc, 0x98, 0x90,
+	0xf0, 0x63, 0x70, 0x62, 0xea, 0x3d, 0xad, 0xdf, 0x50, 0x09, 0x43, 0x19, 0x41, 0x5d, 0xa8, 0xcd,
+	0x3c, 0xc6, 0x71, 0x24, 0xea, 0x8d, 0x9e, 0xd6, 0xaf, 0xb9, 0xab, 0x2a, 0xe0, 0xf8, 0x02, 0x3c,
+	0x27, 0xd1, 0x54, 0x81, 0x2b, 0x0a, 0x54, 0x01, 0xc7, 0x47, 0x6d, 0xa8, 0xc6, 0x4c, 0x41, 0x65,
+	0x09, 0x55, 0xc4, 0xd2, 0xf1, 0xed, 0xaf, 0x1a, 0xdc, 0xcd, 0xaa, 0x65, 0x94, 0x84, 0x0c, 0xa3,
+	0x67, 0x00, 0xf2, 0x54, 0xa3, 0x09, 0xf1, 0xb1, 0x14, 0xdb, 0x1c, 0x6c, 0xee, 0xd0, 0xf1, 0xce,
+	0x7c, 0xf6, 0x9e, 0xc8, 0x18, 0x12, 0x1f, 0xbb, 0x35, 0x9c, 0x7e, 0xa2, 0x07, 0x70, 0x47, 0x55,
+	0xce, 0x30, 0x63, 0xde, 0x09, 0x96, 0x07, 0xa9, 0xb9, 0x0d, 0x19, 0x7c, 0xab, 0x62, 0x59, 0xb5,
+	0x46, 0x56, 0xad, 0xfd, 0x43, 0x83, 0x8d, 0xc3, 0x08, 0xff, 0x37, 0x2e, 0xa2, 0x2d, 0x80, 0x48,
+	0x09, 0x14, 0x58, 0x45, 0x62, 0xb5, 0x24, 0xe2, 0xf8, 0xf6, 0x26, 0xb4, 0x17, 0x8e, 0xa3, 0x6c,
+	0xb6, 0x8f, 0xa1, 0x23, 0x65, 0x45, 0xb3, 0xa2, 0xd3, 0x66, 0xd4, 0x68, 0x39, 0x35, 0xd9, 0x4d,
+	0xf5, 0xfc, 0xa6, 0x5b, 0xd0, 0x2d, 0x64, 0x4e, 0x36, 0x7e, 0x01, 0xed, 0xa1, 0x17, 0x4e, 0xf0,
+	0xd9, 0x6e, 0x0a, 0xb1, 0xbc, 0xc7, 0x81, 0x3f, 0x3a, 0x0b, 0x18, 0x37, 0xb5, 0x9e, 0x91, 0x7a,
+	0xec, 0xf8, 0xfb, 0x01, 0xe3, 0xf6, 0x73, 0xd8, 0x38, 0xf4, 0x62, 0x86, 0xff, 0xa5, 0xf6, 0x25,
+	0xb4, 0xdf, 0xc7, 0xe3, 0x59, 0xc0, 0x17, 0x8b, 0x1f, 0x42, 0x59, 0x24, 0x32, 0x53, 0xef, 0x19,
+	0xfd, 0xfa, 0x60, 0x4d, 0xb4, 0xdb, 0x9c, 0x1d, 0xae, 0x42, 0x6d, 0x0e, 0xf5, 0x79, 0x93, 0x9a,
+	0xa0, 0xdf, 0x34, 0x82, 0x1e, 0xf8, 0x68, 0x03, 0x2a, 0x41, 0x48, 0x63, 0xae, 0x68, 0x0c, 0x37,
+	0x59, 0x21, 0x13, 0xaa, 0x24, 0xe6, 0x12, 0x30, 0x24, 0x90, 0x2e, 0x05, 0x03, 0xa1, 0xf2, 0xb6,
+	0x1b, 0xae, 0x4e, 0x28, 0x5a, 0x87, 0x32, 0xa1, 0x23, 0x4e, 0xe5, 0x2d, 0x97, 0xdd, 0x15, 0x42,
+	0x8f, 0xa8, 0xfd, 0x14, 0xcc, 0x45, 0xdd, 0xc9, 0x63, 0xe9, 0x82, 0x81, 0xa3, 0x48, 0x6a, 0xa8,
+	0x0f, 0x6a, 0x42, 0xb6, 0x7c, 0x19, 0xae, 0x88, 0x8a, 0xc2, 0x45, 0xa7, 0x6f, 0x53, 0xf8, 0x04,
+	0xda, 0x0b, 0x2e, 0xdf, 0xa2, 0xee, 0xd1, 0x31, 0xdc, 0x2b, 0x7c, 0xa4, 0xa8, 0x0e, 0xd5, 0x0f,
+	0xe1, 0x34, 0x24, 0xe7, 0x61, 0xab, 0x84, 0x2a, 0xa0, 0x1f, 0xbc, 0x69, 0x69, 0xa8, 0x09, 0xf0,
+	0x8e, 0xb8, 0x98, 0x91, 0x38, 0x9a, 0xe0, 0x96, 0x2e, 0xd6, 0x4e, 0x18, 0xf0, 0xd7, 0x5e, 0x70,
+	0x86, 0xfd, 0x96, 0x81, 0x00, 0xca, 0x07, 0xfc, 0x14, 0x47, 0xad, 0x3f, 0xd5, 0xc1, 0x6f, 0x03,
+	0x56, 0xf7, 0x92, 0xf9, 0x87, 0x0e, 0xa0, 0x95, 0x37, 0x04, 0x75, 0x85, 0x94, 0x25, 0xd7, 0xdb,
+	0xb9, 0x5f, 0x0c, 0x26, 0x0d, 0x59, 0x12, 0x84, 0x79, 0xa3, 0x14, 0xe1, 0x92, 0x46, 0x55, 0x84,
+	0xcb, 0xbc, 0xb5, 0x4b, 0x68, 0x1f, 0xd6, 0x72, 0x06, 0xa2, 0x8e, 0x28, 0x29, 0xee, 0xdd, 0x4e,
+	0xb7, 0x10, 0xbb, 0x61, 0x1b, 0x42, 0x63, 0xde, 0x56, 0xd4, 0xce, 0x4f, 0xc3, 0x94, 0xc7, 0x5c,
+	0x04, 0x32, 0x92, 0xb2, 0xa3, 0x20, 0x91, 0x54, 0x38, 0xee, 0x12, 0x49, 0x4b, 0x66, 0x47, 0x09,
+	0x1d, 0xc3, 0x7a, 0xc1, 0x1b, 0x47, 0x96, 0xf4, 0x65, 0xe9, 0x58, 0xe9, 0x6c, 0x2f, 0xc5, 0x53,
+	0xe6, 0x5d, 0xf3, 0xfb, 0x95, 0xa5, 0x5d, 0x5e, 0x59, 0xda, 0xaf, 0x2b, 0x4b, 0xfb, 0x72, 0x6d,
+	0x95, 0x2e, 0xaf, 0xad, 0xd2, 0xcf, 0x6b, 0xab, 0x34, 0xae, 0xc8, 0xdf, 0xdc, 0xe3, 0xbf, 0x01,
+	0x00, 0x00, 0xff, 0xff, 0x0f, 0x63, 0x28, 0xef, 0x09, 0x07, 0x00, 0x00,
 }
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -611,6 +829,8 @@ type ExecutorClient interface {
 	PauseBatchTasks(ctx context.Context, in *PauseBatchTasksRequest, opts ...grpc.CallOption) (*PauseBatchTasksResponse, error)
 	// The following methods are for compatibility with the master-worker framework.
 	DispatchTask(ctx context.Context, in *DispatchTaskRequest, opts ...grpc.CallOption) (*DispatchTaskResponse, error)
+	PreDispatchTask(ctx context.Context, in *PreDispatchTaskRequest, opts ...grpc.CallOption) (*PreDispatchTaskResponse, error)
+	ConfirmDispatchTask(ctx context.Context, in *ConfirmDispatchTaskRequest, opts ...grpc.CallOption) (*ConfirmDispatchTaskResponse, error)
 }
 
 type executorClient struct {
@@ -657,6 +877,24 @@ func (c *executorClient) DispatchTask(ctx context.Context, in *DispatchTaskReque
 	return out, nil
 }
 
+func (c *executorClient) PreDispatchTask(ctx context.Context, in *PreDispatchTaskRequest, opts ...grpc.CallOption) (*PreDispatchTaskResponse, error) {
+	out := new(PreDispatchTaskResponse)
+	err := c.cc.Invoke(ctx, "/pb.Executor/PreDispatchTask", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *executorClient) ConfirmDispatchTask(ctx context.Context, in *ConfirmDispatchTaskRequest, opts ...grpc.CallOption) (*ConfirmDispatchTaskResponse, error) {
+	out := new(ConfirmDispatchTaskResponse)
+	err := c.cc.Invoke(ctx, "/pb.Executor/ConfirmDispatchTask", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ExecutorServer is the server API for Executor service.
 type ExecutorServer interface {
 	SubmitBatchTasks(context.Context, *SubmitBatchTasksRequest) (*SubmitBatchTasksResponse, error)
@@ -664,6 +902,8 @@ type ExecutorServer interface {
 	PauseBatchTasks(context.Context, *PauseBatchTasksRequest) (*PauseBatchTasksResponse, error)
 	// The following methods are for compatibility with the master-worker framework.
 	DispatchTask(context.Context, *DispatchTaskRequest) (*DispatchTaskResponse, error)
+	PreDispatchTask(context.Context, *PreDispatchTaskRequest) (*PreDispatchTaskResponse, error)
+	ConfirmDispatchTask(context.Context, *ConfirmDispatchTaskRequest) (*ConfirmDispatchTaskResponse, error)
 }
 
 // UnimplementedExecutorServer can be embedded to have forward compatible implementations.
@@ -681,6 +921,12 @@ func (*UnimplementedExecutorServer) PauseBatchTasks(ctx context.Context, req *Pa
 }
 func (*UnimplementedExecutorServer) DispatchTask(ctx context.Context, req *DispatchTaskRequest) (*DispatchTaskResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DispatchTask not implemented")
+}
+func (*UnimplementedExecutorServer) PreDispatchTask(ctx context.Context, req *PreDispatchTaskRequest) (*PreDispatchTaskResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method PreDispatchTask not implemented")
+}
+func (*UnimplementedExecutorServer) ConfirmDispatchTask(ctx context.Context, req *ConfirmDispatchTaskRequest) (*ConfirmDispatchTaskResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ConfirmDispatchTask not implemented")
 }
 
 func RegisterExecutorServer(s *grpc.Server, srv ExecutorServer) {
@@ -759,6 +1005,42 @@ func _Executor_DispatchTask_Handler(srv interface{}, ctx context.Context, dec fu
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Executor_PreDispatchTask_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PreDispatchTaskRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ExecutorServer).PreDispatchTask(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/pb.Executor/PreDispatchTask",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ExecutorServer).PreDispatchTask(ctx, req.(*PreDispatchTaskRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Executor_ConfirmDispatchTask_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ConfirmDispatchTaskRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ExecutorServer).ConfirmDispatchTask(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/pb.Executor/ConfirmDispatchTask",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ExecutorServer).ConfirmDispatchTask(ctx, req.(*ConfirmDispatchTaskRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 var _Executor_serviceDesc = grpc.ServiceDesc{
 	ServiceName: "pb.Executor",
 	HandlerType: (*ExecutorServer)(nil),
@@ -778,6 +1060,14 @@ var _Executor_serviceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "DispatchTask",
 			Handler:    _Executor_DispatchTask_Handler,
+		},
+		{
+			MethodName: "PreDispatchTask",
+			Handler:    _Executor_PreDispatchTask_Handler,
+		},
+		{
+			MethodName: "ConfirmDispatchTask",
+			Handler:    _Executor_ConfirmDispatchTask_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
@@ -879,6 +1169,152 @@ func (m *DispatchTaskResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 		i--
 		dAtA[i] = 0x8
 	}
+	return len(dAtA) - i, nil
+}
+
+func (m *PreDispatchTaskRequest) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *PreDispatchTaskRequest) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *PreDispatchTaskRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if len(m.RequestId) > 0 {
+		i -= len(m.RequestId)
+		copy(dAtA[i:], m.RequestId)
+		i = encodeVarintExecutor(dAtA, i, uint64(len(m.RequestId)))
+		i--
+		dAtA[i] = 0x32
+	}
+	if len(m.UserId) > 0 {
+		i -= len(m.UserId)
+		copy(dAtA[i:], m.UserId)
+		i = encodeVarintExecutor(dAtA, i, uint64(len(m.UserId)))
+		i--
+		dAtA[i] = 0x2a
+	}
+	if len(m.WorkerId) > 0 {
+		i -= len(m.WorkerId)
+		copy(dAtA[i:], m.WorkerId)
+		i = encodeVarintExecutor(dAtA, i, uint64(len(m.WorkerId)))
+		i--
+		dAtA[i] = 0x22
+	}
+	if len(m.MasterId) > 0 {
+		i -= len(m.MasterId)
+		copy(dAtA[i:], m.MasterId)
+		i = encodeVarintExecutor(dAtA, i, uint64(len(m.MasterId)))
+		i--
+		dAtA[i] = 0x1a
+	}
+	if len(m.TaskConfig) > 0 {
+		i -= len(m.TaskConfig)
+		copy(dAtA[i:], m.TaskConfig)
+		i = encodeVarintExecutor(dAtA, i, uint64(len(m.TaskConfig)))
+		i--
+		dAtA[i] = 0x12
+	}
+	if m.TaskTypeId != 0 {
+		i = encodeVarintExecutor(dAtA, i, uint64(m.TaskTypeId))
+		i--
+		dAtA[i] = 0x8
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *PreDispatchTaskResponse) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *PreDispatchTaskResponse) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *PreDispatchTaskResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	return len(dAtA) - i, nil
+}
+
+func (m *ConfirmDispatchTaskRequest) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *ConfirmDispatchTaskRequest) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *ConfirmDispatchTaskRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if len(m.RequestId) > 0 {
+		i -= len(m.RequestId)
+		copy(dAtA[i:], m.RequestId)
+		i = encodeVarintExecutor(dAtA, i, uint64(len(m.RequestId)))
+		i--
+		dAtA[i] = 0x12
+	}
+	if len(m.WorkerId) > 0 {
+		i -= len(m.WorkerId)
+		copy(dAtA[i:], m.WorkerId)
+		i = encodeVarintExecutor(dAtA, i, uint64(len(m.WorkerId)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *ConfirmDispatchTaskResponse) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *ConfirmDispatchTaskResponse) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *ConfirmDispatchTaskResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
 	return len(dAtA) - i, nil
 }
 
@@ -1242,6 +1678,73 @@ func (m *DispatchTaskResponse) Size() (n int) {
 	if l > 0 {
 		n += 1 + l + sovExecutor(uint64(l))
 	}
+	return n
+}
+
+func (m *PreDispatchTaskRequest) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.TaskTypeId != 0 {
+		n += 1 + sovExecutor(uint64(m.TaskTypeId))
+	}
+	l = len(m.TaskConfig)
+	if l > 0 {
+		n += 1 + l + sovExecutor(uint64(l))
+	}
+	l = len(m.MasterId)
+	if l > 0 {
+		n += 1 + l + sovExecutor(uint64(l))
+	}
+	l = len(m.WorkerId)
+	if l > 0 {
+		n += 1 + l + sovExecutor(uint64(l))
+	}
+	l = len(m.UserId)
+	if l > 0 {
+		n += 1 + l + sovExecutor(uint64(l))
+	}
+	l = len(m.RequestId)
+	if l > 0 {
+		n += 1 + l + sovExecutor(uint64(l))
+	}
+	return n
+}
+
+func (m *PreDispatchTaskResponse) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	return n
+}
+
+func (m *ConfirmDispatchTaskRequest) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = len(m.WorkerId)
+	if l > 0 {
+		n += 1 + l + sovExecutor(uint64(l))
+	}
+	l = len(m.RequestId)
+	if l > 0 {
+		n += 1 + l + sovExecutor(uint64(l))
+	}
+	return n
+}
+
+func (m *ConfirmDispatchTaskResponse) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
 	return n
 }
 
@@ -1681,6 +2184,451 @@ func (m *DispatchTaskResponse) Unmarshal(dAtA []byte) error {
 			}
 			m.WorkerId = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipExecutor(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthExecutor
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *PreDispatchTaskRequest) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowExecutor
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: PreDispatchTaskRequest: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: PreDispatchTaskRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field TaskTypeId", wireType)
+			}
+			m.TaskTypeId = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowExecutor
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.TaskTypeId |= int64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field TaskConfig", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowExecutor
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				byteLen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthExecutor
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex < 0 {
+				return ErrInvalidLengthExecutor
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.TaskConfig = append(m.TaskConfig[:0], dAtA[iNdEx:postIndex]...)
+			if m.TaskConfig == nil {
+				m.TaskConfig = []byte{}
+			}
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field MasterId", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowExecutor
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthExecutor
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthExecutor
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.MasterId = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 4:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field WorkerId", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowExecutor
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthExecutor
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthExecutor
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.WorkerId = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 5:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field UserId", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowExecutor
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthExecutor
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthExecutor
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.UserId = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 6:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field RequestId", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowExecutor
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthExecutor
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthExecutor
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.RequestId = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipExecutor(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthExecutor
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *PreDispatchTaskResponse) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowExecutor
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: PreDispatchTaskResponse: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: PreDispatchTaskResponse: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		default:
+			iNdEx = preIndex
+			skippy, err := skipExecutor(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthExecutor
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *ConfirmDispatchTaskRequest) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowExecutor
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: ConfirmDispatchTaskRequest: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: ConfirmDispatchTaskRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field WorkerId", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowExecutor
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthExecutor
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthExecutor
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.WorkerId = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field RequestId", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowExecutor
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthExecutor
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthExecutor
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.RequestId = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipExecutor(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthExecutor
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *ConfirmDispatchTaskResponse) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowExecutor
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: ConfirmDispatchTaskResponse: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: ConfirmDispatchTaskResponse: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
 		default:
 			iNdEx = preIndex
 			skippy, err := skipExecutor(dAtA[iNdEx:])

@@ -200,6 +200,14 @@ func (c *executorClient) DispatchTask(ctx context.Context, in *pb.DispatchTaskRe
 	panic("implement me")
 }
 
+func (c *executorClient) PreDispatchTask(ctx context.Context, in *pb.PreDispatchTaskRequest, opts ...grpc.CallOption) (*pb.PreDispatchTaskResponse, error) {
+	panic("implement me")
+}
+
+func (c *executorClient) ConfirmDispatchTask(ctx context.Context, in *pb.ConfirmDispatchTaskRequest, opts ...grpc.CallOption) (*pb.ConfirmDispatchTaskResponse, error) {
+	panic("implement me")
+}
+
 func (s *executorServerConn) Close() error {
 	return nil
 }
