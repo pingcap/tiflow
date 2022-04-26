@@ -979,4 +979,10 @@ var (
 		"host must be a URL or a host:port pair: %q",
 		errors.RFCCodeText("CDC:ErrInvalidHost"),
 	)
+
+	// UpStream error
+	ErrUpStreamNotFound = errors.Normalize(
+		"upStram not found, cluster-id: %d",
+		errors.RFCCodeText("CDC:ErrUpStreamNotFound"),
+	)
 )

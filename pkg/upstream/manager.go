@@ -15,95 +15,69 @@ package upstream
 
 import (
 	"context"
-	"strings"
 	"sync"
-	"time"
 
-	"github.com/benbjohnson/clock"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/pkg/config"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
 )
 
-const (
-	tickDuration = 10 * time.Second
-)
+// DefaultClusterID is a pseudo cluster for now. It will remove in the future.
+const DefaultClusterID = 0
 
-var UpStreamManager *Manager
+// UpManager is a global variable.
+var UpManager *Manager
 
+// Manager manages all upstream.
 type Manager struct {
-	ups sync.Map
-	c   clock.Clock
-	ctx context.Context
+	ups               sync.Map
+	defaultPDEnpoints []string
 }
 
 // NewManager create a new Manager.
-func NewManager(ctx context.Context) *Manager {
-	return &Manager{c: clock.New(), ctx: ctx}
+func NewManager(pdEnpoints []string) *Manager {
+	return &Manager{defaultPDEnpoints: pdEnpoints}
 }
 
-// Run will check all upStream in Manager periodly, if one upStream has not been
-// use more than 30 mintues, close it.
-func (m *Manager) Run(ctx context.Context) error {
-	ticker := m.c.Ticker(tickDuration)
-	for {
-		select {
-		case <-ctx.Done():
-			m.closeUpstreams()
-			log.Info("upstream manager exit")
-			return ctx.Err()
-		case <-ticker.C:
-			m.checkUpstreams()
-		}
-	}
-}
-
-// Get gets a upStream by clusterID, if this upStream does not exis, create it.
-func (m *Manager) Get(clusterID uint64) (*UpStream, error) {
-	if up, ok := m.ups.Load(clusterID); ok {
-		up.(*UpStream).hold()
-		up.(*UpStream).clearIdealCount()
-		return up.(*UpStream), nil
+// Get gets a upStream.
+// TODO: Get() will be changed to Get(clusterID uint64) in the future.
+func (m *Manager) Get() *Upstream {
+	if up, ok := m.ups.Load(DefaultClusterID); ok {
+		return up.(*Upstream)
 	}
 
-	// TODO: use changefeed's pd addr in the future
-	pdEndpoints := strings.Split(config.GetGlobalServerConfig().Debug.ServerPdAddr, ",")
+	pdEndpoints := m.defaultPDEnpoints
 	securityConfig := config.GetGlobalServerConfig().Security
-	up := newUpStream(pdEndpoints, securityConfig)
-	up.hold()
-	// 之后的实现需要检查错误
-	_ = up.Init(m.ctx)
-	m.ups.Store(clusterID, up)
-	return up, nil
+	up := newUpstream(DefaultClusterID, pdEndpoints, securityConfig)
+
+	m.ups.Store(DefaultClusterID, up)
+	return up
 }
 
-// Release releases a upStream by clusterID
-func (m *Manager) Release(clusterID uint64) {
-	if up, ok := m.ups.Load(clusterID); ok {
-		up.(*UpStream).unhold()
+// Run runs this manager.
+func (m *Manager) Run(ctx context.Context) error {
+	if up, ok := m.ups.Load(DefaultClusterID); ok {
+		err := up.(*Upstream).init(ctx)
+		if err != nil {
+			return errors.Trace(err)
+		}
+	} else {
+		return cerror.ErrUpStreamNotFound.GenWithStackByArgs(DefaultClusterID)
 	}
+
+	<-ctx.Done()
+	m.close()
+	log.Info("upstream manager exited", zap.Error(ctx.Err()))
+	return ctx.Err()
 }
 
-func (m *Manager) checkUpstreams() {
-	m.ups.Range(func(k, v interface{}) bool {
-		up := v.(*UpStream)
-		if !up.isHold() {
-			up.addIdealCount()
-		}
-		if up.shouldClose() {
-			up.close()
-			m.ups.Delete(k)
-		}
-		return true
-	})
-}
-
-func (m *Manager) closeUpstreams() {
+func (m *Manager) close() {
 	m.ups.Range(func(k, v interface{}) bool {
 		id := k.(uint64)
-		up := v.(*UpStream)
+		up := v.(*Upstream)
 		up.close()
-		log.Info("upStream closed", zap.Uint64("cluster id", id))
 		m.ups.Delete(id)
 		return true
 	})

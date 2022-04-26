@@ -40,11 +40,10 @@ import (
 )
 
 type changefeed struct {
-	id        model.ChangeFeedID
-	clusterID uint64
-	state     *orchestrator.ChangefeedReactorState
+	id    model.ChangeFeedID
+	state *orchestrator.ChangefeedReactorState
 
-	upStream         *upstream.UpStream
+	upStream         *upstream.Upstream
 	scheduler        scheduler
 	barriers         *barriers
 	feedStateManager *feedStateManager
@@ -82,12 +81,12 @@ type changefeed struct {
 	metricsChangefeedResolvedTsLagGauge   prometheus.Gauge
 	metricsChangefeedTickDuration         prometheus.Observer
 
-	newDDLPuller func(ctx cdcContext.Context, upStream *upstream.UpStream, startTs uint64) (DDLPuller, error)
+	newDDLPuller func(ctx cdcContext.Context, upStream *upstream.Upstream, startTs uint64) (DDLPuller, error)
 	newSink      func() DDLSink
 	newScheduler func(ctx cdcContext.Context, startTs uint64) (scheduler, error)
 }
 
-func newChangefeed(id model.ChangeFeedID, upStream *upstream.UpStream) *changefeed {
+func newChangefeed(id model.ChangeFeedID, upStream *upstream.Upstream) *changefeed {
 	c := &changefeed{
 		id: id,
 		// The scheduler will be created lazily.
@@ -107,8 +106,8 @@ func newChangefeed(id model.ChangeFeedID, upStream *upstream.UpStream) *changefe
 }
 
 func newChangefeed4Test(
-	id model.ChangeFeedID, upStream *upstream.UpStream,
-	newDDLPuller func(ctx cdcContext.Context, upStream *upstream.UpStream, startTs uint64) (DDLPuller, error),
+	id model.ChangeFeedID, upStream *upstream.Upstream,
+	newDDLPuller func(ctx cdcContext.Context, upStream *upstream.Upstream, startTs uint64) (DDLPuller, error),
 	newSink func() DDLSink,
 ) *changefeed {
 	c := newChangefeed(id, upStream)
@@ -119,7 +118,7 @@ func newChangefeed4Test(
 
 func (c *changefeed) Tick(ctx cdcContext.Context, state *orchestrator.ChangefeedReactorState, captures map[model.CaptureID]*model.CaptureInfo) {
 	// skip this Tick
-	if c.upStream.IsInitializing() || c.upStream.IsColse() {
+	if !c.upStream.IsNormal() {
 		return
 	}
 
@@ -319,7 +318,6 @@ LOOP:
 	if err != nil {
 		return errors.Trace(err)
 	}
-	c.clusterID = c.upStream.PDClient.GetClusterID(ctx)
 	cancelCtx, cancel := cdcContext.WithCancel(ctx)
 	c.cancel = cancel
 
@@ -633,7 +631,6 @@ func (c *changefeed) Close(ctx cdcContext.Context) {
 	startTime := time.Now()
 
 	c.releaseResources(ctx)
-	upstream.UpStreamManager.Release(c.clusterID)
 
 	costTime := time.Since(startTime)
 	if costTime > changefeedLogsWarnDuration {

@@ -60,7 +60,7 @@ type processor struct {
 	captureInfo  *model.CaptureInfo
 	changefeed   *orchestrator.ChangefeedReactorState
 
-	upStream *upstream.UpStream
+	upStream *upstream.Upstream
 
 	tables map[model.TableID]tablepipeline.TablePipeline
 
@@ -229,7 +229,7 @@ func (p *processor) GetCheckpoint() (checkpointTs, resolvedTs model.Ts) {
 }
 
 // newProcessor creates a new processor
-func newProcessor(ctx cdcContext.Context, upStream *upstream.UpStream) *processor {
+func newProcessor(ctx cdcContext.Context, upStream *upstream.Upstream) *processor {
 	changefeedID := ctx.ChangefeedVars().ID
 	conf := config.GetGlobalServerConfig()
 	p := &processor{
@@ -1118,7 +1118,6 @@ func (p *processor) Close() error {
 			zap.String("changefeed", p.changefeedID),
 			zap.Duration("duration", time.Since(start)))
 	}
-	upstream.UpStreamManager.Release(p.clusterID)
 	// mark tables share the same cdcContext with its original table, don't need to cancel
 	failpoint.Inject("processorStopDelay", nil)
 	resolvedTsGauge.DeleteLabelValues(p.changefeedID)

@@ -90,8 +90,6 @@ type Owner interface {
 }
 
 type ownerImpl struct {
-	// 从 clusterID 映射到 changefeeds map
-	// changefeeds map[uint64]map[model.ChangeFeedID]*changefeed
 	changefeeds map[model.ChangeFeedID]*changefeed
 	captures    map[model.CaptureID]*model.CaptureInfo
 
@@ -109,14 +107,15 @@ type ownerImpl struct {
 	//         as it is not a thread-safe value.
 	bootstrapped bool
 
-	newChangefeed func(id model.ChangeFeedID, upStream *upstream.UpStream) *changefeed
+	newChangefeed func(id model.ChangeFeedID, upStream *upstream.Upstream) *changefeed
+	// for unit test only
+	upStream4Test *upstream.Upstream
 }
 
 // NewOwner creates a new Owner
 func NewOwner() Owner {
 	return &ownerImpl{
-		changefeeds: make(map[model.ChangeFeedID]*changefeed),
-		// gcManager:     gc.NewManager(pdClient),
+		changefeeds:   make(map[model.ChangeFeedID]*changefeed),
 		lastTickTime:  time.Now(),
 		newChangefeed: newChangefeed,
 		logLimiter:    rate.NewLimiter(versionInconsistentLogRate, versionInconsistentLogRate),
@@ -125,14 +124,14 @@ func NewOwner() Owner {
 
 // NewOwner4Test creates a new Owner for test
 func NewOwner4Test(
-	newDDLPuller func(ctx cdcContext.Context, upStream *upstream.UpStream, startTs uint64) (DDLPuller, error),
+	newDDLPuller func(ctx cdcContext.Context, upStream *upstream.Upstream, startTs uint64) (DDLPuller, error),
 	newSink func() DDLSink,
 	pdClient pd.Client,
 ) Owner {
 	o := NewOwner().(*ownerImpl)
 	// Most tests do not need to test bootstrap.
 	o.bootstrapped = true
-	o.newChangefeed = func(id model.ChangeFeedID, upStream *upstream.UpStream) *changefeed {
+	o.newChangefeed = func(id model.ChangeFeedID, upStream *upstream.Upstream) *changefeed {
 		return newChangefeed4Test(id, upStream, newDDLPuller, newSink)
 	}
 	return o
@@ -190,8 +189,12 @@ func (o *ownerImpl) Tick(stdCtx context.Context, rawState orchestrator.ReactorSt
 		})
 		cfReactor, exist := o.changefeeds[changefeedID]
 		if !exist {
-			// 需要获取 clusterID 来划分 changefeed 所属集群
-			upStream, err := upstream.UpStreamManager.Get(0)
+			var upStream *upstream.Upstream
+			if o.upStream4Test != nil {
+				upStream = o.upStream4Test
+			} else {
+				upStream = upstream.UpManager.Get()
+			}
 			if err != nil {
 				return state, errors.Trace(err)
 			}
@@ -573,7 +576,6 @@ func (o *ownerImpl) pushOwnerJob(job *ownerJob) {
 	o.ownerJobQueue.queue = append(o.ownerJobQueue.queue, job)
 }
 
-// 这个函数的逻辑需要修改，owner 应该分别遍历不同上游的 changefeed，然后再计算
 func (o *ownerImpl) updateGCSafepoint(
 	ctx context.Context, state *orchestrator.GlobalReactorState,
 ) error {
@@ -598,25 +600,18 @@ func (o *ownerImpl) updateGCSafepoint(
 			forceUpdate = true
 		}
 	}
-	// 此处逻辑需要修改, 需要根据上游的不同来更新 safePoint
-	upStream, err := upstream.UpStreamManager.Get(0)
-	if err != nil {
-		return errors.Trace(err)
+	var upStream *upstream.Upstream
+	if o.upStream4Test != nil {
+		upStream = o.upStream4Test
+	} else {
+		upStream = upstream.UpManager.Get()
 	}
-	if upStream == nil {
-		log.Panic("upStream is nil")
-	}
-	if !upStream.IsInitialized() {
-		log.Panic("upStream not initialized")
-	}
-	if upStream.GCManager == nil {
-		log.Panic("gcManager is nil")
-	}
+
 	// When the changefeed starts up, CDC will do a snapshot read at
 	// (checkpointTs - 1) from TiKV, so (checkpointTs - 1) should be an upper
 	// bound for the GC safepoint.
 	gcSafepointUpperBound := minCheckpointTs - 1
-	err = upStream.GCManager.TryUpdateGCSafePoint(ctx, gcSafepointUpperBound, forceUpdate)
+	err := upStream.GCManager.TryUpdateGCSafePoint(ctx, gcSafepointUpperBound, forceUpdate)
 	return errors.Trace(err)
 }
 

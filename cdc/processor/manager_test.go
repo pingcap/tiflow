@@ -28,6 +28,7 @@ import (
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
+	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/stretchr/testify/require"
 )
 
@@ -43,9 +44,10 @@ func NewManager4Test(
 	createTablePipeline func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error),
 ) *Manager {
 	m := NewManager()
-	m.newProcessor = func(ctx cdcContext.Context) *processor {
+	m.newProcessor = func(ctx cdcContext.Context, upStream *upstream.Upstream) *processor {
 		return newProcessor4Test(ctx, t, createTablePipeline)
 	}
+	m.upStream4Test = upstream.NewUpstream4Test(nil)
 	return m
 }
 

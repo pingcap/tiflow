@@ -17,9 +17,9 @@ import (
 	"context"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
+	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tiflow/cdc/kv"
@@ -37,16 +37,14 @@ import (
 type status int
 
 const (
-	nonInit status = iota
-	initializing
-	initialized
-	closed
-
-	// 30 mins
-	idealTreshold = 180
+	ready status = iota
+	normal
 )
 
-type UpStream struct {
+// Upstream holds resources of a upstream, it can be shared by many changefeeds
+// and processors.
+type Upstream struct {
+	clusterID      uint64
 	pdEndpoints    []string
 	securityConfig *config.SecurityConfig
 
@@ -54,21 +52,99 @@ type UpStream struct {
 	KVStorage   tidbkv.Storage
 	GrpcPool    kv.GrpcPool
 	RegionCache *tikv.RegionCache
-	PDClock     *pdtime.PDClock
+	PDClock     pdtime.Clock
 	GCManager   gc.Manager
-	// 用来计算有多少个 changefeed 持有该资源，当持有数为 0 时，owner 负责关闭该资源。
-	hc int32
-	// 如果 idealCount 超过
-	idealCount int32
-	// 0 or 1, 1 indicate this upStream is initlized
+
+	wg     *sync.WaitGroup
 	status status
 }
 
-// close closes all resources
-func (up *UpStream) close() {
-	if up.status == closed {
-		return
+func newUpstream(clusterID uint64, pdEndpoints []string, securityConfig *config.SecurityConfig) *Upstream {
+	return &Upstream{
+		clusterID: clusterID, pdEndpoints: pdEndpoints,
+		securityConfig: securityConfig, status: ready,
 	}
+}
+
+// NewUpstream4Test new a upstream for unit test.
+func NewUpstream4Test(pdClient pd.Client) *Upstream {
+	pdClock := pdtime.NewClock4Test()
+	gcManager := gc.NewManager(pdClient, pdClock)
+	res := &Upstream{PDClient: pdClient, PDClock: pdClock, GCManager: gcManager}
+	res.status = normal
+	return res
+}
+
+func (up *Upstream) init(ctx context.Context) error {
+	log.Info("upstream is initializing")
+	var err error
+
+	grpcTLSOption, err := up.securityConfig.ToGRPCDialOption()
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	pdClient, err := pd.NewClientWithContext(
+		ctx, up.pdEndpoints, up.securityConfig.PDSecurityOption(),
+		pd.WithGRPCDialOptions(
+			grpcTLSOption,
+			grpc.WithBlock(),
+			grpc.WithConnectParams(grpc.ConnectParams{
+				Backoff: backoff.Config{
+					BaseDelay:  time.Second,
+					Multiplier: 1.1,
+					Jitter:     0.1,
+					MaxDelay:   3 * time.Second,
+				},
+				MinConnectTimeout: 3 * time.Second,
+			}),
+		))
+	if err != nil {
+		return errors.Trace(err)
+	}
+	up.PDClient = pdClient
+
+	// To not block CDC server startup, we need to warn instead of error
+	// when TiKV is incompatible.
+	errorTiKVIncompatible := false
+	err = version.CheckClusterVersion(ctx, up.PDClient, up.pdEndpoints, up.securityConfig, errorTiKVIncompatible)
+	if err != nil {
+		log.Error("init upstream error", zap.Error(err))
+	}
+
+	kvStore, err := kv.CreateTiStore(strings.Join(up.pdEndpoints, ","), up.securityConfig)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	up.KVStorage = kvStore
+
+	up.GrpcPool = kv.NewGrpcPoolImpl(ctx, up.securityConfig)
+	up.RegionCache = tikv.NewRegionCache(up.PDClient)
+
+	up.PDClock, err = pdtime.NewClock(ctx, up.PDClient)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	up.wg.Add(1)
+	go func() {
+		defer up.wg.Done()
+		up.PDClock.Run(ctx)
+	}()
+	up.wg.Add(1)
+	go func() {
+		defer up.wg.Done()
+		up.GrpcPool.RecycleConn(ctx)
+	}()
+
+	up.GCManager = gc.NewManager(up.PDClient, up.PDClock)
+	log.Info("upStream initialize successfully", zap.Uint64("clusterTD", up.clusterID))
+	up.status = normal
+	return nil
+}
+
+// close all resources
+func (up *Upstream) close() {
 	if up.PDClient != nil {
 		up.PDClient.Close()
 	}
@@ -89,129 +165,12 @@ func (up *UpStream) close() {
 	if up.PDClock != nil {
 		up.PDClock.Stop()
 	}
-	up.status = closed
+
+	up.wg.Wait()
+	log.Info("upStream closed", zap.Uint64("cluster id", up.clusterID))
 }
 
-func newUpStream(pdEndpoints []string, securityConfig *config.SecurityConfig) *UpStream {
-	return &UpStream{pdEndpoints: pdEndpoints, securityConfig: securityConfig, status: nonInit}
-}
-
-func (up *UpStream) IsInitialized() bool {
-	return up.status == initialized
-}
-
-func (up *UpStream) IsInitializing() bool {
-	return up.status == initializing
-}
-
-func (up *UpStream) IsColse() bool {
-	return up.status == closed
-}
-
-// 调用者需要定期检查 error chan 和 up 是否初始化完毕
-// 若出现 error 调用者需要调用 close 方法来释放可能已经初始化完毕的资源
-func (up *UpStream) Init(ctx context.Context) chan error {
-	errCh := make(chan error)
-	if up.IsInitialized() || up.IsInitializing() {
-		return errCh
-	}
-	// 以后需要改为异步初始化
-	up.init(ctx)
-	return errCh
-}
-
-func (up *UpStream) init(ctx context.Context) {
-	log.Info("init upstream")
-	var err error
-	wg := new(sync.WaitGroup)
-
-	grpcTLSOption, err := up.securityConfig.ToGRPCDialOption()
-	if err != nil {
-		log.Error("init upstream error", zap.Error(err))
-		return
-	}
-
-	pdClient, err := pd.NewClientWithContext(
-		ctx, up.pdEndpoints, up.securityConfig.PDSecurityOption(),
-		pd.WithGRPCDialOptions(
-			grpcTLSOption,
-			grpc.WithBlock(),
-			grpc.WithConnectParams(grpc.ConnectParams{
-				Backoff: backoff.Config{
-					BaseDelay:  time.Second,
-					Multiplier: 1.1,
-					Jitter:     0.1,
-					MaxDelay:   3 * time.Second,
-				},
-				MinConnectTimeout: 3 * time.Second,
-			}),
-		))
-	if err != nil {
-		log.Error("init upstream error", zap.Error(err))
-		return
-	}
-	up.PDClient = pdClient
-
-	// To not block CDC server startup, we need to warn instead of error
-	// when TiKV is incompatible.
-	errorTiKVIncompatible := false
-	err = version.CheckClusterVersion(ctx, up.PDClient, up.pdEndpoints, up.securityConfig, errorTiKVIncompatible)
-	if err != nil {
-		log.Error("init upstream error", zap.Error(err))
-	}
-
-	kvStore, err := kv.CreateTiStore(strings.Join(up.pdEndpoints, ","), up.securityConfig)
-	if err != nil {
-		log.Error("init upstream error", zap.Error(err))
-		return
-	}
-	up.KVStorage = kvStore
-
-	up.GrpcPool = kv.NewGrpcPoolImpl(ctx, up.securityConfig)
-	up.RegionCache = tikv.NewRegionCache(up.PDClient)
-
-	up.PDClock, err = pdtime.NewClock(ctx, up.PDClient)
-	if err != nil {
-		log.Error("init upstream error", zap.Error(err))
-		return
-	}
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		up.PDClock.Run(ctx)
-	}()
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		up.GrpcPool.RecycleConn(ctx)
-	}()
-
-	up.GCManager = gc.NewManager(up.PDClient, up.PDClock)
-	log.Warn("upStream gcManager created")
-	up.status = initialized
-}
-
-func (up *UpStream) hold() {
-	atomic.AddInt32(&up.hc, 1)
-}
-
-func (up *UpStream) unhold() {
-	atomic.AddInt32(&up.hc, -1)
-}
-
-func (up *UpStream) isHold() bool {
-	return atomic.LoadInt32(&up.hc) == 0
-}
-
-func (up *UpStream) addIdealCount() {
-	atomic.AddInt32(&up.idealCount, 1)
-}
-
-func (up *UpStream) clearIdealCount() {
-	atomic.StoreInt32(&up.idealCount, 0)
-}
-
-func (up *UpStream) shouldClose() bool {
-	return atomic.LoadInt32(&up.idealCount) >= idealTreshold
+// IsNormal return true if this upstream is normal.
+func (up *Upstream) IsNormal() bool {
+	return up.status == normal
 }

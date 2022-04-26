@@ -66,7 +66,7 @@ func (n *pullerNode) Init(ctx pipeline.NodeContext) error {
 	return n.start(ctx, nil, new(errgroup.Group), false, nil)
 }
 
-func (n *pullerNode) start(ctx pipeline.NodeContext, upStream *upstream.UpStream, wg *errgroup.Group, isActorMode bool, sorter *sorterNode) error {
+func (n *pullerNode) start(ctx pipeline.NodeContext, upStream *upstream.Upstream, wg *errgroup.Group, isActorMode bool, sorter *sorterNode) error {
 	n.wg = wg
 	ctxC, cancel := context.WithCancel(ctx)
 	ctxC = util.PutTableInfoInCtx(ctxC, n.tableID, n.tableName)

@@ -31,9 +31,6 @@ type DebugConfig struct {
 	// The default value is true.
 	EnableNewScheduler bool            `toml:"enable-new-scheduler" json:"enable-new-scheduler"`
 	Messages           *MessagesConfig `toml:"messages" json:"messages"`
-
-	EnableMultiUpStream bool   `toml:"enable-multi-up-stream" json:"enable-multi-up-stream"`
-	ServerPdAddr        string `toml:"server-pd-addr" json:"server-pd-addr"`
 }
 
 // ValidateAndAdjust validates and adjusts the debug configuration

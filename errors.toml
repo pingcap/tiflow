@@ -1056,6 +1056,11 @@ error = '''
 unmarshal failed
 '''
 
+["CDC:ErrUpStreamNotFound"]
+error = '''
+upStram not found, cluster-id: %d
+'''
+
 ["CDC:ErrUpdateServiceSafepointFailed"]
 error = '''
 updating service safepoint failed

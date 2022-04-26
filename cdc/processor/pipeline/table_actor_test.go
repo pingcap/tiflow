@@ -315,7 +315,7 @@ func TestNewTableActor(t *testing.T) {
 	startSorter = func(t *tableActor, ctx *actorNodeContext) error {
 		return nil
 	}
-	tbl, err := NewTableActor(cctx, nil, 1, "t1",
+	tbl, err := NewTableActor(cctx, nil, nil, 1, "t1",
 		&model.TableReplicaInfo{
 			StartTs:     0,
 			MarkTableID: 1,
@@ -331,7 +331,7 @@ func TestNewTableActor(t *testing.T) {
 		return errors.New("failed to start puller")
 	}
 
-	tbl, err = NewTableActor(cctx, nil, 1, "t1",
+	tbl, err = NewTableActor(cctx, nil, nil, 1, "t1",
 		&model.TableReplicaInfo{
 			StartTs:     0,
 			MarkTableID: 1,

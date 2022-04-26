@@ -50,7 +50,7 @@ type tableActor struct {
 	mb      actor.Mailbox[pmessage.Message]
 	router  *actor.Router[pmessage.Message]
 
-	upStream *upstream.UpStream
+	upStream *upstream.Upstream
 
 	// all goroutines in tableActor should be spawned from this wg
 	wg *errgroup.Group
@@ -95,7 +95,7 @@ type tableActor struct {
 
 // NewTableActor creates a table actor and starts it.
 func NewTableActor(cdcCtx cdcContext.Context,
-	upStream *upstream.UpStream,
+	upStream *upstream.Upstream,
 	mounter entry.Mounter,
 	tableID model.TableID,
 	tableName string,

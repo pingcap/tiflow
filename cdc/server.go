@@ -48,7 +48,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/p2p"
 	"github.com/pingcap/tiflow/pkg/tcpserver"
 	"github.com/pingcap/tiflow/pkg/upstream"
-	"github.com/pingcap/tiflow/pkg/version"
 	p2pProto "github.com/pingcap/tiflow/proto/p2p"
 )
 
@@ -117,27 +116,6 @@ func (s *Server) Run(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
-	// 此处的 pdClient 用来做版本检查，之后想办法去掉
-	pdClient, err := pd.NewClientWithContext(
-		ctx, s.pdEndpoints, conf.Security.PDSecurityOption(),
-		pd.WithGRPCDialOptions(
-			grpcTLSOption,
-			grpc.WithBlock(),
-			grpc.WithConnectParams(grpc.ConnectParams{
-				Backoff: backoff.Config{
-					BaseDelay:  time.Second,
-					Multiplier: 1.1,
-					Jitter:     0.1,
-					MaxDelay:   3 * time.Second,
-				},
-				MinConnectTimeout: 3 * time.Second,
-			}),
-		))
-	if err != nil {
-		return cerror.WrapError(cerror.ErrServerNewPDClient, err)
-	}
-	s.pdClient = pdClient
-
 	tlsConfig, err := conf.Security.ToTLSConfig()
 	if err != nil {
 		return errors.Trace(err)
@@ -178,38 +156,20 @@ func (s *Server) Run(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
-	// To not block CDC server startup, we need to warn instead of error
-	// when TiKV is incompatible.
-	errorTiKVIncompatible := false
-	err = version.CheckClusterVersion(ctx, s.pdClient, s.pdEndpoints, conf.Security, errorTiKVIncompatible)
-	if err != nil {
-		return err
-	}
-
 	kv.InitWorkerPool()
 
-	// kvStore, err := kv.CreateTiStore(strings.Join(s.pdEndpoints, ","), conf.Security)
-	// if err != nil {
-	// 	return errors.Trace(err)
-	// }
-	// defer func() {
-	// 	err := kvStore.Close()
-	// 	if err != nil {
-	// 		log.Warn("kv store close failed", zap.Error(err))
-	// 	}
-	// }()
-	// s.kvStorage = kvStore
-	// ctx = util.PutKVStorageInCtx(ctx, kvStore)
-
-	s.capture = capture.NewCapture(s.pdClient, s.kvStorage, s.etcdClient, s.grpcService)
+	s.capture = capture.NewCapture(s.etcdClient, s.grpcService)
 
 	err = s.startStatusHTTP(s.tcpServer.HTTP1Listener())
 	if err != nil {
 		return err
 	}
 
-	// 全局变量
-	upstream.UpStreamManager = upstream.NewManager(ctx)
+	// It is a global variable.
+	if upstream.UpManager == nil {
+		upstream.UpManager = upstream.NewManager(s.pdEndpoints)
+		_ = upstream.UpManager.Get()
+	}
 
 	return s.run(ctx)
 }
@@ -308,7 +268,7 @@ func (s *Server) run(ctx context.Context) (err error) {
 	})
 
 	wg.Go(func() error {
-		return upstream.UpStreamManager.Run(cctx)
+		return upstream.UpManager.Run(cctx)
 	})
 
 	conf := config.GetGlobalServerConfig()

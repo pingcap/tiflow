@@ -33,6 +33,7 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
+	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/stretchr/testify/require"
 )
 
@@ -44,7 +45,8 @@ func newProcessor4Test(
 	t *testing.T,
 	createTablePipeline func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error),
 ) *processor {
-	p := newProcessor(ctx)
+	upStream := upstream.NewUpstream4Test(nil)
+	p := newProcessor(ctx, upStream)
 	// disable new scheduler to pass old test cases
 	// TODO refactor the test cases so that new scheduler can be enabled
 	p.newSchedulerEnabled = false

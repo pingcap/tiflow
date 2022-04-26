@@ -66,7 +66,7 @@ type ddlPullerImpl struct {
 	changefeedID string
 }
 
-func newDDLPuller(ctx cdcContext.Context, upStream *upstream.UpStream, startTs uint64) (DDLPuller, error) {
+func newDDLPuller(ctx cdcContext.Context, upStream *upstream.Upstream, startTs uint64) (DDLPuller, error) {
 	f, err := filter.NewFilter(ctx.ChangefeedVars().Info.Config)
 	if err != nil {
 		return nil, errors.Trace(err)
