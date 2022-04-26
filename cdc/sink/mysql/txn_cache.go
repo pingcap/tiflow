@@ -34,9 +34,7 @@ func (t *txnsWithTheSameCommitTs) Append(row *model.RowChangedEvent) {
 			zap.Uint64("commitTs of txn", t.commitTs),
 			zap.Any("row", row))
 	}
-	if t.txns == nil {
-		t.txns = make([]*model.SingleTableTxn, 0)
-	}
+	
 	var txn *model.SingleTableTxn
 	if len(t.txns) == 0 || t.txns[len(t.txns)-1].StartTs < row.StartTs {
 		txn = &model.SingleTableTxn{
