@@ -48,8 +48,6 @@ func newCheckSink(c *check.C) *checkSink {
 	}
 }
 
-<<<<<<< HEAD:cdc/sink/manager_test.go
-=======
 // Init table sink resources
 func (c *checkSink) Init(tableID model.TableID) error {
 	return nil
@@ -59,7 +57,6 @@ func (c *checkSink) TryEmitRowChangedEvents(ctx context.Context, rows ...*model.
 	return true, nil
 }
 
->>>>>>> c6966a492 (sink(ticdc): refine sink interface and add init method (#5196)):cdc/sink/sink_manager_test.go
 func (c *checkSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
 	c.rowsMu.Lock()
 	defer c.rowsMu.Unlock()
@@ -261,19 +258,12 @@ func (s *managerSuite) TestManagerDestroyTableSink(c *check.C) {
 	errCh := make(chan error, 16)
 	manager := NewManager(ctx, newCheckSink(c), errCh, 0, "", "")
 	defer manager.Close(ctx)
-
-<<<<<<< HEAD:cdc/sink/manager_test.go
 	tableID := int64(49)
-	tableSink := manager.CreateTableSink(tableID, 100, redo.NewDisabledManager())
-	err := tableSink.EmitRowChangedEvents(ctx, &model.RowChangedEvent{
-		Table:    &model.TableName{TableID: tableID},
-=======
 	table := &model.TableName{TableID: int64(49)}
 	tableSink, err := manager.CreateTableSink(table.TableID, redo.NewDisabledManager())
 	c.Assert(err, check.IsNil)
 	err = tableSink.EmitRowChangedEvents(ctx, &model.RowChangedEvent{
 		Table:    table,
->>>>>>> c6966a492 (sink(ticdc): refine sink interface and add init method (#5196)):cdc/sink/sink_manager_test.go
 		CommitTs: uint64(110),
 	})
 	c.Assert(err, check.IsNil)
@@ -371,17 +361,10 @@ type errorSink struct {
 	*check.C
 }
 
-<<<<<<< HEAD:cdc/sink/manager_test.go
-=======
 func (e *errorSink) Init(_ model.TableID) error {
 	return nil
 }
 
-func (e *errorSink) TryEmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) (bool, error) {
-	return true, nil
-}
-
->>>>>>> c6966a492 (sink(ticdc): refine sink interface and add init method (#5196)):cdc/sink/sink_manager_test.go
 func (e *errorSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
 	return errors.New("error in emit row changed events")
 }

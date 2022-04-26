@@ -305,14 +305,6 @@ func (n *sorterNode) TryHandleDataMessage(ctx context.Context, msg pipeline.Mess
 	}
 }
 
-<<<<<<< HEAD
-=======
-func (n *sorterNode) updateBarrierTs(barrierTs model.Ts) {
-	if barrierTs > n.BarrierTs() {
-		atomic.StoreUint64(&n.barrierTs, barrierTs)
-	}
-}
-
 func (n *sorterNode) releaseResource(changefeedID string) {
 	defer tableMemoryHistogram.DeleteLabelValues(changefeedID)
 	// Since the flowController is implemented by `Cond`, it is not cancelable by a context
@@ -321,11 +313,9 @@ func (n *sorterNode) releaseResource(changefeedID string) {
 	n.flowController.Abort()
 }
 
->>>>>>> c6966a492 (sink(ticdc): refine sink interface and add init method (#5196))
 func (n *sorterNode) Destroy(ctx pipeline.NodeContext) error {
 	defer tableMemoryHistogram.DeleteLabelValues(ctx.ChangefeedVars().ID, ctx.GlobalVars().CaptureInfo.AdvertiseAddr)
 	n.cancel()
-<<<<<<< HEAD
 	if n.cleanRouter != nil {
 		// Clean up data when the table sorter is canceled.
 		err := n.cleanRouter.SendB(ctx, n.cleanID, n.cleanTask)
@@ -333,9 +323,7 @@ func (n *sorterNode) Destroy(ctx pipeline.NodeContext) error {
 			log.Warn("schedule table cleanup task failed", zap.Error(err))
 		}
 	}
-=======
 	n.releaseResource(ctx.ChangefeedVars().ID)
->>>>>>> c6966a492 (sink(ticdc): refine sink interface and add init method (#5196))
 	return n.eg.Wait()
 }
 

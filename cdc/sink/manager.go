@@ -16,11 +16,8 @@ package sink
 import (
 	"context"
 	"sync"
-<<<<<<< HEAD:cdc/sink/manager.go
 	"sync/atomic"
 	"time"
-=======
->>>>>>> c6966a492 (sink(ticdc): refine sink interface and add init method (#5196)):cdc/sink/sink_manager.go
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -34,19 +31,11 @@ import (
 // and backendSink.
 // Manager is thread-safe.
 type Manager struct {
-<<<<<<< HEAD:cdc/sink/manager.go
 	bufSink                *bufferSink
 	tableCheckpointTsMap   sync.Map
 	tableSinks             map[model.TableID]*tableSink
 	tableSinksMu           sync.Mutex
 	changeFeedCheckpointTs uint64
-
-	drawbackChan chan drawbackMsg
-=======
-	bufSink      *bufferSink
-	tableSinks   map[model.TableID]*tableSink
-	tableSinksMu sync.Mutex
->>>>>>> c6966a492 (sink(ticdc): refine sink interface and add init method (#5196)):cdc/sink/sink_manager.go
 
 	captureAddr               string
 	changefeedID              model.ChangeFeedID
@@ -58,60 +47,37 @@ func NewManager(
 	ctx context.Context, backendSink Sink, errCh chan error, checkpointTs model.Ts,
 	captureAddr string, changefeedID model.ChangeFeedID,
 ) *Manager {
-<<<<<<< HEAD:cdc/sink/manager.go
-	drawbackChan := make(chan drawbackMsg, 16)
-	bufSink := newBufferSink(backendSink, checkpointTs, drawbackChan)
-	go bufSink.run(ctx, errCh)
-=======
 	bufSink := newBufferSink(backendSink, checkpointTs)
-	go bufSink.run(ctx, changefeedID, errCh)
-	counter := metrics.TableSinkTotalRowsCountCounter.WithLabelValues(changefeedID)
->>>>>>> c6966a492 (sink(ticdc): refine sink interface and add init method (#5196)):cdc/sink/sink_manager.go
+	go bufSink.run(ctx, errCh)
 	return &Manager{
-		bufSink:                   bufSink,
-		tableSinks:                make(map[model.TableID]*tableSink),
-<<<<<<< HEAD:cdc/sink/manager.go
-		drawbackChan:              drawbackChan,
-		captureAddr:               captureAddr,
-=======
->>>>>>> c6966a492 (sink(ticdc): refine sink interface and add init method (#5196)):cdc/sink/sink_manager.go
+		bufSink:     bufSink,
+		tableSinks:  make(map[model.TableID]*tableSink),
+		captureAddr: captureAddr,
+
 		changefeedID:              changefeedID,
 		metricsTableSinkTotalRows: tableSinkTotalRowsCountCounter.WithLabelValues(captureAddr, changefeedID),
 	}
 }
 
 // CreateTableSink creates a table sink
-<<<<<<< HEAD:cdc/sink/manager.go
-func (m *Manager) CreateTableSink(tableID model.TableID, checkpointTs model.Ts, redoManager redo.LogManager) Sink {
-	m.tableSinksMu.Lock()
-	defer m.tableSinksMu.Unlock()
-	if _, exist := m.tableSinks[tableID]; exist {
-		log.Panic("the table sink already exists", zap.Uint64("tableID", uint64(tableID)))
-	}
-=======
 func (m *Manager) CreateTableSink(
 	tableID model.TableID,
 	redoManager redo.LogManager,
 ) (Sink, error) {
->>>>>>> c6966a492 (sink(ticdc): refine sink interface and add init method (#5196)):cdc/sink/sink_manager.go
+	m.tableSinksMu.Lock()
+	defer m.tableSinksMu.Unlock()
 	sink := &tableSink{
 		tableID:     tableID,
 		manager:     m,
 		buffer:      make([]*model.RowChangedEvent, 0, 128),
 		redoManager: redoManager,
 	}
-<<<<<<< HEAD:cdc/sink/manager.go
-=======
-
-	m.tableSinksMu.Lock()
-	defer m.tableSinksMu.Unlock()
 	if _, exist := m.tableSinks[tableID]; exist {
 		log.Panic("the table sink already exists", zap.Uint64("tableID", uint64(tableID)))
 	}
 	if err := sink.Init(tableID); err != nil {
 		return nil, errors.Trace(err)
 	}
->>>>>>> c6966a492 (sink(ticdc): refine sink interface and add init method (#5196)):cdc/sink/sink_manager.go
 	m.tableSinks[tableID] = sink
 	return sink, nil
 }

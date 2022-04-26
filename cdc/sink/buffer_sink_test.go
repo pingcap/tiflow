@@ -38,13 +38,8 @@ func TestFlushTable(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.TODO())
 	defer cancel()
-<<<<<<< HEAD
-	b := newBufferSink(newBlackHoleSink(ctx), 5, make(chan drawbackMsg))
-	go b.run(ctx, make(chan error))
-=======
 	b := newBufferSink(newBlackHoleSink(ctx), 5)
-	go b.run(ctx, "", make(chan error))
->>>>>>> c6966a492 (sink(ticdc): refine sink interface and add init method (#5196))
+	go b.run(ctx, make(chan error))
 
 	require.Equal(t, uint64(5), b.getTableCheckpointTs(2))
 	require.Nil(t, b.EmitRowChangedEvents(ctx))
@@ -87,13 +82,8 @@ func TestFlushFailed(t *testing.T) {
 	t.Parallel()
 
 	ctx, cancel := context.WithCancel(context.TODO())
-<<<<<<< HEAD
-	b := newBufferSink(newBlackHoleSink(ctx), 5, make(chan drawbackMsg))
-	go b.run(ctx, make(chan error))
-=======
 	b := newBufferSink(newBlackHoleSink(ctx), 5)
-	go b.run(ctx, "", make(chan error))
->>>>>>> c6966a492 (sink(ticdc): refine sink interface and add init method (#5196))
+	go b.run(ctx, make(chan error))
 
 	checkpoint, err := b.FlushRowChangedEvents(ctx, 3, 8)
 	require.True(t, checkpoint <= 8)

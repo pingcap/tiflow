@@ -963,8 +963,10 @@ func (p *processor) createTablePipelineImpl(ctx cdcContext.Context, tableID mode
 		tableNameStr = tableName.QuoteString()
 	}
 
-<<<<<<< HEAD
-	sink := p.sinkManager.CreateTableSink(tableID, replicaInfo.StartTs, p.redoManager)
+	sink, err := p.sinkManager.CreateTableSink(tableID, p.redoManager)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
 	table := tablepipeline.NewTablePipeline(
 		ctx,
 		p.mounter,
@@ -974,48 +976,6 @@ func (p *processor) createTablePipelineImpl(ctx cdcContext.Context, tableID mode
 		sink,
 		p.changefeed.Info.GetTargetTs(),
 	)
-	p.wg.Add(1)
-	p.metricSyncTableNumGauge.Inc()
-	go func() {
-		table.Wait()
-		p.wg.Done()
-		p.metricSyncTableNumGauge.Dec()
-		log.Debug("Table pipeline exited", zap.Int64("tableID", tableID),
-			cdcContext.ZapFieldChangefeed(ctx),
-			zap.String("name", table.Name()),
-			zap.Any("replicaInfo", replicaInfo))
-	}()
-=======
-	sink, err := p.sinkManager.CreateTableSink(tableID, p.redoManager)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	var table tablepipeline.TablePipeline
-	if config.GetGlobalServerConfig().Debug.EnableTableActor {
-		var err error
-		table, err = tablepipeline.NewTableActor(
-			ctx,
-			p.mounter,
-			tableID,
-			tableNameStr,
-			replicaInfo,
-			sink,
-			p.changefeed.Info.GetTargetTs())
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-	} else {
-		table = tablepipeline.NewTablePipeline(
-			ctx,
-			p.mounter,
-			tableID,
-			tableNameStr,
-			replicaInfo,
-			sink,
-			p.changefeed.Info.GetTargetTs(),
-		)
-	}
->>>>>>> c6966a492 (sink(ticdc): refine sink interface and add init method (#5196))
 
 	if p.redoManager.Enabled() {
 		p.redoManager.AddTable(tableID, replicaInfo.StartTs)

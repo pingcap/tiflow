@@ -160,8 +160,6 @@ func (b *bufferSink) runOnce(ctx context.Context, state *runState) (bool, error)
 	return true, nil
 }
 
-<<<<<<< HEAD
-=======
 // Init table sink resources
 func (b *bufferSink) Init(tableID model.TableID) error {
 	b.clearBufferedTableData(tableID)
@@ -180,15 +178,6 @@ func (b *bufferSink) clearBufferedTableData(tableID model.TableID) {
 	delete(b.buffer, tableID)
 }
 
-func (b *bufferSink) TryEmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) (bool, error) {
-	err := b.EmitRowChangedEvents(ctx, rows...)
-	if err != nil {
-		return false, err
-	}
-	return true, nil
-}
-
->>>>>>> c6966a492 (sink(ticdc): refine sink interface and add init method (#5196))
 func (b *bufferSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
 	select {
 	case <-ctx.Done():
