@@ -23,7 +23,7 @@ const (
 	defaultBackoffBaseInMs = 10.0
 	// defaultBackoffCapInMs is the max amount of duration, in Millisecond
 	defaultBackoffCapInMs   = 100.0
-	defaultMaxTries         = math.MaxInt64
+	defaultMaxTries         = math.MaxUint64
 	defaultMaxRetryDuration = time.Duration(0)
 )
 
@@ -69,7 +69,7 @@ func WithBackoffMaxDelay(delayInMs int64) Option {
 	}
 }
 
-// WithMaxTries configures maximum tries, if tries <= 0 "defaultMaxTries" will be used
+// WithMaxTries configures maximum tries, if tries is 0, 1 will be used
 func WithMaxTries(tries uint64) Option {
 	return func(o *retryOptions) {
 		if tries == 0 {

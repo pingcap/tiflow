@@ -27,7 +27,8 @@ import (
 // Operation is the action need to retry
 type Operation func() error
 
-// Do execute the specified function at most maxTries times until it succeeds or got canceled
+// Do execute the specified function.
+// By default, it retries infinitely until it succeeds or got canceled.
 func Do(ctx context.Context, operation Operation, opts ...Option) error {
 	retryOption := setOptions(opts...)
 	return run(ctx, operation, retryOption)
