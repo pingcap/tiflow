@@ -1,4 +1,4 @@
-// Copyright 2020 PingCAP, Inc.
+// Copyright 2022 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -11,15 +11,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package model
+package flowcontrol
 
-// SorterStatus is the state of the puller sorter
-type SorterStatus = int32
+import (
+	"testing"
 
-// SorterStatus of the puller sorter
-const (
-	SorterStatusWorking SorterStatus = iota
-	SorterStatusStopping
-	SorterStatusStopped
-	SorterStatusFinished
+	"github.com/pingcap/tiflow/pkg/leakutil"
 )
+
+func TestMain(m *testing.M) {
+	leakutil.SetUpLeakTest(m)
+}

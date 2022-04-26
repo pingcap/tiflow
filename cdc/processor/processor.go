@@ -294,7 +294,7 @@ func (p *processor) Tick(ctx cdcContext.Context, state *orchestrator.ChangefeedR
 		ID:   state.ID,
 		Info: state.Info,
 	})
-	_, err := p.tick(ctx, state)
+	err := p.tick(ctx, state)
 
 	costTime := time.Since(startTime)
 	if costTime > processorLogsWarnDuration {
@@ -336,33 +336,33 @@ func (p *processor) Tick(ctx cdcContext.Context, state *orchestrator.ChangefeedR
 	return state, cerror.ErrReactorFinished.GenWithStackByArgs()
 }
 
-func (p *processor) tick(ctx cdcContext.Context, state *orchestrator.ChangefeedReactorState) (nextState orchestrator.ReactorState, err error) {
+func (p *processor) tick(ctx cdcContext.Context, state *orchestrator.ChangefeedReactorState) error {
 	p.changefeed = state
 	if !p.checkChangefeedNormal() {
-		return nil, cerror.ErrAdminStopProcessor.GenWithStackByArgs()
+		return cerror.ErrAdminStopProcessor.GenWithStackByArgs()
 	}
 	// we should skip this tick after create a task position
 	if p.createTaskPosition() {
-		return p.changefeed, nil
+		return nil
 	}
 	if err := p.handleErrorCh(ctx); err != nil {
-		return nil, errors.Trace(err)
+		return errors.Trace(err)
 	}
 	if err := p.lazyInit(ctx); err != nil {
-		return nil, errors.Trace(err)
+		return errors.Trace(err)
 	}
 	// sink manager will return this checkpointTs to sink node if sink node resolvedTs flush failed
 	p.sinkManager.UpdateChangeFeedCheckpointTs(state.Info.GetCheckpointTs(state.Status))
 	if err := p.handleTableOperation(ctx); err != nil {
-		return nil, errors.Trace(err)
+		return errors.Trace(err)
 	}
 	if err := p.checkTablesNum(ctx); err != nil {
-		return nil, errors.Trace(err)
+		return errors.Trace(err)
 	}
 	if err := p.flushRedoLogMeta(ctx); err != nil {
-		return nil, err
+		return err
 	}
-	// it is no need to check the err here, because we will use
+	// it is no need to check the error here, because we will use
 	// local time when an error return, which is acceptable
 	pdTime, _ := p.upStream.PDClock.CurrentTime()
 
@@ -383,10 +383,10 @@ func (p *processor) tick(ctx cdcContext.Context, state *orchestrator.ChangefeedR
 
 	if p.newSchedulerEnabled {
 		if err := p.agent.Tick(ctx); err != nil {
-			return nil, errors.Trace(err)
+			return errors.Trace(err)
 		}
 	}
-	return p.changefeed, nil
+	return nil
 }
 
 // checkChangefeedNormal checks if the changefeed is runnable.
@@ -932,7 +932,67 @@ func (p *processor) addTable(ctx cdcContext.Context, tableID model.TableID, repl
 	return nil
 }
 
-func (p *processor) createTablePipelineImpl(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error) {
+func (p *processor) getTableName(ctx cdcContext.Context,
+	tableID model.TableID,
+	replicaInfo *model.TableReplicaInfo,
+) (string, error) {
+	// FIXME: using GetLastSnapshot here would be confused and get the wrong table name
+	// after `rename table` DDL, since `rename table` keeps the tableID unchanged
+	var tableName *model.TableName
+	retry.Do(ctx, func() error { //nolint:errcheck
+		if x, ok := p.schemaStorage.GetLastSnapshot().PhysicalTableByID(tableID); ok {
+			tableName = &x.TableName
+			return nil
+		}
+		return errors.Errorf("failed to get table name, fallback to use table id: %d",
+			tableID)
+	}, retry.WithBackoffBaseDelay(backoffBaseDelayInMs),
+		retry.WithMaxTries(maxTries),
+		retry.WithIsRetryableErr(cerror.IsRetryableError))
+	// TODO: remove this feature flag after table actor is GA
+	if p.changefeed.Info.Config.Cyclic.IsEnabled() {
+		// Retry to find mark table ID
+		var markTableID model.TableID
+		err := retry.Do(context.Background(), func() error {
+			if tableName == nil {
+				x, exist := p.schemaStorage.GetLastSnapshot().PhysicalTableByID(tableID)
+				if !exist {
+					return cerror.ErrProcessorTableNotFound.
+						GenWithStack("normal table(%s)", tableID)
+				}
+				tableName = &x.TableName
+			}
+			markTableSchemaName, markTableTableName := mark.GetMarkTableName(tableName.Schema, tableName.Table)
+			tableInfo, exist := p.schemaStorage.GetLastSnapshot().TableByName(markTableSchemaName, markTableTableName)
+			if !exist {
+				return cerror.ErrProcessorTableNotFound.
+					GenWithStack("normal table(%s) and mark table not match",
+						tableName.String())
+			}
+			markTableID = tableInfo.ID
+			return nil
+		}, retry.WithBackoffBaseDelay(50),
+			retry.WithBackoffMaxDelay(60*1000),
+			retry.WithMaxTries(20))
+		if err != nil {
+			return "", errors.Trace(err)
+		}
+		replicaInfo.MarkTableID = markTableID
+	}
+
+	if tableName == nil {
+		log.Warn("failed to get table name for metric")
+		return strconv.Itoa(int(tableID)), nil
+	}
+
+	return tableName.QuoteString(), nil
+}
+
+func (p *processor) createTablePipelineImpl(
+	ctx cdcContext.Context,
+	tableID model.TableID,
+	replicaInfo *model.TableReplicaInfo,
+) (tablepipeline.TablePipeline, error) {
 	ctx = cdcContext.WithErrorHandler(ctx, func(err error) error {
 		if cerror.ErrTableProcessorStoppedSafely.Equal(err) ||
 			errors.Cause(errors.Cause(err)) == context.Canceled {
@@ -942,47 +1002,9 @@ func (p *processor) createTablePipelineImpl(ctx cdcContext.Context, tableID mode
 		return nil
 	})
 
-	// FIXME: using GetLastSnapshot here would be confused and get the wrong table name
-	// after `rename table` DDL, since `rename table` keeps the tableID unchanged
-	var tableName *model.TableName
-	retry.Do(ctx, func() error { //nolint:errcheck
-		if name, ok := p.schemaStorage.GetLastSnapshot().GetTableNameByID(tableID); ok {
-			tableName = &name
-			return nil
-		}
-		return errors.Errorf("failed to get table name, fallback to use table id: %d", tableID)
-	}, retry.WithBackoffBaseDelay(backoffBaseDelayInMs), retry.WithMaxTries(maxTries), retry.WithIsRetryableErr(cerror.IsRetryableError))
-	// TODO: remove this feature flag after table actor is GA
-	if p.changefeed.Info.Config.Cyclic.IsEnabled() {
-		// Retry to find mark table ID
-		var markTableID model.TableID
-		err := retry.Do(context.Background(), func() error {
-			if tableName == nil {
-				name, exist := p.schemaStorage.GetLastSnapshot().GetTableNameByID(tableID)
-				if !exist {
-					return cerror.ErrProcessorTableNotFound.GenWithStack("normal table(%s)", tableID)
-				}
-				tableName = &name
-			}
-			markTableSchemaName, markTableTableName := mark.GetMarkTableName(tableName.Schema, tableName.Table)
-			tableInfo, exist := p.schemaStorage.GetLastSnapshot().GetTableByName(markTableSchemaName, markTableTableName)
-			if !exist {
-				return cerror.ErrProcessorTableNotFound.GenWithStack("normal table(%s) and mark table not match", tableName.String())
-			}
-			markTableID = tableInfo.ID
-			return nil
-		}, retry.WithBackoffBaseDelay(50), retry.WithBackoffMaxDelay(60*1000), retry.WithMaxTries(20))
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-		replicaInfo.MarkTableID = markTableID
-	}
-	var tableNameStr string
-	if tableName == nil {
-		log.Warn("failed to get table name for metric")
-		tableNameStr = strconv.Itoa(int(tableID))
-	} else {
-		tableNameStr = tableName.QuoteString()
+	tableName, err := p.getTableName(ctx, tableID, replicaInfo)
+	if err != nil {
+		return nil, errors.Trace(err)
 	}
 
 	sink, err := p.sinkManager.CreateTableSink(tableID, p.redoManager)
@@ -997,7 +1019,7 @@ func (p *processor) createTablePipelineImpl(ctx cdcContext.Context, tableID mode
 			p.upStream,
 			p.mounter,
 			tableID,
-			tableNameStr,
+			tableName,
 			replicaInfo,
 			sink,
 			p.changefeed.Info.GetTargetTs())
@@ -1009,7 +1031,7 @@ func (p *processor) createTablePipelineImpl(ctx cdcContext.Context, tableID mode
 			ctx,
 			p.mounter,
 			tableID,
-			tableNameStr,
+			tableName,
 			replicaInfo,
 			sink,
 			p.changefeed.Info.GetTargetTs(),

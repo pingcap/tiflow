@@ -101,7 +101,7 @@ func (m *Manager) destroyTableSink(ctx context.Context, tableID model.TableID) e
 	return m.bufSink.Barrier(ctx, tableID)
 }
 
-// UpdateChangeFeedCheckpointTs updates changedfeed level checkpointTs,
+// UpdateChangeFeedCheckpointTs updates changefeed level checkpointTs,
 // this value is used in getCheckpointTs func
 func (m *Manager) UpdateChangeFeedCheckpointTs(checkpointTs uint64) {
 	if m.bufSink != nil {

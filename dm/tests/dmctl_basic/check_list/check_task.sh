@@ -27,6 +27,14 @@ function check_task_not_pass() {
 		"\"result\": false" 1
 }
 
+function check_task_not_pass_with_message() {
+	task_conf=$1
+	error_message=$2
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"check-task $task_conf" \
+		"$error_message" 1
+}
+
 function check_task_error_database_config() {
 	task_conf=$1
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
