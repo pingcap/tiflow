@@ -214,7 +214,6 @@ func (v *DataValidator) reset() {
 func (v *DataValidator) initialize() error {
 	v.ctx, v.cancel = context.WithCancel(context.Background())
 	v.tctx = tcontext.NewContext(v.ctx, v.L)
-	// todo: enhance error handling
 	v.reset()
 
 	newCtx, cancelFunc := context.WithTimeout(v.ctx, unit.DefaultInitTimeout)
@@ -264,6 +263,17 @@ func (v *DataValidator) initialize() error {
 	return nil
 }
 
+func (v *DataValidator) routineWrapper(fn func()) {
+	defer func() {
+		if err := recover(); err != nil {
+			v.L.Error("panic", zap.Any("err", err))
+			v.sendError(terror.ErrValidatorPanic.Generate(err))
+		}
+	}()
+
+	fn()
+}
+
 func (v *DataValidator) Start(expect pb.Stage) {
 	v.Lock()
 	defer v.Unlock()
@@ -288,11 +298,17 @@ func (v *DataValidator) Start(expect pb.Stage) {
 	}
 
 	v.wg.Add(1)
-	go v.doValidate()
+	go v.routineWrapper(func() {
+		v.doValidate()
+	})
 
 	v.wg.Add(1)
-	go v.printStatusRoutine()
+	go v.routineWrapper(func() {
+		v.printStatusRoutine()
+	})
 
+	// routineWrapper relies on errorProcessRoutine to handle panic errors,
+	// so we do not wrap it.
 	v.errProcessWg.Add(1)
 	go v.errorProcessRoutine()
 
@@ -332,13 +348,15 @@ func (v *DataValidator) fillResult(err error, needLock bool) {
 		defer v.Unlock()
 	}
 
-	// todo: if error, validation is stopped( and cancelled), and we may receive a cancelled error.
-	// todo: do we need this cancel field?
+	// when met a non-retryable error, we'll call stopInner, then v.ctx is cancelled,
+	// don't set IsCanceled in this case
 	isCanceled := false
-	select {
-	case <-v.ctx.Done():
-		isCanceled = true
-	default:
+	if len(v.result.Errors) == 0 {
+		select {
+		case <-v.ctx.Done():
+			isCanceled = true
+		default:
+		}
 	}
 
 	var processErr *pb.ProcessError
@@ -353,11 +371,11 @@ func (v *DataValidator) fillResult(err error, needLock bool) {
 
 func (v *DataValidator) errorProcessRoutine() {
 	defer v.errProcessWg.Done()
+	// todo: what if this routine panic? we still need to drain v.errChan.
 	for err := range v.errChan {
 		v.fillResult(err, true)
 
 		if errors.Cause(err) != context.Canceled {
-			// todo: need a better way to handle err(auto resuming on some error, etc.)
 			v.stopInner()
 		}
 	}
@@ -594,10 +612,10 @@ func (v *DataValidator) startValidateWorkers() {
 	for i := 0; i < v.workerCnt; i++ {
 		worker := newValidateWorker(v, i)
 		v.workers[i] = worker
-		go func() {
-			v.wg.Done()
+		go v.routineWrapper(func() {
+			defer v.wg.Done()
 			worker.run()
-		}()
+		})
 	}
 
 	for _, tblChange := range v.loadedPendingChanges {
