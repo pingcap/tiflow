@@ -157,13 +157,11 @@ func (o *options) run(cmd *cobra.Command) error {
 	err = server.Run(ctx)
 	if err != nil && errors.Cause(err) != context.Canceled {
 		log.Error("run server", zap.String("error", errors.ErrorStack(err)))
-		return errors.Annotate(err, "run server")
 	}
 	server.Close()
 	unified.CleanUp()
 	log.Info("cdc server exits successfully")
-
-	return nil
+	return errors.Annotate(err, "run server")
 }
 
 // complete adapts from the command line args and config file to the data required.
