@@ -702,6 +702,8 @@ func (v *DataValidator) processRowsEvent(header *replication.EventHeader, ev *re
 		v.tableStatus[fullTableName] = state
 	}
 	if validateTbl.message != "" {
+		v.L.Warn("stop validating table", zap.String("table", sourceTable.String()),
+			zap.String("reason", validateTbl.message))
 		state.stopped(validateTbl.message)
 		return nil
 	}
