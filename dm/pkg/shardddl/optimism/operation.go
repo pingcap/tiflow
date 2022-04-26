@@ -174,7 +174,7 @@ func PutOperation(cli *clientv3.Client, skipDone bool, op Operation, infoModRev 
 // This function should often be called by DM-master.
 // k/k/k/k/v: task-name -> source-ID -> upstream-schema-name -> upstream-table-name -> shard DDL operation.
 func GetAllOperations(cli *clientv3.Client) (map[string]map[string]map[string]map[string]Operation, int64, error) {
-	respTxn, _, err := etcdutil.DoOpsInOneTxnWithRetry(cli, clientv3.OpGet(common.ShardDDLOptimismOperationKeyAdapter.Path(), clientv3.WithPrefix()))
+	respTxn, _, err := etcdutil.DoOpsInOneTxnRepeatableWithRetry(cli, clientv3.OpGet(common.ShardDDLOptimismOperationKeyAdapter.Path(), clientv3.WithPrefix()))
 	if err != nil {
 		return nil, 0, err
 	}
@@ -206,7 +206,7 @@ func GetAllOperations(cli *clientv3.Client) (map[string]map[string]map[string]ma
 // GetInfosOperationsByTask gets all shard DDL info and operation in etcd currently.
 // This function should often be called by DM-master.
 func GetInfosOperationsByTask(cli *clientv3.Client, task string) ([]Info, []Operation, int64, error) {
-	respTxn, _, err := etcdutil.DoOpsInOneTxnWithRetry(cli,
+	respTxn, _, err := etcdutil.DoOpsInOneTxnRepeatableWithRetry(cli,
 		clientv3.OpGet(common.ShardDDLOptimismInfoKeyAdapter.Encode(task), clientv3.WithPrefix()),
 		clientv3.OpGet(common.ShardDDLOptimismOperationKeyAdapter.Encode(task), clientv3.WithPrefix()))
 	if err != nil {
@@ -335,7 +335,7 @@ func CheckOperations(cli *clientv3.Client, source string, schemaMap map[string]s
 						return err
 					}
 					deleteOp := deleteOperationOp(info)
-					_, _, err = etcdutil.DoOpsInOneTxnWithRetry(cli, deleteOp)
+					_, _, err = etcdutil.DoOpsInOneTxnRepeatableWithRetry(cli, deleteOp)
 					if err != nil {
 						return err
 					}

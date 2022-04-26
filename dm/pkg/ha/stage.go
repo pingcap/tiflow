@@ -100,13 +100,13 @@ func PutRelayStage(cli *clientv3.Client, stages ...Stage) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	_, rev, err := etcdutil.DoOpsInOneTxnWithRetry(cli, ops...)
+	_, rev, err := etcdutil.DoOpsInOneTxnRepeatableWithRetry(cli, ops...)
 	return rev, err
 }
 
 // DeleteRelayStage deleted the relay stage of this source.
 func DeleteRelayStage(cli *clientv3.Client, source string) (int64, error) {
-	_, rev, err := etcdutil.DoOpsInOneTxnWithRetry(cli, deleteRelayStageOp(source))
+	_, rev, err := etcdutil.DoOpsInOneTxnRepeatableWithRetry(cli, deleteRelayStageOp(source))
 	return rev, err
 }
 
@@ -117,7 +117,7 @@ func PutSubTaskStage(cli *clientv3.Client, stages ...Stage) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	_, rev, err := etcdutil.DoOpsInOneTxnWithRetry(cli, ops...)
+	_, rev, err := etcdutil.DoOpsInOneTxnRepeatableWithRetry(cli, ops...)
 	return rev, err
 }
 
@@ -253,7 +253,7 @@ func GetSubTaskStageConfig(cli *clientv3.Client, source string) (map[string]Stag
 		validatorStageMap = make(map[string]Stage)
 		scm               = make(map[string]config.SubTaskConfig)
 	)
-	txnResp, rev, err := etcdutil.DoOpsInOneTxnWithRetry(cli,
+	txnResp, rev, err := etcdutil.DoOpsInOneTxnRepeatableWithRetry(cli,
 		clientv3.OpGet(common.StageSubTaskKeyAdapter.Encode(source), clientv3.WithPrefix()),
 		clientv3.OpGet(common.StageValidatorKeyAdapter.Encode(source), clientv3.WithPrefix()),
 		clientv3.OpGet(common.UpstreamSubTaskKeyAdapter.Encode(source), clientv3.WithPrefix()))
@@ -318,7 +318,7 @@ func WatchValidatorStage(ctx context.Context, cli *clientv3.Client,
 // DeleteSubTaskStage deletes the subtask stage.
 func DeleteSubTaskStage(cli *clientv3.Client, stages ...Stage) (int64, error) {
 	ops := deleteSubTaskStageOp(stages...)
-	_, rev, err := etcdutil.DoOpsInOneTxnWithRetry(cli, ops...)
+	_, rev, err := etcdutil.DoOpsInOneTxnRepeatableWithRetry(cli, ops...)
 	return rev, err
 }
 

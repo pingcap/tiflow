@@ -36,7 +36,7 @@ func PutRelayStageSourceBound(cli *clientv3.Client, stage Stage, bound SourceBou
 	ops := make([]clientv3.Op, 0, len(ops1)+len(op2))
 	ops = append(ops, ops1...)
 	ops = append(ops, op2...)
-	_, rev, err := etcdutil.DoOpsInOneTxnWithRetry(cli, ops...)
+	_, rev, err := etcdutil.DoOpsInOneTxnRepeatableWithRetry(cli, ops...)
 	return rev, err
 }
 
@@ -58,7 +58,7 @@ func PutRelayStageRelayConfigSourceBound(cli *clientv3.Client, stage Stage, boun
 	ops = append(ops, ops1...)
 	ops = append(ops, op2...)
 	ops = append(ops, op3)
-	_, rev, err := etcdutil.DoOpsInOneTxnWithRetry(cli, ops...)
+	_, rev, err := etcdutil.DoOpsInOneTxnRepeatableWithRetry(cli, ops...)
 	return rev, err
 }
 
@@ -77,7 +77,7 @@ func DeleteSourceCfgRelayStageSourceBound(cli *clientv3.Client, source, worker s
 	ops = append(ops, sourceBoundOp...)
 	ops = append(ops, lastBoundOp)
 
-	_, rev, err := etcdutil.DoOpsInOneTxnWithRetry(cli, ops...)
+	_, rev, err := etcdutil.DoOpsInOneTxnRepeatableWithRetry(cli, ops...)
 	return rev, err
 }
 
@@ -131,6 +131,6 @@ func operateSubtask(cli *clientv3.Client, evType mvccpb.Event_EventType, cfgs []
 	ops = append(ops, ops1...)
 	ops = append(ops, ops2...)
 	ops = append(ops, validatorOps...)
-	_, rev, err := etcdutil.DoOpsInOneTxnWithRetry(cli, ops...)
+	_, rev, err := etcdutil.DoOpsInOneTxnRepeatableWithRetry(cli, ops...)
 	return rev, err
 }

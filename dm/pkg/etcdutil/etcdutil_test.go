@@ -212,7 +212,7 @@ func (t *testEtcdUtilSuite) TestDoOpsInOneTxnWithRetry(c *C) {
 
 	cli := cluster.RandClient()
 
-	resp, rev1, err := DoOpsInOneTxnWithRetry(cli, clientv3.OpPut(key1, val1), clientv3.OpPut(key2, val2))
+	resp, rev1, err := DoOpsInOneTxnRepeatableWithRetry(cli, clientv3.OpPut(key1, val1), clientv3.OpPut(key2, val2))
 	c.Assert(err, IsNil)
 	c.Assert(rev1, Greater, int64(0))
 	c.Assert(resp.Responses, HasLen, 2)

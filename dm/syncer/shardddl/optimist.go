@@ -24,7 +24,6 @@ import (
 
 	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
 	"github.com/pingcap/tiflow/dm/pkg/log"
-	"github.com/pingcap/tiflow/dm/pkg/shardddl"
 	"github.com/pingcap/tiflow/dm/pkg/shardddl/optimism"
 )
 
@@ -161,10 +160,10 @@ func (o *Optimist) GetOperation(ctx context.Context, info optimism.Info, rev int
 // DoneOperation marks the shard DDL lock operation as done.
 func (o *Optimist) DoneOperation(op optimism.Operation) error {
 	op.Done = true
-	err := etcdutil.DoEtcdOpsWithRetry(o.cli, func() error {
+	err := etcdutil.DoEtcdOpsWithRepeatableRetry(o.cli, func() error {
 		_, _, err := optimism.PutOperation(o.cli, false, op, 0)
 		return err
-	}, shardddl.IsEtcdPutOpRetryable)
+	})
 	if err != nil {
 		return err
 	}

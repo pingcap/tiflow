@@ -69,7 +69,7 @@ func DeleteInfosOperations(cli *clientv3.Client, infos []Info, ops []Operation) 
 	for _, op := range ops {
 		opsDel = append(opsDel, deleteOperationOp(op))
 	}
-	_, rev, err := etcdutil.DoOpsInOneTxnWithRetry(cli, opsDel...)
+	_, rev, err := etcdutil.DoOpsInOneTxnRepeatableWithRetry(cli, opsDel...)
 	return rev, err
 }
 
@@ -79,6 +79,6 @@ func DeleteInfosOperationsByTask(cli *clientv3.Client, task string) (int64, erro
 	opsDel := make([]clientv3.Op, 0, 2)
 	opsDel = append(opsDel, clientv3.OpDelete(common.ShardDDLPessimismInfoKeyAdapter.Encode(task), clientv3.WithPrefix()))
 	opsDel = append(opsDel, clientv3.OpDelete(common.ShardDDLPessimismOperationKeyAdapter.Encode(task), clientv3.WithPrefix()))
-	_, rev, err := etcdutil.DoOpsInOneTxnWithRetry(cli, opsDel...)
+	_, rev, err := etcdutil.DoOpsInOneTxnRepeatableWithRetry(cli, opsDel...)
 	return rev, err
 }

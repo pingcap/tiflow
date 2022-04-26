@@ -170,7 +170,7 @@ func PutLoadTask(cli *clientv3.Client, task, sourceID, worker string) (int64, er
 	}
 	key := common.LoadTaskKeyAdapter.Encode(task, sourceID)
 
-	_, rev, err := etcdutil.DoOpsInOneTxnWithRetry(cli, clientv3.OpPut(key, string(data)))
+	_, rev, err := etcdutil.DoOpsInOneTxnRepeatableWithRetry(cli, clientv3.OpPut(key, string(data)))
 	if err != nil {
 		return 0, err
 	}
@@ -182,7 +182,7 @@ func PutLoadTask(cli *clientv3.Client, task, sourceID, worker string) (int64, er
 func DelLoadTask(cli *clientv3.Client, task, sourceID string) (int64, bool, error) {
 	key := common.LoadTaskKeyAdapter.Encode(task, sourceID)
 
-	resp, rev, err := etcdutil.DoOpsInOneTxnWithRetry(cli, clientv3.OpDelete(key))
+	resp, rev, err := etcdutil.DoOpsInOneTxnRepeatableWithRetry(cli, clientv3.OpDelete(key))
 	if err != nil {
 		return 0, false, err
 	}
@@ -193,7 +193,7 @@ func DelLoadTask(cli *clientv3.Client, task, sourceID string) (int64, bool, erro
 func DelLoadTaskByTask(cli *clientv3.Client, task string) (int64, bool, error) {
 	key := common.LoadTaskKeyAdapter.Encode(task)
 
-	resp, rev, err := etcdutil.DoOpsInOneTxnWithRetry(cli, clientv3.OpDelete(key, clientv3.WithPrefix()))
+	resp, rev, err := etcdutil.DoOpsInOneTxnRepeatableWithRetry(cli, clientv3.OpDelete(key, clientv3.WithPrefix()))
 	if err != nil {
 		return 0, false, err
 	}

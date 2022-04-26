@@ -99,13 +99,13 @@ func PutVersion(cli *clientv3.Client, ver Version) (int64, error) {
 		return 0, err
 	}
 	op := clientv3.OpPut(common.ClusterVersionKey, value)
-	_, rev, err := etcdutil.DoOpsInOneTxnWithRetry(cli, op)
+	_, rev, err := etcdutil.DoOpsInOneTxnRepeatableWithRetry(cli, op)
 	return rev, err
 }
 
 // GetVersion gets the version from etcd.
 func GetVersion(cli *clientv3.Client) (Version, int64, error) {
-	txnResp, rev, err := etcdutil.DoOpsInOneTxnWithRetry(cli, clientv3.OpGet(common.ClusterVersionKey))
+	txnResp, rev, err := etcdutil.DoOpsInOneTxnRepeatableWithRetry(cli, clientv3.OpGet(common.ClusterVersionKey))
 	if err != nil {
 		return Version{}, 0, err
 	}

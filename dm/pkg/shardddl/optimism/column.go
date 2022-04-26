@@ -28,7 +28,7 @@ func GetAllDroppedColumns(cli *clientv3.Client) (map[string]map[string]map[strin
 	var done DropColumnStage
 	colm := make(map[string]map[string]map[string]map[string]map[string]DropColumnStage)
 	op := clientv3.OpGet(common.ShardDDLOptimismDroppedColumnsKeyAdapter.Path(), clientv3.WithPrefix())
-	respTxn, rev, err := etcdutil.DoOpsInOneTxnWithRetry(cli, op)
+	respTxn, rev, err := etcdutil.DoOpsInOneTxnRepeatableWithRetry(cli, op)
 	if err != nil {
 		return colm, 0, err
 	}
@@ -81,7 +81,7 @@ func PutDroppedColumns(cli *clientv3.Client, lockID, source, upSchema, upTable s
 		ops = append(ops, op)
 	}
 
-	resp, rev, err := etcdutil.DoOpsInOneTxnWithRetry(cli, ops...)
+	resp, rev, err := etcdutil.DoOpsInOneTxnRepeatableWithRetry(cli, ops...)
 	if err != nil {
 		return 0, false, err
 	}
@@ -97,7 +97,7 @@ func DeleteDroppedColumns(cli *clientv3.Client, lockID string, columns ...string
 	for _, col := range columns {
 		ops = append(ops, deleteDroppedColumnByColumnOp(lockID, col))
 	}
-	resp, rev, err := etcdutil.DoOpsInOneTxnWithRetry(cli, ops...)
+	resp, rev, err := etcdutil.DoOpsInOneTxnRepeatableWithRetry(cli, ops...)
 	if err != nil {
 		return 0, false, err
 	}
@@ -153,7 +153,7 @@ func CheckColumns(cli *clientv3.Client, source string, schemaMap map[string]stri
 						opPut := clientv3.OpPut(key, string(val))
 						opDel := deleteSourceDroppedColumnsOp(lockID, columnName, source, schema, table)
 
-						_, _, err = etcdutil.DoOpsInOneTxnWithRetry(cli, opPut, opDel)
+						_, _, err = etcdutil.DoOpsInOneTxnRepeatableWithRetry(cli, opPut, opDel)
 						if err != nil {
 							return err
 						}

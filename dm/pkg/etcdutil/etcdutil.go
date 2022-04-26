@@ -25,6 +25,8 @@ import (
 	v3rpc "go.etcd.io/etcd/api/v3/v3rpc/rpctypes"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/zap"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -51,6 +53,15 @@ var etcdDefaultTxnRetryParam = retry.Params{
 	BackoffStrategy:    retry.Stable,
 	IsRetryableFn: func(retryTime int, err error) bool {
 		return errorutil.IsRetryableEtcdError(err)
+	},
+}
+
+var etcdSafeTxnRetryParam = retry.Params{
+	RetryCount:         etcdDefaultTxnRetryParam.RetryCount,
+	FirstRetryDuration: etcdDefaultTxnRetryParam.FirstRetryDuration,
+	BackoffStrategy:    etcdDefaultTxnRetryParam.BackoffStrategy,
+	IsRetryableFn: func(retryTime int, err error) bool {
+		return IsSafeRetryableError(err)
 	},
 }
 
@@ -86,13 +97,17 @@ func RemoveMember(client *clientv3.Client, id uint64) (*clientv3.MemberRemoveRes
 	return client.MemberRemove(ctx, id)
 }
 
-// DoOpsInOneTxnWithRetry do multiple etcd operations in one txn.
+// DoOpsInOneTxnRepeatableWithRetry do multiple etcd operations in one txn.
+// There are two situations that this function can be used:
+// 1. The operations are all read operations.
+// 2. The operations are all write operations, but write operations tolerate being written to etcd ** at least once **.
 // TODO: add unit test to test encountered an retryable error first but then recovered.
-func DoOpsInOneTxnWithRetry(cli *clientv3.Client, ops ...clientv3.Op) (*clientv3.TxnResponse, int64, error) {
+func DoOpsInOneTxnRepeatableWithRetry(cli *clientv3.Client, ops ...clientv3.Op) (*clientv3.TxnResponse, int64, error) {
 	ctx, cancel := context.WithTimeout(cli.Ctx(), DefaultRequestTimeout)
 	defer cancel()
 	tctx := tcontext.NewContext(ctx, log.L())
-	ret, _, err := etcdDefaultTxnStrategy.Apply(tctx, etcdDefaultTxnRetryParam, func(t *tcontext.Context) (ret interface{}, err error) {
+
+	ret, _, err := etcdDefaultTxnStrategy.Apply(tctx, etcdSafeTxnRetryParam, func(t *tcontext.Context) (ret interface{}, err error) {
 		resp, err := cli.Txn(ctx).Then(ops...).Commit()
 		if err != nil {
 			return nil, terror.ErrHAFailTxnOperation.Delegate(err, "txn commit failed")
@@ -130,20 +145,13 @@ func DoOpsInOneCmpsTxnWithRetry(cli *clientv3.Client, cmps []clientv3.Cmp, opsTh
 	return resp, resp.Header.Revision, nil
 }
 
-// DoEtcdOpsWithRetry do etcd operations function with retry
-func DoEtcdOpsWithRetry(cli *clientv3.Client, operateFunc func() error, isRetryable func(retryTime int, err error) bool) error {
+// DoEtcdOpsWithRepeatableRetry do etcd operations function with repeatable retry
+func DoEtcdOpsWithRepeatableRetry(cli *clientv3.Client, operateFunc func() error) error {
 	ctx, cancel := context.WithTimeout(cli.Ctx(), DefaultRequestTimeout)
 	defer cancel()
 	tctx := tcontext.NewContext(ctx, log.L())
 
-	etcdRetryParam := retry.Params{
-		RetryCount:         etcdDefaultTxnRetryParam.RetryCount,
-		FirstRetryDuration: etcdDefaultTxnRetryParam.FirstRetryDuration,
-		BackoffStrategy:    etcdDefaultTxnRetryParam.BackoffStrategy,
-		IsRetryableFn:      isRetryable,
-	}
-
-	_, _, err := etcdDefaultTxnStrategy.Apply(tctx, etcdRetryParam, func(t *tcontext.Context) (ret interface{}, err error) {
+	_, _, err := etcdDefaultTxnStrategy.Apply(tctx, etcdSafeTxnRetryParam, func(t *tcontext.Context) (ret interface{}, err error) {
 		return nil, operateFunc()
 	})
 	return err
@@ -167,4 +175,19 @@ func IsLimitedRetryableError(err error) bool {
 	default:
 		return false
 	}
+}
+
+// IsSafeRetryableError returns true if the etcd error is retryable to write ** repeatable **.
+// https://github.com/etcd-io/etcd/blob/v3.5.2/client/v3/retry.go#L53
+func IsSafeRetryableError(err error) bool {
+	err = errors.Cause(err)
+	if IsRetryableError(err) {
+		return true
+	}
+	eErr := v3rpc.Error(err)
+	if serverErr, ok := eErr.(v3rpc.EtcdError); ok && serverErr.Code() != codes.Unavailable {
+		return false
+	}
+	// only retry if unavailable
+	return status.Code(err) == codes.Unavailable
 }

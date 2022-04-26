@@ -266,7 +266,7 @@ func upgradeToVer3(ctx context.Context, cli *clientv3.Client) error {
 		// delete old key to provide idempotence
 		ops = append(ops, clientv3.OpDelete(pair.old.Path(), clientv3.WithPrefix()))
 	}
-	_, _, err := etcdutil.DoOpsInOneTxnWithRetry(cli, ops...)
+	_, _, err := etcdutil.DoOpsInOneTxnRepeatableWithRetry(cli, ops...)
 	return err
 }
 
