@@ -192,7 +192,7 @@ type fileSink struct {
 	ddlEncoder codec.EventBatchEncoder
 }
 
-func (s *fileSink) Init(_ model.TableID) error {
+func (f *fileSink) Init(_ model.TableID) error {
 	return nil
 }
 
