@@ -206,11 +206,9 @@ func (n *sinkNode) emitRowToSink(ctx context.Context, event *model.PolymorphicEv
 			}
 			// NOTICE: Please do not change the order, the delete event always comes before the insert event.
 			return n.sink.EmitRowChangedEvents(ctx, deleteEvent.Row, insertEvent.Row)
-		} else {
-			// If the handle key columns are not updated, PreColumns is directly ignored.
-			event.Row.PreColumns = nil
-
 		}
+		// If the handle key columns are not updated, PreColumns is directly ignored.
+		event.Row.PreColumns = nil
 	}
 
 	return n.sink.EmitRowChangedEvents(ctx, event.Row)
