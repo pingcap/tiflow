@@ -110,9 +110,17 @@ func (b *binlogPoint) rollback(schemaTracker *schema.Tracker, schema string) (is
 	defer b.Unlock()
 
 	// set suffix to 0 when we meet error
+<<<<<<< HEAD
 	b.flushedLocation.ResetSuffix()
 	b.location = b.flushedLocation
 	if b.ti == nil {
+=======
+	b.flushedPoint.location.ResetSuffix()
+	b.savedPoint.location = b.flushedPoint.location
+	if b.savedPoint.ti == nil {
+		// TODO: if we forget to save table info for table checkpoint, this is also nil!
+		// And table checkpoint rollback to flushed point may also be nil!
+>>>>>>> 7744c05a7 (syncer(dm): save table checkpoint after a DDL is filtered (#5273))
 		return // for global checkpoint, no need to rollback the schema.
 	}
 

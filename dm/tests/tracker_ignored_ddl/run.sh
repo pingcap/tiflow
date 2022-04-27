@@ -27,10 +27,17 @@ function run() {
 	check_not_contains "ignore_1"
 	echo "increment1 check success"
 
+	# a not ignored DDL to trigger a checkpoint flush
+	run_sql_source1 "create table tracker_ignored_ddl.test (c int primary key);"
+
 	run_sql_file $cur/data/db.increment2.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
 		"Error 1054: Unknown column" 1
+
+	# force a resume, the error is still there, but we want to check https://github.com/pingcap/tiflow/issues/5272#issuecomment-1109283279
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"resume-task test"
 
 	# need operate tidb
 	run_sql_tidb "alter table $TEST_NAME.t1 add column ignore_1 int;"
@@ -39,7 +46,7 @@ function run() {
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"resume-task test" \
 		"\"result\": true" 2
-	sleep 1
+	sleep 3
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
 		"\"stage\": \"Running\"" 1
