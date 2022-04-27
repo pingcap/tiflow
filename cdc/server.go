@@ -26,9 +26,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/prometheus/client_golang/prometheus"
-	pd "github.com/tikv/pd/client"
 	"go.etcd.io/etcd/client/pkg/v3/logutil"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/zap"
@@ -64,9 +62,7 @@ type Server struct {
 	tcpServer    tcpserver.TCPServer
 	grpcService  *p2p.ServerWrapper
 	statusServer *http.Server
-	pdClient     pd.Client
 	etcdClient   *etcd.CDCEtcdClient
-	kvStorage    tidbkv.Storage
 	pdEndpoints  []string
 }
 

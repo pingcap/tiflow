@@ -30,9 +30,11 @@ type Manager struct {
 }
 
 // NewManager creates a new Manager and initlizes a defaultUpstream.
-func NewManager(ctx context.Context, pdEnpoints []string) (*Manager, error) {
+// ctx is used to initialize the default upstream and defaultPDEndpoints
+// is used to create the default upstream.
+func NewManager(ctx context.Context, defaultPDEndpoints []string) (*Manager, error) {
 	securityConfig := config.GetGlobalServerConfig().Security
-	up := newUpstream(defaultClusterID, pdEnpoints, securityConfig)
+	up := newUpstream(defaultClusterID, defaultPDEndpoints, securityConfig)
 	err := up.init(ctx)
 	if err != nil {
 		return nil, errors.Trace(err)
