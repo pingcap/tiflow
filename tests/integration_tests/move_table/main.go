@@ -277,9 +277,10 @@ func queryProcessor(
 		return nil, errors.Trace(err)
 	}
 
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
 	requestURL := fmt.Sprintf("http://%s/api/v1/processors/%s/%s", apiEndpoint, changefeed, captureID)
-	httpClient.Timeout = 3 * time.Second
-	resp, err := httpClient.Get(requestURL)
+	resp, err := httpClient.Get(ctx, requestURL)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
