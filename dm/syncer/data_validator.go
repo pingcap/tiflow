@@ -186,7 +186,6 @@ func NewContinuousDataValidator(cfg *config.SubTaskConfig, syncerObj *Syncer, st
 
 	v.workerCnt = cfg.ValidatorCfg.WorkerCount
 	v.processedRowCounts = make([]atomic.Int64, rowChangeTypeCount)
-	v.workers = make([]*validateWorker, v.workerCnt)
 	v.validateInterval = validationInterval
 	v.persistHelper = newValidatorCheckpointHelper(v)
 	v.tableStatus = make(map[string]*tableValidateStatus)
@@ -588,6 +587,7 @@ func (v *DataValidator) Stage() pb.Stage {
 
 func (v *DataValidator) startValidateWorkers() {
 	v.wg.Add(v.workerCnt)
+	v.workers = make([]*validateWorker, v.workerCnt)
 	for i := 0; i < v.workerCnt; i++ {
 		worker := newValidateWorker(v, i)
 		v.workers[i] = worker
