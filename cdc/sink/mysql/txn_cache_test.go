@@ -31,131 +31,233 @@ func TestSplitResolvedTxn(test *testing.T) {
 		input         []*model.RowChangedEvent
 		resolvedTsMap map[model.TableID]uint64
 		expected      map[model.TableID][]*model.SingleTableTxn
-	}{{{ // Testing basic transaction collocation, no txns with the same commitTs
-		input: []*model.RowChangedEvent{
-			{StartTs: 1, CommitTs: 5, Table: &model.TableName{TableID: 1}},
-			{StartTs: 1, CommitTs: 5, Table: &model.TableName{TableID: 1}},
-			{StartTs: 1, CommitTs: 6, Table: &model.TableName{TableID: 2}},
-			{StartTs: 1, CommitTs: 7, Table: &model.TableName{TableID: 3}},
-			{StartTs: 1, CommitTs: 8, Table: &model.TableName{TableID: 1}},
-			{StartTs: 1, CommitTs: 11, Table: &model.TableName{TableID: 1}},
-			{StartTs: 1, CommitTs: 12, Table: &model.TableName{TableID: 2}},
+	}{
+		{ // Testing basic transaction collocation, no txns with the same commitTs
+			{
+				input: []*model.RowChangedEvent{
+					{StartTs: 1, CommitTs: 5, Table: &model.TableName{TableID: 1}},
+					{StartTs: 1, CommitTs: 5, Table: &model.TableName{TableID: 1}},
+					{StartTs: 1, CommitTs: 6, Table: &model.TableName{TableID: 2}},
+					{StartTs: 1, CommitTs: 7, Table: &model.TableName{TableID: 3}},
+					{StartTs: 1, CommitTs: 8, Table: &model.TableName{TableID: 1}},
+					{StartTs: 1, CommitTs: 11, Table: &model.TableName{TableID: 1}},
+					{StartTs: 1, CommitTs: 12, Table: &model.TableName{TableID: 2}},
+				},
+				resolvedTsMap: map[model.TableID]uint64{
+					1: uint64(6),
+					2: uint64(6),
+				},
+				expected: map[model.TableID][]*model.SingleTableTxn{
+					1: {{
+						Table:    &model.TableName{TableID: 1},
+						StartTs:  1,
+						CommitTs: 5,
+						Rows: []*model.RowChangedEvent{
+							{StartTs: 1, CommitTs: 5, Table: &model.TableName{TableID: 1}},
+							{StartTs: 1, CommitTs: 5, Table: &model.TableName{TableID: 1}},
+						},
+					}},
+					2: {{
+						Table: &model.TableName{TableID: 2}, StartTs: 1, CommitTs: 6,
+						Rows: []*model.RowChangedEvent{
+							{StartTs: 1, CommitTs: 6, Table: &model.TableName{TableID: 2}},
+						},
+					}},
+				},
+			}, {
+				input: []*model.RowChangedEvent{
+					{StartTs: 1, CommitTs: 8, Table: &model.TableName{TableID: 3}},
+				},
+				resolvedTsMap: map[model.TableID]uint64{
+					1: uint64(13),
+					2: uint64(13),
+					3: uint64(13),
+				},
+				expected: map[model.TableID][]*model.SingleTableTxn{
+					1: {
+						{
+							Table:    &model.TableName{TableID: 1},
+							StartTs:  1,
+							CommitTs: 8,
+							Rows: []*model.RowChangedEvent{
+								{StartTs: 1, CommitTs: 8, Table: &model.TableName{TableID: 1}},
+							},
+						},
+						{
+							Table:    &model.TableName{TableID: 1},
+							StartTs:  1,
+							CommitTs: 11,
+							Rows: []*model.RowChangedEvent{
+								{StartTs: 1, CommitTs: 11, Table: &model.TableName{TableID: 1}},
+							},
+						},
+					},
+					2: {
+						{
+							Table:   &model.TableName{TableID: 2},
+							StartTs: 1, CommitTs: 12,
+							Rows: []*model.RowChangedEvent{
+								{StartTs: 1, CommitTs: 12, Table: &model.TableName{TableID: 2}},
+							},
+						},
+					},
+					3: {
+						{
+							Table:    &model.TableName{TableID: 3},
+							StartTs:  1,
+							CommitTs: 7,
+							Rows: []*model.RowChangedEvent{
+								{StartTs: 1, CommitTs: 7, Table: &model.TableName{TableID: 3}},
+							},
+						},
+						{
+							Table:    &model.TableName{TableID: 3},
+							StartTs:  1,
+							CommitTs: 8,
+							Rows: []*model.RowChangedEvent{
+								{StartTs: 1, CommitTs: 8, Table: &model.TableName{TableID: 3}},
+							},
+						},
+					},
+				},
+			},
 		},
-		resolvedTsMap: map[model.TableID]uint64{
-			1: uint64(6),
-			2: uint64(6),
+		{ // Testing the short circuit path
+			{
+				input: []*model.RowChangedEvent{},
+				resolvedTsMap: map[model.TableID]uint64{
+					1: uint64(13),
+					2: uint64(13),
+					3: uint64(13),
+				},
+				expected: nil,
+			},
+			{
+				input: []*model.RowChangedEvent{
+					{StartTs: 1, CommitTs: 11, Table: &model.TableName{TableID: 1}},
+					{StartTs: 1, CommitTs: 12, Table: &model.TableName{TableID: 1}},
+					{StartTs: 1, CommitTs: 13, Table: &model.TableName{TableID: 2}},
+				},
+				resolvedTsMap: map[model.TableID]uint64{
+					1: uint64(6),
+					2: uint64(6),
+				},
+				expected: map[model.TableID][]*model.SingleTableTxn{},
+			},
 		},
-		expected: map[model.TableID][]*model.SingleTableTxn{
-			1: {{Table: &model.TableName{TableID: 1}, StartTs: 1, CommitTs: 5, Rows: []*model.RowChangedEvent{
-				{StartTs: 1, CommitTs: 5, Table: &model.TableName{TableID: 1}},
-				{StartTs: 1, CommitTs: 5, Table: &model.TableName{TableID: 1}},
-			}}},
-			2: {{Table: &model.TableName{TableID: 2}, StartTs: 1, CommitTs: 6, Rows: []*model.RowChangedEvent{
-				{StartTs: 1, CommitTs: 6, Table: &model.TableName{TableID: 2}},
-			}}},
+		{ // Testing the txns with the same commitTs
+			{
+				input: []*model.RowChangedEvent{
+					{StartTs: 1, CommitTs: 5, Table: &model.TableName{TableID: 1}},
+					{StartTs: 1, CommitTs: 8, Table: &model.TableName{TableID: 1}},
+					{StartTs: 1, CommitTs: 6, Table: &model.TableName{TableID: 2}},
+					{StartTs: 1, CommitTs: 6, Table: &model.TableName{TableID: 2}},
+					{StartTs: 1, CommitTs: 8, Table: &model.TableName{TableID: 1}},
+					{StartTs: 1, CommitTs: 8, Table: &model.TableName{TableID: 1}},
+					{StartTs: 2, CommitTs: 8, Table: &model.TableName{TableID: 1}},
+					{StartTs: 2, CommitTs: 6, Table: &model.TableName{TableID: 2}},
+					{StartTs: 1, CommitTs: 7, Table: &model.TableName{TableID: 2}},
+				},
+				resolvedTsMap: map[model.TableID]uint64{
+					1: uint64(6),
+					2: uint64(6),
+				},
+				expected: map[model.TableID][]*model.SingleTableTxn{
+					1: {
+						{
+							Table:    &model.TableName{TableID: 1},
+							StartTs:  1,
+							CommitTs: 5,
+							Rows: []*model.RowChangedEvent{
+								{StartTs: 1, CommitTs: 5, Table: &model.TableName{TableID: 1}},
+							},
+						},
+					},
+					2: {
+						{
+							Table:    &model.TableName{TableID: 2},
+							StartTs:  1,
+							CommitTs: 6,
+							Rows: []*model.RowChangedEvent{
+								{StartTs: 1, CommitTs: 6, Table: &model.TableName{TableID: 2}},
+								{StartTs: 1, CommitTs: 6, Table: &model.TableName{TableID: 2}},
+							},
+						}, {
+							Table:    &model.TableName{TableID: 2},
+							StartTs:  2,
+							CommitTs: 6,
+							Rows: []*model.RowChangedEvent{
+								{StartTs: 2, CommitTs: 6, Table: &model.TableName{TableID: 2}},
+							},
+						},
+					},
+				},
+			},
+			{
+				input: []*model.RowChangedEvent{
+					{StartTs: 1, CommitTs: 7, Table: &model.TableName{TableID: 2}},
+					{StartTs: 2, CommitTs: 7, Table: &model.TableName{TableID: 2}},
+					{StartTs: 2, CommitTs: 8, Table: &model.TableName{TableID: 1}},
+					{StartTs: 2, CommitTs: 8, Table: &model.TableName{TableID: 1}},
+					{StartTs: 1, CommitTs: 9, Table: &model.TableName{TableID: 1}},
+				},
+				resolvedTsMap: map[model.TableID]uint64{
+					1: uint64(13),
+					2: uint64(13),
+				},
+				expected: map[model.TableID][]*model.SingleTableTxn{
+					1: {
+						{
+							Table:    &model.TableName{TableID: 1},
+							StartTs:  1,
+							CommitTs: 8,
+							Rows: []*model.RowChangedEvent{
+								{StartTs: 1, CommitTs: 8, Table: &model.TableName{TableID: 1}},
+								{StartTs: 1, CommitTs: 8, Table: &model.TableName{TableID: 1}},
+								{StartTs: 1, CommitTs: 8, Table: &model.TableName{TableID: 1}},
+							},
+						},
+						{
+							Table:    &model.TableName{TableID: 1},
+							StartTs:  2,
+							CommitTs: 8,
+							Rows: []*model.RowChangedEvent{
+								{StartTs: 2, CommitTs: 8, Table: &model.TableName{TableID: 1}},
+								{StartTs: 2, CommitTs: 8, Table: &model.TableName{TableID: 1}},
+								{StartTs: 2, CommitTs: 8, Table: &model.TableName{TableID: 1}},
+							},
+						},
+						{
+							Table:    &model.TableName{TableID: 1},
+							StartTs:  1,
+							CommitTs: 9,
+							Rows: []*model.RowChangedEvent{
+								{StartTs: 1, CommitTs: 9, Table: &model.TableName{TableID: 1}},
+							},
+						},
+					},
+					2: {
+						{
+							Table:    &model.TableName{TableID: 2},
+							StartTs:  1,
+							CommitTs: 7,
+							Rows: []*model.RowChangedEvent{
+								{StartTs: 1, CommitTs: 7, Table: &model.TableName{TableID: 2}},
+								{StartTs: 1, CommitTs: 7, Table: &model.TableName{TableID: 2}},
+							},
+						}, {
+							Table:    &model.TableName{TableID: 2},
+							StartTs:  2,
+							CommitTs: 7,
+							Rows: []*model.RowChangedEvent{
+								{StartTs: 2, CommitTs: 7, Table: &model.TableName{TableID: 2}},
+							},
+						},
+					},
+				},
+			},
 		},
-	}, {
-		input: []*model.RowChangedEvent{
-			{StartTs: 1, CommitTs: 8, Table: &model.TableName{TableID: 3}},
-		},
-		resolvedTsMap: map[model.TableID]uint64{
-			1: uint64(13),
-			2: uint64(13),
-			3: uint64(13),
-		},
-		expected: map[model.TableID][]*model.SingleTableTxn{
-			1: {{Table: &model.TableName{TableID: 1}, StartTs: 1, CommitTs: 8, Rows: []*model.RowChangedEvent{
-				{StartTs: 1, CommitTs: 8, Table: &model.TableName{TableID: 1}},
-			}}, {Table: &model.TableName{TableID: 1}, StartTs: 1, CommitTs: 11, Rows: []*model.RowChangedEvent{
-				{StartTs: 1, CommitTs: 11, Table: &model.TableName{TableID: 1}},
-			}}},
-			2: {{Table: &model.TableName{TableID: 2}, StartTs: 1, CommitTs: 12, Rows: []*model.RowChangedEvent{
-				{StartTs: 1, CommitTs: 12, Table: &model.TableName{TableID: 2}},
-			}}},
-			3: {{Table: &model.TableName{TableID: 3}, StartTs: 1, CommitTs: 7, Rows: []*model.RowChangedEvent{
-				{StartTs: 1, CommitTs: 7, Table: &model.TableName{TableID: 3}},
-			}}, {Table: &model.TableName{TableID: 3}, StartTs: 1, CommitTs: 8, Rows: []*model.RowChangedEvent{
-				{StartTs: 1, CommitTs: 8, Table: &model.TableName{TableID: 3}},
-			}}},
-		},
-	}}, {{ // Testing the short circuit path
-		input: []*model.RowChangedEvent{},
-		resolvedTsMap: map[model.TableID]uint64{
-			1: uint64(13),
-			2: uint64(13),
-			3: uint64(13),
-		},
-		expected: nil,
-	}, {
-		input: []*model.RowChangedEvent{
-			{StartTs: 1, CommitTs: 11, Table: &model.TableName{TableID: 1}},
-			{StartTs: 1, CommitTs: 12, Table: &model.TableName{TableID: 1}},
-			{StartTs: 1, CommitTs: 13, Table: &model.TableName{TableID: 2}},
-		},
-		resolvedTsMap: map[model.TableID]uint64{
-			1: uint64(6),
-			2: uint64(6),
-		},
-		expected: map[model.TableID][]*model.SingleTableTxn{},
-	}}, {{ // Testing the txns with the same commitTs
-		input: []*model.RowChangedEvent{
-			{StartTs: 1, CommitTs: 5, Table: &model.TableName{TableID: 1}},
-			{StartTs: 1, CommitTs: 8, Table: &model.TableName{TableID: 1}},
-			{StartTs: 1, CommitTs: 6, Table: &model.TableName{TableID: 2}},
-			{StartTs: 2, CommitTs: 6, Table: &model.TableName{TableID: 2}},
-			{StartTs: 2, CommitTs: 8, Table: &model.TableName{TableID: 1}},
-			{StartTs: 1, CommitTs: 8, Table: &model.TableName{TableID: 1}},
-			{StartTs: 2, CommitTs: 8, Table: &model.TableName{TableID: 1}},
-			{StartTs: 1, CommitTs: 6, Table: &model.TableName{TableID: 2}},
-			{StartTs: 1, CommitTs: 7, Table: &model.TableName{TableID: 2}},
-		},
-		resolvedTsMap: map[model.TableID]uint64{
-			1: uint64(6),
-			2: uint64(6),
-		},
-		expected: map[model.TableID][]*model.SingleTableTxn{
-			1: {{Table: &model.TableName{TableID: 1}, StartTs: 1, CommitTs: 5, Rows: []*model.RowChangedEvent{
-				{StartTs: 1, CommitTs: 5, Table: &model.TableName{TableID: 1}},
-			}}},
-			2: {{Table: &model.TableName{TableID: 2}, StartTs: 1, CommitTs: 6, Rows: []*model.RowChangedEvent{
-				{StartTs: 1, CommitTs: 6, Table: &model.TableName{TableID: 2}},
-				{StartTs: 1, CommitTs: 6, Table: &model.TableName{TableID: 2}},
-			}}, {Table: &model.TableName{TableID: 2}, StartTs: 2, CommitTs: 6, Rows: []*model.RowChangedEvent{
-				{StartTs: 2, CommitTs: 6, Table: &model.TableName{TableID: 2}},
-			}}},
-		},
-	}, {
-		input: []*model.RowChangedEvent{
-			{StartTs: 2, CommitTs: 7, Table: &model.TableName{TableID: 2}},
-			{StartTs: 1, CommitTs: 7, Table: &model.TableName{TableID: 2}},
-			{StartTs: 1, CommitTs: 8, Table: &model.TableName{TableID: 1}},
-			{StartTs: 2, CommitTs: 8, Table: &model.TableName{TableID: 1}},
-			{StartTs: 1, CommitTs: 9, Table: &model.TableName{TableID: 1}},
-		},
-		resolvedTsMap: map[model.TableID]uint64{
-			1: uint64(13),
-			2: uint64(13),
-		},
-		expected: map[model.TableID][]*model.SingleTableTxn{
-			1: {{Table: &model.TableName{TableID: 1}, StartTs: 1, CommitTs: 8, Rows: []*model.RowChangedEvent{
-				{StartTs: 1, CommitTs: 8, Table: &model.TableName{TableID: 1}},
-				{StartTs: 1, CommitTs: 8, Table: &model.TableName{TableID: 1}},
-				{StartTs: 1, CommitTs: 8, Table: &model.TableName{TableID: 1}},
-			}}, {Table: &model.TableName{TableID: 1}, StartTs: 2, CommitTs: 8, Rows: []*model.RowChangedEvent{
-				{StartTs: 2, CommitTs: 8, Table: &model.TableName{TableID: 1}},
-				{StartTs: 2, CommitTs: 8, Table: &model.TableName{TableID: 1}},
-				{StartTs: 2, CommitTs: 8, Table: &model.TableName{TableID: 1}},
-			}}, {Table: &model.TableName{TableID: 1}, StartTs: 1, CommitTs: 9, Rows: []*model.RowChangedEvent{
-				{StartTs: 1, CommitTs: 9, Table: &model.TableName{TableID: 1}},
-			}}},
-			2: {{Table: &model.TableName{TableID: 2}, StartTs: 1, CommitTs: 7, Rows: []*model.RowChangedEvent{
-				{StartTs: 1, CommitTs: 7, Table: &model.TableName{TableID: 2}},
-				{StartTs: 1, CommitTs: 7, Table: &model.TableName{TableID: 2}},
-			}}, {Table: &model.TableName{TableID: 2}, StartTs: 2, CommitTs: 7, Rows: []*model.RowChangedEvent{
-				{StartTs: 2, CommitTs: 7, Table: &model.TableName{TableID: 2}},
-			}}},
-		},
-	}}}
+	}
 	for _, tc := range testCases {
 		cache := newUnresolvedTxnCache()
 		for _, t := range tc {
