@@ -268,13 +268,6 @@ func (s *mysqlSink) flushRowChangedEvents(ctx context.Context, receiver *notify.
 		case <-receiver.C:
 		}
 		flushedResolvedTsMap, resolvedTxnsMap := s.txnCache.Resolved(&s.tableMaxResolvedTs)
-		if len(resolvedTxnsMap) == 0 {
-			s.tableMaxResolvedTs.Range(func(key, value interface{}) bool {
-				s.tableCheckpointTs.Store(key, value)
-				return true
-			})
-			continue
-		}
 
 		if s.cyclic != nil {
 			// Filter rows if it is origin from downstream.
@@ -283,7 +276,9 @@ func (s *mysqlSink) flushRowChangedEvents(ctx context.Context, receiver *notify.
 			s.statistics.SubRowsCount(skippedRowCount)
 		}
 
-		s.dispatchAndExecTxns(ctx, resolvedTxnsMap)
+		if len(resolvedTxnsMap) == 0 {
+			s.dispatchAndExecTxns(ctx, resolvedTxnsMap)
+		}
 		for tableID, resolvedTs := range flushedResolvedTsMap {
 			s.tableCheckpointTs.Store(tableID, resolvedTs)
 		}
