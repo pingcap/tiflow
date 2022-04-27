@@ -50,8 +50,9 @@ type scheduler interface {
 	// Rebalance is used to trigger manual workload rebalances.
 	Rebalance()
 
-	// Drain is used to trigger manually moves all tables at the target capture to other nodes.
-	Drain(target model.CaptureID)
+	// DrainCapture is used to trigger manually moves all tables
+	// at the target capture to other nodes.
+	DrainCapture(target model.CaptureID)
 
 	// Close closes the scheduler and releases resources.
 	Close(ctx context.Context)
@@ -122,10 +123,6 @@ func (s *schedulerV2) Tick(
 		return pscheduler.CheckpointCannotProceed, pscheduler.CheckpointCannotProceed, errors.Trace(err)
 	}
 	return s.BaseScheduleDispatcher.Tick(ctx, state.Status.CheckpointTs, currentTables, captures)
-}
-
-func (s *schedulerV2) Drain(target model.CaptureID) {
-	return
 }
 
 func (s *schedulerV2) DispatchTable(

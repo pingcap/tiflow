@@ -24,6 +24,8 @@ import (
 // CaptureID is the type for capture ID
 type CaptureID = string
 
+const DummyCaptureID CaptureID = ""
+
 type CaptureStatus int
 
 const (

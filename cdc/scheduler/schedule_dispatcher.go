@@ -95,6 +95,9 @@ type BaseScheduleDispatcher struct {
 
 	lastTickCaptureCount int
 	needRebalance        bool
+	// capture is draining, should remove all tables on it and no more table should be dispatched
+	// when remove table from the captures, pay attention that drain the capture one by one.
+	drainTargets map[model.CaptureID]struct{}
 
 	// read only fields
 	changeFeedID model.ChangeFeedID
@@ -121,6 +124,7 @@ func NewBaseScheduleDispatcher(
 		communicator:         communicator,
 		checkpointTs:         checkpointTs,
 		lastTickCaptureCount: captureCountUninitialized,
+		drainTargets:         make(map[model.CaptureID]struct{}),
 	}
 }
 
@@ -138,8 +142,6 @@ type captureStatus struct {
 	CheckpointTs model.Ts
 	ResolvedTs   model.Ts
 	// We can add more fields here in the future, such as: RedoLogTs.
-
-	runningStatus captureRunningStatus
 }
 
 type captureSyncStatus int32
@@ -154,16 +156,6 @@ const (
 	// captureSyncFinished indicates that the capture has been fully initialized and is ready to
 	// accept `DispatchTable` messages.
 	captureSyncFinished
-)
-
-type captureRunningStatus int32
-
-const (
-	// captureRunning indicates that the capture is running
-	captureRunning = captureRunningStatus(iota) + 1
-	// captureClosing indicates that the capture is closing, should not dispatch
-	// any new tables to it.
-	captureClosing
 )
 
 // Tick implements the interface ScheduleDispatcher.
@@ -385,23 +377,6 @@ func (s *BaseScheduleDispatcher) descheduleTablesFromDownCaptures() {
 	}
 }
 
-func (s *BaseScheduleDispatcher) drainTablesFromCapture(target model.CaptureID) {
-	// If the capture is not in the current list of captures, it means that
-	// the capture has been removed from the system.
-	if _, ok := s.captures[target]; ok {
-		log.Warn("drainTablesFromCapture: capture not found",
-			zap.String("captureID", target))
-		return
-	}
-	// Remove records for all table previously replicated by the
-	// gone capture.
-	removed := s.tables.RemoveTableRecordByCaptureID(target)
-	s.logger.Info("drain the capture, removing tables",
-		zap.String("captureID", target),
-		zap.Any("removedTables", removed))
-	s.moveTableManager.OnCaptureRemoved(target)
-}
-
 func (s *BaseScheduleDispatcher) findDiffTables(
 	shouldReplicateTables map[model.TableID]struct{},
 ) (toAdd, toRemove []model.TableID) {
@@ -559,8 +534,10 @@ func (s *BaseScheduleDispatcher) rebalance(ctx context.Context) (done bool, err 
 }
 
 // DrainCapture implements the interface ScheduleDispatcher.
+// todo: remove all tables associate with the target capture
+// set the capture's status to draining should be done the capture it's self.
 func (s *BaseScheduleDispatcher) DrainCapture(target model.CaptureID) {
-	return
+	s.drainTargets[target] = struct{}{}
 }
 
 // OnAgentFinishedTableOperation is called when a table operation has been finished by

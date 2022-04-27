@@ -57,7 +57,7 @@ type ownerJob struct {
 	Tp           ownerJobType
 	ChangefeedID model.ChangeFeedID
 
-	// for ScheduleTable / DrainCapture only
+	// for ScheduleTable / DrainCapture
 	TargetCaptureID model.CaptureID
 
 	// for ScheduleTable only
@@ -430,7 +430,7 @@ func (o *ownerImpl) clusterVersionConsistent(captures map[model.CaptureID]*model
 
 func (o *ownerImpl) handleDrainCaptures(target model.CaptureID, done chan<- error) {
 	for _, changefeed := range o.changefeeds {
-		changefeed.scheduler.Drain(target)
+		changefeed.scheduler.DrainCapture(target)
 	}
 	close(done)
 }
