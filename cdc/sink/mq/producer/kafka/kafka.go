@@ -502,9 +502,10 @@ func validateMinInsyncReplicas(
 		log.Error(msg, zap.Int("replication-factor", replicationFactor),
 			zap.Int("min.insync.replicas", minInsyncReplicas))
 		return cerror.ErrKafkaInvalidConfig.GenWithStack(
-			"TiCDC Kafka producer's `request.required.acks` defaults to -1, " +
-				"TiCDC cannot deliver messages when the `replication-factor` " +
-				"is less than `min.insync.replicas`")
+			"TiCDC Kafka producer's `request.required.acks` defaults to -1, "+
+				"TiCDC cannot deliver messages when the `replication-factor` "+
+				"is smaller than the `min.insync.replicas` of %s", configFrom,
+		)
 	}
 
 	return nil

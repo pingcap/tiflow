@@ -144,3 +144,21 @@ func (c *ClusterAdminClientMockImpl) GetTopicMaxMessageBytes() int {
 	maxMessageBytes, _ := strconv.Atoi(TopicMaxMessageBytes)
 	return maxMessageBytes
 }
+
+// DropBrokerConfig remove all broker level configuration for test purpose.
+func (c *ClusterAdminClientMockImpl) DropBrokerConfig() {
+	c.brokerConfigs = c.brokerConfigs[:0]
+}
+
+// AddBrokerConfig add broker level configurations if not found.
+func (c *ClusterAdminClientMockImpl) AddBrokerConfig(configName, value string) {
+	for _, item := range c.brokerConfigs {
+		if item.Name == configName {
+			return
+		}
+	}
+	c.brokerConfigs = append(c.brokerConfigs, sarama.ConfigEntry{
+		Name:  configName,
+		Value: value,
+	})
+}
