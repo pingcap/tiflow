@@ -28,6 +28,12 @@ type TableSet struct {
 	// a non-unique index to facilitate looking up tables
 	// assigned to a given capture.
 	captureIndex map[model.CaptureID]map[model.TableID]*TableRecord
+
+	// caches the number of tables in each status associated with
+	// the given capture.
+	// This is used to accelerate scheduler decision and metrics
+	// collection when the number of tables is very high.
+	statusCounts map[model.CaptureID]map[TableStatus]int
 }
 
 // TableRecord is a record to be inserted into TableSet.
@@ -62,6 +68,7 @@ func NewTableSet() *TableSet {
 	return &TableSet{
 		tableIDMap:   map[model.TableID]*TableRecord{},
 		captureIndex: map[model.CaptureID]map[model.TableID]*TableRecord{},
+		statusCounts: map[model.CaptureID]map[TableStatus]int{},
 	}
 }
 
@@ -80,8 +87,15 @@ func (s *TableSet) AddTableRecord(record *TableRecord) (successful bool) {
 		captureIndexEntry = make(map[model.TableID]*TableRecord)
 		s.captureIndex[record.CaptureID] = captureIndexEntry
 	}
-
 	captureIndexEntry[record.TableID] = recordCloned
+
+	statusCountEntry := s.statusCounts[record.CaptureID]
+	if statusCountEntry == nil {
+		statusCountEntry = make(map[TableStatus]int)
+		s.statusCounts[record.CaptureID] = statusCountEntry
+	}
+	statusCountEntry[record.Status]++
+
 	return true
 }
 
@@ -100,6 +114,9 @@ func (s *TableSet) UpdateTableRecord(record *TableRecord) (successful bool) {
 		recordCloned := record.Clone()
 		s.tableIDMap[record.TableID] = recordCloned
 		s.captureIndex[record.CaptureID][record.TableID] = recordCloned
+
+		s.statusCounts[record.CaptureID][oldRecord.Status]--
+		s.statusCounts[record.CaptureID][record.Status]++
 		return true
 	}
 
@@ -142,6 +159,13 @@ func (s *TableSet) RemoveTableRecord(tableID model.TableID) bool {
 	if len(captureIndexEntry) == 0 {
 		delete(s.captureIndex, record.CaptureID)
 	}
+
+	statusCountEntry, ok := s.statusCounts[record.CaptureID]
+	if !ok {
+		log.Panic("unreachable", zap.Int64("tableID", tableID))
+	}
+	statusCountEntry[record.Status]--
+
 	return true
 }
 
@@ -161,12 +185,23 @@ func (s *TableSet) RemoveTableRecordByCaptureID(captureID model.CaptureID) []*Ta
 		ret = append(ret, record)
 	}
 	delete(s.captureIndex, captureID)
+	delete(s.statusCounts, captureID)
 	return ret
 }
 
 // CountTableByCaptureID counts the number of tables associated with the captureID.
 func (s *TableSet) CountTableByCaptureID(captureID model.CaptureID) int {
 	return len(s.captureIndex[captureID])
+}
+
+// CountTableByCaptureIDAndStatus counts the number of tables associated with the given captureID
+// with the specified status.
+func (s *TableSet) CountTableByCaptureIDAndStatus(captureID model.CaptureID, status TableStatus) int {
+	statusCountEntry, ok := s.statusCounts[captureID]
+	if !ok {
+		return 0
+	}
+	return statusCountEntry[status]
 }
 
 // GetDistinctCaptures counts distinct captures with tables.
@@ -202,10 +237,8 @@ func (s *TableSet) GetAllTablesGroupedByCaptures() map[model.CaptureID]map[model
 
 // CountTableByStatus counts the number of tables with the given status.
 func (s *TableSet) CountTableByStatus(status TableStatus) (count int) {
-	for _, record := range s.tableIDMap {
-		if record.Status == status {
-			count++
-		}
+	for _, statusEntryCount := range s.statusCounts {
+		count += statusEntryCount[status]
 	}
 	return
 }

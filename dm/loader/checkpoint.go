@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/cputil"
+	fr "github.com/pingcap/tiflow/dm/pkg/func-rollback"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 
@@ -101,7 +102,18 @@ type RemoteCheckPoint struct {
 }
 
 func newRemoteCheckPoint(tctx *tcontext.Context, cfg *config.SubTaskConfig, id string) (CheckPoint, error) {
-	db, dbConns, err := createConns(tctx, cfg, cfg.Name, cfg.SourceID, 1)
+	var err error
+	var db *conn.BaseDB
+	var dbConns []*DBConn
+
+	rollbackHolder := fr.NewRollbackHolder("loader")
+	defer func() {
+		if err != nil {
+			rollbackHolder.RollbackReverseOrder()
+		}
+	}()
+
+	db, dbConns, err = createConns(tctx, cfg, cfg.Name, cfg.SourceID, 1)
 	if err != nil {
 		return nil, err
 	}
@@ -116,6 +128,7 @@ func newRemoteCheckPoint(tctx *tcontext.Context, cfg *config.SubTaskConfig, id s
 		logger:         tctx.L().WithFields(zap.String("component", "remote checkpoint")),
 	}
 	cp.restoringFiles.pos = make(map[string]map[string]FilePosSet)
+	rollbackHolder.Add(fr.FuncRollback{Name: "CloseRemoteCheckPoint", Fn: cp.Close})
 
 	err = cp.prepare(tctx)
 	if err != nil {
