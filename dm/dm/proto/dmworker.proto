@@ -420,10 +420,12 @@ message ValidationStatus {
     string task = 1;
     string source = 2;
     Stage stage = 3;
-    ProcessResult result = 4;
-    string processedRowsStatus = 5;
-    string pendingRowsStatus = 6;
-    string allErrorRowsStatus = 7;
+    string validatorBinlog = 4;
+    string validatorBinlogGtid = 5;
+    ProcessResult result = 6;
+    string processedRowsStatus = 7;
+    string pendingRowsStatus = 8;
+    string allErrorRowsStatus = 9;
 }
 
 message ValidationTableStatus {

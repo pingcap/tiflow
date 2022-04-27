@@ -174,6 +174,7 @@ type DataValidator struct {
 	tableStatus          map[string]*tableValidateStatus
 	location             *binlog.Location
 	loadedPendingChanges map[string]*tableChangeJob
+	flushedLoc           *binlog.Location
 }
 
 func NewContinuousDataValidator(cfg *config.SubTaskConfig, syncerObj *Syncer, startWithSubtask bool) *DataValidator {
@@ -783,6 +784,7 @@ func (v *DataValidator) persistCheckpointAndData(loc binlog.Location) error {
 		worker.resetErrorRows()
 	}
 	v.newErrorRowCount.Store(0)
+	v.setFlushedLoc(loc)
 	return nil
 }
 
@@ -856,6 +858,19 @@ func (v *DataValidator) incrErrorRowCount(status pb.ValidateErrorState, cnt int)
 
 func (v *DataValidator) getWorkers() []*validateWorker {
 	return v.workers
+}
+
+func (v *DataValidator) setFlushedLoc(loc binlog.Location) {
+	clone := loc.Clone()
+	v.Lock()
+	defer v.Unlock()
+	v.flushedLoc = &clone
+}
+
+func (v *DataValidator) getFlushedLoc() *binlog.Location {
+	v.RLock()
+	defer v.RUnlock()
+	return v.flushedLoc
 }
 
 func (v *DataValidator) getResult() pb.ProcessResult {
@@ -1030,12 +1045,28 @@ func (v *DataValidator) GetValidatorStatus() *pb.ValidationStatus {
 		allErrorCount[pb.ValidateErrorState_ResolvedErr], extraMsg)
 
 	result := v.getResult()
+	returnedResult := &result
+	if !result.IsCanceled && len(result.Errors) == 0 {
+		// no need to show if validator is running normally
+		returnedResult = nil
+	}
+
+	flushedLoc := v.getFlushedLoc()
+	var validatorBinlog, validatorBinlogGtid string
+	if flushedLoc != nil {
+		validatorBinlog = flushedLoc.Position.String()
+		if flushedLoc.GetGTID() != nil {
+			validatorBinlogGtid = flushedLoc.GetGTID().String()
+		}
+	}
 
 	return &pb.ValidationStatus{
 		Task:                v.cfg.Name,
 		Source:              v.cfg.SourceID,
 		Stage:               v.Stage(),
-		Result:              &result,
+		Result:              returnedResult,
+		ValidatorBinlog:     validatorBinlog,
+		ValidatorBinlogGtid: validatorBinlogGtid,
 		ProcessedRowsStatus: processedRows,
 		PendingRowsStatus:   pendingRows,
 		AllErrorRowsStatus:  allErrorRows,

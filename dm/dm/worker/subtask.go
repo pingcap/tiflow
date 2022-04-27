@@ -925,7 +925,7 @@ func (st *SubTask) getValidator() *syncer.DataValidator {
 
 func (st *SubTask) GetValidatorStatus() *pb.ValidationStatus {
 	validator := st.getValidator()
-	if validator == nil || !validator.Started() {
+	if validator == nil {
 		return nil
 	}
 	return validator.GetValidatorStatus()
