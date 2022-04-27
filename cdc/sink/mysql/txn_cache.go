@@ -133,6 +133,7 @@ func splitResolvedTxn(
 			continue
 		}
 		resolvedTs := v.(uint64)
+		flushedResolvedTsMap[tableID] = resolvedTs
 		i := sort.Search(len(txns), func(i int) bool {
 			return txns[i].commitTs > resolvedTs
 		})
@@ -156,7 +157,6 @@ func splitResolvedTxn(
 			resolvedTxns = append(resolvedTxns, txns.txns...)
 		}
 		resolvedRowsMap[tableID] = resolvedTxns
-		flushedResolvedTsMap[tableID] = resolvedTs
 	}
 	return
 }
