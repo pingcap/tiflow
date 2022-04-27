@@ -29,7 +29,6 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
-	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/r3labs/diff"
@@ -42,7 +41,7 @@ func verifyCreateChangefeedConfig(
 	changefeedConfig model.ChangefeedConfig,
 	capture *capture.Capture,
 ) (*model.ChangeFeedInfo, error) {
-	upStream := upstream.UpManager.Get()
+	upStream := capture.UpstreamManager.GetDefaultUpstream()
 
 	// verify sinkURI
 	if changefeedConfig.SinkURI == "" {

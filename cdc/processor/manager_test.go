@@ -43,11 +43,10 @@ func NewManager4Test(
 	t *testing.T,
 	createTablePipeline func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error),
 ) *Manager {
-	m := NewManager()
+	m := NewManager(upstream.NewManager4Test(nil))
 	m.newProcessor = func(ctx cdcContext.Context, upStream *upstream.Upstream) *processor {
 		return newProcessor4Test(ctx, t, createTablePipeline)
 	}
-	m.upStream4Test = upstream.NewUpstream4Test(nil)
 	return m
 }
 
@@ -225,7 +224,7 @@ func TestClose(t *testing.T) {
 }
 
 func TestSendCommandError(t *testing.T) {
-	m := NewManager()
+	m := NewManager(nil)
 	ctx, cancel := context.WithCancel(context.TODO())
 	cancel()
 	// Use unbuffered channel to stable test.

@@ -18,19 +18,14 @@ import (
 	"time"
 
 	"github.com/pingcap/log"
-	tidbkv "github.com/pingcap/tidb/kv"
-	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/pipeline/system"
 	ssystem "github.com/pingcap/tiflow/cdc/sorter/leveldb/system"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/p2p"
-	"github.com/pingcap/tiflow/pkg/pdtime"
 	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/tikv/client-go/v2/oracle"
-	"github.com/tikv/client-go/v2/tikv"
-	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
 )
 
@@ -38,13 +33,8 @@ import (
 // the lifecycle of vars in the GlobalVars should be aligned with the ticdc server process.
 // All field in Vars should be READ-ONLY and THREAD-SAFE
 type GlobalVars struct {
-	PDClient         pd.Client
-	KVStorage        tidbkv.Storage
 	CaptureInfo      *model.CaptureInfo
 	EtcdClient       *etcd.CDCEtcdClient
-	GrpcPool         kv.GrpcPool
-	RegionCache      *tikv.RegionCache
-	PDClock          pdtime.Clock
 	TableActorSystem *system.System
 	SorterSystem     *ssystem.System
 
@@ -201,7 +191,6 @@ func NewContext4Test(baseCtx context.Context, withChangefeedVars bool) Context {
 			AdvertiseAddr: "127.0.0.1:0000",
 			Version:       version.ReleaseVersion,
 		},
-		PDClock: pdtime.NewClock4Test(),
 	})
 	if withChangefeedVars {
 		ctx = WithChangefeedVars(ctx, &ChangefeedVars{

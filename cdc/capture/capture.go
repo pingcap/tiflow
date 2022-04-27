@@ -40,6 +40,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/p2p"
+	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/version"
 )
 
@@ -50,8 +51,10 @@ type Capture struct {
 	info             *model.CaptureInfo
 	processorManager *processor.Manager
 
-	ownerMu sync.Mutex
-	owner   owner.Owner
+	pdEnpoints      []string
+	UpstreamManager *upstream.Manager
+	ownerMu         sync.Mutex
+	owner           owner.Owner
 
 	// session keeps alive between the capture and etcd
 	session  *concurrency.Session
@@ -79,18 +82,18 @@ type Capture struct {
 
 	cancel context.CancelFunc
 
-	newProcessorManager func() *processor.Manager
-	newOwner            func() owner.Owner
+	newProcessorManager func(upstreamManager *upstream.Manager) *processor.Manager
+	newOwner            func(upstreamManager *upstream.Manager) owner.Owner
 }
 
 // NewCapture returns a new Capture instance
-func NewCapture(etcdClient *etcd.CDCEtcdClient, grpcService *p2p.ServerWrapper) *Capture {
+func NewCapture(pdEnpoints []string, etcdClient *etcd.CDCEtcdClient, grpcService *p2p.ServerWrapper) *Capture {
 	conf := config.GetGlobalServerConfig()
 	return &Capture{
-		EtcdClient:  etcdClient,
-		grpcService: grpcService,
-		cancel:      func() {},
-
+		EtcdClient:          etcdClient,
+		grpcService:         grpcService,
+		cancel:              func() {},
+		pdEnpoints:          pdEnpoints,
 		enableNewScheduler:  conf.Debug.EnableNewScheduler,
 		newProcessorManager: processor.NewManager,
 		newOwner:            owner.NewOwner,
@@ -123,7 +126,18 @@ func (c *Capture) reset(ctx context.Context) error {
 		AdvertiseAddr: conf.AdvertiseAddr,
 		Version:       version.ReleaseVersion,
 	}
-	c.processorManager = c.newProcessorManager()
+
+	if c.UpstreamManager != nil {
+		c.UpstreamManager.Close()
+	}
+	c.UpstreamManager, err = upstream.NewManager(ctx, c.pdEnpoints)
+	if err != nil {
+		return errors.Annotate(
+			cerror.WrapError(cerror.ErrNewCaptureFailed, err),
+			"new upstream manager failed")
+	}
+
+	c.processorManager = c.newProcessorManager(c.UpstreamManager)
 	if c.session != nil {
 		// It can't be handled even after it fails, so we ignore it.
 		_ = c.session.Close()
@@ -374,7 +388,7 @@ func (c *Capture) campaignOwner(ctx cdcContext.Context) error {
 			zap.String("captureID", c.info.ID),
 			zap.Int64("ownerRev", ownerRev))
 
-		owner := c.newOwner()
+		owner := c.newOwner(c.UpstreamManager)
 		c.setOwner(owner)
 
 		globalState := orchestrator.NewGlobalState()

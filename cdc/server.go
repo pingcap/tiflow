@@ -47,7 +47,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/httputil"
 	"github.com/pingcap/tiflow/pkg/p2p"
 	"github.com/pingcap/tiflow/pkg/tcpserver"
-	"github.com/pingcap/tiflow/pkg/upstream"
 	p2pProto "github.com/pingcap/tiflow/proto/p2p"
 )
 
@@ -158,17 +157,11 @@ func (s *Server) Run(ctx context.Context) error {
 
 	kv.InitWorkerPool()
 
-	s.capture = capture.NewCapture(s.etcdClient, s.grpcService)
+	s.capture = capture.NewCapture(s.pdEndpoints, s.etcdClient, s.grpcService)
 
 	err = s.startStatusHTTP(s.tcpServer.HTTP1Listener())
 	if err != nil {
 		return err
-	}
-
-	// It is a global variable.
-	if upstream.UpManager == nil {
-		upstream.UpManager = upstream.NewManager(s.pdEndpoints)
-		_ = upstream.UpManager.Get()
 	}
 
 	return s.run(ctx)
@@ -265,10 +258,6 @@ func (s *Server) run(ctx context.Context) (err error) {
 
 	wg.Go(func() error {
 		return s.tcpServer.Run(cctx)
-	})
-
-	wg.Go(func() error {
-		return upstream.UpManager.Run(cctx)
 	})
 
 	conf := config.GetGlobalServerConfig()

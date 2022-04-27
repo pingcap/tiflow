@@ -49,24 +49,24 @@ type command struct {
 
 // Manager is a manager of processor, which maintains the state and behavior of processors
 type Manager struct {
-	processors   map[model.ChangeFeedID]*processor
-	commandQueue chan *command
+	processors      map[model.ChangeFeedID]*processor
+	commandQueue    chan *command
+	upstreamManager *upstream.Manager
 
 	newProcessor func(cdcContext.Context, *upstream.Upstream) *processor
 
 	enableNewScheduler bool
 
 	metricProcessorCloseDuration prometheus.Observer
-	// for unit test only
-	upStream4Test *upstream.Upstream
 }
 
 // NewManager creates a new processor manager
-func NewManager() *Manager {
+func NewManager(upstreamManager *upstream.Manager) *Manager {
 	conf := config.GetGlobalServerConfig()
 	return &Manager{
 		processors:                   make(map[model.ChangeFeedID]*processor),
 		commandQueue:                 make(chan *command, 4),
+		upstreamManager:              upstreamManager,
 		newProcessor:                 newProcessor,
 		enableNewScheduler:           conf.Debug.EnableNewScheduler,
 		metricProcessorCloseDuration: processorCloseDuration,
@@ -97,12 +97,8 @@ func (m *Manager) Tick(stdCtx context.Context, state orchestrator.ReactorState) 
 		})
 		processor, exist := m.processors[changefeedID]
 		if !exist {
-			var upStream *upstream.Upstream
-			if m.upStream4Test != nil {
-				upStream = m.upStream4Test
-			} else {
-				upStream = upstream.UpManager.Get()
-			}
+
+			upStream := m.upstreamManager.GetDefaultUpstream()
 			if m.enableNewScheduler {
 				failpoint.Inject("processorManagerHandleNewChangefeedDelay", nil)
 				processor = m.newProcessor(ctx, upStream)

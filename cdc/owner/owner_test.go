@@ -60,7 +60,7 @@ func createOwner4Test(ctx cdcContext.Context, t *testing.T) (*ownerImpl, *orches
 		pdClient,
 	)
 	o := owner.(*ownerImpl)
-	o.upStream4Test = upstream.NewUpstream4Test(pdClient)
+	o.upstreamManager = upstream.NewManager4Test(pdClient)
 
 	state := orchestrator.NewGlobalState()
 	tester := orchestrator.NewReactorStateTester(t, state, nil)
@@ -127,9 +127,9 @@ func TestCreateRemoveChangefeed(t *testing.T) {
 	}
 
 	// this will make changefeed always meet ErrGCTTLExceeded
-	mockedManager := &mockManager{Manager: owner.upStream4Test.GCManager}
-	owner.upStream4Test.GCManager = mockedManager
-	err = owner.upStream4Test.GCManager.CheckStaleCheckpointTs(ctx, changefeedID, 0)
+	mockedManager := &mockManager{Manager: owner.upstreamManager.GetDefaultUpstream().GCManager}
+	owner.upstreamManager.GetDefaultUpstream().GCManager = mockedManager
+	err = owner.upstreamManager.GetDefaultUpstream().GCManager.CheckStaleCheckpointTs(ctx, changefeedID, 0)
 	require.NotNil(t, err)
 
 	// this tick create remove changefeed patches
@@ -358,8 +358,8 @@ func TestAdminJob(t *testing.T) {
 
 func TestUpdateGCSafePoint(t *testing.T) {
 	mockPDClient := &gc.MockPDClient{}
-	o := NewOwner().(*ownerImpl)
-	o.upStream4Test = upstream.NewUpstream4Test(mockPDClient)
+	m := upstream.NewManager4Test(mockPDClient)
+	o := NewOwner(m).(*ownerImpl)
 	ctx := cdcContext.NewBackendContext4Test(true)
 	ctx, cancel := cdcContext.WithCancel(ctx)
 	defer cancel()

@@ -90,10 +90,10 @@ type Owner interface {
 }
 
 type ownerImpl struct {
-	changefeeds map[model.ChangeFeedID]*changefeed
-	captures    map[model.CaptureID]*model.CaptureInfo
-
-	ownerJobQueue struct {
+	changefeeds     map[model.ChangeFeedID]*changefeed
+	captures        map[model.CaptureID]*model.CaptureInfo
+	upstreamManager *upstream.Manager
+	ownerJobQueue   struct {
 		sync.Mutex
 		queue []*ownerJob
 	}
@@ -108,17 +108,16 @@ type ownerImpl struct {
 	bootstrapped bool
 
 	newChangefeed func(id model.ChangeFeedID, upStream *upstream.Upstream) *changefeed
-	// for unit test only
-	upStream4Test *upstream.Upstream
 }
 
 // NewOwner creates a new Owner
-func NewOwner() Owner {
+func NewOwner(upstreamManager *upstream.Manager) Owner {
 	return &ownerImpl{
-		changefeeds:   make(map[model.ChangeFeedID]*changefeed),
-		lastTickTime:  time.Now(),
-		newChangefeed: newChangefeed,
-		logLimiter:    rate.NewLimiter(versionInconsistentLogRate, versionInconsistentLogRate),
+		upstreamManager: upstreamManager,
+		changefeeds:     make(map[model.ChangeFeedID]*changefeed),
+		lastTickTime:    time.Now(),
+		newChangefeed:   newChangefeed,
+		logLimiter:      rate.NewLimiter(versionInconsistentLogRate, versionInconsistentLogRate),
 	}
 }
 
@@ -128,7 +127,8 @@ func NewOwner4Test(
 	newSink func() DDLSink,
 	pdClient pd.Client,
 ) Owner {
-	o := NewOwner().(*ownerImpl)
+	m := upstream.NewManager4Test(pdClient)
+	o := NewOwner(m).(*ownerImpl)
 	// Most tests do not need to test bootstrap.
 	o.bootstrapped = true
 	o.newChangefeed = func(id model.ChangeFeedID, upStream *upstream.Upstream) *changefeed {
@@ -189,15 +189,7 @@ func (o *ownerImpl) Tick(stdCtx context.Context, rawState orchestrator.ReactorSt
 		})
 		cfReactor, exist := o.changefeeds[changefeedID]
 		if !exist {
-			var upStream *upstream.Upstream
-			if o.upStream4Test != nil {
-				upStream = o.upStream4Test
-			} else {
-				upStream = upstream.UpManager.Get()
-			}
-			if err != nil {
-				return state, errors.Trace(err)
-			}
+			upStream := o.upstreamManager.GetDefaultUpstream()
 			cfReactor = o.newChangefeed(changefeedID, upStream)
 			o.changefeeds[changefeedID] = cfReactor
 		}
@@ -600,16 +592,8 @@ func (o *ownerImpl) updateGCSafepoint(
 			forceUpdate = true
 		}
 	}
-	var upStream *upstream.Upstream
-	if o.upStream4Test != nil {
-		upStream = o.upStream4Test
-	} else {
-		upStream = upstream.UpManager.Get()
-	}
-	// skip
-	if !upStream.IsNormal() {
-		return nil
-	}
+
+	upStream := o.upstreamManager.GetDefaultUpstream()
 
 	// When the changefeed starts up, CDC will do a snapshot read at
 	// (checkpointTs - 1) from TiKV, so (checkpointTs - 1) should be an upper

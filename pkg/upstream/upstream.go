@@ -17,7 +17,6 @@ import (
 	"context"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -35,13 +34,8 @@ import (
 	"google.golang.org/grpc/backoff"
 )
 
-const (
-	ready int32 = iota
-	normal
-)
-
-// Upstream holds resources of a upstream, it can be shared by many changefeeds
-// and processors.
+// Upstream holds resources of a TiDB cluster, it can be shared by many changefeeds
+// and processors. All public fileds and method of a upstream should be thread-safety.
 type Upstream struct {
 	clusterID      uint64
 	pdEndpoints    []string
@@ -54,15 +48,13 @@ type Upstream struct {
 	PDClock     pdtime.Clock
 	GCManager   gc.Manager
 
-	wg     *sync.WaitGroup
-	status int32
+	wg *sync.WaitGroup
 }
 
 func newUpstream(clusterID uint64, pdEndpoints []string, securityConfig *config.SecurityConfig) *Upstream {
 	return &Upstream{
 		clusterID: clusterID, pdEndpoints: pdEndpoints,
-		securityConfig: securityConfig, status: ready,
-		wg: new(sync.WaitGroup),
+		securityConfig: securityConfig, wg: new(sync.WaitGroup),
 	}
 }
 
@@ -71,12 +63,11 @@ func NewUpstream4Test(pdClient pd.Client) *Upstream {
 	pdClock := pdtime.NewClock4Test()
 	gcManager := gc.NewManager(pdClient, pdClock)
 	res := &Upstream{PDClient: pdClient, PDClock: pdClock, GCManager: gcManager}
-	res.status = normal
 	return res
 }
 
 func (up *Upstream) init(ctx context.Context) error {
-	log.Info("upstream is initializing")
+	log.Info("upstream is initializing", zap.Uint64("cluster id", up.clusterID))
 	var err error
 
 	grpcTLSOption, err := up.securityConfig.ToGRPCDialOption()
@@ -103,6 +94,7 @@ func (up *Upstream) init(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 	up.PDClient = pdClient
+	log.Info("upstream's PDClient created", zap.Uint64("cluster id", up.clusterID))
 
 	// To not block CDC server startup, we need to warn instead of error
 	// when TiKV is incompatible.
@@ -117,14 +109,19 @@ func (up *Upstream) init(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 	up.KVStorage = kvStore
+	log.Info("upstream's KVStorage created", zap.Uint64("cluster id", up.clusterID))
 
 	up.GrpcPool = kv.NewGrpcPoolImpl(ctx, up.securityConfig)
+	log.Info("upstream's GrpcPool created", zap.Uint64("cluster id", up.clusterID))
+
 	up.RegionCache = tikv.NewRegionCache(up.PDClient)
+	log.Info("upstream's RegionCache created", zap.Uint64("cluster id", up.clusterID))
 
 	up.PDClock, err = pdtime.NewClock(ctx, up.PDClient)
 	if err != nil {
 		return errors.Trace(err)
 	}
+	log.Info("upstream's PDClock created", zap.Uint64("cluster id", up.clusterID))
 
 	up.wg.Add(1)
 	go func() {
@@ -138,8 +135,9 @@ func (up *Upstream) init(ctx context.Context) error {
 	}()
 
 	up.GCManager = gc.NewManager(up.PDClient, up.PDClock)
-	log.Info("upStream initialize successfully", zap.Uint64("clusterTD", up.clusterID))
-	atomic.StoreInt32(&up.status, normal)
+	log.Info("upstream's GCManager created", zap.Uint64("cluster id", up.clusterID))
+
+	log.Info("upStream initialize successfully", zap.Uint64("cluster id", up.clusterID))
 	return nil
 }
 
@@ -168,9 +166,4 @@ func (up *Upstream) close() {
 
 	up.wg.Wait()
 	log.Info("upStream closed", zap.Uint64("cluster id", up.clusterID))
-}
-
-// IsNormal return true if this upstream is normal.
-func (up *Upstream) IsNormal() bool {
-	return atomic.LoadInt32(&up.status) == normal
 }

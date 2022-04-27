@@ -15,70 +15,43 @@ package upstream
 
 import (
 	"context"
-	"sync"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/pkg/config"
-	cerror "github.com/pingcap/tiflow/pkg/errors"
-	"go.uber.org/zap"
+	pd "github.com/tikv/pd/client"
 )
 
-// DefaultClusterID is a pseudo cluster id for now. It will be removed in the future.
-const DefaultClusterID uint64 = 0
-
-// UpManager is a global variable.
-var UpManager *Manager
+// defaultClusterID is a pseudo cluster id for now. It will be removed in the future.
+const defaultClusterID uint64 = 0
 
 // Manager manages all upstream.
 type Manager struct {
-	ups               sync.Map
-	defaultPDEnpoints []string
+	defaultUpstream *Upstream
 }
 
-// NewManager create a new Manager.
-func NewManager(pdEnpoints []string) *Manager {
-	return &Manager{defaultPDEnpoints: pdEnpoints}
-}
-
-// Get gets a upStream.
-// TODO: Get() will be changed to Get(clusterID uint64) in the future.
-func (m *Manager) Get() *Upstream {
-	if up, ok := m.ups.Load(DefaultClusterID); ok {
-		return up.(*Upstream)
-	}
-
-	pdEndpoints := m.defaultPDEnpoints
+// NewManager creates a new Manager and initlizes a defaultUpstream.
+func NewManager(ctx context.Context, pdEnpoints []string) (*Manager, error) {
 	securityConfig := config.GetGlobalServerConfig().Security
-	up := newUpstream(DefaultClusterID, pdEndpoints, securityConfig)
-
-	m.ups.Store(DefaultClusterID, up)
-	return up
-}
-
-// Run runs this manager.
-func (m *Manager) Run(ctx context.Context) error {
-	if up, ok := m.ups.Load(DefaultClusterID); ok {
-		err := up.(*Upstream).init(ctx)
-		if err != nil {
-			return errors.Trace(err)
-		}
-	} else {
-		return cerror.ErrUpStreamNotFound.GenWithStackByArgs(DefaultClusterID)
+	up := newUpstream(defaultClusterID, pdEnpoints, securityConfig)
+	err := up.init(ctx)
+	if err != nil {
+		return nil, errors.Trace(err)
 	}
-
-	<-ctx.Done()
-	m.close()
-	log.Info("upstream manager exited", zap.Error(ctx.Err()))
-	return ctx.Err()
+	return &Manager{defaultUpstream: up}, nil
 }
 
-func (m *Manager) close() {
-	m.ups.Range(func(k, v interface{}) bool {
-		id := k.(uint64)
-		up := v.(*Upstream)
-		up.close()
-		m.ups.Delete(id)
-		return true
-	})
+// NewManager4Test returns a Manager for unit test.
+func NewManager4Test(pdClient pd.Client) *Manager {
+	up := NewUpstream4Test(pdClient)
+	return &Manager{defaultUpstream: up}
+}
+
+// GetDefaultUpstream returns defaultUpstream.
+func (m *Manager) GetDefaultUpstream() *Upstream {
+	return m.defaultUpstream
+}
+
+// Close closes defaultUpstream.
+func (m *Manager) Close() {
+	m.defaultUpstream.close()
 }
