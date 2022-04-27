@@ -309,6 +309,7 @@ func (r *Request) Do(ctx context.Context) (res *Result) {
 				return
 			}
 			// close the body to let the TCP connection be reused after reconnecting
+			// see https://github.com/golang/go/blob/go1.18.1/src/net/http/response.go#L62-L64
 			_, _ = io.Copy(ioutil.Discard, resp.Body)
 			resp.Body.Close()
 		}()
