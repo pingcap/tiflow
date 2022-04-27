@@ -38,12 +38,11 @@ import (
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/util/dbutil"
 	"github.com/pingcap/tidb/util/filter"
+	regexprrouter "github.com/pingcap/tidb/util/regexpr-router"
+	router "github.com/pingcap/tidb/util/table-router"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
-
-	regexprrouter "github.com/pingcap/tidb/util/regexpr-router"
-	router "github.com/pingcap/tidb/util/table-router"
 
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/dm/pb"
@@ -1001,8 +1000,7 @@ func (s *Syncer) flushIfOutdated() error {
 		s.flushCheckPointsAsync(j)
 		return nil
 	}
-	s.jobWg.Wait()
-	return s.flushCheckPoints()
+	return s.flushJobs()
 }
 
 // TODO: move to syncer/job.go
@@ -3316,6 +3314,9 @@ func (s *Syncer) loadTableStructureFromDump(ctx context.Context) error {
 					zap.Error(err))
 				setFirstErr(err)
 			}
+			// TODO: we should save table checkpoint here, but considering when
+			// the first time of flushing checkpoint, user may encounter https://github.com/pingcap/tiflow/issues/5010
+			// we should fix that problem first.
 		}
 	}
 	return firstErr
