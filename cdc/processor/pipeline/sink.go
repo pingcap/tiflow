@@ -76,8 +76,6 @@ type sinkNode struct {
 	targetTs     model.Ts
 	barrierTs    model.Ts
 
-	rowBuffer []*model.RowChangedEvent
-
 	flowController tableFlowController
 
 	replicaConfig    *config.ReplicaConfig
@@ -194,6 +192,7 @@ func (n *sinkNode) addRowToBuffer(ctx context.Context, event *model.PolymorphicE
 		return nil
 	}
 
+	rows := make([]*model.RowChangedEvent, 0, 2)
 	// This indicates that it is an update event,
 	// and after enable old value internally by default(but disable in the configuration).
 	// We need to handle the update event to be compatible with the old format.
@@ -204,20 +203,18 @@ func (n *sinkNode) addRowToBuffer(ctx context.Context, event *model.PolymorphicE
 				return errors.Trace(err)
 			}
 			// NOTICE: Please do not change the order, the delete event always comes before the insert event.
-			n.rowBuffer = append(n.rowBuffer, deleteEvent.Row, insertEvent.Row)
+			rows = append(rows, deleteEvent.Row, insertEvent.Row)
 		} else {
 			// If the handle key columns are not updated, PreColumns is directly ignored.
 			event.Row.PreColumns = nil
-			n.rowBuffer = append(n.rowBuffer, event.Row)
+			rows = append(rows, event.Row)
 		}
 	} else {
-		n.rowBuffer = append(n.rowBuffer, event.Row)
+		rows = append(rows, event.Row)
 	}
 
-	if len(n.rowBuffer) >= defaultSyncResolvedBatch {
-		if err := n.emitRowToSink(ctx); err != nil {
-			return errors.Trace(err)
-		}
+	if err := n.emitRowToSink(ctx, rows...); err != nil {
+		return errors.Trace(err)
 	}
 	return nil
 }
@@ -286,32 +283,17 @@ func splitUpdateEvent(updateEvent *model.PolymorphicEvent) (*model.PolymorphicEv
 	return &deleteEvent, &insertEvent, nil
 }
 
-// clearBuffers clears rowBuffer.
-// Also, it dereferences data that are held by buffers.
-func (n *sinkNode) clearBuffers() {
-	// Do not hog memory.
-	if cap(n.rowBuffer) > defaultSyncResolvedBatch {
-		n.rowBuffer = make([]*model.RowChangedEvent, 0, defaultSyncResolvedBatch)
-	} else {
-		for i := range n.rowBuffer {
-			n.rowBuffer[i] = nil
-		}
-		n.rowBuffer = n.rowBuffer[:0]
-	}
-}
-
 // emitRowToSink emits the rows in rowBuffer to backend sink.
-func (n *sinkNode) emitRowToSink(ctx context.Context) error {
+func (n *sinkNode) emitRowToSink(ctx context.Context, rows ...*model.RowChangedEvent) error {
 	failpoint.Inject("ProcessorSyncResolvedPreEmit", func() {
 		log.Info("Prepare to panic for ProcessorSyncResolvedPreEmit")
 		time.Sleep(10 * time.Second)
 		panic("ProcessorSyncResolvedPreEmit")
 	})
-	err := n.sink.EmitRowChangedEvents(ctx, n.rowBuffer...)
+	err := n.sink.EmitRowChangedEvents(ctx, rows...)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	n.clearBuffers()
 	return nil
 }
 
