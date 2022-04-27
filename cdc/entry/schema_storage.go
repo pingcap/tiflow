@@ -604,7 +604,10 @@ func (s *schemaSnapshot) handleDDL(job *timodel.Job) error {
 			return errors.Trace(err)
 		}
 	case timodel.ActionRenameTables:
-		return s.renameTables(job)
+		err := s.renameTables(job)
+		if err != nil {
+			return errors.Trace(err)
+		}
 	case timodel.ActionCreateTable, timodel.ActionCreateView, timodel.ActionRecoverTable:
 		err := s.createTable(getWrapTableInfo(job))
 		if err != nil {
@@ -820,8 +823,8 @@ func (s *schemaStorageImpl) HandleDDLJob(job *timodel.Job) error {
 	if len(s.snaps) > 0 {
 		lastSnap := s.snaps[len(s.snaps)-1]
 		if job.BinlogInfo.FinishedTS <= lastSnap.currentTs {
-			log.Info("ignore foregone DDL",
-				zap.Int64("jobID", job.ID), zap.String("DDL", job.Query))
+			log.Info("ignore foregone DDL", zap.Int64("jobID", job.ID),
+				zap.String("DDL", job.Query), zap.Uint64("finishTs", job.BinlogInfo.FinishedTS))
 			return nil
 		}
 		snap = lastSnap.Clone()
@@ -829,8 +832,14 @@ func (s *schemaStorageImpl) HandleDDLJob(job *timodel.Job) error {
 		snap = newEmptySchemaSnapshot(s.forceReplicate)
 	}
 	if err := snap.handleDDL(job); err != nil {
+		log.Error("handle DDL failed", zap.String("DDL", job.Query),
+			zap.Stringer("job", job), zap.Error(err),
+			zap.Uint64("finishTs", job.BinlogInfo.FinishedTS))
 		return errors.Trace(err)
 	}
+	log.Info("handle DDL", zap.String("DDL", job.Query),
+		zap.Stringer("job", job), zap.Uint64("finishTs", job.BinlogInfo.FinishedTS))
+
 	s.snaps = append(s.snaps, snap)
 	s.AdvanceResolvedTs(job.BinlogInfo.FinishedTS)
 	return nil

@@ -410,9 +410,11 @@ func TestHandleRenameTables(t *testing.T) {
 	rawArgs, err := json.Marshal(args)
 	require.Nil(t, err)
 	var job *timodel.Job = &timodel.Job{
-		Type:       timodel.ActionRenameTables,
-		RawArgs:    rawArgs,
-		BinlogInfo: &timodel.HistoryInfo{},
+		Type:    timodel.ActionRenameTables,
+		RawArgs: rawArgs,
+		BinlogInfo: &timodel.HistoryInfo{
+			FinishedTS: 11112222,
+		},
 	}
 	job.BinlogInfo.MultipleTableInfos = append(job.BinlogInfo.MultipleTableInfos,
 		&timodel.TableInfo{
@@ -442,6 +444,7 @@ func TestHandleRenameTables(t *testing.T) {
 	t2 := model.TableName{Schema: "db_1", Table: "y"}
 	require.Equal(t, snap.tableNameToID[t1], int64(13))
 	require.Equal(t, snap.tableNameToID[t2], int64(14))
+	require.Equal(t, uint64(11112222), snap.currentTs)
 }
 
 func testDoDDLAndCheck(t *testing.T, snap *schemaSnapshot, job *timodel.Job, isErr bool) {
