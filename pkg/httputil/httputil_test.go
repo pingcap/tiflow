@@ -62,7 +62,7 @@ func TestHttputilNewClient(t *testing.T) {
 	cli, err := NewClient(credential)
 	require.Nil(t, err)
 	url := fmt.Sprintf("https://127.0.0.1:%d/", port)
-	resp, err := cli.Get(url)
+	resp, err := cli.Get(context.Background(), url)
 	require.Nil(t, err)
 	defer resp.Body.Close()
 	body, err := io.ReadAll(resp.Body)
