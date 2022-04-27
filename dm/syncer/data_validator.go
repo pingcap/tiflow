@@ -904,9 +904,9 @@ func genRowKeyByString(pkValues []string) string {
 	return join
 }
 
-func (v *DataValidator) GetValidationStatus() []*pb.ValidationStatus {
+func (v *DataValidator) GetValidationStatus() []*pb.ValidationTableStatus {
 	failpoint.Inject("MockValidationQuery", func() {
-		failpoint.Return([]*pb.ValidationStatus{
+		failpoint.Return([]*pb.ValidationTableStatus{
 			{
 				SrcTable:         "`testdb1`.`testtable1`",
 				DstTable:         "`dstdb`.`dsttable`",
@@ -922,9 +922,9 @@ func (v *DataValidator) GetValidationStatus() []*pb.ValidationStatus {
 	})
 	v.RLock()
 	defer v.RUnlock()
-	result := make([]*pb.ValidationStatus, 0)
+	result := make([]*pb.ValidationTableStatus, 0)
 	for _, tblStat := range v.tableStatus {
-		result = append(result, &pb.ValidationStatus{
+		result = append(result, &pb.ValidationTableStatus{
 			SrcTable:         tblStat.source.String(),
 			DstTable:         tblStat.target.String(),
 			ValidationStatus: tblStat.stage.String(),

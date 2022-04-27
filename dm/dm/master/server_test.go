@@ -2386,7 +2386,7 @@ func (t *testMaster) TestGetValidatorStatus(c *check.C) {
 			gomock.Any(),
 		).Return(&pb.GetValidationStatusResponse{
 			Result: true,
-			Status: []*pb.ValidationStatus{
+			Status: []*pb.ValidationTableStatus{
 				{
 					SrcTable: "tbl1",
 				},

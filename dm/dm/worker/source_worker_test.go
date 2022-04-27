@@ -793,7 +793,7 @@ func (t *testServer) TestQueryValidator(c *C) {
 	}, pb.Stage_Running, nil, "")
 	st.StartValidator(pb.Stage_Running, false)
 	w.subTaskHolder.recordSubTask(st)
-	expected := []*pb.ValidationStatus{
+	expected := []*pb.ValidationTableStatus{
 		{
 			Source:           "127.0.0.1:3306",
 			SrcTable:         "`testdb1`.`testtable1`",

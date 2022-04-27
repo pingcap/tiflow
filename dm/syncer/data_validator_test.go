@@ -542,7 +542,7 @@ func TestValidatorGetValidationStatus(t *testing.T) {
 	cfg := genSubtaskConfig(t)
 	syncerObj := NewSyncer(cfg, nil, nil)
 	validator := NewContinuousDataValidator(cfg, syncerObj, false)
-	expected := map[string]*pb.ValidationStatus{
+	expected := map[string]*pb.ValidationTableStatus{
 		"`db`.`tbl1`": {
 			SrcTable:         "`db`.`tbl1`",
 			DstTable:         "`db`.`tbl1`",

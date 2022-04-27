@@ -125,9 +125,9 @@ func (w *SourceWorker) GetUnitAndSourceStatusJSON(stName string, sourceStatus *b
 	return s
 }
 
-func (w *SourceWorker) GetValidateStatus(stName string, filterStatus pb.Stage) []*pb.ValidationStatus {
+func (w *SourceWorker) GetValidateStatus(stName string, filterStatus pb.Stage) []*pb.ValidationTableStatus {
 	st := w.subTaskHolder.findSubTask(stName)
-	res := make([]*pb.ValidationStatus, 0)
+	res := make([]*pb.ValidationTableStatus, 0)
 	if st == nil {
 		return res
 	}

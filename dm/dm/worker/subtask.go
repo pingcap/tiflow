@@ -300,7 +300,7 @@ func (st *SubTask) StopValidator() {
 	st.Unlock()
 }
 
-func (st *SubTask) GetValidatorStatus() []*pb.ValidationStatus {
+func (st *SubTask) GetValidatorStatus() []*pb.ValidationTableStatus {
 	st.RLock()
 	defer st.RUnlock()
 	if st.validator != nil && st.validator.Started() {
@@ -308,7 +308,7 @@ func (st *SubTask) GetValidatorStatus() []*pb.ValidationStatus {
 	}
 	st.l.Warn("validator not start")
 	// todo: should it inform the user of this error
-	return []*pb.ValidationStatus{}
+	return []*pb.ValidationTableStatus{}
 }
 
 func (st *SubTask) setCurrCtx(ctx context.Context, cancel context.CancelFunc) {
