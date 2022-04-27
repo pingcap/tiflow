@@ -167,6 +167,7 @@ type DataValidator struct {
 	// if it's false, we don't mark failed row change as error to reduce false-positive
 	reachedSyncer atomic.Bool
 
+	stateMutex           sync.RWMutex
 	processedRowCounts   []atomic.Int64
 	pendingRowCounts     []atomic.Int64
 	newErrorRowCount     atomic.Int64
@@ -182,29 +183,38 @@ func NewContinuousDataValidator(cfg *config.SubTaskConfig, syncerObj *Syncer, st
 		cfg:              cfg,
 		syncer:           syncerObj,
 		startWithSubtask: startWithSubtask,
-		stage:            pb.Stage_Stopped,
 	}
 	v.L = log.With(zap.String("task", cfg.Name), zap.String("unit", "continuous validator"))
 
+	v.setStage(pb.Stage_Stopped)
 	v.workerCnt = cfg.ValidatorCfg.WorkerCount
 	v.processedRowCounts = make([]atomic.Int64, rowChangeTypeCount)
 	v.validateInterval = validationInterval
 	v.persistHelper = newValidatorCheckpointHelper(v)
-	v.tableStatus = make(map[string]*tableValidateStatus)
+	v.pendingRowCounts = make([]atomic.Int64, rowChangeTypeCount)
 
 	return v
 }
 
-func (v *DataValidator) initialize() error {
+// reset state on start/restart
+func (v *DataValidator) reset() {
+	v.errChan = make(chan error, 10)
+	v.workers = []*validateWorker{}
+
 	v.reachedSyncer.Store(false)
+	v.resetResult()
+	for i := range v.pendingRowCounts {
+		v.pendingRowCounts[i].Store(0)
+	}
+	v.newErrorRowCount.Store(0)
+	v.initTableStatus(map[string]*tableValidateStatus{})
+}
+
+func (v *DataValidator) initialize() error {
 	v.ctx, v.cancel = context.WithCancel(context.Background())
 	v.tctx = tcontext.NewContext(v.ctx, v.L)
-	v.result.Reset()
 	// todo: enhance error handling
-	v.errChan = make(chan error, 10)
-	v.pendingRowCounts = make([]atomic.Int64, rowChangeTypeCount)
-	v.newErrorRowCount.Store(0)
-	v.workers = []*validateWorker{}
+	v.reset()
 
 	if err := v.persistHelper.init(v.tctx); err != nil {
 		return err
@@ -256,12 +266,12 @@ func (v *DataValidator) Start(expect pb.Stage) {
 	v.Lock()
 	defer v.Unlock()
 	failpoint.Inject("MockValidationQuery", func() {
-		v.stage = pb.Stage_Running
+		v.setStage(pb.Stage_Running)
 		failpoint.Return()
 	})
 
 	v.L.Info("starting")
-	if v.stage == pb.Stage_Running {
+	if v.Stage() == pb.Stage_Running {
 		v.L.Info("already started")
 		return
 	}
@@ -284,7 +294,7 @@ func (v *DataValidator) Start(expect pb.Stage) {
 	v.errProcessWg.Add(1)
 	go v.errorProcessRoutine()
 
-	v.stage = pb.Stage_Running
+	v.setStage(pb.Stage_Running)
 	v.L.Info("started")
 }
 
@@ -328,14 +338,15 @@ func (v *DataValidator) fillResult(err error, needLock bool) {
 		isCanceled = true
 	default:
 	}
-	v.result.IsCanceled = isCanceled
 
+	var processErr *pb.ProcessError
 	if utils.IsContextCanceledError(err) {
 		v.L.Info("filter out context cancelled error", log.ShortError(err))
 	} else {
 		v.L.Error("error during validation", zap.Error(err))
-		v.result.Errors = append(v.result.Errors, unit.NewProcessError(err))
+		processErr = unit.NewProcessError(err)
 	}
+	v.addResultError(processErr, isCanceled)
 }
 
 func (v *DataValidator) errorProcessRoutine() {
@@ -553,7 +564,7 @@ func (v *DataValidator) stopInner() {
 	v.Lock()
 	defer v.Unlock()
 	v.L.Info("stopping")
-	if v.stage != pb.Stage_Running {
+	if v.Stage() != pb.Stage_Running {
 		v.L.Warn("not started")
 		return
 	}
@@ -567,20 +578,8 @@ func (v *DataValidator) stopInner() {
 	v.wg.Wait()
 	close(v.errChan) // close error chan after all possible sender goroutines stopped
 
-	v.stage = pb.Stage_Stopped
+	v.setStage(pb.Stage_Stopped)
 	v.L.Info("stopped")
-}
-
-func (v *DataValidator) Started() bool {
-	v.RLock()
-	defer v.RUnlock()
-	return v.stage == pb.Stage_Running
-}
-
-func (v *DataValidator) Stage() pb.Stage {
-	v.RLock()
-	defer v.RUnlock()
-	return v.stage
 }
 
 func (v *DataValidator) startValidateWorkers() {
@@ -784,7 +783,7 @@ func (v *DataValidator) persistCheckpointAndData(loc binlog.Location) error {
 		worker.resetErrorRows()
 	}
 	v.newErrorRowCount.Store(0)
-	v.setFlushedLoc(loc)
+	v.setFlushedLoc(&loc)
 	return nil
 }
 
@@ -845,10 +844,11 @@ func (v *DataValidator) loadPersistedData(tctx *tcontext.Context) error {
 
 	v.persistHelper.setRevision(rev)
 
-	v.tableStatus, err = v.persistHelper.loadTableStatus(tctx)
+	tableStatus, err := v.persistHelper.loadTableStatus(tctx)
 	if err != nil {
 		return err
 	}
+	v.initTableStatus(tableStatus)
 	return nil
 }
 
@@ -860,35 +860,89 @@ func (v *DataValidator) getWorkers() []*validateWorker {
 	return v.workers
 }
 
-func (v *DataValidator) setFlushedLoc(loc binlog.Location) {
-	clone := loc.Clone()
-	v.Lock()
-	defer v.Unlock()
-	v.flushedLoc = &clone
+func (v *DataValidator) Started() bool {
+	v.stateMutex.RLock()
+	defer v.stateMutex.RUnlock()
+	return v.stage == pb.Stage_Running
+}
+
+func (v *DataValidator) Stage() pb.Stage {
+	v.stateMutex.RLock()
+	defer v.stateMutex.RUnlock()
+	return v.stage
+}
+
+func (v *DataValidator) setStage(stage pb.Stage) {
+	v.stateMutex.Lock()
+	defer v.stateMutex.Unlock()
+	v.stage = stage
 }
 
 func (v *DataValidator) getFlushedLoc() *binlog.Location {
-	v.RLock()
-	defer v.RUnlock()
+	v.stateMutex.RLock()
+	defer v.stateMutex.RUnlock()
 	return v.flushedLoc
 }
 
+func (v *DataValidator) setFlushedLoc(loc *binlog.Location) {
+	v.stateMutex.Lock()
+	defer v.stateMutex.Unlock()
+	if loc == nil {
+		v.flushedLoc = nil
+		return
+	}
+	clone := loc.Clone()
+	v.flushedLoc = &clone
+}
+
 func (v *DataValidator) getResult() pb.ProcessResult {
-	v.RLock()
-	defer v.RUnlock()
+	v.stateMutex.RLock()
+	defer v.stateMutex.RUnlock()
 	return v.result
 }
 
+func (v *DataValidator) addResultError(err *pb.ProcessError, cancelled bool) {
+	v.stateMutex.Lock()
+	defer v.stateMutex.Unlock()
+	v.result.Errors = append(v.result.Errors, err)
+	v.result.IsCanceled = cancelled
+}
+
+func (v *DataValidator) resetResult() {
+	v.stateMutex.Lock()
+	defer v.stateMutex.Unlock()
+	v.result.Reset()
+}
+
+func (v *DataValidator) initTableStatus(m map[string]*tableValidateStatus) {
+	v.stateMutex.Lock()
+	defer v.stateMutex.Unlock()
+	v.tableStatus = m
+}
+
 func (v *DataValidator) getTableStatus(fullTableName string) (*tableValidateStatus, bool) {
-	v.RLock()
-	defer v.RUnlock()
+	v.stateMutex.RLock()
+	defer v.stateMutex.RUnlock()
 	res, ok := v.tableStatus[fullTableName]
 	return res, ok
 }
 
+// return snapshot of the current table status.
+func (v *DataValidator) getTableStatusMap() map[string]*tableValidateStatus {
+	v.RLock()
+	defer v.RUnlock()
+	tblStatus := make(map[string]*tableValidateStatus)
+	for key, tblStat := range v.tableStatus {
+		stat := &tableValidateStatus{}
+		*stat = *tblStat // deep copy
+		tblStatus[key] = stat
+	}
+	return tblStatus
+}
+
 func (v *DataValidator) putTableStatus(name string, status *tableValidateStatus) {
-	v.Lock()
-	defer v.Unlock()
+	v.stateMutex.Lock()
+	defer v.stateMutex.Unlock()
 	v.tableStatus[name] = status
 }
 
@@ -995,23 +1049,14 @@ func (v *DataValidator) OperateValidatorError(validateOp pb.ValidationErrOp, err
 	return v.persistHelper.operateError(validateOp, errID, isAll)
 }
 
-// return snapshot of the current table status.
-func (v *DataValidator) getTableStatusMap() map[string]*tableValidateStatus {
-	v.RLock()
-	defer v.RUnlock()
-	tblStatus := make(map[string]*tableValidateStatus)
-	for key, tblStat := range v.tableStatus {
-		stat := &tableValidateStatus{}
-		*stat = *tblStat // deep copy
-		tblStatus[key] = stat
-	}
-	return tblStatus
-}
-
 func (v *DataValidator) getAllErrorCount(timeout time.Duration) ([errorStateTypeCount]int64, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	tctx := tcontext.NewContext(ctx, v.L)
+	// todo: should create a separate db to get error count, since validator maybe stopped or initializing,
+	// else may fail due to concurrent access
+	// todo: should not rely on fields which need to be inited in 'init', such as c.tctx,
+	// else this method may fail due to concurrent access.
 	countMap, err := v.persistHelper.loadErrorCount(tctx)
 	if err != nil {
 		v.L.Warn("failed to load error count", zap.Error(err))
