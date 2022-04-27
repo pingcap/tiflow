@@ -111,7 +111,7 @@ func NewCapture(pdClient pd.Client, kvStorage tidbkv.Storage, etcdClient *etcd.C
 // NewCapture4Test returns a new Capture instance for test.
 func NewCapture4Test(o owner.Owner) *Capture {
 	res := &Capture{
-		info: &model.CaptureInfo{ID: "capture-for-test", AdvertiseAddr: "127.0.0.1", Version: "test"},
+		info: model.NewCaptureInfo("127.0.0.1", "test"),
 	}
 	res.owner = o
 	return res
@@ -352,10 +352,10 @@ func (c *Capture) run(stdCtx context.Context) error {
 }
 
 // Info gets the capture info
-func (c *Capture) Info() model.CaptureInfo {
+func (c *Capture) Info() *model.CaptureInfo {
 	c.captureMu.Lock()
 	defer c.captureMu.Unlock()
-	return *c.info
+	return c.info
 }
 
 func (c *Capture) campaignOwner(ctx cdcContext.Context) error {

@@ -24,34 +24,11 @@ import (
 // CaptureID is the type for capture ID
 type CaptureID = string
 
-const DummyCaptureID CaptureID = ""
-
-type CaptureStatus int
-
-const (
-	CaptureStatusHealthy CaptureStatus = iota
-	CaptureStatusDraining
-	CaptureStatusClosing
-)
-
-func (s CaptureStatus) String() string {
-	switch s {
-	case CaptureStatusHealthy:
-		return "healthy"
-	case CaptureStatusDraining:
-		return "draining"
-	case CaptureStatusClosing:
-		return "closing"
-	}
-	panic("unreachable")
-}
-
 // CaptureInfo store in etcd.
 type CaptureInfo struct {
-	ID            CaptureID     `json:"id"`
-	AdvertiseAddr string        `json:"address"`
-	Version       string        `json:"version"`
-	Status        CaptureStatus `json:"status"`
+	ID            CaptureID `json:"id"`
+	AdvertiseAddr string    `json:"address"`
+	Version       string    `json:"version"`
 }
 
 // NewCaptureInfo return the basic capture info.
@@ -60,7 +37,6 @@ func NewCaptureInfo(addr, version string) *CaptureInfo {
 		ID:            uuid.New().String(),
 		AdvertiseAddr: addr,
 		Version:       version,
-		Status:        CaptureStatusHealthy,
 	}
 }
 
