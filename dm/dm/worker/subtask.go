@@ -304,7 +304,7 @@ func (st *SubTask) GetValidatorTableStatus(filterStatus pb.Stage) []*pb.Validati
 	st.RLock()
 	defer st.RUnlock()
 	if st.validator != nil && st.validator.Started() {
-		return st.validator.GetValidationTableStatus(filterStatus)
+		return st.validator.GetValidatorTableStatus(filterStatus)
 	}
 	st.l.Warn("validator not start")
 	// todo: should it inform the user of this error
@@ -897,10 +897,9 @@ func updateTaskMetric(task, sourceID string, stage pb.Stage, workerName string) 
 }
 
 func (st *SubTask) GetValidatorError(errState pb.ValidateErrorState) []*pb.ValidationError {
-	st.RLock()
-	defer st.RUnlock()
-	if st.validator != nil && st.validator.Started() {
-		return st.validator.GetValidatorError(errState)
+	validator := st.getValidator()
+	if validator != nil && validator.Started() {
+		return validator.GetValidatorError(errState)
 	}
 	st.l.Warn("validator not start")
 	// todo: should it inform the user of this error
@@ -908,13 +907,26 @@ func (st *SubTask) GetValidatorError(errState pb.ValidateErrorState) []*pb.Valid
 }
 
 func (st *SubTask) OperateValidatorError(op pb.ValidationErrOp, errID uint64, isAll bool) error {
-	st.RLock()
-	defer st.RUnlock()
-	if st.validator != nil && st.validator.Started() {
-		return st.validator.OperateValidatorError(op, errID, isAll)
+	validator := st.getValidator()
+	if validator != nil && validator.Started() {
+		return validator.OperateValidatorError(op, errID, isAll)
 	}
 	st.l.Warn("validator not start")
 	// todo: should it inform the user of this error
 	// silently exists
 	return nil
+}
+
+func (st *SubTask) getValidator() *syncer.DataValidator {
+	st.RLock()
+	defer st.RUnlock()
+	return st.validator
+}
+
+func (st *SubTask) GetValidatorStatus() *pb.ValidationStatus {
+	validator := st.getValidator()
+	if validator == nil || !validator.Started() {
+		return nil
+	}
+	return validator.GetValidatorStatus()
 }

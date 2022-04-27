@@ -564,21 +564,21 @@ func TestValidatorGetValidationStatus(t *testing.T) {
 			message: tableWithoutPrimaryKeyMsg,
 		},
 	}
-	ret := validator.GetValidationTableStatus(pb.Stage_InvalidStage)
+	ret := validator.GetValidatorTableStatus(pb.Stage_InvalidStage)
 	require.Equal(t, len(expected), len(ret))
 	for _, result := range ret {
 		ent, ok := expected[result.SrcTable]
 		require.Equal(t, ok, true)
 		require.EqualValues(t, ent, result)
 	}
-	ret = validator.GetValidationTableStatus(pb.Stage_Running)
+	ret = validator.GetValidatorTableStatus(pb.Stage_Running)
 	require.Equal(t, 1, len(ret))
 	for _, result := range ret {
 		ent, ok := expected[result.SrcTable]
 		require.Equal(t, ok, true)
 		require.EqualValues(t, ent, result)
 	}
-	ret = validator.GetValidationTableStatus(pb.Stage_Stopped)
+	ret = validator.GetValidatorTableStatus(pb.Stage_Stopped)
 	require.Equal(t, 1, len(ret))
 	for _, result := range ret {
 		ent, ok := expected[result.SrcTable]

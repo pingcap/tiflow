@@ -438,7 +438,7 @@ message GetValidationStatusResponse {
     bool result = 1;
     string msg = 2;
     repeated ValidationStatus validators = 3;
-    repeated ValidationTableStatus status = 4;
+    repeated ValidationTableStatus tableStatuses = 4;
 }
 message GetValidationErrorRequest {
     ValidateErrorState errState = 1;

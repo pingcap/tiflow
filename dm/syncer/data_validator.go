@@ -921,7 +921,7 @@ func genRowKeyByString(pkValues []string) string {
 	return join
 }
 
-func (v *DataValidator) GetValidationTableStatus(filterStatus pb.Stage) []*pb.ValidationTableStatus {
+func (v *DataValidator) GetValidatorTableStatus(filterStatus pb.Stage) []*pb.ValidationTableStatus {
 	tblStatus := v.getTableStatusMap()
 	failpoint.Inject("MockValidationQuery", func() {
 		tblStatus = map[string]*tableValidateStatus{

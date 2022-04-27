@@ -1358,3 +1358,11 @@ func (w *SourceWorker) OperateWorkerValidatorErr(taskName string, op pb.Validati
 	}
 	return terror.ErrWorkerSubTaskNotFound.Generate(taskName)
 }
+
+func (w *SourceWorker) GetValidatorStatus(taskName string) *pb.ValidationStatus {
+	st := w.subTaskHolder.findSubTask(taskName)
+	if st == nil {
+		return nil
+	}
+	return st.GetValidatorStatus()
+}
