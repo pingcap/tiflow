@@ -77,6 +77,7 @@ type Tracker struct {
 
 // downstreamTracker tracks downstream schema.
 type downstreamTracker struct {
+	sync.RWMutex
 	downstreamConn *dbconn.DBConn                  // downstream connection
 	stmtParser     *parser.Parser                  // statement parser
 	tableInfos     map[string]*DownstreamTableInfo // downstream table infos
@@ -466,22 +467,7 @@ func (tr *Tracker) GetSystemVar(name string) (string, bool) {
 // GetDownStreamTableInfo gets downstream table info.
 // note. this function will init downstreamTrack's table info.
 func (tr *Tracker) GetDownStreamTableInfo(tctx *tcontext.Context, tableID string, originTI *model.TableInfo) (*DownstreamTableInfo, error) {
-	dti, ok := tr.dsTracker.tableInfos[tableID]
-	if !ok {
-		tctx.Logger.Info("Downstream schema tracker init. ", zap.String("tableID", tableID))
-		downstreamTI, err := tr.getTableInfoByCreateStmt(tctx, tableID)
-		if err != nil {
-			tctx.Logger.Error("Init dowstream schema info error. ", zap.String("tableID", tableID), zap.Error(err))
-			return nil, err
-		}
-
-		dti = &DownstreamTableInfo{
-			TableInfo:   downstreamTI,
-			WhereHandle: sqlmodel.GetWhereHandle(originTI, downstreamTI),
-		}
-		tr.dsTracker.tableInfos[tableID] = dti
-	}
-	return dti, nil
+	return tr.dsTracker.getOrInit(tctx, tableID, originTI)
 }
 
 // RemoveDownstreamSchema just remove schema or table in downstreamTrack.
@@ -491,41 +477,76 @@ func (tr *Tracker) RemoveDownstreamSchema(tctx *tcontext.Context, targetTables [
 	}
 
 	for _, targetTable := range targetTables {
-		tableID := utils.GenTableID(targetTable)
-		_, ok := tr.dsTracker.tableInfos[tableID]
-		if !ok {
-			// handle just have schema
-			if targetTable.Schema != "" && targetTable.Name == "" {
-				for k := range tr.dsTracker.tableInfos {
-					if strings.HasPrefix(k, tableID+".") {
-						delete(tr.dsTracker.tableInfos, k)
-						tctx.Logger.Info("Remove downstream schema tracker", zap.String("tableID", k))
-					}
+		tr.dsTracker.remove(tctx, targetTable)
+	}
+}
+
+func (dt *downstreamTracker) getOrInit(tctx *tcontext.Context, tableID string, originTI *model.TableInfo) (*DownstreamTableInfo, error) {
+	dt.RLock()
+	dti, ok := dt.tableInfos[tableID]
+	dt.RUnlock()
+	if ok {
+		return dti, nil
+	}
+
+	// cache miss, get from downstream
+	dt.Lock()
+	defer dt.Unlock()
+	dti, ok = dt.tableInfos[tableID]
+	if !ok {
+		tctx.Logger.Info("Downstream schema tracker init. ", zap.String("tableID", tableID))
+		downstreamTI, err := dt.getTableInfoByCreateStmt(tctx, tableID)
+		if err != nil {
+			tctx.Logger.Error("Init dowstream schema info error. ", zap.String("tableID", tableID), zap.Error(err))
+			return nil, err
+		}
+
+		dti = &DownstreamTableInfo{
+			TableInfo:   downstreamTI,
+			WhereHandle: sqlmodel.GetWhereHandle(originTI, downstreamTI),
+		}
+		dt.tableInfos[tableID] = dti
+	}
+	return dti, nil
+}
+
+func (dt *downstreamTracker) remove(tctx *tcontext.Context, targetTable *filter.Table) {
+	dt.Lock()
+	defer dt.Unlock()
+
+	tableID := utils.GenTableID(targetTable)
+	if _, ok := dt.tableInfos[tableID]; !ok {
+		// handle just have schema
+		if targetTable.Schema != "" && targetTable.Name == "" {
+			for k := range dt.tableInfos {
+				if strings.HasPrefix(k, tableID+".") {
+					delete(dt.tableInfos, k)
+					tctx.Logger.Info("Remove downstream schema tracker", zap.String("tableID", k))
 				}
 			}
-		} else {
-			delete(tr.dsTracker.tableInfos, tableID)
-			tctx.Logger.Info("Remove downstream schema tracker", zap.String("tableID", tableID))
 		}
+	} else {
+		delete(dt.tableInfos, tableID)
+		tctx.Logger.Info("Remove downstream schema tracker", zap.String("tableID", tableID))
 	}
 }
 
 // getTableInfoByCreateStmt get downstream tableInfo by "SHOW CREATE TABLE" stmt.
-func (tr *Tracker) getTableInfoByCreateStmt(tctx *tcontext.Context, tableID string) (*model.TableInfo, error) {
-	if tr.dsTracker.stmtParser == nil {
-		err := tr.initDownStreamSQLModeAndParser(tctx)
+func (dt *downstreamTracker) getTableInfoByCreateStmt(tctx *tcontext.Context, tableID string) (*model.TableInfo, error) {
+	if dt.stmtParser == nil {
+		err := dt.initDownStreamSQLModeAndParser(tctx)
 		if err != nil {
 			return nil, err
 		}
 	}
-	createStr, err := dbconn.GetTableCreateSQL(tctx, tr.dsTracker.downstreamConn, tableID)
+	createStr, err := dbconn.GetTableCreateSQL(tctx, dt.downstreamConn, tableID)
 	if err != nil {
 		return nil, dmterror.ErrSchemaTrackerCannotFetchDownstreamCreateTableStmt.Delegate(err, tableID)
 	}
 
 	tctx.Logger.Info("Show create table info", zap.String("tableID", tableID), zap.String("create string", createStr))
 	// parse create table stmt.
-	stmtNode, err := tr.dsTracker.stmtParser.ParseOneStmt(createStr, "", "")
+	stmtNode, err := dt.stmtParser.ParseOneStmt(createStr, "", "")
 	if err != nil {
 		return nil, dmterror.ErrSchemaTrackerInvalidCreateTableStmt.Delegate(err, createStr)
 	}
@@ -539,9 +560,9 @@ func (tr *Tracker) getTableInfoByCreateStmt(tctx *tcontext.Context, tableID stri
 }
 
 // initDownStreamTrackerParser init downstream tracker parser by default sql_mode.
-func (tr *Tracker) initDownStreamSQLModeAndParser(tctx *tcontext.Context) error {
+func (dt *downstreamTracker) initDownStreamSQLModeAndParser(tctx *tcontext.Context) error {
 	setSQLMode := fmt.Sprintf("SET SESSION SQL_MODE = '%s'", mysql.DefaultSQLMode)
-	_, err := tr.dsTracker.downstreamConn.ExecuteSQL(tctx, []string{setSQLMode})
+	_, err := dt.downstreamConn.ExecuteSQL(tctx, []string{setSQLMode})
 	if err != nil {
 		return dmterror.ErrSchemaTrackerCannotSetDownstreamSQLMode.Delegate(err, mysql.DefaultSQLMode)
 	}
@@ -549,6 +570,6 @@ func (tr *Tracker) initDownStreamSQLModeAndParser(tctx *tcontext.Context) error 
 	if err != nil {
 		return dmterror.ErrSchemaTrackerCannotInitDownstreamParser.Delegate(err, mysql.DefaultSQLMode)
 	}
-	tr.dsTracker.stmtParser = stmtParser
+	dt.stmtParser = stmtParser
 	return nil
 }
