@@ -533,7 +533,7 @@ func GetDownStreamTi(ti *model.TableInfo, originTi *model.TableInfo) *Downstream
 		return mysql.HasNotNullFlag(ti.Columns[i].Flag)
 	}
 
-	for i, idx := range ti.Indices {
+	for _, idx := range ti.Indices {
 		if !idx.Primary && !idx.Unique {
 			continue
 		}
@@ -544,12 +544,12 @@ func GetDownStreamTi(ti *model.TableInfo, originTi *model.TableInfo) *Downstream
 		availableUKIndexList = append(availableUKIndexList, indexRedirect)
 		if idx.Primary {
 			absoluteUKIndexInfo = indexRedirect
-			absoluteUKPosition = i
+			absoluteUKPosition = len(availableUKIndexList) - 1
 			hasPk = true
 		} else if absoluteUKIndexInfo == nil && isSpecifiedIndexColumn(idx, fn) {
 			// second check not null unique key
 			absoluteUKIndexInfo = indexRedirect
-			absoluteUKPosition = i
+			absoluteUKPosition = len(availableUKIndexList) - 1
 		}
 	}
 

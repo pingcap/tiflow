@@ -116,3 +116,18 @@ func TestInfoProviderTaskPosition(t *testing.T) {
 		},
 	}, taskPosition)
 }
+
+func TestInfoProviderTableCounts(t *testing.T) {
+	dispatcher := NewBaseScheduleDispatcher("cf-1", nil, 1300)
+	injectSchedulerStateForInfoProviderTest(dispatcher)
+
+	require.Equal(t, map[model.CaptureID]int{
+		"capture-1": 3,
+		"capture-2": 2,
+	}, dispatcher.GetTotalTableCounts())
+
+	require.Equal(t, map[model.CaptureID]int{
+		"capture-1": 1,
+		"capture-2": 1,
+	}, dispatcher.GetPendingTableCounts())
+}

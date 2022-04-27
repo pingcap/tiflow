@@ -31,9 +31,10 @@ func DispatchTableTopic(changefeedID ChangeFeedID) p2p.Topic {
 
 // DispatchTableMessage is the message body for dispatching a table.
 type DispatchTableMessage struct {
-	OwnerRev int64   `json:"owner-rev"`
-	ID       TableID `json:"id"`
-	IsDelete bool    `json:"is-delete"`
+	OwnerRev int64          `json:"owner-rev"`
+	Epoch    ProcessorEpoch `json:"epoch"`
+	ID       TableID        `json:"id"`
+	IsDelete bool           `json:"is-delete"`
 }
 
 // DispatchTableResponseTopic returns a message topic for the result of
@@ -44,7 +45,8 @@ func DispatchTableResponseTopic(changefeedID ChangeFeedID) p2p.Topic {
 
 // DispatchTableResponseMessage is the message body for the result of dispatching a table.
 type DispatchTableResponseMessage struct {
-	ID TableID `json:"id"`
+	ID    TableID        `json:"id"`
+	Epoch ProcessorEpoch `json:"epoch"`
 }
 
 // AnnounceTopic returns a message topic for announcing an ownership change.
@@ -64,14 +66,23 @@ func SyncTopic(changefeedID ChangeFeedID) p2p.Topic {
 	return fmt.Sprintf("send-status-resp/%s", changefeedID)
 }
 
+// ProcessorEpoch designates a continuous period of the processor working normally.
+type ProcessorEpoch = string
+
 // SyncMessage is the message body for syncing the current states of a processor.
 // MsgPack serialization has been implemented to minimize the size of the message.
 type SyncMessage struct {
 	// Sends the processor's version for compatibility check
 	ProcessorVersion string
-	Running          []TableID
-	Adding           []TableID
-	Removing         []TableID
+
+	// Epoch is reset to a unique value when the processor has
+	// encountered an internal error or other events so that
+	// it has to re-sync its states with the Owner.
+	Epoch ProcessorEpoch
+
+	Running  []TableID
+	Adding   []TableID
+	Removing []TableID
 }
 
 // Marshal serializes the message into MsgPack format.
