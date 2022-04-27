@@ -38,6 +38,13 @@ import (
 	"github.com/pingcap/tidb/parser/format"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/sessionctx"
+<<<<<<< HEAD
+=======
+	"github.com/pingcap/tidb/util/dbutil"
+	"github.com/pingcap/tidb/util/filter"
+	regexprrouter "github.com/pingcap/tidb/util/regexpr-router"
+	router "github.com/pingcap/tidb/util/table-router"
+>>>>>>> cd9032152 (syncer(dm): fix failed row skipped due to incorrect checkpoint flush (#5295))
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
@@ -1011,8 +1018,7 @@ func (s *Syncer) checkShouldFlush() error {
 		s.flushCheckPointsAsync(j)
 		return nil
 	}
-	s.jobWg.Wait()
-	return s.flushCheckPoints()
+	return s.flushJobs()
 }
 
 // TODO: move to syncer/job.go
