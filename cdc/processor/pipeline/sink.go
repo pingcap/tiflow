@@ -14,6 +14,9 @@
 package pipeline
 
 import (
+	"sync/atomic"
+	"time"
+
 	"context"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
@@ -25,8 +28,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/pipeline"
 	pmessage "github.com/pingcap/tiflow/pkg/pipeline/message"
 	"go.uber.org/zap"
-	"sync/atomic"
-	"time"
 )
 
 const (
