@@ -14,10 +14,10 @@
 package pipeline
 
 import (
+	"context"
 	"sync/atomic"
 	"time"
 
-	"context"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
