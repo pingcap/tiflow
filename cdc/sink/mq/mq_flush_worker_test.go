@@ -98,9 +98,11 @@ func newTestWorker() (*flushWorker, *mockProducer) {
 		metrics.NewStatistics(context.Background(), metrics.SinkTypeMQ)), producer
 }
 
+//nolint:tparallel
 func TestBatch(t *testing.T) {
 	t.Parallel()
 
+	worker, _ := newTestWorker()
 	key := topicPartitionKey{
 		topic:     "test",
 		partition: 1,
@@ -172,15 +174,13 @@ func TestBatch(t *testing.T) {
 		},
 	}
 
+	var wg sync.WaitGroup
 	ctx := context.Background()
-	for i := range tests {
-		test := tests[i]
+	batch := make([]mqEvent, 3)
+	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			t.Parallel()
+			// Can not be parallel, it tests reusing the same batch.
 
-			batch := make([]mqEvent, 3)
-			worker, _ := newTestWorker()
-			var wg sync.WaitGroup
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
