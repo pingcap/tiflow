@@ -202,7 +202,8 @@ func (v *DataValidator) initialize() error {
 	// todo: enhance error handling
 	v.errChan = make(chan error, 10)
 	v.pendingRowCounts = make([]atomic.Int64, rowChangeTypeCount)
-	v.resetErrorRowCount()
+	v.newErrorRowCount.Store(0)
+	v.workers = []*validateWorker{}
 
 	if err := v.persistHelper.init(v.tctx); err != nil {
 		return err
@@ -781,7 +782,7 @@ func (v *DataValidator) persistCheckpointAndData(loc binlog.Location) error {
 	for _, worker := range v.workers {
 		worker.resetErrorRows()
 	}
-	v.resetErrorRowCount()
+	v.newErrorRowCount.Store(0)
 	return nil
 }
 
@@ -853,8 +854,8 @@ func (v *DataValidator) incrErrorRowCount(status pb.ValidateErrorState, cnt int)
 	v.newErrorRowCount.Add(int64(cnt))
 }
 
-func (v *DataValidator) resetErrorRowCount() {
-	v.newErrorRowCount.Store(0)
+func (v *DataValidator) getWorkers() []*validateWorker {
+	return v.workers
 }
 
 func (v *DataValidator) getResult() pb.ProcessResult {

@@ -201,7 +201,7 @@ func (c *validatorPersistHelper) persist(loc binlog.Location) error {
 	// get snapshot of the current table status
 	tableStatus := c.validator.getTableStatusMap()
 	count := len(tableStatus)
-	for _, worker := range c.validator.workers {
+	for _, worker := range c.validator.getWorkers() {
 		for _, tblChange := range worker.getPendingChangesMap() {
 			count += len(tblChange.jobs)
 		}
@@ -224,7 +224,7 @@ func (c *validatorPersistHelper) persist(loc binlog.Location) error {
 	args = append(args, []interface{}{c.cfg.SourceID, loc.Position.Name, loc.Position.Pos, loc.GTIDSetStr()})
 
 	// update/insert pending row changes
-	for _, worker := range c.validator.workers {
+	for _, worker := range c.validator.getWorkers() {
 		for _, tblChange := range worker.getPendingChangesMap() {
 			for key, j := range tblChange.jobs {
 				row := j.row
@@ -287,7 +287,7 @@ func (c *validatorPersistHelper) persist(loc binlog.Location) error {
 		)
 	}
 	// error rows
-	for _, worker := range c.validator.workers {
+	for _, worker := range c.validator.getWorkers() {
 		for _, r := range worker.getErrorRows() {
 			sql := `INSERT INTO ` + c.errorChangeTableName + `
 					(source, src_schema_name, src_table_name, row_pk, dst_schema_name, dst_table_name, data, dst_data, error_type, status)
