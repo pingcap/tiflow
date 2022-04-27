@@ -163,6 +163,9 @@ func getJavaSQLType(c *model.Column, mysqlType string) (result JavaSQLType, err 
 	// for **unsigned** integral types, type would be `uint64` or `string`. see reference:
 	// https://github.com/pingcap/tiflow/blob/1e3dd155049417e3fd7bf9b0a0c7b08723b33791/cdc/entry/mounter.go#L501
 	// https://github.com/pingcap/tidb/blob/6495a5a116a016a3e077d181b8c8ad81f76ac31b/types/datum.go#L423-L455
+	if c.Value == nil {
+		return javaType, nil
+	}
 	var number uint64
 	switch v := c.Value.(type) {
 	case uint64:
