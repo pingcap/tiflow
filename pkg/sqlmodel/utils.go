@@ -14,6 +14,7 @@
 package sqlmodel
 
 import (
+	"fmt"
 	"strings"
 
 	timodel "github.com/pingcap/tidb/parser/model"
@@ -56,4 +57,15 @@ func isGenerated(columns []*timodel.ColumnInfo, name timodel.CIStr) bool {
 		}
 	}
 	return false
+}
+
+// ColValAsStr convert column value as string
+func ColValAsStr(v interface{}) string {
+	switch dv := v.(type) {
+	case []byte:
+		return string(dv)
+	case string:
+		return dv
+	}
+	return fmt.Sprintf("%v", v)
 }
