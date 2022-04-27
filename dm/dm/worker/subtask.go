@@ -300,11 +300,11 @@ func (st *SubTask) StopValidator() {
 	st.Unlock()
 }
 
-func (st *SubTask) GetValidatorStatus() []*pb.ValidationTableStatus {
+func (st *SubTask) GetValidatorTableStatus(filterStatus pb.Stage) []*pb.ValidationTableStatus {
 	st.RLock()
 	defer st.RUnlock()
 	if st.validator != nil && st.validator.Started() {
-		return st.validator.GetValidationStatus()
+		return st.validator.GetValidationTableStatus(filterStatus)
 	}
 	st.l.Warn("validator not start")
 	// todo: should it inform the user of this error

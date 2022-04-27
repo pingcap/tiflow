@@ -2754,6 +2754,7 @@ func (s *Server) GetValidationStatus(ctx context.Context, req *pb.GetValidationS
 			resp.Msg += wresp.Msg + "; "
 			continue
 		}
+		resp.Validators = append(resp.Validators, wresp.Validators...)
 		resp.Status = append(resp.Status, wresp.Status...)
 	}
 	// nolint:nilerr

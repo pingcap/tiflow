@@ -979,7 +979,7 @@ func (s *Server) GetWorkerValidatorStatus(ctx context.Context, req *pb.GetValida
 		resp.Msg = terror.ErrWorkerNoStart.Error()
 		return resp, nil
 	}
-	res := w.GetValidateStatus(req.TaskName, req.FilterStatus)
+	res := w.GetValidateTableStatus(req.TaskName, req.FilterStatus)
 	resp.Status = res
 	return resp, nil
 }

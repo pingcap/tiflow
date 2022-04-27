@@ -549,6 +549,12 @@ func TestValidatorGetValidationStatus(t *testing.T) {
 			ValidationStatus: pb.Stage_Running.String(),
 			Message:          "",
 		},
+		"`db`.`tbl2`": {
+			SrcTable:         "`db`.`tbl2`",
+			DstTable:         "`db`.`tbl2`",
+			ValidationStatus: pb.Stage_Stopped.String(),
+			Message:          tableWithoutPrimaryKeyMsg,
+		},
 	}
 	validator.tableStatus = map[string]*tableValidateStatus{
 		"`db`.`tbl1`": {
@@ -556,9 +562,29 @@ func TestValidatorGetValidationStatus(t *testing.T) {
 			target: filter.Table{Schema: "db", Name: "tbl1"},
 			stage:  pb.Stage_Running,
 		},
+		"`db`.`tbl2`": {
+			source:  filter.Table{Schema: "db", Name: "tbl2"},
+			target:  filter.Table{Schema: "db", Name: "tbl2"},
+			stage:   pb.Stage_Stopped,
+			message: tableWithoutPrimaryKeyMsg,
+		},
 	}
-	ret := validator.GetValidationStatus()
+	ret := validator.GetValidationTableStatus(pb.Stage_InvalidStage)
 	require.Equal(t, len(expected), len(ret))
+	for _, result := range ret {
+		ent, ok := expected[result.SrcTable]
+		require.Equal(t, ok, true)
+		require.EqualValues(t, ent, result)
+	}
+	ret = validator.GetValidationTableStatus(pb.Stage_Running)
+	require.Equal(t, 1, len(ret))
+	for _, result := range ret {
+		ent, ok := expected[result.SrcTable]
+		require.Equal(t, ok, true)
+		require.EqualValues(t, ent, result)
+	}
+	ret = validator.GetValidationTableStatus(pb.Stage_Stopped)
+	require.Equal(t, 1, len(ret))
 	for _, result := range ret {
 		ent, ok := expected[result.SrcTable]
 		require.Equal(t, ok, true)

@@ -904,32 +904,38 @@ func genRowKeyByString(pkValues []string) string {
 	return join
 }
 
-func (v *DataValidator) GetValidationStatus() []*pb.ValidationTableStatus {
-	failpoint.Inject("MockValidationQuery", func() {
-		failpoint.Return([]*pb.ValidationTableStatus{
-			{
-				SrcTable:         "`testdb1`.`testtable1`",
-				DstTable:         "`dstdb`.`dsttable`",
-				ValidationStatus: pb.Stage_Running.String(),
-			},
-			{
-				SrcTable:         "`testdb2`.`testtable2`",
-				DstTable:         "`dstdb`.`dsttable`",
-				ValidationStatus: pb.Stage_Stopped.String(),
-				Message:          tableWithoutPrimaryKeyMsg,
-			},
-		})
-	})
+func (v *DataValidator) GetValidationTableStatus(filterStatus pb.Stage) []*pb.ValidationTableStatus {
 	v.RLock()
 	defer v.RUnlock()
+	tblStatus := v.tableStatus
+	failpoint.Inject("MockValidationQuery", func() {
+		tblStatus = map[string]*tableValidateStatus{
+			"`testdb1`.`testtable1`": {
+				source: filter.Table{Schema: "testdb1", Name: "testtable1"},
+				target: filter.Table{Schema: "dstdb", Name: "dsttable"},
+				stage:  pb.Stage_Running,
+			},
+			"`testdb2`.`testtable2`": {
+				source:  filter.Table{Schema: "testdb2", Name: "testtable2"},
+				target:  filter.Table{Schema: "dstdb", Name: "dsttable"},
+				stage:   pb.Stage_Stopped,
+				message: tableWithoutPrimaryKeyMsg,
+			},
+		}
+	})
+
 	result := make([]*pb.ValidationTableStatus, 0)
-	for _, tblStat := range v.tableStatus {
-		result = append(result, &pb.ValidationTableStatus{
-			SrcTable:         tblStat.source.String(),
-			DstTable:         tblStat.target.String(),
-			ValidationStatus: tblStat.stage.String(),
-			Message:          tblStat.message,
-		})
+	for _, tblStat := range tblStatus {
+		returnAll := filterStatus == pb.Stage_InvalidStage
+		if returnAll || tblStat.stage == filterStatus {
+			result = append(result, &pb.ValidationTableStatus{
+				Source:           v.cfg.SourceID,
+				SrcTable:         tblStat.source.String(),
+				DstTable:         tblStat.target.String(),
+				ValidationStatus: tblStat.stage.String(),
+				Message:          tblStat.message,
+			})
+		}
 	}
 	return result
 }

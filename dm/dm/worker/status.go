@@ -16,7 +16,6 @@ package worker
 import (
 	"encoding/json"
 	"sort"
-	"strconv"
 
 	"github.com/gogo/protobuf/jsonpb"
 	"go.uber.org/zap"
@@ -125,22 +124,10 @@ func (w *SourceWorker) GetUnitAndSourceStatusJSON(stName string, sourceStatus *b
 	return s
 }
 
-func (w *SourceWorker) GetValidateStatus(stName string, filterStatus pb.Stage) []*pb.ValidationTableStatus {
+func (w *SourceWorker) GetValidateTableStatus(stName string, filterStatus pb.Stage) []*pb.ValidationTableStatus {
 	st := w.subTaskHolder.findSubTask(stName)
-	res := make([]*pb.ValidationTableStatus, 0)
 	if st == nil {
-		return res
+		return []*pb.ValidationTableStatus{}
 	}
-	w.RLock()
-	cfg := w.cfg
-	w.RUnlock()
-	sourceIP := cfg.From.Host + ":" + strconv.Itoa(cfg.From.Port)
-	tblStats := st.GetValidatorStatus()
-	for _, stat := range tblStats {
-		if filterStatus == pb.Stage_InvalidStage || stat.ValidationStatus == filterStatus.String() {
-			stat.Source = sourceIP
-			res = append(res, stat)
-		}
-	}
-	return res
+	return st.GetValidatorTableStatus(filterStatus)
 }
