@@ -77,15 +77,16 @@ func TestChangefeed(t *testing.T) {
 	_, err = s.manager.Tick(ctx, s.state)
 	require.Nil(t, err)
 
+	changefeedID := model.DefaultNamespaceChangeFeedID("test-changefeed")
 	// an inactive changefeed
-	s.state.Changefeeds["test-changefeed"] = orchestrator.NewChangefeedReactorState("test-changefeed")
+	s.state.Changefeeds[changefeedID] = orchestrator.NewChangefeedReactorState(changefeedID)
 	_, err = s.manager.Tick(ctx, s.state)
 	s.tester.MustApplyPatches()
 	require.Nil(t, err)
 	require.Len(t, s.manager.processors, 0)
 
 	// an active changefeed
-	s.state.Changefeeds["test-changefeed"].PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
+	s.state.Changefeeds[changefeedID].PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 		return &model.ChangeFeedInfo{
 			SinkURI:    "blackhole://",
 			CreateTime: time.Now(),
@@ -94,10 +95,10 @@ func TestChangefeed(t *testing.T) {
 			Config:     config.GetDefaultReplicaConfig(),
 		}, true, nil
 	})
-	s.state.Changefeeds["test-changefeed"].PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
+	s.state.Changefeeds[changefeedID].PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
 		return &model.ChangeFeedStatus{}, true, nil
 	})
-	s.state.Changefeeds["test-changefeed"].PatchTaskStatus(ctx.GlobalVars().CaptureInfo.ID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
+	s.state.Changefeeds[changefeedID].PatchTaskStatus(ctx.GlobalVars().CaptureInfo.ID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
 		return &model.TaskStatus{
 			Tables: map[int64]*model.TableReplicaInfo{1: {}},
 		}, true, nil
@@ -109,11 +110,11 @@ func TestChangefeed(t *testing.T) {
 	require.Len(t, s.manager.processors, 1)
 
 	// processor return errors
-	s.state.Changefeeds["test-changefeed"].PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
+	s.state.Changefeeds[changefeedID].PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
 		status.AdminJobType = model.AdminStop
 		return status, true, nil
 	})
-	s.state.Changefeeds["test-changefeed"].PatchTaskStatus(ctx.GlobalVars().CaptureInfo.ID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
+	s.state.Changefeeds[changefeedID].PatchTaskStatus(ctx.GlobalVars().CaptureInfo.ID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
 		status.AdminJobType = model.AdminStop
 		return status, true, nil
 	})
@@ -134,9 +135,10 @@ func TestDebugInfo(t *testing.T) {
 	_, err = s.manager.Tick(ctx, s.state)
 	require.Nil(t, err)
 
+	changefeedID := model.DefaultNamespaceChangeFeedID("test-changefeed")
 	// an active changefeed
-	s.state.Changefeeds["test-changefeed"] = orchestrator.NewChangefeedReactorState("test-changefeed")
-	s.state.Changefeeds["test-changefeed"].PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
+	s.state.Changefeeds[changefeedID] = orchestrator.NewChangefeedReactorState(changefeedID)
+	s.state.Changefeeds[changefeedID].PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 		return &model.ChangeFeedInfo{
 			SinkURI:    "blackhole://",
 			CreateTime: time.Now(),
@@ -145,10 +147,10 @@ func TestDebugInfo(t *testing.T) {
 			Config:     config.GetDefaultReplicaConfig(),
 		}, true, nil
 	})
-	s.state.Changefeeds["test-changefeed"].PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
+	s.state.Changefeeds[changefeedID].PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
 		return &model.ChangeFeedStatus{}, true, nil
 	})
-	s.state.Changefeeds["test-changefeed"].PatchTaskStatus(ctx.GlobalVars().CaptureInfo.ID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
+	s.state.Changefeeds[changefeedID].PatchTaskStatus(ctx.GlobalVars().CaptureInfo.ID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
 		return &model.TaskStatus{
 			Tables: map[int64]*model.TableReplicaInfo{1: {}},
 		}, true, nil
@@ -190,9 +192,10 @@ func TestClose(t *testing.T) {
 	_, err = s.manager.Tick(ctx, s.state)
 	require.Nil(t, err)
 
+	changefeedID := model.DefaultNamespaceChangeFeedID("test-changefeed")
 	// an active changefeed
-	s.state.Changefeeds["test-changefeed"] = orchestrator.NewChangefeedReactorState("test-changefeed")
-	s.state.Changefeeds["test-changefeed"].PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
+	s.state.Changefeeds[changefeedID] = orchestrator.NewChangefeedReactorState(changefeedID)
+	s.state.Changefeeds[changefeedID].PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 		return &model.ChangeFeedInfo{
 			SinkURI:    "blackhole://",
 			CreateTime: time.Now(),
@@ -201,10 +204,10 @@ func TestClose(t *testing.T) {
 			Config:     config.GetDefaultReplicaConfig(),
 		}, true, nil
 	})
-	s.state.Changefeeds["test-changefeed"].PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
+	s.state.Changefeeds[changefeedID].PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
 		return &model.ChangeFeedStatus{}, true, nil
 	})
-	s.state.Changefeeds["test-changefeed"].PatchTaskStatus(ctx.GlobalVars().CaptureInfo.ID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
+	s.state.Changefeeds[changefeedID].PatchTaskStatus(ctx.GlobalVars().CaptureInfo.ID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
 		return &model.TaskStatus{
 			Tables: map[int64]*model.TableReplicaInfo{1: {}},
 		}, true, nil

@@ -18,6 +18,7 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/api"
+	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/cmd/context"
 	"github.com/pingcap/tiflow/pkg/cmd/factory"
 	"github.com/pingcap/tiflow/pkg/cmd/util"
@@ -76,8 +77,8 @@ func (o *listChangefeedOptions) run(cmd *cobra.Command) error {
 		return err
 	}
 
-	changefeedIDs := make(map[string]struct{}, len(raw))
-	for id := range raw {
+	changefeedIDs := make(map[model.ChangeFeedID]struct{}, len(raw))
+	for id, _ := range raw {
 		changefeedIDs[id] = struct{}{}
 	}
 
@@ -94,7 +95,7 @@ func (o *listChangefeedOptions) run(cmd *cobra.Command) error {
 	cfs := make([]*changefeedCommonInfo, 0, len(changefeedIDs))
 
 	for id := range changefeedIDs {
-		cfci := &changefeedCommonInfo{ID: id}
+		cfci := &changefeedCommonInfo{ID: id.ID}
 
 		resp, err := sendOwnerChangefeedQuery(ctx, o.etcdClient, id, o.credential)
 		if err != nil {

@@ -23,10 +23,11 @@ import (
 	dmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc/contextutil"
+	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/cyclic/mark"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/security"
-	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
 
@@ -38,7 +39,7 @@ type mysqlSyncpointStore struct {
 }
 
 // newSyncpointStore create a sink to record the syncpoint map in downstream DB for every changefeed
-func newMySQLSyncpointStore(ctx context.Context, id string, sinkURI *url.URL) (SyncpointStore, error) {
+func newMySQLSyncpointStore(ctx context.Context, id model.ChangeFeedID, sinkURI *url.URL) (SyncpointStore, error) {
 	var syncDB *sql.DB
 
 	// todo If is neither mysql nor tidb, such as kafka, just ignore this feature.
@@ -66,7 +67,7 @@ func newMySQLSyncpointStore(ctx context.Context, id string, sinkURI *url.URL) (S
 		if err != nil {
 			return nil, cerror.ErrMySQLConnectionError.Wrap(err).GenWithStack("fail to open MySQL connection")
 		}
-		name := "cdc_mysql_tls" + "syncpoint" + id
+		name := "cdc_mysql_tls" + "syncpoint" + id.Namespace + "_" + id.ID
 		err = dmysql.RegisterTLSConfig(name, tlsCfg)
 		if err != nil {
 			return nil, cerror.ErrMySQLConnectionError.Wrap(err).GenWithStack("fail to open MySQL connection")
@@ -81,7 +82,7 @@ func newMySQLSyncpointStore(ctx context.Context, id string, sinkURI *url.URL) (S
 			params.timezone = fmt.Sprintf(`"%s"`, s)
 		}
 	} else {
-		tz := util.TimezoneFromCtx(ctx)
+		tz := contextutil.TimezoneFromCtx(ctx)
 		params.timezone = fmt.Sprintf(`"%s"`, tz.String())
 	}
 
@@ -168,7 +169,7 @@ func (s *mysqlSyncpointStore) CreateSynctable(ctx context.Context) error {
 	return cerror.WrapError(cerror.ErrMySQLTxnError, err)
 }
 
-func (s *mysqlSyncpointStore) SinkSyncpoint(ctx context.Context, id string, checkpointTs uint64) error {
+func (s *mysqlSyncpointStore) SinkSyncpoint(ctx context.Context, id model.ChangeFeedID, checkpointTs uint64) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		log.Error("sync table: begin Tx fail", zap.Error(err))
@@ -187,7 +188,7 @@ func (s *mysqlSyncpointStore) SinkSyncpoint(ctx context.Context, id string, chec
 	}
 	query := "insert ignore into " + mark.SchemaName + "." + syncpointTableName +
 		"(cf, primary_ts, secondary_ts) VALUES (?,?,?)"
-	_, err = tx.Exec(query, id, checkpointTs, secondaryTs)
+	_, err = tx.Exec(query, id.Namespace+"_"+id.ID, checkpointTs, secondaryTs)
 	if err != nil {
 		err2 := tx.Rollback()
 		if err2 != nil {

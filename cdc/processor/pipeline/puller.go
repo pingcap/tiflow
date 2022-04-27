@@ -17,6 +17,7 @@ import (
 	"context"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/puller"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
@@ -32,14 +33,15 @@ type pullerNode struct {
 
 	tableID     model.TableID
 	replicaInfo *model.TableReplicaInfo
-	changefeed  string
+	changefeed  model.ChangeFeedID
 	cancel      context.CancelFunc
 	wg          *errgroup.Group
 }
 
 func newPullerNode(
 	tableID model.TableID, replicaInfo *model.TableReplicaInfo,
-	tableName, changefeed string,
+	tableName string,
+	changefeed model.ChangeFeedID,
 ) *pullerNode {
 	return &pullerNode{
 		tableID:     tableID,
@@ -68,10 +70,10 @@ func (n *pullerNode) Init(ctx pipeline.NodeContext) error {
 func (n *pullerNode) start(ctx pipeline.NodeContext, wg *errgroup.Group, isActorMode bool, sorter *sorterNode) error {
 	n.wg = wg
 	ctxC, cancel := context.WithCancel(ctx)
-	ctxC = util.PutTableInfoInCtx(ctxC, n.tableID, n.tableName)
-	ctxC = util.PutCaptureAddrInCtx(ctxC, ctx.GlobalVars().CaptureInfo.AdvertiseAddr)
-	ctxC = util.PutChangefeedIDInCtx(ctxC, ctx.ChangefeedVars().ID)
-	ctxC = util.PutRoleInCtx(ctxC, util.RoleProcessor)
+	ctxC = contextutil.PutTableInfoInCtx(ctxC, n.tableID, n.tableName)
+	ctxC = contextutil.PutCaptureAddrInCtx(ctxC, ctx.GlobalVars().CaptureInfo.AdvertiseAddr)
+	ctxC = contextutil.PutChangefeedIDInCtx(ctxC, ctx.ChangefeedVars().ID)
+	ctxC = contextutil.PutRoleInCtx(ctxC, util.RoleProcessor)
 	// NOTICE: always pull the old value internally
 	// See also: https://github.com/pingcap/tiflow/issues/2301.
 	plr := puller.NewPuller(

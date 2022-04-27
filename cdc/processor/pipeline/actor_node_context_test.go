@@ -30,9 +30,14 @@ import (
 
 func TestContext(t *testing.T) {
 	t.Parallel()
-	ctx := newContext(sdtContext.TODO(), t.Name(), nil, 1, &context.ChangefeedVars{ID: "zzz", Info: &model.ChangeFeedInfo{}}, &context.GlobalVars{}, throwDoNothing)
+	ctx := newContext(sdtContext.TODO(), t.Name(), nil, 1,
+		&context.ChangefeedVars{
+			ID:   model.DefaultNamespaceChangeFeedID("zzz"),
+			Info: &model.ChangeFeedInfo{},
+		},
+		&context.GlobalVars{}, throwDoNothing)
 	require.NotNil(t, ctx.GlobalVars())
-	require.Equal(t, "zzz", ctx.ChangefeedVars().ID)
+	require.Equal(t, "zzz", ctx.ChangefeedVars().ID.ID)
 	require.Equal(t, actor.ID(1), ctx.tableActorID)
 	ctx.SendToNextNode(pmessage.BarrierMessage(1))
 	require.Equal(t, uint32(1), ctx.eventCount)
@@ -66,7 +71,9 @@ func TestThrow(t *testing.T) {
 
 func TestActorNodeContextTrySendToNextNode(t *testing.T) {
 	t.Parallel()
-	ctx := newContext(sdtContext.TODO(), t.Name(), nil, 1, &context.ChangefeedVars{ID: "zzz"}, &context.GlobalVars{}, throwDoNothing)
+	ctx := newContext(sdtContext.TODO(), t.Name(), nil, 1,
+		&context.ChangefeedVars{ID: model.DefaultNamespaceChangeFeedID("zzz")},
+		&context.GlobalVars{}, throwDoNothing)
 	ctx.outputCh = make(chan pmessage.Message, 1)
 	require.True(t, ctx.TrySendToNextNode(pmessage.BarrierMessage(1)))
 	require.False(t, ctx.TrySendToNextNode(pmessage.BarrierMessage(1)))
@@ -90,7 +97,9 @@ func TestSendToNextNodeNoTickMessage(t *testing.T) {
 	ch := make(chan message.Message[pmessage.Message], defaultOutputChannelSize)
 	fa := &forwardActor{ch: ch}
 	require.Nil(t, sys.System().Spawn(mb, fa))
-	actorContext := newContext(ctx, t.Name(), sys.Router(), actorID, &context.ChangefeedVars{ID: "abc"}, &context.GlobalVars{}, throwDoNothing)
+	actorContext := newContext(ctx, t.Name(), sys.Router(), actorID,
+		&context.ChangefeedVars{ID: model.DefaultNamespaceChangeFeedID("abc")},
+		&context.GlobalVars{}, throwDoNothing)
 	actorContext.setEventBatchSize(2)
 	actorContext.SendToNextNode(pmessage.BarrierMessage(1))
 	time.Sleep(100 * time.Millisecond)

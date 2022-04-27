@@ -97,7 +97,9 @@ func createSorter(ctx pipeline.NodeContext, tableName string, tableID model.Tabl
 	case model.SortUnified, model.SortInFile /* `file` becomes an alias of `unified` for backward compatibility */ :
 		if sortEngine == model.SortInFile {
 			log.Warn("File sorter is obsolete and replaced by unified sorter. Please revise your changefeed settings",
-				zap.String("changefeed", ctx.ChangefeedVars().ID), zap.String("tableName", tableName))
+				zap.String("namesapce", ctx.ChangefeedVars().ID.Namespace),
+				zap.String("changefeed", ctx.ChangefeedVars().ID.ID),
+				zap.String("tableName", tableName))
 		}
 
 		if config.GetGlobalServerConfig().Debug.EnableDBSorter {
@@ -154,7 +156,7 @@ func (n *sorterNode) start(
 		lastSendResolvedTsTime := time.Now() // the time at which we last sent a resolved-ts.
 		lastCRTs := uint64(0)                // the commit-ts of the last row changed we sent.
 
-		metricsTableMemoryHistogram := tableMemoryHistogram.WithLabelValues(ctx.ChangefeedVars().ID)
+		metricsTableMemoryHistogram := tableMemoryHistogram.WithLabelValues(ctx.ChangefeedVars().ID.ID)
 		metricsTicker := time.NewTicker(flushMemoryMetricsDuration)
 		defer metricsTicker.Stop()
 
@@ -305,8 +307,8 @@ func (n *sorterNode) updateBarrierTs(barrierTs model.Ts) {
 	}
 }
 
-func (n *sorterNode) releaseResource(changefeedID string) {
-	defer tableMemoryHistogram.DeleteLabelValues(changefeedID)
+func (n *sorterNode) releaseResource(changefeedID model.ChangeFeedID) {
+	defer tableMemoryHistogram.DeleteLabelValues(changefeedID.ID)
 	// Since the flowController is implemented by `Cond`, it is not cancelable by a context
 	// the flowController will be blocked in a background goroutine,
 	// We need to abort the flowController manually in the nodeRunner

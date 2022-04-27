@@ -23,7 +23,6 @@ import (
 	"strings"
 
 	"github.com/pingcap/failpoint"
-
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sorter"

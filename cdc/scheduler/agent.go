@@ -141,7 +141,7 @@ func NewBaseAgent(
 	messenger ProcessorMessenger,
 	config *BaseAgentConfig,
 ) *BaseAgent {
-	logger := log.L().With(zap.String("changefeed", changeFeedID))
+	logger := log.L().With(zap.String("namespace", changeFeedID.Namespace), zap.String("changefeed", changeFeedID.ID))
 	ret := &BaseAgent{
 		pendingOps:       deque.NewDeque(),
 		tableOperations:  map[model.TableID]*agentOperation{},

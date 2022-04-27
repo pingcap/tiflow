@@ -57,8 +57,8 @@ func GetEtcdKeyChangeFeedList() string {
 }
 
 // GetEtcdKeyChangeFeedInfo returns the key of a changefeed config
-func GetEtcdKeyChangeFeedInfo(changefeedID string) string {
-	return fmt.Sprintf("%s/%s", GetEtcdKeyChangeFeedList(), changefeedID)
+func GetEtcdKeyChangeFeedInfo(changefeedID model.ChangeFeedID) string {
+	return fmt.Sprintf("%s/%s", GetEtcdKeyChangeFeedList(), changefeedID.ID)
 }
 
 // GetEtcdKeyTaskPosition returns the key of a task position
@@ -77,8 +77,8 @@ func GetEtcdKeyTaskStatus(changeFeedID, captureID string) string {
 }
 
 // GetEtcdKeyJob returns the key for a job status
-func GetEtcdKeyJob(changeFeedID string) string {
-	return JobKeyPrefix + "/" + changeFeedID
+func GetEtcdKeyJob(changeFeedID model.ChangeFeedID) string {
+	return JobKeyPrefix + "/" + changeFeedID.ID
 }
 
 // CDCEtcdClient is a wrap of etcd client
@@ -120,7 +120,7 @@ func (c CDCEtcdClient) GetAllCDCInfo(ctx context.Context) ([]*mvccpb.KeyValue, e
 }
 
 // GetChangeFeeds returns kv revision and a map mapping from changefeedID to changefeed detail mvccpb.KeyValue
-func (c CDCEtcdClient) GetChangeFeeds(ctx context.Context) (int64, map[string]*mvccpb.KeyValue, error) {
+func (c CDCEtcdClient) GetChangeFeeds(ctx context.Context) (int64, map[model.ChangeFeedID]*mvccpb.KeyValue, error) {
 	key := GetEtcdKeyChangeFeedList()
 
 	resp, err := c.Client.Get(ctx, key, clientv3.WithPrefix())
@@ -128,24 +128,24 @@ func (c CDCEtcdClient) GetChangeFeeds(ctx context.Context) (int64, map[string]*m
 		return 0, nil, cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
 	}
 	revision := resp.Header.Revision
-	details := make(map[string]*mvccpb.KeyValue, resp.Count)
+	details := make(map[model.ChangeFeedID]*mvccpb.KeyValue, resp.Count)
 	for _, kv := range resp.Kvs {
 		id, err := extractKeySuffix(string(kv.Key))
 		if err != nil {
 			return 0, nil, err
 		}
-		details[id] = kv
+		details[model.DefaultNamespaceChangeFeedID(id)] = kv
 	}
 	return revision, details, nil
 }
 
 // GetAllChangeFeedInfo queries all changefeed information
-func (c CDCEtcdClient) GetAllChangeFeedInfo(ctx context.Context) (map[string]*model.ChangeFeedInfo, error) {
+func (c CDCEtcdClient) GetAllChangeFeedInfo(ctx context.Context) (map[model.ChangeFeedID]*model.ChangeFeedInfo, error) {
 	_, details, err := c.GetChangeFeeds(ctx)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	allFeedInfo := make(map[string]*model.ChangeFeedInfo, len(details))
+	allFeedInfo := make(map[model.ChangeFeedID]*model.ChangeFeedInfo, len(details))
 	for id, rawDetail := range details {
 		info := &model.ChangeFeedInfo{}
 		if err := info.Unmarshal(rawDetail.Value); err != nil {
@@ -158,7 +158,7 @@ func (c CDCEtcdClient) GetAllChangeFeedInfo(ctx context.Context) (map[string]*mo
 }
 
 // GetChangeFeedInfo queries the config of a given changefeed
-func (c CDCEtcdClient) GetChangeFeedInfo(ctx context.Context, id string) (*model.ChangeFeedInfo, error) {
+func (c CDCEtcdClient) GetChangeFeedInfo(ctx context.Context, id model.ChangeFeedID) (*model.ChangeFeedInfo, error) {
 	key := GetEtcdKeyChangeFeedInfo(id)
 	resp, err := c.Client.Get(ctx, key)
 	if err != nil {
@@ -173,20 +173,20 @@ func (c CDCEtcdClient) GetChangeFeedInfo(ctx context.Context, id string) (*model
 }
 
 // DeleteChangeFeedInfo deletes a changefeed config from etcd
-func (c CDCEtcdClient) DeleteChangeFeedInfo(ctx context.Context, id string) error {
+func (c CDCEtcdClient) DeleteChangeFeedInfo(ctx context.Context, id model.ChangeFeedID) error {
 	key := GetEtcdKeyChangeFeedInfo(id)
 	_, err := c.Client.Delete(ctx, key)
 	return cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
 }
 
 // GetAllChangeFeedStatus queries all changefeed job status
-func (c CDCEtcdClient) GetAllChangeFeedStatus(ctx context.Context) (map[string]*model.ChangeFeedStatus, error) {
+func (c CDCEtcdClient) GetAllChangeFeedStatus(ctx context.Context) (map[model.ChangeFeedID]*model.ChangeFeedStatus, error) {
 	key := JobKeyPrefix
 	resp, err := c.Client.Get(ctx, key, clientv3.WithPrefix())
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
 	}
-	statuses := make(map[string]*model.ChangeFeedStatus, resp.Count)
+	statuses := make(map[model.ChangeFeedID]*model.ChangeFeedStatus, resp.Count)
 	for _, rawKv := range resp.Kvs {
 		changefeedID, err := extractKeySuffix(string(rawKv.Key))
 		if err != nil {
@@ -197,13 +197,13 @@ func (c CDCEtcdClient) GetAllChangeFeedStatus(ctx context.Context) (map[string]*
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
-		statuses[changefeedID] = status
+		statuses[model.DefaultNamespaceChangeFeedID(changefeedID)] = status
 	}
 	return statuses, nil
 }
 
 // GetChangeFeedStatus queries the checkpointTs and resovledTs of a given changefeed
-func (c CDCEtcdClient) GetChangeFeedStatus(ctx context.Context, id string) (*model.ChangeFeedStatus, int64, error) {
+func (c CDCEtcdClient) GetChangeFeedStatus(ctx context.Context, id model.ChangeFeedID) (*model.ChangeFeedStatus, int64, error) {
 	key := GetEtcdKeyJob(id)
 	resp, err := c.Client.Get(ctx, key)
 	if err != nil {
@@ -296,7 +296,9 @@ func (c CDCEtcdClient) RevokeAllLeases(ctx context.Context, leases map[string]in
 }
 
 // CreateChangefeedInfo creates a change feed info into etcd and fails if it is already exists.
-func (c CDCEtcdClient) CreateChangefeedInfo(ctx context.Context, info *model.ChangeFeedInfo, changeFeedID string) error {
+func (c CDCEtcdClient) CreateChangefeedInfo(ctx context.Context,
+	info *model.ChangeFeedInfo,
+	changeFeedID model.ChangeFeedID) error {
 	infoKey := GetEtcdKeyChangeFeedInfo(changeFeedID)
 	jobKey := GetEtcdKeyJob(changeFeedID)
 	value, err := info.Marshal()
@@ -317,7 +319,8 @@ func (c CDCEtcdClient) CreateChangefeedInfo(ctx context.Context, info *model.Cha
 	}
 	if !resp.Succeeded {
 		log.Warn("changefeed already exists, ignore create changefeed",
-			zap.String("changefeed", changeFeedID))
+			zap.String("namespace", changeFeedID.Namespace),
+			zap.String("changefeed", changeFeedID.ID))
 		return cerror.ErrChangeFeedAlreadyExists.GenWithStackByArgs(changeFeedID)
 	}
 	return errors.Trace(err)
@@ -325,7 +328,7 @@ func (c CDCEtcdClient) CreateChangefeedInfo(ctx context.Context, info *model.Cha
 
 // SaveChangeFeedInfo stores change feed info into etcd
 // TODO: this should be called from outer system, such as from a TiDB client
-func (c CDCEtcdClient) SaveChangeFeedInfo(ctx context.Context, info *model.ChangeFeedInfo, changeFeedID string) error {
+func (c CDCEtcdClient) SaveChangeFeedInfo(ctx context.Context, info *model.ChangeFeedInfo, changeFeedID model.ChangeFeedID) error {
 	key := GetEtcdKeyChangeFeedInfo(changeFeedID)
 	value, err := info.Marshal()
 	if err != nil {
@@ -354,7 +357,7 @@ func (c CDCEtcdClient) GetProcessors(ctx context.Context) ([]*model.ProcInfoSnap
 			return nil, err
 		}
 		info := &model.ProcInfoSnap{
-			CfID:      changefeedID,
+			CfID:      model.DefaultNamespaceChangeFeedID(changefeedID),
 			CaptureID: captureID,
 		}
 		infos = append(infos, info)
@@ -523,7 +526,7 @@ func (c CDCEtcdClient) PutTaskPositionOnChange(
 // PutChangeFeedStatus puts changefeed synchronization status into etcd
 func (c CDCEtcdClient) PutChangeFeedStatus(
 	ctx context.Context,
-	changefeedID string,
+	changefeedID model.ChangeFeedID,
 	status *model.ChangeFeedStatus,
 ) error {
 	key := GetEtcdKeyJob(changefeedID)

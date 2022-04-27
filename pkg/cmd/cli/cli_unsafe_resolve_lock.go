@@ -18,6 +18,7 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/kv"
+	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/cmd/context"
 	"github.com/pingcap/tiflow/pkg/cmd/factory"
 	"github.com/pingcap/tiflow/pkg/txnutil"
@@ -74,7 +75,8 @@ func (o *unsafeResolveLockOptions) run() error {
 	}
 	log.ReplaceGlobals(lg, p)
 	txnResolver := txnutil.NewLockerResolver(o.kvStorage.(tikv.Storage),
-		"changefeed-client", util.RoleClient)
+		model.DefaultNamespaceChangeFeedID("changefeed-client"),
+		util.RoleClient)
 	return txnResolver.Resolve(ctx, o.regionID, o.ts)
 }
 

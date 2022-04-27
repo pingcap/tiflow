@@ -40,7 +40,7 @@ func TestFlushTable(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.TODO())
 	defer cancel()
 	b := newBufferSink(newBlackHoleSink(ctx), 5)
-	go b.run(ctx, "", make(chan error))
+	go b.run(ctx, model.DefaultNamespaceChangeFeedID(""), make(chan error))
 
 	require.Equal(t, uint64(5), b.getTableCheckpointTs(2))
 	require.Nil(t, b.EmitRowChangedEvents(ctx))
@@ -84,7 +84,7 @@ func TestFlushFailed(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.TODO())
 	b := newBufferSink(newBlackHoleSink(ctx), 5)
-	go b.run(ctx, "", make(chan error))
+	go b.run(ctx, model.DefaultNamespaceChangeFeedID(""), make(chan error))
 
 	checkpoint, err := b.FlushRowChangedEvents(ctx, 3, 8)
 	require.True(t, checkpoint <= 8)

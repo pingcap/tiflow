@@ -108,7 +108,7 @@ func (s *managerSuite) TestManagerRandom(c *check.C) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	errCh := make(chan error, 16)
-	manager := NewManager(ctx, newCheckSink(c), errCh, 0, "", "")
+	manager := NewManager(ctx, newCheckSink(c), errCh, 0, "", model.DefaultNamespaceChangeFeedID(""))
 	defer manager.Close(ctx)
 	goroutineNum := 10
 	rowNum := 100
@@ -166,7 +166,7 @@ func (s *managerSuite) TestManagerAddRemoveTable(c *check.C) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	errCh := make(chan error, 16)
-	manager := NewManager(ctx, newCheckSink(c), errCh, 0, "", "")
+	manager := NewManager(ctx, newCheckSink(c), errCh, 0, "", model.DefaultNamespaceChangeFeedID(""))
 	defer manager.Close(ctx)
 	goroutineNum := 200
 	var wg sync.WaitGroup
@@ -254,7 +254,7 @@ func (s *managerSuite) TestManagerDestroyTableSink(c *check.C) {
 	defer cancel()
 
 	errCh := make(chan error, 16)
-	manager := NewManager(ctx, newCheckSink(c), errCh, 0, "", "")
+	manager := NewManager(ctx, newCheckSink(c), errCh, 0, "", model.DefaultNamespaceChangeFeedID(""))
 	defer manager.Close(ctx)
 
 	table := &model.TableName{TableID: int64(49)}
@@ -276,7 +276,7 @@ func (s *managerSuite) TestManagerDestroyTableSink(c *check.C) {
 func BenchmarkManagerFlushing(b *testing.B) {
 	ctx, cancel := context.WithCancel(context.Background())
 	errCh := make(chan error, 16)
-	manager := NewManager(ctx, newCheckSink(nil), errCh, 0, "", "")
+	manager := NewManager(ctx, newCheckSink(nil), errCh, 0, "", model.DefaultNamespaceChangeFeedID(""))
 
 	// Init table sinks.
 	goroutineNum := 2000
@@ -396,7 +396,7 @@ func (s *managerSuite) TestManagerError(c *check.C) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	errCh := make(chan error, 16)
-	manager := NewManager(ctx, &errorSink{C: c}, errCh, 0, "", "")
+	manager := NewManager(ctx, &errorSink{C: c}, errCh, 0, "", model.DefaultNamespaceChangeFeedID(""))
 	defer manager.Close(ctx)
 	sink, err := manager.CreateTableSink(1, redo.NewDisabledManager())
 	c.Assert(err, check.IsNil)

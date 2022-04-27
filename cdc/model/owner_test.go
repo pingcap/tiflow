@@ -203,7 +203,7 @@ func TestProcSnapshot(t *testing.T) {
 			10: {StartTs: 100},
 		},
 	}
-	cfID := "changefeed-1"
+	cfID := DefaultNamespaceChangeFeedID("changefeed-1")
 	captureID := "capture-1"
 	snap := info.Snapshot(cfID, captureID, 200)
 	require.Equal(t, cfID, snap.CfID)

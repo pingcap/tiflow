@@ -35,7 +35,7 @@ func GetTimezone(name string) (tz *time.Location, err error) {
 	return
 }
 
-func getTimezoneFromZonefile(zonefile string) (tz *time.Location, err error) {
+func GetTimezoneFromZonefile(zonefile string) (tz *time.Location, err error) {
 	// the linked path of `/etc/localtime` sample:
 	// MacOS: /var/db/timezone/zoneinfo/Asia/Shanghai
 	// Linux: /usr/share/zoneinfo/Asia/Shanghai
@@ -58,5 +58,5 @@ func GetLocalTimezone() (*time.Location, error) {
 		return time.Local, nil
 	}
 	str := timeutil.InferSystemTZ()
-	return getTimezoneFromZonefile(str)
+	return GetTimezoneFromZonefile(str)
 }

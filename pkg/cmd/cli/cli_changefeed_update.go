@@ -79,7 +79,7 @@ func (o *updateChangefeedOptions) complete(f factory.Factory) error {
 func (o *updateChangefeedOptions) run(cmd *cobra.Command) error {
 	ctx := cmdcontext.GetDefaultContext()
 
-	resp, err := sendOwnerChangefeedQuery(ctx, o.etcdClient, o.changefeedID, o.credential)
+	resp, err := sendOwnerChangefeedQuery(ctx, o.etcdClient, model.DefaultNamespaceChangeFeedID(o.changefeedID), o.credential)
 	// if no cdc owner exists, allow user to update changefeed config
 	if err != nil && errors.Cause(err) != cerror.ErrOwnerNotFound {
 		return err
@@ -90,7 +90,7 @@ func (o *updateChangefeedOptions) run(cmd *cobra.Command) error {
 		return errors.Errorf("can only update changefeed config when it is stopped\nstatus: %s", resp)
 	}
 
-	old, err := o.etcdClient.GetChangeFeedInfo(ctx, o.changefeedID)
+	old, err := o.etcdClient.GetChangeFeedInfo(ctx, model.DefaultNamespaceChangeFeedID(o.changefeedID))
 	if err != nil {
 		return err
 	}
@@ -126,7 +126,7 @@ func (o *updateChangefeedOptions) run(cmd *cobra.Command) error {
 		}
 	}
 
-	err = o.etcdClient.SaveChangeFeedInfo(ctx, newInfo, o.changefeedID)
+	err = o.etcdClient.SaveChangeFeedInfo(ctx, newInfo, model.DefaultNamespaceChangeFeedID(o.changefeedID))
 	if err != nil {
 		return err
 	}

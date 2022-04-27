@@ -309,14 +309,14 @@ func TestLogWriterFlushLog(t *testing.T) {
 		controller := gomock.NewController(t)
 		mockStorage := mockstorage.NewMockExternalStorage(controller)
 		if tt.isRunning && tt.name != "context cancel" {
-			mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_test-cf_meta.meta", gomock.Any()).Return(nil).Times(1)
+			mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_default_test-cf_meta.meta", gomock.Any()).Return(nil).Times(1)
 		}
 		mockWriter := &mockFileWriter{}
 		mockWriter.On("Flush", mock.Anything).Return(tt.flushErr)
 		mockWriter.On("IsRunning").Return(tt.isRunning)
 		cfg := &LogWriterConfig{
 			Dir:               dir,
-			ChangeFeedID:      "test-cf",
+			ChangeFeedID:      model.DefaultNamespaceChangeFeedID("test-cf"),
 			CaptureID:         "cp",
 			MaxLogSize:        10,
 			CreateTime:        time.Date(2000, 1, 1, 1, 1, 1, 1, &time.Location{}),
@@ -398,14 +398,14 @@ func TestLogWriterEmitCheckpointTs(t *testing.T) {
 		controller := gomock.NewController(t)
 		mockStorage := mockstorage.NewMockExternalStorage(controller)
 		if tt.isRunning && tt.name != "context cancel" {
-			mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_test-cf_meta.meta", gomock.Any()).Return(nil).Times(1)
+			mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_default_test-cf_meta.meta", gomock.Any()).Return(nil).Times(1)
 		}
 
 		mockWriter := &mockFileWriter{}
 		mockWriter.On("IsRunning").Return(tt.isRunning)
 		cfg := &LogWriterConfig{
 			Dir:               dir,
-			ChangeFeedID:      "test-cf",
+			ChangeFeedID:      model.DefaultNamespaceChangeFeedID("test-cf"),
 			CaptureID:         "cp",
 			MaxLogSize:        10,
 			CreateTime:        time.Date(2000, 1, 1, 1, 1, 1, 1, &time.Location{}),
@@ -488,13 +488,13 @@ func TestLogWriterEmitResolvedTs(t *testing.T) {
 		controller := gomock.NewController(t)
 		mockStorage := mockstorage.NewMockExternalStorage(controller)
 		if tt.isRunning && tt.name != "context cancel" {
-			mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_test-cf_meta.meta", gomock.Any()).Return(nil).Times(1)
+			mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_default_test-cf_meta.meta", gomock.Any()).Return(nil).Times(1)
 		}
 		mockWriter := &mockFileWriter{}
 		mockWriter.On("IsRunning").Return(tt.isRunning)
 		cfg := &LogWriterConfig{
 			Dir:               dir,
-			ChangeFeedID:      "test-cf",
+			ChangeFeedID:      model.DefaultNamespaceChangeFeedID("test-cf"),
 			CaptureID:         "cp",
 			MaxLogSize:        10,
 			CreateTime:        time.Date(2000, 1, 1, 1, 1, 1, 1, &time.Location{}),
@@ -570,7 +570,7 @@ func TestLogWriterGetCurrentResolvedTs(t *testing.T) {
 		mockWriter.On("IsRunning").Return(true)
 		cfg := &LogWriterConfig{
 			Dir:               dir,
-			ChangeFeedID:      "test-cf",
+			ChangeFeedID:      model.DefaultNamespaceChangeFeedID("test-cf"),
 			CaptureID:         "cp",
 			MaxLogSize:        10,
 			CreateTime:        time.Date(2000, 1, 1, 1, 1, 1, 1, &time.Location{}),
@@ -612,7 +612,7 @@ func TestNewLogWriter(t *testing.T) {
 	defer cancel()
 	cfg := &LogWriterConfig{
 		Dir:               "dirt",
-		ChangeFeedID:      "test-cf",
+		ChangeFeedID:      model.DefaultNamespaceChangeFeedID("test-cf"),
 		CaptureID:         "cp",
 		MaxLogSize:        10,
 		CreateTime:        time.Date(2000, 1, 1, 1, 1, 1, 1, &time.Location{}),
@@ -629,7 +629,7 @@ func TestNewLogWriter(t *testing.T) {
 
 	cfg1 := &LogWriterConfig{
 		Dir:               "dirt111",
-		ChangeFeedID:      "test-cf",
+		ChangeFeedID:      model.DefaultNamespaceChangeFeedID("test-cf"),
 		CaptureID:         "cp",
 		MaxLogSize:        10,
 		CreateTime:        time.Date(2000, 1, 1, 1, 1, 1, 1, &time.Location{}),
@@ -662,7 +662,7 @@ func TestNewLogWriter(t *testing.T) {
 
 	cfg = &LogWriterConfig{
 		Dir:               dir,
-		ChangeFeedID:      "test-cf",
+		ChangeFeedID:      model.DefaultNamespaceChangeFeedID("test-cf"),
 		CaptureID:         "cp",
 		MaxLogSize:        10,
 		CreateTime:        time.Date(2000, 1, 1, 1, 1, 1, 1, &time.Location{}),
@@ -692,7 +692,7 @@ func TestNewLogWriter(t *testing.T) {
 	}
 	cfg3 := &LogWriterConfig{
 		Dir:               dir,
-		ChangeFeedID:      "test-cf112232",
+		ChangeFeedID:      model.DefaultNamespaceChangeFeedID("test-cf112232"),
 		CaptureID:         "cp",
 		MaxLogSize:        10,
 		CreateTime:        time.Date(2000, 1, 1, 1, 1, 1, 1, &time.Location{}),
@@ -708,7 +708,7 @@ func TestNewLogWriter(t *testing.T) {
 func TestWriterRedoGC(t *testing.T) {
 	cfg := &LogWriterConfig{
 		Dir:               "dir",
-		ChangeFeedID:      "test-cf",
+		ChangeFeedID:      model.DefaultNamespaceChangeFeedID("test-cf"),
 		CaptureID:         "cp",
 		MaxLogSize:        10,
 		CreateTime:        time.Date(2000, 1, 1, 1, 1, 1, 1, &time.Location{}),
@@ -844,7 +844,7 @@ func TestDeleteAllLogs(t *testing.T) {
 		mockWriter.On("Close").Return(tt.closeErr)
 		cfg := &LogWriterConfig{
 			Dir:               dir,
-			ChangeFeedID:      "test-cf",
+			ChangeFeedID:      model.DefaultNamespaceChangeFeedID("test-cf"),
 			CaptureID:         "cp",
 			MaxLogSize:        10,
 			CreateTime:        time.Date(2000, 1, 1, 1, 1, 1, 1, &time.Location{}),
@@ -918,7 +918,7 @@ func TestPreCleanUpS3(t *testing.T) {
 	for _, tc := range testCases {
 		origin := getAllFilesInS3
 		getAllFilesInS3 = func(ctx context.Context, l *LogWriter) ([]string, error) {
-			return []string{"1", "11", "delete_test-cf"}, tc.getAllFilesInS3Err
+			return []string{"1", "11", "delete_default_test-cf"}, tc.getAllFilesInS3Err
 		}
 		controller := gomock.NewController(t)
 		mockStorage := mockstorage.NewMockExternalStorage(controller)
@@ -928,7 +928,7 @@ func TestPreCleanUpS3(t *testing.T) {
 
 		cfg := &LogWriterConfig{
 			Dir:               "dir",
-			ChangeFeedID:      "test-cf",
+			ChangeFeedID:      model.DefaultNamespaceChangeFeedID("test-cf"),
 			CaptureID:         "cp",
 			MaxLogSize:        10,
 			CreateTime:        time.Date(2000, 1, 1, 1, 1, 1, 1, &time.Location{}),

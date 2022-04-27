@@ -148,7 +148,7 @@ func (h *ownerAPI) handleChangefeedAdmin(w http.ResponseWriter, req *http.Reques
 		opts.ForceRemove = forceRemoveOpt
 	}
 	job := model.AdminJob{
-		CfID: req.Form.Get(OpVarChangefeedID),
+		CfID: model.DefaultNamespaceChangeFeedID(req.Form.Get(OpVarChangefeedID)),
 		Type: model.AdminJobType(typ),
 		Opts: opts,
 	}
@@ -169,10 +169,10 @@ func (h *ownerAPI) handleRebalanceTrigger(w http.ResponseWriter, req *http.Reque
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
-	changefeedID := req.Form.Get(OpVarChangefeedID)
-	if err := model.ValidateChangefeedID(changefeedID); err != nil {
+	changefeedID := model.DefaultNamespaceChangeFeedID(req.Form.Get(OpVarChangefeedID))
+	if err := model.ValidateChangefeedID(changefeedID.ID); err != nil {
 		writeError(w, http.StatusBadRequest,
-			cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed id: %s", changefeedID))
+			cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed id: %s", changefeedID.ID))
 		return
 	}
 
@@ -193,10 +193,10 @@ func (h *ownerAPI) handleMoveTable(w http.ResponseWriter, req *http.Request) {
 			cerror.WrapError(cerror.ErrInternalServerError, err))
 		return
 	}
-	changefeedID := req.Form.Get(OpVarChangefeedID)
-	if err := model.ValidateChangefeedID(changefeedID); err != nil {
+	changefeedID := model.DefaultNamespaceChangeFeedID(req.Form.Get(OpVarChangefeedID))
+	if err := model.ValidateChangefeedID(changefeedID.ID); err != nil {
 		writeError(w, http.StatusBadRequest,
-			cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed id: %s", changefeedID))
+			cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed id: %s", changefeedID.ID))
 		return
 	}
 	to := req.Form.Get(OpVarTargetCaptureID)
@@ -230,10 +230,10 @@ func (h *ownerAPI) handleChangefeedQuery(w http.ResponseWriter, req *http.Reques
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
-	changefeedID := req.Form.Get(OpVarChangefeedID)
-	if err := model.ValidateChangefeedID(changefeedID); err != nil {
+	changefeedID := model.DefaultNamespaceChangeFeedID(req.Form.Get(OpVarChangefeedID))
+	if err := model.ValidateChangefeedID(changefeedID.ID); err != nil {
 		writeError(w, http.StatusBadRequest,
-			cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed id: %s", changefeedID))
+			cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed id: %s", changefeedID.ID))
 		return
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

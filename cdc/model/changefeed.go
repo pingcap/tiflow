@@ -31,8 +31,20 @@ import (
 	"go.uber.org/zap"
 )
 
+const DefaultNamespace = "default"
+
 // ChangeFeedID is the type for change feed ID
-type ChangeFeedID = string
+type ChangeFeedID struct {
+	Namespace string
+	ID        string
+}
+
+func DefaultNamespaceChangeFeedID(id string) ChangeFeedID {
+	return ChangeFeedID{
+		Namespace: DefaultNamespace,
+		ID:        id,
+	}
+}
 
 // SortEngine is the sorter engine
 type SortEngine = string

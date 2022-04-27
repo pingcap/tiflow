@@ -19,6 +19,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/redo/reader"
@@ -113,8 +114,8 @@ func (ra *RedoApplier) consumeLogs(ctx context.Context) error {
 		return err
 	}
 	opts := map[string]string{}
-	ctx = util.PutRoleInCtx(ctx, util.RoleRedoLogApplier)
-	s, err := sink.New(ctx, applierChangefeed, ra.cfg.SinkURI, ft, replicaConfig, opts, ra.errCh)
+	ctx = contextutil.PutRoleInCtx(ctx, util.RoleRedoLogApplier)
+	s, err := sink.New(ctx, model.DefaultNamespaceChangeFeedID(applierChangefeed), ra.cfg.SinkURI, ft, replicaConfig, opts, ra.errCh)
 	if err != nil {
 		return err
 	}

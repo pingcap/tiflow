@@ -19,6 +19,7 @@ import (
 	"strings"
 
 	"github.com/pingcap/failpoint"
+	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/mq"
 	"github.com/pingcap/tiflow/cdc/sink/mysql"
@@ -164,9 +165,9 @@ func Validate(ctx context.Context, sinkURI string, cfg *config.ReplicaConfig, op
 		return err
 	}
 	errCh := make(chan error)
-	ctx = util.PutRoleInCtx(ctx, util.RoleClient)
+	ctx = contextutil.PutRoleInCtx(ctx, util.RoleClient)
 	// TODO: find a better way to verify a sinkURI is valid
-	s, err := New(ctx, "sink-verify", sinkURI, sinkFilter, cfg, opts, errCh)
+	s, err := New(ctx, model.DefaultNamespaceChangeFeedID("sink-verify"), sinkURI, sinkFilter, cfg, opts, errCh)
 	if err != nil {
 		return err
 	}

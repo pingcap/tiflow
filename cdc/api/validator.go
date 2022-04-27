@@ -21,6 +21,7 @@ import (
 	"github.com/pingcap/log"
 	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tiflow/cdc/capture"
+	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/entry/schema"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -51,7 +52,7 @@ func verifyCreateChangefeedConfig(
 		return nil, cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed_id: %s", changefeedConfig.ID)
 	}
 	// check if the changefeed exists
-	cfStatus, err := capture.StatusProvider().GetChangeFeedStatus(ctx, changefeedConfig.ID)
+	cfStatus, err := capture.StatusProvider().GetChangeFeedStatus(ctx, model.DefaultNamespaceChangeFeedID(changefeedConfig.ID))
 	if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
 		return nil, err
 	}
@@ -71,7 +72,7 @@ func verifyCreateChangefeedConfig(
 	// Ensure the start ts is valid in the next 1 hour.
 	const ensureTTL = 60 * 60
 	if err := gc.EnsureChangefeedStartTsSafety(
-		ctx, capture.PDClient, changefeedConfig.ID, ensureTTL, changefeedConfig.StartTS); err != nil {
+		ctx, capture.PDClient, model.DefaultNamespaceChangeFeedID(changefeedConfig.ID), ensureTTL, changefeedConfig.StartTS); err != nil {
 		if !cerror.ErrStartTsBeforeGC.Equal(err) {
 			return nil, cerror.ErrPDEtcdAPIError.Wrap(err)
 		}
@@ -146,7 +147,7 @@ func verifyCreateChangefeedConfig(
 	if err != nil {
 		return nil, cerror.ErrAPIInvalidParam.Wrap(errors.Annotatef(err, "invalid timezone:%s", changefeedConfig.TimeZone))
 	}
-	ctx = util.PutTimezoneInCtx(ctx, tz)
+	ctx = contextutil.PutTimezoneInCtx(ctx, tz)
 	if err := sink.Validate(ctx, info.SinkURI, info.Config, info.Opts); err != nil {
 		return nil, err
 	}

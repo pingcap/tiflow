@@ -114,7 +114,7 @@ func (o *statisticsChangefeedOptions) complete(f factory.Factory) error {
 func (o *statisticsChangefeedOptions) runCliWithEtcdClient(ctx context.Context, cmd *cobra.Command, lastCount *uint64, lastTime *time.Time) error {
 	now := time.Now()
 
-	changefeedStatus, _, err := o.etcdClient.GetChangeFeedStatus(ctx, o.changefeedID)
+	changefeedStatus, _, err := o.etcdClient.GetChangeFeedStatus(ctx, model.DefaultNamespaceChangeFeedID(o.changefeedID))
 	if err != nil {
 		return err
 	}

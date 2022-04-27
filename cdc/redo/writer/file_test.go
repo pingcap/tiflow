@@ -26,6 +26,7 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/pingcap/errors"
 	mockstorage "github.com/pingcap/tidb/br/pkg/mock/storage"
+	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo/common"
 	"github.com/pingcap/tiflow/pkg/leakutil"
 	"github.com/stretchr/testify/require"
@@ -51,7 +52,7 @@ func TestWriterWrite(t *testing.T) {
 		cfg: &FileWriterConfig{
 			MaxLogSize:   10,
 			Dir:          dir,
-			ChangeFeedID: "test-cf",
+			ChangeFeedID: model.DefaultNamespaceChangeFeedID("test-cf"),
 			CaptureID:    "cp",
 			FileType:     common.DefaultRowLogFileType,
 			CreateTime:   time.Date(2000, 1, 1, 1, 1, 1, 1, &time.Location{}),
@@ -67,7 +68,7 @@ func TestWriterWrite(t *testing.T) {
 	_, err = w.Write([]byte("tes1t11111"))
 	require.Nil(t, err)
 	// create a .tmp file
-	fileName := fmt.Sprintf("%s_%s_%d_%s_%d%s", w.cfg.CaptureID, w.cfg.ChangeFeedID, w.cfg.CreateTime.Unix(), w.cfg.FileType, 1, common.LogEXT) + common.TmpEXT
+	fileName := fmt.Sprintf("%s_%s_%s_%d_%s_%d%s", w.cfg.CaptureID, w.cfg.ChangeFeedID.Namespace, w.cfg.ChangeFeedID.ID, w.cfg.CreateTime.Unix(), w.cfg.FileType, 1, common.LogEXT) + common.TmpEXT
 	path := filepath.Join(w.cfg.Dir, fileName)
 	info, err := os.Stat(path)
 	require.Nil(t, err)
@@ -81,13 +82,13 @@ func TestWriterWrite(t *testing.T) {
 	require.Nil(t, err)
 
 	// after rotate, rename to .log
-	fileName = fmt.Sprintf("%s_%s_%d_%s_%d%s", w.cfg.CaptureID, w.cfg.ChangeFeedID, w.cfg.CreateTime.Unix(), w.cfg.FileType, 1, common.LogEXT)
+	fileName = fmt.Sprintf("%s_%s_%s_%d_%s_%d%s", w.cfg.CaptureID, w.cfg.ChangeFeedID.Namespace, w.cfg.ChangeFeedID.ID, w.cfg.CreateTime.Unix(), w.cfg.FileType, 1, common.LogEXT)
 	path = filepath.Join(w.cfg.Dir, fileName)
 	info, err = os.Stat(path)
 	require.Nil(t, err)
 	require.Equal(t, fileName, info.Name())
 	// create a .tmp file with first eventCommitTS as name
-	fileName = fmt.Sprintf("%s_%s_%d_%s_%d%s", w.cfg.CaptureID, w.cfg.ChangeFeedID, w.cfg.CreateTime.Unix(), w.cfg.FileType, 12, common.LogEXT) + common.TmpEXT
+	fileName = fmt.Sprintf("%s_%s_%s_%d_%s_%d%s", w.cfg.CaptureID, w.cfg.ChangeFeedID.Namespace, w.cfg.ChangeFeedID.ID, w.cfg.CreateTime.Unix(), w.cfg.FileType, 12, common.LogEXT) + common.TmpEXT
 	path = filepath.Join(w.cfg.Dir, fileName)
 	info, err = os.Stat(path)
 	require.Nil(t, err)
@@ -96,7 +97,7 @@ func TestWriterWrite(t *testing.T) {
 	require.Nil(t, err)
 	require.False(t, w.IsRunning())
 	// safe close, rename to .log with max eventCommitTS as name
-	fileName = fmt.Sprintf("%s_%s_%d_%s_%d%s", w.cfg.CaptureID, w.cfg.ChangeFeedID, w.cfg.CreateTime.Unix(), w.cfg.FileType, 22, common.LogEXT)
+	fileName = fmt.Sprintf("%s_%s_%s_%d_%s_%d%s", w.cfg.CaptureID, w.cfg.ChangeFeedID.Namespace, w.cfg.ChangeFeedID.ID, w.cfg.CreateTime.Unix(), w.cfg.FileType, 22, common.LogEXT)
 	path = filepath.Join(w.cfg.Dir, fileName)
 	info, err = os.Stat(path)
 	require.Nil(t, err)
@@ -106,7 +107,7 @@ func TestWriterWrite(t *testing.T) {
 		cfg: &FileWriterConfig{
 			MaxLogSize:   10,
 			Dir:          dir,
-			ChangeFeedID: "test-cf11",
+			ChangeFeedID: model.DefaultNamespaceChangeFeedID("test-cf11"),
 			CaptureID:    "cp",
 			FileType:     common.DefaultRowLogFileType,
 			CreateTime:   time.Date(2000, 1, 1, 1, 1, 1, 1, &time.Location{}),
@@ -122,7 +123,7 @@ func TestWriterWrite(t *testing.T) {
 	_, err = w1.Write([]byte("tes1t11111"))
 	require.Nil(t, err)
 	// create a .tmp file
-	fileName = fmt.Sprintf("%s_%s_%d_%s_%d%s", w1.cfg.CaptureID, w1.cfg.ChangeFeedID, w1.cfg.CreateTime.Unix(), w1.cfg.FileType, 1, common.LogEXT) + common.TmpEXT
+	fileName = fmt.Sprintf("%s_%s_%s_%d_%s_%d%s", w1.cfg.CaptureID, w1.cfg.ChangeFeedID.Namespace, w1.cfg.ChangeFeedID.ID, w1.cfg.CreateTime.Unix(), w1.cfg.FileType, 1, common.LogEXT) + common.TmpEXT
 	path = filepath.Join(w1.cfg.Dir, fileName)
 	info, err = os.Stat(path)
 	require.Nil(t, err)
@@ -143,25 +144,25 @@ func TestWriterGC(t *testing.T) {
 
 	controller := gomock.NewController(t)
 	mockStorage := mockstorage.NewMockExternalStorage(controller)
-	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_test_946688461_row_1.log.tmp", gomock.Any()).Return(nil).Times(1)
-	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_test_946688461_row_1.log", gomock.Any()).Return(nil).Times(1)
-	mockStorage.EXPECT().DeleteFile(gomock.Any(), "cp_test_946688461_row_1.log.tmp").Return(nil).Times(1)
+	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_default_test_946688461_row_1.log.tmp", gomock.Any()).Return(nil).Times(1)
+	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_default_test_946688461_row_1.log", gomock.Any()).Return(nil).Times(1)
+	mockStorage.EXPECT().DeleteFile(gomock.Any(), "cp_default_test_946688461_row_1.log.tmp").Return(nil).Times(1)
 
-	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_test_946688461_row_2.log.tmp", gomock.Any()).Return(nil).Times(1)
-	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_test_946688461_row_2.log", gomock.Any()).Return(nil).Times(1)
-	mockStorage.EXPECT().DeleteFile(gomock.Any(), "cp_test_946688461_row_2.log.tmp").Return(nil).Times(1)
+	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_default_test_946688461_row_2.log.tmp", gomock.Any()).Return(nil).Times(1)
+	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_default_test_946688461_row_2.log", gomock.Any()).Return(nil).Times(1)
+	mockStorage.EXPECT().DeleteFile(gomock.Any(), "cp_default_test_946688461_row_2.log.tmp").Return(nil).Times(1)
 
-	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_test_946688461_row_3.log.tmp", gomock.Any()).Return(nil).Times(1)
-	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_test_946688461_row_3.log", gomock.Any()).Return(nil).Times(1)
-	mockStorage.EXPECT().DeleteFile(gomock.Any(), "cp_test_946688461_row_3.log.tmp").Return(nil).Times(1)
+	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_default_test_946688461_row_3.log.tmp", gomock.Any()).Return(nil).Times(1)
+	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_default_test_946688461_row_3.log", gomock.Any()).Return(nil).Times(1)
+	mockStorage.EXPECT().DeleteFile(gomock.Any(), "cp_default_test_946688461_row_3.log.tmp").Return(nil).Times(1)
 
-	mockStorage.EXPECT().DeleteFile(gomock.Any(), "cp_test_946688461_row_1.log").Return(errors.New("ignore err")).Times(1)
-	mockStorage.EXPECT().DeleteFile(gomock.Any(), "cp_test_946688461_row_2.log").Return(errors.New("ignore err")).Times(1)
+	mockStorage.EXPECT().DeleteFile(gomock.Any(), "cp_default_test_946688461_row_1.log").Return(errors.New("ignore err")).Times(1)
+	mockStorage.EXPECT().DeleteFile(gomock.Any(), "cp_default_test_946688461_row_2.log").Return(errors.New("ignore err")).Times(1)
 
 	megabyte = 1
 	cfg := &FileWriterConfig{
 		Dir:               dir,
-		ChangeFeedID:      "test",
+		ChangeFeedID:      model.DefaultNamespaceChangeFeedID("test"),
 		CaptureID:         "cp",
 		MaxLogSize:        10,
 		FileType:          common.DefaultRowLogFileType,
@@ -173,9 +174,9 @@ func TestWriterGC(t *testing.T) {
 		cfg:                    cfg,
 		uint64buf:              make([]byte, 8),
 		storage:                mockStorage,
-		metricWriteBytes:       redoWriteBytesGauge.WithLabelValues(cfg.ChangeFeedID),
-		metricFsyncDuration:    redoFsyncDurationHistogram.WithLabelValues(cfg.ChangeFeedID),
-		metricFlushAllDuration: redoFlushAllDurationHistogram.WithLabelValues(cfg.ChangeFeedID),
+		metricWriteBytes:       redoWriteBytesGauge.WithLabelValues(cfg.ChangeFeedID.ID),
+		metricFsyncDuration:    redoFsyncDurationHistogram.WithLabelValues(cfg.ChangeFeedID.ID),
+		metricFlushAllDuration: redoFlushAllDurationHistogram.WithLabelValues(cfg.ChangeFeedID.ID),
 	}
 	w.running.Store(true)
 	w.eventCommitTS.Store(1)
@@ -249,15 +250,15 @@ func TestNewWriter(t *testing.T) {
 
 	controller := gomock.NewController(t)
 	mockStorage := mockstorage.NewMockExternalStorage(controller)
-	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_test_946688461_ddl_0.log.tmp", gomock.Any()).Return(nil).Times(2)
-	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_test_946688461_ddl_0.log", gomock.Any()).Return(nil).Times(1)
-	mockStorage.EXPECT().DeleteFile(gomock.Any(), "cp_test_946688461_ddl_0.log.tmp").Return(nil).Times(1)
+	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_default_test_946688461_ddl_0.log.tmp", gomock.Any()).Return(nil).Times(2)
+	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_default_test_946688461_ddl_0.log", gomock.Any()).Return(nil).Times(1)
+	mockStorage.EXPECT().DeleteFile(gomock.Any(), "cp_default_test_946688461_ddl_0.log.tmp").Return(nil).Times(1)
 
 	w = &Writer{
 		cfg: &FileWriterConfig{
 			Dir:          dir,
 			CaptureID:    "cp",
-			ChangeFeedID: "test",
+			ChangeFeedID: model.DefaultNamespaceChangeFeedID("test"),
 			FileType:     common.DefaultDDLLogFileType,
 			CreateTime:   time.Date(2000, 1, 1, 1, 1, 1, 1, &time.Location{}),
 			S3Storage:    true,
