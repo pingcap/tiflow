@@ -26,3 +26,31 @@ function start_task_not_pass_with_message() {
 		"start-task $task_conf" \
 		"$2" 1
 }
+
+function start_task_empty_config() {
+	start_task_empty_dump_config $1
+	start_task_empty_load_config $1
+	start_task_empty_sync_config $1
+}
+
+function start_task_empty_dump_config() {
+	sed "/threads/d" $1 >/tmp/empty-dump.yaml
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"start-task /tmp/empty-dump.yaml" \
+		"The configurations as following .* are set in global configuration but instances don't use them" 1
+}
+
+function start_task_empty_load_config() {
+	sed "/pool-size/d" $1 >/tmp/empty-load.yaml
+	cat /tmp/empty-load.yaml
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"start-task /tmp/empty-load.yaml" \
+		"The configurations as following .* are set in global configuration but instances don't use them" 1
+}
+
+function start_task_empty_sync_config() {
+	sed "/worker-count/d" $1 >/tmp/empty-sync.yaml
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"start-task /tmp/empty-sync.yaml" \
+		"The configurations as following .* are set in global configuration but instances don't use them" 1
+}

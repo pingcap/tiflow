@@ -689,10 +689,11 @@ func (c *TaskConfig) adjust() error {
 			rule, ok := c.Mydumpers[inst.MydumperConfigName]
 			if !ok {
 				return terror.ErrConfigMydumperCfgNotFound.Generate(i, inst.MydumperConfigName)
+			} else if rule != nil {
+				globalConfigReferCount[configRefPrefixes[mydumperIdx]+inst.MydumperConfigName]++
+				inst.Mydumper = new(MydumperConfig)
+				*inst.Mydumper = *rule // ref mydumper config
 			}
-			globalConfigReferCount[configRefPrefixes[mydumperIdx]+inst.MydumperConfigName]++
-			inst.Mydumper = new(MydumperConfig)
-			*inst.Mydumper = *rule // ref mydumper config
 		}
 		if inst.Mydumper == nil {
 			if len(c.Mydumpers) != 0 {
@@ -717,10 +718,11 @@ func (c *TaskConfig) adjust() error {
 			rule, ok := c.Loaders[inst.LoaderConfigName]
 			if !ok {
 				return terror.ErrConfigLoaderCfgNotFound.Generate(i, inst.LoaderConfigName)
+			} else if rule != nil {
+				globalConfigReferCount[configRefPrefixes[loaderIdx]+inst.LoaderConfigName]++
+				inst.Loader = new(LoaderConfig)
+				*inst.Loader = *rule // ref loader config
 			}
-			globalConfigReferCount[configRefPrefixes[loaderIdx]+inst.LoaderConfigName]++
-			inst.Loader = new(LoaderConfig)
-			*inst.Loader = *rule // ref loader config
 		}
 		if inst.Loader == nil {
 			if len(c.Loaders) != 0 {
@@ -737,10 +739,11 @@ func (c *TaskConfig) adjust() error {
 			rule, ok := c.Syncers[inst.SyncerConfigName]
 			if !ok {
 				return terror.ErrConfigSyncerCfgNotFound.Generate(i, inst.SyncerConfigName)
+			} else if rule != nil {
+				globalConfigReferCount[configRefPrefixes[syncerIdx]+inst.SyncerConfigName]++
+				inst.Syncer = new(SyncerConfig)
+				*inst.Syncer = *rule // ref syncer config
 			}
-			globalConfigReferCount[configRefPrefixes[syncerIdx]+inst.SyncerConfigName]++
-			inst.Syncer = new(SyncerConfig)
-			*inst.Syncer = *rule // ref syncer config
 		}
 		if inst.Syncer == nil {
 			if len(c.Syncers) != 0 {
@@ -816,10 +819,7 @@ func (c *TaskConfig) adjust() error {
 			unusedConfigs = append(unusedConfigs, mydumper)
 		}
 	}
-	for loader, cfg := range c.Loaders {
-		if err1 := cfg.adjust(); err1 != nil {
-			return err1
-		}
+	for loader := range c.Loaders {
 		if globalConfigReferCount[configRefPrefixes[loaderIdx]+loader] == 0 {
 			unusedConfigs = append(unusedConfigs, loader)
 		}
@@ -844,6 +844,13 @@ func (c *TaskConfig) adjust() error {
 		sort.Strings(unusedConfigs)
 		return terror.ErrConfigGlobalConfigsUnused.Generate(unusedConfigs)
 	}
+
+	for _, cfg := range c.Loaders {
+		if err1 := cfg.adjust(); err1 != nil {
+			return err1
+		}
+	}
+
 	// we postpone default time_zone init in each unit so we won't change the config value in task/sub_task config
 	if c.Timezone != "" {
 		if _, err := utils.ParseTimeZone(c.Timezone); err != nil {
