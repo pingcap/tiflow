@@ -25,7 +25,6 @@ import (
 	"github.com/pingcap/tiflow/dm/dm/common"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/shardddl/pessimism"
-	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
 var etcdTestCli *clientv3.Client
@@ -108,7 +107,8 @@ func (t *testPessimist) TestPessimist(c *C) {
 
 	// mark the operation as done and delete the info.
 	c.Assert(p.DoneOperationDeleteInfo(op, info), IsNil)
-	c.Assert(terror.ErrWorkerDDLLockInfoNotFound.Equal(p.DoneOperationDeleteInfo(op, info)), IsTrue)
+	// make this op reentrant.
+	c.Assert(p.DoneOperationDeleteInfo(op, info), IsNil)
 
 	// verify the operation and info.
 	opc := op2

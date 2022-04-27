@@ -104,6 +104,7 @@ func (t *testForEtcd) TestPutOperationDeleteInfo(c *C) {
 	op.Done = true
 	_, _, err = PutOperations(etcdTestCli, true, op)
 	op.Done = false
+	c.Assert(err, IsNil)
 
 	// try to put operation & delete info again, fail(operation not equal).
 	done, _, err = PutOperationDeleteExistInfo(etcdTestCli, op, info)
