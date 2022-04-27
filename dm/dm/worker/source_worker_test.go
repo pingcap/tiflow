@@ -795,15 +795,15 @@ func (t *testServer) TestQueryValidator(c *C) {
 	w.subTaskHolder.recordSubTask(st)
 	expected := []*pb.ValidationTableStatus{
 		{
-			SrcTable:         "`testdb1`.`testtable1`",
-			DstTable:         "`dstdb`.`dsttable`",
-			ValidationStatus: pb.Stage_Running.String(),
+			SrcTable: "`testdb1`.`testtable1`",
+			DstTable: "`dstdb`.`dsttable`",
+			Status:   pb.Stage_Running,
 		},
 		{
-			SrcTable:         "`testdb2`.`testtable2`",
-			DstTable:         "`dstdb`.`dsttable`",
-			ValidationStatus: pb.Stage_Stopped.String(),
-			Message:          "no primary key",
+			SrcTable: "`testdb2`.`testtable2`",
+			DstTable: "`dstdb`.`dsttable`",
+			Status:   pb.Stage_Stopped,
+			Message:  "no primary key",
 		},
 	}
 	ret := w.GetValidateTableStatus("testQueryValidator", pb.Stage_Running)

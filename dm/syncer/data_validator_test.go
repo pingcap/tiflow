@@ -544,16 +544,16 @@ func TestValidatorGetValidationStatus(t *testing.T) {
 	validator := NewContinuousDataValidator(cfg, syncerObj, false)
 	expected := map[string]*pb.ValidationTableStatus{
 		"`db`.`tbl1`": {
-			SrcTable:         "`db`.`tbl1`",
-			DstTable:         "`db`.`tbl1`",
-			ValidationStatus: pb.Stage_Running.String(),
-			Message:          "",
+			SrcTable: "`db`.`tbl1`",
+			DstTable: "`db`.`tbl1`",
+			Status:   pb.Stage_Running,
+			Message:  "",
 		},
 		"`db`.`tbl2`": {
-			SrcTable:         "`db`.`tbl2`",
-			DstTable:         "`db`.`tbl2`",
-			ValidationStatus: pb.Stage_Stopped.String(),
-			Message:          tableWithoutPrimaryKeyMsg,
+			SrcTable: "`db`.`tbl2`",
+			DstTable: "`db`.`tbl2`",
+			Status:   pb.Stage_Stopped,
+			Message:  tableWithoutPrimaryKeyMsg,
 		},
 	}
 	validator.tableStatus = map[string]*tableValidateStatus{

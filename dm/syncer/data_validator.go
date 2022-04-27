@@ -929,11 +929,11 @@ func (v *DataValidator) GetValidationTableStatus(filterStatus pb.Stage) []*pb.Va
 		returnAll := filterStatus == pb.Stage_InvalidStage
 		if returnAll || tblStat.stage == filterStatus {
 			result = append(result, &pb.ValidationTableStatus{
-				Source:           v.cfg.SourceID,
-				SrcTable:         tblStat.source.String(),
-				DstTable:         tblStat.target.String(),
-				ValidationStatus: tblStat.stage.String(),
-				Message:          tblStat.message,
+				Source:   v.cfg.SourceID,
+				SrcTable: tblStat.source.String(),
+				DstTable: tblStat.target.String(),
+				Status:   tblStat.stage,
+				Message:  tblStat.message,
 			})
 		}
 	}
