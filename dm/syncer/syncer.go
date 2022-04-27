@@ -89,7 +89,6 @@ var (
 	maxDDLConnectionTimeout = fmt.Sprintf("%dm", MaxDDLConnectionTimeoutMinute)
 
 	maxDMLConnectionDuration, _ = time.ParseDuration(maxDMLConnectionTimeout)
-	maxDMLExecutionDuration     = 30 * time.Second
 
 	maxPauseOrStopWaitTime = 10 * time.Second
 
@@ -1047,7 +1046,7 @@ func (s *Syncer) addJob(job *job) error {
 	}
 
 	// Periodically create checkpoint snapshot and async flush checkpoint snapshot
-	if s.checkpoint.CheckGlobalPoint() && s.checkpoint.CheckLastSnapshotCreationTime() {
+	if s.checkpoint.LastFlushOutdated() {
 		jobSeq := s.getFlushSeq()
 		s.jobWg.Add(1)
 		if s.cfg.Experimental.AsyncCheckpointFlush {
@@ -1094,7 +1093,7 @@ func (s *Syncer) resetShardingGroup(table *filter.Table) {
 // and except rejecting to flush the checkpoint, we also need to rollback the checkpoint saved before
 // this should be handled when `s.Run` returned
 //
-// we may need to refactor the concurrency model to make the work-flow more clearer later.
+// we may need to refactor the concurrency model to make the work-flow more clear later.
 func (s *Syncer) flushCheckPoints() error {
 	err := s.execError.Load()
 	// TODO: for now, if any error occurred (including user canceled), checkpoint won't be updated. But if we have put
@@ -2016,7 +2015,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		case *replication.GenericEvent:
 			if e.Header.EventType == replication.HEARTBEAT_EVENT {
 				// flush checkpoint even if there are no real binlog events
-				if s.checkpoint.CheckGlobalPoint() {
+				if s.checkpoint.LastFlushOutdated() {
 					tctx.L().Info("meet heartbeat event and then flush jobs")
 					err2 = s.flushJobs()
 				}
@@ -3148,6 +3147,9 @@ func (s *Syncer) loadTableStructureFromDump(ctx context.Context) error {
 					zap.Error(err))
 				setFirstErr(err)
 			}
+			// TODO: we should save table checkpoint here, but considering when
+			// the first time of flushing checkpoint, user may encounter https://github.com/pingcap/tiflow/issues/5010
+			// we should fix that problem first.
 		}
 	}
 	return firstErr
