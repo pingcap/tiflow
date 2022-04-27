@@ -15,9 +15,6 @@ package pipeline
 
 import (
 	"context"
-	"sync/atomic"
-	"time"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
@@ -28,6 +25,8 @@ import (
 	"github.com/pingcap/tiflow/pkg/pipeline"
 	pmessage "github.com/pingcap/tiflow/pkg/pipeline/message"
 	"go.uber.org/zap"
+	"sync/atomic"
+	"time"
 )
 
 const (
@@ -150,9 +149,6 @@ func (n *sinkNode) flushSink(ctx context.Context, resolvedTs model.Ts) (err erro
 	if resolvedTs <= currentCheckpointTs {
 		return nil
 	}
-	if err := n.emitRowToSink(ctx); err != nil {
-		return errors.Trace(err)
-	}
 	checkpointTs, err := n.sink.FlushRowChangedEvents(ctx, n.tableID, resolvedTs)
 	if err != nil {
 		return errors.Trace(err)
@@ -175,8 +171,14 @@ func (n *sinkNode) flushSink(ctx context.Context, resolvedTs model.Ts) (err erro
 	return nil
 }
 
-// addRowToBuffer checks event and adds event.Row to rowBuffer.
-func (n *sinkNode) addRowToBuffer(ctx context.Context, event *model.PolymorphicEvent) error {
+// emitRowToSink checks event and emits event.Row to sink.
+func (n *sinkNode) emitRowToSink(ctx context.Context, event *model.PolymorphicEvent) error {
+	failpoint.Inject("ProcessorSyncResolvedPreEmit", func() {
+		log.Info("Prepare to panic for ProcessorSyncResolvedPreEmit")
+		time.Sleep(10 * time.Second)
+		panic("ProcessorSyncResolvedPreEmit")
+	})
+
 	if event == nil || event.Row == nil {
 		log.Warn("skip emit nil event", zap.Any("event", event))
 		return nil
@@ -192,7 +194,6 @@ func (n *sinkNode) addRowToBuffer(ctx context.Context, event *model.PolymorphicE
 		return nil
 	}
 
-	rows := make([]*model.RowChangedEvent, 0, 2)
 	// This indicates that it is an update event,
 	// and after enable old value internally by default(but disable in the configuration).
 	// We need to handle the update event to be compatible with the old format.
@@ -202,21 +203,16 @@ func (n *sinkNode) addRowToBuffer(ctx context.Context, event *model.PolymorphicE
 			if err != nil {
 				return errors.Trace(err)
 			}
-			// NOTICE: Please do not change the order, the delete event always comes before the insert event.
-			rows = append(rows, deleteEvent.Row, insertEvent.Row)
+			// NOTICE: Please do not change the order, the delete event always comes before the insert event.\
+			return n.sink.EmitRowChangedEvents(ctx, deleteEvent.Row, insertEvent.Row)
 		} else {
 			// If the handle key columns are not updated, PreColumns is directly ignored.
 			event.Row.PreColumns = nil
-			rows = append(rows, event.Row)
+
 		}
-	} else {
-		rows = append(rows, event.Row)
 	}
 
-	if err := n.emitRowToSink(ctx, rows...); err != nil {
-		return errors.Trace(err)
-	}
-	return nil
+	return n.sink.EmitRowChangedEvents(ctx, event.Row)
 }
 
 // shouldSplitUpdateEvent determines if the split event is needed to align the old format based on
@@ -283,20 +279,6 @@ func splitUpdateEvent(updateEvent *model.PolymorphicEvent) (*model.PolymorphicEv
 	return &deleteEvent, &insertEvent, nil
 }
 
-// emitRowToSink emits the rows in rowBuffer to backend sink.
-func (n *sinkNode) emitRowToSink(ctx context.Context, rows ...*model.RowChangedEvent) error {
-	failpoint.Inject("ProcessorSyncResolvedPreEmit", func() {
-		log.Info("Prepare to panic for ProcessorSyncResolvedPreEmit")
-		time.Sleep(10 * time.Second)
-		panic("ProcessorSyncResolvedPreEmit")
-	})
-	err := n.sink.EmitRowChangedEvents(ctx, rows...)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	return nil
-}
-
 // Receive receives the message from the previous node
 func (n *sinkNode) Receive(ctx pipeline.NodeContext) error {
 	_, err := n.HandleMessage(ctx, ctx.Message())
@@ -323,7 +305,7 @@ func (n *sinkNode) HandleMessage(ctx context.Context, msg pmessage.Message) (boo
 			atomic.StoreUint64(&n.resolvedTs, msg.PolymorphicEvent.CRTs)
 			return true, nil
 		}
-		if err := n.addRowToBuffer(ctx, event); err != nil {
+		if err := n.emitRowToSink(ctx, event); err != nil {
 			return false, errors.Trace(err)
 		}
 	case pmessage.MessageTypeTick:
