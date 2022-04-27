@@ -17,6 +17,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -74,7 +75,7 @@ const (
 	flushCheckpoint
 
 	rowChangeTypeCount  = 3
-	errorStateTypeCount = 5 // pb.ValidateErrorState_*
+	errorStateTypeCount = 4 // pb.ValidateErrorState_*
 )
 
 // change of table
@@ -168,7 +169,7 @@ type DataValidator struct {
 
 	processedRowCounts   []atomic.Int64
 	pendingRowCounts     []atomic.Int64
-	errorRowCounts       []atomic.Int64
+	newErrorRowCount     atomic.Int64
 	lastFlushTime        time.Time
 	tableStatus          map[string]*tableValidateStatus
 	location             *binlog.Location
@@ -201,7 +202,7 @@ func (v *DataValidator) initialize() error {
 	// todo: enhance error handling
 	v.errChan = make(chan error, 10)
 	v.pendingRowCounts = make([]atomic.Int64, rowChangeTypeCount)
-	v.errorRowCounts = make([]atomic.Int64, errorStateTypeCount)
+	v.resetErrorRowCount()
 
 	if err := v.persistHelper.init(v.tctx); err != nil {
 		return err
@@ -302,15 +303,10 @@ func (v *DataValidator) printStatusRoutine() {
 				v.pendingRowCounts[rowUpdated].Load(),
 				v.pendingRowCounts[rowDeleted].Load(),
 			}
-			errorCounts := []int64{
-				v.errorRowCounts[pb.ValidateErrorState_NewErr].Load(),
-				v.errorRowCounts[pb.ValidateErrorState_IgnoredErr].Load(),
-				v.errorRowCounts[pb.ValidateErrorState_ResolvedErr].Load(),
-			}
 			v.L.Info("validator status",
 				zap.Int64s("processed(i, u, d)", processed),
 				zap.Int64s("pending(i, u, d)", pending),
-				zap.Int64s("error(new, ignored, resolved)", errorCounts),
+				zap.Int64("new error rows(not flushed)", v.newErrorRowCount.Load()),
 			)
 		}
 	}
@@ -662,8 +658,6 @@ func (v *DataValidator) genValidateTableInfo(sourceTable *filter.Table, columnCo
 }
 
 func (v *DataValidator) processRowsEvent(header *replication.EventHeader, ev *replication.RowsEvent) error {
-	v.Lock() // mutex lock to protect tableStatus and maybe other fields
-	defer v.Unlock()
 	sourceTable := &filter.Table{
 		Schema: string(ev.Table.Schema),
 		Name:   string(ev.Table.Table),
@@ -682,7 +676,7 @@ func (v *DataValidator) processRowsEvent(header *replication.EventHeader, ev *re
 	}
 
 	fullTableName := sourceTable.String()
-	state, ok := v.tableStatus[fullTableName]
+	state, ok := v.getTableStatus(fullTableName)
 	if ok && state.stage == pb.Stage_Stopped {
 		return nil
 	}
@@ -699,7 +693,7 @@ func (v *DataValidator) processRowsEvent(header *replication.EventHeader, ev *re
 			target: *targetTable,
 			stage:  pb.Stage_Running,
 		}
-		v.tableStatus[fullTableName] = state
+		v.putTableStatus(fullTableName, state)
 	}
 	if validateTbl.message != "" {
 		v.L.Warn("stop validating table", zap.String("table", sourceTable.String()),
@@ -781,6 +775,13 @@ func (v *DataValidator) persistCheckpointAndData(loc binlog.Location) error {
 	if err != nil {
 		return err
 	}
+
+	v.persistHelper.incrRevision()
+	// reset errors after save
+	for _, worker := range v.workers {
+		worker.resetErrorRows()
+	}
+	v.resetErrorRowCount()
 	return nil
 }
 
@@ -845,19 +846,34 @@ func (v *DataValidator) loadPersistedData(tctx *tcontext.Context) error {
 	if err != nil {
 		return err
 	}
-
-	countMap, err := v.persistHelper.loadErrorCount()
-	if err != nil {
-		return err
-	}
-	for i := range v.errorRowCounts {
-		v.errorRowCounts[i].Store(countMap[pb.ValidateErrorState(i)])
-	}
 	return nil
 }
 
 func (v *DataValidator) incrErrorRowCount(status pb.ValidateErrorState, cnt int) {
-	v.errorRowCounts[status].Add(int64(cnt))
+	v.newErrorRowCount.Add(int64(cnt))
+}
+
+func (v *DataValidator) resetErrorRowCount() {
+	v.newErrorRowCount.Store(0)
+}
+
+func (v *DataValidator) getResult() pb.ProcessResult {
+	v.RLock()
+	defer v.RUnlock()
+	return v.result
+}
+
+func (v *DataValidator) getTableStatus(fullTableName string) (*tableValidateStatus, bool) {
+	v.RLock()
+	defer v.RUnlock()
+	res, ok := v.tableStatus[fullTableName]
+	return res, ok
+}
+
+func (v *DataValidator) putTableStatus(name string, status *tableValidateStatus) {
+	v.Lock()
+	defer v.Unlock()
+	v.tableStatus[name] = status
 }
 
 func (v *DataValidator) hasReachedSyncer() bool {
@@ -905,9 +921,7 @@ func genRowKeyByString(pkValues []string) string {
 }
 
 func (v *DataValidator) GetValidationTableStatus(filterStatus pb.Stage) []*pb.ValidationTableStatus {
-	v.RLock()
-	defer v.RUnlock()
-	tblStatus := v.tableStatus
+	tblStatus := v.getTableStatusMap()
 	failpoint.Inject("MockValidationQuery", func() {
 		tblStatus = map[string]*tableValidateStatus{
 			"`testdb1`.`testtable1`": {
@@ -966,7 +980,7 @@ func (v *DataValidator) OperateValidatorError(validateOp pb.ValidationErrOp, err
 }
 
 // return snapshot of the current table status.
-func (v *DataValidator) getTableStatus() map[string]*tableValidateStatus {
+func (v *DataValidator) getTableStatusMap() map[string]*tableValidateStatus {
 	v.RLock()
 	defer v.RUnlock()
 	tblStatus := make(map[string]*tableValidateStatus)
@@ -976,4 +990,53 @@ func (v *DataValidator) getTableStatus() map[string]*tableValidateStatus {
 		tblStatus[key] = stat
 	}
 	return tblStatus
+}
+
+func (v *DataValidator) getAllErrorCount(timeout time.Duration) ([errorStateTypeCount]int64, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	tctx := tcontext.NewContext(ctx, v.L)
+	countMap, err := v.persistHelper.loadErrorCount(tctx)
+	if err != nil {
+		v.L.Warn("failed to load error count", zap.Error(err))
+	}
+	var allErrorCount [errorStateTypeCount]int64
+	allErrorCount[pb.ValidateErrorState_NewErr] = countMap[pb.ValidateErrorState_NewErr]
+	allErrorCount[pb.ValidateErrorState_IgnoredErr] = countMap[pb.ValidateErrorState_IgnoredErr]
+	allErrorCount[pb.ValidateErrorState_ResolvedErr] = countMap[pb.ValidateErrorState_ResolvedErr]
+
+	allErrorCount[pb.ValidateErrorState_NewErr] += v.newErrorRowCount.Load()
+
+	return allErrorCount, err
+}
+
+func (v *DataValidator) GetValidatorStatus() *pb.ValidationStatus {
+	var extraMsg string
+	allErrorCount, err := v.getAllErrorCount(5 * time.Second)
+	if err != nil {
+		// nolint:nilerr
+		extraMsg = fmt.Sprintf(" (failed to load error count from meta db: %s)", err.Error())
+	}
+	// if we print those state in a structured way, there would be at least 9 lines for each subtask,
+	// which is hard to read, so print them into one line.
+	template := "insert/update/delete: %d/%d/%d"
+	processedRows := fmt.Sprintf(template, v.processedRowCounts[rowInsert].Load(),
+		v.processedRowCounts[rowUpdated].Load(), v.processedRowCounts[rowDeleted].Load())
+	pendingRows := fmt.Sprintf(template, v.pendingRowCounts[rowInsert].Load(),
+		v.pendingRowCounts[rowUpdated].Load(), v.pendingRowCounts[rowDeleted].Load())
+	allErrorRows := fmt.Sprintf("new/ignored/resolved: %d/%d/%d%s",
+		allErrorCount[pb.ValidateErrorState_NewErr], allErrorCount[pb.ValidateErrorState_IgnoredErr],
+		allErrorCount[pb.ValidateErrorState_ResolvedErr], extraMsg)
+
+	result := v.getResult()
+
+	return &pb.ValidationStatus{
+		Task:                v.cfg.Name,
+		Source:              v.cfg.SourceID,
+		Stage:               v.Stage(),
+		Result:              &result,
+		ProcessedRowsStatus: processedRows,
+		PendingRowsStatus:   pendingRows,
+		AllErrorRowsStatus:  allErrorRows,
+	}
 }

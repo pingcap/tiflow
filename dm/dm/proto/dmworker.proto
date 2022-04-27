@@ -421,13 +421,9 @@ message ValidationStatus {
     string source = 2;
     Stage stage = 3;
     ProcessResult result = 4;
-    // on fail-over or restart, below 3 fields will be reset
-    // processed = pending + error + success
-    string processedRows = 5;
-    string pendingRows = 6;
-    string errorRows = 7;
-    // all errors since the beginning
-    string allErrorRows = 8;
+    string processedRowsStatus = 5;
+    string pendingRowsStatus = 6;
+    string allErrorRowsStatus = 7;
 }
 
 message ValidationTableStatus {

@@ -199,7 +199,7 @@ type rowChangeDataForPersist struct {
 
 func (c *validatorPersistHelper) persist(loc binlog.Location) error {
 	// get snapshot of the current table status
-	tableStatus := c.validator.getTableStatus()
+	tableStatus := c.validator.getTableStatusMap()
 	count := len(tableStatus)
 	for _, worker := range c.validator.workers {
 		for _, tblChange := range worker.getPendingChangesMap() {
@@ -344,14 +344,12 @@ func (c *validatorPersistHelper) persist(loc binlog.Location) error {
 	if err != nil {
 		return err
 	}
-	c.revision++
-
-	// reset errors after save
-	for _, worker := range c.validator.workers {
-		worker.resetErrorRows()
-	}
 
 	return nil
+}
+
+func (c *validatorPersistHelper) incrRevision() {
+	c.revision++
 }
 
 func (c *validatorPersistHelper) close() {
@@ -482,10 +480,10 @@ func (c *validatorPersistHelper) loadTableStatus(tctx *tcontext.Context) (map[st
 	return res, nil
 }
 
-func (c *validatorPersistHelper) loadErrorCount() (map[pb.ValidateErrorState]int64, error) {
+func (c *validatorPersistHelper) loadErrorCount(tctx *tcontext.Context) (map[pb.ValidateErrorState]int64, error) {
 	res := make(map[pb.ValidateErrorState]int64)
 	sql := "select status, count(*) from " + c.errorChangeTableName + " where source = ? group by status"
-	rows, err := c.dbConn.QuerySQL(c.tctx, sql, c.cfg.SourceID)
+	rows, err := c.dbConn.QuerySQL(tctx, sql, c.cfg.SourceID)
 	if err != nil {
 		return nil, err
 	}

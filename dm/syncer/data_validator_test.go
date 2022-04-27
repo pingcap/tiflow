@@ -309,9 +309,6 @@ func TestValidatorDoValidate(t *testing.T) {
 			"{\"key\": \"11\", \"data\": [\"11\", \"a\"], \"tp\": 0, \"first-validate-ts\": 0, \"failed-cnt\": 0}", 1))
 	dbMock.ExpectQuery("select .* from .*_validator_table_status.*").WillReturnRows(
 		dbMock.NewRows([]string{"", "", "", "", "", ""}).AddRow(schemaName, tableName4, schemaName, tableName4, pb.Stage_Stopped, "load from meta"))
-	dbMock.ExpectQuery("select .* from .*_validator_error_change.*").WillReturnRows(
-		dbMock.NewRows([]string{"", ""}).AddRow(pb.ValidateErrorState_NewErr, 2).AddRow(pb.ValidateErrorState_IgnoredErr, 3).
-			AddRow(pb.ValidateErrorState_ResolvedErr, 4))
 
 	syncerObj := NewSyncer(cfg, nil, nil)
 	syncerObj.running.Store(true)
@@ -487,9 +484,7 @@ func TestValidatorDoValidate(t *testing.T) {
 	require.Len(t, validator.tableStatus, 4)
 	require.Contains(t, validator.tableStatus, ft.String())
 	require.Equal(t, pb.Stage_Running, validator.tableStatus[ft.String()].stage)
-	require.Equal(t, int64(2), validator.errorRowCounts[pb.ValidateErrorState_NewErr].Load())
-	require.Equal(t, int64(3), validator.errorRowCounts[pb.ValidateErrorState_IgnoredErr].Load())
-	require.Equal(t, int64(4), validator.errorRowCounts[pb.ValidateErrorState_ResolvedErr].Load())
+	require.Zero(t, validator.newErrorRowCount.Load())
 
 	ft = filter.Table{Schema: schemaName, Name: tableName2}
 	require.Contains(t, validator.tableStatus, ft.String())
