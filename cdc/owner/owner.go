@@ -606,6 +606,10 @@ func (o *ownerImpl) updateGCSafepoint(
 	} else {
 		upStream = upstream.UpManager.Get()
 	}
+	// skip
+	if !upStream.IsNormal() {
+		return nil
+	}
 
 	// When the changefeed starts up, CDC will do a snapshot read at
 	// (checkpointTs - 1) from TiKV, so (checkpointTs - 1) should be an upper

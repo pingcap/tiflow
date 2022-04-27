@@ -25,7 +25,7 @@ import (
 )
 
 // DefaultClusterID is a pseudo cluster id for now. It will be removed in the future.
-const DefaultClusterID = 0
+const DefaultClusterID uint64 = 0
 
 // UpManager is a global variable.
 var UpManager *Manager

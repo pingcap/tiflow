@@ -17,6 +17,7 @@ import (
 	"context"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -34,10 +35,8 @@ import (
 	"google.golang.org/grpc/backoff"
 )
 
-type status int
-
 const (
-	ready status = iota
+	ready int32 = iota
 	normal
 )
 
@@ -56,7 +55,7 @@ type Upstream struct {
 	GCManager   gc.Manager
 
 	wg     *sync.WaitGroup
-	status status
+	status int32
 }
 
 func newUpstream(clusterID uint64, pdEndpoints []string, securityConfig *config.SecurityConfig) *Upstream {
@@ -140,7 +139,7 @@ func (up *Upstream) init(ctx context.Context) error {
 
 	up.GCManager = gc.NewManager(up.PDClient, up.PDClock)
 	log.Info("upStream initialize successfully", zap.Uint64("clusterTD", up.clusterID))
-	up.status = normal
+	atomic.StoreInt32(&up.status, normal)
 	return nil
 }
 
@@ -173,5 +172,5 @@ func (up *Upstream) close() {
 
 // IsNormal return true if this upstream is normal.
 func (up *Upstream) IsNormal() bool {
-	return up.status == normal
+	return atomic.LoadInt32(&up.status) == normal
 }
