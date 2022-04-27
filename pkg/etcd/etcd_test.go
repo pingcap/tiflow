@@ -447,3 +447,28 @@ func TestGetOwnerRevision(t *testing.T) {
 
 	wg.Wait()
 }
+
+func TestExtractKeySuffix(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		input  string
+		expect string
+		hasErr bool
+	}{
+		{"/tidb/cdc/capture/info/6a6c6dd290bc8732", "6a6c6dd290bc8732", false},
+		{"/tidb/cdc/capture/info/6a6c6dd290bc8732/", "", false},
+		{"/tidb/cdc", "cdc", false},
+		{"/tidb", "tidb", false},
+		{"", "", true},
+	}
+	for _, tc := range testCases {
+		key, err := extractKeySuffix(tc.input)
+		if tc.hasErr {
+			require.NotNil(t, err)
+		} else {
+			require.Nil(t, err)
+			require.Equal(t, tc.expect, key)
+		}
+	}
+}

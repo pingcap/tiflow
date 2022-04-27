@@ -97,7 +97,9 @@ type BinlogType uint8
 const (
 	RemoteBinlog BinlogType = iota + 1
 	LocalBinlog
+)
 
+const (
 	skipJobIdx = iota
 	ddlJobIdx
 	workerJobTSArrayInitSize // size = skip + ddl
