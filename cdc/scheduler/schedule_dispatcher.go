@@ -78,6 +78,8 @@ type ScheduleDispatcherCommunicator interface {
 const (
 	// captureCountUninitialized is a placeholder for an unknown total capture count.
 	captureCountUninitialized = -1
+	// captureIDNotDraining is a placeholder for no capture is draining now.
+	captureIDNotDraining = ""
 )
 
 // BaseScheduleDispatcher implements the basic logic of a ScheduleDispatcher.
@@ -95,9 +97,10 @@ type BaseScheduleDispatcher struct {
 
 	lastTickCaptureCount int
 	needRebalance        bool
-	// capture is draining, should remove all tables on it and no more table should be dispatched
-	// when remove table from the captures, pay attention that drain the capture one by one.
-	drainTargets map[model.CaptureID]struct{}
+
+	// capture is draining, should remove all tables on the target capture to other captures
+	// only one capture should be drained at any time.
+	drainTarget model.CaptureID
 
 	// read only fields
 	changeFeedID model.ChangeFeedID
@@ -124,7 +127,7 @@ func NewBaseScheduleDispatcher(
 		communicator:         communicator,
 		checkpointTs:         checkpointTs,
 		lastTickCaptureCount: captureCountUninitialized,
-		drainTargets:         make(map[model.CaptureID]struct{}),
+		drainTarget:          captureIDNotDraining,
 	}
 }
 
@@ -536,8 +539,12 @@ func (s *BaseScheduleDispatcher) rebalance(ctx context.Context) (done bool, err 
 // DrainCapture implements the interface ScheduleDispatcher.
 // todo: remove all tables associate with the target capture
 // set the capture's status to draining should be done the capture it's self.
-func (s *BaseScheduleDispatcher) DrainCapture(target model.CaptureID) {
-	s.drainTargets[target] = struct{}{}
+func (s *BaseScheduleDispatcher) DrainCapture(target model.CaptureID) error {
+	if s.drainTarget != captureIDNotDraining {
+		s.drainTarget = target
+		return nil
+	}
+	return errors.New("some error here")
 }
 
 // OnAgentFinishedTableOperation is called when a table operation has been finished by
