@@ -153,8 +153,7 @@ func TestCheckpointNotPanic(t *testing.T) {
 	validator := NewContinuousDataValidator(cfg, syncerObj, false)
 	validator.ctx, validator.cancel = context.WithCancel(context.Background())
 	validator.tctx = tcontext.NewContext(validator.ctx, validator.L)
-	validator.persistHelper.tctx = validator.tctx
 	currLoc := binlog.NewLocation(cfg.Flavor)
-	err = validator.persistHelper.persist(currLoc) // persist nil worker
-	require.NotNil(t, err)                         // err not nil but program not panicks
+	err = validator.persistHelper.persist(nil, currLoc) // persist nil worker
+	require.NotNil(t, err)                              // err not nil but program not panicks
 }

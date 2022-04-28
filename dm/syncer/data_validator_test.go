@@ -587,7 +587,6 @@ func TestGetValidationError(t *testing.T) {
 	validator := NewContinuousDataValidator(cfg, syncerObj, false)
 	validator.ctx, validator.cancel = context.WithCancel(context.Background())
 	validator.tctx = tcontext.NewContext(validator.ctx, validator.L)
-	validator.persistHelper.tctx = validator.tctx
 	// all error
 	dbMock.ExpectQuery("SELECT .* FROM " + validator.persistHelper.errorChangeTableName + " WHERE source=?").WithArgs(validator.cfg.SourceID).WillReturnRows(
 		sqlmock.NewRows([]string{"id", "source", "src_schema_name", "src_table_name", "dst_schema_name", "dst_table_name", "data", "dst_data", "error_type", "status", "update_time"}).AddRow(
@@ -660,7 +659,6 @@ func TestOperateValidationError(t *testing.T) {
 	validator := NewContinuousDataValidator(cfg, syncerObj, false)
 	validator.ctx, validator.cancel = context.WithCancel(context.Background())
 	validator.tctx = tcontext.NewContext(validator.ctx, validator.L)
-	validator.persistHelper.tctx = validator.tctx
 	validator.persistHelper.db = conn.NewBaseDB(db, func() {})
 	sourceID := validator.cfg.SourceID
 	// 1. clear all error

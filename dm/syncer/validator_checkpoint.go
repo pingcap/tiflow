@@ -31,7 +31,6 @@ import (
 
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/dm/pb"
-	"github.com/pingcap/tiflow/dm/dm/unit"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
@@ -56,19 +55,19 @@ var mapErrType2Str = map[validateFailedType]string{
 var maxRowKeyLengthStr = strconv.Itoa(maxRowKeyLength)
 
 type validatorPersistHelper struct {
-	tctx              *tcontext.Context
-	L                 log.Logger
-	cfg               *config.SubTaskConfig
-	db                *conn.BaseDB
-	validator         *DataValidator
-	retryer           *retry.FiniteRetryer
-	schemaInitialized atomic.Bool
+	L         log.Logger
+	cfg       *config.SubTaskConfig
+	validator *DataValidator
+	retryer   *retry.FiniteRetryer
 
 	checkpointTableName    string
 	pendingChangeTableName string
 	errorChangeTableName   string
 	tableStatusTableName   string
-	revision               int64
+
+	db                *conn.BaseDB
+	schemaInitialized atomic.Bool
+	revision          int64
 }
 
 func newValidatorCheckpointHelper(validator *DataValidator) *validatorPersistHelper {
@@ -82,6 +81,7 @@ func newValidatorCheckpointHelper(validator *DataValidator) *validatorPersistHel
 		),
 	}
 	c := &validatorPersistHelper{
+		L:         validator.L,
 		cfg:       cfg,
 		validator: validator,
 		retryer:   retryer,
@@ -96,18 +96,13 @@ func newValidatorCheckpointHelper(validator *DataValidator) *validatorPersistHel
 }
 
 func (c *validatorPersistHelper) init(tctx *tcontext.Context) error {
-	c.tctx = tctx
-	c.L = tctx.L()
 	c.db = c.validator.toDB
-
-	newCtx, cancelFunc := c.tctx.WithTimeout(unit.DefaultInitTimeout)
-	defer cancelFunc()
 
 	if !c.schemaInitialized.Load() {
 		workFunc := func(tctx *tcontext.Context) (interface{}, error) {
 			return nil, c.createSchemaAndTables(tctx)
 		}
-		if _, cnt, err := c.retryer.Apply(newCtx, workFunc); err != nil {
+		if _, cnt, err := c.retryer.Apply(tctx, workFunc); err != nil {
 			tctx.L().Error("failed to init validator helper after retry",
 				zap.Int("retry-times", cnt), zap.Error(err))
 			return err
@@ -215,7 +210,7 @@ type rowChangeDataForPersist struct {
 	FailedCnt       int              `json:"failed-cnt"` // failed count
 }
 
-func (c *validatorPersistHelper) persist(loc binlog.Location) error {
+func (c *validatorPersistHelper) persist(tctx *tcontext.Context, loc binlog.Location) error {
 	// get snapshot of the current table status
 	tableStatus := c.validator.getTableStatusMap()
 	count := len(tableStatus)
@@ -350,7 +345,7 @@ func (c *validatorPersistHelper) persist(loc binlog.Location) error {
 	// todo: performance issue when using insert on duplicate? https://asktug.com/t/topic/33147
 	// todo: will this transaction too big? but checkpoint & pending changes should be saved in one tx
 	var err error
-	newCtx, cancelFunc := c.tctx.WithTimeout(validationDBTimeout)
+	newCtx, cancelFunc := tctx.WithTimeout(validationDBTimeout)
 	defer cancelFunc()
 	failpoint.Inject("ValidatorCheckPointSkipExecuteSQL", func(val failpoint.Value) {
 		str := val.(string)
@@ -377,11 +372,10 @@ type persistedData struct {
 	pendingChanges map[string]*tableChangeDataForPersist
 	rev            int64
 	tableStatus    map[string]*tableValidateStatus
-	errCountMap    map[pb.ValidateErrorState]int64
 }
 
-func (c *validatorPersistHelper) loadPersistedDataRetry() (*persistedData, error) {
-	newCtx, cancelFunc := c.tctx.WithTimeout(validationDBTimeout)
+func (c *validatorPersistHelper) loadPersistedDataRetry(tctx *tcontext.Context) (*persistedData, error) {
+	newCtx, cancelFunc := tctx.WithTimeout(validationDBTimeout)
 	defer cancelFunc()
 	workFunc := func(tctx *tcontext.Context) (interface{}, error) {
 		return c.loadPersistedData(tctx)
@@ -412,10 +406,6 @@ func (c *validatorPersistHelper) loadPersistedData(tctx *tcontext.Context) (*per
 		return data, err
 	}
 
-	data.errCountMap, err = c.loadErrorCount(tctx)
-	if err != nil {
-		return data, err
-	}
 	return data, err
 }
 
@@ -587,7 +577,7 @@ func (c *validatorPersistHelper) loadError(filterState pb.ValidateErrorState) ([
 		args = append(args, int(filterState))
 	}
 	// we do not retry, let user do it
-	newCtx, cancelFunc := context.WithTimeout(c.tctx.Ctx, validationDBTimeout)
+	newCtx, cancelFunc := context.WithTimeout(context.Background(), validationDBTimeout)
 	defer cancelFunc()
 	rows, err = c.db.DB.QueryContext(newCtx, query, args...)
 	if err != nil {
@@ -647,7 +637,7 @@ func (c *validatorPersistHelper) operateError(validateOp pb.ValidationErrOp, err
 		query += " AND id=?"
 	}
 	// we do not retry, let user do it
-	newCtx, cancelFunc := context.WithTimeout(c.tctx.Ctx, validationDBTimeout)
+	newCtx, cancelFunc := context.WithTimeout(context.Background(), validationDBTimeout)
 	defer cancelFunc()
 	_, err := c.db.DB.ExecContext(newCtx, query, args...)
 	return err
@@ -663,7 +653,7 @@ func (c *validatorPersistHelper) deleteError(errID uint64, isAll bool) error {
 		args = append(args, errID)
 	}
 	// we do not retry, let user do it
-	newCtx, cancelFunc := context.WithTimeout(c.tctx.Ctx, validationDBTimeout)
+	newCtx, cancelFunc := context.WithTimeout(context.Background(), validationDBTimeout)
 	defer cancelFunc()
 	_, err := c.db.DB.ExecContext(newCtx, query, args...)
 	return err

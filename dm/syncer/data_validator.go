@@ -216,17 +216,16 @@ func (v *DataValidator) initialize() error {
 	v.tctx = tcontext.NewContext(v.ctx, v.L)
 	v.reset()
 
-	newCtx, cancelFunc := context.WithTimeout(v.ctx, unit.DefaultInitTimeout)
+	newCtx, cancelFunc := v.tctx.WithTimeout(unit.DefaultInitTimeout)
 	defer cancelFunc()
-	tctx := tcontext.NewContext(newCtx, v.L)
 
 	var err error
 	defer func() {
 		if err == nil {
 			return
 		}
-		dbconn.CloseBaseDB(tctx, v.fromDB)
-		dbconn.CloseBaseDB(tctx, v.toDB)
+		dbconn.CloseBaseDB(newCtx, v.fromDB)
+		dbconn.CloseBaseDB(newCtx, v.toDB)
 		v.cancel()
 	}()
 
@@ -245,11 +244,11 @@ func (v *DataValidator) initialize() error {
 		return err
 	}
 
-	if err = v.persistHelper.init(v.tctx); err != nil {
+	if err = v.persistHelper.init(newCtx); err != nil {
 		return err
 	}
 
-	v.timezone, err = str2TimezoneOrFromDB(tctx, v.cfg.Timezone, &v.cfg.To)
+	v.timezone, err = str2TimezoneOrFromDB(newCtx, v.cfg.Timezone, &v.cfg.To)
 	if err != nil {
 		return err
 	}
@@ -455,7 +454,7 @@ func (v *DataValidator) doValidate() {
 		}
 		// persist current location to make sure we start from the same location
 		// if fail-over happens before we flush checkpoint and data.
-		err := v.persistHelper.persist(location)
+		err := v.persistHelper.persist(v.tctx, location)
 		if err != nil {
 			v.sendError(terror.ErrValidatorPersistData.Delegate(err))
 			return
@@ -796,7 +795,7 @@ func (v *DataValidator) persistCheckpointAndData(loc binlog.Location) error {
 	}
 	wg.Wait()
 
-	err := v.persistHelper.persist(loc)
+	err := v.persistHelper.persist(v.tctx, loc)
 	if err != nil {
 		return err
 	}
@@ -812,7 +811,7 @@ func (v *DataValidator) persistCheckpointAndData(loc binlog.Location) error {
 }
 
 func (v *DataValidator) loadPersistedData() error {
-	data, err := v.persistHelper.loadPersistedDataRetry()
+	data, err := v.persistHelper.loadPersistedDataRetry(v.tctx)
 	if err != nil {
 		return err
 	}
