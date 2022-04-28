@@ -904,7 +904,9 @@ func (v *DataValidator) getResult() pb.ProcessResult {
 func (v *DataValidator) addResultError(err *pb.ProcessError, cancelled bool) {
 	v.stateMutex.Lock()
 	defer v.stateMutex.Unlock()
-	v.result.Errors = append(v.result.Errors, err)
+	if err != nil {
+		v.result.Errors = append(v.result.Errors, err)
+	}
 	v.result.IsCanceled = cancelled
 }
 
