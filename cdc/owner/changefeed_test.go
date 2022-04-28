@@ -15,13 +15,14 @@ package owner
 
 import (
 	"context"
+	"io/ioutil"
 	"os"
 	"path/filepath"
 	"sync"
 	"sync/atomic"
+	"testing"
 	"time"
 
-	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tiflow/cdc/entry"
@@ -31,8 +32,8 @@ import (
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/pdtime"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
-	"github.com/pingcap/tiflow/pkg/util/testleak"
 	"github.com/pingcap/tiflow/pkg/version"
+	"github.com/stretchr/testify/require"
 	"github.com/tikv/client-go/v2/oracle"
 )
 
@@ -112,11 +113,7 @@ func (m *mockDDLSink) Barrier(ctx context.Context) error {
 	return nil
 }
 
-var _ = check.Suite(&changefeedSuite{})
-
-type changefeedSuite struct{}
-
-func createChangefeed4Test(ctx cdcContext.Context, c *check.C) (*changefeed, *orchestrator.ChangefeedReactorState,
+func createChangefeed4Test(ctx cdcContext.Context, t *testing.T) (*changefeed, *orchestrator.ChangefeedReactorState,
 	map[model.CaptureID]*model.CaptureInfo, *orchestrator.ReactorStateTester) {
 	ctx.GlobalVars().PDClient = &gc.MockPDClient{
 		UpdateServiceGCSafePointFunc: func(ctx context.Context, serviceID string, ttl int64, safePoint uint64) (uint64, error) {
@@ -130,9 +127,9 @@ func createChangefeed4Test(ctx cdcContext.Context, c *check.C) (*changefeed, *or
 		return &mockDDLSink{}
 	})
 	state := orchestrator.NewChangefeedReactorState(ctx.ChangefeedVars().ID)
-	tester := orchestrator.NewReactorStateTester(c, state, nil)
+	tester := orchestrator.NewReactorStateTester(t, state, nil)
 	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
-		c.Assert(info, check.IsNil)
+		require.Nil(t, info)
 		info = ctx.ChangefeedVars().Info
 		return info, true, nil
 	})
@@ -142,14 +139,13 @@ func createChangefeed4Test(ctx cdcContext.Context, c *check.C) (*changefeed, *or
 	return cf, state, captures, tester
 }
 
-func (s *changefeedSuite) TestPreCheck(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestPreCheck(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(true)
-	cf, state, captures, tester := createChangefeed4Test(ctx, c)
+	cf, state, captures, tester := createChangefeed4Test(ctx, t)
 	cf.Tick(ctx, state, captures)
 	tester.MustApplyPatches()
-	c.Assert(state.Status, check.NotNil)
-	c.Assert(state.TaskStatuses, check.HasKey, ctx.GlobalVars().CaptureInfo.ID)
+	require.NotNil(t, state.Status)
+	require.Contains(t, state.TaskStatuses, ctx.GlobalVars().CaptureInfo.ID)
 
 	// test clean the meta data of offline capture
 	offlineCaputreID := "offline-capture"
@@ -166,17 +162,16 @@ func (s *changefeedSuite) TestPreCheck(c *check.C) {
 
 	cf.Tick(ctx, state, captures)
 	tester.MustApplyPatches()
-	c.Assert(state.Status, check.NotNil)
-	c.Assert(state.TaskStatuses, check.HasKey, ctx.GlobalVars().CaptureInfo.ID)
-	c.Assert(state.TaskStatuses, check.Not(check.HasKey), offlineCaputreID)
-	c.Assert(state.TaskPositions, check.Not(check.HasKey), offlineCaputreID)
-	c.Assert(state.Workloads, check.Not(check.HasKey), offlineCaputreID)
+	require.NotNil(t, state.Status)
+	require.Contains(t, state.TaskStatuses, ctx.GlobalVars().CaptureInfo.ID)
+	require.NotContains(t, state.TaskStatuses, offlineCaputreID)
+	require.NotContains(t, state.TaskPositions, offlineCaputreID)
+	require.NotContains(t, state.Workloads, offlineCaputreID)
 }
 
-func (s *changefeedSuite) TestInitialize(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestInitialize(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(true)
-	cf, state, captures, tester := createChangefeed4Test(ctx, c)
+	cf, state, captures, tester := createChangefeed4Test(ctx, t)
 	defer cf.Close(ctx)
 	// pre check
 	cf.Tick(ctx, state, captures)
@@ -185,13 +180,12 @@ func (s *changefeedSuite) TestInitialize(c *check.C) {
 	// initialize
 	cf.Tick(ctx, state, captures)
 	tester.MustApplyPatches()
-	c.Assert(state.Status.CheckpointTs, check.Equals, ctx.ChangefeedVars().Info.StartTs)
+	require.Equal(t, state.Status.CheckpointTs, ctx.ChangefeedVars().Info.StartTs)
 }
 
-func (s *changefeedSuite) TestHandleError(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestChangefeedHandleError(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(true)
-	cf, state, captures, tester := createChangefeed4Test(ctx, c)
+	cf, state, captures, tester := createChangefeed4Test(ctx, t)
 	defer cf.Close(ctx)
 	// pre check
 	cf.Tick(ctx, state, captures)
@@ -205,14 +199,12 @@ func (s *changefeedSuite) TestHandleError(c *check.C) {
 	// handle error
 	cf.Tick(ctx, state, captures)
 	tester.MustApplyPatches()
-	c.Assert(state.Status.CheckpointTs, check.Equals, ctx.ChangefeedVars().Info.StartTs)
-	c.Assert(state.Info.Error.Message, check.Equals, "fake error")
+	require.Equal(t, state.Status.CheckpointTs, ctx.ChangefeedVars().Info.StartTs)
+	require.Equal(t, state.Info.Error.Message, "fake error")
 }
 
-func (s *changefeedSuite) TestExecDDL(c *check.C) {
-	defer testleak.AfterTest(c)()
-
-	helper := entry.NewSchemaTestHelper(c)
+func TestExecDDL(t *testing.T) {
+	helper := entry.NewSchemaTestHelper(t)
 	defer helper.Close()
 	// Creates a table, which will be deleted at the start-ts of the changefeed.
 	// It is expected that the changefeed DOES NOT replicate this table.
@@ -237,7 +229,7 @@ func (s *changefeedSuite) TestExecDDL(c *check.C) {
 		},
 	})
 
-	cf, state, captures, tester := createChangefeed4Test(ctx, c)
+	cf, state, captures, tester := createChangefeed4Test(ctx, t)
 	defer cf.Close(ctx)
 	tickThreeTime := func() {
 		cf.Tick(ctx, state, captures)
@@ -249,13 +241,12 @@ func (s *changefeedSuite) TestExecDDL(c *check.C) {
 	}
 	// pre check and initialize
 	tickThreeTime()
-
-	c.Assert(cf.schema.AllPhysicalTables(), check.HasLen, 1)
-	c.Assert(state.TaskStatuses[ctx.GlobalVars().CaptureInfo.ID].Operation, check.HasLen, 0)
-	c.Assert(state.TaskStatuses[ctx.GlobalVars().CaptureInfo.ID].Tables, check.HasLen, 0)
+	require.Len(t, cf.schema.AllPhysicalTables(), 1)
+	require.Len(t, state.TaskStatuses[ctx.GlobalVars().CaptureInfo.ID].Operation, 0)
+	require.Len(t, state.TaskStatuses[ctx.GlobalVars().CaptureInfo.ID].Tables, 0)
 
 	job = helper.DDL2Job("drop table test0.table0")
-	// ddl puller resolved ts grow uo
+	// ddl puller resolved ts grow up
 	mockDDLPuller := cf.ddlPuller.(*mockDDLPuller)
 	mockDDLPuller.resolvedTs = startTs
 	mockDDLSink := cf.sink.(*mockDDLSink)
@@ -263,15 +254,15 @@ func (s *changefeedSuite) TestExecDDL(c *check.C) {
 	mockDDLPuller.ddlQueue = append(mockDDLPuller.ddlQueue, job)
 	// three tick to make sure all barriers set in initialize is handled
 	tickThreeTime()
-	c.Assert(state.Status.CheckpointTs, check.Equals, mockDDLPuller.resolvedTs)
+	require.Equal(t, state.Status.CheckpointTs, mockDDLPuller.resolvedTs)
 	// The ephemeral table should have left no trace in the schema cache
-	c.Assert(cf.schema.AllPhysicalTables(), check.HasLen, 0)
+	require.Len(t, cf.schema.AllPhysicalTables(), 0)
 
 	// executing the ddl finished
 	mockDDLSink.ddlDone = true
 	mockDDLPuller.resolvedTs += 1000
 	tickThreeTime()
-	c.Assert(state.Status.CheckpointTs, check.Equals, mockDDLPuller.resolvedTs)
+	require.Equal(t, state.Status.CheckpointTs, mockDDLPuller.resolvedTs)
 
 	// handle create database
 	job = helper.DDL2Job("create database test1")
@@ -279,14 +270,14 @@ func (s *changefeedSuite) TestExecDDL(c *check.C) {
 	job.BinlogInfo.FinishedTS = mockDDLPuller.resolvedTs
 	mockDDLPuller.ddlQueue = append(mockDDLPuller.ddlQueue, job)
 	tickThreeTime()
-	c.Assert(state.Status.CheckpointTs, check.Equals, mockDDLPuller.resolvedTs)
-	c.Assert(mockDDLSink.ddlExecuting.Query, check.Equals, "CREATE DATABASE `test1`")
+	require.Equal(t, state.Status.CheckpointTs, mockDDLPuller.resolvedTs)
+	require.Equal(t, mockDDLSink.ddlExecuting.Query, "CREATE DATABASE `test1`")
 
 	// executing the ddl finished
 	mockDDLSink.ddlDone = true
 	mockDDLPuller.resolvedTs += 1000
 	tickThreeTime()
-	c.Assert(state.Status.CheckpointTs, check.Equals, mockDDLPuller.resolvedTs)
+	require.Equal(t, state.Status.CheckpointTs, mockDDLPuller.resolvedTs)
 
 	// handle create table
 	job = helper.DDL2Job("create table test1.test1(id int primary key)")
@@ -294,22 +285,22 @@ func (s *changefeedSuite) TestExecDDL(c *check.C) {
 	job.BinlogInfo.FinishedTS = mockDDLPuller.resolvedTs
 	mockDDLPuller.ddlQueue = append(mockDDLPuller.ddlQueue, job)
 	tickThreeTime()
-	c.Assert(state.Status.CheckpointTs, check.Equals, mockDDLPuller.resolvedTs)
-	c.Assert(mockDDLSink.ddlExecuting.Query, check.Equals, "CREATE TABLE `test1`.`test1` (`id` INT PRIMARY KEY)")
+
+	require.Equal(t, state.Status.CheckpointTs, mockDDLPuller.resolvedTs)
+	require.Equal(t, mockDDLSink.ddlExecuting.Query, "CREATE TABLE `test1`.`test1` (`id` INT PRIMARY KEY)")
 
 	// executing the ddl finished
 	mockDDLSink.ddlDone = true
 	mockDDLPuller.resolvedTs += 1000
 	tickThreeTime()
-	c.Assert(state.TaskStatuses[ctx.GlobalVars().CaptureInfo.ID].Tables, check.HasKey, job.TableID)
+	require.Contains(t, state.TaskStatuses[ctx.GlobalVars().CaptureInfo.ID].Tables, job.TableID)
 }
 
-func (s *changefeedSuite) TestSyncPoint(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestSyncPoint(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(true)
 	ctx.ChangefeedVars().Info.SyncPointEnabled = true
 	ctx.ChangefeedVars().Info.SyncPointInterval = 1 * time.Second
-	cf, state, captures, tester := createChangefeed4Test(ctx, c)
+	cf, state, captures, tester := createChangefeed4Test(ctx, t)
 	defer cf.Close(ctx)
 
 	// pre check
@@ -331,16 +322,15 @@ func (s *changefeedSuite) TestSyncPoint(c *check.C) {
 	}
 	for i := 1; i < len(mockDDLSink.syncPointHis); i++ {
 		// check the time interval between adjacent sync points is less or equal than one second
-		c.Assert(mockDDLSink.syncPointHis[i]-mockDDLSink.syncPointHis[i-1], check.LessEqual, uint64(1000<<18))
+		require.LessOrEqual(t, mockDDLSink.syncPointHis[i]-mockDDLSink.syncPointHis[i-1], uint64(1000<<18))
 	}
-	c.Assert(len(mockDDLSink.syncPointHis), check.GreaterEqual, 5)
+	require.GreaterOrEqual(t, len(mockDDLSink.syncPointHis), 5)
 }
 
-func (s *changefeedSuite) TestFinished(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestFinished(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(true)
 	ctx.ChangefeedVars().Info.TargetTs = ctx.ChangefeedVars().Info.StartTs + 1000
-	cf, state, captures, tester := createChangefeed4Test(ctx, c)
+	cf, state, captures, tester := createChangefeed4Test(ctx, t)
 	defer cf.Close(ctx)
 
 	// pre check
@@ -359,17 +349,17 @@ func (s *changefeedSuite) TestFinished(c *check.C) {
 		tester.MustApplyPatches()
 	}
 
-	c.Assert(state.Status.CheckpointTs, check.Equals, state.Info.TargetTs)
-	c.Assert(state.Info.State, check.Equals, model.StateFinished)
+	require.Equal(t, state.Status.CheckpointTs, state.Info.TargetTs)
+	require.Equal(t, state.Info.State, model.StateFinished)
 }
 
-func (s *changefeedSuite) TestRemoveChangefeed(c *check.C) {
-	defer testleak.AfterTest(c)()
-
+func TestRemoveChangefeed(t *testing.T) {
 	baseCtx, cancel := context.WithCancel(context.Background())
 	ctx := cdcContext.NewContext4Test(baseCtx, true)
 	info := ctx.ChangefeedVars().Info
-	dir := c.MkDir()
+	dir, err := ioutil.TempDir("", "remove-changefeed-test")
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
 	info.Config.Consistent = &config.ConsistentConfig{
 		Level:   "eventual",
 		Storage: filepath.Join("nfs://", dir),
@@ -378,17 +368,17 @@ func (s *changefeedSuite) TestRemoveChangefeed(c *check.C) {
 		ID:   ctx.ChangefeedVars().ID,
 		Info: info,
 	})
-	testChangefeedReleaseResource(c, ctx, cancel, dir, true /*expectedInitialized*/)
+	testChangefeedReleaseResource(t, ctx, cancel, dir, true /*expectedInitialized*/)
 }
 
-func (s *changefeedSuite) TestRemovePausedChangefeed(c *check.C) {
-	defer testleak.AfterTest(c)()
-
+func TestRemovePausedChangefeed(t *testing.T) {
 	baseCtx, cancel := context.WithCancel(context.Background())
 	ctx := cdcContext.NewContext4Test(baseCtx, true)
 	info := ctx.ChangefeedVars().Info
 	info.State = model.StateStopped
-	dir := c.MkDir()
+	dir, err := ioutil.TempDir("", "remove-paused-changefeed-test")
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
 	info.Config.Consistent = &config.ConsistentConfig{
 		Level:   "eventual",
 		Storage: filepath.Join("nfs://", dir),
@@ -397,17 +387,17 @@ func (s *changefeedSuite) TestRemovePausedChangefeed(c *check.C) {
 		ID:   ctx.ChangefeedVars().ID,
 		Info: info,
 	})
-	testChangefeedReleaseResource(c, ctx, cancel, dir, false /*expectedInitialized*/)
+	testChangefeedReleaseResource(t, ctx, cancel, dir, false /*expectedInitialized*/)
 }
 
 func testChangefeedReleaseResource(
-	c *check.C,
+	t *testing.T,
 	ctx cdcContext.Context,
 	cancel context.CancelFunc,
 	redoLogDir string,
 	expectedInitialized bool,
 ) {
-	cf, state, captures, tester := createChangefeed4Test(ctx, c)
+	cf, state, captures, tester := createChangefeed4Test(ctx, t)
 
 	// pre check
 	cf.Tick(ctx, state, captures)
@@ -416,7 +406,7 @@ func testChangefeedReleaseResource(
 	// initialize
 	cf.Tick(ctx, state, captures)
 	tester.MustApplyPatches()
-	c.Assert(cf.initialized, check.Equals, expectedInitialized)
+	require.Equal(t, cf.initialized, expectedInitialized)
 
 	// remove changefeed from state manager by admin job
 	cf.feedStateManager.PushAdminJob(&model.AdminJob{
@@ -425,15 +415,14 @@ func testChangefeedReleaseResource(
 	})
 	// changefeed tick will release resources
 	err := cf.tick(ctx, state, captures)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	cancel()
 	// check redo log dir is deleted
 	_, err = os.Stat(redoLogDir)
-	c.Assert(os.IsNotExist(err), check.IsTrue)
+	require.True(t, os.IsNotExist(err))
 }
 
-func (s *changefeedSuite) TestAddSpecialComment(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestAddSpecialComment(t *testing.T) {
 	testCase := []struct {
 		input  string
 		result string
@@ -565,10 +554,10 @@ func (s *changefeedSuite) TestAddSpecialComment(c *check.C) {
 	}
 	for _, ca := range testCase {
 		re, err := addSpecialComment(ca.input)
-		c.Check(err, check.IsNil)
-		c.Check(re, check.Equals, ca.result)
+		require.Nil(t, err)
+		require.Equal(t, re, ca.result)
 	}
-	c.Assert(func() {
+	require.Panics(t, func() {
 		_, _ = addSpecialComment("alter table t force, auto_increment = 12;alter table t force, auto_increment = 12;")
-	}, check.Panics, "invalid ddlQuery statement size")
+	}, "invalid ddlQuery statement size")
 }
