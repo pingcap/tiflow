@@ -409,6 +409,11 @@ type schedulerV1CompatWrapper struct {
 	inner *oldScheduler
 }
 
+// DrainCapture implement the scheduler interface
+func (w *schedulerV1CompatWrapper) DrainCapture(target model.CaptureID) error {
+	panic("implement me")
+}
+
 func (w *schedulerV1CompatWrapper) Tick(
 	_ cdcContext.Context,
 	state *orchestrator.ChangefeedReactorState,
@@ -434,10 +439,6 @@ func (w *schedulerV1CompatWrapper) MoveTable(tableID model.TableID, target model
 
 func (w *schedulerV1CompatWrapper) Rebalance() {
 	w.inner.Rebalance()
-}
-
-func (w *schedulerV1CompatWrapper) Drain(target model.CaptureID) {
-	panic("not implement")
 }
 
 func (w *schedulerV1CompatWrapper) Close(_ cdcContext.Context) {

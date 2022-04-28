@@ -54,7 +54,7 @@ type scheduler interface {
 	Close(ctx context.Context)
 	// DrainCapture is used to trigger manually moves all tables
 	// at the target capture to other nodes.
-	DrainCapture(target model.CaptureID)
+	DrainCapture(target model.CaptureID) error
 }
 
 type schedulerV2 struct {

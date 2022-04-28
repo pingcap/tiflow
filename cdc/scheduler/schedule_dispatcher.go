@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/scheduler/util"
 	"github.com/pingcap/tiflow/pkg/context"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
 )
 
@@ -186,7 +187,7 @@ func (s *BaseScheduleDispatcher) Tick(
 	// the workload may never be balanced until user manually triggers a rebalance.
 	if s.lastTickCaptureCount != captureCountUninitialized &&
 		s.lastTickCaptureCount != len(captures) {
-
+		// todo: consider `draining`
 		s.needRebalance = true
 	}
 	s.lastTickCaptureCount = len(captures)
@@ -213,6 +214,7 @@ func (s *BaseScheduleDispatcher) Tick(
 	}
 
 	s.descheduleTablesFromDownCaptures()
+	s.drainCapture()
 
 	shouldReplicateTableSet := make(map[model.TableID]struct{})
 	for _, tableID := range currentTables {
@@ -276,7 +278,7 @@ func (s *BaseScheduleDispatcher) Tick(
 		return CheckpointCannotProceed, CheckpointCannotProceed, nil
 	}
 
-	if s.needRebalance {
+	if s.needRebalance && !s.draining() {
 		ok, err := s.rebalance(ctx)
 		if err != nil {
 			return CheckpointCannotProceed, CheckpointCannotProceed, errors.Trace(err)
@@ -372,13 +374,26 @@ func (s *BaseScheduleDispatcher) descheduleTablesFromDownCaptures() {
 		if _, ok := s.captures[captureID]; !ok {
 			// Remove records for all table previously replicated by the
 			// gone capture.
-			removed := s.tables.RemoveTableRecordByCaptureID(captureID)
-			s.logger.Info("capture down, removing tables",
-				zap.String("captureID", captureID),
-				zap.Any("removedTables", removed))
+			s.removeTablesByCaptureID(captureID)
 			s.moveTableManager.OnCaptureRemoved(captureID)
 		}
 	}
+}
+
+func (s *BaseScheduleDispatcher) drainCapture() {
+	if s.draining() {
+		s.removeTablesByCaptureID(s.drainTarget)
+		s.moveTableManager.OnCaptureDraining(s.drainTarget)
+	}
+}
+
+func (s *BaseScheduleDispatcher) removeTablesByCaptureID(captureID model.CaptureID) {
+	removed := s.tables.RemoveTableRecordByCaptureID(captureID)
+	s.logger.Info("removing tables from capture",
+		zap.String("captureID", captureID),
+		zap.Int("count", len(removed)),
+		zap.Any("removedTables", removed))
+	s.moveTableManager.OnCaptureRemoved(captureID)
 }
 
 func (s *BaseScheduleDispatcher) findDiffTables(
@@ -538,15 +553,18 @@ func (s *BaseScheduleDispatcher) rebalance(ctx context.Context) (done bool, err 
 }
 
 // DrainCapture implements the interface ScheduleDispatcher.
-// todo: remove all tables associate with the target capture
-// set the capture's status to draining should be done the capture it's self.
 func (s *BaseScheduleDispatcher) DrainCapture(target model.CaptureID) error {
 	if s.drainTarget != captureIDNotDraining {
 		s.drainTarget = target
 		return nil
 	}
-	return errors.New("some error here")
+	return cerror.ErrSchedulerDrainCaptureNotAllowed.GenWithStack(s.drainTarget)
 }
+
+// handleDrainCapture move all tables at the target capture to other captures.
+//func (s *BaseScheduleDispatcher) handleDrainCapture(ctx context.Context) (done bool, err error) {
+//	return true, nil
+//}
 
 // OnAgentFinishedTableOperation is called when a table operation has been finished by
 // the processor.
@@ -686,4 +704,9 @@ func (s *BaseScheduleDispatcher) OnAgentCheckpoint(captureID model.CaptureID, ch
 
 	status.CheckpointTs = checkpointTs
 	status.ResolvedTs = resolvedTs
+}
+
+// draining return true if there is any capture is draining.
+func (s *BaseScheduleDispatcher) draining() bool {
+	return s.drainTarget != captureIDNotDraining
 }

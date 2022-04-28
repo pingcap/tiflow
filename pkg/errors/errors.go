@@ -875,6 +875,10 @@ var (
 		errors.RFCCodeText("CDC:ErrOwnerInconsistentStates"),
 	)
 
+	ErrSchedulerDrainCaptureNotAllowed = errors.Normalize(
+		"other capture is draining: %s",
+		errors.RFCCodeText("CDC:ErrSchedulerDrainCaptureNotAllowed"))
+
 	// miscellaneous internal errors
 	ErrFlowControllerAborted = errors.Normalize(
 		"flow controller is aborted",
