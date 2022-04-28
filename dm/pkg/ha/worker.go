@@ -56,7 +56,9 @@ func (i WorkerInfo) toJSON() (string, error) {
 
 // workerInfoFromJSON constructs WorkerInfo from its JSON represent.
 func workerInfoFromJSON(s string) (i WorkerInfo, err error) {
-	err = terror.ErrHAInvalidItem.Delegate(json.Unmarshal([]byte(s), &i), fmt.Sprintf("failed to unmarshal worker info: %s", s))
+	if err = json.Unmarshal([]byte(s), &i); err != nil {
+		err = terror.ErrHAInvalidItem.Delegate(err, fmt.Sprintf("failed to unmarshal worker info: %s", s))
+	}
 	return
 }
 
@@ -68,7 +70,7 @@ func PutWorkerInfo(cli *clientv3.Client, info WorkerInfo) (int64, error) {
 		return 0, err
 	}
 	key := common.WorkerRegisterKeyAdapter.Encode(info.Name)
-	_, rev, err := etcdutil.DoOpsInOneTxnRepeatableWithRetry(cli, clientv3.OpPut(key, value))
+	_, rev, err := etcdutil.DoTxnWithRepeatable(cli, clientv3.OpPut(key, value))
 	return rev, err
 }
 
@@ -102,6 +104,6 @@ func DeleteWorkerInfoRelayConfig(cli *clientv3.Client, worker string) (int64, er
 		clientv3.OpDelete(common.WorkerRegisterKeyAdapter.Encode(worker)),
 		clientv3.OpDelete(common.UpstreamRelayWorkerKeyAdapter.Encode(worker)),
 	}
-	_, rev, err := etcdutil.DoOpsInOneTxnRepeatableWithRetry(cli, ops...)
+	_, rev, err := etcdutil.DoTxnWithRepeatable(cli, ops...)
 	return rev, err
 }

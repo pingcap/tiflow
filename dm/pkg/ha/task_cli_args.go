@@ -45,7 +45,7 @@ func PutTaskCliArgs(cli *clientv3.Client, taskName string, sources []string, arg
 	if err != nil {
 		return err
 	}
-	_, _, err = etcdutil.DoOpsInOneTxnRepeatableWithRetry(cli, ops...)
+	_, _, err = etcdutil.DoTxnWithRepeatable(cli, ops...)
 	return err
 }
 
@@ -79,7 +79,7 @@ func GetTaskCliArgs(cli *clientv3.Client, taskName, source string) (*config.Task
 func DeleteAllTaskCliArgs(cli *clientv3.Client, taskName string) error {
 	key := common.TaskCliArgsKeyAdapter.Encode(taskName)
 	op := clientv3.OpDelete(key, clientv3.WithPrefix())
-	_, _, err := etcdutil.DoOpsInOneTxnRepeatableWithRetry(cli, op)
+	_, _, err := etcdutil.DoTxnWithRepeatable(cli, op)
 	return err
 }
 
@@ -87,6 +87,6 @@ func DeleteAllTaskCliArgs(cli *clientv3.Client, taskName string) error {
 func DeleteTaskCliArgs(cli *clientv3.Client, taskName, source string) error {
 	key := common.TaskCliArgsKeyAdapter.Encode(taskName, source)
 	op := clientv3.OpDelete(key)
-	_, _, err := etcdutil.DoOpsInOneTxnRepeatableWithRetry(cli, op)
+	_, _, err := etcdutil.DoTxnWithRepeatable(cli, op)
 	return err
 }

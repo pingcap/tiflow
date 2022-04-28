@@ -64,7 +64,9 @@ func (w WorkerEvent) toJSON() (string, error) {
 
 // workerEventFromJSON constructs WorkerEvent from its JSON represent.
 func workerEventFromJSON(s string) (w WorkerEvent, err error) {
-	err = terror.ErrHAInvalidItem.Delegate(json.Unmarshal([]byte(s), &w), fmt.Sprintf("failed to unmarshal worker event %s", s))
+	if err = json.Unmarshal([]byte(s), &w); err != nil {
+		err = terror.ErrHAInvalidItem.Delegate(err, fmt.Sprintf("failed to unmarshal worker event %s", s))
+	}
 	return
 }
 
@@ -130,7 +132,7 @@ func KeepAlive(ctx context.Context, cli *clientv3.Client, workerName string, kee
 
 	ch, err := cli.KeepAlive(keepAliveCtx, leaseID)
 	if err != nil {
-		return terror.ErrHAFailKeepalive.Delegate(err, "failed to worker keepalive")
+		return terror.ErrHAFailKeepalive.Delegate(err, "failed to keepalive")
 	}
 	for {
 		select {
@@ -159,7 +161,7 @@ func KeepAlive(ctx context.Context, cli *clientv3.Client, workerName string, kee
 			ch, err = cli.KeepAlive(keepAliveCtx, leaseID)
 			if err != nil {
 				log.L().Error("meet error when change keepalive TTL", zap.Error(err))
-				return terror.ErrHAFailKeepalive.Delegate(err, "failed to worker keepalive")
+				return terror.ErrHAFailKeepalive.Delegate(err, "failed to keepalive")
 			}
 			currentKeepAliveTTL = newTTL
 			log.L().Info("dynamically changed keepalive TTL to", zap.Int64("ttl in seconds", newTTL))

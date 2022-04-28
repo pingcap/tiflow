@@ -97,12 +97,12 @@ func RemoveMember(client *clientv3.Client, id uint64) (*clientv3.MemberRemoveRes
 	return client.MemberRemove(ctx, id)
 }
 
-// DoOpsInOneTxnRepeatableWithRetry do multiple etcd operations in one txn.
+// DoTxnWithRepeatable do multiple etcd operations in one txn with repeatable retry.
 // There are two situations that this function can be used:
 // 1. The operations are all read operations.
 // 2. The operations are all write operations, but write operations tolerate being written to etcd ** at least once **.
 // TODO: add unit test to test encountered an retryable error first but then recovered.
-func DoOpsInOneTxnRepeatableWithRetry(cli *clientv3.Client, ops ...clientv3.Op) (*clientv3.TxnResponse, int64, error) {
+func DoTxnWithRepeatable(cli *clientv3.Client, ops ...clientv3.Op) (*clientv3.TxnResponse, int64, error) {
 	ctx, cancel := context.WithTimeout(cli.Ctx(), DefaultRequestTimeout)
 	defer cancel()
 	tctx := tcontext.NewContext(ctx, log.L())
@@ -145,8 +145,8 @@ func DoOpsInOneCmpsTxnWithRetry(cli *clientv3.Client, cmps []clientv3.Cmp, opsTh
 	return resp, resp.Header.Revision, nil
 }
 
-// DoEtcdOpsWithRepeatableRetry do etcd operations function with repeatable retry.
-func DoEtcdOpsWithRepeatableRetry(cli *clientv3.Client, operateFunc func() error) error {
+// DoOperationWithRepeatable do etcd operations function with repeatable retry.
+func DoOperationWithRepeatable(cli *clientv3.Client, operateFunc func() error) error {
 	ctx, cancel := context.WithTimeout(cli.Ctx(), DefaultRequestTimeout)
 	defer cancel()
 	tctx := tcontext.NewContext(ctx, log.L())

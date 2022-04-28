@@ -180,7 +180,7 @@ func PutInfo(cli *clientv3.Client, info Info) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	_, rev, err := etcdutil.DoOpsInOneTxnRepeatableWithRetry(cli, op)
+	_, rev, err := etcdutil.DoTxnWithRepeatable(cli, op)
 	return rev, err
 }
 
@@ -189,7 +189,7 @@ func PutInfo(cli *clientv3.Client, info Info) (int64, error) {
 // k/k/k/k/v: task-name -> source-ID -> upstream-schema-name -> upstream-table-name -> shard DDL info.
 // ugly code, but have no better idea now.
 func GetAllInfo(cli *clientv3.Client) (map[string]map[string]map[string]map[string]Info, int64, error) {
-	respTxn, _, err := etcdutil.DoOpsInOneTxnRepeatableWithRetry(cli, clientv3.OpGet(common.ShardDDLOptimismInfoKeyAdapter.Path(), clientv3.WithPrefix()))
+	respTxn, _, err := etcdutil.DoTxnWithRepeatable(cli, clientv3.OpGet(common.ShardDDLOptimismInfoKeyAdapter.Path(), clientv3.WithPrefix()))
 	if err != nil {
 		return nil, 0, err
 	}
@@ -379,7 +379,7 @@ func CheckDDLInfos(cli *clientv3.Client, source string, schemaMap map[string]str
 					if err != nil {
 						return err
 					}
-					_, _, err = etcdutil.DoOpsInOneTxnRepeatableWithRetry(cli, delOp, putOp)
+					_, _, err = etcdutil.DoTxnWithRepeatable(cli, delOp, putOp)
 					if err != nil {
 						return err
 					}
