@@ -20,12 +20,12 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb/br/pkg/httputil"
 	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/owner"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/httputil"
 	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/tikv/client-go/v2/oracle"
@@ -664,27 +664,41 @@ func (h *openAPI) GetProcessor(c *gin.Context) {
 		return
 	}
 
+	// check if this captureID exist
+	procInfos, err := h.statusProvider().GetProcessors(ctx)
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+	var found bool
+	for _, info := range procInfos {
+		if info.CaptureID == captureID {
+			found = true
+			break
+		}
+	}
+	if !found {
+		_ = c.Error(cerror.ErrCaptureNotExist.GenWithStackByArgs(captureID))
+		return
+	}
+
 	statuses, err := h.statusProvider().GetAllTaskStatuses(ctx, changefeedID)
 	if err != nil {
 		_ = c.Error(err)
 		return
 	}
-	status, exist := statuses[captureID]
-	if !exist {
-		_ = c.Error(cerror.ErrCaptureNotExist.GenWithStackByArgs(captureID))
-		return
-	}
+	status, captureExist := statuses[captureID]
 
 	positions, err := h.statusProvider().GetTaskPositions(ctx, changefeedID)
 	if err != nil {
 		_ = c.Error(err)
 		return
 	}
-	position, exist := positions[captureID]
+	position, positionsExist := positions[captureID]
 	// Note: for the case that no tables are attached to a newly created changefeed,
 	//       we just do not report an error.
 	var processorDetail model.ProcessorDetail
-	if exist {
+	if captureExist && positionsExist {
 		processorDetail = model.ProcessorDetail{
 			CheckPointTs: position.CheckPointTs,
 			ResolvedTs:   position.ResolvedTs,
@@ -851,16 +865,18 @@ func (h *openAPI) forwardToOwner(c *gin.Context) {
 		return
 	}
 
-	tslConfig, err := config.GetGlobalServerConfig().Security.ToTLSConfigWithVerify()
+	security := config.GetGlobalServerConfig().Security
+
+	// init a request
+	req, err := http.NewRequestWithContext(
+		ctx, c.Request.Method, c.Request.RequestURI, c.Request.Body)
 	if err != nil {
 		_ = c.Error(err)
 		return
 	}
 
-	// init a request
-	req, _ := http.NewRequest(c.Request.Method, c.Request.RequestURI, c.Request.Body)
 	req.URL.Host = owner.AdvertiseAddr
-	if tslConfig != nil {
+	if security != nil {
 		req.URL.Scheme = "https"
 	} else {
 		req.URL.Scheme = "http"
@@ -872,7 +888,11 @@ func (h *openAPI) forwardToOwner(c *gin.Context) {
 	}
 
 	// forward to owner
-	cli := httputil.NewClient(tslConfig)
+	cli, err := httputil.NewClient(security)
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
 	resp, err := cli.Do(req)
 	if err != nil {
 		_ = c.Error(err)

@@ -273,17 +273,12 @@ func (s *Server) etcdHealthChecker(ctx context.Context) error {
 			for _, pdEndpoint := range s.pdEndpoints {
 				start := time.Now()
 				ctx, cancel := context.WithTimeout(ctx, time.Second*10)
-				req, err := http.NewRequestWithContext(
-					ctx, http.MethodGet, fmt.Sprintf("%s/pd/api/v1/health", pdEndpoint), nil)
-				if err != nil {
-					log.Warn("etcd health check failed", zap.Error(err))
-					cancel()
-					continue
-				}
-				_, err = httpCli.Do(req)
+				resp, err := httpCli.Get(ctx, fmt.Sprintf("%s/pd/api/v1/health", pdEndpoint))
 				if err != nil {
 					log.Warn("etcd health check error", zap.Error(err))
 				} else {
+					_, _ = io.Copy(io.Discard, resp.Body)
+					_ = resp.Body.Close()
 					metrics[pdEndpoint].Observe(float64(time.Since(start)) / float64(time.Second))
 				}
 				cancel()

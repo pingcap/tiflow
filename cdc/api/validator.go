@@ -21,7 +21,7 @@ import (
 	"github.com/pingcap/log"
 	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tiflow/cdc/capture"
-	"github.com/pingcap/tiflow/cdc/entry"
+	"github.com/pingcap/tiflow/cdc/entry/schema"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink"
@@ -215,25 +215,25 @@ func VerifyTables(replicaConfig *config.ReplicaConfig, storage tidbkv.Storage, s
 	if err != nil {
 		return nil, nil, errors.Trace(err)
 	}
-	snap, err := entry.NewSingleSchemaSnapshotFromMeta(meta, startTs, false /* explicitTables */)
+	snap, err := schema.NewSingleSnapshotFromMeta(meta, startTs, false /* explicitTables */)
 	if err != nil {
 		return nil, nil, errors.Trace(err)
 	}
 
-	for _, tableInfo := range snap.Tables() {
+	snap.IterTables(true, func(tableInfo *model.TableInfo) {
 		if filter.ShouldIgnoreTable(tableInfo.TableName.Schema, tableInfo.TableName.Table) {
-			continue
+			return
 		}
 		// Sequence is not supported yet, TiCDC needs to filter all sequence tables.
 		// See https://github.com/pingcap/tiflow/issues/4559
 		if tableInfo.IsSequence() {
-			continue
+			return
 		}
 		if !tableInfo.IsEligible(false /* forceReplicate */) {
 			ineligibleTables = append(ineligibleTables, tableInfo.TableName)
 		} else {
 			eligibleTables = append(eligibleTables, tableInfo.TableName)
 		}
-	}
+	})
 	return
 }
