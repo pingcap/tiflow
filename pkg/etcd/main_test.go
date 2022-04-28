@@ -10,21 +10,15 @@
 // distributed under the License is distributed on an "AS IS" BASIS,
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
 package etcd
 
 import (
-	"math"
-	"math/rand"
 	"testing"
 
-	"github.com/stretchr/testify/require"
-	"go.etcd.io/etcd/clientv3"
+	"github.com/pingcap/tiflow/pkg/leakutil"
 )
 
-func TestGetRevisionFromWatchOpts(t *testing.T) {
-	for i := 0; i < 100; i++ {
-		rev := rand.Int63n(math.MaxInt64)
-		opt := clientv3.WithRev(rev)
-		require.Equal(t, getRevisionFromWatchOpts(opt), rev)
-	}
+func TestMain(m *testing.M) {
+	leakutil.SetUpLeakTest(m)
 }
