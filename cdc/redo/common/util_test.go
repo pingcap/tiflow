@@ -36,8 +36,18 @@ func TestParseLogFileName(t *testing.T) {
 		{
 			name: "happy row .log",
 			args: arg{
+				name: fmt.Sprintf("%s_%s_%d_%s_%d%s", "cp",
+					"test",
+					time.Now().Unix(), DefaultRowLogFileType, 1, LogEXT),
+			},
+			wantTs:       1,
+			wantFileType: DefaultRowLogFileType,
+		},
+		{
+			name: "happy row .log",
+			args: arg{
 				name: fmt.Sprintf("%s_%s_%s_%d_%s_%d%s", "cp",
-					"default", "test",
+					"namespace", "test",
 					time.Now().Unix(), DefaultRowLogFileType, 1, LogEXT),
 			},
 			wantTs:       1,
@@ -46,8 +56,18 @@ func TestParseLogFileName(t *testing.T) {
 		{
 			name: "happy row .tmp",
 			args: arg{
+				name: fmt.Sprintf("%s_%s_%d_%s_%d%s", "cp",
+					"test",
+					time.Now().Unix(), DefaultRowLogFileType, 1, LogEXT) + TmpEXT,
+			},
+			wantTs:       1,
+			wantFileType: DefaultRowLogFileType,
+		},
+		{
+			name: "happy row .tmp",
+			args: arg{
 				name: fmt.Sprintf("%s_%s_%s_%d_%s_%d%s", "cp",
-					"default", "test",
+					"namespace", "test",
 					time.Now().Unix(), DefaultRowLogFileType, 1, LogEXT) + TmpEXT,
 			},
 			wantTs:       1,
@@ -56,8 +76,18 @@ func TestParseLogFileName(t *testing.T) {
 		{
 			name: "happy ddl .log",
 			args: arg{
+				name: fmt.Sprintf("%s_%s_%d_%s_%d%s", "cp",
+					"test",
+					time.Now().Unix(), DefaultDDLLogFileType, 1, LogEXT),
+			},
+			wantTs:       1,
+			wantFileType: DefaultDDLLogFileType,
+		},
+		{
+			name: "happy ddl .log",
+			args: arg{
 				name: fmt.Sprintf("%s_%s_%s_%d_%s_%d%s", "cp",
-					"default", "test",
+					"namespace", "test",
 					time.Now().Unix(), DefaultDDLLogFileType, 1, LogEXT),
 			},
 			wantTs:       1,
@@ -74,10 +104,30 @@ func TestParseLogFileName(t *testing.T) {
 			wantFileType: DefaultDDLLogFileType,
 		},
 		{
+			name: "happy ddl .sort",
+			args: arg{
+				name: fmt.Sprintf("%s_%s_%s_%d_%s_%d%s", "cp",
+					"namespace", "test",
+					time.Now().Unix(), DefaultDDLLogFileType, 1, LogEXT) + SortLogEXT,
+			},
+			wantTs:       1,
+			wantFileType: DefaultDDLLogFileType,
+		},
+		{
+			name: "happy ddl .tmp",
+			args: arg{
+				name: fmt.Sprintf("%s_%s_%d_%s_%d%s", "cp",
+					"test",
+					time.Now().Unix(), DefaultDDLLogFileType, 1, LogEXT) + TmpEXT,
+			},
+			wantTs:       1,
+			wantFileType: DefaultDDLLogFileType,
+		},
+		{
 			name: "happy ddl .tmp",
 			args: arg{
 				name: fmt.Sprintf("%s_%s_%s_%d_%s_%d%s", "cp",
-					"default", "test",
+					"namespace", "test",
 					time.Now().Unix(), DefaultDDLLogFileType, 1, LogEXT) + TmpEXT,
 			},
 			wantTs:       1,

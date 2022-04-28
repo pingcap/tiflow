@@ -493,6 +493,9 @@ func (l *LogWriter) DeleteAllLogs(ctx context.Context) error {
 }
 
 func (l *LogWriter) getDeletedChangefeedMarker() string {
+	if l.cfg.ChangeFeedID.Namespace == model.DefaultNamespace {
+		return fmt.Sprintf("delete_%s", l.cfg.ChangeFeedID.ID)
+	}
 	return fmt.Sprintf("delete_%s_%s", l.cfg.ChangeFeedID.Namespace, l.cfg.ChangeFeedID.ID)
 }
 
@@ -590,6 +593,10 @@ func (l *LogWriter) isStopped() bool {
 }
 
 func (l *LogWriter) getMetafileName() string {
+	if model.DefaultNamespace == l.cfg.ChangeFeedID.Namespace {
+		return fmt.Sprintf("%s_%s_%s%s", l.cfg.CaptureID, l.cfg.ChangeFeedID.ID,
+			common.DefaultMetaFileType, common.MetaEXT)
+	}
 	return fmt.Sprintf("%s_%s_%s_%s%s", l.cfg.CaptureID,
 		l.cfg.ChangeFeedID.Namespace, l.cfg.ChangeFeedID.ID,
 		common.DefaultMetaFileType, common.MetaEXT)
@@ -663,5 +670,8 @@ func (l *LogWriter) filePath() string {
 }
 
 func (cfg LogWriterConfig) String() string {
-	return fmt.Sprintf("%s:%s:%s:%d:%d:%s:%t", cfg.ChangeFeedID, cfg.CaptureID, cfg.Dir, cfg.MaxLogSize, cfg.FlushIntervalInMs, cfg.S3URI.String(), cfg.S3Storage)
+	return fmt.Sprintf("%s:%s:%s:%s:%d:%d:%s:%t",
+		cfg.ChangeFeedID.Namespace, cfg.ChangeFeedID.ID,
+		cfg.CaptureID, cfg.Dir, cfg.MaxLogSize,
+		cfg.FlushIntervalInMs, cfg.S3URI.String(), cfg.S3Storage)
 }

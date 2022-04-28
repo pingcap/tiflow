@@ -75,8 +75,8 @@ func TestReaderRead(t *testing.T) {
 	err = w.Close()
 	require.Nil(t, err)
 	require.True(t, !w.IsRunning())
-	fileName := fmt.Sprintf("%s_%s_%s_%d_%s_%d%s", cfg.CaptureID,
-		cfg.ChangeFeedID.Namespace, cfg.ChangeFeedID.ID,
+	fileName := fmt.Sprintf("%s_%s_%d_%s_%d%s", cfg.CaptureID,
+		cfg.ChangeFeedID.ID,
 		cfg.CreateTime.Unix(), cfg.FileType, 11, common.LogEXT)
 	path := filepath.Join(cfg.Dir, fileName)
 	info, err := os.Stat(path)

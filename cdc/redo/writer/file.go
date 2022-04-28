@@ -338,6 +338,11 @@ func (w *Writer) getLogFileName() string {
 	if w.op != nil && w.op.getLogFileName != nil {
 		return w.op.getLogFileName()
 	}
+	if model.DefaultNamespace == w.cfg.ChangeFeedID.Namespace {
+		return fmt.Sprintf("%s_%s_%d_%s_%d%s", w.cfg.CaptureID,
+			w.cfg.ChangeFeedID.ID,
+			w.cfg.CreateTime.Unix(), w.cfg.FileType, w.commitTS.Load(), common.LogEXT)
+	}
 	return fmt.Sprintf("%s_%s_%s_%d_%s_%d%s", w.cfg.CaptureID,
 		w.cfg.ChangeFeedID.Namespace, w.cfg.ChangeFeedID.ID,
 		w.cfg.CreateTime.Unix(), w.cfg.FileType, w.commitTS.Load(), common.LogEXT)
