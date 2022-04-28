@@ -436,6 +436,10 @@ func (w *schedulerV1CompatWrapper) Rebalance() {
 	w.inner.Rebalance()
 }
 
+func (w *schedulerV1CompatWrapper) Drain(target model.CaptureID) {
+	panic("not implement")
+}
+
 func (w *schedulerV1CompatWrapper) Close(_ cdcContext.Context) {
 	// No-op for the old scheduler
 }

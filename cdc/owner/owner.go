@@ -42,6 +42,7 @@ type ownerJobType int
 const (
 	ownerJobTypeRebalance ownerJobType = iota
 	ownerJobTypeScheduleTable
+	ownerJobTypeDrainCapture
 	ownerJobTypeAdminJob
 	ownerJobTypeDebugInfo
 	ownerJobTypeQuery
@@ -56,7 +57,7 @@ type ownerJob struct {
 	Tp           ownerJobType
 	ChangefeedID model.ChangeFeedID
 
-	// for ScheduleTable only
+	// for ScheduleTable / DrainCapture
 	TargetCaptureID model.CaptureID
 	// for ScheduleTable only
 	TableID model.TableID
@@ -84,6 +85,7 @@ type Owner interface {
 		cfID model.ChangeFeedID, toCapture model.CaptureID,
 		tableID model.TableID, done chan<- error,
 	)
+	DrainCapture(target model.CaptureID, done chan<- error)
 	WriteDebugInfo(w io.Writer, done chan<- error)
 	Query(query *Query, done chan<- error)
 	AsyncStop()
@@ -260,6 +262,16 @@ func (o *ownerImpl) ScheduleTable(
 	})
 }
 
+// DrainCapture removes all tables at the target capture
+// `done` must be buffered to prevent blocking owner.
+func (o *ownerImpl) DrainCapture(target model.CaptureID, done chan<- error) {
+	o.pushOwnerJob(&ownerJob{
+		Tp:              ownerJobTypeDrainCapture,
+		TargetCaptureID: target,
+		done:            done,
+	})
+}
+
 // WriteDebugInfo writes debug info into the specified http writer
 func (o *ownerImpl) WriteDebugInfo(w io.Writer, done chan<- error) {
 	o.pushOwnerJob(&ownerJob{
@@ -415,6 +427,13 @@ func (o *ownerImpl) clusterVersionConsistent(captures map[model.CaptureID]*model
 	return true
 }
 
+func (o *ownerImpl) handleDrainCaptures(target model.CaptureID, done chan<- error) {
+	for _, changefeed := range o.changefeeds {
+		changefeed.scheduler.DrainCapture(target)
+	}
+	close(done)
+}
+
 func (o *ownerImpl) handleJobs() {
 	jobs := o.takeOwnerJobs()
 	for _, job := range jobs {
@@ -431,6 +450,9 @@ func (o *ownerImpl) handleJobs() {
 			cfReactor.feedStateManager.PushAdminJob(job.AdminJob)
 		case ownerJobTypeScheduleTable:
 			cfReactor.scheduler.MoveTable(job.TableID, job.TargetCaptureID)
+		case ownerJobTypeDrainCapture:
+			o.handleDrainCaptures(job.TargetCaptureID, job.done)
+			continue
 		case ownerJobTypeRebalance:
 			cfReactor.scheduler.Rebalance()
 		case ownerJobTypeQuery:
