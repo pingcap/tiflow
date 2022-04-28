@@ -196,7 +196,7 @@ func NewContinuousDataValidator(cfg *config.SubTaskConfig, syncerObj *Syncer, st
 	return v
 }
 
-// reset state on start/restart
+// reset state on start/restart.
 func (v *DataValidator) reset() {
 	v.errChan = make(chan error, 10)
 	v.workers = []*validateWorker{}
