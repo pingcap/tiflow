@@ -15,7 +15,6 @@ package server
 
 import (
 	"context"
-	"os"
 	"strings"
 	"time"
 
@@ -26,7 +25,7 @@ import (
 	ticonfig "github.com/pingcap/tidb/config"
 	"github.com/pingcap/tiflow/cdc"
 	"github.com/pingcap/tiflow/cdc/sorter/unified"
-	cmdconetxt "github.com/pingcap/tiflow/pkg/cmd/context"
+	cmdcontext "github.com/pingcap/tiflow/pkg/cmd/context"
 	"github.com/pingcap/tiflow/pkg/cmd/util"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -109,21 +108,17 @@ func (o *options) addFlags(cmd *cobra.Command) {
 	cmd.Flags().StringVar(&o.allowedCertCN, "cert-allowed-cn", "", "Verify caller's identity (cert Common Name). Use ',' to separate multiple CN")
 }
 
-// run the server cmd.
+// run runs the server cmd.
 func (o *options) run(cmd *cobra.Command) error {
-	logConfig := &logutil.Config{
+	cancel := util.InitCmd(cmd, &logutil.Config{
 		File:                 o.serverConfig.LogFile,
 		Level:                o.serverConfig.LogLevel,
 		FileMaxSize:          o.serverConfig.Log.File.MaxSize,
 		FileMaxDays:          o.serverConfig.Log.File.MaxDays,
 		FileMaxBackups:       o.serverConfig.Log.File.MaxBackups,
 		ZapInternalErrOutput: o.serverConfig.Log.InternalErrOutput,
-	}
-	if err := logutil.InitLogger(logConfig); err != nil {
-		cmd.Printf("init logger error %v\n", errors.ErrorStack(err))
-		os.Exit(1)
-	}
-	log.Info("init log", zap.String("file", logConfig.File), zap.String("level", logConfig.Level))
+	})
+	defer cancel()
 
 	tz, err := ticdcutil.GetTimezone(o.serverConfig.TZ)
 	if err != nil {
@@ -131,8 +126,8 @@ func (o *options) run(cmd *cobra.Command) error {
 	}
 	config.StoreGlobalServerConfig(o.serverConfig)
 
-	cmdconetxt.SetDefaultContext(context.Background())
-	ctx := ticdcutil.PutTimezoneInCtx(cmdconetxt.GetDefaultContext(), tz)
+	cmdcontext.SetDefaultContext(context.Background())
+	ctx := ticdcutil.PutTimezoneInCtx(cmdcontext.GetDefaultContext(), tz)
 	ctx = ticdcutil.PutCaptureAddrInCtx(ctx, o.serverConfig.AdvertiseAddr)
 
 	version.LogVersionInfo()
@@ -148,7 +143,6 @@ func (o *options) run(cmd *cobra.Command) error {
 
 	util.LogHTTPProxies()
 	cdc.RecordGoRuntimeSettings()
-
 	server, err := cdc.NewServer(strings.Split(o.serverPdAddr, ","))
 	if err != nil {
 		return errors.Annotate(err, "new server")
