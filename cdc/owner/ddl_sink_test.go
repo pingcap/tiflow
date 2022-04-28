@@ -17,21 +17,17 @@ import (
 	"context"
 	"sync"
 	"sync/atomic"
+	"testing"
 	"time"
 
-	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/retry"
-	"github.com/pingcap/tiflow/pkg/util/testleak"
+	"github.com/stretchr/testify/require"
 )
-
-var _ = check.Suite(&ddlSinkSuite{})
-
-type ddlSinkSuite struct{}
 
 type mockSink struct {
 	sink.Sink
@@ -78,8 +74,7 @@ func newDDLSink4Test() (DDLSink, *mockSink) {
 	return ddlSink, mockSink
 }
 
-func (s *ddlSinkSuite) TestCheckpoint(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestCheckpoint(t *testing.T) {
 	ddlSink, mSink := newDDLSink4Test()
 	ctx := cdcContext.NewBackendContext4Test(true)
 	ctx, cancel := cdcContext.WithCancel(ctx)
@@ -98,13 +93,12 @@ func (s *ddlSinkSuite) TestCheckpoint(c *check.C) {
 		}, retry.WithBackoffBaseDelay(100), retry.WithMaxTries(30))
 	}
 	ddlSink.emitCheckpointTs(ctx, 1)
-	c.Assert(waitCheckpointGrowingUp(mSink, 1), check.IsNil)
+	require.Nil(t, waitCheckpointGrowingUp(mSink, 1))
 	ddlSink.emitCheckpointTs(ctx, 10)
-	c.Assert(waitCheckpointGrowingUp(mSink, 10), check.IsNil)
+	require.Nil(t, waitCheckpointGrowingUp(mSink, 10))
 }
 
-func (s *ddlSinkSuite) TestExecDDL(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestExecDDLEvents(t *testing.T) {
 	ddlSink, mSink := newDDLSink4Test()
 	ctx := cdcContext.NewBackendContext4Test(true)
 	ctx, cancel := cdcContext.WithCancel(ctx)
@@ -123,17 +117,16 @@ func (s *ddlSinkSuite) TestExecDDL(c *check.C) {
 	for _, event := range ddlEvents {
 		for {
 			done, err := ddlSink.emitDDLEvent(ctx, event)
-			c.Assert(err, check.IsNil)
+			require.Nil(t, err)
 			if done {
-				c.Assert(mSink.GetDDL(), check.DeepEquals, event)
+				require.Equal(t, mSink.GetDDL(), event)
 				break
 			}
 		}
 	}
 }
 
-func (s *ddlSinkSuite) TestExecDDLError(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestExecDDLError(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(true)
 
 	var (
@@ -165,24 +158,24 @@ func (s *ddlSinkSuite) TestExecDDLError(c *check.C) {
 	ddl1 := &model.DDLEvent{CommitTs: 1}
 	for {
 		done, err := ddlSink.emitDDLEvent(ctx, ddl1)
-		c.Assert(err, check.IsNil)
+		require.Nil(t, err)
 		if done {
-			c.Assert(mSink.GetDDL(), check.DeepEquals, ddl1)
+			require.Equal(t, mSink.GetDDL(), ddl1)
 			break
 		}
 	}
-	c.Assert(resultErr, check.IsNil)
+	require.Nil(t, resultErr)
 
 	mSink.ddlError = cerror.ErrExecDDLFailed.GenWithStackByArgs()
 	ddl2 := &model.DDLEvent{CommitTs: 2}
 	for {
 		done, err := ddlSink.emitDDLEvent(ctx, ddl2)
-		c.Assert(err, check.IsNil)
+		require.Nil(t, err)
 
 		if done || readResultErr() != nil {
-			c.Assert(mSink.GetDDL(), check.DeepEquals, ddl2)
+			require.Equal(t, mSink.GetDDL(), ddl2)
 			break
 		}
 	}
-	c.Assert(cerror.ErrExecDDLFailed.Equal(readResultErr()), check.IsTrue)
+	require.True(t, cerror.ErrExecDDLFailed.Equal(readResultErr()))
 }
