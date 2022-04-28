@@ -80,7 +80,7 @@ func (o *updateChangefeedOptions) run(cmd *cobra.Command) error {
 	ctx := cmdcontext.GetDefaultContext()
 
 	resp, err := sendOwnerChangefeedQuery(ctx, o.etcdClient,
-		model.DefaultNamespaceChangeFeedID(o.changefeedID),
+		model.DefaultChangeFeedID(o.changefeedID),
 		o.credential)
 	// if no cdc owner exists, allow user to update changefeed config
 	if err != nil && errors.Cause(err) != cerror.ErrOwnerNotFound {
@@ -93,7 +93,7 @@ func (o *updateChangefeedOptions) run(cmd *cobra.Command) error {
 	}
 
 	old, err := o.etcdClient.GetChangeFeedInfo(ctx,
-		model.DefaultNamespaceChangeFeedID(o.changefeedID))
+		model.DefaultChangeFeedID(o.changefeedID))
 	if err != nil {
 		return err
 	}
@@ -130,7 +130,7 @@ func (o *updateChangefeedOptions) run(cmd *cobra.Command) error {
 	}
 
 	err = o.etcdClient.SaveChangeFeedInfo(ctx, newInfo,
-		model.DefaultNamespaceChangeFeedID(o.changefeedID))
+		model.DefaultChangeFeedID(o.changefeedID))
 	if err != nil {
 		return err
 	}

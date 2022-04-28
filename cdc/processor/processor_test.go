@@ -950,7 +950,7 @@ func TestSchemaGC(t *testing.T) {
 	tester.MustApplyPatches()
 
 	updateChangeFeedPosition(t, tester,
-		model.DefaultNamespaceChangeFeedID("changefeed-id-test"),
+		model.DefaultChangeFeedID("changefeed-id-test"),
 		50, 50)
 	_, err = p.Tick(ctx, p.changefeed)
 	require.Nil(t, err)

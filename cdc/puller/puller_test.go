@@ -128,7 +128,7 @@ func newPullerForTest(
 	defer regionCache.Close()
 	plr := NewPuller(
 		ctx, pdCli, grpcPool, regionCache, store, pdtime.NewClock4Test(),
-		model.DefaultNamespaceChangeFeedID("changefeed-id-test"),
+		model.DefaultChangeFeedID("changefeed-id-test"),
 		checkpointTs, spans, enableOldValue)
 	wg.Add(1)
 	go func() {

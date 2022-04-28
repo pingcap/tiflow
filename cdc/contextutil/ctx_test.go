@@ -38,16 +38,16 @@ func TestCaptureIDNotSet(t *testing.T) {
 }
 
 func TestShouldReturnChangefeedID(t *testing.T) {
-	ctx := PutChangefeedIDInCtx(context.Background(), model.DefaultNamespaceChangeFeedID("ello"))
-	require.Equal(t, model.DefaultNamespaceChangeFeedID("ello"), ChangefeedIDFromCtx(ctx))
+	ctx := PutChangefeedIDInCtx(context.Background(), model.DefaultChangeFeedID("ello"))
+	require.Equal(t, model.DefaultChangeFeedID("ello"), ChangefeedIDFromCtx(ctx))
 }
 
 func TestCanceledContext(t *testing.T) {
-	ctx := PutChangefeedIDInCtx(context.Background(), model.DefaultNamespaceChangeFeedID("test-cf"))
-	require.Equal(t, model.DefaultNamespaceChangeFeedID("test-cf"), ChangefeedIDFromCtx(ctx))
+	ctx := PutChangefeedIDInCtx(context.Background(), model.DefaultChangeFeedID("test-cf"))
+	require.Equal(t, model.DefaultChangeFeedID("test-cf"), ChangefeedIDFromCtx(ctx))
 	ctx, cancel := context.WithCancel(ctx)
 	cancel()
-	require.Equal(t, model.DefaultNamespaceChangeFeedID("test-cf"), ChangefeedIDFromCtx(ctx))
+	require.Equal(t, model.DefaultChangeFeedID("test-cf"), ChangefeedIDFromCtx(ctx))
 }
 
 func TestChangefeedIDNotSet(t *testing.T) {
@@ -115,7 +115,7 @@ func TestKVStorageNotSet(t *testing.T) {
 func TestZapFieldWithContext(t *testing.T) {
 	var (
 		capture    string = "127.0.0.1:8200"
-		changefeed        = model.DefaultNamespaceChangeFeedID("test-cf")
+		changefeed        = model.DefaultChangeFeedID("test-cf")
 	)
 	ctx := context.Background()
 	ctx = PutCaptureAddrInCtx(ctx, capture)

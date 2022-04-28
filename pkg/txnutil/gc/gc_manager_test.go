@@ -108,7 +108,7 @@ func (s *gcManagerSuite) TestCheckStaleCheckpointTs(c *check.C) {
 		PDClock: clock,
 	})
 
-	cfID := model.DefaultNamespaceChangeFeedID("cfID")
+	cfID := model.DefaultChangeFeedID("cfID")
 	err = gcManager.CheckStaleCheckpointTs(cCtx, cfID, 10)
 	c.Assert(cerror.ErrGCTTLExceeded.Equal(errors.Cause(err)), check.IsTrue)
 	c.Assert(cerror.ChangefeedFastFailError(err), check.IsTrue)

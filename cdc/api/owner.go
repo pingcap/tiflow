@@ -148,7 +148,7 @@ func (h *ownerAPI) handleChangefeedAdmin(w http.ResponseWriter, req *http.Reques
 		opts.ForceRemove = forceRemoveOpt
 	}
 	job := model.AdminJob{
-		CfID: model.DefaultNamespaceChangeFeedID(req.Form.Get(OpVarChangefeedID)),
+		CfID: model.DefaultChangeFeedID(req.Form.Get(OpVarChangefeedID)),
 		Type: model.AdminJobType(typ),
 		Opts: opts,
 	}
@@ -169,7 +169,7 @@ func (h *ownerAPI) handleRebalanceTrigger(w http.ResponseWriter, req *http.Reque
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
-	changefeedID := model.DefaultNamespaceChangeFeedID(req.Form.Get(OpVarChangefeedID))
+	changefeedID := model.DefaultChangeFeedID(req.Form.Get(OpVarChangefeedID))
 	if err := model.ValidateChangefeedID(changefeedID.ID); err != nil {
 		writeError(w, http.StatusBadRequest,
 			cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed id: %s", changefeedID.ID))
@@ -193,7 +193,7 @@ func (h *ownerAPI) handleMoveTable(w http.ResponseWriter, req *http.Request) {
 			cerror.WrapError(cerror.ErrInternalServerError, err))
 		return
 	}
-	changefeedID := model.DefaultNamespaceChangeFeedID(req.Form.Get(OpVarChangefeedID))
+	changefeedID := model.DefaultChangeFeedID(req.Form.Get(OpVarChangefeedID))
 	if err := model.ValidateChangefeedID(changefeedID.ID); err != nil {
 		writeError(w, http.StatusBadRequest,
 			cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed id: %s", changefeedID.ID))
@@ -230,7 +230,7 @@ func (h *ownerAPI) handleChangefeedQuery(w http.ResponseWriter, req *http.Reques
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
-	changefeedID := model.DefaultNamespaceChangeFeedID(req.Form.Get(OpVarChangefeedID))
+	changefeedID := model.DefaultChangeFeedID(req.Form.Get(OpVarChangefeedID))
 	if err := model.ValidateChangefeedID(changefeedID.ID); err != nil {
 		writeError(w, http.StatusBadRequest,
 			cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed id: %s", changefeedID.ID))

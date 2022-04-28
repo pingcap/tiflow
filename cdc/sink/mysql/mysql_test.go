@@ -1018,7 +1018,7 @@ func TestAdjustSQLMode(t *testing.T) {
 		mark.OptCyclicConfig: cyclicConfig,
 	}
 	sink, err := NewMySQLSink(ctx,
-		model.DefaultNamespaceChangeFeedID(changefeed),
+		model.DefaultChangeFeedID(changefeed),
 		sinkURI, f, rc, opts)
 	require.Nil(t, err)
 
@@ -1086,7 +1086,7 @@ func TestNewMySQLTimeout(t *testing.T) {
 	rc := config.GetDefaultReplicaConfig()
 	f, err := filter.NewFilter(rc)
 	require.Nil(t, err)
-	_, err = NewMySQLSink(ctx, model.DefaultNamespaceChangeFeedID(changefeed),
+	_, err = NewMySQLSink(ctx, model.DefaultChangeFeedID(changefeed),
 		sinkURI, f, rc, map[string]string{})
 	require.Equal(t, driver.ErrBadConn, errors.Cause(err))
 }
@@ -1134,7 +1134,7 @@ func TestNewMySQLSinkExecDML(t *testing.T) {
 	f, err := filter.NewFilter(rc)
 	require.Nil(t, err)
 	sink, err := NewMySQLSink(ctx,
-		model.DefaultNamespaceChangeFeedID(changefeed),
+		model.DefaultChangeFeedID(changefeed),
 		sinkURI, f, rc, map[string]string{})
 	require.Nil(t, err)
 
@@ -1341,7 +1341,7 @@ func TestExecDMLRollbackErrDatabaseNotExists(t *testing.T) {
 	f, err := filter.NewFilter(rc)
 	require.Nil(t, err)
 	sink, err := NewMySQLSink(ctx,
-		model.DefaultNamespaceChangeFeedID(changefeed),
+		model.DefaultChangeFeedID(changefeed),
 		sinkURI, f, rc, map[string]string{})
 	require.Nil(t, err)
 
@@ -1419,7 +1419,7 @@ func TestExecDMLRollbackErrTableNotExists(t *testing.T) {
 	f, err := filter.NewFilter(rc)
 	require.Nil(t, err)
 	sink, err := NewMySQLSink(ctx,
-		model.DefaultNamespaceChangeFeedID(changefeed),
+		model.DefaultChangeFeedID(changefeed),
 		sinkURI, f, rc, map[string]string{})
 	require.Nil(t, err)
 
@@ -1502,7 +1502,7 @@ func TestExecDMLRollbackErrRetryable(t *testing.T) {
 	f, err := filter.NewFilter(rc)
 	require.Nil(t, err)
 	sink, err := NewMySQLSink(ctx,
-		model.DefaultNamespaceChangeFeedID(changefeed),
+		model.DefaultChangeFeedID(changefeed),
 		sinkURI, f, rc, map[string]string{})
 	require.Nil(t, err)
 
@@ -1560,7 +1560,7 @@ func TestNewMySQLSinkExecDDL(t *testing.T) {
 	f, err := filter.NewFilter(rc)
 	require.Nil(t, err)
 	sink, err := NewMySQLSink(ctx,
-		model.DefaultNamespaceChangeFeedID(changefeed),
+		model.DefaultChangeFeedID(changefeed),
 		sinkURI, f, rc, map[string]string{})
 	require.Nil(t, err)
 
@@ -1679,7 +1679,7 @@ func TestNewMySQLSink(t *testing.T) {
 	f, err := filter.NewFilter(rc)
 	require.Nil(t, err)
 	sink, err := NewMySQLSink(ctx,
-		model.DefaultNamespaceChangeFeedID(changefeed),
+		model.DefaultChangeFeedID(changefeed),
 		sinkURI, f, rc, map[string]string{})
 	require.Nil(t, err)
 	err = sink.Close(ctx)
@@ -1721,7 +1721,7 @@ func TestMySQLSinkClose(t *testing.T) {
 
 	// test sink.Close will work correctly even if the ctx pass in has not been cancel
 	sink, err := NewMySQLSink(ctx,
-		model.DefaultNamespaceChangeFeedID(changefeed),
+		model.DefaultChangeFeedID(changefeed),
 		sinkURI, f, rc, map[string]string{})
 	require.Nil(t, err)
 	err = sink.Close(ctx)
@@ -1773,7 +1773,7 @@ func TestMySQLSinkFlushResolvedTs(t *testing.T) {
 
 	// test sink.Close will work correctly even if the ctx pass in has not been cancel
 	sink, err := NewMySQLSink(ctx,
-		model.DefaultNamespaceChangeFeedID(changefeed),
+		model.DefaultChangeFeedID(changefeed),
 		sinkURI, f, rc, map[string]string{})
 	require.Nil(t, err)
 	checkpoint, err := sink.FlushRowChangedEvents(ctx, model.TableID(1), 1)
@@ -1861,7 +1861,7 @@ func TestGBKSupported(t *testing.T) {
 	f, err := filter.NewFilter(rc)
 	require.Nil(t, err)
 	sink, err := NewMySQLSink(ctx,
-		model.DefaultNamespaceChangeFeedID(changefeed),
+		model.DefaultChangeFeedID(changefeed),
 		sinkURI, f, rc, map[string]string{})
 	require.Nil(t, err)
 

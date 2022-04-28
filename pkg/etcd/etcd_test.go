@@ -132,7 +132,7 @@ func TestGetChangeFeeds(t *testing.T) {
 	for _, tc := range testCases {
 		for i := 0; i < len(tc.ids); i++ {
 			_, err := s.client.Client.Put(context.Background(),
-				GetEtcdKeyChangeFeedInfo(model.DefaultNamespaceChangeFeedID(tc.ids[i])),
+				GetEtcdKeyChangeFeedInfo(model.DefaultChangeFeedID(tc.ids[i])),
 				tc.details[i])
 			require.NoError(t, err)
 		}
@@ -141,7 +141,7 @@ func TestGetChangeFeeds(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, len(result), len(tc.ids))
 		for i := 0; i < len(tc.ids); i++ {
-			rawKv, ok := result[model.DefaultNamespaceChangeFeedID(tc.ids[i])]
+			rawKv, ok := result[model.DefaultChangeFeedID(tc.ids[i])]
 			require.True(t, ok)
 			require.Equal(t, string(rawKv.Value), tc.details[i])
 		}
@@ -230,7 +230,7 @@ func TestOpChangeFeedDetail(t *testing.T) {
 		SinkURI: "root@tcp(127.0.0.1:3306)/mysql",
 		SortDir: "/old-version/sorter",
 	}
-	cfID := model.DefaultNamespaceChangeFeedID("test-op-cf")
+	cfID := model.DefaultChangeFeedID("test-op-cf")
 
 	err := s.client.SaveChangeFeedInfo(ctx, detail, cfID)
 	require.NoError(t, err)
@@ -274,7 +274,7 @@ func TestGetAllChangeFeedInfo(t *testing.T) {
 	for _, item := range infos {
 		err := s.client.SaveChangeFeedInfo(ctx,
 			item.info,
-			model.DefaultNamespaceChangeFeedID(item.id))
+			model.DefaultChangeFeedID(item.id))
 		require.NoError(t, err)
 	}
 
@@ -282,7 +282,7 @@ func TestGetAllChangeFeedInfo(t *testing.T) {
 	require.NoError(t, err)
 
 	for _, item := range infos {
-		obtained, found := allChangFeedInfo[model.DefaultNamespaceChangeFeedID(item.id)]
+		obtained, found := allChangFeedInfo[model.DefaultChangeFeedID(item.id)]
 		require.True(t, found)
 		require.Equal(t, item.info.SinkURI, obtained.SinkURI)
 		require.Equal(t, item.info.SortDir, obtained.SortDir)
@@ -295,11 +295,11 @@ func TestGetAllChangeFeedStatus(t *testing.T) {
 	defer s.tearDownTest(t)
 
 	changefeeds := map[model.ChangeFeedID]*model.ChangeFeedStatus{
-		model.DefaultNamespaceChangeFeedID("cf1"): {
+		model.DefaultChangeFeedID("cf1"): {
 			ResolvedTs:   100,
 			CheckpointTs: 90,
 		},
-		model.DefaultNamespaceChangeFeedID("cf2"): {
+		model.DefaultChangeFeedID("cf2"): {
 			ResolvedTs:   100,
 			CheckpointTs: 70,
 		},
@@ -323,10 +323,10 @@ func TestCreateChangefeed(t *testing.T) {
 		SinkURI: "root@tcp(127.0.0.1:3306)/mysql",
 	}
 
-	err := s.client.CreateChangefeedInfo(ctx, detail, model.DefaultNamespaceChangeFeedID("test-id"))
+	err := s.client.CreateChangefeedInfo(ctx, detail, model.DefaultChangeFeedID("test-id"))
 	require.NoError(t, err)
 
-	err = s.client.CreateChangefeedInfo(ctx, detail, model.DefaultNamespaceChangeFeedID("test-id"))
+	err = s.client.CreateChangefeedInfo(ctx, detail, model.DefaultChangeFeedID("test-id"))
 	require.True(t, cerror.ErrChangeFeedAlreadyExists.Equal(err))
 }
 

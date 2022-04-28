@@ -418,7 +418,7 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 	opts := map[string]string{}
 	for i := 0; i < int(kafkaPartitionNum); i++ {
 		s, err := sink.New(ctx,
-			model.DefaultNamespaceChangeFeedID("kafka-consumer"),
+			model.DefaultChangeFeedID("kafka-consumer"),
 			downstreamURIStr, filter, config.GetDefaultReplicaConfig(), opts, errCh)
 		if err != nil {
 			cancel()
@@ -427,7 +427,7 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 		c.sinks[i] = &partitionSink{Sink: s, partitionNo: i}
 	}
 	sink, err := sink.New(ctx,
-		model.DefaultNamespaceChangeFeedID("kafka-consumer"),
+		model.DefaultChangeFeedID("kafka-consumer"),
 		downstreamURIStr, filter, config.GetDefaultReplicaConfig(), opts, errCh)
 	if err != nil {
 		cancel()

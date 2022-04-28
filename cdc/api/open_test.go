@@ -35,9 +35,9 @@ import (
 )
 
 var (
-	changeFeedID         = model.DefaultNamespaceChangeFeedID("test-changeFeed")
+	changeFeedID         = model.DefaultChangeFeedID("test-changeFeed")
 	captureID            = "test-capture"
-	nonExistChangefeedID = model.DefaultNamespaceChangeFeedID("non-exist-changefeed")
+	nonExistChangefeedID = model.DefaultChangeFeedID("non-exist-changefeed")
 )
 
 type mockStatusProvider struct {
@@ -115,14 +115,14 @@ func newStatusProvider() *mockStatusProvider {
 
 	statusProvider.On("GetAllChangeFeedStatuses", mock.Anything).
 		Return(map[model.ChangeFeedID]*model.ChangeFeedStatus{
-			model.DefaultNamespaceChangeFeedID(changeFeedID.ID + "1"): {CheckpointTs: 1},
-			model.DefaultNamespaceChangeFeedID(changeFeedID.ID + "2"): {CheckpointTs: 2},
+			model.DefaultChangeFeedID(changeFeedID.ID + "1"): {CheckpointTs: 1},
+			model.DefaultChangeFeedID(changeFeedID.ID + "2"): {CheckpointTs: 2},
 		}, nil)
 
 	statusProvider.On("GetAllChangeFeedInfo", mock.Anything).
 		Return(map[model.ChangeFeedID]*model.ChangeFeedInfo{
-			model.DefaultNamespaceChangeFeedID(changeFeedID.ID + "1"): {State: model.StateNormal},
-			model.DefaultNamespaceChangeFeedID(changeFeedID.ID + "2"): {State: model.StateStopped},
+			model.DefaultChangeFeedID(changeFeedID.ID + "1"): {State: model.StateNormal},
+			model.DefaultChangeFeedID(changeFeedID.ID + "2"): {State: model.StateStopped},
 		}, nil)
 
 	statusProvider.On("GetAllTaskStatuses", mock.Anything).
@@ -584,7 +584,7 @@ func TestListProcessor(t *testing.T) {
 	var resp []model.ProcessorCommonInfo
 	err := json.NewDecoder(w.Body).Decode(&resp)
 	require.Nil(t, err)
-	require.Equal(t, changeFeedID, model.DefaultNamespaceChangeFeedID(resp[0].CfID))
+	require.Equal(t, changeFeedID, model.DefaultChangeFeedID(resp[0].CfID))
 }
 
 func TestListCapture(t *testing.T) {

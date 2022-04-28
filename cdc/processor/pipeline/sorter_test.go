@@ -42,7 +42,7 @@ func TestUnifiedSorterFileLockConflict(t *testing.T) {
 	}()
 
 	_, err := unified.NewUnifiedSorter(dir,
-		model.DefaultNamespaceChangeFeedID("changefeed-id-test"),
+		model.DefaultChangeFeedID("changefeed-id-test"),
 		"test", 0)
 	require.Nil(t, err)
 

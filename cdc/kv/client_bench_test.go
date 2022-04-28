@@ -194,7 +194,7 @@ func prepareBenchMultiStore(b *testing.B, storeNum, regionNum int) (
 	}
 
 	lockResolver := txnutil.NewLockerResolver(kvStorage,
-		model.DefaultNamespaceChangeFeedID("changefeed-test"),
+		model.DefaultChangeFeedID("changefeed-test"),
 		util.RoleTester)
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
@@ -203,7 +203,7 @@ func prepareBenchMultiStore(b *testing.B, storeNum, regionNum int) (
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool,
 		regionCache, pdtime.NewClock4Test(),
-		model.DefaultNamespaceChangeFeedID(""))
+		model.DefaultChangeFeedID(""))
 	eventCh := make(chan model.RegionFeedEvent, 1000000)
 	wg.Add(1)
 	go func() {
@@ -290,7 +290,7 @@ func prepareBench(b *testing.B, regionNum int) (
 	}
 
 	lockResolver := txnutil.NewLockerResolver(kvStorage,
-		model.DefaultNamespaceChangeFeedID("changefeed-test"),
+		model.DefaultChangeFeedID("changefeed-test"),
 		util.RoleTester)
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
@@ -299,7 +299,7 @@ func prepareBench(b *testing.B, regionNum int) (
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool,
 		regionCache, pdtime.NewClock4Test(),
-		model.DefaultNamespaceChangeFeedID(""))
+		model.DefaultChangeFeedID(""))
 	eventCh := make(chan model.RegionFeedEvent, 1000000)
 	wg.Add(1)
 	go func() {

@@ -29,7 +29,7 @@ import (
 )
 
 func TestCheckCaptureAlive(t *testing.T) {
-	state := NewChangefeedReactorState(model.DefaultNamespaceChangeFeedID("test"))
+	state := NewChangefeedReactorState(model.DefaultChangeFeedID("test"))
 	stateTester := NewReactorStateTester(t, state, nil)
 	state.CheckCaptureAlive("6bbc01c8-0605-4f86-a0f9-b3119109b225")
 	require.Contains(t, stateTester.ApplyPatches().Error(), "[CDC:ErrLeaseExpired]")
@@ -115,7 +115,7 @@ func TestChangefeedStateUpdate(t *testing.T) {
 				`{"id":"6bbc01c8-0605-4f86-a0f9-b3119109b225","address":"127.0.0.1:8300"}`,
 			},
 			expected: ChangefeedReactorState{
-				ID: model.DefaultNamespaceChangeFeedID("test1"),
+				ID: model.DefaultChangeFeedID("test1"),
 				Info: &model.ChangeFeedInfo{
 					SinkURI:           "blackhole://",
 					Opts:              map[string]string{},
@@ -175,7 +175,7 @@ func TestChangefeedStateUpdate(t *testing.T) {
 				`{"id":"666777888","address":"127.0.0.1:8300"}`,
 			},
 			expected: ChangefeedReactorState{
-				ID: model.DefaultNamespaceChangeFeedID("test1"),
+				ID: model.DefaultChangeFeedID("test1"),
 				Info: &model.ChangeFeedInfo{
 					SinkURI:           "blackhole://",
 					Opts:              map[string]string{},
@@ -242,7 +242,7 @@ func TestChangefeedStateUpdate(t *testing.T) {
 				`fake value`,
 			},
 			expected: ChangefeedReactorState{
-				ID: model.DefaultNamespaceChangeFeedID("test1"),
+				ID: model.DefaultChangeFeedID("test1"),
 				Info: &model.ChangeFeedInfo{
 					SinkURI:           "blackhole://",
 					Opts:              map[string]string{},
@@ -316,7 +316,7 @@ func TestChangefeedStateUpdate(t *testing.T) {
 				``,
 			},
 			expected: ChangefeedReactorState{
-				ID:           model.DefaultNamespaceChangeFeedID("test1"),
+				ID:           model.DefaultChangeFeedID("test1"),
 				Info:         nil,
 				Status:       nil,
 				TaskStatuses: map[model.CaptureID]*model.TaskStatus{},
@@ -341,7 +341,7 @@ func TestChangefeedStateUpdate(t *testing.T) {
 				`{"tables":{"47":{"start-ts":421980685886554116,"mark-table-id":0}},"operation":null,"admin-job-type":0}`,
 			},
 			expected: ChangefeedReactorState{
-				ID: model.DefaultNamespaceChangeFeedID("test1"),
+				ID: model.DefaultChangeFeedID("test1"),
 				TaskStatuses: map[model.CaptureID]*model.TaskStatus{
 					"6bbc01c8-0605-4f86-a0f9-b3119109b225": {
 						Tables: map[int64]*model.TableReplicaInfo{47: {StartTs: 421980685886554116}},
@@ -353,7 +353,7 @@ func TestChangefeedStateUpdate(t *testing.T) {
 		},
 	}
 	for i, tc := range testCases {
-		state := NewChangefeedReactorState(model.DefaultNamespaceChangeFeedID(tc.changefeedID))
+		state := NewChangefeedReactorState(model.DefaultChangeFeedID(tc.changefeedID))
 		for i, k := range tc.updateKey {
 			value := []byte(tc.updateValue[i])
 			if len(value) == 0 {
@@ -368,7 +368,7 @@ func TestChangefeedStateUpdate(t *testing.T) {
 }
 
 func TestPatchInfo(t *testing.T) {
-	state := NewChangefeedReactorState(model.DefaultNamespaceChangeFeedID("test1"))
+	state := NewChangefeedReactorState(model.DefaultChangeFeedID("test1"))
 	stateTester := NewReactorStateTester(t, state, nil)
 	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 		require.Nil(t, info)
@@ -412,7 +412,7 @@ func TestPatchInfo(t *testing.T) {
 }
 
 func TestPatchStatus(t *testing.T) {
-	state := NewChangefeedReactorState(model.DefaultNamespaceChangeFeedID("test1"))
+	state := NewChangefeedReactorState(model.DefaultChangeFeedID("test1"))
 	stateTester := NewReactorStateTester(t, state, nil)
 	state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
 		require.Nil(t, status)
@@ -434,7 +434,7 @@ func TestPatchStatus(t *testing.T) {
 }
 
 func TestPatchTaskPosition(t *testing.T) {
-	state := NewChangefeedReactorState(model.DefaultNamespaceChangeFeedID("test1"))
+	state := NewChangefeedReactorState(model.DefaultChangeFeedID("test1"))
 	stateTester := NewReactorStateTester(t, state, nil)
 	captureID1 := "capture1"
 	captureID2 := "capture2"
@@ -497,7 +497,7 @@ func TestPatchTaskPosition(t *testing.T) {
 }
 
 func TestPatchTaskStatus(t *testing.T) {
-	state := NewChangefeedReactorState(model.DefaultNamespaceChangeFeedID("test1"))
+	state := NewChangefeedReactorState(model.DefaultChangeFeedID("test1"))
 	stateTester := NewReactorStateTester(t, state, nil)
 	captureID1 := "capture1"
 	captureID2 := "capture2"
@@ -541,7 +541,7 @@ func TestPatchTaskStatus(t *testing.T) {
 }
 
 func TestPatchTaskWorkload(t *testing.T) {
-	state := NewChangefeedReactorState(model.DefaultNamespaceChangeFeedID("test1"))
+	state := NewChangefeedReactorState(model.DefaultChangeFeedID("test1"))
 	stateTester := NewReactorStateTester(t, state, nil)
 	captureID1 := "capture1"
 	captureID2 := "capture2"
@@ -610,16 +610,16 @@ func TestGlobalStateUpdate(t *testing.T) {
 					AdvertiseAddr: "127.0.0.1:8300",
 				}},
 				Changefeeds: map[model.ChangeFeedID]*ChangefeedReactorState{
-					model.DefaultNamespaceChangeFeedID("test1"): {
-						ID:           model.DefaultNamespaceChangeFeedID("test1"),
+					model.DefaultChangeFeedID("test1"): {
+						ID:           model.DefaultChangeFeedID("test1"),
 						TaskStatuses: map[string]*model.TaskStatus{},
 						TaskPositions: map[model.CaptureID]*model.TaskPosition{
 							"6bbc01c8-0605-4f86-a0f9-b3119109b225": {CheckPointTs: 421980719742451713, ResolvedTs: 421980720003809281},
 						},
 						Workloads: map[string]model.TaskWorkload{},
 					},
-					model.DefaultNamespaceChangeFeedID("test2"): {
-						ID:            model.DefaultNamespaceChangeFeedID("test2"),
+					model.DefaultChangeFeedID("test2"): {
+						ID:            model.DefaultChangeFeedID("test2"),
 						TaskStatuses:  map[string]*model.TaskStatus{},
 						TaskPositions: map[model.CaptureID]*model.TaskPosition{},
 						Workloads: map[model.CaptureID]model.TaskWorkload{
@@ -659,8 +659,8 @@ func TestGlobalStateUpdate(t *testing.T) {
 				Owner:    map[string]struct{}{"22317526c4fc9a38": {}},
 				Captures: map[model.CaptureID]*model.CaptureInfo{},
 				Changefeeds: map[model.ChangeFeedID]*ChangefeedReactorState{
-					model.DefaultNamespaceChangeFeedID("test2"): {
-						ID:            model.DefaultNamespaceChangeFeedID("test2"),
+					model.DefaultChangeFeedID("test2"): {
+						ID:            model.DefaultChangeFeedID("test2"),
 						TaskStatuses:  map[string]*model.TaskStatus{},
 						TaskPositions: map[model.CaptureID]*model.TaskPosition{},
 						Workloads: map[model.CaptureID]model.TaskWorkload{
@@ -717,7 +717,7 @@ func TestCaptureChangeHooks(t *testing.T) {
 }
 
 func TestCheckChangefeedNormal(t *testing.T) {
-	state := NewChangefeedReactorState(model.DefaultNamespaceChangeFeedID("test1"))
+	state := NewChangefeedReactorState(model.DefaultChangeFeedID("test1"))
 	stateTester := NewReactorStateTester(t, state, nil)
 	state.CheckChangefeedNormal()
 	stateTester.MustApplyPatches()

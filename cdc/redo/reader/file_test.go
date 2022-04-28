@@ -54,7 +54,7 @@ func TestReaderRead(t *testing.T) {
 	cfg := &writer.FileWriterConfig{
 		MaxLogSize:   100000,
 		Dir:          dir,
-		ChangeFeedID: model.DefaultNamespaceChangeFeedID("test-cf"),
+		ChangeFeedID: model.DefaultChangeFeedID("test-cf"),
 		CaptureID:    "cp",
 		FileType:     common.DefaultRowLogFileType,
 		CreateTime:   time.Date(2000, 1, 1, 1, 1, 1, 1, &time.Location{}),

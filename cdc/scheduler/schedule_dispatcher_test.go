@@ -106,7 +106,7 @@ func TestDispatchTable(t *testing.T) {
 
 	ctx := cdcContext.NewBackendContext4Test(false)
 	communicator := NewMockScheduleDispatcherCommunicator()
-	cf1 := model.DefaultNamespaceChangeFeedID("cf-1")
+	cf1 := model.DefaultChangeFeedID("cf-1")
 	dispatcher := NewBaseScheduleDispatcher(cf1, communicator, 1000)
 
 	communicator.On("Announce", mock.Anything,
@@ -190,7 +190,7 @@ func TestSyncCaptures(t *testing.T) {
 
 	ctx := cdcContext.NewBackendContext4Test(false)
 	communicator := NewMockScheduleDispatcherCommunicator()
-	cf1 := model.DefaultNamespaceChangeFeedID("cf-1")
+	cf1 := model.DefaultChangeFeedID("cf-1")
 	dispatcher := NewBaseScheduleDispatcher(cf1, communicator, 1000)
 	dispatcher.captureStatus = map[model.CaptureID]*captureStatus{} // empty capture status
 	communicator.On("Announce", mock.Anything, cf1, "capture-1").
@@ -245,7 +245,7 @@ func TestSyncUnknownCapture(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(false)
 	communicator := NewMockScheduleDispatcherCommunicator()
 	dispatcher := NewBaseScheduleDispatcher(
-		model.DefaultNamespaceChangeFeedID("cf-1"), communicator,
+		model.DefaultChangeFeedID("cf-1"), communicator,
 		1000)
 	dispatcher.captureStatus = map[model.CaptureID]*captureStatus{} // empty capture status
 
@@ -264,7 +264,7 @@ func TestRemoveTable(t *testing.T) {
 
 	ctx := cdcContext.NewBackendContext4Test(false)
 	communicator := NewMockScheduleDispatcherCommunicator()
-	cf1 := model.DefaultNamespaceChangeFeedID("cf-1")
+	cf1 := model.DefaultChangeFeedID("cf-1")
 	dispatcher := NewBaseScheduleDispatcher(cf1, communicator, 1000)
 	dispatcher.captureStatus = map[model.CaptureID]*captureStatus{
 		"capture-1": {
@@ -342,7 +342,7 @@ func TestCaptureGone(t *testing.T) {
 
 	ctx := cdcContext.NewBackendContext4Test(false)
 	communicator := NewMockScheduleDispatcherCommunicator()
-	cf1 := model.DefaultNamespaceChangeFeedID("cf-1")
+	cf1 := model.DefaultChangeFeedID("cf-1")
 	dispatcher := NewBaseScheduleDispatcher(cf1, communicator, 1000)
 	dispatcher.captureStatus = map[model.CaptureID]*captureStatus{
 		"capture-1": {
@@ -389,7 +389,7 @@ func TestCaptureRestarts(t *testing.T) {
 
 	ctx := cdcContext.NewBackendContext4Test(false)
 	communicator := NewMockScheduleDispatcherCommunicator()
-	cf1 := model.DefaultNamespaceChangeFeedID("cf-1")
+	cf1 := model.DefaultChangeFeedID("cf-1")
 	dispatcher := NewBaseScheduleDispatcher(cf1, communicator, 1000)
 	dispatcher.captureStatus = map[model.CaptureID]*captureStatus{
 		"capture-1": {
@@ -448,7 +448,7 @@ func TestCaptureGoneWhileMovingTable(t *testing.T) {
 
 	ctx := cdcContext.NewBackendContext4Test(false)
 	communicator := NewMockScheduleDispatcherCommunicator()
-	cf1 := model.DefaultNamespaceChangeFeedID("cf-1")
+	cf1 := model.DefaultChangeFeedID("cf-1")
 	dispatcher := NewBaseScheduleDispatcher(cf1, communicator, 1000)
 	dispatcher.captureStatus = map[model.CaptureID]*captureStatus{
 		"capture-1": {
@@ -526,7 +526,7 @@ func TestRebalance(t *testing.T) {
 
 	ctx := cdcContext.NewBackendContext4Test(false)
 	communicator := NewMockScheduleDispatcherCommunicator()
-	cf1 := model.DefaultNamespaceChangeFeedID("cf-1")
+	cf1 := model.DefaultChangeFeedID("cf-1")
 	dispatcher := NewBaseScheduleDispatcher(cf1, communicator, 1000)
 	dispatcher.captureStatus = map[model.CaptureID]*captureStatus{
 		"capture-1": {
@@ -600,7 +600,7 @@ func TestIgnoreEmptyCapture(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(false)
 	communicator := NewMockScheduleDispatcherCommunicator()
 	dispatcher := NewBaseScheduleDispatcher(
-		model.DefaultNamespaceChangeFeedID("cf-1"),
+		model.DefaultChangeFeedID("cf-1"),
 		communicator, 1000)
 	dispatcher.captureStatus = map[model.CaptureID]*captureStatus{
 		"capture-1": {
@@ -640,7 +640,7 @@ func TestIgnoreDeadCapture(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(false)
 	communicator := NewMockScheduleDispatcherCommunicator()
 	dispatcher := NewBaseScheduleDispatcher(
-		model.DefaultNamespaceChangeFeedID("cf-1"), communicator,
+		model.DefaultChangeFeedID("cf-1"), communicator,
 		1000)
 	dispatcher.captureStatus = map[model.CaptureID]*captureStatus{
 		"capture-1": {
@@ -678,7 +678,7 @@ func TestIgnoreUnsyncedCaptures(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(false)
 	communicator := NewMockScheduleDispatcherCommunicator()
 	dispatcher := NewBaseScheduleDispatcher(
-		model.DefaultNamespaceChangeFeedID("cf-1"),
+		model.DefaultChangeFeedID("cf-1"),
 		communicator, 1000)
 	dispatcher.captureStatus = map[model.CaptureID]*captureStatus{
 		"capture-1": {
@@ -723,7 +723,7 @@ func TestRebalanceWhileAddingTable(t *testing.T) {
 
 	ctx := cdcContext.NewBackendContext4Test(false)
 	communicator := NewMockScheduleDispatcherCommunicator()
-	cf1 := model.DefaultNamespaceChangeFeedID("cf-1")
+	cf1 := model.DefaultChangeFeedID("cf-1")
 	dispatcher := NewBaseScheduleDispatcher(cf1, communicator, 1000)
 	dispatcher.captureStatus = map[model.CaptureID]*captureStatus{
 		"capture-1": {
@@ -782,7 +782,7 @@ func TestManualMoveTableWhileAddingTable(t *testing.T) {
 
 	ctx := cdcContext.NewBackendContext4Test(false)
 	communicator := NewMockScheduleDispatcherCommunicator()
-	cf1 := model.DefaultNamespaceChangeFeedID("cf-1")
+	cf1 := model.DefaultChangeFeedID("cf-1")
 	dispatcher := NewBaseScheduleDispatcher(cf1, communicator, 1000)
 	dispatcher.captureStatus = map[model.CaptureID]*captureStatus{
 		"capture-1": {
@@ -861,7 +861,7 @@ func TestAutoRebalanceOnCaptureOnline(t *testing.T) {
 
 	ctx := cdcContext.NewBackendContext4Test(false)
 	communicator := NewMockScheduleDispatcherCommunicator()
-	cf1 := model.DefaultNamespaceChangeFeedID("cf-1")
+	cf1 := model.DefaultChangeFeedID("cf-1")
 	dispatcher := NewBaseScheduleDispatcher(cf1, communicator, 1000)
 
 	captureList := map[model.CaptureID]*model.CaptureInfo{
@@ -980,7 +980,7 @@ func TestInvalidFinishedTableOperation(t *testing.T) {
 
 	ctx := cdcContext.NewBackendContext4Test(false)
 	communicator := NewMockScheduleDispatcherCommunicator()
-	cf1 := model.DefaultNamespaceChangeFeedID("cf-1")
+	cf1 := model.DefaultChangeFeedID("cf-1")
 	dispatcher := NewBaseScheduleDispatcher(cf1, communicator, 1000)
 	dispatcher.captureStatus = map[model.CaptureID]*captureStatus{
 		"capture-1": {
@@ -1057,7 +1057,7 @@ func BenchmarkAddTable(b *testing.B) {
 	communicator := NewMockScheduleDispatcherCommunicator()
 	communicator.isBenchmark = true
 
-	cf1 := model.DefaultNamespaceChangeFeedID("cf-1")
+	cf1 := model.DefaultChangeFeedID("cf-1")
 	dispatcher := NewBaseScheduleDispatcher(cf1, communicator, 1000)
 	communicator.On("DispatchTable", mock.Anything, mock.Anything, mock.Anything, mock.Anything, false).
 		Return(true, nil)

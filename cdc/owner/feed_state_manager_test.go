@@ -44,7 +44,7 @@ func TestHandleJob(t *testing.T) {
 
 	// an admin job which of changefeed is not match
 	manager.PushAdminJob(&model.AdminJob{
-		CfID: model.DefaultNamespaceChangeFeedID("fake-changefeed-id"),
+		CfID: model.DefaultChangeFeedID("fake-changefeed-id"),
 		Type: model.AdminStop,
 	})
 	manager.Tick(state)

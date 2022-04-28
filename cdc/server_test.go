@@ -125,11 +125,11 @@ func testSetUpDataDir(t *testing.T, s *testServer) {
 	conf.DataDir = ""
 	dir := t.TempDir()
 	err = s.server.etcdClient.SaveChangeFeedInfo(s.ctx,
-		&model.ChangeFeedInfo{SortDir: dir}, model.DefaultNamespaceChangeFeedID("a"))
+		&model.ChangeFeedInfo{SortDir: dir}, model.DefaultChangeFeedID("a"))
 	require.Nil(t, err)
 
 	err = s.server.etcdClient.SaveChangeFeedInfo(s.ctx,
-		&model.ChangeFeedInfo{}, model.DefaultNamespaceChangeFeedID("b"))
+		&model.ChangeFeedInfo{}, model.DefaultChangeFeedID("b"))
 	require.Nil(t, err)
 
 	err = s.server.setUpDir(s.ctx)

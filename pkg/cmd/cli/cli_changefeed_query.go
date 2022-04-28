@@ -83,7 +83,7 @@ func (o *queryChangefeedOptions) run(cmd *cobra.Command) error {
 
 	if o.simplified {
 		resp, err := sendOwnerChangefeedQuery(ctx, o.etcdClient,
-			model.DefaultNamespaceChangeFeedID(o.changefeedID),
+			model.DefaultChangeFeedID(o.changefeedID),
 			o.credential)
 		if err != nil {
 			return err
@@ -95,7 +95,7 @@ func (o *queryChangefeedOptions) run(cmd *cobra.Command) error {
 	}
 
 	info, err := o.etcdClient.GetChangeFeedInfo(ctx,
-		model.DefaultNamespaceChangeFeedID(o.changefeedID))
+		model.DefaultChangeFeedID(o.changefeedID))
 	if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
 		return err
 	}
@@ -104,7 +104,7 @@ func (o *queryChangefeedOptions) run(cmd *cobra.Command) error {
 	}
 
 	status, _, err := o.etcdClient.GetChangeFeedStatus(ctx,
-		model.DefaultNamespaceChangeFeedID(o.changefeedID))
+		model.DefaultChangeFeedID(o.changefeedID))
 	if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
 		return err
 	}

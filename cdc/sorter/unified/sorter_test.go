@@ -69,7 +69,7 @@ func TestSorterBasic(t *testing.T) {
 	err := os.MkdirAll(conf.Sorter.SortDir, 0o755)
 	require.Nil(t, err)
 	sorter, err := NewUnifiedSorter(conf.Sorter.SortDir,
-		model.DefaultNamespaceChangeFeedID("test-cf"), "test", 0)
+		model.DefaultChangeFeedID("test-cf"), "test", 0)
 	require.Nil(t, err)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
@@ -97,7 +97,7 @@ func TestSorterCancel(t *testing.T) {
 	err := os.MkdirAll(conf.Sorter.SortDir, 0o755)
 	require.Nil(t, err)
 	sorter, err := NewUnifiedSorter(conf.Sorter.SortDir,
-		model.DefaultNamespaceChangeFeedID("cf-1"),
+		model.DefaultChangeFeedID("cf-1"),
 		"test", 0)
 	require.Nil(t, err)
 
@@ -237,7 +237,7 @@ func TestSortDirConfigChangeFeed(t *testing.T) {
 	config.GetGlobalServerConfig().Sorter.SortDir = ""
 
 	_, err := NewUnifiedSorter(dir, /* the changefeed setting */
-		model.DefaultNamespaceChangeFeedID("cf-1"), "test", 0)
+		model.DefaultChangeFeedID("cf-1"), "test", 0)
 	require.Nil(t, err)
 
 	poolMu.Lock()
@@ -284,7 +284,7 @@ func TestSorterCancelRestart(t *testing.T) {
 
 	for i := 0; i < 5; i++ {
 		sorter, err := NewUnifiedSorter(conf.Sorter.SortDir,
-			model.DefaultNamespaceChangeFeedID("cf-1"),
+			model.DefaultChangeFeedID("cf-1"),
 			"test", 0)
 		require.Nil(t, err)
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -313,7 +313,7 @@ func TestSorterIOError(t *testing.T) {
 	err := os.MkdirAll(conf.Sorter.SortDir, 0o755)
 	require.Nil(t, err)
 	sorter, err := NewUnifiedSorter(conf.Sorter.SortDir,
-		model.DefaultNamespaceChangeFeedID("cf-1"),
+		model.DefaultChangeFeedID("cf-1"),
 		"test", 0)
 	require.Nil(t, err)
 
@@ -352,7 +352,7 @@ func TestSorterIOError(t *testing.T) {
 
 	// recreate the sorter
 	sorter, err = NewUnifiedSorter(conf.Sorter.SortDir,
-		model.DefaultNamespaceChangeFeedID("cf-1"), "test", 0)
+		model.DefaultChangeFeedID("cf-1"), "test", 0)
 	require.Nil(t, err)
 
 	finishedCh = make(chan struct{})
@@ -392,7 +392,7 @@ func TestSorterErrorReportCorrect(t *testing.T) {
 	err := os.MkdirAll(conf.Sorter.SortDir, 0o755)
 	require.Nil(t, err)
 	sorter, err := NewUnifiedSorter(conf.Sorter.SortDir,
-		model.DefaultNamespaceChangeFeedID("cf-1"),
+		model.DefaultChangeFeedID("cf-1"),
 		"test", 0)
 	require.Nil(t, err)
 
@@ -431,7 +431,7 @@ func TestSortClosedAddEntry(t *testing.T) {
 	defer CleanUp()
 
 	sorter, err := NewUnifiedSorter(t.TempDir(),
-		model.DefaultNamespaceChangeFeedID("cf-1"), "test", 0)
+		model.DefaultChangeFeedID("cf-1"), "test", 0)
 	require.Nil(t, err)
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*100)
@@ -464,6 +464,6 @@ func TestUnifiedSorterFileLockConflict(t *testing.T) {
 	// GlobalServerConfig overrides dir parameter in NewUnifiedSorter.
 	config.GetGlobalServerConfig().Sorter.SortDir = dir
 	_, err = NewUnifiedSorter(dir,
-		model.DefaultNamespaceChangeFeedID("cf-1"), "test", 0)
+		model.DefaultChangeFeedID("cf-1"), "test", 0)
 	require.Regexp(t, ".*file lock conflict.*", err)
 }

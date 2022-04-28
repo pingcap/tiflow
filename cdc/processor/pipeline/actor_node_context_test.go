@@ -32,7 +32,7 @@ func TestContext(t *testing.T) {
 	t.Parallel()
 	ctx := newContext(sdtContext.TODO(), t.Name(), nil, 1,
 		&context.ChangefeedVars{
-			ID:   model.DefaultNamespaceChangeFeedID("zzz"),
+			ID:   model.DefaultChangeFeedID("zzz"),
 			Info: &model.ChangeFeedInfo{},
 		},
 		&context.GlobalVars{}, throwDoNothing)
@@ -72,7 +72,7 @@ func TestThrow(t *testing.T) {
 func TestActorNodeContextTrySendToNextNode(t *testing.T) {
 	t.Parallel()
 	ctx := newContext(sdtContext.TODO(), t.Name(), nil, 1,
-		&context.ChangefeedVars{ID: model.DefaultNamespaceChangeFeedID("zzz")},
+		&context.ChangefeedVars{ID: model.DefaultChangeFeedID("zzz")},
 		&context.GlobalVars{}, throwDoNothing)
 	ctx.outputCh = make(chan pmessage.Message, 1)
 	require.True(t, ctx.TrySendToNextNode(pmessage.BarrierMessage(1)))
@@ -98,7 +98,7 @@ func TestSendToNextNodeNoTickMessage(t *testing.T) {
 	fa := &forwardActor{ch: ch}
 	require.Nil(t, sys.System().Spawn(mb, fa))
 	actorContext := newContext(ctx, t.Name(), sys.Router(), actorID,
-		&context.ChangefeedVars{ID: model.DefaultNamespaceChangeFeedID("abc")},
+		&context.ChangefeedVars{ID: model.DefaultChangeFeedID("abc")},
 		&context.GlobalVars{}, throwDoNothing)
 	actorContext.setEventBatchSize(2)
 	actorContext.SendToNextNode(pmessage.BarrierMessage(1))

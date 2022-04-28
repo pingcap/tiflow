@@ -71,7 +71,7 @@ func TestClientID(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		id, err := kafkaClientID(tc.role, tc.addr,
-			model.DefaultNamespaceChangeFeedID(tc.changefeedID), tc.configuredID)
+			model.DefaultChangeFeedID(tc.changefeedID), tc.configuredID)
 		if tc.hasError {
 			require.Error(t, err)
 		} else {

@@ -46,46 +46,46 @@ func TestEtcdKey(t *testing.T) {
 		key: "/tidb/cdc/changefeed/info/test-_@#$%changefeed",
 		expected: &CDCKey{
 			Tp:           CDCKeyTypeChangefeedInfo,
-			ChangefeedID: model.DefaultNamespaceChangeFeedID("test-_@#$%changefeed"),
+			ChangefeedID: model.DefaultChangeFeedID("test-_@#$%changefeed"),
 		},
 	}, {
 		key: "/tidb/cdc/changefeed/info/test/changefeed",
 		expected: &CDCKey{
 			Tp:           CDCKeyTypeChangefeedInfo,
-			ChangefeedID: model.DefaultNamespaceChangeFeedID("test/changefeed"),
+			ChangefeedID: model.DefaultChangeFeedID("test/changefeed"),
 		},
 	}, {
 		key: "/tidb/cdc/job/test-changefeed",
 		expected: &CDCKey{
 			Tp:           CDCKeyTypeChangeFeedStatus,
-			ChangefeedID: model.DefaultNamespaceChangeFeedID("test-changefeed"),
+			ChangefeedID: model.DefaultChangeFeedID("test-changefeed"),
 		},
 	}, {
 		key: "/tidb/cdc/task/position/6bbc01c8-0605-4f86-a0f9-b3119109b225/test-changefeed",
 		expected: &CDCKey{
 			Tp:           CDCKeyTypeTaskPosition,
-			ChangefeedID: model.DefaultNamespaceChangeFeedID("test-changefeed"),
+			ChangefeedID: model.DefaultChangeFeedID("test-changefeed"),
 			CaptureID:    "6bbc01c8-0605-4f86-a0f9-b3119109b225",
 		},
 	}, {
 		key: "/tidb/cdc/task/position/6bbc01c8-0605-4f86-a0f9-b3119109b225/test/changefeed",
 		expected: &CDCKey{
 			Tp:           CDCKeyTypeTaskPosition,
-			ChangefeedID: model.DefaultNamespaceChangeFeedID("test/changefeed"),
+			ChangefeedID: model.DefaultChangeFeedID("test/changefeed"),
 			CaptureID:    "6bbc01c8-0605-4f86-a0f9-b3119109b225",
 		},
 	}, {
 		key: "/tidb/cdc/task/status/6bbc01c8-0605-4f86-a0f9-b3119109b225/test-changefeed",
 		expected: &CDCKey{
 			Tp:           CDCKeyTypeTaskStatus,
-			ChangefeedID: model.DefaultNamespaceChangeFeedID("test-changefeed"),
+			ChangefeedID: model.DefaultChangeFeedID("test-changefeed"),
 			CaptureID:    "6bbc01c8-0605-4f86-a0f9-b3119109b225",
 		},
 	}, {
 		key: "/tidb/cdc/task/workload/6bbc01c8-0605-4f86-a0f9-b3119109b225/test-changefeed",
 		expected: &CDCKey{
 			Tp:           CDCKeyTypeTaskWorkload,
-			ChangefeedID: model.DefaultNamespaceChangeFeedID("test-changefeed"),
+			ChangefeedID: model.DefaultChangeFeedID("test-changefeed"),
 			CaptureID:    "6bbc01c8-0605-4f86-a0f9-b3119109b225",
 		},
 	}}

@@ -77,7 +77,7 @@ func TestChangefeed(t *testing.T) {
 	_, err = s.manager.Tick(ctx, s.state)
 	require.Nil(t, err)
 
-	changefeedID := model.DefaultNamespaceChangeFeedID("test-changefeed")
+	changefeedID := model.DefaultChangeFeedID("test-changefeed")
 	// an inactive changefeed
 	s.state.Changefeeds[changefeedID] = orchestrator.NewChangefeedReactorState(changefeedID)
 	_, err = s.manager.Tick(ctx, s.state)
@@ -140,7 +140,7 @@ func TestDebugInfo(t *testing.T) {
 	_, err = s.manager.Tick(ctx, s.state)
 	require.Nil(t, err)
 
-	changefeedID := model.DefaultNamespaceChangeFeedID("test-changefeed")
+	changefeedID := model.DefaultChangeFeedID("test-changefeed")
 	// an active changefeed
 	s.state.Changefeeds[changefeedID] = orchestrator.NewChangefeedReactorState(changefeedID)
 	s.state.Changefeeds[changefeedID].PatchInfo(
@@ -200,7 +200,7 @@ func TestClose(t *testing.T) {
 	_, err = s.manager.Tick(ctx, s.state)
 	require.Nil(t, err)
 
-	changefeedID := model.DefaultNamespaceChangeFeedID("test-changefeed")
+	changefeedID := model.DefaultChangeFeedID("test-changefeed")
 	// an active changefeed
 	s.state.Changefeeds[changefeedID] = orchestrator.NewChangefeedReactorState(changefeedID)
 	s.state.Changefeeds[changefeedID].PatchInfo(

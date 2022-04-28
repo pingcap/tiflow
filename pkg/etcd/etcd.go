@@ -137,7 +137,7 @@ func (c CDCEtcdClient) GetChangeFeeds(ctx context.Context) (
 		if err != nil {
 			return 0, nil, err
 		}
-		details[model.DefaultNamespaceChangeFeedID(id)] = kv
+		details[model.DefaultChangeFeedID(id)] = kv
 	}
 	return revision, details, nil
 }
@@ -208,7 +208,7 @@ func (c CDCEtcdClient) GetAllChangeFeedStatus(ctx context.Context) (
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
-		statuses[model.DefaultNamespaceChangeFeedID(changefeedID)] = status
+		statuses[model.DefaultChangeFeedID(changefeedID)] = status
 	}
 	return statuses, nil
 }
@@ -374,7 +374,7 @@ func (c CDCEtcdClient) GetProcessors(ctx context.Context) ([]*model.ProcInfoSnap
 			return nil, err
 		}
 		info := &model.ProcInfoSnap{
-			CfID:      model.DefaultNamespaceChangeFeedID(changefeedID),
+			CfID:      model.DefaultChangeFeedID(changefeedID),
 			CaptureID: captureID,
 		}
 		infos = append(infos, info)

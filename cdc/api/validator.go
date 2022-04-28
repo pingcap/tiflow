@@ -53,7 +53,7 @@ func verifyCreateChangefeedConfig(
 	}
 	// check if the changefeed exists
 	cfStatus, err := capture.StatusProvider().GetChangeFeedStatus(ctx,
-		model.DefaultNamespaceChangeFeedID(changefeedConfig.ID))
+		model.DefaultChangeFeedID(changefeedConfig.ID))
 	if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
 		return nil, err
 	}
@@ -74,7 +74,7 @@ func verifyCreateChangefeedConfig(
 	const ensureTTL = 60 * 60
 	if err := gc.EnsureChangefeedStartTsSafety(
 		ctx, capture.PDClient,
-		model.DefaultNamespaceChangeFeedID(changefeedConfig.ID),
+		model.DefaultChangeFeedID(changefeedConfig.ID),
 		ensureTTL, changefeedConfig.StartTS); err != nil {
 		if !cerror.ErrStartTsBeforeGC.Equal(err) {
 			return nil, cerror.ErrPDEtcdAPIError.Wrap(err)

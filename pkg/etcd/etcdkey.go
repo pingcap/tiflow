@@ -104,12 +104,12 @@ func (k *CDCKey) Parse(key string) error {
 	case strings.HasPrefix(key, changefeedInfoKey):
 		k.Tp = CDCKeyTypeChangefeedInfo
 		k.CaptureID = ""
-		k.ChangefeedID = model.DefaultNamespaceChangeFeedID(key[len(changefeedInfoKey)+1:])
+		k.ChangefeedID = model.DefaultChangeFeedID(key[len(changefeedInfoKey)+1:])
 		k.OwnerLeaseID = ""
 	case strings.HasPrefix(key, jobKey):
 		k.Tp = CDCKeyTypeChangeFeedStatus
 		k.CaptureID = ""
-		k.ChangefeedID = model.DefaultNamespaceChangeFeedID(key[len(jobKey)+1:])
+		k.ChangefeedID = model.DefaultChangeFeedID(key[len(jobKey)+1:])
 		k.OwnerLeaseID = ""
 	case strings.HasPrefix(key, taskStatusKey):
 		splitKey := strings.SplitN(key[len(taskStatusKey)+1:], "/", 2)
@@ -118,7 +118,7 @@ func (k *CDCKey) Parse(key string) error {
 		}
 		k.Tp = CDCKeyTypeTaskStatus
 		k.CaptureID = splitKey[0]
-		k.ChangefeedID = model.DefaultNamespaceChangeFeedID(splitKey[1])
+		k.ChangefeedID = model.DefaultChangeFeedID(splitKey[1])
 		k.OwnerLeaseID = ""
 	case strings.HasPrefix(key, taskPositionKey):
 		splitKey := strings.SplitN(key[len(taskPositionKey)+1:], "/", 2)
@@ -127,7 +127,7 @@ func (k *CDCKey) Parse(key string) error {
 		}
 		k.Tp = CDCKeyTypeTaskPosition
 		k.CaptureID = splitKey[0]
-		k.ChangefeedID = model.DefaultNamespaceChangeFeedID(splitKey[1])
+		k.ChangefeedID = model.DefaultChangeFeedID(splitKey[1])
 		k.OwnerLeaseID = ""
 	case strings.HasPrefix(key, taskWorkloadKey):
 		splitKey := strings.SplitN(key[len(taskWorkloadKey)+1:], "/", 2)
@@ -136,7 +136,7 @@ func (k *CDCKey) Parse(key string) error {
 		}
 		k.Tp = CDCKeyTypeTaskWorkload
 		k.CaptureID = splitKey[0]
-		k.ChangefeedID = model.DefaultNamespaceChangeFeedID(splitKey[1])
+		k.ChangefeedID = model.DefaultChangeFeedID(splitKey[1])
 		k.OwnerLeaseID = ""
 	default:
 		return cerror.ErrInvalidEtcdKey.GenWithStackByArgs(key)

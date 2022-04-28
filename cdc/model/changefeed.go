@@ -41,8 +41,8 @@ type ChangeFeedID struct {
 	ID        string
 }
 
-// DefaultNamespaceChangeFeedID returns `ChangeFeedID` with default namespace
-func DefaultNamespaceChangeFeedID(id string) ChangeFeedID {
+// DefaultChangeFeedID returns `ChangeFeedID` with default namespace
+func DefaultChangeFeedID(id string) ChangeFeedID {
 	return ChangeFeedID{
 		Namespace: DefaultNamespace,
 		ID:        id,

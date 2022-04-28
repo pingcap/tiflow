@@ -115,7 +115,7 @@ func (o *statisticsChangefeedOptions) runCliWithEtcdClient(ctx context.Context, 
 	now := time.Now()
 
 	changefeedStatus, _, err := o.etcdClient.GetChangeFeedStatus(ctx,
-		model.DefaultNamespaceChangeFeedID(o.changefeedID))
+		model.DefaultChangeFeedID(o.changefeedID))
 	if err != nil {
 		return err
 	}

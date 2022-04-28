@@ -26,7 +26,7 @@ import (
 	"github.com/tikv/client-go/v2/oracle"
 )
 
-var dummyChangeFeedID = model.DefaultNamespaceChangeFeedID("dummy_changefeed")
+var dummyChangeFeedID = model.DefaultChangeFeedID("dummy_changefeed")
 
 func TestAllPhysicalTables(t *testing.T) {
 	helper := entry.NewSchemaTestHelper(t)

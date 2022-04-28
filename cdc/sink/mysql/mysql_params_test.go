@@ -31,7 +31,7 @@ import (
 func TestSinkParamsClone(t *testing.T) {
 	param1 := defaultParams.Clone()
 	param2 := param1.Clone()
-	param2.changefeedID = model.DefaultNamespaceChangeFeedID("123")
+	param2.changefeedID = model.DefaultChangeFeedID("123")
 	param2.batchReplaceEnabled = false
 	param2.maxTxnRow = 1
 	require.Equal(t, &sinkParams{
@@ -46,7 +46,7 @@ func TestSinkParamsClone(t *testing.T) {
 		safeMode:            defaultSafeMode,
 	}, param1)
 	require.Equal(t, &sinkParams{
-		changefeedID:        model.DefaultNamespaceChangeFeedID("123"),
+		changefeedID:        model.DefaultChangeFeedID("123"),
 		workerCount:         DefaultWorkerCount,
 		maxTxnRow:           1,
 		tidbTxnMode:         defaultTiDBTxnMode,
@@ -109,7 +109,7 @@ func TestGenerateDSNByParams(t *testing.T) {
 		uri, err := url.Parse("mysql://127.0.0.1:3306/?read-timeout=4m&write-timeout=5m&timeout=3m")
 		require.Nil(t, err)
 		params, err := parseSinkURIToParams(context.TODO(),
-			model.DefaultNamespaceChangeFeedID("123"), uri, map[string]string{})
+			model.DefaultChangeFeedID("123"), uri, map[string]string{})
 		require.Nil(t, err)
 		dsnStr, err := generateDSNByParams(context.TODO(), dsn, params, db)
 		require.Nil(t, err)
@@ -204,7 +204,7 @@ func TestParseSinkURIToParams(t *testing.T) {
 	expected.batchReplaceSize = 50
 	expected.safeMode = true
 	expected.timezone = `"UTC"`
-	expected.changefeedID = model.DefaultNamespaceChangeFeedID("cf-id")
+	expected.changefeedID = model.DefaultChangeFeedID("cf-id")
 	expected.captureAddr = "127.0.0.1:8300"
 	expected.tidbTxnMode = "pessimistic"
 	uriStr := "mysql://127.0.0.1:3306/?worker-count=64&max-txn-row=20" +
@@ -238,7 +238,7 @@ func TestParseSinkURITimezone(t *testing.T) {
 		uri, err := url.Parse(uriStr)
 		require.Nil(t, err)
 		params, err := parseSinkURIToParams(ctx,
-			model.DefaultNamespaceChangeFeedID("cf"),
+			model.DefaultChangeFeedID("cf"),
 			uri, opts)
 		require.Nil(t, err)
 		require.Equal(t, expected[i], params.timezone)
@@ -277,7 +277,7 @@ func TestParseSinkURIOverride(t *testing.T) {
 			uri = nil
 		}
 		p, err := parseSinkURIToParams(ctx,
-			model.DefaultNamespaceChangeFeedID("changefeed-01"),
+			model.DefaultChangeFeedID("changefeed-01"),
 			uri, map[string]string{})
 		require.Nil(t, err)
 		cs.checker(p)
@@ -316,7 +316,7 @@ func TestParseSinkURIBadQueryString(t *testing.T) {
 			uri = nil
 		}
 		_, err = parseSinkURIToParams(ctx,
-			model.DefaultNamespaceChangeFeedID("changefeed-01"), uri, opts)
+			model.DefaultChangeFeedID("changefeed-01"), uri, opts)
 		require.Error(t, err)
 	}
 }

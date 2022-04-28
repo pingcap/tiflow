@@ -205,7 +205,7 @@ func NewContext4Test(baseCtx context.Context, withChangefeedVars bool) Context {
 	})
 	if withChangefeedVars {
 		ctx = WithChangefeedVars(ctx, &ChangefeedVars{
-			ID: model.DefaultNamespaceChangeFeedID("changefeed-id-test"),
+			ID: model.DefaultChangeFeedID("changefeed-id-test"),
 			Info: &model.ChangeFeedInfo{
 				StartTs: oracle.GoTimeToTS(time.Now()),
 				Config:  config.GetDefaultReplicaConfig(),

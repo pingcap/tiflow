@@ -35,7 +35,7 @@ import (
 	"go.uber.org/zap"
 )
 
-var dummyChangeFeedID = model.DefaultNamespaceChangeFeedID("dummy_changefeed")
+var dummyChangeFeedID = model.DefaultChangeFeedID("dummy_changefeed")
 
 func TestMounterDisableOldValue(t *testing.T) {
 	testCases := []struct {
@@ -290,7 +290,7 @@ func testMounterDisableOldValue(t *testing.T, tc struct {
 	require.Nil(t, err)
 	scheamStorage.AdvanceResolvedTs(ver.Ver)
 	mounter := NewMounter(scheamStorage,
-		model.DefaultNamespaceChangeFeedID("c1"),
+		model.DefaultChangeFeedID("c1"),
 		time.UTC, false).(*mounterImpl)
 	mounter.tz = time.Local
 	ctx := context.Background()

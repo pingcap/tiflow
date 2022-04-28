@@ -30,7 +30,7 @@ func TestAgentAddTable(t *testing.T) {
 
 	executor := NewMockTableExecutor(t)
 	messenger := &MockProcessorMessenger{}
-	agent := NewBaseAgent(model.DefaultNamespaceChangeFeedID("test-cf"),
+	agent := NewBaseAgent(model.DefaultChangeFeedID("test-cf"),
 		executor, messenger, agentConfigForTesting)
 	var epoch model.ProcessorEpoch
 	messenger.On("SyncTaskStatuses", mock.Anything, mock.AnythingOfType("string"), []model.TableID(nil), []model.TableID(nil), []model.TableID(nil)).
@@ -84,7 +84,7 @@ func TestAgentRemoveTable(t *testing.T) {
 	executor.Running[model.TableID(2)] = struct{}{}
 
 	messenger := &MockProcessorMessenger{}
-	agent := NewBaseAgent(model.DefaultNamespaceChangeFeedID("test-cf"),
+	agent := NewBaseAgent(model.DefaultChangeFeedID("test-cf"),
 		executor, messenger, agentConfigForTesting)
 	agent.OnOwnerAnnounce("capture-2", 1)
 
@@ -153,7 +153,7 @@ func TestAgentOwnerChangedWhileAddingTable(t *testing.T) {
 
 	executor := NewMockTableExecutor(t)
 	messenger := &MockProcessorMessenger{}
-	agent := NewBaseAgent(model.DefaultNamespaceChangeFeedID("test-cf"),
+	agent := NewBaseAgent(model.DefaultChangeFeedID("test-cf"),
 		executor, messenger, agentConfigForTesting)
 
 	var epoch model.ProcessorEpoch
@@ -215,7 +215,7 @@ func TestAgentReceiveFromStaleOwner(t *testing.T) {
 
 	executor := NewMockTableExecutor(t)
 	messenger := &MockProcessorMessenger{}
-	agent := NewBaseAgent(model.DefaultNamespaceChangeFeedID("test-cf"),
+	agent := NewBaseAgent(model.DefaultChangeFeedID("test-cf"),
 		executor, messenger, agentConfigForTesting)
 	agent.checkpointSender = &mockCheckpointSender{}
 
@@ -262,7 +262,7 @@ func TestOwnerMismatchShouldPanic(t *testing.T) {
 
 	executor := NewMockTableExecutor(t)
 	messenger := &MockProcessorMessenger{}
-	agent := NewBaseAgent(model.DefaultNamespaceChangeFeedID("test-cf"),
+	agent := NewBaseAgent(model.DefaultChangeFeedID("test-cf"),
 		executor, messenger, agentConfigForTesting)
 	agent.checkpointSender = &mockCheckpointSender{}
 	messenger.On("SyncTaskStatuses", mock.Anything, mock.AnythingOfType("string"),
@@ -291,7 +291,7 @@ func TestIgnoreStaleEpoch(t *testing.T) {
 
 	executor := NewMockTableExecutor(t)
 	messenger := &MockProcessorMessenger{}
-	agent := NewBaseAgent(model.DefaultNamespaceChangeFeedID("test-cf"),
+	agent := NewBaseAgent(model.DefaultChangeFeedID("test-cf"),
 		executor, messenger, agentConfigForTesting)
 	agent.checkpointSender = &mockCheckpointSender{}
 

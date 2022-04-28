@@ -52,7 +52,7 @@ func TestWriterWrite(t *testing.T) {
 		cfg: &FileWriterConfig{
 			MaxLogSize:   10,
 			Dir:          dir,
-			ChangeFeedID: model.DefaultNamespaceChangeFeedID("test-cf"),
+			ChangeFeedID: model.DefaultChangeFeedID("test-cf"),
 			CaptureID:    "cp",
 			FileType:     common.DefaultRowLogFileType,
 			CreateTime:   time.Date(2000, 1, 1, 1, 1, 1, 1, &time.Location{}),
@@ -115,7 +115,7 @@ func TestWriterWrite(t *testing.T) {
 		cfg: &FileWriterConfig{
 			MaxLogSize:   10,
 			Dir:          dir,
-			ChangeFeedID: model.DefaultNamespaceChangeFeedID("test-cf11"),
+			ChangeFeedID: model.DefaultChangeFeedID("test-cf11"),
 			CaptureID:    "cp",
 			FileType:     common.DefaultRowLogFileType,
 			CreateTime:   time.Date(2000, 1, 1, 1, 1, 1, 1, &time.Location{}),
@@ -183,7 +183,7 @@ func TestWriterGC(t *testing.T) {
 	megabyte = 1
 	cfg := &FileWriterConfig{
 		Dir:               dir,
-		ChangeFeedID:      model.DefaultNamespaceChangeFeedID("test"),
+		ChangeFeedID:      model.DefaultChangeFeedID("test"),
 		CaptureID:         "cp",
 		MaxLogSize:        10,
 		FileType:          common.DefaultRowLogFileType,
@@ -282,7 +282,7 @@ func TestNewWriter(t *testing.T) {
 		cfg: &FileWriterConfig{
 			Dir:          dir,
 			CaptureID:    "cp",
-			ChangeFeedID: model.DefaultNamespaceChangeFeedID("test"),
+			ChangeFeedID: model.DefaultChangeFeedID("test"),
 			FileType:     common.DefaultDDLLogFileType,
 			CreateTime:   time.Date(2000, 1, 1, 1, 1, 1, 1, &time.Location{}),
 			S3Storage:    true,

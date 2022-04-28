@@ -318,7 +318,7 @@ func TestLogWriterFlushLog(t *testing.T) {
 		mockWriter.On("IsRunning").Return(tt.isRunning)
 		cfg := &LogWriterConfig{
 			Dir:               dir,
-			ChangeFeedID:      model.DefaultNamespaceChangeFeedID("test-cf"),
+			ChangeFeedID:      model.DefaultChangeFeedID("test-cf"),
 			CaptureID:         "cp",
 			MaxLogSize:        10,
 			CreateTime:        time.Date(2000, 1, 1, 1, 1, 1, 1, &time.Location{}),
@@ -409,7 +409,7 @@ func TestLogWriterEmitCheckpointTs(t *testing.T) {
 		mockWriter.On("IsRunning").Return(tt.isRunning)
 		cfg := &LogWriterConfig{
 			Dir:               dir,
-			ChangeFeedID:      model.DefaultNamespaceChangeFeedID("test-cf"),
+			ChangeFeedID:      model.DefaultChangeFeedID("test-cf"),
 			CaptureID:         "cp",
 			MaxLogSize:        10,
 			CreateTime:        time.Date(2000, 1, 1, 1, 1, 1, 1, &time.Location{}),
@@ -500,7 +500,7 @@ func TestLogWriterEmitResolvedTs(t *testing.T) {
 		mockWriter.On("IsRunning").Return(tt.isRunning)
 		cfg := &LogWriterConfig{
 			Dir:               dir,
-			ChangeFeedID:      model.DefaultNamespaceChangeFeedID("test-cf"),
+			ChangeFeedID:      model.DefaultChangeFeedID("test-cf"),
 			CaptureID:         "cp",
 			MaxLogSize:        10,
 			CreateTime:        time.Date(2000, 1, 1, 1, 1, 1, 1, &time.Location{}),
@@ -576,7 +576,7 @@ func TestLogWriterGetCurrentResolvedTs(t *testing.T) {
 		mockWriter.On("IsRunning").Return(true)
 		cfg := &LogWriterConfig{
 			Dir:               dir,
-			ChangeFeedID:      model.DefaultNamespaceChangeFeedID("test-cf"),
+			ChangeFeedID:      model.DefaultChangeFeedID("test-cf"),
 			CaptureID:         "cp",
 			MaxLogSize:        10,
 			CreateTime:        time.Date(2000, 1, 1, 1, 1, 1, 1, &time.Location{}),
@@ -618,7 +618,7 @@ func TestNewLogWriter(t *testing.T) {
 	defer cancel()
 	cfg := &LogWriterConfig{
 		Dir:               "dirt",
-		ChangeFeedID:      model.DefaultNamespaceChangeFeedID("test-cf"),
+		ChangeFeedID:      model.DefaultChangeFeedID("test-cf"),
 		CaptureID:         "cp",
 		MaxLogSize:        10,
 		CreateTime:        time.Date(2000, 1, 1, 1, 1, 1, 1, &time.Location{}),
@@ -635,7 +635,7 @@ func TestNewLogWriter(t *testing.T) {
 
 	cfg1 := &LogWriterConfig{
 		Dir:               "dirt111",
-		ChangeFeedID:      model.DefaultNamespaceChangeFeedID("test-cf"),
+		ChangeFeedID:      model.DefaultChangeFeedID("test-cf"),
 		CaptureID:         "cp",
 		MaxLogSize:        10,
 		CreateTime:        time.Date(2000, 1, 1, 1, 1, 1, 1, &time.Location{}),
@@ -668,7 +668,7 @@ func TestNewLogWriter(t *testing.T) {
 
 	cfg = &LogWriterConfig{
 		Dir:               dir,
-		ChangeFeedID:      model.DefaultNamespaceChangeFeedID("test-cf"),
+		ChangeFeedID:      model.DefaultChangeFeedID("test-cf"),
 		CaptureID:         "cp",
 		MaxLogSize:        10,
 		CreateTime:        time.Date(2000, 1, 1, 1, 1, 1, 1, &time.Location{}),
@@ -698,7 +698,7 @@ func TestNewLogWriter(t *testing.T) {
 	}
 	cfg3 := &LogWriterConfig{
 		Dir:               dir,
-		ChangeFeedID:      model.DefaultNamespaceChangeFeedID("test-cf112232"),
+		ChangeFeedID:      model.DefaultChangeFeedID("test-cf112232"),
 		CaptureID:         "cp",
 		MaxLogSize:        10,
 		CreateTime:        time.Date(2000, 1, 1, 1, 1, 1, 1, &time.Location{}),
@@ -714,7 +714,7 @@ func TestNewLogWriter(t *testing.T) {
 func TestWriterRedoGC(t *testing.T) {
 	cfg := &LogWriterConfig{
 		Dir:               "dir",
-		ChangeFeedID:      model.DefaultNamespaceChangeFeedID("test-cf"),
+		ChangeFeedID:      model.DefaultChangeFeedID("test-cf"),
 		CaptureID:         "cp",
 		MaxLogSize:        10,
 		CreateTime:        time.Date(2000, 1, 1, 1, 1, 1, 1, &time.Location{}),
@@ -850,7 +850,7 @@ func TestDeleteAllLogs(t *testing.T) {
 		mockWriter.On("Close").Return(tt.closeErr)
 		cfg := &LogWriterConfig{
 			Dir:               dir,
-			ChangeFeedID:      model.DefaultNamespaceChangeFeedID("test-cf"),
+			ChangeFeedID:      model.DefaultChangeFeedID("test-cf"),
 			CaptureID:         "cp",
 			MaxLogSize:        10,
 			CreateTime:        time.Date(2000, 1, 1, 1, 1, 1, 1, &time.Location{}),
@@ -934,7 +934,7 @@ func TestPreCleanUpS3(t *testing.T) {
 
 		cfg := &LogWriterConfig{
 			Dir:               "dir",
-			ChangeFeedID:      model.DefaultNamespaceChangeFeedID("test-cf"),
+			ChangeFeedID:      model.DefaultChangeFeedID("test-cf"),
 			CaptureID:         "cp",
 			MaxLogSize:        10,
 			CreateTime:        time.Date(2000, 1, 1, 1, 1, 1, 1, &time.Location{}),

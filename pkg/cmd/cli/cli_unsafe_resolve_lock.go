@@ -75,7 +75,7 @@ func (o *unsafeResolveLockOptions) run() error {
 	}
 	log.ReplaceGlobals(lg, p)
 	txnResolver := txnutil.NewLockerResolver(o.kvStorage.(tikv.Storage),
-		model.DefaultNamespaceChangeFeedID("changefeed-client"),
+		model.DefaultChangeFeedID("changefeed-client"),
 		util.RoleClient)
 	return txnResolver.Resolve(ctx, o.regionID, o.ts)
 }

@@ -239,7 +239,7 @@ func TestExecDDL(t *testing.T) {
 		PDClock: pdtime.NewClock4Test(),
 	})
 	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
-		ID: model.DefaultNamespaceChangeFeedID("changefeed-id-test"),
+		ID: model.DefaultChangeFeedID("changefeed-id-test"),
 		Info: &model.ChangeFeedInfo{
 			StartTs: startTs,
 			Config:  config.GetDefaultReplicaConfig(),
@@ -332,7 +332,7 @@ func TestEmitCheckpointTs(t *testing.T) {
 		PDClock: pdtime.NewClock4Test(),
 	})
 	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
-		ID: model.DefaultNamespaceChangeFeedID("changefeed-id-test"),
+		ID: model.DefaultChangeFeedID("changefeed-id-test"),
 		Info: &model.ChangeFeedInfo{
 			StartTs: startTs,
 			Config:  config.GetDefaultReplicaConfig(),

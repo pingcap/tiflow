@@ -116,7 +116,7 @@ func (ra *RedoApplier) consumeLogs(ctx context.Context) error {
 	opts := map[string]string{}
 	ctx = contextutil.PutRoleInCtx(ctx, util.RoleRedoLogApplier)
 	s, err := sink.New(ctx,
-		model.DefaultNamespaceChangeFeedID(applierChangefeed),
+		model.DefaultChangeFeedID(applierChangefeed),
 		ra.cfg.SinkURI, ft, replicaConfig, opts, ra.errCh)
 	if err != nil {
 		return err
