@@ -125,8 +125,15 @@ func (o *options) run(cmd *cobra.Command) error {
 	}
 	log.Info("init log", zap.String("file", logConfig.File), zap.String("level", logConfig.Level))
 
-	util.LogHTTPProxies()
-	cdc.RecordGoRuntimeSettings()
+	tz, err := ticdcutil.GetTimezone(o.serverConfig.TZ)
+	if err != nil {
+		return errors.Annotate(err, "can not load timezone, Please specify the time zone through environment variable `TZ` or command line parameters `--tz`")
+	}
+	config.StoreGlobalServerConfig(o.serverConfig)
+
+	cmdconetxt.SetDefaultContext(context.Background())
+	ctx := ticdcutil.PutTimezoneInCtx(cmdconetxt.GetDefaultContext(), tz)
+	ctx = ticdcutil.PutCaptureAddrInCtx(ctx, o.serverConfig.AdvertiseAddr)
 
 	version.LogVersionInfo()
 	if ticdcutil.FailpointBuild {
@@ -139,29 +146,23 @@ func (o *options) run(cmd *cobra.Command) error {
 		}
 	}
 
-	tz, err := ticdcutil.GetTimezone(o.serverConfig.TZ)
-	if err != nil {
-		return errors.Annotate(err, "can not load timezone, Please specify the time zone through environment variable `TZ` or command line parameters `--tz`")
-	}
-	config.StoreGlobalServerConfig(o.serverConfig)
-
-	cmdconetxt.SetDefaultContext(context.Background())
-	ctx := ticdcutil.PutTimezoneInCtx(cmdconetxt.GetDefaultContext(), tz)
-	ctx = ticdcutil.PutCaptureAddrInCtx(ctx, o.serverConfig.AdvertiseAddr)
+	util.LogHTTPProxies()
+	cdc.RecordGoRuntimeSettings()
 
 	server, err := cdc.NewServer(strings.Split(o.serverPdAddr, ","))
 	if err != nil {
 		return errors.Annotate(err, "new server")
 	}
-
 	err = server.Run(ctx)
 	if err != nil && errors.Cause(err) != context.Canceled {
 		log.Error("run server", zap.String("error", errors.ErrorStack(err)))
+		return errors.Annotate(err, "run server")
 	}
 	server.Close()
 	unified.CleanUp()
 	log.Info("cdc server exits successfully")
-	return errors.Annotate(err, "run server")
+
+	return nil
 }
 
 // complete adapts from the command line args and config file to the data required.
