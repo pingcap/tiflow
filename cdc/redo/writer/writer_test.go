@@ -923,7 +923,7 @@ func TestPreCleanUpS3(t *testing.T) {
 
 	for _, tc := range testCases {
 		cfs := []model.ChangeFeedID{
-			model.ChangeFeedID{
+			{
 				Namespace: "abcd",
 				ID:        "test-cf",
 			},
