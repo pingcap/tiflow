@@ -258,7 +258,7 @@ func (s *mysqlSink) FlushRowChangedEvents(ctx context.Context, tableID model.Tab
 func (s *mysqlSink) flushRowChangedEvents(ctx context.Context, receiver *notify.Receiver) {
 	defer func() {
 		for _, worker := range s.workers {
-			worker.closedCh <- struct{}{}
+			worker.close()
 		}
 	}()
 	for {
@@ -276,7 +276,7 @@ func (s *mysqlSink) flushRowChangedEvents(ctx context.Context, receiver *notify.
 			s.statistics.SubRowsCount(skippedRowCount)
 		}
 
-		if len(resolvedTxnsMap) == 0 {
+		if len(resolvedTxnsMap) != 0 {
 			s.dispatchAndExecTxns(ctx, resolvedTxnsMap)
 		}
 		for tableID, resolvedTs := range flushedResolvedTsMap {
