@@ -130,14 +130,13 @@ function test_query_timeout() {
 		"stop-task $ILLEGAL_CHAR_NAME" \
 		"\"result\": true" 3
 
-	# there's only 2 rows in result, one for dm-worker's source-level status, one for SHOW PROCESSLIST
+	# there's only 1 row in result, which is for SHOW PROCESSLIST
 	run_sql_source1 'SHOW PROCESSLIST;'
-	check_rows_equal 2
+	check_rows_equal 1
 
 	run_sql_source2 'SHOW PROCESSLIST;'
-	check_rows_equal 2
+	check_rows_equal 1
 
-	# there's only 1 row in result, which is for SHOW PROCESSLIST
 	run_sql_tidb 'SHOW PROCESSLIST;'
 	check_rows_equal 1
 
