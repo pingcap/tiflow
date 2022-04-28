@@ -616,6 +616,7 @@ const (
 	codeValidatorGetEvent
 	codeValidatorProcessRowEvent
 	codeValidatorValidateChange
+	codeValidatorNotFound
 )
 
 // Schema-tracker error code.
@@ -1283,6 +1284,7 @@ var (
 	ErrValidatorGetEvent          = New(codeValidatorGetEvent, ClassValidator, ScopeInternal, LevelHigh, "failed to get event", "")
 	ErrValidatorProcessRowEvent   = New(codeValidatorProcessRowEvent, ClassValidator, ScopeInternal, LevelHigh, "failed to process event", "")
 	ErrValidatorValidateChange    = New(codeValidatorValidateChange, ClassValidator, ScopeInternal, LevelHigh, "failed to validate row change", "")
+	ErrValidatorNotFound          = New(codeValidatorNotFound, ClassValidator, ScopeNotSet, LevelMedium, "validator not found for task %s", "")
 
 	// Schema-tracker error.
 	ErrSchemaTrackerInvalidJSON        = New(codeSchemaTrackerInvalidJSON, ClassSchemaTracker, ScopeDownstream, LevelHigh, "saved schema of `%s`.`%s` is not proper JSON", "")

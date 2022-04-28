@@ -806,13 +806,16 @@ func (t *testServer) TestQueryValidator(c *C) {
 			Message:  "no primary key",
 		},
 	}
-	ret := w.GetValidatorTableStatus("testQueryValidator", pb.Stage_Running)
+	ret, err := w.GetValidatorTableStatus("testQueryValidator", pb.Stage_Running)
+	c.Assert(err, IsNil)
 	c.Assert(len(ret), Equals, 1)
 	c.Assert(ret[0], DeepEquals, expected[0])
-	ret = w.GetValidatorTableStatus("testQueryValidator", pb.Stage_Stopped)
+	ret, err = w.GetValidatorTableStatus("testQueryValidator", pb.Stage_Stopped)
+	c.Assert(err, IsNil)
 	c.Assert(len(ret), Equals, 1)
 	c.Assert(ret[0], DeepEquals, expected[1])
-	ret = w.GetValidatorTableStatus("testQueryValidator", pb.Stage_InvalidStage)
+	ret, err = w.GetValidatorTableStatus("testQueryValidator", pb.Stage_InvalidStage)
+	c.Assert(err, IsNil)
 	c.Assert(len(ret), Equals, 2)
 	c.Assert(ret, DeepEquals, expected)
 }

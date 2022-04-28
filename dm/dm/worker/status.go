@@ -123,11 +123,3 @@ func (w *SourceWorker) GetUnitAndSourceStatusJSON(stName string, sourceStatus *b
 	}
 	return s
 }
-
-func (w *SourceWorker) GetValidatorTableStatus(stName string, filterStatus pb.Stage) []*pb.ValidationTableStatus {
-	st := w.subTaskHolder.findSubTask(stName)
-	if st == nil {
-		return []*pb.ValidationTableStatus{}
-	}
-	return st.GetValidatorTableStatus(filterStatus)
-}

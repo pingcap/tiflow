@@ -300,17 +300,6 @@ func (st *SubTask) StopValidator() {
 	st.Unlock()
 }
 
-func (st *SubTask) GetValidatorTableStatus(filterStatus pb.Stage) []*pb.ValidationTableStatus {
-	st.RLock()
-	defer st.RUnlock()
-	if st.validator != nil && st.validator.Started() {
-		return st.validator.GetValidatorTableStatus(filterStatus)
-	}
-	st.l.Warn("validator not start")
-	// todo: should it inform the user of this error
-	return []*pb.ValidationTableStatus{}
-}
-
 func (st *SubTask) setCurrCtx(ctx context.Context, cancel context.CancelFunc) {
 	st.Lock()
 	// call previous cancel func for safety
@@ -923,11 +912,21 @@ func (st *SubTask) getValidator() *syncer.DataValidator {
 	return st.validator
 }
 
-func (st *SubTask) GetValidatorStatus() *pb.ValidationStatus {
+func (st *SubTask) GetValidatorStatus() (*pb.ValidationStatus, error) {
 	validator := st.getValidator()
 	// todo: should be able to get status even validator is stopped
 	if validator == nil || !validator.Started() {
-		return nil
+		cfg := st.getCfg()
+		return nil, terror.ErrValidatorNotFound.Generate(cfg.Name)
 	}
-	return validator.GetValidatorStatus()
+	return validator.GetValidatorStatus(), nil
+}
+
+func (st *SubTask) GetValidatorTableStatus(filterStatus pb.Stage) ([]*pb.ValidationTableStatus, error) {
+	validator := st.getValidator()
+	if validator == nil || !validator.Started() {
+		cfg := st.getCfg()
+		return nil, terror.ErrValidatorNotFound.Generate(cfg.Name)
+	}
+	return validator.GetValidatorTableStatus(filterStatus), nil
 }

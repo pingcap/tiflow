@@ -3016,6 +3016,12 @@ description = ""
 workaround = ""
 tags = ["internal", "high"]
 
+[error.DM-validator-43006]
+message = "validator not found for task %s"
+description = ""
+workaround = ""
+tags = ["not-set", "medium"]
+
 [error.DM-schema-tracker-44001]
 message = "saved schema of `%s`.`%s` is not proper JSON"
 description = ""

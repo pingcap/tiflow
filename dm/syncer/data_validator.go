@@ -139,7 +139,6 @@ type DataValidator struct {
 	// whether validator starts together with subtask
 	startWithSubtask bool
 
-	stage        pb.Stage
 	wg           sync.WaitGroup
 	errProcessWg sync.WaitGroup
 	errChan      chan error
@@ -156,7 +155,6 @@ type DataValidator struct {
 	streamerController *StreamerController
 	persistHelper      *validatorPersistHelper
 
-	result           pb.ProcessResult
 	validateInterval time.Duration
 	checkInterval    time.Duration
 	workers          []*validateWorker
@@ -166,15 +164,19 @@ type DataValidator struct {
 	// if it's false, we don't mark failed row change as error to reduce false-positive
 	reachedSyncer atomic.Bool
 
-	stateMutex           sync.RWMutex
+	// fields in this field block are guarded by stateMutex
+	stateMutex  sync.RWMutex
+	stage       pb.Stage
+	flushedLoc  *binlog.Location
+	result      pb.ProcessResult
+	tableStatus map[string]*tableValidateStatus
+
 	processedRowCounts   []atomic.Int64
 	pendingRowCounts     []atomic.Int64
 	newErrorRowCount     atomic.Int64
 	lastFlushTime        time.Time
-	tableStatus          map[string]*tableValidateStatus
 	location             *binlog.Location
 	loadedPendingChanges map[string]*tableChangeJob
-	flushedLoc           *binlog.Location
 }
 
 func NewContinuousDataValidator(cfg *config.SubTaskConfig, syncerObj *Syncer, startWithSubtask bool) *DataValidator {
