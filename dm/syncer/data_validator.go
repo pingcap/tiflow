@@ -48,9 +48,7 @@ import (
 )
 
 const (
-	checkInterval           = 5 * time.Second
-	validationInterval      = 10 * time.Second
-	validatorStatusInterval = 30 * time.Second
+	validatorStatusInterval = time.Minute
 
 	moreColumnInBinlogMsg            = "binlog has more columns than current table"
 	tableWithoutPrimaryKeyMsg        = "no primary key"
@@ -160,6 +158,7 @@ type DataValidator struct {
 
 	result           pb.ProcessResult
 	validateInterval time.Duration
+	checkInterval    time.Duration
 	workers          []*validateWorker
 	workerCnt        int
 
@@ -189,7 +188,8 @@ func NewContinuousDataValidator(cfg *config.SubTaskConfig, syncerObj *Syncer, st
 	v.setStage(pb.Stage_Stopped)
 	v.workerCnt = cfg.ValidatorCfg.WorkerCount
 	v.processedRowCounts = make([]atomic.Int64, rowChangeTypeCount)
-	v.validateInterval = validationInterval
+	v.validateInterval = cfg.ValidatorCfg.ValidateInterval.Duration
+	v.checkInterval = cfg.ValidatorCfg.CheckInterval.Duration
 	v.persistHelper = newValidatorCheckpointHelper(v)
 	v.pendingRowCounts = make([]atomic.Int64, rowChangeTypeCount)
 
@@ -373,7 +373,7 @@ func (v *DataValidator) waitSyncerSynced(currLoc binlog.Location) error {
 		select {
 		case <-v.ctx.Done():
 			return v.ctx.Err()
-		case <-time.After(checkInterval):
+		case <-time.After(v.checkInterval):
 			syncLoc = v.syncer.getFlushedGlobalPoint()
 			cmp = binlog.CompareLocation(currLoc, syncLoc, v.cfg.EnableGTID)
 			if cmp <= 0 {
@@ -393,7 +393,7 @@ func (v *DataValidator) waitSyncerRunning() error {
 		select {
 		case <-v.ctx.Done():
 			return v.ctx.Err()
-		case <-time.After(checkInterval):
+		case <-time.After(v.checkInterval):
 			if v.syncer.IsRunning() {
 				v.L.Info("syncer is running, wait finished")
 				return nil
