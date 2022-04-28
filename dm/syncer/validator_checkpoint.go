@@ -72,16 +72,17 @@ type validatorPersistHelper struct {
 
 func newValidatorCheckpointHelper(validator *DataValidator) *validatorPersistHelper {
 	cfg := validator.cfg
+	logger := validator.L
 	retryer := &retry.FiniteRetryer{
 		Params: retry.NewParams(3, 5*time.Second, retry.LinearIncrease,
 			func(i int, err error) bool {
-				log.L().Info("met retryable error", zap.Error(err))
+				logger.Warn("met error", zap.Error(err))
 				return isRetryableDBError(err)
 			},
 		),
 	}
 	c := &validatorPersistHelper{
-		L:         validator.L,
+		L:         logger,
 		cfg:       cfg,
 		validator: validator,
 		retryer:   retryer,
@@ -124,10 +125,9 @@ func (c *validatorPersistHelper) createSchemaAndTables(tctx *tcontext.Context) e
 }
 
 func (c *validatorPersistHelper) createSchema(tctx *tcontext.Context) error {
-	sql2 := fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s", dbutil.ColumnName(c.cfg.MetaSchema))
-	args := make([]interface{}, 0)
-	_, err := c.db.DB.ExecContext(tctx.Ctx, sql2, []interface{}{args}...)
-	tctx.L().Info("create checkpoint schema", zap.String("statement", sql2))
+	query := fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s", dbutil.ColumnName(c.cfg.MetaSchema))
+	_, err := c.db.DB.ExecContext(tctx.Ctx, query)
+	tctx.L().Info("create checkpoint schema", zap.String("statement", query))
 	return err
 }
 
@@ -354,6 +354,7 @@ func (c *validatorPersistHelper) persist(tctx *tcontext.Context, loc binlog.Loca
 		}
 		failpoint.Goto("afterExecuteSQL")
 	})
+	// baseconn retries too much and with a lot of metric stuff, so use a simpler one.
 	err = c.db.DoTxWithRetry(newCtx, queries, args, c.retryer)
 	failpoint.Label("afterExecuteSQL")
 	if err != nil {

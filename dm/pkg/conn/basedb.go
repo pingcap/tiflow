@@ -185,7 +185,7 @@ func (d *BaseDB) DoTxWithRetry(tctx *tcontext.Context, queries []string, args []
 		)
 		tx, err = d.DB.BeginTx(tctx.Ctx, nil)
 		if err != nil {
-			return nil, err
+			return nil, perrors.Trace(err)
 		}
 		defer func() {
 			if err != nil {
@@ -197,18 +197,18 @@ func (d *BaseDB) DoTxWithRetry(tctx *tcontext.Context, queries []string, args []
 			}
 		}()
 		for i, _ := range queries {
-			if _, err = tx.ExecContext(tctx.Ctx, queries[i], args[i]); err != nil {
-				return nil, err
+			if _, err = tx.ExecContext(tctx.Ctx, queries[i], args[i]...); err != nil {
+				return nil, perrors.Trace(err)
 			}
 		}
-		return nil, err
+		return nil, perrors.Trace(err)
 	}
 
 	if retryer == nil {
 		retryer = retry.NoRetry
 	}
 	_, _, err := retryer.Apply(tctx, workFunc)
-	return perrors.Trace(err)
+	return err
 }
 
 // CloseBaseConn release BaseConn resource from BaseDB, and close BaseConn.
