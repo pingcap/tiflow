@@ -1,7 +1,5 @@
 package model
 
-import "github.com/hanfei1991/microcosm/pb"
-
 type (
 	// ID is the global identified number for jobs and tasks.
 	// For job, the id number is less than int32
@@ -48,19 +46,4 @@ type Task struct {
 
 	Exec   ExecutorID `json:"exec"`
 	Status TaskStatus
-}
-
-func (t *Task) ToPB() *pb.TaskRequest {
-	req := &pb.TaskRequest{
-		Id:   int64(t.ID),
-		Op:   t.Op,
-		OpTp: int32(t.OpTp),
-	}
-	for _, c := range t.Inputs {
-		req.Inputs = append(req.Inputs, int64(c))
-	}
-	for _, c := range t.Outputs {
-		req.Outputs = append(req.Outputs, int64(c))
-	}
-	return req
 }

@@ -19,7 +19,7 @@ func TestDispatchTaskNormal(t *testing.T) {
 	t.Parallel()
 
 	mockExecClient := &MockExecutorClient{}
-	dispatcher := NewTaskDispatcher(mockExecClient, 1*time.Second)
+	dispatcher := newTaskDispatcher(mockExecClient)
 
 	args := &DispatchTaskArgs{
 		WorkerID:     "worker-1",
@@ -56,7 +56,7 @@ func TestDispatchTaskNormal(t *testing.T) {
 	err := dispatcher.DispatchTask(context.Background(), args, func() {
 		require.True(t, preDispatchComplete.Load())
 		require.False(t, cbCalled.Swap(true))
-	}, func() {
+	}, func(error) {
 		require.Fail(t, "not expected")
 	})
 	require.NoError(t, err)
@@ -67,7 +67,7 @@ func TestPreDispatchAborted(t *testing.T) {
 	t.Parallel()
 
 	mockExecClient := &MockExecutorClient{}
-	dispatcher := NewTaskDispatcher(mockExecClient, 1*time.Second)
+	dispatcher := newTaskDispatcher(mockExecClient)
 
 	args := &DispatchTaskArgs{
 		WorkerID:     "worker-1",
@@ -81,7 +81,7 @@ func TestPreDispatchAborted(t *testing.T) {
 
 	err := dispatcher.DispatchTask(context.Background(), args, func() {
 		require.Fail(t, "the callback should never be called")
-	}, func() {
+	}, func(error) {
 		require.Fail(t, "not expected")
 	})
 	require.Error(t, err)
@@ -93,7 +93,7 @@ func TestAlreadyExistsPanics(t *testing.T) {
 	t.Parallel()
 
 	mockExecClient := &MockExecutorClient{}
-	dispatcher := NewTaskDispatcher(mockExecClient, 1*time.Second)
+	dispatcher := newTaskDispatcher(mockExecClient)
 
 	args := &DispatchTaskArgs{
 		WorkerID:     "worker-1",
@@ -108,7 +108,7 @@ func TestAlreadyExistsPanics(t *testing.T) {
 	require.Panics(t, func() {
 		_ = dispatcher.DispatchTask(context.Background(), args, func() {
 			require.Fail(t, "the callback should never be called")
-		}, func() {
+		}, func(error) {
 			require.Fail(t, "not expected")
 		})
 	})
@@ -119,7 +119,7 @@ func TestDispatchRetryCanceled(t *testing.T) {
 	t.Parallel()
 
 	mockExecClient := &MockExecutorClient{}
-	dispatcher := NewTaskDispatcher(mockExecClient, 1*time.Second)
+	dispatcher := newTaskDispatcher(mockExecClient)
 	// Resets the retryInterval to accelerate testing.
 	dispatcher.retryInterval = time.Millisecond * 1
 
@@ -154,7 +154,7 @@ func TestDispatchRetryCanceled(t *testing.T) {
 
 	err := dispatcher.DispatchTask(cancelCtx, args, func() {
 		require.Fail(t, "the callback should never be called")
-	}, func() {
+	}, func(error) {
 		require.Fail(t, "not expected")
 	})
 	require.Error(t, err)
@@ -167,7 +167,7 @@ func TestDispatchRetrySucceed(t *testing.T) {
 	t.Parallel()
 
 	mockExecClient := &MockExecutorClient{}
-	dispatcher := NewTaskDispatcher(mockExecClient, 1*time.Second)
+	dispatcher := newTaskDispatcher(mockExecClient)
 	// Resets the retryInterval to accelerate testing.
 	dispatcher.retryInterval = time.Millisecond * 1
 
@@ -182,7 +182,7 @@ func TestDispatchRetrySucceed(t *testing.T) {
 		Return((*ExecutorResponse)(nil), status.Error(codes.Unknown, "should retry")).Twice()
 	mockExecClient.On("Send", mock.Anything, mock.Anything).
 		Return(&ExecutorResponse{Resp: &pb.ConfirmDispatchTaskResponse{}}, nil)
-	err := dispatcher.DispatchTask(context.Background(), args, func() {}, func() {
+	err := dispatcher.DispatchTask(context.Background(), args, func() {}, func(error) {
 		require.Fail(t, "not expected")
 	})
 	require.NoError(t, err)
@@ -193,7 +193,7 @@ func TestConfirmDispatchFailsUndertermined(t *testing.T) {
 	t.Parallel()
 
 	mockExecClient := &MockExecutorClient{}
-	dispatcher := NewTaskDispatcher(mockExecClient, 1*time.Second)
+	dispatcher := newTaskDispatcher(mockExecClient)
 
 	args := &DispatchTaskArgs{
 		WorkerID:     "worker-1",
@@ -222,7 +222,7 @@ func TestConfirmDispatchFailsUndertermined(t *testing.T) {
 	err := dispatcher.DispatchTask(context.Background(), args, func() {
 		require.True(t, preDispatchComplete.Load())
 		require.False(t, cbCalled.Swap(true))
-	}, func() {
+	}, func(error) {
 		require.Fail(t, "not expected")
 	})
 	require.NoError(t, err)
@@ -233,7 +233,7 @@ func TestConfirmDispatchFailsGuaranteed(t *testing.T) {
 	t.Parallel()
 
 	mockExecClient := &MockExecutorClient{}
-	dispatcher := NewTaskDispatcher(mockExecClient, 1*time.Second)
+	dispatcher := newTaskDispatcher(mockExecClient)
 
 	args := &DispatchTaskArgs{
 		WorkerID:     "worker-1",
@@ -263,7 +263,10 @@ func TestConfirmDispatchFailsGuaranteed(t *testing.T) {
 	err := dispatcher.DispatchTask(context.Background(), args, func() {
 		require.True(t, preDispatchComplete.Load())
 		require.False(t, startTimerCalled.Swap(true))
-	}, func() {
+	}, func(err error) {
+		require.Error(t, err)
+		require.Regexp(t, ".*server end failure.*", err)
+
 		require.True(t, startTimerCalled.Load())
 		require.False(t, abortWorkerCalled.Swap(true))
 	})

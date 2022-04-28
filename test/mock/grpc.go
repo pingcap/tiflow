@@ -181,25 +181,6 @@ func (s *executorServer) dial() (Conn, error) {
 	return &executorServerConn{s}, nil
 }
 
-func (c *executorClient) SubmitBatchTasks(ctx context.Context, req *pb.SubmitBatchTasksRequest, opts ...grpc.CallOption) (*pb.SubmitBatchTasksResponse, error) {
-	resp, err := c.conn.sendRequest(ctx, req)
-	return resp.(*pb.SubmitBatchTasksResponse), err
-}
-
-func (c *executorClient) CancelBatchTasks(ctx context.Context, req *pb.CancelBatchTasksRequest, opts ...grpc.CallOption) (*pb.CancelBatchTasksResponse, error) {
-	resp, err := c.conn.sendRequest(ctx, req)
-	return resp.(*pb.CancelBatchTasksResponse), err
-}
-
-func (c *executorClient) PauseBatchTasks(ctx context.Context, req *pb.PauseBatchTasksRequest, opts ...grpc.CallOption) (*pb.PauseBatchTasksResponse, error) {
-	resp, err := c.conn.sendRequest(ctx, req)
-	return resp.(*pb.PauseBatchTasksResponse), err
-}
-
-func (c *executorClient) DispatchTask(ctx context.Context, in *pb.DispatchTaskRequest, opts ...grpc.CallOption) (*pb.DispatchTaskResponse, error) {
-	panic("implement me")
-}
-
 func (c *executorClient) PreDispatchTask(ctx context.Context, in *pb.PreDispatchTaskRequest, opts ...grpc.CallOption) (*pb.PreDispatchTaskResponse, error) {
 	panic("implement me")
 }
@@ -218,12 +199,11 @@ func NewExecutorClient(conn Conn) pb.ExecutorClient {
 
 func (s *executorServerConn) sendRequest(ctx context.Context, req interface{}) (interface{}, error) {
 	switch x := req.(type) {
-	case *pb.SubmitBatchTasksRequest:
-		return s.server.SubmitBatchTasks(ctx, x)
-	case *pb.CancelBatchTasksRequest:
-		return s.server.CancelBatchTasks(ctx, x)
-	case *pb.PauseBatchTasksRequest:
-		return s.server.PauseBatchTasks(ctx, x)
+	case *pb.PreDispatchTaskRequest:
+		return s.server.PreDispatchTask(ctx, x)
+	case *pb.ConfirmDispatchTaskRequest:
+		return s.server.ConfirmDispatchTask(ctx, x)
+	default:
 	}
 	return nil, errors.New("unknown request")
 }

@@ -8,7 +8,7 @@ const (
 	workerOnlineEvent = masterEventType(iota + 1)
 	workerOfflineEvent
 	workerStatusUpdatedEvent
-	workerDispatched
+	workerDispatchFailedEvent
 )
 
 type masterEvent struct {

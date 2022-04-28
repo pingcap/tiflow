@@ -86,19 +86,19 @@ func MockBaseMasterCreateWorker(
 	configBytes, err := json.Marshal(config)
 	require.NoError(t, err)
 
-	mockExecutorClient.On("Send",
+	mockExecutorClient.On("DispatchTask",
 		mock.Anything,
-		&client.ExecutorRequest{
-			Cmd: client.CmdDispatchTask,
-			Req: &pb.DispatchTaskRequest{
-				TaskTypeId: int64(workerType),
-				TaskConfig: configBytes,
-				MasterId:   masterID,
-				WorkerId:   workerID,
-			},
-		}).Return(&client.ExecutorResponse{Resp: &pb.DispatchTaskResponse{
-		ErrorCode: 1,
-	}}, nil)
+		&client.DispatchTaskArgs{
+			WorkerID:     workerID,
+			MasterID:     masterID,
+			WorkerType:   int64(workerType),
+			WorkerConfig: configBytes,
+		}, mock.Anything, mock.Anything).
+		Return(nil).
+		Run(func(args mock.Arguments) {
+			startWorker := args.Get(2).(client.StartWorkerCallback)
+			startWorker()
+		})
 
 	master.uuidGen.(*uuid.MockGenerator).Push(workerID)
 }

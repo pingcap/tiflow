@@ -56,43 +56,25 @@ func TestExampleMaster(t *testing.T) {
 	err := master.Init(ctx)
 	require.NoError(t, err)
 
-	// master.Init will asynchronously create a worker
+	// worker is online
 	require.Eventually(t, func() bool {
 		err = master.Poll(ctx)
 		require.NoError(t, err)
 
+		lib.MockBaseMasterWorkerHeartbeat(t, master.DefaultBaseMaster, masterID, workerID, executorNodeID)
+
 		master.worker.mu.Lock()
+		online := master.worker.online
 		require.NoError(t, master.worker.receivedErr)
 		handle := master.worker.handle
 		master.worker.mu.Unlock()
-		return handle != nil
-	}, time.Second, 100*time.Millisecond)
+		return online && handle != nil
+	}, 2*time.Second, 100*time.Millisecond)
 
 	// GetWorkers and master.CreateWorker should be consistent
 	handle, ok := master.GetWorkers()[master.worker.id]
 	require.True(t, ok)
 	require.Equal(t, master.worker.handle, handle)
-
-	// before worker's first heartbeat, its status is WorkerStatusCreated
-	err = master.Tick(ctx)
-	require.NoError(t, err)
-	master.worker.mu.Lock()
-	code := master.worker.statusCode
-	master.worker.mu.Unlock()
-	require.Equal(t, libModel.WorkerStatusCreated, code)
-
-	lib.MockBaseMasterWorkerHeartbeat(t, master.DefaultBaseMaster, masterID, workerID, executorNodeID)
-
-	// worker is online after one heartbeat
-	require.Eventually(t, func() bool {
-		err = master.Poll(ctx)
-		require.NoError(t, err)
-
-		master.worker.mu.Lock()
-		online := master.worker.online
-		master.worker.mu.Unlock()
-		return online
-	}, 2*time.Second, 100*time.Millisecond)
 
 	lib.MockBaseMasterWorkerUpdateStatus(ctx, t, master.DefaultBaseMaster, masterID, workerID, executorNodeID, &libModel.WorkerStatus{
 		Code: libModel.WorkerStatusInit,
@@ -103,7 +85,7 @@ func TestExampleMaster(t *testing.T) {
 		require.NoError(t, err)
 
 		master.worker.mu.Lock()
-		code = master.worker.statusCode
+		code := master.worker.statusCode
 		master.worker.mu.Unlock()
 
 		return code == libModel.WorkerStatusInit

@@ -2,39 +2,10 @@
 syntax = "proto3";
 
 package pb;
-import "error.proto";
 
 service Executor {
-    rpc SubmitBatchTasks(SubmitBatchTasksRequest) returns (SubmitBatchTasksResponse) {}
-    rpc CancelBatchTasks(CancelBatchTasksRequest) returns (CancelBatchTasksResponse) {}
-    rpc PauseBatchTasks(PauseBatchTasksRequest) returns (PauseBatchTasksResponse) {}
-
-    // The following methods are for compatibility with the master-worker framework.
-    rpc DispatchTask(DispatchTaskRequest) returns (DispatchTaskResponse) {}
     rpc PreDispatchTask(PreDispatchTaskRequest) returns (PreDispatchTaskResponse) {}
     rpc ConfirmDispatchTask(ConfirmDispatchTaskRequest) returns (ConfirmDispatchTaskResponse) {}
-}
-
-message DispatchTaskRequest {
-    int64 task_type_id = 1;
-    bytes task_config = 2;
-    string master_id = 3;
-    string worker_id = 4;
-    string user_id = 5;
-}
-
-message DispatchTaskResponse {
-    DispatchTaskErrorCode error_code = 1;
-    string error_message = 2;
-    string worker_id = 3;
-}
-
-enum DispatchTaskErrorCode {
-    Unknown = 0;
-    OK = 1;
-    NoResource = 2;
-    InitFailed = 3;
-    Other = 1000;
 }
 
 message PreDispatchTaskRequest {
@@ -60,36 +31,4 @@ message ConfirmDispatchTaskRequest {
 }
 
 message ConfirmDispatchTaskResponse {
-}
-
-message CancelBatchTasksRequest {
-    repeated int64 task_id_list = 1;
-}
-
-message PauseBatchTasksRequest {
-    repeated int64 task_id_list = 1;
-}
-
-message SubmitBatchTasksRequest {
-    repeated TaskRequest tasks = 2;
-}
-
-message TaskRequest {
-    int64 id = 1;
-    repeated int64 inputs = 2;
-    repeated int64 outputs = 3;
-    bytes op = 4;
-    int32 op_tp = 5;
-}
-
-message SubmitBatchTasksResponse {
-    Error err = 1;
-}
-
-message CancelBatchTasksResponse {
-    Error err = 1;
-}
-
-message PauseBatchTasksResponse {
-    Error err = 1;
 }

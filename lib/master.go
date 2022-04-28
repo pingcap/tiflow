@@ -522,56 +522,53 @@ func (m *DefaultBaseMaster) CreateWorker(
 
 		requestCtx, cancel := context.WithTimeout(ctx, createWorkerTimeout)
 		defer cancel()
-		// This following API should be refined.
+
 		resp, err := m.serverMasterClient.ScheduleTask(requestCtx, &pb.ScheduleTaskRequest{
 			TaskId:               workerID,
 			Cost:                 int64(cost),
 			ResourceRequirements: resources,
 		},
-			// TODO (zixiong) make the timeout configurable
+			// TODO (zixiong) remove this timeout.
 			time.Second*10)
 		if err != nil {
+			// TODO log the gRPC errors from a lower level such as by an interceptor.
 			log.L().Warn("ScheduleTask returned error", zap.Error(err))
-			m.workerManager.OnCreatingWorkerFinished(workerID, err)
+			m.workerManager.AbortCreatingWorker(workerID, err)
 			return
 		}
 		log.L().Debug("ScheduleTask succeeded", zap.Any("response", resp))
 
 		executorID := model.ExecutorID(resp.ExecutorId)
-		m.workerManager.OnCreatingWorker(workerID, executorID)
 
 		err = m.executorClientManager.AddExecutor(executorID, resp.ExecutorAddr)
 		if err != nil {
-			m.workerManager.OnCreatingWorkerFinished(workerID, err)
+			m.workerManager.AbortCreatingWorker(workerID, err)
 			return
 		}
 
 		executorClient := m.executorClientManager.ExecutorClient(executorID)
-		executorResp, err := executorClient.Send(requestCtx, &client.ExecutorRequest{
-			Cmd: client.CmdDispatchTask,
-			Req: &pb.DispatchTaskRequest{
-				TaskTypeId: int64(workerType),
-				TaskConfig: configBytes,
-				MasterId:   m.id,
-				WorkerId:   workerID,
-			},
+		dispatchArgs := &client.DispatchTaskArgs{
+			WorkerID:     workerID,
+			MasterID:     m.id,
+			WorkerType:   int64(workerType),
+			WorkerConfig: configBytes,
+		}
+
+		err = executorClient.DispatchTask(requestCtx, dispatchArgs, func() {
+			m.workerManager.BeforeStartingWorker(workerID, executorID)
+		}, func(err error) {
+			m.workerManager.AbortCreatingWorker(workerID, err)
 		})
+
 		if err != nil {
-			// The executor may have already launched the worker.
-			// TODO summarize the kind of errors that could be received
-			// after success.
-			m.workerManager.OnCreatingWorkerFinished(workerID, nil)
+			// All cleaning up should have been done in AbortCreatingWorker.
+			log.L().Info("DispatchTask failed",
+				zap.Error(err))
 			return
 		}
-		dispatchTaskResp := executorResp.Resp.(*pb.DispatchTaskResponse)
-		log.L().Info("Worker dispatched", zap.Any("master-id", m.id), zap.Any("response", dispatchTaskResp))
-		errCode := dispatchTaskResp.GetErrorCode()
-		if errCode != pb.DispatchTaskErrorCode_OK {
-			err := errors.Errorf("dispatch worker failed with error code: %d", errCode)
-			m.workerManager.OnCreatingWorkerFinished(workerID, err)
-			return
-		}
-		m.workerManager.OnCreatingWorkerFinished(workerID, nil)
+
+		log.L().Info("Dispatch Worker succeeded",
+			zap.Any("args", dispatchArgs))
 	}()
 
 	return workerID, nil

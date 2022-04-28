@@ -15,12 +15,27 @@ type MockExecutorClient struct {
 	mock.Mock
 }
 
+var _ ExecutorClient = (*MockExecutorClient)(nil)
+
 func (c *MockExecutorClient) Send(ctx context.Context, request *ExecutorRequest) (*ExecutorResponse, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	args := c.Mock.Called(ctx, request)
 	return args.Get(0).(*ExecutorResponse), args.Error(1)
+}
+
+func (c *MockExecutorClient) DispatchTask(
+	ctx context.Context,
+	args *DispatchTaskArgs,
+	startWorkerTimer StartWorkerCallback,
+	abortWorker AbortWorkerCallback,
+) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	retArgs := c.Mock.Called(ctx, args, startWorkerTimer, abortWorker)
+	return retArgs.Error(0)
 }
 
 type MockServerMasterClient struct {

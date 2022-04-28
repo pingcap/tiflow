@@ -242,6 +242,7 @@ func (m *WorkerManager) HandleHeartbeat(msg *libModel.HeartbeatPingMessage, from
 		}
 	} else {
 		if entry.State() != workerEntryCreated {
+			// Return if it is not the first heartbeat.
 			return
 		}
 
@@ -300,7 +301,7 @@ func (m *WorkerManager) Tick(ctx context.Context) error {
 			if err := m.onWorkerStatusUpdated(ctx, event.Handle); err != nil {
 				return err
 			}
-		case workerDispatched:
+		case workerDispatchFailedEvent:
 			if err := m.onWorkerDispatched(ctx, event.Handle, event.Err); err != nil {
 				return err
 			}
@@ -308,8 +309,9 @@ func (m *WorkerManager) Tick(ctx context.Context) error {
 	}
 }
 
-// OnCreatingWorker is called by the BaseMaster BEFORE the RPC call for creating a worker.
-func (m *WorkerManager) OnCreatingWorker(workerID libModel.WorkerID, executorID model.ExecutorID) {
+// BeforeStartingWorker is called by the BaseMaster BEFORE the executor runs the worker,
+// but after the executor records the time at which the worker is submitted.
+func (m *WorkerManager) BeforeStartingWorker(workerID libModel.WorkerID, executorID model.ExecutorID) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -327,45 +329,32 @@ func (m *WorkerManager) OnCreatingWorker(workerID libModel.WorkerID, executorID 
 		})
 }
 
-// OnCreatingWorkerFinished is called if we know for sure that the worker will never be created.
-// This method undoes whatever OnCreatingWorker does.
-func (m *WorkerManager) OnCreatingWorkerFinished(workerID libModel.WorkerID, errIn error) {
+// AbortCreatingWorker is called by BaseMaster if starting the worker has failed for sure.
+// NOTE: If the RPC used to start the worker returns errors such as Canceled or DeadlineExceeded,
+// it has NOT failed FOR SURE.
+func (m *WorkerManager) AbortCreatingWorker(workerID libModel.WorkerID, errIn error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	var event *masterEvent
-	if errIn != nil {
-		event = &masterEvent{
-			Tp:       workerDispatched,
-			WorkerID: workerID,
-			Handle: &tombstoneHandleImpl{
-				workerID: workerID,
-				manager:  m,
-			},
-			Err: errIn,
-		}
-		delete(m.workerEntries, workerID)
-	} else {
-		entry, exists := m.workerEntries[workerID]
-		if !exists {
-			log.L().Panic("unexpected call of OnCreatingWorkerFinished",
-				zap.String("worker-id", workerID))
-		}
-		event = &masterEvent{
-			Tp:       workerDispatched,
-			WorkerID: workerID,
-			Handle: &runningHandleImpl{
-				workerID:   workerID,
-				executorID: entry.executorID,
-				manager:    m,
-			},
-			Err: errIn,
-		}
+	event := &masterEvent{
+		Tp:       workerDispatchFailedEvent,
+		WorkerID: workerID,
+		Handle: &tombstoneHandleImpl{
+			workerID: workerID,
+			manager:  m,
+		},
+		Err: errIn,
+		beforeHook: func() {
+			m.mu.Lock()
+			defer m.mu.Unlock()
+
+			delete(m.workerEntries, workerID)
+		},
 	}
+
 	err := m.enqueueEvent(event)
 	if err != nil {
-		log.L().Warn("workerDispatchFailed event is dropped",
-			zap.Error(errIn))
+		m.errCenter.OnError(err)
 	}
 }
 

@@ -82,30 +82,6 @@ func NewServer(cfg *Config, ctx *test.Context) *Server {
 	return &s
 }
 
-// SubmitBatchTasks implements the pb interface.
-func (s *Server) SubmitBatchTasks(ctx context.Context, req *pb.SubmitBatchTasksRequest) (*pb.SubmitBatchTasksResponse, error) {
-	// TODO modify executor.proto and remove this method.
-	panic("implement me")
-}
-
-// CancelBatchTasks implements pb interface.
-func (s *Server) CancelBatchTasks(ctx context.Context, req *pb.CancelBatchTasksRequest) (*pb.CancelBatchTasksResponse, error) {
-	// TODO modify executor.proto and remove this method.
-	panic("implement me")
-}
-
-// PauseBatchTasks implements pb interface.
-func (s *Server) PauseBatchTasks(ctx context.Context, req *pb.PauseBatchTasksRequest) (*pb.PauseBatchTasksResponse, error) {
-	// TODO modify executor.proto and remove this method.
-	panic("implement me")
-}
-
-// ResumeBatchTasks implements pb interface.
-func (s *Server) ResumeBatchTasks(ctx context.Context, req *pb.PauseBatchTasksRequest) (*pb.PauseBatchTasksResponse, error) {
-	// TODO modify executor.proto and remove this method.
-	panic("implement me")
-}
-
 func (s *Server) buildDeps() (*deps.Deps, error) {
 	deps := deps.NewDeps()
 	err := deps.Provide(func() p2p.MessageHandlerManager {
@@ -158,72 +134,6 @@ func (s *Server) buildDeps() (*deps.Deps, error) {
 	}
 
 	return deps, nil
-}
-
-// DispatchTask is deprecated.
-func (s *Server) DispatchTask(ctx context.Context, req *pb.DispatchTaskRequest) (*pb.DispatchTaskResponse, error) {
-	log.L().Info("dispatch task", zap.String("req", req.String()))
-
-	// TODO better dependency management
-	dctx := dcontext.Background()
-	dctx.Dependencies = dcontext.RuntimeDependencies{
-		MessageHandlerManager: s.msgServer.MakeHandlerManager(),
-		MessageRouter:         p2p.NewMessageSender(s.p2pMsgRouter),
-		MetaKVClient:          s.metaKVClient,
-		UserRawKVClient:       s.userRawKVClient,
-		ExecutorClientManager: client.NewClientManager(),
-		ServerMasterClient:    s.masterClient,
-	}
-
-	dp, err := s.buildDeps()
-	if err != nil {
-		return nil, err
-	}
-	dctx = dctx.WithDeps(dp)
-	dctx.Environ.NodeID = p2p.NodeID(s.info.ID)
-	dctx.Environ.Addr = s.info.Addr
-
-	masterMeta := &libModel.MasterMetaKVData{
-		// GetWorkerId here returns id of current unit
-		ID:     req.GetWorkerId(),
-		Tp:     libModel.WorkerType(req.GetTaskTypeId()),
-		Config: req.GetTaskConfig(),
-	}
-	metaBytes, err := masterMeta.Marshal()
-	if err != nil {
-		return nil, err
-	}
-	dctx.Environ.MasterMetaBytes = metaBytes
-
-	newWorker, err := registry.GlobalWorkerRegistry().CreateWorker(
-		dctx,
-		libModel.WorkerType(req.GetTaskTypeId()),
-		req.GetWorkerId(),
-		req.GetMasterId(),
-		req.GetTaskConfig())
-	if err != nil {
-		log.L().Error("Failed to create worker", zap.Error(err))
-		// TODO better error handling
-		return nil, err
-	}
-
-	if err := s.taskRunner.AddTask(newWorker); err != nil {
-		errCode := pb.DispatchTaskErrorCode_Other
-		if errors.ErrRuntimeReachedCapacity.Equal(err) || errors.ErrRuntimeIncomingQueueFull.Equal(err) {
-			errCode = pb.DispatchTaskErrorCode_NoResource
-		}
-
-		return &pb.DispatchTaskResponse{
-			ErrorCode:    errCode,
-			ErrorMessage: err.Error(),
-			WorkerId:     req.GetWorkerId(),
-		}, nil
-	}
-
-	return &pb.DispatchTaskResponse{
-		ErrorCode: pb.DispatchTaskErrorCode_OK,
-		WorkerId:  req.GetWorkerId(),
-	}, nil
 }
 
 func (s *Server) makeTask(

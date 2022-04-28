@@ -6,10 +6,9 @@ import (
 
 	"google.golang.org/grpc"
 
-	"github.com/hanfei1991/microcosm/pkg/rpcutil"
-
 	"github.com/hanfei1991/microcosm/pb"
 	"github.com/hanfei1991/microcosm/pkg/errors"
+	"github.com/hanfei1991/microcosm/pkg/rpcutil"
 	"github.com/hanfei1991/microcosm/test"
 	"github.com/hanfei1991/microcosm/test/mock"
 )

@@ -125,7 +125,7 @@ func (s *workerManageTestSuite) onWorkerDispatched(ctx context.Context, handle W
 		return errors.New("unexpected event already exists")
 	}
 	s.events[handle.ID()] = &masterEvent{
-		Tp:     workerDispatched,
+		Tp:     workerDispatchFailedEvent,
 		Handle: handle,
 		Err:    err,
 	}
@@ -228,7 +228,8 @@ func NewWorkerManageTestSuite(isInit bool) *workerManageTestSuite {
 
 func TestCreateWorkerAndWorkerOnline(t *testing.T) {
 	suite := NewWorkerManageTestSuite(true)
-	suite.manager.OnCreatingWorker("worker-1", "executor-1")
+	suite.manager.BeforeStartingWorker("worker-1", "executor-1")
+
 	suite.SimulateHeartbeat("worker-1", 1, "executor-1")
 	suite.SimulateHeartbeat("worker-1", 1, "executor-1")
 	suite.SimulateHeartbeat("worker-1", 1, "executor-1")
@@ -240,7 +241,7 @@ func TestCreateWorkerAndWorkerOnline(t *testing.T) {
 
 func TestCreateWorkerAndWorkerTimesOut(t *testing.T) {
 	suite := NewWorkerManageTestSuite(true)
-	suite.manager.OnCreatingWorker("worker-1", "executor-1")
+	suite.manager.BeforeStartingWorker("worker-1", "executor-1")
 	suite.AdvanceClockBy(30 * time.Second)
 	suite.AdvanceClockBy(30 * time.Second)
 	suite.AdvanceClockBy(30 * time.Second)
@@ -255,7 +256,7 @@ func TestCreateWorkerAndWorkerTimesOut(t *testing.T) {
 
 func TestCreateWorkerAndWorkerStatusUpdatedAndTimesOut(t *testing.T) {
 	suite := NewWorkerManageTestSuite(true)
-	suite.manager.OnCreatingWorker("worker-1", "executor-1")
+	suite.manager.BeforeStartingWorker("worker-1", "executor-1")
 
 	suite.SimulateHeartbeat("worker-1", 1, "executor-1")
 
@@ -394,7 +395,7 @@ func TestCleanTombstone(t *testing.T) {
 	ctx := context.Background()
 
 	suite := NewWorkerManageTestSuite(true)
-	suite.manager.OnCreatingWorker("worker-1", "executor-1")
+	suite.manager.BeforeStartingWorker("worker-1", "executor-1")
 	suite.AdvanceClockBy(30 * time.Second)
 	suite.AdvanceClockBy(30 * time.Second)
 	suite.AdvanceClockBy(30 * time.Second)
@@ -416,7 +417,7 @@ func TestCleanTombstone(t *testing.T) {
 	require.NoError(t, err)
 
 	// Recreating a worker with the same name should work fine.
-	suite.manager.OnCreatingWorker("worker-1", "executor-1")
+	suite.manager.BeforeStartingWorker("worker-1", "executor-1")
 
 	suite.Close()
 }
