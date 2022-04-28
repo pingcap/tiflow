@@ -277,7 +277,7 @@ func (s *mysqlSink) flushRowChangedEvents(ctx context.Context, receiver *notify.
 			s.statistics.SubRowsCount(skippedRowCount)
 		}
 
-		if len(resolvedTxnsMap) == 0 {
+		if len(resolvedTxnsMap) != 0 {
 			s.dispatchAndExecTxns(ctx, resolvedTxnsMap)
 		}
 		for tableID, resolvedTs := range flushedResolvedTsMap {
