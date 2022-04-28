@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta"
 	"github.com/pingcap/errors"
 	dmconfig "github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/stretchr/testify/require"
@@ -516,7 +517,7 @@ func (mockAgent *MockWorkerAgent) SetStages(stages map[string]metadata.TaskStage
 	mockAgent.stages = stages
 }
 
-func (mockAgent *MockWorkerAgent) CreateWorker(ctx context.Context, taskID string, workerType lib.WorkerType, taskCfg *config.TaskCfg) (libModel.WorkerID, error) {
+func (mockAgent *MockWorkerAgent) CreateWorker(ctx context.Context, taskID string, workerType lib.WorkerType, taskCfg *config.TaskCfg, resources ...resourcemeta.ResourceID) (libModel.WorkerID, error) {
 	mockAgent.Lock()
 	defer mockAgent.Unlock()
 	if len(mockAgent.createResults) == 0 {

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 
@@ -325,7 +326,7 @@ func (m *MockBaseJobmaster) MetaKVClient() metaclient.KVClient {
 	return args.Get(0).(metaclient.KVClient)
 }
 
-func (m *MockBaseJobmaster) CreateWorker(workerType lib.WorkerType, config lib.WorkerConfig, cost model.RescUnit) (libModel.WorkerID, error) {
+func (m *MockBaseJobmaster) CreateWorker(workerType lib.WorkerType, config lib.WorkerConfig, cost model.RescUnit, resources ...resourcemeta.ResourceID) (libModel.WorkerID, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	args := m.Called()

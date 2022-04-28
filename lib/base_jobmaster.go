@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/hanfei1991/microcosm/pkg/errctx"
+	"github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -23,7 +24,7 @@ type BaseJobMaster interface {
 	OnError(err error)
 	MetaKVClient() metaclient.KVClient
 	GetWorkers() map[libModel.WorkerID]WorkerHandle
-	CreateWorker(workerType WorkerType, config WorkerConfig, cost model.RescUnit) (libModel.WorkerID, error)
+	CreateWorker(workerType WorkerType, config WorkerConfig, cost model.RescUnit, resources ...resourcemeta.ResourceID) (libModel.WorkerID, error)
 	Workload() model.RescUnit
 	JobMasterID() libModel.MasterID
 	ID() worker.RunnableID
@@ -176,8 +177,8 @@ func (d *DefaultBaseJobMaster) OnError(err error) {
 	d.master.OnError(err)
 }
 
-func (d *DefaultBaseJobMaster) CreateWorker(workerType WorkerType, config WorkerConfig, cost model.RescUnit) (libModel.WorkerID, error) {
-	return d.master.CreateWorker(workerType, config, cost)
+func (d *DefaultBaseJobMaster) CreateWorker(workerType WorkerType, config WorkerConfig, cost model.RescUnit, resources ...resourcemeta.ResourceID) (libModel.WorkerID, error) {
+	return d.master.CreateWorker(workerType, config, cost, resources...)
 }
 
 func (d *DefaultBaseJobMaster) UpdateStatus(ctx context.Context, status libModel.WorkerStatus) error {

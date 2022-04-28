@@ -53,7 +53,7 @@ jobs:
         run: $GITHUB_WORKSPACE/sample/prepare.sh
 
       - name: Run containers
-        run: docker-compose -f $GITHUB_WORKSPACE/sample/1m1e.yaml -f $GITHUB_WORKSPACE/sample/dm_databases.yaml up -d
+        run: docker-compose -f $GITHUB_WORKSPACE/sample/3m3e.yaml -f $GITHUB_WORKSPACE/sample/dm_databases.yaml up -d
 
       - name: Run tests
         run: |
@@ -65,5 +65,5 @@ jobs:
       - name: Try to dump container logs
         if: ${{ failure() }}
         run: |
-          docker-compose -f $GITHUB_WORKSPACE/sample/1m1e.yaml logs -t
+          docker-compose -f $GITHUB_WORKSPACE/sample/3m3e.yaml logs -t
           docker-compose -f $GITHUB_WORKSPACE/sample/dm_databases.yaml logs -t

@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/hanfei1991/microcosm/jobmaster/dm"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -37,11 +38,12 @@ func (s *syncWorker) InitImpl(ctx context.Context) error {
 	log.L().Info("init sync worker")
 
 	if s.cfg.Mode == config.ModeAll {
-		h, err := s.OpenStorage(ctx, "/local/"+s.cfg.Name)
+		rid := dm.NewDMResourceID(s.cfg.Name, s.cfg.SourceID)
+		h, err := s.OpenStorage(ctx, rid)
 		for status.Code(err) == codes.Unavailable {
 			log.L().Info("simple retry", zap.Error(err))
 			time.Sleep(time.Second)
-			h, err = s.OpenStorage(ctx, "/local/"+s.cfg.Name)
+			h, err = s.OpenStorage(ctx, rid)
 		}
 		if err != nil {
 			return errors.Trace(err)

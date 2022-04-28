@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/hanfei1991/microcosm/jobmaster/dm"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/dumpling"
@@ -36,12 +37,13 @@ func newDumpWorker(cfg lib.WorkerConfig) lib.WorkerImpl {
 func (d *dumpWorker) InitImpl(ctx context.Context) error {
 	log.L().Info("init dump worker")
 
-	h, err := d.OpenStorage(ctx, "/local/"+d.cfg.Name)
+	rid := dm.NewDMResourceID(d.cfg.Name, d.cfg.SourceID)
+	h, err := d.OpenStorage(ctx, rid)
 	for status.Code(errors.Cause(err)) == codes.Unavailable {
 		// TODO: use backoff retry later
 		log.L().Info("simple retry", zap.Error(err))
 		time.Sleep(time.Second)
-		h, err = d.OpenStorage(ctx, "/local/"+d.cfg.Name)
+		h, err = d.OpenStorage(ctx, rid)
 	}
 	if err != nil {
 		return errors.Trace(err)

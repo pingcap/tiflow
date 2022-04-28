@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/hanfei1991/microcosm/lib/master"
+	"github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta"
 
 	"github.com/stretchr/testify/require"
 
@@ -134,7 +135,7 @@ func lenSyncMap(m *sync.Map) int {
 
 type MockMaster struct{}
 
-func (m *MockMaster) CreateWorker(workerType lib.WorkerType, config lib.WorkerConfig, cost model.RescUnit) (libModel.WorkerID, error) {
+func (m *MockMaster) CreateWorker(workerType lib.WorkerType, config lib.WorkerConfig, cost model.RescUnit, resources ...resourcemeta.ResourceID) (libModel.WorkerID, error) {
 	return "mock-worker", nil
 }
 

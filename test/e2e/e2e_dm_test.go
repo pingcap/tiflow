@@ -15,7 +15,7 @@ import (
 
 func TestDMJob(t *testing.T) {
 	ctx := context.Background()
-	masterClient, err := client.NewMasterClient(ctx, []string{"127.0.0.1:10240"})
+	masterClient, err := client.NewMasterClient(ctx, []string{"127.0.0.1:10245"})
 	require.NoError(t, err)
 
 	noError := func(_ interface{}, err error) {

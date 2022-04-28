@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/hanfei1991/microcosm/jobmaster/dm"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/loader"
@@ -36,11 +37,12 @@ func newLoadWorker(cfg lib.WorkerConfig) lib.WorkerImpl {
 func (l *loadWorker) InitImpl(ctx context.Context) error {
 	log.L().Info("init load worker")
 
-	h, err := l.OpenStorage(ctx, "/local/"+l.cfg.Name)
+	rid := dm.NewDMResourceID(l.cfg.Name, l.cfg.SourceID)
+	h, err := l.OpenStorage(ctx, rid)
 	for status.Code(err) == codes.Unavailable {
 		log.L().Info("simple retry", zap.Error(err))
 		time.Sleep(time.Second)
-		h, err = l.OpenStorage(ctx, "/local/"+l.cfg.Name)
+		h, err = l.OpenStorage(ctx, rid)
 	}
 	if err != nil {
 		return errors.Trace(err)

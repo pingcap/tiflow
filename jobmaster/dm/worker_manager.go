@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta"
 	dmconfig "github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/zap"
@@ -23,7 +24,7 @@ var (
 )
 
 type WorkerAgent interface {
-	CreateWorker(ctx context.Context, taskID string, workerType libModel.WorkerType, taskCfg *config.TaskCfg) (libModel.WorkerID, error)
+	CreateWorker(ctx context.Context, taskID string, workerType libModel.WorkerType, taskCfg *config.TaskCfg, resources ...resourcemeta.ResourceID) (libModel.WorkerID, error)
 	StopWorker(ctx context.Context, taskID string, workerID libModel.WorkerID) error
 }
 
@@ -182,8 +183,14 @@ func (wm *WorkerManager) checkAndScheduleWorkers(ctx context.Context, job *metad
 			log.L().Info("switch to next unit", zap.String("task_id", taskID), zap.Int64("next_unit", int64(runningWorker.Unit)))
 		}
 
-		// createWorker should be a asynchronous operation
-		if err := wm.createWorker(ctx, taskID, nextUnit, persistentTask.Cfg); err != nil {
+		var resources []resourcemeta.ResourceID
+		// we can assure only first worker don't need local resource.
+		if workerIdxInSeq(persistentTask.Cfg.TaskMode, nextUnit) != 0 {
+			resources = append(resources, NewDMResourceID(persistentTask.Cfg.Name, persistentTask.Cfg.Upstreams[0].SourceID))
+		}
+
+		// createWorker should be an asynchronous operation
+		if err := wm.createWorker(ctx, taskID, nextUnit, persistentTask.Cfg, resources...); err != nil {
 			recordError = err
 			continue
 		}
@@ -191,23 +198,25 @@ func (wm *WorkerManager) checkAndScheduleWorkers(ctx context.Context, job *metad
 	return recordError
 }
 
-func (wm *WorkerManager) getCurrentUnit(ctx context.Context, task *metadata.Task) (libModel.WorkerType, error) {
-	var workerSeq []libModel.WorkerType
+var workerSeqMap = map[string][]libModel.WorkerType{
+	dmconfig.ModeAll: {
+		lib.WorkerDMDump,
+		lib.WorkerDMLoad,
+		lib.WorkerDMSync,
+	},
+	dmconfig.ModeFull: {
+		lib.WorkerDMDump,
+		lib.WorkerDMLoad,
+	},
+	dmconfig.ModeIncrement: {
+		lib.WorkerDMSync,
+	},
+}
 
-	switch task.Cfg.TaskMode {
-	case dmconfig.ModeAll:
-		workerSeq = []libModel.WorkerType{
-			lib.WorkerDMDump,
-			lib.WorkerDMLoad,
-			lib.WorkerDMSync,
-		}
-	case dmconfig.ModeFull:
-		workerSeq = []libModel.WorkerType{
-			lib.WorkerDMDump,
-			lib.WorkerDMLoad,
-		}
-	case dmconfig.ModeIncrement:
-		return lib.WorkerDMSync, nil
+func (wm *WorkerManager) getCurrentUnit(ctx context.Context, task *metadata.Task) (libModel.WorkerType, error) {
+	workerSeq, ok := workerSeqMap[task.Cfg.TaskMode]
+	if !ok {
+		log.L().Panic("Unexpected TaskMode", zap.String("TaskMode", task.Cfg.TaskMode))
 	}
 
 	for i := len(workerSeq) - 1; i >= 0; i-- {
@@ -223,20 +232,56 @@ func (wm *WorkerManager) getCurrentUnit(ctx context.Context, task *metadata.Task
 	return workerSeq[0], nil
 }
 
+func workerIdxInSeq(taskMode string, worker libModel.WorkerType) int {
+	workerSeq, ok := workerSeqMap[taskMode]
+	if !ok {
+		log.L().Panic("Unexpected TaskMode", zap.String("TaskMode", taskMode))
+	}
+	for i, w := range workerSeq {
+		if w == worker {
+			return i
+		}
+	}
+	log.L().Panic("worker not found",
+		zap.String("taskMode", taskMode),
+		zap.Any("currWorker", worker))
+	return -1
+}
+
+func nextWorkerIdxAndType(taskMode string, currWorker libModel.WorkerType) (int, libModel.WorkerType) {
+	workerSeq, ok := workerSeqMap[taskMode]
+	if !ok {
+		log.L().Panic("Unexpected TaskMode", zap.String("TaskMode", taskMode))
+	}
+
+	idx := workerIdxInSeq(taskMode, currWorker)
+	if idx == len(workerSeq)-1 {
+		log.L().Error("workerSeq overflow",
+			zap.String("taskMode", taskMode),
+			zap.Any("currWorker", currWorker))
+		return idx, workerSeq[idx]
+	}
+	return idx + 1, workerSeq[idx+1]
+}
+
 func getNextUnit(task *metadata.Task, worker runtime.WorkerStatus) libModel.WorkerType {
 	if worker.Stage != runtime.WorkerFinished {
 		return worker.Unit
 	}
 
-	if worker.Unit == lib.WorkerDMDump || task.Cfg.TaskMode == dmconfig.ModeFull {
-		return lib.WorkerDMLoad
-	}
-	return lib.WorkerDMSync
+	_, workerType := nextWorkerIdxAndType(task.Cfg.TaskMode, worker.Unit)
+	return workerType
 }
 
-func (wm *WorkerManager) createWorker(ctx context.Context, taskID string, unit libModel.WorkerType, taskCfg *config.TaskCfg) error {
+func (wm *WorkerManager) createWorker(
+	ctx context.Context,
+	taskID string,
+	unit libModel.WorkerType,
+	taskCfg *config.TaskCfg,
+	resources ...resourcemeta.ResourceID,
+) error {
 	log.L().Info("start to create worker", zap.String("task_id", taskID), zap.Int64("unit", int64(unit)))
-	workerID, err := wm.workerAgent.CreateWorker(ctx, taskID, unit, taskCfg)
+	workerID, err := wm.workerAgent.CreateWorker(ctx, taskID, unit, taskCfg, resources...)
 	if err != nil {
 		log.L().Error("failed to create workers", zap.String("task_id", taskID), zap.Int64("unit", int64(unit)), zap.Error(err))
 	}
