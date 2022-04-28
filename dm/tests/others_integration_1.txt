@@ -10,3 +10,4 @@ checkpoint_transaction
 lightning_mode
 slow_relay_writer
 sync_collation
+downstream_index_order

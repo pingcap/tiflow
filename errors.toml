@@ -648,7 +648,7 @@ peer-to-peer message client has failed permanently, no need to reconnect: %s
 
 ["CDC:ErrPeerMessageDataLost"]
 error = '''
-peer-to-peer message data lost, topic: %s, seq: %s
+peer-to-peer message data lost, topic: %s, seq: %d
 '''
 
 ["CDC:ErrPeerMessageDecodeError"]

@@ -16,6 +16,8 @@ package schema
 import (
 	"context"
 	"fmt"
+	"io/ioutil"
+	"os"
 	"strings"
 
 	"github.com/pingcap/errors"
@@ -37,6 +39,7 @@ import (
 	"go.uber.org/zap"
 
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
+	fr "github.com/pingcap/tiflow/dm/pkg/func-rollback"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	dmterror "github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
@@ -59,6 +62,7 @@ var (
 
 // Tracker is used to track schema locally.
 type Tracker struct {
+	storePath string
 	store     kv.Storage
 	dom       *domain.Domain
 	se        session.Session
@@ -83,6 +87,21 @@ type DownstreamTableInfo struct {
 // some variable from downstream using `downstreamConn`.
 // NOTE **sessionCfg is a reference to caller**.
 func NewTracker(ctx context.Context, task string, sessionCfg map[string]string, downstreamConn *dbconn.DBConn) (*Tracker, error) {
+	var (
+		err       error
+		storePath string
+		store     kv.Storage
+		dom       *domain.Domain
+		se        session.Session
+	)
+
+	rollbackHolder := fr.NewRollbackHolder("schema-tracker")
+	defer func() {
+		if err != nil {
+			rollbackHolder.RollbackReverseOrder()
+		}
+	}()
+
 	// NOTE: tidb uses a **global** config so can't isolate tracker's config from each other. If that isolation is needed,
 	// we might SetGlobalConfig before every call to tracker, or use some patch like https://github.com/bouk/monkey
 	tidbConfig.UpdateGlobal(func(conf *tidbConfig.Config) {
@@ -122,24 +141,39 @@ func NewTracker(ctx context.Context, task string, sessionCfg map[string]string, 
 		}
 	}
 
-	store, err := mockstore.NewMockStore(mockstore.WithStoreType(mockstore.EmbedUnistore))
+	storePath, err = ioutil.TempDir("./", "schema-tracker")
 	if err != nil {
 		return nil, err
 	}
+	rollbackHolder.Add(fr.FuncRollback{Name: "DeleteStorePath", Fn: func() {
+		_ = os.RemoveAll(storePath)
+	}})
+
+	store, err = mockstore.NewMockStore(
+		mockstore.WithStoreType(mockstore.EmbedUnistore),
+		mockstore.WithPath(storePath))
+	if err != nil {
+		return nil, err
+	}
+	rollbackHolder.Add(fr.FuncRollback{Name: "CloseStore", Fn: func() {
+		_ = store.Close()
+	}})
 
 	// avoid data race and of course no use in DM
 	domain.RunAutoAnalyze = false
 	session.DisableStats4Test()
 
-	dom, err := session.BootstrapSession(store)
+	dom, err = session.BootstrapSession(store)
 	if err != nil {
 		return nil, err
 	}
+	rollbackHolder.Add(fr.FuncRollback{Name: "CloseDomain", Fn: dom.Close})
 
-	se, err := session.CreateSession(store)
+	se, err = session.CreateSession(store)
 	if err != nil {
 		return nil, err
 	}
+	rollbackHolder.Add(fr.FuncRollback{Name: "CloseSession", Fn: se.Close})
 
 	globalVarsToSet := make(map[string]string, len(defaultGlobalVars))
 	for k, v := range defaultGlobalVars {
@@ -182,6 +216,7 @@ func NewTracker(ctx context.Context, task string, sessionCfg map[string]string, 
 	}
 
 	return &Tracker{
+		storePath: storePath,
 		store:     store,
 		dom:       dom,
 		se:        se,
@@ -315,7 +350,10 @@ func (tr *Tracker) Reset() error {
 func (tr *Tracker) Close() error {
 	tr.se.Close()
 	tr.dom.Close()
-	return tr.store.Close()
+	if err := tr.store.Close(); err != nil {
+		return err
+	}
+	return os.RemoveAll(tr.storePath)
 }
 
 // DropTable drops a table from this tracker.
@@ -495,7 +533,7 @@ func GetDownStreamTi(ti *model.TableInfo, originTi *model.TableInfo) *Downstream
 		return mysql.HasNotNullFlag(ti.Columns[i].Flag)
 	}
 
-	for i, idx := range ti.Indices {
+	for _, idx := range ti.Indices {
 		if !idx.Primary && !idx.Unique {
 			continue
 		}
@@ -506,12 +544,12 @@ func GetDownStreamTi(ti *model.TableInfo, originTi *model.TableInfo) *Downstream
 		availableUKIndexList = append(availableUKIndexList, indexRedirect)
 		if idx.Primary {
 			absoluteUKIndexInfo = indexRedirect
-			absoluteUKPosition = i
+			absoluteUKPosition = len(availableUKIndexList) - 1
 			hasPk = true
 		} else if absoluteUKIndexInfo == nil && isSpecifiedIndexColumn(idx, fn) {
 			// second check not null unique key
 			absoluteUKIndexInfo = indexRedirect
-			absoluteUKPosition = i
+			absoluteUKPosition = len(availableUKIndexList) - 1
 		}
 	}
 

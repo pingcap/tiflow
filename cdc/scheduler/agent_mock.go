@@ -17,24 +17,27 @@ import (
 	"testing"
 
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/cdc/model"
-	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+
+	"github.com/pingcap/tiflow/cdc/model"
+	cdcContext "github.com/pingcap/tiflow/pkg/context"
 )
 
 type MockProcessorMessenger struct {
 	mock.Mock
 }
 
-func (m *MockProcessorMessenger) FinishTableOperation(ctx cdcContext.Context, tableID model.TableID) (bool, error) {
-	args := m.Called(ctx, tableID)
+// FinishTableOperation marks this function as being called.
+func (m *MockProcessorMessenger) FinishTableOperation(ctx cdcContext.Context, tableID model.TableID, epoch model.ProcessorEpoch) (bool, error) {
+	args := m.Called(ctx, tableID, epoch)
 	return args.Bool(0), args.Error(1)
 }
 
-func (m *MockProcessorMessenger) SyncTaskStatuses(ctx cdcContext.Context, running, adding, removing []model.TableID) (bool, error) {
-	args := m.Called(ctx, running, adding, removing)
+// SyncTaskStatuses marks this function as being called.
+func (m *MockProcessorMessenger) SyncTaskStatuses(ctx cdcContext.Context, epoch model.ProcessorEpoch, adding, removing, running []model.TableID) (bool, error) {
+	args := m.Called(ctx, epoch, running, adding, removing)
 	return args.Bool(0), args.Error(1)
 }
 
@@ -48,8 +51,13 @@ func (m *MockProcessorMessenger) Barrier(ctx cdcContext.Context) (done bool) {
 	return args.Bool(0)
 }
 
-func (m *MockProcessorMessenger) OnOwnerChanged(ctx cdcContext.Context, newOwnerCaptureID model.CaptureID) {
-	m.Called(ctx, newOwnerCaptureID)
+// OnOwnerChanged marks this function as being called.
+func (m *MockProcessorMessenger) OnOwnerChanged(
+	ctx cdcContext.Context,
+	newOwnerCaptureID model.CaptureID,
+	newOwnerRev int64,
+) {
+	m.Called(ctx, newOwnerCaptureID, newOwnerRev)
 }
 
 func (m *MockProcessorMessenger) Close() error {

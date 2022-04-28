@@ -126,6 +126,8 @@ func (b *binlogPoint) rollback(schemaTracker *schema.Tracker, schema string) (is
 	b.flushedPoint.location.ResetSuffix()
 	b.savedPoint.location = b.flushedPoint.location
 	if b.savedPoint.ti == nil {
+		// TODO: if we forget to save table info for table checkpoint, this is also nil!
+		// And table checkpoint rollback to flushed point may also be nil!
 		return // for global checkpoint, no need to rollback the schema.
 	}
 
@@ -235,7 +237,7 @@ type CheckPoint interface {
 	// corresponding to Meta.Save
 	SaveGlobalPoint(point binlog.Location)
 
-	// Snapshot make a snapshot of current checkpoint
+	// Snapshot make a snapshot of current checkpoint. If returns nil, it means nothing has changed since last call.
 	Snapshot(isSyncFlush bool) *SnapshotInfo
 
 	// FlushGlobalPointsExcept flushes the global checkpoint and tables'
@@ -272,12 +274,9 @@ type CheckPoint interface {
 	// corresponding to to Meta.Pos and gtid
 	FlushedGlobalPoint() binlog.Location
 
-	// CheckGlobalPoint checks whether we should save global checkpoint
-	// corresponding to Meta.Check
-	CheckGlobalPoint() bool
-
-	// CheckLastSnapshotCreationTime checks whether we should async flush checkpoint since last time async flush
-	CheckLastSnapshotCreationTime() bool
+	// LastFlushOutdated checks the start time of a flush (when call Snapshot) and finish time of a flush, if both of
+	// the two times are outdated, LastFlushOutdated returns true.
+	LastFlushOutdated() bool
 
 	// GetFlushedTableInfo gets flushed table info
 	// use for lazy create table in schemaTracker
@@ -368,6 +367,7 @@ func (cp *RemoteCheckPoint) Snapshot(isSyncFlush bool) *SnapshotInfo {
 	// make snapshot is visit in single thread, so depend on rlock should be enough
 	cp.snapshotSeq++
 	id := cp.snapshotSeq
+	cp.lastSnapshotCreationTime = time.Now()
 
 	tableCheckPoints := make(map[string]map[string]tablePoint, len(cp.points))
 	for s, tableCps := range cp.points {
@@ -404,7 +404,6 @@ func (cp *RemoteCheckPoint) Snapshot(isSyncFlush bool) *SnapshotInfo {
 	}
 
 	cp.snapshots = append(cp.snapshots, snapshot)
-	cp.lastSnapshotCreationTime = time.Now()
 	return &SnapshotInfo{
 		id:        id,
 		globalPos: globalPoint.location,
@@ -825,18 +824,18 @@ func (cp *RemoteCheckPoint) String() string {
 	return cp.globalPoint.String()
 }
 
-// CheckGlobalPoint implements CheckPoint.CheckGlobalPoint.
-func (cp *RemoteCheckPoint) CheckGlobalPoint() bool {
+// LastFlushOutdated implements CheckPoint.LastFlushOutdated.
+func (cp *RemoteCheckPoint) LastFlushOutdated() bool {
 	cp.RLock()
 	defer cp.RUnlock()
-	return time.Since(cp.globalPointSaveTime) >= time.Duration(cp.cfg.CheckpointFlushInterval)*time.Second
-}
 
-// CheckLastSnapshotCreationTime implements CheckPoint.CheckLastSnapshotCreationTime.
-func (cp *RemoteCheckPoint) CheckLastSnapshotCreationTime() bool {
-	cp.RLock()
-	defer cp.RUnlock()
-	return time.Since(cp.lastSnapshotCreationTime) >= time.Duration(cp.cfg.CheckpointFlushInterval)*time.Second
+	if time.Since(cp.globalPointSaveTime) < time.Duration(cp.cfg.CheckpointFlushInterval)*time.Second {
+		return false
+	}
+	if time.Since(cp.lastSnapshotCreationTime) < time.Duration(cp.cfg.CheckpointFlushInterval)*time.Second {
+		return false
+	}
+	return true
 }
 
 // Rollback implements CheckPoint.Rollback.
