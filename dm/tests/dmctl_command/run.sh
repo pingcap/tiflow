@@ -179,6 +179,20 @@ function run_validator_cmd {
 	# do not do sync diff this time, will fail
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation status test" \
+		"\"stage\": \"Running\"" 2 \
+		"\"processedRowsStatus\": \"insert\/update\/delete: 2\/1\/1\"" 1 \
+		"\"processedRowsStatus\": \"insert\/update\/delete: 0\/0\/1\"" 1 \
+		"pendingRowsStatus\": \"insert\/update\/delete: 0\/0\/0" 2 \
+		"new\/ignored\/resolved: 0\/0\/0" 1 \
+		"new\/ignored\/resolved: 2\/0\/0" 1
+
+	# test we can get validation status even when it's stopped
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation stop test" \
+		"\"result\": true" 1
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation status test" \
+		"\"stage\": \"Stopped\"" 2 \
 		"\"processedRowsStatus\": \"insert\/update\/delete: 2\/1\/1\"" 1 \
 		"\"processedRowsStatus\": \"insert\/update\/delete: 0\/0\/1\"" 1 \
 		"pendingRowsStatus\": \"insert\/update\/delete: 0\/0\/0" 2 \
