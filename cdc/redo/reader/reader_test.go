@@ -397,7 +397,7 @@ func TestLogReaderReadNextLog(t *testing.T) {
 			readerRet: &model.RedoLog{
 				RedoRow: &model.RedoRowChangedEvent{
 					Row: &model.RowChangedEvent{
-						CommitTs: 1,
+						CommitTs: 2,
 						RowID:    1,
 					},
 				},
@@ -406,6 +406,31 @@ func TestLogReaderReadNextLog(t *testing.T) {
 				RedoRow: &model.RedoRowChangedEvent{
 					Row: &model.RowChangedEvent{
 						CommitTs: 6,
+						RowID:    2,
+					},
+				},
+			},
+		},
+		{
+			name: "sameCommitTs",
+			args: arg{
+				ctx:    context.Background(),
+				maxNum: 3,
+			},
+			readerRet: &model.RedoLog{
+				RedoRow: &model.RedoRowChangedEvent{
+					Row: &model.RowChangedEvent{
+						CommitTs: 2,
+						StartTs:  2,
+						RowID:    1,
+					},
+				},
+			},
+			readerRet1: &model.RedoLog{
+				RedoRow: &model.RedoRowChangedEvent{
+					Row: &model.RowChangedEvent{
+						CommitTs: 2,
+						StartTs:  1,
 						RowID:    2,
 					},
 				},
@@ -501,14 +526,17 @@ func TestLogReaderReadNextLog(t *testing.T) {
 			require.EqualValues(t, tt.args.maxNum, len(ret), tt.name)
 			for i := 0; i < int(tt.args.maxNum); i++ {
 				if tt.name == "io.EOF err" {
-					require.Equal(t, ret[i].Row.CommitTs, tt.readerRet1.RedoRow.Row.CommitTs, tt.name)
+					require.Equal(t, ret[i].Row.CommitTs,
+						tt.readerRet1.RedoRow.Row.CommitTs, tt.name)
 					continue
 				}
 				if tt.name == "happy1" {
-					require.Equal(t, ret[i].Row.CommitTs, tt.readerRet1.RedoRow.Row.CommitTs, tt.name)
+					require.Equal(t, ret[i].Row.CommitTs,
+						tt.readerRet.RedoRow.Row.CommitTs, tt.name)
 					continue
 				}
 				require.Equal(t, ret[i].Row.CommitTs, tt.readerRet1.RedoRow.Row.CommitTs, tt.name)
+				require.Equal(t, ret[i].Row.StartTs, tt.readerRet1.RedoRow.Row.StartTs, tt.name)
 			}
 		}
 	}
