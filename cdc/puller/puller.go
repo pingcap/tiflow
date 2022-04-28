@@ -125,11 +125,16 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 
 	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
 	tableID, _ := contextutil.TableIDFromCtx(ctx)
-	metricOutputChanSize := outputChanSizeHistogram.WithLabelValues(changefeedID.ID)
-	metricEventChanSize := eventChanSizeHistogram.WithLabelValues(changefeedID.ID)
-	metricPullerResolvedTs := pullerResolvedTsGauge.WithLabelValues(changefeedID.ID)
-	metricTxnCollectCounterKv := txnCollectCounter.WithLabelValues(changefeedID.ID, "kv")
-	metricTxnCollectCounterResolved := txnCollectCounter.WithLabelValues(changefeedID.ID, "resolved")
+	metricOutputChanSize := outputChanSizeHistogram.
+		WithLabelValues(changefeedID.ID)
+	metricEventChanSize := eventChanSizeHistogram.
+		WithLabelValues(changefeedID.ID)
+	metricPullerResolvedTs := pullerResolvedTsGauge.
+		WithLabelValues(changefeedID.ID)
+	metricTxnCollectCounterKv := txnCollectCounter.
+		WithLabelValues(changefeedID.ID, "kv")
+	metricTxnCollectCounterResolved := txnCollectCounter.
+		WithLabelValues(changefeedID.ID, "resolved")
 	defer func() {
 		outputChanSizeHistogram.DeleteLabelValues(changefeedID.ID)
 		eventChanSizeHistogram.DeleteLabelValues(changefeedID.ID)

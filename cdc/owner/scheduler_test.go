@@ -180,10 +180,13 @@ func TestSchedulerBasics(t *testing.T) {
 	require.Equal(t, model.Ts(1000), resolvedTs)
 
 	for _, node := range mockCluster.Nodes {
-		_, err := node.Router.GetClient(mockOwnerNode.ID).SendMessage(ctx, model.CheckpointTopic(model.DefaultNamespaceChangeFeedID("cf-1")), &model.CheckpointMessage{
-			CheckpointTs: 2000,
-			ResolvedTs:   2000,
-		})
+		_, err := node.Router.GetClient(mockOwnerNode.ID).
+			SendMessage(ctx, model.CheckpointTopic(
+				model.DefaultNamespaceChangeFeedID("cf-1")),
+				&model.CheckpointMessage{
+					CheckpointTs: 2000,
+					ResolvedTs:   2000,
+				})
 		require.NoError(t, err)
 	}
 

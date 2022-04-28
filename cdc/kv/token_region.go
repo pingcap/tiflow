@@ -101,7 +101,8 @@ func (r *sizedRegionRouter) AddRegion(sri singleRegionInfo) {
 	} else {
 		r.buffer[id] = append(r.buffer[id], sri)
 		if _, ok := r.metrics.cachedRegions[id]; !ok {
-			r.metrics.cachedRegions[id] = cachedRegionSize.WithLabelValues(id, r.metrics.changefeed.ID)
+			r.metrics.cachedRegions[id] = cachedRegionSize.
+				WithLabelValues(id, r.metrics.changefeed.ID)
 		}
 		r.metrics.cachedRegions[id].Inc()
 	}

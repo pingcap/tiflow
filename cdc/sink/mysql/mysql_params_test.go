@@ -108,7 +108,8 @@ func TestGenerateDSNByParams(t *testing.T) {
 		require.Nil(t, err)
 		uri, err := url.Parse("mysql://127.0.0.1:3306/?read-timeout=4m&write-timeout=5m&timeout=3m")
 		require.Nil(t, err)
-		params, err := parseSinkURIToParams(context.TODO(), model.DefaultNamespaceChangeFeedID("123"), uri, map[string]string{})
+		params, err := parseSinkURIToParams(context.TODO(),
+			model.DefaultNamespaceChangeFeedID("123"), uri, map[string]string{})
 		require.Nil(t, err)
 		dsnStr, err := generateDSNByParams(context.TODO(), dsn, params, db)
 		require.Nil(t, err)
@@ -236,7 +237,9 @@ func TestParseSinkURITimezone(t *testing.T) {
 	for i, uriStr := range uris {
 		uri, err := url.Parse(uriStr)
 		require.Nil(t, err)
-		params, err := parseSinkURIToParams(ctx, model.DefaultNamespaceChangeFeedID("cf"), uri, opts)
+		params, err := parseSinkURIToParams(ctx,
+			model.DefaultNamespaceChangeFeedID("cf"),
+			uri, opts)
 		require.Nil(t, err)
 		require.Equal(t, expected[i], params.timezone)
 	}
@@ -273,7 +276,9 @@ func TestParseSinkURIOverride(t *testing.T) {
 		} else {
 			uri = nil
 		}
-		p, err := parseSinkURIToParams(ctx, model.DefaultNamespaceChangeFeedID("changefeed-01"), uri, map[string]string{})
+		p, err := parseSinkURIToParams(ctx,
+			model.DefaultNamespaceChangeFeedID("changefeed-01"),
+			uri, map[string]string{})
 		require.Nil(t, err)
 		cs.checker(p)
 	}
@@ -310,7 +315,8 @@ func TestParseSinkURIBadQueryString(t *testing.T) {
 		} else {
 			uri = nil
 		}
-		_, err = parseSinkURIToParams(ctx, model.DefaultNamespaceChangeFeedID("changefeed-01"), uri, opts)
+		_, err = parseSinkURIToParams(ctx,
+			model.DefaultNamespaceChangeFeedID("changefeed-01"), uri, opts)
 		require.Error(t, err)
 	}
 }

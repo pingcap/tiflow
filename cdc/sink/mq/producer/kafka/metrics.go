@@ -245,42 +245,50 @@ func (sm *saramaMetricsMonitor) collectBrokerMetrics() {
 
 		incomingByteRateMetric := sm.registry.Get(getBrokerMetricName(incomingByteRateMetricNamePrefix, brokerID))
 		if meter, ok := incomingByteRateMetric.(metrics.Meter); ok {
-			incomingByteRateGauge.WithLabelValues(sm.changefeedID.ID, brokerID).Set(meter.Snapshot().Rate1())
+			incomingByteRateGauge.
+				WithLabelValues(sm.changefeedID.ID, brokerID).Set(meter.Snapshot().Rate1())
 		}
 
 		outgoingByteRateMetric := sm.registry.Get(getBrokerMetricName(outgoingByteRateMetricNamePrefix, brokerID))
 		if meter, ok := outgoingByteRateMetric.(metrics.Meter); ok {
-			outgoingByteRateGauge.WithLabelValues(sm.changefeedID.ID, brokerID).Set(meter.Snapshot().Rate1())
+			outgoingByteRateGauge.
+				WithLabelValues(sm.changefeedID.ID, brokerID).Set(meter.Snapshot().Rate1())
 		}
 
 		requestRateMetric := sm.registry.Get(getBrokerMetricName(requestRateMetricNamePrefix, brokerID))
 		if meter, ok := requestRateMetric.(metrics.Meter); ok {
-			requestRateGauge.WithLabelValues(sm.changefeedID.ID, brokerID).Set(meter.Snapshot().Rate1())
+			requestRateGauge.WithLabelValues(sm.changefeedID.ID, brokerID).
+				Set(meter.Snapshot().Rate1())
 		}
 
 		requestSizeMetric := sm.registry.Get(getBrokerMetricName(requestSizeMetricNamePrefix, brokerID))
 		if histogram, ok := requestSizeMetric.(metrics.Histogram); ok {
-			requestSizeGauge.WithLabelValues(sm.changefeedID.ID, brokerID).Set(histogram.Snapshot().Mean())
+			requestSizeGauge.WithLabelValues(sm.changefeedID.ID, brokerID).
+				Set(histogram.Snapshot().Mean())
 		}
 
 		requestLatencyMetric := sm.registry.Get(getBrokerMetricName(requestLatencyInMsMetricNamePrefix, brokerID))
 		if histogram, ok := requestLatencyMetric.(metrics.Histogram); ok {
-			requestLatencyInMsGauge.WithLabelValues(sm.changefeedID.ID, brokerID).Set(histogram.Snapshot().Mean())
+			requestLatencyInMsGauge.WithLabelValues(sm.changefeedID.ID, brokerID).
+				Set(histogram.Snapshot().Mean())
 		}
 
 		requestsInFlightMetric := sm.registry.Get(getBrokerMetricName(requestsInFlightMetricNamePrefix, brokerID))
 		if counter, ok := requestsInFlightMetric.(metrics.Counter); ok {
-			requestsInFlightGauge.WithLabelValues(sm.changefeedID.ID, brokerID).Set(float64(counter.Snapshot().Count()))
+			requestsInFlightGauge.WithLabelValues(sm.changefeedID.ID, brokerID).
+				Set(float64(counter.Snapshot().Count()))
 		}
 
 		responseRateMetric := sm.registry.Get(getBrokerMetricName(responseRateMetricNamePrefix, brokerID))
 		if meter, ok := responseRateMetric.(metrics.Meter); ok {
-			responseRateGauge.WithLabelValues(sm.changefeedID.ID, brokerID).Set(meter.Snapshot().Rate1())
+			responseRateGauge.WithLabelValues(sm.changefeedID.ID, brokerID).
+				Set(meter.Snapshot().Rate1())
 		}
 
 		responseSizeMetric := sm.registry.Get(getBrokerMetricName(responseSizeMetricNamePrefix, brokerID))
 		if histogram, ok := responseSizeMetric.(metrics.Histogram); ok {
-			responseSizeGauge.WithLabelValues(sm.changefeedID.ID, brokerID).Set(histogram.Snapshot().Mean())
+			responseSizeGauge.WithLabelValues(sm.changefeedID.ID, brokerID).
+				Set(histogram.Snapshot().Mean())
 		}
 	}
 }
@@ -288,7 +296,9 @@ func (sm *saramaMetricsMonitor) collectBrokerMetrics() {
 // flushMetricsInterval specifies the interval of refresh sarama metrics.
 const flushMetricsInterval = 5 * time.Second
 
-func runSaramaMetricsMonitor(ctx context.Context, registry metrics.Registry, changefeedID model.ChangeFeedID,
+func runSaramaMetricsMonitor(ctx context.Context,
+	registry metrics.Registry,
+	changefeedID model.ChangeFeedID,
 	role util.Role, admin kafka.ClusterAdminClient,
 ) {
 	monitor := &saramaMetricsMonitor{

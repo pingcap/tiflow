@@ -124,10 +124,12 @@ func testSetUpDataDir(t *testing.T, s *testServer) {
 	// DataDir is not set, but has existed changefeed, use the one with the largest available space
 	conf.DataDir = ""
 	dir := t.TempDir()
-	err = s.server.etcdClient.SaveChangeFeedInfo(s.ctx, &model.ChangeFeedInfo{SortDir: dir}, model.DefaultNamespaceChangeFeedID("a"))
+	err = s.server.etcdClient.SaveChangeFeedInfo(s.ctx,
+		&model.ChangeFeedInfo{SortDir: dir}, model.DefaultNamespaceChangeFeedID("a"))
 	require.Nil(t, err)
 
-	err = s.server.etcdClient.SaveChangeFeedInfo(s.ctx, &model.ChangeFeedInfo{}, model.DefaultNamespaceChangeFeedID("b"))
+	err = s.server.etcdClient.SaveChangeFeedInfo(s.ctx,
+		&model.ChangeFeedInfo{}, model.DefaultNamespaceChangeFeedID("b"))
 	require.Nil(t, err)
 
 	err = s.server.setUpDir(s.ctx)

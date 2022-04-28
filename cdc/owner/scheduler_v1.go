@@ -311,7 +311,8 @@ func (s *oldScheduler) cleanUpFinishedOperations() {
 	for captureID := range s.state.TaskStatuses {
 		s.state.PatchTaskStatus(captureID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
 			if status == nil {
-				log.Warn("task status of the capture is not found, may be the key in etcd was deleted",
+				log.Warn("task status of the capture is not found, "+
+					"may be the key in etcd was deleted",
 					zap.String("captureID", captureID),
 					zap.String("namespace", s.state.ID.Namespace),
 					zap.String("changefeed", s.state.ID.ID))

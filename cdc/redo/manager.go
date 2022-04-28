@@ -167,7 +167,9 @@ func NewManager(ctx context.Context, cfg *config.ConsistentConfig, opts *Manager
 		globalConf := config.GetGlobalServerConfig()
 		changeFeedID := contextutil.ChangefeedIDFromCtx(ctx)
 		// We use a temporary dir to storage redo logs before flushing to other backends, such as S3
-		redoDir := filepath.Join(globalConf.DataDir, config.DefaultRedoDir, changeFeedID.Namespace, changeFeedID.ID)
+		redoDir := filepath.Join(globalConf.DataDir,
+			config.DefaultRedoDir,
+			changeFeedID.Namespace, changeFeedID.ID)
 		if m.storageType == consistentStorageLocal || m.storageType == consistentStorageNFS {
 			// When using local or nfs as backend, store redo logs to redoDir directly.
 			redoDir = uri.Path

@@ -120,7 +120,10 @@ func (c CDCEtcdClient) GetAllCDCInfo(ctx context.Context) ([]*mvccpb.KeyValue, e
 }
 
 // GetChangeFeeds returns kv revision and a map mapping from changefeedID to changefeed detail mvccpb.KeyValue
-func (c CDCEtcdClient) GetChangeFeeds(ctx context.Context) (int64, map[model.ChangeFeedID]*mvccpb.KeyValue, error) {
+func (c CDCEtcdClient) GetChangeFeeds(ctx context.Context) (
+	int64,
+	map[model.ChangeFeedID]*mvccpb.KeyValue, error,
+) {
 	key := GetEtcdKeyChangeFeedList()
 
 	resp, err := c.Client.Get(ctx, key, clientv3.WithPrefix())
@@ -140,7 +143,9 @@ func (c CDCEtcdClient) GetChangeFeeds(ctx context.Context) (int64, map[model.Cha
 }
 
 // GetAllChangeFeedInfo queries all changefeed information
-func (c CDCEtcdClient) GetAllChangeFeedInfo(ctx context.Context) (map[model.ChangeFeedID]*model.ChangeFeedInfo, error) {
+func (c CDCEtcdClient) GetAllChangeFeedInfo(ctx context.Context) (
+	map[model.ChangeFeedID]*model.ChangeFeedInfo, error,
+) {
 	_, details, err := c.GetChangeFeeds(ctx)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -158,7 +163,9 @@ func (c CDCEtcdClient) GetAllChangeFeedInfo(ctx context.Context) (map[model.Chan
 }
 
 // GetChangeFeedInfo queries the config of a given changefeed
-func (c CDCEtcdClient) GetChangeFeedInfo(ctx context.Context, id model.ChangeFeedID) (*model.ChangeFeedInfo, error) {
+func (c CDCEtcdClient) GetChangeFeedInfo(ctx context.Context,
+	id model.ChangeFeedID,
+) (*model.ChangeFeedInfo, error) {
 	key := GetEtcdKeyChangeFeedInfo(id)
 	resp, err := c.Client.Get(ctx, key)
 	if err != nil {
@@ -173,14 +180,18 @@ func (c CDCEtcdClient) GetChangeFeedInfo(ctx context.Context, id model.ChangeFee
 }
 
 // DeleteChangeFeedInfo deletes a changefeed config from etcd
-func (c CDCEtcdClient) DeleteChangeFeedInfo(ctx context.Context, id model.ChangeFeedID) error {
+func (c CDCEtcdClient) DeleteChangeFeedInfo(ctx context.Context,
+	id model.ChangeFeedID,
+) error {
 	key := GetEtcdKeyChangeFeedInfo(id)
 	_, err := c.Client.Delete(ctx, key)
 	return cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
 }
 
 // GetAllChangeFeedStatus queries all changefeed job status
-func (c CDCEtcdClient) GetAllChangeFeedStatus(ctx context.Context) (map[model.ChangeFeedID]*model.ChangeFeedStatus, error) {
+func (c CDCEtcdClient) GetAllChangeFeedStatus(ctx context.Context) (
+	map[model.ChangeFeedID]*model.ChangeFeedStatus, error,
+) {
 	key := JobKeyPrefix
 	resp, err := c.Client.Get(ctx, key, clientv3.WithPrefix())
 	if err != nil {
@@ -203,7 +214,9 @@ func (c CDCEtcdClient) GetAllChangeFeedStatus(ctx context.Context) (map[model.Ch
 }
 
 // GetChangeFeedStatus queries the checkpointTs and resovledTs of a given changefeed
-func (c CDCEtcdClient) GetChangeFeedStatus(ctx context.Context, id model.ChangeFeedID) (*model.ChangeFeedStatus, int64, error) {
+func (c CDCEtcdClient) GetChangeFeedStatus(ctx context.Context,
+	id model.ChangeFeedID,
+) (*model.ChangeFeedStatus, int64, error) {
 	key := GetEtcdKeyJob(id)
 	resp, err := c.Client.Get(ctx, key)
 	if err != nil {
@@ -298,7 +311,8 @@ func (c CDCEtcdClient) RevokeAllLeases(ctx context.Context, leases map[string]in
 // CreateChangefeedInfo creates a change feed info into etcd and fails if it is already exists.
 func (c CDCEtcdClient) CreateChangefeedInfo(ctx context.Context,
 	info *model.ChangeFeedInfo,
-	changeFeedID model.ChangeFeedID) error {
+	changeFeedID model.ChangeFeedID,
+) error {
 	infoKey := GetEtcdKeyChangeFeedInfo(changeFeedID)
 	jobKey := GetEtcdKeyJob(changeFeedID)
 	value, err := info.Marshal()
@@ -328,7 +342,10 @@ func (c CDCEtcdClient) CreateChangefeedInfo(ctx context.Context,
 
 // SaveChangeFeedInfo stores change feed info into etcd
 // TODO: this should be called from outer system, such as from a TiDB client
-func (c CDCEtcdClient) SaveChangeFeedInfo(ctx context.Context, info *model.ChangeFeedInfo, changeFeedID model.ChangeFeedID) error {
+func (c CDCEtcdClient) SaveChangeFeedInfo(ctx context.Context,
+	info *model.ChangeFeedInfo,
+	changeFeedID model.ChangeFeedID,
+) error {
 	key := GetEtcdKeyChangeFeedInfo(changeFeedID)
 	value, err := info.Marshal()
 	if err != nil {

@@ -61,11 +61,16 @@ func NewStatistics(ctx context.Context, t sinkType) *Statistics {
 	}
 
 	s := t.String()
-	statistics.metricExecTxnHis = ExecTxnHistogram.WithLabelValues(statistics.changefeedID.ID, s)
-	statistics.metricExecBatchHis = ExecBatchHistogram.WithLabelValues(statistics.changefeedID.ID, s)
-	statistics.metricRowSizesHis = LargeRowSizeHistogram.WithLabelValues(statistics.changefeedID.ID, s)
-	statistics.metricExecDDLHis = ExecDDLHistogram.WithLabelValues(statistics.changefeedID.ID, s)
-	statistics.metricExecErrCnt = ExecutionErrorCounter.WithLabelValues(statistics.changefeedID.ID)
+	statistics.metricExecTxnHis = ExecTxnHistogram.
+		WithLabelValues(statistics.changefeedID.ID, s)
+	statistics.metricExecBatchHis = ExecBatchHistogram.
+		WithLabelValues(statistics.changefeedID.ID, s)
+	statistics.metricRowSizesHis = LargeRowSizeHistogram.
+		WithLabelValues(statistics.changefeedID.ID, s)
+	statistics.metricExecDDLHis = ExecDDLHistogram.
+		WithLabelValues(statistics.changefeedID.ID, s)
+	statistics.metricExecErrCnt = ExecutionErrorCounter.
+		WithLabelValues(statistics.changefeedID.ID)
 
 	// Flush metrics in background for better accuracy and efficiency.
 	changefeedID := statistics.changefeedID

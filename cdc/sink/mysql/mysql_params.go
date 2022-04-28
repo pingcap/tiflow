@@ -101,7 +101,10 @@ func (s *sinkParams) Clone() *sinkParams {
 	return &clone
 }
 
-func parseSinkURIToParams(ctx context.Context, changefeedID model.ChangeFeedID, sinkURI *url.URL, opts map[string]string) (*sinkParams, error) {
+func parseSinkURIToParams(ctx context.Context,
+	changefeedID model.ChangeFeedID,
+	sinkURI *url.URL, opts map[string]string,
+) (*sinkParams, error) {
 	params := defaultParams.Clone()
 
 	params.changefeedID = changefeedID

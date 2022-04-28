@@ -191,7 +191,10 @@ func TestGetChangefeed(t *testing.T) {
 	require.Equal(t, model.StateNormal, resp.FeedState)
 
 	// test get changefeed failed
-	api = testCase{url: fmt.Sprintf("/api/v1/changefeeds/%s", nonExistChangefeedID.ID), method: "GET"}
+	api = testCase{
+		url:    fmt.Sprintf("/api/v1/changefeeds/%s", nonExistChangefeedID.ID),
+		method: "GET",
+	}
 	w = httptest.NewRecorder()
 	req, _ = http.NewRequestWithContext(context.Background(), api.method, api.url, nil)
 	router.ServeHTTP(w, req)
@@ -217,7 +220,10 @@ func TestPauseChangefeed(t *testing.T) {
 			require.EqualValues(t, model.AdminStop, adminJob.Type)
 			close(done)
 		})
-	api := testCase{url: fmt.Sprintf("/api/v1/changefeeds/%s/pause", changeFeedID.ID), method: "POST"}
+	api := testCase{
+		url:    fmt.Sprintf("/api/v1/changefeeds/%s/pause", changeFeedID.ID),
+		method: "POST",
+	}
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequestWithContext(context.Background(), api.method, api.url, nil)
 	router.ServeHTTP(w, req)
@@ -230,7 +236,10 @@ func TestPauseChangefeed(t *testing.T) {
 			done <- cerror.ErrChangeFeedNotExists.FastGenByArgs(adminJob.CfID)
 			close(done)
 		})
-	api = testCase{url: fmt.Sprintf("/api/v1/changefeeds/%s/pause", changeFeedID.ID), method: "POST"}
+	api = testCase{
+		url:    fmt.Sprintf("/api/v1/changefeeds/%s/pause", changeFeedID.ID),
+		method: "POST",
+	}
 	w = httptest.NewRecorder()
 	req, _ = http.NewRequestWithContext(context.Background(), api.method, api.url, nil)
 	router.ServeHTTP(w, req)
@@ -270,7 +279,10 @@ func TestResumeChangefeed(t *testing.T) {
 			require.EqualValues(t, model.AdminResume, adminJob.Type)
 			close(done)
 		})
-	api := testCase{url: fmt.Sprintf("/api/v1/changefeeds/%s/resume", changeFeedID.ID), method: "POST"}
+	api := testCase{
+		url:    fmt.Sprintf("/api/v1/changefeeds/%s/resume", changeFeedID.ID),
+		method: "POST",
+	}
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequestWithContext(context.Background(), api.method, api.url, nil)
 	router.ServeHTTP(w, req)
@@ -283,7 +295,10 @@ func TestResumeChangefeed(t *testing.T) {
 			done <- cerror.ErrChangeFeedNotExists.FastGenByArgs(adminJob.CfID)
 			close(done)
 		})
-	api = testCase{url: fmt.Sprintf("/api/v1/changefeeds/%s/resume", changeFeedID.ID), method: "POST"}
+	api = testCase{
+		url:    fmt.Sprintf("/api/v1/changefeeds/%s/resume", changeFeedID.ID),
+		method: "POST",
+	}
 	w = httptest.NewRecorder()
 	req, _ = http.NewRequestWithContext(context.Background(), api.method, api.url, nil)
 	router.ServeHTTP(w, req)
@@ -406,7 +421,8 @@ func TestRebalanceTables(t *testing.T) {
 
 	// test rebalance table failed
 	api = testCase{
-		url:    fmt.Sprintf("/api/v1/changefeeds/%s/tables/rebalance_table", nonExistChangefeedID.ID),
+		url: fmt.Sprintf("/api/v1/changefeeds/%s/tables/rebalance_table",
+			nonExistChangefeedID.ID),
 		method: "POST",
 	}
 	w = httptest.NewRecorder()

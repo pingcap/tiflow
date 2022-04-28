@@ -315,7 +315,8 @@ func TestAdminJob(t *testing.T) {
 	done2 := make(chan error, 1)
 	owner.RebalanceTables(model.DefaultNamespaceChangeFeedID("test-changefeed2"), done2)
 	done3 := make(chan error, 1)
-	owner.ScheduleTable(model.DefaultNamespaceChangeFeedID("test-changefeed3"), "test-caputre1", 10, done3)
+	owner.ScheduleTable(model.DefaultNamespaceChangeFeedID("test-changefeed3"),
+		"test-caputre1", 10, done3)
 	done4 := make(chan error, 1)
 	var buf bytes.Buffer
 	owner.WriteDebugInfo(&buf, done4)

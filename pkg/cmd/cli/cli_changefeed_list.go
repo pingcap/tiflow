@@ -78,7 +78,7 @@ func (o *listChangefeedOptions) run(cmd *cobra.Command) error {
 	}
 
 	changefeedIDs := make(map[model.ChangeFeedID]struct{}, len(raw))
-	for id, _ := range raw {
+	for id := range raw {
 		changefeedIDs[id] = struct{}{}
 	}
 

@@ -35,6 +35,7 @@ func GetTimezone(name string) (tz *time.Location, err error) {
 	return
 }
 
+// GetTimezoneFromZonefile read the timezone from file
 func GetTimezoneFromZonefile(zonefile string) (tz *time.Location, err error) {
 	// the linked path of `/etc/localtime` sample:
 	// MacOS: /var/db/timezone/zoneinfo/Asia/Shanghai

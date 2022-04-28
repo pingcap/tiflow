@@ -68,7 +68,9 @@ func TestWriterWrite(t *testing.T) {
 	_, err = w.Write([]byte("tes1t11111"))
 	require.Nil(t, err)
 	// create a .tmp file
-	fileName := fmt.Sprintf("%s_%s_%s_%d_%s_%d%s", w.cfg.CaptureID, w.cfg.ChangeFeedID.Namespace, w.cfg.ChangeFeedID.ID, w.cfg.CreateTime.Unix(), w.cfg.FileType, 1, common.LogEXT) + common.TmpEXT
+	fileName := fmt.Sprintf("%s_%s_%s_%d_%s_%d%s", w.cfg.CaptureID,
+		w.cfg.ChangeFeedID.Namespace, w.cfg.ChangeFeedID.ID,
+		w.cfg.CreateTime.Unix(), w.cfg.FileType, 1, common.LogEXT) + common.TmpEXT
 	path := filepath.Join(w.cfg.Dir, fileName)
 	info, err := os.Stat(path)
 	require.Nil(t, err)
@@ -82,13 +84,17 @@ func TestWriterWrite(t *testing.T) {
 	require.Nil(t, err)
 
 	// after rotate, rename to .log
-	fileName = fmt.Sprintf("%s_%s_%s_%d_%s_%d%s", w.cfg.CaptureID, w.cfg.ChangeFeedID.Namespace, w.cfg.ChangeFeedID.ID, w.cfg.CreateTime.Unix(), w.cfg.FileType, 1, common.LogEXT)
+	fileName = fmt.Sprintf("%s_%s_%s_%d_%s_%d%s", w.cfg.CaptureID,
+		w.cfg.ChangeFeedID.Namespace, w.cfg.ChangeFeedID.ID,
+		w.cfg.CreateTime.Unix(), w.cfg.FileType, 1, common.LogEXT)
 	path = filepath.Join(w.cfg.Dir, fileName)
 	info, err = os.Stat(path)
 	require.Nil(t, err)
 	require.Equal(t, fileName, info.Name())
 	// create a .tmp file with first eventCommitTS as name
-	fileName = fmt.Sprintf("%s_%s_%s_%d_%s_%d%s", w.cfg.CaptureID, w.cfg.ChangeFeedID.Namespace, w.cfg.ChangeFeedID.ID, w.cfg.CreateTime.Unix(), w.cfg.FileType, 12, common.LogEXT) + common.TmpEXT
+	fileName = fmt.Sprintf("%s_%s_%s_%d_%s_%d%s", w.cfg.CaptureID,
+		w.cfg.ChangeFeedID.Namespace, w.cfg.ChangeFeedID.ID,
+		w.cfg.CreateTime.Unix(), w.cfg.FileType, 12, common.LogEXT) + common.TmpEXT
 	path = filepath.Join(w.cfg.Dir, fileName)
 	info, err = os.Stat(path)
 	require.Nil(t, err)
@@ -97,7 +103,9 @@ func TestWriterWrite(t *testing.T) {
 	require.Nil(t, err)
 	require.False(t, w.IsRunning())
 	// safe close, rename to .log with max eventCommitTS as name
-	fileName = fmt.Sprintf("%s_%s_%s_%d_%s_%d%s", w.cfg.CaptureID, w.cfg.ChangeFeedID.Namespace, w.cfg.ChangeFeedID.ID, w.cfg.CreateTime.Unix(), w.cfg.FileType, 22, common.LogEXT)
+	fileName = fmt.Sprintf("%s_%s_%s_%d_%s_%d%s", w.cfg.CaptureID,
+		w.cfg.ChangeFeedID.Namespace, w.cfg.ChangeFeedID.ID,
+		w.cfg.CreateTime.Unix(), w.cfg.FileType, 22, common.LogEXT)
 	path = filepath.Join(w.cfg.Dir, fileName)
 	info, err = os.Stat(path)
 	require.Nil(t, err)
@@ -123,7 +131,9 @@ func TestWriterWrite(t *testing.T) {
 	_, err = w1.Write([]byte("tes1t11111"))
 	require.Nil(t, err)
 	// create a .tmp file
-	fileName = fmt.Sprintf("%s_%s_%s_%d_%s_%d%s", w1.cfg.CaptureID, w1.cfg.ChangeFeedID.Namespace, w1.cfg.ChangeFeedID.ID, w1.cfg.CreateTime.Unix(), w1.cfg.FileType, 1, common.LogEXT) + common.TmpEXT
+	fileName = fmt.Sprintf("%s_%s_%s_%d_%s_%d%s", w1.cfg.CaptureID,
+		w1.cfg.ChangeFeedID.Namespace, w1.cfg.ChangeFeedID.ID,
+		w1.cfg.CreateTime.Unix(), w1.cfg.FileType, 1, common.LogEXT) + common.TmpEXT
 	path = filepath.Join(w1.cfg.Dir, fileName)
 	info, err = os.Stat(path)
 	require.Nil(t, err)
@@ -144,20 +154,31 @@ func TestWriterGC(t *testing.T) {
 
 	controller := gomock.NewController(t)
 	mockStorage := mockstorage.NewMockExternalStorage(controller)
-	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_default_test_946688461_row_1.log.tmp", gomock.Any()).Return(nil).Times(1)
-	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_default_test_946688461_row_1.log", gomock.Any()).Return(nil).Times(1)
-	mockStorage.EXPECT().DeleteFile(gomock.Any(), "cp_default_test_946688461_row_1.log.tmp").Return(nil).Times(1)
+	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_default_test_946688461_row_1.log.tmp",
+		gomock.Any()).Return(nil).Times(1)
+	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_default_test_946688461_row_1.log",
+		gomock.Any()).Return(nil).Times(1)
+	mockStorage.EXPECT().DeleteFile(gomock.Any(), "cp_default_test_946688461_row_1.log.tmp").
+		Return(nil).Times(1)
 
-	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_default_test_946688461_row_2.log.tmp", gomock.Any()).Return(nil).Times(1)
-	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_default_test_946688461_row_2.log", gomock.Any()).Return(nil).Times(1)
-	mockStorage.EXPECT().DeleteFile(gomock.Any(), "cp_default_test_946688461_row_2.log.tmp").Return(nil).Times(1)
+	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_default_test_946688461_row_2.log.tmp",
+		gomock.Any()).Return(nil).Times(1)
+	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_default_test_946688461_row_2.log",
+		gomock.Any()).Return(nil).Times(1)
+	mockStorage.EXPECT().DeleteFile(gomock.Any(), "cp_default_test_946688461_row_2.log.tmp").
+		Return(nil).Times(1)
 
-	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_default_test_946688461_row_3.log.tmp", gomock.Any()).Return(nil).Times(1)
-	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_default_test_946688461_row_3.log", gomock.Any()).Return(nil).Times(1)
-	mockStorage.EXPECT().DeleteFile(gomock.Any(), "cp_default_test_946688461_row_3.log.tmp").Return(nil).Times(1)
+	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_default_test_946688461_row_3.log.tmp",
+		gomock.Any()).Return(nil).Times(1)
+	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_default_test_946688461_row_3.log",
+		gomock.Any()).Return(nil).Times(1)
+	mockStorage.EXPECT().DeleteFile(gomock.Any(), "cp_default_test_946688461_row_3.log.tmp").
+		Return(nil).Times(1)
 
-	mockStorage.EXPECT().DeleteFile(gomock.Any(), "cp_default_test_946688461_row_1.log").Return(errors.New("ignore err")).Times(1)
-	mockStorage.EXPECT().DeleteFile(gomock.Any(), "cp_default_test_946688461_row_2.log").Return(errors.New("ignore err")).Times(1)
+	mockStorage.EXPECT().DeleteFile(gomock.Any(), "cp_default_test_946688461_row_1.log").
+		Return(errors.New("ignore err")).Times(1)
+	mockStorage.EXPECT().DeleteFile(gomock.Any(), "cp_default_test_946688461_row_2.log").
+		Return(errors.New("ignore err")).Times(1)
 
 	megabyte = 1
 	cfg := &FileWriterConfig{
@@ -250,9 +271,12 @@ func TestNewWriter(t *testing.T) {
 
 	controller := gomock.NewController(t)
 	mockStorage := mockstorage.NewMockExternalStorage(controller)
-	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_default_test_946688461_ddl_0.log.tmp", gomock.Any()).Return(nil).Times(2)
-	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_default_test_946688461_ddl_0.log", gomock.Any()).Return(nil).Times(1)
-	mockStorage.EXPECT().DeleteFile(gomock.Any(), "cp_default_test_946688461_ddl_0.log.tmp").Return(nil).Times(1)
+	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_default_test_946688461_ddl_0.log.tmp",
+		gomock.Any()).Return(nil).Times(2)
+	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_default_test_946688461_ddl_0.log",
+		gomock.Any()).Return(nil).Times(1)
+	mockStorage.EXPECT().DeleteFile(gomock.Any(), "cp_default_test_946688461_ddl_0.log.tmp").
+		Return(nil).Times(1)
 
 	w = &Writer{
 		cfg: &FileWriterConfig{

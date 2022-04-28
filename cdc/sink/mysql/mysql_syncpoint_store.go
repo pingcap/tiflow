@@ -39,7 +39,9 @@ type mysqlSyncpointStore struct {
 }
 
 // newSyncpointStore create a sink to record the syncpoint map in downstream DB for every changefeed
-func newMySQLSyncpointStore(ctx context.Context, id model.ChangeFeedID, sinkURI *url.URL) (SyncpointStore, error) {
+func newMySQLSyncpointStore(ctx context.Context,
+	id model.ChangeFeedID, sinkURI *url.URL,
+) (SyncpointStore, error) {
 	var syncDB *sql.DB
 
 	// todo If is neither mysql nor tidb, such as kafka, just ignore this feature.
@@ -169,7 +171,10 @@ func (s *mysqlSyncpointStore) CreateSynctable(ctx context.Context) error {
 	return cerror.WrapError(cerror.ErrMySQLTxnError, err)
 }
 
-func (s *mysqlSyncpointStore) SinkSyncpoint(ctx context.Context, id model.ChangeFeedID, checkpointTs uint64) error {
+func (s *mysqlSyncpointStore) SinkSyncpoint(ctx context.Context,
+	id model.ChangeFeedID,
+	checkpointTs uint64,
+) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		log.Error("sync table: begin Tx fail", zap.Error(err))

@@ -127,7 +127,8 @@ func newPullerForTest(
 	regionCache := tikv.NewRegionCache(pdCli)
 	defer regionCache.Close()
 	plr := NewPuller(
-		ctx, pdCli, grpcPool, regionCache, store, pdtime.NewClock4Test(), model.DefaultNamespaceChangeFeedID("changefeed-id-test"),
+		ctx, pdCli, grpcPool, regionCache, store, pdtime.NewClock4Test(),
+		model.DefaultNamespaceChangeFeedID("changefeed-id-test"),
 		checkpointTs, spans, enableOldValue)
 	wg.Add(1)
 	go func() {

@@ -356,7 +356,8 @@ func (o *ownerImpl) updateMetrics(state *orchestrator.GlobalReactorState) {
 	if conf.Debug != nil && conf.Debug.EnableNewScheduler {
 		for cfID, cf := range o.changefeeds {
 			if cf.state != nil && cf.state.Info != nil {
-				changefeedStatusGauge.WithLabelValues(cfID.ID).Set(float64(cf.state.Info.State.ToInt()))
+				changefeedStatusGauge.WithLabelValues(cfID.ID).
+					Set(float64(cf.state.Info.State.ToInt()))
 			}
 
 			// The InfoProvider is a proxy object returning information
@@ -372,10 +373,12 @@ func (o *ownerImpl) updateMetrics(state *orchestrator.GlobalReactorState) {
 
 			for captureID, info := range o.captures {
 				ownerMaintainTableNumGauge.
-					WithLabelValues(cfID.ID, info.AdvertiseAddr, maintainTableTypeTotal).
+					WithLabelValues(cfID.ID,
+						info.AdvertiseAddr, maintainTableTypeTotal).
 					Set(float64(totalCounts[captureID]))
 				ownerMaintainTableNumGauge.
-					WithLabelValues(cfID.ID, info.AdvertiseAddr, maintainTableTypeWip).
+					WithLabelValues(cfID.ID,
+						info.AdvertiseAddr, maintainTableTypeWip).
 					Set(float64(pendingCounts[captureID]))
 			}
 		}
@@ -395,7 +398,8 @@ func (o *ownerImpl) updateMetrics(state *orchestrator.GlobalReactorState) {
 				WithLabelValues(changefeedID.ID, captureInfo.AdvertiseAddr, maintainTableTypeWip).
 				Set(float64(len(taskStatus.Operation)))
 			if changefeedState.Info != nil {
-				changefeedStatusGauge.WithLabelValues(changefeedID.ID).Set(float64(changefeedState.Info.State.ToInt()))
+				changefeedStatusGauge.WithLabelValues(changefeedID.ID).
+					Set(float64(changefeedState.Info.State.ToInt()))
 			}
 		}
 	}

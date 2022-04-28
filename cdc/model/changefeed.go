@@ -31,6 +31,8 @@ import (
 	"go.uber.org/zap"
 )
 
+// DefaultNamespace is the default namespace value,
+// all the old changefeed will be put into default namespace
 const DefaultNamespace = "default"
 
 // ChangeFeedID is the type for change feed ID
@@ -39,6 +41,7 @@ type ChangeFeedID struct {
 	ID        string
 }
 
+// DefaultNamespaceChangeFeedID returns `ChangeFeedID` with default namespace
 func DefaultNamespaceChangeFeedID(id string) ChangeFeedID {
 	return ChangeFeedID{
 		Namespace: DefaultNamespace,

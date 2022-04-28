@@ -39,11 +39,13 @@ func (s *gcServiceSuite) TestCheckSafetyOfStartTs(c *check.C) {
 	TTL := int64(1)
 	// assume no pd leader switch
 	s.pdCli.UpdateServiceGCSafePoint(ctx, "service1", 10, 60) //nolint:errcheck
-	err := EnsureChangefeedStartTsSafety(ctx, s.pdCli, model.DefaultNamespaceChangeFeedID("changefeed1"), TTL, 50)
+	err := EnsureChangefeedStartTsSafety(ctx, s.pdCli,
+		model.DefaultNamespaceChangeFeedID("changefeed1"), TTL, 50)
 	c.Assert(err.Error(), check.Equals, "[CDC:ErrStartTsBeforeGC]fail to create changefeed because start-ts 50 is earlier than GC safepoint at 60")
 	s.pdCli.UpdateServiceGCSafePoint(ctx, "service2", 10, 80) //nolint:errcheck
 	s.pdCli.UpdateServiceGCSafePoint(ctx, "service3", 10, 70) //nolint:errcheck
-	err = EnsureChangefeedStartTsSafety(ctx, s.pdCli, model.DefaultNamespaceChangeFeedID("changefeed2"), TTL, 65)
+	err = EnsureChangefeedStartTsSafety(ctx, s.pdCli,
+		model.DefaultNamespaceChangeFeedID("changefeed2"), TTL, 65)
 	c.Assert(err, check.IsNil)
 	c.Assert(s.pdCli.serviceSafePoint, check.DeepEquals, map[string]uint64{
 		"service1":                           60,
@@ -56,19 +58,24 @@ func (s *gcServiceSuite) TestCheckSafetyOfStartTs(c *check.C) {
 
 	s.pdCli.retryThreshold = 1
 	s.pdCli.retryCount = 0
-	err = EnsureChangefeedStartTsSafety(ctx, s.pdCli, model.DefaultNamespaceChangeFeedID("changefeed2"), TTL, 65)
+	err = EnsureChangefeedStartTsSafety(ctx, s.pdCli,
+		model.DefaultNamespaceChangeFeedID("changefeed2"), TTL, 65)
 	c.Assert(err, check.IsNil)
 
 	s.pdCli.retryThreshold = gcServiceMaxRetries + 1
 	s.pdCli.retryCount = 0
-	err = EnsureChangefeedStartTsSafety(ctx, s.pdCli, model.DefaultNamespaceChangeFeedID("changefeed2"), TTL, 65)
+	err = EnsureChangefeedStartTsSafety(ctx, s.pdCli,
+		model.DefaultNamespaceChangeFeedID("changefeed2"), TTL, 65)
 	c.Assert(err, check.NotNil)
 	c.Assert(err.Error(), check.Equals, "[CDC:ErrReachMaxTry]reach maximum try: 9: not pd leader")
 
 	s.pdCli.retryThreshold = 3
 	s.pdCli.retryCount = 0
-	err = EnsureChangefeedStartTsSafety(ctx, s.pdCli, model.DefaultNamespaceChangeFeedID("changefeed1"), TTL, 50)
-	c.Assert(err.Error(), check.Equals, "[CDC:ErrStartTsBeforeGC]fail to create changefeed because start-ts 50 is earlier than GC safepoint at 60")
+	err = EnsureChangefeedStartTsSafety(ctx, s.pdCli,
+		model.DefaultNamespaceChangeFeedID("changefeed1"), TTL, 50)
+	c.Assert(err.Error(), check.Equals,
+		"[CDC:ErrStartTsBeforeGC]fail to create changefeed "+
+			"because start-ts 50 is earlier than GC safepoint at 60")
 }
 
 type mockPdClientForServiceGCSafePoint struct {

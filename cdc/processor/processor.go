@@ -239,16 +239,26 @@ func newProcessor(ctx cdcContext.Context) *processor {
 
 		newSchedulerEnabled: conf.Debug.EnableNewScheduler,
 
-		metricResolvedTsGauge:           resolvedTsGauge.WithLabelValues(changefeedID.ID),
-		metricResolvedTsLagGauge:        resolvedTsLagGauge.WithLabelValues(changefeedID.ID),
-		metricMinResolvedTableIDGuage:   resolvedTsMinTableIDGauge.WithLabelValues(changefeedID.ID),
-		metricCheckpointTsGauge:         checkpointTsGauge.WithLabelValues(changefeedID.ID),
-		metricCheckpointTsLagGauge:      checkpointTsLagGauge.WithLabelValues(changefeedID.ID),
-		metricMinCheckpointTableIDGuage: checkpointTsMinTableIDGauge.WithLabelValues(changefeedID.ID),
-		metricSyncTableNumGauge:         syncTableNumGauge.WithLabelValues(changefeedID.ID),
-		metricProcessorErrorCounter:     processorErrorCounter.WithLabelValues(changefeedID.ID),
-		metricSchemaStorageGcTsGauge:    processorSchemaStorageGcTsGauge.WithLabelValues(changefeedID.ID),
-		metricProcessorTickDuration:     processorTickDuration.WithLabelValues(changefeedID.ID),
+		metricResolvedTsGauge: resolvedTsGauge.
+			WithLabelValues(changefeedID.ID),
+		metricResolvedTsLagGauge: resolvedTsLagGauge.
+			WithLabelValues(changefeedID.ID),
+		metricMinResolvedTableIDGuage: resolvedTsMinTableIDGauge.
+			WithLabelValues(changefeedID.ID),
+		metricCheckpointTsGauge: checkpointTsGauge.
+			WithLabelValues(changefeedID.ID),
+		metricCheckpointTsLagGauge: checkpointTsLagGauge.
+			WithLabelValues(changefeedID.ID),
+		metricMinCheckpointTableIDGuage: checkpointTsMinTableIDGauge.
+			WithLabelValues(changefeedID.ID),
+		metricSyncTableNumGauge: syncTableNumGauge.
+			WithLabelValues(changefeedID.ID),
+		metricProcessorErrorCounter: processorErrorCounter.
+			WithLabelValues(changefeedID.ID),
+		metricSchemaStorageGcTsGauge: processorSchemaStorageGcTsGauge.
+			WithLabelValues(changefeedID.ID),
+		metricProcessorTickDuration: processorTickDuration.
+			WithLabelValues(changefeedID.ID),
 	}
 	p.createTablePipeline = p.createTablePipelineImpl
 	p.lazyInit = p.lazyInitImpl

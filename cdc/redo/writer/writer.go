@@ -590,7 +590,9 @@ func (l *LogWriter) isStopped() bool {
 }
 
 func (l *LogWriter) getMetafileName() string {
-	return fmt.Sprintf("%s_%s_%s_%s%s", l.cfg.CaptureID, l.cfg.ChangeFeedID.Namespace, l.cfg.ChangeFeedID.ID, common.DefaultMetaFileType, common.MetaEXT)
+	return fmt.Sprintf("%s_%s_%s_%s%s", l.cfg.CaptureID,
+		l.cfg.ChangeFeedID.Namespace, l.cfg.ChangeFeedID.ID,
+		common.DefaultMetaFileType, common.MetaEXT)
 }
 
 func (l *LogWriter) flushLogMeta(checkPointTs, resolvedTs uint64) error {

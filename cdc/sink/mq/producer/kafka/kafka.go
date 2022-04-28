@@ -384,11 +384,15 @@ var (
 	commonInvalidChar = regexp.MustCompile(`[\?:,"]`)
 )
 
-func kafkaClientID(role, captureAddr string, changefeedID model.ChangeFeedID, configuredClientID string) (clientID string, err error) {
+func kafkaClientID(role, captureAddr string,
+	changefeedID model.ChangeFeedID,
+	configuredClientID string,
+) (clientID string, err error) {
 	if configuredClientID != "" {
 		clientID = configuredClientID
 	} else {
-		clientID = fmt.Sprintf("TiCDC_sarama_producer_%s_%s_%s_%s", role, captureAddr, changefeedID.Namespace, changefeedID.ID)
+		clientID = fmt.Sprintf("TiCDC_sarama_producer_%s_%s_%s_%s",
+			role, captureAddr, changefeedID.Namespace, changefeedID.ID)
 		clientID = commonInvalidChar.ReplaceAllString(clientID, "_")
 	}
 	if !validClientID.MatchString(clientID) {

@@ -131,7 +131,9 @@ func TestGetChangeFeeds(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		for i := 0; i < len(tc.ids); i++ {
-			_, err := s.client.Client.Put(context.Background(), GetEtcdKeyChangeFeedInfo(model.DefaultNamespaceChangeFeedID(tc.ids[i])), tc.details[i])
+			_, err := s.client.Client.Put(context.Background(),
+				GetEtcdKeyChangeFeedInfo(model.DefaultNamespaceChangeFeedID(tc.ids[i])),
+				tc.details[i])
 			require.NoError(t, err)
 		}
 		_, result, err := s.client.GetChangeFeeds(context.Background())
@@ -270,7 +272,9 @@ func TestGetAllChangeFeedInfo(t *testing.T) {
 	}
 
 	for _, item := range infos {
-		err := s.client.SaveChangeFeedInfo(ctx, item.info, model.DefaultNamespaceChangeFeedID(item.id))
+		err := s.client.SaveChangeFeedInfo(ctx,
+			item.info,
+			model.DefaultNamespaceChangeFeedID(item.id))
 		require.NoError(t, err)
 	}
 

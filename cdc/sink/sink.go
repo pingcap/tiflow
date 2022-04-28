@@ -167,7 +167,8 @@ func Validate(ctx context.Context, sinkURI string, cfg *config.ReplicaConfig, op
 	errCh := make(chan error)
 	ctx = contextutil.PutRoleInCtx(ctx, util.RoleClient)
 	// TODO: find a better way to verify a sinkURI is valid
-	s, err := New(ctx, model.DefaultNamespaceChangeFeedID("sink-verify"), sinkURI, sinkFilter, cfg, opts, errCh)
+	s, err := New(ctx, model.DefaultNamespaceChangeFeedID("sink-verify"),
+		sinkURI, sinkFilter, cfg, opts, errCh)
 	if err != nil {
 		return err
 	}

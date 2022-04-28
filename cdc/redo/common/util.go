@@ -65,7 +65,9 @@ func ParseLogFileName(name string) (uint64, string, error) {
 	}
 
 	// if .sort, the name should be like
-	// fmt.Sprintf("%s_%s_%s_%d_%s_%d%s", w.cfg.captureID, w.cfg.changeFeedID.Namespace,w.cfg.changeFeedID.ID, w.cfg.createTime.Unix(), w.cfg.fileType, w.commitTS.Load(), LogEXT)+SortLogEXT
+	// fmt.Sprintf("%s_%s_%s_%d_%s_%d%s", w.cfg.captureID,
+	// w.cfg.changeFeedID.Namespace,w.cfg.changeFeedID.ID,
+	// w.cfg.createTime.Unix(), w.cfg.fileType, w.commitTS.Load(), LogEXT)+SortLogEXT
 	if ext == SortLogEXT {
 		name = strings.TrimSuffix(name, SortLogEXT)
 		ext = filepath.Ext(name)
@@ -76,7 +78,9 @@ func ParseLogFileName(name string) (uint64, string, error) {
 
 	var commitTs, d1 uint64
 	var s1, namespace, s2, fileType string
-	// the log looks like: fmt.Sprintf("%s_%s_%s_%d_%s_%d%s", w.cfg.captureID, w.cfg.changeFeedID.Namespace,w.cfg.changeFeedID.ID, w.cfg.createTime.Unix(), w.cfg.fileType, w.commitTS.Load(), redo.LogEXT)
+	// the log looks like: fmt.Sprintf("%s_%s_%s_%d_%s_%d%s", w.cfg.captureID,
+	// w.cfg.changeFeedID.Namespace,w.cfg.changeFeedID.ID,
+	// w.cfg.createTime.Unix(), w.cfg.fileType, w.commitTS.Load(), redo.LogEXT)
 	formatStr := "%s %s %s %d %s %d" + LogEXT
 	if ext == TmpEXT {
 		formatStr += TmpEXT

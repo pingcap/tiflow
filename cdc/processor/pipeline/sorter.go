@@ -156,7 +156,8 @@ func (n *sorterNode) start(
 		lastSendResolvedTsTime := time.Now() // the time at which we last sent a resolved-ts.
 		lastCRTs := uint64(0)                // the commit-ts of the last row changed we sent.
 
-		metricsTableMemoryHistogram := tableMemoryHistogram.WithLabelValues(ctx.ChangefeedVars().ID.ID)
+		metricsTableMemoryHistogram := tableMemoryHistogram.
+			WithLabelValues(ctx.ChangefeedVars().ID.ID)
 		metricsTicker := time.NewTicker(flushMemoryMetricsDuration)
 		defer metricsTicker.Stop()
 

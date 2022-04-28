@@ -444,7 +444,8 @@ func (o *createChangefeedOptions) run(ctx context.Context, cmd *cobra.Command) e
 		return err
 	}
 
-	err = o.etcdClient.CreateChangefeedInfo(ctx, info, model.DefaultNamespaceChangeFeedID(id))
+	err = o.etcdClient.CreateChangefeedInfo(ctx, info,
+		model.DefaultNamespaceChangeFeedID(id))
 	if err != nil {
 		return err
 	}

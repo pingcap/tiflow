@@ -350,12 +350,18 @@ LOOP:
 	c.redoManager = redoManager
 
 	// init metrics
-	c.metricsChangefeedBarrierTsGauge = changefeedBarrierTsGauge.WithLabelValues(c.id.ID)
-	c.metricsChangefeedCheckpointTsGauge = changefeedCheckpointTsGauge.WithLabelValues(c.id.ID)
-	c.metricsChangefeedCheckpointTsLagGauge = changefeedCheckpointTsLagGauge.WithLabelValues(c.id.ID)
-	c.metricsChangefeedResolvedTsGauge = changefeedResolvedTsGauge.WithLabelValues(c.id.ID)
-	c.metricsChangefeedResolvedTsLagGauge = changefeedResolvedTsLagGauge.WithLabelValues(c.id.ID)
-	c.metricsChangefeedTickDuration = changefeedTickDuration.WithLabelValues(c.id.ID)
+	c.metricsChangefeedBarrierTsGauge = changefeedBarrierTsGauge.
+		WithLabelValues(c.id.ID)
+	c.metricsChangefeedCheckpointTsGauge = changefeedCheckpointTsGauge.
+		WithLabelValues(c.id.ID)
+	c.metricsChangefeedCheckpointTsLagGauge = changefeedCheckpointTsLagGauge.
+		WithLabelValues(c.id.ID)
+	c.metricsChangefeedResolvedTsGauge = changefeedResolvedTsGauge.
+		WithLabelValues(c.id.ID)
+	c.metricsChangefeedResolvedTsLagGauge = changefeedResolvedTsLagGauge.
+		WithLabelValues(c.id.ID)
+	c.metricsChangefeedTickDuration = changefeedTickDuration.
+		WithLabelValues(c.id.ID)
 
 	// create scheduler
 	c.scheduler, err = c.newScheduler(ctx, checkpointTs)
@@ -428,7 +434,9 @@ func (c *changefeed) redoManagerCleanup(ctx context.Context) {
 			redoManagerOpts := &redo.ManagerOptions{EnableBgRunner: false}
 			redoManager, err := redo.NewManager(ctx, c.state.Info.Config.Consistent, redoManagerOpts)
 			if err != nil {
-				log.Error("create redo manager failed", zap.String("changefeed", c.id.ID), zap.Error(err))
+				log.Error("create redo manager failed",
+					zap.String("changefeed", c.id.ID),
+					zap.Error(err))
 				return
 			}
 			c.redoManager = redoManager
@@ -644,7 +652,9 @@ func (c *changefeed) Close(ctx cdcContext.Context) {
 	c.releaseResources(ctx)
 	costTime := time.Since(startTime)
 	if costTime > changefeedLogsWarnDuration {
-		log.Warn("changefeed close took too long", zap.String("changefeed", c.id.ID), zap.Duration("duration", costTime))
+		log.Warn("changefeed close took too long",
+			zap.String("changefeed", c.id.ID),
+			zap.Duration("duration", costTime))
 	}
 	changefeedCloseDuration.Observe(costTime.Seconds())
 }
