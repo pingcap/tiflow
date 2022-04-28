@@ -531,10 +531,10 @@ func (c *validatorPersistHelper) loadTableStatus(tctx *tcontext.Context) (map[st
 	return res, nil
 }
 
-func (c *validatorPersistHelper) loadErrorCount(tctx *tcontext.Context) (map[pb.ValidateErrorState]int64, error) {
+func (c *validatorPersistHelper) loadErrorCount(tctx *tcontext.Context, db *conn.BaseDB) (map[pb.ValidateErrorState]int64, error) {
 	res := make(map[pb.ValidateErrorState]int64)
 	query := "select status, count(*) from " + c.errorChangeTableName + " where source = ? group by status"
-	rows, err := c.db.DB.QueryContext(tctx.Ctx, query, c.cfg.SourceID)
+	rows, err := db.DB.QueryContext(tctx.Ctx, query, c.cfg.SourceID)
 	if err != nil {
 		return nil, err
 	}

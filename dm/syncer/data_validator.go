@@ -1069,13 +1069,19 @@ func (v *DataValidator) getAllErrorCount(timeout time.Duration) ([errorStateType
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	tctx := tcontext.NewContext(ctx, v.L)
-	// todo: should create a separate db to get error count, since validator may be stopped or being initialized,
-	// else may fail due to concurrent access
-	// todo: should not rely on fields which need to be inited in 'init', such as c.tctx,
-	// else this method may fail due to concurrent access.
-	countMap, err := v.persistHelper.loadErrorCount(tctx)
+
+	// use a separate db to get error count, since validator maybe stopped or initializing
+	dbCfg := v.cfg.To
+	dbCfg.RawDBCfg = config.DefaultRawDBConfig().SetMaxIdleConns(1)
+	countMap := map[pb.ValidateErrorState]int64{}
+	toDB, err := dbconn.CreateBaseDB(&dbCfg)
 	if err != nil {
-		v.L.Warn("failed to load error count", zap.Error(err))
+		v.L.Warn("failed to create downstream db", zap.Error(err))
+	} else {
+		countMap, err = v.persistHelper.loadErrorCount(tctx, toDB)
+		if err != nil {
+			v.L.Warn("failed to load error count", zap.Error(err))
+		}
 	}
 	var allErrorCount [errorStateTypeCount]int64
 	allErrorCount[pb.ValidateErrorState_NewErr] = countMap[pb.ValidateErrorState_NewErr]

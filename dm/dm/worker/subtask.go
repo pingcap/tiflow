@@ -916,9 +916,7 @@ func (st *SubTask) getValidator() *syncer.DataValidator {
 
 func (st *SubTask) GetValidatorStatus() (*pb.ValidationStatus, error) {
 	validator := st.getValidator()
-	// todo: should be able to get status even validator is stopped
-	// current ErrValidatorNotFound looks odd, will fix it in next pr
-	if validator == nil || !validator.Started() {
+	if validator == nil {
 		cfg := st.getCfg()
 		return nil, terror.ErrValidatorNotFound.Generate(cfg.Name)
 	}
