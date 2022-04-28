@@ -2049,9 +2049,7 @@ func (s *Scheduler) handleWorkerEv(ctx context.Context, evCh <-chan ha.WorkerEve
 			// error here are caused by etcd error or worker event decoding
 			s.logger.Error("receive error when watching worker status change event", zap.Error(err))
 			metrics.ReportWorkerEventErr(metrics.WorkerEventWatch)
-			if etcdutil.IsRetryableError(err) {
-				return err
-			}
+			return err
 		}
 	}
 }
@@ -2726,9 +2724,7 @@ func (s *Scheduler) handleLoadTask(ctx context.Context, loadTaskCh <-chan ha.Loa
 			}
 			// error here are caused by etcd error or load worker decoding
 			s.logger.Error("receive error when watching load worker", zap.Error(err))
-			if etcdutil.IsRetryableError(err) {
-				return err
-			}
+			return err
 		}
 	}
 }

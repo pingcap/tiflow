@@ -35,7 +35,7 @@ func DeleteInfosOperationsColumns(cli *clientv3.Client, infos []Info, ops []Oper
 		opsDel = append(opsDel, deleteOperationOp(op))
 	}
 	opsDel = append(opsDel, deleteDroppedColumnsByLockOp(lockID))
-	resp, rev, err := etcdutil.DoOpsInOneCmpsTxnWithRetry(cli, cmps, opsDel, []clientv3.Op{})
+	resp, rev, err := etcdutil.DoTxnWithRepeatable(cli, etcdutil.FullOpFunc(cmps, opsDel, []clientv3.Op{}))
 	if err != nil {
 		return 0, false, err
 	}
@@ -52,7 +52,7 @@ func DeleteInfosOperationsTablesByTask(cli *clientv3.Client, task string, lockID
 	for lockID := range lockIDSet {
 		opsDel = append(opsDel, clientv3.OpDelete(common.ShardDDLOptimismDroppedColumnsKeyAdapter.Encode(lockID), clientv3.WithPrefix()))
 	}
-	_, rev, err := etcdutil.DoTxnWithRepeatable(cli, opsDel...)
+	_, rev, err := etcdutil.DoTxnWithRepeatable(cli, etcdutil.ThenOpFunc(opsDel...))
 	return rev, err
 }
 
@@ -72,7 +72,7 @@ func DeleteInfosOperationsTablesByTaskAndSource(cli *clientv3.Client, task strin
 			}
 		}
 	}
-	_, rev, err := etcdutil.DoTxnWithRepeatable(cli, opsDel...)
+	_, rev, err := etcdutil.DoTxnWithRepeatable(cli, etcdutil.ThenOpFunc(opsDel...))
 	return rev, err
 }
 
@@ -86,6 +86,6 @@ func DeleteInfosOperationsTablesByTable(cli *clientv3.Client, task, source, upSc
 	for _, col := range dropCols {
 		opsDel = append(opsDel, clientv3.OpDelete(common.ShardDDLOptimismDroppedColumnsKeyAdapter.Encode(lockID, col, source, upSchema, upTable)))
 	}
-	_, rev, err := etcdutil.DoTxnWithRepeatable(cli, opsDel...)
+	_, rev, err := etcdutil.DoTxnWithRepeatable(cli, etcdutil.ThenOpFunc(opsDel...))
 	return rev, err
 }

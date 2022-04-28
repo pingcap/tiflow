@@ -56,15 +56,6 @@ var etcdDefaultTxnRetryParam = retry.Params{
 	},
 }
 
-var etcdSafeTxnRetryParam = retry.Params{
-	RetryCount:         etcdDefaultTxnRetryParam.RetryCount,
-	FirstRetryDuration: etcdDefaultTxnRetryParam.FirstRetryDuration,
-	BackoffStrategy:    etcdDefaultTxnRetryParam.BackoffStrategy,
-	IsRetryableFn: func(retryTime int, err error) bool {
-		return IsSafeRetryableError(err)
-	},
-}
-
 var etcdDefaultTxnStrategy = retry.FiniteRetryStrategy{}
 
 // CreateClient creates an etcd client with some default config items.
@@ -97,74 +88,68 @@ func RemoveMember(client *clientv3.Client, id uint64) (*clientv3.MemberRemoveRes
 	return client.MemberRemove(ctx, id)
 }
 
+type EtcdOpFunc func(*tcontext.Context, *clientv3.Client) (interface{}, error)
+
 // DoTxnWithRepeatable do multiple etcd operations in one txn with repeatable retry.
 // There are two situations that this function can be used:
 // 1. The operations are all read operations.
 // 2. The operations are all write operations, but write operations tolerate being written to etcd ** at least once **.
 // TODO: add unit test to test encountered an retryable error first but then recovered.
-func DoTxnWithRepeatable(cli *clientv3.Client, ops ...clientv3.Op) (*clientv3.TxnResponse, int64, error) {
+func DoTxnWithRepeatable(cli *clientv3.Client, opFunc EtcdOpFunc) (*clientv3.TxnResponse, int64, error) {
 	ctx, cancel := context.WithTimeout(cli.Ctx(), DefaultRequestTimeout)
 	defer cancel()
 	tctx := tcontext.NewContext(ctx, log.L())
 
-	ret, _, err := etcdDefaultTxnStrategy.Apply(tctx, etcdSafeTxnRetryParam, func(t *tcontext.Context) (ret interface{}, err error) {
-		resp, err := cli.Txn(ctx).Then(ops...).Commit()
+	ret, _, err := etcdDefaultTxnStrategy.Apply(tctx, etcdDefaultTxnRetryParam, func(t *tcontext.Context) (interface{}, error) {
+		return opFunc(t, cli)
+	})
+	if err != nil {
+		return nil, 0, err
+	}
+	if resp, ok := ret.(*clientv3.TxnResponse); ok {
+		return resp, resp.Header.Revision, nil
+	}
+	return nil, 0, nil
+}
+
+func ThenOpFunc(ops ...clientv3.Op) EtcdOpFunc {
+	return func(tctx *tcontext.Context, cli *clientv3.Client) (interface{}, error) {
+		resp, err := cli.Txn(tctx.Ctx).Then(ops...).Commit()
 		if err != nil {
 			return nil, terror.ErrHAFailTxnOperation.Delegate(err, "txn commit failed")
 		}
 		return resp, nil
-	})
-	if err != nil {
-		return nil, 0, err
 	}
-	resp := ret.(*clientv3.TxnResponse)
-	return resp, resp.Header.Revision, nil
 }
 
-// DoOpsInOneCmpsTxnWithRetry do multiple etcd operations in one txn and with comparisons.
-func DoOpsInOneCmpsTxnWithRetry(cli *clientv3.Client, cmps []clientv3.Cmp, opsThen, opsElse []clientv3.Op) (*clientv3.TxnResponse, int64, error) {
-	ctx, cancel := context.WithTimeout(cli.Ctx(), DefaultRequestTimeout)
-	defer cancel()
-	tctx := tcontext.NewContext(ctx, log.L())
-
-	ret, _, err := etcdDefaultTxnStrategy.Apply(tctx, etcdDefaultTxnRetryParam, func(t *tcontext.Context) (ret interface{}, err error) {
+func FullOpFunc(cmps []clientv3.Cmp, opsThen, opsElse []clientv3.Op) EtcdOpFunc {
+	return func(tctx *tcontext.Context, cli *clientv3.Client) (interface{}, error) {
 		failpoint.Inject("ErrNoSpace", func() {
 			tctx.L().Info("fail to do ops in etcd", zap.String("failpoint", "ErrNoSpace"))
 			failpoint.Return(nil, v3rpc.ErrNoSpace)
 		})
-		resp, err := cli.Txn(ctx).If(cmps...).Then(opsThen...).Else(opsElse...).Commit()
+		resp, err := cli.Txn(tctx.Ctx).If(cmps...).Then(opsThen...).Else(opsElse...).Commit()
 		if err != nil {
-			return nil, err
+			return nil, terror.ErrHAFailTxnOperation.Delegate(err, "txn commit failed")
 		}
 		return resp, nil
-	})
-	if err != nil {
-		return nil, 0, err
 	}
-	resp := ret.(*clientv3.TxnResponse)
-	return resp, resp.Header.Revision, nil
 }
 
-// DoOperationWithRepeatable do etcd operations function with repeatable retry.
-func DoOperationWithRepeatable(cli *clientv3.Client, operateFunc func() error) error {
-	ctx, cancel := context.WithTimeout(cli.Ctx(), DefaultRequestTimeout)
-	defer cancel()
-	tctx := tcontext.NewContext(ctx, log.L())
-
-	_, _, err := etcdDefaultTxnStrategy.Apply(tctx, etcdSafeTxnRetryParam, func(t *tcontext.Context) (ret interface{}, err error) {
-		return nil, operateFunc()
-	})
-	return err
-}
-
-// IsRetryableError check whether error is retryable error for etcd to build again.
+// IsRetryableError returns true if the etcd error is retryable to write ** repeatable **.
+//// https://github.com/etcd-io/etcd/blob/v3.5.2/client/v3/retry.go#L53
 func IsRetryableError(err error) bool {
-	switch errors.Cause(err) {
+	err = errors.Cause(err)
+	switch err {
 	case v3rpc.ErrCompacted, v3rpc.ErrNoLeader, v3rpc.ErrNoSpace, context.DeadlineExceeded:
 		return true
-	default:
+	}
+	eErr := v3rpc.Error(err)
+	if serverErr, ok := eErr.(v3rpc.EtcdError); ok && serverErr.Code() != codes.Unavailable {
 		return false
 	}
+	// only retry if unavailable
+	return status.Code(err) == codes.Unavailable
 }
 
 // IsLimitedRetryableError check whether error is retryable error for etcd to build again in a limited number of times.
@@ -175,19 +160,4 @@ func IsLimitedRetryableError(err error) bool {
 	default:
 		return false
 	}
-}
-
-// IsSafeRetryableError returns true if the etcd error is retryable to write ** repeatable **.
-// https://github.com/etcd-io/etcd/blob/v3.5.2/client/v3/retry.go#L53
-func IsSafeRetryableError(err error) bool {
-	err = errors.Cause(err)
-	if IsRetryableError(err) {
-		return true
-	}
-	eErr := v3rpc.Error(err)
-	if serverErr, ok := eErr.(v3rpc.EtcdError); ok && serverErr.Code() != codes.Unavailable {
-		return false
-	}
-	// only retry if unavailable
-	return status.Code(err) == codes.Unavailable
 }

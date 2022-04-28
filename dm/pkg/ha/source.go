@@ -34,7 +34,7 @@ func PutSourceCfg(cli *clientv3.Client, cfg *config.SourceConfig) (int64, error)
 		return 0, err
 	}
 	key := common.UpstreamConfigKeyAdapter.Encode(cfg.SourceID)
-	_, rev, err := etcdutil.DoTxnWithRepeatable(cli, clientv3.OpPut(key, value))
+	_, rev, err := etcdutil.DoTxnWithRepeatable(cli, etcdutil.ThenOpFunc(clientv3.OpPut(key, value)))
 	return rev, err
 }
 
@@ -137,8 +137,8 @@ func ClearTestInfoOperation(cli *clientv3.Client) error {
 	clearSubTaskStage := clientv3.OpDelete(common.StageSubTaskKeyAdapter.Path(), clientv3.WithPrefix())
 	clearValidatorStage := clientv3.OpDelete(common.StageValidatorKeyAdapter.Path(), clientv3.WithPrefix())
 	clearLoadTasks := clientv3.OpDelete(common.LoadTaskKeyAdapter.Path(), clientv3.WithPrefix())
-	_, _, err := etcdutil.DoTxnWithRepeatable(cli, clearSource, clearSubTask, clearWorkerInfo, clearBound,
-		clearLastBound, clearWorkerKeepAlive, clearRelayStage, clearRelayConfig, clearSubTaskStage, clearValidatorStage,
-		clearLoadTasks)
+	_, _, err := etcdutil.DoTxnWithRepeatable(cli, etcdutil.ThenOpFunc(clearSource, clearSubTask, clearWorkerInfo,
+		clearBound, clearLastBound, clearWorkerKeepAlive, clearRelayStage, clearRelayConfig, clearSubTaskStage,
+		clearValidatorStage, clearLoadTasks))
 	return err
 }

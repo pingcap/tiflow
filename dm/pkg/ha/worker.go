@@ -70,7 +70,7 @@ func PutWorkerInfo(cli *clientv3.Client, info WorkerInfo) (int64, error) {
 		return 0, err
 	}
 	key := common.WorkerRegisterKeyAdapter.Encode(info.Name)
-	_, rev, err := etcdutil.DoTxnWithRepeatable(cli, clientv3.OpPut(key, value))
+	_, rev, err := etcdutil.DoTxnWithRepeatable(cli, etcdutil.ThenOpFunc(clientv3.OpPut(key, value)))
 	return rev, err
 }
 
@@ -104,6 +104,6 @@ func DeleteWorkerInfoRelayConfig(cli *clientv3.Client, worker string) (int64, er
 		clientv3.OpDelete(common.WorkerRegisterKeyAdapter.Encode(worker)),
 		clientv3.OpDelete(common.UpstreamRelayWorkerKeyAdapter.Encode(worker)),
 	}
-	_, rev, err := etcdutil.DoTxnWithRepeatable(cli, ops...)
+	_, rev, err := etcdutil.DoTxnWithRepeatable(cli, etcdutil.ThenOpFunc(ops...))
 	return rev, err
 }

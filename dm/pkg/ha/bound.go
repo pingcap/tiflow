@@ -100,7 +100,7 @@ func PutSourceBound(cli *clientv3.Client, bounds ...SourceBound) (int64, error) 
 		}
 		ops = append(ops, boundOps...)
 	}
-	_, rev, err := etcdutil.DoTxnWithRepeatable(cli, ops...)
+	_, rev, err := etcdutil.DoTxnWithRepeatable(cli, etcdutil.ThenOpFunc(ops...))
 	return rev, err
 }
 
@@ -110,7 +110,7 @@ func DeleteSourceBound(cli *clientv3.Client, workers ...string) (int64, error) {
 	for _, worker := range workers {
 		ops = append(ops, deleteSourceBoundOp(worker)...)
 	}
-	_, rev, err := etcdutil.DoTxnWithRepeatable(cli, ops...)
+	_, rev, err := etcdutil.DoTxnWithRepeatable(cli, etcdutil.ThenOpFunc(ops...))
 	return rev, err
 }
 
@@ -125,7 +125,7 @@ func ReplaceSourceBound(cli *clientv3.Client, source, oldWorker, newWorker strin
 	ops := make([]clientv3.Op, 0, len(deleteOps)+len(putOps))
 	ops = append(ops, deleteOps...)
 	ops = append(ops, putOps...)
-	_, rev, err := etcdutil.DoTxnWithRepeatable(cli, ops...)
+	_, rev, err := etcdutil.DoTxnWithRepeatable(cli, etcdutil.ThenOpFunc(ops...))
 	return rev, err
 }
 
@@ -205,8 +205,8 @@ func GetSourceBoundConfig(cli *clientv3.Client, worker string) (SourceBound, *co
 	}
 
 	for retryCnt := 1; retryCnt <= retryNum; retryCnt++ {
-		txnResp, rev2, err2 := etcdutil.DoTxnWithRepeatable(cli, clientv3.OpGet(common.UpstreamBoundWorkerKeyAdapter.Encode(worker)),
-			clientv3.OpGet(common.UpstreamConfigKeyAdapter.Encode(bound.Source)))
+		txnResp, rev2, err2 := etcdutil.DoTxnWithRepeatable(cli, etcdutil.ThenOpFunc(clientv3.OpGet(common.UpstreamBoundWorkerKeyAdapter.Encode(worker)),
+			clientv3.OpGet(common.UpstreamConfigKeyAdapter.Encode(bound.Source))))
 		if err2 != nil {
 			return bound, cfg, 0, err2
 		}

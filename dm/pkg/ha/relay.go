@@ -47,7 +47,7 @@ func PutRelayConfig(cli *clientv3.Client, source string, workers ...string) (int
 	for _, worker := range workers {
 		ops = append(ops, putRelayConfigOp(worker, source))
 	}
-	_, rev, err := etcdutil.DoTxnWithRepeatable(cli, ops...)
+	_, rev, err := etcdutil.DoTxnWithRepeatable(cli, etcdutil.ThenOpFunc(ops...))
 	return rev, err
 }
 
@@ -57,7 +57,7 @@ func DeleteRelayConfig(cli *clientv3.Client, workers ...string) (int64, error) {
 	for _, worker := range workers {
 		ops = append(ops, deleteRelayConfigOp(worker))
 	}
-	_, rev, err := etcdutil.DoTxnWithRepeatable(cli, ops...)
+	_, rev, err := etcdutil.DoTxnWithRepeatable(cli, etcdutil.ThenOpFunc(ops...))
 	return rev, err
 }
 
@@ -128,9 +128,9 @@ func GetRelayConfig(cli *clientv3.Client, worker string) (*config.SourceConfig, 
 	}
 
 	for retryCnt := 1; retryCnt <= retryNum; retryCnt++ {
-		txnResp, _, err2 := etcdutil.DoTxnWithRepeatable(cli,
+		txnResp, _, err2 := etcdutil.DoTxnWithRepeatable(cli, etcdutil.ThenOpFunc(
 			clientv3.OpGet(common.UpstreamRelayWorkerKeyAdapter.Encode(worker)),
-			clientv3.OpGet(common.UpstreamConfigKeyAdapter.Encode(source)))
+			clientv3.OpGet(common.UpstreamConfigKeyAdapter.Encode(source))))
 		if err2 != nil {
 			return nil, 0, err
 		}
