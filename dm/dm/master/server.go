@@ -15,6 +15,11 @@ package master
 
 import (
 	"context"
+<<<<<<< HEAD
+=======
+	"database/sql"
+	"encoding/binary"
+>>>>>>> 1e4814e3f (master, config(dm): fix case-sensitive compatibility for dmctl (#5307))
 	"fmt"
 	"net"
 	"net/http"
@@ -82,7 +87,11 @@ var (
 	registerOnce      sync.Once
 	runBackgroundOnce sync.Once
 
-	checkAndAdjustSourceConfigFunc = checkAndAdjustSourceConfig
+	// the difference of below functions is checkAndAdjustSourceConfigForDMCtlFunc will not AdjustCaseSensitive. It's a
+	// compatibility compromise.
+	// When we need to change the implementation of dmctl to OpenAPI, we should notice the user about this change.
+	checkAndAdjustSourceConfigFunc         = checkAndAdjustSourceConfig
+	checkAndAdjustSourceConfigForDMCtlFunc = checkAndAdjustSourceConfigForDMCtl
 )
 
 // Server handles RPC requests for dm-master.
@@ -1199,7 +1208,7 @@ func parseAndAdjustSourceConfig(ctx context.Context, contents []string) ([]*conf
 		if err != nil {
 			return cfgs, err
 		}
-		if err := checkAndAdjustSourceConfigFunc(ctx, cfg); err != nil {
+		if err := checkAndAdjustSourceConfigForDMCtlFunc(ctx, cfg); err != nil {
 			return cfgs, err
 		}
 		cfgs[i] = cfg
@@ -1207,7 +1216,11 @@ func parseAndAdjustSourceConfig(ctx context.Context, contents []string) ([]*conf
 	return cfgs, nil
 }
 
-func checkAndAdjustSourceConfig(ctx context.Context, cfg *config.SourceConfig) error {
+func innerCheckAndAdjustSourceConfig(
+	ctx context.Context,
+	cfg *config.SourceConfig,
+	hook func(sourceConfig *config.SourceConfig, ctx context.Context, db *sql.DB) error,
+) error {
 	dbConfig := cfg.GenerateDBConfig()
 	fromDB, err := conn.DefaultDBProvider.Apply(dbConfig)
 	if err != nil {
@@ -1217,10 +1230,23 @@ func checkAndAdjustSourceConfig(ctx context.Context, cfg *config.SourceConfig) e
 	if err = cfg.Adjust(ctx, fromDB.DB); err != nil {
 		return err
 	}
+	if hook != nil {
+		if err = hook(cfg, ctx, fromDB.DB); err != nil {
+			return err
+		}
+	}
 	if _, err = cfg.Yaml(); err != nil {
 		return err
 	}
 	return cfg.Verify()
+}
+
+func checkAndAdjustSourceConfig(ctx context.Context, cfg *config.SourceConfig) error {
+	return innerCheckAndAdjustSourceConfig(ctx, cfg, (*config.SourceConfig).AdjustCaseSensitive)
+}
+
+func checkAndAdjustSourceConfigForDMCtl(ctx context.Context, cfg *config.SourceConfig) error {
+	return innerCheckAndAdjustSourceConfig(ctx, cfg, nil)
 }
 
 func parseSourceConfig(contents []string) ([]*config.SourceConfig, error) {
