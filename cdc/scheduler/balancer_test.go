@@ -57,17 +57,7 @@ func TestBalancerFindVictimsDeterministic(t *testing.T) {
 		CaptureID: "capture-2",
 	})
 
-	mockCaptureInfos := map[model.CaptureID]*model.CaptureInfo{
-		"capture-1": {
-			ID: "capture-1",
-		},
-		"capture-2": {
-			ID: "capture-2",
-		},
-		"capture-3": {
-			ID: "capture-3",
-		},
-	}
+	mockCaptureInfos := []model.CaptureID{"capture-1", "capture-2", "capture-3"}
 
 	victims := balancer.FindVictims(tables, mockCaptureInfos)
 	require.Len(t, victims, 2)
@@ -110,17 +100,7 @@ func TestBalancerFindVictimsRandomized(t *testing.T) {
 		CaptureID: "capture-2",
 	})
 
-	mockCaptureInfos := map[model.CaptureID]*model.CaptureInfo{
-		"capture-1": {
-			ID: "capture-1",
-		},
-		"capture-2": {
-			ID: "capture-2",
-		},
-		"capture-3": {
-			ID: "capture-3",
-		},
-	}
+	mockCaptureInfos := []model.CaptureID{"capture-1", "capture-2", "capture-3"}
 
 	victims := balancer.FindVictims(tables, mockCaptureInfos)
 	// We expect exactly 2 victims from "capture-1".
@@ -169,17 +149,7 @@ func TestBalancerFindTarget(t *testing.T) {
 		CaptureID: "capture-3",
 	})
 
-	mockCaptureInfos := map[model.CaptureID]*model.CaptureInfo{
-		"capture-1": {
-			ID: "capture-1",
-		},
-		"capture-2": {
-			ID: "capture-2",
-		},
-		"capture-3": {
-			ID: "capture-3",
-		},
-	}
+	mockCaptureInfos := []model.CaptureID{"capture-1", "capture-2", "capture-3"}
 
 	target, ok := balancer.FindTarget(tables, mockCaptureInfos)
 	require.True(t, ok)
@@ -215,17 +185,7 @@ func TestBalancerFindTargetTied(t *testing.T) {
 		CaptureID: "capture-3",
 	})
 
-	mockCaptureInfos := map[model.CaptureID]*model.CaptureInfo{
-		"capture-1": {
-			ID: "capture-1",
-		},
-		"capture-2": {
-			ID: "capture-2",
-		},
-		"capture-3": {
-			ID: "capture-3",
-		},
-	}
+	mockCaptureInfos := []model.CaptureID{"capture-1", "capture-2", "capture-3"}
 
 	target1, ok := balancer.FindTarget(tables, mockCaptureInfos)
 	require.True(t, ok)
@@ -241,7 +201,7 @@ func TestBalancerNoCaptureAvailable(t *testing.T) {
 	balancer := newTableNumberRebalancerWithRandomSeed(zap.L(), randomSeedForTestingBalancer)
 	tables := util.NewTableSet()
 
-	_, ok := balancer.FindTarget(tables, map[model.CaptureID]*model.CaptureInfo{})
+	_, ok := balancer.FindTarget(tables, []model.CaptureID{})
 	require.False(t, ok)
 }
 

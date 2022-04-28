@@ -35,13 +35,13 @@ type balancer interface {
 	// Removing these tables will make the workload more balanced.
 	FindVictims(
 		tables *util.TableSet,
-		captures map[model.CaptureID]*model.CaptureInfo,
+		captures []model.CaptureID,
 	) (tablesToRemove []*util.TableRecord)
 
 	// FindTarget returns a target capture to add a table to.
 	FindTarget(
 		tables *util.TableSet,
-		captures map[model.CaptureID]*model.CaptureInfo,
+		captures []model.CaptureID,
 	) (minLoadCapture model.CaptureID, ok bool)
 }
 
@@ -81,7 +81,7 @@ func newDeterministicTableNumberRebalancer(logger *zap.Logger) balancer {
 // TiCDC nodes.
 func (r *tableNumberBalancer) FindTarget(
 	tables *util.TableSet,
-	captures map[model.CaptureID]*model.CaptureInfo,
+	captures []model.CaptureID,
 ) (minLoadCapture model.CaptureID, ok bool) {
 	if len(captures) == 0 {
 		return "", false
@@ -91,7 +91,7 @@ func (r *tableNumberBalancer) FindTarget(
 		candidate   string
 		minWorkload = math.MaxInt64
 	)
-	for captureID := range captures {
+	for _, captureID := range captures {
 		workload := r.randomizeWorkload(tables.CountTableByCaptureID(captureID))
 		if workload < minWorkload {
 			minWorkload = workload
@@ -134,7 +134,7 @@ func (r *tableNumberBalancer) randomizeWorkload(input int) int {
 // where `n` is the number of tables.
 func (r *tableNumberBalancer) FindVictims(
 	tables *util.TableSet,
-	captures map[model.CaptureID]*model.CaptureInfo,
+	captures []model.CaptureID,
 ) []*util.TableRecord {
 	// Algorithm overview: We try to remove some tables as the victims so that
 	// no captures are assigned more tables than the average workload measured in table number,

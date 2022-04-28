@@ -95,7 +95,9 @@ type BaseScheduleDispatcher struct {
 	checkpointTs  model.Ts                               // current checkpoint-ts
 
 	moveTableManager moveTableManager
-	balancer         balancer
+
+	balancer           balancer
+	balancerCandidates []model.CaptureID
 
 	lastTickCaptureCount int
 	needRebalance        bool
@@ -163,6 +165,18 @@ const (
 	captureSyncFinished
 )
 
+func (s *BaseScheduleDispatcher) setCaptures(captures map[model.CaptureID]*model.CaptureInfo) {
+	// Update the internal capture list with information from the Owner
+	// (from Etcd in the current implementation).
+	s.captures = captures
+	s.balancerCandidates = s.balancerCandidates[:0]
+	for captureID := range s.captures {
+		if captureID != s.drainTarget {
+			s.balancerCandidates = append(s.balancerCandidates, captureID)
+		}
+	}
+}
+
 // Tick implements the interface ScheduleDispatcher.
 func (s *BaseScheduleDispatcher) Tick(
 	ctx context.Context,
@@ -175,9 +189,7 @@ func (s *BaseScheduleDispatcher) Tick(
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// Update the internal capture list with information from the Owner
-	// (from Etcd in the current implementation).
-	s.captures = captures
+	s.setCaptures(captures)
 
 	// We trigger an automatic rebalance if the capture count has changed.
 	// This logic is the same as in the older implementation of scheduler.
@@ -425,7 +437,7 @@ func (s *BaseScheduleDispatcher) addTable(
 	target, ok := s.moveTableManager.GetTargetByTableID(tableID)
 	isManualMove := ok
 	if !ok {
-		target, ok = s.balancer.FindTarget(s.tables, s.captures)
+		target, ok = s.balancer.FindTarget(s.tables, s.balancerCandidates)
 		if !ok {
 			s.logger.Warn("no active capture")
 			return true, nil
@@ -528,7 +540,7 @@ func (s *BaseScheduleDispatcher) Rebalance() {
 }
 
 func (s *BaseScheduleDispatcher) rebalance(ctx context.Context) (done bool, err error) {
-	tablesToRemove := s.balancer.FindVictims(s.tables, s.captures)
+	tablesToRemove := s.balancer.FindVictims(s.tables, s.balancerCandidates)
 	for _, record := range tablesToRemove {
 		if record.Status != util.RunningTable {
 			s.logger.DPanic("unexpected table status",
