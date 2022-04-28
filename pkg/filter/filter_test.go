@@ -158,7 +158,10 @@ func TestShouldDiscardDDL(t *testing.T) {
 	require.False(t, filter.ShouldDiscardDDL(model.ActionAddColumns))
 	require.False(t, filter.ShouldDiscardDDL(model.ActionDropColumns))
 
+	// Discard sequence DDL.
 	require.True(t, filter.ShouldDiscardDDL(model.ActionCreateSequence))
+	require.True(t, filter.ShouldDiscardDDL(model.ActionAlterSequence))
+	require.True(t, filter.ShouldDiscardDDL(model.ActionDropSequence))
 }
 
 func TestShouldIgnoreDDL(t *testing.T) {
