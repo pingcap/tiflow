@@ -7,3 +7,9 @@
 - hosts: all
   tasks:
   - include: roles/metrics/tasks/stop.yml
+
+- hosts: df_demo_servers
+  tasks:
+  - name: stop demo
+    shell: "ps -ef | grep demoserver-{{ cluster_name }} | grep -v grep | awk '{print $2}' | xargs -r kill"
+

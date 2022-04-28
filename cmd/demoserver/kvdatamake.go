@@ -28,12 +28,23 @@ var (
 	DataNum     = 0
 )
 
-var ready = make(chan struct{})
+var (
+	ready = make(chan struct{})
+	mock  = false
+)
 
 func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	// Use config file save this chaos.
 	if len(os.Args) > 1 {
+		if len(os.Args) == 2 {
+			if os.Args[1] == "mock" {
+				mock = true
+				goto START
+			}
+			fmt.Print("unknown flag " + os.Args[1])
+			os.Exit(1)
+		}
 		hint := "demo args should be: -d dir -a port [-r record number]"
 		fmt.Println(hint)
 		DemoAddress = os.Args[4]
@@ -47,6 +58,7 @@ func main() {
 			}
 		}
 	}
+START:
 	fmt.Printf("starting demo, dir %s addr %s\n", DemoDir, DemoAddress)
 	err := log.InitLogger(&log.Config{
 		Level: "info",
@@ -135,8 +147,16 @@ func (s *DataRWServer) GenerateData(ctx context.Context, req *pb.GenerateDataReq
 
 func StartDataService(ctx context.Context) {
 	grpcServer := grpc.NewServer()
-	s := NewDataRWServer(ctx)
-	pb.RegisterDataRWServiceServer(grpcServer, s)
+	var s pb.DataRWServiceServer
+	if mock {
+		s = &Mock{
+			dbMap: make(map[string]memDB),
+		}
+		pb.RegisterDataRWServiceServer(grpcServer, s)
+	} else {
+		s = NewDataRWServer(ctx)
+		pb.RegisterDataRWServiceServer(grpcServer, s)
+	}
 	lis, err := net.Listen("tcp", DemoAddress) //nolint:gosec
 	if err != nil {
 		log.L().Panic("listen the port failed",

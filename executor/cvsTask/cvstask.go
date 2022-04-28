@@ -3,6 +3,7 @@ package cvstask
 import (
 	"context"
 	"encoding/json"
+	"math/rand"
 	"sync"
 	"time"
 
@@ -44,6 +45,34 @@ type Status struct {
 	CurrentLoc string `json:"CurLoc"`
 	Count      int64  `json:"Cnt"`
 }
+
+type connPool struct {
+	sync.Mutex
+
+	pool map[string]connArray
+}
+
+var pool connPool = connPool{pool: make(map[string]connArray)}
+
+func (c *connPool) getConn(addr string) (*grpc.ClientConn, error) {
+	c.Lock()
+	defer c.Unlock()
+	arr, ok := c.pool[addr]
+	if !ok {
+		for i := 0; i < 5; i++ {
+			conn, err := grpc.Dial(addr, grpc.WithInsecure())
+			if err != nil {
+				return nil, err
+			}
+			arr = append(arr, conn)
+		}
+		c.pool[addr] = arr
+	}
+	i := rand.Intn(5)
+	return arr[i], nil
+}
+
+type connArray []*grpc.ClientConn
 
 type cvsTask struct {
 	lib.BaseWorker
@@ -183,13 +212,12 @@ func (task *cvsTask) CloseImpl(ctx context.Context) error {
 }
 
 func (task *cvsTask) Receive(ctx context.Context) error {
-	conn, err := grpc.Dial(task.SrcHost, grpc.WithInsecure())
+	conn, err := pool.getConn(task.SrcHost)
 	if err != nil {
 		log.L().Error("cann't connect with the source address ", zap.String("id", task.ID()), zap.Any("message", task.SrcHost))
 		return err
 	}
 	client := pb.NewDataRWServiceClient(conn)
-	defer conn.Close()
 	reader, err := client.ReadLines(ctx, &pb.ReadLinesRequest{FileIdx: int32(task.Idx), LineNo: []byte(task.StartLoc)})
 	if err != nil {
 		log.L().Error("read data from file failed ", zap.String("id", task.ID()), zap.Error(err))
@@ -220,13 +248,12 @@ func (task *cvsTask) Receive(ctx context.Context) error {
 }
 
 func (task *cvsTask) Send(ctx context.Context) error {
-	conn, err := grpc.Dial(task.DstHost, grpc.WithInsecure())
+	conn, err := pool.getConn(task.DstHost)
 	if err != nil {
 		log.L().Error("can't connect with the destination address ", zap.Any("id", task.ID()), zap.Error(err))
 		return err
 	}
 	client := pb.NewDataRWServiceClient(conn)
-	defer conn.Close()
 	writer, err := client.WriteLines(ctx)
 	if err != nil {
 		log.L().Error("call write data rpc failed", zap.String("id", task.ID()), zap.Error(err))

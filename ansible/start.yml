@@ -1,9 +1,16 @@
 - hosts: df_master_servers
   tasks:
   - include: roles/master/tasks/start.yml
+
 - hosts: df_executor_servers
   tasks:
   - include: roles/executor/tasks/start.yml
+
 - hosts: all
   tasks:
   - include: roles/metrics/tasks/start.yml
+
+- hosts: df_demo_servers
+  tasks:
+  - name: start demo
+    shell: "nohup {{ df_bin_dir }}/demoserver-{{ cluster_name }} > {{ df_log_dir }}/demo.log 2>&1 &"

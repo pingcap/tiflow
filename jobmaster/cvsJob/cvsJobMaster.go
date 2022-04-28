@@ -12,7 +12,6 @@ import (
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
-	"google.golang.org/grpc"
 
 	cvsTask "github.com/hanfei1991/microcosm/executor/cvsTask"
 	"github.com/hanfei1991/microcosm/executor/worker"
@@ -20,7 +19,6 @@ import (
 	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/lib/registry"
 	"github.com/hanfei1991/microcosm/model"
-	"github.com/hanfei1991/microcosm/pb"
 	"github.com/hanfei1991/microcosm/pkg/clock"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 	derrors "github.com/hanfei1991/microcosm/pkg/errors"
@@ -32,6 +30,7 @@ type Config struct {
 	SrcDir  string `toml:"srcDir" json:"srcDir"`
 	DstHost string `toml:"dstHost" json:"dstHost"`
 	DstDir  string `toml:"dstDir" json:"dstDir"`
+	FileNum int    `toml:"fileNum" json:"fileNum"`
 }
 
 type SyncFileInfo struct {
@@ -95,10 +94,7 @@ func NewCVSJobMaster(ctx *dcontext.Context, workerID libModel.WorkerID, masterID
 func (jm *JobMaster) InitImpl(ctx context.Context) (err error) {
 	log.L().Info("initializing the cvs jobmaster  ", zap.Any("id :", jm.workerID))
 	jm.setStatusCode(libModel.WorkerStatusInit)
-	filesNum, err := jm.listSrcFiles(ctx)
-	if err != nil {
-		return err
-	}
+	filesNum := jm.jobStatus.Config.FileNum
 	if filesNum == 0 {
 		return errors.New("no file found under the folder")
 	}
@@ -224,7 +220,21 @@ func (jm *JobMaster) OnMasterRecovered(ctx context.Context) (err error) {
 	return nil
 }
 
-func (jm *JobMaster) OnWorkerDispatched(worker lib.WorkerHandle, result error) error {
+func (jm *JobMaster) OnWorkerDispatched(worker lib.WorkerHandle, err error) error {
+	if err == nil {
+		return nil
+	}
+	val, exist := jm.launchedWorkers.Load(worker.ID())
+	log.L().Warn("Worker Dispatched Fail", zap.Any("master id", jm.ID()), zap.Any("worker id", err), zap.Error(err))
+	if !exist {
+		log.L().Panic("failed worker not found", zap.Any("worker", worker.ID()))
+	}
+	jm.launchedWorkers.Delete(worker.ID())
+	id := val.(int)
+	jm.Lock()
+	defer jm.Unlock()
+	jm.syncFilesInfo[id].needCreate.Store(true)
+	jm.syncFilesInfo[id].handle.Store(nil)
 	return nil
 }
 
@@ -380,22 +390,6 @@ func (jm *JobMaster) Status() libModel.WorkerStatus {
 
 func (jm *JobMaster) IsJobMasterImpl() {
 	panic("unreachable")
-}
-
-func (jm *JobMaster) listSrcFiles(ctx context.Context) (int, error) {
-	conn, err := grpc.Dial(jm.jobStatus.SrcHost, grpc.WithInsecure())
-	if err != nil {
-		log.L().Info("cann't connect with the host  ", zap.Any("message", jm.jobStatus.SrcHost))
-		return -1, err
-	}
-	client := pb.NewDataRWServiceClient(conn)
-	defer conn.Close()
-	reply, err := client.ListFiles(ctx, &pb.ListFilesReq{})
-	if err != nil {
-		log.L().Info(" list the directory failed ", zap.String("id", jm.ID()), zap.Error(err))
-		return -1, err
-	}
-	return int(reply.FileNum), nil
 }
 
 func (jm *JobMaster) setStatusCode(code libModel.WorkerStatusCode) {

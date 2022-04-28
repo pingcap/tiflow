@@ -20,8 +20,8 @@ import (
 )
 
 type Config struct {
-	DemoAddr    string   `json:"demo_address"`
-	DemoHost    string   `json:"demo_host"`
+	DemoAddrs   []string `json:"demo_address"`
+	DemoHost    []string `json:"demo_host"`
 	MasterAddrs []string `json:"master_address_list"`
 	RecordNum   int64    `json:"demo_record_num"`
 	JobNum      int      `json:"job_num"`
@@ -66,40 +66,55 @@ func TestSubmitTest(t *testing.T) {
 	config, err := NewConfigFromFile(configPath)
 	require.NoError(t, err)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	democlient, err := NewDemoClient(ctx, config.DemoAddr)
-	require.Nil(t, err)
-	fmt.Printf("connect demo\n")
+	for _, demoAddr := range config.DemoAddrs {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		democlient, err := NewDemoClient(ctx, demoAddr)
+		require.Nil(t, err)
+		fmt.Println("connect demo " + demoAddr)
 
-	resp, err := democlient.client.GenerateData(ctx, &pb.GenerateDataRequest{
-		FileNum:   int32(config.FileNum),
-		RecordNum: int32(config.RecordNum),
-	})
-	require.Nil(t, err)
-	require.Empty(t, resp.ErrMsg)
+		resp, err := democlient.client.GenerateData(ctx, &pb.GenerateDataRequest{
+			FileNum:   int32(config.FileNum),
+			RecordNum: int32(config.RecordNum),
+		})
+		require.Nil(t, err)
+		require.Empty(t, resp.ErrMsg)
+	}
 
+	flowControl := make(chan struct{}, 50)
+	// avoid job swarming
+	go func() {
+		for i := 1; i <= config.JobNum; i++ {
+			if i%50 == 0 {
+				time.Sleep(100 * time.Millisecond)
+			}
+			flowControl <- struct{}{}
+		}
+	}()
 	var wg sync.WaitGroup
 	wg.Add(config.JobNum)
 	for i := 1; i <= config.JobNum; i++ {
+		demoAddr := config.DemoAddrs[i%len(config.DemoAddrs)]
+		demoHost := config.DemoHost[i%len(config.DemoHost)]
 		go func(idx int) {
 			defer wg.Done()
 			cfg := &cvs.Config{
 				DstDir:  fmt.Sprintf(config.DemoDataDir+"/data%d", idx),
-				SrcHost: config.DemoHost,
-				DstHost: config.DemoHost,
+				SrcHost: demoHost,
+				DstHost: demoHost,
+				FileNum: config.FileNum,
 			}
-			testSubmitTest(t, cfg, config)
+			testSubmitTest(t, cfg, config, demoAddr, flowControl)
 		}(i)
 	}
 	wg.Wait()
 }
 
 // run this test after docker-compose has been up
-func testSubmitTest(t *testing.T, cfg *cvs.Config, config *Config) {
+func testSubmitTest(t *testing.T, cfg *cvs.Config, config *Config, demoAddr string, flowControl chan struct{}) {
 	ctx := context.Background()
 	fmt.Printf("connect demo\n")
-	democlient, err := NewDemoClient(ctx, config.DemoAddr)
+	democlient, err := NewDemoClient(ctx, demoAddr)
 	require.Nil(t, err)
 	fmt.Printf("connect clients\n")
 	masterclient, err := client.NewMasterClient(ctx, config.MasterAddrs)
@@ -113,10 +128,12 @@ func testSubmitTest(t *testing.T, cfg *cvs.Config, config *Config) {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	fmt.Printf("test is ready\n")
 
 	configBytes, err := json.Marshal(cfg)
 	require.Nil(t, err)
+
+	<-flowControl
+	fmt.Printf("test is ready\n")
 
 	resp, err := masterclient.SubmitJob(ctx, &pb.SubmitJobRequest{
 		Tp:     pb.JobType_CVSDemo,
