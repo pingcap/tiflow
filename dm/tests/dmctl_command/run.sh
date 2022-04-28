@@ -184,6 +184,14 @@ function run_validator_cmd {
 		"pendingRowsStatus\": \"insert\/update\/delete: 0\/0\/0" 2 \
 		"new\/ignored\/resolved: 0\/0\/0" 1 \
 		"new\/ignored\/resolved: 2\/0\/0" 1
+
+	dmctl_stop_task "test"
+	cp $cur/conf/dm-task.yaml $WORK_DIR/dm-task.yaml
+	sed -i "s/    mode: full/    mode: none/g" $WORK_DIR/dm-task.yaml
+	dmctl_start_task $WORK_DIR/dm-task.yaml --remove-meta
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation status test" \
+		"validator not found for task" 2
 }
 
 cleanup_data dmctl_command
