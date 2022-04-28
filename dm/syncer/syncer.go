@@ -3960,3 +3960,7 @@ func (s *Syncer) initInitExecutedLoc() {
 func (s *Syncer) getTrackedTableInfo(table *filter.Table) (*model.TableInfo, error) {
 	return s.schemaTracker.GetTableInfo(table)
 }
+
+func (s *Syncer) getDownStreamTableInfo(tctx *tcontext.Context, tableID string, originTI *model.TableInfo) (*schema.DownstreamTableInfo, error) {
+	return s.schemaTracker.GetDownStreamTableInfo(tctx, tableID, originTI)
+}

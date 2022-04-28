@@ -611,11 +611,20 @@ const (
 
 // ha related error code.
 const (
-	codeHAFailTxnOperation ErrCode = iota + 43001
+	codeHAFailTxnOperation ErrCode = iota + 42501
 	codeHAInvalidItem
 	codeHAFailWatchEtcd
 	codeHAFailLeaseOperation
 	codeHAFailKeepalive
+)
+
+// validator error code.
+const (
+	codeValidatorLoadPersistedData ErrCode = iota + 43001
+	codeValidatorPersistData
+	codeValidatorGetEvent
+	codeValidatorProcessRowEvent
+	codeValidatorValidateChange
 )
 
 // Schema-tracker error code.
@@ -1283,6 +1292,13 @@ var (
 	ErrTracerEventAssertionFail  = New(codeTracerEventAssertionFail, ClassDMTracer, ScopeInternal, LevelHigh, "type %s event: %v not valid", "")
 	ErrTracerEventTypeNotValid   = New(codeTracerEventTypeNotValid, ClassDMTracer, ScopeInternal, LevelHigh, "trace event type %d not valid", "")
 	ErrTracerStartService        = New(codeTracerStartService, ClassDMTracer, ScopeInternal, LevelHigh, "start server", "")
+
+	// validator errors.
+	ErrValidatorLoadPersistedData = New(codeValidatorLoadPersistedData, ClassValidator, ScopeInternal, LevelHigh, "failed to load persisted data", "")
+	ErrValidatorPersistData       = New(codeValidatorPersistData, ClassValidator, ScopeInternal, LevelHigh, "failed to persist checkpoint and data", "")
+	ErrValidatorGetEvent          = New(codeValidatorGetEvent, ClassValidator, ScopeInternal, LevelHigh, "failed to get event", "")
+	ErrValidatorProcessRowEvent   = New(codeValidatorProcessRowEvent, ClassValidator, ScopeInternal, LevelHigh, "failed to process event", "")
+	ErrValidatorValidateChange    = New(codeValidatorValidateChange, ClassValidator, ScopeInternal, LevelHigh, "failed to validate row change", "")
 
 	// Schema-tracker error.
 	ErrSchemaTrackerInvalidJSON        = New(codeSchemaTrackerInvalidJSON, ClassSchemaTracker, ScopeDownstream, LevelHigh, "saved schema of `%s`.`%s` is not proper JSON", "")
