@@ -782,7 +782,9 @@ func (w *SourceWorker) handleSubTaskStage(ctx context.Context, stageCh chan ha.S
 			if err != nil {
 				opErrCounter.WithLabelValues(w.name, opType).Inc()
 				log.L().Error("fail to operate subtask stage", zap.Stringer("stage", stage), zap.Bool("is deleted", stage.IsDeleted), zap.Error(err))
-				return err
+				if etcdutil.IsRetryableError(err) {
+					return err
+				}
 			}
 		case err, ok := <-errCh:
 			if !ok {
@@ -791,7 +793,9 @@ func (w *SourceWorker) handleSubTaskStage(ctx context.Context, stageCh chan ha.S
 			}
 			// TODO: deal with err
 			log.L().Error("WatchSubTaskStage received an error", zap.Error(err))
-			return err
+			if etcdutil.IsRetryableError(err) {
+				return err
+			}
 		}
 		if closed {
 			log.L().Info("worker is closed, handleSubTaskStage will quit now")
@@ -933,7 +937,9 @@ OUTER:
 				break OUTER
 			}
 			log.L().Error("WatchRelayStage received an error", zap.Error(err))
-			return err
+			if etcdutil.IsRetryableError(err) {
+				return err
+			}
 		}
 	}
 	log.L().Info("worker is closed, handleRelayStage will quit now")
@@ -1196,7 +1202,9 @@ func (w *SourceWorker) handleValidatorStage(ctx context.Context, stageCh chan ha
 				opType := w.getValidatorOp(stage)
 				opErrCounter.WithLabelValues(w.name, opType).Inc()
 				log.L().Error("fail to operate validator stage", zap.Stringer("stage", stage), zap.Bool("is deleted", stage.IsDeleted), zap.Error(err))
-				return err
+				if etcdutil.IsRetryableError(err) {
+					return err
+				}
 			}
 		case err, ok := <-errCh:
 			if !ok {
@@ -1205,7 +1213,9 @@ func (w *SourceWorker) handleValidatorStage(ctx context.Context, stageCh chan ha
 			}
 			// TODO: deal with err
 			log.L().Error("watch validator stage received an error", zap.Error(err))
-			return err
+			if etcdutil.IsRetryableError(err) {
+				return err
+			}
 		}
 		if closed {
 			log.L().Info("worker is closed, handle validator stage will quit now")

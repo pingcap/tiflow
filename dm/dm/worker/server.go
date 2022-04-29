@@ -554,7 +554,9 @@ OUTER:
 			if err != nil {
 				opErrCounter.WithLabelValues(s.cfg.Name, opErrTypeSourceBound).Inc()
 				log.L().Error("fail to operate sourceBound on worker", zap.Stringer("bound", bound), zap.Bool("is deleted", bound.IsDeleted), zap.Error(err))
-				return err
+				if etcdutil.IsRetryableError(err) {
+					return err
+				}
 			}
 		case err, ok := <-errCh:
 			if !ok {
@@ -562,7 +564,9 @@ OUTER:
 			}
 			// TODO: Deal with err
 			log.L().Error("WatchSourceBound received an error", zap.Error(err))
-			return err
+			if etcdutil.IsRetryableError(err) {
+				return err
+			}
 		}
 	}
 	log.L().Info("handleSourceBound will quit now")
@@ -588,7 +592,9 @@ OUTER:
 					zap.String("relay source", relaySource.Source),
 					zap.Bool("is deleted", relaySource.IsDeleted),
 					zap.Error(err))
-				return err
+				if etcdutil.IsRetryableError(err) {
+					return err
+				}
 			}
 		case err, ok := <-errCh:
 			// currently no value is sent to errCh
@@ -597,7 +603,9 @@ OUTER:
 			}
 			// TODO: Deal with err
 			log.L().Error("WatchRelayConfig received an error", zap.Error(err))
-			return err
+			if etcdutil.IsRetryableError(err) {
+				return err
+			}
 		}
 	}
 	log.L().Info("worker server is closed, handleRelayConfig will quit now")
