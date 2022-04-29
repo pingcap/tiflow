@@ -876,7 +876,7 @@ var (
 	)
 
 	ErrSchedulerDrainCaptureNotAllowed = errors.Normalize(
-		"other capture is draining: %s",
+		"drain capture not allowed",
 		errors.RFCCodeText("CDC:ErrSchedulerDrainCaptureNotAllowed"))
 
 	// miscellaneous internal errors

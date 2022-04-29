@@ -80,11 +80,9 @@ type moveTableManager interface {
 
 	// OnCaptureRemoved informs the moveTableManager that a capture has gone offline.
 	// Then the moveTableManager will clear all pending jobs to that capture.
+	// When draining the capture, it can also be treated as going offline, also
+	// remove it.to prevent new tables dispatched to the draining capture.
 	OnCaptureRemoved(captureID model.CaptureID)
-
-	// OnCaptureDraining informs the moveTableManager that the capture is draining,
-	// Then the moveTableManager will clear all pending jobs to that capture.
-	OnCaptureDraining(captureID model.CaptureID)
 }
 
 type moveTableJobStatus int
@@ -194,17 +192,6 @@ func (m *moveTableManagerImpl) MarkDone(tableID model.TableID) {
 }
 
 func (m *moveTableManagerImpl) OnCaptureRemoved(captureID model.CaptureID) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	for tableID, job := range m.moveTableJobs {
-		if job.target == captureID {
-			delete(m.moveTableJobs, tableID)
-		}
-	}
-}
-
-func (m *moveTableManagerImpl) OnCaptureDraining(captureID model.CaptureID) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 

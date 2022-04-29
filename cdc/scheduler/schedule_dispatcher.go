@@ -53,7 +53,7 @@ type ScheduleDispatcher interface {
 
 	// DrainCapture remove all tables from the target capture.
 	// It is called when a capture shuts down.
-	DrainCapture(target model.CaptureID)
+	DrainCapture(target model.CaptureID) error
 }
 
 // ScheduleDispatcherCommunicator is an interface for the BaseScheduleDispatcher to
@@ -126,6 +126,7 @@ func NewBaseScheduleDispatcher(
 		captureStatus:        map[model.CaptureID]*captureStatus{},
 		moveTableManager:     newMoveTableManager(),
 		balancer:             newTableNumberRebalancer(logger),
+		balancerCandidates:   make([]model.CaptureID, 0),
 		changeFeedID:         changeFeedID,
 		logger:               logger,
 		communicator:         communicator,
@@ -169,6 +170,13 @@ func (s *BaseScheduleDispatcher) setCaptures(captures map[model.CaptureID]*model
 	// Update the internal capture list with information from the Owner
 	// (from Etcd in the current implementation).
 	s.captures = captures
+
+	// draining target cannot be found in the latest captures, which means it
+	// is already offline, no more need to check it.
+	if _, ok := s.captures[s.drainTarget]; !ok {
+		s.drainTarget = captureIDNotDraining
+	}
+
 	s.balancerCandidates = s.balancerCandidates[:0]
 	for captureID := range s.captures {
 		if captureID != s.drainTarget {
@@ -225,8 +233,7 @@ func (s *BaseScheduleDispatcher) Tick(
 		return CheckpointCannotProceed, CheckpointCannotProceed, nil
 	}
 
-	s.descheduleTablesFromDownCaptures()
-	s.drainCapture()
+	s.descheduleTablesFromCaptures()
 
 	shouldReplicateTableSet := make(map[model.TableID]struct{})
 	for _, tableID := range currentTables {
@@ -376,26 +383,20 @@ func (s *BaseScheduleDispatcher) syncCaptures(ctx context.Context) (capturesAllS
 	return finishedCount == len(s.captureStatus), nil
 }
 
-// descheduleTablesFromDownCaptures removes tables from `s.tables` that are
-// associated with a capture that no longer exists.
+// descheduleTablesFromCaptures removes tables from `s.tables` that are
+// associated with a capture that no longer exists, or the draining target.
 // `s.captures` MUST be updated before calling this method.
-func (s *BaseScheduleDispatcher) descheduleTablesFromDownCaptures() {
+func (s *BaseScheduleDispatcher) descheduleTablesFromCaptures() {
 	for _, captureID := range s.tables.GetDistinctCaptures() {
 		// If the capture is not in the current list of captures, it means that
 		// the capture has been removed from the system.
-		if _, ok := s.captures[captureID]; !ok {
+		// If the capture is the draining target, which means it's going offline,
+		// also remove all tables from it.
+		if _, ok := s.captures[captureID]; !ok || captureID == s.drainTarget {
 			// Remove records for all table previously replicated by the
 			// gone capture.
 			s.removeTablesByCaptureID(captureID)
-			s.moveTableManager.OnCaptureRemoved(captureID)
 		}
-	}
-}
-
-func (s *BaseScheduleDispatcher) drainCapture() {
-	if s.draining() {
-		s.removeTablesByCaptureID(s.drainTarget)
-		s.moveTableManager.OnCaptureDraining(s.drainTarget)
 	}
 }
 
@@ -566,17 +567,23 @@ func (s *BaseScheduleDispatcher) rebalance(ctx context.Context) (done bool, err 
 
 // DrainCapture implements the interface ScheduleDispatcher.
 func (s *BaseScheduleDispatcher) DrainCapture(target model.CaptureID) error {
+	// there is table adding to the target capture, drain it is not allowed.
+	count := s.tables.CountTableByCaptureIDAndStatus(target, util.AddingTable)
+	if count != 0 {
+		log.Warn("DrainCapture: not allowed since some table is adding to the target",
+			zap.String("target", target),
+			zap.Int("count", count))
+		return cerror.ErrSchedulerDrainCaptureNotAllowed.GenWithStack("adding tables")
+	}
 	if s.drainTarget != captureIDNotDraining {
 		s.drainTarget = target
 		return nil
 	}
-	return cerror.ErrSchedulerDrainCaptureNotAllowed.GenWithStack(s.drainTarget)
+	log.Warn("other capture is draining, new one is not allowed at moment",
+		zap.String("drainingTarget", s.drainTarget),
+		zap.String("target", target))
+	return cerror.ErrSchedulerDrainCaptureNotAllowed.GenWithStack("other capture is draining")
 }
-
-// handleDrainCapture move all tables at the target capture to other captures.
-//func (s *BaseScheduleDispatcher) handleDrainCapture(ctx context.Context) (done bool, err error) {
-//	return true, nil
-//}
 
 // OnAgentFinishedTableOperation is called when a table operation has been finished by
 // the processor.
