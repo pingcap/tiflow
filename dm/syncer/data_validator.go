@@ -74,6 +74,8 @@ const (
 
 	rowChangeTypeCount  = 3
 	errorStateTypeCount = 4 // pb.ValidateErrorState_*
+
+	validatorDmctlOpTimeout = 5 * time.Second
 )
 
 // change of table
@@ -1049,7 +1051,10 @@ func (v *DataValidator) GetValidatorError(errState pb.ValidateErrorState) []*pb.
 	// todo: validation error in workers cannot be returned
 	// because the errID is only allocated when the error rows are flushed
 	// user cannot handle errorRows without errID
-	ret, err := v.persistHelper.loadError(errState)
+	ctx, cancel := context.WithTimeout(context.Background(), validatorDmctlOpTimeout)
+	defer cancel()
+	tctx := tcontext.NewContext(ctx, v.L)
+	ret, err := v.persistHelper.loadError(tctx, errState)
 	if err != nil {
 		v.L.Warn("fail to load validator error", zap.Error(err))
 	}
@@ -1060,7 +1065,11 @@ func (v *DataValidator) OperateValidatorError(validateOp pb.ValidationErrOp, err
 	failpoint.Inject("MockValidationOperation", func() {
 		failpoint.Return(nil)
 	})
-	return v.persistHelper.operateError(validateOp, errID, isAll)
+
+	ctx, cancel := context.WithTimeout(context.Background(), validatorDmctlOpTimeout)
+	defer cancel()
+	tctx := tcontext.NewContext(ctx, v.L)
+	return v.persistHelper.operateError(tctx, validateOp, errID, isAll)
 }
 
 func (v *DataValidator) getAllErrorCount(timeout time.Duration) ([errorStateTypeCount]int64, error) {
@@ -1093,7 +1102,7 @@ func (v *DataValidator) getAllErrorCount(timeout time.Duration) ([errorStateType
 
 func (v *DataValidator) GetValidatorStatus() *pb.ValidationStatus {
 	var extraMsg string
-	allErrorCount, err := v.getAllErrorCount(5 * time.Second)
+	allErrorCount, err := v.getAllErrorCount(validatorDmctlOpTimeout)
 	if err != nil {
 		// nolint:nilerr
 		extraMsg = fmt.Sprintf(" (failed to load error count from meta db: %s)", err.Error())

@@ -14,7 +14,6 @@
 package syncer
 
 import (
-	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -562,7 +561,7 @@ func (c *validatorPersistHelper) setRevision(rev int64) {
 	c.revision = rev
 }
 
-func (c *validatorPersistHelper) loadError(filterState pb.ValidateErrorState) ([]*pb.ValidationError, error) {
+func (c *validatorPersistHelper) loadError(tctx *tcontext.Context, filterState pb.ValidateErrorState) ([]*pb.ValidationError, error) {
 	var (
 		rows *sql.Rows
 		err  error
@@ -578,9 +577,6 @@ func (c *validatorPersistHelper) loadError(filterState pb.ValidateErrorState) ([
 		args = append(args, int(filterState))
 	}
 	// we do not retry, let user do it
-	newCtx, cancelFunc := context.WithTimeout(context.Background(), validationDBTimeout)
-	defer cancelFunc()
-	tctx := tcontext.NewContext(newCtx, c.L)
 	rows, err = c.db.QueryContext(tctx, query, args...)
 	if err != nil {
 		return res, err
@@ -614,9 +610,9 @@ func (c *validatorPersistHelper) loadError(filterState pb.ValidateErrorState) ([
 	return res, nil
 }
 
-func (c *validatorPersistHelper) operateError(validateOp pb.ValidationErrOp, errID uint64, isAll bool) error {
+func (c *validatorPersistHelper) operateError(tctx *tcontext.Context, validateOp pb.ValidationErrOp, errID uint64, isAll bool) error {
 	if validateOp == pb.ValidationErrOp_ClearErrOp {
-		return c.deleteError(errID, isAll)
+		return c.deleteError(tctx, errID, isAll)
 	}
 	query := "UPDATE " + c.errorChangeTableName + " SET status=? WHERE source=?"
 	var setStatus pb.ValidateErrorState
@@ -639,14 +635,11 @@ func (c *validatorPersistHelper) operateError(validateOp pb.ValidationErrOp, err
 		query += " AND id=?"
 	}
 	// we do not retry, let user do it
-	newCtx, cancelFunc := context.WithTimeout(context.Background(), validationDBTimeout)
-	defer cancelFunc()
-	tctx := tcontext.NewContext(newCtx, c.L)
 	_, err := c.db.ExecContext(tctx, query, args...)
 	return err
 }
 
-func (c *validatorPersistHelper) deleteError(errID uint64, isAll bool) error {
+func (c *validatorPersistHelper) deleteError(tctx *tcontext.Context, errID uint64, isAll bool) error {
 	args := []interface{}{
 		c.cfg.SourceID,
 	}
@@ -656,9 +649,6 @@ func (c *validatorPersistHelper) deleteError(errID uint64, isAll bool) error {
 		args = append(args, errID)
 	}
 	// we do not retry, let user do it
-	newCtx, cancelFunc := context.WithTimeout(context.Background(), validationDBTimeout)
-	defer cancelFunc()
-	tctx := tcontext.NewContext(newCtx, c.L)
 	_, err := c.db.ExecContext(tctx, query, args...)
 	return err
 }
