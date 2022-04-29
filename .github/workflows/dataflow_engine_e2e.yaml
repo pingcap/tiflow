@@ -39,6 +39,31 @@ jobs:
         if: ${{ failure() }}
         run: docker-compose -f $GITHUB_WORKSPACE/sample/3m3e.yaml logs -t
 
+  Node-failure-workflow:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - uses: actions/setup-go@v3
+        with:
+          go-version: 1.18
+
+      - name: Build images
+        run: $GITHUB_WORKSPACE/sample/prepare.sh
+
+      - name: Run containers
+        run: docker-compose -f $GITHUB_WORKSPACE/sample/3m3e.yaml up -d
+
+      - name: Run tests
+        run: |
+          cd $GITHUB_WORKSPACE/test/e2e
+          go test -count=1 -v -run=TestNodeFailure
+
+      - name: Try to dump container logs
+        if: ${{ failure() }}
+        run: docker-compose -f $GITHUB_WORKSPACE/sample/3m3e.yaml logs -t
+
   DM-workflow:
     runs-on: ubuntu-latest
 
