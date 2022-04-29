@@ -1,5 +1,5 @@
 ---
-name: test
+name: empty-unit-task
 task-mode: all
 
 target-database:
@@ -13,6 +13,7 @@ mysql-instances:
     mydumper-config-name: "global"
     loader-config-name: "global"
     syncer-config-name: "global"
+    block-allow-list:  "instance"
 
 mydumpers:
   global:
@@ -25,3 +26,10 @@ loaders:
 syncers:
   global:
     worker-count: 32
+
+block-allow-list:
+  instance:
+    do-dbs: ["dmctl"]
+    do-tables:
+    -  db-name: "dmctl"
+       tbl-name: "~^t_[\\d]+"

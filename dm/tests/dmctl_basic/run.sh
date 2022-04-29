@@ -297,6 +297,8 @@ function run() {
 		"stop-task $cur/conf/only_warning.yaml" \
 		"\"result\": true" 2
 
+	echo "check task with empty unit config"
+	check_task_empty_config $cur/conf/empty-unit-task.yaml
 	echo "start task with empty unit config"
 	start_task_empty_config $cur/conf/empty-unit-task.yaml
 

@@ -28,29 +28,19 @@ function start_task_not_pass_with_message() {
 }
 
 function start_task_empty_config() {
-	start_task_empty_dump_config $1
-	start_task_empty_load_config $1
-	start_task_empty_sync_config $1
-}
-
-function start_task_empty_dump_config() {
-	sed "/threads/d" $1 >/tmp/empty-dump.yaml
+	cp $1 /tmp/empty-cfg.yaml
+	sed -i "/threads/d" /tmp/empty-cfg.yaml
+	sed -i "/pool-size/d" /tmp/empty-cfg.yaml
+	sed -i "/worker-count/d" /tmp/empty-cfg.yaml
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"start-task /tmp/empty-dump.yaml" \
-		"The configurations as following .* are set in global configuration but instances don't use them" 1
-}
-
-function start_task_empty_load_config() {
-	sed "/pool-size/d" $1 >/tmp/empty-load.yaml
-	cat /tmp/empty-load.yaml
+		"start-task /tmp/empty-cfg.yaml" \
+		"\"result\": true" 2
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"start-task /tmp/empty-load.yaml" \
-		"The configurations as following .* are set in global configuration but instances don't use them" 1
-}
-
-function start_task_empty_sync_config() {
-	sed "/worker-count/d" $1 >/tmp/empty-sync.yaml
+		"config task empty-unit-task" \
+		"threads: 4" 1 \
+		"pool-size: 16" 1 \
+		"worker-count: 16" 1
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"start-task /tmp/empty-sync.yaml" \
-		"The configurations as following .* are set in global configuration but instances don't use them" 1
+		"stop-task $1" \
+		"\"result\": true" 2
 }
