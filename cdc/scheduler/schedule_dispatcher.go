@@ -171,8 +171,8 @@ func (s *BaseScheduleDispatcher) setCaptures(captures map[model.CaptureID]*model
 	// (from Etcd in the current implementation).
 	s.captures = captures
 
-	// draining target cannot be found in the latest captures, which means it
-	// is already offline, so reset the `drainTarget`.
+	// draining target cannot be found in the latest captures, which means it's
+	// offline, so reset the `drainTarget`.
 	if _, ok := s.captures[s.drainTarget]; !ok {
 		s.drainTarget = captureIDNotDraining
 	}
@@ -574,8 +574,10 @@ func (s *BaseScheduleDispatcher) DrainCapture(target model.CaptureID) error {
 			zap.Int("count", count))
 		return cerror.ErrSchedulerDrainCaptureNotAllowed.GenWithStack("adding tables")
 	}
-	if s.drainTarget != captureIDNotDraining {
+	if s.drainTarget == captureIDNotDraining {
 		s.drainTarget = target
+		// disable rebalance if try to `drain the capture`
+		s.needRebalance = false
 		return nil
 	}
 	log.Warn("other capture is draining, new one is not allowed at moment",

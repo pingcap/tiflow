@@ -125,13 +125,11 @@ func (s *TableSet) UpdateTableRecord(record *TableRecord) (successful bool) {
 
 	// If the CaptureID is changed, we do a proper RemoveTableRecord followed
 	// by AddTableRecord.
-	if record.CaptureID != oldRecord.CaptureID {
-		if ok := s.RemoveTableRecord(record.TableID); !ok {
-			log.Panic("unreachable", zap.Any("record", record))
-		}
-		if ok := s.AddTableRecord(record); !ok {
-			log.Panic("unreachable", zap.Any("record", record))
-		}
+	if ok := s.RemoveTableRecord(record.TableID); !ok {
+		log.Panic("unreachable", zap.Any("record", record))
+	}
+	if ok := s.AddTableRecord(record); !ok {
+		log.Panic("unreachable", zap.Any("record", record))
 	}
 	return true
 }
