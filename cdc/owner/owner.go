@@ -189,7 +189,7 @@ func (o *ownerImpl) Tick(stdCtx context.Context, rawState orchestrator.ReactorSt
 		})
 		cfReactor, exist := o.changefeeds[changefeedID]
 		if !exist {
-			upStream := o.upstreamManager.GetDefaultUpstream()
+			upStream := o.upstreamManager.Get(upstream.DefaultClusterID)
 			cfReactor = o.newChangefeed(changefeedID, upStream)
 			o.changefeeds[changefeedID] = cfReactor
 		}
@@ -593,7 +593,7 @@ func (o *ownerImpl) updateGCSafepoint(
 		}
 	}
 
-	upStream := o.upstreamManager.GetDefaultUpstream()
+	upStream := o.upstreamManager.Get(upstream.DefaultClusterID)
 
 	// When the changefeed starts up, CDC will do a snapshot read at
 	// (checkpointTs - 1) from TiKV, so (checkpointTs - 1) should be an upper

@@ -118,7 +118,10 @@ func newChangefeed4Test(
 
 func (c *changefeed) Tick(ctx cdcContext.Context, state *orchestrator.ChangefeedReactorState, captures map[model.CaptureID]*model.CaptureInfo) {
 	startTime := time.Now()
-
+	// skip this tick
+	if !c.upStream.IsNormal() {
+		return
+	}
 	ctx = cdcContext.WithErrorHandler(ctx, func(err error) error {
 		c.errCh <- errors.Trace(err)
 		return nil

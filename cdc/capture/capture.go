@@ -130,11 +130,12 @@ func (c *Capture) reset(ctx context.Context) error {
 	if c.UpstreamManager != nil {
 		c.UpstreamManager.Close()
 	}
-	c.UpstreamManager, err = upstream.NewManager(ctx, c.pdEnpoints)
+	c.UpstreamManager = upstream.NewManager(ctx)
+	err = c.UpstreamManager.Add(upstream.DefaultClusterID, c.pdEnpoints)
 	if err != nil {
 		return errors.Annotate(
 			cerror.WrapError(cerror.ErrNewCaptureFailed, err),
-			"new upstream manager failed")
+			"add default upstream failed")
 	}
 
 	c.processorManager = c.newProcessorManager(c.UpstreamManager)

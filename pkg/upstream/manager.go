@@ -15,45 +15,74 @@ package upstream
 
 import (
 	"context"
+	"log"
+	"sync"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/pkg/config"
 	pd "github.com/tikv/pd/client"
+	"go.uber.org/zap"
 )
 
-// defaultClusterID is a pseudo cluster id for now. It will be removed in the future.
-const defaultClusterID uint64 = 0
+// DefaultClusterID is a pseudo cluster id for now. It will be removed in the future.
+const DefaultClusterID uint64 = 0
 
 // Manager manages all upstream.
 type Manager struct {
-	defaultUpstream *Upstream
+	// clusterID map to *Upstream.
+	ups *sync.Map
+	// all upstream should be spawn from this ctx.
+	ctx context.Context
+	// Only use in Close()
+	cancel func()
 }
 
-// NewManager creates a new Manager and initlizes a defaultUpstream.
-// ctx is used to initialize the default upstream and defaultPDEndpoints
-// is used to create the default upstream.
-func NewManager(ctx context.Context, defaultPDEndpoints []string) (*Manager, error) {
-	securityConfig := config.GetGlobalServerConfig().Security
-	up := newUpstream(defaultClusterID, defaultPDEndpoints, securityConfig)
-	err := up.init(ctx)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	return &Manager{defaultUpstream: up}, nil
+// NewManager creates a new Manager.
+// ctx will be use to initialize upstream spawned by this Manager.
+func NewManager(ctx context.Context) *Manager {
+	ctx, cancel := context.WithCancel(ctx)
+	res := &Manager{ups: new(sync.Map), ctx: ctx, cancel: cancel}
+	return res
 }
 
 // NewManager4Test returns a Manager for unit test.
 func NewManager4Test(pdClient pd.Client) *Manager {
+	res := &Manager{ups: new(sync.Map)}
 	up := NewUpstream4Test(pdClient)
-	return &Manager{defaultUpstream: up}
+	res.ups.Store(DefaultClusterID, up)
+	return res
 }
 
-// GetDefaultUpstream returns defaultUpstream.
-func (m *Manager) GetDefaultUpstream() *Upstream {
-	return m.defaultUpstream
+// Add adds a upstream and init it.
+// TODO(dongmen): async init upstream and should not return any error in the future.
+func (m *Manager) Add(clusterID uint64, pdEndpoints []string) error {
+	if _, ok := m.ups.Load(clusterID); ok {
+		return nil
+	}
+	securityConfig := config.GetGlobalServerConfig().Security
+	up := newUpstream(DefaultClusterID, pdEndpoints, securityConfig)
+	err := up.init(m.ctx)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	m.ups.Store(DefaultClusterID, up)
+	return nil
 }
 
-// Close closes defaultUpstream.
+// Get gets a upstream by clusterID.
+func (m *Manager) Get(clusterID uint64) *Upstream {
+	v, ok := m.ups.Load(clusterID)
+	if !ok {
+		log.Panic("upstream not exists", zap.Uint64("cluster-id", clusterID))
+	}
+	return v.(*Upstream)
+}
+
+// Close closes all upstreams.
 func (m *Manager) Close() {
-	m.defaultUpstream.close()
+	m.cancel()
+	m.ups.Range(func(k, v interface{}) bool {
+		v.(*Upstream).close()
+		return true
+	})
 }

@@ -17,6 +17,7 @@ import (
 	"context"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -34,6 +35,15 @@ import (
 	"google.golang.org/grpc/backoff"
 )
 
+const (
+	// indicate a upstream is not initialized.
+	uninit int32 = iota
+	// indicate a upstream is initialized and can works normally.
+	normal
+	// indicate a upstream is closed.
+	closed
+)
+
 // Upstream holds resources of a TiDB cluster, it can be shared by many changefeeds
 // and processors. All public fileds and method of a upstream should be thread-safety.
 type Upstream struct {
@@ -48,7 +58,8 @@ type Upstream struct {
 	PDClock     pdtime.Clock
 	GCManager   gc.Manager
 
-	wg *sync.WaitGroup
+	wg     *sync.WaitGroup
+	status int32
 }
 
 func newUpstream(clusterID uint64, pdEndpoints []string, securityConfig *config.SecurityConfig) *Upstream {
@@ -62,7 +73,7 @@ func newUpstream(clusterID uint64, pdEndpoints []string, securityConfig *config.
 func NewUpstream4Test(pdClient pd.Client) *Upstream {
 	pdClock := pdtime.NewClock4Test()
 	gcManager := gc.NewManager(pdClient, pdClock)
-	res := &Upstream{PDClient: pdClient, PDClock: pdClock, GCManager: gcManager}
+	res := &Upstream{PDClient: pdClient, PDClock: pdClock, GCManager: gcManager, status: uninit}
 	return res
 }
 
@@ -138,6 +149,7 @@ func (up *Upstream) init(ctx context.Context) error {
 	log.Info("upstream's GCManager created", zap.Uint64("cluster id", up.clusterID))
 
 	log.Info("upStream initialize successfully", zap.Uint64("cluster id", up.clusterID))
+	atomic.StoreInt32(&up.status, normal)
 	return nil
 }
 
@@ -165,5 +177,14 @@ func (up *Upstream) close() {
 	}
 
 	up.wg.Wait()
+	atomic.StoreInt32(&up.status, closed)
 	log.Info("upStream closed", zap.Uint64("cluster id", up.clusterID))
+}
+
+func (up *Upstream) IsNormal() bool {
+	return atomic.LoadInt32(&up.status) == normal
+}
+
+func (up *Upstream) IsClosed() bool {
+	return atomic.LoadInt32(&up.status) == closed
 }
