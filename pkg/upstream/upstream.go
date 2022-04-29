@@ -74,6 +74,7 @@ func NewUpstream4Test(pdClient pd.Client) *Upstream {
 	pdClock := pdtime.NewClock4Test()
 	gcManager := gc.NewManager(pdClient, pdClock)
 	res := &Upstream{PDClient: pdClient, PDClock: pdClock, GCManager: gcManager, status: uninit}
+	res.status = normal
 	return res
 }
 
