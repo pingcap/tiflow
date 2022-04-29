@@ -46,3 +46,4 @@ syncers:
     worker-count: 16
     batch: 100
     enable-ansi-quotes: false  # compatible with deprecated config
+    checkpoint-flush-interval: 1
