@@ -112,7 +112,7 @@ kafka_consumer:
 install:
 	go install ./...
 
-unit_test: check_failpoint_ctl generate_mock generate-msgp-code
+unit_test: check_failpoint_ctl generate_mock generate-msgp-code generate-protobuf
 	mkdir -p "$(TEST_DIR)"
 	$(FAILPOINT_ENABLE)
 	@export log_level=error;\
@@ -167,7 +167,7 @@ integration_test_mysql:
 integration_test_kafka: check_third_party_binary
 	tests/integration_tests/run.sh kafka "$(CASE)" "$(START_AT)"
 
-fmt: tools/bin/gofumports tools/bin/shfmt generate_mock generate-msgp-code
+fmt: tools/bin/gofumports tools/bin/shfmt generate_mock generate-msgp-code generate-protobuf
 	@echo "gofmt (simplify)"
 	tools/bin/gofumports -l -w $(FILES) 2>&1 | $(FAIL_ON_STDOUT)
 	@echo "run shfmt"
@@ -212,6 +212,10 @@ endif
 generate-msgp-code: tools/bin/msgp
 	@echo "generate-msgp-code"
 	./scripts/generate-msgp-code.sh
+
+generate-protobuf: tools/bin/protoc tools/bin/protoc-gen-gogofaster
+	@echo "generate-protobuf"
+	./scripts/generate-protobuf.sh
 
 vet:
 	@echo "vet"
@@ -451,6 +455,9 @@ tools/bin/swag: tools/check/go.mod
 
 tools/bin/msgp: tools/check/go.mod
 	cd tools/check && $(GO) build -mod=mod -o ../bin/msgp github.com/tinylib/msgp
+
+tools/bin/protoc:
+	./scripts/download-protoc.sh
 
 check_failpoint_ctl: tools/bin/failpoint-ctl
 
