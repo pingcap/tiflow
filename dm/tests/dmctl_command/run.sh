@@ -183,9 +183,23 @@ function run_validator_cmd {
 		"\"processedRowsStatus\": \"insert\/update\/delete: 0\/0\/1\"" 1 \
 		"pendingRowsStatus\": \"insert\/update\/delete: 0\/0\/0" 2 \
 		"new\/ignored\/resolved: 0\/0\/0" 1 \
-		"new\/ignored\/resolved: 2\/0\/0" 1
+		"new\/ignored\/resolved: 2\/0\/0" 1 \
+		"\"stage\": \"Running\"" 4 \
+		"\"stage\": \"Stopped\"" 1
+
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation status --table-stage running test" \
+		"\"stage\": \"	Running\"" 4 \
+		"\"stage\": \"Stopped\"" 0
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation status --table-stage stopped test" \
+		"\"stage\": \"Running\"" 2 \
+		"\"stage\": \"Stopped\"" 1 \
+		"no primary key" 1
 
 	dmctl_stop_task "test"
+	echo "clean up data" # pre-check will not pass, since there is a table without pk
+	cleanup_data_upstream dmctl_command
 	cp $cur/conf/dm-task.yaml $WORK_DIR/dm-task.yaml
 	sed -i "s/    mode: full/    mode: none/g" $WORK_DIR/dm-task.yaml
 	dmctl_start_task $WORK_DIR/dm-task.yaml --remove-meta

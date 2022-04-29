@@ -1025,7 +1025,7 @@ func (v *DataValidator) GetValidatorTableStatus(filterStatus pb.Stage) []*pb.Val
 				Source:   v.cfg.SourceID,
 				SrcTable: tblStat.source.String(),
 				DstTable: tblStat.target.String(),
-				Status:   tblStat.stage,
+				Stage:    tblStat.stage,
 				Message:  tblStat.message,
 			})
 		}

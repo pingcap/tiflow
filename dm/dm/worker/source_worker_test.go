@@ -797,12 +797,12 @@ func (t *testServer) TestQueryValidator(c *C) {
 		{
 			SrcTable: "`testdb1`.`testtable1`",
 			DstTable: "`dstdb`.`dsttable`",
-			Status:   pb.Stage_Running,
+			Stage:    pb.Stage_Running,
 		},
 		{
 			SrcTable: "`testdb2`.`testtable2`",
 			DstTable: "`dstdb`.`dsttable`",
-			Status:   pb.Stage_Stopped,
+			Stage:    pb.Stage_Stopped,
 			Message:  "no primary key",
 		},
 	}

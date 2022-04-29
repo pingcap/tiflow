@@ -541,13 +541,13 @@ func TestValidatorGetValidationStatus(t *testing.T) {
 		"`db`.`tbl1`": {
 			SrcTable: "`db`.`tbl1`",
 			DstTable: "`db`.`tbl1`",
-			Status:   pb.Stage_Running,
+			Stage:    pb.Stage_Running,
 			Message:  "",
 		},
 		"`db`.`tbl2`": {
 			SrcTable: "`db`.`tbl2`",
 			DstTable: "`db`.`tbl2`",
-			Status:   pb.Stage_Stopped,
+			Stage:    pb.Stage_Stopped,
 			Message:  tableWithoutPrimaryKeyMsg,
 		},
 	}
