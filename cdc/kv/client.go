@@ -450,8 +450,7 @@ type eventFeedSession struct {
 	// The queue is used to store region that reaches limit
 	rateLimitQueue []regionErrorInfo
 
-	rangeLock      *regionspan.RegionRangeLock
-	enableOldValue bool
+	rangeLock *regionspan.RegionRangeLock
 
 	// To identify metrics of different eventFeedSession
 	id                string
@@ -705,11 +704,8 @@ func (s *eventFeedSession) requestRegionToStore(
 		}
 		requestID := allocID()
 
-		extraOp := kvrpcpb.ExtraOp_Noop
-		if s.enableOldValue {
-			extraOp = kvrpcpb.ExtraOp_ReadOldValue
-		}
-
+		// Always read old value.
+		extraOp := kvrpcpb.ExtraOp_ReadOldValue
 		rpcCtx := sri.rpcCtx
 		regionID := rpcCtx.Meta.GetId()
 		req := &cdcpb.ChangeDataRequest{
@@ -1385,7 +1381,7 @@ func (s *eventFeedSession) getStreamCancel(storeAddr string) (cancel context.Can
 	return
 }
 
-func assembleRowEvent(regionID uint64, entry *cdcpb.Event_Row, enableOldValue bool) (model.RegionFeedEvent, error) {
+func assembleRowEvent(regionID uint64, entry *cdcpb.Event_Row) (model.RegionFeedEvent, error) {
 	var opType model.OpType
 	switch entry.GetOpType() {
 	case cdcpb.Event_Row_DELETE:
@@ -1405,14 +1401,10 @@ func assembleRowEvent(regionID uint64, entry *cdcpb.Event_Row, enableOldValue bo
 			StartTs:  entry.StartTs,
 			CRTs:     entry.CommitTs,
 			RegionID: regionID,
+			OldValue: entry.GetOldValue(),
 		},
 	}
 
-	// when old-value is disabled, it is still possible for the tikv to send a event containing the old value
-	// we need avoid a old-value sent to downstream when old-value is disabled
-	if enableOldValue {
-		revent.Val.OldValue = entry.GetOldValue()
-	}
 	return revent, nil
 }
 
