@@ -98,6 +98,7 @@ func newTestWorker() (*flushWorker, *mockProducer) {
 		metrics.NewStatistics(context.Background(), metrics.SinkTypeMQ)), producer
 }
 
+//nolint:tparallel
 func TestBatch(t *testing.T) {
 	t.Parallel()
 
@@ -178,6 +179,8 @@ func TestBatch(t *testing.T) {
 	batch := make([]mqEvent, 3)
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			// Can not be parallel, it tests reusing the same batch.
+
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
