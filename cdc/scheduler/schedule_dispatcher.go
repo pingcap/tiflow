@@ -172,7 +172,7 @@ func (s *BaseScheduleDispatcher) setCaptures(captures map[model.CaptureID]*model
 	s.captures = captures
 
 	// draining target cannot be found in the latest captures, which means it
-	// is already offline, treat it as draining finished.
+	// is already offline, so reset the `drainTarget`.
 	if _, ok := s.captures[s.drainTarget]; !ok {
 		s.drainTarget = captureIDNotDraining
 	}
