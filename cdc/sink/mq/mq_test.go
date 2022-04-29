@@ -17,7 +17,6 @@ import (
 	"context"
 	"fmt"
 	"net/url"
-	"testing"
 
 	"github.com/Shopify/sarama"
 	"github.com/pingcap/check"
@@ -32,8 +31,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/kafka"
 	"github.com/pingcap/tiflow/pkg/util/testleak"
 )
-
-func Test(t *testing.T) { check.TestingT(t) }
 
 type mqSinkSuite struct{}
 
