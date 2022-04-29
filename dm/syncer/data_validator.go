@@ -859,7 +859,7 @@ func (v *DataValidator) loadPersistedData(tctx *tcontext.Context) error {
 	return nil
 }
 
-func (v *DataValidator) incrErrorRowCount(status pb.ValidateErrorState, cnt int) {
+func (v *DataValidator) incrErrorRowCount(cnt int) {
 	v.newErrorRowCount.Add(int64(cnt))
 }
 
