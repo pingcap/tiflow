@@ -1062,7 +1062,7 @@ func (v *DataValidator) getAllErrorCount(timeout time.Duration) ([errorStateType
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	tctx := tcontext.NewContext(ctx, v.L)
-	// todo: should create a separate db to get error count, since validator maybe stopped or initializing,
+	// todo: should create a separate db to get error count, since validator may be stopped or being initialized,
 	// else may fail due to concurrent access
 	// todo: should not rely on fields which need to be inited in 'init', such as c.tctx,
 	// else this method may fail due to concurrent access.
