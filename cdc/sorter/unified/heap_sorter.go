@@ -108,7 +108,9 @@ func (h *heapSorter) flush(ctx context.Context, maxResolvedTs uint64) error {
 		return nil
 	}
 
-	sorterFlushCountHistogram.WithLabelValues(changefeedID.ID).Observe(float64(h.heap.Len()))
+	sorterFlushCountHistogram.
+		WithLabelValues(changefeedID.Namespace, changefeedID.ID).
+		Observe(float64(h.heap.Len()))
 
 	// We check if the heap contains only one entry and that entry is a ResolvedEvent.
 	// As an optimization, when the condition is true, we clear the heap and send an empty flush.

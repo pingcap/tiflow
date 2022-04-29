@@ -182,21 +182,21 @@ func (w *regionWorker) initMetrics(ctx context.Context) {
 	metrics.metricReceivedEventSize = eventSize.WithLabelValues("received")
 	metrics.metricDroppedEventSize = eventSize.WithLabelValues("dropped")
 	metrics.metricPullEventInitializedCounter = pullEventCounter.
-		WithLabelValues(cdcpb.Event_INITIALIZED.String(), changefeedID.ID)
+		WithLabelValues(cdcpb.Event_INITIALIZED.String(), changefeedID.Namespace, changefeedID.ID)
 	metrics.metricPullEventCommittedCounter = pullEventCounter.
-		WithLabelValues(cdcpb.Event_COMMITTED.String(), changefeedID.ID)
+		WithLabelValues(cdcpb.Event_COMMITTED.String(), changefeedID.Namespace, changefeedID.ID)
 	metrics.metricPullEventCommitCounter = pullEventCounter.
-		WithLabelValues(cdcpb.Event_COMMIT.String(), changefeedID.ID)
+		WithLabelValues(cdcpb.Event_COMMIT.String(), changefeedID.Namespace, changefeedID.ID)
 	metrics.metricPullEventPrewriteCounter = pullEventCounter.
-		WithLabelValues(cdcpb.Event_PREWRITE.String(), changefeedID.ID)
+		WithLabelValues(cdcpb.Event_PREWRITE.String(), changefeedID.Namespace, changefeedID.ID)
 	metrics.metricPullEventRollbackCounter = pullEventCounter.
-		WithLabelValues(cdcpb.Event_ROLLBACK.String(), changefeedID.ID)
+		WithLabelValues(cdcpb.Event_ROLLBACK.String(), changefeedID.Namespace, changefeedID.ID)
 	metrics.metricSendEventResolvedCounter = sendEventCounter.
-		WithLabelValues("native-resolved", changefeedID.ID)
+		WithLabelValues("native-resolved", changefeedID.Namespace, changefeedID.ID)
 	metrics.metricSendEventCommitCounter = sendEventCounter.
-		WithLabelValues("commit", changefeedID.ID)
+		WithLabelValues("commit", changefeedID.Namespace, changefeedID.ID)
 	metrics.metricSendEventCommittedCounter = sendEventCounter.
-		WithLabelValues("committed", changefeedID.ID)
+		WithLabelValues("committed", changefeedID.Namespace, changefeedID.ID)
 
 	w.metrics = metrics
 }

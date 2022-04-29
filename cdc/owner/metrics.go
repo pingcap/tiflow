@@ -26,7 +26,7 @@ var (
 			Subsystem: "owner",
 			Name:      "barrier_ts",
 			Help:      "barrier ts of changefeeds",
-		}, []string{"changefeed"})
+		}, []string{"namespace", "changefeed"})
 
 	changefeedCheckpointTsGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
@@ -34,28 +34,28 @@ var (
 			Subsystem: "owner",
 			Name:      "checkpoint_ts",
 			Help:      "checkpoint ts of changefeeds",
-		}, []string{"changefeed"})
+		}, []string{"namespace", "changefeed"})
 	changefeedCheckpointTsLagGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
 			Subsystem: "owner",
 			Name:      "checkpoint_ts_lag",
 			Help:      "checkpoint ts lag of changefeeds in seconds",
-		}, []string{"changefeed"})
+		}, []string{"namespace", "changefeed"})
 	changefeedResolvedTsGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
 			Subsystem: "owner",
 			Name:      "resolved_ts",
 			Help:      "resolved ts of changefeeds",
-		}, []string{"changefeed"})
+		}, []string{"namespace", "changefeed"})
 	changefeedResolvedTsLagGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
 			Subsystem: "owner",
 			Name:      "resolved_ts_lag",
 			Help:      "resolved ts lag of changefeeds in seconds",
-		}, []string{"changefeed"})
+		}, []string{"namespace", "changefeed"})
 	ownershipCounter = prometheus.NewCounter(
 		prometheus.CounterOpts{
 			Namespace: "ticdc",
@@ -69,14 +69,14 @@ var (
 			Subsystem: "owner",
 			Name:      "maintain_table_num",
 			Help:      "number of replicated tables maintained in owner",
-		}, []string{"changefeed", "capture", "type"})
+		}, []string{"namespace", "changefeed", "capture", "type"})
 	changefeedStatusGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
 			Subsystem: "owner",
 			Name:      "status",
 			Help:      "The status of changefeeds",
-		}, []string{"changefeed"})
+		}, []string{"namespace", "changefeed"})
 	changefeedTickDuration = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "ticdc",

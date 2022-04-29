@@ -240,25 +240,25 @@ func newProcessor(ctx cdcContext.Context) *processor {
 		newSchedulerEnabled: conf.Debug.EnableNewScheduler,
 
 		metricResolvedTsGauge: resolvedTsGauge.
-			WithLabelValues(changefeedID.ID),
+			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		metricResolvedTsLagGauge: resolvedTsLagGauge.
-			WithLabelValues(changefeedID.ID),
+			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		metricMinResolvedTableIDGuage: resolvedTsMinTableIDGauge.
-			WithLabelValues(changefeedID.ID),
+			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		metricCheckpointTsGauge: checkpointTsGauge.
-			WithLabelValues(changefeedID.ID),
+			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		metricCheckpointTsLagGauge: checkpointTsLagGauge.
-			WithLabelValues(changefeedID.ID),
+			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		metricMinCheckpointTableIDGuage: checkpointTsMinTableIDGauge.
-			WithLabelValues(changefeedID.ID),
+			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		metricSyncTableNumGauge: syncTableNumGauge.
-			WithLabelValues(changefeedID.ID),
+			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		metricProcessorErrorCounter: processorErrorCounter.
-			WithLabelValues(changefeedID.ID),
+			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		metricSchemaStorageGcTsGauge: processorSchemaStorageGcTsGauge.
-			WithLabelValues(changefeedID.ID),
+			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		metricProcessorTickDuration: processorTickDuration.
-			WithLabelValues(changefeedID.ID),
+			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 	}
 	p.createTablePipeline = p.createTablePipelineImpl
 	p.lazyInit = p.lazyInitImpl
@@ -1157,13 +1157,13 @@ func (p *processor) Close() error {
 
 	// mark tables share the same cdcContext with its original table, don't need to cancel
 	failpoint.Inject("processorStopDelay", nil)
-	resolvedTsGauge.DeleteLabelValues(p.changefeedID.ID)
-	resolvedTsLagGauge.DeleteLabelValues(p.changefeedID.ID)
-	checkpointTsGauge.DeleteLabelValues(p.changefeedID.ID)
-	checkpointTsLagGauge.DeleteLabelValues(p.changefeedID.ID)
-	syncTableNumGauge.DeleteLabelValues(p.changefeedID.ID)
-	processorErrorCounter.DeleteLabelValues(p.changefeedID.ID)
-	processorSchemaStorageGcTsGauge.DeleteLabelValues(p.changefeedID.ID)
+	resolvedTsGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
+	resolvedTsLagGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
+	checkpointTsGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
+	checkpointTsLagGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
+	syncTableNumGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
+	processorErrorCounter.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
+	processorSchemaStorageGcTsGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
 
 	return nil
 }

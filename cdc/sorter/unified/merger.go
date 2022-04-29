@@ -39,11 +39,15 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
 
 	metricSorterEventCount := sorter.EventCount.MustCurryWith(map[string]string{
+		"namespace":  changefeedID.Namespace,
 		"changefeed": changefeedID.ID,
 	})
-	metricSorterResolvedTsGauge := sorter.ResolvedTsGauge.WithLabelValues(changefeedID.ID)
-	metricSorterMergerStartTsGauge := sorterMergerStartTsGauge.WithLabelValues(changefeedID.ID)
-	metricSorterMergeCountHistogram := sorterMergeCountHistogram.WithLabelValues(changefeedID.ID)
+	metricSorterResolvedTsGauge := sorter.ResolvedTsGauge.
+		WithLabelValues(changefeedID.Namespace, changefeedID.ID)
+	metricSorterMergerStartTsGauge := sorterMergerStartTsGauge.
+		WithLabelValues(changefeedID.Namespace, changefeedID.ID)
+	metricSorterMergeCountHistogram := sorterMergeCountHistogram.
+		WithLabelValues(changefeedID.Namespace, changefeedID.ID)
 
 	lastResolvedTs := make([]uint64, numSorters)
 	minResolvedTs := uint64(0)

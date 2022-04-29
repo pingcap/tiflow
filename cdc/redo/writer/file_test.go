@@ -241,12 +241,15 @@ func TestWriterGC(t *testing.T) {
 		S3Storage:         true,
 	}
 	w := &Writer{
-		cfg:                    cfg,
-		uint64buf:              make([]byte, 8),
-		storage:                mockStorage,
-		metricWriteBytes:       redoWriteBytesGauge.WithLabelValues(cfg.ChangeFeedID.ID),
-		metricFsyncDuration:    redoFsyncDurationHistogram.WithLabelValues(cfg.ChangeFeedID.ID),
-		metricFlushAllDuration: redoFlushAllDurationHistogram.WithLabelValues(cfg.ChangeFeedID.ID),
+		cfg:       cfg,
+		uint64buf: make([]byte, 8),
+		storage:   mockStorage,
+		metricWriteBytes: redoWriteBytesGauge.
+			WithLabelValues(cfg.ChangeFeedID.ID, cfg.ChangeFeedID.ID),
+		metricFsyncDuration: redoFsyncDurationHistogram.
+			WithLabelValues(cfg.ChangeFeedID.ID, cfg.ChangeFeedID.ID),
+		metricFlushAllDuration: redoFlushAllDurationHistogram.
+			WithLabelValues(cfg.ChangeFeedID.ID, cfg.ChangeFeedID.ID),
 	}
 	w.running.Store(true)
 	w.eventCommitTS.Store(1)

@@ -24,7 +24,7 @@ var (
 		Name:      "db_write_bytes",
 		Help:      "Bucketed histogram of sorter write batch bytes",
 		Buckets:   prometheus.ExponentialBuckets(16, 2.0, 20),
-	}, []string{"id"})
+	}, []string{"namespace", "id"})
 
 	sorterWriteDurationHistogram = prometheus.NewHistogramVec(prometheus.HistogramOpts{
 		Namespace: "ticdc",
@@ -32,7 +32,7 @@ var (
 		Name:      "db_write_duration_seconds",
 		Help:      "Bucketed histogram of sorter write duration",
 		Buckets:   prometheus.ExponentialBuckets(0.004, 2.0, 20),
-	}, []string{"id"})
+	}, []string{"namespace", "id"})
 
 	sorterCompactDurationHistogram = prometheus.NewHistogramVec(prometheus.HistogramOpts{
 		Namespace: "ticdc",
@@ -40,7 +40,7 @@ var (
 		Name:      "db_compact_duration_seconds",
 		Help:      "Bucketed histogram of sorter manual compact duration",
 		Buckets:   prometheus.ExponentialBuckets(0.004, 2.0, 20),
-	}, []string{"id"})
+	}, []string{"namespace", "id"})
 
 	sorterIterReadDurationHistogram = prometheus.NewHistogramVec(prometheus.HistogramOpts{
 		Namespace: "ticdc",
@@ -48,7 +48,7 @@ var (
 		Name:      "db_iter_read_duration_seconds",
 		Help:      "Bucketed histogram of db sorter iterator read duration",
 		Buckets:   prometheus.ExponentialBuckets(0.004, 2.0, 20),
-	}, []string{"id", "call"})
+	}, []string{"namespace", "id", "call"})
 )
 
 // InitMetrics registers all metrics in this file

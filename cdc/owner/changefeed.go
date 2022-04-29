@@ -351,17 +351,17 @@ LOOP:
 
 	// init metrics
 	c.metricsChangefeedBarrierTsGauge = changefeedBarrierTsGauge.
-		WithLabelValues(c.id.ID)
+		WithLabelValues(c.id.Namespace, c.id.ID)
 	c.metricsChangefeedCheckpointTsGauge = changefeedCheckpointTsGauge.
-		WithLabelValues(c.id.ID)
+		WithLabelValues(c.id.Namespace, c.id.ID)
 	c.metricsChangefeedCheckpointTsLagGauge = changefeedCheckpointTsLagGauge.
-		WithLabelValues(c.id.ID)
+		WithLabelValues(c.id.Namespace, c.id.ID)
 	c.metricsChangefeedResolvedTsGauge = changefeedResolvedTsGauge.
-		WithLabelValues(c.id.ID)
+		WithLabelValues(c.id.Namespace, c.id.ID)
 	c.metricsChangefeedResolvedTsLagGauge = changefeedResolvedTsLagGauge.
-		WithLabelValues(c.id.ID)
+		WithLabelValues(c.id.Namespace, c.id.ID)
 	c.metricsChangefeedTickDuration = changefeedTickDuration.
-		WithLabelValues(c.id.ID)
+		WithLabelValues(c.id.Namespace, c.id.ID)
 
 	// create scheduler
 	c.scheduler, err = c.newScheduler(ctx, checkpointTs)
@@ -399,20 +399,20 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 	c.wg.Wait()
 	c.scheduler.Close(ctx)
 
-	changefeedCheckpointTsGauge.DeleteLabelValues(c.id.ID)
-	changefeedCheckpointTsLagGauge.DeleteLabelValues(c.id.ID)
+	changefeedCheckpointTsGauge.DeleteLabelValues(c.id.Namespace, c.id.ID)
+	changefeedCheckpointTsLagGauge.DeleteLabelValues(c.id.Namespace, c.id.ID)
 	c.metricsChangefeedCheckpointTsGauge = nil
 	c.metricsChangefeedCheckpointTsLagGauge = nil
 
-	changefeedResolvedTsGauge.DeleteLabelValues(c.id.ID)
-	changefeedResolvedTsLagGauge.DeleteLabelValues(c.id.ID)
+	changefeedResolvedTsGauge.DeleteLabelValues(c.id.Namespace, c.id.ID)
+	changefeedResolvedTsLagGauge.DeleteLabelValues(c.id.Namespace, c.id.ID)
 	c.metricsChangefeedResolvedTsGauge = nil
 	c.metricsChangefeedResolvedTsLagGauge = nil
 
-	changefeedTickDuration.DeleteLabelValues(c.id.ID)
+	changefeedTickDuration.DeleteLabelValues(c.id.Namespace, c.id.ID)
 	c.metricsChangefeedTickDuration = nil
 
-	changefeedBarrierTsGauge.DeleteLabelValues(c.id.ID)
+	changefeedBarrierTsGauge.DeleteLabelValues(c.id.Namespace, c.id.ID)
 	c.metricsChangefeedBarrierTsGauge = nil
 
 	c.initialized = false
