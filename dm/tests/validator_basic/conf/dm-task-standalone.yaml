@@ -45,5 +45,5 @@ validators:
     worker-count: 1
     validate-interval: 1s
     check-interval: 1s
-    row-error-delay: 3s
+    row-error-delay: 1ms
     meta-flush-interval: 3s
