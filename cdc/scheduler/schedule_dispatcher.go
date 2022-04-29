@@ -276,9 +276,14 @@ func (s *BaseScheduleDispatcher) Tick(
 	}
 
 	checkAllTasksNormal := func() bool {
-		return s.tables.CountTableByStatus(util.RunningTable) == len(currentTables) &&
+		result := s.tables.CountTableByStatus(util.RunningTable) == len(currentTables) &&
 			s.tables.CountTableByStatus(util.AddingTable) == 0 &&
 			s.tables.CountTableByStatus(util.RemovingTable) == 0
+		// when draining capture, tables should be in `AddingTable` status,
+		// after all tables become `Running`, treat it as a signal that the capture
+		// draining process finished.
+		s.drainTarget = captureIDNotDraining
+		return result
 	}
 	if !checkAllTasksNormal() {
 		return CheckpointCannotProceed, CheckpointCannotProceed, nil
