@@ -22,6 +22,8 @@ import (
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/zap"
 
+	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
+	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/shardddl/optimism"
 )
@@ -159,7 +161,10 @@ func (o *Optimist) GetOperation(ctx context.Context, info optimism.Info, rev int
 // DoneOperation marks the shard DDL lock operation as done.
 func (o *Optimist) DoneOperation(op optimism.Operation) error {
 	op.Done = true
-	_, _, err := optimism.PutOperation(o.cli, false, op, 0)
+	_, _, err := etcdutil.DoTxnWithRepeatable(o.cli, func(_ *tcontext.Context, cli *clientv3.Client) (interface{}, error) {
+		_, _, err := optimism.PutOperation(cli, false, op, 0)
+		return nil, err
+	})
 	if err != nil {
 		return err
 	}
