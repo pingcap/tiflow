@@ -126,7 +126,7 @@ func (c *validatorPersistHelper) createSchemaAndTables(tctx *tcontext.Context) e
 
 func (c *validatorPersistHelper) createSchema(tctx *tcontext.Context) error {
 	query := fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s", dbutil.ColumnName(c.cfg.MetaSchema))
-	_, err := c.db.DB.ExecContext(tctx.Ctx, query)
+	_, err := c.db.ExecContext(tctx, query)
 	tctx.L().Info("create checkpoint schema", zap.String("statement", query))
 	return err
 }
@@ -189,7 +189,7 @@ func (c *validatorPersistHelper) createTable(tctx *tcontext.Context) error {
 	}
 	tctx.L().Info("create checkpoint and data table", zap.Strings("statements", sqls))
 	for _, q := range sqls {
-		if _, err := c.db.DB.ExecContext(tctx.Ctx, q); err != nil {
+		if _, err := c.db.ExecContext(tctx, q); err != nil {
 			return err
 		}
 	}
@@ -412,7 +412,7 @@ func (c *validatorPersistHelper) loadPersistedData(tctx *tcontext.Context) (*per
 
 func (c *validatorPersistHelper) loadCheckpoint(tctx *tcontext.Context) (*binlog.Location, error) {
 	query := "select binlog_name, binlog_pos, binlog_gtid from " + c.checkpointTableName + " where source = ?"
-	rows, err := c.db.DB.QueryContext(tctx.Ctx, query, c.cfg.SourceID)
+	rows, err := c.db.QueryContext(tctx, query, c.cfg.SourceID)
 	if err != nil {
 		return nil, err
 	}
@@ -449,7 +449,7 @@ func (c *validatorPersistHelper) loadPendingChange(tctx *tcontext.Context) (map[
 	res := make(map[string]*tableChangeDataForPersist)
 	rev := int64(1)
 	query := "select schema_name, table_name, row_pk, data, revision from " + c.pendingChangeTableName + " where source = ?"
-	rows, err := c.db.DB.QueryContext(tctx.Ctx, query, c.cfg.SourceID)
+	rows, err := c.db.QueryContext(tctx, query, c.cfg.SourceID)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -499,7 +499,7 @@ func (c *validatorPersistHelper) loadTableStatus(tctx *tcontext.Context) (map[st
 	res := make(map[string]*tableValidateStatus)
 	query := "select src_schema_name, src_table_name, dst_schema_name, dst_table_name, stage, message from " +
 		c.tableStatusTableName + " where source = ?"
-	rows, err := c.db.DB.QueryContext(tctx.Ctx, query, c.cfg.SourceID)
+	rows, err := c.db.QueryContext(tctx, query, c.cfg.SourceID)
 	if err != nil {
 		return nil, err
 	}
@@ -535,7 +535,7 @@ func (c *validatorPersistHelper) loadTableStatus(tctx *tcontext.Context) (map[st
 func (c *validatorPersistHelper) loadErrorCount(tctx *tcontext.Context, db *conn.BaseDB) (map[pb.ValidateErrorState]int64, error) {
 	res := make(map[pb.ValidateErrorState]int64)
 	query := "select status, count(*) from " + c.errorChangeTableName + " where source = ? group by status"
-	rows, err := db.DB.QueryContext(tctx.Ctx, query, c.cfg.SourceID)
+	rows, err := db.QueryContext(tctx, query, c.cfg.SourceID)
 	if err != nil {
 		return nil, err
 	}
@@ -580,7 +580,8 @@ func (c *validatorPersistHelper) loadError(filterState pb.ValidateErrorState) ([
 	// we do not retry, let user do it
 	newCtx, cancelFunc := context.WithTimeout(context.Background(), validationDBTimeout)
 	defer cancelFunc()
-	rows, err = c.db.DB.QueryContext(newCtx, query, args...)
+	tctx := tcontext.NewContext(newCtx, c.L)
+	rows, err = c.db.QueryContext(tctx, query, args...)
 	if err != nil {
 		return res, err
 	}
@@ -640,7 +641,8 @@ func (c *validatorPersistHelper) operateError(validateOp pb.ValidationErrOp, err
 	// we do not retry, let user do it
 	newCtx, cancelFunc := context.WithTimeout(context.Background(), validationDBTimeout)
 	defer cancelFunc()
-	_, err := c.db.DB.ExecContext(newCtx, query, args...)
+	tctx := tcontext.NewContext(newCtx, c.L)
+	_, err := c.db.ExecContext(tctx, query, args...)
 	return err
 }
 
@@ -656,6 +658,7 @@ func (c *validatorPersistHelper) deleteError(errID uint64, isAll bool) error {
 	// we do not retry, let user do it
 	newCtx, cancelFunc := context.WithTimeout(context.Background(), validationDBTimeout)
 	defer cancelFunc()
-	_, err := c.db.DB.ExecContext(newCtx, query, args...)
+	tctx := tcontext.NewContext(newCtx, c.L)
+	_, err := c.db.ExecContext(tctx, query, args...)
 	return err
 }

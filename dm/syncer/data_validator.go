@@ -383,14 +383,12 @@ func (v *DataValidator) errorProcessRoutine() {
 func (v *DataValidator) waitSyncerSynced(currLoc binlog.Location) error {
 	syncLoc := v.syncer.getFlushedGlobalPoint()
 	cmp := binlog.CompareLocation(currLoc, syncLoc, v.cfg.EnableGTID)
-	switch {
-	case cmp < 0:
-		return nil
-	case cmp == 0:
+	if cmp >= 0 && !v.reachedSyncer.Load() {
 		v.reachedSyncer.Store(true)
+		v.L.Info("validator progress reached syncer")
+	}
+	if cmp <= 0 {
 		return nil
-	default:
-		v.reachedSyncer.Store(true)
 	}
 
 	for {
