@@ -219,7 +219,7 @@ func (d *BaseDB) DoTxWithRetry(tctx *tcontext.Context, queries []string, args []
 			if tctx.L().Core().Enabled(zap.DebugLevel) {
 				tctx.L().Debug("exec in tx",
 					zap.String("query", utils.TruncateString(q, -1)),
-					zap.String("argument", utils.TruncateInterface(args, -1)))
+					zap.String("argument", utils.TruncateInterface(args[i], -1)))
 			}
 			if _, err = tx.ExecContext(tctx.Ctx, q, args[i]...); err != nil {
 				return nil, perrors.Trace(err)

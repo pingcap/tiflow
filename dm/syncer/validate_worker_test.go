@@ -321,45 +321,67 @@ func TestValidatorWorkerValidateTableChanges(t *testing.T) {
 }
 
 func TestValidatorWorkerCompareData(t *testing.T) {
-	worker := validateWorker{}
-	eq, err := worker.compareData([]*sql.NullString{{String: "1", Valid: true}},
-		[]*sql.NullString{{Valid: false}},
-		[]*model.ColumnInfo{{FieldType: types.FieldType{Tp: mysql.TypeLong}}})
+	compareContext := validateCompareContext{
+		logger:  log.L(),
+		columns: []*model.ColumnInfo{{FieldType: types.FieldType{Tp: mysql.TypeLong}}},
+	}
+	eq, err := compareContext.compareData("", []*sql.NullString{{String: "1", Valid: true}}, []*sql.NullString{{Valid: false}})
 	require.NoError(t, err)
 	require.False(t, eq)
-	eq, err = worker.compareData([]*sql.NullString{{String: "1.1", Valid: true}},
-		[]*sql.NullString{{String: "1.x", Valid: true}},
-		[]*model.ColumnInfo{{FieldType: types.FieldType{Tp: mysql.TypeFloat}}})
+
+	compareContext = validateCompareContext{
+		logger:  log.L(),
+		columns: []*model.ColumnInfo{{FieldType: types.FieldType{Tp: mysql.TypeFloat}}},
+	}
+	eq, err = compareContext.compareData("", []*sql.NullString{{String: "1.1", Valid: true}}, []*sql.NullString{{String: "1.x", Valid: true}})
 	require.Error(t, err)
 	require.False(t, eq)
-	eq, err = worker.compareData([]*sql.NullString{{String: "1.1", Valid: true}},
-		[]*sql.NullString{{String: "1.1000011", Valid: true}},
-		[]*model.ColumnInfo{{FieldType: types.FieldType{Tp: mysql.TypeFloat}}})
+
+	compareContext = validateCompareContext{
+		logger:  log.L(),
+		columns: []*model.ColumnInfo{{FieldType: types.FieldType{Tp: mysql.TypeFloat}}},
+	}
+	eq, err = compareContext.compareData("", []*sql.NullString{{String: "1.1", Valid: true}}, []*sql.NullString{{String: "1.1000011", Valid: true}})
 	require.NoError(t, err)
 	require.False(t, eq)
-	eq, err = worker.compareData([]*sql.NullString{{String: "1.1", Valid: true}},
-		[]*sql.NullString{{String: "1.1000001", Valid: true}},
-		[]*model.ColumnInfo{{FieldType: types.FieldType{Tp: mysql.TypeFloat}}})
+
+	compareContext = validateCompareContext{
+		logger:  log.L(),
+		columns: []*model.ColumnInfo{{FieldType: types.FieldType{Tp: mysql.TypeFloat}}},
+	}
+	eq, err = compareContext.compareData("", []*sql.NullString{{String: "1.1", Valid: true}}, []*sql.NullString{{String: "1.1000001", Valid: true}})
 	require.NoError(t, err)
 	require.True(t, eq)
-	eq, err = worker.compareData([]*sql.NullString{{String: "1.1", Valid: true}},
-		[]*sql.NullString{{String: "1.1000001", Valid: true}},
-		[]*model.ColumnInfo{{FieldType: types.FieldType{Tp: mysql.TypeDouble}}})
+
+	compareContext = validateCompareContext{
+		logger:  log.L(),
+		columns: []*model.ColumnInfo{{FieldType: types.FieldType{Tp: mysql.TypeDouble}}},
+	}
+	eq, err = compareContext.compareData("", []*sql.NullString{{String: "1.1", Valid: true}}, []*sql.NullString{{String: "1.1000001", Valid: true}})
 	require.NoError(t, err)
 	require.True(t, eq)
-	eq, err = worker.compareData([]*sql.NullString{{String: "1", Valid: true}},
-		[]*sql.NullString{{String: "1", Valid: true}},
-		[]*model.ColumnInfo{{FieldType: types.FieldType{Tp: mysql.TypeLong}}})
+
+	compareContext = validateCompareContext{
+		logger:  log.L(),
+		columns: []*model.ColumnInfo{{FieldType: types.FieldType{Tp: mysql.TypeLong}}},
+	}
+	eq, err = compareContext.compareData("", []*sql.NullString{{String: "1", Valid: true}}, []*sql.NullString{{String: "1", Valid: true}})
 	require.NoError(t, err)
 	require.True(t, eq)
-	eq, err = worker.compareData([]*sql.NullString{{String: "aaa", Valid: true}},
-		[]*sql.NullString{{String: "aaa", Valid: true}},
-		[]*model.ColumnInfo{{FieldType: types.FieldType{Tp: mysql.TypeVarchar}}})
+
+	compareContext = validateCompareContext{
+		logger:  log.L(),
+		columns: []*model.ColumnInfo{{FieldType: types.FieldType{Tp: mysql.TypeVarchar}}},
+	}
+	eq, err = compareContext.compareData("", []*sql.NullString{{String: "aaa", Valid: true}}, []*sql.NullString{{String: "aaa", Valid: true}})
 	require.NoError(t, err)
 	require.True(t, eq)
-	eq, err = worker.compareData([]*sql.NullString{{String: "\x01\x02", Valid: true}},
-		[]*sql.NullString{{String: "\x01\x02", Valid: true}},
-		[]*model.ColumnInfo{{FieldType: types.FieldType{Tp: mysql.TypeVarString}}})
+
+	compareContext = validateCompareContext{
+		logger:  log.L(),
+		columns: []*model.ColumnInfo{{FieldType: types.FieldType{Tp: mysql.TypeVarString}}},
+	}
+	eq, err = compareContext.compareData("", []*sql.NullString{{String: "\x01\x02", Valid: true}}, []*sql.NullString{{String: "\x01\x02", Valid: true}})
 	require.NoError(t, err)
 	require.True(t, eq)
 }
