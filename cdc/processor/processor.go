@@ -939,8 +939,8 @@ func (p *processor) getTableName(ctx cdcContext.Context,
 	// after `rename table` DDL, since `rename table` keeps the tableID unchanged
 	var tableName *model.TableName
 	retry.Do(ctx, func() error { //nolint:errcheck
-		if name, ok := p.schemaStorage.GetLastSnapshot().GetTableNameByID(tableID); ok {
-			tableName = &name
+		if x, ok := p.schemaStorage.GetLastSnapshot().PhysicalTableByID(tableID); ok {
+			tableName = &x.TableName
 			return nil
 		}
 		return errors.Errorf("failed to get table name, fallback to use table id: %d",
@@ -954,18 +954,15 @@ func (p *processor) getTableName(ctx cdcContext.Context,
 		var markTableID model.TableID
 		err := retry.Do(context.Background(), func() error {
 			if tableName == nil {
-				name, exist := p.schemaStorage.GetLastSnapshot().GetTableNameByID(tableID)
+				x, exist := p.schemaStorage.GetLastSnapshot().PhysicalTableByID(tableID)
 				if !exist {
 					return cerror.ErrProcessorTableNotFound.
 						GenWithStack("normal table(%s)", tableID)
 				}
-				tableName = &name
+				tableName = &x.TableName
 			}
-			markTableSchemaName, markTableTableName := mark.GetMarkTableName(
-				tableName.Schema, tableName.Table)
-			tableInfo, exist := p.schemaStorage.
-				GetLastSnapshot().
-				GetTableByName(markTableSchemaName, markTableTableName)
+			markTableSchemaName, markTableTableName := mark.GetMarkTableName(tableName.Schema, tableName.Table)
+			tableInfo, exist := p.schemaStorage.GetLastSnapshot().TableByName(markTableSchemaName, markTableTableName)
 			if !exist {
 				return cerror.ErrProcessorTableNotFound.
 					GenWithStack("normal table(%s) and mark table not match",

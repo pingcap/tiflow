@@ -18,7 +18,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net/http"
 	"regexp"
 	"strings"
 
@@ -106,13 +105,7 @@ func CheckPDVersion(ctx context.Context, pdAddr string, credential *security.Cre
 		return err
 	}
 
-	req, err := http.NewRequestWithContext(
-		ctx, http.MethodGet, fmt.Sprintf("%s/pd/api/v1/version", pdAddr), nil)
-	if err != nil {
-		return cerror.ErrCheckClusterVersionFromPD.GenWithStackByArgs(err)
-	}
-
-	resp, err := httpClient.Do(req)
+	resp, err := httpClient.Get(ctx, fmt.Sprintf("%s/pd/api/v1/version", pdAddr))
 	if err != nil {
 		return cerror.ErrCheckClusterVersionFromPD.GenWithStackByArgs(err)
 	}

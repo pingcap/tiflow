@@ -28,7 +28,6 @@ import (
 	"github.com/pingcap/tidb/util/filter"
 	regexprrouter "github.com/pingcap/tidb/util/regexpr-router"
 	router "github.com/pingcap/tidb/util/table-router"
-	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/require"
 
 	"github.com/pingcap/tiflow/dm/dm/config"
@@ -188,7 +187,7 @@ func TestValidatorErrorProcessRoutine(t *testing.T) {
 	validator.Start(pb.Stage_Running)
 	defer validator.Stop()
 	require.Equal(t, pb.Stage_Running, validator.Stage())
-	validator.errChan <- errors.New("test error")
+	validator.sendError(errors.New("test error"))
 	require.True(t, utils.WaitSomething(20, 100*time.Millisecond, func() bool {
 		return validator.Stage() == pb.Stage_Stopped
 	}))
@@ -292,6 +291,9 @@ func TestValidatorDoValidate(t *testing.T) {
 		createTableSQL  = "CREATE TABLE `" + tableName + "`(id int primary key, v varchar(100))"
 		createTableSQL2 = "CREATE TABLE `" + tableName2 + "`(id int primary key)"
 		createTableSQL3 = "CREATE TABLE `" + tableName3 + "`(id int, v varchar(100))"
+		tableNameInfo   = filter.Table{Schema: schemaName, Name: tableName}
+		tableNameInfo2  = filter.Table{Schema: schemaName, Name: tableName2}
+		tableNameInfo3  = filter.Table{Schema: schemaName, Name: tableName3}
 	)
 	cfg := genSubtaskConfig(t)
 	_, dbMock, err := conn.InitMockDBFull()
@@ -327,8 +329,21 @@ func TestValidatorDoValidate(t *testing.T) {
 	}
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
+	mock.MatchExpectationsInOrder(false)
 	mock.ExpectQuery("SHOW VARIABLES LIKE 'sql_mode'").WillReturnRows(
 		mock.NewRows([]string{"Variable_name", "Value"}).AddRow("sql_mode", ""),
+	)
+	mock.ExpectBegin()
+	mock.ExpectExec("SET SESSION SQL_MODE.*").WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectCommit()
+	mock.ExpectQuery("SHOW CREATE TABLE " + tableNameInfo.String() + ".*").WillReturnRows(
+		mock.NewRows([]string{"Table", "Create Table"}).AddRow(tableName, createTableSQL),
+	)
+	mock.ExpectQuery("SHOW CREATE TABLE " + tableNameInfo2.String() + ".*").WillReturnRows(
+		mock.NewRows([]string{"Table", "Create Table"}).AddRow(tableName2, createTableSQL2),
+	)
+	mock.ExpectQuery("SHOW CREATE TABLE " + tableNameInfo3.String() + ".*").WillReturnRows(
+		mock.NewRows([]string{"Table", "Create Table"}).AddRow(tableName3, createTableSQL3),
 	)
 	dbConn, err := db.Conn(context.Background())
 	require.NoError(t, err)
@@ -466,9 +481,9 @@ func TestValidatorDoValidate(t *testing.T) {
 	require.Len(t, validator.loadedPendingChanges, 1)
 	ft := filter.Table{Schema: schemaName, Name: tableName}
 	require.Contains(t, validator.loadedPendingChanges, ft.String())
-	require.Len(t, validator.loadedPendingChanges[ft.String()].rows, 1)
-	require.Contains(t, validator.loadedPendingChanges[ft.String()].rows, "11")
-	require.Equal(t, validator.loadedPendingChanges[ft.String()].rows["11"].Tp, rowInsert)
+	require.Len(t, validator.loadedPendingChanges[ft.String()].jobs, 1)
+	require.Contains(t, validator.loadedPendingChanges[ft.String()].jobs, "11")
+	require.Equal(t, validator.loadedPendingChanges[ft.String()].jobs["11"].Tp, rowInsert)
 	require.Len(t, validator.tableStatus, 4)
 	require.Contains(t, validator.tableStatus, ft.String())
 	require.Equal(t, pb.Stage_Running, validator.tableStatus[ft.String()].stage)
@@ -504,94 +519,29 @@ func TestValidatorGetRowChangeType(t *testing.T) {
 }
 
 func TestValidatorGenRowKey(t *testing.T) {
-	require.Equal(t, "a", genRowKey([]string{"a"}))
-	require.Equal(t, "a\tb", genRowKey([]string{"a", "b"}))
-	require.Equal(t, "a\tb\tc", genRowKey([]string{"a", "b", "c"}))
+	require.Equal(t, "a", genRowKeyByString([]string{"a"}))
+	require.Equal(t, "a\tb", genRowKeyByString([]string{"a", "b"}))
+	require.Equal(t, "a\tb\tc", genRowKeyByString([]string{"a", "b", "c"}))
 	var bytes []byte
 	for i := 0; i < 100; i++ {
 		bytes = append(bytes, 'a')
 	}
 	{
 		longStr := string(bytes[:maxRowKeyLength])
-		require.Equal(t, longStr, genRowKey([]string{longStr}))
+		require.Equal(t, longStr, genRowKeyByString([]string{longStr}))
 	}
 	{
 		longStr := string(bytes[:maxRowKeyLength+1])
 		sum := sha256.Sum256([]byte(longStr))
 		sha := hex.EncodeToString(sum[:])
-		require.Equal(t, sha, genRowKey([]string{longStr}))
+		require.Equal(t, sha, genRowKeyByString([]string{longStr}))
 	}
 }
 
-func TestValidatorGenColData(t *testing.T) {
-	res := genColData(1)
-	require.Equal(t, "1", res)
-	res = genColData(1.2)
-	require.Equal(t, "1.2", res)
-	res = genColData("abc")
-	require.Equal(t, "abc", res)
-	res = genColData([]byte{'\x01', '\x02', '\x03'})
-	require.Equal(t, "\x01\x02\x03", res)
-	res = genColData(decimal.NewFromInt(222123123))
-	require.Equal(t, "222123123", res)
-}
-
-func TestGetValidationStatus(t *testing.T) {
-	var err error
-	createTableSQL1 := "CREATE TABLE `db`.`tbl1` (id int primary key, v varchar(100))"
-	createTableSQL2 := "CREATE TABLE `db`.`tbl2` (id int primary key, v varchar(100))"
+func TestValidatorGetValidationStatus(t *testing.T) {
 	cfg := genSubtaskConfig(t)
-	generator := genEventGenerator(t)
-	defer func() {
-		conn.DefaultDBProvider = &conn.DefaultDBProviderImpl{}
-	}()
-	require.Equal(t, log.InitLogger(&log.Config{}), nil)
 	syncerObj := NewSyncer(cfg, nil, nil)
-	syncerObj.schemaLoaded.Store(true)
-	syncerObj.schemaTracker, err = schema.NewTracker(context.Background(), cfg.Name, defaultTestSessionCfg, syncerObj.downstreamTrackConn)
-	require.NoError(t, err)
-	defer syncerObj.schemaTracker.Close()
-	syncerObj.tableRouter, err = regexprrouter.NewRegExprRouter(cfg.CaseSensitive, []*router.TableRule{})
-	require.NoError(t, err)
 	validator := NewContinuousDataValidator(cfg, syncerObj, false)
-	validator.ctx, validator.cancel = context.WithCancel(context.Background())
-	validator.tctx = tcontext.NewContext(validator.ctx, validator.L)
-	validator.workerCnt = 1
-	validator.workers = []*validateWorker{{rowChangeCh: make(chan *rowChange, workerChannelSize)}}
-	defer close(validator.workers[0].rowChangeCh)
-	require.NoError(t, syncerObj.schemaTracker.CreateSchemaIfNotExists("db"))
-	require.NoError(t, syncerObj.schemaTracker.Exec(context.Background(), "db", createTableSQL1))
-	require.NoError(t, syncerObj.schemaTracker.Exec(context.Background(), "db", createTableSQL2))
-	dmlData := []*event.DMLData{
-		{
-			TableID:    11,
-			Schema:     "db",
-			Table:      "tbl1",
-			ColumnType: []byte{mysql.MYSQL_TYPE_LONG, mysql.MYSQL_TYPE_STRING},
-			Rows: [][]interface{}{
-				{int32(3), "c"},
-				{int32(3), "d"},
-			},
-		},
-		{
-			TableID:    12,
-			Schema:     "db",
-			Table:      "tbl2",
-			ColumnType: []byte{mysql.MYSQL_TYPE_LONG, mysql.MYSQL_TYPE_STRING},
-			Rows: [][]interface{}{
-				{int32(3), "c"},
-				{int32(3), "d"},
-			},
-		},
-	}
-	dmlEvents, _, err := generator.GenDMLEvents(replication.WRITE_ROWS_EVENTv2, dmlData, 0)
-	require.NoError(t, err)
-	for _, ev := range dmlEvents {
-		if _, ok := ev.Event.(*replication.RowsEvent); ok {
-			err = validator.processRowsEvent(ev.Header, ev.Event.(*replication.RowsEvent))
-			require.NoError(t, err)
-		}
-	}
 	expected := map[string]*pb.ValidationStatus{
 		"`db`.`tbl1`": {
 			SrcTable:         "`db`.`tbl1`",
@@ -599,11 +549,12 @@ func TestGetValidationStatus(t *testing.T) {
 			ValidationStatus: pb.Stage_Running.String(),
 			Message:          "",
 		},
-		"`db`.`tbl2`": {
-			SrcTable:         "`db`.`tbl2`",
-			DstTable:         "`db`.`tbl2`",
-			ValidationStatus: pb.Stage_Running.String(),
-			Message:          "",
+	}
+	validator.tableStatus = map[string]*tableValidateStatus{
+		"`db`.`tbl1`": {
+			source: filter.Table{Schema: "db", Name: "tbl1"},
+			target: filter.Table{Schema: "db", Name: "tbl1"},
+			stage:  pb.Stage_Running,
 		},
 	}
 	ret := validator.GetValidationStatus()
