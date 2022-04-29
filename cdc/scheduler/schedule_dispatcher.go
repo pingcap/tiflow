@@ -172,7 +172,7 @@ func (s *BaseScheduleDispatcher) setCaptures(captures map[model.CaptureID]*model
 	s.captures = captures
 
 	// draining target cannot be found in the latest captures, which means it
-	// is already offline, no more need to check it.
+	// is already offline, treat it as draining finished.
 	if _, ok := s.captures[s.drainTarget]; !ok {
 		s.drainTarget = captureIDNotDraining
 	}
@@ -207,8 +207,7 @@ func (s *BaseScheduleDispatcher) Tick(
 	// the workload may never be balanced until user manually triggers a rebalance.
 	if s.lastTickCaptureCount != captureCountUninitialized &&
 		s.lastTickCaptureCount != len(captures) {
-		// todo: consider `draining`
-		s.needRebalance = true
+		s.Rebalance()
 	}
 	s.lastTickCaptureCount = len(captures)
 
@@ -297,7 +296,7 @@ func (s *BaseScheduleDispatcher) Tick(
 		return CheckpointCannotProceed, CheckpointCannotProceed, nil
 	}
 
-	if s.needRebalance && !s.draining() {
+	if s.needRebalance {
 		ok, err := s.rebalance(ctx)
 		if err != nil {
 			return CheckpointCannotProceed, CheckpointCannotProceed, errors.Trace(err)
@@ -394,19 +393,15 @@ func (s *BaseScheduleDispatcher) descheduleTablesFromCaptures() {
 		// also remove all tables from it.
 		if _, ok := s.captures[captureID]; !ok || captureID == s.drainTarget {
 			// Remove records for all table previously replicated by the
-			// gone capture.
-			s.removeTablesByCaptureID(captureID)
+			// gone capture or the draining one.
+			removed := s.tables.RemoveTableRecordByCaptureID(captureID)
+			s.logger.Info("removing tables from capture",
+				zap.String("captureID", captureID),
+				zap.Int("count", len(removed)),
+				zap.Any("removedTables", removed))
+			s.moveTableManager.OnCaptureRemoved(captureID)
 		}
 	}
-}
-
-func (s *BaseScheduleDispatcher) removeTablesByCaptureID(captureID model.CaptureID) {
-	removed := s.tables.RemoveTableRecordByCaptureID(captureID)
-	s.logger.Info("removing tables from capture",
-		zap.String("captureID", captureID),
-		zap.Int("count", len(removed)),
-		zap.Any("removedTables", removed))
-	s.moveTableManager.OnCaptureRemoved(captureID)
 }
 
 func (s *BaseScheduleDispatcher) findDiffTables(
@@ -496,8 +491,8 @@ func (s *BaseScheduleDispatcher) removeTable(
 // MoveTable implements the interface SchedulerDispatcher.
 func (s *BaseScheduleDispatcher) MoveTable(tableID model.TableID, target model.CaptureID) {
 	if !s.moveTableManager.Add(tableID, target) {
-		log.Info("Move Table command has been ignored, because the last user triggered"+
-			"move has not finished",
+		log.Info("Move Table command has been ignored, "+
+			"because the last user triggered move has not finished",
 			zap.Int64("tableID", tableID),
 			zap.String("targetCapture", target))
 	}
@@ -537,7 +532,11 @@ func (s *BaseScheduleDispatcher) handleMoveTableJobs(ctx context.Context) (bool,
 
 // Rebalance implements the interface ScheduleDispatcher.
 func (s *BaseScheduleDispatcher) Rebalance() {
-	s.needRebalance = true
+	// if one capture is draining, do not rebalance tables to
+	// prevent interfere the draining process.
+	if !s.draining() {
+		s.needRebalance = true
+	}
 }
 
 func (s *BaseScheduleDispatcher) rebalance(ctx context.Context) (done bool, err error) {
