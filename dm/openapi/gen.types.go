@@ -243,6 +243,15 @@ type OperateTaskTableStructureRequest struct {
 	Sync *bool `json:"sync,omitempty"`
 }
 
+// OperateTaskWithPreCheckResponse defines model for OperateTaskWithPreCheckResponse.
+type OperateTaskWithPreCheckResponse struct {
+	// pre-check result
+	CheckResult string `json:"check_result"`
+
+	// task
+	Task Task `json:"task"`
+}
+
 // PrometheusTopology defines model for PrometheusTopology.
 type PrometheusTopology struct {
 	Host string `json:"host"`
