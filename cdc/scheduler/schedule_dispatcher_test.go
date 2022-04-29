@@ -977,6 +977,10 @@ func TestManualMoveTableWhileDrainingCapture(t *testing.T) {
 		Status:    util.RunningTable,
 	})
 
+	// move table task before draining capture
+
+	// move table when draining capture
+
 	// move the table-1 from the capture-1 to the capture-2
 
 	// drain the capture-1
