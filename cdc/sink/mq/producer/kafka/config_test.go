@@ -438,13 +438,13 @@ func TestApplySASL(t *testing.T) {
 		{
 			name: "valid PLAIN SASL",
 			URI: "kafka://127.0.0.1:9092/abc?kafka-version=2.6.0&partition-num=0" +
-				"&sasl-username=user&sasl-password=password&sasl-mechanism=plain",
+				"&sasl-user=user&sasl-password=password&sasl-mechanism=plain",
 			exceptErr: "",
 		},
 		{
 			name: "valid SCRAM SASL",
 			URI: "kafka://127.0.0.1:9092/abc?kafka-version=2.6.0&partition-num=0" +
-				"&sasl-username=user&sasl-password=password&sasl-mechanism=SCRAM-SHA-512",
+				"&sasl-user=user&sasl-password=password&sasl-mechanism=SCRAM-SHA-512",
 			exceptErr: "",
 		},
 		{
