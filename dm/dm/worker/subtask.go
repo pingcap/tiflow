@@ -887,6 +887,7 @@ func updateTaskMetric(task, sourceID string, stage pb.Stage, workerName string) 
 
 func (st *SubTask) GetValidatorError(errState pb.ValidateErrorState) []*pb.ValidationError {
 	validator := st.getValidator()
+	// todo: should be able to get status even validator is stopped
 	if validator != nil && validator.Started() {
 		return validator.GetValidatorError(errState)
 	}
@@ -897,6 +898,7 @@ func (st *SubTask) GetValidatorError(errState pb.ValidateErrorState) []*pb.Valid
 
 func (st *SubTask) OperateValidatorError(op pb.ValidationErrOp, errID uint64, isAll bool) error {
 	validator := st.getValidator()
+	// todo: should be able to get status even validator is stopped
 	if validator != nil && validator.Started() {
 		return validator.OperateValidatorError(op, errID, isAll)
 	}
@@ -915,6 +917,7 @@ func (st *SubTask) getValidator() *syncer.DataValidator {
 func (st *SubTask) GetValidatorStatus() (*pb.ValidationStatus, error) {
 	validator := st.getValidator()
 	// todo: should be able to get status even validator is stopped
+	// current ErrValidatorNotFound looks odd, will fix it in next pr
 	if validator == nil || !validator.Started() {
 		cfg := st.getCfg()
 		return nil, terror.ErrValidatorNotFound.Generate(cfg.Name)
@@ -924,6 +927,8 @@ func (st *SubTask) GetValidatorStatus() (*pb.ValidationStatus, error) {
 
 func (st *SubTask) GetValidatorTableStatus(filterStatus pb.Stage) ([]*pb.ValidationTableStatus, error) {
 	validator := st.getValidator()
+	// todo: should be able to get status even validator is stopped
+	// current ErrValidatorNotFound looks odd, will fix it in next pr
 	if validator == nil || !validator.Started() {
 		cfg := st.getCfg()
 		return nil, terror.ErrValidatorNotFound.Generate(cfg.Name)
