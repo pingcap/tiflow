@@ -183,7 +183,8 @@ func (c *validatorPersistHelper) createTable(tctx *tcontext.Context) error {
             message VARCHAR(512) NOT NULL,
 			create_time timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			update_time timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-			UNIQUE KEY uk_source_schema_table_key(source, src_schema_name, src_table_name)
+			UNIQUE KEY uk_source_schema_table_key(source, src_schema_name, src_table_name),
+			INDEX idx_stage(stage)
 		)`,
 	}
 	tctx.L().Info("create checkpoint and data table", zap.Strings("statements", sqls))
@@ -278,7 +279,7 @@ func (c *validatorPersistHelper) persist(tctx *tcontext.Context, loc binlog.Loca
 	queries = append(queries, `DELETE FROM `+c.pendingChangeTableName+` WHERE source = ? and revision != ?`)
 	args = append(args, []interface{}{c.cfg.SourceID, nextRevision})
 
-	// unsupported table info
+	// insert/update table status
 	for _, state := range tableStatus {
 		query := `INSERT INTO ` + c.tableStatusTableName + `
 					(source, src_schema_name, src_table_name, dst_schema_name, dst_table_name, stage, message)

@@ -566,6 +566,18 @@ func (v *DataValidator) doValidate() {
 				v.sendError(terror.ErrValidatorPersistData.Delegate(err))
 				return
 			}
+		case *replication.QueryEvent:
+			locationForFlush.Position = currLoc.Position
+			query := string(ev.Query)
+			if query == "COMMIT" || query == "BEGIN" {
+				break
+			}
+			err = locationForFlush.SetGTID(ev.GSet)
+			if err = v.persistCheckpointAndData(locationForFlush); err != nil {
+				v.L.Warn("failed to flush checkpoint: ", zap.Error(err))
+				v.sendError(terror.ErrValidatorPersistData.Delegate(err))
+				return
+			}
 		case *replication.GenericEvent:
 			if e.Header.EventType == replication.HEARTBEAT_EVENT {
 				if err = v.checkAndPersistCheckpointAndData(locationForFlush); err != nil {
