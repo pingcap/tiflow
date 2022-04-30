@@ -26,6 +26,11 @@ import (
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/puller/frontier"
+<<<<<<< HEAD
+=======
+	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/pdtime"
+>>>>>>> 5476c8b55 (cdc,retry: fix leader missing by extending region retry duration (#5269))
 	"github.com/pingcap/tiflow/pkg/regionspan"
 	"github.com/pingcap/tiflow/pkg/txnutil"
 	"github.com/pingcap/tiflow/pkg/util"
@@ -52,6 +57,7 @@ type Puller interface {
 }
 
 type pullerImpl struct {
+<<<<<<< HEAD
 	pdCli          pd.Client
 	kvCli          kv.CDCKVClient
 	kvStorage      tikv.Storage
@@ -62,6 +68,16 @@ type pullerImpl struct {
 	resolvedTs     uint64
 	initialized    int64
 	enableOldValue bool
+=======
+	kvCli        kv.CDCKVClient
+	kvStorage    tikv.Storage
+	checkpointTs uint64
+	spans        []regionspan.ComparableSpan
+	outputCh     chan *model.RawKVEntry
+	tsTracker    frontier.Frontier
+	resolvedTs   uint64
+	initialized  int64
+>>>>>>> 5476c8b55 (cdc,retry: fix leader missing by extending region retry duration (#5269))
 }
 
 // NewPuller create a new Puller fetch event start from checkpointTs
@@ -73,7 +89,7 @@ func NewPuller(
 	kvStorage tidbkv.Storage,
 	checkpointTs uint64,
 	spans []regionspan.Span,
-	enableOldValue bool,
+	cfg *config.KVClientConfig,
 ) Puller {
 	tikvStorage, ok := kvStorage.(tikv.Storage)
 	if !ok {
@@ -87,6 +103,7 @@ func NewPuller(
 	// the initial ts for frontier to 0. Once the puller level resolved ts
 	// initialized, the ts should advance to a non-zero value.
 	tsTracker := frontier.NewFrontier(0, comparableSpans...)
+<<<<<<< HEAD
 	kvCli := kv.NewCDCKVClient(ctx, pdCli, tikvStorage, grpcPool)
 	p := &pullerImpl{
 		pdCli:          pdCli,
@@ -99,6 +116,19 @@ func NewPuller(
 		resolvedTs:     checkpointTs,
 		initialized:    0,
 		enableOldValue: enableOldValue,
+=======
+	kvCli := kv.NewCDCKVClient(
+		ctx, pdCli, tikvStorage, grpcPool, regionCache, pdClock, changefeed, cfg)
+	p := &pullerImpl{
+		kvCli:        kvCli,
+		kvStorage:    tikvStorage,
+		checkpointTs: checkpointTs,
+		spans:        comparableSpans,
+		outputCh:     make(chan *model.RawKVEntry, defaultPullerOutputChanSize),
+		tsTracker:    tsTracker,
+		resolvedTs:   checkpointTs,
+		initialized:  0,
+>>>>>>> 5476c8b55 (cdc,retry: fix leader missing by extending region retry duration (#5269))
 	}
 	return p
 }
@@ -121,7 +151,11 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 		span := span
 
 		g.Go(func() error {
+<<<<<<< HEAD
 			return p.kvCli.EventFeed(ctx, span, checkpointTs, p.enableOldValue, lockresolver, p, eventCh)
+=======
+			return p.kvCli.EventFeed(ctx, span, checkpointTs, lockResolver, p, eventCh)
+>>>>>>> 5476c8b55 (cdc,retry: fix leader missing by extending region retry duration (#5269))
 		})
 	}
 

@@ -150,23 +150,20 @@ type regionWorker struct {
 
 	metrics *regionWorkerMetrics
 
-	enableOldValue bool
-	storeAddr      string
+	storeAddr string
 }
 
 func newRegionWorker(s *eventFeedSession, addr string) *regionWorker {
-	cfg := config.GetGlobalServerConfig().KVClient
 	worker := &regionWorker{
-		session:        s,
-		inputCh:        make(chan *regionStatefulEvent, regionWorkerInputChanSize),
-		outputCh:       s.eventCh,
-		errorCh:        make(chan error, 1),
-		statesManager:  newRegionStateManager(-1),
-		rtsManager:     newRegionTsManager(),
-		rtsUpdateCh:    make(chan *regionTsInfo, 1024),
-		enableOldValue: s.enableOldValue,
-		storeAddr:      addr,
-		concurrent:     cfg.WorkerConcurrent,
+		session:       s,
+		inputCh:       make(chan *regionStatefulEvent, regionWorkerInputChanSize),
+		outputCh:      s.eventCh,
+		errorCh:       make(chan error, 1),
+		statesManager: newRegionStateManager(-1),
+		rtsManager:    newRegionTsManager(),
+		rtsUpdateCh:   make(chan *regionTsInfo, 1024),
+		storeAddr:     addr,
+		concurrent:    s.client.config.WorkerConcurrent,
 	}
 	return worker
 }
@@ -638,7 +635,7 @@ func (w *regionWorker) handleEventEntry(
 			w.session.regionRouter.Release(state.sri.rpcCtx.Addr)
 			cachedEvents := state.matcher.matchCachedRow()
 			for _, cachedEvent := range cachedEvents {
-				revent, err := assembleRowEvent(regionID, cachedEvent, w.enableOldValue)
+				revent, err := assembleRowEvent(regionID, cachedEvent)
 				if err != nil {
 					return errors.Trace(err)
 				}
@@ -651,7 +648,7 @@ func (w *regionWorker) handleEventEntry(
 			}
 		case cdcpb.Event_COMMITTED:
 			w.metrics.metricPullEventCommittedCounter.Inc()
-			revent, err := assembleRowEvent(regionID, entry, w.enableOldValue)
+			revent, err := assembleRowEvent(regionID, entry)
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -695,7 +692,7 @@ func (w *regionWorker) handleEventEntry(
 					entry.GetType(), entry.GetOpType())
 			}
 
-			revent, err := assembleRowEvent(regionID, entry, w.enableOldValue)
+			revent, err := assembleRowEvent(regionID, entry)
 			if err != nil {
 				return errors.Trace(err)
 			}
