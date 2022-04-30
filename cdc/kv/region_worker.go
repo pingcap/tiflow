@@ -335,7 +335,7 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 					sinceLastEvent := time.Since(rts.ts.eventTime)
 					if sinceLastResolvedTs > reconnectInterval && sinceLastEvent > reconnectInterval {
 						log.Warn("kv client reconnect triggered", zap.String("changefeed", w.session.client.changefeed),
-							zap.Duration("duration", sinceLastResolvedTs), zap.Duration("since last event", sinceLastResolvedTs))
+							zap.Duration("duration", sinceLastResolvedTs), zap.Duration("sinceLastEvent", sinceLastResolvedTs))
 						return errReconnect
 					}
 					// Only resolve lock if the resolved-ts keeps unchanged for

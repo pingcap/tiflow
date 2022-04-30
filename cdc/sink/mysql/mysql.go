@@ -664,7 +664,7 @@ func (s *mysqlSink) execDMLWithMaxRetries(ctx context.Context, dmls *preparedDML
 		}
 		log.Debug("Exec Rows succeeded",
 			zap.String("changefeed", s.params.changefeedID),
-			zap.Int("num of Rows", dmls.rowCount),
+			zap.Int("numOfRows", dmls.rowCount),
 			zap.Int("bucket", bucket))
 		return nil
 	}, retry.WithBackoffBaseDelay(backoffBaseDelayInMs),
