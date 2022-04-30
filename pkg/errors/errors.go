@@ -261,7 +261,13 @@ var (
 	ErrFlowControllerEventLargerThanQuota = errors.Normalize("event is larger than the total memory quota, size: %d, quota: %d", errors.RFCCodeText("CDC:ErrFlowControllerEventLargerThanQuota"))
 
 	// retry error
+<<<<<<< HEAD
 	ErrReachMaxTry = errors.Normalize("reach maximum try: %d", errors.RFCCodeText("CDC:ErrReachMaxTry"))
+=======
+	ErrReachMaxTry = errors.Normalize("reach maximum try: %s, error: %s",
+		errors.RFCCodeText("CDC:ErrReachMaxTry"),
+	)
+>>>>>>> 5476c8b55 (cdc,retry: fix leader missing by extending region retry duration (#5269))
 
 	// tcp server error
 	ErrTCPServerClosed = errors.Normalize("The TCP server has been closed", errors.RFCCodeText("CDC:ErrTCPServerClosed"))

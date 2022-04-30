@@ -93,19 +93,25 @@ func (s *clientSuite) TestNewClient(c *check.C) {
 	defer grpcPool.Close()
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
+<<<<<<< HEAD
 	cli := NewCDCClient(context.Background(), pdClient, nil, grpcPool, regionCache)
 	c.Assert(cli, check.NotNil)
+=======
+	cli := NewCDCClient(
+		context.Background(), pdClient, nil, grpcPool, regionCache, pdtime.NewClock4Test(), "",
+		config.GetDefaultServerConfig().KVClient)
+	require.NotNil(t, cli)
+>>>>>>> 5476c8b55 (cdc,retry: fix leader missing by extending region retry duration (#5269))
 }
 
 func (s *clientSuite) TestAssembleRowEvent(c *check.C) {
 	defer testleak.AfterTest(c)()
 	defer s.TearDownTest(c)
 	testCases := []struct {
-		regionID       uint64
-		entry          *cdcpb.Event_Row
-		enableOldValue bool
-		expected       model.RegionFeedEvent
-		err            string
+		regionID uint64
+		entry    *cdcpb.Event_Row
+		expected model.RegionFeedEvent
+		err      string
 	}{{
 		regionID: 1,
 		entry: &cdcpb.Event_Row{
@@ -115,7 +121,6 @@ func (s *clientSuite) TestAssembleRowEvent(c *check.C) {
 			Value:    []byte("v1"),
 			OpType:   cdcpb.Event_Row_PUT,
 		},
-		enableOldValue: false,
 		expected: model.RegionFeedEvent{
 			RegionID: 1,
 			Val: &model.RawKVEntry{
@@ -136,7 +141,6 @@ func (s *clientSuite) TestAssembleRowEvent(c *check.C) {
 			Value:    []byte("v2"),
 			OpType:   cdcpb.Event_Row_DELETE,
 		},
-		enableOldValue: false,
 		expected: model.RegionFeedEvent{
 			RegionID: 2,
 			Val: &model.RawKVEntry{
@@ -149,28 +153,6 @@ func (s *clientSuite) TestAssembleRowEvent(c *check.C) {
 			},
 		},
 	}, {
-		regionID: 3,
-		entry: &cdcpb.Event_Row{
-			StartTs:  1,
-			CommitTs: 2,
-			Key:      []byte("k2"),
-			Value:    []byte("v2"),
-			OldValue: []byte("ov2"),
-			OpType:   cdcpb.Event_Row_PUT,
-		},
-		enableOldValue: false,
-		expected: model.RegionFeedEvent{
-			RegionID: 3,
-			Val: &model.RawKVEntry{
-				OpType:   model.OpTypePut,
-				StartTs:  1,
-				CRTs:     2,
-				Key:      []byte("k2"),
-				Value:    []byte("v2"),
-				RegionID: 3,
-			},
-		},
-	}, {
 		regionID: 4,
 		entry: &cdcpb.Event_Row{
 			StartTs:  1,
@@ -180,7 +162,6 @@ func (s *clientSuite) TestAssembleRowEvent(c *check.C) {
 			OldValue: []byte("ov3"),
 			OpType:   cdcpb.Event_Row_PUT,
 		},
-		enableOldValue: true,
 		expected: model.RegionFeedEvent{
 			RegionID: 4,
 			Val: &model.RawKVEntry{
@@ -202,13 +183,18 @@ func (s *clientSuite) TestAssembleRowEvent(c *check.C) {
 			Value:    []byte("v2"),
 			OpType:   cdcpb.Event_Row_UNKNOWN,
 		},
-		enableOldValue: false,
-		err:            "[CDC:ErrUnknownKVEventType]unknown kv optype: UNKNOWN, entry: start_ts:1 commit_ts:2 key:\"k2\" value:\"v2\" ",
+		err: "[CDC:ErrUnknownKVEventType]unknown kv optype: UNKNOWN, entry: start_ts:1 " +
+			"commit_ts:2 key:\"k2\" value:\"v2\" ",
 	}}
 
 	for _, tc := range testCases {
+<<<<<<< HEAD
 		event, err := assembleRowEvent(tc.regionID, tc.entry, tc.enableOldValue)
 		c.Assert(event, check.DeepEquals, tc.expected)
+=======
+		event, err := assembleRowEvent(tc.regionID, tc.entry)
+		require.Equal(t, tc.expected, event)
+>>>>>>> 5476c8b55 (cdc,retry: fix leader missing by extending region retry duration (#5269))
 		if err != nil {
 			c.Assert(err.Error(), check.Equals, tc.err)
 		}
@@ -366,6 +352,7 @@ func (s *clientSuite) TestConnectOfflineTiKV(c *check.C) {
 	defer grpcPool.Close()
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
+<<<<<<< HEAD
 	cdcClient := NewCDCClient(context.Background(), pdClient, kvStorage, grpcPool, regionCache)
 	eventCh := make(chan model.RegionFeedEvent, 10)
 	wg.Add(1)
@@ -373,6 +360,21 @@ func (s *clientSuite) TestConnectOfflineTiKV(c *check.C) {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 1, false, lockresolver, isPullInit, eventCh)
 		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
+=======
+	cdcClient := NewCDCClient(
+		context.Background(), pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(),
+		"", config.GetDefaultServerConfig().KVClient)
+	// Take care of the eventCh, it's used to output resolvedTs event or kv event
+	// It will stuck the normal routine
+	eventCh := make(chan model.RegionFeedEvent, 50)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := cdcClient.EventFeed(ctx,
+			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+			1, lockResolver, isPullInit, eventCh)
+		require.Equal(t, context.Canceled, errors.Cause(err))
+>>>>>>> 5476c8b55 (cdc,retry: fix leader missing by extending region retry duration (#5269))
 	}()
 
 	// new session, request to store 1, request to store 2
@@ -466,6 +468,7 @@ func (s *clientSuite) TestRecvLargeMessageSize(c *check.C) {
 	defer grpcPool.Close()
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
+<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache)
 	eventCh := make(chan model.RegionFeedEvent, 10)
 	wg.Add(1)
@@ -473,6 +476,19 @@ func (s *clientSuite) TestRecvLargeMessageSize(c *check.C) {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 1, false, lockresolver, isPullInit, eventCh)
 		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
+=======
+	cdcClient := NewCDCClient(
+		ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "",
+		config.GetDefaultServerConfig().KVClient)
+	eventCh := make(chan model.RegionFeedEvent, 50)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := cdcClient.EventFeed(ctx,
+			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+			1, lockResolver, isPullInit, eventCh)
+		require.Equal(t, context.Canceled, errors.Cause(err))
+>>>>>>> 5476c8b55 (cdc,retry: fix leader missing by extending region retry duration (#5269))
 	}()
 
 	// new session, new request
@@ -565,6 +581,7 @@ func (s *clientSuite) TestHandleError(c *check.C) {
 	defer grpcPool.Close()
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
+<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache)
 	eventCh := make(chan model.RegionFeedEvent, 10)
 	wg.Add(1)
@@ -572,6 +589,19 @@ func (s *clientSuite) TestHandleError(c *check.C) {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("d")}, 100, false, lockresolver, isPullInit, eventCh)
 		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
+=======
+	cdcClient := NewCDCClient(
+		ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "",
+		config.GetDefaultServerConfig().KVClient)
+	eventCh := make(chan model.RegionFeedEvent, 50)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := cdcClient.EventFeed(ctx,
+			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("d")},
+			100, lockResolver, isPullInit, eventCh)
+		require.Equal(t, context.Canceled, errors.Cause(err))
+>>>>>>> 5476c8b55 (cdc,retry: fix leader missing by extending region retry duration (#5269))
 	}()
 
 	// wait request id allocated with: new session, new request
@@ -723,14 +753,28 @@ func (s *clientSuite) TestCompatibilityWithSameConn(c *check.C) {
 	defer grpcPool.Close()
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
+<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache)
 	eventCh := make(chan model.RegionFeedEvent, 10)
+=======
+	cdcClient := NewCDCClient(
+		ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "",
+		config.GetDefaultServerConfig().KVClient)
+	eventCh := make(chan model.RegionFeedEvent, 50)
+>>>>>>> 5476c8b55 (cdc,retry: fix leader missing by extending region retry duration (#5269))
 	var wg2 sync.WaitGroup
 	wg2.Add(1)
 	go func() {
 		defer wg2.Done()
+<<<<<<< HEAD
 		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockResolver, isPullInit, eventCh)
 		c.Assert(cerror.ErrVersionIncompatible.Equal(err), check.IsTrue)
+=======
+		err := cdcClient.EventFeed(ctx,
+			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+			100, lockResolver, isPullInit, eventCh)
+		require.True(t, cerror.ErrVersionIncompatible.Equal(err))
+>>>>>>> 5476c8b55 (cdc,retry: fix leader missing by extending region retry duration (#5269))
 	}()
 
 	// wait request id allocated with: new session, new request
@@ -792,15 +836,29 @@ func (s *clientSuite) TestClusterIDMismatch(c *check.C) {
 	defer grpcPool.Close()
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
+<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache)
 	eventCh := make(chan model.RegionFeedEvent, 10)
+=======
+	cdcClient := NewCDCClient(
+		ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "",
+		config.GetDefaultServerConfig().KVClient)
+	eventCh := make(chan model.RegionFeedEvent, 50)
+>>>>>>> 5476c8b55 (cdc,retry: fix leader missing by extending region retry duration (#5269))
 
 	var wg2 sync.WaitGroup
 	wg2.Add(1)
 	go func() {
 		defer wg2.Done()
+<<<<<<< HEAD
 		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockResolver, isPullInit, eventCh)
 		c.Assert(cerror.ErrClusterIDMismatch.Equal(err), check.IsTrue)
+=======
+		err := cdcClient.EventFeed(ctx,
+			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+			100, lockResolver, isPullInit, eventCh)
+		require.True(t, cerror.ErrClusterIDMismatch.Equal(err))
+>>>>>>> 5476c8b55 (cdc,retry: fix leader missing by extending region retry duration (#5269))
 	}()
 
 	// wait request id allocated with: new session, new request
@@ -859,6 +917,7 @@ func (s *clientSuite) testHandleFeedEvent(c *check.C) {
 	defer grpcPool.Close()
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
+<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache)
 	eventCh := make(chan model.RegionFeedEvent, 10)
 	wg.Add(1)
@@ -866,6 +925,19 @@ func (s *clientSuite) testHandleFeedEvent(c *check.C) {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
 		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
+=======
+	cdcClient := NewCDCClient(
+		ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "",
+		config.GetDefaultServerConfig().KVClient)
+	eventCh := make(chan model.RegionFeedEvent, 50)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := cdcClient.EventFeed(ctx,
+			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+			100, lockResolver, isPullInit, eventCh)
+		require.Equal(t, context.Canceled, errors.Cause(err))
+>>>>>>> 5476c8b55 (cdc,retry: fix leader missing by extending region retry duration (#5269))
 	}()
 
 	// wait request id allocated with: new session, new request
@@ -1309,6 +1381,7 @@ func (s *clientSuite) TestStreamSendWithError(c *check.C) {
 	defer grpcPool.Close()
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
+<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache)
 	eventCh := make(chan model.RegionFeedEvent, 10)
 	wg.Add(1)
@@ -1316,6 +1389,19 @@ func (s *clientSuite) TestStreamSendWithError(c *check.C) {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")}, 100, false, lockerResolver, isPullInit, eventCh)
 		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
+=======
+	cdcClient := NewCDCClient(
+		ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "",
+		config.GetDefaultServerConfig().KVClient)
+	eventCh := make(chan model.RegionFeedEvent, 50)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := cdcClient.EventFeed(ctx,
+			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")},
+			100, lockerResolver, isPullInit, eventCh)
+		require.Equal(t, context.Canceled, errors.Cause(err))
+>>>>>>> 5476c8b55 (cdc,retry: fix leader missing by extending region retry duration (#5269))
 	}()
 
 	var requestIds sync.Map
@@ -1420,6 +1506,7 @@ func (s *clientSuite) testStreamRecvWithError(c *check.C, failpointStr string) {
 	defer grpcPool.Close()
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
+<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache)
 	eventCh := make(chan model.RegionFeedEvent, 40)
 	wg.Add(1)
@@ -1427,6 +1514,19 @@ func (s *clientSuite) testStreamRecvWithError(c *check.C, failpointStr string) {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
 		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
+=======
+	cdcClient := NewCDCClient(
+		ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "",
+		config.GetDefaultServerConfig().KVClient)
+	eventCh := make(chan model.RegionFeedEvent, 50)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := cdcClient.EventFeed(ctx,
+			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+			100, lockResolver, isPullInit, eventCh)
+		require.Equal(t, context.Canceled, errors.Cause(err))
+>>>>>>> 5476c8b55 (cdc,retry: fix leader missing by extending region retry duration (#5269))
 	}()
 
 	// wait request id allocated with: new session, new request
@@ -1550,14 +1650,28 @@ func (s *clientSuite) TestStreamRecvWithErrorAndResolvedGoBack(c *check.C) {
 	defer grpcPool.Close()
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
+<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache)
 	eventCh := make(chan model.RegionFeedEvent, 10)
+=======
+	cdcClient := NewCDCClient(
+		ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "",
+		config.GetDefaultServerConfig().KVClient)
+	eventCh := make(chan model.RegionFeedEvent, 50)
+>>>>>>> 5476c8b55 (cdc,retry: fix leader missing by extending region retry duration (#5269))
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		defer close(eventCh)
+<<<<<<< HEAD
 		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
 		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
+=======
+		err := cdcClient.EventFeed(ctx,
+			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+			100, lockResolver, isPullInit, eventCh)
+		require.Equal(t, context.Canceled, errors.Cause(err))
+>>>>>>> 5476c8b55 (cdc,retry: fix leader missing by extending region retry duration (#5269))
 	}()
 
 	// wait request id allocated with: new session, new request
@@ -1760,14 +1874,27 @@ func (s *clientSuite) TestIncompatibleTiKV(c *check.C) {
 	defer grpcPool.Close()
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
+<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache)
+=======
+	cdcClient := NewCDCClient(
+		ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "",
+		config.GetDefaultServerConfig().KVClient)
+>>>>>>> 5476c8b55 (cdc,retry: fix leader missing by extending region retry duration (#5269))
 	// NOTICE: eventCh may block the main logic of EventFeed
 	eventCh := make(chan model.RegionFeedEvent, 128)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+<<<<<<< HEAD
 		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
 		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
+=======
+		err := cdcClient.EventFeed(ctx,
+			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+			100, lockResolver, isPullInit, eventCh)
+		require.Equal(t, context.Canceled, errors.Cause(err))
+>>>>>>> 5476c8b55 (cdc,retry: fix leader missing by extending region retry duration (#5269))
 	}()
 
 	err = retry.Do(context.Background(), func() error {
@@ -1837,14 +1964,28 @@ func (s *clientSuite) TestNoPendingRegionError(c *check.C) {
 	defer grpcPool.Close()
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
+<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache)
 	eventCh := make(chan model.RegionFeedEvent, 10)
+=======
+	cdcClient := NewCDCClient(
+		ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "",
+		config.GetDefaultServerConfig().KVClient)
+	eventCh := make(chan model.RegionFeedEvent, 50)
+>>>>>>> 5476c8b55 (cdc,retry: fix leader missing by extending region retry duration (#5269))
 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+<<<<<<< HEAD
 		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
 		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
+=======
+		err := cdcClient.EventFeed(ctx,
+			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+			100, lockResolver, isPullInit, eventCh)
+		require.Equal(t, context.Canceled, errors.Cause(err))
+>>>>>>> 5476c8b55 (cdc,retry: fix leader missing by extending region retry duration (#5269))
 	}()
 
 	// wait request id allocated with: new session, new request
@@ -1915,6 +2056,7 @@ func (s *clientSuite) TestDropStaleRequest(c *check.C) {
 	defer grpcPool.Close()
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
+<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache)
 	eventCh := make(chan model.RegionFeedEvent, 10)
 	wg.Add(1)
@@ -1922,6 +2064,19 @@ func (s *clientSuite) TestDropStaleRequest(c *check.C) {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
 		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
+=======
+	cdcClient := NewCDCClient(
+		ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "",
+		config.GetDefaultServerConfig().KVClient)
+	eventCh := make(chan model.RegionFeedEvent, 50)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := cdcClient.EventFeed(ctx,
+			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+			100, lockResolver, isPullInit, eventCh)
+		require.Equal(t, context.Canceled, errors.Cause(err))
+>>>>>>> 5476c8b55 (cdc,retry: fix leader missing by extending region retry duration (#5269))
 	}()
 
 	// wait request id allocated with: new session, new request
@@ -2025,6 +2180,7 @@ func (s *clientSuite) TestResolveLock(c *check.C) {
 	defer grpcPool.Close()
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
+<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache)
 	eventCh := make(chan model.RegionFeedEvent, 10)
 	wg.Add(1)
@@ -2032,6 +2188,19 @@ func (s *clientSuite) TestResolveLock(c *check.C) {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
 		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
+=======
+	cdcClient := NewCDCClient(
+		ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "",
+		config.GetDefaultServerConfig().KVClient)
+	eventCh := make(chan model.RegionFeedEvent, 50)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := cdcClient.EventFeed(ctx,
+			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+			100, lockResolver, isPullInit, eventCh)
+		require.Equal(t, context.Canceled, errors.Cause(err))
+>>>>>>> 5476c8b55 (cdc,retry: fix leader missing by extending region retry duration (#5269))
 	}()
 
 	// wait request id allocated with: new session, new request
@@ -2125,14 +2294,28 @@ func (s *clientSuite) testEventCommitTsFallback(c *check.C, events []*cdcpb.Chan
 	defer grpcPool.Close()
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
+<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache)
 	eventCh := make(chan model.RegionFeedEvent, 10)
+=======
+	cdcClient := NewCDCClient(
+		ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "",
+		config.GetDefaultServerConfig().KVClient)
+	eventCh := make(chan model.RegionFeedEvent, 50)
+>>>>>>> 5476c8b55 (cdc,retry: fix leader missing by extending region retry duration (#5269))
 	var clientWg sync.WaitGroup
 	clientWg.Add(1)
 	go func() {
 		defer clientWg.Done()
+<<<<<<< HEAD
 		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
 		c.Assert(err, check.Equals, errUnreachable)
+=======
+		err := cdcClient.EventFeed(ctx,
+			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+			100, lockResolver, isPullInit, eventCh)
+		require.Equal(t, errUnreachable, err)
+>>>>>>> 5476c8b55 (cdc,retry: fix leader missing by extending region retry duration (#5269))
 	}()
 
 	// wait request id allocated with: new session, new request
@@ -2273,6 +2456,7 @@ func (s *clientSuite) testEventAfterFeedStop(c *check.C) {
 	defer grpcPool.Close()
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
+<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache)
 	eventCh := make(chan model.RegionFeedEvent, 10)
 	wg.Add(1)
@@ -2280,6 +2464,19 @@ func (s *clientSuite) testEventAfterFeedStop(c *check.C) {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
 		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
+=======
+	cdcClient := NewCDCClient(
+		ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "",
+		config.GetDefaultServerConfig().KVClient)
+	eventCh := make(chan model.RegionFeedEvent, 50)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := cdcClient.EventFeed(ctx,
+			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+			100, lockResolver, isPullInit, eventCh)
+		require.Equal(t, context.Canceled, errors.Cause(err))
+>>>>>>> 5476c8b55 (cdc,retry: fix leader missing by extending region retry duration (#5269))
 	}()
 
 	// wait request id allocated with: new session, new request
@@ -2453,6 +2650,7 @@ func (s *clientSuite) TestOutOfRegionRangeEvent(c *check.C) {
 	defer grpcPool.Close()
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
+<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache)
 	eventCh := make(chan model.RegionFeedEvent, 10)
 	wg.Add(1)
@@ -2460,6 +2658,19 @@ func (s *clientSuite) TestOutOfRegionRangeEvent(c *check.C) {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
 		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
+=======
+	cdcClient := NewCDCClient(
+		ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "",
+		config.GetDefaultServerConfig().KVClient)
+	eventCh := make(chan model.RegionFeedEvent, 50)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := cdcClient.EventFeed(ctx,
+			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+			100, lockResolver, isPullInit, eventCh)
+		require.Equal(t, context.Canceled, errors.Cause(err))
+>>>>>>> 5476c8b55 (cdc,retry: fix leader missing by extending region retry duration (#5269))
 	}()
 
 	// wait request id allocated with: new session, new request
@@ -2668,6 +2879,7 @@ func (s *clientSuite) TestResolveLockNoCandidate(c *check.C) {
 	defer grpcPool.Close()
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
+<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache)
 	eventCh := make(chan model.RegionFeedEvent, 10)
 	wg.Add(1)
@@ -2675,6 +2887,19 @@ func (s *clientSuite) TestResolveLockNoCandidate(c *check.C) {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
 		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
+=======
+	cdcClient := NewCDCClient(
+		ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "",
+		config.GetDefaultServerConfig().KVClient)
+	eventCh := make(chan model.RegionFeedEvent, 50)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := cdcClient.EventFeed(ctx,
+			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+			100, lockResolver, isPullInit, eventCh)
+		require.Equal(t, context.Canceled, errors.Cause(err))
+>>>>>>> 5476c8b55 (cdc,retry: fix leader missing by extending region retry duration (#5269))
 	}()
 
 	// wait request id allocated with: new session, new request
@@ -2763,6 +2988,7 @@ func (s *clientSuite) TestFailRegionReentrant(c *check.C) {
 	defer grpcPool.Close()
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
+<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), grpcPool, regionCache)
 	eventCh := make(chan model.RegionFeedEvent, 10)
 	wg.Add(1)
@@ -2770,6 +2996,19 @@ func (s *clientSuite) TestFailRegionReentrant(c *check.C) {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
 		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
+=======
+	cdcClient := NewCDCClient(
+		ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "",
+		config.GetDefaultServerConfig().KVClient)
+	eventCh := make(chan model.RegionFeedEvent, 50)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := cdcClient.EventFeed(ctx,
+			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+			100, lockResolver, isPullInit, eventCh)
+		require.Equal(t, context.Canceled, errors.Cause(err))
+>>>>>>> 5476c8b55 (cdc,retry: fix leader missing by extending region retry duration (#5269))
 	}()
 
 	// wait request id allocated with: new session, new request
@@ -2845,6 +3084,7 @@ func (s *clientSuite) TestClientV1UnlockRangeReentrant(c *check.C) {
 	defer grpcPool.Close()
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
+<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache)
 	eventCh := make(chan model.RegionFeedEvent, 10)
 	wg.Add(1)
@@ -2852,6 +3092,19 @@ func (s *clientSuite) TestClientV1UnlockRangeReentrant(c *check.C) {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")}, 100, false, lockresolver, isPullInit, eventCh)
 		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
+=======
+	cdcClient := NewCDCClient(
+		ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "",
+		config.GetDefaultServerConfig().KVClient)
+	eventCh := make(chan model.RegionFeedEvent, 50)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := cdcClient.EventFeed(ctx,
+			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")},
+			100, lockResolver, isPullInit, eventCh)
+		require.Equal(t, context.Canceled, errors.Cause(err))
+>>>>>>> 5476c8b55 (cdc,retry: fix leader missing by extending region retry duration (#5269))
 	}()
 
 	// wait the second region is scheduled
@@ -2912,6 +3165,7 @@ func (s *clientSuite) testClientErrNoPendingRegion(c *check.C) {
 	defer grpcPool.Close()
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
+<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache)
 	eventCh := make(chan model.RegionFeedEvent, 10)
 	wg.Add(1)
@@ -2919,6 +3173,19 @@ func (s *clientSuite) testClientErrNoPendingRegion(c *check.C) {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")}, 100, false, lockresolver, isPullInit, eventCh)
 		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
+=======
+	cdcClient := NewCDCClient(
+		ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "",
+		config.GetDefaultServerConfig().KVClient)
+	eventCh := make(chan model.RegionFeedEvent, 50)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := cdcClient.EventFeed(ctx,
+			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")},
+			100, lockResolver, isPullInit, eventCh)
+		require.Equal(t, context.Canceled, errors.Cause(err))
+>>>>>>> 5476c8b55 (cdc,retry: fix leader missing by extending region retry duration (#5269))
 	}()
 
 	baseAllocatedID := currentRequestID()
@@ -2990,6 +3257,7 @@ func (s *clientSuite) testKVClientForceReconnect(c *check.C) {
 	defer grpcPool.Close()
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
+<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache)
 	eventCh := make(chan model.RegionFeedEvent, 10)
 	wg.Add(1)
@@ -2997,6 +3265,19 @@ func (s *clientSuite) testKVClientForceReconnect(c *check.C) {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")}, 100, false, lockresolver, isPullInit, eventCh)
 		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
+=======
+	cdcClient := NewCDCClient(
+		ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "",
+		config.GetDefaultServerConfig().KVClient)
+	eventCh := make(chan model.RegionFeedEvent, 50)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := cdcClient.EventFeed(ctx,
+			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")},
+			100, lockResolver, isPullInit, eventCh)
+		require.Equal(t, context.Canceled, errors.Cause(err))
+>>>>>>> 5476c8b55 (cdc,retry: fix leader missing by extending region retry duration (#5269))
 	}()
 
 	baseAllocatedID := currentRequestID()
@@ -3141,13 +3422,26 @@ func (s *clientSuite) TestConcurrentProcessRangeRequest(c *check.C) {
 	defer grpcPool.Close()
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
+<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache)
+=======
+	cdcClient := NewCDCClient(
+		ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "",
+		config.GetDefaultServerConfig().KVClient)
+>>>>>>> 5476c8b55 (cdc,retry: fix leader missing by extending region retry duration (#5269))
 	eventCh := make(chan model.RegionFeedEvent, 100)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+<<<<<<< HEAD
 		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("z")}, 100, false, lockresolver, isPullInit, eventCh)
 		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
+=======
+		err := cdcClient.EventFeed(ctx,
+			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("z")},
+			100, lockResolver, isPullInit, eventCh)
+		require.Equal(t, context.Canceled, errors.Cause(err))
+>>>>>>> 5476c8b55 (cdc,retry: fix leader missing by extending region retry duration (#5269))
 	}()
 
 	// the kv client is blocked by failpoint injection, and after region has split
@@ -3257,6 +3551,7 @@ func (s *clientSuite) TestEvTimeUpdate(c *check.C) {
 	defer grpcPool.Close()
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
+<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache)
 	eventCh := make(chan model.RegionFeedEvent, 10)
 	wg.Add(1)
@@ -3264,6 +3559,19 @@ func (s *clientSuite) TestEvTimeUpdate(c *check.C) {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
 		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
+=======
+	cdcClient := NewCDCClient(
+		ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "",
+		config.GetDefaultServerConfig().KVClient)
+	eventCh := make(chan model.RegionFeedEvent, 50)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := cdcClient.EventFeed(ctx,
+			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+			100, lockResolver, isPullInit, eventCh)
+		require.Equal(t, context.Canceled, errors.Cause(err))
+>>>>>>> 5476c8b55 (cdc,retry: fix leader missing by extending region retry duration (#5269))
 	}()
 
 	// wait request id allocated with: new session, new request
@@ -3377,6 +3685,7 @@ func (s *clientSuite) TestRegionWorkerExitWhenIsIdle(c *check.C) {
 	defer grpcPool.Close()
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
+<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache)
 	eventCh := make(chan model.RegionFeedEvent, 10)
 	wg.Add(1)
@@ -3384,6 +3693,19 @@ func (s *clientSuite) TestRegionWorkerExitWhenIsIdle(c *check.C) {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
 		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
+=======
+	cdcClient := NewCDCClient(
+		ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "",
+		config.GetDefaultServerConfig().KVClient)
+	eventCh := make(chan model.RegionFeedEvent, 50)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := cdcClient.EventFeed(ctx,
+			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+			100, lockResolver, isPullInit, eventCh)
+		require.Equal(t, context.Canceled, errors.Cause(err))
+>>>>>>> 5476c8b55 (cdc,retry: fix leader missing by extending region retry duration (#5269))
 	}()
 
 	// wait request id allocated with: new session, new request
@@ -3469,15 +3791,29 @@ func (s *clientSuite) TestPrewriteNotMatchError(c *check.C) {
 	defer grpcPool.Close()
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
+<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache)
 	eventCh := make(chan model.RegionFeedEvent, 10)
+=======
+	cdcClient := NewCDCClient(
+		ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "",
+		config.GetDefaultServerConfig().KVClient)
+	eventCh := make(chan model.RegionFeedEvent, 50)
+>>>>>>> 5476c8b55 (cdc,retry: fix leader missing by extending region retry duration (#5269))
 	baseAllocatedID := currentRequestID()
 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+<<<<<<< HEAD
 		err = cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")}, 100, false, lockResolver, isPullInit, eventCh)
 		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
+=======
+		err = cdcClient.EventFeed(ctx,
+			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")},
+			100, lockResolver, isPullInit, eventCh)
+		require.Equal(t, context.Canceled, errors.Cause(err))
+>>>>>>> 5476c8b55 (cdc,retry: fix leader missing by extending region retry duration (#5269))
 	}()
 
 	// The expected request ids are agnostic because the kv client could retry
@@ -3549,14 +3885,20 @@ func (s *clientSuite) TestPrewriteNotMatchError(c *check.C) {
 
 func createFakeEventFeedSession(ctx context.Context) *eventFeedSession {
 	return newEventFeedSession(ctx,
+<<<<<<< HEAD
 		&CDCClient{regionLimiters: defaultRegionEventFeedLimiters},
 		nil, /*regionCache*/
 		nil, /*kvStorage*/
+=======
+		&CDCClient{
+			regionLimiters: defaultRegionEventFeedLimiters,
+			config:         config.GetDefaultServerConfig().KVClient,
+		},
+>>>>>>> 5476c8b55 (cdc,retry: fix leader missing by extending region retry duration (#5269))
 		regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
-		nil,   /*lockResolver*/
-		nil,   /*isPullerInit*/
-		false, /*enableOldValue*/
-		100,   /*startTs*/
+		nil, /*lockResolver*/
+		nil, /*isPullerInit*/
+		100, /*startTs*/
 		nil /*eventCh*/)
 }
 

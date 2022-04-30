@@ -46,6 +46,16 @@ const (
 	defaultWriteTimeout        = "2m"
 	defaultDialTimeout         = "2m"
 	defaultSafeMode            = true
+<<<<<<< HEAD:cdc/sink/mysql_params.go
+=======
+	defaultTxnIsolationRC      = "READ-COMMITTED"
+	defaultCharacterSet        = "utf8mb4"
+)
+
+var (
+	defaultDMLMaxRetry uint64 = 8
+	defaultDDLMaxRetry uint64 = 20
+>>>>>>> 5476c8b55 (cdc,retry: fix leader missing by extending region retry duration (#5269)):cdc/sink/mysql/mysql_params.go
 )
 
 var defaultParams = &sinkParams{

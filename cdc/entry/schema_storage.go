@@ -795,7 +795,11 @@ func (s *schemaStorageImpl) GetSnapshot(ctx context.Context, ts uint64) (*schema
 			logTime = now
 		}
 		return err
+<<<<<<< HEAD
 	}, retry.WithBackoffBaseDelay(10), retry.WithInfiniteTries(), retry.WithIsRetryableErr(isRetryable))
+=======
+	}, retry.WithBackoffBaseDelay(10), retry.WithIsRetryableErr(isRetryable))
+>>>>>>> 5476c8b55 (cdc,retry: fix leader missing by extending region retry duration (#5269))
 
 	return snap, err
 }

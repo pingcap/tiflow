@@ -57,7 +57,7 @@ type Request struct {
 	// retry options
 	backoffBaseDelay time.Duration
 	backoffMaxDelay  time.Duration
-	maxRetries       int64
+	maxRetries       uint64
 
 	// output
 	err  error
@@ -187,8 +187,13 @@ func (r *Request) WithBackoffMaxDelay(delay time.Duration) *Request {
 	return r
 }
 
+<<<<<<< HEAD
 // MaxRetries specifies the maximum times a request will retry.
 func (r *Request) WithMaxRetries(maxRetries int64) *Request {
+=======
+// WithMaxRetries specifies the maximum times a request will retry.
+func (r *Request) WithMaxRetries(maxRetries uint64) *Request {
+>>>>>>> 5476c8b55 (cdc,retry: fix leader missing by extending region retry duration (#5269))
 	if r.err != nil {
 		return r
 	}

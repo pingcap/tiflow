@@ -302,7 +302,14 @@ func (s *mysqlSink) execDDLWithMaxRetries(ctx context.Context, ddl *model.DDLEve
 			log.Warn("execute DDL with error, retry later", zap.String("query", ddl.Query), zap.Error(err))
 		}
 		return err
+<<<<<<< HEAD:cdc/sink/mysql.go
 	}, retry.WithBackoffBaseDelay(backoffBaseDelayInMs), retry.WithBackoffMaxDelay(backoffMaxDelayInMs), retry.WithMaxTries(defaultDDLMaxRetryTime), retry.WithIsRetryableErr(cerror.IsRetryableError))
+=======
+	}, retry.WithBackoffBaseDelay(backoffBaseDelayInMs),
+		retry.WithBackoffMaxDelay(backoffMaxDelayInMs),
+		retry.WithMaxTries(defaultDDLMaxRetry),
+		retry.WithIsRetryableErr(cerror.IsRetryableError))
+>>>>>>> 5476c8b55 (cdc,retry: fix leader missing by extending region retry duration (#5269)):cdc/sink/mysql/mysql.go
 }
 
 func (s *mysqlSink) execDDL(ctx context.Context, ddl *model.DDLEvent) error {
@@ -611,7 +618,10 @@ func (s *mysqlSink) execDMLWithMaxRetries(ctx context.Context, dmls *preparedDML
 			zap.Int("num of Rows", dmls.rowCount),
 			zap.Int("bucket", bucket))
 		return nil
-	}, retry.WithBackoffBaseDelay(backoffBaseDelayInMs), retry.WithBackoffMaxDelay(backoffMaxDelayInMs), retry.WithMaxTries(defaultDMLMaxRetryTime), retry.WithIsRetryableErr(isRetryableDMLError))
+	}, retry.WithBackoffBaseDelay(backoffBaseDelayInMs),
+		retry.WithBackoffMaxDelay(backoffMaxDelayInMs),
+		retry.WithMaxTries(defaultDMLMaxRetry),
+		retry.WithIsRetryableErr(isRetryableDMLError))
 }
 
 type preparedDMLs struct {
