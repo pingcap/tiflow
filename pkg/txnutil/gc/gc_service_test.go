@@ -62,7 +62,12 @@ func (s *gcServiceSuite) TestCheckSafetyOfStartTs(c *check.C) {
 	s.pdCli.retryCount = 0
 	err = EnsureChangefeedStartTsSafety(ctx, s.pdCli, "changefeed2", TTL, 65)
 	c.Assert(err, check.NotNil)
+<<<<<<< HEAD
 	c.Assert(err.Error(), check.Equals, "[CDC:ErrReachMaxTry]reach maximum try: 9")
+=======
+	c.Assert(err.Error(), check.Equals,
+		"[CDC:ErrReachMaxTry]reach maximum try: 9, error: not pd leader: not pd leader")
+>>>>>>> 5476c8b55 (cdc,retry: fix leader missing by extending region retry duration (#5269))
 
 	s.pdCli.retryThreshold = 3
 	s.pdCli.retryCount = 0

@@ -17,6 +17,7 @@ import (
 	"context"
 	"math"
 	"math/rand"
+	"strconv"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -26,7 +27,8 @@ import (
 // Operation is the action need to retry
 type Operation func() error
 
-// Do execute the specified function at most maxTries times until it succeeds or got canceled
+// Do execute the specified function.
+// By default, it retries infinitely until it succeeds or got canceled.
 func Do(ctx context.Context, operation Operation, opts ...Option) error {
 	retryOption := setOptions(opts...)
 	return run(ctx, operation, retryOption)
@@ -48,7 +50,8 @@ func run(ctx context.Context, op Operation, retryOption *retryOptions) error {
 	}
 
 	var t *time.Timer
-	try := 0
+	var start time.Time
+	try := uint64(0)
 	backOff := time.Duration(0)
 	for {
 		err := op()
@@ -61,8 +64,17 @@ func run(ctx context.Context, op Operation, retryOption *retryOptions) error {
 		}
 
 		try++
-		if int64(try) >= retryOption.maxTries {
-			return cerror.ErrReachMaxTry.Wrap(err).GenWithStackByArgs(retryOption.maxTries)
+		if try >= retryOption.maxTries {
+			return cerror.ErrReachMaxTry.
+				Wrap(err).GenWithStackByArgs(strconv.Itoa(int(retryOption.maxTries)), err)
+		}
+		if retryOption.totalRetryDuration > 0 {
+			if start.IsZero() {
+				start = time.Now()
+			} else if time.Since(start) > retryOption.totalRetryDuration {
+				return cerror.ErrReachMaxTry.
+					Wrap(err).GenWithStackByArgs(retryOption.totalRetryDuration, err)
+			}
 		}
 
 		backOff = getBackoffInMs(retryOption.backoffBaseInMs, retryOption.backoffCapInMs, float64(try))

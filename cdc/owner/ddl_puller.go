@@ -25,6 +25,11 @@ import (
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/puller"
+<<<<<<< HEAD
+=======
+	"github.com/pingcap/tiflow/cdc/sorter/memory"
+	"github.com/pingcap/tiflow/pkg/config"
+>>>>>>> 5476c8b55 (cdc,retry: fix leader missing by extending region retry duration (#5269))
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/regionspan"
@@ -69,6 +74,7 @@ func newDDLPuller(ctx cdcContext.Context, startTs uint64) (DDLPuller, error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	kvCfg := config.GetGlobalServerConfig().KVClient
 	var plr puller.Puller
 	kvStorage := ctx.GlobalVars().KVStorage
 	// kvStorage can be nil only in the test
@@ -80,7 +86,9 @@ func newDDLPuller(ctx cdcContext.Context, startTs uint64) (DDLPuller, error) {
 			// Add "_ddl_puller" to make it different from table pullers.
 			ctx.ChangefeedVars().ID+"_ddl_puller",
 			startTs,
-			[]regionspan.Span{regionspan.GetDDLSpan(), regionspan.GetAddIndexDDLSpan()}, false)
+			[]regionspan.Span{regionspan.GetDDLSpan(), regionspan.GetAddIndexDDLSpan()},
+			kvCfg,
+		)
 	}
 
 	return &ddlPullerImpl{

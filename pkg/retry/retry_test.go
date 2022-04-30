@@ -195,10 +195,17 @@ func (s *runSuite) TestDoCancelInfiniteRetry(c *check.C) {
 		return errors.New("test")
 	}
 
+<<<<<<< HEAD
 	err := Do(ctx, f, WithInfiniteTries(), WithBackoffBaseDelay(2), WithBackoffMaxDelay(10))
 	c.Assert(errors.Cause(err), check.Equals, context.DeadlineExceeded)
 	c.Assert(callCount, check.GreaterEqual, 1, check.Commentf("tries: %d", callCount))
 	c.Assert(callCount, check.Less, math.MaxInt64)
+=======
+	err := Do(ctx, f, WithBackoffBaseDelay(2), WithBackoffMaxDelay(10))
+	require.Equal(t, errors.Cause(err), context.DeadlineExceeded)
+	require.GreaterOrEqual(t, callCount, 1, "tries: %d", callCount)
+	require.Less(t, callCount, math.MaxInt64)
+>>>>>>> 5476c8b55 (cdc,retry: fix leader missing by extending region retry duration (#5269))
 }
 
 func (s *runSuite) TestDoCancelAtBeginning(c *check.C) {
@@ -211,9 +218,15 @@ func (s *runSuite) TestDoCancelAtBeginning(c *check.C) {
 		return errors.New("test")
 	}
 
+<<<<<<< HEAD
 	err := Do(ctx, f, WithInfiniteTries(), WithBackoffBaseDelay(2), WithBackoffMaxDelay(10))
 	c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 	c.Assert(callCount, check.Equals, 0, check.Commentf("tries:%d", callCount))
+=======
+	err := Do(ctx, f, WithBackoffBaseDelay(2), WithBackoffMaxDelay(10))
+	require.Equal(t, errors.Cause(err), context.Canceled)
+	require.Equal(t, callCount, 0, "tries:%d", callCount)
+>>>>>>> 5476c8b55 (cdc,retry: fix leader missing by extending region retry duration (#5269))
 }
 
 func (s *runSuite) TestDoCornerCases(c *check.C) {
@@ -243,9 +256,10 @@ func (s *runSuite) TestDoCornerCases(c *check.C) {
 	c.Assert(errors.Cause(err), check.ErrorMatches, "test")
 	c.Assert(callCount, check.Equals, 2)
 
-	var i int64
-	for i = -10; i < 10; i++ {
+	var i uint64
+	for i = 0; i < 10; i++ {
 		callCount = 0
+<<<<<<< HEAD
 		err = Do(context.Background(), f, WithBackoffBaseDelay(i), WithBackoffMaxDelay(i), WithMaxTries(i))
 		c.Assert(errors.Cause(err), check.ErrorMatches, "test")
 		c.Assert(err, check.ErrorMatches, ".*CDC:ErrReachMaxTry.*")
@@ -253,6 +267,57 @@ func (s *runSuite) TestDoCornerCases(c *check.C) {
 			c.Assert(int64(callCount), check.Equals, i)
 		} else {
 			c.Assert(callCount, check.Equals, defaultMaxTries)
+=======
+		err = Do(context.Background(), f,
+			WithBackoffBaseDelay(int64(i)), WithBackoffMaxDelay(int64(i)), WithMaxTries(i))
+		require.Regexp(t, "test", errors.Cause(err))
+		require.Regexp(t, ".*CDC:ErrReachMaxTry.*", err)
+		if i == 0 {
+			require.Equal(t, 1, callCount)
+		} else {
+			require.Equal(t, int(i), callCount)
+>>>>>>> 5476c8b55 (cdc,retry: fix leader missing by extending region retry duration (#5269))
 		}
 	}
+}
+
+func TestTotalRetryDuration(t *testing.T) {
+	t.Parallel()
+
+	f := func() error {
+		return errors.New("test")
+	}
+
+	start := time.Now()
+	err := Do(
+		context.Background(), f,
+		WithBackoffBaseDelay(math.MinInt64),
+		WithTotalRetryDuratoin(time.Second),
+	)
+	require.Regexp(t, "test", errors.Cause(err))
+	require.LessOrEqual(t, 1, int(math.Round(time.Since(start).Seconds())))
+
+	start = time.Now()
+	err = Do(
+		context.Background(), f,
+		WithBackoffBaseDelay(math.MinInt64),
+		WithTotalRetryDuratoin(2*time.Second),
+	)
+	require.Regexp(t, "test", errors.Cause(err))
+	require.LessOrEqual(t, 2, int(math.Round(time.Since(start).Seconds())))
+}
+
+func TestRetryError(t *testing.T) {
+	t.Parallel()
+
+	f := func() error {
+		return errors.New("some error info")
+	}
+
+	err := Do(
+		context.Background(), f, WithBackoffBaseDelay(math.MinInt64), WithMaxTries(2),
+	)
+	require.Regexp(t, "some error info", errors.Cause(err))
+	require.Regexp(t, ".*some error info.*", err.Error())
+	require.Regexp(t, ".*CDC:ErrReachMaxTry.*", err.Error())
 }
