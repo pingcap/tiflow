@@ -889,7 +889,11 @@ func TestExecDMLRollbackErrRetryable(t *testing.T) {
 		// normal db
 		db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
 		require.Nil(t, err)
+<<<<<<< HEAD:cdc/sink/mysql_test.go
 		for i := 0; i < defaultDMLMaxRetryTime; i++ {
+=======
+		for i := 0; i < int(defaultDMLMaxRetry); i++ {
+>>>>>>> 5476c8b55 (cdc,retry: fix leader missing by extending region retry duration (#5269)):cdc/sink/mysql/mysql_test.go
 			mock.ExpectBegin()
 			mock.ExpectExec("REPLACE INTO `s1`.`t1`(`a`) VALUES (?),(?)").
 				WithArgs(1, 2).
@@ -901,8 +905,16 @@ func TestExecDMLRollbackErrRetryable(t *testing.T) {
 	}
 	backupGetDBConn := GetDBConnImpl
 	GetDBConnImpl = mockGetDBConnErrDatabaseNotExists
+<<<<<<< HEAD:cdc/sink/mysql_test.go
 	defer func() {
 		GetDBConnImpl = backupGetDBConn
+=======
+	backupMaxRetry := defaultDMLMaxRetry
+	defaultDMLMaxRetry = 2
+	defer func() {
+		GetDBConnImpl = backupGetDBConn
+		defaultDMLMaxRetry = backupMaxRetry
+>>>>>>> 5476c8b55 (cdc,retry: fix leader missing by extending region retry duration (#5269)):cdc/sink/mysql/mysql_test.go
 	}()
 
 	ctx, cancel := context.WithCancel(context.Background())
