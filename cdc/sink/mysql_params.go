@@ -36,8 +36,6 @@ const (
 	DefaultWorkerCount = 16
 	DefaultMaxTxnRow   = 256
 
-	defaultDMLMaxRetryTime     = 8
-	defaultDDLMaxRetryTime     = 20
 	defaultTiDBTxnMode         = "optimistic"
 	defaultFlushInterval       = time.Millisecond * 50
 	defaultBatchReplaceEnabled = true
@@ -46,6 +44,11 @@ const (
 	defaultWriteTimeout        = "2m"
 	defaultDialTimeout         = "2m"
 	defaultSafeMode            = true
+)
+
+var (
+	defaultDMLMaxRetry uint64 = 8
+	defaultDDLMaxRetry uint64 = 20
 )
 
 var defaultParams = &sinkParams{

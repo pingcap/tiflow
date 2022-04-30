@@ -55,7 +55,7 @@ const (
 	}`
 )
 
-var defaultMaxRetry int64 = 3
+var defaultMaxRetry uint64 = 3
 
 // pdAPIClient is api client of Placement Driver.
 type pdAPIClient struct {
