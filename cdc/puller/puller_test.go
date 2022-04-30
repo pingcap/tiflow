@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/tidb/store/mockstore"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/regionspan"
 	"github.com/pingcap/tiflow/pkg/retry"
@@ -63,6 +64,7 @@ func newMockCDCKVClient(
 	kvStorage tikv.Storage,
 	grpcPool kv.GrpcPool,
 	changefeed string,
+	cfg *config.KVClientConfig,
 ) kv.CDCKVClient {
 	return &mockCDCKVClient{
 		expectations: make(chan model.RegionFeedEvent, 1024),
@@ -73,7 +75,6 @@ func (mc *mockCDCKVClient) EventFeed(
 	ctx context.Context,
 	span regionspan.ComparableSpan,
 	ts uint64,
-	enableOldValue bool,
 	lockResolver txnutil.LockResolver,
 	isPullerInit kv.PullerInitialization,
 	eventCh chan<- model.RegionFeedEvent,
@@ -115,8 +116,12 @@ func (s *pullerSuite) newPullerForTest(
 	var wg sync.WaitGroup
 	ctx, cancel := context.WithCancel(context.Background())
 	store, err := mockstore.NewMockStore()
+<<<<<<< HEAD
 	c.Assert(err, check.IsNil)
 	enableOldValue := true
+=======
+	require.Nil(t, err)
+>>>>>>> 5476c8b55 (cdc,retry: fix leader missing by extending region retry duration (#5269))
 	backupNewCDCKVClient := kv.NewCDCKVClient
 	kv.NewCDCKVClient = newMockCDCKVClient
 	defer func() {
@@ -125,7 +130,15 @@ func (s *pullerSuite) newPullerForTest(
 	pdCli := &mockPdClientForPullerTest{clusterID: uint64(1)}
 	grpcPool := kv.NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
+<<<<<<< HEAD
 	plr := NewPuller(ctx, pdCli, grpcPool, store, "", checkpointTs, spans, enableOldValue)
+=======
+	regionCache := tikv.NewRegionCache(pdCli)
+	defer regionCache.Close()
+	plr := NewPuller(
+		ctx, pdCli, grpcPool, regionCache, store, pdtime.NewClock4Test(), "",
+		checkpointTs, spans, config.GetDefaultServerConfig().KVClient)
+>>>>>>> 5476c8b55 (cdc,retry: fix leader missing by extending region retry duration (#5269))
 	wg.Add(1)
 	go func() {
 		defer wg.Done()

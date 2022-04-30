@@ -237,5 +237,101 @@ var (
 	ErrFlowControllerEventLargerThanQuota = errors.Normalize("event is larger than the total memory quota, size: %d, quota: %d", errors.RFCCodeText("CDC:ErrFlowControllerEventLargerThanQuota"))
 
 	// retry error
+<<<<<<< HEAD
 	ErrReachMaxTry = errors.Normalize("reach maximum try: %d", errors.RFCCodeText("CDC:ErrReachMaxTry"))
+=======
+	ErrReachMaxTry = errors.Normalize("reach maximum try: %s, error: %s",
+		errors.RFCCodeText("CDC:ErrReachMaxTry"),
+	)
+
+	// tcp server error
+	ErrTCPServerClosed = errors.Normalize("The TCP server has been closed",
+		errors.RFCCodeText("CDC:ErrTCPServerClosed"),
+	)
+
+	// p2p error
+	ErrPeerMessageIllegalMeta = errors.Normalize(
+		"peer-to-peer message server received an RPC call with illegal metadata",
+		errors.RFCCodeText("CDC:ErrPeerMessageIllegalMeta"),
+	)
+	ErrPeerMessageClientPermanentFail = errors.Normalize(
+		"peer-to-peer message client has failed permanently, no need to reconnect: %s",
+		errors.RFCCodeText("CDC:ErrPeerMessageClientPermanentFail"),
+	)
+	ErrPeerMessageClientClosed = errors.Normalize(
+		"peer-to-peer message client has been closed",
+		errors.RFCCodeText("CDC:ErrPeerMessageClientClosed"),
+	)
+	ErrPeerMessageSendTryAgain = errors.Normalize(
+		"peer-to-peer message client has too many pending messages to send,"+
+			" try again later",
+		errors.RFCCodeText("CDC:ErrPeerMessageSendTryAgain"),
+	)
+	ErrPeerMessageEncodeError = errors.Normalize(
+		"failed to encode peer-to-peer message",
+		errors.RFCCodeText("CDC:ErrPeerMessageEncodeError"),
+	)
+	ErrPeerMessageInternalSenderClosed = errors.Normalize(
+		"peer-to-peer message server tries to send to a closed stream. Internal only.",
+		errors.RFCCodeText("CDC:ErrPeerMessageInternalSenderClosed"),
+	)
+	ErrPeerMessageStaleConnection = errors.Normalize(
+		"peer-to-peer message stale connection: old-epoch %d, new-epoch %d",
+		errors.RFCCodeText("CDC:ErrPeerMessageStaleConnection"),
+	)
+	ErrPeerMessageDuplicateConnection = errors.Normalize(
+		"peer-to-peer message duplicate connection: epoch %d",
+		errors.RFCCodeText("CDC:ErrPeerMessageDuplicateConnection"),
+	)
+	ErrPeerMessageServerClosed = errors.Normalize(
+		"peer-to-peer message server has closed connection: %s.",
+		errors.RFCCodeText("CDC:ErrPeerMessageServerClosed"),
+	)
+	ErrPeerMessageDataLost = errors.Normalize(
+		"peer-to-peer message data lost, topic: %s, seq: %d",
+		errors.RFCCodeText("CDC:ErrPeerMessageDataLost"),
+	)
+	ErrPeerMessageToManyPeers = errors.Normalize(
+		"peer-to-peer message server got too many peers: %d peers",
+		errors.RFCCodeText("CDC:ErrPeerMessageToManyPeers"),
+	)
+	ErrPeerMessageDecodeError = errors.Normalize(
+		"failed to decode peer-to-peer message",
+		errors.RFCCodeText("CDC:ErrPeerMessageDecodeError"),
+	)
+	ErrPeerMessageTaskQueueCongested = errors.Normalize(
+		"peer-to-peer message server has too many pending tasks",
+		errors.RFCCodeText("CDC:ErrPeerMessageTaskQueueCongested"),
+	)
+	ErrPeerMessageReceiverMismatch = errors.Normalize(
+		"peer-to-peer message receiver is a mismatch: expected %s, got %s",
+		errors.RFCCodeText("CDC:ErrPeerMessageReceiverMismatch"),
+	)
+	ErrPeerMessageIllegalClientVersion = errors.Normalize(
+		"peer-to-peer message client reported illegal version: %s",
+		errors.RFCCodeText("CDC:ErrPeerMessageIllegalClientVersion"),
+	)
+	ErrPeerMessageTopicCongested = errors.Normalize(
+		"peer-to-peer message topic has congested, aborting all connections",
+		errors.RFCCodeText("CDC:ErrPeerMessageTopicCongested"),
+	)
+	ErrPeerMessageInjectedServerRestart = errors.Normalize(
+		"peer-to-peer message server injected error",
+		errors.RFCCodeText("CDC:ErrPeerMessageInjectedServerRestart"),
+	)
+
+	// RESTful client error
+	ErrRewindRequestBodyError = errors.Normalize(
+		"failed to seek to the beginning of request body",
+		errors.RFCCodeText("CDC:ErrRewindRequestBodyError"),
+	)
+	ErrZeroLengthResponseBody = errors.Normalize(
+		"0-length response with status code: %d",
+		errors.RFCCodeText("CDC:ErrZeroLengthResponseBody"),
+	)
+	ErrInvalidHost = errors.Normalize(
+		"host must be a URL or a host:port pair: %q",
+		errors.RFCCodeText("CDC:ErrInvalidHost"),
+	)
+>>>>>>> 5476c8b55 (cdc,retry: fix leader missing by extending region retry duration (#5269))
 )

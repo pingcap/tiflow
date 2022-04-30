@@ -638,7 +638,7 @@ pulsar send message failed
 
 ["CDC:ErrReachMaxTry"]
 error = '''
-reach maximum try: %d
+reach maximum try: %s, error: %s
 '''
 
 ["CDC:ErrReactorFinished"]

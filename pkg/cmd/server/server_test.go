@@ -182,9 +182,10 @@ func (s *serverSuite) TestParseCfg(c *check.C) {
 		},
 		PerTableMemoryQuota: 10 * 1024 * 1024, // 10M
 		KVClient: &config.KVClientConfig{
-			WorkerConcurrent: 8,
-			WorkerPoolSize:   0,
-			RegionScanLimit:  40,
+			WorkerConcurrent:    8,
+			WorkerPoolSize:      0,
+			RegionScanLimit:     40,
+			RegionRetryDuration: config.TomlDuration(25 * time.Second),
 		},
 	})
 }
@@ -221,6 +222,38 @@ max-memory-percentage = 3
 num-concurrent-worker = 4
 num-workerpool-goroutine = 5
 sort-dir = "/tmp/just_a_test"
+<<<<<<< HEAD
+=======
+
+[kv-client]
+region-retry-duration = "3s"
+
+[debug]
+enable-db-sorter = false
+[debug.db]
+count = 5
+concurrency = 6
+max-open-files = 7
+block-size = 32768 # 32 KB
+block-cache-size = 8
+writer-buffer-size = 9
+compression = "none"
+target-file-size-base = 10
+compaction-l0-trigger = 11
+compaction-deletion-threshold = 15
+compaction-period = 16
+write-l0-slowdown-trigger = 12
+write-l0-pause-trigger = 13
+
+[debug.messages]
+client-max-batch-interval = "500ms"
+client-max-batch-size = 999
+client-max-batch-count = 888
+client-retry-rate-limit = 100.0
+server-max-pending-message-count = 1024
+server-ack-interval = "1s"
+server-worker-pool-size = 16
+>>>>>>> 5476c8b55 (cdc,retry: fix leader missing by extending region retry duration (#5269))
 `, dataDir)
 	err := ioutil.WriteFile(configPath, []byte(configContent), 0o644)
 	c.Assert(err, check.IsNil)
@@ -264,9 +297,10 @@ sort-dir = "/tmp/just_a_test"
 		Security:            &config.SecurityConfig{},
 		PerTableMemoryQuota: 10 * 1024 * 1024, // 10M
 		KVClient: &config.KVClientConfig{
-			WorkerConcurrent: 8,
-			WorkerPoolSize:   0,
-			RegionScanLimit:  40,
+			WorkerConcurrent:    8,
+			WorkerPoolSize:      0,
+			RegionScanLimit:     40,
+			RegionRetryDuration: config.TomlDuration(3 * time.Second),
 		},
 	})
 }
@@ -371,9 +405,10 @@ cert-allowed-cn = ["dd","ee"]
 		},
 		PerTableMemoryQuota: 10 * 1024 * 1024, // 10M
 		KVClient: &config.KVClientConfig{
-			WorkerConcurrent: 8,
-			WorkerPoolSize:   0,
-			RegionScanLimit:  40,
+			WorkerConcurrent:    8,
+			WorkerPoolSize:      0,
+			RegionScanLimit:     40,
+			RegionRetryDuration: config.TomlDuration(25 * time.Second),
 		},
 	})
 }
