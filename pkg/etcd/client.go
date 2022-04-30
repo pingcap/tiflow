@@ -54,7 +54,7 @@ const (
 )
 
 // set to var instead of const for mocking the value to speedup test
-var maxTries int64 = 8
+var maxTries uint64 = 8
 
 // Client is a simple wrapper that adds retry to etcd RPC
 type Client struct {

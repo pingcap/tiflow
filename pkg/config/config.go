@@ -190,7 +190,43 @@ var defaultServerConfig = &ServerConfig{
 	KVClient: &KVClientConfig{
 		WorkerConcurrent: 8,
 		WorkerPoolSize:   0, // 0 will use NumCPU() * 2
+<<<<<<< HEAD:pkg/config/config.go
 		RegionScanLimit:  6,
+=======
+		RegionScanLimit:  40,
+		// The default TiKV region election timeout is [10s, 20s],
+		// Use 25 seconds to cover region leader missing.
+		RegionRetryDuration: TomlDuration(25 * time.Second),
+	},
+	Debug: &DebugConfig{
+		EnableTableActor: true,
+		TableActor: &TableActorConfig{
+			EventBatchSize: 32,
+		},
+		EnableNewScheduler: true,
+		// Default leveldb sorter config
+		EnableDBSorter: true,
+		DB: &DBConfig{
+			Count: 8,
+			// Following configs are optimized for write/read throughput.
+			// Users should not change them.
+			Concurrency:                 128,
+			MaxOpenFiles:                10000,
+			BlockSize:                   65536,
+			BlockCacheSize:              4294967296,
+			WriterBufferSize:            8388608,
+			Compression:                 "snappy",
+			TargetFileSizeBase:          8388608,
+			WriteL0SlowdownTrigger:      math.MaxInt32,
+			WriteL0PauseTrigger:         math.MaxInt32,
+			CompactionL0Trigger:         160,
+			CompactionDeletionThreshold: 10485760,
+			CompactionPeriod:            1800,
+			IteratorMaxAliveDuration:    10000,
+			IteratorSlowReadDuration:    256,
+		},
+		Messages: defaultMessageConfig.Clone(),
+>>>>>>> 5476c8b55 (cdc,retry: fix leader missing by extending region retry duration (#5269)):pkg/config/server_config.go
 	},
 }
 
@@ -315,11 +351,8 @@ func (c *ServerConfig) ValidateAndAdjust() error {
 	if c.KVClient == nil {
 		c.KVClient = defaultCfg.KVClient
 	}
-	if c.KVClient.WorkerConcurrent <= 0 {
-		return cerror.ErrInvalidServerOption.GenWithStackByArgs("region-scan-limit should be at least 1")
-	}
-	if c.KVClient.RegionScanLimit <= 0 {
-		return cerror.ErrInvalidServerOption.GenWithStackByArgs("region-scan-limit should be at least 1")
+	if err = c.KVClient.ValidateAndAdjust(); err != nil {
+		return errors.Trace(err)
 	}
 
 	return nil

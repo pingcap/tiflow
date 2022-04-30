@@ -28,6 +28,11 @@ import (
 	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/pingcap/tiflow/cdc/model"
+<<<<<<< HEAD
+=======
+	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/pdtime"
+>>>>>>> 5476c8b55 (cdc,retry: fix leader missing by extending region retry duration (#5269))
 	"github.com/pingcap/tiflow/pkg/regionspan"
 	"github.com/pingcap/tiflow/pkg/retry"
 	"go.uber.org/zap/zapcore"
@@ -187,10 +192,24 @@ func prepareBenchMultiStore(b *testing.B, storeNum, regionNum int) (
 
 	lockresolver, isPullInit, grpcPool, cdcClient := createCDCKVClient(ctx, pdClient, kvStorage)
 	defer grpcPool.Close()
+<<<<<<< HEAD
 	eventCh := make(chan model.RegionFeedEvent, 1000000)
 	wg.Add(1)
 	go func() {
 		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
+=======
+	regionCache := tikv.NewRegionCache(pdClient)
+	defer regionCache.Close()
+	cdcClient := NewCDCClient(
+		ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "",
+		config.GetDefaultServerConfig().KVClient)
+	eventCh := make(chan model.RegionFeedEvent, 1000000)
+	wg.Add(1)
+	go func() {
+		err := cdcClient.EventFeed(ctx,
+			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+			100, lockResolver, isPullInit, eventCh)
+>>>>>>> 5476c8b55 (cdc,retry: fix leader missing by extending region retry duration (#5269))
 		if errors.Cause(err) != context.Canceled {
 			b.Error(err)
 		}
@@ -276,10 +295,24 @@ func prepareBench(b *testing.B, regionNum int) (
 
 	lockresolver, isPullInit, grpcPool, cdcClient := createCDCKVClient(ctx, pdClient, kvStorage)
 	defer grpcPool.Close()
+<<<<<<< HEAD
 	eventCh := make(chan model.RegionFeedEvent, 1000000)
 	wg.Add(1)
 	go func() {
 		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("z")}, 100, false, lockresolver, isPullInit, eventCh)
+=======
+	regionCache := tikv.NewRegionCache(pdClient)
+	defer regionCache.Close()
+	cdcClient := NewCDCClient(
+		ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "",
+		config.GetDefaultServerConfig().KVClient)
+	eventCh := make(chan model.RegionFeedEvent, 1000000)
+	wg.Add(1)
+	go func() {
+		err := cdcClient.EventFeed(ctx,
+			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("z")},
+			100, lockResolver, isPullInit, eventCh)
+>>>>>>> 5476c8b55 (cdc,retry: fix leader missing by extending region retry duration (#5269))
 		if errors.Cause(err) != context.Canceled {
 			b.Error(err)
 		}
