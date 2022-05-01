@@ -1227,7 +1227,7 @@ func (s *eventFeedSession) receiveFromStream(
 			log.Warn("change data event size too large",
 				zap.String("changefeed", s.client.changefeed),
 				zap.Int("size", size), zap.Int("eventLen", len(cevent.Events)),
-				zap.Int("resolved region count", regionCount))
+				zap.Int("resolvedRegionCount", regionCount))
 		}
 
 		for _, event := range cevent.Events {

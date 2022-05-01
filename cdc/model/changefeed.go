@@ -346,8 +346,8 @@ func (info *ChangeFeedInfo) fixSinkProtocol() {
 			sinkURIParsed.RawQuery = newRawQuery
 			fixedSinkURI := sinkURIParsed.String()
 			log.Info("handle incompatible protocol from sink URI",
-				zap.String("old URI query", oldRawQuery),
-				zap.String("fixed URI query", newRawQuery))
+				zap.String("oldUriQuery", oldRawQuery),
+				zap.String("fixedUriQuery", newRawQuery))
 			info.SinkURI = fixedSinkURI
 		}
 	} else {
