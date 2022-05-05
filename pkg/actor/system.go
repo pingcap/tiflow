@@ -110,7 +110,7 @@ func (p *proc[T]) onSystemStop() {
 }
 
 // closeMailbox close mailbox and set state to closed.
-// onMailboxEmpty is threads-afe.
+// onMailboxEmpty is thread-safe.
 func (p *proc[T]) onMailboxEmpty() {
 	// MailboxClosed -> Close
 	if atomic.CompareAndSwapUint64(
