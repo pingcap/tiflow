@@ -14,7 +14,6 @@
 package sqlmodel
 
 import (
-	"fmt"
 	"strings"
 
 	"go.uber.org/zap"
@@ -25,9 +24,7 @@ import (
 // HasNotNullUniqueIdx returns true when the target table structure has PK or UK
 // whose columns are all NOT NULL.
 func (r *RowChange) HasNotNullUniqueIdx() bool {
-	r.lazyInitWhereHandle()
-
-	return r.whereHandle.UniqueNotNullIdx != nil
+	return r.UniqueNotNullIdx() != nil
 }
 
 // IdentityValues returns the two group of values that can be used to identify
@@ -58,6 +55,41 @@ func (r *RowChange) IdentityValues() ([]interface{}, []interface{}) {
 	return pre, post
 }
 
+// RowIdentity returns the identity of this row change, caller should
+// call IsIdentityUpdated/SplitUpdate before calling this method to
+// make sure it's not updating the identity itself.
+// we extract identity from preValues for update/delete, postValues for insert.
+// if there's no primary key, return all values.
+func (r *RowChange) RowIdentity() []interface{} {
+	r.lazyInitWhereHandle()
+
+	targetVals := r.preValues
+	if r.tp == RowChangeInsert {
+		targetVals = r.postValues
+	}
+
+	indexInfo := r.whereHandle.UniqueNotNullIdx
+	if indexInfo == nil {
+		return targetVals
+	}
+
+	identityVals := make([]interface{}, 0, len(indexInfo.Columns))
+	for _, column := range indexInfo.Columns {
+		identityVals = append(identityVals, targetVals[column.Offset])
+	}
+	return identityVals
+}
+
+// RowStrIdentity returns the identity of the row change as string slice
+func (r *RowChange) RowStrIdentity() []string {
+	identity := r.RowIdentity()
+	identifyStr := make([]string, len(identity))
+	for i := range identity {
+		identifyStr[i] = ColValAsStr(identity[i])
+	}
+	return identifyStr
+}
+
 // IsIdentityUpdated returns true when the row is updated by the same values.
 func (r *RowChange) IsIdentityUpdated() bool {
 	if r.tp != RowChangeUpdate {
@@ -85,7 +117,7 @@ func genKey(values []interface{}) string {
 		if i != 0 {
 			builder.WriteString(".")
 		}
-		fmt.Fprintf(builder, "%v", v)
+		builder.WriteString(ColValAsStr(v))
 	}
 
 	return builder.String()

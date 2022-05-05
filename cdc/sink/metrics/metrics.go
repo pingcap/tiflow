@@ -17,6 +17,9 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
+// rowSizeLowBound is set to 128K, only track data event with size not smaller than it.
+const rowSizeLowBound = 128 * 1024
+
 var (
 	// ExecBatchHistogram records batch size of a txn.
 	ExecBatchHistogram = prometheus.NewHistogramVec(
@@ -38,6 +41,16 @@ var (
 			Buckets:   prometheus.ExponentialBuckets(0.002 /* 2 ms */, 2, 18),
 		}, []string{"changefeed", "type"}) // type is for `sinkType`
 
+	// LargeRowSizeHistogram records the row size of events.
+	LargeRowSizeHistogram = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Namespace: "ticdc",
+			Subsystem: "sink",
+			Name:      "large_row_changed_event_size",
+			Help:      "The size of all received row changed events (in bytes)",
+			Buckets:   prometheus.ExponentialBuckets(rowSizeLowBound, 2, 10),
+		}, []string{"changefeed", "type"}) // type is for `sinkType`
+
 	// ExecDDLHistogram records the exexution time of a DDL.
 	ExecDDLHistogram = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
@@ -46,7 +59,7 @@ var (
 			Name:      "ddl_exec_duration",
 			Help:      "Bucketed histogram of processing time (s) of a ddl.",
 			Buckets:   prometheus.ExponentialBuckets(0.01, 2, 18),
-		}, []string{"changefeed"})
+		}, []string{"changefeed", "type"}) // type is for `sinkType`
 
 	// ExecutionErrorCounter is the counter of execution errors.
 	ExecutionErrorCounter = prometheus.NewCounterVec(
@@ -118,6 +131,7 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(ExecBatchHistogram)
 	registry.MustRegister(ExecTxnHistogram)
 	registry.MustRegister(ExecDDLHistogram)
+	registry.MustRegister(LargeRowSizeHistogram)
 	registry.MustRegister(ExecutionErrorCounter)
 	registry.MustRegister(ConflictDetectDurationHis)
 	registry.MustRegister(BucketSizeCounter)

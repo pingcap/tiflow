@@ -269,7 +269,7 @@ LOOP:
 	checkpointTs := c.state.Info.GetCheckpointTs(c.state.Status)
 	log.Info("initialize changefeed", zap.String("changefeed", c.state.ID),
 		zap.Stringer("info", c.state.Info),
-		zap.Uint64("checkpoint ts", checkpointTs))
+		zap.Uint64("checkpointTs", checkpointTs))
 	failpoint.Inject("NewChangefeedNoRetryError", func() {
 		failpoint.Return(cerror.ErrStartTsBeforeGC.GenWithStackByArgs(checkpointTs-300, checkpointTs))
 	})

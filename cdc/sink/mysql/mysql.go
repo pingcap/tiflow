@@ -325,7 +325,7 @@ func (s *mysqlSink) execDDLWithMaxRetries(ctx context.Context, ddl *model.DDLEve
 		return err
 	}, retry.WithBackoffBaseDelay(backoffBaseDelayInMs),
 		retry.WithBackoffMaxDelay(backoffMaxDelayInMs),
-		retry.WithMaxTries(defaultDDLMaxRetryTime),
+		retry.WithMaxTries(defaultDDLMaxRetry),
 		retry.WithIsRetryableErr(cerror.IsRetryableError))
 }
 
@@ -664,10 +664,13 @@ func (s *mysqlSink) execDMLWithMaxRetries(ctx context.Context, dmls *preparedDML
 		}
 		log.Debug("Exec Rows succeeded",
 			zap.String("changefeed", s.params.changefeedID),
-			zap.Int("num of Rows", dmls.rowCount),
+			zap.Int("numOfRows", dmls.rowCount),
 			zap.Int("bucket", bucket))
 		return nil
-	}, retry.WithBackoffBaseDelay(backoffBaseDelayInMs), retry.WithBackoffMaxDelay(backoffMaxDelayInMs), retry.WithMaxTries(defaultDMLMaxRetryTime), retry.WithIsRetryableErr(isRetryableDMLError))
+	}, retry.WithBackoffBaseDelay(backoffBaseDelayInMs),
+		retry.WithBackoffMaxDelay(backoffMaxDelayInMs),
+		retry.WithMaxTries(defaultDMLMaxRetry),
+		retry.WithIsRetryableErr(isRetryableDMLError))
 }
 
 type preparedDMLs struct {
@@ -788,6 +791,7 @@ func (s *mysqlSink) execDMLs(ctx context.Context, rows []*model.RowChangedEvent,
 		time.Sleep(time.Second * 2)
 		failpoint.Return(errors.Trace(dmysql.ErrInvalidConn))
 	})
+	s.statistics.ObserveRows(rows...)
 	dmls := s.prepareDMLs(rows, replicaID, bucket)
 	log.Debug("prepare DMLs", zap.Any("rows", rows), zap.Strings("sqls", dmls.sqls), zap.Any("values", dmls.values))
 	if err := s.execDMLWithMaxRetries(ctx, dmls, bucket); err != nil {
@@ -843,7 +847,7 @@ func prepareReplace(
 		builder.WriteString("REPLACE INTO " + quoteTable + colList + " VALUES ")
 	}
 	if appendPlaceHolder {
-		builder.WriteString("(" + model.HolderString(len(columnNames)) + ");")
+		builder.WriteString("(" + placeHolder(len(columnNames)) + ");")
 	}
 
 	return builder.String(), args
@@ -854,7 +858,7 @@ func prepareReplace(
 // args: (1,"",2,"2",3,"")
 func reduceReplace(replaces map[string][][]interface{}, batchSize int) ([]string, [][]interface{}) {
 	nextHolderString := func(query string, valueNum int, last bool) string {
-		query += "(" + model.HolderString(valueNum) + ")"
+		query += "(" + placeHolder(valueNum) + ")"
 		if !last {
 			query += ","
 		}
@@ -1017,4 +1021,18 @@ func getDBConn(ctx context.Context, dsnStr string) (*sql.DB, error) {
 		return nil, cerror.ErrMySQLConnectionError.Wrap(err).GenWithStack("fail to open MySQL connection")
 	}
 	return db, nil
+}
+
+// placeHolder returns a string separated by comma
+// n must be greater or equal than 1, or the function will panic
+func placeHolder(n int) string {
+	var builder strings.Builder
+	builder.Grow((n-1)*2 + 1)
+	for i := 0; i < n; i++ {
+		if i > 0 {
+			builder.WriteString(",")
+		}
+		builder.WriteString("?")
+	}
+	return builder.String()
 }

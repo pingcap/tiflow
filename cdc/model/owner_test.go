@@ -48,21 +48,6 @@ func TestAdminJobType(t *testing.T) {
 	}
 }
 
-func TestDDLStateString(t *testing.T) {
-	t.Parallel()
-
-	names := map[ChangeFeedDDLState]string{
-		ChangeFeedSyncDML:          "SyncDML",
-		ChangeFeedWaitToExecDDL:    "WaitToExecDDL",
-		ChangeFeedExecDDL:          "ExecDDL",
-		ChangeFeedDDLExecuteFailed: "DDLExecuteFailed",
-		ChangeFeedDDLState(100):    "Unknown",
-	}
-	for state, name := range names {
-		require.Equal(t, name, state.String())
-	}
-}
-
 func TestTaskPositionMarshal(t *testing.T) {
 	t.Parallel()
 

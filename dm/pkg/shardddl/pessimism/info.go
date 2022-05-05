@@ -108,8 +108,8 @@ func PutInfoIfOpNotDone(cli *clientv3.Client, info Info) (rev int64, putted bool
 	opGet := clientv3.OpGet(opKey)
 
 	// try to PUT info if the operation not exist.
-	resp, rev, err := etcdutil.DoOpsInOneCmpsTxnWithRetry(cli, []clientv3.Cmp{clientv3util.KeyMissing(opKey)},
-		[]clientv3.Op{infoPut}, []clientv3.Op{opGet})
+	resp, rev, err := etcdutil.DoTxnWithRepeatable(cli, etcdutil.FullOpFunc([]clientv3.Cmp{clientv3util.KeyMissing(opKey)},
+		[]clientv3.Op{infoPut}, []clientv3.Op{opGet}))
 	if err != nil {
 		return 0, false, err
 	} else if resp.Succeeded {
@@ -130,7 +130,7 @@ func PutInfoIfOpNotDone(cli *clientv3.Client, info Info) (rev int64, putted bool
 
 	// NOTE: try to PUT info if the operation still not done.
 	opNotDone := clientv3.Compare(clientv3.Value(opKey), "=", string(opsResp.Kvs[0].Value))
-	resp, rev, err = etcdutil.DoOpsInOneCmpsTxnWithRetry(cli, []clientv3.Cmp{opNotDone}, []clientv3.Op{infoPut}, []clientv3.Op{})
+	resp, rev, err = etcdutil.DoTxnWithRepeatable(cli, etcdutil.FullOpFunc([]clientv3.Cmp{opNotDone}, []clientv3.Op{infoPut}, []clientv3.Op{}))
 	if err != nil {
 		return 0, false, err
 	}

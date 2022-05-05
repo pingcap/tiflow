@@ -38,12 +38,12 @@ import (
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/util/dbutil"
 	"github.com/pingcap/tidb/util/filter"
+	regexprrouter "github.com/pingcap/tidb/util/regexpr-router"
+	router "github.com/pingcap/tidb/util/table-router"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
-	regexprrouter "github.com/pingcap/tidb/util/regexpr-router"
-	router "github.com/pingcap/tidb/util/table-router"
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/dm/pb"
 	"github.com/pingcap/tiflow/dm/dm/unit"
@@ -97,7 +97,9 @@ type BinlogType uint8
 const (
 	RemoteBinlog BinlogType = iota + 1
 	LocalBinlog
+)
 
+const (
 	skipJobIdx = iota
 	ddlJobIdx
 	workerJobTSArrayInitSize // size = skip + ddl
@@ -705,6 +707,7 @@ func (s *Syncer) Process(ctx context.Context, pr chan pb.ProcessResult) {
 		if utils.IsContextCanceledError(err) {
 			s.tctx.L().Info("filter out error caused by user cancel", log.ShortError(err))
 		} else {
+			s.tctx.L().Debug("unit syncer quits with error", zap.Error(err))
 			metrics.SyncerExitWithErrorCounter.WithLabelValues(s.cfg.Name, s.cfg.SourceID).Inc()
 			errsMu.Lock()
 			errs = append(errs, unit.NewProcessError(err))
@@ -997,8 +1000,7 @@ func (s *Syncer) flushIfOutdated() error {
 		s.flushCheckPointsAsync(j)
 		return nil
 	}
-	s.jobWg.Wait()
-	return s.flushCheckPoints()
+	return s.flushJobs()
 }
 
 // TODO: move to syncer/job.go
@@ -3312,6 +3314,9 @@ func (s *Syncer) loadTableStructureFromDump(ctx context.Context) error {
 					zap.Error(err))
 				setFirstErr(err)
 			}
+			// TODO: we should save table checkpoint here, but considering when
+			// the first time of flushing checkpoint, user may encounter https://github.com/pingcap/tiflow/issues/5010
+			// we should fix that problem first.
 		}
 	}
 	return firstErr
@@ -3954,4 +3959,8 @@ func (s *Syncer) initInitExecutedLoc() {
 
 func (s *Syncer) getTrackedTableInfo(table *filter.Table) (*model.TableInfo, error) {
 	return s.schemaTracker.GetTableInfo(table)
+}
+
+func (s *Syncer) getDownStreamTableInfo(tctx *tcontext.Context, tableID string, originTI *model.TableInfo) (*schema.DownstreamTableInfo, error) {
+	return s.schemaTracker.GetDownStreamTableInfo(tctx, tableID, originTI)
 }

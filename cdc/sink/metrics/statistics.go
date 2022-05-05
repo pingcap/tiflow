@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
@@ -64,7 +65,8 @@ func NewStatistics(ctx context.Context, t sinkType) *Statistics {
 	s := t.String()
 	statistics.metricExecTxnHis = ExecTxnHistogram.WithLabelValues(statistics.changefeedID, s)
 	statistics.metricExecBatchHis = ExecBatchHistogram.WithLabelValues(statistics.changefeedID, s)
-	statistics.metricExecDDLHis = ExecDDLHistogram.WithLabelValues(statistics.changefeedID)
+	statistics.metricRowSizesHis = LargeRowSizeHistogram.WithLabelValues(statistics.changefeedID, s)
+	statistics.metricExecDDLHis = ExecDDLHistogram.WithLabelValues(statistics.changefeedID, s)
 	statistics.metricExecErrCnt = ExecutionErrorCounter.WithLabelValues(statistics.changefeedID)
 
 	// Flush metrics in background for better accuracy and efficiency.
@@ -107,11 +109,24 @@ type Statistics struct {
 	metricExecDDLHis   prometheus.Observer
 	metricExecBatchHis prometheus.Observer
 	metricExecErrCnt   prometheus.Counter
+
+	metricRowSizesHis prometheus.Observer
 }
 
 // AddRowsCount records total number of rows needs to flush
 func (b *Statistics) AddRowsCount(count int) {
 	atomic.AddUint64(&b.totalRows, uint64(count))
+}
+
+// ObserveRows record the size of all received `RowChangedEvent`
+func (b *Statistics) ObserveRows(rows ...*model.RowChangedEvent) {
+	for _, row := range rows {
+		// only track row with data size larger than `rowSizeLowBound` to reduce
+		// the overhead of calling `Observe` method.
+		if row.ApproximateDataSize >= rowSizeLowBound {
+			b.metricRowSizesHis.Observe(float64(row.ApproximateDataSize))
+		}
+	}
 }
 
 // SubRowsCount records total number of rows needs to flush
