@@ -2386,7 +2386,7 @@ func (t *testMaster) TestGetValidatorStatus(c *check.C) {
 			gomock.Any(),
 		).Return(&pb.GetValidationStatusResponse{
 			Result: true,
-			Status: []*pb.ValidationStatus{
+			TableStatuses: []*pb.ValidationTableStatus{
 				{
 					SrcTable: "tbl1",
 				},
@@ -2432,7 +2432,7 @@ func (t *testMaster) TestGetValidatorStatus(c *check.C) {
 	c.Assert(err, check.IsNil)
 	c.Assert(resp.Msg, check.Equals, "")
 	c.Assert(resp.Result, check.IsTrue)
-	c.Assert(len(resp.Status), check.Equals, 2)
+	c.Assert(len(resp.TableStatuses), check.Equals, 2)
 	// 2. query invalid task's status
 	statusReq.TaskName = "invalid-task"
 	resp, err = server.GetValidationStatus(context.Background(), statusReq)

@@ -32,7 +32,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/dm/dm/config"
-	"github.com/pingcap/tiflow/dm/dm/pb"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
@@ -244,7 +243,7 @@ func (vw *validateWorker) updatePendingAndErrorRows(failedChanges map[string]map
 	vw.setPendingRowCounts(newPendingCnt)
 	vw.pendingChangesMap = newPendingChanges
 	vw.errorRows = append(vw.errorRows, allErrorRows...)
-	vw.validator.incrErrorRowCount(pb.ValidateErrorState_NewErr, len(allErrorRows))
+	vw.validator.incrErrorRowCount(len(allErrorRows))
 }
 
 func (vw *validateWorker) validateRowChanges(rows []*rowValidationJob, deleteChange bool) (map[string]*validateFailedRow, error) {

@@ -63,6 +63,8 @@ const (
 	ValidationFull = "full"
 
 	DefaultValidatorWorkerCount       = 4
+	DefaultValidatorValidateInterval  = 10 * time.Second
+	DefaultValidatorCheckInterval     = 5 * time.Second
 	DefaultValidatorRowErrorDelay     = 30 * time.Minute
 	DefaultValidatorMetaFlushInterval = 1 * time.Minute
 	DefaultValidatorBatchQuerySize    = 100
@@ -346,6 +348,8 @@ func (m *SyncerConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
 type ValidatorConfig struct {
 	Mode              string   `yaml:"mode" toml:"mode" json:"mode"`
 	WorkerCount       int      `yaml:"worker-count" toml:"worker-count" json:"worker-count"`
+	ValidateInterval  Duration `yaml:"validate-interval" toml:"validate-interval" json:"validate-interval"`
+	CheckInterval     Duration `yaml:"check-interval" toml:"check-interval" json:"check-interval"`
 	RowErrorDelay     Duration `yaml:"row-error-delay" toml:"row-error-delay" json:"row-error-delay"`
 	MetaFlushInterval Duration `yaml:"meta-flush-interval" toml:"meta-flush-interval" json:"meta-flush-interval"`
 	BatchQuerySize    int      `yaml:"batch-query-size" toml:"batch-query-size" json:"batch-query-size"`
@@ -360,6 +364,12 @@ func (v *ValidatorConfig) Adjust() error {
 	}
 	if v.WorkerCount <= 0 {
 		v.WorkerCount = DefaultValidatorWorkerCount
+	}
+	if v.ValidateInterval.Duration == 0 {
+		v.ValidateInterval.Duration = DefaultValidatorValidateInterval
+	}
+	if v.CheckInterval.Duration == 0 {
+		v.CheckInterval.Duration = DefaultValidatorCheckInterval
 	}
 	if v.RowErrorDelay.Duration == 0 {
 		v.RowErrorDelay.Duration = DefaultValidatorRowErrorDelay
