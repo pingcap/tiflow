@@ -232,7 +232,7 @@ func (s *BaseScheduleDispatcher) Tick(
 		return CheckpointCannotProceed, CheckpointCannotProceed, nil
 	}
 
-	s.descheduleTablesFromCaptures()
+	s.descheduleTablesFromDownCaptures()
 
 	shouldReplicateTableSet := make(map[model.TableID]struct{})
 	for _, tableID := range currentTables {
@@ -389,20 +389,17 @@ func (s *BaseScheduleDispatcher) syncCaptures(ctx context.Context) (capturesAllS
 	return finishedCount == len(s.captureStatus), nil
 }
 
-// descheduleTablesFromCaptures removes tables from `s.tables` that are
-// associated with a capture that no longer exists, or the draining target.
-// `s.captures` MUST be updated before calling this method.
-func (s *BaseScheduleDispatcher) descheduleTablesFromCaptures() {
+// descheduleTablesFromDownCaptures removes tables from `s.tables` that are
+// associated with a capture that no longer exists.
+func (s *BaseScheduleDispatcher) descheduleTablesFromDownCaptures() {
 	for _, captureID := range s.tables.GetDistinctCaptures() {
 		// If the capture is not in the current list of captures, it means that
 		// the capture has been removed from the system.
-		// If the capture is the draining target, which means it's going offline,
-		// also remove all tables from it.
-		if _, ok := s.captures[captureID]; !ok || captureID == s.drainTarget {
+		if _, ok := s.captures[captureID]; !ok {
 			// Remove records for all table previously replicated by the
-			// gone capture or the draining one.
+			// gone capture.
 			removed := s.tables.RemoveTableRecordByCaptureID(captureID)
-			s.logger.Info("removing tables from capture",
+			s.logger.Info("capture down, removing tables",
 				zap.String("captureID", captureID),
 				zap.Int("count", len(removed)),
 				zap.Any("removedTables", removed))
