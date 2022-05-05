@@ -84,7 +84,7 @@ var (
 			Name:      "changefeed_tick_duration",
 			Help:      "Bucketed histogram of owner tick changefeed reactor time (s).",
 			Buckets:   prometheus.ExponentialBuckets(0.01 /* 10 ms */, 2, 18),
-		}, []string{"changefeed"})
+		}, []string{"namespace", "changefeed"})
 	changefeedCloseDuration = prometheus.NewHistogram(
 		prometheus.HistogramOpts{
 			Namespace: "ticdc",

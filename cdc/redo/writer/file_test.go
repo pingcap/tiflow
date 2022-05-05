@@ -80,7 +80,8 @@ func TestWriterWrite(t *testing.T) {
 				WithLabelValues("default", "test-cf"),
 			metricFsyncDuration: redoFsyncDurationHistogram.
 				WithLabelValues("default", "test-cf"),
-			metricFlushAllDuration: redoFlushAllDurationHistogram.WithLabelValues("test-cf"),
+			metricFlushAllDuration: redoFlushAllDurationHistogram.
+				WithLabelValues("default", "test-cf"),
 		}
 
 		w.eventCommitTS.Store(1)
