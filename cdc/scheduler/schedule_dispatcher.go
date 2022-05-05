@@ -391,6 +391,7 @@ func (s *BaseScheduleDispatcher) syncCaptures(ctx context.Context) (capturesAllS
 
 // descheduleTablesFromDownCaptures removes tables from `s.tables` that are
 // associated with a capture that no longer exists.
+// `s.captures` MUST be updated before calling this method.
 func (s *BaseScheduleDispatcher) descheduleTablesFromDownCaptures() {
 	for _, captureID := range s.tables.GetDistinctCaptures() {
 		// If the capture is not in the current list of captures, it means that
@@ -746,8 +747,3 @@ func (s *BaseScheduleDispatcher) OnAgentCheckpoint(captureID model.CaptureID, ch
 	status.CheckpointTs = checkpointTs
 	status.ResolvedTs = resolvedTs
 }
-
-//// draining return true if there is any capture is draining.
-//func (s *BaseScheduleDispatcher) draining() bool {
-//	return s.drainTarget != captureIDNotDraining
-//}
