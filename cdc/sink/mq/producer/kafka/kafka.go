@@ -384,14 +384,12 @@ func AdjustConfig(
 ) error {
 	topics, err := admin.ListTopics()
 	if err != nil {
-		return cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+		return errors.Trace(err)
 	}
 
 	err = validateMinInsyncReplicas(admin, topics, topic, int(config.ReplicationFactor))
 	if err != nil {
-		return cerror.ErrKafkaInvalidConfig.Wrap(err).GenWithStack(
-			"because TiCDC Kafka producer's `request.required.acks` defaults to -1, " +
-				"TiCDC cannot deliver messages when the `replication-factor` is less than `min.insync.replicas`")
+		return errors.Trace(err)
 	}
 
 	info, exists := topics[topic]
@@ -401,11 +399,11 @@ func AdjustConfig(
 		topicMaxMessageBytesStr, err := getTopicConfig(admin, info, kafka.TopicMaxMessageBytesConfigName,
 			kafka.BrokerMessageMaxBytesConfigName)
 		if err != nil {
-			return cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+			return errors.Trace(err)
 		}
 		topicMaxMessageBytes, err := strconv.Atoi(topicMaxMessageBytesStr)
 		if err != nil {
-			return cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+			return errors.Trace(err)
 		}
 
 		if topicMaxMessageBytes < config.MaxMessageBytes {
@@ -436,7 +434,7 @@ func AdjustConfig(
 	}
 	brokerMessageMaxBytes, err := strconv.Atoi(brokerMessageMaxBytesStr)
 	if err != nil {
-		return cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+		return errors.Trace(err)
 	}
 
 	// when create the topic, `max.message.bytes` is decided by the broker,
@@ -501,9 +499,13 @@ func validateMinInsyncReplicas(
 	if replicationFactor < minInsyncReplicas {
 		msg := fmt.Sprintf("`replication-factor` cannot be smaller than the `%s` of %s",
 			kafka.MinInsyncReplicasConfigName, configFrom)
-		log.Error(msg, zap.Int("replicationFactor", replicationFactor),
-			zap.Int("minInsyncReplicas", minInsyncReplicas))
-		return errors.New(msg)
+		log.Error(msg, zap.Int("replication-factor", replicationFactor),
+			zap.Int("min.insync.replicas", minInsyncReplicas))
+		return cerror.ErrKafkaInvalidConfig.GenWithStack(
+			"TiCDC Kafka producer's `request.required.acks` defaults to -1, "+
+				"TiCDC cannot deliver messages when the `replication-factor` "+
+				"is smaller than the `min.insync.replicas` of %s", configFrom,
+		)
 	}
 
 	return nil
