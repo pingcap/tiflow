@@ -553,8 +553,7 @@ func (c *changefeed) asyncExecDDLJob(ctx cdcContext.Context,
 		return true, nil
 	}
 
-	if c.ddlEventCache == nil || c.ddlEventCache[0].CommitTs !=
-		job.BinlogInfo.FinishedTS {
+	if c.ddlEventCache == nil || c.ddlEventCache[0].CommitTs != job.BinlogInfo.FinishedTS {
 		ddlEvents, err := c.schema.BuildDDLEvents(job)
 		if err != nil {
 			log.Error("build DDL event fail", zap.String("changefeed", c.id),
@@ -584,14 +583,14 @@ func (c *changefeed) asyncExecDDLJob(ctx cdcContext.Context,
 
 	jobDone := true
 	for i, ddlEvent := range c.ddlEventCache {
-		if c.ddlEventDone[i] == true {
+		if c.ddlEventDone[i] {
 			continue
 		}
 		eventDone, err := c.asyncExecDDLEvent(ctx, ddlEvent)
 		if err != nil {
 			return false, err
 		}
-		if eventDone == true {
+		if eventDone {
 			c.ddlEventDone[i] = true
 		}
 		jobDone = jobDone && eventDone

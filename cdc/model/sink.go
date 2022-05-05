@@ -490,11 +490,9 @@ func (d *DDLEvent) FromJob(job *model.Job, preTableInfo *TableInfo) {
 	rebuildQuery := func() {
 		switch d.Type {
 		case model.ActionDropTable:
-			d.Query = fmt.Sprintf("DROP TABLE `%s`.`%s`",
-				d.TableInfo.Schema, d.TableInfo.Table)
+			d.Query = fmt.Sprintf("DROP TABLE `%s`.`%s`", d.TableInfo.Schema, d.TableInfo.Table)
 		case model.ActionDropView:
-			d.Query = fmt.Sprintf("DROP VIEW `%s`.`%s`",
-				d.TableInfo.Schema, d.TableInfo.Table)
+			d.Query = fmt.Sprintf("DROP VIEW `%s`.`%s`", d.TableInfo.Schema, d.TableInfo.Table)
 		default:
 			d.Query = job.Query
 		}
