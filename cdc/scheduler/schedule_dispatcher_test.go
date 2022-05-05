@@ -830,26 +830,44 @@ func TestDrainingCapture(t *testing.T) {
 	err := dispatcher.DrainCapture("capture-1")
 	require.Nil(t, err)
 	// inject `DispatchTable` method
-	communicator.On("DispatchTable", mock.Anything, "cf-1", mock.Anything, mock.Anything, false, defaultEpoch).Return(true, nil)
+	communicator.On("DispatchTable", mock.Anything, "cf-1", mock.Anything, mock.Anything, mock.Anything, defaultEpoch).Return(true, nil)
 	checkpointTs, resolvedTs, err := dispatcher.Tick(ctx, 1300, []model.TableID{0, 1, 2, 3, 4, 5}, mockCaptureInfos)
 	require.Nil(t, err)
 	// some table is `AddingTable`, so that cannot make progress at the moment
 	require.Equal(t, CheckpointCannotProceed, checkpointTs)
 	require.Equal(t, CheckpointCannotProceed, resolvedTs)
 	require.ElementsMatch(t, []model.CaptureID{"capture-2", "capture-3"}, dispatcher.balancerCandidates)
+
 	tablesByCapture := dispatcher.tables.GetAllTablesGroupedByCaptures()
-	require.Equal(t, 3, len(tablesByCapture["capture-2"]))
-	require.Equal(t, 3, len(tablesByCapture["capture-3"]))
+	require.Equal(t, 2, len(tablesByCapture["capture-1"]))
+	require.Equal(t, 2, len(tablesByCapture["capture-2"]))
+	require.Equal(t, 2, len(tablesByCapture["capture-3"]))
+
+	for _, record := range tablesByCapture["capture-1"] {
+		require.Equal(t, record.Status, util.RemovingTable)
+	}
 	communicator.AssertExpectations(t)
 
 	// receive ack message from agents.
+	for _, record := range tablesByCapture["capture-1"] {
+		dispatcher.OnAgentFinishedTableOperation("capture-1", record.TableID, defaultEpoch)
+	}
+
+	checkpointTs, resolvedTs, err = dispatcher.Tick(ctx, 1300, []model.TableID{0, 1, 2, 3, 4, 5}, mockCaptureInfos)
+	require.Nil(t, err)
+	require.Equal(t, CheckpointCannotProceed, checkpointTs)
+	require.Equal(t, CheckpointCannotProceed, resolvedTs)
+
+	tablesByCapture = dispatcher.tables.GetAllTablesGroupedByCaptures()
 	for captureID, tables := range tablesByCapture {
-		for tableID, record := range tables {
+		require.Equal(t, 3, len(tables))
+		for _, record := range tables {
 			if record.Status == util.AddingTable {
-				dispatcher.OnAgentFinishedTableOperation(captureID, tableID, defaultEpoch)
+				dispatcher.OnAgentFinishedTableOperation(captureID, record.TableID, defaultEpoch)
 			}
 		}
 	}
+
 	// captures should send checkpoint back to the dispatcher
 	dispatcher.OnAgentCheckpoint("capture-2", 1300, 1550)
 	dispatcher.OnAgentCheckpoint("capture-3", 1300, 1450)

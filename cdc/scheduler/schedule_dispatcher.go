@@ -421,9 +421,13 @@ func (s *BaseScheduleDispatcher) findDiffTables(
 	}
 
 	// Find tables that need to be removed.
-	for tableID := range s.tables.GetAllTables() {
+	for tableID, record := range s.tables.GetAllTables() {
 		if _, ok := shouldReplicateTables[tableID]; !ok {
 			// table is not found in `shouldReplicateTables`.
+			toRemove = append(toRemove, tableID)
+		}
+		// the table is at the drainTarget, also remove it.
+		if record.CaptureID == s.drainTarget {
 			toRemove = append(toRemove, tableID)
 		}
 	}
