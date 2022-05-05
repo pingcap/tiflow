@@ -70,17 +70,18 @@ func TestNewClient(t *testing.T) {
 	defer grpcPool.Close()
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
-	cli := NewCDCClient(context.Background(), pdClient, nil, grpcPool, regionCache, pdtime.NewClock4Test(), "")
+	cli := NewCDCClient(
+		context.Background(), pdClient, nil, grpcPool, regionCache, pdtime.NewClock4Test(), "",
+		config.GetDefaultServerConfig().KVClient)
 	require.NotNil(t, cli)
 }
 
 func TestAssembleRowEvent(t *testing.T) {
 	testCases := []struct {
-		regionID       uint64
-		entry          *cdcpb.Event_Row
-		enableOldValue bool
-		expected       model.RegionFeedEvent
-		err            string
+		regionID uint64
+		entry    *cdcpb.Event_Row
+		expected model.RegionFeedEvent
+		err      string
 	}{{
 		regionID: 1,
 		entry: &cdcpb.Event_Row{
@@ -90,7 +91,6 @@ func TestAssembleRowEvent(t *testing.T) {
 			Value:    []byte("v1"),
 			OpType:   cdcpb.Event_Row_PUT,
 		},
-		enableOldValue: false,
 		expected: model.RegionFeedEvent{
 			RegionID: 1,
 			Val: &model.RawKVEntry{
@@ -111,7 +111,6 @@ func TestAssembleRowEvent(t *testing.T) {
 			Value:    []byte("v2"),
 			OpType:   cdcpb.Event_Row_DELETE,
 		},
-		enableOldValue: false,
 		expected: model.RegionFeedEvent{
 			RegionID: 2,
 			Val: &model.RawKVEntry{
@@ -124,28 +123,6 @@ func TestAssembleRowEvent(t *testing.T) {
 			},
 		},
 	}, {
-		regionID: 3,
-		entry: &cdcpb.Event_Row{
-			StartTs:  1,
-			CommitTs: 2,
-			Key:      []byte("k2"),
-			Value:    []byte("v2"),
-			OldValue: []byte("ov2"),
-			OpType:   cdcpb.Event_Row_PUT,
-		},
-		enableOldValue: false,
-		expected: model.RegionFeedEvent{
-			RegionID: 3,
-			Val: &model.RawKVEntry{
-				OpType:   model.OpTypePut,
-				StartTs:  1,
-				CRTs:     2,
-				Key:      []byte("k2"),
-				Value:    []byte("v2"),
-				RegionID: 3,
-			},
-		},
-	}, {
 		regionID: 4,
 		entry: &cdcpb.Event_Row{
 			StartTs:  1,
@@ -155,7 +132,6 @@ func TestAssembleRowEvent(t *testing.T) {
 			OldValue: []byte("ov3"),
 			OpType:   cdcpb.Event_Row_PUT,
 		},
-		enableOldValue: true,
 		expected: model.RegionFeedEvent{
 			RegionID: 4,
 			Val: &model.RawKVEntry{
@@ -177,12 +153,12 @@ func TestAssembleRowEvent(t *testing.T) {
 			Value:    []byte("v2"),
 			OpType:   cdcpb.Event_Row_UNKNOWN,
 		},
-		enableOldValue: false,
-		err:            "[CDC:ErrUnknownKVEventType]unknown kv optype: UNKNOWN, entry: start_ts:1 commit_ts:2 key:\"k2\" value:\"v2\" ",
+		err: "[CDC:ErrUnknownKVEventType]unknown kv optype: UNKNOWN, entry: start_ts:1 " +
+			"commit_ts:2 key:\"k2\" value:\"v2\" ",
 	}}
 
 	for _, tc := range testCases {
-		event, err := assembleRowEvent(tc.regionID, tc.entry, tc.enableOldValue)
+		event, err := assembleRowEvent(tc.regionID, tc.entry)
 		require.Equal(t, tc.expected, event)
 		if err != nil {
 			require.Equal(t, tc.err, err.Error())
@@ -342,7 +318,9 @@ func TestConnectOfflineTiKV(t *testing.T) {
 	defer grpcPool.Close()
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
-	cdcClient := NewCDCClient(context.Background(), pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "")
+	cdcClient := NewCDCClient(
+		context.Background(), pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(),
+		"", config.GetDefaultServerConfig().KVClient)
 	// Take care of the eventCh, it's used to output resolvedTs event or kv event
 	// It will stuck the normal routine
 	eventCh := make(chan model.RegionFeedEvent, 50)
@@ -351,7 +329,7 @@ func TestConnectOfflineTiKV(t *testing.T) {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
 			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
-			1, false, lockResolver, isPullInit, eventCh)
+			1, lockResolver, isPullInit, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
 
@@ -442,14 +420,16 @@ func TestRecvLargeMessageSize(t *testing.T) {
 	defer grpcPool.Close()
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "")
+	cdcClient := NewCDCClient(
+		ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "",
+		config.GetDefaultServerConfig().KVClient)
 	eventCh := make(chan model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
 			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
-			1, false, lockResolver, isPullInit, eventCh)
+			1, lockResolver, isPullInit, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
 
@@ -540,14 +520,16 @@ func TestHandleError(t *testing.T) {
 	defer grpcPool.Close()
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "")
+	cdcClient := NewCDCClient(
+		ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "",
+		config.GetDefaultServerConfig().KVClient)
 	eventCh := make(chan model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
 			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("d")},
-			100, false, lockResolver, isPullInit, eventCh)
+			100, lockResolver, isPullInit, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
 
@@ -697,7 +679,9 @@ func TestCompatibilityWithSameConn(t *testing.T) {
 	defer grpcPool.Close()
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "")
+	cdcClient := NewCDCClient(
+		ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "",
+		config.GetDefaultServerConfig().KVClient)
 	eventCh := make(chan model.RegionFeedEvent, 50)
 	var wg2 sync.WaitGroup
 	wg2.Add(1)
@@ -705,7 +689,7 @@ func TestCompatibilityWithSameConn(t *testing.T) {
 		defer wg2.Done()
 		err := cdcClient.EventFeed(ctx,
 			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
-			100, false, lockResolver, isPullInit, eventCh)
+			100, lockResolver, isPullInit, eventCh)
 		require.True(t, cerror.ErrVersionIncompatible.Equal(err))
 	}()
 
@@ -763,7 +747,9 @@ func TestClusterIDMismatch(t *testing.T) {
 	defer grpcPool.Close()
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "")
+	cdcClient := NewCDCClient(
+		ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "",
+		config.GetDefaultServerConfig().KVClient)
 	eventCh := make(chan model.RegionFeedEvent, 50)
 
 	var wg2 sync.WaitGroup
@@ -772,7 +758,7 @@ func TestClusterIDMismatch(t *testing.T) {
 		defer wg2.Done()
 		err := cdcClient.EventFeed(ctx,
 			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
-			100, false, lockResolver, isPullInit, eventCh)
+			100, lockResolver, isPullInit, eventCh)
 		require.True(t, cerror.ErrClusterIDMismatch.Equal(err))
 	}()
 
@@ -830,14 +816,16 @@ func testHandleFeedEvent(t *testing.T) {
 	defer grpcPool.Close()
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "")
+	cdcClient := NewCDCClient(
+		ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "",
+		config.GetDefaultServerConfig().KVClient)
 	eventCh := make(chan model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
 			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
-			100, false, lockResolver, isPullInit, eventCh)
+			100, lockResolver, isPullInit, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
 
@@ -1284,14 +1272,16 @@ func TestStreamSendWithError(t *testing.T) {
 	defer grpcPool.Close()
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "")
+	cdcClient := NewCDCClient(
+		ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "",
+		config.GetDefaultServerConfig().KVClient)
 	eventCh := make(chan model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
 			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")},
-			100, false, lockerResolver, isPullInit, eventCh)
+			100, lockerResolver, isPullInit, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
 
@@ -1395,14 +1385,16 @@ func testStreamRecvWithError(t *testing.T, failpointStr string) {
 	defer grpcPool.Close()
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "")
+	cdcClient := NewCDCClient(
+		ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "",
+		config.GetDefaultServerConfig().KVClient)
 	eventCh := make(chan model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
 			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
-			100, false, lockResolver, isPullInit, eventCh)
+			100, lockResolver, isPullInit, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
 
@@ -1524,7 +1516,9 @@ func TestStreamRecvWithErrorAndResolvedGoBack(t *testing.T) {
 	defer grpcPool.Close()
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "")
+	cdcClient := NewCDCClient(
+		ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "",
+		config.GetDefaultServerConfig().KVClient)
 	eventCh := make(chan model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
@@ -1532,7 +1526,7 @@ func TestStreamRecvWithErrorAndResolvedGoBack(t *testing.T) {
 		defer close(eventCh)
 		err := cdcClient.EventFeed(ctx,
 			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
-			100, false, lockResolver, isPullInit, eventCh)
+			100, lockResolver, isPullInit, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
 
@@ -1730,7 +1724,9 @@ func TestIncompatibleTiKV(t *testing.T) {
 	defer grpcPool.Close()
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "")
+	cdcClient := NewCDCClient(
+		ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "",
+		config.GetDefaultServerConfig().KVClient)
 	// NOTICE: eventCh may block the main logic of EventFeed
 	eventCh := make(chan model.RegionFeedEvent, 128)
 	wg.Add(1)
@@ -1738,7 +1734,7 @@ func TestIncompatibleTiKV(t *testing.T) {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
 			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
-			100, false, lockResolver, isPullInit, eventCh)
+			100, lockResolver, isPullInit, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
 
@@ -1806,7 +1802,9 @@ func TestNoPendingRegionError(t *testing.T) {
 	defer grpcPool.Close()
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "")
+	cdcClient := NewCDCClient(
+		ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "",
+		config.GetDefaultServerConfig().KVClient)
 	eventCh := make(chan model.RegionFeedEvent, 50)
 
 	wg.Add(1)
@@ -1814,7 +1812,7 @@ func TestNoPendingRegionError(t *testing.T) {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
 			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
-			100, false, lockResolver, isPullInit, eventCh)
+			100, lockResolver, isPullInit, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
 
@@ -1883,14 +1881,16 @@ func TestDropStaleRequest(t *testing.T) {
 	defer grpcPool.Close()
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "")
+	cdcClient := NewCDCClient(
+		ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "",
+		config.GetDefaultServerConfig().KVClient)
 	eventCh := make(chan model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
 			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
-			100, false, lockResolver, isPullInit, eventCh)
+			100, lockResolver, isPullInit, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
 
@@ -1992,14 +1992,16 @@ func TestResolveLock(t *testing.T) {
 	defer grpcPool.Close()
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "")
+	cdcClient := NewCDCClient(
+		ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "",
+		config.GetDefaultServerConfig().KVClient)
 	eventCh := make(chan model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
 			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
-			100, false, lockResolver, isPullInit, eventCh)
+			100, lockResolver, isPullInit, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
 
@@ -2093,7 +2095,9 @@ func testEventCommitTsFallback(t *testing.T, events []*cdcpb.ChangeDataEvent) {
 	defer grpcPool.Close()
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "")
+	cdcClient := NewCDCClient(
+		ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "",
+		config.GetDefaultServerConfig().KVClient)
 	eventCh := make(chan model.RegionFeedEvent, 50)
 	var clientWg sync.WaitGroup
 	clientWg.Add(1)
@@ -2101,7 +2105,7 @@ func testEventCommitTsFallback(t *testing.T, events []*cdcpb.ChangeDataEvent) {
 		defer clientWg.Done()
 		err := cdcClient.EventFeed(ctx,
 			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
-			100, false, lockResolver, isPullInit, eventCh)
+			100, lockResolver, isPullInit, eventCh)
 		require.Equal(t, errUnreachable, err)
 	}()
 
@@ -2244,14 +2248,16 @@ func testEventAfterFeedStop(t *testing.T) {
 	defer grpcPool.Close()
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "")
+	cdcClient := NewCDCClient(
+		ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "",
+		config.GetDefaultServerConfig().KVClient)
 	eventCh := make(chan model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
 			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
-			100, false, lockResolver, isPullInit, eventCh)
+			100, lockResolver, isPullInit, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
 
@@ -2423,14 +2429,16 @@ func TestOutOfRegionRangeEvent(t *testing.T) {
 	defer grpcPool.Close()
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "")
+	cdcClient := NewCDCClient(
+		ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "",
+		config.GetDefaultServerConfig().KVClient)
 	eventCh := make(chan model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
 			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
-			100, false, lockResolver, isPullInit, eventCh)
+			100, lockResolver, isPullInit, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
 
@@ -2637,14 +2645,16 @@ func TestResolveLockNoCandidate(t *testing.T) {
 	defer grpcPool.Close()
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "")
+	cdcClient := NewCDCClient(
+		ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "",
+		config.GetDefaultServerConfig().KVClient)
 	eventCh := make(chan model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
 			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
-			100, false, lockResolver, isPullInit, eventCh)
+			100, lockResolver, isPullInit, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
 
@@ -2731,14 +2741,16 @@ func TestFailRegionReentrant(t *testing.T) {
 	defer grpcPool.Close()
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "")
+	cdcClient := NewCDCClient(
+		ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "",
+		config.GetDefaultServerConfig().KVClient)
 	eventCh := make(chan model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
 			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
-			100, false, lockResolver, isPullInit, eventCh)
+			100, lockResolver, isPullInit, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
 
@@ -2811,14 +2823,16 @@ func TestClientV1UnlockRangeReentrant(t *testing.T) {
 	defer grpcPool.Close()
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "")
+	cdcClient := NewCDCClient(
+		ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "",
+		config.GetDefaultServerConfig().KVClient)
 	eventCh := make(chan model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
 			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")},
-			100, false, lockResolver, isPullInit, eventCh)
+			100, lockResolver, isPullInit, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
 
@@ -2876,14 +2890,16 @@ func testClientErrNoPendingRegion(t *testing.T) {
 	defer grpcPool.Close()
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "")
+	cdcClient := NewCDCClient(
+		ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "",
+		config.GetDefaultServerConfig().KVClient)
 	eventCh := make(chan model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
 			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")},
-			100, false, lockResolver, isPullInit, eventCh)
+			100, lockResolver, isPullInit, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
 
@@ -2952,14 +2968,16 @@ func testKVClientForceReconnect(t *testing.T) {
 	defer grpcPool.Close()
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "")
+	cdcClient := NewCDCClient(
+		ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "",
+		config.GetDefaultServerConfig().KVClient)
 	eventCh := make(chan model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
 			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")},
-			100, false, lockResolver, isPullInit, eventCh)
+			100, lockResolver, isPullInit, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
 
@@ -3099,14 +3117,16 @@ func TestConcurrentProcessRangeRequest(t *testing.T) {
 	defer grpcPool.Close()
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "")
+	cdcClient := NewCDCClient(
+		ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "",
+		config.GetDefaultServerConfig().KVClient)
 	eventCh := make(chan model.RegionFeedEvent, 100)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
 			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("z")},
-			100, false, lockResolver, isPullInit, eventCh)
+			100, lockResolver, isPullInit, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
 
@@ -3214,14 +3234,16 @@ func TestEvTimeUpdate(t *testing.T) {
 	defer grpcPool.Close()
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "")
+	cdcClient := NewCDCClient(
+		ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "",
+		config.GetDefaultServerConfig().KVClient)
 	eventCh := make(chan model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
 			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
-			100, false, lockResolver, isPullInit, eventCh)
+			100, lockResolver, isPullInit, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
 
@@ -3334,14 +3356,16 @@ func TestRegionWorkerExitWhenIsIdle(t *testing.T) {
 	defer grpcPool.Close()
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "")
+	cdcClient := NewCDCClient(
+		ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "",
+		config.GetDefaultServerConfig().KVClient)
 	eventCh := make(chan model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
 			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
-			100, false, lockResolver, isPullInit, eventCh)
+			100, lockResolver, isPullInit, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
 
@@ -3424,7 +3448,9 @@ func TestPrewriteNotMatchError(t *testing.T) {
 	defer grpcPool.Close()
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
-	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "")
+	cdcClient := NewCDCClient(
+		ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "",
+		config.GetDefaultServerConfig().KVClient)
 	eventCh := make(chan model.RegionFeedEvent, 50)
 	baseAllocatedID := currentRequestID()
 
@@ -3433,7 +3459,7 @@ func TestPrewriteNotMatchError(t *testing.T) {
 		defer wg.Done()
 		err = cdcClient.EventFeed(ctx,
 			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")},
-			100, false, lockResolver, isPullInit, eventCh)
+			100, lockResolver, isPullInit, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
 
@@ -3506,12 +3532,14 @@ func TestPrewriteNotMatchError(t *testing.T) {
 
 func createFakeEventFeedSession(ctx context.Context) *eventFeedSession {
 	return newEventFeedSession(ctx,
-		&CDCClient{regionLimiters: defaultRegionEventFeedLimiters},
+		&CDCClient{
+			regionLimiters: defaultRegionEventFeedLimiters,
+			config:         config.GetDefaultServerConfig().KVClient,
+		},
 		regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
-		nil,   /*lockResolver*/
-		nil,   /*isPullerInit*/
-		false, /*enableOldValue*/
-		100,   /*startTs*/
+		nil, /*lockResolver*/
+		nil, /*isPullerInit*/
+		100, /*startTs*/
 		nil /*eventCh*/)
 }
 

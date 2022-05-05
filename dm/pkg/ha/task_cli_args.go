@@ -15,6 +15,7 @@ package ha
 
 import (
 	"context"
+	"fmt"
 
 	clientv3 "go.etcd.io/etcd/client/v3"
 
@@ -44,7 +45,7 @@ func PutTaskCliArgs(cli *clientv3.Client, taskName string, sources []string, arg
 	if err != nil {
 		return err
 	}
-	_, _, err = etcdutil.DoOpsInOneTxnWithRetry(cli, ops...)
+	_, _, err = etcdutil.DoTxnWithRepeatable(cli, etcdutil.ThenOpFunc(ops...))
 	return err
 }
 
@@ -55,7 +56,7 @@ func GetTaskCliArgs(cli *clientv3.Client, taskName, source string) (*config.Task
 
 	resp, err := cli.Get(ctx, common.TaskCliArgsKeyAdapter.Encode(taskName, source))
 	if err != nil {
-		return nil, err
+		return nil, terror.ErrHAFailTxnOperation.Delegate(err, fmt.Sprintf("fail to get task cli args, taskName: %s, source: %s", taskName, source))
 	}
 
 	if resp.Count == 0 {
@@ -78,7 +79,7 @@ func GetTaskCliArgs(cli *clientv3.Client, taskName, source string) (*config.Task
 func DeleteAllTaskCliArgs(cli *clientv3.Client, taskName string) error {
 	key := common.TaskCliArgsKeyAdapter.Encode(taskName)
 	op := clientv3.OpDelete(key, clientv3.WithPrefix())
-	_, _, err := etcdutil.DoOpsInOneTxnWithRetry(cli, op)
+	_, _, err := etcdutil.DoTxnWithRepeatable(cli, etcdutil.ThenOpFunc(op))
 	return err
 }
 
@@ -86,6 +87,6 @@ func DeleteAllTaskCliArgs(cli *clientv3.Client, taskName string) error {
 func DeleteTaskCliArgs(cli *clientv3.Client, taskName, source string) error {
 	key := common.TaskCliArgsKeyAdapter.Encode(taskName, source)
 	op := clientv3.OpDelete(key)
-	_, _, err := etcdutil.DoOpsInOneTxnWithRetry(cli, op)
+	_, _, err := etcdutil.DoTxnWithRepeatable(cli, etcdutil.ThenOpFunc(op))
 	return err
 }

@@ -237,7 +237,7 @@ func PutSourceTables(cli *clientv3.Client, st SourceTables) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	_, rev, err := etcdutil.DoOpsInOneTxnWithRetry(cli, op)
+	_, rev, err := etcdutil.DoTxnWithRepeatable(cli, etcdutil.ThenOpFunc(op))
 	return rev, err
 }
 
@@ -245,7 +245,7 @@ func PutSourceTables(cli *clientv3.Client, st SourceTables) (int64, error) {
 // This function should often be called by DM-worker.
 func DeleteSourceTables(cli *clientv3.Client, st SourceTables) (int64, error) {
 	key := common.ShardDDLOptimismSourceTablesKeyAdapter.Encode(st.Task, st.Source)
-	_, rev, err := etcdutil.DoOpsInOneTxnWithRetry(cli, clientv3.OpDelete(key))
+	_, rev, err := etcdutil.DoTxnWithRepeatable(cli, etcdutil.ThenOpFunc(clientv3.OpDelete(key)))
 	return rev, err
 }
 
@@ -253,7 +253,7 @@ func DeleteSourceTables(cli *clientv3.Client, st SourceTables) (int64, error) {
 // This function should often be called by DM-master.
 // k/k/v: task-name -> source-ID -> source tables.
 func GetAllSourceTables(cli *clientv3.Client) (map[string]map[string]SourceTables, int64, error) {
-	respTxn, _, err := etcdutil.DoOpsInOneTxnWithRetry(cli, clientv3.OpGet(common.ShardDDLOptimismSourceTablesKeyAdapter.Path(), clientv3.WithPrefix()))
+	respTxn, _, err := etcdutil.DoTxnWithRepeatable(cli, etcdutil.ThenOpFunc(clientv3.OpGet(common.ShardDDLOptimismSourceTablesKeyAdapter.Path(), clientv3.WithPrefix())))
 	if err != nil {
 		return nil, 0, err
 	}

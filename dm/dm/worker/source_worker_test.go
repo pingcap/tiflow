@@ -23,6 +23,7 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	. "github.com/pingcap/check"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/stretchr/testify/require"
 	"github.com/tikv/pd/pkg/tempurl"
@@ -439,7 +440,7 @@ func (t *testWorkerEtcdCompact) TestWatchSubtaskStageEtcdCompact(c *C) {
 	ha.WatchSubTaskStage(ctx, etcdCli, sourceCfg.SourceID, startRev, subTaskStageCh, subTaskErrCh)
 	select {
 	case err = <-subTaskErrCh:
-		c.Assert(err, Equals, etcdErrCompacted)
+		c.Assert(errors.Cause(err), Equals, etcdErrCompacted)
 	case <-time.After(300 * time.Millisecond):
 		c.Fatal("fail to get etcd error compacted")
 	}
@@ -565,7 +566,7 @@ func (t *testWorkerEtcdCompact) TestWatchValidatorStageEtcdCompact(c *C) {
 	ha.WatchValidatorStage(ctxForWatch, etcdCli, sourceCfg.SourceID, startRev, subTaskStageCh, subTaskErrCh)
 	select {
 	case err = <-subTaskErrCh:
-		c.Assert(err, Equals, etcdErrCompacted)
+		c.Assert(errors.Cause(err), Equals, etcdErrCompacted)
 	case <-time.After(300 * time.Millisecond):
 		c.Fatal("fail to get etcd error compacted")
 	}
@@ -680,7 +681,7 @@ func (t *testWorkerEtcdCompact) TestWatchRelayStageEtcdCompact(c *C) {
 	ha.WatchRelayStage(ctx, etcdCli, cfg.Name, startRev, relayStageCh, relayErrCh)
 	select {
 	case err := <-relayErrCh:
-		c.Assert(err, Equals, etcdErrCompacted)
+		c.Assert(errors.Cause(err), Equals, etcdErrCompacted)
 	case <-time.After(300 * time.Millisecond):
 		c.Fatal("fail to get etcd error compacted")
 	}
@@ -793,28 +794,29 @@ func (t *testServer) TestQueryValidator(c *C) {
 	}, pb.Stage_Running, nil, "")
 	st.StartValidator(pb.Stage_Running, false)
 	w.subTaskHolder.recordSubTask(st)
-	expected := []*pb.ValidationStatus{
+	expected := []*pb.ValidationTableStatus{
 		{
-			Source:           "127.0.0.1:3306",
-			SrcTable:         "`testdb1`.`testtable1`",
-			DstTable:         "`dstdb`.`dsttable`",
-			ValidationStatus: pb.Stage_Running.String(),
+			SrcTable: "`testdb1`.`testtable1`",
+			DstTable: "`dstdb`.`dsttable`",
+			Stage:    pb.Stage_Running,
 		},
 		{
-			Source:           "127.0.0.1:3306",
-			SrcTable:         "`testdb2`.`testtable2`",
-			DstTable:         "`dstdb`.`dsttable`",
-			ValidationStatus: pb.Stage_Stopped.String(),
-			Message:          "no primary key",
+			SrcTable: "`testdb2`.`testtable2`",
+			DstTable: "`dstdb`.`dsttable`",
+			Stage:    pb.Stage_Stopped,
+			Message:  "no primary key",
 		},
 	}
-	ret := w.GetValidateStatus("testQueryValidator", pb.Stage_Running)
+	ret, err := w.GetValidatorTableStatus("testQueryValidator", pb.Stage_Running)
+	c.Assert(err, IsNil)
 	c.Assert(len(ret), Equals, 1)
 	c.Assert(ret[0], DeepEquals, expected[0])
-	ret = w.GetValidateStatus("testQueryValidator", pb.Stage_Stopped)
+	ret, err = w.GetValidatorTableStatus("testQueryValidator", pb.Stage_Stopped)
+	c.Assert(err, IsNil)
 	c.Assert(len(ret), Equals, 1)
 	c.Assert(ret[0], DeepEquals, expected[1])
-	ret = w.GetValidateStatus("testQueryValidator", pb.Stage_InvalidStage)
+	ret, err = w.GetValidatorTableStatus("testQueryValidator", pb.Stage_InvalidStage)
+	c.Assert(err, IsNil)
 	c.Assert(len(ret), Equals, 2)
 	c.Assert(ret, DeepEquals, expected)
 }

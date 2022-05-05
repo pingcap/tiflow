@@ -248,9 +248,15 @@ func (s *simpleMySQLSink) checkOldValue(ctx context.Context, row *model.RowChang
 	if err != nil {
 		return errors.Trace(err)
 	}
+	defer result.Close()
 	var count int
 	if result.Next() {
-		err := result.Scan(&count)
+		err := result.Err()
+		if err != nil {
+			return errors.Trace(err)
+		}
+
+		err = result.Scan(&count)
 		if err != nil {
 			return errors.Trace(err)
 		}
