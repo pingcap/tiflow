@@ -586,7 +586,7 @@ function test_task_with_ignore_check_items() {
 	ignore_check="schema_of_shard_tables"
 	is_success="success"
 	check_res="pre-check is passed"
-	openapi_task_check "create_task_with_precheck" "$task_name" "$ignore_checks" "$is_success" "$check_res"
+	openapi_task_check "create_task_with_precheck" "$task_name" "$ignore_check" "$is_success" "$check_res"
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status $task_name" \
 		"\"stage\": \"Stopped\"" 2
