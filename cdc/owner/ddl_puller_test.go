@@ -29,6 +29,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	"github.com/pingcap/tiflow/pkg/retry"
+	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
@@ -106,7 +107,8 @@ func TestPuller(t *testing.T) {
 	startTs := uint64(10)
 	mockPuller := newMockPuller(t, startTs)
 	ctx := cdcContext.NewBackendContext4Test(true)
-	p, err := newDDLPuller(ctx, startTs)
+	upStream := upstream.NewUpstream4Test(nil)
+	p, err := newDDLPuller(ctx, upStream, startTs)
 	require.Nil(t, err)
 	p.(*ddlPullerImpl).puller = mockPuller
 	var wg sync.WaitGroup
@@ -232,7 +234,8 @@ func TestResolvedTsStuck(t *testing.T) {
 	startTs := uint64(10)
 	mockPuller := newMockPuller(t, startTs)
 	ctx := cdcContext.NewBackendContext4Test(true)
-	p, err := newDDLPuller(ctx, startTs)
+	upStream := upstream.NewUpstream4Test(nil)
+	p, err := newDDLPuller(ctx, upStream, startTs)
 	require.Nil(t, err)
 
 	mockClock := clock.NewMock()

@@ -40,7 +40,8 @@ type gcManagerSuite struct{}
 func (s *gcManagerSuite) TestUpdateGCSafePoint(c *check.C) {
 	defer testleak.AfterTest(c)()
 	mockPDClient := &MockPDClient{}
-	gcManager := NewManager(mockPDClient).(*gcManager)
+	pdClock := pdtime.NewClock4Test()
+	gcManager := NewManager(mockPDClient, pdClock).(*gcManager)
 	ctx := cdcContext.NewBackendContext4Test(true)
 
 	startTs := oracle.GoTimeToTS(time.Now())
@@ -93,32 +94,26 @@ func (s *gcManagerSuite) TestUpdateGCSafePoint(c *check.C) {
 func (s *gcManagerSuite) TestCheckStaleCheckpointTs(c *check.C) {
 	defer testleak.AfterTest(c)()
 	mockPDClient := &MockPDClient{}
-	gcManager := NewManager(mockPDClient).(*gcManager)
+	pdClock := pdtime.NewClock4Test()
+	gcManager := NewManager(mockPDClient, pdClock).(*gcManager)
 	gcManager.isTiCDCBlockGC = true
 	ctx := context.Background()
 
-	clock, err := pdtime.NewClock(context.Background(), mockPDClient)
-	c.Assert(err, check.IsNil)
-
-	go clock.Run(ctx)
 	time.Sleep(1 * time.Second)
-	defer clock.Stop()
-
-	cCtx := cdcContext.NewContext(ctx, &cdcContext.GlobalVars{
-		PDClock: clock,
-	})
 
 	cfID := model.DefaultChangeFeedID("cfID")
-	err = gcManager.CheckStaleCheckpointTs(cCtx, cfID, 10)
+	err := gcManager.CheckStaleCheckpointTs(ctx, cfID, 10)
 	c.Assert(cerror.ErrGCTTLExceeded.Equal(errors.Cause(err)), check.IsTrue)
 	c.Assert(cerror.ChangefeedFastFailError(err), check.IsTrue)
 
-	err = gcManager.CheckStaleCheckpointTs(cCtx, cfID, oracle.GoTimeToTS(time.Now()))
+	err = gcManager.CheckStaleCheckpointTs(ctx, cfID, oracle.GoTimeToTS(time.Now()))
 	c.Assert(err, check.IsNil)
 
 	gcManager.isTiCDCBlockGC = false
 	gcManager.lastSafePointTs = 20
-	err = gcManager.CheckStaleCheckpointTs(cCtx, cfID, 10)
+
+	err = gcManager.CheckStaleCheckpointTs(ctx, cfID, 10)
+
 	c.Assert(cerror.ErrSnapshotLostByGC.Equal(errors.Cause(err)), check.IsTrue)
 	c.Assert(cerror.ChangefeedFastFailError(err), check.IsTrue)
 }
