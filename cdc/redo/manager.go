@@ -24,11 +24,11 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/br/pkg/storage"
+	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo/writer"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
 
@@ -165,9 +165,17 @@ func NewManager(ctx context.Context, cfg *config.ConsistentConfig, opts *Manager
 		m.writer = writer.NewBlackHoleWriter()
 	case consistentStorageLocal, consistentStorageNFS, consistentStorageS3:
 		globalConf := config.GetGlobalServerConfig()
-		changeFeedID := util.ChangefeedIDFromCtx(ctx)
+		changeFeedID := contextutil.ChangefeedIDFromCtx(ctx)
 		// We use a temporary dir to storage redo logs before flushing to other backends, such as S3
-		redoDir := filepath.Join(globalConf.DataDir, config.DefaultRedoDir, changeFeedID)
+		var redoDir string
+		if changeFeedID.Namespace == model.DefaultNamespace {
+			redoDir = filepath.Join(globalConf.DataDir,
+				config.DefaultRedoDir, changeFeedID.ID)
+		} else {
+			redoDir = filepath.Join(globalConf.DataDir,
+				config.DefaultRedoDir,
+				changeFeedID.Namespace, changeFeedID.ID)
+		}
 		if m.storageType == consistentStorageLocal || m.storageType == consistentStorageNFS {
 			// When using local or nfs as backend, store redo logs to redoDir directly.
 			redoDir = uri.Path
@@ -175,7 +183,7 @@ func NewManager(ctx context.Context, cfg *config.ConsistentConfig, opts *Manager
 
 		writerCfg := &writer.LogWriterConfig{
 			Dir:               redoDir,
-			CaptureID:         util.CaptureAddrFromCtx(ctx),
+			CaptureID:         contextutil.CaptureAddrFromCtx(ctx),
 			ChangeFeedID:      changeFeedID,
 			CreateTime:        time.Now(),
 			MaxLogSize:        cfg.MaxLogSize,

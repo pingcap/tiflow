@@ -97,11 +97,12 @@ func (s *cdcReactorState) Update(key util.EtcdKey, value []byte, isInit bool) er
 	}
 
 	if matches := changefeedRegex.FindSubmatch(key.Bytes()); matches != nil {
-		changefeedID := string(matches[1])
+		changefeedID := model.DefaultChangeFeedID(string(matches[1]))
 
 		if value == nil {
 			log.Info("Changefeed deleted",
-				zap.String("changefeed", changefeedID),
+				zap.String("namespace", changefeedID.Namespace),
+				zap.String("changefeed", changefeedID.ID),
 				zap.Reflect("oldChangefeed", s.ChangefeedStatuses))
 
 			delete(s.ChangefeedStatuses, changefeedID)
@@ -116,12 +117,14 @@ func (s *cdcReactorState) Update(key util.EtcdKey, value []byte, isInit bool) er
 
 		if oldChangefeedInfo, ok := s.ChangefeedStatuses[changefeedID]; ok {
 			log.Info("Changefeed updated",
-				zap.String("changefeed", changefeedID),
+				zap.String("namespace", changefeedID.Namespace),
+				zap.String("changefeed", changefeedID.ID),
 				zap.Reflect("oldChangefeed", oldChangefeedInfo),
 				zap.Reflect("newChangefeed", newChangefeedStatus))
 		} else {
 			log.Info("Changefeed added",
-				zap.String("changefeed", changefeedID),
+				zap.String("namespace", changefeedID.Namespace),
+				zap.String("changefeed", changefeedID.ID),
 				zap.Reflect("newChangefeed", newChangefeedStatus))
 		}
 
@@ -132,12 +135,13 @@ func (s *cdcReactorState) Update(key util.EtcdKey, value []byte, isInit bool) er
 
 	if matches := positionRegex.FindSubmatch(key.Bytes()); matches != nil {
 		captureID := string(matches[1])
-		changefeedID := string(matches[2])
+		changefeedID := model.DefaultChangeFeedID(string(matches[2]))
 
 		if value == nil {
 			log.Info("Position deleted",
 				zap.String("captureID", captureID),
-				zap.String("changefeed", changefeedID),
+				zap.String("namespace", changefeedID.Namespace),
+				zap.String("changefeed", changefeedID.ID),
 				zap.Reflect("oldPosition", s.TaskPositions[changefeedID][captureID]))
 
 			delete(s.TaskPositions[changefeedID], captureID)
@@ -161,13 +165,15 @@ func (s *cdcReactorState) Update(key util.EtcdKey, value []byte, isInit bool) er
 		if position, ok := s.TaskPositions[changefeedID][captureID]; ok {
 			log.Info("Position updated",
 				zap.String("captureID", captureID),
-				zap.String("changefeed", changefeedID),
+				zap.String("namespace", changefeedID.Namespace),
+				zap.String("changefeed", changefeedID.ID),
 				zap.Reflect("oldPosition", position),
 				zap.Reflect("newPosition", newTaskPosition))
 		} else {
 			log.Info("Position created",
 				zap.String("captureID", captureID),
-				zap.String("changefeed", changefeedID),
+				zap.String("namespace", changefeedID.Namespace),
+				zap.String("changefeed", changefeedID.ID),
 				zap.Reflect("newPosition", newTaskPosition))
 		}
 
@@ -178,12 +184,13 @@ func (s *cdcReactorState) Update(key util.EtcdKey, value []byte, isInit bool) er
 
 	if matches := statusRegex.FindSubmatch(key.Bytes()); matches != nil {
 		captureID := string(matches[1])
-		changefeedID := string(matches[2])
+		changefeedID := model.DefaultChangeFeedID(string(matches[2]))
 
 		if value == nil {
 			log.Info("Status deleted",
 				zap.String("captureID", captureID),
-				zap.String("changefeed", changefeedID),
+				zap.String("namespace", changefeedID.Namespace),
+				zap.String("changefeed", changefeedID.ID),
 				zap.Reflect("oldStatus", s.TaskStatuses[changefeedID][captureID]))
 
 			delete(s.TaskStatuses[changefeedID], captureID)
@@ -207,13 +214,15 @@ func (s *cdcReactorState) Update(key util.EtcdKey, value []byte, isInit bool) er
 		if status, ok := s.TaskStatuses[changefeedID][captureID]; ok {
 			log.Info("Status updated",
 				zap.String("captureID", captureID),
-				zap.String("changefeed", changefeedID),
+				zap.String("namespace", changefeedID.Namespace),
+				zap.String("changefeed", changefeedID.ID),
 				zap.Reflect("oldStatus", status),
 				zap.Reflect("newStatus", newTaskStatus))
 		} else {
 			log.Info("Status updated",
 				zap.String("captureID", captureID),
-				zap.String("changefeed", changefeedID),
+				zap.String("namespace", changefeedID.Namespace),
+				zap.String("changefeed", changefeedID.ID),
 				zap.Reflect("newStatus", newTaskStatus))
 		}
 

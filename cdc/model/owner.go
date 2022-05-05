@@ -34,7 +34,7 @@ type AdminJobOption struct {
 
 // AdminJob holds an admin job
 type AdminJob struct {
-	CfID  string
+	CfID  ChangeFeedID
 	Type  AdminJobType
 	Opts  *AdminJobOption
 	Error *RunningError
@@ -388,7 +388,7 @@ func (status *ChangeFeedStatus) Unmarshal(data []byte) error {
 
 // ProcInfoSnap holds most important replication information of a processor
 type ProcInfoSnap struct {
-	CfID      string                        `json:"changefeed-id"`
+	CfID      ChangeFeedID                  `json:"changefeed-id"`
 	CaptureID string                        `json:"capture-id"`
 	Tables    map[TableID]*TableReplicaInfo `json:"-"`
 }

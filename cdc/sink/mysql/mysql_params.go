@@ -25,10 +25,11 @@ import (
 	dmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc/contextutil"
+	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/metrics"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/security"
-	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
 
@@ -82,7 +83,7 @@ type sinkParams struct {
 	workerCount         int
 	maxTxnRow           int
 	tidbTxnMode         string
-	changefeedID        string
+	changefeedID        model.ChangeFeedID
 	captureAddr         string
 	batchReplaceEnabled bool
 	batchReplaceSize    int
@@ -100,12 +101,13 @@ func (s *sinkParams) Clone() *sinkParams {
 	return &clone
 }
 
-func parseSinkURIToParams(ctx context.Context, sinkURI *url.URL, opts map[string]string) (*sinkParams, error) {
+func parseSinkURIToParams(ctx context.Context,
+	changefeedID model.ChangeFeedID,
+	sinkURI *url.URL, opts map[string]string,
+) (*sinkParams, error) {
 	params := defaultParams.Clone()
 
-	if cid, ok := opts[metrics.OptChangefeedID]; ok {
-		params.changefeedID = cid
-	}
+	params.changefeedID = changefeedID
 	if caddr, ok := opts[metrics.OptCaptureAddr]; ok {
 		params.captureAddr = caddr
 	}
@@ -169,7 +171,7 @@ func parseSinkURIToParams(ctx context.Context, sinkURI *url.URL, opts map[string
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
-		name := "cdc_mysql_tls" + params.changefeedID
+		name := "cdc_mysql_tls" + params.changefeedID.Namespace + "_" + params.changefeedID.ID
 		err = dmysql.RegisterTLSConfig(name, tlsCfg)
 		if err != nil {
 			return nil, cerror.ErrMySQLConnectionError.Wrap(err).GenWithStack("fail to open MySQL connection")
@@ -219,7 +221,7 @@ func parseSinkURIToParams(ctx context.Context, sinkURI *url.URL, opts map[string
 			params.timezone = fmt.Sprintf(`"%s"`, s)
 		}
 	} else {
-		tz := util.TimezoneFromCtx(ctx)
+		tz := contextutil.TimezoneFromCtx(ctx)
 		params.timezone = fmt.Sprintf(`"%s"`, tz.String())
 	}
 

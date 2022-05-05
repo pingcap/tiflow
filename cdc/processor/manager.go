@@ -139,13 +139,16 @@ func (m *Manager) closeProcessor(changefeedID model.ChangeFeedID) {
 		err := processor.Close()
 		costTime := time.Since(startTime)
 		if costTime > processorLogsWarnDuration {
-			log.Warn("processor close took too long", zap.String("changefeed", changefeedID),
+			log.Warn("processor close took too long",
+				zap.String("namespace", changefeedID.Namespace),
+				zap.String("changefeed", changefeedID.ID),
 				zap.String("capture", captureID), zap.Duration("duration", costTime))
 		}
 		m.metricProcessorCloseDuration.Observe(costTime.Seconds())
 		if err != nil {
 			log.Warn("failed to close processor",
-				zap.String("changefeed", changefeedID),
+				zap.String("namespace", changefeedID.Namespace),
+				zap.String("changefeed", changefeedID.ID),
 				zap.Error(err))
 		}
 		delete(m.processors, changefeedID)

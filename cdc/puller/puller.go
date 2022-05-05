@@ -21,6 +21,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	tidbkv "github.com/pingcap/tidb/kv"
+	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/puller/frontier"
@@ -28,7 +29,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/pdtime"
 	"github.com/pingcap/tiflow/pkg/regionspan"
 	"github.com/pingcap/tiflow/pkg/txnutil"
-	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/tikv/client-go/v2/oracle"
 	"github.com/tikv/client-go/v2/tikv"
 	pd "github.com/tikv/pd/client"
@@ -73,7 +73,7 @@ func NewPuller(
 	regionCache *tikv.RegionCache,
 	kvStorage tidbkv.Storage,
 	pdClock pdtime.Clock,
-	changefeed string,
+	changefeed model.ChangeFeedID,
 	checkpointTs uint64,
 	spans []regionspan.Span,
 	cfg *config.KVClientConfig,
@@ -113,7 +113,7 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 	eventCh := make(chan model.RegionFeedEvent, defaultPullerEventChanSize)
 
 	lockResolver := txnutil.NewLockerResolver(p.kvStorage,
-		util.ChangefeedIDFromCtx(ctx), util.RoleFromCtx(ctx))
+		contextutil.ChangefeedIDFromCtx(ctx), contextutil.RoleFromCtx(ctx))
 	for _, span := range p.spans {
 		span := span
 
@@ -122,22 +122,27 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 		})
 	}
 
-	changefeedID := util.ChangefeedIDFromCtx(ctx)
-	tableID, _ := util.TableIDFromCtx(ctx)
-	metricOutputChanSize := outputChanSizeHistogram.WithLabelValues(changefeedID)
-	metricEventChanSize := eventChanSizeHistogram.WithLabelValues(changefeedID)
-	metricPullerResolvedTs := pullerResolvedTsGauge.WithLabelValues(changefeedID)
-	metricTxnCollectCounterKv := txnCollectCounter.WithLabelValues(changefeedID, "kv")
-	metricTxnCollectCounterResolved := txnCollectCounter.WithLabelValues(changefeedID, "resolved")
+	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
+	tableID, _ := contextutil.TableIDFromCtx(ctx)
+	metricOutputChanSize := outputChanSizeHistogram.
+		WithLabelValues(changefeedID.ID)
+	metricEventChanSize := eventChanSizeHistogram.
+		WithLabelValues(changefeedID.ID)
+	metricPullerResolvedTs := pullerResolvedTsGauge.
+		WithLabelValues(changefeedID.ID)
+	metricTxnCollectCounterKv := txnCollectCounter.
+		WithLabelValues(changefeedID.ID, "kv")
+	metricTxnCollectCounterResolved := txnCollectCounter.
+		WithLabelValues(changefeedID.ID, "resolved")
 	defer func() {
-		outputChanSizeHistogram.DeleteLabelValues(changefeedID)
-		eventChanSizeHistogram.DeleteLabelValues(changefeedID)
-		memBufferSizeGauge.DeleteLabelValues(changefeedID)
-		pullerResolvedTsGauge.DeleteLabelValues(changefeedID)
-		kvEventCounter.DeleteLabelValues(changefeedID, "kv")
-		kvEventCounter.DeleteLabelValues(changefeedID, "resolved")
-		txnCollectCounter.DeleteLabelValues(changefeedID, "kv")
-		txnCollectCounter.DeleteLabelValues(changefeedID, "resolved")
+		outputChanSizeHistogram.DeleteLabelValues(changefeedID.ID)
+		eventChanSizeHistogram.DeleteLabelValues(changefeedID.ID)
+		memBufferSizeGauge.DeleteLabelValues(changefeedID.ID)
+		pullerResolvedTsGauge.DeleteLabelValues(changefeedID.ID)
+		kvEventCounter.DeleteLabelValues(changefeedID.ID, "kv")
+		kvEventCounter.DeleteLabelValues(changefeedID.ID, "resolved")
+		txnCollectCounter.DeleteLabelValues(changefeedID.ID, "kv")
+		txnCollectCounter.DeleteLabelValues(changefeedID.ID, "resolved")
 	}()
 
 	lastResolvedTs := p.checkpointTs
@@ -152,7 +157,8 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 			// resolved ts is not broken.
 			if raw.CRTs < p.resolvedTs || (raw.CRTs == p.resolvedTs && raw.OpType != model.OpTypeResolved) {
 				log.Warn("The CRTs is fallen back in puller",
-					zap.String("changefeed", changefeedID),
+					zap.String("namespace", changefeedID.Namespace),
+					zap.String("changefeed", changefeedID.ID),
 					zap.Reflect("row", raw),
 					zap.Uint64("CRTs", raw.CRTs),
 					zap.Uint64("resolvedTs", p.resolvedTs),
@@ -194,7 +200,8 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 				metricTxnCollectCounterResolved.Inc()
 				if !regionspan.IsSubSpan(e.Resolved.Span, p.spans...) {
 					log.Panic("the resolved span is not in the total span",
-						zap.String("changefeed", changefeedID),
+						zap.String("namespace", changefeedID.Namespace),
+						zap.String("changefeed", changefeedID.ID),
 						zap.Reflect("resolved", e.Resolved),
 						zap.Int64("tableID", tableID),
 						zap.Reflect("spans", p.spans),
@@ -214,7 +221,8 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 						spans = append(spans, p.spans[i].String())
 					}
 					log.Info("puller is initialized",
-						zap.String("changefeed", changefeedID),
+						zap.String("namespace", changefeedID.Namespace),
+						zap.String("changefeed", changefeedID.ID),
 						zap.Duration("duration", time.Since(start)),
 						zap.Int64("tableID", tableID),
 						zap.Strings("spans", spans),
