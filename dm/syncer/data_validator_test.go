@@ -309,9 +309,6 @@ func TestValidatorDoValidate(t *testing.T) {
 			"{\"key\": \"11\", \"data\": [\"11\", \"a\"], \"tp\": 0, \"first-validate-ts\": 0, \"failed-cnt\": 0}", 1))
 	dbMock.ExpectQuery("select .* from .*_validator_table_status.*").WillReturnRows(
 		dbMock.NewRows([]string{"", "", "", "", "", ""}).AddRow(schemaName, tableName4, schemaName, tableName4, pb.Stage_Stopped, "load from meta"))
-	dbMock.ExpectQuery("select .* from .*_validator_error_change.*").WillReturnRows(
-		dbMock.NewRows([]string{"", ""}).AddRow(pb.ValidateErrorState_NewErr, 2).AddRow(pb.ValidateErrorState_IgnoredErr, 3).
-			AddRow(pb.ValidateErrorState_ResolvedErr, 4))
 
 	syncerObj := NewSyncer(cfg, nil, nil)
 	syncerObj.running.Store(true)
@@ -487,9 +484,7 @@ func TestValidatorDoValidate(t *testing.T) {
 	require.Len(t, validator.tableStatus, 4)
 	require.Contains(t, validator.tableStatus, ft.String())
 	require.Equal(t, pb.Stage_Running, validator.tableStatus[ft.String()].stage)
-	require.Equal(t, int64(2), validator.errorRowCounts[pb.ValidateErrorState_NewErr].Load())
-	require.Equal(t, int64(3), validator.errorRowCounts[pb.ValidateErrorState_IgnoredErr].Load())
-	require.Equal(t, int64(4), validator.errorRowCounts[pb.ValidateErrorState_ResolvedErr].Load())
+	require.Zero(t, validator.newErrorRowCount.Load())
 
 	ft = filter.Table{Schema: schemaName, Name: tableName2}
 	require.Contains(t, validator.tableStatus, ft.String())
@@ -542,12 +537,18 @@ func TestValidatorGetValidationStatus(t *testing.T) {
 	cfg := genSubtaskConfig(t)
 	syncerObj := NewSyncer(cfg, nil, nil)
 	validator := NewContinuousDataValidator(cfg, syncerObj, false)
-	expected := map[string]*pb.ValidationStatus{
+	expected := map[string]*pb.ValidationTableStatus{
 		"`db`.`tbl1`": {
-			SrcTable:         "`db`.`tbl1`",
-			DstTable:         "`db`.`tbl1`",
-			ValidationStatus: pb.Stage_Running.String(),
-			Message:          "",
+			SrcTable: "`db`.`tbl1`",
+			DstTable: "`db`.`tbl1`",
+			Stage:    pb.Stage_Running,
+			Message:  "",
+		},
+		"`db`.`tbl2`": {
+			SrcTable: "`db`.`tbl2`",
+			DstTable: "`db`.`tbl2`",
+			Stage:    pb.Stage_Stopped,
+			Message:  tableWithoutPrimaryKeyMsg,
 		},
 	}
 	validator.tableStatus = map[string]*tableValidateStatus{
@@ -556,9 +557,29 @@ func TestValidatorGetValidationStatus(t *testing.T) {
 			target: filter.Table{Schema: "db", Name: "tbl1"},
 			stage:  pb.Stage_Running,
 		},
+		"`db`.`tbl2`": {
+			source:  filter.Table{Schema: "db", Name: "tbl2"},
+			target:  filter.Table{Schema: "db", Name: "tbl2"},
+			stage:   pb.Stage_Stopped,
+			message: tableWithoutPrimaryKeyMsg,
+		},
 	}
-	ret := validator.GetValidationStatus()
+	ret := validator.GetValidatorTableStatus(pb.Stage_InvalidStage)
 	require.Equal(t, len(expected), len(ret))
+	for _, result := range ret {
+		ent, ok := expected[result.SrcTable]
+		require.Equal(t, ok, true)
+		require.EqualValues(t, ent, result)
+	}
+	ret = validator.GetValidatorTableStatus(pb.Stage_Running)
+	require.Equal(t, 1, len(ret))
+	for _, result := range ret {
+		ent, ok := expected[result.SrcTable]
+		require.Equal(t, ok, true)
+		require.EqualValues(t, ent, result)
+	}
+	ret = validator.GetValidatorTableStatus(pb.Stage_Stopped)
+	require.Equal(t, 1, len(ret))
 	for _, result := range ret {
 		ent, ok := expected[result.SrcTable]
 		require.Equal(t, ok, true)

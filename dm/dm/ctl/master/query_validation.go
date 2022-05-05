@@ -92,11 +92,11 @@ func queryValidationError(cmd *cobra.Command, _ []string) (err error) {
 
 func NewQueryValidationStatusCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "status [--stage stage] <task-name>",
+		Use:   "status [--table-stage stage] <task-name>",
 		Short: "query validation status of a task",
 		RunE:  queryValidationStatus,
 	}
-	cmd.Flags().String("stage", "", "filter validation tasks status by stages: running/stopped")
+	cmd.Flags().String("table-stage", "", "filter validation tables by stage: running/stopped")
 	return cmd
 }
 
@@ -113,7 +113,7 @@ func queryValidationStatus(cmd *cobra.Command, _ []string) error {
 		return errors.New("task name should be specified")
 	}
 	taskName = cmd.Flags().Arg(0)
-	stage, err = cmd.Flags().GetString("stage")
+	stage, err = cmd.Flags().GetString("table-stage")
 	if err != nil {
 		return err
 	}

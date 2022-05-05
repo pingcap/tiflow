@@ -62,9 +62,11 @@ type tableActor struct {
 	nodes []*ActorNode
 
 	// states of table actor
-	started  bool
-	stopped  uint32
-	stopLock sync.Mutex
+	started     bool
+	stopped     uint32
+	stopLock    sync.Mutex
+	sinkStopped bool
+
 	// TODO: try to reduce these config fields below in the future
 	tableID        int64
 	markTableID    int64
@@ -196,12 +198,14 @@ func (t *tableActor) Poll(ctx context.Context, msgs []message.Message[pmessage.M
 		}
 
 		// process message for each node, pull message from parent node and then send it to next node
-		if err := t.handleDataMsg(ctx); err != nil {
-			log.Error("failed to process message, stop table actor ",
-				zap.String("tableName", t.tableName),
-				zap.Int64("tableID", t.tableID), zap.Error(err))
-			t.handleError(err)
-			break
+		if !t.sinkStopped {
+			if err := t.handleDataMsg(ctx); err != nil {
+				log.Error("failed to process message, stop table actor ",
+					zap.String("tableName", t.tableName),
+					zap.Int64("tableID", t.tableID), zap.Error(err))
+				t.handleError(err)
+				break
+			}
 		}
 	}
 	if atomic.LoadUint32(&t.stopped) == stopped {
@@ -242,6 +246,7 @@ func (t *tableActor) handleTickMsg(ctx context.Context) error {
 }
 
 func (t *tableActor) handleStopMsg(ctx context.Context) {
+	t.sinkStopped = true
 	// async stops sinkNode and tableSink
 	go func() {
 		_, err := t.sinkNode.HandleMessage(ctx,
