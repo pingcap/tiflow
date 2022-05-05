@@ -1000,7 +1000,7 @@ func TestDrainingCaptureWhileAddingTable(t *testing.T) {
 	require.Equal(t, model.Ts(1550), resolvedTs)
 	communicator.AssertExpectations(t)
 
-	communicator.On("DispatchTable", mock.Anything, "cf-1", mock.Anything, mock.Anything, false, defaultEpoch).
+	communicator.On("DispatchTable", mock.Anything, "cf-1", mock.Anything, mock.Anything, mock.Anything, defaultEpoch).
 		Return(true, nil)
 
 	// 1. drain one capture
@@ -1012,26 +1012,47 @@ func TestDrainingCaptureWhileAddingTable(t *testing.T) {
 	require.Nil(t, err)
 	require.Equal(t, CheckpointCannotProceed, checkpointTs)
 	require.Equal(t, CheckpointCannotProceed, resolvedTs)
-	//
-	//dispatcher.Rebalance()
-	//communicator.Reset()
-	//checkpointTs, resolvedTs, err = dispatcher.Tick(ctx, 1300, []model.TableID{1, 2, 3, 4, 5, 6, 7}, defaultMockCaptureInfos)
-	//require.NoError(t, err)
-	//require.Equal(t, CheckpointCannotProceed, checkpointTs)
-	//require.Equal(t, CheckpointCannotProceed, resolvedTs)
-	//communicator.AssertExpectations(t)
-	//
-	//dispatcher.OnAgentFinishedTableOperation("capture-2", model.TableID(7), defaultEpoch)
-	//communicator.Reset()
-	//communicator.On("DispatchTable", mock.Anything, "cf-1", mock.Anything, mock.Anything, true, defaultEpoch).
-	//	Return(true, nil)
-	//checkpointTs, resolvedTs, err = dispatcher.Tick(ctx, 1300, []model.TableID{1, 2, 3, 4, 5, 6, 7}, defaultMockCaptureInfos)
-	//require.NoError(t, err)
-	//require.Equal(t, CheckpointCannotProceed, checkpointTs)
-	//require.Equal(t, CheckpointCannotProceed, resolvedTs)
-	//communicator.AssertNumberOfCalls(t, "DispatchTable", 2)
-	//communicator.AssertExpectations(t)
+	communicator.AssertExpectations(t)
 
+	// new table `table-4` should be adding to `capture-1`
+	tablesByCapture := dispatcher.tables.GetAllTablesGroupedByCaptures()
+	tables4Capture1 := tablesByCapture["capture-1"]
+	require.Equal(t, 3, len(tables4Capture1))
+	require.Equal(t, util.AddingTable, tables4Capture1[4].Status)
+	dispatcher.OnAgentFinishedTableOperation("capture-1", 4, defaultEpoch)
+
+	// tables in the `capture-2` should be in `RemovingTable` status
+	tables4Capture2 := tablesByCapture["capture-2"]
+	require.Equal(t, 2, len(tables4Capture2))
+	for _, record := range tables4Capture2 {
+		require.Equal(t, util.RemovingTable, record.Status)
+		dispatcher.OnAgentFinishedTableOperation("capture-2", record.TableID, defaultEpoch)
+	}
+
+	checkpointTs, resolvedTs, err = dispatcher.Tick(ctx, 1300, []model.TableID{0, 1, 2, 3, 4}, defaultMockCaptureInfos)
+	require.Nil(t, err)
+	require.Equal(t, CheckpointCannotProceed, checkpointTs)
+	require.Equal(t, CheckpointCannotProceed, resolvedTs)
+	communicator.AssertExpectations(t)
+
+	// all tables should in capture-1, and 2 in `AddingTable` status
+	tablesByCapture = dispatcher.tables.GetAllTablesGroupedByCaptures()
+	require.Equal(t, 0, len(tablesByCapture["capture-2"]))
+	tables4Capture1 = tablesByCapture["capture-1"]
+	count := 0
+	for _, record := range tables4Capture1 {
+		if record.Status == util.AddingTable {
+			dispatcher.OnAgentFinishedTableOperation("capture-1", record.TableID, defaultEpoch)
+			count += 1
+		}
+	}
+	require.Equal(t, count, 2)
+
+	dispatcher.OnAgentCheckpoint("capture-1", 1300, 1550)
+	checkpointTs, resolvedTs, err = dispatcher.Tick(ctx, 1300, []model.TableID{0, 1, 2, 3, 4}, defaultMockCaptureInfos)
+	require.Nil(t, err)
+	require.Equal(t, model.Ts(1300), checkpointTs)
+	require.Equal(t, model.Ts(1550), resolvedTs)
 }
 
 func TestManualMoveTableWhileDrainingCapture(t *testing.T) {
