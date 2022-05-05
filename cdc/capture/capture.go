@@ -40,6 +40,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/p2p"
+	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/version"
 )
@@ -388,6 +389,12 @@ func (c *Capture) campaignOwner(ctx cdcContext.Context) error {
 		log.Info("campaign owner successfully",
 			zap.String("captureID", c.info.ID),
 			zap.Int64("ownerRev", ownerRev))
+
+		// verify that meta region isolated from data region
+		err = pdutil.Verify(ctx, c.PDClient, pdutil.DefaultMaxRetry)
+		if err != nil {
+			log.Warn("Fail to verify region label rule in owner", zap.Error(err))
+		}
 
 		owner := c.newOwner(c.UpstreamManager)
 		c.setOwner(owner)

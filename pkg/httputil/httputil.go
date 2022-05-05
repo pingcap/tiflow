@@ -15,6 +15,7 @@ package httputil
 
 import (
 	"context"
+	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -90,4 +91,40 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 // See http.Client.CloseIdleConnections.
 func (c *Client) CloseIdleConnections() {
 	c.client.CloseIdleConnections()
+}
+
+// DoRequest sends an request and returns an HTTP response content.
+func DoRequest(
+	ctx context.Context, client *Client, url, method string, headers http.Header, body io.Reader,
+) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, method, url, body)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	for key, values := range headers {
+		for _, v := range values {
+			req.Header.Add(key, v)
+		}
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		var msg []byte
+		msg, err = io.ReadAll(resp.Body)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		return nil, errors.Errorf("[%d] %s", resp.StatusCode, msg)
+	}
+
+	content, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	return content, nil
 }

@@ -26,7 +26,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/puller/frontier"
 	"github.com/pingcap/tiflow/pkg/config"
-	"github.com/pingcap/tiflow/pkg/pdtime"
+	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/pingcap/tiflow/pkg/regionspan"
 	"github.com/pingcap/tiflow/pkg/txnutil"
 	"github.com/tikv/client-go/v2/oracle"
@@ -72,7 +72,7 @@ func NewPuller(
 	grpcPool kv.GrpcPool,
 	regionCache *tikv.RegionCache,
 	kvStorage tidbkv.Storage,
-	pdClock pdtime.Clock,
+	pdClock pdutil.Clock,
 	changefeed model.ChangeFeedID,
 	checkpointTs uint64,
 	spans []regionspan.Span,
