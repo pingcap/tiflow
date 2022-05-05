@@ -21,11 +21,11 @@ import (
 	"time"
 
 	"github.com/pingcap/failpoint"
-	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/stretchr/testify/require"
 	"github.com/tikv/pd/pkg/tempurl"
 
 	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
+	"github.com/pingcap/tiflow/dm/pkg/log"
 )
 
 func TestFailToStartLeader(t *testing.T) {
@@ -106,8 +106,7 @@ func TestFailToStartLeader(t *testing.T) {
 	}, 3*time.Second, 100*time.Millisecond)
 	clusterID := s1.ClusterID()
 
-	//nolint:errcheck
-	failpoint.Disable("github.com/pingcap/tiflow/dm/dm/master/FailToStartLeader")
+	require.NoError(t, failpoint.Disable("github.com/pingcap/tiflow/dm/dm/master/FailToStartLeader"))
 	s1.election.Resign()
 	time.Sleep(1 * time.Second)
 

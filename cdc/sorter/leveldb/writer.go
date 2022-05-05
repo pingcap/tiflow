@@ -26,7 +26,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// writer is a thin shim that batches, translates events into key-vaule pairs
+// writer is a thin shim that batches, translates events into key-value pairs
 // and writes to leveldb.
 type writer struct {
 	common
@@ -97,7 +97,7 @@ func (w *writer) Poll(ctx context.Context, msgs []actormsg.Message[message.Task]
 	}
 	// Notify reader that there is something to read.
 	//
-	// It's ok to noify reader immediately without waiting writes done,
+	// It's ok to notify reader immediately without waiting writes done,
 	// because reader will see these writes:
 	//   1. reader/writer send tasks to the same leveldb, so tasks are ordered.
 	//   2. ReadTs will trigger reader to take iterator from leveldb,
@@ -114,9 +114,9 @@ func (w *writer) Poll(ctx context.Context, msgs []actormsg.Message[message.Task]
 			// exhaustedResolvedTs >= maxCommitTs.
 			//
 			// If maxCommitTs and maxResolvedTs are sent separately,
-			// data in (exhaustedResolvedTs, actaul maxCommitTs] is lost:
+			// data in (exhaustedResolvedTs, actual maxCommitTs] is lost:
 			//        --------------------------------------------->
-			// writer:                          ^ actaul maxCommitTs
+			// writer:                          ^ actual maxCommitTs
 			// reader:  ^ maxCommitTs  ^ exhaustedResolvedTs   ^ maxResolvedTs
 			MaxCommitTs:   w.maxCommitTs,
 			MaxResolvedTs: w.maxResolvedTs,

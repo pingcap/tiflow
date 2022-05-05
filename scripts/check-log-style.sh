@@ -12,7 +12,7 @@
 # limitations under the License.
 
 # zap field name should be camelCase, excepts for idioms and special terms.
-grep -RnE "zap.[A-Z][a-z]+\(\"[0-9A-Za-z]*[-_ ][0-9A-Za-z]*\"(,|\))" cdc tests pkg |
+grep -RnE "zap.[A-Z][a-zA-Z0-9]+\(\"[0-9A-Za-z]*[-_ ][^\"]*\"(,|\))" cdc tests pkg |
 	grep -vE "user-agent" |
 	grep -vE "https_proxy|http_proxy|no_proxy" |
 	grep -vE "max-message-bytes|max-message-size|replication-factor" |

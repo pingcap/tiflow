@@ -212,7 +212,7 @@ func (t *testEtcdUtilSuite) TestDoOpsInOneTxnWithRetry(c *C) {
 
 	cli := cluster.RandClient()
 
-	resp, rev1, err := DoOpsInOneTxnWithRetry(cli, clientv3.OpPut(key1, val1), clientv3.OpPut(key2, val2))
+	resp, rev1, err := DoTxnWithRepeatable(cli, ThenOpFunc(clientv3.OpPut(key1, val1), clientv3.OpPut(key2, val2)))
 	c.Assert(err, IsNil)
 	c.Assert(rev1, Greater, int64(0))
 	c.Assert(resp.Responses, HasLen, 2)
@@ -220,9 +220,9 @@ func (t *testEtcdUtilSuite) TestDoOpsInOneTxnWithRetry(c *C) {
 	// both cmps are true
 	cmp1 := clientv3.Compare(clientv3.Value(key1), "=", val1)
 	cmp2 := clientv3.Compare(clientv3.Value(key2), "=", val2)
-	resp, rev2, err := DoOpsInOneCmpsTxnWithRetry(cli, []clientv3.Cmp{cmp1, cmp2}, []clientv3.Op{
+	resp, rev2, err := DoTxnWithRepeatable(cli, FullOpFunc([]clientv3.Cmp{cmp1, cmp2}, []clientv3.Op{
 		clientv3.OpPut(key1, val), clientv3.OpPut(key2, val),
-	}, []clientv3.Op{})
+	}, []clientv3.Op{}))
 	c.Assert(err, IsNil)
 	c.Assert(rev2, Greater, rev1)
 	c.Assert(resp.Responses, HasLen, 2)
@@ -230,9 +230,9 @@ func (t *testEtcdUtilSuite) TestDoOpsInOneTxnWithRetry(c *C) {
 	// one of cmps are false
 	cmp1 = clientv3.Compare(clientv3.Value(key1), "=", val)
 	cmp2 = clientv3.Compare(clientv3.Value(key2), "=", val2)
-	resp, rev3, err := DoOpsInOneCmpsTxnWithRetry(cli, []clientv3.Cmp{cmp1, cmp2}, []clientv3.Op{}, []clientv3.Op{
+	resp, rev3, err := DoTxnWithRepeatable(cli, FullOpFunc([]clientv3.Cmp{cmp1, cmp2}, []clientv3.Op{}, []clientv3.Op{
 		clientv3.OpDelete(key1), clientv3.OpDelete(key2),
-	})
+	}))
 	c.Assert(err, IsNil)
 	c.Assert(rev3, Greater, rev2)
 	c.Assert(resp.Responses, HasLen, 2)
@@ -243,9 +243,9 @@ func (t *testEtcdUtilSuite) TestDoOpsInOneTxnWithRetry(c *C) {
 	defer failpoint.Disable("github.com/pingcap/tiflow/dm/pkg/etcdutil/ErrNoSpace")
 
 	// put again
-	resp, rev2, err = DoOpsInOneCmpsTxnWithRetry(cli, []clientv3.Cmp{clientv3util.KeyMissing(key1), clientv3util.KeyMissing(key2)}, []clientv3.Op{
+	resp, rev2, err = DoTxnWithRepeatable(cli, FullOpFunc([]clientv3.Cmp{clientv3util.KeyMissing(key1), clientv3util.KeyMissing(key2)}, []clientv3.Op{
 		clientv3.OpPut(key1, val), clientv3.OpPut(key2, val),
-	}, []clientv3.Op{})
+	}, []clientv3.Op{}))
 	c.Assert(err, IsNil)
 	c.Assert(rev2, Greater, rev1)
 	c.Assert(resp.Responses, HasLen, 2)

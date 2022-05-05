@@ -147,7 +147,7 @@ func (k *mqSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowCha
 	for _, row := range rows {
 		if k.filter.ShouldIgnoreDMLEvent(row.StartTs, row.Table.Schema, row.Table.Table) {
 			log.Info("Row changed event ignored",
-				zap.Uint64("start-ts", row.StartTs),
+				zap.Uint64("startTs", row.StartTs),
 				zap.String("changefeed", k.id),
 				zap.Any("role", k.role))
 			continue
