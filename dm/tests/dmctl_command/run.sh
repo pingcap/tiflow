@@ -189,7 +189,7 @@ function run_validator_cmd {
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation status --table-stage running test" \
-		"\"stage\": \"	Running\"" 4 \
+		"\"stage\": \"Running\"" 4 \
 		"\"stage\": \"Stopped\"" 0
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation status --table-stage stopped test" \
