@@ -818,7 +818,14 @@ func (t *testServer) TestQueryValidator(c *C) {
 	ret, err = w.GetValidatorTableStatus("testQueryValidator", pb.Stage_InvalidStage)
 	c.Assert(err, IsNil)
 	c.Assert(len(ret), Equals, 2)
-	c.Assert(ret, DeepEquals, expected)
+	// the return order is not stable
+	if ret[0].SrcTable == expected[0].SrcTable {
+		c.Assert(ret[0], DeepEquals, expected[0])
+		c.Assert(ret[1], DeepEquals, expected[1])
+	} else {
+		c.Assert(ret[0], DeepEquals, expected[1])
+		c.Assert(ret[1], DeepEquals, expected[0])
+	}
 }
 
 func (t *testServer) setupValidator(c *C) *SourceWorker {

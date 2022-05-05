@@ -578,7 +578,7 @@ func TestValidatorGetValidationStatus(t *testing.T) {
 	}
 }
 
-func TestGetValidationError(t *testing.T) {
+func TestValidatorGetValidationError(t *testing.T) {
 	db, dbMock, err := sqlmock.New()
 	require.Equal(t, log.InitLogger(&log.Config{}), nil)
 	require.NoError(t, err)
@@ -649,7 +649,7 @@ func TestGetValidationError(t *testing.T) {
 	require.EqualValues(t, expected[1], res)
 }
 
-func TestOperateValidationError(t *testing.T) {
+func TestValidatorOperateValidationError(t *testing.T) {
 	var err error
 	db, dbMock, err := sqlmock.New()
 	require.Equal(t, log.InitLogger(&log.Config{}), nil)
@@ -662,22 +662,23 @@ func TestOperateValidationError(t *testing.T) {
 	validator.persistHelper.db = conn.NewBaseDB(db, func() {})
 	sourceID := validator.cfg.SourceID
 	// 1. clear all error
-	dbMock.ExpectQuery("DELETE FROM " + validator.persistHelper.errorChangeTableName + " WHERE source=?").WillReturnRows()
+	dbMock.ExpectExec("DELETE FROM " + validator.persistHelper.errorChangeTableName + " WHERE source=\\?").
+		WithArgs(sourceID).WillReturnResult(sqlmock.NewResult(0, 1))
 	// 2. clear error of errID
-	dbMock.ExpectQuery("DELETE FROM "+validator.persistHelper.errorChangeTableName+" WHERE source=\\? AND id=\\?").
-		WithArgs(sourceID, 1).WillReturnRows()
+	dbMock.ExpectExec("DELETE FROM "+validator.persistHelper.errorChangeTableName+" WHERE source=\\? AND id=\\?").
+		WithArgs(sourceID, 1).WillReturnResult(sqlmock.NewResult(0, 1))
 	// 3. mark all error as resolved
-	dbMock.ExpectQuery("UPDATE "+validator.persistHelper.errorChangeTableName+" SET status=\\? WHERE source=\\?").
-		WithArgs(int(pb.ValidateErrorState_ResolvedErr), sourceID).WillReturnRows()
+	dbMock.ExpectExec("UPDATE "+validator.persistHelper.errorChangeTableName+" SET status=\\? WHERE source=\\?").
+		WithArgs(int(pb.ValidateErrorState_ResolvedErr), sourceID).WillReturnResult(sqlmock.NewResult(0, 1))
 	// 4. mark all error as ignored
-	dbMock.ExpectQuery("UPDATE "+validator.persistHelper.errorChangeTableName+" SET status=\\? WHERE source=\\?").
-		WithArgs(int(pb.ValidateErrorState_IgnoredErr), sourceID).WillReturnRows()
+	dbMock.ExpectExec("UPDATE "+validator.persistHelper.errorChangeTableName+" SET status=\\? WHERE source=\\?").
+		WithArgs(int(pb.ValidateErrorState_IgnoredErr), sourceID).WillReturnResult(sqlmock.NewResult(0, 1))
 	// 5. mark error as resolved of errID
-	dbMock.ExpectQuery("UPDATE "+validator.persistHelper.errorChangeTableName+" SET status=\\? WHERE source=\\? AND id=\\?").
-		WithArgs(int(pb.ValidateErrorState_ResolvedErr), sourceID, 1).WillReturnRows()
+	dbMock.ExpectExec("UPDATE "+validator.persistHelper.errorChangeTableName+" SET status=\\? WHERE source=\\? AND id=\\?").
+		WithArgs(int(pb.ValidateErrorState_ResolvedErr), sourceID, 1).WillReturnResult(sqlmock.NewResult(0, 1))
 	// 6. mark error as ignored of errID
-	dbMock.ExpectQuery("UPDATE "+validator.persistHelper.errorChangeTableName+" SET status=\\? WHERE source=\\? AND id=\\?").
-		WithArgs(int(pb.ValidateErrorState_IgnoredErr), sourceID, 1).WillReturnRows()
+	dbMock.ExpectExec("UPDATE "+validator.persistHelper.errorChangeTableName+" SET status=\\? WHERE source=\\? AND id=\\?").
+		WithArgs(int(pb.ValidateErrorState_IgnoredErr), sourceID, 1).WillReturnResult(sqlmock.NewResult(0, 1))
 
 	// clear all error
 	err = validator.OperateValidatorError(pb.ValidationErrOp_ClearErrOp, 0, true)

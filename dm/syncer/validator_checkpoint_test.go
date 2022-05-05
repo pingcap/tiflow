@@ -141,7 +141,7 @@ func TestValidatorCheckpointPersist(t *testing.T) {
 	testFunc("failed")
 }
 
-func TestCheckpointNotPanic(t *testing.T) {
+func TestValidatorCheckpointNotPanic(t *testing.T) {
 	// validator will try persisting data before starting
 	// if it visits and persists workers, which are not intialized before starting,
 	// the program will panick.
@@ -154,6 +154,6 @@ func TestCheckpointNotPanic(t *testing.T) {
 	validator.ctx, validator.cancel = context.WithCancel(context.Background())
 	validator.tctx = tcontext.NewContext(validator.ctx, validator.L)
 	currLoc := binlog.NewLocation(cfg.Flavor)
-	err = validator.persistHelper.persist(nil, currLoc) // persist nil worker
-	require.NotNil(t, err)                              // err not nil but program not panicks
+	err = validator.persistHelper.persist(validator.tctx, currLoc) // persist nil worker
+	require.NotNil(t, err)                                         // err not nil but program not panicks
 }

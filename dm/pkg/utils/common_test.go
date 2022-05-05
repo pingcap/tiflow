@@ -27,6 +27,9 @@ import (
 	regexprrouter "github.com/pingcap/tidb/util/regexpr-router"
 	router "github.com/pingcap/tidb/util/table-router"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+
+	"github.com/pingcap/tiflow/dm/pkg/log"
 )
 
 var _ = Suite(&testCommonSuite{})
@@ -264,7 +267,9 @@ func (s *testCommonSuite) TestNonRepeatStringsEqual(c *C) {
 func TestGoLogWrapper(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(1)
-	go GoLogWrapper(func() {
+	// to avoid data race since there's concurrent test case writing log.L()
+	l := log.Logger{Logger: zap.NewNop()}
+	go GoLogWrapper(l, func() {
 		defer wg.Done()
 		panic("should be captured")
 	})

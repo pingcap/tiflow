@@ -314,7 +314,7 @@ func (v *DataValidator) Start(expect pb.Stage) {
 	// routineWrapper relies on errorProcessRoutine to handle panic errors,
 	// so just wrap it using a common wrapper.
 	v.errProcessWg.Add(1)
-	go utils.GoLogWrapper(v.errorProcessRoutine)
+	go utils.GoLogWrapper(v.L, v.errorProcessRoutine)
 
 	v.setStage(pb.Stage_Running)
 	v.L.Info("started")
@@ -632,7 +632,7 @@ func (v *DataValidator) startValidateWorkers() {
 		v.workers[i] = worker
 		// worker handles panic in validateTableChange, so we can see it in `dmctl validation status`,
 		// for other panics we just log it.
-		go utils.GoLogWrapper(func() {
+		go utils.GoLogWrapper(v.L, func() {
 			defer v.wg.Done()
 			worker.run()
 		})
