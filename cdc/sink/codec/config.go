@@ -109,26 +109,39 @@ func (c *Config) WithMaxMessageBytes(bytes int) *Config {
 
 // Validate the Config
 func (c *Config) Validate() error {
-	if c.enableTiDBExtension && !(c.protocol == config.ProtocolCanalJSON || c.protocol == config.ProtocolAvro) {
-		return cerror.ErrMQCodecInvalidConfig.GenWithStack(`enable-tidb-extension only supports canal-json/avro protocol`)
+	if c.enableTiDBExtension &&
+		!(c.protocol == config.ProtocolCanalJSON || c.protocol == config.ProtocolAvro) {
+		return cerror.ErrMQCodecInvalidConfig.GenWithStack(
+			`enable-tidb-extension only supports canal-json/avro protocol`,
+		)
 	}
 
 	if c.protocol == config.ProtocolAvro {
 		if c.avroSchemaRegistry == "" {
-			return cerror.ErrMQCodecInvalidConfig.GenWithStack(`Avro protocol requires parameter "%s"`, codecOPTAvroSchemaRegistry)
+			return cerror.ErrMQCodecInvalidConfig.GenWithStack(
+				`Avro protocol requires parameter "%s"`,
+				codecOPTAvroSchemaRegistry,
+			)
 		}
 
 		if c.avroDecimalHandlingMode != "precise" && c.avroDecimalHandlingMode != "string" {
-			return cerror.ErrMQCodecInvalidConfig.GenWithStack(`%s value could only be "string" or "precise"`, codecOPTAvroDecimalHandlingMode)
+			return cerror.ErrMQCodecInvalidConfig.GenWithStack(
+				`%s value could only be "string" or "precise"`,
+				codecOPTAvroDecimalHandlingMode,
+			)
 		}
 	}
 
 	if c.maxMessageBytes <= 0 {
-		return cerror.ErrMQCodecInvalidConfig.Wrap(errors.Errorf("invalid max-message-bytes %d", c.maxMessageBytes))
+		return cerror.ErrMQCodecInvalidConfig.Wrap(
+			errors.Errorf("invalid max-message-bytes %d", c.maxMessageBytes),
+		)
 	}
 
 	if c.maxBatchSize <= 0 {
-		return cerror.ErrMQCodecInvalidConfig.Wrap(errors.Errorf("invalid max-batch-size %d", c.maxBatchSize))
+		return cerror.ErrMQCodecInvalidConfig.Wrap(
+			errors.Errorf("invalid max-batch-size %d", c.maxBatchSize),
+		)
 	}
 
 	return nil

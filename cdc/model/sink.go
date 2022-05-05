@@ -330,6 +330,7 @@ func (r *RowChangedEvent) HandleKeyColumns() []*Column {
 	return pkeyCols
 }
 
+// HandleKeyColInfos returns the column(s) and colInfo(s) corresponding to the handle key(s)
 func (r *RowChangedEvent) HandleKeyColInfos() ([]*Column, []rowcodec.ColInfo) {
 	pkeyCols := make([]*Column, 0)
 	pkeyColInfos := make([]rowcodec.ColInfo, 0)

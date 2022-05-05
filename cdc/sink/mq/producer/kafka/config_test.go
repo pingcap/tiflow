@@ -403,7 +403,7 @@ func TestConfigurationCombinations(t *testing.T) {
 		require.Nil(t, err)
 
 		encoderConfig := codec.NewConfig(config.ProtocolOpen)
-		err = encoderConfig.Apply(sinkURI, map[string]string{})
+		err = encoderConfig.Apply(sinkURI, &config.ReplicaConfig{})
 		require.Nil(t, err)
 		encoderConfig.WithMaxMessageBytes(saramaConfig.Producer.MaxMessageBytes)
 

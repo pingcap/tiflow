@@ -21,7 +21,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func mustIdentJSON(t *testing.T, j string) string {
+func mustIndentJSON(t *testing.T, j string) string {
 	var buf bytes.Buffer
 	err := json.Indent(&buf, []byte(j), "", "  ")
 	require.Nil(t, err)
@@ -44,7 +44,7 @@ func TestReplicaConfigMarshal(t *testing.T) {
 	}
 	b, err := conf.Marshal()
 	require.Nil(t, err)
-	require.Equal(t, testCfgTestReplicaConfigMarshal1, mustIdentJSON(t, b))
+	require.Equal(t, testCfgTestReplicaConfigMarshal1, mustIndentJSON(t, b))
 	conf2 := new(ReplicaConfig)
 	err = conf2.Unmarshal([]byte(testCfgTestReplicaConfigMarshal2))
 	require.Nil(t, err)

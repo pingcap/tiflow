@@ -61,7 +61,7 @@ require (
 	github.com/soheilhy/cmux v0.1.5
 	github.com/spf13/cobra v1.4.0
 	github.com/spf13/pflag v1.0.5
-	github.com/stretchr/testify v1.7.0
+	github.com/stretchr/testify v1.7.1
 	github.com/swaggo/files v0.0.0-20190704085106-630677cd5c14
 	github.com/swaggo/gin-swagger v1.2.0
 	github.com/swaggo/swag v1.6.6-0.20200529100950-7c765ddd0476
@@ -94,6 +94,8 @@ require (
 	gopkg.in/yaml.v2 v2.4.0
 	upper.io/db.v3 v3.7.1+incompatible
 )
+
+require github.com/pkg/errors v0.9.1 // indirect
 
 require (
 	cloud.google.com/go v0.100.2 // indirect
@@ -207,7 +209,6 @@ require (
 	github.com/pingcap/sysutil v0.0.0-20220114020952-ea68d2dbf5b4 // indirect
 	github.com/pingcap/tipb v0.0.0-20220215045658-d12dec7a7609 // indirect
 	github.com/pkg/browser v0.0.0-20180916011732-0a3d74bf9ce4 // indirect
-	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/power-devops/perfstat v0.0.0-20210106213030-5aafc221ea8c // indirect
 	github.com/prometheus/common v0.32.1 // indirect

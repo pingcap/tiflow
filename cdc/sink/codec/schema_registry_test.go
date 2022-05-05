@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package avro
+package codec
 
 import (
 	"bytes"
@@ -41,7 +41,7 @@ type mockRegistrySchema struct {
 	ID      int
 }
 
-func startHTTPInterceptForTestingRegistry(t *testing.T) {
+func startHTTPInterceptForTestingRegistry() {
 	httpmock.Activate()
 
 	registry := mockRegistry{
@@ -49,7 +49,11 @@ func startHTTPInterceptForTestingRegistry(t *testing.T) {
 		newID:    1,
 	}
 
-	httpmock.RegisterResponder("GET", "http://127.0.0.1:8081", httpmock.NewStringResponder(200, "{}"))
+	httpmock.RegisterResponder(
+		"GET",
+		"http://127.0.0.1:8081",
+		httpmock.NewStringResponder(200, "{}"),
+	)
 
 	httpmock.RegisterResponder("POST", `=~^http://127.0.0.1:8081/subjects/(.+)/versions`,
 		func(req *http.Request) (*http.Response, error) {
@@ -67,15 +71,13 @@ func startHTTPInterceptForTestingRegistry(t *testing.T) {
 				return nil, err
 			}
 
-			// require.Equal(t, "AVRO", reqData.SchemaType)
-
 			var respData registerResponse
 			registry.mu.Lock()
 			item, exists := registry.subjects[subject]
 			if !exists {
 				item = &mockRegistrySchema{
 					content: reqData.Schema,
-					version: 0,
+					version: 1,
 					ID:      registry.newID,
 				}
 				registry.subjects[subject] = item
@@ -126,24 +128,23 @@ func startHTTPInterceptForTestingRegistry(t *testing.T) {
 
 			registry.mu.Lock()
 			defer registry.mu.Unlock()
-			_, exists := registry.subjects[subject]
+			item, exists := registry.subjects[subject]
 			if !exists {
 				return httpmock.NewStringResponse(404, ""), nil
 			}
 
 			delete(registry.subjects, subject)
-			return httpmock.NewStringResponse(200, ""), nil
+			// simplify the response not returning all the versions
+			return httpmock.NewJsonResponse(200, []int{item.version})
 		})
 
 	failCounter := 0
 	httpmock.RegisterResponder("POST", `=~^http://127.0.0.1:8081/may-fail`,
 		func(req *http.Request) (*http.Response, error) {
-			data, _ := io.ReadAll(req.Body)
-			require.Greater(t, len(data), 0)
-			require.Equal(t, req.ContentLength, int64(len(data)))
+			io.ReadAll(req.Body)
 			if failCounter < 3 {
 				failCounter++
-				return httpmock.NewStringResponse(422, ""), nil
+				return httpmock.NewStringResponse(500, ""), nil
 			}
 			return httpmock.NewStringResponse(200, ""), nil
 		})
@@ -160,21 +161,28 @@ func getTestingContext() context.Context {
 }
 
 func TestSchemaRegistry(t *testing.T) {
-	startHTTPInterceptForTestingRegistry(t)
+	startHTTPInterceptForTestingRegistry()
 	defer stopHTTPInterceptForTestingRegistry()
 
 	table := model.TableName{
 		Schema: "testdb",
-		Table:  "test1",
+		Table:  "test",
 	}
 
-	manager, err := NewAvroSchemaManager(getTestingContext(), nil, "http://127.0.0.1:8081", "-value")
-	require.Nil(t, err)
+	manager, err := NewAvroSchemaManager(
+		getTestingContext(),
+		nil,
+		"http://127.0.0.1:8081",
+		"-value",
+	)
+	require.NoError(t, err)
 
-	err = manager.ClearRegistry(getTestingContext(), table)
-	require.Nil(t, err)
+	fqdn := table.Schema + "." + table.Table
 
-	_, _, err = manager.Lookup(getTestingContext(), table, 1)
+	err = manager.ClearRegistry(getTestingContext(), fqdn)
+	require.NoError(t, err)
+
+	_, _, err = manager.Lookup(getTestingContext(), fqdn, 1)
 	require.Regexp(t, `.*not\sfound.*`, err)
 
 	codec, err := goavro.NewCodec(`{
@@ -188,15 +196,15 @@ func TestSchemaRegistry(t *testing.T) {
            }
           ]
      }`)
-	require.Nil(t, err)
+	require.NoError(t, err)
 
-	_, err = manager.Register(getTestingContext(), table, codec)
-	require.Nil(t, err)
+	_, err = manager.Register(getTestingContext(), fqdn, codec)
+	require.NoError(t, err)
 
 	var id int
 	for i := 0; i < 2; i++ {
-		_, id, err = manager.Lookup(getTestingContext(), table, 1)
-		require.Nil(t, err)
+		_, id, err = manager.Lookup(getTestingContext(), fqdn, 1)
+		require.NoError(t, err)
 		require.Greater(t, id, 0)
 	}
 
@@ -219,18 +227,18 @@ func TestSchemaRegistry(t *testing.T) {
            }
           ]
      }`)
-	require.Nil(t, err)
-	_, err = manager.Register(getTestingContext(), table, codec)
-	require.Nil(t, err)
+	require.NoError(t, err)
+	_, err = manager.Register(getTestingContext(), fqdn, codec)
+	require.NoError(t, err)
 
-	codec2, id2, err := manager.Lookup(getTestingContext(), table, 999)
-	require.Nil(t, err)
+	codec2, id2, err := manager.Lookup(getTestingContext(), fqdn, 999)
+	require.NoError(t, err)
 	require.NotEqual(t, id, id2)
-	require.Equal(t, codec2.CanonicalSchema(), codec.CanonicalSchema())
+	require.Equal(t, codec.CanonicalSchema(), codec2.CanonicalSchema())
 }
 
 func TestSchemaRegistryBad(t *testing.T) {
-	startHTTPInterceptForTestingRegistry(t)
+	startHTTPInterceptForTestingRegistry()
 	defer stopHTTPInterceptForTestingRegistry()
 
 	_, err := NewAvroSchemaManager(getTestingContext(), nil, "http://127.0.0.1:808", "-value")
@@ -241,19 +249,26 @@ func TestSchemaRegistryBad(t *testing.T) {
 }
 
 func TestSchemaRegistryIdempotent(t *testing.T) {
-	startHTTPInterceptForTestingRegistry(t)
+	startHTTPInterceptForTestingRegistry()
 	defer stopHTTPInterceptForTestingRegistry()
 	table := model.TableName{
 		Schema: "testdb",
-		Table:  "test1",
+		Table:  "test",
+	}
+	fqdn := table.Schema + "." + table.Table
+
+	manager, err := NewAvroSchemaManager(
+		getTestingContext(),
+		nil,
+		"http://127.0.0.1:8081",
+		"-value",
+	)
+	require.NoError(t, err)
+	for i := 0; i < 20; i++ {
+		err = manager.ClearRegistry(getTestingContext(), fqdn)
+		require.NoError(t, err)
 	}
 
-	manager, err := NewAvroSchemaManager(getTestingContext(), nil, "http://127.0.0.1:8081", "-value")
-	require.Nil(t, err)
-	for i := 0; i < 20; i++ {
-		err = manager.ClearRegistry(getTestingContext(), table)
-		require.Nil(t, err)
-	}
 	codec, err := goavro.NewCodec(`{
        "type": "record",
        "name": "test",
@@ -273,19 +288,19 @@ func TestSchemaRegistryIdempotent(t *testing.T) {
            }
           ]
      }`)
-	require.Nil(t, err)
+	require.NoError(t, err)
 
 	id := 0
 	for i := 0; i < 20; i++ {
-		id1, err := manager.Register(getTestingContext(), table, codec)
-		require.Nil(t, err)
+		id1, err := manager.Register(getTestingContext(), fqdn, codec)
+		require.NoError(t, err)
 		require.True(t, id == 0 || id == id1)
 		id = id1
 	}
 }
 
 func TestGetCachedOrRegister(t *testing.T) {
-	startHTTPInterceptForTestingRegistry(t)
+	startHTTPInterceptForTestingRegistry()
 	defer stopHTTPInterceptForTestingRegistry()
 
 	table := model.TableName{
@@ -293,8 +308,13 @@ func TestGetCachedOrRegister(t *testing.T) {
 		Table:  "test1",
 	}
 
-	manager, err := NewAvroSchemaManager(getTestingContext(), nil, "http://127.0.0.1:8081", "-value")
-	require.Nil(t, err)
+	manager, err := NewAvroSchemaManager(
+		getTestingContext(),
+		nil,
+		"http://127.0.0.1:8081",
+		"-value",
+	)
+	require.NoError(t, err)
 
 	called := 0
 	// nolint:unparam
@@ -303,7 +323,7 @@ func TestGetCachedOrRegister(t *testing.T) {
 		called++
 		return `{
        "type": "record",
-       "name": "test",
+       "name": "test1",
        "fields":
          [
            {
@@ -321,27 +341,28 @@ func TestGetCachedOrRegister(t *testing.T) {
           ]
      }`, nil
 	}
+	fqdn := table.Schema + "." + table.Table
 
-	codec, id, err := manager.GetCachedOrRegister(getTestingContext(), table, 1, schemaGen)
-	require.Nil(t, err)
+	codec, id, err := manager.GetCachedOrRegister(getTestingContext(), fqdn, 1, schemaGen)
+	require.NoError(t, err)
 	require.Greater(t, id, 0)
 	require.NotNil(t, codec)
 	require.Equal(t, 1, called)
 
-	codec1, _, err := manager.GetCachedOrRegister(getTestingContext(), table, 1, schemaGen)
-	require.Nil(t, err)
-	require.Equal(t, codec, codec1)
+	codec1, _, err := manager.GetCachedOrRegister(getTestingContext(), fqdn, 1, schemaGen)
+	require.NoError(t, err)
+	require.True(t, codec == codec1) // check identity
 	require.Equal(t, 1, called)
 
-	codec2, _, err := manager.GetCachedOrRegister(getTestingContext(), table, 2, schemaGen)
-	require.Nil(t, err)
+	codec2, _, err := manager.GetCachedOrRegister(getTestingContext(), fqdn, 2, schemaGen)
+	require.NoError(t, err)
 	require.NotEqual(t, codec, codec2)
 	require.Equal(t, 2, called)
 
 	schemaGen = func() (string, error) {
 		return `{
        "type": "record",
-       "name": "test",
+       "name": "test1",
        "fields":
          [
            {
@@ -367,8 +388,13 @@ func TestGetCachedOrRegister(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			for j := 0; j < 100; j++ {
-				codec, id, err := manager.GetCachedOrRegister(getTestingContext(), table, uint64(finalI), schemaGen)
-				require.Nil(t, err)
+				codec, id, err := manager.GetCachedOrRegister(
+					getTestingContext(),
+					fqdn,
+					uint64(finalI),
+					schemaGen,
+				)
+				require.NoError(t, err)
 				require.Greater(t, id, 0)
 				require.NotNil(t, codec)
 			}
@@ -378,7 +404,7 @@ func TestGetCachedOrRegister(t *testing.T) {
 }
 
 func TestHTTPRetry(t *testing.T) {
-	startHTTPInterceptForTestingRegistry(t)
+	startHTTPInterceptForTestingRegistry()
 	defer stopHTTPInterceptForTestingRegistry()
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
@@ -387,9 +413,10 @@ func TestHTTPRetry(t *testing.T) {
 	payload := []byte("test")
 	req, err := http.NewRequestWithContext(ctx,
 		"POST", "http://127.0.0.1:8081/may-fail", bytes.NewReader(payload))
-	require.Nil(t, err)
+	require.NoError(t, err)
 
-	resp, err := httpRetry(ctx, nil, req, false)
-	require.Nil(t, err)
+	resp, err := httpRetry(ctx, nil, req)
+	require.NoError(t, err)
+	require.Equal(t, 200, resp.StatusCode)
 	_ = resp.Body.Close()
 }
