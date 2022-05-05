@@ -114,6 +114,7 @@ func (s FeedState) IsNeeded(need string) bool {
 
 // ChangeFeedInfo describes the detail of a ChangeFeed
 type ChangeFeedInfo struct {
+	ClusterID  uint64            `json:"cluster-id"`
 	SinkURI    string            `json:"sink-uri"`
 	Opts       map[string]string `json:"opts"`
 	CreateTime time.Time         `json:"create-time"`

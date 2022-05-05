@@ -28,6 +28,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
+	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/stretchr/testify/require"
 	"github.com/tikv/client-go/v2/oracle"
 )
@@ -45,18 +46,22 @@ func (m *mockManager) CheckStaleCheckpointTs(
 var _ gc.Manager = (*mockManager)(nil)
 
 func createOwner4Test(ctx cdcContext.Context, t *testing.T) (*ownerImpl, *orchestrator.GlobalReactorState, *orchestrator.ReactorStateTester) {
-	ctx.GlobalVars().PDClient = &gc.MockPDClient{
+	pdClient := &gc.MockPDClient{
 		UpdateServiceGCSafePointFunc: func(ctx context.Context, serviceID string, ttl int64, safePoint uint64) (uint64, error) {
 			return safePoint, nil
 		},
 	}
-	owner := NewOwner4Test(func(ctx cdcContext.Context, startTs uint64) (DDLPuller, error) {
+
+	owner := NewOwner4Test(func(ctx cdcContext.Context, upStream *upstream.Upstream, startTs uint64) (DDLPuller, error) {
 		return &mockDDLPuller{resolvedTs: startTs - 1}, nil
 	}, func() DDLSink {
 		return &mockDDLSink{}
 	},
-		ctx.GlobalVars().PDClient,
+		pdClient,
 	)
+	o := owner.(*ownerImpl)
+	o.upstreamManager = upstream.NewManager4Test(pdClient)
+
 	state := orchestrator.NewGlobalState()
 	tester := orchestrator.NewReactorStateTester(t, state, nil)
 
@@ -68,7 +73,7 @@ func createOwner4Test(ctx cdcContext.Context, t *testing.T) (*ownerImpl, *orches
 	captureBytes, err := ctx.GlobalVars().CaptureInfo.Marshal()
 	require.Nil(t, err)
 	tester.MustUpdate(cdcKey.String(), captureBytes)
-	return owner.(*ownerImpl), state, tester
+	return o, state, tester
 }
 
 func TestCreateRemoveChangefeed(t *testing.T) {
@@ -122,9 +127,9 @@ func TestCreateRemoveChangefeed(t *testing.T) {
 	}
 
 	// this will make changefeed always meet ErrGCTTLExceeded
-	mockedManager := &mockManager{Manager: owner.gcManager}
-	owner.gcManager = mockedManager
-	err = owner.gcManager.CheckStaleCheckpointTs(ctx, changefeedID, 0)
+	mockedManager := &mockManager{Manager: owner.upstreamManager.Get(changefeedInfo.ClusterID).GCManager}
+	owner.upstreamManager.Get(changefeedInfo.ClusterID).GCManager = mockedManager
+	err = owner.upstreamManager.Get(changefeedInfo.ClusterID).GCManager.CheckStaleCheckpointTs(ctx, changefeedID, 0)
 	require.NotNil(t, err)
 
 	// this tick create remove changefeed patches
@@ -354,8 +359,8 @@ func TestAdminJob(t *testing.T) {
 
 func TestUpdateGCSafePoint(t *testing.T) {
 	mockPDClient := &gc.MockPDClient{}
-	o := NewOwner(mockPDClient).(*ownerImpl)
-	o.gcManager = gc.NewManager(mockPDClient)
+	m := upstream.NewManager4Test(mockPDClient)
+	o := NewOwner(m).(*ownerImpl)
 	ctx := cdcContext.NewBackendContext4Test(true)
 	ctx, cancel := cdcContext.WithCancel(ctx)
 	defer cancel()
