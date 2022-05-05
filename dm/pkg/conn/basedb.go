@@ -214,7 +214,7 @@ func (d *BaseDB) DoTxWithRetry(tctx *tcontext.Context, queries []string, args []
 				err = tx.Commit()
 			}
 		}()
-		for i, _ := range queries {
+		for i := range queries {
 			q := queries[i]
 			if tctx.L().Core().Enabled(zap.DebugLevel) {
 				tctx.L().Debug("exec in tx",

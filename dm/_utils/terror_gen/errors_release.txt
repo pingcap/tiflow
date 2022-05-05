@@ -507,6 +507,7 @@ ErrValidatorGetEvent,[code=43003:class=validator:scope=internal:level=high], "Me
 ErrValidatorProcessRowEvent,[code=43004:class=validator:scope=internal:level=high], "Message: failed to process event"
 ErrValidatorValidateChange,[code=43005:class=validator:scope=internal:level=high], "Message: failed to validate row change"
 ErrValidatorNotFound,[code=43006:class=validator:scope=not-set:level=medium], "Message: validator not found for task %s"
+ErrValidatorPanic,[code=43007:class=validator:scope=internal:level=high], "Message: panic error: %v"
 ErrSchemaTrackerInvalidJSON,[code=44001:class=schema-tracker:scope=downstream:level=high], "Message: saved schema of `%s`.`%s` is not proper JSON"
 ErrSchemaTrackerCannotCreateSchema,[code=44002:class=schema-tracker:scope=internal:level=high], "Message: failed to create database for `%s` in schema tracker"
 ErrSchemaTrackerCannotCreateTable,[code=44003:class=schema-tracker:scope=internal:level=high], "Message: failed to create table for %v in schema tracker"

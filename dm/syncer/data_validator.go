@@ -576,6 +576,10 @@ func (v *DataValidator) doValidate() {
 				break
 			}
 			err = locationForFlush.SetGTID(ev.GSet)
+			if err != nil {
+				v.sendError(terror.Annotate(err, "failed to set gtid"))
+				return
+			}
 			if err = v.persistCheckpointAndData(locationForFlush); err != nil {
 				v.L.Warn("failed to flush checkpoint: ", zap.Error(err))
 				v.sendError(terror.ErrValidatorPersistData.Delegate(err))

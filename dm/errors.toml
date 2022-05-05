@@ -3052,6 +3052,12 @@ description = ""
 workaround = ""
 tags = ["not-set", "medium"]
 
+[error.DM-validator-43007]
+message = "panic error: %v"
+description = ""
+workaround = ""
+tags = ["internal", "high"]
+
 [error.DM-schema-tracker-44001]
 message = "saved schema of `%s`.`%s` is not proper JSON"
 description = ""

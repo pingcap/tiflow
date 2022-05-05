@@ -49,7 +49,8 @@ type Params struct {
 }
 
 func NewParams(retryCount int, firstRetryDuration time.Duration, backoffStrategy backoffStrategy,
-	isRetryableFn func(int, error) bool) *Params {
+	isRetryableFn func(int, error) bool,
+) *Params {
 	return &Params{
 		RetryCount:         retryCount,
 		FirstRetryDuration: firstRetryDuration,
@@ -120,7 +121,7 @@ func (n *NoRetryRetryer) Apply(ctx *tcontext.Context, operateFn OperateFunc) (in
 	return res, 0, err
 }
 
-// FiniteRetryer wraps params
+// FiniteRetryer wraps params.
 type FiniteRetryer struct {
 	FiniteRetryStrategy
 	Params *Params

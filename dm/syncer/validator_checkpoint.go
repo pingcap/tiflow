@@ -117,10 +117,7 @@ func (c *validatorPersistHelper) createSchemaAndTables(tctx *tcontext.Context) e
 	if err := c.createSchema(tctx); err != nil {
 		return err
 	}
-	if err := c.createTable(tctx); err != nil {
-		return err
-	}
-	return nil
+	return c.createTable(tctx)
 }
 
 func (c *validatorPersistHelper) createSchema(tctx *tcontext.Context) error {

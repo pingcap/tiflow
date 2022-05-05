@@ -42,7 +42,6 @@ function run_standalone() {
 	run_sql "SELECT count(*) from $db_name.t1" $TIDB_PORT $TIDB_PASSWORD
 	check_contains "count(*): 6"
 
-
 	echo "--> check we can catch inconsistent rows"
 	# skip incremental rows with id <= 5
 	export GO_FAILPOINTS='github.com/pingcap/tiflow/dm/syncer/SkipDML=return(5)'
@@ -56,7 +55,6 @@ function run_standalone() {
 	run_sql "SELECT count(*) from $db_name.t1" $TIDB_PORT $TIDB_PASSWORD
 	check_contains "count(*): 3"
 
-
 	echo "--> check update pk(split into insert and delete)"
 	run_sql_source1 "update $db_name.t1 set id=100 where id=7"
 	run_sql_source1 "alter table $db_name.t1 comment 'a';" # force flush checkpoint
@@ -68,7 +66,6 @@ function run_standalone() {
 	run_sql "SELECT count(*) from $db_name.t1" $TIDB_PORT $TIDB_PASSWORD
 	check_contains "count(*): 3"
 
-
 	echo "--> check validator panic and we can catch it"
 	export GO_FAILPOINTS='github.com/pingcap/tiflow/dm/syncer/ValidatorPanic=panic("validator panic")'
 	prepare_for_standalone_test
@@ -76,7 +73,6 @@ function run_standalone() {
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation status test" \
 		"validator panic" 1
-
 
 	echo "--> check validator worker panic and we can catch it"
 	# panic 1 times
