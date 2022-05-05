@@ -84,7 +84,9 @@ func TestLogReaderResetReader(t *testing.T) {
 		MaxLogSize: 100000,
 		Dir:        dir,
 	}
-	fileName := fmt.Sprintf("%s_%s_%d_%s_%d%s", "cp", "test-cf100", time.Now().Unix(), common.DefaultDDLLogFileType, 100, common.LogEXT)
+	fileName := fmt.Sprintf("%s_%s_%s_%d_%s_%d%s", "cp",
+		"default", "test-cf100",
+		time.Now().Unix(), common.DefaultDDLLogFileType, 100, common.LogEXT)
 	w, err := writer.NewWriter(ctx, cfg, writer.WithLogFileName(func() string {
 		return fileName
 	}))
@@ -103,7 +105,9 @@ func TestLogReaderResetReader(t *testing.T) {
 	f, err := os.Open(path)
 	require.Nil(t, err)
 
-	fileName = fmt.Sprintf("%s_%s_%d_%s_%d%s", "cp", "test-cf10", time.Now().Unix(), common.DefaultRowLogFileType, 10, common.LogEXT)
+	fileName = fmt.Sprintf("%s_%s_%s_%d_%s_%d%s", "cp",
+		"default", "test-cf10",
+		time.Now().Unix(), common.DefaultRowLogFileType, 10, common.LogEXT)
 	w, err = writer.NewWriter(ctx, cfg, writer.WithLogFileName(func() string {
 		return fileName
 	}))
@@ -236,7 +240,9 @@ func TestLogReaderReadMeta(t *testing.T) {
 	require.Nil(t, err)
 	defer os.RemoveAll(dir)
 
-	fileName := fmt.Sprintf("%s_%s_%d_%s%s", "cp", "test-changefeed", time.Now().Unix(), common.DefaultMetaFileType, common.MetaEXT)
+	fileName := fmt.Sprintf("%s_%s_%d_%s%s", "cp",
+		"test-changefeed",
+		time.Now().Unix(), common.DefaultMetaFileType, common.MetaEXT)
 	path := filepath.Join(dir, fileName)
 	f, err := os.Create(path)
 	require.Nil(t, err)
@@ -249,7 +255,9 @@ func TestLogReaderReadMeta(t *testing.T) {
 	_, err = f.Write(data)
 	require.Nil(t, err)
 
-	fileName = fmt.Sprintf("%s_%s_%d_%s%s", "cp1", "test-changefeed", time.Now().Unix(), common.DefaultMetaFileType, common.MetaEXT)
+	fileName = fmt.Sprintf("%s_%s_%d_%s%s", "cp1",
+		"test-changefeed",
+		time.Now().Unix(), common.DefaultMetaFileType, common.MetaEXT)
 	path = filepath.Join(dir, fileName)
 	f, err = os.Create(path)
 	require.Nil(t, err)

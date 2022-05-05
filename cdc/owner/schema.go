@@ -105,20 +105,26 @@ func (s *schemaWrap4Owner) AllTableNames() []model.TableName {
 func (s *schemaWrap4Owner) HandleDDL(job *timodel.Job) error {
 	if job.BinlogInfo.FinishedTS <= s.ddlHandledTs {
 		log.Warn("job finishTs is less than schema handleTs, discard invalid job",
-			zap.String("changefeed", s.id), zap.Stringer("job", job),
+			zap.String("namespace", s.id.Namespace),
+			zap.String("changefeed", s.id.ID),
+			zap.Stringer("job", job),
 			zap.Any("ddlHandledTs", s.ddlHandledTs))
 		return nil
 	}
 	s.allPhysicalTablesCache = nil
 	err := s.schemaSnapshot.HandleDDL(job)
 	if err != nil {
-		log.Error("handle DDL failed", zap.String("changefeed", s.id),
+		log.Error("handle DDL failed",
+			zap.String("namespace", s.id.Namespace),
+			zap.String("changefeed", s.id.ID),
 			zap.String("DDL", job.Query),
 			zap.Stringer("job", job), zap.Error(err),
 			zap.Any("role", util.RoleOwner))
 		return errors.Trace(err)
 	}
-	log.Info("handle DDL", zap.String("changefeed", s.id),
+	log.Info("handle DDL",
+		zap.String("namespace", s.id.Namespace),
+		zap.String("changefeed", s.id.ID),
 		zap.String("DDL", job.Query), zap.Stringer("job", job),
 		zap.Any("role", util.RoleOwner))
 
@@ -228,7 +234,9 @@ func (s *schemaWrap4Owner) shouldIgnoreTable(t *model.TableInfo) bool {
 		// See https://github.com/pingcap/tiflow/issues/4559
 		if !t.IsSequence() {
 			log.Warn("skip ineligible table", zap.Int64("tableID", t.ID),
-				zap.Stringer("tableName", t.TableName), zap.String("changefeed", s.id))
+				zap.Stringer("tableName", t.TableName),
+				zap.String("namespace", s.id.Namespace),
+				zap.String("changefeed", s.id.ID))
 		}
 		return true
 	}
