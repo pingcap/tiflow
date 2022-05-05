@@ -296,7 +296,7 @@ func (c *MessageClient) retrySending(ctx context.Context, stream clientStream) e
 			retryFromSeq := tpk.sentMessages.Front().(*p2p.MessageEntry).Sequence
 			log.Info("peer-to-peer client retrying",
 				zap.String("topic", topic),
-				zap.Int64("from-seq", retryFromSeq))
+				zap.Int64("fromSeq", retryFromSeq))
 		}
 
 		for i := 0; i < tpk.sentMessages.Len(); i++ {

@@ -65,7 +65,7 @@ func main() {
 		log.Error("sorter_stress_test:", zap.Error(err))
 	}
 
-	sorter, err := unified.NewUnifiedSorter(*sorterDir, "test-cf", "test", 0)
+	sorter, err := unified.NewUnifiedSorter(*sorterDir, model.DefaultChangeFeedID("test-cf"), "test", 0)
 	if err != nil {
 		log.Panic("sorter_stress_test:", zap.Error(err))
 	}

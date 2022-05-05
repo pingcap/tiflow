@@ -324,7 +324,7 @@ func (s *mysqlSink) execDDLWithMaxRetries(ctx context.Context, ddl *model.DDLEve
 		return err
 	}, retry.WithBackoffBaseDelay(backoffBaseDelayInMs),
 		retry.WithBackoffMaxDelay(backoffMaxDelayInMs),
-		retry.WithMaxTries(defaultDDLMaxRetryTime),
+		retry.WithMaxTries(defaultDDLMaxRetry),
 		retry.WithIsRetryableErr(cerror.IsRetryableError))
 }
 
@@ -664,10 +664,13 @@ func (s *mysqlSink) execDMLWithMaxRetries(ctx context.Context, dmls *preparedDML
 		log.Debug("Exec Rows succeeded",
 			zap.String("namespace", s.params.changefeedID.Namespace),
 			zap.String("changefeed", s.params.changefeedID.ID),
-			zap.Int("num of Rows", dmls.rowCount),
+			zap.Int("numOfRows", dmls.rowCount),
 			zap.Int("bucket", bucket))
 		return nil
-	}, retry.WithBackoffBaseDelay(backoffBaseDelayInMs), retry.WithBackoffMaxDelay(backoffMaxDelayInMs), retry.WithMaxTries(defaultDMLMaxRetryTime), retry.WithIsRetryableErr(isRetryableDMLError))
+	}, retry.WithBackoffBaseDelay(backoffBaseDelayInMs),
+		retry.WithBackoffMaxDelay(backoffMaxDelayInMs),
+		retry.WithMaxTries(defaultDMLMaxRetry),
+		retry.WithIsRetryableErr(isRetryableDMLError))
 }
 
 type preparedDMLs struct {

@@ -280,7 +280,7 @@ LOOP:
 		zap.String("namespace", c.state.ID.Namespace),
 		zap.String("changefeed", c.state.ID.ID),
 		zap.Stringer("info", c.state.Info),
-		zap.Uint64("checkpoint ts", checkpointTs))
+		zap.Uint64("checkpointTs", checkpointTs))
 	failpoint.Inject("NewChangefeedNoRetryError", func() {
 		failpoint.Return(cerror.ErrStartTsBeforeGC.GenWithStackByArgs(checkpointTs-300, checkpointTs))
 	})

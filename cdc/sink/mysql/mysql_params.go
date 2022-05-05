@@ -56,8 +56,8 @@ const (
 )
 
 var (
-	defaultDMLMaxRetryTime int64 = 8
-	defaultDDLMaxRetryTime int64 = 20
+	defaultDMLMaxRetry uint64 = 8
+	defaultDDLMaxRetry uint64 = 20
 )
 
 var defaultParams = &sinkParams{

@@ -261,7 +261,7 @@ func (h *heapSorter) flush(ctx context.Context, maxResolvedTs uint64) error {
 					zap.Int64("tableID", tableID),
 					zap.String("tableName", tableName),
 					zap.Uint64("resolvedTs", task.maxResolvedTs),
-					zap.Uint64("data-size", dataSize),
+					zap.Uint64("dataSize", dataSize),
 					zap.Int("size", eventCount))
 			})
 
@@ -307,14 +307,14 @@ func (h *heapSorter) init(ctx context.Context, onError func(err error)) {
 
 		if isResolvedEvent {
 			if event.RawKV.CRTs < state.maxResolved {
-				log.Panic("ResolvedTs regression, bug?", zap.Uint64("event-resolvedTs", event.RawKV.CRTs),
-					zap.Uint64("max-resolvedTs", state.maxResolved))
+				log.Panic("ResolvedTs regression, bug?", zap.Uint64("resolvedTs", event.RawKV.CRTs),
+					zap.Uint64("maxResolvedTs", state.maxResolved))
 			}
 			state.maxResolved = event.RawKV.CRTs
 		}
 
 		if event.RawKV.CRTs < state.maxResolved {
-			log.Panic("Bad input to sorter", zap.Uint64("cur-ts", event.RawKV.CRTs), zap.Uint64("maxResolved", state.maxResolved))
+			log.Panic("Bad input to sorter", zap.Uint64("curTs", event.RawKV.CRTs), zap.Uint64("maxResolved", state.maxResolved))
 		}
 
 		// 5 * 8 is for the 5 fields in PolymorphicEvent
