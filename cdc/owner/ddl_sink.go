@@ -16,7 +16,6 @@ package owner
 import (
 	"context"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -51,6 +50,7 @@ type DDLSink interface {
 	// the caller of this function can call again and again until a true returned
 	emitDDLEvent(ctx cdcContext.Context, ddl *model.DDLEvent) (bool, error)
 	emitSyncPoint(ctx cdcContext.Context, checkpointTs uint64) error
+	// clearDDLTsMap()
 	// close the sink, cancel running goroutine.
 	close(ctx context.Context) error
 }
@@ -65,8 +65,9 @@ type ddlSinkImpl struct {
 		checkpointTs      model.Ts
 		currentTableNames []model.TableName
 	}
-	ddlFinishedTs model.Ts
-	ddlSentTs     model.Ts
+
+	ddlFinishedTsMap sync.Map
+	ddlSentTsMap     map[*model.DDLEvent]model.Ts
 
 	ddlCh chan *model.DDLEvent
 	errCh chan error
@@ -82,6 +83,7 @@ type ddlSinkImpl struct {
 
 func newDDLSink() DDLSink {
 	return &ddlSinkImpl{
+		ddlSentTsMap:    make(map[*model.DDLEvent]uint64),
 		ddlCh:           make(chan *model.DDLEvent, 1),
 		errCh:           make(chan error, defaultErrChSize),
 		sinkInitHandler: ddlSinkInitializer,
@@ -189,7 +191,7 @@ func (s *ddlSinkImpl) run(ctx cdcContext.Context, id model.ChangeFeedID, info *m
 						zap.String("changefeed", ctx.ChangefeedVars().ID),
 						zap.Bool("ignored", err != nil),
 						zap.Any("ddl", ddl))
-					atomic.StoreUint64(&s.ddlFinishedTs, ddl.CommitTs)
+					s.ddlFinishedTsMap.Store(ddl, ddl.CommitTs)
 					continue
 				}
 				// If DDL executing failed, and the error can not be ignored,
@@ -212,19 +214,32 @@ func (s *ddlSinkImpl) emitCheckpointTs(ts uint64, tableNames []model.TableName) 
 	s.mu.currentTableNames = tableNames
 }
 
+// emitDDLEvent returns true if the ddl event is already executed.
+// For a rename tables job, the events in that job have identical StartTs
+// and CommitTs. So in emitDDLEvent, we get the DDL finished ts of an event
+// from a map in order to check whether that event is finshed or not.
 func (s *ddlSinkImpl) emitDDLEvent(ctx cdcContext.Context, ddl *model.DDLEvent) (bool, error) {
-	ddlFinishedTs := atomic.LoadUint64(&s.ddlFinishedTs)
+	var ddlFinishedTs model.Ts
+
+	ts, ok := s.ddlFinishedTsMap.Load(ddl)
+	if ok {
+		ddlFinishedTs = ts.(model.Ts)
+	}
 	if ddl.CommitTs <= ddlFinishedTs {
 		// the DDL event is executed successfully, and done is true
 		log.Info("ddl already executed",
 			zap.String("changefeed", ctx.ChangefeedVars().ID),
 			zap.Uint64("ddlFinishedTs", ddlFinishedTs), zap.Any("DDL", ddl))
+		s.ddlFinishedTsMap.Delete(ddl)
+		delete(s.ddlSentTsMap, ddl)
 		return true, nil
 	}
-	if ddl.CommitTs <= s.ddlSentTs {
+
+	ddlSentTs := s.ddlSentTsMap[ddl]
+	if ddl.CommitTs <= ddlSentTs {
 		log.Debug("ddl is not finished yet",
 			zap.String("changefeed", ctx.ChangefeedVars().ID),
-			zap.Uint64("ddlSentTs", s.ddlSentTs), zap.Any("DDL", ddl))
+			zap.Uint64("ddlSentTs", ddlSentTs), zap.Any("DDL", ddl))
 		// the DDL event is executing and not finished yet, return false
 		return false, nil
 	}
@@ -232,15 +247,15 @@ func (s *ddlSinkImpl) emitDDLEvent(ctx cdcContext.Context, ddl *model.DDLEvent) 
 	case <-ctx.Done():
 		return false, errors.Trace(ctx.Err())
 	case s.ddlCh <- ddl:
-		s.ddlSentTs = ddl.CommitTs
+		s.ddlSentTsMap[ddl] = ddl.CommitTs
 		log.Info("ddl is sent",
 			zap.String("changefeed", ctx.ChangefeedVars().ID),
-			zap.Uint64("ddlSentTs", s.ddlSentTs))
+			zap.Uint64("ddlSentTs", ddlSentTs))
 	default:
 		log.Warn("ddl chan full, send it the next round",
 			zap.String("changefeed", ctx.ChangefeedVars().ID),
-			zap.Uint64("ddlSentTs", s.ddlSentTs),
-			zap.Uint64("ddlFinishedTs", s.ddlFinishedTs), zap.Any("DDL", ddl))
+			zap.Uint64("ddlSentTs", ddlSentTs),
+			zap.Uint64("ddlFinishedTs", ddlFinishedTs), zap.Any("DDL", ddl))
 		// if this hit, we think that ddlCh is full,
 		// just return false and send the ddl in the next round.
 	}

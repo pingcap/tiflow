@@ -1,6 +1,6 @@
-use test;
-
-create table test1
+create database test1;
+use test1;
+create table table1
 (
     id          int auto_increment,
     c_tinyint   tinyint null,
@@ -11,11 +11,12 @@ create table test1
     constraint pk
         primary key (id)
 );
-
-insert into test1(c_tinyint, c_smallint, c_mediumint, c_int, c_bigint)
+insert into table1(c_tinyint, c_smallint, c_mediumint, c_int, c_bigint)
 values (1, 2, 3, 4, 5);
 
-create table test2
+create database test2;
+use test2;
+create table table2
 (
     id          int auto_increment,
     c_tinyint   tinyint null,
@@ -26,11 +27,12 @@ create table test2
     constraint pk
         primary key (id)
 );
-
-insert into test2(c_tinyint, c_smallint, c_mediumint, c_int, c_bigint)
+insert into table2(c_tinyint, c_smallint, c_mediumint, c_int, c_bigint)
 values (1, 2, 3, 4, 5);
 
-create table test3
+create database test3;
+use test3;
+create table table3
 (
     id          int auto_increment,
     c_tinyint   tinyint null,
@@ -42,5 +44,5 @@ create table test3
         primary key (id)
 );
 
-insert into test3(c_tinyint, c_smallint, c_mediumint, c_int, c_bigint)
+insert into table3(c_tinyint, c_smallint, c_mediumint, c_int, c_bigint)
 values (1, 2, 3, 4, 5);

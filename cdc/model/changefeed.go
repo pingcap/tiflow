@@ -167,7 +167,8 @@ func (info *ChangeFeedInfo) String() (str string) {
 	return
 }
 
-// GetStartTs returns StartTs if it's  specified or using the CreateTime of changefeed.
+// GetStartTs returns StartTs if it's specified or using the
+// CreateTime of changefeed.
 func (info *ChangeFeedInfo) GetStartTs() uint64 {
 	if info.StartTs > 0 {
 		return info.StartTs

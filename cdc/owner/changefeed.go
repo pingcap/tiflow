@@ -56,9 +56,12 @@ type changefeed struct {
 	isRemoved bool
 
 	// only used for asyncExecDDL function
-	// ddlEventCache is not nil when the changefeed is executing a DDL event asynchronously
-	// After the DDL event has been executed, ddlEventCache will be set to nil.
-	ddlEventCache *model.DDLEvent
+	// ddlEventCache is not nil when the changefeed is executing
+	// a DDL job asynchronously. After the DDL job has been executed,
+	// ddlEventCache will be set to nil. ddlEventCache contains more than
+	// one event for a rename tables DDL job.
+	ddlEventCache []*model.DDLEvent
+	ddlEventDone  []bool
 	// currentTableNames is the table names that the changefeed is watching.
 	// And it contains only the tables of the ddl that have been processed.
 	// The ones that have not been executed yet do not have.
@@ -502,7 +505,7 @@ func (c *changefeed) handleBarrier(ctx cdcContext.Context) (uint64, error) {
 		if !blocked {
 			return barrierTs, nil
 		}
-		done, err := c.asyncExecDDL(ctx, ddlJob)
+		done, err := c.asyncExecDDLJob(ctx, ddlJob)
 		if err != nil {
 			return 0, errors.Trace(err)
 		}
@@ -534,20 +537,25 @@ func (c *changefeed) handleBarrier(ctx cdcContext.Context) (uint64, error) {
 	return barrierTs, nil
 }
 
-func (c *changefeed) asyncExecDDL(ctx cdcContext.Context, job *timodel.Job) (done bool, err error) {
+func (c *changefeed) asyncExecDDLJob(ctx cdcContext.Context,
+	job *timodel.Job,
+) (bool, error) {
 	if job.BinlogInfo == nil {
 		log.Warn("ignore the invalid DDL job", zap.String("changefeed", c.id),
 			zap.Reflect("job", job))
 		return true, nil
 	}
+
 	cyclicConfig := c.state.Info.Config.Cyclic
 	if cyclicConfig.IsEnabled() && !cyclicConfig.SyncDDL {
 		log.Info("ignore the DDL job because cyclic config is enabled and syncDDL is false",
 			zap.String("changefeed", c.id), zap.Reflect("job", job))
 		return true, nil
 	}
-	if c.ddlEventCache == nil || c.ddlEventCache.CommitTs != job.BinlogInfo.FinishedTS {
-		ddlEvent, err := c.schema.BuildDDLEvent(job)
+
+	if c.ddlEventCache == nil || c.ddlEventCache[0].CommitTs !=
+		job.BinlogInfo.FinishedTS {
+		ddlEvents, err := c.schema.BuildDDLEvents(job)
 		if err != nil {
 			log.Error("build DDL event fail", zap.String("changefeed", c.id),
 				zap.Reflect("job", job), zap.Error(err))
@@ -561,36 +569,60 @@ func (c *changefeed) asyncExecDDL(ctx cdcContext.Context, job *timodel.Job) (don
 		if err != nil {
 			return false, errors.Trace(err)
 		}
-		ddlEvent.Query, err = addSpecialComment(ddlEvent.Query)
-		if err != nil {
-			log.Error("add special comment fail", zap.String("changefeed", c.id),
-				zap.String("Query", ddlEvent.Query), zap.Error(err))
-			return false, errors.Trace(err)
-		}
 
-		c.ddlEventCache = ddlEvent
-		if c.redoManager.Enabled() {
-			err = c.redoManager.EmitDDLEvent(ctx, ddlEvent)
-			if err != nil {
-				return false, err
+		c.ddlEventCache = ddlEvents
+		c.ddlEventDone = make([]bool, len(ddlEvents))
+		for _, ddlEvent := range ddlEvents {
+			if c.redoManager.Enabled() {
+				err = c.redoManager.EmitDDLEvent(ctx, ddlEvent)
+				if err != nil {
+					return false, err
+				}
 			}
 		}
 	}
-	if job.BinlogInfo.TableInfo != nil && c.schema.IsIneligibleTableID(job.BinlogInfo.TableInfo.ID) {
-		log.Warn("ignore the DDL job of ineligible table",
-			zap.String("changefeed", c.id), zap.Reflect("job", job))
-		return true, nil
+
+	jobDone := true
+	for i, ddlEvent := range c.ddlEventCache {
+		if c.ddlEventDone[i] == true {
+			continue
+		}
+		eventDone, err := c.asyncExecDDLEvent(ctx, ddlEvent)
+		if err != nil {
+			return false, err
+		}
+		if eventDone == true {
+			c.ddlEventDone[i] = true
+		}
+		jobDone = jobDone && eventDone
 	}
-	done, err = c.sink.emitDDLEvent(ctx, c.ddlEventCache)
-	if err != nil {
-		return false, err
-	}
-	if done {
+
+	if jobDone {
 		c.ddlEventCache = nil
+		c.ddlEventDone = nil
 		// It has expired.
 		// We should use the latest table names now.
 		c.currentTableNames = nil
 	}
+
+	return jobDone, nil
+}
+
+func (c *changefeed) asyncExecDDLEvent(ctx cdcContext.Context,
+	ddlEvent *model.DDLEvent,
+) (done bool, err error) {
+	ddlEvent.Query, err = addSpecialComment(ddlEvent.Query)
+	if ddlEvent.TableInfo != nil &&
+		c.schema.IsIneligibleTableID(ddlEvent.TableInfo.TableID) {
+		log.Warn("ignore the DDL event of ineligible table",
+			zap.String("changefeed", c.id), zap.Reflect("event", ddlEvent))
+		return true, nil
+	}
+	done, err = c.sink.emitDDLEvent(ctx, ddlEvent)
+	if err != nil {
+		return false, err
+	}
+
 	return done, nil
 }
 

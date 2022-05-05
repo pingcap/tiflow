@@ -153,7 +153,7 @@ func (k *mqSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowCha
 			continue
 		}
 		topic := k.eventRouter.GetTopicForRowChange(row)
-		partitionNum, err := k.topicManager.Partitions(topic)
+		partitionNum, err := k.topicManager.GetPartitionNum(topic)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -241,7 +241,7 @@ func (k *mqSink) EmitCheckpointTs(ctx context.Context, ts uint64, tables []model
 	// This will be compatible with the old behavior.
 	if len(tables) == 0 {
 		topic := k.eventRouter.GetDefaultTopic()
-		partitionNum, err := k.topicManager.Partitions(topic)
+		partitionNum, err := k.topicManager.GetPartitionNum(topic)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -253,7 +253,7 @@ func (k *mqSink) EmitCheckpointTs(ctx context.Context, ts uint64, tables []model
 	topics := k.eventRouter.GetActiveTopics(tables)
 	log.Debug("MQ sink current active topics", zap.Any("topics", topics))
 	for _, topic := range topics {
-		partitionNum, err := k.topicManager.Partitions(topic)
+		partitionNum, err := k.topicManager.GetPartitionNum(topic)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -296,18 +296,18 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 		zap.Uint64("commitTs", ddl.CommitTs), zap.String("query", ddl.Query),
 		zap.String("changefeed", k.id), zap.Any("role", k.role))
 	if partitionRule == dispatcher.PartitionAll {
-		partitionNum, err := k.topicManager.Partitions(topic)
+		partitionNum, err := k.topicManager.GetPartitionNum(topic)
 		if err != nil {
 			return errors.Trace(err)
 		}
 		err = k.mqProducer.SyncBroadcastMessage(ctx, topic, partitionNum, msg)
 		return errors.Trace(err)
 	}
-	// Notice: We must call Partitions here,
+	// Notice: We must call GetPartitionNum here,
 	// which will be responsible for automatically creating topics when they don't exist.
 	// If it is not called here and kafka has `auto.create.topics.enable` turned on,
 	// then the auto-created topic will not be created as configured by ticdc.
-	_, err = k.topicManager.Partitions(topic)
+	_, err = k.topicManager.GetPartitionNum(topic)
 	if err != nil {
 		return errors.Trace(err)
 	}
