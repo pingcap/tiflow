@@ -45,7 +45,7 @@ const (
 )
 
 // Upstream holds resources of a TiDB cluster, it can be shared by many changefeeds
-// and processors. All public fileds and method of a upstream should be thread-safety.
+// and processors. All public fileds and method of a upstream should be thread-safe.
 type Upstream struct {
 	clusterID      uint64
 	pdEndpoints    []string
@@ -87,7 +87,7 @@ func (up *Upstream) init(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
-	pdClient, err := pd.NewClientWithContext(
+	up.PDClient, err = pd.NewClientWithContext(
 		ctx, up.pdEndpoints, up.securityConfig.PDSecurityOption(),
 		pd.WithGRPCDialOptions(
 			grpcTLSOption,
@@ -105,7 +105,6 @@ func (up *Upstream) init(ctx context.Context) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	up.PDClient = pdClient
 	log.Info("upstream's PDClient created", zap.Uint64("clusterID", up.clusterID))
 
 	// To not block CDC server startup, we need to warn instead of error
@@ -116,11 +115,10 @@ func (up *Upstream) init(ctx context.Context) error {
 		log.Error("init upstream error", zap.Error(err))
 	}
 
-	kvStore, err := kv.CreateTiStore(strings.Join(up.pdEndpoints, ","), up.securityConfig)
+	up.KVStorage, err = kv.CreateTiStore(strings.Join(up.pdEndpoints, ","), up.securityConfig)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	up.KVStorage = kvStore
 	log.Info("upstream's KVStorage created", zap.Uint64("clusterID", up.clusterID))
 
 	up.GrpcPool = kv.NewGrpcPoolImpl(ctx, up.securityConfig)
@@ -135,6 +133,9 @@ func (up *Upstream) init(ctx context.Context) error {
 	}
 	log.Info("upstream's PDClock created", zap.Uint64("clusterID", up.clusterID))
 
+	up.GCManager = gc.NewManager(up.PDClient, up.PDClock)
+	log.Info("upstream's GCManager created", zap.Uint64("clusterID", up.clusterID))
+
 	up.wg.Add(1)
 	go func() {
 		defer up.wg.Done()
@@ -146,15 +147,12 @@ func (up *Upstream) init(ctx context.Context) error {
 		up.GrpcPool.RecycleConn(ctx)
 	}()
 
-	up.GCManager = gc.NewManager(up.PDClient, up.PDClock)
-	log.Info("upstream's GCManager created", zap.Uint64("clusterID", up.clusterID))
-
 	log.Info("upStream initialize successfully", zap.Uint64("clusterId", up.clusterID))
 	atomic.StoreInt32(&up.status, normal)
 	return nil
 }
 
-// close all resources
+// close all resources.
 func (up *Upstream) close() {
 	if up.PDClient != nil {
 		up.PDClient.Close()

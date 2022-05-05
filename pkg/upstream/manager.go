@@ -34,23 +34,22 @@ type Manager struct {
 	ups *sync.Map
 	// all upstream should be spawn from this ctx.
 	ctx context.Context
-	// Only use in Close()
+	// Only use in Close().
 	cancel func()
 }
 
 // NewManager creates a new Manager.
-// ctx will be use to initialize upstream spawned by this Manager.
+// ctx will be used to initialize upstream spawned by this Manager.
 func NewManager(ctx context.Context) *Manager {
 	ctx, cancel := context.WithCancel(ctx)
-	res := &Manager{ups: new(sync.Map), ctx: ctx, cancel: cancel}
-	return res
+	return &Manager{ups: new(sync.Map), ctx: ctx, cancel: cancel}
 }
 
 // NewManager4Test returns a Manager for unit test.
 func NewManager4Test(pdClient pd.Client) *Manager {
-	res := &Manager{ups: new(sync.Map)}
 	up := NewUpstream4Test(pdClient)
 	atomic.StoreInt32(&up.status, normal)
+	res := &Manager{ups: new(sync.Map)}
 	res.ups.Store(defaultClusterID, up)
 	return res
 }
@@ -62,12 +61,12 @@ func (m *Manager) Add(clusterID uint64, pdEndpoints []string) error {
 		return nil
 	}
 	securityConfig := config.GetGlobalServerConfig().Security
-	up := newUpstream(defaultClusterID, pdEndpoints, securityConfig)
+	up := newUpstream(clusterID, pdEndpoints, securityConfig)
 	err := up.init(m.ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	m.ups.Store(defaultClusterID, up)
+	m.ups.Store(clusterID, up)
 	return nil
 }
 
@@ -81,6 +80,8 @@ func (m *Manager) Get(clusterID uint64) *Upstream {
 }
 
 // Close closes all upstreams.
+// Close is not thread-safe, please make sure it will only be called
+// once when capture exits.
 func (m *Manager) Close() {
 	m.cancel()
 	m.ups.Range(func(k, v interface{}) bool {
