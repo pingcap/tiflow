@@ -79,7 +79,7 @@ func NewUpstream4Test(pdClient pd.Client) *Upstream {
 }
 
 func (up *Upstream) init(ctx context.Context) error {
-	log.Info("upstream is initializing", zap.Uint64("cluster id", up.clusterID))
+	log.Info("upstream is initializing", zap.Uint64("clusterID", up.clusterID))
 	var err error
 
 	grpcTLSOption, err := up.securityConfig.ToGRPCDialOption()
@@ -106,7 +106,7 @@ func (up *Upstream) init(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 	up.PDClient = pdClient
-	log.Info("upstream's PDClient created", zap.Uint64("cluster id", up.clusterID))
+	log.Info("upstream's PDClient created", zap.Uint64("clusterID", up.clusterID))
 
 	// To not block CDC server startup, we need to warn instead of error
 	// when TiKV is incompatible.
@@ -121,19 +121,19 @@ func (up *Upstream) init(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 	up.KVStorage = kvStore
-	log.Info("upstream's KVStorage created", zap.Uint64("cluster id", up.clusterID))
+	log.Info("upstream's KVStorage created", zap.Uint64("clusterID", up.clusterID))
 
 	up.GrpcPool = kv.NewGrpcPoolImpl(ctx, up.securityConfig)
-	log.Info("upstream's GrpcPool created", zap.Uint64("cluster id", up.clusterID))
+	log.Info("upstream's GrpcPool created", zap.Uint64("clusterID", up.clusterID))
 
 	up.RegionCache = tikv.NewRegionCache(up.PDClient)
-	log.Info("upstream's RegionCache created", zap.Uint64("cluster id", up.clusterID))
+	log.Info("upstream's RegionCache created", zap.Uint64("clusterID", up.clusterID))
 
 	up.PDClock, err = pdtime.NewClock(ctx, up.PDClient)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	log.Info("upstream's PDClock created", zap.Uint64("cluster id", up.clusterID))
+	log.Info("upstream's PDClock created", zap.Uint64("clusterID", up.clusterID))
 
 	up.wg.Add(1)
 	go func() {
@@ -147,9 +147,9 @@ func (up *Upstream) init(ctx context.Context) error {
 	}()
 
 	up.GCManager = gc.NewManager(up.PDClient, up.PDClock)
-	log.Info("upstream's GCManager created", zap.Uint64("cluster id", up.clusterID))
+	log.Info("upstream's GCManager created", zap.Uint64("clusterID", up.clusterID))
 
-	log.Info("upStream initialize successfully", zap.Uint64("cluster id", up.clusterID))
+	log.Info("upStream initialize successfully", zap.Uint64("clusterId", up.clusterID))
 	atomic.StoreInt32(&up.status, normal)
 	return nil
 }
@@ -179,7 +179,7 @@ func (up *Upstream) close() {
 
 	up.wg.Wait()
 	atomic.StoreInt32(&up.status, closed)
-	log.Info("upStream closed", zap.Uint64("cluster id", up.clusterID))
+	log.Info("upStream closed", zap.Uint64("clusterID", up.clusterID))
 }
 
 // IsNormal returns true if the upstream is normal.

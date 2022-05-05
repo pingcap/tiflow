@@ -25,7 +25,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// defaultClusterID is a pseudo cluster id for now. It will be removed in the future.
+// defaultClusterID is a pseudo clusterID for now. It will be removed in the future.
 const defaultClusterID uint64 = 0
 
 // Manager manages all upstream.
@@ -75,7 +75,7 @@ func (m *Manager) Add(clusterID uint64, pdEndpoints []string) error {
 func (m *Manager) Get(clusterID uint64) *Upstream {
 	v, ok := m.ups.Load(clusterID)
 	if !ok {
-		log.Panic("upstream not exists", zap.Uint64("cluster-id", clusterID))
+		log.Panic("upstream not exists", zap.Uint64("clusterID", clusterID))
 	}
 	return v.(*Upstream)
 }
@@ -88,3 +88,8 @@ func (m *Manager) Close() {
 		return true
 	})
 }
+
+// TODO(dongmen): We should add a method to free upstreams that
+// have not been used for a long time to save resources.
+// This method should be call in Owner.Tick()
+// func (* Manager) Tick() error {}
