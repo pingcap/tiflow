@@ -81,8 +81,8 @@ func (c *Config) setPartitionNum(realPartitionCount int32) error {
 	if c.PartitionNum < realPartitionCount {
 		log.Warn("number of partition specified in sink-uri is less than that of the actual topic. "+
 			"Some partitions will not have messages dispatched to",
-			zap.Int32("sink-uri partitions", c.PartitionNum),
-			zap.Int32("topic partitions", realPartitionCount))
+			zap.Int32("sinkUriPartitions", c.PartitionNum),
+			zap.Int32("topicPartitions", realPartitionCount))
 		return nil
 	}
 

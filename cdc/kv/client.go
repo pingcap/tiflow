@@ -294,7 +294,6 @@ type CDCKVClient interface {
 		ctx context.Context,
 		span regionspan.ComparableSpan,
 		ts uint64,
-		enableOldValue bool,
 		lockResolver txnutil.LockResolver,
 		isPullerInit PullerInitialization,
 		eventCh chan<- model.RegionFeedEvent,
@@ -308,6 +307,7 @@ var NewCDCKVClient = NewCDCClient
 type CDCClient struct {
 	pd pd.Client
 
+	config    *config.KVClientConfig
 	clusterID uint64
 
 	grpcPool GrpcPool
@@ -329,11 +329,13 @@ func NewCDCClient(
 	regionCache *tikv.RegionCache,
 	pdClock pdtime.Clock,
 	changefeed model.ChangeFeedID,
+	cfg *config.KVClientConfig,
 ) (c CDCKVClient) {
 	clusterID := pd.GetClusterID(ctx)
 
 	c = &CDCClient{
 		clusterID:      clusterID,
+		config:         cfg,
 		pd:             pd,
 		kvStorage:      kvStorage,
 		grpcPool:       grpcPool,
@@ -408,14 +410,12 @@ type PullerInitialization interface {
 // The `Start` and `End` field in input span must be memcomparable encoded.
 func (c *CDCClient) EventFeed(
 	ctx context.Context, span regionspan.ComparableSpan, ts uint64,
-	enableOldValue bool,
 	lockResolver txnutil.LockResolver,
 	isPullerInit PullerInitialization,
 	eventCh chan<- model.RegionFeedEvent,
 ) error {
-	s := newEventFeedSession(ctx, c, span,
-		lockResolver, isPullerInit,
-		enableOldValue, ts, eventCh)
+	s := newEventFeedSession(
+		ctx, c, span, lockResolver, isPullerInit, ts, eventCh)
 	return s.eventFeed(ctx, ts)
 }
 
@@ -454,8 +454,7 @@ type eventFeedSession struct {
 	// The queue is used to store region that reaches limit
 	rateLimitQueue []regionErrorInfo
 
-	rangeLock      *regionspan.RegionRangeLock
-	enableOldValue bool
+	rangeLock *regionspan.RegionRangeLock
 
 	// To identify metrics of different eventFeedSession
 	id                string
@@ -479,12 +478,10 @@ func newEventFeedSession(
 	totalSpan regionspan.ComparableSpan,
 	lockResolver txnutil.LockResolver,
 	isPullerInit PullerInitialization,
-	enableOldValue bool,
 	startTs uint64,
 	eventCh chan<- model.RegionFeedEvent,
 ) *eventFeedSession {
 	id := strconv.FormatUint(allocID(), 10)
-	kvClientCfg := config.GetGlobalServerConfig().KVClient
 	rangeLock := regionspan.NewRegionRangeLock(
 		totalSpan.Start, totalSpan.End, startTs,
 		client.changefeed.Namespace+"-"+client.changefeed.ID)
@@ -492,13 +489,12 @@ func newEventFeedSession(
 		client:            client,
 		totalSpan:         totalSpan,
 		eventCh:           eventCh,
-		regionRouter:      NewSizedRegionRouter(ctx, kvClientCfg.RegionScanLimit),
+		regionRouter:      NewSizedRegionRouter(ctx, client.config.RegionScanLimit),
 		regionCh:          make(chan singleRegionInfo, defaultRegionChanSize),
 		errCh:             make(chan regionErrorInfo, defaultRegionChanSize),
 		requestRangeCh:    make(chan rangeRequestTask, defaultRegionChanSize),
 		rateLimitQueue:    make([]regionErrorInfo, 0, defaultRegionRateLimitQueueSize),
 		rangeLock:         rangeLock,
-		enableOldValue:    enableOldValue,
 		lockResolver:      lockResolver,
 		isPullerInit:      isPullerInit,
 		id:                id,
@@ -717,11 +713,8 @@ func (s *eventFeedSession) requestRegionToStore(
 		}
 		requestID := allocID()
 
-		extraOp := kvrpcpb.ExtraOp_Noop
-		if s.enableOldValue {
-			extraOp = kvrpcpb.ExtraOp_ReadOldValue
-		}
-
+		// Always read old value.
+		extraOp := kvrpcpb.ExtraOp_ReadOldValue
 		rpcCtx := sri.rpcCtx
 		regionID := rpcCtx.Meta.GetId()
 		req := &cdcpb.ChangeDataRequest{
@@ -939,6 +932,8 @@ func (s *eventFeedSession) divideAndSendEventFeedToRegions(
 	limit := 20
 	nextSpan := span
 
+	// Max backoff 500ms.
+	scanRegionMaxBackoff := int64(500)
 	for {
 		var (
 			regions []*tikv.Region
@@ -981,7 +976,8 @@ func (s *eventFeedSession) divideAndSendEventFeedToRegions(
 				zap.String("namespace", s.client.changefeed.Namespace),
 				zap.String("changefeed", s.client.changefeed.ID))
 			return nil
-		}, retry.WithBackoffMaxDelay(50), retry.WithMaxTries(100), retry.WithIsRetryableErr(cerror.IsRetryableError))
+		}, retry.WithBackoffMaxDelay(scanRegionMaxBackoff),
+			retry.WithTotalRetryDuratoin(time.Duration(s.client.config.RegionRetryDuration)))
 		if retryErr != nil {
 			return retryErr
 		}
@@ -1259,7 +1255,7 @@ func (s *eventFeedSession) receiveFromStream(
 				zap.String("namespace", s.client.changefeed.Namespace),
 				zap.String("changefeed", s.client.changefeed.ID),
 				zap.Int("size", size), zap.Int("eventLen", len(cevent.Events)),
-				zap.Int("resolved region count", regionCount))
+				zap.Int("resolvedRegionCount", regionCount))
 		}
 
 		for _, event := range cevent.Events {
@@ -1418,7 +1414,7 @@ func (s *eventFeedSession) getStreamCancel(storeAddr string) (cancel context.Can
 	return
 }
 
-func assembleRowEvent(regionID uint64, entry *cdcpb.Event_Row, enableOldValue bool) (model.RegionFeedEvent, error) {
+func assembleRowEvent(regionID uint64, entry *cdcpb.Event_Row) (model.RegionFeedEvent, error) {
 	var opType model.OpType
 	switch entry.GetOpType() {
 	case cdcpb.Event_Row_DELETE:
@@ -1438,14 +1434,10 @@ func assembleRowEvent(regionID uint64, entry *cdcpb.Event_Row, enableOldValue bo
 			StartTs:  entry.StartTs,
 			CRTs:     entry.CommitTs,
 			RegionID: regionID,
+			OldValue: entry.GetOldValue(),
 		},
 	}
 
-	// when old-value is disabled, it is still possible for the tikv to send a event containing the old value
-	// we need avoid a old-value sent to downstream when old-value is disabled
-	if enableOldValue {
-		revent.Val.OldValue = entry.GetOldValue()
-	}
 	return revent, nil
 }
 

@@ -245,7 +245,7 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 				pendingSet.Store(task, nextEvent)
 				if nextEvent.CRTs < minResolvedTs {
 					log.Panic("remaining event CRTs too small",
-						zap.Uint64("next-ts", nextEvent.CRTs),
+						zap.Uint64("nextTs", nextEvent.CRTs),
 						zap.Uint64("minResolvedTs", minResolvedTs))
 				}
 			}
@@ -293,7 +293,7 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 						zap.Uint64("curTs", event.CRTs),
 						zap.Int("lastHeapID", lastTask.heapSorterID),
 						zap.Int("lastTaskID", lastTask.taskID),
-						zap.Uint64("lastTask-resolved", task.maxResolvedTs),
+						zap.Uint64("lastTaskResolved", task.maxResolvedTs),
 						zap.Reflect("lastEvent", lastEvent),
 						zap.Uint64("lastTs", lastOutputTs),
 						zap.Int("sortHeapLen", sortHeap.Len()))
@@ -301,7 +301,7 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 
 				if event.CRTs <= lastOutputResolvedTs {
 					log.Panic("unified sorter: output ts smaller than resolved ts, bug?", zap.Uint64("minResolvedTs", minResolvedTs),
-						zap.Uint64("lastOutputResolvedTs", lastOutputResolvedTs), zap.Uint64("event-crts", event.CRTs))
+						zap.Uint64("lastOutputResolvedTs", lastOutputResolvedTs), zap.Uint64("eventCrts", event.CRTs))
 				}
 				lastOutputTs = event.CRTs
 				lastEvent = event
