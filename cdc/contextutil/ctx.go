@@ -110,7 +110,7 @@ func IsOwnerFromCtx(ctx context.Context) bool {
 }
 
 // ChangefeedIDFromCtx returns a changefeedID stored in the specified context.
-// It returns an empty model.changefeedID if there's not a changefeedID.
+// It returns an empty model.changefeedID if there's no changefeedID found.
 func ChangefeedIDFromCtx(ctx context.Context) model.ChangeFeedID {
 	changefeedID, ok := ctx.Value(ctxKeyChangefeedID).(model.ChangeFeedID)
 	if !ok {
