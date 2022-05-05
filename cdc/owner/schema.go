@@ -132,7 +132,8 @@ func (s *schemaWrap4Owner) IsIneligibleTableID(tableID model.TableID) bool {
 
 // parseRenameTables gets a list of DDLEvent from a rename tables DDL job.
 func (s *schemaWrap4Owner) parseRenameTables(
-	job *timodel.Job) ([]*model.DDLEvent, error) {
+	job *timodel.Job,
+) ([]*model.DDLEvent, error) {
 	var (
 		oldSchemaIDs, newSchemaIDs, oldTableIDs []int64
 		newTableNames, oldSchemaNames           []*timodel.CIStr
@@ -180,7 +181,8 @@ func (s *schemaWrap4Owner) parseRenameTables(
 // BuildDDLEvents builds ddl events from a DDL job.
 // The result contains more than one DDLEvent for a rename tables job.
 func (s *schemaWrap4Owner) BuildDDLEvents(
-	job *timodel.Job) ([]*model.DDLEvent, error) {
+	job *timodel.Job,
+) ([]*model.DDLEvent, error) {
 	var preTableInfo *model.TableInfo
 	var err error
 

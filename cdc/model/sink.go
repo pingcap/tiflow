@@ -482,7 +482,7 @@ func (d *DDLEvent) FromJob(job *model.Job, preTableInfo *TableInfo) {
 		return
 	}
 
-	// The the query for "DROP TABLE" and "DROP VIEW" statements need
+	// The query for "DROP TABLE" and "DROP VIEW" statements need
 	// to be rebuilt. The reason is elaborated as follows:
 	// for a DDL statement like "DROP TABLE test1.table1, test2.table2",
 	// two DDL jobs will be generated. These two jobs can be differentiated
