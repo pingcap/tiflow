@@ -25,8 +25,8 @@ import (
 	"go.uber.org/zap"
 )
 
-// DefaultClusterID is a pseudo cluster id for now. It will be removed in the future.
-const DefaultClusterID uint64 = 0
+// defaultClusterID is a pseudo cluster id for now. It will be removed in the future.
+const defaultClusterID uint64 = 0
 
 // Manager manages all upstream.
 type Manager struct {
@@ -51,7 +51,7 @@ func NewManager4Test(pdClient pd.Client) *Manager {
 	res := &Manager{ups: new(sync.Map)}
 	up := NewUpstream4Test(pdClient)
 	atomic.StoreInt32(&up.status, normal)
-	res.ups.Store(DefaultClusterID, up)
+	res.ups.Store(defaultClusterID, up)
 	return res
 }
 
@@ -62,12 +62,12 @@ func (m *Manager) Add(clusterID uint64, pdEndpoints []string) error {
 		return nil
 	}
 	securityConfig := config.GetGlobalServerConfig().Security
-	up := newUpstream(DefaultClusterID, pdEndpoints, securityConfig)
+	up := newUpstream(defaultClusterID, pdEndpoints, securityConfig)
 	err := up.init(m.ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	m.ups.Store(DefaultClusterID, up)
+	m.ups.Store(defaultClusterID, up)
 	return nil
 }
 

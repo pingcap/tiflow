@@ -36,7 +36,7 @@ import (
 )
 
 const (
-	// indicate a upstream is not initialized.
+	// indicate a upstream is crerated but not initialized.
 	uninit int32 = iota
 	// indicate a upstream is initialized and can works normally.
 	normal
@@ -182,10 +182,12 @@ func (up *Upstream) close() {
 	log.Info("upStream closed", zap.Uint64("cluster id", up.clusterID))
 }
 
+// IsNormal return true if the upstream is normal.
 func (up *Upstream) IsNormal() bool {
 	return atomic.LoadInt32(&up.status) == normal
 }
 
+// IsNormal return true if the upstream is closed.
 func (up *Upstream) IsClosed() bool {
 	return atomic.LoadInt32(&up.status) == closed
 }
