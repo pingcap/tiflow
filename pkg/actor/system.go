@@ -94,13 +94,13 @@ func (p *proc[T]) batchReceiveMsgs(batchMsg []message.Message[T]) int {
 }
 
 // isClosed returns ture, means its mailbox and actor are closed.
-// isClosed is threadsafe.
+// isClosed is thread-safe.
 func (p *proc[T]) isClosed() bool {
 	return atomic.LoadUint64(&p.state) == uint64(procStateClosed)
 }
 
 // closeMailbox close mailbox and set state to closed for graceful close.
-// onSystemStop is threadsafe.
+// onSystemStop is thread-safe.
 func (p *proc[T]) onSystemStop() {
 	// Running -> MailboxClosed
 	if atomic.CompareAndSwapUint64(
@@ -110,7 +110,7 @@ func (p *proc[T]) onSystemStop() {
 }
 
 // closeMailbox close mailbox and set state to closed.
-// onMailboxEmpty is threadsafe.
+// onMailboxEmpty is thread-safe.
 func (p *proc[T]) onMailboxEmpty() {
 	// MailboxClosed -> Close
 	if atomic.CompareAndSwapUint64(
@@ -119,8 +119,8 @@ func (p *proc[T]) onMailboxEmpty() {
 	}
 }
 
-// onActorClosed all mailbox and actor.
-// onActorClosed is threadsafe.
+// onActorClosed closes all mailbox and actor.
+// onActorClosed is thread-safe.
 func (p *proc[T]) onActorClosed() {
 	if atomic.CompareAndSwapUint64(
 		&p.state, uint64(procStateRunning), uint64(procStateClosed)) {
@@ -145,7 +145,7 @@ const (
 	readyStateStopped readyState = 2
 )
 
-// ready is a centralize notification struct, shared by a router and a system.
+// ready is a centralized notification struct, shared by a router and a system.
 // It schedules notification and actors.
 type ready[T any] struct {
 	sync.Mutex
@@ -441,7 +441,7 @@ type System[T any] struct {
 }
 
 // Start the system. Cancelling the context to stop the system.
-// Start is not threadsafe.
+// Start is not thread-safe.
 func (s *System[T]) Start(ctx context.Context) {
 	s.wg, ctx = errgroup.WithContext(ctx)
 	ctx, s.cancel = context.WithCancel(ctx)
@@ -461,7 +461,7 @@ func (s *System[T]) Start(ctx context.Context) {
 
 // Stop the system, cancels all actors. It should be called after Start.
 // Messages sent before this call will be received by actors.
-// Stop is not threadsafe.
+// Stop is not thread-safe.
 func (s *System[T]) Stop() {
 	// Cancel context-aware work currently being polled.
 	if s.cancel != nil {
@@ -480,7 +480,7 @@ func (s *System[T]) Stop() {
 }
 
 // Spawn spawns an actor in the system.
-// Spawn is threadsafe.
+// Spawn is thread-safe.
 func (s *System[T]) Spawn(mb Mailbox[T], actor Actor[T]) error {
 	id := mb.ID()
 	p := &proc[T]{mb: mb, actor: actor}
