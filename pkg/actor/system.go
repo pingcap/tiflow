@@ -119,7 +119,7 @@ func (p *proc[T]) onMailboxEmpty() {
 	}
 }
 
-// onActorClosed close all mailbox and actor.
+// onActorClosed closes all mailbox and actor.
 // onActorClosed is thread-safe.
 func (p *proc[T]) onActorClosed() {
 	if atomic.CompareAndSwapUint64(
