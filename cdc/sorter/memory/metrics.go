@@ -37,7 +37,7 @@ var (
 			Subsystem: "puller",
 			Name:      "entry_sorter_output_chan_size",
 			Help:      "Puller entry sorter output channel size",
-		}, []string{"changefeed", "table"})
+		}, []string{"namespace", "changefeed", "table"})
 	entrySorterUnsortedSizeGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
