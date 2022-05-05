@@ -741,10 +741,6 @@ func TestRebalanceWhileAddingTable(t *testing.T) {
 	communicator.AssertExpectations(t)
 }
 
-func TestDrainingCaptureWhileAddingTable(t *testing.T) {
-	t.Parallel()
-}
-
 func TestDrainingCaptureWhileMoveTable(t *testing.T) {
 	t.Parallel()
 }
@@ -922,6 +918,89 @@ func TestDrainingCaptureOtherCrashed(t *testing.T) {
 
 func TestDrainingOwnerOtherCrashed(t *testing.T) {
 	t.Parallel()
+}
+
+func TestDrainingCaptureWhileAddingTable(t *testing.T) {
+	t.Parallel()
+
+	ctx := cdcContext.NewBackendContext4Test(false)
+	communicator := NewMockScheduleDispatcherCommunicator()
+	dispatcher := NewBaseScheduleDispatcher("cf-1", communicator, 1000)
+	dispatcher.captureStatus = map[model.CaptureID]*captureStatus{
+		"capture-1": {
+			SyncStatus:   captureSyncFinished,
+			CheckpointTs: 1300,
+			ResolvedTs:   1600,
+			Epoch:        defaultEpoch,
+		},
+		"capture-2": {
+			SyncStatus:   captureSyncFinished,
+			CheckpointTs: 1500,
+			ResolvedTs:   1550,
+			Epoch:        defaultEpoch,
+		},
+	}
+
+	// initialize each capture with 2 tables.
+	dispatcher.tables.AddTableRecord(&util.TableRecord{
+		TableID:   model.TableID(0),
+		CaptureID: "capture-1",
+		Status:    util.RunningTable,
+	})
+	dispatcher.tables.AddTableRecord(&util.TableRecord{
+		TableID:   model.TableID(1),
+		CaptureID: "capture-1",
+		Status:    util.RunningTable,
+	})
+	dispatcher.tables.AddTableRecord(&util.TableRecord{
+		TableID:   model.TableID(2),
+		CaptureID: "capture-2",
+		Status:    util.RunningTable,
+	})
+	dispatcher.tables.AddTableRecord(&util.TableRecord{
+		TableID:   model.TableID(3),
+		CaptureID: "capture-2",
+		Status:    util.RunningTable,
+	})
+
+	checkpointTs, resolvedTs, err := dispatcher.Tick(ctx, 1300, []model.TableID{0, 1, 2, 3}, defaultMockCaptureInfos)
+	require.NoError(t, err)
+	require.Equal(t, model.Ts(1300), checkpointTs)
+	require.Equal(t, model.Ts(1550), resolvedTs)
+	communicator.AssertExpectations(t)
+
+	communicator.On("DispatchTable", mock.Anything, "cf-1", mock.Anything, mock.Anything, false, defaultEpoch).
+		Return(true, nil)
+
+	// 1. drain one capture
+	err = dispatcher.DrainCapture("capture-2")
+	require.Nil(t, err)
+
+	// 2. add a new table
+	checkpointTs, resolvedTs, err = dispatcher.Tick(ctx, 1300, []model.TableID{0, 1, 2, 3, 4}, defaultMockCaptureInfos)
+	require.Nil(t, err)
+	require.Equal(t, CheckpointCannotProceed, checkpointTs)
+	require.Equal(t, CheckpointCannotProceed, resolvedTs)
+	//
+	//dispatcher.Rebalance()
+	//communicator.Reset()
+	//checkpointTs, resolvedTs, err = dispatcher.Tick(ctx, 1300, []model.TableID{1, 2, 3, 4, 5, 6, 7}, defaultMockCaptureInfos)
+	//require.NoError(t, err)
+	//require.Equal(t, CheckpointCannotProceed, checkpointTs)
+	//require.Equal(t, CheckpointCannotProceed, resolvedTs)
+	//communicator.AssertExpectations(t)
+	//
+	//dispatcher.OnAgentFinishedTableOperation("capture-2", model.TableID(7), defaultEpoch)
+	//communicator.Reset()
+	//communicator.On("DispatchTable", mock.Anything, "cf-1", mock.Anything, mock.Anything, true, defaultEpoch).
+	//	Return(true, nil)
+	//checkpointTs, resolvedTs, err = dispatcher.Tick(ctx, 1300, []model.TableID{1, 2, 3, 4, 5, 6, 7}, defaultMockCaptureInfos)
+	//require.NoError(t, err)
+	//require.Equal(t, CheckpointCannotProceed, checkpointTs)
+	//require.Equal(t, CheckpointCannotProceed, resolvedTs)
+	//communicator.AssertNumberOfCalls(t, "DispatchTable", 2)
+	//communicator.AssertExpectations(t)
+
 }
 
 func TestManualMoveTableWhileDrainingCapture(t *testing.T) {
