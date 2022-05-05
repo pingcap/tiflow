@@ -76,7 +76,7 @@ func (c *Config) setPartitionNum(realPartitionCount int32) error {
 	if c.PartitionNum == 0 {
 		c.PartitionNum = realPartitionCount
 		log.Info("partitionNum is not set, set by topic's partition-num",
-			zap.Int32("partition-num", realPartitionCount))
+			zap.Int32("partitionNum", realPartitionCount))
 		return nil
 	}
 
