@@ -21,6 +21,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/scheduler/util"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -919,6 +920,10 @@ func TestDrainingCaptureOtherCrashed(t *testing.T) {
 	t.Parallel()
 }
 
+func TestDrainingOwnerOtherCrashed(t *testing.T) {
+	t.Parallel()
+}
+
 func TestManualMoveTableWhileDrainingCapture(t *testing.T) {
 	t.Parallel()
 
@@ -977,13 +982,64 @@ func TestManualMoveTableWhileDrainingCapture(t *testing.T) {
 		Status:    util.RunningTable,
 	})
 
-	// move table task before draining capture
+	mockCaptureInfos := map[model.CaptureID]*model.CaptureInfo{
+		"capture-1": {
+			ID:            "capture-1",
+			AdvertiseAddr: "fakeip:1",
+		},
+		"capture-2": {
+			ID:            "capture-2",
+			AdvertiseAddr: "fakeip:2",
+		},
+		"capture-3": {
+			ID:            "capture-3",
+			AdvertiseAddr: "fakeip:3",
+		},
+	}
 
-	// move table when draining capture
+	communicator.On("DispatchTable", mock.Anything, "cf-1", mock.Anything, mock.Anything, mock.Anything, defaultEpoch).Return(true, nil)
 
-	// move the table-1 from the capture-1 to the capture-2
+	// manually move table: `table-1` to `capture-2`
+	dispatcher.MoveTable(1, "capture-2")
+	checkpointTs, resolvedTs, err := dispatcher.Tick(ctx, 1300, []model.TableID{0, 1, 2, 3, 4, 5}, mockCaptureInfos)
+	require.Nil(t, err)
+	// cannot make progress, since `table-1` is removing from `capture-1`.
+	require.Equal(t, CheckpointCannotProceed, checkpointTs)
+	require.Equal(t, CheckpointCannotProceed, resolvedTs)
+	communicator.AssertExpectations(t)
 
-	// drain the capture-1
+	// `table-1` is not adding to `capture-2` yet, now drain the `capture-2`
+	err = dispatcher.DrainCapture("capture-2")
+	require.Error(t, err, cerror.ErrSchedulerDrainCaptureNotAllowed)
+
+	// `table-1` is removed from `capture-1`
+	dispatcher.OnAgentFinishedTableOperation("capture-1", 1, defaultEpoch)
+
+	checkpointTs, resolvedTs, err = dispatcher.Tick(ctx, 1300, []model.TableID{0, 1, 2, 3, 4, 5}, mockCaptureInfos)
+	require.Nil(t, err)
+	// cannot make progress, since `table-1` is adding to `capture-2`
+	require.Equal(t, CheckpointCannotProceed, checkpointTs)
+	require.Equal(t, CheckpointCannotProceed, resolvedTs)
+	communicator.AssertExpectations(t)
+
+	err = dispatcher.DrainCapture("capture-2")
+	require.Error(t, err, cerror.ErrSchedulerDrainCaptureNotAllowed)
+
+	// move `table-1` from `capture-1` to `capture-2` finished
+	dispatcher.OnAgentFinishedTableOperation("capture-2", 1, defaultEpoch)
+
+	err = dispatcher.DrainCapture("capture-2")
+	require.Nil(t, err)
+
+	checkpointTs, resolvedTs, err = dispatcher.Tick(ctx, 1300, []model.TableID{0, 1, 2, 3, 4, 5}, mockCaptureInfos)
+	require.Nil(t, err)
+	require.Equal(t, CheckpointCannotProceed, checkpointTs)
+	require.Equal(t, CheckpointCannotProceed, resolvedTs)
+	communicator.AssertExpectations(t)
+
+	// capture is draining now, `MoveTable` should be a no-op.
+	dispatcher.MoveTable(5, "capture-1")
+	require.False(t, dispatcher.moveTableManager.HaveJobsByCaptureID("capture-1"))
 }
 
 func TestManualMoveTableWhileAddingTable(t *testing.T) {

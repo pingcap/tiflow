@@ -429,7 +429,7 @@ func (o *ownerImpl) clusterVersionConsistent(captures map[model.CaptureID]*model
 
 func (o *ownerImpl) handleDrainCaptures(target model.CaptureID, done chan<- error) {
 	for _, changefeed := range o.changefeeds {
-		// errors should be checked here.
+		// todo: errors should be checked here.
 		_ = changefeed.scheduler.DrainCapture(target)
 	}
 	close(done)

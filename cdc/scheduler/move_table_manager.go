@@ -74,21 +74,27 @@ type moveTableManager interface {
 	// moved, and the request to de-schedule the given table has already been sent.
 	GetTargetByTableID(tableID model.TableID) (target model.CaptureID, ok bool)
 
+	// HaveJobsByCaptureID returns true if there is any processing move table jobs
+	// not finished yet, which target capture is the given `target`.
+	HaveJobsByCaptureID(target model.CaptureID) bool
+
 	// MarkDone informs the moveTableManager that the given table has successfully
 	// been moved.
 	MarkDone(tableID model.TableID)
 
 	// OnCaptureRemoved informs the moveTableManager that a capture has gone offline.
 	// Then the moveTableManager will clear all pending jobs to that capture.
-	// When draining the capture, it can also be treated as going offline, also
-	// remove it.to prevent new tables dispatched to the draining capture.
+	// `DrainCapture` can also be treated as the capture going offline, also
+	// remove it, to prevent new tables dispatched.
 	OnCaptureRemoved(captureID model.CaptureID)
 }
 
 type moveTableJobStatus int
 
 const (
+	// moveTableJobStatusReceived indicate the manual move table job is received by not executed yet.
 	moveTableJobStatusReceived = moveTableJobStatus(iota + 1)
+	// moveTableJobStatusRemoved indicate the `remove the target table` is sent to the source capture.
 	moveTableJobStatusRemoved
 )
 
@@ -182,6 +188,18 @@ func (m *moveTableManagerImpl) GetTargetByTableID(tableID model.TableID) (model.
 	}
 
 	return job.target, true
+}
+
+func (m *moveTableManagerImpl) HaveJobsByCaptureID(target model.CaptureID) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	for _, job := range m.moveTableJobs {
+		if job.target == target {
+			return true
+		}
+	}
+	return false
 }
 
 func (m *moveTableManagerImpl) MarkDone(tableID model.TableID) {

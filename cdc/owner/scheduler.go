@@ -52,8 +52,8 @@ type scheduler interface {
 
 	// Close closes the scheduler and releases resources.
 	Close(ctx context.Context)
-	// DrainCapture is used to trigger manually moves all tables
-	// at the target capture to other nodes.
+
+	// DrainCapture is used to drop all tables at the target capture.
 	DrainCapture(target model.CaptureID) error
 }
 

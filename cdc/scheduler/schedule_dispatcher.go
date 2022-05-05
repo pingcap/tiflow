@@ -52,7 +52,8 @@ type ScheduleDispatcher interface {
 	Rebalance()
 
 	// DrainCapture remove all tables from the target capture.
-	// It is called when a capture shuts down.
+	// should only be called when a capture is planning to shut down.
+	// It should be thread-safe.
 	DrainCapture(target model.CaptureID) error
 }
 
@@ -102,8 +103,7 @@ type BaseScheduleDispatcher struct {
 	lastTickCaptureCount int
 	needRebalance        bool
 
-	// capture is draining, should remove all tables on the target capture to other captures
-	// only one capture should be drained at any time.
+	// at most one capture can be drained at any time.
 	drainTarget model.CaptureID
 
 	// read only fields
@@ -276,14 +276,16 @@ func (s *BaseScheduleDispatcher) Tick(
 	}
 
 	checkAllTasksNormal := func() bool {
-		result := s.tables.CountTableByStatus(util.RunningTable) == len(currentTables) &&
+		normal := s.tables.CountTableByStatus(util.RunningTable) == len(currentTables) &&
 			s.tables.CountTableByStatus(util.AddingTable) == 0 &&
 			s.tables.CountTableByStatus(util.RemovingTable) == 0
-		// when draining capture, tables should be in `AddingTable` status,
-		// after all tables become `Running`, treat it as a signal that the capture
+		// when draining capture, tables in the `AddingTable` status,
+		// once all tables become `Running`, treat it as the signal that the capture
 		// draining process finished.
-		s.drainTarget = captureIDNotDraining
-		return result
+		if normal {
+			s.drainTarget = captureIDNotDraining
+		}
+		return normal
 	}
 	if !checkAllTasksNormal() {
 		return CheckpointCannotProceed, CheckpointCannotProceed, nil
@@ -495,6 +497,14 @@ func (s *BaseScheduleDispatcher) removeTable(
 
 // MoveTable implements the interface SchedulerDispatcher.
 func (s *BaseScheduleDispatcher) MoveTable(tableID model.TableID, target model.CaptureID) {
+	if s.drainTarget != captureIDNotDraining {
+		log.Info("Move Table command has been ignored, "+
+			"because one capture is draining",
+			zap.Int64("tableID", tableID),
+			zap.String("targetCapture", target),
+			zap.String("drainingTarget", s.drainTarget))
+		return
+	}
 	if !s.moveTableManager.Add(tableID, target) {
 		log.Info("Move Table command has been ignored, "+
 			"because the last user triggered move has not finished",
@@ -537,11 +547,13 @@ func (s *BaseScheduleDispatcher) handleMoveTableJobs(ctx context.Context) (bool,
 
 // Rebalance implements the interface ScheduleDispatcher.
 func (s *BaseScheduleDispatcher) Rebalance() {
-	// if one capture is draining, do not rebalance tables to
-	// prevent interfere the draining process.
-	if !s.draining() {
-		s.needRebalance = true
+	if s.drainTarget != captureIDNotDraining {
+		log.Info("Rebalance command has been ignored, "+
+			"because one capture is draining",
+			zap.String("drainingTarget", s.drainTarget))
+		return
 	}
+	s.needRebalance = true
 }
 
 func (s *BaseScheduleDispatcher) rebalance(ctx context.Context) (done bool, err error) {
@@ -579,16 +591,23 @@ func (s *BaseScheduleDispatcher) DrainCapture(target model.CaptureID) error {
 			zap.Int("count", count))
 		return cerror.ErrSchedulerDrainCaptureNotAllowed.GenWithStack("adding tables")
 	}
-	if s.drainTarget == captureIDNotDraining {
-		s.drainTarget = target
-		// disable rebalance if try to `drain the capture`
-		s.needRebalance = false
-		return nil
+	if s.moveTableManager.HaveJobsByCaptureID(target) {
+		log.Warn("DrainCapture: not allowed since have processing move table jobs",
+			zap.String("target", target))
+		return cerror.ErrSchedulerDrainCaptureNotAllowed.GenWithStack("processing move table jobs")
 	}
-	log.Warn("other capture is draining, new one is not allowed at moment",
-		zap.String("drainingTarget", s.drainTarget),
-		zap.String("target", target))
-	return cerror.ErrSchedulerDrainCaptureNotAllowed.GenWithStack("other capture is draining")
+
+	if s.drainTarget != captureIDNotDraining {
+		log.Warn("DrainCapture: not allowed since other capture is draining now",
+			zap.String("drainingCapture", s.drainTarget),
+			zap.String("target", target))
+		return cerror.ErrSchedulerDrainCaptureNotAllowed.GenWithStack("other capture is draining")
+	}
+
+	s.drainTarget = target
+	// disable rebalance if try to `drain the capture`
+	s.needRebalance = false
+	return nil
 }
 
 // OnAgentFinishedTableOperation is called when a table operation has been finished by
@@ -731,7 +750,7 @@ func (s *BaseScheduleDispatcher) OnAgentCheckpoint(captureID model.CaptureID, ch
 	status.ResolvedTs = resolvedTs
 }
 
-// draining return true if there is any capture is draining.
-func (s *BaseScheduleDispatcher) draining() bool {
-	return s.drainTarget != captureIDNotDraining
-}
+//// draining return true if there is any capture is draining.
+//func (s *BaseScheduleDispatcher) draining() bool {
+//	return s.drainTarget != captureIDNotDraining
+//}
