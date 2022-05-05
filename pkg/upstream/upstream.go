@@ -182,12 +182,12 @@ func (up *Upstream) close() {
 	log.Info("upStream closed", zap.Uint64("cluster id", up.clusterID))
 }
 
-// IsNormal return true if the upstream is normal.
+// IsNormal returns true if the upstream is normal.
 func (up *Upstream) IsNormal() bool {
 	return atomic.LoadInt32(&up.status) == normal
 }
 
-// IsNormal return true if the upstream is closed.
+// IsClosed returns true if the upstream is closed.
 func (up *Upstream) IsClosed() bool {
 	return atomic.LoadInt32(&up.status) == closed
 }
