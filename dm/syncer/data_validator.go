@@ -1109,6 +1109,7 @@ func (v *DataValidator) getAllErrorCount(timeout time.Duration) ([errorStateType
 	if err != nil {
 		v.L.Warn("failed to create downstream db", zap.Error(err))
 	} else {
+		defer dbconn.CloseBaseDB(tctx, toDB)
 		countMap, err = v.persistHelper.loadErrorCount(tctx, toDB)
 		if err != nil {
 			v.L.Warn("failed to load error count", zap.Error(err))
