@@ -886,7 +886,7 @@ func TestDrainingCapture(t *testing.T) {
 		AdvertiseAddr: "fakeip:1",
 	}
 
-	// drain the `capture-2`, no need to wait for upgraded capture goes online.
+	// drain the `capture-2`
 	err = dispatcher.DrainCapture("capture-2")
 	require.Nil(t, err)
 	communicator.On("Announce", mock.Anything, "cf-1", "capture-4").Return(true, nil)
@@ -902,14 +902,27 @@ func TestDrainingCapture(t *testing.T) {
 	require.Nil(t, err)
 	require.Equal(t, CheckpointCannotProceed, checkpointTs)
 	require.Equal(t, CheckpointCannotProceed, resolvedTs)
+
+	// all capture-2's tables should be in `RemovingTable`
+	tablesByCapture = dispatcher.tables.GetAllTablesGroupedByCaptures()
+	require.Equal(t, 3, len(tablesByCapture["capture-2"]))
+	for _, record := range tablesByCapture["capture-2"] {
+		require.Equal(t, util.RemovingTable, record.Status)
+		dispatcher.OnAgentFinishedTableOperation("capture-2", record.TableID, defaultEpoch)
+	}
+	// this tick should add tables to other captures
+	checkpointTs, resolvedTs, err = dispatcher.Tick(ctx, 1300, []model.TableID{0, 1, 2, 3, 4, 5}, mockCaptureInfos)
+	require.Nil(t, err)
+	require.Equal(t, CheckpointCannotProceed, checkpointTs)
+	require.Equal(t, CheckpointCannotProceed, resolvedTs)
+
 	// all capture-2's table should be dispatched to the new capture-4
 	require.Equal(t, dispatcher.tables.CountTableByCaptureID("capture-4"), 3)
 	// receive ack message from agent
 	tables := dispatcher.tables.GetAllTablesGroupedByCaptures()["capture-4"]
 	for tableID, record := range tables {
-		if record.Status == util.AddingTable {
-			dispatcher.OnAgentFinishedTableOperation("capture-4", tableID, defaultEpoch)
-		}
+		require.Equal(t, util.AddingTable, record.Status)
+		dispatcher.OnAgentFinishedTableOperation("capture-4", tableID, defaultEpoch)
 	}
 	// capture-4 inherit all tables from capture-2, so the checkpointTs / resolvedTs should identical to capture-2's.
 	dispatcher.OnAgentCheckpoint("capture-4", 1300, 1450)
