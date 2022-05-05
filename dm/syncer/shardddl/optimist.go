@@ -193,7 +193,7 @@ func (o *Optimist) GetRedirectOperation(ctx context.Context, info optimism.Info,
 				}
 			}
 			ctx3, cancel3 := context.WithCancel(ctx2)
-			go optimism.WatchOperationPut(ctx3, o.cli, o.task, o.source, info.UpSchema, info.UpTable, rev2, ch, errCh)
+			go optimism.WatchOperationPut(ctx3, o.cli, o.task, o.source, info.UpSchema, info.UpTable, rev2+1, ch, errCh)
 			select {
 			case op = <-ch:
 				cancel3()
