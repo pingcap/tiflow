@@ -442,6 +442,11 @@ func (h logHeap) Less(i, j int) bool {
 	if h[j].data.RedoRow == nil || h[j].data.RedoRow.Row == nil {
 		return false
 	}
+
+	if h[i].data.RedoRow.Row.CommitTs == h[j].data.RedoRow.Row.CommitTs &&
+		h[i].data.RedoRow.Row.StartTs < h[j].data.RedoRow.Row.StartTs {
+		return true
+	}
 	return h[i].data.RedoRow.Row.CommitTs < h[j].data.RedoRow.Row.CommitTs
 }
 

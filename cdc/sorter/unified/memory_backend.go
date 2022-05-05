@@ -115,8 +115,8 @@ func (w *memoryBackEndWriter) writeNext(event *model.PolymorphicEvent) error {
 	failpoint.Inject("sorterDebug", func() {
 		if event.CRTs < w.maxTs {
 			log.Panic("memoryBackEnd: ts regressed, bug?",
-				zap.Uint64("prev-ts", w.maxTs),
-				zap.Uint64("cur-ts", event.CRTs))
+				zap.Uint64("prevTs", w.maxTs),
+				zap.Uint64("curTs", event.CRTs))
 		}
 		w.maxTs = event.CRTs
 	})

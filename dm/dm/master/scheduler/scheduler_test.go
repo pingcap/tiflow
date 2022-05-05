@@ -20,6 +20,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -1049,7 +1050,7 @@ func (t *testSchedulerSuite) TestWatchWorkerEventEtcdCompact() {
 	ha.WatchWorkerEvent(ctx, t.etcdTestCli, startRev, workerEvCh, workerErrCh)
 	select {
 	case err := <-workerErrCh:
-		require.Equal(t.T(), etcdErrCompacted, err)
+		require.Equal(t.T(), etcdErrCompacted, errors.Cause(err))
 	case <-time.After(time.Second):
 		t.T().Fatal("fail to get etcd error compacted")
 	}

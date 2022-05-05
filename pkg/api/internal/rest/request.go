@@ -57,7 +57,7 @@ type Request struct {
 	// retry options
 	backoffBaseDelay time.Duration
 	backoffMaxDelay  time.Duration
-	maxRetries       int64
+	maxRetries       uint64
 
 	// output
 	err  error
@@ -75,7 +75,7 @@ func NewRequest(c *CDCRESTClient) *Request {
 
 	var timeout time.Duration
 	if c.Client != nil {
-		timeout = c.Client.Timeout
+		timeout = c.Client.Timeout()
 	}
 
 	r := &Request{
@@ -188,7 +188,7 @@ func (r *Request) WithBackoffMaxDelay(delay time.Duration) *Request {
 }
 
 // WithMaxRetries specifies the maximum times a request will retry.
-func (r *Request) WithMaxRetries(maxRetries int64) *Request {
+func (r *Request) WithMaxRetries(maxRetries uint64) *Request {
 	if r.err != nil {
 		return r
 	}
@@ -309,6 +309,7 @@ func (r *Request) Do(ctx context.Context) (res *Result) {
 				return
 			}
 			// close the body to let the TCP connection be reused after reconnecting
+			// see https://github.com/golang/go/blob/go1.18.1/src/net/http/response.go#L62-L64
 			_, _ = io.Copy(ioutil.Discard, resp.Body)
 			resp.Body.Close()
 		}()

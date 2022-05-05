@@ -2986,6 +2986,72 @@ description = ""
 workaround = ""
 tags = ["internal", "high"]
 
+[error.DM-ha-42501]
+message = "fail to do etcd txn operation: %s"
+description = ""
+workaround = "Please check dm-master's node status and the network between this node and dm-master"
+tags = ["internal", "high"]
+
+[error.DM-ha-42502]
+message = "meets invalid ha item: %s"
+description = ""
+workaround = "Please check if there is any compatible problem and invalid manual etcd operations"
+tags = ["internal", "high"]
+
+[error.DM-ha-42503]
+message = "fail to watch etcd: %s"
+description = ""
+workaround = "Please check dm-master's node status and the network between this node and dm-master"
+tags = ["internal", "high"]
+
+[error.DM-ha-42504]
+message = "fail to do etcd lease operation: %s"
+description = ""
+workaround = "Please check dm-master's node status and the network between this node and dm-master"
+tags = ["internal", "high"]
+
+[error.DM-ha-42505]
+message = "fail to keepalive to etcd: %s"
+description = ""
+workaround = "Please check dm-master's node status and the network between this node and dm-master"
+tags = ["internal", "high"]
+
+[error.DM-validator-43001]
+message = "failed to load persisted data"
+description = ""
+workaround = ""
+tags = ["internal", "high"]
+
+[error.DM-validator-43002]
+message = "failed to persist checkpoint and data"
+description = ""
+workaround = ""
+tags = ["internal", "high"]
+
+[error.DM-validator-43003]
+message = "failed to get event"
+description = ""
+workaround = ""
+tags = ["internal", "high"]
+
+[error.DM-validator-43004]
+message = "failed to process event"
+description = ""
+workaround = ""
+tags = ["internal", "high"]
+
+[error.DM-validator-43005]
+message = "failed to validate row change"
+description = ""
+workaround = ""
+tags = ["internal", "high"]
+
+[error.DM-validator-43006]
+message = "validator not found for task %s"
+description = ""
+workaround = ""
+tags = ["not-set", "medium"]
+
 [error.DM-schema-tracker-44001]
 message = "saved schema of `%s`.`%s` is not proper JSON"
 description = ""

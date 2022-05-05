@@ -186,8 +186,8 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 			// Check whether the response is stale.
 			if worker.revision >= response.Header.GetRevision() {
 				log.Info("Stale Etcd event dropped",
-					zap.Int64("event-revision", response.Header.GetRevision()),
-					zap.Int64("previous-revision", worker.revision),
+					zap.Int64("eventRevision", response.Header.GetRevision()),
+					zap.Int64("previousRevision", worker.revision),
 					zap.Any("events", response.Events),
 					zap.String("role", role))
 				continue

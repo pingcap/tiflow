@@ -31,7 +31,7 @@ type txnsWithTheSameCommitTs struct {
 func (t *txnsWithTheSameCommitTs) Append(row *model.RowChangedEvent) {
 	if row.CommitTs != t.commitTs {
 		log.Panic("unexpected row change event",
-			zap.Uint64("commitTs of txn", t.commitTs),
+			zap.Uint64("commitTs", t.commitTs),
 			zap.Any("row", row))
 	}
 
@@ -86,7 +86,7 @@ func (c *unresolvedTxnCache) Append(filter *filter.Filter, rows ...*model.RowCha
 	appendRows := 0
 	for _, row := range rows {
 		if filter != nil && filter.ShouldIgnoreDMLEvent(row.StartTs, row.Table.Schema, row.Table.Table) {
-			log.Info("Row changed event ignored", zap.Uint64("start-ts", row.StartTs))
+			log.Info("Row changed event ignored", zap.Uint64("startTs", row.StartTs))
 			continue
 		}
 		txns := c.unresolvedTxns[row.Table.TableID]

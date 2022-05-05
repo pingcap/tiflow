@@ -73,23 +73,15 @@ func (f clientFunc) RoundTrip(req *http.Request) (*http.Response, error) {
 	return f(req)
 }
 
-func testClient(fn clientFunc) *httputil.Client {
-	return &httputil.Client{
-		Client: http.Client{
-			Transport: fn,
-		},
-	}
-}
-
 func TestRequestHeader(t *testing.T) {
-	cli := testClient(func(req *http.Request) (*http.Response, error) {
+	cli := httputil.NewTestClient(clientFunc(func(req *http.Request) (*http.Response, error) {
 		require.Equal(t, req.Header.Get("signature"), "test-header1")
 
 		return &http.Response{
 			StatusCode: http.StatusOK,
 			Body:       ioutil.NopCloser(bytes.NewReader([]byte{})),
 		}, nil
-	})
+	}))
 	req := NewRequestWithClient(&url.URL{Path: "/test"}, "", nil).WithMethod(HTTPMethodGet)
 	req.WithHeader("signature", "test-header2")
 	req.WithHeader("signature", "test-header1")

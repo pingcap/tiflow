@@ -417,17 +417,30 @@ message GetValidationStatusRequest {
 }
 
 message ValidationStatus {
+    string task = 1;
+    string source = 2;
+    Stage stage = 3;
+    string validatorBinlog = 4;
+    string validatorBinlogGtid = 5;
+    ProcessResult result = 6;
+    string processedRowsStatus = 7;
+    string pendingRowsStatus = 8;
+    string allErrorRowsStatus = 9;
+}
+
+message ValidationTableStatus {
     string source = 1;
     string srcTable = 2;
     string dstTable = 3;
-    string validationStatus = 4;
+    Stage stage = 4;
     string message = 5;
 }
 
 message GetValidationStatusResponse {
     bool result = 1;
     string msg = 2;
-    repeated ValidationStatus status = 3;
+    repeated ValidationStatus validators = 3;
+    repeated ValidationTableStatus tableStatuses = 4;
 }
 message GetValidationErrorRequest {
     ValidateErrorState errState = 1;
