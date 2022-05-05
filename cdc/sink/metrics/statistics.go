@@ -70,7 +70,7 @@ func NewStatistics(ctx context.Context, t sinkType) *Statistics {
 	statistics.metricExecDDLHis = ExecDDLHistogram.
 		WithLabelValues(statistics.changefeedID.Namespace, statistics.changefeedID.ID, s)
 	statistics.metricExecErrCnt = ExecutionErrorCounter.
-		WithLabelValues(statistics.changefeedID.Namespace, statistics.changefeedID.ID, s)
+		WithLabelValues(statistics.changefeedID.Namespace, statistics.changefeedID.ID)
 
 	// Flush metrics in background for better accuracy and efficiency.
 	changefeedID := statistics.changefeedID

@@ -93,7 +93,7 @@ var (
 			Name:      "batch_resolved_event_size",
 			Help:      "The number of region in one batch resolved ts event",
 			Buckets:   prometheus.ExponentialBuckets(2, 2, 16),
-		}, []string{"namespace", "namespace", "changefeed"})
+		}, []string{"namespace", "changefeed"})
 	grpcPoolStreamGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
