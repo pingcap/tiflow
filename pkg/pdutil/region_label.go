@@ -38,7 +38,7 @@ const (
 	addMetaJSON = `{
 		"sets": [
 			{
-				"id": "user/ticdc/meta",
+				"id": "ticdc/meta",
 				"labels": [
 					{
 						"key": "data-type",

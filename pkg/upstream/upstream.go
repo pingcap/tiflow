@@ -25,7 +25,7 @@ import (
 	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/pkg/config"
-	"github.com/pingcap/tiflow/pkg/pdtime"
+	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/tikv/client-go/v2/tikv"
@@ -55,7 +55,7 @@ type Upstream struct {
 	KVStorage   tidbkv.Storage
 	GrpcPool    kv.GrpcPool
 	RegionCache *tikv.RegionCache
-	PDClock     pdtime.Clock
+	PDClock     pdutil.Clock
 	GCManager   gc.Manager
 
 	wg     *sync.WaitGroup
@@ -71,7 +71,7 @@ func newUpstream(clusterID uint64, pdEndpoints []string, securityConfig *config.
 
 // NewUpstream4Test new a upstream for unit test.
 func NewUpstream4Test(pdClient pd.Client) *Upstream {
-	pdClock := pdtime.NewClock4Test()
+	pdClock := pdutil.NewClock4Test()
 	gcManager := gc.NewManager(pdClient, pdClock)
 	res := &Upstream{PDClient: pdClient, PDClock: pdClock, GCManager: gcManager, status: uninit}
 	res.status = normal
@@ -127,7 +127,7 @@ func (up *Upstream) init(ctx context.Context) error {
 	up.RegionCache = tikv.NewRegionCache(up.PDClient)
 	log.Info("upstream's RegionCache created", zap.Uint64("clusterID", up.clusterID))
 
-	up.PDClock, err = pdtime.NewClock(ctx, up.PDClient)
+	up.PDClock, err = pdutil.NewClock(ctx, up.PDClient)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -135,6 +135,15 @@ func (up *Upstream) init(ctx context.Context) error {
 
 	up.GCManager = gc.NewManager(up.PDClient, up.PDClock)
 	log.Info("upstream's GCManager created", zap.Uint64("clusterID", up.clusterID))
+
+	// verify that meta region isolated from data region
+	err = pdutil.Verify(ctx, up.PDClient, pdutil.DefaultMaxRetry)
+	if err != nil {
+		log.Warn("Fail to verify region label rule",
+			zap.Error(err),
+			zap.Uint64("upstreamClusterID", up.clusterID),
+			zap.Strings("upstramEndpoints", up.pdEndpoints))
+	}
 
 	up.wg.Add(1)
 	go func() {
