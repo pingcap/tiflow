@@ -80,7 +80,7 @@ func FilterAndReduceTxns(
 						event.RowID != first.RowID {
 						log.Panic(
 							"there should be at most one mark row for each txn",
-							zap.Uint64("start-ts", event.StartTs),
+							zap.Uint64("startTs", event.StartTs),
 							zap.Any("first", first),
 							zap.Any("second", event))
 					}

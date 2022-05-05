@@ -219,8 +219,8 @@ func (r *fileBackEndReader) readNext() (*model.PolymorphicEvent, error) {
 			if r.totalEvents != r.readEvents {
 				log.Panic("unexpected EOF",
 					zap.String("file", r.backEnd.fileName),
-					zap.Uint64("expected-num-events", r.totalEvents),
-					zap.Uint64("actual-num-events", r.readEvents))
+					zap.Uint64("expectedNumEvents", r.totalEvents),
+					zap.Uint64("actualNumEvents", r.readEvents))
 			}
 			return nil, nil
 		}

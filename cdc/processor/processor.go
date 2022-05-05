@@ -680,6 +680,7 @@ func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.S
 	kvStorage := p.upStream.KVStorage
 	ddlspans := []regionspan.Span{regionspan.GetDDLSpan(), regionspan.GetAddIndexDDLSpan()}
 	checkpointTs := p.changefeed.Info.GetCheckpointTs(p.changefeed.Status)
+	kvCfg := config.GetGlobalServerConfig().KVClient
 	stdCtx := util.PutTableInfoInCtx(ctx, -1, puller.DDLPullerTableName)
 	stdCtx = util.PutChangefeedIDInCtx(stdCtx, ctx.ChangefeedVars().ID)
 	stdCtx = util.PutRoleInCtx(stdCtx, util.RoleProcessor)
@@ -691,7 +692,10 @@ func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.S
 		p.upStream.KVStorage,
 		p.upStream.PDClock,
 		ctx.ChangefeedVars().ID,
-		checkpointTs, ddlspans, false)
+		checkpointTs,
+		ddlspans,
+		kvCfg,
+	)
 	meta, err := kv.GetSnapshotMeta(kvStorage, checkpointTs)
 	if err != nil {
 		return nil, errors.Trace(err)

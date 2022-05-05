@@ -1465,7 +1465,7 @@ func TestExecDMLRollbackErrRetryable(t *testing.T) {
 		// normal db
 		db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
 		require.Nil(t, err)
-		for i := 0; i < int(defaultDMLMaxRetryTime); i++ {
+		for i := 0; i < int(defaultDMLMaxRetry); i++ {
 			mock.ExpectBegin()
 			mock.ExpectExec("REPLACE INTO `s1`.`t1`(`a`) VALUES (?),(?)").
 				WithArgs(1, 2).
@@ -1477,11 +1477,11 @@ func TestExecDMLRollbackErrRetryable(t *testing.T) {
 	}
 	backupGetDBConn := GetDBConnImpl
 	GetDBConnImpl = mockGetDBConnErrDatabaseNotExists
-	backupMaxRetry := defaultDMLMaxRetryTime
-	defaultDMLMaxRetryTime = 2
+	backupMaxRetry := defaultDMLMaxRetry
+	defaultDMLMaxRetry = 2
 	defer func() {
 		GetDBConnImpl = backupGetDBConn
-		defaultDMLMaxRetryTime = backupMaxRetry
+		defaultDMLMaxRetry = backupMaxRetry
 	}()
 
 	ctx, cancel := context.WithCancel(context.Background())
