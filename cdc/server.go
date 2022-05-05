@@ -223,7 +223,8 @@ func (s *Server) startStatusHTTP(lis net.Listener) error {
 	RegisterRoutes(router, s.capture, registry)
 
 	// No need to configure TLS because it is already handled by `s.tcpServer`.
-	s.statusServer = &http.Server{Handler: router}
+	// Add ReadTimeout and WriteTimeout to avoid some abnormal connections never close.
+	s.statusServer = &http.Server{Handler: router, ReadTimeout: 10 * time.Minute, WriteTimeout: 10 * time.Minute}
 
 	go func() {
 		log.Info("http server is running", zap.String("addr", conf.Addr))

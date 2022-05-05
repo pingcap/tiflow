@@ -36,6 +36,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
+	ckafka "github.com/pingcap/tiflow/pkg/kafka"
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
@@ -363,6 +364,16 @@ func NewKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 	filter *filter.Filter, replicaConfig *config.ReplicaConfig,
 	opts map[string]string, errCh chan error,
 ) (*mqSink, error) {
+	// we must close adminClient when this func return cause by an error
+	// otherwise the adminClient will never be closed and lead to an goroutine leak
+	var err error
+	var adminClient ckafka.ClusterAdminClient
+	defer func() {
+		if err != nil && adminClient != nil {
+			adminClient.Close()
+		}
+	}()
+
 	topic := strings.TrimFunc(sinkURI.Path, func(r rune) bool {
 		return r == '/'
 	})
@@ -384,7 +395,7 @@ func NewKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 		return nil, errors.Trace(err)
 	}
 
-	adminClient, err := kafka.NewAdminClientImpl(baseConfig.BrokerEndpoints, saramaConfig)
+	adminClient, err = kafka.NewAdminClientImpl(baseConfig.BrokerEndpoints, saramaConfig)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}

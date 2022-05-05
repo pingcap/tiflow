@@ -263,7 +263,7 @@ func (h *openAPI) CreateChangefeed(c *gin.Context) {
 		return
 	}
 
-	info, err := verifyCreateChangefeedConfig(c, changefeedConfig, h.capture)
+	info, err := verifyCreateChangefeedConfig(ctx, changefeedConfig, h.capture)
 	if err != nil {
 		_ = c.Error(err)
 		return
