@@ -192,7 +192,8 @@ func NewTablePipeline(ctx cdcContext.Context,
 
 	perTableMemoryQuota := serverConfig.GetGlobalServerConfig().PerTableMemoryQuota
 	log.Debug("creating table flow controller",
-		zap.String("changefeed", ctx.ChangefeedVars().ID),
+		zap.String("namesapce", ctx.ChangefeedVars().ID.Namespace),
+		zap.String("changefeed", ctx.ChangefeedVars().ID.ID),
 		zap.String("tableName", tableName),
 		zap.Int64("tableID", tableID),
 		zap.Uint64("quota", perTableMemoryQuota))

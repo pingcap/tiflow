@@ -126,7 +126,7 @@ func (s *mockCloseControlSink) Close(ctx context.Context) error {
 func TestStatus(t *testing.T) {
 	ctx := cdcContext.NewContext(context.Background(), &cdcContext.GlobalVars{})
 	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
-		ID: "changefeed-id-test-status",
+		ID: model.DefaultChangeFeedID("changefeed-id-test-status"),
 		Info: &model.ChangeFeedInfo{
 			StartTs: oracle.GoTimeToTS(time.Now()),
 			Config:  config.GetDefaultReplicaConfig(),
@@ -240,7 +240,7 @@ func TestStatus(t *testing.T) {
 func TestStopStatus(t *testing.T) {
 	ctx := cdcContext.NewContext(context.Background(), &cdcContext.GlobalVars{})
 	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
-		ID: "changefeed-id-test-status",
+		ID: model.DefaultChangeFeedID("changefeed-id-test-status"),
 		Info: &model.ChangeFeedInfo{
 			StartTs: oracle.GoTimeToTS(time.Now()),
 			Config:  config.GetDefaultReplicaConfig(),
@@ -279,7 +279,7 @@ func TestStopStatus(t *testing.T) {
 func TestManyTs(t *testing.T) {
 	ctx := cdcContext.NewContext(context.Background(), &cdcContext.GlobalVars{})
 	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
-		ID: "changefeed-id-test-many-ts",
+		ID: model.DefaultChangeFeedID("changefeed-id-test"),
 		Info: &model.ChangeFeedInfo{
 			StartTs: oracle.GoTimeToTS(time.Now()),
 			Config:  config.GetDefaultReplicaConfig(),
@@ -441,7 +441,7 @@ func TestManyTs(t *testing.T) {
 func TestIgnoreEmptyRowChangeEvent(t *testing.T) {
 	ctx := cdcContext.NewContext(context.Background(), &cdcContext.GlobalVars{})
 	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
-		ID: "changefeed-id-test-ignore-empty-row-change-event",
+		ID: model.DefaultChangeFeedID("changefeed-id-test"),
 		Info: &model.ChangeFeedInfo{
 			StartTs: oracle.GoTimeToTS(time.Now()),
 			Config:  config.GetDefaultReplicaConfig(),
@@ -463,7 +463,7 @@ func TestIgnoreEmptyRowChangeEvent(t *testing.T) {
 func TestSplitUpdateEventWhenEnableOldValue(t *testing.T) {
 	ctx := cdcContext.NewContext(context.Background(), &cdcContext.GlobalVars{})
 	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
-		ID: "changefeed-id-test-split-update-event",
+		ID: model.DefaultChangeFeedID("changefeed-id-test"),
 		Info: &model.ChangeFeedInfo{
 			StartTs: oracle.GoTimeToTS(time.Now()),
 			Config:  config.GetDefaultReplicaConfig(),
@@ -521,7 +521,7 @@ func TestSplitUpdateEventWhenDisableOldValue(t *testing.T) {
 	cfg := config.GetDefaultReplicaConfig()
 	cfg.EnableOldValue = false
 	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
-		ID: "changefeed-id-test-split-update-event",
+		ID: model.DefaultChangeFeedID("changefeed-id-test"),
 		Info: &model.ChangeFeedInfo{
 			StartTs: oracle.GoTimeToTS(time.Now()),
 			Config:  cfg,
@@ -662,7 +662,7 @@ func TestFlushSinkReleaseFlowController(t *testing.T) {
 	cfg := config.GetDefaultReplicaConfig()
 	cfg.EnableOldValue = false
 	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
-		ID: "changefeed-id-test-flushSink",
+		ID: model.DefaultChangeFeedID("changefeed-id-test"),
 		Info: &model.ChangeFeedInfo{
 			StartTs: oracle.GoTimeToTS(time.Now()),
 			Config:  cfg,

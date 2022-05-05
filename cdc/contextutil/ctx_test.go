@@ -11,13 +11,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package util
+package contextutil
 
 import (
 	"context"
 	"testing"
 
 	"github.com/pingcap/tidb/store/mockstore"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 )
@@ -36,29 +38,29 @@ func TestCaptureIDNotSet(t *testing.T) {
 }
 
 func TestShouldReturnChangefeedID(t *testing.T) {
-	ctx := PutChangefeedIDInCtx(context.Background(), "ello")
-	require.Equal(t, "ello", ChangefeedIDFromCtx(ctx))
+	ctx := PutChangefeedIDInCtx(context.Background(), model.DefaultChangeFeedID("ello"))
+	require.Equal(t, model.DefaultChangeFeedID("ello"), ChangefeedIDFromCtx(ctx))
 }
 
 func TestCanceledContext(t *testing.T) {
-	ctx := PutChangefeedIDInCtx(context.Background(), "test-cf")
-	require.Equal(t, "test-cf", ChangefeedIDFromCtx(ctx))
+	ctx := PutChangefeedIDInCtx(context.Background(), model.DefaultChangeFeedID("test-cf"))
+	require.Equal(t, model.DefaultChangeFeedID("test-cf"), ChangefeedIDFromCtx(ctx))
 	ctx, cancel := context.WithCancel(ctx)
 	cancel()
-	require.Equal(t, "test-cf", ChangefeedIDFromCtx(ctx))
+	require.Equal(t, model.DefaultChangeFeedID("test-cf"), ChangefeedIDFromCtx(ctx))
 }
 
 func TestChangefeedIDNotSet(t *testing.T) {
-	require.Equal(t, "", ChangefeedIDFromCtx(context.Background()))
+	require.Equal(t, "", ChangefeedIDFromCtx(context.Background()).ID)
 	changefeedID := ChangefeedIDFromCtx(context.Background())
-	require.Equal(t, "", changefeedID)
+	require.Equal(t, "", changefeedID.ID)
 	ctx := context.WithValue(context.Background(), ctxKeyChangefeedID, 1321)
 	changefeedID = ChangefeedIDFromCtx(ctx)
-	require.Equal(t, "", changefeedID)
+	require.Equal(t, "", changefeedID.ID)
 }
 
 func TestShouldReturnTimezone(t *testing.T) {
-	tz, _ := getTimezoneFromZonefile("UTC")
+	tz, _ := util.GetTimezoneFromZonefile("UTC")
 	ctx := PutTimezoneInCtx(context.Background(), tz)
 	tz = TimezoneFromCtx(ctx)
 	require.Equal(t, "UTC", tz.String())
@@ -113,11 +115,11 @@ func TestKVStorageNotSet(t *testing.T) {
 func TestZapFieldWithContext(t *testing.T) {
 	var (
 		capture    string = "127.0.0.1:8200"
-		changefeed string = "test-cf"
+		changefeed        = model.DefaultChangeFeedID("test-cf")
 	)
 	ctx := context.Background()
 	ctx = PutCaptureAddrInCtx(ctx, capture)
 	ctx = PutChangefeedIDInCtx(ctx, changefeed)
 	require.Equal(t, zap.String("capture", capture), ZapFieldCapture(ctx))
-	require.Equal(t, zap.String("changefeed", changefeed), ZapFieldChangefeed(ctx))
+	require.Equal(t, zap.String("changefeed", changefeed.ID), ZapFieldChangefeed(ctx))
 }
