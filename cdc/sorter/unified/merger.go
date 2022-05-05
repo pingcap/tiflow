@@ -25,10 +25,10 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sorter"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -36,14 +36,14 @@ import (
 
 // TODO refactor this into a struct Merger.
 func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out chan *model.PolymorphicEvent, onExit func()) error {
-	changefeedID := util.ChangefeedIDFromCtx(ctx)
+	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
 
 	metricSorterEventCount := sorter.EventCount.MustCurryWith(map[string]string{
-		"changefeed": changefeedID,
+		"changefeed": changefeedID.ID,
 	})
-	metricSorterResolvedTsGauge := sorter.ResolvedTsGauge.WithLabelValues(changefeedID)
-	metricSorterMergerStartTsGauge := sorterMergerStartTsGauge.WithLabelValues(changefeedID)
-	metricSorterMergeCountHistogram := sorterMergeCountHistogram.WithLabelValues(changefeedID)
+	metricSorterResolvedTsGauge := sorter.ResolvedTsGauge.WithLabelValues(changefeedID.ID)
+	metricSorterMergerStartTsGauge := sorterMergerStartTsGauge.WithLabelValues(changefeedID.ID)
+	metricSorterMergeCountHistogram := sorterMergeCountHistogram.WithLabelValues(changefeedID.ID)
 
 	lastResolvedTs := make([]uint64, numSorters)
 	minResolvedTs := uint64(0)
@@ -254,7 +254,7 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 
 		failpoint.Inject("sorterDebug", func() {
 			if sortHeap.Len() > 0 {
-				tableID, tableName := util.TableIDFromCtx(ctx)
+				tableID, tableName := contextutil.TableIDFromCtx(ctx)
 				log.Debug("Unified Sorter: start merging",
 					zap.Int64("tableID", tableID),
 					zap.String("tableName", tableName),
@@ -362,7 +362,7 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 
 			failpoint.Inject("sorterDebug", func() {
 				if counter%10 == 0 {
-					tableID, tableName := util.TableIDFromCtx(ctx)
+					tableID, tableName := contextutil.TableIDFromCtx(ctx)
 					log.Debug("Merging progress",
 						zap.Int64("tableID", tableID),
 						zap.String("tableName", tableName),
@@ -382,7 +382,7 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 
 		failpoint.Inject("sorterDebug", func() {
 			if counter > 0 {
-				tableID, tableName := util.TableIDFromCtx(ctx)
+				tableID, tableName := contextutil.TableIDFromCtx(ctx)
 				log.Debug("Unified Sorter: merging ended",
 					zap.Int64("tableID", tableID),
 					zap.String("tableName", tableName),
@@ -415,7 +415,7 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 			}
 
 			if task == nil {
-				tableID, tableName := util.TableIDFromCtx(ctx)
+				tableID, tableName := contextutil.TableIDFromCtx(ctx)
 				log.Debug("Merger input channel closed, exiting",
 					zap.Int64("tableID", tableID),
 					zap.String("tableName", tableName))

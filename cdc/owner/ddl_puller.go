@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/puller"
@@ -63,7 +64,7 @@ type ddlPullerImpl struct {
 	cancel         context.CancelFunc
 
 	clock        clock.Clock
-	changefeedID string
+	changefeedID model.ChangeFeedID
 }
 
 func newDDLPuller(ctx cdcContext.Context, startTs uint64) (DDLPuller, error) {
@@ -83,8 +84,11 @@ func newDDLPuller(ctx cdcContext.Context, startTs uint64) (DDLPuller, error) {
 			ctx.GlobalVars().RegionCache,
 			kvStorage,
 			ctx.GlobalVars().PDClock,
-			// Add "_ddl_puller" to make it different from table pullers.
-			ctx.ChangefeedVars().ID+"_ddl_puller",
+			model.ChangeFeedID{
+				Namespace: ctx.ChangefeedVars().ID.Namespace,
+				// Add "_ddl_puller" to make it different from table pullers.
+				ID: ctx.ChangefeedVars().ID.ID + "_ddl_puller",
+			},
 			startTs,
 			[]regionspan.Span{regionspan.GetDDLSpan(), regionspan.GetAddIndexDDLSpan()},
 			kvCfg,
@@ -92,23 +96,29 @@ func newDDLPuller(ctx cdcContext.Context, startTs uint64) (DDLPuller, error) {
 	}
 
 	return &ddlPullerImpl{
-		puller:       plr,
-		resolvedTS:   startTs,
-		filter:       f,
-		cancel:       func() {},
-		clock:        clock.New(),
-		changefeedID: ctx.ChangefeedVars().ID + "_ddl_puller",
+		puller:     plr,
+		resolvedTS: startTs,
+		filter:     f,
+		cancel:     func() {},
+		clock:      clock.New(),
+		changefeedID: model.ChangeFeedID{
+			Namespace: ctx.ChangefeedVars().ID.Namespace,
+			// Add "_ddl_puller" to make it different from table pullers.
+			ID: ctx.ChangefeedVars().ID.ID + "_ddl_puller",
+		},
 	}, nil
 }
 
 func (h *ddlPullerImpl) Run(ctx cdcContext.Context) error {
 	ctx, cancel := cdcContext.WithCancel(ctx)
 	h.cancel = cancel
-	log.Info("DDL puller started", zap.String("changefeed", h.changefeedID),
+	log.Info("DDL puller started",
+		zap.String("namespace", h.changefeedID.Namespace),
+		zap.String("changefeed", h.changefeedID.ID),
 		zap.Uint64("resolvedTS", h.resolvedTS))
-	stdCtx := util.PutTableInfoInCtx(ctx, -1, puller.DDLPullerTableName)
-	stdCtx = util.PutChangefeedIDInCtx(stdCtx, ctx.ChangefeedVars().ID)
-	stdCtx = util.PutRoleInCtx(stdCtx, util.RoleProcessor)
+	stdCtx := contextutil.PutTableInfoInCtx(ctx, -1, puller.DDLPullerTableName)
+	stdCtx = contextutil.PutChangefeedIDInCtx(stdCtx, ctx.ChangefeedVars().ID)
+	stdCtx = contextutil.PutRoleInCtx(stdCtx, util.RoleProcessor)
 	g, stdCtx := errgroup.WithContext(stdCtx)
 	lastResolvedTsAdvancedTime := h.clock.Now()
 
@@ -136,20 +146,28 @@ func (h *ddlPullerImpl) Run(ctx cdcContext.Context) error {
 			return errors.Trace(err)
 		}
 		if job == nil {
-			log.Info("ddl job is nil after unmarshal", zap.String("changefeed", h.changefeedID))
+			log.Info("ddl job is nil after unmarshal",
+				zap.String("namespace", h.changefeedID.Namespace),
+				zap.String("changefeed", h.changefeedID.ID))
 			return nil
 		}
 		if h.filter.ShouldDiscardDDL(job.Type) {
-			log.Info("discard the ddl job", zap.String("changefeed", h.changefeedID),
+			log.Info("discard the ddl job",
+				zap.String("namespace", h.changefeedID.Namespace),
+				zap.String("changefeed", h.changefeedID.ID),
 				zap.Int64("jobID", job.ID), zap.String("query", job.Query))
 			return nil
 		}
 		if job.ID == h.lastDDLJobID {
-			log.Warn("ignore duplicated DDL job", zap.String("changefeed", h.changefeedID),
+			log.Warn("ignore duplicated DDL job",
+				zap.String("namespace", h.changefeedID.Namespace),
+				zap.String("changefeed", h.changefeedID.ID),
 				zap.Any("job", job))
 			return nil
 		}
-		log.Info("receive new ddl job", zap.String("changefeed", h.changefeedID),
+		log.Info("receive new ddl job",
+			zap.String("namespace", h.changefeedID.Namespace),
+			zap.String("changefeed", h.changefeedID.ID),
 			zap.Any("job", job))
 
 		h.mu.Lock()
@@ -171,7 +189,8 @@ func (h *ddlPullerImpl) Run(ctx cdcContext.Context) error {
 				duration := h.clock.Since(lastResolvedTsAdvancedTime)
 				if duration > ownerDDLPullerStuckWarnTimeout {
 					log.Warn("ddl puller resolved ts has not advanced",
-						zap.String("changefeed", h.changefeedID),
+						zap.String("namespace", h.changefeedID.Namespace),
+						zap.String("changefeed", h.changefeedID.ID),
 						zap.Duration("duration", duration),
 						zap.Uint64("resolvedTs", h.resolvedTS))
 				}
@@ -208,6 +227,8 @@ func (h *ddlPullerImpl) PopFrontDDL() (uint64, *timodel.Job) {
 }
 
 func (h *ddlPullerImpl) Close() {
-	log.Info("Close the ddl puller", zap.String("changefeed", h.changefeedID))
+	log.Info("Close the ddl puller",
+		zap.String("namespace", h.changefeedID.Namespace),
+		zap.String("changefeed", h.changefeedID.ID))
 	h.cancel()
 }

@@ -23,10 +23,10 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/pingcap/tiflow/pkg/workerpool"
 	"go.uber.org/zap"
 )
@@ -95,7 +95,7 @@ func newHeapSorter(id int, out chan *flushTask) *heapSorter {
 
 // flush should only be called in the same goroutine where the heap is being written to.
 func (h *heapSorter) flush(ctx context.Context, maxResolvedTs uint64) error {
-	changefeedID := util.ChangefeedIDFromCtx(ctx)
+	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
 
 	var (
 		backEnd    backEnd
@@ -108,7 +108,7 @@ func (h *heapSorter) flush(ctx context.Context, maxResolvedTs uint64) error {
 		return nil
 	}
 
-	sorterFlushCountHistogram.WithLabelValues(changefeedID).Observe(float64(h.heap.Len()))
+	sorterFlushCountHistogram.WithLabelValues(changefeedID.ID).Observe(float64(h.heap.Len()))
 
 	// We check if the heap contains only one entry and that entry is a ResolvedEvent.
 	// As an optimization, when the condition is true, we clear the heap and send an empty flush.
@@ -167,7 +167,7 @@ func (h *heapSorter) flush(ctx context.Context, maxResolvedTs uint64) error {
 		}
 	}
 	failpoint.Inject("sorterDebug", func() {
-		tableID, tableName := util.TableIDFromCtx(ctx)
+		tableID, tableName := contextutil.TableIDFromCtx(ctx)
 		log.Debug("Unified Sorter new flushTask",
 			zap.Int64("tableID", tableID),
 			zap.String("tableName", tableName),
@@ -253,7 +253,7 @@ func (h *heapSorter) flush(ctx context.Context, maxResolvedTs uint64) error {
 			backEndFinal = nil
 
 			failpoint.Inject("sorterDebug", func() {
-				tableID, tableName := util.TableIDFromCtx(ctx)
+				tableID, tableName := contextutil.TableIDFromCtx(ctx)
 				log.Debug("Unified Sorter flushTask finished",
 					zap.Int("heapID", task.heapSorterID),
 					zap.Int64("tableID", tableID),

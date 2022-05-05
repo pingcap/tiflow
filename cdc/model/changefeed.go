@@ -31,8 +31,25 @@ import (
 	"go.uber.org/zap"
 )
 
+// DefaultNamespace is the default namespace value,
+// all the old changefeed will be put into default namespace
+const DefaultNamespace = "default"
+
 // ChangeFeedID is the type for change feed ID
-type ChangeFeedID = string
+type ChangeFeedID struct {
+	// Namespace and ID pair is unique in one ticdc cluster
+	// the default value of Namespace is "default"
+	Namespace string
+	ID        string
+}
+
+// DefaultChangeFeedID returns `ChangeFeedID` with default namespace
+func DefaultChangeFeedID(id string) ChangeFeedID {
+	return ChangeFeedID{
+		Namespace: DefaultNamespace,
+		ID:        id,
+	}
+}
 
 // SortEngine is the sorter engine
 type SortEngine = string
