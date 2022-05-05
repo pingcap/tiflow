@@ -29,6 +29,7 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
+	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/r3labs/diff"
@@ -41,9 +42,8 @@ func verifyCreateChangefeedConfig(
 	changefeedConfig model.ChangefeedConfig,
 	capture *capture.Capture,
 ) (*model.ChangeFeedInfo, error) {
-	// 0 is default cluster id
 	// TODO(dongmen): we should pass ClusterID in ChangefeedConfig in the upcoming future
-	upStream := capture.UpstreamManager.Get(0)
+	upStream := capture.UpstreamManager.Get(upstream.DefaultClusterID)
 
 	// verify sinkURI
 	if changefeedConfig.SinkURI == "" {
