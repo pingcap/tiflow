@@ -13,18 +13,32 @@ type (
 	WorkerType       int64
 )
 
+// TODO: using reflect to generate it more generally
+// related to some implement of gorm
+var MasterUpdateColumns = []string{
+	"updated_at",
+	"project_id",
+	"id",
+	"type",
+	"status",
+	"node_id",
+	"address",
+	"epoch",
+	"config",
+}
+
 type MasterMetaKVData struct {
 	ormModel.Model
-	ProjectID  tenant.ProjectID `json:"project-id" gorm:"column:project_id;type:char(36) not null;index:idx_st,priority:1"`
-	ID         MasterID         `json:"id" gorm:"column:id;type:char(36) not null;uniqueIndex:uidx_id"`
+	ProjectID  tenant.ProjectID `json:"project-id" gorm:"column:project_id;type:varchar(64) not null;index:idx_st,priority:1"`
+	ID         MasterID         `json:"id" gorm:"column:id;type:varchar(64) not null;uniqueIndex:uidx_id"`
 	Tp         WorkerType       `json:"type" gorm:"column:type;type:tinyint not null"`
 	StatusCode MasterStatusCode `json:"status" gorm:"column:status;type:tinyint not null;index:idx_st,priority:2"`
-	NodeID     p2p.NodeID       `json:"node-id" gorm:"column:node_id;type:char(36) not null"`
+	NodeID     p2p.NodeID       `json:"node-id" gorm:"column:node_id;type:varchar(64) not null"`
 	Addr       string           `json:"addr" gorm:"column:address;type:varchar(64) not null"`
 	Epoch      Epoch            `json:"epoch" gorm:"column:epoch;type:bigint not null"`
 
 	// Config holds business-specific data
-	Config []byte `json:"config"`
+	Config []byte `json:"config" gorm:"column:config;type:blob"`
 	// TODO: add master status and checkpoint data
 }
 
@@ -34,6 +48,20 @@ func (m *MasterMetaKVData) Marshal() ([]byte, error) {
 
 func (m *MasterMetaKVData) Unmarshal(data []byte) error {
 	return json.Unmarshal(data, m)
+}
+
+// Map is used for update the orm model
+func (m *MasterMetaKVData) Map() map[string]interface{} {
+	return map[string]interface{}{
+		"project_id": m.ProjectID,
+		"id":         m.ID,
+		"type":       m.Tp,
+		"status":     m.StatusCode,
+		"node_id":    m.NodeID,
+		"address":    m.Addr,
+		"epoch":      m.Epoch,
+		"config":     m.Config,
+	}
 }
 
 // Job master statuses

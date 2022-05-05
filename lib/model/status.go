@@ -24,12 +24,25 @@ const (
 	WorkerStatusStopped
 )
 
+// TODO: using reflect to generate it more generally
+// related to some implement of gorm
+var WorkerUpdateColumns = []string{
+	"updated_at",
+	"project_id",
+	"job_id",
+	"id",
+	"type",
+	"status",
+	"errmsg",
+	"ext_bytes",
+}
+
 type WorkerStatus struct {
 	ormModel.Model
-	ProjectID    string           `gorm:"column:project_id;type:char(36) not null"`
-	JobID        string           `gorm:"column:job_id;type:char(36) not null;uniqueIndex:uidx_id,priority:1;index:idx_st,priority:1"`
-	ID           string           `gorm:"column:id;type:char(36) not null;uniqueIndex:uidx_id,priority:2"`
-	Type         int              `gorm:"column:type;type:tinyint not null"`
+	ProjectID    string           `json:"project-id" gorm:"column:project_id;type:varchar(64) not null"`
+	JobID        string           `json:"job-id" gorm:"column:job_id;type:varchar(64) not null;uniqueIndex:uidx_id,priority:1;index:idx_st,priority:1"`
+	ID           string           `json:"id" gorm:"column:id;type:varchar(64) not null;uniqueIndex:uidx_id,priority:2"`
+	Type         int              `json:"type" gorm:"column:type;type:tinyint not null"`
 	Code         WorkerStatusCode `json:"code" gorm:"column:status;type:tinyint not null;index:idx_st,priority:2"`
 	ErrorMessage string           `json:"error-message" gorm:"column:errmsg;type:varchar(128)"`
 
@@ -64,6 +77,19 @@ func (s *WorkerStatus) Unmarshal(bytes []byte) error {
 		return errors.Trace(err)
 	}
 	return nil
+}
+
+// Map is used for update the orm model
+func (s *WorkerStatus) Map() map[string]interface{} {
+	return map[string]interface{}{
+		"project_id": s.ProjectID,
+		"job_id":     s.JobID,
+		"id":         s.ID,
+		"type":       s.Type,
+		"status":     s.Code,
+		"errmsg":     s.ErrorMessage,
+		"ext_bytes":  s.ExtBytes,
+	}
 }
 
 func EncodeWorkerStatusKey(masterID string, workerID string) string {

@@ -21,6 +21,16 @@ type (
 	ExecutorID = model.ExecutorID
 )
 
+var ResourceUpdateColumns = []string{
+	"updated_at",
+	"project_id",
+	"id",
+	"job_id",
+	"worker_id",
+	"executor_id",
+	"deleted",
+}
+
 // ResourceMeta is the records stored in the metastore.
 type ResourceMeta struct {
 	ormModel.Model
@@ -43,6 +53,17 @@ func (m *ResourceMeta) ToQueryResourceResponse() *pb.QueryResourceResponse {
 		CreatorExecutor: string(m.Executor),
 		JobId:           m.Job,
 		CreatorWorkerId: m.Worker,
+	}
+}
+
+func (m *ResourceMeta) Map() map[string]interface{} {
+	return map[string]interface{}{
+		"project_id":  m.ProjectID,
+		"id":          m.ID,
+		"job_id":      m.Job,
+		"worker_id":   m.Worker,
+		"executor_id": m.Executor,
+		"deleted":     m.Deleted,
 	}
 }
 
