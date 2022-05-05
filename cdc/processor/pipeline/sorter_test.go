@@ -41,7 +41,9 @@ func TestUnifiedSorterFileLockConflict(t *testing.T) {
 		config.GetGlobalServerConfig().Debug.EnableDBSorter = true
 	}()
 
-	_, err := unified.NewUnifiedSorter(dir, "test-cf", "test", 0)
+	_, err := unified.NewUnifiedSorter(dir,
+		model.DefaultChangeFeedID("changefeed-id-test"),
+		"test", 0)
 	require.Nil(t, err)
 
 	unified.ResetGlobalPoolWithoutCleanup()

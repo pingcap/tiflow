@@ -238,7 +238,7 @@ func TestExecDDL(t *testing.T) {
 		},
 	})
 	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
-		ID: "changefeed-id-test",
+		ID: model.DefaultChangeFeedID("changefeed-id-test"),
 		Info: &model.ChangeFeedInfo{
 			StartTs: startTs,
 			Config:  config.GetDefaultReplicaConfig(),
@@ -330,7 +330,7 @@ func TestEmitCheckpointTs(t *testing.T) {
 		},
 	})
 	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
-		ID: "changefeed-id-test",
+		ID: model.DefaultChangeFeedID("changefeed-id-test"),
 		Info: &model.ChangeFeedInfo{
 			StartTs: startTs,
 			Config:  config.GetDefaultReplicaConfig(),

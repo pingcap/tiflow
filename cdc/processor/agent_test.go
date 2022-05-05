@@ -95,7 +95,8 @@ func newAgentTestSuite(t *testing.T) *agentTestSuite {
 		cancel: cancel,
 	}
 
-	_, err := ownerMessageServer.SyncAddHandler(ctx, model.DispatchTableResponseTopic("cf-1"),
+	_, err := ownerMessageServer.SyncAddHandler(ctx, model.DispatchTableResponseTopic(
+		model.DefaultChangeFeedID("cf-1")),
 		&model.DispatchTableResponseMessage{},
 		func(senderID string, msg interface{}) error {
 			require.Equal(t, processorCaptureID, senderID)
@@ -110,7 +111,8 @@ func newAgentTestSuite(t *testing.T) *agentTestSuite {
 	)
 	require.NoError(t, err)
 
-	_, err = ownerMessageServer.SyncAddHandler(ctx, model.SyncTopic("cf-1"),
+	_, err = ownerMessageServer.SyncAddHandler(ctx, model.SyncTopic(
+		model.DefaultChangeFeedID("cf-1")),
 		&model.SyncMessage{},
 		func(senderID string, msg interface{}) error {
 			ret.blockSyncMu.Lock()
@@ -132,7 +134,8 @@ func newAgentTestSuite(t *testing.T) *agentTestSuite {
 	)
 	require.NoError(t, err)
 
-	_, err = ownerMessageServer.SyncAddHandler(ctx, model.CheckpointTopic("cf-1"),
+	_, err = ownerMessageServer.SyncAddHandler(ctx, model.CheckpointTopic(
+		model.DefaultChangeFeedID("cf-1")),
 		&model.CheckpointMessage{},
 		func(senderID string, msg interface{}) error {
 			require.Equal(t, processorCaptureID, senderID)
@@ -164,7 +167,8 @@ func (s *agentTestSuite) CreateAgent(t *testing.T) (*agentImpl, error) {
 	})
 	s.cdcCtx = ctx
 
-	ret, err := newAgent(ctx, messageServer, messageRouter, s.tableExecutor, "cf-1")
+	ret, err := newAgent(ctx, messageServer, messageRouter, s.tableExecutor,
+		model.DefaultChangeFeedID("cf-1"))
 	if err != nil {
 		return nil, err
 	}
@@ -256,7 +260,7 @@ func TestAgentBasics(t *testing.T) {
 	}
 
 	_, err = suite.ownerMessageClient.SendMessage(suite.ctx,
-		model.DispatchTableTopic("cf-1"),
+		model.DispatchTableTopic(model.DefaultChangeFeedID("cf-1")),
 		&model.DispatchTableMessage{
 			OwnerRev: 1,
 			Epoch:    agent.CurrentEpoch(),
@@ -354,7 +358,7 @@ func TestAgentNoOwnerAtStartUp(t *testing.T) {
 
 	// Test Point 3: Agent should process the Announce message.
 	_, err = suite.ownerMessageClient.SendMessage(suite.ctx,
-		model.AnnounceTopic("cf-1"),
+		model.AnnounceTopic(model.DefaultChangeFeedID("cf-1")),
 		&model.AnnounceMessage{
 			OwnerRev:     1,
 			OwnerVersion: version.ReleaseSemver(),
@@ -460,7 +464,7 @@ func TestNoFinishOperationBeforeSyncIsReceived(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = suite.ownerMessageClient.SendMessage(suite.ctx,
-		model.DispatchTableTopic("cf-1"),
+		model.DispatchTableTopic(model.DefaultChangeFeedID("cf-1")),
 		&model.DispatchTableMessage{
 			OwnerRev: 1,
 			Epoch:    agent.CurrentEpoch(),
@@ -470,7 +474,7 @@ func TestNoFinishOperationBeforeSyncIsReceived(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = suite.ownerMessageClient.SendMessage(suite.ctx,
-		model.DispatchTableTopic("cf-1"),
+		model.DispatchTableTopic(model.DefaultChangeFeedID("cf-1")),
 		&model.DispatchTableMessage{
 			OwnerRev: 1,
 			Epoch:    agent.CurrentEpoch(),

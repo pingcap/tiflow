@@ -194,7 +194,7 @@ func NewContext4Test(baseCtx context.Context, withChangefeedVars bool) Context {
 	})
 	if withChangefeedVars {
 		ctx = WithChangefeedVars(ctx, &ChangefeedVars{
-			ID: "changefeed-id-test",
+			ID: model.DefaultChangeFeedID("changefeed-id-test"),
 			Info: &model.ChangeFeedInfo{
 				StartTs: oracle.GoTimeToTS(time.Now()),
 				Config:  config.GetDefaultReplicaConfig(),
@@ -217,5 +217,5 @@ func ZapFieldCapture(ctx Context) zap.Field {
 
 // ZapFieldChangefeed returns a zap field containing changefeed id
 func ZapFieldChangefeed(ctx Context) zap.Field {
-	return zap.String("changefeed", ctx.ChangefeedVars().ID)
+	return zap.String("changefeed", ctx.ChangefeedVars().ID.ID)
 }

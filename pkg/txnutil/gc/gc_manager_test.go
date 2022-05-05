@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/pdtime"
 
 	"github.com/pingcap/check"
@@ -100,16 +101,19 @@ func (s *gcManagerSuite) TestCheckStaleCheckpointTs(c *check.C) {
 
 	time.Sleep(1 * time.Second)
 
-	err := gcManager.CheckStaleCheckpointTs(ctx, "cfID", 10)
+	cfID := model.DefaultChangeFeedID("cfID")
+	err = gcManager.CheckStaleCheckpointTs(cCtx, cfID, 10)
 	c.Assert(cerror.ErrGCTTLExceeded.Equal(errors.Cause(err)), check.IsTrue)
 	c.Assert(cerror.ChangefeedFastFailError(err), check.IsTrue)
 
-	err = gcManager.CheckStaleCheckpointTs(ctx, "cfID", oracle.GoTimeToTS(time.Now()))
+	err = gcManager.CheckStaleCheckpointTs(cCtx, cfID, oracle.GoTimeToTS(time.Now()))
 	c.Assert(err, check.IsNil)
 
 	gcManager.isTiCDCBlockGC = false
 	gcManager.lastSafePointTs = 20
-	err = gcManager.CheckStaleCheckpointTs(ctx, "cfID", 10)
+
+	err = gcManager.CheckStaleCheckpointTs(cCtx, cfID, 10)
+  
 	c.Assert(cerror.ErrSnapshotLostByGC.Equal(errors.Cause(err)), check.IsTrue)
 	c.Assert(cerror.ChangefeedFastFailError(err), check.IsTrue)
 }

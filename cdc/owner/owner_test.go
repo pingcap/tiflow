@@ -83,7 +83,7 @@ func TestCreateRemoveChangefeed(t *testing.T) {
 
 	owner, state, tester := createOwner4Test(ctx, t)
 
-	changefeedID := "test-changefeed"
+	changefeedID := model.DefaultChangeFeedID("test-changefeed")
 	changefeedInfo := &model.ChangeFeedInfo{
 		StartTs: oracle.GoTimeToTS(time.Now()),
 		Config:  config.GetDefaultReplicaConfig(),
@@ -152,7 +152,7 @@ func TestStopChangefeed(t *testing.T) {
 	ctx, cancel := cdcContext.WithCancel(ctx)
 	defer cancel()
 
-	changefeedID := "test-changefeed"
+	changefeedID := model.DefaultChangeFeedID("test-changefeed")
 	changefeedInfo := &model.ChangeFeedInfo{
 		StartTs: oracle.GoTimeToTS(time.Now()),
 		Config:  config.GetDefaultReplicaConfig(),
@@ -198,7 +198,7 @@ func TestFixChangefeedState(t *testing.T) {
 	owner, state, tester := createOwner4Test(ctx, t)
 	// We need to do bootstrap.
 	owner.bootstrapped = false
-	changefeedID := "test-changefeed"
+	changefeedID := model.DefaultChangeFeedID("test-changefeed")
 	// Mismatched state and admin job.
 	changefeedInfo := &model.ChangeFeedInfo{
 		State:        model.StateNormal,
@@ -233,7 +233,7 @@ func TestFixChangefeedSinkProtocol(t *testing.T) {
 	owner, state, tester := createOwner4Test(ctx, t)
 	// We need to do bootstrap.
 	owner.bootstrapped = false
-	changefeedID := "test-changefeed"
+	changefeedID := model.DefaultChangeFeedID("test-changefeed")
 	// Unknown protocol.
 	changefeedInfo := &model.ChangeFeedInfo{
 		State:          model.StateNormal,
@@ -277,7 +277,7 @@ func TestCheckClusterVersion(t *testing.T) {
 
 	tester.MustUpdate("/tidb/cdc/capture/6bbc01c8-0605-4f86-a0f9-b3119109b225", []byte(`{"id":"6bbc01c8-0605-4f86-a0f9-b3119109b225","address":"127.0.0.1:8300","version":"v6.0.0"}`))
 
-	changefeedID := "test-changefeed"
+	changefeedID := model.DefaultChangeFeedID("test-changefeed")
 	changefeedInfo := &model.ChangeFeedInfo{
 		StartTs: oracle.GoTimeToTS(time.Now()),
 		Config:  config.GetDefaultReplicaConfig(),
@@ -314,13 +314,14 @@ func TestAdminJob(t *testing.T) {
 	done1 := make(chan error, 1)
 	owner, _, _ := createOwner4Test(ctx, t)
 	owner.EnqueueJob(model.AdminJob{
-		CfID: "test-changefeed1",
+		CfID: model.DefaultChangeFeedID("test-changefeed1"),
 		Type: model.AdminResume,
 	}, done1)
 	done2 := make(chan error, 1)
-	owner.RebalanceTables("test-changefeed2", done2)
+	owner.RebalanceTables(model.DefaultChangeFeedID("test-changefeed2"), done2)
 	done3 := make(chan error, 1)
-	owner.ScheduleTable("test-changefeed3", "test-caputre1", 10, done3)
+	owner.ScheduleTable(model.DefaultChangeFeedID("test-changefeed3"),
+		"test-caputre1", 10, done3)
 	done4 := make(chan error, 1)
 	var buf bytes.Buffer
 	owner.WriteDebugInfo(&buf, done4)
@@ -336,16 +337,16 @@ func TestAdminJob(t *testing.T) {
 		{
 			Tp: ownerJobTypeAdminJob,
 			AdminJob: &model.AdminJob{
-				CfID: "test-changefeed1",
+				CfID: model.DefaultChangeFeedID("test-changefeed1"),
 				Type: model.AdminResume,
 			},
-			ChangefeedID: "test-changefeed1",
+			ChangefeedID: model.DefaultChangeFeedID("test-changefeed1"),
 		}, {
 			Tp:           ownerJobTypeRebalance,
-			ChangefeedID: "test-changefeed2",
+			ChangefeedID: model.DefaultChangeFeedID("test-changefeed2"),
 		}, {
 			Tp:              ownerJobTypeScheduleTable,
-			ChangefeedID:    "test-changefeed3",
+			ChangefeedID:    model.DefaultChangeFeedID("test-changefeed3"),
 			TargetCaptureID: "test-caputre1",
 			TableID:         10,
 		}, {
@@ -385,9 +386,9 @@ func TestUpdateGCSafePoint(t *testing.T) {
 		t.Fatal("must not update")
 		return 0, nil
 	}
-	changefeedID1 := "changefeed-test1"
+	changefeedID1 := model.DefaultChangeFeedID("test-changefeed1")
 	tester.MustUpdate(
-		fmt.Sprintf("/tidb/cdc/changefeed/info/%s", changefeedID1),
+		fmt.Sprintf("/tidb/cdc/changefeed/info/%s", changefeedID1.ID),
 		[]byte(`{"config":{"cyclic-replication":{}},"state":"failed"}`))
 	tester.MustApplyPatches()
 	state.Changefeeds[changefeedID1].PatchStatus(
@@ -426,9 +427,9 @@ func TestUpdateGCSafePoint(t *testing.T) {
 	}
 
 	// add another changefeed, it must update GC safepoint.
-	changefeedID2 := "changefeed-test2"
+	changefeedID2 := model.DefaultChangeFeedID("test-changefeed2")
 	tester.MustUpdate(
-		fmt.Sprintf("/tidb/cdc/changefeed/info/%s", changefeedID2),
+		fmt.Sprintf("/tidb/cdc/changefeed/info/%s", changefeedID2.ID),
 		[]byte(`{"config":{"cyclic-replication":{}},"state":"normal"}`))
 	tester.MustApplyPatches()
 	state.Changefeeds[changefeedID1].PatchStatus(
@@ -469,7 +470,7 @@ func TestHandleJobsDontBlock(t *testing.T) {
 
 	statusProvider := owner.StatusProvider()
 	// work well
-	cf1 := "test-changefeed"
+	cf1 := model.DefaultChangeFeedID("test-changefeed")
 	cfInfo1 := &model.ChangeFeedInfo{
 		StartTs: oracle.GoTimeToTS(time.Now()),
 		Config:  config.GetDefaultReplicaConfig(),
@@ -503,7 +504,7 @@ func TestHandleJobsDontBlock(t *testing.T) {
 	tester.MustUpdate(cdcKey.String(), v)
 
 	// try to add another changefeed
-	cf2 := "test-changefeed1"
+	cf2 := model.DefaultChangeFeedID("test-changefeed1")
 	cfInfo2 := &model.ChangeFeedInfo{
 		StartTs: oracle.GoTimeToTS(time.Now()),
 		Config:  config.GetDefaultReplicaConfig(),

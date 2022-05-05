@@ -19,6 +19,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc/model"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/retry"
 	pd "github.com/tikv/pd/client"
@@ -33,10 +34,14 @@ const (
 // EnsureChangefeedStartTsSafety checks if the startTs less than the minimum of
 // service GC safepoint and this function will update the service GC to startTs
 func EnsureChangefeedStartTsSafety(
-	ctx context.Context, pdCli pd.Client, changefeedID string, TTL int64, startTs uint64,
+	ctx context.Context, pdCli pd.Client,
+	changefeedID model.ChangeFeedID,
+	TTL int64, startTs uint64,
 ) error {
 	minServiceGCTs, err := setServiceGCSafepoint(
-		ctx, pdCli, cdcChangefeedCreatingServiceGCSafePointID+changefeedID, TTL, startTs)
+		ctx, pdCli,
+		cdcChangefeedCreatingServiceGCSafePointID+changefeedID.Namespace+"_"+changefeedID.ID,
+		TTL, startTs)
 	if err != nil {
 		return errors.Trace(err)
 	}

@@ -62,7 +62,7 @@ func newMockCDCKVClient(
 	grpcPool kv.GrpcPool,
 	regionCache *tikv.RegionCache,
 	pdClock pdtime.Clock,
-	changefeed string,
+	changefeed model.ChangeFeedID,
 	cfg *config.KVClientConfig,
 ) kv.CDCKVClient {
 	return &mockCDCKVClient{
@@ -127,7 +127,8 @@ func newPullerForTest(
 	regionCache := tikv.NewRegionCache(pdCli)
 	defer regionCache.Close()
 	plr := NewPuller(
-		ctx, pdCli, grpcPool, regionCache, store, pdtime.NewClock4Test(), "",
+		ctx, pdCli, grpcPool, regionCache, store, pdtime.NewClock4Test(),
+		model.DefaultChangeFeedID("changefeed-id-test"),
 		checkpointTs, spans, config.GetDefaultServerConfig().KVClient)
 	wg.Add(1)
 	go func() {

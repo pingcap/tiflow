@@ -338,7 +338,7 @@ func TestNewTableActor(t *testing.T) {
 	cctx := cdcContext.WithChangefeedVars(
 		cdcContext.NewContext(ctx, globalVars),
 		&cdcContext.ChangefeedVars{
-			ID: "changefeed-1",
+			ID: model.DefaultChangeFeedID("changefeed-id-test"),
 			Info: &model.ChangeFeedInfo{
 				Config: config.GetDefaultReplicaConfig(),
 			},
@@ -401,7 +401,7 @@ func TestTableActorStart(t *testing.T) {
 	tbl := &tableActor{
 		globalVars: globalVars,
 		changefeedVars: &cdcContext.ChangefeedVars{
-			ID: "changefeed-1",
+			ID: model.DefaultChangeFeedID("changefeed-id-test"),
 			Info: &model.ChangeFeedInfo{
 				Config: config.GetDefaultReplicaConfig(),
 			},
@@ -418,7 +418,7 @@ func TestTableActorStart(t *testing.T) {
 	tbl = &tableActor{
 		globalVars: globalVars,
 		changefeedVars: &cdcContext.ChangefeedVars{
-			ID: "changefeed-1",
+			ID: model.DefaultChangeFeedID("changefeed-id-test"),
 			Info: &model.ChangeFeedInfo{
 				Config: config.GetDefaultReplicaConfig(),
 			},
