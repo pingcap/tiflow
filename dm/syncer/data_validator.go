@@ -206,6 +206,9 @@ func (v *DataValidator) reset() {
 
 	v.reachedSyncer.Store(false)
 	v.resetResult()
+	for i := range v.processedRowCounts {
+		v.processedRowCounts[i].Store(0)
+	}
 	for i := range v.pendingRowCounts {
 		v.pendingRowCounts[i].Store(0)
 	}
@@ -309,9 +312,9 @@ func (v *DataValidator) Start(expect pb.Stage) {
 	})
 
 	// routineWrapper relies on errorProcessRoutine to handle panic errors,
-	// so we do not wrap it.
+	// so just wrap it using a common wrapper.
 	v.errProcessWg.Add(1)
-	go v.errorProcessRoutine()
+	go utils.GoLogWrapper(v.errorProcessRoutine)
 
 	v.setStage(pb.Stage_Running)
 	v.L.Info("started")
@@ -623,7 +626,9 @@ func (v *DataValidator) startValidateWorkers() {
 	for i := 0; i < v.workerCnt; i++ {
 		worker := newValidateWorker(v, i)
 		v.workers[i] = worker
-		go v.routineWrapper(func() {
+		// worker handles panic in validateTableChange, so we can see it in `dmctl validation status`,
+		// for other panics we just log it.
+		go utils.GoLogWrapper(func() {
 			defer v.wg.Done()
 			worker.run()
 		})
@@ -698,6 +703,8 @@ func (v *DataValidator) processRowsEvent(header *replication.EventHeader, ev *re
 		Schema: string(ev.Table.Schema),
 		Name:   string(ev.Table.Table),
 	}
+
+	failpoint.Inject("ValidatorPanic", func() {})
 
 	if err := checkLogColumns(ev.SkippedColumns); err != nil {
 		return terror.Annotate(err, sourceTable.String())
@@ -829,9 +836,7 @@ func (v *DataValidator) loadPersistedData() error {
 	}
 	// table info of pending change is not persisted in order to save space, so need to init them after load.
 	pendingChanges := make(map[string]*tableChangeJob)
-	for tblName, tblChange := range data.pendingChanges {
-		pendingTblChange := newTableChangeJob()
-		pendingChanges[tblName] = pendingTblChange
+	for _, tblChange := range data.pendingChanges {
 		// todo: if table is dropped since last run, we should skip rows related to this table & update table status
 		// see https://github.com/pingcap/tiflow/pull/4881#discussion_r834093316
 		sourceTable := tblChange.sourceTable
@@ -842,6 +847,9 @@ func (v *DataValidator) loadPersistedData() error {
 		if validateTbl.message != "" {
 			return errors.New("failed to get table info " + validateTbl.message)
 		}
+		pendingTblChange := newTableChangeJob()
+		// aggregate using target table just as worker did.
+		pendingChanges[validateTbl.targetTable.String()] = pendingTblChange
 		for _, row := range tblChange.rows {
 			var beforeImage, afterImage []interface{}
 			switch row.Tp {
@@ -957,8 +965,8 @@ func (v *DataValidator) getTableStatus(fullTableName string) (*tableValidateStat
 
 // return snapshot of the current table status.
 func (v *DataValidator) getTableStatusMap() map[string]*tableValidateStatus {
-	v.RLock()
-	defer v.RUnlock()
+	v.stateMutex.RLock()
+	defer v.stateMutex.RUnlock()
 	tblStatus := make(map[string]*tableValidateStatus)
 	for key, tblStat := range v.tableStatus {
 		stat := &tableValidateStatus{}

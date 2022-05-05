@@ -26,6 +26,7 @@ import (
 
 	"github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/parser/model"
 	tidbmysql "github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/util/dbutil"
@@ -161,6 +162,10 @@ func (vw *validateWorker) validateTableChange() {
 		if err != nil && !isRetryableValidateError(err) {
 			vw.validator.sendError(terror.ErrValidatorValidateChange.Delegate(err))
 		}
+		if panicErr := recover(); panicErr != nil {
+			vw.L.Error("worker panic", zap.Any("err", panicErr))
+			vw.validator.sendError(terror.ErrValidatorPanic.Generate(panicErr))
+		}
 	}()
 
 	// clear accumulated row counter
@@ -282,6 +287,8 @@ func (vw *validateWorker) getErrorRows() []*validateFailedRow {
 }
 
 func (vw *validateWorker) batchValidateRowChanges(rows []*rowValidationJob, deleteChange bool) (map[string]*validateFailedRow, error) {
+	failpoint.Inject("ValidatorWorkerPanic", func() {})
+
 	pkValues := make([][]string, 0, len(rows))
 	for _, r := range rows {
 		pkValues = append(pkValues, r.row.RowStrIdentity())

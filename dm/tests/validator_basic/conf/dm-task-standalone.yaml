@@ -42,7 +42,7 @@ syncers:
 validators:
   global:
     mode: full
-    worker-count: 1
+    worker-count: 4
     validate-interval: 1s
     check-interval: 1s
     row-error-delay: 1ms

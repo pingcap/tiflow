@@ -370,9 +370,9 @@ func (c *validatorPersistHelper) incrRevision() {
 
 type persistedData struct {
 	checkpoint     *binlog.Location
-	pendingChanges map[string]*tableChangeDataForPersist
+	pendingChanges map[string]*tableChangeDataForPersist // key is full name of source table
 	rev            int64
-	tableStatus    map[string]*tableValidateStatus
+	tableStatus    map[string]*tableValidateStatus // key is full name of source table
 }
 
 func (c *validatorPersistHelper) loadPersistedDataRetry(tctx *tcontext.Context) (*persistedData, error) {

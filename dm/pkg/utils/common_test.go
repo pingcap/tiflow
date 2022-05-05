@@ -17,6 +17,8 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"sync"
+	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	. "github.com/pingcap/check"
@@ -24,6 +26,7 @@ import (
 	"github.com/pingcap/tidb/util/filter"
 	regexprrouter "github.com/pingcap/tidb/util/regexpr-router"
 	router "github.com/pingcap/tidb/util/table-router"
+	"github.com/stretchr/testify/require"
 )
 
 var _ = Suite(&testCommonSuite{})
@@ -256,4 +259,15 @@ func (s *testCommonSuite) TestNonRepeatStringsEqual(c *C) {
 	c.Assert(NonRepeatStringsEqual([]string{"1", "2"}, []string{"2", "1"}), IsTrue)
 	c.Assert(NonRepeatStringsEqual([]string{}, []string{"1"}), IsFalse)
 	c.Assert(NonRepeatStringsEqual([]string{"1", "2"}, []string{"2", "3"}), IsFalse)
+}
+
+func TestGoLogWrapper(t *testing.T) {
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go GoLogWrapper(func() {
+		defer wg.Done()
+		panic("should be captured")
+	})
+	wg.Wait()
+	require.True(t, true)
 }
