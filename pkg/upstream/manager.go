@@ -56,6 +56,13 @@ func NewManager4Test(pdClient pd.Client) *Manager {
 // Add adds a upstream and init it.
 // TODO(dongmen): async init upstream and should not return any error in the future.
 func (m *Manager) Add(clusterID uint64, pdEndpoints []string) error {
+	select {
+	case <-m.ctx.Done():
+		// This would not happen if there were no errors in the code logic.
+		panic("should not add a upstream to a closed upstream manager")
+	default:
+	}
+
 	if _, ok := m.ups.Load(clusterID); ok {
 		return nil
 	}
@@ -79,8 +86,7 @@ func (m *Manager) Get(clusterID uint64) *Upstream {
 }
 
 // Close closes all upstreams.
-// Close is not thread-safe, please make sure it will only be called
-// once when capture exits.
+// Please make sure it will only be called once when capture exits.
 func (m *Manager) Close() {
 	m.cancel()
 	m.ups.Range(func(k, v interface{}) bool {
