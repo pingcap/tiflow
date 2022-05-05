@@ -210,7 +210,7 @@ func GetAllOperations(cli *clientv3.Client) (map[string]map[string]map[string]ma
 // This function should often be called by DM-worker.
 // (task-name, source-ID, upstream-schema-name, upstream-table-name) -> shard DDL operation.
 func GetOperation(cli *clientv3.Client, task, source, upSchema, upTable string) (Operation, int64, error) {
-	respTxn, _, err := etcdutil.DoOpsInOneTxnWithRetry(cli, clientv3.OpGet(common.ShardDDLOptimismOperationKeyAdapter.Encode(task, source, upSchema, upTable)))
+	respTxn, _, err := etcdutil.DoTxnWithRepeatable(cli, etcdutil.ThenOpFunc(clientv3.OpGet(common.ShardDDLOptimismOperationKeyAdapter.Encode(task, source, upSchema, upTable))))
 	if err != nil {
 		return Operation{}, 0, err
 	}
