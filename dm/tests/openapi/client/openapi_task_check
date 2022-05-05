@@ -55,7 +55,7 @@ def create_task_failed():
     print("create_task_failed resp=", resp.json())
     assert resp.status_code == 400
 
-def create_task_with_precheck(task_name, ignore_checks, is_success, check_result):
+def create_task_with_precheck(task_name, ignore_check, is_success, check_result):
     task = {
         "name": task_name,
         "task_mode": "all",
@@ -63,7 +63,7 @@ def create_task_with_precheck(task_name, ignore_checks, is_success, check_result
         "shard_mode": "pessimistic",
         "enhance_online_schema_change": True,
         "on_duplicate": "error",
-        "ignore_checking_items" : [ignore_checks],
+        "ignore_checking_items" : ["version", ignore_check],
         "target_config": {
             "host": "127.0.0.1",
             "port": 4000,

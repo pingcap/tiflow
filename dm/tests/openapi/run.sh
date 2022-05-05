@@ -41,7 +41,7 @@ function init_data_with_auto_id() {
 }
 
 function init_data_with_diff_column() {
-	run_sql_source1 "CREATE TABLE openapi.t(id bigint primary key auto_increment, i TINYINT, j INT UNIQUE KEY);"
+	run_sql_source1 "CREATE TABLE openapi.t(id bigint, i TINYINT, j INT UNIQUE KEY);"
 	run_sql_source2 "CREATE TABLE openapi.t(i TINYINT, j INT UNIQUE KEY);"
 
 	run_sql_source1 "INSERT INTO openapi.t(i,j) VALUES (1, 2);"
@@ -538,10 +538,10 @@ function test_task_with_ignore_check_items() {
 
 	# no ignore precheck and no warn or error
 	task_name="test-no-ignore-no-error"
-	ignore_checks=""
+	ignore_check=""
 	is_success="success"
 	check_res="pre-check is passed"
-	openapi_task_check "create_task_with_precheck" "$task_name" "$ignore_checks" "$is_success" "$check_res"
+	openapi_task_check "create_task_with_precheck" "$task_name" "$ignore_check" "$is_success" "$check_res"
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status $task_name" \
 		"\"stage\": \"Stopped\"" 2
@@ -554,10 +554,10 @@ function test_task_with_ignore_check_items() {
 	prepare_database
 	init_data_with_auto_id
 	task_name="test-no-ignore-has-warn"
-	ignore_checks=""
+	ignore_check=""
 	is_success="success"
 	check_res="have auto-increment key"
-	openapi_task_check "create_task_with_precheck" "$task_name" "$ignore_checks" "$is_success" "$check_res"
+	openapi_task_check "create_task_with_precheck" "$task_name" "$ignore_check" "$is_success" "$check_res"
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status $task_name" \
 		"\"stage\": \"Stopped\"" 2
@@ -570,10 +570,10 @@ function test_task_with_ignore_check_items() {
 	prepare_database
 	init_data_with_diff_column
 	task_name="test-no-ignore-has-error"
-	ignore_checks=""
+	ignore_check=""
 	is_success="failed"
 	check_res="column length mismatch"
-	openapi_task_check "create_task_with_precheck" "$task_name" "$ignore_checks" "$is_success" "$check_res"
+	openapi_task_check "create_task_with_precheck" "$task_name" "$ignore_check" "$is_success" "$check_res"
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status $task_name" \
 		"\"result\": false" 1
@@ -583,7 +583,7 @@ function test_task_with_ignore_check_items() {
 	prepare_database
 	init_data_with_diff_column
 	task_name="test-has-ignore-without-error"
-	ignore_checks="schema_of_shard_tables"
+	ignore_check="schema_of_shard_tables"
 	is_success="success"
 	check_res="pre-check is passed"
 	openapi_task_check "create_task_with_precheck" "$task_name" "$ignore_checks" "$is_success" "$check_res"
