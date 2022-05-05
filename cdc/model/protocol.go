@@ -26,7 +26,7 @@ import (
 
 // DispatchTableTopic returns a message topic for dispatching a table.
 func DispatchTableTopic(changefeedID ChangeFeedID) p2p.Topic {
-	return fmt.Sprintf("dispatch/%s", changefeedID)
+	return fmt.Sprintf("dispatch/%s/%s", changefeedID.Namespace, changefeedID.ID)
 }
 
 // DispatchTableMessage is the message body for dispatching a table.
@@ -40,7 +40,7 @@ type DispatchTableMessage struct {
 // DispatchTableResponseTopic returns a message topic for the result of
 // dispatching a table. It is sent from the Processor to the Owner.
 func DispatchTableResponseTopic(changefeedID ChangeFeedID) p2p.Topic {
-	return fmt.Sprintf("dispatch-resp/%s", changefeedID)
+	return fmt.Sprintf("dispatch-resp/%s/%s", changefeedID.Namespace, changefeedID.ID)
 }
 
 // DispatchTableResponseMessage is the message body for the result of dispatching a table.
@@ -51,7 +51,7 @@ type DispatchTableResponseMessage struct {
 
 // AnnounceTopic returns a message topic for announcing an ownership change.
 func AnnounceTopic(changefeedID ChangeFeedID) p2p.Topic {
-	return fmt.Sprintf("send-status/%s", changefeedID)
+	return fmt.Sprintf("send-status/%s/%s", changefeedID.Namespace, changefeedID.ID)
 }
 
 // AnnounceMessage is the message body for announcing an ownership change.
@@ -63,7 +63,7 @@ type AnnounceMessage struct {
 
 // SyncTopic returns a message body for syncing the current states of a processor.
 func SyncTopic(changefeedID ChangeFeedID) p2p.Topic {
-	return fmt.Sprintf("send-status-resp/%s", changefeedID)
+	return fmt.Sprintf("send-status-resp/%s/%s", changefeedID.Namespace, changefeedID.ID)
 }
 
 // ProcessorEpoch designates a continuous period of the processor working normally.
@@ -102,7 +102,7 @@ func (m *SyncMessage) Unmarshal(data []byte) error {
 // CheckpointTopic returns a topic for sending the latest checkpoint from
 // the Processor to the Owner.
 func CheckpointTopic(changefeedID ChangeFeedID) p2p.Topic {
-	return fmt.Sprintf("checkpoint/%s", changefeedID)
+	return fmt.Sprintf("checkpoint/%s/%s", changefeedID.Namespace, changefeedID.ID)
 }
 
 // CheckpointMessage is the message body for sending the latest checkpoint

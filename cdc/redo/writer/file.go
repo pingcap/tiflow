@@ -29,6 +29,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/br/pkg/storage"
+	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/uber-go/atomic"
 	pioutil "go.etcd.io/etcd/pkg/v3/ioutil"
@@ -77,7 +78,7 @@ type flusher interface {
 // FileWriterConfig is the configuration used by a Writer.
 type FileWriterConfig struct {
 	Dir          string
-	ChangeFeedID string
+	ChangeFeedID model.ChangeFeedID
 	CaptureID    string
 	FileType     string
 	CreateTime   time.Time
@@ -160,9 +161,9 @@ func NewWriter(ctx context.Context, cfg *FileWriterConfig, opts ...Option) (*Wri
 		uint64buf: make([]byte, 8),
 		storage:   s3storage,
 
-		metricFsyncDuration:    redoFsyncDurationHistogram.WithLabelValues(cfg.ChangeFeedID),
-		metricFlushAllDuration: redoFlushAllDurationHistogram.WithLabelValues(cfg.ChangeFeedID),
-		metricWriteBytes:       redoWriteBytesGauge.WithLabelValues(cfg.ChangeFeedID),
+		metricFsyncDuration:    redoFsyncDurationHistogram.WithLabelValues(cfg.ChangeFeedID.ID),
+		metricFlushAllDuration: redoFlushAllDurationHistogram.WithLabelValues(cfg.ChangeFeedID.ID),
+		metricWriteBytes:       redoWriteBytesGauge.WithLabelValues(cfg.ChangeFeedID.ID),
 	}
 
 	w.running.Store(true)
@@ -184,12 +185,17 @@ func (w *Writer) runFlushToDisk(ctx context.Context, flushIntervalInMs int64) {
 		case <-ctx.Done():
 			err := w.Close()
 			if err != nil {
-				log.Error("runFlushToDisk close fail", zap.String("changefeed", w.cfg.ChangeFeedID), zap.Error(err))
+				log.Error("runFlushToDisk close fail",
+					zap.String("namespace", w.cfg.ChangeFeedID.Namespace),
+					zap.String("changefeed", w.cfg.ChangeFeedID.ID),
+					zap.Error(err))
 			}
 		case <-ticker.C:
 			err := w.Flush()
 			if err != nil {
-				log.Error("redo log flush fail", zap.String("changefeed", w.cfg.ChangeFeedID), zap.Error(err))
+				log.Error("redo log flush fail",
+					zap.String("namespace", w.cfg.ChangeFeedID.Namespace),
+					zap.String("changefeed", w.cfg.ChangeFeedID.ID), zap.Error(err))
 			}
 		}
 	}
@@ -272,9 +278,9 @@ func (w *Writer) Close() error {
 		return nil
 	}
 
-	redoFlushAllDurationHistogram.DeleteLabelValues(w.cfg.ChangeFeedID)
-	redoFsyncDurationHistogram.DeleteLabelValues(w.cfg.ChangeFeedID)
-	redoWriteBytesGauge.DeleteLabelValues(w.cfg.ChangeFeedID)
+	redoFlushAllDurationHistogram.DeleteLabelValues(w.cfg.ChangeFeedID.ID)
+	redoFsyncDurationHistogram.DeleteLabelValues(w.cfg.ChangeFeedID.ID)
+	redoWriteBytesGauge.DeleteLabelValues(w.cfg.ChangeFeedID.ID)
 
 	return w.close()
 }
@@ -332,7 +338,14 @@ func (w *Writer) getLogFileName() string {
 	if w.op != nil && w.op.getLogFileName != nil {
 		return w.op.getLogFileName()
 	}
-	return fmt.Sprintf("%s_%s_%d_%s_%d%s", w.cfg.CaptureID, w.cfg.ChangeFeedID, w.cfg.CreateTime.Unix(), w.cfg.FileType, w.commitTS.Load(), common.LogEXT)
+	if model.DefaultNamespace == w.cfg.ChangeFeedID.Namespace {
+		return fmt.Sprintf("%s_%s_%d_%s_%d%s", w.cfg.CaptureID,
+			w.cfg.ChangeFeedID.ID,
+			w.cfg.CreateTime.Unix(), w.cfg.FileType, w.commitTS.Load(), common.LogEXT)
+	}
+	return fmt.Sprintf("%s_%s_%s_%d_%s_%d%s", w.cfg.CaptureID,
+		w.cfg.ChangeFeedID.Namespace, w.cfg.ChangeFeedID.ID,
+		w.cfg.CreateTime.Unix(), w.cfg.FileType, w.commitTS.Load(), common.LogEXT)
 }
 
 func (w *Writer) filePath() string {
