@@ -37,6 +37,8 @@ const DefaultNamespace = "default"
 
 // ChangeFeedID is the type for change feed ID
 type ChangeFeedID struct {
+	// Namespace and ID pair is unique in one ticdc cluster
+	// the default value of Namespace is "default"
 	Namespace string
 	ID        string
 }
