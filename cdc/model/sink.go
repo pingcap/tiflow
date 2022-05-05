@@ -535,7 +535,7 @@ func (d *DDLEvent) FromRenameTablesJob(job *model.Job,
 	d.fillTableInfo(tableInfo, newSchemaName)
 }
 
-// fillTableInfo populate the TableInfo of an DDLEvent
+// fillTableInfo populates the TableInfo of an DDLEvent
 func (d *DDLEvent) fillTableInfo(tableInfo *model.TableInfo,
 	schemaName string,
 ) {
@@ -556,7 +556,7 @@ func (d *DDLEvent) fillTableInfo(tableInfo *model.TableInfo,
 	d.TableInfo.TableID = tableInfo.ID
 }
 
-//
+// fillPreTableInfo populates the PreTableInfo of an event
 func (d *DDLEvent) fillPreTableInfo(preTableInfo *TableInfo) {
 	if preTableInfo == nil {
 		return
