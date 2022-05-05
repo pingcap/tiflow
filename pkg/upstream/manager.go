@@ -15,11 +15,10 @@ package upstream
 
 import (
 	"context"
-	"log"
 	"sync"
-	"sync/atomic"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/pkg/config"
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
@@ -48,8 +47,8 @@ func NewManager(ctx context.Context) *Manager {
 // NewManager4Test returns a Manager for unit test.
 func NewManager4Test(pdClient pd.Client) *Manager {
 	up := NewUpstream4Test(pdClient)
-	atomic.StoreInt32(&up.status, normal)
 	res := &Manager{ups: new(sync.Map)}
+	res.ups.Store(DefaultClusterID, up)
 	return res
 }
 

@@ -85,7 +85,6 @@ func newDDLPuller(ctx cdcContext.Context, upStream *upstream.Upstream, startTs u
 			kvStorage,
 			upStream.PDClock,
 			// Add "_ddl_puller" to make it different from table pullers.
-			ctx.ChangefeedVars().ID+"_ddl_puller",
 			model.ChangeFeedID{
 				Namespace: ctx.ChangefeedVars().ID.Namespace,
 				// Add "_ddl_puller" to make it different from table pullers.
