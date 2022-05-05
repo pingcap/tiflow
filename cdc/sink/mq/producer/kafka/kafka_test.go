@@ -328,18 +328,34 @@ func TestAdjustConfigMinInsyncReplicas(t *testing.T) {
 	err = AdjustConfig(adminClient, config, saramaConfig, "create-new-fail-invalid-min-insync-replicas")
 	require.Regexp(
 		t,
-		".*`replication-factor` cannot be smaller than the `min.insync.replicas` of broker.*",
+		".*`replication-factor` is smaller than the `min.insync.replicas` of broker.*",
 		errors.Cause(err),
 	)
+
+	// topic not exist, and `min.insync.replicas` not found in broker's configuration
+	adminClient.DropBrokerConfig()
+	err = AdjustConfig(adminClient, config, saramaConfig, "no-topic-no-min-insync-replicas")
+	require.Regexp(t, ".*cannot find the `min.insync.replicas` from the broker's configuration",
+		errors.Cause(err))
 
 	// Report an error if the replication-factor is less than min.insync.replicas
 	// when the topic does exist.
 	saramaConfig, err = NewSaramaConfig(context.Background(), config)
 	require.Nil(t, err)
+
+	// topic exist, but `min.insync.replicas` not found in topic and broker configuration
+	topicName := "topic-no-config-entry"
+	err = adminClient.CreateTopic(topicName, &sarama.TopicDetail{}, false)
+	require.Nil(t, err)
+	err = AdjustConfig(adminClient, config, saramaConfig, topicName)
+	require.Regexp(t, ".*cannot find the `min.insync.replicas` from the broker's configuration",
+		errors.Cause(err))
+
+	// topic found, and have `min.insync.replicas`, but set to 2, larger than `replication-factor`.
 	adminClient.SetMinInsyncReplicas("2")
 	err = AdjustConfig(adminClient, config, saramaConfig, adminClient.GetDefaultMockTopicName())
 	require.Regexp(t,
-		".*`replication-factor` cannot be smaller than the `min.insync.replicas` of topic.*",
+		".*`replication-factor` is smaller than the `min.insync.replicas` of topic.*",
 		errors.Cause(err),
 	)
 }

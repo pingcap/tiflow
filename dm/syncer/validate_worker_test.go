@@ -92,9 +92,7 @@ func TestValidatorWorkerValidateTableChanges(t *testing.T) {
 			require.Zero(t, validator.pendingRowCounts[rowDeleted].Load())
 			require.Zero(t, len(worker.pendingChangesMap))
 			require.Zero(t, len(worker.errorRows))
-			require.Zero(t, validator.errorRowCounts[pb.ValidateErrorState_NewErr].Load())
-			require.Zero(t, validator.errorRowCounts[pb.ValidateErrorState_IgnoredErr].Load())
-			require.Zero(t, validator.errorRowCounts[pb.ValidateErrorState_ResolvedErr].Load())
+			require.Zero(t, validator.newErrorRowCount.Load())
 		}
 
 		// just created
@@ -115,9 +113,7 @@ func TestValidatorWorkerValidateTableChanges(t *testing.T) {
 		require.Equal(t, rowUpdated, worker.pendingChangesMap[tbl1.String()].jobs["1"].Tp)
 		require.Equal(t, 1, worker.pendingChangesMap[tbl1.String()].jobs["1"].FailedCnt)
 		require.Len(t, worker.errorRows, 0)
-		require.Zero(t, validator.errorRowCounts[pb.ValidateErrorState_NewErr].Load())
-		require.Zero(t, validator.errorRowCounts[pb.ValidateErrorState_IgnoredErr].Load())
-		require.Zero(t, validator.errorRowCounts[pb.ValidateErrorState_ResolvedErr].Load())
+		require.Zero(t, validator.newErrorRowCount.Load())
 		if mode == config.ValidationFull {
 			require.Len(t, worker.pendingChangesMap[tbl1.String()].jobs, 2)
 			require.Equal(t, int64(1), worker.pendingRowCounts[rowInsert])
@@ -158,9 +154,7 @@ func TestValidatorWorkerValidateTableChanges(t *testing.T) {
 		require.Equal(t, rowUpdated, worker.pendingChangesMap[tbl1.String()].jobs["1"].Tp)
 		require.Equal(t, 2, worker.pendingChangesMap[tbl1.String()].jobs["1"].FailedCnt)
 		require.Len(t, worker.errorRows, 0)
-		require.Zero(t, validator.errorRowCounts[pb.ValidateErrorState_NewErr].Load())
-		require.Zero(t, validator.errorRowCounts[pb.ValidateErrorState_IgnoredErr].Load())
-		require.Zero(t, validator.errorRowCounts[pb.ValidateErrorState_ResolvedErr].Load())
+		require.Zero(t, validator.newErrorRowCount.Load())
 
 		//
 		// add 2 delete row of tbl2 and tbl3
@@ -193,9 +187,7 @@ func TestValidatorWorkerValidateTableChanges(t *testing.T) {
 		require.Equal(t, rowDeleted, worker.pendingChangesMap[tbl3.String()].jobs["aa"].Tp)
 		require.Equal(t, 1, worker.pendingChangesMap[tbl3.String()].jobs["aa"].FailedCnt)
 		require.Len(t, worker.errorRows, 0)
-		require.Zero(t, validator.errorRowCounts[pb.ValidateErrorState_NewErr].Load())
-		require.Zero(t, validator.errorRowCounts[pb.ValidateErrorState_IgnoredErr].Load())
-		require.Zero(t, validator.errorRowCounts[pb.ValidateErrorState_ResolvedErr].Load())
+		require.Zero(t, validator.newErrorRowCount.Load())
 
 		// for tbl1, pk=1 is synced, validate success
 		// for tbl3, pk=aa is synced, validate success
@@ -234,9 +226,7 @@ func TestValidatorWorkerValidateTableChanges(t *testing.T) {
 		require.Equal(t, rowInsert, worker.pendingChangesMap[tbl1.String()].jobs["3"].Tp)
 		require.Equal(t, 1, worker.pendingChangesMap[tbl1.String()].jobs["3"].FailedCnt)
 		require.Len(t, worker.errorRows, 0)
-		require.Zero(t, validator.errorRowCounts[pb.ValidateErrorState_NewErr].Load())
-		require.Zero(t, validator.errorRowCounts[pb.ValidateErrorState_IgnoredErr].Load())
-		require.Zero(t, validator.errorRowCounts[pb.ValidateErrorState_ResolvedErr].Load())
+		require.Zero(t, validator.newErrorRowCount.Load())
 
 		// sync row 3 but got wrong result
 		mock.ExpectQuery("SELECT .* FROM .*tbl1.* WHERE .*").WillReturnRows(
@@ -258,9 +248,7 @@ func TestValidatorWorkerValidateTableChanges(t *testing.T) {
 			require.Equal(t, rowInsert, worker.pendingChangesMap[tbl1.String()].jobs["3"].Tp)
 			require.Equal(t, 2, worker.pendingChangesMap[tbl1.String()].jobs["3"].FailedCnt) // fail again
 			require.Len(t, worker.errorRows, 0)
-			require.Zero(t, validator.errorRowCounts[pb.ValidateErrorState_NewErr].Load())
-			require.Zero(t, validator.errorRowCounts[pb.ValidateErrorState_IgnoredErr].Load())
-			require.Zero(t, validator.errorRowCounts[pb.ValidateErrorState_ResolvedErr].Load())
+			require.Zero(t, validator.newErrorRowCount.Load())
 		} else {
 			// everything is validated successfully, no error rows
 			checkInitStatus()
@@ -299,9 +287,7 @@ func TestValidatorWorkerValidateTableChanges(t *testing.T) {
 		require.Equal(t, rowInsert, worker.pendingChangesMap[tbl1.String()].jobs["1"].Tp)
 		require.Zero(t, worker.pendingChangesMap[tbl1.String()].jobs["1"].FailedCnt)
 		require.Len(t, worker.errorRows, 0)
-		require.Zero(t, validator.errorRowCounts[pb.ValidateErrorState_NewErr].Load())
-		require.Zero(t, validator.errorRowCounts[pb.ValidateErrorState_IgnoredErr].Load())
-		require.Zero(t, validator.errorRowCounts[pb.ValidateErrorState_ResolvedErr].Load())
+		require.Zero(t, validator.newErrorRowCount.Load())
 
 		mock.ExpectQuery("SELECT .* FROM .*tbl1.* WHERE .*").WillReturnRows(
 			sqlmock.NewRows([]string{"a", "b"}).AddRow(1, "a"))
@@ -326,9 +312,7 @@ func TestValidatorWorkerValidateTableChanges(t *testing.T) {
 		require.Zero(t, validator.pendingRowCounts[rowDeleted].Load())
 		require.Zero(t, len(worker.pendingChangesMap))
 		require.Len(t, worker.errorRows, 1)
-		require.Equal(t, int64(1), validator.errorRowCounts[pb.ValidateErrorState_NewErr].Load())
-		require.Zero(t, validator.errorRowCounts[pb.ValidateErrorState_IgnoredErr].Load())
-		require.Zero(t, validator.errorRowCounts[pb.ValidateErrorState_ResolvedErr].Load())
+		require.Equal(t, int64(1), validator.newErrorRowCount.Load())
 	}
 	testFunc(t, config.ValidationFast)
 	testFunc(t, config.ValidationFull)

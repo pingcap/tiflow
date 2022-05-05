@@ -974,7 +974,16 @@ func (s *Syncer) addJob(job *job) {
 		s.ddlJobCh <- job
 		metrics.AddJobDurationHistogram.WithLabelValues("ddl", s.cfg.Name, adminQueueName, s.cfg.SourceID).Observe(time.Since(startTime).Seconds())
 	case dml:
+		failpoint.Inject("SkipDML", func(val failpoint.Value) {
+			// first col should be an int and primary key, every row with pk <= val will be skipped
+			skippedIDUpperBound := val.(int)
+			firstColVal, _ := strconv.Atoi(fmt.Sprintf("%v", job.dml.RowValues()[0]))
+			if firstColVal <= skippedIDUpperBound {
+				failpoint.Goto("skip_dml")
+			}
+		})
 		s.dmlJobCh <- job
+		failpoint.Label("skip_dml")
 		failpoint.Inject("checkCheckpointInMiddleOfTransaction", func() {
 			s.tctx.L().Info("receive dml job", zap.Any("dml job", job))
 			time.Sleep(500 * time.Millisecond)
