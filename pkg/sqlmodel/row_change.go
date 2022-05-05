@@ -174,6 +174,22 @@ func (r *RowChange) TargetTableID() string {
 	return r.targetTable.QuoteString()
 }
 
+// ColumnCount returns the number of columns of this RowChange.
+func (r *RowChange) ColumnCount() int {
+	return len(r.sourceTableInfo.Columns)
+}
+
+// SourceTableInfo returns the TableInfo of source table.
+func (r *RowChange) SourceTableInfo() *timodel.TableInfo {
+	return r.sourceTableInfo
+}
+
+// UniqueNotNullIdx returns the unique and not null index.
+func (r *RowChange) UniqueNotNullIdx() *timodel.IndexInfo {
+	r.lazyInitWhereHandle()
+	return r.whereHandle.UniqueNotNullIdx
+}
+
 // SetWhereHandle can be used when caller has cached whereHandle, to avoid every
 // RowChange lazily initialize it.
 func (r *RowChange) SetWhereHandle(whereHandle *WhereHandle) {
@@ -352,6 +368,18 @@ func (r *RowChange) GetPreValues() []interface{} {
 // GetPostValues is only used in tests.
 func (r *RowChange) GetPostValues() []interface{} {
 	return r.postValues
+}
+
+// RowValues returns the values of this row change
+// for INSERT and UPDATE, it is the post values.
+// for DELETE, it is the pre values.
+func (r *RowChange) RowValues() []interface{} {
+	switch r.tp {
+	case RowChangeInsert, RowChangeUpdate:
+		return r.postValues
+	default:
+		return r.preValues
+	}
 }
 
 // GetSourceTable returns TableName of the source table.

@@ -1,4 +1,4 @@
-// Copyright 2020 PingCAP, Inc.
+// Copyright 2022 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -11,15 +11,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package model
+package httputil
 
-// SorterStatus is the state of the puller sorter
-type SorterStatus = int32
-
-// SorterStatus of the puller sorter
-const (
-	SorterStatusWorking SorterStatus = iota
-	SorterStatusStopping
-	SorterStatusStopped
-	SorterStatusFinished
+import (
+	"net/http"
 )
+
+// NewTestClient creates a testing HTTP client.
+func NewTestClient(t http.RoundTripper) *Client {
+	return &Client{
+		client: http.Client{
+			Transport: t,
+		},
+	}
+}

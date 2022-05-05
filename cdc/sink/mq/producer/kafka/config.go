@@ -23,10 +23,10 @@ import (
 	"github.com/Shopify/sarama"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/security"
-	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
 
@@ -75,14 +75,16 @@ func (c *Config) setPartitionNum(realPartitionCount int32) error {
 	// user does not specify the `partition-num` in the sink-uri
 	if c.PartitionNum == 0 {
 		c.PartitionNum = realPartitionCount
+		log.Info("partitionNum is not set, set by topic's partition-num",
+			zap.Int32("partitionNum", realPartitionCount))
 		return nil
 	}
 
 	if c.PartitionNum < realPartitionCount {
 		log.Warn("number of partition specified in sink-uri is less than that of the actual topic. "+
 			"Some partitions will not have messages dispatched to",
-			zap.Int32("sink-uri partitions", c.PartitionNum),
-			zap.Int32("topic partitions", realPartitionCount))
+			zap.Int32("sinkUriPartitions", c.PartitionNum),
+			zap.Int32("topicPartitions", realPartitionCount))
 		return nil
 	}
 
@@ -298,13 +300,13 @@ func NewSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidVersion, err)
 	}
 	var role string
-	if util.IsOwnerFromCtx(ctx) {
+	if contextutil.IsOwnerFromCtx(ctx) {
 		role = "owner"
 	} else {
 		role = "processor"
 	}
-	captureAddr := util.CaptureAddrFromCtx(ctx)
-	changefeedID := util.ChangefeedIDFromCtx(ctx)
+	captureAddr := contextutil.CaptureAddrFromCtx(ctx)
+	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
 
 	config.ClientID, err = kafkaClientID(role, captureAddr, changefeedID, c.ClientID)
 	if err != nil {

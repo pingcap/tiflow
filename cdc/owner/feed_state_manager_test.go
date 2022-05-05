@@ -44,7 +44,7 @@ func TestHandleJob(t *testing.T) {
 
 	// an admin job which of changefeed is not match
 	manager.PushAdminJob(&model.AdminJob{
-		CfID: "fake-changefeed-id",
+		CfID: model.DefaultChangeFeedID("fake-changefeed-id"),
 		Type: model.AdminStop,
 	})
 	manager.Tick(state)
@@ -324,9 +324,12 @@ func TestChangefeedStatusNotExist(t *testing.T) {
 	manager := newFeedStateManager4Test()
 	state := orchestrator.NewChangefeedReactorState(ctx.ChangefeedVars().ID)
 	tester := orchestrator.NewReactorStateTester(t, state, map[string]string{
-		"/tidb/cdc/capture/d563bfc0-f406-4f34-bc7d-6dc2e35a44e5": `{"id":"d563bfc0-f406-4f34-bc7d-6dc2e35a44e5","address":"172.16.6.147:8300","version":"v5.0.0-master-dirty"}`,
-		"/tidb/cdc/changefeed/info/" + ctx.ChangefeedVars().ID:   changefeedInfo,
-		"/tidb/cdc/owner/156579d017f84a68":                       "d563bfc0-f406-4f34-bc7d-6dc2e35a44e5",
+		"/tidb/cdc/capture/d563bfc0-f406-4f34-bc7d-6dc2e35a44e5": `
+{"id":"d563bfc0-f406-4f34-bc7d-6dc2e35a44e5",
+"address":"172.16.6.147:8300","version":"v5.0.0-master-dirty"}`,
+		"/tidb/cdc/changefeed/info/" +
+			ctx.ChangefeedVars().ID.ID: changefeedInfo,
+		"/tidb/cdc/owner/156579d017f84a68": "d563bfc0-f406-4f34-bc7d-6dc2e35a44e5",
 	})
 	manager.Tick(state)
 	require.False(t, manager.ShouldRunning())

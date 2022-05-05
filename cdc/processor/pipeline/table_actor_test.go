@@ -284,6 +284,41 @@ func TestPollDataFailed(t *testing.T) {
 	require.Equal(t, stopped, tbl.stopped)
 }
 
+func TestPollDataAfterSinkStopped(t *testing.T) {
+	// process failed
+	msgPulled := false
+	var pN asyncMessageHolderFunc = func() *pmessage.Message {
+		msgPulled = true
+		return &pmessage.Message{
+			Tp:        pmessage.MessageTypeBarrier,
+			BarrierTs: 1,
+		}
+	}
+	var dp asyncMessageProcessorFunc = func(
+		ctx context.Context, msg pmessage.Message,
+	) (bool, error) {
+		return false, errors.New("error")
+	}
+	tbl := tableActor{
+		cancel:            func() {},
+		reportErr:         func(err error) {},
+		sinkNode:          &sinkNode{sink: &mockSink{}, flowController: &mockFlowController{}},
+		lastFlushSinkTime: time.Now(),
+		nodes: []*ActorNode{
+			{
+				parentNode:       pN,
+				messageProcessor: dp,
+			},
+		},
+		sinkStopped: true,
+	}
+	require.True(t, tbl.Poll(context.TODO(), []message.Message[pmessage.Message]{
+		message.ValueMessage[pmessage.Message](pmessage.TickMessage()),
+	}))
+	require.False(t, msgPulled)
+	require.NotEqual(t, stopped, tbl.stopped)
+}
+
 func TestNewTableActor(t *testing.T) {
 	realStartPullerFunc := startPuller
 	realStartSorterFunc := startSorter
@@ -303,7 +338,7 @@ func TestNewTableActor(t *testing.T) {
 	cctx := cdcContext.WithChangefeedVars(
 		cdcContext.NewContext(ctx, globalVars),
 		&cdcContext.ChangefeedVars{
-			ID: "changefeed-1",
+			ID: model.DefaultChangeFeedID("changefeed-id-test"),
 			Info: &model.ChangeFeedInfo{
 				Config: config.GetDefaultReplicaConfig(),
 			},
@@ -315,7 +350,7 @@ func TestNewTableActor(t *testing.T) {
 	startSorter = func(t *tableActor, ctx *actorNodeContext) error {
 		return nil
 	}
-	tbl, err := NewTableActor(cctx, nil, 1, "t1",
+	tbl, err := NewTableActor(cctx, nil, nil, 1, "t1",
 		&model.TableReplicaInfo{
 			StartTs:     0,
 			MarkTableID: 1,
@@ -331,7 +366,7 @@ func TestNewTableActor(t *testing.T) {
 		return errors.New("failed to start puller")
 	}
 
-	tbl, err = NewTableActor(cctx, nil, 1, "t1",
+	tbl, err = NewTableActor(cctx, nil, nil, 1, "t1",
 		&model.TableReplicaInfo{
 			StartTs:     0,
 			MarkTableID: 1,
@@ -366,7 +401,7 @@ func TestTableActorStart(t *testing.T) {
 	tbl := &tableActor{
 		globalVars: globalVars,
 		changefeedVars: &cdcContext.ChangefeedVars{
-			ID: "changefeed-1",
+			ID: model.DefaultChangeFeedID("changefeed-id-test"),
 			Info: &model.ChangeFeedInfo{
 				Config: config.GetDefaultReplicaConfig(),
 			},
@@ -383,7 +418,7 @@ func TestTableActorStart(t *testing.T) {
 	tbl = &tableActor{
 		globalVars: globalVars,
 		changefeedVars: &cdcContext.ChangefeedVars{
-			ID: "changefeed-1",
+			ID: model.DefaultChangeFeedID("changefeed-id-test"),
 			Info: &model.ChangeFeedInfo{
 				Config: config.GetDefaultReplicaConfig(),
 			},

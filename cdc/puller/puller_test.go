@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/tidb/store/mockstore"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/pdtime"
 	"github.com/pingcap/tiflow/pkg/regionspan"
@@ -61,7 +62,8 @@ func newMockCDCKVClient(
 	grpcPool kv.GrpcPool,
 	regionCache *tikv.RegionCache,
 	pdClock pdtime.Clock,
-	changefeed string,
+	changefeed model.ChangeFeedID,
+	cfg *config.KVClientConfig,
 ) kv.CDCKVClient {
 	return &mockCDCKVClient{
 		expectations: make(chan model.RegionFeedEvent, 1024),
@@ -72,7 +74,6 @@ func (mc *mockCDCKVClient) EventFeed(
 	ctx context.Context,
 	span regionspan.ComparableSpan,
 	ts uint64,
-	enableOldValue bool,
 	lockResolver txnutil.LockResolver,
 	isPullerInit kv.PullerInitialization,
 	eventCh chan<- model.RegionFeedEvent,
@@ -115,7 +116,6 @@ func newPullerForTest(
 	ctx, cancel := context.WithCancel(context.Background())
 	store, err := mockstore.NewMockStore()
 	require.Nil(t, err)
-	enableOldValue := true
 	backupNewCDCKVClient := kv.NewCDCKVClient
 	kv.NewCDCKVClient = newMockCDCKVClient
 	defer func() {
@@ -127,8 +127,9 @@ func newPullerForTest(
 	regionCache := tikv.NewRegionCache(pdCli)
 	defer regionCache.Close()
 	plr := NewPuller(
-		ctx, pdCli, grpcPool, regionCache, store, pdtime.NewClock4Test(), "",
-		checkpointTs, spans, enableOldValue)
+		ctx, pdCli, grpcPool, regionCache, store, pdtime.NewClock4Test(),
+		model.DefaultChangeFeedID("changefeed-id-test"),
+		checkpointTs, spans, config.GetDefaultServerConfig().KVClient)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
