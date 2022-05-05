@@ -119,7 +119,7 @@ func ChangefeedIDFromCtx(ctx context.Context) model.ChangeFeedID {
 	return changefeedID
 }
 
-// PutChangefeedIDInCtx returns a new child context with the specified changefeed ID stored.
+// PutChangefeedIDInCtx returns a new child context with the specified changefeedID stored.
 func PutChangefeedIDInCtx(ctx context.Context, changefeedID model.ChangeFeedID) context.Context {
 	return context.WithValue(ctx, ctxKeyChangefeedID, changefeedID)
 }
