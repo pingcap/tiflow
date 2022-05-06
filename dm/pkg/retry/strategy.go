@@ -112,15 +112,6 @@ type Retryer interface {
 	Apply(ctx *tcontext.Context, operateFn OperateFunc) (interface{}, int, error)
 }
 
-type NoRetryRetryer struct{}
-
-var NoRetry = &NoRetryRetryer{}
-
-func (n *NoRetryRetryer) Apply(ctx *tcontext.Context, operateFn OperateFunc) (interface{}, int, error) {
-	res, err := operateFn(ctx)
-	return res, 0, err
-}
-
 // FiniteRetryer wraps params.
 type FiniteRetryer struct {
 	FiniteRetryStrategy

@@ -228,9 +228,6 @@ func (d *BaseDB) DoTxWithRetry(tctx *tcontext.Context, queries []string, args []
 		return nil, perrors.Trace(err)
 	}
 
-	if retryer == nil {
-		retryer = retry.NoRetry
-	}
 	_, _, err := retryer.Apply(tctx, workFunc)
 	return err
 }
