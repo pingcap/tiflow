@@ -57,20 +57,20 @@ const (
 
 var defaultMaxRetry uint64 = 3
 
-// PDApiClient is api client of Placement Driver.
-type PDApiClient struct {
+// pdApiClient is api client of Placement Driver.
+type pdApiClient struct {
 	pdClient   pd.Client
 	dialClient *httputil.Client
 }
 
 // NewPDApiClient create a new PDApiClient.
-func NewPDApiClient(ctx context.Context, pdClient pd.Client) (*PDApiClient, error) {
+func NewPDApiClient(ctx context.Context, pdClient pd.Client) (*pdApiClient, error) {
 	conf := config.GetGlobalServerConfig()
 	dialClient, err := httputil.NewClient(conf.Security)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	return &PDApiClient{
+	return &pdApiClient{
 		pdClient:   pdClient,
 		dialClient: dialClient,
 	}, nil
@@ -103,7 +103,7 @@ func UpdateMetaLabel(ctx context.Context, pdClient pd.Client) error {
 	return err
 }
 
-func (pc *PDApiClient) patchMetaLabel(ctx context.Context) error {
+func (pc *pdApiClient) patchMetaLabel(ctx context.Context) error {
 	url := pc.pdClient.GetLeaderAddr() + regionLabelPrefix
 	header := http.Header{"Content-Type": {"application/json"}}
 	content := []byte(addMetaJSON)
