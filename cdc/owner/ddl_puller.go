@@ -31,6 +31,7 @@ import (
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/regionspan"
+	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -67,23 +68,23 @@ type ddlPullerImpl struct {
 	changefeedID model.ChangeFeedID
 }
 
-func newDDLPuller(ctx cdcContext.Context, startTs uint64) (DDLPuller, error) {
-	pdCli := ctx.GlobalVars().PDClient
+func newDDLPuller(ctx cdcContext.Context, upStream *upstream.Upstream, startTs uint64) (DDLPuller, error) {
 	f, err := filter.NewFilter(ctx.ChangefeedVars().Info.Config)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 	kvCfg := config.GetGlobalServerConfig().KVClient
 	var plr puller.Puller
-	kvStorage := ctx.GlobalVars().KVStorage
+	kvStorage := upStream.KVStorage
 	// kvStorage can be nil only in the test
 	if kvStorage != nil {
 		plr = puller.NewPuller(
-			ctx, pdCli,
-			ctx.GlobalVars().GrpcPool,
-			ctx.GlobalVars().RegionCache,
+			ctx, upStream.PDClient,
+			upStream.GrpcPool,
+			upStream.RegionCache,
 			kvStorage,
-			ctx.GlobalVars().PDClock,
+			upStream.PDClock,
+			// Add "_ddl_puller" to make it different from table pullers.
 			model.ChangeFeedID{
 				Namespace: ctx.ChangefeedVars().ID.Namespace,
 				// Add "_ddl_puller" to make it different from table pullers.
