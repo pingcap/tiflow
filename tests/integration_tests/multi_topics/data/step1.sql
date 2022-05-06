@@ -1,5 +1,5 @@
-create database test1;
-use test1;
+use test;
+
 create table table1
 (
     id          int auto_increment,
