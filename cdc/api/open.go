@@ -256,6 +256,9 @@ func (h *openAPI) CreateChangefeed(c *gin.Context) {
 		return
 	}
 
+	// c does not have a cancel() func and its Done() method always return nil,
+	// so we should not use c as a context.
+	// Ref:https://github.com/gin-gonic/gin/blob/92eeaa4ebbadec2376e2ca5f5749888da1a42e24/context.go#L1157
 	ctx := c.Request.Context()
 	var changefeedConfig model.ChangefeedConfig
 	if err := c.BindJSON(&changefeedConfig); err != nil {
