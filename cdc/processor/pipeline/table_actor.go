@@ -32,6 +32,7 @@ import (
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	pmessage "github.com/pingcap/tiflow/pkg/pipeline/message"
+	"github.com/pingcap/tiflow/pkg/upstream"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
@@ -48,6 +49,9 @@ type tableActor struct {
 	actorID actor.ID
 	mb      actor.Mailbox[pmessage.Message]
 	router  *actor.Router[pmessage.Message]
+
+	upStream *upstream.Upstream
+
 	// all goroutines in tableActor should be spawned from this wg
 	wg *errgroup.Group
 	// backend mounter
@@ -93,6 +97,7 @@ type tableActor struct {
 
 // NewTableActor creates a table actor and starts it.
 func NewTableActor(cdcCtx cdcContext.Context,
+	upStream *upstream.Upstream,
 	mounter entry.Mounter,
 	tableID model.TableID,
 	tableName string,
@@ -124,6 +129,7 @@ func NewTableActor(cdcCtx cdcContext.Context,
 		tableName:     tableName,
 		cyclicEnabled: cyclicEnabled,
 		memoryQuota:   serverConfig.GetGlobalServerConfig().PerTableMemoryQuota,
+		upStream:      upStream,
 		mounter:       mounter,
 		replicaInfo:   replicaInfo,
 		replicaConfig: config,
@@ -511,7 +517,7 @@ func (t *tableActor) Wait() {
 
 // for ut
 var startPuller = func(t *tableActor, ctx *actorNodeContext) error {
-	return t.pullerNode.start(ctx, t.wg, true, t.sortNode)
+	return t.pullerNode.start(ctx, t.upStream, t.wg, true, t.sortNode)
 }
 
 var startSorter = func(t *tableActor, ctx *actorNodeContext) error {
