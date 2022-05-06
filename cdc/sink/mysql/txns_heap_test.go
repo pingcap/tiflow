@@ -21,7 +21,6 @@ import (
 )
 
 func TestTxnsHeap(t *testing.T) {
-
 	testCases := []struct {
 		txnsMap  map[model.TableID][]*model.SingleTableTxn
 		expected []*model.SingleTableTxn

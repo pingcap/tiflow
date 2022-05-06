@@ -25,7 +25,6 @@ import (
 )
 
 func TestCausality(t *testing.T) {
-
 	rows := [][][]byte{
 		{[]byte("a")},
 		{[]byte("b")},
@@ -70,7 +69,6 @@ func TestCausality(t *testing.T) {
 }
 
 func TestGenKeys(t *testing.T) {
-
 	testCases := []struct {
 		txn      *model.SingleTableTxn
 		expected [][]byte
