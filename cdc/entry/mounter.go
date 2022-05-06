@@ -86,12 +86,14 @@ func NewMounter(schemaStorage SchemaStorage,
 	enableOldValue bool,
 ) Mounter {
 	return &mounterImpl{
-		schemaStorage:       schemaStorage,
-		changefeedID:        changefeedID,
-		enableOldValue:      enableOldValue,
-		metricMountDuration: mountDuration.WithLabelValues(changefeedID.ID),
-		metricTotalRows:     totalRowsCountGauge.WithLabelValues(changefeedID.ID),
-		tz:                  tz,
+		schemaStorage:  schemaStorage,
+		changefeedID:   changefeedID,
+		enableOldValue: enableOldValue,
+		metricMountDuration: mountDuration.
+			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
+		metricTotalRows: totalRowsCountGauge.
+			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
+		tz: tz,
 	}
 }
 
