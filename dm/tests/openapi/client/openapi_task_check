@@ -98,6 +98,66 @@ def create_noshard_task_success(task_name, tartget_table_name=""):
     print("create_noshard_task_success resp=", resp.json())
     assert resp.status_code == 201
 
+def create_incremental_task_with_gitd_success(task_name,binlog_name1,binlog_pos1,binlog_gtid1,binlog_name2,binlog_pos2,binlog_gtid2):
+    task = {
+        "name": task_name,
+        "task_mode": "incremental",
+        "meta_schema": "dm_meta",
+        "enhance_online_schema_change": True,
+        "on_duplicate": "error",
+        "target_config": {
+            "host": "127.0.0.1",
+            "port": 4000,
+            "user": "root",
+            "password": "",
+        },
+        "table_migrate_rule": [
+            {
+                "source": {
+                    "source_name": SOURCE1_NAME,
+                    "schema": "openapi",
+                    "table": "*",
+                },
+                "target": {"schema": "openapi", "table": ""},
+            },
+            {
+                "source": {
+                    "source_name": SOURCE2_NAME,
+                    "schema": "openapi",
+                    "table": "*",
+                },
+                "target": {"schema": "openapi", "table": ""},
+            },
+        ],
+         "source_config": {
+            "source_conf": [
+                {"source_name": SOURCE1_NAME},
+                {"source_name": SOURCE2_NAME},
+            ],
+         },
+    }
+
+    if binlog_pos1 != "":
+        task["source_config"] = {
+            "source_conf": [
+                {
+                    "source_name": SOURCE1_NAME,
+                    "binlog_name": binlog_name1,
+                    "binlog_pos": int(binlog_pos1),
+                    "binlog_gtid": binlog_gtid1,
+                },
+                {
+                    "source_name": SOURCE2_NAME,
+                    "binlog_name": binlog_name2,
+                    "binlog_pos": int(binlog_pos2),
+                    "binlog_gtid": binlog_gtid2,
+                },
+            ],
+        }
+
+    resp = requests.post(url=API_ENDPOINT, json={"task": task})
+    print("create_incremental_task_with_gitd_success resp=", resp.json())
+    assert resp.status_code == 201
 
 def create_shard_task_success():
     task = {
@@ -170,6 +230,21 @@ def start_task_success(task_name, source_name):
         print("start_task_failed resp=", resp.json())
     assert resp.status_code == 200
 
+def start_task_with_condition(task_name, start_time, duration, is_success, check_result):
+    url = API_ENDPOINT + "/" + task_name + "/start"
+    req = {"start_time": start_time, "safe_mode_time_duration": duration}
+    resp = requests.post(url=url, json=req)
+    if is_success == "success":
+        if resp.status_code != 200:
+            print("start_task_with_condition_failed resp=", resp.json())
+        assert resp.status_code == 200
+        print("start_task_with_condition success")
+    else:
+        if resp.status_code == 200:
+             print("start_task_with_condition_failed resp should not be 200")
+        assert resp.status_code == 400
+        print("start_task_with_condition resp=", resp.json())
+        assert check_result in resp.json()["error_msg"]
 
 def stop_task_success(task_name, source_name):
     url = API_ENDPOINT + "/" + task_name + "/stop"
@@ -568,10 +643,12 @@ if __name__ == "__main__":
         "create_task_failed": create_task_failed,
         "create_noshard_task_success": create_noshard_task_success,
         "create_shard_task_success": create_shard_task_success,
+        "create_incremental_task_with_gitd_success": create_incremental_task_with_gitd_success,
         "delete_task_failed": delete_task_failed,
         "delete_task_success": delete_task_success,
         "delete_task_with_force_success": delete_task_with_force_success,
         "start_task_success": start_task_success,
+        "start_task_with_condition": start_task_with_condition,
         "stop_task_success": stop_task_success,
         "get_task_list": get_task_list,
         "get_task_list_with_status": get_task_list_with_status,

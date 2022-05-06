@@ -23,6 +23,9 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/pingcap/tiflow/dm/dm/master/scheduler"
+	"github.com/pingcap/tiflow/dm/pkg/ha"
+
 	"github.com/pingcap/tiflow/dm/checker"
 	dmcommon "github.com/pingcap/tiflow/dm/dm/common"
 	"github.com/pingcap/tiflow/dm/dm/config"
@@ -652,10 +655,14 @@ func (s *Server) startTask(ctx context.Context, taskName string, req openapi.Sta
 		return nil
 	}
 
-	// TODO(ehco) support other start args after https://github.com/pingcap/tiflow/pull/4601 merged
+	var (
+		release scheduler.ReleaseFunc
+		err     error
+	)
+	// removeMeta
 	if req.RemoveMeta != nil && *req.RemoveMeta {
 		// use same latch for remove-meta and start-task
-		release, err := s.scheduler.AcquireSubtaskLatch(taskName)
+		release, err = s.scheduler.AcquireSubtaskLatch(taskName)
 		if err != nil {
 			return terror.ErrSchedulerLatchInUse.Generate("RemoveMeta", taskName)
 		}
@@ -666,8 +673,28 @@ func (s *Server) startTask(ctx context.Context, taskName string, req openapi.Sta
 		if err != nil {
 			return terror.Annotate(err, "while removing metadata")
 		}
+	}
+
+	cliArgs, err := config.OpenAPIStartTaskReqToTaskCliArgs(req)
+	if err != nil {
+		return terror.Annotate(err, "while converting task command line arguments")
+	}
+
+	if cliArgs.StartTime == "" {
+		err = ha.DeleteAllTaskCliArgs(s.etcdClient, taskName)
+		if err != nil {
+			return terror.Annotate(err, "while removing task command line arguments")
+		}
+	} else {
+		err = ha.PutTaskCliArgs(s.etcdClient, taskName, *req.SourceNameList, *cliArgs)
+		if err != nil {
+			return terror.Annotate(err, "while putting task command line arguments")
+		}
+	}
+	if release != nil {
 		release()
 	}
+
 	return s.scheduler.UpdateExpectSubTaskStage(pb.Stage_Running, taskName, *req.SourceNameList...)
 }
 

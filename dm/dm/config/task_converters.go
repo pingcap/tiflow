@@ -166,10 +166,7 @@ func OpenAPITaskToSubTaskConfigs(task *openapi.Task, toDBCfg *DBConfig, sourceCf
 			}
 			subTaskCfg.Meta = meta
 		}
-		// check must set meta when mode is ModeIncrement
-		if subTaskCfg.Meta == nil && subTaskCfg.Mode == ModeIncrement {
-			return nil, terror.ErrConfigMetadataNotSet.Generate(i, ModeIncrement)
-		}
+
 		// set shard config
 		if task.ShardMode != nil {
 			subTaskCfg.IsSharding = true
@@ -683,4 +680,19 @@ func removeDuplication(in []string) []string {
 func genFilterRuleName(sourceName string, idx int) string {
 	// NOTE that we don't have user input filter rule name in sub task config, so we make one by ourself
 	return fmt.Sprintf("%s-filter-rule-%d", sourceName, idx)
+}
+
+func OpenAPIStartTaskReqToTaskCliArgs(req openapi.StartTaskRequest) (*TaskCliArgs, error) {
+	cliArgs := &TaskCliArgs{}
+	if req.StartTime != nil {
+		cliArgs.StartTime = *req.StartTime
+	}
+	if req.SafeModeTimeDuration != nil {
+		cliArgs.SafeModeDuration = *req.SafeModeTimeDuration
+	}
+
+	if err := cliArgs.Verify(); err != nil {
+		return nil, err
+	}
+	return cliArgs, nil
 }

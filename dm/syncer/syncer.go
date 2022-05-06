@@ -2076,7 +2076,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		}
 
 		// set exitSafeModeTS when meet first binlog
-		if s.firstMeetBinlogTS == nil && s.cliArgs != nil && s.cliArgs.SafeModeDuration != "" {
+		if s.firstMeetBinlogTS == nil && s.cliArgs != nil && s.cliArgs.SafeModeDuration != "" && int64(e.Header.Timestamp) != 0 {
 			if checkErr := s.initSafeModeExitTS(int64(e.Header.Timestamp)); checkErr != nil {
 				return checkErr
 			}
@@ -2185,7 +2185,7 @@ func (s *Syncer) initSafeModeExitTS(firstBinlogTS int64) error {
 		return err
 	}
 	s.firstMeetBinlogTS = &firstBinlogTS
-	exitTS := firstBinlogTS + int64(duration.Seconds())
+	exitTS := firstBinlogTS + int64(duration.Seconds())*1000
 	s.exitSafeModeTS = &exitTS
 	s.tctx.L().Info("safe-mode will disable by task cli args", zap.Int64("ts", exitTS))
 	return nil

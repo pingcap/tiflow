@@ -395,8 +395,14 @@ type StartTaskRequest struct {
 	// whether to remove meta database in downstream database
 	RemoveMeta *bool `json:"remove_meta,omitempty"`
 
+	// time duration of safe mode
+	SafeModeTimeDuration *string `json:"safe_mode_time_duration,omitempty"`
+
 	// source name list
 	SourceNameList *SourceNameList `json:"source_name_list,omitempty"`
+
+	// task start time
+	StartTime *string `json:"start_time,omitempty"`
 }
 
 // StopTaskRequest defines model for StopTaskRequest.
