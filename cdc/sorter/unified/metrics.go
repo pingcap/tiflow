@@ -23,14 +23,14 @@ var (
 		Subsystem: "sorter",
 		Name:      "consume_count",
 		Help:      "the number of events consumed by the sorter",
-	}, []string{"changefeed", "type"})
+	}, []string{"namespace", "changefeed", "type"})
 
 	sorterMergerStartTsGauge = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: "ticdc",
 		Subsystem: "sorter",
 		Name:      "merger_start_ts_gauge",
 		Help:      "the start TS of each merge in the sorter",
-	}, []string{"changefeed"})
+	}, []string{"namespace", "changefeed"})
 
 	sorterFlushCountHistogram = prometheus.NewHistogramVec(prometheus.HistogramOpts{
 		Namespace: "ticdc",
@@ -38,7 +38,7 @@ var (
 		Name:      "flush_count_histogram",
 		Help:      "Bucketed histogram of the number of events in individual flushes performed by the sorter",
 		Buckets:   prometheus.ExponentialBuckets(4, 4, 10),
-	}, []string{"changefeed"})
+	}, []string{"namespace", "changefeed"})
 
 	sorterMergeCountHistogram = prometheus.NewHistogramVec(prometheus.HistogramOpts{
 		Namespace: "ticdc",
@@ -46,7 +46,7 @@ var (
 		Name:      "merge_count_histogram",
 		Help:      "Bucketed histogram of the number of events in individual merges performed by the sorter",
 		Buckets:   prometheus.ExponentialBuckets(16, 4, 10),
-	}, []string{"changefeed"})
+	}, []string{"namespace", "changefeed"})
 )
 
 // InitMetrics registers all metrics in this file

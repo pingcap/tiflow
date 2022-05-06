@@ -173,6 +173,7 @@ func (s *Sorter) Run(ctx context.Context) error {
 		changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
 
 		metricSorterConsumeCount := sorterConsumeCount.MustCurryWith(map[string]string{
+			"namespace":  changefeedID.Namespace,
 			"changefeed": changefeedID.ID,
 		})
 
