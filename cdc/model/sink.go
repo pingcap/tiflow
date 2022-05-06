@@ -478,6 +478,7 @@ type RedoDDLEvent struct {
 
 // FromJob fills the values of DDLEvent from DDL job
 func (d *DDLEvent) FromJob(job *model.Job, preTableInfo *TableInfo) {
+	// populating DDLEvent of a rename tables job is handled in `FromRenameTablesJob()`
 	if d.Type == model.ActionRenameTables {
 		return
 	}

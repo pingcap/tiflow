@@ -61,8 +61,7 @@ type changefeed struct {
 	// a DDL job asynchronously. After the DDL job has been executed,
 	// ddlEventCache will be set to nil. ddlEventCache contains more than
 	// one event for a rename tables DDL job.
-	ddlEventCache []*model.DDLEvent
-	ddlEventDone  map[*model.DDLEvent]bool
+	ddlEventCache map[*model.DDLEvent]bool
 	// currentTableNames is the table names that the changefeed is watching.
 	// And it contains only the tables of the ddl that have been processed.
 	// The ones that have not been executed yet do not have.
@@ -580,7 +579,7 @@ func (c *changefeed) asyncExecDDLJob(ctx cdcContext.Context,
 		return true, nil
 	}
 
-	if c.ddlEventCache == nil || c.ddlEventCache[0].CommitTs != job.BinlogInfo.FinishedTS {
+	if c.ddlEventCache == nil {
 		ddlEvents, err := c.schema.BuildDDLEvents(job)
 		if err != nil {
 			log.Error("build DDL event fail", zap.String("changefeed", c.id.ID),
@@ -595,9 +594,9 @@ func (c *changefeed) asyncExecDDLJob(ctx cdcContext.Context,
 		if err != nil {
 			return false, errors.Trace(err)
 		}
-
-		c.ddlEventCache = ddlEvents
-		c.ddlEventDone = make(map[*model.DDLEvent]bool)
+		for _, event := range ddlEvents {
+			c.ddlEventCache[event] = false
+		}
 		for _, ddlEvent := range ddlEvents {
 			if c.redoManager.Enabled() {
 				err = c.redoManager.EmitDDLEvent(ctx, ddlEvent)
@@ -609,8 +608,8 @@ func (c *changefeed) asyncExecDDLJob(ctx cdcContext.Context,
 	}
 
 	jobDone := true
-	for _, event := range c.ddlEventCache {
-		if c.ddlEventDone[event] {
+	for event, done := range c.ddlEventCache {
+		if done {
 			continue
 		}
 		eventDone, err := c.asyncExecDDLEvent(ctx, event)
@@ -618,14 +617,13 @@ func (c *changefeed) asyncExecDDLJob(ctx cdcContext.Context,
 			return false, err
 		}
 		if eventDone {
-			c.ddlEventDone[event] = true
+			c.ddlEventCache[event] = true
 		}
 		jobDone = jobDone && eventDone
 	}
 
 	if jobDone {
 		c.ddlEventCache = nil
-		c.ddlEventDone = nil
 		// It has expired.
 		// We should use the latest table names now.
 		c.currentTableNames = nil
