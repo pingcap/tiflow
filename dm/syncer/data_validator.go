@@ -375,7 +375,6 @@ func (v *DataValidator) fillResult(err error, needLock bool) {
 
 func (v *DataValidator) errorProcessRoutine() {
 	defer v.errProcessWg.Done()
-	// todo: what if this routine panic? we still need to drain v.errChan.
 	for err := range v.errChan {
 		v.fillResult(err, true)
 
