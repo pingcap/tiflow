@@ -26,7 +26,6 @@ import (
 	"github.com/pingcap/tidb/util/filter"
 	regexprrouter "github.com/pingcap/tidb/util/regexpr-router"
 	router "github.com/pingcap/tidb/util/table-router"
-	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -274,5 +273,5 @@ func TestGoLogWrapper(t *testing.T) {
 		panic("should be captured")
 	})
 	wg.Wait()
-	require.True(t, true)
+	// if GoLogWrapper didn't catch it, this case will fail.
 }
