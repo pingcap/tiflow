@@ -149,7 +149,7 @@ func NewTracker(ctx context.Context, task string, sessionCfg map[string]string, 
 		}
 	}
 
-	storePath, err = ioutil.TempDir("./", "schema-tracker")
+	storePath, err = ioutil.TempDir("./", task+"-schema-tracker")
 	if err != nil {
 		return nil, err
 	}
