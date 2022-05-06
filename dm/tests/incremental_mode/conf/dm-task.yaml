@@ -1,6 +1,6 @@
 ---
 name: test
-task-mode: task-mode-placeholder
+task-mode: incremental
 is-sharding: false
 meta-schema: "dm_meta"
 # enable-heartbeat: true
@@ -17,8 +17,6 @@ target-database:
 mysql-instances:
   - source-id: "mysql-replica-01"
     meta:
-      binlog-name: binlog-name-placeholder-1
-      binlog-pos: binlog-pos-placeholder-1
       binlog-gtid: binlog-gtid-placeholder-1
     block-allow-list:  "instance"
     mydumper-config-name: "global"
@@ -29,7 +27,6 @@ mysql-instances:
     meta:
       binlog-name: binlog-name-placeholder-2
       binlog-pos: binlog-pos-placeholder-2
-      binlog-gtid: binlog-gtid-placeholder-2
     block-allow-list:  "instance"
     mydumper-config-name: "global"
     loader-config-name: "global"
