@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/log"
 	ticonfig "github.com/pingcap/tidb/config"
 	"github.com/pingcap/tiflow/cdc"
+	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/sorter/unified"
 	cmdcontext "github.com/pingcap/tiflow/pkg/cmd/context"
 	"github.com/pingcap/tiflow/pkg/cmd/util"
@@ -126,8 +127,8 @@ func (o *options) run(cmd *cobra.Command) error {
 	}
 
 	config.StoreGlobalServerConfig(o.serverConfig)
-	ctx := ticdcutil.PutTimezoneInCtx(cmdcontext.GetDefaultContext(), tz)
-	ctx = ticdcutil.PutCaptureAddrInCtx(ctx, o.serverConfig.AdvertiseAddr)
+	ctx := contextutil.PutTimezoneInCtx(cmdcontext.GetDefaultContext(), tz)
+	ctx = contextutil.PutCaptureAddrInCtx(ctx, o.serverConfig.AdvertiseAddr)
 
 	version.LogVersionInfo()
 	if ticdcutil.FailpointBuild {

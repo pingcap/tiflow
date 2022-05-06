@@ -33,8 +33,10 @@ type schedulerTester struct {
 }
 
 func (s *schedulerTester) reset(t *testing.T) {
-	s.changefeedID = fmt.Sprintf("test-changefeed-%x", rand.Uint32())
-	s.state = orchestrator.NewChangefeedReactorState("test-changefeed")
+	s.changefeedID = model.DefaultChangeFeedID(
+		fmt.Sprintf("test-changefeed-%x", rand.Uint32()))
+	s.state = orchestrator.NewChangefeedReactorState(
+		model.DefaultChangeFeedID("test-changefeed"))
 	s.tester = orchestrator.NewReactorStateTester(t, s.state, nil)
 	s.scheduler = newSchedulerV1().(*schedulerV1CompatWrapper).inner
 	s.captures = make(map[model.CaptureID]*model.CaptureInfo)

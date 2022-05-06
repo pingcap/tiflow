@@ -32,7 +32,7 @@ func TestGetTimezoneFromZonefile(t *testing.T) {
 		{false, "/usr/share/zoneinfo/Asia/Shanghai", "Asia/Shanghai"},
 	}
 	for _, tc := range testCases {
-		loc, err := getTimezoneFromZonefile(tc.zonefile)
+		loc, err := GetTimezoneFromZonefile(tc.zonefile)
 		if tc.hasErr {
 			require.NotNil(t, err)
 		} else {

@@ -32,6 +32,7 @@ import (
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	pmessage "github.com/pingcap/tiflow/pkg/pipeline/message"
+	"github.com/pingcap/tiflow/pkg/upstream"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
@@ -48,6 +49,9 @@ type tableActor struct {
 	actorID actor.ID
 	mb      actor.Mailbox[pmessage.Message]
 	router  *actor.Router[pmessage.Message]
+
+	upStream *upstream.Upstream
+
 	// all goroutines in tableActor should be spawned from this wg
 	wg *errgroup.Group
 	// backend mounter
@@ -78,7 +82,7 @@ type tableActor struct {
 	changefeedVars *cdcContext.ChangefeedVars
 	globalVars     *cdcContext.GlobalVars
 	// these fields below are used in logs and metrics only
-	changefeedID string
+	changefeedID model.ChangeFeedID
 	tableName    string
 
 	// use to report error to processor
@@ -93,6 +97,7 @@ type tableActor struct {
 
 // NewTableActor creates a table actor and starts it.
 func NewTableActor(cdcCtx cdcContext.Context,
+	upStream *upstream.Upstream,
 	mounter entry.Mounter,
 	tableID model.TableID,
 	tableName string,
@@ -124,6 +129,7 @@ func NewTableActor(cdcCtx cdcContext.Context,
 		tableName:     tableName,
 		cyclicEnabled: cyclicEnabled,
 		memoryQuota:   serverConfig.GetGlobalServerConfig().PerTableMemoryQuota,
+		upStream:      upStream,
 		mounter:       mounter,
 		replicaInfo:   replicaInfo,
 		replicaConfig: config,
@@ -142,7 +148,8 @@ func NewTableActor(cdcCtx cdcContext.Context,
 
 	startTime := time.Now()
 	log.Info("table actor starting",
-		zap.String("changefeed", table.changefeedID),
+		zap.String("namespace", table.changefeedID.Namespace),
+		zap.String("changefeed", table.changefeedID.ID),
 		zap.String("tableName", tableName),
 		zap.Int64("tableID", tableID))
 	if err := table.start(cctx); err != nil {
@@ -154,7 +161,8 @@ func NewTableActor(cdcCtx cdcContext.Context,
 		return nil, errors.Trace(err)
 	}
 	log.Info("table actor started",
-		zap.String("changefeed", table.changefeedID),
+		zap.String("namespace", table.changefeedID.Namespace),
+		zap.String("changefeed", table.changefeedID.ID),
 		zap.String("tableName", tableName),
 		zap.Int64("tableID", tableID),
 		zap.Duration("duration", time.Since(startTime)))
@@ -208,7 +216,8 @@ func (t *tableActor) Poll(ctx context.Context, msgs []message.Message[pmessage.M
 	}
 	if atomic.LoadUint32(&t.stopped) == stopped {
 		log.Error("table actor removed",
-			zap.String("changefeed", t.changefeedID),
+			zap.String("namespace", t.changefeedID.Namespace),
+			zap.String("changefeed", t.changefeedID.ID),
 			zap.String("tableName", t.tableName),
 			zap.Int64("tableID", t.tableID))
 		return false
@@ -258,12 +267,14 @@ func (t *tableActor) handleStopMsg(ctx context.Context) {
 func (t *tableActor) start(sdtTableContext context.Context) error {
 	if t.started {
 		log.Panic("start an already started table",
-			zap.String("changefeedID", t.changefeedID),
+			zap.String("namespace", t.changefeedID.Namespace),
+			zap.String("changefeed", t.changefeedID.ID),
 			zap.Int64("tableID", t.tableID),
 			zap.String("tableName", t.tableName))
 	}
 	log.Debug("creating table flow controller",
-		zap.String("changefeedID", t.changefeedID),
+		zap.String("namespace", t.changefeedID.Namespace),
+		zap.String("changefeed", t.changefeedID.ID),
 		zap.Int64("tableID", t.tableID),
 		zap.String("tableName", t.tableName),
 		zap.Uint64("quota", t.memoryQuota))
@@ -366,13 +377,15 @@ func (t *tableActor) getSinkAsyncMessageHolder(
 // from this table actor
 func (t *tableActor) stop(err error) {
 	log.Info("table actor begin to stop....",
-		zap.String("changefeed", t.changefeedID),
+		zap.String("namespace", t.changefeedID.Namespace),
+		zap.String("changefeed", t.changefeedID.ID),
 		zap.String("tableName", t.tableName))
 	t.stopLock.Lock()
 	defer t.stopLock.Unlock()
 	if atomic.LoadUint32(&t.stopped) == stopped {
 		log.Info("table actor is already stopped",
-			zap.String("changefeed", t.changefeedID),
+			zap.String("namespace", t.changefeedID.Namespace),
+			zap.String("changefeed", t.changefeedID.ID),
 			zap.String("tableName", t.tableName))
 		return
 	}
@@ -385,13 +398,15 @@ func (t *tableActor) stop(err error) {
 	if t.sinkNode != nil {
 		if err := t.sinkNode.releaseResource(t.stopCtx); err != nil {
 			log.Warn("close sink failed",
-				zap.String("changefeed", t.changefeedID),
+				zap.String("namespace", t.changefeedID.Namespace),
+				zap.String("changefeed", t.changefeedID.ID),
 				zap.String("tableName", t.tableName),
 				zap.Error(err))
 		}
 	}
 	log.Info("table actor stopped",
-		zap.String("changefeed", t.changefeedID),
+		zap.String("namespace", t.changefeedID.Namespace),
+		zap.String("changefeed", t.changefeedID.ID),
 		zap.String("tableName", t.tableName),
 		zap.Int64("tableID", t.tableID),
 		zap.Error(err))
@@ -502,7 +517,7 @@ func (t *tableActor) Wait() {
 
 // for ut
 var startPuller = func(t *tableActor, ctx *actorNodeContext) error {
-	return t.pullerNode.start(ctx, t.wg, true, t.sortNode)
+	return t.pullerNode.start(ctx, t.upStream, t.wg, true, t.sortNode)
 }
 
 var startSorter = func(t *tableActor, ctx *actorNodeContext) error {

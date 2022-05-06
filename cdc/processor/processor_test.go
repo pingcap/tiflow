@@ -33,6 +33,7 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
+	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/stretchr/testify/require"
 )
 
@@ -44,7 +45,8 @@ func newProcessor4Test(
 	t *testing.T,
 	createTablePipeline func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error),
 ) *processor {
-	p := newProcessor(ctx)
+	upStream := upstream.NewUpstream4Test(nil)
+	p := newProcessor(ctx, upStream)
 	// disable new scheduler to pass old test cases
 	// TODO refactor the test cases so that new scheduler can be enabled
 	p.newSchedulerEnabled = false
@@ -117,11 +119,11 @@ func initProcessor4Test(ctx cdcContext.Context, t *testing.T) (*processor, *orch
 		"/tidb/cdc/capture/" +
 			captureID: `{"id":"` + captureID + `","address":"127.0.0.1:8300"}`,
 		"/tidb/cdc/changefeed/info/" +
-			changefeedID: changefeedInfo,
+			changefeedID.ID: changefeedInfo,
 		"/tidb/cdc/job/" +
-			ctx.ChangefeedVars().ID: `{"resolved-ts":0,"checkpoint-ts":0,"admin-job-type":0}`,
+			ctx.ChangefeedVars().ID.ID: `{"resolved-ts":0,"checkpoint-ts":0,"admin-job-type":0}`,
 		"/tidb/cdc/task/status/" +
-			captureID + "/" + changefeedID: `{"tables":{},"operation":null,"admin-job-type":0}`,
+			captureID + "/" + changefeedID.ID: `{"tables":{},"operation":null,"admin-job-type":0}`,
 	})
 }
 
@@ -949,7 +951,9 @@ func TestSchemaGC(t *testing.T) {
 	require.Nil(t, err)
 	tester.MustApplyPatches()
 
-	updateChangeFeedPosition(t, tester, "changefeed-id-test", 50, 50)
+	updateChangeFeedPosition(t, tester,
+		model.DefaultChangeFeedID("changefeed-id-test"),
+		50, 50)
 	_, err = p.Tick(ctx, p.changefeed)
 	require.Nil(t, err)
 	tester.MustApplyPatches()
