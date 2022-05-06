@@ -594,6 +594,7 @@ func (c *changefeed) asyncExecDDLJob(ctx cdcContext.Context,
 		if err != nil {
 			return false, errors.Trace(err)
 		}
+		c.ddlEventCache = make(map[*model.DDLEvent]bool)
 		for _, event := range ddlEvents {
 			c.ddlEventCache[event] = false
 		}
