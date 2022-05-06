@@ -231,6 +231,15 @@ type MasterTopology struct {
 	Port int    `json:"port"`
 }
 
+// OperateTaskResponse defines model for OperateTaskResponse.
+type OperateTaskResponse struct {
+	// pre-check result
+	CheckResult string `json:"check_result"`
+
+	// task
+	Task Task `json:"task"`
+}
+
 // action to operate table request
 type OperateTaskTableStructureRequest struct {
 	// Writes the schema to the checkpoint so that DM can load it after restarting the task
@@ -241,15 +250,6 @@ type OperateTaskTableStructureRequest struct {
 
 	// Updates the optimistic sharding metadata with this schema only used when an error occurs in the optimistic sharding DDL mode
 	Sync *bool `json:"sync,omitempty"`
-}
-
-// OperateTaskWithPreCheckResponse defines model for OperateTaskWithPreCheckResponse.
-type OperateTaskWithPreCheckResponse struct {
-	// pre-check result
-	CheckResult string `json:"check_result"`
-
-	// task
-	Task Task `json:"task"`
 }
 
 // PrometheusTopology defines model for PrometheusTopology.

@@ -454,7 +454,7 @@ paths:
           content:
             "application/json":
               schema:
-                $ref: "#/components/schemas/OperateTaskWithPreCheckResponse"
+                $ref: "#/components/schemas/OperateTaskResponse"
         "400":
           description: "failed"
           content:
@@ -583,7 +583,7 @@ paths:
           content:
             "application/json":
               schema:
-                $ref: "#/components/schemas/OperateTaskWithPreCheckResponse"
+                $ref: "#/components/schemas/OperateTaskResponse"
         "400":
           description: "failed"
           content:
@@ -2213,7 +2213,7 @@ components:
           description: "Updates the optimistic sharding metadata with this schema only used when an error occurs in the optimistic sharding DDL mode"
       required:
         - "sql_content"
-    OperateTaskWithPreCheckResponse:
+    OperateTaskResponse:
       type: object
       properties: 
         task:

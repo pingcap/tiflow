@@ -383,7 +383,7 @@ func (s *Server) checkOpenAPITaskBeforeOperate(ctx context.Context, task *openap
 	return subTaskConfigList, msg, nil
 }
 
-func (s *Server) createTask(ctx context.Context, req openapi.CreateTaskRequest) (*openapi.OperateTaskWithPreCheckResponse, error) {
+func (s *Server) createTask(ctx context.Context, req openapi.CreateTaskRequest) (*openapi.OperateTaskResponse, error) {
 	task := &req.Task
 	if err := task.Adjust(); err != nil {
 		return nil, err
@@ -392,14 +392,14 @@ func (s *Server) createTask(ctx context.Context, req openapi.CreateTaskRequest) 
 	if err != nil {
 		return nil, err
 	}
-	res := &openapi.OperateTaskWithPreCheckResponse{
+	res := &openapi.OperateTaskResponse{
 		Task:        *task,
 		CheckResult: msg,
 	}
 	return res, s.scheduler.AddSubTasks(false, pb.Stage_Stopped, subtaskCfgPointersToInstances(subTaskConfigList...)...)
 }
 
-func (s *Server) updateTask(ctx context.Context, req openapi.UpdateTaskRequest) (*openapi.OperateTaskWithPreCheckResponse, error) {
+func (s *Server) updateTask(ctx context.Context, req openapi.UpdateTaskRequest) (*openapi.OperateTaskResponse, error) {
 	task := &req.Task
 	if err := task.Adjust(); err != nil {
 		return nil, err
@@ -408,7 +408,7 @@ func (s *Server) updateTask(ctx context.Context, req openapi.UpdateTaskRequest) 
 	if err != nil {
 		return nil, err
 	}
-	res := &openapi.OperateTaskWithPreCheckResponse{
+	res := &openapi.OperateTaskResponse{
 		Task:        *task,
 		CheckResult: msg,
 	}
