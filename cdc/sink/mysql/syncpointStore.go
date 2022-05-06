@@ -28,7 +28,7 @@ type SyncpointStore interface {
 	CreateSynctable(ctx context.Context) error
 
 	// SinkSyncpoint record the syncpoint(a map with ts) in downstream db
-	SinkSyncpoint(ctx context.Context, id string, checkpointTs uint64) error
+	SinkSyncpoint(ctx context.Context, id model.ChangeFeedID, checkpointTs uint64) error
 
 	// Close closes the SyncpointSink
 	Close() error

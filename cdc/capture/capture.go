@@ -24,15 +24,11 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
-	tidbkv "github.com/pingcap/tidb/kv"
-	"github.com/tikv/client-go/v2/tikv"
-	pd "github.com/tikv/pd/client"
 	"go.etcd.io/etcd/client/v3/concurrency"
 	"go.etcd.io/etcd/server/v3/mvcc"
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
 
-	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/owner"
 	"github.com/pingcap/tiflow/cdc/processor"
@@ -44,7 +40,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/p2p"
-	"github.com/pingcap/tiflow/pkg/pdtime"
+	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/version"
 )
 
@@ -55,19 +51,16 @@ type Capture struct {
 	info             *model.CaptureInfo
 	processorManager *processor.Manager
 
-	ownerMu sync.Mutex
-	owner   owner.Owner
+	pdEnpoints      []string
+	UpstreamManager *upstream.Manager
+	ownerMu         sync.Mutex
+	owner           owner.Owner
 
 	// session keeps alive between the capture and etcd
 	session  *concurrency.Session
 	election *concurrency.Election
 
-	PDClient     pd.Client
-	Storage      tidbkv.Storage
 	EtcdClient   *etcd.CDCEtcdClient
-	grpcPool     kv.GrpcPool
-	regionCache  *tikv.RegionCache
-	pdClock      *pdtime.PDClock
 	sorterSystem *ssystem.System
 
 	enableNewScheduler bool
@@ -89,20 +82,18 @@ type Capture struct {
 
 	cancel context.CancelFunc
 
-	newProcessorManager func() *processor.Manager
-	newOwner            func(pd.Client) owner.Owner
+	newProcessorManager func(upstreamManager *upstream.Manager) *processor.Manager
+	newOwner            func(upstreamManager *upstream.Manager) owner.Owner
 }
 
 // NewCapture returns a new Capture instance
-func NewCapture(pdClient pd.Client, kvStorage tidbkv.Storage, etcdClient *etcd.CDCEtcdClient, grpcService *p2p.ServerWrapper) *Capture {
+func NewCapture(pdEnpoints []string, etcdClient *etcd.CDCEtcdClient, grpcService *p2p.ServerWrapper) *Capture {
 	conf := config.GetGlobalServerConfig()
 	return &Capture{
-		PDClient:    pdClient,
-		Storage:     kvStorage,
-		EtcdClient:  etcdClient,
-		grpcService: grpcService,
-		cancel:      func() {},
-
+		EtcdClient:          etcdClient,
+		grpcService:         grpcService,
+		cancel:              func() {},
+		pdEnpoints:          pdEnpoints,
 		enableNewScheduler:  conf.Debug.EnableNewScheduler,
 		newProcessorManager: processor.NewManager,
 		newOwner:            owner.NewOwner,
@@ -135,22 +126,25 @@ func (c *Capture) reset(ctx context.Context) error {
 		AdvertiseAddr: conf.AdvertiseAddr,
 		Version:       version.ReleaseVersion,
 	}
-	c.processorManager = c.newProcessorManager()
+
+	if c.UpstreamManager != nil {
+		c.UpstreamManager.Close()
+	}
+	c.UpstreamManager = upstream.NewManager(ctx)
+	err = c.UpstreamManager.Add(upstream.DefaultClusterID, c.pdEnpoints)
+	if err != nil {
+		return errors.Annotate(
+			cerror.WrapError(cerror.ErrNewCaptureFailed, err),
+			"add default upstream failed")
+	}
+
+	c.processorManager = c.newProcessorManager(c.UpstreamManager)
 	if c.session != nil {
 		// It can't be handled even after it fails, so we ignore it.
 		_ = c.session.Close()
 	}
 	c.session = sess
 	c.election = concurrency.NewElection(sess, etcd.CaptureOwnerKey)
-
-	if c.pdClock != nil {
-		c.pdClock.Stop()
-	}
-
-	c.pdClock, err = pdtime.NewClock(ctx, c.PDClient)
-	if err != nil {
-		return errors.Trace(err)
-	}
 
 	if c.tableActorSystem != nil {
 		c.tableActorSystem.Stop()
@@ -183,9 +177,6 @@ func (c *Capture) reset(ctx context.Context) error {
 				"create sorter system")
 		}
 	}
-	if c.grpcPool != nil {
-		c.grpcPool.Close()
-	}
 
 	if c.enableNewScheduler {
 		c.grpcService.Reset(nil)
@@ -196,12 +187,6 @@ func (c *Capture) reset(ctx context.Context) error {
 			c.MessageRouter = nil
 		}
 	}
-
-	c.grpcPool = kv.NewGrpcPoolImpl(ctx, conf.Security)
-	if c.regionCache != nil {
-		c.regionCache.Close()
-	}
-	c.regionCache = tikv.NewRegionCache(c.PDClient)
 
 	if c.enableNewScheduler {
 		messageServerConfig := conf.Debug.Messages.ToMessageServerConfig()
@@ -265,13 +250,8 @@ func (c *Capture) Run(ctx context.Context) error {
 
 func (c *Capture) run(stdCtx context.Context) error {
 	ctx := cdcContext.NewContext(stdCtx, &cdcContext.GlobalVars{
-		PDClient:         c.PDClient,
-		KVStorage:        c.Storage,
 		CaptureInfo:      c.info,
 		EtcdClient:       c.EtcdClient,
-		GrpcPool:         c.grpcPool,
-		RegionCache:      c.regionCache,
-		PDClock:          c.pdClock,
 		TableActorSystem: c.tableActorSystem,
 		SorterSystem:     c.sorterSystem,
 		MessageServer:    c.MessageServer,
@@ -323,16 +303,6 @@ func (c *Capture) run(stdCtx context.Context) error {
 		// so we should also stop the processor and let capture restart or exit
 		processorErr = c.runEtcdWorker(ctx, c.processorManager, globalState, processorFlushInterval, "processor")
 		log.Info("the processor routine has exited", zap.Error(processorErr))
-	}()
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		c.pdClock.Run(ctx)
-	}()
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		c.grpcPool.RecycleConn(ctx)
 	}()
 	if c.enableNewScheduler {
 		wg.Add(1)
@@ -419,7 +389,7 @@ func (c *Capture) campaignOwner(ctx cdcContext.Context) error {
 			zap.String("captureID", c.info.ID),
 			zap.Int64("ownerRev", ownerRev))
 
-		owner := c.newOwner(c.PDClient)
+		owner := c.newOwner(c.UpstreamManager)
 		c.setOwner(owner)
 
 		globalState := orchestrator.NewGlobalState()
@@ -541,13 +511,7 @@ func (c *Capture) AsyncClose() {
 	if c.processorManager != nil {
 		c.processorManager.AsyncClose()
 	}
-	if c.grpcPool != nil {
-		c.grpcPool.Close()
-	}
-	if c.regionCache != nil {
-		c.regionCache.Close()
-		c.regionCache = nil
-	}
+
 	if c.tableActorSystem != nil {
 		c.tableActorSystem.Stop()
 		c.tableActorSystem = nil

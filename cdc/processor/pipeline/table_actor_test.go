@@ -338,7 +338,7 @@ func TestNewTableActor(t *testing.T) {
 	cctx := cdcContext.WithChangefeedVars(
 		cdcContext.NewContext(ctx, globalVars),
 		&cdcContext.ChangefeedVars{
-			ID: "changefeed-1",
+			ID: model.DefaultChangeFeedID("changefeed-id-test"),
 			Info: &model.ChangeFeedInfo{
 				Config: config.GetDefaultReplicaConfig(),
 			},
@@ -350,7 +350,7 @@ func TestNewTableActor(t *testing.T) {
 	startSorter = func(t *tableActor, ctx *actorNodeContext) error {
 		return nil
 	}
-	tbl, err := NewTableActor(cctx, nil, 1, "t1",
+	tbl, err := NewTableActor(cctx, nil, nil, 1, "t1",
 		&model.TableReplicaInfo{
 			StartTs:     0,
 			MarkTableID: 1,
@@ -366,7 +366,7 @@ func TestNewTableActor(t *testing.T) {
 		return errors.New("failed to start puller")
 	}
 
-	tbl, err = NewTableActor(cctx, nil, 1, "t1",
+	tbl, err = NewTableActor(cctx, nil, nil, 1, "t1",
 		&model.TableReplicaInfo{
 			StartTs:     0,
 			MarkTableID: 1,
@@ -401,7 +401,7 @@ func TestTableActorStart(t *testing.T) {
 	tbl := &tableActor{
 		globalVars: globalVars,
 		changefeedVars: &cdcContext.ChangefeedVars{
-			ID: "changefeed-1",
+			ID: model.DefaultChangeFeedID("changefeed-id-test"),
 			Info: &model.ChangeFeedInfo{
 				Config: config.GetDefaultReplicaConfig(),
 			},
@@ -418,7 +418,7 @@ func TestTableActorStart(t *testing.T) {
 	tbl = &tableActor{
 		globalVars: globalVars,
 		changefeedVars: &cdcContext.ChangefeedVars{
-			ID: "changefeed-1",
+			ID: model.DefaultChangeFeedID("changefeed-id-test"),
 			Info: &model.ChangeFeedInfo{
 				Config: config.GetDefaultReplicaConfig(),
 			},

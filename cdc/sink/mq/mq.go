@@ -22,6 +22,7 @@ import (
 	"github.com/Shopify/sarama"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/codec"
 	"github.com/pingcap/tiflow/cdc/sink/metrics"
@@ -90,8 +91,8 @@ func newMqSink(
 		return nil, errors.Trace(err)
 	}
 
-	changefeedID := util.ChangefeedIDFromCtx(ctx)
-	role := util.RoleFromCtx(ctx)
+	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
+	role := contextutil.RoleFromCtx(ctx)
 
 	encoder := encoderBuilder.Build()
 	statistics := metrics.NewStatistics(ctx, metrics.SinkTypeMQ)
@@ -119,7 +120,9 @@ func newMqSink(
 			case errCh <- err:
 			default:
 				log.Error("error channel is full", zap.Error(err),
-					zap.String("changefeed", changefeedID), zap.Any("role", s.role))
+					zap.String("namespace", changefeedID.Namespace),
+					zap.String("changefeed", changefeedID.ID),
+					zap.Any("role", s.role))
 			}
 		}
 	}()
@@ -148,7 +151,8 @@ func (k *mqSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowCha
 		if k.filter.ShouldIgnoreDMLEvent(row.StartTs, row.Table.Schema, row.Table.Table) {
 			log.Info("Row changed event ignored",
 				zap.Uint64("startTs", row.StartTs),
-				zap.String("changefeed", k.id),
+				zap.String("namespace", k.id.Namespace),
+				zap.String("changefeed", k.id.ID),
 				zap.Any("role", k.role))
 			continue
 		}
@@ -274,7 +278,8 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 			zap.String("query", ddl.Query),
 			zap.Uint64("startTs", ddl.StartTs),
 			zap.Uint64("commitTs", ddl.CommitTs),
-			zap.String("changefeed", k.id),
+			zap.String("namespace", k.id.Namespace),
+			zap.String("changefeed", k.id.ID),
 			zap.Any("role", k.role),
 		)
 		return cerror.ErrDDLEventIgnored.GenWithStackByArgs()
@@ -293,8 +298,11 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 	partitionRule := k.eventRouter.GetDLLDispatchRuleByProtocol(k.protocol)
 	k.statistics.AddDDLCount()
 	log.Debug("emit ddl event",
-		zap.Uint64("commitTs", ddl.CommitTs), zap.String("query", ddl.Query),
-		zap.String("changefeed", k.id), zap.Any("role", k.role))
+		zap.Uint64("commitTs", ddl.CommitTs),
+		zap.String("query", ddl.Query),
+		zap.String("namespace", k.id.Namespace),
+		zap.String("changefeed", k.id.ID),
+		zap.Any("role", k.role))
 	if partitionRule == dispatcher.PartitionAll {
 		partitionNum, err := k.topicManager.Partitions(topic)
 		if err != nil {
@@ -390,7 +398,7 @@ func NewKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
 
-	encoderConfig := codec.NewConfig(protocol, util.TimezoneFromCtx(ctx))
+	encoderConfig := codec.NewConfig(protocol, contextutil.TimezoneFromCtx(ctx))
 	if err := encoderConfig.Apply(sinkURI, opts); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
@@ -463,7 +471,7 @@ func NewPulsarSink(ctx context.Context, sinkURI *url.URL, filter *filter.Filter,
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
 
-	encoderConfig := codec.NewConfig(protocol, util.TimezoneFromCtx(ctx))
+	encoderConfig := codec.NewConfig(protocol, contextutil.TimezoneFromCtx(ctx))
 	if err := encoderConfig.Apply(sinkURI, opts); err != nil {
 		return nil, errors.Trace(err)
 	}

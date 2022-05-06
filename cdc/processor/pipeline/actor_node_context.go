@@ -99,7 +99,9 @@ func (c *actorNodeContext) SendToNextNode(msg pmessage.Message) {
 	case <-c.Context.Done():
 		log.Info("context is canceled",
 			zap.String("tableName", c.tableName),
-			zap.String("changefeed", c.changefeedVars.ID))
+			zap.String("namespace", c.changefeedVars.ID.Namespace),
+			zap.String("changefeed", c.changefeedVars.ID.ID),
+		)
 	case c.outputCh <- msg:
 		c.trySendTickMessage()
 	}
