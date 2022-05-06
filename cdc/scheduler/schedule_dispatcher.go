@@ -38,9 +38,12 @@ type ScheduleDispatcher interface {
 	// This function should NOT be assumed to be thread-safe. No concurrent calls allowed.
 	Tick(
 		ctx context.Context,
-		checkpointTs model.Ts, // Latest global checkpoint of the changefeed
-		currentTables []model.TableID, // All tables that SHOULD be replicated (or started) at the current checkpoint.
-		captures map[model.CaptureID]*model.CaptureInfo, // All captures that are alive according to the latest Etcd states.
+		// Latest global checkpoint of the changefeed
+		checkpointTs model.Ts,
+		// All tables that SHOULD be replicated (or started) at the current checkpoint.
+		currentTables []model.TableID,
+		// All captures that are alive according to the latest Etcd states.
+		captures map[model.CaptureID]*model.CaptureInfo,
 	) (newCheckpointTs, newResolvedTs model.Ts, err error)
 
 	// MoveTable requests that a table be moved to target.
@@ -119,7 +122,9 @@ func NewBaseScheduleDispatcher(
 	checkpointTs model.Ts,
 ) *BaseScheduleDispatcher {
 	// logger is just the global logger with the `changefeed-id` field attached.
-	logger := log.L().With(zap.String("changefeed", changeFeedID))
+	logger := log.L().With(
+		zap.String("namespace", changeFeedID.Namespace),
+		zap.String("changefeed", changeFeedID.ID))
 
 	return &BaseScheduleDispatcher{
 		tables:               util.NewTableSet(),

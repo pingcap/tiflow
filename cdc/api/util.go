@@ -99,7 +99,7 @@ func handleOwnerJob(
 }
 
 func handleOwnerRebalance(
-	ctx context.Context, capture *capture.Capture, changefeedID string,
+	ctx context.Context, capture *capture.Capture, changefeedID model.ChangeFeedID,
 ) error {
 	// Use buffered channel to prevent blocking owner.
 	done := make(chan error, 1)
@@ -118,7 +118,7 @@ func handleOwnerRebalance(
 
 func handleOwnerScheduleTable(
 	ctx context.Context, capture *capture.Capture,
-	changefeedID string, captureID string, tableID int64,
+	changefeedID model.ChangeFeedID, captureID string, tableID int64,
 ) error {
 	// Use buffered channel to prevernt blocking owner.
 	done := make(chan error, 1)

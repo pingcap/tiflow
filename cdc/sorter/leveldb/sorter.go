@@ -21,6 +21,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sorter"
 	"github.com/pingcap/tiflow/cdc/sorter/encoding"
@@ -29,7 +30,6 @@ import (
 	actormsg "github.com/pingcap/tiflow/pkg/actor/message"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
@@ -94,11 +94,16 @@ func NewSorter(
 	readerSystem *actor.System[message.Task], readerRouter *actor.Router[message.Task],
 	compact *CompactScheduler, cfg *config.DBConfig,
 ) (*Sorter, error) {
-	changefeedID := util.ChangefeedIDFromCtx(ctx)
+	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
 	metricIterDuration := sorterIterReadDurationHistogram.MustCurryWith(
-		prometheus.Labels{"id": changefeedID})
-	metricTotalEventsKV := sorter.EventCount.WithLabelValues(changefeedID, "kv")
-	metricTotalEventsResolvedTs := sorter.EventCount.WithLabelValues(changefeedID, "resolved")
+		prometheus.Labels{
+			"namespace": changefeedID.Namespace,
+			"id":        changefeedID.ID,
+		})
+	metricTotalEventsKV := sorter.EventCount.
+		WithLabelValues(changefeedID.Namespace, changefeedID.ID, "kv")
+	metricTotalEventsResolvedTs := sorter.EventCount.
+		WithLabelValues(changefeedID.Namespace, changefeedID.ID, "resolved")
 
 	// TODO: test capture the same table multiple times.
 	uid := allocID()

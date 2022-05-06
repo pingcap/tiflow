@@ -202,7 +202,9 @@ func (s *oldScheduler) dispatchToTargetCaptures(pendingJobs []*schedulerJob) {
 			workloads[pendingJob.TargetCapture] -= 1
 		default:
 			log.Panic("Unreachable, please report a bug",
-				zap.String("changefeed", s.state.ID), zap.Any("job", pendingJob))
+				zap.String("namespace", s.state.ID.Namespace),
+				zap.String("changefeed", s.state.ID.ID),
+				zap.Any("job", pendingJob))
 		}
 	}
 
@@ -309,7 +311,11 @@ func (s *oldScheduler) cleanUpFinishedOperations() {
 	for captureID := range s.state.TaskStatuses {
 		s.state.PatchTaskStatus(captureID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
 			if status == nil {
-				log.Warn("task status of the capture is not found, may be the key in etcd was deleted", zap.String("captureID", captureID), zap.String("changefeed", s.state.ID))
+				log.Warn("task status of the capture is not found, "+
+					"may be the key in etcd was deleted",
+					zap.String("captureID", captureID),
+					zap.String("namespace", s.state.ID.Namespace),
+					zap.String("changefeed", s.state.ID.ID))
 				return status, false, nil
 			}
 
@@ -360,7 +366,8 @@ func (s *oldScheduler) rebalanceByTableNum() (shouldUpdateState bool) {
 	shouldUpdateState = true
 
 	log.Info("Start rebalancing",
-		zap.String("changefeed", s.state.ID),
+		zap.String("namespace", s.state.ID.Namespace),
+		zap.String("changefeed", s.state.ID.ID),
 		zap.Int("tableNum", totalTableNum),
 		zap.Int("captureNum", captureNum),
 		zap.Int("targetLimit", upperLimitPerCapture))
@@ -392,7 +399,8 @@ func (s *oldScheduler) rebalanceByTableNum() (shouldUpdateState bool) {
 				log.Info("Rebalance: Move table",
 					zap.Int64("tableID", tableID),
 					zap.String("capture", captureID),
-					zap.String("changefeed", s.state.ID))
+					zap.String("namespace", s.state.ID.Namespace),
+					zap.String("changefeed", s.state.ID.ID))
 				return status, true, nil
 			})
 			tableNum2Remove--

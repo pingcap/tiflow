@@ -22,9 +22,9 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/metrics"
-	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
@@ -63,12 +63,14 @@ type runState struct {
 	metricTotalRows prometheus.Counter
 }
 
-func (b *bufferSink) run(ctx context.Context, changefeedID string, errCh chan error) {
+func (b *bufferSink) run(ctx context.Context, changefeedID model.ChangeFeedID, errCh chan error) {
 	state := runState{
-		metricTotalRows: metrics.BufferSinkTotalRowsCountCounter.WithLabelValues(changefeedID),
+		metricTotalRows: metrics.BufferSinkTotalRowsCountCounter.
+			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 	}
 	defer func() {
-		metrics.BufferSinkTotalRowsCountCounter.DeleteLabelValues(changefeedID)
+		metrics.BufferSinkTotalRowsCountCounter.
+			DeleteLabelValues(changefeedID.Namespace, changefeedID.ID)
 	}()
 
 	for {
@@ -144,7 +146,7 @@ func (b *bufferSink) runOnce(ctx context.Context, state *runState) (bool, error)
 		log.Warn("flush row changed events too slow",
 			zap.Int("batchSize", batchSize),
 			zap.Duration("duration", elapsed),
-			util.ZapFieldChangefeed(ctx))
+			contextutil.ZapFieldChangefeed(ctx))
 	}
 
 	return true, nil

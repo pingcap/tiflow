@@ -88,8 +88,7 @@ func NewMySQLSink(
 	replicaConfig *config.ReplicaConfig,
 	opts map[string]string,
 ) (*mysqlSink, error) {
-	opts[metrics.OptChangefeedID] = changefeedID
-	params, err := parseSinkURIToParams(ctx, sinkURI, opts)
+	params, err := parseSinkURIToParams(ctx, changefeedID, sinkURI, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -181,11 +180,11 @@ func NewMySQLSink(
 	db.SetMaxOpenConns(params.workerCount)
 
 	metricConflictDetectDurationHis := metrics.ConflictDetectDurationHis.
-		WithLabelValues(params.changefeedID)
+		WithLabelValues(params.changefeedID.Namespace, params.changefeedID.ID)
 	metricBucketSizeCounters := make([]prometheus.Counter, params.workerCount)
 	for i := 0; i < params.workerCount; i++ {
 		metricBucketSizeCounters[i] = metrics.BucketSizeCounter.
-			WithLabelValues(params.changefeedID, strconv.Itoa(i))
+			WithLabelValues(params.changefeedID.Namespace, params.changefeedID.ID, strconv.Itoa(i))
 	}
 	ctx, cancel := context.WithCancel(ctx)
 
@@ -325,7 +324,7 @@ func (s *mysqlSink) execDDLWithMaxRetries(ctx context.Context, ddl *model.DDLEve
 		return err
 	}, retry.WithBackoffBaseDelay(backoffBaseDelayInMs),
 		retry.WithBackoffMaxDelay(backoffMaxDelayInMs),
-		retry.WithMaxTries(defaultDDLMaxRetryTime),
+		retry.WithMaxTries(defaultDDLMaxRetry),
 		retry.WithIsRetryableErr(cerror.IsRetryableError))
 }
 
@@ -663,11 +662,15 @@ func (s *mysqlSink) execDMLWithMaxRetries(ctx context.Context, dmls *preparedDML
 			return errors.Trace(err)
 		}
 		log.Debug("Exec Rows succeeded",
-			zap.String("changefeed", s.params.changefeedID),
-			zap.Int("num of Rows", dmls.rowCount),
+			zap.String("namespace", s.params.changefeedID.Namespace),
+			zap.String("changefeed", s.params.changefeedID.ID),
+			zap.Int("numOfRows", dmls.rowCount),
 			zap.Int("bucket", bucket))
 		return nil
-	}, retry.WithBackoffBaseDelay(backoffBaseDelayInMs), retry.WithBackoffMaxDelay(backoffMaxDelayInMs), retry.WithMaxTries(defaultDMLMaxRetryTime), retry.WithIsRetryableErr(isRetryableDMLError))
+	}, retry.WithBackoffBaseDelay(backoffBaseDelayInMs),
+		retry.WithBackoffMaxDelay(backoffMaxDelayInMs),
+		retry.WithMaxTries(defaultDMLMaxRetry),
+		retry.WithIsRetryableErr(isRetryableDMLError))
 }
 
 type preparedDMLs struct {

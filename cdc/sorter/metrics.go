@@ -24,7 +24,7 @@ var (
 		Subsystem: "sorter",
 		Name:      "event_count",
 		Help:      "The number of events output by the sorter",
-	}, []string{"changefeed", "type"})
+	}, []string{"namespace", "changefeed", "type"})
 
 	// ResolvedTsGauge is the metric that records sorter resolved ts.
 	ResolvedTsGauge = prometheus.NewGaugeVec(prometheus.GaugeOpts{
@@ -32,7 +32,7 @@ var (
 		Subsystem: "sorter",
 		Name:      "resolved_ts_gauge",
 		Help:      "the resolved ts of the sorter",
-	}, []string{"changefeed"})
+	}, []string{"namespace", "changefeed"})
 
 	// InMemoryDataSizeGauge is the metric that records sorter memory usage.
 	InMemoryDataSizeGauge = prometheus.NewGaugeVec(prometheus.GaugeOpts{

@@ -24,63 +24,63 @@ var (
 			Subsystem: "processor",
 			Name:      "resolved_ts",
 			Help:      "local resolved ts of processor",
-		}, []string{"changefeed"})
+		}, []string{"namespace", "changefeed"})
 	resolvedTsLagGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
 			Subsystem: "processor",
 			Name:      "resolved_ts_lag",
 			Help:      "local resolved ts lag of processor",
-		}, []string{"changefeed"})
+		}, []string{"namespace", "changefeed"})
 	resolvedTsMinTableIDGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
 			Subsystem: "processor",
 			Name:      "min_resolved_table_id",
 			Help:      "ID of the minimum resolved table",
-		}, []string{"changefeed"})
+		}, []string{"namespace", "changefeed"})
 	checkpointTsGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
 			Subsystem: "processor",
 			Name:      "checkpoint_ts",
 			Help:      "global checkpoint ts of processor",
-		}, []string{"changefeed"})
+		}, []string{"namespace", "changefeed"})
 	checkpointTsLagGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
 			Subsystem: "processor",
 			Name:      "checkpoint_ts_lag",
 			Help:      "global checkpoint ts lag of processor",
-		}, []string{"changefeed"})
+		}, []string{"namespace", "changefeed"})
 	checkpointTsMinTableIDGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
 			Subsystem: "processor",
 			Name:      "min_checkpoint_table_id",
 			Help:      "ID of the minimum checkpoint table",
-		}, []string{"changefeed"})
+		}, []string{"namespace", "changefeed"})
 	syncTableNumGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
 			Subsystem: "processor",
 			Name:      "num_of_tables",
 			Help:      "number of synchronized table of processor",
-		}, []string{"changefeed"})
+		}, []string{"namespace", "changefeed"})
 	processorErrorCounter = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Namespace: "ticdc",
 			Subsystem: "processor",
 			Name:      "exit_with_error_count",
 			Help:      "counter for processor exits with error",
-		}, []string{"changefeed"})
+		}, []string{"namespace", "changefeed"})
 	processorSchemaStorageGcTsGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
 			Subsystem: "processor",
 			Name:      "schema_storage_gc_ts",
 			Help:      "the TS of the currently maintained oldest snapshot in SchemaStorage",
-		}, []string{"changefeed"})
+		}, []string{"namespace", "changefeed"})
 	processorTickDuration = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "ticdc",
@@ -88,7 +88,7 @@ var (
 			Name:      "processor_tick_duration",
 			Help:      "Bucketed histogram of processorManager tick processor time (s).",
 			Buckets:   prometheus.ExponentialBuckets(0.01 /* 10 ms */, 2, 18),
-		}, []string{"changefeed"})
+		}, []string{"namespace", "changefeed"})
 	processorCloseDuration = prometheus.NewHistogram(
 		prometheus.HistogramOpts{
 			Namespace: "ticdc",

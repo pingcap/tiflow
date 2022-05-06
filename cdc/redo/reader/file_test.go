@@ -54,7 +54,7 @@ func TestReaderRead(t *testing.T) {
 	cfg := &writer.FileWriterConfig{
 		MaxLogSize:   100000,
 		Dir:          dir,
-		ChangeFeedID: "test-cf",
+		ChangeFeedID: model.DefaultChangeFeedID("test-cf"),
 		CaptureID:    "cp",
 		FileType:     common.DefaultRowLogFileType,
 		CreateTime:   time.Date(2000, 1, 1, 1, 1, 1, 1, &time.Location{}),
@@ -75,7 +75,9 @@ func TestReaderRead(t *testing.T) {
 	err = w.Close()
 	require.Nil(t, err)
 	require.True(t, !w.IsRunning())
-	fileName := fmt.Sprintf("%s_%s_%d_%s_%d%s", cfg.CaptureID, cfg.ChangeFeedID, cfg.CreateTime.Unix(), cfg.FileType, 11, common.LogEXT)
+	fileName := fmt.Sprintf("%s_%s_%d_%s_%d%s", cfg.CaptureID,
+		cfg.ChangeFeedID.ID,
+		cfg.CreateTime.Unix(), cfg.FileType, 11, common.LogEXT)
 	path := filepath.Join(cfg.Dir, fileName)
 	info, err := os.Stat(path)
 	require.Nil(t, err)
@@ -108,7 +110,9 @@ func TestReaderOpenSelectedFiles(t *testing.T) {
 		MaxLogSize: 100000,
 		Dir:        dir,
 	}
-	fileName := fmt.Sprintf("%s_%s_%d_%s_%d%s", "cp", "test-cf", time.Now().Unix(), common.DefaultDDLLogFileType, 11, common.LogEXT+common.TmpEXT)
+	fileName := fmt.Sprintf("%s_%s_%s_%d_%s_%d%s", "cp",
+		"default", "test-cf",
+		time.Now().Unix(), common.DefaultDDLLogFileType, 11, common.LogEXT+common.TmpEXT)
 	w, err := writer.NewWriter(ctx, cfg, writer.WithLogFileName(func() string {
 		return fileName
 	}))
@@ -134,13 +138,17 @@ func TestReaderOpenSelectedFiles(t *testing.T) {
 	require.Nil(t, err)
 
 	// no data, wil not open
-	fileName = fmt.Sprintf("%s_%s_%d_%s_%d%s", "cp", "test-cf11", time.Now().Unix(), common.DefaultDDLLogFileType, 10, common.LogEXT)
+	fileName = fmt.Sprintf("%s_%s_%s_%d_%s_%d%s", "cp",
+		"default", "test-cf11",
+		time.Now().Unix(), common.DefaultDDLLogFileType, 10, common.LogEXT)
 	path = filepath.Join(dir, fileName)
 	_, err = os.Create(path)
 	require.Nil(t, err)
 
 	// SortLogEXT, wil open
-	fileName = fmt.Sprintf("%s_%s_%d_%s_%d%s", "cp", "test-cf111", time.Now().Unix(), common.DefaultDDLLogFileType, 10, common.LogEXT) + common.SortLogEXT
+	fileName = fmt.Sprintf("%s_%s_%s_%d_%s_%d%s", "cp",
+		"default", "test-cf111",
+		time.Now().Unix(), common.DefaultDDLLogFileType, 10, common.LogEXT) + common.SortLogEXT
 	path = filepath.Join(dir, fileName)
 	f1, err := os.Create(path)
 	require.Nil(t, err)
@@ -148,7 +156,9 @@ func TestReaderOpenSelectedFiles(t *testing.T) {
 	dir1, err := ioutil.TempDir("", "redo-openSelectedFiles1")
 	require.Nil(t, err)
 	defer os.RemoveAll(dir1) //nolint:errcheck
-	fileName = fmt.Sprintf("%s_%s_%d_%s_%d%s", "cp", "test-cf", time.Now().Unix(), common.DefaultDDLLogFileType, 11, common.LogEXT+"test")
+	fileName = fmt.Sprintf("%s_%s_%s_%d_%s_%d%s", "cp",
+		"default", "test-cf",
+		time.Now().Unix(), common.DefaultDDLLogFileType, 11, common.LogEXT+"test")
 	path = filepath.Join(dir1, fileName)
 	_, err = os.Create(path)
 	require.Nil(t, err)

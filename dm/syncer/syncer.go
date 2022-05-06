@@ -707,6 +707,7 @@ func (s *Syncer) Process(ctx context.Context, pr chan pb.ProcessResult) {
 		if utils.IsContextCanceledError(err) {
 			s.tctx.L().Info("filter out error caused by user cancel", log.ShortError(err))
 		} else {
+			s.tctx.L().Debug("unit syncer quits with error", zap.Error(err))
 			metrics.SyncerExitWithErrorCounter.WithLabelValues(s.cfg.Name, s.cfg.SourceID).Inc()
 			errsMu.Lock()
 			errs = append(errs, unit.NewProcessError(err))
@@ -973,7 +974,16 @@ func (s *Syncer) addJob(job *job) {
 		s.ddlJobCh <- job
 		metrics.AddJobDurationHistogram.WithLabelValues("ddl", s.cfg.Name, adminQueueName, s.cfg.SourceID).Observe(time.Since(startTime).Seconds())
 	case dml:
+		failpoint.Inject("SkipDML", func(val failpoint.Value) {
+			// first col should be an int and primary key, every row with pk <= val will be skipped
+			skippedIDUpperBound := val.(int)
+			firstColVal, _ := strconv.Atoi(fmt.Sprintf("%v", job.dml.RowValues()[0]))
+			if firstColVal <= skippedIDUpperBound {
+				failpoint.Goto("skip_dml")
+			}
+		})
 		s.dmlJobCh <- job
+		failpoint.Label("skip_dml")
 		failpoint.Inject("checkCheckpointInMiddleOfTransaction", func() {
 			s.tctx.L().Info("receive dml job", zap.Any("dml job", job))
 			time.Sleep(500 * time.Millisecond)

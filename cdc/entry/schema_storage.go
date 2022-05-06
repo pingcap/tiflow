@@ -127,12 +127,12 @@ func (s *schemaStorageImpl) GetSnapshot(ctx context.Context, ts uint64) (*schema
 			log.Warn("GetSnapshot is taking too long, DDL puller stuck?",
 				zap.Uint64("ts", ts),
 				zap.Duration("duration", now.Sub(startTime)),
-				zap.String("changefeed", s.id))
+				zap.String("namespace", s.id.Namespace),
+				zap.String("changefeed", s.id.ID))
 			logTime = now
 		}
 		return err
-	}, retry.WithBackoffBaseDelay(10), retry.WithInfiniteTries(),
-		retry.WithIsRetryableErr(isRetryable))
+	}, retry.WithBackoffBaseDelay(10), retry.WithIsRetryableErr(isRetryable))
 
 	return snap, err
 }
@@ -161,7 +161,9 @@ func (s *schemaStorageImpl) HandleDDLJob(job *timodel.Job) error {
 		lastSnap := s.snaps[len(s.snaps)-1]
 		if job.BinlogInfo.FinishedTS <= lastSnap.CurrentTs() {
 			log.Info("ignore foregone DDL", zap.Int64("jobID", job.ID),
-				zap.String("DDL", job.Query), zap.String("changefeed", s.id),
+				zap.String("DDL", job.Query),
+				zap.String("namespace", s.id.Namespace),
+				zap.String("changefeed", s.id.ID),
 				zap.Uint64("finishTs", job.BinlogInfo.FinishedTS))
 			return nil
 		}
@@ -172,11 +174,14 @@ func (s *schemaStorageImpl) HandleDDLJob(job *timodel.Job) error {
 	if err := snap.HandleDDL(job); err != nil {
 		log.Error("handle DDL failed", zap.String("DDL", job.Query),
 			zap.Stringer("job", job), zap.Error(err),
-			zap.String("changefeed", s.id), zap.Uint64("finishTs", job.BinlogInfo.FinishedTS))
+			zap.String("namespace", s.id.Namespace),
+			zap.String("changefeed", s.id.ID), zap.Uint64("finishTs", job.BinlogInfo.FinishedTS))
 		return errors.Trace(err)
 	}
 	log.Info("handle DDL", zap.String("DDL", job.Query),
-		zap.Stringer("job", job), zap.String("changefeed", s.id),
+		zap.Stringer("job", job),
+		zap.String("namespace", s.id.Namespace),
+		zap.String("changefeed", s.id.ID),
 		zap.Uint64("finishTs", job.BinlogInfo.FinishedTS))
 
 	s.snaps = append(s.snaps, snap)
@@ -244,11 +249,13 @@ func (s *schemaStorageImpl) DoGC(ts uint64) (lastSchemaTs uint64) {
 func (s *schemaStorageImpl) skipJob(job *timodel.Job) bool {
 	log.Debug("handle DDL new commit",
 		zap.String("DDL", job.Query), zap.Stringer("job", job),
-		zap.String("changefeed", s.id))
+		zap.String("namespace", s.id.Namespace),
+		zap.String("changefeed", s.id.ID))
 	if s.filter != nil && s.filter.ShouldDiscardDDL(job.Type) {
 		log.Info("discard DDL",
 			zap.Int64("jobID", job.ID), zap.String("DDL", job.Query),
-			zap.String("changefeed", s.id))
+			zap.String("namespace", s.id.Namespace),
+			zap.String("changefeed", s.id.ID))
 		return true
 	}
 	return !job.IsSynced() && !job.IsDone()

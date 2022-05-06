@@ -136,7 +136,7 @@ func (r *reader) outputBufferedResolvedEvents(buffer *outputBuffer) {
 //
 // It returns:
 //   * a bool to indicate whether it has read the last Next or not.
-//   * a uint64, if it is not 0, it means all resolved events before the ts
+//   * an uint64, if it is not 0, it means all resolved events before the ts
 //     are outputted.
 //   * an error if it occurs.
 //
@@ -251,12 +251,12 @@ type pollState struct {
 	// A threshold of triggering db compaction.
 	iterFirstSlowDuration time.Duration
 	// A timestamp when iterator was created.
-	// Iterator is released once it execced `iterMaxAliveDuration`.
+	// Iterator is released once it exceeds `iterMaxAliveDuration`.
 	iterAliveTime        time.Time
 	iterMaxAliveDuration time.Duration
 	// A channel for receiving iterator asynchronously.
 	iterCh chan *message.LimitedIterator
-	// A iterator for reading resolved events, up to the `iterResolvedTs`.
+	// An iterator for reading resolved events, up to the `iterResolvedTs`.
 	iter           *message.LimitedIterator
 	iterResolvedTs uint64
 	// A flag to mark whether the current position has been read.
@@ -442,7 +442,7 @@ func (r *reader) Poll(ctx context.Context, msgs []actormsg.Message[message.Task]
 				r.outputResolvedTs(r.state.maxResolvedTs)
 			}
 		}
-		// Release iterator as we does not need to read.
+		// Release iterator as we do not need to read.
 		err := r.state.tryReleaseIterator()
 		if err != nil {
 			r.reportError("failed to release iterator", err)

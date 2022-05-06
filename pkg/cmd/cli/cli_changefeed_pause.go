@@ -60,7 +60,7 @@ func (o *pauseChangefeedOptions) complete(f factory.Factory) error {
 // run the `cli changefeed pause` command.
 func (o *pauseChangefeedOptions) run() error {
 	job := model.AdminJob{
-		CfID: o.changefeedID,
+		CfID: model.DefaultChangeFeedID(o.changefeedID),
 		Type: model.AdminStop,
 	}
 

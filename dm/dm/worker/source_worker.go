@@ -1358,3 +1358,19 @@ func (w *SourceWorker) OperateWorkerValidatorErr(taskName string, op pb.Validati
 	}
 	return terror.ErrWorkerSubTaskNotFound.Generate(taskName)
 }
+
+func (w *SourceWorker) GetValidatorStatus(taskName string) (*pb.ValidationStatus, error) {
+	st := w.subTaskHolder.findSubTask(taskName)
+	if st == nil {
+		return nil, terror.ErrWorkerSubTaskNotFound.Generate(taskName)
+	}
+	return st.GetValidatorStatus()
+}
+
+func (w *SourceWorker) GetValidatorTableStatus(taskName string, filterStatus pb.Stage) ([]*pb.ValidationTableStatus, error) {
+	st := w.subTaskHolder.findSubTask(taskName)
+	if st == nil {
+		return nil, terror.ErrWorkerSubTaskNotFound.Generate(taskName)
+	}
+	return st.GetValidatorTableStatus(filterStatus)
+}
