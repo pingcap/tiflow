@@ -64,3 +64,41 @@ function check_task_error_count() {
 		"\"failed\": 2" 1 \
 		"\"state\": \"fail\"" 0
 }
+<<<<<<< HEAD
+=======
+
+function check_task_only_warning() {
+	task_conf=$1
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"check-task $task_conf" \
+		"\"state\": \"warn\"" 1
+}
+
+function check_task_empty_dump_config() {
+	sed "/threads/d" $1 >/tmp/empty-dump.yaml
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"check-task /tmp/empty-dump.yaml" \
+		"pre-check is passed" 1
+}
+
+function check_task_empty_load_config() {
+	sed "/pool-size/d" $1 >/tmp/empty-load.yaml
+	cat /tmp/empty-load.yaml
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"check-task /tmp/empty-load.yaml" \
+		"pre-check is passed" 1
+}
+
+function check_task_empty_sync_config() {
+	sed "/worker-count/d" $1 >/tmp/empty-sync.yaml
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"check-task /tmp/empty-sync.yaml" \
+		"pre-check is passed" 1
+}
+
+function check_task_empty_config() {
+	check_task_empty_dump_config $1
+	check_task_empty_load_config $1
+	check_task_empty_sync_config $1
+}
+>>>>>>> 21608dce2 (dm: fix empty config cause dm-master panic (#5298))
