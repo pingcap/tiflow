@@ -65,10 +65,12 @@ type runState struct {
 
 func (b *bufferSink) run(ctx context.Context, changefeedID model.ChangeFeedID, errCh chan error) {
 	state := runState{
-		metricTotalRows: metrics.BufferSinkTotalRowsCountCounter.WithLabelValues(changefeedID.ID),
+		metricTotalRows: metrics.BufferSinkTotalRowsCountCounter.
+			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 	}
 	defer func() {
-		metrics.BufferSinkTotalRowsCountCounter.DeleteLabelValues(changefeedID.ID)
+		metrics.BufferSinkTotalRowsCountCounter.
+			DeleteLabelValues(changefeedID.Namespace, changefeedID.ID)
 	}()
 
 	for {

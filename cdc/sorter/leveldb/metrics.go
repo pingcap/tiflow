@@ -48,7 +48,7 @@ var (
 		Name:      "db_iter_read_duration_seconds",
 		Help:      "Bucketed histogram of db sorter iterator read duration",
 		Buckets:   prometheus.ExponentialBuckets(0.004, 2.0, 20),
-	}, []string{"id", "call"})
+	}, []string{"namespace", "id", "call"})
 )
 
 // InitMetrics registers all metrics in this file

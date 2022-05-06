@@ -127,10 +127,11 @@ func TestLogWriterWriteLog(t *testing.T) {
 		mockWriter.On("IsRunning").Return(tt.isRunning)
 		mockWriter.On("AdvanceTs", mock.Anything)
 		writer := LogWriter{
-			rowWriter:            mockWriter,
-			ddlWriter:            mockWriter,
-			meta:                 &common.LogMeta{ResolvedTsList: map[int64]uint64{}},
-			metricTotalRowsCount: redoTotalRowsCountGauge.WithLabelValues(""),
+			rowWriter: mockWriter,
+			ddlWriter: mockWriter,
+			meta:      &common.LogMeta{ResolvedTsList: map[int64]uint64{}},
+			metricTotalRowsCount: redoTotalRowsCountGauge.
+				WithLabelValues("default", ""),
 		}
 		if tt.name == "context cancel" {
 			ctx, cancel := context.WithCancel(context.Background())
