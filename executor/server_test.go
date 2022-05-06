@@ -10,12 +10,16 @@ import (
 	"time"
 
 	"github.com/phayes/freeport"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 
+	"github.com/hanfei1991/microcosm/client"
 	"github.com/hanfei1991/microcosm/executor/worker"
+	"github.com/hanfei1991/microcosm/pb"
+	"github.com/hanfei1991/microcosm/pkg/uuid"
 )
 
 func init() {
@@ -121,4 +125,67 @@ func testCustomedPrometheusMetrics(t *testing.T, addr string) {
 		metric := string(body)
 		return strings.Contains(metric, "dataflow_executor_task_num")
 	}, time.Second, time.Millisecond*20)
+}
+
+type registerExecutorReturnValue struct {
+	resp *pb.RegisterExecutorResponse
+	err  error
+}
+
+type mockRegisterMasterClient struct {
+	client.MasterClient
+	respChan chan *registerExecutorReturnValue
+}
+
+func newMockRegisterMasterClient(chanBufferSize int) *mockRegisterMasterClient {
+	return &mockRegisterMasterClient{
+		respChan: make(chan *registerExecutorReturnValue, chanBufferSize),
+	}
+}
+
+func (c *mockRegisterMasterClient) RegisterExecutor(
+	ctx context.Context, req *pb.RegisterExecutorRequest, timeout time.Duration,
+) (resp *pb.RegisterExecutorResponse, err error) {
+	value := <-c.respChan
+	return value.resp, value.err
+}
+
+func TestSelfRegister(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	cfg := NewConfig()
+	port, err := freeport.GetFreePort()
+	require.Nil(t, err)
+	addr := fmt.Sprintf("127.0.0.1:%d", port)
+	cfg.AdvertiseAddr = addr
+	s := NewServer(cfg, nil)
+	mockMasterClient := newMockRegisterMasterClient(10)
+	s.masterClient = mockMasterClient
+
+	mockMasterClient.respChan <- &registerExecutorReturnValue{
+		nil, errors.New("service unavailable"),
+	}
+	err = s.selfRegister(ctx)
+	require.Error(t, err, "service unavailable")
+
+	executorID := uuid.NewGenerator().NewString()
+	returnValues := []*registerExecutorReturnValue{
+		{
+			&pb.RegisterExecutorResponse{
+				Err: &pb.Error{Code: pb.ErrorCode_MasterNotReady},
+			}, nil,
+		},
+		{
+			&pb.RegisterExecutorResponse{
+				ExecutorId: executorID,
+			}, nil,
+		},
+	}
+	for _, val := range returnValues {
+		mockMasterClient.respChan <- val
+	}
+	err = s.selfRegister(ctx)
+	require.NoError(t, err)
+	require.Equal(t, executorID, string(s.info.ID))
 }

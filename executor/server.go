@@ -5,8 +5,10 @@ import (
 	"strings"
 	"time"
 
+	pcErrors "github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	p2pImpl "github.com/pingcap/tiflow/pkg/p2p"
+	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/tcpserver"
 	"go.etcd.io/etcd/client/pkg/v3/logutil"
@@ -522,10 +524,35 @@ func (s *Server) selfRegister(ctx context.Context) (err error) {
 		Address:    s.cfg.AdvertiseAddr,
 		Capability: defaultCapability,
 	}
-	resp, err := s.masterClient.RegisterExecutor(ctx, registerReq, s.cfg.RPCTimeout)
+
+	var resp *pb.RegisterExecutorResponse
+	err = retry.Do(ctx, func() error {
+		var err2 error
+		resp, err2 = s.masterClient.RegisterExecutor(ctx, registerReq, s.cfg.RPCTimeout)
+		if err2 != nil {
+			return err2
+		}
+		if resp.Err != nil {
+			return pcErrors.New(resp.Err.Code.String())
+		}
+		return nil
+	},
+		retry.WithBackoffBaseDelay(200 /* 200 ms */),
+		retry.WithBackoffMaxDelay(3000 /* 3 seconds */),
+		retry.WithMaxTries(15 /* fail after 33 seconds, TODO: make it configurable */),
+		retry.WithIsRetryableErr(func(err error) bool {
+			if err.Error() == pb.ErrorCode_MasterNotReady.String() {
+				log.L().Info("server master leader is not ready, retry later")
+				return true
+			}
+			return false
+		}),
+	)
+
 	if err != nil {
-		return err
+		return
 	}
+
 	s.info = &model.NodeInfo{
 		Type:       model.NodeTypeExecutor,
 		ID:         model.ExecutorID(resp.ExecutorId),
