@@ -125,24 +125,24 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
 	tableID, _ := contextutil.TableIDFromCtx(ctx)
 	metricOutputChanSize := outputChanSizeHistogram.
-		WithLabelValues(changefeedID.ID)
+		WithLabelValues(changefeedID.Namespace, changefeedID.ID)
 	metricEventChanSize := eventChanSizeHistogram.
-		WithLabelValues(changefeedID.ID)
+		WithLabelValues(changefeedID.Namespace, changefeedID.ID)
 	metricPullerResolvedTs := pullerResolvedTsGauge.
-		WithLabelValues(changefeedID.ID)
+		WithLabelValues(changefeedID.Namespace, changefeedID.ID)
 	metricTxnCollectCounterKv := txnCollectCounter.
-		WithLabelValues(changefeedID.ID, "kv")
+		WithLabelValues(changefeedID.Namespace, changefeedID.ID, "kv")
 	metricTxnCollectCounterResolved := txnCollectCounter.
-		WithLabelValues(changefeedID.ID, "resolved")
+		WithLabelValues(changefeedID.Namespace, changefeedID.ID, "resolved")
 	defer func() {
-		outputChanSizeHistogram.DeleteLabelValues(changefeedID.ID)
-		eventChanSizeHistogram.DeleteLabelValues(changefeedID.ID)
-		memBufferSizeGauge.DeleteLabelValues(changefeedID.ID)
-		pullerResolvedTsGauge.DeleteLabelValues(changefeedID.ID)
-		kvEventCounter.DeleteLabelValues(changefeedID.ID, "kv")
-		kvEventCounter.DeleteLabelValues(changefeedID.ID, "resolved")
-		txnCollectCounter.DeleteLabelValues(changefeedID.ID, "kv")
-		txnCollectCounter.DeleteLabelValues(changefeedID.ID, "resolved")
+		outputChanSizeHistogram.DeleteLabelValues(changefeedID.Namespace, changefeedID.ID)
+		eventChanSizeHistogram.DeleteLabelValues(changefeedID.Namespace, changefeedID.ID)
+		memBufferSizeGauge.DeleteLabelValues(changefeedID.Namespace, changefeedID.ID)
+		pullerResolvedTsGauge.DeleteLabelValues(changefeedID.Namespace, changefeedID.ID)
+		kvEventCounter.DeleteLabelValues(changefeedID.Namespace, changefeedID.ID, "kv")
+		kvEventCounter.DeleteLabelValues(changefeedID.Namespace, changefeedID.ID, "resolved")
+		txnCollectCounter.DeleteLabelValues(changefeedID.Namespace, changefeedID.ID, "kv")
+		txnCollectCounter.DeleteLabelValues(changefeedID.Namespace, changefeedID.ID, "resolved")
 	}()
 
 	lastResolvedTs := p.checkpointTs
