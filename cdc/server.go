@@ -34,6 +34,7 @@ import (
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+	"golang.org/x/net/netutil"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
@@ -57,6 +58,10 @@ const (
 	defaultDataDir = "/tmp/cdc_data"
 	// dataDirThreshold is used to warn if the free space of the specified data-dir is lower than it, unit is GB
 	dataDirThreshold = 500
+	// maxHTTPConnection is used to limits the max concurrent connections of http server.
+	maxHTTPConnection = 1000
+	// httpConnectionTimeout is used to limits a connection max alive time of http server.
+	httpConnectionTimeout = 10 * time.Minute
 )
 
 // Server is the capture server
@@ -212,8 +217,14 @@ func (s *Server) Run(ctx context.Context) error {
 
 // startStatusHTTP starts the HTTP server.
 // `lis` is a listener that gives us plain-text HTTP requests.
-// TODO can we decouple the HTTP server from the capture server?
+// TODO: can we decouple the HTTP server from the capture server?
 func (s *Server) startStatusHTTP(lis net.Listener) error {
+	// LimitListener returns a Listener that accepts at most n simultaneous
+	// connections from the provided Listener. Connections that exceed the
+	// limit will wait in a queue and no new goroutines will be created until
+	// a connection is processed.
+	// We use it here to limit the max concurrent conections of statusServer.
+	lis = netutil.LimitListener(lis, maxHTTPConnection)
 	conf := config.GetGlobalServerConfig()
 
 	// discard gin log output
@@ -223,7 +234,12 @@ func (s *Server) startStatusHTTP(lis net.Listener) error {
 	RegisterRoutes(router, s.capture, registry)
 
 	// No need to configure TLS because it is already handled by `s.tcpServer`.
-	s.statusServer = &http.Server{Handler: router}
+	// Add ReadTimeout and WriteTimeout to avoid some abnormal connections never close.
+	s.statusServer = &http.Server{
+		Handler:      router,
+		ReadTimeout:  httpConnectionTimeout,
+		WriteTimeout: httpConnectionTimeout,
+	}
 
 	go func() {
 		log.Info("http server is running", zap.String("addr", conf.Addr))
