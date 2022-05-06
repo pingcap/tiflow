@@ -137,7 +137,7 @@ func (up *Upstream) init(ctx context.Context) error {
 	log.Info("upstream's GCManager created", zap.Uint64("clusterID", up.clusterID))
 
 	// Update meta-region label to ensure that meta region isolated from data regions.
-	err = pdutil.UpdateMetaLabel(ctx, up.PDClient, pdutil.DefaultMaxRetry)
+	err = pdutil.UpdateMetaLabel(ctx, up.PDClient)
 	if err != nil {
 		log.Warn("Fail to verify region label rule",
 			zap.Error(err),

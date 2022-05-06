@@ -29,8 +29,6 @@ import (
 )
 
 const (
-	// DefaultMaxRetry is the default max number of verifing region labels.
-	DefaultMaxRetry   = 3
 	regionLabelPrefix = "/pd/api/v1/config/region-label/rules"
 
 	// Split the default rule by `6e000000000000000000f8` to keep metadata region
@@ -57,6 +55,8 @@ const (
 	}`
 )
 
+var defaultMaxRetry uint64 = 3
+
 // PDApiClient is api client of Placement Driver.
 type PDApiClient struct {
 	pdClient   pd.Client
@@ -77,7 +77,7 @@ func NewPDApiClient(ctx context.Context, pdClient pd.Client) (*PDApiClient, erro
 }
 
 // UpdateMetaLabel is a reentrant function that updates the meta-region label of upstream cluster.
-func UpdateMetaLabel(ctx context.Context, pdClient pd.Client, maxRetry uint64) error {
+func UpdateMetaLabel(ctx context.Context, pdClient pd.Client) error {
 	pc, err := NewPDApiClient(ctx, pdClient)
 	if err != nil {
 		return err
@@ -93,7 +93,7 @@ func UpdateMetaLabel(ctx context.Context, pdClient pd.Client, maxRetry uint64) e
 
 		log.Info("Succeed to add meta region label to PD")
 		return nil
-	}, retry.WithMaxTries(maxRetry), retry.WithIsRetryableErr(func(err error) bool {
+	}, retry.WithMaxTries(defaultMaxRetry), retry.WithIsRetryableErr(func(err error) bool {
 		switch errors.Cause(err) {
 		case context.Canceled:
 			return false
@@ -110,7 +110,7 @@ func (pc *PDApiClient) patchMetaLabel(ctx context.Context) error {
 
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	_, err := httputil.DoRequest(ctx, pc.dialClient, url, http.MethodPatch,
+	_, err := pc.dialClient.DoRequest(ctx, url, http.MethodPatch,
 		header, bytes.NewReader(content))
 	return errors.Trace(err)
 }
