@@ -48,11 +48,11 @@ type ScheduleDispatcher interface {
 
 	// MoveTable requests that a table be moved to target.
 	// It should be thread-safe.
-	MoveTable(tableID model.TableID, target model.CaptureID)
+	MoveTable(tableID model.TableID, target model.CaptureID) error
 
 	// Rebalance triggers a rebalance operation.
 	// It should be thread-safe
-	Rebalance()
+	Rebalance() error
 
 	// DrainCapture remove all tables from the target capture.
 	// should only be called when a capture is planning to shut down.
@@ -182,10 +182,10 @@ func (s *BaseScheduleDispatcher) resetDrainingTarget() {
 		s.drainTarget = captureIDNotDraining
 	}
 	// if no table on the `drainTarget`, treat it as the draining process finished.
-	if s.tables.CountTableByCaptureID(s.drainTarget) == 0 {
-		log.Info("DrainCapture: Done", zap.String("target", s.drainTarget))
-		s.drainTarget = captureIDNotDraining
-	}
+	//if s.tables.CountTableByCaptureID(s.drainTarget) == 0 {
+	//	log.Info("DrainCapture: Done", zap.String("target", s.drainTarget))
+	//	s.drainTarget = captureIDNotDraining
+	//}
 }
 
 func (s *BaseScheduleDispatcher) setCaptures(captures map[model.CaptureID]*model.CaptureInfo) {
@@ -225,7 +225,10 @@ func (s *BaseScheduleDispatcher) Tick(
 	// the workload may never be balanced until user manually triggers a rebalance.
 	if s.lastTickCaptureCount != captureCountUninitialized &&
 		s.lastTickCaptureCount != len(captures) {
-		s.Rebalance()
+		// when the capture count has changed but still during draining process, do not rebalance.
+		if s.drainTarget == captureIDNotDraining {
+			s.needRebalance = true
+		}
 	}
 	s.lastTickCaptureCount = len(captures)
 
@@ -517,14 +520,14 @@ func (s *BaseScheduleDispatcher) removeTable(
 }
 
 // MoveTable implements the interface SchedulerDispatcher.
-func (s *BaseScheduleDispatcher) MoveTable(tableID model.TableID, target model.CaptureID) {
+func (s *BaseScheduleDispatcher) MoveTable(tableID model.TableID, target model.CaptureID) error {
 	if s.drainTarget != captureIDNotDraining {
 		log.Info("Move Table command has been ignored, "+
 			"because one capture is draining",
 			zap.Int64("tableID", tableID),
 			zap.String("targetCapture", target),
 			zap.String("drainingTarget", s.drainTarget))
-		return
+		return cerror.ErrSchedulerMoveTableNotAllowed.GenWithStack("draining capture")
 	}
 	if !s.moveTableManager.Add(tableID, target) {
 		log.Info("Move Table command has been ignored, "+
@@ -532,6 +535,7 @@ func (s *BaseScheduleDispatcher) MoveTable(tableID model.TableID, target model.C
 			zap.Int64("tableID", tableID),
 			zap.String("targetCapture", target))
 	}
+	return nil
 }
 
 func (s *BaseScheduleDispatcher) handleMoveTableJobs(ctx context.Context) (bool, error) {
@@ -567,14 +571,15 @@ func (s *BaseScheduleDispatcher) handleMoveTableJobs(ctx context.Context) (bool,
 }
 
 // Rebalance implements the interface ScheduleDispatcher.
-func (s *BaseScheduleDispatcher) Rebalance() {
+func (s *BaseScheduleDispatcher) Rebalance() error {
 	if s.drainTarget != captureIDNotDraining {
 		log.Info("Rebalance command has been ignored, "+
 			"because one capture is draining",
 			zap.String("drainingTarget", s.drainTarget))
-		return
+		return cerror.ErrSchedulerRebalanceNotAllowed.GenWithStack("draining capture")
 	}
 	s.needRebalance = true
+	return nil
 }
 
 func (s *BaseScheduleDispatcher) rebalance(ctx context.Context) (done bool, err error) {
@@ -620,7 +625,9 @@ func (s *BaseScheduleDispatcher) DrainCapture(target model.CaptureID) error {
 		return nil
 	}
 
-	// there is table adding to the target capture, drain it is not allowed.
+	// there is table adding to the target capture, drain it is not allowed at the moment.
+	// Drain the capture would remove all tables from the target capture, so if there is any
+	// at `RemovingTable` status should be acceptable, treat it as a front-runner.
 	count := s.tables.CountTableByCaptureIDAndStatus(target, util.AddingTable)
 	if count != 0 {
 		log.Warn("DrainCapture: not allowed since some table is adding to the target",
@@ -628,7 +635,8 @@ func (s *BaseScheduleDispatcher) DrainCapture(target model.CaptureID) error {
 			zap.Int("addingTableCount", count))
 		return cerror.ErrSchedulerDrainCaptureNotAllowed.GenWithStack("adding tables")
 	}
-
+	// there is at least one `MoveTable` job which target is identical to the draining target not finished yet,
+	// a new table will be dispatched to the target capture, before the whole process finished, reject the request.
 	if s.moveTableManager.HaveJobsByCaptureID(target) {
 		log.Warn("DrainCapture: not allowed since have processing move table jobs",
 			zap.String("target", target))

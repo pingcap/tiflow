@@ -1530,7 +1530,9 @@ func TestDrainCaptureWhileMoveTable(t *testing.T) {
 	communicator.On("DispatchTable", mock.Anything, cf1, mock.Anything, mock.Anything, mock.Anything, defaultEpoch).Return(true, nil)
 
 	// manually move table: `table-1` to `capture-2`
-	dispatcher.MoveTable(1, "capture-2")
+	err := dispatcher.MoveTable(1, "capture-2")
+	require.Nil(t, err)
+
 	checkpointTs, resolvedTs, err := dispatcher.Tick(ctx, 1300, []model.TableID{0, 1, 2, 3, 4, 5}, mockCaptureInfos)
 	require.Nil(t, err)
 	// cannot make progress, since `table-1` is removing from `capture-1`.
@@ -1542,7 +1544,7 @@ func TestDrainCaptureWhileMoveTable(t *testing.T) {
 	err = dispatcher.DrainCapture("capture-2")
 	require.Error(t, err, cerror.ErrSchedulerDrainCaptureNotAllowed)
 
-	// `table-1` is removed from `capture-1`
+	// `table-1` removed from `capture-1`
 	dispatcher.OnAgentFinishedTableOperation("capture-1", 1, defaultEpoch)
 
 	checkpointTs, resolvedTs, err = dispatcher.Tick(ctx, 1300, []model.TableID{0, 1, 2, 3, 4, 5}, mockCaptureInfos)
@@ -1561,19 +1563,181 @@ func TestDrainCaptureWhileMoveTable(t *testing.T) {
 	err = dispatcher.DrainCapture("capture-2")
 	require.Nil(t, err)
 
+	// `MoveTable` during the process of draining capture, should fail
+	// todo: the target is not identical to the draining one, should it be ok ?
+	err = dispatcher.MoveTable(0, "capture-3")
+	require.Error(t, err, cerror.ErrSchedulerMoveTableNotAllowed)
+
 	checkpointTs, resolvedTs, err = dispatcher.Tick(ctx, 1300, []model.TableID{0, 1, 2, 3, 4, 5}, mockCaptureInfos)
 	require.Nil(t, err)
 	require.Equal(t, CheckpointCannotProceed, checkpointTs)
 	require.Equal(t, CheckpointCannotProceed, resolvedTs)
 	communicator.AssertExpectations(t)
 
-	// capture is draining now, `MoveTable` should be a no-op.
-	dispatcher.MoveTable(5, "capture-1")
+	err = dispatcher.MoveTable(5, "capture-1")
+	require.Error(t, err, cerror.ErrSchedulerMoveTableNotAllowed)
 	require.False(t, dispatcher.moveTableManager.HaveJobsByCaptureID("capture-1"))
 }
 
 func TestDrainingCaptureWhileRebalance(t *testing.T) {
 	t.Parallel()
+
+	ctx := cdcContext.NewBackendContext4Test(false)
+	communicator := NewMockScheduleDispatcherCommunicator()
+	cf1 := model.DefaultChangeFeedID("cf-1")
+	dispatcher := NewBaseScheduleDispatcher(cf1, communicator, 1000)
+	dispatcher.captureStatus = map[model.CaptureID]*captureStatus{
+		"capture-1": {
+			SyncStatus:   captureSyncFinished,
+			CheckpointTs: 1300,
+			ResolvedTs:   1600,
+			Epoch:        defaultEpoch,
+		},
+		"capture-2": {
+			SyncStatus:   captureSyncFinished,
+			CheckpointTs: 1500,
+			ResolvedTs:   1550,
+			Epoch:        defaultEpoch,
+		},
+	}
+	// `capture-1` 2 tables, `capture-2` 4 tables.
+	dispatcher.tables.AddTableRecord(&util.TableRecord{
+		TableID:   model.TableID(0),
+		CaptureID: "capture-1",
+		Status:    util.RunningTable,
+	})
+	dispatcher.tables.AddTableRecord(&util.TableRecord{
+		TableID:   model.TableID(1),
+		CaptureID: "capture-1",
+		Status:    util.RunningTable,
+	})
+	dispatcher.tables.AddTableRecord(&util.TableRecord{
+		TableID:   model.TableID(2),
+		CaptureID: "capture-2",
+		Status:    util.RunningTable,
+	})
+	dispatcher.tables.AddTableRecord(&util.TableRecord{
+		TableID:   model.TableID(3),
+		CaptureID: "capture-2",
+		Status:    util.RunningTable,
+	})
+	dispatcher.tables.AddTableRecord(&util.TableRecord{
+		TableID:   model.TableID(4),
+		CaptureID: "capture-2",
+		Status:    util.RunningTable,
+	})
+	dispatcher.tables.AddTableRecord(&util.TableRecord{
+		TableID:   model.TableID(5),
+		CaptureID: "capture-2",
+		Status:    util.RunningTable,
+	})
+
+	mockCaptureInfos := map[model.CaptureID]*model.CaptureInfo{
+		"capture-1": {
+			ID:            "capture-1",
+			AdvertiseAddr: "fakeip:1",
+		},
+		"capture-2": {
+			ID:            "capture-2",
+			AdvertiseAddr: "fakeip:2",
+		},
+	}
+
+	err := dispatcher.Rebalance()
+	require.Nil(t, err)
+	require.True(t, dispatcher.needRebalance)
+
+	communicator.On("DispatchTable", mock.Anything, cf1, mock.Anything, mock.Anything, mock.Anything, defaultEpoch).Return(true, nil)
+
+	checkpointTs, resolvedTs, err := dispatcher.Tick(ctx, 1300, []model.TableID{0, 1, 2, 3, 4, 5}, mockCaptureInfos)
+	require.Nil(t, err)
+	// cannot make progress since rebalance is progressing.
+	require.Equal(t, CheckpointCannotProceed, checkpointTs)
+	require.Equal(t, CheckpointCannotProceed, resolvedTs)
+	communicator.AssertExpectations(t)
+
+	tables4Capture2 := dispatcher.tables.GetAllTablesGroupedByCaptures()["capture-2"]
+	count := 0
+	for _, record := range tables4Capture2 {
+		if record.Status == util.RemovingTable {
+			count++
+			dispatcher.OnAgentFinishedTableOperation("capture-2", record.TableID, defaultEpoch)
+		}
+	}
+	require.Equal(t, 1, count)
+
+	// one table removed, should be adding to `capture-1` in the next tick, but not happened yet.
+	err = dispatcher.DrainCapture("capture-1")
+	require.Nil(t, err)
+	require.Equal(t, "capture-1", dispatcher.drainTarget)
+
+	// `capture-1` is draining, remove `table-0` / `table-1` from it
+	// one table removed previously caused by rebalance has to be added on `capture-2` again.
+	checkpointTs, resolvedTs, err = dispatcher.Tick(ctx, 1300, []model.TableID{0, 1, 2, 3, 4, 5}, mockCaptureInfos)
+	require.Nil(t, err)
+	// cannot make progress since rebalance is progressing.
+	require.Equal(t, CheckpointCannotProceed, checkpointTs)
+	require.Equal(t, CheckpointCannotProceed, resolvedTs)
+
+	err = dispatcher.DrainCapture("capture-1")
+	require.Error(t, err, cerror.ErrSchedulerDrainCaptureNotAllowed)
+
+	err = dispatcher.DrainCapture("capture-2")
+	// because has `AddingTable`
+	require.Error(t, err, cerror.ErrSchedulerDrainCaptureNotAllowed)
+
+	tablesByCaptures := dispatcher.tables.GetAllTablesGroupedByCaptures()
+	tables4Capture1 := tablesByCaptures["capture-1"]
+	for _, record := range tables4Capture1 {
+		require.Equal(t, util.RemovingTable, record.Status)
+		dispatcher.OnAgentFinishedTableOperation("capture-1", record.TableID, defaultEpoch)
+	}
+	require.Equal(t, 2, len(tables4Capture1))
+
+	tables4Capture2 = tablesByCaptures["capture-2"]
+	count = 0
+	for _, record := range tables4Capture2 {
+		if record.Status == util.AddingTable {
+			count += 1
+			dispatcher.OnAgentFinishedTableOperation("capture-2", record.TableID, defaultEpoch)
+		}
+	}
+	require.Equal(t, 1, count)
+
+	// all tables in the `RunningTable` status,
+	// but `drainingTarget` is not reset yet before the next tick.
+	err = dispatcher.Rebalance()
+	require.Error(t, err, cerror.ErrSchedulerRebalanceNotAllowed)
+
+	// add a new capture to trigger auto rebalance
+	mockCaptureInfos["capture-3"] = &model.CaptureInfo{
+		ID:            "capture-3",
+		AdvertiseAddr: "fakeip-3",
+	}
+	dispatcher.captureStatus["capture-3"] = &captureStatus{
+		SyncStatus:   captureSyncFinished,
+		CheckpointTs: 1500,
+		ResolvedTs:   1550,
+		Epoch:        defaultEpoch,
+	}
+
+	// have 2 tables which was removed previous by draining `capture-1` has to be dispatched.
+	checkpointTs, resolvedTs, err = dispatcher.Tick(ctx, 1300, []model.TableID{0, 1, 2, 3, 4, 5}, mockCaptureInfos)
+	require.Nil(t, err)
+	require.Equal(t, CheckpointCannotProceed, checkpointTs)
+	require.Equal(t, CheckpointCannotProceed, resolvedTs)
+
+	require.Equal(t, "capture-1", dispatcher.drainTarget)
+	// auto rebalance is not triggered, since `capture-1` is draining.
+	require.False(t, dispatcher.needRebalance)
+
+	tablesByCaptures = dispatcher.tables.GetAllTablesGroupedByCaptures()
+	tables4Capture3 := tablesByCaptures["capture-3"]
+	for _, record := range tables4Capture3 {
+		require.Equal(t, util.AddingTable, record.Status)
+		dispatcher.OnAgentFinishedTableOperation("capture-3", record.TableID, defaultEpoch)
+	}
+	require.Equal(t, 2, len(tables4Capture3))
 }
 
 func TestManualMoveTableWhileAddingTable(t *testing.T) {

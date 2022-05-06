@@ -879,6 +879,14 @@ var (
 		"drain capture not allowed",
 		errors.RFCCodeText("CDC:ErrSchedulerDrainCaptureNotAllowed"))
 
+	ErrSchedulerRebalanceNotAllowed = errors.Normalize(
+		"rebalance not allowed",
+		errors.RFCCodeText("CDC:ErrSchedulerRebalanceNotAllowed"))
+	
+	ErrSchedulerMoveTableNotAllowed = errors.Normalize(
+		"move table not allowed",
+		errors.RFCCodeText("CDC:ErrSchedulerMoveTableNotAllowed"))
+
 	// miscellaneous internal errors
 	ErrFlowControllerAborted = errors.Normalize(
 		"flow controller is aborted",
