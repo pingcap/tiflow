@@ -75,11 +75,7 @@ func testBatchCodec(
 	}
 
 	encoder := encoderBuilder.Build()
-	s := &batchTester{
-		rowCases:        codecRowCases,
-		ddlCases:        codecDDLCases,
-		resolvedTsCases: codecResolvedTSCases,
-	}
+	s := NewDefaultBatchTester()
 
 	for _, cs := range s.rowCases {
 		events := 0
@@ -187,7 +183,6 @@ func TestCraftMaxBatchSize(t *testing.T) {
 }
 
 func TestDefaultCraftEventBatchCodec(t *testing.T) {
-	t.Parallel()
 	config := NewConfig(config.ProtocolCraft, timeutil.SystemLocation()).WithMaxMessageBytes(8192)
 	config.maxBatchSize = 64
 	testBatchCodec(t, newCraftEventBatchEncoderBuilder(config), NewCraftEventBatchDecoder)

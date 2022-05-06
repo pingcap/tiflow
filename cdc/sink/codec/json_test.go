@@ -52,6 +52,14 @@ type batchTester struct {
 	resolvedTsCases [][]uint64
 }
 
+func NewDefaultBatchTester() *batchTester {
+	return &batchTester{
+		rowCases:        codecRowCases,
+		ddlCases:        codecDDLCases,
+		resolvedTsCases: codecResolvedTSCases,
+	}
+}
+
 func (s *batchTester) testBatchCodec(
 	t *testing.T,
 	encoderBuilder EncoderBuilder,
@@ -235,14 +243,9 @@ func TestMaxBatchSize(t *testing.T) {
 }
 
 func TestDefaultEventBatchCodec(t *testing.T) {
-	t.Parallel()
 	config := NewConfig(config.ProtocolOpen, timeutil.SystemLocation()).WithMaxMessageBytes(8192)
 	config.maxBatchSize = 64
-	tester := &batchTester{
-		rowCases:        codecRowCases,
-		ddlCases:        codecDDLCases,
-		resolvedTsCases: codecResolvedTSCases,
-	}
+	tester := NewDefaultBatchTester()
 	tester.testBatchCodec(t, newJSONEventBatchEncoderBuilder(config), NewJSONEventBatchDecoder)
 }
 
