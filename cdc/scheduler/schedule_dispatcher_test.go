@@ -937,6 +937,139 @@ func TestDrainingCapture(t *testing.T) {
 
 func TestDrainingCaptureCrashed(t *testing.T) {
 	t.Parallel()
+
+	ctx := cdcContext.NewBackendContext4Test(false)
+	communicator := NewMockScheduleDispatcherCommunicator()
+	dispatcher := NewBaseScheduleDispatcher("cf-1", communicator, 1000)
+	dispatcher.captureStatus = map[model.CaptureID]*captureStatus{
+		"capture-1": {
+			SyncStatus:   captureSyncFinished,
+			CheckpointTs: 1300,
+			ResolvedTs:   1600,
+			Epoch:        defaultEpoch,
+		},
+		"capture-2": {
+			SyncStatus:   captureSyncFinished,
+			CheckpointTs: 1500,
+			ResolvedTs:   1550,
+			Epoch:        defaultEpoch,
+		},
+	}
+
+	// initialize each capture with 2 tables.
+	dispatcher.tables.AddTableRecord(&util.TableRecord{
+		TableID:   model.TableID(0),
+		CaptureID: "capture-1",
+		Status:    util.RunningTable,
+	})
+	dispatcher.tables.AddTableRecord(&util.TableRecord{
+		TableID:   model.TableID(1),
+		CaptureID: "capture-1",
+		Status:    util.RunningTable,
+	})
+	dispatcher.tables.AddTableRecord(&util.TableRecord{
+		TableID:   model.TableID(2),
+		CaptureID: "capture-2",
+		Status:    util.RunningTable,
+	})
+	dispatcher.tables.AddTableRecord(&util.TableRecord{
+		TableID:   model.TableID(3),
+		CaptureID: "capture-2",
+		Status:    util.RunningTable,
+	})
+
+	mockCaptureInfos := map[model.CaptureID]*model.CaptureInfo{
+		"capture-1": {
+			ID:            "capture-1",
+			AdvertiseAddr: "fakeip:1",
+		},
+		"capture-2": {
+			ID:            "capture-2",
+			AdvertiseAddr: "fakeip:2",
+		},
+	}
+
+	communicator.On("DispatchTable", mock.Anything, "cf-1", mock.Anything, mock.Anything, mock.Anything, defaultEpoch).
+		Return(true, nil)
+
+	// 1. drain one capture
+	err := dispatcher.DrainCapture("capture-2")
+	require.Nil(t, err)
+
+	checkpointTs, resolvedTs, err := dispatcher.Tick(ctx, 1300, []model.TableID{0, 1, 2, 3}, mockCaptureInfos)
+	require.NoError(t, err)
+	require.Equal(t, CheckpointCannotProceed, checkpointTs)
+	require.Equal(t, CheckpointCannotProceed, resolvedTs)
+	communicator.AssertExpectations(t)
+
+	tablesByCapture := dispatcher.tables.GetAllTablesGroupedByCaptures()
+	tables4Capture2 := tablesByCapture["capture-2"]
+	require.Equal(t, 2, len(tables4Capture2))
+	for _, record := range tables4Capture2 {
+		require.Equal(t, util.RemovingTable, record.Status)
+	}
+
+	// draining target capture crashed before send ack message.
+	delete(mockCaptureInfos, "capture-2")
+	// `capture-2` crashed, cannot make progress, and add capture-2's tables to capture-1.
+	checkpointTs, resolvedTs, err = dispatcher.Tick(ctx, 1300, []model.TableID{0, 1, 2, 3}, mockCaptureInfos)
+	require.Nil(t, err)
+	require.Equal(t, dispatcher.drainTarget, captureIDNotDraining)
+	require.Equal(t, CheckpointCannotProceed, checkpointTs)
+	require.Equal(t, CheckpointCannotProceed, resolvedTs)
+
+	tablesByCapture = dispatcher.tables.GetAllTablesGroupedByCaptures()
+	tables4Capture1 := tablesByCapture["capture-1"]
+	require.Equal(t, 4, len(tables4Capture1))
+	require.Equal(t, util.AddingTable, tables4Capture1[2].Status)
+	require.Equal(t, util.AddingTable, tables4Capture1[3].Status)
+
+	_, ok := tablesByCapture["capture-2"]
+	require.Equal(t, ok, false)
+	communicator.AssertExpectations(t)
+
+	dispatcher.OnAgentFinishedTableOperation("capture-1", 2, defaultEpoch)
+	dispatcher.OnAgentFinishedTableOperation("capture-1", 3, defaultEpoch)
+
+	dispatcher.OnAgentCheckpoint("capture-1", 1300, 1550)
+	checkpointTs, resolvedTs, err = dispatcher.Tick(ctx, 1300, []model.TableID{0, 1, 2, 3}, mockCaptureInfos)
+	require.Nil(t, err)
+	require.Equal(t, uint64(1300), checkpointTs)
+	require.Equal(t, uint64(1550), resolvedTs)
+	communicator.AssertExpectations(t)
+}
+
+func TestDrainingOnlyOneCapture(t *testing.T) {
+	t.Parallel()
+
+	communicator := NewMockScheduleDispatcherCommunicator()
+	dispatcher := NewBaseScheduleDispatcher("cf-1", communicator, 1000)
+	dispatcher.captureStatus = map[model.CaptureID]*captureStatus{
+		"capture-1": {
+			SyncStatus:   captureSyncFinished,
+			CheckpointTs: 1300,
+			ResolvedTs:   1600,
+			Epoch:        defaultEpoch,
+		},
+	}
+
+	// initialize each capture with 2 tables.
+	dispatcher.tables.AddTableRecord(&util.TableRecord{
+		TableID:   model.TableID(0),
+		CaptureID: "capture-1",
+		Status:    util.RunningTable,
+	})
+	dispatcher.tables.AddTableRecord(&util.TableRecord{
+		TableID:   model.TableID(1),
+		CaptureID: "capture-1",
+		Status:    util.RunningTable,
+	})
+	err := dispatcher.DrainCapture("capture-2")
+	require.Error(t, err, cerror.ErrSchedulerDrainCaptureNotAllowed)
+}
+
+func TestDrainingOwnerOtherCrashed(t *testing.T) {
+	t.Parallel()
 }
 
 func TestDrainingCaptureOwnerCrashed(t *testing.T) {
@@ -945,10 +1078,125 @@ func TestDrainingCaptureOwnerCrashed(t *testing.T) {
 
 func TestDrainingCaptureOtherCrashed(t *testing.T) {
 	t.Parallel()
-}
 
-func TestDrainingOwnerOtherCrashed(t *testing.T) {
-	t.Parallel()
+	ctx := cdcContext.NewBackendContext4Test(false)
+	communicator := NewMockScheduleDispatcherCommunicator()
+	dispatcher := NewBaseScheduleDispatcher("cf-1", communicator, 1000)
+	dispatcher.captureStatus = map[model.CaptureID]*captureStatus{
+		"capture-1": {
+			SyncStatus:   captureSyncFinished,
+			CheckpointTs: 1300,
+			ResolvedTs:   1600,
+			Epoch:        defaultEpoch,
+		},
+		"capture-2": {
+			SyncStatus:   captureSyncFinished,
+			CheckpointTs: 1500,
+			ResolvedTs:   1550,
+			Epoch:        defaultEpoch,
+		},
+	}
+
+	// initialize each capture with 2 tables.
+	dispatcher.tables.AddTableRecord(&util.TableRecord{
+		TableID:   model.TableID(0),
+		CaptureID: "capture-1",
+		Status:    util.RunningTable,
+	})
+	dispatcher.tables.AddTableRecord(&util.TableRecord{
+		TableID:   model.TableID(1),
+		CaptureID: "capture-1",
+		Status:    util.RunningTable,
+	})
+	dispatcher.tables.AddTableRecord(&util.TableRecord{
+		TableID:   model.TableID(2),
+		CaptureID: "capture-2",
+		Status:    util.RunningTable,
+	})
+	dispatcher.tables.AddTableRecord(&util.TableRecord{
+		TableID:   model.TableID(3),
+		CaptureID: "capture-2",
+		Status:    util.RunningTable,
+	})
+
+	mockCaptureInfos := map[model.CaptureID]*model.CaptureInfo{
+		"capture-1": {
+			ID:            "capture-1",
+			AdvertiseAddr: "fakeip:1",
+		},
+		"capture-2": {
+			ID:            "capture-2",
+			AdvertiseAddr: "fakeip:2",
+		},
+	}
+
+	checkpointTs, resolvedTs, err := dispatcher.Tick(ctx, 1300, []model.TableID{0, 1, 2, 3}, defaultMockCaptureInfos)
+	require.NoError(t, err)
+	require.Equal(t, model.Ts(1300), checkpointTs)
+	require.Equal(t, model.Ts(1550), resolvedTs)
+	communicator.AssertExpectations(t)
+
+	communicator.On("DispatchTable", mock.Anything, "cf-1", mock.Anything, mock.Anything, mock.Anything, defaultEpoch).
+		Return(true, nil)
+
+	// 1. drain the `capture-2`
+	err = dispatcher.DrainCapture("capture-2")
+	require.Nil(t, err)
+
+	checkpointTs, resolvedTs, err = dispatcher.Tick(ctx, 1300, []model.TableID{0, 1, 2, 3}, mockCaptureInfos)
+	require.NoError(t, err)
+	require.Equal(t, CheckpointCannotProceed, checkpointTs)
+	require.Equal(t, CheckpointCannotProceed, resolvedTs)
+	communicator.AssertExpectations(t)
+
+	tablesByCapture := dispatcher.tables.GetAllTablesGroupedByCaptures()
+	tables4Capture2 := tablesByCapture["capture-2"]
+	require.Equal(t, 2, len(tables4Capture2))
+	for _, record := range tables4Capture2 {
+		require.Equal(t, util.RemovingTable, record.Status)
+	}
+
+	// 2. before send ack back to the dispatcher, `capture-1` crashed.
+	delete(mockCaptureInfos, "capture-1")
+	// `capture-2` crashed, cannot make progress, and add capture-2's tables to capture-1.
+	checkpointTs, resolvedTs, err = dispatcher.Tick(ctx, 1300, []model.TableID{0, 1, 2, 3}, mockCaptureInfos)
+	require.Nil(t, err)
+	require.Equal(t, dispatcher.drainTarget, "capture-2")
+	require.Equal(t, CheckpointCannotProceed, checkpointTs)
+	require.Equal(t, CheckpointCannotProceed, resolvedTs)
+
+	// since `capture-2` is draining, capture-1's tables cannot be dispatched to capture-2
+	tablesByCapture = dispatcher.tables.GetAllTablesGroupedByCaptures()
+	// `capture-1` crashed, no tables
+	_, ok := tablesByCapture["capture-1"]
+	require.False(t, ok)
+	tables4Capture2 = tablesByCapture["capture-2"]
+	require.Equal(t, 2, len(tables4Capture2))
+	for _, record := range tables4Capture2 {
+		require.Equal(t, util.RemovingTable, record.Status)
+		dispatcher.OnAgentFinishedTableOperation("capture-2", record.TableID, defaultEpoch)
+	}
+
+	checkpointTs, resolvedTs, err = dispatcher.Tick(ctx, 1300, []model.TableID{0, 1, 2, 3}, mockCaptureInfos)
+	require.Nil(t, err)
+	// since `capture-2` has no table, so the draining process finished.
+	require.Equal(t, dispatcher.drainTarget, captureIDNotDraining)
+	require.Equal(t, CheckpointCannotProceed, checkpointTs)
+	require.Equal(t, CheckpointCannotProceed, resolvedTs)
+
+	// all tables dispatched to `capture-2` back, to prevent no table dispatched.
+	tables4Capture2 = dispatcher.tables.GetAllTablesGroupedByCaptures()["capture-2"]
+	for _, record := range tables4Capture2 {
+		require.Equal(t, util.AddingTable, record.Status)
+		dispatcher.OnAgentFinishedTableOperation("capture-2", record.TableID, defaultEpoch)
+	}
+
+	dispatcher.OnAgentCheckpoint("capture-2", 1300, 1550)
+	checkpointTs, resolvedTs, err = dispatcher.Tick(ctx, 1300, []model.TableID{0, 1, 2, 3}, mockCaptureInfos)
+	require.Nil(t, err)
+	require.Equal(t, uint64(1300), checkpointTs)
+	require.Equal(t, uint64(1550), resolvedTs)
+	communicator.AssertExpectations(t)
 }
 
 func TestDrainingCaptureWhileAddingTable(t *testing.T) {

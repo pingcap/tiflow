@@ -166,16 +166,29 @@ const (
 	captureSyncFinished
 )
 
+func (s *BaseScheduleDispatcher) resetDrainingTarget(captures map[model.CaptureID]*model.CaptureInfo) {
+	if s.drainTarget == captureIDNotDraining {
+		return
+	}
+	// draining target cannot be found in the latest captures, which means it's
+	// offline, so reset the `drainTarget`.
+	if _, ok := s.captures[s.drainTarget]; !ok {
+		log.Info("DrainCapture: Done", zap.String("target", s.drainTarget))
+		s.drainTarget = captureIDNotDraining
+	}
+	// if no table on the `drainTarget`, treat it as the draining process finished.
+	if s.tables.CountTableByCaptureID(s.drainTarget) == 0 {
+		log.Info("DrainCapture: Done", zap.String("target", s.drainTarget))
+		s.drainTarget = captureIDNotDraining
+	}
+}
+
 func (s *BaseScheduleDispatcher) setCaptures(captures map[model.CaptureID]*model.CaptureInfo) {
 	// Update the internal capture list with information from the Owner
 	// (from Etcd in the current implementation).
 	s.captures = captures
 
-	// draining target cannot be found in the latest captures, which means it's
-	// offline, so reset the `drainTarget`.
-	if _, ok := s.captures[s.drainTarget]; !ok {
-		s.drainTarget = captureIDNotDraining
-	}
+	s.resetDrainingTarget(captures)
 
 	s.balancerCandidates = s.balancerCandidates[:0]
 	for captureID := range s.captures {
@@ -282,7 +295,8 @@ func (s *BaseScheduleDispatcher) Tick(
 		// when draining capture, tables in the `AddingTable` status,
 		// once all tables become `Running`, treat it as the signal that the capture
 		// draining process finished.
-		if normal {
+		if normal && s.drainTarget != captureIDNotDraining {
+			log.Info("DrainCapture: Done", zap.String("target", s.drainTarget))
 			s.drainTarget = captureIDNotDraining
 		}
 		return normal
@@ -585,14 +599,24 @@ func (s *BaseScheduleDispatcher) rebalance(ctx context.Context) (done bool, err 
 
 // DrainCapture implements the interface ScheduleDispatcher.
 func (s *BaseScheduleDispatcher) DrainCapture(target model.CaptureID) error {
+	// when draining the capture, tables should be dispatched to other capture except the draining one,
+	// so at least should have 2 captures alive. otherwise, reject the request.
+	if len(s.captures) < 2 {
+		log.Warn("DrainCapture: not allowed since less than 2 captures alive",
+			zap.Any("captures", s.captures),
+			zap.String("target", target))
+		return cerror.ErrSchedulerDrainCaptureNotAllowed.GenWithStack("captures not enough")
+	}
+
 	// there is table adding to the target capture, drain it is not allowed.
 	count := s.tables.CountTableByCaptureIDAndStatus(target, util.AddingTable)
 	if count != 0 {
 		log.Warn("DrainCapture: not allowed since some table is adding to the target",
 			zap.String("target", target),
-			zap.Int("count", count))
+			zap.Int("addingTableCount", count))
 		return cerror.ErrSchedulerDrainCaptureNotAllowed.GenWithStack("adding tables")
 	}
+
 	if s.moveTableManager.HaveJobsByCaptureID(target) {
 		log.Warn("DrainCapture: not allowed since have processing move table jobs",
 			zap.String("target", target))
@@ -607,7 +631,7 @@ func (s *BaseScheduleDispatcher) DrainCapture(target model.CaptureID) error {
 	}
 
 	s.drainTarget = target
-	// disable rebalance if try to `drain the capture`
+	// disable rebalance to prevent unnecessary table scheduling.
 	s.needRebalance = false
 	return nil
 }
