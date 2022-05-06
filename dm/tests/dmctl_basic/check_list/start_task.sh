@@ -26,3 +26,21 @@ function start_task_not_pass_with_message() {
 		"start-task $task_conf" \
 		"$2" 1
 }
+
+function start_task_empty_config() {
+	cp $1 /tmp/empty-cfg.yaml
+	sed -i "/threads/d" /tmp/empty-cfg.yaml
+	sed -i "/pool-size/d" /tmp/empty-cfg.yaml
+	sed -i "/worker-count/d" /tmp/empty-cfg.yaml
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"start-task /tmp/empty-cfg.yaml" \
+		"\"result\": true" 2
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"config task empty-unit-task" \
+		"threads: 4" 1 \
+		"pool-size: 16" 1 \
+		"worker-count: 16" 1
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"stop-task $1" \
+		"\"result\": true" 2
+}

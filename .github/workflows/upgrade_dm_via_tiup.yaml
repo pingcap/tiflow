@@ -68,12 +68,6 @@ jobs:
         with:
           args: "upgrade job failed, see https://github.com/pingcap/tiflow/actions/runs/{{ GITHUB_RUN_ID }}"
 
-      # Debug via SSH if previous steps failed
-      - name: Set up tmate session
-        if: ${{ failure() }}
-        uses: mxschmitt/action-tmate@v3
-        timeout-minutes: 30
-
   from_v2:
     name: From V2
     runs-on: ubuntu-18.04
@@ -186,12 +180,6 @@ jobs:
         with:
           args: "upgrade-via-tiup job failed, see https://github.com/pingcap/tiflow/actions/runs/{{ GITHUB_RUN_ID }}"
 
-      # Debug via SSH if previous steps failed
-      - name: Set up tmate session
-        if: ${{ failure() }}
-        uses: mxschmitt/action-tmate@v3
-        timeout-minutes: 30
-
   upgrade_tidb:
     name: Upgrade TiDB
     runs-on: ubuntu-18.04
@@ -244,9 +232,3 @@ jobs:
         uses: Ilshidur/action-slack@2.1.0
         with:
           args: "upgrade job failed, see https://github.com/pingcap/tiflow/actions/runs/{{ GITHUB_RUN_ID }}"
-
-      # Debug via SSH if previous steps failed
-      - name: Set up tmate session
-        if: ${{ failure() }}
-        uses: mxschmitt/action-tmate@v3
-        timeout-minutes: 60
