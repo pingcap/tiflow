@@ -63,7 +63,7 @@ type PDApiClient struct {
 	dialClient *httputil.Client
 }
 
-// NewPDApiClient create a new PlacementClient.
+// NewPDApiClient create a new PDApiClient.
 func NewPDApiClient(ctx context.Context, pdClient pd.Client) (*PDApiClient, error) {
 	conf := config.GetGlobalServerConfig()
 	dialClient, err := httputil.NewClient(conf.Security)
@@ -76,8 +76,8 @@ func NewPDApiClient(ctx context.Context, pdClient pd.Client) (*PDApiClient, erro
 	}, nil
 }
 
-// Verify check and update region labels.
-func Verify(ctx context.Context, pdClient pd.Client, maxRetry uint64) error {
+// UpdateMetaLabel is a reentrant function that updates the meta-region label of upstream cluster.
+func UpdateMetaLabel(ctx context.Context, pdClient pd.Client, maxRetry uint64) error {
 	pc, err := NewPDApiClient(ctx, pdClient)
 	if err != nil {
 		return err

@@ -56,7 +56,7 @@ func TestMetaLabelNormal(t *testing.T) {
 	defer cancel()
 	mockClient := newMockPDClient(ctx, true)
 
-	err := Verify(ctx, mockClient, 1)
+	err := UpdateMetaLabel(ctx, mockClient, 1)
 	require.Nil(t, err)
 	mockClient.testServer.Close()
 }
@@ -79,7 +79,7 @@ func TestMetaLabelFail(t *testing.T) {
 	err = pc.patchMetaLabel(ctx)
 	require.Regexp(t, ".*404.*", err)
 
-	err = Verify(ctx, mockClient, 2)
+	err = UpdateMetaLabel(ctx, mockClient, 2)
 	require.ErrorIs(t, err, cerror.ErrReachMaxTry)
 	mockClient.testServer.Close()
 }

@@ -113,18 +113,13 @@ func DoRequest(
 		return nil, errors.Trace(err)
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		var msg []byte
-		msg, err = io.ReadAll(resp.Body)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-		return nil, errors.Errorf("[%d] %s", resp.StatusCode, msg)
-	}
 
 	content, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, errors.Trace(err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, errors.Errorf("[%d] %s", resp.StatusCode, content)
 	}
 	return content, nil
 }
