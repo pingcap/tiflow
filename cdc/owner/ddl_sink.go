@@ -51,7 +51,6 @@ type DDLSink interface {
 	// the caller of this function can call again and again until a true returned
 	emitDDLEvent(ctx cdcContext.Context, ddl *model.DDLEvent) (bool, error)
 	emitSyncPoint(ctx cdcContext.Context, checkpointTs uint64) error
-	// clearDDLTsMap()
 	// close the sink, cancel running goroutine.
 	close(ctx context.Context) error
 }
@@ -66,9 +65,12 @@ type ddlSinkImpl struct {
 		checkpointTs      model.Ts
 		currentTableNames []model.TableName
 	}
-
+	// ddlFinishedTsMap is used to check whether a ddl event in a ddl job has
+	// been executed successfully.
 	ddlFinishedTsMap sync.Map
-	ddlSentTsMap     map[*model.DDLEvent]model.Ts
+	// ddlSentTsMap is used to check whether a ddl event in a ddl job has been
+	// sent to `ddlCh` successfully.
+	ddlSentTsMap map[*model.DDLEvent]model.Ts
 
 	ddlCh chan *model.DDLEvent
 	errCh chan error

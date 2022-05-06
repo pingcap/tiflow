@@ -62,7 +62,7 @@ type changefeed struct {
 	// ddlEventCache will be set to nil. ddlEventCache contains more than
 	// one event for a rename tables DDL job.
 	ddlEventCache []*model.DDLEvent
-	ddlEventDone  []bool
+	ddlEventDone  map[*model.DDLEvent]bool
 	// currentTableNames is the table names that the changefeed is watching.
 	// And it contains only the tables of the ddl that have been processed.
 	// The ones that have not been executed yet do not have.
@@ -597,7 +597,7 @@ func (c *changefeed) asyncExecDDLJob(ctx cdcContext.Context,
 		}
 
 		c.ddlEventCache = ddlEvents
-		c.ddlEventDone = make([]bool, len(ddlEvents))
+		c.ddlEventDone = make(map[*model.DDLEvent]bool)
 		for _, ddlEvent := range ddlEvents {
 			if c.redoManager.Enabled() {
 				err = c.redoManager.EmitDDLEvent(ctx, ddlEvent)
@@ -609,16 +609,16 @@ func (c *changefeed) asyncExecDDLJob(ctx cdcContext.Context,
 	}
 
 	jobDone := true
-	for i, ddlEvent := range c.ddlEventCache {
-		if c.ddlEventDone[i] {
+	for _, event := range c.ddlEventCache {
+		if c.ddlEventDone[event] {
 			continue
 		}
-		eventDone, err := c.asyncExecDDLEvent(ctx, ddlEvent)
+		eventDone, err := c.asyncExecDDLEvent(ctx, event)
 		if err != nil {
 			return false, err
 		}
 		if eventDone {
-			c.ddlEventDone[i] = true
+			c.ddlEventDone[event] = true
 		}
 		jobDone = jobDone && eventDone
 	}
