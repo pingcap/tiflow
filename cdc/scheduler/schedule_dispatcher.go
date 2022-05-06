@@ -613,6 +613,13 @@ func (s *BaseScheduleDispatcher) DrainCapture(target model.CaptureID) error {
 		return cerror.ErrSchedulerDrainCaptureNotAllowed.GenWithStack("captures not enough")
 	}
 
+	// target capture has no table, `DrainCapture` become a no-op
+	if s.tables.CountTableByCaptureID(target) == 0 {
+		log.Info("DrainCapture: target capture has no table",
+			zap.String("target", target))
+		return nil
+	}
+
 	// there is table adding to the target capture, drain it is not allowed.
 	count := s.tables.CountTableByCaptureIDAndStatus(target, util.AddingTable)
 	if count != 0 {
