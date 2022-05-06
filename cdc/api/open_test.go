@@ -34,10 +34,10 @@ import (
 	"go.uber.org/zap"
 )
 
-const (
-	changeFeedID         = "test-changeFeed"
+var (
+	changeFeedID         = model.DefaultChangeFeedID("test-changeFeed")
 	captureID            = "test-capture"
-	nonExistChangefeedID = "non-exist-changefeed"
+	nonExistChangefeedID = model.DefaultChangeFeedID("non-exist-changefeed")
 )
 
 type mockStatusProvider struct {
@@ -115,14 +115,14 @@ func newStatusProvider() *mockStatusProvider {
 
 	statusProvider.On("GetAllChangeFeedStatuses", mock.Anything).
 		Return(map[model.ChangeFeedID]*model.ChangeFeedStatus{
-			changeFeedID + "1": {CheckpointTs: 1},
-			changeFeedID + "2": {CheckpointTs: 2},
+			model.DefaultChangeFeedID(changeFeedID.ID + "1"): {CheckpointTs: 1},
+			model.DefaultChangeFeedID(changeFeedID.ID + "2"): {CheckpointTs: 2},
 		}, nil)
 
 	statusProvider.On("GetAllChangeFeedInfo", mock.Anything).
 		Return(map[model.ChangeFeedID]*model.ChangeFeedInfo{
-			changeFeedID + "1": {State: model.StateNormal},
-			changeFeedID + "2": {State: model.StateStopped},
+			model.DefaultChangeFeedID(changeFeedID.ID + "1"): {State: model.StateNormal},
+			model.DefaultChangeFeedID(changeFeedID.ID + "2"): {State: model.StateStopped},
 		}, nil)
 
 	statusProvider.On("GetAllTaskStatuses", mock.Anything).
@@ -150,7 +150,7 @@ func TestListChangefeed(t *testing.T) {
 	// test list changefeed succeeded
 	api := testCase{url: "/api/v1/changefeeds", method: "GET"}
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest(api.method, api.url, nil)
+	req, _ := http.NewRequestWithContext(context.Background(), api.method, api.url, nil)
 	router.ServeHTTP(w, req)
 	require.Equal(t, 200, w.Code)
 	var resp []model.ChangefeedCommonInfo
@@ -161,7 +161,7 @@ func TestListChangefeed(t *testing.T) {
 	// test list changefeed with specific state
 	api = testCase{url: fmt.Sprintf("/api/v1/changefeeds?state=%s", "stopped"), method: "GET"}
 	w = httptest.NewRecorder()
-	req, _ = http.NewRequest(api.method, api.url, nil)
+	req, _ = http.NewRequestWithContext(context.Background(), api.method, api.url, nil)
 	router.ServeHTTP(w, req)
 	require.Equal(t, 200, w.Code)
 	resp = []model.ChangefeedCommonInfo{}
@@ -180,9 +180,9 @@ func TestGetChangefeed(t *testing.T) {
 	router := newRouter(cp, newStatusProvider())
 
 	// test get changefeed succeeded
-	api := testCase{url: fmt.Sprintf("/api/v1/changefeeds/%s", changeFeedID), method: "GET"}
+	api := testCase{url: fmt.Sprintf("/api/v1/changefeeds/%s", changeFeedID.ID), method: "GET"}
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest(api.method, api.url, nil)
+	req, _ := http.NewRequestWithContext(context.Background(), api.method, api.url, nil)
 	router.ServeHTTP(w, req)
 	require.Equal(t, 200, w.Code)
 	var resp model.ChangefeedDetail
@@ -191,9 +191,12 @@ func TestGetChangefeed(t *testing.T) {
 	require.Equal(t, model.StateNormal, resp.FeedState)
 
 	// test get changefeed failed
-	api = testCase{url: fmt.Sprintf("/api/v1/changefeeds/%s", nonExistChangefeedID), method: "GET"}
+	api = testCase{
+		url:    fmt.Sprintf("/api/v1/changefeeds/%s", nonExistChangefeedID.ID),
+		method: "GET",
+	}
 	w = httptest.NewRecorder()
-	req, _ = http.NewRequest(api.method, api.url, nil)
+	req, _ = http.NewRequestWithContext(context.Background(), api.method, api.url, nil)
 	router.ServeHTTP(w, req)
 	require.Equal(t, 400, w.Code)
 	respErr := model.HTTPError{}
@@ -217,9 +220,12 @@ func TestPauseChangefeed(t *testing.T) {
 			require.EqualValues(t, model.AdminStop, adminJob.Type)
 			close(done)
 		})
-	api := testCase{url: fmt.Sprintf("/api/v1/changefeeds/%s/pause", changeFeedID), method: "POST"}
+	api := testCase{
+		url:    fmt.Sprintf("/api/v1/changefeeds/%s/pause", changeFeedID.ID),
+		method: "POST",
+	}
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest(api.method, api.url, nil)
+	req, _ := http.NewRequestWithContext(context.Background(), api.method, api.url, nil)
 	router.ServeHTTP(w, req)
 	require.Equal(t, 202, w.Code)
 
@@ -230,9 +236,12 @@ func TestPauseChangefeed(t *testing.T) {
 			done <- cerror.ErrChangeFeedNotExists.FastGenByArgs(adminJob.CfID)
 			close(done)
 		})
-	api = testCase{url: fmt.Sprintf("/api/v1/changefeeds/%s/pause", changeFeedID), method: "POST"}
+	api = testCase{
+		url:    fmt.Sprintf("/api/v1/changefeeds/%s/pause", changeFeedID.ID),
+		method: "POST",
+	}
 	w = httptest.NewRecorder()
-	req, _ = http.NewRequest(api.method, api.url, nil)
+	req, _ = http.NewRequestWithContext(context.Background(), api.method, api.url, nil)
 	router.ServeHTTP(w, req)
 	require.Equal(t, 400, w.Code)
 	respErr := model.HTTPError{}
@@ -242,11 +251,11 @@ func TestPauseChangefeed(t *testing.T) {
 
 	// test pause changefeed failed
 	api = testCase{
-		url:    fmt.Sprintf("/api/v1/changefeeds/%s/pause", nonExistChangefeedID),
+		url:    fmt.Sprintf("/api/v1/changefeeds/%s/pause", nonExistChangefeedID.ID),
 		method: "POST",
 	}
 	w = httptest.NewRecorder()
-	req, _ = http.NewRequest(api.method, api.url, nil)
+	req, _ = http.NewRequestWithContext(context.Background(), api.method, api.url, nil)
 	router.ServeHTTP(w, req)
 	require.Equal(t, 400, w.Code)
 	respErr = model.HTTPError{}
@@ -270,9 +279,12 @@ func TestResumeChangefeed(t *testing.T) {
 			require.EqualValues(t, model.AdminResume, adminJob.Type)
 			close(done)
 		})
-	api := testCase{url: fmt.Sprintf("/api/v1/changefeeds/%s/resume", changeFeedID), method: "POST"}
+	api := testCase{
+		url:    fmt.Sprintf("/api/v1/changefeeds/%s/resume", changeFeedID.ID),
+		method: "POST",
+	}
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest(api.method, api.url, nil)
+	req, _ := http.NewRequestWithContext(context.Background(), api.method, api.url, nil)
 	router.ServeHTTP(w, req)
 	require.Equal(t, 202, w.Code)
 
@@ -283,9 +295,12 @@ func TestResumeChangefeed(t *testing.T) {
 			done <- cerror.ErrChangeFeedNotExists.FastGenByArgs(adminJob.CfID)
 			close(done)
 		})
-	api = testCase{url: fmt.Sprintf("/api/v1/changefeeds/%s/resume", changeFeedID), method: "POST"}
+	api = testCase{
+		url:    fmt.Sprintf("/api/v1/changefeeds/%s/resume", changeFeedID.ID),
+		method: "POST",
+	}
 	w = httptest.NewRecorder()
-	req, _ = http.NewRequest(api.method, api.url, nil)
+	req, _ = http.NewRequestWithContext(context.Background(), api.method, api.url, nil)
 	router.ServeHTTP(w, req)
 	require.Equal(t, 400, w.Code)
 	respErr := model.HTTPError{}
@@ -295,11 +310,11 @@ func TestResumeChangefeed(t *testing.T) {
 
 	// test resume changefeed failed
 	api = testCase{
-		url:    fmt.Sprintf("/api/v1/changefeeds/%s/resume", nonExistChangefeedID),
+		url:    fmt.Sprintf("/api/v1/changefeeds/%s/resume", nonExistChangefeedID.ID),
 		method: "POST",
 	}
 	w = httptest.NewRecorder()
-	req, _ = http.NewRequest(api.method, api.url, nil)
+	req, _ = http.NewRequestWithContext(context.Background(), api.method, api.url, nil)
 	router.ServeHTTP(w, req)
 	require.Equal(t, 400, w.Code)
 	respErr = model.HTTPError{}
@@ -323,9 +338,9 @@ func TestRemoveChangefeed(t *testing.T) {
 			require.EqualValues(t, model.AdminRemove, adminJob.Type)
 			close(done)
 		})
-	api := testCase{url: fmt.Sprintf("/api/v1/changefeeds/%s", changeFeedID), method: "DELETE"}
+	api := testCase{url: fmt.Sprintf("/api/v1/changefeeds/%s", changeFeedID.ID), method: "DELETE"}
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest(api.method, api.url, nil)
+	req, _ := http.NewRequestWithContext(context.Background(), api.method, api.url, nil)
 	router.ServeHTTP(w, req)
 	require.Equal(t, 202, w.Code)
 
@@ -336,9 +351,9 @@ func TestRemoveChangefeed(t *testing.T) {
 			done <- cerror.ErrChangeFeedNotExists.FastGenByArgs(adminJob.CfID)
 			close(done)
 		})
-	api = testCase{url: fmt.Sprintf("/api/v1/changefeeds/%s", changeFeedID), method: "DELETE"}
+	api = testCase{url: fmt.Sprintf("/api/v1/changefeeds/%s", changeFeedID.ID), method: "DELETE"}
 	w = httptest.NewRecorder()
-	req, _ = http.NewRequest(api.method, api.url, nil)
+	req, _ = http.NewRequestWithContext(context.Background(), api.method, api.url, nil)
 	router.ServeHTTP(w, req)
 	require.Equal(t, 400, w.Code)
 	respErr := model.HTTPError{}
@@ -348,11 +363,11 @@ func TestRemoveChangefeed(t *testing.T) {
 
 	// test remove changefeed failed
 	api = testCase{
-		url:    fmt.Sprintf("/api/v1/changefeeds/%s", nonExistChangefeedID),
+		url:    fmt.Sprintf("/api/v1/changefeeds/%s", nonExistChangefeedID.ID),
 		method: "DELETE",
 	}
 	w = httptest.NewRecorder()
-	req, _ = http.NewRequest(api.method, api.url, nil)
+	req, _ = http.NewRequestWithContext(context.Background(), api.method, api.url, nil)
 	router.ServeHTTP(w, req)
 	require.Equal(t, 400, w.Code)
 	respErr = model.HTTPError{}
@@ -376,11 +391,11 @@ func TestRebalanceTables(t *testing.T) {
 			close(done)
 		})
 	api := testCase{
-		url:    fmt.Sprintf("/api/v1/changefeeds/%s/tables/rebalance_table", changeFeedID),
+		url:    fmt.Sprintf("/api/v1/changefeeds/%s/tables/rebalance_table", changeFeedID.ID),
 		method: "POST",
 	}
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest(api.method, api.url, nil)
+	req, _ := http.NewRequestWithContext(context.Background(), api.method, api.url, nil)
 	router.ServeHTTP(w, req)
 	require.Equal(t, 202, w.Code)
 
@@ -392,11 +407,11 @@ func TestRebalanceTables(t *testing.T) {
 			close(done)
 		})
 	api = testCase{
-		url:    fmt.Sprintf("/api/v1/changefeeds/%s/tables/rebalance_table", changeFeedID),
+		url:    fmt.Sprintf("/api/v1/changefeeds/%s/tables/rebalance_table", changeFeedID.ID),
 		method: "POST",
 	}
 	w = httptest.NewRecorder()
-	req, _ = http.NewRequest(api.method, api.url, nil)
+	req, _ = http.NewRequestWithContext(context.Background(), api.method, api.url, nil)
 	router.ServeHTTP(w, req)
 	require.Equal(t, 400, w.Code)
 	respErr := model.HTTPError{}
@@ -406,11 +421,12 @@ func TestRebalanceTables(t *testing.T) {
 
 	// test rebalance table failed
 	api = testCase{
-		url:    fmt.Sprintf("/api/v1/changefeeds/%s/tables/rebalance_table", nonExistChangefeedID),
+		url: fmt.Sprintf("/api/v1/changefeeds/%s/tables/rebalance_table",
+			nonExistChangefeedID.ID),
 		method: "POST",
 	}
 	w = httptest.NewRecorder()
-	req, _ = http.NewRequest(api.method, api.url, nil)
+	req, _ = http.NewRequestWithContext(context.Background(), api.method, api.url, nil)
 	router.ServeHTTP(w, req)
 	require.Equal(t, 400, w.Code)
 	respErr = model.HTTPError{}
@@ -447,11 +463,11 @@ func TestMoveTable(t *testing.T) {
 			close(done)
 		})
 	api := testCase{
-		url:    fmt.Sprintf("/api/v1/changefeeds/%s/tables/move_table", changeFeedID),
+		url:    fmt.Sprintf("/api/v1/changefeeds/%s/tables/move_table", changeFeedID.ID),
 		method: "POST",
 	}
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest(api.method, api.url, body)
+	req, _ := http.NewRequestWithContext(context.Background(), api.method, api.url, body)
 	router.ServeHTTP(w, req)
 	require.Equal(t, 202, w.Code)
 
@@ -476,11 +492,11 @@ func TestMoveTable(t *testing.T) {
 			close(done)
 		})
 	api = testCase{
-		url:    fmt.Sprintf("/api/v1/changefeeds/%s/tables/move_table", changeFeedID),
+		url:    fmt.Sprintf("/api/v1/changefeeds/%s/tables/move_table", changeFeedID.ID),
 		method: "POST",
 	}
 	w = httptest.NewRecorder()
-	req, _ = http.NewRequest(api.method, api.url, body)
+	req, _ = http.NewRequestWithContext(context.Background(), api.method, api.url, body)
 	router.ServeHTTP(w, req)
 	require.Equal(t, 400, w.Code)
 	respErr := model.HTTPError{}
@@ -490,11 +506,11 @@ func TestMoveTable(t *testing.T) {
 
 	// test move table failed
 	api = testCase{
-		url:    fmt.Sprintf("/api/v1/changefeeds/%s/tables/move_table", nonExistChangefeedID),
+		url:    fmt.Sprintf("/api/v1/changefeeds/%s/tables/move_table", nonExistChangefeedID.ID),
 		method: "POST",
 	}
 	w = httptest.NewRecorder()
-	req, _ = http.NewRequest(api.method, api.url, body)
+	req, _ = http.NewRequestWithContext(context.Background(), api.method, api.url, body)
 	router.ServeHTTP(w, req)
 	require.Equal(t, 400, w.Code)
 	respErr = model.HTTPError{}
@@ -513,7 +529,7 @@ func TestResignOwner(t *testing.T) {
 	mo.EXPECT().AsyncStop()
 	api := testCase{url: "/api/v1/owner/resign", method: "POST"}
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest(api.method, api.url, nil)
+	req, _ := http.NewRequestWithContext(context.Background(), api.method, api.url, nil)
 	router.ServeHTTP(w, req)
 	require.Equal(t, 202, w.Code)
 }
@@ -526,11 +542,11 @@ func TestGetProcessor(t *testing.T) {
 	router := newRouter(cp, newStatusProvider())
 	// test get processor succeeded
 	api := testCase{
-		url:    fmt.Sprintf("/api/v1/processors/%s/%s", changeFeedID, captureID),
+		url:    fmt.Sprintf("/api/v1/processors/%s/%s", changeFeedID.ID, captureID),
 		method: "GET",
 	}
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest(api.method, api.url, nil)
+	req, _ := http.NewRequestWithContext(context.Background(), api.method, api.url, nil)
 	router.ServeHTTP(w, req)
 	require.Equal(t, 200, w.Code)
 	processorDetail := &model.ProcessorDetail{}
@@ -540,11 +556,11 @@ func TestGetProcessor(t *testing.T) {
 
 	// test get processor fail due to capture ID error
 	api = testCase{
-		url:    fmt.Sprintf("/api/v1/processors/%s/%s", changeFeedID, "non-exist-capture"),
+		url:    fmt.Sprintf("/api/v1/processors/%s/%s", changeFeedID.ID, "non-exist-capture"),
 		method: "GET",
 	}
 	w = httptest.NewRecorder()
-	req, _ = http.NewRequest(api.method, api.url, nil)
+	req, _ = http.NewRequestWithContext(context.Background(), api.method, api.url, nil)
 	router.ServeHTTP(w, req)
 	require.Equal(t, 400, w.Code)
 	httpError := &model.HTTPError{}
@@ -562,13 +578,13 @@ func TestListProcessor(t *testing.T) {
 	// test list processor succeeded
 	api := testCase{url: "/api/v1/processors", method: "GET"}
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest(api.method, api.url, nil)
+	req, _ := http.NewRequestWithContext(context.Background(), api.method, api.url, nil)
 	router.ServeHTTP(w, req)
 	require.Equal(t, 200, w.Code)
 	var resp []model.ProcessorCommonInfo
 	err := json.NewDecoder(w.Body).Decode(&resp)
 	require.Nil(t, err)
-	require.Equal(t, changeFeedID, resp[0].CfID)
+	require.Equal(t, changeFeedID, model.DefaultChangeFeedID(resp[0].CfID))
 }
 
 func TestListCapture(t *testing.T) {
@@ -580,7 +596,7 @@ func TestListCapture(t *testing.T) {
 	// test list processor succeeded
 	api := testCase{url: "/api/v1/captures", method: "GET"}
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest(api.method, api.url, nil)
+	req, _ := http.NewRequestWithContext(context.Background(), api.method, api.url, nil)
 	router.ServeHTTP(w, req)
 	require.Equal(t, 200, w.Code)
 	var resp []model.Capture
@@ -598,7 +614,7 @@ func TestServerStatus(t *testing.T) {
 	ownerRouter := newRouter(cp, newStatusProvider())
 	api := testCase{url: "/api/v1/status", method: "GET"}
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest(api.method, api.url, nil)
+	req, _ := http.NewRequestWithContext(context.Background(), api.method, api.url, nil)
 	ownerRouter.ServeHTTP(w, req)
 	require.Equal(t, 200, w.Code)
 	var resp model.ServerStatus
@@ -613,7 +629,7 @@ func TestServerStatus(t *testing.T) {
 	RegisterOpenAPIRoutes(r, NewOpenAPI4Test(c, nil))
 	api = testCase{url: "/api/v1/status", method: "GET"}
 	w = httptest.NewRecorder()
-	req, _ = http.NewRequest(api.method, api.url, nil)
+	req, _ = http.NewRequestWithContext(context.Background(), api.method, api.url, nil)
 	r.ServeHTTP(w, req)
 	require.Equal(t, 200, w.Code)
 	resp = model.ServerStatus{}
@@ -638,7 +654,7 @@ func TestSetLogLevel(t *testing.T) {
 	b, err := json.Marshal(&data)
 	require.Nil(t, err)
 	body := bytes.NewReader(b)
-	req, _ := http.NewRequest(api.method, api.url, body)
+	req, _ := http.NewRequestWithContext(context.Background(), api.method, api.url, body)
 	router.ServeHTTP(w, req)
 	require.Equal(t, 200, w.Code)
 
@@ -651,7 +667,7 @@ func TestSetLogLevel(t *testing.T) {
 	b, err = json.Marshal(&data)
 	require.Nil(t, err)
 	body = bytes.NewReader(b)
-	req, _ = http.NewRequest(api.method, api.url, body)
+	req, _ = http.NewRequestWithContext(context.Background(), api.method, api.url, body)
 	router.ServeHTTP(w, req)
 	require.Equal(t, 400, w.Code)
 	httpError := &model.HTTPError{}

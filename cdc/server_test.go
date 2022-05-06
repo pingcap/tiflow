@@ -28,7 +28,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pingcap/tidb/br/pkg/httputil"
 	"github.com/stretchr/testify/require"
 	"github.com/tikv/pd/pkg/tempurl"
 	clientv3 "go.etcd.io/etcd/client/v3"
@@ -40,6 +39,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
+	"github.com/pingcap/tiflow/pkg/httputil"
 	"github.com/pingcap/tiflow/pkg/retry"
 	security2 "github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/util"
@@ -124,10 +124,12 @@ func testSetUpDataDir(t *testing.T, s *testServer) {
 	// DataDir is not set, but has existed changefeed, use the one with the largest available space
 	conf.DataDir = ""
 	dir := t.TempDir()
-	err = s.server.etcdClient.SaveChangeFeedInfo(s.ctx, &model.ChangeFeedInfo{SortDir: dir}, "a")
+	err = s.server.etcdClient.SaveChangeFeedInfo(s.ctx,
+		&model.ChangeFeedInfo{SortDir: dir}, model.DefaultChangeFeedID("a"))
 	require.Nil(t, err)
 
-	err = s.server.etcdClient.SaveChangeFeedInfo(s.ctx, &model.ChangeFeedInfo{}, "b")
+	err = s.server.etcdClient.SaveChangeFeedInfo(s.ctx,
+		&model.ChangeFeedInfo{}, model.DefaultChangeFeedID("b"))
 	require.Nil(t, err)
 
 	err = s.server.setUpDir(s.ctx)
@@ -214,28 +216,26 @@ func TestServerTLSWithoutCommonName(t *testing.T) {
 		tr := &http.Transport{
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 		}
-		cli := &http.Client{Transport: tr}
-		resp, err := cli.Get(statusURL)
+		cli := httputil.NewTestClient(tr)
+		resp, err := cli.Get(ctx, statusURL)
 		if err != nil {
 			return err
 		}
+		defer resp.Body.Close()
 		decoder := json.NewDecoder(resp.Body)
 		captureInfo := &model.CaptureInfo{}
 		err = decoder.Decode(captureInfo)
 		require.Nil(t, err)
 		require.Equal(t, server.capture.Info().ID, captureInfo.ID)
-		resp.Body.Close()
 		return nil
 	}, retry.WithMaxTries(retryTime), retry.WithBackoffBaseDelay(50), retry.WithIsRetryableErr(cerrors.IsRetryableError))
 	require.Nil(t, err)
 
 	// test cli sends request with a cert will success
 	err = retry.Do(ctx, func() error {
-		tlsConfig, err := security.ToTLSConfigWithVerify()
+		cli, err := httputil.NewClient(&security)
 		require.Nil(t, err)
-
-		cli := httputil.NewClient(tlsConfig)
-		resp, err := cli.Get(statusURL)
+		resp, err := cli.Get(ctx, statusURL)
 		if err != nil {
 			return err
 		}
@@ -290,8 +290,9 @@ func TestServerTLSWithCommonName(t *testing.T) {
 		tr := &http.Transport{
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 		}
-		cli := &http.Client{Transport: tr}
-		resp, err := cli.Get(statusURL)
+		cli := httputil.NewTestClient(tr)
+		require.Nil(t, err)
+		resp, err := cli.Get(ctx, statusURL)
 		if err != nil {
 			return err
 		}
@@ -307,11 +308,9 @@ func TestServerTLSWithCommonName(t *testing.T) {
 
 	// test cli sends request with a cert will success
 	err = retry.Do(ctx, func() error {
-		tlsConfig, err := security.ToTLSConfigWithVerify()
+		cli, err := httputil.NewClient(&security)
 		require.Nil(t, err)
-
-		cli := httputil.NewClient(tlsConfig)
-		resp, err := cli.Get(statusURL)
+		resp, err := cli.Get(ctx, statusURL)
 		if err != nil {
 			return err
 		}

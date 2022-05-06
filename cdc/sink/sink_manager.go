@@ -45,7 +45,7 @@ func NewManager(
 ) *Manager {
 	bufSink := newBufferSink(backendSink, checkpointTs)
 	go bufSink.run(ctx, changefeedID, errCh)
-	counter := metrics.TableSinkTotalRowsCountCounter.WithLabelValues(changefeedID)
+	counter := metrics.TableSinkTotalRowsCountCounter.WithLabelValues(changefeedID.ID)
 	return &Manager{
 		bufSink:                   bufSink,
 		tableSinks:                make(map[model.TableID]*tableSink),
@@ -82,11 +82,12 @@ func (m *Manager) CreateTableSink(
 func (m *Manager) Close(ctx context.Context) error {
 	m.tableSinksMu.Lock()
 	defer m.tableSinksMu.Unlock()
-	metrics.TableSinkTotalRowsCountCounter.DeleteLabelValues(m.changefeedID)
+	metrics.TableSinkTotalRowsCountCounter.DeleteLabelValues(m.changefeedID.ID)
 	if m.bufSink != nil {
 		if err := m.bufSink.Close(ctx); err != nil && errors.Cause(err) != context.Canceled {
 			log.Warn("close bufSink failed",
-				zap.String("changefeed", m.changefeedID),
+				zap.String("namespapce", m.changefeedID.Namespace),
+				zap.String("changefeed", m.changefeedID.ID),
 				zap.Error(err))
 			return err
 		}

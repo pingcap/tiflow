@@ -22,8 +22,8 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
-	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/pdtime"
 	"github.com/tikv/client-go/v2/oracle"
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
@@ -48,6 +48,7 @@ type Manager interface {
 
 type gcManager struct {
 	pdClient pd.Client
+	pdClock  pdtime.Clock
 	gcTTL    int64
 
 	lastUpdatedTime   time.Time
@@ -57,13 +58,14 @@ type gcManager struct {
 }
 
 // NewManager creates a new Manager.
-func NewManager(pdClient pd.Client) Manager {
+func NewManager(pdClient pd.Client, pdClock pdtime.Clock) Manager {
 	serverConfig := config.GetGlobalServerConfig()
 	failpoint.Inject("InjectGcSafepointUpdateInterval", func(val failpoint.Value) {
 		gcSafepointUpdateInterval = time.Duration(val.(int) * int(time.Millisecond))
 	})
 	return &gcManager{
 		pdClient:          pdClient,
+		pdClock:           pdClock,
 		lastSucceededTime: time.Now(),
 		gcTTL:             serverConfig.GcTTL,
 	}
@@ -111,11 +113,7 @@ func (m *gcManager) CheckStaleCheckpointTs(
 ) error {
 	gcSafepointUpperBound := checkpointTs - 1
 	if m.isTiCDCBlockGC {
-		cctx, ok := ctx.(cdcContext.Context)
-		if !ok {
-			return cerror.ErrOwnerUnknown.GenWithStack("ctx not an cdcContext.Context, it should be")
-		}
-		pdTime, err := cctx.GlobalVars().PDClock.CurrentTime()
+		pdTime, err := m.pdClock.CurrentTime()
 		// TODO: should we return err here, or just log it?
 		if err != nil {
 			return errors.Trace(err)

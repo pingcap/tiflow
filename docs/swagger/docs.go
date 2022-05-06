@@ -806,6 +806,9 @@ var doc = `{
                 "id": {
                     "type": "string"
                 },
+                "namespace": {
+                    "type": "string"
+                },
                 "state": {
                     "type": "string"
                 }
@@ -841,6 +844,9 @@ var doc = `{
                 "mounter_worker_num": {
                     "type": "integer",
                     "default": 16
+                },
+                "namespace": {
+                    "type": "string"
                 },
                 "sink_config": {
                     "$ref": "#/definitions/config.SinkConfig"
@@ -888,6 +894,9 @@ var doc = `{
                 "id": {
                     "type": "string"
                 },
+                "namespace": {
+                    "type": "string"
+                },
                 "resolved_ts": {
                     "type": "integer"
                 },
@@ -932,6 +941,9 @@ var doc = `{
                     "type": "string"
                 },
                 "changefeed_id": {
+                    "type": "string"
+                },
+                "namespace": {
                     "type": "string"
                 }
             }

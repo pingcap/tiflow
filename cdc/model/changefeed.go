@@ -31,6 +31,26 @@ import (
 	"go.uber.org/zap"
 )
 
+// DefaultNamespace is the default namespace value,
+// all the old changefeed will be put into default namespace
+const DefaultNamespace = "default"
+
+// ChangeFeedID is the type for change feed ID
+type ChangeFeedID struct {
+	// Namespace and ID pair is unique in one ticdc cluster
+	// the default value of Namespace is "default"
+	Namespace string
+	ID        string
+}
+
+// DefaultChangeFeedID returns `ChangeFeedID` with default namespace
+func DefaultChangeFeedID(id string) ChangeFeedID {
+	return ChangeFeedID{
+		Namespace: DefaultNamespace,
+		ID:        id,
+	}
+}
+
 // SortEngine is the sorter engine
 type SortEngine = string
 
@@ -94,6 +114,7 @@ func (s FeedState) IsNeeded(need string) bool {
 
 // ChangeFeedInfo describes the detail of a ChangeFeed
 type ChangeFeedInfo struct {
+	ClusterID  uint64            `json:"cluster-id"`
 	SinkURI    string            `json:"sink-uri"`
 	Opts       map[string]string `json:"opts"`
 	CreateTime time.Time         `json:"create-time"`
@@ -343,8 +364,8 @@ func (info *ChangeFeedInfo) fixSinkProtocol() {
 			sinkURIParsed.RawQuery = newRawQuery
 			fixedSinkURI := sinkURIParsed.String()
 			log.Info("handle incompatible protocol from sink URI",
-				zap.String("old URI query", oldRawQuery),
-				zap.String("fixed URI query", newRawQuery))
+				zap.String("oldUriQuery", oldRawQuery),
+				zap.String("fixedUriQuery", newRawQuery))
 			info.SinkURI = fixedSinkURI
 		}
 	} else {

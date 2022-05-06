@@ -24,12 +24,12 @@ import (
 	"github.com/Shopify/sarama"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/util/timeutil"
+	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/sink/codec"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/kafka"
 	"github.com/pingcap/tiflow/pkg/security"
-	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
 )
 
@@ -39,7 +39,7 @@ func TestNewSaramaConfig(t *testing.T) {
 	config.Version = "invalid"
 	_, err := NewSaramaConfig(ctx, config)
 	require.Regexp(t, "invalid version.*", errors.Cause(err))
-	ctx = util.SetOwnerInCtx(ctx)
+	ctx = contextutil.SetOwnerInCtx(ctx)
 	config.Version = "2.6.0"
 	config.ClientID = "^invalid$"
 	_, err = NewSaramaConfig(ctx, config)

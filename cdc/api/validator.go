@@ -21,7 +21,8 @@ import (
 	"github.com/pingcap/log"
 	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tiflow/cdc/capture"
-	"github.com/pingcap/tiflow/cdc/entry"
+	"github.com/pingcap/tiflow/cdc/contextutil"
+	"github.com/pingcap/tiflow/cdc/entry/schema"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink"
@@ -29,6 +30,7 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
+	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/r3labs/diff"
@@ -41,6 +43,9 @@ func verifyCreateChangefeedConfig(
 	changefeedConfig model.ChangefeedConfig,
 	capture *capture.Capture,
 ) (*model.ChangeFeedInfo, error) {
+	// TODO(dongmen): we should pass ClusterID in ChangefeedConfig in the upcoming future
+	upStream := capture.UpstreamManager.Get(upstream.DefaultClusterID)
+
 	// verify sinkURI
 	if changefeedConfig.SinkURI == "" {
 		return nil, cerror.ErrSinkURIInvalid.GenWithStackByArgs("sink-uri is empty, can't not create a changefeed without sink-uri")
@@ -51,7 +56,8 @@ func verifyCreateChangefeedConfig(
 		return nil, cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed_id: %s", changefeedConfig.ID)
 	}
 	// check if the changefeed exists
-	cfStatus, err := capture.StatusProvider().GetChangeFeedStatus(ctx, changefeedConfig.ID)
+	cfStatus, err := capture.StatusProvider().GetChangeFeedStatus(ctx,
+		model.DefaultChangeFeedID(changefeedConfig.ID))
 	if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
 		return nil, err
 	}
@@ -61,7 +67,7 @@ func verifyCreateChangefeedConfig(
 
 	// verify start-ts
 	if changefeedConfig.StartTS == 0 {
-		ts, logical, err := capture.PDClient.GetTS(ctx)
+		ts, logical, err := upStream.PDClient.GetTS(ctx)
 		if err != nil {
 			return nil, cerror.ErrPDEtcdAPIError.GenWithStackByArgs("fail to get ts from pd client")
 		}
@@ -71,7 +77,10 @@ func verifyCreateChangefeedConfig(
 	// Ensure the start ts is valid in the next 1 hour.
 	const ensureTTL = 60 * 60
 	if err := gc.EnsureChangefeedStartTsSafety(
-		ctx, capture.PDClient, changefeedConfig.ID, ensureTTL, changefeedConfig.StartTS); err != nil {
+		ctx,
+		upStream.PDClient,
+		model.DefaultChangeFeedID(changefeedConfig.ID),
+		ensureTTL, changefeedConfig.StartTS); err != nil {
 		if !cerror.ErrStartTsBeforeGC.Equal(err) {
 			return nil, cerror.ErrPDEtcdAPIError.Wrap(err)
 		}
@@ -133,7 +142,7 @@ func verifyCreateChangefeedConfig(
 	}
 
 	if !replicaConfig.ForceReplicate && !changefeedConfig.IgnoreIneligibleTable {
-		ineligibleTables, _, err := VerifyTables(replicaConfig, capture.Storage, changefeedConfig.StartTS)
+		ineligibleTables, _, err := VerifyTables(replicaConfig, upStream.KVStorage, changefeedConfig.StartTS)
 		if err != nil {
 			return nil, err
 		}
@@ -146,7 +155,7 @@ func verifyCreateChangefeedConfig(
 	if err != nil {
 		return nil, cerror.ErrAPIInvalidParam.Wrap(errors.Annotatef(err, "invalid timezone:%s", changefeedConfig.TimeZone))
 	}
-	ctx = util.PutTimezoneInCtx(ctx, tz)
+	ctx = contextutil.PutTimezoneInCtx(ctx, tz)
 	if err := sink.Validate(ctx, info.SinkURI, info.Config, info.Opts); err != nil {
 		return nil, err
 	}
@@ -215,25 +224,25 @@ func VerifyTables(replicaConfig *config.ReplicaConfig, storage tidbkv.Storage, s
 	if err != nil {
 		return nil, nil, errors.Trace(err)
 	}
-	snap, err := entry.NewSingleSchemaSnapshotFromMeta(meta, startTs, false /* explicitTables */)
+	snap, err := schema.NewSingleSnapshotFromMeta(meta, startTs, false /* explicitTables */)
 	if err != nil {
 		return nil, nil, errors.Trace(err)
 	}
 
-	for _, tableInfo := range snap.Tables() {
+	snap.IterTables(true, func(tableInfo *model.TableInfo) {
 		if filter.ShouldIgnoreTable(tableInfo.TableName.Schema, tableInfo.TableName.Table) {
-			continue
+			return
 		}
 		// Sequence is not supported yet, TiCDC needs to filter all sequence tables.
 		// See https://github.com/pingcap/tiflow/issues/4559
 		if tableInfo.IsSequence() {
-			continue
+			return
 		}
 		if !tableInfo.IsEligible(false /* forceReplicate */) {
 			ineligibleTables = append(ineligibleTables, tableInfo.TableName)
 		} else {
 			eligibleTables = append(eligibleTables, tableInfo.TableName)
 		}
-	}
+	})
 	return
 }

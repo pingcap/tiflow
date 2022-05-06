@@ -21,15 +21,13 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	tidbkv "github.com/pingcap/tidb/kv"
+
 	"github.com/prometheus/client_golang/prometheus"
-	pd "github.com/tikv/pd/client"
 	"go.etcd.io/etcd/client/pkg/v3/logutil"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/zap"
@@ -48,8 +46,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/httputil"
 	"github.com/pingcap/tiflow/pkg/p2p"
 	"github.com/pingcap/tiflow/pkg/tcpserver"
-	"github.com/pingcap/tiflow/pkg/util"
-	"github.com/pingcap/tiflow/pkg/version"
 	p2pProto "github.com/pingcap/tiflow/proto/p2p"
 )
 
@@ -67,9 +63,7 @@ type Server struct {
 	tcpServer    tcpserver.TCPServer
 	grpcService  *p2p.ServerWrapper
 	statusServer *http.Server
-	pdClient     pd.Client
 	etcdClient   *etcd.CDCEtcdClient
-	kvStorage    tidbkv.Storage
 	pdEndpoints  []string
 }
 
@@ -118,26 +112,6 @@ func (s *Server) Run(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
-	pdClient, err := pd.NewClientWithContext(
-		ctx, s.pdEndpoints, conf.Security.PDSecurityOption(),
-		pd.WithGRPCDialOptions(
-			grpcTLSOption,
-			grpc.WithBlock(),
-			grpc.WithConnectParams(grpc.ConnectParams{
-				Backoff: backoff.Config{
-					BaseDelay:  time.Second,
-					Multiplier: 1.1,
-					Jitter:     0.1,
-					MaxDelay:   3 * time.Second,
-				},
-				MinConnectTimeout: 3 * time.Second,
-			}),
-		))
-	if err != nil {
-		return cerror.WrapError(cerror.ErrServerNewPDClient, err)
-	}
-	s.pdClient = pdClient
-
 	tlsConfig, err := conf.Security.ToTLSConfig()
 	if err != nil {
 		return errors.Trace(err)
@@ -178,29 +152,9 @@ func (s *Server) Run(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
-	// To not block CDC server startup, we need to warn instead of error
-	// when TiKV is incompatible.
-	errorTiKVIncompatible := false
-	err = version.CheckClusterVersion(ctx, s.pdClient, s.pdEndpoints, conf.Security, errorTiKVIncompatible)
-	if err != nil {
-		return err
-	}
-
 	kv.InitWorkerPool()
-	kvStore, err := kv.CreateTiStore(strings.Join(s.pdEndpoints, ","), conf.Security)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	defer func() {
-		err := kvStore.Close()
-		if err != nil {
-			log.Warn("kv store close failed", zap.Error(err))
-		}
-	}()
-	s.kvStorage = kvStore
-	ctx = util.PutKVStorageInCtx(ctx, kvStore)
 
-	s.capture = capture.NewCapture(s.pdClient, s.kvStorage, s.etcdClient, s.grpcService)
+	s.capture = capture.NewCapture(s.pdEndpoints, s.etcdClient, s.grpcService)
 
 	err = s.startStatusHTTP(s.tcpServer.HTTP1Listener())
 	if err != nil {
@@ -258,17 +212,12 @@ func (s *Server) etcdHealthChecker(ctx context.Context) error {
 			for _, pdEndpoint := range s.pdEndpoints {
 				start := time.Now()
 				ctx, cancel := context.WithTimeout(ctx, time.Second*10)
-				req, err := http.NewRequestWithContext(
-					ctx, http.MethodGet, fmt.Sprintf("%s/pd/api/v1/health", pdEndpoint), nil)
-				if err != nil {
-					log.Warn("etcd health check failed", zap.Error(err))
-					cancel()
-					continue
-				}
-				_, err = httpCli.Do(req)
+				resp, err := httpCli.Get(ctx, fmt.Sprintf("%s/pd/api/v1/health", pdEndpoint))
 				if err != nil {
 					log.Warn("etcd health check error", zap.Error(err))
 				} else {
+					_, _ = io.Copy(io.Discard, resp.Body)
+					_ = resp.Body.Close()
 					metrics[pdEndpoint].Observe(float64(time.Since(start)) / float64(time.Second))
 				}
 				cancel()

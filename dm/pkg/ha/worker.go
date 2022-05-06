@@ -16,11 +16,13 @@ package ha
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 
 	clientv3 "go.etcd.io/etcd/client/v3"
 
 	"github.com/pingcap/tiflow/dm/dm/common"
 	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
 // WorkerInfo represents the node information of the DM-worker.
@@ -47,14 +49,16 @@ func (i WorkerInfo) String() string {
 func (i WorkerInfo) toJSON() (string, error) {
 	data, err := json.Marshal(i)
 	if err != nil {
-		return "", err
+		return "", terror.ErrHAInvalidItem.Delegate(err, fmt.Sprintf("failed to marshal worker info: %+v", i))
 	}
 	return string(data), nil
 }
 
 // workerInfoFromJSON constructs WorkerInfo from its JSON represent.
 func workerInfoFromJSON(s string) (i WorkerInfo, err error) {
-	err = json.Unmarshal([]byte(s), &i)
+	if err = json.Unmarshal([]byte(s), &i); err != nil {
+		err = terror.ErrHAInvalidItem.Delegate(err, fmt.Sprintf("failed to unmarshal worker info: %s", s))
+	}
 	return
 }
 
@@ -66,7 +70,7 @@ func PutWorkerInfo(cli *clientv3.Client, info WorkerInfo) (int64, error) {
 		return 0, err
 	}
 	key := common.WorkerRegisterKeyAdapter.Encode(info.Name)
-	_, rev, err := etcdutil.DoOpsInOneTxnWithRetry(cli, clientv3.OpPut(key, value))
+	_, rev, err := etcdutil.DoTxnWithRepeatable(cli, etcdutil.ThenOpFunc(clientv3.OpPut(key, value)))
 	return rev, err
 }
 
@@ -78,7 +82,7 @@ func GetAllWorkerInfo(cli *clientv3.Client) (map[string]WorkerInfo, int64, error
 
 	resp, err := cli.Get(ctx, common.WorkerRegisterKeyAdapter.Path(), clientv3.WithPrefix())
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, terror.ErrHAFailTxnOperation.Delegate(err, "failed to get all worker info")
 	}
 
 	ifm := make(map[string]WorkerInfo)
@@ -100,6 +104,6 @@ func DeleteWorkerInfoRelayConfig(cli *clientv3.Client, worker string) (int64, er
 		clientv3.OpDelete(common.WorkerRegisterKeyAdapter.Encode(worker)),
 		clientv3.OpDelete(common.UpstreamRelayWorkerKeyAdapter.Encode(worker)),
 	}
-	_, rev, err := etcdutil.DoOpsInOneTxnWithRetry(cli, ops...)
+	_, rev, err := etcdutil.DoTxnWithRepeatable(cli, etcdutil.ThenOpFunc(ops...))
 	return rev, err
 }

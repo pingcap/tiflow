@@ -35,9 +35,7 @@ import (
 	"go.uber.org/zap"
 )
 
-const (
-	dummyChangeFeedID = "dummy_changefeed"
-)
+var dummyChangeFeedID = model.DefaultChangeFeedID("dummy_changefeed")
 
 func TestMounterDisableOldValue(t *testing.T) {
 	testCases := []struct {
@@ -276,7 +274,7 @@ func testMounterDisableOldValue(t *testing.T, tc struct {
 		err := scheamStorage.HandleDDLJob(job)
 		require.Nil(t, err)
 	}
-	tableInfo, ok := scheamStorage.GetLastSnapshot().GetTableByName("test", tc.tableName)
+	tableInfo, ok := scheamStorage.GetLastSnapshot().TableByName("test", tc.tableName)
 	require.True(t, ok)
 	if tableInfo.IsCommonHandle {
 		// we can check this log to make sure if the clustered-index is enabled
@@ -291,7 +289,9 @@ func testMounterDisableOldValue(t *testing.T, tc struct {
 	ver, err := store.CurrentVersion(oracle.GlobalTxnScope)
 	require.Nil(t, err)
 	scheamStorage.AdvanceResolvedTs(ver.Ver)
-	mounter := NewMounter(scheamStorage, "c1", time.UTC, false).(*mounterImpl)
+	mounter := NewMounter(scheamStorage,
+		model.DefaultChangeFeedID("c1"),
+		time.UTC, false).(*mounterImpl)
 	mounter.tz = time.Local
 	ctx := context.Background()
 

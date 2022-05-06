@@ -52,6 +52,8 @@ const (
 	ClassDMCtl
 	ClassNotSet
 	ClassOpenAPI
+	ClassValidator
+	ClassHA
 )
 
 var errClass2Str = map[ErrClass]string{
@@ -70,6 +72,8 @@ var errClass2Str = map[ErrClass]string{
 	ClassDMMaster:      "dm-master",
 	ClassDMWorker:      "dm-worker",
 	ClassDMTracer:      "dm-tracer",
+	ClassValidator:     "validator",
+	ClassHA:            "ha",
 	ClassSchemaTracker: "schema-tracker",
 	ClassScheduler:     "scheduler",
 	ClassDMCtl:         "dmctl",

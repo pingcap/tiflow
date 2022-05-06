@@ -43,9 +43,10 @@ import (
 
 // SourceWorker manages a source(upstream) which is mainly related to subtasks and relay.
 type SourceWorker struct {
-	// ensure no other operation can be done when closing (we can use `WatGroup`/`Context` to archive this)
+	// ensure no other operation can be done when closing (we can use `WaitGroup`/`Context` to archive this)
 	// TODO: check what does it guards. Now it's used to guard relayHolder and relayPurger (maybe subTaskHolder?) since
 	// query-status maybe access them when closing/disable functionalities
+	// This lock is used to guards source worker's source config and subtask holder(subtask configs)
 	sync.RWMutex
 
 	wg     sync.WaitGroup
@@ -249,9 +250,12 @@ func (w *SourceWorker) Stop(graceful bool) {
 // updateSourceStatus updates w.sourceStatus.
 func (w *SourceWorker) updateSourceStatus(ctx context.Context) error {
 	w.sourceDBMu.Lock()
+	w.RLock()
+	cfg := w.cfg
+	w.RUnlock()
 	if w.sourceDB == nil {
 		var err error
-		w.sourceDB, err = conn.DefaultDBProvider.Apply(&w.cfg.DecryptPassword().From)
+		w.sourceDB, err = conn.DefaultDBProvider.Apply(&cfg.DecryptPassword().From)
 		if err != nil {
 			w.sourceDBMu.Unlock()
 			return err
@@ -262,7 +266,7 @@ func (w *SourceWorker) updateSourceStatus(ctx context.Context) error {
 	var status binlog.SourceStatus
 	ctx, cancel := context.WithTimeout(ctx, utils.DefaultDBTimeout)
 	defer cancel()
-	pos, gtidSet, err := utils.GetPosAndGs(ctx, w.sourceDB.DB, w.cfg.Flavor)
+	pos, gtidSet, err := utils.GetPosAndGs(ctx, w.sourceDB.DB, cfg.Flavor)
 	if err != nil {
 		return err
 	}
@@ -1160,7 +1164,10 @@ func (w *SourceWorker) observeValidatorStage(ctx context.Context, lastUsedRev in
 				case <-ctx.Done():
 					return nil
 				case <-time.After(500 * time.Millisecond):
-					startRevision, err = w.getCurrentValidatorRevision(w.cfg.SourceID)
+					w.RLock()
+					sourceID := w.cfg.SourceID
+					w.RUnlock()
+					startRevision, err = w.getCurrentValidatorRevision(sourceID)
 					if err != nil {
 						log.L().Error("reset validator stage failed, will retry later", zap.Error(err), zap.Int("retryNum", retryNum))
 					}
@@ -1350,4 +1357,20 @@ func (w *SourceWorker) OperateWorkerValidatorErr(taskName string, op pb.Validati
 		return st.OperateValidatorError(op, errID, isAll)
 	}
 	return terror.ErrWorkerSubTaskNotFound.Generate(taskName)
+}
+
+func (w *SourceWorker) GetValidatorStatus(taskName string) (*pb.ValidationStatus, error) {
+	st := w.subTaskHolder.findSubTask(taskName)
+	if st == nil {
+		return nil, terror.ErrWorkerSubTaskNotFound.Generate(taskName)
+	}
+	return st.GetValidatorStatus()
+}
+
+func (w *SourceWorker) GetValidatorTableStatus(taskName string, filterStatus pb.Stage) ([]*pb.ValidationTableStatus, error) {
+	st := w.subTaskHolder.findSubTask(taskName)
+	if st == nil {
+		return nil, terror.ErrWorkerSubTaskNotFound.Generate(taskName)
+	}
+	return st.GetValidatorTableStatus(filterStatus)
 }
