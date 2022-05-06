@@ -121,6 +121,11 @@ type tableValidateStatus struct {
 	message string
 }
 
+func (vs *tableValidateStatus) String() string {
+	return fmt.Sprintf("source=%s, target=%s, stage=%s, message=%s",
+		vs.source, vs.target, vs.stage, vs.message)
+}
+
 func (vs *tableValidateStatus) stopped(msg string) {
 	vs.stage = pb.Stage_Stopped
 	vs.message = msg
@@ -175,6 +180,7 @@ type DataValidator struct {
 	processedRowCounts   []atomic.Int64
 	pendingRowCounts     []atomic.Int64
 	newErrorRowCount     atomic.Int64
+	processedBinlogSize  atomic.Int64
 	lastFlushTime        time.Time
 	location             *binlog.Location
 	loadedPendingChanges map[string]*tableChangeJob
@@ -213,6 +219,7 @@ func (v *DataValidator) reset() {
 		v.pendingRowCounts[i].Store(0)
 	}
 	v.newErrorRowCount.Store(0)
+	v.processedBinlogSize.Store(0)
 	v.initTableStatus(map[string]*tableValidateStatus{})
 }
 
@@ -322,6 +329,10 @@ func (v *DataValidator) Start(expect pb.Stage) {
 
 func (v *DataValidator) printStatusRoutine() {
 	defer v.wg.Done()
+	var (
+		prevProcessedBinlogSize = v.processedBinlogSize.Load()
+		prevTime                = time.Now()
+	)
 	for {
 		select {
 		case <-v.ctx.Done():
@@ -337,10 +348,18 @@ func (v *DataValidator) printStatusRoutine() {
 				v.pendingRowCounts[rowUpdated].Load(),
 				v.pendingRowCounts[rowDeleted].Load(),
 			}
+			currProcessedBinlogSize := v.processedBinlogSize.Load()
+			currTime := time.Now()
+			interval := time.Since(prevTime)
+			speed := float64((currProcessedBinlogSize-prevProcessedBinlogSize)>>20) / interval.Seconds()
+			prevProcessedBinlogSize = currProcessedBinlogSize
+			prevTime = currTime
+
 			v.L.Info("validator status",
 				zap.Int64s("processed(i, u, d)", processed),
 				zap.Int64s("pending(i, u, d)", pending),
 				zap.Int64("new error rows(not flushed)", v.newErrorRowCount.Load()),
+				zap.String("binlog process speed", fmt.Sprintf("%.2f MB/s", speed)),
 			)
 		}
 	}
@@ -549,6 +568,8 @@ func (v *DataValidator) doValidate() {
 			return
 		}
 
+		v.processedBinlogSize.Add(int64(e.Header.EventSize))
+
 		switch ev := e.Event.(type) {
 		case *replication.RowsEvent:
 			if err = v.processRowsEvent(e.Header, ev); err != nil {
@@ -739,6 +760,8 @@ func (v *DataValidator) processRowsEvent(header *replication.EventHeader, ev *re
 			target: *targetTable,
 			stage:  pb.Stage_Running,
 		}
+
+		v.L.Info("put table status", zap.Stringer("state", state))
 		v.putTableStatus(fullTableName, state)
 	}
 	if validateTbl.message != "" {
@@ -1016,7 +1039,7 @@ func genRowKey(row *sqlmodel.RowChange) string {
 }
 
 func genRowKeyByString(pkValues []string) string {
-	// TODO: in scenario below, the generated key may not unique, but it's rare
+	// in scenario below, the generated key may not unique, but it's rare
 	// suppose a table with multiple column primary key: (v1, v2)
 	// for below case, the generated key is the same:
 	// 	 (aaa\t, bbb) and (aaa, \tbbb), the joint values both are "aaa\t\tbbb"
