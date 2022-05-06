@@ -2752,8 +2752,17 @@ func (s *Scheduler) OperateValidationTask(expectStage pb.Stage, stCfgs map[strin
 	validatorStages := make([]ha.Stage, 0)
 	for taskName := range stCfgs {
 		for _, cfg := range stCfgs[taskName] {
-			if expectStage == pb.Stage_Running {
-				// don't need to update config if stopping the validator task
+			stageM, _, err := ha.GetValidatorStage(s.etcdCli, cfg.SourceID, cfg.Name, 0)
+			if err != nil {
+				return terror.Annotatef(err, "fail to get validator stage for task `%s` and source `%s`", cfg.Name, cfg.SourceID)
+			}
+			if v, ok := stageM[cfg.Name]; ok {
+				s.logger.Info("validator already exists, resuming",
+					zap.String("curr-stage", v.Expect.String()),
+					zap.String("taskName", cfg.Name),
+					zap.String("source", cfg.SourceID),
+				)
+			} else {
 				newCfgs = append(newCfgs, cfg)
 			}
 			validatorStages = append(validatorStages, ha.NewValidatorStage(expectStage, cfg.SourceID, cfg.Name))
