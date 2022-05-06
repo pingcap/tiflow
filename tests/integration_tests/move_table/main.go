@@ -234,7 +234,7 @@ func (c *cluster) refreshInfo(ctx context.Context) error {
 	log.Debug("retrieved changefeeds", zap.Reflect("changefeeds", changefeeds))
 	var changefeed string
 	for k := range changefeeds {
-		changefeed = k
+		changefeed = k.ID
 		break
 	}
 
