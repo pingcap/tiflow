@@ -171,7 +171,7 @@ const (
 	captureSyncFinished
 )
 
-func (s *BaseScheduleDispatcher) resetDrainingTarget(captures map[model.CaptureID]*model.CaptureInfo) {
+func (s *BaseScheduleDispatcher) resetDrainingTarget() {
 	if s.drainTarget == captureIDNotDraining {
 		return
 	}
@@ -193,7 +193,7 @@ func (s *BaseScheduleDispatcher) setCaptures(captures map[model.CaptureID]*model
 	// (from Etcd in the current implementation).
 	s.captures = captures
 
-	s.resetDrainingTarget(captures)
+	s.resetDrainingTarget()
 
 	s.balancerCandidates = s.balancerCandidates[:0]
 	for captureID := range s.captures {
