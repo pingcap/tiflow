@@ -62,26 +62,30 @@ func NewStatistics(ctx context.Context, t sinkType) *Statistics {
 
 	s := t.String()
 	statistics.metricExecTxnHis = ExecTxnHistogram.
-		WithLabelValues(statistics.changefeedID.ID, s)
+		WithLabelValues(statistics.changefeedID.Namespace, statistics.changefeedID.ID, s)
 	statistics.metricExecBatchHis = ExecBatchHistogram.
-		WithLabelValues(statistics.changefeedID.ID, s)
+		WithLabelValues(statistics.changefeedID.Namespace, statistics.changefeedID.ID, s)
 	statistics.metricRowSizesHis = LargeRowSizeHistogram.
-		WithLabelValues(statistics.changefeedID.ID, s)
+		WithLabelValues(statistics.changefeedID.Namespace, statistics.changefeedID.ID, s)
 	statistics.metricExecDDLHis = ExecDDLHistogram.
-		WithLabelValues(statistics.changefeedID.ID, s)
+		WithLabelValues(statistics.changefeedID.Namespace, statistics.changefeedID.ID, s)
 	statistics.metricExecErrCnt = ExecutionErrorCounter.
-		WithLabelValues(statistics.changefeedID.ID)
+		WithLabelValues(statistics.changefeedID.Namespace, statistics.changefeedID.ID)
 
 	// Flush metrics in background for better accuracy and efficiency.
 	changefeedID := statistics.changefeedID
 	ticker := time.NewTicker(flushMetricsInterval)
 	go func() {
 		defer ticker.Stop()
-		metricTotalRows := TotalRowsCountGauge.WithLabelValues(changefeedID.ID)
-		metricTotalFlushedRows := TotalFlushedRowsCountGauge.WithLabelValues(changefeedID.ID)
+		metricTotalRows := TotalRowsCountGauge.
+			WithLabelValues(changefeedID.Namespace, changefeedID.ID)
+		metricTotalFlushedRows := TotalFlushedRowsCountGauge.
+			WithLabelValues(changefeedID.Namespace, changefeedID.ID)
 		defer func() {
-			TotalRowsCountGauge.DeleteLabelValues(changefeedID.ID)
-			TotalFlushedRowsCountGauge.DeleteLabelValues(changefeedID.ID)
+			TotalRowsCountGauge.
+				DeleteLabelValues(changefeedID.Namespace, changefeedID.ID)
+			TotalFlushedRowsCountGauge.
+				DeleteLabelValues(changefeedID.Namespace, changefeedID.ID)
 		}()
 		for {
 			select {
