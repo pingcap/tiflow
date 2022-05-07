@@ -481,7 +481,8 @@ func TestCaptureGoneWhileMovingTable(t *testing.T) {
 		Status:    util.RunningTable,
 	})
 
-	dispatcher.MoveTable(1, "capture-2")
+	err := dispatcher.MoveTable(1, "capture-2")
+	require.Nil(t, err)
 	communicator.On("DispatchTable", mock.Anything,
 		cf1, model.TableID(1), "capture-1", true, defaultEpoch).
 		Return(true, nil)
@@ -1855,7 +1856,8 @@ func TestManualMoveTableWhileAddingTable(t *testing.T) {
 	require.Equal(t, CheckpointCannotProceed, resolvedTs)
 
 	// move table-1 to the capture-1
-	dispatcher.MoveTable(1, "capture-1")
+	err = dispatcher.MoveTable(1, "capture-1")
+	require.Nil(t, err)
 	checkpointTs, resolvedTs, err = dispatcher.Tick(ctx, 1300, []model.TableID{1, 2, 3}, defaultMockCaptureInfos)
 	require.NoError(t, err)
 	require.Equal(t, CheckpointCannotProceed, checkpointTs)
