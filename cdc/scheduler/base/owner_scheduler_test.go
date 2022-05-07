@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package owner
+package base
 
 import (
 	"context"
@@ -23,8 +23,8 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	pscheduler "github.com/pingcap/tiflow/cdc/scheduler"
+	"github.com/pingcap/tiflow/cdc/scheduler/base/protocol"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
-	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/p2p"
 	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/stretchr/testify/require"
@@ -73,13 +73,8 @@ func TestSchedulerBasics(t *testing.T) {
 	require.NoError(t, err)
 
 	for atomic.LoadInt64(&sched.stats.AnnounceSentCount) < numNodes {
-		checkpointTs, resolvedTs, err := sched.Tick(ctx, &orchestrator.ChangefeedReactorState{
-			ID: model.DefaultChangeFeedID("cf-1"),
-			Status: &model.ChangeFeedStatus{
-				ResolvedTs:   1000,
-				CheckpointTs: 1000,
-			},
-		}, []model.TableID{1, 2, 3}, mockCaptures)
+		checkpointTs, resolvedTs, err := sched.Tick(
+			ctx, 1000, []model.TableID{1, 2, 3}, mockCaptures)
 		require.NoError(t, err)
 		require.Equal(t, pscheduler.CheckpointCannotProceed, checkpointTs)
 		require.Equal(t, pscheduler.CheckpointCannotProceed, resolvedTs)
@@ -90,15 +85,15 @@ func TestSchedulerBasics(t *testing.T) {
 		t,
 		mockOwnerNode.ID,
 		mockCluster,
-		model.AnnounceTopic(model.DefaultChangeFeedID("cf-1")),
-		&model.AnnounceMessage{})
+		protocol.AnnounceTopic(model.DefaultChangeFeedID("cf-1")),
+		&protocol.AnnounceMessage{})
 	dispatchCh := receiveToChannels(
 		ctx,
 		t,
 		mockOwnerNode.ID,
 		mockCluster,
-		model.DispatchTableTopic(model.DefaultChangeFeedID("cf-1")),
-		&model.DispatchTableMessage{})
+		protocol.DispatchTableTopic(model.DefaultChangeFeedID("cf-1")),
+		&protocol.DispatchTableMessage{})
 
 	for id, ch := range announceCh {
 		var msg interface{}
@@ -108,16 +103,16 @@ func TestSchedulerBasics(t *testing.T) {
 		case msg = <-ch:
 		}
 
-		require.IsType(t, &model.AnnounceMessage{}, msg)
-		require.Equal(t, &model.AnnounceMessage{
+		require.IsType(t, &protocol.AnnounceMessage{}, msg)
+		require.Equal(t, &protocol.AnnounceMessage{
 			OwnerRev:     1,
 			OwnerVersion: version.ReleaseSemver(),
 		}, msg)
 
 		_, err := mockCluster.Nodes[id].Router.GetClient(mockOwnerNode.ID).SendMessage(
 			ctx,
-			model.SyncTopic(model.DefaultChangeFeedID("cf-1")),
-			&model.SyncMessage{
+			protocol.SyncTopic(model.DefaultChangeFeedID("cf-1")),
+			&protocol.SyncMessage{
 				ProcessorVersion: version.ReleaseSemver(),
 			})
 		require.NoError(t, err)
@@ -128,13 +123,8 @@ func TestSchedulerBasics(t *testing.T) {
 	}, 5*time.Second, 100*time.Millisecond)
 
 	for atomic.LoadInt64(&sched.stats.DispatchSentCount) < numNodes {
-		checkpointTs, resolvedTs, err := sched.Tick(ctx, &orchestrator.ChangefeedReactorState{
-			ID: model.DefaultChangeFeedID("cf-1"),
-			Status: &model.ChangeFeedStatus{
-				ResolvedTs:   1000,
-				CheckpointTs: 1000,
-			},
-		}, []model.TableID{1, 2, 3}, mockCaptures)
+		checkpointTs, resolvedTs, err := sched.Tick(
+			ctx, 1000, []model.TableID{1, 2, 3}, mockCaptures)
 		require.NoError(t, err)
 		require.Equal(t, pscheduler.CheckpointCannotProceed, checkpointTs)
 		require.Equal(t, pscheduler.CheckpointCannotProceed, resolvedTs)
@@ -149,16 +139,16 @@ func TestSchedulerBasics(t *testing.T) {
 		case msg = <-ch:
 		}
 
-		require.IsType(t, &model.DispatchTableMessage{}, msg)
-		dispatchTableMessage := msg.(*model.DispatchTableMessage)
+		require.IsType(t, &protocol.DispatchTableMessage{}, msg)
+		dispatchTableMessage := msg.(*protocol.DispatchTableMessage)
 		require.Equal(t, int64(1), dispatchTableMessage.OwnerRev)
 		require.False(t, dispatchTableMessage.IsDelete)
 		require.Contains(t, []model.TableID{1, 2, 3}, dispatchTableMessage.ID)
 
 		_, err := mockCluster.Nodes[id].Router.GetClient(mockOwnerNode.ID).SendMessage(
 			ctx,
-			model.DispatchTableResponseTopic(model.DefaultChangeFeedID("cf-1")),
-			&model.DispatchTableResponseMessage{
+			protocol.DispatchTableResponseTopic(model.DefaultChangeFeedID("cf-1")),
+			&protocol.DispatchTableResponseMessage{
 				ID: dispatchTableMessage.ID,
 			})
 		require.NoError(t, err)
@@ -168,22 +158,17 @@ func TestSchedulerBasics(t *testing.T) {
 		return atomic.LoadInt64(&sched.stats.DispatchResponseReceiveCount) == 3
 	}, 5*time.Second, 100*time.Millisecond)
 
-	checkpointTs, resolvedTs, err := sched.Tick(ctx, &orchestrator.ChangefeedReactorState{
-		ID: model.DefaultChangeFeedID("cf-1"),
-		Status: &model.ChangeFeedStatus{
-			ResolvedTs:   1000,
-			CheckpointTs: 1000,
-		},
-	}, []model.TableID{1, 2, 3}, mockCaptures)
+	checkpointTs, resolvedTs, err := sched.Tick(
+		ctx, 1000, []model.TableID{1, 2, 3}, mockCaptures)
 	require.NoError(t, err)
 	require.Equal(t, model.Ts(1000), checkpointTs)
 	require.Equal(t, model.Ts(1000), resolvedTs)
 
 	for _, node := range mockCluster.Nodes {
 		_, err := node.Router.GetClient(mockOwnerNode.ID).
-			SendMessage(ctx, model.CheckpointTopic(
+			SendMessage(ctx, protocol.CheckpointTopic(
 				model.DefaultChangeFeedID("cf-1")),
-				&model.CheckpointMessage{
+				&protocol.CheckpointMessage{
 					CheckpointTs: 2000,
 					ResolvedTs:   2000,
 				})
@@ -232,13 +217,8 @@ func TestSchedulerNoPeer(t *testing.T) {
 
 	// Ticks the scheduler 10 times. It should not panic.
 	for i := 0; i < 10; i++ {
-		checkpointTs, resolvedTs, err := sched.Tick(ctx, &orchestrator.ChangefeedReactorState{
-			ID: model.DefaultChangeFeedID("cf-1"),
-			Status: &model.ChangeFeedStatus{
-				ResolvedTs:   1000,
-				CheckpointTs: 1000,
-			},
-		}, []model.TableID{1, 2, 3}, mockCaptures)
+		checkpointTs, resolvedTs, err := sched.Tick(
+			ctx, 1000, []model.TableID{1, 2, 3}, mockCaptures)
 		require.NoError(t, err)
 		require.Equal(t, pscheduler.CheckpointCannotProceed, checkpointTs)
 		require.Equal(t, pscheduler.CheckpointCannotProceed, resolvedTs)
@@ -248,13 +228,8 @@ func TestSchedulerNoPeer(t *testing.T) {
 	delete(mockCaptures, "dead-capture")
 
 	for atomic.LoadInt64(&sched.stats.AnnounceSentCount) < numNodes {
-		checkpointTs, resolvedTs, err := sched.Tick(ctx, &orchestrator.ChangefeedReactorState{
-			ID: model.DefaultChangeFeedID("cf-1"),
-			Status: &model.ChangeFeedStatus{
-				ResolvedTs:   1000,
-				CheckpointTs: 1000,
-			},
-		}, []model.TableID{1, 2, 3}, mockCaptures)
+		checkpointTs, resolvedTs, err := sched.Tick(
+			ctx, 1000, []model.TableID{1, 2, 3}, mockCaptures)
 		require.NoError(t, err)
 		require.Equal(t, pscheduler.CheckpointCannotProceed, checkpointTs)
 		require.Equal(t, pscheduler.CheckpointCannotProceed, resolvedTs)
@@ -265,7 +240,8 @@ func TestSchedulerNoPeer(t *testing.T) {
 }
 
 func TestInfoProvider(t *testing.T) {
-	sched := scheduler(new(schedulerV2))
+	var sched interface{}
+	sched = new(SchedulerV2)
 	_, ok := sched.(pscheduler.InfoProvider)
 	require.True(t, ok)
 }

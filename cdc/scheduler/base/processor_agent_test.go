@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package processor
+package base
 
 import (
 	"context"
@@ -26,7 +26,7 @@ import (
 	clientv3 "go.etcd.io/etcd/client/v3"
 
 	"github.com/pingcap/tiflow/cdc/model"
-	pscheduler "github.com/pingcap/tiflow/cdc/scheduler"
+	"github.com/pingcap/tiflow/cdc/scheduler/base/protocol"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/p2p"
@@ -52,10 +52,10 @@ type agentTestSuite struct {
 	etcdClient   *clientv3.Client
 	etcdKVClient *mockEtcdKVClient
 
-	tableExecutor      *pscheduler.MockTableExecutor
-	dispatchResponseCh chan *model.DispatchTableResponseMessage
-	syncCh             chan *model.SyncMessage
-	checkpointCh       chan *model.CheckpointMessage
+	tableExecutor      *MockTableExecutor
+	dispatchResponseCh chan *protocol.DispatchTableResponseMessage
+	syncCh             chan *protocol.SyncMessage
+	checkpointCh       chan *protocol.CheckpointMessage
 
 	ownerMessageClient *p2p.MessageClient
 
@@ -85,9 +85,9 @@ func newAgentTestSuite(t *testing.T) *agentTestSuite {
 
 		// The channel sizes 1024 should be more than sufficient for these tests.
 		// Full channels will result in panics to make the cases fail.
-		dispatchResponseCh: make(chan *model.DispatchTableResponseMessage, 1024),
-		syncCh:             make(chan *model.SyncMessage, 1024),
-		checkpointCh:       make(chan *model.CheckpointMessage, 1024),
+		dispatchResponseCh: make(chan *protocol.DispatchTableResponseMessage, 1024),
+		syncCh:             make(chan *protocol.SyncMessage, 1024),
+		checkpointCh:       make(chan *protocol.CheckpointMessage, 1024),
 
 		ownerMessageClient: ownerMessageClient,
 
@@ -95,14 +95,14 @@ func newAgentTestSuite(t *testing.T) *agentTestSuite {
 		cancel: cancel,
 	}
 
-	_, err := ownerMessageServer.SyncAddHandler(ctx, model.DispatchTableResponseTopic(
+	_, err := ownerMessageServer.SyncAddHandler(ctx, protocol.DispatchTableResponseTopic(
 		model.DefaultChangeFeedID("cf-1")),
-		&model.DispatchTableResponseMessage{},
+		&protocol.DispatchTableResponseMessage{},
 		func(senderID string, msg interface{}) error {
 			require.Equal(t, processorCaptureID, senderID)
-			require.IsType(t, &model.DispatchTableResponseMessage{}, msg)
+			require.IsType(t, &protocol.DispatchTableResponseMessage{}, msg)
 			select {
-			case ret.dispatchResponseCh <- msg.(*model.DispatchTableResponseMessage):
+			case ret.dispatchResponseCh <- msg.(*protocol.DispatchTableResponseMessage):
 			default:
 				require.FailNow(t, "full channel")
 			}
@@ -111,9 +111,9 @@ func newAgentTestSuite(t *testing.T) *agentTestSuite {
 	)
 	require.NoError(t, err)
 
-	_, err = ownerMessageServer.SyncAddHandler(ctx, model.SyncTopic(
+	_, err = ownerMessageServer.SyncAddHandler(ctx, protocol.SyncTopic(
 		model.DefaultChangeFeedID("cf-1")),
-		&model.SyncMessage{},
+		&protocol.SyncMessage{},
 		func(senderID string, msg interface{}) error {
 			ret.blockSyncMu.Lock()
 			for ret.blockSync {
@@ -122,10 +122,10 @@ func newAgentTestSuite(t *testing.T) *agentTestSuite {
 			ret.blockSyncMu.Unlock()
 
 			require.Equal(t, processorCaptureID, senderID)
-			require.IsType(t, &model.SyncMessage{}, msg)
+			require.IsType(t, &protocol.SyncMessage{}, msg)
 
 			select {
-			case ret.syncCh <- msg.(*model.SyncMessage):
+			case ret.syncCh <- msg.(*protocol.SyncMessage):
 			default:
 				require.FailNow(t, "full channel")
 			}
@@ -134,15 +134,15 @@ func newAgentTestSuite(t *testing.T) *agentTestSuite {
 	)
 	require.NoError(t, err)
 
-	_, err = ownerMessageServer.SyncAddHandler(ctx, model.CheckpointTopic(
+	_, err = ownerMessageServer.SyncAddHandler(ctx, protocol.CheckpointTopic(
 		model.DefaultChangeFeedID("cf-1")),
-		&model.CheckpointMessage{},
+		&protocol.CheckpointMessage{},
 		func(senderID string, msg interface{}) error {
 			require.Equal(t, processorCaptureID, senderID)
-			require.IsType(t, &model.CheckpointMessage{}, msg)
+			require.IsType(t, &protocol.CheckpointMessage{}, msg)
 
 			select {
-			case ret.checkpointCh <- msg.(*model.CheckpointMessage):
+			case ret.checkpointCh <- msg.(*protocol.CheckpointMessage):
 			default:
 				require.FailNow(t, "full channel")
 			}
@@ -158,7 +158,7 @@ func (s *agentTestSuite) CreateAgent(t *testing.T) (*agentImpl, error) {
 	cdcEtcdClient := etcd.NewCDCEtcdClient(s.ctx, s.etcdClient)
 	messageServer := s.cluster.Nodes["capture-1"].Server
 	messageRouter := s.cluster.Nodes["capture-1"].Router
-	s.tableExecutor = pscheduler.NewMockTableExecutor(t)
+	s.tableExecutor = NewMockTableExecutor(t)
 
 	ctx := cdcContext.NewContext(s.ctx, &cdcContext.GlobalVars{
 		EtcdClient:    &cdcEtcdClient,
@@ -167,7 +167,7 @@ func (s *agentTestSuite) CreateAgent(t *testing.T) (*agentImpl, error) {
 	})
 	s.cdcCtx = ctx
 
-	ret, err := newAgent(ctx, messageServer, messageRouter, s.tableExecutor,
+	ret, err := NewAgent(ctx, messageServer, messageRouter, s.tableExecutor,
 		model.DefaultChangeFeedID("cf-1"))
 	if err != nil {
 		return nil, err
@@ -250,7 +250,7 @@ func TestAgentBasics(t *testing.T) {
 	case <-suite.ctx.Done():
 		require.Fail(t, "context should not be canceled")
 	case syncMsg := <-suite.syncCh:
-		require.Equal(t, &model.SyncMessage{
+		require.Equal(t, &protocol.SyncMessage{
 			ProcessorVersion: version.ReleaseSemver(),
 			Epoch:            agent.CurrentEpoch(),
 			Running:          nil,
@@ -260,8 +260,8 @@ func TestAgentBasics(t *testing.T) {
 	}
 
 	_, err = suite.ownerMessageClient.SendMessage(suite.ctx,
-		model.DispatchTableTopic(model.DefaultChangeFeedID("cf-1")),
-		&model.DispatchTableMessage{
+		protocol.DispatchTableTopic(model.DefaultChangeFeedID("cf-1")),
+		&protocol.DispatchTableMessage{
 			OwnerRev: 1,
 			Epoch:    agent.CurrentEpoch(),
 			ID:       1,
@@ -291,7 +291,7 @@ func TestAgentBasics(t *testing.T) {
 		case <-suite.ctx.Done():
 			require.Fail(t, "context should not be canceled")
 		case msg := <-suite.checkpointCh:
-			require.Equal(t, &model.CheckpointMessage{
+			require.Equal(t, &protocol.CheckpointMessage{
 				CheckpointTs: model.Ts(1000),
 				ResolvedTs:   model.Ts(1000),
 			}, msg)
@@ -315,7 +315,7 @@ func TestAgentBasics(t *testing.T) {
 		case <-suite.ctx.Done():
 			return false
 		case msg := <-suite.dispatchResponseCh:
-			require.Equal(t, &model.DispatchTableResponseMessage{
+			require.Equal(t, &protocol.DispatchTableResponseMessage{
 				ID:    1,
 				Epoch: agent.CurrentEpoch(),
 			}, msg)
@@ -358,8 +358,8 @@ func TestAgentNoOwnerAtStartUp(t *testing.T) {
 
 	// Test Point 3: Agent should process the Announce message.
 	_, err = suite.ownerMessageClient.SendMessage(suite.ctx,
-		model.AnnounceTopic(model.DefaultChangeFeedID("cf-1")),
-		&model.AnnounceMessage{
+		protocol.AnnounceTopic(model.DefaultChangeFeedID("cf-1")),
+		&protocol.AnnounceMessage{
 			OwnerRev:     1,
 			OwnerVersion: version.ReleaseSemver(),
 		})
@@ -372,7 +372,7 @@ func TestAgentNoOwnerAtStartUp(t *testing.T) {
 		case <-suite.ctx.Done():
 			require.Fail(t, "context should not be canceled")
 		case syncMsg := <-suite.syncCh:
-			require.Equal(t, &model.SyncMessage{
+			require.Equal(t, &protocol.SyncMessage{
 				ProcessorVersion: version.ReleaseSemver(),
 				Epoch:            agent.CurrentEpoch(),
 				Running:          nil,
@@ -429,7 +429,7 @@ func TestAgentTolerateClientClosed(t *testing.T) {
 	case <-suite.ctx.Done():
 		require.Fail(t, "context should not be canceled")
 	case syncMsg := <-suite.syncCh:
-		require.Equal(t, &model.SyncMessage{
+		require.Equal(t, &protocol.SyncMessage{
 			ProcessorVersion: version.ReleaseSemver(),
 			Epoch:            agent.CurrentEpoch(),
 			Running:          nil,
@@ -464,8 +464,8 @@ func TestNoFinishOperationBeforeSyncIsReceived(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = suite.ownerMessageClient.SendMessage(suite.ctx,
-		model.DispatchTableTopic(model.DefaultChangeFeedID("cf-1")),
-		&model.DispatchTableMessage{
+		protocol.DispatchTableTopic(model.DefaultChangeFeedID("cf-1")),
+		&protocol.DispatchTableMessage{
 			OwnerRev: 1,
 			Epoch:    agent.CurrentEpoch(),
 			ID:       1,
@@ -474,8 +474,8 @@ func TestNoFinishOperationBeforeSyncIsReceived(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = suite.ownerMessageClient.SendMessage(suite.ctx,
-		model.DispatchTableTopic(model.DefaultChangeFeedID("cf-1")),
-		&model.DispatchTableMessage{
+		protocol.DispatchTableTopic(model.DefaultChangeFeedID("cf-1")),
+		&protocol.DispatchTableMessage{
 			OwnerRev: 1,
 			Epoch:    agent.CurrentEpoch(),
 			ID:       2,
@@ -524,7 +524,7 @@ func TestNoFinishOperationBeforeSyncIsReceived(t *testing.T) {
 			require.Fail(t, "context should not be canceled")
 			return false
 		case syncMsg := <-suite.syncCh:
-			require.Equal(t, &model.SyncMessage{
+			require.Equal(t, &protocol.SyncMessage{
 				ProcessorVersion: version.ReleaseSemver(),
 				Epoch:            agent.CurrentEpoch(),
 				Running:          nil,

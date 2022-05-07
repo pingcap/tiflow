@@ -11,13 +11,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package scheduler
+package base
 
 import (
 	"testing"
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/scheduler/base/protocol"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -30,13 +31,18 @@ type MockProcessorMessenger struct {
 }
 
 // FinishTableOperation marks this function as being called.
-func (m *MockProcessorMessenger) FinishTableOperation(ctx cdcContext.Context, tableID model.TableID, epoch model.ProcessorEpoch) (bool, error) {
+func (m *MockProcessorMessenger) FinishTableOperation(
+	ctx cdcContext.Context, tableID model.TableID, epoch protocol.ProcessorEpoch,
+) (bool, error) {
 	args := m.Called(ctx, tableID, epoch)
 	return args.Bool(0), args.Error(1)
 }
 
 // SyncTaskStatuses marks this function as being called.
-func (m *MockProcessorMessenger) SyncTaskStatuses(ctx cdcContext.Context, epoch model.ProcessorEpoch, adding, removing, running []model.TableID) (bool, error) {
+func (m *MockProcessorMessenger) SyncTaskStatuses(
+	ctx cdcContext.Context, epoch protocol.ProcessorEpoch,
+	adding, removing, running []model.TableID,
+) (bool, error) {
 	args := m.Called(ctx, epoch, running, adding, removing)
 	return args.Bool(0), args.Error(1)
 }

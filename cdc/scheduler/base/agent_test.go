@@ -11,19 +11,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package scheduler
+package base
 
 import (
 	"testing"
 
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/scheduler/base/protocol"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
 // read only
-var agentConfigForTesting = &BaseAgentConfig{SendCheckpointTsInterval: 0}
+var agentConfigForTesting = &AgentConfig{SendCheckpointTsInterval: 0}
 
 func TestAgentAddTable(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(false)
@@ -32,7 +33,7 @@ func TestAgentAddTable(t *testing.T) {
 	messenger := &MockProcessorMessenger{}
 	agent := NewBaseAgent(model.DefaultChangeFeedID("test-cf"),
 		executor, messenger, agentConfigForTesting)
-	var epoch model.ProcessorEpoch
+	var epoch protocol.ProcessorEpoch
 	messenger.On("SyncTaskStatuses", mock.Anything, mock.AnythingOfType("string"), []model.TableID(nil), []model.TableID(nil), []model.TableID(nil)).
 		Return(true, nil).
 		Run(func(args mock.Arguments) {
@@ -88,7 +89,7 @@ func TestAgentRemoveTable(t *testing.T) {
 		executor, messenger, agentConfigForTesting)
 	agent.OnOwnerAnnounce("capture-2", 1)
 
-	var epoch model.ProcessorEpoch
+	var epoch protocol.ProcessorEpoch
 	messenger.On("SyncTaskStatuses", mock.Anything, mock.AnythingOfType("string"), []model.TableID{1, 2}, []model.TableID(nil), []model.TableID(nil)).
 		Return(true, nil).
 		Run(func(args mock.Arguments) {
@@ -156,7 +157,7 @@ func TestAgentOwnerChangedWhileAddingTable(t *testing.T) {
 	agent := NewBaseAgent(model.DefaultChangeFeedID("test-cf"),
 		executor, messenger, agentConfigForTesting)
 
-	var epoch model.ProcessorEpoch
+	var epoch protocol.ProcessorEpoch
 	messenger.On("SyncTaskStatuses",
 		mock.Anything,
 		mock.AnythingOfType("string"),
@@ -219,7 +220,7 @@ func TestAgentReceiveFromStaleOwner(t *testing.T) {
 		executor, messenger, agentConfigForTesting)
 	agent.checkpointSender = &mockCheckpointSender{}
 
-	var epoch model.ProcessorEpoch
+	var epoch protocol.ProcessorEpoch
 	messenger.On("SyncTaskStatuses", mock.Anything, mock.AnythingOfType("string"),
 		[]model.TableID(nil), []model.TableID(nil), []model.TableID(nil)).
 		Return(true, nil).Run(func(args mock.Arguments) {
@@ -295,7 +296,7 @@ func TestIgnoreStaleEpoch(t *testing.T) {
 		executor, messenger, agentConfigForTesting)
 	agent.checkpointSender = &mockCheckpointSender{}
 
-	var epoch, newEpoch model.ProcessorEpoch
+	var epoch, newEpoch protocol.ProcessorEpoch
 	messenger.On("SyncTaskStatuses", mock.Anything, mock.AnythingOfType("string"),
 		[]model.TableID(nil), []model.TableID(nil), []model.TableID(nil)).
 		Return(true, nil).Run(func(args mock.Arguments) {

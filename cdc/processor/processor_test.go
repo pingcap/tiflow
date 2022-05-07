@@ -204,7 +204,7 @@ func (s *mockSchemaStorage) DoGC(ts uint64) uint64 {
 
 type mockAgent struct {
 	// dummy to satisfy the interface
-	processorAgent
+	scheduler.ProcessorAgent
 
 	executor         scheduler.TableExecutor
 	lastCheckpointTs model.Ts
