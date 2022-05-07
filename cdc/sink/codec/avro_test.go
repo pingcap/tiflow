@@ -633,7 +633,7 @@ func TestRowToAvroSchema(t *testing.T) {
 		Schema: "testdb",
 		Table:  "rowtoavroschema",
 	}
-	fqdn := table.Schema + "." + table.Table
+	qualifiedName := getQualifiedNameFromTableName(&table)
 	var cols []*model.Column = make([]*model.Column, 0)
 	var colInfos []rowcodec.ColInfo = make([]rowcodec.ColInfo, 0)
 
@@ -648,13 +648,13 @@ func TestRowToAvroSchema(t *testing.T) {
 		colInfos = append(colInfos, v.colInfo)
 	}
 
-	schema, err := rowToAvroSchema(fqdn, cols, colInfos, false, "precise", "long")
+	schema, err := rowToAvroSchema(qualifiedName, cols, colInfos, false, "precise", "long")
 	require.NoError(t, err)
 	require.Equal(t, expectedSchemaWithoutExtension, indentJSON(schema))
 	_, err = goavro.NewCodec(schema)
 	require.NoError(t, err)
 
-	schema, err = rowToAvroSchema(fqdn, cols, colInfos, true, "precise", "long")
+	schema, err = rowToAvroSchema(qualifiedName, cols, colInfos, true, "precise", "long")
 	require.NoError(t, err)
 	require.Equal(t, expectedSchemaWithExtension, indentJSON(schema))
 	_, err = goavro.NewCodec(schema)
@@ -832,4 +832,17 @@ func TestAvroEnvelope(t *testing.T) {
 	id, exists := parsed.(map[string]interface{})["id"]
 	require.True(t, exists)
 	require.Equal(t, int32(7), id)
+}
+
+func TestSanitizeColumnName(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, "normalColumnName123", sanitizeColumnName("normalColumnName123"))
+	require.Equal(
+		t,
+		"_1ColumnNameStartWithNumber",
+		sanitizeColumnName("1ColumnNameStartWithNumber"),
+	)
+	require.Equal(t, "A_B", sanitizeColumnName("A.B"))
+	require.Equal(t, "columnNameWith__", sanitizeColumnName("columnNameWith中文"))
 }

@@ -177,12 +177,12 @@ func TestSchemaRegistry(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	fqdn := table.Schema + "." + table.Table
+	qualifiedName := getQualifiedNameFromTableName(&table)
 
-	err = manager.ClearRegistry(getTestingContext(), fqdn)
+	err = manager.ClearRegistry(getTestingContext(), qualifiedName)
 	require.NoError(t, err)
 
-	_, _, err = manager.Lookup(getTestingContext(), fqdn, 1)
+	_, _, err = manager.Lookup(getTestingContext(), qualifiedName, 1)
 	require.Regexp(t, `.*not\sfound.*`, err)
 
 	codec, err := goavro.NewCodec(`{
@@ -198,12 +198,12 @@ func TestSchemaRegistry(t *testing.T) {
      }`)
 	require.NoError(t, err)
 
-	_, err = manager.Register(getTestingContext(), fqdn, codec)
+	_, err = manager.Register(getTestingContext(), qualifiedName, codec)
 	require.NoError(t, err)
 
 	var id int
 	for i := 0; i < 2; i++ {
-		_, id, err = manager.Lookup(getTestingContext(), fqdn, 1)
+		_, id, err = manager.Lookup(getTestingContext(), qualifiedName, 1)
 		require.NoError(t, err)
 		require.Greater(t, id, 0)
 	}
@@ -228,10 +228,10 @@ func TestSchemaRegistry(t *testing.T) {
           ]
      }`)
 	require.NoError(t, err)
-	_, err = manager.Register(getTestingContext(), fqdn, codec)
+	_, err = manager.Register(getTestingContext(), qualifiedName, codec)
 	require.NoError(t, err)
 
-	codec2, id2, err := manager.Lookup(getTestingContext(), fqdn, 999)
+	codec2, id2, err := manager.Lookup(getTestingContext(), qualifiedName, 999)
 	require.NoError(t, err)
 	require.NotEqual(t, id, id2)
 	require.Equal(t, codec.CanonicalSchema(), codec2.CanonicalSchema())
@@ -255,7 +255,7 @@ func TestSchemaRegistryIdempotent(t *testing.T) {
 		Schema: "testdb",
 		Table:  "test",
 	}
-	fqdn := table.Schema + "." + table.Table
+	qualifiedName := getQualifiedNameFromTableName(&table)
 
 	manager, err := NewAvroSchemaManager(
 		getTestingContext(),
@@ -265,7 +265,7 @@ func TestSchemaRegistryIdempotent(t *testing.T) {
 	)
 	require.NoError(t, err)
 	for i := 0; i < 20; i++ {
-		err = manager.ClearRegistry(getTestingContext(), fqdn)
+		err = manager.ClearRegistry(getTestingContext(), qualifiedName)
 		require.NoError(t, err)
 	}
 
@@ -292,7 +292,7 @@ func TestSchemaRegistryIdempotent(t *testing.T) {
 
 	id := 0
 	for i := 0; i < 20; i++ {
-		id1, err := manager.Register(getTestingContext(), fqdn, codec)
+		id1, err := manager.Register(getTestingContext(), qualifiedName, codec)
 		require.NoError(t, err)
 		require.True(t, id == 0 || id == id1)
 		id = id1
@@ -341,20 +341,20 @@ func TestGetCachedOrRegister(t *testing.T) {
           ]
      }`, nil
 	}
-	fqdn := table.Schema + "." + table.Table
+	qualifiedName := getQualifiedNameFromTableName(&table)
 
-	codec, id, err := manager.GetCachedOrRegister(getTestingContext(), fqdn, 1, schemaGen)
+	codec, id, err := manager.GetCachedOrRegister(getTestingContext(), qualifiedName, 1, schemaGen)
 	require.NoError(t, err)
 	require.Greater(t, id, 0)
 	require.NotNil(t, codec)
 	require.Equal(t, 1, called)
 
-	codec1, _, err := manager.GetCachedOrRegister(getTestingContext(), fqdn, 1, schemaGen)
+	codec1, _, err := manager.GetCachedOrRegister(getTestingContext(), qualifiedName, 1, schemaGen)
 	require.NoError(t, err)
 	require.True(t, codec == codec1) // check identity
 	require.Equal(t, 1, called)
 
-	codec2, _, err := manager.GetCachedOrRegister(getTestingContext(), fqdn, 2, schemaGen)
+	codec2, _, err := manager.GetCachedOrRegister(getTestingContext(), qualifiedName, 2, schemaGen)
 	require.NoError(t, err)
 	require.NotEqual(t, codec, codec2)
 	require.Equal(t, 2, called)
@@ -390,7 +390,7 @@ func TestGetCachedOrRegister(t *testing.T) {
 			for j := 0; j < 100; j++ {
 				codec, id, err := manager.GetCachedOrRegister(
 					getTestingContext(),
-					fqdn,
+					qualifiedName,
 					uint64(finalI),
 					schemaGen,
 				)

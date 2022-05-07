@@ -18,6 +18,7 @@ import (
 	"context"
 	"encoding/binary"
 	"encoding/json"
+	"fmt"
 	"math/big"
 	"strconv"
 	"strings"
@@ -181,11 +182,11 @@ func (a *AvroEventBatchEncoder) avroEncode(
 		}
 	}
 
-	var fqdn string = e.Table.Schema + "." + e.Table.Table
+	qualifiedName := getQualifiedNameFromTableName(e.Table)
 
 	schemaGen := func() (string, error) {
 		schema, err := rowToAvroSchema(
-			fqdn,
+			qualifiedName,
 			cols,
 			colInfos,
 			enableTiDBExtension,
@@ -200,7 +201,7 @@ func (a *AvroEventBatchEncoder) avroEncode(
 
 	avroCodec, registryID, err := schemaManager.GetCachedOrRegister(
 		ctx,
-		fqdn,
+		qualifiedName,
 		e.TableInfoVersion,
 		schemaGen,
 	)
@@ -289,6 +290,59 @@ func getTiDBTypeFromColumn(col *model.Column) string {
 	return tt
 }
 
+const (
+	replacementChar = "_"
+	numberPrefix    = "_"
+)
+
+// debezium-core/src/main/java/io/debezium/schema/FieldNameSelector.java
+// https://avro.apache.org/docs/current/spec.html#names
+func sanitizeColumnName(name string) string {
+	changed := false
+	var sb strings.Builder
+	for i, c := range name {
+		if i == 0 && (c >= '0' && c <= '9') {
+			sb.WriteString(numberPrefix)
+			sb.WriteRune(c)
+			changed = true
+		} else if !(c == '_' ||
+			('a' <= c && c <= 'z') ||
+			('A' <= c && c <= 'Z') ||
+			('0' <= c && c <= '9')) {
+			sb.WriteString(replacementChar)
+			changed = true
+		} else {
+			sb.WriteRune(c)
+		}
+	}
+
+	sanitizedName := sb.String()
+	if changed {
+		log.Warn(
+			fmt.Sprintf(
+				"Field '%s' name potentially not safe for serialization, replaced with '%s'",
+				name,
+				sanitizedName,
+			),
+		)
+	}
+	return sanitizedName
+}
+
+// https://github.com/debezium/debezium/blob/9f7ede0e0695f012c6c4e715e96aed85eecf6b5f \
+// /debezium-connector-mysql/src/main/java/io/debezium/connector/mysql/antlr/ \
+// MySqlAntlrDdlParser.java#L374
+func escapeEnumAndSetOptions(option string) string {
+	option = strings.ReplaceAll(option, ",", "\\,")
+	option = strings.ReplaceAll(option, "\\'", "'")
+	option = strings.ReplaceAll(option, "''", "'")
+	return option
+}
+
+func getQualifiedNameFromTableName(tableName *model.TableName) string {
+	return tableName.Schema + "." + tableName.Table
+}
+
 type avroSchema struct {
 	Type       string            `json:"type"`
 	Parameters map[string]string `json:"connect.parameters"`
@@ -302,7 +356,7 @@ type avroLogicalTypeSchema struct {
 }
 
 func rowToAvroSchema(
-	fqdn string,
+	qualifiedName string,
 	columnInfo []*model.Column,
 	colInfos []rowcodec.ColInfo,
 	enableTiDBExtension bool,
@@ -311,7 +365,7 @@ func rowToAvroSchema(
 ) (string, error) {
 	top := avroSchemaTop{
 		Tp:     "record",
-		Name:   fqdn,
+		Name:   qualifiedName,
 		Fields: nil,
 	}
 
@@ -326,7 +380,7 @@ func rowToAvroSchema(
 			return "", err
 		}
 		field := make(map[string]interface{})
-		field["name"] = col.Name
+		field["name"] = sanitizeColumnName(col.Name)
 		if col.Flag.IsNullable() {
 			field["type"] = []interface{}{"null", avroType}
 			field["default"] = nil
@@ -388,9 +442,9 @@ func rowToAvroData(
 
 		// https://pkg.go.dev/github.com/linkedin/goavro/v2#Union
 		if col.Flag.IsNullable() {
-			ret[col.Name] = goavro.Union(str, data)
+			ret[sanitizeColumnName(col.Name)] = goavro.Union(str, data)
 		} else {
-			ret[col.Name] = data
+			ret[sanitizeColumnName(col.Name)] = data
 		}
 	}
 
@@ -503,7 +557,7 @@ func columnToAvroSchema(
 	case mysql.TypeEnum, mysql.TypeSet:
 		es := make([]string, 0, len(ft.Elems))
 		for _, e := range ft.Elems {
-			e = strings.ReplaceAll(e, ",", "\\,")
+			e = escapeEnumAndSetOptions(e)
 			es = append(es, e)
 		}
 		return avroSchema{
@@ -617,6 +671,9 @@ func columnToAvroData(
 
 const magicByte = uint8(0)
 
+// confluent avro wire format, confluent avro is not same as apache avro
+// https://rmoff.net/2020/07/03/why-json-isnt-the-same-as-json-schema-in-kafka-connect-converters \
+// -and-ksqldb-viewing-kafka-messages-bytes-as-hex/
 func (r *avroEncodeResult) toEnvelope() ([]byte, error) {
 	buf := new(bytes.Buffer)
 	data := []interface{}{magicByte, int32(r.registryID), r.data}
