@@ -40,8 +40,9 @@ type AvroEventBatchEncoder struct {
 	valueSchemaManager *AvroSchemaManager
 	resultBuf          []*MQMessage
 
-	enableTiDBExtension bool
-	decimalHandlingMode string
+	enableTiDBExtension        bool
+	decimalHandlingMode        string
+	bigintUnsignedHandlingMode string
 }
 
 type avroEncodeResult struct {
@@ -188,6 +189,7 @@ func (a *AvroEventBatchEncoder) avroEncode(
 			colInfos,
 			enableTiDBExtension,
 			a.decimalHandlingMode,
+			a.bigintUnsignedHandlingMode,
 		)
 		if err != nil {
 			return "", errors.Annotate(err, "AvroEventBatchEncoder: generating schema failed")
@@ -212,6 +214,7 @@ func (a *AvroEventBatchEncoder) avroEncode(
 		operation,
 		enableTiDBExtension,
 		a.decimalHandlingMode,
+		a.bigintUnsignedHandlingMode,
 	)
 	if err != nil {
 		return nil, errors.Annotate(err, "AvroEventBatchEncoder: converting to native failed")
@@ -298,6 +301,7 @@ func rowToAvroSchema(
 	colInfos []rowcodec.ColInfo,
 	enableTiDBExtension bool,
 	decimalHandlingMode string,
+	bigintUnsignedHandlingMode string,
 ) (string, error) {
 	top := avroSchemaTop{
 		Tp:     "record",
@@ -306,7 +310,7 @@ func rowToAvroSchema(
 	}
 
 	for i, col := range columnInfo {
-		avroType, err := columnToAvroSchema(col, colInfos[i].Ft, decimalHandlingMode)
+		avroType, err := columnToAvroSchema(col, colInfos[i].Ft, decimalHandlingMode, bigintUnsignedHandlingMode)
 		if err != nil {
 			return "", err
 		}
@@ -350,13 +354,14 @@ func rowToAvroData(
 	operation string,
 	enableTiDBExtension bool,
 	decimalHandlingMode string,
+	bigintUnsignedHandlingMode string,
 ) (map[string]interface{}, error) {
 	ret := make(map[string]interface{}, len(cols))
 	for i, col := range cols {
 		if col == nil {
 			continue
 		}
-		data, str, err := columnToAvroData(col, colInfos[i].Ft, decimalHandlingMode)
+		data, str, err := columnToAvroData(col, colInfos[i].Ft, decimalHandlingMode, bigintUnsignedHandlingMode)
 		if err != nil {
 			return nil, err
 		}
@@ -381,6 +386,7 @@ func columnToAvroSchema(
 	col *model.Column,
 	ft *types.FieldType,
 	decimalHandlingMode string,
+	bigintUnsignedHandlingMode string,
 ) (interface{}, error) {
 	log.Debug("getAvroDataTypeFromColumn", zap.Reflect("col", col))
 	tt := getTiDBTypeFromColumn(col)
@@ -402,6 +408,12 @@ func columnToAvroSchema(
 			Parameters: map[string]string{tidbType: tt},
 		}, nil
 	case mysql.TypeLonglong: // BIGINT
+		if col.Flag.IsUnsigned() && bigintUnsignedHandlingMode == "string" {
+			return avroSchema{
+				Type:       "string",
+				Parameters: map[string]string{tidbType: tt},
+			}, nil
+		}
 		return avroSchema{
 			Type:       "long",
 			Parameters: map[string]string{tidbType: tt},
@@ -505,6 +517,7 @@ func columnToAvroData(
 	col *model.Column,
 	ft *types.FieldType,
 	decimalHandlingMode string,
+	bigintUnsignedHandlingMode string,
 ) (interface{}, string, error) {
 	if col.Value == nil {
 		return nil, "null", nil
@@ -523,7 +536,11 @@ func columnToAvroData(
 		return int32(col.Value.(int64)), "int", nil
 	case mysql.TypeLonglong:
 		if col.Flag.IsUnsigned() {
-			return int64(col.Value.(uint64)), "long", nil
+			if bigintUnsignedHandlingMode == "long" {
+				return int64(col.Value.(uint64)), "long", nil
+			}
+			// bigintUnsignedHandlingMode == "string"
+			return strconv.FormatUint(col.Value.(uint64), 10), "string", nil
 		}
 		return col.Value.(int64), "long", nil
 	case mysql.TypeFloat, mysql.TypeDouble:
@@ -638,6 +655,7 @@ func (b *avroEventBatchEncoderBuilder) Build() EventBatchEncoder {
 	encoder.valueSchemaManager = b.valueSchemaManager
 	encoder.enableTiDBExtension = b.config.enableTiDBExtension
 	encoder.decimalHandlingMode = b.config.avroDecimalHandlingMode
+	encoder.bigintUnsignedHandlingMode = b.config.avroBigintUnsignedHandlingMode
 
 	return encoder
 }

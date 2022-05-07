@@ -31,6 +31,7 @@ import (
 func setupEncoderAndSchemaRegistry(
 	enableTiDBExtension bool,
 	decimalHandlingMode string,
+	bigintUnsignedHandlingMode string,
 ) (*AvroEventBatchEncoder, error) {
 	startHTTPInterceptForTestingRegistry()
 
@@ -55,11 +56,12 @@ func setupEncoderAndSchemaRegistry(
 	}
 
 	return &AvroEventBatchEncoder{
-		valueSchemaManager:  valueManager,
-		keySchemaManager:    keyManager,
-		resultBuf:           make([]*MQMessage, 0, 4096),
-		enableTiDBExtension: enableTiDBExtension,
-		decimalHandlingMode: decimalHandlingMode,
+		valueSchemaManager:         valueManager,
+		keySchemaManager:           keyManager,
+		resultBuf:                  make([]*MQMessage, 0, 4096),
+		enableTiDBExtension:        enableTiDBExtension,
+		decimalHandlingMode:        decimalHandlingMode,
+		bigintUnsignedHandlingMode: bigintUnsignedHandlingMode,
 	}, nil
 }
 
@@ -568,15 +570,27 @@ var avroTestColumns = []*avroTestColumnTuple{
 
 func TestColumnToAvroSchema(t *testing.T) {
 	for _, v := range avroTestColumns {
-		schema, err := columnToAvroSchema(&v.col, v.colInfo.Ft, "precise")
+		schema, err := columnToAvroSchema(&v.col, v.colInfo.Ft, "precise", "long")
 		require.NoError(t, err)
 		require.Equal(t, v.expectedSchema, schema)
 		if v.col.Name == "decimal" {
-			schema, err := columnToAvroSchema(&v.col, v.colInfo.Ft, "string")
+			schema, err := columnToAvroSchema(&v.col, v.colInfo.Ft, "string", "long")
 			require.NoError(t, err)
 			require.Equal(
 				t,
 				avroSchema{Type: "string", Parameters: map[string]string{"tidbType": "DECIMAL"}},
+				schema,
+			)
+		}
+		if v.col.Name == "longlongunsigned" {
+			schema, err := columnToAvroSchema(&v.col, v.colInfo.Ft, "precise", "string")
+			require.NoError(t, err)
+			require.Equal(
+				t,
+				avroSchema{
+					Type:       "string",
+					Parameters: map[string]string{"tidbType": "BIGINT UNSIGNED"},
+				},
 				schema,
 			)
 		}
@@ -587,14 +601,20 @@ func TestColumnToAvroData(t *testing.T) {
 	t.Parallel()
 
 	for _, v := range avroTestColumns {
-		data, str, err := columnToAvroData(&v.col, v.colInfo.Ft, "precise")
+		data, str, err := columnToAvroData(&v.col, v.colInfo.Ft, "precise", "long")
 		require.NoError(t, err)
 		require.Equal(t, v.expectedData, data)
 		require.Equal(t, v.expectedType, str)
 		if v.col.Name == "decimal" {
-			data, str, err := columnToAvroData(&v.col, v.colInfo.Ft, "string")
+			data, str, err := columnToAvroData(&v.col, v.colInfo.Ft, "string", "long")
 			require.NoError(t, err)
 			require.Equal(t, "129012.1230000", data)
+			require.Equal(t, "string", str)
+		}
+		if v.col.Name == "longlongunsigned" {
+			data, str, err := columnToAvroData(&v.col, v.colInfo.Ft, "precise", "string")
+			require.NoError(t, err)
+			require.Equal(t, "1", data)
 			require.Equal(t, "string", str)
 		}
 	}
@@ -628,13 +648,13 @@ func TestRowToAvroSchema(t *testing.T) {
 		colInfos = append(colInfos, v.colInfo)
 	}
 
-	schema, err := rowToAvroSchema(fqdn, cols, colInfos, false, "precise")
+	schema, err := rowToAvroSchema(fqdn, cols, colInfos, false, "precise", "long")
 	require.NoError(t, err)
 	require.Equal(t, expectedSchemaWithoutExtension, indentJSON(schema))
 	_, err = goavro.NewCodec(schema)
 	require.NoError(t, err)
 
-	schema, err = rowToAvroSchema(fqdn, cols, colInfos, true, "precise")
+	schema, err = rowToAvroSchema(fqdn, cols, colInfos, true, "precise", "long")
 	require.NoError(t, err)
 	require.Equal(t, expectedSchemaWithExtension, indentJSON(schema))
 	_, err = goavro.NewCodec(schema)
@@ -658,14 +678,14 @@ func TestRowToAvroData(t *testing.T) {
 		colInfos = append(colInfos, v.colInfo)
 	}
 
-	data, err := rowToAvroData(cols, colInfos, 417318403368288260, "c", false, "precise")
+	data, err := rowToAvroData(cols, colInfos, 417318403368288260, "c", false, "precise", "long")
 	require.NoError(t, err)
 	_, exists := data["tidbCommitTs"]
 	require.False(t, exists)
 	_, exists = data["tidbOp"]
 	require.False(t, exists)
 
-	data, err = rowToAvroData(cols, colInfos, 417318403368288260, "c", true, "precise")
+	data, err = rowToAvroData(cols, colInfos, 417318403368288260, "c", true, "precise", "long")
 	require.NoError(t, err)
 	v, exists := data["tidbCommitTs"]
 	require.True(t, exists)
@@ -676,7 +696,7 @@ func TestRowToAvroData(t *testing.T) {
 }
 
 func TestAvroEncode(t *testing.T) {
-	encoder, err := setupEncoderAndSchemaRegistry(true, "precise")
+	encoder, err := setupEncoderAndSchemaRegistry(true, "precise", "long")
 	require.NoError(t, err)
 	defer teardownEncoderAndSchemaRegistry()
 
@@ -722,7 +742,14 @@ func TestAvroEncode(t *testing.T) {
 	defer cancel()
 
 	keyCols, keyColInfos := event.HandleKeyColInfos()
-	keySchema, err := rowToAvroSchema("testdb.avroencode", keyCols, keyColInfos, false, "precise")
+	keySchema, err := rowToAvroSchema(
+		"testdb.avroencode",
+		keyCols,
+		keyColInfos,
+		false,
+		"precise",
+		"long",
+	)
 	require.NoError(t, err)
 	avroKeyCodec, err := goavro.NewCodec(keySchema)
 	require.NoError(t, err)
@@ -738,7 +765,14 @@ func TestAvroEncode(t *testing.T) {
 		}
 	}
 
-	valueSchema, err := rowToAvroSchema("testdb.avroencode", cols, colInfos, true, "precise")
+	valueSchema, err := rowToAvroSchema(
+		"testdb.avroencode",
+		cols,
+		colInfos,
+		true,
+		"precise",
+		"long",
+	)
 	require.NoError(t, err)
 	avroValueCodec, err := goavro.NewCodec(valueSchema)
 	require.NoError(t, err)

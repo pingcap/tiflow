@@ -37,8 +37,9 @@ type Config struct {
 	enableTiDBExtension bool
 
 	// avro only
-	avroSchemaRegistry      string
-	avroDecimalHandlingMode string
+	avroSchemaRegistry             string
+	avroDecimalHandlingMode        string
+	avroBigintUnsignedHandlingMode string
 }
 
 // NewConfig return a Config for codec
@@ -49,18 +50,20 @@ func NewConfig(protocol config.Protocol) *Config {
 		maxMessageBytes: config.DefaultMaxMessageBytes,
 		maxBatchSize:    defaultMaxBatchSize,
 
-		enableTiDBExtension:     false,
-		avroSchemaRegistry:      "",
-		avroDecimalHandlingMode: "precise",
+		enableTiDBExtension:            false,
+		avroSchemaRegistry:             "",
+		avroDecimalHandlingMode:        "precise",
+		avroBigintUnsignedHandlingMode: "long",
 	}
 }
 
 const (
-	codecOPTEnableTiDBExtension     = "enable-tidb-extension"
-	codecOPTMaxBatchSize            = "max-batch-size"
-	codecOPTMaxMessageBytes         = "max-message-bytes"
-	codecOPTAvroDecimalHandlingMode = "avro-decimal-handling-mode"
-	codecOPTAvroSchemaRegistry      = "schema-registry"
+	codecOPTEnableTiDBExtension            = "enable-tidb-extension"
+	codecOPTMaxBatchSize                   = "max-batch-size"
+	codecOPTMaxMessageBytes                = "max-message-bytes"
+	codecOPTAvroDecimalHandlingMode        = "avro-decimal-handling-mode"
+	codecOPTAvroBigintUnsignedHandlingMode = "avro-bigint-unsigned-handling-mode"
+	codecOPTAvroSchemaRegistry             = "schema-registry"
 )
 
 // Apply fill the Config
@@ -92,6 +95,10 @@ func (c *Config) Apply(sinkURI *url.URL, config *config.ReplicaConfig) error {
 
 	if s := params.Get(codecOPTAvroDecimalHandlingMode); s != "" {
 		c.avroDecimalHandlingMode = s
+	}
+
+	if s := params.Get(codecOPTAvroBigintUnsignedHandlingMode); s != "" {
+		c.avroBigintUnsignedHandlingMode = s
 	}
 
 	if config.SchemaRegistry != "" {
@@ -128,6 +135,14 @@ func (c *Config) Validate() error {
 			return cerror.ErrMQCodecInvalidConfig.GenWithStack(
 				`%s value could only be "string" or "precise"`,
 				codecOPTAvroDecimalHandlingMode,
+			)
+		}
+
+		if c.avroBigintUnsignedHandlingMode != "long" &&
+			c.avroBigintUnsignedHandlingMode != "string" {
+			return cerror.ErrMQCodecInvalidConfig.GenWithStack(
+				`%s value could only be "long" or "string"`,
+				codecOPTAvroBigintUnsignedHandlingMode,
 			)
 		}
 	}
