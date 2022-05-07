@@ -778,7 +778,7 @@ func TestRebalanceWhileAddingTable(t *testing.T) {
 	communicator.AssertExpectations(t)
 }
 
-func TestDrainingOnlyOneCapture(t *testing.T) {
+func TestDrainingCaptureOnlyOne(t *testing.T) {
 	t.Parallel()
 
 	communicator := NewMockScheduleDispatcherCommunicator()
@@ -1040,7 +1040,7 @@ func TestDrainingCaptureCrashed(t *testing.T) {
 		},
 	}
 
-	communicator.On("DispatchTable", mock.Anything, cf1, mock.Anything, mock.Anything, mock.Anything, defaultEpoch).
+	communicator.On("DispatchTable", mock.Anything, cf1, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return(true, nil)
 
 	checkpointTs, resolvedTs, err := dispatcher.Tick(ctx, 1300, []model.TableID{0, 1, 2, 3}, mockCaptureInfos)
@@ -1105,17 +1105,72 @@ func TestDrainingCaptureCrashed(t *testing.T) {
 	require.Nil(t, err)
 	require.Equal(t, CheckpointCannotProceed, checkpointTs)
 	require.Equal(t, CheckpointCannotProceed, resolvedTs)
+	// caused by capture count changed
 	require.True(t, dispatcher.needRebalance)
-
-	err = dispatcher.DrainCapture("capture-1")
-	require.Nil(t, err)
+	dispatcher.OnAgentSyncTaskStatuses("capture-3", nextEpoch, []model.TableID{}, []model.TableID{}, []model.TableID{})
 
 	checkpointTs, resolvedTs, err = dispatcher.Tick(ctx, 1300, []model.TableID{0, 1, 2, 3}, mockCaptureInfos)
 	require.Nil(t, err)
 	require.Equal(t, CheckpointCannotProceed, checkpointTs)
 	require.Equal(t, CheckpointCannotProceed, resolvedTs)
-	require.True(t, dispatcher.needRebalance)
+	require.False(t, dispatcher.needRebalance)
 
+	err = dispatcher.DrainCapture("capture-1")
+	require.Nil(t, err)
+
+	tables4Capture1 = dispatcher.tables.GetAllTablesGroupedByCaptures()["capture-1"]
+	count := 0
+	for _, record := range tables4Capture1 {
+		if record.Status == util.RemovingTable {
+			count++
+			dispatcher.OnAgentFinishedTableOperation("capture-1", record.TableID, defaultEpoch)
+		}
+	}
+	require.Equal(t, 2, count)
+
+	checkpointTs, resolvedTs, err = dispatcher.Tick(ctx, 1300, []model.TableID{0, 1, 2, 3}, mockCaptureInfos)
+	require.Nil(t, err)
+	require.Equal(t, CheckpointCannotProceed, checkpointTs)
+	require.Equal(t, CheckpointCannotProceed, resolvedTs)
+	require.False(t, dispatcher.needRebalance)
+
+	tablesByCapture = dispatcher.tables.GetAllTablesGroupedByCaptures()
+
+	tables4Capture1 = tablesByCapture["capture-1"]
+	for _, record := range tables4Capture1 {
+		require.Equal(t, util.RemovingTable, record.Status)
+		dispatcher.OnAgentFinishedTableOperation("capture-1", record.TableID, defaultEpoch)
+	}
+	require.Equal(t, 2, len(tables4Capture1))
+
+	tables4Capture3 := tablesByCapture["capture-3"]
+	for _, record := range tables4Capture3 {
+		require.Equal(t, util.AddingTable, record.Status)
+		dispatcher.OnAgentFinishedTableOperation("capture-3", record.TableID, nextEpoch)
+	}
+	require.Equal(t, 2, len(tables4Capture3))
+
+	checkpointTs, resolvedTs, err = dispatcher.Tick(ctx, 1300, []model.TableID{0, 1, 2, 3}, mockCaptureInfos)
+	require.Nil(t, err)
+	require.Equal(t, CheckpointCannotProceed, checkpointTs)
+	require.Equal(t, CheckpointCannotProceed, resolvedTs)
+
+	tables4Capture3 = dispatcher.tables.GetAllTablesGroupedByCaptures()["capture-3"]
+	require.Equal(t, 4, len(tables4Capture3))
+	count = 0
+	for _, record := range tables4Capture3 {
+		if record.Status == util.AddingTable {
+			count++
+			dispatcher.OnAgentFinishedTableOperation("capture-3", record.TableID, nextEpoch)
+		}
+	}
+	require.Equal(t, 2, count)
+
+	dispatcher.OnAgentCheckpoint("capture-3", model.Ts(1300), model.Ts(1450))
+	checkpointTs, resolvedTs, err = dispatcher.Tick(ctx, 1300, []model.TableID{0, 1, 2, 3}, mockCaptureInfos)
+	require.Nil(t, err)
+	require.Equal(t, model.Ts(1300), checkpointTs)
+	require.Equal(t, model.Ts(1450), resolvedTs)
 }
 
 func TestDrainingCaptureOtherCrashed(t *testing.T) {
