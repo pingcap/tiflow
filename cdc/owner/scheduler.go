@@ -45,10 +45,10 @@ type scheduler interface {
 	) (newCheckpointTs, newResolvedTs model.Ts, err error)
 
 	// MoveTable is used to trigger manual table moves.
-	MoveTable(tableID model.TableID, target model.CaptureID)
+	MoveTable(tableID model.TableID, target model.CaptureID) error
 
 	// Rebalance is used to trigger manual workload rebalances.
-	Rebalance()
+	Rebalance() error
 
 	// Close closes the scheduler and releases resources.
 	Close(ctx context.Context)

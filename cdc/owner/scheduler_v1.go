@@ -441,12 +441,14 @@ func (w *schedulerV1CompatWrapper) Tick(
 	return checkpointTs, resolvedTs, nil
 }
 
-func (w *schedulerV1CompatWrapper) MoveTable(tableID model.TableID, target model.CaptureID) {
+func (w *schedulerV1CompatWrapper) MoveTable(tableID model.TableID, target model.CaptureID) error {
 	w.inner.MoveTable(tableID, target)
+	return nil
 }
 
-func (w *schedulerV1CompatWrapper) Rebalance() {
+func (w *schedulerV1CompatWrapper) Rebalance() error {
 	w.inner.Rebalance()
+	return nil
 }
 
 func (w *schedulerV1CompatWrapper) Close(_ cdcContext.Context) {

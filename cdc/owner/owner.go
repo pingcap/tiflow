@@ -437,7 +437,7 @@ func (o *ownerImpl) clusterVersionConsistent(captures map[model.CaptureID]*model
 func (o *ownerImpl) handleDrainCaptures(target model.CaptureID, done chan<- error) {
 	for _, changefeed := range o.changefeeds {
 		// todo: errors should be checked here.
-		_ = changefeed.scheduler.DrainCapture(target)
+		done <- changefeed.scheduler.DrainCapture(target)
 	}
 	close(done)
 }
@@ -457,12 +457,12 @@ func (o *ownerImpl) handleJobs() {
 		case ownerJobTypeAdminJob:
 			cfReactor.feedStateManager.PushAdminJob(job.AdminJob)
 		case ownerJobTypeScheduleTable:
-			cfReactor.scheduler.MoveTable(job.TableID, job.TargetCaptureID)
+			job.done <- cfReactor.scheduler.MoveTable(job.TableID, job.TargetCaptureID)
 		case ownerJobTypeDrainCapture:
 			o.handleDrainCaptures(job.TargetCaptureID, job.done)
 			continue
 		case ownerJobTypeRebalance:
-			cfReactor.scheduler.Rebalance()
+			job.done <- cfReactor.scheduler.Rebalance()
 		case ownerJobTypeQuery:
 			job.done <- o.handleQueries(job.query)
 		case ownerJobTypeDebugInfo:
