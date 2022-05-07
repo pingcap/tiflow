@@ -24,7 +24,12 @@ import (
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/puller/frontier"
+<<<<<<< HEAD
 	"github.com/pingcap/tiflow/pkg/pdtime"
+=======
+	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/pdutil"
+>>>>>>> dadad882a (owner(ticdc): Add support for region-label to enable meta-region isolation (#4937))
 	"github.com/pingcap/tiflow/pkg/regionspan"
 	"github.com/pingcap/tiflow/pkg/txnutil"
 	"github.com/pingcap/tiflow/pkg/util"
@@ -72,8 +77,13 @@ func NewPuller(
 	grpcPool kv.GrpcPool,
 	regionCache *tikv.RegionCache,
 	kvStorage tidbkv.Storage,
+<<<<<<< HEAD
 	pdClock pdtime.Clock,
 	changefeed string,
+=======
+	pdClock pdutil.Clock,
+	changefeed model.ChangeFeedID,
+>>>>>>> dadad882a (owner(ticdc): Add support for region-label to enable meta-region isolation (#4937))
 	checkpointTs uint64,
 	spans []regionspan.Span,
 	enableOldValue bool,

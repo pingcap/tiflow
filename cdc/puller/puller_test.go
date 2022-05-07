@@ -26,7 +26,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/pdtime"
+	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/pingcap/tiflow/pkg/regionspan"
 	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/pingcap/tiflow/pkg/security"
@@ -60,8 +60,14 @@ func newMockCDCKVClient(
 	kvStorage tikv.Storage,
 	grpcPool kv.GrpcPool,
 	regionCache *tikv.RegionCache,
+<<<<<<< HEAD
 	pdClock pdtime.Clock,
 	changefeed string,
+=======
+	pdClock pdutil.Clock,
+	changefeed model.ChangeFeedID,
+	cfg *config.KVClientConfig,
+>>>>>>> dadad882a (owner(ticdc): Add support for region-label to enable meta-region isolation (#4937))
 ) kv.CDCKVClient {
 	return &mockCDCKVClient{
 		expectations: make(chan model.RegionFeedEvent, 1024),
@@ -127,8 +133,14 @@ func newPullerForTest(
 	regionCache := tikv.NewRegionCache(pdCli)
 	defer regionCache.Close()
 	plr := NewPuller(
+<<<<<<< HEAD
 		ctx, pdCli, grpcPool, regionCache, store, pdtime.NewClock4Test(), "",
 		checkpointTs, spans, enableOldValue)
+=======
+		ctx, pdCli, grpcPool, regionCache, store, pdutil.NewClock4Test(),
+		model.DefaultChangeFeedID("changefeed-id-test"),
+		checkpointTs, spans, config.GetDefaultServerConfig().KVClient)
+>>>>>>> dadad882a (owner(ticdc): Add support for region-label to enable meta-region isolation (#4937))
 	wg.Add(1)
 	go func() {
 		defer wg.Done()

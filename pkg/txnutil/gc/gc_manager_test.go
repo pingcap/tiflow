@@ -18,12 +18,17 @@ import (
 	"testing"
 	"time"
 
+<<<<<<< HEAD
 	"github.com/pingcap/tiflow/pkg/pdtime"
 
+=======
+>>>>>>> dadad882a (owner(ticdc): Add support for region-label to enable meta-region isolation (#4937))
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/tiflow/cdc/model"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/pingcap/tiflow/pkg/util/testleak"
 	"github.com/tikv/client-go/v2/oracle"
 )
@@ -39,7 +44,12 @@ type gcManagerSuite struct{}
 func (s *gcManagerSuite) TestUpdateGCSafePoint(c *check.C) {
 	defer testleak.AfterTest(c)()
 	mockPDClient := &MockPDClient{}
+<<<<<<< HEAD
 	gcManager := NewManager(mockPDClient).(*gcManager)
+=======
+	pdClock := pdutil.NewClock4Test()
+	gcManager := NewManager(mockPDClient, pdClock).(*gcManager)
+>>>>>>> dadad882a (owner(ticdc): Add support for region-label to enable meta-region isolation (#4937))
 	ctx := cdcContext.NewBackendContext4Test(true)
 
 	startTs := oracle.GoTimeToTS(time.Now())
@@ -92,7 +102,12 @@ func (s *gcManagerSuite) TestUpdateGCSafePoint(c *check.C) {
 func (s *gcManagerSuite) TestCheckStaleCheckpointTs(c *check.C) {
 	defer testleak.AfterTest(c)()
 	mockPDClient := &MockPDClient{}
+<<<<<<< HEAD
 	gcManager := NewManager(mockPDClient).(*gcManager)
+=======
+	pdClock := pdutil.NewClock4Test()
+	gcManager := NewManager(mockPDClient, pdClock).(*gcManager)
+>>>>>>> dadad882a (owner(ticdc): Add support for region-label to enable meta-region isolation (#4937))
 	gcManager.isTiCDCBlockGC = true
 	ctx := context.Background()
 

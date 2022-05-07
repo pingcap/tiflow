@@ -32,7 +32,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/pdtime"
+	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/pingcap/tiflow/pkg/regionspan"
 	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/pingcap/tiflow/pkg/txnutil"
@@ -314,8 +314,13 @@ type CDCClient struct {
 
 	regionCache *tikv.RegionCache
 	kvStorage   tikv.Storage
+<<<<<<< HEAD
 	pdClock     pdtime.Clock
 	changefeed  string
+=======
+	pdClock     pdutil.Clock
+	changefeed  model.ChangeFeedID
+>>>>>>> dadad882a (owner(ticdc): Add support for region-label to enable meta-region isolation (#4937))
 
 	regionLimiters *regionEventFeedLimiters
 }
@@ -327,8 +332,14 @@ func NewCDCClient(
 	kvStorage tikv.Storage,
 	grpcPool GrpcPool,
 	regionCache *tikv.RegionCache,
+<<<<<<< HEAD
 	pdClock pdtime.Clock,
 	changefeed string,
+=======
+	pdClock pdutil.Clock,
+	changefeed model.ChangeFeedID,
+	cfg *config.KVClientConfig,
+>>>>>>> dadad882a (owner(ticdc): Add support for region-label to enable meta-region isolation (#4937))
 ) (c CDCKVClient) {
 	clusterID := pd.GetClusterID(ctx)
 

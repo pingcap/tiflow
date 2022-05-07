@@ -26,7 +26,12 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/store/mockstore/mockcopr"
 	"github.com/pingcap/tiflow/cdc/model"
+<<<<<<< HEAD
 	"github.com/pingcap/tiflow/pkg/pdtime"
+=======
+	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/pdutil"
+>>>>>>> dadad882a (owner(ticdc): Add support for region-label to enable meta-region isolation (#4937))
 	"github.com/pingcap/tiflow/pkg/regionspan"
 	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/pingcap/tiflow/pkg/security"
@@ -193,7 +198,14 @@ func prepareBenchMultiStore(b *testing.B, storeNum, regionNum int) (
 	defer grpcPool.Close()
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
+<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "")
+=======
+	cdcClient := NewCDCClient(
+		ctx, pdClient, kvStorage, grpcPool, regionCache, pdutil.NewClock4Test(),
+		model.DefaultChangeFeedID(""),
+		config.GetDefaultServerConfig().KVClient)
+>>>>>>> dadad882a (owner(ticdc): Add support for region-label to enable meta-region isolation (#4937))
 	eventCh := make(chan model.RegionFeedEvent, 1000000)
 	wg.Add(1)
 	go func() {
@@ -285,7 +297,14 @@ func prepareBench(b *testing.B, regionNum int) (
 	defer grpcPool.Close()
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
+<<<<<<< HEAD
 	cdcClient := NewCDCClient(ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(), "")
+=======
+	cdcClient := NewCDCClient(
+		ctx, pdClient, kvStorage, grpcPool, regionCache, pdutil.NewClock4Test(),
+		model.DefaultChangeFeedID(""),
+		config.GetDefaultServerConfig().KVClient)
+>>>>>>> dadad882a (owner(ticdc): Add support for region-label to enable meta-region isolation (#4937))
 	eventCh := make(chan model.RegionFeedEvent, 1000000)
 	wg.Add(1)
 	go func() {

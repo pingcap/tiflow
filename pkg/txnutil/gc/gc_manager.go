@@ -24,6 +24,10 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+<<<<<<< HEAD
+=======
+	"github.com/pingcap/tiflow/pkg/pdutil"
+>>>>>>> dadad882a (owner(ticdc): Add support for region-label to enable meta-region isolation (#4937))
 	"github.com/tikv/client-go/v2/oracle"
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
@@ -48,6 +52,10 @@ type Manager interface {
 
 type gcManager struct {
 	pdClient pd.Client
+<<<<<<< HEAD
+=======
+	pdClock  pdutil.Clock
+>>>>>>> dadad882a (owner(ticdc): Add support for region-label to enable meta-region isolation (#4937))
 	gcTTL    int64
 
 	lastUpdatedTime   time.Time
@@ -57,7 +65,11 @@ type gcManager struct {
 }
 
 // NewManager creates a new Manager.
+<<<<<<< HEAD
 func NewManager(pdClient pd.Client) Manager {
+=======
+func NewManager(pdClient pd.Client, pdClock pdutil.Clock) Manager {
+>>>>>>> dadad882a (owner(ticdc): Add support for region-label to enable meta-region isolation (#4937))
 	serverConfig := config.GetGlobalServerConfig()
 	failpoint.Inject("InjectGcSafepointUpdateInterval", func(val failpoint.Value) {
 		gcSafepointUpdateInterval = time.Duration(val.(int) * int(time.Millisecond))
