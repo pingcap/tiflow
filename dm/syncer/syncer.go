@@ -3520,8 +3520,7 @@ func (s *Syncer) Pause() {
 		return
 	}
 	s.stopSync()
-	err := s.schemaTracker.Close()
-	if err != nil {
+	if err := s.schemaTracker.Close(); err != nil {
 		s.tctx.L().Error("fail to close schema tracker", log.ShortError(err))
 	}
 }

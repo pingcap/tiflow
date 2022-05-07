@@ -1075,6 +1075,9 @@ func (cp *RemoteCheckPoint) LoadIntoSchemaTracker(ctx context.Context, schemaTra
 				tablesToCreate[cpSchema] = make(map[string]*model.TableInfo)
 			}
 			tablesToCreate[cpSchema][cpTable] = point.flushedPoint.ti
+			cp.logCtx.L().Debug("will init table info in schema tracker",
+				zap.String("database", cpSchema),
+				zap.String("table", cpTable))
 		}
 	}
 	return schemaTracker.BatchCreateTableIfNotExist(tablesToCreate)

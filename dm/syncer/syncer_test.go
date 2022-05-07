@@ -25,8 +25,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/require"
-
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
@@ -45,6 +43,7 @@ import (
 	"github.com/pingcap/tiflow/dm/syncer/dbconn"
 	"github.com/pingcap/tiflow/pkg/errorutil"
 	"github.com/pingcap/tiflow/pkg/sqlmodel"
+	"github.com/stretchr/testify/require"
 
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
 	"github.com/go-mysql-org/go-mysql/mysql"
@@ -767,6 +766,10 @@ func (s *testSyncerSuite) TestRun(c *C) {
 	s.cfg.Batch = 1000
 	s.cfg.WorkerCount = 2
 	s.cfg.MaxRetry = 1
+	s.cfg.To.Session = map[string]string{
+		"sql_mode":             "ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION",
+		"tidb_skip_utf8_check": "0",
+	}
 
 	cfg, err := s.cfg.Clone()
 	c.Assert(err, IsNil)
@@ -790,6 +793,9 @@ func (s *testSyncerSuite) TestRun(c *C) {
 		sqlmock.NewRows([]string{"Table", "Create Table"}).
 			AddRow("t_1", "create table t_1(id int primary key, name varchar(24), KEY `index1` (`name`))"))
 	mockGetServerUnixTS(mock)
+	mock.ExpectBegin()
+	mock.ExpectExec(fmt.Sprintf("SET SESSION SQL_MODE = '%s'", pmysql.DefaultSQLMode)).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectCommit()
 	mock.ExpectQuery("SHOW CREATE TABLE " + "`test_1`.`t_2`").WillReturnRows(
 		sqlmock.NewRows([]string{"Table", "Create Table"}).
 			AddRow("t_2", "create table t_2(id int primary key, name varchar(24))"))
@@ -1124,7 +1130,6 @@ func (s *testSyncerSuite) TestExitSafeModeByConfig(c *C) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	resultCh := make(chan pb.ProcessResult)
-	defer close(resultCh)
 
 	// When crossing safeModeExitPoint, will generate a flush sql
 	checkPointMock.ExpectBegin()
@@ -1772,6 +1777,10 @@ func TestWaitBeforeRunExit(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cfg := genDefaultSubTaskConfig4Test()
 	cfg.WorkerCount = 0
+	cfg.To.Session = map[string]string{
+		"sql_mode":             "ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION",
+		"tidb_skip_utf8_check": "0",
+	}
 	syncer := NewSyncer(cfg, nil, nil)
 
 	db, mock, err := sqlmock.New()
