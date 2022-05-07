@@ -101,7 +101,7 @@ var avroTestColumns = []*avroTestColumnTuple{
 			VirtualGenCol: false,
 			Ft:            types.NewFieldType(mysql.TypeTiny),
 		},
-		avroSchema{Type: "int", Parameters: map[string]string{"tidbType": "INT"}},
+		avroSchema{Type: "int", Parameters: map[string]string{"tidb_type": "INT"}},
 		int32(1), "int",
 	},
 	{
@@ -112,7 +112,7 @@ var avroTestColumns = []*avroTestColumnTuple{
 			VirtualGenCol: false,
 			Ft:            types.NewFieldType(mysql.TypeShort),
 		},
-		avroSchema{Type: "int", Parameters: map[string]string{"tidbType": "INT"}},
+		avroSchema{Type: "int", Parameters: map[string]string{"tidb_type": "INT"}},
 		int32(1), "int",
 	},
 	{
@@ -123,7 +123,7 @@ var avroTestColumns = []*avroTestColumnTuple{
 			VirtualGenCol: false,
 			Ft:            types.NewFieldType(mysql.TypeInt24),
 		},
-		avroSchema{Type: "int", Parameters: map[string]string{"tidbType": "INT"}},
+		avroSchema{Type: "int", Parameters: map[string]string{"tidb_type": "INT"}},
 		int32(1), "int",
 	},
 	{
@@ -134,7 +134,7 @@ var avroTestColumns = []*avroTestColumnTuple{
 			VirtualGenCol: false,
 			Ft:            types.NewFieldType(mysql.TypeLong),
 		},
-		avroSchema{Type: "int", Parameters: map[string]string{"tidbType": "INT"}},
+		avroSchema{Type: "int", Parameters: map[string]string{"tidb_type": "INT"}},
 		int32(1), "int",
 	},
 	{
@@ -145,7 +145,7 @@ var avroTestColumns = []*avroTestColumnTuple{
 			VirtualGenCol: false,
 			Ft:            types.NewFieldType(mysql.TypeLonglong),
 		},
-		avroSchema{Type: "long", Parameters: map[string]string{"tidbType": "BIGINT"}},
+		avroSchema{Type: "long", Parameters: map[string]string{"tidb_type": "BIGINT"}},
 		int64(1), "long",
 	},
 	{
@@ -161,7 +161,7 @@ var avroTestColumns = []*avroTestColumnTuple{
 			VirtualGenCol: false,
 			Ft:            setFlag(types.NewFieldType(mysql.TypeTiny), uint(model.UnsignedFlag)),
 		},
-		avroSchema{Type: "int", Parameters: map[string]string{"tidbType": "INT UNSIGNED"}},
+		avroSchema{Type: "int", Parameters: map[string]string{"tidb_type": "INT UNSIGNED"}},
 		int32(1), "int",
 	},
 	{
@@ -177,7 +177,7 @@ var avroTestColumns = []*avroTestColumnTuple{
 			VirtualGenCol: false,
 			Ft:            setFlag(types.NewFieldType(mysql.TypeShort), uint(model.UnsignedFlag)),
 		},
-		avroSchema{Type: "int", Parameters: map[string]string{"tidbType": "INT UNSIGNED"}},
+		avroSchema{Type: "int", Parameters: map[string]string{"tidb_type": "INT UNSIGNED"}},
 		int32(1), "int",
 	},
 	{
@@ -193,7 +193,7 @@ var avroTestColumns = []*avroTestColumnTuple{
 			VirtualGenCol: false,
 			Ft:            setFlag(types.NewFieldType(mysql.TypeInt24), uint(model.UnsignedFlag)),
 		},
-		avroSchema{Type: "int", Parameters: map[string]string{"tidbType": "INT UNSIGNED"}},
+		avroSchema{Type: "int", Parameters: map[string]string{"tidb_type": "INT UNSIGNED"}},
 		int32(1), "int",
 	},
 	{
@@ -209,7 +209,7 @@ var avroTestColumns = []*avroTestColumnTuple{
 			VirtualGenCol: false,
 			Ft:            setFlag(types.NewFieldType(mysql.TypeLong), uint(model.UnsignedFlag)),
 		},
-		avroSchema{Type: "long", Parameters: map[string]string{"tidbType": "INT UNSIGNED"}},
+		avroSchema{Type: "long", Parameters: map[string]string{"tidb_type": "INT UNSIGNED"}},
 		int64(1), "long",
 	},
 	{
@@ -228,7 +228,7 @@ var avroTestColumns = []*avroTestColumnTuple{
 				uint(model.UnsignedFlag),
 			),
 		},
-		avroSchema{Type: "long", Parameters: map[string]string{"tidbType": "BIGINT UNSIGNED"}},
+		avroSchema{Type: "long", Parameters: map[string]string{"tidb_type": "BIGINT UNSIGNED"}},
 		int64(1), "long",
 	},
 	{
@@ -239,7 +239,7 @@ var avroTestColumns = []*avroTestColumnTuple{
 			VirtualGenCol: false,
 			Ft:            types.NewFieldType(mysql.TypeFloat),
 		},
-		avroSchema{Type: "double", Parameters: map[string]string{"tidbType": "FLOAT"}},
+		avroSchema{Type: "double", Parameters: map[string]string{"tidb_type": "FLOAT"}},
 		float64(3.14), "double",
 	},
 	{
@@ -250,7 +250,7 @@ var avroTestColumns = []*avroTestColumnTuple{
 			VirtualGenCol: false,
 			Ft:            types.NewFieldType(mysql.TypeDouble),
 		},
-		avroSchema{Type: "double", Parameters: map[string]string{"tidbType": "DOUBLE"}},
+		avroSchema{Type: "double", Parameters: map[string]string{"tidb_type": "DOUBLE"}},
 		float64(3.14), "double",
 	},
 	{
@@ -261,7 +261,7 @@ var avroTestColumns = []*avroTestColumnTuple{
 			VirtualGenCol: false,
 			Ft:            types.NewFieldType(mysql.TypeBit),
 		},
-		avroSchema{Type: "bytes", Parameters: map[string]string{"tidbType": "BIT", "length": "1"}},
+		avroSchema{Type: "bytes", Parameters: map[string]string{"tidb_type": "BIT", "length": "1"}},
 		[]byte("\x02\xab"), "bytes",
 	},
 	{
@@ -275,7 +275,7 @@ var avroTestColumns = []*avroTestColumnTuple{
 		avroLogicalTypeSchema{
 			avroSchema: avroSchema{
 				Type:       "bytes",
-				Parameters: map[string]string{"tidbType": "DECIMAL"},
+				Parameters: map[string]string{"tidb_type": "DECIMAL"},
 			},
 			LogicalType: "decimal",
 			Precision:   10,
@@ -291,7 +291,7 @@ var avroTestColumns = []*avroTestColumnTuple{
 			VirtualGenCol: false,
 			Ft:            types.NewFieldType(mysql.TypeBlob),
 		},
-		avroSchema{Type: "string", Parameters: map[string]string{"tidbType": "TEXT"}},
+		avroSchema{Type: "string", Parameters: map[string]string{"tidb_type": "TEXT"}},
 		"hello world", "string",
 	},
 	{
@@ -302,7 +302,7 @@ var avroTestColumns = []*avroTestColumnTuple{
 			VirtualGenCol: false,
 			Ft:            types.NewFieldType(mysql.TypeMediumBlob),
 		},
-		avroSchema{Type: "string", Parameters: map[string]string{"tidbType": "TEXT"}},
+		avroSchema{Type: "string", Parameters: map[string]string{"tidb_type": "TEXT"}},
 		"hello world", "string",
 	},
 	{
@@ -313,7 +313,7 @@ var avroTestColumns = []*avroTestColumnTuple{
 			VirtualGenCol: false,
 			Ft:            types.NewFieldType(mysql.TypeBlob),
 		},
-		avroSchema{Type: "string", Parameters: map[string]string{"tidbType": "TEXT"}},
+		avroSchema{Type: "string", Parameters: map[string]string{"tidb_type": "TEXT"}},
 		"hello world", "string",
 	},
 	{
@@ -324,7 +324,7 @@ var avroTestColumns = []*avroTestColumnTuple{
 			VirtualGenCol: false,
 			Ft:            types.NewFieldType(mysql.TypeLongBlob),
 		},
-		avroSchema{Type: "string", Parameters: map[string]string{"tidbType": "TEXT"}},
+		avroSchema{Type: "string", Parameters: map[string]string{"tidb_type": "TEXT"}},
 		"hello world", "string",
 	},
 	{
@@ -335,7 +335,7 @@ var avroTestColumns = []*avroTestColumnTuple{
 			VirtualGenCol: false,
 			Ft:            types.NewFieldType(mysql.TypeVarchar),
 		},
-		avroSchema{Type: "string", Parameters: map[string]string{"tidbType": "TEXT"}},
+		avroSchema{Type: "string", Parameters: map[string]string{"tidb_type": "TEXT"}},
 		"hello world", "string",
 	},
 	{
@@ -346,7 +346,7 @@ var avroTestColumns = []*avroTestColumnTuple{
 			VirtualGenCol: false,
 			Ft:            types.NewFieldType(mysql.TypeVarString),
 		},
-		avroSchema{Type: "string", Parameters: map[string]string{"tidbType": "TEXT"}},
+		avroSchema{Type: "string", Parameters: map[string]string{"tidb_type": "TEXT"}},
 		"hello world", "string",
 	},
 	{
@@ -357,7 +357,7 @@ var avroTestColumns = []*avroTestColumnTuple{
 			VirtualGenCol: false,
 			Ft:            types.NewFieldType(mysql.TypeString),
 		},
-		avroSchema{Type: "string", Parameters: map[string]string{"tidbType": "TEXT"}},
+		avroSchema{Type: "string", Parameters: map[string]string{"tidb_type": "TEXT"}},
 		"hello world", "string",
 	},
 	{
@@ -373,7 +373,7 @@ var avroTestColumns = []*avroTestColumnTuple{
 			VirtualGenCol: false,
 			Ft:            setBinChsClnFlag(types.NewFieldType(mysql.TypeTinyBlob)),
 		},
-		avroSchema{Type: "bytes", Parameters: map[string]string{"tidbType": "BLOB"}},
+		avroSchema{Type: "bytes", Parameters: map[string]string{"tidb_type": "BLOB"}},
 		[]byte("hello world"), "bytes",
 	},
 	{
@@ -389,7 +389,7 @@ var avroTestColumns = []*avroTestColumnTuple{
 			VirtualGenCol: false,
 			Ft:            setBinChsClnFlag(types.NewFieldType(mysql.TypeMediumBlob)),
 		},
-		avroSchema{Type: "bytes", Parameters: map[string]string{"tidbType": "BLOB"}},
+		avroSchema{Type: "bytes", Parameters: map[string]string{"tidb_type": "BLOB"}},
 		[]byte("hello world"), "bytes",
 	},
 	{
@@ -405,7 +405,7 @@ var avroTestColumns = []*avroTestColumnTuple{
 			VirtualGenCol: false,
 			Ft:            setBinChsClnFlag(types.NewFieldType(mysql.TypeBlob)),
 		},
-		avroSchema{Type: "bytes", Parameters: map[string]string{"tidbType": "BLOB"}},
+		avroSchema{Type: "bytes", Parameters: map[string]string{"tidb_type": "BLOB"}},
 		[]byte("hello world"), "bytes",
 	},
 	{
@@ -421,7 +421,7 @@ var avroTestColumns = []*avroTestColumnTuple{
 			VirtualGenCol: false,
 			Ft:            setBinChsClnFlag(types.NewFieldType(mysql.TypeLongBlob)),
 		},
-		avroSchema{Type: "bytes", Parameters: map[string]string{"tidbType": "BLOB"}},
+		avroSchema{Type: "bytes", Parameters: map[string]string{"tidb_type": "BLOB"}},
 		[]byte("hello world"), "bytes",
 	},
 	{
@@ -437,7 +437,7 @@ var avroTestColumns = []*avroTestColumnTuple{
 			VirtualGenCol: false,
 			Ft:            setBinChsClnFlag(types.NewFieldType(mysql.TypeVarchar)),
 		},
-		avroSchema{Type: "bytes", Parameters: map[string]string{"tidbType": "BLOB"}},
+		avroSchema{Type: "bytes", Parameters: map[string]string{"tidb_type": "BLOB"}},
 		[]byte("hello world"), "bytes",
 	},
 	{
@@ -453,7 +453,7 @@ var avroTestColumns = []*avroTestColumnTuple{
 			VirtualGenCol: false,
 			Ft:            setBinChsClnFlag(types.NewFieldType(mysql.TypeVarString)),
 		},
-		avroSchema{Type: "bytes", Parameters: map[string]string{"tidbType": "BLOB"}},
+		avroSchema{Type: "bytes", Parameters: map[string]string{"tidb_type": "BLOB"}},
 		[]byte("hello world"), "bytes",
 	},
 	{
@@ -469,7 +469,7 @@ var avroTestColumns = []*avroTestColumnTuple{
 			VirtualGenCol: false,
 			Ft:            setBinChsClnFlag(types.NewFieldType(mysql.TypeString)),
 		},
-		avroSchema{Type: "bytes", Parameters: map[string]string{"tidbType": "BLOB"}},
+		avroSchema{Type: "bytes", Parameters: map[string]string{"tidb_type": "BLOB"}},
 		[]byte("hello world"), "bytes",
 	},
 	{
@@ -482,7 +482,7 @@ var avroTestColumns = []*avroTestColumnTuple{
 		},
 		avroSchema{
 			Type:       "string",
-			Parameters: map[string]string{"tidbType": "ENUM", "allowed": "a\\,,b"},
+			Parameters: map[string]string{"tidb_type": "ENUM", "allowed": "a\\,,b"},
 		},
 		"a,", "string",
 	},
@@ -496,7 +496,7 @@ var avroTestColumns = []*avroTestColumnTuple{
 		},
 		avroSchema{
 			Type:       "string",
-			Parameters: map[string]string{"tidbType": "SET", "allowed": "a\\,,b"},
+			Parameters: map[string]string{"tidb_type": "SET", "allowed": "a\\,,b"},
 		},
 		"a,", "string",
 	},
@@ -508,7 +508,7 @@ var avroTestColumns = []*avroTestColumnTuple{
 			VirtualGenCol: false,
 			Ft:            types.NewFieldType(mysql.TypeJSON),
 		},
-		avroSchema{Type: "string", Parameters: map[string]string{"tidbType": "JSON"}},
+		avroSchema{Type: "string", Parameters: map[string]string{"tidb_type": "JSON"}},
 		`{"key": "value"}`, "string",
 	},
 	{
@@ -519,7 +519,7 @@ var avroTestColumns = []*avroTestColumnTuple{
 			VirtualGenCol: false,
 			Ft:            types.NewFieldType(mysql.TypeDate),
 		},
-		avroSchema{Type: "string", Parameters: map[string]string{"tidbType": "DATE"}},
+		avroSchema{Type: "string", Parameters: map[string]string{"tidb_type": "DATE"}},
 		"2000-01-01", "string",
 	},
 	{
@@ -530,7 +530,7 @@ var avroTestColumns = []*avroTestColumnTuple{
 			VirtualGenCol: false,
 			Ft:            types.NewFieldType(mysql.TypeDatetime),
 		},
-		avroSchema{Type: "string", Parameters: map[string]string{"tidbType": "DATETIME"}},
+		avroSchema{Type: "string", Parameters: map[string]string{"tidb_type": "DATETIME"}},
 		"2015-12-20 23:58:58", "string",
 	},
 	{
@@ -541,7 +541,7 @@ var avroTestColumns = []*avroTestColumnTuple{
 			VirtualGenCol: false,
 			Ft:            types.NewFieldType(mysql.TypeTimestamp),
 		},
-		avroSchema{Type: "string", Parameters: map[string]string{"tidbType": "TIMESTAMP"}},
+		avroSchema{Type: "string", Parameters: map[string]string{"tidb_type": "TIMESTAMP"}},
 		"1973-12-30 15:30:00", "string",
 	},
 	{
@@ -552,7 +552,7 @@ var avroTestColumns = []*avroTestColumnTuple{
 			VirtualGenCol: false,
 			Ft:            types.NewFieldType(mysql.TypeDuration),
 		},
-		avroSchema{Type: "string", Parameters: map[string]string{"tidbType": "TIME"}},
+		avroSchema{Type: "string", Parameters: map[string]string{"tidb_type": "TIME"}},
 		"23:59:59", "string",
 	},
 	{
@@ -563,7 +563,7 @@ var avroTestColumns = []*avroTestColumnTuple{
 			VirtualGenCol: false,
 			Ft:            types.NewFieldType(mysql.TypeYear),
 		},
-		avroSchema{Type: "int", Parameters: map[string]string{"tidbType": "YEAR"}},
+		avroSchema{Type: "int", Parameters: map[string]string{"tidb_type": "YEAR"}},
 		int64(1970), "int",
 	},
 }
@@ -578,7 +578,7 @@ func TestColumnToAvroSchema(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(
 				t,
-				avroSchema{Type: "string", Parameters: map[string]string{"tidbType": "DECIMAL"}},
+				avroSchema{Type: "string", Parameters: map[string]string{"tidb_type": "DECIMAL"}},
 				schema,
 			)
 		}
@@ -589,7 +589,7 @@ func TestColumnToAvroSchema(t *testing.T) {
 				t,
 				avroSchema{
 					Type:       "string",
-					Parameters: map[string]string{"tidbType": "BIGINT UNSIGNED"},
+					Parameters: map[string]string{"tidb_type": "BIGINT UNSIGNED"},
 				},
 				schema,
 			)
@@ -680,17 +680,22 @@ func TestRowToAvroData(t *testing.T) {
 
 	data, err := rowToAvroData(cols, colInfos, 417318403368288260, "c", false, "precise", "long")
 	require.NoError(t, err)
-	_, exists := data["tidbCommitTs"]
+	_, exists := data["_tidb_commit_ts"]
 	require.False(t, exists)
-	_, exists = data["tidbOp"]
+	_, exists = data["_tidb_op"]
+	require.False(t, exists)
+	_, exists = data["_tidb_physical_time"]
 	require.False(t, exists)
 
 	data, err = rowToAvroData(cols, colInfos, 417318403368288260, "c", true, "precise", "long")
 	require.NoError(t, err)
-	v, exists := data["tidbCommitTs"]
+	v, exists := data["_tidb_commit_ts"]
 	require.True(t, exists)
 	require.Equal(t, int64(417318403368288260), v.(int64))
-	v, exists = data["tidbOp"]
+	v, exists = data["_tidb_physical_time"]
+	require.True(t, exists)
+	require.Equal(t, int64(1591943372224), v.(int64))
+	v, exists = data["_tidb_op"]
 	require.True(t, exists)
 	require.Equal(t, "c", v.(string))
 }
@@ -760,7 +765,7 @@ func TestAvroEncode(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, res)
 	for k := range res.(map[string]interface{}) {
-		if k == "tidbCommitTs" || k == "tidbOp" {
+		if k == "_tidb_commit_ts" || k == "_tidb_op" || k == "_tidb_physical_time" {
 			require.Fail(t, "key shall not include extension fields")
 		}
 	}
@@ -783,7 +788,7 @@ func TestAvroEncode(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, res)
 	for k, v := range res.(map[string]interface{}) {
-		if k == "tidbOp" {
+		if k == "_tidb_op" {
 			require.Equal(t, "c", v.(string))
 		}
 	}

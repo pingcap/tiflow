@@ -22,7 +22,7 @@ var expectedSchemaWithoutExtension = `{
       "type": {
         "type": "int",
         "connect.parameters": {
-          "tidbType": "INT"
+          "tidb_type": "INT"
         }
       }
     },
@@ -34,7 +34,7 @@ var expectedSchemaWithoutExtension = `{
         {
           "type": "int",
           "connect.parameters": {
-            "tidbType": "INT"
+            "tidb_type": "INT"
           }
         }
       ]
@@ -44,7 +44,7 @@ var expectedSchemaWithoutExtension = `{
       "type": {
         "type": "int",
         "connect.parameters": {
-          "tidbType": "INT"
+          "tidb_type": "INT"
         }
       }
     },
@@ -56,7 +56,7 @@ var expectedSchemaWithoutExtension = `{
         {
           "type": "int",
           "connect.parameters": {
-            "tidbType": "INT"
+            "tidb_type": "INT"
           }
         }
       ]
@@ -66,7 +66,7 @@ var expectedSchemaWithoutExtension = `{
       "type": {
         "type": "int",
         "connect.parameters": {
-          "tidbType": "INT"
+          "tidb_type": "INT"
         }
       }
     },
@@ -78,7 +78,7 @@ var expectedSchemaWithoutExtension = `{
         {
           "type": "int",
           "connect.parameters": {
-            "tidbType": "INT"
+            "tidb_type": "INT"
           }
         }
       ]
@@ -88,7 +88,7 @@ var expectedSchemaWithoutExtension = `{
       "type": {
         "type": "int",
         "connect.parameters": {
-          "tidbType": "INT"
+          "tidb_type": "INT"
         }
       }
     },
@@ -100,7 +100,7 @@ var expectedSchemaWithoutExtension = `{
         {
           "type": "int",
           "connect.parameters": {
-            "tidbType": "INT"
+            "tidb_type": "INT"
           }
         }
       ]
@@ -110,7 +110,7 @@ var expectedSchemaWithoutExtension = `{
       "type": {
         "type": "long",
         "connect.parameters": {
-          "tidbType": "BIGINT"
+          "tidb_type": "BIGINT"
         }
       }
     },
@@ -122,7 +122,7 @@ var expectedSchemaWithoutExtension = `{
         {
           "type": "long",
           "connect.parameters": {
-            "tidbType": "BIGINT"
+            "tidb_type": "BIGINT"
           }
         }
       ]
@@ -132,7 +132,7 @@ var expectedSchemaWithoutExtension = `{
       "type": {
         "type": "int",
         "connect.parameters": {
-          "tidbType": "INT UNSIGNED"
+          "tidb_type": "INT UNSIGNED"
         }
       }
     },
@@ -144,7 +144,7 @@ var expectedSchemaWithoutExtension = `{
         {
           "type": "int",
           "connect.parameters": {
-            "tidbType": "INT UNSIGNED"
+            "tidb_type": "INT UNSIGNED"
           }
         }
       ]
@@ -154,7 +154,7 @@ var expectedSchemaWithoutExtension = `{
       "type": {
         "type": "int",
         "connect.parameters": {
-          "tidbType": "INT UNSIGNED"
+          "tidb_type": "INT UNSIGNED"
         }
       }
     },
@@ -166,7 +166,7 @@ var expectedSchemaWithoutExtension = `{
         {
           "type": "int",
           "connect.parameters": {
-            "tidbType": "INT UNSIGNED"
+            "tidb_type": "INT UNSIGNED"
           }
         }
       ]
@@ -176,7 +176,7 @@ var expectedSchemaWithoutExtension = `{
       "type": {
         "type": "int",
         "connect.parameters": {
-          "tidbType": "INT UNSIGNED"
+          "tidb_type": "INT UNSIGNED"
         }
       }
     },
@@ -188,7 +188,7 @@ var expectedSchemaWithoutExtension = `{
         {
           "type": "int",
           "connect.parameters": {
-            "tidbType": "INT UNSIGNED"
+            "tidb_type": "INT UNSIGNED"
           }
         }
       ]
@@ -198,7 +198,7 @@ var expectedSchemaWithoutExtension = `{
       "type": {
         "type": "long",
         "connect.parameters": {
-          "tidbType": "INT UNSIGNED"
+          "tidb_type": "INT UNSIGNED"
         }
       }
     },
@@ -210,7 +210,7 @@ var expectedSchemaWithoutExtension = `{
         {
           "type": "long",
           "connect.parameters": {
-            "tidbType": "INT UNSIGNED"
+            "tidb_type": "INT UNSIGNED"
           }
         }
       ]
@@ -220,7 +220,7 @@ var expectedSchemaWithoutExtension = `{
       "type": {
         "type": "long",
         "connect.parameters": {
-          "tidbType": "BIGINT UNSIGNED"
+          "tidb_type": "BIGINT UNSIGNED"
         }
       }
     },
@@ -232,7 +232,7 @@ var expectedSchemaWithoutExtension = `{
         {
           "type": "long",
           "connect.parameters": {
-            "tidbType": "BIGINT UNSIGNED"
+            "tidb_type": "BIGINT UNSIGNED"
           }
         }
       ]
@@ -242,7 +242,7 @@ var expectedSchemaWithoutExtension = `{
       "type": {
         "type": "double",
         "connect.parameters": {
-          "tidbType": "FLOAT"
+          "tidb_type": "FLOAT"
         }
       }
     },
@@ -254,7 +254,7 @@ var expectedSchemaWithoutExtension = `{
         {
           "type": "double",
           "connect.parameters": {
-            "tidbType": "FLOAT"
+            "tidb_type": "FLOAT"
           }
         }
       ]
@@ -264,7 +264,7 @@ var expectedSchemaWithoutExtension = `{
       "type": {
         "type": "double",
         "connect.parameters": {
-          "tidbType": "DOUBLE"
+          "tidb_type": "DOUBLE"
         }
       }
     },
@@ -276,7 +276,7 @@ var expectedSchemaWithoutExtension = `{
         {
           "type": "double",
           "connect.parameters": {
-            "tidbType": "DOUBLE"
+            "tidb_type": "DOUBLE"
           }
         }
       ]
@@ -287,7 +287,7 @@ var expectedSchemaWithoutExtension = `{
         "type": "bytes",
         "connect.parameters": {
           "length": "1",
-          "tidbType": "BIT"
+          "tidb_type": "BIT"
         }
       }
     },
@@ -300,7 +300,7 @@ var expectedSchemaWithoutExtension = `{
           "type": "bytes",
           "connect.parameters": {
             "length": "1",
-            "tidbType": "BIT"
+            "tidb_type": "BIT"
           }
         }
       ]
@@ -310,7 +310,7 @@ var expectedSchemaWithoutExtension = `{
       "type": {
         "type": "bytes",
         "connect.parameters": {
-          "tidbType": "DECIMAL"
+          "tidb_type": "DECIMAL"
         },
         "logicalType": "decimal",
         "precision": 10,
@@ -325,7 +325,7 @@ var expectedSchemaWithoutExtension = `{
         {
           "type": "bytes",
           "connect.parameters": {
-            "tidbType": "DECIMAL"
+            "tidb_type": "DECIMAL"
           },
           "logicalType": "decimal",
           "precision": 10,
@@ -338,7 +338,7 @@ var expectedSchemaWithoutExtension = `{
       "type": {
         "type": "string",
         "connect.parameters": {
-          "tidbType": "TEXT"
+          "tidb_type": "TEXT"
         }
       }
     },
@@ -350,7 +350,7 @@ var expectedSchemaWithoutExtension = `{
         {
           "type": "string",
           "connect.parameters": {
-            "tidbType": "TEXT"
+            "tidb_type": "TEXT"
           }
         }
       ]
@@ -360,7 +360,7 @@ var expectedSchemaWithoutExtension = `{
       "type": {
         "type": "string",
         "connect.parameters": {
-          "tidbType": "TEXT"
+          "tidb_type": "TEXT"
         }
       }
     },
@@ -372,7 +372,7 @@ var expectedSchemaWithoutExtension = `{
         {
           "type": "string",
           "connect.parameters": {
-            "tidbType": "TEXT"
+            "tidb_type": "TEXT"
           }
         }
       ]
@@ -382,7 +382,7 @@ var expectedSchemaWithoutExtension = `{
       "type": {
         "type": "string",
         "connect.parameters": {
-          "tidbType": "TEXT"
+          "tidb_type": "TEXT"
         }
       }
     },
@@ -394,7 +394,7 @@ var expectedSchemaWithoutExtension = `{
         {
           "type": "string",
           "connect.parameters": {
-            "tidbType": "TEXT"
+            "tidb_type": "TEXT"
           }
         }
       ]
@@ -404,7 +404,7 @@ var expectedSchemaWithoutExtension = `{
       "type": {
         "type": "string",
         "connect.parameters": {
-          "tidbType": "TEXT"
+          "tidb_type": "TEXT"
         }
       }
     },
@@ -416,7 +416,7 @@ var expectedSchemaWithoutExtension = `{
         {
           "type": "string",
           "connect.parameters": {
-            "tidbType": "TEXT"
+            "tidb_type": "TEXT"
           }
         }
       ]
@@ -426,7 +426,7 @@ var expectedSchemaWithoutExtension = `{
       "type": {
         "type": "string",
         "connect.parameters": {
-          "tidbType": "TEXT"
+          "tidb_type": "TEXT"
         }
       }
     },
@@ -438,7 +438,7 @@ var expectedSchemaWithoutExtension = `{
         {
           "type": "string",
           "connect.parameters": {
-            "tidbType": "TEXT"
+            "tidb_type": "TEXT"
           }
         }
       ]
@@ -448,7 +448,7 @@ var expectedSchemaWithoutExtension = `{
       "type": {
         "type": "string",
         "connect.parameters": {
-          "tidbType": "TEXT"
+          "tidb_type": "TEXT"
         }
       }
     },
@@ -460,7 +460,7 @@ var expectedSchemaWithoutExtension = `{
         {
           "type": "string",
           "connect.parameters": {
-            "tidbType": "TEXT"
+            "tidb_type": "TEXT"
           }
         }
       ]
@@ -470,7 +470,7 @@ var expectedSchemaWithoutExtension = `{
       "type": {
         "type": "string",
         "connect.parameters": {
-          "tidbType": "TEXT"
+          "tidb_type": "TEXT"
         }
       }
     },
@@ -482,7 +482,7 @@ var expectedSchemaWithoutExtension = `{
         {
           "type": "string",
           "connect.parameters": {
-            "tidbType": "TEXT"
+            "tidb_type": "TEXT"
           }
         }
       ]
@@ -492,7 +492,7 @@ var expectedSchemaWithoutExtension = `{
       "type": {
         "type": "bytes",
         "connect.parameters": {
-          "tidbType": "BLOB"
+          "tidb_type": "BLOB"
         }
       }
     },
@@ -504,7 +504,7 @@ var expectedSchemaWithoutExtension = `{
         {
           "type": "bytes",
           "connect.parameters": {
-            "tidbType": "BLOB"
+            "tidb_type": "BLOB"
           }
         }
       ]
@@ -514,7 +514,7 @@ var expectedSchemaWithoutExtension = `{
       "type": {
         "type": "bytes",
         "connect.parameters": {
-          "tidbType": "BLOB"
+          "tidb_type": "BLOB"
         }
       }
     },
@@ -526,7 +526,7 @@ var expectedSchemaWithoutExtension = `{
         {
           "type": "bytes",
           "connect.parameters": {
-            "tidbType": "BLOB"
+            "tidb_type": "BLOB"
           }
         }
       ]
@@ -536,7 +536,7 @@ var expectedSchemaWithoutExtension = `{
       "type": {
         "type": "bytes",
         "connect.parameters": {
-          "tidbType": "BLOB"
+          "tidb_type": "BLOB"
         }
       }
     },
@@ -548,7 +548,7 @@ var expectedSchemaWithoutExtension = `{
         {
           "type": "bytes",
           "connect.parameters": {
-            "tidbType": "BLOB"
+            "tidb_type": "BLOB"
           }
         }
       ]
@@ -558,7 +558,7 @@ var expectedSchemaWithoutExtension = `{
       "type": {
         "type": "bytes",
         "connect.parameters": {
-          "tidbType": "BLOB"
+          "tidb_type": "BLOB"
         }
       }
     },
@@ -570,7 +570,7 @@ var expectedSchemaWithoutExtension = `{
         {
           "type": "bytes",
           "connect.parameters": {
-            "tidbType": "BLOB"
+            "tidb_type": "BLOB"
           }
         }
       ]
@@ -580,7 +580,7 @@ var expectedSchemaWithoutExtension = `{
       "type": {
         "type": "bytes",
         "connect.parameters": {
-          "tidbType": "BLOB"
+          "tidb_type": "BLOB"
         }
       }
     },
@@ -592,7 +592,7 @@ var expectedSchemaWithoutExtension = `{
         {
           "type": "bytes",
           "connect.parameters": {
-            "tidbType": "BLOB"
+            "tidb_type": "BLOB"
           }
         }
       ]
@@ -602,7 +602,7 @@ var expectedSchemaWithoutExtension = `{
       "type": {
         "type": "bytes",
         "connect.parameters": {
-          "tidbType": "BLOB"
+          "tidb_type": "BLOB"
         }
       }
     },
@@ -614,7 +614,7 @@ var expectedSchemaWithoutExtension = `{
         {
           "type": "bytes",
           "connect.parameters": {
-            "tidbType": "BLOB"
+            "tidb_type": "BLOB"
           }
         }
       ]
@@ -624,7 +624,7 @@ var expectedSchemaWithoutExtension = `{
       "type": {
         "type": "bytes",
         "connect.parameters": {
-          "tidbType": "BLOB"
+          "tidb_type": "BLOB"
         }
       }
     },
@@ -636,7 +636,7 @@ var expectedSchemaWithoutExtension = `{
         {
           "type": "bytes",
           "connect.parameters": {
-            "tidbType": "BLOB"
+            "tidb_type": "BLOB"
           }
         }
       ]
@@ -647,7 +647,7 @@ var expectedSchemaWithoutExtension = `{
         "type": "string",
         "connect.parameters": {
           "allowed": "a\\,,b",
-          "tidbType": "ENUM"
+          "tidb_type": "ENUM"
         }
       }
     },
@@ -660,7 +660,7 @@ var expectedSchemaWithoutExtension = `{
           "type": "string",
           "connect.parameters": {
             "allowed": "a\\,,b",
-            "tidbType": "ENUM"
+            "tidb_type": "ENUM"
           }
         }
       ]
@@ -671,7 +671,7 @@ var expectedSchemaWithoutExtension = `{
         "type": "string",
         "connect.parameters": {
           "allowed": "a\\,,b",
-          "tidbType": "SET"
+          "tidb_type": "SET"
         }
       }
     },
@@ -684,7 +684,7 @@ var expectedSchemaWithoutExtension = `{
           "type": "string",
           "connect.parameters": {
             "allowed": "a\\,,b",
-            "tidbType": "SET"
+            "tidb_type": "SET"
           }
         }
       ]
@@ -694,7 +694,7 @@ var expectedSchemaWithoutExtension = `{
       "type": {
         "type": "string",
         "connect.parameters": {
-          "tidbType": "JSON"
+          "tidb_type": "JSON"
         }
       }
     },
@@ -706,7 +706,7 @@ var expectedSchemaWithoutExtension = `{
         {
           "type": "string",
           "connect.parameters": {
-            "tidbType": "JSON"
+            "tidb_type": "JSON"
           }
         }
       ]
@@ -716,7 +716,7 @@ var expectedSchemaWithoutExtension = `{
       "type": {
         "type": "string",
         "connect.parameters": {
-          "tidbType": "DATE"
+          "tidb_type": "DATE"
         }
       }
     },
@@ -728,7 +728,7 @@ var expectedSchemaWithoutExtension = `{
         {
           "type": "string",
           "connect.parameters": {
-            "tidbType": "DATE"
+            "tidb_type": "DATE"
           }
         }
       ]
@@ -738,7 +738,7 @@ var expectedSchemaWithoutExtension = `{
       "type": {
         "type": "string",
         "connect.parameters": {
-          "tidbType": "DATETIME"
+          "tidb_type": "DATETIME"
         }
       }
     },
@@ -750,7 +750,7 @@ var expectedSchemaWithoutExtension = `{
         {
           "type": "string",
           "connect.parameters": {
-            "tidbType": "DATETIME"
+            "tidb_type": "DATETIME"
           }
         }
       ]
@@ -760,7 +760,7 @@ var expectedSchemaWithoutExtension = `{
       "type": {
         "type": "string",
         "connect.parameters": {
-          "tidbType": "TIMESTAMP"
+          "tidb_type": "TIMESTAMP"
         }
       }
     },
@@ -772,7 +772,7 @@ var expectedSchemaWithoutExtension = `{
         {
           "type": "string",
           "connect.parameters": {
-            "tidbType": "TIMESTAMP"
+            "tidb_type": "TIMESTAMP"
           }
         }
       ]
@@ -782,7 +782,7 @@ var expectedSchemaWithoutExtension = `{
       "type": {
         "type": "string",
         "connect.parameters": {
-          "tidbType": "TIME"
+          "tidb_type": "TIME"
         }
       }
     },
@@ -794,7 +794,7 @@ var expectedSchemaWithoutExtension = `{
         {
           "type": "string",
           "connect.parameters": {
-            "tidbType": "TIME"
+            "tidb_type": "TIME"
           }
         }
       ]
@@ -804,7 +804,7 @@ var expectedSchemaWithoutExtension = `{
       "type": {
         "type": "int",
         "connect.parameters": {
-          "tidbType": "YEAR"
+          "tidb_type": "YEAR"
         }
       }
     },
@@ -816,7 +816,7 @@ var expectedSchemaWithoutExtension = `{
         {
           "type": "int",
           "connect.parameters": {
-            "tidbType": "YEAR"
+            "tidb_type": "YEAR"
           }
         }
       ]
@@ -833,7 +833,7 @@ var expectedSchemaWithExtension = `{
       "type": {
         "type": "int",
         "connect.parameters": {
-          "tidbType": "INT"
+          "tidb_type": "INT"
         }
       }
     },
@@ -845,7 +845,7 @@ var expectedSchemaWithExtension = `{
         {
           "type": "int",
           "connect.parameters": {
-            "tidbType": "INT"
+            "tidb_type": "INT"
           }
         }
       ]
@@ -855,7 +855,7 @@ var expectedSchemaWithExtension = `{
       "type": {
         "type": "int",
         "connect.parameters": {
-          "tidbType": "INT"
+          "tidb_type": "INT"
         }
       }
     },
@@ -867,7 +867,7 @@ var expectedSchemaWithExtension = `{
         {
           "type": "int",
           "connect.parameters": {
-            "tidbType": "INT"
+            "tidb_type": "INT"
           }
         }
       ]
@@ -877,7 +877,7 @@ var expectedSchemaWithExtension = `{
       "type": {
         "type": "int",
         "connect.parameters": {
-          "tidbType": "INT"
+          "tidb_type": "INT"
         }
       }
     },
@@ -889,7 +889,7 @@ var expectedSchemaWithExtension = `{
         {
           "type": "int",
           "connect.parameters": {
-            "tidbType": "INT"
+            "tidb_type": "INT"
           }
         }
       ]
@@ -899,7 +899,7 @@ var expectedSchemaWithExtension = `{
       "type": {
         "type": "int",
         "connect.parameters": {
-          "tidbType": "INT"
+          "tidb_type": "INT"
         }
       }
     },
@@ -911,7 +911,7 @@ var expectedSchemaWithExtension = `{
         {
           "type": "int",
           "connect.parameters": {
-            "tidbType": "INT"
+            "tidb_type": "INT"
           }
         }
       ]
@@ -921,7 +921,7 @@ var expectedSchemaWithExtension = `{
       "type": {
         "type": "long",
         "connect.parameters": {
-          "tidbType": "BIGINT"
+          "tidb_type": "BIGINT"
         }
       }
     },
@@ -933,7 +933,7 @@ var expectedSchemaWithExtension = `{
         {
           "type": "long",
           "connect.parameters": {
-            "tidbType": "BIGINT"
+            "tidb_type": "BIGINT"
           }
         }
       ]
@@ -943,7 +943,7 @@ var expectedSchemaWithExtension = `{
       "type": {
         "type": "int",
         "connect.parameters": {
-          "tidbType": "INT UNSIGNED"
+          "tidb_type": "INT UNSIGNED"
         }
       }
     },
@@ -955,7 +955,7 @@ var expectedSchemaWithExtension = `{
         {
           "type": "int",
           "connect.parameters": {
-            "tidbType": "INT UNSIGNED"
+            "tidb_type": "INT UNSIGNED"
           }
         }
       ]
@@ -965,7 +965,7 @@ var expectedSchemaWithExtension = `{
       "type": {
         "type": "int",
         "connect.parameters": {
-          "tidbType": "INT UNSIGNED"
+          "tidb_type": "INT UNSIGNED"
         }
       }
     },
@@ -977,7 +977,7 @@ var expectedSchemaWithExtension = `{
         {
           "type": "int",
           "connect.parameters": {
-            "tidbType": "INT UNSIGNED"
+            "tidb_type": "INT UNSIGNED"
           }
         }
       ]
@@ -987,7 +987,7 @@ var expectedSchemaWithExtension = `{
       "type": {
         "type": "int",
         "connect.parameters": {
-          "tidbType": "INT UNSIGNED"
+          "tidb_type": "INT UNSIGNED"
         }
       }
     },
@@ -999,7 +999,7 @@ var expectedSchemaWithExtension = `{
         {
           "type": "int",
           "connect.parameters": {
-            "tidbType": "INT UNSIGNED"
+            "tidb_type": "INT UNSIGNED"
           }
         }
       ]
@@ -1009,7 +1009,7 @@ var expectedSchemaWithExtension = `{
       "type": {
         "type": "long",
         "connect.parameters": {
-          "tidbType": "INT UNSIGNED"
+          "tidb_type": "INT UNSIGNED"
         }
       }
     },
@@ -1021,7 +1021,7 @@ var expectedSchemaWithExtension = `{
         {
           "type": "long",
           "connect.parameters": {
-            "tidbType": "INT UNSIGNED"
+            "tidb_type": "INT UNSIGNED"
           }
         }
       ]
@@ -1031,7 +1031,7 @@ var expectedSchemaWithExtension = `{
       "type": {
         "type": "long",
         "connect.parameters": {
-          "tidbType": "BIGINT UNSIGNED"
+          "tidb_type": "BIGINT UNSIGNED"
         }
       }
     },
@@ -1043,7 +1043,7 @@ var expectedSchemaWithExtension = `{
         {
           "type": "long",
           "connect.parameters": {
-            "tidbType": "BIGINT UNSIGNED"
+            "tidb_type": "BIGINT UNSIGNED"
           }
         }
       ]
@@ -1053,7 +1053,7 @@ var expectedSchemaWithExtension = `{
       "type": {
         "type": "double",
         "connect.parameters": {
-          "tidbType": "FLOAT"
+          "tidb_type": "FLOAT"
         }
       }
     },
@@ -1065,7 +1065,7 @@ var expectedSchemaWithExtension = `{
         {
           "type": "double",
           "connect.parameters": {
-            "tidbType": "FLOAT"
+            "tidb_type": "FLOAT"
           }
         }
       ]
@@ -1075,7 +1075,7 @@ var expectedSchemaWithExtension = `{
       "type": {
         "type": "double",
         "connect.parameters": {
-          "tidbType": "DOUBLE"
+          "tidb_type": "DOUBLE"
         }
       }
     },
@@ -1087,7 +1087,7 @@ var expectedSchemaWithExtension = `{
         {
           "type": "double",
           "connect.parameters": {
-            "tidbType": "DOUBLE"
+            "tidb_type": "DOUBLE"
           }
         }
       ]
@@ -1098,7 +1098,7 @@ var expectedSchemaWithExtension = `{
         "type": "bytes",
         "connect.parameters": {
           "length": "1",
-          "tidbType": "BIT"
+          "tidb_type": "BIT"
         }
       }
     },
@@ -1111,7 +1111,7 @@ var expectedSchemaWithExtension = `{
           "type": "bytes",
           "connect.parameters": {
             "length": "1",
-            "tidbType": "BIT"
+            "tidb_type": "BIT"
           }
         }
       ]
@@ -1121,7 +1121,7 @@ var expectedSchemaWithExtension = `{
       "type": {
         "type": "bytes",
         "connect.parameters": {
-          "tidbType": "DECIMAL"
+          "tidb_type": "DECIMAL"
         },
         "logicalType": "decimal",
         "precision": 10,
@@ -1136,7 +1136,7 @@ var expectedSchemaWithExtension = `{
         {
           "type": "bytes",
           "connect.parameters": {
-            "tidbType": "DECIMAL"
+            "tidb_type": "DECIMAL"
           },
           "logicalType": "decimal",
           "precision": 10,
@@ -1149,7 +1149,7 @@ var expectedSchemaWithExtension = `{
       "type": {
         "type": "string",
         "connect.parameters": {
-          "tidbType": "TEXT"
+          "tidb_type": "TEXT"
         }
       }
     },
@@ -1161,7 +1161,7 @@ var expectedSchemaWithExtension = `{
         {
           "type": "string",
           "connect.parameters": {
-            "tidbType": "TEXT"
+            "tidb_type": "TEXT"
           }
         }
       ]
@@ -1171,7 +1171,7 @@ var expectedSchemaWithExtension = `{
       "type": {
         "type": "string",
         "connect.parameters": {
-          "tidbType": "TEXT"
+          "tidb_type": "TEXT"
         }
       }
     },
@@ -1183,7 +1183,7 @@ var expectedSchemaWithExtension = `{
         {
           "type": "string",
           "connect.parameters": {
-            "tidbType": "TEXT"
+            "tidb_type": "TEXT"
           }
         }
       ]
@@ -1193,7 +1193,7 @@ var expectedSchemaWithExtension = `{
       "type": {
         "type": "string",
         "connect.parameters": {
-          "tidbType": "TEXT"
+          "tidb_type": "TEXT"
         }
       }
     },
@@ -1205,7 +1205,7 @@ var expectedSchemaWithExtension = `{
         {
           "type": "string",
           "connect.parameters": {
-            "tidbType": "TEXT"
+            "tidb_type": "TEXT"
           }
         }
       ]
@@ -1215,7 +1215,7 @@ var expectedSchemaWithExtension = `{
       "type": {
         "type": "string",
         "connect.parameters": {
-          "tidbType": "TEXT"
+          "tidb_type": "TEXT"
         }
       }
     },
@@ -1227,7 +1227,7 @@ var expectedSchemaWithExtension = `{
         {
           "type": "string",
           "connect.parameters": {
-            "tidbType": "TEXT"
+            "tidb_type": "TEXT"
           }
         }
       ]
@@ -1237,7 +1237,7 @@ var expectedSchemaWithExtension = `{
       "type": {
         "type": "string",
         "connect.parameters": {
-          "tidbType": "TEXT"
+          "tidb_type": "TEXT"
         }
       }
     },
@@ -1249,7 +1249,7 @@ var expectedSchemaWithExtension = `{
         {
           "type": "string",
           "connect.parameters": {
-            "tidbType": "TEXT"
+            "tidb_type": "TEXT"
           }
         }
       ]
@@ -1259,7 +1259,7 @@ var expectedSchemaWithExtension = `{
       "type": {
         "type": "string",
         "connect.parameters": {
-          "tidbType": "TEXT"
+          "tidb_type": "TEXT"
         }
       }
     },
@@ -1271,7 +1271,7 @@ var expectedSchemaWithExtension = `{
         {
           "type": "string",
           "connect.parameters": {
-            "tidbType": "TEXT"
+            "tidb_type": "TEXT"
           }
         }
       ]
@@ -1281,7 +1281,7 @@ var expectedSchemaWithExtension = `{
       "type": {
         "type": "string",
         "connect.parameters": {
-          "tidbType": "TEXT"
+          "tidb_type": "TEXT"
         }
       }
     },
@@ -1293,7 +1293,7 @@ var expectedSchemaWithExtension = `{
         {
           "type": "string",
           "connect.parameters": {
-            "tidbType": "TEXT"
+            "tidb_type": "TEXT"
           }
         }
       ]
@@ -1303,7 +1303,7 @@ var expectedSchemaWithExtension = `{
       "type": {
         "type": "bytes",
         "connect.parameters": {
-          "tidbType": "BLOB"
+          "tidb_type": "BLOB"
         }
       }
     },
@@ -1315,7 +1315,7 @@ var expectedSchemaWithExtension = `{
         {
           "type": "bytes",
           "connect.parameters": {
-            "tidbType": "BLOB"
+            "tidb_type": "BLOB"
           }
         }
       ]
@@ -1325,7 +1325,7 @@ var expectedSchemaWithExtension = `{
       "type": {
         "type": "bytes",
         "connect.parameters": {
-          "tidbType": "BLOB"
+          "tidb_type": "BLOB"
         }
       }
     },
@@ -1337,7 +1337,7 @@ var expectedSchemaWithExtension = `{
         {
           "type": "bytes",
           "connect.parameters": {
-            "tidbType": "BLOB"
+            "tidb_type": "BLOB"
           }
         }
       ]
@@ -1347,7 +1347,7 @@ var expectedSchemaWithExtension = `{
       "type": {
         "type": "bytes",
         "connect.parameters": {
-          "tidbType": "BLOB"
+          "tidb_type": "BLOB"
         }
       }
     },
@@ -1359,7 +1359,7 @@ var expectedSchemaWithExtension = `{
         {
           "type": "bytes",
           "connect.parameters": {
-            "tidbType": "BLOB"
+            "tidb_type": "BLOB"
           }
         }
       ]
@@ -1369,7 +1369,7 @@ var expectedSchemaWithExtension = `{
       "type": {
         "type": "bytes",
         "connect.parameters": {
-          "tidbType": "BLOB"
+          "tidb_type": "BLOB"
         }
       }
     },
@@ -1381,7 +1381,7 @@ var expectedSchemaWithExtension = `{
         {
           "type": "bytes",
           "connect.parameters": {
-            "tidbType": "BLOB"
+            "tidb_type": "BLOB"
           }
         }
       ]
@@ -1391,7 +1391,7 @@ var expectedSchemaWithExtension = `{
       "type": {
         "type": "bytes",
         "connect.parameters": {
-          "tidbType": "BLOB"
+          "tidb_type": "BLOB"
         }
       }
     },
@@ -1403,7 +1403,7 @@ var expectedSchemaWithExtension = `{
         {
           "type": "bytes",
           "connect.parameters": {
-            "tidbType": "BLOB"
+            "tidb_type": "BLOB"
           }
         }
       ]
@@ -1413,7 +1413,7 @@ var expectedSchemaWithExtension = `{
       "type": {
         "type": "bytes",
         "connect.parameters": {
-          "tidbType": "BLOB"
+          "tidb_type": "BLOB"
         }
       }
     },
@@ -1425,7 +1425,7 @@ var expectedSchemaWithExtension = `{
         {
           "type": "bytes",
           "connect.parameters": {
-            "tidbType": "BLOB"
+            "tidb_type": "BLOB"
           }
         }
       ]
@@ -1435,7 +1435,7 @@ var expectedSchemaWithExtension = `{
       "type": {
         "type": "bytes",
         "connect.parameters": {
-          "tidbType": "BLOB"
+          "tidb_type": "BLOB"
         }
       }
     },
@@ -1447,7 +1447,7 @@ var expectedSchemaWithExtension = `{
         {
           "type": "bytes",
           "connect.parameters": {
-            "tidbType": "BLOB"
+            "tidb_type": "BLOB"
           }
         }
       ]
@@ -1458,7 +1458,7 @@ var expectedSchemaWithExtension = `{
         "type": "string",
         "connect.parameters": {
           "allowed": "a\\,,b",
-          "tidbType": "ENUM"
+          "tidb_type": "ENUM"
         }
       }
     },
@@ -1471,7 +1471,7 @@ var expectedSchemaWithExtension = `{
           "type": "string",
           "connect.parameters": {
             "allowed": "a\\,,b",
-            "tidbType": "ENUM"
+            "tidb_type": "ENUM"
           }
         }
       ]
@@ -1482,7 +1482,7 @@ var expectedSchemaWithExtension = `{
         "type": "string",
         "connect.parameters": {
           "allowed": "a\\,,b",
-          "tidbType": "SET"
+          "tidb_type": "SET"
         }
       }
     },
@@ -1495,7 +1495,7 @@ var expectedSchemaWithExtension = `{
           "type": "string",
           "connect.parameters": {
             "allowed": "a\\,,b",
-            "tidbType": "SET"
+            "tidb_type": "SET"
           }
         }
       ]
@@ -1505,7 +1505,7 @@ var expectedSchemaWithExtension = `{
       "type": {
         "type": "string",
         "connect.parameters": {
-          "tidbType": "JSON"
+          "tidb_type": "JSON"
         }
       }
     },
@@ -1517,7 +1517,7 @@ var expectedSchemaWithExtension = `{
         {
           "type": "string",
           "connect.parameters": {
-            "tidbType": "JSON"
+            "tidb_type": "JSON"
           }
         }
       ]
@@ -1527,7 +1527,7 @@ var expectedSchemaWithExtension = `{
       "type": {
         "type": "string",
         "connect.parameters": {
-          "tidbType": "DATE"
+          "tidb_type": "DATE"
         }
       }
     },
@@ -1539,7 +1539,7 @@ var expectedSchemaWithExtension = `{
         {
           "type": "string",
           "connect.parameters": {
-            "tidbType": "DATE"
+            "tidb_type": "DATE"
           }
         }
       ]
@@ -1549,7 +1549,7 @@ var expectedSchemaWithExtension = `{
       "type": {
         "type": "string",
         "connect.parameters": {
-          "tidbType": "DATETIME"
+          "tidb_type": "DATETIME"
         }
       }
     },
@@ -1561,7 +1561,7 @@ var expectedSchemaWithExtension = `{
         {
           "type": "string",
           "connect.parameters": {
-            "tidbType": "DATETIME"
+            "tidb_type": "DATETIME"
           }
         }
       ]
@@ -1571,7 +1571,7 @@ var expectedSchemaWithExtension = `{
       "type": {
         "type": "string",
         "connect.parameters": {
-          "tidbType": "TIMESTAMP"
+          "tidb_type": "TIMESTAMP"
         }
       }
     },
@@ -1583,7 +1583,7 @@ var expectedSchemaWithExtension = `{
         {
           "type": "string",
           "connect.parameters": {
-            "tidbType": "TIMESTAMP"
+            "tidb_type": "TIMESTAMP"
           }
         }
       ]
@@ -1593,7 +1593,7 @@ var expectedSchemaWithExtension = `{
       "type": {
         "type": "string",
         "connect.parameters": {
-          "tidbType": "TIME"
+          "tidb_type": "TIME"
         }
       }
     },
@@ -1605,7 +1605,7 @@ var expectedSchemaWithExtension = `{
         {
           "type": "string",
           "connect.parameters": {
-            "tidbType": "TIME"
+            "tidb_type": "TIME"
           }
         }
       ]
@@ -1615,7 +1615,7 @@ var expectedSchemaWithExtension = `{
       "type": {
         "type": "int",
         "connect.parameters": {
-          "tidbType": "YEAR"
+          "tidb_type": "YEAR"
         }
       }
     },
@@ -1627,17 +1627,21 @@ var expectedSchemaWithExtension = `{
         {
           "type": "int",
           "connect.parameters": {
-            "tidbType": "YEAR"
+            "tidb_type": "YEAR"
           }
         }
       ]
     },
     {
-      "name": "tidbOp",
+      "name": "_tidb_op",
       "type": "string"
     },
     {
-      "name": "tidbCommitTs",
+      "name": "_tidb_commit_ts",
+      "type": "long"
+    },
+    {
+      "name": "_tidb_physical_time",
       "type": "long"
     }
   ]
