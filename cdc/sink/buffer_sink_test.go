@@ -105,7 +105,9 @@ func TestCleanBufferedData(t *testing.T) {
 	t.Parallel()
 
 	tblID := model.TableID(1)
-	b := newBufferSink(newBlackHoleSink(context.TODO()), 5)
+	ctx, cancel := context.WithCancel(context.TODO())
+	defer cancel()
+	b := newBufferSink(newBlackHoleSink(ctx), 5)
 	b.buffer[tblID] = []*model.RowChangedEvent{}
 	_, ok := b.buffer[tblID]
 	require.True(t, ok)
