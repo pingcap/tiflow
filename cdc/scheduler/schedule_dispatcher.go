@@ -181,11 +181,12 @@ func (s *BaseScheduleDispatcher) resetDrainingTarget() {
 		log.Info("DrainCapture: Done", zap.String("target", s.drainTarget))
 		s.drainTarget = captureIDNotDraining
 	}
-	// if no table on the `drainTarget`, treat it as the draining process finished.
-	//if s.tables.CountTableByCaptureID(s.drainTarget) == 0 {
-	//	log.Info("DrainCapture: Done", zap.String("target", s.drainTarget))
-	//	s.drainTarget = captureIDNotDraining
-	//}
+
+	if len(s.captures) < 2 {
+		log.Info("DrainCapture: Abort, not enough running captures",
+			zap.String("target", s.drainTarget))
+		s.drainTarget = captureIDNotDraining
+	}
 }
 
 func (s *BaseScheduleDispatcher) setCaptures(captures map[model.CaptureID]*model.CaptureInfo) {
@@ -449,7 +450,7 @@ func (s *BaseScheduleDispatcher) findDiffTables(
 			toRemove = append(toRemove, tableID)
 		}
 		// the table is at the drainTarget, also remove it.
-		if record.CaptureID == s.drainTarget {
+		if record.CaptureID == s.drainTarget && record.Status == util.RunningTable {
 			toRemove = append(toRemove, tableID)
 		}
 	}
