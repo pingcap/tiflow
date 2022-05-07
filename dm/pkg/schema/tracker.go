@@ -439,19 +439,18 @@ func (tr *Tracker) RecreateTables(logCtx *tcontext.Context, tablesToDrop []*filt
 				zap.Stringer("table", tbl), log.ShortError(err))
 		}
 	}
-	for schemaName := range tablesToCreate {
-		// TODO: Figure out how to recover from errors.
-		if err := tr.CreateSchemaIfNotExists(schemaName); err != nil {
-			logCtx.L().Error("failed to rollback schema on schema tracker: cannot create schema",
-				zap.String("schema", schemaName), log.ShortError(err))
-		}
-	}
-	return tr.batchCreateTableIfNotExist(tablesToCreate)
+	return tr.BatchCreateTableIfNotExist(tablesToCreate)
 }
 
-func (tr *Tracker) batchCreateTableIfNotExist(tablesToCreate map[string]map[string]*model.TableInfo) error {
+// BatchCreateTableIfNotExist will batch creating tables per schema. If the schema does not exist, it will create it.
+// The argument is { database name -> { table name -> TableInfo } }.
+func (tr *Tracker) BatchCreateTableIfNotExist(tablesToCreate map[string]map[string]*model.TableInfo) error {
 	tr.se.SetValue(sessionctx.QueryString, "skip")
 	for schema, tableNameInfo := range tablesToCreate {
+		if err := tr.CreateSchemaIfNotExists(schema); err != nil {
+			return err
+		}
+
 		var cloneTis []*model.TableInfo
 		for table, ti := range tableNameInfo {
 			cloneTi := cloneTableInfo(ti)        // clone TableInfo w.r.t the warning of the CreateTable function

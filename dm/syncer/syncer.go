@@ -354,11 +354,6 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 	}
 	rollbackHolder.Add(fr.FuncRollback{Name: "close-DBs", Fn: s.closeDBs})
 
-	s.schemaTracker, err = schema.NewTracker(ctx, s.cfg.Name, s.cfg.To.Session, s.downstreamTrackConn)
-	if err != nil {
-		return terror.ErrSchemaTrackerInit.Delegate(err)
-	}
-
 	if s.cfg.CollationCompatible == config.StrictCollationCompatible {
 		s.charsetAndDefaultCollation, s.idAndCollationMap, err = dbconn.GetCharsetAndCollationInfo(tctx, s.fromConn)
 		if err != nil {
@@ -1556,13 +1551,17 @@ func (s *Syncer) updateTSOffset(ctx context.Context) error {
 
 // Run starts running for sync, we should guarantee it can rerun when paused.
 func (s *Syncer) Run(ctx context.Context) (err error) {
-	if !s.schemaLoaded.Load() {
-		err = s.checkpoint.LoadIntoSchemaTracker(ctx, s.schemaTracker)
-		if err != nil {
-			return err
-		}
-		s.schemaLoaded.Store(true)
+	s.schemaTracker, err = schema.NewTracker(ctx, s.cfg.Name, s.cfg.To.Session, s.downstreamTrackConn)
+	if err != nil {
+		return terror.ErrSchemaTrackerInit.Delegate(err)
 	}
+
+	err = s.checkpoint.LoadIntoSchemaTracker(ctx, s.schemaTracker)
+	if err != nil {
+		return err
+	}
+	// TODO: not sure if schemaLoaded is needed by data validator, will remove it later.
+	s.schemaLoaded.Store(true)
 
 	runCtx, runCancel := context.WithCancel(context.Background())
 	s.runCtx, s.runCancel = tcontext.NewContext(runCtx, s.tctx.L()), runCancel
@@ -3489,7 +3488,7 @@ func (s *Syncer) Kill() {
 	s.Close()
 }
 
-// stopSync stops stream and rollbacks checkpoint now it used by Close() and Pause().
+// stopSync stops stream and rollbacks checkpoint. Now it's used by Close() and Pause().
 func (s *Syncer) stopSync() {
 	// before re-write workflow for s.syncer, simply close it
 	// when resuming, re-create s.syncer
@@ -3500,10 +3499,10 @@ func (s *Syncer) stopSync() {
 
 	// try to rollback checkpoints, if they already flushed, no effect, this operation should call before close schemaTracker
 	prePos := s.checkpoint.GlobalPoint()
-	s.checkpoint.Rollback(s.schemaTracker)
+	s.checkpoint.Rollback()
 	currPos := s.checkpoint.GlobalPoint()
 	if binlog.CompareLocation(prePos, currPos, s.cfg.EnableGTID) != 0 {
-		s.tctx.L().Warn("something wrong with rollback global checkpoint", zap.Stringer("previous position", prePos), zap.Stringer("current position", currPos))
+		s.tctx.L().Warn("rollback global checkpoint", zap.Stringer("previous position", prePos), zap.Stringer("current position", currPos))
 	}
 }
 
@@ -3521,6 +3520,10 @@ func (s *Syncer) Pause() {
 		return
 	}
 	s.stopSync()
+	err := s.schemaTracker.Close()
+	if err != nil {
+		s.tctx.L().Error("fail to close schema tracker", log.ShortError(err))
+	}
 }
 
 // Resume resumes the paused process.

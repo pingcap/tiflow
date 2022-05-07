@@ -560,7 +560,7 @@ func (s *trackerSuite) TestBatchCreateTableIfNotExist(c *C) {
 	for i := range tables {
 		tablesToCreate[tables[i].Schema][tables[i].Name] = tiInfos[i]
 	}
-	err = tracker.batchCreateTableIfNotExist(tablesToCreate)
+	err = tracker.BatchCreateTableIfNotExist(tablesToCreate)
 	c.Assert(err, IsNil)
 	// 3. check all create success
 	for i := range tables {
@@ -580,7 +580,7 @@ func (s *trackerSuite) TestBatchCreateTableIfNotExist(c *C) {
 	err = tracker.DropTable(tables[0])
 	c.Assert(err, IsNil)
 	// 2. batch create
-	err = tracker.batchCreateTableIfNotExist(tablesToCreate)
+	err = tracker.BatchCreateTableIfNotExist(tablesToCreate)
 	c.Assert(err, IsNil)
 	// 3. check
 	for i := range tables {
@@ -595,7 +595,7 @@ func (s *trackerSuite) TestBatchCreateTableIfNotExist(c *C) {
 	ctx := context.Background()
 	err = tracker.Exec(ctx, "", `drop database testdb`)
 	c.Assert(err, IsNil)
-	err = tracker.batchCreateTableIfNotExist(tablesToCreate)
+	err = tracker.BatchCreateTableIfNotExist(tablesToCreate)
 	c.Assert(err, NotNil)
 }
 
