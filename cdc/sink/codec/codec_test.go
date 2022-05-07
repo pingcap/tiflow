@@ -18,12 +18,11 @@ import (
 	"compress/zlib"
 	"testing"
 
-	"github.com/pingcap/check"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/codec/craft"
-	"github.com/pingcap/tiflow/pkg/util/testleak"
 	"github.com/pingcap/tiflow/proto/benchmark"
+	"github.com/stretchr/testify/require"
 )
 
 var (
@@ -186,11 +185,7 @@ var (
 	codecTestSliceAllocator = craft.NewSliceAllocator(512)
 )
 
-var _ = check.Suite(&codecTestSuite{})
-
-type codecTestSuite struct{}
-
-func (s *codecTestSuite) checkCompressedSize(messages []*MQMessage) (int, int) {
+func checkCompressedSize(messages []*MQMessage) (int, int) {
 	var buff bytes.Buffer
 	writer := zlib.NewWriter(&buff)
 	originalSize := 0
@@ -205,16 +200,16 @@ func (s *codecTestSuite) checkCompressedSize(messages []*MQMessage) (int, int) {
 	return originalSize, buff.Len()
 }
 
-func (s *codecTestSuite) encodeRowCase(c *check.C, encoder EventBatchEncoder, events []*model.RowChangedEvent) []*MQMessage {
+func encodeRowCase(t *testing.T, encoder EventBatchEncoder, events []*model.RowChangedEvent) []*MQMessage {
 	msg, err := codecEncodeRowCase(encoder, events)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	return msg
 }
 
-func (s *codecTestSuite) TestJsonVsCraftVsPB(c *check.C) {
-	defer testleak.AfterTest(c)()
-	c.Logf("| case | craft size | json size | protobuf 1 size | protobuf 2 size | craft compressed | json compressed | protobuf 1 compressed | protobuf 2 compressed |")
-	c.Logf("| :---- | :--------- | :-------- | :-------------- | :-------------- | :--------------- | :-------------- | :-------------------- | :-------------------- |")
+func TestJsonVsCraftVsPB(t *testing.T) {
+	t.Parallel()
+	t.Logf("| case | craft size | json size | protobuf 1 size | protobuf 2 size | craft compressed | json compressed | protobuf 1 compressed | protobuf 2 compressed |")
+	t.Logf("| :---- | :--------- | :-------- | :-------------- | :-------------- | :--------------- | :-------------- | :-------------------- | :-------------------- |")
 	for i, cs := range codecRowCases {
 		if len(cs) == 0 {
 			continue
@@ -222,20 +217,20 @@ func (s *codecTestSuite) TestJsonVsCraftVsPB(c *check.C) {
 		craftEncoder := NewCraftEventBatchEncoder()
 		craftEncoder.(*CraftEventBatchEncoder).maxMessageBytes = 8192
 		craftEncoder.(*CraftEventBatchEncoder).maxBatchSize = 64
-		craftMessages := s.encodeRowCase(c, craftEncoder, cs)
+		craftMessages := encodeRowCase(t, craftEncoder, cs)
 
 		jsonEncoder := NewJSONEventBatchEncoder()
 		jsonEncoder.(*JSONEventBatchEncoder).maxMessageBytes = 8192
 		jsonEncoder.(*JSONEventBatchEncoder).maxBatchSize = 64
-		jsonMessages := s.encodeRowCase(c, jsonEncoder, cs)
+		jsonMessages := encodeRowCase(t, jsonEncoder, cs)
 
 		protobuf1Messages := codecEncodeRowChangedPB1ToMessage(cs)
 		protobuf2Messages := codecEncodeRowChangedPB2ToMessage(cs)
-		craftOriginal, craftCompressed := s.checkCompressedSize(craftMessages)
-		jsonOriginal, jsonCompressed := s.checkCompressedSize(jsonMessages)
-		protobuf1Original, protobuf1Compressed := s.checkCompressedSize(protobuf1Messages)
-		protobuf2Original, protobuf2Compressed := s.checkCompressedSize(protobuf2Messages)
-		c.Logf("| case %d | %d | %d (%d%%)+ | %d (%d%%)+ | %d (%d%%)+ | %d | %d (%d%%)+ | %d (%d%%)+ | %d (%d%%)+ |", i,
+		craftOriginal, craftCompressed := checkCompressedSize(craftMessages)
+		jsonOriginal, jsonCompressed := checkCompressedSize(jsonMessages)
+		protobuf1Original, protobuf1Compressed := checkCompressedSize(protobuf1Messages)
+		protobuf2Original, protobuf2Compressed := checkCompressedSize(protobuf2Messages)
+		t.Logf("| case %d | %d | %d (%d%%)+ | %d (%d%%)+ | %d (%d%%)+ | %d | %d (%d%%)+ | %d (%d%%)+ | %d (%d%%)+ |", i,
 			craftOriginal, jsonOriginal, 100*jsonOriginal/craftOriginal-100,
 			protobuf1Original, 100*protobuf1Original/craftOriginal-100,
 			protobuf2Original, 100*protobuf2Original/craftOriginal-100,
