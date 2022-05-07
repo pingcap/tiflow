@@ -370,6 +370,9 @@ func (tr *Tracker) Reset() error {
 
 // Close close a tracker.
 func (tr *Tracker) Close() error {
+	if tr == nil {
+		return nil
+	}
 	if !tr.closed.CAS(false, true) {
 		return nil
 	}
