@@ -683,6 +683,9 @@ func genFilterRuleName(sourceName string, idx int) string {
 }
 
 func OpenAPIStartTaskReqToTaskCliArgs(req openapi.StartTaskRequest) (*TaskCliArgs, error) {
+	if req.StartTime == nil && req.SafeModeTimeDuration == nil {
+		return nil, nil
+	}
 	cliArgs := &TaskCliArgs{}
 	if req.StartTime != nil {
 		cliArgs.StartTime = *req.StartTime

@@ -680,7 +680,7 @@ func (s *Server) startTask(ctx context.Context, taskName string, req openapi.Sta
 		return terror.Annotate(err, "while converting task command line arguments")
 	}
 
-	if cliArgs.StartTime == "" {
+	if cliArgs == nil {
 		err = ha.DeleteAllTaskCliArgs(s.etcdClient, taskName)
 		if err != nil {
 			return terror.Annotate(err, "while removing task command line arguments")
