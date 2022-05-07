@@ -27,7 +27,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/pdtime"
+	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/pingcap/tiflow/pkg/regionspan"
 	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/pingcap/tiflow/pkg/security"
@@ -61,7 +61,7 @@ func newMockCDCKVClient(
 	kvStorage tikv.Storage,
 	grpcPool kv.GrpcPool,
 	regionCache *tikv.RegionCache,
-	pdClock pdtime.Clock,
+	pdClock pdutil.Clock,
 	changefeed model.ChangeFeedID,
 	cfg *config.KVClientConfig,
 ) kv.CDCKVClient {
@@ -127,7 +127,7 @@ func newPullerForTest(
 	regionCache := tikv.NewRegionCache(pdCli)
 	defer regionCache.Close()
 	plr := NewPuller(
-		ctx, pdCli, grpcPool, regionCache, store, pdtime.NewClock4Test(),
+		ctx, pdCli, grpcPool, regionCache, store, pdutil.NewClock4Test(),
 		model.DefaultChangeFeedID("changefeed-id-test"),
 		checkpointTs, spans, config.GetDefaultServerConfig().KVClient)
 	wg.Add(1)
