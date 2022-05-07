@@ -490,9 +490,10 @@ func (s *Server) getSourceWorkers(needLock bool) map[string]*SourceWorker {
 		s.Lock()
 		defer s.Unlock()
 	}
-	sws := make(map[string]*SourceWorker, len(s.workers))
-	for source, w := range s.workers {
-		sws[source] = w
+	// return workers just have worker for temp.
+	s.workers = make(map[string]*SourceWorker, 0)
+	if s.worker != nil {
+		s.workers[s.worker.cfg.SourceID] = s.worker
 	}
 	return s.workers
 }
@@ -512,7 +513,7 @@ func (s *Server) setWorker(worker *SourceWorker, needLock bool) {
 		s.Lock()
 		defer s.Unlock()
 	}
-	s.workers[worker.cfg.SourceID] = worker
+	s.worker = worker
 }
 
 // nolint:unparam
