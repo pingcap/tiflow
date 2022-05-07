@@ -1501,16 +1501,13 @@ func TestDrainingCaptureWhileAddingTable(t *testing.T) {
 
 	// new table `table-4` should be adding to `capture-1`
 	tablesByCapture := dispatcher.tables.GetAllTablesGroupedByCaptures()
-	tables4Capture1 := tablesByCapture["capture-1"]
-	require.Equal(t, 3, len(tables4Capture1))
-	require.Equal(t, util.AddingTable, tables4Capture1[4].Status)
+	require.Equal(t, 1, dispatcher.tables.CountTableByCaptureIDAndStatus("capture-1", util.AddingTable))
+	require.Equal(t, 3, dispatcher.tables.CountTableByCaptureID("capture-1"))
 	dispatcher.OnAgentFinishedTableOperation("capture-1", 4, defaultEpoch)
 
 	// tables in the `capture-2` should be in `RemovingTable` status
-	tables4Capture2 := tablesByCapture["capture-2"]
-	require.Equal(t, 2, len(tables4Capture2))
-	for _, record := range tables4Capture2 {
-		require.Equal(t, util.RemovingTable, record.Status)
+	require.Equal(t, 2, dispatcher.tables.CountTableByCaptureIDAndStatus("capture-2", util.RemovingTable))
+	for _, record := range tablesByCapture["capture-2"] {
 		dispatcher.OnAgentFinishedTableOperation("capture-2", record.TableID, defaultEpoch)
 	}
 
@@ -1521,17 +1518,15 @@ func TestDrainingCaptureWhileAddingTable(t *testing.T) {
 	communicator.AssertExpectations(t)
 
 	// all tables should in capture-1, and 2 in `AddingTable` status
-	tablesByCapture = dispatcher.tables.GetAllTablesGroupedByCaptures()
-	require.Equal(t, 0, len(tablesByCapture["capture-2"]))
-	tables4Capture1 = tablesByCapture["capture-1"]
-	count := 0
-	for _, record := range tables4Capture1 {
+	require.Equal(t, 2, dispatcher.tables.CountTableByCaptureIDAndStatus("capture-1", util.AddingTable))
+	require.Equal(t, 5, dispatcher.tables.CountTableByCaptureID("capture-1"))
+	require.Equal(t, 0, dispatcher.tables.CountTableByCaptureID("capture-2"))
+
+	for _, record := range dispatcher.tables.GetAllTablesGroupedByCaptures()["capture-1"] {
 		if record.Status == util.AddingTable {
 			dispatcher.OnAgentFinishedTableOperation("capture-1", record.TableID, defaultEpoch)
-			count += 1
 		}
 	}
-	require.Equal(t, count, 2)
 
 	dispatcher.OnAgentCheckpoint("capture-1", 1300, 1550)
 	checkpointTs, resolvedTs, err = dispatcher.Tick(ctx, 1300, []model.TableID{0, 1, 2, 3, 4}, defaultMockCaptureInfos)
@@ -1651,7 +1646,6 @@ func TestDrainCaptureWhileMoveTable(t *testing.T) {
 	require.Nil(t, err)
 
 	// `MoveTable` during the process of draining capture, should fail
-	// todo: the target is not identical to the draining one, should it be ok ?
 	err = dispatcher.MoveTable(0, "capture-3")
 	require.Error(t, err, cerror.ErrSchedulerMoveTableNotAllowed)
 
@@ -1743,15 +1737,12 @@ func TestDrainingCaptureWhileRebalance(t *testing.T) {
 	require.Equal(t, CheckpointCannotProceed, resolvedTs)
 	communicator.AssertExpectations(t)
 
-	tables4Capture2 := dispatcher.tables.GetAllTablesGroupedByCaptures()["capture-2"]
-	count := 0
-	for _, record := range tables4Capture2 {
+	require.Equal(t, 1, dispatcher.tables.CountTableByCaptureIDAndStatus("capture-2", util.RemovingTable))
+	for _, record := range dispatcher.tables.GetAllTablesGroupedByCaptures()["capture-2"] {
 		if record.Status == util.RemovingTable {
-			count++
 			dispatcher.OnAgentFinishedTableOperation("capture-2", record.TableID, defaultEpoch)
 		}
 	}
-	require.Equal(t, 1, count)
 
 	// one table removed, should be adding to `capture-1` in the next tick, but not happened yet.
 	err = dispatcher.DrainCapture("capture-1")
@@ -1781,15 +1772,12 @@ func TestDrainingCaptureWhileRebalance(t *testing.T) {
 	}
 	require.Equal(t, 2, len(tables4Capture1))
 
-	tables4Capture2 = tablesByCaptures["capture-2"]
-	count = 0
-	for _, record := range tables4Capture2 {
+	require.Equal(t, 1, dispatcher.tables.CountTableByCaptureIDAndStatus("capture-2", util.AddingTable))
+	for _, record := range tablesByCaptures["capture-2"] {
 		if record.Status == util.AddingTable {
-			count += 1
 			dispatcher.OnAgentFinishedTableOperation("capture-2", record.TableID, defaultEpoch)
 		}
 	}
-	require.Equal(t, 1, count)
 
 	// all tables in the `RunningTable` status,
 	// but `drainingTarget` is not reset yet before the next tick.
@@ -1815,7 +1803,6 @@ func TestDrainingCaptureWhileRebalance(t *testing.T) {
 	require.Equal(t, CheckpointCannotProceed, resolvedTs)
 
 	require.Equal(t, "capture-1", dispatcher.drainTarget)
-	// auto rebalance is not triggered, since `capture-1` is draining.
 	require.False(t, dispatcher.needRebalance)
 
 	tablesByCaptures = dispatcher.tables.GetAllTablesGroupedByCaptures()
