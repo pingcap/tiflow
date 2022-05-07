@@ -1,3 +1,16 @@
+// Copyright 2022 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package servermaster
 
 import (
@@ -26,31 +39,31 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/hanfei1991/microcosm/client"
-	"github.com/hanfei1991/microcosm/lib"
-	"github.com/hanfei1991/microcosm/lib/metadata"
-	libModel "github.com/hanfei1991/microcosm/lib/model"
-	"github.com/hanfei1991/microcosm/model"
-	"github.com/hanfei1991/microcosm/pb"
-	"github.com/hanfei1991/microcosm/pkg/adapter"
-	dcontext "github.com/hanfei1991/microcosm/pkg/context"
-	"github.com/hanfei1991/microcosm/pkg/deps"
-	derrors "github.com/hanfei1991/microcosm/pkg/errors"
-	"github.com/hanfei1991/microcosm/pkg/etcdutils"
-	externRescManager "github.com/hanfei1991/microcosm/pkg/externalresource/manager"
-	extkv "github.com/hanfei1991/microcosm/pkg/meta/extension"
-	"github.com/hanfei1991/microcosm/pkg/meta/kvclient"
-	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
-	pkgOrm "github.com/hanfei1991/microcosm/pkg/orm"
-	"github.com/hanfei1991/microcosm/pkg/p2p"
-	"github.com/hanfei1991/microcosm/pkg/rpcutil"
-	"github.com/hanfei1991/microcosm/pkg/serverutils"
-	"github.com/hanfei1991/microcosm/pkg/tenant"
-	"github.com/hanfei1991/microcosm/servermaster/cluster"
-	"github.com/hanfei1991/microcosm/servermaster/scheduler"
-	schedModel "github.com/hanfei1991/microcosm/servermaster/scheduler/model"
-	"github.com/hanfei1991/microcosm/test"
-	"github.com/hanfei1991/microcosm/test/mock"
+	"github.com/pingcap/tiflow/engine/client"
+	"github.com/pingcap/tiflow/engine/lib"
+	"github.com/pingcap/tiflow/engine/lib/metadata"
+	libModel "github.com/pingcap/tiflow/engine/lib/model"
+	"github.com/pingcap/tiflow/engine/model"
+	"github.com/pingcap/tiflow/engine/pb"
+	"github.com/pingcap/tiflow/engine/pkg/adapter"
+	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
+	"github.com/pingcap/tiflow/engine/pkg/deps"
+	derrors "github.com/pingcap/tiflow/engine/pkg/errors"
+	"github.com/pingcap/tiflow/engine/pkg/etcdutils"
+	externRescManager "github.com/pingcap/tiflow/engine/pkg/externalresource/manager"
+	extkv "github.com/pingcap/tiflow/engine/pkg/meta/extension"
+	"github.com/pingcap/tiflow/engine/pkg/meta/kvclient"
+	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
+	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
+	"github.com/pingcap/tiflow/engine/pkg/p2p"
+	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
+	"github.com/pingcap/tiflow/engine/pkg/serverutils"
+	"github.com/pingcap/tiflow/engine/pkg/tenant"
+	"github.com/pingcap/tiflow/engine/servermaster/cluster"
+	"github.com/pingcap/tiflow/engine/servermaster/scheduler"
+	schedModel "github.com/pingcap/tiflow/engine/servermaster/scheduler/model"
+	"github.com/pingcap/tiflow/engine/test"
+	"github.com/pingcap/tiflow/engine/test/mock"
 )
 
 // Server handles PRC requests for df master.

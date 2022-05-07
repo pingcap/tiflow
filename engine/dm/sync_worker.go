@@ -1,21 +1,34 @@
+// Copyright 2022 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package dm
 
 import (
 	"context"
 	"time"
 
-	"github.com/hanfei1991/microcosm/jobmaster/dm"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/syncer"
+	"github.com/pingcap/tiflow/engine/jobmaster/dm"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/hanfei1991/microcosm/lib"
-	"github.com/hanfei1991/microcosm/model"
-	"github.com/hanfei1991/microcosm/pkg/p2p"
+	"github.com/pingcap/tiflow/engine/lib"
+	"github.com/pingcap/tiflow/engine/model"
+	"github.com/pingcap/tiflow/engine/pkg/p2p"
 )
 
 var _ lib.Worker = &syncWorker{}

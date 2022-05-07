@@ -1,3 +1,16 @@
+// Copyright 2022 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package cvs
 
 import (
@@ -13,16 +26,16 @@ import (
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
 
-	cvsTask "github.com/hanfei1991/microcosm/executor/cvsTask"
-	"github.com/hanfei1991/microcosm/executor/worker"
-	"github.com/hanfei1991/microcosm/lib"
-	libModel "github.com/hanfei1991/microcosm/lib/model"
-	"github.com/hanfei1991/microcosm/lib/registry"
-	"github.com/hanfei1991/microcosm/model"
-	"github.com/hanfei1991/microcosm/pkg/clock"
-	dcontext "github.com/hanfei1991/microcosm/pkg/context"
-	derrors "github.com/hanfei1991/microcosm/pkg/errors"
-	"github.com/hanfei1991/microcosm/pkg/p2p"
+	cvsTask "github.com/pingcap/tiflow/engine/executor/cvsTask"
+	"github.com/pingcap/tiflow/engine/executor/worker"
+	"github.com/pingcap/tiflow/engine/lib"
+	libModel "github.com/pingcap/tiflow/engine/lib/model"
+	"github.com/pingcap/tiflow/engine/lib/registry"
+	"github.com/pingcap/tiflow/engine/model"
+	"github.com/pingcap/tiflow/engine/pkg/clock"
+	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
+	derrors "github.com/pingcap/tiflow/engine/pkg/errors"
+	"github.com/pingcap/tiflow/engine/pkg/p2p"
 )
 
 type Config struct {
