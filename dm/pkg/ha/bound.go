@@ -291,7 +291,7 @@ func GetSourceBoundConfig(cli *clientv3.Client, worker, source string) ([]Source
 		if err2 != nil {
 			return nil, nil, 0, err2
 		}
-		cfgs := make([]*config.SourceConfig, 0, consistentsLen)
+		cfgs = make([]*config.SourceConfig, 0, consistentsLen)
 		for _, consistent := range consistents {
 			cfg, ok := scm[consistent.Source]
 			// ok == false means we have got source bound but there is no source config, this shouldn't happen

@@ -314,7 +314,9 @@ func (s *Server) observeRelayConfig(ctx context.Context, rev int64) error {
 						// has relaySource but no worker
 						if w, ok := ws[relaySource.SourceID]; !ok {
 							log.L().Info(fmt.Sprintf("didn't find source_worker but found relay config %s after etcd retryable error. Will start source_worker", relaySource.SourceID))
-							s.enableRelay(relaySource, false)
+							if err2 := s.enableRelay(relaySource, false); err2 != nil {
+								return err2
+							}
 						} else {
 							// has relaySource and worker
 							log.L().Info(fmt.Sprintf("found source_worker and relay config %s after etcd retryable error. Will check and enable relay", relaySource.SourceID))
@@ -414,7 +416,9 @@ func (s *Server) observeSourceBound(ctx context.Context, rev int64) error {
 						// has bound but no worker
 						if w, ok := ws[bound.Source]; !ok {
 							log.L().Info(fmt.Sprintf("didn't find source_worker but found bound %v after etcd retryable error. Will start source_worker", bound))
-							s.enableHandleSubtasks(cfgs[i], false)
+							if err2 := s.enableHandleSubtasks(cfgs[i], false); err2 != nil {
+								return err2
+							}
 						} else {
 							// has bound and worker
 							log.L().Info(fmt.Sprintf("found source_worker and bound %v after etcd retryable error. Will check and enable relay", bound))
@@ -546,20 +550,6 @@ func (s *Server) setSourceStatus(source string, err error, needLock bool) {
 			},
 		}
 	}
-}
-
-// stopAllWorkers stops all source worker.
-func (s *Server) stopAllWorkers(onlyRelay bool) error {
-	workers := s.getSourceWorkers(false)
-	for source, w := range workers {
-		if onlyRelay && !w.relayEnabled.Load() {
-			continue
-		}
-		if err := s.stopSourceWorker(source, false, true); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 // we will check sourceID with w.cfg.SourceID, sourceID can't be empty.
@@ -704,8 +694,8 @@ func (s *Server) enableHandleSubtasks(sourceCfg *config.SourceConfig, needLock b
 	return nil
 }
 
-// disableHandleSubtasks will stop the worker and disable handle subtasks with specified sourceID
-// if source == "", it will stop all workers
+// disableHandleSubtasks will stop the worker and disable handle subtasks with specified sourceID.
+// if source == "", it will stop all workers.
 func (s *Server) disableHandleSubtasks(source string) error {
 	s.Lock()
 	defer s.Unlock()
