@@ -355,9 +355,9 @@ type partitionSink struct {
 type Consumer struct {
 	ready chan bool
 
-	ddlList          []*model.DDLEvent
-	maxDDLReceivedTs uint64
-	ddlListMu        sync.Mutex
+	ddlList        []*model.DDLEvent
+	maxDDLCommitTs uint64
+	ddlListMu      sync.Mutex
 
 	sinks   []*partitionSink
 	sinksMu sync.Mutex
@@ -649,22 +649,23 @@ func (c *Consumer) appendDDL(ddl *model.DDLEvent) {
 	c.ddlListMu.Lock()
 	defer c.ddlListMu.Unlock()
 	// DDL CommitTs fallback, just crash it to indicate the bug.
-	if ddl.CommitTs < c.maxDDLReceivedTs {
-		log.Panic("DDL CommitTs < maxDDLReceivedTs",
+	if ddl.CommitTs < c.maxDDLCommitTs {
+		log.Panic("DDL CommitTs < maxDDLCommitTs",
 			zap.Uint64("commitTs", ddl.CommitTs),
-			zap.Uint64("maxDDLReceivedTs", c.maxDDLReceivedTs),
+			zap.Uint64("maxDDLCommitTs", c.maxDDLCommitTs),
 			zap.Any("DDL", ddl))
 	}
 
-	if ddl.CommitTs == c.maxDDLReceivedTs {
-		log.Info("ignore redundant DDL, CommitTs = maxDDLReceivedTs",
+	if ddl.CommitTs == c.maxDDLCommitTs {
+		log.Info("ignore redundant DDL, CommitTs = maxDDLCommitTs",
 			zap.Any("DDL", ddl))
 		return
 	}
 
 	c.ddlList = append(c.ddlList, ddl)
-	log.Info("DDL event received", zap.Any("DDL", ddl))
-	c.maxDDLReceivedTs = ddl.CommitTs
+	log.Info("DDL event received",
+		zap.Uint64("commitTs", ddl.CommitTs), zap.Any("DDL", ddl))
+	c.maxDDLCommitTs = ddl.CommitTs
 }
 
 func (c *Consumer) getFrontDDL() *model.DDLEvent {
