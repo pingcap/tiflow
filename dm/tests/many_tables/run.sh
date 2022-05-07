@@ -77,11 +77,9 @@ function run() {
 	fi
 
 	echo "start incremental_data"
-	read -p 123
 	incremental_data
 	echo "finish incremental_data"
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
-	read -p 456
 
   # test https://github.com/pingcap/tiflow/issues/5344
   kill_dm_worker
@@ -90,19 +88,24 @@ function run() {
   run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
   check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
   run_sql_source1 "CREATE TABLE many_tables_db.flush (c INT PRIMARY KEY);"
-  # not sure why we need this sleep
   sleep 5
   run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
     "query-status test" \
     '"synced": true' 1
 
-  read -p 789
   pkill -hup tidb-server 2>/dev/null || true
   wait_process_exit tidb-server
-
+  # now worker will process some binlog events, save table checkpoint and meet downstream error
   incremental_data_2
   sleep 20
-  [ 1 == 0 ]
+
+	rollback_num=$(grep '"rollback checkpoint' $WORK_DIR/worker1/log/dm-worker.log | wc -l)
+  echo "rollback_num: $rollback_num"
+  [ $rollback_num -gt 20 ]
+  folder_size=$(du -d0 $WORK_DIR/worker1/ --exclude="$WORK_DIR/worker1/log" | cut -f1)
+  echo "folder_size: $folder_size"
+  # less than 10M
+  [ $folder_size -lt 10000 ]
 
   export GO_FAILPOINTS=''
 }
