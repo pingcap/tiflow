@@ -230,7 +230,7 @@ function run() {
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"operate-source show" \
 		"\"result\": true" 3 \
-		'msg": "source is added but there is no free worker to bound"' 1 \
+		'msg": "source is added but there is no online worker to bound"' 1 \
 		'"worker": "worker1"' 1
 
 	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $dm_worker2_conf

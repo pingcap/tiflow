@@ -102,11 +102,21 @@ func PutSourceBound(cli *clientv3.Client, bounds ...SourceBound) (int64, error) 
 	return rev, err
 }
 
-// DeleteSourceBound deletes the bound relationship in etcd for the specified worker.
-func DeleteSourceBound(cli *clientv3.Client, workers ...string) (int64, error) {
+// DeleteSourceBoundByWorker deletes the bound relationship in etcd for the specified worker.
+func DeleteSourceBoundByWorker(cli *clientv3.Client, workers ...string) (int64, error) {
 	ops := make([]clientv3.Op, 0, len(workers))
 	for _, worker := range workers {
-		ops = append(ops, deleteSourceBoundOp(worker)...)
+		ops = append(ops, deleteSourceBoundByWorkerOp(worker)...)
+	}
+	_, rev, err := etcdutil.DoOpsInOneTxnWithRetry(cli, ops...)
+	return rev, err
+}
+
+// DeleteSourceBoundByBound deletes the bound relationship in etcd for the specified bound.
+func DeleteSourceBoundByBound(cli *clientv3.Client, bounds ...SourceBound) (int64, error) {
+	ops := make([]clientv3.Op, 0, len(bounds))
+	for _, bound := range bounds {
+		ops = append(ops, deleteSourceBoundByBoundOp(bound)...)
 	}
 	_, rev, err := etcdutil.DoOpsInOneTxnWithRetry(cli, ops...)
 	return rev, err
@@ -115,7 +125,7 @@ func DeleteSourceBound(cli *clientv3.Client, workers ...string) (int64, error) {
 // ReplaceSourceBound deletes an old bound and puts a new bound in one transaction, so a bound source will not become
 // unbound because of failing halfway.
 func ReplaceSourceBound(cli *clientv3.Client, source, oldWorker, newWorker string) (int64, error) {
-	deleteOps := deleteSourceBoundOp(oldWorker)
+	deleteOps := deleteSourceBoundByBoundOp(NewSourceBound(source, oldWorker))
 	putOps, err := putSourceBoundOp(NewSourceBound(source, newWorker))
 	if err != nil {
 		return 0, err
@@ -409,16 +419,23 @@ func lastSourceBoundFromResp(resp *clientv3.GetResponse) (map[string]SourceBound
 	return sbm, nil
 }
 
-// deleteSourceBoundOp returns a DELETE etcd operation for the bound relationship of the specified DM-worker.
-func deleteSourceBoundOp(worker string) []clientv3.Op {
+// deleteSourceBoundByWorkerOp returns a DELETE etcd operation for the bound relationship of the specified DM-worker.
+func deleteSourceBoundByWorkerOp(worker string) []clientv3.Op {
 	return []clientv3.Op{
 		clientv3.OpDelete(common.UpstreamBoundWorkerKeyAdapter.Encode(worker), clientv3.WithPrefix()),
 	}
 }
 
-// deleteLastSourceBoundOp returns a DELETE etcd operation for the last bound relationship of the specified DM-worker.
-func deleteLastSourceBoundOp(worker string) clientv3.Op {
-	return clientv3.OpDelete(common.UpstreamLastBoundWorkerKeyAdapter.Encode(worker), clientv3.WithPrefix())
+// deleteSourceBoundByBoundOp returns a DELETE etcd operation for the bound relationship of the specified DM-worker.
+func deleteSourceBoundByBoundOp(bound SourceBound) []clientv3.Op {
+	return []clientv3.Op{
+		clientv3.OpDelete(common.UpstreamBoundWorkerKeyAdapter.Encode(bound.Worker, bound.Source)),
+	}
+}
+
+// deleteLastSourceBoundOp returns a DELETE etcd operation for the last bound relationship of the specified source.
+func deleteLastSourceBoundOp(source string) clientv3.Op {
+	return clientv3.OpDelete(common.UpstreamLastBoundWorkerKeyAdapter.Encode(source))
 }
 
 // putSourceBoundOp returns PUT etcd operations for the bound relationship.
@@ -430,7 +447,7 @@ func putSourceBoundOp(bound SourceBound) ([]clientv3.Op, error) {
 	}
 	key1 := common.UpstreamBoundWorkerKeyAdapter.Encode(bound.Worker, bound.Source)
 	op1 := clientv3.OpPut(key1, value)
-	key2 := common.UpstreamLastBoundWorkerKeyAdapter.Encode(bound.Worker, bound.Source)
+	key2 := common.UpstreamLastBoundWorkerKeyAdapter.Encode(bound.Source)
 	op2 := clientv3.OpPut(key2, value)
 
 	return []clientv3.Op{op1, op2}, nil

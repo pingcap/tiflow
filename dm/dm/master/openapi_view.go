@@ -288,7 +288,7 @@ func (s *Server) DMAPIDisableSource(c *gin.Context, sourceName string) {
 	c.Status(http.StatusOK)
 }
 
-// DMAPITransferSource transfer source to another free worker url is: (POST /api/v1/sources/{source-name}/transfer).
+// DMAPITransferSource transfer source to another online worker url is: (POST /api/v1/sources/{source-name}/transfer).
 func (s *Server) DMAPITransferSource(c *gin.Context, sourceName string) {
 	var req openapi.WorkerNameRequest
 	if err := c.Bind(&req); err != nil {

@@ -666,7 +666,7 @@ const (
 	codeSchedulerStartRelayOnBound
 	codeSchedulerStopRelayOnBound
 	codeSchedulerPauseTaskForTransferSource
-	codeSchedulerWorkerNotFree
+	codeSchedulerWorkerOffline
 	codeSchedulerSubTaskNotExist
 	codeSchedulerSubTaskCfgUpdate
 )
@@ -1335,7 +1335,7 @@ var (
 	ErrSchedulerStartRelayOnBound            = New(codeSchedulerStartRelayOnBound, ClassScheduler, ScopeInternal, LevelLow, "the source has `start-relay` automatically for bound worker, so it can't `start-relay` with worker name now", "Please stop relay by `stop-relay` without worker name first.")
 	ErrSchedulerStopRelayOnBound             = New(codeSchedulerStopRelayOnBound, ClassScheduler, ScopeInternal, LevelLow, "the source has `start-relay` automatically for bound worker, so it can't `stop-relay` with worker name now", "Please use `stop-relay` without worker name.")
 	ErrSchedulerPauseTaskForTransferSource   = New(codeSchedulerPauseTaskForTransferSource, ClassScheduler, ScopeInternal, LevelLow, "failed to auto pause tasks %s when transfer-source", "Please pause task by `dmctl pause-task`.")
-	ErrSchedulerWorkerNotFree                = New(codeSchedulerWorkerNotFree, ClassScheduler, ScopeInternal, LevelLow, "dm-worker with name %s not free", "")
+	ErrSchedulerWorkerOffline                = New(codeSchedulerWorkerOffline, ClassScheduler, ScopeInternal, LevelLow, "dm-worker with name %s not online", "")
 
 	// dmctl.
 	ErrCtlGRPCCreateConn = New(codeCtlGRPCCreateConn, ClassDMCtl, ScopeInternal, LevelHigh, "can not create grpc connection", "Please check your network connection.")

@@ -302,7 +302,7 @@ function test_exclusive_relay() {
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"operate-source show -s $SOURCE_ID2" \
-		"\"msg\": \"source is added but there is no free worker to bound\"" 1
+		"\"msg\": \"source is added but there is no online worker to bound\"" 1
 
 	cleanup
 	echo "[$(date)] <<<<<< finish test_exclusive_relay >>>>>>"
@@ -363,7 +363,7 @@ function test_exclusive_relay_2() {
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"operate-source show -s $SOURCE_ID2" \
-		"\"msg\": \"source is added but there is no free worker to bound\"" 1
+		"\"msg\": \"source is added but there is no online worker to bound\"" 1
 
 	# worker2 online, bound to source2
 	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml

@@ -1504,7 +1504,7 @@ func (s *Server) OperateSource(ctx context.Context, req *pb.OperateSourceRequest
 	var noWorkerMsg string
 	switch req.Op {
 	case pb.SourceOp_StartSource, pb.SourceOp_ShowSource:
-		noWorkerMsg = "source is added but there is no free worker to bound"
+		noWorkerMsg = "source is added but there is no online worker to bound"
 	case pb.SourceOp_StopSource:
 		noWorkerMsg = "source is stopped and hasn't bound to worker before being stopped"
 	}
@@ -2054,11 +2054,18 @@ func (s *Server) listMemberWorker(names []string) *pb.Members_Worker {
 			continue
 		}
 
+		bounds := workerAgent.Bounds()
+		sources := make([]string, 0, len(bounds))
+		for _, bound := range bounds {
+			sources = append(sources, bound.Source)
+		}
+
 		workers = append(workers, &pb.WorkerInfo{
-			Name:   workerAgent.BaseInfo().Name,
-			Addr:   workerAgent.BaseInfo().Addr,
-			Stage:  string(workerAgent.Stage()),
-			Source: workerAgent.Bound().Source,
+			Name:  workerAgent.BaseInfo().Name,
+			Addr:  workerAgent.BaseInfo().Addr,
+			Stage: string(workerAgent.Stage()),
+			// TODO: replace Source with Sources or other new fields
+			Source: strings.Join(sources, ","),
 		})
 	}
 
