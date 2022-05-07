@@ -14,8 +14,6 @@ create table table1
 insert into table1(c_tinyint, c_smallint, c_mediumint, c_int, c_bigint)
 values (1, 2, 3, 4, 5);
 
-create database test2;
-use test2;
 create table table2
 (
     id          int auto_increment,
@@ -30,8 +28,6 @@ create table table2
 insert into table2(c_tinyint, c_smallint, c_mediumint, c_int, c_bigint)
 values (1, 2, 3, 4, 5);
 
-create database test3;
-use test3;
 create table table3
 (
     id          int auto_increment,
