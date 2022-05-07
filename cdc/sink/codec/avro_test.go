@@ -16,8 +16,12 @@ package codec
 import (
 	"context"
 	"encoding/json"
+	"io"
+	"net/http"
+	"testing"
 	"time"
 
+	"github.com/jarcoal/httpmock"
 	"github.com/linkedin/goavro/v2"
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
@@ -34,6 +38,8 @@ import (
 	"go.uber.org/zap"
 )
 
+func Test(t *testing.T) { check.TestingT(t) }
+
 type avroBatchEncoderSuite struct {
 	encoder *AvroEventBatchEncoder
 }
@@ -41,7 +47,7 @@ type avroBatchEncoderSuite struct {
 var _ = check.Suite(&avroBatchEncoderSuite{})
 
 func (s *avroBatchEncoderSuite) SetUpSuite(c *check.C) {
-	startHTTPInterceptForTestingRegistry(c)
+	startAvroHTTPInterceptForTestingRegistry(c)
 
 	keyManager, err := NewAvroSchemaManager(context.Background(), &security.Credential{}, "http://127.0.0.1:8081", "-key")
 	c.Assert(err, check.IsNil)
@@ -57,7 +63,7 @@ func (s *avroBatchEncoderSuite) SetUpSuite(c *check.C) {
 }
 
 func (s *avroBatchEncoderSuite) TearDownSuite(c *check.C) {
-	stopHTTPInterceptForTestingRegistry()
+	stopAvroHTTPInterceptForTestingRegistry()
 }
 
 func setBinChsClnFlag(ft *types.FieldType) *types.FieldType {
@@ -378,4 +384,116 @@ func (s *avroBatchEncoderSuite) TestAvroEncode(c *check.C) {
 
 	err = s.encoder.AppendRowChangedEvent(testCaseUpdate)
 	c.Check(err, check.IsNil)
+}
+
+func startAvroHTTPInterceptForTestingRegistry(c *check.C) {
+	httpmock.Activate()
+
+	registry := mockRegistry{
+		subjects: make(map[string]*mockRegistrySchema),
+		newID:    1,
+	}
+
+	httpmock.RegisterResponder("GET", "http://127.0.0.1:8081", httpmock.NewStringResponder(200, "{}"))
+
+	httpmock.RegisterResponder("POST", `=~^http://127.0.0.1:8081/subjects/(.+)/versions`,
+		func(req *http.Request) (*http.Response, error) {
+			subject, err := httpmock.GetSubmatch(req, 1)
+			if err != nil {
+				return nil, err
+			}
+			reqBody, err := io.ReadAll(req.Body)
+			if err != nil {
+				return nil, err
+			}
+			var reqData registerRequest
+			err = json.Unmarshal(reqBody, &reqData)
+			if err != nil {
+				return nil, err
+			}
+
+			// c.Assert(reqData.SchemaType, check.Equals, "AVRO")
+
+			var respData registerResponse
+			registry.mu.Lock()
+			item, exists := registry.subjects[subject]
+			if !exists {
+				item = &mockRegistrySchema{
+					content: reqData.Schema,
+					version: 0,
+					ID:      registry.newID,
+				}
+				registry.subjects[subject] = item
+				respData.ID = registry.newID
+			} else {
+				if item.content == reqData.Schema {
+					respData.ID = item.ID
+				} else {
+					item.content = reqData.Schema
+					item.version++
+					item.ID = registry.newID
+					respData.ID = registry.newID
+				}
+			}
+			registry.newID++
+			registry.mu.Unlock()
+			return httpmock.NewJsonResponse(200, &respData)
+		})
+
+	httpmock.RegisterResponder("GET", `=~^http://127.0.0.1:8081/subjects/(.+)/versions/latest`,
+		func(req *http.Request) (*http.Response, error) {
+			subject, err := httpmock.GetSubmatch(req, 1)
+			if err != nil {
+				return httpmock.NewStringResponse(500, "Internal Server Error"), err
+			}
+
+			registry.mu.Lock()
+			item, exists := registry.subjects[subject]
+			registry.mu.Unlock()
+			if !exists {
+				return httpmock.NewStringResponse(404, ""), nil
+			}
+
+			var respData lookupResponse
+			respData.Schema = item.content
+			respData.Name = subject
+			respData.RegistryID = item.ID
+
+			return httpmock.NewJsonResponse(200, &respData)
+		})
+
+	httpmock.RegisterResponder("DELETE", `=~^http://127.0.0.1:8081/subjects/(.+)`,
+		func(req *http.Request) (*http.Response, error) {
+			subject, err := httpmock.GetSubmatch(req, 1)
+			if err != nil {
+				return nil, err
+			}
+
+			registry.mu.Lock()
+			defer registry.mu.Unlock()
+			_, exists := registry.subjects[subject]
+			if !exists {
+				return httpmock.NewStringResponse(404, ""), nil
+			}
+
+			delete(registry.subjects, subject)
+			return httpmock.NewStringResponse(200, ""), nil
+		})
+
+	failCounter := 0
+	httpmock.RegisterResponder("POST", `=~^http://127.0.0.1:8081/may-fail`,
+		func(req *http.Request) (*http.Response, error) {
+			data, _ := io.ReadAll(req.Body)
+			c.Assert(len(data), check.Greater, 0)
+			c.Assert(int64(len(data)), check.Equals, req.ContentLength)
+			if failCounter < 3 {
+				failCounter++
+				return httpmock.NewStringResponse(422, ""), nil
+			}
+			return httpmock.NewStringResponse(200, ""), nil
+		})
+}
+
+func stopAvroHTTPInterceptForTestingRegistry() {
+	httpmock.DeactivateAndReset()
 }

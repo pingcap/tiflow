@@ -27,7 +27,7 @@ import (
 	"github.com/pingcap/tidb/store/mockstore/mockcopr"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
-	"github.com/pingcap/tiflow/pkg/pdtime"
+	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/pingcap/tiflow/pkg/regionspan"
 	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/pingcap/tiflow/pkg/security"
@@ -203,7 +203,7 @@ func prepareBenchMultiStore(b *testing.B, storeNum, regionNum int) (
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(
-		ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(),
+		ctx, pdClient, kvStorage, grpcPool, regionCache, pdutil.NewClock4Test(),
 		model.DefaultChangeFeedID(""),
 		config.GetDefaultServerConfig().KVClient)
 	eventCh := make(chan model.RegionFeedEvent, 1000000)
@@ -300,7 +300,7 @@ func prepareBench(b *testing.B, regionNum int) (
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(
-		ctx, pdClient, kvStorage, grpcPool, regionCache, pdtime.NewClock4Test(),
+		ctx, pdClient, kvStorage, grpcPool, regionCache, pdutil.NewClock4Test(),
 		model.DefaultChangeFeedID(""),
 		config.GetDefaultServerConfig().KVClient)
 	eventCh := make(chan model.RegionFeedEvent, 1000000)
