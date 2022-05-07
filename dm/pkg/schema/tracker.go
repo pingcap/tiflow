@@ -21,6 +21,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/docker/go-units"
 	"github.com/pingcap/errors"
 	tidbConfig "github.com/pingcap/tidb/config"
 	"github.com/pingcap/tidb/ddl"
@@ -36,6 +37,7 @@ import (
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tidb/store/mockstore"
+	unistoreConfig "github.com/pingcap/tidb/store/mockstore/unistore/config"
 	"github.com/pingcap/tidb/util/filter"
 	"go.uber.org/zap"
 
@@ -61,6 +63,11 @@ var (
 		TiDBClusteredIndex: "OFF",
 	}
 )
+
+func init() {
+	unistoreConfig.DefaultConf.Engine.VlogFileSize = 4 * units.MiB
+	unistoreConfig.DefaultConf.Engine.L1Size = 128 * units.MiB
+}
 
 // Tracker is used to track schema locally.
 type Tracker struct {
