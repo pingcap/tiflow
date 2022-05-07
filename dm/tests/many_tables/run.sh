@@ -97,11 +97,12 @@ function run() {
   wait_process_exit tidb-server
   # now worker will process some binlog events, save table checkpoint and meet downstream error
   incremental_data_2
-  sleep 20
+  sleep 30
 
 	resume_num=$(grep 'unit process error' $WORK_DIR/worker1/log/dm-worker.log | wc -l)
   echo "resume_num: $resume_num"
-  [ $resume_num -gt 10 ]
+  # because we check auto resume every 5 seconds...
+  [ $resume_num -ge 4 ]
   folder_size=$(du -d0 $WORK_DIR/worker1/ --exclude="$WORK_DIR/worker1/log" | cut -f1)
   echo "folder_size: $folder_size"
   # less than 10M
