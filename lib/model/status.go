@@ -37,6 +37,7 @@ var WorkerUpdateColumns = []string{
 	"ext_bytes",
 }
 
+// TODO: refine me, merge orm model to WorkerStatus will cause some confuse
 type WorkerStatus struct {
 	ormModel.Model
 	ProjectID    string           `json:"project-id" gorm:"column:project_id;type:varchar(64) not null"`

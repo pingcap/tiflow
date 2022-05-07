@@ -9,7 +9,7 @@ import (
 	dmysql "github.com/go-sql-driver/mysql"
 	libModel "github.com/hanfei1991/microcosm/lib/model"
 	cerrors "github.com/hanfei1991/microcosm/pkg/errors"
-	"github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta"
+	resourcemeta "github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta/model"
 	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
 	"github.com/hanfei1991/microcosm/pkg/orm/model"
 	"github.com/hanfei1991/microcosm/pkg/tenant"
@@ -73,6 +73,7 @@ type JobClient interface {
 	UpsertJob(ctx context.Context, job *libModel.MasterMetaKVData) error
 	UpdateJob(ctx context.Context, job *libModel.MasterMetaKVData) error
 	DeleteJob(ctx context.Context, jobID string) (Result, error)
+
 	GetJobByID(ctx context.Context, jobID string) (*libModel.MasterMetaKVData, error)
 	QueryJobs(ctx context.Context) ([]*libModel.MasterMetaKVData, error)
 	QueryJobsByProjectID(ctx context.Context, projectID string) ([]*libModel.MasterMetaKVData, error)
@@ -222,7 +223,8 @@ func (c *metaOpsClient) Close() error {
 
 ////////////////////////// Initialize
 // Initialize will create all related tables in SQL backend
-// TODO: What if we change the definition of orm??
+// TODO: What happen if we upgrade the definition of model when rolling update?
+// TODO: need test: change column definition/add column/drop column?
 func (c *metaOpsClient) Initialize(ctx context.Context) error {
 	if err := c.db.AutoMigrate(globalModels...); err != nil {
 		return cerrors.ErrMetaOpFail.Wrap(err)
@@ -241,7 +243,7 @@ func (c *metaOpsClient) GenEpoch(ctx context.Context) (libModel.Epoch, error) {
 // CreateProject insert the model.ProjectInfo
 func (c *metaOpsClient) CreateProject(ctx context.Context, project *model.ProjectInfo) error {
 	if project == nil {
-		return cerrors.ErrMetaOpFail.GenWithStackByArgs("input project info is nil")
+		return cerrors.ErrMetaParamsInvalid.GenWithStackByArgs("input project info is nil")
 	}
 	if result := c.db.Create(project); result.Error != nil {
 		return cerrors.ErrMetaOpFail.Wrap(result.Error)
@@ -286,7 +288,7 @@ func (c *metaOpsClient) GetProjectByID(ctx context.Context, projectID string) (*
 // CreateProjectOperation insert the operation
 func (c *metaOpsClient) CreateProjectOperation(ctx context.Context, op *model.ProjectOperation) error {
 	if op == nil {
-		return cerrors.ErrMetaOpFail.GenWithStackByArgs("input project operation is nil")
+		return cerrors.ErrMetaParamsInvalid.GenWithStackByArgs("input project operation is nil")
 	}
 
 	if result := c.db.Create(op); result.Error != nil {
@@ -323,7 +325,7 @@ func (c *metaOpsClient) QueryProjectOperationsByTimeRange(ctx context.Context,
 // UpsertJob upsert the jobInfo
 func (c *metaOpsClient) UpsertJob(ctx context.Context, job *libModel.MasterMetaKVData) error {
 	if job == nil {
-		return cerrors.ErrMetaOpFail.GenWithStackByArgs("input master meta is nil")
+		return cerrors.ErrMetaParamsInvalid.GenWithStackByArgs("input master meta is nil")
 	}
 
 	if err := c.db.Clauses(clause.OnConflict{
@@ -339,7 +341,7 @@ func (c *metaOpsClient) UpsertJob(ctx context.Context, job *libModel.MasterMetaK
 // UpdateJob update the jobInfo
 func (c *metaOpsClient) UpdateJob(ctx context.Context, job *libModel.MasterMetaKVData) error {
 	if job == nil {
-		return cerrors.ErrMetaOpFail.GenWithStackByArgs("input master meta is nil")
+		return cerrors.ErrMetaParamsInvalid.GenWithStackByArgs("input master meta is nil")
 	}
 	// we don't use `Save` here to avoid user dealing with the basic model
 	// expected SQL: UPDATE xxx SET xxx='xxx', updated_at='2013-11-17 21:34:10' WHERE id=xxx;
@@ -410,7 +412,7 @@ func (c *metaOpsClient) QueryJobsByStatus(ctx context.Context,
 // UpsertWorker insert the workerInfo
 func (c *metaOpsClient) UpsertWorker(ctx context.Context, worker *libModel.WorkerStatus) error {
 	if worker == nil {
-		return cerrors.ErrMetaOpFail.GenWithStackByArgs("input worker meta is nil")
+		return cerrors.ErrMetaParamsInvalid.GenWithStackByArgs("input worker meta is nil")
 	}
 
 	if err := c.db.Clauses(clause.OnConflict{
@@ -425,7 +427,7 @@ func (c *metaOpsClient) UpsertWorker(ctx context.Context, worker *libModel.Worke
 
 func (c *metaOpsClient) UpdateWorker(ctx context.Context, worker *libModel.WorkerStatus) error {
 	if worker == nil {
-		return cerrors.ErrMetaOpFail.GenWithStackByArgs("input worker meta is nil")
+		return cerrors.ErrMetaParamsInvalid.GenWithStackByArgs("input worker meta is nil")
 	}
 	// we don't use `Save` here to avoid user dealing with the basic model
 	if err := c.db.Model(&libModel.WorkerStatus{}).Where("job_id = ? && id = ?", worker.JobID, worker.ID).Updates(worker.Map()).Error; err != nil {
@@ -485,7 +487,7 @@ func (c *metaOpsClient) QueryWorkersByStatus(ctx context.Context, masterID strin
 // UpsertResource upsert the ResourceMeta
 func (c *metaOpsClient) UpsertResource(ctx context.Context, resource *resourcemeta.ResourceMeta) error {
 	if resource == nil {
-		return cerrors.ErrMetaOpFail.GenWithStackByArgs("input resource meta is nil")
+		return cerrors.ErrMetaParamsInvalid.GenWithStackByArgs("input resource meta is nil")
 	}
 
 	if err := c.db.Clauses(clause.OnConflict{
@@ -501,7 +503,7 @@ func (c *metaOpsClient) UpsertResource(ctx context.Context, resource *resourceme
 // UpdateResource update the resourcemeta
 func (c *metaOpsClient) UpdateResource(ctx context.Context, resource *resourcemeta.ResourceMeta) error {
 	if resource == nil {
-		return cerrors.ErrMetaOpFail.GenWithStackByArgs("input resource meta is nil")
+		return cerrors.ErrMetaParamsInvalid.GenWithStackByArgs("input resource meta is nil")
 	}
 	// we don't use `Save` here to avoid user dealing with the basic model
 	if err := c.db.Model(&resourcemeta.ResourceMeta{}).Where("id = ?", resource.ID).Updates(resource.Map()).Error; err != nil {

@@ -1,6 +1,8 @@
 package dm
 
-import "github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta"
+import (
+	resourcemeta "github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta/model"
+)
 
 // NewDMResourceID returns a ResourceID in DM's style. Currently only support local resource.
 func NewDMResourceID(taskName, sourceName string) resourcemeta.ResourceID {

@@ -21,8 +21,9 @@ import (
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 	"github.com/hanfei1991/microcosm/pkg/deps"
 	"github.com/hanfei1991/microcosm/pkg/errors"
-	"github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta"
+	resourcemeta "github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta/model"
 	mockkv "github.com/hanfei1991/microcosm/pkg/meta/kvclient/mock"
+	pkgOrm "github.com/hanfei1991/microcosm/pkg/orm"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 	"github.com/hanfei1991/microcosm/pkg/uuid"
 )
@@ -30,11 +31,15 @@ import (
 func MockBaseMaster(id libModel.MasterID, masterImpl MasterImpl) *DefaultBaseMaster {
 	ctx := dcontext.Background()
 	dp := deps.NewDeps()
-	err := dp.Provide(func() masterParamListForTest {
+	cli, err := pkgOrm.NewMockClient()
+	if err != nil {
+		panic(err)
+	}
+	err = dp.Provide(func() masterParamListForTest {
 		return masterParamListForTest{
 			MessageHandlerManager: p2p.NewMockMessageHandlerManager(),
 			MessageSender:         p2p.NewMockMessageSender(),
-			MetaKVClient:          mockkv.NewMetaMock(),
+			FrameMetaClient:       cli,
 			UserRawKVClient:       mockkv.NewMetaMock(),
 			ExecutorClientManager: client.NewClientManager(),
 			ServerMasterClient:    &client.MockServerMasterClient{},
@@ -156,8 +161,8 @@ func MockBaseMasterWorkerUpdateStatus(
 	executorID p2p.NodeID,
 	status *libModel.WorkerStatus,
 ) {
-	workerMetaClient := metadata.NewWorkerMetadataClient(masterID, master.metaKVClient)
-	err := workerMetaClient.Store(ctx, workerID, status)
+	workerMetaClient := metadata.NewWorkerMetadataClient(masterID, master.frameMetaClient)
+	err := workerMetaClient.Store(ctx, status)
 	require.NoError(t, err)
 
 	err = master.messageHandlerManager.(*p2p.MockMessageHandlerManager).InvokeHandler(

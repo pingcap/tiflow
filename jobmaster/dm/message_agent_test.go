@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/hanfei1991/microcosm/lib/master"
-	"github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta"
+	resourcemeta "github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta/model"
 
 	"github.com/stretchr/testify/require"
 

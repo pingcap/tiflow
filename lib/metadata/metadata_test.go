@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	libModel "github.com/hanfei1991/microcosm/lib/model"
-	mockkv "github.com/hanfei1991/microcosm/pkg/meta/kvclient/mock"
+	pkgOrm "github.com/hanfei1991/microcosm/pkg/orm"
 )
 
 // These constants are only used for unit testing.
@@ -20,7 +20,8 @@ func TestMasterMetadata(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	metaKVClient := mockkv.NewMetaMock()
+	metaClient, err := pkgOrm.NewMockClient()
+	require.Nil(t, err)
 	meta := []*libModel.MasterMetaKVData{
 		{
 			ID: JobManagerUUID,
@@ -36,61 +37,75 @@ func TestMasterMetadata(t *testing.T) {
 		},
 	}
 	for _, data := range meta {
-		cli := NewMasterMetadataClient(data.ID, metaKVClient)
+		cli := NewMasterMetadataClient(data.ID, metaClient)
 		err := cli.Store(ctx, data)
 		require.Nil(t, err)
 	}
-	cli := NewMasterMetadataClient("job-manager", metaKVClient)
+	cli := NewMasterMetadataClient("job-manager", metaClient)
 	masters, err := cli.LoadAllMasters(ctx)
 	require.Nil(t, err)
 	require.Len(t, masters, 3)
-	require.Contains(t, masters, &libModel.MasterMetaKVData{
-		ID: JobManagerUUID,
-		Tp: jobManager,
-	})
-	require.Contains(t, masters, &libModel.MasterMetaKVData{
-		ID: "master-1",
-		Tp: fakeJobMaster,
-	})
-	require.Contains(t, masters, &libModel.MasterMetaKVData{
-		ID: "master-2",
-		Tp: fakeJobMaster,
-	})
+	require.Equal(t,
+		&libModel.MasterMetaKVData{
+			ID: masters[0].ID,
+			Tp: masters[0].Tp,
+		}, &libModel.MasterMetaKVData{
+			ID: JobManagerUUID,
+			Tp: jobManager,
+		})
+	require.Equal(t,
+		&libModel.MasterMetaKVData{
+			ID: masters[1].ID,
+			Tp: masters[1].Tp,
+		}, &libModel.MasterMetaKVData{
+			ID: "master-1",
+			Tp: fakeJobMaster,
+		})
+	require.Equal(t,
+		&libModel.MasterMetaKVData{
+			ID: masters[2].ID,
+			Tp: masters[2].Tp,
+		}, &libModel.MasterMetaKVData{
+			ID: "master-2",
+			Tp: fakeJobMaster,
+		})
 }
 
 func TestOperateMasterMetadata(t *testing.T) {
 	t.Parallel()
 	var (
-		ctx          = context.Background()
-		metaKVClient = mockkv.NewMetaMock()
-		addr1        = "127.0.0.1:10000"
-		addr2        = "127.0.0.1:10001"
-		meta         = &libModel.MasterMetaKVData{
+		ctx   = context.Background()
+		addr1 = "127.0.0.1:10000"
+		addr2 = "127.0.0.1:10001"
+		meta  = &libModel.MasterMetaKVData{
 			ID:         "master-1",
 			Tp:         fakeJobMaster,
 			Addr:       addr1,
 			StatusCode: libModel.MasterStatusInit,
 		}
 	)
+	metaClient, err := pkgOrm.NewMockClient()
+	require.Nil(t, err)
+
 	loadMeta := func() *libModel.MasterMetaKVData {
-		cli := NewMasterMetadataClient(meta.ID, metaKVClient)
+		cli := NewMasterMetadataClient(meta.ID, metaClient)
 		meta, err := cli.Load(ctx)
 		require.NoError(t, err)
 		return meta
 	}
 
 	// persist master meta for the first time
-	err := StoreMasterMeta(ctx, metaKVClient, meta)
+	err = StoreMasterMeta(ctx, metaClient, meta)
 	require.NoError(t, err)
 	require.Equal(t, addr1, loadMeta().Addr)
 
 	// overwrite master meta
 	meta.Addr = addr2
-	err = StoreMasterMeta(ctx, metaKVClient, meta)
+	err = StoreMasterMeta(ctx, metaClient, meta)
 	require.NoError(t, err)
 	require.Equal(t, addr2, loadMeta().Addr)
 
-	err = DeleteMasterMeta(ctx, metaKVClient, meta.ID)
+	err = DeleteMasterMeta(ctx, metaClient, meta.ID)
 	require.NoError(t, err)
 	// meta is not found in metastore, load meta will return a new master meta
 	require.Equal(t, "", loadMeta().Addr)
@@ -100,26 +115,33 @@ func TestOperateMasterMetadata(t *testing.T) {
 func TestLoadAllWorkers(t *testing.T) {
 	t.Parallel()
 
-	metaKVClient := mockkv.NewMetaMock()
-	workerMetaClient := NewWorkerMetadataClient("master-1", metaKVClient)
+	metaClient, err := pkgOrm.NewMockClient()
+	require.Nil(t, err)
+	workerMetaClient := NewWorkerMetadataClient("master-1", metaClient)
 
 	// Using context.Background() since there is no risk that
 	// the mock KV might time out.
-	err := workerMetaClient.Store(context.Background(), "worker-1", &libModel.WorkerStatus{
+	err = workerMetaClient.Store(context.Background(), &libModel.WorkerStatus{
+		JobID:        "master-1",
+		ID:           "worker-1",
 		Code:         libModel.WorkerStatusInit,
 		ErrorMessage: "test-1",
 		ExtBytes:     []byte("ext-bytes-1"),
 	})
 	require.NoError(t, err)
 
-	err = workerMetaClient.Store(context.Background(), "worker-2", &libModel.WorkerStatus{
+	err = workerMetaClient.Store(context.Background(), &libModel.WorkerStatus{
+		JobID:        "master-1",
+		ID:           "worker-2",
 		Code:         libModel.WorkerStatusNormal,
 		ErrorMessage: "test-2",
 		ExtBytes:     []byte("ext-bytes-2"),
 	})
 	require.NoError(t, err)
 
-	err = workerMetaClient.Store(context.Background(), "worker-3", &libModel.WorkerStatus{
+	err = workerMetaClient.Store(context.Background(), &libModel.WorkerStatus{
+		JobID:        "master-1",
+		ID:           "worker-3",
 		Code:         libModel.WorkerStatusFinished,
 		ErrorMessage: "test-3",
 		ExtBytes:     []byte("ext-bytes-3"),
@@ -128,21 +150,41 @@ func TestLoadAllWorkers(t *testing.T) {
 
 	workerStatuses, err := workerMetaClient.LoadAllWorkers(context.Background())
 	require.NoError(t, err)
-	require.Equal(t, map[libModel.WorkerID]*libModel.WorkerStatus{
-		"worker-1": {
-			Code:         libModel.WorkerStatusInit,
-			ErrorMessage: "test-1",
-			ExtBytes:     []byte("ext-bytes-1"),
+	require.Len(t, workerStatuses, 3)
+	require.Equal(t,
+		map[libModel.WorkerID]*libModel.WorkerStatus{
+			"worker-1": {
+				Code:         libModel.WorkerStatusInit,
+				ErrorMessage: "test-1",
+				ExtBytes:     []byte("ext-bytes-1"),
+			},
+			"worker-2": {
+				Code:         libModel.WorkerStatusNormal,
+				ErrorMessage: "test-2",
+				ExtBytes:     []byte("ext-bytes-2"),
+			},
+			"worker-3": {
+				Code:         libModel.WorkerStatusFinished,
+				ErrorMessage: "test-3",
+				ExtBytes:     []byte("ext-bytes-3"),
+			},
 		},
-		"worker-2": {
-			Code:         libModel.WorkerStatusNormal,
-			ErrorMessage: "test-2",
-			ExtBytes:     []byte("ext-bytes-2"),
+		map[libModel.WorkerID]*libModel.WorkerStatus{
+			workerStatuses["worker-1"].ID: {
+				Code:         workerStatuses["worker-1"].Code,
+				ErrorMessage: workerStatuses["worker-1"].ErrorMessage,
+				ExtBytes:     workerStatuses["worker-1"].ExtBytes,
+			},
+			workerStatuses["worker-2"].ID: {
+				Code:         workerStatuses["worker-2"].Code,
+				ErrorMessage: workerStatuses["worker-2"].ErrorMessage,
+				ExtBytes:     workerStatuses["worker-2"].ExtBytes,
+			},
+			workerStatuses["worker-3"].ID: {
+				Code:         workerStatuses["worker-3"].Code,
+				ErrorMessage: workerStatuses["worker-3"].ErrorMessage,
+				ExtBytes:     workerStatuses["worker-3"].ExtBytes,
+			},
 		},
-		"worker-3": {
-			Code:         libModel.WorkerStatusFinished,
-			ErrorMessage: "test-3",
-			ExtBytes:     []byte("ext-bytes-3"),
-		},
-	}, workerStatuses)
+	)
 }

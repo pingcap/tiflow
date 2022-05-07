@@ -28,10 +28,11 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/deps"
 	"github.com/hanfei1991/microcosm/pkg/errctx"
 	derror "github.com/hanfei1991/microcosm/pkg/errors"
-	"github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta"
-	extKV "github.com/hanfei1991/microcosm/pkg/meta/extension"
+	resourcemeta "github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta/model"
+	extkv "github.com/hanfei1991/microcosm/pkg/meta/extension"
 	"github.com/hanfei1991/microcosm/pkg/meta/kvclient"
 	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
+	pkgOrm "github.com/hanfei1991/microcosm/pkg/orm"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 	"github.com/hanfei1991/microcosm/pkg/quota"
 	"github.com/hanfei1991/microcosm/pkg/tenant"
@@ -111,10 +112,10 @@ type DefaultBaseMaster struct {
 	// dependencies
 	messageHandlerManager p2p.MessageHandlerManager
 	messageSender         p2p.MessageSender
-	// framework metastore prefix kvclient
-	metaKVClient metaclient.KVClient
+	// framework metastore client
+	frameMetaClient pkgOrm.Client
 	// user metastore raw kvclient
-	userRawKVClient       extKV.KVClientEx
+	userRawKVClient       extkv.KVClientEx
 	executorClientManager client.ClientsManager
 	serverMasterClient    client.MasterClient
 
@@ -157,10 +158,10 @@ type masterParams struct {
 
 	MessageHandlerManager p2p.MessageHandlerManager
 	MessageSender         p2p.MessageSender
-	// framework metastore prefix kvclient
-	MetaKVClient metaclient.KVClient
+	// framework metastore client
+	FrameMetaClient pkgOrm.Client
 	// user metastore raw kvclient
-	UserRawKVClient       extKV.KVClientEx
+	UserRawKVClient       extkv.KVClientEx
 	ExecutorClientManager client.ClientsManager
 	ServerMasterClient    client.MasterClient
 }
@@ -195,7 +196,7 @@ func NewBaseMaster(
 		Impl:                  impl,
 		messageHandlerManager: params.MessageHandlerManager,
 		messageSender:         params.MessageSender,
-		metaKVClient:          params.MetaKVClient,
+		frameMetaClient:       params.FrameMetaClient,
 		userRawKVClient:       params.UserRawKVClient,
 		executorClientManager: params.ExecutorClientManager,
 		serverMasterClient:    params.ServerMasterClient,
@@ -259,7 +260,7 @@ func (m *DefaultBaseMaster) doInit(ctx context.Context) (isFirstStartUp bool, er
 	m.workerManager = master.NewWorkerManager(
 		m.id,
 		epoch,
-		m.metaKVClient,
+		m.frameMetaClient,
 		m.messageSender,
 		func(_ context.Context, handle master.WorkerHandle) error {
 			return m.Impl.OnWorkerOnline(handle)
@@ -414,14 +415,14 @@ func (m *DefaultBaseMaster) OnError(err error) {
 // master meta is persisted before it is created, in this function we update some
 // fileds to the current value, including epoch, nodeID and advertiseAddr.
 func (m *DefaultBaseMaster) refreshMetadata(ctx context.Context) (isInit bool, epoch libModel.Epoch, err error) {
-	metaClient := metadata.NewMasterMetadataClient(m.id, m.metaKVClient)
+	metaClient := metadata.NewMasterMetadataClient(m.id, m.frameMetaClient)
 
 	masterMeta, err := metaClient.Load(ctx)
 	if err != nil {
 		return false, 0, err
 	}
 
-	epoch, err = m.metaKVClient.GenEpoch(ctx)
+	epoch, err = m.frameMetaClient.GenEpoch(ctx)
 	if err != nil {
 		return false, 0, err
 	}
@@ -431,7 +432,7 @@ func (m *DefaultBaseMaster) refreshMetadata(ctx context.Context) (isInit bool, e
 	masterMeta.Addr = m.advertiseAddr
 	masterMeta.NodeID = m.nodeID
 
-	if err := metaClient.Store(ctx, masterMeta); err != nil {
+	if err := metaClient.Update(ctx, masterMeta); err != nil {
 		return false, 0, errors.Trace(err)
 	}
 
@@ -445,14 +446,14 @@ func (m *DefaultBaseMaster) refreshMetadata(ctx context.Context) (isInit bool, e
 func (m *DefaultBaseMaster) markStatusCodeInMetadata(
 	ctx context.Context, code libModel.MasterStatusCode,
 ) error {
-	metaClient := metadata.NewMasterMetadataClient(m.id, m.metaKVClient)
+	metaClient := metadata.NewMasterMetadataClient(m.id, m.frameMetaClient)
 	masterMeta, err := metaClient.Load(ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
 
 	masterMeta.StatusCode = code
-	return metaClient.Store(ctx, masterMeta)
+	return metaClient.Update(ctx, masterMeta)
 }
 
 // prepareWorkerConfig extracts information from WorkerConfig into detail fields.

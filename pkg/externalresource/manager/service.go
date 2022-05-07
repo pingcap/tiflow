@@ -18,7 +18,8 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/ctxmu"
 	derror "github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta"
-	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
+	resModel "github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta/model"
+	pkgOrm "github.com/hanfei1991/microcosm/pkg/orm"
 )
 
 // Service implements pb.ResourceManagerServer
@@ -29,14 +30,14 @@ import (
 type Service struct {
 	mu       *ctxmu.CtxMutex
 	accessor *resourcemeta.MetadataAccessor
-	cache    map[resourcemeta.ResourceID]*resourcemeta.ResourceMeta
+	cache    map[resModel.ResourceID]*resModel.ResourceMeta
 
 	executors ExecutorInfoProvider
 
 	wg       sync.WaitGroup
 	cancelCh chan struct{}
 
-	offlinedExecutors chan resourcemeta.ExecutorID
+	offlinedExecutors chan resModel.ExecutorID
 
 	isAllLoaded atomic.Bool
 
@@ -48,16 +49,16 @@ const (
 )
 
 func NewService(
-	metaclient metaclient.KV,
+	metaclient pkgOrm.Client,
 	executorInfoProvider ExecutorInfoProvider,
 	preRPCHook *rpcutil.PreRPCHook[pb.ResourceManagerClient],
 ) *Service {
 	return &Service{
 		mu:                ctxmu.New(),
 		accessor:          resourcemeta.NewMetadataAccessor(metaclient),
-		cache:             make(map[resourcemeta.ResourceID]*resourcemeta.ResourceMeta),
+		cache:             make(map[resModel.ResourceID]*resModel.ResourceMeta),
 		executors:         executorInfoProvider,
-		offlinedExecutors: make(chan resourcemeta.ExecutorID, offlineExecutorQueueSize),
+		offlinedExecutors: make(chan resModel.ExecutorID, offlineExecutorQueueSize),
 		preRPCHook:        preRPCHook,
 	}
 }
@@ -154,11 +155,12 @@ func (s *Service) CreateResource(
 		return nil, st.Err()
 	}
 
-	resourceRecord := &resourcemeta.ResourceMeta{
+	resourceRecord := &resModel.ResourceMeta{
+		// TODO: projectID
 		ID:       request.GetResourceId(),
 		Job:      request.GetJobId(),
 		Worker:   request.GetCreatorWorkerId(),
-		Executor: resourcemeta.ExecutorID(request.GetCreatorExecutor()),
+		Executor: resModel.ExecutorID(request.GetCreatorExecutor()),
 		Deleted:  false,
 	}
 
@@ -200,20 +202,20 @@ func (s *Service) CreateResource(
 // (4) Other errors: ("", false, err)
 func (s *Service) GetPlacementConstraint(
 	ctx context.Context,
-	id resourcemeta.ResourceID,
-) (resourcemeta.ExecutorID, bool, error) {
+	id resModel.ResourceID,
+) (resModel.ExecutorID, bool, error) {
 	if !s.checkAllLoaded() {
 		return "", false, derror.ErrResourceManagerNotReady.GenWithStackByArgs()
 	}
 
 	logger := log.L().WithFields(zap.String("resource-id", id))
 
-	rType, _, err := resourcemeta.ParseResourcePath(id)
+	rType, _, err := resModel.ParseResourcePath(id)
 	if err != nil {
 		return "", false, err
 	}
 
-	if rType != resourcemeta.ResourceTypeLocalFile {
+	if rType != resModel.ResourceTypeLocalFile {
 		logger.Info("Resource does not need a constraint",
 			zap.String("resource-id", id), zap.String("type", string(rType)))
 		return "", false, nil
@@ -263,7 +265,7 @@ func (s *Service) GetPlacementConstraint(
 	return record.Executor, true, nil
 }
 
-func (s *Service) OnExecutorOffline(executorID resourcemeta.ExecutorID) error {
+func (s *Service) OnExecutorOffline(executorID resModel.ExecutorID) error {
 	select {
 	case s.offlinedExecutors <- executorID:
 		return nil
@@ -316,7 +318,7 @@ func (s *Service) runBackgroundWorker(ctx context.Context) {
 	}
 }
 
-func (s *Service) handleExecutorOffline(ctx context.Context, executorID resourcemeta.ExecutorID) {
+func (s *Service) handleExecutorOffline(ctx context.Context, executorID resModel.ExecutorID) {
 	if !s.mu.Lock(ctx) {
 		return
 	}

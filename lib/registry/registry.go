@@ -85,10 +85,12 @@ func (r *registryImpl) CreateWorker(
 			impl,
 			workerID,
 			masterID,
+			// tp,
 		)
 		setImplMember(impl, nameOfBaseWorker, base)
 		return base, nil
 	}
+	// TODO: should jobmaster record worker status
 	if implHasMember(impl, nameOfBaseJobMaster) {
 		base := lib.NewBaseJobMaster(
 			ctx,

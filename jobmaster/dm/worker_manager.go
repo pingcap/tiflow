@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta"
+	resourcemeta "github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta/model"
 	dmconfig "github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/zap"

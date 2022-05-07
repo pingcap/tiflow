@@ -16,7 +16,7 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/clock"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 	derrors "github.com/hanfei1991/microcosm/pkg/errors"
-	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
+	pkgOrm "github.com/hanfei1991/microcosm/pkg/orm"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 	"github.com/hanfei1991/microcosm/pkg/uuid"
 )
@@ -47,6 +47,7 @@ type JobManagerImplV2 struct {
 	masterMetaClient *metadata.MasterMetadataClient
 	uuidGen          uuid.Generator
 	clocker          clock.Clock
+	frameMetaClient  pkgOrm.Client
 	tombstoneCleaned bool
 }
 
@@ -83,7 +84,9 @@ func (jm *JobManagerImplV2) QueryJob(ctx context.Context, req *pb.QueryJobReques
 	if resp != nil {
 		return resp
 	}
-	mcli := metadata.NewMasterMetadataClient(req.JobId, jm.MetaKVClient())
+
+	// TODO: refine the Load method here, seems strange
+	mcli := metadata.NewMasterMetadataClient(req.JobId, jm.frameMetaClient)
 	if masterMeta, err := mcli.Load(ctx); err != nil {
 		log.L().Warn("failed to load master kv meta from meta store", zap.Any("id", req.JobId), zap.Error(err))
 	} else {
@@ -122,10 +125,11 @@ func (jm *JobManagerImplV2) SubmitJob(ctx context.Context, req *pb.SubmitJobRequ
 	)
 
 	meta := &libModel.MasterMetaKVData{
+		ProjectID: req.GetUser(),
 		// TODO: we can use job name provided from user, but we must check the
 		// job name is unique before using it.
 		ID:         jm.uuidGen.NewString(),
-		Config:     req.Config,
+		Config:     req.GetConfig(),
 		StatusCode: libModel.MasterStatusUninit,
 	}
 	switch req.Tp {
@@ -150,7 +154,7 @@ func (jm *JobManagerImplV2) SubmitJob(ctx context.Context, req *pb.SubmitJobRequ
 	}
 
 	// Store job master meta data before creating it
-	err = metadata.StoreMasterMeta(ctx, jm.BaseMaster.MetaKVClient(), meta)
+	err = metadata.StoreMasterMeta(ctx, jm.frameMetaClient, meta)
 	if err != nil {
 		resp.Err = derrors.ToPBError(err)
 		return resp
@@ -161,7 +165,7 @@ func (jm *JobManagerImplV2) SubmitJob(ctx context.Context, req *pb.SubmitJobRequ
 	id, err = jm.BaseMaster.CreateWorker(
 		meta.Tp, meta, defaultJobMasterCost)
 	if err != nil {
-		err2 := metadata.DeleteMasterMeta(ctx, jm.BaseMaster.MetaKVClient(), meta.ID)
+		err2 := metadata.DeleteMasterMeta(ctx, jm.frameMetaClient, meta.ID)
 		if err2 != nil {
 			// TODO: add more GC mechanism if master meta is failed to delete
 			log.L().Error("failed to delete master meta", zap.Error(err2))
@@ -182,19 +186,21 @@ func NewJobManagerImplV2(
 	dctx *dcontext.Context,
 	id libModel.MasterID,
 ) (*JobManagerImplV2, error) {
-	masterMetaClient, err := dctx.Deps().Construct(func(metaKV metaclient.KVClient) (*metadata.MasterMetadataClient, error) {
-		return metadata.NewMasterMetadataClient(id, metaKV), nil
+	metaCli, err := dctx.Deps().Construct(func(cli pkgOrm.Client) (pkgOrm.Client, error) {
+		return cli, nil
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	cli := masterMetaClient.(*metadata.MasterMetadataClient)
+	metaClient := metaCli.(pkgOrm.Client)
+	cli := metadata.NewMasterMetadataClient(id, metaClient)
 	impl := &JobManagerImplV2{
 		JobFsm:           NewJobFsm(),
 		uuidGen:          uuid.NewGenerator(),
 		masterMetaClient: cli,
 		clocker:          clock.New(),
+		frameMetaClient:  metaClient,
 	}
 	impl.BaseMaster = lib.NewBaseMaster(
 		dctx,
@@ -207,7 +213,7 @@ func NewJobManagerImplV2(
 	// Initialized to true in order to trigger OnMasterRecovered of job manager.
 	meta := impl.MasterMeta()
 	meta.StatusCode = libModel.MasterStatusInit
-	err = metadata.StoreMasterMeta(dctx, impl.BaseMaster.MetaKVClient(), meta)
+	err = metadata.StoreMasterMeta(dctx, impl.frameMetaClient, meta)
 	if err != nil {
 		return nil, err
 	}

@@ -6,7 +6,6 @@ import (
 
 	sqle "github.com/dolthub/go-mysql-server"
 	"github.com/dolthub/go-mysql-server/memory"
-	"github.com/dolthub/go-mysql-server/server"
 	gsvr "github.com/dolthub/go-mysql-server/server"
 	gsql "github.com/dolthub/go-mysql-server/sql"
 	"github.com/dolthub/go-mysql-server/sql/information_schema"
@@ -16,8 +15,7 @@ import (
 )
 
 func NewMockClient() (Client, error) {
-	addr := allocTempURL()
-	svr, err := MockBackendDB(addr, tenant.FrameTenantID)
+	svr, addr, err := MockBackendDB(tenant.FrameTenantID)
 	if err != nil {
 		return nil, err
 	}
@@ -70,21 +68,22 @@ func allocTempURL() string {
 // https://github.com/dolthub/go-mysql-server
 // go-mysql-server not support unique index
 // ref: https://github.com/dolthub/go-mysql-server/issues/571
-func MockBackendDB(address string, db string) (*server.Server, error) {
+func MockBackendDB(db string) (*gsvr.Server, string, error) {
+	addr := allocTempURL()
 	engine := sqle.NewDefault(
 		gsql.NewDatabaseProvider(
 			createTestDatabase(db),
 			information_schema.NewInformationSchemaDatabase(),
 		))
 
-	config := server.Config{
+	config := gsvr.Config{
 		Protocol: "tcp",
-		Address:  address,
+		Address:  addr,
 	}
 
-	s, err := server.NewDefaultServer(config, engine)
+	s, err := gsvr.NewDefaultServer(config, engine)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	go func() {
@@ -94,9 +93,15 @@ func MockBackendDB(address string, db string) (*server.Server, error) {
 		}
 	}()
 
-	return s, err
+	return s, addr, err
 }
 
 func createTestDatabase(db string) *memory.Database {
 	return memory.NewDatabase(db)
+}
+
+func CloseBackendDB(svr *gsvr.Server) {
+	if svr != nil {
+		svr.Close()
+	}
 }

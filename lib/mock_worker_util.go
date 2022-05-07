@@ -15,6 +15,7 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/deps"
 	"github.com/hanfei1991/microcosm/pkg/externalresource/broker"
 	mockkv "github.com/hanfei1991/microcosm/pkg/meta/kvclient/mock"
+	pkgOrm "github.com/hanfei1991/microcosm/pkg/orm"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 )
 
@@ -30,16 +31,19 @@ func MockBaseWorker(
 ) *BaseWorkerForTesting {
 	ctx := dcontext.Background()
 	dp := deps.NewDeps()
-
+	cli, err := pkgOrm.NewMockClient()
+	if err != nil {
+		panic(err)
+	}
 	resourceBroker := broker.NewBrokerForTesting("executor-1")
 	params := workerParamListForTest{
 		MessageHandlerManager: p2p.NewMockMessageHandlerManager(),
 		MessageSender:         p2p.NewMockMessageSender(),
-		MetaKVClient:          mockkv.NewMetaMock(),
+		FrameMetaClient:       cli,
 		UserRawKVClient:       mockkv.NewMetaMock(),
 		ResourceBroker:        resourceBroker,
 	}
-	err := dp.Provide(func() workerParamListForTest {
+	err = dp.Provide(func() workerParamListForTest {
 		return params
 	})
 	if err != nil {

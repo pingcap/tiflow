@@ -8,34 +8,34 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/hanfei1991/microcosm/pb"
-	"github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta"
+	resModel "github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta/model"
 	"github.com/hanfei1991/microcosm/pkg/externalresource/storagecfg"
 )
 
 type Broker interface {
 	OpenStorage(
 		ctx context.Context,
-		workerID resourcemeta.WorkerID,
-		jobID resourcemeta.JobID,
-		resourcePath resourcemeta.ResourceID,
+		workerID resModel.WorkerID,
+		jobID resModel.JobID,
+		resourcePath resModel.ResourceID,
 	) (Handle, error)
 	OnWorkerClosed(
 		ctx context.Context,
-		workerID resourcemeta.WorkerID,
-		jobID resourcemeta.JobID,
+		workerID resModel.WorkerID,
+		jobID resModel.JobID,
 	)
 }
 
 type Impl struct {
 	config     *storagecfg.Config
-	executorID resourcemeta.ExecutorID
+	executorID resModel.ExecutorID
 
 	factory *Factory
 }
 
 func NewBroker(
 	config *storagecfg.Config,
-	executorID resourcemeta.ExecutorID,
+	executorID resModel.ExecutorID,
 	client *rpcutil.FailoverRPCClients[pb.ResourceManagerClient],
 ) *Impl {
 	return &Impl{
@@ -51,19 +51,19 @@ func NewBroker(
 
 func (i *Impl) OpenStorage(
 	ctx context.Context,
-	workerID resourcemeta.WorkerID,
-	jobID resourcemeta.JobID,
-	resourcePath resourcemeta.ResourceID,
+	workerID resModel.WorkerID,
+	jobID resModel.JobID,
+	resourcePath resModel.ResourceID,
 ) (Handle, error) {
-	tp, _, err := resourcemeta.ParseResourcePath(resourcePath)
+	tp, _, err := resModel.ParseResourcePath(resourcePath)
 	if err != nil {
 		return nil, err
 	}
 
 	switch tp {
-	case resourcemeta.ResourceTypeLocalFile:
+	case resModel.ResourceTypeLocalFile:
 		return i.factory.NewHandleForLocalFile(ctx, jobID, workerID, resourcePath)
-	case resourcemeta.ResourceTypeS3:
+	case resModel.ResourceTypeS3:
 		log.L().Panic("resource type s3 is not supported for now")
 	default:
 	}
@@ -72,6 +72,6 @@ func (i *Impl) OpenStorage(
 	panic("unreachable")
 }
 
-func (i *Impl) OnWorkerClosed(ctx context.Context, workerID resourcemeta.WorkerID, jobID resourcemeta.JobID) {
+func (i *Impl) OnWorkerClosed(ctx context.Context, workerID resModel.WorkerID, jobID resModel.JobID) {
 	panic("implement me")
 }

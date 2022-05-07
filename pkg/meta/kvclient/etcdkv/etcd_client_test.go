@@ -2,17 +2,12 @@ package etcdkv
 
 import (
 	"context"
-	"fmt"
-	"io/ioutil"
-	"log"
-	"net/url"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
-	"github.com/phayes/freeport"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.etcd.io/etcd/server/v3/embed"
@@ -25,53 +20,20 @@ type SuiteTestEtcd struct {
 	endpoints string
 }
 
-func allocTempURL(t *testing.T) string {
-	port, err := freeport.GetFreePort()
-	require.Nil(t, err)
-	return fmt.Sprintf("http://127.0.0.1:%d", port)
-}
-
 // The SetupSuite method will be run by testify once, at the very
 // start of the testing suite, before any tests are run.
 func (suite *SuiteTestEtcd) SetupSuite() {
-	cfg := embed.NewConfig()
-	tmpDir := "suite-etcd"
-	dir, err := ioutil.TempDir("", tmpDir)
-	require.Nil(suite.T(), err)
-	cfg.Dir = dir
-	peers := allocTempURL(suite.T())
-	log.Printf("Allocate server peer port is %s", peers)
-	u, err := url.Parse(peers)
-	require.Nil(suite.T(), err)
-	cfg.LPUrls = []url.URL{*u}
-	advertises := allocTempURL(suite.T())
-	log.Printf("Allocate server advertises port is %s", advertises)
-	u, err = url.Parse(advertises)
-	require.Nil(suite.T(), err)
-	cfg.LCUrls = []url.URL{*u}
-	suite.e, err = embed.StartEtcd(cfg)
-	if err != nil {
-		require.FailNow(suite.T(), "Start embedded etcd fail:%v", err)
-	}
-	select {
-	case <-suite.e.Server.ReadyNotify():
-		log.Printf("Server is ready!")
-	case <-time.After(60 * time.Second):
-		suite.e.Server.Stop() // trigger a shutdown
-		suite.e.Close()
-		suite.e = nil
-		require.FailNow(suite.T(), "Server took too long to start!")
-	}
-	suite.endpoints = advertises
+	svr, endpoints, err := MockBackendEtcd()
+	require.NoError(suite.T(), err)
+
+	suite.e = svr
+	suite.endpoints = endpoints
 }
 
 // The TearDownSuite method will be run by testify once, at the very
 // end of the testing suite, after all tests have been run.
 func (suite *SuiteTestEtcd) TearDownSuite() {
-	if suite.e != nil {
-		suite.e.Server.Stop()
-		suite.e.Close()
-	}
+	CloseEmbededEtcd(suite.e)
 }
 
 func clearKeySpace(ctx context.Context, cli metaclient.KVClient) {

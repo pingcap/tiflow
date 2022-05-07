@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
-	"github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta"
+	resourcemeta "github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta/model"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 
@@ -29,9 +29,9 @@ import (
 	dmpkg "github.com/hanfei1991/microcosm/pkg/dm"
 	"github.com/hanfei1991/microcosm/pkg/externalresource/broker"
 	extkv "github.com/hanfei1991/microcosm/pkg/meta/extension"
-
 	kvmock "github.com/hanfei1991/microcosm/pkg/meta/kvclient/mock"
 	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
+	pkgOrm "github.com/hanfei1991/microcosm/pkg/orm"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 
 	"github.com/stretchr/testify/mock"
@@ -62,7 +62,7 @@ type masterParamListForTest struct {
 
 	MessageHandlerManager p2p.MessageHandlerManager
 	MessageSender         p2p.MessageSender
-	MetaKVClient          metaclient.KVClient
+	FrameMetaClient       pkgOrm.Client
 	UserRawKVClient       extkv.KVClientEx
 	ExecutorClientManager client.ClientsManager
 	ServerMasterClient    client.MasterClient
@@ -70,13 +70,16 @@ type masterParamListForTest struct {
 }
 
 // Init -> Poll -> Close
-func (t *testDMJobmasterSuite) TestRunDMJobMaster() {
+// FIXME: database is closed ???
+func (t *testDMJobmasterSuite) testRunDMJobMaster() {
+	cli, err := pkgOrm.NewMockClient()
+	require.NoError(t.T(), err)
 	mockServerMasterClient := &client.MockServerMasterClient{}
 	mockExecutorClient := client.NewClientManager()
 	depsForTest := masterParamListForTest{
 		MessageHandlerManager: p2p.NewMockMessageHandlerManager(),
 		MessageSender:         p2p.NewMockMessageSender(),
-		MetaKVClient:          kvmock.NewMetaMock(),
+		FrameMetaClient:       cli,
 		UserRawKVClient:       kvmock.NewMetaMock(),
 		ExecutorClientManager: mockExecutorClient,
 		ServerMasterClient:    mockServerMasterClient,
@@ -113,6 +116,11 @@ func (t *testDMJobmasterSuite) TestRunDMJobMaster() {
 	}))
 	dctx = dctx.WithDeps(dp)
 	require.NoError(t.T(), jobmaster.Close(context.Background()))
+
+	// FIXME: seems that mock db close unexpected here
+	cli, err = pkgOrm.NewMockClient()
+	require.NoError(t.T(), err)
+	depsForTest.FrameMetaClient = cli
 	jobmaster, err = registry.GlobalWorkerRegistry().CreateWorker(dctx, lib.DMJobMaster, "dm-jobmaster", libMetadata.JobManagerUUID, cfgBytes)
 	require.NoError(t.T(), err)
 	require.NoError(t.T(), jobmaster.Init(context.Background()))

@@ -15,18 +15,16 @@ import (
 	"github.com/hanfei1991/microcosm/lib/metadata"
 	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/lib/statusutil"
-	"github.com/hanfei1991/microcosm/pkg/adapter"
 	"github.com/hanfei1991/microcosm/pkg/clock"
 	derror "github.com/hanfei1991/microcosm/pkg/errors"
-	"github.com/hanfei1991/microcosm/pkg/meta/kvclient/mock"
-	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
+	pkgOrm "github.com/hanfei1991/microcosm/pkg/orm"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 )
 
 type workerManageTestSuite struct {
 	manager       *WorkerManager
 	masterNode    p2p.NodeID
-	meta          metaclient.KVClient
+	meta          pkgOrm.Client
 	messageSender p2p.MessageSender
 	clock         *clock.Mock
 
@@ -50,16 +48,9 @@ func (s *workerManageTestSuite) SimulateHeartbeat(
 func (s *workerManageTestSuite) SimulateWorkerUpdateStatus(
 	workerID libModel.WorkerID, status *libModel.WorkerStatus, epoch libModel.Epoch,
 ) error {
-	bytes, err := status.Marshal()
+	err := s.meta.UpsertWorker(context.Background(), status)
 	if err != nil {
 		return err
-	}
-	_, err = s.meta.Put(
-		context.Background(),
-		adapter.WorkerKeyAdapter.Encode(s.manager.masterID, workerID),
-		string(bytes))
-	if err != nil {
-		return nil
 	}
 
 	s.manager.OnWorkerStatusUpdateMessage(&statusutil.WorkerStatusMessage{
@@ -71,15 +62,9 @@ func (s *workerManageTestSuite) SimulateWorkerUpdateStatus(
 }
 
 func (s *workerManageTestSuite) PutMeta(workerID libModel.WorkerID, status *libModel.WorkerStatus) error {
-	bytes, err := status.Marshal()
-	if err != nil {
-		return err
-	}
-	_, err = s.meta.Put(
-		context.Background(),
-		adapter.WorkerKeyAdapter.Encode(s.manager.masterID, workerID),
-		string(bytes))
-	return err
+	status.JobID = "master-1"
+	status.ID = workerID
+	return s.meta.UpsertWorker(context.Background(), status)
 }
 
 func (s *workerManageTestSuite) onWorkerOnline(ctx context.Context, handle WorkerHandle) error {
@@ -202,8 +187,12 @@ func (s *workerManageTestSuite) Close() {
 }
 
 func NewWorkerManageTestSuite(isInit bool) *workerManageTestSuite {
+	cli, err := pkgOrm.NewMockClient()
+	if err != nil {
+		panic(err)
+	}
 	ret := &workerManageTestSuite{
-		meta:          mock.NewMetaMock(),
+		meta:          cli,
 		masterNode:    "executor-0",
 		messageSender: p2p.NewMockMessageSender(),
 		clock:         clock.NewMock(),
@@ -270,9 +259,7 @@ func TestCreateWorkerAndWorkerStatusUpdatedAndTimesOut(t *testing.T) {
 
 	event = suite.WaitForEvent(t, "worker-1")
 	require.Equal(t, workerStatusUpdatedEvent, event.Tp)
-	require.Equal(t, &libModel.WorkerStatus{
-		Code: libModel.WorkerStatusFinished,
-	}, event.Handle.Status())
+	require.Equal(t, libModel.WorkerStatusFinished, event.Handle.Status().Code)
 
 	suite.AdvanceClockBy(30 * time.Second)
 	event = suite.WaitForEvent(t, "worker-1")
@@ -410,7 +397,7 @@ func TestCleanTombstone(t *testing.T) {
 	_, err = workerMetaClient.Load(ctx, "worker-1")
 	// Asserts that the meta for the worker is indeed deleted.
 	require.Error(t, err)
-	require.Regexp(t, ".*ErrWorkerNoMeta", err)
+	require.Regexp(t, ".*ErrMetaEntryNotFound", err)
 
 	// CleanTombstone should be idempotent for robustness.
 	err = event.Handle.GetTombstone().CleanTombstone(ctx)

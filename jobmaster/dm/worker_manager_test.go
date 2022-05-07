@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta"
+	resourcemeta "github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta/model"
 	"github.com/pingcap/errors"
 	dmconfig "github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/stretchr/testify/require"

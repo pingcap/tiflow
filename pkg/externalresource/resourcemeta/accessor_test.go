@@ -6,12 +6,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hanfei1991/microcosm/pkg/meta/kvclient/mock"
+	resModel "github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta/model"
+	pkgOrm "github.com/hanfei1991/microcosm/pkg/orm"
 	"github.com/stretchr/testify/require"
 )
 
 func newAccessorWithMockKV() *MetadataAccessor {
-	return NewMetadataAccessor(mock.NewMetaMock())
+	cli, _ := pkgOrm.NewMockClient()
+	return NewMetadataAccessor(cli)
 }
 
 func TestAccessorBasics(t *testing.T) {
@@ -23,7 +25,7 @@ func TestAccessorBasics(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, found)
 
-	ok, err := acc.CreateResource(ctx, &ResourceMeta{
+	ok, err := acc.CreateResource(ctx, &resModel.ResourceMeta{
 		ID:       "resource-1",
 		Job:      "job-1",
 		Worker:   "worker-1",
@@ -33,7 +35,7 @@ func TestAccessorBasics(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, ok)
 
-	ok, err = acc.CreateResource(ctx, &ResourceMeta{
+	ok, err = acc.CreateResource(ctx, &resModel.ResourceMeta{
 		ID:       "resource-1",
 		Job:      "job-1",
 		Worker:   "worker-1",
@@ -46,7 +48,7 @@ func TestAccessorBasics(t *testing.T) {
 	resc, found, err := acc.GetResource(ctx, "resource-1")
 	require.NoError(t, err)
 	require.True(t, found)
-	require.Equal(t, &ResourceMeta{
+	checkResourceMetaEqual(t, &resModel.ResourceMeta{
 		ID:       "resource-1",
 		Job:      "job-1",
 		Worker:   "worker-1",
@@ -54,7 +56,7 @@ func TestAccessorBasics(t *testing.T) {
 		Deleted:  false,
 	}, resc)
 
-	ok, err = acc.UpdateResource(ctx, &ResourceMeta{
+	ok, err = acc.UpdateResource(ctx, &resModel.ResourceMeta{
 		ID:       "resource-1",
 		Job:      "job-1",
 		Worker:   "worker-2",
@@ -67,7 +69,7 @@ func TestAccessorBasics(t *testing.T) {
 	resc, found, err = acc.GetResource(ctx, "resource-1")
 	require.NoError(t, err)
 	require.True(t, found)
-	require.Equal(t, &ResourceMeta{
+	checkResourceMetaEqual(t, &resModel.ResourceMeta{
 		ID:       "resource-1",
 		Job:      "job-1",
 		Worker:   "worker-2",
@@ -75,7 +77,7 @@ func TestAccessorBasics(t *testing.T) {
 		Deleted:  false,
 	}, resc)
 
-	ok, err = acc.UpdateResource(ctx, &ResourceMeta{
+	ok, err = acc.UpdateResource(ctx, &resModel.ResourceMeta{
 		ID:       "resource-2",
 		Job:      "job-1",
 		Worker:   "worker-2",
@@ -102,11 +104,11 @@ func TestMetadataAccessorGetResourcesForExecutor(t *testing.T) {
 			executor = "executor-2"
 		}
 
-		ok, err := acc.CreateResource(ctx, &ResourceMeta{
+		ok, err := acc.CreateResource(ctx, &resModel.ResourceMeta{
 			ID:       fmt.Sprintf("resource-%d", i),
 			Job:      "job-1",
 			Worker:   fmt.Sprintf("worker-%d", i),
-			Executor: ExecutorID(executor),
+			Executor: resModel.ExecutorID(executor),
 			Deleted:  false,
 		})
 		require.NoError(t, err)
@@ -116,4 +118,12 @@ func TestMetadataAccessorGetResourcesForExecutor(t *testing.T) {
 	results, err := acc.GetResourcesForExecutor(ctx, "executor-1")
 	require.NoError(t, err)
 	require.Len(t, results, 500)
+}
+
+func checkResourceMetaEqual(t *testing.T, expect, actual *resModel.ResourceMeta) {
+	require.Equal(t, expect.ID, actual.ID)
+	require.Equal(t, expect.Job, actual.Job)
+	require.Equal(t, expect.Worker, actual.Worker)
+	require.Equal(t, expect.Executor, actual.Executor)
+	require.Equal(t, expect.Deleted, actual.Deleted)
 }

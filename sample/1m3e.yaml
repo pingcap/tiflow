@@ -18,14 +18,16 @@ services:
                         - "--advertise-peer-urls"
                         - "http://server-master:8291"
                         - "--frame-meta-endpoints"
-                        - "frame-etcd-standalone:2379"
+                        - "frame-mysql-standalone:3306"
                         - "--user-meta-endpoints"
                         - "user-etcd-standalone:2379"
                 ports:
                         - "10240:10240"
                 depends_on:
-                        - "frame-etcd-standalone"
-                        - "user-etcd-standalone"
+                  "user-etcd-standalone":
+                    condition: service_started
+                  "frame-mysql-standalone":
+                    condition: service_healthy
         server-executor-0:
                 image: dataflow:test
                 volumes:
@@ -86,18 +88,22 @@ services:
                 restart: "on-failure"
                 extra_hosts:
                         - "host.docker.internal:host-gateway"
-        frame-etcd-standalone:
-                image: quay.io/coreos/etcd
-                container_name: frame-etcd-standalone
+        frame-mysql-standalone:
+                image: mysql:5.7
+                platform: linux/amd64
+                container_name: frame-mysql-standalone
+                environment:
+                        MYSQL_ROOT_PASSWORD: 123456
                 volumes:
-                        - ./config/etcd.yml:/etcd.yml
-                command:
-                        - "etcd"
-                        - "--config-file"
-                        - "/etcd.yml"
+                        - '/tmp/dataflow/mysql:/var/lib/mysql'
+                        - './config/mysql_meta.cnf:/etc/my.cnf'
                 ports:
-                        - "12379:2379"
-                        - "12380:2380"
+                        - "3336:3306"
+                healthcheck:
+                        test: "mysqladmin ping -h127.0.0.1 -P3306 -uroot -p123456"
+                        interval: 10s
+                        timeout: 600s
+                        retries: 60
         user-etcd-standalone:
                 image: quay.io/coreos/etcd
                 container_name: user-etcd-standalone

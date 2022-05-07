@@ -2,7 +2,7 @@ package model
 
 import (
 	"github.com/hanfei1991/microcosm/model"
-	"github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta"
+	resourcemeta "github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta/model"
 )
 
 // SchedulerRequest represents a request for an executor to run a given task.

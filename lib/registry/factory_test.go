@@ -14,7 +14,7 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/externalresource/broker"
 	extkv "github.com/hanfei1991/microcosm/pkg/meta/extension"
 	"github.com/hanfei1991/microcosm/pkg/meta/kvclient/mock"
-	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
+	pkgOrm "github.com/hanfei1991/microcosm/pkg/orm"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 )
 
@@ -23,18 +23,20 @@ type paramList struct {
 
 	MessageHandlerManager p2p.MessageHandlerManager
 	MessageSender         p2p.MessageSender
-	MetaKVClient          metaclient.KVClient
+	FrameMetaClient       pkgOrm.Client
 	UserRawKVClient       extkv.KVClientEx
 	ResourceBroker        broker.Broker
 }
 
 func makeCtxWithMockDeps(t *testing.T) *dcontext.Context {
 	dp := deps.NewDeps()
-	err := dp.Provide(func() paramList {
+	cli, err := pkgOrm.NewMockClient()
+	require.NoError(t, err)
+	err = dp.Provide(func() paramList {
 		return paramList{
 			MessageHandlerManager: p2p.NewMockMessageHandlerManager(),
 			MessageSender:         p2p.NewMockMessageSender(),
-			MetaKVClient:          mock.NewMetaMock(),
+			FrameMetaClient:       cli,
 			UserRawKVClient:       mock.NewMetaMock(),
 			ResourceBroker:        broker.NewBrokerForTesting("executor-1"),
 		}

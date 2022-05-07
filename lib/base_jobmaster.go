@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/hanfei1991/microcosm/pkg/errctx"
-	"github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta"
+	resourcemeta "github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta/model"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -91,6 +91,7 @@ func NewBaseJobMaster(
 	baseMaster := NewBaseMaster(
 		ctx, &jobMasterImplAsMasterImpl{jobMasterImpl}, workerID)
 	baseWorker := NewBaseWorker(
+		// TODO: need worker_type
 		ctx, &jobMasterImplAsWorkerImpl{jobMasterImpl}, workerID, masterID)
 	errCenter := errctx.NewErrCenter()
 	baseMaster.(*DefaultBaseMaster).errCenter = errCenter

@@ -5,6 +5,9 @@ import (
 
 	"github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
+	pkgOrm "github.com/hanfei1991/microcosm/pkg/orm"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"go.uber.org/zap"
 )
 
 type MetaStoreManager interface {
@@ -29,6 +32,7 @@ func NewMetaStoreManager() MetaStoreManager {
 
 func (m *metaStoreManagerImpl) Register(id string, store *metaclient.StoreConfigParams) error {
 	if _, exists := m.id2Store.LoadOrStore(id, store); exists {
+		log.L().Error("register metastore fail", zap.Any("config", store), zap.String("err", "Duplicate storeID"))
 		return errors.ErrMetaStoreIDDuplicate.GenWithStackByArgs()
 	}
 	return nil
@@ -36,6 +40,7 @@ func (m *metaStoreManagerImpl) Register(id string, store *metaclient.StoreConfig
 
 func (m *metaStoreManagerImpl) UnRegister(id string) {
 	m.id2Store.Delete(id)
+	log.L().Info("unregister metastore", zap.String("storeID", id))
 }
 
 func (m *metaStoreManagerImpl) GetMetaStore(id string) *metaclient.StoreConfigParams {
@@ -51,7 +56,11 @@ func NewFrameMetaConfig() *metaclient.StoreConfigParams {
 	return &metaclient.StoreConfigParams{
 		StoreID: metaclient.FrameMetaID,
 		Endpoints: []string{
-			metaclient.DefaultFrameMetaEndpoints,
+			pkgOrm.DefaultFrameMetaEndpoints,
+		},
+		Auth: metaclient.AuthConfParams{
+			User:   pkgOrm.DefaultFrameMetaUser,
+			Passwd: pkgOrm.DefaultFrameMetaPassword,
 		},
 	}
 }

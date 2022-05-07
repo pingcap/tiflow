@@ -11,8 +11,7 @@ import (
 	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/pkg/externalresource/broker"
 	extkv "github.com/hanfei1991/microcosm/pkg/meta/extension"
-	mockkv "github.com/hanfei1991/microcosm/pkg/meta/kvclient/mock"
-	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
+	pkgOrm "github.com/hanfei1991/microcosm/pkg/orm"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 )
 
@@ -25,7 +24,7 @@ type mockWorkerImpl struct {
 
 	messageHandlerManager *p2p.MockMessageHandlerManager
 	messageSender         *p2p.MockMessageSender
-	metaKVClient          *mockkv.MetaMock
+	metaClient            pkgOrm.Client
 
 	failoverCount atomic.Int64
 }
@@ -35,7 +34,7 @@ type workerParamListForTest struct {
 
 	MessageHandlerManager p2p.MessageHandlerManager
 	MessageSender         p2p.MessageSender
-	MetaKVClient          metaclient.KVClient
+	FrameMetaClient       pkgOrm.Client
 	UserRawKVClient       extkv.KVClientEx
 	ResourceBroker        broker.Broker
 }
@@ -49,7 +48,7 @@ func newMockWorkerImpl(workerID libModel.WorkerID, masterID libModel.MasterID) *
 	ret.DefaultBaseWorker = MockBaseWorker(workerID, masterID, ret).DefaultBaseWorker
 	ret.messageHandlerManager = ret.DefaultBaseWorker.messageHandlerManager.(*p2p.MockMessageHandlerManager)
 	ret.messageSender = ret.DefaultBaseWorker.messageSender.(*p2p.MockMessageSender)
-	ret.metaKVClient = ret.DefaultBaseWorker.metaKVClient.(*mockkv.MetaMock)
+	ret.metaClient = ret.DefaultBaseWorker.frameMetaClient
 	return ret
 }
 

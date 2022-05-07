@@ -5,7 +5,7 @@ import (
 
 	"github.com/hanfei1991/microcosm/model"
 	derror "github.com/hanfei1991/microcosm/pkg/errors"
-	"github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta"
+	resourcemeta "github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta/model"
 )
 
 // PlacementConstrainer describes an object that provides

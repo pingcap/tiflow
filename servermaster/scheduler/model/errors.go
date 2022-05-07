@@ -11,7 +11,7 @@ import (
 
 	"github.com/hanfei1991/microcosm/model"
 	derrors "github.com/hanfei1991/microcosm/pkg/errors"
-	"github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta"
+	resourcemeta "github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta/model"
 )
 
 type ResourceNotFoundError struct {

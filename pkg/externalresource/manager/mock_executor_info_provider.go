@@ -3,7 +3,7 @@ package manager
 import (
 	"sync"
 
-	"github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta"
+	resourcemeta "github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta/model"
 )
 
 type MockExecutorInfoProvider struct {

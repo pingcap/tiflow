@@ -14,17 +14,15 @@ import (
 	"google.golang.org/grpc/codes"
 
 	"github.com/hanfei1991/microcosm/pb"
-	"github.com/hanfei1991/microcosm/pkg/adapter"
-	"github.com/hanfei1991/microcosm/pkg/dataset"
 	derror "github.com/hanfei1991/microcosm/pkg/errors"
-	"github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta"
-	"github.com/hanfei1991/microcosm/pkg/meta/kvclient/mock"
+	resourcemeta "github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta/model"
+	pkgOrm "github.com/hanfei1991/microcosm/pkg/orm"
 )
 
 type serviceTestSuite struct {
 	service              *Service
 	executorInfoProvider *MockExecutorInfoProvider
-	meta                 *mock.MetaMock
+	meta                 pkgOrm.Client
 }
 
 var serviceMockData = []*resourcemeta.ResourceMeta{
@@ -65,9 +63,10 @@ var serviceMockData = []*resourcemeta.ResourceMeta{
 	},
 }
 
-func newServiceTestSuite() *serviceTestSuite {
+func newServiceTestSuite(t *testing.T) *serviceTestSuite {
 	execPro := NewMockExecutorInfoProvider()
-	meta := mock.NewMetaMock()
+	meta, err := pkgOrm.NewMockClient()
+	require.NoError(t, err)
 	id := "leader"
 	leaderVal := &atomic.Value{}
 	leaderVal.Store(&rpcutil.Member{Name: id})
@@ -105,9 +104,8 @@ func (s *serviceTestSuite) OfflineExecutor(t *testing.T, executor resourcemeta.E
 }
 
 func (s *serviceTestSuite) LoadMockData() {
-	ds := dataset.NewDataSet[resourcemeta.ResourceMeta, *resourcemeta.ResourceMeta](s.meta, adapter.ResourceKeyAdapter)
 	for _, resource := range serviceMockData {
-		_ = ds.Upsert(context.Background(), resource)
+		_ = s.meta.UpsertResource(context.Background(), resource)
 	}
 
 	for i := 1; i <= 4; i++ {
@@ -121,7 +119,7 @@ func (s *serviceTestSuite) CleanCache() {
 }
 
 func TestServiceBasics(t *testing.T) {
-	suite := newServiceTestSuite()
+	suite := newServiceTestSuite(t)
 	suite.LoadMockData()
 	suite.Start()
 	suite.WaitForReady(t)
@@ -189,7 +187,7 @@ func TestServiceBasics(t *testing.T) {
 }
 
 func TestServiceNotReady(t *testing.T) {
-	suite := newServiceTestSuite()
+	suite := newServiceTestSuite(t)
 	// We do not call Start()
 
 	ctx := context.Background()
@@ -210,7 +208,7 @@ func TestServiceNotReady(t *testing.T) {
 }
 
 func TestServiceResourceTypeNoConstraint(t *testing.T) {
-	suite := newServiceTestSuite()
+	suite := newServiceTestSuite(t)
 	suite.LoadMockData()
 	suite.Start()
 	suite.WaitForReady(t)
@@ -223,7 +221,7 @@ func TestServiceResourceTypeNoConstraint(t *testing.T) {
 }
 
 func TestServiceCacheMiss(t *testing.T) {
-	suite := newServiceTestSuite()
+	suite := newServiceTestSuite(t)
 	suite.LoadMockData()
 	suite.Start()
 	suite.WaitForReady(t)

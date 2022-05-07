@@ -12,14 +12,14 @@ import (
 	"golang.org/x/time/rate"
 
 	libModel "github.com/hanfei1991/microcosm/lib/model"
-	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
+	pkgOrm "github.com/hanfei1991/microcosm/pkg/orm"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 )
 
 // Writer is used to persist WorkerStatus changes and send notifications
 // to the Master.
 type Writer struct {
-	metaclient    metaclient.KVClient
+	metaclient    pkgOrm.Client
 	messageSender p2p.MessageSender
 	lastStatus    *libModel.WorkerStatus
 
@@ -30,7 +30,7 @@ type Writer struct {
 
 // NewWriter creates a new Writer.
 func NewWriter(
-	metaclient metaclient.KVClient,
+	metaclient pkgOrm.Client,
 	messageSender p2p.MessageSender,
 	masterInfo MasterInfoProvider,
 	workerID string,
@@ -111,22 +111,13 @@ func (w *Writer) sendStatusMessageWithRetry(
 }
 
 func (w *Writer) persistStatus(ctx context.Context, newStatus *libModel.WorkerStatus) error {
-	raw, err := newStatus.Marshal()
-	if err != nil {
-		return err
-	}
-
 	return retry.Do(ctx, func() error {
-		key := libModel.EncodeWorkerStatusKey(w.masterInfo.MasterID(), w.workerID)
-		if _, err := w.metaclient.Put(ctx, key, string(raw)); err != nil {
-			return err
-		}
-		return nil
+		return w.metaclient.UpdateWorker(ctx, newStatus)
 	}, retry.WithBackoffMaxDelay(1000 /* 1 second */), retry.WithIsRetryableErr(func(err error) bool {
-		if err, ok := err.(metaclient.Error); ok {
-			// TODO: refine the IsRetryable method
-			return err.IsRetryable()
-		}
+		// TODO: refine the IsRetryable method
+		//if err, ok := err.(metaclient.Error); ok {
+		//return err.IsRetryable()
+		//}
 		return true
 	}))
 }

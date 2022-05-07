@@ -12,12 +12,12 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/hanfei1991/microcosm/pb"
-	"github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta"
+	resModel "github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta/model"
 	"github.com/hanfei1991/microcosm/pkg/externalresource/storagecfg"
 )
 
 type Handle interface {
-	ID() resourcemeta.ResourceID
+	ID() resModel.ResourceID
 	BrExternalStorage() brStorage.ExternalStorage
 	Persist(ctx context.Context) error
 	Discard(ctx context.Context) error
@@ -27,16 +27,16 @@ type Handle interface {
 // It helps Dataflow Engine reuse the external storage facilities
 // implemented in Br.
 type BrExternalStorageHandle struct {
-	id         resourcemeta.ResourceID
-	jobID      resourcemeta.JobID
-	workerID   resourcemeta.WorkerID
-	executorID resourcemeta.ExecutorID
+	id         resModel.ResourceID
+	jobID      resModel.JobID
+	workerID   resModel.WorkerID
+	executorID resModel.ExecutorID
 
 	inner  brStorage.ExternalStorage
 	client *rpcutil.FailoverRPCClients[pb.ResourceManagerClient]
 }
 
-func (h *BrExternalStorageHandle) ID() resourcemeta.ResourceID {
+func (h *BrExternalStorageHandle) ID() resModel.ResourceID {
 	return h.id
 }
 
@@ -70,20 +70,20 @@ func (h *BrExternalStorageHandle) Discard(ctx context.Context) error {
 type Factory struct {
 	config     *storagecfg.Config
 	client     *rpcutil.FailoverRPCClients[pb.ResourceManagerClient]
-	executorID resourcemeta.ExecutorID
+	executorID resModel.ExecutorID
 }
 
 func (f *Factory) NewHandleForLocalFile(
 	ctx context.Context,
-	jobID resourcemeta.JobID,
-	workerID resourcemeta.WorkerID,
-	resourceID resourcemeta.ResourceID,
+	jobID resModel.JobID,
+	workerID resModel.WorkerID,
+	resourceID resModel.ResourceID,
 ) (Handle, error) {
-	tp, suffix, err := resourcemeta.ParseResourcePath(resourceID)
+	tp, suffix, err := resModel.ParseResourcePath(resourceID)
 	if err != nil {
 		return nil, err
 	}
-	if tp != resourcemeta.ResourceTypeLocalFile {
+	if tp != resModel.ResourceTypeLocalFile {
 		log.L().Panic("unexpected resource type", zap.String("type", string(tp)))
 	}
 
@@ -123,8 +123,8 @@ func (f *Factory) NewHandleForLocalFile(
 
 func (f *Factory) CheckForExistingResource(
 	ctx context.Context,
-	resourceID resourcemeta.ResourceID,
-) (*resourcemeta.ResourceMeta, bool, error) {
+	resourceID resModel.ResourceID,
+) (*resModel.ResourceMeta, bool, error) {
 	resp, err := rpcutil.DoFailoverRPC(
 		ctx,
 		f.client,
@@ -132,11 +132,11 @@ func (f *Factory) CheckForExistingResource(
 		pb.ResourceManagerClient.QueryResource,
 	)
 	if err == nil {
-		return &resourcemeta.ResourceMeta{
+		return &resModel.ResourceMeta{
 			ID:       resourceID,
 			Job:      resp.GetJobId(),
 			Worker:   resp.GetCreatorWorkerId(),
-			Executor: resourcemeta.ExecutorID(resp.GetCreatorExecutor()),
+			Executor: resModel.ExecutorID(resp.GetCreatorExecutor()),
 			Deleted:  false,
 		}, true, nil
 	}
@@ -171,6 +171,6 @@ func (f *Factory) CheckForExistingResource(
 	}
 }
 
-func getWorkerDir(config *storagecfg.Config, workerID resourcemeta.WorkerID) string {
+func getWorkerDir(config *storagecfg.Config, workerID resModel.WorkerID) string {
 	return filepath.Join(config.Local.BaseDir, workerID)
 }
