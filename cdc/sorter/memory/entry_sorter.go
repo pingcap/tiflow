@@ -54,15 +54,15 @@ func (es *EntrySorter) Run(ctx context.Context) error {
 	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
 	_, tableName := contextutil.TableIDFromCtx(ctx)
 	metricEntrySorterResolvedChanSizeGuage := entrySorterResolvedChanSizeGauge.
-		WithLabelValues(changefeedID.ID, tableName)
+		WithLabelValues(changefeedID.Namespace, changefeedID.ID, tableName)
 	metricEntrySorterOutputChanSizeGauge := entrySorterOutputChanSizeGauge.
-		WithLabelValues(changefeedID.ID, tableName)
+		WithLabelValues(changefeedID.Namespace, changefeedID.ID, tableName)
 	metricEntryUnsortedSizeGauge := entrySorterUnsortedSizeGauge.
-		WithLabelValues(changefeedID.ID, tableName)
+		WithLabelValues(changefeedID.Namespace, changefeedID.ID, tableName)
 	metricEntrySorterSortDuration := entrySorterSortDuration.
-		WithLabelValues(changefeedID.ID, tableName)
+		WithLabelValues(changefeedID.Namespace, changefeedID.ID, tableName)
 	metricEntrySorterMergeDuration := entrySorterMergeDuration.
-		WithLabelValues(changefeedID.ID, tableName)
+		WithLabelValues(changefeedID.Namespace, changefeedID.ID, tableName)
 
 	output := func(ctx context.Context, entry *model.PolymorphicEvent) {
 		select {

@@ -28,7 +28,7 @@ var (
 		Subsystem: subsystem,
 		Name:      "write_bytes_total",
 		Help:      "Total number of bytes redo log written",
-	}, []string{"changefeed"})
+	}, []string{"namespace", "changefeed"})
 
 	redoFsyncDurationHistogram = prometheus.NewHistogramVec(prometheus.HistogramOpts{
 		Namespace: namespace,
@@ -36,7 +36,7 @@ var (
 		Name:      "fsync_duration_seconds",
 		Help:      "The latency distributions of fsync called by redo writer",
 		Buckets:   prometheus.ExponentialBuckets(0.001, 2.0, 13),
-	}, []string{"changefeed"})
+	}, []string{"namespace", "changefeed"})
 
 	redoFlushAllDurationHistogram = prometheus.NewHistogramVec(prometheus.HistogramOpts{
 		Namespace: namespace,
@@ -44,14 +44,14 @@ var (
 		Name:      "flushall_duration_seconds",
 		Help:      "The latency distributions of flushall called by redo writer",
 		Buckets:   prometheus.ExponentialBuckets(0.001, 2.0, 13),
-	}, []string{"changefeed"})
+	}, []string{"namespace", "changefeed"})
 
 	redoTotalRowsCountGauge = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: namespace,
 		Subsystem: subsystem,
 		Name:      "total_rows_count",
 		Help:      "The total count of rows that are processed by redo writer",
-	}, []string{"changefeed"})
+	}, []string{"namespace", "changefeed"})
 )
 
 // InitMetrics registers all metrics in this file
