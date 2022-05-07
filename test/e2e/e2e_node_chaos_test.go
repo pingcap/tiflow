@@ -3,6 +3,7 @@ package e2e_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"testing"
 	"time"
 
@@ -15,8 +16,32 @@ import (
 	"github.com/hanfei1991/microcosm/test/e2e"
 )
 
+// update the watched key of workers belonging to a given job, and then
+// check the mvcc count and value of the key are updated as expected.
+func updateKeyAndCheckOnce(
+	ctx context.Context, t *testing.T, cli *e2e.ChaosCli,
+	jobID string, workerCount int, updateValue string, expectedMvcc int,
+) {
+	for j := 0; j < workerCount; j++ {
+		err := cli.UpdateFakeJobKey(ctx, j, updateValue)
+		require.NoError(t, err)
+	}
+
+	require.Eventually(t, func() bool {
+		for jobIdx := 0; jobIdx < workerCount; jobIdx++ {
+			err := cli.CheckFakeJobKey(ctx, jobID, jobIdx, expectedMvcc, updateValue)
+			if err != nil {
+				log.L().Warn("check fake job failed", zap.Error(err))
+				return false
+			}
+		}
+		return true
+	}, time.Second*60, time.Second*2)
+}
+
 func TestNodeFailure(t *testing.T) {
-	// TODO: make the following variables configurable
+	// TODO: make the following variables configurable, these variables keep the
+	// same in sample/3m3e.yaml
 	var (
 		masterAddrs              = []string{"127.0.0.1:10245", "127.0.0.1:10246", "127.0.0.1:10247"}
 		userMetaAddrs            = []string{"127.0.0.1:12479"}
@@ -60,29 +85,30 @@ func TestNodeFailure(t *testing.T) {
 		return true
 	}, time.Second*60, time.Second*2)
 
-	sourceUpdateCount := 3
-	sourceValue := "value"
-	for i := 0; i < sourceUpdateCount; i++ {
-		for j := 0; j < cfg.WorkerCount; j++ {
-			err := cli.UpdateFakeJobKey(ctx, j, sourceValue)
-			require.NoError(t, err)
-		}
+	mvccCount := 1
+	updateKeyAndCheckOnce(ctx, t, cli, jobID, cfg.WorkerCount, "random-value-1", mvccCount)
+
+	// restart all server masters and check fake job is running normally
+	nodeCount := 3
+	for i := 0; i < nodeCount; i++ {
+		name := fmt.Sprintf("sample_server-master-%d_1", i)
+		cli.ContainerRestart(name)
+		mvccCount++
+		value := fmt.Sprintf("restart-server-master-value-%d", i)
+		updateKeyAndCheckOnce(ctx, t, cli, jobID, cfg.WorkerCount, value, mvccCount)
 	}
 
-	require.Eventually(t, func() bool {
-		for jobIdx := 0; jobIdx < cfg.WorkerCount; jobIdx++ {
-			err := cli.CheckFakeJobKey(ctx, jobID, jobIdx, sourceUpdateCount, sourceValue)
-			if err != nil {
-				log.L().Warn("check fake job failed", zap.Error(err))
-				return false
-			}
-		}
-		return true
-	}, time.Second*60, time.Second*2)
+	// restart all executors and check fake job is running normally
+	for i := 0; i < nodeCount; i++ {
+		name := fmt.Sprintf("sample_server-executor-%d_1", i)
+		cli.ContainerRestart(name)
+		mvccCount++
+		value := fmt.Sprintf("restart-executor-value-%d", i)
+		updateKeyAndCheckOnce(ctx, t, cli, jobID, cfg.WorkerCount, value, mvccCount)
+	}
 
 	err = cli.PauseJob(ctx, jobID)
 	require.NoError(t, err)
-
 	require.Eventually(t, func() bool {
 		stopped, err := cli.CheckJobStatus(ctx, jobID, pb.QueryJobResponse_stopped)
 		if err != nil {

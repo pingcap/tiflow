@@ -32,18 +32,12 @@ type (
 	WorkerConfig struct {
 		ID         int   `json:"id"`
 		TargetTick int64 `json:"target-tick"`
-		StartTick  int64 `json:"start-tick"`
 
-		EtcdWatchEnable   bool     `json:"etcd-watch-enable"`
-		EtcdEndpoints     []string `json:"etcd-endpoints"`
-		EtcdWatchPrefix   string   `json:"etcd-watch-prefix"`
-		EtcdWatchRevision int64    `json:"etcd-watch-revision"`
-	}
+		EtcdWatchEnable bool     `json:"etcd-watch-enable"`
+		EtcdEndpoints   []string `json:"etcd-endpoints"`
+		EtcdWatchPrefix string   `json:"etcd-watch-prefix"`
 
-	EtcdCheckpoint struct {
-		Revision int64  `json:"revision"`
-		Mvcc     int    `json:"mvcc"` // record mvcc version count
-		Value    string `json:"value"`
+		Checkpoint workerCheckpoint `json:"checkpoint"`
 	}
 
 	dummyWorker struct {
@@ -66,9 +60,9 @@ type (
 
 type dummyWorkerStatus struct {
 	sync.RWMutex
-	BusinessID     int             `json:"business-id"`
-	Tick           int64           `json:"tick"`
-	EtcdCheckpoint *EtcdCheckpoint `json:"etcd-checkpoint"`
+	BusinessID int               `json:"business-id"`
+	Tick       int64             `json:"tick"`
+	Checkpoint *workerCheckpoint `json:"checkpoint"`
 }
 
 func (s *dummyWorkerStatus) tick() {
@@ -77,16 +71,16 @@ func (s *dummyWorkerStatus) tick() {
 	s.Tick++
 }
 
-func (s *dummyWorkerStatus) getEtcdCheckpoint() EtcdCheckpoint {
+func (s *dummyWorkerStatus) getEtcdCheckpoint() workerCheckpoint {
 	s.RLock()
 	defer s.RUnlock()
-	return *s.EtcdCheckpoint
+	return *s.Checkpoint
 }
 
-func (s *dummyWorkerStatus) setEtcdCheckpoint(ckpt *EtcdCheckpoint) {
+func (s *dummyWorkerStatus) setEtcdCheckpoint(ckpt *workerCheckpoint) {
 	s.Lock()
 	defer s.Unlock()
-	s.EtcdCheckpoint = ckpt
+	s.Checkpoint = ckpt
 }
 
 func (s *dummyWorkerStatus) Marshal() ([]byte, error) {
@@ -237,7 +231,11 @@ watchLoop:
 			return errors.Trace(ctx.Err())
 		default:
 		}
-		ch := cli.Watch(ctx, key, clientv3.WithRev(d.status.getEtcdCheckpoint().Revision))
+		opts := make([]clientv3.OpOption, 0)
+		if d.status.getEtcdCheckpoint().Revision > 0 {
+			opts = append(opts, clientv3.WithRev(d.status.getEtcdCheckpoint().Revision+1))
+		}
+		ch := cli.Watch(ctx, key, opts...)
 		for resp := range ch {
 			if resp.Err() != nil {
 				log.L().Warn("watch met error", zap.Error(resp.Err()))
@@ -247,7 +245,7 @@ watchLoop:
 				// no concurrent write of this checkpoint, so it is safe to read
 				// old value, change it and overwrite.
 				ckpt := d.status.getEtcdCheckpoint()
-				ckpt.Mvcc++
+				ckpt.MvccCount++
 				ckpt.Revision = event.Kv.ModRevision
 				switch event.Type {
 				case mvccpb.PUT:
@@ -268,9 +266,12 @@ func NewDummyWorker(
 ) lib.WorkerImpl {
 	wcfg := cfg.(*WorkerConfig)
 	status := &dummyWorkerStatus{
-		BusinessID:     wcfg.ID,
-		Tick:           wcfg.StartTick,
-		EtcdCheckpoint: &EtcdCheckpoint{Revision: wcfg.EtcdWatchRevision},
+		BusinessID: wcfg.ID,
+		Tick:       wcfg.Checkpoint.Tick,
+		Checkpoint: &workerCheckpoint{
+			Revision:  wcfg.Checkpoint.Revision,
+			MvccCount: wcfg.Checkpoint.MvccCount,
+		},
 	}
 	return &dummyWorker{
 		statusRateLimiter: rate.NewLimiter(rate.Every(time.Second*3), 1),

@@ -48,8 +48,8 @@ type Config struct {
 }
 
 type Checkpoint struct {
-	Ticks           map[int]int64          `json:"ticks"`
-	EtcdCheckpoints map[int]EtcdCheckpoint `json:"etcd-checkpoints"`
+	Ticks       map[int]int64            `json:"ticks"`
+	Checkpoints map[int]workerCheckpoint `json:"checkpoints"`
 }
 
 func (cp *Checkpoint) String() string {
@@ -60,10 +60,25 @@ func (cp *Checkpoint) String() string {
 	return string(data)
 }
 
+// workerCheckpoint is used to resume a new worker from old checkpoint
+type workerCheckpoint struct {
+	Tick      int64  `json:"tick"`
+	Revision  int64  `json:"revision"`
+	MvccCount int    `json:"mvcc-count"`
+	Value     string `json:"value"`
+}
+
+func zeroWorkerCheckpoint() workerCheckpoint {
+	return workerCheckpoint{}
+}
+
 var _ lib.BaseJobMaster = (*Master)(nil)
 
 type Master struct {
 	lib.BaseJobMaster
+
+	config  *Config
+	bStatus *businessStatus
 
 	// workerID stores the ID of the Master AS A WORKER.
 	workerID libModel.WorkerID
@@ -72,17 +87,23 @@ type Master struct {
 	workerList          []lib.WorkerHandle
 	workerID2BusinessID map[libModel.WorkerID]int
 	pendingWorkerSet    map[libModel.WorkerID]int
-	statusRateLimiter   *rate.Limiter
-	status              map[libModel.WorkerID]*dummyWorkerStatus
 	finishedSet         map[libModel.WorkerID]int
-	config              *Config
-	statusCode          struct {
+
+	// worker status
+	statusRateLimiter *rate.Limiter
+	statusCode        struct {
 		sync.RWMutex
 		code libModel.WorkerStatusCode
 	}
+
 	ctx         context.Context
 	clocker     clock.Clock
 	initialized bool
+}
+
+type businessStatus struct {
+	sync.RWMutex
+	status map[libModel.WorkerID]*dummyWorkerStatus
 }
 
 func (m *Master) OnJobManagerFailover(reason lib.MasterFailoverReason) error {
@@ -146,7 +167,7 @@ func (m *Master) Workload() model.RescUnit {
 
 func (m *Master) InitImpl(ctx context.Context) error {
 	log.L().Info("FakeMaster: Init", zap.Any("config", m.config))
-	return m.createWorkers()
+	return m.initWorkers()
 }
 
 // This function is not thread safe, it must be called with m.workerListMu locked
@@ -163,7 +184,7 @@ func (m *Master) createWorker(wcfg *WorkerConfig) error {
 	return nil
 }
 
-func (m *Master) createWorkers() error {
+func (m *Master) initWorkers() error {
 	m.workerListMu.Lock()
 	defer m.workerListMu.Unlock()
 OUT:
@@ -174,7 +195,7 @@ OUT:
 					continue OUT
 				}
 			}
-			wcfg := m.genWorkerConfig(i, 0, 0)
+			wcfg := m.genWorkerConfig(i, zeroWorkerCheckpoint())
 			err := m.createWorker(wcfg)
 			if err != nil {
 				return err
@@ -235,14 +256,15 @@ func (m *Master) tickedCheckWorkers(ctx context.Context) error {
 		for i, worker := range m.workerList {
 			// create new worker for non-active worker
 			if worker == nil {
-				var startTick, startRevision int64
+				workerCkpt := zeroWorkerCheckpoint()
 				if tick, ok := ckpt.Ticks[i]; ok {
-					startTick = tick
+					workerCkpt.Tick = tick
 				}
-				if etcdCkpt, ok := ckpt.EtcdCheckpoints[i]; ok {
-					startRevision = etcdCkpt.Revision
+				if etcdCkpt, ok := ckpt.Checkpoints[i]; ok {
+					workerCkpt.Revision = etcdCkpt.Revision
+					workerCkpt.MvccCount = etcdCkpt.MvccCount
 				}
-				wcfg := m.genWorkerConfig(i, startTick, startRevision)
+				wcfg := m.genWorkerConfig(i, workerCkpt)
 				if err := m.createWorker(wcfg); err != nil {
 					return errors.Trace(err)
 				}
@@ -262,7 +284,9 @@ func (m *Master) tickedCheckWorkers(ctx context.Context) error {
 					return err
 				}
 			}
-			m.status[worker.ID()] = dws
+			m.bStatus.Lock()
+			m.bStatus.status[worker.ID()] = dws
+			m.bStatus.Unlock()
 		}
 	}
 
@@ -271,7 +295,9 @@ func (m *Master) tickedCheckWorkers(ctx context.Context) error {
 
 func (m *Master) tickedCheckStatus(ctx context.Context) error {
 	if m.statusRateLimiter.Allow() {
-		log.L().Info("FakeMaster: Tick", zap.Any("status", m.status))
+		m.bStatus.RLock()
+		log.L().Info("FakeMaster: Tick", zap.Any("status", m.bStatus.status))
+		m.bStatus.RUnlock()
 		// save checkpoint, which is used in business only
 		_, metaErr := m.MetaKVClient().Put(ctx, CheckpointKey(m.workerID), m.genCheckpoint().String())
 		if metaErr != nil {
@@ -352,6 +378,10 @@ func (m *Master) OnWorkerOffline(worker lib.WorkerHandle, reason error) error {
 		return errors.Errorf("worker(%s) is not found in worker list", worker.ID())
 	}
 
+	m.bStatus.Lock()
+	delete(m.bStatus.status, worker.ID())
+	m.bStatus.Unlock()
+
 	if derrors.ErrWorkerFinish.Equal(reason) {
 		log.L().Info("FakeMaster: OnWorkerOffline: worker finished", zap.String("worker-id", worker.ID()))
 		m.finishedSet[worker.ID()] = index
@@ -360,16 +390,17 @@ func (m *Master) OnWorkerOffline(worker lib.WorkerHandle, reason error) error {
 
 	log.L().Info("FakeMaster: OnWorkerOffline",
 		zap.String("worker-id", worker.ID()), zap.Error(reason))
-	var startTick, startRevision int64
+	workerCkpt := zeroWorkerCheckpoint()
 	if ws, err := parseExtBytes(worker.Status().ExtBytes); err != nil {
 		log.L().Warn("failed to parse worker ext bytes", zap.Error(err))
 	} else {
-		startTick = ws.Tick
-		if ws.EtcdCheckpoint != nil {
-			startRevision = ws.EtcdCheckpoint.Revision
+		workerCkpt.Tick = ws.Tick
+		if ws.Checkpoint != nil {
+			workerCkpt.Revision = ws.Checkpoint.Revision
+			workerCkpt.MvccCount = ws.Checkpoint.MvccCount
 		}
 	}
-	wcfg := m.genWorkerConfig(index, startTick, startRevision)
+	wcfg := m.genWorkerConfig(index, workerCkpt)
 	m.workerListMu.Lock()
 	defer m.workerListMu.Unlock()
 	return m.createWorker(wcfg)
@@ -401,14 +432,21 @@ func (m *Master) OnMasterMessage(topic p2p.Topic, message p2p.MessageValue) erro
 	return nil
 }
 
-func (m *Master) Status() libModel.WorkerStatus {
-	bytes, err := json.Marshal(m.status)
+func (m *Master) marshalBusinessStatus() []byte {
+	m.bStatus.RLock()
+	defer m.bStatus.RUnlock()
+	bytes, err := json.Marshal(m.bStatus.status)
 	if err != nil {
 		log.L().Panic("unexpected marshal error", zap.Error(err))
 	}
+	return bytes
+}
+
+func (m *Master) Status() libModel.WorkerStatus {
+	extBytes := m.marshalBusinessStatus()
 	return libModel.WorkerStatus{
 		Code:     m.getStatusCode(),
-		ExtBytes: bytes,
+		ExtBytes: extBytes,
 	}
 }
 
@@ -438,31 +476,36 @@ func (m *Master) genCheckpoint() *Checkpoint {
 	m.workerListMu.Lock()
 	defer m.workerListMu.Unlock()
 	cp := &Checkpoint{
-		Ticks:           make(map[int]int64),
-		EtcdCheckpoints: make(map[int]EtcdCheckpoint),
+		Ticks:       make(map[int]int64),
+		Checkpoints: make(map[int]workerCheckpoint),
 	}
-	for wid, status := range m.status {
+	m.bStatus.RLock()
+	defer m.bStatus.RUnlock()
+	for wid, status := range m.bStatus.status {
 		if businessID, ok := m.workerID2BusinessID[wid]; ok {
 			cp.Ticks[businessID] = status.Tick
-			if status.EtcdCheckpoint != nil {
-				cp.EtcdCheckpoints[businessID] = *status.EtcdCheckpoint
+			if status.Checkpoint != nil {
+				cp.Checkpoints[businessID] = *status.Checkpoint
 			} else {
-				cp.EtcdCheckpoints[businessID] = EtcdCheckpoint{}
+				cp.Checkpoints[businessID] = workerCheckpoint{}
 			}
 		}
 	}
 	return cp
 }
 
-func (m *Master) genWorkerConfig(index int, startTick, startRevision int64) *WorkerConfig {
+func (m *Master) genWorkerConfig(index int, checkpoint workerCheckpoint) *WorkerConfig {
 	return &WorkerConfig{
-		ID:                index,
-		StartTick:         startTick,
-		TargetTick:        int64(m.config.TargetTick),
-		EtcdWatchEnable:   m.config.EtcdWatchEnable,
-		EtcdEndpoints:     m.config.EtcdEndpoints,
-		EtcdWatchPrefix:   m.config.EtcdWatchPrefix,
-		EtcdWatchRevision: startRevision,
+		ID: index,
+
+		// generated from fake master config
+		TargetTick:      int64(m.config.TargetTick),
+		EtcdWatchEnable: m.config.EtcdWatchEnable,
+		EtcdEndpoints:   m.config.EtcdEndpoints,
+		EtcdWatchPrefix: m.config.EtcdWatchPrefix,
+
+		// loaded from checkpoint if exists
+		Checkpoint: checkpoint,
 	}
 }
 
@@ -476,7 +519,7 @@ func NewFakeMaster(ctx *dcontext.Context, workerID libModel.WorkerID, masterID l
 		workerID2BusinessID: make(map[libModel.WorkerID]int),
 		config:              masterConfig,
 		statusRateLimiter:   rate.NewLimiter(rate.Every(time.Second*3), 1),
-		status:              make(map[libModel.WorkerID]*dummyWorkerStatus),
+		bStatus:             &businessStatus{status: make(map[libModel.WorkerID]*dummyWorkerStatus)},
 		finishedSet:         make(map[libModel.WorkerID]int),
 		ctx:                 ctx.Context,
 		clocker:             clock.New(),
