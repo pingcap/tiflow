@@ -39,6 +39,7 @@ import (
 	"github.com/pingcap/tidb/store/mockstore"
 	unistoreConfig "github.com/pingcap/tidb/store/mockstore/unistore/config"
 	"github.com/pingcap/tidb/util/filter"
+	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
@@ -80,6 +81,7 @@ type Tracker struct {
 	dom       *domain.Domain
 	se        session.Session
 	dsTracker *downstreamTracker
+	closed    atomic.Bool
 }
 
 // downstreamTracker tracks downstream schema.
@@ -368,6 +370,9 @@ func (tr *Tracker) Reset() error {
 
 // Close close a tracker.
 func (tr *Tracker) Close() error {
+	if !tr.closed.CAS(false, true) {
+		return nil
+	}
 	tr.se.Close()
 	tr.dom.Close()
 	if err := tr.store.Close(); err != nil {
