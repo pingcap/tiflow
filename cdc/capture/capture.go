@@ -44,7 +44,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/p2p"
-	"github.com/pingcap/tiflow/pkg/pdtime"
+	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/pingcap/tiflow/pkg/version"
 )
 
@@ -66,7 +66,7 @@ type Capture struct {
 	etcdClient   *etcd.CDCEtcdClient
 	grpcPool     kv.GrpcPool
 	regionCache  *tikv.RegionCache
-	TimeAcquirer pdtime.TimeAcquirer
+	TimeAcquirer pdutil.TimeAcquirer
 	sorterSystem *ssystem.System
 
 	enableNewScheduler bool
@@ -143,7 +143,7 @@ func (c *Capture) reset(ctx context.Context) error {
 	if c.TimeAcquirer != nil {
 		c.TimeAcquirer.Stop()
 	}
-	c.TimeAcquirer, err = pdtime.NewTimeAcquirer(ctx, c.pdClient)
+	c.TimeAcquirer, err = pdutil.NewTimeAcquirer(ctx, c.pdClient)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -412,6 +412,14 @@ func (c *Capture) campaignOwner(ctx cdcContext.Context) error {
 		newGlobalVars := &globalVars
 		newGlobalVars.OwnerRevision = ownerRev
 		ownerCtx := cdcContext.NewContext(ctx, newGlobalVars)
+
+		// Update meta-region label to ensure that meta region isolated from data regions.
+		err = pdutil.UpdateMetaLabel(ctx, c.pdClient)
+		if err != nil {
+			log.Warn("Fail to verify region label rule",
+				zap.Error(err),
+				zap.String("captureID", c.info.ID))
+		}
 
 		log.Info("campaign owner successfully",
 			zap.String("capture-id", c.info.ID),
