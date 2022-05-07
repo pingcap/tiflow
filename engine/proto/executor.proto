@@ -1,0 +1,34 @@
+
+syntax = "proto3";
+
+package pb;
+
+service Executor {
+    rpc PreDispatchTask(PreDispatchTaskRequest) returns (PreDispatchTaskResponse) {}
+    rpc ConfirmDispatchTask(ConfirmDispatchTaskRequest) returns (ConfirmDispatchTaskResponse) {}
+}
+
+message PreDispatchTaskRequest {
+    int64 task_type_id = 1;
+    bytes task_config = 2;
+    string master_id = 3;
+    string worker_id = 4;
+    string user_id = 5;
+
+    // request_id should be a UUID unique for each RPC call.
+    string request_id = 6;
+}
+
+message PreDispatchTaskResponse {
+}
+
+message ConfirmDispatchTaskRequest {
+    // Note: worker_id and request_id must match the
+    // corresponding fields in PreDispatchTaskRequest.
+
+    string worker_id = 1;
+    string request_id = 2;
+}
+
+message ConfirmDispatchTaskResponse {
+}

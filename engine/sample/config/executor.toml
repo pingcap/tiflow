@@ -1,0 +1,6 @@
+keepalive-ttl = "10s"
+keepalive-interval = "500ms"
+session-ttl = 20
+
+join = "0.0.0.0:10240"
+worker-addr = "0.0.0.0:10241"

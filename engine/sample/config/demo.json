@@ -1,0 +1,5 @@
+{
+   "srcHost":"demo-server:1234",
+   "dstHost":"demo-server:1234",
+   "dstDir":"/data1"
+}
