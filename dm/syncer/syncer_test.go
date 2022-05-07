@@ -1044,6 +1044,10 @@ func (s *testSyncerSuite) TestExitSafeModeByConfig(c *C) {
 			{Schema: "test_1", Name: "t_1"},
 		},
 	}
+	s.cfg.To.Session = map[string]string{
+		"sql_mode":             "ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION",
+		"tidb_skip_utf8_check": "0",
+	}
 
 	cfg, err := s.cfg.Clone()
 	c.Assert(err, IsNil)
@@ -1120,6 +1124,7 @@ func (s *testSyncerSuite) TestExitSafeModeByConfig(c *C) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	resultCh := make(chan pb.ProcessResult)
+	defer close(resultCh)
 
 	// When crossing safeModeExitPoint, will generate a flush sql
 	checkPointMock.ExpectBegin()
@@ -1128,6 +1133,13 @@ func (s *testSyncerSuite) TestExitSafeModeByConfig(c *C) {
 	// disable 1-minute safe mode
 	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/syncer/SafeModeInitPhaseSeconds", "return(0)"), IsNil)
 	go syncer.Process(ctx, resultCh)
+	go func() {
+		for r := range resultCh {
+			if len(r.Errors) > 0 {
+				c.Fatal(r.String())
+			}
+		}
+	}()
 
 	expectJobs := []*expectJob{
 		// now every ddl job will start with a flush job

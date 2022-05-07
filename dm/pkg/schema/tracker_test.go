@@ -591,12 +591,12 @@ func (s *trackerSuite) TestBatchCreateTableIfNotExist(c *C) {
 		c.Assert(ti, DeepEquals, tiInfos[i])
 	}
 
-	// drop schema and raise error
+	// BatchCreateTableIfNotExist will also create database
 	ctx := context.Background()
 	err = tracker.Exec(ctx, "", `drop database testdb`)
 	c.Assert(err, IsNil)
 	err = tracker.BatchCreateTableIfNotExist(tablesToCreate)
-	c.Assert(err, NotNil)
+	c.Assert(err, IsNil)
 }
 
 func (s *trackerSuite) TestAllSchemas(c *C) {
