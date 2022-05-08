@@ -792,13 +792,7 @@ func (s *testSyncerSuite) TestRun(c *C) {
 	mock.ExpectQuery("SHOW CREATE TABLE " + "`test_1`.`t_1`").WillReturnRows(
 		sqlmock.NewRows([]string{"Table", "Create Table"}).
 			AddRow("t_1", "create table t_1(id int primary key, name varchar(24), KEY `index1` (`name`))"))
-	mockGetServerUnixTS(mock)
-	mock.ExpectBegin()
-	mock.ExpectExec(fmt.Sprintf("SET SESSION SQL_MODE = '%s'", pmysql.DefaultSQLMode)).WillReturnResult(sqlmock.NewResult(0, 0))
-	mock.ExpectCommit()
-	mock.ExpectQuery("SHOW CREATE TABLE " + "`test_1`.`t_2`").WillReturnRows(
-		sqlmock.NewRows([]string{"Table", "Create Table"}).
-			AddRow("t_2", "create table t_2(id int primary key, name varchar(24))"))
+
 	syncer.exprFilterGroup = NewExprFilterGroup(utils.NewSessionCtx(nil), nil)
 	c.Assert(err, IsNil)
 	c.Assert(syncer.Type(), Equals, pb.UnitType_Sync)
@@ -957,6 +951,16 @@ func (s *testSyncerSuite) TestRun(c *C) {
 	mockDBProvider := conn.InitMockDB(c)
 	mockDBProvider.ExpectQuery("SELECT cast\\(TIMEDIFF\\(NOW\\(6\\), UTC_TIMESTAMP\\(6\\)\\) as time\\);").
 		WillReturnRows(sqlmock.NewRows([]string{""}).AddRow("01:00:00"))
+	mockGetServerUnixTS(mock)
+	mock.ExpectQuery("SHOW VARIABLES LIKE 'sql_mode'").WillReturnRows(
+		sqlmock.NewRows([]string{"Variable_name", "Value"}).AddRow("sql_mode", ""))
+	mock.ExpectBegin()
+	mock.ExpectExec(fmt.Sprintf("SET SESSION SQL_MODE = '%s'", pmysql.DefaultSQLMode)).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectCommit()
+	mock.ExpectQuery("SHOW CREATE TABLE " + "`test_1`.`t_2`").WillReturnRows(
+		sqlmock.NewRows([]string{"Table", "Create Table"}).
+			AddRow("t_2", "create table t_2(id int primary key, name varchar(24))"))
+
 	c.Assert(syncer.Update(context.Background(), s.cfg), IsNil)
 	c.Assert(syncer.timezone.String(), Equals, "+01:00")
 
