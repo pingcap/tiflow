@@ -499,8 +499,6 @@ func (d *DDLEvent) FromJob(job *model.Job, preTableInfo *TableInfo) {
 		}
 	}
 
-	d.TableInfo = new(SimpleTableInfo)
-	d.TableInfo.Schema = job.SchemaName
 	d.StartTs = job.StartTS
 	d.CommitTs = job.BinlogInfo.FinishedTS
 	d.Type = job.Type
