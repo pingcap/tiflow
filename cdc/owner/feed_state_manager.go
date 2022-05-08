@@ -343,11 +343,6 @@ func (m *feedStateManager) cleanUpInfos() {
 			return nil, position != nil, nil
 		})
 	}
-	for captureID := range m.state.Workloads {
-		m.state.PatchTaskWorkload(captureID, func(workload model.TaskWorkload) (model.TaskWorkload, bool, error) {
-			return nil, workload != nil, nil
-		})
-	}
 }
 
 func (m *feedStateManager) errorsReportedByProcessors() []*model.RunningError {

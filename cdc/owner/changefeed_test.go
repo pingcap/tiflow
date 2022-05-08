@@ -16,6 +16,7 @@ package owner
 import (
 	"context"
 	"io/ioutil"
+	"math"
 	"os"
 	"path/filepath"
 	"sync"
@@ -125,6 +126,51 @@ func (m *mockDDLSink) Barrier(ctx context.Context) error {
 	return nil
 }
 
+type mockScheduler struct {
+	currentTables []model.TableID
+}
+
+func (m *mockScheduler) Tick(
+	ctx cdcContext.Context,
+	state *orchestrator.ChangefeedReactorState,
+	currentTables []model.TableID,
+	captures map[model.CaptureID]*model.CaptureInfo,
+) (newCheckpointTs, newResolvedTs model.Ts, err error) {
+	m.currentTables = currentTables
+
+	resolvedTs := model.Ts(math.MaxUint64)
+
+	for _, position := range state.TaskPositions {
+		if resolvedTs > position.ResolvedTs {
+			resolvedTs = position.ResolvedTs
+		}
+	}
+	for _, taskStatus := range state.TaskStatuses {
+		for _, opt := range taskStatus.Operation {
+			if resolvedTs > opt.BoundaryTs {
+				resolvedTs = opt.BoundaryTs
+			}
+		}
+	}
+	checkpointTs := resolvedTs
+	for _, position := range state.TaskPositions {
+		if checkpointTs > position.CheckPointTs {
+			checkpointTs = position.CheckPointTs
+		}
+	}
+
+	return checkpointTs, resolvedTs, nil
+}
+
+// MoveTable is used to trigger manual table moves.
+func (m *mockScheduler) MoveTable(tableID model.TableID, target model.CaptureID) {}
+
+// Rebalance is used to trigger manual workload rebalances.
+func (m *mockScheduler) Rebalance() {}
+
+// Close closes the scheduler and releases resources.
+func (m *mockScheduler) Close(ctx cdcContext.Context) {}
+
 func createChangefeed4Test(ctx cdcContext.Context, t *testing.T) (
 	*changefeed, *orchestrator.ChangefeedReactorState,
 	map[model.CaptureID]*model.CaptureInfo, *orchestrator.ReactorStateTester,
@@ -141,7 +187,7 @@ func createChangefeed4Test(ctx cdcContext.Context, t *testing.T) (
 		return &mockDDLSink{}
 	})
 	cf.newScheduler = func(ctx cdcContext.Context, startTs uint64) (scheduler, error) {
-		return newSchedulerV1(), nil
+		return &mockScheduler{}, nil
 	}
 	cf.upStream = upStream
 	state := orchestrator.NewChangefeedReactorState(ctx.ChangefeedVars().ID)
@@ -173,9 +219,6 @@ func TestPreCheck(t *testing.T) {
 	state.PatchTaskPosition(offlineCaputreID, func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
 		return new(model.TaskPosition), true, nil
 	})
-	state.PatchTaskWorkload(offlineCaputreID, func(workload model.TaskWorkload) (model.TaskWorkload, bool, error) {
-		return make(model.TaskWorkload), true, nil
-	})
 	tester.MustApplyPatches()
 
 	cf.Tick(ctx, state, captures)
@@ -184,7 +227,6 @@ func TestPreCheck(t *testing.T) {
 	require.Contains(t, state.TaskStatuses, ctx.GlobalVars().CaptureInfo.ID)
 	require.NotContains(t, state.TaskStatuses, offlineCaputreID)
 	require.NotContains(t, state.TaskPositions, offlineCaputreID)
-	require.NotContains(t, state.Workloads, offlineCaputreID)
 }
 
 func TestInitialize(t *testing.T) {
@@ -310,7 +352,7 @@ func TestExecDDL(t *testing.T) {
 	mockDDLSink.ddlDone = true
 	mockDDLPuller.resolvedTs += 1000
 	tickThreeTime()
-	require.Contains(t, state.TaskStatuses[ctx.GlobalVars().CaptureInfo.ID].Tables, job.TableID)
+	require.Contains(t, cf.scheduler.(*mockScheduler).currentTables, job.TableID)
 }
 
 func TestEmitCheckpointTs(t *testing.T) {

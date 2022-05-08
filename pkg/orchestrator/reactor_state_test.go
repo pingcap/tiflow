@@ -540,46 +540,6 @@ func TestPatchTaskStatus(t *testing.T) {
 	})
 }
 
-func TestPatchTaskWorkload(t *testing.T) {
-	state := NewChangefeedReactorState(model.DefaultChangeFeedID("test1"))
-	stateTester := NewReactorStateTester(t, state, nil)
-	captureID1 := "capture1"
-	captureID2 := "capture2"
-	state.PatchTaskWorkload(captureID1, func(workload model.TaskWorkload) (model.TaskWorkload, bool, error) {
-		require.Nil(t, workload)
-		return model.TaskWorkload{45: {Workload: 1}}, true, nil
-	})
-	state.PatchTaskWorkload(captureID2, func(workload model.TaskWorkload) (model.TaskWorkload, bool, error) {
-		require.Nil(t, workload)
-		return model.TaskWorkload{46: {Workload: 1}}, true, nil
-	})
-	stateTester.MustApplyPatches()
-	require.Equal(t, state.Workloads, map[model.CaptureID]model.TaskWorkload{
-		captureID1: {45: {Workload: 1}},
-		captureID2: {46: {Workload: 1}},
-	})
-	state.PatchTaskWorkload(captureID1, func(workload model.TaskWorkload) (model.TaskWorkload, bool, error) {
-		workload[46] = model.WorkloadInfo{Workload: 2}
-		return workload, true, nil
-	})
-	state.PatchTaskWorkload(captureID2, func(workload model.TaskWorkload) (model.TaskWorkload, bool, error) {
-		workload[45] = model.WorkloadInfo{Workload: 3}
-		return workload, true, nil
-	})
-	stateTester.MustApplyPatches()
-	require.Equal(t, state.Workloads, map[model.CaptureID]model.TaskWorkload{
-		captureID1: {45: {Workload: 1}, 46: {Workload: 2}},
-		captureID2: {45: {Workload: 3}, 46: {Workload: 1}},
-	})
-	state.PatchTaskWorkload(captureID2, func(workload model.TaskWorkload) (model.TaskWorkload, bool, error) {
-		return nil, true, nil
-	})
-	stateTester.MustApplyPatches()
-	require.Equal(t, state.Workloads, map[model.CaptureID]model.TaskWorkload{
-		captureID1: {45: {Workload: 1}, 46: {Workload: 2}},
-	})
-}
-
 func TestGlobalStateUpdate(t *testing.T) {
 	testCases := []struct {
 		updateKey   []string

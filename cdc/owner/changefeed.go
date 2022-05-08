@@ -500,14 +500,6 @@ func (c *changefeed) preflightCheck(captures map[model.CaptureID]*model.CaptureI
 			ok = false
 		}
 	}
-	for captureID := range c.state.Workloads {
-		if _, exist := captures[captureID]; !exist {
-			c.state.PatchTaskWorkload(captureID, func(workload model.TaskWorkload) (model.TaskWorkload, bool, error) {
-				return nil, workload != nil, nil
-			})
-			ok = false
-		}
-	}
 	return
 }
 

@@ -25,7 +25,6 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
@@ -302,11 +301,6 @@ func (o *ownerImpl) cleanUpChangefeed(state *orchestrator.ChangefeedReactorState
 			return nil, position != nil, nil
 		})
 	}
-	for captureID := range state.Workloads {
-		state.PatchTaskWorkload(captureID, func(workload model.TaskWorkload) (model.TaskWorkload, bool, error) {
-			return nil, workload != nil, nil
-		})
-	}
 }
 
 // Bootstrap checks if the state contains incompatible or incorrect information and tries to fix it.
@@ -350,62 +344,35 @@ func (o *ownerImpl) updateMetrics(state *orchestrator.GlobalReactorState) {
 	ownershipCounter.Add(float64(now.Sub(o.lastTickTime)) / float64(time.Second))
 	o.lastTickTime = now
 
-	conf := config.GetGlobalServerConfig()
-
-	// TODO refactor this piece of code when the new scheduler is stabilized,
-	// and the old scheduler is removed.
-	if conf.Debug != nil && conf.Debug.EnableNewScheduler {
-		for cfID, cf := range o.changefeeds {
-			if cf.state != nil && cf.state.Info != nil {
-				changefeedStatusGauge.WithLabelValues(cfID.Namespace, cfID.ID).
-					Set(float64(cf.state.Info.State.ToInt()))
-			}
-
-			// The InfoProvider is a proxy object returning information
-			// from the scheduler.
-			infoProvider := cf.GetInfoProvider()
-			if infoProvider == nil {
-				// The scheduler has not been initialized yet.
-				continue
-			}
-
-			totalCounts := infoProvider.GetTotalTableCounts()
-			pendingCounts := infoProvider.GetPendingTableCounts()
-
-			for captureID, info := range o.captures {
-				ownerMaintainTableNumGauge.
-					WithLabelValues(cfID.Namespace, cfID.ID,
-						info.AdvertiseAddr, maintainTableTypeTotal).
-					Set(float64(totalCounts[captureID]))
-				ownerMaintainTableNumGauge.
-					WithLabelValues(cfID.Namespace, cfID.ID,
-						info.AdvertiseAddr, maintainTableTypeWip).
-					Set(float64(pendingCounts[captureID]))
-			}
+	for cfID, cf := range o.changefeeds {
+		if cf.state != nil && cf.state.Info != nil {
+			changefeedStatusGauge.WithLabelValues(cfID.Namespace, cfID.ID).
+				Set(float64(cf.state.Info.State.ToInt()))
 		}
-		return
-	}
 
-	for changefeedID, changefeedState := range state.Changefeeds {
-		for captureID, captureInfo := range state.Captures {
-			taskStatus, exist := changefeedState.TaskStatuses[captureID]
-			if !exist {
-				continue
-			}
+		// The InfoProvider is a proxy object returning information
+		// from the scheduler.
+		infoProvider := cf.GetInfoProvider()
+		if infoProvider == nil {
+			// The scheduler has not been initialized yet.
+			continue
+		}
+
+		totalCounts := infoProvider.GetTotalTableCounts()
+		pendingCounts := infoProvider.GetPendingTableCounts()
+
+		for captureID, info := range o.captures {
 			ownerMaintainTableNumGauge.
-				WithLabelValues(changefeedID.Namespace, changefeedID.ID,
-					captureInfo.AdvertiseAddr, maintainTableTypeTotal).
-				Set(float64(len(taskStatus.Tables)))
+				WithLabelValues(cfID.Namespace, cfID.ID,
+					info.AdvertiseAddr, maintainTableTypeTotal).
+				Set(float64(totalCounts[captureID]))
 			ownerMaintainTableNumGauge.
-				WithLabelValues(changefeedID.Namespace, changefeedID.ID,
-					captureInfo.AdvertiseAddr, maintainTableTypeWip).
-				Set(float64(len(taskStatus.Operation)))
-			if changefeedState.Info != nil {
-				changefeedStatusGauge.WithLabelValues(changefeedID.Namespace, changefeedID.ID).
-					Set(float64(changefeedState.Info.State.ToInt()))
-			}
+				WithLabelValues(cfID.Namespace, cfID.ID,
+					info.AdvertiseAddr, maintainTableTypeWip).
+				Set(float64(pendingCounts[captureID]))
 		}
 	}
+	return
 }
 
 func (o *ownerImpl) clusterVersionConsistent(captures map[model.CaptureID]*model.CaptureInfo) bool {
