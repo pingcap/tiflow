@@ -32,7 +32,6 @@ import (
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/util/filter"
 	timock "github.com/pingcap/tidb/util/mock"
-	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zapcore"
 
 	"github.com/pingcap/tiflow/dm/dm/config"
@@ -953,77 +952,4 @@ func (s *trackerSuite) TestPlacementRule(c *C) {
 	c.Assert(err, IsNil)
 	_, ok := tracker.dsTracker.tableInfos[tableID]
 	c.Assert(ok, IsTrue)
-}
-
-func TestTrackerRecreateTables(t *testing.T) {
-	cfg := &config.SubTaskConfig{}
-	backupKeys := downstreamVars
-	defer func() {
-		downstreamVars = backupKeys
-	}()
-	downstreamVars = []string{"sql_mode"}
-	db, _, err := sqlmock.New()
-	require.NoError(t, err)
-	defer db.Close()
-	con, err := db.Conn(context.Background())
-	require.NoError(t, err)
-	dbConn := dbconn.NewDBConn(cfg, conn.NewBaseConn(con, nil))
-	log.SetLevel(zapcore.ErrorLevel)
-
-	tracker, err := NewTracker(context.Background(), "test-tracker", defaultTestSessionCfg, dbConn)
-	require.NoError(t, err)
-	defer func() {
-		err = tracker.Close()
-		require.NoError(t, err)
-	}()
-	err = tracker.CreateSchemaIfNotExists("testdb")
-	require.NoError(t, err)
-	err = tracker.CreateSchemaIfNotExists("testdb2")
-	require.NoError(t, err)
-
-	tables := []*filter.Table{
-		{Schema: "testdb", Name: "foo"},
-		{Schema: "testdb", Name: "foo1"},
-		{Schema: "testdb2", Name: "foo3"},
-	}
-	execStmt := []string{
-		`create table foo(a int primary key);`,
-		`create table foo1(a int primary key);`,
-		`create table foo3(a int primary key);`,
-	}
-	tiInfos := make([]*model.TableInfo, len(tables))
-	for i := range tables {
-		ctx := context.Background()
-		err = tracker.Exec(ctx, tables[i].Schema, execStmt[i])
-		require.NoError(t, err)
-		tiInfos[i], err = tracker.GetTableInfo(tables[i])
-		require.NoError(t, err)
-		require.NotNil(t, tiInfos[i])
-		require.Equal(t, tables[i].Name, tiInfos[i].Name.O)
-		tiInfos[i] = tiInfos[i].Clone()
-		clearVolatileInfo(tiInfos[i])
-	}
-
-	// drop one schema
-	require.NoError(t, tracker.dom.DDL().DropSchema(tracker.se, model.NewCIStr("testdb")))
-
-	// recreate tables
-	tablesToCreate := map[string]map[string]*model.TableInfo{}
-	tablesToCreate["testdb"] = map[string]*model.TableInfo{}
-	tablesToCreate["testdb2"] = map[string]*model.TableInfo{}
-	for i := range tables {
-		tablesToCreate[tables[i].Schema][tables[i].Name] = tiInfos[i]
-	}
-	tctx := tcontext.Background()
-	err = tracker.RecreateTables(tctx, tables, tablesToCreate)
-	require.NoError(t, err)
-	// check all create success
-	for i := range tables {
-		var ti *model.TableInfo
-		ti, err = tracker.GetTableInfo(tables[i])
-		require.NoError(t, err)
-		cloneTi := ti.Clone()
-		clearVolatileInfo(cloneTi)
-		require.Equal(t, tiInfos[i], cloneTi)
-	}
 }

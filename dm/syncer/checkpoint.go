@@ -277,6 +277,9 @@ type CheckPoint interface {
 	// TablePoint returns all table's stream checkpoint
 	TablePoint() map[string]map[string]binlog.Location
 
+	// GetTableInfo returns the saved table info from table checkpoint for the given table, return nil when not found
+	GetTableInfo(schema string, table string) *model.TableInfo
+
 	// FlushedGlobalPoint returns the flushed global binlog stream's checkpoint
 	// corresponding to to Meta.Pos and gtid
 	FlushedGlobalPoint() binlog.Location
@@ -858,6 +861,21 @@ func (cp *RemoteCheckPoint) TablePoint() map[string]map[string]binlog.Location {
 		}
 	}
 	return tablePoint
+}
+
+func (cp *RemoteCheckPoint) GetTableInfo(schema string, table string) *model.TableInfo {
+	cp.RLock()
+	defer cp.RUnlock()
+
+	tables, ok := cp.points[schema]
+	if !ok {
+		return nil
+	}
+	tablePoint, ok := tables[table]
+	if !ok {
+		return nil
+	}
+	return tablePoint.TableInfo()
 }
 
 // FlushedGlobalPoint implements CheckPoint.FlushedGlobalPoint.

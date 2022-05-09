@@ -437,19 +437,6 @@ func (tr *Tracker) CreateTableIfNotExists(table *filter.Table, ti *model.TableIn
 	return tr.dom.DDL().CreateTableWithInfo(tr.se, schemaName, ti, ddl.OnExistIgnore)
 }
 
-func (tr *Tracker) RecreateTables(logCtx *tcontext.Context, tablesToDrop []*filter.Table, tablesToCreate map[string]map[string]*model.TableInfo) error {
-	tr.Lock()
-	defer tr.Unlock()
-	for _, tbl := range tablesToDrop {
-		// schema changed
-		if err := tr.DropTable(tbl); err != nil {
-			logCtx.L().Warn("failed to drop table from schema tracker",
-				zap.Stringer("table", tbl), log.ShortError(err))
-		}
-	}
-	return tr.BatchCreateTableIfNotExist(tablesToCreate)
-}
-
 // BatchCreateTableIfNotExist will batch creating tables per schema. If the schema does not exist, it will create it.
 // The argument is { database name -> { table name -> TableInfo } }.
 func (tr *Tracker) BatchCreateTableIfNotExist(tablesToCreate map[string]map[string]*model.TableInfo) error {

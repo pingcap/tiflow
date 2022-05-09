@@ -170,9 +170,8 @@ type Syncer struct {
 	exprFilterGroup *ExprFilterGroup
 	sessCtx         sessionctx.Context
 
-	running      atomic.Bool
-	closed       atomic.Bool
-	schemaLoaded atomic.Bool
+	running atomic.Bool
+	closed  atomic.Bool
 
 	start    atomic.Time
 	lastTime atomic.Time
@@ -260,7 +259,6 @@ func NewSyncer(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, relay rel
 	syncer.waitXIDJob.Store(int64(noWait))
 	syncer.isTransactionEnd = true
 	syncer.closed.Store(false)
-	syncer.schemaLoaded.Store(false)
 	syncer.lastBinlogSizeCount.Store(0)
 	syncer.binlogSizeCount.Store(0)
 	syncer.lastCount.Store(0)
@@ -1560,8 +1558,6 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 	if err != nil {
 		return err
 	}
-	// TODO: not sure if schemaLoaded is needed by data validator, will remove it later.
-	s.schemaLoaded.Store(true)
 
 	runCtx, runCancel := context.WithCancel(context.Background())
 	s.runCtx, s.runCancel = tcontext.NewContext(runCtx, s.tctx.L()), runCancel
