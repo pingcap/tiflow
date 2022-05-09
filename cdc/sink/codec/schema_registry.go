@@ -143,7 +143,7 @@ func (m *AvroSchemaManager) Register(
 		)
 	}
 	uri := m.registryURL + "/subjects/" + url.QueryEscape(
-		m.tableNameToSchemaSubject(qualifiedName),
+		m.qualifiedNameToSchemaSubject(qualifiedName),
 	) + "/versions"
 	log.Debug("Registering schema", zap.String("uri", uri), zap.ByteString("payload", payload))
 
@@ -220,7 +220,7 @@ func (m *AvroSchemaManager) Lookup(
 	qualifiedName string,
 	tiSchemaID uint64,
 ) (*goavro.Codec, int, error) {
-	key := m.tableNameToSchemaSubject(qualifiedName)
+	key := m.qualifiedNameToSchemaSubject(qualifiedName)
 	m.cacheRWLock.RLock()
 	if entry, exists := m.cache[key]; exists && entry.tiSchemaID == tiSchemaID {
 		log.Info("Avro schema lookup cache hit",
@@ -340,7 +340,7 @@ func (m *AvroSchemaManager) GetCachedOrRegister(
 	tiSchemaID uint64,
 	schemaGen SchemaGenerator,
 ) (*goavro.Codec, int, error) {
-	key := m.tableNameToSchemaSubject(qualifiedName)
+	key := m.qualifiedNameToSchemaSubject(qualifiedName)
 	m.cacheRWLock.RLock()
 	if entry, exists := m.cache[key]; exists && entry.tiSchemaID == tiSchemaID {
 		log.Debug("Avro schema GetCachedOrRegister cache hit",
@@ -404,7 +404,9 @@ func (m *AvroSchemaManager) GetCachedOrRegister(
 // Exported for testing.
 // NOT USED for now, reserved for future use.
 func (m *AvroSchemaManager) ClearRegistry(ctx context.Context, qualifiedName string) error {
-	uri := m.registryURL + "/subjects/" + url.QueryEscape(m.tableNameToSchemaSubject(qualifiedName))
+	uri := m.registryURL + "/subjects/" + url.QueryEscape(
+		m.qualifiedNameToSchemaSubject(qualifiedName),
+	)
 	req, err := http.NewRequestWithContext(ctx, "DELETE", uri, nil)
 	if err != nil {
 		log.Error("Could not construct request for clearRegistry", zap.String("uri", uri))
@@ -498,7 +500,7 @@ func httpRetry(
 	return resp, nil
 }
 
-func (m *AvroSchemaManager) tableNameToSchemaSubject(qualifiedName string) string {
+func (m *AvroSchemaManager) qualifiedNameToSchemaSubject(qualifiedName string) string {
 	// obey the RecordNameStrategy but generate a global unique subject
 	// https://docs.confluent.io/platform/current/schema-registry/serdes-develop/index.html \
 	// #subject-name-strategy

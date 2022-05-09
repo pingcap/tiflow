@@ -177,7 +177,7 @@ func TestSchemaRegistry(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	qualifiedName := getQualifiedNameFromTableName(&table)
+	qualifiedName := getQualifiedNameFromTable(model.DefaultNamespace, &table)
 
 	err = manager.ClearRegistry(getTestingContext(), qualifiedName)
 	require.NoError(t, err)
@@ -255,7 +255,7 @@ func TestSchemaRegistryIdempotent(t *testing.T) {
 		Schema: "testdb",
 		Table:  "test",
 	}
-	qualifiedName := getQualifiedNameFromTableName(&table)
+	qualifiedName := getQualifiedNameFromTable(model.DefaultNamespace, &table)
 
 	manager, err := NewAvroSchemaManager(
 		getTestingContext(),
@@ -341,7 +341,7 @@ func TestGetCachedOrRegister(t *testing.T) {
           ]
      }`, nil
 	}
-	qualifiedName := getQualifiedNameFromTableName(&table)
+	qualifiedName := getQualifiedNameFromTable(model.DefaultNamespace, &table)
 
 	codec, id, err := manager.GetCachedOrRegister(getTestingContext(), qualifiedName, 1, schemaGen)
 	require.NoError(t, err)

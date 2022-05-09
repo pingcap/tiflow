@@ -56,6 +56,7 @@ func setupEncoderAndSchemaRegistry(
 	}
 
 	return &AvroEventBatchEncoder{
+		namespace:                  model.DefaultNamespace,
 		valueSchemaManager:         valueManager,
 		keySchemaManager:           keyManager,
 		resultBuf:                  make([]*MQMessage, 0, 4096),
@@ -633,7 +634,7 @@ func TestRowToAvroSchema(t *testing.T) {
 		Schema: "testdb",
 		Table:  "rowtoavroschema",
 	}
-	qualifiedName := getQualifiedNameFromTableName(&table)
+	recordName := getRecordNameFromTable(&table)
 	var cols []*model.Column = make([]*model.Column, 0)
 	var colInfos []rowcodec.ColInfo = make([]rowcodec.ColInfo, 0)
 
@@ -648,13 +649,29 @@ func TestRowToAvroSchema(t *testing.T) {
 		colInfos = append(colInfos, v.colInfo)
 	}
 
-	schema, err := rowToAvroSchema(qualifiedName, cols, colInfos, false, "precise", "long")
+	schema, err := rowToAvroSchema(
+		model.DefaultNamespace,
+		recordName,
+		cols,
+		colInfos,
+		false,
+		"precise",
+		"long",
+	)
 	require.NoError(t, err)
 	require.Equal(t, expectedSchemaWithoutExtension, indentJSON(schema))
 	_, err = goavro.NewCodec(schema)
 	require.NoError(t, err)
 
-	schema, err = rowToAvroSchema(qualifiedName, cols, colInfos, true, "precise", "long")
+	schema, err = rowToAvroSchema(
+		model.DefaultNamespace,
+		recordName,
+		cols,
+		colInfos,
+		true,
+		"precise",
+		"long",
+	)
 	require.NoError(t, err)
 	require.Equal(t, expectedSchemaWithExtension, indentJSON(schema))
 	_, err = goavro.NewCodec(schema)
@@ -748,6 +765,7 @@ func TestAvroEncode(t *testing.T) {
 
 	keyCols, keyColInfos := event.HandleKeyColInfos()
 	keySchema, err := rowToAvroSchema(
+		encoder.namespace,
 		"testdb.avroencode",
 		keyCols,
 		keyColInfos,
@@ -771,6 +789,7 @@ func TestAvroEncode(t *testing.T) {
 	}
 
 	valueSchema, err := rowToAvroSchema(
+		encoder.namespace,
 		"testdb.avroencode",
 		cols,
 		colInfos,

@@ -79,7 +79,7 @@ func newMqSink(
 	replicaConfig *config.ReplicaConfig, encoderConfig *codec.Config,
 	errCh chan error,
 ) (*mqSink, error) {
-	encoderBuilder, err := codec.NewEventBatchEncoderBuilder(encoderConfig)
+	encoderBuilder, err := codec.NewEventBatchEncoderBuilder(ctx, encoderConfig)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}

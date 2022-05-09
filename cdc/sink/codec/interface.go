@@ -14,6 +14,7 @@
 package codec
 
 import (
+	"context"
 	"encoding/binary"
 	"time"
 
@@ -149,14 +150,14 @@ type EncoderBuilder interface {
 }
 
 // NewEventBatchEncoderBuilder returns an EncoderBuilder
-func NewEventBatchEncoderBuilder(c *Config) (EncoderBuilder, error) {
+func NewEventBatchEncoderBuilder(ctx context.Context, c *Config) (EncoderBuilder, error) {
 	switch c.protocol {
 	case config.ProtocolDefault, config.ProtocolOpen:
 		return newJSONEventBatchEncoderBuilder(c), nil
 	case config.ProtocolCanal:
 		return newCanalEventBatchEncoderBuilder(), nil
 	case config.ProtocolAvro:
-		return newAvroEventBatchEncoderBuilder(c)
+		return newAvroEventBatchEncoderBuilder(ctx, c)
 	case config.ProtocolMaxwell:
 		return newMaxwellEventBatchEncoderBuilder(), nil
 	case config.ProtocolCanalJSON:
