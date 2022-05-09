@@ -1,6 +1,6 @@
-drop database if exists `rename_tables_test`;
-create database `rename_tables_test`;
-use `rename_tables_test`;
+drop database if exists `multi_tables_ddl_test`;
+create database `multi_tables_ddl_test`;
+use `multi_tables_ddl_test`;
 
 create table t1 (
  value64  bigint unsigned  not null,
