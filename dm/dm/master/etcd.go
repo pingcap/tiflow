@@ -41,7 +41,8 @@ const (
 // startEtcd starts an embedded etcd server.
 func startEtcd(etcdCfg *embed.Config,
 	gRPCSvr func(*grpc.Server),
-	httpHandles map[string]http.Handler, startTimeout time.Duration) (*embed.Etcd, error) {
+	httpHandles map[string]http.Handler, startTimeout time.Duration,
+) (*embed.Etcd, error) {
 	// attach extra gRPC and HTTP server
 	if gRPCSvr != nil {
 		etcdCfg.ServiceRegister = gRPCSvr

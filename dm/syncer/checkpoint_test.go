@@ -20,6 +20,12 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"testing"
+	"time"
+
+	tidbddl "github.com/pingcap/tidb/ddl"
+	"github.com/pingcap/tidb/parser/ast"
+	"github.com/stretchr/testify/require"
 
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
@@ -29,6 +35,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/gtid"
 	"github.com/pingcap/tiflow/dm/pkg/retry"
 	"github.com/pingcap/tiflow/dm/pkg/schema"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/syncer/dbconn"
 
 	"github.com/DATA-DOG/go-sqlmock"
@@ -36,8 +43,8 @@ import (
 	. "github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb-tools/pkg/dbutil"
-	"github.com/pingcap/tidb-tools/pkg/filter"
+	"github.com/pingcap/tidb/util/dbutil"
+	"github.com/pingcap/tidb/util/filter"
 	"go.uber.org/zap/zapcore"
 )
 
@@ -125,8 +132,7 @@ func (s *testCheckpointSuite) TestCheckPoint(c *C) {
 
 	dbConn, err := db.Conn(tcontext.Background().Context())
 	c.Assert(err, IsNil)
-	conn := &dbconn.DBConn{Cfg: s.cfg, BaseConn: conn.NewBaseConn(dbConn, &retry.FiniteRetryStrategy{})}
-
+	conn := dbconn.NewDBConn(s.cfg, conn.NewBaseConn(dbConn, &retry.FiniteRetryStrategy{}))
 	cp.(*RemoteCheckPoint).dbConn = conn
 	err = cp.(*RemoteCheckPoint).prepare(tctx)
 	c.Assert(err, IsNil)
@@ -494,4 +500,68 @@ func (s *testCheckpointSuite) testTableCheckPoint(c *C, cp CheckPoint) {
 	c.Assert(rcp.points[schemaName][tableName].TableInfo(), NotNil)
 	c.Assert(rcp.points[schemaName][tableName].flushedPoint.ti, NotNil)
 	c.Assert(*rcp.safeModeExitPoint, DeepEquals, binlog.InitLocation(pos2, gs))
+}
+
+func TestRemoteCheckPointLoadIntoSchemaTracker(t *testing.T) {
+	cfg := genDefaultSubTaskConfig4Test()
+	cfg.WorkerCount = 0
+	ctx := context.Background()
+
+	db, _, err := sqlmock.New()
+	require.NoError(t, err)
+	dbConn, err := db.Conn(ctx)
+	require.NoError(t, err)
+	downstreamTrackConn := dbconn.NewDBConn(cfg, conn.NewBaseConn(dbConn, &retry.FiniteRetryStrategy{}))
+	schemaTracker, err := schema.NewTracker(ctx, cfg.Name, defaultTestSessionCfg, downstreamTrackConn)
+	require.NoError(t, err)
+	defer schemaTracker.Close() //nolint
+
+	tbl1 := &filter.Table{Schema: "test", Name: "tbl1"}
+	tbl2 := &filter.Table{Schema: "test", Name: "tbl2"}
+
+	// before load
+	_, err = schemaTracker.GetTableInfo(tbl1)
+	require.Error(t, err)
+	_, err = schemaTracker.GetTableInfo(tbl2)
+	require.Error(t, err)
+
+	cp := NewRemoteCheckPoint(tcontext.Background(), cfg, "1")
+	checkpoint := cp.(*RemoteCheckPoint)
+
+	parser, err := utils.GetParserFromSQLModeStr("")
+	require.NoError(t, err)
+	createNode, err := parser.ParseOneStmt("create table tbl1(id int)", "", "")
+	require.NoError(t, err)
+	ti, err := tidbddl.BuildTableInfoFromAST(createNode.(*ast.CreateTableStmt))
+	require.NoError(t, err)
+
+	tp1 := tablePoint{ti: ti}
+	tp2 := tablePoint{}
+	checkpoint.points[tbl1.Schema] = make(map[string]*binlogPoint)
+	checkpoint.points[tbl1.Schema][tbl1.Name] = &binlogPoint{flushedPoint: tp1}
+	checkpoint.points[tbl2.Schema][tbl2.Name] = &binlogPoint{flushedPoint: tp2}
+
+	// after load
+	err = checkpoint.LoadIntoSchemaTracker(ctx, schemaTracker)
+	require.NoError(t, err)
+	tableInfo, err := schemaTracker.GetTableInfo(tbl1)
+	require.NoError(t, err)
+	require.Len(t, tableInfo.Columns, 1)
+	_, err = schemaTracker.GetTableInfo(tbl2)
+	require.Error(t, err)
+}
+
+func TestLastFlushOutdated(t *testing.T) {
+	cfg := genDefaultSubTaskConfig4Test()
+	cfg.WorkerCount = 0
+	cfg.CheckpointFlushInterval = 1
+
+	cp := NewRemoteCheckPoint(tcontext.Background(), cfg, "1")
+	checkpoint := cp.(*RemoteCheckPoint)
+	checkpoint.globalPointSaveTime = time.Now().Add(-2 * time.Second)
+
+	require.True(t, checkpoint.LastFlushOutdated())
+	require.Nil(t, checkpoint.Snapshot(true))
+	// though snapshot is nil, checkpoint is not outdated
+	require.False(t, checkpoint.LastFlushOutdated())
 }

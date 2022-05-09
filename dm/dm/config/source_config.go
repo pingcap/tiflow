@@ -62,13 +62,16 @@ type PurgeConfig struct {
 
 // SourceConfig is the configuration for source.
 type SourceConfig struct {
-	Enable      bool   `yaml:"enable" toml:"enable" json:"enable"`
-	EnableGTID  bool   `yaml:"enable-gtid" toml:"enable-gtid" json:"enable-gtid"`
+	Enable     bool `yaml:"enable" toml:"enable" json:"enable"`
+	EnableGTID bool `yaml:"enable-gtid" toml:"enable-gtid" json:"enable-gtid"`
+	// deprecated
 	AutoFixGTID bool   `yaml:"auto-fix-gtid" toml:"auto-fix-gtid" json:"auto-fix-gtid"`
 	RelayDir    string `yaml:"relay-dir" toml:"relay-dir" json:"relay-dir"`
-	MetaDir     string `yaml:"meta-dir" toml:"meta-dir" json:"meta-dir"`
-	Flavor      string `yaml:"flavor" toml:"flavor" json:"flavor"`
-	Charset     string `yaml:"charset" toml:"charset" json:"charset"`
+	// deprecated
+	MetaDir string `yaml:"meta-dir" toml:"meta-dir" json:"meta-dir"`
+	Flavor  string `yaml:"flavor" toml:"flavor" json:"flavor"`
+	// deprecated
+	Charset string `yaml:"charset" toml:"charset" json:"charset"`
 
 	EnableRelay bool `yaml:"enable-relay" toml:"enable-relay" json:"enable-relay"`
 	// relay synchronous starting point (if specified)
@@ -204,6 +207,11 @@ func (c *SourceConfig) String() string {
 func (c *SourceConfig) adjust() {
 	c.From.Adjust()
 	c.Checker.Adjust()
+
+	if c.AutoFixGTID {
+		c.AutoFixGTID = false
+		log.L().Warn("auto-fix-gtid is deprecated, overwrite it to false")
+	}
 }
 
 // Verify verifies the config.
@@ -300,7 +308,7 @@ func (c *SourceConfig) Adjust(ctx context.Context, db *sql.DB) (err error) {
 		log.L().Warn("using an absolute relay path, relay log can't work when starting multiple relay worker")
 	}
 
-	return c.AdjustCaseSensitive(ctx2, db)
+	return nil
 }
 
 // AdjustCaseSensitive adjust CaseSensitive from DB.
@@ -395,7 +403,7 @@ func (c *SourceConfig) YamlForDowngrade() (string, error) {
 		return "", err
 	}
 	s.From.Password = cipher
-
+	s.omitDefaultVals()
 	return s.Yaml()
 }
 
@@ -403,11 +411,9 @@ func (c *SourceConfig) YamlForDowngrade() (string, error) {
 // This config is used for downgrade(config export) from a higher dmctl version.
 // When we add any new config item into SourceConfig, we should update it also.
 type SourceConfigForDowngrade struct {
-	Enable          bool                   `yaml:"enable"`
+	Enable          bool                   `yaml:"enable,omitempty"`
 	EnableGTID      bool                   `yaml:"enable-gtid"`
-	AutoFixGTID     bool                   `yaml:"auto-fix-gtid"`
 	RelayDir        string                 `yaml:"relay-dir"`
-	MetaDir         string                 `yaml:"meta-dir"`
 	Flavor          string                 `yaml:"flavor"`
 	Charset         string                 `yaml:"charset"`
 	EnableRelay     bool                   `yaml:"enable-relay"`
@@ -430,9 +436,7 @@ func NewSourceConfigForDowngrade(sourceCfg *SourceConfig) *SourceConfigForDowngr
 	return &SourceConfigForDowngrade{
 		Enable:          sourceCfg.Enable,
 		EnableGTID:      sourceCfg.EnableGTID,
-		AutoFixGTID:     sourceCfg.AutoFixGTID,
 		RelayDir:        sourceCfg.RelayDir,
-		MetaDir:         sourceCfg.MetaDir,
 		Flavor:          sourceCfg.Flavor,
 		Charset:         sourceCfg.Charset,
 		EnableRelay:     sourceCfg.EnableRelay,
@@ -448,6 +452,13 @@ func NewSourceConfigForDowngrade(sourceCfg *SourceConfig) *SourceConfigForDowngr
 		CaseSensitive:   sourceCfg.CaseSensitive,
 		Filters:         sourceCfg.Filters,
 	}
+}
+
+// omitDefaultVals change default value to empty value for new config item.
+// If any default value for new config item is not empty(0 or false or nil),
+// we should change it to empty.
+func (c *SourceConfigForDowngrade) omitDefaultVals() {
+	c.Enable = false
 }
 
 // Yaml returns YAML format representation of the config.

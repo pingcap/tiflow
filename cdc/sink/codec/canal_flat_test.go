@@ -15,19 +15,15 @@ package codec
 
 import (
 	"encoding/json"
+	"testing"
 
-	"github.com/pingcap/check"
 	mm "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/util/timeutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
-	"github.com/pingcap/tiflow/pkg/util/testleak"
+	"github.com/stretchr/testify/require"
 	"golang.org/x/text/encoding/charmap"
 )
-
-type canalFlatSuite struct{}
-
-var _ = check.Suite(&canalFlatSuite{})
 
 var (
 	testColumns = collectAllColumns(testColumnsTable)
@@ -72,305 +68,303 @@ var testCaseDDL = &model.DDLEvent{
 	Type:  mm.ActionCreateTable,
 }
 
-func (s *canalFlatSuite) TestBuildCanalFlatEventBatchEncoder(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestBuildCanalFlatEventBatchEncoder(t *testing.T) {
+	t.Parallel()
 	config := NewConfig(config.ProtocolCanalJSON, timeutil.SystemLocation())
 
 	builder := &canalFlatEventBatchEncoderBuilder{config: config}
 	encoder, ok := builder.Build().(*CanalFlatEventBatchEncoder)
-	c.Assert(ok, check.IsTrue)
-	c.Assert(encoder.enableTiDBExtension, check.IsFalse)
+	require.True(t, ok)
+	require.False(t, encoder.enableTiDBExtension)
 
 	config.enableTiDBExtension = true
 	builder = &canalFlatEventBatchEncoderBuilder{config: config}
 	encoder, ok = builder.Build().(*CanalFlatEventBatchEncoder)
-	c.Assert(ok, check.IsTrue)
-	c.Assert(encoder.enableTiDBExtension, check.IsTrue)
+	require.True(t, ok)
+	require.True(t, encoder.enableTiDBExtension)
 }
 
-func (s *canalFlatSuite) TestNewCanalFlatMessage4DML(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestNewCanalFlatMessage4DML(t *testing.T) {
+	t.Parallel()
 	encoder := &CanalFlatEventBatchEncoder{builder: NewCanalEntryBuilder()}
-	c.Assert(encoder, check.NotNil)
+	require.NotNil(t, encoder)
 
 	message, err := encoder.newFlatMessageForDML(testCaseInsert)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	flatMessage, ok := message.(*canalFlatMessage)
-	c.Assert(ok, check.IsTrue)
-	c.Assert(flatMessage.Data, check.NotNil)
-	c.Assert(flatMessage.Old, check.IsNil)
-	c.Assert(flatMessage.EventType, check.Equals, "INSERT")
-	c.Assert(flatMessage.ExecutionTime, check.Equals, convertToCanalTs(testCaseInsert.CommitTs))
-	c.Assert(flatMessage.tikvTs, check.Equals, testCaseInsert.CommitTs)
-	c.Assert(flatMessage.Schema, check.Equals, "cdc")
-	c.Assert(flatMessage.Table, check.Equals, "person")
-	c.Assert(flatMessage.IsDDL, check.IsFalse)
+	require.True(t, ok)
+	require.NotNil(t, flatMessage.Data)
+	require.Nil(t, flatMessage.Old)
+	require.Equal(t, "INSERT", flatMessage.EventType)
+	require.Equal(t, convertToCanalTs(testCaseInsert.CommitTs), flatMessage.ExecutionTime)
+	require.Equal(t, testCaseInsert.CommitTs, flatMessage.tikvTs)
+	require.Equal(t, "cdc", flatMessage.Schema)
+	require.Equal(t, "person", flatMessage.Table)
+	require.False(t, flatMessage.IsDDL)
 
 	// check data is enough
 	obtainedDataMap := flatMessage.getData()
-	c.Assert(obtainedDataMap, check.NotNil)
+	require.NotNil(t, obtainedDataMap)
 
 	for _, item := range testColumnsTable {
 		obtainedValue, ok := obtainedDataMap[item.column.Name]
-		c.Assert(ok, check.IsTrue)
+		require.True(t, ok)
 		if !item.column.Flag.IsBinary() {
-			c.Assert(obtainedValue, check.Equals, item.expectedEncodedValue)
+			require.Equal(t, item.expectedEncodedValue, obtainedValue)
 			continue
 		}
 
 		// for `Column.Value` is nil, which mean's it is nullable, set the value to `""`
 		if obtainedValue == nil {
-			c.Assert(item.expectedEncodedValue, check.Equals, "")
+			require.Equal(t, "", item.expectedEncodedValue)
 			continue
 		}
 
 		if bytes, ok := item.column.Value.([]byte); ok {
 			expectedValue, err := charmap.ISO8859_1.NewDecoder().Bytes(bytes)
-			c.Assert(err, check.IsNil)
-			c.Assert(obtainedValue, check.Equals, string(expectedValue))
+			require.Nil(t, err)
+			require.Equal(t, string(expectedValue), obtainedValue)
 			continue
 		}
 
-		c.Assert(obtainedValue, check.Equals, item.expectedEncodedValue)
+		require.Equal(t, item.expectedEncodedValue, obtainedValue)
 	}
 
 	message, err = encoder.newFlatMessageForDML(testCaseUpdate)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	flatMessage, ok = message.(*canalFlatMessage)
-	c.Assert(ok, check.IsTrue)
-	c.Assert(flatMessage.Data, check.NotNil)
-	c.Assert(flatMessage.Old, check.NotNil)
-	c.Assert(flatMessage.EventType, check.Equals, "UPDATE")
+	require.True(t, ok)
+	require.NotNil(t, flatMessage.Data)
+	require.NotNil(t, flatMessage.Old)
+	require.Equal(t, "UPDATE", flatMessage.EventType)
 
 	message, err = encoder.newFlatMessageForDML(testCaseDelete)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	flatMessage, ok = message.(*canalFlatMessage)
-	c.Assert(ok, check.IsTrue)
-	c.Assert(flatMessage.Data, check.NotNil)
-	c.Assert(flatMessage.Old, check.IsNil)
-	c.Assert(flatMessage.EventType, check.Equals, "DELETE")
+	require.True(t, ok)
+	require.NotNil(t, flatMessage.Data)
+	require.Nil(t, flatMessage.Old)
+	require.Equal(t, "DELETE", flatMessage.EventType)
 
 	encoder = &CanalFlatEventBatchEncoder{builder: NewCanalEntryBuilder(), enableTiDBExtension: true}
-	c.Assert(encoder, check.NotNil)
+	require.NotNil(t, encoder)
 	message, err = encoder.newFlatMessageForDML(testCaseUpdate)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 
 	withExtension, ok := message.(*canalFlatMessageWithTiDBExtension)
-	c.Assert(ok, check.IsTrue)
+	require.True(t, ok)
 
-	c.Assert(withExtension.Extensions, check.NotNil)
-	c.Assert(withExtension.Extensions.CommitTs, check.Equals, testCaseUpdate.CommitTs)
+	require.NotNil(t, withExtension.Extensions)
+	require.Equal(t, testCaseUpdate.CommitTs, withExtension.Extensions.CommitTs)
 }
 
-func (s *canalFlatSuite) TestNewCanalFlatEventBatchDecoder4RowMessage(c *check.C) {
-	defer testleak.AfterTest(c)()
-
+func TestNewCanalFlatEventBatchDecoder4RowMessage(t *testing.T) {
+	t.Parallel()
 	expectedDecodedValue := collectExpectedDecodedValue(testColumnsTable)
 	for _, encodeEnable := range []bool{false, true} {
 		encoder := &CanalFlatEventBatchEncoder{builder: NewCanalEntryBuilder(), enableTiDBExtension: encodeEnable}
-		c.Assert(encoder, check.NotNil)
+		require.NotNil(t, encoder)
 
 		err := encoder.AppendRowChangedEvent(testCaseInsert)
-		c.Assert(err, check.IsNil)
+		require.Nil(t, err)
 
 		mqMessages := encoder.Build()
-		c.Assert(len(mqMessages), check.Equals, 1)
+		require.Equal(t, 1, len(mqMessages))
 		msg := mqMessages[0]
 
 		for _, decodeEnable := range []bool{false, true} {
 			decoder := NewCanalFlatEventBatchDecoder(msg.Value, decodeEnable)
 
 			ty, hasNext, err := decoder.HasNext()
-			c.Assert(err, check.IsNil)
-			c.Assert(hasNext, check.IsTrue)
-			c.Assert(ty, check.Equals, model.MqMessageTypeRow)
+			require.Nil(t, err)
+			require.True(t, hasNext)
+			require.Equal(t, model.MqMessageTypeRow, ty)
 
 			consumed, err := decoder.NextRowChangedEvent()
-			c.Assert(err, check.IsNil)
+			require.Nil(t, err)
 
-			c.Assert(consumed.Table, check.DeepEquals, testCaseInsert.Table)
+			require.Equal(t, testCaseInsert.Table, consumed.Table)
 			if encodeEnable && decodeEnable {
-				c.Assert(consumed.CommitTs, check.Equals, testCaseInsert.CommitTs)
+				require.Equal(t, testCaseInsert.CommitTs, consumed.CommitTs)
 			} else {
-				c.Assert(consumed.CommitTs, check.Equals, uint64(0))
+				require.Equal(t, uint64(0), consumed.CommitTs)
 			}
 
 			for _, col := range consumed.Columns {
 				expected, ok := expectedDecodedValue[col.Name]
-				c.Assert(ok, check.IsTrue)
-				c.Assert(col.Value, check.Equals, expected)
+				require.True(t, ok)
+				require.Equal(t, expected, col.Value)
 
 				for _, item := range testCaseInsert.Columns {
 					if item.Name == col.Name {
-						c.Assert(col.Type, check.Equals, item.Type)
+						require.Equal(t, item.Type, col.Type)
 					}
 				}
 			}
 
 			_, hasNext, _ = decoder.HasNext()
-			c.Assert(hasNext, check.IsFalse)
+			require.False(t, hasNext)
 
 			consumed, err = decoder.NextRowChangedEvent()
-			c.Assert(err, check.NotNil)
-			c.Assert(consumed, check.IsNil)
+			require.NotNil(t, err)
+			require.Nil(t, consumed)
 		}
 	}
 }
 
-func (s *canalFlatSuite) TestNewCanalFlatMessageFromDDL(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestNewCanalFlatMessageFromDDL(t *testing.T) {
+	t.Parallel()
 	encoder := &CanalFlatEventBatchEncoder{builder: NewCanalEntryBuilder()}
-	c.Assert(encoder, check.NotNil)
+	require.NotNil(t, encoder)
 
 	message := encoder.newFlatMessageForDDL(testCaseDDL)
-	c.Assert(message, check.NotNil)
+	require.NotNil(t, message)
 
 	msg, ok := message.(*canalFlatMessage)
-	c.Assert(ok, check.IsTrue)
-	c.Assert(msg.tikvTs, check.Equals, testCaseDDL.CommitTs)
-	c.Assert(msg.ExecutionTime, check.Equals, convertToCanalTs(testCaseDDL.CommitTs))
-	c.Assert(msg.IsDDL, check.IsTrue)
-	c.Assert(msg.Schema, check.Equals, "cdc")
-	c.Assert(msg.Table, check.Equals, "person")
-	c.Assert(msg.Query, check.Equals, testCaseDDL.Query)
-	c.Assert(msg.EventType, check.Equals, "CREATE")
+	require.True(t, ok)
+	require.Equal(t, testCaseDDL.CommitTs, msg.tikvTs)
+	require.Equal(t, convertToCanalTs(testCaseDDL.CommitTs), msg.ExecutionTime)
+	require.True(t, msg.IsDDL)
+	require.Equal(t, "cdc", msg.Schema)
+	require.Equal(t, "person", msg.Table)
+	require.Equal(t, testCaseDDL.Query, msg.Query)
+	require.Equal(t, "CREATE", msg.EventType)
 
 	encoder = &CanalFlatEventBatchEncoder{builder: NewCanalEntryBuilder(), enableTiDBExtension: true}
-	c.Assert(encoder, check.NotNil)
+	require.NotNil(t, encoder)
 
 	message = encoder.newFlatMessageForDDL(testCaseDDL)
-	c.Assert(message, check.NotNil)
+	require.NotNil(t, message)
 
 	withExtension, ok := message.(*canalFlatMessageWithTiDBExtension)
-	c.Assert(ok, check.IsTrue)
+	require.True(t, ok)
 
-	c.Assert(withExtension.Extensions, check.NotNil)
-	c.Assert(withExtension.Extensions.CommitTs, check.Equals, testCaseDDL.CommitTs)
+	require.NotNil(t, withExtension.Extensions)
+	require.Equal(t, testCaseDDL.CommitTs, withExtension.Extensions.CommitTs)
 }
 
-func (s *canalFlatSuite) TestNewCanalFlatEventBatchDecoder4DDLMessage(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestNewCanalFlatEventBatchDecoder4DDLMessage(t *testing.T) {
+	t.Parallel()
 	for _, encodeEnable := range []bool{false, true} {
 		encoder := &CanalFlatEventBatchEncoder{builder: NewCanalEntryBuilder(), enableTiDBExtension: encodeEnable}
-		c.Assert(encoder, check.NotNil)
+		require.NotNil(t, encoder)
 
 		result, err := encoder.EncodeDDLEvent(testCaseDDL)
-		c.Assert(err, check.IsNil)
-		c.Assert(result, check.NotNil)
+		require.Nil(t, err)
+		require.NotNil(t, result)
 
 		for _, decodeEnable := range []bool{false, true} {
 			decoder := NewCanalFlatEventBatchDecoder(result.Value, decodeEnable)
 
 			ty, hasNext, err := decoder.HasNext()
-			c.Assert(err, check.IsNil)
-			c.Assert(hasNext, check.IsTrue)
-			c.Assert(ty, check.Equals, model.MqMessageTypeDDL)
+			require.Nil(t, err)
+			require.True(t, hasNext)
+			require.Equal(t, model.MqMessageTypeDDL, ty)
 
 			consumed, err := decoder.NextDDLEvent()
-			c.Assert(err, check.IsNil)
+			require.Nil(t, err)
 
 			if encodeEnable && decodeEnable {
-				c.Assert(consumed.CommitTs, check.Equals, testCaseDDL.CommitTs)
+				require.Equal(t, testCaseDDL.CommitTs, consumed.CommitTs)
 			} else {
-				c.Assert(consumed.CommitTs, check.Equals, uint64(0))
+				require.Equal(t, uint64(0), consumed.CommitTs)
 			}
 
-			c.Assert(consumed.TableInfo, check.DeepEquals, testCaseDDL.TableInfo)
-			c.Assert(consumed.Query, check.Equals, testCaseDDL.Query)
+			require.Equal(t, testCaseDDL.TableInfo, consumed.TableInfo)
+			require.Equal(t, testCaseDDL.Query, consumed.Query)
 
 			ty, hasNext, err = decoder.HasNext()
-			c.Assert(err, check.IsNil)
-			c.Assert(hasNext, check.IsFalse)
-			c.Assert(ty, check.Equals, model.MqMessageTypeUnknown)
+			require.Nil(t, err)
+			require.False(t, hasNext)
+			require.Equal(t, model.MqMessageTypeUnknown, ty)
 
 			consumed, err = decoder.NextDDLEvent()
-			c.Assert(err, check.NotNil)
-			c.Assert(consumed, check.IsNil)
+			require.NotNil(t, err)
+			require.Nil(t, consumed)
 		}
 	}
 }
 
-func (s *canalFlatSuite) TestBatching(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestBatching(t *testing.T) {
+	t.Parallel()
 	encoder := &CanalFlatEventBatchEncoder{builder: NewCanalEntryBuilder()}
-	c.Assert(encoder, check.NotNil)
+	require.NotNil(t, encoder)
 
 	updateCase := *testCaseUpdate
 	for i := 1; i <= 1000; i++ {
 		ts := uint64(i)
 		updateCase.CommitTs = ts
 		err := encoder.AppendRowChangedEvent(&updateCase)
-		c.Assert(err, check.IsNil)
+		require.Nil(t, err)
 
 		if i%100 == 0 {
 			msgs := encoder.Build()
-			c.Assert(msgs, check.NotNil)
-			c.Assert(msgs, check.HasLen, 100)
+			require.NotNil(t, msgs)
+			require.Len(t, msgs, 100)
 
 			for j := range msgs {
-				c.Assert(msgs[j].GetRowsCount(), check.Equals, 1)
+				require.Equal(t, 1, msgs[j].GetRowsCount())
 
 				var msg canalFlatMessage
 				err := json.Unmarshal(msgs[j].Value, &msg)
-				c.Assert(err, check.IsNil)
-				c.Assert(msg.EventType, check.Equals, "UPDATE")
+				require.Nil(t, err)
+				require.Equal(t, "UPDATE", msg.EventType)
 			}
 		}
 	}
 
-	c.Assert(encoder.messageBuf, check.HasLen, 0)
+	require.Len(t, encoder.messageBuf, 0)
 }
 
-func (s *canalFlatSuite) TestEncodeCheckpointEvent(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestEncodeCheckpointEvent(t *testing.T) {
+	t.Parallel()
 	var watermark uint64 = 2333
 	for _, enable := range []bool{false, true} {
 		encoder := &CanalFlatEventBatchEncoder{builder: NewCanalEntryBuilder(), enableTiDBExtension: enable}
-		c.Assert(encoder, check.NotNil)
+		require.NotNil(t, encoder)
 
 		msg, err := encoder.EncodeCheckpointEvent(watermark)
-		c.Assert(err, check.IsNil)
+		require.Nil(t, err)
 
 		if !enable {
-			c.Assert(msg, check.IsNil)
+			require.Nil(t, msg)
 			continue
 		}
 
-		c.Assert(msg, check.NotNil)
+		require.NotNil(t, msg)
 		decoder := NewCanalFlatEventBatchDecoder(msg.Value, enable)
 
 		ty, hasNext, err := decoder.HasNext()
-		c.Assert(err, check.IsNil)
+		require.Nil(t, err)
 		if enable {
-			c.Assert(hasNext, check.IsTrue)
-			c.Assert(ty, check.Equals, model.MqMessageTypeResolved)
+			require.True(t, hasNext)
+			require.Equal(t, model.MqMessageTypeResolved, ty)
 			consumed, err := decoder.NextResolvedEvent()
-			c.Assert(err, check.IsNil)
-			c.Assert(consumed, check.Equals, watermark)
+			require.Nil(t, err)
+			require.Equal(t, watermark, consumed)
 		} else {
-			c.Assert(hasNext, check.IsFalse)
-			c.Assert(ty, check.Equals, model.MqMessageTypeUnknown)
+			require.False(t, hasNext)
+			require.Equal(t, model.MqMessageTypeUnknown, ty)
 		}
 
 		ty, hasNext, err = decoder.HasNext()
-		c.Assert(err, check.IsNil)
-		c.Assert(hasNext, check.IsFalse)
-		c.Assert(ty, check.Equals, model.MqMessageTypeUnknown)
+		require.Nil(t, err)
+		require.False(t, hasNext)
+		require.Equal(t, model.MqMessageTypeUnknown, ty)
 	}
 }
 
-func (s *canalFlatSuite) TestCheckpointEventValueMarshal(c *check.C) {
-	defer testleak.AfterTest(c)()
-
+func TestCheckpointEventValueMarshal(t *testing.T) {
+	t.Parallel()
 	var watermark uint64 = 1024
 	encoder := &CanalFlatEventBatchEncoder{
 		builder:             NewCanalEntryBuilder(),
 		enableTiDBExtension: true,
 	}
-	c.Assert(encoder, check.NotNil)
+	require.NotNil(t, encoder)
 	msg, err := encoder.EncodeCheckpointEvent(watermark)
-	c.Assert(err, check.IsNil)
-	c.Assert(msg, check.NotNil)
+	require.Nil(t, err)
+	require.NotNil(t, msg)
 
 	// Unmarshal from the data we have encoded.
 	flatMsg := canalFlatMessageWithTiDBExtension{
@@ -378,13 +372,13 @@ func (s *canalFlatSuite) TestCheckpointEventValueMarshal(c *check.C) {
 		&tidbExtension{},
 	}
 	err = json.Unmarshal(msg.Value, &flatMsg)
-	c.Assert(err, check.IsNil)
-	c.Assert(flatMsg.Extensions.WatermarkTs, check.Equals, watermark)
+	require.Nil(t, err)
+	require.Equal(t, watermark, flatMsg.Extensions.WatermarkTs)
 	// Hack the build time.
 	// Otherwise, the timing will be inconsistent.
 	flatMsg.BuildTime = 1469579899
 	rawBytes, err := json.MarshalIndent(flatMsg, "", "  ")
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 
 	// No commit ts will be output.
 	expectedJSON := `{
@@ -405,25 +399,24 @@ func (s *canalFlatSuite) TestCheckpointEventValueMarshal(c *check.C) {
     "watermarkTs": 1024
   }
 }`
-	c.Assert(string(rawBytes), check.Equals, expectedJSON)
+	require.Equal(t, expectedJSON, string(rawBytes))
 }
 
-func (s *canalFlatSuite) TestDDLEventWithExtensionValueMarshal(c *check.C) {
-	defer testleak.AfterTest(c)()
-
+func TestDDLEventWithExtensionValueMarshal(t *testing.T) {
+	t.Parallel()
 	encoder := &CanalFlatEventBatchEncoder{builder: NewCanalEntryBuilder(), enableTiDBExtension: true}
-	c.Assert(encoder, check.NotNil)
+	require.NotNil(t, encoder)
 
 	message := encoder.newFlatMessageForDDL(testCaseDDL)
-	c.Assert(message, check.NotNil)
+	require.NotNil(t, message)
 
 	msg, ok := message.(*canalFlatMessageWithTiDBExtension)
-	c.Assert(ok, check.IsTrue)
+	require.True(t, ok)
 	// Hack the build time.
 	// Otherwise, the timing will be inconsistent.
 	msg.BuildTime = 1469579899
 	rawBytes, err := json.MarshalIndent(msg, "", "  ")
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 
 	// No watermark ts will be output.
 	expectedJSON := `{
@@ -444,5 +437,5 @@ func (s *canalFlatSuite) TestDDLEventWithExtensionValueMarshal(c *check.C) {
     "commitTs": 417318403368288260
   }
 }`
-	c.Assert(string(rawBytes), check.Equals, expectedJSON)
+	require.Equal(t, expectedJSON, string(rawBytes))
 }

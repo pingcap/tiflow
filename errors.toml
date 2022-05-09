@@ -348,7 +348,7 @@ invalid admin job type: %d
 
 ["CDC:ErrInvalidChangefeedID"]
 error = '''
-bad changefeed id, please match the pattern "^[a-zA-Z0-9]+(\-[a-zA-Z0-9]+)*$, the length should no more than %d", eg, "simple-changefeed-task"
+bad changefeed id, please match the pattern "^[a-zA-Z0-9]+(\-[a-zA-Z0-9]+)*$", the length should no more than %d, eg, "simple-changefeed-task",
 '''
 
 ["CDC:ErrInvalidDDLJob"]
@@ -499,6 +499,11 @@ MQ Codec invalid config
 ["CDC:ErrMQSinkUnknownProtocol"]
 error = '''
 unknown '%s' protocol for Message Queue sink
+'''
+
+["CDC:ErrMQWorkerClosed"]
+error = '''
+MQ worker has closed
 '''
 
 ["CDC:ErrMailboxFull"]
@@ -788,7 +793,7 @@ pulsar send message failed
 
 ["CDC:ErrReachMaxTry"]
 error = '''
-reach maximum try: %d
+reach maximum try: %s, error: %s
 '''
 
 ["CDC:ErrReactorFinished"]
@@ -1051,6 +1056,11 @@ error = '''
 unmarshal failed
 '''
 
+["CDC:ErrUpStreamNotFound"]
+error = '''
+upStram not found, cluster-id: %d
+'''
+
 ["CDC:ErrUpdateServiceSafepointFailed"]
 error = '''
 updating service safepoint failed
@@ -1098,7 +1108,7 @@ file lock conflict: %s
 
 ["ErrRequestForwardErr"]
 error = '''
-request forward error, an request can only forward to owner one time 
+request forward error, an request can only forward to owner one time
 '''
 
 ["ErrSortDirLockError"]

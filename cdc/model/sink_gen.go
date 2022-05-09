@@ -36,10 +36,22 @@ func (z *Column) DecodeMsg(dc *msgp.Reader) (err error) {
 				err = msgp.WrapError(err, "Type")
 				return
 			}
+		case "charset":
+			z.Charset, err = dc.ReadString()
+			if err != nil {
+				err = msgp.WrapError(err, "Charset")
+				return
+			}
 		case "value":
 			z.Value, err = dc.ReadIntf()
 			if err != nil {
 				err = msgp.WrapError(err, "Value")
+				return
+			}
+		case "ApproximateBytes":
+			z.ApproximateBytes, err = dc.ReadInt()
+			if err != nil {
+				err = msgp.WrapError(err, "ApproximateBytes")
 				return
 			}
 		default:
@@ -54,10 +66,10 @@ func (z *Column) DecodeMsg(dc *msgp.Reader) (err error) {
 }
 
 // EncodeMsg implements msgp.Encodable
-func (z Column) EncodeMsg(en *msgp.Writer) (err error) {
-	// map header, size 3
+func (z *Column) EncodeMsg(en *msgp.Writer) (err error) {
+	// map header, size 5
 	// write "name"
-	err = en.Append(0x83, 0xa4, 0x6e, 0x61, 0x6d, 0x65)
+	err = en.Append(0x85, 0xa4, 0x6e, 0x61, 0x6d, 0x65)
 	if err != nil {
 		return
 	}
@@ -76,6 +88,16 @@ func (z Column) EncodeMsg(en *msgp.Writer) (err error) {
 		err = msgp.WrapError(err, "Type")
 		return
 	}
+	// write "charset"
+	err = en.Append(0xa7, 0x63, 0x68, 0x61, 0x72, 0x73, 0x65, 0x74)
+	if err != nil {
+		return
+	}
+	err = en.WriteString(z.Charset)
+	if err != nil {
+		err = msgp.WrapError(err, "Charset")
+		return
+	}
 	// write "value"
 	err = en.Append(0xa5, 0x76, 0x61, 0x6c, 0x75, 0x65)
 	if err != nil {
@@ -86,19 +108,32 @@ func (z Column) EncodeMsg(en *msgp.Writer) (err error) {
 		err = msgp.WrapError(err, "Value")
 		return
 	}
+	// write "ApproximateBytes"
+	err = en.Append(0xb0, 0x41, 0x70, 0x70, 0x72, 0x6f, 0x78, 0x69, 0x6d, 0x61, 0x74, 0x65, 0x42, 0x79, 0x74, 0x65, 0x73)
+	if err != nil {
+		return
+	}
+	err = en.WriteInt(z.ApproximateBytes)
+	if err != nil {
+		err = msgp.WrapError(err, "ApproximateBytes")
+		return
+	}
 	return
 }
 
 // MarshalMsg implements msgp.Marshaler
-func (z Column) MarshalMsg(b []byte) (o []byte, err error) {
+func (z *Column) MarshalMsg(b []byte) (o []byte, err error) {
 	o = msgp.Require(b, z.Msgsize())
-	// map header, size 3
+	// map header, size 5
 	// string "name"
-	o = append(o, 0x83, 0xa4, 0x6e, 0x61, 0x6d, 0x65)
+	o = append(o, 0x85, 0xa4, 0x6e, 0x61, 0x6d, 0x65)
 	o = msgp.AppendString(o, z.Name)
 	// string "type"
 	o = append(o, 0xa4, 0x74, 0x79, 0x70, 0x65)
 	o = msgp.AppendByte(o, z.Type)
+	// string "charset"
+	o = append(o, 0xa7, 0x63, 0x68, 0x61, 0x72, 0x73, 0x65, 0x74)
+	o = msgp.AppendString(o, z.Charset)
 	// string "value"
 	o = append(o, 0xa5, 0x76, 0x61, 0x6c, 0x75, 0x65)
 	o, err = msgp.AppendIntf(o, z.Value)
@@ -106,6 +141,9 @@ func (z Column) MarshalMsg(b []byte) (o []byte, err error) {
 		err = msgp.WrapError(err, "Value")
 		return
 	}
+	// string "ApproximateBytes"
+	o = append(o, 0xb0, 0x41, 0x70, 0x70, 0x72, 0x6f, 0x78, 0x69, 0x6d, 0x61, 0x74, 0x65, 0x42, 0x79, 0x74, 0x65, 0x73)
+	o = msgp.AppendInt(o, z.ApproximateBytes)
 	return
 }
 
@@ -139,10 +177,22 @@ func (z *Column) UnmarshalMsg(bts []byte) (o []byte, err error) {
 				err = msgp.WrapError(err, "Type")
 				return
 			}
+		case "charset":
+			z.Charset, bts, err = msgp.ReadStringBytes(bts)
+			if err != nil {
+				err = msgp.WrapError(err, "Charset")
+				return
+			}
 		case "value":
 			z.Value, bts, err = msgp.ReadIntfBytes(bts)
 			if err != nil {
 				err = msgp.WrapError(err, "Value")
+				return
+			}
+		case "ApproximateBytes":
+			z.ApproximateBytes, bts, err = msgp.ReadIntBytes(bts)
+			if err != nil {
+				err = msgp.WrapError(err, "ApproximateBytes")
 				return
 			}
 		default:
@@ -158,8 +208,8 @@ func (z *Column) UnmarshalMsg(bts []byte) (o []byte, err error) {
 }
 
 // Msgsize returns an upper bound estimate of the number of bytes occupied by the serialized message
-func (z Column) Msgsize() (s int) {
-	s = 1 + 5 + msgp.StringPrefixSize + len(z.Name) + 5 + msgp.ByteSize + 6 + msgp.GuessSize(z.Value)
+func (z *Column) Msgsize() (s int) {
+	s = 1 + 5 + msgp.StringPrefixSize + len(z.Name) + 5 + msgp.ByteSize + 8 + msgp.StringPrefixSize + len(z.Charset) + 6 + msgp.GuessSize(z.Value) + 17 + msgp.IntSize
 	return
 }
 
@@ -664,45 +714,10 @@ func (z *RedoColumn) DecodeMsg(dc *msgp.Reader) (err error) {
 				if z.Column == nil {
 					z.Column = new(Column)
 				}
-				var zb0002 uint32
-				zb0002, err = dc.ReadMapHeader()
+				err = z.Column.DecodeMsg(dc)
 				if err != nil {
 					err = msgp.WrapError(err, "Column")
 					return
-				}
-				for zb0002 > 0 {
-					zb0002--
-					field, err = dc.ReadMapKeyPtr()
-					if err != nil {
-						err = msgp.WrapError(err, "Column")
-						return
-					}
-					switch msgp.UnsafeString(field) {
-					case "name":
-						z.Column.Name, err = dc.ReadString()
-						if err != nil {
-							err = msgp.WrapError(err, "Column", "Name")
-							return
-						}
-					case "type":
-						z.Column.Type, err = dc.ReadByte()
-						if err != nil {
-							err = msgp.WrapError(err, "Column", "Type")
-							return
-						}
-					case "value":
-						z.Column.Value, err = dc.ReadIntf()
-						if err != nil {
-							err = msgp.WrapError(err, "Column", "Value")
-							return
-						}
-					default:
-						err = dc.Skip()
-						if err != nil {
-							err = msgp.WrapError(err, "Column")
-							return
-						}
-					}
 				}
 			}
 		case "flag":
@@ -736,35 +751,9 @@ func (z *RedoColumn) EncodeMsg(en *msgp.Writer) (err error) {
 			return
 		}
 	} else {
-		// map header, size 3
-		// write "name"
-		err = en.Append(0x83, 0xa4, 0x6e, 0x61, 0x6d, 0x65)
+		err = z.Column.EncodeMsg(en)
 		if err != nil {
-			return
-		}
-		err = en.WriteString(z.Column.Name)
-		if err != nil {
-			err = msgp.WrapError(err, "Column", "Name")
-			return
-		}
-		// write "type"
-		err = en.Append(0xa4, 0x74, 0x79, 0x70, 0x65)
-		if err != nil {
-			return
-		}
-		err = en.WriteByte(z.Column.Type)
-		if err != nil {
-			err = msgp.WrapError(err, "Column", "Type")
-			return
-		}
-		// write "value"
-		err = en.Append(0xa5, 0x76, 0x61, 0x6c, 0x75, 0x65)
-		if err != nil {
-			return
-		}
-		err = en.WriteIntf(z.Column.Value)
-		if err != nil {
-			err = msgp.WrapError(err, "Column", "Value")
+			err = msgp.WrapError(err, "Column")
 			return
 		}
 	}
@@ -790,18 +779,9 @@ func (z *RedoColumn) MarshalMsg(b []byte) (o []byte, err error) {
 	if z.Column == nil {
 		o = msgp.AppendNil(o)
 	} else {
-		// map header, size 3
-		// string "name"
-		o = append(o, 0x83, 0xa4, 0x6e, 0x61, 0x6d, 0x65)
-		o = msgp.AppendString(o, z.Column.Name)
-		// string "type"
-		o = append(o, 0xa4, 0x74, 0x79, 0x70, 0x65)
-		o = msgp.AppendByte(o, z.Column.Type)
-		// string "value"
-		o = append(o, 0xa5, 0x76, 0x61, 0x6c, 0x75, 0x65)
-		o, err = msgp.AppendIntf(o, z.Column.Value)
+		o, err = z.Column.MarshalMsg(o)
 		if err != nil {
-			err = msgp.WrapError(err, "Column", "Value")
+			err = msgp.WrapError(err, "Column")
 			return
 		}
 	}
@@ -840,45 +820,10 @@ func (z *RedoColumn) UnmarshalMsg(bts []byte) (o []byte, err error) {
 				if z.Column == nil {
 					z.Column = new(Column)
 				}
-				var zb0002 uint32
-				zb0002, bts, err = msgp.ReadMapHeaderBytes(bts)
+				bts, err = z.Column.UnmarshalMsg(bts)
 				if err != nil {
 					err = msgp.WrapError(err, "Column")
 					return
-				}
-				for zb0002 > 0 {
-					zb0002--
-					field, bts, err = msgp.ReadMapKeyZC(bts)
-					if err != nil {
-						err = msgp.WrapError(err, "Column")
-						return
-					}
-					switch msgp.UnsafeString(field) {
-					case "name":
-						z.Column.Name, bts, err = msgp.ReadStringBytes(bts)
-						if err != nil {
-							err = msgp.WrapError(err, "Column", "Name")
-							return
-						}
-					case "type":
-						z.Column.Type, bts, err = msgp.ReadByteBytes(bts)
-						if err != nil {
-							err = msgp.WrapError(err, "Column", "Type")
-							return
-						}
-					case "value":
-						z.Column.Value, bts, err = msgp.ReadIntfBytes(bts)
-						if err != nil {
-							err = msgp.WrapError(err, "Column", "Value")
-							return
-						}
-					default:
-						bts, err = msgp.Skip(bts)
-						if err != nil {
-							err = msgp.WrapError(err, "Column")
-							return
-						}
-					}
 				}
 			}
 		case "flag":
@@ -905,7 +850,7 @@ func (z *RedoColumn) Msgsize() (s int) {
 	if z.Column == nil {
 		s += msgp.NilSize
 	} else {
-		s += 1 + 5 + msgp.StringPrefixSize + len(z.Column.Name) + 5 + msgp.ByteSize + 6 + msgp.GuessSize(z.Column.Value)
+		s += z.Column.Msgsize()
 	}
 	s += 5 + msgp.Uint64Size
 	return
@@ -1564,24 +1509,65 @@ func (z *RedoRowChangedEvent) DecodeMsg(dc *msgp.Reader) (err error) {
 					if z.PreColumns[za0001] == nil {
 						z.PreColumns[za0001] = new(RedoColumn)
 					}
-					err = z.PreColumns[za0001].DecodeMsg(dc)
+					var zb0003 uint32
+					zb0003, err = dc.ReadMapHeader()
 					if err != nil {
 						err = msgp.WrapError(err, "PreColumns", za0001)
 						return
 					}
+					for zb0003 > 0 {
+						zb0003--
+						field, err = dc.ReadMapKeyPtr()
+						if err != nil {
+							err = msgp.WrapError(err, "PreColumns", za0001)
+							return
+						}
+						switch msgp.UnsafeString(field) {
+						case "column":
+							if dc.IsNil() {
+								err = dc.ReadNil()
+								if err != nil {
+									err = msgp.WrapError(err, "PreColumns", za0001, "Column")
+									return
+								}
+								z.PreColumns[za0001].Column = nil
+							} else {
+								if z.PreColumns[za0001].Column == nil {
+									z.PreColumns[za0001].Column = new(Column)
+								}
+								err = z.PreColumns[za0001].Column.DecodeMsg(dc)
+								if err != nil {
+									err = msgp.WrapError(err, "PreColumns", za0001, "Column")
+									return
+								}
+							}
+						case "flag":
+							z.PreColumns[za0001].Flag, err = dc.ReadUint64()
+							if err != nil {
+								err = msgp.WrapError(err, "PreColumns", za0001, "Flag")
+								return
+							}
+						default:
+							err = dc.Skip()
+							if err != nil {
+								err = msgp.WrapError(err, "PreColumns", za0001)
+								return
+							}
+						}
+					}
 				}
 			}
 		case "columns":
-			var zb0003 uint32
-			zb0003, err = dc.ReadArrayHeader()
+			var zb0004 uint32
+			zb0004, err = dc.ReadArrayHeader()
 			if err != nil {
 				err = msgp.WrapError(err, "Columns")
 				return
 			}
-			if cap(z.Columns) >= int(zb0003) {
-				z.Columns = (z.Columns)[:zb0003]
+			if cap(z.Columns) >= int(zb0004) {
+				z.Columns = (z.Columns)[:zb0004]
 			} else {
-				z.Columns = make([]*RedoColumn, zb0003)
+				z.Columns = make([]*RedoColumn, zb0004)
 			}
 			for za0002 := range z.Columns {
 				if dc.IsNil() {
@@ -1595,10 +1581,51 @@ func (z *RedoRowChangedEvent) DecodeMsg(dc *msgp.Reader) (err error) {
 					if z.Columns[za0002] == nil {
 						z.Columns[za0002] = new(RedoColumn)
 					}
-					err = z.Columns[za0002].DecodeMsg(dc)
+					var zb0005 uint32
+					zb0005, err = dc.ReadMapHeader()
 					if err != nil {
 						err = msgp.WrapError(err, "Columns", za0002)
 						return
+					}
+					for zb0005 > 0 {
+						zb0005--
+						field, err = dc.ReadMapKeyPtr()
+						if err != nil {
+							err = msgp.WrapError(err, "Columns", za0002)
+							return
+						}
+						switch msgp.UnsafeString(field) {
+						case "column":
+							if dc.IsNil() {
+								err = dc.ReadNil()
+								if err != nil {
+									err = msgp.WrapError(err, "Columns", za0002, "Column")
+									return
+								}
+								z.Columns[za0002].Column = nil
+							} else {
+								if z.Columns[za0002].Column == nil {
+									z.Columns[za0002].Column = new(Column)
+								}
+								err = z.Columns[za0002].Column.DecodeMsg(dc)
+								if err != nil {
+									err = msgp.WrapError(err, "Columns", za0002, "Column")
+									return
+								}
+							}
+						case "flag":
+							z.Columns[za0002].Flag, err = dc.ReadUint64()
+							if err != nil {
+								err = msgp.WrapError(err, "Columns", za0002, "Flag")
+								return
+							}
+						default:
+							err = dc.Skip()
+							if err != nil {
+								err = msgp.WrapError(err, "Columns", za0002)
+								return
+							}
+						}
 					}
 				}
 			}
@@ -1650,9 +1677,32 @@ func (z *RedoRowChangedEvent) EncodeMsg(en *msgp.Writer) (err error) {
 				return
 			}
 		} else {
-			err = z.PreColumns[za0001].EncodeMsg(en)
+			// map header, size 2
+			// write "column"
+			err = en.Append(0x82, 0xa6, 0x63, 0x6f, 0x6c, 0x75, 0x6d, 0x6e)
 			if err != nil {
-				err = msgp.WrapError(err, "PreColumns", za0001)
+				return
+			}
+			if z.PreColumns[za0001].Column == nil {
+				err = en.WriteNil()
+				if err != nil {
+					return
+				}
+			} else {
+				err = z.PreColumns[za0001].Column.EncodeMsg(en)
+				if err != nil {
+					err = msgp.WrapError(err, "PreColumns", za0001, "Column")
+					return
+				}
+			}
+			// write "flag"
+			err = en.Append(0xa4, 0x66, 0x6c, 0x61, 0x67)
+			if err != nil {
+				return
+			}
+			err = en.WriteUint64(z.PreColumns[za0001].Flag)
+			if err != nil {
+				err = msgp.WrapError(err, "PreColumns", za0001, "Flag")
 				return
 			}
 		}
@@ -1674,9 +1724,32 @@ func (z *RedoRowChangedEvent) EncodeMsg(en *msgp.Writer) (err error) {
 				return
 			}
 		} else {
-			err = z.Columns[za0002].EncodeMsg(en)
+			// map header, size 2
+			// write "column"
+			err = en.Append(0x82, 0xa6, 0x63, 0x6f, 0x6c, 0x75, 0x6d, 0x6e)
 			if err != nil {
-				err = msgp.WrapError(err, "Columns", za0002)
+				return
+			}
+			if z.Columns[za0002].Column == nil {
+				err = en.WriteNil()
+				if err != nil {
+					return
+				}
+			} else {
+				err = z.Columns[za0002].Column.EncodeMsg(en)
+				if err != nil {
+					err = msgp.WrapError(err, "Columns", za0002, "Column")
+					return
+				}
+			}
+			// write "flag"
+			err = en.Append(0xa4, 0x66, 0x6c, 0x61, 0x67)
+			if err != nil {
+				return
+			}
+			err = en.WriteUint64(z.Columns[za0002].Flag)
+			if err != nil {
+				err = msgp.WrapError(err, "Columns", za0002, "Flag")
 				return
 			}
 		}
@@ -1706,11 +1779,21 @@ func (z *RedoRowChangedEvent) MarshalMsg(b []byte) (o []byte, err error) {
 		if z.PreColumns[za0001] == nil {
 			o = msgp.AppendNil(o)
 		} else {
-			o, err = z.PreColumns[za0001].MarshalMsg(o)
-			if err != nil {
-				err = msgp.WrapError(err, "PreColumns", za0001)
-				return
+			// map header, size 2
+			// string "column"
+			o = append(o, 0x82, 0xa6, 0x63, 0x6f, 0x6c, 0x75, 0x6d, 0x6e)
+			if z.PreColumns[za0001].Column == nil {
+				o = msgp.AppendNil(o)
+			} else {
+				o, err = z.PreColumns[za0001].Column.MarshalMsg(o)
+				if err != nil {
+					err = msgp.WrapError(err, "PreColumns", za0001, "Column")
+					return
+				}
 			}
+			// string "flag"
+			o = append(o, 0xa4, 0x66, 0x6c, 0x61, 0x67)
+			o = msgp.AppendUint64(o, z.PreColumns[za0001].Flag)
 		}
 	}
 	// string "columns"
@@ -1720,11 +1803,21 @@ func (z *RedoRowChangedEvent) MarshalMsg(b []byte) (o []byte, err error) {
 		if z.Columns[za0002] == nil {
 			o = msgp.AppendNil(o)
 		} else {
-			o, err = z.Columns[za0002].MarshalMsg(o)
-			if err != nil {
-				err = msgp.WrapError(err, "Columns", za0002)
-				return
+			// map header, size 2
+			// string "column"
+			o = append(o, 0x82, 0xa6, 0x63, 0x6f, 0x6c, 0x75, 0x6d, 0x6e)
+			if z.Columns[za0002].Column == nil {
+				o = msgp.AppendNil(o)
+			} else {
+				o, err = z.Columns[za0002].Column.MarshalMsg(o)
+				if err != nil {
+					err = msgp.WrapError(err, "Columns", za0002, "Column")
+					return
+				}
 			}
+			// string "flag"
+			o = append(o, 0xa4, 0x66, 0x6c, 0x61, 0x67)
+			o = msgp.AppendUint64(o, z.Columns[za0002].Flag)
 		}
 	}
 	return
@@ -1788,24 +1881,64 @@ func (z *RedoRowChangedEvent) UnmarshalMsg(bts []byte) (o []byte, err error) {
 					if z.PreColumns[za0001] == nil {
 						z.PreColumns[za0001] = new(RedoColumn)
 					}
-					bts, err = z.PreColumns[za0001].UnmarshalMsg(bts)
+					var zb0003 uint32
+					zb0003, bts, err = msgp.ReadMapHeaderBytes(bts)
 					if err != nil {
 						err = msgp.WrapError(err, "PreColumns", za0001)
 						return
 					}
+					for zb0003 > 0 {
+						zb0003--
+						field, bts, err = msgp.ReadMapKeyZC(bts)
+						if err != nil {
+							err = msgp.WrapError(err, "PreColumns", za0001)
+							return
+						}
+						switch msgp.UnsafeString(field) {
+						case "column":
+							if msgp.IsNil(bts) {
+								bts, err = msgp.ReadNilBytes(bts)
+								if err != nil {
+									return
+								}
+								z.PreColumns[za0001].Column = nil
+							} else {
+								if z.PreColumns[za0001].Column == nil {
+									z.PreColumns[za0001].Column = new(Column)
+								}
+								bts, err = z.PreColumns[za0001].Column.UnmarshalMsg(bts)
+								if err != nil {
+									err = msgp.WrapError(err, "PreColumns", za0001, "Column")
+									return
+								}
+							}
+						case "flag":
+							z.PreColumns[za0001].Flag, bts, err = msgp.ReadUint64Bytes(bts)
+							if err != nil {
+								err = msgp.WrapError(err, "PreColumns", za0001, "Flag")
+								return
+							}
+						default:
+							bts, err = msgp.Skip(bts)
+							if err != nil {
+								err = msgp.WrapError(err, "PreColumns", za0001)
+								return
+							}
+						}
+					}
 				}
 			}
 		case "columns":
-			var zb0003 uint32
-			zb0003, bts, err = msgp.ReadArrayHeaderBytes(bts)
+			var zb0004 uint32
+			zb0004, bts, err = msgp.ReadArrayHeaderBytes(bts)
 			if err != nil {
 				err = msgp.WrapError(err, "Columns")
 				return
 			}
-			if cap(z.Columns) >= int(zb0003) {
-				z.Columns = (z.Columns)[:zb0003]
+			if cap(z.Columns) >= int(zb0004) {
+				z.Columns = (z.Columns)[:zb0004]
 			} else {
-				z.Columns = make([]*RedoColumn, zb0003)
+				z.Columns = make([]*RedoColumn, zb0004)
 			}
 			for za0002 := range z.Columns {
 				if msgp.IsNil(bts) {
@@ -1818,10 +1951,50 @@ func (z *RedoRowChangedEvent) UnmarshalMsg(bts []byte) (o []byte, err error) {
 					if z.Columns[za0002] == nil {
 						z.Columns[za0002] = new(RedoColumn)
 					}
-					bts, err = z.Columns[za0002].UnmarshalMsg(bts)
+					var zb0005 uint32
+					zb0005, bts, err = msgp.ReadMapHeaderBytes(bts)
 					if err != nil {
 						err = msgp.WrapError(err, "Columns", za0002)
 						return
+					}
+					for zb0005 > 0 {
+						zb0005--
+						field, bts, err = msgp.ReadMapKeyZC(bts)
+						if err != nil {
+							err = msgp.WrapError(err, "Columns", za0002)
+							return
+						}
+						switch msgp.UnsafeString(field) {
+						case "column":
+							if msgp.IsNil(bts) {
+								bts, err = msgp.ReadNilBytes(bts)
+								if err != nil {
+									return
+								}
+								z.Columns[za0002].Column = nil
+							} else {
+								if z.Columns[za0002].Column == nil {
+									z.Columns[za0002].Column = new(Column)
+								}
+								bts, err = z.Columns[za0002].Column.UnmarshalMsg(bts)
+								if err != nil {
+									err = msgp.WrapError(err, "Columns", za0002, "Column")
+									return
+								}
+							}
+						case "flag":
+							z.Columns[za0002].Flag, bts, err = msgp.ReadUint64Bytes(bts)
+							if err != nil {
+								err = msgp.WrapError(err, "Columns", za0002, "Flag")
+								return
+							}
+						default:
+							bts, err = msgp.Skip(bts)
+							if err != nil {
+								err = msgp.WrapError(err, "Columns", za0002)
+								return
+							}
+						}
 					}
 				}
 			}
@@ -1850,7 +2023,13 @@ func (z *RedoRowChangedEvent) Msgsize() (s int) {
 		if z.PreColumns[za0001] == nil {
 			s += msgp.NilSize
 		} else {
-			s += z.PreColumns[za0001].Msgsize()
+			s += 1 + 7
+			if z.PreColumns[za0001].Column == nil {
+				s += msgp.NilSize
+			} else {
+				s += z.PreColumns[za0001].Column.Msgsize()
+			}
+			s += 5 + msgp.Uint64Size
 		}
 	}
 	s += 8 + msgp.ArrayHeaderSize
@@ -1858,7 +2037,13 @@ func (z *RedoRowChangedEvent) Msgsize() (s int) {
 		if z.Columns[za0002] == nil {
 			s += msgp.NilSize
 		} else {
-			s += z.Columns[za0002].Msgsize()
+			s += 1 + 7
+			if z.Columns[za0002].Column == nil {
+				s += msgp.NilSize
+			} else {
+				s += z.Columns[za0002].Column.Msgsize()
+			}
+			s += 5 + msgp.Uint64Size
 		}
 	}
 	return

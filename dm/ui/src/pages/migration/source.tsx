@@ -206,7 +206,7 @@ const SourceList: React.FC = () => {
         return (
           <Badge
             status={enabled ? 'success' : 'default'}
-            text={enabled ? t('enabled') : t('stopped')}
+            text={enabled ? t('enabled') : t('disabled')}
           />
         )
       },

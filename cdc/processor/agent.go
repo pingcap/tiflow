@@ -67,6 +67,7 @@ type agentImpl struct {
 
 	changeFeed     model.ChangeFeedID
 	ownerCaptureID model.CaptureID
+	ownerRevision  int64
 
 	clock              clock.Clock
 	barrierSeqs        map[p2p.Topic]p2p.Seq
@@ -85,7 +86,7 @@ func newAgent(
 	messageRouter p2p.MessageRouter,
 	executor scheduler.TableExecutor,
 	changeFeedID model.ChangeFeedID,
-) (processorAgent, error) {
+) (retVal processorAgent, err error) {
 	ret := &agentImpl{
 		messageServer: messageServer,
 		messageRouter: messageRouter,
@@ -103,7 +104,8 @@ func newAgent(
 	flushInterval := time.Duration(conf.ProcessorFlushInterval)
 
 	log.Debug("creating processor agent",
-		zap.String("changefeed", changeFeedID),
+		zap.String("namespace", changeFeedID.Namespace),
+		zap.String("changefeed", changeFeedID.ID),
 		zap.Duration("sendCheckpointTsInterval", flushInterval))
 
 	ret.BaseAgent = scheduler.NewBaseAgent(
@@ -115,14 +117,26 @@ func newAgent(
 	// Note that registerPeerMessageHandlers sets handlerErrChs.
 	if err := ret.registerPeerMessageHandlers(); err != nil {
 		log.Warn("failed to register processor message handlers",
-			zap.String("changefeed", changeFeedID),
+			zap.String("namespace", changeFeedID.Namespace),
+			zap.String("changefeed", changeFeedID.ID),
 			zap.Error(err))
 		return nil, errors.Trace(err)
 	}
+	defer func() {
+		if err != nil {
+			if err1 := ret.deregisterPeerMessageHandlers(); err1 != nil {
+				log.Warn("failed to unregister processor message handlers",
+					zap.String("namespace", changeFeedID.Namespace),
+					zap.String("changefeed", changeFeedID.ID),
+					zap.Error(err))
+			}
+		}
+	}()
 
 	etcdCliCtx, cancel := stdContext.WithTimeout(ctx, getOwnerFromEtcdTimeout)
-	ownerCaptureID, err := ctx.GlobalVars().EtcdClient.GetOwnerID(etcdCliCtx, etcd.CaptureOwnerKey)
-	cancel()
+	defer cancel()
+	ownerCaptureID, err := ctx.GlobalVars().EtcdClient.
+		GetOwnerID(etcdCliCtx, etcd.CaptureOwnerKey)
 	if err != nil {
 		if err != concurrency.ErrElectionNoLeader {
 			return nil, errors.Trace(err)
@@ -131,13 +145,31 @@ func newAgent(
 		// If we are registered in Etcd, an elected Owner will have to
 		// contact us before it can schedule any table.
 		log.Info("no owner found. We will wait for an owner to contact us.",
-			zap.String("changefeed", changeFeedID),
+			zap.String("namespace", changeFeedID.Namespace),
+			zap.String("changefeed", changeFeedID.ID),
 			zap.Error(err))
-	} else {
-		ret.ownerCaptureID = ownerCaptureID
-		log.Debug("found owner",
-			zap.String("changefeed", changeFeedID),
-			zap.String("ownerID", ownerCaptureID))
+		return ret, nil
+	}
+
+	ret.ownerCaptureID = ownerCaptureID
+	log.Debug("found owner",
+		zap.String("namespace", changeFeedID.Namespace),
+		zap.String("changefeed", changeFeedID.ID),
+		zap.String("ownerID", ownerCaptureID))
+
+	ret.ownerRevision, err = ctx.GlobalVars().EtcdClient.
+		GetOwnerRevision(etcdCliCtx, ownerCaptureID)
+	if err != nil {
+		if cerror.ErrOwnerNotFound.Equal(err) || cerror.ErrNotOwner.Equal(err) {
+			// These are expected errors when no owner has been elected
+			log.Info("no owner found when querying for the owner revision",
+				zap.String("namespace", changeFeedID.Namespace),
+				zap.String("changefeed", changeFeedID.ID),
+				zap.Error(err))
+			ret.ownerCaptureID = ""
+			return ret, nil
+		}
+		return nil, errors.Trace(err)
 	}
 	return ret, nil
 }
@@ -166,6 +198,19 @@ func (a *agentImpl) FinishTableOperation(
 	tableID model.TableID,
 	epoch model.ProcessorEpoch,
 ) (done bool, err error) {
+	topic := model.SyncTopic(a.changeFeed)
+	if !a.Barrier(ctx) {
+		if _, exists := a.barrierSeqs[topic]; exists {
+			log.L().Info("Delay sending FinishTableOperation due to pending sync",
+				zap.String("namespace", a.changeFeed.Namespace),
+				zap.String("changefeedID", a.changeFeed.ID),
+				zap.String("ownerID", a.ownerCaptureID),
+				zap.Int64("tableID", tableID),
+				zap.String("epoch", epoch))
+			return false, nil
+		}
+	}
+
 	message := &model.DispatchTableResponseMessage{ID: tableID, Epoch: epoch}
 	defer func() {
 		if err != nil {
@@ -173,7 +218,8 @@ func (a *agentImpl) FinishTableOperation(
 		}
 		log.Info("SchedulerAgent: FinishTableOperation", zap.Any("message", message),
 			zap.Bool("successful", done),
-			zap.String("changefeedID", a.changeFeed),
+			zap.String("namespace", a.changeFeed.Namespace),
+			zap.String("changefeedID", a.changeFeed.ID),
 			zap.String("ownerID", a.ownerCaptureID))
 	}()
 
@@ -213,13 +259,15 @@ func (a *agentImpl) SyncTaskStatuses(
 			log.Debug("SchedulerAgent: SyncTaskStatuses",
 				zap.Any("message", message),
 				zap.Bool("successful", done),
-				zap.String("changefeedID", a.changeFeed),
+				zap.String("namespace", a.changeFeed.Namespace),
+				zap.String("changefeedID", a.changeFeed.ID),
 				zap.String("ownerID", a.ownerCaptureID))
 			return
 		}
 		log.Info("SchedulerAgent: SyncTaskStatuses",
 			zap.Bool("successful", done),
-			zap.String("changefeedID", a.changeFeed),
+			zap.String("namespace", a.changeFeed.Namespace),
+			zap.String("changefeedID", a.changeFeed.ID),
 			zap.String("ownerID", a.ownerCaptureID))
 	}()
 
@@ -253,7 +301,8 @@ func (a *agentImpl) SendCheckpoint(
 		log.Debug("SchedulerAgent: SendCheckpoint",
 			zap.Any("message", message),
 			zap.Bool("successful", done),
-			zap.String("changefeedID", a.changeFeed),
+			zap.String("namespace", a.changeFeed.Namespace),
+			zap.String("changefeedID", a.changeFeed.ID),
 			zap.String("ownerID", a.ownerCaptureID))
 	}()
 
@@ -279,7 +328,8 @@ func (a *agentImpl) Barrier(_ context.Context) (done bool) {
 		sinceLastAdvanced := a.clock.Since(a.barrierLastCleared)
 		if sinceLastAdvanced > barrierNotAdvancingWarnDuration && a.barrierLogRateLimiter.Allow() {
 			log.Warn("processor send barrier not advancing, report a bug if this log repeats",
-				zap.String("changefeed", a.changeFeed),
+				zap.String("namespace", a.changeFeed.Namespace),
+				zap.String("changefeedID", a.changeFeed.ID),
 				zap.String("ownerID", a.ownerCaptureID),
 				zap.Duration("duration", sinceLastAdvanced))
 		}
@@ -294,7 +344,8 @@ func (a *agentImpl) Barrier(_ context.Context) (done bool) {
 		// We need to wait for the sync request anyways, and
 		// there would not be any table to replicate for now.
 		log.Debug("waiting for owner to request sync",
-			zap.String("changefeed", a.changeFeed))
+			zap.String("namespace", a.changeFeed.Namespace),
+			zap.String("changefeedID", a.changeFeed.ID))
 		return false
 	}
 
@@ -322,8 +373,19 @@ func (a *agentImpl) Barrier(_ context.Context) (done bool) {
 	return true
 }
 
-func (a *agentImpl) OnOwnerChanged(ctx context.Context, newOwnerCaptureID model.CaptureID) {
+func (a *agentImpl) OnOwnerChanged(
+	ctx context.Context,
+	newOwnerCaptureID model.CaptureID,
+	newOwnerRev int64,
+) {
+	// The BaseAgent will notify us of an owner change if an AnnounceOwner is received.
+	// However, we need to filter out the event if we already learned of this owner directly
+	// from Etcd.
+	if a.ownerCaptureID == newOwnerCaptureID && a.ownerRevision == newOwnerRev {
+		return
+	}
 	a.ownerCaptureID = newOwnerCaptureID
+	a.ownerRevision = newOwnerRev
 	// Note that we clear the pending barriers.
 	a.barrierSeqs = map[p2p.Topic]p2p.Seq{}
 }
@@ -332,7 +394,8 @@ func (a *agentImpl) Close() error {
 	log.Debug("processor messenger: closing", zap.Stack("stack"))
 	if err := a.deregisterPeerMessageHandlers(); err != nil {
 		log.Warn("failed to deregister processor message handlers",
-			zap.String("changefeed", a.changeFeed),
+			zap.String("namespace", a.changeFeed.Namespace),
+			zap.String("changefeedID", a.changeFeed.ID),
 			zap.Error(err))
 		return errors.Trace(err)
 	}
@@ -362,7 +425,8 @@ func (a *agentImpl) trySendMessage(
 		if cerror.ErrPeerMessageClientClosed.Equal(err) {
 			log.Warn("peer messaging client is closed while trying to send a message through it. "+
 				"Report a bug if this warning repeats",
-				zap.String("changefeed", a.changeFeed),
+				zap.String("namespace", a.changeFeed.Namespace),
+				zap.String("changefeedID", a.changeFeed.ID),
 				zap.String("target", target))
 			return false, nil
 		}

@@ -20,11 +20,11 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	. "github.com/pingcap/check"
-	"github.com/pingcap/tidb-tools/pkg/schemacmp"
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/util/mock"
+	"github.com/pingcap/tidb/util/schemacmp"
 	"go.etcd.io/etcd/tests/v3/integration"
 
 	"github.com/pingcap/tiflow/dm/dm/config"
@@ -1931,7 +1931,8 @@ func (t *testLock) TestAddNotFullyDroppedColumns(c *C) {
 }
 
 func (t *testLock) trySyncForAllTablesLarger(c *C, l *Lock,
-	ddls []string, tableInfoBefore *model.TableInfo, tis []*model.TableInfo, tts []TargetTable, vers map[string]map[string]map[string]int64) {
+	ddls []string, tableInfoBefore *model.TableInfo, tis []*model.TableInfo, tts []TargetTable, vers map[string]map[string]map[string]int64,
+) {
 	for source, schemaTables := range l.Ready() {
 		for schema, tables := range schemaTables {
 			for table := range tables {
@@ -1973,7 +1974,8 @@ func (t *testLock) checkLockNoDone(c *C, l *Lock) {
 }
 
 func newInfoWithVersion(task, source, upSchema, upTable, downSchema, downTable string, ddls []string, tableInfoBefore *model.TableInfo,
-	tableInfosAfter []*model.TableInfo, vers map[string]map[string]map[string]int64) Info {
+	tableInfosAfter []*model.TableInfo, vers map[string]map[string]map[string]int64,
+) Info {
 	info := NewInfo(task, source, upSchema, upTable, downSchema, downTable, ddls, tableInfoBefore, tableInfosAfter)
 	vers[source][upSchema][upTable]++
 	info.Version = vers[source][upSchema][upTable]

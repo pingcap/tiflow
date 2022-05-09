@@ -18,8 +18,8 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/pingcap/tidb-tools/pkg/schemacmp"
 	"github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tidb/util/schemacmp"
 	"go.etcd.io/etcd/api/v3/mvccpb"
 	clientv3 "go.etcd.io/etcd/client/v3"
 
@@ -83,7 +83,8 @@ type LogInfo struct {
 
 // NewInfo creates a new Info instance.
 func NewInfo(task, source, upSchema, upTable, downSchema, downTable string,
-	ddls []string, tableInfoBefore *model.TableInfo, tableInfosAfter []*model.TableInfo) Info {
+	ddls []string, tableInfoBefore *model.TableInfo, tableInfosAfter []*model.TableInfo,
+) Info {
 	return Info{
 		Task:            task,
 		Source:          source,
@@ -179,7 +180,7 @@ func PutInfo(cli *clientv3.Client, info Info) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	_, rev, err := etcdutil.DoOpsInOneTxnWithRetry(cli, op)
+	_, rev, err := etcdutil.DoTxnWithRepeatable(cli, etcdutil.ThenOpFunc(op))
 	return rev, err
 }
 
@@ -188,7 +189,7 @@ func PutInfo(cli *clientv3.Client, info Info) (int64, error) {
 // k/k/k/k/v: task-name -> source-ID -> upstream-schema-name -> upstream-table-name -> shard DDL info.
 // ugly code, but have no better idea now.
 func GetAllInfo(cli *clientv3.Client) (map[string]map[string]map[string]map[string]Info, int64, error) {
-	respTxn, _, err := etcdutil.DoOpsInOneTxnWithRetry(cli, clientv3.OpGet(common.ShardDDLOptimismInfoKeyAdapter.Path(), clientv3.WithPrefix()))
+	respTxn, _, err := etcdutil.DoTxnWithRepeatable(cli, etcdutil.ThenOpFunc(clientv3.OpGet(common.ShardDDLOptimismInfoKeyAdapter.Path(), clientv3.WithPrefix())))
 	if err != nil {
 		return nil, 0, err
 	}
@@ -221,7 +222,8 @@ func GetAllInfo(cli *clientv3.Client) (map[string]map[string]map[string]map[stri
 // WatchInfo watches PUT & DELETE operations for info.
 // This function should often be called by DM-master.
 func WatchInfo(ctx context.Context, cli *clientv3.Client, revision int64,
-	outCh chan<- Info, errCh chan<- error) {
+	outCh chan<- Info, errCh chan<- error,
+) {
 	wCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	// NOTE: WithPrevKV used to get a valid `ev.PrevKv` for deletion.
@@ -377,7 +379,7 @@ func CheckDDLInfos(cli *clientv3.Client, source string, schemaMap map[string]str
 					if err != nil {
 						return err
 					}
-					_, _, err = etcdutil.DoOpsInOneTxnWithRetry(cli, delOp, putOp)
+					_, _, err = etcdutil.DoTxnWithRepeatable(cli, etcdutil.ThenOpFunc(delOp, putOp))
 					if err != nil {
 						return err
 					}

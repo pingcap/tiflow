@@ -131,7 +131,9 @@ func TestGetChangeFeeds(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		for i := 0; i < len(tc.ids); i++ {
-			_, err := s.client.Client.Put(context.Background(), GetEtcdKeyChangeFeedInfo(tc.ids[i]), tc.details[i])
+			_, err := s.client.Client.Put(context.Background(),
+				GetEtcdKeyChangeFeedInfo(model.DefaultChangeFeedID(tc.ids[i])),
+				tc.details[i])
 			require.NoError(t, err)
 		}
 		_, result, err := s.client.GetChangeFeeds(context.Background())
@@ -139,7 +141,7 @@ func TestGetChangeFeeds(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, len(result), len(tc.ids))
 		for i := 0; i < len(tc.ids); i++ {
-			rawKv, ok := result[tc.ids[i]]
+			rawKv, ok := result[model.DefaultChangeFeedID(tc.ids[i])]
 			require.True(t, ok)
 			require.Equal(t, string(rawKv.Value), tc.details[i])
 		}
@@ -228,7 +230,7 @@ func TestOpChangeFeedDetail(t *testing.T) {
 		SinkURI: "root@tcp(127.0.0.1:3306)/mysql",
 		SortDir: "/old-version/sorter",
 	}
-	cfID := "test-op-cf"
+	cfID := model.DefaultChangeFeedID("test-op-cf")
 
 	err := s.client.SaveChangeFeedInfo(ctx, detail, cfID)
 	require.NoError(t, err)
@@ -270,7 +272,9 @@ func TestGetAllChangeFeedInfo(t *testing.T) {
 	}
 
 	for _, item := range infos {
-		err := s.client.SaveChangeFeedInfo(ctx, item.info, item.id)
+		err := s.client.SaveChangeFeedInfo(ctx,
+			item.info,
+			model.DefaultChangeFeedID(item.id))
 		require.NoError(t, err)
 	}
 
@@ -278,7 +282,7 @@ func TestGetAllChangeFeedInfo(t *testing.T) {
 	require.NoError(t, err)
 
 	for _, item := range infos {
-		obtained, found := allChangFeedInfo[item.id]
+		obtained, found := allChangFeedInfo[model.DefaultChangeFeedID(item.id)]
 		require.True(t, found)
 		require.Equal(t, item.info.SinkURI, obtained.SinkURI)
 		require.Equal(t, item.info.SortDir, obtained.SortDir)
@@ -291,11 +295,11 @@ func TestGetAllChangeFeedStatus(t *testing.T) {
 	defer s.tearDownTest(t)
 
 	changefeeds := map[model.ChangeFeedID]*model.ChangeFeedStatus{
-		"cf1": {
+		model.DefaultChangeFeedID("cf1"): {
 			ResolvedTs:   100,
 			CheckpointTs: 90,
 		},
-		"cf2": {
+		model.DefaultChangeFeedID("cf2"): {
 			ResolvedTs:   100,
 			CheckpointTs: 70,
 		},
@@ -319,10 +323,10 @@ func TestCreateChangefeed(t *testing.T) {
 		SinkURI: "root@tcp(127.0.0.1:3306)/mysql",
 	}
 
-	err := s.client.CreateChangefeedInfo(ctx, detail, "test-id")
+	err := s.client.CreateChangefeedInfo(ctx, detail, model.DefaultChangeFeedID("test-id"))
 	require.NoError(t, err)
 
-	err = s.client.CreateChangefeedInfo(ctx, detail, "test-id")
+	err = s.client.CreateChangefeedInfo(ctx, detail, model.DefaultChangeFeedID("test-id"))
 	require.True(t, cerror.ErrChangeFeedAlreadyExists.Equal(err))
 }
 
@@ -446,4 +450,29 @@ func TestGetOwnerRevision(t *testing.T) {
 	}
 
 	wg.Wait()
+}
+
+func TestExtractKeySuffix(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		input  string
+		expect string
+		hasErr bool
+	}{
+		{"/tidb/cdc/capture/info/6a6c6dd290bc8732", "6a6c6dd290bc8732", false},
+		{"/tidb/cdc/capture/info/6a6c6dd290bc8732/", "", false},
+		{"/tidb/cdc", "cdc", false},
+		{"/tidb", "tidb", false},
+		{"", "", true},
+	}
+	for _, tc := range testCases {
+		key, err := extractKeySuffix(tc.input)
+		if tc.hasErr {
+			require.NotNil(t, err)
+		} else {
+			require.Nil(t, err)
+			require.Equal(t, tc.expect, key)
+		}
+	}
 }

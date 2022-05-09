@@ -24,6 +24,7 @@ import (
 
 	"github.com/go-mysql-org/go-mysql/mysql"
 	. "github.com/pingcap/check"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/tikv/pd/pkg/tempurl"
 	v3rpc "go.etcd.io/etcd/api/v3/v3rpc/rpctypes"
@@ -368,6 +369,72 @@ func (t *testServer) TestHandleSourceBoundAfterError(c *C) {
 	}), IsTrue)
 }
 
+func (t *testServer) TestServerQueryValidator(c *C) {
+	var (
+		masterAddr   = tempurl.Alloc()[len("http://"):]
+		keepAliveTTL = int64(1)
+	)
+	etcdDir := c.MkDir()
+	ETCD, err := createMockETCD(etcdDir, "http://"+masterAddr)
+	c.Assert(err, IsNil)
+	defer ETCD.Close()
+	cfg := NewConfig()
+	c.Assert(cfg.Parse([]string{"-config=./dm-worker.toml"}), IsNil)
+	cfg.Join = masterAddr
+	cfg.KeepAliveTTL = keepAliveTTL
+	cfg.RelayKeepAliveTTL = keepAliveTTL
+
+	s := NewServer(cfg)
+	resp, err := s.GetWorkerValidatorStatus(context.Background(), &pb.GetValidationStatusRequest{})
+	c.Assert(err, IsNil)
+	c.Assert(resp.Result, IsFalse)
+	c.Assert(resp.Msg, Matches, ".*no mysql source is being handled in the worker.*")
+}
+
+func (t *testServer) TestServerQueryValidatorError(c *C) {
+	var (
+		masterAddr   = tempurl.Alloc()[len("http://"):]
+		keepAliveTTL = int64(1)
+	)
+	etcdDir := c.MkDir()
+	ETCD, err := createMockETCD(etcdDir, "http://"+masterAddr)
+	c.Assert(err, IsNil)
+	defer ETCD.Close()
+	cfg := NewConfig()
+	c.Assert(cfg.Parse([]string{"-config=./dm-worker.toml"}), IsNil)
+	cfg.Join = masterAddr
+	cfg.KeepAliveTTL = keepAliveTTL
+	cfg.RelayKeepAliveTTL = keepAliveTTL
+
+	s := NewServer(cfg)
+	resp, err := s.GetValidatorError(context.Background(), &pb.GetValidationErrorRequest{})
+	c.Assert(err, IsNil)
+	c.Assert(resp.Result, IsFalse)
+	c.Assert(resp.Msg, Matches, ".*no mysql source is being handled in the worker.*")
+}
+
+func (t *testServer) TestServerOperateValidatorError(c *C) {
+	var (
+		masterAddr   = tempurl.Alloc()[len("http://"):]
+		keepAliveTTL = int64(1)
+	)
+	etcdDir := c.MkDir()
+	ETCD, err := createMockETCD(etcdDir, "http://"+masterAddr)
+	c.Assert(err, IsNil)
+	defer ETCD.Close()
+	cfg := NewConfig()
+	c.Assert(cfg.Parse([]string{"-config=./dm-worker.toml"}), IsNil)
+	cfg.Join = masterAddr
+	cfg.KeepAliveTTL = keepAliveTTL
+	cfg.RelayKeepAliveTTL = keepAliveTTL
+
+	s := NewServer(cfg)
+	resp, err := s.OperateValidatorError(context.Background(), &pb.OperateValidationErrorRequest{})
+	c.Assert(err, IsNil)
+	c.Assert(resp.Result, IsFalse)
+	c.Assert(resp.Msg, Matches, ".*no mysql source is being handled in the worker.*")
+}
+
 func (t *testServer) TestWatchSourceBoundEtcdCompact(c *C) {
 	var (
 		masterAddr   = tempurl.Alloc()[len("http://"):]
@@ -420,7 +487,7 @@ func (t *testServer) TestWatchSourceBoundEtcdCompact(c *C) {
 	ha.WatchSourceBound(ctx, etcdCli, cfg.Name, startRev, sourceBoundCh, sourceBoundErrCh)
 	select {
 	case err = <-sourceBoundErrCh:
-		c.Assert(err, Equals, etcdErrCompacted)
+		c.Assert(errors.Cause(err), Equals, etcdErrCompacted)
 	case <-time.After(300 * time.Millisecond):
 		c.Fatal("fail to get etcd error compacted")
 	}

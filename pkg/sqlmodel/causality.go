@@ -30,7 +30,7 @@ import (
 // CausalityKeys returns all string representation of causality keys. If two row
 // changes has the same causality keys, they must be replicated sequentially.
 func (r *RowChange) CausalityKeys() []string {
-	r.lazyInitIdentityInfo()
+	r.lazyInitWhereHandle()
 
 	ret := make([]string, 0, 1)
 	if r.preValues != nil {
@@ -136,7 +136,7 @@ func truncateIndexValues(
 }
 
 func (r *RowChange) getCausalityString(values []interface{}) []string {
-	pkAndUks := r.identityInfo.AvailableUKIndexList
+	pkAndUks := r.whereHandle.UniqueIdxs
 	if len(pkAndUks) == 0 {
 		// the table has no PK/UK, all values of the row consists the causality key
 		return []string{genKeyString(r.sourceTable.String(), r.sourceTableInfo.Columns, values)}

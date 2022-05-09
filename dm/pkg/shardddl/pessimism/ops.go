@@ -36,12 +36,25 @@ func PutOperationDeleteExistInfo(cli *clientv3.Client, op Operation, info Info) 
 
 	infoCmp := infoExistCmp(info)
 
+	getOp := getOperationOp(op)
+
 	ctx, cancel := context.WithTimeout(cli.Ctx(), etcdutil.DefaultRequestTimeout)
 	defer cancel()
 
-	resp, err := cli.Txn(ctx).If(infoCmp).Then(putOp, delOp).Commit()
+	resp, err := cli.Txn(ctx).If(infoCmp).Then(putOp, delOp).Else(getOp).Commit()
 	if err != nil {
 		return false, 0, err
+	}
+
+	if !resp.Succeeded && len(resp.Responses) == 1 {
+		if getResponse := resp.Responses[0].GetResponseRange(); getResponse.GetCount() == 1 {
+			// err must be nil here, or the last putOperationOp will return an error.
+			opBytes, _ := op.toJSON()
+			// we may successfully delete the info in the previous txn but fail to get the result
+			// before the connection is broken. If we check the operation is the same with the put
+			// operation, we can safely assume the done operation is okay.
+			return opBytes == string(getResponse.Kvs[0].Value), resp.Header.Revision, nil
+		}
 	}
 	return resp.Succeeded, resp.Header.Revision, nil
 }
@@ -56,7 +69,7 @@ func DeleteInfosOperations(cli *clientv3.Client, infos []Info, ops []Operation) 
 	for _, op := range ops {
 		opsDel = append(opsDel, deleteOperationOp(op))
 	}
-	_, rev, err := etcdutil.DoOpsInOneTxnWithRetry(cli, opsDel...)
+	_, rev, err := etcdutil.DoTxnWithRepeatable(cli, etcdutil.ThenOpFunc(opsDel...))
 	return rev, err
 }
 
@@ -66,6 +79,6 @@ func DeleteInfosOperationsByTask(cli *clientv3.Client, task string) (int64, erro
 	opsDel := make([]clientv3.Op, 0, 2)
 	opsDel = append(opsDel, clientv3.OpDelete(common.ShardDDLPessimismInfoKeyAdapter.Encode(task), clientv3.WithPrefix()))
 	opsDel = append(opsDel, clientv3.OpDelete(common.ShardDDLPessimismOperationKeyAdapter.Encode(task), clientv3.WithPrefix()))
-	_, rev, err := etcdutil.DoOpsInOneTxnWithRetry(cli, opsDel...)
+	_, rev, err := etcdutil.DoTxnWithRepeatable(cli, etcdutil.ThenOpFunc(opsDel...))
 	return rev, err
 }

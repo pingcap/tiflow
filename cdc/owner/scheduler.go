@@ -144,7 +144,8 @@ func (s *schedulerV2) DispatchTable(
 		log.Info("schedulerV2: DispatchTable",
 			zap.Any("message", message),
 			zap.Any("successful", done),
-			zap.String("changefeedID", changeFeedID),
+			zap.String("namespace", changeFeedID.Namespace),
+			zap.String("changefeedID", changeFeedID.ID),
 			zap.String("captureID", captureID))
 	}()
 
@@ -182,7 +183,8 @@ func (s *schedulerV2) Announce(
 		log.Info("schedulerV2: Announce",
 			zap.Any("message", message),
 			zap.Any("successful", done),
-			zap.String("changefeedID", changeFeedID),
+			zap.String("namespace", changeFeedID.Namespace),
+			zap.String("changefeedID", changeFeedID.ID),
 			zap.String("captureID", captureID))
 	}()
 
@@ -234,7 +236,8 @@ func (s *schedulerV2) trySendMessage(
 		if cerror.ErrPeerMessageClientClosed.Equal(err) {
 			log.Warn("peer messaging client is closed while trying to send a message through it. "+
 				"Report a bug if this warning repeats",
-				zap.String("changefeed", s.changeFeedID),
+				zap.String("namespace", s.changeFeedID.Namespace),
+				zap.String("changefeedID", s.changeFeedID.ID),
 				zap.String("target", target))
 			return false, nil
 		}
@@ -245,7 +248,9 @@ func (s *schedulerV2) trySendMessage(
 }
 
 func (s *schedulerV2) Close(ctx context.Context) {
-	log.Debug("scheduler closed", zap.String("changefeed", s.changeFeedID))
+	log.Debug("scheduler closed",
+		zap.String("namespace", s.changeFeedID.Namespace),
+		zap.String("changefeedID", s.changeFeedID.ID))
 	s.deregisterPeerMessageHandlers(ctx)
 }
 

@@ -26,13 +26,13 @@ import (
 	"go.uber.org/zap"
 )
 
-// writer is a thin shim that batches, translates events into key-vaule pairs
+// writer is a thin shim that batches, translates events into key-value pairs
 // and writes to leveldb.
 type writer struct {
 	common
 	stopped bool
 
-	readerRouter  *actor.Router
+	readerRouter  *actor.Router[message.Task]
 	readerActorID actor.ID
 
 	maxResolvedTs uint64
@@ -42,21 +42,21 @@ type writer struct {
 	metricTotalEventsResolvedTs prometheus.Counter
 }
 
-var _ actor.Actor = (*writer)(nil)
+var _ actor.Actor[message.Task] = (*writer)(nil)
 
-func (w *writer) Poll(ctx context.Context, msgs []actormsg.Message) (running bool) {
+func (w *writer) Poll(ctx context.Context, msgs []actormsg.Message[message.Task]) (running bool) {
 	kvEventCount, resolvedEventCount := 0, 0
 	writes := make(map[message.Key][]byte)
 	for i := range msgs {
 		switch msgs[i].Tp {
-		case actormsg.TypeSorterTask:
+		case actormsg.TypeValue:
 		case actormsg.TypeStop:
 			return false
 		default:
 			log.Panic("unexpected message", zap.Any("message", msgs[i]))
 		}
 
-		ev := msgs[i].SorterTask.InputEvent
+		ev := msgs[i].Value.InputEvent
 		if ev.RawKV.OpType == model.OpTypeResolved {
 			if w.maxResolvedTs < ev.CRTs {
 				w.maxResolvedTs = ev.CRTs
@@ -84,7 +84,7 @@ func (w *writer) Poll(ctx context.Context, msgs []actormsg.Message) (running boo
 	if len(writes) != 0 {
 		// Send write task to leveldb.
 		task := message.Task{UID: w.uid, TableID: w.tableID, WriteReq: writes}
-		err := w.dbRouter.SendB(ctx, w.dbActorID, actormsg.SorterMessage(task))
+		err := w.dbRouter.SendB(ctx, w.dbActorID, actormsg.ValueMessage(task))
 		if err != nil {
 			w.reportError("failed to send write request", err)
 			return false
@@ -97,13 +97,13 @@ func (w *writer) Poll(ctx context.Context, msgs []actormsg.Message) (running boo
 	}
 	// Notify reader that there is something to read.
 	//
-	// It's ok to noify reader immediately without waiting writes done,
+	// It's ok to notify reader immediately without waiting writes done,
 	// because reader will see these writes:
 	//   1. reader/writer send tasks to the same leveldb, so tasks are ordered.
 	//   2. ReadTs will trigger reader to take iterator from leveldb,
 	//      it happens after writer send writes to leveldb.
 	//   3. Before leveldb takes iterator, it flushes all buffered writes.
-	msg := actormsg.SorterMessage(message.Task{
+	msg := actormsg.ValueMessage(message.Task{
 		UID:     w.uid,
 		TableID: w.tableID,
 		ReadTs: message.ReadTs{
@@ -114,9 +114,9 @@ func (w *writer) Poll(ctx context.Context, msgs []actormsg.Message) (running boo
 			// exhaustedResolvedTs >= maxCommitTs.
 			//
 			// If maxCommitTs and maxResolvedTs are sent separately,
-			// data in (exhaustedResolvedTs, actaul maxCommitTs] is lost:
+			// data in (exhaustedResolvedTs, actual maxCommitTs] is lost:
 			//        --------------------------------------------->
-			// writer:                          ^ actaul maxCommitTs
+			// writer:                          ^ actual maxCommitTs
 			// reader:  ^ maxCommitTs  ^ exhaustedResolvedTs   ^ maxResolvedTs
 			MaxCommitTs:   w.maxCommitTs,
 			MaxResolvedTs: w.maxResolvedTs,

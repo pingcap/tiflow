@@ -20,9 +20,11 @@ package master
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"github.com/pingcap/tiflow/dm/checker"
+	dmcommon "github.com/pingcap/tiflow/dm/dm/common"
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/dm/ctl/common"
 	"github.com/pingcap/tiflow/dm/dm/master/workerrpc"
@@ -32,6 +34,39 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"go.uber.org/zap"
 )
+
+// nolint:unparam
+func (s *Server) getClusterInfo(ctx context.Context) (*openapi.GetClusterInfoResponse, error) {
+	info := &openapi.GetClusterInfoResponse{}
+	info.ClusterId = s.ClusterID()
+
+	resp, err := s.etcdClient.Get(ctx, dmcommon.ClusterTopologyKey)
+	if err != nil {
+		return nil, err
+	}
+
+	// already set by tiup, load to info
+	if len(resp.Kvs) == 1 {
+		topo := &openapi.ClusterTopology{}
+		if err := json.Unmarshal(resp.Kvs[0].Value, topo); err != nil {
+			return nil, err
+		}
+		info.Topology = topo
+	}
+	return info, nil
+}
+
+func (s *Server) updateClusterInfo(ctx context.Context, topo *openapi.ClusterTopology) (*openapi.GetClusterInfoResponse, error) {
+	if val, err := json.Marshal(topo); err != nil {
+		return nil, err
+	} else if _, err := s.etcdClient.Put(ctx, dmcommon.ClusterTopologyKey, string(val)); err != nil {
+		return nil, err
+	}
+	info := &openapi.GetClusterInfoResponse{}
+	info.ClusterId = s.ClusterID()
+	info.Topology = topo
+	return info, nil
+}
 
 func (s *Server) getSourceStatusListFromWorker(ctx context.Context, sourceName string, specifiedSource bool) ([]openapi.SourceStatus, error) {
 	workerStatusList := s.getStatusFromWorkers(ctx, []string{sourceName}, "", specifiedSource)
@@ -86,6 +121,7 @@ func (s *Server) createSource(ctx context.Context, req openapi.CreateSourceReque
 	if err != nil {
 		return nil, err
 	}
+	// TODO: refine relay logic https://github.com/pingcap/tiflow/issues/4985
 	if cfg.EnableRelay {
 		return &req.Source, s.enableRelay(ctx, req.Source.SourceName, openapi.EnableRelayRequest{})
 	}
@@ -653,9 +689,22 @@ func (s *Server) convertTaskConfig(ctx context.Context, req openapi.ConverterTas
 		if err := taskCfg.RawDecode(*req.TaskConfigFile); err != nil {
 			return nil, nil, err
 		}
+		// clear extra config in MySQLInstance, use cfg.xxConfigName instead otherwise adjust will fail
+		for _, cfg := range taskCfg.MySQLInstances {
+			cfg.Mydumper = nil
+			cfg.Loader = nil
+			cfg.Syncer = nil
+		}
+		if adjustErr := taskCfg.Adjust(); adjustErr != nil {
+			return nil, nil, adjustErr
+		}
 		sourceCfgMap := make(map[string]*config.SourceConfig, len(taskCfg.MySQLInstances))
 		for _, source := range taskCfg.MySQLInstances {
-			sourceCfgMap[source.SourceID] = s.scheduler.GetSourceCfgByID(source.SourceID)
+			sourceCfg := s.scheduler.GetSourceCfgByID(source.SourceID)
+			if sourceCfg == nil {
+				return nil, nil, terror.ErrConfigSourceIDNotFound.Generate(source.SourceID)
+			}
+			sourceCfgMap[source.SourceID] = sourceCfg
 		}
 		task, err := config.TaskConfigToOpenAPITask(taskCfg, sourceCfgMap)
 		if err != nil {
@@ -669,7 +718,11 @@ func (s *Server) convertTaskConfig(ctx context.Context, req openapi.ConverterTas
 	}
 	sourceCfgMap := make(map[string]*config.SourceConfig, len(task.SourceConfig.SourceConf))
 	for _, cfg := range task.SourceConfig.SourceConf {
-		sourceCfgMap[cfg.SourceName] = s.scheduler.GetSourceCfgByID(cfg.SourceName)
+		sourceCfg := s.scheduler.GetSourceCfgByID(cfg.SourceName)
+		if sourceCfg == nil {
+			return nil, nil, terror.ErrConfigSourceIDNotFound.Generate(cfg.SourceName)
+		}
+		sourceCfgMap[sourceCfg.SourceID] = sourceCfg
 	}
 	taskCfg, err := config.OpenAPITaskToTaskConfig(task, sourceCfgMap)
 	if err != nil {

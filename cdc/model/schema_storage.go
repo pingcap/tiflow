@@ -137,7 +137,7 @@ func WrapTableInfo(schemaID int64, schemaName string, version uint64, info *mode
 
 	ti.findHandleIndex()
 	ti.initColumnsFlag()
-	log.Debug("warped table info", zap.Reflect("tableInfo", ti))
+	log.Debug("wrapped table info", zap.Reflect("tableInfo", ti))
 	return ti
 }
 

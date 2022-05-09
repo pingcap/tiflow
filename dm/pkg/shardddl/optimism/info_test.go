@@ -329,7 +329,8 @@ func (t *testForEtcd) TestInfoEtcd(c *C) {
 }
 
 func newOldInfo(task, source, upSchema, upTable, downSchema, downTable string,
-	ddls []string, tableInfoBefore *model.TableInfo, tableInfoAfter *model.TableInfo) OldInfo {
+	ddls []string, tableInfoBefore *model.TableInfo, tableInfoAfter *model.TableInfo,
+) OldInfo {
 	return OldInfo{
 		Task:            task,
 		Source:          source,

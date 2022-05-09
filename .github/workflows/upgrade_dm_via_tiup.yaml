@@ -68,12 +68,6 @@ jobs:
         with:
           args: "upgrade job failed, see https://github.com/pingcap/tiflow/actions/runs/{{ GITHUB_RUN_ID }}"
 
-      # Debug via SSH if previous steps failed
-      - name: Set up tmate session
-        if: ${{ failure() }}
-        uses: mxschmitt/action-tmate@v3
-        timeout-minutes: 30
-
   from_v2:
     name: From V2
     runs-on: ubuntu-18.04
@@ -117,22 +111,22 @@ jobs:
           echo "package dm-master"
           mkdir dm-master
           cp ${{ env.working-directory }}/bin/dm-master dm-master
-          cp -r ${{ env.working-directory }}/dm/dm/dm-ansible/conf dm-master
-          cp -r ${{ env.working-directory }}/dm/dm/dm-ansible/scripts dm-master
+          cp -r ${{ env.working-directory }}/dm/metrics/grafana/ dm-master/scripts
+          cp -r ${{ env.working-directory }}/dm/metrics/alertmanager/ dm-master/conf
           tar -czvf dm-master-nightly-linux-amd64.tar.gz dm-master
 
           echo "package dm-worker"
           mkdir dm-worker
           cp ${{ env.working-directory }}/bin/dm-worker dm-worker
-          cp -r ${{ env.working-directory }}/dm/dm/dm-ansible/conf dm-worker/conf
-          cp -r ${{ env.working-directory }}/dm/dm/dm-ansible/scripts dm-worker/scripts
+          cp -r ${{ env.working-directory }}/dm/metrics/grafana/ dm-worker/scripts
+          cp -r ${{ env.working-directory }}/dm/metrics/alertmanager/ dm-worker/conf
           tar -czvf dm-worker-nightly-linux-amd64.tar.gz dm-worker
 
           echo "package dmctl"
           mkdir dmctl
           cp ${{ env.working-directory }}/bin/dmctl dmctl
-          cp -r ${{ env.working-directory }}/dm/dm/dm-ansible/conf dmctl/conf
-          cp -r ${{ env.working-directory }}/dm/dm/dm-ansible/scripts dmctl/scripts
+          cp -r ${{ env.working-directory }}/dm/metrics/grafana/ dmctl/scripts
+          cp -r ${{ env.working-directory }}/dm/metrics/alertmanager/ dmctl/conf
           tar -czvf dmctl-nightly-linux-amd64.tar.gz dmctl
 
       - name: Setup containers
@@ -186,12 +180,6 @@ jobs:
         with:
           args: "upgrade-via-tiup job failed, see https://github.com/pingcap/tiflow/actions/runs/{{ GITHUB_RUN_ID }}"
 
-      # Debug via SSH if previous steps failed
-      - name: Set up tmate session
-        if: ${{ failure() }}
-        uses: mxschmitt/action-tmate@v3
-        timeout-minutes: 30
-
   upgrade_tidb:
     name: Upgrade TiDB
     runs-on: ubuntu-18.04
@@ -244,9 +232,3 @@ jobs:
         uses: Ilshidur/action-slack@2.1.0
         with:
           args: "upgrade job failed, see https://github.com/pingcap/tiflow/actions/runs/{{ GITHUB_RUN_ID }}"
-
-      # Debug via SSH if previous steps failed
-      - name: Set up tmate session
-        if: ${{ failure() }}
-        uses: mxschmitt/action-tmate@v3
-        timeout-minutes: 60

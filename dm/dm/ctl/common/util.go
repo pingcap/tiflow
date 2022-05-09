@@ -94,7 +94,8 @@ func (c *CtlClient) sendRequest(
 	reqName string,
 	req interface{},
 	respPointer interface{},
-	opts ...interface{}) error {
+	opts ...interface{},
+) error {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 

@@ -38,13 +38,13 @@ func TestCausalityKeys(t *testing.T) {
 			"CREATE TABLE tb1 (c INT PRIMARY KEY, c2 INT, c3 VARCHAR(10) UNIQUE)",
 			[]interface{}{1, 2, "abc"},
 			[]interface{}{3, 4, "abc"},
-			[]string{"1.c.db.tb1", "abc.c3.db.tb1", "3.c.db.tb1", "abc.c3.db.tb1"},
+			[]string{"abc.c3.db.tb1", "1.c.db.tb1", "abc.c3.db.tb1", "3.c.db.tb1"},
 		},
 		{
 			"CREATE TABLE tb1 (c INT PRIMARY KEY, c2 INT, c3 VARCHAR(10), UNIQUE INDEX(c3(1)))",
 			[]interface{}{1, 2, "abc"},
 			[]interface{}{3, 4, "adef"},
-			[]string{"1.c.db.tb1", "a.c3.db.tb1", "3.c.db.tb1", "a.c3.db.tb1"},
+			[]string{"a.c3.db.tb1", "1.c.db.tb1", "a.c3.db.tb1", "3.c.db.tb1"},
 		},
 
 		// test not string key
@@ -148,13 +148,13 @@ func TestGetCausalityString(t *testing.T) {
 			// multiple keys with primary key
 			schema: `create table t6(a int primary key, b varchar(16) unique)`,
 			values: []interface{}{16, "xyz"},
-			keys:   []string{"16.a.db.tbl", "xyz.b.db.tbl"},
+			keys:   []string{"xyz.b.db.tbl", "16.a.db.tbl"},
 		},
 		{
 			// non-integer primary key
 			schema: `create table t65(a int unique, b varchar(16) primary key)`,
 			values: []interface{}{16, "xyz"},
-			keys:   []string{"xyz.b.db.tbl", "16.a.db.tbl"},
+			keys:   []string{"16.a.db.tbl", "xyz.b.db.tbl"},
 		},
 		{
 			// primary key of multiple columns
@@ -199,7 +199,7 @@ func TestGetCausalityString(t *testing.T) {
 	for _, ca := range testCases {
 		ti := mockTableInfo(t, ca.schema)
 		change := NewRowChange(source, nil, nil, ca.values, ti, nil, nil)
-		change.lazyInitIdentityInfo()
+		change.lazyInitWhereHandle()
 		require.Equal(t, ca.keys, change.getCausalityString(ca.values))
 	}
 }

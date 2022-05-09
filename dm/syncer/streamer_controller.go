@@ -29,8 +29,6 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/binlog/common"
 	"github.com/pingcap/tiflow/dm/pkg/binlog/reader"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
-	"github.com/pingcap/tiflow/dm/pkg/log"
-	"github.com/pingcap/tiflow/dm/pkg/retry"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/relay"
@@ -89,9 +87,9 @@ func (r *remoteBinlogReader) generateStreamer(location binlog.Location) (reader.
 }
 
 // StreamerController controls the streamer for read binlog, include:
-// 1. reopen streamer
-// 2. redirect binlog position or gtid
-// 3. transfor from local streamer to remote streamer.
+// 1. reset streamer to a binlog position or GTID
+// 2. read next binlog event (TODO: and maintain the locations of the events)
+// 3. transfer from local streamer to remote streamer.
 type StreamerController struct {
 	sync.RWMutex
 
@@ -191,6 +189,7 @@ func (c *StreamerController) ResetReplicationSyncer(tctx *tcontext.Context, loca
 	c.Lock()
 	defer c.Unlock()
 
+	tctx.L().Info("reset replication syncer", zap.Stringer("location", location))
 	return c.resetReplicationSyncer(tctx, location)
 }
 
@@ -239,15 +238,6 @@ func (c *StreamerController) resetReplicationSyncer(tctx *tcontext.Context, loca
 
 	c.streamer, err = c.streamerProducer.generateStreamer(location)
 	return err
-}
-
-// RedirectStreamer redirects the streamer's begin position or gtid.
-func (c *StreamerController) RedirectStreamer(tctx *tcontext.Context, location binlog.Location) error {
-	c.Lock()
-	defer c.Unlock()
-
-	tctx.L().Info("redirect streamer", zap.Stringer("location", location))
-	return c.resetReplicationSyncer(tctx, location)
 }
 
 var mockRestarted = false
@@ -315,27 +305,6 @@ func (c *StreamerController) GetEvent(tctx *tcontext.Context) (event *replicatio
 	}
 
 	return event, nil
-}
-
-// ReopenWithRetry reopens streamer with retry.
-func (c *StreamerController) ReopenWithRetry(tctx *tcontext.Context, location binlog.Location) error {
-	c.Lock()
-	defer c.Unlock()
-
-	var err error
-	for i := 0; i < maxRetryCount; i++ {
-		err = c.resetReplicationSyncer(tctx, location)
-		if err == nil {
-			return nil
-		}
-		if retry.IsConnectionError(err) {
-			tctx.L().Info("fail to retry open binlog streamer", log.ShortError(err))
-			time.Sleep(retryTimeout)
-			continue
-		}
-		break
-	}
-	return err
 }
 
 // Close closes streamer.

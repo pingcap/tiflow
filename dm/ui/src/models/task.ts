@@ -383,6 +383,13 @@ export const calculateTaskStatus = (subtasks?: SubTaskStatus[]): TaskStage => {
   }
 
   // TODO Error status
+  if (subtasks.some(subtask => subtask.stage === TaskStage.Resuming)) {
+    return TaskStage.Resuming
+  }
+
+  if (subtasks.some(subtask => subtask.stage === TaskStage.Pausing)) {
+    return TaskStage.Pausing
+  }
 
   if (subtasks.some(subtask => subtask.stage === TaskStage.Paused)) {
     return TaskStage.Paused

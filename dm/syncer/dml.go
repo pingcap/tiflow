@@ -16,12 +16,12 @@ package syncer
 import (
 	"encoding/binary"
 
-	"github.com/pingcap/tidb-tools/pkg/filter"
 	"github.com/pingcap/tidb/expression"
 	"github.com/pingcap/tidb/parser/charset"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/parser/types"
+	"github.com/pingcap/tidb/util/filter"
 	"github.com/shopspring/decimal"
 	"go.uber.org/zap"
 
@@ -129,7 +129,7 @@ RowLoop:
 			downstreamTableInfo.TableInfo,
 			s.sessCtx,
 		)
-		rowChange.SetIdentifyInfo(downstreamTableInfo)
+		rowChange.SetWhereHandle(downstreamTableInfo.WhereHandle)
 		dmls = append(dmls, rowChange)
 	}
 
@@ -203,7 +203,7 @@ RowLoop:
 			downstreamTableInfo.TableInfo,
 			s.sessCtx,
 		)
-		rowChange.SetIdentifyInfo(downstreamTableInfo)
+		rowChange.SetWhereHandle(downstreamTableInfo.WhereHandle)
 		dmls = append(dmls, rowChange)
 	}
 
@@ -257,7 +257,7 @@ RowLoop:
 			downstreamTableInfo.TableInfo,
 			s.sessCtx,
 		)
-		rowChange.SetIdentifyInfo(downstreamTableInfo)
+		rowChange.SetWhereHandle(downstreamTableInfo.WhereHandle)
 		dmls = append(dmls, rowChange)
 	}
 

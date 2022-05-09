@@ -377,10 +377,11 @@ func (r *RowChangedEvent) ApproximateBytes() int {
 
 // Column represents a column value in row changed event
 type Column struct {
-	Name  string         `json:"name" msg:"name"`
-	Type  byte           `json:"type" msg:"type"`
-	Flag  ColumnFlagType `json:"flag" msg:"-"`
-	Value interface{}    `json:"value" msg:"value"`
+	Name    string         `json:"name" msg:"name"`
+	Type    byte           `json:"type" msg:"type"`
+	Charset string         `json:"charset" msg:"charset"`
+	Flag    ColumnFlagType `json:"flag" msg:"-"`
+	Value   interface{}    `json:"value" msg:"value"`
 
 	// ApproximateBytes is approximate bytes consumed by the column.
 	ApproximateBytes int `json:"-"`
@@ -545,9 +546,9 @@ type SingleTableTxn struct {
 func (t *SingleTableTxn) Append(row *RowChangedEvent) {
 	if row.StartTs != t.StartTs || row.CommitTs != t.CommitTs || row.Table.TableID != t.Table.TableID {
 		log.Panic("unexpected row change event",
-			zap.Uint64("startTs of txn", t.StartTs),
-			zap.Uint64("commitTs of txn", t.CommitTs),
-			zap.Any("table of txn", t.Table),
+			zap.Uint64("startTs", t.StartTs),
+			zap.Uint64("commitTs", t.CommitTs),
+			zap.Any("table", t.Table),
 			zap.Any("row", row))
 	}
 	t.Rows = append(t.Rows, row)

@@ -22,7 +22,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/actor/message"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/context"
-	"github.com/pingcap/tiflow/pkg/pipeline"
+	pmessage "github.com/pingcap/tiflow/pkg/pipeline/message"
 	"go.uber.org/zap"
 )
 
@@ -35,8 +35,8 @@ const defaultEventBatchSize = uint32(32)
 // the Throw function handle error and stop the actor
 type actorNodeContext struct {
 	sdtContext.Context
-	outputCh         chan pipeline.Message
-	tableActorRouter *actor.Router
+	outputCh         chan pmessage.Message
+	tableActorRouter *actor.Router[pmessage.Message]
 	tableActorID     actor.ID
 	changefeedVars   *context.ChangefeedVars
 	globalVars       *context.GlobalVars
@@ -49,18 +49,19 @@ type actorNodeContext struct {
 
 func newContext(stdCtx sdtContext.Context,
 	tableName string,
-	tableActorRouter *actor.Router,
+	tableActorRouter *actor.Router[pmessage.Message],
 	tableActorID actor.ID,
 	changefeedVars *context.ChangefeedVars,
 	globalVars *context.GlobalVars,
-	throw func(error)) *actorNodeContext {
+	throw func(error),
+) *actorNodeContext {
 	batchSize := defaultEventBatchSize
 	if config.GetGlobalServerConfig().Debug.TableActor != nil {
 		batchSize = config.GetGlobalServerConfig().Debug.TableActor.EventBatchSize
 	}
 	return &actorNodeContext{
 		Context:          stdCtx,
-		outputCh:         make(chan pipeline.Message, defaultOutputChannelSize),
+		outputCh:         make(chan pmessage.Message, defaultOutputChannelSize),
 		tableActorRouter: tableActorRouter,
 		tableActorID:     tableActorID,
 		changefeedVars:   changefeedVars,
@@ -91,20 +92,22 @@ func (c *actorNodeContext) Throw(err error) {
 
 // SendToNextNode send msg to the outputCh and notify the actor system,
 // to reduce the  actor message, only send tick message per threshold
-func (c *actorNodeContext) SendToNextNode(msg pipeline.Message) {
+func (c *actorNodeContext) SendToNextNode(msg pmessage.Message) {
 	select {
 	// if the processor context is cancelled, return directly
 	// otherwise processor tick loop will be blocked if the chan is full， because actor is topped
 	case <-c.Context.Done():
 		log.Info("context is canceled",
 			zap.String("tableName", c.tableName),
-			zap.String("changefeed", c.changefeedVars.ID))
+			zap.String("namespace", c.changefeedVars.ID.Namespace),
+			zap.String("changefeed", c.changefeedVars.ID.ID),
+		)
 	case c.outputCh <- msg:
 		c.trySendTickMessage()
 	}
 }
 
-func (c *actorNodeContext) TrySendToNextNode(msg pipeline.Message) bool {
+func (c *actorNodeContext) TrySendToNextNode(msg pmessage.Message) bool {
 	added := false
 	select {
 	case c.outputCh <- msg:
@@ -117,11 +120,11 @@ func (c *actorNodeContext) TrySendToNextNode(msg pipeline.Message) bool {
 	return added
 }
 
-func (c *actorNodeContext) Message() pipeline.Message {
+func (c *actorNodeContext) Message() pmessage.Message {
 	return <-c.outputCh
 }
 
-func (c *actorNodeContext) tryGetProcessedMessage() *pipeline.Message {
+func (c *actorNodeContext) tryGetProcessedMessage() *pmessage.Message {
 	select {
 	case msg, ok := <-c.outputCh:
 		if !ok {
@@ -139,7 +142,7 @@ func (c *actorNodeContext) trySendTickMessage() {
 	count := atomic.LoadUint32(&c.eventCount)
 	// resolvedTs event will be sent by puller periodically
 	if count >= threshold {
-		_ = c.tableActorRouter.Send(c.tableActorID, message.TickMessage())
+		_ = c.tableActorRouter.Send(c.tableActorID, message.ValueMessage(pmessage.TickMessage()))
 		atomic.StoreUint32(&c.eventCount, 0)
 	}
 }

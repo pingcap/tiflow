@@ -18,11 +18,13 @@ import (
 	"database/sql"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/go-mysql-org/go-mysql/replication"
 	. "github.com/pingcap/check"
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
-	"github.com/pingcap/tidb-tools/pkg/filter"
 	"github.com/pingcap/tidb/parser"
+	"github.com/pingcap/tidb/util/filter"
+	"github.com/pingcap/tiflow/dm/pkg/binlog"
 
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
@@ -66,9 +68,10 @@ func (s *testFilterSuite) TestSkipQueryEvent(c *C) {
 	syncer.baList, err = filter.New(syncer.cfg.CaseSensitive, syncer.cfg.BAList)
 	c.Assert(err, IsNil)
 
-	syncer.ddlDBConn = &dbconn.DBConn{Cfg: syncer.cfg, BaseConn: s.baseConn}
+	syncer.ddlDBConn = dbconn.NewDBConn(syncer.cfg, s.baseConn)
 	syncer.schemaTracker, err = schema.NewTracker(context.Background(), syncer.cfg.Name, defaultTestSessionCfg, syncer.ddlDBConn)
 	c.Assert(err, IsNil)
+	defer syncer.schemaTracker.Close()
 	syncer.exprFilterGroup = NewExprFilterGroup(utils.NewSessionCtx(nil), nil)
 
 	// test binlog filter
@@ -126,11 +129,16 @@ func (s *testFilterSuite) TestSkipQueryEvent(c *C) {
 	}
 	p := parser.New()
 
+	loc := binlog.NewLocation(mysql.MySQLFlavor)
+
 	for _, ca := range cases {
 		qec := &queryEventContext{
-			eventContext: &eventContext{tctx: tcontext.Background()},
-			p:            p,
-			ddlSchema:    ca.schema,
+			eventContext: &eventContext{
+				tctx:         tcontext.Background(),
+				lastLocation: &loc,
+			},
+			p:         p,
+			ddlSchema: ca.schema,
 		}
 		ddlInfo, err := syncer.genDDLInfo(qec, ca.sql)
 		c.Assert(err, IsNil)

@@ -18,7 +18,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net/http"
 	"regexp"
 	"strings"
 
@@ -73,7 +72,9 @@ func removeVAndHash(v string) string {
 // CheckClusterVersion check TiKV and PD version.
 // need only one PD alive and match the cdc version.
 func CheckClusterVersion(
-	ctx context.Context, client pd.Client, pdAddrs []string, credential *security.Credential, errorTiKVIncompat bool) error {
+	ctx context.Context, client pd.Client, pdAddrs []string,
+	credential *security.Credential, errorTiKVIncompat bool,
+) error {
 	err := CheckStoreVersion(ctx, client, 0 /* check all TiKV */)
 	if err != nil {
 		if errorTiKVIncompat {
@@ -104,13 +105,7 @@ func CheckPDVersion(ctx context.Context, pdAddr string, credential *security.Cre
 		return err
 	}
 
-	req, err := http.NewRequestWithContext(
-		ctx, http.MethodGet, fmt.Sprintf("%s/pd/api/v1/version", pdAddr), nil)
-	if err != nil {
-		return cerror.ErrCheckClusterVersionFromPD.GenWithStackByArgs(err)
-	}
-
-	resp, err := httpClient.Do(req)
+	resp, err := httpClient.Get(ctx, fmt.Sprintf("%s/pd/api/v1/version", pdAddr))
 	if err != nil {
 		return cerror.ErrCheckClusterVersionFromPD.GenWithStackByArgs(err)
 	}

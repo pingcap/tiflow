@@ -24,7 +24,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/redo/reader"
-	"github.com/pingcap/tiflow/cdc/sink"
+	"github.com/pingcap/tiflow/cdc/sink/mysql"
 	"github.com/stretchr/testify/require"
 )
 
@@ -145,6 +145,10 @@ func TestApplyDMLs(t *testing.T) {
 					sqlmock.NewRows(columns).
 						AddRow("tidb_placement_mode", "IGNORE"),
 				)
+			mock.ExpectQuery("select character_set_name from information_schema.character_sets " +
+				"where character_set_name = 'gbk';").WillReturnRows(
+				sqlmock.NewRows([]string{"character_set_name"}).AddRow("gbk"),
+			)
 			mock.ExpectClose()
 			return db, nil
 		}
@@ -169,13 +173,13 @@ func TestApplyDMLs(t *testing.T) {
 		return db, nil
 	}
 
-	getDBConnBak := sink.GetDBConnImpl
-	sink.GetDBConnImpl = mockGetDBConn
+	getDBConnBak := mysql.GetDBConnImpl
+	mysql.GetDBConnImpl = mockGetDBConn
 	createRedoReaderBak := createRedoReader
 	createRedoReader = createMockReader
 	defer func() {
 		createRedoReader = createRedoReaderBak
-		sink.GetDBConnImpl = getDBConnBak
+		mysql.GetDBConnImpl = getDBConnBak
 	}()
 
 	dmls := []*model.RowChangedEvent{

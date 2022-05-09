@@ -22,15 +22,15 @@ import (
 	"sync"
 
 	"github.com/pingcap/failpoint"
-	"github.com/pingcap/tidb-tools/pkg/dbutil"
-	"github.com/pingcap/tidb-tools/pkg/filter"
-	regexprrouter "github.com/pingcap/tidb-tools/pkg/regexpr-router"
 	"github.com/pingcap/tidb/parser/model"
 	tmysql "github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tidb/table"
 	"github.com/pingcap/tidb/types"
+	"github.com/pingcap/tidb/util/dbutil"
+	"github.com/pingcap/tidb/util/filter"
+	regexprrouter "github.com/pingcap/tidb/util/regexpr-router"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -184,12 +184,13 @@ func FetchLowerCaseTableNamesSetting(ctx context.Context, conn *sql.Conn) (Lower
 	return LowerCaseTableNamesFlavor(res), nil
 }
 
-// GetDBCaseSensitive returns the case sensitive setting of target db.
+// GetDBCaseSensitive returns the case-sensitive setting of target db.
 func GetDBCaseSensitive(ctx context.Context, db *sql.DB) (bool, error) {
 	conn, err := db.Conn(ctx)
 	if err != nil {
 		return true, terror.DBErrorAdapt(err, terror.ErrDBDriverError)
 	}
+	defer conn.Close()
 	lcFlavor, err := FetchLowerCaseTableNamesSetting(ctx, conn)
 	if err != nil {
 		return true, err

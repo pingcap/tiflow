@@ -24,7 +24,6 @@ import (
 
 	cdcmodel "github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/dm/pkg/log"
-	"github.com/pingcap/tiflow/dm/pkg/schema"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/pkg/quotes"
 )
@@ -69,8 +68,8 @@ type RowChange struct {
 
 	tiSessionCtx sessionctx.Context
 
-	tp           RowChangeType
-	identityInfo *schema.DownstreamTableInfo
+	tp          RowChangeType
+	whereHandle *WhereHandle
 }
 
 // NewRowChange creates a new RowChange.
@@ -175,32 +174,44 @@ func (r *RowChange) TargetTableID() string {
 	return r.targetTable.QuoteString()
 }
 
-// SetIdentifyInfo can be used when caller has calculated and cached
-// identityInfo, to avoid every RowChange lazily initialize it.
-func (r *RowChange) SetIdentifyInfo(info *schema.DownstreamTableInfo) {
-	r.identityInfo = info
+// ColumnCount returns the number of columns of this RowChange.
+func (r *RowChange) ColumnCount() int {
+	return len(r.sourceTableInfo.Columns)
 }
 
-func (r *RowChange) lazyInitIdentityInfo() {
-	if r.identityInfo != nil {
+// SourceTableInfo returns the TableInfo of source table.
+func (r *RowChange) SourceTableInfo() *timodel.TableInfo {
+	return r.sourceTableInfo
+}
+
+// UniqueNotNullIdx returns the unique and not null index.
+func (r *RowChange) UniqueNotNullIdx() *timodel.IndexInfo {
+	r.lazyInitWhereHandle()
+	return r.whereHandle.UniqueNotNullIdx
+}
+
+// SetWhereHandle can be used when caller has cached whereHandle, to avoid every
+// RowChange lazily initialize it.
+func (r *RowChange) SetWhereHandle(whereHandle *WhereHandle) {
+	r.whereHandle = whereHandle
+}
+
+func (r *RowChange) lazyInitWhereHandle() {
+	if r.whereHandle != nil {
 		return
 	}
 
-	// TODO: move below function into this package
-	r.identityInfo = schema.GetDownStreamTI(r.targetTableInfo, r.sourceTableInfo)
+	r.whereHandle = GetWhereHandle(r.sourceTableInfo, r.targetTableInfo)
 }
 
 // whereColumnsAndValues returns columns and values to identify the row, to form
 // the WHERE clause.
 func (r *RowChange) whereColumnsAndValues() ([]string, []interface{}) {
-	r.lazyInitIdentityInfo()
-
-	uniqueIndex := r.identityInfo.AbsoluteUKIndexInfo
-	if uniqueIndex == nil {
-		uniqueIndex = schema.GetIdentityUKByData(r.identityInfo, r.preValues)
-	}
+	r.lazyInitWhereHandle()
 
 	columns, values := r.sourceTableInfo.Columns, r.preValues
+
+	uniqueIndex := r.whereHandle.getWhereIdxByData(r.preValues)
 	if uniqueIndex != nil {
 		columns, values = getColsAndValuesOfIdx(r.sourceTableInfo.Columns, uniqueIndex, values)
 	}
@@ -357,6 +368,18 @@ func (r *RowChange) GetPreValues() []interface{} {
 // GetPostValues is only used in tests.
 func (r *RowChange) GetPostValues() []interface{} {
 	return r.postValues
+}
+
+// RowValues returns the values of this row change
+// for INSERT and UPDATE, it is the post values.
+// for DELETE, it is the pre values.
+func (r *RowChange) RowValues() []interface{} {
+	switch r.tp {
+	case RowChangeInsert, RowChangeUpdate:
+		return r.postValues
+	default:
+		return r.preValues
+	}
 }
 
 // GetSourceTable returns TableName of the source table.

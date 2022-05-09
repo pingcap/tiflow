@@ -54,8 +54,12 @@ func (m *MockProcessorMessenger) Barrier(ctx cdcContext.Context) (done bool) {
 }
 
 // OnOwnerChanged marks this function as being called.
-func (m *MockProcessorMessenger) OnOwnerChanged(ctx cdcContext.Context, newOwnerCaptureID model.CaptureID) {
-	m.Called(ctx, newOwnerCaptureID)
+func (m *MockProcessorMessenger) OnOwnerChanged(
+	ctx cdcContext.Context,
+	newOwnerCaptureID model.CaptureID,
+	newOwnerRev int64,
+) {
+	m.Called(ctx, newOwnerCaptureID, newOwnerRev)
 }
 
 // Close marks this function as being called.

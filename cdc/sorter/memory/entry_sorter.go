@@ -22,10 +22,10 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/notify"
-	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
@@ -51,13 +51,18 @@ func NewEntrySorter() *EntrySorter {
 
 // Run runs EntrySorter
 func (es *EntrySorter) Run(ctx context.Context) error {
-	changefeedID := util.ChangefeedIDFromCtx(ctx)
-	_, tableName := util.TableIDFromCtx(ctx)
-	metricEntrySorterResolvedChanSizeGuage := entrySorterResolvedChanSizeGauge.WithLabelValues(changefeedID, tableName)
-	metricEntrySorterOutputChanSizeGauge := entrySorterOutputChanSizeGauge.WithLabelValues(changefeedID, tableName)
-	metricEntryUnsortedSizeGauge := entrySorterUnsortedSizeGauge.WithLabelValues(changefeedID, tableName)
-	metricEntrySorterSortDuration := entrySorterSortDuration.WithLabelValues(changefeedID, tableName)
-	metricEntrySorterMergeDuration := entrySorterMergeDuration.WithLabelValues(changefeedID, tableName)
+	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
+	_, tableName := contextutil.TableIDFromCtx(ctx)
+	metricEntrySorterResolvedChanSizeGuage := entrySorterResolvedChanSizeGauge.
+		WithLabelValues(changefeedID.Namespace, changefeedID.ID, tableName)
+	metricEntrySorterOutputChanSizeGauge := entrySorterOutputChanSizeGauge.
+		WithLabelValues(changefeedID.Namespace, changefeedID.ID, tableName)
+	metricEntryUnsortedSizeGauge := entrySorterUnsortedSizeGauge.
+		WithLabelValues(changefeedID.Namespace, changefeedID.ID, tableName)
+	metricEntrySorterSortDuration := entrySorterSortDuration.
+		WithLabelValues(changefeedID.Namespace, changefeedID.ID, tableName)
+	metricEntrySorterMergeDuration := entrySorterMergeDuration.
+		WithLabelValues(changefeedID.Namespace, changefeedID.ID, tableName)
 
 	output := func(ctx context.Context, entry *model.PolymorphicEvent) {
 		select {
@@ -159,16 +164,7 @@ func (es *EntrySorter) Output() <-chan *model.PolymorphicEvent {
 }
 
 func eventLess(i *model.PolymorphicEvent, j *model.PolymorphicEvent) bool {
-	if i.CRTs == j.CRTs {
-		if i.RawKV.OpType == model.OpTypeDelete {
-			return true
-		}
-
-		if j.RawKV.OpType == model.OpTypeResolved {
-			return true
-		}
-	}
-	return i.CRTs < j.CRTs
+	return model.ComparePolymorphicEvents(i, j)
 }
 
 func mergeEvents(kvsA []*model.PolymorphicEvent, kvsB []*model.PolymorphicEvent, output func(*model.PolymorphicEvent)) {

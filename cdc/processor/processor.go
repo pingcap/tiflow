@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -32,6 +33,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/puller"
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/sink"
+	"github.com/pingcap/tiflow/cdc/sink/metrics"
 	"github.com/pingcap/tiflow/cdc/sorter/memory"
 	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
@@ -41,6 +43,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/regionspan"
 	"github.com/pingcap/tiflow/pkg/retry"
+	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/tikv/client-go/v2/oracle"
@@ -56,6 +59,8 @@ type processor struct {
 	changefeedID model.ChangeFeedID
 	captureInfo  *model.CaptureInfo
 	changefeed   *orchestrator.ChangefeedReactorState
+
+	upStream *upstream.Upstream
 
 	tables map[model.TableID]tablepipeline.TablePipeline
 
@@ -224,10 +229,11 @@ func (p *processor) GetCheckpoint() (checkpointTs, resolvedTs model.Ts) {
 }
 
 // newProcessor creates a new processor
-func newProcessor(ctx cdcContext.Context) *processor {
+func newProcessor(ctx cdcContext.Context, upStream *upstream.Upstream) *processor {
 	changefeedID := ctx.ChangefeedVars().ID
 	conf := config.GetGlobalServerConfig()
 	p := &processor{
+		upStream:      upStream,
 		tables:        make(map[model.TableID]tablepipeline.TablePipeline),
 		errCh:         make(chan error, 1),
 		changefeedID:  changefeedID,
@@ -237,16 +243,26 @@ func newProcessor(ctx cdcContext.Context) *processor {
 
 		newSchedulerEnabled: conf.Debug.EnableNewScheduler,
 
-		metricResolvedTsGauge:           resolvedTsGauge.WithLabelValues(changefeedID),
-		metricResolvedTsLagGauge:        resolvedTsLagGauge.WithLabelValues(changefeedID),
-		metricMinResolvedTableIDGuage:   resolvedTsMinTableIDGauge.WithLabelValues(changefeedID),
-		metricCheckpointTsGauge:         checkpointTsGauge.WithLabelValues(changefeedID),
-		metricCheckpointTsLagGauge:      checkpointTsLagGauge.WithLabelValues(changefeedID),
-		metricMinCheckpointTableIDGuage: checkpointTsMinTableIDGauge.WithLabelValues(changefeedID),
-		metricSyncTableNumGauge:         syncTableNumGauge.WithLabelValues(changefeedID),
-		metricProcessorErrorCounter:     processorErrorCounter.WithLabelValues(changefeedID),
-		metricSchemaStorageGcTsGauge:    processorSchemaStorageGcTsGauge.WithLabelValues(changefeedID),
-		metricProcessorTickDuration:     processorTickDuration.WithLabelValues(changefeedID),
+		metricResolvedTsGauge: resolvedTsGauge.
+			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
+		metricResolvedTsLagGauge: resolvedTsLagGauge.
+			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
+		metricMinResolvedTableIDGuage: resolvedTsMinTableIDGauge.
+			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
+		metricCheckpointTsGauge: checkpointTsGauge.
+			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
+		metricCheckpointTsLagGauge: checkpointTsLagGauge.
+			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
+		metricMinCheckpointTableIDGuage: checkpointTsMinTableIDGauge.
+			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
+		metricSyncTableNumGauge: syncTableNumGauge.
+			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
+		metricProcessorErrorCounter: processorErrorCounter.
+			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
+		metricSchemaStorageGcTsGauge: processorSchemaStorageGcTsGauge.
+			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
+		metricProcessorTickDuration: processorTickDuration.
+			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 	}
 	p.createTablePipeline = p.createTablePipelineImpl
 	p.lazyInit = p.lazyInitImpl
@@ -281,6 +297,10 @@ func isProcessorIgnorableError(err error) bool {
 // the `state` parameter is sent by the etcd worker, the `state` must be a snapshot of KVs in etcd
 // The main logic of processor is in this function, including the calculation of many kinds of ts, maintain table pipeline, error handling, etc.
 func (p *processor) Tick(ctx cdcContext.Context, state *orchestrator.ChangefeedReactorState) (orchestrator.ReactorState, error) {
+	// skip this tick
+	if !p.upStream.IsNormal() {
+		return state, nil
+	}
 	startTime := time.Now()
 	p.changefeed = state
 	state.CheckCaptureAlive(ctx.GlobalVars().CaptureInfo.ID)
@@ -288,11 +308,11 @@ func (p *processor) Tick(ctx cdcContext.Context, state *orchestrator.ChangefeedR
 		ID:   state.ID,
 		Info: state.Info,
 	})
-	_, err := p.tick(ctx, state)
+	err := p.tick(ctx, state)
 
 	costTime := time.Since(startTime)
 	if costTime > processorLogsWarnDuration {
-		log.Warn("processor tick took too long", zap.String("changefeed", p.changefeedID),
+		log.Warn("processor tick took too long", zap.String("changefeed", p.changefeedID.ID),
 			zap.String("capture", ctx.GlobalVars().CaptureInfo.ID), zap.Duration("duration", costTime))
 	}
 	p.metricProcessorTickDuration.Observe(costTime.Seconds())
@@ -330,35 +350,35 @@ func (p *processor) Tick(ctx cdcContext.Context, state *orchestrator.ChangefeedR
 	return state, cerror.ErrReactorFinished.GenWithStackByArgs()
 }
 
-func (p *processor) tick(ctx cdcContext.Context, state *orchestrator.ChangefeedReactorState) (nextState orchestrator.ReactorState, err error) {
+func (p *processor) tick(ctx cdcContext.Context, state *orchestrator.ChangefeedReactorState) error {
 	p.changefeed = state
 	if !p.checkChangefeedNormal() {
-		return nil, cerror.ErrAdminStopProcessor.GenWithStackByArgs()
+		return cerror.ErrAdminStopProcessor.GenWithStackByArgs()
 	}
 	// we should skip this tick after create a task position
 	if p.createTaskPosition() {
-		return p.changefeed, nil
+		return nil
 	}
 	if err := p.handleErrorCh(ctx); err != nil {
-		return nil, errors.Trace(err)
+		return errors.Trace(err)
 	}
 	if err := p.lazyInit(ctx); err != nil {
-		return nil, errors.Trace(err)
+		return errors.Trace(err)
 	}
 	// sink manager will return this checkpointTs to sink node if sink node resolvedTs flush failed
 	p.sinkManager.UpdateChangeFeedCheckpointTs(state.Info.GetCheckpointTs(state.Status))
 	if err := p.handleTableOperation(ctx); err != nil {
-		return nil, errors.Trace(err)
+		return errors.Trace(err)
 	}
 	if err := p.checkTablesNum(ctx); err != nil {
-		return nil, errors.Trace(err)
+		return errors.Trace(err)
 	}
 	if err := p.flushRedoLogMeta(ctx); err != nil {
-		return nil, err
+		return err
 	}
-	// it is no need to check the err here, because we will use
+	// it is no need to check the error here, because we will use
 	// local time when an error return, which is acceptable
-	pdTime, _ := ctx.GlobalVars().PDClock.CurrentTime()
+	pdTime, _ := p.upStream.PDClock.CurrentTime()
 
 	p.handlePosition(oracle.GetPhysical(pdTime))
 	p.pushResolvedTs2Table()
@@ -377,10 +397,10 @@ func (p *processor) tick(ctx cdcContext.Context, state *orchestrator.ChangefeedR
 
 	if p.newSchedulerEnabled {
 		if err := p.agent.Tick(ctx); err != nil {
-			return nil, errors.Trace(err)
+			return errors.Trace(err)
 		}
 	}
-	return p.changefeed, nil
+	return nil
 }
 
 // checkChangefeedNormal checks if the changefeed is runnable.
@@ -423,7 +443,6 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 	}
 	ctx, cancel := cdcContext.WithCancel(ctx)
 	p.cancel = cancel
-
 	// We don't close this error channel, since it is only safe to close channel
 	// in sender, and this channel will be used in many modules including sink,
 	// redo log manager, etc. Let runtime GC to recycle it.
@@ -459,15 +478,13 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 		return errors.Trace(err)
 	}
 
-	stdCtx := util.PutChangefeedIDInCtx(ctx, p.changefeed.ID)
-	stdCtx = util.PutRoleInCtx(stdCtx, util.RoleProcessor)
+	stdCtx := contextutil.PutChangefeedIDInCtx(ctx, p.changefeed.ID)
+	stdCtx = contextutil.PutRoleInCtx(stdCtx, util.RoleProcessor)
 
-	p.mounter = entry.NewMounter(p.schemaStorage, p.changefeed.Info.Config.Mounter.WorkerNum, p.changefeed.Info.Config.EnableOldValue)
-	p.wg.Add(1)
-	go func() {
-		defer p.wg.Done()
-		p.sendError(p.mounter.Run(stdCtx))
-	}()
+	p.mounter = entry.NewMounter(p.schemaStorage,
+		p.changefeedID,
+		contextutil.TimezoneFromCtx(ctx),
+		p.changefeed.Info.Config.EnableOldValue)
 
 	opts := make(map[string]string, len(p.changefeed.Info.Opts)+2)
 	for k, v := range p.changefeed.Info.Opts {
@@ -482,15 +499,17 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 		}
 		opts[mark.OptCyclicConfig] = cyclicCfg
 	}
-	opts[sink.OptChangefeedID] = p.changefeed.ID
-	opts[sink.OptCaptureAddr] = ctx.GlobalVars().CaptureInfo.AdvertiseAddr
-	log.Info("processor try new sink", zap.String("changefeed", p.changefeed.ID))
+	opts[metrics.OptCaptureAddr] = ctx.GlobalVars().CaptureInfo.AdvertiseAddr
+	log.Info("processor try new sink",
+		zap.String("namespace", p.changefeed.ID.Namespace),
+		zap.String("changefeed", p.changefeed.ID.ID))
 
 	start := time.Now()
 	s, err := sink.New(stdCtx, p.changefeed.ID, p.changefeed.Info.SinkURI, p.filter, p.changefeed.Info.Config, opts, errCh)
 	if err != nil {
 		log.Info("processor new sink failed",
-			zap.String("changefeed", p.changefeed.ID),
+			zap.String("namespace", p.changefeed.ID.Namespace),
+			zap.String("changefeed", p.changefeed.ID.ID),
 			zap.Duration("duration", time.Since(start)))
 		return errors.Trace(err)
 	}
@@ -671,21 +690,25 @@ func (p *processor) handleTableOperation(ctx cdcContext.Context) error {
 }
 
 func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.SchemaStorage, error) {
-	kvStorage := ctx.GlobalVars().KVStorage
+	kvStorage := p.upStream.KVStorage
 	ddlspans := []regionspan.Span{regionspan.GetDDLSpan(), regionspan.GetAddIndexDDLSpan()}
 	checkpointTs := p.changefeed.Info.GetCheckpointTs(p.changefeed.Status)
-	stdCtx := util.PutTableInfoInCtx(ctx, -1, puller.DDLPullerTableName)
-	stdCtx = util.PutChangefeedIDInCtx(stdCtx, ctx.ChangefeedVars().ID)
-	stdCtx = util.PutRoleInCtx(stdCtx, util.RoleProcessor)
+	kvCfg := config.GetGlobalServerConfig().KVClient
+	stdCtx := contextutil.PutTableInfoInCtx(ctx, -1, puller.DDLPullerTableName)
+	stdCtx = contextutil.PutChangefeedIDInCtx(stdCtx, ctx.ChangefeedVars().ID)
+	stdCtx = contextutil.PutRoleInCtx(stdCtx, util.RoleProcessor)
 	ddlPuller := puller.NewPuller(
 		stdCtx,
-		ctx.GlobalVars().PDClient,
-		ctx.GlobalVars().GrpcPool,
-		ctx.GlobalVars().RegionCache,
-		ctx.GlobalVars().KVStorage,
-		ctx.GlobalVars().PDClock,
+		p.upStream.PDClient,
+		p.upStream.GrpcPool,
+		p.upStream.RegionCache,
+		p.upStream.KVStorage,
+		p.upStream.PDClock,
 		ctx.ChangefeedVars().ID,
-		checkpointTs, ddlspans, false)
+		checkpointTs,
+		ddlspans,
+		kvCfg,
+	)
 	meta, err := kv.GetSnapshotMeta(kvStorage, checkpointTs)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -846,7 +869,9 @@ func (p *processor) handlePosition(currentTs int64) {
 			if position == nil {
 				// when the captureInfo is deleted, the old owner will delete task status, task position, task workload in non-atomic
 				// so processor may see a intermediate state, for example the task status is exist but task position is deleted.
-				log.Warn("task position is not exist, skip to update position", zap.String("changefeed", p.changefeed.ID))
+				log.Warn("task position is not exist, skip to update position",
+					zap.String("namespace", p.changefeed.ID.Namespace),
+					zap.String("changefeed", p.changefeed.ID.ID))
 				return nil, false, nil
 			}
 			position.CheckPointTs = minCheckpointTs
@@ -928,7 +953,67 @@ func (p *processor) addTable(ctx cdcContext.Context, tableID model.TableID, repl
 	return nil
 }
 
-func (p *processor) createTablePipelineImpl(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error) {
+func (p *processor) getTableName(ctx cdcContext.Context,
+	tableID model.TableID,
+	replicaInfo *model.TableReplicaInfo,
+) (string, error) {
+	// FIXME: using GetLastSnapshot here would be confused and get the wrong table name
+	// after `rename table` DDL, since `rename table` keeps the tableID unchanged
+	var tableName *model.TableName
+	retry.Do(ctx, func() error { //nolint:errcheck
+		if x, ok := p.schemaStorage.GetLastSnapshot().PhysicalTableByID(tableID); ok {
+			tableName = &x.TableName
+			return nil
+		}
+		return errors.Errorf("failed to get table name, fallback to use table id: %d",
+			tableID)
+	}, retry.WithBackoffBaseDelay(backoffBaseDelayInMs),
+		retry.WithMaxTries(maxTries),
+		retry.WithIsRetryableErr(cerror.IsRetryableError))
+	// TODO: remove this feature flag after table actor is GA
+	if p.changefeed.Info.Config.Cyclic.IsEnabled() {
+		// Retry to find mark table ID
+		var markTableID model.TableID
+		err := retry.Do(context.Background(), func() error {
+			if tableName == nil {
+				x, exist := p.schemaStorage.GetLastSnapshot().PhysicalTableByID(tableID)
+				if !exist {
+					return cerror.ErrProcessorTableNotFound.
+						GenWithStack("normal table(%s)", tableID)
+				}
+				tableName = &x.TableName
+			}
+			markTableSchemaName, markTableTableName := mark.GetMarkTableName(tableName.Schema, tableName.Table)
+			tableInfo, exist := p.schemaStorage.GetLastSnapshot().TableByName(markTableSchemaName, markTableTableName)
+			if !exist {
+				return cerror.ErrProcessorTableNotFound.
+					GenWithStack("normal table(%s) and mark table not match",
+						tableName.String())
+			}
+			markTableID = tableInfo.ID
+			return nil
+		}, retry.WithBackoffBaseDelay(50),
+			retry.WithBackoffMaxDelay(60*1000),
+			retry.WithMaxTries(20))
+		if err != nil {
+			return "", errors.Trace(err)
+		}
+		replicaInfo.MarkTableID = markTableID
+	}
+
+	if tableName == nil {
+		log.Warn("failed to get table name for metric")
+		return strconv.Itoa(int(tableID)), nil
+	}
+
+	return tableName.QuoteString(), nil
+}
+
+func (p *processor) createTablePipelineImpl(
+	ctx cdcContext.Context,
+	tableID model.TableID,
+	replicaInfo *model.TableReplicaInfo,
+) (tablepipeline.TablePipeline, error) {
 	ctx = cdcContext.WithErrorHandler(ctx, func(err error) error {
 		if cerror.ErrTableProcessorStoppedSafely.Equal(err) ||
 			errors.Cause(errors.Cause(err)) == context.Canceled {
@@ -937,56 +1022,25 @@ func (p *processor) createTablePipelineImpl(ctx cdcContext.Context, tableID mode
 		p.sendError(err)
 		return nil
 	})
-	var tableName *model.TableName
-	retry.Do(ctx, func() error { //nolint:errcheck
-		if name, ok := p.schemaStorage.GetLastSnapshot().GetTableNameByID(tableID); ok {
-			tableName = &name
-			return nil
-		}
-		return errors.Errorf("failed to get table name, fallback to use table id: %d", tableID)
-	}, retry.WithBackoffBaseDelay(backoffBaseDelayInMs), retry.WithMaxTries(maxTries), retry.WithIsRetryableErr(cerror.IsRetryableError))
-	// TODO: remove this feature flag after table actor is GA
-	if p.changefeed.Info.Config.Cyclic.IsEnabled() {
-		// Retry to find mark table ID
-		var markTableID model.TableID
-		err := retry.Do(context.Background(), func() error {
-			if tableName == nil {
-				name, exist := p.schemaStorage.GetLastSnapshot().GetTableNameByID(tableID)
-				if !exist {
-					return cerror.ErrProcessorTableNotFound.GenWithStack("normal table(%s)", tableID)
-				}
-				tableName = &name
-			}
-			markTableSchemaName, markTableTableName := mark.GetMarkTableName(tableName.Schema, tableName.Table)
-			tableInfo, exist := p.schemaStorage.GetLastSnapshot().GetTableByName(markTableSchemaName, markTableTableName)
-			if !exist {
-				return cerror.ErrProcessorTableNotFound.GenWithStack("normal table(%s) and mark table not match", tableName.String())
-			}
-			markTableID = tableInfo.ID
-			return nil
-		}, retry.WithBackoffBaseDelay(50), retry.WithBackoffMaxDelay(60*1000), retry.WithMaxTries(20))
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-		replicaInfo.MarkTableID = markTableID
-	}
-	var tableNameStr string
-	if tableName == nil {
-		log.Warn("failed to get table name for metric")
-		tableNameStr = strconv.Itoa(int(tableID))
-	} else {
-		tableNameStr = tableName.QuoteString()
+
+	tableName, err := p.getTableName(ctx, tableID, replicaInfo)
+	if err != nil {
+		return nil, errors.Trace(err)
 	}
 
-	sink := p.sinkManager.CreateTableSink(tableID, replicaInfo.StartTs, p.redoManager)
+	sink, err := p.sinkManager.CreateTableSink(tableID, p.redoManager)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
 	var table tablepipeline.TablePipeline
 	if config.GetGlobalServerConfig().Debug.EnableTableActor {
 		var err error
 		table, err = tablepipeline.NewTableActor(
 			ctx,
+			p.upStream,
 			p.mounter,
 			tableID,
-			tableNameStr,
+			tableName,
 			replicaInfo,
 			sink,
 			p.changefeed.Info.GetTargetTs())
@@ -998,7 +1052,7 @@ func (p *processor) createTablePipelineImpl(ctx cdcContext.Context, tableID mode
 			ctx,
 			p.mounter,
 			tableID,
-			tableNameStr,
+			tableName,
 			replicaInfo,
 			sink,
 			p.changefeed.Info.GetTargetTs(),
@@ -1069,7 +1123,9 @@ func (p *processor) flushRedoLogMeta(ctx context.Context) error {
 }
 
 func (p *processor) Close() error {
-	log.Info("processor closing ...", zap.String("changefeed", p.changefeedID))
+	log.Info("processor closing ...",
+		zap.String("namespace", p.changefeed.ID.Namespace),
+		zap.String("changefeed", p.changefeed.ID.ID))
 	for _, tbl := range p.tables {
 		tbl.Cancel()
 	}
@@ -1095,28 +1151,30 @@ func (p *processor) Close() error {
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
 		log.Info("processor try to close the sinkManager",
-			zap.String("changefeed", p.changefeedID))
+			zap.String("namespace", p.changefeedID.Namespace),
+			zap.String("changefeed", p.changefeedID.ID))
 		start := time.Now()
 		if err := p.sinkManager.Close(ctx); err != nil {
 			log.Info("processor close sinkManager failed",
-				zap.String("changefeed", p.changefeedID),
+				zap.String("namespace", p.changefeedID.Namespace),
+				zap.String("changefeed", p.changefeedID.ID),
 				zap.Duration("duration", time.Since(start)))
 			return errors.Trace(err)
 		}
 		log.Info("processor close sinkManager success",
-			zap.String("changefeed", p.changefeedID),
+			zap.String("namespace", p.changefeedID.Namespace),
+			zap.String("changefeed", p.changefeedID.ID),
 			zap.Duration("duration", time.Since(start)))
 	}
-
 	// mark tables share the same cdcContext with its original table, don't need to cancel
 	failpoint.Inject("processorStopDelay", nil)
-	resolvedTsGauge.DeleteLabelValues(p.changefeedID)
-	resolvedTsLagGauge.DeleteLabelValues(p.changefeedID)
-	checkpointTsGauge.DeleteLabelValues(p.changefeedID)
-	checkpointTsLagGauge.DeleteLabelValues(p.changefeedID)
-	syncTableNumGauge.DeleteLabelValues(p.changefeedID)
-	processorErrorCounter.DeleteLabelValues(p.changefeedID)
-	processorSchemaStorageGcTsGauge.DeleteLabelValues(p.changefeedID)
+	resolvedTsGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
+	resolvedTsLagGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
+	checkpointTsGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
+	checkpointTsLagGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
+	syncTableNumGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
+	processorErrorCounter.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
+	processorSchemaStorageGcTsGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
 
 	return nil
 }

@@ -220,7 +220,8 @@ func (conn *BaseConn) ExecuteSQL(tctx *tcontext.Context, hVec *metricsproxy.Hist
 
 // ApplyRetryStrategy apply specify strategy for BaseConn.
 func (conn *BaseConn) ApplyRetryStrategy(tctx *tcontext.Context, params retry.Params,
-	operateFn func(*tcontext.Context) (interface{}, error)) (interface{}, int, error) {
+	operateFn func(*tcontext.Context) (interface{}, error),
+) (interface{}, int, error) {
 	return conn.RetryStrategy.Apply(tctx, params, operateFn)
 }
 

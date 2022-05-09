@@ -20,14 +20,13 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb/br/pkg/httputil"
 	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/owner"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/httputil"
 	"github.com/pingcap/tiflow/pkg/logutil"
-	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
@@ -42,8 +41,6 @@ const (
 	apiOpVarCaptureID = "capture_id"
 	// forWardFromCapture is a header to be set when a request is forwarded from another capture
 	forWardFromCapture = "TiCDC-ForwardFromCapture"
-	// getOwnerRetryMaxTime is the retry max time to get an owner
-	getOwnerRetryMaxTime = 3
 )
 
 // openAPI provides capture APIs.
@@ -154,7 +151,8 @@ func (h *openAPI) ListChangefeed(c *gin.Context) {
 		}
 
 		resp := &model.ChangefeedCommonInfo{
-			ID: cfID,
+			Namespace: cfID.Namespace,
+			ID:        cfID.ID,
 		}
 
 		if cfInfo != nil {
@@ -190,9 +188,10 @@ func (h *openAPI) GetChangefeed(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	changefeedID := c.Param(apiOpVarChangefeedID)
-	if err := model.ValidateChangefeedID(changefeedID); err != nil {
-		_ = c.Error(cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed_id: %s", changefeedID))
+	changefeedID := model.DefaultChangeFeedID(c.Param(apiOpVarChangefeedID))
+	if err := model.ValidateChangefeedID(changefeedID.ID); err != nil {
+		_ = c.Error(cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed_id: %s",
+			changefeedID.ID))
 		return
 	}
 
@@ -224,7 +223,8 @@ func (h *openAPI) GetChangefeed(c *gin.Context) {
 	}
 
 	changefeedDetail := &model.ChangefeedDetail{
-		ID:             changefeedID,
+		Namespace:      changefeedID.Namespace,
+		ID:             changefeedID.ID,
 		SinkURI:        info.SinkURI,
 		CreateTime:     model.JSONTime(info.CreateTime),
 		StartTs:        info.StartTs,
@@ -256,6 +256,9 @@ func (h *openAPI) CreateChangefeed(c *gin.Context) {
 		return
 	}
 
+	// c does not have a cancel() func and its Done() method always return nil,
+	// so we should not use c as a context.
+	// Ref:https://github.com/gin-gonic/gin/blob/92eeaa4ebbadec2376e2ca5f5749888da1a42e24/context.go#L1157
 	ctx := c.Request.Context()
 	var changefeedConfig model.ChangefeedConfig
 	if err := c.BindJSON(&changefeedConfig); err != nil {
@@ -263,7 +266,7 @@ func (h *openAPI) CreateChangefeed(c *gin.Context) {
 		return
 	}
 
-	info, err := verifyCreateChangefeedConfig(c, changefeedConfig, h.capture)
+	info, err := verifyCreateChangefeedConfig(ctx, changefeedConfig, h.capture)
 	if err != nil {
 		_ = c.Error(err)
 		return
@@ -275,7 +278,8 @@ func (h *openAPI) CreateChangefeed(c *gin.Context) {
 		return
 	}
 
-	err = h.capture.EtcdClient.CreateChangefeedInfo(ctx, info, changefeedConfig.ID)
+	err = h.capture.EtcdClient.CreateChangefeedInfo(ctx, info,
+		model.DefaultChangeFeedID(changefeedConfig.ID))
 	if err != nil {
 		_ = c.Error(err)
 		return
@@ -303,9 +307,10 @@ func (h *openAPI) PauseChangefeed(c *gin.Context) {
 
 	ctx := c.Request.Context()
 
-	changefeedID := c.Param(apiOpVarChangefeedID)
-	if err := model.ValidateChangefeedID(changefeedID); err != nil {
-		_ = c.Error(cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed_id: %s", changefeedID))
+	changefeedID := model.DefaultChangeFeedID(c.Param(apiOpVarChangefeedID))
+	if err := model.ValidateChangefeedID(changefeedID.ID); err != nil {
+		_ = c.Error(cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed_id: %s",
+			changefeedID.ID))
 		return
 	}
 	// check if the changefeed exists
@@ -344,9 +349,10 @@ func (h *openAPI) ResumeChangefeed(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	changefeedID := c.Param(apiOpVarChangefeedID)
-	if err := model.ValidateChangefeedID(changefeedID); err != nil {
-		_ = c.Error(cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed_id: %s", changefeedID))
+	changefeedID := model.DefaultChangeFeedID(c.Param(apiOpVarChangefeedID))
+	if err := model.ValidateChangefeedID(changefeedID.ID); err != nil {
+		_ = c.Error(cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed_id: %s",
+			changefeedID.ID))
 		return
 	}
 	// check if the changefeed exists
@@ -391,10 +397,11 @@ func (h *openAPI) UpdateChangefeed(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	changefeedID := c.Param(apiOpVarChangefeedID)
+	changefeedID := model.DefaultChangeFeedID(c.Param(apiOpVarChangefeedID))
 
-	if err := model.ValidateChangefeedID(changefeedID); err != nil {
-		_ = c.Error(cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed_id: %s", changefeedID))
+	if err := model.ValidateChangefeedID(changefeedID.ID); err != nil {
+		_ = c.Error(cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed_id: %s",
+			changefeedID.ID))
 		return
 	}
 	info, err := h.statusProvider().GetChangeFeedInfo(ctx, changefeedID)
@@ -447,9 +454,10 @@ func (h *openAPI) RemoveChangefeed(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	changefeedID := c.Param(apiOpVarChangefeedID)
-	if err := model.ValidateChangefeedID(changefeedID); err != nil {
-		_ = c.Error(cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed_id: %s", changefeedID))
+	changefeedID := model.DefaultChangeFeedID(c.Param(apiOpVarChangefeedID))
+	if err := model.ValidateChangefeedID(changefeedID.ID); err != nil {
+		_ = c.Error(cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed_id: %s",
+			changefeedID.ID))
 		return
 	}
 	// check if the changefeed exists
@@ -488,10 +496,11 @@ func (h *openAPI) RebalanceTables(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	changefeedID := c.Param(apiOpVarChangefeedID)
+	changefeedID := model.DefaultChangeFeedID(c.Param(apiOpVarChangefeedID))
 
-	if err := model.ValidateChangefeedID(changefeedID); err != nil {
-		_ = c.Error(cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed_id: %s", changefeedID))
+	if err := model.ValidateChangefeedID(changefeedID.ID); err != nil {
+		_ = c.Error(cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed_id: %s",
+			changefeedID.ID))
 		return
 	}
 	// check if the changefeed exists
@@ -527,9 +536,10 @@ func (h *openAPI) MoveTable(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	changefeedID := c.Param(apiOpVarChangefeedID)
-	if err := model.ValidateChangefeedID(changefeedID); err != nil {
-		_ = c.Error(cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed_id: %s", changefeedID))
+	changefeedID := model.DefaultChangeFeedID(c.Param(apiOpVarChangefeedID))
+	if err := model.ValidateChangefeedID(changefeedID.ID); err != nil {
+		_ = c.Error(cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed_id: %s",
+			changefeedID.ID))
 		return
 	}
 	// check if the changefeed exists
@@ -603,9 +613,10 @@ func (h *openAPI) GetProcessor(c *gin.Context) {
 
 	ctx := c.Request.Context()
 
-	changefeedID := c.Param(apiOpVarChangefeedID)
-	if err := model.ValidateChangefeedID(changefeedID); err != nil {
-		_ = c.Error(cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed_id: %s", changefeedID))
+	changefeedID := model.DefaultChangeFeedID(c.Param(apiOpVarChangefeedID))
+	if err := model.ValidateChangefeedID(changefeedID.ID); err != nil {
+		_ = c.Error(cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed_id: %s",
+			changefeedID.ID))
 		return
 	}
 
@@ -615,27 +626,41 @@ func (h *openAPI) GetProcessor(c *gin.Context) {
 		return
 	}
 
+	// check if this captureID exist
+	procInfos, err := h.statusProvider().GetProcessors(ctx)
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+	var found bool
+	for _, info := range procInfos {
+		if info.CaptureID == captureID {
+			found = true
+			break
+		}
+	}
+	if !found {
+		_ = c.Error(cerror.ErrCaptureNotExist.GenWithStackByArgs(captureID))
+		return
+	}
+
 	statuses, err := h.statusProvider().GetAllTaskStatuses(ctx, changefeedID)
 	if err != nil {
 		_ = c.Error(err)
 		return
 	}
-	status, exist := statuses[captureID]
-	if !exist {
-		_ = c.Error(cerror.ErrCaptureNotExist.GenWithStackByArgs(captureID))
-		return
-	}
+	status, captureExist := statuses[captureID]
 
 	positions, err := h.statusProvider().GetTaskPositions(ctx, changefeedID)
 	if err != nil {
 		_ = c.Error(err)
 		return
 	}
-	position, exist := positions[captureID]
+	position, positionsExist := positions[captureID]
 	// Note: for the case that no tables are attached to a newly created changefeed,
 	//       we just do not report an error.
 	var processorDetail model.ProcessorDetail
-	if exist {
+	if captureExist && positionsExist {
 		processorDetail = model.ProcessorDetail{
 			CheckPointTs: position.CheckPointTs,
 			ResolvedTs:   position.ResolvedTs,
@@ -674,7 +699,10 @@ func (h *openAPI) ListProcessor(c *gin.Context) {
 	}
 	resps := make([]*model.ProcessorCommonInfo, len(infos))
 	for i, info := range infos {
-		resp := &model.ProcessorCommonInfo{CfID: info.CfID, CaptureID: info.CaptureID}
+		resp := &model.ProcessorCommonInfo{
+			Namespace: info.CfID.Namespace,
+			CfID:      info.CfID.ID, CaptureID: info.CaptureID,
+		}
 		resps[i] = resp
 	}
 	c.IndentedJSON(http.StatusOK, resps)
@@ -795,30 +823,25 @@ func (h *openAPI) forwardToOwner(c *gin.Context) {
 
 	var owner *model.CaptureInfo
 	// get owner
-	err := retry.Do(ctx, func() error {
-		o, err := h.capture.GetOwnerCaptureInfo(ctx)
-		if err != nil {
-			log.Info("get owner failed, retry later", zap.Error(err))
-			return err
-		}
-		owner = o
-		return nil
-	}, retry.WithBackoffBaseDelay(300), retry.WithMaxTries(getOwnerRetryMaxTime))
+	owner, err := h.capture.GetOwnerCaptureInfo(ctx)
 	if err != nil {
+		log.Info("get owner failed", zap.Error(err))
 		_ = c.Error(err)
 		return
 	}
 
-	tslConfig, err := config.GetGlobalServerConfig().Security.ToTLSConfigWithVerify()
-	if err != nil {
-		_ = c.Error(err)
-		return
-	}
+	security := config.GetGlobalServerConfig().Security
 
 	// init a request
-	req, _ := http.NewRequest(c.Request.Method, c.Request.RequestURI, c.Request.Body)
+	req, err := http.NewRequestWithContext(
+		ctx, c.Request.Method, c.Request.RequestURI, c.Request.Body)
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+
 	req.URL.Host = owner.AdvertiseAddr
-	if tslConfig != nil {
+	if security != nil {
 		req.URL.Scheme = "https"
 	} else {
 		req.URL.Scheme = "http"
@@ -830,7 +853,11 @@ func (h *openAPI) forwardToOwner(c *gin.Context) {
 	}
 
 	// forward to owner
-	cli := httputil.NewClient(tslConfig)
+	cli, err := httputil.NewClient(security)
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
 	resp, err := cli.Do(req)
 	if err != nil {
 		_ = c.Error(err)

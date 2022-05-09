@@ -13,19 +13,14 @@
 
 package model
 
-import (
-	"context"
-)
-
 // PolymorphicEvent describes an event can be in multiple states
 type PolymorphicEvent struct {
 	StartTs uint64
 	// Commit or resolved TS
 	CRTs uint64
 
-	RawKV    *RawKVEntry
-	Row      *RowChangedEvent
-	finished chan struct{}
+	RawKV *RawKVEntry
+	Row   *RowChangedEvent
 }
 
 // NewPolymorphicEvent creates a new PolymorphicEvent with a raw KV
@@ -34,20 +29,18 @@ func NewPolymorphicEvent(rawKV *RawKVEntry) *PolymorphicEvent {
 		return NewResolvedPolymorphicEvent(rawKV.RegionID, rawKV.CRTs)
 	}
 	return &PolymorphicEvent{
-		StartTs:  rawKV.StartTs,
-		CRTs:     rawKV.CRTs,
-		RawKV:    rawKV,
-		finished: nil,
+		StartTs: rawKV.StartTs,
+		CRTs:    rawKV.CRTs,
+		RawKV:   rawKV,
 	}
 }
 
 // NewResolvedPolymorphicEvent creates a new PolymorphicEvent with the resolved ts
 func NewResolvedPolymorphicEvent(regionID uint64, resolvedTs uint64) *PolymorphicEvent {
 	return &PolymorphicEvent{
-		CRTs:     resolvedTs,
-		RawKV:    &RawKVEntry{CRTs: resolvedTs, OpType: OpTypeResolved, RegionID: regionID},
-		Row:      nil,
-		finished: nil,
+		CRTs:  resolvedTs,
+		RawKV: &RawKVEntry{CRTs: resolvedTs, OpType: OpTypeResolved, RegionID: regionID},
+		Row:   nil,
 	}
 }
 
@@ -56,29 +49,25 @@ func (e *PolymorphicEvent) RegionID() uint64 {
 	return e.RawKV.RegionID
 }
 
-// SetUpFinishedChan creates an internal channel to support PrepareFinished and WaitPrepare
-func (e *PolymorphicEvent) SetUpFinishedChan() {
-	if e.finished == nil {
-		e.finished = make(chan struct{})
-	}
-}
+// ComparePolymorphicEvents compares two events by CRTs, Resolved, StartTs, Delete/Put order.
+// It returns true if and only if i should precede j.
+func ComparePolymorphicEvents(i, j *PolymorphicEvent) bool {
+	if i.CRTs == j.CRTs {
+		if i.RawKV.OpType == OpTypeResolved {
+			return false
+		} else if j.RawKV.OpType == OpTypeResolved {
+			return true
+		}
 
-// PrepareFinished marks the prepare process is finished
-// In prepare process, Mounter will translate raw KV to row data
-func (e *PolymorphicEvent) PrepareFinished() {
-	if e.finished != nil {
-		close(e.finished)
-	}
-}
+		if i.StartTs > j.StartTs {
+			return false
+		} else if i.StartTs < j.StartTs {
+			return true
+		}
 
-// WaitPrepare waits for prepare process finished
-func (e *PolymorphicEvent) WaitPrepare(ctx context.Context) error {
-	if e.finished != nil {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-e.finished:
+		if i.RawKV.OpType == OpTypeDelete && j.RawKV.OpType != OpTypeDelete {
+			return true
 		}
 	}
-	return nil
+	return i.CRTs < j.CRTs
 }

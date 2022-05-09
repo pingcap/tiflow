@@ -24,9 +24,10 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tidb-tools/pkg/dbutil"
 	"github.com/pingcap/tidb/parser/model"
 	tidbmysql "github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tidb/util/dbutil"
+	"github.com/pingcap/tidb/util/filter"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
@@ -35,12 +36,13 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/syncer/dbconn"
+	"github.com/pingcap/tiflow/pkg/sqlmodel"
 )
 
 const (
 	workerChannelSize = 1000
 
-	maxBatchSize = 100 // todo: choose a proper value, or configurable?
+	MaxAccumulatedRowBeforeValidate = 1000 // todo: make it configurable
 )
 
 type validateFailedType int
@@ -54,38 +56,49 @@ const (
 type validateFailedRow struct {
 	tp      validateFailedType
 	dstData []*sql.NullString
+
+	srcJob *rowValidationJob
 }
 
 type validateWorker struct {
-	cfg               config.ValidatorConfig
-	ctx               context.Context
-	interval          time.Duration
-	validator         *DataValidator
-	L                 log.Logger
-	conn              *dbconn.DBConn
-	rowChangeCh       chan *rowChange
-	pendingChangesMap map[string]*tableChange
-	pendingRowCount   atomic.Int64
-	batchSize         int
 	sync.Mutex
+	cfg                config.ValidatorConfig
+	ctx                context.Context
+	interval           time.Duration
+	validator          *DataValidator
+	L                  log.Logger
+	conn               *dbconn.DBConn
+	rowChangeCh        chan *rowValidationJob
+	batchSize          int
+	rowErrorDelayInSec int64
+
+	pendingChangesMap map[string]*tableChangeJob
+	pendingRowCounts  []int64
+	accuRowCount      atomic.Int64 // accumulated row count from channel
+	errorRows         []*validateFailedRow
 }
 
 func newValidateWorker(v *DataValidator, id int) *validateWorker {
 	workerLog := v.L.WithFields(zap.Int("id", id))
+	rowErrorDelayInSec := int64(v.cfg.ValidatorCfg.RowErrorDelay.Duration.Seconds())
 	return &validateWorker{
-		cfg:               v.cfg.ValidatorCfg,
-		ctx:               v.ctx,
-		interval:          v.validateInterval,
-		validator:         v,
-		L:                 workerLog,
-		conn:              v.toDBConns[id],
-		rowChangeCh:       make(chan *rowChange, workerChannelSize),
-		pendingChangesMap: make(map[string]*tableChange),
-		batchSize:         maxBatchSize,
+		cfg:                v.cfg.ValidatorCfg,
+		ctx:                v.ctx,
+		interval:           v.validateInterval,
+		validator:          v,
+		L:                  workerLog,
+		conn:               v.toDBConns[id],
+		rowChangeCh:        make(chan *rowValidationJob, workerChannelSize),
+		batchSize:          v.cfg.ValidatorCfg.BatchQuerySize,
+		rowErrorDelayInSec: rowErrorDelayInSec,
+
+		pendingChangesMap: make(map[string]*tableChangeJob),
+		pendingRowCounts:  make([]int64, rowChangeTypeCount),
 	}
 }
 
 func (vw *validateWorker) run() {
+	validatedBeforeTimer := false
 outer:
 	for {
 		select {
@@ -93,94 +106,147 @@ outer:
 			if !ok {
 				break outer
 			}
-			// todo: limit number of pending rows.
-			// todo: trigger validation when pending rows count reaches a threshold, but we don't want trigger it too often
-			// todo: since it may not reduce the number of pending row changes as the downstream may have changed again,
-			// todo: we need to catchup with the progress of syncer first, so row changes which are changed again can be merged.
-			vw.updateRowChange(change)
-		case <-time.After(vw.interval):
-			err := vw.validateTableChange()
-			if err != nil {
-				// todo: better error handling
-				vw.validator.errChan <- terror.Annotate(err, "failed to validate table change")
+			if change.Tp == flushCheckpoint {
+				// validate before flush to reduce the number of row changes
+				vw.validateTableChange()
+				validatedBeforeTimer = true
+				change.wg.Done()
+				break
 			}
-			// todo: if a row failed too many times, add it to failed changes
+
+			vw.updateRowChange(change)
+			vw.accuRowCount.Add(1)
+			// reduce number of pending rows
+			if vw.accuRowCount.Load() >= MaxAccumulatedRowBeforeValidate {
+				vw.validateTableChange()
+				validatedBeforeTimer = true
+			}
+		case <-time.After(vw.interval):
+			// reduce the number of validation
+			if validatedBeforeTimer {
+				validatedBeforeTimer = false
+				break
+			}
+			vw.validateTableChange()
 		}
 	}
 }
 
-func (vw *validateWorker) updateRowChange(row *rowChange) {
+func (vw *validateWorker) updateRowChange(job *rowValidationJob) {
+	vw.Lock()
+	defer vw.Unlock()
 	// cluster using target table
-	fullTableName := row.table.Target.String()
+	tbl := job.row.GetTargetTable()
+	targetTable := filter.Table{Schema: tbl.Schema, Name: tbl.Table}
+	fullTableName := targetTable.String()
 	change := vw.pendingChangesMap[fullTableName]
 	if change == nil {
 		// no change of this table
-		change = &tableChange{
-			table: row.table,
-			rows:  make(map[string]*rowChange),
-		}
+		change = newTableChangeJob()
 		vw.pendingChangesMap[fullTableName] = change
 	}
-	if val, ok := change.rows[row.key]; ok {
-		val.data = row.data
-		val.tp = row.tp
-		val.lastMeetTS = row.lastMeetTS
-		val.failedCnt = 0 // clear failed count
-	} else {
-		change.rows[row.key] = row
-		vw.pendingRowCount.Inc()
+	if change.addOrUpdate(job) {
+		vw.incrPendingRowCount(job.Tp)
 	}
 }
 
-func (vw *validateWorker) validateTableChange() error {
-	failedChanges := make(map[string]*tableChange)
-	var failedRowCnt int64
+func (vw *validateWorker) validateTableChange() {
+	var err error
+	defer func() {
+		if err != nil {
+			// todo: better error handling
+			vw.validator.sendError(terror.ErrValidatorValidateChange.Delegate(err))
+		}
+	}()
+
+	// clear accumulated row counter
+	vw.accuRowCount.Store(0)
+
+	failedChanges := make(map[string]map[string]*validateFailedRow)
 	for k, tblChange := range vw.pendingChangesMap {
-		var insertUpdateChanges, deleteChanges []*rowChange
-		for _, r := range tblChange.rows {
-			if r.tp == rowDeleted {
+		var insertUpdateChanges, deleteChanges []*rowValidationJob
+		for _, r := range tblChange.jobs {
+			if r.Tp == rowDeleted {
 				deleteChanges = append(deleteChanges, r)
 			} else {
 				insertUpdateChanges = append(insertUpdateChanges, r)
 			}
 		}
-		rows := make(map[string]*rowChange)
-		if len(insertUpdateChanges) > 0 {
-			failedRows, err := vw.validateRowChanges(tblChange.table, insertUpdateChanges, false)
-			if err != nil {
-				return err
+		allFailedRows := make(map[string]*validateFailedRow)
+		validateFunc := func(rows []*rowValidationJob, isDelete bool) error {
+			if len(rows) == 0 {
+				return nil
 			}
-			// todo: if row failed count > threshold, should mark it as data inconsistent error
-			for pk := range failedRows {
-				rows[pk] = tblChange.rows[pk]
-				rows[pk].failedCnt++
+			failedRows, err2 := vw.validateRowChanges(rows, isDelete)
+			if err2 != nil {
+				return err2
 			}
+			for key, val := range failedRows {
+				allFailedRows[key] = val
+			}
+			return nil
 		}
-		if len(deleteChanges) > 0 {
-			failedRows, err := vw.validateRowChanges(tblChange.table, deleteChanges, true)
-			if err != nil {
-				return err
-			}
-			for pk := range failedRows {
-				rows[pk] = tblChange.rows[pk]
-				rows[pk].failedCnt++
-			}
+		if err = validateFunc(insertUpdateChanges, false); err != nil {
+			return
 		}
-		if len(rows) > 0 {
-			failedChanges[k] = &tableChange{
-				table: tblChange.table,
-				rows:  rows,
-			}
-			failedRowCnt += int64(len(rows))
+		if err = validateFunc(deleteChanges, true); err != nil {
+			return
+		}
+		if len(allFailedRows) > 0 {
+			failedChanges[k] = allFailedRows
 		}
 	}
-	vw.L.Debug("pending row count", zap.Int64("before", vw.pendingRowCount.Load()), zap.Int64("after", failedRowCnt))
-	vw.pendingRowCount.Store(failedRowCnt)
-	vw.pendingChangesMap = failedChanges
-	return nil
+
+	vw.updatePendingAndErrorRows(failedChanges)
 }
 
-func (vw *validateWorker) validateRowChanges(table *validateTableInfo, rows []*rowChange, deleteChange bool) (map[string]*validateFailedRow, error) {
+func (vw *validateWorker) updatePendingAndErrorRows(failedChanges map[string]map[string]*validateFailedRow) {
+	vw.Lock()
+	defer vw.Unlock()
+
+	newPendingCnt := make([]int64, rowChangeTypeCount)
+	allErrorRows := make([]*validateFailedRow, 0)
+	newPendingChanges := make(map[string]*tableChangeJob)
+	validateTS := time.Now().Unix()
+	for tblKey, rows := range failedChanges {
+		tblChange := vw.pendingChangesMap[tblKey]
+		newPendingRows := make(map[string]*rowValidationJob)
+		for pk, row := range rows {
+			job := tblChange.jobs[pk]
+			if vw.validator.hasReachedSyncer() {
+				job.FailedCnt++
+				if job.FirstValidateTS == 0 {
+					job.FirstValidateTS = validateTS
+				}
+
+				if validateTS-job.FirstValidateTS >= vw.rowErrorDelayInSec {
+					row.srcJob = job
+					allErrorRows = append(allErrorRows, row)
+				} else {
+					newPendingRows[pk] = job
+					newPendingCnt[job.Tp]++
+				}
+			} else {
+				newPendingRows[pk] = job
+				newPendingCnt[job.Tp]++
+			}
+		}
+		if len(newPendingRows) > 0 {
+			newPendingChanges[tblKey] = &tableChangeJob{
+				jobs: newPendingRows,
+			}
+		}
+	}
+
+	vw.L.Debug("pending row count (insert, update, delete)", zap.Int64s("before", vw.pendingRowCounts),
+		zap.Int64s("after", newPendingCnt))
+	vw.setPendingRowCounts(newPendingCnt)
+	vw.pendingChangesMap = newPendingChanges
+	vw.errorRows = append(vw.errorRows, allErrorRows...)
+	vw.validator.incrErrorRowCount(len(allErrorRows))
+}
+
+func (vw *validateWorker) validateRowChanges(rows []*rowValidationJob, deleteChange bool) (map[string]*validateFailedRow, error) {
 	res := make(map[string]*validateFailedRow)
 	for start := 0; start < len(rows); start += vw.batchSize {
 		end := start + vw.batchSize
@@ -188,7 +254,7 @@ func (vw *validateWorker) validateRowChanges(table *validateTableInfo, rows []*r
 			end = len(rows)
 		}
 		batch := rows[start:end]
-		failedRows, err := vw.batchValidateRowChanges(table, batch, deleteChange)
+		failedRows, err := vw.batchValidateRowChanges(batch, deleteChange)
 		if err != nil {
 			return nil, err
 		}
@@ -199,15 +265,28 @@ func (vw *validateWorker) validateRowChanges(table *validateTableInfo, rows []*r
 	return res, nil
 }
 
-func (vw *validateWorker) batchValidateRowChanges(table *validateTableInfo, rows []*rowChange, deleteChange bool) (map[string]*validateFailedRow, error) {
+func (vw *validateWorker) getPendingChangesMap() map[string]*tableChangeJob {
+	vw.Lock()
+	defer vw.Unlock()
+	return vw.pendingChangesMap
+}
+
+func (vw *validateWorker) getErrorRows() []*validateFailedRow {
+	vw.Lock()
+	defer vw.Unlock()
+	return vw.errorRows
+}
+
+func (vw *validateWorker) batchValidateRowChanges(rows []*rowValidationJob, deleteChange bool) (map[string]*validateFailedRow, error) {
 	pkValues := make([][]string, 0, len(rows))
 	for _, r := range rows {
-		pkValues = append(pkValues, r.pkValues)
+		pkValues = append(pkValues, r.row.RowStrIdentity())
 	}
-	colCnt := len(rows[0].data)
+	firstRow := rows[0].row
 	cond := &Cond{
-		Table:     table,
-		ColumnCnt: colCnt,
+		TargetTbl: firstRow.TargetTableID(),
+		Columns:   firstRow.SourceTableInfo().Columns,
+		PK:        firstRow.UniqueNotNullIdx(),
 		PkValues:  pkValues,
 	}
 	var failedRows map[string]*validateFailedRow
@@ -237,7 +316,7 @@ func (vw *validateWorker) validateDeletedRows(cond *Cond) (map[string]*validateF
 	return failedRows, nil
 }
 
-func (vw *validateWorker) validateInsertAndUpdateRows(rows []*rowChange, cond *Cond) (map[string]*validateFailedRow, error) {
+func (vw *validateWorker) validateInsertAndUpdateRows(rows []*rowValidationJob, cond *Cond) (map[string]*validateFailedRow, error) {
 	failedRows := make(map[string]*validateFailedRow)
 	sourceRows := getSourceRowsForCompare(rows)
 	targetRows, err := vw.getTargetRows(cond)
@@ -250,7 +329,7 @@ func (vw *validateWorker) validateInsertAndUpdateRows(rows []*rowChange, cond *C
 		vw.L.Debug("more data on downstream, may come from other client")
 	}
 
-	tableInfo := cond.Table.Info
+	tableInfo := rows[0].row.SourceTableInfo()
 	for key, sourceRow := range sourceRows {
 		targetRow, ok := targetRows[key]
 		if !ok {
@@ -259,9 +338,9 @@ func (vw *validateWorker) validateInsertAndUpdateRows(rows []*rowChange, cond *C
 		}
 		if vw.cfg.Mode == config.ValidationFull {
 			// only compare the whole row in full mode
-			eq, err := vw.compareData(sourceRow, targetRow, tableInfo.Columns[:cond.ColumnCnt])
-			if err != nil {
-				return nil, err
+			eq, err2 := vw.compareData(sourceRow, targetRow, tableInfo.Columns)
+			if err2 != nil {
+				return nil, err2
 			}
 			if !eq {
 				failedRows[key] = &validateFailedRow{tp: rowDifferent, dstData: targetRow}
@@ -300,16 +379,14 @@ func (vw *validateWorker) compareData(sourceData, targetData []*sql.NullString, 
 }
 
 func (vw *validateWorker) getTargetRows(cond *Cond) (map[string][]*sql.NullString, error) {
-	tctx := tcontext.NewContext(vw.ctx, log.L())
-	fullTableName := cond.Table.Target.String()
-	columnNames := make([]string, 0, cond.ColumnCnt)
-	for i := 0; i < cond.ColumnCnt; i++ {
-		col := cond.Table.Info.Columns[i]
+	tctx := tcontext.NewContext(vw.ctx, vw.L)
+	columnNames := make([]string, 0, len(cond.Columns))
+	for _, col := range cond.Columns {
 		columnNames = append(columnNames, dbutil.ColumnName(col.Name.O))
 	}
 	columns := strings.Join(columnNames, ", ")
 	rowsQuery := fmt.Sprintf("SELECT /*!40001 SQL_NO_CACHE */ %s FROM %s WHERE %s",
-		columns, fullTableName, cond.GetWhere())
+		columns, cond.TargetTbl, cond.GetWhere())
 	rows, err := vw.conn.QuerySQL(tctx, rowsQuery, cond.GetArgs()...)
 	if err != nil {
 		return nil, err
@@ -322,11 +399,12 @@ func (vw *validateWorker) getTargetRows(cond *Cond) (map[string][]*sql.NullStrin
 		if err != nil {
 			return nil, err
 		}
-		pkValues := make([]string, 0, len(cond.Table.pkIndices))
-		for _, idx := range cond.Table.pkIndices {
-			pkValues = append(pkValues, rowData[idx].String)
+		pkCols := cond.PK.Columns
+		pkValues := make([]string, 0, len(pkCols))
+		for _, col := range pkCols {
+			pkValues = append(pkValues, rowData[col.Offset].String)
 		}
-		pk := genRowKey(pkValues)
+		pk := genRowKeyByString(pkValues)
 		result[pk] = rowData
 	}
 	return result, rows.Err()
@@ -334,6 +412,25 @@ func (vw *validateWorker) getTargetRows(cond *Cond) (map[string][]*sql.NullStrin
 
 func (vw *validateWorker) close() {
 	close(vw.rowChangeCh)
+}
+
+func (vw *validateWorker) resetErrorRows() {
+	vw.Lock()
+	defer vw.Unlock()
+	vw.errorRows = make([]*validateFailedRow, 0)
+}
+
+func (vw *validateWorker) incrPendingRowCount(tp rowChangeJobType) {
+	vw.pendingRowCounts[tp]++
+	vw.validator.addPendingRowCount(tp, 1)
+}
+
+func (vw *validateWorker) setPendingRowCounts(newCounts []int64) {
+	for tp, val := range newCounts {
+		diff := val - vw.pendingRowCounts[tp]
+		vw.pendingRowCounts[tp] = val
+		vw.validator.addPendingRowCount(rowChangeJobType(tp), diff)
+	}
 }
 
 func scanRow(rows *sql.Rows) ([]*sql.NullString, error) {
@@ -364,21 +461,23 @@ func scanRow(rows *sql.Rows) ([]*sql.NullString, error) {
 	return result, nil
 }
 
-func getSourceRowsForCompare(rows []*rowChange) map[string][]*sql.NullString {
-	rowMap := make(map[string][]*sql.NullString, len(rows))
-	for _, r := range rows {
-		colValues := make([]*sql.NullString, len(r.data))
-		for i := range r.data {
+func getSourceRowsForCompare(jobs []*rowValidationJob) map[string][]*sql.NullString {
+	rowMap := make(map[string][]*sql.NullString, len(jobs))
+	for _, j := range jobs {
+		r := j.row
+		colValues := make([]*sql.NullString, r.ColumnCount())
+		rowValues := r.RowValues()
+		for i := range rowValues {
 			var colData string
-			if r.data[i] != nil {
-				colData = genColData(r.data[i])
+			if rowValues[i] != nil {
+				colData = sqlmodel.ColValAsStr(rowValues[i])
 			}
 			colValues[i] = &sql.NullString{
 				String: colData,
-				Valid:  r.data[i] != nil,
+				Valid:  rowValues[i] != nil,
 			}
 		}
-		rowMap[r.key] = colValues
+		rowMap[j.Key] = colValues
 	}
 	return rowMap
 }

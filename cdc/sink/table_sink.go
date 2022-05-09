@@ -75,7 +75,7 @@ func (t *tableSink) FlushRowChangedEvents(ctx context.Context, tableID model.Tab
 
 	err := t.manager.bufSink.EmitRowChangedEvents(ctx, resolvedRows...)
 	if err != nil {
-		return t.manager.getCheckpointTs(tableID), errors.Trace(err)
+		return 0, errors.Trace(err)
 	}
 	return t.flushResolvedTs(ctx, resolvedTs)
 }
@@ -83,12 +83,17 @@ func (t *tableSink) FlushRowChangedEvents(ctx context.Context, tableID model.Tab
 func (t *tableSink) flushResolvedTs(ctx context.Context, resolvedTs uint64) (uint64, error) {
 	redoTs, err := t.flushRedoLogs(ctx, resolvedTs)
 	if err != nil {
-		return t.manager.getCheckpointTs(t.tableID), err
+		return 0, errors.Trace(err)
 	}
 	if redoTs < resolvedTs {
 		resolvedTs = redoTs
 	}
-	return t.manager.flushBackendSink(ctx, t.tableID, resolvedTs)
+
+	checkpointTs, err := t.manager.bufSink.FlushRowChangedEvents(ctx, t.tableID, resolvedTs)
+	if err != nil {
+		return 0, errors.Trace(err)
+	}
+	return checkpointTs, nil
 }
 
 // flushRedoLogs flush redo logs and returns redo log resolved ts which means
@@ -107,6 +112,11 @@ func (t *tableSink) flushRedoLogs(ctx context.Context, resolvedTs uint64) (uint6
 func (t *tableSink) EmitCheckpointTs(_ context.Context, _ uint64, _ []model.TableName) error {
 	// the table sink doesn't receive the checkpoint event
 	return nil
+}
+
+// Init table sink resources
+func (t *tableSink) Init(tableID model.TableID) error {
+	return t.manager.bufSink.Init(tableID)
 }
 
 // Close once the method is called, no more events can be written to this table sink

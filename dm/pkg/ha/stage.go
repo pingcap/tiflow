@@ -16,6 +16,7 @@ package ha
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 
 	"go.etcd.io/etcd/api/v3/mvccpb"
 	clientv3 "go.etcd.io/etcd/client/v3"
@@ -75,7 +76,7 @@ func (s Stage) String() string {
 func (s Stage) toJSON() (string, error) {
 	data, err := json.Marshal(s)
 	if err != nil {
-		return "", err
+		return "", terror.ErrHAInvalidItem.Delegate(err, fmt.Sprintf("failed to marshal stage %+v", s))
 	}
 	return string(data), nil
 }
@@ -88,7 +89,9 @@ func (s Stage) IsEmpty() bool {
 
 // stageFromJSON constructs Stage from its JSON represent.
 func stageFromJSON(str string) (s Stage, err error) {
-	err = json.Unmarshal([]byte(str), &s)
+	if err = json.Unmarshal([]byte(str), &s); err != nil {
+		err = terror.ErrHAInvalidItem.Delegate(err, fmt.Sprintf("failed to unmarshal stage %s", str))
+	}
 	return
 }
 
@@ -99,13 +102,13 @@ func PutRelayStage(cli *clientv3.Client, stages ...Stage) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	_, rev, err := etcdutil.DoOpsInOneTxnWithRetry(cli, ops...)
+	_, rev, err := etcdutil.DoTxnWithRepeatable(cli, etcdutil.ThenOpFunc(ops...))
 	return rev, err
 }
 
 // DeleteRelayStage deleted the relay stage of this source.
 func DeleteRelayStage(cli *clientv3.Client, source string) (int64, error) {
-	_, rev, err := etcdutil.DoOpsInOneTxnWithRetry(cli, deleteRelayStageOp(source))
+	_, rev, err := etcdutil.DoTxnWithRepeatable(cli, etcdutil.ThenOpFunc(deleteRelayStageOp(source)))
 	return rev, err
 }
 
@@ -116,7 +119,7 @@ func PutSubTaskStage(cli *clientv3.Client, stages ...Stage) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	_, rev, err := etcdutil.DoOpsInOneTxnWithRetry(cli, ops...)
+	_, rev, err := etcdutil.DoTxnWithRepeatable(cli, etcdutil.ThenOpFunc(ops...))
 	return rev, err
 }
 
@@ -129,7 +132,7 @@ func GetRelayStage(cli *clientv3.Client, source string) (Stage, int64, error) {
 	var stage Stage
 	resp, err := cli.Get(ctx, common.StageRelayKeyAdapter.Encode(source))
 	if err != nil {
-		return stage, 0, err
+		return stage, 0, terror.ErrHAFailTxnOperation.Delegate(err, "failed to get relay stage for source %s", source)
 	}
 
 	if resp.Count == 0 {
@@ -156,7 +159,7 @@ func GetAllRelayStage(cli *clientv3.Client) (map[string]Stage, int64, error) {
 
 	resp, err := cli.Get(ctx, common.StageRelayKeyAdapter.Path(), clientv3.WithPrefix())
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, terror.ErrHAFailTxnOperation.Delegate(err, "failed to get all relay stages")
 	}
 
 	stages := make(map[string]Stage)
@@ -200,7 +203,7 @@ func getStageByKey(cli *clientv3.Client, key common.KeyAdapter, source, task str
 	}
 
 	if err != nil {
-		return stm, 0, err
+		return stm, 0, terror.ErrHAFailTxnOperation.Delegate(err, "failed to get subtask stage for source %s, task %s", source, task)
 	}
 
 	stages, err := getStagesFromResp(source, task, resp)
@@ -228,7 +231,7 @@ func getAllStagesInner(cli *clientv3.Client, key common.KeyAdapter) (map[string]
 
 	resp, err := cli.Get(ctx, key.Path(), clientv3.WithPrefix())
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, terror.ErrHAFailTxnOperation.Delegate(err, "failed to get all subtask stages")
 	}
 
 	stages, err := getStagesFromResp("", "", resp)
@@ -252,10 +255,10 @@ func GetSubTaskStageConfig(cli *clientv3.Client, source string) (map[string]Stag
 		validatorStageMap = make(map[string]Stage)
 		scm               = make(map[string]config.SubTaskConfig)
 	)
-	txnResp, rev, err := etcdutil.DoOpsInOneTxnWithRetry(cli,
+	txnResp, rev, err := etcdutil.DoTxnWithRepeatable(cli, etcdutil.ThenOpFunc(
 		clientv3.OpGet(common.StageSubTaskKeyAdapter.Encode(source), clientv3.WithPrefix()),
 		clientv3.OpGet(common.StageValidatorKeyAdapter.Encode(source), clientv3.WithPrefix()),
-		clientv3.OpGet(common.UpstreamSubTaskKeyAdapter.Encode(source), clientv3.WithPrefix()))
+		clientv3.OpGet(common.UpstreamSubTaskKeyAdapter.Encode(source), clientv3.WithPrefix())))
 	if err != nil {
 		return stm, validatorStageMap, scm, 0, err
 	}
@@ -286,7 +289,8 @@ func GetSubTaskStageConfig(cli *clientv3.Client, source string) (map[string]Stag
 // WatchRelayStage watches PUT & DELETE operations for the relay stage.
 // for the DELETE stage, it returns an empty stage.
 func WatchRelayStage(ctx context.Context, cli *clientv3.Client,
-	source string, revision int64, outCh chan<- Stage, errCh chan<- error) {
+	source string, revision int64, outCh chan<- Stage, errCh chan<- error,
+) {
 	wCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	ch := cli.Watch(wCtx, common.StageRelayKeyAdapter.Encode(source), clientv3.WithRev(revision))
@@ -296,7 +300,8 @@ func WatchRelayStage(ctx context.Context, cli *clientv3.Client,
 // WatchSubTaskStage watches PUT & DELETE operations for the subtask stage.
 // for the DELETE stage, it returns an empty stage.
 func WatchSubTaskStage(ctx context.Context, cli *clientv3.Client,
-	source string, revision int64, outCh chan<- Stage, errCh chan<- error) {
+	source string, revision int64, outCh chan<- Stage, errCh chan<- error,
+) {
 	wCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	ch := cli.Watch(wCtx, common.StageSubTaskKeyAdapter.Encode(source), clientv3.WithPrefix(), clientv3.WithRev(revision))
@@ -304,7 +309,8 @@ func WatchSubTaskStage(ctx context.Context, cli *clientv3.Client,
 }
 
 func WatchValidatorStage(ctx context.Context, cli *clientv3.Client,
-	source string, rev int64, outCh chan<- Stage, errCh chan<- error) {
+	source string, rev int64, outCh chan<- Stage, errCh chan<- error,
+) {
 	wCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	ch := cli.Watch(wCtx, common.StageValidatorKeyAdapter.Encode(source), clientv3.WithPrefix(), clientv3.WithRev(rev))
@@ -314,7 +320,7 @@ func WatchValidatorStage(ctx context.Context, cli *clientv3.Client,
 // DeleteSubTaskStage deletes the subtask stage.
 func DeleteSubTaskStage(cli *clientv3.Client, stages ...Stage) (int64, error) {
 	ops := deleteSubTaskStageOp(stages...)
-	_, rev, err := etcdutil.DoOpsInOneTxnWithRetry(cli, ops...)
+	_, rev, err := etcdutil.DoTxnWithRepeatable(cli, etcdutil.ThenOpFunc(ops...))
 	return rev, err
 }
 
@@ -382,7 +388,8 @@ func getStagesFromResp(source, task string, resp *clientv3.GetResponse) (map[str
 // watchStage watches PUT & DELETE operations for the stage.
 // nolint:dupl
 func watchStage(ctx context.Context, watchCh clientv3.WatchChan,
-	stageFromKey func(key string) (Stage, error), outCh chan<- Stage, errCh chan<- error) {
+	stageFromKey func(key string) (Stage, error), outCh chan<- Stage, errCh chan<- error,
+) {
 	for {
 		select {
 		case <-ctx.Done():
@@ -395,7 +402,7 @@ func watchStage(ctx context.Context, watchCh clientv3.WatchChan,
 				// TODO(csuzhangxc): do retry here.
 				if resp.Err() != nil {
 					select {
-					case errCh <- resp.Err():
+					case errCh <- terror.ErrHAFailWatchEtcd.Delegate(resp.Err(), "watch stage canceled"):
 					case <-ctx.Done():
 					}
 				}

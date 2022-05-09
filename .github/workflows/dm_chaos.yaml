@@ -305,9 +305,3 @@ jobs:
         uses: Ilshidur/action-slack@2.1.0
         with:
           args: "chaos job failed, see https://github.com/pingcap/tiflow/actions/runs/{{ GITHUB_RUN_ID }}"
-
-      # Debug via SSH if previous steps failed
-      - name: Set up tmate session
-        if: ${{ failure() }}
-        uses: mxschmitt/action-tmate@v3
-        timeout-minutes: 15

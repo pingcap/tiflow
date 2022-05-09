@@ -17,11 +17,13 @@ import (
 	"context"
 	"sync"
 
-	filter "github.com/pingcap/tidb-tools/pkg/table-filter"
 	"github.com/pingcap/tidb/parser/model"
+	filter "github.com/pingcap/tidb/util/table-filter"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/zap"
 
+	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
+	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/shardddl/optimism"
 )
@@ -101,7 +103,8 @@ func (o *Optimist) Reset() {
 
 // ConstructInfo constructs a shard DDL info.
 func (o *Optimist) ConstructInfo(upSchema, upTable, downSchema, downTable string,
-	ddls []string, tiBefore *model.TableInfo, tisAfter []*model.TableInfo) optimism.Info {
+	ddls []string, tiBefore *model.TableInfo, tisAfter []*model.TableInfo,
+) optimism.Info {
 	return optimism.NewInfo(o.task, o.source, upSchema, upTable, downSchema, downTable, ddls, tiBefore, tisAfter)
 }
 
@@ -158,7 +161,10 @@ func (o *Optimist) GetOperation(ctx context.Context, info optimism.Info, rev int
 // DoneOperation marks the shard DDL lock operation as done.
 func (o *Optimist) DoneOperation(op optimism.Operation) error {
 	op.Done = true
-	_, _, err := optimism.PutOperation(o.cli, false, op, 0)
+	_, _, err := etcdutil.DoTxnWithRepeatable(o.cli, func(_ *tcontext.Context, cli *clientv3.Client) (interface{}, error) {
+		_, _, err := optimism.PutOperation(cli, false, op, 0)
+		return nil, err
+	})
 	if err != nil {
 		return err
 	}

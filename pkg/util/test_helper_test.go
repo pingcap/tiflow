@@ -20,20 +20,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pingcap/check"
-	"github.com/pingcap/tiflow/pkg/util/testleak"
+	"github.com/stretchr/testify/require"
 )
 
-func Test(t *testing.T) {
-	check.TestingT(t)
-}
-
-type testHelperSuite struct{}
-
-var _ = check.Suite(&testHelperSuite{})
-
-func (s *testHelperSuite) TestWaitSomething(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestWaitSomething(t *testing.T) {
 	var (
 		backoff  = 10
 		waitTime = 10 * time.Millisecond
@@ -45,8 +35,8 @@ func (s *testHelperSuite) TestWaitSomething(c *check.C) {
 		count++
 		return false
 	}
-	c.Assert(WaitSomething(backoff, waitTime, f1), check.IsFalse)
-	c.Assert(count, check.Equals, backoff)
+	require.False(t, WaitSomething(backoff, waitTime, f1))
+	require.Equal(t, backoff, count)
 
 	count = 0 // reset
 	// wait success
@@ -54,13 +44,11 @@ func (s *testHelperSuite) TestWaitSomething(c *check.C) {
 		count++
 		return count >= 5
 	}
-
-	c.Assert(WaitSomething(backoff, waitTime, f2), check.IsTrue)
-	c.Assert(count, check.Equals, 5)
+	require.True(t, WaitSomething(backoff, waitTime, f2))
+	require.Equal(t, 5, count)
 }
 
-func (s *testHelperSuite) TestHandleErr(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestHandleErr(t *testing.T) {
 	var (
 		ctx, cancel = context.WithCancel(context.Background())
 		errCh       = make(chan error)
@@ -70,7 +58,7 @@ func (s *testHelperSuite) TestHandleErr(c *check.C) {
 	for i := 0; i < 5; i++ {
 		errCh <- errors.New("test error")
 	}
-	c.Assert(WaitSomething(5, time.Millisecond*10, func() bool { return atomic.LoadInt32(&count) == int32(5) }), check.IsTrue)
+	require.True(t, WaitSomething(5, time.Millisecond*10, func() bool { return atomic.LoadInt32(&count) == int32(5) }))
 	cancel()
-	c.Assert(errg.Wait(), check.IsNil)
+	require.Nil(t, errg.Wait())
 }

@@ -282,6 +282,8 @@ function run() {
 	check_task_wrong_start_time_format $cur/conf/dm-task3.yaml
 	check_task_not_pass $cur/conf/dm-task2.yaml
 	check_task_error_count $cur/conf/dm-task3.yaml
+	check_task_not_pass_with_message $cur/conf/dm-task5.yaml "please use \`shard-mode\` only."
+	start_task_not_pass_with_message $cur/conf/dm-task5.yaml "please use \`shard-mode\` only."
 
 	echo "check_task_optimistic"
 	check_task_pass $cur/conf/dm-task4.yaml
@@ -294,6 +296,11 @@ function run() {
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"stop-task $cur/conf/only_warning.yaml" \
 		"\"result\": true" 2
+
+	echo "check task with empty unit config"
+	check_task_empty_config $cur/conf/empty-unit-task.yaml
+	echo "start task with empty unit config"
+	start_task_empty_config $cur/conf/empty-unit-task.yaml
 
 	cp $cur/conf/dm-task.yaml $WORK_DIR/dm-task-error-database-config.yaml
 	sed -i "s/password: \"\"/password: \"wrond password\"/g" $WORK_DIR/dm-task-error-database-config.yaml

@@ -48,21 +48,6 @@ func TestAdminJobType(t *testing.T) {
 	}
 }
 
-func TestDDLStateString(t *testing.T) {
-	t.Parallel()
-
-	names := map[ChangeFeedDDLState]string{
-		ChangeFeedSyncDML:          "SyncDML",
-		ChangeFeedWaitToExecDDL:    "WaitToExecDDL",
-		ChangeFeedExecDDL:          "ExecDDL",
-		ChangeFeedDDLExecuteFailed: "DDLExecuteFailed",
-		ChangeFeedDDLState(100):    "Unknown",
-	}
-	for state, name := range names {
-		require.Equal(t, name, state.String())
-	}
-}
-
 func TestTaskPositionMarshal(t *testing.T) {
 	t.Parallel()
 
@@ -218,7 +203,7 @@ func TestProcSnapshot(t *testing.T) {
 			10: {StartTs: 100},
 		},
 	}
-	cfID := "changefeed-1"
+	cfID := DefaultChangeFeedID("changefeed-1")
 	captureID := "capture-1"
 	snap := info.Snapshot(cfID, captureID, 200)
 	require.Equal(t, cfID, snap.CfID)
