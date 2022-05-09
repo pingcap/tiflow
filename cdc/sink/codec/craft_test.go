@@ -14,39 +14,32 @@
 package codec
 
 import (
-	"github.com/pingcap/check"
+	"testing"
+
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/util/timeutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
-	"github.com/pingcap/tiflow/pkg/util/testleak"
+	"github.com/stretchr/testify/require"
 )
 
-type craftBatchSuite struct {
-	rowCases        [][]*model.RowChangedEvent
-	ddlCases        [][]*model.DDLEvent
-	resolvedTsCases [][]uint64
-}
-
-var _ = check.Suite(&craftBatchSuite{
-	rowCases:        codecRowCases,
-	ddlCases:        codecDDLCases,
-	resolvedTsCases: codecResolvedTSCases,
-})
-
-func (s *craftBatchSuite) testBatchCodec(c *check.C, encoderBuilder EncoderBuilder, newDecoder func(value []byte) (EventBatchDecoder, error)) {
+func testBatchCodec(
+	t *testing.T,
+	encoderBuilder EncoderBuilder,
+	newDecoder func(value []byte) (EventBatchDecoder, error),
+) {
 	checkRowDecoder := func(decoder EventBatchDecoder, cs []*model.RowChangedEvent) {
 		index := 0
 		for {
 			tp, hasNext, err := decoder.HasNext()
-			c.Assert(err, check.IsNil)
+			require.Nil(t, err)
 			if !hasNext {
 				break
 			}
-			c.Assert(tp, check.Equals, model.MqMessageTypeRow)
+			require.Equal(t, model.MqMessageTypeRow, tp)
 			row, err := decoder.NextRowChangedEvent()
-			c.Assert(err, check.IsNil)
-			c.Assert(row, check.DeepEquals, cs[index])
+			require.Nil(t, err)
+			require.Equal(t, cs[index], row)
 			index++
 		}
 	}
@@ -54,14 +47,14 @@ func (s *craftBatchSuite) testBatchCodec(c *check.C, encoderBuilder EncoderBuild
 		index := 0
 		for {
 			tp, hasNext, err := decoder.HasNext()
-			c.Assert(err, check.IsNil)
+			require.Nil(t, err)
 			if !hasNext {
 				break
 			}
-			c.Assert(tp, check.Equals, model.MqMessageTypeDDL)
+			require.Equal(t, model.MqMessageTypeDDL, tp)
 			ddl, err := decoder.NextDDLEvent()
-			c.Assert(err, check.IsNil)
-			c.Assert(ddl, check.DeepEquals, cs[index])
+			require.Nil(t, err)
+			require.Equal(t, cs[index], ddl)
 			index++
 		}
 	}
@@ -69,32 +62,34 @@ func (s *craftBatchSuite) testBatchCodec(c *check.C, encoderBuilder EncoderBuild
 		index := 0
 		for {
 			tp, hasNext, err := decoder.HasNext()
-			c.Assert(err, check.IsNil)
+			require.Nil(t, err)
 			if !hasNext {
 				break
 			}
-			c.Assert(tp, check.Equals, model.MqMessageTypeResolved)
+			require.Equal(t, model.MqMessageTypeResolved, tp)
 			ts, err := decoder.NextResolvedEvent()
-			c.Assert(err, check.IsNil)
-			c.Assert(ts, check.DeepEquals, cs[index])
+			require.Nil(t, err)
+			require.Equal(t, cs[index], ts)
 			index++
 		}
 	}
 
 	encoder := encoderBuilder.Build()
+	s := NewDefaultBatchTester()
+
 	for _, cs := range s.rowCases {
 		events := 0
 		for _, row := range cs {
 			err := encoder.AppendRowChangedEvent(row)
 			events++
-			c.Assert(err, check.IsNil)
+			require.Nil(t, err)
 		}
 		// test normal decode
 		if len(cs) > 0 {
 			res := encoder.Build()
-			c.Assert(res, check.HasLen, 1)
+			require.Len(t, res, 1)
 			decoder, err := newDecoder(res[0].Value)
-			c.Assert(err, check.IsNil)
+			require.Nil(t, err)
 			checkRowDecoder(decoder, cs)
 		}
 	}
@@ -103,10 +98,10 @@ func (s *craftBatchSuite) testBatchCodec(c *check.C, encoderBuilder EncoderBuild
 	for _, cs := range s.ddlCases {
 		for i, ddl := range cs {
 			msg, err := encoder.EncodeDDLEvent(ddl)
-			c.Assert(err, check.IsNil)
-			c.Assert(msg, check.NotNil)
+			require.Nil(t, err)
+			require.NotNil(t, msg)
 			decoder, err := newDecoder(msg.Value)
-			c.Assert(err, check.IsNil)
+			require.Nil(t, err)
 			checkDDLDecoder(decoder, cs[i:i+1])
 		}
 	}
@@ -115,17 +110,17 @@ func (s *craftBatchSuite) testBatchCodec(c *check.C, encoderBuilder EncoderBuild
 	for _, cs := range s.resolvedTsCases {
 		for i, ts := range cs {
 			msg, err := encoder.EncodeCheckpointEvent(ts)
-			c.Assert(err, check.IsNil)
-			c.Assert(msg, check.NotNil)
+			require.Nil(t, err)
+			require.NotNil(t, msg)
 			decoder, err := newDecoder(msg.Value)
-			c.Assert(err, check.IsNil)
+			require.Nil(t, err)
 			checkTSDecoder(decoder, cs[i:i+1])
 		}
 	}
 }
 
-func (s *craftBatchSuite) TestMaxMessageBytes(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestCraftMaxMessageBytes(t *testing.T) {
+	t.Parallel()
 	config := NewConfig(config.ProtocolCraft, timeutil.SystemLocation()).WithMaxMessageBytes(256)
 	encoder := newCraftEventBatchEncoderBuilder(config).Build()
 
@@ -137,17 +132,17 @@ func (s *craftBatchSuite) TestMaxMessageBytes(c *check.C) {
 
 	for i := 0; i < 10000; i++ {
 		err := encoder.AppendRowChangedEvent(testEvent)
-		c.Check(err, check.IsNil)
+		require.Nil(t, err)
 	}
 
 	messages := encoder.Build()
 	for _, msg := range messages {
-		c.Assert(msg.Length(), check.LessEqual, 256)
+		require.LessOrEqual(t, msg.Length(), 256)
 	}
 }
 
-func (s *craftBatchSuite) TestMaxBatchSize(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestCraftMaxBatchSize(t *testing.T) {
+	t.Parallel()
 	config := NewConfig(config.ProtocolCraft, timeutil.SystemLocation()).WithMaxMessageBytes(10485760)
 	config.maxBatchSize = 64
 	encoder := newCraftEventBatchEncoderBuilder(config).Build()
@@ -160,47 +155,46 @@ func (s *craftBatchSuite) TestMaxBatchSize(c *check.C) {
 
 	for i := 0; i < 10000; i++ {
 		err := encoder.AppendRowChangedEvent(testEvent)
-		c.Check(err, check.IsNil)
+		require.Nil(t, err)
 	}
 
 	messages := encoder.Build()
 	sum := 0
 	for _, msg := range messages {
 		decoder, err := NewCraftEventBatchDecoder(msg.Value)
-		c.Check(err, check.IsNil)
+		require.Nil(t, err)
 		count := 0
 		for {
-			t, hasNext, err := decoder.HasNext()
-			c.Check(err, check.IsNil)
+			v, hasNext, err := decoder.HasNext()
+			require.Nil(t, err)
 			if !hasNext {
 				break
 			}
 
-			c.Check(t, check.Equals, model.MqMessageTypeRow)
+			require.Equal(t, model.MqMessageTypeRow, v)
 			_, err = decoder.NextRowChangedEvent()
-			c.Check(err, check.IsNil)
+			require.Nil(t, err)
 			count++
 		}
-		c.Check(count, check.LessEqual, 64)
+		require.LessOrEqual(t, count, 64)
 		sum += count
 	}
-	c.Check(sum, check.Equals, 10000)
+	require.Equal(t, 10000, sum)
 }
 
-func (s *craftBatchSuite) TestDefaultEventBatchCodec(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestDefaultCraftEventBatchCodec(t *testing.T) {
 	config := NewConfig(config.ProtocolCraft, timeutil.SystemLocation()).WithMaxMessageBytes(8192)
 	config.maxBatchSize = 64
-	s.testBatchCodec(c, newCraftEventBatchEncoderBuilder(config), NewCraftEventBatchDecoder)
+	testBatchCodec(t, newCraftEventBatchEncoderBuilder(config), NewCraftEventBatchDecoder)
 }
 
-func (s *craftBatchSuite) TestBuildCraftEventBatchEncoder(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestBuildCraftEventBatchEncoder(t *testing.T) {
+	t.Parallel()
 	config := NewConfig(config.ProtocolCraft, timeutil.SystemLocation())
 
 	builder := &craftEventBatchEncoderBuilder{config: config}
 	encoder, ok := builder.Build().(*CraftEventBatchEncoder)
-	c.Assert(ok, check.IsTrue)
-	c.Assert(encoder.maxBatchSize, check.Equals, config.maxBatchSize)
-	c.Assert(encoder.maxMessageBytes, check.Equals, config.maxMessageBytes)
+	require.True(t, ok)
+	require.Equal(t, config.maxBatchSize, encoder.maxBatchSize)
+	require.Equal(t, config.maxMessageBytes, encoder.maxMessageBytes)
 }

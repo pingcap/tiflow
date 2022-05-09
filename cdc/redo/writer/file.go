@@ -161,9 +161,12 @@ func NewWriter(ctx context.Context, cfg *FileWriterConfig, opts ...Option) (*Wri
 		uint64buf: make([]byte, 8),
 		storage:   s3storage,
 
-		metricFsyncDuration:    redoFsyncDurationHistogram.WithLabelValues(cfg.ChangeFeedID.ID),
-		metricFlushAllDuration: redoFlushAllDurationHistogram.WithLabelValues(cfg.ChangeFeedID.ID),
-		metricWriteBytes:       redoWriteBytesGauge.WithLabelValues(cfg.ChangeFeedID.ID),
+		metricFsyncDuration: redoFsyncDurationHistogram.
+			WithLabelValues(cfg.ChangeFeedID.Namespace, cfg.ChangeFeedID.ID),
+		metricFlushAllDuration: redoFlushAllDurationHistogram.
+			WithLabelValues(cfg.ChangeFeedID.Namespace, cfg.ChangeFeedID.ID),
+		metricWriteBytes: redoWriteBytesGauge.
+			WithLabelValues(cfg.ChangeFeedID.Namespace, cfg.ChangeFeedID.ID),
 	}
 
 	w.running.Store(true)
@@ -278,9 +281,12 @@ func (w *Writer) Close() error {
 		return nil
 	}
 
-	redoFlushAllDurationHistogram.DeleteLabelValues(w.cfg.ChangeFeedID.ID)
-	redoFsyncDurationHistogram.DeleteLabelValues(w.cfg.ChangeFeedID.ID)
-	redoWriteBytesGauge.DeleteLabelValues(w.cfg.ChangeFeedID.ID)
+	redoFlushAllDurationHistogram.
+		DeleteLabelValues(w.cfg.ChangeFeedID.Namespace, w.cfg.ChangeFeedID.ID)
+	redoFsyncDurationHistogram.
+		DeleteLabelValues(w.cfg.ChangeFeedID.Namespace, w.cfg.ChangeFeedID.ID)
+	redoWriteBytesGauge.
+		DeleteLabelValues(w.cfg.ChangeFeedID.Namespace, w.cfg.ChangeFeedID.ID)
 
 	return w.close()
 }

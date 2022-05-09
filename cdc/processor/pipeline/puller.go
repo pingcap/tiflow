@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/pipeline"
 	pmessage "github.com/pingcap/tiflow/pkg/pipeline/message"
 	"github.com/pingcap/tiflow/pkg/regionspan"
+	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/util"
 	"golang.org/x/sync/errgroup"
 )
@@ -65,10 +66,10 @@ func (n *pullerNode) tableSpan(ctx cdcContext.Context) []regionspan.Span {
 }
 
 func (n *pullerNode) Init(ctx pipeline.NodeContext) error {
-	return n.start(ctx, new(errgroup.Group), false, nil)
+	return n.start(ctx, nil, new(errgroup.Group), false, nil)
 }
 
-func (n *pullerNode) start(ctx pipeline.NodeContext, wg *errgroup.Group, isActorMode bool, sorter *sorterNode) error {
+func (n *pullerNode) start(ctx pipeline.NodeContext, upStream *upstream.Upstream, wg *errgroup.Group, isActorMode bool, sorter *sorterNode) error {
 	n.wg = wg
 	ctxC, cancel := context.WithCancel(ctx)
 	ctxC = contextutil.PutTableInfoInCtx(ctxC, n.tableID, n.tableName)
@@ -80,11 +81,11 @@ func (n *pullerNode) start(ctx pipeline.NodeContext, wg *errgroup.Group, isActor
 	// See also: https://github.com/pingcap/tiflow/issues/2301.
 	plr := puller.NewPuller(
 		ctxC,
-		ctx.GlobalVars().PDClient,
-		ctx.GlobalVars().GrpcPool,
-		ctx.GlobalVars().RegionCache,
-		ctx.GlobalVars().KVStorage,
-		ctx.GlobalVars().PDClock,
+		upStream.PDClient,
+		upStream.GrpcPool,
+		upStream.RegionCache,
+		upStream.KVStorage,
+		upStream.PDClock,
 		n.changefeed,
 		n.replicaInfo.StartTs,
 		n.tableSpan(ctx),

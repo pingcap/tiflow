@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package pdtime
+package pdutil
 
 import (
 	"context"
@@ -32,6 +32,8 @@ const pdTimeUpdateInterval = 200 * time.Millisecond
 type Clock interface {
 	// CurrentTime returns current time from PD.
 	CurrentTime() (time.Time, error)
+	Run(ctx context.Context)
+	Stop()
 }
 
 // PDClock cache time get from PD periodically and cache it
