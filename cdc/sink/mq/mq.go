@@ -389,6 +389,14 @@ func NewKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
 
+	// we must close adminClient when this func return cause by an error
+	// otherwise the adminClient will never be closed and lead to an goroutine leak
+	defer func() {
+		if err != nil {
+			adminClient.Close()
+		}
+	}()
+
 	if err := kafka.AdjustConfig(adminClient, baseConfig, saramaConfig, topic); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
