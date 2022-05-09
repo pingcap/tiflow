@@ -43,8 +43,10 @@ type reader struct {
 	outputCh chan *model.PolymorphicEvent
 	delete   deleteThrottle
 
-	metricIterReadDuration prometheus.Observer
-	metricIterNextDuration prometheus.Observer
+	metricIterReadDuration    prometheus.Observer
+	metricIterNextDuration    prometheus.Observer
+	metricTotalEventsKV       prometheus.Counter
+	metricTotalEventsResolved prometheus.Counter
 }
 
 var _ actor.Actor[message.Task] = (*reader)(nil)
@@ -82,6 +84,11 @@ func (r *reader) output(event *model.PolymorphicEvent) bool {
 	case r.outputCh <- event:
 		r.lastEvent = event
 		r.lastSentCommitTs = event.CRTs
+		if event.RawKV.OpType == model.OpTypeResolved {
+			r.metricTotalEventsResolved.Inc()
+		} else {
+			r.metricTotalEventsKV.Inc()
+		}
 		return true
 	default:
 		return false
