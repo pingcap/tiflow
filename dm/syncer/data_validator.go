@@ -388,6 +388,7 @@ func (v *DataValidator) waitSyncerSynced(currLoc binlog.Location) error {
 	syncLoc := v.syncer.getFlushedGlobalPoint()
 	cmp := binlog.CompareLocation(currLoc, syncLoc, v.cfg.EnableGTID)
 	if cmp >= 0 && !v.reachedSyncer.Load() {
+		// todo: need to make sure reachedSyncer=true at some time
 		v.reachedSyncer.Store(true)
 		v.L.Info("validator progress reached syncer")
 	}
@@ -579,8 +580,7 @@ func (v *DataValidator) doValidate() {
 				v.sendError(terror.Annotate(err, "failed to set gtid"))
 				return
 			}
-			if err = v.persistCheckpointAndData(locationForFlush); err != nil {
-				v.L.Warn("failed to flush checkpoint: ", zap.Error(err))
+			if err = v.checkAndPersistCheckpointAndData(locationForFlush); err != nil {
 				v.sendError(terror.ErrValidatorPersistData.Delegate(err))
 				return
 			}
