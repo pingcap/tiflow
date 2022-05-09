@@ -64,21 +64,6 @@ func (s *schedulerTester) finishTableOperation(captureID model.CaptureID, tableI
 		}
 		return status, true, nil
 	})
-	s.state.PatchTaskWorkload(captureID, func(workload model.TaskWorkload) (model.TaskWorkload, bool, error) {
-		if workload == nil {
-			workload = make(model.TaskWorkload)
-		}
-		for _, tableID := range tableIDs {
-			if s.state.TaskStatuses[captureID].Operation[tableID].Delete {
-				delete(workload, tableID)
-			} else {
-				workload[tableID] = model.WorkloadInfo{
-					Workload: 1,
-				}
-			}
-		}
-		return workload, true, nil
-	})
 	s.tester.MustApplyPatches()
 }
 
@@ -318,14 +303,6 @@ func TestScheduleRebalance(t *testing.T) {
 			opt.Status = model.OperFinished
 		}
 		return status, true, nil
-	})
-	s.state.PatchTaskWorkload(captureID1, func(workload model.TaskWorkload) (model.TaskWorkload, bool, error) {
-		require.Nil(t, workload)
-		workload = make(model.TaskWorkload)
-		for tableID := range s.state.TaskStatuses[captureID1].Tables {
-			workload[tableID] = model.WorkloadInfo{Workload: 1}
-		}
-		return workload, true, nil
 	})
 	s.tester.MustApplyPatches()
 

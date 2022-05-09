@@ -81,13 +81,6 @@ func TestEtcdKey(t *testing.T) {
 			ChangefeedID: model.DefaultChangeFeedID("test-changefeed"),
 			CaptureID:    "6bbc01c8-0605-4f86-a0f9-b3119109b225",
 		},
-	}, {
-		key: "/tidb/cdc/task/workload/6bbc01c8-0605-4f86-a0f9-b3119109b225/test-changefeed",
-		expected: &CDCKey{
-			Tp:           CDCKeyTypeTaskWorkload,
-			ChangefeedID: model.DefaultChangeFeedID("test-changefeed"),
-			CaptureID:    "6bbc01c8-0605-4f86-a0f9-b3119109b225",
-		},
 	}}
 	for _, tc := range testcases {
 		k := new(CDCKey)
@@ -113,9 +106,6 @@ func TestEtcdKeyParseError(t *testing.T) {
 		error: true,
 	}, {
 		key:   "/tidb/cdc/task/status/6bbc01c8-0605-4f86-a0f9-b3119109b225",
-		error: true,
-	}, {
-		key:   "/tidb/cdc/task/workload/6bbc01c8-0605-4f86-a0f9-b3119109b225",
 		error: true,
 	}, {
 		key:   "/tidb/cd",

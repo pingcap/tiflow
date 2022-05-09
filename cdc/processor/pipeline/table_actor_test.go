@@ -84,7 +84,6 @@ func TestTableActorInterface(t *testing.T) {
 	require.Equal(t, TableStatusInitializing, tbl.Status())
 	sink.status.Store(TableStatusStopped)
 	require.Equal(t, TableStatusStopped, tbl.Status())
-	require.Equal(t, uint64(1), tbl.Workload().Workload)
 
 	atomic.StoreUint64(&sink.checkpointTs, 3)
 	require.Equal(t, model.Ts(3), tbl.CheckpointTs())

@@ -143,9 +143,6 @@ func TestChangefeedStateUpdate(t *testing.T) {
 				TaskPositions: map[model.CaptureID]*model.TaskPosition{
 					"6bbc01c8-0605-4f86-a0f9-b3119109b225": {CheckPointTs: 421980720003809281, ResolvedTs: 421980720003809281},
 				},
-				Workloads: map[model.CaptureID]model.TaskWorkload{
-					"6bbc01c8-0605-4f86-a0f9-b3119109b225": {45: {Workload: 1}},
-				},
 			},
 		},
 		{ // test multiple capture
@@ -207,10 +204,6 @@ func TestChangefeedStateUpdate(t *testing.T) {
 					"6bbc01c8-0605-4f86-a0f9-b3119109b225": {CheckPointTs: 421980720003809281, ResolvedTs: 421980720003809281},
 					"666777888":                            {CheckPointTs: 11332244, ResolvedTs: 312321, Count: 8},
 				},
-				Workloads: map[model.CaptureID]model.TaskWorkload{
-					"6bbc01c8-0605-4f86-a0f9-b3119109b225": {45: {Workload: 1}},
-					"666777888":                            {46: {Workload: 3}},
-				},
 			},
 		},
 		{ // testing changefeedID not match
@@ -270,9 +263,6 @@ func TestChangefeedStateUpdate(t *testing.T) {
 				TaskPositions: map[model.CaptureID]*model.TaskPosition{
 					"6bbc01c8-0605-4f86-a0f9-b3119109b225": {CheckPointTs: 421980720003809281, ResolvedTs: 421980720003809281},
 				},
-				Workloads: map[model.CaptureID]model.TaskWorkload{
-					"6bbc01c8-0605-4f86-a0f9-b3119109b225": {45: {Workload: 1}},
-				},
 			},
 		},
 		{ // testing value is nil
@@ -323,7 +313,6 @@ func TestChangefeedStateUpdate(t *testing.T) {
 				TaskPositions: map[model.CaptureID]*model.TaskPosition{
 					"666777888": {CheckPointTs: 11332244, ResolvedTs: 312321, Count: 8},
 				},
-				Workloads: map[model.CaptureID]model.TaskWorkload{},
 			},
 		},
 		{ // testing the same key case
@@ -348,7 +337,6 @@ func TestChangefeedStateUpdate(t *testing.T) {
 					},
 				},
 				TaskPositions: map[model.CaptureID]*model.TaskPosition{},
-				Workloads:     map[model.CaptureID]model.TaskWorkload{},
 			},
 		},
 	}
@@ -540,46 +528,6 @@ func TestPatchTaskStatus(t *testing.T) {
 	})
 }
 
-func TestPatchTaskWorkload(t *testing.T) {
-	state := NewChangefeedReactorState(model.DefaultChangeFeedID("test1"))
-	stateTester := NewReactorStateTester(t, state, nil)
-	captureID1 := "capture1"
-	captureID2 := "capture2"
-	state.PatchTaskWorkload(captureID1, func(workload model.TaskWorkload) (model.TaskWorkload, bool, error) {
-		require.Nil(t, workload)
-		return model.TaskWorkload{45: {Workload: 1}}, true, nil
-	})
-	state.PatchTaskWorkload(captureID2, func(workload model.TaskWorkload) (model.TaskWorkload, bool, error) {
-		require.Nil(t, workload)
-		return model.TaskWorkload{46: {Workload: 1}}, true, nil
-	})
-	stateTester.MustApplyPatches()
-	require.Equal(t, state.Workloads, map[model.CaptureID]model.TaskWorkload{
-		captureID1: {45: {Workload: 1}},
-		captureID2: {46: {Workload: 1}},
-	})
-	state.PatchTaskWorkload(captureID1, func(workload model.TaskWorkload) (model.TaskWorkload, bool, error) {
-		workload[46] = model.WorkloadInfo{Workload: 2}
-		return workload, true, nil
-	})
-	state.PatchTaskWorkload(captureID2, func(workload model.TaskWorkload) (model.TaskWorkload, bool, error) {
-		workload[45] = model.WorkloadInfo{Workload: 3}
-		return workload, true, nil
-	})
-	stateTester.MustApplyPatches()
-	require.Equal(t, state.Workloads, map[model.CaptureID]model.TaskWorkload{
-		captureID1: {45: {Workload: 1}, 46: {Workload: 2}},
-		captureID2: {45: {Workload: 3}, 46: {Workload: 1}},
-	})
-	state.PatchTaskWorkload(captureID2, func(workload model.TaskWorkload) (model.TaskWorkload, bool, error) {
-		return nil, true, nil
-	})
-	stateTester.MustApplyPatches()
-	require.Equal(t, state.Workloads, map[model.CaptureID]model.TaskWorkload{
-		captureID1: {45: {Workload: 1}, 46: {Workload: 2}},
-	})
-}
-
 func TestGlobalStateUpdate(t *testing.T) {
 	testCases := []struct {
 		updateKey   []string
@@ -616,16 +564,11 @@ func TestGlobalStateUpdate(t *testing.T) {
 						TaskPositions: map[model.CaptureID]*model.TaskPosition{
 							"6bbc01c8-0605-4f86-a0f9-b3119109b225": {CheckPointTs: 421980719742451713, ResolvedTs: 421980720003809281},
 						},
-						Workloads: map[string]model.TaskWorkload{},
 					},
 					model.DefaultChangeFeedID("test2"): {
 						ID:            model.DefaultChangeFeedID("test2"),
 						TaskStatuses:  map[string]*model.TaskStatus{},
 						TaskPositions: map[model.CaptureID]*model.TaskPosition{},
-						Workloads: map[model.CaptureID]model.TaskWorkload{
-							"6bbc01c8-0605-4f86-a0f9-b3119109b225": {45: {Workload: 1}},
-							"55551111":                             {46: {Workload: 1}},
-						},
 					},
 				},
 			},
@@ -663,9 +606,6 @@ func TestGlobalStateUpdate(t *testing.T) {
 						ID:            model.DefaultChangeFeedID("test2"),
 						TaskStatuses:  map[string]*model.TaskStatus{},
 						TaskPositions: map[model.CaptureID]*model.TaskPosition{},
-						Workloads: map[model.CaptureID]model.TaskWorkload{
-							"55551111": {46: {Workload: 1}},
-						},
 					},
 				},
 			},

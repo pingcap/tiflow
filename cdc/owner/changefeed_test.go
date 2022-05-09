@@ -173,9 +173,6 @@ func TestPreCheck(t *testing.T) {
 	state.PatchTaskPosition(offlineCaputreID, func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
 		return new(model.TaskPosition), true, nil
 	})
-	state.PatchTaskWorkload(offlineCaputreID, func(workload model.TaskWorkload) (model.TaskWorkload, bool, error) {
-		return make(model.TaskWorkload), true, nil
-	})
 	tester.MustApplyPatches()
 
 	cf.Tick(ctx, state, captures)
@@ -184,7 +181,6 @@ func TestPreCheck(t *testing.T) {
 	require.Contains(t, state.TaskStatuses, ctx.GlobalVars().CaptureInfo.ID)
 	require.NotContains(t, state.TaskStatuses, offlineCaputreID)
 	require.NotContains(t, state.TaskPositions, offlineCaputreID)
-	require.NotContains(t, state.Workloads, offlineCaputreID)
 }
 
 func TestInitialize(t *testing.T) {

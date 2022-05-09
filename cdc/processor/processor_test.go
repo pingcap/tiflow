@@ -844,7 +844,6 @@ func TestProcessorClose(t *testing.T) {
 	require.Equal(t, p.changefeed.TaskStatuses[p.captureInfo.ID], &model.TaskStatus{
 		Tables: map[int64]*model.TableReplicaInfo{1: {StartTs: 20}, 2: {StartTs: 30}},
 	})
-	require.Equal(t, p.changefeed.Workloads[p.captureInfo.ID], model.TaskWorkload{1: {Workload: 1}, 2: {Workload: 1}})
 
 	require.Nil(t, p.Close())
 	tester.MustApplyPatches()
