@@ -106,7 +106,7 @@ func (p *processor) checkReadyForMessages() bool {
 }
 
 // AddTable implements TableExecutor interface.
-func (p *processor) AddTable(ctx cdcContext.Context, tableID model.TableID) (bool, error) {
+func (p *processor) AddTable(ctx cdcContext.Context, tableID model.TableID, startTs model.Ts) (bool, error) {
 	if !p.checkReadyForMessages() {
 		return false, nil
 	}
@@ -114,7 +114,7 @@ func (p *processor) AddTable(ctx cdcContext.Context, tableID model.TableID) (boo
 	log.Info("adding table",
 		zap.Int64("tableID", tableID),
 		cdcContext.ZapFieldChangefeed(ctx))
-	err := p.addTable(ctx, tableID, &model.TableReplicaInfo{})
+	err := p.addTable(ctx, tableID, &model.TableReplicaInfo{StartTs: startTs})
 	if err != nil {
 		return false, errors.Trace(err)
 	}
