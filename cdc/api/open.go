@@ -758,7 +758,15 @@ func (h *openAPI) DrainCapture(c *gin.Context) {
 		return
 	}
 
-	target := c.Param(apiOpVarCaptureID)
+	req := struct {
+		CaptureID string `json:"capture_id"`
+	}{}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		_ = c.Error(cerror.ErrAPIInvalidParam.Wrap(err))
+		return
+	}
+
+	target := req.CaptureID
 	if err := model.ValidateChangefeedID(target); err != nil {
 		_ = c.Error(cerror.ErrAPIInvalidParam.GenWithStack("invalid capture_id: %s", target))
 		return
@@ -770,7 +778,6 @@ func (h *openAPI) DrainCapture(c *gin.Context) {
 		_ = c.Error(err)
 		return
 	}
-
 	checkCaptureFound := func() bool {
 		// make sure the target capture exist
 		for _, capture := range captures {

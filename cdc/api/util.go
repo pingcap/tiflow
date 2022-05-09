@@ -148,7 +148,12 @@ func handleOwnerDrainCapture(
 	select {
 	case <-ctx.Done():
 		return errors.Trace(ctx.Err())
-	case err := <-done:
-		return errors.Trace(err)
+	default:
+		for e := range done {
+			if e != nil {
+				err = e
+			}
+		}
 	}
+	return errors.Trace(err)
 }
