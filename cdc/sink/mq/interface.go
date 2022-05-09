@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package producer
+package mq
 
 import (
 	"context"
@@ -34,4 +34,14 @@ type Producer interface {
 	Flush(ctx context.Context) error
 	// Close closes the producer and client(s).
 	Close() error
+}
+
+// TopicManager is the interface of topic manager.
+// It will be responsible for creating and
+// updating the information of the topic.
+type TopicManager interface {
+	// Partitions returns the partitions of the topic.
+	Partitions(topic string) (int32, error)
+	// CreateTopic creates the topic.
+	CreateTopic(topicName string) (int32, error)
 }

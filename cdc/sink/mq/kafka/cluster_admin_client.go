@@ -19,23 +19,33 @@ import (
 	"github.com/Shopify/sarama"
 )
 
-const (
-	// DefaultMockTopicName specifies the default mock topic name.
-	DefaultMockTopicName = "mock_topic"
-	// defaultMockControllerID specifies the default mock controller ID.
-	defaultMockControllerID = 1
-)
+// clusterAdminClient is the administrative client for Kafka, which supports managing and inspecting topics,
+// brokers, configurations and ACLs.
+type clusterAdminClient interface {
+	// ListTopics list the topics available in the cluster with the default options.
+	ListTopics() (map[string]sarama.TopicDetail, error)
+	// DescribeCluster gets information about the nodes in the cluster
+	DescribeCluster() (brokers []*sarama.Broker, controllerID int32, err error)
+	// DescribeConfig gets the configuration for the specified resources.
+	DescribeConfig(resource sarama.ConfigResource) ([]sarama.ConfigEntry, error)
+	// CreateTopic creates a new topic.
+	CreateTopic(topic string, detail *sarama.TopicDetail, validateOnly bool) error
+	// Close shuts down the admin and closes underlying client.
+	Close() error
+}
 
-const (
-	// defaultMaxMessageBytes specifies the default max message bytes,
-	// default to 1048576, identical to kafka broker's `message.max.bytes` and topic's `max.message.bytes`
-	// see: https://kafka.apache.org/documentation/#brokerconfigs_message.max.bytes
-	// see: https://kafka.apache.org/documentation/#topicconfigs_max.message.bytes
-	defaultMaxMessageBytes = "1048576"
+// clusterAdminClientCreator defines the type of cluster admin client crater.
+type clusterAdminClientCreator func([]string, *sarama.Config) (clusterAdminClient, error)
 
-	// defaultMinInsyncReplicas specifies the default `min.insync.replicas` for broker and topic.
-	defaultMinInsyncReplicas = "1"
-)
+// NewSaramaAdminClient constructs a ClusterAdminClient with sarama.
+func NewSaramaAdminClient(addrs []string, conf *sarama.Config) (clusterAdminClient, error) {
+	return sarama.NewClusterAdmin(addrs, conf)
+}
+
+// NewMockAdminClient constructs a ClusterAdminClient with mock implementation.
+func NewMockAdminClient(_ []string, _ *sarama.Config) (clusterAdminClient, error) {
+	return newClusterAdminClientMockImpl(), nil
+}
 
 var (
 	// BrokerMessageMaxBytes is the broker's `message.max.bytes`
@@ -54,8 +64,8 @@ type ClusterAdminClientMockImpl struct {
 	brokerConfigs []sarama.ConfigEntry
 }
 
-// NewClusterAdminClientMockImpl news a ClusterAdminClientMockImpl struct with default configurations.
-func NewClusterAdminClientMockImpl() *ClusterAdminClientMockImpl {
+// newClusterAdminClientMockImpl news a ClusterAdminClientMockImpl struct with default configurations.
+func newClusterAdminClientMockImpl() *ClusterAdminClientMockImpl {
 	topics := make(map[string]sarama.TopicDetail)
 	configEntries := make(map[string]*string)
 	configEntries[TopicMaxMessageBytesConfigName] = &TopicMaxMessageBytes

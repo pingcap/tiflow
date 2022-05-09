@@ -22,7 +22,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/puller"
 	redowriter "github.com/pingcap/tiflow/cdc/redo/writer"
 	sink "github.com/pingcap/tiflow/cdc/sink/metrics"
-	"github.com/pingcap/tiflow/cdc/sink/mq/producer/kafka"
+	"github.com/pingcap/tiflow/cdc/sink/mq/kafka"
 	"github.com/pingcap/tiflow/cdc/sorter"
 	"github.com/pingcap/tiflow/cdc/sorter/leveldb"
 	"github.com/pingcap/tiflow/cdc/sorter/memory"

@@ -27,12 +27,8 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/codec"
 	"github.com/pingcap/tiflow/cdc/sink/metrics"
 	"github.com/pingcap/tiflow/cdc/sink/mq/dispatcher"
-	"github.com/pingcap/tiflow/cdc/sink/mq/manager"
-	kafkamanager "github.com/pingcap/tiflow/cdc/sink/mq/manager/kafka"
-	pulsarmanager "github.com/pingcap/tiflow/cdc/sink/mq/manager/pulsar"
-	"github.com/pingcap/tiflow/cdc/sink/mq/producer"
-	"github.com/pingcap/tiflow/cdc/sink/mq/producer/kafka"
-	"github.com/pingcap/tiflow/cdc/sink/mq/producer/pulsar"
+	"github.com/pingcap/tiflow/cdc/sink/mq/kafka"
+	"github.com/pingcap/tiflow/cdc/sink/mq/pulsar"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
@@ -54,62 +50,61 @@ const (
 )
 
 type mqSink struct {
-	mqProducer     producer.Producer
-	eventRouter    *dispatcher.EventRouter
-	encoderBuilder codec.EncoderBuilder
-	filter         *filter.Filter
-	protocol       config.Protocol
-
-	topicManager         manager.TopicManager
-	flushWorker          *flushWorker
-	tableCheckpointTsMap sync.Map
-	resolvedBuffer       chan resolvedTsEvent
-
-	statistics *metrics.Statistics
-
 	role util.Role
 	id   model.ChangeFeedID
+
+	filter         *filter.Filter
+	encoderBuilder codec.EncoderBuilder
+	protocol       config.Protocol
+
+	mqProducer   Producer
+	eventRouter  *dispatcher.EventRouter
+	topicManager TopicManager
+
+	flushWorker          *flushWorker
+	resolvedBuffer       chan resolvedTsEvent
+	tableCheckpointTsMap sync.Map
+
+	statistics *metrics.Statistics
 }
 
 func newMqSink(
 	ctx context.Context,
 	credential *security.Credential,
-	topicManager manager.TopicManager,
-	mqProducer producer.Producer,
+	topicManager TopicManager,
+	mqProducer Producer,
 	filter *filter.Filter,
 	defaultTopic string,
 	replicaConfig *config.ReplicaConfig, encoderConfig *codec.Config,
 	errCh chan error,
 ) (*mqSink, error) {
+	role := contextutil.RoleFromCtx(ctx)
+	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
+
 	encoderBuilder, err := codec.NewEventBatchEncoderBuilder(encoderConfig, credential)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
-
 	eventRouter, err := dispatcher.NewEventRouter(replicaConfig, defaultTopic)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
-	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
-	role := contextutil.RoleFromCtx(ctx)
-
-	encoder := encoderBuilder.Build()
 	statistics := metrics.NewStatistics(ctx, metrics.SinkTypeMQ)
-	flushWorker := newFlushWorker(encoder, mqProducer, statistics)
+	flushWorker := newFlushWorker(encoderBuilder.Build(), mqProducer, statistics)
 
 	s := &mqSink{
+		role:           role,
+		id:             changefeedID,
+		filter:         filter,
+		encoderBuilder: encoderBuilder,
+		protocol:       encoderConfig.Protocol(),
 		mqProducer:     mqProducer,
 		eventRouter:    eventRouter,
-		encoderBuilder: encoderBuilder,
-		filter:         filter,
-		protocol:       encoderConfig.Protocol(),
 		topicManager:   topicManager,
 		flushWorker:    flushWorker,
 		resolvedBuffer: make(chan resolvedTsEvent, defaultResolvedTsEventBufferSize),
 		statistics:     statistics,
-		role:           role,
-		id:             changefeedID,
 	}
 
 	go func() {
@@ -423,7 +418,7 @@ func NewKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
 
-	topicManager := kafkamanager.NewTopicManager(
+	topicManager := kafka.NewTopicManager(
 		client,
 		adminClient,
 		baseConfig.DeriveTopicConfig(),
@@ -432,7 +427,7 @@ func NewKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 		return nil, cerror.WrapError(cerror.ErrKafkaCreateTopic, err)
 	}
 
-	sProducer, err := kafka.NewKafkaSaramaProducer(
+	producer, err := kafka.NewKafkaSaramaProducer(
 		ctx,
 		client,
 		adminClient,
@@ -448,7 +443,7 @@ func NewKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 		ctx,
 		baseConfig.Credential,
 		topicManager,
-		sProducer,
+		producer,
 		filter,
 		topic,
 		replicaConfig,
@@ -496,16 +491,17 @@ func NewPulsarSink(ctx context.Context, sinkURI *url.URL, filter *filter.Filter,
 	// For now, it's a placeholder. Avro format have to make connection to Schema Registry,
 	// and it may need credential.
 	credential := &security.Credential{}
-	fakeTopicManager := pulsarmanager.NewTopicManager(
+	fakeTopicManager := pulsar.NewTopicManager(
 		producer.GetPartitionNum(),
 	)
+	defaultTopic := ""
 	sink, err := newMqSink(
 		ctx,
 		credential,
 		fakeTopicManager,
 		producer,
 		filter,
-		"",
+		defaultTopic,
 		replicaConfig,
 		encoderConfig,
 		errCh,

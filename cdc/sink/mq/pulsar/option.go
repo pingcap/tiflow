@@ -24,15 +24,15 @@ import (
 	"github.com/apache/pulsar-client-go/pulsar"
 )
 
-// Option is pulsar producer's option.
-type Option struct {
+// option is pulsar producer's option.
+type option struct {
 	clientOptions   *pulsar.ClientOptions
 	producerOptions *pulsar.ProducerOptions
 }
 
 const route = "$route"
 
-func parseSinkOptions(u *url.URL) (opt *Option, err error) {
+func parseSinkOptions(u *url.URL) (opt *option, err error) {
 	switch u.Scheme {
 	case "pulsar", "pulsar+ssl":
 	default:
@@ -43,7 +43,7 @@ func parseSinkOptions(u *url.URL) (opt *Option, err error) {
 		return nil, err
 	}
 	p := parseProducerOptions(u)
-	opt = &Option{
+	opt = &option{
 		clientOptions:   c,
 		producerOptions: p,
 	}

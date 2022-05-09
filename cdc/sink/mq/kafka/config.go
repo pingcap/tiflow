@@ -30,6 +30,37 @@ import (
 	"go.uber.org/zap"
 )
 
+const (
+	// BrokerMessageMaxBytesConfigName specifies the largest record batch size allowed by
+	// Kafka brokers.
+	// See: https://kafka.apache.org/documentation/#brokerconfigs_message.max.bytes
+	BrokerMessageMaxBytesConfigName = "message.max.bytes"
+
+	// TopicMaxMessageBytesConfigName specifies the largest record batch size allowed by
+	// Kafka topics.
+	// See: https://kafka.apache.org/documentation/#topicconfigs_max.message.bytes
+	TopicMaxMessageBytesConfigName = "max.message.bytes"
+
+	// MinInsyncReplicasConfigName the minimum number of replicas that must acknowledge a write
+	// for the write to be considered successful. Only works if the producer's acks is "all" (or "-1").
+	// See: https://kafka.apache.org/documentation/#brokerconfigs_min.insync.replicas and
+	// https://kafka.apache.org/documentation/#topicconfigs_min.insync.replicas
+	MinInsyncReplicasConfigName = "min.insync.replicas"
+
+	// DefaultMockTopicName specifies the default mock topic name.
+	DefaultMockTopicName = "mock_topic"
+
+	// defaultMaxMessageBytes specifies the default max message bytes,
+	// default to 1048576, identical to kafka broker's `message.max.bytes` and topic's `max.message.bytes`
+	// see: https://kafka.apache.org/documentation/#brokerconfigs_message.max.bytes
+	// see: https://kafka.apache.org/documentation/#topicconfigs_max.message.bytes
+	defaultMaxMessageBytes = "1048576"
+	// defaultMinInsyncReplicas specifies the default `min.insync.replicas` for broker and topic.
+	defaultMinInsyncReplicas = "1"
+	// defaultMockControllerID specifies the default mock controller ID.
+	defaultMockControllerID = 1
+)
+
 // Config stores user specified Kafka producer configuration
 type Config struct {
 	BrokerEndpoints []string

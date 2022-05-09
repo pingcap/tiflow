@@ -27,9 +27,9 @@ import (
 )
 
 // NewProducer create a pulsar producer.
-func NewProducer(u *url.URL, errCh chan error) (*Producer, error) {
+func NewProducer(u *url.URL, errCh chan error) (*pulsarProducer, error) {
 	failpoint.Inject("MockPulsar", func() {
-		failpoint.Return(&Producer{
+		failpoint.Return(&pulsarProducer{
 			errCh:        errCh,
 			partitionNum: 4,
 		}, nil)
@@ -53,7 +53,7 @@ func NewProducer(u *url.URL, errCh chan error) (*Producer, error) {
 		client.Close()
 		return nil, cerror.WrapError(cerror.ErrPulsarNewProducer, err)
 	}
-	return &Producer{
+	return &pulsarProducer{
 		errCh:        errCh,
 		opt:          *opt,
 		client:       client,
@@ -62,9 +62,9 @@ func NewProducer(u *url.URL, errCh chan error) (*Producer, error) {
 	}, nil
 }
 
-// Producer provide a way to send msg to pulsar.
-type Producer struct {
-	opt          Option
+// pulsarProducer provide a way to send msg to pulsar.
+type pulsarProducer struct {
+	opt          option
 	client       pulsar.Client
 	producer     pulsar.Producer
 	errCh        chan error
@@ -86,7 +86,7 @@ func createProperties(message *codec.MQMessage, partition int32) map[string]stri
 }
 
 // AsyncSendMessage send key-value msg to target partition.
-func (p *Producer) AsyncSendMessage(
+func (p *pulsarProducer) AsyncSendMessage(
 	ctx context.Context, _ string, partition int32, message *codec.MQMessage,
 ) error {
 	p.producer.SendAsync(ctx, &pulsar.ProducerMessage{
@@ -98,7 +98,7 @@ func (p *Producer) AsyncSendMessage(
 	return nil
 }
 
-func (p *Producer) errors(_ pulsar.MessageID, _ *pulsar.ProducerMessage, err error) {
+func (p *pulsarProducer) errors(_ pulsar.MessageID, _ *pulsar.ProducerMessage, err error) {
 	if err != nil {
 		select {
 		case p.errCh <- cerror.WrapError(cerror.ErrPulsarSendMessage, err):
@@ -109,7 +109,7 @@ func (p *Producer) errors(_ pulsar.MessageID, _ *pulsar.ProducerMessage, err err
 }
 
 // SyncBroadcastMessage send key-value msg to all partition.
-func (p *Producer) SyncBroadcastMessage(
+func (p *pulsarProducer) SyncBroadcastMessage(
 	ctx context.Context, _ string, _ int32, message *codec.MQMessage,
 ) error {
 	for partition := 0; partition < p.partitionNum; partition++ {
@@ -127,17 +127,17 @@ func (p *Producer) SyncBroadcastMessage(
 }
 
 // Flush flushes all in memory msgs to server.
-func (p *Producer) Flush(_ context.Context) error {
+func (p *pulsarProducer) Flush(_ context.Context) error {
 	return cerror.WrapError(cerror.ErrPulsarSendMessage, p.producer.Flush())
 }
 
 // GetPartitionNum got current topic's partition size.
-func (p *Producer) GetPartitionNum() int32 {
+func (p *pulsarProducer) GetPartitionNum() int32 {
 	return int32(p.partitionNum)
 }
 
 // Close closes the producer and client.
-func (p *Producer) Close() error {
+func (p *pulsarProducer) Close() error {
 	err := p.producer.Flush()
 	if err != nil {
 		return cerror.WrapError(cerror.ErrPulsarSendMessage, err)

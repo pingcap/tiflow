@@ -20,7 +20,7 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/kafka"
+
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/rcrowley/go-metrics"
@@ -181,7 +181,7 @@ type saramaMetricsMonitor struct {
 	role         util.Role
 
 	registry metrics.Registry
-	admin    kafka.ClusterAdminClient
+	admin    clusterAdminClient
 
 	brokers map[int32]struct{}
 }
@@ -315,7 +315,7 @@ const flushMetricsInterval = 5 * time.Second
 func runSaramaMetricsMonitor(ctx context.Context,
 	registry metrics.Registry,
 	changefeedID model.ChangeFeedID,
-	role util.Role, admin kafka.ClusterAdminClient,
+	role util.Role, admin clusterAdminClient,
 ) {
 	monitor := &saramaMetricsMonitor{
 		changefeedID: changefeedID,

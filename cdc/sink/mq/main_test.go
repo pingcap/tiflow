@@ -11,14 +11,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package manager
+package mq
 
-// TopicManager is the interface of topic manager.
-// It will be responsible for creating and
-// updating the information of the topic.
-type TopicManager interface {
-	// Partitions returns the partitions of the topic.
-	Partitions(topic string) (int32, error)
-	// CreateTopic creates the topic.
-	CreateTopic(topicName string) (int32, error)
+import (
+	"testing"
+
+	"github.com/pingcap/tiflow/pkg/leakutil"
+)
+
+func TestMain(m *testing.M) {
+	leakutil.SetUpLeakTest(m)
 }

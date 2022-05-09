@@ -21,19 +21,18 @@ import (
 	"github.com/Shopify/sarama"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	kafkaconfig "github.com/pingcap/tiflow/cdc/sink/mq/producer/kafka"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/kafka"
+
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 )
 
-// TopicManager is a manager for kafka topics.
-type TopicManager struct {
-	client kafka.Client
-	admin  kafka.ClusterAdminClient
+// topicManager is a manager for kafka topics.
+type topicManager struct {
+	client kafkaClient
+	admin  clusterAdminClient
 
-	cfg *kafkaconfig.AutoCreateTopicConfig
+	cfg *AutoCreateTopicConfig
 
 	topics sync.Map
 
@@ -42,11 +41,11 @@ type TopicManager struct {
 
 // NewTopicManager creates a new topic manager.
 func NewTopicManager(
-	client kafka.Client,
-	admin kafka.ClusterAdminClient,
-	cfg *kafkaconfig.AutoCreateTopicConfig,
-) *TopicManager {
-	return &TopicManager{
+	client kafkaClient,
+	admin clusterAdminClient,
+	cfg *AutoCreateTopicConfig,
+) *topicManager {
+	return &topicManager{
 		client: client,
 		admin:  admin,
 		cfg:    cfg,
@@ -55,7 +54,7 @@ func NewTopicManager(
 
 // Partitions returns the number of partitions of the topic.
 // It may also try to update the topics' information maintained by manager.
-func (m *TopicManager) Partitions(topic string) (int32, error) {
+func (m *topicManager) Partitions(topic string) (int32, error) {
 	err := m.tryRefreshMeta()
 	if err != nil {
 		return 0, errors.Trace(err)
@@ -69,7 +68,7 @@ func (m *TopicManager) Partitions(topic string) (int32, error) {
 }
 
 // tryRefreshMeta try to refresh the topics' information maintained by manager.
-func (m *TopicManager) tryRefreshMeta() error {
+func (m *topicManager) tryRefreshMeta() error {
 	if time.Since(time.Unix(m.lastMetadataRefresh.Load(), 0)) > time.Minute {
 		topics, err := m.client.Topics()
 		if err != nil {
@@ -90,7 +89,7 @@ func (m *TopicManager) tryRefreshMeta() error {
 }
 
 // tryUpdatePartitionsAndLogging try to update the partitions of the topic.
-func (m *TopicManager) tryUpdatePartitionsAndLogging(topic string, partitions int32) {
+func (m *topicManager) tryUpdatePartitionsAndLogging(topic string, partitions int32) {
 	oldPartitions, ok := m.topics.Load(topic)
 	if ok {
 		if oldPartitions.(int32) != partitions {
@@ -114,7 +113,7 @@ func (m *TopicManager) tryUpdatePartitionsAndLogging(topic string, partitions in
 
 // CreateTopic creates a topic with the given name
 // and returns the number of partitions.
-func (m *TopicManager) CreateTopic(topicName string) (int32, error) {
+func (m *topicManager) CreateTopic(topicName string) (int32, error) {
 	start := time.Now()
 	topics, err := m.admin.ListTopics()
 	if err != nil {

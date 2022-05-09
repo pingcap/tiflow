@@ -22,7 +22,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/codec"
 	"github.com/pingcap/tiflow/cdc/sink/metrics"
-	"github.com/pingcap/tiflow/cdc/sink/mq/producer"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
 )
@@ -61,14 +60,14 @@ type flushWorker struct {
 	errCh chan error
 
 	encoder    codec.EventBatchEncoder
-	producer   producer.Producer
+	producer   Producer
 	statistics *metrics.Statistics
 }
 
 // newFlushWorker creates a new flush worker.
 func newFlushWorker(
 	encoder codec.EventBatchEncoder,
-	producer producer.Producer,
+	producer Producer,
 	statistics *metrics.Statistics,
 ) *flushWorker {
 	w := &flushWorker{
