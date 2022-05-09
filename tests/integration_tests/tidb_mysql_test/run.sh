@@ -13,11 +13,11 @@ function prepare() {
 	stop_tidb_cluster
 	rm -rf $WORK_DIR && mkdir -p $WORK_DIR
 
-    # Use '--tidb-config' here to suppress the default config for other integration tests
-    # Maybe it can specify some options for the rest test cases in the future
+	# Use '--tidb-config' here to suppress the default config for other integration tests
+	# Maybe it can specify some options for the rest test cases in the future
 	start_tidb_cluster --workdir $WORK_DIR --tidb-config=$TIDB_CONFIG
-	
-    cd $WORK_DIR
+
+	cd $WORK_DIR
 
 	# record tso before we create tables to skip the system table DDLs
 	start_ts=$(run_cdc_cli_tso_query ${UP_PD_HOST_1} ${UP_PD_PORT_1})
@@ -29,8 +29,8 @@ function prepare() {
 	kafka) SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=open-protocol&partition-num=4&kafka-version=${KAFKA_VERSION}&max-message-bytes=10485760" ;;
 	*) SINK_URI="mysql://normal:123456@127.0.0.1:3306/" ;;
 	esac
-	
-    SINK_PARA="{\"force_replicate\":true, \"changefeed_id\":\"tidb-mysql-test\", \"sink_uri\":\"$SINK_URI\", \"start_ts\":$start_ts}"
+
+	SINK_PARA="{\"force_replicate\":true, \"changefeed_id\":\"tidb-mysql-test\", \"sink_uri\":\"$SINK_URI\", \"start_ts\":$start_ts}"
 	curl -X POST -H "'Content-type':'application/json'" http://$CDC_HOST:$CDC_PORT/api/v1/changefeeds -d "$SINK_PARA"
 	if [ "$SINK_TYPE" == "kafka" ]; then
 		run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=open-protocol&partition-num=4&version=${KAFKA_VERSION}&max-message-bytes=10485760"
@@ -54,7 +54,7 @@ prepare $*
 
 MYSQL_TEST_PATH=$CUR/tidb_test/mysql_test
 
-cp -f $CUR/converter2.sh $MYSQL_TEST_PATH
+cp -f $CUR/converter.sh $MYSQL_TEST_PATH
 cp -f $CUR/build.sh $MYSQL_TEST_PATH
 cd $MYSQL_TEST_PATH
 
@@ -67,7 +67,7 @@ cases="bigint composite_index date_formats datetime_insert \
     type_time type_timestamp type_uint update \
     insert_select insert_update alter_table1 json\
     mysql_replace date_time_ddl"
-./converter2.sh "$cases"
+./converter.sh "$cases"
 
 # run mysql-test cases
 echo -e "mysql_test start\n"

@@ -9,6 +9,7 @@
 # --pd: pd address
 
 set -e
+source ./test_prepare
 
 workdir=
 tls=
