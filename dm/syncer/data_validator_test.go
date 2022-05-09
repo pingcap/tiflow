@@ -699,3 +699,26 @@ func TestValidatorOperateValidationError(t *testing.T) {
 	err = validator.OperateValidatorError(pb.ValidationErrOp_IgnoreErrOp, 1, false)
 	require.NoError(t, err)
 }
+
+func TestValidatorMarkReachedSyncerRoutine(t *testing.T) {
+	cfg := genSubtaskConfig(t)
+	syncerObj := NewSyncer(cfg, nil, nil)
+	validator := NewContinuousDataValidator(cfg, syncerObj, false)
+
+	cfg.ValidatorCfg.RowErrorDelay.Duration = time.Minute
+	validator.ctx, validator.cancel = context.WithCancel(context.Background())
+	require.False(t, validator.reachedSyncer.Load())
+	validator.wg.Add(1)
+	go validator.markReachedSyncerRoutine()
+	validator.cancel()
+	validator.wg.Wait()
+	require.False(t, validator.reachedSyncer.Load())
+
+	cfg.ValidatorCfg.RowErrorDelay.Duration = time.Second
+	validator.ctx = context.Background()
+	require.False(t, validator.reachedSyncer.Load())
+	validator.wg.Add(1)
+	go validator.markReachedSyncerRoutine()
+	validator.wg.Wait()
+	require.True(t, validator.reachedSyncer.Load())
+}

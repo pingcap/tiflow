@@ -315,14 +315,13 @@ func (v *DataValidator) Start(expect pb.Stage) {
 	}
 
 	v.wg.Add(1)
-	go v.routineWrapper(func() {
-		v.doValidate()
-	})
+	go v.routineWrapper(v.doValidate)
 
 	v.wg.Add(1)
-	go v.routineWrapper(func() {
-		v.printStatusRoutine()
-	})
+	go v.routineWrapper(v.printStatusRoutine)
+
+	v.wg.Add(1)
+	go utils.GoLogWrapper(v.L, v.markReachedSyncerRoutine)
 
 	// routineWrapper relies on errorProcessRoutine to handle panic errors,
 	// so just wrap it using a common wrapper.
@@ -331,6 +330,20 @@ func (v *DataValidator) Start(expect pb.Stage) {
 
 	v.setStage(pb.Stage_Running)
 	v.L.Info("started")
+}
+
+func (v *DataValidator) markReachedSyncerRoutine() {
+	defer v.wg.Done()
+	errorRowDelay := v.cfg.ValidatorCfg.RowErrorDelay.Duration
+
+	select {
+	case <-v.ctx.Done():
+	case <-time.After(errorRowDelay):
+		if !v.reachedSyncer.Load() {
+			v.L.Info("mark reachedSyncer=true after error row delay")
+			v.reachedSyncer.Store(true)
+		}
+	}
 }
 
 func (v *DataValidator) printStatusRoutine() {
