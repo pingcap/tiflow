@@ -93,6 +93,7 @@ func newTableChangeJob() *tableChangeJob {
 func (tc *tableChangeJob) addOrUpdate(job *rowValidationJob) bool {
 	if val, ok := tc.jobs[job.Key]; ok {
 		val.row = job.row
+		val.size = job.size
 		val.Tp = job.Tp
 		val.FirstValidateTS = 0
 		val.FailedCnt = 0 // clear failed count
@@ -108,7 +109,10 @@ type rowValidationJob struct {
 	Tp  rowChangeJobType
 	row *sqlmodel.RowChange
 
-	wg *sync.WaitGroup
+	// estimated memory size taken by this row, we use binlog size of the row to estimated it now.
+	// the memory taken for a row change job is more than this size
+	size int32
+	wg   *sync.WaitGroup
 	// timestamp of first validation of this row. will reset when merge row changes
 	FirstValidateTS int64
 	FailedCnt       int
@@ -181,6 +185,7 @@ type DataValidator struct {
 	pendingRowCounts     []atomic.Int64
 	newErrorRowCount     atomic.Int64
 	processedBinlogSize  atomic.Int64
+	pendingRowSize       atomic.Int64 // accumulation of rowValidationJob.size
 	lastFlushTime        time.Time
 	location             *binlog.Location
 	loadedPendingChanges map[string]*tableChangeJob
@@ -220,6 +225,7 @@ func (v *DataValidator) reset() {
 	}
 	v.newErrorRowCount.Store(0)
 	v.processedBinlogSize.Store(0)
+	v.pendingRowSize.Store(0)
 	v.initTableStatus(map[string]*tableValidateStatus{})
 }
 
@@ -779,6 +785,7 @@ func (v *DataValidator) processRowsEvent(header *replication.EventHeader, ev *re
 	if changeType == rowUpdated {
 		step = 2
 	}
+	estimatedRowSize := int32(header.EventSize) / int32(len(ev.Rows))
 	for i := 0; i < len(ev.Rows); i += step {
 		var beforeImage, afterImage []interface{}
 		switch changeType {
@@ -798,18 +805,22 @@ func (v *DataValidator) processRowsEvent(header *replication.EventHeader, ev *re
 			nil,
 		)
 		rowChange.SetWhereHandle(downstreamTableInfo.WhereHandle)
+		size := estimatedRowSize
 		if changeType == rowUpdated && rowChange.IsIdentityUpdated() {
 			delRow, insRow := rowChange.SplitUpdate()
 			delRowKey := genRowKey(delRow)
-			v.dispatchRowChange(delRowKey, &rowValidationJob{Key: delRowKey, Tp: rowDeleted, row: delRow})
+			v.dispatchRowChange(delRowKey, &rowValidationJob{Key: delRowKey, Tp: rowDeleted, row: delRow, size: size})
 			v.processedRowCounts[rowDeleted].Inc()
 
 			insRowKey := genRowKey(insRow)
-			v.dispatchRowChange(insRowKey, &rowValidationJob{Key: insRowKey, Tp: rowInsert, row: insRow})
+			v.dispatchRowChange(insRowKey, &rowValidationJob{Key: insRowKey, Tp: rowInsert, row: insRow, size: size})
 			v.processedRowCounts[rowInsert].Inc()
 		} else {
 			rowKey := genRowKey(rowChange)
-			v.dispatchRowChange(rowKey, &rowValidationJob{Key: rowKey, Tp: changeType, row: rowChange})
+			if changeType == rowUpdated {
+				size *= 2
+			}
+			v.dispatchRowChange(rowKey, &rowValidationJob{Key: rowKey, Tp: changeType, row: rowChange, size: size})
 			v.processedRowCounts[changeType].Inc()
 		}
 	}
@@ -898,6 +909,7 @@ func (v *DataValidator) loadPersistedData() error {
 					validateTbl.srcTableInfo, validateTbl.downstreamTableInfo.TableInfo,
 					nil,
 				),
+				size:            row.Size,
 				FirstValidateTS: row.FirstValidateTS,
 				FailedCnt:       row.FailedCnt,
 			}
@@ -1014,6 +1026,20 @@ func (v *DataValidator) hasReachedSyncer() bool {
 
 func (v *DataValidator) addPendingRowCount(tp rowChangeJobType, cnt int64) {
 	v.pendingRowCounts[tp].Add(cnt)
+}
+
+func (v *DataValidator) getAllPendingRowCount() int64 {
+	return v.pendingRowCounts[rowInsert].Load() +
+		v.pendingRowCounts[rowUpdated].Load() +
+		v.pendingRowCounts[rowDeleted].Load()
+}
+
+func (v *DataValidator) addPendingRowSize(size int64) {
+	v.pendingRowSize.Add(size)
+}
+
+func (v *DataValidator) getPendingRowSize() int64 {
+	return v.pendingRowSize.Load()
 }
 
 func (v *DataValidator) sendError(err error) {

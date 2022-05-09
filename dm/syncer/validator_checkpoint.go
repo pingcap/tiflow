@@ -202,6 +202,7 @@ type tableChangeDataForPersist struct {
 type rowChangeDataForPersist struct {
 	Key             string           `json:"key"`
 	Tp              rowChangeJobType `json:"tp"`
+	Size            int32            `json:"size"`
 	Data            []interface{}    `json:"data"`
 	FirstValidateTS int64            `json:"first-ts"`
 	FailedCnt       int              `json:"failed-cnt"` // failed count
@@ -241,6 +242,7 @@ func (c *validatorPersistHelper) persist(tctx *tcontext.Context, loc binlog.Loca
 				rowForPersist := rowChangeDataForPersist{
 					Key:             key,
 					Tp:              j.Tp,
+					Size:            j.size,
 					Data:            row.RowValues(),
 					FirstValidateTS: j.FirstValidateTS,
 					FailedCnt:       j.FailedCnt,

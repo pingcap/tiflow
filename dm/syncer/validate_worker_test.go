@@ -529,3 +529,37 @@ func TestValidatorIsRetryableDBError(t *testing.T) {
 	require.True(t, isRetryableDBError(driver.ErrBadConn))
 	require.True(t, isRetryableDBError(errors.Annotate(driver.ErrBadConn, "test")))
 }
+
+func TestValidatorRowCountAndSize(t *testing.T) {
+	cfg := genSubtaskConfig(t)
+	cfg.ValidatorCfg.Mode = config.ValidationFull
+	syncerObj := NewSyncer(cfg, nil, nil)
+	validator := NewContinuousDataValidator(cfg, syncerObj, false)
+	validator.persistHelper.schemaInitialized.Store(true)
+	validator.Start(pb.Stage_Stopped)
+	defer validator.cancel()
+	validator.reachedSyncer.Store(true)
+
+	worker := newValidateWorker(validator, 0)
+	worker.newJobAdded(&rowValidationJob{Tp: rowInsert, size: 100})
+	worker.newJobAdded(&rowValidationJob{Tp: rowUpdated, size: 200})
+	worker.newJobAdded(&rowValidationJob{Tp: rowDeleted, size: 400})
+	worker.newJobAdded(&rowValidationJob{Tp: rowInsert, size: 800})
+	require.Equal(t, int64(2), worker.pendingRowCounts[rowInsert])
+	require.Equal(t, int64(1), worker.pendingRowCounts[rowUpdated])
+	require.Equal(t, int64(1), worker.pendingRowCounts[rowDeleted])
+	require.Equal(t, int64(1500), worker.pendingRowSize)
+	require.Equal(t, int64(2), validator.pendingRowCounts[rowInsert].Load())
+	require.Equal(t, int64(1), validator.pendingRowCounts[rowUpdated].Load())
+	require.Equal(t, int64(1), validator.pendingRowCounts[rowDeleted].Load())
+	require.Equal(t, int64(1500), validator.pendingRowSize.Load())
+	worker.setPendingRowCountsAndSize([]int64{0, 0, 0}, 300)
+	require.Equal(t, int64(0), worker.pendingRowCounts[rowInsert])
+	require.Equal(t, int64(0), worker.pendingRowCounts[rowUpdated])
+	require.Equal(t, int64(0), worker.pendingRowCounts[rowDeleted])
+	require.Equal(t, int64(300), worker.pendingRowSize)
+	require.Equal(t, int64(0), validator.pendingRowCounts[rowInsert].Load())
+	require.Equal(t, int64(0), validator.pendingRowCounts[rowUpdated].Load())
+	require.Equal(t, int64(0), validator.pendingRowCounts[rowDeleted].Load())
+	require.Equal(t, int64(300), validator.pendingRowSize.Load())
+}
