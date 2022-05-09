@@ -84,11 +84,6 @@ func (r *reader) output(event *model.PolymorphicEvent) bool {
 	case r.outputCh <- event:
 		r.lastEvent = event
 		r.lastSentCommitTs = event.CRTs
-		if event.RawKV != nil && event.RawKV.OpType == model.OpTypeResolved {
-			r.metricTotalEventsResolved.Inc()
-		} else {
-			r.metricTotalEventsKV.Inc()
-		}
 		return true
 	default:
 		return false
@@ -99,6 +94,7 @@ func (r *reader) output(event *model.PolymorphicEvent) bool {
 func (r *reader) outputResolvedTs(rts model.Ts) {
 	ok := r.output(model.NewResolvedPolymorphicEvent(0, rts))
 	if ok {
+		r.metricTotalEventsResolved.Inc()
 		r.lastSentResolvedTs = rts
 	}
 }
@@ -126,6 +122,7 @@ func (r *reader) outputBufferedResolvedEvents(buffer *outputBuffer) {
 		buffer.appendDeleteKey(message.Key(key))
 		remainIdx = idx + 1
 	}
+	r.metricTotalEventsKV.Add(float64(remainIdx))
 	// Remove outputted events.
 	buffer.shiftResolvedEvents(remainIdx)
 
