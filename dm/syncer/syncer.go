@@ -2734,8 +2734,7 @@ func (s *Syncer) handleQueryEvent(ev *replication.QueryEvent, ec eventContext, o
 		}
 		if binlog.CompareLocation(qec.shardingReSync.currLocation, qec.shardingReSync.latestLocation, s.cfg.EnableGTID) >= expectedCmp {
 			qec.tctx.L().Info("re-replicate shard group was completed", zap.String("event", "query"), zap.Stringer("queryEventContext", qec))
-			err2 := qec.closeShardingResync()
-			return err2
+			return qec.closeShardingResync()
 		} else if s.cfg.ShardMode != config.ShardOptimistic {
 			// in re-syncing, we can simply skip all DDLs.
 			// for pessimistic shard mode,
