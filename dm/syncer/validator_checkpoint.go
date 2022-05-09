@@ -222,8 +222,6 @@ func (c *validatorPersistHelper) persist(tctx *tcontext.Context, loc binlog.Loca
 	args := make([][]interface{}, 0, count+2)
 	nextRevision := c.revision + 1
 
-	c.L.Info("persist checkpoint and intermediate data")
-
 	// update checkpoint
 	queries = append(queries, `INSERT INTO `+c.checkpointTableName+
 		`(source, binlog_name, binlog_pos, binlog_gtid) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE
@@ -267,7 +265,7 @@ func (c *validatorPersistHelper) persist(tctx *tcontext.Context, loc binlog.Loca
 					sourceTable.Schema,
 					sourceTable.Table,
 					key,
-					rowJSON,
+					string(rowJSON),
 					nextRevision,
 				})
 			}
@@ -337,7 +335,7 @@ func (c *validatorPersistHelper) persist(tctx *tcontext.Context, loc binlog.Loca
 			args = append(args, []interface{}{
 				c.cfg.SourceID, sourceTable.Schema, sourceTable.Table, r.srcJob.Key,
 				targetTable.Schema, targetTable.Table,
-				srcDataStr, dstDataStr, r.tp, pb.ValidateErrorState_NewErr,
+				string(srcDataStr), string(dstDataStr), r.tp, pb.ValidateErrorState_NewErr,
 			})
 		}
 	}

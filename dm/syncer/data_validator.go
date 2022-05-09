@@ -68,8 +68,8 @@ type rowChangeJobType int
 
 const (
 	rowInsert rowChangeJobType = iota
-	rowDeleted
 	rowUpdated
+	rowDeleted
 	flushCheckpoint
 
 	rowChangeTypeCount  = 3
@@ -863,6 +863,11 @@ func (v *DataValidator) persistCheckpointAndData(loc binlog.Location) error {
 		worker.rowChangeCh <- flushJob
 	}
 	wg.Wait()
+
+	v.L.Info("persist checkpoint and intermediate data",
+		zap.Int64("pending size", v.getPendingRowSize()),
+		zap.Int64("pending count", v.getAllPendingRowCount()),
+		zap.Int64("new error", v.newErrorRowCount.Load()))
 
 	err := v.persistHelper.persist(v.tctx, loc)
 	if err != nil {
