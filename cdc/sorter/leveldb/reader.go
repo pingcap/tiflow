@@ -84,7 +84,7 @@ func (r *reader) output(event *model.PolymorphicEvent) bool {
 	case r.outputCh <- event:
 		r.lastEvent = event
 		r.lastSentCommitTs = event.CRTs
-		if event.RawKV.OpType == model.OpTypeResolved {
+		if event.RawKV != nil && event.RawKV.OpType == model.OpTypeResolved {
 			r.metricTotalEventsResolved.Inc()
 		} else {
 			r.metricTotalEventsKV.Inc()
