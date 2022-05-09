@@ -2185,7 +2185,7 @@ func (s *Syncer) initSafeModeExitTS(firstBinlogTS int64) error {
 		return err
 	}
 	s.firstMeetBinlogTS = &firstBinlogTS
-	exitTS := firstBinlogTS + int64(duration.Seconds())*1000
+	exitTS := firstBinlogTS + int64(duration.Seconds())
 	s.exitSafeModeTS = &exitTS
 	s.tctx.L().Info("safe-mode will disable by task cli args", zap.Int64("ts", exitTS))
 	return nil

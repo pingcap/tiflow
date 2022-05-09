@@ -665,8 +665,9 @@ function test_start_task_with_condition() {
 		"query-status $task_name" \
 		"Duplicate entry" 2
 
+	# set duration and start again
 	openapi_task_check "stop_task_success" "$task_name" ""
-	duration="100s"
+	duration="200s"
 	openapi_task_check "start_task_with_condition" $task_name "$start_time" "$duration" "$is_success" "$check_result"
 
 	run_sql_tidb_with_retry "SELECT count(1) FROM openapi.t1;" "count(1): 2"
