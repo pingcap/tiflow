@@ -137,29 +137,7 @@ func (m *mockScheduler) Tick(
 	captures map[model.CaptureID]*model.CaptureInfo,
 ) (newCheckpointTs, newResolvedTs model.Ts, err error) {
 	m.currentTables = currentTables
-
-	resolvedTs := model.Ts(math.MaxUint64)
-
-	for _, position := range state.TaskPositions {
-		if resolvedTs > position.ResolvedTs {
-			resolvedTs = position.ResolvedTs
-		}
-	}
-	for _, taskStatus := range state.TaskStatuses {
-		for _, opt := range taskStatus.Operation {
-			if resolvedTs > opt.BoundaryTs {
-				resolvedTs = opt.BoundaryTs
-			}
-		}
-	}
-	checkpointTs := resolvedTs
-	for _, position := range state.TaskPositions {
-		if checkpointTs > position.CheckPointTs {
-			checkpointTs = position.CheckPointTs
-		}
-	}
-
-	return checkpointTs, resolvedTs, nil
+	return model.Ts(math.MaxUint64), model.Ts(math.MaxUint64), nil
 }
 
 // MoveTable is used to trigger manual table moves.
@@ -209,13 +187,9 @@ func TestPreCheck(t *testing.T) {
 	cf.Tick(ctx, state, captures)
 	tester.MustApplyPatches()
 	require.NotNil(t, state.Status)
-	require.Contains(t, state.TaskStatuses, ctx.GlobalVars().CaptureInfo.ID)
 
 	// test clean the meta data of offline capture
 	offlineCaputreID := "offline-capture"
-	state.PatchTaskStatus(offlineCaputreID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
-		return new(model.TaskStatus), true, nil
-	})
 	state.PatchTaskPosition(offlineCaputreID, func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
 		return new(model.TaskPosition), true, nil
 	})
@@ -224,8 +198,6 @@ func TestPreCheck(t *testing.T) {
 	cf.Tick(ctx, state, captures)
 	tester.MustApplyPatches()
 	require.NotNil(t, state.Status)
-	require.Contains(t, state.TaskStatuses, ctx.GlobalVars().CaptureInfo.ID)
-	require.NotContains(t, state.TaskStatuses, offlineCaputreID)
 	require.NotContains(t, state.TaskPositions, offlineCaputreID)
 }
 
@@ -301,8 +273,6 @@ func TestExecDDL(t *testing.T) {
 	// pre check and initialize
 	tickThreeTime()
 	require.Len(t, cf.schema.AllPhysicalTables(), 1)
-	require.Len(t, state.TaskStatuses[ctx.GlobalVars().CaptureInfo.ID].Operation, 0)
-	require.Len(t, state.TaskStatuses[ctx.GlobalVars().CaptureInfo.ID].Tables, 0)
 
 	job = helper.DDL2Job("drop table test0.table0")
 	// ddl puller resolved ts grow up
@@ -396,8 +366,6 @@ func TestEmitCheckpointTs(t *testing.T) {
 	mockDDLSink := cf.sink.(*mockDDLSink)
 
 	require.Len(t, cf.schema.AllTableNames(), 1)
-	require.Len(t, state.TaskStatuses[ctx.GlobalVars().CaptureInfo.ID].Operation, 0)
-	require.Len(t, state.TaskStatuses[ctx.GlobalVars().CaptureInfo.ID].Tables, 0)
 	ts, names := mockDDLSink.getCheckpointTsAndTableNames()
 	require.Equal(t, ts, startTs)
 	require.Len(t, names, 1)

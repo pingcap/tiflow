@@ -141,9 +141,9 @@ type ChangefeedReactorState struct {
 	Status        *model.ChangeFeedStatus
 	TaskPositions map[model.CaptureID]*model.TaskPosition
 
-	// Deprecated: No longer used.
+	// Deprecated: No longer used, kept for compatibility.
 	TaskStatuses map[model.CaptureID]*model.TaskStatus
-	// Deprecated: No longer used.
+	// Deprecated: No longer used, kept for compatibility.
 	Workloads map[model.CaptureID]model.TaskWorkload
 
 	pendingPatches        []DataPatch
@@ -251,7 +251,7 @@ func (s *ChangefeedReactorState) Exist() bool {
 
 // Active return true if the changefeed is ready to be processed
 func (s *ChangefeedReactorState) Active(captureID model.CaptureID) bool {
-	return s.Info != nil && s.Status != nil && s.TaskStatuses[captureID] != nil
+	return s.Info != nil && s.Status != nil && s.Status.AdminJobType == model.AdminNone
 }
 
 // GetPatches implements the ReactorState interface
@@ -358,29 +358,15 @@ func (s *ChangefeedReactorState) PatchTaskPosition(captureID model.CaptureID, fn
 	})
 }
 
-// PatchTaskStatus appends a DataPatch which can modify the TaskStatus of a specified capture
-//
-// Deprecated: No longer used.
-func (s *ChangefeedReactorState) PatchTaskStatus(captureID model.CaptureID, fn func(*model.TaskStatus) (*model.TaskStatus, bool, error)) {
-	key := &etcd.CDCKey{
-		Tp:           etcd.CDCKeyTypeTaskStatus,
-		CaptureID:    captureID,
-		ChangefeedID: s.ID,
-	}
-	s.patchAny(key.String(), taskStatusTPI, func(e interface{}) (interface{}, bool, error) {
-		// e == nil means that the key is not exist before this patch
-		if e == nil {
-			return fn(nil)
-		}
-		return fn(e.(*model.TaskStatus))
-	})
-}
-
 var (
 	taskPositionTPI     *model.TaskPosition
-	taskStatusTPI       *model.TaskStatus
 	changefeedStatusTPI *model.ChangeFeedStatus
 	changefeedInfoTPI   *model.ChangeFeedInfo
+
+	// No longer used, kept for future clean up for keys left by older TiCDC.
+	taskStatusTPI *model.TaskStatus
+	// No longer used, kept for future clean up for keys left by older TiCDC.
+	taskWorkloadTPI *model.TaskWorkload
 )
 
 func (s *ChangefeedReactorState) patchAny(key string, tpi interface{}, fn func(interface{}) (interface{}, bool, error)) {

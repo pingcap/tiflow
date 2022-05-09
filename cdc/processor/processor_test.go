@@ -242,11 +242,6 @@ func TestTableExecutor(t *testing.T) {
 		status.ResolvedTs = 20
 		return status, true, nil
 	})
-	p.changefeed.PatchTaskPosition(p.captureInfo.ID, func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
-		position.ResolvedTs = 100
-		position.CheckPointTs = 90
-		return position, true, nil
-	})
 	tester.MustApplyPatches()
 
 	// no operation
@@ -436,10 +431,6 @@ func TestProcessorExit(t *testing.T) {
 		status.AdminJobType = model.AdminStop
 		return status, true, nil
 	})
-	p.changefeed.PatchTaskStatus(ctx.GlobalVars().CaptureInfo.ID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
-		status.AdminJobType = model.AdminStop
-		return status, true, nil
-	})
 	tester.MustApplyPatches()
 	_, err = p.Tick(ctx, p.changefeed)
 	require.True(t, cerror.ErrReactorFinished.Equal(errors.Cause(err)))
@@ -567,11 +558,6 @@ func TestPositionDeleted(t *testing.T) {
 func TestSchemaGC(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(true)
 	p, tester := initProcessor4Test(ctx, t)
-	p.changefeed.PatchTaskStatus(p.captureInfo.ID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
-		status.Tables[1] = &model.TableReplicaInfo{StartTs: 30}
-		status.Tables[2] = &model.TableReplicaInfo{StartTs: 40}
-		return status, true, nil
-	})
 
 	var err error
 	// init tick
@@ -589,21 +575,6 @@ func TestSchemaGC(t *testing.T) {
 	// GC Ts should be (checkpoint - 1).
 	require.Equal(t, p.schemaStorage.(*mockSchemaStorage).lastGcTs, uint64(49))
 	require.Equal(t, p.lastSchemaTs, uint64(49))
-}
-
-func cleanUpFinishedOpOperation(state *orchestrator.ChangefeedReactorState, captureID model.CaptureID, tester *orchestrator.ReactorStateTester) {
-	state.PatchTaskStatus(captureID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
-		if status == nil || status.Operation == nil {
-			return status, false, nil
-		}
-		for tableID, opt := range status.Operation {
-			if opt.Status == model.OperFinished {
-				delete(status.Operation, tableID)
-			}
-		}
-		return status, true, nil
-	})
-	tester.MustApplyPatches()
 }
 
 func updateChangeFeedPosition(t *testing.T, tester *orchestrator.ReactorStateTester, cfID model.ChangeFeedID, resolvedTs, checkpointTs model.Ts) {

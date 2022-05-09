@@ -291,11 +291,6 @@ func (o *ownerImpl) cleanUpChangefeed(state *orchestrator.ChangefeedReactorState
 	state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
 		return nil, status != nil, nil
 	})
-	for captureID := range state.TaskStatuses {
-		state.PatchTaskStatus(captureID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
-			return nil, status != nil, nil
-		})
-	}
 	for captureID := range state.TaskPositions {
 		state.PatchTaskPosition(captureID, func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
 			return nil, position != nil, nil
@@ -460,18 +455,12 @@ func (o *ownerImpl) handleQueries(query *Query) error {
 		}
 
 		var ret map[model.CaptureID]*model.TaskStatus
-		if provider := cfReactor.GetInfoProvider(); provider != nil {
-			// If the new scheduler is enabled, provider should be non-nil.
-			var err error
-			ret, err = provider.GetTaskStatuses()
-			if err != nil {
-				return errors.Trace(err)
-			}
-		} else {
-			ret = map[model.CaptureID]*model.TaskStatus{}
-			for captureID, taskStatus := range cfReactor.state.TaskStatuses {
-				ret[captureID] = taskStatus.Clone()
-			}
+		provider := cfReactor.GetInfoProvider()
+		// If the new scheduler is enabled, provider should be non-nil.
+		var err error
+		ret, err = provider.GetTaskStatuses()
+		if err != nil {
+			return errors.Trace(err)
 		}
 		query.Data = ret
 	case QueryTaskPositions:
@@ -480,31 +469,21 @@ func (o *ownerImpl) handleQueries(query *Query) error {
 			return cerror.ErrChangeFeedNotExists.GenWithStackByArgs(query.ChangeFeedID)
 		}
 
-		var ret map[model.CaptureID]*model.TaskPosition
-		if provider := cfReactor.GetInfoProvider(); provider != nil {
-			// If the new scheduler is enabled, provider should be non-nil.
-			var err error
-			ret, err = provider.GetTaskPositions()
-			if err != nil {
-				return errors.Trace(err)
-			}
-		} else {
-			if cfReactor.state == nil {
-				return cerror.ErrChangeFeedNotExists.GenWithStackByArgs(query.ChangeFeedID)
-			}
-			ret = map[model.CaptureID]*model.TaskPosition{}
-			for captureID, taskPosition := range cfReactor.state.TaskPositions {
-				ret[captureID] = taskPosition.Clone()
-			}
+		provider := cfReactor.GetInfoProvider()
+		ret, err := provider.GetTaskPositions()
+		if err != nil {
+			return errors.Trace(err)
 		}
 		query.Data = ret
 	case QueryProcessors:
 		var ret []*model.ProcInfoSnap
 		for cfID, cfReactor := range o.changefeeds {
-			if cfReactor.state == nil {
-				continue
+			provider := cfReactor.GetInfoProvider()
+			positions, err := provider.GetTaskPositions()
+			if err != nil {
+				return errors.Trace(err)
 			}
-			for captureID := range cfReactor.state.TaskStatuses {
+			for captureID := range positions {
 				ret = append(ret, &model.ProcInfoSnap{
 					CfID:      cfID,
 					CaptureID: captureID,

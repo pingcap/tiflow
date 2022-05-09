@@ -471,26 +471,6 @@ func (c *changefeed) preflightCheck(captures map[model.CaptureID]*model.CaptureI
 		})
 		ok = false
 	}
-	for captureID := range captures {
-		if _, exist := c.state.TaskStatuses[captureID]; !exist {
-			c.state.PatchTaskStatus(captureID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
-				if status == nil {
-					status = new(model.TaskStatus)
-					return status, true, nil
-				}
-				return status, false, nil
-			})
-			ok = false
-		}
-	}
-	for captureID := range c.state.TaskStatuses {
-		if _, exist := captures[captureID]; !exist {
-			c.state.PatchTaskStatus(captureID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
-				return nil, status != nil, nil
-			})
-			ok = false
-		}
-	}
 
 	for captureID := range c.state.TaskPositions {
 		if _, exist := captures[captureID]; !exist {

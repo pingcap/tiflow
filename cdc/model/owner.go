@@ -76,15 +76,17 @@ func (t AdminJobType) IsStopState() bool {
 type TaskPosition struct {
 	// The maximum event CommitTs that has been synchronized. This is updated by corresponding processor.
 	//
-	// Deprecated: No longer used.
+	// Deprecated: only used in API. TODO: remove API usage.
 	CheckPointTs uint64 `json:"checkpoint-ts"`
 	// The event that satisfies CommitTs <= ResolvedTs can be synchronized. This is updated by corresponding processor.
 	//
-	// Deprecated: No longer used.
+	// Deprecated: only used in API. TODO: remove API usage.
 	ResolvedTs uint64 `json:"resolved-ts"`
-
 	// The count of events were synchronized. This is updated by corresponding processor.
+	//
+	// Deprecated: only used in API. TODO: remove API usage.
 	Count uint64 `json:"count"`
+
 	// Error when error happens
 	Error *RunningError `json:"error"`
 }
@@ -210,18 +212,14 @@ func (i *TableReplicaInfo) Clone() *TableReplicaInfo {
 	return &clone
 }
 
-// TaskStatus records the task information of a capture
+// TaskStatus records the task information of a capture.
+//
+// Deprecated: only used in API. TODO: remove API usage.
 type TaskStatus struct {
-	// Table information list, containing tables that processor should process,
-	// updated by owner, processor is read only.
-	Tables map[TableID]*TableReplicaInfo `json:"tables"`
-
-	// Deprecated: No longer used.
-	Operation map[TableID]*TableOperation `json:"operation"`
-	// Deprecated: No longer used.
-	AdminJobType AdminJobType `json:"admin-job-type"`
-	// Deprecated: No longer used.
-	ModRevision int64 `json:"-"`
+	Tables       map[TableID]*TableReplicaInfo `json:"tables"`
+	Operation    map[TableID]*TableOperation   `json:"operation"`
+	AdminJobType AdminJobType                  `json:"admin-job-type"`
+	ModRevision  int64                         `json:"-"`
 }
 
 // String implements fmt.Stringer interface.

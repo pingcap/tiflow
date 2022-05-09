@@ -141,14 +141,10 @@ func TestCleanUpInfos(t *testing.T) {
 		require.Nil(t, status)
 		return &model.ChangeFeedStatus{}, true, nil
 	})
-	state.PatchTaskStatus(ctx.GlobalVars().CaptureInfo.ID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
-		return &model.TaskStatus{}, true, nil
-	})
 	state.PatchTaskPosition(ctx.GlobalVars().CaptureInfo.ID, func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
 		return &model.TaskPosition{}, true, nil
 	})
 	tester.MustApplyPatches()
-	require.Contains(t, state.TaskStatuses, ctx.GlobalVars().CaptureInfo.ID)
 	require.Contains(t, state.TaskPositions, ctx.GlobalVars().CaptureInfo.ID)
 	manager.Tick(state)
 	tester.MustApplyPatches()
@@ -161,7 +157,6 @@ func TestCleanUpInfos(t *testing.T) {
 	require.Equal(t, state.Info.State, model.StateFinished)
 	require.Equal(t, state.Info.AdminJobType, model.AdminFinish)
 	require.Equal(t, state.Status.AdminJobType, model.AdminFinish)
-	require.NotContains(t, state.TaskStatuses, ctx.GlobalVars().CaptureInfo.ID)
 	require.NotContains(t, state.TaskPositions, ctx.GlobalVars().CaptureInfo.ID)
 }
 
@@ -177,9 +172,6 @@ func TestHandleError(t *testing.T) {
 	state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
 		require.Nil(t, status)
 		return &model.ChangeFeedStatus{}, true, nil
-	})
-	state.PatchTaskStatus(ctx.GlobalVars().CaptureInfo.ID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
-		return &model.TaskStatus{}, true, nil
 	})
 
 	tester.MustApplyPatches()

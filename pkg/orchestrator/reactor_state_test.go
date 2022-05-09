@@ -496,50 +496,6 @@ func TestPatchTaskPosition(t *testing.T) {
 	})
 }
 
-func TestPatchTaskStatus(t *testing.T) {
-	state := NewChangefeedReactorState(model.DefaultChangeFeedID("test1"))
-	stateTester := NewReactorStateTester(t, state, nil)
-	captureID1 := "capture1"
-	captureID2 := "capture2"
-	state.PatchTaskStatus(captureID1, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
-		require.Nil(t, status)
-		return &model.TaskStatus{
-			Tables: map[model.TableID]*model.TableReplicaInfo{45: {StartTs: 1}},
-		}, true, nil
-	})
-	state.PatchTaskStatus(captureID2, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
-		require.Nil(t, status)
-		return &model.TaskStatus{
-			Tables: map[model.TableID]*model.TableReplicaInfo{46: {StartTs: 1}},
-		}, true, nil
-	})
-	stateTester.MustApplyPatches()
-	require.Equal(t, state.TaskStatuses, map[model.CaptureID]*model.TaskStatus{
-		captureID1: {Tables: map[model.TableID]*model.TableReplicaInfo{45: {StartTs: 1}}},
-		captureID2: {Tables: map[model.TableID]*model.TableReplicaInfo{46: {StartTs: 1}}},
-	})
-	state.PatchTaskStatus(captureID1, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
-		status.Tables[46] = &model.TableReplicaInfo{StartTs: 2}
-		return status, true, nil
-	})
-	state.PatchTaskStatus(captureID2, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
-		status.Tables[46].StartTs++
-		return status, true, nil
-	})
-	stateTester.MustApplyPatches()
-	require.Equal(t, state.TaskStatuses, map[model.CaptureID]*model.TaskStatus{
-		captureID1: {Tables: map[model.TableID]*model.TableReplicaInfo{45: {StartTs: 1}, 46: {StartTs: 2}}},
-		captureID2: {Tables: map[model.TableID]*model.TableReplicaInfo{46: {StartTs: 2}}},
-	})
-	state.PatchTaskStatus(captureID2, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
-		return nil, true, nil
-	})
-	stateTester.MustApplyPatches()
-	require.Equal(t, state.TaskStatuses, map[model.CaptureID]*model.TaskStatus{
-		captureID1: {Tables: map[model.TableID]*model.TableReplicaInfo{45: {StartTs: 1}, 46: {StartTs: 2}}},
-	})
-}
-
 func TestGlobalStateUpdate(t *testing.T) {
 	testCases := []struct {
 		updateKey   []string
