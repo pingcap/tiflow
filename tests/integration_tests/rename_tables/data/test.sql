@@ -38,6 +38,18 @@ create table t2 (
  primary key(value64, value32)
 );
 
+create table t3 (
+ value64  bigint unsigned  not null,
+ value32  integer          not null,
+ primary key(value64, value32)
+);
+
+create table t4 (
+ value64  bigint unsigned  not null,
+ value32  integer          not null,
+ primary key(value64, value32)
+);
+
 insert into t1 values(17156792991891826145, 1);
 insert into t1 values( 9223372036854775807, 2);
 insert into t2 values(17156792991891826145, 3);
@@ -49,5 +61,9 @@ insert into t1_7 values(91891826145, 5);
 insert into t1_7 values(685477580, 6);
 insert into t2_7 values(1715679991826145, 7);
 insert into t2_7 values(2036854775807, 8);
+
+insert into t3 select * from t1_7;
+insert into t4 select * from t2_7;
+drop table t3, t4;
 
 create table finish_mark(id int primary key);
