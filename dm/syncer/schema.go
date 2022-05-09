@@ -27,6 +27,7 @@ import (
 	"github.com/pingcap/tidb/parser/format"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/util/filter"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/dm/dm/config"
@@ -77,9 +78,10 @@ func (s *Syncer) OperateSchema(ctx context.Context, req *pb.OperateWorkerSchemaR
 			targetTable := s.route(sourceTable)
 			return dbconn.GetTableCreateSQL(s.tctx.WithContext(ctx), s.downstreamTrackConn, targetTable.String())
 		}
+
 		result := bytes.NewBuffer(make([]byte, 0, 512))
 		err2 := executor.ConstructResultOfShowCreateTable(s.sessCtx, ti, autoid.Allocators{}, result)
-		return result.String(), err2
+		return utils.CreateTableSQLToOneRow(result.String()), err2
 
 	case pb.SchemaOp_SetSchema:
 		// from source or target need get schema

@@ -286,10 +286,7 @@ func (tr *Tracker) GetCreateTable(ctx context.Context, table *filter.Table) (str
 
 	row := req.GetRow(0)
 	str := row.GetString(1) // the first column is the table name.
-	// returned as single line.
-	str = strings.ReplaceAll(str, "\n", "")
-	str = strings.ReplaceAll(str, "  ", " ")
-	return str, nil
+	return utils.CreateTableSQLToOneRow(str), nil
 }
 
 // AllSchemas returns all schemas visible to the tracker (excluding system tables).
