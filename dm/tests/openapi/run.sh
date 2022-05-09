@@ -571,19 +571,19 @@ function run() {
 	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
 
-	#	test_relay
-	#	test_source
-	#
-	#	test_shard_task
-	#	test_multi_tasks
-	#	test_noshard_task
-	#	test_task_templates
-	#	test_noshard_task_dump_status
-	#	test_complex_operations_of_source_and_task
+	test_relay
+	test_source
+
+	test_shard_task
+	test_multi_tasks
+	test_noshard_task
+	test_task_templates
+	test_noshard_task_dump_status
+	test_complex_operations_of_source_and_task
 	test_delete_task_with_stopped_downstream
 
 	# NOTE: this test case MUST running at last, because it will offline some members of cluster
-	#	test_cluster
+	test_cluster
 }
 
 cleanup_data openapi
