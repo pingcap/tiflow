@@ -19,11 +19,13 @@ function complex_behaviour() {
 
 	run_sql_file $cur/data/db1.prepare2.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
 
-	# test about schema-tracker can't create its storage
+	# test no permission
 	chmod -w $WORK_DIR/worker1
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"start-task $cur/conf/dm-task2.yaml" \
-		"failed to create schema tracker" 1 \
+		"start-task $cur/conf/dm-task2.yaml"
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+	  "query-status test" \
+		"mydumper/dumpling runs with error" 1 \
 		"permission denied" 1
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"stop-task test"
