@@ -383,15 +383,6 @@ func (p *processor) tick(ctx cdcContext.Context, state *orchestrator.ChangefeedR
 	p.handlePosition(oracle.GetPhysical(pdTime))
 	p.pushResolvedTs2Table()
 
-	// The workload key does not contain extra information and
-	// will not be used in the new scheduler. If we wrote to the
-	// key while there are many tables (>10000), we would risk burdening Etcd.
-	//
-	// The keys will still exist but will no longer be written to
-	// if we do not call handleWorkload.
-	if !p.newSchedulerEnabled {
-		p.handleWorkload()
-	}
 	p.doGCSchemaStorage(ctx)
 	p.metricSyncTableNumGauge.Set(float64(len(p.tables)))
 
@@ -883,25 +874,6 @@ func (p *processor) handlePosition(currentTs int64) {
 
 // handleWorkload calculates the workload of all tables
 func (p *processor) handleWorkload() {
-	p.changefeed.PatchTaskWorkload(p.captureInfo.ID, func(workloads model.TaskWorkload) (model.TaskWorkload, bool, error) {
-		changed := false
-		if workloads == nil {
-			workloads = make(model.TaskWorkload)
-		}
-		for tableID := range workloads {
-			if _, exist := p.tables[tableID]; !exist {
-				delete(workloads, tableID)
-				changed = true
-			}
-		}
-		for tableID, table := range p.tables {
-			if workloads[tableID] != table.Workload() {
-				workloads[tableID] = table.Workload()
-				changed = true
-			}
-		}
-		return workloads, changed, nil
-	})
 }
 
 // pushResolvedTs2Table sends global resolved ts to all the table pipelines.
