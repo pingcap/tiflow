@@ -474,12 +474,6 @@ func (t *tableActor) AsyncStop(targetTs model.Ts) bool {
 	return true
 }
 
-// Workload returns the workload of this table pipeline
-func (t *tableActor) Workload() model.WorkloadInfo {
-	// We temporarily set the value to constant 1
-	return workload
-}
-
 // Status returns the status of this table pipeline
 func (t *tableActor) Status() TableStatus {
 	return t.sinkNode.Status()

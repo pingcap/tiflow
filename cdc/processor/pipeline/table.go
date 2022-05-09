@@ -51,8 +51,6 @@ type TablePipeline interface {
 	UpdateBarrierTs(ts model.Ts)
 	// AsyncStop tells the pipeline to stop, and returns true is the pipeline is already stopped.
 	AsyncStop(targetTs model.Ts) bool
-	// Workload returns the workload of this table
-	Workload() model.WorkloadInfo
 	// Status returns the status of this table pipeline
 	Status() TableStatus
 	// Cancel stops this table pipeline immediately and destroy all resources created by this table pipeline
@@ -125,15 +123,6 @@ func (t *tablePipelineImpl) AsyncStop(targetTs model.Ts) bool {
 		log.Panic("unexpect error from send to first node", zap.Error(err))
 	}
 	return true
-}
-
-var workload = model.WorkloadInfo{Workload: 1}
-
-// Workload returns the workload of this table
-func (t *tablePipelineImpl) Workload() model.WorkloadInfo {
-	// TODO(leoppro) calculate the workload of this table
-	// We temporarily set the value to constant 1
-	return workload
 }
 
 // Status returns the status of this table pipeline, sinkNode maintains the table status

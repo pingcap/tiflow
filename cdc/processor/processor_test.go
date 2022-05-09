@@ -163,10 +163,6 @@ func (m *mockTablePipeline) AsyncStop(targetTs model.Ts) bool {
 	return true
 }
 
-func (m *mockTablePipeline) Workload() model.WorkloadInfo {
-	return model.WorkloadInfo{Workload: 1}
-}
-
 func (m *mockTablePipeline) Status() tablepipeline.TableStatus {
 	return m.status
 }

@@ -176,13 +176,6 @@ func (s *oldScheduler) dispatchToTargetCaptures(pendingJobs []*schedulerJob) {
 
 	for captureID := range s.captures {
 		workloads[captureID] = 0
-		taskWorkload := s.state.Workloads[captureID]
-		if taskWorkload == nil {
-			continue
-		}
-		for _, workload := range taskWorkload {
-			workloads[captureID] += workload.Workload
-		}
 	}
 
 	for _, pendingJob := range pendingJobs {

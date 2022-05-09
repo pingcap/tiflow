@@ -90,8 +90,7 @@ func (s *GlobalReactorState) Update(key util.EtcdKey, value []byte, _ bool) erro
 	case etcd.CDCKeyTypeChangefeedInfo,
 		etcd.CDCKeyTypeChangeFeedStatus,
 		etcd.CDCKeyTypeTaskPosition,
-		etcd.CDCKeyTypeTaskStatus,
-		etcd.CDCKeyTypeTaskWorkload:
+		etcd.CDCKeyTypeTaskStatus:
 		changefeedState, exist := s.Changefeeds[k.ChangefeedID]
 		if !exist {
 			if value == nil {
@@ -141,7 +140,6 @@ type ChangefeedReactorState struct {
 	Status        *model.ChangeFeedStatus
 	TaskPositions map[model.CaptureID]*model.TaskPosition
 	TaskStatuses  map[model.CaptureID]*model.TaskStatus
-	Workloads     map[model.CaptureID]model.TaskWorkload
 
 	pendingPatches        []DataPatch
 	skipPatchesInThisTick bool
@@ -153,7 +151,6 @@ func NewChangefeedReactorState(id model.ChangeFeedID) *ChangefeedReactorState {
 		ID:            id,
 		TaskPositions: make(map[model.CaptureID]*model.TaskPosition),
 		TaskStatuses:  make(map[model.CaptureID]*model.TaskStatus),
-		Workloads:     make(map[model.CaptureID]model.TaskWorkload),
 	}
 }
 
@@ -216,17 +213,6 @@ func (s *ChangefeedReactorState) UpdateCDCKey(key *etcd.CDCKey, value []byte) er
 		status := new(model.TaskStatus)
 		s.TaskStatuses[key.CaptureID] = status
 		e = status
-	case etcd.CDCKeyTypeTaskWorkload:
-		if key.ChangefeedID != s.ID {
-			return nil
-		}
-		if value == nil {
-			delete(s.Workloads, key.CaptureID)
-			return nil
-		}
-		workload := make(model.TaskWorkload)
-		s.Workloads[key.CaptureID] = workload
-		e = &workload
 	default:
 		return nil
 	}
@@ -243,7 +229,7 @@ func (s *ChangefeedReactorState) UpdateCDCKey(key *etcd.CDCKey, value []byte) er
 
 // Exist returns false if all keys of this changefeed in ETCD is not exist
 func (s *ChangefeedReactorState) Exist() bool {
-	return s.Info != nil || s.Status != nil || len(s.TaskPositions) != 0 || len(s.TaskStatuses) != 0 || len(s.Workloads) != 0
+	return s.Info != nil || s.Status != nil || len(s.TaskPositions) != 0 || len(s.TaskStatuses) != 0
 }
 
 // Active return true if the changefeed is ready to be processed
@@ -371,26 +357,9 @@ func (s *ChangefeedReactorState) PatchTaskStatus(captureID model.CaptureID, fn f
 	})
 }
 
-// PatchTaskWorkload appends a DataPatch which can modify the TaskWorkload of a specified capture
-func (s *ChangefeedReactorState) PatchTaskWorkload(captureID model.CaptureID, fn func(model.TaskWorkload) (model.TaskWorkload, bool, error)) {
-	key := &etcd.CDCKey{
-		Tp:           etcd.CDCKeyTypeTaskWorkload,
-		CaptureID:    captureID,
-		ChangefeedID: s.ID,
-	}
-	s.patchAny(key.String(), taskWorkloadTPI, func(e interface{}) (interface{}, bool, error) {
-		// e == nil means that the key is not exist before this patch
-		if e == nil {
-			return fn(nil)
-		}
-		return fn(*e.(*model.TaskWorkload))
-	})
-}
-
 var (
 	taskPositionTPI     *model.TaskPosition
 	taskStatusTPI       *model.TaskStatus
-	taskWorkloadTPI     *model.TaskWorkload
 	changefeedStatusTPI *model.ChangeFeedStatus
 	changefeedInfoTPI   *model.ChangeFeedInfo
 )

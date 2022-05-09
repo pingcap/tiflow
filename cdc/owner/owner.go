@@ -302,11 +302,6 @@ func (o *ownerImpl) cleanUpChangefeed(state *orchestrator.ChangefeedReactorState
 			return nil, position != nil, nil
 		})
 	}
-	for captureID := range state.Workloads {
-		state.PatchTaskWorkload(captureID, func(workload model.TaskWorkload) (model.TaskWorkload, bool, error) {
-			return nil, workload != nil, nil
-		})
-	}
 }
 
 // Bootstrap checks if the state contains incompatible or incorrect information and tries to fix it.

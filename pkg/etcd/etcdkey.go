@@ -28,7 +28,6 @@ const (
 	captureKey  = "/capture"
 
 	taskKey         = "/task"
-	taskWorkloadKey = taskKey + "/workload"
 	taskStatusKey   = taskKey + "/status"
 	taskPositionKey = taskKey + "/position"
 
@@ -48,7 +47,6 @@ const (
 	CDCKeyTypeChangeFeedStatus
 	CDCKeyTypeTaskPosition
 	CDCKeyTypeTaskStatus
-	CDCKeyTypeTaskWorkload
 )
 
 // CDCKey represents a etcd key which is defined by TiCDC
@@ -129,15 +127,6 @@ func (k *CDCKey) Parse(key string) error {
 		k.CaptureID = splitKey[0]
 		k.ChangefeedID = model.DefaultChangeFeedID(splitKey[1])
 		k.OwnerLeaseID = ""
-	case strings.HasPrefix(key, taskWorkloadKey):
-		splitKey := strings.SplitN(key[len(taskWorkloadKey)+1:], "/", 2)
-		if len(splitKey) != 2 {
-			return cerror.ErrInvalidEtcdKey.GenWithStackByArgs(key)
-		}
-		k.Tp = CDCKeyTypeTaskWorkload
-		k.CaptureID = splitKey[0]
-		k.ChangefeedID = model.DefaultChangeFeedID(splitKey[1])
-		k.OwnerLeaseID = ""
 	default:
 		return cerror.ErrInvalidEtcdKey.GenWithStackByArgs(key)
 	}
@@ -161,8 +150,6 @@ func (k *CDCKey) String() string {
 		return EtcdKeyBase + taskPositionKey + "/" + k.CaptureID + "/" + k.ChangefeedID.ID
 	case CDCKeyTypeTaskStatus:
 		return EtcdKeyBase + taskStatusKey + "/" + k.CaptureID + "/" + k.ChangefeedID.ID
-	case CDCKeyTypeTaskWorkload:
-		return EtcdKeyBase + taskWorkloadKey + "/" + k.CaptureID + "/" + k.ChangefeedID.ID
 	}
 	log.Panic("unreachable")
 	return ""
