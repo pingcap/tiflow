@@ -27,7 +27,6 @@ function prepare_for_standalone_test() {
 }
 
 function trigger_validator_flush() {
-	sleep 1.5
 	run_sql_source1 "alter table $db_name.t1 comment 'a';" # force flush checkpoint
 }
 
@@ -38,9 +37,20 @@ function restore_task_config() {
 }
 
 function run_standalone() {
-	echo "--> normal case, check we validate different data types"
-	prepare_for_standalone_test
+	#
+	# we have set row-error-delay and meta-flush-interval small enough for cases below,
+	# but it maybe unstable if validator reached progress of syncer before the last ddl,
+	# and then validator start to mark failed rows as error. So we may have more errors
+	# than expected.
+	#
 
+	# backup it, will change it in the following case
+	cp $cur/conf/dm-task-standalone.yaml $cur/conf/dm-task-standalone.yaml.bak
+	trap restore_task_config EXIT
+
+	echo "--> full mode, check we validate different data types"
+	cp $cur/conf/dm-task-standalone.yaml.bak $cur/conf/dm-task-standalone.yaml
+	prepare_for_standalone_test
 	# key=6, mysql store as 1.2345679e+17, but in tidb it's 1.23457e17
 	# so will fail in current compare rule
 	# note: key=1 has the same condition, but it's not validated, since it's migrated in full phase.
@@ -53,9 +63,24 @@ function run_standalone() {
 	run_sql "SELECT count(*) from $db_name.t1" $TIDB_PORT $TIDB_PASSWORD
 	check_contains "count(*): 6"
 
+	echo "--> fast mode, check we validate different data types"
+	cp $cur/conf/dm-task-standalone.yaml.bak $cur/conf/dm-task-standalone.yaml
+	sed -i 's/    mode: full/    mode: fast/' $cur/conf/dm-task-standalone.yaml
+	prepare_for_standalone_test
+	# in fast mode we don't check col by col, so key=6 will pass
+	run_sql_file $cur/data/db1.increment.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation status test" \
+		"\"processedRowsStatus\": \"insert\/update\/delete: 6\/1\/1\"" 1 \
+		"pendingRowsStatus\": \"insert\/update\/delete: 0\/0\/0" 1 \
+		"new\/ignored\/resolved: 0\/0\/0" 1
+	run_sql "SELECT count(*) from $db_name.t1" $TIDB_PORT $TIDB_PASSWORD
+	check_contains "count(*): 6"
+
 	echo "--> check we can catch inconsistent rows"
 	# skip incremental rows with id <= 5
 	export GO_FAILPOINTS='github.com/pingcap/tiflow/dm/syncer/SkipDML=return(5)'
+	cp $cur/conf/dm-task-standalone.yaml.bak $cur/conf/dm-task-standalone.yaml
 	prepare_for_standalone_test
 	run_sql_file $cur/data/db1.increment.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
@@ -79,6 +104,7 @@ function run_standalone() {
 
 	echo "--> check validator panic and we can catch it"
 	export GO_FAILPOINTS='github.com/pingcap/tiflow/dm/syncer/ValidatorPanic=panic("validator panic")'
+	cp $cur/conf/dm-task-standalone.yaml.bak $cur/conf/dm-task-standalone.yaml
 	prepare_for_standalone_test
 	run_sql_file $cur/data/db1.increment.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
@@ -88,6 +114,7 @@ function run_standalone() {
 	echo "--> check validator worker panic and we can catch it"
 	# panic 1 times
 	export GO_FAILPOINTS='github.com/pingcap/tiflow/dm/syncer/ValidatorWorkerPanic=1*panic("validator worker panic")'
+	cp $cur/conf/dm-task-standalone.yaml.bak $cur/conf/dm-task-standalone.yaml
 	prepare_for_standalone_test
 	run_sql_file $cur/data/db1.increment.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
 	sleep 5
@@ -107,10 +134,6 @@ function run_standalone() {
 		"new\/ignored\/resolved: 1\/0\/0" 1
 	run_sql "SELECT count(*) from $db_name.t1" $TIDB_PORT $TIDB_PASSWORD
 	check_contains "count(*): 6"
-
-	# backup it, will change it in the following case
-	cp $cur/conf/dm-task-standalone.yaml $cur/conf/dm-task-standalone.yaml.bak
-	trap restore_task_config EXIT
 
 	echo "--> check validator stop when pending row size too large"
 	# skip incremental rows with id <= 5

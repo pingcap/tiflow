@@ -81,7 +81,7 @@ func TestValidatorWorkerValidateTableChanges(t *testing.T) {
 		validator.persistHelper.schemaInitialized.Store(true)
 		validator.Start(pb.Stage_Stopped)
 		defer validator.cancel()
-		validator.reachedSyncer.Store(true)
+		validator.markErrorStarted.Store(true)
 
 		worker := newValidateWorker(validator, 0)
 
@@ -268,8 +268,8 @@ func TestValidatorWorkerValidateTableChanges(t *testing.T) {
 			checkInitStatus()
 		}
 
-		// set reachedSyncer = false, there should not be any errors and failedCount=0
-		validator.reachedSyncer.Store(false)
+		// set markErrorStarted = false, there should not be any errors and failedCount=0
+		validator.markErrorStarted.Store(false)
 		worker.updateRowChange(genRowChangeJob(tbl1, tableInfo1, "1", rowInsert, []interface{}{1, "a"}))
 
 		mock.ExpectQuery("SELECT .* FROM .*tbl1.* WHERE .*").WillReturnRows(
@@ -298,8 +298,8 @@ func TestValidatorWorkerValidateTableChanges(t *testing.T) {
 		// everything is validated successfully, no error rows
 		checkInitStatus()
 
-		// set reachedSyncer=true, rowErrorDelayInSec = 0, failed rows became error directly
-		validator.reachedSyncer.Store(true)
+		// set markErrorStarted=true, rowErrorDelayInSec = 0, failed rows became error directly
+		validator.markErrorStarted.Store(true)
 		worker.rowErrorDelayInSec = 0
 		worker.updateRowChange(genRowChangeJob(tbl1, tableInfo1, "1", rowInsert, []interface{}{1, "a"}))
 		mock.ExpectQuery("SELECT .* FROM .*tbl1.* WHERE .*").WillReturnRows(
@@ -538,7 +538,7 @@ func TestValidatorRowCountAndSize(t *testing.T) {
 	validator.persistHelper.schemaInitialized.Store(true)
 	validator.Start(pb.Stage_Stopped)
 	defer validator.cancel()
-	validator.reachedSyncer.Store(true)
+	validator.markErrorStarted.Store(true)
 
 	worker := newValidateWorker(validator, 0)
 	worker.newJobAdded(&rowValidationJob{Tp: rowInsert, size: 100})

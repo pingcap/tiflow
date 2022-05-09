@@ -705,20 +705,20 @@ func TestValidatorMarkReachedSyncerRoutine(t *testing.T) {
 	syncerObj := NewSyncer(cfg, nil, nil)
 	validator := NewContinuousDataValidator(cfg, syncerObj, false)
 
-	cfg.ValidatorCfg.RowErrorDelay.Duration = time.Minute
+	markErrorRowDelay = time.Minute
 	validator.ctx, validator.cancel = context.WithCancel(context.Background())
-	require.False(t, validator.reachedSyncer.Load())
+	require.False(t, validator.markErrorStarted.Load())
 	validator.wg.Add(1)
 	go validator.markReachedSyncerRoutine()
 	validator.cancel()
 	validator.wg.Wait()
-	require.False(t, validator.reachedSyncer.Load())
+	require.False(t, validator.markErrorStarted.Load())
 
-	cfg.ValidatorCfg.RowErrorDelay.Duration = time.Second
+	markErrorRowDelay = time.Second
 	validator.ctx = context.Background()
-	require.False(t, validator.reachedSyncer.Load())
+	require.False(t, validator.markErrorStarted.Load())
 	validator.wg.Add(1)
 	go validator.markReachedSyncerRoutine()
 	validator.wg.Wait()
-	require.True(t, validator.reachedSyncer.Load())
+	require.True(t, validator.markErrorStarted.Load())
 }

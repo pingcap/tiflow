@@ -241,7 +241,7 @@ func (vw *validateWorker) updatePendingAndErrorRows(failedChanges map[string]map
 		newPendingRows := make(map[string]*rowValidationJob)
 		for pk, row := range rows {
 			job := tblChange.jobs[pk]
-			if vw.validator.hasReachedSyncer() {
+			if vw.validator.isMarkErrorStarted() {
 				job.FailedCnt++
 				if job.FirstValidateTS == 0 {
 					job.FirstValidateTS = validateTS

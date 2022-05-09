@@ -78,6 +78,9 @@ const (
 	validatorDmctlOpTimeout = 5 * time.Second
 )
 
+// to make ut easier, we define it as a var, so we can change it
+var markErrorRowDelay = config.DefaultValidatorRowErrorDelay
+
 // change of table
 // binlog changes are clustered into table changes
 // the validator validates changes of table-grain at a time.
@@ -170,9 +173,10 @@ type DataValidator struct {
 	workers          []*validateWorker
 	workerCnt        int
 
-	// whether the validation progress ever reached syncer
+	// whether we start to mark failed rows as error rows
 	// if it's false, we don't mark failed row change as error to reduce false-positive
-	reachedSyncer atomic.Bool
+	// it's set to true when validator reached the progress of syncer once or after markErrorRowDelay
+	markErrorStarted atomic.Bool
 
 	// fields in this field block are guarded by stateMutex
 	stateMutex  sync.RWMutex
@@ -215,7 +219,7 @@ func (v *DataValidator) reset() {
 	v.errChan = make(chan error, 10)
 	v.workers = []*validateWorker{}
 
-	v.reachedSyncer.Store(false)
+	v.markErrorStarted.Store(false)
 	v.resetResult()
 	for i := range v.processedRowCounts {
 		v.processedRowCounts[i].Store(0)
@@ -334,14 +338,13 @@ func (v *DataValidator) Start(expect pb.Stage) {
 
 func (v *DataValidator) markReachedSyncerRoutine() {
 	defer v.wg.Done()
-	errorRowDelay := v.cfg.ValidatorCfg.RowErrorDelay.Duration
 
 	select {
 	case <-v.ctx.Done():
-	case <-time.After(errorRowDelay):
-		if !v.reachedSyncer.Load() {
-			v.L.Info("mark reachedSyncer=true after error row delay")
-			v.reachedSyncer.Store(true)
+	case <-time.After(markErrorRowDelay):
+		if !v.markErrorStarted.Load() {
+			v.L.Info("mark markErrorStarted=true after error row delay")
+			v.markErrorStarted.Store(true)
 		}
 	}
 }
@@ -425,9 +428,8 @@ func (v *DataValidator) errorProcessRoutine() {
 func (v *DataValidator) waitSyncerSynced(currLoc binlog.Location) error {
 	syncLoc := v.syncer.getFlushedGlobalPoint()
 	cmp := binlog.CompareLocation(currLoc, syncLoc, v.cfg.EnableGTID)
-	if cmp >= 0 && !v.reachedSyncer.Load() {
-		// todo: need to make sure reachedSyncer=true at some time
-		v.reachedSyncer.Store(true)
+	if cmp >= 0 && !v.markErrorStarted.Load() {
+		v.markErrorStarted.Store(true)
 		v.L.Info("validator progress reached syncer")
 	}
 	if cmp <= 0 {
@@ -1038,8 +1040,8 @@ func (v *DataValidator) putTableStatus(name string, status *tableValidateStatus)
 	v.tableStatus[name] = status
 }
 
-func (v *DataValidator) hasReachedSyncer() bool {
-	return v.reachedSyncer.Load()
+func (v *DataValidator) isMarkErrorStarted() bool {
+	return v.markErrorStarted.Load()
 }
 
 func (v *DataValidator) addPendingRowCount(tp rowChangeJobType, cnt int64) {
