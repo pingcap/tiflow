@@ -100,7 +100,7 @@ func ParserGTID(flavor, gtidStr string) (Set, error) {
 
 // check whether a gtid set is nil(start sync from start)
 // mysql: uuid:0
-// mariadb: x-y-0(no need to handle)
+// mariadb: 0-0-0(no need to handle)
 func IsNilMySQLGTIDSet(gStr string) bool {
 	sp := strings.Split(gStr, ",")
 	if len(sp) != 1 {
