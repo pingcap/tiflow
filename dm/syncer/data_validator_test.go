@@ -24,6 +24,7 @@ import (
 	"github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/go-mysql-org/go-mysql/replication"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/util/filter"
 	regexprrouter "github.com/pingcap/tidb/util/regexpr-router"
 	router "github.com/pingcap/tidb/util/table-router"
@@ -579,6 +580,10 @@ func TestValidatorGetValidationStatus(t *testing.T) {
 }
 
 func TestValidatorGetValidationError(t *testing.T) {
+	require.Nil(t, failpoint.Enable("github.com/pingcap/tiflow/dm/syncer/MockValidationQueryDB", `return(true)`))
+	defer func() {
+		require.Nil(t, failpoint.Disable("github.com/pingcap/tiflow/dm/syncer/MockValidationQueryDB"))
+	}()
 	db, dbMock, err := sqlmock.New()
 	require.Equal(t, log.InitLogger(&log.Config{}), nil)
 	require.NoError(t, err)
@@ -594,7 +599,7 @@ func TestValidatorGetValidationError(t *testing.T) {
 		),
 	)
 	// filter by status
-	dbMock.ExpectQuery("SELECT .* FROM "+validator.persistHelper.errorChangeTableName+" WHERE source=\\? AND status=\\?").
+	dbMock.ExpectQuery("SELECT .* FROM "+validator.persistHelper.errorChangeTableName+" WHERE source = \\? AND status=\\?").
 		WithArgs(validator.cfg.SourceID, int(pb.ValidateErrorState_IgnoredErr)).
 		WillReturnRows(
 			sqlmock.NewRows([]string{"id", "source", "src_schema_name", "src_table_name", "dst_schema_name", "dst_table_name", "data", "dst_data", "error_type", "status", "update_time"}).AddRow(
@@ -650,6 +655,10 @@ func TestValidatorGetValidationError(t *testing.T) {
 }
 
 func TestValidatorOperateValidationError(t *testing.T) {
+	require.Nil(t, failpoint.Enable("github.com/pingcap/tiflow/dm/syncer/MockValidationQuery", `return(true)`))
+	defer func() {
+		require.Nil(t, failpoint.Disable("github.com/pingcap/tiflow/dm/syncer/MockValidationQuery"))
+	}()
 	var err error
 	db, dbMock, err := sqlmock.New()
 	require.Equal(t, log.InitLogger(&log.Config{}), nil)

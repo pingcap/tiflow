@@ -196,20 +196,76 @@ function run_validator_cmd {
 		"\"stage\": \"Running\"" 2 \
 		"\"stage\": \"Stopped\"" 1 \
 		"no primary key" 1
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation show-errors --error all test" \
+		"\"id\": \"1\"" 1 \
+		"\"id\": \"2\"" 1
+	# resolve error 1
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation make-resolve test 1"
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation status test" \
+		"new\/ignored\/resolved: 1\/0\/1" 1
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation show-errors --error unprocessed test" \
+		"\"id\": \"2\"" 1
+	# ignore error 2
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation ignore-error test 2"
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation status test" \
+		"new\/ignored\/resolved: 0\/1\/1" 1
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation show-errors --error ignored test" \
+		"\"id\": \"2\"" 1
+	# clear error 1
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation clear test 1"
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation status test" \
+		"new\/ignored\/resolved: 0\/1\/0" 1
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation show-errors --error ignored test" \
+		"\"id\": \"2\"" 1
+	# clear all errors
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation clear test --all"
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation status test" \
+		"new\/ignored\/resolved: 0\/0\/0" 2
 
+	# two more validation errors and then stop validator
+	run_sql_source1 "insert into dmctl_command.t1 values(0,'ignore-row')" # skip by syncer
+	run_sql_source1 "insert into dmctl_command.t1 values(-1,'ignore-row')"
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation status test" \
+		"new\/ignored\/resolved: 2\/0\/0" 1
+	run_sql_source1 "create table dmctl_command.t_trigger_flush10(id int primary key)" # trigger flush
+	sleep 3
 	# test we can get validation status even when it's stopped
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation stop test" \
 		"\"result\": true" 1
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation status test" \
-		"\"processedRowsStatus\": \"insert\/update\/delete: 2\/1\/1\"" 1 \
+		"\"processedRowsStatus\": \"insert\/update\/delete: 4\/1\/1\"" 1 \
 		"\"processedRowsStatus\": \"insert\/update\/delete: 0\/0\/1\"" 1 \
 		"pendingRowsStatus\": \"insert\/update\/delete: 0\/0\/0" 2 \
 		"new\/ignored\/resolved: 0\/0\/0" 1 \
 		"new\/ignored\/resolved: 2\/0\/0" 1 \
 		"\"stage\": \"Running\"" 2 \
 		"\"stage\": \"Stopped\"" 3
+	# still able to query validation error
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation show-errors --error all test" \
+		"\"id\": \"3\"" 1 \
+		"\"id\": \"4\"" 1 \
+	# still able to operate validation error
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation clear test --all"
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation status test" \
+		"new\/ignored\/resolved: 0\/0\/0" 2
 
 	dmctl_stop_task "test"
 	echo "clean up data" # pre-check will not pass, since there is a table without pk

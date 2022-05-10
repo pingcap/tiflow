@@ -818,7 +818,17 @@ func (t *testServer) TestQueryValidator(c *C) {
 	ret, err = w.GetValidatorTableStatus("testQueryValidator", pb.Stage_InvalidStage)
 	c.Assert(err, IsNil)
 	c.Assert(len(ret), Equals, 2)
-	// the return order is not stable
+	c.Assert(ret, DeepEquals, expected)
+	// stop validator, and get same result
+	st.StopValidator()
+	ret, err = w.GetValidatorTableStatus("testQueryValidator", pb.Stage_Running)
+	c.Assert(err, IsNil)
+	c.Assert(len(ret), Equals, 1)
+	c.Assert(ret[0], DeepEquals, expected[0])
+	ret, err = w.GetValidatorTableStatus("testQueryValidator", pb.Stage_Stopped)
+	c.Assert(err, IsNil)
+	c.Assert(len(ret), Equals, 1)
+	c.Assert(ret[0], DeepEquals, expected[1])
 	if ret[0].SrcTable == expected[0].SrcTable {
 		c.Assert(ret[0], DeepEquals, expected[0])
 		c.Assert(ret[1], DeepEquals, expected[1])
@@ -859,9 +869,13 @@ func (t *testServer) TestGetWorkerValidatorErr(c *C) {
 	w := t.setupValidator(c)
 	// when subtask name not exists
 	// return empty array
-	c.Assert(len(w.GetWorkerValidatorErr("invalidTask", pb.ValidateErrorState_InvalidErr)), Equals, 0)
+	errors, err := w.GetWorkerValidatorErr("invalidTask", pb.ValidateErrorState_InvalidErr)
+	c.Assert(err, Matches, ".*sub task with name.*not found.*")
+	c.Assert(errors, IsNil)
 	// subtask match
-	c.Assert(len(w.GetWorkerValidatorErr("testQueryValidator", pb.ValidateErrorState_InvalidErr)), Equals, 2)
+	errors, err = w.GetWorkerValidatorErr("testQueryValidator", pb.ValidateErrorState_InvalidErr)
+	c.Assert(err, IsNil)
+	c.Assert(len(errors), Equals, 2)
 }
 
 func (t *testServer) TestOperateWorkerValidatorErr(c *C) {

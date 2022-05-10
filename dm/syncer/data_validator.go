@@ -1074,10 +1074,27 @@ func (v *DataValidator) GetValidatorError(errState pb.ValidateErrorState) []*pb.
 	// todo: validation error in workers cannot be returned
 	// because the errID is only allocated when the error rows are flushed
 	// user cannot handle errorRows without errID
+	var (
+		toDB  *conn.BaseDB
+		err   error
+		dbCfg config.DBConfig
+	)
 	ctx, cancel := context.WithTimeout(context.Background(), validatorDmctlOpTimeout)
 	defer cancel()
+	failpoint.Inject("MockValidationQueryDB", func() {
+		toDB = v.persistHelper.db
+		failpoint.Goto("bypass")
+	})
+	dbCfg = v.cfg.To
+	dbCfg.RawDBCfg = config.DefaultRawDBConfig().SetMaxIdleConns(1)
+	toDB, err = dbconn.CreateBaseDB(&dbCfg)
+	if err != nil {
+		v.L.Warn("failed to create downstream db", zap.Error(err))
+		return []*pb.ValidationError{}
+	}
+	failpoint.Label("bypass")
 	tctx := tcontext.NewContext(ctx, v.L)
-	ret, err := v.persistHelper.loadError(tctx, errState)
+	ret, err := v.persistHelper.loadError(tctx, toDB, errState)
 	if err != nil {
 		v.L.Warn("fail to load validator error", zap.Error(err))
 	}
@@ -1088,11 +1105,26 @@ func (v *DataValidator) OperateValidatorError(validateOp pb.ValidationErrOp, err
 	failpoint.Inject("MockValidationOperation", func() {
 		failpoint.Return(nil)
 	})
-
+	var (
+		toDB  *conn.BaseDB
+		err   error
+		dbCfg config.DBConfig
+	)
 	ctx, cancel := context.WithTimeout(context.Background(), validatorDmctlOpTimeout)
 	defer cancel()
+	failpoint.Inject("MockValidationQuery", func() {
+		toDB = v.persistHelper.db
+		failpoint.Goto("bypass")
+	})
+	dbCfg = v.cfg.To
+	dbCfg.RawDBCfg = config.DefaultRawDBConfig().SetMaxIdleConns(1)
+	toDB, err = dbconn.CreateBaseDB(&dbCfg)
+	if err != nil {
+		return err
+	}
+	failpoint.Label("bypass")
 	tctx := tcontext.NewContext(ctx, v.L)
-	return v.persistHelper.operateError(tctx, validateOp, errID, isAll)
+	return v.persistHelper.operateError(tctx, toDB, validateOp, errID, isAll)
 }
 
 func (v *DataValidator) getAllErrorCount(timeout time.Duration) ([errorStateTypeCount]int64, error) {
@@ -1125,6 +1157,13 @@ func (v *DataValidator) getAllErrorCount(timeout time.Duration) ([errorStateType
 }
 
 func (v *DataValidator) GetValidatorStatus() *pb.ValidationStatus {
+	failpoint.Inject("MockValidationQuery", func() {
+		failpoint.Return(
+			&pb.ValidationStatus{
+				Task: v.cfg.Name,
+			},
+		)
+	})
 	var extraMsg string
 	allErrorCount, err := v.getAllErrorCount(validatorDmctlOpTimeout)
 	if err != nil {

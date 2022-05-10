@@ -1338,15 +1338,19 @@ func (w *SourceWorker) CheckCfgCanUpdated(cfg *config.SubTaskConfig) error {
 	return subTask.CheckUnitCfgCanUpdate(cfg)
 }
 
-func (w *SourceWorker) GetWorkerValidatorErr(taskName string, errState pb.ValidateErrorState) []*pb.ValidationError {
+func (w *SourceWorker) GetWorkerValidatorErr(taskName string, errState pb.ValidateErrorState) ([]*pb.ValidationError, error) {
 	w.RLock()
 	defer w.RUnlock()
 	st := w.subTaskHolder.findSubTask(taskName)
 	if st != nil {
-		return st.GetValidatorError(errState)
+		ret, err := st.GetValidatorError(errState)
+		if err != nil {
+			return nil, err
+		} else {
+			return ret, err
+		}
 	}
-	log.L().Warn("get validator err", zap.Error(terror.ErrWorkerSubTaskNotFound.Generate(taskName)))
-	return []*pb.ValidationError{}
+	return nil, terror.ErrWorkerSubTaskNotFound.Generate(taskName)
 }
 
 func (w *SourceWorker) OperateWorkerValidatorErr(taskName string, op pb.ValidationErrOp, errID uint64, isAll bool) error {

@@ -885,27 +885,22 @@ func updateTaskMetric(task, sourceID string, stage pb.Stage, workerName string) 
 	}
 }
 
-func (st *SubTask) GetValidatorError(errState pb.ValidateErrorState) []*pb.ValidationError {
+func (st *SubTask) GetValidatorError(errState pb.ValidateErrorState) ([]*pb.ValidationError, error) {
 	validator := st.getValidator()
-	// todo: should be able to get status even validator is stopped
-	if validator != nil && validator.Started() {
-		return validator.GetValidatorError(errState)
+	if validator != nil {
+		return validator.GetValidatorError(errState), nil
 	}
-	st.l.Warn("validator not start")
-	// todo: should it inform the user of this error
-	return []*pb.ValidationError{}
+	cfg := st.getCfg()
+	return nil, terror.ErrValidatorNotFound.Generate(cfg.Name)
 }
 
 func (st *SubTask) OperateValidatorError(op pb.ValidationErrOp, errID uint64, isAll bool) error {
 	validator := st.getValidator()
-	// todo: should be able to get status even validator is stopped
-	if validator != nil && validator.Started() {
+	if validator != nil {
 		return validator.OperateValidatorError(op, errID, isAll)
 	}
-	st.l.Warn("validator not start")
-	// todo: should it inform the user of this error
-	// silently exists
-	return nil
+	cfg := st.getCfg()
+	return terror.ErrValidatorNotFound.Generate(cfg.Name)
 }
 
 func (st *SubTask) getValidator() *syncer.DataValidator {
