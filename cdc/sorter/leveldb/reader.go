@@ -43,8 +43,10 @@ type reader struct {
 	outputCh chan *model.PolymorphicEvent
 	delete   deleteThrottle
 
-	metricIterReadDuration prometheus.Observer
-	metricIterNextDuration prometheus.Observer
+	metricIterReadDuration    prometheus.Observer
+	metricIterNextDuration    prometheus.Observer
+	metricTotalEventsKV       prometheus.Counter
+	metricTotalEventsResolved prometheus.Counter
 }
 
 var _ actor.Actor[message.Task] = (*reader)(nil)
@@ -92,6 +94,7 @@ func (r *reader) output(event *model.PolymorphicEvent) bool {
 func (r *reader) outputResolvedTs(rts model.Ts) {
 	ok := r.output(model.NewResolvedPolymorphicEvent(0, rts))
 	if ok {
+		r.metricTotalEventsResolved.Inc()
 		r.lastSentResolvedTs = rts
 	}
 }
@@ -119,6 +122,7 @@ func (r *reader) outputBufferedResolvedEvents(buffer *outputBuffer) {
 		buffer.appendDeleteKey(message.Key(key))
 		remainIdx = idx + 1
 	}
+	r.metricTotalEventsKV.Add(float64(remainIdx))
 	// Remove outputted events.
 	buffer.shiftResolvedEvents(remainIdx)
 
