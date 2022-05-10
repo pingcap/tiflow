@@ -387,9 +387,9 @@ func (s *schedulerStats) RecordCheckpoint() {
 
 // SchedulerQuery is for scheduler related owner job.
 type SchedulerQuery struct {
-	captureID    model.CaptureID
+	CaptureID    model.CaptureID
 	changefeedID model.ChangeFeedID
 	tableID      model.TableID
 
-	resp interface{}
+	Resp interface{}
 }

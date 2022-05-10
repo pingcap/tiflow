@@ -51,15 +51,15 @@ func (mr *MockOwnerMockRecorder) AsyncStop() *gomock.Call {
 }
 
 // DrainCapture mocks base method.
-func (m *MockOwner) DrainCapture(target model.CaptureID, done chan<- error) {
+func (m *MockOwner) DrainCapture(query *owner.SchedulerQuery, done chan<- error) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "DrainCapture", target, done)
+	m.ctrl.Call(m, "DrainCapture", query, done)
 }
 
 // DrainCapture indicates an expected call of DrainCapture.
-func (mr *MockOwnerMockRecorder) DrainCapture(target, done interface{}) *gomock.Call {
+func (mr *MockOwnerMockRecorder) DrainCapture(query, done interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DrainCapture", reflect.TypeOf((*MockOwner)(nil).DrainCapture), target, done)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DrainCapture", reflect.TypeOf((*MockOwner)(nil).DrainCapture), query, done)
 }
 
 // EnqueueJob mocks base method.

@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/owner"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
 )
@@ -120,7 +121,7 @@ func handleOwnerScheduleTable(
 	ctx context.Context, capture *capture.Capture,
 	changefeedID model.ChangeFeedID, captureID string, tableID int64,
 ) error {
-	// Use buffered channel to prevernt blocking owner.
+	// Use buffered channel to prevent blocking owner.
 	done := make(chan error, 1)
 	o, err := capture.GetOwner()
 	if err != nil {
@@ -137,21 +138,22 @@ func handleOwnerScheduleTable(
 
 func handleOwnerDrainCapture(
 	ctx context.Context, capture *capture.Capture, captureID string,
-) (resp model.DrainCaptureResp, err error) {
+) (*model.DrainCaptureResp, error) {
 	// Use buffered channel to prevent blocking owner.
 	done := make(chan error, 1)
-	resp = model.DrainCaptureResp{}
-
 	o, err := capture.GetOwner()
 	if err != nil {
-		return resp, errors.Trace(err)
+		return nil, errors.Trace(err)
 	}
 
-	o.DrainCapture(captureID, &resp, done)
+	query := owner.SchedulerQuery{
+		CaptureID: captureID,
+	}
+	o.DrainCapture(&query, done)
 	select {
 	case <-ctx.Done():
-		return resp, errors.Trace(ctx.Err())
+		return query.Resp.(*model.DrainCaptureResp), errors.Trace(ctx.Err())
 	case err := <-done:
-		return resp, errors.Trace(err)
+		return query.Resp.(*model.DrainCaptureResp), errors.Trace(err)
 	}
 }

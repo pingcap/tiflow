@@ -418,7 +418,7 @@ type schedulerV1CompatWrapper struct {
 }
 
 // DrainCapture implement the scheduler interface
-func (w *schedulerV1CompatWrapper) DrainCapture(target model.CaptureID) error {
+func (w *schedulerV1CompatWrapper) DrainCapture(target string) (int, error) {
 	panic("implement me")
 }
 

@@ -437,10 +437,23 @@ func (o *ownerImpl) clusterVersionConsistent(captures map[model.CaptureID]*model
 	return true
 }
 
-func (o *ownerImpl) handleDrainCaptures(target model.CaptureID, done chan<- error) {
+func (o *ownerImpl) handleDrainCaptures(query *SchedulerQuery, done chan<- error) {
+	var (
+		totalTableCount int
+		err             error
+	)
+
+	// todo: think about how to handle errors.
+	target := query.CaptureID
 	for _, changefeed := range o.changefeeds {
-		done <- changefeed.scheduler.DrainCapture(target)
+		count, e := changefeed.scheduler.DrainCapture(target)
+		if e != nil && err == nil {
+			err = e
+		}
+		totalTableCount += count
 	}
+	query.Resp = &model.DrainCaptureResp{TotalTableCount: totalTableCount}
+	done <- err
 	close(done)
 }
 
@@ -461,7 +474,7 @@ func (o *ownerImpl) handleJobs() {
 		case ownerJobTypeScheduleTable:
 			job.done <- cfReactor.scheduler.MoveTable(job.TableID, job.TargetCaptureID)
 		case ownerJobTypeDrainCapture:
-			o.handleDrainCaptures(job.TargetCaptureID, job.done)
+			o.handleDrainCaptures(job.schedulerQuery, job.done)
 			continue
 		case ownerJobTypeRebalance:
 			job.done <- cfReactor.scheduler.Rebalance()
