@@ -29,8 +29,8 @@ func NewTopicManager(partitionNum int32) *TopicManager {
 	}
 }
 
-// Partitions returns the number of partitions of the topic.
-func (m *TopicManager) Partitions(_ string) (int32, error) {
+// GetPartitionNum returns the number of partitions of the topic.
+func (m *TopicManager) GetPartitionNum(_ string) (int32, error) {
 	return m.partitionNum, nil
 }
 
