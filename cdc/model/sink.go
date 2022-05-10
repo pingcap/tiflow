@@ -536,14 +536,15 @@ func (d *DDLEvent) FromRenameTablesJob(job *model.Job,
 func (d *DDLEvent) fillTableInfo(tableInfo *model.TableInfo,
 	schemaName string,
 ) {
+	// `TableInfo` field of `DDLEvent` should always not be nil
+	d.TableInfo = new(SimpleTableInfo)
+	d.TableInfo.Schema = schemaName
+
 	if tableInfo == nil {
 		return
 	}
 
-	d.TableInfo = new(SimpleTableInfo)
-	d.TableInfo.Schema = schemaName
 	d.TableInfo.ColumnInfo = make([]*ColumnInfo, len(tableInfo.Columns))
-
 	for i, colInfo := range tableInfo.Columns {
 		d.TableInfo.ColumnInfo[i] = new(ColumnInfo)
 		d.TableInfo.ColumnInfo[i].FromTiColumnInfo(colInfo)
