@@ -40,3 +40,8 @@ func TruncateString(s string, n int) string {
 func TruncateInterface(v interface{}, n int) string {
 	return TruncateString(fmt.Sprintf("%+v", v), n)
 }
+
+// StringP return a *string.
+func StringP(c string) *string {
+	return &c
+}

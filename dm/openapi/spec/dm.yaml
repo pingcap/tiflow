@@ -1376,7 +1376,7 @@ components:
           type: string
           example: "123456"
           description: "source password"
-          nullable: false
+          nullable: true
         enable_gtid:
           type: boolean
           example: false

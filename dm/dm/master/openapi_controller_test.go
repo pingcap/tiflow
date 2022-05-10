@@ -22,6 +22,8 @@ import (
 	"context"
 	"testing"
 
+	"github.com/pingcap/tiflow/dm/pkg/utils"
+
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tiflow/dm/checker"
 	"github.com/pingcap/tiflow/dm/dm/config"
@@ -50,7 +52,7 @@ func (s *OpenAPIControllerSuite) SetupSuite() {
 		Enable:     true,
 		EnableGtid: false,
 		Host:       dbCfg.Host,
-		Password:   dbCfg.Password,
+		Password:   utils.StringP(dbCfg.Password),
 		Port:       dbCfg.Port,
 		User:       dbCfg.User,
 	}
@@ -220,6 +222,40 @@ func (s *OpenAPIControllerSuite) TestSourceController() {
 		sourceList, err := server.listSource(ctx, openapi.DMAPIGetSourceListParams{})
 		s.Nil(err)
 		s.Len(sourceList, 0)
+	}
+
+	// create and update no password source
+	{
+		// no password will use "" as password
+		source := *s.testSource
+		source.Password = nil
+		createReq := openapi.CreateSourceRequest{Source: source}
+		resp, err := server.createSource(ctx, createReq)
+		s.NoError(err)
+		s.EqualValues(source, *resp)
+		config := server.scheduler.GetSourceCfgByID(source.SourceName)
+		s.NotNil(config)
+		s.Equal("", config.From.Password)
+
+		// update to have password
+		updateReq := openapi.UpdateSourceRequest{Source: *s.testSource}
+		sourceAfterUpdated, err := server.updateSource(ctx, source.SourceName, updateReq)
+		s.NoError(err)
+		s.EqualValues(s.testSource, sourceAfterUpdated)
+
+		// update without password will use old password
+		source = *s.testSource
+		source.Password = nil
+		updateReq = openapi.UpdateSourceRequest{Source: source}
+		sourceAfterUpdated, err = server.updateSource(ctx, source.SourceName, updateReq)
+		s.NoError(err)
+		s.Equal(source, *sourceAfterUpdated)
+		// password is old
+		config = server.scheduler.GetSourceCfgByID(source.SourceName)
+		s.NotNil(config)
+		s.Equal(*s.testSource.Password, config.From.Password)
+
+		s.Nil(server.deleteSource(ctx, s.testSource.SourceName, false))
 	}
 }
 
