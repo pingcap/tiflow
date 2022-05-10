@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
+	"net/url"
 	"os"
 	"strings"
 	"sync"
@@ -234,23 +235,8 @@ func NewTracker(ctx context.Context, task string, sessionCfg map[string]string, 
 	}, nil
 }
 
-var specialChars = map[rune]struct{}{
-	'`': {}, '~': {}, '!': {}, '@': {}, '#': {}, '$': {}, '%': {}, '^': {}, '&': {},
-	'*': {}, '(': {}, ')': {}, '-': {}, '_': {}, '=': {}, '+': {}, '\\': {}, '|': {},
-	'[': {}, '{': {}, ']': {}, '}': {}, ':': {}, ';': {}, '\'': {}, '"': {}, '<': {},
-	'>': {}, ',': {}, '.': {}, '?': {}, '/': {}, ' ': {},
-}
-
 func newTmpFolderForTracker(task string) (string, error) {
-	var buf strings.Builder
-	for _, c := range task {
-		if _, ok := specialChars[c]; ok {
-			fmt.Fprintf(&buf, "%%%02X", c)
-		} else {
-			buf.WriteRune(c)
-		}
-	}
-	return ioutil.TempDir("./", buf.String()+"-tracker")
+	return ioutil.TempDir("./", url.PathEscape(task)+"-tracker")
 }
 
 // Exec runs an SQL (DDL) statement.
