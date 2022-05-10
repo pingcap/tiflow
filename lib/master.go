@@ -508,7 +508,7 @@ func (m *DefaultBaseMaster) CreateWorker(
 	quotaCtx, cancel := context.WithTimeout(ctx, createWorkerWaitQuotaTimeout)
 	defer cancel()
 	if err := m.createWorkerQuota.Consume(quotaCtx); err != nil {
-		return "", derror.ErrMasterConcurrencyExceeded.Wrap(err)
+		return "", derror.Wrap(derror.ErrMasterConcurrencyExceeded, err)
 	}
 
 	configBytes, workerID, err := m.prepareWorkerConfig(workerType, config)

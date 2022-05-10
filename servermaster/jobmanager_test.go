@@ -270,3 +270,35 @@ func TestJobManagerRecover(t *testing.T) {
 	require.Nil(t, queryResp.Err)
 	require.Equal(t, pb.QueryJobResponse_dispatched, queryResp.Status)
 }
+
+func TestJobManagerTickExceedQuota(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	masterImpl := lib.NewMockMasterImpl("", "create-worker-with-error")
+	mockMaster := &mockBaseMasterCreateWorkerFailed{
+		MockMasterImpl: masterImpl,
+	}
+	mgr := &JobManagerImplV2{
+		BaseMaster:      mockMaster,
+		JobFsm:          NewJobFsm(),
+		uuidGen:         uuid.NewGenerator(),
+		frameMetaClient: mockMaster.GetFrameMetaClient(),
+	}
+	mockMaster.Impl = mgr
+	err := mockMaster.Init(ctx)
+	require.NoError(t, err)
+
+	mgr.JobFsm.JobDispatched(&libModel.MasterMetaKVData{ID: "failover-job-master"}, true)
+	// try to recreate failover job master, will meet quota error
+	err = mgr.Tick(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 1, mgr.JobFsm.JobCount(pb.QueryJobResponse_dispatched))
+
+	// try to recreate failover job master again, will meet quota error again
+	err = mgr.Tick(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 1, mgr.JobFsm.JobCount(pb.QueryJobResponse_dispatched))
+}

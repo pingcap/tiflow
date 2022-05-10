@@ -232,12 +232,23 @@ func (jm *JobManagerImplV2) InitImpl(ctx context.Context) error {
 
 // Tick implements lib.MasterImpl.Tick
 func (jm *JobManagerImplV2) Tick(ctx context.Context) error {
+	filterQuotaError := func(err error) (exceedQuota bool, retErr error) {
+		if err == nil {
+			return false, nil
+		}
+		if derrors.ErrMasterConcurrencyExceeded.Equal(err) {
+			log.L().Warn("create worker exceeds quota, retry later", zap.Error(err))
+			return true, nil
+		}
+		return false, err
+	}
+
 	err := jm.JobFsm.IterPendingJobs(
 		func(job *libModel.MasterMetaKVData) (string, error) {
 			return jm.BaseMaster.CreateWorker(
 				job.Tp, job, defaultJobMasterCost)
 		})
-	if err != nil {
+	if _, err = filterQuotaError(err); err != nil {
 		return err
 	}
 
@@ -258,10 +269,15 @@ func (jm *JobManagerImplV2) Tick(ctx context.Context) error {
 				return jm.BaseMaster.CreateWorker(
 					job.Tp, job, defaultJobMasterCost)
 			})
+		exceedQuota, err := filterQuotaError(err)
 		if err != nil {
 			return err
 		}
-		jm.tombstoneCleaned = true
+		// if met exceed quota error, the remaining jobs need to be failover in
+		// another tick
+		if !exceedQuota {
+			jm.tombstoneCleaned = true
+		}
 	}
 
 	return nil
