@@ -4,7 +4,7 @@
 
 ## Architecture
 
-![architecture](docs/media/dm-architecture.png)
+![architecture](dm/docs/media/dm-architecture.png)
 
 ## Documentation
 
@@ -19,7 +19,7 @@ To check the code style and build binaries, you can simply run:
 make build
 ```
 
-Note that DM supports building with Go version `Go >= 1.16`, and unit test preparation can be found in [Running/Unit Test](tests/README.md#Unit-Test)
+Note that DM supports building with Go version `Go >= 1.16`, and unit test preparation can be found in [Running/Unit Test](dm/tests/README.md#Unit-Test)
 
 If you only want to build binaries, you can run:
 
@@ -37,7 +37,7 @@ When DM is built successfully, you can find binaries in the `bin` directory.
 
 Run all tests, including unit tests and integration tests:
 
-See [test/README.md](./tests/README.md) for a more detailed guidance.
+See [Tests README](dm/tests/README.md) for a more detailed guidance.
 
 ```bash
 make test
@@ -53,11 +53,11 @@ See the "Configuration" section in [our doc](https://docs.pingcap.com/tidb-data-
 
 ## Roadmap
 
-Read the [Roadmap](roadmap.md).
+Read the [Roadmap](dm/roadmap.md).
 
 ## Contributing
 
-Contributions are welcomed and greatly appreciated. See [CONTRIBUTING.md](./CONTRIBUTING.md)
+Contributions are welcomed and greatly appreciated. See [CONTRIBUTING.md](dm/CONTRIBUTING.md)
 for details on submitting patches and the contribution workflow.
 
 Any questions? Let's discuss on [TiDB Internals forum](https://internals.tidb.io/).
