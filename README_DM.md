@@ -62,12 +62,6 @@ for details on submitting patches and the contribution workflow.
 
 Any questions? Let's discuss on [TiDB Internals forum](https://internals.tidb.io/).
 
-## License
-
-DM is under the Apache 2.0 license. See the [LICENSE](./LICENSE) file for details.
-
-[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Fpingcap%2Fdm.svg?type=large)](https://app.fossa.com/projects/git%2Bgithub.com%2Fpingcap%2Fdm?ref=badge_large)
-
 ## More resources
 
 - TiDB blog

@@ -68,7 +68,3 @@ $ mysql -h 127.0.0.1 -P 5000 -u root -e "SELECT COUNT(*) FROM test.sbtest1"
 
 Contributions are welcomed and greatly appreciated. See [CONTRIBUTING.md](./CONTRIBUTING.md)
 for details on submitting patches and the contribution workflow.
-
-## License
-
-TiCDC is under the Apache 2.0 license. See the [LICENSE](./LICENSE) file for details.
