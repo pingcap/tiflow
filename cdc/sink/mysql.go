@@ -826,6 +826,7 @@ func (w *mysqlSinkWorker) run(ctx context.Context) (err error) {
 	}
 }
 
+<<<<<<< HEAD:cdc/sink/mysql.go
 // cleanup waits for notification from closedCh and consumes all txns from txnCh.
 // The exit sequence is
 // 1. producer(sink.flushRowChangedEvents goroutine) of txnCh exits
@@ -843,6 +844,25 @@ func (w *mysqlSinkWorker) cleanup() {
 			return
 		}
 	}
+=======
+func (s *mysqlSink) cleanTableResource(tableID model.TableID) {
+	// We need to clean up the old values of the table,
+	// otherwise when the table is dispatched back again,
+	// it may read the old values.
+	// See: https://github.com/pingcap/tiflow/issues/4464#issuecomment-1085385382.
+	if resolvedTs, loaded := s.tableMaxResolvedTs.LoadAndDelete(tableID); loaded {
+		log.Info("clean up table max resolved ts in MySQL sink",
+			zap.Int64("tableID", tableID),
+			zap.Uint64("resolvedTs", resolvedTs.(uint64)))
+	}
+	if checkpointTs, loaded := s.tableCheckpointTs.LoadAndDelete(tableID); loaded {
+		log.Info("clean up table checkpoint ts in MySQL sink",
+			zap.Int64("tableID", tableID),
+			zap.Uint64("checkpointTs", checkpointTs.(uint64)))
+	}
+	// try to remove table txn cache
+	s.txnCache.RemoveTableTxn(tableID)
+>>>>>>> 544aadb0f (sink(ticdc): clean up table checkpoint ts in buffer and MQ sink (#5372)):cdc/sink/mysql/mysql.go
 }
 
 func (s *mysqlSink) Close(ctx context.Context) error {
