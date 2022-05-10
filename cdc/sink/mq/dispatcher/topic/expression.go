@@ -15,14 +15,13 @@ package topic
 
 import (
 	"regexp"
-	"strings"
 
 	"github.com/pingcap/tiflow/pkg/errors"
 )
 
 var (
 	// topicNameRE is used to match a valid topic expression
-	topicNameRE = regexp.MustCompile(`^[A-Za-z0-9\._\-]*\{schema\}[A-Za-z0-9\._\-]*$|^\{schema\}_\{table\}$`)
+	topicNameRE = regexp.MustCompile(`^[A-Za-z0-9\._\-]*\{schema\}(_\{table\})?[A-Za-z0-9\._\-]*$`)
 	// kafkaForbidRE is used to reject the characters which are forbidden in kafka topic name
 	kafkaForbidRE = regexp.MustCompile(`[^a-zA-Z0-9\._\-]`)
 	// schemaRE is used to match substring '{schema}' in topic expression
@@ -57,8 +56,8 @@ func (e Expression) Validate() error {
 func (e Expression) Substitute(schema, table string) string {
 	// the upper case letters in schema/table will be converted to lower case,
 	// and some of the special characters will be replaced with '_'
-	replacedSchema := kafkaForbidRE.ReplaceAllString(strings.ToLower(schema), "_")
-	replacedTable := kafkaForbidRE.ReplaceAllString(strings.ToLower(table), "_")
+	replacedSchema := kafkaForbidRE.ReplaceAllString(schema, "_")
+	replacedTable := kafkaForbidRE.ReplaceAllString(table, "_")
 
 	topicExpr := string(e)
 	// doing the real conversion things

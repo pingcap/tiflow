@@ -62,14 +62,14 @@ func TestSubstituteTopicExpression(t *testing.T) {
 			name:       "valid expression containing '{schema}', schema is converted to lower case letters",
 			schema:     "DEF",
 			table:      "",
-			expected:   "abcdef",
+			expected:   "abcDEF",
 		},
 		{
 			name:       "valid expression containing '{schema}' and special prefix, schema is converted to lower case letters",
 			expression: "abc._-def{schema}abc",
 			schema:     "HELLO",
 			table:      "",
-			expected:   "abc._-defhelloabc",
+			expected:   "abc._-defHELLOabc",
 		},
 		{
 			name:       "valid expression containing '{schema}', the kafka disallowed characters in schema are replaced with underscore '_'",
@@ -137,7 +137,7 @@ func TestSubstituteTopicExpression(t *testing.T) {
 			expression: "{schema}_{table}",
 			schema:     "HELLO",
 			table:      "WORLD",
-			expected:   "hello_world",
+			expected:   "HELLO_WORLD",
 		},
 		{
 			name:       "valid expression containing '{schema}_{table}', the kafka disallowed characters in table are replaced",
@@ -152,6 +152,13 @@ func TestSubstituteTopicExpression(t *testing.T) {
 			schema:     "()_+.{}",
 			table:      "world",
 			expected:   "____.___world",
+		},
+		{
+			name:       "valid expression containing '{schema}_{table}', with both prefix and suffix",
+			expression: "ab.-c_{schema}_{table}_de.-f",
+			schema:     "hello",
+			table:      "WORLD",
+			expected:   "ab.-c_hello_WORLD_de.-f",
 		},
 		{
 			name:       "valid expression containing '{schema}_{table}', the kafka disallowed characters in schema and table are replaced",
