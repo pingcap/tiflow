@@ -14,9 +14,13 @@
 package gtid
 
 import (
+	"strings"
+
 	"github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/pingcap/errors"
+	"go.uber.org/zap"
 
+	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
@@ -80,12 +84,35 @@ func ParserGTID(flavor, gtidStr string) (Set, error) {
 	case mysql.MariaDBFlavor:
 		m = &MariadbGTIDSet{}
 	case mysql.MySQLFlavor:
+		// check for xxx:0
+		if IsNilMySQLGTIDSet(gtidStr) {
+			log.L().Warn("get empty gtid set end with `0`", zap.String("gtid", gtidStr))
+			return MinGTIDSet(mysql.MySQLFlavor), nil
+		}
 		m = &MySQLGTIDSet{}
 	default:
 		return nil, terror.ErrNotSupportedFlavor.Generate(flavor)
 	}
+
 	err = m.Set(gtid)
 	return m, err
+}
+
+// check whether a gtid set is nil(start sync from start)
+// mysql: uuid:0
+// mariadb: 0-0-0(no need to handle)
+func IsNilMySQLGTIDSet(gStr string) bool {
+	sp := strings.Split(gStr, ",")
+	if len(sp) != 1 {
+		return false
+	}
+
+	sep := strings.Split(sp[0], ":")
+	if len(sep) != 2 {
+		return false
+	}
+	interval := strings.TrimSpace(sep[1])
+	return interval == "0"
 }
 
 // MinGTIDSet returns the min GTID set.
