@@ -34,9 +34,9 @@ func newTestWriter(
 		readerRouter:  readerRouter,
 		readerActorID: readerActorID,
 
-		metricTotalEventsKV: sorter.EventCount.
+		metricTotalEventsKV: sorter.OutputEventCount.
 			WithLabelValues("default", "test", "kv"),
-		metricTotalEventsResolvedTs: sorter.EventCount.
+		metricTotalEventsResolved: sorter.OutputEventCount.
 			WithLabelValues("default", "test", "resolved"),
 	}
 }
