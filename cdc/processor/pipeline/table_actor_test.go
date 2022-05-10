@@ -63,7 +63,7 @@ func TestAsyncStopFailed(t *testing.T) {
 }
 
 func TestTableActorInterface(t *testing.T) {
-	sink := &sinkNode{status: TableStatusInitializing}
+	sink := &sinkNode{status: TableStatusPreparing}
 	sorter := &sorterNode{resolvedTs: 5}
 	tbl := &tableActor{
 		markTableID: 2,
@@ -81,7 +81,7 @@ func TestTableActorInterface(t *testing.T) {
 	require.Equal(t, int64(1), tableID)
 	require.Equal(t, int64(2), markID)
 	require.Equal(t, "t1", tbl.Name())
-	require.Equal(t, TableStatusInitializing, tbl.Status())
+	require.Equal(t, TableStatusPreparing, tbl.Status())
 	sink.status.Store(TableStatusStopped)
 	require.Equal(t, TableStatusStopped, tbl.Status())
 	require.Equal(t, uint64(1), tbl.Workload().Workload)
@@ -149,7 +149,7 @@ func TestHandleError(t *testing.T) {
 		},
 		sinkNode: &sinkNode{
 			sink:           &errorCloseSink{},
-			status:         TableStatusInitializing,
+			status:         TableStatusPreparing,
 			flowController: &mockFlowController{},
 		},
 		sortNode: &sorterNode{
@@ -159,7 +159,7 @@ func TestHandleError(t *testing.T) {
 	}
 	// table is already stopped
 	tbl.handleError(nil)
-	require.Equal(t, TableStatusInitializing, tbl.sinkNode.status)
+	require.Equal(t, TableStatusPreparing, tbl.sinkNode.status)
 	require.False(t, canceled)
 	require.True(t, reporterErr)
 
@@ -186,7 +186,7 @@ func TestPollTickMessage(t *testing.T) {
 	startTime := time.Now().Add(-sinkFlushInterval)
 	tbl := tableActor{
 		sinkNode: &sinkNode{
-			status:         TableStatusInitializing,
+			status:         TableStatusPreparing,
 			sink:           &mockSink{},
 			flowController: &mockFlowController{},
 			resolvedTs:     10,

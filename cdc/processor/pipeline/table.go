@@ -51,6 +51,8 @@ type TablePipeline interface {
 	UpdateBarrierTs(ts model.Ts)
 	// AsyncStop tells the pipeline to stop, and returns true is the pipeline is already stopped.
 	AsyncStop(targetTs model.Ts) bool
+	// Run transit table state from ready to run.
+	// Run(checkpointTs model.Ts)
 	// Workload returns the workload of this table
 	Workload() model.WorkloadInfo
 	// Status returns the status of this table pipeline
