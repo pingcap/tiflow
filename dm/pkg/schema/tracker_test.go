@@ -1030,9 +1030,9 @@ func TestTrackerRecreateTables(t *testing.T) {
 }
 
 func TestNewTmpFolderForTracker(t *testing.T) {
-	got, err := newTmpFolderForTracker("task`~!@#$%^&*()-=_+[]{}\\|;:'\"<>,./? task")
+	got, err := newTmpFolderForTracker("task/db01")
 	require.NoError(t, err)
-	t.Log(got)
+	require.Contains(t, got, "task%2Fdb01")
 	require.DirExists(t, got)
 	err = os.RemoveAll(got)
 	require.NoError(t, err)

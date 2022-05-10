@@ -245,7 +245,7 @@ func newTmpFolderForTracker(task string) (string, error) {
 	var buf strings.Builder
 	for _, c := range task {
 		if _, ok := specialChars[c]; ok {
-			buf.WriteByte('_')
+			fmt.Fprintf(&buf, "%%%02X", c)
 		} else {
 			buf.WriteRune(c)
 		}
