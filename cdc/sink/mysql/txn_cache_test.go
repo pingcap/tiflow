@@ -20,12 +20,12 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/util/testleak"
+	"github.com/pingcap/tiflow/pkg/leakutil"
 	"github.com/stretchr/testify/require"
 )
 
 func TestSplitResolvedTxn(test *testing.T) {
-	defer testleak.AfterTestT(test)()
+	defer leakutil.VerifyNone(test)
 
 	testCases := [][]struct {
 		input         []*model.RowChangedEvent

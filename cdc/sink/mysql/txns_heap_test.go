@@ -17,10 +17,12 @@ import (
 	"testing"
 
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/leakutil"
 	"github.com/stretchr/testify/require"
 )
 
 func TestTxnsHeap(t *testing.T) {
+	defer leakutil.VerifyNone(t)
 	testCases := []struct {
 		txnsMap  map[model.TableID][]*model.SingleTableTxn
 		expected []*model.SingleTableTxn
