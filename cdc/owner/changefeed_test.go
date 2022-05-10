@@ -29,8 +29,8 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
-	"github.com/pingcap/tiflow/pkg/pdtime"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
+	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/stretchr/testify/require"
 	"github.com/tikv/client-go/v2/oracle"
@@ -129,13 +129,13 @@ func createChangefeed4Test(ctx cdcContext.Context, t *testing.T) (
 	*changefeed, *orchestrator.ChangefeedReactorState,
 	map[model.CaptureID]*model.CaptureInfo, *orchestrator.ReactorStateTester,
 ) {
-	ctx.GlobalVars().PDClient = &gc.MockPDClient{
+	upStream := upstream.NewUpstream4Test(&gc.MockPDClient{
 		UpdateServiceGCSafePointFunc: func(ctx context.Context, serviceID string, ttl int64, safePoint uint64) (uint64, error) {
 			return safePoint, nil
 		},
-	}
-	gcManager := gc.NewManager(ctx.GlobalVars().PDClient)
-	cf := newChangefeed4Test(ctx.ChangefeedVars().ID, gcManager, func(ctx cdcContext.Context, startTs uint64) (DDLPuller, error) {
+	})
+
+	cf := newChangefeed4Test(ctx.ChangefeedVars().ID, upStream, func(ctx cdcContext.Context, upStream *upstream.Upstream, startTs uint64) (DDLPuller, error) {
 		return &mockDDLPuller{resolvedTs: startTs - 1}, nil
 	}, func() DDLSink {
 		return &mockDDLSink{}
@@ -143,6 +143,7 @@ func createChangefeed4Test(ctx cdcContext.Context, t *testing.T) (
 	cf.newScheduler = func(ctx cdcContext.Context, startTs uint64) (scheduler, error) {
 		return newSchedulerV1(), nil
 	}
+	cf.upStream = upStream
 	state := orchestrator.NewChangefeedReactorState(ctx.ChangefeedVars().ID)
 	tester := orchestrator.NewReactorStateTester(t, state, nil)
 	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
@@ -230,16 +231,14 @@ func TestExecDDL(t *testing.T) {
 	startTs := job.BinlogInfo.FinishedTS + 1000
 
 	ctx := cdcContext.NewContext(context.Background(), &cdcContext.GlobalVars{
-		KVStorage: helper.Storage(),
 		CaptureInfo: &model.CaptureInfo{
 			ID:            "capture-id-test",
 			AdvertiseAddr: "127.0.0.1:0000",
 			Version:       version.ReleaseVersion,
 		},
-		PDClock: pdtime.NewClock4Test(),
 	})
 	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
-		ID: "changefeed-id-test",
+		ID: model.DefaultChangeFeedID("changefeed-id-test"),
 		Info: &model.ChangeFeedInfo{
 			StartTs: startTs,
 			Config:  config.GetDefaultReplicaConfig(),
@@ -247,6 +246,7 @@ func TestExecDDL(t *testing.T) {
 	})
 
 	cf, state, captures, tester := createChangefeed4Test(ctx, t)
+	cf.upStream.KVStorage = helper.Storage()
 	defer cf.Close(ctx)
 	tickThreeTime := func() {
 		cf.Tick(ctx, state, captures)
@@ -323,16 +323,14 @@ func TestEmitCheckpointTs(t *testing.T) {
 	startTs := job.BinlogInfo.FinishedTS + 1000
 
 	ctx := cdcContext.NewContext(context.Background(), &cdcContext.GlobalVars{
-		KVStorage: helper.Storage(),
 		CaptureInfo: &model.CaptureInfo{
 			ID:            "capture-id-test",
 			AdvertiseAddr: "127.0.0.1:0000",
 			Version:       version.ReleaseVersion,
 		},
-		PDClock: pdtime.NewClock4Test(),
 	})
 	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
-		ID: "changefeed-id-test",
+		ID: model.DefaultChangeFeedID("changefeed-id-test"),
 		Info: &model.ChangeFeedInfo{
 			StartTs: startTs,
 			Config:  config.GetDefaultReplicaConfig(),
@@ -340,6 +338,8 @@ func TestEmitCheckpointTs(t *testing.T) {
 	})
 
 	cf, state, captures, tester := createChangefeed4Test(ctx, t)
+	cf.upStream.KVStorage = helper.Storage()
+
 	defer cf.Close(ctx)
 	tickThreeTime := func() {
 		cf.Tick(ctx, state, captures)

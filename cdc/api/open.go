@@ -151,7 +151,8 @@ func (h *openAPI) ListChangefeed(c *gin.Context) {
 		}
 
 		resp := &model.ChangefeedCommonInfo{
-			ID: cfID,
+			Namespace: cfID.Namespace,
+			ID:        cfID.ID,
 		}
 
 		if cfInfo != nil {
@@ -187,9 +188,10 @@ func (h *openAPI) GetChangefeed(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	changefeedID := c.Param(apiOpVarChangefeedID)
-	if err := model.ValidateChangefeedID(changefeedID); err != nil {
-		_ = c.Error(cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed_id: %s", changefeedID))
+	changefeedID := model.DefaultChangeFeedID(c.Param(apiOpVarChangefeedID))
+	if err := model.ValidateChangefeedID(changefeedID.ID); err != nil {
+		_ = c.Error(cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed_id: %s",
+			changefeedID.ID))
 		return
 	}
 
@@ -221,7 +223,8 @@ func (h *openAPI) GetChangefeed(c *gin.Context) {
 	}
 
 	changefeedDetail := &model.ChangefeedDetail{
-		ID:             changefeedID,
+		Namespace:      changefeedID.Namespace,
+		ID:             changefeedID.ID,
 		SinkURI:        info.SinkURI,
 		CreateTime:     model.JSONTime(info.CreateTime),
 		StartTs:        info.StartTs,
@@ -253,6 +256,9 @@ func (h *openAPI) CreateChangefeed(c *gin.Context) {
 		return
 	}
 
+	// c does not have a cancel() func and its Done() method always return nil,
+	// so we should not use c as a context.
+	// Ref:https://github.com/gin-gonic/gin/blob/92eeaa4ebbadec2376e2ca5f5749888da1a42e24/context.go#L1157
 	ctx := c.Request.Context()
 	var changefeedConfig model.ChangefeedConfig
 	if err := c.BindJSON(&changefeedConfig); err != nil {
@@ -260,7 +266,7 @@ func (h *openAPI) CreateChangefeed(c *gin.Context) {
 		return
 	}
 
-	info, err := verifyCreateChangefeedConfig(c, changefeedConfig, h.capture)
+	info, err := verifyCreateChangefeedConfig(ctx, changefeedConfig, h.capture)
 	if err != nil {
 		_ = c.Error(err)
 		return
@@ -272,7 +278,8 @@ func (h *openAPI) CreateChangefeed(c *gin.Context) {
 		return
 	}
 
-	err = h.capture.EtcdClient.CreateChangefeedInfo(ctx, info, changefeedConfig.ID)
+	err = h.capture.EtcdClient.CreateChangefeedInfo(ctx, info,
+		model.DefaultChangeFeedID(changefeedConfig.ID))
 	if err != nil {
 		_ = c.Error(err)
 		return
@@ -300,9 +307,10 @@ func (h *openAPI) PauseChangefeed(c *gin.Context) {
 
 	ctx := c.Request.Context()
 
-	changefeedID := c.Param(apiOpVarChangefeedID)
-	if err := model.ValidateChangefeedID(changefeedID); err != nil {
-		_ = c.Error(cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed_id: %s", changefeedID))
+	changefeedID := model.DefaultChangeFeedID(c.Param(apiOpVarChangefeedID))
+	if err := model.ValidateChangefeedID(changefeedID.ID); err != nil {
+		_ = c.Error(cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed_id: %s",
+			changefeedID.ID))
 		return
 	}
 	// check if the changefeed exists
@@ -341,9 +349,10 @@ func (h *openAPI) ResumeChangefeed(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	changefeedID := c.Param(apiOpVarChangefeedID)
-	if err := model.ValidateChangefeedID(changefeedID); err != nil {
-		_ = c.Error(cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed_id: %s", changefeedID))
+	changefeedID := model.DefaultChangeFeedID(c.Param(apiOpVarChangefeedID))
+	if err := model.ValidateChangefeedID(changefeedID.ID); err != nil {
+		_ = c.Error(cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed_id: %s",
+			changefeedID.ID))
 		return
 	}
 	// check if the changefeed exists
@@ -388,10 +397,11 @@ func (h *openAPI) UpdateChangefeed(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	changefeedID := c.Param(apiOpVarChangefeedID)
+	changefeedID := model.DefaultChangeFeedID(c.Param(apiOpVarChangefeedID))
 
-	if err := model.ValidateChangefeedID(changefeedID); err != nil {
-		_ = c.Error(cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed_id: %s", changefeedID))
+	if err := model.ValidateChangefeedID(changefeedID.ID); err != nil {
+		_ = c.Error(cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed_id: %s",
+			changefeedID.ID))
 		return
 	}
 	info, err := h.statusProvider().GetChangeFeedInfo(ctx, changefeedID)
@@ -444,9 +454,10 @@ func (h *openAPI) RemoveChangefeed(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	changefeedID := c.Param(apiOpVarChangefeedID)
-	if err := model.ValidateChangefeedID(changefeedID); err != nil {
-		_ = c.Error(cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed_id: %s", changefeedID))
+	changefeedID := model.DefaultChangeFeedID(c.Param(apiOpVarChangefeedID))
+	if err := model.ValidateChangefeedID(changefeedID.ID); err != nil {
+		_ = c.Error(cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed_id: %s",
+			changefeedID.ID))
 		return
 	}
 	// check if the changefeed exists
@@ -485,10 +496,11 @@ func (h *openAPI) RebalanceTables(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	changefeedID := c.Param(apiOpVarChangefeedID)
+	changefeedID := model.DefaultChangeFeedID(c.Param(apiOpVarChangefeedID))
 
-	if err := model.ValidateChangefeedID(changefeedID); err != nil {
-		_ = c.Error(cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed_id: %s", changefeedID))
+	if err := model.ValidateChangefeedID(changefeedID.ID); err != nil {
+		_ = c.Error(cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed_id: %s",
+			changefeedID.ID))
 		return
 	}
 	// check if the changefeed exists
@@ -524,9 +536,10 @@ func (h *openAPI) MoveTable(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	changefeedID := c.Param(apiOpVarChangefeedID)
-	if err := model.ValidateChangefeedID(changefeedID); err != nil {
-		_ = c.Error(cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed_id: %s", changefeedID))
+	changefeedID := model.DefaultChangeFeedID(c.Param(apiOpVarChangefeedID))
+	if err := model.ValidateChangefeedID(changefeedID.ID); err != nil {
+		_ = c.Error(cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed_id: %s",
+			changefeedID.ID))
 		return
 	}
 	// check if the changefeed exists
@@ -600,9 +613,10 @@ func (h *openAPI) GetProcessor(c *gin.Context) {
 
 	ctx := c.Request.Context()
 
-	changefeedID := c.Param(apiOpVarChangefeedID)
-	if err := model.ValidateChangefeedID(changefeedID); err != nil {
-		_ = c.Error(cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed_id: %s", changefeedID))
+	changefeedID := model.DefaultChangeFeedID(c.Param(apiOpVarChangefeedID))
+	if err := model.ValidateChangefeedID(changefeedID.ID); err != nil {
+		_ = c.Error(cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed_id: %s",
+			changefeedID.ID))
 		return
 	}
 
@@ -685,7 +699,10 @@ func (h *openAPI) ListProcessor(c *gin.Context) {
 	}
 	resps := make([]*model.ProcessorCommonInfo, len(infos))
 	for i, info := range infos {
-		resp := &model.ProcessorCommonInfo{CfID: info.CfID, CaptureID: info.CaptureID}
+		resp := &model.ProcessorCommonInfo{
+			Namespace: info.CfID.Namespace,
+			CfID:      info.CfID.ID, CaptureID: info.CaptureID,
+		}
 		resps[i] = resp
 	}
 	c.IndentedJSON(http.StatusOK, resps)

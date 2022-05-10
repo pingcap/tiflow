@@ -65,7 +65,7 @@ func injectSchedulerStateForInfoProviderTest(dispatcher *BaseScheduleDispatcher)
 }
 
 func TestInfoProviderTaskStatus(t *testing.T) {
-	dispatcher := NewBaseScheduleDispatcher("cf-1", nil, 1300)
+	dispatcher := NewBaseScheduleDispatcher(model.DefaultChangeFeedID("cf-1"), nil, 1300)
 	injectSchedulerStateForInfoProviderTest(dispatcher)
 
 	taskStatus, err := dispatcher.GetTaskStatuses()
@@ -100,7 +100,7 @@ func TestInfoProviderTaskStatus(t *testing.T) {
 }
 
 func TestInfoProviderTaskPosition(t *testing.T) {
-	dispatcher := NewBaseScheduleDispatcher("cf-1", nil, 1300)
+	dispatcher := NewBaseScheduleDispatcher(model.DefaultChangeFeedID("cf-1"), nil, 1300)
 	injectSchedulerStateForInfoProviderTest(dispatcher)
 
 	taskPosition, err := dispatcher.GetTaskPositions()
@@ -118,7 +118,7 @@ func TestInfoProviderTaskPosition(t *testing.T) {
 }
 
 func TestInfoProviderTableCounts(t *testing.T) {
-	dispatcher := NewBaseScheduleDispatcher("cf-1", nil, 1300)
+	dispatcher := NewBaseScheduleDispatcher(model.DefaultChangeFeedID("cf-1"), nil, 1300)
 	injectSchedulerStateForInfoProviderTest(dispatcher)
 
 	require.Equal(t, map[model.CaptureID]int{

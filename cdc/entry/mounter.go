@@ -70,7 +70,7 @@ type mounterImpl struct {
 	tz             *time.Location
 	workerNum      int
 	enableOldValue bool
-	changefeedID   string
+	changefeedID   model.ChangeFeedID
 
 	// index is an atomic variable to dispatch input events to workers.
 	index int64
@@ -81,17 +81,19 @@ type mounterImpl struct {
 
 // NewMounter creates a mounter
 func NewMounter(schemaStorage SchemaStorage,
-	changefeedID string,
+	changefeedID model.ChangeFeedID,
 	tz *time.Location,
 	enableOldValue bool,
 ) Mounter {
 	return &mounterImpl{
-		schemaStorage:       schemaStorage,
-		changefeedID:        changefeedID,
-		enableOldValue:      enableOldValue,
-		metricMountDuration: mountDuration.WithLabelValues(changefeedID),
-		metricTotalRows:     totalRowsCountGauge.WithLabelValues(changefeedID),
-		tz:                  tz,
+		schemaStorage:  schemaStorage,
+		changefeedID:   changefeedID,
+		enableOldValue: enableOldValue,
+		metricMountDuration: mountDuration.
+			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
+		metricTotalRows: totalRowsCountGauge.
+			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
+		tz: tz,
 	}
 }
 

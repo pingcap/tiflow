@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package util
+package contextutil
 
 import (
 	"context"
@@ -19,6 +19,8 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/kv"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
 
@@ -108,32 +110,32 @@ func IsOwnerFromCtx(ctx context.Context) bool {
 }
 
 // ChangefeedIDFromCtx returns a changefeedID stored in the specified context.
-// It returns an empty string if there's no valid changefeed ID found.
-func ChangefeedIDFromCtx(ctx context.Context) string {
-	changefeedID, ok := ctx.Value(ctxKeyChangefeedID).(string)
+// It returns an empty model.changefeedID if there's no changefeedID found.
+func ChangefeedIDFromCtx(ctx context.Context) model.ChangeFeedID {
+	changefeedID, ok := ctx.Value(ctxKeyChangefeedID).(model.ChangeFeedID)
 	if !ok {
-		return ""
+		return model.ChangeFeedID{}
 	}
 	return changefeedID
 }
 
-// PutChangefeedIDInCtx returns a new child context with the specified changefeed ID stored.
-func PutChangefeedIDInCtx(ctx context.Context, changefeedID string) context.Context {
+// PutChangefeedIDInCtx returns a new child context with the specified changefeedID stored.
+func PutChangefeedIDInCtx(ctx context.Context, changefeedID model.ChangeFeedID) context.Context {
 	return context.WithValue(ctx, ctxKeyChangefeedID, changefeedID)
 }
 
 // RoleFromCtx returns a role stored in the specified context.
 // It returns RoleUnknown if there's no valid role found
-func RoleFromCtx(ctx context.Context) Role {
-	role, ok := ctx.Value(ctxKeyRole).(Role)
+func RoleFromCtx(ctx context.Context) util.Role {
+	role, ok := ctx.Value(ctxKeyRole).(util.Role)
 	if !ok {
-		return RoleUnknown
+		return util.RoleUnknown
 	}
 	return role
 }
 
 // PutRoleInCtx return a new child context with the specified role stored.
-func PutRoleInCtx(ctx context.Context, role Role) context.Context {
+func PutRoleInCtx(ctx context.Context, role util.Role) context.Context {
 	return context.WithValue(ctx, ctxKeyRole, role)
 }
 
@@ -145,5 +147,5 @@ func ZapFieldCapture(ctx context.Context) zap.Field {
 
 // ZapFieldChangefeed returns a zap field containing changefeed id
 func ZapFieldChangefeed(ctx context.Context) zap.Field {
-	return zap.String("changefeed", ChangefeedIDFromCtx(ctx))
+	return zap.String("changefeed", ChangefeedIDFromCtx(ctx).ID)
 }

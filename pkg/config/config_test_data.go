@@ -101,7 +101,8 @@ const (
   "kv-client": {
     "worker-concurrent": 8,
     "worker-pool-size": 0,
-    "region-scan-limit": 40
+    "region-scan-limit": 40,
+    "region-retry-duration": 25000000000
   },
   "debug": {
     "enable-table-actor": true,

@@ -144,3 +144,8 @@ func (c *ClusterAdminClientMockImpl) GetTopicMaxMessageBytes() int {
 	maxMessageBytes, _ := strconv.Atoi(TopicMaxMessageBytes)
 	return maxMessageBytes
 }
+
+// DropBrokerConfig remove all broker level configuration for test purpose.
+func (c *ClusterAdminClientMockImpl) DropBrokerConfig() {
+	c.brokerConfigs = c.brokerConfigs[:0]
+}

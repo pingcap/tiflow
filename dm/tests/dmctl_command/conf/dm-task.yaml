@@ -20,12 +20,14 @@ mysql-instances:
     mydumper-config-name: "global"
     loader-config-name: "global"
     syncer-config-name: "global"
+    continuous-validator-config-name: global
 
   - source-id: "mysql-replica-02"
     block-allow-list:  "instance"
     mydumper-config-name: "global"
     loader-config-name: "global"
     syncer-config-name: "global"
+    continuous-validator-config-name: global
 
 block-allow-list:
   instance:
@@ -47,3 +49,12 @@ syncers:
   global:
     worker-count: 16
     batch: 100
+
+validators:
+  global:
+    mode: full
+    worker-count: 1
+    validate-interval: 1s
+    check-interval: 1s
+    row-error-delay: 3s
+    meta-flush-interval: 3s

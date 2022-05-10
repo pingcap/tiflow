@@ -609,6 +609,15 @@ const (
 	codeTracerStartService
 )
 
+// ha related error code.
+const (
+	codeHAFailTxnOperation ErrCode = iota + 42501
+	codeHAInvalidItem
+	codeHAFailWatchEtcd
+	codeHAFailLeaseOperation
+	codeHAFailKeepalive
+)
+
 // validator error code.
 const (
 	codeValidatorLoadPersistedData ErrCode = iota + 43001
@@ -616,6 +625,7 @@ const (
 	codeValidatorGetEvent
 	codeValidatorProcessRowEvent
 	codeValidatorValidateChange
+	codeValidatorNotFound
 )
 
 // Schema-tracker error code.
@@ -1264,6 +1274,14 @@ var (
 	ErrWorkerFailConnectMaster              = New(codeWorkerFailConnectMaster, ClassDMWorker, ScopeInternal, LevelHigh, "cannot join with master endpoints: %v, error: %v", "Please check network connection of worker and check worker name is unique.")
 	ErrWorkerRelayConfigChanging            = New(codeWorkerRelayConfigChanging, ClassDMWorker, ScopeInternal, LevelLow, "relay config of worker %s is changed too frequently, last relay source %s:, new relay source %s", "Please try again later")
 	ErrWorkerRouteTableDupMatch             = New(codeWorkerRouteTableDupMatch, ClassDMWorker, ScopeInternal, LevelHigh, "table %s.%s matches more than one rule", "please check the route rules in the task config")
+
+	// etcd error.
+	ErrHAFailTxnOperation   = New(codeHAFailTxnOperation, ClassHA, ScopeInternal, LevelHigh, "fail to do etcd txn operation: %s", "Please check dm-master's node status and the network between this node and dm-master")
+	ErrHAInvalidItem        = New(codeHAInvalidItem, ClassHA, ScopeInternal, LevelHigh, "meets invalid ha item: %s", "Please check if there is any compatible problem and invalid manual etcd operations")
+	ErrHAFailWatchEtcd      = New(codeHAFailWatchEtcd, ClassHA, ScopeInternal, LevelHigh, "fail to watch etcd: %s", "Please check dm-master's node status and the network between this node and dm-master")
+	ErrHAFailLeaseOperation = New(codeHAFailLeaseOperation, ClassHA, ScopeInternal, LevelHigh, "fail to do etcd lease operation: %s", "Please check dm-master's node status and the network between this node and dm-master")
+	ErrHAFailKeepalive      = New(codeHAFailKeepalive, ClassHA, ScopeInternal, LevelHigh, "fail to keepalive to etcd: %s", "Please check dm-master's node status and the network between this node and dm-master")
+
 	// DM-tracer error.
 	ErrTracerParseFlagSet        = New(codeTracerParseFlagSet, ClassDMTracer, ScopeInternal, LevelMedium, "parse dm-tracer config flag set", "")
 	ErrTracerConfigTomlTransform = New(codeTracerConfigTomlTransform, ClassDMTracer, ScopeInternal, LevelMedium, "config toml transform", "Please check the configuration file has correct TOML format.")
@@ -1277,12 +1295,12 @@ var (
 	ErrTracerStartService        = New(codeTracerStartService, ClassDMTracer, ScopeInternal, LevelHigh, "start server", "")
 
 	// validator errors.
-
 	ErrValidatorLoadPersistedData = New(codeValidatorLoadPersistedData, ClassValidator, ScopeInternal, LevelHigh, "failed to load persisted data", "")
 	ErrValidatorPersistData       = New(codeValidatorPersistData, ClassValidator, ScopeInternal, LevelHigh, "failed to persist checkpoint and data", "")
 	ErrValidatorGetEvent          = New(codeValidatorGetEvent, ClassValidator, ScopeInternal, LevelHigh, "failed to get event", "")
 	ErrValidatorProcessRowEvent   = New(codeValidatorProcessRowEvent, ClassValidator, ScopeInternal, LevelHigh, "failed to process event", "")
 	ErrValidatorValidateChange    = New(codeValidatorValidateChange, ClassValidator, ScopeInternal, LevelHigh, "failed to validate row change", "")
+	ErrValidatorNotFound          = New(codeValidatorNotFound, ClassValidator, ScopeNotSet, LevelMedium, "validator not found for task %s", "")
 
 	// Schema-tracker error.
 	ErrSchemaTrackerInvalidJSON        = New(codeSchemaTrackerInvalidJSON, ClassSchemaTracker, ScopeDownstream, LevelHigh, "saved schema of `%s`.`%s` is not proper JSON", "")
