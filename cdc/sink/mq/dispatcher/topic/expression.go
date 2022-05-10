@@ -21,7 +21,7 @@ import (
 
 var (
 	// topicNameRE is used to match a valid topic expression
-	topicNameRE = regexp.MustCompile(`^[A-Za-z0-9\._\-]*\{schema\}(_\{table\})?[A-Za-z0-9\._\-]*$`)
+	topicNameRE = regexp.MustCompile(`^[A-Za-z0-9\._\-]*\{schema\}([A-Za-z0-9\._\-]*{table\})?[A-Za-z0-9\._\-]*$`)
 	// kafkaForbidRE is used to reject the characters which are forbidden in kafka topic name
 	kafkaForbidRE = regexp.MustCompile(`[^a-zA-Z0-9\._\-]`)
 	// schemaRE is used to match substring '{schema}' in topic expression
