@@ -1549,16 +1549,6 @@ func (s *Syncer) updateTSOffset(ctx context.Context) error {
 
 // Run starts running for sync, we should guarantee it can rerun when paused.
 func (s *Syncer) Run(ctx context.Context) (err error) {
-	s.schemaTracker, err = schema.NewTracker(ctx, s.cfg.Name, s.cfg.To.Session, s.downstreamTrackConn)
-	if err != nil {
-		return terror.ErrSchemaTrackerInit.Delegate(err)
-	}
-
-	err = s.checkpoint.LoadIntoSchemaTracker(ctx, s.schemaTracker)
-	if err != nil {
-		return err
-	}
-
 	runCtx, runCancel := context.WithCancel(context.Background())
 	s.runCtx, s.runCancel = tcontext.NewContext(runCtx, s.tctx.L()), runCancel
 	syncCtx, syncCancel := context.WithCancel(context.Background())
@@ -1613,6 +1603,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		flushCheckpoint bool
 		delLoadTask     bool
 		cleanDumpFile   = s.cfg.CleanDumpFile
+		freshAndAllMode bool
 	)
 	flushCheckpoint, err = s.adjustGlobalPointGTID(s.runCtx)
 	if err != nil {
@@ -1621,14 +1612,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 	if fresh && s.cfg.Mode == config.ModeAll {
 		delLoadTask = true
 		flushCheckpoint = true
-		err = s.loadTableStructureFromDump(ctx)
-		if err != nil {
-			s.tctx.L().Warn("error happened when load table structure from dump files", zap.Error(err))
-			cleanDumpFile = false
-		}
-		if s.cfg.ShardMode == config.ShardOptimistic {
-			s.flushOptimisticTableInfos(s.runCtx)
-		}
+		freshAndAllMode = true
 	}
 
 	if s.cfg.Mode == config.ModeIncrement || !fresh {
@@ -1649,6 +1633,19 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 	go s.updateLagCronJob(s.runCtx.Ctx)
 	s.runWg.Add(1)
 	go s.updateTSOffsetCronJob(s.runCtx.Ctx)
+
+	// some prepare work before the binlog event loop:
+	// 1. first we flush checkpoint as needed, so in next resume we won't go to Load unit.
+	// 2. then since we are confident that Load unit is done we can delete the load task etcd KV.
+	//    TODO: we can't handle panic between 1. and 2., or fail to delete the load task etcd KV.
+	// 3. then we initiate schema tracker
+	// 4. - when it's a fresh task, load the table structure from dump files into schema tracker.
+	//      if it's also a optimistic sharding task, also load the table structure into checkpoints because shard tables
+	//      may not have same table structure so we can't fetch the downstream table structure for them lazily.
+	//    - when it's a resumed task, load the table structure from checkpoints into schema tracker.
+	//    TODO: we can't handle failure between 1. and 4. After 1. it's not a fresh task.
+	// 5. finally clean the dump files
+
 	if flushCheckpoint {
 		if err = s.flushCheckPoints(); err != nil {
 			s.tctx.L().Warn("fail to flush checkpoints when starting task", zap.Error(err))
@@ -1657,7 +1654,28 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 	}
 	if delLoadTask {
 		if err = s.delLoadTask(); err != nil {
-			s.tctx.L().Warn("error when del load task in etcd", zap.Error(err))
+			s.tctx.L().Error("error when del load task in etcd", zap.Error(err))
+		}
+	}
+
+	s.schemaTracker, err = schema.NewTracker(ctx, s.cfg.Name, s.cfg.To.Session, s.downstreamTrackConn)
+	if err != nil {
+		return terror.ErrSchemaTrackerInit.Delegate(err)
+	}
+
+	if freshAndAllMode {
+		err = s.loadTableStructureFromDump(ctx)
+		if err != nil {
+			s.tctx.L().Warn("error happened when load table structure from dump files", zap.Error(err))
+			cleanDumpFile = false
+		}
+		if s.cfg.ShardMode == config.ShardOptimistic {
+			s.flushOptimisticTableInfos(s.runCtx)
+		}
+	} else {
+		err = s.checkpoint.LoadIntoSchemaTracker(ctx, s.schemaTracker)
+		if err != nil {
+			return err
 		}
 	}
 
