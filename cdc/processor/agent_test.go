@@ -471,6 +471,7 @@ func TestNoFinishOperationBeforeSyncIsReceived(t *testing.T) {
 			OwnerRev: 1,
 			Epoch:    agent.CurrentEpoch(),
 			ID:       1,
+			StartTs:  1,
 			IsDelete: false,
 		})
 	require.NoError(t, err)
@@ -481,6 +482,7 @@ func TestNoFinishOperationBeforeSyncIsReceived(t *testing.T) {
 			OwnerRev: 1,
 			Epoch:    agent.CurrentEpoch(),
 			ID:       2,
+			StartTs:  2,
 			IsDelete: false,
 		})
 	require.NoError(t, err)
