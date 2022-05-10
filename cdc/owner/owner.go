@@ -462,7 +462,7 @@ func (o *ownerImpl) handleJobs() {
 	for _, job := range jobs {
 		changefeedID := job.ChangefeedID
 		cfReactor, exist := o.changefeeds[changefeedID]
-		if !exist && (job.Tp != ownerJobTypeQuery || job.Tp != ownerJobTypeDrainCapture) {
+		if !exist && (job.Tp != ownerJobTypeQuery && job.Tp != ownerJobTypeDrainCapture) {
 			log.Warn("changefeed not found when handle a job", zap.Any("job", job))
 			job.done <- cerror.ErrChangeFeedNotExists.FastGenByArgs(job.ChangefeedID)
 			close(job.done)
