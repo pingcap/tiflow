@@ -56,7 +56,7 @@ func PutOpenAPITaskTemplate(cli *clientv3.Client, task openapi.Task, overWrite b
 	}
 	resp, err := txn.Then(clientv3.OpPut(key, string(taskJSON))).Commit()
 	if err != nil {
-		return err
+		return terror.ErrHAFailTxnOperation.Delegate(err, "put openapi task template")
 	}
 	// user don't want to overwrite and key already exists.
 	if !overWrite && !resp.Succeeded {
@@ -78,7 +78,7 @@ func UpdateOpenAPITaskTemplate(cli *clientv3.Client, task openapi.Task) error {
 	txn := cli.Txn(ctx).If(clientv3util.KeyExists(key)).Then(clientv3.OpPut(key, string(taskJSON)))
 	resp, err := txn.Commit()
 	if err != nil {
-		return err
+		return terror.ErrHAFailTxnOperation.Delegate(err, "update openapi task template")
 	}
 	// user want to update a key not exists.
 	if !resp.Succeeded {
@@ -92,7 +92,7 @@ func DeleteOpenAPITaskTemplate(cli *clientv3.Client, taskName string) error {
 	ctx, cancel := context.WithTimeout(cli.Ctx(), etcdutil.DefaultRequestTimeout)
 	defer cancel()
 	if _, err := cli.Delete(ctx, common.OpenAPITaskTemplateKeyAdapter.Encode(taskName)); err != nil {
-		return err
+		return terror.ErrHAFailTxnOperation.Delegate(err, "delete openapi task template")
 	}
 	return nil
 }
@@ -109,7 +109,7 @@ func GetOpenAPITaskTemplate(cli *clientv3.Client, taskName string) (*openapi.Tas
 	)
 	resp, err = cli.Get(ctx, common.OpenAPITaskTemplateKeyAdapter.Encode(taskName))
 	if err != nil {
-		return task, err
+		return task, terror.ErrHAFailTxnOperation.Delegate(err, "get openapi task template")
 	}
 	return openAPITaskFromResp(resp)
 }
@@ -121,7 +121,7 @@ func GetAllOpenAPITaskTemplate(cli *clientv3.Client) ([]*openapi.Task, error) {
 
 	resp, err := cli.Get(ctx, common.OpenAPITaskTemplateKeyAdapter.Path(), clientv3.WithPrefix())
 	if err != nil {
-		return nil, err
+		return nil, terror.ErrHAFailTxnOperation.Delegate(err, "get all openapi task templates")
 	}
 	tasks := make([]*openapi.Task, resp.Count)
 	for i, kv := range resp.Kvs {

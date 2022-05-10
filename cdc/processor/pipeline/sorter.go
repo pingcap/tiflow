@@ -89,6 +89,47 @@ func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
 	return n.start(ctx, false, &wg, 0, nil)
 }
 
+func createSorter(ctx pipeline.NodeContext, tableName string, tableID model.TableID) (sorter.EventSorter, error) {
+	sortEngine := ctx.ChangefeedVars().Info.Engine
+	switch sortEngine {
+	case model.SortInMemory:
+		return memory.NewEntrySorter(), nil
+	case model.SortUnified, model.SortInFile /* `file` becomes an alias of `unified` for backward compatibility */ :
+		if sortEngine == model.SortInFile {
+			log.Warn("File sorter is obsolete and replaced by unified sorter. Please revise your changefeed settings",
+				zap.String("namesapce", ctx.ChangefeedVars().ID.Namespace),
+				zap.String("changefeed", ctx.ChangefeedVars().ID.ID),
+				zap.String("tableName", tableName))
+		}
+
+		if config.GetGlobalServerConfig().Debug.EnableDBSorter {
+			startTs := ctx.ChangefeedVars().Info.StartTs
+			ssystem := ctx.GlobalVars().SorterSystem
+			dbActorID := ssystem.DBActorID(uint64(tableID))
+			compactScheduler := ctx.GlobalVars().SorterSystem.CompactScheduler()
+			levelSorter, err := leveldb.NewSorter(
+				ctx, tableID, startTs, ssystem.DBRouter, dbActorID,
+				ssystem.WriterSystem, ssystem.WriterRouter,
+				ssystem.ReaderSystem, ssystem.ReaderRouter,
+				compactScheduler, config.GetGlobalServerConfig().Debug.DB)
+			if err != nil {
+				return nil, err
+			}
+			return levelSorter, nil
+		}
+		// Sorter dir has been set and checked when server starts.
+		// See https://github.com/pingcap/tiflow/blob/9dad09/cdc/server.go#L275
+		sortDir := config.GetGlobalServerConfig().Sorter.SortDir
+		unifiedSorter, err := unified.NewUnifiedSorter(sortDir, ctx.ChangefeedVars().ID, tableName, tableID)
+		if err != nil {
+			return nil, err
+		}
+		return unifiedSorter, nil
+	default:
+		return nil, cerror.ErrUnknownSortEngine.GenWithStackByArgs(sortEngine)
+	}
+}
+
 func (n *sorterNode) start(
 	ctx pipeline.NodeContext, isTableActorMode bool, eg *errgroup.Group,
 	tableActorID actor.ID, tableActorRouter *actor.Router[pmessage.Message],
@@ -97,44 +138,12 @@ func (n *sorterNode) start(
 	n.eg = eg
 	stdCtx, cancel := context.WithCancel(ctx)
 	n.cancel = cancel
-	var eventSorter sorter.EventSorter
-	sortEngine := ctx.ChangefeedVars().Info.Engine
-	switch sortEngine {
-	case model.SortInMemory:
-		eventSorter = memory.NewEntrySorter()
-	case model.SortUnified, model.SortInFile /* `file` becomes an alias of `unified` for backward compatibility */ :
-		if sortEngine == model.SortInFile {
-			log.Warn("File sorter is obsolete and replaced by unified sorter. Please revise your changefeed settings",
-				zap.String("changefeed", ctx.ChangefeedVars().ID), zap.String("tableName", n.tableName))
-		}
 
-		if config.GetGlobalServerConfig().Debug.EnableDBSorter {
-			startTs := ctx.ChangefeedVars().Info.StartTs
-			ssystem := ctx.GlobalVars().SorterSystem
-			dbActorID := ssystem.DBActorID(uint64(n.tableID))
-			compactScheduler := ctx.GlobalVars().SorterSystem.CompactScheduler()
-			levelSorter, err := leveldb.NewSorter(
-				ctx, n.tableID, startTs, ssystem.DBRouter, dbActorID,
-				ssystem.WriterSystem, ssystem.WriterRouter,
-				ssystem.ReaderSystem, ssystem.ReaderRouter,
-				compactScheduler, config.GetGlobalServerConfig().Debug.DB)
-			if err != nil {
-				return errors.Trace(err)
-			}
-			eventSorter = levelSorter
-		} else {
-			// Sorter dir has been set and checked when server starts.
-			// See https://github.com/pingcap/tiflow/blob/9dad09/cdc/server.go#L275
-			sortDir := config.GetGlobalServerConfig().Sorter.SortDir
-			var err error
-			eventSorter, err = unified.NewUnifiedSorter(sortDir, ctx.ChangefeedVars().ID, n.tableName, n.tableID)
-			if err != nil {
-				return errors.Trace(err)
-			}
-		}
-	default:
-		return cerror.ErrUnknownSortEngine.GenWithStackByArgs(sortEngine)
+	eventSorter, err := createSorter(ctx, n.tableName, n.tableID)
+	if err != nil {
+		return errors.Trace(err)
 	}
+
 	failpoint.Inject("ProcessorAddTableError", func() {
 		failpoint.Return(errors.New("processor add table injected error"))
 	})
@@ -147,7 +156,8 @@ func (n *sorterNode) start(
 		lastSendResolvedTsTime := time.Now() // the time at which we last sent a resolved-ts.
 		lastCRTs := uint64(0)                // the commit-ts of the last row changed we sent.
 
-		metricsTableMemoryHistogram := tableMemoryHistogram.WithLabelValues(ctx.ChangefeedVars().ID)
+		metricsTableMemoryHistogram := tableMemoryHistogram.
+			WithLabelValues(ctx.ChangefeedVars().ID.Namespace, ctx.ChangefeedVars().ID.ID)
 		metricsTicker := time.NewTicker(flushMemoryMetricsDuration)
 		defer metricsTicker.Stop()
 
@@ -298,8 +308,8 @@ func (n *sorterNode) updateBarrierTs(barrierTs model.Ts) {
 	}
 }
 
-func (n *sorterNode) releaseResource(_ context.Context, changefeedID string) {
-	defer tableMemoryHistogram.DeleteLabelValues(changefeedID)
+func (n *sorterNode) releaseResource(changefeedID model.ChangeFeedID) {
+	defer tableMemoryHistogram.DeleteLabelValues(changefeedID.Namespace, changefeedID.ID)
 	// Since the flowController is implemented by `Cond`, it is not cancelable by a context
 	// the flowController will be blocked in a background goroutine,
 	// We need to abort the flowController manually in the nodeRunner
@@ -308,7 +318,7 @@ func (n *sorterNode) releaseResource(_ context.Context, changefeedID string) {
 
 func (n *sorterNode) Destroy(ctx pipeline.NodeContext) error {
 	n.cancel()
-	n.releaseResource(ctx, ctx.ChangefeedVars().ID)
+	n.releaseResource(ctx.ChangefeedVars().ID)
 	return n.eg.Wait()
 }
 

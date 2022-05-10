@@ -23,7 +23,6 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
@@ -61,7 +60,7 @@ func main() {
 	}
 
 	log.Info("table mover started")
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 
 	cluster, err := newCluster(ctx, *pd)
@@ -110,16 +109,10 @@ func main() {
 
 	err = cluster.moveAllTables(ctx, sourceCapture, targetCapture)
 	if err != nil {
-		log.Fatal("Fail to move tables", zap.Error(err))
+		log.Fatal("failed to move tables", zap.Error(err))
 	}
 
-	// Make sure the table synchronization starts.
-	time.Sleep(2 * time.Minute)
-
-	err = cluster.moveAllTables(ctx, targetCapture, sourceCapture)
-	if err != nil {
-		log.Fatal("Fail to move tables back", zap.Error(err))
-	}
+	log.Info("all tables are moved", zap.String("sourceCapture", sourceCapture), zap.String("targetCapture", targetCapture))
 }
 
 type tableInfo struct {
@@ -184,8 +177,6 @@ func (c *cluster) moveAllTables(ctx context.Context, sourceCapture, targetCaptur
 		log.Info("moved table successful", zap.Int64("tableID", table.ID))
 	}
 
-	log.Info("all tables are moved", zap.String("sourceCapture", sourceCapture), zap.String("targetCapture", targetCapture))
-
 	for counter := 0; counter < maxCheckSourceEmptyRetries; counter++ {
 		err := retry.Do(ctx, func() error {
 			return c.refreshInfo(ctx)
@@ -197,7 +188,7 @@ func (c *cluster) moveAllTables(ctx context.Context, sourceCapture, targetCaptur
 		tables, ok := c.captures[sourceCapture]
 		if !ok {
 			log.Warn("source capture is gone", zap.String("sourceCapture", sourceCapture))
-			break
+			return errors.New("source capture is gone")
 		}
 
 		if len(tables) == 0 {
@@ -209,8 +200,7 @@ func (c *cluster) moveAllTables(ctx context.Context, sourceCapture, targetCaptur
 			log.Debug("source capture is not empty, will try again", zap.String("sourceCapture", sourceCapture))
 			time.Sleep(time.Second * 10)
 		} else {
-			// non-zero error code indicates failed test.
-			os.Exit(1)
+			return errors.New("source capture is not empty after retries")
 		}
 	}
 
@@ -244,7 +234,7 @@ func (c *cluster) refreshInfo(ctx context.Context) error {
 	log.Debug("retrieved changefeeds", zap.Reflect("changefeeds", changefeeds))
 	var changefeed string
 	for k := range changefeeds {
-		changefeed = k
+		changefeed = k.ID
 		break
 	}
 
@@ -287,9 +277,10 @@ func queryProcessor(
 		return nil, errors.Trace(err)
 	}
 
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
 	requestURL := fmt.Sprintf("http://%s/api/v1/processors/%s/%s", apiEndpoint, changefeed, captureID)
-	httpClient.Timeout = 3 * time.Second
-	resp, err := httpClient.Get(requestURL)
+	resp, err := httpClient.Get(ctx, requestURL)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

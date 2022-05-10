@@ -128,6 +128,8 @@ func (b *binlogPoint) rollback(schemaTracker *schema.Tracker, schema string) (is
 	b.flushedPoint.location.ResetSuffix()
 	b.savedPoint.location = b.flushedPoint.location
 	if b.savedPoint.ti == nil {
+		// TODO: if we forget to save table info for table checkpoint, this is also nil!
+		// And table checkpoint rollback to flushed point may also be nil!
 		return // for global checkpoint, no need to rollback the schema.
 	}
 
@@ -234,7 +236,7 @@ type CheckPoint interface {
 	DeleteSchemaPoint(tctx *tcontext.Context, sourceSchema string) error
 
 	// IsOlderThanTablePoint checks whether job's checkpoint is older than previous saved checkpoint
-	IsOlderThanTablePoint(table *filter.Table, point binlog.Location, isDDL bool) bool
+	IsOlderThanTablePoint(table *filter.Table, point binlog.Location) bool
 
 	// SaveGlobalPoint saves the global binlog stream's checkpoint
 	// corresponding to Meta.Save
@@ -280,12 +282,9 @@ type CheckPoint interface {
 	// corresponding to to Meta.Pos and gtid
 	FlushedGlobalPoint() binlog.Location
 
-	// CheckGlobalPoint checks whether we should save global checkpoint
-	// corresponding to Meta.Check
-	CheckGlobalPoint() bool
-
-	// CheckLastSnapshotCreationTime checks whether we should async flush checkpoint since last time async flush
-	CheckLastSnapshotCreationTime() bool
+	// LastFlushOutdated checks the start time of a flush (when call Snapshot) and finish time of a flush, if both of
+	// the two times are outdated, LastFlushOutdated returns true.
+	LastFlushOutdated() bool
 
 	// Rollback rolls global checkpoint and all table checkpoints back to flushed checkpoints
 	Rollback(schemaTracker *schema.Tracker)
@@ -602,11 +601,12 @@ func (cp *RemoteCheckPoint) DeleteSchemaPoint(tctx *tcontext.Context, sourceSche
 
 // IsOlderThanTablePoint implements CheckPoint.IsOlderThanTablePoint.
 // This function is used to skip old binlog events. Table checkpoint is saved after dispatching a binlog event.
-// - For GTID based and position based replication, DML handling is different. When using position based, each event has
-//   unique position so we have confident to skip event which is <= table checkpoint. When using GTID based, there may
-//   be more than one event with same GTID, so we can only skip event which is < table checkpoint.
+// - For GTID based and position based replication, DML handling is a bit different but comparison is same here.
+//   When using position based, each event has unique position so we have confident to skip event which is <= table checkpoint.
+//   When using GTID based, there may be more than one event with same GTID, but we still skip event which is <= table checkpoint,
+//   to make this right we only save table point for the transaction affected tables only after the whole transaction is processed
 // - DDL will not have unique position or GTID, so we can always skip events <= table checkpoint.
-func (cp *RemoteCheckPoint) IsOlderThanTablePoint(table *filter.Table, location binlog.Location, isDDL bool) bool {
+func (cp *RemoteCheckPoint) IsOlderThanTablePoint(table *filter.Table, location binlog.Location) bool {
 	cp.RLock()
 	defer cp.RUnlock()
 	sourceSchema, sourceTable := table.Schema, table.Name
@@ -619,12 +619,11 @@ func (cp *RemoteCheckPoint) IsOlderThanTablePoint(table *filter.Table, location 
 		return false
 	}
 	oldLocation := point.MySQLLocation()
-	cp.logCtx.L().Debug("compare table location whether is newer", zap.Stringer("location", location), zap.Stringer("old location", oldLocation))
+	// if we update enable-gtid = false to true, we need to compare binlog position instead of GTID before we save table point
+	cmpGTID := cp.cfg.EnableGTID && !(oldLocation.GTIDSetStr() == "" && binlog.ComparePosition(oldLocation.Position, binlog.MinPosition) > 0)
+	cp.logCtx.L().Debug("compare table location whether is newer", zap.Stringer("location", location), zap.Stringer("old location", oldLocation), zap.Bool("cmpGTID", cmpGTID))
 
-	if isDDL || !cp.cfg.EnableGTID {
-		return binlog.CompareLocation(location, oldLocation, cp.cfg.EnableGTID) <= 0
-	}
-	return binlog.CompareLocation(location, oldLocation, cp.cfg.EnableGTID) < 0
+	return binlog.CompareLocation(location, oldLocation, cmpGTID) <= 0
 }
 
 // SaveGlobalPoint implements CheckPoint.SaveGlobalPoint.
@@ -878,18 +877,18 @@ func (cp *RemoteCheckPoint) String() string {
 	return cp.globalPoint.String()
 }
 
-// CheckGlobalPoint implements CheckPoint.CheckGlobalPoint.
-func (cp *RemoteCheckPoint) CheckGlobalPoint() bool {
+// LastFlushOutdated implements CheckPoint.LastFlushOutdated.
+func (cp *RemoteCheckPoint) LastFlushOutdated() bool {
 	cp.RLock()
 	defer cp.RUnlock()
-	return time.Since(cp.globalPointSaveTime) >= time.Duration(cp.cfg.CheckpointFlushInterval)*time.Second
-}
 
-// CheckLastSnapshotCreationTime implements CheckPoint.CheckLastSnapshotCreationTime.
-func (cp *RemoteCheckPoint) CheckLastSnapshotCreationTime() bool {
-	cp.RLock()
-	defer cp.RUnlock()
-	return time.Since(cp.lastSnapshotCreationTime) >= time.Duration(cp.cfg.CheckpointFlushInterval)*time.Second
+	if time.Since(cp.globalPointSaveTime) < time.Duration(cp.cfg.CheckpointFlushInterval)*time.Second {
+		return false
+	}
+	if time.Since(cp.lastSnapshotCreationTime) < time.Duration(cp.cfg.CheckpointFlushInterval)*time.Second {
+		return false
+	}
+	return true
 }
 
 // Rollback implements CheckPoint.Rollback.
@@ -1260,7 +1259,7 @@ func (cp *RemoteCheckPoint) genUpdateSQL(cpSchema, cpTable string, location binl
 func (cp *RemoteCheckPoint) parseMetaData(ctx context.Context) (*binlog.Location, *binlog.Location, error) {
 	// `metadata` is mydumper's output meta file name
 	filename := "metadata"
-	loc, loc2, err := dumpling.ParseMetaData(ctx, cp.cfg.LoaderConfig.Dir, filename, cp.cfg.Flavor)
+	loc, loc2, err := dumpling.ParseMetaData(ctx, cp.cfg.LoaderConfig.Dir, filename, cp.cfg.Flavor, cp.cfg.ExtStorage)
 	if err != nil {
 		toPrint, err2 := storage.ReadFile(ctx, cp.cfg.LoaderConfig.Dir, filename, nil)
 		if err2 != nil {

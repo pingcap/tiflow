@@ -183,13 +183,27 @@ func (c *validatorPersistHelper) createTable(tctx *tcontext.Context) error {
 	return err
 }
 
+type tableChangeDataForPersist struct {
+	sourceTable *filter.Table
+	columnCount int
+	rows        map[string]*rowChangeDataForPersist
+}
+
+type rowChangeDataForPersist struct {
+	Key             string           `json:"key"`
+	Tp              rowChangeJobType `json:"tp"`
+	Data            []interface{}    `json:"data"`
+	FirstValidateTS int64            `json:"first-ts"`
+	FailedCnt       int              `json:"failed-cnt"` // failed count
+}
+
 func (c *validatorPersistHelper) persist(loc binlog.Location) error {
 	// get snapshot of the current table status
-	tableStatus := c.validator.getTableStatus()
+	tableStatus := c.validator.getTableStatusMap()
 	count := len(tableStatus)
-	for _, worker := range c.validator.workers {
+	for _, worker := range c.validator.getWorkers() {
 		for _, tblChange := range worker.getPendingChangesMap() {
-			count += len(tblChange.rows)
+			count += len(tblChange.jobs)
 		}
 		count += len(worker.errorRows)
 	}
@@ -210,10 +224,18 @@ func (c *validatorPersistHelper) persist(loc binlog.Location) error {
 	args = append(args, []interface{}{c.cfg.SourceID, loc.Position.Name, loc.Position.Pos, loc.GTIDSetStr()})
 
 	// update/insert pending row changes
-	for _, worker := range c.validator.workers {
+	for _, worker := range c.validator.getWorkers() {
 		for _, tblChange := range worker.getPendingChangesMap() {
-			for key, row := range tblChange.rows {
-				rowJSON, err := json.Marshal(&row)
+			for key, j := range tblChange.jobs {
+				row := j.row
+				rowForPersist := rowChangeDataForPersist{
+					Key:             key,
+					Tp:              j.Tp,
+					Data:            row.RowValues(),
+					FirstValidateTS: j.FirstValidateTS,
+					FailedCnt:       j.FailedCnt,
+				}
+				rowJSON, err := json.Marshal(&rowForPersist)
 				if err != nil {
 					return err
 				}
@@ -227,10 +249,11 @@ func (c *validatorPersistHelper) persist(loc binlog.Location) error {
 							data = VALUES(data),
 							revision = VALUES(revision)`
 				queries = append(queries, sql)
+				sourceTable := row.GetSourceTable()
 				args = append(args, []interface{}{
 					c.cfg.SourceID,
-					row.table.Source.Schema,
-					row.table.Source.Name,
+					sourceTable.Schema,
+					sourceTable.Table,
 					key,
 					rowJSON,
 					nextRevision,
@@ -264,7 +287,7 @@ func (c *validatorPersistHelper) persist(loc binlog.Location) error {
 		)
 	}
 	// error rows
-	for _, worker := range c.validator.workers {
+	for _, worker := range c.validator.getWorkers() {
 		for _, r := range worker.getErrorRows() {
 			sql := `INSERT INTO ` + c.errorChangeTableName + `
 					(source, src_schema_name, src_table_name, row_pk, dst_schema_name, dst_table_name, data, dst_data, error_type, status)
@@ -282,7 +305,8 @@ func (c *validatorPersistHelper) persist(loc binlog.Location) error {
 			`
 			queries = append(queries, sql)
 
-			srcDataStr, err := json.Marshal(r.srcRow.Data)
+			row := r.srcJob.row
+			srcDataStr, err := json.Marshal(row.RowValues())
 			if err != nil {
 				return err
 			}
@@ -296,10 +320,11 @@ func (c *validatorPersistHelper) persist(loc binlog.Location) error {
 			if err != nil {
 				return err
 			}
-			table := r.srcRow.table
+			sourceTable := row.GetSourceTable()
+			targetTable := row.GetTargetTable()
 			args = append(args, []interface{}{
-				c.cfg.SourceID, table.Source.Schema, table.Source.Name, r.srcRow.Key,
-				table.Target.Schema, table.Target.Name,
+				c.cfg.SourceID, sourceTable.Schema, sourceTable.Table, r.srcJob.Key,
+				targetTable.Schema, targetTable.Table,
 				srcDataStr, dstDataStr, r.tp, pb.ValidateErrorState_NewErr,
 			})
 		}
@@ -319,14 +344,12 @@ func (c *validatorPersistHelper) persist(loc binlog.Location) error {
 	if err != nil {
 		return err
 	}
-	c.revision++
-
-	// reset errors after save
-	for _, worker := range c.validator.workers {
-		worker.resetErrorRows()
-	}
 
 	return nil
+}
+
+func (c *validatorPersistHelper) incrRevision() {
+	c.revision++
 }
 
 func (c *validatorPersistHelper) close() {
@@ -370,8 +393,8 @@ func (c *validatorPersistHelper) loadCheckpoint(tctx *tcontext.Context) (*binlog
 	return location, nil
 }
 
-func (c *validatorPersistHelper) loadPendingChange(tctx *tcontext.Context) (map[string]*tableChange, int64, error) {
-	res := make(map[string]*tableChange)
+func (c *validatorPersistHelper) loadPendingChange(tctx *tcontext.Context) (map[string]*tableChangeDataForPersist, int64, error) {
+	res := make(map[string]*tableChangeDataForPersist)
 	rev := int64(1)
 	sql := "select schema_name, table_name, row_pk, data, revision from " + c.pendingChangeTableName + " where source = ?"
 	rows, err := c.dbConn.QuerySQL(tctx, sql, c.cfg.SourceID)
@@ -391,17 +414,22 @@ func (c *validatorPersistHelper) loadPendingChange(tctx *tcontext.Context) (map[
 		if err != nil {
 			return nil, 0, err
 		}
+		var row *rowChangeDataForPersist
+		err = json.Unmarshal(data, &row)
+		if err != nil {
+			return nil, 0, err
+		}
+
 		sourceTbl := filter.Table{Schema: schemaName, Name: tableName}
 		fullTableName := sourceTbl.String()
 		tblChange, ok := res[fullTableName]
 		if !ok {
-			tblChange = newTableChange(&validateTableInfo{Source: &sourceTbl})
+			tblChange = &tableChangeDataForPersist{
+				sourceTable: &sourceTbl,
+				columnCount: len(row.Data),
+				rows:        make(map[string]*rowChangeDataForPersist),
+			}
 			res[fullTableName] = tblChange
-		}
-		var row *rowChange
-		err = json.Unmarshal(data, &row)
-		if err != nil {
-			return nil, 0, err
 		}
 		tblChange.rows[key] = row
 		rev = revision
@@ -452,10 +480,10 @@ func (c *validatorPersistHelper) loadTableStatus(tctx *tcontext.Context) (map[st
 	return res, nil
 }
 
-func (c *validatorPersistHelper) loadErrorCount() (map[pb.ValidateErrorState]int64, error) {
+func (c *validatorPersistHelper) loadErrorCount(tctx *tcontext.Context) (map[pb.ValidateErrorState]int64, error) {
 	res := make(map[pb.ValidateErrorState]int64)
 	sql := "select status, count(*) from " + c.errorChangeTableName + " where source = ? group by status"
-	rows, err := c.dbConn.QuerySQL(c.tctx, sql, c.cfg.SourceID)
+	rows, err := c.dbConn.QuerySQL(tctx, sql, c.cfg.SourceID)
 	if err != nil {
 		return nil, err
 	}

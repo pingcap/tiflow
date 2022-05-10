@@ -54,6 +54,10 @@ func (c *mockFlowController) GetConsumption() uint64 {
 	return 0
 }
 
+func (s *mockSink) Init(tableID model.TableID) error {
+	return nil
+}
+
 func (s *mockSink) TryEmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) (bool, error) {
 	_ = s.EmitRowChangedEvents(ctx, rows...)
 	return true, nil
@@ -122,7 +126,7 @@ func (s *mockCloseControlSink) Close(ctx context.Context) error {
 func TestStatus(t *testing.T) {
 	ctx := cdcContext.NewContext(context.Background(), &cdcContext.GlobalVars{})
 	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
-		ID: "changefeed-id-test-status",
+		ID: model.DefaultChangeFeedID("changefeed-id-test-status"),
 		Info: &model.ChangeFeedInfo{
 			StartTs: oracle.GoTimeToTS(time.Now()),
 			Config:  config.GetDefaultReplicaConfig(),
@@ -236,7 +240,7 @@ func TestStatus(t *testing.T) {
 func TestStopStatus(t *testing.T) {
 	ctx := cdcContext.NewContext(context.Background(), &cdcContext.GlobalVars{})
 	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
-		ID: "changefeed-id-test-status",
+		ID: model.DefaultChangeFeedID("changefeed-id-test-status"),
 		Info: &model.ChangeFeedInfo{
 			StartTs: oracle.GoTimeToTS(time.Now()),
 			Config:  config.GetDefaultReplicaConfig(),
@@ -275,7 +279,7 @@ func TestStopStatus(t *testing.T) {
 func TestManyTs(t *testing.T) {
 	ctx := cdcContext.NewContext(context.Background(), &cdcContext.GlobalVars{})
 	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
-		ID: "changefeed-id-test-many-ts",
+		ID: model.DefaultChangeFeedID("changefeed-id-test"),
 		Info: &model.ChangeFeedInfo{
 			StartTs: oracle.GoTimeToTS(time.Now()),
 			Config:  config.GetDefaultReplicaConfig(),
@@ -332,7 +336,45 @@ func TestManyTs(t *testing.T) {
 	})
 	require.Nil(t, node.Receive(pipeline.MockNodeContext4Test(ctx, msg, nil)))
 	require.Equal(t, TableStatusRunning, node.Status())
-	sink.Check(t, nil)
+	sink.Check(t, []struct {
+		resolvedTs model.Ts
+		row        *model.RowChangedEvent
+	}{
+		{
+			row: &model.RowChangedEvent{
+				CommitTs: 1,
+				Columns: []*model.Column{
+					{
+						Name:  "col1",
+						Flag:  model.BinaryFlag,
+						Value: "col1-value-updated",
+					},
+					{
+						Name:  "col2",
+						Flag:  model.HandleKeyFlag,
+						Value: "col2-value",
+					},
+				},
+			},
+		},
+		{
+			row: &model.RowChangedEvent{
+				CommitTs: 2,
+				Columns: []*model.Column{
+					{
+						Name:  "col1",
+						Flag:  model.BinaryFlag,
+						Value: "col1-value-updated",
+					},
+					{
+						Name:  "col2",
+						Flag:  model.HandleKeyFlag,
+						Value: "col2-value",
+					},
+				},
+			},
+		},
+	})
 
 	require.Nil(t, node.Receive(
 		pipeline.MockNodeContext4Test(ctx, pmessage.BarrierMessage(1), nil)))
@@ -399,7 +441,7 @@ func TestManyTs(t *testing.T) {
 func TestIgnoreEmptyRowChangeEvent(t *testing.T) {
 	ctx := cdcContext.NewContext(context.Background(), &cdcContext.GlobalVars{})
 	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
-		ID: "changefeed-id-test-ignore-empty-row-change-event",
+		ID: model.DefaultChangeFeedID("changefeed-id-test"),
 		Info: &model.ChangeFeedInfo{
 			StartTs: oracle.GoTimeToTS(time.Now()),
 			Config:  config.GetDefaultReplicaConfig(),
@@ -415,13 +457,13 @@ func TestIgnoreEmptyRowChangeEvent(t *testing.T) {
 		Row: &model.RowChangedEvent{CommitTs: 1},
 	})
 	require.Nil(t, node.Receive(pipeline.MockNodeContext4Test(ctx, msg, nil)))
-	require.Equal(t, 0, len(node.rowBuffer))
+	require.Len(t, sink.received, 0)
 }
 
 func TestSplitUpdateEventWhenEnableOldValue(t *testing.T) {
 	ctx := cdcContext.NewContext(context.Background(), &cdcContext.GlobalVars{})
 	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
-		ID: "changefeed-id-test-split-update-event",
+		ID: model.DefaultChangeFeedID("changefeed-id-test"),
 		Info: &model.ChangeFeedInfo{
 			StartTs: oracle.GoTimeToTS(time.Now()),
 			Config:  config.GetDefaultReplicaConfig(),
@@ -436,7 +478,7 @@ func TestSplitUpdateEventWhenEnableOldValue(t *testing.T) {
 		CRTs: 1, RawKV: &model.RawKVEntry{OpType: model.OpTypePut},
 	})
 	require.Nil(t, node.Receive(pipeline.MockNodeContext4Test(ctx, msg, nil)))
-	require.Equal(t, 0, len(node.rowBuffer))
+	require.Len(t, sink.received, 0)
 
 	columns := []*model.Column{
 		{
@@ -469,9 +511,9 @@ func TestSplitUpdateEventWhenEnableOldValue(t *testing.T) {
 			RawKV: &model.RawKVEntry{OpType: model.OpTypePut},
 			Row:   &model.RowChangedEvent{CommitTs: 1, Columns: columns, PreColumns: preColumns},
 		}), nil)))
-	require.Equal(t, 1, len(node.rowBuffer))
-	require.Equal(t, 2, len(node.rowBuffer[0].Columns))
-	require.Equal(t, 2, len(node.rowBuffer[0].PreColumns))
+	require.Len(t, sink.received, 1)
+	require.Len(t, sink.received[0].row.Columns, 2)
+	require.Len(t, sink.received[0].row.PreColumns, 2)
 }
 
 func TestSplitUpdateEventWhenDisableOldValue(t *testing.T) {
@@ -479,7 +521,7 @@ func TestSplitUpdateEventWhenDisableOldValue(t *testing.T) {
 	cfg := config.GetDefaultReplicaConfig()
 	cfg.EnableOldValue = false
 	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
-		ID: "changefeed-id-test-split-update-event",
+		ID: model.DefaultChangeFeedID("changefeed-id-test"),
 		Info: &model.ChangeFeedInfo{
 			StartTs: oracle.GoTimeToTS(time.Now()),
 			Config:  cfg,
@@ -494,7 +536,7 @@ func TestSplitUpdateEventWhenDisableOldValue(t *testing.T) {
 		CRTs: 1, RawKV: &model.RawKVEntry{OpType: model.OpTypePut},
 	})
 	require.Nil(t, node.Receive(pipeline.MockNodeContext4Test(ctx, msg, nil)))
-	require.Equal(t, 0, len(node.rowBuffer))
+	require.Len(t, sink.received, 0)
 
 	// No update to the handle key column.
 	columns := []*model.Column{
@@ -529,12 +571,12 @@ func TestSplitUpdateEventWhenDisableOldValue(t *testing.T) {
 			RawKV: &model.RawKVEntry{OpType: model.OpTypePut},
 			Row:   &model.RowChangedEvent{CommitTs: 1, Columns: columns, PreColumns: preColumns},
 		}), nil)))
-	require.Equal(t, 1, len(node.rowBuffer))
-	require.Equal(t, 2, len(node.rowBuffer[0].Columns))
-	require.Equal(t, 0, len(node.rowBuffer[0].PreColumns))
+	require.Len(t, sink.received, 1)
+	require.Len(t, sink.received[0].row.Columns, 2)
+	require.Len(t, sink.received[0].row.PreColumns, 0)
 
 	// Cleanup.
-	node.rowBuffer = []*model.RowChangedEvent{}
+	sink.Reset()
 	// Update to the handle key column.
 	columns = []*model.Column{
 		{
@@ -569,21 +611,23 @@ func TestSplitUpdateEventWhenDisableOldValue(t *testing.T) {
 			Row:   &model.RowChangedEvent{CommitTs: 1, Columns: columns, PreColumns: preColumns},
 		}), nil)))
 	// Split an update event into a delete and an insert event.
-	require.Equal(t, 2, len(node.rowBuffer))
+	require.Len(t, sink.received, 2)
 
 	deleteEventIndex := 0
-	require.Equal(t, 0, len(node.rowBuffer[deleteEventIndex].Columns))
-	require.Equal(t, 2, len(node.rowBuffer[deleteEventIndex].PreColumns))
+	require.Len(t, sink.received[deleteEventIndex].row.Columns, 0)
+	require.Len(t, sink.received[deleteEventIndex].row.PreColumns, 2)
 	nonHandleKeyColIndex := 0
 	handleKeyColIndex := 1
 	// NOTICE: When old value disabled, we only keep the handle key pre cols.
-	require.Nil(t, node.rowBuffer[deleteEventIndex].PreColumns[nonHandleKeyColIndex])
-	require.Equal(t, "col2", node.rowBuffer[deleteEventIndex].PreColumns[handleKeyColIndex].Name)
-	require.True(t, node.rowBuffer[deleteEventIndex].PreColumns[handleKeyColIndex].Flag.IsHandleKey())
+	require.Nil(t, sink.received[deleteEventIndex].row.PreColumns[nonHandleKeyColIndex])
+	require.Equal(t, "col2", sink.received[deleteEventIndex].row.PreColumns[handleKeyColIndex].Name)
+	require.True(t,
+		sink.received[deleteEventIndex].row.PreColumns[handleKeyColIndex].Flag.IsHandleKey(),
+	)
 
 	insertEventIndex := 1
-	require.Equal(t, 2, len(node.rowBuffer[insertEventIndex].Columns))
-	require.Equal(t, 0, len(node.rowBuffer[insertEventIndex].PreColumns))
+	require.Len(t, sink.received[insertEventIndex].row.Columns, 2)
+	require.Len(t, sink.received[insertEventIndex].row.PreColumns, 0)
 }
 
 type flushFlowController struct {
@@ -618,7 +662,7 @@ func TestFlushSinkReleaseFlowController(t *testing.T) {
 	cfg := config.GetDefaultReplicaConfig()
 	cfg.EnableOldValue = false
 	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
-		ID: "changefeed-id-test-flushSink",
+		ID: model.DefaultChangeFeedID("changefeed-id-test"),
 		Info: &model.ChangeFeedInfo{
 			StartTs: oracle.GoTimeToTS(time.Now()),
 			Config:  cfg,

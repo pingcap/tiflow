@@ -21,6 +21,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sorter"
 	"github.com/pingcap/tiflow/cdc/sorter/encoding"
@@ -29,7 +30,6 @@ import (
 	actormsg "github.com/pingcap/tiflow/pkg/actor/message"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
@@ -94,11 +94,20 @@ func NewSorter(
 	readerSystem *actor.System[message.Task], readerRouter *actor.Router[message.Task],
 	compact *CompactScheduler, cfg *config.DBConfig,
 ) (*Sorter, error) {
-	changefeedID := util.ChangefeedIDFromCtx(ctx)
+	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
 	metricIterDuration := sorterIterReadDurationHistogram.MustCurryWith(
-		prometheus.Labels{"id": changefeedID})
-	metricTotalEventsKV := sorter.EventCount.WithLabelValues(changefeedID, "kv")
-	metricTotalEventsResolvedTs := sorter.EventCount.WithLabelValues(changefeedID, "resolved")
+		prometheus.Labels{
+			"namespace": changefeedID.Namespace,
+			"id":        changefeedID.ID,
+		})
+	metricInputKV := sorter.InputEventCount.
+		WithLabelValues(changefeedID.Namespace, changefeedID.ID, "kv")
+	metricInputResolved := sorter.InputEventCount.
+		WithLabelValues(changefeedID.Namespace, changefeedID.ID, "resolved")
+	metricOutputKV := sorter.OutputEventCount.
+		WithLabelValues(changefeedID.Namespace, changefeedID.ID, "kv")
+	metricOutputResolved := sorter.InputEventCount.
+		WithLabelValues(changefeedID.Namespace, changefeedID.ID, "resolved")
 
 	// TODO: test capture the same table multiple times.
 	uid := allocID()
@@ -118,8 +127,8 @@ func NewSorter(
 		readerRouter:  readerRouter,
 		readerActorID: actorID,
 
-		metricTotalEventsKV:         metricTotalEventsKV,
-		metricTotalEventsResolvedTs: metricTotalEventsResolvedTs,
+		metricTotalEventsKV:       metricInputKV,
+		metricTotalEventsResolved: metricInputResolved,
 	}
 	wmb := actor.NewMailbox[message.Task](actorID, sorterInputCap)
 	err := writerSystem.Spawn(wmb, w)
@@ -127,8 +136,6 @@ func NewSorter(
 		return nil, errors.Trace(err)
 	}
 	c.closedWg.Add(1)
-
-	outputCh := make(chan *model.PolymorphicEvent, sorterOutputCap)
 
 	r := &reader{
 		common: c,
@@ -157,10 +164,12 @@ func NewSorter(
 		},
 
 		lastSentResolvedTs: startTs,
-		outputCh:           outputCh,
+		outputCh:           make(chan *model.PolymorphicEvent, sorterOutputCap),
 
-		metricIterReadDuration: metricIterDuration.WithLabelValues("read"),
-		metricIterNextDuration: metricIterDuration.WithLabelValues("next"),
+		metricIterReadDuration:    metricIterDuration.WithLabelValues("read"),
+		metricIterNextDuration:    metricIterDuration.WithLabelValues("next"),
+		metricTotalEventsKV:       metricOutputKV,
+		metricTotalEventsResolved: metricOutputResolved,
 	}
 	rmb := actor.NewMailbox[message.Task](actorID, sorterInputCap)
 	err = readerSystem.Spawn(rmb, r)
@@ -175,7 +184,7 @@ func NewSorter(
 		writerActorID: actorID,
 		readerRouter:  readerRouter,
 		ReaderActorID: actorID,
-		outputCh:      outputCh,
+		outputCh:      r.outputCh,
 	}, nil
 }
 

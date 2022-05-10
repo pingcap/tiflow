@@ -458,6 +458,9 @@ function DM_097_CASE() {
 	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT
 
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		"\"stage\": \"Running\"" 3
 }
 
 function DM_097() {

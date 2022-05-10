@@ -18,13 +18,11 @@ import (
 	"testing"
 
 	"github.com/pingcap/tiflow/pkg/config"
-	"github.com/pingcap/tiflow/pkg/util/testleak"
 	"github.com/stretchr/testify/require"
 )
 
 func TestValidateSink(t *testing.T) {
-	defer testleak.AfterTestT(t)()
-
+	t.Parallel()
 	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()

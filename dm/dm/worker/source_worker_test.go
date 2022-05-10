@@ -18,11 +18,14 @@ import (
 	"fmt"
 	"sync"
 	"sync/atomic"
+	"testing"
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	. "github.com/pingcap/check"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
+	"github.com/stretchr/testify/require"
 	"github.com/tikv/pd/pkg/tempurl"
 	clientv3 "go.etcd.io/etcd/client/v3"
 
@@ -44,6 +47,11 @@ func mockShowMasterStatus(mockDB sqlmock.Sqlmock) {
 	rows := mockDB.NewRows([]string{"File", "Position", "Binlog_Do_DB", "Binlog_Ignore_DB", "Executed_Gtid_Set"}).AddRow(
 		"mysql-bin.000009", 11232, nil, nil, "074be7f4-f0f1-11ea-95bd-0242ac120002:1-699",
 	)
+	mockDB.ExpectQuery(`SHOW MASTER STATUS`).WillReturnRows(rows)
+}
+
+func mockShowMasterStatusNoRows(mockDB sqlmock.Sqlmock) {
+	rows := mockDB.NewRows([]string{"File", "Position", "Binlog_Do_DB", "Binlog_Ignore_DB", "Executed_Gtid_Set"})
 	mockDB.ExpectQuery(`SHOW MASTER STATUS`).WillReturnRows(rows)
 }
 
@@ -432,7 +440,7 @@ func (t *testWorkerEtcdCompact) TestWatchSubtaskStageEtcdCompact(c *C) {
 	ha.WatchSubTaskStage(ctx, etcdCli, sourceCfg.SourceID, startRev, subTaskStageCh, subTaskErrCh)
 	select {
 	case err = <-subTaskErrCh:
-		c.Assert(err, Equals, etcdErrCompacted)
+		c.Assert(errors.Cause(err), Equals, etcdErrCompacted)
 	case <-time.After(300 * time.Millisecond):
 		c.Fatal("fail to get etcd error compacted")
 	}
@@ -558,7 +566,7 @@ func (t *testWorkerEtcdCompact) TestWatchValidatorStageEtcdCompact(c *C) {
 	ha.WatchValidatorStage(ctxForWatch, etcdCli, sourceCfg.SourceID, startRev, subTaskStageCh, subTaskErrCh)
 	select {
 	case err = <-subTaskErrCh:
-		c.Assert(err, Equals, etcdErrCompacted)
+		c.Assert(errors.Cause(err), Equals, etcdErrCompacted)
 	case <-time.After(300 * time.Millisecond):
 		c.Fatal("fail to get etcd error compacted")
 	}
@@ -673,7 +681,7 @@ func (t *testWorkerEtcdCompact) TestWatchRelayStageEtcdCompact(c *C) {
 	ha.WatchRelayStage(ctx, etcdCli, cfg.Name, startRev, relayStageCh, relayErrCh)
 	select {
 	case err := <-relayErrCh:
-		c.Assert(err, Equals, etcdErrCompacted)
+		c.Assert(errors.Cause(err), Equals, etcdErrCompacted)
 	case <-time.After(300 * time.Millisecond):
 		c.Fatal("fail to get etcd error compacted")
 	}
@@ -786,28 +794,29 @@ func (t *testServer) TestQueryValidator(c *C) {
 	}, pb.Stage_Running, nil, "")
 	st.StartValidator(pb.Stage_Running, false)
 	w.subTaskHolder.recordSubTask(st)
-	expected := []*pb.ValidationStatus{
+	expected := []*pb.ValidationTableStatus{
 		{
-			Source:           "127.0.0.1:3306",
-			SrcTable:         "`testdb1`.`testtable1`",
-			DstTable:         "`dstdb`.`dsttable`",
-			ValidationStatus: pb.Stage_Running.String(),
+			SrcTable: "`testdb1`.`testtable1`",
+			DstTable: "`dstdb`.`dsttable`",
+			Stage:    pb.Stage_Running,
 		},
 		{
-			Source:           "127.0.0.1:3306",
-			SrcTable:         "`testdb2`.`testtable2`",
-			DstTable:         "`dstdb`.`dsttable`",
-			ValidationStatus: pb.Stage_Stopped.String(),
-			Message:          "no primary key",
+			SrcTable: "`testdb2`.`testtable2`",
+			DstTable: "`dstdb`.`dsttable`",
+			Stage:    pb.Stage_Stopped,
+			Message:  "no primary key",
 		},
 	}
-	ret := w.GetValidateStatus("testQueryValidator", pb.Stage_Running)
+	ret, err := w.GetValidatorTableStatus("testQueryValidator", pb.Stage_Running)
+	c.Assert(err, IsNil)
 	c.Assert(len(ret), Equals, 1)
 	c.Assert(ret[0], DeepEquals, expected[0])
-	ret = w.GetValidateStatus("testQueryValidator", pb.Stage_Stopped)
+	ret, err = w.GetValidatorTableStatus("testQueryValidator", pb.Stage_Stopped)
+	c.Assert(err, IsNil)
 	c.Assert(len(ret), Equals, 1)
 	c.Assert(ret[0], DeepEquals, expected[1])
-	ret = w.GetValidateStatus("testQueryValidator", pb.Stage_InvalidStage)
+	ret, err = w.GetValidatorTableStatus("testQueryValidator", pb.Stage_InvalidStage)
+	c.Assert(err, IsNil)
 	c.Assert(len(ret), Equals, 2)
 	c.Assert(ret, DeepEquals, expected)
 }
@@ -856,4 +865,28 @@ func (t *testServer) TestOperateWorkerValidatorErr(c *C) {
 	c.Assert(w.OperateWorkerValidatorErr("invalidTask", pb.ValidationErrOp_ClearErrOp, 0, true).Error(), Equals, taskNotFound.Error())
 	// subtask match
 	c.Assert(w.OperateWorkerValidatorErr("testQueryValidator", pb.ValidationErrOp_ClearErrOp, 0, true), IsNil)
+}
+
+func TestMasterBinlogOff(t *testing.T) {
+	ctx := context.Background()
+	cfg, err := config.ParseYamlAndVerify(config.SampleSourceConfig)
+	require.NoError(t, err)
+	cfg.From.Password = "no need to connect"
+
+	w, err := NewSourceWorker(cfg, nil, "", "")
+	require.NoError(t, err)
+	w.closed.Store(false)
+
+	// start task
+	var subtaskCfg config.SubTaskConfig
+	require.NoError(t, subtaskCfg.Decode(config.SampleSubtaskConfig, true))
+	require.NoError(t, w.StartSubTask(&subtaskCfg, pb.Stage_Running, pb.Stage_Stopped, true))
+
+	_, mockDB, err := conn.InitMockDBFull()
+	require.NoError(t, err)
+	mockShowMasterStatusNoRows(mockDB)
+	status, _, err := w.QueryStatus(ctx, subtaskCfg.Name)
+	require.NoError(t, err)
+	require.Len(t, status, 1)
+	require.Equal(t, subtaskCfg.Name, status[0].Name)
 }

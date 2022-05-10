@@ -172,7 +172,9 @@ func (m *feedStateManager) PushAdminJob(job *model.AdminJob) {
 	switch job.Type {
 	case model.AdminStop, model.AdminResume, model.AdminRemove:
 	default:
-		log.Panic("Can not handle this job", zap.String("changefeed", m.state.ID),
+		log.Panic("Can not handle this job",
+			zap.String("namespace", m.state.ID.Namespace),
+			zap.String("changefeed", m.state.ID.ID),
 			zap.String("changefeedState", string(m.state.Info.State)), zap.Any("job", job))
 	}
 	m.pushAdminJob(job)
@@ -183,13 +185,17 @@ func (m *feedStateManager) handleAdminJob() (jobsPending bool) {
 	if job == nil || job.CfID != m.state.ID {
 		return false
 	}
-	log.Info("handle admin job", zap.String("changefeed", m.state.ID), zap.Reflect("job", job))
+	log.Info("handle admin job",
+		zap.String("namespace", m.state.ID.Namespace),
+		zap.String("changefeed", m.state.ID.ID), zap.Reflect("job", job))
 	switch job.Type {
 	case model.AdminStop:
 		switch m.state.Info.State {
 		case model.StateNormal, model.StateError:
 		default:
-			log.Warn("can not pause the changefeed in the current state", zap.String("changefeed", m.state.ID),
+			log.Warn("can not pause the changefeed in the current state",
+				zap.String("namespace", m.state.ID.Namespace),
+				zap.String("changefeed", m.state.ID.ID),
 				zap.String("changefeedState", string(m.state.Info.State)), zap.Any("job", job))
 			return
 		}
@@ -201,7 +207,9 @@ func (m *feedStateManager) handleAdminJob() (jobsPending bool) {
 		case model.StateNormal, model.StateError, model.StateFailed,
 			model.StateStopped, model.StateFinished, model.StateRemoved:
 		default:
-			log.Warn("can not remove the changefeed in the current state", zap.String("changefeed", m.state.ID),
+			log.Warn("can not remove the changefeed in the current state",
+				zap.String("namespace", m.state.ID.Namespace),
+				zap.String("changefeed", m.state.ID.ID),
 				zap.String("changefeedState", string(m.state.Info.State)), zap.Any("job", job))
 			return
 		}
@@ -218,12 +226,17 @@ func (m *feedStateManager) handleAdminJob() (jobsPending bool) {
 			return nil, true, nil
 		})
 		checkpointTs := m.state.Info.GetCheckpointTs(m.state.Status)
-		log.Info("the changefeed is removed", zap.String("changefeed", m.state.ID), zap.Uint64("checkpointTs", checkpointTs))
+		log.Info("the changefeed is removed",
+			zap.String("namespace", m.state.ID.Namespace),
+			zap.String("changefeed", m.state.ID.ID),
+			zap.Uint64("checkpointTs", checkpointTs))
 	case model.AdminResume:
 		switch m.state.Info.State {
 		case model.StateFailed, model.StateError, model.StateStopped, model.StateFinished:
 		default:
-			log.Warn("can not resume the changefeed in the current state", zap.String("changefeed", m.state.ID),
+			log.Warn("can not resume the changefeed in the current state",
+				zap.String("namespace", m.state.ID.Namespace),
+				zap.String("changefeed", m.state.ID.ID),
 				zap.String("changefeedState", string(m.state.Info.State)), zap.Any("job", job))
 			return
 		}
@@ -248,7 +261,9 @@ func (m *feedStateManager) handleAdminJob() (jobsPending bool) {
 		switch m.state.Info.State {
 		case model.StateNormal:
 		default:
-			log.Warn("can not finish the changefeed in the current state", zap.String("changefeed", m.state.ID),
+			log.Warn("can not finish the changefeed in the current state",
+				zap.String("namespace", m.state.ID.Namespace),
+				zap.String("changefeed", m.state.ID.ID),
 				zap.String("changefeedState", string(m.state.Info.State)), zap.Any("job", job))
 			return
 		}
@@ -256,7 +271,9 @@ func (m *feedStateManager) handleAdminJob() (jobsPending bool) {
 		jobsPending = true
 		m.patchState(model.StateFinished)
 	default:
-		log.Warn("Unknown admin job", zap.Any("adminJob", job), zap.String("changefeed", m.state.ID))
+		log.Warn("Unknown admin job", zap.Any("adminJob", job),
+			zap.String("namespace", m.state.ID.Namespace),
+			zap.String("changefeed", m.state.ID.ID))
 	}
 	return
 }
@@ -341,7 +358,10 @@ func (m *feedStateManager) errorsReportedByProcessors() []*model.RunningError {
 				runningErrors = make(map[string]*model.RunningError)
 			}
 			runningErrors[position.Error.Code] = position.Error
-			log.Error("processor report an error", zap.String("changefeed", m.state.ID), zap.String("captureID", captureID), zap.Any("error", position.Error))
+			log.Error("processor report an error",
+				zap.String("namespace", m.state.ID.Namespace),
+				zap.String("changefeed", m.state.ID.ID),
+				zap.String("captureID", captureID), zap.Any("error", position.Error))
 			m.state.PatchTaskPosition(captureID, func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
 				if position == nil {
 					return nil, false, nil
@@ -426,7 +446,9 @@ func (m *feedStateManager) handleError(errs ...*model.RunningError) {
 			m.shouldBeRunning = false
 			m.patchState(model.StateFailed)
 		} else {
-			log.Info("changefeed restart backoff interval is changed", zap.String("changefeed", m.state.ID),
+			log.Info("changefeed restart backoff interval is changed",
+				zap.String("namespace", m.state.ID.Namespace),
+				zap.String("changefeed", m.state.ID.ID),
 				zap.Duration("oldInterval", oldBackoffInterval), zap.Duration("newInterval", m.backoffInterval))
 		}
 	}

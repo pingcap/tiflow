@@ -21,6 +21,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	tidbddl "github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/parser/ast"
@@ -355,22 +356,22 @@ func (s *testCheckpointSuite) testTableCheckPoint(c *C, cp CheckPoint) {
 	)
 
 	// not exist
-	older := cp.IsOlderThanTablePoint(table, binlog.Location{Position: pos1}, false)
+	older := cp.IsOlderThanTablePoint(table, binlog.Location{Position: pos1})
 	c.Assert(older, IsFalse)
 
 	// save
 	cp.SaveTablePoint(table, binlog.Location{Position: pos2}, nil)
-	older = cp.IsOlderThanTablePoint(table, binlog.Location{Position: pos1}, false)
+	older = cp.IsOlderThanTablePoint(table, binlog.Location{Position: pos1})
 	c.Assert(older, IsTrue)
 
 	// rollback, to min
 	cp.Rollback(s.tracker)
-	older = cp.IsOlderThanTablePoint(table, binlog.Location{Position: pos1}, false)
+	older = cp.IsOlderThanTablePoint(table, binlog.Location{Position: pos1})
 	c.Assert(older, IsFalse)
 
 	// save again
 	cp.SaveTablePoint(table, binlog.Location{Position: pos2}, nil)
-	older = cp.IsOlderThanTablePoint(table, binlog.Location{Position: pos1}, false)
+	older = cp.IsOlderThanTablePoint(table, binlog.Location{Position: pos1})
 	c.Assert(older, IsTrue)
 
 	// flush + rollback
@@ -380,12 +381,12 @@ func (s *testCheckpointSuite) testTableCheckPoint(c *C, cp CheckPoint) {
 	err = cp.FlushPointsExcept(tctx, cp.Snapshot(true).id, nil, nil, nil)
 	c.Assert(err, IsNil)
 	cp.Rollback(s.tracker)
-	older = cp.IsOlderThanTablePoint(table, binlog.Location{Position: pos1}, false)
+	older = cp.IsOlderThanTablePoint(table, binlog.Location{Position: pos1})
 	c.Assert(older, IsTrue)
 
 	// save
 	cp.SaveTablePoint(table, binlog.Location{Position: pos2}, nil)
-	older = cp.IsOlderThanTablePoint(table, binlog.Location{Position: pos1}, false)
+	older = cp.IsOlderThanTablePoint(table, binlog.Location{Position: pos1})
 	c.Assert(older, IsTrue)
 
 	// delete
@@ -450,7 +451,7 @@ func (s *testCheckpointSuite) testTableCheckPoint(c *C, cp CheckPoint) {
 	s.mock.ExpectCommit()
 	err = cp.Clear(tctx)
 	c.Assert(err, IsNil)
-	older = cp.IsOlderThanTablePoint(table, binlog.Location{Position: pos1}, false)
+	older = cp.IsOlderThanTablePoint(table, binlog.Location{Position: pos1})
 	c.Assert(older, IsFalse)
 
 	// test save table point less than global point
@@ -476,7 +477,7 @@ func (s *testCheckpointSuite) testTableCheckPoint(c *C, cp CheckPoint) {
 	c.Assert(cp.GlobalPointSaveTime(), Not(Equals), lastGlobalPointSavedTime)
 	c.Assert(err, IsNil)
 	cp.Rollback(s.tracker)
-	older = cp.IsOlderThanTablePoint(table, binlog.Location{Position: pos1}, false)
+	older = cp.IsOlderThanTablePoint(table, binlog.Location{Position: pos1})
 	c.Assert(older, IsFalse)
 
 	s.mock.ExpectBegin()
@@ -548,4 +549,19 @@ func TestRemoteCheckPointLoadIntoSchemaTracker(t *testing.T) {
 	require.Len(t, tableInfo.Columns, 1)
 	_, err = schemaTracker.GetTableInfo(tbl2)
 	require.Error(t, err)
+}
+
+func TestLastFlushOutdated(t *testing.T) {
+	cfg := genDefaultSubTaskConfig4Test()
+	cfg.WorkerCount = 0
+	cfg.CheckpointFlushInterval = 1
+
+	cp := NewRemoteCheckPoint(tcontext.Background(), cfg, "1")
+	checkpoint := cp.(*RemoteCheckPoint)
+	checkpoint.globalPointSaveTime = time.Now().Add(-2 * time.Second)
+
+	require.True(t, checkpoint.LastFlushOutdated())
+	require.Nil(t, checkpoint.Snapshot(true))
+	// though snapshot is nil, checkpoint is not outdated
+	require.False(t, checkpoint.LastFlushOutdated())
 }

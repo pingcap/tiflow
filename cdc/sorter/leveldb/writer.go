@@ -26,7 +26,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// writer is a thin shim that batches, translates events into key-vaule pairs
+// writer is a thin shim that batches, translates events into key-value pairs
 // and writes to leveldb.
 type writer struct {
 	common
@@ -38,8 +38,8 @@ type writer struct {
 	maxResolvedTs uint64
 	maxCommitTs   uint64
 
-	metricTotalEventsKV         prometheus.Counter
-	metricTotalEventsResolvedTs prometheus.Counter
+	metricTotalEventsKV       prometheus.Counter
+	metricTotalEventsResolved prometheus.Counter
 }
 
 var _ actor.Actor[message.Task] = (*writer)(nil)
@@ -79,7 +79,7 @@ func (w *writer) Poll(ctx context.Context, msgs []actormsg.Message[message.Task]
 		writes[message.Key(key)] = value
 	}
 	w.metricTotalEventsKV.Add(float64(kvEventCount))
-	w.metricTotalEventsResolvedTs.Add(float64(resolvedEventCount))
+	w.metricTotalEventsResolved.Add(float64(resolvedEventCount))
 
 	if len(writes) != 0 {
 		// Send write task to leveldb.
@@ -97,7 +97,7 @@ func (w *writer) Poll(ctx context.Context, msgs []actormsg.Message[message.Task]
 	}
 	// Notify reader that there is something to read.
 	//
-	// It's ok to noify reader immediately without waiting writes done,
+	// It's ok to notify reader immediately without waiting writes done,
 	// because reader will see these writes:
 	//   1. reader/writer send tasks to the same leveldb, so tasks are ordered.
 	//   2. ReadTs will trigger reader to take iterator from leveldb,
@@ -114,9 +114,9 @@ func (w *writer) Poll(ctx context.Context, msgs []actormsg.Message[message.Task]
 			// exhaustedResolvedTs >= maxCommitTs.
 			//
 			// If maxCommitTs and maxResolvedTs are sent separately,
-			// data in (exhaustedResolvedTs, actaul maxCommitTs] is lost:
+			// data in (exhaustedResolvedTs, actual maxCommitTs] is lost:
 			//        --------------------------------------------->
-			// writer:                          ^ actaul maxCommitTs
+			// writer:                          ^ actual maxCommitTs
 			// reader:  ^ maxCommitTs  ^ exhaustedResolvedTs   ^ maxResolvedTs
 			MaxCommitTs:   w.maxCommitTs,
 			MaxResolvedTs: w.maxResolvedTs,

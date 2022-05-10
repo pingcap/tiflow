@@ -52,7 +52,7 @@ type Actor[T any] interface {
 }
 
 // Mailbox sends messages to an actor.
-// Mailbox is threadsafe.
+// Mailbox is thread-safe.
 type Mailbox[T any] interface {
 	ID() ID
 	// Send non-blocking send a message to its actor.
@@ -61,7 +61,7 @@ type Mailbox[T any] interface {
 	Send(msg message.Message[T]) error
 	// SendB sends a message to its actor, blocks when it's full.
 	// Returns ErrActorStopped when its actor is closed.
-	// Retruns context.Canceled or context.DeadlineExceeded
+	// Returns context.Canceled or context.DeadlineExceeded
 	// when context is canceled or deadline exceeded.
 	SendB(ctx context.Context, msg message.Message[T]) error
 

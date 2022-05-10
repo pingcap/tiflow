@@ -18,6 +18,8 @@ import (
 
 	"github.com/go-mysql-org/go-mysql/mysql"
 	. "github.com/pingcap/check"
+	"github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tidb/util/filter"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/dm/dm/config"
@@ -78,3 +80,5 @@ func (*mockCheckpoint) FlushedGlobalPoint() binlog.Location {
 		},
 	}
 }
+
+func (*mockCheckpoint) SaveTablePoint(_ *filter.Table, _ binlog.Location, _ *model.TableInfo) {}

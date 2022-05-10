@@ -272,6 +272,9 @@ func (l *Lock) TrySync(info Info, tts []TargetTable) (newDDLs []string, cols []s
 			}
 		case ConflictSkipWaitRedirect:
 			return newDDLs, cols, terror.ErrShardDDLOptimismNeedSkipAndRedirect.Generate(l.ID, ddls[idx])
+		case ConflictResolved:
+			log.L().Info("all conflict DDL resolved", zap.String("DDL", ddls[idx]), zap.String("callerSource", callerSource),
+				zap.String("callerSchema", callerSchema), zap.String("callerTable", callerTable))
 		}
 
 		if schemaChanged {
@@ -842,6 +845,7 @@ func (l *Lock) trySyncForOneDDL(source, schema, table string, prevTable, postTab
 	}
 
 	tableCmp, tableErr := prevTable.Compare(postTable)
+
 	// Normal DDL
 	if tableErr == nil {
 		log.L().Debug("receive a normal DDL", zap.String("source", source), zap.String("schema", schema), zap.String("table", table), zap.Stringer("prevTable", prevTable), zap.Stringer("postTable", postTable))
@@ -922,6 +926,7 @@ func (l *Lock) trySyncForOneDDL(source, schema, table string, prevTable, postTab
 			return false, ConflictDetected
 		}
 		l.resolveTables()
+
 		return true, ConflictNone
 	}
 	log.L().Debug("conflict hasn't been resolved", zap.String("source", source), zap.String("schema", schema), zap.String("table", table), zap.Stringer("prevTable", prevTable), zap.Stringer("postTable", postTable))

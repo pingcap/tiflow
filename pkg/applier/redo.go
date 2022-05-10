@@ -19,10 +19,12 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/redo/reader"
 	"github.com/pingcap/tiflow/cdc/sink"
+	"github.com/pingcap/tiflow/cdc/sink/mysql"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
@@ -33,8 +35,8 @@ import (
 
 const (
 	applierChangefeed = "redo-applier"
-	emitBatch         = sink.DefaultMaxTxnRow
-	readBatch         = sink.DefaultWorkerCount * emitBatch
+	emitBatch         = mysql.DefaultMaxTxnRow
+	readBatch         = mysql.DefaultWorkerCount * emitBatch
 )
 
 var errApplyFinished = errors.New("apply finished, can exit safely")
@@ -112,8 +114,10 @@ func (ra *RedoApplier) consumeLogs(ctx context.Context) error {
 		return err
 	}
 	opts := map[string]string{}
-	ctx = util.PutRoleInCtx(ctx, util.RoleRedoLogApplier)
-	s, err := sink.New(ctx, applierChangefeed, ra.cfg.SinkURI, ft, replicaConfig, opts, ra.errCh)
+	ctx = contextutil.PutRoleInCtx(ctx, util.RoleRedoLogApplier)
+	s, err := sink.New(ctx,
+		model.DefaultChangeFeedID(applierChangefeed),
+		ra.cfg.SinkURI, ft, replicaConfig, opts, ra.errCh)
 	if err != nil {
 		return err
 	}
