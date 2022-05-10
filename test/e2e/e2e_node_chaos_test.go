@@ -91,8 +91,7 @@ func TestNodeFailure(t *testing.T) {
 	// restart all server masters and check fake job is running normally
 	nodeCount := 3
 	for i := 0; i < nodeCount; i++ {
-		name := fmt.Sprintf("sample_server-master-%d_1", i)
-		cli.ContainerRestart(name)
+		cli.ContainerRestart(masterContainerName(i))
 		mvccCount++
 		value := fmt.Sprintf("restart-server-master-value-%d", i)
 		updateKeyAndCheckOnce(ctx, t, cli, jobID, cfg.WorkerCount, value, mvccCount)
@@ -100,12 +99,23 @@ func TestNodeFailure(t *testing.T) {
 
 	// restart all executors and check fake job is running normally
 	for i := 0; i < nodeCount; i++ {
-		name := fmt.Sprintf("sample_server-executor-%d_1", i)
-		cli.ContainerRestart(name)
+		cli.ContainerRestart(executorContainerName(i))
 		mvccCount++
 		value := fmt.Sprintf("restart-executor-value-%d", i)
 		updateKeyAndCheckOnce(ctx, t, cli, jobID, cfg.WorkerCount, value, mvccCount)
 	}
+
+	for i := 0; i < nodeCount; i++ {
+		cli.ContainerStop(masterContainerName(i))
+		cli.ContainerStop(executorContainerName(i))
+	}
+	for i := 0; i < nodeCount; i++ {
+		cli.ContainerStart(masterContainerName(i))
+		cli.ContainerStart(executorContainerName(i))
+	}
+	value := "stop-start-container-value"
+	mvccCount++
+	updateKeyAndCheckOnce(ctx, t, cli, jobID, cfg.WorkerCount, value, mvccCount)
 
 	err = cli.PauseJob(ctx, jobID)
 	require.NoError(t, err)
@@ -121,4 +131,12 @@ func TestNodeFailure(t *testing.T) {
 		}
 		return true
 	}, time.Second*60, time.Second*2)
+}
+
+func masterContainerName(index int) string {
+	return fmt.Sprintf("sample_server-master-%d_1", index)
+}
+
+func executorContainerName(index int) string {
+	return fmt.Sprintf("sample_server-executor-%d_1", index)
 }

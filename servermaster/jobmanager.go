@@ -254,10 +254,16 @@ func (jm *JobManagerImplV2) Tick(ctx context.Context) error {
 
 	if !jm.tombstoneCleaned && jm.BaseMaster.IsMasterReady() {
 		for _, worker := range jm.BaseMaster.GetWorkers() {
-			// ignore tombstone worker
-			if worker.GetTombstone() != nil {
+			// clean tombstone workers from worker manager and they will be
+			// re-created in the following IterWaitAckJobs
+			tombstoneHandle := worker.GetTombstone()
+			if tombstoneHandle != nil {
+				if err := tombstoneHandle.CleanTombstone(ctx); err != nil {
+					return err
+				}
 				continue
 			}
+			// mark non-tombstone workers as online
 			err := jm.JobFsm.JobOnline(worker)
 			// ignore worker that is not in WaitAck list
 			if err != nil && derrors.ErrWorkerNotFound.NotEqual(err) {

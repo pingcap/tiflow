@@ -199,3 +199,15 @@ func (cli *ChaosCli) ContainerRestart(name string) {
 	runCmdHandleError(cmd)
 	log.L().Info("Finished restarting container", zap.String("name", name))
 }
+
+func (cli *ChaosCli) ContainerStop(name string) {
+	cmd := exec.Command("docker", "stop", name)
+	runCmdHandleError(cmd)
+	log.L().Info("Finished stopping container", zap.String("name", name))
+}
+
+func (cli *ChaosCli) ContainerStart(name string) {
+	cmd := exec.Command("docker", "start", name)
+	runCmdHandleError(cmd)
+	log.L().Info("Finished starting container", zap.String("name", name))
+}
