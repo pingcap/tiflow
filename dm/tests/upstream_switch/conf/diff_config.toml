@@ -15,7 +15,7 @@ check-struct-only = false
 
 [routes.rule1]
 schema-pattern = "db_pessimistic"
-table-pattern = "tb?*"
+table-pattern = "tb*"
 target-schema = "db_pessimistic"
 target-table = "tb"
 

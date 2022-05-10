@@ -102,7 +102,7 @@ func (r *sizedRegionRouter) AddRegion(sri singleRegionInfo) {
 		r.buffer[id] = append(r.buffer[id], sri)
 		if _, ok := r.metrics.cachedRegions[id]; !ok {
 			r.metrics.cachedRegions[id] = cachedRegionSize.
-				WithLabelValues(id, r.metrics.changefeed.ID)
+				WithLabelValues(id, r.metrics.changefeed.Namespace, r.metrics.changefeed.ID)
 		}
 		r.metrics.cachedRegions[id].Inc()
 	}
@@ -116,7 +116,8 @@ func (r *sizedRegionRouter) Acquire(id string) {
 	defer r.lock.Unlock()
 	r.tokens[id]++
 	if _, ok := r.metrics.tokens[id]; !ok {
-		r.metrics.tokens[id] = clientRegionTokenSize.WithLabelValues(id, r.metrics.changefeed.ID)
+		r.metrics.tokens[id] = clientRegionTokenSize.
+			WithLabelValues(id, r.metrics.changefeed.Namespace, r.metrics.changefeed.ID)
 	}
 	r.metrics.tokens[id].Inc()
 }
@@ -128,7 +129,8 @@ func (r *sizedRegionRouter) Release(id string) {
 	defer r.lock.Unlock()
 	r.tokens[id]--
 	if _, ok := r.metrics.tokens[id]; !ok {
-		r.metrics.tokens[id] = clientRegionTokenSize.WithLabelValues(id, r.metrics.changefeed.ID)
+		r.metrics.tokens[id] = clientRegionTokenSize.
+			WithLabelValues(id, r.metrics.changefeed.Namespace, r.metrics.changefeed.ID)
 	}
 	r.metrics.tokens[id].Dec()
 }
