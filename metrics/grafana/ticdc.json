@@ -6075,7 +6075,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "sum(rate(ticdc_sorter_event_count{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", instance=~\"$ticdc_instance\"}[1m])) by (changefeed, instance, type)",
+              "expr": "sum(rate(ticdc_sorter_output_event_count{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", instance=~\"$ticdc_instance\"}[1m])) by (changefeed, instance, type)",
               "format": "time_series",
               "intervalFactor": 1,
               "legendFormat": "{{changefeed}}-{{instance}}-{{type}}",
@@ -6176,7 +6176,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "sum(ticdc_sorter_event_count{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", instance=~\"$ticdc_instance\"}) by (instance, changefeed, type)",
+              "expr": "sum(ticdc_sorter_output_event_count{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", instance=~\"$ticdc_instance\"}) by (instance, changefeed, type)",
               "format": "time_series",
               "intervalFactor": 1,
               "legendFormat": "{{changefeed}}-{{instance}}-{{type}}",
@@ -6896,7 +6896,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "Sink output events/s",
+          "title": "Sink received events/s",
           "tooltip": {
             "shared": true,
             "sort": 2,
@@ -6999,7 +6999,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "Sink output events",
+          "title": "Sink received events",
           "tooltip": {
             "shared": true,
             "sort": 2,
@@ -10831,7 +10831,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "sum(rate(ticdc_sorter_event_count{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", instance=~\"$ticdc_instance\"}[1m])) by (instance,changefeed)",
+              "expr": "sum(rate(ticdc_sorter_output_event_count{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", instance=~\"$ticdc_instance\"}[1m])) by (instance,changefeed)",
               "format": "time_series",
               "intervalFactor": 1,
               "legendFormat": "{{instance}}-{{changefeed}}",

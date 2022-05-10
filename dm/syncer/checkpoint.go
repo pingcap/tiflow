@@ -235,7 +235,7 @@ type CheckPoint interface {
 	DeleteSchemaPoint(tctx *tcontext.Context, sourceSchema string) error
 
 	// IsOlderThanTablePoint checks whether job's checkpoint is older than previous saved checkpoint
-	IsOlderThanTablePoint(table *filter.Table, point binlog.Location, isDDL bool) bool
+	IsOlderThanTablePoint(table *filter.Table, point binlog.Location) bool
 
 	// SaveGlobalPoint saves the global binlog stream's checkpoint
 	// corresponding to Meta.Save
@@ -603,11 +603,12 @@ func (cp *RemoteCheckPoint) DeleteSchemaPoint(tctx *tcontext.Context, sourceSche
 
 // IsOlderThanTablePoint implements CheckPoint.IsOlderThanTablePoint.
 // This function is used to skip old binlog events. Table checkpoint is saved after dispatching a binlog event.
-// - For GTID based and position based replication, DML handling is different. When using position based, each event has
-//   unique position so we have confident to skip event which is <= table checkpoint. When using GTID based, there may
-//   be more than one event with same GTID, so we can only skip event which is < table checkpoint.
+// - For GTID based and position based replication, DML handling is a bit different but comparison is same here.
+//   When using position based, each event has unique position so we have confident to skip event which is <= table checkpoint.
+//   When using GTID based, there may be more than one event with same GTID, but we still skip event which is <= table checkpoint,
+//   to make this right we only save table point for the transaction affected tables only after the whole transaction is processed
 // - DDL will not have unique position or GTID, so we can always skip events <= table checkpoint.
-func (cp *RemoteCheckPoint) IsOlderThanTablePoint(table *filter.Table, location binlog.Location, isDDL bool) bool {
+func (cp *RemoteCheckPoint) IsOlderThanTablePoint(table *filter.Table, location binlog.Location) bool {
 	cp.RLock()
 	defer cp.RUnlock()
 	sourceSchema, sourceTable := table.Schema, table.Name
@@ -620,12 +621,11 @@ func (cp *RemoteCheckPoint) IsOlderThanTablePoint(table *filter.Table, location 
 		return false
 	}
 	oldLocation := point.MySQLLocation()
-	cp.logCtx.L().Debug("compare table location whether is newer", zap.Stringer("location", location), zap.Stringer("old location", oldLocation))
+	// if we update enable-gtid = false to true, we need to compare binlog position instead of GTID before we save table point
+	cmpGTID := cp.cfg.EnableGTID && !(oldLocation.GTIDSetStr() == "" && binlog.ComparePosition(oldLocation.Position, binlog.MinPosition) > 0)
+	cp.logCtx.L().Debug("compare table location whether is newer", zap.Stringer("location", location), zap.Stringer("old location", oldLocation), zap.Bool("cmpGTID", cmpGTID))
 
-	if isDDL || !cp.cfg.EnableGTID {
-		return binlog.CompareLocation(location, oldLocation, cp.cfg.EnableGTID) <= 0
-	}
-	return binlog.CompareLocation(location, oldLocation, cp.cfg.EnableGTID) < 0
+	return binlog.CompareLocation(location, oldLocation, cmpGTID) <= 0
 }
 
 // SaveGlobalPoint implements CheckPoint.SaveGlobalPoint.

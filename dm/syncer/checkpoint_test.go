@@ -355,22 +355,22 @@ func (s *testCheckpointSuite) testTableCheckPoint(c *C, cp CheckPoint) {
 	)
 
 	// not exist
-	older := cp.IsOlderThanTablePoint(table, binlog.Location{Position: pos1}, false)
+	older := cp.IsOlderThanTablePoint(table, binlog.Location{Position: pos1})
 	c.Assert(older, IsFalse)
 
 	// save
 	cp.SaveTablePoint(table, binlog.Location{Position: pos2}, nil)
-	older = cp.IsOlderThanTablePoint(table, binlog.Location{Position: pos1}, false)
+	older = cp.IsOlderThanTablePoint(table, binlog.Location{Position: pos1})
 	c.Assert(older, IsTrue)
 
 	// rollback, to min
 	cp.Rollback()
-	older = cp.IsOlderThanTablePoint(table, binlog.Location{Position: pos1}, false)
+	older = cp.IsOlderThanTablePoint(table, binlog.Location{Position: pos1})
 	c.Assert(older, IsFalse)
 
 	// save again
 	cp.SaveTablePoint(table, binlog.Location{Position: pos2}, nil)
-	older = cp.IsOlderThanTablePoint(table, binlog.Location{Position: pos1}, false)
+	older = cp.IsOlderThanTablePoint(table, binlog.Location{Position: pos1})
 	c.Assert(older, IsTrue)
 
 	// flush + rollback
@@ -380,12 +380,12 @@ func (s *testCheckpointSuite) testTableCheckPoint(c *C, cp CheckPoint) {
 	err = cp.FlushPointsExcept(tctx, cp.Snapshot(true).id, nil, nil, nil)
 	c.Assert(err, IsNil)
 	cp.Rollback()
-	older = cp.IsOlderThanTablePoint(table, binlog.Location{Position: pos1}, false)
+	older = cp.IsOlderThanTablePoint(table, binlog.Location{Position: pos1})
 	c.Assert(older, IsTrue)
 
 	// save
 	cp.SaveTablePoint(table, binlog.Location{Position: pos2}, nil)
-	older = cp.IsOlderThanTablePoint(table, binlog.Location{Position: pos1}, false)
+	older = cp.IsOlderThanTablePoint(table, binlog.Location{Position: pos1})
 	c.Assert(older, IsTrue)
 
 	// delete
@@ -440,7 +440,7 @@ func (s *testCheckpointSuite) testTableCheckPoint(c *C, cp CheckPoint) {
 	s.mock.ExpectCommit()
 	err = cp.Clear(tctx)
 	c.Assert(err, IsNil)
-	older = cp.IsOlderThanTablePoint(table, binlog.Location{Position: pos1}, false)
+	older = cp.IsOlderThanTablePoint(table, binlog.Location{Position: pos1})
 	c.Assert(older, IsFalse)
 
 	// test save table point less than global point
@@ -466,7 +466,7 @@ func (s *testCheckpointSuite) testTableCheckPoint(c *C, cp CheckPoint) {
 	c.Assert(cp.GlobalPointSaveTime(), Not(Equals), lastGlobalPointSavedTime)
 	c.Assert(err, IsNil)
 	cp.Rollback()
-	older = cp.IsOlderThanTablePoint(table, binlog.Location{Position: pos1}, false)
+	older = cp.IsOlderThanTablePoint(table, binlog.Location{Position: pos1})
 	c.Assert(older, IsFalse)
 
 	s.mock.ExpectBegin()
