@@ -141,6 +141,24 @@ func (k *mqSink) TryEmitRowChangedEvents(ctx context.Context, rows ...*model.Row
 	return true, nil
 }
 
+<<<<<<< HEAD:cdc/sink/mq.go
+=======
+// Init table sink resources
+func (k *mqSink) Init(tableID model.TableID) error {
+	// We need to clean up the old values of the table,
+	// otherwise when the table is dispatched back again,
+	// it may read the old values.
+	// See: https://github.com/pingcap/tiflow/issues/4464#issuecomment-1085385382.
+	if checkpointTs, loaded := k.tableCheckpointTsMap.LoadAndDelete(tableID); loaded {
+		log.Info("clean up table checkpoint ts in MQ sink",
+			zap.Int64("tableID", tableID),
+			zap.Uint64("checkpointTs", checkpointTs.(uint64)))
+	}
+
+	return nil
+}
+
+>>>>>>> 544aadb0f (sink(ticdc): clean up table checkpoint ts in buffer and MQ sink (#5372)):cdc/sink/mq/mq.go
 func (k *mqSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
 	rowsCount := 0
 	for _, row := range rows {

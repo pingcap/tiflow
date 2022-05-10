@@ -166,6 +166,33 @@ func (b *bufferSink) runOnce(ctx context.Context, state *runState) (bool, error)
 	return true, nil
 }
 
+<<<<<<< HEAD
+=======
+// Init table sink resources
+func (b *bufferSink) Init(tableID model.TableID) error {
+	b.clearBufferedTableData(tableID)
+	return b.Sink.Init(tableID)
+}
+
+// Barrier delete buffer
+func (b *bufferSink) Barrier(ctx context.Context, tableID model.TableID) error {
+	b.clearBufferedTableData(tableID)
+	return b.Sink.Barrier(ctx, tableID)
+}
+
+func (b *bufferSink) clearBufferedTableData(tableID model.TableID) {
+	b.bufferMu.Lock()
+	defer b.bufferMu.Unlock()
+	delete(b.buffer, tableID)
+	checkpointTs, loaded := b.tableCheckpointTsMap.LoadAndDelete(tableID)
+	if loaded {
+		log.Info("clean up table checkpoint ts in buffer sink",
+			zap.Int64("tableID", tableID),
+			zap.Uint64("checkpointTs", checkpointTs.(uint64)))
+	}
+}
+
+>>>>>>> 544aadb0f (sink(ticdc): clean up table checkpoint ts in buffer and MQ sink (#5372))
 func (b *bufferSink) TryEmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) (bool, error) {
 	err := b.EmitRowChangedEvents(ctx, rows...)
 	if err != nil {
