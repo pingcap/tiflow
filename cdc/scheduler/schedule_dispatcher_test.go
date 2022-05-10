@@ -304,7 +304,7 @@ func TestRemoveTable(t *testing.T) {
 
 	// Inject a dispatch table failure
 	communicator.On("DispatchTable", mock.Anything,
-		cf1, model.TableID(3), model.Ts(1500), "capture-1", true, defaultEpoch).
+		cf1, model.TableID(3), model.Ts(0), "capture-1", true, defaultEpoch).
 		Return(false, nil)
 	checkpointTs, resolvedTs, err = dispatcher.Tick(ctx, 1500, []model.TableID{1, 2}, defaultMockCaptureInfos)
 	require.NoError(t, err)
@@ -314,7 +314,7 @@ func TestRemoveTable(t *testing.T) {
 
 	communicator.Reset()
 	communicator.On("DispatchTable", mock.Anything,
-		cf1, model.TableID(3), model.Ts(1500), "capture-1", true, defaultEpoch).
+		cf1, model.TableID(3), model.Ts(0), "capture-1", true, defaultEpoch).
 		Return(true, nil)
 	checkpointTs, resolvedTs, err = dispatcher.Tick(ctx, 1500, []model.TableID{1, 2}, defaultMockCaptureInfos)
 	require.NoError(t, err)
@@ -483,7 +483,7 @@ func TestCaptureGoneWhileMovingTable(t *testing.T) {
 
 	dispatcher.MoveTable(1, "capture-2")
 	communicator.On("DispatchTable", mock.Anything,
-		cf1, model.TableID(1), model.Ts(1300), "capture-1", true, defaultEpoch).
+		cf1, model.TableID(1), model.Ts(0), "capture-1", true, defaultEpoch).
 		Return(true, nil)
 	checkpointTs, resolvedTs, err := dispatcher.Tick(ctx, 1300, []model.TableID{1, 2, 3}, mockCaptureInfos)
 	require.NoError(t, err)
@@ -559,7 +559,7 @@ func TestRebalance(t *testing.T) {
 
 	dispatcher.Rebalance()
 	communicator.On("DispatchTable", mock.Anything,
-		cf1, model.Ts(1300), mock.Anything, mock.Anything, true, defaultEpoch).
+		cf1, model.TableID(5), model.Ts(1300), mock.Anything, true, defaultEpoch).
 		Return(false, nil)
 	checkpointTs, resolvedTs, err := dispatcher.Tick(ctx, 1300, []model.TableID{1, 2, 3, 4, 5, 6}, mockCaptureInfos)
 	require.NoError(t, err)
@@ -952,7 +952,7 @@ func TestAutoRebalanceOnCaptureOnline(t *testing.T) {
 	communicator.On("DispatchTable", mock.Anything,
 		cf1, mock.Anything, mock.Anything, mock.Anything, true, defaultEpoch).
 		Return(true, nil).Run(func(args mock.Arguments) {
-		removeTableFromCapture = args.Get(3).(model.CaptureID)
+		removeTableFromCapture = args.Get(4).(model.CaptureID)
 	})
 	checkpointTs, resolvedTs, err = dispatcher.Tick(ctx, 1000, []model.TableID{1, 2, 3}, captureList)
 	require.NoError(t, err)
