@@ -25,6 +25,8 @@ import (
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/rowcodec"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/sink/mq/dispatcher"
+	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/stretchr/testify/require"
 )
 
@@ -55,10 +57,16 @@ func setupEncoderAndSchemaRegistry(
 		return nil, err
 	}
 
+	eventRouter, err := dispatcher.NewEventRouter(config.GetDefaultReplicaConfig(), "test")
+	if err != nil {
+		return nil, err
+	}
+
 	return &AvroEventBatchEncoder{
 		namespace:                  model.DefaultNamespace,
 		valueSchemaManager:         valueManager,
 		keySchemaManager:           keyManager,
+		eventRouter:                eventRouter,
 		resultBuf:                  make([]*MQMessage, 0, 4096),
 		enableTiDBExtension:        enableTiDBExtension,
 		decimalHandlingMode:        decimalHandlingMode,

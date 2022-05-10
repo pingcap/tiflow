@@ -25,7 +25,6 @@ import (
 
 	"github.com/jarcoal/httpmock"
 	"github.com/linkedin/goavro/v2"
-	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/stretchr/testify/require"
 )
 
@@ -164,11 +163,6 @@ func TestSchemaRegistry(t *testing.T) {
 	startHTTPInterceptForTestingRegistry()
 	defer stopHTTPInterceptForTestingRegistry()
 
-	table := model.TableName{
-		Schema: "testdb",
-		Table:  "test",
-	}
-
 	manager, err := NewAvroSchemaManager(
 		getTestingContext(),
 		nil,
@@ -177,12 +171,12 @@ func TestSchemaRegistry(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	qualifiedName := getQualifiedNameFromTable(model.DefaultNamespace, &table)
+	topic := "cdctest"
 
-	err = manager.ClearRegistry(getTestingContext(), qualifiedName)
+	err = manager.ClearRegistry(getTestingContext(), topic)
 	require.NoError(t, err)
 
-	_, _, err = manager.Lookup(getTestingContext(), qualifiedName, 1)
+	_, _, err = manager.Lookup(getTestingContext(), topic, 1)
 	require.Regexp(t, `.*not\sfound.*`, err)
 
 	codec, err := goavro.NewCodec(`{
@@ -198,12 +192,12 @@ func TestSchemaRegistry(t *testing.T) {
      }`)
 	require.NoError(t, err)
 
-	_, err = manager.Register(getTestingContext(), qualifiedName, codec)
+	_, err = manager.Register(getTestingContext(), topic, codec)
 	require.NoError(t, err)
 
 	var id int
 	for i := 0; i < 2; i++ {
-		_, id, err = manager.Lookup(getTestingContext(), qualifiedName, 1)
+		_, id, err = manager.Lookup(getTestingContext(), topic, 1)
 		require.NoError(t, err)
 		require.Greater(t, id, 0)
 	}
@@ -228,10 +222,10 @@ func TestSchemaRegistry(t *testing.T) {
           ]
      }`)
 	require.NoError(t, err)
-	_, err = manager.Register(getTestingContext(), qualifiedName, codec)
+	_, err = manager.Register(getTestingContext(), topic, codec)
 	require.NoError(t, err)
 
-	codec2, id2, err := manager.Lookup(getTestingContext(), qualifiedName, 999)
+	codec2, id2, err := manager.Lookup(getTestingContext(), topic, 999)
 	require.NoError(t, err)
 	require.NotEqual(t, id, id2)
 	require.Equal(t, codec.CanonicalSchema(), codec2.CanonicalSchema())
@@ -251,11 +245,6 @@ func TestSchemaRegistryBad(t *testing.T) {
 func TestSchemaRegistryIdempotent(t *testing.T) {
 	startHTTPInterceptForTestingRegistry()
 	defer stopHTTPInterceptForTestingRegistry()
-	table := model.TableName{
-		Schema: "testdb",
-		Table:  "test",
-	}
-	qualifiedName := getQualifiedNameFromTable(model.DefaultNamespace, &table)
 
 	manager, err := NewAvroSchemaManager(
 		getTestingContext(),
@@ -264,8 +253,11 @@ func TestSchemaRegistryIdempotent(t *testing.T) {
 		"-value",
 	)
 	require.NoError(t, err)
+
+	topic := "cdctest"
+
 	for i := 0; i < 20; i++ {
-		err = manager.ClearRegistry(getTestingContext(), qualifiedName)
+		err = manager.ClearRegistry(getTestingContext(), topic)
 		require.NoError(t, err)
 	}
 
@@ -292,7 +284,7 @@ func TestSchemaRegistryIdempotent(t *testing.T) {
 
 	id := 0
 	for i := 0; i < 20; i++ {
-		id1, err := manager.Register(getTestingContext(), qualifiedName, codec)
+		id1, err := manager.Register(getTestingContext(), topic, codec)
 		require.NoError(t, err)
 		require.True(t, id == 0 || id == id1)
 		id = id1
@@ -302,11 +294,6 @@ func TestSchemaRegistryIdempotent(t *testing.T) {
 func TestGetCachedOrRegister(t *testing.T) {
 	startHTTPInterceptForTestingRegistry()
 	defer stopHTTPInterceptForTestingRegistry()
-
-	table := model.TableName{
-		Schema: "testdb",
-		Table:  "test1",
-	}
 
 	manager, err := NewAvroSchemaManager(
 		getTestingContext(),
@@ -341,20 +328,20 @@ func TestGetCachedOrRegister(t *testing.T) {
           ]
      }`, nil
 	}
-	qualifiedName := getQualifiedNameFromTable(model.DefaultNamespace, &table)
+	topic := "cdctest"
 
-	codec, id, err := manager.GetCachedOrRegister(getTestingContext(), qualifiedName, 1, schemaGen)
+	codec, id, err := manager.GetCachedOrRegister(getTestingContext(), topic, 1, schemaGen)
 	require.NoError(t, err)
 	require.Greater(t, id, 0)
 	require.NotNil(t, codec)
 	require.Equal(t, 1, called)
 
-	codec1, _, err := manager.GetCachedOrRegister(getTestingContext(), qualifiedName, 1, schemaGen)
+	codec1, _, err := manager.GetCachedOrRegister(getTestingContext(), topic, 1, schemaGen)
 	require.NoError(t, err)
 	require.True(t, codec == codec1) // check identity
 	require.Equal(t, 1, called)
 
-	codec2, _, err := manager.GetCachedOrRegister(getTestingContext(), qualifiedName, 2, schemaGen)
+	codec2, _, err := manager.GetCachedOrRegister(getTestingContext(), topic, 2, schemaGen)
 	require.NoError(t, err)
 	require.NotEqual(t, codec, codec2)
 	require.Equal(t, 2, called)
@@ -390,7 +377,7 @@ func TestGetCachedOrRegister(t *testing.T) {
 			for j := 0; j < 100; j++ {
 				codec, id, err := manager.GetCachedOrRegister(
 					getTestingContext(),
-					qualifiedName,
+					topic,
 					uint64(finalI),
 					schemaGen,
 				)

@@ -30,6 +30,10 @@ var (
 	schemaRE = regexp.MustCompile(`\{schema\}`)
 	// tableRE is used to match substring '{table}' in topic expression
 	tableRE = regexp.MustCompile(`\{table\}`)
+	// avro has different topic name pattern requirements
+	avroTopicNameRE = regexp.MustCompile(
+		`^[A-Za-z0-9\._\-]*\{schema\}[A-Za-z0-9\._\-]*\{table\}[A-Za-z0-9\._\-]*$`,
+	)
 )
 
 // The max length of kafka topic name is 249.
@@ -46,6 +50,15 @@ type Expression string
 func (e Expression) Validate() error {
 	// validate the topic expression
 	if ok := topicNameRE.MatchString(string(e)); !ok {
+		return errors.ErrKafkaInvalidTopicExpression.GenWithStackByArgs()
+	}
+
+	return nil
+}
+
+// ValidateForAvro checks whether topic pattern is {schema}_{table}, the only allowed
+func (e Expression) ValidateForAvro() error {
+	if ok := avroTopicNameRE.MatchString(string(e)); !ok {
 		return errors.ErrKafkaInvalidTopicExpression.GenWithStackByArgs()
 	}
 

@@ -125,7 +125,7 @@ var regexRemoveSpaces = regexp.MustCompile(`\s`)
 // Register a schema in schema registry, no cache
 func (m *AvroSchemaManager) Register(
 	ctx context.Context,
-	qualifiedName string,
+	topicName string,
 	codec *goavro.Codec,
 ) (int, error) {
 	// The Schema Registry expects the JSON to be without newline characters
@@ -143,8 +143,8 @@ func (m *AvroSchemaManager) Register(
 		)
 	}
 	uri := m.registryURL + "/subjects/" + url.QueryEscape(
-		m.qualifiedNameToSchemaSubject(qualifiedName),
-	) + "/versions"
+		m.topicNameToSchemaSubject(topicName),
+	) + "/versions?normalize=true"
 	log.Debug("Registering schema", zap.String("uri", uri), zap.ByteString("payload", payload))
 
 	req, err := http.NewRequestWithContext(ctx, "POST", uri, bytes.NewReader(payload))
@@ -217,10 +217,10 @@ func (m *AvroSchemaManager) Register(
 // NOT USED for now, reserved for future use.
 func (m *AvroSchemaManager) Lookup(
 	ctx context.Context,
-	qualifiedName string,
+	topicName string,
 	tiSchemaID uint64,
 ) (*goavro.Codec, int, error) {
-	key := m.qualifiedNameToSchemaSubject(qualifiedName)
+	key := m.topicNameToSchemaSubject(topicName)
 	m.cacheRWLock.RLock()
 	if entry, exists := m.cache[key]; exists && entry.tiSchemaID == tiSchemaID {
 		log.Info("Avro schema lookup cache hit",
@@ -336,11 +336,11 @@ type SchemaGenerator func() (string, error)
 // cache is out-of-sync with schema registry, we could reload it.
 func (m *AvroSchemaManager) GetCachedOrRegister(
 	ctx context.Context,
-	qualifiedName string,
+	topicName string,
 	tiSchemaID uint64,
 	schemaGen SchemaGenerator,
 ) (*goavro.Codec, int, error) {
-	key := m.qualifiedNameToSchemaSubject(qualifiedName)
+	key := m.topicNameToSchemaSubject(topicName)
 	m.cacheRWLock.RLock()
 	if entry, exists := m.cache[key]; exists && entry.tiSchemaID == tiSchemaID {
 		log.Debug("Avro schema GetCachedOrRegister cache hit",
@@ -372,7 +372,7 @@ func (m *AvroSchemaManager) GetCachedOrRegister(
 		)
 	}
 
-	id, err := m.Register(ctx, qualifiedName, codec)
+	id, err := m.Register(ctx, topicName, codec)
 	if err != nil {
 		return nil, 0, errors.Annotate(
 			cerror.WrapError(
@@ -403,9 +403,9 @@ func (m *AvroSchemaManager) GetCachedOrRegister(
 // ClearRegistry clears the Registry subject for the given table. Should be idempotent.
 // Exported for testing.
 // NOT USED for now, reserved for future use.
-func (m *AvroSchemaManager) ClearRegistry(ctx context.Context, qualifiedName string) error {
+func (m *AvroSchemaManager) ClearRegistry(ctx context.Context, topicName string) error {
 	uri := m.registryURL + "/subjects/" + url.QueryEscape(
-		m.qualifiedNameToSchemaSubject(qualifiedName),
+		m.topicNameToSchemaSubject(topicName),
 	)
 	req, err := http.NewRequestWithContext(ctx, "DELETE", uri, nil)
 	if err != nil {
@@ -500,9 +500,7 @@ func httpRetry(
 	return resp, nil
 }
 
-func (m *AvroSchemaManager) qualifiedNameToSchemaSubject(qualifiedName string) string {
-	// obey the RecordNameStrategy but generate a global unique subject
-	// https://docs.confluent.io/platform/current/schema-registry/serdes-develop/index.html \
-	// #subject-name-strategy
-	return qualifiedName + m.subjectSuffix
+// TopicNameStrategy, ksqlDB only supports this
+func (m *AvroSchemaManager) topicNameToSchemaSubject(topicName string) string {
+	return topicName + m.subjectSuffix
 }

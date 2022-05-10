@@ -20,6 +20,7 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/sink/mq/dispatcher"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
@@ -85,7 +86,15 @@ func (m *MQMessage) IncRowsCount() {
 }
 
 func newDDLMQMessage(proto config.Protocol, key, value []byte, event *model.DDLEvent) *MQMessage {
-	return NewMQMessage(proto, key, value, event.CommitTs, model.MqMessageTypeDDL, &event.TableInfo.Schema, &event.TableInfo.Table)
+	return NewMQMessage(
+		proto,
+		key,
+		value,
+		event.CommitTs,
+		model.MqMessageTypeDDL,
+		&event.TableInfo.Schema,
+		&event.TableInfo.Table,
+	)
 }
 
 func newResolvedMQMessage(proto config.Protocol, key, value []byte, ts uint64) *MQMessage {
@@ -94,7 +103,14 @@ func newResolvedMQMessage(proto config.Protocol, key, value []byte, ts uint64) *
 
 // NewMQMessage should be used when creating a MQMessage struct.
 // It copies the input byte slices to avoid any surprises in asynchronous MQ writes.
-func NewMQMessage(proto config.Protocol, key []byte, value []byte, ts uint64, ty model.MqMessageType, schema, table *string) *MQMessage {
+func NewMQMessage(
+	proto config.Protocol,
+	key []byte,
+	value []byte,
+	ts uint64,
+	ty model.MqMessageType,
+	schema, table *string,
+) *MQMessage {
 	ret := &MQMessage{
 		Key:       nil,
 		Value:     nil,
@@ -150,14 +166,18 @@ type EncoderBuilder interface {
 }
 
 // NewEventBatchEncoderBuilder returns an EncoderBuilder
-func NewEventBatchEncoderBuilder(ctx context.Context, c *Config) (EncoderBuilder, error) {
+func NewEventBatchEncoderBuilder(
+	ctx context.Context,
+	c *Config,
+	eventRouter *dispatcher.EventRouter,
+) (EncoderBuilder, error) {
 	switch c.protocol {
 	case config.ProtocolDefault, config.ProtocolOpen:
 		return newJSONEventBatchEncoderBuilder(c), nil
 	case config.ProtocolCanal:
 		return newCanalEventBatchEncoderBuilder(), nil
 	case config.ProtocolAvro:
-		return newAvroEventBatchEncoderBuilder(ctx, c)
+		return newAvroEventBatchEncoderBuilder(ctx, c, eventRouter)
 	case config.ProtocolMaxwell:
 		return newMaxwellEventBatchEncoderBuilder(), nil
 	case config.ProtocolCanalJSON:
@@ -165,7 +185,10 @@ func NewEventBatchEncoderBuilder(ctx context.Context, c *Config) (EncoderBuilder
 	case config.ProtocolCraft:
 		return newCraftEventBatchEncoderBuilder(c), nil
 	default:
-		log.Warn("unknown codec protocol value of EventBatchEncoder, use open-protocol as the default", zap.Any("protocolValue", int(c.protocol)))
+		log.Warn(
+			"unknown codec protocol value of EventBatchEncoder, use open-protocol as the default",
+			zap.Any("protocolValue", int(c.protocol)),
+		)
 		return newJSONEventBatchEncoderBuilder(c), nil
 	}
 }

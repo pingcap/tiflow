@@ -31,6 +31,7 @@ import (
 	"github.com/pingcap/tidb/util/rowcodec"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/sink/mq/dispatcher"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/tikv/client-go/v2/oracle"
@@ -42,6 +43,7 @@ type AvroEventBatchEncoder struct {
 	namespace          string
 	keySchemaManager   *AvroSchemaManager
 	valueSchemaManager *AvroSchemaManager
+	eventRouter        *dispatcher.EventRouter
 	resultBuf          []*MQMessage
 
 	enableTiDBExtension        bool
@@ -177,7 +179,6 @@ func (a *AvroEventBatchEncoder) avroEncode(
 	}
 
 	recordName := getRecordNameFromTable(e.Table)
-	qualifiedName := getQualifiedNameFromTable(a.namespace, e.Table)
 
 	schemaGen := func() (string, error) {
 		schema, err := rowToAvroSchema(
@@ -197,7 +198,7 @@ func (a *AvroEventBatchEncoder) avroEncode(
 
 	avroCodec, registryID, err := schemaManager.GetCachedOrRegister(
 		ctx,
-		qualifiedName,
+		a.eventRouter.GetTopicForRowChange(e),
 		e.TableInfoVersion,
 		schemaGen,
 	)
@@ -338,10 +339,6 @@ func escapeEnumAndSetOptions(option string) string {
 
 func getRecordNameFromTable(tableName *model.TableName) string {
 	return tableName.Schema + "." + tableName.Table
-}
-
-func getQualifiedNameFromTable(namespace string, tableName *model.TableName) string {
-	return namespace + "." + getRecordNameFromTable(tableName)
 }
 
 type avroSchema struct {
@@ -694,6 +691,7 @@ type avroEventBatchEncoderBuilder struct {
 	config             *Config
 	keySchemaManager   *AvroSchemaManager
 	valueSchemaManager *AvroSchemaManager
+	eventRouter        *dispatcher.EventRouter
 }
 
 const (
@@ -701,7 +699,11 @@ const (
 	valueSchemaSuffix = "-value"
 )
 
-func newAvroEventBatchEncoderBuilder(ctx context.Context, config *Config) (EncoderBuilder, error) {
+func newAvroEventBatchEncoderBuilder(
+	ctx context.Context,
+	config *Config,
+	eventRouter *dispatcher.EventRouter,
+) (EncoderBuilder, error) {
 	keySchemaManager, err := NewAvroSchemaManager(
 		ctx,
 		nil,
@@ -727,6 +729,7 @@ func newAvroEventBatchEncoderBuilder(ctx context.Context, config *Config) (Encod
 		config:             config,
 		keySchemaManager:   keySchemaManager,
 		valueSchemaManager: valueSchemaManager,
+		eventRouter:        eventRouter,
 	}, nil
 }
 
@@ -736,6 +739,7 @@ func (b *avroEventBatchEncoderBuilder) Build() EventBatchEncoder {
 	encoder.namespace = b.namespace
 	encoder.keySchemaManager = b.keySchemaManager
 	encoder.valueSchemaManager = b.valueSchemaManager
+	encoder.eventRouter = b.eventRouter
 	encoder.resultBuf = make([]*MQMessage, 0, 4096)
 	encoder.enableTiDBExtension = b.config.enableTiDBExtension
 	encoder.decimalHandlingMode = b.config.avroDecimalHandlingMode
