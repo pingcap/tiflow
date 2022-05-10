@@ -14,23 +14,22 @@
 package codec
 
 import (
+	"testing"
+
 	"github.com/golang/protobuf/proto" // nolint:staticcheck
-	"github.com/pingcap/check"
 	mm "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
+	"github.com/stretchr/testify/require"
 	"golang.org/x/text/encoding/charmap"
 
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/util/testleak"
 	canal "github.com/pingcap/tiflow/proto/canal"
 )
 
-type canalBatchSuite struct {
+var defaultCanalBatchTester = &struct {
 	rowCases [][]*model.RowChangedEvent
 	ddlCases [][]*model.DDLEvent
-}
-
-var _ = check.Suite(&canalBatchSuite{
+}{
 	rowCases: [][]*model.RowChangedEvent{
 		{{
 			CommitTs: 1,
@@ -78,73 +77,70 @@ var _ = check.Suite(&canalBatchSuite{
 			},
 		},
 	},
-})
+}
 
-func (s *canalBatchSuite) TestCanalEventBatchEncoder(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestCanalEventBatchEncoder(t *testing.T) {
+	t.Parallel()
+	s := defaultCanalBatchTester
 	for _, cs := range s.rowCases {
 		encoder := NewCanalEventBatchEncoder()
 		for _, row := range cs {
 			err := encoder.AppendRowChangedEvent(row)
-			c.Assert(err, check.IsNil)
+			require.Nil(t, err)
 		}
 		size := encoder.Size()
 		res := encoder.Build()
 
 		if len(cs) == 0 {
-			c.Assert(res, check.IsNil)
+			require.Nil(t, res)
 			continue
 		}
 
-		c.Assert(res, check.HasLen, 1)
-		c.Assert(res[0].Key, check.IsNil)
-		c.Assert(len(res[0].Value), check.Equals, size)
-		c.Assert(res[0].GetRowsCount(), check.Equals, len(cs))
+		require.Len(t, res, 1)
+		require.Nil(t, res[0].Key)
+		require.Equal(t, size, len(res[0].Value))
+		require.Equal(t, len(cs), res[0].GetRowsCount())
 
 		packet := &canal.Packet{}
 		err := proto.Unmarshal(res[0].Value, packet)
-		c.Assert(err, check.IsNil)
-		c.Assert(packet.GetType(), check.Equals, canal.PacketType_MESSAGES)
+		require.Nil(t, err)
+		require.Equal(t, canal.PacketType_MESSAGES, packet.GetType())
 		messages := &canal.Messages{}
 		err = proto.Unmarshal(packet.GetBody(), messages)
-		c.Assert(err, check.IsNil)
-		c.Assert(len(messages.GetMessages()), check.Equals, len(cs))
+		require.Nil(t, err)
+		require.Equal(t, len(cs), len(messages.GetMessages()))
 	}
 
 	for _, cs := range s.ddlCases {
 		encoder := NewCanalEventBatchEncoder()
 		for _, ddl := range cs {
 			msg, err := encoder.EncodeDDLEvent(ddl)
-			c.Assert(err, check.IsNil)
-			c.Assert(msg, check.NotNil)
-			c.Assert(msg.Key, check.IsNil)
+			require.Nil(t, err)
+			require.NotNil(t, msg)
+			require.Nil(t, msg.Key)
 
 			packet := &canal.Packet{}
 			err = proto.Unmarshal(msg.Value, packet)
-			c.Assert(err, check.IsNil)
-			c.Assert(packet.GetType(), check.Equals, canal.PacketType_MESSAGES)
+			require.Nil(t, err)
+			require.Equal(t, canal.PacketType_MESSAGES, packet.GetType())
 			messages := &canal.Messages{}
 			err = proto.Unmarshal(packet.GetBody(), messages)
-			c.Assert(err, check.IsNil)
-			c.Assert(len(messages.GetMessages()), check.Equals, 1)
-			c.Assert(err, check.IsNil)
+			require.Nil(t, err)
+			require.Equal(t, 1, len(messages.GetMessages()))
+			require.Nil(t, err)
 		}
 	}
 }
 
-type canalEntrySuite struct{}
-
-var _ = check.Suite(&canalEntrySuite{})
-
-func (s *canalEntrySuite) TestConvertEntry(c *check.C) {
-	defer testleak.AfterTest(c)()
-	testInsert(c)
-	testUpdate(c)
-	testDelete(c)
-	testDdl(c)
+func TestConvertEntry(t *testing.T) {
+	t.Parallel()
+	testInsert(t)
+	testUpdate(t)
+	testDelete(t)
+	testDdl(t)
 }
 
-func testInsert(c *check.C) {
+func testInsert(t *testing.T) {
 	testCaseInsert := &model.RowChangedEvent{
 		CommitTs: 417318403368288260,
 		Table: &model.TableName{
@@ -162,65 +158,65 @@ func testInsert(c *check.C) {
 
 	builder := NewCanalEntryBuilder()
 	entry, err := builder.FromRowEvent(testCaseInsert)
-	c.Assert(err, check.IsNil)
-	c.Assert(entry.GetEntryType(), check.Equals, canal.EntryType_ROWDATA)
+	require.Nil(t, err)
+	require.Equal(t, canal.EntryType_ROWDATA, entry.GetEntryType())
 	header := entry.GetHeader()
-	c.Assert(header.GetExecuteTime(), check.Equals, int64(1591943372224))
-	c.Assert(header.GetSourceType(), check.Equals, canal.Type_MYSQL)
-	c.Assert(header.GetSchemaName(), check.Equals, testCaseInsert.Table.Schema)
-	c.Assert(header.GetTableName(), check.Equals, testCaseInsert.Table.Table)
-	c.Assert(header.GetEventType(), check.Equals, canal.EventType_INSERT)
+	require.Equal(t, int64(1591943372224), header.GetExecuteTime())
+	require.Equal(t, canal.Type_MYSQL, header.GetSourceType())
+	require.Equal(t, testCaseInsert.Table.Schema, header.GetSchemaName())
+	require.Equal(t, testCaseInsert.Table.Table, header.GetTableName())
+	require.Equal(t, canal.EventType_INSERT, header.GetEventType())
 	store := entry.GetStoreValue()
-	c.Assert(store, check.NotNil)
+	require.NotNil(t, store)
 	rc := &canal.RowChange{}
 	err = proto.Unmarshal(store, rc)
-	c.Assert(err, check.IsNil)
-	c.Assert(rc.GetIsDdl(), check.IsFalse)
+	require.Nil(t, err)
+	require.False(t, rc.GetIsDdl())
 	rowDatas := rc.GetRowDatas()
-	c.Assert(len(rowDatas), check.Equals, 1)
+	require.Equal(t, 1, len(rowDatas))
 
 	columns := rowDatas[0].AfterColumns
-	c.Assert(len(columns), check.Equals, len(testCaseInsert.Columns))
+	require.Equal(t, len(testCaseInsert.Columns), len(columns))
 	for _, col := range columns {
-		c.Assert(col.GetUpdated(), check.IsTrue)
+		require.True(t, col.GetUpdated())
 		switch col.GetName() {
 		case "id":
-			c.Assert(col.GetSqlType(), check.Equals, int32(JavaSQLTypeINTEGER))
-			c.Assert(col.GetIsKey(), check.IsTrue)
-			c.Assert(col.GetIsNull(), check.IsFalse)
-			c.Assert(col.GetValue(), check.Equals, "1")
-			c.Assert(col.GetMysqlType(), check.Equals, "int")
+			require.Equal(t, int32(JavaSQLTypeINTEGER), col.GetSqlType())
+			require.True(t, col.GetIsKey())
+			require.False(t, col.GetIsNull())
+			require.Equal(t, "1", col.GetValue())
+			require.Equal(t, "int", col.GetMysqlType())
 		case "name":
-			c.Assert(col.GetSqlType(), check.Equals, int32(JavaSQLTypeVARCHAR))
-			c.Assert(col.GetIsKey(), check.IsFalse)
-			c.Assert(col.GetIsNull(), check.IsFalse)
-			c.Assert(col.GetValue(), check.Equals, "Bob")
-			c.Assert(col.GetMysqlType(), check.Equals, "varchar")
+			require.Equal(t, int32(JavaSQLTypeVARCHAR), col.GetSqlType())
+			require.False(t, col.GetIsKey())
+			require.False(t, col.GetIsNull())
+			require.Equal(t, "Bob", col.GetValue())
+			require.Equal(t, "varchar", col.GetMysqlType())
 		case "tiny":
-			c.Assert(col.GetSqlType(), check.Equals, int32(JavaSQLTypeTINYINT))
-			c.Assert(col.GetIsKey(), check.IsFalse)
-			c.Assert(col.GetIsNull(), check.IsFalse)
-			c.Assert(col.GetValue(), check.Equals, "255")
+			require.Equal(t, int32(JavaSQLTypeTINYINT), col.GetSqlType())
+			require.False(t, col.GetIsKey())
+			require.False(t, col.GetIsNull())
+			require.Equal(t, "255", col.GetValue())
 		case "comment":
-			c.Assert(col.GetSqlType(), check.Equals, int32(JavaSQLTypeCLOB))
-			c.Assert(col.GetIsKey(), check.IsFalse)
-			c.Assert(col.GetIsNull(), check.IsFalse)
-			c.Assert(err, check.IsNil)
-			c.Assert(col.GetValue(), check.Equals, "测试")
-			c.Assert(col.GetMysqlType(), check.Equals, "text")
+			require.Equal(t, int32(JavaSQLTypeCLOB), col.GetSqlType())
+			require.False(t, col.GetIsKey())
+			require.False(t, col.GetIsNull())
+			require.Nil(t, err)
+			require.Equal(t, "测试", col.GetValue())
+			require.Equal(t, "text", col.GetMysqlType())
 		case "blob":
-			c.Assert(col.GetSqlType(), check.Equals, int32(JavaSQLTypeBLOB))
-			c.Assert(col.GetIsKey(), check.IsFalse)
-			c.Assert(col.GetIsNull(), check.IsFalse)
+			require.Equal(t, int32(JavaSQLTypeBLOB), col.GetSqlType())
+			require.False(t, col.GetIsKey())
+			require.False(t, col.GetIsNull())
 			s, err := charmap.ISO8859_1.NewEncoder().String(col.GetValue())
-			c.Assert(err, check.IsNil)
-			c.Assert(s, check.Equals, "测试blob")
-			c.Assert(col.GetMysqlType(), check.Equals, "blob")
+			require.Nil(t, err)
+			require.Equal(t, "测试blob", s)
+			require.Equal(t, "blob", col.GetMysqlType())
 		}
 	}
 }
 
-func testUpdate(c *check.C) {
+func testUpdate(t *testing.T) {
 	testCaseUpdate := &model.RowChangedEvent{
 		CommitTs: 417318403368288260,
 		Table: &model.TableName{
@@ -238,66 +234,66 @@ func testUpdate(c *check.C) {
 	}
 	builder := NewCanalEntryBuilder()
 	entry, err := builder.FromRowEvent(testCaseUpdate)
-	c.Assert(err, check.IsNil)
-	c.Assert(entry.GetEntryType(), check.Equals, canal.EntryType_ROWDATA)
+	require.Nil(t, err)
+	require.Equal(t, canal.EntryType_ROWDATA, entry.GetEntryType())
 
 	header := entry.GetHeader()
-	c.Assert(header.GetExecuteTime(), check.Equals, int64(1591943372224))
-	c.Assert(header.GetSourceType(), check.Equals, canal.Type_MYSQL)
-	c.Assert(header.GetSchemaName(), check.Equals, testCaseUpdate.Table.Schema)
-	c.Assert(header.GetTableName(), check.Equals, testCaseUpdate.Table.Table)
-	c.Assert(header.GetEventType(), check.Equals, canal.EventType_UPDATE)
+	require.Equal(t, int64(1591943372224), header.GetExecuteTime())
+	require.Equal(t, canal.Type_MYSQL, header.GetSourceType())
+	require.Equal(t, testCaseUpdate.Table.Schema, header.GetSchemaName())
+	require.Equal(t, testCaseUpdate.Table.Table, header.GetTableName())
+	require.Equal(t, canal.EventType_UPDATE, header.GetEventType())
 	store := entry.GetStoreValue()
-	c.Assert(store, check.NotNil)
+	require.NotNil(t, store)
 	rc := &canal.RowChange{}
 	err = proto.Unmarshal(store, rc)
-	c.Assert(err, check.IsNil)
-	c.Assert(rc.GetIsDdl(), check.IsFalse)
+	require.Nil(t, err)
+	require.False(t, rc.GetIsDdl())
 	rowDatas := rc.GetRowDatas()
-	c.Assert(len(rowDatas), check.Equals, 1)
+	require.Equal(t, 1, len(rowDatas))
 
 	beforeColumns := rowDatas[0].BeforeColumns
-	c.Assert(len(beforeColumns), check.Equals, len(testCaseUpdate.PreColumns))
+	require.Equal(t, len(testCaseUpdate.PreColumns), len(beforeColumns))
 	for _, col := range beforeColumns {
-		c.Assert(col.GetUpdated(), check.IsTrue)
+		require.True(t, col.GetUpdated())
 		switch col.GetName() {
 		case "id":
-			c.Assert(col.GetSqlType(), check.Equals, int32(JavaSQLTypeINTEGER))
-			c.Assert(col.GetIsKey(), check.IsTrue)
-			c.Assert(col.GetIsNull(), check.IsFalse)
-			c.Assert(col.GetValue(), check.Equals, "2")
-			c.Assert(col.GetMysqlType(), check.Equals, "int")
+			require.Equal(t, int32(JavaSQLTypeINTEGER), col.GetSqlType())
+			require.True(t, col.GetIsKey())
+			require.False(t, col.GetIsNull())
+			require.Equal(t, "2", col.GetValue())
+			require.Equal(t, "int", col.GetMysqlType())
 		case "name":
-			c.Assert(col.GetSqlType(), check.Equals, int32(JavaSQLTypeVARCHAR))
-			c.Assert(col.GetIsKey(), check.IsFalse)
-			c.Assert(col.GetIsNull(), check.IsFalse)
-			c.Assert(col.GetValue(), check.Equals, "Nancy")
-			c.Assert(col.GetMysqlType(), check.Equals, "varchar")
+			require.Equal(t, int32(JavaSQLTypeVARCHAR), col.GetSqlType())
+			require.False(t, col.GetIsKey())
+			require.False(t, col.GetIsNull())
+			require.Equal(t, "Nancy", col.GetValue())
+			require.Equal(t, "varchar", col.GetMysqlType())
 		}
 	}
 
 	afterColumns := rowDatas[0].AfterColumns
-	c.Assert(len(afterColumns), check.Equals, len(testCaseUpdate.Columns))
+	require.Equal(t, len(testCaseUpdate.Columns), len(afterColumns))
 	for _, col := range afterColumns {
-		c.Assert(col.GetUpdated(), check.IsTrue)
+		require.True(t, col.GetUpdated())
 		switch col.GetName() {
 		case "id":
-			c.Assert(col.GetSqlType(), check.Equals, int32(JavaSQLTypeINTEGER))
-			c.Assert(col.GetIsKey(), check.IsTrue)
-			c.Assert(col.GetIsNull(), check.IsFalse)
-			c.Assert(col.GetValue(), check.Equals, "1")
-			c.Assert(col.GetMysqlType(), check.Equals, "int")
+			require.Equal(t, int32(JavaSQLTypeINTEGER), col.GetSqlType())
+			require.True(t, col.GetIsKey())
+			require.False(t, col.GetIsNull())
+			require.Equal(t, "1", col.GetValue())
+			require.Equal(t, "int", col.GetMysqlType())
 		case "name":
-			c.Assert(col.GetSqlType(), check.Equals, int32(JavaSQLTypeVARCHAR))
-			c.Assert(col.GetIsKey(), check.IsFalse)
-			c.Assert(col.GetIsNull(), check.IsFalse)
-			c.Assert(col.GetValue(), check.Equals, "Bob")
-			c.Assert(col.GetMysqlType(), check.Equals, "varchar")
+			require.Equal(t, int32(JavaSQLTypeVARCHAR), col.GetSqlType())
+			require.False(t, col.GetIsKey())
+			require.False(t, col.GetIsNull())
+			require.Equal(t, "Bob", col.GetValue())
+			require.Equal(t, "varchar", col.GetMysqlType())
 		}
 	}
 }
 
-func testDelete(c *check.C) {
+func testDelete(t *testing.T) {
 	testCaseDelete := &model.RowChangedEvent{
 		CommitTs: 417318403368288260,
 		Table: &model.TableName{
@@ -311,37 +307,37 @@ func testDelete(c *check.C) {
 
 	builder := NewCanalEntryBuilder()
 	entry, err := builder.FromRowEvent(testCaseDelete)
-	c.Assert(err, check.IsNil)
-	c.Assert(entry.GetEntryType(), check.Equals, canal.EntryType_ROWDATA)
+	require.Nil(t, err)
+	require.Equal(t, canal.EntryType_ROWDATA, entry.GetEntryType())
 	header := entry.GetHeader()
-	c.Assert(header.GetSchemaName(), check.Equals, testCaseDelete.Table.Schema)
-	c.Assert(header.GetTableName(), check.Equals, testCaseDelete.Table.Table)
-	c.Assert(header.GetEventType(), check.Equals, canal.EventType_DELETE)
+	require.Equal(t, testCaseDelete.Table.Schema, header.GetSchemaName())
+	require.Equal(t, testCaseDelete.Table.Table, header.GetTableName())
+	require.Equal(t, canal.EventType_DELETE, header.GetEventType())
 	store := entry.GetStoreValue()
-	c.Assert(store, check.NotNil)
+	require.NotNil(t, store)
 	rc := &canal.RowChange{}
 	err = proto.Unmarshal(store, rc)
-	c.Assert(err, check.IsNil)
-	c.Assert(rc.GetIsDdl(), check.IsFalse)
+	require.Nil(t, err)
+	require.False(t, rc.GetIsDdl())
 	rowDatas := rc.GetRowDatas()
-	c.Assert(len(rowDatas), check.Equals, 1)
+	require.Equal(t, 1, len(rowDatas))
 
 	columns := rowDatas[0].BeforeColumns
-	c.Assert(len(columns), check.Equals, len(testCaseDelete.PreColumns))
+	require.Equal(t, len(testCaseDelete.PreColumns), len(columns))
 	for _, col := range columns {
-		c.Assert(col.GetUpdated(), check.IsFalse)
+		require.False(t, col.GetUpdated())
 		switch col.GetName() {
 		case "id":
-			c.Assert(col.GetSqlType(), check.Equals, int32(JavaSQLTypeINTEGER))
-			c.Assert(col.GetIsKey(), check.IsTrue)
-			c.Assert(col.GetIsNull(), check.IsFalse)
-			c.Assert(col.GetValue(), check.Equals, "1")
-			c.Assert(col.GetMysqlType(), check.Equals, "int")
+			require.Equal(t, int32(JavaSQLTypeINTEGER), col.GetSqlType())
+			require.True(t, col.GetIsKey())
+			require.False(t, col.GetIsNull())
+			require.Equal(t, "1", col.GetValue())
+			require.Equal(t, "int", col.GetMysqlType())
 		}
 	}
 }
 
-func testDdl(c *check.C) {
+func testDdl(t *testing.T) {
 	testCaseDdl := &model.DDLEvent{
 		CommitTs: 417318403368288260,
 		TableInfo: &model.SimpleTableInfo{
@@ -352,19 +348,19 @@ func testDdl(c *check.C) {
 	}
 	builder := NewCanalEntryBuilder()
 	entry, err := builder.FromDdlEvent(testCaseDdl)
-	c.Assert(err, check.IsNil)
-	c.Assert(entry.GetEntryType(), check.Equals, canal.EntryType_ROWDATA)
+	require.Nil(t, err)
+	require.Equal(t, canal.EntryType_ROWDATA, entry.GetEntryType())
 	header := entry.GetHeader()
-	c.Assert(header.GetSchemaName(), check.Equals, testCaseDdl.TableInfo.Schema)
-	c.Assert(header.GetTableName(), check.Equals, testCaseDdl.TableInfo.Table)
-	c.Assert(header.GetEventType(), check.Equals, canal.EventType_CREATE)
+	require.Equal(t, testCaseDdl.TableInfo.Schema, header.GetSchemaName())
+	require.Equal(t, testCaseDdl.TableInfo.Table, header.GetTableName())
+	require.Equal(t, canal.EventType_CREATE, header.GetEventType())
 	store := entry.GetStoreValue()
-	c.Assert(store, check.NotNil)
+	require.NotNil(t, store)
 	rc := &canal.RowChange{}
 	err = proto.Unmarshal(store, rc)
-	c.Assert(err, check.IsNil)
-	c.Assert(rc.GetIsDdl(), check.IsTrue)
-	c.Assert(rc.GetDdlSchemaName(), check.Equals, testCaseDdl.TableInfo.Schema)
+	require.Nil(t, err)
+	require.True(t, rc.GetIsDdl())
+	require.Equal(t, testCaseDdl.TableInfo.Schema, rc.GetDdlSchemaName())
 }
 
 type testColumnTuple struct {
@@ -718,21 +714,21 @@ var testColumnsTable = []*testColumnTuple{
 	},
 }
 
-func (s *canalEntrySuite) TestGetMySQLTypeAndJavaSQLType(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestGetMySQLTypeAndJavaSQLType(t *testing.T) {
+	t.Parallel()
 	canalEntryBuilder := NewCanalEntryBuilder()
 	for _, item := range testColumnsTable {
 		obtainedMySQLType := getMySQLType(item.column)
-		c.Assert(obtainedMySQLType, check.Equals, item.expectedMySQLType)
+		require.Equal(t, item.expectedMySQLType, obtainedMySQLType)
 
 		obtainedJavaSQLType, err := getJavaSQLType(item.column, obtainedMySQLType)
-		c.Assert(err, check.IsNil)
-		c.Assert(obtainedJavaSQLType, check.Equals, item.expectedJavaSQLType)
+		require.Nil(t, err)
+		require.Equal(t, item.expectedJavaSQLType, obtainedJavaSQLType)
 
 		if !item.column.Flag.IsBinary() {
 			obtainedFinalValue, err := canalEntryBuilder.formatValue(item.column.Value, obtainedJavaSQLType)
-			c.Assert(err, check.IsNil)
-			c.Assert(obtainedFinalValue, check.Equals, item.expectedEncodedValue)
+			require.Nil(t, err)
+			require.Equal(t, item.expectedEncodedValue, obtainedFinalValue)
 		}
 	}
 }

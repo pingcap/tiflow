@@ -23,7 +23,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/pdtime"
+	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/tikv/client-go/v2/oracle"
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
@@ -48,7 +48,7 @@ type Manager interface {
 
 type gcManager struct {
 	pdClient pd.Client
-	pdClock  pdtime.Clock
+	pdClock  pdutil.Clock
 	gcTTL    int64
 
 	lastUpdatedTime   time.Time
@@ -58,7 +58,7 @@ type gcManager struct {
 }
 
 // NewManager creates a new Manager.
-func NewManager(pdClient pd.Client, pdClock pdtime.Clock) Manager {
+func NewManager(pdClient pd.Client, pdClock pdutil.Clock) Manager {
 	serverConfig := config.GetGlobalServerConfig()
 	failpoint.Inject("InjectGcSafepointUpdateInterval", func(val failpoint.Value) {
 		gcSafepointUpdateInterval = time.Duration(val.(int) * int(time.Millisecond))

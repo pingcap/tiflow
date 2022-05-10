@@ -24,6 +24,7 @@ import (
 )
 
 func TestNewConfig(t *testing.T) {
+	t.Parallel()
 	c := NewConfig(config.ProtocolDefault, timeutil.SystemLocation())
 	require.Equal(t, c.protocol, config.ProtocolDefault)
 	require.Equal(t, c.maxMessageBytes, config.DefaultMaxMessageBytes)
@@ -33,6 +34,7 @@ func TestNewConfig(t *testing.T) {
 }
 
 func TestConfigApplyValidate(t *testing.T) {
+	t.Parallel()
 	uri := "kafka://127.0.0.1:9092/abc?protocol=canal-json&enable-tidb-extension=true"
 	sinkURI, err := url.Parse(uri)
 	require.Nil(t, err)
