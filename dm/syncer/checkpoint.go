@@ -782,6 +782,9 @@ func (cp *RemoteCheckPoint) FlushPointsWithTableInfos(tctx *tcontext.Context, ta
 			if point == nil {
 				cp.saveTablePoint(table, cp.globalPoint.MySQLLocation(), ti)
 				point = cp.points[sourceSchema][sourceTable]
+			} else {
+				point.savedPoint.ti = ti
+				point.flushedPoint.ti = ti
 			}
 			tiBytes, err := json.Marshal(ti)
 			if err != nil {
