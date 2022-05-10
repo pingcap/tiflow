@@ -456,7 +456,11 @@ func (o *ownerImpl) handleQueries(query *Query) error {
 
 		var ret map[model.CaptureID]*model.TaskStatus
 		provider := cfReactor.GetInfoProvider()
-		// If the new scheduler is enabled, provider should be non-nil.
+		if provider == nil {
+			// The scheduler has not been initialized yet.
+			return cerror.ErrChangeFeedNotExists.GenWithStackByArgs(query.ChangeFeedID)
+		}
+
 		var err error
 		ret, err = provider.GetTaskStatuses()
 		if err != nil {
@@ -470,6 +474,11 @@ func (o *ownerImpl) handleQueries(query *Query) error {
 		}
 
 		provider := cfReactor.GetInfoProvider()
+		if provider == nil {
+			// The scheduler has not been initialized yet.
+			return cerror.ErrChangeFeedNotExists.GenWithStackByArgs(query.ChangeFeedID)
+		}
+
 		ret, err := provider.GetTaskPositions()
 		if err != nil {
 			return errors.Trace(err)
@@ -479,6 +488,11 @@ func (o *ownerImpl) handleQueries(query *Query) error {
 		var ret []*model.ProcInfoSnap
 		for cfID, cfReactor := range o.changefeeds {
 			provider := cfReactor.GetInfoProvider()
+			if provider == nil {
+				// The scheduler has not been initialized yet.
+				continue
+			}
+
 			positions, err := provider.GetTaskPositions()
 			if err != nil {
 				return errors.Trace(err)
