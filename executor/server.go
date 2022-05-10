@@ -616,8 +616,14 @@ func (s *Server) keepHeartbeat(ctx context.Context) error {
 				switch resp.Err.Code {
 				case pb.ErrorCode_UnknownExecutor, pb.ErrorCode_TombstoneExecutor:
 					return errors.ErrHeartbeat.GenWithStack("logic error: %s", resp.Err.GetMessage())
+				case pb.ErrorCode_MasterNotReady:
+					s.lastHearbeatTime = t
+					if rl.Allow() {
+						log.L().Info("heartbeat success with MasterNotReady")
+					}
+					continue
+				default:
 				}
-				continue
 			}
 			// We aim to keep lastHbTime of executor consistent with lastHbTime of Master.
 			// If we set the heartbeat time of executor to the start time of rpc, it will
