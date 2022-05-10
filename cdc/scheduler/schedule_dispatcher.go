@@ -509,7 +509,8 @@ func (s *BaseScheduleDispatcher) Rebalance() {
 }
 
 func (s *BaseScheduleDispatcher) rebalance(ctx context.Context,
-	checkpointTs model.Ts) (done bool, err error) {
+	checkpointTs model.Ts,
+) (done bool, err error) {
 	tablesToRemove := s.balancer.FindVictims(s.tables, s.captures)
 	for _, record := range tablesToRemove {
 		if record.Status != util.RunningTable {
