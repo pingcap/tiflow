@@ -121,8 +121,8 @@ function run() {
 		"\"result\": true" 2
 
 	worker1_run_source_1=$(sed "s/$SOURCE_ID1/$SOURCE_ID1\n/g" $WORK_DIR/worker1/log/dm-worker.log | grep -c "$SOURCE_ID1") || true
-	echo "start task in incremental mode with nil gtid/pos"
-	binlog_name=($(get_binlog_name $MYSQL_HOST1 $MYSQL_PORT1))
+	echo "start task in incremental mode with zero gtid/pos"
+	binlog_name=($(get_binlog_name $MYSQL_HOST2 $MYSQL_PORT2))
 	sed "s/binlog-gtid-placeholder-1/$uuid:0/g" $cur/conf/dm-task.yaml >$WORK_DIR/dm-task.yaml
 	sed -i "s/binlog-name-placeholder-2/$binlog_name/g" $WORK_DIR/dm-task.yaml
 	sed -i "s/binlog-pos-placeholder-2/4/g" $WORK_DIR/dm-task.yaml
@@ -153,9 +153,9 @@ function run() {
 	sleep 3
 	# check not specify binlog name could also update active relay log
 	if [ $worker1_run_source_1 -gt 0 ]; then
-		grep -E ".*current earliest active relay log.*$binlog_name" $WORK_DIR/worker1/log/dm-worker.log
-	else
 		grep -E ".*current earliest active relay log.*$binlog_name" $WORK_DIR/worker2/log/dm-worker.log
+	else
+		grep -E ".*current earliest active relay log.*$binlog_name" $WORK_DIR/worker1/log/dm-worker.log
 	fi
 
 	run_sql_file $cur/data/db1.increment.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1

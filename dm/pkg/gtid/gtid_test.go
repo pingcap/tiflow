@@ -19,6 +19,7 @@ import (
 
 	"github.com/go-mysql-org/go-mysql/mysql"
 	. "github.com/pingcap/check"
+	"github.com/stretchr/testify/require"
 
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
@@ -94,6 +95,16 @@ func (s *testGTIDSuite) TestSortingGTIDSet(c *C) {
 	c.Assert(err, IsNil)
 	sortedGTIDSet = "0-0-1,1-1-1,10-10-10,3-1-1,4-20-1"
 	c.Assert(gSet.String(), Equals, sortedGTIDSet)
+}
+
+func TestIsNilGTIDSet(t *testing.T) {
+	require.False(t, IsNilMySQLGTIDSet(""))
+	require.False(t, IsNilMySQLGTIDSet("xxxxx"))
+	require.False(t, IsNilMySQLGTIDSet("xxxxx:0,yyyy:0"))
+	require.False(t, IsNilMySQLGTIDSet("xxxxx:1-2"))
+	require.False(t, IsNilMySQLGTIDSet("xxxxx:0-0"))
+	require.True(t, IsNilMySQLGTIDSet("xxxxx:0"))
+	require.True(t, IsNilMySQLGTIDSet(" xxxxx:0 "))
 }
 
 func (s *testGTIDSuite) TestMinGTIDSet(c *C) {
