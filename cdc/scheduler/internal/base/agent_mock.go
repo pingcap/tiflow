@@ -119,6 +119,9 @@ func NewMockTableExecutor(t *testing.T) *MockTableExecutor {
 }
 
 // AddTable adds a table to the executor.
+// func (e *MockTableExecutor) AddTable(
+// 	ctx context.Context, tableID model.TableID, checkpointTs model.Ts, isPrepare bool,
+// ) (bool, error) {
 func (e *MockTableExecutor) AddTable(
 	ctx context.Context, tableID model.TableID, startTs model.Ts,
 ) (bool, error) {
@@ -152,6 +155,9 @@ func (e *MockTableExecutor) IsAddTableFinished(ctx context.Context, tableID mode
 }
 
 // IsRemoveTableFinished determines if the table has been removed.
+// func (e *MockTableExecutor) IsRemoveTableFinished(
+// 	ctx context.Context, tableID model.TableID,
+// ) (model.Ts, bool) {
 func (e *MockTableExecutor) IsRemoveTableFinished(ctx context.Context, tableID model.TableID) bool {
 	_, ok := e.Removing[tableID]
 	return !ok

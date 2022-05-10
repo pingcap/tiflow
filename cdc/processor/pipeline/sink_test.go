@@ -139,12 +139,12 @@ func TestStatus(t *testing.T) {
 	node := newSinkNode(1, &mockSink{}, 0, 10, &mockFlowController{}, redo.NewDisabledManager())
 	node.initWithReplicaConfig(pipeline.MockNodeContext4Test(ctx, pmessage.Message{}, nil).
 		ChangefeedVars().Info.Config)
-	require.Equal(t, TableStatusInitializing, node.Status())
+	require.Equal(t, TableStatusPreparing, node.Status())
 
 	ok, err := node.HandleMessage(ctx, pmessage.BarrierMessage(20))
 	require.Nil(t, err)
 	require.True(t, ok)
-	require.Equal(t, TableStatusInitializing, node.Status())
+	require.Equal(t, TableStatusPreparing, node.Status())
 	require.Equal(t, model.Ts(20), node.BarrierTs())
 
 	msg := pmessage.PolymorphicEventMessage(&model.PolymorphicEvent{
@@ -154,7 +154,7 @@ func TestStatus(t *testing.T) {
 	ok, err = node.HandleMessage(ctx, msg)
 	require.Nil(t, err)
 	require.True(t, ok)
-	require.Equal(t, TableStatusInitializing, node.Status())
+	require.Equal(t, TableStatusPreparing, node.Status())
 
 	msg = pmessage.PolymorphicEventMessage(&model.PolymorphicEvent{
 		CRTs: 2, RawKV: &model.RawKVEntry{OpType: model.OpTypePut},
@@ -163,7 +163,7 @@ func TestStatus(t *testing.T) {
 	ok, err = node.HandleMessage(ctx, msg)
 	require.Nil(t, err)
 	require.True(t, ok)
-	require.Equal(t, TableStatusInitializing, node.Status())
+	require.Equal(t, TableStatusPreparing, node.Status())
 
 	msg = pmessage.PolymorphicEventMessage(&model.PolymorphicEvent{
 		CRTs: 2, RawKV: &model.RawKVEntry{OpType: model.OpTypeResolved},
@@ -188,13 +188,13 @@ func TestStatus(t *testing.T) {
 	node = newSinkNode(1, &mockSink{}, 0, 10, &mockFlowController{}, redo.NewDisabledManager())
 	node.initWithReplicaConfig(pipeline.MockNodeContext4Test(ctx,
 		pmessage.Message{}, nil).ChangefeedVars().Info.Config)
-	require.Equal(t, TableStatusInitializing, node.Status())
+	require.Equal(t, TableStatusPreparing, node.Status())
 
 	msg = pmessage.BarrierMessage(20)
 	ok, err = node.HandleMessage(ctx, msg)
 	require.True(t, ok)
 	require.Nil(t, err)
-	require.Equal(t, TableStatusInitializing, node.Status())
+	require.Equal(t, TableStatusPreparing, node.Status())
 	require.Equal(t, model.Ts(20), node.BarrierTs())
 
 	msg = pmessage.PolymorphicEventMessage(&model.PolymorphicEvent{
@@ -226,13 +226,13 @@ func TestStatus(t *testing.T) {
 	node = newSinkNode(1, &mockSink{}, 0, 10, &mockFlowController{}, redo.NewDisabledManager())
 	node.initWithReplicaConfig(pipeline.MockNodeContext4Test(ctx,
 		pmessage.Message{}, nil).ChangefeedVars().Info.Config)
-	require.Equal(t, TableStatusInitializing, node.Status())
+	require.Equal(t, TableStatusPreparing, node.Status())
 
 	msg = pmessage.BarrierMessage(20)
 	ok, err = node.HandleMessage(ctx, msg)
 	require.Nil(t, err)
 	require.True(t, ok)
-	require.Equal(t, TableStatusInitializing, node.Status())
+	require.Equal(t, TableStatusPreparing, node.Status())
 
 	msg = pmessage.PolymorphicEventMessage(&model.PolymorphicEvent{
 		CRTs: 7, RawKV: &model.RawKVEntry{OpType: model.OpTypeResolved},
@@ -278,7 +278,7 @@ func TestStopStatus(t *testing.T) {
 		&mockFlowController{}, redo.NewDisabledManager())
 	node.initWithReplicaConfig(pipeline.MockNodeContext4Test(ctx,
 		pmessage.Message{}, nil).ChangefeedVars().Info.Config)
-	require.Equal(t, TableStatusInitializing, node.Status())
+	require.Equal(t, TableStatusPreparing, node.Status())
 
 	msg := pmessage.PolymorphicEventMessage(&model.PolymorphicEvent{
 		CRTs: 2, RawKV: &model.RawKVEntry{OpType: model.OpTypeResolved},
@@ -320,7 +320,7 @@ func TestManyTs(t *testing.T) {
 	node := newSinkNode(1, sink, 0, 10, &mockFlowController{}, redo.NewDisabledManager())
 	node.initWithReplicaConfig(pipeline.MockNodeContext4Test(ctx,
 		pmessage.Message{}, nil).ChangefeedVars().Info.Config)
-	require.Equal(t, TableStatusInitializing, node.Status())
+	require.Equal(t, TableStatusPreparing, node.Status())
 
 	msg := pmessage.PolymorphicEventMessage(&model.PolymorphicEvent{
 		CRTs: 1, RawKV: &model.RawKVEntry{OpType: model.OpTypePut}, Row: &model.RowChangedEvent{
@@ -339,7 +339,7 @@ func TestManyTs(t *testing.T) {
 			},
 		},
 	})
-	require.Equal(t, TableStatusInitializing, node.Status())
+	require.Equal(t, TableStatusPreparing, node.Status())
 	ok, err := node.HandleMessage(ctx, msg)
 	require.Nil(t, err)
 	require.True(t, ok)
@@ -361,7 +361,7 @@ func TestManyTs(t *testing.T) {
 			},
 		},
 	})
-	require.Equal(t, TableStatusInitializing, node.Status())
+	require.Equal(t, TableStatusPreparing, node.Status())
 	ok, err = node.HandleMessage(ctx, msg)
 	require.Nil(t, err)
 	require.True(t, ok)

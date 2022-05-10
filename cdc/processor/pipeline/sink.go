@@ -35,15 +35,18 @@ type TableStatus int32
 
 // TableStatus for table pipeline
 const (
-	TableStatusInitializing TableStatus = iota
+	TableStatusPreparing TableStatus = iota
+	TableStatusPrepared
 	TableStatusRunning
 	TableStatusStopped
 )
 
 func (s TableStatus) String() string {
 	switch s {
-	case TableStatusInitializing:
-		return "Initializing"
+	case TableStatusPreparing:
+		return "Preparing"
+	case TableStatusPrepared:
+		return "Prepared"
 	case TableStatusRunning:
 		return "Running"
 	case TableStatusStopped:
@@ -88,7 +91,7 @@ func newSinkNode(
 	sn := &sinkNode{
 		tableID:        tableID,
 		sink:           sink,
-		status:         TableStatusInitializing,
+		status:         TableStatusPreparing,
 		targetTs:       targetTs,
 		barrierTs:      startTs,
 		flowController: flowController,
@@ -324,7 +327,7 @@ func (n *sinkNode) HandleMessage(ctx context.Context, msg pmessage.Message) (boo
 	case pmessage.MessageTypePolymorphicEvent:
 		event := msg.PolymorphicEvent
 		if event.IsResolved() {
-			if n.status.Load() == TableStatusInitializing {
+			if n.status.Load() == TableStatusPreparing {
 				n.status.Store(TableStatusRunning)
 			}
 			failpoint.Inject("ProcessorSyncResolvedError", func() {

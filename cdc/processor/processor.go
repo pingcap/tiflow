@@ -108,6 +108,9 @@ func (p *processor) checkReadyForMessages() bool {
 }
 
 // AddTable implements TableExecutor interface.
+// func (p *processor) AddTable(
+// 	ctx context.Context, tableID model.TableID, checkpointTs model.Ts, isPrepare bool,
+// ) (bool, error) {
 func (p *processor) AddTable(
 	ctx context.Context, tableID model.TableID, startTs model.Ts,
 ) (bool, error) {
@@ -195,6 +198,9 @@ func (p *processor) IsAddTableFinished(ctx context.Context, tableID model.TableI
 }
 
 // IsRemoveTableFinished implements TableExecutor interface.
+// func (p *processor) IsRemoveTableFinished(
+// 	ctx context.Context, tableID model.TableID,
+// ) (model.Ts, bool) {
 func (p *processor) IsRemoveTableFinished(ctx context.Context, tableID model.TableID) bool {
 	if !p.checkReadyForMessages() {
 		return false
