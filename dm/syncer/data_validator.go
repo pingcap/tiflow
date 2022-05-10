@@ -876,7 +876,6 @@ func (v *DataValidator) persistCheckpointAndData(loc binlog.Location) error {
 		return err
 	}
 
-	v.persistHelper.incrRevision()
 	// reset errors after save
 	for _, worker := range v.workers {
 		worker.resetErrorRows()
@@ -1064,6 +1063,10 @@ func (v *DataValidator) getPendingRowSize() int64 {
 
 func (v *DataValidator) sendError(err error) {
 	v.errChan <- err
+}
+
+func (v *DataValidator) getNewErrorRowCount() int64 {
+	return v.newErrorRowCount.Load()
 }
 
 // getRowChangeType should be called only when the event type is RowsEvent.

@@ -145,6 +145,7 @@ function run_standalone() {
 	run_sql_source1 "create table $db_name.t1_large_col(id int primary key, c varchar(100))"
 	run_sql_source1 "insert into $db_name.t1_large_col values(1, 'this-text-is-more-than-20-bytes')"
 	trigger_validator_flush
+	# since multiple worker may send this error, there should be at least one "too much pending data" error
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation status test" \
 		"\"stage\": \"Stopped\"" 1 \
