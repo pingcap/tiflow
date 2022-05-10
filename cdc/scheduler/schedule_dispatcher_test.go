@@ -559,7 +559,7 @@ func TestRebalance(t *testing.T) {
 
 	dispatcher.Rebalance()
 	communicator.On("DispatchTable", mock.Anything,
-		cf1, model.TableID(3), model.Ts(1300), mock.Anything, true, defaultEpoch).
+		cf1, mock.Anything, mock.Anything, mock.Anything, true, defaultEpoch).
 		Return(false, nil)
 	checkpointTs, resolvedTs, err := dispatcher.Tick(ctx, 1300, []model.TableID{1, 2, 3, 4, 5, 6}, mockCaptureInfos)
 	require.NoError(t, err)
@@ -570,7 +570,7 @@ func TestRebalance(t *testing.T) {
 
 	communicator.Reset()
 	communicator.On("DispatchTable", mock.Anything,
-		cf1, mock.Anything, model.Ts(1300), mock.Anything, true, defaultEpoch).
+		cf1, mock.Anything, mock.Anything, mock.Anything, true, defaultEpoch).
 		Return(true, nil)
 	checkpointTs, resolvedTs, err = dispatcher.Tick(ctx, 1300, []model.TableID{1, 2, 3, 4, 5, 6}, mockCaptureInfos)
 	require.NoError(t, err)
