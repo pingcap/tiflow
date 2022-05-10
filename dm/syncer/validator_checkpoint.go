@@ -18,9 +18,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-mysql-org/go-mysql/mysql"
+	"github.com/pingcap/errors"
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/util/dbutil"
 	"github.com/pingcap/tidb/util/filter"
 	"go.uber.org/atomic"
@@ -207,9 +210,25 @@ type rowChangeDataForPersist struct {
 	FailedCnt       int              `json:"failed-cnt"` // failed count
 }
 
+var triggeredFailOnPersistForIntegrationTest bool
+
 func (c *validatorPersistHelper) execQueriesWithRetry(tctx *tcontext.Context, queries []string, args [][]interface{}) error {
 	workFunc := func(tctx *tcontext.Context) (interface{}, error) {
 		for i, q := range queries {
+			failpoint.Inject("ValidatorFailOnPersist", func() {
+				// on persist pending row changes, the queries would be [delete, insert...]
+				// if there are 5 inserts, we fail for one time
+				// for source mysql-replica-01, fail on the 3rd
+				// for source mysql-replica-02, fail on the 4th
+				if strings.Contains(q, "_validator_pending_change") && len(queries) == 6 &&
+					!triggeredFailOnPersistForIntegrationTest {
+					if (c.cfg.SourceID == "mysql-replica-01" && i == 3) ||
+						(c.cfg.SourceID == "mysql-replica-02" && i == 4) {
+						triggeredFailOnPersistForIntegrationTest = true
+						failpoint.Return(nil, errors.New("ValidatorFailOnPersist"))
+					}
+				}
+			})
 			if _, err := c.db.ExecContext(tctx, q, args[i]...); err != nil {
 				return nil, err
 			}
