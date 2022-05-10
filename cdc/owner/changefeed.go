@@ -590,6 +590,9 @@ func (c *changefeed) asyncExecDDLJob(ctx cdcContext.Context,
 		// we need to make sure we receive the ddl before we start or stop broadcasting checkpoint ts.
 		// So let's remember the name of the table before processing and cache the DDL.
 		c.currentTableNames = c.schema.AllTableNames()
+		checkpointTs := c.state.Info.GetCheckpointTs(c.state.Status)
+		// refresh checkpointTs and currentTableNames when a ddl job is received
+		c.sink.emitCheckpointTs(checkpointTs, c.currentTableNames)
 		err = c.schema.HandleDDL(job)
 		if err != nil {
 			return false, errors.Trace(err)

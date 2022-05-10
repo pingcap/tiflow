@@ -49,8 +49,8 @@ function run() {
 
 	run_sql_file $CUR/data/step2.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	sleep 30
-	run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/test_table10?protocol=canal-json&version=${KAFKA_VERSION}&enable-tidb-extension=true" "" 1
-	run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/test_table20?protocol=canal-json&version=${KAFKA_VERSION}&enable-tidb-extension=true" "" 2
+	run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/test_table10?protocol=canal-json&version=${KAFKA_VERSION}&enable-tidb-extension=true" "" 10
+	run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/test_table20?protocol=canal-json&version=${KAFKA_VERSION}&enable-tidb-extension=true" "" 20
 	run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/test_finish?protocol=canal-json&version=${KAFKA_VERSION}&enable-tidb-extension=true" "" "finish"
 
 	check_table_exists test.finish ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 300

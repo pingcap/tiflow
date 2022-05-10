@@ -766,8 +766,6 @@ func (c *Consumer) Run(ctx context.Context) error {
 		}
 
 		c.globalResolvedTs = minPartitionResolvedTs
-		log.Info("update globalResolvedTs",
-			zap.Uint64("globalResolvedTs", c.globalResolvedTs))
 
 		if err := c.forEachSink(func(sink *partitionSink) error {
 			return syncFlushRowChangedEvents(ctx, sink, c.globalResolvedTs)

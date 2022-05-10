@@ -199,6 +199,21 @@ func (s *ddlSinkImpl) run(ctx cdcContext.Context, id model.ChangeFeedID, info *m
 						zap.Bool("ignored", err != nil),
 						zap.Any("ddl", ddl))
 					s.ddlFinishedTsMap.Store(ddl, ddl.CommitTs)
+					// Force emitting checkpoint ts when a ddl event is finished.
+					// Otherwise, a kafka consumer may not execute that ddl event.
+					s.mu.Lock()
+					checkpointTs := s.mu.checkpointTs
+					if checkpointTs == 0 || checkpointTs <= lastCheckpointTs {
+						s.mu.Unlock()
+						continue
+					}
+					tables := s.mu.currentTableNames
+					s.mu.Unlock()
+					lastCheckpointTs = checkpointTs
+					if err := s.sink.EmitCheckpointTs(ctx, checkpointTs, tables); err != nil {
+						ctx.Throw(errors.Trace(err))
+						return
+					}
 					continue
 				}
 				// If DDL executing failed, and the error can not be ignored,
