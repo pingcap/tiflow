@@ -362,11 +362,6 @@ var (
 	taskPositionTPI     *model.TaskPosition
 	changefeedStatusTPI *model.ChangeFeedStatus
 	changefeedInfoTPI   *model.ChangeFeedInfo
-
-	// No longer used, kept for future clean up for keys left by older TiCDC.
-	taskStatusTPI *model.TaskStatus
-	// No longer used, kept for future clean up for keys left by older TiCDC.
-	taskWorkloadTPI *model.TaskWorkload
 )
 
 func (s *ChangefeedReactorState) patchAny(key string, tpi interface{}, fn func(interface{}) (interface{}, bool, error)) {
