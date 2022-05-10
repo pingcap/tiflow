@@ -14,13 +14,12 @@
 package base
 
 import (
+	"context"
 	"time"
 
 	"github.com/benbjohnson/clock"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/scheduler"
-	"github.com/pingcap/tiflow/pkg/context"
 	"go.uber.org/zap"
 )
 
@@ -42,7 +41,7 @@ const (
 )
 
 type checkpointTsSenderImpl struct {
-	communicator scheduler.ProcessorMessenger
+	communicator ProcessorMessenger
 	logger       *zap.Logger
 
 	// We use a `clock.Clock` here to make time mockable in unit tests.
@@ -62,7 +61,7 @@ type checkpointTsSenderImpl struct {
 }
 
 func newCheckpointSender(
-	communicator scheduler.ProcessorMessenger,
+	communicator ProcessorMessenger,
 	logger *zap.Logger,
 	sendCheckpointTsInterval time.Duration,
 ) checkpointSender {

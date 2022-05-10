@@ -14,6 +14,7 @@
 package base
 
 import (
+	"context"
 	"sync"
 	"time"
 
@@ -25,11 +26,38 @@ import (
 	"github.com/pingcap/tiflow/cdc/scheduler"
 	"github.com/pingcap/tiflow/cdc/scheduler/base/protocol"
 	"github.com/pingcap/tiflow/cdc/scheduler/util"
-	"github.com/pingcap/tiflow/pkg/context"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/uber-go/atomic"
 	"go.uber.org/zap"
 )
+
+// ProcessorMessenger implements how messages should be sent to the owner,
+// and should be able to know whether there are any messages not yet acknowledged
+// by the owner.
+type ProcessorMessenger interface {
+	// FinishTableOperation notifies the owner that a table operation has finished.
+	FinishTableOperation(
+		ctx context.Context, tableID model.TableID, epoch protocol.ProcessorEpoch,
+	) (done bool, err error)
+	// SyncTaskStatuses informs the owner of the processor's current internal state.
+	SyncTaskStatuses(
+		ctx context.Context, epoch protocol.ProcessorEpoch,
+		adding, removing, running []model.TableID,
+	) (done bool, err error)
+	// SendCheckpoint sends the owner the processor's local watermarks,
+	// i.e., checkpoint-ts and resolved-ts.
+	SendCheckpoint(
+		ctx context.Context, checkpointTs model.Ts, resolvedTs model.Ts,
+	) (done bool, err error)
+	// Barrier returns whether there is a pending message not yet acknowledged by the owner.
+	Barrier(ctx context.Context) (done bool)
+	// OnOwnerChanged is called when the owner is changed.
+	OnOwnerChanged(
+		ctx context.Context, newOwnerCaptureID model.CaptureID, newOwnerRevision int64,
+	)
+	// Close closes the messenger and does the necessary cleanup.
+	Close() error
+}
 
 // AgentConfig stores configurations for BaseAgent
 type AgentConfig struct {
@@ -42,7 +70,7 @@ type AgentConfig struct {
 // implements its own TableExecutor and ProcessorMessenger.
 type Agent struct {
 	executor     scheduler.TableExecutor
-	communicator scheduler.ProcessorMessenger
+	communicator ProcessorMessenger
 
 	epochMu sync.RWMutex
 	// epoch is reset on each Sync message.
@@ -83,7 +111,7 @@ type Agent struct {
 func NewBaseAgent(
 	changeFeedID model.ChangeFeedID,
 	executor scheduler.TableExecutor,
-	messenger scheduler.ProcessorMessenger,
+	messenger ProcessorMessenger,
 	config *AgentConfig,
 ) *Agent {
 	logger := log.L().With(

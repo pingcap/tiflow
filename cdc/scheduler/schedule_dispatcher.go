@@ -14,9 +14,9 @@
 package scheduler
 
 import (
+	"context"
+
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/scheduler/base/protocol"
-	"github.com/pingcap/tiflow/pkg/context"
 )
 
 const (
@@ -46,24 +46,4 @@ type ScheduleDispatcher interface {
 	// Rebalance triggers a rebalance operation.
 	// It should be thread-safe
 	Rebalance()
-}
-
-// ScheduleDispatcherCommunicator is an interface for the BaseScheduleDispatcher to
-// send commands to Processors. The owner of a BaseScheduleDispatcher should provide
-// an implementation of ScheduleDispatcherCommunicator to supply BaseScheduleDispatcher
-// some methods to specify its behavior.
-type ScheduleDispatcherCommunicator interface {
-	// DispatchTable should send a dispatch command to the Processor.
-	DispatchTable(ctx context.Context,
-		changeFeedID model.ChangeFeedID,
-		tableID model.TableID,
-		captureID model.CaptureID,
-		isDelete bool,
-		epoch protocol.ProcessorEpoch,
-	) (done bool, err error)
-
-	// Announce announces to the specified capture that the current node has become the Owner.
-	Announce(ctx context.Context,
-		changeFeedID model.ChangeFeedID,
-		captureID model.CaptureID) (done bool, err error)
 }

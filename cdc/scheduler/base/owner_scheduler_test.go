@@ -24,7 +24,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	pscheduler "github.com/pingcap/tiflow/cdc/scheduler"
 	"github.com/pingcap/tiflow/cdc/scheduler/base/protocol"
-	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	"github.com/pingcap/tiflow/pkg/p2p"
 	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/stretchr/testify/require"
@@ -45,12 +44,8 @@ func TestSchedulerBasics(t *testing.T) {
 		_ = failpoint.Disable("github.com/pingcap/tiflow/pkg/p2p/ClientInjectClosed")
 	}()
 
-	stdCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-
-	ctx := cdcContext.NewContext(stdCtx, &cdcContext.GlobalVars{
-		OwnerRevision: 1,
-	})
 
 	mockCluster := p2p.NewMockCluster(t, numNodes)
 	mockCaptures := map[model.CaptureID]*model.CaptureInfo{}
@@ -69,7 +64,8 @@ func TestSchedulerBasics(t *testing.T) {
 		model.DefaultChangeFeedID("cf-1"),
 		1000,
 		mockOwnerNode.Server,
-		mockOwnerNode.Router)
+		mockOwnerNode.Router,
+		1)
 	require.NoError(t, err)
 
 	for atomic.LoadInt64(&sched.stats.AnnounceSentCount) < numNodes {
@@ -184,12 +180,8 @@ func TestSchedulerBasics(t *testing.T) {
 }
 
 func TestSchedulerNoPeer(t *testing.T) {
-	stdCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-
-	ctx := cdcContext.NewContext(stdCtx, &cdcContext.GlobalVars{
-		OwnerRevision: 1,
-	})
 
 	mockCluster := p2p.NewMockCluster(t, numNodes)
 	mockCaptures := map[model.CaptureID]*model.CaptureInfo{}
@@ -212,7 +204,8 @@ func TestSchedulerNoPeer(t *testing.T) {
 		model.DefaultChangeFeedID("cf-1"),
 		1000,
 		mockOwnerNode.Server,
-		mockOwnerNode.Router)
+		mockOwnerNode.Router,
+		1)
 	require.NoError(t, err)
 
 	// Ticks the scheduler 10 times. It should not panic.

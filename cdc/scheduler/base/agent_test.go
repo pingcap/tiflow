@@ -14,11 +14,11 @@
 package base
 
 import (
+	"context"
 	"testing"
 
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/scheduler/base/protocol"
-	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
@@ -27,7 +27,8 @@ import (
 var agentConfigForTesting = &AgentConfig{SendCheckpointTsInterval: 0}
 
 func TestAgentAddTable(t *testing.T) {
-	ctx := cdcContext.NewBackendContext4Test(false)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	executor := NewMockTableExecutor(t)
 	messenger := &MockProcessorMessenger{}
@@ -78,7 +79,8 @@ func TestAgentAddTable(t *testing.T) {
 }
 
 func TestAgentRemoveTable(t *testing.T) {
-	ctx := cdcContext.NewBackendContext4Test(false)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	executor := NewMockTableExecutor(t)
 	executor.Running[model.TableID(1)] = struct{}{}
@@ -150,7 +152,8 @@ func TestAgentRemoveTable(t *testing.T) {
 }
 
 func TestAgentOwnerChangedWhileAddingTable(t *testing.T) {
-	ctx := cdcContext.NewBackendContext4Test(false)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	executor := NewMockTableExecutor(t)
 	messenger := &MockProcessorMessenger{}
@@ -212,7 +215,8 @@ func TestAgentOwnerChangedWhileAddingTable(t *testing.T) {
 }
 
 func TestAgentReceiveFromStaleOwner(t *testing.T) {
-	ctx := cdcContext.NewBackendContext4Test(false)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	executor := NewMockTableExecutor(t)
 	messenger := &MockProcessorMessenger{}
@@ -259,7 +263,8 @@ func TestAgentReceiveFromStaleOwner(t *testing.T) {
 }
 
 func TestOwnerMismatchShouldPanic(t *testing.T) {
-	ctx := cdcContext.NewBackendContext4Test(false)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	executor := NewMockTableExecutor(t)
 	messenger := &MockProcessorMessenger{}
@@ -288,7 +293,8 @@ func TestOwnerMismatchShouldPanic(t *testing.T) {
 }
 
 func TestIgnoreStaleEpoch(t *testing.T) {
-	ctx := cdcContext.NewBackendContext4Test(false)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	executor := NewMockTableExecutor(t)
 	messenger := &MockProcessorMessenger{}

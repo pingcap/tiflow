@@ -14,6 +14,7 @@
 package base
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
@@ -22,13 +23,12 @@ import (
 	"github.com/pingcap/tiflow/cdc/scheduler"
 	"github.com/pingcap/tiflow/cdc/scheduler/base/protocol"
 	"github.com/pingcap/tiflow/cdc/scheduler/util"
-	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 )
 
-var _ scheduler.ScheduleDispatcherCommunicator = (*mockScheduleDispatcherCommunicator)(nil)
+var _ ScheduleDispatcherCommunicator = (*mockScheduleDispatcherCommunicator)(nil)
 
 const (
 	defaultEpoch = "default-epoch"
@@ -58,7 +58,7 @@ func (m *mockScheduleDispatcherCommunicator) Reset() {
 }
 
 func (m *mockScheduleDispatcherCommunicator) DispatchTable(
-	ctx cdcContext.Context,
+	ctx context.Context,
 	changeFeedID model.ChangeFeedID,
 	tableID model.TableID,
 	captureID model.CaptureID,
@@ -83,7 +83,7 @@ func (m *mockScheduleDispatcherCommunicator) DispatchTable(
 }
 
 func (m *mockScheduleDispatcherCommunicator) Announce(
-	ctx cdcContext.Context,
+	ctx context.Context,
 	changeFeedID model.ChangeFeedID,
 	captureID model.CaptureID,
 ) (done bool, err error) {
@@ -106,7 +106,8 @@ var defaultMockCaptureInfos = map[model.CaptureID]*model.CaptureInfo{
 func TestDispatchTable(t *testing.T) {
 	t.Parallel()
 
-	ctx := cdcContext.NewBackendContext4Test(false)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	communicator := NewMockScheduleDispatcherCommunicator()
 	cf1 := model.DefaultChangeFeedID("cf-1")
 	dispatcher := NewBaseScheduleDispatcher(cf1, communicator, 1000)
@@ -190,7 +191,8 @@ func TestDispatchTable(t *testing.T) {
 func TestSyncCaptures(t *testing.T) {
 	t.Parallel()
 
-	ctx := cdcContext.NewBackendContext4Test(false)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	communicator := NewMockScheduleDispatcherCommunicator()
 	cf1 := model.DefaultChangeFeedID("cf-1")
 	dispatcher := NewBaseScheduleDispatcher(cf1, communicator, 1000)
@@ -244,7 +246,8 @@ func TestSyncUnknownCapture(t *testing.T) {
 
 	mockCaptureInfos := map[model.CaptureID]*model.CaptureInfo{}
 
-	ctx := cdcContext.NewBackendContext4Test(false)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	communicator := NewMockScheduleDispatcherCommunicator()
 	dispatcher := NewBaseScheduleDispatcher(
 		model.DefaultChangeFeedID("cf-1"), communicator,
@@ -264,7 +267,8 @@ func TestSyncUnknownCapture(t *testing.T) {
 func TestRemoveTable(t *testing.T) {
 	t.Parallel()
 
-	ctx := cdcContext.NewBackendContext4Test(false)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	communicator := NewMockScheduleDispatcherCommunicator()
 	cf1 := model.DefaultChangeFeedID("cf-1")
 	dispatcher := NewBaseScheduleDispatcher(cf1, communicator, 1000)
@@ -342,7 +346,8 @@ func TestCaptureGone(t *testing.T) {
 		// capture-2 is gone
 	}
 
-	ctx := cdcContext.NewBackendContext4Test(false)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	communicator := NewMockScheduleDispatcherCommunicator()
 	cf1 := model.DefaultChangeFeedID("cf-1")
 	dispatcher := NewBaseScheduleDispatcher(cf1, communicator, 1000)
@@ -389,7 +394,8 @@ func TestCaptureGone(t *testing.T) {
 func TestCaptureRestarts(t *testing.T) {
 	t.Parallel()
 
-	ctx := cdcContext.NewBackendContext4Test(false)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	communicator := NewMockScheduleDispatcherCommunicator()
 	cf1 := model.DefaultChangeFeedID("cf-1")
 	dispatcher := NewBaseScheduleDispatcher(cf1, communicator, 1000)
@@ -448,7 +454,8 @@ func TestCaptureGoneWhileMovingTable(t *testing.T) {
 		},
 	}
 
-	ctx := cdcContext.NewBackendContext4Test(false)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	communicator := NewMockScheduleDispatcherCommunicator()
 	cf1 := model.DefaultChangeFeedID("cf-1")
 	dispatcher := NewBaseScheduleDispatcher(cf1, communicator, 1000)
@@ -526,7 +533,8 @@ func TestRebalance(t *testing.T) {
 		},
 	}
 
-	ctx := cdcContext.NewBackendContext4Test(false)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	communicator := NewMockScheduleDispatcherCommunicator()
 	cf1 := model.DefaultChangeFeedID("cf-1")
 	dispatcher := NewBaseScheduleDispatcher(cf1, communicator, 1000)
@@ -599,7 +607,8 @@ func TestIgnoreEmptyCapture(t *testing.T) {
 		},
 	}
 
-	ctx := cdcContext.NewBackendContext4Test(false)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	communicator := NewMockScheduleDispatcherCommunicator()
 	dispatcher := NewBaseScheduleDispatcher(
 		model.DefaultChangeFeedID("cf-1"),
@@ -639,7 +648,8 @@ func TestIgnoreEmptyCapture(t *testing.T) {
 func TestIgnoreDeadCapture(t *testing.T) {
 	t.Parallel()
 
-	ctx := cdcContext.NewBackendContext4Test(false)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	communicator := NewMockScheduleDispatcherCommunicator()
 	dispatcher := NewBaseScheduleDispatcher(
 		model.DefaultChangeFeedID("cf-1"), communicator,
@@ -677,7 +687,8 @@ func TestIgnoreDeadCapture(t *testing.T) {
 func TestIgnoreUnsyncedCaptures(t *testing.T) {
 	t.Parallel()
 
-	ctx := cdcContext.NewBackendContext4Test(false)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	communicator := NewMockScheduleDispatcherCommunicator()
 	dispatcher := NewBaseScheduleDispatcher(
 		model.DefaultChangeFeedID("cf-1"),
@@ -723,7 +734,8 @@ func TestIgnoreUnsyncedCaptures(t *testing.T) {
 func TestRebalanceWhileAddingTable(t *testing.T) {
 	t.Parallel()
 
-	ctx := cdcContext.NewBackendContext4Test(false)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	communicator := NewMockScheduleDispatcherCommunicator()
 	cf1 := model.DefaultChangeFeedID("cf-1")
 	dispatcher := NewBaseScheduleDispatcher(cf1, communicator, 1000)
@@ -782,7 +794,8 @@ func TestRebalanceWhileAddingTable(t *testing.T) {
 func TestManualMoveTableWhileAddingTable(t *testing.T) {
 	t.Parallel()
 
-	ctx := cdcContext.NewBackendContext4Test(false)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	communicator := NewMockScheduleDispatcherCommunicator()
 	cf1 := model.DefaultChangeFeedID("cf-1")
 	dispatcher := NewBaseScheduleDispatcher(cf1, communicator, 1000)
@@ -861,7 +874,8 @@ func TestAutoRebalanceOnCaptureOnline(t *testing.T) {
 
 	t.Parallel()
 
-	ctx := cdcContext.NewBackendContext4Test(false)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	communicator := NewMockScheduleDispatcherCommunicator()
 	cf1 := model.DefaultChangeFeedID("cf-1")
 	dispatcher := NewBaseScheduleDispatcher(cf1, communicator, 1000)
@@ -980,7 +994,8 @@ func TestAutoRebalanceOnCaptureOnline(t *testing.T) {
 func TestInvalidFinishedTableOperation(t *testing.T) {
 	t.Parallel()
 
-	ctx := cdcContext.NewBackendContext4Test(false)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	communicator := NewMockScheduleDispatcherCommunicator()
 	cf1 := model.DefaultChangeFeedID("cf-1")
 	dispatcher := NewBaseScheduleDispatcher(cf1, communicator, 1000)
@@ -1054,7 +1069,8 @@ func TestInvalidFinishedTableOperation(t *testing.T) {
 }
 
 func BenchmarkAddTable(b *testing.B) {
-	ctx := cdcContext.NewBackendContext4Test(false)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	communicator := NewMockScheduleDispatcherCommunicator()
 	communicator.isBenchmark = true

@@ -14,6 +14,7 @@
 package base
 
 import (
+	"context"
 	"math"
 	"sync"
 
@@ -23,9 +24,28 @@ import (
 	sched "github.com/pingcap/tiflow/cdc/scheduler"
 	"github.com/pingcap/tiflow/cdc/scheduler/base/protocol"
 	"github.com/pingcap/tiflow/cdc/scheduler/util"
-	"github.com/pingcap/tiflow/pkg/context"
 	"go.uber.org/zap"
 )
+
+// ScheduleDispatcherCommunicator is an interface for the BaseScheduleDispatcher to
+// send commands to Processors. The owner of a BaseScheduleDispatcher should provide
+// an implementation of ScheduleDispatcherCommunicator to supply BaseScheduleDispatcher
+// some methods to specify its behavior.
+type ScheduleDispatcherCommunicator interface {
+	// DispatchTable should send a dispatch command to the Processor.
+	DispatchTable(ctx context.Context,
+		changeFeedID model.ChangeFeedID,
+		tableID model.TableID,
+		captureID model.CaptureID,
+		isDelete bool,
+		epoch protocol.ProcessorEpoch,
+	) (done bool, err error)
+
+	// Announce announces to the specified capture that the current node has become the Owner.
+	Announce(ctx context.Context,
+		changeFeedID model.ChangeFeedID,
+		captureID model.CaptureID) (done bool, err error)
+}
 
 const (
 	// captureCountUninitialized is a placeholder for an unknown total capture count.
@@ -34,7 +54,7 @@ const (
 
 // ScheduleDispatcher implements the basic logic of a ScheduleDispatcher.
 // For it to be directly useful to the Owner, the Owner should implement it own
-// sched.ScheduleDispatcherCommunicator.
+// ScheduleDispatcherCommunicator.
 type ScheduleDispatcher struct {
 	mu sync.Mutex
 	// information of all actually running tables
@@ -54,14 +74,14 @@ type ScheduleDispatcher struct {
 
 	// read only fields
 	changeFeedID model.ChangeFeedID
-	communicator sched.ScheduleDispatcherCommunicator
+	communicator ScheduleDispatcherCommunicator
 	logger       *zap.Logger
 }
 
 // NewBaseScheduleDispatcher creates a new BaseScheduleDispatcher.
 func NewBaseScheduleDispatcher(
 	changeFeedID model.ChangeFeedID,
-	communicator sched.ScheduleDispatcherCommunicator,
+	communicator ScheduleDispatcherCommunicator,
 	checkpointTs model.Ts,
 ) *ScheduleDispatcher {
 	// logger is just the global logger with the `changefeed-id` field attached.

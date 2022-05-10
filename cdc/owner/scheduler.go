@@ -56,7 +56,11 @@ func (s *schedulerV2Wraper) Tick(
 	currentTables []model.TableID,
 	captures map[model.CaptureID]*model.CaptureInfo,
 ) (checkpoint, resolvedTs model.Ts, err error) {
-	return s.ScheduleDispatcher.Tick(ctx, state.Status.CheckpointTs, currentTables, captures)
+	return s.SchedulerV2.Tick(ctx, state.Status.CheckpointTs, currentTables, captures)
+}
+
+func (s *schedulerV2Wraper) Close(ctx context.Context) {
+	s.SchedulerV2.Close(ctx)
 }
 
 // newSchedulerV2FromCtx creates a new schedulerV2 from context.
@@ -65,7 +69,9 @@ func newSchedulerV2FromCtx(ctx context.Context, startTs uint64) (scheduler, erro
 	changeFeedID := ctx.ChangefeedVars().ID
 	messageServer := ctx.GlobalVars().MessageServer
 	messageRouter := ctx.GlobalVars().MessageRouter
-	ret, err := base.NewSchedulerV2(ctx, changeFeedID, startTs, messageServer, messageRouter)
+	ownerRev := ctx.GlobalVars().OwnerRevision
+	ret, err := base.NewSchedulerV2(
+		ctx, changeFeedID, startTs, messageServer, messageRouter, ownerRev)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

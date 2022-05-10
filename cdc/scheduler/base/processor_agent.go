@@ -14,27 +14,24 @@
 package base
 
 import (
-	stdContext "context"
+	"context"
 	"time"
-
-	"go.uber.org/zap/zapcore"
 
 	"github.com/benbjohnson/clock"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"go.etcd.io/etcd/client/v3/concurrency"
-	"go.uber.org/zap"
-	"golang.org/x/time/rate"
-
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/scheduler"
 	"github.com/pingcap/tiflow/cdc/scheduler/base/protocol"
 	"github.com/pingcap/tiflow/pkg/config"
-	"github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/p2p"
 	"github.com/pingcap/tiflow/pkg/version"
+	"go.etcd.io/etcd/client/v3/concurrency"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"golang.org/x/time/rate"
 )
 
 const (
@@ -53,6 +50,7 @@ type agentImpl struct {
 	changeFeed     model.ChangeFeedID
 	ownerCaptureID model.CaptureID
 	ownerRevision  int64
+	etcdClient     *etcd.CDCEtcdClient
 
 	clock              clock.Clock
 	barrierSeqs        map[p2p.Topic]p2p.Seq
@@ -70,12 +68,14 @@ func NewAgent(
 	ctx context.Context,
 	messageServer *p2p.MessageServer,
 	messageRouter p2p.MessageRouter,
+	etcdClient *etcd.CDCEtcdClient,
 	executor scheduler.TableExecutor,
 	changeFeedID model.ChangeFeedID,
-) (retVal scheduler.ProcessorAgent, err error) {
+) (retVal scheduler.Agent, err error) {
 	ret := &agentImpl{
 		messageServer: messageServer,
 		messageRouter: messageRouter,
+		etcdClient:    etcdClient,
 
 		changeFeed: changeFeedID,
 
@@ -119,9 +119,9 @@ func NewAgent(
 		}
 	}()
 
-	etcdCliCtx, cancel := stdContext.WithTimeout(ctx, getOwnerFromEtcdTimeout)
+	etcdCliCtx, cancel := context.WithTimeout(ctx, getOwnerFromEtcdTimeout)
 	defer cancel()
-	ownerCaptureID, err := ctx.GlobalVars().EtcdClient.
+	ownerCaptureID, err := ret.etcdClient.
 		GetOwnerID(etcdCliCtx, etcd.CaptureOwnerKey)
 	if err != nil {
 		if err != concurrency.ErrElectionNoLeader {
@@ -143,7 +143,7 @@ func NewAgent(
 		zap.String("changefeed", changeFeedID.ID),
 		zap.String("ownerID", ownerCaptureID))
 
-	ret.ownerRevision, err = ctx.GlobalVars().EtcdClient.
+	ret.ownerRevision, err = ret.etcdClient.
 		GetOwnerRevision(etcdCliCtx, ownerCaptureID)
 	if err != nil {
 		if cerror.ErrOwnerNotFound.Equal(err) || cerror.ErrNotOwner.Equal(err) {
@@ -432,7 +432,7 @@ func (a *agentImpl) registerPeerMessageHandlers() (ret error) {
 		}
 	}()
 
-	ctx, cancel := stdContext.WithTimeout(stdContext.Background(), messageHandlerOperationsTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), messageHandlerOperationsTimeout)
 	defer cancel()
 
 	errCh, err := a.messageServer.SyncAddHandler(
@@ -475,7 +475,7 @@ func (a *agentImpl) registerPeerMessageHandlers() (ret error) {
 }
 
 func (a *agentImpl) deregisterPeerMessageHandlers() error {
-	ctx, cancel := stdContext.WithTimeout(stdContext.Background(), messageHandlerOperationsTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), messageHandlerOperationsTimeout)
 	defer cancel()
 
 	err := a.messageServer.SyncRemoveHandler(ctx, protocol.DispatchTableTopic(a.changeFeed))

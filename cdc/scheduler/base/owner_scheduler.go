@@ -14,6 +14,7 @@
 package base
 
 import (
+	"context"
 	"sync/atomic"
 
 	"github.com/pingcap/errors"
@@ -21,7 +22,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	sched "github.com/pingcap/tiflow/cdc/scheduler"
 	"github.com/pingcap/tiflow/cdc/scheduler/base/protocol"
-	"github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/p2p"
 	"github.com/pingcap/tiflow/pkg/version"
@@ -31,6 +31,7 @@ import (
 // SchedulerV2 schedules tables through P2P.
 type SchedulerV2 struct {
 	*ScheduleDispatcher
+	ownerRevision int64
 
 	messageServer *p2p.MessageServer
 	messageRouter p2p.MessageRouter
@@ -48,12 +49,14 @@ func NewSchedulerV2(
 	checkpointTs model.Ts,
 	messageServer *p2p.MessageServer,
 	messageRouter p2p.MessageRouter,
+	ownerRevision int64,
 ) (*SchedulerV2, error) {
 	ret := &SchedulerV2{
 		changeFeedID:  changeFeedID,
 		messageServer: messageServer,
 		messageRouter: messageRouter,
 		stats:         &schedulerStats{},
+		ownerRevision: ownerRevision,
 	}
 	ret.ScheduleDispatcher = NewBaseScheduleDispatcher(changeFeedID, ret, checkpointTs)
 	if err := ret.registerPeerMessageHandlers(ctx); err != nil {
@@ -87,7 +90,7 @@ func (s *SchedulerV2) DispatchTable(
 ) (done bool, err error) {
 	topic := protocol.DispatchTableTopic(changeFeedID)
 	message := &protocol.DispatchTableMessage{
-		OwnerRev: ctx.GlobalVars().OwnerRevision,
+		OwnerRev: s.ownerRevision,
 		ID:       tableID,
 		IsDelete: isDelete,
 		Epoch:    epoch,
@@ -129,7 +132,7 @@ func (s *SchedulerV2) Announce(
 ) (done bool, err error) {
 	topic := protocol.AnnounceTopic(changeFeedID)
 	message := &protocol.AnnounceMessage{
-		OwnerRev:     ctx.GlobalVars().OwnerRevision,
+		OwnerRev:     s.ownerRevision,
 		OwnerVersion: version.ReleaseSemver(),
 	}
 

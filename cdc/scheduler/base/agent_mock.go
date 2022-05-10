@@ -14,12 +14,12 @@
 package base
 
 import (
+	"context"
 	"testing"
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/scheduler/base/protocol"
-	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -32,7 +32,7 @@ type MockProcessorMessenger struct {
 
 // FinishTableOperation marks this function as being called.
 func (m *MockProcessorMessenger) FinishTableOperation(
-	ctx cdcContext.Context, tableID model.TableID, epoch protocol.ProcessorEpoch,
+	ctx context.Context, tableID model.TableID, epoch protocol.ProcessorEpoch,
 ) (bool, error) {
 	args := m.Called(ctx, tableID, epoch)
 	return args.Bool(0), args.Error(1)
@@ -40,7 +40,7 @@ func (m *MockProcessorMessenger) FinishTableOperation(
 
 // SyncTaskStatuses marks this function as being called.
 func (m *MockProcessorMessenger) SyncTaskStatuses(
-	ctx cdcContext.Context, epoch protocol.ProcessorEpoch,
+	ctx context.Context, epoch protocol.ProcessorEpoch,
 	adding, removing, running []model.TableID,
 ) (bool, error) {
 	args := m.Called(ctx, epoch, running, adding, removing)
@@ -48,20 +48,20 @@ func (m *MockProcessorMessenger) SyncTaskStatuses(
 }
 
 // SendCheckpoint marks this function as being called.
-func (m *MockProcessorMessenger) SendCheckpoint(ctx cdcContext.Context, checkpointTs model.Ts, resolvedTs model.Ts) (bool, error) {
+func (m *MockProcessorMessenger) SendCheckpoint(ctx context.Context, checkpointTs model.Ts, resolvedTs model.Ts) (bool, error) {
 	args := m.Called(ctx, checkpointTs, resolvedTs)
 	return args.Bool(0), args.Error(1)
 }
 
 // Barrier marks this function as being called.
-func (m *MockProcessorMessenger) Barrier(ctx cdcContext.Context) (done bool) {
+func (m *MockProcessorMessenger) Barrier(ctx context.Context) (done bool) {
 	args := m.Called(ctx)
 	return args.Bool(0)
 }
 
 // OnOwnerChanged marks this function as being called.
 func (m *MockProcessorMessenger) OnOwnerChanged(
-	ctx cdcContext.Context,
+	ctx context.Context,
 	newOwnerCaptureID model.CaptureID,
 	newOwnerRev int64,
 ) {
@@ -80,7 +80,7 @@ type mockCheckpointSender struct {
 }
 
 // SendCheckpoint sends a checkpoint.
-func (s *mockCheckpointSender) SendCheckpoint(_ cdcContext.Context, provider checkpointProviderFunc) error {
+func (s *mockCheckpointSender) SendCheckpoint(_ context.Context, provider checkpointProviderFunc) error {
 	checkpointTs, resolvedTs, ok := provider()
 	if !ok {
 		return nil
@@ -115,7 +115,7 @@ func NewMockTableExecutor(t *testing.T) *MockTableExecutor {
 }
 
 // AddTable adds a table to the executor.
-func (e *MockTableExecutor) AddTable(ctx cdcContext.Context, tableID model.TableID) (bool, error) {
+func (e *MockTableExecutor) AddTable(ctx context.Context, tableID model.TableID) (bool, error) {
 	log.Info("AddTable", zap.Int64("tableID", tableID))
 	require.NotContains(e.t, e.Adding, tableID)
 	require.NotContains(e.t, e.Running, tableID)
@@ -129,7 +129,7 @@ func (e *MockTableExecutor) AddTable(ctx cdcContext.Context, tableID model.Table
 }
 
 // RemoveTable removes a table from the executor.
-func (e *MockTableExecutor) RemoveTable(ctx cdcContext.Context, tableID model.TableID) (bool, error) {
+func (e *MockTableExecutor) RemoveTable(ctx context.Context, tableID model.TableID) (bool, error) {
 	log.Info("RemoveTable", zap.Int64("tableID", tableID))
 	args := e.Called(ctx, tableID)
 	require.Contains(e.t, e.Running, tableID)
@@ -140,13 +140,13 @@ func (e *MockTableExecutor) RemoveTable(ctx cdcContext.Context, tableID model.Ta
 }
 
 // IsAddTableFinished determines if the table has been added.
-func (e *MockTableExecutor) IsAddTableFinished(ctx cdcContext.Context, tableID model.TableID) bool {
+func (e *MockTableExecutor) IsAddTableFinished(ctx context.Context, tableID model.TableID) bool {
 	_, ok := e.Running[tableID]
 	return ok
 }
 
 // IsRemoveTableFinished determines if the table has been removed.
-func (e *MockTableExecutor) IsRemoveTableFinished(ctx cdcContext.Context, tableID model.TableID) bool {
+func (e *MockTableExecutor) IsRemoveTableFinished(ctx context.Context, tableID model.TableID) bool {
 	_, ok := e.Removing[tableID]
 	return !ok
 }
