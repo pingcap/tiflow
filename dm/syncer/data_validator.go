@@ -78,7 +78,7 @@ const (
 	validatorDmctlOpTimeout = 5 * time.Second
 )
 
-// to make ut easier, we define it as a var, so we can change it
+// to make ut easier, we define it as a var, so we can change it.
 var markErrorRowDelay = config.DefaultValidatorRowErrorDelay
 
 // change of table
