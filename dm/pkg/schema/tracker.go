@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
+	"net/url"
 	"os"
 	"strings"
 
@@ -141,7 +142,7 @@ func NewTracker(ctx context.Context, task string, sessionCfg map[string]string, 
 		}
 	}
 
-	storePath, err = ioutil.TempDir("./", "schema-tracker")
+	storePath, err = newTmpFolderForTracker(task)
 	if err != nil {
 		return nil, err
 	}
@@ -222,6 +223,10 @@ func NewTracker(ctx context.Context, task string, sessionCfg map[string]string, 
 		se:        se,
 		dsTracker: dsTracker,
 	}, nil
+}
+
+func newTmpFolderForTracker(task string) (string, error) {
+	return ioutil.TempDir("./", url.PathEscape(task)+"-tracker")
 }
 
 // Exec runs an SQL (DDL) statement.
