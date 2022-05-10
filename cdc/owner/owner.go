@@ -71,6 +71,9 @@ type ownerJob struct {
 	// for status provider
 	query *Query
 
+	// for scheduler related jobs
+	schedulerQuery *SchedulerQuery
+
 	done chan<- error
 }
 
@@ -85,7 +88,7 @@ type Owner interface {
 		cfID model.ChangeFeedID, toCapture model.CaptureID,
 		tableID model.TableID, done chan<- error,
 	)
-	DrainCapture(target model.CaptureID, done chan<- error)
+	DrainCapture(query *SchedulerQuery, done chan<- error)
 	WriteDebugInfo(w io.Writer, done chan<- error)
 	Query(query *Query, done chan<- error)
 	AsyncStop()
@@ -265,11 +268,11 @@ func (o *ownerImpl) ScheduleTable(
 
 // DrainCapture removes all tables at the target capture
 // `done` must be buffered to prevent blocking owner.
-func (o *ownerImpl) DrainCapture(target model.CaptureID, done chan<- error) {
+func (o *ownerImpl) DrainCapture(query *SchedulerQuery, done chan<- error) {
 	o.pushOwnerJob(&ownerJob{
-		Tp:              ownerJobTypeDrainCapture,
-		TargetCaptureID: target,
-		done:            done,
+		Tp:             ownerJobTypeDrainCapture,
+		schedulerQuery: query,
+		done:           done,
 	})
 }
 

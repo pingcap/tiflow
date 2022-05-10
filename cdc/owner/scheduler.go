@@ -54,7 +54,7 @@ type scheduler interface {
 	Close(ctx context.Context)
 
 	// DrainCapture is used to drop all tables at the target capture.
-	DrainCapture(target model.CaptureID) error
+	DrainCapture(target model.CaptureID) (int, error)
 }
 
 type schedulerV2 struct {
@@ -383,4 +383,13 @@ func (s *schedulerStats) RecordDispatchResponse() {
 
 func (s *schedulerStats) RecordCheckpoint() {
 	atomic.AddInt64(&s.CheckpointReceiveCount, 1)
+}
+
+// SchedulerQuery is for scheduler related owner job.
+type SchedulerQuery struct {
+	captureID    model.CaptureID
+	changefeedID model.ChangeFeedID
+	tableID      model.TableID
+
+	resp interface{}
 }

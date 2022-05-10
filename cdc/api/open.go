@@ -758,9 +758,7 @@ func (h *openAPI) DrainCapture(c *gin.Context) {
 		return
 	}
 
-	req := struct {
-		CaptureID string `json:"capture_id"`
-	}{}
+	var req model.DrainCaptureRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		_ = c.Error(cerror.ErrAPIInvalidParam.Wrap(err))
 		return
@@ -793,31 +791,17 @@ func (h *openAPI) DrainCapture(c *gin.Context) {
 		return
 	}
 
-	allProcessorSnap, err := h.statusProvider().GetProcessors(ctx)
+	resp, err := handleOwnerDrainCapture(ctx, h.capture, target)
 	if err != nil {
 		_ = c.Error(err)
 		return
 	}
 
-	var tableCount int
-	for _, processor := range allProcessorSnap {
-		if processor.CaptureID == target {
-			tableCount += len(processor.Tables)
-		}
+	status := http.StatusAccepted
+	if resp.TotalTableCount == 0 {
+		status = http.StatusOK
 	}
-	// no tables found in from all processors at the target capture.
-	if tableCount == 0 {
-		c.JSON(http.StatusOK, tableCount)
-		return
-	}
-
-	err = handleOwnerDrainCapture(ctx, h.capture, target)
-	if err != nil {
-		_ = c.Error(err)
-		return
-	}
-
-	c.JSON(http.StatusAccepted, tableCount)
+	c.JSON(status, resp)
 }
 
 // ServerStatus gets the status of server(capture)

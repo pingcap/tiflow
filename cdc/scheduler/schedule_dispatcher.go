@@ -57,7 +57,7 @@ type ScheduleDispatcher interface {
 	// DrainCapture remove all tables from the target capture.
 	// should only be called when a capture is planning to shut down.
 	// It should be thread-safe.
-	DrainCapture(target model.CaptureID) error
+	DrainCapture(target model.CaptureID) (int, error)
 }
 
 // ScheduleDispatcherCommunicator is an interface for the BaseScheduleDispatcher to
@@ -609,52 +609,58 @@ func (s *BaseScheduleDispatcher) rebalance(ctx context.Context) (done bool, err 
 }
 
 // DrainCapture implements the interface ScheduleDispatcher.
-func (s *BaseScheduleDispatcher) DrainCapture(target model.CaptureID) error {
+func (s *BaseScheduleDispatcher) DrainCapture(target model.CaptureID) (int, error) {
+	totalTableCount := s.tables.CountTableByCaptureID(target)
+	// target capture has no table, `DrainCapture` become a no-op
+	if totalTableCount == 0 {
+		log.Info("DrainCapture: target capture has no table",
+			zap.String("target", target))
+		return 0, nil
+	}
+
 	// when draining the capture, tables should be dispatched to other capture except the draining one,
 	// so at least should have 2 captures alive. otherwise, reject the request.
 	if len(s.captures) < 2 {
 		log.Warn("DrainCapture: not allowed since less than 2 captures alive",
 			zap.Any("captures", s.captures),
-			zap.String("target", target))
-		return cerror.ErrSchedulerDrainCaptureNotAllowed.GenWithStack("captures not enough")
-	}
-
-	// target capture has no table, `DrainCapture` become a no-op
-	if s.tables.CountTableByCaptureID(target) == 0 {
-		log.Info("DrainCapture: target capture has no table",
-			zap.String("target", target))
-		return nil
+			zap.String("target", target),
+			zap.Int("totalTableCount", totalTableCount))
+		return totalTableCount, cerror.ErrSchedulerDrainCaptureNotAllowed.GenWithStack("captures not enough")
 	}
 
 	// there is table adding to the target capture, drain it is not allowed at the moment.
 	// Drain the capture would remove all tables from the target capture, so if there is any
 	// at `RemovingTable` status should be acceptable, treat it as a front-runner.
-	count := s.tables.CountTableByCaptureIDAndStatus(target, util.AddingTable)
-	if count != 0 {
+	addingTableCount := s.tables.CountTableByCaptureIDAndStatus(target, util.AddingTable)
+	if addingTableCount != 0 {
 		log.Warn("DrainCapture: not allowed since some table is adding to the target",
 			zap.String("target", target),
-			zap.Int("addingTableCount", count))
-		return cerror.ErrSchedulerDrainCaptureNotAllowed.GenWithStack("adding tables")
+			zap.Int("totalTableCount", totalTableCount),
+			zap.Int("addingTableCount", addingTableCount))
+		return totalTableCount, cerror.ErrSchedulerDrainCaptureNotAllowed.GenWithStack("adding tables")
 	}
+
 	// there is at least one `MoveTable` job which target is identical to the draining target not finished yet,
 	// a new table will be dispatched to the target capture, before the whole process finished, reject the request.
 	if s.moveTableManager.HaveJobsByCaptureID(target) {
 		log.Warn("DrainCapture: not allowed since have processing move table jobs",
-			zap.String("target", target))
-		return cerror.ErrSchedulerDrainCaptureNotAllowed.GenWithStack("processing move table jobs")
+			zap.String("target", target),
+			zap.Int("totalTableCount", totalTableCount))
+		return totalTableCount, cerror.ErrSchedulerDrainCaptureNotAllowed.GenWithStack("processing move table jobs")
 	}
 
 	if s.drainTarget != captureIDNotDraining {
 		log.Warn("DrainCapture: not allowed since other capture is draining now",
 			zap.String("drainingCapture", s.drainTarget),
-			zap.String("target", target))
-		return cerror.ErrSchedulerDrainCaptureNotAllowed.GenWithStack("other capture is draining")
+			zap.String("target", target),
+			zap.Int("totalTableCount", totalTableCount))
+		return totalTableCount, cerror.ErrSchedulerDrainCaptureNotAllowed.GenWithStack("other capture is draining")
 	}
 
 	s.drainTarget = target
 	// disable rebalance to prevent unnecessary table scheduling.
 	s.needRebalance = false
-	return nil
+	return totalTableCount, nil
 }
 
 // OnAgentFinishedTableOperation is called when a table operation has been finished by

@@ -137,23 +137,21 @@ func handleOwnerScheduleTable(
 
 func handleOwnerDrainCapture(
 	ctx context.Context, capture *capture.Capture, captureID string,
-) error {
+) (resp model.DrainCaptureResp, err error) {
 	// Use buffered channel to prevent blocking owner.
 	done := make(chan error, 1)
+	resp = model.DrainCaptureResp{}
+
 	o, err := capture.GetOwner()
 	if err != nil {
-		return errors.Trace(err)
+		return resp, errors.Trace(err)
 	}
-	o.DrainCapture(captureID, done)
+
+	o.DrainCapture(captureID, &resp, done)
 	select {
 	case <-ctx.Done():
-		return errors.Trace(ctx.Err())
-	default:
-		for e := range done {
-			if e != nil {
-				err = e
-			}
-		}
+		return resp, errors.Trace(ctx.Err())
+	case err := <-done:
+		return resp, errors.Trace(err)
 	}
-	return errors.Trace(err)
 }

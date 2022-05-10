@@ -801,7 +801,7 @@ func TestDrainingCaptureOnlyOne(t *testing.T) {
 		Status:    util.RunningTable,
 	})
 
-	err := dispatcher.DrainCapture("capture-2")
+	_, err := dispatcher.DrainCapture("capture-2")
 	require.Error(t, err, cerror.ErrSchedulerDrainCaptureNotAllowed)
 }
 
@@ -886,7 +886,7 @@ func TestDrainingCapture(t *testing.T) {
 	require.Equal(t, model.Ts(1450), resolvedTs)
 
 	// drain the `capture-1`
-	err = dispatcher.DrainCapture("capture-1")
+	_, err = dispatcher.DrainCapture("capture-1")
 	require.Nil(t, err)
 
 	checkpointTs, resolvedTs, err = dispatcher.Tick(ctx, 1300, []model.TableID{0, 1, 2, 3, 4, 5}, mockCaptureInfos)
@@ -940,7 +940,7 @@ func TestDrainingCapture(t *testing.T) {
 	}
 
 	// drain the `capture-2`
-	err = dispatcher.DrainCapture("capture-2")
+	_, err = dispatcher.DrainCapture("capture-2")
 	require.Nil(t, err)
 	communicator.On("Announce", mock.Anything, cf1, "capture-4").Return(true, nil)
 	checkpointTs, resolvedTs, err = dispatcher.Tick(ctx, 1300, []model.TableID{0, 1, 2, 3, 4, 5}, mockCaptureInfos)
@@ -1050,7 +1050,7 @@ func TestDrainingCaptureCrashed(t *testing.T) {
 	require.Equal(t, model.Ts(1450), resolvedTs)
 
 	// 1. drain one capture
-	err = dispatcher.DrainCapture("capture-2")
+	_, err = dispatcher.DrainCapture("capture-2")
 	require.Nil(t, err)
 
 	checkpointTs, resolvedTs, err = dispatcher.Tick(ctx, 1300, []model.TableID{0, 1, 2, 3}, mockCaptureInfos)
@@ -1116,7 +1116,7 @@ func TestDrainingCaptureCrashed(t *testing.T) {
 	require.Equal(t, CheckpointCannotProceed, resolvedTs)
 	require.False(t, dispatcher.needRebalance)
 
-	err = dispatcher.DrainCapture("capture-1")
+	_, err = dispatcher.DrainCapture("capture-1")
 	require.Nil(t, err)
 
 	tables4Capture1 = dispatcher.tables.GetAllTablesGroupedByCaptures()["capture-1"]
@@ -1240,7 +1240,7 @@ func TestDrainingCaptureOtherCrashed(t *testing.T) {
 		Return(true, nil)
 
 	// 1. drain the `capture-2`,
-	err = dispatcher.DrainCapture("capture-2")
+	_, err = dispatcher.DrainCapture("capture-2")
 	require.Nil(t, err)
 
 	checkpointTs, resolvedTs, err = dispatcher.Tick(ctx, 1300, []model.TableID{0, 1, 2, 3}, mockCaptureInfos)
@@ -1338,7 +1338,7 @@ func TestDrainingCaptureOtherCrashed(t *testing.T) {
 	}
 
 	// at the moment, `rebalance` is false, and `capture-3` has no table yet.
-	err = dispatcher.DrainCapture("capture-3")
+	_, err = dispatcher.DrainCapture("capture-3")
 	require.Nil(t, err)
 	require.Equal(t, dispatcher.drainTarget, captureIDNotDraining)
 	communicator.Reset()
@@ -1354,14 +1354,14 @@ func TestDrainingCaptureOtherCrashed(t *testing.T) {
 	// 2 tables adding to `capture-3`
 	require.Equal(t, 2, dispatcher.tables.CountTableByCaptureIDAndStatus("capture-3", util.AddingTable))
 
-	err = dispatcher.DrainCapture("capture-3")
+	_, err = dispatcher.DrainCapture("capture-3")
 	require.Error(t, err, cerror.ErrSchedulerDrainCaptureNotAllowed)
 
 	for _, record := range dispatcher.tables.GetAllTablesGroupedByCaptures()["capture-3"] {
 		dispatcher.OnAgentFinishedTableOperation("capture-3", record.TableID, nextEpoch)
 	}
 
-	err = dispatcher.DrainCapture("capture-3")
+	_, err = dispatcher.DrainCapture("capture-3")
 	require.Nil(t, err)
 	require.Equal(t, dispatcher.drainTarget, "capture-3")
 
@@ -1490,7 +1490,7 @@ func TestDrainingCaptureWhileAddingTable(t *testing.T) {
 		Return(true, nil)
 
 	// 1. drain one capture
-	err = dispatcher.DrainCapture("capture-2")
+	_, err = dispatcher.DrainCapture("capture-2")
 	require.Nil(t, err)
 
 	// 2. add a new table
@@ -1624,7 +1624,7 @@ func TestDrainCaptureWhileMoveTable(t *testing.T) {
 	communicator.AssertExpectations(t)
 
 	// `table-1` is not adding to `capture-2` yet, now drain the `capture-2`
-	err = dispatcher.DrainCapture("capture-2")
+	_, err = dispatcher.DrainCapture("capture-2")
 	require.Error(t, err, cerror.ErrSchedulerDrainCaptureNotAllowed)
 
 	// `table-1` removed from `capture-1`
@@ -1637,13 +1637,13 @@ func TestDrainCaptureWhileMoveTable(t *testing.T) {
 	require.Equal(t, CheckpointCannotProceed, resolvedTs)
 	communicator.AssertExpectations(t)
 
-	err = dispatcher.DrainCapture("capture-2")
+	_, err = dispatcher.DrainCapture("capture-2")
 	require.Error(t, err, cerror.ErrSchedulerDrainCaptureNotAllowed)
 
 	// move `table-1` from `capture-1` to `capture-2` finished
 	dispatcher.OnAgentFinishedTableOperation("capture-2", 1, defaultEpoch)
 
-	err = dispatcher.DrainCapture("capture-2")
+	_, err = dispatcher.DrainCapture("capture-2")
 	require.Nil(t, err)
 
 	// `MoveTable` during the process of draining capture, should fail
@@ -1746,7 +1746,7 @@ func TestDrainingCaptureWhileRebalance(t *testing.T) {
 	}
 
 	// one table removed, should be adding to `capture-1` in the next tick, but not happened yet.
-	err = dispatcher.DrainCapture("capture-1")
+	_, err = dispatcher.DrainCapture("capture-1")
 	require.Nil(t, err)
 	require.Equal(t, "capture-1", dispatcher.drainTarget)
 
@@ -1758,10 +1758,10 @@ func TestDrainingCaptureWhileRebalance(t *testing.T) {
 	require.Equal(t, CheckpointCannotProceed, checkpointTs)
 	require.Equal(t, CheckpointCannotProceed, resolvedTs)
 
-	err = dispatcher.DrainCapture("capture-1")
+	_, err = dispatcher.DrainCapture("capture-1")
 	require.Error(t, err, cerror.ErrSchedulerDrainCaptureNotAllowed)
 
-	err = dispatcher.DrainCapture("capture-2")
+	_, err = dispatcher.DrainCapture("capture-2")
 	// because has `AddingTable`
 	require.Error(t, err, cerror.ErrSchedulerDrainCaptureNotAllowed)
 
