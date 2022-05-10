@@ -18,6 +18,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"os"
 	"sort"
 	"testing"
 	"time"
@@ -1026,4 +1027,13 @@ func TestTrackerRecreateTables(t *testing.T) {
 		clearVolatileInfo(cloneTi)
 		require.Equal(t, tiInfos[i], cloneTi)
 	}
+}
+
+func TestNewTmpFolderForTracker(t *testing.T) {
+	got, err := newTmpFolderForTracker("task`~!@#$%^&*()-=_+[]{}\\|;:'\"<>,./? task")
+	require.NoError(t, err)
+	t.Log(got)
+	require.DirExists(t, got)
+	err = os.RemoveAll(got)
+	require.NoError(t, err)
 }

@@ -149,7 +149,7 @@ func NewTracker(ctx context.Context, task string, sessionCfg map[string]string, 
 		}
 	}
 
-	storePath, err = ioutil.TempDir("./", task+"-schema-tracker")
+	storePath, err = newTmpFolderForTracker(task)
 	if err != nil {
 		return nil, err
 	}
@@ -232,6 +232,25 @@ func NewTracker(ctx context.Context, task string, sessionCfg map[string]string, 
 		se:        se,
 		dsTracker: dsTracker,
 	}, nil
+}
+
+var specialChars = map[rune]struct{}{
+	'`': {}, '~': {}, '!': {}, '@': {}, '#': {}, '$': {}, '%': {}, '^': {}, '&': {},
+	'*': {}, '(': {}, ')': {}, '-': {}, '_': {}, '=': {}, '+': {}, '\\': {}, '|': {},
+	'[': {}, '{': {}, ']': {}, '}': {}, ':': {}, ';': {}, '\'': {}, '"': {}, '<': {},
+	'>': {}, ',': {}, '.': {}, '?': {}, '/': {}, ' ': {},
+}
+
+func newTmpFolderForTracker(task string) (string, error) {
+	var buf strings.Builder
+	for _, c := range task {
+		if _, ok := specialChars[c]; ok {
+			buf.WriteByte('_')
+		} else {
+			buf.WriteRune(c)
+		}
+	}
+	return ioutil.TempDir("./", buf.String()+"-tracker")
 }
 
 // Exec runs an SQL (DDL) statement.
