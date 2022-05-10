@@ -312,12 +312,12 @@ function different_field_flag_test() {
 	if [[ $locked == true ]]; then
 		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 			"query-status test" \
-			"ALTER TABLE \`${shardddl}\`.\`${tb}\` ADD COLUMN \`col1\` ${type2^^}" 1 \
+			"ALTER TABLE \`${shardddl}\`.\`${tb}\` ADD COLUMN \`col1\`" 1 \
 			"\"${SOURCE_ID2}-\`${shardddl1}\`.\`${tb1}\`\"" 1
 	else
 		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 			"query-status test" \
-			"ALTER TABLE \`${shardddl}\`.\`${tb}\` ADD COLUMN \`col1\` ${type2^^}" 2 \
+			"ALTER TABLE \`${shardddl}\`.\`${tb}\` ADD COLUMN \`col1\`" 2 \
 			"because schema conflict detected" 1
 	fi
 
