@@ -488,7 +488,7 @@ func TestNoFinishOperationBeforeSyncIsReceived(t *testing.T) {
 	require.NoError(t, err)
 
 	suite.tableExecutor.On("AddTable", mock.Anything, model.TableID(1),
-		model.Ts(0)).
+		model.Ts(1)).
 		Return(true, nil).
 		Run(
 			func(_ mock.Arguments) {
@@ -496,7 +496,7 @@ func TestNoFinishOperationBeforeSyncIsReceived(t *testing.T) {
 				suite.tableExecutor.Running[1] = struct{}{}
 			}).Once()
 	suite.tableExecutor.On("AddTable", mock.Anything, model.TableID(2),
-		model.Ts(0)).
+		model.Ts(2)).
 		Return(true, nil).
 		Run(
 			func(_ mock.Arguments) {
