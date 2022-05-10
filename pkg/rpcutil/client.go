@@ -105,7 +105,8 @@ func (c *FailoverRPCClients[T]) UpdateClients(ctx context.Context, urls []string
 	c.leader = trimURL(leaderURL)
 	// we also handle "" because "" is not in clients map
 	if _, ok := c.clients[c.leader]; !ok {
-		// note that when c.clients is empty, c.leader is ""
+		// reset leader first, note that when c.clients is empty, c.leader is ""
+		c.leader = ""
 		for k := range c.clients {
 			c.leader = k
 			break
@@ -171,12 +172,17 @@ func DoFailoverRPC[
 	clients.clientsLock.RLock()
 	defer clients.clientsLock.RUnlock()
 
+	if len(clients.clients) == 0 {
+		return resp, errors.ErrNoRPCClient.GenWithStack("rpc: %#v, request: %#v", rpc, req)
+	}
+
 	for _, cli := range clients.clients {
 		resp, err = rpc(cli.client, ctx, req)
 		if err == nil {
 			return resp, nil
 		}
 	}
+	// return the last error
 	return resp, err
 }
 

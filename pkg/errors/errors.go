@@ -33,6 +33,7 @@ var (
 	ErrInvalidMetaStoreKey   = errors.Normalize("invalid metastore key %s", errors.RFCCodeText("DFLOW:ErrInvalidMetaStoreKey"))
 	ErrInvalidMetaStoreKeyTp = errors.Normalize("invalid metastore key type %s", errors.RFCCodeText("DFLOW:ErrInvalidMetaStoreKeyTp"))
 	ErrEtcdAPIError          = errors.Normalize("etcd api returns error", errors.RFCCodeText("DFLOW:ErrEtcdAPIError"))
+	ErrNoRPCClient           = errors.Normalize("no available RPC client", errors.RFCCodeText("DFLOW:ErrNoRPCClient"))
 
 	// master related errors
 	ErrMasterConfigParseFlagSet       = errors.Normalize("parse config flag set failed", errors.RFCCodeText("DFLOW:ErrMasterConfigParseFlagSet"))

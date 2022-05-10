@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	derror "github.com/hanfei1991/microcosm/pkg/errors"
 	"github.com/pingcap/errors"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
@@ -49,13 +50,13 @@ func TestFailoverRpcClients(t *testing.T) {
 	// reset
 	testClient.cnt = 0
 	_, err = DoFailoverRPC(ctx, clients, req, (*mockRPCClient).MockFailRPC)
-	require.Error(t, err)
+	require.ErrorContains(t, err, "mock fail")
 	require.Equal(t, 2, testClient.cnt)
 
 	clients.UpdateClients(ctx, []string{"url1", "url2", "url3"}, "")
 	testClient.cnt = 0
 	_, err = DoFailoverRPC(ctx, clients, req, (*mockRPCClient).MockFailRPC)
-	require.Error(t, err)
+	require.ErrorContains(t, err, "mock fail")
 	require.Equal(t, 3, testClient.cnt)
 	require.Len(t, clients.Endpoints(), 3)
 }
@@ -84,4 +85,28 @@ func TestValidLeaderAfterUpdateClients(t *testing.T) {
 
 	clients.UpdateClients(ctx, []string{}, "")
 	require.Nil(t, clients.GetLeaderClient())
+
+	_, err = DoFailoverRPC(ctx, clients, req, (*mockRPCClient).MockRPC)
+	require.ErrorIs(t, err, derror.ErrNoRPCClient)
+}
+
+func mockDailWithAddrWithError(_ context.Context, addr string) (*mockRPCClient, CloseableConnIface, error) {
+	if addr == "cant-dial" {
+		return nil, nil, errors.New("can't dial RPC connection")
+	}
+	return &mockRPCClient{addr: addr}, &closer{}, nil
+}
+
+func TestFailToDialLeaderAfterwards(t *testing.T) {
+	ctx := context.Background()
+	clients, err := NewFailoverRPCClients(ctx, []string{"url1"}, mockDailWithAddrWithError)
+	require.NoError(t, err)
+	require.Equal(t, "url1", clients.GetLeaderClient().addr)
+
+	clients.UpdateClients(ctx, []string{"cant-dial"}, "cant-dial")
+	require.Nil(t, clients.GetLeaderClient())
+	require.Equal(t, "", clients.leader)
+	_, err = DoFailoverRPC(ctx, clients, req, (*mockRPCClient).MockRPC)
+	require.ErrorIs(t, err, derror.ErrNoRPCClient)
+	t.Log(err.Error())
 }
