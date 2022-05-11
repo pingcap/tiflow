@@ -33,7 +33,7 @@ var (
 
 func testAvro() {
 	env := avro.NewKafkaDockerEnv(*dockerComposeFile)
-	env.DockerComposeOperator.ExecEnv = []string{"CDC_TIME_ZONE=America/Los_Angeles"}
+	env.DockerComposeOperator.ExecEnv = []string{"CDC_TIME_ZONE=UTC"}
 	task := &avro.SingleTableTask{TableName: "test"}
 	testCases := []framework.Task{
 		cases.NewAlterCase(task), // this case is slow, so put it last

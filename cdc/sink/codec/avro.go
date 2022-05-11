@@ -59,6 +59,7 @@ type avroEncodeResult struct {
 // AppendRowChangedEvent appends a row change event to the encoder
 // NOTE: the encoder can only store one RowChangedEvent!
 func (a *AvroEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) error {
+	log.Debug("AppendRowChangedEvent", zap.Reflect("rowChangedEvent", e))
 	mqMessage := NewMQMessage(
 		config.ProtocolAvro,
 		nil,
@@ -173,7 +174,7 @@ func (a *AvroEventBatchEncoder) avroEncode(
 		} else if e.IsUpdate() {
 			operation = "u"
 		} else {
-			log.Panic("unknown operation", zap.Reflect("rowChangedEvent", e))
+			log.Error("unknown operation", zap.Reflect("rowChangedEvent", e))
 			return nil, cerror.ErrAvroEncodeFailed.GenWithStack("unknown operation")
 		}
 	}
@@ -446,7 +447,7 @@ func rowToAvroSchema(
 	if err != nil {
 		return "", cerror.WrapError(cerror.ErrAvroMarshalFailed, err)
 	}
-	log.Debug("Avro Schema JSON generated", zap.ByteString("schema", str))
+	log.Debug("rowToAvroSchema", zap.ByteString("schema", str))
 	return string(str), nil
 }
 
@@ -488,6 +489,7 @@ func rowToAvroData(
 		ret[tidbPhysicalTime] = oracle.ExtractPhysical(commitTs)
 	}
 
+	log.Debug("rowToAvroData", zap.Reflect("data", ret))
 	return ret, nil
 }
 
@@ -497,7 +499,6 @@ func columnToAvroSchema(
 	decimalHandlingMode string,
 	bigintUnsignedHandlingMode string,
 ) (interface{}, error) {
-	log.Debug("getAvroDataTypeFromColumn", zap.Reflect("col", col))
 	tt := getTiDBTypeFromColumn(col)
 	switch col.Type {
 	case mysql.TypeTiny, mysql.TypeShort, mysql.TypeInt24: // BOOL/TINYINT/SMALLINT/MEDIUMINT
@@ -617,7 +618,7 @@ func columnToAvroSchema(
 			Parameters: map[string]string{tidbType: tt},
 		}, nil
 	default:
-		log.Panic("unknown mysql type", zap.Reflect("mysqlType", col.Type))
+		log.Error("unknown mysql type", zap.Reflect("mysqlType", col.Type))
 		return nil, cerror.ErrAvroEncodeFailed.GenWithStack("unknown mysql type")
 	}
 }
@@ -698,7 +699,7 @@ func columnToAvroData(
 	case mysql.TypeYear:
 		return col.Value.(int64), "int", nil
 	default:
-		log.Panic("unknown mysql type", zap.Reflect("mysqlType", col.Type))
+		log.Error("unknown mysql type", zap.Reflect("mysqlType", col.Type))
 		return nil, "", cerror.ErrAvroEncodeFailed.GenWithStack("unknown mysql type")
 	}
 }
