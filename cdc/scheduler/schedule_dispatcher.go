@@ -475,7 +475,7 @@ func (s *BaseScheduleDispatcher) findDiffTables(
 			s.drainingTable = record.TableID
 			s.logger.Info("DrainCapture: remove table",
 				zap.Int64("tableID", record.TableID))
-			continue
+			break
 		}
 	}
 
