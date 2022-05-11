@@ -16,6 +16,7 @@ package syncer
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
 	"fmt"
 	"math"
 	"strconv"
@@ -23,7 +24,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/parser/model"
 	tidbmysql "github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/util/dbutil"
@@ -31,11 +34,13 @@ import (
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
+	cdcmodel "github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/dm/dm/config"
+	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
-	"github.com/pingcap/tiflow/dm/syncer/dbconn"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/pkg/sqlmodel"
 )
 
@@ -43,6 +48,7 @@ const (
 	workerChannelSize = 1000
 
 	MaxAccumulatedRowBeforeValidate = 1000 // todo: make it configurable
+	queryTimeout                    = time.Minute
 )
 
 type validateFailedType int
@@ -67,7 +73,7 @@ type validateWorker struct {
 	interval           time.Duration
 	validator          *DataValidator
 	L                  log.Logger
-	conn               *dbconn.DBConn
+	db                 *conn.BaseDB
 	rowChangeCh        chan *rowValidationJob
 	batchSize          int
 	rowErrorDelayInSec int64
@@ -87,7 +93,7 @@ func newValidateWorker(v *DataValidator, id int) *validateWorker {
 		interval:           v.validateInterval,
 		validator:          v,
 		L:                  workerLog,
-		conn:               v.toDBConns[id],
+		db:                 v.toDB,
 		rowChangeCh:        make(chan *rowValidationJob, workerChannelSize),
 		batchSize:          v.cfg.ValidatorCfg.BatchQuerySize,
 		rowErrorDelayInSec: rowErrorDelayInSec,
@@ -153,9 +159,12 @@ func (vw *validateWorker) updateRowChange(job *rowValidationJob) {
 func (vw *validateWorker) validateTableChange() {
 	var err error
 	defer func() {
-		if err != nil {
-			// todo: better error handling
+		if err != nil && !isRetryableValidateError(err) {
 			vw.validator.sendError(terror.ErrValidatorValidateChange.Delegate(err))
+		}
+		if panicErr := recover(); panicErr != nil {
+			vw.L.Error("worker panic", zap.Any("err", panicErr))
+			vw.validator.sendError(terror.ErrValidatorPanic.Generate(panicErr))
 		}
 	}()
 
@@ -278,6 +287,8 @@ func (vw *validateWorker) getErrorRows() []*validateFailedRow {
 }
 
 func (vw *validateWorker) batchValidateRowChanges(rows []*rowValidationJob, deleteChange bool) (map[string]*validateFailedRow, error) {
+	failpoint.Inject("ValidatorWorkerPanic", func() {})
+
 	pkValues := make([][]string, 0, len(rows))
 	for _, r := range rows {
 		pkValues = append(pkValues, r.row.RowStrIdentity())
@@ -297,7 +308,6 @@ func (vw *validateWorker) batchValidateRowChanges(rows []*rowValidationJob, dele
 		failedRows, err = vw.validateInsertAndUpdateRows(rows, cond)
 	}
 	if err != nil {
-		vw.L.Warn("fail to validate row changes of table", zap.Error(err))
 		return nil, err
 	}
 	return failedRows, nil
@@ -329,7 +339,14 @@ func (vw *validateWorker) validateInsertAndUpdateRows(rows []*rowValidationJob, 
 		vw.L.Debug("more data on downstream, may come from other client")
 	}
 
-	tableInfo := rows[0].row.SourceTableInfo()
+	firstRow := rows[0].row
+	tableInfo := firstRow.SourceTableInfo()
+	validateContext := &validateCompareContext{
+		logger:      vw.L,
+		sourceTable: firstRow.GetSourceTable(),
+		targetTable: firstRow.GetTargetTable(),
+		columns:     tableInfo.Columns,
+	}
 	for key, sourceRow := range sourceRows {
 		targetRow, ok := targetRows[key]
 		if !ok {
@@ -338,7 +355,7 @@ func (vw *validateWorker) validateInsertAndUpdateRows(rows []*rowValidationJob, 
 		}
 		if vw.cfg.Mode == config.ValidationFull {
 			// only compare the whole row in full mode
-			eq, err2 := vw.compareData(sourceRow, targetRow, tableInfo.Columns)
+			eq, err2 := validateContext.compareData(key, sourceRow, targetRow)
 			if err2 != nil {
 				return nil, err2
 			}
@@ -350,36 +367,10 @@ func (vw *validateWorker) validateInsertAndUpdateRows(rows []*rowValidationJob, 
 	return failedRows, nil
 }
 
-// a simplified version of https://github.com/pingcap/tidb-tools/blob/d9fdfa2f9040aab3fab7cd11774a82226f467fe7/sync_diff_inspector/utils/utils.go#L487-L606
-func (vw *validateWorker) compareData(sourceData, targetData []*sql.NullString, columns []*model.ColumnInfo) (bool, error) {
-	for i, column := range columns {
-		data1, data2 := sourceData[i], targetData[i]
-		if data1.Valid != data2.Valid {
-			return false, nil
-		}
-		str1, str2 := data1.String, data2.String
-		if str1 == str2 {
-			continue
-		} else if column.FieldType.Tp == tidbmysql.TypeFloat || column.FieldType.Tp == tidbmysql.TypeDouble {
-			// source and target data have different precision?
-			num1, err1 := strconv.ParseFloat(str1, 64)
-			num2, err2 := strconv.ParseFloat(str2, 64)
-			if err1 != nil || err2 != nil {
-				// should not happen
-				return false, errors.Errorf("convert %s, %s to float failed, err1: %v, err2: %v", str1, str2, err1, err2)
-			}
-			if math.Abs(num1-num2) <= 1e-6 {
-				continue
-			}
-		}
-		return false, nil
-	}
-
-	return true, nil
-}
-
 func (vw *validateWorker) getTargetRows(cond *Cond) (map[string][]*sql.NullString, error) {
-	tctx := tcontext.NewContext(vw.ctx, vw.L)
+	ctx, cancelFunc := context.WithTimeout(vw.ctx, queryTimeout)
+	defer cancelFunc()
+	tctx := tcontext.NewContext(ctx, vw.L)
 	columnNames := make([]string, 0, len(cond.Columns))
 	for _, col := range cond.Columns {
 		columnNames = append(columnNames, dbutil.ColumnName(col.Name.O))
@@ -387,8 +378,17 @@ func (vw *validateWorker) getTargetRows(cond *Cond) (map[string][]*sql.NullStrin
 	columns := strings.Join(columnNames, ", ")
 	rowsQuery := fmt.Sprintf("SELECT /*!40001 SQL_NO_CACHE */ %s FROM %s WHERE %s",
 		columns, cond.TargetTbl, cond.GetWhere())
-	rows, err := vw.conn.QuerySQL(tctx, rowsQuery, cond.GetArgs()...)
+	// query using sql.DB directly, BaseConn is more than what we need
+	rows, err := vw.db.QueryContext(tctx, rowsQuery, cond.GetArgs()...)
 	if err != nil {
+		if isRetryableValidateError(err) {
+			vw.L.Info("met retryable error", zap.Error(err))
+		} else {
+			vw.L.Error("failed to query",
+				zap.String("query", utils.TruncateString(rowsQuery, -1)),
+				zap.String("args", utils.TruncateInterface(cond.GetArgs(), -1)))
+			err = errors.Trace(err)
+		}
 		return nil, err
 	}
 	defer rows.Close()
@@ -431,6 +431,66 @@ func (vw *validateWorker) setPendingRowCounts(newCounts []int64) {
 		vw.pendingRowCounts[tp] = val
 		vw.validator.addPendingRowCount(rowChangeJobType(tp), diff)
 	}
+}
+
+type validateCompareContext struct {
+	logger      log.Logger
+	sourceTable *cdcmodel.TableName
+	targetTable *cdcmodel.TableName
+	columns     []*model.ColumnInfo
+}
+
+// a simplified version of https://github.com/pingcap/tidb-tools/blob/d9fdfa2f9040aab3fab7cd11774a82226f467fe7/sync_diff_inspector/utils/utils.go#L487-L606
+func (c *validateCompareContext) compareData(key string, sourceData, targetData []*sql.NullString) (bool, error) {
+	for i, column := range c.columns {
+		data1, data2 := sourceData[i], targetData[i]
+		if data1.Valid != data2.Valid {
+			return false, nil
+		}
+		str1, str2 := data1.String, data2.String
+		if str1 == str2 {
+			continue
+		} else if column.FieldType.Tp == tidbmysql.TypeFloat || column.FieldType.Tp == tidbmysql.TypeDouble {
+			// source and target data have different precision?
+			num1, err1 := strconv.ParseFloat(str1, 64)
+			num2, err2 := strconv.ParseFloat(str2, 64)
+			if err1 != nil || err2 != nil {
+				// should not happen
+				return false, errors.Errorf("convert %s, %s to float failed, err1: %v, err2: %v", str1, str2, err1, err2)
+			}
+			if math.Abs(num1-num2) <= 1e-6 {
+				continue
+			}
+		}
+		if c.logger.Core().Enabled(zap.DebugLevel) {
+			c.logger.Debug("compare failed",
+				zap.Stringer("src table", c.sourceTable),
+				zap.Stringer("dst table", c.targetTable),
+				zap.String("col", fmt.Sprintf("%s %s", column.Name, column.GetTypeDesc())),
+				zap.String("key", key),
+				zap.Reflect("src data", data1), zap.Reflect("dst data", data2))
+		}
+		return false, nil
+	}
+
+	return true, nil
+}
+
+func isRetryableValidateError(err error) bool {
+	err = errors.Cause(err)
+	return err == context.DeadlineExceeded || isRetryableDBError(err)
+}
+
+func isRetryableDBError(err error) bool {
+	err = errors.Cause(err)
+	if dbutil.IsRetryableError(err) {
+		return true
+	}
+	switch err {
+	case driver.ErrBadConn, context.DeadlineExceeded, mysql.ErrInvalidConn:
+		return true
+	}
+	return false
 }
 
 func scanRow(rows *sql.Rows) ([]*sql.NullString, error) {
