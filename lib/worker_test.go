@@ -210,7 +210,6 @@ func TestWorkerMasterFailover(t *testing.T) {
 	err = worker.messageHandlerManager.InvokeHandler(t,
 		libModel.HeartbeatPongTopic(masterName, workerID1), masterNodeName, pongMsg)
 	require.NoError(t, err)
-	masterAckedTimeAfterPing := worker.masterClient.getLastMasterAckedPingTime()
 
 	worker.clock.(*clock.Mock).Add(time.Second * 1)
 	putMasterMeta(ctx, t, worker.metaClient, &libModel.MasterMetaKVData{
@@ -227,9 +226,6 @@ func TestWorkerMasterFailover(t *testing.T) {
 	require.Eventually(t, func() bool {
 		return worker.failoverCount.Load() == 1
 	}, time.Second*3, time.Millisecond*10)
-
-	masterAckedTimeAfterFailover := worker.masterClient.getLastMasterAckedPingTime()
-	require.Greater(t, masterAckedTimeAfterFailover, masterAckedTimeAfterPing)
 }
 
 func TestWorkerStatus(t *testing.T) {

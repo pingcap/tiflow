@@ -113,9 +113,11 @@ func TestWriterSendRetry(t *testing.T) {
 	st, err = suite.cli.GetWorkerByID(ctx, st.JobID, st.ID)
 	require.NoError(t, err)
 
+	require.Equal(t, 0, suite.masterInfo.RefreshCount())
 	suite.messageSender.InjectError(derror.ErrExecutorNotFoundForMessage.GenWithStackByArgs())
 	err = suite.writer.UpdateStatus(ctx, st)
 	require.NoError(t, err)
+	require.Equal(t, 1, suite.masterInfo.RefreshCount())
 
 	rawMsg, ok := suite.messageSender.TryPop("executor-1", WorkerStatusTopic("master-1"))
 	require.True(t, ok)
