@@ -35,10 +35,13 @@ type cdcReactorState struct {
 }
 
 var (
-	captureRegex    = regexp.MustCompile(regexp.QuoteMeta(etcd.CaptureInfoKeyPrefix) + "/(.+)")
-	changefeedRegex = regexp.MustCompile(regexp.QuoteMeta(etcd.JobKeyPrefix) + "/(.+)")
-	positionRegex   = regexp.MustCompile(regexp.QuoteMeta(etcd.TaskPositionKeyPrefix) + "/(.+?)/(.+)")
-	statusRegex     = regexp.MustCompile(regexp.QuoteMeta(etcd.TaskStatusKeyPrefix) + "/(.+?)/(.+)")
+	captureRegex    = regexp.MustCompile(regexp.QuoteMeta(etcd.CaptureInfoKeyPrefix()) + "/(.+)")
+	changefeedRegex = regexp.MustCompile(regexp.
+			QuoteMeta(etcd.JobKeyPrefix(model.DefaultNamespace)) + "/(.+)")
+	positionRegex = regexp.MustCompile(regexp.
+			QuoteMeta(etcd.TaskPositionKeyPrefix(model.DefaultNamespace)) + "/(.+?)/(.+)")
+	statusRegex = regexp.MustCompile(regexp.
+			QuoteMeta(etcd.TaskStatusKeyPrefix(model.DefaultNamespace)) + "/(.+?)/(.+)")
 )
 
 func newCDCReactorState() *cdcReactorState {
@@ -51,7 +54,7 @@ func newCDCReactorState() *cdcReactorState {
 }
 
 func (s *cdcReactorState) Update(key util.EtcdKey, value []byte, isInit bool) error {
-	if key.String() == etcd.CaptureOwnerKey {
+	if key.String() == etcd.CaptureOwnerKey() {
 		if value == nil {
 			log.Info("Owner lost", zap.String("oldOwner", s.Owner))
 			return nil

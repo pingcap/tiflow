@@ -136,7 +136,7 @@ func newAgent(
 	etcdCliCtx, cancel := stdContext.WithTimeout(ctx, getOwnerFromEtcdTimeout)
 	defer cancel()
 	ownerCaptureID, err := ctx.GlobalVars().EtcdClient.
-		GetOwnerID(etcdCliCtx, etcd.CaptureOwnerKey)
+		GetOwnerID(etcdCliCtx, etcd.CaptureOwnerKey())
 	if err != nil {
 		if err != concurrency.ErrElectionNoLeader {
 			return nil, errors.Trace(err)

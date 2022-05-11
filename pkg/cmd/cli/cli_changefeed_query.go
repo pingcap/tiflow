@@ -114,7 +114,8 @@ func (o *queryChangefeedOptions) run(cmd *cobra.Command) error {
 		return err
 	}
 
-	taskPositions, err := o.etcdClient.GetAllTaskPositions(ctx, o.changefeedID)
+	taskPositions, err := o.etcdClient.GetAllTaskPositions(ctx,
+		model.DefaultChangeFeedID(o.changefeedID))
 	if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
 		return err
 	}
@@ -124,7 +125,8 @@ func (o *queryChangefeedOptions) run(cmd *cobra.Command) error {
 		count += pinfo.Count
 	}
 
-	processorInfos, err := o.etcdClient.GetAllTaskStatus(ctx, o.changefeedID)
+	processorInfos, err := o.etcdClient.GetAllTaskStatus(ctx,
+		model.DefaultChangeFeedID(o.changefeedID))
 	if err != nil {
 		return err
 	}

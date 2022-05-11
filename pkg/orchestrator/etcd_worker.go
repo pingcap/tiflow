@@ -41,7 +41,6 @@ const (
 	// When EtcdWorker commits a txn to etcd or ticks its reactor
 	// takes more than etcdWorkerLogsWarnDuration, it will print a log
 	etcdWorkerLogsWarnDuration = 1 * time.Second
-	deletionCounterKey         = "/meta/ticdc-delete-etcd-key-count"
 )
 
 // EtcdWorker handles all interactions with Etcd
@@ -388,12 +387,12 @@ func (worker *EtcdWorker) commitChangedState(ctx context.Context, changedState m
 	}
 
 	if hasDelete {
-		opsThen = append(opsThen, clientv3.OpPut(worker.prefix.String()+deletionCounterKey, fmt.Sprint(worker.deleteCounter+1)))
+		opsThen = append(opsThen, clientv3.OpPut(worker.prefix.String()+etcd.DeletionCounterKey, fmt.Sprint(worker.deleteCounter+1)))
 	}
 	if worker.deleteCounter > 0 {
-		cmps = append(cmps, clientv3.Compare(clientv3.Value(worker.prefix.String()+deletionCounterKey), "=", fmt.Sprint(worker.deleteCounter)))
+		cmps = append(cmps, clientv3.Compare(clientv3.Value(worker.prefix.String()+etcd.DeletionCounterKey), "=", fmt.Sprint(worker.deleteCounter)))
 	} else if worker.deleteCounter == 0 {
-		cmps = append(cmps, clientv3.Compare(clientv3.CreateRevision(worker.prefix.String()+deletionCounterKey), "=", 0))
+		cmps = append(cmps, clientv3.Compare(clientv3.CreateRevision(worker.prefix.String()+etcd.DeletionCounterKey), "=", 0))
 	} else {
 		panic("unreachable")
 	}
@@ -479,7 +478,7 @@ func (worker *EtcdWorker) cleanUp() {
 }
 
 func (worker *EtcdWorker) isDeleteCounterKey(key []byte) bool {
-	return string(key) == worker.prefix.String()+deletionCounterKey
+	return string(key) == worker.prefix.String()+etcd.DeletionCounterKey
 }
 
 func (worker *EtcdWorker) handleDeleteCounter(value []byte) {

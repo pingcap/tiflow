@@ -89,9 +89,7 @@ func (s *GlobalReactorState) Update(key util.EtcdKey, value []byte, _ bool) erro
 		s.Captures[k.CaptureID] = &newCaptureInfo
 	case etcd.CDCKeyTypeChangefeedInfo,
 		etcd.CDCKeyTypeChangeFeedStatus,
-		etcd.CDCKeyTypeTaskPosition,
-		etcd.CDCKeyTypeTaskStatus,
-		etcd.CDCKeyTypeTaskWorkload:
+		etcd.CDCKeyTypeTaskPosition:
 		changefeedState, exist := s.Changefeeds[k.ChangefeedID]
 		if !exist {
 			if value == nil {
@@ -141,11 +139,6 @@ type ChangefeedReactorState struct {
 	Status        *model.ChangeFeedStatus
 	TaskPositions map[model.CaptureID]*model.TaskPosition
 
-	// Deprecated: No longer used, kept for compatibility.
-	TaskStatuses map[model.CaptureID]*model.TaskStatus
-	// Deprecated: No longer used, kept for compatibility.
-	Workloads map[model.CaptureID]model.TaskWorkload
-
 	pendingPatches        []DataPatch
 	skipPatchesInThisTick bool
 }
@@ -155,8 +148,6 @@ func NewChangefeedReactorState(id model.ChangeFeedID) *ChangefeedReactorState {
 	return &ChangefeedReactorState{
 		ID:            id,
 		TaskPositions: make(map[model.CaptureID]*model.TaskPosition),
-		TaskStatuses:  make(map[model.CaptureID]*model.TaskStatus),
-		Workloads:     make(map[model.CaptureID]model.TaskWorkload),
 	}
 }
 
@@ -208,28 +199,6 @@ func (s *ChangefeedReactorState) UpdateCDCKey(key *etcd.CDCKey, value []byte) er
 		position := new(model.TaskPosition)
 		s.TaskPositions[key.CaptureID] = position
 		e = position
-	case etcd.CDCKeyTypeTaskStatus:
-		if key.ChangefeedID != s.ID {
-			return nil
-		}
-		if value == nil {
-			delete(s.TaskStatuses, key.CaptureID)
-			return nil
-		}
-		status := new(model.TaskStatus)
-		s.TaskStatuses[key.CaptureID] = status
-		e = status
-	case etcd.CDCKeyTypeTaskWorkload:
-		if key.ChangefeedID != s.ID {
-			return nil
-		}
-		if value == nil {
-			delete(s.Workloads, key.CaptureID)
-			return nil
-		}
-		workload := make(model.TaskWorkload)
-		s.Workloads[key.CaptureID] = workload
-		e = &workload
 	default:
 		return nil
 	}
@@ -246,7 +215,7 @@ func (s *ChangefeedReactorState) UpdateCDCKey(key *etcd.CDCKey, value []byte) er
 
 // Exist returns false if all keys of this changefeed in ETCD is not exist
 func (s *ChangefeedReactorState) Exist() bool {
-	return s.Info != nil || s.Status != nil || len(s.TaskPositions) != 0 || len(s.TaskStatuses) != 0 || len(s.Workloads) != 0
+	return s.Info != nil || s.Status != nil || len(s.TaskPositions) != 0
 }
 
 // Active return true if the changefeed is ready to be processed

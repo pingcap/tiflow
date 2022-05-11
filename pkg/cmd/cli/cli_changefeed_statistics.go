@@ -120,7 +120,8 @@ func (o *statisticsChangefeedOptions) runCliWithEtcdClient(ctx context.Context, 
 		return err
 	}
 
-	taskPositions, err := o.etcdClient.GetAllTaskPositions(ctx, o.changefeedID)
+	taskPositions, err := o.etcdClient.GetAllTaskPositions(ctx,
+		model.DefaultChangeFeedID(o.changefeedID))
 	if err != nil {
 		return err
 	}

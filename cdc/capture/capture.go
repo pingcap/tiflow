@@ -140,7 +140,7 @@ func (c *Capture) reset(ctx context.Context) error {
 		_ = c.session.Close()
 	}
 	c.session = sess
-	c.election = concurrency.NewElection(sess, etcd.CaptureOwnerKey)
+	c.election = concurrency.NewElection(sess, etcd.CaptureOwnerKey())
 
 	if c.tableActorSystem != nil {
 		c.tableActorSystem.Stop()
@@ -411,7 +411,7 @@ func (c *Capture) runEtcdWorker(
 	timerInterval time.Duration,
 	role string,
 ) error {
-	etcdWorker, err := orchestrator.NewEtcdWorker(ctx.GlobalVars().EtcdClient.Client, etcd.EtcdKeyBase, reactor, reactorState)
+	etcdWorker, err := orchestrator.NewEtcdWorker(ctx.GlobalVars().EtcdClient.Client, etcd.EtcdKeyBase(), reactor, reactorState)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -569,7 +569,7 @@ func (c *Capture) GetOwnerCaptureInfo(ctx context.Context) (*model.CaptureInfo, 
 		return nil, err
 	}
 
-	ownerID, err := c.EtcdClient.GetOwnerID(ctx, etcd.CaptureOwnerKey)
+	ownerID, err := c.EtcdClient.GetOwnerID(ctx, etcd.CaptureOwnerKey())
 	if err != nil {
 		return nil, err
 	}

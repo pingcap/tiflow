@@ -369,7 +369,7 @@ func TestGetOwnerRevision(t *testing.T) {
 			sess, err := concurrency.NewSession(s.client.Client.Unwrap(),
 				concurrency.WithTTL(10 /* seconds */))
 			require.Nil(t, err)
-			election := concurrency.NewElection(sess, CaptureOwnerKey)
+			election := concurrency.NewElection(sess, CaptureOwnerKey())
 
 			mockCaptureID := fmt.Sprintf("capture-%d", i)
 
