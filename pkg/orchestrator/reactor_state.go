@@ -140,8 +140,11 @@ type ChangefeedReactorState struct {
 	Info          *model.ChangeFeedInfo
 	Status        *model.ChangeFeedStatus
 	TaskPositions map[model.CaptureID]*model.TaskPosition
-	TaskStatuses  map[model.CaptureID]*model.TaskStatus
-	Workloads     map[model.CaptureID]model.TaskWorkload
+
+	// Deprecated: No longer used, kept for compatibility.
+	TaskStatuses map[model.CaptureID]*model.TaskStatus
+	// Deprecated: No longer used, kept for compatibility.
+	Workloads map[model.CaptureID]model.TaskWorkload
 
 	pendingPatches        []DataPatch
 	skipPatchesInThisTick bool
@@ -248,7 +251,7 @@ func (s *ChangefeedReactorState) Exist() bool {
 
 // Active return true if the changefeed is ready to be processed
 func (s *ChangefeedReactorState) Active(captureID model.CaptureID) bool {
-	return s.Info != nil && s.Status != nil && s.TaskStatuses[captureID] != nil
+	return s.Info != nil && s.Status != nil && s.Status.AdminJobType == model.AdminNone
 }
 
 // GetPatches implements the ReactorState interface
@@ -355,42 +358,8 @@ func (s *ChangefeedReactorState) PatchTaskPosition(captureID model.CaptureID, fn
 	})
 }
 
-// PatchTaskStatus appends a DataPatch which can modify the TaskStatus of a specified capture
-func (s *ChangefeedReactorState) PatchTaskStatus(captureID model.CaptureID, fn func(*model.TaskStatus) (*model.TaskStatus, bool, error)) {
-	key := &etcd.CDCKey{
-		Tp:           etcd.CDCKeyTypeTaskStatus,
-		CaptureID:    captureID,
-		ChangefeedID: s.ID,
-	}
-	s.patchAny(key.String(), taskStatusTPI, func(e interface{}) (interface{}, bool, error) {
-		// e == nil means that the key is not exist before this patch
-		if e == nil {
-			return fn(nil)
-		}
-		return fn(e.(*model.TaskStatus))
-	})
-}
-
-// PatchTaskWorkload appends a DataPatch which can modify the TaskWorkload of a specified capture
-func (s *ChangefeedReactorState) PatchTaskWorkload(captureID model.CaptureID, fn func(model.TaskWorkload) (model.TaskWorkload, bool, error)) {
-	key := &etcd.CDCKey{
-		Tp:           etcd.CDCKeyTypeTaskWorkload,
-		CaptureID:    captureID,
-		ChangefeedID: s.ID,
-	}
-	s.patchAny(key.String(), taskWorkloadTPI, func(e interface{}) (interface{}, bool, error) {
-		// e == nil means that the key is not exist before this patch
-		if e == nil {
-			return fn(nil)
-		}
-		return fn(*e.(*model.TaskWorkload))
-	})
-}
-
 var (
 	taskPositionTPI     *model.TaskPosition
-	taskStatusTPI       *model.TaskStatus
-	taskWorkloadTPI     *model.TaskWorkload
 	changefeedStatusTPI *model.ChangeFeedStatus
 	changefeedInfoTPI   *model.ChangeFeedInfo
 )
