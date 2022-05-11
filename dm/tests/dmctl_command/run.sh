@@ -179,7 +179,7 @@ function checktask_incr_mode_conn() {
 	run_sql "set @@GLOBAL.max_connections=41;" $TIDB_PORT $TIDB_PASSWORD
 	check_task_not_pass $cur/conf/dm-task3.yaml # not enough connections for syncer
 	run_sql "set @@GLOBAL.max_connections=42;" $TIDB_PORT $TIDB_PASSWORD
-	check_task_not_pass $cur/conf/dm-task3.yaml # pass
+	check_task_pass $cur/conf/dm-task3.yaml # pass
 
 	# set to default
 	run_sql "set @@GLOBAL.max_connections=151;" $TIDB_PORT $TIDB_PASSWORD
