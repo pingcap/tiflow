@@ -70,6 +70,10 @@ function setup_mysql_tls() {
 
 	cp $cur/conf/source1.yaml $WORK_DIR/source1.yaml
 	sed -i "s%dir-placeholer%$mysql_data_path%g" $WORK_DIR/source1.yaml
+
+	# add a tls source with only ca
+	cp $cur/conf/source-only-ca.yaml $WORK_DIR/source-only-ca.yaml
+	sed -i "s%dir-placeholer%$mysql_data_path%g" $WORK_DIR/source-only-ca.yaml
 	echo "add dm_tls_test user done $mysql_data_path"
 }
 
@@ -308,7 +312,7 @@ function test_worker_ha_when_enable_source_tls() {
 	echo "============================== test_worker_ha_when_enable_source_tls success =================================="
 }
 
-function test_master_ha_when_enable_tidb_tls() {
+function test_master_ha_when_enable_tidb_tls_whit_only_ca_source() {
 	prepare_test
 
 	cp $cur/conf/dm-master1.toml $WORK_DIR/
@@ -335,7 +339,7 @@ function test_master_ha_when_enable_tidb_tls() {
 
 	# operate mysql config to worker
 	run_dm_ctl_with_tls_and_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" $cur/conf/ca.pem $cur/conf/dm.pem $cur/conf/dm.key \
-		"operate-source create $WORK_DIR/source1.yaml" \
+		"operate-source create $WORK_DIR/source-only-ca.yaml" \
 		"\"result\": true" 2 \
 		"\"source\": \"$SOURCE_ID1\"" 1
 
@@ -381,10 +385,11 @@ function test_master_ha_when_enable_tidb_tls() {
 }
 
 function run() {
+	test_master_ha_when_enable_tidb_tls_whit_only_ca_source
+
 	test_worker_handle_multi_tls_tasks
 	test_worker_download_certs_from_master
 	test_worker_ha_when_enable_source_tls
-	test_master_ha_when_enable_tidb_tls
 }
 
 cleanup_data tls
