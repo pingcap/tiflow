@@ -40,6 +40,7 @@ import (
 	"github.com/pingcap/tidb/util/filter"
 	regexprrouter "github.com/pingcap/tidb/util/regexpr-router"
 	router "github.com/pingcap/tidb/util/table-router"
+	"github.com/pingcap/tiflow/dm/pkg/gtid"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
@@ -1853,6 +1854,28 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		return nil
 	}
 
+	advanceLatestLocationGtidSet := func(e *replication.BinlogEvent) error {
+		var err2 error
+		if _, ok := e.Event.(*replication.MariadbGTIDEvent); ok {
+			gtidSet, err2 := gtid.ParserGTID(s.cfg.Flavor, currentGTID)
+			if err2 != nil {
+				return err2
+			}
+			if lastLocation.GetGTID().Contain(gtidSet) {
+				return nil
+			}
+		}
+
+		// clone lastLocation's gtid set to avoid its gtid is transport to table checkpoint
+		// currently table checkpoint will save last location's gtid set with shallow copy
+		lastLocation = lastLocation.Clone()
+		err2 = lastLocation.Update(currentGTID)
+		if err2 != nil {
+			return terror.Annotatef(err2, "fail to update GTID %s", currentGTID)
+		}
+		return nil
+	}
+
 	// eventIndex is the rows event index in this transaction, it's used to avoiding read duplicate event in gtid mode
 	eventIndex := 0
 	// affectedSourceTables is used for gtid mode to update table point's gtid set after receiving a xid event,
@@ -2236,10 +2259,6 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 
 			s.tctx.L().Debug("", zap.String("event", "XID"), zap.Stringer("last location", lastLocation), log.WrapStringerField("location", currentLocation))
 			lastLocation.Position.Pos = e.Header.LogPos // update lastPos
-			err = lastLocation.SetGTID(ev.GSet)
-			if err != nil {
-				return terror.Annotatef(err, "fail to record GTID %v", ev.GSet)
-			}
 			for schemaName, tableMap := range affectedSourceTables {
 				for table := range tableMap {
 					s.saveTablePoint(&filter.Table{Schema: schemaName, Name: table}, currentLocation)
@@ -2261,6 +2280,13 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			currentGTID, err2 = event.GetGTIDStr(e)
 			if err2 != nil {
 				return err2
+			}
+			if s.cfg.EnableGTID {
+				// TODO: add mariaDB integration test
+				err2 = advanceLatestLocationGtidSet(e)
+				if err2 != nil {
+					return err2
+				}
 			}
 		}
 		if err2 != nil {
@@ -2644,6 +2670,10 @@ func generateExtendColumn(data [][]interface{}, r *regexprrouter.RouteTable, tab
 
 func (s *Syncer) handleQueryEvent(ev *replication.QueryEvent, ec eventContext, originSQL string) (err error) {
 	if originSQL == "BEGIN" {
+		failpoint.Inject("NotUpdateLatestGTID", func(_ failpoint.Value) {
+			// directly return nil without update latest GTID here
+			failpoint.Return(nil)
+		})
 		// GTID event: GTID_NEXT = xxx:11
 		// Query event: BEGIN (GTID set = xxx:1-11)
 		// Rows event: ... (GTID set = xxx:1-11)  if we update lastLocation below,
