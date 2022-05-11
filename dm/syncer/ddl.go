@@ -282,7 +282,7 @@ func adjustColumnsCollation(tctx *tcontext.Context, createStmt *ast.CreateTableS
 		}
 		fieldType := col.Tp
 		// already have 'Collation'
-		if fieldType.Collate != "" {
+		if fieldType.GetCollate() != "" {
 			continue
 		}
 		if fieldType.Charset != "" {

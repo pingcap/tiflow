@@ -77,7 +77,7 @@ func setFlag(ft *types.FieldType, flag uint) *types.FieldType {
 }
 
 func setElems(ft *types.FieldType, elems []string) *types.FieldType {
-	ft.Elems = elems
+	ft.GetElems() = elems
 	return ft
 }
 

@@ -466,13 +466,13 @@ func columnToAvroNativeData(col *model.Column, ft *types.FieldType, tz *time.Loc
 	case mysql.TypeNewDecimal:
 		return col.Value.(string), "string", nil
 	case mysql.TypeEnum:
-		enumVar, err := types.ParseEnumValue(ft.Elems, col.Value.(uint64))
+		enumVar, err := types.ParseEnumValue(ft.GetElems(), col.Value.(uint64))
 		if err != nil {
 			return nil, "", cerror.WrapError(cerror.ErrAvroEncodeFailed, err)
 		}
 		return enumVar.Name, "string", nil
 	case mysql.TypeSet:
-		setVar, err := types.ParseSetValue(ft.Elems, col.Value.(uint64))
+		setVar, err := types.ParseSetValue(ft.GetElems(), col.Value.(uint64))
 		if err != nil {
 			return nil, "", cerror.WrapError(cerror.ErrAvroEncodeFailed, err)
 		}

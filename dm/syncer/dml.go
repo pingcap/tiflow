@@ -277,7 +277,7 @@ func castUnsigned(data interface{}, ft *types.FieldType) interface{} {
 	case int16:
 		return uint16(v)
 	case int32:
-		if ft.Tp == mysql.TypeInt24 {
+		if ft.GetType() == mysql.TypeInt24 {
 			// we use int32 to store MEDIUMINT, if the value is signed, it's fine
 			// but if the value is un-signed, simply convert it use `uint32` may out of the range
 			// like -4692783 converted to 4290274513 (2^32 - 4692783), but we expect 12084433 (2^24 - 4692783)

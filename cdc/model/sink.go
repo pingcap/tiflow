@@ -445,7 +445,7 @@ type ColumnInfo struct {
 
 // FromTiColumnInfo populates cdc's ColumnInfo from TiDB's model.ColumnInfo
 func (c *ColumnInfo) FromTiColumnInfo(tiColumnInfo *model.ColumnInfo) {
-	c.Type = tiColumnInfo.Tp
+	c.Type = tiColumnInfo.GetType()
 	c.Name = tiColumnInfo.Name.O
 }
 
