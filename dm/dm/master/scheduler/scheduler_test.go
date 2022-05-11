@@ -2022,19 +2022,12 @@ func (t *testSchedulerSuite) TestOperateValidatorTask() {
 	require.NoError(t.T(), s.OperateValidationTask(pb.Stage_Stopped, stCfgs))        // stop stopped validator task with no error
 	t.validatorStageMatch(s, subtaskCfg.Name, subtaskCfg.SourceID, pb.Stage_Stopped) // stage not changed
 
-	// CASE 3: start subtask with fast mode
+	// CASE 3: start subtask again, will turn into resuming
 	subtaskCfg.ValidatorCfg.Mode = config.ValidationFast
 	stCfgs[subtaskCfg.Name][subtaskCfg.SourceID] = subtaskCfg                            // set new mode
 	require.NoError(t.T(), s.OperateValidationTask(pb.Stage_Running, stCfgs))            // create validator task
-	t.validatorModeMatch(s, subtaskCfg.Name, subtaskCfg.SourceID, config.ValidationFast) // succeed to change mode
-	t.validatorStageMatch(s, subtaskCfg.Name, subtaskCfg.SourceID, pb.Stage_Running)     // task running
-
-	// CASE 4: set the mode of a running task, not succeed
-	subtaskCfg.ValidatorCfg.Mode = config.ValidationFull
-	stCfgs[subtaskCfg.Name][subtaskCfg.SourceID] = subtaskCfg                            // set new mode
-	require.NoError(t.T(), s.OperateValidationTask(pb.Stage_Running, stCfgs))            // create validator task
-	t.validatorModeMatch(s, subtaskCfg.Name, subtaskCfg.SourceID, config.ValidationFast) // fail to change mode, remain fast
-	t.validatorStageMatch(s, subtaskCfg.Name, subtaskCfg.SourceID, pb.Stage_Running)     // task running with no error
+	t.validatorModeMatch(s, subtaskCfg.Name, subtaskCfg.SourceID, config.ValidationFull) // cannot change mode
+	t.validatorStageMatch(s, subtaskCfg.Name, subtaskCfg.SourceID, pb.Stage_Running)     // task resumed
 }
 
 func (t *testSchedulerSuite) TestUpdateSubTasksAndSourceCfg() {
