@@ -92,8 +92,13 @@ func NewSyncerConnAmountCheker(targetDB *conn.BaseDB, stCfgs []*config.SubTaskCo
 		connAmountChecker: newConnAmountChecker(targetDB, stCfgs, func(stCfgs []*config.SubTaskConfig) int {
 			syncerConn := 0
 			for _, stCfg := range stCfgs {
-				// syncer's worker, checkpoint, and DDL (always keeps one db connection)
-				syncerConn += stCfg.SyncerConfig.WorkerCount + 2
+				// 1. worker count
+				// 2. checkpoint
+				// 3. ddl connection
+				// 4. downstream tracker
+				// 5. shard group keeper
+				// 6. online ddl
+				syncerConn += stCfg.SyncerConfig.WorkerCount + 5
 			}
 			return syncerConn
 		}, "syncer"),

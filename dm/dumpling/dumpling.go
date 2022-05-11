@@ -120,12 +120,18 @@ func (m *Dumpling) Process(ctx context.Context, pr chan pb.ProcessResult) {
 
 	newCtx, cancel := context.WithCancel(ctx)
 	var dumpling *export.Dumper
-
+	failpoint.Inject("longDumpProcess", func() {
+		m.dumpConfig.Rows = 0
+	})
 	if dumpling, err = export.NewDumper(newCtx, m.dumpConfig); err == nil {
 		m.mu.Lock()
 		m.core = dumpling
 		m.mu.Unlock()
 		err = dumpling.Dump()
+		failpoint.Inject("longDumpProcess", func() {
+			m.logger.Info("long dump unit")
+			time.Sleep(10 * time.Second)
+		})
 		dumpling.Close()
 	}
 	cancel()

@@ -40,6 +40,7 @@ mydumpers:
 loaders:
   global:
     pool-size: 16
+    import-mode: "loader"
     dir: "./dumped_data"
 
 syncers:

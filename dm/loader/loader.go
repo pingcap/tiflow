@@ -609,7 +609,10 @@ func (l *Loader) Process(ctx context.Context, pr chan pb.ProcessResult) {
 			errs = append(errs, err)
 		}
 	}()
-
+	failpoint.Inject("longLoadProcess", func() {
+		l.logger.Info("long loader unit")
+		time.Sleep(5 * time.Second)
+	})
 	err = l.Restore(newCtx)
 	close(l.runFatalChan) // Restore returned, all potential fatal sent to l.runFatalChan
 	cancel()              // cancel the goroutines created in `Restore`.
