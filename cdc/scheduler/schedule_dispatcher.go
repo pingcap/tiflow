@@ -104,8 +104,8 @@ type BaseScheduleDispatcher struct {
 	needRebalance        bool
 
 	// at most one capture can be drained at any time.
-	drainTarget model.CaptureID
-	drainTick   int
+	drainTarget   model.CaptureID
+	drainingTable model.TableID
 
 	// read only fields
 	changeFeedID model.ChangeFeedID
@@ -441,35 +441,43 @@ func (s *BaseScheduleDispatcher) findDiffTables(
 		}
 	}
 
-	drainRemoved := 0
 	// Find tables that need to be removed.
-	for tableID, record := range s.tables.GetAllTables() {
+	for tableID, _ := range s.tables.GetAllTables() {
 		if _, ok := shouldReplicateTables[tableID]; !ok {
 			// table is not found in `shouldReplicateTables`.
 			toRemove = append(toRemove, tableID)
 		}
+	}
 
-		if s.drainTarget != captureIDNotDraining {
-			addingCount := s.tables.CountTableByStatus(util.AddingTable)
-			if addingCount == 0 {
-				if s.drainTick < drainCaptureRelaxTicks {
-					s.drainTick++
-					s.logger.Info("DrainCapture: relax a few ticks", zap.Int("drainTick", s.drainTick))
-					continue
-				}
-				if drainRemoved < drainCaptureTableBatchSize {
-					// the table is at the drainTarget, also remove it.
-					if record.CaptureID == s.drainTarget && record.Status == util.RunningTable {
-						toRemove = append(toRemove, tableID)
-						drainRemoved += 1
-						s.drainTick = 0
-						s.logger.Info("DrainCapture: remove table",
-							zap.Int64("tableID", tableID))
-					}
-				}
-			}
+	if s.drainTarget == captureIDNotDraining {
+		return
+	}
+
+	if s.drainingTable != 0 {
+		record, ok := s.tables.GetTableRecord(s.drainingTable)
+		if !ok {
+			s.logger.Warn("DrainCapture: draining table not found",
+				zap.Int64("tableID", s.drainingTable))
+			return
+		}
+		if record.Status == util.AddingTable || record.Status == util.RemovingTable {
+			return
+		}
+		s.logger.Info("DrainCapture: move table finished",
+			zap.Int64("tableID", record.TableID))
+		s.drainingTable = 0
+		return
+	}
+
+	for _, record := range s.tables.GetAllTablesGroupedByCaptures()[s.drainTarget] {
+		if record.Status == util.RunningTable {
+			toRemove = append(toRemove, record.TableID)
+			s.drainingTable = record.TableID
+			s.logger.Info("DrainCapture: remove table",
+				zap.Int64("tableID", record.TableID))
 		}
 	}
+
 	return
 }
 
