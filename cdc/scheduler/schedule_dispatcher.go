@@ -30,6 +30,8 @@ const (
 	// CheckpointCannotProceed is a placeholder indicating that the
 	// Owner should not advance the global checkpoint TS just yet.
 	CheckpointCannotProceed = model.Ts(0)
+
+	drainCaptureTableBatchSize = 1
 )
 
 // ScheduleDispatcher is an interface for a table scheduler used in Owner.
@@ -443,15 +445,23 @@ func (s *BaseScheduleDispatcher) findDiffTables(
 		}
 	}
 
+	drainRemoved := 0
 	// Find tables that need to be removed.
 	for tableID, record := range s.tables.GetAllTables() {
 		if _, ok := shouldReplicateTables[tableID]; !ok {
 			// table is not found in `shouldReplicateTables`.
 			toRemove = append(toRemove, tableID)
 		}
-		// the table is at the drainTarget, also remove it.
-		if record.CaptureID == s.drainTarget && record.Status == util.RunningTable {
-			toRemove = append(toRemove, tableID)
+
+		if drainRemoved < drainCaptureTableBatchSize {
+			// the table is at the drainTarget, also remove it.
+			if record.CaptureID == s.drainTarget && record.Status == util.RunningTable {
+				toRemove = append(toRemove, tableID)
+				drainRemoved += 1
+
+				s.logger.Info("DrainCapture: remove table",
+					zap.Int64("tableID", tableID))
+			}
 		}
 	}
 	return
