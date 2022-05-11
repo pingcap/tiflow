@@ -37,9 +37,9 @@ var (
 const kafkaTopicNameMaxLength = 249
 
 // Expression represent a kafka topic expression.
-// Only two types of expression are allowed:
-//   1. [prefix]{schema}[suffix], the prefix/suffix is optional and matches [A-Za-z0-9\._\-]*
-//   2. {schema}_{table}
+// The expression should be in form of: [prefix]{schema}[middle][{table}][suffix]
+// prefix/suffix/middle are optional and should match the regex of [A-Za-z0-9\._\-]*
+// {table} can also be optional.
 type Expression string
 
 // Validate checks whether a kafka topic name is valid or not.
