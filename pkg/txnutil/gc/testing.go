@@ -36,3 +36,5 @@ func (m *MockPDClient) UpdateServiceGCSafePoint(ctx context.Context, serviceID s
 func (m *MockPDClient) GetTS(ctx context.Context) (int64, int64, error) {
 	return oracle.GetPhysical(time.Now()), 0, nil
 }
+
+func (m *MockPDClient) Close() {}

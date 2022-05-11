@@ -16,7 +16,6 @@ package owner
 import (
 	"context"
 	"io"
-	"math"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -151,6 +150,9 @@ func (o *ownerImpl) Tick(stdCtx context.Context, rawState orchestrator.ReactorSt
 		o.bootstrapped = true
 		return state, nil
 	}
+	if err := o.upstreamManager.Tick(stdCtx); err != nil {
+		return state, errors.Trace(err)
+	}
 
 	o.captures = state.Captures
 	o.updateMetrics(state)
@@ -189,7 +191,7 @@ func (o *ownerImpl) Tick(stdCtx context.Context, rawState orchestrator.ReactorSt
 		})
 		cfReactor, exist := o.changefeeds[changefeedID]
 		if !exist {
-			upStream := o.upstreamManager.Get(changefeedState.Info.ClusterID)
+			upStream := o.upstreamManager.Get(changefeedState.Info.UpstreamID)
 			cfReactor = o.newChangefeed(changefeedID, upStream)
 			o.changefeeds[changefeedID] = cfReactor
 		}
@@ -577,10 +579,35 @@ func (o *ownerImpl) pushOwnerJob(job *ownerJob) {
 func (o *ownerImpl) updateGCSafepoint(
 	ctx context.Context, state *orchestrator.GlobalReactorState,
 ) error {
-	forceUpdate := false
-	minCheckpointTs := uint64(math.MaxUint64)
-	// 0 is default cluster id
-	minChangfeedClusterID := uint64(0)
+	minChekpoinTsMap, forceUpdateMap := o.calculateGCSagepoint(state)
+	for upstreamID, minCheckpointTs := range minChekpoinTsMap {
+		upStream := o.upstreamManager.Get(upstreamID)
+
+		// When the changefeed starts up, CDC will do a snapshot read at
+		// (checkpointTs - 1) from TiKV, so (checkpointTs - 1) should be an upper
+		// bound for the GC safepoint.
+		gcSafepointUpperBound := minCheckpointTs - 1
+
+		var forceUpdate bool
+		if _, exist := forceUpdateMap[upstreamID]; exist {
+			forceUpdate = true
+		}
+
+		err := upStream.GCManager.TryUpdateGCSafePoint(ctx, gcSafepointUpperBound, forceUpdate)
+		if err != nil {
+			return errors.Trace(err)
+		}
+	}
+	return nil
+}
+
+// calculateGCSagepoint calculates GCSafepoint for different upstream.
+func (o *ownerImpl) calculateGCSagepoint(state *orchestrator.GlobalReactorState) (
+	map[uint64]uint64, map[uint64]interface{},
+) {
+	minCheckpointTsMap := make(map[uint64]uint64)
+	forceUpdateMap := make(map[uint64]interface{})
+
 	for changefeedID, changefeedState := range state.Changefeeds {
 		if changefeedState.Info == nil {
 			continue
@@ -590,26 +617,27 @@ func (o *ownerImpl) updateGCSafepoint(
 		default:
 			continue
 		}
+
 		checkpointTs := changefeedState.Info.GetCheckpointTs(changefeedState.Status)
-		if minCheckpointTs > checkpointTs {
-			minCheckpointTs = checkpointTs
-			minChangfeedClusterID = changefeedState.Info.ClusterID
+		upstreamID := changefeedState.Info.UpstreamID
+
+		if _, exist := minCheckpointTsMap[upstreamID]; !exist {
+			minCheckpointTsMap[upstreamID] = checkpointTs
+		}
+
+		minCpts := minCheckpointTsMap[upstreamID]
+
+		if minCpts > checkpointTs {
+			minCpts = checkpointTs
+			minCheckpointTsMap[upstreamID] = minCpts
 		}
 		// Force update when adding a new changefeed.
 		_, exist := o.changefeeds[changefeedID]
 		if !exist {
-			forceUpdate = true
+			forceUpdateMap[upstreamID] = nil
 		}
 	}
-
-	upStream := o.upstreamManager.Get(minChangfeedClusterID)
-
-	// When the changefeed starts up, CDC will do a snapshot read at
-	// (checkpointTs - 1) from TiKV, so (checkpointTs - 1) should be an upper
-	// bound for the GC safepoint.
-	gcSafepointUpperBound := minCheckpointTs - 1
-	err := upStream.GCManager.TryUpdateGCSafePoint(ctx, gcSafepointUpperBound, forceUpdate)
-	return errors.Trace(err)
+	return minCheckpointTsMap, forceUpdateMap
 }
 
 // StatusProvider returns a StatusProvider

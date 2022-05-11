@@ -42,12 +42,15 @@ const (
 	normal
 	// indicate a upstream is closed.
 	closed
+
+	maxIdleDuration = time.Minute * 30
 )
 
 // Upstream holds resources of a TiDB cluster, it can be shared by many changefeeds
 // and processors. All public fileds and method of a upstream should be thread-safe.
+// Please be careful that never change any exported field of a Upstream.
 type Upstream struct {
-	clusterID      uint64
+	ID             uint64
 	pdEndpoints    []string
 	securityConfig *config.SecurityConfig
 
@@ -58,13 +61,20 @@ type Upstream struct {
 	PDClock     pdutil.Clock
 	GCManager   gc.Manager
 
+	// holder count of this upstream
+	hc int32
+	// record the time when Upstream.hc becomes zero.
+	idleTime time.Time
+	// mu should be lock when Upstream.hc or Upstream.idleTime need to be changed.
+	mu sync.Mutex
+
 	wg     *sync.WaitGroup
 	status int32
 }
 
-func newUpstream(clusterID uint64, pdEndpoints []string, securityConfig *config.SecurityConfig) *Upstream {
+func newUpstream(upstreamID uint64, pdEndpoints []string, securityConfig *config.SecurityConfig) *Upstream {
 	return &Upstream{
-		clusterID: clusterID, pdEndpoints: pdEndpoints,
+		ID: upstreamID, pdEndpoints: pdEndpoints,
 		securityConfig: securityConfig, wg: new(sync.WaitGroup),
 	}
 }
@@ -73,13 +83,16 @@ func newUpstream(clusterID uint64, pdEndpoints []string, securityConfig *config.
 func NewUpstream4Test(pdClient pd.Client) *Upstream {
 	pdClock := pdutil.NewClock4Test()
 	gcManager := gc.NewManager(pdClient, pdClock)
-	res := &Upstream{PDClient: pdClient, PDClock: pdClock, GCManager: gcManager, status: uninit}
+	res := &Upstream{
+		PDClient: pdClient, PDClock: pdClock, GCManager: gcManager,
+		status: uninit, hc: 1, wg: new(sync.WaitGroup),
+	}
 	res.status = normal
 	return res
 }
 
 func (up *Upstream) init(ctx context.Context) error {
-	log.Info("upstream is initializing", zap.Uint64("clusterID", up.clusterID))
+	log.Info("upstream is initializing", zap.Uint64("upstreamID", up.ID))
 	var err error
 
 	grpcTLSOption, err := up.securityConfig.ToGRPCDialOption()
@@ -105,7 +118,7 @@ func (up *Upstream) init(ctx context.Context) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	log.Info("upstream's PDClient created", zap.Uint64("clusterID", up.clusterID))
+	log.Info("upstream's PDClient created", zap.Uint64("upstreamID", up.ID))
 
 	// To not block CDC server startup, we need to warn instead of error
 	// when TiKV is incompatible.
@@ -119,29 +132,29 @@ func (up *Upstream) init(ctx context.Context) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	log.Info("upstream's KVStorage created", zap.Uint64("clusterID", up.clusterID))
+	log.Info("upstream's KVStorage created", zap.Uint64("upstreamID", up.ID))
 
 	up.GrpcPool = kv.NewGrpcPoolImpl(ctx, up.securityConfig)
-	log.Info("upstream's GrpcPool created", zap.Uint64("clusterID", up.clusterID))
+	log.Info("upstream's GrpcPool created", zap.Uint64("upstreamID", up.ID))
 
 	up.RegionCache = tikv.NewRegionCache(up.PDClient)
-	log.Info("upstream's RegionCache created", zap.Uint64("clusterID", up.clusterID))
+	log.Info("upstream's RegionCache created", zap.Uint64("upstreamID", up.ID))
 
 	up.PDClock, err = pdutil.NewClock(ctx, up.PDClient)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	log.Info("upstream's PDClock created", zap.Uint64("clusterID", up.clusterID))
+	log.Info("upstream's PDClock created", zap.Uint64("upstreamID", up.ID))
 
 	up.GCManager = gc.NewManager(up.PDClient, up.PDClock)
-	log.Info("upstream's GCManager created", zap.Uint64("clusterID", up.clusterID))
+	log.Info("upstream's GCManager created", zap.Uint64("upstreamID", up.ID))
 
 	// Update meta-region label to ensure that meta region isolated from data regions.
 	err = pdutil.UpdateMetaLabel(ctx, up.PDClient)
 	if err != nil {
 		log.Warn("Fail to verify region label rule",
 			zap.Error(err),
-			zap.Uint64("upstreamClusterID", up.clusterID),
+			zap.Uint64("upstreamID", up.ID),
 			zap.Strings("upstramEndpoints", up.pdEndpoints))
 	}
 
@@ -156,7 +169,7 @@ func (up *Upstream) init(ctx context.Context) error {
 		up.GrpcPool.RecycleConn(ctx)
 	}()
 
-	log.Info("upStream initialize successfully", zap.Uint64("clusterId", up.clusterID))
+	log.Info("upStream initialize successfully", zap.Uint64("upstreamID", up.ID))
 	atomic.StoreInt32(&up.status, normal)
 	return nil
 }
@@ -186,7 +199,7 @@ func (up *Upstream) close() {
 
 	up.wg.Wait()
 	atomic.StoreInt32(&up.status, closed)
-	log.Info("upStream closed", zap.Uint64("clusterID", up.clusterID))
+	log.Info("upStream closed", zap.Uint64("upstreamID", up.ID))
 }
 
 // IsNormal returns true if the upstream is normal.
@@ -197,4 +210,43 @@ func (up *Upstream) IsNormal() bool {
 // IsClosed returns true if the upstream is closed.
 func (up *Upstream) IsClosed() bool {
 	return atomic.LoadInt32(&up.status) == closed
+}
+
+func (up *Upstream) unhold() {
+	up.mu.Lock()
+	defer up.mu.Unlock()
+	up.hc--
+	if up.hc < 0 {
+		log.Panic("upstream's hc should never less than 0", zap.Uint64("upstreamID", up.ID))
+	}
+	if up.hc == 0 && up.idleTime.IsZero() {
+		up.idleTime = time.Now()
+	}
+}
+
+func (up *Upstream) hold() {
+	up.mu.Lock()
+	defer up.mu.Unlock()
+	if up.hc < 0 {
+		log.Panic("upstream's hc should never less than 0", zap.Uint64("upstreamID", up.ID))
+	}
+	up.hc++
+	// reset unusedTime
+	if !up.idleTime.IsZero() {
+		up.idleTime = time.Time{}
+	}
+}
+
+func (up *Upstream) Release() {
+	up.unhold()
+}
+
+// return true if this upstream idleTime reachs maxIdleDuration.
+func (up *Upstream) shouldClose() bool {
+	up.mu.Lock()
+	defer up.mu.Unlock()
+	if !up.idleTime.IsZero() && time.Since(up.idleTime) >= maxIdleDuration {
+		return true
+	}
+	return false
 }

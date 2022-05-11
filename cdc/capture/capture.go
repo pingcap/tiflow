@@ -131,7 +131,7 @@ func (c *Capture) reset(ctx context.Context) error {
 		c.UpstreamManager.Close()
 	}
 	c.UpstreamManager = upstream.NewManager(ctx)
-	err = c.UpstreamManager.Add(upstream.DefaultClusterID, c.pdEnpoints)
+	err = c.UpstreamManager.Add(upstream.DefaultUpstreamID, c.pdEnpoints)
 	if err != nil {
 		return errors.Annotate(
 			cerror.WrapError(cerror.ErrNewCaptureFailed, err),
