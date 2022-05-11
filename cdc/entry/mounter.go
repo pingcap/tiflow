@@ -273,8 +273,8 @@ func datum2Column(tableInfo *model.TableInfo, datums map[int64]types.Datum, fill
 		colSize += size
 		cols[tableInfo.RowColumnsOffset[colInfo.ID]] = &model.Column{
 			Name:    colName,
-			Type:    colInfo.Tp,
-			Charset: colInfo.Charset,
+			Type:    colInfo.GetType(),
+			Charset: colInfo.GetCharset(),
 			Value:   colValue,
 			Flag:    tableInfo.ColumnsFlag[colInfo.ID],
 			// ApproximateBytes = column data size + column struct size
@@ -387,7 +387,7 @@ func formatColVal(datum types.Datum, col *timodel.ColumnInfo) (
 	if datum.IsNull() {
 		return nil, 0, "", nil
 	}
-	switch col.Tp {
+	switch col.GetType() {
 	case mysql.TypeDate, mysql.TypeDatetime, mysql.TypeNewDate, mysql.TypeTimestamp:
 		v := datum.GetMysqlTime().String()
 		return v, sizeOfString(v), "", nil
@@ -464,18 +464,18 @@ func getDefaultOrZeroValue(col *timodel.ColumnInfo) (interface{}, int, string, e
 		return d.GetValue(), sizeOfDatum(d), "", nil
 	}
 
-	if !mysql.HasNotNullFlag(col.Flag) {
+	if !mysql.HasNotNullFlag(col.GetFlag()) {
 		// NOTICE: NotNullCheck need do after OriginDefaultValue check, as when TiDB meet "amend + add column default xxx",
 		// ref: https://github.com/pingcap/ticdc/issues/3929
 		// must use null if TiDB not write the column value when default value is null
 		// and the value is null, see https://github.com/pingcap/tidb/issues/9304
 		d = types.NewDatum(nil)
 	} else {
-		switch col.Tp {
+		switch col.GetType() {
 		case mysql.TypeEnum:
 			// For enum type, if no default value and not null is set,
 			// the default value is the first element of the enum list
-			d = types.NewDatum(col.FieldType.Elems[0])
+			d = types.NewDatum(col.FieldType.GetElem(0))
 		case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar:
 			return emptyBytes, sizeOfEmptyBytes, "", nil
 		default:

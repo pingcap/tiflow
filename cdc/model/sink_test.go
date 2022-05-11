@@ -178,7 +178,7 @@ func TestFromTiColumnInfo(t *testing.T) {
 	col := &ColumnInfo{}
 	col.FromTiColumnInfo(&timodel.ColumnInfo{
 		Name:      timodel.CIStr{O: "col1"},
-		FieldType: types.FieldType{Tp: 3},
+		FieldType: *types.NewFieldType(mysql.TypeLong),
 	})
 	require.Equal(t, "col1", col.Name)
 	require.Equal(t, uint8(3), col.Type)
@@ -186,6 +186,8 @@ func TestFromTiColumnInfo(t *testing.T) {
 
 func TestDDLEventFromJob(t *testing.T) {
 	t.Parallel()
+	ft := types.NewFieldType(mysql.TypeUnspecified)
+	ft.SetFlag(mysql.PriKeyFlag)
 	job := &timodel.Job{
 		ID:         1071,
 		TableID:    49,
@@ -198,7 +200,7 @@ func TestDDLEventFromJob(t *testing.T) {
 				ID:   49,
 				Name: timodel.CIStr{O: "t1"},
 				Columns: []*timodel.ColumnInfo{
-					{ID: 1, Name: timodel.CIStr{O: "id"}, FieldType: types.FieldType{Flag: mysql.PriKeyFlag}, State: timodel.StatePublic},
+					{ID: 1, Name: timodel.CIStr{O: "id"}, FieldType: *ft, State: timodel.StatePublic},
 					{ID: 2, Name: timodel.CIStr{O: "a"}, FieldType: types.FieldType{}, State: timodel.StatePublic},
 				},
 			},
@@ -215,7 +217,7 @@ func TestDDLEventFromJob(t *testing.T) {
 			ID:   49,
 			Name: timodel.CIStr{O: "t1"},
 			Columns: []*timodel.ColumnInfo{
-				{ID: 1, Name: timodel.CIStr{O: "id"}, FieldType: types.FieldType{Flag: mysql.PriKeyFlag}, State: timodel.StatePublic},
+				{ID: 1, Name: timodel.CIStr{O: "id"}, FieldType: *ft, State: timodel.StatePublic},
 			},
 		},
 	}
@@ -231,6 +233,8 @@ func TestDDLEventFromJob(t *testing.T) {
 }
 
 func TestDDLEventFromRenameTablesJob(t *testing.T) {
+	ft := types.NewFieldType(mysql.TypeUnspecified)
+	ft.SetFlag(mysql.PriKeyFlag | mysql.UniqueFlag)
 	job := &timodel.Job{
 		ID:         71,
 		TableID:    69,
@@ -246,12 +250,10 @@ func TestDDLEventFromRenameTablesJob(t *testing.T) {
 					Name: timodel.CIStr{O: "t10"},
 					Columns: []*timodel.ColumnInfo{
 						{
-							ID:   1,
-							Name: timodel.CIStr{O: "id"},
-							FieldType: types.FieldType{
-								Flag: mysql.PriKeyFlag | mysql.UniqueFlag,
-							},
-							State: timodel.StatePublic,
+							ID:        1,
+							Name:      timodel.CIStr{O: "id"},
+							FieldType: *ft,
+							State:     timodel.StatePublic,
 						},
 					},
 				},
@@ -260,12 +262,10 @@ func TestDDLEventFromRenameTablesJob(t *testing.T) {
 					Name: timodel.CIStr{O: "t20"},
 					Columns: []*timodel.ColumnInfo{
 						{
-							ID:   1,
-							Name: timodel.CIStr{O: "id"},
-							FieldType: types.FieldType{
-								Flag: mysql.PriKeyFlag | mysql.UniqueFlag,
-							},
-							State: timodel.StatePublic,
+							ID:        1,
+							Name:      timodel.CIStr{O: "id"},
+							FieldType: *ft,
+							State:     timodel.StatePublic,
 						},
 					},
 				},
@@ -284,12 +284,10 @@ func TestDDLEventFromRenameTablesJob(t *testing.T) {
 			Name: timodel.CIStr{O: "t1"},
 			Columns: []*timodel.ColumnInfo{
 				{
-					ID:   1,
-					Name: timodel.CIStr{O: "id"},
-					FieldType: types.FieldType{
-						Flag: mysql.PriKeyFlag | mysql.UniqueFlag,
-					},
-					State: timodel.StatePublic,
+					ID:        1,
+					Name:      timodel.CIStr{O: "id"},
+					FieldType: *ft,
+					State:     timodel.StatePublic,
 				},
 			},
 		},
@@ -300,12 +298,10 @@ func TestDDLEventFromRenameTablesJob(t *testing.T) {
 		Name: timodel.CIStr{O: "t10"},
 		Columns: []*timodel.ColumnInfo{
 			{
-				ID:   1,
-				Name: timodel.CIStr{O: "id"},
-				FieldType: types.FieldType{
-					Flag: mysql.PriKeyFlag | mysql.UniqueFlag,
-				},
-				State: timodel.StatePublic,
+				ID:        1,
+				Name:      timodel.CIStr{O: "id"},
+				FieldType: *ft,
+				State:     timodel.StatePublic,
 			},
 		},
 	}
@@ -331,12 +327,10 @@ func TestDDLEventFromRenameTablesJob(t *testing.T) {
 			Name: timodel.CIStr{O: "t2"},
 			Columns: []*timodel.ColumnInfo{
 				{
-					ID:   1,
-					Name: timodel.CIStr{O: "id"},
-					FieldType: types.FieldType{
-						Flag: mysql.PriKeyFlag | mysql.UniqueFlag,
-					},
-					State: timodel.StatePublic,
+					ID:        1,
+					Name:      timodel.CIStr{O: "id"},
+					FieldType: *ft,
+					State:     timodel.StatePublic,
 				},
 			},
 		},
@@ -347,12 +341,10 @@ func TestDDLEventFromRenameTablesJob(t *testing.T) {
 		Name: timodel.CIStr{O: "t20"},
 		Columns: []*timodel.ColumnInfo{
 			{
-				ID:   1,
-				Name: timodel.CIStr{O: "id"},
-				FieldType: types.FieldType{
-					Flag: mysql.PriKeyFlag | mysql.UniqueFlag,
-				},
-				State: timodel.StatePublic,
+				ID:        1,
+				Name:      timodel.CIStr{O: "id"},
+				FieldType: *ft,
+				State:     timodel.StatePublic,
 			},
 		},
 	}

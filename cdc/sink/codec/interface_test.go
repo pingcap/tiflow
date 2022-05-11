@@ -56,6 +56,8 @@ func TestCreate(t *testing.T) {
 	require.Equal(t, rowEvent.Table.Table, *msg.Table)
 	require.Equal(t, config.ProtocolOpen, msg.Protocol)
 
+	ft := types.NewFieldType(0)
+	ft.SetFlag(mysql.PriKeyFlag)
 	job := &timodel.Job{
 		ID:         1071,
 		TableID:    49,
@@ -68,7 +70,7 @@ func TestCreate(t *testing.T) {
 				ID:   49,
 				Name: timodel.CIStr{O: "t1"},
 				Columns: []*timodel.ColumnInfo{
-					{ID: 1, Name: timodel.CIStr{O: "id"}, FieldType: types.FieldType{Flag: mysql.PriKeyFlag}, State: timodel.StatePublic},
+					{ID: 1, Name: timodel.CIStr{O: "id"}, FieldType: *ft, State: timodel.StatePublic},
 					{ID: 2, Name: timodel.CIStr{O: "a"}, FieldType: types.FieldType{}, State: timodel.StatePublic},
 				},
 			},
@@ -85,7 +87,7 @@ func TestCreate(t *testing.T) {
 			ID:   49,
 			Name: timodel.CIStr{O: "t1"},
 			Columns: []*timodel.ColumnInfo{
-				{ID: 1, Name: timodel.CIStr{O: "id"}, FieldType: types.FieldType{Flag: mysql.PriKeyFlag}, State: timodel.StatePublic},
+				{ID: 1, Name: timodel.CIStr{O: "id"}, FieldType: *ft, State: timodel.StatePublic},
 			},
 		},
 	}
