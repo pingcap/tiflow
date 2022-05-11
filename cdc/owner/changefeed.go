@@ -29,6 +29,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/scheduler"
+	"github.com/pingcap/tiflow/cdc/scheduler/base"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
@@ -38,6 +39,27 @@ import (
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
 )
+
+// newSchedulerV2FromCtx creates a new schedulerV2 from context.
+// This function is factored out to facilitate unit testing.
+func newSchedulerV2FromCtx(
+	ctx cdcContext.Context, startTs uint64,
+) (scheduler.Scheduler, error) {
+	changeFeedID := ctx.ChangefeedVars().ID
+	messageServer := ctx.GlobalVars().MessageServer
+	messageRouter := ctx.GlobalVars().MessageRouter
+	ownerRev := ctx.GlobalVars().OwnerRevision
+	ret, err := base.NewSchedulerV2(
+		ctx, changeFeedID, startTs, messageServer, messageRouter, ownerRev)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	return ret, nil
+}
+
+func newScheduler(ctx cdcContext.Context, startTs uint64) (scheduler.Scheduler, error) {
+	return newSchedulerV2FromCtx(ctx, startTs)
+}
 
 type changefeed struct {
 	id    model.ChangeFeedID
