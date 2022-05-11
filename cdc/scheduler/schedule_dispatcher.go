@@ -453,14 +453,17 @@ func (s *BaseScheduleDispatcher) findDiffTables(
 			toRemove = append(toRemove, tableID)
 		}
 
-		if drainRemoved < drainCaptureTableBatchSize {
-			// the table is at the drainTarget, also remove it.
-			if record.CaptureID == s.drainTarget && record.Status == util.RunningTable {
-				toRemove = append(toRemove, tableID)
-				drainRemoved += 1
+		if s.drainTarget != captureIDNotDraining {
+			removingCount := s.tables.CountTableByCaptureIDAndStatus(s.drainTarget, util.RemovingTable)
+			if drainRemoved < drainCaptureTableBatchSize && removingCount == 0 {
+				// the table is at the drainTarget, also remove it.
+				if record.CaptureID == s.drainTarget && record.Status == util.RunningTable {
+					toRemove = append(toRemove, tableID)
+					drainRemoved += 1
 
-				s.logger.Info("DrainCapture: remove table",
-					zap.Int64("tableID", tableID))
+					s.logger.Info("DrainCapture: remove table",
+						zap.Int64("tableID", tableID))
+				}
 			}
 		}
 	}
