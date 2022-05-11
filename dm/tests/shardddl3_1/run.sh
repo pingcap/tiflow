@@ -315,7 +315,7 @@ function different_field_flag_test() {
 		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 			"query-status test" \
 			"ALTER TABLE \`${shardddl}\`.\`${tb}\` ADD COLUMN \`col1\`" 1 \
-			"-\`${shardddl1}\`.\`${tb1}\`\"" 1
+			"\`${shardddl1}\`.\`${tb1}\`\"" 1
 	else
 		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 			"query-status test" \
