@@ -20,7 +20,9 @@ import (
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	gmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/tidb/errno"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/parser/types"
@@ -319,45 +321,67 @@ func TestValidatorWorkerValidateTableChanges(t *testing.T) {
 }
 
 func TestValidatorWorkerCompareData(t *testing.T) {
-	worker := validateWorker{}
-	eq, err := worker.compareData([]*sql.NullString{{String: "1", Valid: true}},
-		[]*sql.NullString{{Valid: false}},
-		[]*model.ColumnInfo{{FieldType: types.FieldType{Tp: mysql.TypeLong}}})
+	compareContext := validateCompareContext{
+		logger:  log.L(),
+		columns: []*model.ColumnInfo{{FieldType: types.FieldType{Tp: mysql.TypeLong}}},
+	}
+	eq, err := compareContext.compareData("", []*sql.NullString{{String: "1", Valid: true}}, []*sql.NullString{{Valid: false}})
 	require.NoError(t, err)
 	require.False(t, eq)
-	eq, err = worker.compareData([]*sql.NullString{{String: "1.1", Valid: true}},
-		[]*sql.NullString{{String: "1.x", Valid: true}},
-		[]*model.ColumnInfo{{FieldType: types.FieldType{Tp: mysql.TypeFloat}}})
+
+	compareContext = validateCompareContext{
+		logger:  log.L(),
+		columns: []*model.ColumnInfo{{FieldType: types.FieldType{Tp: mysql.TypeFloat}}},
+	}
+	eq, err = compareContext.compareData("", []*sql.NullString{{String: "1.1", Valid: true}}, []*sql.NullString{{String: "1.x", Valid: true}})
 	require.Error(t, err)
 	require.False(t, eq)
-	eq, err = worker.compareData([]*sql.NullString{{String: "1.1", Valid: true}},
-		[]*sql.NullString{{String: "1.1000011", Valid: true}},
-		[]*model.ColumnInfo{{FieldType: types.FieldType{Tp: mysql.TypeFloat}}})
+
+	compareContext = validateCompareContext{
+		logger:  log.L(),
+		columns: []*model.ColumnInfo{{FieldType: types.FieldType{Tp: mysql.TypeFloat}}},
+	}
+	eq, err = compareContext.compareData("", []*sql.NullString{{String: "1.1", Valid: true}}, []*sql.NullString{{String: "1.1000011", Valid: true}})
 	require.NoError(t, err)
 	require.False(t, eq)
-	eq, err = worker.compareData([]*sql.NullString{{String: "1.1", Valid: true}},
-		[]*sql.NullString{{String: "1.1000001", Valid: true}},
-		[]*model.ColumnInfo{{FieldType: types.FieldType{Tp: mysql.TypeFloat}}})
+
+	compareContext = validateCompareContext{
+		logger:  log.L(),
+		columns: []*model.ColumnInfo{{FieldType: types.FieldType{Tp: mysql.TypeFloat}}},
+	}
+	eq, err = compareContext.compareData("", []*sql.NullString{{String: "1.1", Valid: true}}, []*sql.NullString{{String: "1.1000001", Valid: true}})
 	require.NoError(t, err)
 	require.True(t, eq)
-	eq, err = worker.compareData([]*sql.NullString{{String: "1.1", Valid: true}},
-		[]*sql.NullString{{String: "1.1000001", Valid: true}},
-		[]*model.ColumnInfo{{FieldType: types.FieldType{Tp: mysql.TypeDouble}}})
+
+	compareContext = validateCompareContext{
+		logger:  log.L(),
+		columns: []*model.ColumnInfo{{FieldType: types.FieldType{Tp: mysql.TypeDouble}}},
+	}
+	eq, err = compareContext.compareData("", []*sql.NullString{{String: "1.1", Valid: true}}, []*sql.NullString{{String: "1.1000001", Valid: true}})
 	require.NoError(t, err)
 	require.True(t, eq)
-	eq, err = worker.compareData([]*sql.NullString{{String: "1", Valid: true}},
-		[]*sql.NullString{{String: "1", Valid: true}},
-		[]*model.ColumnInfo{{FieldType: types.FieldType{Tp: mysql.TypeLong}}})
+
+	compareContext = validateCompareContext{
+		logger:  log.L(),
+		columns: []*model.ColumnInfo{{FieldType: types.FieldType{Tp: mysql.TypeLong}}},
+	}
+	eq, err = compareContext.compareData("", []*sql.NullString{{String: "1", Valid: true}}, []*sql.NullString{{String: "1", Valid: true}})
 	require.NoError(t, err)
 	require.True(t, eq)
-	eq, err = worker.compareData([]*sql.NullString{{String: "aaa", Valid: true}},
-		[]*sql.NullString{{String: "aaa", Valid: true}},
-		[]*model.ColumnInfo{{FieldType: types.FieldType{Tp: mysql.TypeVarchar}}})
+
+	compareContext = validateCompareContext{
+		logger:  log.L(),
+		columns: []*model.ColumnInfo{{FieldType: types.FieldType{Tp: mysql.TypeVarchar}}},
+	}
+	eq, err = compareContext.compareData("", []*sql.NullString{{String: "aaa", Valid: true}}, []*sql.NullString{{String: "aaa", Valid: true}})
 	require.NoError(t, err)
 	require.True(t, eq)
-	eq, err = worker.compareData([]*sql.NullString{{String: "\x01\x02", Valid: true}},
-		[]*sql.NullString{{String: "\x01\x02", Valid: true}},
-		[]*model.ColumnInfo{{FieldType: types.FieldType{Tp: mysql.TypeVarString}}})
+
+	compareContext = validateCompareContext{
+		logger:  log.L(),
+		columns: []*model.ColumnInfo{{FieldType: types.FieldType{Tp: mysql.TypeVarString}}},
+	}
+	eq, err = compareContext.compareData("", []*sql.NullString{{String: "\x01\x02", Valid: true}}, []*sql.NullString{{String: "\x01\x02", Valid: true}})
 	require.NoError(t, err)
 	require.True(t, eq)
 }
@@ -437,12 +461,11 @@ func TestValidatorWorkerGetTargetRows(t *testing.T) {
 			PK:        tblInfo.Indices[0],
 			PkValues:  tc.pkValues,
 		}
-		dbConn := genDBConn(t, db, genSubtaskConfig(t))
 
 		worker := &validateWorker{
-			ctx:  context.Background(),
-			conn: dbConn,
-			L:    log.L(),
+			ctx: context.Background(),
+			db:  conn.NewBaseDB(db, func() {}),
+			L:   log.L(),
 		}
 		targetRows, err2 := worker.getTargetRows(cond)
 		require.NoError(t, err2)
@@ -472,9 +495,9 @@ func TestValidatorWorkerGetTargetRows(t *testing.T) {
 		PkValues:  [][]string{{"1"}},
 	}
 	worker := &validateWorker{
-		ctx:  context.Background(),
-		conn: genDBConn(t, db, genSubtaskConfig(t)),
-		L:    log.L(),
+		ctx: context.Background(),
+		db:  conn.NewBaseDB(db, func() {}),
+		L:   log.L(),
 	}
 
 	// query error
@@ -497,4 +520,12 @@ func TestValidatorWorkerGetSourceRowsForCompare(t *testing.T) {
 	require.Equal(t, "1", rows["a"][1].String)
 	require.Equal(t, "1", rows["b"][0].String)
 	require.Equal(t, "2", rows["b"][1].String)
+}
+
+func TestValidatorIsRetryableDBError(t *testing.T) {
+	require.True(t, isRetryableDBError(&gmysql.MySQLError{Number: errno.ErrPDServerTimeout}))
+	require.True(t, isRetryableDBError(gmysql.ErrInvalidConn))
+	require.True(t, isRetryableDBError(context.DeadlineExceeded))
+	require.True(t, isRetryableDBError(driver.ErrBadConn))
+	require.True(t, isRetryableDBError(errors.Annotate(driver.ErrBadConn, "test")))
 }
