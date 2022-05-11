@@ -18,7 +18,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-sql-driver/mysql"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
+	"github.com/pingcap/tidb/errno"
 	"github.com/pingcap/tidb/util/dbutil"
 	"go.uber.org/zap"
 
@@ -197,7 +200,8 @@ func (conn *DBConn) ExecuteSQLWithIgnore(tctx *tcontext.Context, ignoreError fun
 				metrics.SQLRetriesTotal.WithLabelValues("stmt_exec", conn.cfg.Name).Add(1)
 				return true
 			}
-			return false
+			// TODO: move it to above IsRetryableError
+			return isRetryableError(err)
 		},
 	}
 
@@ -232,6 +236,22 @@ func (conn *DBConn) ExecuteSQLWithIgnore(tctx *tcontext.Context, ignoreError fun
 		return ret.(int), err
 	}
 	return ret.(int), nil
+}
+
+func isRetryableError(err error) bool {
+	err = errors.Cause(err) // check the original error
+	mysqlErr, ok := err.(*mysql.MySQLError)
+	if !ok {
+		return false
+	}
+
+	switch mysqlErr.Number {
+	case errno.ErrKeyColumnDoesNotExits:
+		// when two DDL modify one column
+		return true
+	}
+
+	return false
 }
 
 // ExecuteSQL does some SQL executions.
