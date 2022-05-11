@@ -375,8 +375,6 @@ func HTTPTestWithTestResponseRecorder(r *testutil.RequestBuilder, handler http.H
 		return nil, nil
 	}
 	if r.Error != nil {
-		// Fail the test if we had an error
-		// t.Errorf("error constructing request: %s", r.Error)
 		return nil, r.Error
 	}
 	var bodyReader io.Reader
