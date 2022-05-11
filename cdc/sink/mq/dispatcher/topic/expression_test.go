@@ -126,49 +126,56 @@ func TestSubstituteTopicExpression(t *testing.T) {
 			expected:   "",
 		},
 		{
-			name:       "valid expression containing '{schema}' and '{table}', without prefix or suffix",
+			name: "valid expression containing '{schema}' and '{table}'," +
+				" without prefix or suffix",
 			expression: "{schema}_{table}",
 			schema:     "hello",
 			table:      "world",
 			expected:   "hello_world",
 		},
 		{
-			name:       "valid expression containing '{schema}' and '{table}', schema/table are converted to lower case letters",
+			name: "valid expression containing '{schema}' and '{table}'," +
+				" schema/table are converted to lower case letters",
 			expression: "{schema}_{table}",
 			schema:     "HELLO",
 			table:      "WORLD",
 			expected:   "HELLO_WORLD",
 		},
 		{
-			name:       "valid expression containing '{schema}' and '{table}', the kafka disallowed characters in table are replaced",
+			name: "valid expression containing '{schema}' and '{table}'," +
+				" the kafka disallowed characters in table are replaced",
 			expression: "{schema}_{table}",
 			schema:     "hello",
 			table:      "!@#$%^&*",
 			expected:   "hello_________",
 		},
 		{
-			name:       "valid expression containing '{schema}' and '{table}', the kafka disallowed characters in schema are replaced",
+			name: "valid expression containing '{schema}' and '{table}'," +
+				" the kafka disallowed characters in schema are replaced",
 			expression: "{schema}_{table}",
 			schema:     "()_+.{}",
 			table:      "world",
 			expected:   "____.___world",
 		},
 		{
-			name:       "valid expression containing '{schema}' and '{table}', with both prefix and suffix",
+			name: "valid expression containing '{schema}' and '{table}'," +
+				" with both prefix and suffix",
 			expression: "ab.-c_{schema}_{table}_de.-f",
 			schema:     "hello",
 			table:      "WORLD",
 			expected:   "ab.-c_hello_WORLD_de.-f",
 		},
 		{
-			name:       "valid expression containing '{schema}' and '{table}', with customized middle delimited string",
+			name: "valid expression containing '{schema}' and '{table}'," +
+				" with customized middle delimited string",
 			expression: "abc_{schema}de._-{table}_fhi",
 			schema:     "hello",
 			table:      "world",
 			expected:   "abc_hellode._-world_fhi",
 		},
 		{
-			name:       "valid expression containing '{schema}' and '{table}', the kafka disallowed characters in schema and table are replaced",
+			name: "valid expression containing '{schema}' and '{table}'," +
+				" the kafka disallowed characters in schema and table are replaced",
 			expression: "{schema}_{table}",
 			schema:     "你好",
 			table:      "世界",
@@ -183,7 +190,8 @@ func TestSubstituteTopicExpression(t *testing.T) {
 			expected:   "",
 		},
 		{
-			name:       "invalid expression containing '{schema}' and '{table}', but with invalid middle delimited string",
+			name: "invalid expression containing '{schema}' and '{table}'," +
+				" the middle delimited string must be [A-Za-z0-9\\._\\-]*",
 			expression: "{schema}!@#$%^&*()+{}你好{table}",
 			schema:     "hello",
 			table:      "world",
