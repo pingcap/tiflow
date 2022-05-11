@@ -17,8 +17,8 @@ package manager
 // It will be responsible for creating and
 // updating the information of the topic.
 type TopicManager interface {
-	// Partitions returns the partitions of the topic.
-	Partitions(topic string) (int32, error)
+	// GetPartitionNum returns the number of partitions of the topic.
+	GetPartitionNum(topic string) (int32, error)
 	// CreateTopic creates the topic.
 	CreateTopic(topicName string) (int32, error)
 }

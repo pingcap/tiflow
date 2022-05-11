@@ -2158,6 +2158,7 @@ func (t *testLock) TestCheckAddDropColumns(c *C) {
 	l.tables[source][db][tbls[1]] = schemacmp.Encode(ti1)
 
 	col, err := l.checkAddDropColumn(source, db, tbls[0], DDLs1, schemacmp.Encode(ti0), schemacmp.Encode(ti1), nil)
+
 	c.Assert(err, IsNil)
 	c.Assert(len(col), Equals, 0)
 
