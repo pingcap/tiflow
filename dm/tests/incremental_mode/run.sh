@@ -20,9 +20,12 @@ function get_binlog_name() {
 }
 
 function run() {
-	run_sql_file $cur/data/db1.prepare.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
+	# reset master to start from beginning
+	sed '2 i reset master;' $cur/data/db1.prepare.sql >$WORK_DIR/db1.prepare.sql
+	sed '2 i reset master;' $cur/data/db2.prepare.sql >$WORK_DIR/db2.prepare.sql
+	run_sql_file $WORK_DIR/db1.prepare.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
 	check_contains 'Query OK, 2 rows affected'
-	run_sql_file $cur/data/db2.prepare.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
+	run_sql_file $WORK_DIR/db2.prepare.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
 	check_contains 'Query OK, 3 rows affected'
 	uuid=($(get_uuid $MYSQL_HOST1 $MYSQL_PORT1))
 

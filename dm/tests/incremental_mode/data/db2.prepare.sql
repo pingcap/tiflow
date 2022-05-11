@@ -1,5 +1,4 @@
 drop database if exists `incremental_mode`;
-reset master;
 create database `incremental_mode`;
 use `incremental_mode`;
 create table t2 (id int auto_increment, name varchar(20), primary key (`id`));
