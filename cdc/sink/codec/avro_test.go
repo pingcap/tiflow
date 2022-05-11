@@ -873,3 +873,12 @@ func TestSanitizeColumnName(t *testing.T) {
 	require.Equal(t, "A_B", sanitizeColumnName("A.B"))
 	require.Equal(t, "columnNameWith__", sanitizeColumnName("columnNameWith中文"))
 }
+
+func TestSanitizeRecordName(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, "normalSchema.normalTable", sanitizeRecordName("normalSchema.normalTable"))
+	require.Equal(t, "_Schema.normalTable", sanitizeRecordName("1Schema.normalTable"))
+	require.Equal(t, "S_chema.T_able", sanitizeRecordName("S-chema.T-able"))
+	require.Equal(t, "recordNameWith__", sanitizeRecordName("recordNameWith中文"))
+}

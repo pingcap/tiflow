@@ -327,6 +327,40 @@ func sanitizeColumnName(name string) string {
 	return sanitizedName
 }
 
+// https://github.com/debezium/debezium/blob/9f7ede0e0695f012c6c4e715e96aed85eecf6b5f/ \
+// debezium-core/src/main/java/io/debezium/util/SchemaNameAdjuster.java
+// record name treats '-' differently for avro name requirement is different from kafka topic name
+func sanitizeRecordName(name string) string {
+	changed := false
+	var sb strings.Builder
+	for i, c := range name {
+		if i == 0 && !(c == '_' || (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')) {
+			sb.WriteString(replacementChar)
+			changed = true
+		} else if !(c == '_' || c == '.' ||
+			('a' <= c && c <= 'z') ||
+			('A' <= c && c <= 'Z') ||
+			('0' <= c && c <= '9')) {
+			sb.WriteString(replacementChar)
+			changed = true
+		} else {
+			sb.WriteRune(c)
+		}
+	}
+
+	sanitizedName := sb.String()
+	if changed {
+		log.Warn(
+			fmt.Sprintf(
+				"Record '%s' name potentially not safe for serialization, replaced with '%s'",
+				name,
+				sanitizedName,
+			),
+		)
+	}
+	return sanitizedName
+}
+
 // https://github.com/debezium/debezium/blob/9f7ede0e0695f012c6c4e715e96aed85eecf6b5f \
 // /debezium-connector-mysql/src/main/java/io/debezium/connector/mysql/antlr/ \
 // MySqlAntlrDdlParser.java#L374
@@ -338,7 +372,7 @@ func escapeEnumAndSetOptions(option string) string {
 }
 
 func getRecordNameFromTable(tableName *model.TableName) string {
-	return tableName.Schema + "." + tableName.Table
+	return sanitizeRecordName(tableName.Schema + "." + tableName.Table)
 }
 
 type avroSchema struct {
