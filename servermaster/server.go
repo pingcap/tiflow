@@ -107,6 +107,7 @@ type Server struct {
 	userMetaKVClient extkv.KVClientEx
 }
 
+// PersistResource implements pb.MasterServer.PersistResource
 func (s *Server) PersistResource(ctx context.Context, request *pb.PersistResourceRequest) (*pb.PersistResourceResponse, error) {
 	// TODO implement me
 	panic("implement me")
@@ -224,6 +225,7 @@ func (s *Server) SubmitJob(ctx context.Context, req *pb.SubmitJobRequest) (*pb.S
 	return s.jobManager.SubmitJob(ctx, req), nil
 }
 
+// QueryJob implements pb.MasterServer.QueryJob
 func (s *Server) QueryJob(ctx context.Context, req *pb.QueryJobRequest) (*pb.QueryJobResponse, error) {
 	resp2 := &pb.QueryJobResponse{}
 	shouldRet, err := s.masterRPCHook.PreRPC(ctx, req, &resp2)
@@ -233,6 +235,7 @@ func (s *Server) QueryJob(ctx context.Context, req *pb.QueryJobRequest) (*pb.Que
 	return s.jobManager.QueryJob(ctx, req), nil
 }
 
+// CancelJob implements pb.MasterServer.CancelJob
 func (s *Server) CancelJob(ctx context.Context, req *pb.CancelJobRequest) (*pb.CancelJobResponse, error) {
 	resp2 := &pb.CancelJobResponse{}
 	shouldRet, err := s.masterRPCHook.PreRPC(ctx, req, &resp2)
@@ -242,6 +245,7 @@ func (s *Server) CancelJob(ctx context.Context, req *pb.CancelJobRequest) (*pb.C
 	return s.jobManager.CancelJob(ctx, req), nil
 }
 
+// PauseJob implements pb.MasterServer.PauseJob
 func (s *Server) PauseJob(ctx context.Context, req *pb.PauseJobRequest) (*pb.PauseJobResponse, error) {
 	resp2 := &pb.PauseJobResponse{}
 	shouldRet, err := s.masterRPCHook.PreRPC(ctx, req, &resp2)
@@ -370,6 +374,7 @@ func (s *Server) QueryMetaStore(
 	}
 }
 
+// ReportExecutorWorkload implements pb.MasterServer.ReportExecutorWorkload
 func (s *Server) ReportExecutorWorkload(
 	ctx context.Context, req *pb.ExecWorkloadRequest,
 ) (*pb.ExecWorkloadResponse, error) {

@@ -46,6 +46,7 @@ import (
 	"github.com/hanfei1991/microcosm/test/mock"
 )
 
+// Server is a executor server abstraction
 type Server struct {
 	cfg     *Config
 	testCtx *test.Context
@@ -76,6 +77,7 @@ type Server struct {
 	resourceBroker  broker.Broker
 }
 
+// NewServer creates a new executor server instance
 func NewServer(cfg *Config, ctx *test.Context) *Server {
 	s := Server{
 		cfg:         cfg,
@@ -181,6 +183,7 @@ func (s *Server) makeTask(
 	return newWorker, nil
 }
 
+// PreDispatchTask implements Executor.PreDispatchTask
 func (s *Server) PreDispatchTask(ctx context.Context, req *pb.PreDispatchTaskRequest) (*pb.PreDispatchTaskResponse, error) {
 	task, err := s.makeTask(
 		ctx,
@@ -205,6 +208,7 @@ func (s *Server) PreDispatchTask(ctx context.Context, req *pb.PreDispatchTaskReq
 	return &pb.PreDispatchTaskResponse{}, nil
 }
 
+// ConfirmDispatchTask implements Executor.ConfirmDispatchTask
 func (s *Server) ConfirmDispatchTask(ctx context.Context, req *pb.ConfirmDispatchTaskRequest) (*pb.ConfirmDispatchTaskResponse, error) {
 	ok, err := s.taskCommitter.ConfirmDispatchTask(req.GetRequestId(), req.GetWorkerId())
 	if err != nil {
@@ -216,6 +220,7 @@ func (s *Server) ConfirmDispatchTask(ctx context.Context, req *pb.ConfirmDispatc
 	return &pb.ConfirmDispatchTaskResponse{}, nil
 }
 
+// Stop stops all running goroutines and releases resources in Server
 func (s *Server) Stop() {
 	if s.grpcSrv != nil {
 		s.grpcSrv.Stop()
@@ -300,6 +305,8 @@ const (
 	defaultTaskPreDispatchRequestTTL = 10 * time.Second
 )
 
+// Run drives server logic in independent background goroutines, and use error
+// group to collect errors.
 func (s *Server) Run(ctx context.Context) error {
 	if test.GetGlobalTestFlag() {
 		return s.startForTest(ctx)

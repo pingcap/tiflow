@@ -39,12 +39,15 @@ type NodeInfo struct {
 	Capability int `json:"cap"`
 }
 
+// EtcdKey return encoded key for a node used in service discovery etcd
 func (e *NodeInfo) EtcdKey() string {
 	return adapter.NodeInfoKeyAdapter.Encode(string(e.ID))
 }
 
+// ExecutorStatus describes the node aliveness status of an executor
 type ExecutorStatus int32
 
+// All ExecutorStatus
 const (
 	Initing ExecutorStatus = iota
 	Running
@@ -52,6 +55,7 @@ const (
 	Tombstone
 )
 
+// ExecutorStatusNameMapping maps from executor status to human-readable string
 var ExecutorStatusNameMapping = map[ExecutorStatus]string{
 	Initing:      "initializing",
 	Running:      "running",
@@ -68,6 +72,7 @@ func (s ExecutorStatus) String() string {
 	return val
 }
 
+// ToJSON returns json marshal of a node info
 func (e *NodeInfo) ToJSON() (string, error) {
 	data, err := json.Marshal(e)
 	if err != nil {

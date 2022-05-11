@@ -77,6 +77,7 @@ type JobStats interface {
 	JobCount(pb.QueryJobResponse_JobStatus) int
 }
 
+// NewJobFsm creates a new job fsm
 func NewJobFsm() *JobFsm {
 	return &JobFsm{
 		pendingJobs: make(map[libModel.MasterID]*libModel.MasterMetaKVData),
@@ -85,12 +86,14 @@ func NewJobFsm() *JobFsm {
 	}
 }
 
+// QueryOnlineJob queries job from online job list
 func (fsm *JobFsm) QueryOnlineJob(jobID libModel.MasterID) *jobHolder {
 	fsm.jobsMu.RLock()
 	defer fsm.jobsMu.RUnlock()
 	return fsm.onlineJobs[jobID]
 }
 
+// QueryJob queries job with given jobID and returns QueryJobResponse
 func (fsm *JobFsm) QueryJob(jobID libModel.MasterID) *pb.QueryJobResponse {
 	checkPendingJob := func() *pb.QueryJobResponse {
 		fsm.jobsMu.Lock()
@@ -163,6 +166,7 @@ func (fsm *JobFsm) QueryJob(jobID libModel.MasterID) *pb.QueryJobResponse {
 	return checkOnlineJob()
 }
 
+// JobDispatched is called when a job is firstly created or server master is failovered
 func (fsm *JobFsm) JobDispatched(job *libModel.MasterMetaKVData, addFromFailover bool) {
 	fsm.jobsMu.Lock()
 	defer fsm.jobsMu.Unlock()
@@ -172,6 +176,7 @@ func (fsm *JobFsm) JobDispatched(job *libModel.MasterMetaKVData, addFromFailover
 	}
 }
 
+// IterPendingJobs iterates all pending jobs and dispatch(via create worker) them again.
 func (fsm *JobFsm) IterPendingJobs(dispatchJobFn func(job *libModel.MasterMetaKVData) (string, error)) error {
 	fsm.jobsMu.Lock()
 	defer fsm.jobsMu.Unlock()
@@ -192,6 +197,7 @@ func (fsm *JobFsm) IterPendingJobs(dispatchJobFn func(job *libModel.MasterMetaKV
 	return nil
 }
 
+// IterWaitAckJobs iterates wait ack jobs, failover them if they are added from failover
 func (fsm *JobFsm) IterWaitAckJobs(dispatchJobFn func(job *libModel.MasterMetaKVData) (string, error)) error {
 	fsm.jobsMu.Lock()
 	defer fsm.jobsMu.Unlock()
@@ -211,6 +217,7 @@ func (fsm *JobFsm) IterWaitAckJobs(dispatchJobFn func(job *libModel.MasterMetaKV
 	return nil
 }
 
+// JobOnline is called when the first heartbeat of job is received
 func (fsm *JobFsm) JobOnline(worker lib.WorkerHandle) error {
 	fsm.jobsMu.Lock()
 	defer fsm.jobsMu.Unlock()
@@ -227,6 +234,7 @@ func (fsm *JobFsm) JobOnline(worker lib.WorkerHandle) error {
 	return nil
 }
 
+// JobOffline is called when a job meets error or finishes
 func (fsm *JobFsm) JobOffline(worker lib.WorkerHandle, needFailover bool) {
 	fsm.jobsMu.Lock()
 	defer fsm.jobsMu.Unlock()
@@ -247,6 +255,7 @@ func (fsm *JobFsm) JobOffline(worker lib.WorkerHandle, needFailover bool) {
 	}
 }
 
+// JobDispatchFailed is called when a job dispatch fails
 func (fsm *JobFsm) JobDispatchFailed(worker lib.WorkerHandle) error {
 	fsm.jobsMu.Lock()
 	defer fsm.jobsMu.Unlock()
@@ -260,6 +269,7 @@ func (fsm *JobFsm) JobDispatchFailed(worker lib.WorkerHandle) error {
 	return nil
 }
 
+// JobCount queries job count based on job status
 func (fsm *JobFsm) JobCount(status pb.QueryJobResponse_JobStatus) int {
 	fsm.jobsMu.RLock()
 	defer fsm.jobsMu.RUnlock()

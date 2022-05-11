@@ -6,6 +6,7 @@ import (
 	"github.com/edwingeng/deque"
 )
 
+// Queue abstracts a generics double-ended queue, which is thread-safe
 type Queue[T any] interface {
 	Add(elem T)
 	Pop() (T, bool)
@@ -21,6 +22,7 @@ type Deque[T any] struct {
 	deque deque.Deque
 }
 
+// NewDeque creates a new Deque instance
 func NewDeque[T any]() *Deque[T] {
 	return &Deque[T]{
 		deque: deque.NewDeque(),

@@ -13,6 +13,7 @@ const (
 	metadataQPSLimit = 1024
 )
 
+// MetadataAccessor manages access to framework metastore
 type MetadataAccessor struct {
 	// rl limits the frequency the metastore is written to.
 	// It helps to prevent cascading failures after a fail-over
@@ -21,6 +22,7 @@ type MetadataAccessor struct {
 	metaclient pkgOrm.Client
 }
 
+// NewMetadataAccessor creates a new MetadataAccessor instance
 func NewMetadataAccessor(client pkgOrm.Client) *MetadataAccessor {
 	return &MetadataAccessor{
 		rl:         ratelimit.New(metadataQPSLimit),
@@ -28,6 +30,7 @@ func NewMetadataAccessor(client pkgOrm.Client) *MetadataAccessor {
 	}
 }
 
+// GetResource queries resource by resource id
 func (m *MetadataAccessor) GetResource(ctx context.Context, resourceID resModel.ResourceID) (*resModel.ResourceMeta, bool, error) {
 	rec, err := m.metaclient.GetResourceByID(ctx, resourceID)
 	if err == nil {
@@ -41,6 +44,11 @@ func (m *MetadataAccessor) GetResource(ctx context.Context, resourceID resModel.
 	return nil, false, err
 }
 
+// CreateResource creates a resource if it does not exist
+// - If the resource with given resource id exits, return false and nil
+// - Otherwise
+//   - if create resource successfully, return true and nil
+//   - Otherwise return false and error
 func (m *MetadataAccessor) CreateResource(ctx context.Context, resource *resModel.ResourceMeta) (bool, error) {
 	_, err := m.metaclient.GetResourceByID(ctx, resource.ID)
 	if err == nil {
@@ -60,6 +68,7 @@ func (m *MetadataAccessor) CreateResource(ctx context.Context, resource *resMode
 	return true, nil
 }
 
+// UpdateResource updates the content of a given resource if it exists
 func (m *MetadataAccessor) UpdateResource(ctx context.Context, resource *resModel.ResourceMeta) (bool, error) {
 	_, err := m.metaclient.GetResourceByID(ctx, resource.ID)
 	if err != nil {
@@ -77,6 +86,7 @@ func (m *MetadataAccessor) UpdateResource(ctx context.Context, resource *resMode
 	return true, nil
 }
 
+// DeleteResource deletes a resource by its resource id
 func (m *MetadataAccessor) DeleteResource(ctx context.Context, resourceID resModel.ResourceID) (bool, error) {
 	res, err := m.metaclient.DeleteResource(ctx, resourceID)
 	if err != nil {
@@ -89,10 +99,12 @@ func (m *MetadataAccessor) DeleteResource(ctx context.Context, resourceID resMod
 	return true, nil
 }
 
+// GetAllResources returns all resources
 func (m *MetadataAccessor) GetAllResources(ctx context.Context) ([]*resModel.ResourceMeta, error) {
 	return m.metaclient.QueryResources(ctx)
 }
 
+// GetResourcesForExecutor queries all resources belong to the given executor
 func (m *MetadataAccessor) GetResourcesForExecutor(
 	ctx context.Context,
 	executorID resModel.ExecutorID,

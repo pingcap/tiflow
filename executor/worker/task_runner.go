@@ -19,12 +19,18 @@ import (
 
 // Re-export types for public use
 type (
-	Runnable   = internal.Runnable
+	// Runnable alias internal.Runnable
+	Runnable = internal.Runnable
+	// RunnableID alias internal.RunnableID
 	RunnableID = internal.RunnableID
+	// Workloader alias internal.Workloader
 	Workloader = internal.Workloader
-	Closer     = internal.Closer
+	// Closer alias internal.Closer
+	Closer = internal.Closer
 )
 
+// TaskRunner receives RunnableContainer in a FIFO way, and runs them in
+// independent background goroutines.
 type TaskRunner struct {
 	inQueue       chan *internal.RunnableContainer
 	initQuotaSema *semaphore.Weighted
@@ -66,6 +72,7 @@ func (e *taskEntry) EventLoop(ctx context.Context) error {
 	}
 }
 
+// NewTaskRunner creates a new TaskRunner instance
 func NewTaskRunner(inQueueSize int, initConcurrency int) *TaskRunner {
 	return &TaskRunner{
 		inQueue:       make(chan *internal.RunnableContainer, inQueueSize),
@@ -99,6 +106,8 @@ func (r *TaskRunner) addWrappedTask(task *internal.RunnableContainer) error {
 	return derror.ErrRuntimeIncomingQueueFull.GenWithStackByArgs()
 }
 
+// Run runs forever until context is canceled or task queue is closed.
+// It receives new added task and call onNewTask with task
 func (r *TaskRunner) Run(ctx context.Context) error {
 	defer r.cancelAll()
 
@@ -119,6 +128,7 @@ func (r *TaskRunner) Run(ctx context.Context) error {
 	}
 }
 
+// Workload returns total workload of task runner
 func (r *TaskRunner) Workload() (ret model.RescUnit) {
 	r.tasks.Range(func(key, value interface{}) bool {
 		container := value.(*taskEntry).RunnableContainer
@@ -245,6 +255,7 @@ func (r *TaskRunner) onNewTask(ctx context.Context, task *internal.RunnableConta
 	return nil
 }
 
+// TaskCount returns current task count
 func (r *TaskRunner) TaskCount() int64 {
 	return r.taskCount.Load()
 }

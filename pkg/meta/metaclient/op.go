@@ -50,6 +50,7 @@ type Op struct {
 	isOptsWithRange   bool
 }
 
+// EmptyOp creates a global empty op
 var EmptyOp Op = Op{}
 
 // accessors/mutators
@@ -93,6 +94,7 @@ func (op *Op) WithRangeBytes(end []byte) { op.end = end }
 // ValueBytes returns the byte slice holding the Op's value, if any.
 func (op Op) ValueBytes() []byte { return op.val }
 
+// NewOp creates a new op instance
 func NewOp() *Op {
 	return &Op{key: []byte("")}
 }
@@ -127,6 +129,7 @@ func IsOptsWithFromKey(opts []OpOption) bool {
 	return op.isOptsWithFromKey
 }
 
+// CheckValidOp checks whether op is valid
 func (op Op) CheckValidOp() error {
 	// [TODO] forbit WithPrefix() + ""
 	if !(op.IsOptsWithRange() || op.IsOptsWithPrefix() || op.IsOptsWithFromKey()) {
@@ -192,6 +195,7 @@ func getPrefix(key []byte) []byte {
 	return noPrefixEnd
 }
 
+// ApplyOpts calls given option function one by one
 func (op *Op) ApplyOpts(opts []OpOption) {
 	for _, opt := range opts {
 		opt(op)

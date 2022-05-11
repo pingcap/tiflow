@@ -9,16 +9,20 @@ import (
 	"go.uber.org/zap"
 )
 
+// Deps provides a way to construct dependencies container, and supports
+// dependency injection.
 type Deps struct {
 	container *dig.Container
 }
 
+// NewDeps creates a new Dep instance
 func NewDeps() *Deps {
 	return &Deps{
 		container: dig.New(),
 	}
 }
 
+// Provide accepts a constructor and build a value into container
 func (d *Deps) Provide(constructor interface{}) error {
 	return d.container.Provide(constructor)
 }
@@ -55,6 +59,7 @@ func (d *Deps) Construct(fn interface{}) (interface{}, error) {
 	return obj.Interface(), nil
 }
 
+// Fill injects dependencies from Deps to params
 func (d *Deps) Fill(params interface{}) error {
 	invokeFnTp := reflect.FuncOf(
 		[]reflect.Type{reflect.TypeOf(params).Elem()},

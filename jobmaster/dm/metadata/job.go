@@ -11,6 +11,7 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
 )
 
+// TaskStage represents internal stage of a task
 // TODO: use Stage in lib or move Stage to lib.
 type TaskStage int
 
@@ -33,6 +34,7 @@ type Job struct {
 	Tasks map[string]*Task
 }
 
+// NewJob creates a new Job instance
 func NewJob(jobCfg *config.JobCfg) *Job {
 	taskCfgs := jobCfg.ToTaskConfigs()
 	job := &Job{
@@ -45,12 +47,14 @@ func NewJob(jobCfg *config.JobCfg) *Job {
 	return job
 }
 
+// Task is the minimum working unit of a job.
 // A job may contain multiple upstream and it will be converted into multiple tasks.
 type Task struct {
 	Cfg   *config.TaskCfg
 	Stage TaskStage
 }
 
+// NewTask creates a new Task instance
 func NewTask(taskCfg *config.TaskCfg) *Task {
 	return &Task{
 		Cfg:   taskCfg,
@@ -65,6 +69,7 @@ type JobStore struct {
 	id libModel.MasterID
 }
 
+// NewJobStore creates a new JobStore instance
 func NewJobStore(id libModel.MasterID, kvClient metaclient.KVClient) *JobStore {
 	jobStore := &JobStore{
 		TomlStore: NewTomlStore(kvClient),

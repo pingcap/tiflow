@@ -26,8 +26,10 @@ type DiscoveryRunner interface {
 	ApplyWatchResult(WatchResp)
 }
 
+// Snapshot alias to a map mapping from uuid to service resource (node info)
 type Snapshot map[UUID]ServiceResource
 
+// Clone returns a deep copy of Snapshot
 func (s Snapshot) Clone() Snapshot {
 	snapshot := make(map[UUID]ServiceResource, len(s))
 	for k, v := range s {
@@ -115,6 +117,7 @@ func (dr *DiscoveryRunnerImpl) createSession(ctx context.Context, etcdCli *clien
 	return session, nil
 }
 
+// ResetDiscovery implements DiscoveryRunner.ResetDiscovery
 func (dr *DiscoveryRunnerImpl) ResetDiscovery(ctx context.Context, resetSession bool) (Session, error) {
 	session, err := dr.connectToEtcdDiscovery(ctx, resetSession)
 	if err != nil {
@@ -125,14 +128,17 @@ func (dr *DiscoveryRunnerImpl) ResetDiscovery(ctx context.Context, resetSession 
 	return session, nil
 }
 
+// GetSnapshot implements DiscoveryRunner.GetSnapshot
 func (dr *DiscoveryRunnerImpl) GetSnapshot() Snapshot {
 	return dr.snapshot
 }
 
+// GetWatcher implements DiscoveryRunner.GetWatcher
 func (dr *DiscoveryRunnerImpl) GetWatcher() <-chan WatchResp {
 	return dr.discoveryWatcher
 }
 
+// ApplyWatchResult implements DiscoveryRunner.ApplyWatchResult
 func (dr *DiscoveryRunnerImpl) ApplyWatchResult(resp WatchResp) {
 	for uuid, add := range resp.AddSet {
 		dr.snapshot[uuid] = add

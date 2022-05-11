@@ -31,6 +31,7 @@ type Runnable interface {
 
 type RunnableStatus = int32
 
+// Defines all RunnableStatus
 const (
 	TaskSubmitted = RunnableStatus(iota + 1)
 	TaskRunning

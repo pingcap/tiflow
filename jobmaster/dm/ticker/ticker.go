@@ -6,6 +6,7 @@ import (
 	"time"
 )
 
+// Ticker interface
 type Ticker interface {
 	TickImpl(ctx context.Context) error
 }
@@ -22,6 +23,7 @@ type DefaultTicker struct {
 	errorInterval  time.Duration
 }
 
+// NewDefaultTicker creates a DefaultTicker instance
 func NewDefaultTicker(normalInterval, errorInterval time.Duration) *DefaultTicker {
 	defaultTicker := &DefaultTicker{
 		normalInterval: normalInterval,
@@ -31,6 +33,8 @@ func NewDefaultTicker(normalInterval, errorInterval time.Duration) *DefaultTicke
 	return defaultTicker
 }
 
+// SetNextCheckTime sets the next check time if ticker has checked or the given
+// check time hits (lastCheckTime, nextCheckTime)
 func (s *DefaultTicker) SetNextCheckTime(t time.Time) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -53,6 +57,7 @@ func (s *DefaultTicker) advanceCheckTime() {
 	s.nextCheckTime = now
 }
 
+// Tick checks whether needs to check and calls TickImpl if needed.
 func (s *DefaultTicker) Tick(ctx context.Context) {
 	if time.Now().Before(s.getNextCheckTime()) {
 		return

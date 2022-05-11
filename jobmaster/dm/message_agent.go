@@ -16,11 +16,9 @@ import (
 	"github.com/pingcap/errors"
 )
 
-var (
-	DefaultMessageTimeOut = time.Second * 2
-	DefaultRequestTimeOut = time.Second * 30
-)
+var defaultMessageTimeOut = time.Second * 2
 
+// Master defines an interface for dm master operation
 type Master interface {
 	// for create worker
 	CreateWorker(
@@ -33,6 +31,7 @@ type Master interface {
 	CurrentEpoch() libModel.Epoch
 }
 
+// SendHandle defines an interface that supports ID and SendMessage
 type SendHandle interface {
 	ID() libModel.WorkerID
 	SendMessage(ctx context.Context, topic string, message interface{}, nonblocking bool) error
@@ -49,6 +48,7 @@ type MessageAgent struct {
 	sendHandles sync.Map
 }
 
+// NewMessageAgent creates a new MessageAgent instance
 func NewMessageAgent(initSenders map[string]SendHandle, id libModel.WorkerID, master Master) *MessageAgent {
 	messageAgent := &MessageAgent{
 		master:      master,
@@ -62,6 +62,7 @@ func NewMessageAgent(initSenders map[string]SendHandle, id libModel.WorkerID, ma
 	return messageAgent
 }
 
+// UpdateWorkerHandle updates or deletes the worker handler
 func (agent *MessageAgent) UpdateWorkerHandle(taskID string, sendHandle SendHandle) {
 	if sendHandle == nil {
 		agent.sendHandles.Delete(taskID)
@@ -70,7 +71,7 @@ func (agent *MessageAgent) UpdateWorkerHandle(taskID string, sendHandle SendHand
 	}
 }
 
-// Manage all interactions with workers in the message agent
+// CreateWorker manages all interactions with workers in the message agent
 // Though we can create worker in jobmaster directly
 func (agent *MessageAgent) CreateWorker(
 	ctx context.Context,
@@ -88,6 +89,7 @@ func (agent *MessageAgent) CreateWorker(
 	return agent.master.CreateWorker(workerType, subTaskCfg, 1, resources...)
 }
 
+// StopWorker sends wtop worker message
 func (agent *MessageAgent) StopWorker(ctx context.Context, taskID libModel.WorkerID, workerID libModel.WorkerID) error {
 	v, ok := agent.sendHandles.Load(taskID)
 	if !ok {
@@ -107,11 +109,12 @@ func (agent *MessageAgent) StopWorker(ctx context.Context, taskID libModel.Worke
 		ExpectState:  libModel.WorkerStatusStopped,
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, DefaultMessageTimeOut)
+	ctx, cancel := context.WithTimeout(ctx, defaultMessageTimeOut)
 	defer cancel()
 	return sender.SendMessage(ctx, topic, message, true)
 }
 
+// OperateTask delegates to send operate task message with p2p messaging system
 func (agent *MessageAgent) OperateTask(ctx context.Context, taskID string, stage metadata.TaskStage) error {
 	if stage != metadata.StageRunning && stage != metadata.StagePaused {
 		return errors.Errorf("invalid expected stage %d for task %s", stage, taskID)
@@ -127,11 +130,12 @@ func (agent *MessageAgent) OperateTask(ctx context.Context, taskID string, stage
 		Stage:  stage,
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, DefaultMessageTimeOut)
+	ctx, cancel := context.WithTimeout(ctx, defaultMessageTimeOut)
 	defer cancel()
 	return v.(SendHandle).SendMessage(ctx, topic, message, true)
 }
 
+// OnWorkerMessage is the callback for worker message
 func (agent *MessageAgent) OnWorkerMessage(response dmpkg.MessageWithID) error {
 	return agent.messagePair.OnResponse(response)
 }

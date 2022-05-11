@@ -10,6 +10,7 @@ import (
 	"go.uber.org/zap"
 )
 
+// MetaStoreManager defines an interface to manage metastore
 type MetaStoreManager interface {
 	// Register register specify backend store to manager with an unique id
 	// id can be some readable identifier, like `meta-test1`.
@@ -26,10 +27,12 @@ type metaStoreManagerImpl struct {
 	id2Store sync.Map
 }
 
+// NewMetaStoreManager creates a new metaStoreManagerImpl instance
 func NewMetaStoreManager() MetaStoreManager {
 	return &metaStoreManagerImpl{}
 }
 
+// Register implements MetaStoreManager.Register
 func (m *metaStoreManagerImpl) Register(id string, store *metaclient.StoreConfigParams) error {
 	if _, exists := m.id2Store.LoadOrStore(id, store); exists {
 		log.L().Error("register metastore fail", zap.Any("config", store), zap.String("err", "Duplicate storeID"))
@@ -38,11 +41,13 @@ func (m *metaStoreManagerImpl) Register(id string, store *metaclient.StoreConfig
 	return nil
 }
 
+// Unregister implements MetaStoreManager.Unregister
 func (m *metaStoreManagerImpl) UnRegister(id string) {
 	m.id2Store.Delete(id)
 	log.L().Info("unregister metastore", zap.String("storeID", id))
 }
 
+// GetMetaStore implements MetaStoreManager.GetMetaStore
 func (m *metaStoreManagerImpl) GetMetaStore(id string) *metaclient.StoreConfigParams {
 	if store, exists := m.id2Store.Load(id); exists {
 		return store.(*metaclient.StoreConfigParams)

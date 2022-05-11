@@ -11,6 +11,7 @@ import (
 	"google.golang.org/grpc"
 )
 
+// CloseableConnIface defines an interface that supports Close(release resource)
 type CloseableConnIface interface {
 	Close() error
 }
@@ -37,6 +38,7 @@ type FailoverRPCClients[T FailoverRPCClientType] struct {
 	dialer      DialFunc[T]
 }
 
+// NewFailoverRPCClients creates a FailoverRPCClients and initializes it
 func NewFailoverRPCClients[T FailoverRPCClientType](
 	ctx context.Context,
 	urls []string,
@@ -186,6 +188,7 @@ func DoFailoverRPC[
 	return resp, err
 }
 
+// NewFailoverRPCClientsForTest creates a FailoverRPCClients for test
 func NewFailoverRPCClientsForTest[T FailoverRPCClientType](
 	client T,
 ) *FailoverRPCClients[T] {

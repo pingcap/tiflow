@@ -6,10 +6,8 @@ import (
 	"github.com/hanfei1991/microcosm/model"
 )
 
-// defines some type alias used in service discovery module
-type (
-	UUID = string
-)
+// UUID is node id actually
+type UUID = string
 
 // ServiceResource alias to NodeInfo
 type ServiceResource = model.NodeInfo

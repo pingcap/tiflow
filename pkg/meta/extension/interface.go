@@ -6,7 +6,8 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
 )
 
-// Extend the KV interface with Do method to implement the intermediate layer easier
+// KVEx extends the KV interface with Do method to implement the intermediate
+// layer easier
 type KVEx interface {
 	metaclient.KV
 
@@ -15,7 +16,8 @@ type KVEx interface {
 	Do(ctx context.Context, op metaclient.Op) (metaclient.OpResponse, metaclient.Error)
 }
 
-// Extend the KVClient interface with Do method to implement the intermediate layer easier
+// KVClientEx extends the KVClient interface with Do method to implement the
+// intermediate layer easier
 type KVClientEx interface {
 	KVEx
 	metaclient.Client

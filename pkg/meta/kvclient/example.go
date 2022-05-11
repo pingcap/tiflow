@@ -20,7 +20,7 @@ import (
 //|		dm		|		DDL		|		0		|		18		|
 
 // nolint:deadcode, ineffassign
-func Test(t *testing.T) {
+func test(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 	cli := mock.NewMockKVClient(ctrl)

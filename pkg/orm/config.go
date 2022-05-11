@@ -20,6 +20,7 @@ const (
 	// TODO: more params for mysql connection
 )
 
+// DBConfig defines some configuration used in database connection
 // refer to: https://pkg.go.dev/database/sql#SetConnMaxIdleTime
 type DBConfig struct {
 	ReadTimeout     string
@@ -31,6 +32,7 @@ type DBConfig struct {
 	MaxOpenConns    int
 }
 
+// NewDefaultDBConfig creates a default DBConfig
 func NewDefaultDBConfig() DBConfig {
 	return DBConfig{
 		ReadTimeout:     defaultReadTimeout,

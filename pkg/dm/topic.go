@@ -18,14 +18,18 @@ type MessageWithID struct {
 	Message Message
 }
 
+// Request alias to Message
 type Request Message
 
+// Response alias to Message
 type Response Message
 
+// OperateTaskMessageTopic is topic constructor for operate task message
 func OperateTaskMessageTopic(masterID libModel.MasterID, taskID string) p2p.Topic {
 	return fmt.Sprintf("operate-task-message-%s-%s", masterID, taskID)
 }
 
+// OperateTaskMessage is operate task message
 type OperateTaskMessage struct {
 	TaskID string
 	Stage  metadata.TaskStage

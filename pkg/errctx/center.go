@@ -24,6 +24,9 @@ func NewErrCenter() *ErrCenter {
 	}
 }
 
+// OnError receivers an error, if the error center has received one, drops the
+// new error and records a warning log. Otherwise the error will be recorded and
+// doneCh will be closed to use as notification.
 func (c *ErrCenter) OnError(err error) {
 	c.errMu.Lock()
 	defer c.errMu.Unlock()
@@ -43,6 +46,7 @@ func (c *ErrCenter) OnError(err error) {
 	close(c.doneCh)
 }
 
+// CheckError retusn the recorded error
 func (c *ErrCenter) CheckError() error {
 	c.errMu.RLock()
 	defer c.errMu.RUnlock()
@@ -50,6 +54,7 @@ func (c *ErrCenter) CheckError() error {
 	return c.errVal
 }
 
+// WithCancelOnFirstError creates an error context which supports is cancelled on error
 func (c *ErrCenter) WithCancelOnFirstError(ctx context.Context) context.Context {
 	return newErrCtx(ctx, c)
 }

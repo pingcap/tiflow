@@ -19,19 +19,24 @@ import (
 )
 
 var (
+	// WorkerNormalInterval is check interval when no error returns in tick
 	WorkerNormalInterval = time.Second * 30
-	WorkerErrorInterval  = time.Second * 10
+	// WorkerErrorInterval is check interval when any error returns in tick
+	WorkerErrorInterval = time.Second * 10
 )
 
+// WorkerAgent manages worker
 type WorkerAgent interface {
 	CreateWorker(ctx context.Context, taskID string, workerType libModel.WorkerType, taskCfg *config.TaskCfg, resources ...resourcemeta.ResourceID) (libModel.WorkerID, error)
 	StopWorker(ctx context.Context, taskID string, workerID libModel.WorkerID) error
 }
 
+// CheckpointAgent manages checkpoint
 type CheckpointAgent interface {
 	IsFresh(ctx context.Context, workerType libModel.WorkerType, taskCfg *metadata.Task) (bool, error)
 }
 
+// WorkerManager checks and schedules workers.
 type WorkerManager struct {
 	*ticker.DefaultTicker
 
@@ -44,7 +49,7 @@ type WorkerManager struct {
 	workerStatusMap sync.Map
 }
 
-// WorkerManager checks and schedules workers.
+// NewWorkerManager creates a new WorkerManager instance
 func NewWorkerManager(initWorkerStatus []runtime.WorkerStatus, jobStore *metadata.JobStore, workerAgent WorkerAgent, checkpointAgent CheckpointAgent) *WorkerManager {
 	workerManager := &WorkerManager{
 		DefaultTicker:   ticker.NewDefaultTicker(WorkerNormalInterval, WorkerErrorInterval),

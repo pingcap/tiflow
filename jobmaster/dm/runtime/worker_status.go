@@ -38,6 +38,7 @@ var HeartbeatInterval = 3 * time.Second
 //                 │                    │                    │                   │
 type WorkerStage int
 
+// All available WorkerStage
 const (
 	WorkerCreating WorkerStage = iota
 	WorkerOnline
@@ -46,6 +47,7 @@ const (
 	// WorkerDestroying
 )
 
+// WorkerStatus manages worker state machine
 type WorkerStatus struct {
 	TaskID string
 	ID     libModel.WorkerID
@@ -55,25 +57,30 @@ type WorkerStatus struct {
 	createdTime time.Time
 }
 
+// IsOffline checks whether worker stage is offline
 func (w *WorkerStatus) IsOffline() bool {
 	return w.Stage == WorkerOffline
 }
 
+// CreateFailed checks whether the worker creation is failed
 func (w *WorkerStatus) CreateFailed() bool {
 	return w.Stage == WorkerCreating && w.createdTime.Add(2*HeartbeatInterval).Before(time.Now())
 }
 
-// currently, we regard worker run as expected except it is offline.
+// RunAsExpected returns whether a worker is running.
+// Currently, we regard worker run as expected except it is offline.
 func (w *WorkerStatus) RunAsExpected() bool {
 	return w.Stage == WorkerOnline || w.Stage == WorkerCreating || w.Stage == WorkerFinished
 }
 
+// InitWorkerStatus creates a new worker status and initializes it
 func InitWorkerStatus(taskID string, unit lib.WorkerType, id libModel.WorkerID) WorkerStatus {
 	workerStatus := NewWorkerStatus(taskID, unit, id, WorkerCreating)
 	workerStatus.createdTime = time.Now()
 	return workerStatus
 }
 
+// NewWorkerStatus creates a new WorkerStatus instance
 func NewWorkerStatus(taskID string, unit lib.WorkerType, id libModel.WorkerID, stage WorkerStage) WorkerStatus {
 	return WorkerStatus{
 		TaskID: taskID,

@@ -13,8 +13,10 @@ import (
 	"github.com/hanfei1991/microcosm/test/mock"
 )
 
+// DialTimeout is the default timeout for gRPC dialing
 const DialTimeout = 5 * time.Second
 
+// MasterClient abstracts an interface that can be used to interact with server master
 type MasterClient interface {
 	UpdateClients(ctx context.Context, urls []string, leaderURL string)
 	Endpoints() []string
@@ -44,6 +46,7 @@ type MasterClient interface {
 	GetLeaderClient() pb.MasterClient
 }
 
+// MasterClientImpl implemeents MasterClient interface
 type MasterClientImpl struct {
 	*rpcutil.FailoverRPCClients[pb.MasterClient]
 }
@@ -66,6 +69,7 @@ var mockDialImpl = func(ctx context.Context, addr string) (pb.MasterClient, rpcu
 	return mock.NewMasterClient(conn), conn, nil
 }
 
+// NewMasterClient creates a new MasterClientImpl instance
 func NewMasterClient(ctx context.Context, join []string) (*MasterClientImpl, error) {
 	dialer := dialImpl
 	if test.GetGlobalTestFlag() {
@@ -88,22 +92,27 @@ func (c *MasterClientImpl) RegisterExecutor(ctx context.Context, req *pb.Registe
 	return rpcutil.DoFailoverRPC(ctx, c.FailoverRPCClients, req, pb.MasterClient.RegisterExecutor)
 }
 
+// SubmitJob implemeents MasterClient.SubmitJob
 func (c *MasterClientImpl) SubmitJob(ctx context.Context, req *pb.SubmitJobRequest) (resp *pb.SubmitJobResponse, err error) {
 	return rpcutil.DoFailoverRPC(ctx, c.FailoverRPCClients, req, pb.MasterClient.SubmitJob)
 }
 
+// QueryJob implemeents MasterClient.QueryJob
 func (c *MasterClientImpl) QueryJob(ctx context.Context, req *pb.QueryJobRequest) (resp *pb.QueryJobResponse, err error) {
 	return rpcutil.DoFailoverRPC(ctx, c.FailoverRPCClients, req, pb.MasterClient.QueryJob)
 }
 
+// PauseJob implemeents MasterClient.PauseJob
 func (c *MasterClientImpl) PauseJob(ctx context.Context, req *pb.PauseJobRequest) (resp *pb.PauseJobResponse, err error) {
 	return rpcutil.DoFailoverRPC(ctx, c.FailoverRPCClients, req, pb.MasterClient.PauseJob)
 }
 
+// CancelJob implemeents MasterClient.CancelJob
 func (c *MasterClientImpl) CancelJob(ctx context.Context, req *pb.CancelJobRequest) (resp *pb.CancelJobResponse, err error) {
 	return rpcutil.DoFailoverRPC(ctx, c.FailoverRPCClients, req, pb.MasterClient.CancelJob)
 }
 
+// QueryMetaStore implemeents MasterClient.QueryMetaStore
 func (c *MasterClientImpl) QueryMetaStore(
 	ctx context.Context, req *pb.QueryMetaStoreRequest, timeout time.Duration,
 ) (resp *pb.QueryMetaStoreResponse, err error) {
@@ -124,6 +133,7 @@ func (c *MasterClientImpl) ScheduleTask(
 	return rpcutil.DoFailoverRPC(ctx1, c.FailoverRPCClients, req, pb.MasterClient.ScheduleTask)
 }
 
+// ReportExecutorWorkload implemeents MasterClient.ReportExecutorWorkload
 func (c *MasterClientImpl) ReportExecutorWorkload(
 	ctx context.Context,
 	req *pb.ExecWorkloadRequest,
@@ -131,6 +141,7 @@ func (c *MasterClientImpl) ReportExecutorWorkload(
 	return rpcutil.DoFailoverRPC(ctx, c.FailoverRPCClients, req, pb.MasterClient.ReportExecutorWorkload)
 }
 
+// PersistResource implemeents MasterClient.PersistResource
 func (c *MasterClientImpl) PersistResource(
 	ctx context.Context,
 	req *pb.PersistResourceRequest,

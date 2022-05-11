@@ -13,14 +13,18 @@ import (
 )
 
 type (
+	// WorkerID alias worker id string
 	WorkerID = string
 	// ResourceID should be in the form of `/<type>/<unique-name>`, currently
 	// only local type is available.
 	ResourceID = string
-	JobID      = string
+	// JobID alias job id string
+	JobID = string
+	// ExecutorID alias model.ExecutorID
 	ExecutorID = model.ExecutorID
 )
 
+// ResourceUpdateColumns is used in gorm update
 var ResourceUpdateColumns = []string{
 	"updated_at",
 	"project_id",
@@ -56,6 +60,7 @@ func (m *ResourceMeta) ToQueryResourceResponse() *pb.QueryResourceResponse {
 	}
 }
 
+// Map is used in gorm update
 func (m *ResourceMeta) Map() map[string]interface{} {
 	return map[string]interface{}{
 		"project_id":  m.ProjectID,
@@ -77,6 +82,7 @@ type GCTodoEntry struct {
 // ResourceType represents the type of the resource
 type ResourceType string
 
+// Define all supported resource types
 const (
 	ResourceTypeLocalFile = ResourceType("local")
 	ResourceTypeS3        = ResourceType("s3")

@@ -80,26 +80,32 @@ func (c *baseExecutorClientImpl) Send(ctx context.Context, req *ExecutorRequest)
 	return resp, err
 }
 
+// CmdType represents the request type when dispatching task from server master to executor.
 type CmdType uint16
 
+// CmdType values.
 const (
 	CmdPreDispatchTask CmdType = 1 + iota
 	CmdConfirmDispatchTask
 )
 
+// ExecutorRequest wraps CmdType and dispatch task request object
 type ExecutorRequest struct {
 	Cmd CmdType
 	Req interface{}
 }
 
+// PreDispatchTask unwraps gRPC PreDispatchTaskRequest from ExecutorRequest
 func (e *ExecutorRequest) PreDispatchTask() *pb.PreDispatchTaskRequest {
 	return e.Req.(*pb.PreDispatchTaskRequest)
 }
 
+// ConfirmDispatchTask unwraps gRPC ConfirmDispatchTask from ExecutorRequest
 func (e *ExecutorRequest) ConfirmDispatchTask() *pb.ConfirmDispatchTaskRequest {
 	return e.Req.(*pb.ConfirmDispatchTaskRequest)
 }
 
+// ExecutorResponse wraps DispatchTaskResponse object
 type ExecutorResponse struct {
 	Resp interface{}
 }

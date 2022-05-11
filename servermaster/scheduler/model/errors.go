@@ -14,11 +14,14 @@ import (
 	resourcemeta "github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta/model"
 )
 
+// ResourceNotFoundError happens when the resource id doesn't equal to any record
+// in metastore, it also contains detail cause by Inner error field.
 type ResourceNotFoundError struct {
 	ProblemResource resourcemeta.ResourceID
 	Inner           error
 }
 
+// NewResourceNotFoundError creates a resource not found error
 func NewResourceNotFoundError(
 	resourceID resourcemeta.ResourceID, cause error,
 ) error {
@@ -34,11 +37,13 @@ func (e *ResourceNotFoundError) Error() string {
 		e.ProblemResource, e.Inner.Error())
 }
 
+// ResourceConflictError is raised when two resources are assigned to two executors.
 type ResourceConflictError struct {
 	ConflictingResources [2]resourcemeta.ResourceID
 	AssignedExecutors    [2]model.ExecutorID
 }
 
+// NewResourceConflictError creates a new resource conflict error
 func NewResourceConflictError(
 	resourceA resourcemeta.ResourceID,
 	executorA model.ExecutorID,
@@ -59,6 +64,7 @@ func (e *ResourceConflictError) Error() string {
 		e.ConflictingResources[1], e.AssignedExecutors[1])
 }
 
+// SchedulerErrorToGRPCError converts resource error to corresponding gRPC error
 func SchedulerErrorToGRPCError(errIn error) error {
 	if errIn == nil {
 		log.L().Panic("Invalid input to SchedulerErrorToGRPCError")

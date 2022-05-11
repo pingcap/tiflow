@@ -12,7 +12,7 @@ const (
 	defaultMinEpoch = 1
 )
 
-// using transaction to generate increasing epoch
+// LogicEpoch is used to generate increasing epoch
 type LogicEpoch struct {
 	Model
 	Epoch int64 `gorm:"type:bigint not null default 1"`

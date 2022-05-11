@@ -2,6 +2,7 @@ package config
 
 import "time"
 
+// TimeoutConfig defines timeout related config used in master-worker framework
 type TimeoutConfig struct {
 	WorkerTimeoutDuration            time.Duration
 	WorkerTimeoutGracefulDuration    time.Duration
@@ -28,6 +29,7 @@ func (config TimeoutConfig) Adjust() TimeoutConfig {
 	return tc
 }
 
+// DefaultTimeoutConfig returns a default timeout config
 func DefaultTimeoutConfig() TimeoutConfig {
 	return defaultTimeoutConfig
 }

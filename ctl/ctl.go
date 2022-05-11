@@ -18,8 +18,8 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
-// NewRootCmd registers all the sub-commands.
-func NewRootCmd() *cobra.Command {
+// newRootCmd registers all the sub-commands.
+func newRootCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:           "tfctl",
 		Short:         "TiFlow Command Tools",
@@ -29,9 +29,9 @@ func NewRootCmd() *cobra.Command {
 			DisableDefaultCmd: true,
 		},
 	}
-	cmd.AddCommand(NewSubmitJob())
-	cmd.AddCommand(NewQueryJob())
-	cmd.AddCommand(NewPauseJob())
+	cmd.AddCommand(newSubmitJob())
+	cmd.AddCommand(newQueryJob())
+	cmd.AddCommand(newPauseJob())
 	helpCmd := &cobra.Command{
 		Use:   "help [command]",
 		Short: "Gets help about any commands",
@@ -56,7 +56,7 @@ Simply type ` + cmd.Name() + ` help [path to command] for full details.`,
 	return cmd
 }
 
-type Config struct {
+type config struct {
 	flagSet *pflag.FlagSet
 
 	MasterAddrs string `toml:"master-addr"`
@@ -81,7 +81,7 @@ func defineConfigFlagSet(fs *pflag.FlagSet) {
 	fs.String("rpc-timeout", defaultRPCTimeout, fmt.Sprintf("RPC timeout, default is %s.", defaultRPCTimeout))
 }
 
-func (c *Config) getConfigFromFlagSet() error {
+func (c *config) getConfigFromFlagSet() error {
 	var err error
 	fs := c.flagSet
 	c.ConfigFile, err = fs.GetString("config")
@@ -99,7 +99,7 @@ func (c *Config) getConfigFromFlagSet() error {
 	return nil
 }
 
-func (c *Config) Adjust() error {
+func (c *config) Adjust() error {
 	err := c.getConfigFromFlagSet()
 	if err != nil {
 		return errors.Trace(err)
@@ -135,13 +135,13 @@ func (c *Config) Adjust() error {
 }
 
 // configFromFile loads config from file.
-func (c *Config) configFromFile(path string) error {
+func (c *config) configFromFile(path string) error {
 	_, err := toml.DecodeFile(path, c)
 	return err
 }
 
 // Init initializes dm-control.
-func Init(ctx context.Context, cfg *Config) error {
+func Init(ctx context.Context, cfg *config) error {
 	// set the log level temporarily
 	log.SetLevel(zapcore.InfoLevel)
 	rpcTimeout = cfg.RPCTimeout
@@ -158,8 +158,9 @@ func Init(ctx context.Context, cfg *Config) error {
 	return nil
 }
 
+// MainStart runs root command
 func MainStart(ctx context.Context, args []string) {
-	rootCmd := NewRootCmd()
+	rootCmd := newRootCmd()
 	rootCmd.RunE = func(cmd *cobra.Command, args []string) error {
 		return cmd.Help()
 	}
@@ -190,9 +191,9 @@ func MainStart(ctx context.Context, args []string) {
 	}
 }
 
-// NewConfig creates a new base config for dmctl.
-func newConfig(fs *pflag.FlagSet) *Config {
-	cfg := &Config{}
+// newConfig creates a new base config for dmctl.
+func newConfig(fs *pflag.FlagSet) *config {
+	cfg := &config{}
 	cfg.flagSet = fs
 	return cfg
 }

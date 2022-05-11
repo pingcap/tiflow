@@ -33,6 +33,7 @@ type LocalBroker struct {
 	persistedList []resourcemeta.ResourceID
 }
 
+// NewBrokerForTesting creates a LocalBroker instance for testing only
 func NewBrokerForTesting(executorID resourcemeta.ExecutorID) *LocalBroker {
 	dir, err := ioutil.TempDir("/tmp", "*-localfiles")
 	if err != nil {
@@ -46,6 +47,7 @@ func NewBrokerForTesting(executorID resourcemeta.ExecutorID) *LocalBroker {
 	}
 }
 
+// OpenStorage wraps broker.OpenStorage
 func (b *LocalBroker) OpenStorage(
 	ctx context.Context,
 	workerID resourcemeta.WorkerID,
@@ -75,6 +77,7 @@ func (b *LocalBroker) OpenStorage(
 	return &brExternalStorageHandleForTesting{parent: b, Handle: h}, nil
 }
 
+// AssertPersisted checks resource is in persisted list
 func (b *LocalBroker) AssertPersisted(t *testing.T, id resourcemeta.ResourceID) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -89,6 +92,7 @@ func (b *LocalBroker) appendPersistRecord(id resourcemeta.ResourceID) {
 	b.persistedList = append(b.persistedList, id)
 }
 
+// AssertFileExists checks lock file exists
 func (b *LocalBroker) AssertFileExists(
 	t *testing.T,
 	workerID resourcemeta.WorkerID,

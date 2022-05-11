@@ -64,6 +64,7 @@ func (m *messageSenderImpl) SendToNode(ctx context.Context, targetNodeID NodeID,
 	return true, nil
 }
 
+// MessageRouter alias to p2pImpl.MessageRouter
 type MessageRouter = p2pImpl.MessageRouter
 
 var defaultClientConfig = &p2pImpl.MessageClientConfig{
@@ -75,6 +76,7 @@ var defaultClientConfig = &p2pImpl.MessageClientConfig{
 	ClientVersion:           "v5.4.0", // a fake version
 }
 
+// NewMessageRouter creates a new MessageRouter instance via tiflow p2p API
 func NewMessageRouter(nodeID NodeID, advertisedAddr string) MessageRouter {
 	config := *defaultClientConfig // copy
 	config.AdvertisedAddr = advertisedAddr

@@ -22,6 +22,7 @@ type CapRescMgr struct {
 	executors map[model.ExecutorID]*ExecutorResource
 }
 
+// NewCapRescMgr creates a new CapRescMgr instance
 func NewCapRescMgr() *CapRescMgr {
 	return &CapRescMgr{
 		r:         rand.New(rand.NewSource(time.Now().UnixNano())),

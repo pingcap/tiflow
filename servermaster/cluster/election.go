@@ -25,6 +25,7 @@ type Election interface {
 	Campaign(ctx context.Context, selfID NodeID, timeout time.Duration) (leaderCtx context.Context, resignFn context.CancelFunc, err error)
 }
 
+// EtcdElectionConfig defines configurations used in etcd election
 type EtcdElectionConfig struct {
 	CreateSessionTimeout time.Duration
 	TTL                  time.Duration
@@ -32,8 +33,10 @@ type EtcdElectionConfig struct {
 }
 
 type (
+	// EtcdKeyPrefix alias the key prefix type used in election
 	EtcdKeyPrefix = string
-	NodeID        = string
+	// NodeID alias the node type used in election
+	NodeID = string
 )
 
 // EtcdElection implements Election and provides a way to elect leaders via Etcd.
@@ -44,6 +47,7 @@ type EtcdElection struct {
 	rl         *rate.Limiter
 }
 
+// NewEtcdElection creates a new EtcdElection instance
 func NewEtcdElection(
 	ctx context.Context,
 	etcdClient *clientv3.Client,
@@ -76,6 +80,7 @@ func NewEtcdElection(
 	}, nil
 }
 
+// Campaign tries to campaign to be a leader. If a leader already exists, it blocks.
 func (e *EtcdElection) Campaign(ctx context.Context, selfID NodeID, timeout time.Duration) (context.Context, context.CancelFunc, error) {
 	for {
 		select {

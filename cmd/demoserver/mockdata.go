@@ -59,18 +59,20 @@ func (m *memFile) insert(v int) bool {
 
 type memDB map[int]*memFile
 
-type Mock struct {
+type dataRWServiceMock struct {
 	mu    sync.Mutex
 	dbMap map[string]memDB
 }
 
-func (s *Mock) ListFiles(ctx context.Context, _ *pb.ListFilesReq) (*pb.ListFilesResponse, error) {
+// ListFiles implements DataRWService.ListFiles
+func (s *dataRWServiceMock) ListFiles(ctx context.Context, _ *pb.ListFilesReq) (*pb.ListFilesResponse, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return &pb.ListFilesResponse{FileNum: int32(len(s.dbMap[DemoDir]))}, nil
+	return &pb.ListFilesResponse{FileNum: int32(len(s.dbMap[demoDir]))}, nil
 }
 
-func (s *Mock) GenerateData(ctx context.Context, req *pb.GenerateDataRequest) (*pb.GenerateDataResponse, error) {
+// GenerateData implements DataRWService.GenerateData
+func (s *dataRWServiceMock) GenerateData(ctx context.Context, req *pb.GenerateDataRequest) (*pb.GenerateDataResponse, error) {
 	ready = make(chan struct{})
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -85,20 +87,21 @@ func (s *Mock) GenerateData(ctx context.Context, req *pb.GenerateDataRequest) (*
 		index := k % fileNum
 		origin[index].insert(k)
 	}
-	s.dbMap[DemoDir] = origin
+	s.dbMap[demoDir] = origin
 
 	log.L().Info("files have been created", zap.Any("filenumber", fileNum))
 	close(ready)
 	return &pb.GenerateDataResponse{}, nil
 }
 
-func (s *Mock) ReadLines(req *pb.ReadLinesRequest, stream pb.DataRWService_ReadLinesServer) error {
+// ReadLines implements DataRWService.ReadLines
+func (s *dataRWServiceMock) ReadLines(req *pb.ReadLinesRequest, stream pb.DataRWService_ReadLinesServer) error {
 	log.L().Info("receive the request for reading file ", zap.Any("idx", req.FileIdx), zap.String("lineNo", string(req.LineNo)))
 	s.mu.Lock()
-	db, ok := s.dbMap[DemoDir][int(req.FileIdx)]
+	db, ok := s.dbMap[demoDir][int(req.FileIdx)]
 	s.mu.Unlock()
 	if !ok {
-		return stream.Send(&pb.ReadLinesResponse{ErrMsg: fmt.Sprintf("file idx %d is out of range %d", req.FileIdx, len(s.dbMap[DemoAddress])), IsEof: true})
+		return stream.Send(&pb.ReadLinesResponse{ErrMsg: fmt.Sprintf("file idx %d is out of range %d", req.FileIdx, len(s.dbMap[demoAddress])), IsEof: true})
 	}
 	log.L().Info("db reading", zap.Any("begin", db.start), zap.Any("end", db.end))
 	seekByte := req.GetLineNo()
@@ -127,7 +130,8 @@ func (s *Mock) ReadLines(req *pb.ReadLinesRequest, stream pb.DataRWService_ReadL
 	}
 }
 
-func (s *Mock) WriteLines(stream pb.DataRWService_WriteLinesServer) error {
+// WriteLines implements DataRWService.WriteLines
+func (s *dataRWServiceMock) WriteLines(stream pb.DataRWService_WriteLinesServer) error {
 	var dir string
 	var idx int
 	file := &memFile{}
@@ -145,7 +149,7 @@ func (s *Mock) WriteLines(stream pb.DataRWService_WriteLinesServer) error {
 				}
 				file, ok = bucket[idx]
 				if !ok {
-					file = &memFile{step: len(s.dbMap[DemoDir])}
+					file = &memFile{step: len(s.dbMap[demoDir])}
 					bucket[idx] = file
 				}
 				s.dbMap[dir] = bucket
@@ -179,9 +183,10 @@ func (s *Mock) WriteLines(stream pb.DataRWService_WriteLinesServer) error {
 	}
 }
 
-func (s *Mock) CheckDir(ctx context.Context, req *pb.CheckDirRequest) (*pb.CheckDirResponse, error) {
+// CheckDir implements DataRWService.CheckDir
+func (s *dataRWServiceMock) CheckDir(ctx context.Context, req *pb.CheckDirRequest) (*pb.CheckDirResponse, error) {
 	s.mu.Lock()
-	originBucket := s.dbMap[DemoDir]
+	originBucket := s.dbMap[demoDir]
 	targetBucket, ok := s.dbMap[req.Dir]
 	if !ok {
 		return &pb.CheckDirResponse{ErrMsg: fmt.Sprintf("cannot find %s db", req.Dir)}, nil
@@ -202,7 +207,8 @@ func (s *Mock) CheckDir(ctx context.Context, req *pb.CheckDirRequest) (*pb.Check
 	return &pb.CheckDirResponse{}, nil
 }
 
-func (s *Mock) IsReady(ctx context.Context, req *pb.IsReadyRequest) (*pb.IsReadyResponse, error) {
+// IsReady implements DataRWService.IsReady
+func (s *dataRWServiceMock) IsReady(ctx context.Context, req *pb.IsReadyRequest) (*pb.IsReadyResponse, error) {
 	select {
 	case <-ready:
 		return &pb.IsReadyResponse{Ready: true}, nil

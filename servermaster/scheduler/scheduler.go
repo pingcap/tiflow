@@ -12,12 +12,15 @@ import (
 	schedModel "github.com/hanfei1991/microcosm/servermaster/scheduler/model"
 )
 
+// Scheduler is a full set of scheduling management, containing capacity provider,
+// real scheduler and resource placement manager.
 type Scheduler struct {
 	capacityProvider     CapacityProvider
 	costScheduler        *CostScheduler
 	placementConstrainer PlacementConstrainer
 }
 
+// NewScheduler creates a new Scheduler instance
 func NewScheduler(
 	capacityProvider CapacityProvider,
 	placementConstrainer PlacementConstrainer,

@@ -122,6 +122,7 @@ func (s *testServerConn) sendRequest(ctx context.Context, req interface{}) (inte
 	return nil, errors.New("unknown request")
 }
 
+// NewTestServer creates a mock gRPC server
 func NewTestServer(addr string, server pb.TestServiceServer) (GrpcServer, error) {
 	container.mu.Lock()
 	defer container.mu.Unlock()
@@ -134,6 +135,7 @@ func NewTestServer(addr string, server pb.TestServiceServer) (GrpcServer, error)
 	return newServer, nil
 }
 
+// NewTestClient creates a mock test service client
 func NewTestClient(conn Conn) pb.TestServiceClient {
 	return &testClient{conn}
 }

@@ -15,6 +15,7 @@ import (
 	"github.com/hanfei1991/microcosm/jobmaster/dm/ticker"
 )
 
+// OperateType represents internal operate type in DM
 // TODO: use OperateType in lib or move OperateType to lib.
 type OperateType int
 
@@ -30,10 +31,11 @@ const (
 )
 
 var (
-	TaskNormalInterval = time.Second * 30
-	TaskErrorInterval  = time.Second * 10
+	taskNormalInterval = time.Second * 30
+	taskErrorInterval  = time.Second * 10
 )
 
+// TaskAgent defines an interface to operate task
 type TaskAgent interface {
 	OperateTask(ctx context.Context, taskID string, stage metadata.TaskStage) error
 }
@@ -51,7 +53,7 @@ type TaskManager struct {
 
 func NewTaskManager(initTaskStatus []runtime.TaskStatus, jobStore *metadata.JobStore, agent TaskAgent) *TaskManager {
 	taskManager := &TaskManager{
-		DefaultTicker: ticker.NewDefaultTicker(TaskNormalInterval, TaskErrorInterval),
+		DefaultTicker: ticker.NewDefaultTicker(taskNormalInterval, taskErrorInterval),
 		jobStore:      jobStore,
 		taskAgent:     agent,
 	}

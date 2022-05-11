@@ -21,6 +21,8 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/tenant"
 )
 
+// ChaosCli is used to interact with server master, fake job and provides ways
+// to adding chaos in e2e test.
 type ChaosCli struct {
 	// used to operate with server master, such as submit job
 	masterCli client.MasterClient
@@ -32,12 +34,14 @@ type ChaosCli struct {
 	fakeJobCfg *FakeJobConfig
 }
 
+// FakeJobConfig is used to construct a fake job configuration
 type FakeJobConfig struct {
 	EtcdEndpoints []string
 	WorkerCount   int
 	KeyPrefix     string
 }
 
+// NewUTCli creates a new ChaosCli instance
 func NewUTCli(
 	ctx context.Context, masterAddrs, userMetaAddrs []string, cfg *FakeJobConfig,
 ) (*ChaosCli, error) {
@@ -71,6 +75,7 @@ func NewUTCli(
 	}, nil
 }
 
+// CreateJob sends SubmitJob command to servermaster
 func (cli *ChaosCli) CreateJob(ctx context.Context, tp pb.JobType, config []byte) (string, error) {
 	req := &pb.SubmitJobRequest{Tp: tp, Config: config}
 	resp, err := cli.masterCli.SubmitJob(ctx, req)
@@ -83,6 +88,7 @@ func (cli *ChaosCli) CreateJob(ctx context.Context, tp pb.JobType, config []byte
 	return resp.JobIdStr, nil
 }
 
+// PauseJob sends PauseJob command to servermaster
 func (cli *ChaosCli) PauseJob(ctx context.Context, jobID string) error {
 	req := &pb.PauseJobRequest{JobIdStr: jobID}
 	resp, err := cli.masterCli.PauseJob(ctx, req)
@@ -95,6 +101,7 @@ func (cli *ChaosCli) PauseJob(ctx context.Context, jobID string) error {
 	return nil
 }
 
+// CheckJobStatus checks job status is as expected.
 func (cli *ChaosCli) CheckJobStatus(
 	ctx context.Context, jobID string, expectedStatus pb.QueryJobResponse_JobStatus,
 ) (bool, error) {
@@ -109,6 +116,7 @@ func (cli *ChaosCli) CheckJobStatus(
 	return resp.Status == expectedStatus, nil
 }
 
+// UpdateFakeJobKey updates the etcd value of a worker beloinging to a fake job
 func (cli *ChaosCli) UpdateFakeJobKey(ctx context.Context, id int, value string) error {
 	key := fmt.Sprintf("%s%d", cli.fakeJobCfg.KeyPrefix, id)
 	_, err := cli.fakeJobCli.Put(ctx, key, value)
@@ -134,6 +142,8 @@ func (cli *ChaosCli) getFakeJobCheckpoint(
 	return checkpoint, nil
 }
 
+// CheckFakeJobTick queries the checkpoint of a fake job and checks the tick count
+// is as expected.
 func (cli *ChaosCli) CheckFakeJobTick(
 	ctx context.Context, masterID string, jobIndex int, target int64,
 ) error {
@@ -151,6 +161,8 @@ func (cli *ChaosCli) CheckFakeJobTick(
 	return nil
 }
 
+// CheckFakeJobKey queries the checkpoint of a fake job, checks the value and mvcc
+// count are as expected. If error happens or check is not passed, return error.
 func (cli *ChaosCli) CheckFakeJobKey(
 	ctx context.Context, masterID string, jobIndex int, expectedMvcc int, expectedValue string,
 ) error {
@@ -194,18 +206,21 @@ func runCmdHandleError(cmd *exec.Cmd) []byte {
 	return bytes
 }
 
+// ContainerRestart restarts a docker container
 func (cli *ChaosCli) ContainerRestart(name string) {
 	cmd := exec.Command("docker", "restart", name)
 	runCmdHandleError(cmd)
 	log.L().Info("Finished restarting container", zap.String("name", name))
 }
 
+// ContainerStop stops a docker container
 func (cli *ChaosCli) ContainerStop(name string) {
 	cmd := exec.Command("docker", "stop", name)
 	runCmdHandleError(cmd)
 	log.L().Info("Finished stopping container", zap.String("name", name))
 }
 
+// ContainerStart starts a docker container
 func (cli *ChaosCli) ContainerStart(name string) {
 	cmd := exec.Command("docker", "start", name)
 	runCmdHandleError(cmd)

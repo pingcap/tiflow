@@ -45,7 +45,11 @@ type DispatchTaskArgs struct {
 }
 
 type (
+	// StartWorkerCallback alias to the function that is called after the pre
+	// dispatch task is successful and before confirm dispatch task.
 	StartWorkerCallback = func()
+	// AbortWorkerCallback alias to the function that is called only if the
+	// failure is guaranteed when creating worker.
 	AbortWorkerCallback = func(error)
 )
 

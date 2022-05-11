@@ -10,30 +10,36 @@ import (
 	libModel "github.com/hanfei1991/microcosm/lib/model"
 )
 
+// TaskStatus defines an interface to manage common fields of a task
 type TaskStatus interface {
 	GetUnit() libModel.WorkerType
 	GetTask() string
 	GetStage() metadata.TaskStage
 }
 
+// DefaultTaskStatus implements TaskStatus interface
 type DefaultTaskStatus struct {
 	Unit  libModel.WorkerType
 	Task  string
 	Stage metadata.TaskStage
 }
 
+// GetUnit implements TaskStatus.GetUnit
 func (s *DefaultTaskStatus) GetUnit() libModel.WorkerType {
 	return s.Unit
 }
 
+// GetTask implements TaskStatus.GetTask
 func (s *DefaultTaskStatus) GetTask() string {
 	return s.Task
 }
 
+// GetStage implements TaskStatus.GetStage
 func (s *DefaultTaskStatus) GetStage() metadata.TaskStage {
 	return s.Stage
 }
 
+// DumpStatus records necessary information of a dump unit
 type DumpStatus struct {
 	DefaultTaskStatus
 	// copy from tiflow/dm/dm/proto/dmworker.proto:DumpStatus
@@ -44,6 +50,7 @@ type DumpStatus struct {
 	EstimateTotalRows float64
 }
 
+// LoadStatus records necessary information of a load unit
 type LoadStatus struct {
 	DefaultTaskStatus
 	// copy from tiflow/dm/dm/proto/dmworker.proto:LoadStatus
@@ -54,6 +61,7 @@ type LoadStatus struct {
 	MetaBinlogGTID string
 }
 
+// SyncStatus records necessary information of a sync unit
 type SyncStatus struct {
 	DefaultTaskStatus
 	// copy from tiflow/dm/dm/proto/dmworker.proto:SyncStatus
@@ -74,7 +82,7 @@ type SyncStatus struct {
 	ConflictMsg         string
 }
 
-// Use when jobmaster receive a worker offline.
+// NewOfflineStatus is used when jobmaster receives a worker offline.
 // No need to serialize.
 func NewOfflineStatus(taskID string) *DefaultTaskStatus {
 	return &DefaultTaskStatus{
@@ -108,6 +116,7 @@ func UnmarshalTaskStatus(data []byte) (TaskStatus, error) {
 	return taskStatus, errors.Trace(err)
 }
 
+// MarshalTaskStatus returns the JSON encoding of task status.
 func MarshalTaskStatus(taskStatus TaskStatus) ([]byte, error) {
 	return json.Marshal(taskStatus)
 }

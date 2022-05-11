@@ -17,10 +17,12 @@ type PlacementConstrainer interface {
 	) (resourcemeta.ExecutorID, bool, error)
 }
 
+// MockPlacementConstrainer uses a resource executor binding map to implement PlacementConstrainer
 type MockPlacementConstrainer struct {
 	ResourceList map[resourcemeta.ResourceID]model.ExecutorID
 }
 
+// GetPlacementConstraint implements PlacementConstrainer.GetPlacementConstraint
 func (c *MockPlacementConstrainer) GetPlacementConstraint(
 	_ context.Context, id resourcemeta.ResourceID,
 ) (resourcemeta.ExecutorID, bool, error) {

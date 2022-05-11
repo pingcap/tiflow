@@ -24,7 +24,7 @@ import (
 )
 
 const (
-	BUFFERSIZE = 1024
+	bufferSize = 1024
 )
 
 type strPair struct {
@@ -32,6 +32,7 @@ type strPair struct {
 	secondStr string
 }
 
+// Config is cvs task config
 type Config struct {
 	Idx      int    `json:"Idx"`
 	SrcHost  string `json:"SrcHost"`
@@ -40,6 +41,7 @@ type Config struct {
 	StartLoc string `json:"StartLoc"`
 }
 
+// Status represents business status of cvs task
 type Status struct {
 	TaskConfig Config `json:"Config"`
 	CurrentLoc string `json:"CurLoc"`
@@ -95,26 +97,28 @@ type cvsTask struct {
 	statusRateLimiter *rate.Limiter
 }
 
+// RegisterWorker is used to register cvs task worker into global registry
 func RegisterWorker() {
 	constructor := func(ctx *dcontext.Context, id libModel.WorkerID, masterID libModel.MasterID, config lib.WorkerConfig) lib.WorkerImpl {
-		return NewCvsTask(ctx, id, masterID, config)
+		return newCvsTask(ctx, id, masterID, config)
 	}
 	factory := registry.NewSimpleWorkerFactory(constructor, &Config{})
 	registry.GlobalWorkerRegistry().MustRegisterWorkerType(lib.CvsTask, factory)
 }
 
-func NewCvsTask(ctx *dcontext.Context, _workerID libModel.WorkerID, masterID libModel.MasterID, conf lib.WorkerConfig) *cvsTask {
+func newCvsTask(ctx *dcontext.Context, _workerID libModel.WorkerID, masterID libModel.MasterID, conf lib.WorkerConfig) *cvsTask {
 	cfg := conf.(*Config)
 	task := &cvsTask{
 		Config:            *cfg,
 		curLoc:            cfg.StartLoc,
-		buffer:            make(chan strPair, BUFFERSIZE),
+		buffer:            make(chan strPair, bufferSize),
 		statusRateLimiter: rate.NewLimiter(rate.Every(time.Second), 1),
 		counter:           atomic.NewInt64(0),
 	}
 	return task
 }
 
+// InitImpl implements WorkerImpl.InitImpl
 func (task *cvsTask) InitImpl(ctx context.Context) error {
 	log.L().Info("init the task  ", zap.Any("task id :", task.ID()))
 	task.setStatusCode(libModel.WorkerStatusNormal)
@@ -128,7 +132,7 @@ func (task *cvsTask) InitImpl(ctx context.Context) error {
 		}
 	}()
 	go func() {
-		err := task.Send(ctx)
+		err := task.send(ctx)
 		if err != nil {
 			log.L().Error("error happened when writing data to the downstream ", zap.String("id", task.ID()), zap.Any("message", err.Error()))
 			task.setRunError(err)
@@ -247,7 +251,7 @@ func (task *cvsTask) Receive(ctx context.Context) error {
 	return nil
 }
 
-func (task *cvsTask) Send(ctx context.Context) error {
+func (task *cvsTask) send(ctx context.Context) error {
 	conn, err := pool.getConn(task.DstHost)
 	if err != nil {
 		log.L().Error("can't connect with the destination address ", zap.Any("id", task.ID()), zap.Error(err))

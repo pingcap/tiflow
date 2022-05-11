@@ -34,7 +34,7 @@ func (t *mockTxn) Commit() (*metaclient.TxnResponse, metaclient.Error) {
 	defer t.m.Unlock()
 
 	for _, op := range t.ops {
-		rsp, err := t.m.DoNoLock(t.c, op)
+		rsp, err := t.m.doNoLock(t.c, op)
 		if err != nil {
 			return nil, err
 		}
@@ -67,6 +67,8 @@ func (t *mockTxn) Commit() (*metaclient.TxnResponse, metaclient.Error) {
 	return txnRsp, nil
 }
 
+// MetaMock uses a simple in memory kv storage to implement metaclient.Client
+// and metaclient.KV interface. MetaMock is used in unit test.
 // not support Option yet
 type MetaMock struct {
 	sync.Mutex
@@ -74,20 +76,22 @@ type MetaMock struct {
 	revision int64
 }
 
+// NewMetaMock creates a new MetaMock instance
 func NewMetaMock() *MetaMock {
 	return &MetaMock{
 		store: make(map[string]string),
 	}
 }
 
+// Delete implements metaclient.KV.Delete
 func (m *MetaMock) Delete(ctx context.Context, key string, opts ...metaclient.OpOption) (*metaclient.DeleteResponse, metaclient.Error) {
 	m.Lock()
 	defer m.Unlock()
 
-	return m.DeleteNoLock(ctx, key, opts...)
+	return m.deleteNoLock(ctx, key, opts...)
 }
 
-func (m *MetaMock) DeleteNoLock(ctx context.Context, key string, opts ...metaclient.OpOption) (*metaclient.DeleteResponse, metaclient.Error) {
+func (m *MetaMock) deleteNoLock(ctx context.Context, key string, opts ...metaclient.OpOption) (*metaclient.DeleteResponse, metaclient.Error) {
 	delete(m.store, key)
 	m.revision++
 	return &metaclient.DeleteResponse{
@@ -97,14 +101,15 @@ func (m *MetaMock) DeleteNoLock(ctx context.Context, key string, opts ...metacli
 	}, nil
 }
 
+// Put implements metaclient.KV.Put
 func (m *MetaMock) Put(ctx context.Context, key, value string) (*metaclient.PutResponse, metaclient.Error) {
 	m.Lock()
 	defer m.Unlock()
 
-	return m.PutNoLock(ctx, key, value)
+	return m.putNoLock(ctx, key, value)
 }
 
-func (m *MetaMock) PutNoLock(ctx context.Context, key, value string) (*metaclient.PutResponse, metaclient.Error) {
+func (m *MetaMock) putNoLock(ctx context.Context, key, value string) (*metaclient.PutResponse, metaclient.Error) {
 	m.store[key] = value
 	m.revision++
 	return &metaclient.PutResponse{
@@ -114,14 +119,15 @@ func (m *MetaMock) PutNoLock(ctx context.Context, key, value string) (*metaclien
 	}, nil
 }
 
+// Get implements metaclient.KV.Get
 func (m *MetaMock) Get(ctx context.Context, key string, opts ...metaclient.OpOption) (*metaclient.GetResponse, metaclient.Error) {
 	m.Lock()
 	defer m.Unlock()
 
-	return m.GetNoLock(ctx, key, opts...)
+	return m.getNoLock(ctx, key, opts...)
 }
 
-func (m *MetaMock) GetNoLock(ctx context.Context, key string, opts ...metaclient.OpOption) (*metaclient.GetResponse, metaclient.Error) {
+func (m *MetaMock) getNoLock(ctx context.Context, key string, opts ...metaclient.OpOption) (*metaclient.GetResponse, metaclient.Error) {
 	ret := &metaclient.GetResponse{
 		Header: &metaclient.ResponseHeader{
 			ClusterID: "mock_cluster",
@@ -139,29 +145,30 @@ func (m *MetaMock) GetNoLock(ctx context.Context, key string, opts ...metaclient
 	return ret, nil
 }
 
+// Do implements extension.KVClientEx.Do
 func (m *MetaMock) Do(ctx context.Context, op metaclient.Op) (metaclient.OpResponse, metaclient.Error) {
 	m.Lock()
 	defer m.Unlock()
 
-	return m.DoNoLock(ctx, op)
+	return m.doNoLock(ctx, op)
 }
 
-func (m *MetaMock) DoNoLock(ctx context.Context, op metaclient.Op) (metaclient.OpResponse, metaclient.Error) {
+func (m *MetaMock) doNoLock(ctx context.Context, op metaclient.Op) (metaclient.OpResponse, metaclient.Error) {
 	switch {
 	case op.IsGet():
-		rsp, err := m.GetNoLock(ctx, string(op.KeyBytes()))
+		rsp, err := m.getNoLock(ctx, string(op.KeyBytes()))
 		if err != nil {
 			return metaclient.OpResponse{}, err
 		}
 		return rsp.OpResponse(), nil
 	case op.IsDelete():
-		rsp, err := m.DeleteNoLock(ctx, string(op.KeyBytes()))
+		rsp, err := m.deleteNoLock(ctx, string(op.KeyBytes()))
 		if err != nil {
 			return metaclient.OpResponse{}, err
 		}
 		return rsp.OpResponse(), nil
 	case op.IsPut():
-		rsp, err := m.PutNoLock(ctx, string(op.KeyBytes()), string(op.ValueBytes()))
+		rsp, err := m.putNoLock(ctx, string(op.KeyBytes()), string(op.ValueBytes()))
 		if err != nil {
 			return metaclient.OpResponse{}, err
 		}
@@ -174,6 +181,7 @@ func (m *MetaMock) DoNoLock(ctx context.Context, op metaclient.Op) (metaclient.O
 	}
 }
 
+// Txn implements metaclient.KV.Txn
 func (m *MetaMock) Txn(ctx context.Context) metaclient.Txn {
 	return &mockTxn{
 		m: m,
@@ -181,10 +189,12 @@ func (m *MetaMock) Txn(ctx context.Context) metaclient.Txn {
 	}
 }
 
+// Close implements pkg/meta/metaclient.Close
 func (m *MetaMock) Close() error {
 	return nil
 }
 
+// GenEpoch implements pkg/meta/metaclient.Client.GenEpoch
 func (m *MetaMock) GenEpoch(ctx context.Context) (int64, error) {
 	m.Lock()
 	defer m.Unlock()

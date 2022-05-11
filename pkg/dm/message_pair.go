@@ -9,11 +9,13 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 )
 
+// MessageIDAllocator is an id allocator for p2p message system
 type MessageIDAllocator struct {
 	mu sync.Mutex
 	id uint64
 }
 
+// Alloc allocs a new message id
 func (a *MessageIDAllocator) Alloc() uint64 {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -22,6 +24,7 @@ func (a *MessageIDAllocator) Alloc() uint64 {
 	return a.id
 }
 
+// Sender defines an interface that supports send message
 type Sender interface {
 	SendMessage(ctx context.Context, topic p2p.Topic, message interface{}, nonblocking bool) error
 }
@@ -36,6 +39,7 @@ type MessagePair struct {
 	idAllocator *MessageIDAllocator
 }
 
+// NewMessagePair creates a new MessagePair instance
 func NewMessagePair() *MessagePair {
 	return &MessagePair{
 		idAllocator: &MessageIDAllocator{},

@@ -99,6 +99,7 @@ func (c *Context) L() log.Logger {
 	return c.Logger
 }
 
+// RuntimeDependencies contains useful clients or management tools
 type RuntimeDependencies struct {
 	MessageHandlerManager p2p.MessageHandlerManager
 	MessageRouter         p2p.MessageSender
@@ -108,6 +109,7 @@ type RuntimeDependencies struct {
 	ServerMasterClient    client.MasterClient
 }
 
+// Environment contains some configuration related environ values
 type Environment struct {
 	NodeID          p2p.NodeID
 	Addr            string

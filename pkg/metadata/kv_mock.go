@@ -15,24 +15,29 @@ var (
 	_ clientv3.Txn = &Txn{}
 )
 
+// Txn simulates simple etcd txn
 type Txn struct {
 	m   *MetaMock
 	ops []clientv3.Op
 }
 
+// If simulats etcd txn If
 func (t *Txn) If(cs ...clientv3.Cmp) clientv3.Txn {
 	panic("unimplemented")
 }
 
+// Else simulats etcd txn else
 func (t *Txn) Else(cs ...clientv3.Op) clientv3.Txn {
 	panic("unimplemented")
 }
 
+// Then adds an op to txn group
 func (t *Txn) Then(ops ...clientv3.Op) clientv3.Txn {
 	t.ops = append(t.ops, ops...)
 	return t
 }
 
+// Commit commits the txn
 func (t *Txn) Commit() (*clientv3.TxnResponse, error) {
 	var err error
 	for _, op := range t.ops {
@@ -50,18 +55,21 @@ func (t *Txn) Commit() (*clientv3.TxnResponse, error) {
 	return nil, nil
 }
 
+// MetaMock uses a simple memory storage to implement MetaKV interface
 type MetaMock struct {
 	sync.Mutex
 	store    map[string]string
 	revision int64
 }
 
+// NewMetaMock creates a new MetaMock instance
 func NewMetaMock() *MetaMock {
 	return &MetaMock{
 		store: make(map[string]string),
 	}
 }
 
+// Delete implements MetaKV.Delete
 func (m *MetaMock) Delete(ctx context.Context, key string, opts ...interface{}) (interface{}, error) {
 	m.Lock()
 	defer m.Unlock()
@@ -70,10 +78,12 @@ func (m *MetaMock) Delete(ctx context.Context, key string, opts ...interface{}) 
 	return nil, nil
 }
 
+// Watch implements MetaKV.Watch
 func (m *MetaMock) Watch(ctx context.Context, key string, opts ...interface{}) interface{} {
 	panic("unimplemented")
 }
 
+// Put implements MetaKV.Put
 func (m *MetaMock) Put(ctx context.Context, key, value string, opts ...interface{}) (interface{}, error) {
 	m.Lock()
 	defer m.Unlock()
@@ -82,6 +92,7 @@ func (m *MetaMock) Put(ctx context.Context, key, value string, opts ...interface
 	return nil, nil
 }
 
+// Get implements MetaKV.Get
 func (m *MetaMock) Get(ctx context.Context, key string, opts ...interface{}) (interface{}, error) {
 	m.Lock()
 	defer m.Unlock()
@@ -103,6 +114,7 @@ func (m *MetaMock) Get(ctx context.Context, key string, opts ...interface{}) (in
 	return ret, nil
 }
 
+// Txn implements MetaKV.Txn
 func (m *MetaMock) Txn(ctx context.Context) interface{} {
 	return &Txn{
 		m: m,

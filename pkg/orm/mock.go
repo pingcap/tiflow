@@ -14,6 +14,7 @@ import (
 	"github.com/phayes/freeport"
 )
 
+// NewMockClient creates a mock orm client
 func NewMockClient() (Client, error) {
 	svr, addr, err := MockBackendDB(tenant.FrameTenantID)
 	if err != nil {
@@ -64,7 +65,7 @@ func allocTempURL() string {
 	return fmt.Sprintf("localhost:%d", port)
 }
 
-// using go-mysql-server as backend storage
+// MockBackendDB creates a mock mysql using go-mysql-server as backend storage
 // https://github.com/dolthub/go-mysql-server
 // go-mysql-server not support unique index
 // ref: https://github.com/dolthub/go-mysql-server/issues/571
@@ -100,6 +101,7 @@ func createTestDatabase(db string) *memory.Database {
 	return memory.NewDatabase(db)
 }
 
+// CloseBackendDB closes backend db
 func CloseBackendDB(svr *gsvr.Server) {
 	if svr != nil {
 		svr.Close()

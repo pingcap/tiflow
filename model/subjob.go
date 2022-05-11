@@ -1,7 +1,9 @@
 package model
 
 type (
-	NodeID   int32
+	// NodeID defines node id used in DAG
+	NodeID int32
+	// SubJobID defines sub job id used in DAG
 	SubJobID int32
 )
 

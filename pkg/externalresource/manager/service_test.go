@@ -99,7 +99,7 @@ func (s *serviceTestSuite) Stop() {
 
 func (s *serviceTestSuite) OfflineExecutor(t *testing.T, executor resourcemeta.ExecutorID) {
 	s.executorInfoProvider.RemoveExecutor(string(executor))
-	err := s.service.OnExecutorOffline(executor)
+	err := s.service.onExecutorOffline(executor)
 	require.NoError(t, err)
 }
 

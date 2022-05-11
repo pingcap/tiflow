@@ -11,6 +11,7 @@ import (
 	"go.uber.org/zap"
 )
 
+// ConfigParams contains part of etcd configurations
 type ConfigParams struct {
 	// etcd relative config items
 	// NOTE: we use `Addr` to generate `ClientUrls` and `AdvertiseClientUrls`
@@ -24,6 +25,7 @@ type ConfigParams struct {
 	Join                string `toml:"join" json:"join"`
 }
 
+// Adjust adjusts config if needed
 func (cp *ConfigParams) Adjust(
 	defaultPeerUrls string,
 	defaultInitialClusterState string,

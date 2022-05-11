@@ -16,6 +16,7 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/externalresource/storagecfg"
 )
 
+// Handle defines an interface for interact with framework
 type Handle interface {
 	ID() resModel.ResourceID
 	BrExternalStorage() brStorage.ExternalStorage
@@ -36,14 +37,17 @@ type BrExternalStorageHandle struct {
 	client *rpcutil.FailoverRPCClients[pb.ResourceManagerClient]
 }
 
+// ID implements Handle.ID
 func (h *BrExternalStorageHandle) ID() resModel.ResourceID {
 	return h.id
 }
 
+// BrExternalStorage implements Handle.BrExternalStorage
 func (h *BrExternalStorageHandle) BrExternalStorage() brStorage.ExternalStorage {
 	return h.inner
 }
 
+// Persist implements Handle.Persist
 func (h *BrExternalStorageHandle) Persist(ctx context.Context) error {
 	_, err := rpcutil.DoFailoverRPC(
 		ctx,
@@ -62,18 +66,20 @@ func (h *BrExternalStorageHandle) Persist(ctx context.Context) error {
 	return nil
 }
 
+// Discard implements Handle.Discard
 func (h *BrExternalStorageHandle) Discard(ctx context.Context) error {
 	// TODO implement me
 	return nil
 }
 
+// Factory defines a external storage(resource) factory
 type Factory struct {
 	config     *storagecfg.Config
 	client     *rpcutil.FailoverRPCClients[pb.ResourceManagerClient]
 	executorID resModel.ExecutorID
 }
 
-func (f *Factory) NewHandleForLocalFile(
+func (f *Factory) newHandleForLocalFile(
 	ctx context.Context,
 	jobID resModel.JobID,
 	workerID resModel.WorkerID,
@@ -87,7 +93,7 @@ func (f *Factory) NewHandleForLocalFile(
 		log.L().Panic("unexpected resource type", zap.String("type", string(tp)))
 	}
 
-	record, exists, err := f.CheckForExistingResource(ctx, resourceID)
+	record, exists, err := f.checkForExistingResource(ctx, resourceID)
 	if err != nil {
 		return nil, err
 	}
@@ -121,7 +127,7 @@ func (f *Factory) NewHandleForLocalFile(
 	}, nil
 }
 
-func (f *Factory) CheckForExistingResource(
+func (f *Factory) checkForExistingResource(
 	ctx context.Context,
 	resourceID resModel.ResourceID,
 ) (*resModel.ResourceMeta, bool, error) {

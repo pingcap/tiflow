@@ -63,6 +63,7 @@ type JobCfg struct {
 	// RemoveMeta bool `yaml:"remove-meta"`
 }
 
+// TaskCfg alias JobCfg
 // The difference between task configuration and job configuration is that a task has only one usptream.
 type TaskCfg JobCfg
 
@@ -72,6 +73,7 @@ type UpstreamCfg struct {
 	DBCfg                  *dmconfig.DBConfig `yaml:"db-config" toml:"db-config" json:"db-config"`
 }
 
+// DecodeFile reads file content from a given path and decodes it.
 func (c *JobCfg) DecodeFile(fpath string) error {
 	bs, err := os.ReadFile(fpath)
 	if err != nil {
@@ -84,6 +86,7 @@ func (c *JobCfg) DecodeFile(fpath string) error {
 	return c.adjust()
 }
 
+// Decode unmarshals the content into JobCfg and calls adjust() on it.
 // TODO: unify config type
 // Now, dmJobmaster use yaml, dmWorker use toml, and lib use json...
 func (c *JobCfg) Decode(content []byte) error {
@@ -126,6 +129,7 @@ func (c *JobCfg) adjust() error {
 	return nil
 }
 
+// Yaml serializes the JobCfg into a YAML document.
 func (c *JobCfg) Yaml() (string, error) {
 	b, err := yaml.Marshal(c)
 	return string(b), err
@@ -141,6 +145,8 @@ func (c *JobCfg) Clone() (*JobCfg, error) {
 	return clone, err
 }
 
+// ToTaskConfigs converts job config to a map, mapping from upstream source id
+// to task config.
 func (c *JobCfg) ToTaskConfigs() map[string]*TaskCfg {
 	taskCfgs := make(map[string]*TaskCfg, len(c.Upstreams))
 	for _, mysqlInstance := range c.Upstreams {

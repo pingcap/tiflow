@@ -48,6 +48,7 @@ const (
 	offlineExecutorQueueSize = 1024
 )
 
+// NewService creates a new externalresource manage service
 func NewService(
 	metaclient pkgOrm.Client,
 	executorInfoProvider ExecutorInfoProvider,
@@ -63,6 +64,7 @@ func NewService(
 	}
 }
 
+// QueryResource implements ResourceManagerClient.QueryResource
 func (s *Service) QueryResource(ctx context.Context, request *pb.QueryResourceRequest) (*pb.QueryResourceResponse, error) {
 	var resp2 *pb.QueryResourceResponse
 	shouldRet, err := s.preRPCHook.PreRPC(ctx, request, &resp2)
@@ -127,6 +129,7 @@ func (s *Service) QueryResource(ctx context.Context, request *pb.QueryResourceRe
 	return record.ToQueryResourceResponse(), nil
 }
 
+// CreateResource implements ResourceManagerClient.CreateResource
 func (s *Service) CreateResource(
 	ctx context.Context,
 	request *pb.CreateResourceRequest,
@@ -265,7 +268,7 @@ func (s *Service) GetPlacementConstraint(
 	return record.Executor, true, nil
 }
 
-func (s *Service) OnExecutorOffline(executorID resModel.ExecutorID) error {
+func (s *Service) onExecutorOffline(executorID resModel.ExecutorID) error {
 	select {
 	case s.offlinedExecutors <- executorID:
 		return nil
@@ -276,6 +279,7 @@ func (s *Service) OnExecutorOffline(executorID resModel.ExecutorID) error {
 	return nil
 }
 
+// StartBackgroundWorker starts all background worker of this service
 func (s *Service) StartBackgroundWorker() {
 	s.cancelCh = make(chan struct{})
 	ctx, cancel := context.WithCancel(context.Background())

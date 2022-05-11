@@ -7,6 +7,7 @@ import (
 	"github.com/edwingeng/deque"
 )
 
+// MockMessageSender defines a mock message sender
 type MockMessageSender struct {
 	mu        sync.Mutex
 	msgBox    map[msgBoxIndex]deque.Deque
@@ -15,6 +16,7 @@ type MockMessageSender struct {
 	injectedErrCh chan error
 }
 
+// NewMockMessageSender creates a new MockMessageSender instance
 func NewMockMessageSender() *MockMessageSender {
 	return &MockMessageSender{
 		msgBox:        make(map[msgBoxIndex]deque.Deque),
@@ -27,6 +29,7 @@ type msgBoxIndex struct {
 	target NodeID
 }
 
+// SendToNodeB implements pkg/p2p.MessageSender.SendToNodeB
 func (m *MockMessageSender) SendToNodeB(
 	ctx context.Context,
 	targetNodeID NodeID,
@@ -48,6 +51,7 @@ func (m *MockMessageSender) SendToNodeB(
 	return nil
 }
 
+// SendToNode implements pkg/p2p.MessageSender.SendToNode
 func (m *MockMessageSender) SendToNode(
 	_ context.Context,
 	targetNodeID NodeID,
@@ -73,6 +77,7 @@ func (m *MockMessageSender) SendToNode(
 	return true, nil
 }
 
+// TryPop tries to get a message from message sender
 func (m *MockMessageSender) TryPop(targetNodeID NodeID, topic Topic) (interface{}, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -100,6 +105,7 @@ func (m *MockMessageSender) getQueue(target NodeID, topic Topic) deque.Deque {
 	return q
 }
 
+// SetBlocked makes the message send blocking
 func (m *MockMessageSender) SetBlocked(isBlocked bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -107,6 +113,7 @@ func (m *MockMessageSender) SetBlocked(isBlocked bool) {
 	m.isBlocked = isBlocked
 }
 
+// InjectError injects error to simulate error scenario
 func (m *MockMessageSender) InjectError(err error) {
 	m.injectedErrCh <- err
 }

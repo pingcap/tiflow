@@ -18,7 +18,7 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/errors"
 )
 
-func NewQueryJob() *cobra.Command {
+func newQueryJob() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "query-job",
 		Short: "query job info",
@@ -70,7 +70,7 @@ func runQueryJob(cmd *cobra.Command, _ []string) error {
 	return nil
 }
 
-func NewSubmitJob() *cobra.Command {
+func newSubmitJob() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "submit-job",
 		Short: "submit job to master",
@@ -137,7 +137,7 @@ func runSubmitJob(cmd *cobra.Command, _ []string) error {
 	return nil
 }
 
-func NewPauseJob() *cobra.Command {
+func newPauseJob() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "pause-job",
 		Short: "pause job",

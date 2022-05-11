@@ -32,11 +32,15 @@ var globalModels = []interface{}{
 // TODO: retry and idempotent??
 // TODO: context control??
 
+// TimeRange defines a time range with [start, end] time
 type TimeRange struct {
 	start time.Time
 	end   time.Time
 }
 
+// Client defines an interface that has the ability to manage every kind of
+// logic abstraction in metastore, including project, project op, job, worker
+// and resource
 type Client interface {
 	metaclient.Client
 	// project
@@ -54,6 +58,7 @@ type Client interface {
 	Initialize(ctx context.Context) error
 }
 
+// ProjectClient defines interface that manages project in metastore
 type ProjectClient interface {
 	CreateProject(ctx context.Context, project *model.ProjectInfo) error
 	DeleteProject(ctx context.Context, projectID string) error
@@ -61,6 +66,7 @@ type ProjectClient interface {
 	GetProjectByID(ctx context.Context, projectID string) (*model.ProjectInfo, error)
 }
 
+// ProjectOperationClient defines interface that manages project operation in metastore
 // TODO: support pagination and cursor here
 // support `order by time desc limit N`
 type ProjectOperationClient interface {
@@ -69,6 +75,7 @@ type ProjectOperationClient interface {
 	QueryProjectOperationsByTimeRange(ctx context.Context, projectID string, tr TimeRange) ([]*model.ProjectOperation, error)
 }
 
+// JobClient defines interface that manages job in metastore
 type JobClient interface {
 	UpsertJob(ctx context.Context, job *libModel.MasterMetaKVData) error
 	UpdateJob(ctx context.Context, job *libModel.MasterMetaKVData) error
@@ -80,6 +87,7 @@ type JobClient interface {
 	QueryJobsByStatus(ctx context.Context, jobID string, status int) ([]*libModel.MasterMetaKVData, error)
 }
 
+// WorkerClient defines interface that manages worker in metastore
 type WorkerClient interface {
 	UpsertWorker(ctx context.Context, worker *libModel.WorkerStatus) error
 	UpdateWorker(ctx context.Context, worker *libModel.WorkerStatus) error
@@ -89,6 +97,7 @@ type WorkerClient interface {
 	QueryWorkersByStatus(ctx context.Context, masterID string, status int) ([]*libModel.WorkerStatus, error)
 }
 
+// ResourceClient defines interface that manages resource in metastore
 type ResourceClient interface {
 	UpsertResource(ctx context.Context, resource *resourcemeta.ResourceMeta) error
 	UpdateResource(ctx context.Context, resource *resourcemeta.ResourceMeta) error
@@ -566,6 +575,7 @@ func (c *metaOpsClient) QueryResourcesByExecutorID(ctx context.Context, executor
 	return resources, nil
 }
 
+// Result defines a query result interface
 type Result interface {
 	RowsAffected() int64
 }

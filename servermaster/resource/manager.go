@@ -21,6 +21,7 @@ type RescMgr interface {
 	Update(id model.ExecutorID, used, reserved model.RescUnit, status model.ExecutorStatus) error
 }
 
+// ExecutorResource defines the capacity usage of an executor
 type ExecutorResource struct {
 	ID     model.ExecutorID
 	Status model.ExecutorStatus

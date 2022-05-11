@@ -14,12 +14,12 @@ func (h *ResponseHeader) String() string {
 	return fmt.Sprintf("clusterID:%s;", h.ClusterID)
 }
 
-// Put Response
+// PutResponse .
 type PutResponse struct {
 	Header *ResponseHeader
 }
 
-// Get Response
+// GetResponse .
 type GetResponse struct {
 	Header *ResponseHeader
 	// kvs is the list of key-value pairs matched by the range request.
@@ -37,12 +37,12 @@ func (resp *GetResponse) String() string {
 	return s
 }
 
-// Delete Response
+// DeleteResponse .
 type DeleteResponse struct {
 	Header *ResponseHeader
 }
 
-// Txn Response
+// TxnResponse .
 type TxnResponse struct {
 	Header *ResponseHeader
 	// Responses is a list of responses corresponding to the results from applying
@@ -50,6 +50,7 @@ type TxnResponse struct {
 	Responses []ResponseOp
 }
 
+// ResponseOp defines a response operation, the op is one of get/put/delete/txn
 type ResponseOp struct {
 	// response is a union of response types returned by a transaction.
 	//
@@ -66,18 +67,22 @@ type isResponseOpResponse interface {
 	isResponseOp()
 }
 
+// ResponseOpResponseGet defines an op that wraps GetResponse
 type ResponseOpResponseGet struct {
 	ResponseGet *GetResponse
 }
 
+// ResponseOpResponsePut defines an op that wraps PutResponse
 type ResponseOpResponsePut struct {
 	ResponsePut *PutResponse
 }
 
+// ResponseOpResponseDelete defines an op that wraps DeleteResponse
 type ResponseOpResponseDelete struct {
 	ResponseDelete *DeleteResponse
 }
 
+// ResponseOpResponseTxn defines an op that wraps TxnResponse
 type ResponseOpResponseTxn struct {
 	ResponseTxn *TxnResponse
 }
@@ -87,6 +92,7 @@ func (*ResponseOpResponsePut) isResponseOp()    {}
 func (*ResponseOpResponseDelete) isResponseOp() {}
 func (*ResponseOpResponseTxn) isResponseOp()    {}
 
+// GetResponse returns an isResponseOpResponse interface
 func (m *ResponseOp) GetResponse() isResponseOpResponse {
 	if m != nil {
 		return m.Response
@@ -94,6 +100,7 @@ func (m *ResponseOp) GetResponse() isResponseOpResponse {
 	return nil
 }
 
+// GetResponseGet returns a ResponseGet if it matches
 func (m *ResponseOp) GetResponseGet() *GetResponse {
 	if x, ok := m.GetResponse().(*ResponseOpResponseGet); ok {
 		return x.ResponseGet
@@ -101,6 +108,7 @@ func (m *ResponseOp) GetResponseGet() *GetResponse {
 	return nil
 }
 
+// GetResponsePut returns a ResponsePut if it matches
 func (m *ResponseOp) GetResponsePut() *PutResponse {
 	if x, ok := m.GetResponse().(*ResponseOpResponsePut); ok {
 		return x.ResponsePut
@@ -108,6 +116,7 @@ func (m *ResponseOp) GetResponsePut() *PutResponse {
 	return nil
 }
 
+// GetResponseDelete returns a ResponseDelete if it matches
 func (m *ResponseOp) GetResponseDelete() *DeleteResponse {
 	if x, ok := m.GetResponse().(*ResponseOpResponseDelete); ok {
 		return x.ResponseDelete
@@ -115,6 +124,7 @@ func (m *ResponseOp) GetResponseDelete() *DeleteResponse {
 	return nil
 }
 
+// GetResponseTxn returns a ResponseTxn if it matches
 func (m *ResponseOp) GetResponseTxn() *TxnResponse {
 	if x, ok := m.GetResponse().(*ResponseOpResponseTxn); ok {
 		return x.ResponseTxn
@@ -122,6 +132,7 @@ func (m *ResponseOp) GetResponseTxn() *TxnResponse {
 	return nil
 }
 
+// OpResponse contains a list of put/get/del/txn response
 type OpResponse struct {
 	put *PutResponse
 	get *GetResponse
@@ -129,27 +140,39 @@ type OpResponse struct {
 	txn *TxnResponse
 }
 
-func (op OpResponse) Put() *PutResponse    { return op.put }
-func (op OpResponse) Get() *GetResponse    { return op.get }
-func (op OpResponse) Del() *DeleteResponse { return op.del }
-func (op OpResponse) Txn() *TxnResponse    { return op.txn }
+// Put returns a PutResponse
+func (op OpResponse) Put() *PutResponse { return op.put }
 
+// Get returns a GetResponse
+func (op OpResponse) Get() *GetResponse { return op.get }
+
+// Del returns a DelResponse
+func (op OpResponse) Del() *DeleteResponse { return op.del }
+
+// Txn returns a TxnResponse
+func (op OpResponse) Txn() *TxnResponse { return op.txn }
+
+// OpResponse generates a put OpResponse from PutResponse
 func (resp *PutResponse) OpResponse() OpResponse {
 	return OpResponse{put: resp}
 }
 
+// OpResponse generates a get OpResponse from GetResponse
 func (resp *GetResponse) OpResponse() OpResponse {
 	return OpResponse{get: resp}
 }
 
+// OpResponse generates a delete OpResponse from DeleteResponse
 func (resp *DeleteResponse) OpResponse() OpResponse {
 	return OpResponse{del: resp}
 }
 
+// OpResponse generates a txn OpResponse from TxnResponse
 func (resp *TxnResponse) OpResponse() OpResponse {
 	return OpResponse{txn: resp}
 }
 
+// KeyValue defines a key value byte slice pair
 type KeyValue struct {
 	// Key is the key in bytes. An empty key is not allowed.
 	Key []byte

@@ -23,6 +23,7 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 )
 
+// JobMaster defines job master of dm job
 type JobMaster struct {
 	lib.BaseJobMaster
 
@@ -41,16 +42,19 @@ type JobMaster struct {
 
 type dmJobMasterFactory struct{}
 
+// RegisterWorker is used to register dm job master to global registry
 func RegisterWorker() {
 	registry.GlobalWorkerRegistry().MustRegisterWorkerType(lib.DMJobMaster, dmJobMasterFactory{})
 }
 
+// DeserializeConfig implements WorkerFactory.DeserializeConfig
 func (j dmJobMasterFactory) DeserializeConfig(configBytes []byte) (registry.WorkerConfig, error) {
 	cfg := &config.JobCfg{}
 	err := cfg.Decode(configBytes)
 	return cfg, err
 }
 
+// NewWorkerImpl implements WorkerFactory.NewWorkerImpl
 func (j dmJobMasterFactory) NewWorkerImpl(ctx *dcontext.Context, workerID libModel.WorkerID, masterID libModel.MasterID, conf lib.WorkerConfig) (lib.WorkerImpl, error) {
 	log.L().Info("new dm jobmaster", zap.String("id", workerID))
 	jm := &JobMaster{
@@ -82,6 +86,7 @@ func (jm *JobMaster) createComponents() error {
 	return nil
 }
 
+// InitImpl implements JobMasterImpl.InitImpl
 func (jm *JobMaster) InitImpl(ctx context.Context) error {
 	log.L().Info("initializing the dm jobmaster", zap.String("id", jm.workerID), zap.String("jobmaster_id", jm.JobMasterID()))
 	if err := jm.createComponents(); err != nil {
@@ -96,17 +101,20 @@ func (jm *JobMaster) InitImpl(ctx context.Context) error {
 	return jm.taskManager.OperateTask(ctx, Create, jm.jobCfg, nil)
 }
 
+// Tick implements JobMasterImpl.Tick
 func (jm *JobMaster) Tick(ctx context.Context) error {
 	jm.workerManager.Tick(ctx)
 	jm.taskManager.Tick(ctx)
 	return nil
 }
 
+// OnMasterRecovered implements JobMasterImpl.OnMasterRecovered
 func (jm *JobMaster) OnMasterRecovered(ctx context.Context) error {
 	log.L().Info("recovering the dm jobmaster", zap.String("id", jm.workerID))
 	return jm.createComponents()
 }
 
+// OnWorkerDispatched implements JobMasterImpl.OnWorkerDispatched
 func (jm *JobMaster) OnWorkerDispatched(worker lib.WorkerHandle, result error) error {
 	log.L().Info("on worker dispatched", zap.String("id", jm.workerID), zap.String("worker_id", worker.ID()))
 	if result != nil {
@@ -117,6 +125,7 @@ func (jm *JobMaster) OnWorkerDispatched(worker lib.WorkerHandle, result error) e
 	return nil
 }
 
+// OnWorkerOnline implements JobMasterImpl.OnWorkerOnline
 func (jm *JobMaster) OnWorkerOnline(worker lib.WorkerHandle) error {
 	log.L().Debug("on worker online", zap.String("id", jm.workerID), zap.String("worker_id", worker.ID()))
 	taskStatus, err := runtime.UnmarshalTaskStatus(worker.Status().ExtBytes)
@@ -130,6 +139,7 @@ func (jm *JobMaster) OnWorkerOnline(worker lib.WorkerHandle) error {
 	return nil
 }
 
+// OnWorkerOffline implements JobMasterImpl.OnWorkerOffline
 func (jm *JobMaster) OnWorkerOffline(worker lib.WorkerHandle, reason error) error {
 	log.L().Info("on worker offline", zap.String("id", jm.workerID), zap.String("worker_id", worker.ID()))
 	taskStatus, err := runtime.UnmarshalTaskStatus(worker.Status().ExtBytes)
@@ -156,16 +166,19 @@ func (jm *JobMaster) onWorkerFinished(taskStatus runtime.TaskStatus, worker lib.
 	return nil
 }
 
+// OnWorkerStatusUpdated implements JobMasterImpl.OnWorkerStatusUpdated
 func (jm *JobMaster) OnWorkerStatusUpdated(worker lib.WorkerHandle, newStatus *libModel.WorkerStatus) error {
 	// No need to do anything here, because we update it in OnWorkerOnline
 	return nil
 }
 
+// OnJobManagerMessage implements JobMasterImpl.OnJobManagerMessage
 func (jm *JobMaster) OnJobManagerMessage(topic p2p.Topic, message interface{}) error {
 	// TODO: receive user request
 	return nil
 }
 
+// OnWorkerMessage implements JobMasterImpl.OnWorkerMessage
 func (jm *JobMaster) OnWorkerMessage(worker lib.WorkerHandle, topic p2p.Topic, message interface{}) error {
 	log.L().Debug("on worker message", zap.String("id", jm.workerID), zap.String("worker_id", worker.ID()))
 	// TODO: handle DDL request
@@ -180,6 +193,7 @@ func (jm *JobMaster) OnMasterMessage(topic p2p.Topic, message interface{}) error
 	return nil
 }
 
+// CloseImpl implements JobMasterImpl.CloseImpl
 func (jm *JobMaster) CloseImpl(ctx context.Context) error {
 	log.L().Info("close the dm jobmaster", zap.String("id", jm.workerID))
 	if err := jm.taskManager.OperateTask(ctx, Delete, nil, nil); err != nil {
@@ -211,25 +225,30 @@ outer:
 	return nil
 }
 
+// ID implements JobMasterImpl.ID
 func (jm *JobMaster) ID() worker.RunnableID {
 	return jm.workerID
 }
 
+// Workload implements JobMasterImpl.Workload
 func (jm *JobMaster) Workload() model.RescUnit {
 	// TODO: implement workload
 	return 2
 }
 
+// OnMasterFailover implements JobMasterImpl.OnMasterFailover
 func (jm *JobMaster) OnMasterFailover(reason lib.MasterFailoverReason) error {
 	// No need to do anything here
 	return nil
 }
 
+// OnJobManagerFailover implements JobMasterImpl.OnJobManagerFailover
 func (jm *JobMaster) OnJobManagerFailover(reason lib.MasterFailoverReason) error {
 	// No need to do anything here
 	return nil
 }
 
+// IsJobMasterImpl implements JobMasterImpl.IsJobMasterImpl
 func (jm *JobMaster) IsJobMasterImpl() {
 	panic("unreachable")
 }

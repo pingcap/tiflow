@@ -23,9 +23,9 @@ import (
 )
 
 var (
-	DemoAddress = "0.0.0.0:1234"
-	DemoDir     = "/data/demo/"
-	DataNum     = 0
+	demoAddress = "0.0.0.0:1234"
+	demoDir     = "/data/demo/"
+	dataNum     = 0
 )
 
 var (
@@ -47,11 +47,11 @@ func main() {
 		}
 		hint := "demo args should be: -d dir -a port [-r record number]"
 		fmt.Println(hint)
-		DemoAddress = os.Args[4]
-		DemoDir = os.Args[2]
+		demoAddress = os.Args[4]
+		demoDir = os.Args[2]
 		if len(os.Args) > 5 {
 			var err error
-			DataNum, err = strconv.Atoi(os.Args[6]) //nolint:gosec
+			dataNum, err = strconv.Atoi(os.Args[6]) //nolint:gosec
 			if err != nil {
 				fmt.Println(err.Error())
 				os.Exit(1)
@@ -59,10 +59,10 @@ func main() {
 		}
 	}
 START:
-	fmt.Printf("starting demo, dir %s addr %s\n", DemoDir, DemoAddress)
+	fmt.Printf("starting demo, dir %s addr %s\n", demoDir, demoAddress)
 	err := log.InitLogger(&log.Config{
 		Level: "info",
-		// File:  DemoDir + "demo.log",
+		// File:  demoDir + "demo.log",
 	})
 	if err != nil {
 		fmt.Printf("err: %v", err)
@@ -83,10 +83,11 @@ START:
 			cancel()
 		}
 	}()
-	StartDataService(ctx)
+	startDataService(ctx)
 	log.L().Info("server exits normally")
 }
 
+// ErrorInfo wraps info
 type ErrorInfo struct {
 	info string
 }
@@ -95,6 +96,7 @@ func (e *ErrorInfo) Error() string {
 	return e.info
 }
 
+// GenerateData implements DataRWService.GenerateData
 func (s *DataRWServer) GenerateData(ctx context.Context, req *pb.GenerateDataRequest) (*pb.GenerateDataResponse, error) {
 	ready = make(chan struct{})
 	s.mu.Lock()
@@ -114,7 +116,7 @@ func (s *DataRWServer) GenerateData(ctx context.Context, req *pb.GenerateDataReq
 	batches := make([]db.Batch, 0, fileNum)
 	bucket := make(dbBuckets)
 	for i := 0; i < fileNum; i++ {
-		fileDB, err := db.OpenPebble(s.ctx, i, DemoDir, 256<<10, config.GetDefaultServerConfig().Debug.DB)
+		fileDB, err := db.OpenPebble(s.ctx, i, demoDir, 256<<10, config.GetDefaultServerConfig().Debug.DB)
 		if err != nil {
 			return &pb.GenerateDataResponse{ErrMsg: err.Error()}, nil
 		}
@@ -137,7 +139,7 @@ func (s *DataRWServer) GenerateData(ctx context.Context, req *pb.GenerateDataReq
 	}
 
 	s.mu.Lock()
-	s.dbMap[DemoDir] = bucket
+	s.dbMap[demoDir] = bucket
 	s.mu.Unlock()
 
 	log.L().Info("files have been created", zap.Any("filenumber", fileNum))
@@ -145,11 +147,11 @@ func (s *DataRWServer) GenerateData(ctx context.Context, req *pb.GenerateDataReq
 	return &pb.GenerateDataResponse{}, nil
 }
 
-func StartDataService(ctx context.Context) {
+func startDataService(ctx context.Context) {
 	grpcServer := grpc.NewServer()
 	var s pb.DataRWServiceServer
 	if mock {
-		s = &Mock{
+		s = &dataRWServiceMock{
 			dbMap: make(map[string]memDB),
 		}
 		pb.RegisterDataRWServiceServer(grpcServer, s)
@@ -157,7 +159,7 @@ func StartDataService(ctx context.Context) {
 		s = NewDataRWServer(ctx)
 		pb.RegisterDataRWServiceServer(grpcServer, s)
 	}
-	lis, err := net.Listen("tcp", DemoAddress) //nolint:gosec
+	lis, err := net.Listen("tcp", demoAddress) //nolint:gosec
 	if err != nil {
 		log.L().Panic("listen the port failed",
 			zap.String("error:", err.Error()))
@@ -175,13 +177,13 @@ func StartDataService(ctx context.Context) {
 		return nil
 	})
 	wg.Go(func() error {
-		if DataNum == 0 {
+		if dataNum == 0 {
 			return nil
 		}
-		log.L().Info("preparing data...", zap.Any("num", DataNum))
+		log.L().Info("preparing data...", zap.Any("num", dataNum))
 		resp, _ := s.GenerateData(ctx, &pb.GenerateDataRequest{ // nolint: errcheck
 			FileNum:   10,
-			RecordNum: int32(DataNum),
+			RecordNum: int32(dataNum),
 		})
 		if len(resp.ErrMsg) > 0 {
 			log.L().Error("generate data failed", zap.String("err", resp.ErrMsg))
@@ -198,12 +200,14 @@ func StartDataService(ctx context.Context) {
 
 type dbBuckets map[int]db.DB
 
+// DataRWServer defines a struct that implements DataRWService
 type DataRWServer struct {
 	ctx   context.Context
 	mu    sync.Mutex
 	dbMap map[string]dbBuckets
 }
 
+// NewDataRWServer creates a new DataRWServer instance
 func NewDataRWServer(ctx context.Context) *DataRWServer {
 	s := &DataRWServer{
 		ctx:   ctx,
@@ -213,12 +217,14 @@ func NewDataRWServer(ctx context.Context) *DataRWServer {
 	return s
 }
 
+// ListFiles implements DataRWService.ListFiles
 func (s *DataRWServer) ListFiles(ctx context.Context, _ *pb.ListFilesReq) (*pb.ListFilesResponse, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return &pb.ListFilesResponse{FileNum: int32(len(s.dbMap[DemoDir]))}, nil
+	return &pb.ListFilesResponse{FileNum: int32(len(s.dbMap[demoDir]))}, nil
 }
 
+// IsReady implements DataRWService.IsReady
 func (s *DataRWServer) IsReady(ctx context.Context, req *pb.IsReadyRequest) (*pb.IsReadyResponse, error) {
 	select {
 	case <-ready:
@@ -266,9 +272,10 @@ func (s *DataRWServer) compareDBs(db1, db2 db.DB) error {
 	}
 }
 
+// CheckDir implements DataRWService.CheckDir
 func (s *DataRWServer) CheckDir(ctx context.Context, req *pb.CheckDirRequest) (*pb.CheckDirResponse, error) {
 	s.mu.Lock()
-	originBucket := s.dbMap[DemoDir]
+	originBucket := s.dbMap[demoDir]
 	targetBucket, ok := s.dbMap[req.Dir]
 	if !ok {
 		return &pb.CheckDirResponse{ErrMsg: fmt.Sprintf("cannot find %s db", req.Dir)}, nil
@@ -288,13 +295,14 @@ func (s *DataRWServer) CheckDir(ctx context.Context, req *pb.CheckDirRequest) (*
 	return &pb.CheckDirResponse{}, nil
 }
 
+// ReadLines implements DataRWService.ReadLines
 func (s *DataRWServer) ReadLines(req *pb.ReadLinesRequest, stream pb.DataRWService_ReadLinesServer) error {
 	log.L().Info("receive the request for reading file ", zap.Any("idx", req.FileIdx), zap.String("lineNo", string(req.LineNo)))
 	s.mu.Lock()
-	db, ok := s.dbMap[DemoDir][int(req.FileIdx)]
+	db, ok := s.dbMap[demoDir][int(req.FileIdx)]
 	s.mu.Unlock()
 	if !ok {
-		return stream.Send(&pb.ReadLinesResponse{ErrMsg: fmt.Sprintf("file idx %d is out of range %d", req.FileIdx, len(s.dbMap[DemoAddress])), IsEof: true})
+		return stream.Send(&pb.ReadLinesResponse{ErrMsg: fmt.Sprintf("file idx %d is out of range %d", req.FileIdx, len(s.dbMap[demoAddress])), IsEof: true})
 	}
 	iter := db.Iterator([]byte{}, []byte{0xff})
 	if !iter.Seek(req.LineNo) {
@@ -322,6 +330,7 @@ func (s *DataRWServer) ReadLines(req *pb.ReadLinesRequest, stream pb.DataRWServi
 	}
 }
 
+// WriteLines implements DataRWService.WriteLines
 func (s *DataRWServer) WriteLines(stream pb.DataRWService_WriteLinesServer) error {
 	var dir string
 	var idx int

@@ -11,13 +11,16 @@ import (
 	pkgOrm "github.com/hanfei1991/microcosm/pkg/orm"
 )
 
+// JobManagerUUID defines the global unique id for job manager
 const JobManagerUUID = "dataflow-engine-job-manager"
 
+// MasterMetadataClient provides all ways to manage the master metadata
 type MasterMetadataClient struct {
 	masterID   libModel.MasterID
 	metaClient pkgOrm.Client
 }
 
+// NewMasterMetadataClient creates a new MasterMetadataClient
 func NewMasterMetadataClient(
 	masterID libModel.MasterID,
 	metaClient pkgOrm.Client,
@@ -28,6 +31,8 @@ func NewMasterMetadataClient(
 	}
 }
 
+// Load queries master metadata from metastore, if the metadata does not exist,
+// create a new one and return it.
 func (c *MasterMetadataClient) Load(ctx context.Context) (*libModel.MasterMetaKVData, error) {
 	masterMeta, err := c.metaClient.GetJobByID(ctx, c.masterID)
 	if err != nil {
@@ -56,6 +61,7 @@ func (c *MasterMetadataClient) Update(ctx context.Context, data *libModel.Master
 	return errors.Trace(c.metaClient.UpdateJob(ctx, data))
 }
 
+// Delete deletes the metadata of this master
 func (c *MasterMetadataClient) Delete(ctx context.Context) error {
 	_, err := c.metaClient.DeleteJob(ctx, c.masterID)
 	return errors.Trace(err)
@@ -70,11 +76,14 @@ func (c *MasterMetadataClient) LoadAllMasters(ctx context.Context) ([]*libModel.
 	return meta, nil
 }
 
+// WorkerMetadataClient provides all ways to manage metadata of all workers
+// belonging to a given master
 type WorkerMetadataClient struct {
 	masterID   libModel.MasterID
 	metaClient pkgOrm.Client
 }
 
+// NewWorkerMetadataClient creates a new WorkerMetadataClient instance
 func NewWorkerMetadataClient(
 	masterID libModel.MasterID,
 	metaClient pkgOrm.Client,
@@ -85,6 +94,7 @@ func NewWorkerMetadataClient(
 	}
 }
 
+// LoadAllWorkers queries all workers of this master
 func (c *WorkerMetadataClient) LoadAllWorkers(ctx context.Context) (map[libModel.WorkerID]*libModel.WorkerStatus, error) {
 	resp, err := c.metaClient.QueryWorkersByMasterID(ctx, c.masterID)
 	if err != nil {
@@ -98,6 +108,7 @@ func (c *WorkerMetadataClient) LoadAllWorkers(ctx context.Context) (map[libModel
 	return res, nil
 }
 
+// Load queries a worker by its worker id
 func (c *WorkerMetadataClient) Load(ctx context.Context, workerID libModel.WorkerID) (*libModel.WorkerStatus, error) {
 	resp, err := c.metaClient.GetWorkerByID(ctx, c.masterID, workerID)
 	if err != nil {
@@ -107,6 +118,7 @@ func (c *WorkerMetadataClient) Load(ctx context.Context, workerID libModel.Worke
 	return resp, nil
 }
 
+// Remove deletes a given worker from metastore
 func (c *WorkerMetadataClient) Remove(ctx context.Context, id libModel.WorkerID) (bool, error) {
 	_, err := c.metaClient.DeleteWorker(ctx, c.masterID, id)
 	if err != nil {
@@ -115,14 +127,17 @@ func (c *WorkerMetadataClient) Remove(ctx context.Context, id libModel.WorkerID)
 	return true, nil
 }
 
+// Store stores a worker metadata into metastore
 func (c *WorkerMetadataClient) Store(ctx context.Context, data *libModel.WorkerStatus) error {
 	return errors.Trace(c.metaClient.UpsertWorker(ctx, data))
 }
 
+// Update updates a worker metadata
 func (c *WorkerMetadataClient) Update(ctx context.Context, data *libModel.WorkerStatus) error {
 	return errors.Trace(c.metaClient.UpdateWorker(ctx, data))
 }
 
+// MasterID returns the master id of this metadata client
 func (c *WorkerMetadataClient) MasterID() libModel.MasterID {
 	return c.masterID
 }
@@ -143,6 +158,7 @@ func StoreMasterMeta(
 	return metaCli.Store(ctx, meta)
 }
 
+// DeleteMasterMeta deletes given maste meta from meta store
 func DeleteMasterMeta(
 	ctx context.Context,
 	metaClient pkgOrm.Client,

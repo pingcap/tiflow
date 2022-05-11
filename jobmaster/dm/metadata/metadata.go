@@ -11,6 +11,7 @@ type MetaData struct {
 	ddlStore *DDLStore
 }
 
+// NewMetaData creates a new MetaData instance
 func NewMetaData(id libModel.WorkerID, kvClient metaclient.KVClient) *MetaData {
 	return &MetaData{
 		jobStore: NewJobStore(id, kvClient),
@@ -18,10 +19,12 @@ func NewMetaData(id libModel.WorkerID, kvClient metaclient.KVClient) *MetaData {
 	}
 }
 
+// JobStore returns internal jobStore
 func (m *MetaData) JobStore() *JobStore {
 	return m.jobStore
 }
 
+// DDLStore returns internal ddlStore
 func (m *MetaData) DDLStore() *DDLStore {
 	return m.ddlStore
 }

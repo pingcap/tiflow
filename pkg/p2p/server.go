@@ -17,18 +17,25 @@ import (
 
 // Re-export some types
 type (
-	Topic  = p2pImpl.Topic
+	// Topic alias to p2pImpl.Topic
+	Topic = p2pImpl.Topic
+	// NodeID alias to p2pImpl.NodeID
 	NodeID = p2pImpl.NodeID
+	// Config alias to p2pImpl.MessageServerConfig
 	Config = p2pImpl.MessageServerConfig
 )
 
 type (
+	// TypeInformation is used to hold type data
 	TypeInformation = interface{}
-	MessageValue    = interface{}
-	HandlerFunc     = func(sender NodeID, value MessageValue) error
+	// MessageValue is used to hold message object
+	MessageValue = interface{}
+	// HandlerFunc alias to message handler function
+	HandlerFunc = func(sender NodeID, value MessageValue) error
 )
 
 type (
+	// MessageServerOpt alias to the option setter function
 	MessageServerOpt = func(*Config)
 )
 
@@ -164,6 +171,7 @@ func (s *MessageRPCService) Serve(ctx context.Context, l net.Listener) error {
 	return wg.Wait()
 }
 
+// GetMessageServer returns the internal message server
 func (s *MessageRPCService) GetMessageServer() *p2pImpl.MessageServer {
 	return s.messageServer
 }

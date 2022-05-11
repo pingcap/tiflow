@@ -6,17 +6,20 @@ import (
 	resourcemeta "github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta/model"
 )
 
+// MockExecutorInfoProvider implements ExecutorManager interface
 type MockExecutorInfoProvider struct {
 	mu          sync.RWMutex
 	executorSet map[resourcemeta.ExecutorID]struct{}
 }
 
+// NewMockExecutorInfoProvider creates a new MockExecutorInfoProvider instance
 func NewMockExecutorInfoProvider() *MockExecutorInfoProvider {
 	return &MockExecutorInfoProvider{
 		executorSet: make(map[resourcemeta.ExecutorID]struct{}),
 	}
 }
 
+// AddExecutor implements ExecutorManager.AddExecutor
 func (p *MockExecutorInfoProvider) AddExecutor(executorID string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -24,6 +27,7 @@ func (p *MockExecutorInfoProvider) AddExecutor(executorID string) {
 	p.executorSet[resourcemeta.ExecutorID(executorID)] = struct{}{}
 }
 
+// RemoveExecutor implements ExecutorManager.RemoveExecutor
 func (p *MockExecutorInfoProvider) RemoveExecutor(executorID string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -31,6 +35,7 @@ func (p *MockExecutorInfoProvider) RemoveExecutor(executorID string) {
 	delete(p.executorSet, resourcemeta.ExecutorID(executorID))
 }
 
+// HasExecutor implements ExecutorManager.HasExecutor
 func (p *MockExecutorInfoProvider) HasExecutor(executorID string) bool {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
@@ -41,6 +46,7 @@ func (p *MockExecutorInfoProvider) HasExecutor(executorID string) bool {
 	return false
 }
 
+// ListExecutors implements ExecutorManager.ListExecutors
 func (p *MockExecutorInfoProvider) ListExecutors() (ret []string) {
 	p.mu.RLock()
 	defer p.mu.RUnlock()

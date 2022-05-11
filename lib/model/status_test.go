@@ -4,8 +4,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-
-	"github.com/hanfei1991/microcosm/pkg/adapter"
 )
 
 func TestTerminateState(t *testing.T) {
@@ -66,11 +64,4 @@ func TestHasSignificantChange(t *testing.T) {
 		changed := tc.prev.HasSignificantChange(tc.next)
 		require.Equal(t, tc.changed, changed)
 	}
-}
-
-func TestEncodeWorkerStatusKey(t *testing.T) {
-	require.Equal(
-		t,
-		adapter.WorkerKeyAdapter.Encode("a", "b"),
-		EncodeWorkerStatusKey("a", "b"))
 }

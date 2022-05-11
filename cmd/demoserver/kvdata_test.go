@@ -14,20 +14,20 @@ import (
 )
 
 func TestDemoLogic(t *testing.T) {
-	DemoAddress = "127.0.0.1:1234"
-	DemoDir = "/tmp/data"
-	WtDir := "/tmp/data1"
+	demoAddress = "127.0.0.1:1234"
+	demoDir = "/tmp/data"
+	wtDir := "/tmp/data1"
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go StartDataService(ctx)
+	go startDataService(ctx)
 	defer func() {
-		os.RemoveAll(DemoDir)
-		os.RemoveAll(WtDir)
+		os.RemoveAll(demoDir)
+		os.RemoveAll(wtDir)
 	}()
 	ctx1, cancel1 := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel1()
-	conn, err := grpc.DialContext(ctx1, DemoAddress, grpc.WithInsecure(), grpc.WithBlock())
+	conn, err := grpc.DialContext(ctx1, demoAddress, grpc.WithInsecure(), grpc.WithBlock())
 	require.Nil(t, err)
 	demoClt := pb.NewDataRWServiceClient(conn)
 	// Generate Data
@@ -69,7 +69,7 @@ func TestDemoLogic(t *testing.T) {
 		require.Equal(t, false, rlResp.IsEof, i)
 		require.Equal(t, strs[0][i], string(rlResp.Key))
 		err = wrClt.Send(&pb.WriteLinesRequest{
-			Dir:     WtDir,
+			Dir:     wtDir,
 			FileIdx: 0,
 			Key:     rlResp.Key,
 			Value:   rlResp.Val,
@@ -103,7 +103,7 @@ func TestDemoLogic(t *testing.T) {
 	require.Equal(t, true, rlResp.IsEof)
 
 	result, err := demoClt.CheckDir(ctx, &pb.CheckDirRequest{
-		Dir: DemoDir,
+		Dir: demoDir,
 	})
 	require.Nil(t, err)
 	require.Empty(t, result.ErrMsg)

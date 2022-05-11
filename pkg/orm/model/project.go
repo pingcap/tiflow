@@ -9,6 +9,7 @@ type ProjectInfo struct {
 	Name string `gorm:"type:varchar(64) not null"`
 }
 
+// ProjectOperation records each operation of a project
 type ProjectOperation struct {
 	SeqID     uint      `gorm:"primaryKey;auto_increment"`
 	ProjectID string    `gorm:"type:varchar(64) not null;index:idx_op"`

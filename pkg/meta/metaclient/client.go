@@ -2,12 +2,7 @@ package metaclient
 
 import "context"
 
-type ClientType int
-
-const (
-	TypeKVClient ClientType = iota /* KV client style，like etcd/consul/TiKV/redis or even SQL backend*/
-)
-
+// Client defines some basice method used as a meta client
 type Client interface {
 	// Close is the method to close the client and release inner resources
 	Close() error
@@ -16,6 +11,7 @@ type Client interface {
 	GenEpoch(ctx context.Context) (int64, error)
 }
 
+// KVClient combines Client interface and KV interface
 type KVClient interface {
 	Client
 	KV

@@ -1,7 +1,9 @@
 package tenant
 
+// ProjectID is tenant identify
 type ProjectID = string
 
+// tenant const variables
 const (
 	FrameTenantID       = "dfe_root"
 	TestTenantID        = "dfe_test"

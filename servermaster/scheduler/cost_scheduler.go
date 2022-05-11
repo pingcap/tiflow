@@ -8,11 +8,13 @@ import (
 	schedModel "github.com/hanfei1991/microcosm/servermaster/scheduler/model"
 )
 
+// CostScheduler is a random scheduler
 type CostScheduler struct {
 	capacityProvider CapacityProvider
 	random           *rand.Rand
 }
 
+// NewRandomizedCostScheduler creates a CostScheduler instance
 func NewRandomizedCostScheduler(capacityProvider CapacityProvider) *CostScheduler {
 	return &CostScheduler{
 		capacityProvider: capacityProvider,
@@ -28,6 +30,7 @@ func NewDeterministicCostScheduler(capacityProvider CapacityProvider, seed int64
 	}
 }
 
+// ScheduleByCost is a native random based scheduling strategy
 func (s *CostScheduler) ScheduleByCost(cost schedModel.ResourceUnit) (model.ExecutorID, bool) {
 	executorCaps := s.capacityProvider.CapacitiesForAllExecutors()
 	executorList := make([]model.ExecutorID, 0, len(executorCaps))

@@ -8,6 +8,7 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/errors"
 )
 
+// Defines all key adapters
 var (
 	MasterCampaignKey KeyAdapter = keyHexEncoderDecoder("/data-flow/master/leader/")
 	// TODO: investigate whether we can merge MasterInfoKey and MasterMetaKey into one key
@@ -25,6 +26,7 @@ var (
 	DMJobKeyAdapter KeyAdapter = keyHexEncoderDecoder("/data-flow/dm/job/")
 )
 
+// KeyAdapter is used to construct etcd like key
 type KeyAdapter interface {
 	Encode(keys ...string) string
 	Decode(key string) ([]string, error)

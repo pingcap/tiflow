@@ -43,6 +43,7 @@ func NewDiscoveryKeepaliver(
 	return k
 }
 
+// InitRunnerImpl inits the discovery runner
 func (k *DiscoveryKeepaliver) InitRunnerImpl() error {
 	value, err := k.info.ToJSON()
 	if err != nil {

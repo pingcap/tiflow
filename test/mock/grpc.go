@@ -146,6 +146,7 @@ func (c *masterServerClient) ReportExecutorWorkload(
 	return resp.(*pb.ExecWorkloadResponse), nil
 }
 
+// NewMasterClient creates a new master client based on Conn
 func NewMasterClient(conn Conn) pb.MasterClient {
 	return &masterServerClient{conn}
 }
@@ -189,10 +190,12 @@ func (c *executorClient) ConfirmDispatchTask(ctx context.Context, in *pb.Confirm
 	panic("implement me")
 }
 
+// Close closes executor server conn
 func (s *executorServerConn) Close() error {
 	return nil
 }
 
+// NewExecutorClient returns executor client based on Conn
 func NewExecutorClient(conn Conn) pb.ExecutorClient {
 	return &executorClient{conn}
 }
@@ -208,6 +211,7 @@ func (s *executorServerConn) sendRequest(ctx context.Context, req interface{}) (
 	return nil, errors.New("unknown request")
 }
 
+// Dial dials to gRPC server
 func Dial(addr string) (Conn, error) {
 	container.mu.Lock()
 	defer container.mu.Unlock()
@@ -232,6 +236,8 @@ func NewMasterServer(addr string, server pb.MasterServer) (GrpcServer, error) {
 	return newServer, nil
 }
 
+// NewExecutorServer returns a mock executor gRPC server for given address, if it
+// doesn't exist, create a new one
 func NewExecutorServer(addr string, server pb.ExecutorServer) (GrpcServer, error) {
 	container.mu.Lock()
 	defer container.mu.Unlock()
@@ -244,11 +250,13 @@ func NewExecutorServer(addr string, server pb.ExecutorServer) (GrpcServer, error
 	return newServer, nil
 }
 
+// Conn is a simple interface that support send gRPC requests and closeable
 type Conn interface {
 	Close() error
 	sendRequest(ctx context.Context, req interface{}) (interface{}, error)
 }
 
+// ResetGrpcCtx resets grpc servers
 func ResetGrpcCtx() {
 	container = &grpcContainer{
 		servers: make(map[string]GrpcServer),

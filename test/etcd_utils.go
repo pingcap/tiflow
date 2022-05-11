@@ -59,6 +59,7 @@ func PrepareEtcd(t *testing.T, name string) (string, *embed.Etcd, *clientv3.Clie
 	return advertiseAddr, etcd, client, cleanFn
 }
 
+// PrepareEtcdCluster creates an etcd cluster with multiple nodes
 func PrepareEtcdCluster(t *testing.T, names []string) (
 	advertiseAddrs []string,
 	embedEtcds []*embed.Etcd,

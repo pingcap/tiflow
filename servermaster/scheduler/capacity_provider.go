@@ -29,10 +29,12 @@ type MockCapacityProvider struct {
 	Capacities map[model.ExecutorID]*schedModel.ExecutorResourceStatus
 }
 
+// CapacitiesForAllExecutors implements CapacityProvider.CapacitiesForAllExecutors
 func (p *MockCapacityProvider) CapacitiesForAllExecutors() map[model.ExecutorID]*schedModel.ExecutorResourceStatus {
 	return p.Capacities
 }
 
+// CapacityForExecutor implements CapacityProvider.CapacityForExecutor
 func (p *MockCapacityProvider) CapacityForExecutor(executor model.ExecutorID) (*schedModel.ExecutorResourceStatus, bool) {
 	status, ok := p.Capacities[executor]
 	return status, ok

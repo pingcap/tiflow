@@ -12,6 +12,7 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
 )
 
+// Defines fake key/value pair which is used in aliveness check or epoch generation
 const (
 	FakeKey   = "/fake-key"
 	FakeValue = "/fake-value"
@@ -35,6 +36,7 @@ type etcdImpl struct {
 	closeMu sync.Mutex
 }
 
+// NewEtcdImpl creates a new etcdImpl instance
 func NewEtcdImpl(config *metaclient.StoreConfigParams) (*etcdImpl, error) {
 	cli, err := clientv3.New(clientv3.Config{
 		Endpoints: config.Endpoints,

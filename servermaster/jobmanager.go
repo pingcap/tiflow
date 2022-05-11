@@ -51,6 +51,7 @@ type JobManagerImplV2 struct {
 	tombstoneCleaned bool
 }
 
+// PauseJob implements proto/Master.PauseJob
 func (jm *JobManagerImplV2) PauseJob(ctx context.Context, req *pb.PauseJobRequest) *pb.PauseJobResponse {
 	job := jm.JobFsm.QueryOnlineJob(req.JobIdStr)
 	if job == nil {
@@ -75,10 +76,12 @@ func (jm *JobManagerImplV2) PauseJob(ctx context.Context, req *pb.PauseJobReques
 	}}
 }
 
+// CancelJob implements proto/Master.CancelJob
 func (jm *JobManagerImplV2) CancelJob(ctx context.Context, req *pb.CancelJobRequest) *pb.CancelJobResponse {
 	panic("not implemented")
 }
 
+// QueryJob implements proto/Master.QueryJob
 func (jm *JobManagerImplV2) QueryJob(ctx context.Context, req *pb.QueryJobRequest) *pb.QueryJobResponse {
 	resp := jm.JobFsm.QueryJob(req.JobId)
 	if resp != nil {
@@ -351,6 +354,7 @@ func (jm *JobManagerImplV2) OnWorkerMessage(worker lib.WorkerHandle, topic p2p.T
 	return nil
 }
 
+// OnWorkerStatusUpdated implements lib.MasterImpl.OnWorkerStatusUpdated
 func (jm *JobManagerImplV2) OnWorkerStatusUpdated(worker lib.WorkerHandle, newStatus *libModel.WorkerStatus) error {
 	log.L().Info("on worker status updated", zap.String("worker-id", worker.ID()), zap.Any("status", newStatus))
 	return nil

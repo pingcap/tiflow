@@ -10,6 +10,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// MockMessageHandlerManager is used in unit-test only, it simulates a message
+// handler manager
 type MockMessageHandlerManager struct {
 	mu       sync.RWMutex
 	handlers map[Topic]HandlerFunc
@@ -18,6 +20,7 @@ type MockMessageHandlerManager struct {
 	injectedError chan error
 }
 
+// NewMockMessageHandlerManager creates a new MockMessageHandlerManager instance
 func NewMockMessageHandlerManager() *MockMessageHandlerManager {
 	return &MockMessageHandlerManager{
 		handlers:      make(map[Topic]HandlerFunc),
@@ -26,6 +29,7 @@ func NewMockMessageHandlerManager() *MockMessageHandlerManager {
 	}
 }
 
+// AssertHasHandler checks the given topic is registered
 func (m *MockMessageHandlerManager) AssertHasHandler(t *testing.T, topic Topic, tpi TypeInformation) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -35,6 +39,7 @@ func (m *MockMessageHandlerManager) AssertHasHandler(t *testing.T, topic Topic, 
 	require.Equal(t, tpi, m.tpi[topic])
 }
 
+// AssertNoHandler checks the given topic is not registered
 func (m *MockMessageHandlerManager) AssertNoHandler(t *testing.T, topic Topic) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -43,6 +48,8 @@ func (m *MockMessageHandlerManager) AssertNoHandler(t *testing.T, topic Topic) {
 	require.NotContains(t, m.tpi, topic)
 }
 
+// InvokeHandler gets the handler of given topic and invoke the handler to
+// simulate to send message from given sender
 func (m *MockMessageHandlerManager) InvokeHandler(t *testing.T, topic Topic, senderID NodeID, message interface{}) error {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -57,10 +64,12 @@ func (m *MockMessageHandlerManager) InvokeHandler(t *testing.T, topic Topic, sen
 	return errors.Trace(err)
 }
 
+// InjectError injects an error into the mock message handler
 func (m *MockMessageHandlerManager) InjectError(err error) {
 	m.injectedError <- err
 }
 
+// RegisterHandler implements MessageHandlerManager.RegisterHandler
 func (m *MockMessageHandlerManager) RegisterHandler(
 	ctx context.Context,
 	topic Topic,
@@ -80,6 +89,7 @@ func (m *MockMessageHandlerManager) RegisterHandler(
 	return true, nil
 }
 
+// UnregisterHandler implements MessageHandlerManager.UnregisterHandler
 func (m *MockMessageHandlerManager) UnregisterHandler(ctx context.Context, topic Topic) (bool, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -93,6 +103,7 @@ func (m *MockMessageHandlerManager) UnregisterHandler(ctx context.Context, topic
 	return true, nil
 }
 
+// CheckError implements MessageHandlerManager.CheckError
 func (m *MockMessageHandlerManager) CheckError(ctx context.Context) error {
 	select {
 	case <-ctx.Done():
@@ -104,6 +115,7 @@ func (m *MockMessageHandlerManager) CheckError(ctx context.Context) error {
 	return nil
 }
 
+// Clean implements MessageHandlerManager.Clean
 func (m *MockMessageHandlerManager) Clean(ctx context.Context) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -116,6 +128,7 @@ func (m *MockMessageHandlerManager) Clean(ctx context.Context) error {
 	return nil
 }
 
+// SetTimeout implements MessageHandlerManager.SetTimeout
 func (m *MockMessageHandlerManager) SetTimeout(timeout time.Duration) {
 	// This function is a dummy
 }

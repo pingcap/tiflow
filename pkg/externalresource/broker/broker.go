@@ -12,6 +12,7 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/externalresource/storagecfg"
 )
 
+// Broker abstracts a middleware for external storage operation
 type Broker interface {
 	OpenStorage(
 		ctx context.Context,
@@ -26,6 +27,7 @@ type Broker interface {
 	)
 }
 
+// Impl implements the Broker interface
 type Impl struct {
 	config     *storagecfg.Config
 	executorID resModel.ExecutorID
@@ -33,6 +35,7 @@ type Impl struct {
 	factory *Factory
 }
 
+// NewBroker creates a new Impl instance
 func NewBroker(
 	config *storagecfg.Config,
 	executorID resModel.ExecutorID,
@@ -49,6 +52,7 @@ func NewBroker(
 	}
 }
 
+// OpenStorage implements Broker.OpenStorage
 func (i *Impl) OpenStorage(
 	ctx context.Context,
 	workerID resModel.WorkerID,
@@ -62,7 +66,7 @@ func (i *Impl) OpenStorage(
 
 	switch tp {
 	case resModel.ResourceTypeLocalFile:
-		return i.factory.NewHandleForLocalFile(ctx, jobID, workerID, resourcePath)
+		return i.factory.newHandleForLocalFile(ctx, jobID, workerID, resourcePath)
 	case resModel.ResourceTypeS3:
 		log.L().Panic("resource type s3 is not supported for now")
 	default:
@@ -72,6 +76,7 @@ func (i *Impl) OpenStorage(
 	panic("unreachable")
 }
 
+// OnWorkerClosed implements Broker.OnWorkerClosed
 func (i *Impl) OnWorkerClosed(ctx context.Context, workerID resModel.WorkerID, jobID resModel.JobID) {
 	panic("implement me")
 }

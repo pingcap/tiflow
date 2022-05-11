@@ -16,6 +16,7 @@ type Txn interface {
 	Commit() (*TxnResponse, Error)
 }
 
+// KV defines a key value access interface, which is quite similar to etcd KV API
 type KV interface {
 	// Put puts a key-value pair into metastore.
 	// Note that key,value can be plain bytes array and string is
@@ -40,6 +41,7 @@ type KV interface {
 	Txn(ctx context.Context) Txn
 }
 
+// Error defines the interface used in KV interface
 type Error interface {
 	error
 	// IsRetryable returns true if this error may be gone if retried.

@@ -16,6 +16,7 @@
 
 package namespace
 
+// MakeNamespacePrefix adds separator to given tenantID to form a prefix
 func MakeNamespacePrefix(tenantID string) string {
 	return tenantID + "/"
 }

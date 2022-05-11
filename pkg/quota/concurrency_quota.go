@@ -7,12 +7,16 @@ import (
 	"golang.org/x/sync/semaphore"
 )
 
+// ConcurrencyQuota abstracts an interface that supports acquire and release
+// quota concurrently
 type ConcurrencyQuota interface {
 	Consume(ctx context.Context) error
 	TryConsume() bool
 	Release()
 }
 
+// NewConcurrencyQuota creates a new concurrencyQuotaImpl instance that
+// implements ConcurrencyQuota interface
 func NewConcurrencyQuota(total int64) ConcurrencyQuota {
 	return &concurrencyQuotaImpl{sem: semaphore.NewWeighted(total)}
 }

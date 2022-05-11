@@ -16,6 +16,7 @@ import (
 // uuid length = 36, plus one "-" symbol
 const idSuffixLen = 37
 
+// Member alias to rpcutil.Member
 type Member = rpcutil.Member
 
 // Membership defines the interface to query member information in metastore
@@ -23,6 +24,7 @@ type Membership interface {
 	GetMembers(ctx context.Context, leader *Member, etcdLeaderID uint64) ([]*Member, error)
 }
 
+// EtcdMembership implements Membership via etcd
 type EtcdMembership struct {
 	etcdCli *clientv3.Client
 }
@@ -50,6 +52,7 @@ func (em *EtcdMembership) getMasterNodes(ctx context.Context) (map[string]*model
 	return nodes, nil
 }
 
+// GetMembers implements Membership.GetMembers
 func (em *EtcdMembership) GetMembers(ctx context.Context, leader *Member, etcdLeaderID uint64) ([]*Member, error) {
 	servers, err := em.getMasterNodes(ctx)
 	if err != nil {

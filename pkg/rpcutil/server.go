@@ -42,23 +42,27 @@ func (m *Member) Unmarshal(data []byte) error {
 // let us do it. So we left an alias to any.
 type RPCClientType any
 
+// LeaderClientWithLock encapsulates a thread-safe rpc client
 type LeaderClientWithLock[T RPCClientType] struct {
 	mu    sync.RWMutex
 	inner *FailoverRPCClients[T]
 }
 
+// Get returns internal FailoverRPCClients
 func (l *LeaderClientWithLock[T]) Get() *FailoverRPCClients[T] {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
 	return l.inner
 }
 
+// Set sets internal FailoverRPCClients to given value
 func (l *LeaderClientWithLock[T]) Set(c *FailoverRPCClients[T]) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.inner = c
 }
 
+// Close closes internal FailoverRPCClients
 func (l *LeaderClientWithLock[T]) Close() {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -89,6 +93,7 @@ type PreRPCHook[T RPCClientType] struct {
 	limiter *rate.Limiter
 }
 
+// NewPreRPCHook creates a new PreRPCHook
 func NewPreRPCHook[T RPCClientType](
 	id string,
 	leader *atomic.Value,

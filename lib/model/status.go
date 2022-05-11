@@ -5,10 +5,11 @@ import (
 
 	"github.com/pingcap/errors"
 
-	"github.com/hanfei1991/microcosm/pkg/adapter"
 	ormModel "github.com/hanfei1991/microcosm/pkg/orm/model"
 )
 
+// WorkerStatusCode represents worker running status in master worker framework
+// TODO: add fsm of WorkerStatusCode
 type WorkerStatusCode int32
 
 // Among these statuses, only WorkerStatusCreated is used by the framework
@@ -24,6 +25,7 @@ const (
 	WorkerStatusStopped
 )
 
+// WorkerUpdateColumns is used in gorm update.
 // TODO: using reflect to generate it more generally
 // related to some implement of gorm
 var WorkerUpdateColumns = []string{
@@ -37,6 +39,9 @@ var WorkerUpdateColumns = []string{
 	"ext_bytes",
 }
 
+// WorkerStatus records worker information, including master id, worker id,
+// worker type, project id(tenant), worker status(used in master worker framework),
+// error message and ext bytes(passed from business logic) in metastore.
 // TODO: refine me, merge orm model to WorkerStatus will cause some confuse
 type WorkerStatus struct {
 	ormModel.Model
@@ -69,10 +74,12 @@ func (s *WorkerStatus) InTerminateState() bool {
 	}
 }
 
+// Marshal returns the JSON encoding of WorkerStatus.
 func (s *WorkerStatus) Marshal() ([]byte, error) {
 	return json.Marshal(s)
 }
 
+// Unmarshal parses the JSON-encoded data and stores the result into a WorkerStatus
 func (s *WorkerStatus) Unmarshal(bytes []byte) error {
 	if err := json.Unmarshal(bytes, s); err != nil {
 		return errors.Trace(err)
@@ -91,8 +98,4 @@ func (s *WorkerStatus) Map() map[string]interface{} {
 		"errmsg":     s.ErrorMessage,
 		"ext_bytes":  s.ExtBytes,
 	}
-}
-
-func EncodeWorkerStatusKey(masterID string, workerID string) string {
-	return adapter.WorkerKeyAdapter.Encode(masterID, workerID)
 }
