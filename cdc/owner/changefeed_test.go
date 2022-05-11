@@ -157,10 +157,18 @@ func (m *mockScheduler) Tick(
 }
 
 // MoveTable is used to trigger manual table moves.
-func (m *mockScheduler) MoveTable(tableID model.TableID, target model.CaptureID) {}
+func (m *mockScheduler) MoveTable(tableID model.TableID, target model.CaptureID) error {
+	return nil
+}
 
 // Rebalance is used to trigger manual workload rebalances.
-func (m *mockScheduler) Rebalance() {}
+func (m *mockScheduler) Rebalance() error {
+	return nil
+}
+
+func (m *mockScheduler) DrainCapture(target string) (int, error) {
+	return 0, nil
+}
 
 // Close closes the scheduler and releases resources.
 func (m *mockScheduler) Close(ctx cdcContext.Context) {}
