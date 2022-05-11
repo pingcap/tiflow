@@ -55,7 +55,7 @@ type testReaderSuite struct {
 func (t *testReaderSuite) SetUpSuite(c *C) {
 	var err error
 	t.lastPos = 0
-	t.lastGTID, err = gtid.ParserGTID(gmysql.MySQLFlavor, "ba8f633f-1f15-11eb-b1c7-0242ac110002:0")
+	t.lastGTID, err = gtid.ParserGTID(gmysql.MySQLFlavor, "ba8f633f-1f15-11eb-b1c7-0242ac110002:1")
 	c.Assert(err, IsNil)
 	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/relay/SetHeartbeatInterval", "return(10000)"), IsNil)
 }
@@ -613,7 +613,7 @@ func (t *testReaderSuite) TestStartSyncByGTID(c *C) {
 		{
 			"ba8f633f-1f15-11eb-b1c7-0242ac110002",
 			"ba8f633f-1f15-11eb-b1c7-0242ac110002.000001",
-			"ba8f633f-1f15-11eb-b1c7-0242ac110002:0",
+			"ba8f633f-1f15-11eb-b1c7-0242ac110002:1",
 			[]FileEventResult{
 				{
 					"mysql.000001",

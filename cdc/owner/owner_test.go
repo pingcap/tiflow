@@ -102,7 +102,7 @@ func TestCreateRemoveChangefeed(t *testing.T) {
 
 	// delete changefeed info key to remove changefeed
 	tester.MustUpdate(cdcKey.String(), nil)
-	// this tick to clean the leak info fo the removed changefeed
+	// this tick to clean the leak info of the removed changefeed
 	_, err = owner.Tick(ctx, state)
 	require.Nil(t, err)
 	// this tick to remove the changefeed state in memory

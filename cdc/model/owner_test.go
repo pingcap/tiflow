@@ -14,7 +14,6 @@
 package model
 
 import (
-	"math"
 	"testing"
 
 	"github.com/pingcap/check"
@@ -195,23 +194,6 @@ func TestShouldBeDeepCopy(t *testing.T) {
 	assertIsSnapshot()
 }
 
-func TestProcSnapshot(t *testing.T) {
-	t.Parallel()
-
-	info := TaskStatus{
-		Tables: map[TableID]*TableReplicaInfo{
-			10: {StartTs: 100},
-		},
-	}
-	cfID := DefaultChangeFeedID("changefeed-1")
-	captureID := "capture-1"
-	snap := info.Snapshot(cfID, captureID, 200)
-	require.Equal(t, cfID, snap.CfID)
-	require.Equal(t, captureID, snap.CaptureID)
-	require.Equal(t, 1, len(snap.Tables))
-	require.Equal(t, &TableReplicaInfo{StartTs: 200}, snap.Tables[10])
-}
-
 func TestTaskStatusMarshal(t *testing.T) {
 	t.Parallel()
 
@@ -231,104 +213,4 @@ func TestTaskStatusMarshal(t *testing.T) {
 	err = newStatus.Unmarshal([]byte(data))
 	require.Nil(t, err)
 	require.Equal(t, status, newStatus)
-}
-
-func TestAddTable(t *testing.T) {
-	t.Parallel()
-
-	ts := uint64(420875942036766723)
-	expected := &TaskStatus{
-		Tables: map[TableID]*TableReplicaInfo{
-			1: {StartTs: ts},
-		},
-		Operation: map[TableID]*TableOperation{
-			1: {
-				BoundaryTs: ts,
-				Status:     OperDispatched,
-			},
-		},
-	}
-	status := &TaskStatus{}
-	status.AddTable(1, &TableReplicaInfo{StartTs: ts}, ts)
-	require.Equal(t, expected, status)
-
-	// add existing table does nothing
-	status.AddTable(1, &TableReplicaInfo{StartTs: 1}, 1)
-	require.Equal(t, expected, status)
-}
-
-func TestTaskStatusApplyState(t *testing.T) {
-	t.Parallel()
-
-	ts1 := uint64(420875042036766723)
-	ts2 := uint64(420876783269969921)
-	status := &TaskStatus{}
-	status.AddTable(1, &TableReplicaInfo{StartTs: ts1}, ts1)
-	status.AddTable(2, &TableReplicaInfo{StartTs: ts2}, ts2)
-	require.True(t, status.SomeOperationsUnapplied())
-	require.Equal(t, ts1, status.AppliedTs())
-
-	status.Operation[1].Status = OperFinished
-	status.Operation[2].Status = OperFinished
-	require.False(t, status.SomeOperationsUnapplied())
-	require.Equal(t, uint64(math.MaxUint64), status.AppliedTs())
-}
-
-func TestMoveTable(t *testing.T) {
-	t.Parallel()
-
-	info := TaskStatus{
-		Tables: map[TableID]*TableReplicaInfo{
-			1: {StartTs: 100},
-			2: {StartTs: 200},
-		},
-	}
-
-	replicaInfo, found := info.RemoveTable(2, 300, true)
-	require.True(t, found)
-	require.Equal(t, &TableReplicaInfo{StartTs: 200}, replicaInfo)
-	require.NotNil(t, info.Tables[int64(1)])
-	require.Nil(t, info.Tables[int64(2)])
-	expectedFlag := uint64(1) // OperFlagMoveTable
-	require.Equal(t, map[int64]*TableOperation{
-		2: {
-			Delete:     true,
-			Flag:       expectedFlag,
-			BoundaryTs: 300,
-			Status:     OperDispatched,
-		},
-	}, info.Operation)
-}
-
-func TestShouldReturnRemovedTable(t *testing.T) {
-	t.Parallel()
-
-	info := TaskStatus{
-		Tables: map[TableID]*TableReplicaInfo{
-			1: {StartTs: 100},
-			2: {StartTs: 200},
-			3: {StartTs: 300},
-			4: {StartTs: 400},
-		},
-	}
-
-	replicaInfo, found := info.RemoveTable(2, 666, false)
-	require.True(t, found)
-	require.Equal(t, &TableReplicaInfo{StartTs: 200}, replicaInfo)
-}
-
-func TestShouldHandleTableNotFound(t *testing.T) {
-	t.Parallel()
-
-	info := TaskStatus{}
-	_, found := info.RemoveTable(404, 666, false)
-	require.False(t, found)
-
-	info = TaskStatus{
-		Tables: map[TableID]*TableReplicaInfo{
-			1: {StartTs: 100},
-		},
-	}
-	_, found = info.RemoveTable(404, 666, false)
-	require.False(t, found)
 }
