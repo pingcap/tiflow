@@ -67,7 +67,11 @@ type mysqlSink struct {
 	execWaitNotifier *notify.Notifier
 	resolvedNotifier *notify.Notifier
 	errCh            chan error
-	flushSyncWg      sync.WaitGroup
+
+	// flushSyncWg should only be used to sync flush txn.
+	flushSyncWg sync.WaitGroup
+	// spawn goroutine from workerWg to avoid goroutine leak when mysqlSink is closed.
+	workerWg sync.WaitGroup
 
 	statistics *metrics.Statistics
 
@@ -214,7 +218,12 @@ func NewMySQLSink(
 	if err != nil {
 		return nil, err
 	}
-	go sink.flushRowChangedEvents(ctx, receiver)
+
+	sink.workerWg.Add(1)
+	go func() {
+		sink.flushRowChangedEvents(ctx, receiver)
+		sink.workerWg.Done()
+	}()
 
 	return sink, nil
 }
@@ -424,6 +433,7 @@ func (s *mysqlSink) createSinkWorkers(ctx context.Context) error {
 		worker := newMySQLSinkWorker(
 			s.params.maxTxnRow, i, s.metricBucketSizeCounters[i], receiver, s.execDMLs)
 		s.workers[i] = worker
+		s.workerWg.Add(1)
 		go func() {
 			err := worker.run(ctx)
 			if err != nil && errors.Cause(err) != context.Canceled {
@@ -434,6 +444,7 @@ func (s *mysqlSink) createSinkWorkers(ctx context.Context) error {
 				}
 			}
 			worker.cleanup()
+			s.workerWg.Done()
 		}()
 	}
 	return nil
@@ -452,10 +463,23 @@ func (s *mysqlSink) notifyAndWaitExec(ctx context.Context) {
 	s.broadcastFinishTxn()
 	s.execWaitNotifier.Notify()
 	done := make(chan struct{})
+
+	// spawn goroutine from s.workerWg to avoid goroutine leak when mysqlSink is closed.
+	s.workerWg.Add(1)
 	go func() {
-		s.flushSyncWg.Wait()
-		close(done)
+		defer s.workerWg.Done()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+				s.flushSyncWg.Wait()
+				close(done)
+				return
+			}
+		}
 	}()
+
 	// This is a hack code to avoid io wait in some routine blocks others to exit.
 	// As the network io wait is blocked in kernel code, the goroutine is in a
 	// D-state that we could not even stop it by cancel the context. So if this
@@ -536,6 +560,7 @@ func (s *mysqlSink) Close(ctx context.Context) error {
 	s.resolvedNotifier.Close()
 	err := s.db.Close()
 	s.cancel()
+	s.workerWg.Wait()
 	return cerror.WrapError(cerror.ErrMySQLConnectionError, err)
 }
 

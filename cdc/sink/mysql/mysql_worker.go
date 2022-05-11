@@ -81,20 +81,6 @@ func (w *mysqlSinkWorker) run(ctx context.Context) (err error) {
 		txnNum     int
 	)
 
-	// mark FinishWg before worker exits, all data txns can be omitted.
-	defer func() {
-		for {
-			select {
-			case txn := <-w.txnCh:
-				if txn.FinishWg != nil {
-					txn.FinishWg.Done()
-				}
-			default:
-				return
-			}
-		}
-	}()
-
 	defer func() {
 		if r := recover(); r != nil {
 			buf := make([]byte, 4096)
