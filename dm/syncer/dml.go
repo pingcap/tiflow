@@ -71,9 +71,9 @@ func extractValueFromData(data []interface{}, columns []*model.ColumnInfo, sourc
 			d = v.String()
 		case string:
 			// convert string to []byte so that go-sql-driver/mysql can use _binary'value' for DML
-			if columns[i].Charset == charset.CharsetGBK {
+			if columns[i].GetCharset() == charset.CharsetGBK {
 				d = []byte(v)
-			} else if columns[i].Charset == "" && sourceTI.Charset == charset.CharsetGBK {
+			} else if columns[i].GetCharset() == "" && sourceTI.Charset == charset.CharsetGBK {
 				d = []byte(v)
 			}
 		}
@@ -265,7 +265,7 @@ RowLoop:
 }
 
 func castUnsigned(data interface{}, ft *types.FieldType) interface{} {
-	if !mysql.HasUnsignedFlag(ft.Flag) {
+	if !mysql.HasUnsignedFlag(ft.GetFlag()) {
 		return data
 	}
 
