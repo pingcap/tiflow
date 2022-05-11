@@ -44,7 +44,7 @@ type changefeed struct {
 	state *orchestrator.ChangefeedReactorState
 
 	upStream         *upstream.Upstream
-	scheduler        scheduler.ScheduleDispatcher
+	scheduler        scheduler.Scheduler
 	barriers         *barriers
 	feedStateManager *feedStateManager
 	redoManager      redo.LogManager
@@ -85,7 +85,7 @@ type changefeed struct {
 
 	newDDLPuller func(ctx cdcContext.Context, upStream *upstream.Upstream, startTs uint64) (DDLPuller, error)
 	newSink      func() DDLSink
-	newScheduler func(ctx cdcContext.Context, startTs uint64) (scheduler.ScheduleDispatcher, error)
+	newScheduler func(ctx cdcContext.Context, startTs uint64) (scheduler.Scheduler, error)
 }
 
 func newChangefeed(id model.ChangeFeedID, upStream *upstream.Upstream) *changefeed {

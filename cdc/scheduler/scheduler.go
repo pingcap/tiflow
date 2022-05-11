@@ -25,12 +25,12 @@ const (
 	CheckpointCannotProceed = model.Ts(0)
 )
 
-// ScheduleDispatcher is an interface for scheduling tables.
+// Scheduler is an interface for scheduling tables.
 // Since in our design, we do not record checkpoints per table,
 // how we calculate the global watermarks (checkpoint-ts and resolved-ts)
 // is heavily coupled with how tables are scheduled.
 // That is why we have a scheduler interface that also reports the global watermarks.
-type ScheduleDispatcher interface {
+type Scheduler interface {
 	// Tick is called periodically from the owner, and returns
 	// updated global watermarks.
 	// It not is thread-safe.

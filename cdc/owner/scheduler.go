@@ -24,7 +24,7 @@ import (
 // This function is factored out to facilitate unit testing.
 func newSchedulerV2FromCtx(
 	ctx context.Context, startTs uint64,
-) (scheduler.ScheduleDispatcher, error) {
+) (scheduler.Scheduler, error) {
 	changeFeedID := ctx.ChangefeedVars().ID
 	messageServer := ctx.GlobalVars().MessageServer
 	messageRouter := ctx.GlobalVars().MessageRouter
@@ -37,6 +37,6 @@ func newSchedulerV2FromCtx(
 	return ret, nil
 }
 
-func newScheduler(ctx context.Context, startTs uint64) (scheduler.ScheduleDispatcher, error) {
+func newScheduler(ctx context.Context, startTs uint64) (scheduler.Scheduler, error) {
 	return newSchedulerV2FromCtx(ctx, startTs)
 }

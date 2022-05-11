@@ -186,7 +186,7 @@ func createChangefeed4Test(ctx cdcContext.Context, t *testing.T) (
 	})
 	cf.newScheduler = func(
 		ctx cdcContext.Context, startTs uint64,
-	) (scheduler.ScheduleDispatcher, error) {
+	) (scheduler.Scheduler, error) {
 		return &mockScheduler{}, nil
 	}
 	cf.upStream = upStream
