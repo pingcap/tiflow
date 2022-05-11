@@ -423,6 +423,16 @@ func TestGetTopicForDDL(t *testing.T) {
 			ddl: &model.DDLEvent{
 				TableInfo: &model.SimpleTableInfo{
 					Schema: "test1",
+					Table:  "view1",
+				},
+				Type: timodel.ActionDropView,
+			},
+			expectedTopic: "test1_view1",
+		},
+		{
+			ddl: &model.DDLEvent{
+				TableInfo: &model.SimpleTableInfo{
+					Schema: "test1",
 					Table:  "tb1",
 				},
 				Type: timodel.ActionAddColumn,

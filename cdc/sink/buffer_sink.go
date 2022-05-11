@@ -168,6 +168,12 @@ func (b *bufferSink) clearBufferedTableData(tableID model.TableID) {
 	b.bufferMu.Lock()
 	defer b.bufferMu.Unlock()
 	delete(b.buffer, tableID)
+	checkpointTs, loaded := b.tableCheckpointTsMap.LoadAndDelete(tableID)
+	if loaded {
+		log.Info("clean up table checkpoint ts in buffer sink",
+			zap.Int64("tableID", tableID),
+			zap.Uint64("checkpointTs", checkpointTs.(uint64)))
+	}
 }
 
 func (b *bufferSink) TryEmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) (bool, error) {
