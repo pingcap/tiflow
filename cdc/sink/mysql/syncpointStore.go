@@ -34,7 +34,7 @@ type SyncpointStore interface {
 	Close() error
 }
 
-// NewSyncpointStore creates a new Spyncpoint sink with the sink-uri
+// NewSyncpointStore creates a new Syncpoint sink with the sink-uri
 func NewSyncpointStore(ctx context.Context, changefeedID model.ChangeFeedID, sinkURIStr string) (SyncpointStore, error) {
 	// parse sinkURI as a URI
 	sinkURI, err := url.Parse(sinkURIStr)

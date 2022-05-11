@@ -518,12 +518,12 @@ func (s *mysqlSink) cleanTableResource(tableID model.TableID) {
 	// it may read the old values.
 	// See: https://github.com/pingcap/tiflow/issues/4464#issuecomment-1085385382.
 	if resolvedTs, loaded := s.tableMaxResolvedTs.LoadAndDelete(tableID); loaded {
-		log.Info("clean up table max resolved ts",
+		log.Info("clean up table max resolved ts in MySQL sink",
 			zap.Int64("tableID", tableID),
 			zap.Uint64("resolvedTs", resolvedTs.(uint64)))
 	}
 	if checkpointTs, loaded := s.tableCheckpointTs.LoadAndDelete(tableID); loaded {
-		log.Info("clean up table checkpoint ts",
+		log.Info("clean up table checkpoint ts in MySQL sink",
 			zap.Int64("tableID", tableID),
 			zap.Uint64("checkpointTs", checkpointTs.(uint64)))
 	}

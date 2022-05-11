@@ -34,6 +34,7 @@ import (
 	"go.uber.org/zap/zapcore"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/util"
@@ -158,69 +159,6 @@ func TestGetChangeFeeds(t *testing.T) {
 	require.Equal(t, len(result), 0)
 }
 
-func TestGetPutTaskStatus(t *testing.T) {
-	s := &etcdTester{}
-	s.setUpTest(t)
-	defer s.tearDownTest(t)
-	ctx := context.Background()
-	info := &model.TaskStatus{
-		Tables: map[model.TableID]*model.TableReplicaInfo{
-			1: {StartTs: 100},
-		},
-	}
-
-	feedID := "feedid"
-	captureID := "captureid"
-
-	err := s.client.PutTaskStatus(ctx, feedID, captureID, info)
-	require.NoError(t, err)
-
-	_, getInfo, err := s.client.GetTaskStatus(ctx, feedID, captureID)
-	require.NoError(t, err)
-	require.Equal(t, getInfo, info)
-
-	err = s.client.ClearAllCDCInfo(context.Background())
-	require.NoError(t, err)
-	_, _, err = s.client.GetTaskStatus(ctx, feedID, captureID)
-	require.True(t, cerror.ErrTaskStatusNotExists.Equal(err))
-}
-
-func TestGetPutTaskPosition(t *testing.T) {
-	s := &etcdTester{}
-	s.setUpTest(t)
-	defer s.tearDownTest(t)
-	ctx := context.Background()
-	info := &model.TaskPosition{
-		ResolvedTs:   99,
-		CheckPointTs: 77,
-	}
-
-	feedID := "feedid"
-	captureID := "captureid"
-
-	updated, err := s.client.PutTaskPositionOnChange(ctx, feedID, captureID, info)
-	require.NoError(t, err)
-	require.True(t, updated)
-
-	updated, err = s.client.PutTaskPositionOnChange(ctx, feedID, captureID, info)
-	require.NoError(t, err)
-	require.False(t, updated)
-
-	info.CheckPointTs = 99
-	updated, err = s.client.PutTaskPositionOnChange(ctx, feedID, captureID, info)
-	require.NoError(t, err)
-	require.True(t, updated)
-
-	_, getInfo, err := s.client.GetTaskPosition(ctx, feedID, captureID)
-	require.NoError(t, err)
-	require.Equal(t, getInfo, info)
-
-	err = s.client.ClearAllCDCInfo(ctx)
-	require.NoError(t, err)
-	_, _, err = s.client.GetTaskStatus(ctx, feedID, captureID)
-	require.True(t, cerror.ErrTaskStatusNotExists.Equal(err))
-}
-
 func TestOpChangeFeedDetail(t *testing.T) {
 	s := &etcdTester{}
 	s.setUpTest(t)
@@ -289,6 +227,21 @@ func TestGetAllChangeFeedInfo(t *testing.T) {
 	}
 }
 
+func putChangeFeedStatus(
+	ctx context.Context,
+	c CDCEtcdClient,
+	changefeedID model.ChangeFeedID,
+	status *model.ChangeFeedStatus,
+) error {
+	key := GetEtcdKeyJob(changefeedID)
+	value, err := status.Marshal()
+	if err != nil {
+		return errors.Trace(err)
+	}
+	_, err = c.Client.Put(ctx, key, value)
+	return cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
+}
+
 func TestGetAllChangeFeedStatus(t *testing.T) {
 	s := &etcdTester{}
 	s.setUpTest(t)
@@ -305,7 +258,7 @@ func TestGetAllChangeFeedStatus(t *testing.T) {
 		},
 	}
 	for id, cf := range changefeeds {
-		err := s.client.PutChangeFeedStatus(context.Background(), id, cf)
+		err := putChangeFeedStatus(context.Background(), s.client, id, cf)
 		require.NoError(t, err)
 	}
 	statuses, err := s.client.GetAllChangeFeedStatus(context.Background())

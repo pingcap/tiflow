@@ -229,3 +229,141 @@ func TestDDLEventFromJob(t *testing.T) {
 	event.FromJob(job, nil)
 	require.Nil(t, event.PreTableInfo)
 }
+
+func TestDDLEventFromRenameTablesJob(t *testing.T) {
+	job := &timodel.Job{
+		ID:         71,
+		TableID:    69,
+		SchemaName: "test1",
+		Type:       timodel.ActionRenameTables,
+		StartTS:    432853521879007233,
+		Query:      "rename table test1.t1 to test1.t10, test1.t2 to test1.t20",
+		BinlogInfo: &timodel.HistoryInfo{
+			FinishedTS: 432853521879007238,
+			MultipleTableInfos: []*timodel.TableInfo{
+				{
+					ID:   67,
+					Name: timodel.CIStr{O: "t10"},
+					Columns: []*timodel.ColumnInfo{
+						{
+							ID:   1,
+							Name: timodel.CIStr{O: "id"},
+							FieldType: types.FieldType{
+								Flag: mysql.PriKeyFlag | mysql.UniqueFlag,
+							},
+							State: timodel.StatePublic,
+						},
+					},
+				},
+				{
+					ID:   69,
+					Name: timodel.CIStr{O: "t20"},
+					Columns: []*timodel.ColumnInfo{
+						{
+							ID:   1,
+							Name: timodel.CIStr{O: "id"},
+							FieldType: types.FieldType{
+								Flag: mysql.PriKeyFlag | mysql.UniqueFlag,
+							},
+							State: timodel.StatePublic,
+						},
+					},
+				},
+			},
+		},
+	}
+
+	preTableInfo := &TableInfo{
+		TableName: TableName{
+			Schema:  "test1",
+			Table:   "t1",
+			TableID: 67,
+		},
+		TableInfo: &timodel.TableInfo{
+			ID:   67,
+			Name: timodel.CIStr{O: "t1"},
+			Columns: []*timodel.ColumnInfo{
+				{
+					ID:   1,
+					Name: timodel.CIStr{O: "id"},
+					FieldType: types.FieldType{
+						Flag: mysql.PriKeyFlag | mysql.UniqueFlag,
+					},
+					State: timodel.StatePublic,
+				},
+			},
+		},
+	}
+
+	tableInfo := &timodel.TableInfo{
+		ID:   67,
+		Name: timodel.CIStr{O: "t10"},
+		Columns: []*timodel.ColumnInfo{
+			{
+				ID:   1,
+				Name: timodel.CIStr{O: "id"},
+				FieldType: types.FieldType{
+					Flag: mysql.PriKeyFlag | mysql.UniqueFlag,
+				},
+				State: timodel.StatePublic,
+			},
+		},
+	}
+
+	event := &DDLEvent{}
+	event.FromRenameTablesJob(job, "test1", "test1", preTableInfo, tableInfo)
+	require.Equal(t, event.PreTableInfo.TableID, int64(67))
+	require.Equal(t, event.PreTableInfo.Table, "t1")
+	require.Len(t, event.PreTableInfo.ColumnInfo, 1)
+	require.Equal(t, event.TableInfo.TableID, int64(67))
+	require.Equal(t, event.TableInfo.Table, "t10")
+	require.Len(t, event.TableInfo.ColumnInfo, 1)
+	require.Equal(t, event.Query, "RENAME TABLE `test1`.`t1` TO `test1`.`t10`")
+
+	preTableInfo = &TableInfo{
+		TableName: TableName{
+			Schema:  "test1",
+			Table:   "t2",
+			TableID: 69,
+		},
+		TableInfo: &timodel.TableInfo{
+			ID:   69,
+			Name: timodel.CIStr{O: "t2"},
+			Columns: []*timodel.ColumnInfo{
+				{
+					ID:   1,
+					Name: timodel.CIStr{O: "id"},
+					FieldType: types.FieldType{
+						Flag: mysql.PriKeyFlag | mysql.UniqueFlag,
+					},
+					State: timodel.StatePublic,
+				},
+			},
+		},
+	}
+
+	tableInfo = &timodel.TableInfo{
+		ID:   69,
+		Name: timodel.CIStr{O: "t20"},
+		Columns: []*timodel.ColumnInfo{
+			{
+				ID:   1,
+				Name: timodel.CIStr{O: "id"},
+				FieldType: types.FieldType{
+					Flag: mysql.PriKeyFlag | mysql.UniqueFlag,
+				},
+				State: timodel.StatePublic,
+			},
+		},
+	}
+
+	event = &DDLEvent{}
+	event.FromRenameTablesJob(job, "test1", "test1", preTableInfo, tableInfo)
+	require.Equal(t, event.PreTableInfo.TableID, int64(69))
+	require.Equal(t, event.PreTableInfo.Table, "t2")
+	require.Len(t, event.PreTableInfo.ColumnInfo, 1)
+	require.Equal(t, event.TableInfo.TableID, int64(69))
+	require.Equal(t, event.TableInfo.Table, "t20")
+	require.Len(t, event.TableInfo.ColumnInfo, 1)
+	require.Equal(t, event.Query, "RENAME TABLE `test1`.`t2` TO `test1`.`t20`")
+}

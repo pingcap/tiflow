@@ -1285,9 +1285,10 @@ func (s *testSyncerSuite) TestTrackDDL(c *C) {
 	syncer.ddlDBConn = dbconn.NewDBConn(s.cfg, conn.NewBaseConn(dbConn, &retry.FiniteRetryStrategy{}))
 	syncer.checkpoint.(*RemoteCheckPoint).dbConn = dbconn.NewDBConn(s.cfg, conn.NewBaseConn(checkPointDBConn, &retry.FiniteRetryStrategy{}))
 	syncer.schemaTracker, err = schema.NewTracker(context.Background(), s.cfg.Name, defaultTestSessionCfg, syncer.ddlDBConn)
+	c.Assert(err, IsNil)
+	defer syncer.schemaTracker.Close()
 	syncer.exprFilterGroup = NewExprFilterGroup(utils.NewSessionCtx(nil), nil)
 	c.Assert(syncer.genRouter(), IsNil)
-	c.Assert(err, IsNil)
 
 	cases := []struct {
 		sql      string
@@ -1603,6 +1604,7 @@ func (s *testSyncerSuite) TestTrackDownstreamTableWontOverwrite(c *C) {
 	syncer.downstreamTrackConn = dbconn.NewDBConn(s.cfg, conn.NewBaseConn(dbConn, &retry.FiniteRetryStrategy{}))
 	syncer.schemaTracker, err = schema.NewTracker(ctx, s.cfg.Name, defaultTestSessionCfg, syncer.downstreamTrackConn)
 	c.Assert(err, IsNil)
+	defer syncer.schemaTracker.Close()
 
 	upTable := &filter.Table{
 		Schema: "test",
@@ -1684,8 +1686,10 @@ func (s *testSyncerSuite) TestDownstreamTableHasAutoRandom(c *C) {
 		"tidb_skip_utf8_check":    "0",
 		schema.TiDBClusteredIndex: "ON",
 	}
+	c.Assert(syncer.schemaTracker.Close(), IsNil)
 	syncer.schemaTracker, err = schema.NewTracker(ctx, s.cfg.Name, sessionCfg, syncer.downstreamTrackConn)
 	c.Assert(err, IsNil)
+	defer syncer.schemaTracker.Close()
 	v, ok := syncer.schemaTracker.GetSystemVar(schema.TiDBClusteredIndex)
 	c.Assert(v, Equals, "ON")
 	c.Assert(ok, IsTrue)
@@ -1864,8 +1868,8 @@ func TestSyncerGetTableInfo(t *testing.T) {
 	syncer.ddlDBConn = dbconn.NewDBConn(cfg, baseConn)
 	syncer.downstreamTrackConn = dbconn.NewDBConn(cfg, conn.NewBaseConn(dbConn, &retry.FiniteRetryStrategy{}))
 	syncer.schemaTracker, err = schema.NewTracker(ctx, cfg.Name, defaultTestSessionCfg, syncer.downstreamTrackConn)
-	defer syncer.schemaTracker.Close()
 	require.NoError(t, err)
+	defer syncer.schemaTracker.Close()
 
 	upTable := &filter.Table{
 		Schema: "test",

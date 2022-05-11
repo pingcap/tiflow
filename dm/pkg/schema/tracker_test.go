@@ -18,6 +18,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"os"
 	"sort"
 	"testing"
 	"time"
@@ -32,6 +33,7 @@ import (
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/util/filter"
 	timock "github.com/pingcap/tidb/util/mock"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zapcore"
 
 	"github.com/pingcap/tiflow/dm/dm/config"
@@ -952,4 +954,13 @@ func (s *trackerSuite) TestPlacementRule(c *C) {
 	c.Assert(err, IsNil)
 	_, ok := tracker.dsTracker.tableInfos[tableID]
 	c.Assert(ok, IsTrue)
+}
+
+func TestNewTmpFolderForTracker(t *testing.T) {
+	got, err := newTmpFolderForTracker("task/db01")
+	require.NoError(t, err)
+	require.Contains(t, got, "task%2Fdb01")
+	require.DirExists(t, got)
+	err = os.RemoveAll(got)
+	require.NoError(t, err)
 }

@@ -333,19 +333,9 @@ func (m *feedStateManager) patchState(feedState model.FeedState) {
 }
 
 func (m *feedStateManager) cleanUpInfos() {
-	for captureID := range m.state.TaskStatuses {
-		m.state.PatchTaskStatus(captureID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
-			return nil, status != nil, nil
-		})
-	}
 	for captureID := range m.state.TaskPositions {
 		m.state.PatchTaskPosition(captureID, func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
 			return nil, position != nil, nil
-		})
-	}
-	for captureID := range m.state.Workloads {
-		m.state.PatchTaskWorkload(captureID, func(workload model.TaskWorkload) (model.TaskWorkload, bool, error) {
-			return nil, workload != nil, nil
 		})
 	}
 }

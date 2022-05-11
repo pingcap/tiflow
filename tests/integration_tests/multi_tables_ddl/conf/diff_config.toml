@@ -7,13 +7,13 @@ export-fix-sql = true
 check-struct-only = false
 
 [task]
-    output-dir = "/tmp/tidb_cdc_test/rename_tables/sync_diff/output"
+    output-dir = "/tmp/tidb_cdc_test/multi_tables_ddl/sync_diff/output"
 
     source-instances = ["tidb0"]
 
     target-instance = "mysql1"
 
-    target-check-tables = ["rename_tables_test.?*"]
+    target-check-tables = ["multi_tables_ddl_test.?*"]
 
 [data-sources]
 [data-sources.tidb0]
