@@ -16,7 +16,6 @@ package owner
 import (
 	"context"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -66,8 +65,12 @@ type ddlSinkImpl struct {
 		checkpointTs      model.Ts
 		currentTableNames []model.TableName
 	}
-	ddlFinishedTs model.Ts
-	ddlSentTs     model.Ts
+	// ddlFinishedTsMap is used to check whether a ddl event in a ddl job has
+	// been executed successfully.
+	ddlFinishedTsMap sync.Map
+	// ddlSentTsMap is used to check whether a ddl event in a ddl job has been
+	// sent to `ddlCh` successfully.
+	ddlSentTsMap map[*model.DDLEvent]model.Ts
 
 	ddlCh chan *model.DDLEvent
 	errCh chan error
@@ -83,6 +86,7 @@ type ddlSinkImpl struct {
 
 func newDDLSink() DDLSink {
 	return &ddlSinkImpl{
+		ddlSentTsMap:    make(map[*model.DDLEvent]uint64),
 		ddlCh:           make(chan *model.DDLEvent, 1),
 		errCh:           make(chan error, defaultErrChSize),
 		sinkInitHandler: ddlSinkInitializer,
@@ -194,7 +198,22 @@ func (s *ddlSinkImpl) run(ctx cdcContext.Context, id model.ChangeFeedID, info *m
 						zap.String("changefeed", ctx.ChangefeedVars().ID.ID),
 						zap.Bool("ignored", err != nil),
 						zap.Any("ddl", ddl))
-					atomic.StoreUint64(&s.ddlFinishedTs, ddl.CommitTs)
+					s.ddlFinishedTsMap.Store(ddl, ddl.CommitTs)
+					// Force emitting checkpoint ts when a ddl event is finished.
+					// Otherwise, a kafka consumer may not execute that ddl event.
+					s.mu.Lock()
+					checkpointTs := s.mu.checkpointTs
+					if checkpointTs == 0 || checkpointTs <= lastCheckpointTs {
+						s.mu.Unlock()
+						continue
+					}
+					tables := s.mu.currentTableNames
+					s.mu.Unlock()
+					lastCheckpointTs = checkpointTs
+					if err := s.sink.EmitCheckpointTs(ctx, checkpointTs, tables); err != nil {
+						ctx.Throw(errors.Trace(err))
+						return
+					}
 					continue
 				}
 				// If DDL executing failed, and the error can not be ignored,
@@ -218,21 +237,34 @@ func (s *ddlSinkImpl) emitCheckpointTs(ts uint64, tableNames []model.TableName) 
 	s.mu.currentTableNames = tableNames
 }
 
+// emitDDLEvent returns true if the ddl event is already executed.
+// For a rename tables job, the events in that job have identical StartTs
+// and CommitTs. So in emitDDLEvent, we get the DDL finished ts of an event
+// from a map in order to check whether that event is finshed or not.
 func (s *ddlSinkImpl) emitDDLEvent(ctx cdcContext.Context, ddl *model.DDLEvent) (bool, error) {
-	ddlFinishedTs := atomic.LoadUint64(&s.ddlFinishedTs)
+	var ddlFinishedTs model.Ts
+
+	ts, ok := s.ddlFinishedTsMap.Load(ddl)
+	if ok {
+		ddlFinishedTs = ts.(model.Ts)
+	}
 	if ddl.CommitTs <= ddlFinishedTs {
 		// the DDL event is executed successfully, and done is true
 		log.Info("ddl already executed",
 			zap.String("namespace", ctx.ChangefeedVars().ID.Namespace),
 			zap.String("changefeed", ctx.ChangefeedVars().ID.ID),
 			zap.Uint64("ddlFinishedTs", ddlFinishedTs), zap.Any("DDL", ddl))
+		s.ddlFinishedTsMap.Delete(ddl)
+		delete(s.ddlSentTsMap, ddl)
 		return true, nil
 	}
-	if ddl.CommitTs <= s.ddlSentTs {
+
+	ddlSentTs := s.ddlSentTsMap[ddl]
+	if ddl.CommitTs <= ddlSentTs {
 		log.Debug("ddl is not finished yet",
 			zap.String("namespace", ctx.ChangefeedVars().ID.Namespace),
 			zap.String("changefeed", ctx.ChangefeedVars().ID.ID),
-			zap.Uint64("ddlSentTs", s.ddlSentTs), zap.Any("DDL", ddl))
+			zap.Uint64("ddlSentTs", ddlSentTs), zap.Any("DDL", ddl))
 		// the DDL event is executing and not finished yet, return false
 		return false, nil
 	}
@@ -240,17 +272,17 @@ func (s *ddlSinkImpl) emitDDLEvent(ctx cdcContext.Context, ddl *model.DDLEvent) 
 	case <-ctx.Done():
 		return false, errors.Trace(ctx.Err())
 	case s.ddlCh <- ddl:
-		s.ddlSentTs = ddl.CommitTs
+		s.ddlSentTsMap[ddl] = ddl.CommitTs
 		log.Info("ddl is sent",
 			zap.String("namespace", ctx.ChangefeedVars().ID.Namespace),
 			zap.String("changefeed", ctx.ChangefeedVars().ID.ID),
-			zap.Uint64("ddlSentTs", s.ddlSentTs))
+			zap.Uint64("ddlSentTs", ddlSentTs))
 	default:
 		log.Warn("ddl chan full, send it the next round",
 			zap.String("namespace", ctx.ChangefeedVars().ID.Namespace),
 			zap.String("changefeed", ctx.ChangefeedVars().ID.ID),
-			zap.Uint64("ddlSentTs", s.ddlSentTs),
-			zap.Uint64("ddlFinishedTs", s.ddlFinishedTs), zap.Any("DDL", ddl))
+			zap.Uint64("ddlSentTs", ddlSentTs),
+			zap.Uint64("ddlFinishedTs", ddlFinishedTs), zap.Any("DDL", ddl))
 		// if this hit, we think that ddlCh is full,
 		// just return false and send the ddl in the next round.
 	}
