@@ -161,7 +161,7 @@ func TestDebugInfo(t *testing.T) {
 	s.state.Changefeeds[changefeedID].PatchTaskStatus(ctx.GlobalVars().CaptureInfo.ID,
 		func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
 			return &model.TaskStatus{
-				Tables: map[int64]*model.TableReplicaInfo{1: {}},
+				Tables: map[int64]*model.TableReplicaInfo{1: {StartTs: 1}},
 			}, true, nil
 		})
 	s.tester.MustApplyPatches()
