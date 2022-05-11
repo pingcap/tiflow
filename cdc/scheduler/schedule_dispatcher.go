@@ -302,7 +302,7 @@ func (s *BaseScheduleDispatcher) Tick(
 		// when draining capture, tables in the `AddingTable` status,
 		// once all tables become `Running`, treat it as the signal that the capture
 		// draining process finished.
-		if normal && s.drainTarget != captureIDNotDraining {
+		if normal && s.drainTarget != captureIDNotDraining && s.tables.CountTableByCaptureIDAndStatus(s.drainTarget, util.RunningTable) == 0 {
 			log.Info("DrainCapture: Done", zap.String("target", s.drainTarget))
 			s.drainTarget = captureIDNotDraining
 		}
