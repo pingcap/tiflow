@@ -1855,7 +1855,6 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 	}
 
 	advanceLatestLocationGtidSet := func(e *replication.BinlogEvent) error {
-		var err2 error
 		if _, ok := e.Event.(*replication.MariadbGTIDEvent); ok {
 			gtidSet, err2 := gtid.ParserGTID(s.cfg.Flavor, currentGTID)
 			if err2 != nil {
@@ -1869,7 +1868,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		// clone lastLocation's gtid set to avoid its gtid is transport to table checkpoint
 		// currently table checkpoint will save last location's gtid set with shallow copy
 		lastLocation = lastLocation.Clone()
-		err2 = lastLocation.Update(currentGTID)
+		err2 := lastLocation.Update(currentGTID)
 		if err2 != nil {
 			return terror.Annotatef(err2, "fail to update GTID %s", currentGTID)
 		}
