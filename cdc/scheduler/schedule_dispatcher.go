@@ -105,6 +105,7 @@ type BaseScheduleDispatcher struct {
 
 	// at most one capture can be drained at any time.
 	drainTarget model.CaptureID
+	drainTick   int
 
 	// read only fields
 	changeFeedID model.ChangeFeedID
@@ -449,15 +450,21 @@ func (s *BaseScheduleDispatcher) findDiffTables(
 		}
 
 		if s.drainTarget != captureIDNotDraining {
-			removingCount := s.tables.CountTableByCaptureIDAndStatus(s.drainTarget, util.RemovingTable)
-			if drainRemoved < drainCaptureTableBatchSize && removingCount == 0 {
-				// the table is at the drainTarget, also remove it.
-				if record.CaptureID == s.drainTarget && record.Status == util.RunningTable {
-					toRemove = append(toRemove, tableID)
-					drainRemoved += 1
-
-					s.logger.Info("DrainCapture: remove table",
-						zap.Int64("tableID", tableID))
+			addingCount := s.tables.CountTableByStatus(util.AddingTable)
+			if addingCount == 0 {
+				if s.drainTick < drainCaptureRelaxTicks {
+					s.drainTick++
+					continue
+				}
+				if drainRemoved < drainCaptureTableBatchSize {
+					// the table is at the drainTarget, also remove it.
+					if record.CaptureID == s.drainTarget && record.Status == util.RunningTable {
+						toRemove = append(toRemove, tableID)
+						drainRemoved += 1
+						s.drainTick = 0
+						s.logger.Info("DrainCapture: remove table",
+							zap.Int64("tableID", tableID))
+					}
 				}
 			}
 		}

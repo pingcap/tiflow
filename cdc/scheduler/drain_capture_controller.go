@@ -4,9 +4,9 @@ import "github.com/pingcap/tiflow/cdc/model"
 
 const (
 	// captureIDNotDraining is a placeholder for no capture is draining now.
-	captureIDNotDraining = ""
-
+	captureIDNotDraining       = ""
 	drainCaptureTableBatchSize = 1
+	drainCaptureRelaxTicks     = 10
 )
 
 type drainCaptureController interface {
