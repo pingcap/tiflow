@@ -100,7 +100,7 @@ func (s *SchedulerV2) DispatchTable(
 		if err != nil {
 			return
 		}
-		log.Info("SchedulerV2: DispatchTable",
+		log.Info("schedulerV2: DispatchTable",
 			zap.Any("message", message),
 			zap.Any("successful", done),
 			zap.String("namespace", changeFeedID.Namespace),
@@ -140,7 +140,7 @@ func (s *SchedulerV2) Announce(
 		if err != nil {
 			return
 		}
-		log.Info("SchedulerV2: Announce",
+		log.Info("schedulerV2: Announce",
 			zap.Any("message", message),
 			zap.Any("successful", done),
 			zap.String("namespace", changeFeedID.Namespace),
