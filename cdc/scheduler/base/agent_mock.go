@@ -48,7 +48,9 @@ func (m *MockProcessorMessenger) SyncTaskStatuses(
 }
 
 // SendCheckpoint marks this function as being called.
-func (m *MockProcessorMessenger) SendCheckpoint(ctx context.Context, checkpointTs model.Ts, resolvedTs model.Ts) (bool, error) {
+func (m *MockProcessorMessenger) SendCheckpoint(
+	ctx context.Context, checkpointTs model.Ts, resolvedTs model.Ts,
+) (bool, error) {
 	args := m.Called(ctx, checkpointTs, resolvedTs)
 	return args.Bool(0), args.Error(1)
 }
@@ -80,7 +82,9 @@ type mockCheckpointSender struct {
 }
 
 // SendCheckpoint sends a checkpoint.
-func (s *mockCheckpointSender) SendCheckpoint(_ context.Context, provider checkpointProviderFunc) error {
+func (s *mockCheckpointSender) SendCheckpoint(
+	_ context.Context, provider checkpointProviderFunc,
+) error {
 	checkpointTs, resolvedTs, ok := provider()
 	if !ok {
 		return nil

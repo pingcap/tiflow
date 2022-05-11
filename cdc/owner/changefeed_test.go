@@ -28,6 +28,7 @@ import (
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/scheduler"
 	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
@@ -147,8 +148,8 @@ type mockScheduler struct {
 }
 
 func (m *mockScheduler) Tick(
-	ctx cdcContext.Context,
-	state *orchestrator.ChangefeedReactorState,
+	ctx context.Context,
+	checkpointTs model.Ts,
 	currentTables []model.TableID,
 	captures map[model.CaptureID]*model.CaptureInfo,
 ) (newCheckpointTs, newResolvedTs model.Ts, err error) {
@@ -163,7 +164,7 @@ func (m *mockScheduler) MoveTable(tableID model.TableID, target model.CaptureID)
 func (m *mockScheduler) Rebalance() {}
 
 // Close closes the scheduler and releases resources.
-func (m *mockScheduler) Close(ctx cdcContext.Context) {}
+func (m *mockScheduler) Close(ctx context.Context) {}
 
 func createChangefeed4Test(ctx cdcContext.Context, t *testing.T) (
 	*changefeed, *orchestrator.ChangefeedReactorState,
@@ -183,7 +184,9 @@ func createChangefeed4Test(ctx cdcContext.Context, t *testing.T) (
 			recordDDLHistory: false,
 		}
 	})
-	cf.newScheduler = func(ctx cdcContext.Context, startTs uint64) (scheduler, error) {
+	cf.newScheduler = func(
+		ctx cdcContext.Context, startTs uint64,
+	) (scheduler.ScheduleDispatcher, error) {
 		return &mockScheduler{}, nil
 	}
 	cf.upStream = upStream

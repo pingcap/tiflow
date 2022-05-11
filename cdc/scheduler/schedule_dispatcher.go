@@ -25,10 +25,15 @@ const (
 	CheckpointCannotProceed = model.Ts(0)
 )
 
-// ScheduleDispatcher is an interface for a table scheduler used in Owner.
+// ScheduleDispatcher is an interface for scheduling tables.
+// Since in our design, we do not record checkpoints per table,
+// how we calculate the global watermarks (checkpoint-ts and resolved-ts)
+// is heavily coupled with how tables are scheduled.
+// That is why we have a scheduler interface that also reports the global watermarks.
 type ScheduleDispatcher interface {
-	// Tick is called periodically to update the SchedulerDispatcher on the latest state of replication.
-	// This function should NOT be assumed to be thread-safe. No concurrent calls allowed.
+	// Tick is called periodically from the owner, and returns
+	// updated global watermarks.
+	// It not is thread-safe.
 	Tick(
 		ctx context.Context,
 		// Latest global checkpoint of the changefeed
@@ -36,14 +41,16 @@ type ScheduleDispatcher interface {
 		// All tables that SHOULD be replicated (or started) at the current checkpoint.
 		currentTables []model.TableID,
 		// All captures that are alive according to the latest Etcd states.
-		captures map[model.CaptureID]*model.CaptureInfo,
+		aliveCaptures map[model.CaptureID]*model.CaptureInfo,
 	) (newCheckpointTs, newResolvedTs model.Ts, err error)
 
 	// MoveTable requests that a table be moved to target.
-	// It should be thread-safe.
+	// It is thread-safe.
 	MoveTable(tableID model.TableID, target model.CaptureID)
 
 	// Rebalance triggers a rebalance operation.
-	// It should be thread-safe
+	// It is thread-safe
 	Rebalance()
+
+	Close(ctx context.Context)
 }
