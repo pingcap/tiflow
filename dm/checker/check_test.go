@@ -491,14 +491,14 @@ func (s *testCheckerSuite) TestIncrModeConnAmount(c *tc.C) {
 	}
 	mock := initMockDB(c)
 	mock.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'max_connections'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
-		AddRow("max_connections", 15))
+		AddRow("max_connections", 20))
 	_, err = CheckSyncConfig(context.Background(), cfgs, common.DefaultErrorCnt, common.DefaultWarnCnt)
 	c.Assert(err, tc.NotNil)
 	c.Assert(err, tc.ErrorMatches, "(.|\n)*is less than the amount syncer(.|\n)*")
 
 	mock = initMockDB(c)
 	mock.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'max_connections'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
-		AddRow("max_connections", 17))
+		AddRow("max_connections", 21))
 	msg, err = CheckSyncConfig(context.Background(), cfgs, common.DefaultErrorCnt, common.DefaultWarnCnt)
 	c.Assert(err, tc.IsNil)
 	c.Assert(msg, tc.Equals, CheckTaskSuccess)

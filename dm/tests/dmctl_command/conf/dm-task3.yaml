@@ -3,7 +3,7 @@ name: test
 task-mode: incremental
 meta-schema: "dm_meta"
 enable-heartbeat: false
-ignore-checking-items: ["mysql_version"]
+ignore-checking-items: ["version"]
 target-database:
   host: "127.0.0.1"
   port: 4000
