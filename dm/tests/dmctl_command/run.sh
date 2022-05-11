@@ -190,8 +190,7 @@ function check_full_mode_conn() {
 	run_sql_both_source "drop database if exists dmctl_conn"
 	run_sql_both_source "create database dmctl_conn"
 	# ref: many_tables/run.sh
-	for (( i = 0; i <= 500; ++i ))
-	do
+	for ((i = 0; i <= 500; ++i)); do
 		run_sql_source1 "create table dmctl_conn.test_$i(id int primary key)"
 		run_sql_source1 "insert into dmctl_conn.test_$i values (1)"
 	done
@@ -282,7 +281,7 @@ function run_check_task() {
 	run_dm_master $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master.toml
 	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT
 	export GO_FAILPOINTS='github.com/pingcap/tiflow/dm/loader/longLoadProcess=return(true);github.com/pingcap/tiflow/dm/dumpling/longDumpProcess=return(true)'
-	
+
 	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
 	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
