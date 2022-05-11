@@ -161,7 +161,6 @@ type MiddlewareFunc func(c *gin.Context)
 
 // DMAPIGetClusterInfo operation middleware
 func (siw *ServerInterfaceWrapper) DMAPIGetClusterInfo(c *gin.Context) {
-
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
 	}
@@ -171,7 +170,6 @@ func (siw *ServerInterfaceWrapper) DMAPIGetClusterInfo(c *gin.Context) {
 
 // DMAPIUpdateClusterInfo operation middleware
 func (siw *ServerInterfaceWrapper) DMAPIUpdateClusterInfo(c *gin.Context) {
-
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
 	}
@@ -181,7 +179,6 @@ func (siw *ServerInterfaceWrapper) DMAPIUpdateClusterInfo(c *gin.Context) {
 
 // DMAPIGetClusterMasterList operation middleware
 func (siw *ServerInterfaceWrapper) DMAPIGetClusterMasterList(c *gin.Context) {
-
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
 	}
@@ -191,7 +188,6 @@ func (siw *ServerInterfaceWrapper) DMAPIGetClusterMasterList(c *gin.Context) {
 
 // DMAPIOfflineMasterNode operation middleware
 func (siw *ServerInterfaceWrapper) DMAPIOfflineMasterNode(c *gin.Context) {
-
 	var err error
 
 	// ------------- Path parameter "master-name" -------------
@@ -212,7 +208,6 @@ func (siw *ServerInterfaceWrapper) DMAPIOfflineMasterNode(c *gin.Context) {
 
 // DMAPIGetClusterWorkerList operation middleware
 func (siw *ServerInterfaceWrapper) DMAPIGetClusterWorkerList(c *gin.Context) {
-
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
 	}
@@ -222,7 +217,6 @@ func (siw *ServerInterfaceWrapper) DMAPIGetClusterWorkerList(c *gin.Context) {
 
 // DMAPIOfflineWorkerNode operation middleware
 func (siw *ServerInterfaceWrapper) DMAPIOfflineWorkerNode(c *gin.Context) {
-
 	var err error
 
 	// ------------- Path parameter "worker-name" -------------
@@ -243,7 +237,6 @@ func (siw *ServerInterfaceWrapper) DMAPIOfflineWorkerNode(c *gin.Context) {
 
 // GetDocJSON operation middleware
 func (siw *ServerInterfaceWrapper) GetDocJSON(c *gin.Context) {
-
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
 	}
@@ -253,7 +246,6 @@ func (siw *ServerInterfaceWrapper) GetDocJSON(c *gin.Context) {
 
 // GetDocHTML operation middleware
 func (siw *ServerInterfaceWrapper) GetDocHTML(c *gin.Context) {
-
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
 	}
@@ -263,7 +255,6 @@ func (siw *ServerInterfaceWrapper) GetDocHTML(c *gin.Context) {
 
 // DMAPIGetSourceList operation middleware
 func (siw *ServerInterfaceWrapper) DMAPIGetSourceList(c *gin.Context) {
-
 	var err error
 
 	// Parameter object where we will unmarshal all parameters from the context
@@ -271,7 +262,6 @@ func (siw *ServerInterfaceWrapper) DMAPIGetSourceList(c *gin.Context) {
 
 	// ------------- Optional query parameter "with_status" -------------
 	if paramValue := c.Query("with_status"); paramValue != "" {
-
 	}
 
 	err = runtime.BindQueryParameter("form", true, false, "with_status", c.Request.URL.Query(), &params.WithStatus)
@@ -282,7 +272,6 @@ func (siw *ServerInterfaceWrapper) DMAPIGetSourceList(c *gin.Context) {
 
 	// ------------- Optional query parameter "enable_relay" -------------
 	if paramValue := c.Query("enable_relay"); paramValue != "" {
-
 	}
 
 	err = runtime.BindQueryParameter("form", true, false, "enable_relay", c.Request.URL.Query(), &params.EnableRelay)
@@ -300,7 +289,6 @@ func (siw *ServerInterfaceWrapper) DMAPIGetSourceList(c *gin.Context) {
 
 // DMAPICreateSource operation middleware
 func (siw *ServerInterfaceWrapper) DMAPICreateSource(c *gin.Context) {
-
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
 	}
@@ -310,7 +298,6 @@ func (siw *ServerInterfaceWrapper) DMAPICreateSource(c *gin.Context) {
 
 // DMAPIDeleteSource operation middleware
 func (siw *ServerInterfaceWrapper) DMAPIDeleteSource(c *gin.Context) {
-
 	var err error
 
 	// ------------- Path parameter "source-name" -------------
@@ -327,7 +314,6 @@ func (siw *ServerInterfaceWrapper) DMAPIDeleteSource(c *gin.Context) {
 
 	// ------------- Optional query parameter "force" -------------
 	if paramValue := c.Query("force"); paramValue != "" {
-
 	}
 
 	err = runtime.BindQueryParameter("form", true, false, "force", c.Request.URL.Query(), &params.Force)
@@ -345,7 +331,6 @@ func (siw *ServerInterfaceWrapper) DMAPIDeleteSource(c *gin.Context) {
 
 // DMAPIGetSource operation middleware
 func (siw *ServerInterfaceWrapper) DMAPIGetSource(c *gin.Context) {
-
 	var err error
 
 	// ------------- Path parameter "source-name" -------------
@@ -362,7 +347,6 @@ func (siw *ServerInterfaceWrapper) DMAPIGetSource(c *gin.Context) {
 
 	// ------------- Optional query parameter "with_status" -------------
 	if paramValue := c.Query("with_status"); paramValue != "" {
-
 	}
 
 	err = runtime.BindQueryParameter("form", true, false, "with_status", c.Request.URL.Query(), &params.WithStatus)
@@ -380,7 +364,6 @@ func (siw *ServerInterfaceWrapper) DMAPIGetSource(c *gin.Context) {
 
 // DMAPIUpdateSource operation middleware
 func (siw *ServerInterfaceWrapper) DMAPIUpdateSource(c *gin.Context) {
-
 	var err error
 
 	// ------------- Path parameter "source-name" -------------
@@ -401,7 +384,6 @@ func (siw *ServerInterfaceWrapper) DMAPIUpdateSource(c *gin.Context) {
 
 // DMAPIDisableSource operation middleware
 func (siw *ServerInterfaceWrapper) DMAPIDisableSource(c *gin.Context) {
-
 	var err error
 
 	// ------------- Path parameter "source-name" -------------
@@ -422,7 +404,6 @@ func (siw *ServerInterfaceWrapper) DMAPIDisableSource(c *gin.Context) {
 
 // DMAPIEnableSource operation middleware
 func (siw *ServerInterfaceWrapper) DMAPIEnableSource(c *gin.Context) {
-
 	var err error
 
 	// ------------- Path parameter "source-name" -------------
@@ -443,7 +424,6 @@ func (siw *ServerInterfaceWrapper) DMAPIEnableSource(c *gin.Context) {
 
 // DMAPIDisableRelay operation middleware
 func (siw *ServerInterfaceWrapper) DMAPIDisableRelay(c *gin.Context) {
-
 	var err error
 
 	// ------------- Path parameter "source-name" -------------
@@ -464,7 +444,6 @@ func (siw *ServerInterfaceWrapper) DMAPIDisableRelay(c *gin.Context) {
 
 // DMAPIEnableRelay operation middleware
 func (siw *ServerInterfaceWrapper) DMAPIEnableRelay(c *gin.Context) {
-
 	var err error
 
 	// ------------- Path parameter "source-name" -------------
@@ -485,7 +464,6 @@ func (siw *ServerInterfaceWrapper) DMAPIEnableRelay(c *gin.Context) {
 
 // DMAPIPurgeRelay operation middleware
 func (siw *ServerInterfaceWrapper) DMAPIPurgeRelay(c *gin.Context) {
-
 	var err error
 
 	// ------------- Path parameter "source-name" -------------
@@ -506,7 +484,6 @@ func (siw *ServerInterfaceWrapper) DMAPIPurgeRelay(c *gin.Context) {
 
 // DMAPIGetSourceSchemaList operation middleware
 func (siw *ServerInterfaceWrapper) DMAPIGetSourceSchemaList(c *gin.Context) {
-
 	var err error
 
 	// ------------- Path parameter "source-name" -------------
@@ -527,7 +504,6 @@ func (siw *ServerInterfaceWrapper) DMAPIGetSourceSchemaList(c *gin.Context) {
 
 // DMAPIGetSourceTableList operation middleware
 func (siw *ServerInterfaceWrapper) DMAPIGetSourceTableList(c *gin.Context) {
-
 	var err error
 
 	// ------------- Path parameter "source-name" -------------
@@ -557,7 +533,6 @@ func (siw *ServerInterfaceWrapper) DMAPIGetSourceTableList(c *gin.Context) {
 
 // DMAPIGetSourceStatus operation middleware
 func (siw *ServerInterfaceWrapper) DMAPIGetSourceStatus(c *gin.Context) {
-
 	var err error
 
 	// ------------- Path parameter "source-name" -------------
@@ -578,7 +553,6 @@ func (siw *ServerInterfaceWrapper) DMAPIGetSourceStatus(c *gin.Context) {
 
 // DMAPITransferSource operation middleware
 func (siw *ServerInterfaceWrapper) DMAPITransferSource(c *gin.Context) {
-
 	var err error
 
 	// ------------- Path parameter "source-name" -------------
@@ -599,7 +573,6 @@ func (siw *ServerInterfaceWrapper) DMAPITransferSource(c *gin.Context) {
 
 // DMAPIGetTaskList operation middleware
 func (siw *ServerInterfaceWrapper) DMAPIGetTaskList(c *gin.Context) {
-
 	var err error
 
 	// Parameter object where we will unmarshal all parameters from the context
@@ -607,7 +580,6 @@ func (siw *ServerInterfaceWrapper) DMAPIGetTaskList(c *gin.Context) {
 
 	// ------------- Optional query parameter "with_status" -------------
 	if paramValue := c.Query("with_status"); paramValue != "" {
-
 	}
 
 	err = runtime.BindQueryParameter("form", true, false, "with_status", c.Request.URL.Query(), &params.WithStatus)
@@ -618,7 +590,6 @@ func (siw *ServerInterfaceWrapper) DMAPIGetTaskList(c *gin.Context) {
 
 	// ------------- Optional query parameter "stage" -------------
 	if paramValue := c.Query("stage"); paramValue != "" {
-
 	}
 
 	err = runtime.BindQueryParameter("form", true, false, "stage", c.Request.URL.Query(), &params.Stage)
@@ -629,7 +600,6 @@ func (siw *ServerInterfaceWrapper) DMAPIGetTaskList(c *gin.Context) {
 
 	// ------------- Optional query parameter "source_name_list" -------------
 	if paramValue := c.Query("source_name_list"); paramValue != "" {
-
 	}
 
 	err = runtime.BindQueryParameter("form", true, false, "source_name_list", c.Request.URL.Query(), &params.SourceNameList)
@@ -647,7 +617,6 @@ func (siw *ServerInterfaceWrapper) DMAPIGetTaskList(c *gin.Context) {
 
 // DMAPICreateTask operation middleware
 func (siw *ServerInterfaceWrapper) DMAPICreateTask(c *gin.Context) {
-
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
 	}
@@ -657,7 +626,6 @@ func (siw *ServerInterfaceWrapper) DMAPICreateTask(c *gin.Context) {
 
 // DMAPIConvertTask operation middleware
 func (siw *ServerInterfaceWrapper) DMAPIConvertTask(c *gin.Context) {
-
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
 	}
@@ -667,7 +635,6 @@ func (siw *ServerInterfaceWrapper) DMAPIConvertTask(c *gin.Context) {
 
 // DMAPIGetTaskTemplateList operation middleware
 func (siw *ServerInterfaceWrapper) DMAPIGetTaskTemplateList(c *gin.Context) {
-
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
 	}
@@ -677,7 +644,6 @@ func (siw *ServerInterfaceWrapper) DMAPIGetTaskTemplateList(c *gin.Context) {
 
 // DMAPICreateTaskTemplate operation middleware
 func (siw *ServerInterfaceWrapper) DMAPICreateTaskTemplate(c *gin.Context) {
-
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
 	}
@@ -687,7 +653,6 @@ func (siw *ServerInterfaceWrapper) DMAPICreateTaskTemplate(c *gin.Context) {
 
 // DMAPIImportTaskTemplate operation middleware
 func (siw *ServerInterfaceWrapper) DMAPIImportTaskTemplate(c *gin.Context) {
-
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
 	}
@@ -697,7 +662,6 @@ func (siw *ServerInterfaceWrapper) DMAPIImportTaskTemplate(c *gin.Context) {
 
 // DMAPIDeleteTaskTemplate operation middleware
 func (siw *ServerInterfaceWrapper) DMAPIDeleteTaskTemplate(c *gin.Context) {
-
 	var err error
 
 	// ------------- Path parameter "task-name" -------------
@@ -718,7 +682,6 @@ func (siw *ServerInterfaceWrapper) DMAPIDeleteTaskTemplate(c *gin.Context) {
 
 // DMAPIGetTaskTemplate operation middleware
 func (siw *ServerInterfaceWrapper) DMAPIGetTaskTemplate(c *gin.Context) {
-
 	var err error
 
 	// ------------- Path parameter "task-name" -------------
@@ -739,7 +702,6 @@ func (siw *ServerInterfaceWrapper) DMAPIGetTaskTemplate(c *gin.Context) {
 
 // DMAPUpdateTaskTemplate operation middleware
 func (siw *ServerInterfaceWrapper) DMAPUpdateTaskTemplate(c *gin.Context) {
-
 	var err error
 
 	// ------------- Path parameter "task-name" -------------
@@ -760,7 +722,6 @@ func (siw *ServerInterfaceWrapper) DMAPUpdateTaskTemplate(c *gin.Context) {
 
 // DMAPIDeleteTask operation middleware
 func (siw *ServerInterfaceWrapper) DMAPIDeleteTask(c *gin.Context) {
-
 	var err error
 
 	// ------------- Path parameter "task-name" -------------
@@ -777,7 +738,6 @@ func (siw *ServerInterfaceWrapper) DMAPIDeleteTask(c *gin.Context) {
 
 	// ------------- Optional query parameter "force" -------------
 	if paramValue := c.Query("force"); paramValue != "" {
-
 	}
 
 	err = runtime.BindQueryParameter("form", true, false, "force", c.Request.URL.Query(), &params.Force)
@@ -795,7 +755,6 @@ func (siw *ServerInterfaceWrapper) DMAPIDeleteTask(c *gin.Context) {
 
 // DMAPIGetTask operation middleware
 func (siw *ServerInterfaceWrapper) DMAPIGetTask(c *gin.Context) {
-
 	var err error
 
 	// ------------- Path parameter "task-name" -------------
@@ -812,7 +771,6 @@ func (siw *ServerInterfaceWrapper) DMAPIGetTask(c *gin.Context) {
 
 	// ------------- Optional query parameter "with_status" -------------
 	if paramValue := c.Query("with_status"); paramValue != "" {
-
 	}
 
 	err = runtime.BindQueryParameter("form", true, false, "with_status", c.Request.URL.Query(), &params.WithStatus)
@@ -830,7 +788,6 @@ func (siw *ServerInterfaceWrapper) DMAPIGetTask(c *gin.Context) {
 
 // DMAPIUpdateTask operation middleware
 func (siw *ServerInterfaceWrapper) DMAPIUpdateTask(c *gin.Context) {
-
 	var err error
 
 	// ------------- Path parameter "task-name" -------------
@@ -851,7 +808,6 @@ func (siw *ServerInterfaceWrapper) DMAPIUpdateTask(c *gin.Context) {
 
 // DMAPIGetTaskMigrateTargets operation middleware
 func (siw *ServerInterfaceWrapper) DMAPIGetTaskMigrateTargets(c *gin.Context) {
-
 	var err error
 
 	// ------------- Path parameter "task-name" -------------
@@ -877,7 +833,6 @@ func (siw *ServerInterfaceWrapper) DMAPIGetTaskMigrateTargets(c *gin.Context) {
 
 	// ------------- Optional query parameter "schema_pattern" -------------
 	if paramValue := c.Query("schema_pattern"); paramValue != "" {
-
 	}
 
 	err = runtime.BindQueryParameter("form", true, false, "schema_pattern", c.Request.URL.Query(), &params.SchemaPattern)
@@ -888,7 +843,6 @@ func (siw *ServerInterfaceWrapper) DMAPIGetTaskMigrateTargets(c *gin.Context) {
 
 	// ------------- Optional query parameter "table_pattern" -------------
 	if paramValue := c.Query("table_pattern"); paramValue != "" {
-
 	}
 
 	err = runtime.BindQueryParameter("form", true, false, "table_pattern", c.Request.URL.Query(), &params.TablePattern)
@@ -906,7 +860,6 @@ func (siw *ServerInterfaceWrapper) DMAPIGetTaskMigrateTargets(c *gin.Context) {
 
 // DMAPIGetSchemaListByTaskAndSource operation middleware
 func (siw *ServerInterfaceWrapper) DMAPIGetSchemaListByTaskAndSource(c *gin.Context) {
-
 	var err error
 
 	// ------------- Path parameter "task-name" -------------
@@ -936,7 +889,6 @@ func (siw *ServerInterfaceWrapper) DMAPIGetSchemaListByTaskAndSource(c *gin.Cont
 
 // DMAPIGetTableListByTaskAndSource operation middleware
 func (siw *ServerInterfaceWrapper) DMAPIGetTableListByTaskAndSource(c *gin.Context) {
-
 	var err error
 
 	// ------------- Path parameter "task-name" -------------
@@ -975,7 +927,6 @@ func (siw *ServerInterfaceWrapper) DMAPIGetTableListByTaskAndSource(c *gin.Conte
 
 // DMAPIDeleteTableStructure operation middleware
 func (siw *ServerInterfaceWrapper) DMAPIDeleteTableStructure(c *gin.Context) {
-
 	var err error
 
 	// ------------- Path parameter "task-name" -------------
@@ -1023,7 +974,6 @@ func (siw *ServerInterfaceWrapper) DMAPIDeleteTableStructure(c *gin.Context) {
 
 // DMAPIGetTableStructure operation middleware
 func (siw *ServerInterfaceWrapper) DMAPIGetTableStructure(c *gin.Context) {
-
 	var err error
 
 	// ------------- Path parameter "task-name" -------------
@@ -1071,7 +1021,6 @@ func (siw *ServerInterfaceWrapper) DMAPIGetTableStructure(c *gin.Context) {
 
 // DMAPIOperateTableStructure operation middleware
 func (siw *ServerInterfaceWrapper) DMAPIOperateTableStructure(c *gin.Context) {
-
 	var err error
 
 	// ------------- Path parameter "task-name" -------------
@@ -1119,7 +1068,6 @@ func (siw *ServerInterfaceWrapper) DMAPIOperateTableStructure(c *gin.Context) {
 
 // DMAPIStartTask operation middleware
 func (siw *ServerInterfaceWrapper) DMAPIStartTask(c *gin.Context) {
-
 	var err error
 
 	// ------------- Path parameter "task-name" -------------
@@ -1140,7 +1088,6 @@ func (siw *ServerInterfaceWrapper) DMAPIStartTask(c *gin.Context) {
 
 // DMAPIGetTaskStatus operation middleware
 func (siw *ServerInterfaceWrapper) DMAPIGetTaskStatus(c *gin.Context) {
-
 	var err error
 
 	// ------------- Path parameter "task-name" -------------
@@ -1157,7 +1104,6 @@ func (siw *ServerInterfaceWrapper) DMAPIGetTaskStatus(c *gin.Context) {
 
 	// ------------- Optional query parameter "source_name_list" -------------
 	if paramValue := c.Query("source_name_list"); paramValue != "" {
-
 	}
 
 	err = runtime.BindQueryParameter("form", true, false, "source_name_list", c.Request.URL.Query(), &params.SourceNameList)
@@ -1175,7 +1121,6 @@ func (siw *ServerInterfaceWrapper) DMAPIGetTaskStatus(c *gin.Context) {
 
 // DMAPIStopTask operation middleware
 func (siw *ServerInterfaceWrapper) DMAPIStopTask(c *gin.Context) {
-
 	var err error
 
 	// ------------- Path parameter "task-name" -------------
@@ -1303,7 +1248,6 @@ func RegisterHandlersWithOptions(router *gin.Engine, si ServerInterface, options
 
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
-
 	"H4sIAAAAAAAC/+x9bXPbOJLwX8Gj5z7sTEmWZDtO4qv9kMSerO/sJGV7am5rKqdAJChhTQIMANqjTfm/",
 	"X+GFJEgCJGVbHmvs/bDjiCDQaPR7N5o/BgFNUkoQEXxw+GPAgyVKoPrzXYyYOIMELhC7pCmN6WIlf08Z",
 	"TRETGKlRS8qF/C/6AyZpjAaHg+nu653JzmRnOhgOxCqVP3HBMFkMboeDlLLq8LeTt3vFOEwEWiA2uL0d",
@@ -1439,7 +1383,7 @@ func decodeSpecCached() func() ([]byte, error) {
 
 // Constructs a synthetic filesystem for resolving external references when loading openapi specifications.
 func PathToRawSpec(pathToFile string) map[string]func() ([]byte, error) {
-	var res = make(map[string]func() ([]byte, error))
+	res := make(map[string]func() ([]byte, error))
 	if len(pathToFile) > 0 {
 		res[pathToFile] = rawSpec
 	}
@@ -1453,12 +1397,12 @@ func PathToRawSpec(pathToFile string) map[string]func() ([]byte, error) {
 // Externally referenced files must be embedded in the corresponding golang packages.
 // Urls can be supported but this task was out of the scope.
 func GetSwagger() (swagger *openapi3.T, err error) {
-	var resolvePath = PathToRawSpec("")
+	resolvePath := PathToRawSpec("")
 
 	loader := openapi3.NewLoader()
 	loader.IsExternalRefsAllowed = true
 	loader.ReadFromURIFunc = func(loader *openapi3.Loader, url *url.URL) ([]byte, error) {
-		var pathToFile = url.String()
+		pathToFile := url.String()
 		pathToFile = path.Clean(pathToFile)
 		getSpec, ok := resolvePath[pathToFile]
 		if !ok {
