@@ -488,6 +488,8 @@ func (v *DataValidator) doValidate() {
 	if v.location != nil {
 		location = *v.location
 	} else {
+		// validator always uses remote binlog streamer now.
+		// todo: when relay log enabled, need to decode location to get real location
 		if v.startWithSubtask {
 			// in extreme case, this loc may still not be the first binlog location of this task:
 			//   syncer synced some binlog and flush checkpoint, but validator still not has chance to run, then fail-over
