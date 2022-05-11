@@ -53,9 +53,9 @@ func NewTopicManager(
 	}
 }
 
-// Partitions returns the number of partitions of the topic.
+// GetPartitionNum returns the number of partitions of the topic.
 // It may also try to update the topics' information maintained by manager.
-func (m *TopicManager) Partitions(topic string) (int32, error) {
+func (m *TopicManager) GetPartitionNum(topic string) (int32, error) {
 	err := m.tryRefreshMeta()
 	if err != nil {
 		return 0, errors.Trace(err)
