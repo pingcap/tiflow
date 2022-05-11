@@ -30,8 +30,6 @@ const (
 	// CheckpointCannotProceed is a placeholder indicating that the
 	// Owner should not advance the global checkpoint TS just yet.
 	CheckpointCannotProceed = model.Ts(0)
-
-	drainCaptureTableBatchSize = 1
 )
 
 // ScheduleDispatcher is an interface for a table scheduler used in Owner.
@@ -85,9 +83,6 @@ type ScheduleDispatcherCommunicator interface {
 const (
 	// captureCountUninitialized is a placeholder for an unknown total capture count.
 	captureCountUninitialized = -1
-
-	// captureIDNotDraining is a placeholder for no capture is draining now.
-	captureIDNotDraining = ""
 )
 
 // BaseScheduleDispatcher implements the basic logic of a ScheduleDispatcher.
