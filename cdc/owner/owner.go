@@ -24,7 +24,6 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
@@ -294,19 +293,9 @@ func (o *ownerImpl) cleanUpChangefeed(state *orchestrator.ChangefeedReactorState
 	state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
 		return nil, status != nil, nil
 	})
-	for captureID := range state.TaskStatuses {
-		state.PatchTaskStatus(captureID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
-			return nil, status != nil, nil
-		})
-	}
 	for captureID := range state.TaskPositions {
 		state.PatchTaskPosition(captureID, func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
 			return nil, position != nil, nil
-		})
-	}
-	for captureID := range state.Workloads {
-		state.PatchTaskWorkload(captureID, func(workload model.TaskWorkload) (model.TaskWorkload, bool, error) {
-			return nil, workload != nil, nil
 		})
 	}
 }
@@ -352,62 +341,35 @@ func (o *ownerImpl) updateMetrics(state *orchestrator.GlobalReactorState) {
 	ownershipCounter.Add(float64(now.Sub(o.lastTickTime)) / float64(time.Second))
 	o.lastTickTime = now
 
-	conf := config.GetGlobalServerConfig()
-
-	// TODO refactor this piece of code when the new scheduler is stabilized,
-	// and the old scheduler is removed.
-	if conf.Debug != nil && conf.Debug.EnableNewScheduler {
-		for cfID, cf := range o.changefeeds {
-			if cf.state != nil && cf.state.Info != nil {
-				changefeedStatusGauge.WithLabelValues(cfID.Namespace, cfID.ID).
-					Set(float64(cf.state.Info.State.ToInt()))
-			}
-
-			// The InfoProvider is a proxy object returning information
-			// from the scheduler.
-			infoProvider := cf.GetInfoProvider()
-			if infoProvider == nil {
-				// The scheduler has not been initialized yet.
-				continue
-			}
-
-			totalCounts := infoProvider.GetTotalTableCounts()
-			pendingCounts := infoProvider.GetPendingTableCounts()
-
-			for captureID, info := range o.captures {
-				ownerMaintainTableNumGauge.
-					WithLabelValues(cfID.Namespace, cfID.ID,
-						info.AdvertiseAddr, maintainTableTypeTotal).
-					Set(float64(totalCounts[captureID]))
-				ownerMaintainTableNumGauge.
-					WithLabelValues(cfID.Namespace, cfID.ID,
-						info.AdvertiseAddr, maintainTableTypeWip).
-					Set(float64(pendingCounts[captureID]))
-			}
+	for cfID, cf := range o.changefeeds {
+		if cf.state != nil && cf.state.Info != nil {
+			changefeedStatusGauge.WithLabelValues(cfID.Namespace, cfID.ID).
+				Set(float64(cf.state.Info.State.ToInt()))
 		}
-		return
-	}
 
-	for changefeedID, changefeedState := range state.Changefeeds {
-		for captureID, captureInfo := range state.Captures {
-			taskStatus, exist := changefeedState.TaskStatuses[captureID]
-			if !exist {
-				continue
-			}
+		// The InfoProvider is a proxy object returning information
+		// from the scheduler.
+		infoProvider := cf.GetInfoProvider()
+		if infoProvider == nil {
+			// The scheduler has not been initialized yet.
+			continue
+		}
+
+		totalCounts := infoProvider.GetTotalTableCounts()
+		pendingCounts := infoProvider.GetPendingTableCounts()
+
+		for captureID, info := range o.captures {
 			ownerMaintainTableNumGauge.
-				WithLabelValues(changefeedID.Namespace, changefeedID.ID,
-					captureInfo.AdvertiseAddr, maintainTableTypeTotal).
-				Set(float64(len(taskStatus.Tables)))
+				WithLabelValues(cfID.Namespace, cfID.ID,
+					info.AdvertiseAddr, maintainTableTypeTotal).
+				Set(float64(totalCounts[captureID]))
 			ownerMaintainTableNumGauge.
-				WithLabelValues(changefeedID.Namespace, changefeedID.ID,
-					captureInfo.AdvertiseAddr, maintainTableTypeWip).
-				Set(float64(len(taskStatus.Operation)))
-			if changefeedState.Info != nil {
-				changefeedStatusGauge.WithLabelValues(changefeedID.Namespace, changefeedID.ID).
-					Set(float64(changefeedState.Info.State.ToInt()))
-			}
+				WithLabelValues(cfID.Namespace, cfID.ID,
+					info.AdvertiseAddr, maintainTableTypeWip).
+				Set(float64(pendingCounts[captureID]))
 		}
 	}
+	return
 }
 
 func (o *ownerImpl) clusterVersionConsistent(captures map[model.CaptureID]*model.CaptureInfo) bool {
@@ -495,18 +457,16 @@ func (o *ownerImpl) handleQueries(query *Query) error {
 		}
 
 		var ret map[model.CaptureID]*model.TaskStatus
-		if provider := cfReactor.GetInfoProvider(); provider != nil {
-			// If the new scheduler is enabled, provider should be non-nil.
-			var err error
-			ret, err = provider.GetTaskStatuses()
-			if err != nil {
-				return errors.Trace(err)
-			}
-		} else {
-			ret = map[model.CaptureID]*model.TaskStatus{}
-			for captureID, taskStatus := range cfReactor.state.TaskStatuses {
-				ret[captureID] = taskStatus.Clone()
-			}
+		provider := cfReactor.GetInfoProvider()
+		if provider == nil {
+			// The scheduler has not been initialized yet.
+			return cerror.ErrChangeFeedNotExists.GenWithStackByArgs(query.ChangeFeedID)
+		}
+
+		var err error
+		ret, err = provider.GetTaskStatuses()
+		if err != nil {
+			return errors.Trace(err)
 		}
 		query.Data = ret
 	case QueryTaskPositions:
@@ -515,31 +475,31 @@ func (o *ownerImpl) handleQueries(query *Query) error {
 			return cerror.ErrChangeFeedNotExists.GenWithStackByArgs(query.ChangeFeedID)
 		}
 
-		var ret map[model.CaptureID]*model.TaskPosition
-		if provider := cfReactor.GetInfoProvider(); provider != nil {
-			// If the new scheduler is enabled, provider should be non-nil.
-			var err error
-			ret, err = provider.GetTaskPositions()
-			if err != nil {
-				return errors.Trace(err)
-			}
-		} else {
-			if cfReactor.state == nil {
-				return cerror.ErrChangeFeedNotExists.GenWithStackByArgs(query.ChangeFeedID)
-			}
-			ret = map[model.CaptureID]*model.TaskPosition{}
-			for captureID, taskPosition := range cfReactor.state.TaskPositions {
-				ret[captureID] = taskPosition.Clone()
-			}
+		provider := cfReactor.GetInfoProvider()
+		if provider == nil {
+			// The scheduler has not been initialized yet.
+			return cerror.ErrChangeFeedNotExists.GenWithStackByArgs(query.ChangeFeedID)
+		}
+
+		ret, err := provider.GetTaskPositions()
+		if err != nil {
+			return errors.Trace(err)
 		}
 		query.Data = ret
 	case QueryProcessors:
 		var ret []*model.ProcInfoSnap
 		for cfID, cfReactor := range o.changefeeds {
-			if cfReactor.state == nil {
+			provider := cfReactor.GetInfoProvider()
+			if provider == nil {
+				// The scheduler has not been initialized yet.
 				continue
 			}
-			for captureID := range cfReactor.state.TaskStatuses {
+
+			positions, err := provider.GetTaskPositions()
+			if err != nil {
+				return errors.Trace(err)
+			}
+			for captureID := range positions {
 				ret = append(ret, &model.ProcInfoSnap{
 					CfID:      cfID,
 					CaptureID: captureID,

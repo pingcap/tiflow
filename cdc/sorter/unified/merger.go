@@ -38,7 +38,7 @@ import (
 func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out chan *model.PolymorphicEvent, onExit func()) error {
 	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
 
-	metricSorterEventCount := sorter.EventCount.MustCurryWith(map[string]string{
+	metricSorterEventCount := sorter.OutputEventCount.MustCurryWith(map[string]string{
 		"namespace":  changefeedID.Namespace,
 		"changefeed": changefeedID.ID,
 	})

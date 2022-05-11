@@ -355,9 +355,10 @@ type partitionSink struct {
 type Consumer struct {
 	ready chan bool
 
-	ddlList          []*model.DDLEvent
-	maxDDLReceivedTs uint64
-	ddlListMu        sync.Mutex
+	ddlList []*model.DDLEvent
+
+	ddlWithMaxCommitTs *model.DDLEvent
+	ddlListMu          sync.Mutex
 
 	sinks   []*partitionSink
 	sinksMu sync.Mutex
@@ -649,22 +650,25 @@ func (c *Consumer) appendDDL(ddl *model.DDLEvent) {
 	c.ddlListMu.Lock()
 	defer c.ddlListMu.Unlock()
 	// DDL CommitTs fallback, just crash it to indicate the bug.
-	if ddl.CommitTs < c.maxDDLReceivedTs {
-		log.Panic("DDL CommitTs < maxDDLReceivedTs",
+	if c.ddlWithMaxCommitTs != nil && ddl.CommitTs < c.ddlWithMaxCommitTs.CommitTs {
+		log.Panic("DDL CommitTs < maxCommitTsDDL.CommitTs",
 			zap.Uint64("commitTs", ddl.CommitTs),
-			zap.Uint64("maxDDLReceivedTs", c.maxDDLReceivedTs),
+			zap.Uint64("maxCommitTs", c.ddlWithMaxCommitTs.CommitTs),
 			zap.Any("DDL", ddl))
 	}
 
-	if ddl.CommitTs == c.maxDDLReceivedTs {
-		log.Info("ignore redundant DDL, CommitTs = maxDDLReceivedTs",
+	// A rename tables DDL job contains multiple DDL events with same CommitTs.
+	// So to tell if a DDL is redundant or not, we must check the equivalence of
+	// the current DDL and the DDL with max CommitTs.
+	if ddl == c.ddlWithMaxCommitTs {
+		log.Info("ignore redundant DDL, the DDL is equal to ddlWithMaxCommitTs",
 			zap.Any("DDL", ddl))
 		return
 	}
 
 	c.ddlList = append(c.ddlList, ddl)
 	log.Info("DDL event received", zap.Any("DDL", ddl))
-	c.maxDDLReceivedTs = ddl.CommitTs
+	c.ddlWithMaxCommitTs = ddl
 }
 
 func (c *Consumer) getFrontDDL() *model.DDLEvent {
@@ -762,8 +766,6 @@ func (c *Consumer) Run(ctx context.Context) error {
 		}
 
 		c.globalResolvedTs = minPartitionResolvedTs
-		log.Info("update globalResolvedTs",
-			zap.Uint64("globalResolvedTs", c.globalResolvedTs))
 
 		if err := c.forEachSink(func(sink *partitionSink) error {
 			return syncFlushRowChangedEvents(ctx, sink, c.globalResolvedTs)

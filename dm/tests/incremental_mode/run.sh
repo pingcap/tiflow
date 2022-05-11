@@ -9,11 +9,22 @@ TASK_NAME="test"
 
 API_VERSION="v1alpha1"
 
+function get_uuid() {
+	uuid=$(echo "show variables like '%server_uuid%';" | MYSQL_PWD=123456 mysql -uroot -h$1 -P$2 | awk 'FNR == 2 {print $2}')
+	echo $uuid
+}
+
+function get_binlog_name() {
+	binlog_name=$(echo "SHOW BINARY LOGS;" | MYSQL_PWD=123456 mysql -uroot -h127.0.0.1 -P3307 | awk 'FNR == 2 {print $1}')
+	echo $binlog_name
+}
+
 function run() {
 	run_sql_file $cur/data/db1.prepare.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
 	check_contains 'Query OK, 2 rows affected'
 	run_sql_file $cur/data/db2.prepare.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
 	check_contains 'Query OK, 3 rows affected'
+	uuid=($(get_uuid $MYSQL_HOST1 $MYSQL_PORT1))
 
 	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/dm/worker/defaultKeepAliveTTL=return(1)"
 
@@ -38,6 +49,7 @@ function run() {
 	# operate mysql config to worker
 	cp $cur/conf/source1.yaml $WORK_DIR/source1.yaml
 	cp $cur/conf/source2.yaml $WORK_DIR/source2.yaml
+	sed -i "s/binlog-gtid-placeholder/$uuid:0/g" $WORK_DIR/source1.yaml
 	sed -i "/relay-binlog-name/i\relay-dir: $WORK_DIR/worker1/relay_log" $WORK_DIR/source1.yaml
 	sed -i "/relay-binlog-name/i\relay-dir: $WORK_DIR/worker2/relay_log" $WORK_DIR/source2.yaml
 	dmctl_operate_source create $WORK_DIR/source1.yaml $SOURCE_ID1
@@ -67,42 +79,9 @@ function run() {
 	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
 
-	# start a task in `full` mode
-	echo "start task in full mode"
-	cat $cur/conf/dm-task.yaml >$WORK_DIR/dm-task.yaml
-	sed -i "s/task-mode-placeholder/full/g" $WORK_DIR/dm-task.yaml
-	# avoid cannot unmarshal !!str `binlog-...` into uint32 error
-	sed -i "s/binlog-pos-placeholder-1/4/g" $WORK_DIR/dm-task.yaml
-	sed -i "s/binlog-pos-placeholder-2/4/g" $WORK_DIR/dm-task.yaml
-	dmctl_start_task $WORK_DIR/dm-task.yaml
-
-	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
-
-	dmctl_stop_task $TASK_NAME
-
-	# $worker1_run_source_1 > 0 means source1 is operated to worker1
-	worker1_run_source_1=$(sed "s/$SOURCE_ID1/$SOURCE_ID1\n/g" $WORK_DIR/worker1/log/dm-worker.log | grep -c "$SOURCE_ID1") || true
-	if [ $worker1_run_source_1 -gt 0 ]; then
-		name1=$(grep "Log: " $WORK_DIR/worker1/dumped_data.$TASK_NAME/metadata | awk -F: '{print $2}' | tr -d ' ')
-		pos1=$(grep "Pos: " $WORK_DIR/worker1/dumped_data.$TASK_NAME/metadata | awk -F: '{print $2}' | tr -d ' ')
-		gtid1=$(grep "GTID:" $WORK_DIR/worker1/dumped_data.$TASK_NAME/metadata | awk -F: '{print $2,":",$3}' | tr -d ' ')
-		name2=$(grep "Log: " $WORK_DIR/worker2/dumped_data.$TASK_NAME/metadata | awk -F: '{print $2}' | tr -d ' ')
-		pos2=$(grep "Pos: " $WORK_DIR/worker2/dumped_data.$TASK_NAME/metadata | awk -F: '{print $2}' | tr -d ' ')
-		gtid2=$(grep "GTID:" $WORK_DIR/worker2/dumped_data.$TASK_NAME/metadata | awk -F: '{print $2,":",$3}' | tr -d ' ')
-	else
-		name2=$(grep "Log: " $WORK_DIR/worker1/dumped_data.$TASK_NAME/metadata | awk -F: '{print $2}' | tr -d ' ')
-		pos2=$(grep "Pos: " $WORK_DIR/worker1/dumped_data.$TASK_NAME/metadata | awk -F: '{print $2}' | tr -d ' ')
-		gtid2=$(grep "GTID:" $WORK_DIR/worker1/dumped_data.$TASK_NAME/metadata | awk -F: '{print $2,":",$3}' | tr -d ' ')
-		name1=$(grep "Log: " $WORK_DIR/worker2/dumped_data.$TASK_NAME/metadata | awk -F: '{print $2}' | tr -d ' ')
-		pos1=$(grep "Pos: " $WORK_DIR/worker2/dumped_data.$TASK_NAME/metadata | awk -F: '{print $2}' | tr -d ' ')
-		gtid1=$(grep "GTID:" $WORK_DIR/worker2/dumped_data.$TASK_NAME/metadata | awk -F: '{print $2,":",$3}' | tr -d ' ')
-	fi
-	# kill worker1 and worker2
 	kill_dm_worker
 	check_port_offline $WORKER1_PORT 20
 	check_port_offline $WORKER2_PORT 20
-
-	# start a task in `incremental` mode
 
 	# using account with limited privileges
 	run_sql_file $cur/data/db1.prepare.user.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
@@ -112,7 +91,6 @@ function run() {
 
 	# update mysql config
 	sed -i "s/root/dm_incremental/g" $WORK_DIR/source1.yaml
-	sed -i "s/relay-binlog-gtid: ''/relay-binlog-gtid: '$gtid1'/g" $WORK_DIR/source1.yaml
 	sed -i "s/root/dm_incremental/g" $WORK_DIR/source2.yaml
 
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
@@ -142,16 +120,12 @@ function run() {
 		"start-relay -s $worker2bound worker2" \
 		"\"result\": true" 2
 
-	echo "start task in incremental mode"
-	cat $cur/conf/dm-task.yaml >$WORK_DIR/dm-task.yaml
-	sed -i "s/task-mode-placeholder/incremental/g" $WORK_DIR/dm-task.yaml
-	sed -i "s/binlog-name-placeholder-1//g" $WORK_DIR/dm-task.yaml
-	sed -i "s/binlog-pos-placeholder-1//g" $WORK_DIR/dm-task.yaml
-	sed -i "s/binlog-gtid-placeholder-1/$gtid1/g" $WORK_DIR/dm-task.yaml
-
-	sed -i "s/binlog-name-placeholder-2/$name2/g" $WORK_DIR/dm-task.yaml
-	sed -i "s/binlog-pos-placeholder-2/$pos2/g" $WORK_DIR/dm-task.yaml
-	sed -i "s/binlog-gtid-placeholder-2/$gtid2/g" $WORK_DIR/dm-task.yaml
+	worker1_run_source_1=$(sed "s/$SOURCE_ID1/$SOURCE_ID1\n/g" $WORK_DIR/worker1/log/dm-worker.log | grep -c "$SOURCE_ID1") || true
+	echo "start task in incremental mode with zero gtid/pos"
+	binlog_name=($(get_binlog_name $MYSQL_HOST2 $MYSQL_PORT2))
+	sed "s/binlog-gtid-placeholder-1/$uuid:0/g" $cur/conf/dm-task.yaml >$WORK_DIR/dm-task.yaml
+	sed -i "s/binlog-name-placeholder-2/$binlog_name/g" $WORK_DIR/dm-task.yaml
+	sed -i "s/binlog-pos-placeholder-2/4/g" $WORK_DIR/dm-task.yaml
 
 	# test graceful display error
 	export GO_FAILPOINTS='github.com/pingcap/tiflow/dm/syncer/GetEventError=return'
@@ -179,9 +153,9 @@ function run() {
 	sleep 3
 	# check not specify binlog name could also update active relay log
 	if [ $worker1_run_source_1 -gt 0 ]; then
-		grep -E ".*current earliest active relay log.*$name1" $WORK_DIR/worker1/log/dm-worker.log
+		grep -E ".*current earliest active relay log.*$binlog_name" $WORK_DIR/worker2/log/dm-worker.log
 	else
-		grep -E ".*current earliest active relay log.*$name1" $WORK_DIR/worker2/log/dm-worker.log
+		grep -E ".*current earliest active relay log.*$binlog_name" $WORK_DIR/worker1/log/dm-worker.log
 	fi
 
 	run_sql_file $cur/data/db1.increment.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
