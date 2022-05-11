@@ -363,3 +363,14 @@ func AdjustBinaryProtocolForDatum(ctx sessionctx.Context, data []interface{}, co
 	}
 	return ret, nil
 }
+
+// GoLogWrapper go routine wrapper, log error on panic.
+func GoLogWrapper(logger log.Logger, fn func()) {
+	defer func() {
+		if err := recover(); err != nil {
+			logger.Error("routine panic", zap.Any("err", err))
+		}
+	}()
+
+	fn()
+}

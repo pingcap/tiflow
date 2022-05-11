@@ -197,6 +197,20 @@ function run_validator_cmd {
 		"\"stage\": \"Stopped\"" 1 \
 		"no primary key" 1
 
+	# test we can get validation status even when it's stopped
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation stop test" \
+		"\"result\": true" 1
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation status test" \
+		"\"processedRowsStatus\": \"insert\/update\/delete: 2\/1\/1\"" 1 \
+		"\"processedRowsStatus\": \"insert\/update\/delete: 0\/0\/1\"" 1 \
+		"pendingRowsStatus\": \"insert\/update\/delete: 0\/0\/0" 2 \
+		"new\/ignored\/resolved: 0\/0\/0" 1 \
+		"new\/ignored\/resolved: 2\/0\/0" 1 \
+		"\"stage\": \"Running\"" 2 \
+		"\"stage\": \"Stopped\"" 3
+
 	dmctl_stop_task "test"
 	echo "clean up data" # pre-check will not pass, since there is a table without pk
 	cleanup_data_upstream dmctl_command

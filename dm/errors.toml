@@ -2747,7 +2747,7 @@ workaround = ""
 tags = ["internal", "high"]
 
 [error.DM-dm-worker-40051]
-message = "current task or validator stage is %s but not paused, invalid"
+message = "current stage is %s but not paused, invalid"
 description = ""
 workaround = ""
 tags = ["internal", "high"]
@@ -2932,6 +2932,12 @@ description = ""
 workaround = ""
 tags = ["internal", "high"]
 
+[error.DM-dm-worker-40082]
+message = "current validator stage is %s but not paused, invalid"
+description = ""
+workaround = ""
+tags = ["internal", "high"]
+
 [error.DM-dm-tracer-42001]
 message = "parse dm-tracer config flag set"
 description = ""
@@ -3057,6 +3063,12 @@ message = "validator not found for task %s"
 description = ""
 workaround = ""
 tags = ["not-set", "medium"]
+
+[error.DM-validator-43007]
+message = "panic error: %v"
+description = ""
+workaround = ""
+tags = ["internal", "high"]
 
 [error.DM-schema-tracker-44001]
 message = "saved schema of `%s`.`%s` is not proper JSON"
