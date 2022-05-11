@@ -91,9 +91,6 @@ type CDCKey struct {
 // EtcdKeyBase is the common prefix of the keys in CDC
 func EtcdKeyBase() string {
 	clusterId := config.GetGlobalServerConfig().ClusterID
-	if clusterId == "" {
-		clusterId = "default"
-	}
 	return fmt.Sprintf("/tidb/cdc/%s", clusterId)
 }
 

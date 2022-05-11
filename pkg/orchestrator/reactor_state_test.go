@@ -33,7 +33,8 @@ func TestCheckCaptureAlive(t *testing.T) {
 	stateTester := NewReactorStateTester(t, state, nil)
 	state.CheckCaptureAlive("6bbc01c8-0605-4f86-a0f9-b3119109b225")
 	require.Contains(t, stateTester.ApplyPatches().Error(), "[CDC:ErrLeaseExpired]")
-	err := stateTester.Update("/tidb/cdc/default/__cdc_meta__/capture/6bbc01c8-0605-4f86-a0f9-b3119109b225",
+	err := stateTester.Update(fmt.Sprintf("%s", etcd.DefaultClusterAndMetaPrefix)+
+		"/capture/6bbc01c8-0605-4f86-a0f9-b3119109b225",
 		[]byte(`{"id":"6bbc01c8-0605-4f86-a0f9-b3119109b225","address":"127.0.0.1:8300"}`))
 	require.Nil(t, err)
 	state.CheckCaptureAlive("6bbc01c8-0605-4f86-a0f9-b3119109b225")
@@ -100,10 +101,14 @@ func TestChangefeedStateUpdate(t *testing.T) {
 		{ // common case
 			changefeedID: "test1",
 			updateKey: []string{
-				"/tidb/cdc/default/default/changefeed/info/test1",
-				"/tidb/cdc/default/default/job/test1",
-				"/tidb/cdc/default/default/task/position/6bbc01c8-0605-4f86-a0f9-b3119109b225/test1",
-				"/tidb/cdc/default/__cdc_meta__/capture/6bbc01c8-0605-4f86-a0f9-b3119109b225",
+				fmt.Sprintf("%s", etcd.DefaultClusterAndNamespacePrefix) +
+					"/changefeed/info/test1",
+				fmt.Sprintf("%s", etcd.DefaultClusterAndNamespacePrefix) +
+					"/job/test1",
+				fmt.Sprintf("%s", etcd.DefaultClusterAndNamespacePrefix) +
+					"/task/position/6bbc01c8-0605-4f86-a0f9-b3119109b225/test1",
+				fmt.Sprintf("%s", etcd.DefaultClusterAndMetaPrefix) +
+					"/capture/6bbc01c8-0605-4f86-a0f9-b3119109b225",
 			},
 			updateValue: []string{
 				changefeedInfo,
@@ -140,12 +145,18 @@ func TestChangefeedStateUpdate(t *testing.T) {
 		{ // test multiple capture
 			changefeedID: "test1",
 			updateKey: []string{
-				"/tidb/cdc/default/default/changefeed/info/test1",
-				"/tidb/cdc/default/default/job/test1",
-				"/tidb/cdc/default/default/task/position/6bbc01c8-0605-4f86-a0f9-b3119109b225/test1",
-				"/tidb/cdc/default/__cdc_meta__/capture/6bbc01c8-0605-4f86-a0f9-b3119109b225",
-				"/tidb/cdc/default/default/task/position/666777888/test1",
-				"/tidb/cdc/default/__cdc_meta__/capture/666777888",
+				fmt.Sprintf("%s", etcd.DefaultClusterAndNamespacePrefix) +
+					"/changefeed/info/test1",
+				fmt.Sprintf("%s", etcd.DefaultClusterAndNamespacePrefix) +
+					"/job/test1",
+				fmt.Sprintf("%s", etcd.DefaultClusterAndNamespacePrefix) +
+					"/task/position/6bbc01c8-0605-4f86-a0f9-b3119109b225/test1",
+				fmt.Sprintf("%s", etcd.DefaultClusterAndMetaPrefix) +
+					"/capture/6bbc01c8-0605-4f86-a0f9-b3119109b225",
+				fmt.Sprintf("%s", etcd.DefaultClusterAndNamespacePrefix) +
+					"/task/position/666777888/test1",
+				fmt.Sprintf("%s", etcd.DefaultClusterAndMetaPrefix) +
+					"/capture/666777888",
 			},
 			updateValue: []string{
 				changefeedInfo,
@@ -185,13 +196,20 @@ func TestChangefeedStateUpdate(t *testing.T) {
 		{ // testing changefeedID not match
 			changefeedID: "test1",
 			updateKey: []string{
-				"/tidb/cdc/default/default/changefeed/info/test1",
-				"/tidb/cdc/default/default/job/test1",
-				"/tidb/cdc/default/default/task/position/6bbc01c8-0605-4f86-a0f9-b3119109b225/test1",
-				"/tidb/cdc/default/__cdc_meta__/capture/6bbc01c8-0605-4f86-a0f9-b3119109b225",
-				"/tidb/cdc/default/default/changefeed/info/test-fake",
-				"/tidb/cdc/default/default/job/test-fake",
-				"/tidb/cdc/default/default/task/position/6bbc01c8-0605-4f86-a0f9-b3119109b225/test-fake",
+				fmt.Sprintf("%s", etcd.DefaultClusterAndNamespacePrefix) +
+					"/changefeed/info/test1",
+				fmt.Sprintf("%s", etcd.DefaultClusterAndNamespacePrefix) +
+					"/job/test1",
+				fmt.Sprintf("%s", etcd.DefaultClusterAndNamespacePrefix) +
+					"/task/position/6bbc01c8-0605-4f86-a0f9-b3119109b225/test1",
+				fmt.Sprintf("%s", etcd.DefaultClusterAndMetaPrefix) +
+					"/capture/6bbc01c8-0605-4f86-a0f9-b3119109b225",
+				fmt.Sprintf("%s", etcd.DefaultClusterAndNamespacePrefix) +
+					"/changefeed/info/test-fake",
+				fmt.Sprintf("%s", etcd.DefaultClusterAndNamespacePrefix) +
+					"/job/test-fake",
+				fmt.Sprintf("%s", etcd.DefaultClusterAndNamespacePrefix) +
+					"/task/position/6bbc01c8-0605-4f86-a0f9-b3119109b225/test-fake",
 			},
 			updateValue: []string{
 				changefeedInfo,
@@ -231,15 +249,24 @@ func TestChangefeedStateUpdate(t *testing.T) {
 		{ // testing value is nil
 			changefeedID: "test1",
 			updateKey: []string{
-				"/tidb/cdc/default/default/changefeed/info/test1",
-				"/tidb/cdc/default/default/job/test1",
-				"/tidb/cdc/default/default/task/position/6bbc01c8-0605-4f86-a0f9-b3119109b225/test1",
-				"/tidb/cdc/default/__cdc_meta__/capture/6bbc01c8-0605-4f86-a0f9-b3119109b225",
-				"/tidb/cdc/default/default/task/position/666777888/test1",
-				"/tidb/cdc/default/default/changefeed/info/test1",
-				"/tidb/cdc/default/default/job/test1",
-				"/tidb/cdc/default/default/task/position/6bbc01c8-0605-4f86-a0f9-b3119109b225/test1",
-				"/tidb/cdc/default/__cdc_meta__/capture/6bbc01c8-0605-4f86-a0f9-b3119109b225",
+				fmt.Sprintf("%s", etcd.DefaultClusterAndNamespacePrefix) +
+					"/changefeed/info/test1",
+				fmt.Sprintf("%s", etcd.DefaultClusterAndNamespacePrefix) +
+					"/job/test1",
+				fmt.Sprintf("%s", etcd.DefaultClusterAndNamespacePrefix) +
+					"/task/position/6bbc01c8-0605-4f86-a0f9-b3119109b225/test1",
+				fmt.Sprintf("%s", etcd.DefaultClusterAndMetaPrefix) +
+					"/capture/6bbc01c8-0605-4f86-a0f9-b3119109b225",
+				fmt.Sprintf("%s", etcd.DefaultClusterAndNamespacePrefix) +
+					"/task/position/666777888/test1",
+				fmt.Sprintf("%s", etcd.DefaultClusterAndNamespacePrefix) +
+					"/changefeed/info/test1",
+				fmt.Sprintf("%s", etcd.DefaultClusterAndNamespacePrefix) +
+					"/job/test1",
+				fmt.Sprintf("%s", etcd.DefaultClusterAndNamespacePrefix) +
+					"/task/position/6bbc01c8-0605-4f86-a0f9-b3119109b225/test1",
+				fmt.Sprintf("%s", etcd.DefaultClusterAndMetaPrefix) +
+					"/capture/6bbc01c8-0605-4f86-a0f9-b3119109b225",
 			},
 			updateValue: []string{
 				changefeedInfo,
@@ -416,11 +443,16 @@ func TestGlobalStateUpdate(t *testing.T) {
 	}{
 		{ // common case
 			updateKey: []string{
-				"/tidb/cdc/default/__cdc_meta__/owner/22317526c4fc9a37",
-				"/tidb/cdc/default/__cdc_meta__/owner/22317526c4fc9a38",
-				"/tidb/cdc/default/__cdc_meta__/capture/6bbc01c8-0605-4f86-a0f9-b3119109b225",
-				"/tidb/cdc/default/default/task/position/6bbc01c8-0605-4f86-a0f9-b3119109b225/test1",
-				"/tidb/cdc/default/default/task/position/6bbc01c8-0605-4f86-a0f9-b3119109b225/test2",
+				fmt.Sprintf("%s", etcd.DefaultClusterAndMetaPrefix) +
+					"/owner/22317526c4fc9a37",
+				fmt.Sprintf("%s", etcd.DefaultClusterAndMetaPrefix) +
+					"/owner/22317526c4fc9a38",
+				fmt.Sprintf("%s", etcd.DefaultClusterAndMetaPrefix) +
+					"/capture/6bbc01c8-0605-4f86-a0f9-b3119109b225",
+				fmt.Sprintf("%s", etcd.DefaultClusterAndNamespacePrefix) +
+					"/task/position/6bbc01c8-0605-4f86-a0f9-b3119109b225/test1",
+				fmt.Sprintf("%s", etcd.DefaultClusterAndNamespacePrefix) +
+					"/task/position/6bbc01c8-0605-4f86-a0f9-b3119109b225/test2",
 			},
 			updateValue: []string{
 				`6bbc01c8-0605-4f86-a0f9-b3119109b225`,
@@ -456,13 +488,20 @@ func TestGlobalStateUpdate(t *testing.T) {
 		},
 		{ // testing remove changefeed
 			updateKey: []string{
-				"/tidb/cdc/default/__cdc_meta__/owner/22317526c4fc9a37",
-				"/tidb/cdc/default/__cdc_meta__/owner/22317526c4fc9a38",
-				"/tidb/cdc/default/__cdc_meta__/capture/6bbc01c8-0605-4f86-a0f9-b3119109b225",
-				"/tidb/cdc/default/default/task/position/6bbc01c8-0605-4f86-a0f9-b3119109b225/test1",
-				"/tidb/cdc/default/__cdc_meta__/owner/22317526c4fc9a37",
-				"/tidb/cdc/default/default/position/6bbc01c8-0605-4f86-a0f9-b3119109b225/test1",
-				"/tidb/cdc/default/__cdc_meta__/capture/6bbc01c8-0605-4f86-a0f9-b3119109b225",
+				fmt.Sprintf("%s", etcd.DefaultClusterAndMetaPrefix) +
+					"/owner/22317526c4fc9a37",
+				fmt.Sprintf("%s", etcd.DefaultClusterAndMetaPrefix) +
+					"/owner/22317526c4fc9a38",
+				fmt.Sprintf("%s", etcd.DefaultClusterAndMetaPrefix) +
+					"/capture/6bbc01c8-0605-4f86-a0f9-b3119109b225",
+				fmt.Sprintf("%s", etcd.DefaultClusterAndNamespacePrefix) +
+					"/task/position/6bbc01c8-0605-4f86-a0f9-b3119109b225/test1",
+				fmt.Sprintf("%s", etcd.DefaultClusterAndMetaPrefix) +
+					"/owner/22317526c4fc9a37",
+				fmt.Sprintf("%s", etcd.DefaultClusterAndNamespacePrefix) +
+					"/task/position/6bbc01c8-0605-4f86-a0f9-b3119109b225/test1",
+				fmt.Sprintf("%s", etcd.DefaultClusterAndMetaPrefix) +
+					"/capture/6bbc01c8-0605-4f86-a0f9-b3119109b225",
 			},
 			updateValue: []string{
 				`6bbc01c8-0605-4f86-a0f9-b3119109b225`,

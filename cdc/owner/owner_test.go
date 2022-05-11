@@ -275,7 +275,8 @@ func TestCheckClusterVersion(t *testing.T) {
 	ctx, cancel := cdcContext.WithCancel(ctx)
 	defer cancel()
 
-	tester.MustUpdate("/tidb/cdc/default/__cdc_meta__/capture/6bbc01c8-0605-4f86-a0f9-b3119109b225",
+	tester.MustUpdate(fmt.Sprintf("%s/capture/6bbc01c8-0605-4f86-a0f9-b3119109b225",
+		etcd.DefaultClusterAndMetaPrefix),
 		[]byte(`{"id":"6bbc01c8-0605-4f86-a0f9-b3119109b225","address":"127.0.0.1:8300","version":"v6.0.0"}`))
 
 	changefeedID := model.DefaultChangeFeedID("test-changefeed")
@@ -391,7 +392,8 @@ func TestUpdateGCSafePoint(t *testing.T) {
 	}
 	changefeedID1 := model.DefaultChangeFeedID("test-changefeed1")
 	tester.MustUpdate(
-		fmt.Sprintf("/tidb/cdc/default/default/changefeed/info/%s",
+		fmt.Sprintf("%s/changefeed/info/%s",
+			etcd.DefaultClusterAndNamespacePrefix,
 			changefeedID1.ID),
 		[]byte(`{"config":{"cyclic-replication":{}},"state":"failed"}`))
 	tester.MustApplyPatches()

@@ -40,7 +40,7 @@ import (
 )
 
 const (
-	testEtcdKeyPrefix    = "/cdc_etcd_worker_test/default/default"
+	testEtcdKeyPrefix    = "/cdc_etcd_worker_test"
 	numGroups            = 10
 	numValuesPerGroup    = 5
 	totalTicksPerReactor = 1000
