@@ -37,7 +37,8 @@ func TestPartitions(t *testing.T) {
 	}
 
 	manager := NewTopicManager(client, adminClient, cfg)
-	partitionsNum, err := manager.Partitions(kafkamock.DefaultMockTopicName)
+	partitionsNum, err := manager.GetPartitionNum(
+		kafkamock.DefaultMockTopicName)
 	require.Nil(t, err)
 	require.Equal(t, int32(3), partitionsNum)
 }
@@ -57,21 +58,22 @@ func TestTryRefreshMeta(t *testing.T) {
 	}
 
 	manager := NewTopicManager(client, adminClient, cfg)
-	partitionsNum, err := manager.Partitions(kafkamock.DefaultMockTopicName)
+	partitionsNum, err := manager.GetPartitionNum(
+		kafkamock.DefaultMockTopicName)
 	require.Nil(t, err)
 	require.Equal(t, int32(3), partitionsNum)
 
 	// Mock create a topic.
 	client.AddTopic("test", 4)
 	manager.lastMetadataRefresh.Store(time.Now().Add(-2 * time.Minute).Unix())
-	partitionsNum, err = manager.Partitions("test")
+	partitionsNum, err = manager.GetPartitionNum("test")
 	require.Nil(t, err)
 	require.Equal(t, int32(4), partitionsNum)
 
 	// Mock delete a topic.
 	// NOTICE: we do not refresh metadata for the deleted topic.
 	client.DeleteTopic("test")
-	partitionsNum, err = manager.Partitions("test")
+	partitionsNum, err = manager.GetPartitionNum("test")
 	require.Nil(t, err)
 	require.Equal(t, int32(4), partitionsNum)
 }
@@ -98,7 +100,7 @@ func TestCreateTopic(t *testing.T) {
 	partitionNum, err = manager.CreateTopic("new-topic")
 	require.Nil(t, err)
 	require.Equal(t, int32(2), partitionNum)
-	partitionsNum, err := manager.Partitions("new-topic")
+	partitionsNum, err := manager.GetPartitionNum("new-topic")
 	require.Nil(t, err)
 	require.Equal(t, int32(2), partitionsNum)
 
