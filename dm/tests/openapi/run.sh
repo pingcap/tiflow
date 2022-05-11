@@ -75,7 +75,7 @@ function test_source() {
 	openapi_source_check "delete_source_failed" "mysql-01"
 
 	# send request to not leader node
-	openapi_source_check "list_source_with_redirect" 0
+	openapi_source_check "list_source_with_reverse" 0
 
 	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>TEST OPENAPI: SOURCE SUCCESS"
 }

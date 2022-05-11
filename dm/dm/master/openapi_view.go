@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/http/httputil"
 
 	ginmiddleware "github.com/deepmap/oapi-codegen/pkg/gin-middleware"
 	"github.com/gin-gonic/gin"
@@ -60,6 +61,34 @@ func (s *Server) redirectRequestToLeaderMW() gin.HandlerFunc {
 	}
 }
 
+// reverseRequestToLeaderMW reverses request to leader.
+func (s *Server) reverseRequestToLeaderMW() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		ctx2 := c.Request.Context()
+		isLeader, _ := s.isLeaderAndNeedForward(ctx2)
+		if isLeader {
+			c.Next()
+		} else {
+			// nolint:dogsled
+			_, _, leaderOpenAPIAddr, err := s.election.LeaderInfo(ctx2)
+			if err != nil {
+				_ = c.AbortWithError(http.StatusBadRequest, err)
+				return
+			}
+			// simpleProxy just reverses to leader host
+			simpleProxy := httputil.ReverseProxy{
+				Director: func(req *http.Request) {
+					req.URL.Scheme = "http"
+					req.URL.Host = leaderOpenAPIAddr
+					req.Host = leaderOpenAPIAddr
+				},
+			}
+			simpleProxy.ServeHTTP(c.Writer, c.Request)
+			c.Abort()
+		}
+	}
+}
+
 // InitOpenAPIHandles init openapi handlers.
 func (s *Server) InitOpenAPIHandles() error {
 	swagger, err := openapi.GetSwagger()
@@ -73,7 +102,7 @@ func (s *Server) InitOpenAPIHandles() error {
 	// middlewares
 	r.Use(gin.Recovery())
 	r.Use(openapi.ZapLogger(log.L().WithFields(zap.String("component", "openapi")).Logger))
-	r.Use(s.redirectRequestToLeaderMW())
+	r.Use(s.reverseRequestToLeaderMW())
 	r.Use(terrorHTTPErrorHandler())
 	// use validation middleware to check all requests against the OpenAPI schema.
 	r.Use(ginmiddleware.OapiRequestValidator(swagger))

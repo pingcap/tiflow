@@ -72,11 +72,11 @@ def list_source_with_status_success(source_count, status_count):
         assert len(data["data"][i]["status_list"]) == int(status_count)
 
 
-def list_source_with_redirect(source_count):
+def list_source_with_reverse(source_count):
     resp = requests.get(url=API_ENDPOINT_NOT_LEADER)
     assert resp.status_code == 200
     data = resp.json()
-    print("list_source_by_openapi_redirect resp=", data)
+    print("list_source_with_reverse resp=", data)
     assert data["total"] == int(source_count)
 
 
@@ -221,7 +221,7 @@ if __name__ == "__main__":
         "create_source1_success": create_source1_success,
         "create_source2_success": create_source2_success,
         "list_source_success": list_source_success,
-        "list_source_with_redirect": list_source_with_redirect,
+        "list_source_with_reverse": list_source_with_reverse,
         "list_source_with_status_success": list_source_with_status_success,
         "delete_source_failed": delete_source_failed,
         "delete_source_success": delete_source_success,

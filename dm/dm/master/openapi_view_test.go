@@ -16,9 +16,12 @@
 package master
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -292,7 +295,7 @@ func (s *OpenAPIViewSuite) TestClusterAPI() {
 	cancel1()
 }
 
-func (s *OpenAPIViewSuite) TestRedirectRequestToLeader() {
+func (s *OpenAPIViewSuite) TestReverseRequestToLeader() {
 	ctx1, cancel1 := context.WithCancel(context.Background())
 	s1 := setupTestServer(ctx1, s.T())
 	defer func() {
@@ -334,9 +337,70 @@ func (s *OpenAPIViewSuite) TestRedirectRequestToLeader() {
 	s.Len(resultListSource.Data, 0)
 	s.Equal(0, resultListSource.Total)
 
-	// list source not from leader will get a redirect
-	result = testutil.NewRequest().Get(baseURL).GoWithHTTPHandler(s.T(), s2.openapiHandles)
-	s.Equal(http.StatusTemporaryRedirect, result.Code())
+	// list source not from leader will get result too
+	result, err := HTTPTestWithTestResponseRecorder(testutil.NewRequest().Get(baseURL), s2.openapiHandles)
+	s.NoError(err)
+	s.Equal(http.StatusOK, result.Code())
+	var resultListSource2 openapi.GetSourceListResponse
+	s.NoError(result.UnmarshalBodyToObject(&resultListSource2))
+	s.Len(resultListSource2.Data, 0)
+	s.Equal(0, resultListSource2.Total)
+}
+
+// httptest.ResponseRecorder is not http.CloseNotifier, will panic when test reverse proxy.
+// We need to implement the interface ourselves.
+// ref: https://github.com/gin-gonic/gin/blob/ce20f107f5dc498ec7489d7739541a25dcd48463/context_test.go#L1747-L1765
+type TestResponseRecorder struct {
+	*httptest.ResponseRecorder
+	closeChannel chan bool
+}
+
+func (r *TestResponseRecorder) CloseNotify() <-chan bool {
+	return r.closeChannel
+}
+
+func (r *TestResponseRecorder) closeClient() {
+	r.closeChannel <- true
+}
+
+func CreateTestResponseRecorder() *TestResponseRecorder {
+	return &TestResponseRecorder{
+		httptest.NewRecorder(),
+		make(chan bool, 1),
+	}
+}
+
+func HTTPTestWithTestResponseRecorder(r *testutil.RequestBuilder, handler http.Handler) (*testutil.CompletedRequest, error) {
+	if r == nil {
+		return nil, nil
+	}
+	if r.Error != nil {
+		// Fail the test if we had an error
+		// t.Errorf("error constructing request: %s", r.Error)
+		return nil, r.Error
+	}
+	var bodyReader io.Reader
+	if r.Body != nil {
+		bodyReader = bytes.NewReader(r.Body)
+	}
+
+	req := httptest.NewRequest(r.Method, r.Path, bodyReader)
+	for h, v := range r.Headers {
+		req.Header.Add(h, v)
+	}
+	if host, ok := r.Headers["Host"]; ok {
+		req.Host = host
+	}
+	for _, c := range r.Cookies {
+		req.AddCookie(c)
+	}
+
+	rec := CreateTestResponseRecorder()
+	handler.ServeHTTP(rec, req)
+
+	return &testutil.CompletedRequest{
+		Recorder: rec.ResponseRecorder,
+	}, nil
 }
 
 func (s *OpenAPIViewSuite) TestOpenAPIWillNotStartInDefaultConfig() {
