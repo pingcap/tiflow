@@ -496,6 +496,8 @@ func TestGlobalStateUpdate(t *testing.T) {
 					"/capture/6bbc01c8-0605-4f86-a0f9-b3119109b225",
 				fmt.Sprintf("%s", etcd.DefaultClusterAndNamespacePrefix) +
 					"/task/position/6bbc01c8-0605-4f86-a0f9-b3119109b225/test1",
+				fmt.Sprintf("%s", etcd.DefaultClusterAndNamespacePrefix) +
+					"/task/position/6bbc01c8-0605-4f86-a0f9-b3119109b225/test2",
 				fmt.Sprintf("%s", etcd.DefaultClusterAndMetaPrefix) +
 					"/owner/22317526c4fc9a37",
 				fmt.Sprintf("%s", etcd.DefaultClusterAndNamespacePrefix) +
@@ -508,6 +510,7 @@ func TestGlobalStateUpdate(t *testing.T) {
 				`55551111`,
 				`{"id":"6bbc01c8-0605-4f86-a0f9-b3119109b225","address":"127.0.0.1:8300"}`,
 				`{"resolved-ts":421980720003809281,"checkpoint-ts":421980719742451713,"admin-job-type":0}`,
+				`{"resolved-ts":421980720003809281,"checkpoint-ts":421980719742451713,"admin-job-type":0}`,
 				``,
 				``,
 				``,
@@ -517,8 +520,13 @@ func TestGlobalStateUpdate(t *testing.T) {
 				Captures: map[model.CaptureID]*model.CaptureInfo{},
 				Changefeeds: map[model.ChangeFeedID]*ChangefeedReactorState{
 					model.DefaultChangeFeedID("test2"): {
-						ID:            model.DefaultChangeFeedID("test2"),
-						TaskPositions: map[model.CaptureID]*model.TaskPosition{},
+						ID: model.DefaultChangeFeedID("test2"),
+						TaskPositions: map[model.CaptureID]*model.TaskPosition{
+							"6bbc01c8-0605-4f86-a0f9-b3119109b225": {
+								CheckPointTs: 421980719742451713,
+								ResolvedTs:   421980720003809281,
+							},
+						},
 					},
 				},
 			},
