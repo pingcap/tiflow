@@ -454,6 +454,7 @@ func (s *BaseScheduleDispatcher) findDiffTables(
 			if addingCount == 0 {
 				if s.drainTick < drainCaptureRelaxTicks {
 					s.drainTick++
+					s.logger.Info("DrainCapture: relax a few ticks", zap.Int("drainTick", s.drainTick))
 					continue
 				}
 				if drainRemoved < drainCaptureTableBatchSize {
