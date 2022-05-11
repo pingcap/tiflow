@@ -23,7 +23,7 @@ func SourceCfgToOpenAPISource(cfg *SourceConfig) openapi.Source {
 		Enable:     cfg.Enable,
 		EnableGtid: cfg.EnableGTID,
 		Host:       cfg.From.Host,
-		Password:   &DefaultFeedbackEnPassword, // PM's requirement, we always return obfuscated password to users
+		Password:   &ObfuscatedPasswordForFeedback, // PM's requirement, we always return obfuscated password to users
 		Port:       cfg.From.Port,
 		SourceName: cfg.SourceID,
 		User:       cfg.From.User,

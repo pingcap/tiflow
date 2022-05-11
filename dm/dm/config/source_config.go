@@ -53,9 +53,9 @@ var getAllServerIDFunc = utils.GetAllServerID
 //go:embed source.yaml
 var SampleSourceConfig string
 
-// DefaultFeedbackEnPassword is the source encryption password that returns to the foreground.
+// ObfuscatedPasswordForFeedback is the source encryption password that returns to the foreground.
 // PM's requirement, we always return obfuscated password to users.
-var DefaultFeedbackEnPassword string = "******"
+var ObfuscatedPasswordForFeedback string = "******"
 
 // PurgeConfig is the configuration for Purger.
 type PurgeConfig struct {
