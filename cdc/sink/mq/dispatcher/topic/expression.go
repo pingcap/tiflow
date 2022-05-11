@@ -56,8 +56,7 @@ func (e Expression) Validate() error {
 // When doing conversion, the special characters other than [A-Za-z0-9\._\-] in schema/table
 // will be substituted for underscore '_'.
 func (e Expression) Substitute(schema, table string) string {
-	// the upper case letters in schema/table will be converted to lower case,
-	// and some of the special characters will be replaced with '_'
+	// some of the special characters will be replaced with '_'
 	replacedSchema := kafkaForbidRE.ReplaceAllString(schema, "_")
 	replacedTable := kafkaForbidRE.ReplaceAllString(table, "_")
 
