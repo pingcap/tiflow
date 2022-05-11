@@ -440,6 +440,15 @@ func walkTableSpanInStore(t *testing.T, store tidbkv.Storage, tableID int64, f f
 func TestGetDefaultZeroValue(t *testing.T) {
 	// Check following MySQL type, ref to:
 	// https://github.com/pingcap/tidb/blob/master/parser/mysql/type.go
+
+	// mysql flag null
+	ftNull := types.NewFieldType(mysql.TypeUnspecified)
+	ftNull.SetFlag(0)
+
+	// mysql.TypeTiny + notnull + nodefault
+	ftTinyIntNotNull := types.NewFieldType(mysql.TypeTiny)
+	ftTinyIntNotNull.SetFlag(mysql.NotNullFlag)
+
 	testCases := []struct {
 		Name    string
 		ColInfo timodel.ColumnInfo
@@ -447,34 +456,22 @@ func TestGetDefaultZeroValue(t *testing.T) {
 	}{
 		// mysql flag null
 		{
-			Name: "mysql flag null",
-			ColInfo: timodel.ColumnInfo{
-				FieldType: types.FieldType{
-					Flag: uint(0),
-				},
-			},
-			Res: nil,
+			Name:    "mysql flag null",
+			ColInfo: timodel.ColumnInfo{FieldType: *ftNull},
+			Res:     nil,
 		},
 		// mysql.TypeTiny + notnull + nodefault
 		{
-			Name: "mysql.TypeTiny + notnull + nodefault",
-			ColInfo: timodel.ColumnInfo{
-				FieldType: types.FieldType{
-					Tp:   mysql.TypeTiny,
-					Flag: mysql.NotNullFlag,
-				},
-			},
-			Res: int64(0),
+			Name:    "mysql.TypeTiny + notnull + nodefault",
+			ColInfo: timodel.ColumnInfo{FieldType: *ftTinyIntNotNull},
+			Res:     int64(0),
 		},
 		// mysql.TypeTiny + notnull + default
 		{
 			Name: "mysql.TypeTiny + notnull + default",
 			ColInfo: timodel.ColumnInfo{
 				OriginDefaultValue: -1314,
-				FieldType: types.FieldType{
-					Tp:   mysql.TypeTiny,
-					Flag: mysql.NotNullFlag,
-				},
+				FieldType:          *ftTinyIntNotNull,
 			},
 			Res: int64(-1314),
 		},
