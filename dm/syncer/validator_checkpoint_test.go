@@ -30,8 +30,6 @@ import (
 	"github.com/pingcap/tiflow/dm/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
-	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
-	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/retry"
 	"github.com/pingcap/tiflow/dm/pkg/schema"
 	"github.com/pingcap/tiflow/dm/syncer/dbconn"
@@ -105,7 +103,7 @@ func TestValidatorCheckpointPersist(t *testing.T) {
 	validator.persistHelper.schemaInitialized.Store(true)
 	validator.Start(pb.Stage_Stopped)
 	validator.Stop()
-	require.NoError(t, validator.loadPersistedData(tcontext.Background()))
+	require.NoError(t, validator.loadPersistedData())
 	require.Equal(t, int64(1), validator.persistHelper.revision)
 	require.Equal(t, 1, len(validator.loadedPendingChanges))
 	require.Equal(t, 3, len(validator.loadedPendingChanges[tbl.String()].jobs))
@@ -139,22 +137,4 @@ func TestValidatorCheckpointPersist(t *testing.T) {
 
 	testFunc("")
 	testFunc("failed")
-}
-
-func TestCheckpointNotPanic(t *testing.T) {
-	// validator will try persisting data before starting
-	// if it visits and persists workers, which are not intialized before starting,
-	// the program will panick.
-	// This issue is fixed by putting off initializing workers
-	var err error
-	cfg := genSubtaskConfig(t)
-	syncerObj := NewSyncer(cfg, nil, nil)
-	require.Equal(t, log.InitLogger(&log.Config{}), nil)
-	validator := NewContinuousDataValidator(cfg, syncerObj, false)
-	validator.ctx, validator.cancel = context.WithCancel(context.Background())
-	validator.tctx = tcontext.NewContext(validator.ctx, validator.L)
-	validator.persistHelper.tctx = validator.tctx
-	currLoc := binlog.NewLocation(cfg.Flavor)
-	err = validator.persistHelper.persist(currLoc) // persist nil worker
-	require.NotNil(t, err)                         // err not nil but program not panicks
 }
