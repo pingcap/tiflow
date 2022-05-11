@@ -678,7 +678,10 @@ func (p *processor) pushResolvedTs2Table() {
 // addTable creates a new table pipeline and adds it to the `p.tables`
 func (p *processor) addTable(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) error {
 	if replicaInfo.StartTs == 0 {
-		log.Panic("table start ts must not be 0", zap.Int64("tableID", tableID))
+		log.Panic("table start ts must not be 0",
+			zap.String("namespace", p.changefeedID.Namespace),
+			zap.String("changefeed", p.changefeedID.ID),
+			zap.Int64("tableID", tableID))
 	}
 
 	if table, ok := p.tables[tableID]; ok {
