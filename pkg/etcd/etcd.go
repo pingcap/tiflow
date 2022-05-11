@@ -133,7 +133,7 @@ func (c CDCEtcdClient) GetChangeFeeds(ctx context.Context) (
 	int64,
 	map[model.ChangeFeedID]*mvccpb.KeyValue, error,
 ) {
-	//todo: support namespace
+	// todo: support namespace
 	key := GetEtcdKeyChangeFeedList(model.DefaultNamespace)
 
 	resp, err := c.Client.Get(ctx, key, clientv3.WithPrefix())
@@ -202,7 +202,7 @@ func (c CDCEtcdClient) DeleteChangeFeedInfo(ctx context.Context,
 func (c CDCEtcdClient) GetAllChangeFeedStatus(ctx context.Context) (
 	map[model.ChangeFeedID]*model.ChangeFeedStatus, error,
 ) {
-	//todo: support namespace
+	// todo: support namespace
 	key := JobKeyPrefix(model.DefaultNamespace)
 	resp, err := c.Client.Get(ctx, key, clientv3.WithPrefix())
 	if err != nil {
@@ -369,7 +369,7 @@ func (c CDCEtcdClient) SaveChangeFeedInfo(ctx context.Context,
 // GetProcessors queries all processors of the cdc cluster,
 // and returns a slice of ProcInfoSnap(without table info)
 func (c CDCEtcdClient) GetProcessors(ctx context.Context) ([]*model.ProcInfoSnap, error) {
-	//todo: support namespace
+	// todo: support namespace
 	resp, err := c.Client.Get(ctx, TaskStatusKeyPrefix(model.DefaultNamespace), clientv3.WithPrefix())
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
@@ -397,7 +397,8 @@ func (c CDCEtcdClient) GetProcessors(ctx context.Context) ([]*model.ProcInfoSnap
 // GetAllTaskStatus queries all task status of a changefeed, and returns a map
 // mapping from captureID to TaskStatus
 func (c CDCEtcdClient) GetAllTaskStatus(ctx context.Context,
-	changefeedID model.ChangeFeedID) (model.ProcessorsInfos, error) {
+	changefeedID model.ChangeFeedID,
+) (model.ProcessorsInfos, error) {
 	resp, err := c.Client.Get(ctx, TaskStatusKeyPrefix(changefeedID.Namespace), clientv3.WithPrefix())
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrPDEtcdAPIError, err)

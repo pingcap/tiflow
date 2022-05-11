@@ -26,17 +26,14 @@ import (
 const (
 	metaPrefix = "/__cdc_meta__"
 
-	ownerKey   = "/owner"
-	captureKey = "/capture"
-
-	taskKey         = "/task"
-	taskWorkloadKey = taskKey + "/workload"
-	taskStatusKey   = taskKey + "/status"
-	taskPositionKey = taskKey + "/position"
+	ownerKey        = "/owner"
+	captureKey      = "/capture"
+	taskPositionKey = "/task/position"
 
 	changefeedInfoKey = "/changefeed/info"
 	jobKey            = "/job"
 
+	// DeletionCounterKey is the key path for the counter of deleted keys
 	DeletionCounterKey = metaPrefix + "/meta/ticdc-delete-etcd-key-count"
 
 	DefaultClusterAndNamespacePrefix = "/tidb/cdc/default/default"
@@ -90,8 +87,8 @@ type CDCKey struct {
 
 // EtcdKeyBase is the common prefix of the keys in CDC
 func EtcdKeyBase() string {
-	clusterId := config.GetGlobalServerConfig().ClusterID
-	return fmt.Sprintf("/tidb/cdc/%s", clusterId)
+	clusterID := config.GetGlobalServerConfig().ClusterID
+	return fmt.Sprintf("/tidb/cdc/%s", clusterID)
 }
 
 func NamespacedPrefix(namespace string) string {
