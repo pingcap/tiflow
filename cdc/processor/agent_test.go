@@ -231,7 +231,7 @@ func TestAgentBasics(t *testing.T) {
 		Return(&clientv3.GetResponse{
 			Kvs: []*mvccpb.KeyValue{
 				{
-					Key:         []byte(etcd.CaptureOwnerKey),
+					Key:         []byte(etcd.CaptureOwnerKey()),
 					Value:       []byte(ownerCaptureID),
 					ModRevision: 1,
 				},
@@ -403,7 +403,7 @@ func TestAgentTolerateClientClosed(t *testing.T) {
 		Return(&clientv3.GetResponse{
 			Kvs: []*mvccpb.KeyValue{
 				{
-					Key:         []byte(etcd.CaptureOwnerKey),
+					Key:         []byte(etcd.CaptureOwnerKey()),
 					Value:       []byte(ownerCaptureID),
 					ModRevision: 1,
 				},
@@ -448,7 +448,7 @@ func TestNoFinishOperationBeforeSyncIsReceived(t *testing.T) {
 		Return(&clientv3.GetResponse{
 			Kvs: []*mvccpb.KeyValue{
 				{
-					Key:         []byte(etcd.CaptureOwnerKey),
+					Key:         []byte(etcd.CaptureOwnerKey()),
 					Value:       []byte(ownerCaptureID),
 					ModRevision: 1,
 				},

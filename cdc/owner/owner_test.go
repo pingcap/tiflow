@@ -275,7 +275,8 @@ func TestCheckClusterVersion(t *testing.T) {
 	ctx, cancel := cdcContext.WithCancel(ctx)
 	defer cancel()
 
-	tester.MustUpdate("/tidb/cdc/capture/6bbc01c8-0605-4f86-a0f9-b3119109b225", []byte(`{"id":"6bbc01c8-0605-4f86-a0f9-b3119109b225","address":"127.0.0.1:8300","version":"v6.0.0"}`))
+	tester.MustUpdate("/tidb/cdc/default/__cdc_meta__/capture/6bbc01c8-0605-4f86-a0f9-b3119109b225",
+		[]byte(`{"id":"6bbc01c8-0605-4f86-a0f9-b3119109b225","address":"127.0.0.1:8300","version":"v6.0.0"}`))
 
 	changefeedID := model.DefaultChangeFeedID("test-changefeed")
 	changefeedInfo := &model.ChangeFeedInfo{
@@ -296,7 +297,9 @@ func TestCheckClusterVersion(t *testing.T) {
 	require.Nil(t, err)
 	require.NotContains(t, owner.changefeeds, changefeedID)
 
-	tester.MustUpdate("/tidb/cdc/capture/6bbc01c8-0605-4f86-a0f9-b3119109b225",
+	tester.MustUpdate(fmt.Sprintf("%s/capture/6bbc01c8-0605-4f86-a0f9-b3119109b225",
+		etcd.DefaultClusterAndMetaPrefix,
+	),
 		[]byte(`{"id":"6bbc01c8-0605-4f86-a0f9-b3119109b225","address":"127.0.0.1:8300","version":"`+ctx.GlobalVars().CaptureInfo.Version+`"}`))
 
 	// check the tick is not skipped and the changefeed will be handled normally
@@ -388,7 +391,8 @@ func TestUpdateGCSafePoint(t *testing.T) {
 	}
 	changefeedID1 := model.DefaultChangeFeedID("test-changefeed1")
 	tester.MustUpdate(
-		fmt.Sprintf("/tidb/cdc/changefeed/info/%s", changefeedID1.ID),
+		fmt.Sprintf("/tidb/cdc/default/default/changefeed/info/%s",
+			changefeedID1.ID),
 		[]byte(`{"config":{"cyclic-replication":{}},"state":"failed"}`))
 	tester.MustApplyPatches()
 	state.Changefeeds[changefeedID1].PatchStatus(
@@ -429,7 +433,9 @@ func TestUpdateGCSafePoint(t *testing.T) {
 	// add another changefeed, it must update GC safepoint.
 	changefeedID2 := model.DefaultChangeFeedID("test-changefeed2")
 	tester.MustUpdate(
-		fmt.Sprintf("/tidb/cdc/changefeed/info/%s", changefeedID2.ID),
+		fmt.Sprintf("%s/changefeed/info/%s",
+			etcd.DefaultClusterAndNamespacePrefix,
+			changefeedID2.ID),
 		[]byte(`{"config":{"cyclic-replication":{}},"state":"normal"}`))
 	tester.MustApplyPatches()
 	state.Changefeeds[changefeedID1].PatchStatus(

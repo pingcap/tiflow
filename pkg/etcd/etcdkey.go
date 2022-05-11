@@ -38,6 +38,9 @@ const (
 	jobKey            = "/job"
 
 	DeletionCounterKey = metaPrefix + "/meta/ticdc-delete-etcd-key-count"
+
+	DefaultClusterAndNamespacePrefix = "/tidb/cdc/default/default"
+	DefaultClusterAndMetaPrefix      = "/tidb/cdc/default" + metaPrefix
 )
 
 // CDCKeyType is the type of etcd key

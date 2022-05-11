@@ -14,12 +14,14 @@
 package owner
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
+	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/stretchr/testify/require"
 )
@@ -308,12 +310,16 @@ func TestChangefeedStatusNotExist(t *testing.T) {
 	manager := newFeedStateManager4Test()
 	state := orchestrator.NewChangefeedReactorState(ctx.ChangefeedVars().ID)
 	tester := orchestrator.NewReactorStateTester(t, state, map[string]string{
-		"/tidb/cdc/capture/d563bfc0-f406-4f34-bc7d-6dc2e35a44e5": `
+		fmt.Sprintf("%s/capture/d563bfc0-f406-4f34-bc7d-6dc2e35a44e5",
+			etcd.DefaultClusterAndMetaPrefix): `
 {"id":"d563bfc0-f406-4f34-bc7d-6dc2e35a44e5",
 "address":"172.16.6.147:8300","version":"v5.0.0-master-dirty"}`,
-		"/tidb/cdc/changefeed/info/" +
+		fmt.Sprintf("%s/changefeed/info/",
+			etcd.DefaultClusterAndNamespacePrefix) +
 			ctx.ChangefeedVars().ID.ID: changefeedInfo,
-		"/tidb/cdc/owner/156579d017f84a68": "d563bfc0-f406-4f34-bc7d-6dc2e35a44e5",
+		fmt.Sprintf("%s/owner/156579d017f84a68",
+			etcd.DefaultClusterAndMetaPrefix,
+		): "d563bfc0-f406-4f34-bc7d-6dc2e35a44e5",
 	})
 	manager.Tick(state)
 	require.False(t, manager.ShouldRunning())
