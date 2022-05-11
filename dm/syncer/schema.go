@@ -162,9 +162,9 @@ func (s *Syncer) OperateSchema(ctx context.Context, req *pb.OperateWorkerSchemaR
 		}
 
 	case pb.SchemaOp_RemoveSchema:
-		// we only drop the schema in the schema-tracker now,
-		// so if we drop the schema and continue to replicate any DDL/DML, it will try to get schema from downstream again.
-		return "", s.schemaTracker.DropTable(sourceTable)
+		// as the doc says, `operate-schema remove` will let DM-worker use table structure in checkpoint, which does not
+		// need further actions.
+		return "", nil
 	}
 	return "", nil
 }
