@@ -2741,7 +2741,7 @@ workaround = ""
 tags = ["internal", "high"]
 
 [error.DM-dm-worker-40051]
-message = "current task or validator stage is %s but not paused, invalid"
+message = "current stage is %s but not paused, invalid"
 description = ""
 workaround = ""
 tags = ["internal", "high"]
@@ -2922,6 +2922,12 @@ tags = ["internal", "high"]
 
 [error.DM-dm-worker-40081]
 message = "can only update task config for limited fields and this task must in sync unit, current task: %s current unit: %s"
+description = ""
+workaround = ""
+tags = ["internal", "high"]
+
+[error.DM-dm-worker-40082]
+message = "current validator stage is %s but not paused, invalid"
 description = ""
 workaround = ""
 tags = ["internal", "high"]
