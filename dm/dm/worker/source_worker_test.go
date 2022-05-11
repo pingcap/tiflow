@@ -870,7 +870,7 @@ func (t *testServer) TestGetWorkerValidatorErr(c *C) {
 	// when subtask name not exists
 	// return empty array
 	errors, err := w.GetWorkerValidatorErr("invalidTask", pb.ValidateErrorState_InvalidErr)
-	c.Assert(err, Matches, ".*sub task with name.*not found.*")
+	c.Assert(err.Error(), Matches, ".*sub task with name.*not found.*")
 	c.Assert(errors, IsNil)
 	// subtask match
 	errors, err = w.GetWorkerValidatorErr("testQueryValidator", pb.ValidateErrorState_InvalidErr)

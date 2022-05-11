@@ -1346,9 +1346,8 @@ func (w *SourceWorker) GetWorkerValidatorErr(taskName string, errState pb.Valida
 		ret, err := st.GetValidatorError(errState)
 		if err != nil {
 			return nil, err
-		} else {
-			return ret, err
 		}
+		return ret, err
 	}
 	return nil, terror.ErrWorkerSubTaskNotFound.Generate(taskName)
 }

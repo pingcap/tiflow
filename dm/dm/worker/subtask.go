@@ -886,8 +886,7 @@ func updateTaskMetric(task, sourceID string, stage pb.Stage, workerName string) 
 }
 
 func (st *SubTask) GetValidatorError(errState pb.ValidateErrorState) ([]*pb.ValidationError, error) {
-	validator := st.getValidator()
-	if validator != nil {
+	if validator := st.getValidator(); validator != nil {
 		return validator.GetValidatorError(errState), nil
 	}
 	cfg := st.getCfg()
@@ -895,8 +894,7 @@ func (st *SubTask) GetValidatorError(errState pb.ValidateErrorState) ([]*pb.Vali
 }
 
 func (st *SubTask) OperateValidatorError(op pb.ValidationErrOp, errID uint64, isAll bool) error {
-	validator := st.getValidator()
-	if validator != nil {
+	if validator := st.getValidator(); validator != nil {
 		return validator.OperateValidatorError(op, errID, isAll)
 	}
 	cfg := st.getCfg()

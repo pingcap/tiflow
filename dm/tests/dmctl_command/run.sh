@@ -259,7 +259,7 @@ function run_validator_cmd {
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation show-errors --error all test" \
 		"\"id\": \"3\"" 1 \
-		"\"id\": \"4\"" 1 \
+		"\"id\": \"4\"" 1
 	# still able to operate validation error
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation clear test --all"
