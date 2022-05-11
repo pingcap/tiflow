@@ -33,6 +33,7 @@ function run() {
 	run_sql_file $WORK_DIR/db2.prepare.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
 	check_contains 'Query OK, 3 rows affected'
 	uuid=($(get_uuid $MYSQL_HOST1 $MYSQL_PORT1))
+	binlog_name=($(get_binlog_name $MYSQL_HOST2 $MYSQL_PORT2))
 
 	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/dm/worker/defaultKeepAliveTTL=return(1)"
 
@@ -58,6 +59,7 @@ function run() {
 	cp $cur/conf/source1.yaml $WORK_DIR/source1.yaml
 	cp $cur/conf/source2.yaml $WORK_DIR/source2.yaml
 	sed -i "s/binlog-gtid-placeholder/$uuid:0/g" $WORK_DIR/source1.yaml
+	sed -i "s/binlog-name-placeholder/$binlog_name/g" $WORK_DIR/source2.yaml
 	sed -i "/relay-binlog-name/i\relay-dir: $WORK_DIR/worker1/relay_log" $WORK_DIR/source1.yaml
 	sed -i "/relay-binlog-name/i\relay-dir: $WORK_DIR/worker2/relay_log" $WORK_DIR/source2.yaml
 	dmctl_operate_source create $WORK_DIR/source1.yaml $SOURCE_ID1
@@ -130,7 +132,6 @@ function run() {
 
 	worker1_run_source_1=$(sed "s/$SOURCE_ID1/$SOURCE_ID1\n/g" $WORK_DIR/worker1/log/dm-worker.log | grep -c "$SOURCE_ID1") || true
 	echo "start task in incremental mode with zero gtid/pos"
-	binlog_name=($(get_binlog_name $MYSQL_HOST2 $MYSQL_PORT2))
 	sed "s/binlog-gtid-placeholder-1/$uuid:0/g" $cur/conf/dm-task.yaml >$WORK_DIR/dm-task.yaml
 	sed -i "s/binlog-name-placeholder-2/$binlog_name/g" $WORK_DIR/dm-task.yaml
 	sed -i "s/binlog-pos-placeholder-2/4/g" $WORK_DIR/dm-task.yaml
