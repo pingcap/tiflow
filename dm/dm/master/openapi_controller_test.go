@@ -22,8 +22,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/pingcap/tiflow/dm/pkg/utils"
-
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tiflow/dm/checker"
 	"github.com/pingcap/tiflow/dm/dm/config"
@@ -52,7 +50,7 @@ func (s *OpenAPIControllerSuite) SetupSuite() {
 		Enable:     true,
 		EnableGtid: false,
 		Host:       dbCfg.Host,
-		Password:   utils.StringP(dbCfg.Password),
+		Password:   &dbCfg.Password,
 		Port:       dbCfg.Port,
 		User:       dbCfg.User,
 	}

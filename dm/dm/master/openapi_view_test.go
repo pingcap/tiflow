@@ -372,7 +372,7 @@ func (s *OpenAPIViewSuite) TestTaskTemplatesAPI() {
 		SourceName: source1Name,
 		EnableGtid: false,
 		Host:       dbCfg.Host,
-		Password:   utils.StringP(dbCfg.Password),
+		Password:   &dbCfg.Password,
 		Port:       dbCfg.Port,
 		User:       dbCfg.User,
 	}
@@ -471,7 +471,7 @@ func (s *OpenAPIViewSuite) TestSourceAPI() {
 		Enable:     true,
 		EnableGtid: false,
 		Host:       dbCfg.Host,
-		Password:   utils.StringP(dbCfg.Password),
+		Password:   &dbCfg.Password,
 		Port:       dbCfg.Port,
 		User:       dbCfg.User,
 		Purge:      &openapi.Purge{Interval: &purgeInterVal},
@@ -806,7 +806,7 @@ func (s *OpenAPIViewSuite) TestTaskAPI() {
 		SourceName: source1Name,
 		EnableGtid: false,
 		Host:       dbCfg.Host,
-		Password:   utils.StringP(dbCfg.Password),
+		Password:   &dbCfg.Password,
 		Port:       dbCfg.Port,
 		User:       dbCfg.User,
 	}

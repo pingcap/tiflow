@@ -1410,7 +1410,6 @@ components:
         - "host"
         - "port"
         - "user"
-        - "password"
         - "enable_gtid"
         - "enable"
     ShardingGroup:
