@@ -54,7 +54,7 @@ run() {
 
 	# try to get schema for the table, but the stage is not paused.
 	curl -X PUT ${API_URL} -d '{"op":1, "task":"sequence_sharding_optimistic", "sources": ["mysql-replica-01"], "database":"sharding_seq_opt", "table":"t1"}' >${WORK_DIR}/get_schema.log
-	check_log_contains ${WORK_DIR}/get_schema.log "current task or validator stage is Running but not paused, invalid" 1
+	check_log_contains ${WORK_DIR}/get_schema.log "current stage is Running but not paused, invalid" 1
 
 	# pause task manually.
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
