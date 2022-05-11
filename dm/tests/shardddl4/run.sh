@@ -422,6 +422,9 @@ function DM_130_CASE() {
 	run_sql_source2 "insert into ${shardddl1}.${tb1} values(5,5);"
 	run_sql_source2 "insert into ${shardddl1}.${tb2} values(6,6);"
 
+	# make sure 2 DM-workers have a order to see DDL
+	sleep 2
+
 	run_sql_source2 "alter table ${shardddl1}.${tb1} modify b int default -1;"
 	run_sql_source1 "insert into ${shardddl1}.${tb1}(a) values(7);"
 	run_sql_source2 "insert into ${shardddl1}.${tb1}(a) values(8);"
