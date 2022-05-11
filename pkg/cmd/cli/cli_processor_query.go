@@ -31,7 +31,6 @@ import (
 )
 
 type processorMeta struct {
-	Status   *model.TaskStatus   `json:"status"`
 	Position *model.TaskPosition `json:"position"`
 }
 
@@ -99,19 +98,13 @@ func (o *queryProcessorOptions) addFlags(cmd *cobra.Command) {
 
 // run cli cmd with etcd client
 func (o *queryProcessorOptions) runCliWithEtcdClient(ctx context.Context, cmd *cobra.Command) error {
-	_, status, err := o.etcdClient.GetTaskStatus(ctx,
-		model.DefaultChangeFeedID(o.changefeedID), o.captureID)
-	if err != nil && cerror.ErrTaskStatusNotExists.Equal(err) {
-		return err
-	}
-
 	_, position, err := o.etcdClient.GetTaskPosition(ctx,
 		model.DefaultChangeFeedID(o.changefeedID), o.captureID)
 	if err != nil && cerror.ErrTaskPositionNotExists.Equal(err) {
 		return err
 	}
 
-	meta := &processorMeta{Status: status, Position: position}
+	meta := &processorMeta{Position: position}
 
 	return util.JSONPrint(cmd, meta)
 }
@@ -133,10 +126,6 @@ func (o *queryProcessorOptions) runCliWithAPIClient(ctx context.Context, cmd *co
 	}
 
 	meta := &processorMeta{
-		Status: &model.TaskStatus{
-			Tables: tables,
-			// Operations, AdminJobType and ModRevision are vacant
-		},
 		Position: &model.TaskPosition{
 			CheckPointTs: processor.CheckPointTs,
 			ResolvedTs:   processor.ResolvedTs,

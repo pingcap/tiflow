@@ -46,10 +46,6 @@ func CaptureInfoKeyPrefix() string {
 	return EtcdKeyBase() + metaPrefix + captureKey
 }
 
-func TaskStatusKeyPrefix(namespace string) string {
-	return NamespacedPrefix(namespace) + taskStatusKey
-}
-
 // TaskPositionKeyPrefix is the prefix of task position keys
 func TaskPositionKeyPrefix(namespace string) string {
 	return NamespacedPrefix(namespace) + taskPositionKey
@@ -78,11 +74,6 @@ func GetEtcdKeyTaskPosition(changefeedID model.ChangeFeedID, captureID string) s
 // GetEtcdKeyCaptureInfo returns the key of a capture info
 func GetEtcdKeyCaptureInfo(id string) string {
 	return CaptureInfoKeyPrefix() + "/" + id
-}
-
-// GetEtcdKeyTaskStatus returns the key for the task status
-func GetEtcdKeyTaskStatus(changeFeedID model.ChangeFeedID, captureID string) string {
-	return TaskStatusKeyPrefix(changeFeedID.Namespace) + "/" + captureID + "/" + changeFeedID.ID
 }
 
 // GetEtcdKeyJob returns the key for a job status
@@ -370,7 +361,7 @@ func (c CDCEtcdClient) SaveChangeFeedInfo(ctx context.Context,
 // and returns a slice of ProcInfoSnap(without table info)
 func (c CDCEtcdClient) GetProcessors(ctx context.Context) ([]*model.ProcInfoSnap, error) {
 	// todo: support namespace
-	resp, err := c.Client.Get(ctx, TaskStatusKeyPrefix(model.DefaultNamespace), clientv3.WithPrefix())
+	resp, err := c.Client.Get(ctx, TaskPositionKeyPrefix(model.DefaultNamespace), clientv3.WithPrefix())
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
 	}
@@ -392,62 +383,6 @@ func (c CDCEtcdClient) GetProcessors(ctx context.Context) ([]*model.ProcInfoSnap
 		infos = append(infos, info)
 	}
 	return infos, nil
-}
-
-// GetAllTaskStatus queries all task status of a changefeed, and returns a map
-// mapping from captureID to TaskStatus
-func (c CDCEtcdClient) GetAllTaskStatus(ctx context.Context,
-	changefeedID model.ChangeFeedID,
-) (model.ProcessorsInfos, error) {
-	resp, err := c.Client.Get(ctx, TaskStatusKeyPrefix(changefeedID.Namespace), clientv3.WithPrefix())
-	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
-	}
-	pinfo := make(map[string]*model.TaskStatus, resp.Count)
-	for _, rawKv := range resp.Kvs {
-		changeFeed, err := extractKeySuffix(string(rawKv.Key))
-		if err != nil {
-			return nil, err
-		}
-		endIndex := len(rawKv.Key) - len(changeFeed) - 1
-		captureID, err := extractKeySuffix(string(rawKv.Key[0:endIndex]))
-		if err != nil {
-			return nil, err
-		}
-		if changeFeed != changefeedID.ID {
-			continue
-		}
-		info := &model.TaskStatus{}
-		err = info.Unmarshal(rawKv.Value)
-		if err != nil {
-			return nil, cerror.ErrDecodeFailed.GenWithStackByArgs("failed to unmarshal task status: %s", err)
-		}
-		info.ModRevision = rawKv.ModRevision
-		pinfo[captureID] = info
-	}
-	return pinfo, nil
-}
-
-// GetTaskStatus queries task status from etcd, returns
-//  - ModRevision of the given key
-//  - *model.TaskStatus unmarshalled from the value
-//  - error if error happens
-func (c CDCEtcdClient) GetTaskStatus(
-	ctx context.Context,
-	changefeedID model.ChangeFeedID,
-	captureID string,
-) (int64, *model.TaskStatus, error) {
-	key := GetEtcdKeyTaskStatus(changefeedID, captureID)
-	resp, err := c.Client.Get(ctx, key)
-	if err != nil {
-		return 0, nil, cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
-	}
-	if resp.Count == 0 {
-		return 0, nil, cerror.ErrTaskStatusNotExists.GenWithStackByArgs(key)
-	}
-	info := &model.TaskStatus{}
-	err = info.Unmarshal(resp.Kvs[0].Value)
-	return resp.Kvs[0].ModRevision, info, errors.Trace(err)
 }
 
 // GetAllTaskPositions queries all task positions of a changefeed, and returns a map
