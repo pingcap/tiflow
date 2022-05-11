@@ -33,7 +33,7 @@ const (
 type Scheduler interface {
 	// Tick is called periodically from the owner, and returns
 	// updated global watermarks.
-	// It not is thread-safe.
+	// It is not thread-safe.
 	Tick(
 		ctx context.Context,
 		// Latest global checkpoint of the changefeed
@@ -52,5 +52,7 @@ type Scheduler interface {
 	// It is thread-safe
 	Rebalance()
 
+	// Close scheduler and release it's resource.
+	// It is not thread-safe.
 	Close(ctx context.Context)
 }
