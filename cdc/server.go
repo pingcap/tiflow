@@ -21,20 +21,18 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	tidbkv "github.com/pingcap/tidb/kv"
-	"github.com/pingcap/tiflow/cdc/contextutil"
+
 	"github.com/prometheus/client_golang/prometheus"
-	pd "github.com/tikv/pd/client"
 	"go.etcd.io/etcd/client/pkg/v3/logutil"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+	"golang.org/x/net/netutil"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
@@ -49,7 +47,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/httputil"
 	"github.com/pingcap/tiflow/pkg/p2p"
 	"github.com/pingcap/tiflow/pkg/tcpserver"
-	"github.com/pingcap/tiflow/pkg/version"
 	p2pProto "github.com/pingcap/tiflow/proto/p2p"
 )
 
@@ -57,6 +54,10 @@ const (
 	defaultDataDir = "/tmp/cdc_data"
 	// dataDirThreshold is used to warn if the free space of the specified data-dir is lower than it, unit is GB
 	dataDirThreshold = 500
+	// maxHTTPConnection is used to limits the max concurrent connections of http server.
+	maxHTTPConnection = 1000
+	// httpConnectionTimeout is used to limits a connection max alive time of http server.
+	httpConnectionTimeout = 10 * time.Minute
 )
 
 // Server is the capture server
@@ -67,9 +68,7 @@ type Server struct {
 	tcpServer    tcpserver.TCPServer
 	grpcService  *p2p.ServerWrapper
 	statusServer *http.Server
-	pdClient     pd.Client
 	etcdClient   *etcd.CDCEtcdClient
-	kvStorage    tidbkv.Storage
 	pdEndpoints  []string
 }
 
@@ -118,26 +117,6 @@ func (s *Server) Run(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
-	pdClient, err := pd.NewClientWithContext(
-		ctx, s.pdEndpoints, conf.Security.PDSecurityOption(),
-		pd.WithGRPCDialOptions(
-			grpcTLSOption,
-			grpc.WithBlock(),
-			grpc.WithConnectParams(grpc.ConnectParams{
-				Backoff: backoff.Config{
-					BaseDelay:  time.Second,
-					Multiplier: 1.1,
-					Jitter:     0.1,
-					MaxDelay:   3 * time.Second,
-				},
-				MinConnectTimeout: 3 * time.Second,
-			}),
-		))
-	if err != nil {
-		return cerror.WrapError(cerror.ErrServerNewPDClient, err)
-	}
-	s.pdClient = pdClient
-
 	tlsConfig, err := conf.Security.ToTLSConfig()
 	if err != nil {
 		return errors.Trace(err)
@@ -178,29 +157,9 @@ func (s *Server) Run(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
-	// To not block CDC server startup, we need to warn instead of error
-	// when TiKV is incompatible.
-	errorTiKVIncompatible := false
-	err = version.CheckClusterVersion(ctx, s.pdClient, s.pdEndpoints, conf.Security, errorTiKVIncompatible)
-	if err != nil {
-		return err
-	}
-
 	kv.InitWorkerPool()
-	kvStore, err := kv.CreateTiStore(strings.Join(s.pdEndpoints, ","), conf.Security)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	defer func() {
-		err := kvStore.Close()
-		if err != nil {
-			log.Warn("kv store close failed", zap.Error(err))
-		}
-	}()
-	s.kvStorage = kvStore
-	ctx = contextutil.PutKVStorageInCtx(ctx, kvStore)
 
-	s.capture = capture.NewCapture(s.pdClient, s.kvStorage, s.etcdClient, s.grpcService)
+	s.capture = capture.NewCapture(s.pdEndpoints, s.etcdClient, s.grpcService)
 
 	err = s.startStatusHTTP(s.tcpServer.HTTP1Listener())
 	if err != nil {
@@ -212,8 +171,14 @@ func (s *Server) Run(ctx context.Context) error {
 
 // startStatusHTTP starts the HTTP server.
 // `lis` is a listener that gives us plain-text HTTP requests.
-// TODO can we decouple the HTTP server from the capture server?
+// TODO: can we decouple the HTTP server from the capture server?
 func (s *Server) startStatusHTTP(lis net.Listener) error {
+	// LimitListener returns a Listener that accepts at most n simultaneous
+	// connections from the provided Listener. Connections that exceed the
+	// limit will wait in a queue and no new goroutines will be created until
+	// a connection is processed.
+	// We use it here to limit the max concurrent conections of statusServer.
+	lis = netutil.LimitListener(lis, maxHTTPConnection)
 	conf := config.GetGlobalServerConfig()
 
 	// discard gin log output
@@ -223,7 +188,12 @@ func (s *Server) startStatusHTTP(lis net.Listener) error {
 	RegisterRoutes(router, s.capture, registry)
 
 	// No need to configure TLS because it is already handled by `s.tcpServer`.
-	s.statusServer = &http.Server{Handler: router}
+	// Add ReadTimeout and WriteTimeout to avoid some abnormal connections never close.
+	s.statusServer = &http.Server{
+		Handler:      router,
+		ReadTimeout:  httpConnectionTimeout,
+		WriteTimeout: httpConnectionTimeout,
+	}
 
 	go func() {
 		log.Info("http server is running", zap.String("addr", conf.Addr))

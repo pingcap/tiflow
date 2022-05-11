@@ -297,6 +297,11 @@ function run() {
 		"stop-task $cur/conf/only_warning.yaml" \
 		"\"result\": true" 2
 
+	echo "check task with empty unit config"
+	check_task_empty_config $cur/conf/empty-unit-task.yaml
+	echo "start task with empty unit config"
+	start_task_empty_config $cur/conf/empty-unit-task.yaml
+
 	cp $cur/conf/dm-task.yaml $WORK_DIR/dm-task-error-database-config.yaml
 	sed -i "s/password: \"\"/password: \"wrond password\"/g" $WORK_DIR/dm-task-error-database-config.yaml
 	check_task_error_database_config $WORK_DIR/dm-task-error-database-config.yaml

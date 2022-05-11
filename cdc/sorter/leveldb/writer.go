@@ -38,8 +38,8 @@ type writer struct {
 	maxResolvedTs uint64
 	maxCommitTs   uint64
 
-	metricTotalEventsKV         prometheus.Counter
-	metricTotalEventsResolvedTs prometheus.Counter
+	metricTotalEventsKV       prometheus.Counter
+	metricTotalEventsResolved prometheus.Counter
 }
 
 var _ actor.Actor[message.Task] = (*writer)(nil)
@@ -79,7 +79,7 @@ func (w *writer) Poll(ctx context.Context, msgs []actormsg.Message[message.Task]
 		writes[message.Key(key)] = value
 	}
 	w.metricTotalEventsKV.Add(float64(kvEventCount))
-	w.metricTotalEventsResolvedTs.Add(float64(resolvedEventCount))
+	w.metricTotalEventsResolved.Add(float64(resolvedEventCount))
 
 	if len(writes) != 0 {
 		// Send write task to leveldb.

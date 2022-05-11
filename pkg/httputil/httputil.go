@@ -15,6 +15,7 @@ package httputil
 
 import (
 	"context"
+	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -84,6 +85,37 @@ func (c *Client) PostForm(
 // See http.Client.Do.
 func (c *Client) Do(req *http.Request) (*http.Response, error) {
 	return c.client.Do(req)
+}
+
+// DoRequest sends an request and returns an HTTP response content.
+func (c *Client) DoRequest(
+	ctx context.Context, url, method string, headers http.Header, body io.Reader,
+) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, method, url, body)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	for key, values := range headers {
+		for _, v := range values {
+			req.Header.Add(key, v)
+		}
+	}
+
+	resp, err := c.Do(req)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	defer resp.Body.Close()
+
+	content, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, errors.Errorf("[%d] %s", resp.StatusCode, content)
+	}
+	return content, nil
 }
 
 // CloseIdleConnections closes any connections are now sitting idle.

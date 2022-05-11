@@ -142,6 +142,16 @@ func (k *mqSink) TryEmitRowChangedEvents(ctx context.Context, rows ...*model.Row
 
 // Init table sink resources
 func (k *mqSink) Init(tableID model.TableID) error {
+	// We need to clean up the old values of the table,
+	// otherwise when the table is dispatched back again,
+	// it may read the old values.
+	// See: https://github.com/pingcap/tiflow/issues/4464#issuecomment-1085385382.
+	if checkpointTs, loaded := k.tableCheckpointTsMap.LoadAndDelete(tableID); loaded {
+		log.Info("clean up table checkpoint ts in MQ sink",
+			zap.Int64("tableID", tableID),
+			zap.Uint64("checkpointTs", checkpointTs.(uint64)))
+	}
+
 	return nil
 }
 
@@ -157,7 +167,7 @@ func (k *mqSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowCha
 			continue
 		}
 		topic := k.eventRouter.GetTopicForRowChange(row)
-		partitionNum, err := k.topicManager.Partitions(topic)
+		partitionNum, err := k.topicManager.GetPartitionNum(topic)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -245,7 +255,7 @@ func (k *mqSink) EmitCheckpointTs(ctx context.Context, ts uint64, tables []model
 	// This will be compatible with the old behavior.
 	if len(tables) == 0 {
 		topic := k.eventRouter.GetDefaultTopic()
-		partitionNum, err := k.topicManager.Partitions(topic)
+		partitionNum, err := k.topicManager.GetPartitionNum(topic)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -257,7 +267,7 @@ func (k *mqSink) EmitCheckpointTs(ctx context.Context, ts uint64, tables []model
 	topics := k.eventRouter.GetActiveTopics(tables)
 	log.Debug("MQ sink current active topics", zap.Any("topics", topics))
 	for _, topic := range topics {
-		partitionNum, err := k.topicManager.Partitions(topic)
+		partitionNum, err := k.topicManager.GetPartitionNum(topic)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -304,18 +314,18 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 		zap.String("changefeed", k.id.ID),
 		zap.Any("role", k.role))
 	if partitionRule == dispatcher.PartitionAll {
-		partitionNum, err := k.topicManager.Partitions(topic)
+		partitionNum, err := k.topicManager.GetPartitionNum(topic)
 		if err != nil {
 			return errors.Trace(err)
 		}
 		err = k.mqProducer.SyncBroadcastMessage(ctx, topic, partitionNum, msg)
 		return errors.Trace(err)
 	}
-	// Notice: We must call Partitions here,
+	// Notice: We must call GetPartitionNum here,
 	// which will be responsible for automatically creating topics when they don't exist.
 	// If it is not called here and kafka has `auto.create.topics.enable` turned on,
 	// then the auto-created topic will not be created as configured by ticdc.
-	_, err = k.topicManager.Partitions(topic)
+	_, err = k.topicManager.GetPartitionNum(topic)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -388,6 +398,14 @@ func NewKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
+
+	// we must close adminClient when this func return cause by an error
+	// otherwise the adminClient will never be closed and lead to an goroutine leak
+	defer func() {
+		if err != nil {
+			adminClient.Close()
+		}
+	}()
 
 	if err := kafka.AdjustConfig(adminClient, baseConfig, saramaConfig, topic); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)

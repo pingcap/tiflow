@@ -135,65 +135,7 @@ function DM_RENAME_COLUMN_OPTIMISTIC_CASE() {
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
-		"because schema conflict detected" 2
-
-	# first, execute sql in downstream TiDB
-	run_sql_tidb "alter table ${shardddl}.${tb} change a c int;"
-
-	# second, skip the unsupported ddl
-	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"binlog skip test" \
-		"\"result\": true" 3
-
-	# dmls fail
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"query-status test" \
-		"Paused" 1 \
-		"Unknown column 'a' in 'field list'" 1
-
-	# third, set schema to be same with upstream
-	echo 'CREATE TABLE `tb1` ( `c` int NOT NULL, `b` varchar(10) DEFAULT NULL, PRIMARY KEY (`c`)) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_bin' >${WORK_DIR}/schema1.sql
-	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"binlog-schema update -s mysql-replica-02 test ${shardddl1} ${tb1} ${WORK_DIR}/schema1.sql --flush" \
-		"\"result\": true" 2
-
-	# fourth, resume-task. don't check "result: true" here, because worker may run quickly and meet the error from tb2
-	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"resume-task test"
-
-	# WARN: if it's sequence_sharding, the other tables will not be fixed
-	# source2.table2's dml fails
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"query-status test" \
-		"Unknown column 'a' in 'field list'" 1
-
-	# WARN: set schema of source2.table2
-	# Actually it should be tb2(a,b), dml is {a: 9, b: 'iii'}
-	# Now we set it to tb2(c,b), dml become {c: 9, b: 'iii'}
-	# This may only work for a "rename ddl"
-	echo 'CREATE TABLE `tb2` ( `c` int NOT NULL, `b` varchar(10) DEFAULT NULL, PRIMARY KEY (`c`)) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_bin' >${WORK_DIR}/schema2.sql
-	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"binlog-schema update -s mysql-replica-02 test ${shardddl1} ${tb2} ${WORK_DIR}/schema2.sql --flush" \
-		"\"result\": true" 2
-
-	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"resume-task test -s mysql-replica-02"
-
-	# source2.table2's ddl fails
-	# Unknown column 'a' in 'tb2'
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"query-status test" \
-		"Unknown column 'a' in 'tb2'" 1
-
-	# skip source2.table2's ddl
-	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"binlog skip test -s mysql-replica-02" \
-		"\"result\": true" 2
-
-	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
-	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"query-status test" \
-		"\"result\": true" 3
+		"Running" 3
 
 	# now, it works as normal
 	run_sql_source1 "alter table ${shardddl1}.${tb1} add column d int;"
@@ -210,6 +152,12 @@ function DM_RENAME_COLUMN_OPTIMISTIC_CASE() {
 	run_sql_source1 "insert into ${shardddl1}.${tb1} values(19,'sss',19);"
 	run_sql_source2 "insert into ${shardddl1}.${tb1} values(20,'ttt',20);"
 	run_sql_source2 "insert into ${shardddl1}.${tb2} values(21,'uuu',21);"
+
+	# insert 3 recorde to make sure optimistic mode sharding resolve can finish fast
+	sleep 3
+	run_sql_source1 "insert into ${shardddl1}.${tb1} values(22,'vvv',22);"
+	run_sql_source2 "insert into ${shardddl1}.${tb1} values(23,'www',23);"
+	run_sql_source2 "insert into ${shardddl1}.${tb2} values(24,'xxx',24);"
 
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
@@ -383,12 +331,17 @@ function DM_UpdateBARule_CASE() {
 	run_sql_source2 "alter table ${shardddl1}.${tb1} drop column new_col1"
 	run_sql_source2 "insert into ${shardddl1}.${tb1} values(12);"
 
-	# source2 db2.tb1 do a unsupported DDL
-	run_sql_source2 "alter table ${shardddl2}.${tb1} rename column id to new_id;"
-	# TODO: fix this after DM worker supports redirect
+	# source2 db2.tb1, source1 db2.tb1 do unsupported DDLs and provoke a conflict
+	# source2 db2.tb1 do a rename ddl, should not provoke a conflict
+	run_sql_source2 "alter table ${shardddl2}.${tb1} change id new_id int;"
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
-		"because schema conflict detected" 1
+		"Running" 3
+	# source1 db2.tb1 do a different add column not null ddl, should provoke a conflict
+	run_sql_source1 "alter table ${shardddl2}.${tb1} add column new_col4 int not null;"
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		"fail to try sync the optimistic shard ddl lock" 1
 
 	# user found error and then change block-allow-list, restart task
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \

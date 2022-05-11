@@ -25,11 +25,10 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
-	"github.com/pingcap/tiflow/pkg/txnutil/gc"
+	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/version"
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
@@ -90,12 +89,10 @@ type Owner interface {
 }
 
 type ownerImpl struct {
-	changefeeds map[model.ChangeFeedID]*changefeed
-	captures    map[model.CaptureID]*model.CaptureInfo
-
-	gcManager gc.Manager
-
-	ownerJobQueue struct {
+	changefeeds     map[model.ChangeFeedID]*changefeed
+	captures        map[model.CaptureID]*model.CaptureInfo
+	upstreamManager *upstream.Manager
+	ownerJobQueue   struct {
 		sync.Mutex
 		queue []*ownerJob
 	}
@@ -109,31 +106,32 @@ type ownerImpl struct {
 	//         as it is not a thread-safe value.
 	bootstrapped bool
 
-	newChangefeed func(id model.ChangeFeedID, gcManager gc.Manager) *changefeed
+	newChangefeed func(id model.ChangeFeedID, upStream *upstream.Upstream) *changefeed
 }
 
 // NewOwner creates a new Owner
-func NewOwner(pdClient pd.Client) Owner {
+func NewOwner(upstreamManager *upstream.Manager) Owner {
 	return &ownerImpl{
-		changefeeds:   make(map[model.ChangeFeedID]*changefeed),
-		gcManager:     gc.NewManager(pdClient),
-		lastTickTime:  time.Now(),
-		newChangefeed: newChangefeed,
-		logLimiter:    rate.NewLimiter(versionInconsistentLogRate, versionInconsistentLogRate),
+		upstreamManager: upstreamManager,
+		changefeeds:     make(map[model.ChangeFeedID]*changefeed),
+		lastTickTime:    time.Now(),
+		newChangefeed:   newChangefeed,
+		logLimiter:      rate.NewLimiter(versionInconsistentLogRate, versionInconsistentLogRate),
 	}
 }
 
 // NewOwner4Test creates a new Owner for test
 func NewOwner4Test(
-	newDDLPuller func(ctx cdcContext.Context, startTs uint64) (DDLPuller, error),
+	newDDLPuller func(ctx cdcContext.Context, upStream *upstream.Upstream, startTs uint64) (DDLPuller, error),
 	newSink func() DDLSink,
 	pdClient pd.Client,
 ) Owner {
-	o := NewOwner(pdClient).(*ownerImpl)
+	m := upstream.NewManager4Test(pdClient)
+	o := NewOwner(m).(*ownerImpl)
 	// Most tests do not need to test bootstrap.
 	o.bootstrapped = true
-	o.newChangefeed = func(id model.ChangeFeedID, gcManager gc.Manager) *changefeed {
-		return newChangefeed4Test(id, gcManager, newDDLPuller, newSink)
+	o.newChangefeed = func(id model.ChangeFeedID, upStream *upstream.Upstream) *changefeed {
+		return newChangefeed4Test(id, upStream, newDDLPuller, newSink)
 	}
 	return o
 }
@@ -190,7 +188,8 @@ func (o *ownerImpl) Tick(stdCtx context.Context, rawState orchestrator.ReactorSt
 		})
 		cfReactor, exist := o.changefeeds[changefeedID]
 		if !exist {
-			cfReactor = o.newChangefeed(changefeedID, o.gcManager)
+			upStream := o.upstreamManager.Get(changefeedState.Info.ClusterID)
+			cfReactor = o.newChangefeed(changefeedID, upStream)
 			o.changefeeds[changefeedID] = cfReactor
 		}
 		cfReactor.Tick(ctx, changefeedState, state.Captures)
@@ -220,6 +219,7 @@ func (o *ownerImpl) Tick(stdCtx context.Context, rawState orchestrator.ReactorSt
 		}
 		return state, cerror.ErrReactorFinished.GenWithStackByArgs()
 	}
+
 	return state, nil
 }
 
@@ -291,19 +291,9 @@ func (o *ownerImpl) cleanUpChangefeed(state *orchestrator.ChangefeedReactorState
 	state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
 		return nil, status != nil, nil
 	})
-	for captureID := range state.TaskStatuses {
-		state.PatchTaskStatus(captureID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
-			return nil, status != nil, nil
-		})
-	}
 	for captureID := range state.TaskPositions {
 		state.PatchTaskPosition(captureID, func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
 			return nil, position != nil, nil
-		})
-	}
-	for captureID := range state.Workloads {
-		state.PatchTaskWorkload(captureID, func(workload model.TaskWorkload) (model.TaskWorkload, bool, error) {
-			return nil, workload != nil, nil
 		})
 	}
 }
@@ -349,60 +339,35 @@ func (o *ownerImpl) updateMetrics(state *orchestrator.GlobalReactorState) {
 	ownershipCounter.Add(float64(now.Sub(o.lastTickTime)) / float64(time.Second))
 	o.lastTickTime = now
 
-	conf := config.GetGlobalServerConfig()
-
-	// TODO refactor this piece of code when the new scheduler is stabilized,
-	// and the old scheduler is removed.
-	if conf.Debug != nil && conf.Debug.EnableNewScheduler {
-		for cfID, cf := range o.changefeeds {
-			if cf.state != nil && cf.state.Info != nil {
-				changefeedStatusGauge.WithLabelValues(cfID.ID).
-					Set(float64(cf.state.Info.State.ToInt()))
-			}
-
-			// The InfoProvider is a proxy object returning information
-			// from the scheduler.
-			infoProvider := cf.GetInfoProvider()
-			if infoProvider == nil {
-				// The scheduler has not been initialized yet.
-				continue
-			}
-
-			totalCounts := infoProvider.GetTotalTableCounts()
-			pendingCounts := infoProvider.GetPendingTableCounts()
-
-			for captureID, info := range o.captures {
-				ownerMaintainTableNumGauge.
-					WithLabelValues(cfID.ID,
-						info.AdvertiseAddr, maintainTableTypeTotal).
-					Set(float64(totalCounts[captureID]))
-				ownerMaintainTableNumGauge.
-					WithLabelValues(cfID.ID,
-						info.AdvertiseAddr, maintainTableTypeWip).
-					Set(float64(pendingCounts[captureID]))
-			}
+	for cfID, cf := range o.changefeeds {
+		if cf.state != nil && cf.state.Info != nil {
+			changefeedStatusGauge.WithLabelValues(cfID.Namespace, cfID.ID).
+				Set(float64(cf.state.Info.State.ToInt()))
 		}
-		return
-	}
 
-	for changefeedID, changefeedState := range state.Changefeeds {
-		for captureID, captureInfo := range state.Captures {
-			taskStatus, exist := changefeedState.TaskStatuses[captureID]
-			if !exist {
-				continue
-			}
+		// The InfoProvider is a proxy object returning information
+		// from the scheduler.
+		infoProvider := cf.GetInfoProvider()
+		if infoProvider == nil {
+			// The scheduler has not been initialized yet.
+			continue
+		}
+
+		totalCounts := infoProvider.GetTotalTableCounts()
+		pendingCounts := infoProvider.GetPendingTableCounts()
+
+		for captureID, info := range o.captures {
 			ownerMaintainTableNumGauge.
-				WithLabelValues(changefeedID.ID, captureInfo.AdvertiseAddr, maintainTableTypeTotal).
-				Set(float64(len(taskStatus.Tables)))
+				WithLabelValues(cfID.Namespace, cfID.ID,
+					info.AdvertiseAddr, maintainTableTypeTotal).
+				Set(float64(totalCounts[captureID]))
 			ownerMaintainTableNumGauge.
-				WithLabelValues(changefeedID.ID, captureInfo.AdvertiseAddr, maintainTableTypeWip).
-				Set(float64(len(taskStatus.Operation)))
-			if changefeedState.Info != nil {
-				changefeedStatusGauge.WithLabelValues(changefeedID.ID).
-					Set(float64(changefeedState.Info.State.ToInt()))
-			}
+				WithLabelValues(cfID.Namespace, cfID.ID,
+					info.AdvertiseAddr, maintainTableTypeWip).
+				Set(float64(pendingCounts[captureID]))
 		}
 	}
+	return
 }
 
 func (o *ownerImpl) clusterVersionConsistent(captures map[model.CaptureID]*model.CaptureInfo) bool {
@@ -490,18 +455,16 @@ func (o *ownerImpl) handleQueries(query *Query) error {
 		}
 
 		var ret map[model.CaptureID]*model.TaskStatus
-		if provider := cfReactor.GetInfoProvider(); provider != nil {
-			// If the new scheduler is enabled, provider should be non-nil.
-			var err error
-			ret, err = provider.GetTaskStatuses()
-			if err != nil {
-				return errors.Trace(err)
-			}
-		} else {
-			ret = map[model.CaptureID]*model.TaskStatus{}
-			for captureID, taskStatus := range cfReactor.state.TaskStatuses {
-				ret[captureID] = taskStatus.Clone()
-			}
+		provider := cfReactor.GetInfoProvider()
+		if provider == nil {
+			// The scheduler has not been initialized yet.
+			return cerror.ErrChangeFeedNotExists.GenWithStackByArgs(query.ChangeFeedID)
+		}
+
+		var err error
+		ret, err = provider.GetTaskStatuses()
+		if err != nil {
+			return errors.Trace(err)
 		}
 		query.Data = ret
 	case QueryTaskPositions:
@@ -510,31 +473,31 @@ func (o *ownerImpl) handleQueries(query *Query) error {
 			return cerror.ErrChangeFeedNotExists.GenWithStackByArgs(query.ChangeFeedID)
 		}
 
-		var ret map[model.CaptureID]*model.TaskPosition
-		if provider := cfReactor.GetInfoProvider(); provider != nil {
-			// If the new scheduler is enabled, provider should be non-nil.
-			var err error
-			ret, err = provider.GetTaskPositions()
-			if err != nil {
-				return errors.Trace(err)
-			}
-		} else {
-			if cfReactor.state == nil {
-				return cerror.ErrChangeFeedNotExists.GenWithStackByArgs(query.ChangeFeedID)
-			}
-			ret = map[model.CaptureID]*model.TaskPosition{}
-			for captureID, taskPosition := range cfReactor.state.TaskPositions {
-				ret[captureID] = taskPosition.Clone()
-			}
+		provider := cfReactor.GetInfoProvider()
+		if provider == nil {
+			// The scheduler has not been initialized yet.
+			return cerror.ErrChangeFeedNotExists.GenWithStackByArgs(query.ChangeFeedID)
+		}
+
+		ret, err := provider.GetTaskPositions()
+		if err != nil {
+			return errors.Trace(err)
 		}
 		query.Data = ret
 	case QueryProcessors:
 		var ret []*model.ProcInfoSnap
 		for cfID, cfReactor := range o.changefeeds {
-			if cfReactor.state == nil {
+			provider := cfReactor.GetInfoProvider()
+			if provider == nil {
+				// The scheduler has not been initialized yet.
 				continue
 			}
-			for captureID := range cfReactor.state.TaskStatuses {
+
+			positions, err := provider.GetTaskPositions()
+			if err != nil {
+				return errors.Trace(err)
+			}
+			for captureID := range positions {
 				ret = append(ret, &model.ProcInfoSnap{
 					CfID:      cfID,
 					CaptureID: captureID,
@@ -576,6 +539,8 @@ func (o *ownerImpl) updateGCSafepoint(
 ) error {
 	forceUpdate := false
 	minCheckpointTs := uint64(math.MaxUint64)
+	// 0 is default cluster id
+	minChangfeedClusterID := uint64(0)
 	for changefeedID, changefeedState := range state.Changefeeds {
 		if changefeedState.Info == nil {
 			continue
@@ -588,6 +553,7 @@ func (o *ownerImpl) updateGCSafepoint(
 		checkpointTs := changefeedState.Info.GetCheckpointTs(changefeedState.Status)
 		if minCheckpointTs > checkpointTs {
 			minCheckpointTs = checkpointTs
+			minChangfeedClusterID = changefeedState.Info.ClusterID
 		}
 		// Force update when adding a new changefeed.
 		_, exist := o.changefeeds[changefeedID]
@@ -595,11 +561,14 @@ func (o *ownerImpl) updateGCSafepoint(
 			forceUpdate = true
 		}
 	}
+
+	upStream := o.upstreamManager.Get(minChangfeedClusterID)
+
 	// When the changefeed starts up, CDC will do a snapshot read at
 	// (checkpointTs - 1) from TiKV, so (checkpointTs - 1) should be an upper
 	// bound for the GC safepoint.
 	gcSafepointUpperBound := minCheckpointTs - 1
-	err := o.gcManager.TryUpdateGCSafePoint(ctx, gcSafepointUpperBound, forceUpdate)
+	err := upStream.GCManager.TryUpdateGCSafePoint(ctx, gcSafepointUpperBound, forceUpdate)
 	return errors.Trace(err)
 }
 

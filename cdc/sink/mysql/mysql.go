@@ -180,11 +180,11 @@ func NewMySQLSink(
 	db.SetMaxOpenConns(params.workerCount)
 
 	metricConflictDetectDurationHis := metrics.ConflictDetectDurationHis.
-		WithLabelValues(params.changefeedID.ID)
+		WithLabelValues(params.changefeedID.Namespace, params.changefeedID.ID)
 	metricBucketSizeCounters := make([]prometheus.Counter, params.workerCount)
 	for i := 0; i < params.workerCount; i++ {
 		metricBucketSizeCounters[i] = metrics.BucketSizeCounter.
-			WithLabelValues(params.changefeedID.ID, strconv.Itoa(i))
+			WithLabelValues(params.changefeedID.Namespace, params.changefeedID.ID, strconv.Itoa(i))
 	}
 	ctx, cancel := context.WithCancel(ctx)
 
@@ -518,12 +518,12 @@ func (s *mysqlSink) cleanTableResource(tableID model.TableID) {
 	// it may read the old values.
 	// See: https://github.com/pingcap/tiflow/issues/4464#issuecomment-1085385382.
 	if resolvedTs, loaded := s.tableMaxResolvedTs.LoadAndDelete(tableID); loaded {
-		log.Info("clean up table max resolved ts",
+		log.Info("clean up table max resolved ts in MySQL sink",
 			zap.Int64("tableID", tableID),
 			zap.Uint64("resolvedTs", resolvedTs.(uint64)))
 	}
 	if checkpointTs, loaded := s.tableCheckpointTs.LoadAndDelete(tableID); loaded {
-		log.Info("clean up table checkpoint ts",
+		log.Info("clean up table checkpoint ts in MySQL sink",
 			zap.Int64("tableID", tableID),
 			zap.Uint64("checkpointTs", checkpointTs.(uint64)))
 	}

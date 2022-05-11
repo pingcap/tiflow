@@ -65,10 +65,12 @@ type runState struct {
 
 func (b *bufferSink) run(ctx context.Context, changefeedID model.ChangeFeedID, errCh chan error) {
 	state := runState{
-		metricTotalRows: metrics.BufferSinkTotalRowsCountCounter.WithLabelValues(changefeedID.ID),
+		metricTotalRows: metrics.BufferSinkTotalRowsCountCounter.
+			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 	}
 	defer func() {
-		metrics.BufferSinkTotalRowsCountCounter.DeleteLabelValues(changefeedID.ID)
+		metrics.BufferSinkTotalRowsCountCounter.
+			DeleteLabelValues(changefeedID.Namespace, changefeedID.ID)
 	}()
 
 	for {
@@ -166,6 +168,12 @@ func (b *bufferSink) clearBufferedTableData(tableID model.TableID) {
 	b.bufferMu.Lock()
 	defer b.bufferMu.Unlock()
 	delete(b.buffer, tableID)
+	checkpointTs, loaded := b.tableCheckpointTsMap.LoadAndDelete(tableID)
+	if loaded {
+		log.Info("clean up table checkpoint ts in buffer sink",
+			zap.Int64("tableID", tableID),
+			zap.Uint64("checkpointTs", checkpointTs.(uint64)))
+	}
 }
 
 func (b *bufferSink) TryEmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) (bool, error) {

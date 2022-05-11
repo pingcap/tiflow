@@ -28,6 +28,7 @@ import (
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
+	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/stretchr/testify/require"
 )
 
@@ -42,8 +43,8 @@ func NewManager4Test(
 	t *testing.T,
 	createTablePipeline func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error),
 ) *Manager {
-	m := NewManager()
-	m.newProcessor = func(ctx cdcContext.Context) *processor {
+	m := NewManager(upstream.NewManager4Test(nil))
+	m.newProcessor = func(ctx cdcContext.Context, upStream *upstream.Upstream) *processor {
 		return newProcessor4Test(ctx, t, createTablePipeline)
 	}
 	return m
@@ -100,12 +101,6 @@ func TestChangefeed(t *testing.T) {
 		func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
 			return &model.ChangeFeedStatus{}, true, nil
 		})
-	s.state.Changefeeds[changefeedID].PatchTaskStatus(ctx.GlobalVars().CaptureInfo.ID,
-		func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
-			return &model.TaskStatus{
-				Tables: map[int64]*model.TableReplicaInfo{1: {}},
-			}, true, nil
-		})
 	s.tester.MustApplyPatches()
 	_, err = s.manager.Tick(ctx, s.state)
 	s.tester.MustApplyPatches()
@@ -115,11 +110,6 @@ func TestChangefeed(t *testing.T) {
 	// processor return errors
 	s.state.Changefeeds[changefeedID].PatchStatus(
 		func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
-			status.AdminJobType = model.AdminStop
-			return status, true, nil
-		})
-	s.state.Changefeeds[changefeedID].PatchTaskStatus(ctx.GlobalVars().CaptureInfo.ID,
-		func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
 			status.AdminJobType = model.AdminStop
 			return status, true, nil
 		})
@@ -156,12 +146,6 @@ func TestDebugInfo(t *testing.T) {
 	s.state.Changefeeds[changefeedID].PatchStatus(
 		func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
 			return &model.ChangeFeedStatus{}, true, nil
-		})
-	s.state.Changefeeds[changefeedID].PatchTaskStatus(ctx.GlobalVars().CaptureInfo.ID,
-		func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
-			return &model.TaskStatus{
-				Tables: map[int64]*model.TableReplicaInfo{1: {}},
-			}, true, nil
 		})
 	s.tester.MustApplyPatches()
 	_, err = s.manager.Tick(ctx, s.state)
@@ -217,12 +201,6 @@ func TestClose(t *testing.T) {
 		func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
 			return &model.ChangeFeedStatus{}, true, nil
 		})
-	s.state.Changefeeds[changefeedID].PatchTaskStatus(ctx.GlobalVars().CaptureInfo.ID,
-		func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
-			return &model.TaskStatus{
-				Tables: map[int64]*model.TableReplicaInfo{1: {}},
-			}, true, nil
-		})
 	s.tester.MustApplyPatches()
 	_, err = s.manager.Tick(ctx, s.state)
 	require.Nil(t, err)
@@ -237,7 +215,7 @@ func TestClose(t *testing.T) {
 }
 
 func TestSendCommandError(t *testing.T) {
-	m := NewManager()
+	m := NewManager(nil)
 	ctx, cancel := context.WithCancel(context.TODO())
 	cancel()
 	// Use unbuffered channel to stable test.

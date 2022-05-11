@@ -189,7 +189,8 @@ func NewLogWriter(ctx context.Context, cfg *LogWriterConfig) (*LogWriter, error)
 		}
 	}
 
-	logWriter.metricTotalRowsCount = redoTotalRowsCountGauge.WithLabelValues(cfg.ChangeFeedID.ID)
+	logWriter.metricTotalRowsCount = redoTotalRowsCountGauge.
+		WithLabelValues(cfg.ChangeFeedID.Namespace, cfg.ChangeFeedID.ID)
 	logWriters[cfg.ChangeFeedID] = logWriter
 	go logWriter.runGC(ctx)
 	return logWriter, nil
@@ -554,7 +555,8 @@ var getAllFilesInS3 = func(ctx context.Context, l *LogWriter) ([]string, error) 
 
 // Close implements RedoLogWriter.Close.
 func (l *LogWriter) Close() error {
-	redoTotalRowsCountGauge.DeleteLabelValues(l.cfg.ChangeFeedID.ID)
+	redoTotalRowsCountGauge.
+		DeleteLabelValues(l.cfg.ChangeFeedID.Namespace, l.cfg.ChangeFeedID.ID)
 
 	var err error
 	err = multierr.Append(err, l.rowWriter.Close())

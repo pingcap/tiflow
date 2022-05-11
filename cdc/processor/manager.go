@@ -23,10 +23,10 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
+	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
@@ -48,25 +48,22 @@ type command struct {
 
 // Manager is a manager of processor, which maintains the state and behavior of processors
 type Manager struct {
-	processors map[model.ChangeFeedID]*processor
+	processors      map[model.ChangeFeedID]*processor
+	commandQueue    chan *command
+	upstreamManager *upstream.Manager
 
-	commandQueue chan *command
-
-	newProcessor func(cdcContext.Context) *processor
-
-	enableNewScheduler bool
+	newProcessor func(cdcContext.Context, *upstream.Upstream) *processor
 
 	metricProcessorCloseDuration prometheus.Observer
 }
 
 // NewManager creates a new processor manager
-func NewManager() *Manager {
-	conf := config.GetGlobalServerConfig()
+func NewManager(upstreamManager *upstream.Manager) *Manager {
 	return &Manager{
 		processors:                   make(map[model.ChangeFeedID]*processor),
 		commandQueue:                 make(chan *command, 4),
+		upstreamManager:              upstreamManager,
 		newProcessor:                 newProcessor,
-		enableNewScheduler:           conf.Debug.EnableNewScheduler,
 		metricProcessorCloseDuration: processorCloseDuration,
 	}
 }
@@ -95,23 +92,10 @@ func (m *Manager) Tick(stdCtx context.Context, state orchestrator.ReactorState) 
 		})
 		processor, exist := m.processors[changefeedID]
 		if !exist {
-			if m.enableNewScheduler {
-				failpoint.Inject("processorManagerHandleNewChangefeedDelay", nil)
-				processor = m.newProcessor(ctx)
-				m.processors[changefeedID] = processor
-			} else {
-				if changefeedState.Status.AdminJobType.IsStopState() || changefeedState.TaskStatuses[captureID].AdminJobType.IsStopState() {
-					continue
-				}
-				// the processor should start after at least one table has been added to this capture
-				taskStatus := changefeedState.TaskStatuses[captureID]
-				if taskStatus == nil || (len(taskStatus.Tables) == 0 && len(taskStatus.Operation) == 0) {
-					continue
-				}
-				failpoint.Inject("processorManagerHandleNewChangefeedDelay", nil)
-				processor = m.newProcessor(ctx)
-				m.processors[changefeedID] = processor
-			}
+			upStream := m.upstreamManager.Get(changefeedState.Info.ClusterID)
+			failpoint.Inject("processorManagerHandleNewChangefeedDelay", nil)
+			processor = m.newProcessor(ctx, upStream)
+			m.processors[changefeedID] = processor
 		}
 		if _, err := processor.Tick(ctx, changefeedState); err != nil {
 			m.closeProcessor(changefeedID)
