@@ -598,6 +598,10 @@ func (v *DataValidator) doValidate() {
 }
 
 func (v *DataValidator) Stop() {
+	failpoint.Inject("MockValidationQuery", func() {
+		v.setStage(pb.Stage_Stopped)
+		failpoint.Return()
+	})
 	v.stopInner()
 	v.errProcessWg.Wait()
 }

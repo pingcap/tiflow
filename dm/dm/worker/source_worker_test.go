@@ -818,7 +818,13 @@ func (t *testServer) TestQueryValidator(c *C) {
 	ret, err = w.GetValidatorTableStatus("testQueryValidator", pb.Stage_InvalidStage)
 	c.Assert(err, IsNil)
 	c.Assert(len(ret), Equals, 2)
-	c.Assert(ret, DeepEquals, expected)
+	if ret[0].SrcTable == expected[0].SrcTable {
+		c.Assert(ret[0], DeepEquals, expected[0])
+		c.Assert(ret[1], DeepEquals, expected[1])
+	} else {
+		c.Assert(ret[0], DeepEquals, expected[1])
+		c.Assert(ret[1], DeepEquals, expected[0])
+	}
 	// stop validator, and get same result
 	st.StopValidator()
 	ret, err = w.GetValidatorTableStatus("testQueryValidator", pb.Stage_Running)
@@ -829,6 +835,9 @@ func (t *testServer) TestQueryValidator(c *C) {
 	c.Assert(err, IsNil)
 	c.Assert(len(ret), Equals, 1)
 	c.Assert(ret[0], DeepEquals, expected[1])
+	ret, err = w.GetValidatorTableStatus("testQueryValidator", pb.Stage_InvalidStage)
+	c.Assert(err, IsNil)
+	c.Assert(len(ret), Equals, 2)
 	if ret[0].SrcTable == expected[0].SrcTable {
 		c.Assert(ret[0], DeepEquals, expected[0])
 		c.Assert(ret[1], DeepEquals, expected[1])
@@ -879,6 +888,14 @@ func (t *testServer) TestGetWorkerValidatorErr(c *C) {
 }
 
 func (t *testServer) TestOperateWorkerValidatorErr(c *C) {
+	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/syncer/MockValidationQuery", `return(true)`), IsNil)
+	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/syncer/MockValidationOperation", `return(true)`), IsNil)
+	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/dm/worker/MockValidationQuery", `return(true)`), IsNil)
+	defer func() {
+		c.Assert(failpoint.Disable("github.com/pingcap/tiflow/dm/syncer/MockValidationQuery"), IsNil)
+		c.Assert(failpoint.Disable("github.com/pingcap/tiflow/dm/syncer/MockValidationOperation"), IsNil)
+		c.Assert(failpoint.Disable("github.com/pingcap/tiflow/dm/dm/worker/MockValidationQuery"), IsNil)
+	}()
 	w := t.setupValidator(c)
 	// when subtask name not exists
 	// return empty array

@@ -186,6 +186,7 @@ function run_validator_cmd {
 		"new\/ignored\/resolved: 2\/0\/0" 1 \
 		"\"stage\": \"Running\"" 4 \
 		"\"stage\": \"Stopped\"" 1
+	run_sql_source1 "create table dmctl_command.t_trigger_flush101(id int primary key)" # trigger flush
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation status --table-stage running test" \
