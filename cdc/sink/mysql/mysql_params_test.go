@@ -24,7 +24,6 @@ import (
 	dmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/metrics"
-	"github.com/pingcap/tiflow/pkg/util/testleak"
 	"github.com/stretchr/testify/require"
 )
 
@@ -199,7 +198,7 @@ func TestGenerateDSNByParams(t *testing.T) {
 
 func TestParseSinkURIToParams(t *testing.T) {
 	t.Parallel()
-	defer testleak.AfterTestT(t)()
+
 	expected := defaultParams.Clone()
 	expected.workerCount = 64
 	expected.maxTxnRow = 20
@@ -225,7 +224,7 @@ func TestParseSinkURIToParams(t *testing.T) {
 
 func TestParseSinkURITimezone(t *testing.T) {
 	t.Parallel()
-	defer testleak.AfterTestT(t)()
+
 	uris := []string{
 		"mysql://127.0.0.1:3306/?time-zone=Asia/Shanghai&worker-count=32",
 		"mysql://127.0.0.1:3306/?time-zone=&worker-count=32",
@@ -251,7 +250,7 @@ func TestParseSinkURITimezone(t *testing.T) {
 
 func TestParseSinkURIOverride(t *testing.T) {
 	t.Parallel()
-	defer testleak.AfterTestT(t)()
+
 	cases := []struct {
 		uri     string
 		checker func(*sinkParams)
@@ -291,7 +290,7 @@ func TestParseSinkURIOverride(t *testing.T) {
 
 func TestParseSinkURIBadQueryString(t *testing.T) {
 	t.Parallel()
-	defer testleak.AfterTestT(t)()
+
 	uris := []string{
 		"",
 		"postgre://127.0.0.1:3306",
@@ -329,7 +328,7 @@ func TestParseSinkURIBadQueryString(t *testing.T) {
 
 func TestCheckTiDBVariable(t *testing.T) {
 	t.Parallel()
-	defer testleak.AfterTestT(t)()
+
 	db, mock, err := sqlmock.New()
 	require.Nil(t, err)
 	defer db.Close() //nolint:errcheck
