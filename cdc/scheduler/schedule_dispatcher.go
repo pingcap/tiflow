@@ -104,8 +104,9 @@ type BaseScheduleDispatcher struct {
 	needRebalance        bool
 
 	// at most one capture can be drained at any time.
-	drainTarget   model.CaptureID
-	drainingTable model.TableID
+	drainTarget    model.CaptureID
+	drainingTable  model.TableID
+	drainRelaxTick int
 
 	// read only fields
 	changeFeedID model.ChangeFeedID
@@ -468,13 +469,18 @@ func (s *BaseScheduleDispatcher) findDiffTables(
 		if record.Status == util.AddingTable || record.Status == util.RemovingTable {
 			return
 		}
-		s.logger.Info("DrainCapture: move table finished",
-			zap.Int64("tableID", record.TableID),
-			zap.Int("running", s.tables.CountTableByStatus(util.RunningTable)),
-			zap.Int("adding", s.tables.CountTableByStatus(util.AddingTable)),
-			zap.Int("removing", s.tables.CountTableByStatus(util.RemovingTable)))
-		s.drainingTable = 0
-		return
+
+		s.drainRelaxTick++
+		if s.drainRelaxTick == drainCaptureRelaxTicks {
+			s.drainRelaxTick = 0
+			s.logger.Info("DrainCapture: move table finished",
+				zap.Int64("tableID", record.TableID),
+				zap.Int("running", s.tables.CountTableByStatus(util.RunningTable)),
+				zap.Int("adding", s.tables.CountTableByStatus(util.AddingTable)),
+				zap.Int("removing", s.tables.CountTableByStatus(util.RemovingTable)))
+			s.drainingTable = 0
+			return
+		}
 	}
 
 	for _, record := range s.tables.GetAllTablesGroupedByCaptures()[s.drainTarget] {
@@ -693,6 +699,7 @@ func (s *BaseScheduleDispatcher) DrainCapture(target model.CaptureID) (int, erro
 	s.drainTarget = target
 	// disable rebalance to prevent unnecessary table scheduling.
 	s.needRebalance = false
+	s.logger.Info("DrainCapture: find target", zap.String("target", s.drainTarget))
 	return totalTableCount, nil
 }
 
