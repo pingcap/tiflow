@@ -27,6 +27,7 @@ var defaultOpts = []goleak.Option{
 }
 
 // VerifyNone verifies that no unexpected leaks occur
+// Note that this function is incompatible with `t.Parallel()`
 func VerifyNone(t *testing.T, options ...goleak.Option) {
 	options = append(options, defaultOpts...)
 	goleak.VerifyNone(t, options...)

@@ -24,14 +24,13 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/metrics"
-	"github.com/pingcap/tiflow/pkg/leakutil"
 	"github.com/pingcap/tiflow/pkg/notify"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 )
 
 func TestMysqlSinkWorker(t *testing.T) {
-	defer leakutil.VerifyNone(t)
+	t.Parallel()
 	tbl := &model.TableName{
 		Schema:      "test",
 		Table:       "user",
@@ -212,7 +211,7 @@ func TestMysqlSinkWorker(t *testing.T) {
 }
 
 func TestMySQLSinkWorkerExitWithError(t *testing.T) {
-	defer leakutil.VerifyNone(t)
+	t.Parallel()
 	tbl := &model.TableName{
 		Schema:      "test",
 		Table:       "user",
@@ -299,7 +298,7 @@ func TestMySQLSinkWorkerExitWithError(t *testing.T) {
 }
 
 func TestMySQLSinkWorkerExitCleanup(t *testing.T) {
-	defer leakutil.VerifyNone(t)
+	t.Parallel()
 	tbl := &model.TableName{
 		Schema:      "test",
 		Table:       "user",

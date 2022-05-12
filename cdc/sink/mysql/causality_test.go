@@ -21,12 +21,11 @@ import (
 
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/leakutil"
 	"github.com/stretchr/testify/require"
 )
 
 func TestCausality(t *testing.T) {
-	defer leakutil.VerifyNone(t)
+	t.Parallel()
 	rows := [][][]byte{
 		{[]byte("a")},
 		{[]byte("b")},
@@ -71,7 +70,7 @@ func TestCausality(t *testing.T) {
 }
 
 func TestGenKeys(t *testing.T) {
-	defer leakutil.VerifyNone(t)
+	t.Parallel()
 	testCases := []struct {
 		txn      *model.SingleTableTxn
 		expected [][]byte

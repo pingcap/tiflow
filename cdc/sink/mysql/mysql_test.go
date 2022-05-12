@@ -38,7 +38,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/cyclic/mark"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
-	"github.com/pingcap/tiflow/pkg/leakutil"
 	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -59,7 +58,7 @@ func newMySQLSink4Test(ctx context.Context, t *testing.T) *mysqlSink {
 }
 
 func TestPrepareDML(t *testing.T) {
-	defer leakutil.VerifyNone(t)
+	t.Parallel()
 	testCases := []struct {
 		input    []*model.RowChangedEvent
 		expected *preparedDMLs
@@ -129,7 +128,7 @@ func TestPrepareDML(t *testing.T) {
 }
 
 func TestPrepareUpdate(t *testing.T) {
-	defer leakutil.VerifyNone(t)
+	t.Parallel()
 	testCases := []struct {
 		quoteTable   string
 		preCols      []*model.Column
@@ -364,7 +363,7 @@ func TestPrepareUpdate(t *testing.T) {
 }
 
 func TestPrepareDelete(t *testing.T) {
-	defer leakutil.VerifyNone(t)
+	t.Parallel()
 	testCases := []struct {
 		quoteTable   string
 		preCols      []*model.Column
@@ -506,7 +505,7 @@ func TestPrepareDelete(t *testing.T) {
 }
 
 func TestWhereSlice(t *testing.T) {
-	defer leakutil.VerifyNone(t)
+	t.Parallel()
 	testCases := []struct {
 		cols             []*model.Column
 		forceReplicate   bool
@@ -716,7 +715,7 @@ func TestWhereSlice(t *testing.T) {
 }
 
 func TestMapReplace(t *testing.T) {
-	defer leakutil.VerifyNone(t)
+	t.Parallel()
 	testCases := []struct {
 		quoteTable    string
 		cols          []*model.Column
@@ -834,7 +833,7 @@ func (a sqlArgs) Less(i, j int) bool { return fmt.Sprintf("%s", a[i]) < fmt.Spri
 func (a sqlArgs) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
 
 func TestReduceReplace(t *testing.T) {
-	defer leakutil.VerifyNone(t)
+	t.Parallel()
 	testCases := []struct {
 		replaces   map[string][][]interface{}
 		batchSize  int
@@ -981,7 +980,6 @@ func mockTestDB(adjustSQLMode bool) (*sql.DB, error) {
 }
 
 func TestAdjustSQLMode(t *testing.T) {
-	defer leakutil.VerifyNone(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -1082,7 +1080,7 @@ func (s *mockUnavailableMySQL) Stop() {
 }
 
 func TestNewMySQLTimeout(t *testing.T) {
-	defer leakutil.VerifyNone(t)
+	t.Parallel()
 	addr := "127.0.0.1:33333"
 	mockMySQL := newMockUnavailableMySQL(addr, t)
 	defer mockMySQL.Stop()
@@ -1101,7 +1099,6 @@ func TestNewMySQLTimeout(t *testing.T) {
 }
 
 func TestNewMySQLSinkExecDML(t *testing.T) {
-	defer leakutil.VerifyNone(t)
 	dbIndex := 0
 	mockGetDBConn := func(ctx context.Context, dsnStr string) (*sql.DB, error) {
 		defer func() {
@@ -1285,7 +1282,6 @@ func TestNewMySQLSinkExecDML(t *testing.T) {
 }
 
 func TestExecDMLRollbackErrDatabaseNotExists(t *testing.T) {
-	defer leakutil.VerifyNone(t)
 	rows := []*model.RowChangedEvent{
 		{
 			Table: &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
@@ -1364,7 +1360,6 @@ func TestExecDMLRollbackErrDatabaseNotExists(t *testing.T) {
 }
 
 func TestExecDMLRollbackErrTableNotExists(t *testing.T) {
-	defer leakutil.VerifyNone(t)
 	rows := []*model.RowChangedEvent{
 		{
 			Table: &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
@@ -1443,7 +1438,6 @@ func TestExecDMLRollbackErrTableNotExists(t *testing.T) {
 }
 
 func TestExecDMLRollbackErrRetryable(t *testing.T) {
-	defer leakutil.VerifyNone(t)
 	rows := []*model.RowChangedEvent{
 		{
 			Table: &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
@@ -1527,7 +1521,6 @@ func TestExecDMLRollbackErrRetryable(t *testing.T) {
 }
 
 func TestNewMySQLSinkExecDDL(t *testing.T) {
-	defer leakutil.VerifyNone(t)
 	dbIndex := 0
 	mockGetDBConn := func(ctx context.Context, dsnStr string) (*sql.DB, error) {
 		defer func() {
@@ -1612,7 +1605,7 @@ func TestNewMySQLSinkExecDDL(t *testing.T) {
 }
 
 func TestNeedSwitchDB(t *testing.T) {
-	defer leakutil.VerifyNone(t)
+	t.Parallel()
 	testCases := []struct {
 		ddl        *model.DDLEvent
 		needSwitch bool
@@ -1661,7 +1654,6 @@ func TestNeedSwitchDB(t *testing.T) {
 }
 
 func TestNewMySQLSink(t *testing.T) {
-	defer leakutil.VerifyNone(t)
 	dbIndex := 0
 	mockGetDBConn := func(ctx context.Context, dsnStr string) (*sql.DB, error) {
 		defer func() {
@@ -1703,7 +1695,6 @@ func TestNewMySQLSink(t *testing.T) {
 }
 
 func TestMySQLSinkClose(t *testing.T) {
-	defer leakutil.VerifyNone(t)
 	dbIndex := 0
 	mockGetDBConn := func(ctx context.Context, dsnStr string) (*sql.DB, error) {
 		defer func() {
@@ -1746,7 +1737,6 @@ func TestMySQLSinkClose(t *testing.T) {
 }
 
 func TestMySQLSinkFlushResolvedTs(t *testing.T) {
-	defer leakutil.VerifyNone(t)
 	dbIndex := 0
 	mockGetDBConn := func(ctx context.Context, dsnStr string) (*sql.DB, error) {
 		defer func() {
@@ -1841,7 +1831,6 @@ func TestMySQLSinkFlushResolvedTs(t *testing.T) {
 }
 
 func TestGBKSupported(t *testing.T) {
-	defer leakutil.VerifyNone(t)
 	dbIndex := 0
 	mockGetDBConn := func(ctx context.Context, dsnStr string) (*sql.DB, error) {
 		defer func() {
@@ -1892,7 +1881,7 @@ func TestGBKSupported(t *testing.T) {
 }
 
 func TestCleanTableResource(t *testing.T) {
-	defer leakutil.VerifyNone(t)
+	t.Parallel()
 
 	ctx, cancel := context.WithCancel(context.TODO())
 	defer cancel()
@@ -1921,7 +1910,7 @@ func TestCleanTableResource(t *testing.T) {
 }
 
 func TestHolderString(t *testing.T) {
-	defer leakutil.VerifyNone(t)
+	t.Parallel()
 
 	testCases := []struct {
 		count    int

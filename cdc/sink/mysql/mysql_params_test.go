@@ -24,13 +24,12 @@ import (
 	dmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/metrics"
-	"github.com/pingcap/tiflow/pkg/leakutil"
 	"github.com/pingcap/tiflow/pkg/util/testleak"
 	"github.com/stretchr/testify/require"
 )
 
 func TestSinkParamsClone(t *testing.T) {
-	defer leakutil.VerifyNone(t)
+	t.Parallel()
 	param1 := defaultParams.Clone()
 	param2 := param1.Clone()
 	param2.changefeedID = model.DefaultChangeFeedID("123")
@@ -62,7 +61,7 @@ func TestSinkParamsClone(t *testing.T) {
 }
 
 func TestGenerateDSNByParams(t *testing.T) {
-	defer leakutil.VerifyNone(t)
+	t.Parallel()
 	testDefaultParams := func() {
 		db, err := mockTestDB(false)
 		require.Nil(t, err)
@@ -199,7 +198,7 @@ func TestGenerateDSNByParams(t *testing.T) {
 }
 
 func TestParseSinkURIToParams(t *testing.T) {
-	defer leakutil.VerifyNone(t)
+	t.Parallel()
 	defer testleak.AfterTestT(t)()
 	expected := defaultParams.Clone()
 	expected.workerCount = 64
@@ -225,7 +224,7 @@ func TestParseSinkURIToParams(t *testing.T) {
 }
 
 func TestParseSinkURITimezone(t *testing.T) {
-	defer leakutil.VerifyNone(t)
+	t.Parallel()
 	defer testleak.AfterTestT(t)()
 	uris := []string{
 		"mysql://127.0.0.1:3306/?time-zone=Asia/Shanghai&worker-count=32",
@@ -251,7 +250,7 @@ func TestParseSinkURITimezone(t *testing.T) {
 }
 
 func TestParseSinkURIOverride(t *testing.T) {
-	defer leakutil.VerifyNone(t)
+	t.Parallel()
 	defer testleak.AfterTestT(t)()
 	cases := []struct {
 		uri     string
@@ -291,7 +290,7 @@ func TestParseSinkURIOverride(t *testing.T) {
 }
 
 func TestParseSinkURIBadQueryString(t *testing.T) {
-	defer leakutil.VerifyNone(t)
+	t.Parallel()
 	defer testleak.AfterTestT(t)()
 	uris := []string{
 		"",
@@ -329,7 +328,7 @@ func TestParseSinkURIBadQueryString(t *testing.T) {
 }
 
 func TestCheckTiDBVariable(t *testing.T) {
-	defer leakutil.VerifyNone(t)
+	t.Parallel()
 	defer testleak.AfterTestT(t)()
 	db, mock, err := sqlmock.New()
 	require.Nil(t, err)
