@@ -6,7 +6,7 @@ const (
 	// captureIDNotDraining is a placeholder for no capture is draining now.
 	captureIDNotDraining       = ""
 	drainCaptureTableBatchSize = 1
-	drainCaptureRelaxTicks     = 10
+	drainCaptureRelaxTicks     = 100
 )
 
 type drainCaptureController interface {
