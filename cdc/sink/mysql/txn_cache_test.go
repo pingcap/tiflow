@@ -20,13 +20,11 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/util/testleak"
 	"github.com/stretchr/testify/require"
 )
 
 func TestSplitResolvedTxn(test *testing.T) {
-	defer testleak.AfterTestT(test)()
-
+	test.Parallel()
 	testCases := [][]struct {
 		input         []*model.RowChangedEvent
 		resolvedTsMap map[model.TableID]uint64
