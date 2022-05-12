@@ -260,7 +260,7 @@ func newProcessor(ctx cdcContext.Context, upStream *upstream.Upstream) *processo
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		metricProcessorTickDuration: processorTickDuration.
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
-		metricsTableSinkTotalRows: sinkmetric.TableSinkTotalRowsCountCounter.WithLabelValues(changefeedID.ID),
+		metricsTableSinkTotalRows: sinkmetric.TableSinkTotalRowsCountCounter.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 	}
 	p.createTablePipeline = p.createTablePipelineImpl
 	p.lazyInit = p.lazyInitImpl
