@@ -1687,7 +1687,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 
 	// startLocation is the start location for current received event
 	// currentLocation is the end location for current received event (End_log_pos in `show binlog events` for mysql)
-	// lastLocation is the end location for last received (ROTATE / QUERY / XID) event
+	// lastLocation is the end location for last received and fully executed (ROTATE / QUERY / XID) event
 	// we use startLocation to replace and skip binlog event of specified position
 	// we use currentLocation and update table checkpoint in sharding ddl
 	// we use lastLocation to update global checkpoint and table checkpoint
@@ -1860,17 +1860,21 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			if err2 != nil {
 				return err2
 			}
-			if lastLocation.GetGTID().Contain(gtidSet) {
+			if currentLocation.GetGTID().Contain(gtidSet) {
 				return nil
 			}
 		}
 
-		// clone lastLocation's gtid set to avoid its gtid is transport to table checkpoint
-		// currently table checkpoint will save last location's gtid set with shallow copy
-		lastLocation = lastLocation.Clone()
-		err2 := lastLocation.Update(currentGTID)
+		// clone currentLocation's gtid set to avoid its gtid is transport to table checkpoint
+		// currently table checkpoint will save  location's gtid set with shallow copy
+		newGTID := currentLocation.GetGTID().Clone()
+		err2 := newGTID.Update(currentGTID)
 		if err2 != nil {
 			return terror.Annotatef(err2, "fail to update GTID %s", currentGTID)
+		}
+		err2 = currentLocation.SetGTID(newGTID.Origin())
+		if err2 != nil {
+			return terror.Annotatef(err2, "fail to set GTID %s", newGTID.Origin())
 		}
 		return nil
 	}
@@ -2089,10 +2093,11 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 					Name: lastLocation.Position.Name,
 					Pos:  e.Header.LogPos,
 				},
-				lastLocation.GetGTID(),
+				currentLocation.GetGTID(),
 			)
 			currentLocation.Suffix = endSuffix
 
+			// TODO: can be removed in the future
 			if queryEvent, ok := ev.(*replication.QueryEvent); ok {
 				err = currentLocation.SetGTID(queryEvent.GSet)
 				if err != nil {
@@ -2251,13 +2256,12 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			}
 
 			currentLocation.Position.Pos = e.Header.LogPos
-			err = currentLocation.SetGTID(ev.GSet)
+			s.tctx.L().Debug("", zap.String("event", "XID"), zap.Stringer("last location", lastLocation), log.WrapStringerField("location", currentLocation))
+			lastLocation.Position.Pos = e.Header.LogPos // update lastPos
+			err = lastLocation.SetGTID(ev.GSet)
 			if err != nil {
 				return terror.Annotatef(err, "fail to record GTID %v", ev.GSet)
 			}
-
-			s.tctx.L().Debug("", zap.String("event", "XID"), zap.Stringer("last location", lastLocation), log.WrapStringerField("location", currentLocation))
-			lastLocation.Position.Pos = e.Header.LogPos // update lastPos
 			for schemaName, tableMap := range affectedSourceTables {
 				for table := range tableMap {
 					s.saveTablePoint(&filter.Table{Schema: schemaName, Name: table}, currentLocation)
@@ -2441,7 +2445,7 @@ func (s *Syncer) handleRowsEvent(ev *replication.RowsEvent, ec eventContext) (*f
 			Name: ec.lastLocation.Position.Name,
 			Pos:  ec.header.LogPos,
 		},
-		ec.lastLocation.GetGTID(),
+		ec.currentLocation.GetGTID(),
 	)
 
 	if ec.shardingReSync != nil {
