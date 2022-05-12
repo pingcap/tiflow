@@ -65,9 +65,6 @@ type ddlSinkImpl struct {
 		checkpointTs      model.Ts
 		currentTableNames []model.TableName
 	}
-	// ddlFinishedTsMap is used to check whether a ddl event in a ddl job has
-	// been executed successfully.
-	ddlFinishedTsMap sync.Map
 	// ddlSentTsMap is used to check whether a ddl event in a ddl job has been
 	// sent to `ddlCh` successfully.
 	ddlSentTsMap map[*model.DDLEvent]model.Ts
@@ -198,7 +195,7 @@ func (s *ddlSinkImpl) run(ctx cdcContext.Context, id model.ChangeFeedID, info *m
 						zap.String("changefeed", ctx.ChangefeedVars().ID.ID),
 						zap.Bool("ignored", err != nil),
 						zap.Any("ddl", ddl))
-					s.ddlFinishedTsMap.Store(ddl, ddl.CommitTs)
+					ddl.Done = true
 					// Force emitting checkpoint ts when a ddl event is finished.
 					// Otherwise, a kafka consumer may not execute that ddl event.
 					s.mu.Lock()
@@ -242,19 +239,12 @@ func (s *ddlSinkImpl) emitCheckpointTs(ts uint64, tableNames []model.TableName) 
 // and CommitTs. So in emitDDLEvent, we get the DDL finished ts of an event
 // from a map in order to check whether that event is finshed or not.
 func (s *ddlSinkImpl) emitDDLEvent(ctx cdcContext.Context, ddl *model.DDLEvent) (bool, error) {
-	var ddlFinishedTs model.Ts
-
-	ts, ok := s.ddlFinishedTsMap.Load(ddl)
-	if ok {
-		ddlFinishedTs = ts.(model.Ts)
-	}
-	if ddl.CommitTs <= ddlFinishedTs {
+	if ddl.Done {
 		// the DDL event is executed successfully, and done is true
 		log.Info("ddl already executed",
 			zap.String("namespace", ctx.ChangefeedVars().ID.Namespace),
 			zap.String("changefeed", ctx.ChangefeedVars().ID.ID),
-			zap.Uint64("ddlFinishedTs", ddlFinishedTs), zap.Any("DDL", ddl))
-		s.ddlFinishedTsMap.Delete(ddl)
+			zap.Any("DDL", ddl))
 		delete(s.ddlSentTsMap, ddl)
 		return true, nil
 	}
@@ -282,7 +272,7 @@ func (s *ddlSinkImpl) emitDDLEvent(ctx cdcContext.Context, ddl *model.DDLEvent) 
 			zap.String("namespace", ctx.ChangefeedVars().ID.Namespace),
 			zap.String("changefeed", ctx.ChangefeedVars().ID.ID),
 			zap.Uint64("ddlSentTs", ddlSentTs),
-			zap.Uint64("ddlFinishedTs", ddlFinishedTs), zap.Any("DDL", ddl))
+			zap.Any("DDL", ddl))
 		// if this hit, we think that ddlCh is full,
 		// just return false and send the ddl in the next round.
 	}
