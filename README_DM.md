@@ -1,17 +1,10 @@
 # TiDB Data Migration Platform
 
-[![Build Status](https://internal.pingcap.net/idc-jenkins/job/build_dm_multi_branch/job/master/badge/icon)](https://internal.pingcap.net/idc-jenkins/job/build_dm_multi_branch/job/master)
-![GitHub release](https://img.shields.io/github/tag/pingcap/dm.svg)
-[![Coverage Status](https://coveralls.io/repos/github/pingcap/dm/badge.svg)](https://coveralls.io/github/pingcap/dm)
-[![codecov](https://codecov.io/gh/pingcap/dm/branch/master/graph/badge.svg)](https://codecov.io/gh/pingcap/dm)
-[![Go Report Card](https://goreportcard.com/badge/github.com/pingcap/dm)](https://goreportcard.com/report/github.com/pingcap/dm)
-[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Fpingcap%2Fdm.svg?type=shield)](https://app.fossa.com/projects/git%2Bgithub.com%2Fpingcap%2Fdm?ref=badge_shield)
-
 [**TiDB Data Migration (DM)**](https://docs.pingcap.com/tidb-data-migration/stable) is an integrated data migration task management platform that supports full data migration and incremental data replication from MySQL/MariaDB into [TiDB](https://docs.pingcap.com/tidb/stable). It helps reduce the operations cost and simplify the troubleshooting process.
 
 ## Architecture
 
-![architecture](docs/media/dm-architecture.png)
+![architecture](dm/docs/media/dm-architecture.png)
 
 ## Documentation
 
@@ -26,7 +19,7 @@ To check the code style and build binaries, you can simply run:
 make build
 ```
 
-Note that DM supports building with Go version `Go >= 1.16`, and unit test preparation can be found in [Running/Unit Test](tests/README.md#Unit-Test)
+Note that DM supports building with Go version `Go >= 1.16`, and unit test preparation can be found in [Running/Unit Test](dm/tests/README.md#Unit-Test)
 
 If you only want to build binaries, you can run:
 
@@ -44,7 +37,7 @@ When DM is built successfully, you can find binaries in the `bin` directory.
 
 Run all tests, including unit tests and integration tests:
 
-See [test/README.md](./tests/README.md) for a more detailed guidance.
+See [Tests README](dm/tests/README.md) for a more detailed guidance.
 
 ```bash
 make test
@@ -60,20 +53,14 @@ See the "Configuration" section in [our doc](https://docs.pingcap.com/tidb-data-
 
 ## Roadmap
 
-Read the [Roadmap](roadmap.md).
+Read the [Roadmap](dm/roadmap.md).
 
 ## Contributing
 
-Contributions are welcomed and greatly appreciated. See [CONTRIBUTING.md](./CONTRIBUTING.md)
+Contributions are welcomed and greatly appreciated. See [CONTRIBUTING.md](dm/CONTRIBUTING.md)
 for details on submitting patches and the contribution workflow.
 
 Any questions? Let's discuss on [TiDB Internals forum](https://internals.tidb.io/).
-
-## License
-
-DM is under the Apache 2.0 license. See the [LICENSE](./LICENSE) file for details.
-
-[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Fpingcap%2Fdm.svg?type=large)](https://app.fossa.com/projects/git%2Bgithub.com%2Fpingcap%2Fdm?ref=badge_large)
 
 ## More resources
 

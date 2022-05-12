@@ -60,11 +60,9 @@ type Capture struct {
 	session  *concurrency.Session
 	election *concurrency.Election
 
-	EtcdClient   *etcd.CDCEtcdClient
-	sorterSystem *ssystem.System
-
-	enableNewScheduler bool
-	tableActorSystem   *system.System
+	EtcdClient       *etcd.CDCEtcdClient
+	sorterSystem     *ssystem.System
+	tableActorSystem *system.System
 
 	// MessageServer is the receiver of the messages from the other nodes.
 	// It should be recreated each time the capture is restarted.
@@ -88,13 +86,11 @@ type Capture struct {
 
 // NewCapture returns a new Capture instance
 func NewCapture(pdEnpoints []string, etcdClient *etcd.CDCEtcdClient, grpcService *p2p.ServerWrapper) *Capture {
-	conf := config.GetGlobalServerConfig()
 	return &Capture{
 		EtcdClient:          etcdClient,
 		grpcService:         grpcService,
 		cancel:              func() {},
 		pdEnpoints:          pdEnpoints,
-		enableNewScheduler:  conf.Debug.EnableNewScheduler,
 		newProcessorManager: processor.NewManager,
 		newOwner:            owner.NewOwner,
 	}
@@ -178,31 +174,26 @@ func (c *Capture) reset(ctx context.Context) error {
 		}
 	}
 
-	if c.enableNewScheduler {
-		c.grpcService.Reset(nil)
+	c.grpcService.Reset(nil)
 
-		if c.MessageRouter != nil {
-			c.MessageRouter.Close()
-			c.MessageRouter.Wait()
-			c.MessageRouter = nil
-		}
+	if c.MessageRouter != nil {
+		c.MessageRouter.Close()
+		c.MessageRouter.Wait()
+		c.MessageRouter = nil
 	}
+	messageServerConfig := conf.Debug.Messages.ToMessageServerConfig()
+	c.MessageServer = p2p.NewMessageServer(c.info.ID, messageServerConfig)
+	c.grpcService.Reset(c.MessageServer)
 
-	if c.enableNewScheduler {
-		messageServerConfig := conf.Debug.Messages.ToMessageServerConfig()
-		c.MessageServer = p2p.NewMessageServer(c.info.ID, messageServerConfig)
-		c.grpcService.Reset(c.MessageServer)
+	messageClientConfig := conf.Debug.Messages.ToMessageClientConfig()
 
-		messageClientConfig := conf.Debug.Messages.ToMessageClientConfig()
+	// Puts the advertise-addr of the local node to the client config.
+	// This is for metrics purpose only, so that the receiver knows which
+	// node the connections are from.
+	advertiseAddr := conf.AdvertiseAddr
+	messageClientConfig.AdvertisedAddr = advertiseAddr
 
-		// Puts the advertise-addr of the local node to the client config.
-		// This is for metrics purpose only, so that the receiver knows which
-		// node the connections are from.
-		advertiseAddr := conf.AdvertiseAddr
-		messageClientConfig.AdvertisedAddr = advertiseAddr
-
-		c.MessageRouter = p2p.NewMessageRouter(c.info.ID, conf.Security, messageClientConfig)
-	}
+	c.MessageRouter = p2p.NewMessageRouter(c.info.ID, conf.Security, messageClientConfig)
 
 	log.Info("init capture",
 		zap.String("captureID", c.info.ID),
@@ -289,14 +280,12 @@ func (c *Capture) run(stdCtx context.Context) error {
 
 		globalState := orchestrator.NewGlobalState()
 
-		if c.enableNewScheduler {
-			globalState.SetOnCaptureAdded(func(captureID model.CaptureID, addr string) {
-				c.MessageRouter.AddPeer(captureID, addr)
-			})
-			globalState.SetOnCaptureRemoved(func(captureID model.CaptureID) {
-				c.MessageRouter.RemovePeer(captureID)
-			})
-		}
+		globalState.SetOnCaptureAdded(func(captureID model.CaptureID, addr string) {
+			c.MessageRouter.AddPeer(captureID, addr)
+		})
+		globalState.SetOnCaptureRemoved(func(captureID model.CaptureID) {
+			c.MessageRouter.RemovePeer(captureID)
+		})
 
 		// when the etcd worker of processor returns an error, it means that the processor throws an unrecoverable serious errors
 		// (recoverable errors are intercepted in the processor tick)
@@ -304,15 +293,13 @@ func (c *Capture) run(stdCtx context.Context) error {
 		processorErr = c.runEtcdWorker(ctx, c.processorManager, globalState, processorFlushInterval, "processor")
 		log.Info("the processor routine has exited", zap.Error(processorErr))
 	}()
-	if c.enableNewScheduler {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			defer c.AsyncClose()
-			defer c.grpcService.Reset(nil)
-			messageServerErr = c.MessageServer.Run(ctx)
-		}()
-	}
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		defer c.AsyncClose()
+		defer c.grpcService.Reset(nil)
+		messageServerErr = c.MessageServer.Run(ctx)
+	}()
 	wg.Wait()
 	if ownerErr != nil {
 		return errors.Annotate(ownerErr, "owner exited with error")
@@ -394,14 +381,12 @@ func (c *Capture) campaignOwner(ctx cdcContext.Context) error {
 
 		globalState := orchestrator.NewGlobalState()
 
-		if c.enableNewScheduler {
-			globalState.SetOnCaptureAdded(func(captureID model.CaptureID, addr string) {
-				c.MessageRouter.AddPeer(captureID, addr)
-			})
-			globalState.SetOnCaptureRemoved(func(captureID model.CaptureID) {
-				c.MessageRouter.RemovePeer(captureID)
-			})
-		}
+		globalState.SetOnCaptureAdded(func(captureID model.CaptureID, addr string) {
+			c.MessageRouter.AddPeer(captureID, addr)
+		})
+		globalState.SetOnCaptureRemoved(func(captureID model.CaptureID) {
+			c.MessageRouter.RemovePeer(captureID)
+		})
 
 		err = c.runEtcdWorker(ownerCtx, owner, orchestrator.NewGlobalState(), ownerFlushInterval, "owner")
 		c.setOwner(nil)
@@ -523,14 +508,12 @@ func (c *Capture) AsyncClose() {
 		}
 		c.sorterSystem = nil
 	}
-	if c.enableNewScheduler {
-		c.grpcService.Reset(nil)
+	c.grpcService.Reset(nil)
 
-		if c.MessageRouter != nil {
-			c.MessageRouter.Close()
-			c.MessageRouter.Wait()
-			c.MessageRouter = nil
-		}
+	if c.MessageRouter != nil {
+		c.MessageRouter.Close()
+		c.MessageRouter.Wait()
+		c.MessageRouter = nil
 	}
 }
 

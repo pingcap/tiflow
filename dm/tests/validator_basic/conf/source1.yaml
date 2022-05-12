@@ -1,0 +1,15 @@
+source-id: mysql-replica-01
+flavor: ''
+enable-gtid: false
+enable-relay: false
+relay-binlog-name: ''
+relay-binlog-gtid: ''
+from:
+  host: 127.0.0.1
+  user: root
+  password: '123456'
+  port: 3306
+checker:
+  check-enable: true
+  backoff-rollback: 5m
+  backoff-max: 5m

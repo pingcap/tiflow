@@ -76,7 +76,7 @@ type EventRouter struct {
 	}
 }
 
-// NewEventRouter creates a new EventRouter
+// NewEventRouter creates a new EventRouter.
 func NewEventRouter(cfg *config.ReplicaConfig, defaultTopic string) (*EventRouter, error) {
 	// If an event does not match any dispatching rules in the config file,
 	// it will be dispatched by the default partition dispatcher and
@@ -125,8 +125,6 @@ func (s *EventRouter) GetTopicForRowChange(row *model.RowChangedEvent) string {
 }
 
 // GetTopicForDDL returns the target topic for DDL.
-// FIXME: Now we can't handle rename tables because
-// we are missing the old and new tables information.
 func (s *EventRouter) GetTopicForDDL(ddl *model.DDLEvent) string {
 	var schema, table string
 	if ddl.PreTableInfo != nil {
