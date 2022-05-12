@@ -286,7 +286,10 @@ func (m *WorkerManager) Tick(ctx context.Context) error {
 		}
 
 		if event.beforeHook != nil {
-			event.beforeHook()
+			if ok := event.beforeHook(); !ok {
+				// Continue to the next event.
+				continue
+			}
 		}
 
 		switch event.Tp {
@@ -345,11 +348,12 @@ func (m *WorkerManager) AbortCreatingWorker(workerID libModel.WorkerID, errIn er
 			manager:  m,
 		},
 		Err: errIn,
-		beforeHook: func() {
+		beforeHook: func() bool {
 			m.mu.Lock()
 			defer m.mu.Unlock()
 
 			delete(m.workerEntries, workerID)
+			return true
 		},
 	}
 
@@ -369,20 +373,35 @@ func (m *WorkerManager) OnWorkerStatusUpdateMessage(msg *statusutil.WorkerStatus
 	}
 
 	entry, exists := m.workerEntries[msg.Worker]
-	if exists {
-		err := entry.StatusReader().OnAsynchronousNotification(msg.Status)
-		if err != nil {
-			log.L().Warn("Error encountered when processing status update",
-				zap.String("master-id", m.masterID),
-				zap.Any("message", msg),
-				zap.Error(err))
-		}
+	if !exists {
+		log.L().Info("WorkerStatusMessage dropped for unknown worker",
+			zap.String("master-id", m.masterID),
+			zap.Any("message", msg))
 		return
 	}
 
-	log.L().Info("WorkerStatusMessage dropped for unknown worker",
-		zap.String("master-id", m.masterID),
-		zap.Any("message", msg))
+	event := &masterEvent{
+		Tp: workerStatusUpdatedEvent,
+		Handle: &runningHandleImpl{
+			workerID:   msg.Worker,
+			executorID: entry.executorID,
+			manager:    m,
+		},
+		WorkerID: msg.Worker,
+		beforeHook: func() bool {
+			if entry.IsTombstone() {
+				// Cancel the event
+				return false
+			}
+			entry.UpdateStatus(msg.Status)
+			return true
+		},
+	}
+
+	if err := m.enqueueEvent(event); err != nil {
+		m.errCenter.OnError(err)
+		return
+	}
 }
 
 func (m *WorkerManager) GetWorkers() map[libModel.WorkerID]WorkerHandle {
@@ -436,23 +455,6 @@ func (m *WorkerManager) checkWorkerEntriesOnce() error {
 
 		if entry.ExpireTime().After(m.clock.Now()) {
 			// Not timed out
-			if reader := entry.StatusReader(); reader != nil {
-				if _, ok := reader.Receive(); ok {
-					err := m.enqueueEvent(&masterEvent{
-						Tp:       workerStatusUpdatedEvent,
-						WorkerID: workerID,
-						Handle: &runningHandleImpl{
-							workerID:   workerID,
-							executorID: entry.executorID,
-							manager:    m,
-						},
-					})
-					if err != nil {
-						return err
-					}
-				}
-			}
-
 			continue
 		}
 
@@ -460,8 +462,8 @@ func (m *WorkerManager) checkWorkerEntriesOnce() error {
 		entry.MarkAsOffline()
 
 		var offlineError error
-		if reader := entry.StatusReader(); reader != nil {
-			switch reader.Status().Code {
+		if status := entry.Status(); status != nil {
+			switch status.Code {
 			case libModel.WorkerStatusFinished:
 				offlineError = derror.ErrWorkerFinish.FastGenByArgs()
 			case libModel.WorkerStatusStopped:
@@ -479,8 +481,9 @@ func (m *WorkerManager) checkWorkerEntriesOnce() error {
 				manager:  m,
 			},
 			Err: offlineError,
-			beforeHook: func() {
+			beforeHook: func() bool {
 				entry.MarkAsTombstone()
+				return true
 			},
 		})
 		if err != nil {

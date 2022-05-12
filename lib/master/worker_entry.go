@@ -9,7 +9,6 @@ import (
 	"go.uber.org/zap"
 
 	libModel "github.com/hanfei1991/microcosm/lib/model"
-	"github.com/hanfei1991/microcosm/lib/statusutil"
 	"github.com/hanfei1991/microcosm/model"
 )
 
@@ -54,8 +53,8 @@ type workerEntry struct {
 	expireAt time.Time
 	state    workerEntryState
 
-	statusReaderMu sync.RWMutex
-	statusReader   *statusutil.Reader
+	statusMu sync.RWMutex
+	status   *libModel.WorkerStatus
 }
 
 func newWorkerEntry(
@@ -65,16 +64,12 @@ func newWorkerEntry(
 	state workerEntryState,
 	initWorkerStatus *libModel.WorkerStatus,
 ) *workerEntry {
-	var stReader *statusutil.Reader
-	if initWorkerStatus != nil {
-		stReader = statusutil.NewReader(initWorkerStatus)
-	}
 	return &workerEntry{
-		id:           id,
-		executorID:   executorID,
-		expireAt:     expireAt,
-		state:        state,
-		statusReader: stReader,
+		id:         id,
+		executorID: executorID,
+		expireAt:   expireAt,
+		state:      state,
+		status:     initWorkerStatus,
 	}
 }
 
@@ -145,22 +140,18 @@ func (e *workerEntry) MarkAsOffline() {
 	log.L().Panic("Unreachable", zap.Stringer("entry", e))
 }
 
-func (e *workerEntry) StatusReader() *statusutil.Reader {
-	e.statusReaderMu.RLock()
-	defer e.statusReaderMu.RUnlock()
+func (e *workerEntry) Status() *libModel.WorkerStatus {
+	e.statusMu.RLock()
+	defer e.statusMu.RUnlock()
 
-	return e.statusReader
+	return e.status
 }
 
-func (e *workerEntry) InitStatus(status *libModel.WorkerStatus) {
-	e.statusReaderMu.Lock()
-	defer e.statusReaderMu.Unlock()
+func (e *workerEntry) UpdateStatus(status *libModel.WorkerStatus) {
+	e.statusMu.Lock()
+	defer e.statusMu.Unlock()
 
-	if e.statusReader != nil {
-		log.L().Panic("double InitStatus", zap.Stringer("entry", e))
-	}
-
-	e.statusReader = statusutil.NewReader(status)
+	e.status = status
 }
 
 func (e *workerEntry) SetExpireTime(expireAt time.Time) {
