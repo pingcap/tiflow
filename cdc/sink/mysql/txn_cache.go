@@ -36,7 +36,7 @@ func (t *txnsWithTheSameCommitTs) Append(row *model.RowChangedEvent) {
 	}
 
 	var txn *model.SingleTableTxn
-	if len(t.txns) == 0 || t.txns[len(t.txns)-1].StartTs < row.StartTs {
+	if len(t.txns) == 0 || t.txns[len(t.txns)-1].StartTs < row.StartTs || row.SplitTxn {
 		txn = &model.SingleTableTxn{
 			StartTs:   row.StartTs,
 			CommitTs:  row.CommitTs,

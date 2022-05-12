@@ -20,7 +20,14 @@ import (
 	"github.com/edwingeng/deque"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc/model"
 	"go.uber.org/zap"
+)
+
+const (
+	maxRowsPerTxn = 1024
+	maxSizePerTxn = 1024 * 1024 /* 1MB */
+	batchSize     = 100
 )
 
 // TableFlowController provides a convenient interface to control the memory consumption of a per table event stream
@@ -31,13 +38,17 @@ type TableFlowController struct {
 		sync.Mutex
 		queue deque.Deque
 	}
+	txnsWithSameCommitTs uint
 
 	lastCommitTs uint64
 }
 
-type commitTsSizeEntry struct {
+type txnSizeEntry struct {
+	// txn id
+	startTs  uint64
 	commitTs uint64
 	size     uint64
+	rowCount uint64
 }
 
 // NewTableFlowController creates a new TableFlowController
@@ -55,7 +66,12 @@ func NewTableFlowController(quota uint64) *TableFlowController {
 
 // Consume is called when an event has arrived for being processed by the sink.
 // It will handle transaction boundaries automatically, and will not block intra-transaction.
-func (c *TableFlowController) Consume(commitTs uint64, size uint64, blockCallBack func() error) error {
+func (c *TableFlowController) Consume(
+	msg *model.PolymorphicEvent,
+	commitTs uint64,
+	size uint64,
+	callBack func(batch bool) error,
+) error {
 	lastCommitTs := atomic.LoadUint64(&c.lastCommitTs)
 
 	if commitTs < lastCommitTs {
@@ -65,8 +81,7 @@ func (c *TableFlowController) Consume(commitTs uint64, size uint64, blockCallBac
 	}
 
 	if commitTs > lastCommitTs {
-		atomic.StoreUint64(&c.lastCommitTs, commitTs)
-		err := c.memoryQuota.consumeWithBlocking(size, blockCallBack)
+		err := c.memoryQuota.consumeWithBlocking(size, callBack)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -82,13 +97,7 @@ func (c *TableFlowController) Consume(commitTs uint64, size uint64, blockCallBac
 		}
 	}
 
-	c.queueMu.Lock()
-	defer c.queueMu.Unlock()
-	c.queueMu.queue.PushBack(&commitTsSizeEntry{
-		commitTs: commitTs,
-		size:     size,
-	})
-
+	c.enqueueSingleMsg(msg, commitTs, size)
 	return nil
 }
 
@@ -98,7 +107,7 @@ func (c *TableFlowController) Release(resolvedTs uint64) {
 
 	c.queueMu.Lock()
 	for c.queueMu.queue.Len() > 0 {
-		if peeked := c.queueMu.queue.Front().(*commitTsSizeEntry); peeked.commitTs <= resolvedTs {
+		if peeked := c.queueMu.queue.Front().(*txnSizeEntry); peeked.commitTs <= resolvedTs {
 			nBytesToRelease += peeked.size
 			c.queueMu.queue.PopFront()
 		} else {
@@ -108,6 +117,62 @@ func (c *TableFlowController) Release(resolvedTs uint64) {
 	c.queueMu.Unlock()
 
 	c.memoryQuota.release(nBytesToRelease)
+}
+
+func (c *TableFlowController) enqueueSingleMsg(
+	msg *model.PolymorphicEvent,
+	commitTs uint64,
+	size uint64,
+) {
+	lastCommitTs := atomic.LoadUint64(&c.lastCommitTs)
+
+	c.queueMu.Lock()
+	defer c.queueMu.Unlock()
+
+	var e deque.Elem
+	// 1. Processing a new transaction.
+	if e = c.queueMu.queue.Back(); e == nil || lastCommitTs < commitTs {
+		c.queueMu.queue.PushBack(&txnSizeEntry{
+			startTs:  msg.StartTs,
+			commitTs: commitTs,
+			size:     size,
+			rowCount: 1,
+		})
+		c.txnsWithSameCommitTs = 1
+		atomic.StoreUint64(&c.lastCommitTs, commitTs)
+		return
+	}
+
+	// Processing txns with the same commitTs.
+	txnEntry := e.(*txnSizeEntry)
+	if txnEntry.commitTs != lastCommitTs {
+		log.Panic("got wrong commitTs from deque, report a bug",
+			zap.Uint64("lastCommitTs", c.lastCommitTs),
+			zap.Uint64("commitTsInDeque", txnEntry.commitTs))
+	}
+
+	// 2. Append row to current transaction entry.
+	if txnEntry.startTs == msg.Row.StartTs &&
+		txnEntry.rowCount < maxRowsPerTxn && txnEntry.size < maxSizePerTxn {
+		txnEntry.size += size
+		txnEntry.rowCount++
+		return
+	}
+
+	// 3. Split the txn or handle a new txn with the same commitTs.
+	c.queueMu.queue.PushBack(&txnSizeEntry{
+		startTs:  msg.StartTs,
+		commitTs: commitTs,
+		size:     size,
+		rowCount: 1,
+	})
+	c.txnsWithSameCommitTs++
+	// mark the first data of new txnSizeEntry
+	msg.Row.SplitTxn = true
+	if c.txnsWithSameCommitTs >= batchSize {
+		// TODO(CharlesCheung): add batch resolve mechanism to mitigate oom problem
+		log.Debug("emit batch resolve event")
+	}
 }
 
 // Abort interrupts any ongoing Consume call

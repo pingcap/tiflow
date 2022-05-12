@@ -267,6 +267,9 @@ type RowChangedEvent struct {
 	// ApproximateDataSize is the approximate size of protobuf binary
 	// representation of this event.
 	ApproximateDataSize int64 `json:"-" msg:"-"`
+
+	// SplitTxn marks this RowChangedEvent as the first line of a new batch
+	SplitTxn bool `json:"-" msg:"-"`
 }
 
 // IsDelete returns true if the row is a delete event
