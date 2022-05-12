@@ -141,7 +141,7 @@ func TestDebugInfo(t *testing.T) {
 			return &model.ChangeFeedInfo{
 				SinkURI:    "blackhole://",
 				CreateTime: time.Now(),
-				StartTs:    0,
+				StartTs:    1,
 				TargetTs:   math.MaxUint64,
 				Config:     config.GetDefaultReplicaConfig(),
 			}, true, nil

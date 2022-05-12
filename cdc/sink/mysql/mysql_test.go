@@ -58,6 +58,7 @@ func newMySQLSink4Test(ctx context.Context, t *testing.T) *mysqlSink {
 }
 
 func TestPrepareDML(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		input    []*model.RowChangedEvent
 		expected *preparedDMLs
@@ -127,6 +128,7 @@ func TestPrepareDML(t *testing.T) {
 }
 
 func TestPrepareUpdate(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		quoteTable   string
 		preCols      []*model.Column
@@ -361,6 +363,7 @@ func TestPrepareUpdate(t *testing.T) {
 }
 
 func TestPrepareDelete(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		quoteTable   string
 		preCols      []*model.Column
@@ -502,6 +505,7 @@ func TestPrepareDelete(t *testing.T) {
 }
 
 func TestWhereSlice(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		cols             []*model.Column
 		forceReplicate   bool
@@ -711,6 +715,7 @@ func TestWhereSlice(t *testing.T) {
 }
 
 func TestMapReplace(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		quoteTable    string
 		cols          []*model.Column
@@ -828,6 +833,7 @@ func (a sqlArgs) Less(i, j int) bool { return fmt.Sprintf("%s", a[i]) < fmt.Spri
 func (a sqlArgs) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
 
 func TestReduceReplace(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		replaces   map[string][][]interface{}
 		batchSize  int
@@ -1074,6 +1080,7 @@ func (s *mockUnavailableMySQL) Stop() {
 }
 
 func TestNewMySQLTimeout(t *testing.T) {
+	t.Parallel()
 	addr := "127.0.0.1:33333"
 	mockMySQL := newMockUnavailableMySQL(addr, t)
 	defer mockMySQL.Stop()
@@ -1598,6 +1605,7 @@ func TestNewMySQLSinkExecDDL(t *testing.T) {
 }
 
 func TestNeedSwitchDB(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		ddl        *model.DDLEvent
 		needSwitch bool

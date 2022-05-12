@@ -109,12 +109,12 @@ func NewMockTableExecutor(t *testing.T) *MockTableExecutor {
 }
 
 // AddTable adds a table to the executor.
-func (e *MockTableExecutor) AddTable(ctx cdcContext.Context, tableID model.TableID) (bool, error) {
+func (e *MockTableExecutor) AddTable(ctx cdcContext.Context, tableID model.TableID, startTs model.Ts) (bool, error) {
 	log.Info("AddTable", zap.Int64("tableID", tableID))
 	require.NotContains(e.t, e.Adding, tableID)
 	require.NotContains(e.t, e.Running, tableID)
 	require.NotContains(e.t, e.Removing, tableID)
-	args := e.Called(ctx, tableID)
+	args := e.Called(ctx, tableID, startTs)
 	if args.Bool(0) {
 		// If the mock return value indicates a success, then we record the added table.
 		e.Adding[tableID] = struct{}{}
