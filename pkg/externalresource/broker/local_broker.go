@@ -9,13 +9,13 @@ import (
 	"testing"
 
 	"github.com/gogo/status"
-	"github.com/hanfei1991/microcosm/pb"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 
+	"github.com/hanfei1991/microcosm/pb"
 	"github.com/hanfei1991/microcosm/pkg/externalresource/manager"
 	resourcemeta "github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta/model"
 	"github.com/hanfei1991/microcosm/pkg/externalresource/storagecfg"
@@ -24,7 +24,7 @@ import (
 // LocalBroker is a broker unit-testing other components
 // that depend on a Broker.
 type LocalBroker struct {
-	*Impl
+	*DefaultBroker
 
 	clientMu sync.Mutex
 	client   *manager.MockClient
@@ -42,8 +42,8 @@ func NewBrokerForTesting(executorID resourcemeta.ExecutorID) *LocalBroker {
 	cfg := &storagecfg.Config{Local: &storagecfg.LocalFileConfig{BaseDir: dir}}
 	client := manager.NewWrappedMockClient()
 	return &LocalBroker{
-		Impl:   NewBroker(cfg, executorID, client),
-		client: client.GetLeaderClient().(*manager.MockClient),
+		DefaultBroker: NewBroker(cfg, executorID, client),
+		client:        client.GetLeaderClient().(*manager.MockClient),
 	}
 }
 
@@ -69,7 +69,7 @@ func (b *LocalBroker) OpenStorage(
 	defer func() {
 		b.client.ExpectedCalls = nil
 	}()
-	h, err := b.Impl.OpenStorage(ctx, workerID, jobID, resourcePath)
+	h, err := b.DefaultBroker.OpenStorage(ctx, workerID, jobID, resourcePath)
 	if err != nil {
 		return nil, err
 	}
