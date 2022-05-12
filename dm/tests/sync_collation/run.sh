@@ -95,7 +95,7 @@ function run() {
 	run_sql_file $cur/data/db2.prepare_err.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
 
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-    "start-task $WORK_DIR/dm-task.yaml --remove-meta"
+		"start-task $WORK_DIR/dm-task.yaml --remove-meta"
 
 	echo "check full phase error"
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
