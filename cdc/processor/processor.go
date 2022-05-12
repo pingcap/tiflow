@@ -905,7 +905,7 @@ func (p *processor) Close() error {
 			zap.String("namespace", p.changefeedID.Namespace),
 			zap.String("changefeed", p.changefeedID.ID))
 		start := time.Now()
-		if err := p.sink.Close(ctx); err != nil {
+		if err := p.sink.Close(ctx); err != nil && errors.Cause(err) != context.Canceled {
 			log.Info("processor close sink failed",
 				zap.String("namespace", p.changefeedID.Namespace),
 				zap.String("changefeed", p.changefeedID.ID),
