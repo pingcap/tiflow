@@ -846,9 +846,9 @@ func (s *OpenAPIViewSuite) TestTaskAPI() {
 	createTaskReq := openapi.CreateTaskRequest{Task: task}
 	result = testutil.NewRequest().Post(taskURL).WithJsonBody(createTaskReq).GoWithHTTPHandler(s.T(), s1.openapiHandles)
 	s.Equal(http.StatusCreated, result.Code())
-	var createTaskResp openapi.Task
+	var createTaskResp openapi.OperateTaskResponse
 	s.NoError(result.UnmarshalBodyToObject(&createTaskResp))
-	s.Equal(createTaskResp.Name, task.Name)
+	s.Equal(createTaskResp.Task.Name, task.Name)
 	subTaskM := s1.scheduler.GetSubTaskCfgsByTask(task.Name)
 	s.Len(subTaskM, 1)
 	s.Equal(task.Name, subTaskM[source1Name].Name)
@@ -869,8 +869,9 @@ func (s *OpenAPIViewSuite) TestTaskAPI() {
 	updateReq := openapi.UpdateTaskRequest{Task: clone}
 	result = testutil.NewRequest().Put(task1URL).WithJsonBody(updateReq).GoWithHTTPHandler(s.T(), s1.openapiHandles)
 	s.Equal(http.StatusOK, result.Code())
-	s.NoError(result.UnmarshalBodyToObject(&task1FromHTTP))
-	s.EqualValues(task1FromHTTP.SourceConfig.IncrMigrateConf.ReplBatch, clone.SourceConfig.IncrMigrateConf.ReplBatch)
+	var updateResp openapi.OperateTaskResponse
+	s.NoError(result.UnmarshalBodyToObject(&updateResp))
+	s.EqualValues(updateResp.Task.SourceConfig.IncrMigrateConf.ReplBatch, clone.SourceConfig.IncrMigrateConf.ReplBatch)
 	s.NoError(failpoint.Disable("github.com/pingcap/tiflow/dm/dm/master/scheduler/operateCheckSubtasksCanUpdate"))
 
 	// list tasks

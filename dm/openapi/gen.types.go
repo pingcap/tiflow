@@ -231,6 +231,15 @@ type MasterTopology struct {
 	Port int    `json:"port"`
 }
 
+// OperateTaskResponse defines model for OperateTaskResponse.
+type OperateTaskResponse struct {
+	// pre-check result
+	CheckResult string `json:"check_result"`
+
+	// task
+	Task Task `json:"task"`
+}
+
 // action to operate table request
 type OperateTaskTableStructureRequest struct {
 	// Writes the schema to the checkpoint so that DM can load it after restarting the task
@@ -463,6 +472,9 @@ type Task struct {
 
 	// whether to enable support for the online ddl plugin
 	EnhanceOnlineSchemaChange bool `json:"enhance_online_schema_change"`
+
+	// ignore precheck items
+	IgnoreCheckingItems *[]string `json:"ignore_checking_items,omitempty"`
 
 	// downstream database for storing meta information
 	MetaSchema *string `json:"meta_schema,omitempty"`
