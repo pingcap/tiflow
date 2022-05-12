@@ -62,7 +62,9 @@ type changefeed struct {
 	// ddlEventCache will be set to nil. ddlEventCache contains more than
 	// one event for a rename tables DDL job.
 	ddlEventCache []*model.DDLEvent
-	ddlEventDone  []bool
+	// each item of ddlEventDone is used for indicating whether an event in
+	// ddlEventCache is finished or not
+	ddlEventDone []bool
 	// currentTableNames is the table names that the changefeed is watching.
 	// And it contains only the tables of the ddl that have been processed.
 	// The ones that have not been executed yet do not have.
