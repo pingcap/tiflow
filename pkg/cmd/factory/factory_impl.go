@@ -20,7 +20,6 @@ import (
 
 	"github.com/pingcap/errors"
 	tidbkv "github.com/pingcap/tidb/kv"
-	"github.com/pingcap/tiflow/pkg/config"
 	pd "github.com/tikv/pd/client"
 	etcdlogutil "go.etcd.io/etcd/client/pkg/v3/logutil"
 	clientv3 "go.etcd.io/etcd/client/v3"
@@ -83,7 +82,6 @@ func (f *factoryImpl) GetClusterID() string {
 
 // EtcdClient creates new cdc etcd client.
 func (f *factoryImpl) EtcdClient() (*etcd.CDCEtcdClient, error) {
-	updateGlobalClusterID(f.clientGetter.GetClusterID())
 	ctx := cmdconetxt.GetDefaultContext()
 	tlsConfig, err := f.ToTLSConfig()
 	if err != nil {
@@ -188,10 +186,4 @@ func (f factoryImpl) KvStorage() (tidbkv.Storage, error) {
 			"fail to open KV storage client, please check pd address \"%s\"", pdAddr)
 	}
 	return kvStore, nil
-}
-
-func updateGlobalClusterID(clusterID string) {
-	conf := config.GetDefaultServerConfig()
-	conf.ClusterID = clusterID
-	config.StoreGlobalServerConfig(conf)
 }

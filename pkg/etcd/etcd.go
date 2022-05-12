@@ -104,7 +104,8 @@ func NewCDCEtcdClient(ctx context.Context,
 	}
 	return CDCEtcdClient{
 		Client:    Wrap(cli, metrics),
-		ClusterID: clusterID}
+		ClusterID: clusterID,
+	}
 }
 
 // Close releases resources in CDCEtcdClient

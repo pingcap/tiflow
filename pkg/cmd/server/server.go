@@ -228,6 +228,8 @@ func (o *options) complete(cmd *cobra.Command) error {
 					"sort-dir will be set to `{data-dir}/tmp/sorter`. The sort-dir here will be no-op\n"))
 			}
 			cfg.Sorter.SortDir = config.DefaultSortDir
+		case "cluster-id":
+			cfg.ClusterID = o.serverConfig.ClusterID
 		case "pd", "config":
 			// do nothing
 		default:

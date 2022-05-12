@@ -89,7 +89,7 @@ func (c *ClientFlags) GetLogLevel() string {
 
 // GetClusterID returns cdc cluster id.
 func (c *ClientFlags) GetClusterID() string {
-	return c.logLevel
+	return c.clusterID
 }
 
 // NewClientFlags creates new client flags.
