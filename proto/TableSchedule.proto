@@ -30,14 +30,20 @@ message Checkpoint {
 
 message AddTableRequest {
     int64 table_id = 1
-        [(gogoproto.casttype) = "github.com/pingcap/tiflow/cdc/model.TableID"];
+        [
+            (gogoproto.casttype) = "github.com/pingcap/tiflow/cdc/model.TableID",
+            (gogoproto.customname) = "TableID"
+        ];
     bool is_secondary = 2;
     Checkpoint checkpoint = 3;
 }
 
 message RemoveTableRequest {
     int64 table_id = 1
-        [(gogoproto.casttype) = "github.com/pingcap/tiflow/cdc/model.TableID"];
+        [
+            (gogoproto.casttype) = "github.com/pingcap/tiflow/cdc/model.TableID",
+            (gogoproto.customname) = "TableID"
+        ];
 }
 
 message DispatchTableRequest {
@@ -48,7 +54,10 @@ message DispatchTableRequest {
 
 message AddTableResponse {
     int64 table_id = 1
-        [(gogoproto.casttype) = "github.com/pingcap/tiflow/cdc/model.TableID"];
+        [
+            (gogoproto.casttype) = "github.com/pingcap/tiflow/cdc/model.TableID",
+            (gogoproto.customname) = "TableID"
+        ];
     bool is_secondary = 2;
     Checkpoint checkpoint = 3;
     bool reject = 4;
@@ -56,7 +65,10 @@ message AddTableResponse {
 
 message RemoveTableResponse {
     int64 table_id = 1
-        [(gogoproto.casttype) = "github.com/pingcap/tiflow/cdc/model.TableID"];
+        [
+            (gogoproto.casttype) = "github.com/pingcap/tiflow/cdc/model.TableID",
+            (gogoproto.customname) = "TableID"
+        ];
     Checkpoint checkpoint = 2;
 }
 
@@ -71,27 +83,29 @@ message Announce { OwnerRevision owner_revision = 1; }
 
 // TableState is the state of table repliction in processor.
 //
-//  ┌───────────┐   ┌──────────┐
-//  │ Preparing ├─> │ Prepared ├───────┐
-//  └───────────┘   └──────────┘       v
-//                              ┌─────────────┐
-//                              │ Replicating │
-//                              └──────┬──────┘
-//  ┌───────────┐   ┌──────────┐       │
-//  │ Stopped   │ <─┤ Stopping │ <─────┘
-//  └───────────┘   └──────────┘
+//  ┌────────┐   ┌───────────┐   ┌──────────┐
+//  │ Absent ├─> │ Preparing ├─> │ Prepared │
+//  └────────┘   └───────────┘   └─────┬────┘
+//                                     v
+//  ┌─────────┐   ┌──────────┐   ┌─────────────┐
+//  │ Stopped │ <─┤ Stopping │ <─┤ Replicating │
+//  └─────────┘   └──────────┘   └─────────────┘
 enum TableState {
     Unknown = 0;
-    Preparing = 1;
-    Prepared = 2;
-    Replicating = 3;
-    Stopping = 4;
-    Stopped = 5;
+    Absent = 1;
+    Preparing = 2;
+    Prepared = 3;
+    Replicating = 4;
+    Stopping = 5;
+    Stopped = 6;
 }
 
 message TableStatus {
     int64 table_id = 1
-        [(gogoproto.casttype) = "github.com/pingcap/tiflow/cdc/model.TableID"];
+        [
+            (gogoproto.casttype) = "github.com/pingcap/tiflow/cdc/model.TableID",
+            (gogoproto.customname) = "TableID"
+        ];
     TableState state = 2;
     Checkpoint checkpoint = 3;
 }

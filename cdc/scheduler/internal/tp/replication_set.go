@@ -14,18 +14,18 @@
 package tp
 
 import (
+	"fmt"
+
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/tp/schedulepb"
 )
 
 // ReplicationSetState is the state of ReplicationSet in owner.
 //
-//     Absent
-//       │
-//       v
-//  ┌───────────┐
-//  │ Preparing │<──────┐
-//  └────┬──────┘       │
+//  ┌────────┐   ┌─────────┐
+//  │ Absent ├─> │ Prepare │
+//  └────────┘   └──┬──────┘
+//       ┌──────────┘   ^
 //       v              │
 //  ┌────────┐   ┌──────┴──────┐
 //  │ Commit ├──>│ Replicating │<── Move table
@@ -33,19 +33,49 @@ import (
 type ReplicationSetState int
 
 const (
-	Prepare     ReplicationSetState = 1
-	Commit      ReplicationSetState = 2
-	Replicating ReplicationSetState = 3
+	// Unknown means the replication state is unknown, it should not happen.
+	Unknown ReplicationSetState = 0
+	// Absent means there is no one replicates or prepares it.
+	Absent      ReplicationSetState = 1
+	Prepare     ReplicationSetState = 2
+	Commit      ReplicationSetState = 3
+	Replicating ReplicationSetState = 4
 )
 
+func (r ReplicationSetState) String() string {
+	switch r {
+	case Absent:
+		return "Absent"
+	case Prepare:
+		return "Prepare"
+	case Commit:
+		return "Commit"
+	case Replicating:
+		return "Replicating"
+	default:
+		return fmt.Sprintf("Unknown %d", r)
+	}
+}
+
 type ReplicationSet struct {
+	TableID    model.TableID
 	State      ReplicationSetState
 	Primary    model.CaptureID
-	Secondary  []model.CaptureID
+	Captures   map[model.CaptureID]schedulepb.TableState
 	Checkpoint model.Ts
 }
 
-func newReplicationSet(tableStatus *schedulepb.TableStatus) *ReplicationSet {
+func newReplicationSet(
+	tableStatus map[model.CaptureID]*schedulepb.TableStatus,
+) *ReplicationSet {
+	return nil
+}
+
+// poll transit replication state based on input and the current state.
+// See ReplicationSetState's comment for the state transition.
+func (r *ReplicationSet) poll(
+	input schedulepb.TableState, captureID model.CaptureID,
+) []*schedulepb.Message {
 	return nil
 }
 
