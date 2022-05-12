@@ -81,6 +81,8 @@ func (w *mysqlSinkWorker) run(ctx context.Context) (err error) {
 		txnNum     int
 	)
 
+	defer w.cleanup()
+
 	defer func() {
 		if r := recover(); r != nil {
 			buf := make([]byte, 4096)
@@ -155,4 +157,8 @@ func (w *mysqlSinkWorker) cleanup() {
 			return
 		}
 	}
+}
+
+func (w *mysqlSinkWorker) close() {
+	w.closedCh <- struct{}{}
 }

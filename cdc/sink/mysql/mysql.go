@@ -221,8 +221,8 @@ func NewMySQLSink(
 
 	sink.workerWg.Add(1)
 	go func() {
+		defer sink.workerWg.Done()
 		sink.flushRowChangedEvents(ctx, receiver)
-		sink.workerWg.Done()
 	}()
 
 	return sink, nil
@@ -267,7 +267,7 @@ func (s *mysqlSink) FlushRowChangedEvents(ctx context.Context, tableID model.Tab
 func (s *mysqlSink) flushRowChangedEvents(ctx context.Context, receiver *notify.Receiver) {
 	defer func() {
 		for _, worker := range s.workers {
-			worker.closedCh <- struct{}{}
+			worker.close()
 		}
 	}()
 	for {
@@ -435,6 +435,7 @@ func (s *mysqlSink) createSinkWorkers(ctx context.Context) error {
 		s.workers[i] = worker
 		s.workerWg.Add(1)
 		go func() {
+			defer s.workerWg.Done()
 			err := worker.run(ctx)
 			if err != nil && errors.Cause(err) != context.Canceled {
 				select {
@@ -443,8 +444,6 @@ func (s *mysqlSink) createSinkWorkers(ctx context.Context) error {
 					log.Info("mysql sink receives redundant error", zap.Error(err))
 				}
 			}
-			worker.cleanup()
-			s.workerWg.Done()
 		}()
 	}
 	return nil
