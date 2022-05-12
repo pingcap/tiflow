@@ -834,4 +834,8 @@ func (s *BaseScheduleDispatcher) OnAgentCheckpoint(captureID model.CaptureID, ch
 
 	status.CheckpointTs = checkpointTs
 	status.ResolvedTs = resolvedTs
+
+	if s.drainTarget != captureIDNotDraining {
+		logger.Info("DrainCapture: checkpoint received")
+	}
 }
