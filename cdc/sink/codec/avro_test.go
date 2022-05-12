@@ -701,7 +701,7 @@ func TestRowToAvroData(t *testing.T) {
 	require.False(t, exists)
 	_, exists = data["_tidb_op"]
 	require.False(t, exists)
-	_, exists = data["_tidb_physical_time"]
+	_, exists = data["_tidb_commit_physical_time"]
 	require.False(t, exists)
 
 	data, err = rowToAvroData(cols, colInfos, 417318403368288260, "c", true, "precise", "long")
@@ -709,7 +709,7 @@ func TestRowToAvroData(t *testing.T) {
 	v, exists := data["_tidb_commit_ts"]
 	require.True(t, exists)
 	require.Equal(t, int64(417318403368288260), v.(int64))
-	v, exists = data["_tidb_physical_time"]
+	v, exists = data["_tidb_commit_physical_time"]
 	require.True(t, exists)
 	require.Equal(t, int64(1591943372224), v.(int64))
 	v, exists = data["_tidb_op"]
@@ -783,7 +783,7 @@ func TestAvroEncode(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, res)
 	for k := range res.(map[string]interface{}) {
-		if k == "_tidb_commit_ts" || k == "_tidb_op" || k == "_tidb_physical_time" {
+		if k == "_tidb_commit_ts" || k == "_tidb_op" || k == "_tidb_commit_physical_time" {
 			require.Fail(t, "key shall not include extension fields")
 		}
 	}

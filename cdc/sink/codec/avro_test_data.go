@@ -1643,7 +1643,7 @@ var expectedSchemaWithExtension = `{
       "type": "long"
     },
     {
-      "name": "_tidb_physical_time",
+      "name": "_tidb_commit_physical_time",
       "type": "long"
     }
   ]

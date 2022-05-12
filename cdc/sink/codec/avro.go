@@ -250,7 +250,7 @@ const (
 	tidbType         = "tidb_type"
 	tidbOp           = "_tidb_op"
 	tidbCommitTs     = "_tidb_commit_ts"
-	tidbPhysicalTime = "_tidb_physical_time"
+	tidbPhysicalTime = "_tidb_commit_physical_time"
 )
 
 var type2TiDBType = map[byte]string{
