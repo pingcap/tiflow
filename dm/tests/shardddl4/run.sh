@@ -422,8 +422,10 @@ function DM_130_CASE() {
 	run_sql_source2 "insert into ${shardddl1}.${tb1} values(5,5);"
 	run_sql_source2 "insert into ${shardddl1}.${tb2} values(6,6);"
 
-	# make sure 2 DM-workers have a order to see DDL
-	sleep 2
+	if [[ "$1" = "optimistic" ]]; then
+		check_log_contain_with_retry "finish to handle ddls in optimistic shard mode.*alter table ${shardddl1}.${tb1} modify b int default 0" \
+			$WORK_DIR/worker1/log/dm-worker.log $WORK_DIR/worker2/log/dm-worker.log
+	fi
 
 	run_sql_source2 "alter table ${shardddl1}.${tb1} modify b int default -1;"
 	run_sql_source1 "insert into ${shardddl1}.${tb1}(a) values(7);"
