@@ -157,7 +157,7 @@ func newCluster(ctx context.Context, pd string) (*cluster, error) {
 	ret := &cluster{
 		ownerAddr:  "",
 		captures:   nil,
-		cdcEtcdCli: etcd.NewCDCEtcdClient(ctx, etcdCli),
+		cdcEtcdCli: etcd.NewCDCEtcdClient(ctx, etcdCli, etcd.DefaultCDCClusterID),
 	}
 
 	log.Info("new cluster initialized")
@@ -208,7 +208,8 @@ func (c *cluster) moveAllTables(ctx context.Context, sourceCapture, targetCaptur
 }
 
 func (c *cluster) refreshInfo(ctx context.Context) error {
-	ownerID, err := c.cdcEtcdCli.GetOwnerID(ctx, etcd.CaptureOwnerKey)
+	ownerID, err := c.cdcEtcdCli.GetOwnerID(ctx,
+		etcd.CaptureOwnerKey(c.cdcEtcdCli.ClusterID))
 	if err != nil {
 		return errors.Trace(err)
 	}

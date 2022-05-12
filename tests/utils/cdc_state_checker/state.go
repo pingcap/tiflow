@@ -35,13 +35,14 @@ type cdcReactorState struct {
 }
 
 var (
-	captureRegex    = regexp.MustCompile(regexp.QuoteMeta(etcd.CaptureInfoKeyPrefix()) + "/(.+)")
+	captureRegex = regexp.MustCompile(regexp.QuoteMeta(
+		etcd.CaptureInfoKeyPrefix(etcd.DefaultCDCClusterID)) + "/(.+)")
 	changefeedRegex = regexp.MustCompile(regexp.
-			QuoteMeta(etcd.JobKeyPrefix(model.DefaultNamespace)) + "/(.+)")
+			QuoteMeta(etcd.JobKeyPrefix(etcd.DefaultCDCClusterID,
+			model.DefaultNamespace)) + "/(.+)")
 	positionRegex = regexp.MustCompile(regexp.
-			QuoteMeta(etcd.TaskPositionKeyPrefix(model.DefaultNamespace)) + "/(.+?)/(.+)")
-	statusRegex = regexp.MustCompile(regexp.
-			QuoteMeta(etcd.TaskStatusKeyPrefix(model.DefaultNamespace)) + "/(.+?)/(.+)")
+			QuoteMeta(etcd.TaskPositionKeyPrefix(etcd.DefaultCDCClusterID,
+			model.DefaultNamespace)) + "/(.+?)/(.+)")
 )
 
 func newCDCReactorState() *cdcReactorState {
@@ -54,7 +55,7 @@ func newCDCReactorState() *cdcReactorState {
 }
 
 func (s *cdcReactorState) Update(key util.EtcdKey, value []byte, isInit bool) error {
-	if key.String() == etcd.CaptureOwnerKey() {
+	if key.String() == etcd.CaptureOwnerKey(etcd.DefaultCDCClusterID) {
 		if value == nil {
 			log.Info("Owner lost", zap.String("oldOwner", s.Owner))
 			return nil
@@ -181,55 +182,6 @@ func (s *cdcReactorState) Update(key util.EtcdKey, value []byte, isInit bool) er
 		}
 
 		s.TaskPositions[changefeedID][captureID] = &newTaskPosition
-
-		return nil
-	}
-
-	if matches := statusRegex.FindSubmatch(key.Bytes()); matches != nil {
-		captureID := string(matches[1])
-		changefeedID := model.DefaultChangeFeedID(string(matches[2]))
-
-		if value == nil {
-			log.Info("Status deleted",
-				zap.String("captureID", captureID),
-				zap.String("namespace", changefeedID.Namespace),
-				zap.String("changefeed", changefeedID.ID),
-				zap.Reflect("oldStatus", s.TaskStatuses[changefeedID][captureID]))
-
-			delete(s.TaskStatuses[changefeedID], captureID)
-			if len(s.TaskStatuses[changefeedID]) == 0 {
-				delete(s.TaskStatuses, changefeedID)
-			}
-
-			return nil
-		}
-
-		var newTaskStatus model.TaskStatus
-		err := json.Unmarshal(value, &newTaskStatus)
-		if err != nil {
-			return errors.Trace(err)
-		}
-
-		if _, ok := s.TaskStatuses[changefeedID]; !ok {
-			s.TaskStatuses[changefeedID] = make(map[model.CaptureID]*model.TaskStatus)
-		}
-
-		if status, ok := s.TaskStatuses[changefeedID][captureID]; ok {
-			log.Info("Status updated",
-				zap.String("captureID", captureID),
-				zap.String("namespace", changefeedID.Namespace),
-				zap.String("changefeed", changefeedID.ID),
-				zap.Reflect("oldStatus", status),
-				zap.Reflect("newStatus", newTaskStatus))
-		} else {
-			log.Info("Status updated",
-				zap.String("captureID", captureID),
-				zap.String("namespace", changefeedID.Namespace),
-				zap.String("changefeed", changefeedID.ID),
-				zap.Reflect("newStatus", newTaskStatus))
-		}
-
-		s.TaskStatuses[changefeedID][captureID] = &newTaskStatus
 
 		return nil
 	}

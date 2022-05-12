@@ -155,7 +155,7 @@ func newAgentTestSuite(t *testing.T) *agentTestSuite {
 }
 
 func (s *agentTestSuite) CreateAgent(t *testing.T) (*agentImpl, error) {
-	cdcEtcdClient := etcd.NewCDCEtcdClient(s.ctx, s.etcdClient)
+	cdcEtcdClient := etcd.NewCDCEtcdClient(s.ctx, s.etcdClient, etcd.DefaultCDCClusterID)
 	messageServer := s.cluster.Nodes["capture-1"].Server
 	messageRouter := s.cluster.Nodes["capture-1"].Router
 	s.tableExecutor = pscheduler.NewMockTableExecutor(t)

@@ -74,7 +74,8 @@ func newCDCMonitor(ctx context.Context, pd string, credential *security.Credenti
 	wrappedCli := etcd.Wrap(etcdCli, map[string]prometheus.Counter{})
 	reactor := &cdcMonitReactor{}
 	initState := newCDCReactorState()
-	etcdWorker, err := orchestrator.NewEtcdWorker(wrappedCli, etcd.EtcdKeyBase, reactor, initState)
+	etcdWorker, err := orchestrator.NewEtcdWorker(wrappedCli,
+		etcd.BaseKey(etcd.DefaultCDCClusterID), reactor, initState)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
