@@ -472,15 +472,19 @@ func (s *BaseScheduleDispatcher) findDiffTables(
 
 		s.drainRelaxTick++
 		if s.drainRelaxTick == drainCaptureRelaxTicks {
-			s.drainRelaxTick = 0
 			s.logger.Info("DrainCapture: move table finished",
 				zap.Int64("tableID", record.TableID),
 				zap.Int("running", s.tables.CountTableByStatus(util.RunningTable)),
 				zap.Int("adding", s.tables.CountTableByStatus(util.AddingTable)),
 				zap.Int("removing", s.tables.CountTableByStatus(util.RemovingTable)))
 			s.drainingTable = 0
-			return
+			s.drainRelaxTick = 0
+		} else {
+			if s.drainRelaxTick%20 == 0 {
+				s.logger.Info("DrainCapture: relax tick", zap.Int("tick", s.drainRelaxTick))
+			}
 		}
+		return
 	}
 
 	for _, record := range s.tables.GetAllTablesGroupedByCaptures()[s.drainTarget] {
