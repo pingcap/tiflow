@@ -458,8 +458,10 @@ func TestGlobalStateUpdate(t *testing.T) {
 				`6bbc01c8-0605-4f86-a0f9-b3119109b225`,
 				`55551111`,
 				`{"id":"6bbc01c8-0605-4f86-a0f9-b3119109b225","address":"127.0.0.1:8300"}`,
-				`{"resolved-ts":421980720003809281,"checkpoint-ts":421980719742451713,"admin-job-type":0}`,
-				`{"resolved-ts":421980720003809281,"checkpoint-ts":421980719742451713,"admin-job-type":0}`,
+				`{"resolved-ts":421980720003809281,"checkpoint-ts":421980719742451713,
+"admin-job-type":0}`,
+				`{"resolved-ts":421980720003809281,"checkpoint-ts":421980719742451713,
+"admin-job-type":0}`,
 			},
 			expected: GlobalReactorState{
 				Owner: map[string]struct{}{"22317526c4fc9a37": {}, "22317526c4fc9a38": {}},
@@ -509,8 +511,10 @@ func TestGlobalStateUpdate(t *testing.T) {
 				`6bbc01c8-0605-4f86-a0f9-b3119109b225`,
 				`55551111`,
 				`{"id":"6bbc01c8-0605-4f86-a0f9-b3119109b225","address":"127.0.0.1:8300"}`,
-				`{"resolved-ts":421980720003809281,"checkpoint-ts":421980719742451713,"admin-job-type":0}`,
-				`{"resolved-ts":421980720003809281,"checkpoint-ts":421980719742451713,"admin-job-type":0}`,
+				`{"resolved-ts":421980720003809281,"checkpoint-ts":421980719742451713,
+"admin-job-type":0}`,
+				`{"resolved-ts":421980720003809281,"checkpoint-ts":421980719742451713,
+"admin-job-type":0}`,
 				``,
 				``,
 				``,
@@ -568,11 +572,13 @@ func TestCaptureChangeHooks(t *testing.T) {
 	captureInfoBytes, err := json.Marshal(captureInfo)
 	require.Nil(t, err)
 
-	err = state.Update(util.NewEtcdKey(etcd.CaptureInfoKeyPrefix()+"/capture-1"), captureInfoBytes, false)
+	err = state.Update(util.NewEtcdKey(etcd.CaptureInfoKeyPrefix()+"/capture-1"),
+		captureInfoBytes, false)
 	require.Nil(t, err)
 	require.Equal(t, callCount, 1)
 
-	err = state.Update(util.NewEtcdKey(etcd.CaptureInfoKeyPrefix()+"/capture-1"), nil /* delete */, false)
+	err = state.Update(util.NewEtcdKey(etcd.CaptureInfoKeyPrefix()+"/capture-1"),
+		nil /* delete */, false)
 	require.Nil(t, err)
 	require.Equal(t, callCount, 2)
 }

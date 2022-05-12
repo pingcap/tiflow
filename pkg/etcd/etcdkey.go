@@ -36,8 +36,10 @@ const (
 	// DeletionCounterKey is the key path for the counter of deleted keys
 	DeletionCounterKey = metaPrefix + "/meta/ticdc-delete-etcd-key-count"
 
+	// DefaultClusterAndNamespacePrefix is the default prefix of changefeed data
 	DefaultClusterAndNamespacePrefix = "/tidb/cdc/default/default"
-	DefaultClusterAndMetaPrefix      = "/tidb/cdc/default" + metaPrefix
+	// DefaultClusterAndMetaPrefix is the default prefix of cluster mata
+	DefaultClusterAndMetaPrefix = "/tidb/cdc/default" + metaPrefix
 )
 
 // CDCKeyType is the type of etcd key
@@ -85,19 +87,20 @@ type CDCKey struct {
 	ClusterID    string
 }
 
-// EtcdKeyBase is the common prefix of the keys in CDC
-func EtcdKeyBase() string {
+// BaseKey is the common prefix of the keys with cluster id in CDC
+func BaseKey() string {
 	clusterID := config.GetGlobalServerConfig().ClusterID
 	return fmt.Sprintf("/tidb/cdc/%s", clusterID)
 }
 
+// NamespacedPrefix returns the etcd prefix of changefeed data
 func NamespacedPrefix(namespace string) string {
-	return EtcdKeyBase() + "/" + namespace
+	return BaseKey() + "/" + namespace
 }
 
 // Parse parses the given etcd key
 func (k *CDCKey) Parse(key string) error {
-	if !strings.HasPrefix(key, EtcdKeyBase()) {
+	if !strings.HasPrefix(key, BaseKey()) {
 		return cerror.ErrInvalidEtcdKey.GenWithStackByArgs(key)
 	}
 	key = key[len("/tidb/cdc"):]
@@ -165,11 +168,11 @@ func (k *CDCKey) String() string {
 	switch k.Tp {
 	case CDCKeyTypeOwner:
 		if len(k.OwnerLeaseID) == 0 {
-			return EtcdKeyBase() + metaPrefix + ownerKey
+			return BaseKey() + metaPrefix + ownerKey
 		}
-		return EtcdKeyBase() + metaPrefix + ownerKey + "/" + k.OwnerLeaseID
+		return BaseKey() + metaPrefix + ownerKey + "/" + k.OwnerLeaseID
 	case CDCKeyTypeCapture:
-		return EtcdKeyBase() + metaPrefix + captureKey + "/" + k.CaptureID
+		return BaseKey() + metaPrefix + captureKey + "/" + k.CaptureID
 	case CDCKeyTypeChangefeedInfo:
 		return NamespacedPrefix(k.ChangefeedID.Namespace) + changefeedInfoKey +
 			"/" + k.ChangefeedID.ID

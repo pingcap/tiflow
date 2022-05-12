@@ -277,7 +277,8 @@ func TestCheckClusterVersion(t *testing.T) {
 
 	tester.MustUpdate(fmt.Sprintf("%s/capture/6bbc01c8-0605-4f86-a0f9-b3119109b225",
 		etcd.DefaultClusterAndMetaPrefix),
-		[]byte(`{"id":"6bbc01c8-0605-4f86-a0f9-b3119109b225","address":"127.0.0.1:8300","version":"v6.0.0"}`))
+		[]byte(`{"id":"6bbc01c8-0605-4f86-a0f9-b3119109b225",
+"address":"127.0.0.1:8300","version":"v6.0.0"}`))
 
 	changefeedID := model.DefaultChangeFeedID("test-changefeed")
 	changefeedInfo := &model.ChangeFeedInfo{

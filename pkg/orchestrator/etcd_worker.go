@@ -387,12 +387,17 @@ func (worker *EtcdWorker) commitChangedState(ctx context.Context, changedState m
 	}
 
 	if hasDelete {
-		opsThen = append(opsThen, clientv3.OpPut(worker.prefix.String()+etcd.DeletionCounterKey, fmt.Sprint(worker.deleteCounter+1)))
+		opsThen = append(opsThen, clientv3.OpPut(worker.prefix.String()+etcd.DeletionCounterKey,
+			fmt.Sprint(worker.deleteCounter+1)))
 	}
 	if worker.deleteCounter > 0 {
-		cmps = append(cmps, clientv3.Compare(clientv3.Value(worker.prefix.String()+etcd.DeletionCounterKey), "=", fmt.Sprint(worker.deleteCounter)))
+		cmps = append(cmps, clientv3.Compare(clientv3.Value(worker.prefix.String()+
+			etcd.DeletionCounterKey),
+			"=", fmt.Sprint(worker.deleteCounter)))
 	} else if worker.deleteCounter == 0 {
-		cmps = append(cmps, clientv3.Compare(clientv3.CreateRevision(worker.prefix.String()+etcd.DeletionCounterKey), "=", 0))
+		cmps = append(cmps, clientv3.Compare(clientv3.CreateRevision(worker.prefix.String()+
+			etcd.DeletionCounterKey),
+			"=", 0))
 	} else {
 		panic("unreachable")
 	}

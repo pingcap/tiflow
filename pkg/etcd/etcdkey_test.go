@@ -40,7 +40,8 @@ func TestEtcdKey(t *testing.T) {
 			ClusterID:    "default",
 		},
 	}, {
-		key: fmt.Sprintf("%s/capture/6bbc01c8-0605-4f86-a0f9-b3119109b225", DefaultClusterAndMetaPrefix),
+		key: fmt.Sprintf("%s/capture/6bbc01c8-0605-4f86-a0f9-b3119109b225",
+			DefaultClusterAndMetaPrefix),
 		expected: &CDCKey{
 			Tp:        CDCKeyTypeCapture,
 			CaptureID: "6bbc01c8-0605-4f86-a0f9-b3119109b225",
@@ -71,7 +72,8 @@ func TestEtcdKey(t *testing.T) {
 			ClusterID:    "default",
 		},
 	}, {
-		key: "/tidb/cdc/default/name/task/position/6bbc01c8-0605-4f86-a0f9-b3119109b225/test-changefeed",
+		key: "/tidb/cdc/default/name/task" +
+			"/position/6bbc01c8-0605-4f86-a0f9-b3119109b225/test-changefeed",
 		expected: &CDCKey{
 			Tp: CDCKeyTypeTaskPosition,
 			ChangefeedID: model.ChangeFeedID{
