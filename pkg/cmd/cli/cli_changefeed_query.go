@@ -125,8 +125,18 @@ func (o *queryChangefeedOptions) run(cmd *cobra.Command) error {
 		count += pinfo.Count
 	}
 
-	meta := &cfMeta{Info: info, Status: status, Count: count}
+	processorInfos, err := o.etcdClient.GetAllTaskStatus(ctx,
+		model.DefaultChangeFeedID(o.changefeedID))
+	if err != nil {
+		return err
+	}
 
+	taskStatus := make([]captureTaskStatus, 0, len(processorInfos))
+	for captureID, status := range processorInfos {
+		taskStatus = append(taskStatus, captureTaskStatus{CaptureID: captureID, TaskStatus: status})
+	}
+
+	meta := &cfMeta{Info: info, Status: status, Count: count, TaskStatus: taskStatus}
 	return util.JSONPrint(cmd, meta)
 }
 
