@@ -264,6 +264,9 @@ func OpenAPITaskToSubTaskConfigs(task *openapi.Task, toDBCfg *DBConfig, sourceCf
 			}
 			subTaskCfg.BAList = bAList
 		}
+		if task.IgnoreCheckingItems != nil && len(*task.IgnoreCheckingItems) != 0 {
+			subTaskCfg.IgnoreCheckingItems = *task.IgnoreCheckingItems
+		}
 		// adjust sub task config
 		if err := subTaskCfg.Adjust(true); err != nil {
 			return nil, terror.Annotatef(err, "source name %s", sourceCfg.SourceName)
@@ -606,6 +609,10 @@ func SubTaskConfigsToOpenAPITask(subTaskConfigList []*SubTaskConfig) *openapi.Ta
 		task.BinlogFilterRule = &filterRuleMap
 	}
 	task.TableMigrateRule = tableMigrateRuleList
+	if len(oneSubtaskConfig.IgnoreCheckingItems) != 0 {
+		ignoreItems := oneSubtaskConfig.IgnoreCheckingItems
+		task.IgnoreCheckingItems = &ignoreItems
+	}
 	return &task
 }
 

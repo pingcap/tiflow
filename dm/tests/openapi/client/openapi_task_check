@@ -55,6 +55,55 @@ def create_task_failed():
     print("create_task_failed resp=", resp.json())
     assert resp.status_code == 400
 
+def create_task_with_precheck(task_name, ignore_check, is_success, check_result):
+    task = {
+        "name": task_name,
+        "task_mode": "all",
+        "meta_schema": "dm_meta",
+        "shard_mode": "pessimistic",
+        "enhance_online_schema_change": True,
+        "on_duplicate": "error",
+        "ignore_checking_items" : ["version", ignore_check],
+        "target_config": {
+            "host": "127.0.0.1",
+            "port": 4000,
+            "user": "root",
+            "password": "",
+        },
+        "table_migrate_rule": [
+            {
+                "source": {
+                    "source_name": SOURCE1_NAME,
+                    "schema": "openapi",
+                    "table": "t*",
+                },
+                "target": {"schema": "openapi", "table": "t"},
+            },
+            {
+                "source": {
+                    "source_name": SOURCE2_NAME,
+                    "schema": "openapi",
+                    "table": "t*",
+                },
+                "target": {"schema": "openapi", "table": "t"},
+            },
+        ],
+        "source_config": {
+            "source_conf": [
+                {"source_name": SOURCE1_NAME},
+                {"source_name": SOURCE2_NAME},
+            ],
+        },
+    }
+
+    resp = requests.post(url=API_ENDPOINT, json={"task": task})
+    print("create_task_with_precheck resp=", resp.json())
+    if is_success == "success":
+         assert resp.status_code == 201
+         assert check_result in resp.json()["check_result"]
+    else:
+        assert resp.status_code == 400
+        assert check_result in resp.json()["error_msg"]
 
 def create_noshard_task_success(task_name, tartget_table_name=""):
     task = {
@@ -666,6 +715,7 @@ if __name__ == "__main__":
         "delete_task_template": delete_task_template,
         "check_noshard_task_dump_status_success": check_noshard_task_dump_status_success,
         "do_complex_operations": do_complex_operations,
+        "create_task_with_precheck": create_task_with_precheck,
     }
 
     func = FUNC_MAP[sys.argv[1]]
