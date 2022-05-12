@@ -459,55 +459,51 @@ func (s *BaseScheduleDispatcher) findDiffTables(
 		return
 	}
 
-	for _, record := range s.tables.GetAllTablesGroupedByCaptures()[s.drainTarget] {
-		if record.Status == util.RunningTable {
-			toRemove = append(toRemove, record.TableID)
-			s.logger.Info("DrainCapture: remove table",
-				zap.Int64("tableID", record.TableID))
-		}
-	}
-
-	return
-
-	//if s.drainingTable != 0 {
-	//	record, ok := s.tables.GetTableRecord(s.drainingTable)
-	//	if !ok {
-	//		s.logger.Warn("DrainCapture: draining table not found",
-	//			zap.Int64("tableID", s.drainingTable))
-	//		return
-	//	}
-	//	if record.Status == util.AddingTable || record.Status == util.RemovingTable {
-	//		return
-	//	}
-	//
-	//	s.drainRelaxTick++
-	//	if s.drainRelaxTick == drainCaptureRelaxTicks {
-	//		s.logger.Info("DrainCapture: move table finished",
-	//			zap.Int64("tableID", record.TableID),
-	//			zap.Int("running", s.tables.CountTableByStatus(util.RunningTable)),
-	//			zap.Int("adding", s.tables.CountTableByStatus(util.AddingTable)),
-	//			zap.Int("removing", s.tables.CountTableByStatus(util.RemovingTable)))
-	//		s.drainingTable = 0
-	//		s.drainRelaxTick = 0
-	//	} else {
-	//		if s.drainRelaxTick%20 == 0 {
-	//			s.logger.Info("DrainCapture: relax tick", zap.Int("tick", s.drainRelaxTick))
-	//		}
-	//	}
-	//	return
-	//}
-	//
 	//for _, record := range s.tables.GetAllTablesGroupedByCaptures()[s.drainTarget] {
 	//	if record.Status == util.RunningTable {
 	//		toRemove = append(toRemove, record.TableID)
-	//		s.drainingTable = record.TableID
 	//		s.logger.Info("DrainCapture: remove table",
 	//			zap.Int64("tableID", record.TableID))
-	//		break
 	//	}
 	//}
 	//
 	//return
+
+	if s.drainingTable != 0 {
+		record, ok := s.tables.GetTableRecord(s.drainingTable)
+		if !ok {
+			s.logger.Warn("DrainCapture: draining table not found",
+				zap.Int64("tableID", s.drainingTable))
+			return
+		}
+		if record.Status == util.AddingTable || record.Status == util.RemovingTable {
+			return
+		}
+
+		s.drainRelaxTick++
+		if s.drainRelaxTick == drainCaptureRelaxTicks {
+			s.logger.Info("DrainCapture: move table finished",
+				zap.Int64("tableID", record.TableID),
+				zap.Int("running", s.tables.CountTableByStatus(util.RunningTable)),
+				zap.Int("adding", s.tables.CountTableByStatus(util.AddingTable)),
+				zap.Int("removing", s.tables.CountTableByStatus(util.RemovingTable)))
+			s.drainingTable = 0
+			s.drainRelaxTick = 0
+		}
+		return
+	}
+
+	for _, record := range s.tables.GetAllTablesGroupedByCaptures()[s.drainTarget] {
+		if record.Status == util.RunningTable {
+			toRemove = append(toRemove, record.TableID)
+			s.drainingTable = record.TableID
+			s.logger.Info("DrainCapture: remove table",
+				zap.Int64("tableID", record.TableID))
+			break
+		}
+	}
+
+	return
 }
 
 func (s *BaseScheduleDispatcher) addTable(
