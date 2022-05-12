@@ -18,22 +18,28 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/scheduler/tp/schedulepb"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/p2p"
+	"go.uber.org/zap"
 )
 
 type transport interface {
-	Send(ctx context.Context, to model.CaptureID, msgs []*schedulepb.Message) error
-	Recv(ctx context.Context, msgs []*schedulepb.Message) error
+	Send(ctx context.Context, to model.CaptureID, msgs []*schedulepb.Message) (bool, error)
+	Recv(ctx context.Context) ([]*schedulepb.Message, error)
 }
 
 func p2pTopic(changefeed model.ChangeFeedID) p2p.Topic {
 	return fmt.Sprintf("changefeed/%s/%s", changefeed.Namespace, changefeed.ID)
 }
 
+var _ transport = (*p2pTransport)(nil)
+
 type p2pTransport struct {
+	changefeed    model.ChangeFeedID
 	topic         p2p.Topic
 	messageServer *p2p.MessageServer
 	messageRouter p2p.MessageRouter
@@ -49,8 +55,9 @@ type p2pTransport struct {
 func newTranport(
 	ctx context.Context, changefeed model.ChangeFeedID,
 	server *p2p.MessageServer, router p2p.MessageRouter,
-) (transport, error) {
+) (*p2pTransport, error) {
 	trans := &p2pTransport{
+		changefeed:    changefeed,
 		topic:         p2pTopic(changefeed),
 		messageServer: server,
 		messageRouter: router,
@@ -76,12 +83,48 @@ func newTranport(
 
 func (t *p2pTransport) Send(
 	ctx context.Context, to model.CaptureID, msgs []*schedulepb.Message,
-) error {
-	return nil
+) (bool, error) {
+	client := t.messageRouter.GetClient(to)
+	if client == nil {
+		log.Warn("tpscheduler: no message client found, retry later",
+			zap.String("namespace", t.changefeed.Namespace),
+			zap.String("changefeed", t.changefeed.ID),
+			zap.String("to", to))
+		return false, nil
+	}
+
+	for i := range msgs {
+		value := msgs[i]
+		_, err := client.TrySendMessage(ctx, t.topic, value)
+		if err != nil {
+			if cerror.ErrPeerMessageSendTryAgain.Equal(err) {
+				return false, nil
+			}
+			if cerror.ErrPeerMessageClientClosed.Equal(err) {
+				log.Warn("tpscheduler: peer messaging client is closed"+
+					"while trying to send a message through it. "+
+					"Report a bug if this warning repeats",
+					zap.String("namespace", t.changefeed.Namespace),
+					zap.String("changefeed", t.changefeed.ID),
+					zap.String("to", to))
+				return false, nil
+			}
+			return false, errors.Trace(err)
+		}
+	}
+
+	log.Debug("tpscheduler: all messages sent",
+		zap.String("namespace", t.changefeed.Namespace),
+		zap.String("changefeed", t.changefeed.ID),
+		zap.Int("len", len(msgs)),
+		zap.String("to", to))
+	return true, nil
 }
 
-func (t *p2pTransport) Recv(
-	ctx context.Context, msgs []*schedulepb.Message,
-) error {
-	return nil
+func (t *p2pTransport) Recv(ctx context.Context) ([]*schedulepb.Message, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	recvMsgs := t.mu.msgBuf
+	t.mu.msgBuf = make([]*schedulepb.Message, 0)
+	return recvMsgs, nil
 }
