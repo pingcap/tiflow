@@ -244,14 +244,8 @@ func isRetryableError(err error) bool {
 	if !ok {
 		return false
 	}
-
-	switch mysqlErr.Number {
-	case errno.ErrKeyColumnDoesNotExits:
-		// when two DDL modify one column
-		return true
-	}
-
-	return false
+	
+	return mysqlErr.Number == errno.ErrKeyColumnDoesNotExits
 }
 
 // ExecuteSQL does some SQL executions.
