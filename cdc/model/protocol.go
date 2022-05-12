@@ -34,6 +34,7 @@ type DispatchTableMessage struct {
 	OwnerRev int64          `json:"owner-rev"`
 	Epoch    ProcessorEpoch `json:"epoch"`
 	ID       TableID        `json:"id"`
+	StartTs  Ts             `json:"start-ts"`
 	IsDelete bool           `json:"is-delete"`
 }
 

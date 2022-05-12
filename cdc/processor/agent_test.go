@@ -266,9 +266,11 @@ func TestAgentBasics(t *testing.T) {
 	require.NoError(t, err)
 
 	// Test Point 3: Accept an incoming DispatchTableMessage, and the AddTable method in TableExecutor can return false.
-	suite.tableExecutor.On("AddTable", mock.Anything, model.TableID(1)).
+	suite.tableExecutor.On("AddTable", mock.Anything, model.TableID(1),
+		model.Ts(0)).
 		Return(false, nil).Once()
-	suite.tableExecutor.On("AddTable", mock.Anything, model.TableID(1)).
+	suite.tableExecutor.On("AddTable", mock.Anything, model.TableID(1),
+		model.Ts(0)).
 		Return(true, nil).Run(
 		func(_ mock.Arguments) {
 			delete(suite.tableExecutor.Adding, 1)
@@ -465,6 +467,7 @@ func TestNoFinishOperationBeforeSyncIsReceived(t *testing.T) {
 			OwnerRev: 1,
 			Epoch:    agent.CurrentEpoch(),
 			ID:       1,
+			StartTs:  1,
 			IsDelete: false,
 		})
 	require.NoError(t, err)
@@ -475,18 +478,21 @@ func TestNoFinishOperationBeforeSyncIsReceived(t *testing.T) {
 			OwnerRev: 1,
 			Epoch:    agent.CurrentEpoch(),
 			ID:       2,
+			StartTs:  2,
 			IsDelete: false,
 		})
 	require.NoError(t, err)
 
-	suite.tableExecutor.On("AddTable", mock.Anything, model.TableID(1)).
+	suite.tableExecutor.On("AddTable", mock.Anything, model.TableID(1),
+		model.Ts(1)).
 		Return(true, nil).
 		Run(
 			func(_ mock.Arguments) {
 				delete(suite.tableExecutor.Adding, 1)
 				suite.tableExecutor.Running[1] = struct{}{}
 			}).Once()
-	suite.tableExecutor.On("AddTable", mock.Anything, model.TableID(2)).
+	suite.tableExecutor.On("AddTable", mock.Anything, model.TableID(2),
+		model.Ts(2)).
 		Return(true, nil).
 		Run(
 			func(_ mock.Arguments) {

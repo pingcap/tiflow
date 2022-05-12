@@ -445,6 +445,7 @@ func (a *agentImpl) registerPeerMessageHandlers() (ret error) {
 				ownerCapture,
 				message.OwnerRev,
 				message.ID,
+				message.StartTs,
 				message.IsDelete,
 				message.Epoch)
 			return nil

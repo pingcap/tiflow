@@ -46,7 +46,7 @@ type Agent interface {
 // to adapt the current Processor implementation to it.
 // TODO find a way to make the semantics easier to understand.
 type TableExecutor interface {
-	AddTable(ctx context.Context, tableID model.TableID) (done bool, err error)
+	AddTable(ctx context.Context, tableID model.TableID, startTs model.Ts) (done bool, err error)
 	RemoveTable(ctx context.Context, tableID model.TableID) (done bool, err error)
 	IsAddTableFinished(ctx context.Context, tableID model.TableID) (done bool)
 	IsRemoveTableFinished(ctx context.Context, tableID model.TableID) (done bool)
@@ -168,6 +168,7 @@ const (
 
 type agentOperation struct {
 	TableID  model.TableID
+	StartTs  model.Ts
 	IsDelete bool
 	Epoch    model.ProcessorEpoch
 
@@ -295,7 +296,7 @@ func (a *BaseAgent) processOperations(ctx context.Context) error {
 			a.logger.Info("Agent start processing operation", zap.Any("op", op))
 			if !op.IsDelete {
 				// add table
-				done, err := a.executor.AddTable(ctx, op.TableID)
+				done, err := a.executor.AddTable(ctx, op.TableID, op.StartTs)
 				if err != nil {
 					return errors.Trace(err)
 				}
@@ -364,6 +365,7 @@ func (a *BaseAgent) OnOwnerDispatchedTask(
 	ownerCaptureID model.CaptureID,
 	ownerRev int64,
 	tableID model.TableID,
+	startTs model.Ts,
 	isDelete bool,
 	epoch model.ProcessorEpoch,
 ) {
@@ -379,6 +381,7 @@ func (a *BaseAgent) OnOwnerDispatchedTask(
 
 	op := &agentOperation{
 		TableID:     tableID,
+		StartTs:     startTs,
 		IsDelete:    isDelete,
 		Epoch:       epoch,
 		FromOwnerID: ownerCaptureID,

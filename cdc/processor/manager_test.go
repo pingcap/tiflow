@@ -135,6 +135,7 @@ func TestDebugInfo(t *testing.T) {
 	require.Nil(t, err)
 
 	// an active changefeed
+<<<<<<< HEAD
 	s.state.Changefeeds["test-changefeed"] = orchestrator.NewChangefeedReactorState("test-changefeed")
 	s.state.Changefeeds["test-changefeed"].PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 		return &model.ChangeFeedInfo{
@@ -153,6 +154,23 @@ func TestDebugInfo(t *testing.T) {
 			Tables: map[int64]*model.TableReplicaInfo{1: {}},
 		}, true, nil
 	})
+=======
+	s.state.Changefeeds[changefeedID] = orchestrator.NewChangefeedReactorState(changefeedID)
+	s.state.Changefeeds[changefeedID].PatchInfo(
+		func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
+			return &model.ChangeFeedInfo{
+				SinkURI:    "blackhole://",
+				CreateTime: time.Now(),
+				StartTs:    1,
+				TargetTs:   math.MaxUint64,
+				Config:     config.GetDefaultReplicaConfig(),
+			}, true, nil
+		})
+	s.state.Changefeeds[changefeedID].PatchStatus(
+		func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
+			return &model.ChangeFeedStatus{}, true, nil
+		})
+>>>>>>> 02baae191 (scheduler(ticdc): Fix owner panic issue (#5367))
 	s.tester.MustApplyPatches()
 	_, err = s.manager.Tick(ctx, s.state)
 	require.Nil(t, err)
