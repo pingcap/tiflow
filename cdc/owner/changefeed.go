@@ -602,6 +602,7 @@ func (c *changefeed) asyncExecDDLJob(ctx cdcContext.Context,
 
 	if jobDone {
 		c.ddlEventCache = nil
+		c.ddlEventDone = nil
 		// It has expired.
 		// We should use the latest table names now.
 		c.currentTableNames = nil
