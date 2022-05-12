@@ -25,13 +25,12 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/metrics"
 	"github.com/pingcap/tiflow/pkg/notify"
-	"github.com/pingcap/tiflow/pkg/util/testleak"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 )
 
 func TestMysqlSinkWorker(t *testing.T) {
-	defer testleak.AfterTestT(t)()
+	t.Parallel()
 	tbl := &model.TableName{
 		Schema:      "test",
 		Table:       "user",
@@ -212,7 +211,7 @@ func TestMysqlSinkWorker(t *testing.T) {
 }
 
 func TestMySQLSinkWorkerExitWithError(t *testing.T) {
-	defer testleak.AfterTestT(t)()
+	t.Parallel()
 	tbl := &model.TableName{
 		Schema:      "test",
 		Table:       "user",
@@ -299,7 +298,7 @@ func TestMySQLSinkWorkerExitWithError(t *testing.T) {
 }
 
 func TestMySQLSinkWorkerExitCleanup(t *testing.T) {
-	defer testleak.AfterTestT(t)()
+	t.Parallel()
 	tbl := &model.TableName{
 		Schema:      "test",
 		Table:       "user",
