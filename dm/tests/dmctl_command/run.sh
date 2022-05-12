@@ -238,10 +238,10 @@ function run_validator_cmd {
 	# two more validation errors and then stop validator
 	run_sql_source1 "insert into dmctl_command.t1 values(0,'ignore-row')" # skip by syncer
 	run_sql_source1 "insert into dmctl_command.t1 values(-1,'ignore-row')"
+	sleep 10
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation status test" \
 		"new\/ignored\/resolved: 2\/0\/0" 1
-	sleep 10
 	run_sql_source1 "create table dmctl_command.t_trigger_flush10(id int primary key)" # trigger flush
 	sleep 5
 	# test we can get validation status even when it's stopped
