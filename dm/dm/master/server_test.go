@@ -2230,7 +2230,7 @@ func (t *testMaster) TestGRPCLongResponse(c *check.C) {
 	c.Assert(err, check.IsNil)
 }
 
-func (t *testMaster) TestStartStopValidion(c *check.C) {
+func (t *testMaster) TestStartStopValidation(c *check.C) {
 	var (
 		wg       sync.WaitGroup
 		taskName = "test"
@@ -2276,7 +2276,7 @@ func (t *testMaster) TestStartStopValidion(c *check.C) {
 	t.validatorModeMatch(c, server.scheduler, taskName, sources[0], config.ValidationFull)
 	t.validatorModeMatch(c, server.scheduler, taskName, sources[1], config.ValidationFull)
 
-	// 1.2 start existed validaion task
+	// 1.2 start existed validation task
 	startResp, err = server.StartValidation(context.Background(), validatorStartReq)
 	c.Assert(err, check.IsNil)
 	c.Assert(startResp.Result, check.IsTrue) // return with no error
@@ -2314,18 +2314,7 @@ func (t *testMaster) TestStartStopValidion(c *check.C) {
 	t.validatorStageMatch(c, validatorStopReq.TaskName, sources[0], pb.Stage_InvalidStage) // stage not found
 	t.validatorStageMatch(c, validatorStopReq.TaskName, sources[1], pb.Stage_InvalidStage)
 
-	// 3.1 start validation with mode fast
-	validatorStartReq.TaskName = taskName
-	validatorStartReq.Mode = config.ValidationFast
-	startResp, err = server.StartValidation(context.Background(), validatorStartReq)
-	c.Assert(err, check.IsNil)
-	c.Assert(startResp.Result, check.IsTrue)
-	t.validatorStageMatch(c, taskName, sources[0], pb.Stage_Running)
-	t.validatorStageMatch(c, taskName, sources[1], pb.Stage_Running)
-	t.validatorModeMatch(c, server.scheduler, taskName, sources[0], config.ValidationFast)
-	t.validatorModeMatch(c, server.scheduler, taskName, sources[1], config.ValidationFast)
-
-	// 4.1 stop all tasks
+	// stop all tasks
 	validatorStopReq.TaskName = ""
 	stopResp, err = server.StopValidation(context.Background(), validatorStopReq)
 	c.Assert(err, check.IsNil)
@@ -2333,7 +2322,7 @@ func (t *testMaster) TestStartStopValidion(c *check.C) {
 	t.validatorStageMatch(c, taskName, sources[0], pb.Stage_Stopped)
 	t.validatorStageMatch(c, taskName, sources[1], pb.Stage_Stopped)
 
-	// 4.2 start all tasks
+	// start all tasks
 	validatorStartReq.TaskName = ""
 	startResp, err = server.StartValidation(context.Background(), validatorStartReq)
 	c.Assert(err, check.IsNil)
