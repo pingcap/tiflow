@@ -241,8 +241,9 @@ function run_validator_cmd {
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation status test" \
 		"new\/ignored\/resolved: 2\/0\/0" 1
+	sleep 10
 	run_sql_source1 "create table dmctl_command.t_trigger_flush10(id int primary key)" # trigger flush
-	sleep 10 # wait for flush
+	sleep 5
 	# test we can get validation status even when it's stopped
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation stop test" \
@@ -262,6 +263,15 @@ function run_validator_cmd {
 		"\"id\": \"3\"" 1 \
 		"\"id\": \"4\"" 1
 	# still able to operate validation error
+	# ignore error 3
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation ignore-error test 3"
+	# resolve error 4
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation make-resolve test 4"
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation status test" \
+		"new\/ignored\/resolved: 0\/1\/1" 1
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation clear test --all"
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \

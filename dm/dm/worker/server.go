@@ -1015,7 +1015,7 @@ func (s *Server) GetValidatorError(ctx context.Context, req *pb.GetValidationErr
 }
 
 func (s *Server) OperateValidatorError(ctx context.Context, req *pb.OperateValidationErrorRequest) (*pb.OperateValidationErrorResponse, error) {
-	log.L().Info("", zap.String("request", "OperateValidatorError"), zap.Stringer("payload", req))
+	log.L().Info("operate validation error", zap.String("request", "OperateValidatorError"), zap.Stringer("payload", req))
 	w := s.getSourceWorker(true)
 	resp := &pb.OperateValidationErrorResponse{
 		Result: true,

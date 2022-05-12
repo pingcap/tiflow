@@ -1067,14 +1067,7 @@ func (v *DataValidator) GetValidatorTableStatus(filterStatus pb.Stage) []*pb.Val
 	return result
 }
 
-func (v *DataValidator) GetValidatorError(errState pb.ValidateErrorState) []*pb.ValidationError {
-	failpoint.Inject("MockValidationQuery", func() {
-		failpoint.Return(
-			[]*pb.ValidationError{
-				{Id: "1"}, {Id: "2"},
-			},
-		)
-	})
+func (v *DataValidator) GetValidatorError(errState pb.ValidateErrorState) ([]*pb.ValidationError, error) {
 	// todo: validation error in workers cannot be returned
 	// because the errID is only allocated when the error rows are flushed
 	// user cannot handle errorRows without errID
@@ -1084,41 +1077,40 @@ func (v *DataValidator) GetValidatorError(errState pb.ValidateErrorState) []*pb.
 		dbCfg config.DBConfig
 	)
 	ctx, cancel := context.WithTimeout(context.Background(), validatorDmctlOpTimeout)
+	tctx := tcontext.NewContext(ctx, v.L)
 	defer cancel()
-	failpoint.Inject("MockValidationQueryDB", func() {
+	failpoint.Inject("MockValidationQuery", func() {
 		toDB = v.persistHelper.db
-		failpoint.Goto("bypass")
+		failpoint.Return(v.persistHelper.loadError(tctx, toDB, errState))
 	})
 	dbCfg = v.cfg.To
 	dbCfg.RawDBCfg = config.DefaultRawDBConfig().SetMaxIdleConns(1)
 	toDB, err = dbconn.CreateBaseDB(&dbCfg)
 	if err != nil {
 		v.L.Warn("failed to create downstream db", zap.Error(err))
-		return []*pb.ValidationError{}
+		return nil, err
 	}
-	failpoint.Label("bypass")
-	tctx := tcontext.NewContext(ctx, v.L)
+	defer dbconn.CloseBaseDB(tctx, toDB)
 	ret, err := v.persistHelper.loadError(tctx, toDB, errState)
 	if err != nil {
 		v.L.Warn("fail to load validator error", zap.Error(err))
+		return nil, err
 	}
-	return ret
+	return ret, nil
 }
 
 func (v *DataValidator) OperateValidatorError(validateOp pb.ValidationErrOp, errID uint64, isAll bool) error {
-	failpoint.Inject("MockValidationOperation", func() {
-		failpoint.Return(nil)
-	})
 	var (
 		toDB  *conn.BaseDB
 		err   error
 		dbCfg config.DBConfig
 	)
 	ctx, cancel := context.WithTimeout(context.Background(), validatorDmctlOpTimeout)
+	tctx := tcontext.NewContext(ctx, v.L)
 	defer cancel()
 	failpoint.Inject("MockValidationQuery", func() {
 		toDB = v.persistHelper.db
-		failpoint.Goto("bypass")
+		failpoint.Return(v.persistHelper.operateError(tctx, toDB, validateOp, errID, isAll))
 	})
 	dbCfg = v.cfg.To
 	dbCfg.RawDBCfg = config.DefaultRawDBConfig().SetMaxIdleConns(1)
@@ -1126,8 +1118,7 @@ func (v *DataValidator) OperateValidatorError(validateOp pb.ValidationErrOp, err
 	if err != nil {
 		return err
 	}
-	failpoint.Label("bypass")
-	tctx := tcontext.NewContext(ctx, v.L)
+	defer dbconn.CloseBaseDB(tctx, toDB)
 	return v.persistHelper.operateError(tctx, toDB, validateOp, errID, isAll)
 }
 

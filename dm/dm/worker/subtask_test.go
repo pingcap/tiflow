@@ -19,7 +19,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/dm/pb"
 	"github.com/pingcap/tiflow/dm/dm/unit"
@@ -540,23 +539,7 @@ func TestGetValidatorError(t *testing.T) {
 	validatorErrs, err := st.GetValidatorError(pb.ValidateErrorState_InvalidErr)
 	require.Nil(t, validatorErrs)
 	require.Regexp(t, ".*validator not found for task.*", err.Error())
-	// validator != nil, validator not start
-	require.Nil(t, failpoint.Enable("github.com/pingcap/tiflow/dm/syncer/MockValidationQuery", `return(true)`))
-	require.Nil(t, failpoint.Enable("github.com/pingcap/tiflow/dm/dm/worker/MockValidationQuery", `return(true)`))
-	defer func() {
-		require.Nil(t, failpoint.Disable("github.com/pingcap/tiflow/dm/syncer/MockValidationQuery"))
-		require.Nil(t, failpoint.Disable("github.com/pingcap/tiflow/dm/dm/worker/MockValidationQuery"))
-	}()
-	st.validator = syncer.NewContinuousDataValidator(st.cfg, nil, false)
-	validatorErrs, err = st.GetValidatorError(pb.ValidateErrorState_InvalidErr)
-	require.Nil(t, err)
-	require.Equal(t, 2, len(validatorErrs))
-	// validator != nil, validator started
-	st.validator = nil
-	st.StartValidator(pb.Stage_Running, false)
-	validatorErrs, err = st.GetValidatorError(pb.ValidateErrorState_InvalidErr)
-	require.Nil(t, err)
-	require.Equal(t, 2, len(validatorErrs))
+	// validator != nil: will be tested in IT
 }
 
 func TestOperateValidatorError(t *testing.T) {
@@ -569,21 +552,7 @@ func TestOperateValidatorError(t *testing.T) {
 	st := NewSubTaskWithStage(cfg, pb.Stage_Paused, nil, "worker")
 	// validator == nil
 	require.Regexp(t, ".*validator not found for task.*", st.OperateValidatorError(pb.ValidationErrOp_ClearErrOp, 0, true).Error())
-	// validator != nil, validator not start
-	require.Nil(t, failpoint.Enable("github.com/pingcap/tiflow/dm/syncer/MockValidationQuery", `return(true)`))
-	require.Nil(t, failpoint.Enable("github.com/pingcap/tiflow/dm/dm/worker/MockValidationQuery", `return(true)`))
-	require.Nil(t, failpoint.Enable("github.com/pingcap/tiflow/dm/syncer/MockValidationOperation", `return(true)`))
-	defer func() {
-		require.Nil(t, failpoint.Disable("github.com/pingcap/tiflow/dm/syncer/MockValidationOperation"))
-		require.Nil(t, failpoint.Disable("github.com/pingcap/tiflow/dm/syncer/MockValidationQuery"))
-		require.Nil(t, failpoint.Disable("github.com/pingcap/tiflow/dm/dm/worker/MockValidationQuery"))
-	}()
-	st.validator = syncer.NewContinuousDataValidator(st.cfg, nil, false)
-	require.Nil(t, st.OperateValidatorError(pb.ValidationErrOp_ClearErrOp, 0, true))
-	// validator != nil, validator started
-	st.validator = nil
-	st.StartValidator(pb.Stage_Running, false)
-	require.Nil(t, st.OperateValidatorError(pb.ValidationErrOp_ClearErrOp, 0, true))
+	// validator != nil: will be tested in IT
 }
 
 func TestValidatorStatus(t *testing.T) {
@@ -598,21 +567,5 @@ func TestValidatorStatus(t *testing.T) {
 	stats, err := st.GetValidatorStatus()
 	require.Nil(t, stats)
 	require.Regexp(t, ".*validator not found for task.*", err.Error())
-	// validator != nil, validator not start
-	require.Nil(t, failpoint.Enable("github.com/pingcap/tiflow/dm/syncer/MockValidationQuery", `return(true)`))
-	require.Nil(t, failpoint.Enable("github.com/pingcap/tiflow/dm/dm/worker/MockValidationQuery", `return(true)`))
-	defer func() {
-		require.Nil(t, failpoint.Disable("github.com/pingcap/tiflow/dm/syncer/MockValidationQuery"))
-		require.Nil(t, failpoint.Disable("github.com/pingcap/tiflow/dm/dm/worker/MockValidationQuery"))
-	}()
-	st.validator = syncer.NewContinuousDataValidator(st.cfg, nil, false)
-	stats, err = st.GetValidatorStatus()
-	require.Nil(t, err)
-	require.Equal(t, "test-validate-status", stats.Task)
-	// validator != nil, validator start
-	st.validator = nil
-	st.StartValidator(pb.Stage_Running, false)
-	stats, err = st.GetValidatorStatus()
-	require.Nil(t, err)
-	require.Equal(t, "test-validate-status", stats.Task)
+	// validator != nil: will be tested in IT
 }

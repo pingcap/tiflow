@@ -869,40 +869,20 @@ func (t *testServer) setupValidator(c *C) *SourceWorker {
 }
 
 func (t *testServer) TestGetWorkerValidatorErr(c *C) {
-	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/syncer/MockValidationQuery", `return(true)`), IsNil)
-	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/dm/worker/MockValidationQuery", `return(true)`), IsNil)
-	defer func() {
-		c.Assert(failpoint.Disable("github.com/pingcap/tiflow/dm/syncer/MockValidationQuery"), IsNil)
-		c.Assert(failpoint.Disable("github.com/pingcap/tiflow/dm/dm/worker/MockValidationQuery"), IsNil)
-	}()
 	w := t.setupValidator(c)
 	// when subtask name not exists
 	// return empty array
 	errors, err := w.GetWorkerValidatorErr("invalidTask", pb.ValidateErrorState_InvalidErr)
-	c.Assert(err.Error(), Matches, ".*sub task with name.*not found.*")
+	c.Assert(terror.ErrWorkerSubTaskNotFound.Equal(err), IsTrue)
 	c.Assert(errors, IsNil)
-	// subtask match
-	errors, err = w.GetWorkerValidatorErr("testQueryValidator", pb.ValidateErrorState_InvalidErr)
-	c.Assert(err, IsNil)
-	c.Assert(len(errors), Equals, 2)
 }
 
 func (t *testServer) TestOperateWorkerValidatorErr(c *C) {
-	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/syncer/MockValidationQuery", `return(true)`), IsNil)
-	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/syncer/MockValidationOperation", `return(true)`), IsNil)
-	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/dm/worker/MockValidationQuery", `return(true)`), IsNil)
-	defer func() {
-		c.Assert(failpoint.Disable("github.com/pingcap/tiflow/dm/syncer/MockValidationQuery"), IsNil)
-		c.Assert(failpoint.Disable("github.com/pingcap/tiflow/dm/syncer/MockValidationOperation"), IsNil)
-		c.Assert(failpoint.Disable("github.com/pingcap/tiflow/dm/dm/worker/MockValidationQuery"), IsNil)
-	}()
 	w := t.setupValidator(c)
 	// when subtask name not exists
 	// return empty array
 	taskNotFound := terror.ErrWorkerSubTaskNotFound.Generate("invalidTask")
 	c.Assert(w.OperateWorkerValidatorErr("invalidTask", pb.ValidationErrOp_ClearErrOp, 0, true).Error(), Equals, taskNotFound.Error())
-	// subtask match
-	c.Assert(w.OperateWorkerValidatorErr("testQueryValidator", pb.ValidationErrOp_ClearErrOp, 0, true), IsNil)
 }
 
 func TestMasterBinlogOff(t *testing.T) {

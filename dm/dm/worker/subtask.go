@@ -887,7 +887,7 @@ func updateTaskMetric(task, sourceID string, stage pb.Stage, workerName string) 
 
 func (st *SubTask) GetValidatorError(errState pb.ValidateErrorState) ([]*pb.ValidationError, error) {
 	if validator := st.getValidator(); validator != nil {
-		return validator.GetValidatorError(errState), nil
+		return validator.GetValidatorError(errState)
 	}
 	cfg := st.getCfg()
 	return nil, terror.ErrValidatorNotFound.Generate(cfg.Name)

@@ -580,9 +580,9 @@ func TestValidatorGetValidationStatus(t *testing.T) {
 }
 
 func TestValidatorGetValidationError(t *testing.T) {
-	require.Nil(t, failpoint.Enable("github.com/pingcap/tiflow/dm/syncer/MockValidationQueryDB", `return(true)`))
+	require.Nil(t, failpoint.Enable("github.com/pingcap/tiflow/dm/syncer/MockValidationQuery", `return(true)`))
 	defer func() {
-		require.Nil(t, failpoint.Disable("github.com/pingcap/tiflow/dm/syncer/MockValidationQueryDB"))
+		require.Nil(t, failpoint.Disable("github.com/pingcap/tiflow/dm/syncer/MockValidationQuery"))
 	}()
 	db, dbMock, err := sqlmock.New()
 	require.Equal(t, log.InitLogger(&log.Config{}), nil)
@@ -648,9 +648,11 @@ func TestValidatorGetValidationError(t *testing.T) {
 		},
 	}
 	validator.persistHelper.db = conn.NewBaseDB(db, func() {})
-	res := validator.GetValidatorError(pb.ValidateErrorState_InvalidErr)
+	res, err := validator.GetValidatorError(pb.ValidateErrorState_InvalidErr)
+	require.Nil(t, err)
 	require.EqualValues(t, expected[0], res)
-	res = validator.GetValidatorError(pb.ValidateErrorState_IgnoredErr)
+	res, err = validator.GetValidatorError(pb.ValidateErrorState_IgnoredErr)
+	require.Nil(t, err)
 	require.EqualValues(t, expected[1], res)
 }
 
