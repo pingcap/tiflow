@@ -14,6 +14,7 @@
 package codec
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"reflect"
@@ -419,7 +420,11 @@ func (d *CanalEventBatchEncoder) EncodeCheckpointEvent(ts uint64) (*MQMessage, e
 }
 
 // AppendRowChangedEvent implements the EventBatchEncoder interface
-func (d *CanalEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) error {
+func (d *CanalEventBatchEncoder) AppendRowChangedEvent(
+	ctx context.Context,
+	e *model.RowChangedEvent,
+	topic string,
+) error {
 	entry, err := d.entryBuilder.FromRowEvent(e)
 	if err != nil {
 		return errors.Trace(err)

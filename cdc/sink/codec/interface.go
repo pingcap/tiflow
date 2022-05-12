@@ -20,7 +20,6 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/sink/mq/dispatcher"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
@@ -32,7 +31,7 @@ type EventBatchEncoder interface {
 	// This event will be broadcast to all partitions to signal a global checkpoint.
 	EncodeCheckpointEvent(ts uint64) (*MQMessage, error)
 	// AppendRowChangedEvent appends a row changed event into the batch
-	AppendRowChangedEvent(e *model.RowChangedEvent) error
+	AppendRowChangedEvent(context.Context, *model.RowChangedEvent, string) error
 	// EncodeDDLEvent appends a DDL event into the batch
 	EncodeDDLEvent(e *model.DDLEvent) (*MQMessage, error)
 	// Build builds the batch and returns the bytes of key and value.
@@ -166,18 +165,14 @@ type EncoderBuilder interface {
 }
 
 // NewEventBatchEncoderBuilder returns an EncoderBuilder
-func NewEventBatchEncoderBuilder(
-	ctx context.Context,
-	c *Config,
-	eventRouter *dispatcher.EventRouter,
-) (EncoderBuilder, error) {
+func NewEventBatchEncoderBuilder(ctx context.Context, c *Config) (EncoderBuilder, error) {
 	switch c.protocol {
 	case config.ProtocolDefault, config.ProtocolOpen:
 		return newJSONEventBatchEncoderBuilder(c), nil
 	case config.ProtocolCanal:
 		return newCanalEventBatchEncoderBuilder(), nil
 	case config.ProtocolAvro:
-		return newAvroEventBatchEncoderBuilder(ctx, c, eventRouter)
+		return newAvroEventBatchEncoderBuilder(ctx, c)
 	case config.ProtocolMaxwell:
 		return newMaxwellEventBatchEncoderBuilder(), nil
 	case config.ProtocolCanalJSON:

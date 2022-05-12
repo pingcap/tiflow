@@ -14,6 +14,7 @@
 package codec
 
 import (
+	"context"
 	"sort"
 	"testing"
 
@@ -115,7 +116,7 @@ func (s *batchTester) testBatchCodec(
 		encoder := encoderBuilder.Build()
 
 		for _, row := range cs {
-			err := encoder.AppendRowChangedEvent(row)
+			err := encoder.AppendRowChangedEvent(context.Background(), row, "")
 			require.Nil(t, err)
 		}
 
@@ -173,24 +174,26 @@ func TestMaxMessageBytes(t *testing.T) {
 		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
 	}
 
+	ctx := context.Background()
+	topic := ""
 	// for a single message, the overhead is 36(maximumRecordOverhead) + 8(versionHea) = 44, just can hold it.
 	a := 87 + 44
 	config := NewConfig(config.ProtocolOpen).WithMaxMessageBytes(a)
 	encoder := newJSONEventBatchEncoderBuilder(config).Build()
-	err := encoder.AppendRowChangedEvent(testEvent)
+	err := encoder.AppendRowChangedEvent(ctx, testEvent, topic)
 	require.Nil(t, err)
 
 	// cannot hold a single message
 	config = config.WithMaxMessageBytes(a - 1)
 	encoder = newJSONEventBatchEncoderBuilder(config).Build()
-	err = encoder.AppendRowChangedEvent(testEvent)
+	err = encoder.AppendRowChangedEvent(ctx, testEvent, topic)
 	require.NotNil(t, err)
 
 	// make sure each batch's `Length` not greater than `max-message-bytes`
 	config = config.WithMaxMessageBytes(256)
 	encoder = newJSONEventBatchEncoderBuilder(config).Build()
 	for i := 0; i < 10000; i++ {
-		err := encoder.AppendRowChangedEvent(testEvent)
+		err := encoder.AppendRowChangedEvent(ctx, testEvent, topic)
 		require.Nil(t, err)
 	}
 
@@ -213,7 +216,7 @@ func TestMaxBatchSize(t *testing.T) {
 	}
 
 	for i := 0; i < 10000; i++ {
-		err := encoder.AppendRowChangedEvent(testEvent)
+		err := encoder.AppendRowChangedEvent(context.Background(), testEvent, "")
 		require.Nil(t, err)
 	}
 

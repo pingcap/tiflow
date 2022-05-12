@@ -14,6 +14,7 @@
 package codec
 
 import (
+	"context"
 	"encoding/json"
 	"sort"
 	"strings"
@@ -339,7 +340,11 @@ func (c *CanalFlatEventBatchEncoder) EncodeCheckpointEvent(ts uint64) (*MQMessag
 }
 
 // AppendRowChangedEvent implements the interface EventBatchEncoder
-func (c *CanalFlatEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) error {
+func (c *CanalFlatEventBatchEncoder) AppendRowChangedEvent(
+	ctx context.Context,
+	e *model.RowChangedEvent,
+	topic string,
+) error {
 	message, err := c.newFlatMessageForDML(e)
 	if err != nil {
 		return errors.Trace(err)

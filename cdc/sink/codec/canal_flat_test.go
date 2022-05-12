@@ -14,6 +14,7 @@
 package codec
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
 
@@ -164,7 +165,7 @@ func TestNewCanalFlatEventBatchDecoder4RowMessage(t *testing.T) {
 		encoder := &CanalFlatEventBatchEncoder{builder: NewCanalEntryBuilder(), enableTiDBExtension: encodeEnable}
 		require.NotNil(t, encoder)
 
-		err := encoder.AppendRowChangedEvent(testCaseInsert)
+		err := encoder.AppendRowChangedEvent(context.Background(), testCaseInsert, "")
 		require.Nil(t, err)
 
 		mqMessages := encoder.Build()
@@ -293,7 +294,7 @@ func TestBatching(t *testing.T) {
 	for i := 1; i <= 1000; i++ {
 		ts := uint64(i)
 		updateCase.CommitTs = ts
-		err := encoder.AppendRowChangedEvent(&updateCase)
+		err := encoder.AppendRowChangedEvent(context.Background(), &updateCase, "")
 		require.Nil(t, err)
 
 		if i%100 == 0 {

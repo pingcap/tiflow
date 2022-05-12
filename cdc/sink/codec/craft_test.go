@@ -14,6 +14,7 @@
 package codec
 
 import (
+	"context"
 	"testing"
 
 	"github.com/pingcap/tidb/parser/mysql"
@@ -79,7 +80,7 @@ func testBatchCodec(
 	for _, cs := range s.rowCases {
 		events := 0
 		for _, row := range cs {
-			err := encoder.AppendRowChangedEvent(row)
+			err := encoder.AppendRowChangedEvent(context.Background(), row, "")
 			events++
 			require.Nil(t, err)
 		}
@@ -130,7 +131,7 @@ func TestCraftMaxMessageBytes(t *testing.T) {
 	}
 
 	for i := 0; i < 10000; i++ {
-		err := encoder.AppendRowChangedEvent(testEvent)
+		err := encoder.AppendRowChangedEvent(context.Background(), testEvent, "")
 		require.Nil(t, err)
 	}
 
@@ -153,7 +154,7 @@ func TestCraftMaxBatchSize(t *testing.T) {
 	}
 
 	for i := 0; i < 10000; i++ {
-		err := encoder.AppendRowChangedEvent(testEvent)
+		err := encoder.AppendRowChangedEvent(context.Background(), testEvent, "")
 		require.Nil(t, err)
 	}
 

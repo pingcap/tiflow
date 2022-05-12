@@ -25,8 +25,6 @@ import (
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/rowcodec"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/sink/mq/dispatcher"
-	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/stretchr/testify/require"
 )
 
@@ -57,16 +55,10 @@ func setupEncoderAndSchemaRegistry(
 		return nil, err
 	}
 
-	eventRouter, err := dispatcher.NewEventRouter(config.GetDefaultReplicaConfig(), "test")
-	if err != nil {
-		return nil, err
-	}
-
 	return &AvroEventBatchEncoder{
 		namespace:                  model.DefaultNamespace,
 		valueSchemaManager:         valueManager,
 		keySchemaManager:           keyManager,
-		eventRouter:                eventRouter,
 		resultBuf:                  make([]*MQMessage, 0, 4096),
 		enableTiDBExtension:        enableTiDBExtension,
 		decimalHandlingMode:        decimalHandlingMode,
@@ -785,7 +777,7 @@ func TestAvroEncode(t *testing.T) {
 	avroKeyCodec, err := goavro.NewCodec(keySchema)
 	require.NoError(t, err)
 
-	r, err := encoder.avroEncode(ctx, event, true)
+	r, err := encoder.avroEncode(ctx, event, "default", true)
 	require.NoError(t, err)
 	res, _, err := avroKeyCodec.NativeFromBinary(r.data)
 	require.NoError(t, err)
@@ -809,7 +801,7 @@ func TestAvroEncode(t *testing.T) {
 	avroValueCodec, err := goavro.NewCodec(valueSchema)
 	require.NoError(t, err)
 
-	r, err = encoder.avroEncode(ctx, event, false)
+	r, err = encoder.avroEncode(ctx, event, "default", false)
 	require.NoError(t, err)
 	res, _, err = avroValueCodec.NativeFromBinary(r.data)
 	require.NoError(t, err)

@@ -15,6 +15,7 @@ package codec
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"encoding/json"
 
@@ -163,7 +164,11 @@ func rowEventToMaxwellMessage(e *model.RowChangedEvent) (*mqMessageKey, *maxwell
 }
 
 // AppendRowChangedEvent implements the EventBatchEncoder interface
-func (d *MaxwellEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) error {
+func (d *MaxwellEventBatchEncoder) AppendRowChangedEvent(
+	ctx context.Context,
+	e *model.RowChangedEvent,
+	topic string,
+) error {
 	_, valueMsg := rowEventToMaxwellMessage(e)
 	value, err := valueMsg.Encode()
 	if err != nil {

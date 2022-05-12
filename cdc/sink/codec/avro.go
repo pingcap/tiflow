@@ -31,7 +31,6 @@ import (
 	"github.com/pingcap/tidb/util/rowcodec"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/sink/mq/dispatcher"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/tikv/client-go/v2/oracle"
@@ -43,7 +42,6 @@ type AvroEventBatchEncoder struct {
 	namespace          string
 	keySchemaManager   *AvroSchemaManager
 	valueSchemaManager *AvroSchemaManager
-	eventRouter        *dispatcher.EventRouter
 	resultBuf          []*MQMessage
 
 	enableTiDBExtension        bool
@@ -58,7 +56,11 @@ type avroEncodeResult struct {
 
 // AppendRowChangedEvent appends a row change event to the encoder
 // NOTE: the encoder can only store one RowChangedEvent!
-func (a *AvroEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) error {
+func (a *AvroEventBatchEncoder) AppendRowChangedEvent(
+	ctx context.Context,
+	e *model.RowChangedEvent,
+	topic string,
+) error {
 	log.Debug("AppendRowChangedEvent", zap.Reflect("rowChangedEvent", e))
 	mqMessage := NewMQMessage(
 		config.ProtocolAvro,
@@ -69,10 +71,9 @@ func (a *AvroEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) 
 		&e.Table.Schema,
 		&e.Table.Table,
 	)
-	ctx := context.Background()
 
 	if !e.IsDelete() {
-		res, err := a.avroEncode(ctx, e, false)
+		res, err := a.avroEncode(ctx, e, topic, false)
 		if err != nil {
 			log.Warn(
 				"AppendRowChangedEvent: avro encoding failed",
@@ -95,7 +96,7 @@ func (a *AvroEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) 
 		mqMessage.Value = nil
 	}
 
-	res, err := a.avroEncode(ctx, e, true)
+	res, err := a.avroEncode(ctx, e, topic, true)
 	if err != nil {
 		log.Warn(
 			"AppendRowChangedEvent: avro encoding failed",
@@ -153,6 +154,7 @@ func (a *AvroEventBatchEncoder) Size() int {
 func (a *AvroEventBatchEncoder) avroEncode(
 	ctx context.Context,
 	e *model.RowChangedEvent,
+	topic string,
 	key bool,
 ) (*avroEncodeResult, error) {
 	var cols []*model.Column
@@ -199,7 +201,7 @@ func (a *AvroEventBatchEncoder) avroEncode(
 
 	avroCodec, registryID, err := schemaManager.GetCachedOrRegister(
 		ctx,
-		a.eventRouter.GetTopicForRowChange(e),
+		topic,
 		e.TableInfoVersion,
 		schemaGen,
 	)
@@ -726,7 +728,6 @@ type avroEventBatchEncoderBuilder struct {
 	config             *Config
 	keySchemaManager   *AvroSchemaManager
 	valueSchemaManager *AvroSchemaManager
-	eventRouter        *dispatcher.EventRouter
 }
 
 const (
@@ -734,11 +735,7 @@ const (
 	valueSchemaSuffix = "-value"
 )
 
-func newAvroEventBatchEncoderBuilder(
-	ctx context.Context,
-	config *Config,
-	eventRouter *dispatcher.EventRouter,
-) (EncoderBuilder, error) {
+func newAvroEventBatchEncoderBuilder(ctx context.Context, config *Config) (EncoderBuilder, error) {
 	keySchemaManager, err := NewAvroSchemaManager(
 		ctx,
 		nil,
@@ -764,7 +761,6 @@ func newAvroEventBatchEncoderBuilder(
 		config:             config,
 		keySchemaManager:   keySchemaManager,
 		valueSchemaManager: valueSchemaManager,
-		eventRouter:        eventRouter,
 	}, nil
 }
 
@@ -774,7 +770,6 @@ func (b *avroEventBatchEncoderBuilder) Build() EventBatchEncoder {
 	encoder.namespace = b.namespace
 	encoder.keySchemaManager = b.keySchemaManager
 	encoder.valueSchemaManager = b.valueSchemaManager
-	encoder.eventRouter = b.eventRouter
 	encoder.resultBuf = make([]*MQMessage, 0, 4096)
 	encoder.enableTiDBExtension = b.config.enableTiDBExtension
 	encoder.decimalHandlingMode = b.config.avroDecimalHandlingMode

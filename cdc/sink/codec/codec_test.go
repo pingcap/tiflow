@@ -16,6 +16,7 @@ package codec
 import (
 	"bytes"
 	"compress/zlib"
+	"context"
 	"testing"
 
 	"github.com/pingcap/tidb/parser/mysql"
@@ -351,7 +352,7 @@ func codecEncodeRowChangedPB2(events []*model.RowChangedEvent) []byte {
 
 func codecEncodeRowCase(encoder EventBatchEncoder, events []*model.RowChangedEvent) ([]*MQMessage, error) {
 	for _, event := range events {
-		err := encoder.AppendRowChangedEvent(event)
+		err := encoder.AppendRowChangedEvent(context.Background(), event, "")
 		if err != nil {
 			return nil, err
 		}

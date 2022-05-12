@@ -79,14 +79,14 @@ func newMqSink(
 	replicaConfig *config.ReplicaConfig, encoderConfig *codec.Config,
 	errCh chan error,
 ) (*mqSink, error) {
+	encoderBuilder, err := codec.NewEventBatchEncoderBuilder(ctx, encoderConfig)
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
+	}
+
 	eventRouter, err := dispatcher.NewEventRouter(replicaConfig, defaultTopic)
 	if err != nil {
 		return nil, errors.Trace(err)
-	}
-
-	encoderBuilder, err := codec.NewEventBatchEncoderBuilder(ctx, encoderConfig, eventRouter)
-	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
 
 	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
