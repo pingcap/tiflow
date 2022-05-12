@@ -42,13 +42,13 @@ Apache Avro™ is a data serialization system with rich data structures and a co
 
 ### New Config Items
 
-| Config item                        | Option values          | Default | Explain
-|------------------------------------|------------------------|---------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-| protocol                           | canal-json / flat-avro | -       | Specify the message format which output to the kafka.<br>The `flat-avro` option means that using the avro format design by this document.
-| enable-tidb-extension              | true / false           | false   | Append tidb extension fields into avro message or not.
-| schema-registry                    | -                      | -       | Specifies the schema registry endpoint.
-| avro-decimal-handling-mode         | precise / string       | precise | Specifies how the TiCDC should handle values for DECIMAL columns:<br>`precise` option represents encoding decimals as precise bytes.<br>`string` option encodes values as formatted strings, which is easy to consume but semantic information about the real type is lost.
-| avro-bigint-unsigned-handling-mode | long / string          | long    | Specifies how the TiCDC should handle values for UNSIGNED BIGINT columns:<br>`long` represents values by using Avro long(64-bit signed integer) which might overflow but which is easy to use in consumers.<br>`string` represents values by string which is precision but which is need to parse by consumers.
+| Config item                        | Option values          | Default | Explain                                                                                                                                                                                                                                                                                                         |
+| ---------------------------------- | ---------------------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| protocol                           | canal-json / flat-avro | -       | Specify the message format which output to the kafka.<br>The `flat-avro` option means that using the avro format design by this document.                                                                                                                                                                       |
+| enable-tidb-extension              | true / false           | false   | Append tidb extension fields into avro message or not.                                                                                                                                                                                                                                                          |
+| schema-registry                    | -                      | -       | Specifies the schema registry endpoint.                                                                                                                                                                                                                                                                         |
+| avro-decimal-handling-mode         | precise / string       | precise | Specifies how the TiCDC should handle values for DECIMAL columns:<br>`precise` option represents encoding decimals as precise bytes.<br>`string` option encodes values as formatted strings, which is easy to consume but semantic information about the real type is lost.                                     |
+| avro-bigint-unsigned-handling-mode | long / string          | long    | Specifies how the TiCDC should handle values for UNSIGNED BIGINT columns:<br>`long` represents values by using Avro long(64-bit signed integer) which might overflow but which is easy to use in consumers.<br>`string` represents values by string which is precision but which is need to parse by consumers. |
 
 ### flat-avro Schema Definition
 
@@ -97,6 +97,7 @@ Apache Avro™ is a data serialization system with rich data structures and a co
     ]
 }
 ```
+
 - `{{RecordName}}` represents full qualified table name.
 - `{{ColumnValueBlock}}` represents a JSON block, which defines a column value of a key.
 - `_tidb_op` used to distinguish between INSERT or UPDATE events, optional values are "c" / "u".
@@ -138,7 +139,7 @@ A `ColumnValueBlock` has the following schema:
 ```
 
 | SQL TYPE                                           | TIDB_TYPE                    | AVRO_TYPE | Description                                                                                                                    |
-|----------------------------------------------------|------------------------------|-----------|--------------------------------------------------------------------------------------------------------------------------------|
+| -------------------------------------------------- | ---------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------ |
 | TINYINT/BOOL/SMALLINT/MEDIUMINT/INT                | INT                          | int       | When it's unsigned, TIDB_TYPE is INT UNSIGNED. For SQL TYPE INT UNSIGNED, its AVRO_TYPE is long.                               |
 | BIGINT                                             | BIGINT                       | long      | When it's unsigned, TIDB_TYPE is BIGINT UNSIGNED. If `avro-bigint-unsigned-handling-mode` is string, AVRO_TYPE is string.      |
 | TINYBLOB/BLOB/MEDIUMBLOB/LONGBLOB/BINARY/VARBINARY | BLOB                         | bytes     |                                                                                                                                |
@@ -150,7 +151,6 @@ A `ColumnValueBlock` has the following schema:
 | JSON                                               | JSON                         | string    |                                                                                                                                |
 | ENUM/SET                                           | ENUM/SET                     | string    | BIT has another `connector.parameters` entry `"allowed":"a,b,c"`.                                                              |
 | DECIMAL                                            | DECIMAL                      | bytes     | This is an avro logical type having `scale` and `precision`. When `avro-decimal-handling-mode` is string, AVRO_TYPE is string. |
-
 
 ## Test Design
 
@@ -167,7 +167,7 @@ A `ColumnValueBlock` has the following schema:
 #### Data Mapping Tests
 
 - With protocol=avro&enable-tidb-extension=false&avro-decimal-handling-mode=precise&avro-bigint-unsigned-handling-mode=long, all generated schema and data are correct.
-- With enable-tidb-extension=true, schema and value will have _tidb_op, _tidb_commit_ts, _tidb_commit_physical_time fields.
+- With enable-tidb-extension=true, schema and value will have \_tidb_op, \_tidb_commit_ts, \_tidb_commit_physical_time fields.
 - With avro-decimal-handling-mode=string，decimal field generates string schema and data.
 - With avro-bigint-unsigned-handling-mode=string, bigint unsigned generates string schema and data.
 
