@@ -436,28 +436,6 @@ func (c CDCEtcdClient) GetTaskStatus(
 	return resp.Kvs[0].ModRevision, info, errors.Trace(err)
 }
 
-// PutTaskStatus puts task status into etcd.
-func (c CDCEtcdClient) PutTaskStatus(
-	ctx context.Context,
-	changefeedID string,
-	captureID string,
-	info *model.TaskStatus,
-) error {
-	data, err := info.Marshal()
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	key := GetEtcdKeyTaskStatus(changefeedID, captureID)
-
-	_, err = c.Client.Put(ctx, key, data)
-	if err != nil {
-		return cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
-	}
-
-	return nil
-}
-
 // GetAllTaskPositions queries all task positions of a changefeed, and returns a map
 // mapping from captureID to TaskPositions
 func (c CDCEtcdClient) GetAllTaskPositions(ctx context.Context, changefeedID string) (map[string]*model.TaskPosition, error) {
@@ -509,50 +487,6 @@ func (c CDCEtcdClient) GetTaskPosition(
 	info := &model.TaskPosition{}
 	err = info.Unmarshal(resp.Kvs[0].Value)
 	return resp.Kvs[0].ModRevision, info, errors.Trace(err)
-}
-
-// PutTaskPositionOnChange puts task position information into etcd if the
-// task position value changes or the previous value does not exist in etcd.
-// returns true if task position is written to etcd.
-func (c CDCEtcdClient) PutTaskPositionOnChange(
-	ctx context.Context,
-	changefeedID string,
-	captureID string,
-	info *model.TaskPosition,
-) (bool, error) {
-	data, err := info.Marshal()
-	if err != nil {
-		return false, errors.Trace(err)
-	}
-
-	key := GetEtcdKeyTaskPosition(changefeedID, captureID)
-	cmps := []clientv3.Cmp{
-		clientv3.Compare(clientv3.ModRevision(key), ">", 0),
-		clientv3.Compare(clientv3.Value(key), "=", data),
-	}
-	opsElse := []clientv3.Op{
-		clientv3.OpPut(key, data),
-	}
-	resp, err := c.Client.Txn(ctx, cmps, txnEmptyOpsThen, opsElse)
-	if err != nil {
-		return false, cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
-	}
-	return !resp.Succeeded, nil
-}
-
-// PutChangeFeedStatus puts changefeed synchronization status into etcd
-func (c CDCEtcdClient) PutChangeFeedStatus(
-	ctx context.Context,
-	changefeedID model.ChangeFeedID,
-	status *model.ChangeFeedStatus,
-) error {
-	key := GetEtcdKeyJob(changefeedID)
-	value, err := status.Marshal()
-	if err != nil {
-		return errors.Trace(err)
-	}
-	_, err = c.Client.Put(ctx, key, value)
-	return cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
 }
 
 // PutCaptureInfo put capture info into etcd,

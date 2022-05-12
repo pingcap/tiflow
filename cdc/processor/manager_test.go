@@ -101,12 +101,6 @@ func TestChangefeed(t *testing.T) {
 		func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
 			return &model.ChangeFeedStatus{}, true, nil
 		})
-	s.state.Changefeeds[changefeedID].PatchTaskStatus(ctx.GlobalVars().CaptureInfo.ID,
-		func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
-			return &model.TaskStatus{
-				Tables: map[int64]*model.TableReplicaInfo{1: {}},
-			}, true, nil
-		})
 	s.tester.MustApplyPatches()
 	_, err = s.manager.Tick(ctx, s.state)
 	s.tester.MustApplyPatches()
@@ -116,11 +110,6 @@ func TestChangefeed(t *testing.T) {
 	// processor return errors
 	s.state.Changefeeds[changefeedID].PatchStatus(
 		func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
-			status.AdminJobType = model.AdminStop
-			return status, true, nil
-		})
-	s.state.Changefeeds[changefeedID].PatchTaskStatus(ctx.GlobalVars().CaptureInfo.ID,
-		func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
 			status.AdminJobType = model.AdminStop
 			return status, true, nil
 		})
@@ -157,12 +146,6 @@ func TestDebugInfo(t *testing.T) {
 	s.state.Changefeeds[changefeedID].PatchStatus(
 		func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
 			return &model.ChangeFeedStatus{}, true, nil
-		})
-	s.state.Changefeeds[changefeedID].PatchTaskStatus(ctx.GlobalVars().CaptureInfo.ID,
-		func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
-			return &model.TaskStatus{
-				Tables: map[int64]*model.TableReplicaInfo{1: {}},
-			}, true, nil
 		})
 	s.tester.MustApplyPatches()
 	_, err = s.manager.Tick(ctx, s.state)
@@ -217,12 +200,6 @@ func TestClose(t *testing.T) {
 	s.state.Changefeeds[changefeedID].PatchStatus(
 		func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
 			return &model.ChangeFeedStatus{}, true, nil
-		})
-	s.state.Changefeeds[changefeedID].PatchTaskStatus(ctx.GlobalVars().CaptureInfo.ID,
-		func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
-			return &model.TaskStatus{
-				Tables: map[int64]*model.TableReplicaInfo{1: {}},
-			}, true, nil
 		})
 	s.tester.MustApplyPatches()
 	_, err = s.manager.Tick(ctx, s.state)
