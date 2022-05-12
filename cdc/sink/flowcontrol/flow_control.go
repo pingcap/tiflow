@@ -68,10 +68,10 @@ func NewTableFlowController(quota uint64) *TableFlowController {
 // It will handle transaction boundaries automatically, and will not block intra-transaction.
 func (c *TableFlowController) Consume(
 	msg *model.PolymorphicEvent,
-	commitTs uint64,
 	size uint64,
 	callBack func(batch bool) error,
 ) error {
+	commitTs := msg.CRTs
 	lastCommitTs := atomic.LoadUint64(&c.lastCommitTs)
 
 	if commitTs < lastCommitTs {
@@ -97,7 +97,7 @@ func (c *TableFlowController) Consume(
 		}
 	}
 
-	c.enqueueSingleMsg(msg, commitTs, size)
+	c.enqueueSingleMsg(msg, size)
 	return nil
 }
 
@@ -119,11 +119,8 @@ func (c *TableFlowController) Release(resolvedTs uint64) {
 	c.memoryQuota.release(nBytesToRelease)
 }
 
-func (c *TableFlowController) enqueueSingleMsg(
-	msg *model.PolymorphicEvent,
-	commitTs uint64,
-	size uint64,
-) {
+func (c *TableFlowController) enqueueSingleMsg(msg *model.PolymorphicEvent, size uint64) {
+	commitTs := msg.CRTs
 	lastCommitTs := atomic.LoadUint64(&c.lastCommitTs)
 
 	c.queueMu.Lock()
@@ -171,7 +168,7 @@ func (c *TableFlowController) enqueueSingleMsg(
 	msg.Row.SplitTxn = true
 	if c.txnsWithSameCommitTs >= batchSize {
 		// TODO(CharlesCheung): add batch resolve mechanism to mitigate oom problem
-		log.Debug("emit batch resolve event")
+		log.Debug("emit batch resolve event throw callback")
 	}
 }
 

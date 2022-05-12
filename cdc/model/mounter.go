@@ -24,8 +24,9 @@ type PolymorphicEvent struct {
 }
 
 // NewEmptyPolymorphicEvent creates a new empty PolymorphicEvent.
-func NewEmptyPolymorphicEvent() *PolymorphicEvent {
+func NewEmptyPolymorphicEvent(ts uint64) *PolymorphicEvent {
 	return &PolymorphicEvent{
+		CRTs:  ts,
 		RawKV: &RawKVEntry{},
 		Row:   &RowChangedEvent{},
 	}

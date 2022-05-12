@@ -206,7 +206,7 @@ func (n *sorterNode) start(
 					size := uint64(msg.Row.ApproximateBytes())
 					// NOTE we allow the quota to be exceeded if blocking means interrupting a transaction.
 					// Otherwise the pipeline would deadlock.
-					err = n.flowController.Consume(msg, commitTs, size, func(batch bool) error {
+					err = n.flowController.Consume(msg, size, func(batch bool) error {
 						if batch {
 							panic("cdc does not support the batch resolve mechanism at this time")
 						} else if lastCRTs > lastSentResolvedTs {
