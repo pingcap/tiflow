@@ -244,7 +244,7 @@ func isRetryableError(err error) bool {
 	if !ok {
 		return false
 	}
-	
+
 	return mysqlErr.Number == errno.ErrKeyColumnDoesNotExits
 }
 
