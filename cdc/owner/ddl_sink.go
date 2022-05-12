@@ -196,7 +196,6 @@ func (s *ddlSinkImpl) run(ctx cdcContext.Context, id model.ChangeFeedID, info *m
 						zap.String("changefeed", ctx.ChangefeedVars().ID.ID),
 						zap.Bool("ignored", err != nil),
 						zap.Any("ddl", ddl))
-					atomic.StoreInt32(&ddl.Done, 1)
 					// Force emitting checkpoint ts when a ddl event is finished.
 					// Otherwise, a kafka consumer may not execute that ddl event.
 					s.mu.Lock()
@@ -212,6 +211,7 @@ func (s *ddlSinkImpl) run(ctx cdcContext.Context, id model.ChangeFeedID, info *m
 						ctx.Throw(errors.Trace(err))
 						return
 					}
+					atomic.StoreInt32(&ddl.Done, 1)
 					continue
 				}
 				// If DDL executing failed, and the error can not be ignored,
