@@ -582,10 +582,6 @@ func (c *changefeed) asyncExecDDLJob(ctx cdcContext.Context,
 
 	jobDone := true
 	for _, event := range c.ddlEventCache {
-		// asyncExecDDLEvent shouldn't be called when the event is already done.
-		if event.Done {
-			continue
-		}
 		eventDone, err := c.asyncExecDDLEvent(ctx, event)
 		if err != nil {
 			return false, err
