@@ -19,6 +19,13 @@ import (
 )
 
 // ChannelDelayer provides a mechanism to inject delay in a channel.
+//
+// Algorithm sketch:
+// When an element arrives from the input channel,
+// attach the current timestamp and put it in a queue.
+// The top of the queue is checked, if the element
+// has stayed in the queue for more than `delayBy`,
+// then the element in popped and sent to the output channel.
 type ChannelDelayer[T any] struct {
 	inCh  <-chan T
 	outCh chan T
@@ -38,7 +45,12 @@ type entry[T any] struct {
 }
 
 // NewChannelDelayer creates a new ChannelDelayer.
-func NewChannelDelayer[T any](delayBy time.Duration, in chan T, queueSize int, outChSize int) *ChannelDelayer[T] {
+func NewChannelDelayer[T any](
+	delayBy time.Duration,
+	in chan T,
+	queueSize int,
+	outChSize int,
+) *ChannelDelayer[T] {
 	ret := &ChannelDelayer[T]{
 		inCh:    in,
 		outCh:   make(chan T, outChSize),
@@ -75,8 +87,18 @@ func (d *ChannelDelayer[T]) run() {
 	ticker := time.NewTicker(time.Millisecond)
 	defer ticker.Stop()
 
+	// currentTime is a timestamp cache to
+	// avoid having to read the system's
+	// clock frequently.
 	currentTime := time.Now()
 
+	// Returns the output channel if
+	// the first element in the queue
+	// is ready to be popped.
+	// Otherwise, nil is returned.
+	// Note that nil channels are ignored in
+	// a select statement, so it would disable
+	// a case block.
 	outChIfReady := func() chan<- T {
 		if len(d.queue) == 0 {
 			return nil
@@ -87,13 +109,16 @@ func (d *ChannelDelayer[T]) run() {
 		return nil
 	}
 
+	// dummyEntry provides a zero value entry.
 	var dummyEntry entry[T]
+
 	for {
-		var nextOut *T
+		var firstElem *T
 		if len(d.queue) > 0 {
-			nextOut = &d.queue[0].elem
+			firstElem = &d.queue[0].elem
 		} else {
-			nextOut = &dummyEntry.elem
+			// Must provide a valid pointer.
+			firstElem = &dummyEntry.elem
 		}
 
 		select {
@@ -112,12 +137,14 @@ func (d *ChannelDelayer[T]) run() {
 				elem:   inElem,
 				inTime: time.Now(),
 			})
-		case outChIfReady() <- *nextOut:
-			// Cleans any reference to *T if T is a pointer
+		case outChIfReady() <- *firstElem:
+			// Cleans any reference to *T if T is a pointer,
+			// to prompt a timely GC.
 			d.queue[0] = dummyEntry
 			d.queue = d.queue[1:]
 
 		LOOP:
+			// Drain the queue as much as possible.
 			for {
 				if len(d.queue) == 0 {
 					break LOOP
