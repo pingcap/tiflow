@@ -339,6 +339,11 @@ func (s *BaseScheduleDispatcher) Tick(
 	}
 
 	newCheckpointTs, resolvedTs = s.calculateTs()
+	if s.drainTarget != captureIDNotDraining {
+		s.logger.Info("Scheduler: calculateTs",
+			zap.Uint64("checkpointTs", newCheckpointTs),
+			zap.Uint64("resolvedTs", resolvedTs))
+	}
 	return
 }
 
@@ -464,7 +469,10 @@ func (s *BaseScheduleDispatcher) findDiffTables(
 			return
 		}
 		s.logger.Info("DrainCapture: move table finished",
-			zap.Int64("tableID", record.TableID))
+			zap.Int64("tableID", record.TableID),
+			zap.Int("running", s.tables.CountTableByStatus(util.RunningTable)),
+			zap.Int("adding", s.tables.CountTableByStatus(util.AddingTable)),
+			zap.Int("removing", s.tables.CountTableByStatus(util.RemovingTable)))
 		s.drainingTable = 0
 		return
 	}
@@ -731,7 +739,7 @@ func (s *BaseScheduleDispatcher) OnAgentFinishedTableOperation(
 		logger.Panic("message from unexpected capture",
 			zap.String("expected", record.CaptureID))
 	}
-	logger.Info("owner received dispatch finished")
+	logger.Info("owner received dispatch finished", zap.Any("status", record.Status))
 
 	switch record.Status {
 	case util.AddingTable:
