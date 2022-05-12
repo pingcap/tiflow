@@ -66,13 +66,14 @@ func makeVeryLargeSyncMessage() *SyncMessage {
 func TestMarshalDispatchTableMessage(t *testing.T) {
 	msg := &DispatchTableMessage{
 		OwnerRev: 1,
+		StartTs:  2,
 		Epoch:    "test-epoch",
 		ID:       model.TableID(1),
 		IsDelete: true,
 	}
 	bytes, err := json.Marshal(msg)
 	require.NoError(t, err)
-	require.Equal(t, `{"owner-rev":1,"epoch":"test-epoch","id":1,"is-delete":true}`, string(bytes))
+	require.Equal(t, `{"owner-rev":1,"epoch":"test-epoch","id":1,"start-ts":2,"is-delete":true}`, string(bytes))
 }
 
 func TestMarshalDispatchTableResponseMessage(t *testing.T) {

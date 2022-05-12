@@ -36,6 +36,7 @@ type ScheduleDispatcherCommunicator interface {
 	DispatchTable(ctx context.Context,
 		changeFeedID model.ChangeFeedID,
 		tableID model.TableID,
+		startTs model.Ts,
 		captureID model.CaptureID,
 		isDelete bool,
 		epoch protocol.ProcessorEpoch,
@@ -197,7 +198,7 @@ func (s *ScheduleDispatcher) Tick(
 	toAdd, toRemove := s.findDiffTables(shouldReplicateTableSet)
 
 	for _, tableID := range toAdd {
-		ok, err := s.addTable(ctx, tableID)
+		ok, err := s.addTable(ctx, tableID, checkpointTs)
 		if err != nil {
 			return sched.CheckpointCannotProceed, sched.CheckpointCannotProceed, errors.Trace(err)
 		}
@@ -247,7 +248,7 @@ func (s *ScheduleDispatcher) Tick(
 	}
 
 	if s.needRebalance {
-		ok, err := s.rebalance(ctx)
+		ok, err := s.rebalance(ctx, checkpointTs)
 		if err != nil {
 			return sched.CheckpointCannotProceed, sched.CheckpointCannotProceed, errors.Trace(err)
 		}
@@ -375,6 +376,7 @@ func (s *ScheduleDispatcher) findDiffTables(
 func (s *ScheduleDispatcher) addTable(
 	ctx context.Context,
 	tableID model.TableID,
+	startTs model.Ts,
 ) (done bool, err error) {
 	// A user triggered move-table will have had the target recorded.
 	target, ok := s.moveTableManager.GetTargetByTableID(tableID)
@@ -389,7 +391,7 @@ func (s *ScheduleDispatcher) addTable(
 
 	epoch := s.captureStatus[target].Epoch
 	ok, err = s.communicator.DispatchTable(
-		ctx, s.changeFeedID, tableID, target, false, epoch)
+		ctx, s.changeFeedID, tableID, startTs, target, false, epoch)
 	if err != nil {
 		return false, errors.Trace(err)
 	}
@@ -422,7 +424,8 @@ func (s *ScheduleDispatcher) removeTable(
 	// need to delete table
 	captureID := record.CaptureID
 	epoch := s.captureStatus[captureID].Epoch
-	ok, err = s.communicator.DispatchTable(ctx, s.changeFeedID, tableID, captureID, true, epoch)
+	ok, err = s.communicator.DispatchTable(ctx, s.changeFeedID, tableID,
+		0, captureID, true, epoch)
 	if err != nil {
 		return false, errors.Trace(err)
 	}
@@ -484,7 +487,9 @@ func (s *ScheduleDispatcher) Rebalance() {
 	s.needRebalance = true
 }
 
-func (s *ScheduleDispatcher) rebalance(ctx context.Context) (done bool, err error) {
+func (s *ScheduleDispatcher) rebalance(
+	ctx context.Context, checkpointTs model.Ts,
+) (done bool, err error) {
 	tablesToRemove := s.balancer.FindVictims(s.tables, s.captures)
 	for _, record := range tablesToRemove {
 		if record.Status != util.RunningTable {
@@ -495,7 +500,7 @@ func (s *ScheduleDispatcher) rebalance(ctx context.Context) (done bool, err erro
 		epoch := s.captureStatus[record.CaptureID].Epoch
 		// Removes the table from the current capture
 		ok, err := s.communicator.DispatchTable(
-			ctx, s.changeFeedID, record.TableID, record.CaptureID, true, epoch)
+			ctx, s.changeFeedID, record.TableID, checkpointTs, record.CaptureID, true, epoch)
 		if err != nil {
 			return false, errors.Trace(err)
 		}

@@ -46,8 +46,8 @@ func TestAgentAddTable(t *testing.T) {
 
 	executor.ExpectedCalls = nil
 	messenger.ExpectedCalls = nil
-	agent.OnOwnerDispatchedTask("capture-1", 1, model.TableID(1), false, epoch)
-	executor.On("AddTable", mock.Anything, model.TableID(1)).Return(true, nil)
+	agent.OnOwnerDispatchedTask("capture-1", 1, model.TableID(1), model.Ts(1000), false, epoch)
+	executor.On("AddTable", mock.Anything, model.TableID(1), model.Ts(1000)).Return(true, nil)
 	messenger.On("OnOwnerChanged", mock.Anything, "capture-1", int64(1))
 
 	err = agent.Tick(ctx)
@@ -106,7 +106,7 @@ func TestAgentRemoveTable(t *testing.T) {
 
 	executor.ExpectedCalls = nil
 	messenger.ExpectedCalls = nil
-	agent.OnOwnerDispatchedTask("capture-2", 1, model.TableID(1), true, epoch)
+	agent.OnOwnerDispatchedTask("capture-2", 1, model.TableID(1), model.Ts(1000), true, epoch)
 	executor.On("GetCheckpoint").Return(model.Ts(1000), model.Ts(1000))
 	messenger.On("SendCheckpoint", mock.Anything, model.Ts(1000), model.Ts(1000)).Return(true, nil)
 	executor.On("RemoveTable", mock.Anything, model.TableID(1)).Return(true, nil)
@@ -174,8 +174,8 @@ func TestAgentOwnerChangedWhileAddingTable(t *testing.T) {
 	require.NoError(t, err)
 	messenger.AssertExpectations(t)
 
-	agent.OnOwnerDispatchedTask("capture-1", 1, model.TableID(1), false, epoch)
-	executor.On("AddTable", mock.Anything, model.TableID(1)).Return(true, nil)
+	agent.OnOwnerDispatchedTask("capture-1", 1, model.TableID(1), model.Ts(1000), false, epoch)
+	executor.On("AddTable", mock.Anything, model.TableID(1), model.Ts(1000)).Return(true, nil)
 	messenger.On("OnOwnerChanged", mock.Anything, "capture-1", int64(1))
 
 	err = agent.Tick(ctx)
@@ -234,8 +234,8 @@ func TestAgentReceiveFromStaleOwner(t *testing.T) {
 	require.NoError(t, err)
 	messenger.AssertExpectations(t)
 
-	agent.OnOwnerDispatchedTask("capture-1", 1, model.TableID(1), false, epoch)
-	executor.On("AddTable", mock.Anything, model.TableID(1)).Return(true, nil)
+	agent.OnOwnerDispatchedTask("capture-1", 1, model.TableID(1), model.Ts(1000), false, epoch)
+	executor.On("AddTable", mock.Anything, model.TableID(1), model.Ts(1000)).Return(true, nil)
 	messenger.On("OnOwnerChanged", mock.Anything, "capture-1", int64(1))
 
 	err = agent.Tick(ctx)
@@ -246,7 +246,7 @@ func TestAgentReceiveFromStaleOwner(t *testing.T) {
 	messenger.ExpectedCalls = nil
 	executor.On("GetCheckpoint").Return(model.Ts(1002), model.Ts(1000))
 	// Stale owner
-	agent.OnOwnerDispatchedTask("capture-2", 0, model.TableID(2), false, defaultEpoch)
+	agent.OnOwnerDispatchedTask("capture-2", 0, model.TableID(2), model.Ts(1000), false, defaultEpoch)
 
 	err = agent.Tick(ctx)
 	require.NoError(t, err)
@@ -334,10 +334,10 @@ func TestIgnoreStaleEpoch(t *testing.T) {
 	messenger.AssertExpectations(t)
 
 	require.NotEqual(t, epoch, newEpoch)
-	agent.OnOwnerDispatchedTask("capture-1", 1, model.TableID(2), false, epoch)
+	agent.OnOwnerDispatchedTask("capture-1", 1, model.TableID(2), model.Ts(1000), false, epoch)
 
 	err = agent.Tick(ctx)
 	require.NoError(t, err)
 	messenger.AssertExpectations(t)
-	executor.AssertNotCalled(t, "AddTable", mock.Anything, model.TableID(1))
+	executor.AssertNotCalled(t, "AddTable", mock.Anything, model.TableID(1), model.Ts(1000))
 }

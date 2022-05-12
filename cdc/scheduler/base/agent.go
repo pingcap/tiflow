@@ -143,6 +143,7 @@ const (
 
 type agentOperation struct {
 	TableID  model.TableID
+	StartTs  model.Ts
 	IsDelete bool
 	Epoch    protocol.ProcessorEpoch
 
@@ -270,7 +271,7 @@ func (a *Agent) processOperations(ctx context.Context) error {
 			a.logger.Info("Agent start processing operation", zap.Any("op", op))
 			if !op.IsDelete {
 				// add table
-				done, err := a.executor.AddTable(ctx, op.TableID)
+				done, err := a.executor.AddTable(ctx, op.TableID, op.StartTs)
 				if err != nil {
 					return errors.Trace(err)
 				}
@@ -339,6 +340,7 @@ func (a *Agent) OnOwnerDispatchedTask(
 	ownerCaptureID model.CaptureID,
 	ownerRev int64,
 	tableID model.TableID,
+	startTs model.Ts,
 	isDelete bool,
 	epoch protocol.ProcessorEpoch,
 ) {
@@ -354,6 +356,7 @@ func (a *Agent) OnOwnerDispatchedTask(
 
 	op := &agentOperation{
 		TableID:     tableID,
+		StartTs:     startTs,
 		IsDelete:    isDelete,
 		Epoch:       epoch,
 		FromOwnerID: ownerCaptureID,

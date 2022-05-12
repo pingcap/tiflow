@@ -251,9 +251,9 @@ func (s *OpenAPIControllerSuite) TestTaskController() {
 	// create
 	{
 		createTaskReq := openapi.CreateTaskRequest{Task: *s.testTask}
-		task, err := server.createTask(ctx, createTaskReq)
+		res, err := server.createTask(ctx, createTaskReq)
 		s.Nil(err)
-		s.EqualValues(s.testTask, task)
+		s.EqualValues(*s.testTask, res.Task)
 	}
 
 	// update
@@ -263,15 +263,15 @@ func (s *OpenAPIControllerSuite) TestTaskController() {
 		task.SourceConfig.IncrMigrateConf.ReplBatch = &batch
 		updateReq := openapi.UpdateTaskRequest{Task: task}
 		s.NoError(failpoint.Enable("github.com/pingcap/tiflow/dm/dm/master/scheduler/operateCheckSubtasksCanUpdate", `return("success")`))
-		taskAfterUpdated, err := server.updateTask(ctx, updateReq)
+		res, err := server.updateTask(ctx, updateReq)
 		s.NoError(err)
-		s.EqualValues(task.SourceConfig.IncrMigrateConf, taskAfterUpdated.SourceConfig.IncrMigrateConf)
+		s.EqualValues(task.SourceConfig.IncrMigrateConf, res.Task.SourceConfig.IncrMigrateConf)
 
 		// update back to continue next text
 		updateReq.Task = *s.testTask
-		taskAfterUpdated, err = server.updateTask(ctx, updateReq)
+		res, err = server.updateTask(ctx, updateReq)
 		s.NoError(err)
-		s.EqualValues(s.testTask, taskAfterUpdated)
+		s.EqualValues(*s.testTask, res.Task)
 		s.NoError(failpoint.Disable("github.com/pingcap/tiflow/dm/dm/master/scheduler/operateCheckSubtasksCanUpdate"))
 	}
 

@@ -84,6 +84,7 @@ func (s *SchedulerV2) DispatchTable(
 	ctx context.Context,
 	changeFeedID model.ChangeFeedID,
 	tableID model.TableID,
+	startTs model.Ts,
 	captureID model.CaptureID,
 	isDelete bool,
 	epoch protocol.ProcessorEpoch,
@@ -92,6 +93,7 @@ func (s *SchedulerV2) DispatchTable(
 	message := &protocol.DispatchTableMessage{
 		OwnerRev: s.ownerRevision,
 		ID:       tableID,
+		StartTs:  startTs,
 		IsDelete: isDelete,
 		Epoch:    epoch,
 	}
