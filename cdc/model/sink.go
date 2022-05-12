@@ -468,7 +468,7 @@ type DDLEvent struct {
 	PreTableInfo *SimpleTableInfo `msg:"pre-table-info"`
 	Query        string           `msg:"query"`
 	Type         model.ActionType `msg:"-"`
-	Done         bool             `msg:"-"`
+	Done         int32            `msg:"-"`
 }
 
 // RedoDDLEvent represents DDL event used in redo log persistent
