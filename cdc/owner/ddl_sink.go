@@ -16,7 +16,6 @@ package owner
 import (
 	"context"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -199,6 +198,7 @@ func (s *ddlSinkImpl) run(ctx cdcContext.Context, id model.ChangeFeedID, info *m
 					// Force emitting checkpoint ts when a ddl event is finished.
 					// Otherwise, a kafka consumer may not execute that ddl event.
 					s.mu.Lock()
+					ddl.Done = true
 					checkpointTs := s.mu.checkpointTs
 					if checkpointTs == 0 || checkpointTs <= lastCheckpointTs {
 						s.mu.Unlock()
@@ -211,7 +211,6 @@ func (s *ddlSinkImpl) run(ctx cdcContext.Context, id model.ChangeFeedID, info *m
 						ctx.Throw(errors.Trace(err))
 						return
 					}
-					atomic.StoreInt32(&ddl.Done, 1)
 					continue
 				}
 				// If DDL executing failed, and the error can not be ignored,
@@ -240,7 +239,7 @@ func (s *ddlSinkImpl) emitCheckpointTs(ts uint64, tableNames []model.TableName) 
 // and CommitTs. So in emitDDLEvent, we get the DDL finished ts of an event
 // from a map in order to check whether that event is finshed or not.
 func (s *ddlSinkImpl) emitDDLEvent(ctx cdcContext.Context, ddl *model.DDLEvent) (bool, error) {
-	if atomic.LoadInt32(&ddl.Done) > 0 {
+	if ddl.Done {
 		// the DDL event is executed successfully, and done is true
 		log.Info("ddl already executed",
 			zap.String("namespace", ctx.ChangefeedVars().ID.Namespace),
