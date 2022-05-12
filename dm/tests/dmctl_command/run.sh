@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -eu
+set -eux
 
 cur=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 source $cur/../_utils/test_prepare
@@ -242,7 +242,7 @@ function run_validator_cmd {
 		"validation status test" \
 		"new\/ignored\/resolved: 2\/0\/0" 1
 	run_sql_source1 "create table dmctl_command.t_trigger_flush10(id int primary key)" # trigger flush
-	sleep 3
+	sleep 10 # wait for flush
 	# test we can get validation status even when it's stopped
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation stop test" \
