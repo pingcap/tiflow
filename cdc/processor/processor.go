@@ -34,6 +34,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/sink"
 	"github.com/pingcap/tiflow/cdc/sink/metrics"
+	sinkmetric "github.com/pingcap/tiflow/cdc/sink/metrics"
 	"github.com/pingcap/tiflow/cdc/sorter/memory"
 	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
@@ -69,7 +70,7 @@ type processor struct {
 
 	filter        *filter.Filter
 	mounter       entry.Mounter
-	sinkManager   *sink.Manager
+	sink          sink.Sink
 	redoManager   redo.LogManager
 	lastRedoFlush time.Time
 
@@ -96,6 +97,7 @@ type processor struct {
 	metricSchemaStorageGcTsGauge    prometheus.Gauge
 	metricProcessorErrorCounter     prometheus.Counter
 	metricProcessorTickDuration     prometheus.Observer
+	metricsTableSinkTotalRows       prometheus.Counter
 }
 
 // checkReadyForMessages checks whether all necessary Etcd keys have been established.
@@ -258,6 +260,7 @@ func newProcessor(ctx cdcContext.Context, upStream *upstream.Upstream) *processo
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		metricProcessorTickDuration: processorTickDuration.
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
+		metricsTableSinkTotalRows: sinkmetric.TableSinkTotalRowsCountCounter.WithLabelValues(changefeedID.ID),
 	}
 	p.createTablePipeline = p.createTablePipelineImpl
 	p.lazyInit = p.lazyInitImpl
@@ -360,8 +363,6 @@ func (p *processor) tick(ctx cdcContext.Context, state *orchestrator.ChangefeedR
 	if err := p.lazyInit(ctx); err != nil {
 		return errors.Trace(err)
 	}
-	// sink manager will return this checkpointTs to sink node if sink node resolvedTs flush failed
-	p.sinkManager.UpdateChangeFeedCheckpointTs(state.Info.GetCheckpointTs(state.Status))
 	if err := p.flushRedoLogMeta(ctx); err != nil {
 		return err
 	}
@@ -479,7 +480,7 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 		zap.String("changefeed", p.changefeed.ID.ID))
 
 	start := time.Now()
-	s, err := sink.New(stdCtx, p.changefeed.ID, p.changefeed.Info.SinkURI, p.filter, p.changefeed.Info.Config, opts, errCh)
+	p.sink, err = sink.New(stdCtx, p.changefeed.ID, p.changefeed.Info.SinkURI, p.filter, p.changefeed.Info.Config, opts, errCh)
 	if err != nil {
 		log.Info("processor new sink failed",
 			zap.String("namespace", p.changefeed.ID.Namespace),
@@ -490,9 +491,6 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 	log.Info("processor try new sink success",
 		zap.Duration("duration", time.Since(start)))
 
-	checkpointTs := p.changefeed.Info.GetCheckpointTs(p.changefeed.Status)
-	captureAddr := ctx.GlobalVars().CaptureInfo.AdvertiseAddr
-	p.sinkManager = sink.NewManager(stdCtx, s, errCh, checkpointTs, captureAddr, p.changefeedID)
 	redoManagerOpts := &redo.ManagerOptions{EnableBgRunner: true, ErrCh: errCh}
 	p.redoManager, err = redo.NewManager(stdCtx, p.changefeed.Info.Config.Consistent, redoManagerOpts)
 	if err != nil {
@@ -783,7 +781,7 @@ func (p *processor) createTablePipelineImpl(
 		return nil, errors.Trace(err)
 	}
 
-	sink, err := p.sinkManager.CreateTableSink(tableID, p.redoManager)
+	s, err := sink.NewTableSink(p.sink, tableID, p.metricsTableSinkTotalRows, p.redoManager)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -797,7 +795,7 @@ func (p *processor) createTablePipelineImpl(
 			tableID,
 			tableName,
 			replicaInfo,
-			sink,
+			s,
 			p.changefeed.Info.GetTargetTs())
 		if err != nil {
 			return nil, errors.Trace(err)
@@ -809,7 +807,7 @@ func (p *processor) createTablePipelineImpl(
 			tableID,
 			tableName,
 			replicaInfo,
-			sink,
+			s,
 			p.changefeed.Info.GetTargetTs(),
 		)
 	}
@@ -899,22 +897,22 @@ func (p *processor) Close() error {
 	p.agent = nil
 
 	// sink close might be time-consuming, do it the last.
-	if p.sinkManager != nil {
+	if p.sink != nil {
 		// pass a canceled context is ok here, since we don't need to wait Close
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
-		log.Info("processor try to close the sinkManager",
+		log.Info("processor try to close the sink",
 			zap.String("namespace", p.changefeedID.Namespace),
 			zap.String("changefeed", p.changefeedID.ID))
 		start := time.Now()
-		if err := p.sinkManager.Close(ctx); err != nil {
-			log.Info("processor close sinkManager failed",
+		if err := p.sink.Close(ctx); err != nil {
+			log.Info("processor close sink failed",
 				zap.String("namespace", p.changefeedID.Namespace),
 				zap.String("changefeed", p.changefeedID.ID),
 				zap.Duration("duration", time.Since(start)))
 			return errors.Trace(err)
 		}
-		log.Info("processor close sinkManager success",
+		log.Info("processor close sink success",
 			zap.String("namespace", p.changefeedID.Namespace),
 			zap.String("changefeed", p.changefeedID.ID),
 			zap.Duration("duration", time.Since(start)))
@@ -928,6 +926,7 @@ func (p *processor) Close() error {
 	syncTableNumGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
 	processorErrorCounter.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
 	processorSchemaStorageGcTsGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
+	sinkmetric.TableSinkTotalRowsCountCounter.DeleteLabelValues(p.changefeedID.ID)
 
 	return nil
 }
