@@ -148,7 +148,8 @@ type ChangefeedReactorState struct {
 
 // NewChangefeedReactorState creates a new changefeed reactor state
 func NewChangefeedReactorState(clusterID string,
-	id model.ChangeFeedID) *ChangefeedReactorState {
+	id model.ChangeFeedID,
+) *ChangefeedReactorState {
 	return &ChangefeedReactorState{
 		ClusterID:     clusterID,
 		ID:            id,
