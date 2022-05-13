@@ -32,6 +32,22 @@ function init_shard_data() {
 	run_sql_source2 "INSERT INTO openapi.t(i,j) VALUES (3, 4);"
 }
 
+function init_data_with_auto_id() {
+	run_sql_source1 "CREATE TABLE openapi.t(id bigint primary key auto_increment, i TINYINT, j INT UNIQUE KEY);"
+	run_sql_source2 "CREATE TABLE openapi.t(id bigint primary key auto_increment, i TINYINT, j INT UNIQUE KEY);"
+
+	run_sql_source1 "INSERT INTO openapi.t(i,j) VALUES (1, 2);"
+	run_sql_source2 "INSERT INTO openapi.t(i,j) VALUES (3, 4);"
+}
+
+function init_data_with_diff_column() {
+	run_sql_source1 "CREATE TABLE openapi.t(id bigint, i TINYINT, j INT UNIQUE KEY);"
+	run_sql_source2 "CREATE TABLE openapi.t(i TINYINT, j INT UNIQUE KEY);"
+
+	run_sql_source1 "INSERT INTO openapi.t(i,j) VALUES (1, 2);"
+	run_sql_source2 "INSERT INTO openapi.t(i,j) VALUES (3, 4);"
+}
+
 function clean_cluster_sources_and_tasks() {
 	openapi_source_check "delete_source_with_force_success" "mysql-01"
 	openapi_source_check "delete_source_with_force_success" "mysql-02"
@@ -500,6 +516,124 @@ function test_noshard_task_dump_status() {
 	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>TEST OPENAPI: NO SHARD TASK DUMP STATUS SUCCESS"
 }
 
+function test_task_with_ignore_check_items() {
+	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>START TEST OPENAPI: TEST TASK WITH IGNORE CHECK ITEMS"
+	prepare_database
+	init_shard_data
+
+	# create source successfully
+	openapi_source_check "create_source1_success"
+	openapi_source_check "list_source_success" 1
+
+	# get source status success
+	openapi_source_check "get_source_status_success" "mysql-01"
+
+	# create source successfully
+	openapi_source_check "create_source2_success"
+	# get source list success
+	openapi_source_check "list_source_success" 2
+
+	# get source status success
+	openapi_source_check "get_source_status_success" "mysql-02"
+
+	# no ignore precheck and no warn or error
+	task_name="test-no-ignore-no-error"
+	ignore_check=""
+	is_success="success"
+	check_res="pre-check is passed"
+	openapi_task_check "create_task_with_precheck" "$task_name" "$ignore_check" "$is_success" "$check_res"
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status $task_name" \
+		"\"stage\": \"Stopped\"" 2
+	# delete task
+	openapi_task_check "delete_task_success" "$task_name"
+	openapi_task_check "get_task_list" 0
+	run_sql_tidb "DROP DATABASE if exists dm_mata;"
+
+	# no ignore precheck and has warn
+	prepare_database
+	init_data_with_auto_id
+	task_name="test-no-ignore-has-warn"
+	ignore_check=""
+	is_success="success"
+	check_res="have auto-increment key"
+	openapi_task_check "create_task_with_precheck" "$task_name" "$ignore_check" "$is_success" "$check_res"
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status $task_name" \
+		"\"stage\": \"Stopped\"" 2
+	# delete task
+	openapi_task_check "delete_task_success" "$task_name"
+	openapi_task_check "get_task_list" 0
+	run_sql_tidb "DROP DATABASE if exists dm_mata;"
+
+	# no ignore precheck and has error
+	prepare_database
+	init_data_with_diff_column
+	task_name="test-no-ignore-has-error"
+	ignore_check=""
+	is_success="failed"
+	check_res="column length mismatch"
+	openapi_task_check "create_task_with_precheck" "$task_name" "$ignore_check" "$is_success" "$check_res"
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status $task_name" \
+		"\"result\": false" 1
+	run_sql_tidb "DROP DATABASE if exists dm_mata;"
+
+	# # has ignore precheck and no error
+	prepare_database
+	init_data_with_diff_column
+	task_name="test-has-ignore-without-error"
+	ignore_check="schema_of_shard_tables"
+	is_success="success"
+	check_res="pre-check is passed"
+	openapi_task_check "create_task_with_precheck" "$task_name" "$ignore_check" "$is_success" "$check_res"
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status $task_name" \
+		"\"stage\": \"Stopped\"" 2
+	# delete task
+	openapi_task_check "delete_task_success" "$task_name"
+	openapi_task_check "get_task_list" 0
+
+	clean_cluster_sources_and_tasks
+	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>TEST OPENAPI: TEST TASK WITH IGNORE CHECK ITEMS SUCCESS"
+}
+
+function test_delete_task_with_stopped_downstream() {
+	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>START TEST OPENAPI: DELETE TASK WITH STOPPED DOWNSTREAM"
+	prepare_database
+
+	task_name="test-no-shard"
+	target_table_name="" # empty means no route
+
+	# create source successfully
+	openapi_source_check "create_source1_success"
+	# create source successfully
+	openapi_source_check "create_source2_success"
+	# get source list success
+	openapi_source_check "list_source_success" 2
+	# create no shard task success
+	openapi_task_check "create_noshard_task_success" $task_name $target_table_name
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status $task_name" \
+		"\"stage\": \"Stopped\"" 2
+
+	# stop downstream
+	cleanup_tidb_server
+
+	# delete task failed because downstream is stopped.
+	openapi_task_check "delete_task_failed" "$task_name"
+
+	# delete task success with force
+	openapi_task_check "delete_task_with_force_success" "$task_name"
+	openapi_task_check "get_task_list" 0
+
+	# restart downstream
+	run_tidb_server 4000 $TIDB_PASSWORD
+	sleep 2
+	clean_cluster_sources_and_tasks
+	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>TEST OPENAPI: DELETE TASK WITH STOPPED DOWNSTREAM SUCCESS"
+}
+
 function test_cluster() {
 	# list master and worker node
 	openapi_cluster_check "list_master_success" 2
@@ -543,6 +677,8 @@ function run() {
 	test_task_templates
 	test_noshard_task_dump_status
 	test_complex_operations_of_source_and_task
+	test_task_with_ignore_check_items
+	test_delete_task_with_stopped_downstream
 
 	# NOTE: this test case MUST running at last, because it will offline some members of cluster
 	test_cluster

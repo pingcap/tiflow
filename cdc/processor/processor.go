@@ -106,7 +106,7 @@ func (p *processor) checkReadyForMessages() bool {
 }
 
 // AddTable implements TableExecutor interface.
-func (p *processor) AddTable(ctx cdcContext.Context, tableID model.TableID) (bool, error) {
+func (p *processor) AddTable(ctx cdcContext.Context, tableID model.TableID, startTs model.Ts) (bool, error) {
 	if !p.checkReadyForMessages() {
 		return false, nil
 	}
@@ -114,7 +114,7 @@ func (p *processor) AddTable(ctx cdcContext.Context, tableID model.TableID) (boo
 	log.Info("adding table",
 		zap.Int64("tableID", tableID),
 		cdcContext.ZapFieldChangefeed(ctx))
-	err := p.addTable(ctx, tableID, &model.TableReplicaInfo{})
+	err := p.addTable(ctx, tableID, &model.TableReplicaInfo{StartTs: startTs})
 	if err != nil {
 		return false, errors.Trace(err)
 	}
@@ -676,7 +676,10 @@ func (p *processor) pushResolvedTs2Table() {
 // addTable creates a new table pipeline and adds it to the `p.tables`
 func (p *processor) addTable(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) error {
 	if replicaInfo.StartTs == 0 {
-		replicaInfo.StartTs = p.changefeed.Status.CheckpointTs
+		log.Panic("table start ts must not be 0",
+			zap.String("namespace", p.changefeedID.Namespace),
+			zap.String("changefeed", p.changefeedID.ID),
+			zap.Int64("tableID", tableID))
 	}
 
 	if table, ok := p.tables[tableID]; ok {

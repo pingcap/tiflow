@@ -33,8 +33,12 @@ git --no-pager diff $BASE_HASH -U0 -- cdc pkg cmd -- ':(exclude)*_gen.go' -- ':(
     if (width > $ERROR_THRESHOLD) {
         print \"\033[0;31m[ERROR]\033[0m width too long, \" length \": \" \$0 ;
         fail=1 ;
-    } else if (width > $WARN_THRESHOLD) {
-        print \"\033[0;33m[WARN]\033[0m  width too long, \" length \": \" \$0 ;
     }
 }
-END { if (fail != 0) { exit 1 } }"
+END {
+    if (fail != 0) {
+        printf \"\033[0;33mNote\033[0m please keep line width with in $WARN_THRESHOLD, \" ;
+        print \"and must not be larger than $ERROR_THRESHOLD.\" ;
+        exit 1;
+    }
+}"
