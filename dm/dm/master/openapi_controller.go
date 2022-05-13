@@ -137,6 +137,12 @@ func (s *Server) updateSource(ctx context.Context, sourceName string, req openap
 		return nil, terror.ErrSchedulerSourceCfgNotExist.Generate(sourceName)
 	}
 	newCfg := config.OpenAPISourceToSourceCfg(req.Source)
+
+	// update's request will be no password when user doesn't input password and wants to use old password.
+	if req.Source.Password == nil {
+		newCfg.From.Password = oldCfg.From.Password
+	}
+
 	if err := checkAndAdjustSourceConfigFunc(ctx, newCfg); err != nil {
 		return nil, err
 	}
