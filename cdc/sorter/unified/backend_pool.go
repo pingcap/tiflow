@@ -392,7 +392,7 @@ func checkDataDirSatisfied() error {
 	if err != nil {
 		return cerrors.WrapError(cerrors.ErrCheckDataDirSatisfied, err)
 	}
-	if diskInfo.AvailPercentage > dataDirAvailLowThreshold {
+	if diskInfo.AvailPercentage < dataDirAvailLowThreshold {
 		failpoint.Inject("InjectCheckDataDirSatisfied", func() {
 			log.Info("inject check data dir satisfied error")
 			failpoint.Return(nil)

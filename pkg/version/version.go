@@ -24,7 +24,7 @@ import (
 
 // Version information.
 var (
-	ReleaseVersion = "v6.0.0"
+	ReleaseVersion = "Node"
 	BuildTS        = "None"
 	GitHash        = "None"
 	GitBranch      = "None"
