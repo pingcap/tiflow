@@ -369,6 +369,9 @@ func (m *Master) OnWorkerOnline(worker lib.WorkerHandle) error {
 func (m *Master) OnWorkerOffline(worker lib.WorkerHandle, reason error) error {
 	index := -1
 	for i, handle := range m.workerList {
+		if handle == nil {
+			continue
+		}
 		if handle.ID() == worker.ID() {
 			index = i
 			break
