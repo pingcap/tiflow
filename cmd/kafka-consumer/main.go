@@ -256,7 +256,7 @@ func newSaramaConfig() (*sarama.Config, error) {
 	config.Metadata.Retry.Max = 10000
 	config.Metadata.Retry.Backoff = 500 * time.Millisecond
 	config.Consumer.Retry.Backoff = 500 * time.Millisecond
-	config.Consumer.Offsets.Initial = sarama.OffsetOldest
+	config.Consumer.Offsets.Initial = sarama.OffsetNewest
 
 	if len(ca) != 0 {
 		config.Net.TLS.Enable = true
@@ -310,8 +310,10 @@ func main() {
 			// server-side rebalance happens, the consumer session will need to be
 			// recreated to get the new claims
 			if err := client.Consume(ctx, strings.Split(kafkaTopic, ","), consumer); err != nil {
-				log.Error("Error from consumer: %v", zap.Error(err))
+				log.Error("Error from consumer", zap.Error(err))
 			}
+			// to suppress logs.
+			time.Sleep(time.Second * 2)
 			// check if context was cancelled, signaling that the consumer should stop
 			if ctx.Err() != nil {
 				return
@@ -601,7 +603,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 				resolvedTs := atomic.LoadUint64(&sink.resolvedTs)
 				// `resolvedTs` should be monotonically increasing, it's allowed to receive redundant one.
 				if ts < resolvedTs {
-					log.Warn("partition resolved ts fallback",
+					log.Panic("partition resolved ts fallback",
 						zap.Uint64("ts", ts),
 						zap.Uint64("resolvedTs", resolvedTs),
 						zap.Int32("partition", partition))
@@ -632,9 +634,8 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 					log.Info("redundant sink resolved ts", zap.Uint64("ts", ts), zap.Int32("partition", partition))
 				}
 			}
-			session.MarkMessage(message, "")
 		}
-
+		session.MarkMessage(message, "")
 		if counter > kafkaMaxBatchSize {
 			log.Panic("Open Protocol max-batch-size exceeded", zap.Int("max-batch-size", kafkaMaxBatchSize),
 				zap.Int("actual-batch-size", counter))
