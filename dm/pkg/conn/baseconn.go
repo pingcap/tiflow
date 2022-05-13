@@ -215,6 +215,10 @@ func (conn *BaseConn) ExecuteSQLWithIgnoreError(tctx *tcontext.Context, hVec *me
 // 1. failed: (the index of sqls executed error, error)
 // 2. succeed: (len(sqls), nil).
 func (conn *BaseConn) ExecuteSQL(tctx *tcontext.Context, hVec *metricsproxy.HistogramVecProxy, task string, queries []string, args ...[]interface{}) (int, error) {
+	now := time.Now()
+	defer func() {
+		tctx.L().Debug("execute sql time cost", zap.Duration("cost", time.Since(now)))
+	}()
 	return conn.ExecuteSQLWithIgnoreError(tctx, hVec, task, nil, queries, args...)
 }
 

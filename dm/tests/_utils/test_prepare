@@ -199,8 +199,15 @@ function run_case() {
     done
     DM_${case}_CASE $args
 
-    run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-            "stop-task test"
+    if [[ "$task_conf" == *"single"* ]]; then
+        run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+            "stop-task test" \
+            "\"result\": true" 2 || print_goroutine_stack
+    elif [[ "$task_conf" == *"double"* ]]; then
+        run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+            "stop-task test" \
+            "\"result\": true" 3 || print_goroutine_stack
+    fi
 
     eval ${clean_table_cmd}
 
