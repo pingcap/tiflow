@@ -111,10 +111,6 @@ func (m *Manager) Tick(ctx context.Context) error {
 		default:
 		}
 		id := k.(uint64)
-		// default upstream should never be closed, so just skip it here.
-		if id == DefaultUpstreamID {
-			return true
-		}
 
 		up := v.(*Upstream)
 		if up.shouldClose() {

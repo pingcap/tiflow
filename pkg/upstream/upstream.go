@@ -20,6 +20,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/benbjohnson/clock"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	tidbkv "github.com/pingcap/tidb/kv"
@@ -69,7 +70,8 @@ type Upstream struct {
 		// record the time when Upstream.hc becomes zero.
 		idleTime time.Time
 	}
-
+	// use clock to faciliate unit test
+	clock  clock.Clock
 	wg     *sync.WaitGroup
 	status int32
 }
@@ -77,7 +79,7 @@ type Upstream struct {
 func newUpstream(upstreamID uint64, pdEndpoints []string, securityConfig *config.SecurityConfig) *Upstream {
 	return &Upstream{
 		ID: upstreamID, pdEndpoints: pdEndpoints,
-		securityConfig: securityConfig, wg: new(sync.WaitGroup),
+		securityConfig: securityConfig, wg: new(sync.WaitGroup), clock: clock.New(),
 	}
 }
 
@@ -86,17 +88,16 @@ func NewUpstream4Test(pdClient pd.Client) *Upstream {
 	pdClock := pdutil.NewClock4Test()
 	gcManager := gc.NewManager(pdClient, pdClock)
 	res := &Upstream{
+		ID:       DefaultUpstreamID,
 		PDClient: pdClient, PDClock: pdClock, GCManager: gcManager,
-		status: uninit, wg: new(sync.WaitGroup),
+		status: normal, wg: new(sync.WaitGroup), clock: clock.New(),
+		hcMu: struct {
+			mu       sync.Mutex
+			hc       int32
+			idleTime time.Time
+		}{hc: 1},
 	}
 
-	res.hcMu = struct {
-		mu       sync.Mutex
-		hc       int32
-		idleTime time.Time
-	}{hc: 1}
-
-	res.status = normal
 	return res
 }
 
@@ -185,6 +186,10 @@ func (up *Upstream) init(ctx context.Context) error {
 
 // close all resources.
 func (up *Upstream) close() {
+	if atomic.LoadInt32(&up.status) == closed {
+		return
+	}
+
 	if up.PDClient != nil {
 		up.PDClient.Close()
 	}
@@ -225,11 +230,12 @@ func (up *Upstream) unhold() {
 	up.hcMu.mu.Lock()
 	defer up.hcMu.mu.Unlock()
 	up.hcMu.hc--
+
 	if up.hcMu.hc < 0 {
 		log.Panic("upstream's hc should never less than 0", zap.Uint64("upstreamID", up.ID))
 	}
-	if up.hcMu.hc == 0 && up.hcMu.idleTime.IsZero() {
-		up.hcMu.idleTime = time.Now()
+	if up.hcMu.hc == 0 {
+		up.hcMu.idleTime = up.clock.Now()
 	}
 }
 
@@ -240,7 +246,7 @@ func (up *Upstream) hold() {
 		log.Panic("upstream's hc should never less than 0", zap.Uint64("upstreamID", up.ID))
 	}
 	up.hcMu.hc++
-	// reset unusedTime
+	// reset idleTime
 	if !up.hcMu.idleTime.IsZero() {
 		up.hcMu.idleTime = time.Time{}
 	}
@@ -252,10 +258,17 @@ func (up *Upstream) Release() {
 
 // return true if this upstream idleTime reachs maxIdleDuration.
 func (up *Upstream) shouldClose() bool {
+	// default upstream should never be closed.
+	if up.ID == DefaultUpstreamID {
+		return false
+	}
+
 	up.hcMu.mu.Lock()
 	defer up.hcMu.mu.Unlock()
-	if !up.hcMu.idleTime.IsZero() && time.Since(up.hcMu.idleTime) >= maxIdleDuration {
+	if up.hcMu.hc == 0 && !up.hcMu.idleTime.IsZero() &&
+		up.clock.Since(up.hcMu.idleTime) >= maxIdleDuration {
 		return true
 	}
+
 	return false
 }

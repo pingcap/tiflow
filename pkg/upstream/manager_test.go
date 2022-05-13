@@ -16,8 +16,8 @@ package upstream
 import (
 	"context"
 	"testing"
-	"time"
 
+	"github.com/benbjohnson/clock"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	"github.com/stretchr/testify/require"
@@ -37,14 +37,17 @@ func TestUpstream(t *testing.T) {
 	testID := uint64(1)
 	require.Panics(t, func() { manager.Get(testID) })
 	up2 := NewUpstream4Test(pdClient)
+	up2.ID = testID
+	mockClock := clock.NewMock()
+	up2.clock = mockClock
+
 	manager.ups.Store(testID, up2)
 	require.NotNil(t, manager.Get(testID))
 
 	// test Tick
 	up2.Release()
-	up2.hcMu.mu.Lock()
-	up2.hcMu.idleTime = time.Now().Add(-(maxIdleDuration + maxIdleDuration))
-	up2.hcMu.mu.Unlock()
+	up2.Release()
+	mockClock.Add(maxIdleDuration * 2)
 
 	manager.Tick(context.Background())
 	// wait until up2 is closed
