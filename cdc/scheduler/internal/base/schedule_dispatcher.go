@@ -11,48 +11,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package scheduler
+package base
 
 import (
+	"context"
 	"math"
 	"sync"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/scheduler/util"
-	"github.com/pingcap/tiflow/pkg/context"
+	sched "github.com/pingcap/tiflow/cdc/scheduler/internal"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/base/protocol"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/util"
 	"go.uber.org/zap"
 )
-
-const (
-	// CheckpointCannotProceed is a placeholder indicating that the
-	// Owner should not advance the global checkpoint TS just yet.
-	CheckpointCannotProceed = model.Ts(0)
-)
-
-// ScheduleDispatcher is an interface for a table scheduler used in Owner.
-type ScheduleDispatcher interface {
-	// Tick is called periodically to update the SchedulerDispatcher on the latest state of replication.
-	// This function should NOT be assumed to be thread-safe. No concurrent calls allowed.
-	Tick(
-		ctx context.Context,
-		// Latest global checkpoint of the changefeed
-		checkpointTs model.Ts,
-		// All tables that SHOULD be replicated (or started) at the current checkpoint.
-		currentTables []model.TableID,
-		// All captures that are alive according to the latest Etcd states.
-		captures map[model.CaptureID]*model.CaptureInfo,
-	) (newCheckpointTs, newResolvedTs model.Ts, err error)
-
-	// MoveTable requests that a table be moved to target.
-	// It should be thread-safe.
-	MoveTable(tableID model.TableID, target model.CaptureID)
-
-	// Rebalance triggers a rebalance operation.
-	// It should be thread-safe
-	Rebalance()
-}
 
 // ScheduleDispatcherCommunicator is an interface for the BaseScheduleDispatcher to
 // send commands to Processors. The owner of a BaseScheduleDispatcher should provide
@@ -66,7 +39,7 @@ type ScheduleDispatcherCommunicator interface {
 		startTs model.Ts,
 		captureID model.CaptureID,
 		isDelete bool,
-		epoch model.ProcessorEpoch,
+		epoch protocol.ProcessorEpoch,
 	) (done bool, err error)
 
 	// Announce announces to the specified capture that the current node has become the Owner.
@@ -80,15 +53,19 @@ const (
 	captureCountUninitialized = -1
 )
 
-// BaseScheduleDispatcher implements the basic logic of a ScheduleDispatcher.
+// ScheduleDispatcher implements the basic logic of a ScheduleDispatcher.
 // For it to be directly useful to the Owner, the Owner should implement it own
 // ScheduleDispatcherCommunicator.
-type BaseScheduleDispatcher struct {
-	mu            sync.Mutex
-	tables        *util.TableSet                         // information of all actually running tables
-	captures      map[model.CaptureID]*model.CaptureInfo // basic information of all captures
-	captureStatus map[model.CaptureID]*captureStatus     // more information on the captures
-	checkpointTs  model.Ts                               // current checkpoint-ts
+type ScheduleDispatcher struct {
+	mu sync.Mutex
+	// information of all actually running tables
+	tables *util.TableSet
+	// basic information of all captures
+	captures map[model.CaptureID]*model.CaptureInfo
+	// more information on the captures
+	captureStatus map[model.CaptureID]*captureStatus
+	// current checkpoint-ts
+	checkpointTs model.Ts
 
 	moveTableManager moveTableManager
 	balancer         balancer
@@ -107,13 +84,13 @@ func NewBaseScheduleDispatcher(
 	changeFeedID model.ChangeFeedID,
 	communicator ScheduleDispatcherCommunicator,
 	checkpointTs model.Ts,
-) *BaseScheduleDispatcher {
+) *ScheduleDispatcher {
 	// logger is just the global logger with the `changefeed-id` field attached.
 	logger := log.L().With(
 		zap.String("namespace", changeFeedID.Namespace),
 		zap.String("changefeed", changeFeedID.ID))
 
-	return &BaseScheduleDispatcher{
+	return &ScheduleDispatcher{
 		tables:               util.NewTableSet(),
 		captureStatus:        map[model.CaptureID]*captureStatus{},
 		moveTableManager:     newMoveTableManager(),
@@ -134,7 +111,7 @@ type captureStatus struct {
 
 	// Epoch is reset when the processor's internal states
 	// have been reset.
-	Epoch model.ProcessorEpoch
+	Epoch protocol.ProcessorEpoch
 
 	// Watermark fields
 	CheckpointTs model.Ts
@@ -157,7 +134,7 @@ const (
 )
 
 // Tick implements the interface ScheduleDispatcher.
-func (s *BaseScheduleDispatcher) Tick(
+func (s *ScheduleDispatcher) Tick(
 	ctx context.Context,
 	checkpointTs model.Ts,
 	// currentTables are tables that SHOULD be running given the current checkpoint-ts.
@@ -173,7 +150,7 @@ func (s *BaseScheduleDispatcher) Tick(
 	s.captures = captures
 
 	// We trigger an automatic rebalance if the capture count has changed.
-	// This logic is the same as in the older implementation of scheduler.
+	// This logic is the same as in the older implementation of sched.
 	// TODO a better criterion is needed.
 	// NOTE: We need to check whether the capture count has changed in every tick,
 	// and set needRebalance to true if it has. If we miss a capture count change,
@@ -197,13 +174,13 @@ func (s *BaseScheduleDispatcher) Tick(
 	// Makes sure that captures have all been synchronized before proceeding.
 	done, err := s.syncCaptures(ctx)
 	if err != nil {
-		return CheckpointCannotProceed, CheckpointCannotProceed, errors.Trace(err)
+		return sched.CheckpointCannotProceed, sched.CheckpointCannotProceed, errors.Trace(err)
 	}
 	if !done {
 		// Returns early if not all captures have synced their states with us.
 		// We need to know all captures' status in order to proceed.
 		// This is crucial for ensuring that no table is double-scheduled.
-		return CheckpointCannotProceed, CheckpointCannotProceed, nil
+		return sched.CheckpointCannotProceed, sched.CheckpointCannotProceed, nil
 	}
 
 	s.descheduleTablesFromDownCaptures()
@@ -223,10 +200,10 @@ func (s *BaseScheduleDispatcher) Tick(
 	for _, tableID := range toAdd {
 		ok, err := s.addTable(ctx, tableID, checkpointTs)
 		if err != nil {
-			return CheckpointCannotProceed, CheckpointCannotProceed, errors.Trace(err)
+			return sched.CheckpointCannotProceed, sched.CheckpointCannotProceed, errors.Trace(err)
 		}
 		if !ok {
-			return CheckpointCannotProceed, CheckpointCannotProceed, nil
+			return sched.CheckpointCannotProceed, sched.CheckpointCannotProceed, nil
 		}
 	}
 
@@ -242,10 +219,10 @@ func (s *BaseScheduleDispatcher) Tick(
 
 		ok, err := s.removeTable(ctx, tableID)
 		if err != nil {
-			return CheckpointCannotProceed, CheckpointCannotProceed, errors.Trace(err)
+			return sched.CheckpointCannotProceed, sched.CheckpointCannotProceed, errors.Trace(err)
 		}
 		if !ok {
-			return CheckpointCannotProceed, CheckpointCannotProceed, nil
+			return sched.CheckpointCannotProceed, sched.CheckpointCannotProceed, nil
 		}
 	}
 
@@ -255,40 +232,40 @@ func (s *BaseScheduleDispatcher) Tick(
 			s.tables.CountTableByStatus(util.RemovingTable) == 0
 	}
 	if !checkAllTasksNormal() {
-		return CheckpointCannotProceed, CheckpointCannotProceed, nil
+		return sched.CheckpointCannotProceed, sched.CheckpointCannotProceed, nil
 	}
 
 	// handleMoveTableJobs tries to execute user-specified manual move table jobs.
 	ok, err := s.handleMoveTableJobs(ctx)
 	if err != nil {
-		return CheckpointCannotProceed, CheckpointCannotProceed, errors.Trace(err)
+		return sched.CheckpointCannotProceed, sched.CheckpointCannotProceed, errors.Trace(err)
 	}
 	if !ok {
-		return CheckpointCannotProceed, CheckpointCannotProceed, nil
+		return sched.CheckpointCannotProceed, sched.CheckpointCannotProceed, nil
 	}
 	if !checkAllTasksNormal() {
-		return CheckpointCannotProceed, CheckpointCannotProceed, nil
+		return sched.CheckpointCannotProceed, sched.CheckpointCannotProceed, nil
 	}
 
 	if s.needRebalance {
 		ok, err := s.rebalance(ctx, checkpointTs)
 		if err != nil {
-			return CheckpointCannotProceed, CheckpointCannotProceed, errors.Trace(err)
+			return sched.CheckpointCannotProceed, sched.CheckpointCannotProceed, errors.Trace(err)
 		}
 		if !ok {
-			return CheckpointCannotProceed, CheckpointCannotProceed, nil
+			return sched.CheckpointCannotProceed, sched.CheckpointCannotProceed, nil
 		}
 		s.needRebalance = false
 	}
 	if !checkAllTasksNormal() {
-		return CheckpointCannotProceed, CheckpointCannotProceed, nil
+		return sched.CheckpointCannotProceed, sched.CheckpointCannotProceed, nil
 	}
 
 	newCheckpointTs, resolvedTs = s.calculateTs()
 	return
 }
 
-func (s *BaseScheduleDispatcher) calculateTs() (checkpointTs, resolvedTs model.Ts) {
+func (s *ScheduleDispatcher) calculateTs() (checkpointTs, resolvedTs model.Ts) {
 	checkpointTs = math.MaxUint64
 	resolvedTs = math.MaxUint64
 
@@ -312,7 +289,7 @@ func (s *BaseScheduleDispatcher) calculateTs() (checkpointTs, resolvedTs model.T
 	return
 }
 
-func (s *BaseScheduleDispatcher) syncCaptures(ctx context.Context) (capturesAllSynced bool, err error) {
+func (s *ScheduleDispatcher) syncCaptures(ctx context.Context) (capturesAllSynced bool, err error) {
 	for captureID := range s.captureStatus {
 		if _, ok := s.captures[captureID]; !ok {
 			// removes expired captures from the captureSynced map
@@ -359,7 +336,7 @@ func (s *BaseScheduleDispatcher) syncCaptures(ctx context.Context) (capturesAllS
 // descheduleTablesFromDownCaptures removes tables from `s.tables` that are
 // associated with a capture that no longer exists.
 // `s.captures` MUST be updated before calling this method.
-func (s *BaseScheduleDispatcher) descheduleTablesFromDownCaptures() {
+func (s *ScheduleDispatcher) descheduleTablesFromDownCaptures() {
 	for _, captureID := range s.tables.GetDistinctCaptures() {
 		// If the capture is not in the current list of captures, it means that
 		// the capture has been removed from the system.
@@ -375,7 +352,7 @@ func (s *BaseScheduleDispatcher) descheduleTablesFromDownCaptures() {
 	}
 }
 
-func (s *BaseScheduleDispatcher) findDiffTables(
+func (s *ScheduleDispatcher) findDiffTables(
 	shouldReplicateTables map[model.TableID]struct{},
 ) (toAdd, toRemove []model.TableID) {
 	// Find tables that need to be added.
@@ -396,7 +373,7 @@ func (s *BaseScheduleDispatcher) findDiffTables(
 	return
 }
 
-func (s *BaseScheduleDispatcher) addTable(
+func (s *ScheduleDispatcher) addTable(
 	ctx context.Context,
 	tableID model.TableID,
 	startTs model.Ts,
@@ -436,7 +413,7 @@ func (s *BaseScheduleDispatcher) addTable(
 	return true, nil
 }
 
-func (s *BaseScheduleDispatcher) removeTable(
+func (s *ScheduleDispatcher) removeTable(
 	ctx context.Context,
 	tableID model.TableID,
 ) (done bool, err error) {
@@ -462,7 +439,7 @@ func (s *BaseScheduleDispatcher) removeTable(
 }
 
 // MoveTable implements the interface SchedulerDispatcher.
-func (s *BaseScheduleDispatcher) MoveTable(tableID model.TableID, target model.CaptureID) {
+func (s *ScheduleDispatcher) MoveTable(tableID model.TableID, target model.CaptureID) {
 	if !s.moveTableManager.Add(tableID, target) {
 		log.Info("Move Table command has been ignored, because the last user triggered"+
 			"move has not finished",
@@ -471,9 +448,11 @@ func (s *BaseScheduleDispatcher) MoveTable(tableID model.TableID, target model.C
 	}
 }
 
-func (s *BaseScheduleDispatcher) handleMoveTableJobs(ctx context.Context) (bool, error) {
+func (s *ScheduleDispatcher) handleMoveTableJobs(ctx context.Context) (bool, error) {
 	removeAllDone, err := s.moveTableManager.DoRemove(ctx,
-		func(ctx context.Context, tableID model.TableID, target model.CaptureID) (removeTableResult, error) {
+		func(
+			ctx context.Context, tableID model.TableID, target model.CaptureID,
+		) (removeTableResult, error) {
 			_, ok := s.tables.GetTableRecord(tableID)
 			if !ok {
 				s.logger.Warn("table does not exist", zap.Int64("tableID", tableID))
@@ -504,12 +483,12 @@ func (s *BaseScheduleDispatcher) handleMoveTableJobs(ctx context.Context) (bool,
 }
 
 // Rebalance implements the interface ScheduleDispatcher.
-func (s *BaseScheduleDispatcher) Rebalance() {
+func (s *ScheduleDispatcher) Rebalance() {
 	s.needRebalance = true
 }
 
-func (s *BaseScheduleDispatcher) rebalance(ctx context.Context,
-	checkpointTs model.Ts,
+func (s *ScheduleDispatcher) rebalance(
+	ctx context.Context, checkpointTs model.Ts,
 ) (done bool, err error) {
 	tablesToRemove := s.balancer.FindVictims(s.tables, s.captures)
 	for _, record := range tablesToRemove {
@@ -537,10 +516,10 @@ func (s *BaseScheduleDispatcher) rebalance(ctx context.Context,
 
 // OnAgentFinishedTableOperation is called when a table operation has been finished by
 // the processor.
-func (s *BaseScheduleDispatcher) OnAgentFinishedTableOperation(
+func (s *ScheduleDispatcher) OnAgentFinishedTableOperation(
 	captureID model.CaptureID,
 	tableID model.TableID,
-	epoch model.ProcessorEpoch,
+	epoch protocol.ProcessorEpoch,
 ) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -594,9 +573,9 @@ func (s *BaseScheduleDispatcher) OnAgentFinishedTableOperation(
 }
 
 // OnAgentSyncTaskStatuses is called when the processor sends its complete current state.
-func (s *BaseScheduleDispatcher) OnAgentSyncTaskStatuses(
+func (s *ScheduleDispatcher) OnAgentSyncTaskStatuses(
 	captureID model.CaptureID,
-	epoch model.ProcessorEpoch,
+	epoch protocol.ProcessorEpoch,
 	running, adding, removing []model.TableID,
 ) {
 	s.mu.Lock()
@@ -632,7 +611,9 @@ func (s *BaseScheduleDispatcher) OnAgentSyncTaskStatuses(
 				zap.Int64("tableID", tableID),
 				zap.String("actualCaptureID", record.CaptureID))
 		}
-		s.tables.AddTableRecord(&util.TableRecord{TableID: tableID, CaptureID: captureID, Status: util.AddingTable})
+		s.tables.AddTableRecord(&util.TableRecord{
+			TableID: tableID, CaptureID: captureID, Status: util.AddingTable,
+		})
 	}
 	for _, tableID := range running {
 		if record, ok := s.tables.GetTableRecord(tableID); ok {
@@ -640,7 +621,9 @@ func (s *BaseScheduleDispatcher) OnAgentSyncTaskStatuses(
 				zap.Int64("tableID", tableID),
 				zap.String("actualCaptureID", record.CaptureID))
 		}
-		s.tables.AddTableRecord(&util.TableRecord{TableID: tableID, CaptureID: captureID, Status: util.RunningTable})
+		s.tables.AddTableRecord(&util.TableRecord{
+			TableID: tableID, CaptureID: captureID, Status: util.RunningTable,
+		})
 	}
 	for _, tableID := range removing {
 		if record, ok := s.tables.GetTableRecord(tableID); ok {
@@ -648,7 +631,9 @@ func (s *BaseScheduleDispatcher) OnAgentSyncTaskStatuses(
 				zap.Int64("tableID", tableID),
 				zap.String("actualCaptureID", record.CaptureID))
 		}
-		s.tables.AddTableRecord(&util.TableRecord{TableID: tableID, CaptureID: captureID, Status: util.RemovingTable})
+		s.tables.AddTableRecord(&util.TableRecord{
+			TableID: tableID, CaptureID: captureID, Status: util.RemovingTable,
+		})
 	}
 
 	status := s.captureStatus[captureID]
@@ -657,7 +642,9 @@ func (s *BaseScheduleDispatcher) OnAgentSyncTaskStatuses(
 }
 
 // OnAgentCheckpoint is called when the processor sends a checkpoint.
-func (s *BaseScheduleDispatcher) OnAgentCheckpoint(captureID model.CaptureID, checkpointTs model.Ts, resolvedTs model.Ts) {
+func (s *ScheduleDispatcher) OnAgentCheckpoint(
+	captureID model.CaptureID, checkpointTs model.Ts, resolvedTs model.Ts,
+) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 

@@ -28,7 +28,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo"
-	schedulerv2 "github.com/pingcap/tiflow/cdc/scheduler"
+	"github.com/pingcap/tiflow/cdc/scheduler"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
@@ -39,12 +39,33 @@ import (
 	"go.uber.org/zap"
 )
 
+// newSchedulerV2FromCtx creates a new schedulerV2 from context.
+// This function is factored out to facilitate unit testing.
+func newSchedulerV2FromCtx(
+	ctx cdcContext.Context, startTs uint64,
+) (scheduler.Scheduler, error) {
+	changeFeedID := ctx.ChangefeedVars().ID
+	messageServer := ctx.GlobalVars().MessageServer
+	messageRouter := ctx.GlobalVars().MessageRouter
+	ownerRev := ctx.GlobalVars().OwnerRevision
+	ret, err := scheduler.NewScheduler(
+		ctx, changeFeedID, startTs, messageServer, messageRouter, ownerRev)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	return ret, nil
+}
+
+func newScheduler(ctx cdcContext.Context, startTs uint64) (scheduler.Scheduler, error) {
+	return newSchedulerV2FromCtx(ctx, startTs)
+}
+
 type changefeed struct {
 	id    model.ChangeFeedID
 	state *orchestrator.ChangefeedReactorState
 
 	upStream         *upstream.Upstream
-	scheduler        scheduler
+	scheduler        scheduler.Scheduler
 	barriers         *barriers
 	feedStateManager *feedStateManager
 	redoManager      redo.LogManager
@@ -85,7 +106,7 @@ type changefeed struct {
 
 	newDDLPuller func(ctx cdcContext.Context, upStream *upstream.Upstream, startTs uint64) (DDLPuller, error)
 	newSink      func() DDLSink
-	newScheduler func(ctx cdcContext.Context, startTs uint64) (scheduler, error)
+	newScheduler func(ctx cdcContext.Context, startTs uint64) (scheduler.Scheduler, error)
 }
 
 func newChangefeed(id model.ChangeFeedID, upStream *upstream.Upstream) *changefeed {
@@ -233,7 +254,8 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 	}
 
 	startTime := time.Now()
-	newCheckpointTs, newResolvedTs, err := c.scheduler.Tick(ctx, c.state, c.schema.AllPhysicalTables(), captures)
+	newCheckpointTs, newResolvedTs, err := c.scheduler.Tick(
+		ctx, c.state.Status.CheckpointTs, c.schema.AllPhysicalTables(), captures)
 	costTime := time.Since(startTime)
 	if costTime > schedulerLogsWarnDuration {
 		log.Warn("scheduler tick took too long",
@@ -249,7 +271,7 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 
 	// CheckpointCannotProceed implies that not all tables are being replicated normally,
 	// so in that case there is no need to advance the global watermarks.
-	if newCheckpointTs != schedulerv2.CheckpointCannotProceed {
+	if newCheckpointTs != scheduler.CheckpointCannotProceed {
 		if newResolvedTs > barrierTs {
 			newResolvedTs = barrierTs
 		}
@@ -660,8 +682,8 @@ func (c *changefeed) Close(ctx cdcContext.Context) {
 }
 
 // GetInfoProvider returns an InfoProvider if one is available.
-func (c *changefeed) GetInfoProvider() schedulerv2.InfoProvider {
-	if provider, ok := c.scheduler.(schedulerv2.InfoProvider); ok {
+func (c *changefeed) GetInfoProvider() scheduler.InfoProvider {
+	if provider, ok := c.scheduler.(scheduler.InfoProvider); ok {
 		return provider
 	}
 	return nil
