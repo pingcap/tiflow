@@ -205,14 +205,14 @@ func (s *mockSchemaStorage) DoGC(ts uint64) uint64 {
 
 type mockAgent struct {
 	// dummy to satisfy the interface
-	processorAgent
+	scheduler.Agent
 
 	executor         scheduler.TableExecutor
 	lastCheckpointTs model.Ts
 	isClosed         bool
 }
 
-func (a *mockAgent) Tick(_ cdcContext.Context) error {
+func (a *mockAgent) Tick(_ context.Context) error {
 	if len(a.executor.GetAllCurrentTables()) == 0 {
 		return nil
 	}

@@ -11,36 +11,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package scheduler
+package base
 
 import (
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/scheduler/util"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/util"
 )
-
-// InfoProvider is the interface to get information about the internal states of the scheduler.
-// We need this interface so that we can provide the information through HTTP API.
-type InfoProvider interface {
-	// GetTaskStatuses returns the task statuses.
-	GetTaskStatuses() (map[model.CaptureID]*model.TaskStatus, error)
-
-	// GetTaskPositions returns the task positions.
-	GetTaskPositions() (map[model.CaptureID]*model.TaskPosition, error)
-
-	// GetTotalTableCounts returns the number of tables associated
-	// with each capture.
-	GetTotalTableCounts() map[model.CaptureID]int
-
-	// GetPendingTableCounts returns the number of tables in a non-ready
-	// status (Adding & Removing) associated with each capture.
-	GetPendingTableCounts() map[model.CaptureID]int
-}
 
 // GetTaskStatuses implements InfoProvider for BaseScheduleDispatcher.
 // Complexity Note: This function has O(#tables) cost. USE WITH CARE.
 // Functions with cost O(#tables) are NOT recommended for regular metrics
 // collection.
-func (s *BaseScheduleDispatcher) GetTaskStatuses() (map[model.CaptureID]*model.TaskStatus, error) {
+func (s *ScheduleDispatcher) GetTaskStatuses() (map[model.CaptureID]*model.TaskStatus, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -86,7 +68,7 @@ func (s *BaseScheduleDispatcher) GetTaskStatuses() (map[model.CaptureID]*model.T
 
 // GetTaskPositions implements InfoProvider for BaseScheduleDispatcher.
 // Complexity Note: This function has O(#captures) cost.
-func (s *BaseScheduleDispatcher) GetTaskPositions() (map[model.CaptureID]*model.TaskPosition, error) {
+func (s *ScheduleDispatcher) GetTaskPositions() (map[model.CaptureID]*model.TaskPosition, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -103,7 +85,7 @@ func (s *BaseScheduleDispatcher) GetTaskPositions() (map[model.CaptureID]*model.
 
 // GetTotalTableCounts implements InfoProvider for BaseScheduleDispatcher.
 // Complexity Note: This function has O(#captures) cost.
-func (s *BaseScheduleDispatcher) GetTotalTableCounts() map[model.CaptureID]int {
+func (s *ScheduleDispatcher) GetTotalTableCounts() map[model.CaptureID]int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -116,7 +98,7 @@ func (s *BaseScheduleDispatcher) GetTotalTableCounts() map[model.CaptureID]int {
 
 // GetPendingTableCounts implements InfoProvider for BaseScheduleDispatcher.
 // Complexity Note: This function has O(#captures) cost.
-func (s *BaseScheduleDispatcher) GetPendingTableCounts() map[model.CaptureID]int {
+func (s *ScheduleDispatcher) GetPendingTableCounts() map[model.CaptureID]int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 

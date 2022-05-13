@@ -11,29 +11,27 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package processor
+package base
 
 import (
-	stdContext "context"
+	"context"
 	"time"
-
-	"go.uber.org/zap/zapcore"
 
 	"github.com/benbjohnson/clock"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"go.etcd.io/etcd/client/v3/concurrency"
-	"go.uber.org/zap"
-	"golang.org/x/time/rate"
-
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/scheduler"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/base/protocol"
 	"github.com/pingcap/tiflow/pkg/config"
-	"github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/p2p"
 	"github.com/pingcap/tiflow/pkg/version"
+	"go.etcd.io/etcd/client/v3/concurrency"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"golang.org/x/time/rate"
 )
 
 const (
@@ -43,24 +41,8 @@ const (
 	printWarnLogMinInterval         = time.Second * 1
 )
 
-// processorAgent is a data structure in the Processor that serves as a bridge with
-// the Owner.
-//
-// processorAgent has a BaseAgent embedded in it, which handles the high-level logic of receiving
-// commands from the Owner. It also implements ProcessorMessenger interface, which
-// provides the BaseAgent with the necessary methods to send messages to the Owner.
-//
-// The reason for this design is to decouple the scheduling algorithm with the underlying
-// RPC server/client.
-//
-// Note that Agent is not thread-safe, and it is not necessary for it to be thread-safe.
-type processorAgent interface {
-	scheduler.Agent
-	scheduler.ProcessorMessenger
-}
-
 type agentImpl struct {
-	*scheduler.BaseAgent
+	*Agent
 
 	messageServer *p2p.MessageServer
 	messageRouter p2p.MessageRouter
@@ -68,6 +50,7 @@ type agentImpl struct {
 	changeFeed     model.ChangeFeedID
 	ownerCaptureID model.CaptureID
 	ownerRevision  int64
+	etcdClient     *etcd.CDCEtcdClient
 
 	clock              clock.Clock
 	barrierSeqs        map[p2p.Topic]p2p.Seq
@@ -80,16 +63,19 @@ type agentImpl struct {
 	handlerErrChs []<-chan error
 }
 
-func newAgent(
+// NewAgent returns processor agent.
+func NewAgent(
 	ctx context.Context,
 	messageServer *p2p.MessageServer,
 	messageRouter p2p.MessageRouter,
-	executor scheduler.TableExecutor,
+	etcdClient *etcd.CDCEtcdClient,
+	executor internal.TableExecutor,
 	changeFeedID model.ChangeFeedID,
-) (retVal processorAgent, err error) {
+) (retVal internal.Agent, err error) {
 	ret := &agentImpl{
 		messageServer: messageServer,
 		messageRouter: messageRouter,
+		etcdClient:    etcdClient,
 
 		changeFeed: changeFeedID,
 
@@ -108,11 +94,11 @@ func newAgent(
 		zap.String("changefeed", changeFeedID.ID),
 		zap.Duration("sendCheckpointTsInterval", flushInterval))
 
-	ret.BaseAgent = scheduler.NewBaseAgent(
+	ret.Agent = NewBaseAgent(
 		changeFeedID,
 		executor,
 		ret,
-		&scheduler.BaseAgentConfig{SendCheckpointTsInterval: flushInterval})
+		&AgentConfig{SendCheckpointTsInterval: flushInterval})
 
 	// Note that registerPeerMessageHandlers sets handlerErrChs.
 	if err := ret.registerPeerMessageHandlers(); err != nil {
@@ -133,9 +119,9 @@ func newAgent(
 		}
 	}()
 
-	etcdCliCtx, cancel := stdContext.WithTimeout(ctx, getOwnerFromEtcdTimeout)
+	etcdCliCtx, cancel := context.WithTimeout(ctx, getOwnerFromEtcdTimeout)
 	defer cancel()
-	ownerCaptureID, err := ctx.GlobalVars().EtcdClient.
+	ownerCaptureID, err := ret.etcdClient.
 		GetOwnerID(etcdCliCtx, etcd.CaptureOwnerKey())
 	if err != nil {
 		if err != concurrency.ErrElectionNoLeader {
@@ -157,7 +143,7 @@ func newAgent(
 		zap.String("changefeed", changeFeedID.ID),
 		zap.String("ownerID", ownerCaptureID))
 
-	ret.ownerRevision, err = ctx.GlobalVars().EtcdClient.
+	ret.ownerRevision, err = ret.etcdClient.
 		GetOwnerRevision(etcdCliCtx, ownerCaptureID)
 	if err != nil {
 		if cerror.ErrOwnerNotFound.Equal(err) || cerror.ErrNotOwner.Equal(err) {
@@ -187,7 +173,7 @@ func (a *agentImpl) Tick(ctx context.Context) error {
 		}
 	}
 
-	if err := a.BaseAgent.Tick(ctx); err != nil {
+	if err := a.Agent.Tick(ctx); err != nil {
 		return errors.Trace(err)
 	}
 	return nil
@@ -196,9 +182,9 @@ func (a *agentImpl) Tick(ctx context.Context) error {
 func (a *agentImpl) FinishTableOperation(
 	ctx context.Context,
 	tableID model.TableID,
-	epoch model.ProcessorEpoch,
+	epoch protocol.ProcessorEpoch,
 ) (done bool, err error) {
-	topic := model.SyncTopic(a.changeFeed)
+	topic := protocol.SyncTopic(a.changeFeed)
 	if !a.Barrier(ctx) {
 		if _, exists := a.barrierSeqs[topic]; exists {
 			log.L().Info("Delay sending FinishTableOperation due to pending sync",
@@ -211,7 +197,7 @@ func (a *agentImpl) FinishTableOperation(
 		}
 	}
 
-	message := &model.DispatchTableResponseMessage{ID: tableID, Epoch: epoch}
+	message := &protocol.DispatchTableResponseMessage{ID: tableID, Epoch: epoch}
 	defer func() {
 		if err != nil {
 			return
@@ -225,7 +211,7 @@ func (a *agentImpl) FinishTableOperation(
 
 	done, err = a.trySendMessage(
 		ctx, a.ownerCaptureID,
-		model.DispatchTableResponseTopic(a.changeFeed),
+		protocol.DispatchTableResponseTopic(a.changeFeed),
 		message)
 	if err != nil {
 		return false, errors.Trace(err)
@@ -234,14 +220,14 @@ func (a *agentImpl) FinishTableOperation(
 }
 
 func (a *agentImpl) SyncTaskStatuses(
-	ctx context.Context, epoch model.ProcessorEpoch, adding, removing, running []model.TableID,
+	ctx context.Context, epoch protocol.ProcessorEpoch, adding, removing, running []model.TableID,
 ) (done bool, err error) {
 	if !a.Barrier(ctx) {
 		// The Sync message needs to be strongly ordered w.r.t. other messages.
 		return false, nil
 	}
 
-	message := &model.SyncMessage{
+	message := &protocol.SyncMessage{
 		ProcessorVersion: version.ReleaseSemver(),
 		Epoch:            epoch,
 		Running:          running,
@@ -274,7 +260,7 @@ func (a *agentImpl) SyncTaskStatuses(
 	done, err = a.trySendMessage(
 		ctx,
 		a.ownerCaptureID,
-		model.SyncTopic(a.changeFeed),
+		protocol.SyncTopic(a.changeFeed),
 		message)
 	if err != nil {
 		return false, errors.Trace(err)
@@ -287,7 +273,7 @@ func (a *agentImpl) SendCheckpoint(
 	checkpointTs model.Ts,
 	resolvedTs model.Ts,
 ) (done bool, err error) {
-	message := &model.CheckpointMessage{
+	message := &protocol.CheckpointMessage{
 		CheckpointTs: checkpointTs,
 		ResolvedTs:   resolvedTs,
 	}
@@ -309,7 +295,7 @@ func (a *agentImpl) SendCheckpoint(
 	done, err = a.trySendMessage(
 		ctx,
 		a.ownerCaptureID,
-		model.CheckpointTopic(a.changeFeed),
+		protocol.CheckpointTopic(a.changeFeed),
 		message)
 	if err != nil {
 		return false, errors.Trace(err)
@@ -408,7 +394,8 @@ func (a *agentImpl) trySendMessage(
 	topic p2p.Topic,
 	value interface{},
 ) (bool, error) {
-	// TODO (zixiong): abstract this function out together with the similar method in cdc/owner/scheduler.go
+	// TODO (zixiong): abstract this function out together with the similar method
+	// in cdc/scheduler/internal/base/owner_scheduler.go
 	// We probably need more advanced logic to handle and mitigate complex failure situations.
 
 	client := a.messageRouter.GetClient(target)
@@ -446,16 +433,16 @@ func (a *agentImpl) registerPeerMessageHandlers() (ret error) {
 		}
 	}()
 
-	ctx, cancel := stdContext.WithTimeout(stdContext.Background(), messageHandlerOperationsTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), messageHandlerOperationsTimeout)
 	defer cancel()
 
 	errCh, err := a.messageServer.SyncAddHandler(
 		ctx,
-		model.DispatchTableTopic(a.changeFeed),
-		&model.DispatchTableMessage{},
+		protocol.DispatchTableTopic(a.changeFeed),
+		&protocol.DispatchTableMessage{},
 		func(sender string, value interface{}) error {
 			ownerCapture := sender
-			message := value.(*model.DispatchTableMessage)
+			message := value.(*protocol.DispatchTableMessage)
 			a.OnOwnerDispatchedTask(
 				ownerCapture,
 				message.OwnerRev,
@@ -472,11 +459,11 @@ func (a *agentImpl) registerPeerMessageHandlers() (ret error) {
 
 	errCh, err = a.messageServer.SyncAddHandler(
 		ctx,
-		model.AnnounceTopic(a.changeFeed),
-		&model.AnnounceMessage{},
+		protocol.AnnounceTopic(a.changeFeed),
+		&protocol.AnnounceMessage{},
 		func(sender string, value interface{}) error {
 			ownerCapture := sender
-			message := value.(*model.AnnounceMessage)
+			message := value.(*protocol.AnnounceMessage)
 			a.OnOwnerAnnounce(
 				ownerCapture,
 				message.OwnerRev)
@@ -490,15 +477,15 @@ func (a *agentImpl) registerPeerMessageHandlers() (ret error) {
 }
 
 func (a *agentImpl) deregisterPeerMessageHandlers() error {
-	ctx, cancel := stdContext.WithTimeout(stdContext.Background(), messageHandlerOperationsTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), messageHandlerOperationsTimeout)
 	defer cancel()
 
-	err := a.messageServer.SyncRemoveHandler(ctx, model.DispatchTableTopic(a.changeFeed))
+	err := a.messageServer.SyncRemoveHandler(ctx, protocol.DispatchTableTopic(a.changeFeed))
 	if err != nil {
 		return errors.Trace(err)
 	}
 
-	err = a.messageServer.SyncRemoveHandler(ctx, model.AnnounceTopic(a.changeFeed))
+	err = a.messageServer.SyncRemoveHandler(ctx, protocol.AnnounceTopic(a.changeFeed))
 	if err != nil {
 		return errors.Trace(err)
 	}
