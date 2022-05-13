@@ -22,10 +22,13 @@ import (
 )
 
 type (
-	Callback          = func(ctx context.Context, handle WorkerHandle) error
+	// Callback alias to worker callback function when there is no error along with.
+	Callback = func(ctx context.Context, handle WorkerHandle) error
+	// CallbackWithError alias to worker callback function when there could be an error along with.
 	CallbackWithError = func(ctx context.Context, handle WorkerHandle, err error) error
 )
 
+// WorkerManager manages all workers belonging to a job master
 type WorkerManager struct {
 	mu            sync.Mutex
 	workerEntries map[libModel.WorkerID]*workerEntry
@@ -64,6 +67,7 @@ const (
 	workerManagerWaitingHeartbeat
 )
 
+// NewWorkerManager creates a new WorkerManager instance
 func NewWorkerManager(
 	masterID libModel.MasterID,
 	epoch libModel.Epoch,
@@ -117,6 +121,7 @@ func NewWorkerManager(
 	return ret
 }
 
+// Close closes the WorkerManager and waits all resource released.
 func (m *WorkerManager) Close() {
 	close(m.closeCh)
 	m.wg.Wait()
@@ -195,6 +200,7 @@ func (m *WorkerManager) InitAfterRecover(ctx context.Context) (retErr error) {
 	return nil
 }
 
+// HandleHeartbeat handles heartbeat ping message from a worker
 func (m *WorkerManager) HandleHeartbeat(msg *libModel.HeartbeatPingMessage, fromNode p2p.NodeID) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -404,6 +410,8 @@ func (m *WorkerManager) OnWorkerStatusUpdateMessage(msg *statusutil.WorkerStatus
 	}
 }
 
+// GetWorkers gets all workers maintained by WorkerManager, including both running
+// workers and dead workers.
 func (m *WorkerManager) GetWorkers() map[libModel.WorkerID]WorkerHandle {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -427,6 +435,8 @@ func (m *WorkerManager) GetWorkers() map[libModel.WorkerID]WorkerHandle {
 	return ret
 }
 
+// IsInitialized returns true after the worker manager has checked all tombstone
+// workers are online or dead.
 func (m *WorkerManager) IsInitialized() bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()

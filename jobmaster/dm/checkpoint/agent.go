@@ -42,42 +42,46 @@ const (
 	)`
 )
 
+// Agent defeins a checkpoint agent interface
 type Agent interface {
 	Init(ctx context.Context) error
 	Remove(ctx context.Context) error
 	IsFresh(ctx context.Context, workerType lib.WorkerType, task *metadata.Task) (bool, error)
 }
 
+// AgentImpl implements Agent
 type AgentImpl struct {
 	mu  sync.RWMutex
 	cfg *config.JobCfg
 }
 
+// NewAgentImpl creates a new AgentImpl instance
 func NewAgentImpl(jobCfg *config.JobCfg) *AgentImpl {
 	c := &AgentImpl{}
-	c.UpdateConfig(jobCfg)
+	c.updateConfig(jobCfg)
 	return c
 }
 
-func (c *AgentImpl) GetConfig() *config.JobCfg {
+func (c *AgentImpl) getConfig() *config.JobCfg {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.cfg
 }
 
-func (c *AgentImpl) UpdateConfig(jobCfg *config.JobCfg) {
+func (c *AgentImpl) updateConfig(jobCfg *config.JobCfg) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.cfg = jobCfg
 }
 
+// Init implements Agent.Init
 // We create checkpoint table in master rather than in workers,
 // to avoid the annoying log of "table already exists",
 // because one job only need to create one checkpoint table per unit.
 // move these codes to tiflow later.
 func (c *AgentImpl) Init(ctx context.Context) error {
 	log.L().Info("init checkpoint", zap.String("job_id", c.cfg.Name))
-	cfg := c.GetConfig()
+	cfg := c.getConfig()
 	db, err := conn.DefaultDBProvider.Apply(cfg.TargetDB)
 	if err != nil {
 		return err
@@ -102,9 +106,10 @@ func (c *AgentImpl) Init(ctx context.Context) error {
 	return nil
 }
 
+// Remove implements Agent.Remove
 func (c *AgentImpl) Remove(ctx context.Context) error {
 	log.L().Info("remove checkpoint", zap.String("job_id", c.cfg.Name))
-	cfg := c.GetConfig()
+	cfg := c.getConfig()
 	db, err := conn.DefaultDBProvider.Apply(cfg.TargetDB)
 	if err != nil {
 		return err
@@ -117,6 +122,7 @@ func (c *AgentImpl) Remove(ctx context.Context) error {
 	return dropSyncCheckpointTable(ctx, cfg, db)
 }
 
+// IsFresh implements Agent.IsFresh
 func (c *AgentImpl) IsFresh(ctx context.Context, workerType lib.WorkerType, task *metadata.Task) (bool, error) {
 	if workerType == lib.WorkerDMDump {
 		return true, nil

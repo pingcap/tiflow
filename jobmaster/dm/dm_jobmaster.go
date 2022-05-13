@@ -189,6 +189,7 @@ func (jm *JobMaster) OnWorkerMessage(worker lib.WorkerHandle, topic p2p.Topic, m
 	return jm.messageAgent.OnWorkerMessage(response)
 }
 
+// OnMasterMessage implements JobMasterImpl.OnMasterMessage
 func (jm *JobMaster) OnMasterMessage(topic p2p.Topic, message interface{}) error {
 	return nil
 }

@@ -19,11 +19,13 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 )
 
+// BaseWorkerForTesting mocks base worker
 type BaseWorkerForTesting struct {
 	*DefaultBaseWorker
 	Broker *broker.LocalBroker
 }
 
+// MockBaseWorker creates a mock base worker for test
 func MockBaseWorker(
 	workerID libModel.WorkerID,
 	masterID libModel.MasterID,
@@ -62,6 +64,7 @@ func MockBaseWorker(
 	}
 }
 
+// MockBaseWorkerCheckSendMessage checks can receive one message from mock message sender
 func MockBaseWorkerCheckSendMessage(
 	t *testing.T,
 	worker *DefaultBaseWorker,
@@ -74,6 +77,8 @@ func MockBaseWorkerCheckSendMessage(
 	require.Equal(t, message, got)
 }
 
+// MockBaseWorkerWaitUpdateStatus checks can receive a update status message from
+// mock message sender
 func MockBaseWorkerWaitUpdateStatus(
 	t *testing.T,
 	worker *DefaultBaseWorker,

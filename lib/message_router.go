@@ -29,6 +29,7 @@ type MessageRouter struct {
 	routeFn  func(topic p2p.Topic, msg p2p.MessageValue) error
 }
 
+// NewMessageRouter creates a new MessageRouter
 func NewMessageRouter(
 	workerID libModel.WorkerID,
 	pool workerpool.AsyncPool,
@@ -44,6 +45,7 @@ func NewMessageRouter(
 	}
 }
 
+// Tick should be called periodically, it receives message from buffer and route it
 func (r *MessageRouter) Tick(ctx context.Context) error {
 	select {
 	case <-ctx.Done():

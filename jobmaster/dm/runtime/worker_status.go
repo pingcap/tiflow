@@ -7,6 +7,7 @@ import (
 	libModel "github.com/hanfei1991/microcosm/lib/model"
 )
 
+// HeartbeatInterval is heartbeat interval for checking worker stage
 // TODO: expose this config in lib
 var HeartbeatInterval = 3 * time.Second
 

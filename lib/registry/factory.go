@@ -27,14 +27,16 @@ type WorkerFactory interface {
 	DeserializeConfig(configBytes []byte) (WorkerConfig, error)
 }
 
+// WorkerConstructor alias to the function that can construct a WorkerImpl
 type WorkerConstructor func(ctx *dcontext.Context, id libModel.WorkerID, masterID libModel.MasterID, config WorkerConfig) lib.WorkerImpl
 
+// SimpleWorkerFactory is a WorkerFactory with built-in JSON codec for WorkerConfig.
 type SimpleWorkerFactory struct {
 	constructor WorkerConstructor
 	configTpi   interface{}
 }
 
-// NewSimpleWorkerFactory creates a WorkerFactory with built-in JSON codec for WorkerConfig.
+// NewSimpleWorkerFactory creates a new WorkerFactory.
 func NewSimpleWorkerFactory(constructor WorkerConstructor, configType interface{}) *SimpleWorkerFactory {
 	return &SimpleWorkerFactory{
 		constructor: constructor,
@@ -42,6 +44,7 @@ func NewSimpleWorkerFactory(constructor WorkerConstructor, configType interface{
 	}
 }
 
+// NewWorkerImpl implements WorkerFactory.NewWorkerImpl
 func (f *SimpleWorkerFactory) NewWorkerImpl(
 	ctx *dcontext.Context,
 	workerID libModel.WorkerID,
@@ -51,6 +54,7 @@ func (f *SimpleWorkerFactory) NewWorkerImpl(
 	return f.constructor(ctx, workerID, masterID, config), nil
 }
 
+// DeserializeConfig implements WorkerFactory.DeserializeConfig
 func (f *SimpleWorkerFactory) DeserializeConfig(configBytes []byte) (WorkerConfig, error) {
 	config := reflect.New(reflect.TypeOf(f.configTpi).Elem()).Interface()
 	if err := json.Unmarshal(configBytes, config); err != nil {
@@ -67,11 +71,13 @@ func NewTomlWorkerFactory(constructor WorkerConstructor, configType interface{})
 	}
 }
 
+// TomlWorkerFactory is a WorkerFactory with built-in TOML codec for WorkerConfig
 type TomlWorkerFactory struct {
 	constructor WorkerConstructor
 	configTpi   interface{}
 }
 
+// NewWorkerImpl implements WorkerFactory.NewWorkerImpl
 func (f *TomlWorkerFactory) NewWorkerImpl(
 	ctx *dcontext.Context,
 	workerID libModel.WorkerID,
@@ -81,6 +87,7 @@ func (f *TomlWorkerFactory) NewWorkerImpl(
 	return f.constructor(ctx, workerID, masterID, config), nil
 }
 
+// DeserializeConfig implements WorkerFactory.DeserializeConfig
 func (f *TomlWorkerFactory) DeserializeConfig(configBytes []byte) (WorkerConfig, error) {
 	config := reflect.New(reflect.TypeOf(f.configTpi).Elem()).Interface()
 	if _, err := toml.Decode(string(configBytes), config); err != nil {

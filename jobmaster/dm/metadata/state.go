@@ -32,13 +32,14 @@ type TomlStore struct {
 	mu sync.RWMutex
 }
 
+// NewTomlStore returns a new TomlStore instance
 func NewTomlStore(kvClient metaclient.KVClient) *TomlStore {
 	return &TomlStore{
 		kvClient: kvClient,
 	}
 }
 
-func (ds *TomlStore) PutOp(state State) (metaclient.Op, error) {
+func (ds *TomlStore) putOp(state State) (metaclient.Op, error) {
 	var b bytes.Buffer
 	err := toml.NewEncoder(&b).Encode(state)
 	if err != nil {
@@ -47,7 +48,7 @@ func (ds *TomlStore) PutOp(state State) (metaclient.Op, error) {
 	return metaclient.OpPut(ds.Key(), b.String()), nil
 }
 
-func (ds *TomlStore) DeleteOp() metaclient.Op {
+func (ds *TomlStore) deleteOp() metaclient.Op {
 	return metaclient.OpDelete(ds.Key())
 }
 
@@ -68,6 +69,7 @@ func checkAllFieldsIsPublic(state State) bool {
 	return true
 }
 
+// Put updates state into metastore
 func (ds *TomlStore) Put(ctx context.Context, state State) error {
 	if !checkAllFieldsIsPublic(state) {
 		return errors.New("fields of state should all be public")
@@ -76,7 +78,7 @@ func (ds *TomlStore) Put(ctx context.Context, state State) error {
 	ds.mu.Lock()
 	defer ds.mu.Unlock()
 
-	putOp, err := ds.PutOp(state)
+	putOp, err := ds.putOp(state)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -89,6 +91,7 @@ func (ds *TomlStore) Put(ctx context.Context, state State) error {
 	return nil
 }
 
+// Delete deletes the state from metastore
 func (ds *TomlStore) Delete(ctx context.Context) error {
 	ds.mu.Lock()
 	defer ds.mu.Unlock()
@@ -97,7 +100,7 @@ func (ds *TomlStore) Delete(ctx context.Context) error {
 		return nil
 	}
 
-	delOp := ds.DeleteOp()
+	delOp := ds.deleteOp()
 	if _, err := ds.kvClient.Txn(ctx).Do(delOp).Commit(); err != nil {
 		return errors.Trace(err)
 	}
@@ -106,7 +109,7 @@ func (ds *TomlStore) Delete(ctx context.Context) error {
 	return nil
 }
 
-// Notice: get always return clone of a state.
+// Get queries State from metastore, it always return clone of a state.
 func (ds *TomlStore) Get(ctx context.Context) (State, error) {
 	ds.mu.RLock()
 	if ds.state != nil {

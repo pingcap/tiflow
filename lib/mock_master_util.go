@@ -28,6 +28,7 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/uuid"
 )
 
+// MockBaseMaster returns a mock DefaultBaseMaster
 func MockBaseMaster(id libModel.MasterID, masterImpl MasterImpl) *DefaultBaseMaster {
 	ctx := dcontext.Background()
 	dp := deps.NewDeps()
@@ -59,6 +60,7 @@ func MockBaseMaster(id libModel.MasterID, masterImpl MasterImpl) *DefaultBaseMas
 	return ret.(*DefaultBaseMaster)
 }
 
+// MockBaseMasterCreateWorker mocks to create worker in base master
 func MockBaseMasterCreateWorker(
 	t *testing.T,
 	master *DefaultBaseMaster,
@@ -108,6 +110,7 @@ func MockBaseMasterCreateWorker(
 	master.uuidGen.(*uuid.MockGenerator).Push(workerID)
 }
 
+// MockBaseMasterCreateWorkerMetScheduleTaskError mocks ScheduleTask meets error
 func MockBaseMasterCreateWorkerMetScheduleTaskError(
 	t *testing.T,
 	master *DefaultBaseMaster,
@@ -132,6 +135,7 @@ func MockBaseMasterCreateWorkerMetScheduleTaskError(
 	master.uuidGen.(*uuid.MockGenerator).Push(workerID)
 }
 
+// MockBaseMasterWorkerHeartbeat sends HeartbeatPingMessage with mock message handler
 func MockBaseMasterWorkerHeartbeat(
 	t *testing.T,
 	master *DefaultBaseMaster,
@@ -152,6 +156,8 @@ func MockBaseMasterWorkerHeartbeat(
 	require.NoError(t, err)
 }
 
+// MockBaseMasterWorkerUpdateStatus mocks to store status in metastore and sends
+// WorkerStatusMessage.
 func MockBaseMasterWorkerUpdateStatus(
 	ctx context.Context,
 	t *testing.T,

@@ -72,10 +72,10 @@ func TestCheckpoint(t *testing.T) {
 func TestCheckpointLifeCycle(t *testing.T) {
 	jobCfg := &config.JobCfg{Name: "test", MetaSchema: "meta", TaskMode: dmconfig.ModeAll}
 	checkpointAgent := NewAgentImpl(jobCfg)
-	require.Equal(t, checkpointAgent.GetConfig(), jobCfg)
+	require.Equal(t, checkpointAgent.getConfig(), jobCfg)
 	jobCfg2 := &config.JobCfg{Name: "test2", MetaSchema: "meta", TaskMode: dmconfig.ModeAll}
-	checkpointAgent.UpdateConfig(jobCfg2)
-	require.Equal(t, checkpointAgent.GetConfig(), jobCfg2)
+	checkpointAgent.updateConfig(jobCfg2)
+	require.Equal(t, checkpointAgent.getConfig(), jobCfg2)
 	require.NotEqual(t, jobCfg, jobCfg2)
 
 	// create meta database error
@@ -113,7 +113,7 @@ func TestCheckpointLifeCycle(t *testing.T) {
 
 	// create load checkpoint only
 	jobCfg.TaskMode = dmconfig.ModeFull
-	checkpointAgent.UpdateConfig(jobCfg)
+	checkpointAgent.updateConfig(jobCfg)
 	_, mock, err = conn.InitMockDBFull()
 	require.NoError(t, err)
 	mock.ExpectExec(".*").WillReturnResult(sqlmock.NewResult(1, 1))
@@ -123,7 +123,7 @@ func TestCheckpointLifeCycle(t *testing.T) {
 
 	// create sync checkpoint only
 	jobCfg.TaskMode = dmconfig.ModeIncrement
-	checkpointAgent.UpdateConfig(jobCfg)
+	checkpointAgent.updateConfig(jobCfg)
 	_, mock, err = conn.InitMockDBFull()
 	require.NoError(t, err)
 	mock.ExpectExec(".*").WillReturnResult(sqlmock.NewResult(1, 1))

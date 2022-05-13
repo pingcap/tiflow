@@ -14,8 +14,11 @@ import (
 	derror "github.com/hanfei1991/microcosm/pkg/errors"
 )
 
+// WorkerConfig alias to lib.WorkerConfig
 type WorkerConfig = lib.WorkerConfig
 
+// Registry defines an interface to worker as worker register bridge. Business
+// can register any worker or job master implementation into a registry
 type Registry interface {
 	MustRegisterWorkerType(tp libModel.WorkerType, factory WorkerFactory)
 	RegisterWorkerType(tp libModel.WorkerType, factory WorkerFactory) (ok bool)
@@ -33,12 +36,14 @@ type registryImpl struct {
 	factoryMap map[libModel.WorkerType]WorkerFactory
 }
 
+// NewRegistry creates a new registryImpl instance
 func NewRegistry() Registry {
 	return &registryImpl{
 		factoryMap: make(map[libModel.WorkerType]WorkerFactory),
 	}
 }
 
+// MustRegisterWorkerType implements Registry.MustRegisterWorkerType
 func (r *registryImpl) MustRegisterWorkerType(tp libModel.WorkerType, factory WorkerFactory) {
 	if ok := r.RegisterWorkerType(tp, factory); !ok {
 		log.L().Panic("duplicate worker type", zap.Int64("worker-type", int64(tp)))
@@ -46,6 +51,7 @@ func (r *registryImpl) MustRegisterWorkerType(tp libModel.WorkerType, factory Wo
 	log.L().Info("register worker", zap.Int64("worker-type", int64(tp)))
 }
 
+// RegisterWorkerType implements Registry.RegisterWorkerType
 func (r *registryImpl) RegisterWorkerType(tp libModel.WorkerType, factory WorkerFactory) (ok bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -57,6 +63,7 @@ func (r *registryImpl) RegisterWorkerType(tp libModel.WorkerType, factory Worker
 	return true
 }
 
+// CreateWorker implements Registry.CreateWorker
 func (r *registryImpl) CreateWorker(
 	ctx *dcontext.Context,
 	tp lib.WorkerType,

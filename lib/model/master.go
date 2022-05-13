@@ -9,10 +9,13 @@ import (
 )
 
 type (
+	// MasterStatusCode is used in framework to manage job status
 	MasterStatusCode int32
-	WorkerType       int64
+	// WorkerType represents task type, such as DM worker, DM master, etc.
+	WorkerType int64
 )
 
+// MasterUpdateColumns is used in gorm update
 // TODO: using reflect to generate it more generally
 // related to some implement of gorm
 var MasterUpdateColumns = []string{
@@ -27,6 +30,7 @@ var MasterUpdateColumns = []string{
 	"config",
 }
 
+// MasterMetaKVData defines the metadata of job master
 type MasterMetaKVData struct {
 	ormModel.Model
 	ProjectID  tenant.ProjectID `json:"project-id" gorm:"column:project_id;type:varchar(64) not null;index:idx_st,priority:1"`
@@ -42,10 +46,12 @@ type MasterMetaKVData struct {
 	// TODO: add master status and checkpoint data
 }
 
+// Marshal returns the JSON encoding of MasterMetaKVData.
 func (m *MasterMetaKVData) Marshal() ([]byte, error) {
 	return json.Marshal(m)
 }
 
+// Unmarshal parses the JSON-encoded data and stores the result to MasterMetaKVData
 func (m *MasterMetaKVData) Unmarshal(data []byte) error {
 	return json.Unmarshal(data, m)
 }

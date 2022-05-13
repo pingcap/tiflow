@@ -31,6 +31,8 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/tenant"
 )
 
+// Worker defines an interface that provides all methods that will be used in
+// runtime(runner container)
 type Worker interface {
 	Init(ctx context.Context) error
 	Poll(ctx context.Context) error
@@ -64,12 +66,11 @@ type WorkerImpl interface {
 	CloseImpl(ctx context.Context) error
 }
 
+// BaseWorker defines the worker interface, it embeds a Worker interface and adds
+// more utility methods
 type BaseWorker interface {
-	Workload() model.RescUnit
-	Init(ctx context.Context) error
-	Poll(ctx context.Context) error
-	Close(ctx context.Context) error
-	ID() runtime.RunnableID
+	Worker
+
 	MetaKVClient() metaclient.KVClient
 	UpdateStatus(ctx context.Context, status libModel.WorkerStatus) error
 	SendMessage(ctx context.Context, topic p2p.Topic, message interface{}) (bool, error)
@@ -80,6 +81,8 @@ type BaseWorker interface {
 	Exit(ctx context.Context, status libModel.WorkerStatus, err error) error
 }
 
+// DefaultBaseWorker implements BaseWorker interface, it also embeds an Impl
+// which implements the WorkerImpl interface and passed from business logic.
 type DefaultBaseWorker struct {
 	Impl WorkerImpl
 
@@ -128,6 +131,7 @@ type workerParams struct {
 	ResourceBroker        broker.Broker
 }
 
+// NewBaseWorker creates a new BaseWorker instance
 func NewBaseWorker(
 	ctx *dcontext.Context,
 	impl WorkerImpl,
@@ -168,10 +172,12 @@ func NewBaseWorker(
 	}
 }
 
+// Workload implements BaseWorker.Workload
 func (w *DefaultBaseWorker) Workload() model.RescUnit {
 	return w.Impl.Workload()
 }
 
+// Init implements BaseWorker.Init
 func (w *DefaultBaseWorker) Init(ctx context.Context) error {
 	ctx = w.errCenter.WithCancelOnFirstError(ctx)
 
@@ -274,6 +280,7 @@ func (w *DefaultBaseWorker) doPoll(ctx context.Context) error {
 	return w.messageRouter.Tick(ctx)
 }
 
+// Poll implements BaseWorker.Poll
 func (w *DefaultBaseWorker) Poll(ctx context.Context) error {
 	ctx = w.errCenter.WithCancelOnFirstError(ctx)
 
@@ -308,6 +315,7 @@ func (w *DefaultBaseWorker) doClose() {
 	w.wg.Wait()
 }
 
+// Close implements BaseWorker.Close
 func (w *DefaultBaseWorker) Close(ctx context.Context) error {
 	if err := w.Impl.CloseImpl(ctx); err != nil {
 		log.L().Error("Failed to close WorkerImpl", zap.Error(err))
@@ -318,10 +326,12 @@ func (w *DefaultBaseWorker) Close(ctx context.Context) error {
 	return nil
 }
 
+// ID implements BaseWorker.ID
 func (w *DefaultBaseWorker) ID() runtime.RunnableID {
 	return w.id
 }
 
+// MetaKVClient implements BaseWorker.MetaKVClient
 func (w *DefaultBaseWorker) MetaKVClient() metaclient.KVClient {
 	return w.userMetaKVClient
 }
@@ -346,6 +356,7 @@ func (w *DefaultBaseWorker) UpdateStatus(ctx context.Context, status libModel.Wo
 	return nil
 }
 
+// SendMessage implements BaseWorker.SendMessage
 func (w *DefaultBaseWorker) SendMessage(
 	ctx context.Context,
 	topic p2p.Topic,
@@ -355,11 +366,13 @@ func (w *DefaultBaseWorker) SendMessage(
 	return w.messageSender.SendToNode(ctx, w.masterClient.MasterNode(), topic, message)
 }
 
+// OpenStorage implements BaseWorker.OpenStorage
 func (w *DefaultBaseWorker) OpenStorage(ctx context.Context, resourcePath resourcemeta.ResourceID) (broker.Handle, error) {
 	ctx = w.errCenter.WithCancelOnFirstError(ctx)
 	return w.resourceBroker.OpenStorage(ctx, w.id, w.masterID, resourcePath)
 }
 
+// Exit implements BaseWorker.Exit
 func (w *DefaultBaseWorker) Exit(ctx context.Context, status libModel.WorkerStatus, err error) error {
 	if err != nil {
 		status.Code = libModel.WorkerStatusError

@@ -135,6 +135,7 @@ func (c *JobCfg) Yaml() (string, error) {
 	return string(b), err
 }
 
+// Clone returns a deep copy of JobCfg
 func (c *JobCfg) Clone() (*JobCfg, error) {
 	content, err := c.Yaml()
 	if err != nil {
@@ -160,7 +161,7 @@ func (c *JobCfg) ToTaskConfigs() map[string]*TaskCfg {
 	return taskCfgs
 }
 
-// ToDMSubtaskCfg adapts a TaskCfg to a SubTaskCfg for worker now.
+// ToDMSubTaskCfg adapts a TaskCfg to a SubTaskCfg for worker now.
 // TODO: fully support all fields
 func (c *TaskCfg) ToDMSubTaskCfg() *dmconfig.SubTaskConfig {
 	cfg := &dmconfig.SubTaskConfig{}

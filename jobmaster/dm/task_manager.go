@@ -51,6 +51,7 @@ type TaskManager struct {
 	tasks sync.Map
 }
 
+// NewTaskManager creates a new TaskManager instance
 func NewTaskManager(initTaskStatus []runtime.TaskStatus, jobStore *metadata.JobStore, agent TaskAgent) *TaskManager {
 	taskManager := &TaskManager{
 		DefaultTicker: ticker.NewDefaultTicker(taskNormalInterval, taskErrorInterval),

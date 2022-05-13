@@ -11,16 +11,20 @@ import (
 	"github.com/hanfei1991/microcosm/model"
 )
 
+// Closer defines an interface to support Close
 type Closer interface {
 	Close(ctx context.Context) error
 }
 
+// Workloader defines an interface to get Workload
 type Workloader interface {
 	Workload() model.RescUnit
 }
 
+// RunnableID is a unique id for the runnable
 type RunnableID = string
 
+// Runnable defines an interface that can be ran in task runner
 type Runnable interface {
 	Init(ctx context.Context) error
 	Poll(ctx context.Context) error
@@ -29,6 +33,7 @@ type Runnable interface {
 	Closer
 }
 
+// RunnableStatus is the runtime container status
 type RunnableStatus = int32
 
 // Defines all RunnableStatus
@@ -38,12 +43,14 @@ const (
 	TaskClosing
 )
 
+// RunnableContainer implements Runnable, and maintains some more running information
 type RunnableContainer struct {
 	Runnable
 	status atomic.Int32
 	info   RuntimeInfo
 }
 
+// WrapRunnable creates a new RunnableContainer from a Runnable interface
 func WrapRunnable(runnable Runnable, submitTime time.Time) *RunnableContainer {
 	return &RunnableContainer{
 		Runnable: runnable,
@@ -52,14 +59,17 @@ func WrapRunnable(runnable Runnable, submitTime time.Time) *RunnableContainer {
 	}
 }
 
+// Status returns the status of RunnableContainer
 func (c *RunnableContainer) Status() RunnableStatus {
 	return c.status.Load()
 }
 
+// Info returns the info of RunnableContainer
 func (c *RunnableContainer) Info() RuntimeInfo {
 	return c.info
 }
 
+// OnInitialized is the callback when the runnable instance is initialized
 func (c *RunnableContainer) OnInitialized() {
 	oldStatus := c.status.Swap(TaskRunning)
 	if oldStatus != TaskSubmitted {
@@ -67,6 +77,7 @@ func (c *RunnableContainer) OnInitialized() {
 	}
 }
 
+// OnStopped is the callback when the runnable instance is stopped
 func (c *RunnableContainer) OnStopped() {
 	oldStatus := c.status.Swap(TaskClosing)
 	if oldStatus != TaskRunning && oldStatus != TaskSubmitted {

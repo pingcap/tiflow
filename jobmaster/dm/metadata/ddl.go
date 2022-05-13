@@ -19,6 +19,7 @@ type DDLStore struct {
 	id libModel.MasterID
 }
 
+// NewDDLStore returns a new DDLStore instance
 func NewDDLStore(id libModel.MasterID, kvClient metaclient.KVClient) *DDLStore {
 	ddlStore := &DDLStore{
 		TomlStore: NewTomlStore(kvClient),
@@ -28,10 +29,12 @@ func NewDDLStore(id libModel.MasterID, kvClient metaclient.KVClient) *DDLStore {
 	return ddlStore
 }
 
+// CreateState creates an empty DDL object
 func (ddlStore *DDLStore) CreateState() State {
 	return &DDL{}
 }
 
+// Key returns encoded key of ddl state store
 // TODO: add ddl key
 func (ddlStore *DDLStore) Key() string {
 	return ""

@@ -79,10 +79,12 @@ func NewJobStore(id libModel.MasterID, kvClient metaclient.KVClient) *JobStore {
 	return jobStore
 }
 
+// CreateState returns an empty Job object
 func (jobStore *JobStore) CreateState() State {
 	return &Job{}
 }
 
+// Key returns encoded key for job store id
 func (jobStore *JobStore) Key() string {
 	return adapter.DMJobKeyAdapter.Encode(jobStore.id)
 }

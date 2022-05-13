@@ -12,18 +12,26 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 )
 
-type WorkerHandle interface {
+// BaseHandle provides some common api of a worker, no matter it is running or dead.
+type BaseHandle interface {
 	Status() *libModel.WorkerStatus
 	ID() libModel.WorkerID
-	GetTombstone() TombstoneHandle
-	Unwrap() RunningHandle
 	ToPB() (*pb.WorkerInfo, error)
 }
 
+// WorkerHandle defines the interface of a worker, businiss logic can use this
+// handler to get RunningHandle or TombstoneHandle
+type WorkerHandle interface {
+	BaseHandle
+
+	GetTombstone() TombstoneHandle
+	Unwrap() RunningHandle
+}
+
+// RunningHandle represents a running worker
 type RunningHandle interface {
-	Status() *libModel.WorkerStatus
-	ID() libModel.WorkerID
-	ToPB() (*pb.WorkerInfo, error)
+	BaseHandle
+
 	SendMessage(
 		ctx context.Context,
 		topic p2p.Topic,
@@ -34,9 +42,7 @@ type RunningHandle interface {
 
 // TombstoneHandle represents a dead worker.
 type TombstoneHandle interface {
-	Status() *libModel.WorkerStatus
-	ID() libModel.WorkerID
-	ToPB() (*pb.WorkerInfo, error)
+	BaseHandle
 
 	// CleanTombstone cleans the metadata from the metastore,
 	// and cleans the state managed by the framework.

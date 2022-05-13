@@ -27,8 +27,10 @@ import (
 var _ lib.Worker = (*dummyWorker)(nil)
 
 type (
+	// Worker is exposed for unit test
 	Worker = dummyWorker
 
+	// WorkerConfig defines config of fake worker
 	WorkerConfig struct {
 		ID         int   `json:"id"`
 		TargetTick int64 `json:"target-tick"`
@@ -259,6 +261,7 @@ watchLoop:
 	}
 }
 
+// NewDummyWorker creates a new dummy worker instance
 func NewDummyWorker(
 	ctx *dcontext.Context,
 	id libModel.WorkerID, masterID libModel.MasterID,

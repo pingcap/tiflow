@@ -17,17 +17,17 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 )
 
+// BaseJobMaster defines an interface that can workr as a job master, it embeds
+// a Worker interface which can run on dateflow engine runtime, and also provides
+// some utility methods.
 type BaseJobMaster interface {
-	Init(ctx context.Context) error
-	Poll(ctx context.Context) error
-	Close(ctx context.Context) error
+	Worker
+
 	OnError(err error)
 	MetaKVClient() metaclient.KVClient
 	GetWorkers() map[libModel.WorkerID]WorkerHandle
 	CreateWorker(workerType WorkerType, config WorkerConfig, cost model.RescUnit, resources ...resourcemeta.ResourceID) (libModel.WorkerID, error)
-	Workload() model.RescUnit
 	JobMasterID() libModel.MasterID
-	ID() worker.RunnableID
 	UpdateJobStatus(ctx context.Context, status libModel.WorkerStatus) error
 	CurrentEpoch() libModel.Epoch
 
@@ -47,6 +47,7 @@ type BaseJobMaster interface {
 	IsBaseJobMaster()
 }
 
+// DefaultBaseJobMaster implements BaseJobMaster interface
 type DefaultBaseJobMaster struct {
 	master    *DefaultBaseMaster
 	worker    *DefaultBaseWorker
@@ -58,26 +59,17 @@ type DefaultBaseJobMaster struct {
 // the implementation struct must embed the lib.BaseJobMaster interface, this
 // interface will be initialized by the framework.
 type JobMasterImpl interface {
-	InitImpl(ctx context.Context) error
-	// Tick is called on a fixed interval. When an error is returned, the worker
-	// will be stopped.
-	Tick(ctx context.Context) error
-	CloseImpl(ctx context.Context) error
-	OnMasterRecovered(ctx context.Context) error
-	OnWorkerDispatched(worker WorkerHandle, result error) error
-	OnWorkerOnline(worker WorkerHandle) error
-	OnWorkerOffline(worker WorkerHandle, reason error) error
-	OnWorkerMessage(worker WorkerHandle, topic p2p.Topic, message interface{}) error
-	OnWorkerStatusUpdated(worker WorkerHandle, newStatus *libModel.WorkerStatus) error
+	MasterImpl
+
 	Workload() model.RescUnit
 	OnJobManagerFailover(reason MasterFailoverReason) error
 	OnJobManagerMessage(topic p2p.Topic, message interface{}) error
-
 	// IsJobMasterImpl is an empty function used to prevent accidental implementation
 	// of this interface.
 	IsJobMasterImpl()
 }
 
+// NewBaseJobMaster creates a new DefaultBaseJobMaster instance
 func NewBaseJobMaster(
 	ctx *dcontext.Context,
 	jobMasterImpl JobMasterImpl,
@@ -104,10 +96,12 @@ func NewBaseJobMaster(
 	}
 }
 
+// MetaKVClient implements BaseJobMaster.MetaKVClient
 func (d *DefaultBaseJobMaster) MetaKVClient() metaclient.KVClient {
 	return d.master.MetaKVClient()
 }
 
+// Init implements BaseJobMaster.Init
 func (d *DefaultBaseJobMaster) Init(ctx context.Context) error {
 	ctx = d.errCenter.WithCancelOnFirstError(ctx)
 
@@ -140,6 +134,7 @@ func (d *DefaultBaseJobMaster) Init(ctx context.Context) error {
 	return nil
 }
 
+// Poll implements BaseJobMaster.Poll
 func (d *DefaultBaseJobMaster) Poll(ctx context.Context) error {
 	ctx = d.errCenter.WithCancelOnFirstError(ctx)
 
@@ -155,14 +150,12 @@ func (d *DefaultBaseJobMaster) Poll(ctx context.Context) error {
 	return nil
 }
 
-func (d *DefaultBaseJobMaster) MasterID() libModel.MasterID {
-	return d.master.MasterID()
-}
-
+// GetWorkers implements BaseJobMaster.GetWorkers
 func (d *DefaultBaseJobMaster) GetWorkers() map[libModel.WorkerID]WorkerHandle {
 	return d.master.GetWorkers()
 }
 
+// Close implements BaseJobMaster.Close
 func (d *DefaultBaseJobMaster) Close(ctx context.Context) error {
 	if err := d.impl.CloseImpl(ctx); err != nil {
 		return errors.Trace(err)
@@ -173,46 +166,56 @@ func (d *DefaultBaseJobMaster) Close(ctx context.Context) error {
 	return nil
 }
 
+// OnError implements BaseJobMaster.OnError
 func (d *DefaultBaseJobMaster) OnError(err error) {
 	// TODO refine the OnError logic.
 	d.master.OnError(err)
 }
 
+// CreateWorker implements BaseJobMaster.CreateWorker
 func (d *DefaultBaseJobMaster) CreateWorker(workerType WorkerType, config WorkerConfig, cost model.RescUnit, resources ...resourcemeta.ResourceID) (libModel.WorkerID, error) {
 	return d.master.CreateWorker(workerType, config, cost, resources...)
 }
 
+// UpdateStatus delegates the UpdateStatus of inner worker
 func (d *DefaultBaseJobMaster) UpdateStatus(ctx context.Context, status libModel.WorkerStatus) error {
 	ctx = d.errCenter.WithCancelOnFirstError(ctx)
 
 	return d.worker.UpdateStatus(ctx, status)
 }
 
+// Workload delegates the Workload of inner worker
 func (d *DefaultBaseJobMaster) Workload() model.RescUnit {
 	return d.worker.Workload()
 }
 
+// ID delegates the ID of inner worker
 func (d *DefaultBaseJobMaster) ID() worker.RunnableID {
 	return d.worker.ID()
 }
 
+// JobMasterID delegates the JobMasterID of inner worker
 func (d *DefaultBaseJobMaster) JobMasterID() libModel.MasterID {
 	return d.master.MasterID()
 }
 
+// UpdateJobStatus implements BaseJobMaster.UpdateJobStatus
 func (d *DefaultBaseJobMaster) UpdateJobStatus(ctx context.Context, status libModel.WorkerStatus) error {
 	ctx = d.errCenter.WithCancelOnFirstError(ctx)
 
 	return d.worker.UpdateStatus(ctx, status)
 }
 
+// CurrentEpoch implements BaseJobMaster.CurrentEpoch
 func (d *DefaultBaseJobMaster) CurrentEpoch() libModel.Epoch {
 	return d.master.currentEpoch.Load()
 }
 
+// IsBaseJobMaster implements BaseJobMaster.IsBaseJobMaster
 func (d *DefaultBaseJobMaster) IsBaseJobMaster() {
 }
 
+// SendMessage delegates the SendMessage or inner worker
 func (d *DefaultBaseJobMaster) SendMessage(ctx context.Context, topic p2p.Topic, message interface{}) (bool, error) {
 	ctx = d.errCenter.WithCancelOnFirstError(ctx)
 
@@ -220,10 +223,12 @@ func (d *DefaultBaseJobMaster) SendMessage(ctx context.Context, topic p2p.Topic,
 	return d.worker.SendMessage(ctx, topic, message)
 }
 
+// IsMasterReady implements BaseJobMaster.IsMasterReady
 func (d *DefaultBaseJobMaster) IsMasterReady() bool {
 	return d.master.IsMasterReady()
 }
 
+// Exit implements BaseJobMaster.Exit
 func (d *DefaultBaseJobMaster) Exit(ctx context.Context, status libModel.WorkerStatus, err error) error {
 	ctx = d.errCenter.WithCancelOnFirstError(ctx)
 

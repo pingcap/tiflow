@@ -39,6 +39,7 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/uuid"
 )
 
+// Master defines a basic interface that can run in dataflow engine runtime
 type Master interface {
 	Init(ctx context.Context) error
 	Poll(ctx context.Context) error
@@ -47,6 +48,8 @@ type Master interface {
 	runtime.Closer
 }
 
+// MasterImpl defines the interface to implement a master, business logic can be
+// added in the functions of this interface
 type MasterImpl interface {
 	// InitImpl provides customized logic for the business logic to initialize.
 	InitImpl(ctx context.Context) error
@@ -83,16 +86,16 @@ const (
 	maxCreateWorkerConcurrency   = 100
 )
 
+// BaseMaster defines the master interface, it embeds the Master interface and
+// contains more core logic of a master
 type BaseMaster interface {
+	Master
+
 	// MetaKVClient return user metastore kv client
 	MetaKVClient() metaclient.KVClient
-	Init(ctx context.Context) error
-	Poll(ctx context.Context) error
 	MasterMeta() *libModel.MasterMetaKVData
-	MasterID() libModel.MasterID
 	GetWorkers() map[libModel.WorkerID]WorkerHandle
 	IsMasterReady() bool
-	Close(ctx context.Context) error
 	OnError(err error)
 
 	// CreateWorker requires the framework to dispatch a new worker.
@@ -106,6 +109,7 @@ type BaseMaster interface {
 	) (libModel.WorkerID, error)
 }
 
+// DefaultBaseMaster implements BaseMaster interface
 type DefaultBaseMaster struct {
 	Impl MasterImpl
 
@@ -166,6 +170,7 @@ type masterParams struct {
 	ServerMasterClient    client.MasterClient
 }
 
+// NewBaseMaster creates a new DefaultBaseMaster instance
 func NewBaseMaster(
 	ctx *dcontext.Context,
 	impl MasterImpl,
@@ -222,10 +227,12 @@ func NewBaseMaster(
 	}
 }
 
+// MetaKVClient returns the user space metaclient
 func (m *DefaultBaseMaster) MetaKVClient() metaclient.KVClient {
 	return m.userMetaKVClient
 }
 
+// Init implements BaseMaster.Init
 func (m *DefaultBaseMaster) Init(ctx context.Context) error {
 	ctx = m.errCenter.WithCancelOnFirstError(ctx)
 
@@ -343,6 +350,7 @@ func (m *DefaultBaseMaster) registerMessageHandlers(ctx context.Context) error {
 	return nil
 }
 
+// Poll implements BaseMaster.Poll
 func (m *DefaultBaseMaster) Poll(ctx context.Context) error {
 	ctx = m.errCenter.WithCancelOnFirstError(ctx)
 
@@ -374,14 +382,17 @@ func (m *DefaultBaseMaster) doPoll(ctx context.Context) error {
 	return m.workerManager.Tick(ctx)
 }
 
+// MasterMeta implements BaseMaster.MasterMeta
 func (m *DefaultBaseMaster) MasterMeta() *libModel.MasterMetaKVData {
 	return m.masterMeta
 }
 
+// MasterID implements BaseMaster.MasterID
 func (m *DefaultBaseMaster) MasterID() libModel.MasterID {
 	return m.id
 }
 
+// GetWorkers implements BaseMaster.GetWorkers
 func (m *DefaultBaseMaster) GetWorkers() map[libModel.WorkerID]WorkerHandle {
 	return m.workerManager.GetWorkers()
 }
@@ -398,6 +409,7 @@ func (m *DefaultBaseMaster) doClose() {
 	}
 }
 
+// Close implements BaseMaster.Close
 func (m *DefaultBaseMaster) Close(ctx context.Context) error {
 	if err := m.Impl.CloseImpl(ctx); err != nil {
 		return errors.Trace(err)
@@ -407,6 +419,7 @@ func (m *DefaultBaseMaster) Close(ctx context.Context) error {
 	return nil
 }
 
+// OnError implements BaseMaster.OnError
 func (m *DefaultBaseMaster) OnError(err error) {
 	m.errCenter.OnError(err)
 }
@@ -491,6 +504,7 @@ func (m *DefaultBaseMaster) prepareWorkerConfig(
 	return
 }
 
+// CreateWorker implements BaseMaster.CreateWorker
 func (m *DefaultBaseMaster) CreateWorker(
 	workerType libModel.WorkerType,
 	config WorkerConfig,
@@ -575,6 +589,7 @@ func (m *DefaultBaseMaster) CreateWorker(
 	return workerID, nil
 }
 
+// IsMasterReady implements BaseMaster.IsMasterReady
 func (m *DefaultBaseMaster) IsMasterReady() bool {
 	return m.workerManager.IsInitialized()
 }

@@ -13,7 +13,7 @@ func HeartbeatPingTopic(masterID MasterID) p2p.Topic {
 	return fmt.Sprintf("heartbeat-ping-%s", masterID)
 }
 
-// HeartbeatPingTopic is heartbeat pong message topic, each worker has a unique one.
+// HeartbeatPongTopic is heartbeat pong message topic, each worker has a unique one.
 func HeartbeatPongTopic(masterID MasterID, workerID WorkerID) p2p.Topic {
 	// TODO do we need hex-encoding here?
 	return fmt.Sprintf("heartbeat-pong-%s-%s", masterID, workerID)

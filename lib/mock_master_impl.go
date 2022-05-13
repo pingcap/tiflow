@@ -25,6 +25,7 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 )
 
+// MockMasterImpl implements a mock MasterImpl
 type MockMasterImpl struct {
 	mu sync.Mutex
 	mock.Mock
@@ -48,6 +49,7 @@ type MockMasterImpl struct {
 	serverMasterClient    *client.MockServerMasterClient
 }
 
+// NewMockMasterImpl creates a new MockMasterImpl instance
 func NewMockMasterImpl(masterID, id libModel.MasterID) *MockMasterImpl {
 	ret := &MockMasterImpl{
 		masterID:          masterID,
@@ -79,10 +81,12 @@ type masterParamListForTest struct {
 	ResourceBroker        broker.Broker
 }
 
+// GetFrameMetaClient returns the framework meta client.
 func (m *MockMasterImpl) GetFrameMetaClient() pkgOrm.Client {
 	return m.frameMetaClient
 }
 
+// Reset resets the mock data.
 func (m *MockMasterImpl) Reset() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -114,10 +118,12 @@ func (m *MockMasterImpl) Reset() {
 		m.id).(*DefaultBaseMaster)
 }
 
+// TickCount returns tick invoke time
 func (m *MockMasterImpl) TickCount() int64 {
 	return m.tickCount.Load()
 }
 
+// InitImpl implements MasterImpl.InitImpl
 func (m *MockMasterImpl) InitImpl(ctx context.Context) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -126,6 +132,7 @@ func (m *MockMasterImpl) InitImpl(ctx context.Context) error {
 	return args.Error(0)
 }
 
+// OnMasterRecovered implements MasterImpl.OnMasterRecovered
 func (m *MockMasterImpl) OnMasterRecovered(ctx context.Context) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -134,6 +141,7 @@ func (m *MockMasterImpl) OnMasterRecovered(ctx context.Context) error {
 	return args.Error(0)
 }
 
+// OnWorkerStatusUpdated implements MasterImpl.OnWorkerStatusUpdated
 func (m *MockMasterImpl) OnWorkerStatusUpdated(worker WorkerHandle, newStatus *libModel.WorkerStatus) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -147,6 +155,7 @@ func (m *MockMasterImpl) OnWorkerStatusUpdated(worker WorkerHandle, newStatus *l
 	return args.Error(0)
 }
 
+// Tick implements MasterImpl.Tick
 func (m *MockMasterImpl) Tick(ctx context.Context) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -158,6 +167,7 @@ func (m *MockMasterImpl) Tick(ctx context.Context) error {
 	return args.Error(0)
 }
 
+// OnWorkerDispatched implements MasterImpl.OnWorkerDispatched
 func (m *MockMasterImpl) OnWorkerDispatched(worker WorkerHandle, result error) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -169,6 +179,7 @@ func (m *MockMasterImpl) OnWorkerDispatched(worker WorkerHandle, result error) e
 	return args.Error(0)
 }
 
+// OnWorkerOnline implements MasterImpl.OnWorkerOnline
 func (m *MockMasterImpl) OnWorkerOnline(worker WorkerHandle) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -180,6 +191,7 @@ func (m *MockMasterImpl) OnWorkerOnline(worker WorkerHandle) error {
 	return args.Error(0)
 }
 
+// OnWorkerOffline implements MasterImpl.OnWorkerOffline
 func (m *MockMasterImpl) OnWorkerOffline(worker WorkerHandle, reason error) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -190,6 +202,7 @@ func (m *MockMasterImpl) OnWorkerOffline(worker WorkerHandle, reason error) erro
 	return args.Error(0)
 }
 
+// OnWorkerMessage implements MasterImpl.OnWorkerMessage
 func (m *MockMasterImpl) OnWorkerMessage(worker WorkerHandle, topic p2p.Topic, message interface{}) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -198,6 +211,7 @@ func (m *MockMasterImpl) OnWorkerMessage(worker WorkerHandle, topic p2p.Topic, m
 	return args.Error(0)
 }
 
+// CloseImpl implements MasterImpl.CloseImpl
 func (m *MockMasterImpl) CloseImpl(ctx context.Context) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -206,6 +220,7 @@ func (m *MockMasterImpl) CloseImpl(ctx context.Context) error {
 	return args.Error(0)
 }
 
+// MasterClient returns internal server master client
 func (m *MockMasterImpl) MasterClient() *client.MockServerMasterClient {
 	return m.serverMasterClient
 }
@@ -222,12 +237,14 @@ func (s *dummyStatus) Unmarshal(data []byte) error {
 	return json.Unmarshal(data, s)
 }
 
+// MockWorkerHandler implements WorkerHandle, RunningHandle and TombstoneHandle interface
 type MockWorkerHandler struct {
 	mock.Mock
 
 	WorkerID libModel.WorkerID
 }
 
+// GetTombstone implements WorkerHandle.GetTombstone
 func (m *MockWorkerHandler) GetTombstone() master.TombstoneHandle {
 	if m.IsTombStone() {
 		return m
@@ -235,6 +252,7 @@ func (m *MockWorkerHandler) GetTombstone() master.TombstoneHandle {
 	return nil
 }
 
+// Unwrap implements WorkerHandle.Unwrap
 func (m *MockWorkerHandler) Unwrap() master.RunningHandle {
 	if !m.IsTombStone() {
 		return m
@@ -242,30 +260,36 @@ func (m *MockWorkerHandler) Unwrap() master.RunningHandle {
 	return nil
 }
 
+// SendMessage implements RunningHandle.SendMessage
 func (m *MockWorkerHandler) SendMessage(ctx context.Context, topic p2p.Topic, message interface{}, nonblocking bool) error {
 	args := m.Called(ctx, topic, message, nonblocking)
 	return args.Error(0)
 }
 
+// Status implements WorkerHandle.Status
 func (m *MockWorkerHandler) Status() *libModel.WorkerStatus {
 	args := m.Called()
 	return args.Get(0).(*libModel.WorkerStatus)
 }
 
+// ID implements WorkerHandle.ID
 func (m *MockWorkerHandler) ID() libModel.WorkerID {
 	return m.WorkerID
 }
 
+// IsTombStone implements WorkerHandle.IsTombStone
 func (m *MockWorkerHandler) IsTombStone() bool {
 	args := m.Called()
 	return args.Bool(0)
 }
 
+// ToPB implements WorkerHandle.CleanTombstone
 func (m *MockWorkerHandler) ToPB() (*pb.WorkerInfo, error) {
 	args := m.Called()
 	return args.Get(0).(*pb.WorkerInfo), args.Error(1)
 }
 
+// CleanTombstone implements TombstoneHandle.CleanTombstone
 func (m *MockWorkerHandler) CleanTombstone(ctx context.Context) error {
 	args := m.Called()
 	return args.Error(0)

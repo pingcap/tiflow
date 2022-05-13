@@ -8,10 +8,13 @@ import (
 )
 
 type (
-	WorkerType   = model.WorkerType
+	// WorkerType alias to model.WorkerType
+	WorkerType = model.WorkerType
+	// WorkerConfig stores worker config in any type
 	WorkerConfig = interface{}
 )
 
+// Defines all task type
 const (
 	JobManager = model.WorkerType(iota + 1)
 	// job master
@@ -30,18 +33,22 @@ const (
 	WorkerDMSync
 )
 
+// MasterFailoverReasonCode is used as reason code
 type MasterFailoverReasonCode int32
 
+// Defines all reason codes
 const (
 	MasterTimedOut = MasterFailoverReasonCode(iota + 1)
 	MasterReportedError
 )
 
+// MasterFailoverReason contains failover reason code and error message
 type MasterFailoverReason struct {
 	Code         MasterFailoverReasonCode
 	ErrorMessage string
 }
 
+// WorkerHandle alias to master.WorkerHandle
 type WorkerHandle = master.WorkerHandle
 
 // nolint:revive
