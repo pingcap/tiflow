@@ -29,6 +29,7 @@ import (
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/scheduler"
 	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	"github.com/pingcap/tiflow/pkg/etcd"
@@ -149,8 +150,8 @@ type mockScheduler struct {
 }
 
 func (m *mockScheduler) Tick(
-	ctx cdcContext.Context,
-	state *orchestrator.ChangefeedReactorState,
+	ctx context.Context,
+	checkpointTs model.Ts,
 	currentTables []model.TableID,
 	captures map[model.CaptureID]*model.CaptureInfo,
 ) (newCheckpointTs, newResolvedTs model.Ts, err error) {
@@ -165,7 +166,7 @@ func (m *mockScheduler) MoveTable(tableID model.TableID, target model.CaptureID)
 func (m *mockScheduler) Rebalance() {}
 
 // Close closes the scheduler and releases resources.
-func (m *mockScheduler) Close(ctx cdcContext.Context) {}
+func (m *mockScheduler) Close(ctx context.Context) {}
 
 func createChangefeed4Test(ctx cdcContext.Context, t *testing.T) (
 	*changefeed, *orchestrator.ChangefeedReactorState,
@@ -185,7 +186,9 @@ func createChangefeed4Test(ctx cdcContext.Context, t *testing.T) (
 			recordDDLHistory: false,
 		}
 	})
-	cf.newScheduler = func(ctx cdcContext.Context, startTs uint64) (scheduler, error) {
+	cf.newScheduler = func(
+		ctx cdcContext.Context, startTs uint64,
+	) (scheduler.Scheduler, error) {
 		return &mockScheduler{}, nil
 	}
 	cf.upStream = upStream
@@ -810,12 +813,12 @@ func TestExecRenameTablesDDL(t *testing.T) {
 			oldTableIDs = append(oldTableIDs, job.TableID)
 		}
 		require.Nil(t, err)
-		require.Equal(t, done, false)
+		require.Equal(t, false, done)
 		require.Equal(t, expectedDDL, mockDDLSink.ddlExecuting.Query)
 		mockDDLSink.ddlDone = true
 		done, err = cf.asyncExecDDLJob(ctx, job)
 		require.Nil(t, err)
-		require.Equal(t, done, true)
+		require.Equal(t, true, done)
 		require.Equal(t, expectedDDL, mockDDLSink.ddlExecuting.Query)
 	}
 
@@ -857,19 +860,19 @@ func TestExecRenameTablesDDL(t *testing.T) {
 	mockDDLSink.recordDDLHistory = true
 	done, err := cf.asyncExecDDLJob(ctx, job)
 	require.Nil(t, err)
-	require.Equal(t, done, false)
+	require.Equal(t, false, done)
 	require.Len(t, mockDDLSink.ddlHistory, 2)
-	require.Equal(t, mockDDLSink.ddlHistory[0],
-		"RENAME TABLE `test1`.`tb1` TO `test2`.`tb10`")
-	require.Equal(t, mockDDLSink.ddlHistory[1],
-		"RENAME TABLE `test2`.`tb2` TO `test1`.`tb20`")
+	require.Equal(t, "RENAME TABLE `test1`.`tb1` TO `test2`.`tb10`",
+		mockDDLSink.ddlHistory[0])
+	require.Equal(t, "RENAME TABLE `test2`.`tb2` TO `test1`.`tb20`",
+		mockDDLSink.ddlHistory[1])
 
 	// mock all of the rename table statements have been done
 	mockDDLSink.resetDDLDone = false
 	mockDDLSink.ddlDone = true
 	done, err = cf.asyncExecDDLJob(ctx, job)
 	require.Nil(t, err)
-	require.Equal(t, done, true)
+	require.Equal(t, true, done)
 }
 
 func TestExecDropTablesDDL(t *testing.T) {
@@ -891,12 +894,12 @@ func TestExecDropTablesDDL(t *testing.T) {
 		job := helper.DDL2Job(actualDDL)
 		done, err := cf.asyncExecDDLJob(ctx, job)
 		require.Nil(t, err)
-		require.Equal(t, done, false)
+		require.Equal(t, false, done)
 		require.Equal(t, expectedDDL, mockDDLSink.ddlExecuting.Query)
 		mockDDLSink.ddlDone = true
 		done, err = cf.asyncExecDDLJob(ctx, job)
 		require.Nil(t, err)
-		require.Equal(t, done, true)
+		require.Equal(t, true, done)
 	}
 
 	execCreateStmt("create database test1",
@@ -914,12 +917,12 @@ func TestExecDropTablesDDL(t *testing.T) {
 	execDropStmt := func(job *timodel.Job, expectedDDL string) {
 		done, err := cf.asyncExecDDLJob(ctx, job)
 		require.Nil(t, err)
-		require.Equal(t, done, false)
+		require.Equal(t, false, done)
 		require.Equal(t, mockDDLSink.ddlExecuting.Query, expectedDDL)
 		mockDDLSink.ddlDone = true
 		done, err = cf.asyncExecDDLJob(ctx, job)
 		require.Nil(t, err)
-		require.Equal(t, done, true)
+		require.Equal(t, true, done)
 	}
 
 	execDropStmt(jobs[0], "DROP TABLE `test1`.`tb2`")
@@ -945,12 +948,12 @@ func TestExecDropViewsDDL(t *testing.T) {
 		job := helper.DDL2Job(actualDDL)
 		done, err := cf.asyncExecDDLJob(ctx, job)
 		require.Nil(t, err)
-		require.Equal(t, done, false)
+		require.Equal(t, false, done)
 		require.Equal(t, expectedDDL, mockDDLSink.ddlExecuting.Query)
 		mockDDLSink.ddlDone = true
 		done, err = cf.asyncExecDDLJob(ctx, job)
 		require.Nil(t, err)
-		require.Equal(t, done, true)
+		require.Equal(t, true, done)
 	}
 	execCreateStmt("create database test1",
 		"CREATE DATABASE `test1`")
@@ -975,12 +978,12 @@ func TestExecDropViewsDDL(t *testing.T) {
 	execDropStmt := func(job *timodel.Job, expectedDDL string) {
 		done, err := cf.asyncExecDDLJob(ctx, job)
 		require.Nil(t, err)
-		require.Equal(t, done, false)
-		require.Equal(t, mockDDLSink.ddlExecuting.Query, expectedDDL)
+		require.Equal(t, false, done)
+		require.Equal(t, expectedDDL, mockDDLSink.ddlExecuting.Query)
 		mockDDLSink.ddlDone = true
 		done, err = cf.asyncExecDDLJob(ctx, job)
 		require.Nil(t, err)
-		require.Equal(t, done, true)
+		require.Equal(t, true, done)
 	}
 
 	execDropStmt(jobs[0], "DROP VIEW `test1`.`view2`")
