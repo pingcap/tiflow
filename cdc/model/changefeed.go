@@ -137,6 +137,12 @@ type ChangeFeedInfo struct {
 	SyncPointEnabled  bool          `json:"sync-point-enabled"`
 	SyncPointInterval time.Duration `json:"sync-point-interval"`
 	CreatorVersion    string        `json:"creator-version"`
+
+	PDEndpoints   string   `json:"pd-endpoints"`
+	KeyPath       string   `json:"key-path"`
+	CertPath      string   `json:"cert-path"`
+	CAPath        string   `json:"ca-path"`
+	CertAllowedCN []string `json:"cert-allowed-cn"`
 }
 
 const changeFeedIDMaxLen = 128
