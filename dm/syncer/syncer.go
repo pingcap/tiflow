@@ -41,6 +41,7 @@ import (
 	"github.com/pingcap/tidb/parser/format"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/sessionctx"
+	"github.com/pingcap/tiflow/dm/pkg/gtid"
 	"go.etcd.io/etcd/clientv3"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
@@ -424,7 +425,9 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 // buildLowerCaseTableNamesMap build a lower case schema map and lower case table map for all tables
 // Input: map of schema --> list of tables
 // Output: schema names map: lower_case_schema_name --> schema_name
-//         tables names map: lower_case_schema_name --> lower_case_table_name --> table_name
+//
+//	tables names map: lower_case_schema_name --> lower_case_table_name --> table_name
+//
 // Note: the result will skip the schemas and tables that their lower_case_name are the same.
 func buildLowerCaseTableNamesMap(tables map[string][]string) (map[string]string, map[string]map[string]string) {
 	schemaMap := make(map[string]string)
@@ -1049,13 +1052,15 @@ func (s *Syncer) resetShardingGroup(table *filter.Table) {
 
 // flushCheckPoints flushes previous saved checkpoint in memory to persistent storage, like TiDB
 // we flush checkpoints in four cases:
-//   1. DDL executed
-//   2. at intervals (and job executed)
-//   3. pausing / stopping the sync (driven by `s.flushJobs`)
-//   4. IsFreshTask return true
+//  1. DDL executed
+//  2. at intervals (and job executed)
+//  3. pausing / stopping the sync (driven by `s.flushJobs`)
+//  4. IsFreshTask return true
+//
 // but when error occurred, we can not flush checkpoint, otherwise data may lost
 // and except rejecting to flush the checkpoint, we also need to rollback the checkpoint saved before
-//   this should be handled when `s.Run` returned
+//
+//	this should be handled when `s.Run` returned
 //
 // we may need to refactor the concurrency model to make the work-flow more clearer later.
 func (s *Syncer) flushCheckPoints() error {
@@ -1445,7 +1450,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 
 	// startLocation is the start location for current received event
 	// currentLocation is the end location for current received event (End_log_pos in `show binlog events` for mysql)
-	// lastLocation is the end location for last received (ROTATE / QUERY / XID) event
+	// lastLocation is the end location for last received and fully executed (ROTATE / QUERY / XID) event
 	// we use startLocation to replace and skip binlog event of specified position
 	// we use currentLocation and update table checkpoint in sharding ddl
 	// we use lastLocation to update global checkpoint and table checkpoint
@@ -1453,6 +1458,8 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		currentLocation = s.checkpoint.GlobalPoint() // also init to global checkpoint
 		startLocation   = s.checkpoint.GlobalPoint()
 		lastLocation    = s.checkpoint.GlobalPoint()
+
+		currentGTID string
 	)
 	tctx.L().Info("replicate binlog from checkpoint", zap.Stringer("checkpoint", lastLocation))
 
@@ -1581,8 +1588,32 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		return nil
 	}
 
+	advanceLatestLocationGtidSet := func(e *replication.BinlogEvent) error {
+		if _, ok := e.Event.(*replication.MariadbGTIDEvent); ok {
+			gtidSet, err2 := gtid.ParserGTID(s.cfg.Flavor, currentGTID)
+			if err2 != nil {
+				return err2
+			}
+			if currentLocation.GetGTID().Contain(gtidSet) {
+				return nil
+			}
+		}
+
+		// clone currentLocation's gtid set to avoid its gtid is transport to table checkpoint
+		// currently table checkpoint will save  location's gtid set with shallow copy
+		newGTID := currentLocation.GetGTID().Clone().Origin()
+		err2 := newGTID.Update(currentGTID)
+		if err2 != nil {
+			return terror.Annotatef(err2, "fail to update GTID %s", currentGTID)
+		}
+		err2 = currentLocation.SetGTID(newGTID)
+		if err2 != nil {
+			return terror.Annotatef(err2, "fail to set GTID %s", newGTID)
+		}
+		return nil
+	}
+
 	inFinerRetry := false
-	// in release branch, we only use eventIndex to test a bug
 	eventIndex := 0
 	for {
 		if s.execError.Load() != nil {
@@ -1732,7 +1763,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 					Name: lastLocation.Position.Name,
 					Pos:  e.Header.LogPos,
 				},
-				lastLocation.GetGTID(),
+				currentLocation.GetGTID(),
 			)
 			currentLocation.Suffix = endSuffix
 
@@ -1869,12 +1900,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			}
 
 			currentLocation.Position.Pos = e.Header.LogPos
-			err = currentLocation.SetGTID(ev.GSet)
-			if err != nil {
-				return terror.Annotatef(err, "fail to record GTID %v", ev.GSet)
-			}
-
-			tctx.L().Debug("", zap.String("event", "XID"), zap.Stringer("last location", lastLocation), log.WrapStringerField("location", currentLocation))
+			s.tctx.L().Debug("", zap.String("event", "XID"), zap.Stringer("last location", lastLocation), log.WrapStringerField("location", currentLocation))
 			lastLocation.Position.Pos = e.Header.LogPos // update lastPos
 			err = lastLocation.SetGTID(ev.GSet)
 			if err != nil {
@@ -1889,6 +1915,18 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 				if s.checkpoint.CheckGlobalPoint() {
 					tctx.L().Info("meet heartbeat event and then flush jobs")
 					err2 = s.flushJobs()
+				}
+			}
+		case *replication.GTIDEvent, *replication.MariadbGTIDEvent:
+			currentGTID, err2 = event.GetGTIDStr(e)
+			if err2 != nil {
+				return err2
+			}
+			if s.cfg.EnableGTID {
+				// TODO: add mariaDB integration test
+				err2 = advanceLatestLocationGtidSet(e)
+				if err2 != nil {
+					return err2
 				}
 			}
 		}
@@ -1999,7 +2037,7 @@ func (s *Syncer) handleRowsEvent(ev *replication.RowsEvent, ec eventContext) err
 			Name: ec.lastLocation.Position.Name,
 			Pos:  ec.header.LogPos,
 		},
-		ec.lastLocation.GetGTID(),
+		ec.currentLocation.GetGTID(),
 	)
 
 	if ec.shardingReSync != nil {
@@ -2190,6 +2228,10 @@ func (qec *queryEventContext) String() string {
 
 func (s *Syncer) handleQueryEvent(ev *replication.QueryEvent, ec eventContext, originSQL string) (err error) {
 	if originSQL == "BEGIN" {
+		failpoint.Inject("NotUpdateLatestGTID", func(_ failpoint.Value) {
+			// directly return nil without update latest GTID here
+			failpoint.Return(nil)
+		})
 		// GTID event: GTID_NEXT = xxx:11
 		// Query event: BEGIN (GTID set = xxx:1-11)
 		// Rows event: ... (GTID set = xxx:1-11)  if we update lastLocation below,
