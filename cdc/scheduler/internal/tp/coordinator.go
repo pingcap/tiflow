@@ -25,6 +25,7 @@ import (
 type scheduler interface {
 	Name() string
 	Schedule(
+		checkpointTs model.Ts,
 		currentTables []model.TableID,
 		aliveCaptures map[model.CaptureID]*model.CaptureInfo,
 		captureTables map[model.CaptureID]captureStatus,
@@ -71,7 +72,7 @@ func (c *coordinator) poll(
 	captureTables := c.manager.captureTableSets()
 	allTasks := make([]*scheduleTask, 0)
 	for _, sched := range c.scheduler {
-		tasks := sched.Schedule(currentTables, aliveCaptures, captureTables)
+		tasks := sched.Schedule(checkpointTs, currentTables, aliveCaptures, captureTables)
 		allTasks = append(allTasks, tasks...)
 	}
 	recvMsgs := c.recvMessages()
@@ -81,6 +82,8 @@ func (c *coordinator) poll(
 		return errors.Trace(err)
 	}
 	c.sendMessages(sentMsgs)
+
+	// checkpoint calcuation
 	return nil
 }
 

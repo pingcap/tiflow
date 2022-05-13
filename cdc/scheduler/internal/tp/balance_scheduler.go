@@ -28,6 +28,7 @@ func (b *balancer) Name() string {
 }
 
 func (b *balancer) Schedule(
+	checkpointTs model.Ts,
 	currentTables []model.TableID,
 	captures map[model.CaptureID]*model.CaptureInfo,
 	captureTables map[model.CaptureID]captureStatus,
