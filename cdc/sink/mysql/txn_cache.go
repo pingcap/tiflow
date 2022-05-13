@@ -122,19 +122,29 @@ func (c *unresolvedTxnCache) Resolved(
 func splitResolvedTxn(
 	resolvedTsMap *sync.Map, unresolvedTxns map[model.TableID][]*txnsWithTheSameCommitTs,
 ) (flushedResolvedTsMap map[model.TableID]uint64, resolvedRowsMap map[model.TableID][]*model.SingleTableTxn) {
-	resolvedRowsMap = make(map[model.TableID][]*model.SingleTableTxn, len(unresolvedTxns))
 	flushedResolvedTsMap = make(map[model.TableID]uint64, len(unresolvedTxns))
 	resolvedTsMap.Range(func(k, v any) bool {
 		tableID := k.(model.TableID)
 		resolvedTs := v.(model.Ts)
 		flushedResolvedTsMap[tableID] = resolvedTs
+		return true
+	})
 
-		txns := unresolvedTxns[tableID]
+	resolvedRowsMap = make(map[model.TableID][]*model.SingleTableTxn, len(unresolvedTxns))
+	var (
+		txns                            []*txnsWithTheSameCommitTs
+		ok                              bool
+		resolvedTxnsWithTheSameCommitTs []*txnsWithTheSameCommitTs
+		txnsLength                      int
+	)
+	for tableID, resolvedTs := range flushedResolvedTsMap {
+		if txns, ok = unresolvedTxns[tableID]; !ok {
+			continue
+		}
 		i := sort.Search(len(txns), func(i int) bool {
 			return txns[i].commitTs > resolvedTs
 		})
 		if i != 0 {
-			var resolvedTxnsWithTheSameCommitTs []*txnsWithTheSameCommitTs
 			if i == len(txns) {
 				resolvedTxnsWithTheSameCommitTs = txns
 				delete(unresolvedTxns, tableID)
@@ -142,7 +152,6 @@ func splitResolvedTxn(
 				resolvedTxnsWithTheSameCommitTs = txns[:i]
 				unresolvedTxns[tableID] = txns[i:]
 			}
-			var txnsLength int
 			for _, txns := range resolvedTxnsWithTheSameCommitTs {
 				txnsLength += len(txns.txns)
 			}
@@ -152,7 +161,7 @@ func splitResolvedTxn(
 			}
 			resolvedRowsMap[tableID] = resolvedTxns
 		}
-		return true
-	})
+	}
+
 	return
 }
