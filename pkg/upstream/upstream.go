@@ -61,12 +61,14 @@ type Upstream struct {
 	PDClock     pdutil.Clock
 	GCManager   gc.Manager
 
-	// holder count of this upstream
-	hc int32
-	// record the time when Upstream.hc becomes zero.
-	idleTime time.Time
-	// mu should be lock when Upstream.hc or Upstream.idleTime need to be changed.
-	mu sync.Mutex
+	hcMu struct {
+		// mu should be lock when hc or idleTime need to be changed.
+		mu sync.Mutex
+		// holder count of this upstream
+		hc int32
+		// record the time when Upstream.hc becomes zero.
+		idleTime time.Time
+	}
 
 	wg     *sync.WaitGroup
 	status int32
@@ -85,8 +87,15 @@ func NewUpstream4Test(pdClient pd.Client) *Upstream {
 	gcManager := gc.NewManager(pdClient, pdClock)
 	res := &Upstream{
 		PDClient: pdClient, PDClock: pdClock, GCManager: gcManager,
-		status: uninit, hc: 1, wg: new(sync.WaitGroup),
+		status: uninit, wg: new(sync.WaitGroup),
 	}
+
+	res.hcMu = struct {
+		mu       sync.Mutex
+		hc       int32
+		idleTime time.Time
+	}{hc: 1}
+
 	res.status = normal
 	return res
 }
@@ -213,27 +222,27 @@ func (up *Upstream) IsClosed() bool {
 }
 
 func (up *Upstream) unhold() {
-	up.mu.Lock()
-	defer up.mu.Unlock()
-	up.hc--
-	if up.hc < 0 {
+	up.hcMu.mu.Lock()
+	defer up.hcMu.mu.Unlock()
+	up.hcMu.hc--
+	if up.hcMu.hc < 0 {
 		log.Panic("upstream's hc should never less than 0", zap.Uint64("upstreamID", up.ID))
 	}
-	if up.hc == 0 && up.idleTime.IsZero() {
-		up.idleTime = time.Now()
+	if up.hcMu.hc == 0 && up.hcMu.idleTime.IsZero() {
+		up.hcMu.idleTime = time.Now()
 	}
 }
 
 func (up *Upstream) hold() {
-	up.mu.Lock()
-	defer up.mu.Unlock()
-	if up.hc < 0 {
+	up.hcMu.mu.Lock()
+	defer up.hcMu.mu.Unlock()
+	if up.hcMu.hc < 0 {
 		log.Panic("upstream's hc should never less than 0", zap.Uint64("upstreamID", up.ID))
 	}
-	up.hc++
+	up.hcMu.hc++
 	// reset unusedTime
-	if !up.idleTime.IsZero() {
-		up.idleTime = time.Time{}
+	if !up.hcMu.idleTime.IsZero() {
+		up.hcMu.idleTime = time.Time{}
 	}
 }
 
@@ -243,9 +252,9 @@ func (up *Upstream) Release() {
 
 // return true if this upstream idleTime reachs maxIdleDuration.
 func (up *Upstream) shouldClose() bool {
-	up.mu.Lock()
-	defer up.mu.Unlock()
-	if !up.idleTime.IsZero() && time.Since(up.idleTime) >= maxIdleDuration {
+	up.hcMu.mu.Lock()
+	defer up.hcMu.mu.Unlock()
+	if !up.hcMu.idleTime.IsZero() && time.Since(up.hcMu.idleTime) >= maxIdleDuration {
 		return true
 	}
 	return false

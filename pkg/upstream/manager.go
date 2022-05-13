@@ -56,7 +56,7 @@ func NewManager4Test(pdClient pd.Client) *Manager {
 
 // Add adds a upstream and init it.
 // TODO(dongmen): async init upstream and should not return any error in the future.
-func (m *Manager) Add(upstreamID uint64, pdEndpoints []string) error {
+func (m *Manager) Add(upstreamID uint64, pdEndpoints []string, securityConfig *config.SecurityConfig) error {
 	select {
 	case <-m.ctx.Done():
 		// This would not happen if there were no errors in the code logic.
@@ -66,7 +66,6 @@ func (m *Manager) Add(upstreamID uint64, pdEndpoints []string) error {
 	if _, ok := m.ups.Load(upstreamID); ok {
 		return nil
 	}
-	securityConfig := config.GetGlobalServerConfig().Security
 	up := newUpstream(upstreamID, pdEndpoints, securityConfig)
 	err := up.init(m.ctx)
 	if err != nil {

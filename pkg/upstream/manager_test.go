@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	"github.com/stretchr/testify/require"
 )
@@ -30,7 +31,7 @@ func TestUpstream(t *testing.T) {
 	require.NotNil(t, up1)
 
 	// test Add
-	manager.Add(DefaultUpstreamID, []string{})
+	manager.Add(DefaultUpstreamID, []string{}, config.GetGlobalServerConfig().Security)
 
 	// test Get
 	testID := uint64(1)
@@ -41,9 +42,10 @@ func TestUpstream(t *testing.T) {
 
 	// test Tick
 	up2.Release()
-	up2.mu.Lock()
-	up2.idleTime = time.Now().Add(-(maxIdleDuration + maxIdleDuration))
-	up2.mu.Unlock()
+	up2.hcMu.mu.Lock()
+	up2.hcMu.idleTime = time.Now().Add(-(maxIdleDuration + maxIdleDuration))
+	up2.hcMu.mu.Unlock()
+
 	manager.Tick(context.Background())
 	// wait until up2 is closed
 	for !up2.IsClosed() {
