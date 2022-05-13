@@ -729,17 +729,22 @@ function DM_151_CASE {
 		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 			"show-ddl-locks" \
 			'"ALTER TABLE `shardddl`.`tb` MODIFY COLUMN `a` DOUBLE"' 1
-
-		# we alter database in source2 and the ddl lock will be resolved
-		run_sql_source2 "alter table ${shardddl1}.${tb1} modify column a double;"
-		run_sql_source2 "alter table ${shardddl1}.${tb2} modify column a double;"
-		check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 	else
 		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 			"query-status test" \
-			"because schema conflict detected" 1
+			"Running" 3
 	fi
 
+	# we alter database in source2 and the ddl lock will be resolved
+	run_sql_source2 "alter table ${shardddl1}.${tb1} modify column a double;"
+	run_sql_source2 "alter table ${shardddl1}.${tb2} modify column a double;"
+
+	# insert 3 recorde to make sure optimistic mode sharding resolve can finish fast
+	sleep 3
+	run_sql_source1 "insert into ${shardddl1}.${tb1} values(7,7.0);"
+	run_sql_source2 "insert into ${shardddl1}.${tb1} values(8,8.0);"
+	run_sql_source2 "insert into ${shardddl1}.${tb2} values(9,9.0);"
+	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 }
 
 function DM_151 {
@@ -900,11 +905,138 @@ function DM_154 {
 		"clean_table" "optimistic"
 }
 
+function DM_155_CASE {
+	run_sql_source1 "insert into ${shardddl1}.${tb1} values(1,1,1);"
+	run_sql_source2 "insert into ${shardddl1}.${tb1} values(2,2,2);"
+	run_sql_source2 "insert into ${shardddl1}.${tb2} values(3,3,3);"
+
+	run_sql_source1 "alter table ${shardddl1}.${tb1} change c b int;"
+	sleep 1
+	random_restart 3
+
+	run_sql_source1 "insert into ${shardddl1}.${tb1} values(4,4,4);"
+	run_sql_source2 "insert into ${shardddl1}.${tb1} values(5,5,5);"
+	run_sql_source2 "insert into ${shardddl1}.${tb2} values(6,6,6);"
+
+	run_sql_source1 "alter table ${shardddl1}.${tb1} add column g int;"
+	sleep 1
+	random_restart 3
+
+	run_sql_source1 "insert into ${shardddl1}.${tb1} values(7,7,7,7);"
+	run_sql_source2 "insert into ${shardddl1}.${tb1} values(8,8,8);"
+	run_sql_source2 "insert into ${shardddl1}.${tb2} values(9,9,9);"
+
+	run_sql_source1 "alter table ${shardddl1}.${tb1} change d f int;"
+	sleep 1
+	random_restart 3
+
+	run_sql_source1 "insert into ${shardddl1}.${tb1} values(10,10,10,10);"
+	run_sql_source2 "insert into ${shardddl1}.${tb1} values(11,11,11);"
+	run_sql_source2 "insert into ${shardddl1}.${tb2} values(12,12,12);"
+
+	run_sql_source1 "alter table ${shardddl1}.${tb1} add column e int not null after f;"
+	sleep 1
+	random_restart 3
+
+	run_sql_source1 "insert into ${shardddl1}.${tb1} values(13,13,13,13,13);"
+	run_sql_source2 "insert into ${shardddl1}.${tb1} values(14,14,14);"
+	run_sql_source2 "insert into ${shardddl1}.${tb2} values(15,15,15);"
+
+	run_sql_source2 "alter table ${shardddl1}.${tb1} change c b int;"
+	sleep 1
+	random_restart 3
+
+	run_sql_source1 "insert into ${shardddl1}.${tb1} values(16,16,16,16,16);"
+	run_sql_source2 "insert into ${shardddl1}.${tb1} values(17,17,17);"
+	run_sql_source2 "insert into ${shardddl1}.${tb2} values(18,18,18);"
+
+	run_sql_source2 "alter table ${shardddl1}.${tb1} change d f int;"
+	sleep 1
+	random_restart 3
+
+	run_sql_source1 "insert into ${shardddl1}.${tb1} values(19,19,19,19,19);"
+	run_sql_source2 "insert into ${shardddl1}.${tb1} values(20,20,20);"
+	run_sql_source2 "insert into ${shardddl1}.${tb2} values(21,21,21);"
+
+	run_sql_source2 "alter table ${shardddl1}.${tb1} add column g int;"
+	sleep 1
+	random_restart 3
+
+	run_sql_source1 "insert into ${shardddl1}.${tb1} values(22,22,22,22,22);"
+	run_sql_source2 "insert into ${shardddl1}.${tb1} values(23,23,23,23);"
+	run_sql_source2 "insert into ${shardddl1}.${tb2} values(24,24,24);"
+
+	run_sql_source2 "alter table ${shardddl1}.${tb1} add column e int not null after f;"
+	sleep 1
+	random_restart 3
+
+	run_sql_source1 "insert into ${shardddl1}.${tb1} values(25,25,25,25,25);"
+	run_sql_source2 "insert into ${shardddl1}.${tb1} values(26,26,26,26,26);"
+	run_sql_source2 "insert into ${shardddl1}.${tb2} values(27,27,27);"
+
+	run_sql_source2 "alter table ${shardddl1}.${tb2} change c b int;"
+	sleep 1
+	random_restart 3
+
+	run_sql_source1 "insert into ${shardddl1}.${tb1} values(28,28,28,28,28);"
+	run_sql_source2 "insert into ${shardddl1}.${tb1} values(29,29,29,29,29);"
+	run_sql_source2 "insert into ${shardddl1}.${tb2} values(30,30,30);"
+
+	run_sql_source2 "alter table ${shardddl1}.${tb2} change d f int;"
+	sleep 1
+	random_restart 3
+
+	run_sql_source1 "insert into ${shardddl1}.${tb1} values(31,31,31,31,31);"
+	run_sql_source2 "insert into ${shardddl1}.${tb1} values(32,32,32,32,32);"
+	run_sql_source2 "insert into ${shardddl1}.${tb2} values(33,33,33);"
+
+	run_sql_source2 "alter table ${shardddl1}.${tb2} add column e int not null after f;"
+	sleep 1
+	random_restart 3
+
+	run_sql_source1 "insert into ${shardddl1}.${tb1} values(34,34,34,34,34);"
+	run_sql_source2 "insert into ${shardddl1}.${tb1} values(35,35,35,35,35);"
+	run_sql_source2 "insert into ${shardddl1}.${tb2} values(36,36,36,36);"
+
+	run_sql_source2 "alter table ${shardddl1}.${tb2} add column g int;"
+	sleep 1
+	random_restart 3
+
+	run_sql_source1 "insert into ${shardddl1}.${tb1} values(37,37,37,37,37);"
+	run_sql_source2 "insert into ${shardddl1}.${tb1} values(38,38,38,38,38);"
+	run_sql_source2 "insert into ${shardddl1}.${tb2} values(39,39,39,39,39);"
+
+	# sleep 15 seconds to make sure both dm-workers have reached their final event
+	# then insert some dmls to avoid dm-worker get blocked at getting heart event which may cause 30s
+	# this part is used to handle case like:
+	# worker1 receives skip and wait redirect, and finishes all the events and start waiting to for heartbeat event
+	# worker2 resolves this lock, and finishes all its dmls, but worker1 is blocked at receiving heartbeat event(because there is no new data written)
+	for ((k = 100; k < 145; k++)); do
+		run_sql_source1 "insert into ${shardddl1}.${tb1} values(${k},${k},${k},${k},${k});"
+		k=$((k + 1))
+		run_sql_source2 "insert into ${shardddl1}.${tb1} values(${k},${k},${k},${k},${k});"
+		k=$((k + 1))
+		run_sql_source2 "insert into ${shardddl1}.${tb2} values(${k},${k},${k},${k},${k});"
+		sleep 1
+	done
+
+	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
+}
+
+# Add syncing optimistic conflict sequence DDLs case
+function DM_155 {
+	run_case 155 "double-source-optimistic" \
+		"run_sql_source1 \"create table ${shardddl1}.${tb1} (a int primary key, c int, d int) engine=innodb default charset=latin1 collate=latin1_bin;\"; \
+     run_sql_source2 \"create table ${shardddl1}.${tb1} (a int primary key, c int, d int) engine=innodb default charset=latin1 collate=latin1_bin;\"; \
+     run_sql_source2 \"create table ${shardddl1}.${tb2} (a int primary key, c int, d int) engine=innodb default charset=latin1 collate=latin1_bin;\";" \
+		"clean_table" "optimistic"
+}
+
 function run() {
 	init_cluster
 	init_database
 	start=131
-	end=154
+	end=155
 	for i in $(seq -f "%03g" ${start} ${end}); do
 		DM_${i}
 		sleep 1

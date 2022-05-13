@@ -20,7 +20,6 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	pscheduler "github.com/pingcap/tiflow/cdc/scheduler"
-	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
@@ -102,11 +101,7 @@ func newSchedulerV2FromCtx(ctx context.Context, startTs uint64) (scheduler, erro
 }
 
 func newScheduler(ctx context.Context, startTs uint64) (scheduler, error) {
-	conf := config.GetGlobalServerConfig()
-	if conf.Debug.EnableNewScheduler {
-		return newSchedulerV2FromCtx(ctx, startTs)
-	}
-	return newSchedulerV1(), nil
+	return newSchedulerV2FromCtx(ctx, startTs)
 }
 
 func (s *schedulerV2) Tick(
@@ -125,6 +120,7 @@ func (s *schedulerV2) DispatchTable(
 	ctx context.Context,
 	changeFeedID model.ChangeFeedID,
 	tableID model.TableID,
+	startTs model.Ts,
 	captureID model.CaptureID,
 	isDelete bool,
 	epoch model.ProcessorEpoch,
@@ -133,6 +129,7 @@ func (s *schedulerV2) DispatchTable(
 	message := &model.DispatchTableMessage{
 		OwnerRev: ctx.GlobalVars().OwnerRevision,
 		ID:       tableID,
+		StartTs:  startTs,
 		IsDelete: isDelete,
 		Epoch:    epoch,
 	}

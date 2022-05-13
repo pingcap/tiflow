@@ -468,6 +468,7 @@ type DDLEvent struct {
 	PreTableInfo *SimpleTableInfo `msg:"pre-table-info"`
 	Query        string           `msg:"query"`
 	Type         model.ActionType `msg:"-"`
+	Done         bool             `msg:"-"`
 }
 
 // RedoDDLEvent represents DDL event used in redo log persistent
@@ -478,38 +479,83 @@ type RedoDDLEvent struct {
 
 // FromJob fills the values of DDLEvent from DDL job
 func (d *DDLEvent) FromJob(job *model.Job, preTableInfo *TableInfo) {
-	d.TableInfo = new(SimpleTableInfo)
-	d.TableInfo.Schema = job.SchemaName
+	// populating DDLEvent of a rename tables job is handled in `FromRenameTablesJob()`
+	if d.Type == model.ActionRenameTables {
+		return
+	}
+
+	// The query for "DROP TABLE" and "DROP VIEW" statements need
+	// to be rebuilt. The reason is elaborated as follows:
+	// for a DDL statement like "DROP TABLE test1.table1, test2.table2",
+	// two DDL jobs will be generated. These two jobs can be differentiated
+	// from job.BinlogInfo.TableInfo whereas the job.Query are identical.
+	rebuildQuery := func() {
+		switch d.Type {
+		case model.ActionDropTable:
+			d.Query = fmt.Sprintf("DROP TABLE `%s`.`%s`", d.TableInfo.Schema, d.TableInfo.Table)
+		case model.ActionDropView:
+			d.Query = fmt.Sprintf("DROP VIEW `%s`.`%s`", d.TableInfo.Schema, d.TableInfo.Table)
+		default:
+			d.Query = job.Query
+		}
+	}
+
 	d.StartTs = job.StartTS
 	d.CommitTs = job.BinlogInfo.FinishedTS
-	d.Query = job.Query
 	d.Type = job.Type
+	// fill PreTableInfo for the event.
 	d.fillPreTableInfo(preTableInfo)
-
-	switch d.Type {
-	case model.ActionRenameTables:
-		// DDLs update multiple target tables, in which case `TableInfo` isn't meaningful.
-		// So we can skip to fill TableInfo for the event.
-		return
-	default:
-	}
-
-	// Fill TableInfo for the event.
-	if job.BinlogInfo.TableInfo != nil {
-		tableName := job.BinlogInfo.TableInfo.Name.O
-		tableInfo := job.BinlogInfo.TableInfo
-		d.TableInfo.ColumnInfo = make([]*ColumnInfo, len(tableInfo.Columns))
-
-		for i, colInfo := range tableInfo.Columns {
-			d.TableInfo.ColumnInfo[i] = new(ColumnInfo)
-			d.TableInfo.ColumnInfo[i].FromTiColumnInfo(colInfo)
-		}
-
-		d.TableInfo.Table = tableName
-		d.TableInfo.TableID = job.TableID
-	}
+	// fill TableInfo for the event.
+	d.fillTableInfo(job.BinlogInfo.TableInfo, job.SchemaName)
+	// rebuild the query if necessary
+	rebuildQuery()
 }
 
+// FromRenameTablesJob fills the values of DDLEvent from a rename tables DDL job
+func (d *DDLEvent) FromRenameTablesJob(job *model.Job,
+	oldSchemaName, newSchemaName string,
+	preTableInfo *TableInfo, tableInfo *model.TableInfo,
+) {
+	if job.Type != model.ActionRenameTables {
+		return
+	}
+
+	d.StartTs = job.StartTS
+	d.CommitTs = job.BinlogInfo.FinishedTS
+	oldTableName := preTableInfo.Name.O
+	newTableName := tableInfo.Name.O
+	d.Query = fmt.Sprintf("RENAME TABLE `%s`.`%s` TO `%s`.`%s`",
+		oldSchemaName, oldTableName, newSchemaName, newTableName)
+	d.Type = model.ActionRenameTable
+	// fill PreTableInfo for the event.
+	d.fillPreTableInfo(preTableInfo)
+	// fill TableInfo for the event.
+	d.fillTableInfo(tableInfo, newSchemaName)
+}
+
+// fillTableInfo populates the TableInfo of an DDLEvent
+func (d *DDLEvent) fillTableInfo(tableInfo *model.TableInfo,
+	schemaName string,
+) {
+	// `TableInfo` field of `DDLEvent` should always not be nil
+	d.TableInfo = new(SimpleTableInfo)
+	d.TableInfo.Schema = schemaName
+
+	if tableInfo == nil {
+		return
+	}
+
+	d.TableInfo.ColumnInfo = make([]*ColumnInfo, len(tableInfo.Columns))
+	for i, colInfo := range tableInfo.Columns {
+		d.TableInfo.ColumnInfo[i] = new(ColumnInfo)
+		d.TableInfo.ColumnInfo[i].FromTiColumnInfo(colInfo)
+	}
+
+	d.TableInfo.Table = tableInfo.Name.O
+	d.TableInfo.TableID = tableInfo.ID
+}
+
+// fillPreTableInfo populates the PreTableInfo of an event
 func (d *DDLEvent) fillPreTableInfo(preTableInfo *TableInfo) {
 	if preTableInfo == nil {
 		return
