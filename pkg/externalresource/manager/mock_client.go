@@ -3,9 +3,10 @@ package manager
 import (
 	"context"
 
-	"github.com/hanfei1991/microcosm/pkg/rpcutil"
 	"github.com/stretchr/testify/mock"
 	"google.golang.org/grpc"
+
+	"github.com/hanfei1991/microcosm/pkg/rpcutil"
 
 	"github.com/hanfei1991/microcosm/pb"
 )
@@ -32,4 +33,10 @@ func (m *MockClient) CreateResource(ctx context.Context, in *pb.CreateResourceRe
 func (m *MockClient) QueryResource(ctx context.Context, in *pb.QueryResourceRequest, opts ...grpc.CallOption) (*pb.QueryResourceResponse, error) {
 	args := m.Called(ctx, in, opts)
 	return args.Get(0).(*pb.QueryResourceResponse), args.Error(1)
+}
+
+// RemoveResource implements ResourceManagerClient.RemoveResource
+func (m *MockClient) RemoveResource(ctx context.Context, in *pb.RemoveResourceRequest, opts ...grpc.CallOption) (*pb.RemoveResourceResponse, error) {
+	args := m.Called(ctx, in, opts)
+	return args.Get(0).(*pb.RemoveResourceResponse), args.Error(1)
 }

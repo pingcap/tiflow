@@ -5,6 +5,10 @@ package pb;
 service ResourceManager {
   rpc CreateResource(CreateResourceRequest) returns (CreateResourceResponse){}
   rpc QueryResource(QueryResourceRequest) returns (QueryResourceResponse){}
+
+  // RemoveResource cleans up the metadata only of the resource.
+  // The invoker should handle the actual cleaning up on its own.
+  rpc RemoveResource(RemoveResourceRequest) returns (RemoveResourceResponse){}
 }
 
 message CreateResourceRequest {
@@ -25,6 +29,12 @@ message QueryResourceResponse {
   string job_id = 3;
   string creator_worker_id = 4;
 }
+
+message RemoveResourceRequest {
+  string resource_id = 1;
+}
+
+message RemoveResourceResponse {}
 
 message ResourceError {
   ResourceErrorCode error_code = 1;

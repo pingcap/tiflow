@@ -10,13 +10,14 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/go-sql-driver/mysql"
+	perrors "github.com/pingcap/errors"
+	"github.com/stretchr/testify/require"
+
 	libModel "github.com/hanfei1991/microcosm/lib/model"
 	cerrors "github.com/hanfei1991/microcosm/pkg/errors"
 	resourcemeta "github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta/model"
 	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
 	"github.com/hanfei1991/microcosm/pkg/orm/model"
-	perrors "github.com/pingcap/errors"
-	"github.com/stretchr/testify/require"
 )
 
 type tCase struct {
@@ -841,6 +842,63 @@ func TestResource(t *testing.T) {
 	updatedAt := tm.Add(time.Duration(1))
 
 	testCases := []tCase{
+		{
+			fn: "CreateResource",
+			inputs: []interface{}{
+				&resourcemeta.ResourceMeta{
+					Model: model.Model{
+						SeqID:     1,
+						CreatedAt: createdAt,
+						UpdatedAt: updatedAt,
+					},
+					ID:        "r333",
+					ProjectID: "111-222-333",
+					Job:       "j111",
+					Worker:    "w222",
+					Executor:  "e444",
+					Deleted:   false,
+				},
+			},
+			mockExpectResFn: func(mock sqlmock.Sqlmock) {
+				mock.ExpectBegin()
+				mock.ExpectQuery("SELECT count[(]1[)] FROM `resource_meta` WHERE id").WithArgs("r333").WillReturnRows(
+					sqlmock.NewRows([]string{
+						"count(1)",
+					}).AddRow(0))
+				mock.ExpectExec("INSERT INTO `resource_meta` [(]`created_at`,`updated_at`,`project_id`,`id`,`job_id`,"+
+					"`worker_id`,`executor_id`,`deleted`,`seq_id`[)]").WithArgs(
+					createdAt, updatedAt, "111-222-333", "r333", "j111", "w222", "e444", false, 1).
+					WillReturnResult(sqlmock.NewResult(1, 1))
+				mock.ExpectCommit()
+			},
+		},
+		{
+			fn: "CreateResource",
+			inputs: []interface{}{
+				&resourcemeta.ResourceMeta{
+					Model: model.Model{
+						SeqID:     1,
+						CreatedAt: createdAt,
+						UpdatedAt: updatedAt,
+					},
+					ID:        "r333",
+					ProjectID: "111-222-333",
+					Job:       "j111",
+					Worker:    "w222",
+					Executor:  "e444",
+					Deleted:   false,
+				},
+			},
+			mockExpectResFn: func(mock sqlmock.Sqlmock) {
+				mock.ExpectBegin()
+				mock.ExpectQuery("SELECT count[(]1[)] FROM `resource_meta` WHERE id").WithArgs("r333").WillReturnRows(
+					sqlmock.NewRows([]string{
+						"count(1)",
+					}).AddRow(1))
+				mock.ExpectRollback()
+			},
+			err: cerrors.ErrDuplicateResourceID.GenWithStackByArgs("r333"),
+		},
 		{
 			fn: "UpsertResource",
 			inputs: []interface{}{

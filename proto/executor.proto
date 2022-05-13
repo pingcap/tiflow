@@ -34,12 +34,12 @@ message ConfirmDispatchTaskResponse {
 }
 
 service BrokerService {
-    rpc RemoveResource(RemoveResourceRequest) returns (RemoveResourceResponse){}
+    rpc RemoveResource(RemoveLocalResourceRequest) returns (RemoveLocalResourceResponse){}
 }
 
-message RemoveResourceRequest {
+message RemoveLocalResourceRequest {
     string resource_id = 1;
     string creator_id = 2;
 }
 
-message RemoveResourceResponse {}
+message RemoveLocalResourceResponse {}

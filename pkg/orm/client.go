@@ -7,17 +7,18 @@ import (
 	"time"
 
 	dmysql "github.com/go-sql-driver/mysql"
+	"github.com/pingcap/log"
+	"go.uber.org/zap"
+	"gorm.io/driver/mysql"
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
+
 	libModel "github.com/hanfei1991/microcosm/lib/model"
 	cerrors "github.com/hanfei1991/microcosm/pkg/errors"
 	resourcemeta "github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta/model"
 	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
 	"github.com/hanfei1991/microcosm/pkg/orm/model"
 	"github.com/hanfei1991/microcosm/pkg/tenant"
-	"github.com/pingcap/log"
-	"go.uber.org/zap"
-	"gorm.io/driver/mysql"
-	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 )
 
 var globalModels = []interface{}{
@@ -99,6 +100,7 @@ type WorkerClient interface {
 
 // ResourceClient defines interface that manages resource in metastore
 type ResourceClient interface {
+	CreateResource(ctx context.Context, resource *resourcemeta.ResourceMeta) error
 	UpsertResource(ctx context.Context, resource *resourcemeta.ResourceMeta) error
 	UpdateResource(ctx context.Context, resource *resourcemeta.ResourceMeta) error
 	DeleteResource(ctx context.Context, resourceID string) (Result, error)
@@ -506,6 +508,35 @@ func (c *metaOpsClient) UpsertResource(ctx context.Context, resource *resourceme
 		return cerrors.ErrMetaOpFail.Wrap(err)
 	}
 
+	return nil
+}
+
+func (c *metaOpsClient) CreateResource(ctx context.Context, resource *resourcemeta.ResourceMeta) error {
+	if resource == nil {
+		return cerrors.ErrMetaParamsInvalid.GenWithStackByArgs("input resource meta is nil")
+	}
+
+	err := c.db.Transaction(func(tx *gorm.DB) error {
+		var count int64
+		err := tx.Model(&resourcemeta.ResourceMeta{}).
+			Where("id = ?", resource.ID).
+			Count(&count).Error
+		if err != nil {
+			return err
+		}
+
+		if count > 0 {
+			return cerrors.ErrDuplicateResourceID.GenWithStackByArgs(resource.ID)
+		}
+
+		if err := tx.Create(resource).Error; err != nil {
+			return cerrors.ErrMetaOpFail.Wrap(err)
+		}
+		return nil
+	})
+	if err != nil {
+		return cerrors.ErrMetaOpFail.Wrap(err)
+	}
 	return nil
 }
 

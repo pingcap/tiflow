@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"github.com/gogo/status"
-	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -57,12 +56,7 @@ func (b *LocalBroker) OpenStorage(
 	b.clientMu.Lock()
 	defer b.clientMu.Unlock()
 
-	st, err := status.New(codes.Internal, "resource manager error").WithDetails(&pb.ResourceError{
-		ErrorCode: pb.ResourceErrorCode_ResourceNotFound,
-	})
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
+	st := status.New(codes.NotFound, "resource manager error")
 
 	b.client.On("QueryResource", mock.Anything, &pb.QueryResourceRequest{ResourceId: resourcePath}, mock.Anything).
 		Return((*pb.QueryResourceResponse)(nil), st.Err())

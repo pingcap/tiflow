@@ -84,8 +84,8 @@ func (b *DefaultBroker) OnWorkerClosed(ctx context.Context, workerID resModel.Wo
 // RemoveResource implements pb.BrokerServiceServer.
 func (b *DefaultBroker) RemoveResource(
 	_ context.Context,
-	request *pb.RemoveResourceRequest,
-) (*pb.RemoveResourceResponse, error) {
+	request *pb.RemoveLocalResourceRequest,
+) (*pb.RemoveLocalResourceResponse, error) {
 	tp, resName, err := resModel.ParseResourcePath(request.GetResourceId())
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
@@ -109,7 +109,7 @@ func (b *DefaultBroker) RemoveResource(
 		return nil, status.Error(codes.Unknown, err.Error())
 	}
 
-	return &pb.RemoveResourceResponse{}, nil
+	return &pb.RemoveLocalResourceResponse{}, nil
 }
 
 func (b *DefaultBroker) newHandleForLocalFile(
@@ -206,26 +206,12 @@ func (b *DefaultBroker) checkForExistingResource(
 		// If the error is not derived from a grpc status, we should throw it.
 		return nil, false, errors.Trace(err)
 	}
-	if len(st.Details()) != 1 {
-		// The resource manager only generates status with ONE detail.
-		return nil, false, errors.Trace(err)
-	}
-	resourceErr, ok := st.Details()[0].(*pb.ResourceError)
-	if !ok {
-		return nil, false, errors.Trace(err)
-	}
 
-	log.L().Info("Got ResourceError",
-		zap.String("resource-id", resourceID),
-		zap.Any("resource-err", resourceErr))
-	switch resourceErr.ErrorCode {
-	case pb.ResourceErrorCode_ResourceNotFound:
+	switch st.Code() {
+	case codes.NotFound:
 		// Indicates that there is no existing resource with the same name.
 		return nil, false, nil
 	default:
-		log.L().Warn("Unexpected ResourceError",
-			zap.String("code", resourceErr.ErrorCode.String()),
-			zap.String("stack-trace", resourceErr.StackTrace))
 		return nil, false, errors.Trace(err)
 	}
 }
