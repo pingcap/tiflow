@@ -22,6 +22,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
+
+	"github.com/pingcap/log"
+	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/dm/checker"
 	dmcommon "github.com/pingcap/tiflow/dm/dm/common"
@@ -133,6 +137,12 @@ func (s *Server) updateSource(ctx context.Context, sourceName string, req openap
 		return nil, terror.ErrSchedulerSourceCfgNotExist.Generate(sourceName)
 	}
 	newCfg := config.OpenAPISourceToSourceCfg(req.Source)
+
+	// update's request will be no password when user doesn't input password and wants to use old password.
+	if req.Source.Password == nil {
+		newCfg.From.Password = oldCfg.From.Password
+	}
+
 	if err := checkAndAdjustSourceConfigFunc(ctx, newCfg); err != nil {
 		return nil, err
 	}
@@ -445,14 +455,29 @@ func (s *Server) deleteTask(ctx context.Context, taskName string, force bool) er
 	}
 	defer release()
 
+	ignoreCannotConnectError := func(err error) bool {
+		if err == nil {
+			return true
+		}
+		if force && strings.Contains(err.Error(), "connect: connection refused") {
+			log.L().Warn("connect downstream error when fore delete task", zap.Error(err))
+			return true
+		}
+		return false
+	}
+
 	toDBCfg := config.GetTargetDBCfgFromOpenAPITask(task)
 	if adjustErr := adjustTargetDB(ctx, toDBCfg); adjustErr != nil {
-		return adjustErr
+		if !ignoreCannotConnectError(adjustErr) {
+			return adjustErr
+		}
 	}
 	metaSchema := *task.MetaSchema
 	err = s.removeMetaData(ctx, taskName, metaSchema, toDBCfg)
 	if err != nil {
-		return terror.Annotate(err, "while removing metadata")
+		if !ignoreCannotConnectError(err) {
+			return terror.Annotate(err, "while removing metadata")
+		}
 	}
 	release()
 	sourceNameList := s.getTaskSourceNameList(taskName)
