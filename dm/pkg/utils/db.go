@@ -632,3 +632,10 @@ func GetTableCreateSQL(ctx context.Context, conn *sql.Conn, tableID string) (sql
 	}
 	return createStr, nil
 }
+
+// CreateTableSQLToOneRow formats the result of SHOW CREATE TABLE to one row.
+func CreateTableSQLToOneRow(sql string) string {
+	sql = strings.ReplaceAll(sql, "\n", "")
+	sql = strings.ReplaceAll(sql, "  ", " ")
+	return sql
+}
