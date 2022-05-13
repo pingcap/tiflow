@@ -382,15 +382,18 @@ func (m *Master) OnWorkerOnline(worker lib.WorkerHandle) error {
 // OnWorkerOffline implements MasterImpl.OnWorkerOffline
 func (m *Master) OnWorkerOffline(worker lib.WorkerHandle, reason error) error {
 	index := -1
+	m.workerListMu.Lock()
 	for i, handle := range m.workerList {
 		if handle == nil {
 			continue
 		}
 		if handle.ID() == worker.ID() {
 			index = i
+			m.workerList[i] = nil
 			break
 		}
 	}
+	m.workerListMu.Unlock()
 	if index < 0 {
 		return errors.Errorf("worker(%s) is not found in worker list", worker.ID())
 	}
