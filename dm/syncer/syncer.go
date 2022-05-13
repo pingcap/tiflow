@@ -163,7 +163,12 @@ type Syncer struct {
 	exprFilterGroup *ExprFilterGroup
 	sessCtx         sessionctx.Context
 
+<<<<<<< HEAD
 	closed atomic.Bool
+=======
+	running atomic.Bool
+	closed  atomic.Bool
+>>>>>>> f3bf091a6 (tracker(dm): close and recreate tracker when pause and resume (#5350))
 
 	start    atomic.Time
 	lastTime atomic.Time
@@ -322,12 +327,23 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 	}
 	rollbackHolder.Add(fr.FuncRollback{Name: "close-DBs", Fn: s.closeDBs})
 
+<<<<<<< HEAD
 	s.schemaTracker, err = schema.NewTracker(ctx, s.cfg.Name, s.cfg.To.Session, s.downstreamTrackConn)
 	if err != nil {
 		return terror.ErrSchemaTrackerInit.Delegate(err)
 	}
 
 	s.streamerController = NewStreamerController(s.notifier, s.syncCfg, s.cfg.EnableGTID, s.fromDB, s.binlogType, s.cfg.RelayDir, s.timezone)
+=======
+	if s.cfg.CollationCompatible == config.StrictCollationCompatible {
+		s.charsetAndDefaultCollation, s.idAndCollationMap, err = dbconn.GetCharsetAndCollationInfo(tctx, s.fromConn)
+		if err != nil {
+			return err
+		}
+	}
+
+	s.streamerController = NewStreamerController(s.syncCfg, s.cfg.EnableGTID, s.fromDB, s.cfg.RelayDir, s.timezone, s.relay)
+>>>>>>> f3bf091a6 (tracker(dm): close and recreate tracker when pause and resume (#5350))
 
 	s.baList, err = filter.New(s.cfg.CaseSensitive, s.cfg.BAList)
 	if err != nil {
@@ -1347,6 +1363,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		flushCheckpoint bool
 		delLoadTask     bool
 		cleanDumpFile   = s.cfg.CleanDumpFile
+		freshAndAllMode bool
 	)
 	flushCheckpoint, err = s.adjustGlobalPointGTID(tctx)
 	if err != nil {
@@ -1355,6 +1372,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 	if s.cfg.Mode == config.ModeAll && fresh {
 		delLoadTask = true
 		flushCheckpoint = true
+<<<<<<< HEAD
 		err = s.loadTableStructureFromDump(ctx)
 		if err != nil {
 			tctx.L().Warn("error happened when load table structure from dump files", zap.Error(err))
@@ -1364,6 +1382,42 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		cleanDumpFile = false
 	}
 
+=======
+		freshAndAllMode = true
+	}
+
+	if s.cfg.Mode == config.ModeIncrement || !fresh {
+		cleanDumpFile = false
+	}
+
+	s.runWg.Add(1)
+	go s.syncDML()
+	s.runWg.Add(1)
+	go func() {
+		defer s.runWg.Done()
+		// also need to use a different ctx. checkpointFlushWorker worker will be closed in the first defer
+		s.checkpointFlushWorker.Run(s.tctx)
+	}()
+	s.runWg.Add(1)
+	go s.syncDDL(adminQueueName, s.ddlDBConn, s.ddlJobCh)
+	s.runWg.Add(1)
+	go s.updateLagCronJob(s.runCtx.Ctx)
+	s.runWg.Add(1)
+	go s.updateTSOffsetCronJob(s.runCtx.Ctx)
+
+	// some prepare work before the binlog event loop:
+	// 1. first we flush checkpoint as needed, so in next resume we won't go to Load unit.
+	// 2. then since we are confident that Load unit is done we can delete the load task etcd KV.
+	//    TODO: we can't handle panic between 1. and 2., or fail to delete the load task etcd KV.
+	// 3. then we initiate schema tracker
+	// 4. - when it's a fresh task, load the table structure from dump files into schema tracker.
+	//      if it's also a optimistic sharding task, also load the table structure into checkpoints because shard tables
+	//      may not have same table structure so we can't fetch the downstream table structure for them lazily.
+	//    - when it's a resumed task, load the table structure from checkpoints into schema tracker.
+	//    TODO: we can't handle failure between 1. and 4. After 1. it's not a fresh task.
+	// 5. finally clean the dump files
+
+>>>>>>> f3bf091a6 (tracker(dm): close and recreate tracker when pause and resume (#5350))
 	if flushCheckpoint {
 		if err = s.flushCheckPoints(); err != nil {
 			tctx.L().Warn("fail to flush checkpoints when starting task", zap.Error(err))
@@ -1372,7 +1426,32 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 	}
 	if delLoadTask {
 		if err = s.delLoadTask(); err != nil {
+<<<<<<< HEAD
 			tctx.L().Warn("error when del load task in etcd", zap.Error(err))
+=======
+			s.tctx.L().Error("error when del load task in etcd", zap.Error(err))
+		}
+	}
+
+	s.schemaTracker, err = schema.NewTracker(ctx, s.cfg.Name, s.cfg.To.Session, s.downstreamTrackConn)
+	if err != nil {
+		return terror.ErrSchemaTrackerInit.Delegate(err)
+	}
+
+	if freshAndAllMode {
+		err = s.loadTableStructureFromDump(ctx)
+		if err != nil {
+			s.tctx.L().Warn("error happened when load table structure from dump files", zap.Error(err))
+			cleanDumpFile = false
+		}
+		if s.cfg.ShardMode == config.ShardOptimistic {
+			s.flushOptimisticTableInfos(s.runCtx)
+		}
+	} else {
+		err = s.checkpoint.LoadIntoSchemaTracker(ctx, s.schemaTracker)
+		if err != nil {
+			return err
+>>>>>>> f3bf091a6 (tracker(dm): close and recreate tracker when pause and resume (#5350))
 		}
 	}
 	if cleanDumpFile {
@@ -3092,8 +3171,20 @@ func (s *Syncer) Close() {
 	s.closed.Store(true)
 }
 
+<<<<<<< HEAD
 // stopSync stops syncing, now it used by Close and Pause
 // maybe we can refine the workflow more clear.
+=======
+// Kill kill syncer without graceful.
+func (s *Syncer) Kill() {
+	s.tctx.L().Warn("kill syncer without graceful")
+	s.runCancel()
+	s.syncCancel()
+	s.Close()
+}
+
+// stopSync stops stream and rollbacks checkpoint. Now it's used by Close() and Pause().
+>>>>>>> f3bf091a6 (tracker(dm): close and recreate tracker when pause and resume (#5350))
 func (s *Syncer) stopSync() {
 	if s.done != nil {
 		<-s.done // wait Run to return
@@ -3105,7 +3196,19 @@ func (s *Syncer) stopSync() {
 	// when resuming, re-create s.syncer
 
 	if s.streamerController != nil {
+<<<<<<< HEAD
 		s.streamerController.Close(s.tctx)
+=======
+		s.streamerController.Close()
+	}
+
+	// try to rollback checkpoints, if they already flushed, no effect, this operation should call before close schemaTracker
+	prePos := s.checkpoint.GlobalPoint()
+	s.checkpoint.Rollback()
+	currPos := s.checkpoint.GlobalPoint()
+	if binlog.CompareLocation(prePos, currPos, s.cfg.EnableGTID) != 0 {
+		s.tctx.L().Warn("rollback global checkpoint", zap.Stringer("previous position", prePos), zap.Stringer("current position", currPos))
+>>>>>>> f3bf091a6 (tracker(dm): close and recreate tracker when pause and resume (#5350))
 	}
 }
 
@@ -3123,6 +3226,9 @@ func (s *Syncer) Pause() {
 		return
 	}
 	s.stopSync()
+	if err := s.schemaTracker.Close(); err != nil {
+		s.tctx.L().Error("fail to close schema tracker", log.ShortError(err))
+	}
 }
 
 // Resume resumes the paused process.

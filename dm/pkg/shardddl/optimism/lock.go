@@ -585,11 +585,21 @@ func (l *Lock) IsDroppedColumn(source, upSchema, upTable, col string) bool {
 	return true
 }
 
+<<<<<<< HEAD
 // AddDroppedColumn adds a dropped column name in both etcd and lock's column map.
 func (l *Lock) AddDroppedColumn(info Info, col string) error {
 	source, upSchema, upTable := info.Source, info.UpSchema, info.UpTable
 	if l.IsDroppedColumn(source, upSchema, upTable, col) {
 		return nil
+=======
+// AddDroppedColumns adds a dropped column name in both etcd and lock's column map.
+func (l *Lock) AddDroppedColumns(source, schema, table string, cols []string) error {
+	newCols := make([]string, 0, len(cols))
+	for _, col := range cols {
+		if !l.IsDroppedColumn(source, schema, table, col) {
+			newCols = append(newCols, col)
+		}
+>>>>>>> f3bf091a6 (tracker(dm): close and recreate tracker when pause and resume (#5350))
 	}
 	log.L().Info("add partially dropped columns", zap.String("column", col), zap.String("info", info.ShortString()))
 

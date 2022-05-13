@@ -55,6 +55,19 @@ function run() {
 		"query-status test" \
 		"\"stage\": \"Running\"" 1
 
+<<<<<<< HEAD
+=======
+	echo "kill dm-worker1"
+	ps aux | grep dm-worker1 | awk '{print $2}' | xargs kill || true
+	check_port_offline $WORKER1_PORT 20
+	rm -rf $WORK_DIR/worker1
+	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		"\"stage\": \"Running\"" 1
+
+>>>>>>> f3bf091a6 (tracker(dm): close and recreate tracker when pause and resume (#5350))
 	run_sql_file $cur/data/db1.increment2.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
 	# wait transaction start
 	# you can see why sleep in https://github.com/pingcap/dm/pull/1928#issuecomment-895820239
