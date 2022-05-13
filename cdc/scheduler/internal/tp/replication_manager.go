@@ -17,7 +17,7 @@ import (
 	"context"
 
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/scheduler/tp/schedulepb"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/tp/schedulepb"
 )
 
 type callback func(model.TableID)
