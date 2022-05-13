@@ -37,6 +37,6 @@ func (m *MockPDClient) GetTS(ctx context.Context) (int64, int64, error) {
 	return oracle.GetPhysical(time.Now()), 0, nil
 }
 
-// Clsoe implements pd.Client.Close()
+// Close implements pd.Client.Close()
 // This method is used in some unit test cases.
 func (m *MockPDClient) Close() {}
