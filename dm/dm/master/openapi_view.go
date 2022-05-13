@@ -429,12 +429,12 @@ func (s *Server) DMAPICreateTask(c *gin.Context) {
 		_ = c.Error(err)
 		return
 	}
-	task, err := s.createTask(c.Request.Context(), req)
+	res, err := s.createTask(c.Request.Context(), req)
 	if err != nil {
 		_ = c.Error(err)
 		return
 	}
-	c.IndentedJSON(http.StatusCreated, task)
+	c.IndentedJSON(http.StatusCreated, res)
 }
 
 // DMAPIUpdateTask url is: (PUT /api/v1/tasks/{task-name}).
@@ -444,12 +444,12 @@ func (s *Server) DMAPIUpdateTask(c *gin.Context, taskName string) {
 		_ = c.Error(err)
 		return
 	}
-	task, err := s.updateTask(c.Request.Context(), req)
+	res, err := s.updateTask(c.Request.Context(), req)
 	if err != nil {
 		_ = c.Error(err)
 		return
 	}
-	c.IndentedJSON(http.StatusOK, task)
+	c.IndentedJSON(http.StatusOK, res)
 }
 
 // DMAPIDeleteTask url is:(DELETE /api/v1/tasks).
