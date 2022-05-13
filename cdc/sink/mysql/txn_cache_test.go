@@ -44,6 +44,7 @@ func TestSplitResolvedTxn(test *testing.T) {
 				resolvedTsMap: map[model.TableID]uint64{
 					1: uint64(6),
 					2: uint64(6),
+					3: uint64(6),
 				},
 				expected: map[model.TableID][]*model.SingleTableTxn{
 					1: {{
@@ -70,6 +71,7 @@ func TestSplitResolvedTxn(test *testing.T) {
 					1: uint64(13),
 					2: uint64(13),
 					3: uint64(13),
+					4: uint64(6),
 				},
 				expected: map[model.TableID][]*model.SingleTableTxn{
 					1: {
@@ -139,6 +141,7 @@ func TestSplitResolvedTxn(test *testing.T) {
 				resolvedTsMap: map[model.TableID]uint64{
 					1: uint64(6),
 					2: uint64(6),
+					3: uint64(13),
 				},
 				expected: map[model.TableID][]*model.SingleTableTxn{},
 			},
@@ -159,6 +162,7 @@ func TestSplitResolvedTxn(test *testing.T) {
 				resolvedTsMap: map[model.TableID]uint64{
 					1: uint64(6),
 					2: uint64(6),
+					3: uint64(13),
 				},
 				expected: map[model.TableID][]*model.SingleTableTxn{
 					1: {
@@ -202,6 +206,7 @@ func TestSplitResolvedTxn(test *testing.T) {
 				resolvedTsMap: map[model.TableID]uint64{
 					1: uint64(13),
 					2: uint64(13),
+					3: uint64(13),
 				},
 				expected: map[model.TableID][]*model.SingleTableTxn{
 					1: {
