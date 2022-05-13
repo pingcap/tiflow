@@ -894,6 +894,10 @@ func (cp *RemoteCheckPoint) LoadIntoSchemaTracker(ctx context.Context, schemaTra
 	defer cp.RUnlock()
 
 	for cpSchema, mSchema := range cp.points {
+		err := schemaTracker.CreateSchemaIfNotExists(cpSchema)
+		if err != nil {
+			return err
+		}
 		for cpTable, point := range mSchema {
 			// for create database DDL, we'll create a table point with no table name and table info, need to skip.
 			if point.flushedTI == nil {

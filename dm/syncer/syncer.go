@@ -1392,7 +1392,6 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			cleanDumpFile = false
 		}
 	} else {
-		// TODO!!!!!
 		err = s.checkpoint.LoadIntoSchemaTracker(ctx, s.schemaTracker)
 		if err != nil {
 			return err
