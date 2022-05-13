@@ -590,12 +590,16 @@ func (s *trackerSuite) TestBatchCreateTableIfNotExist(c *C) {
 		c.Assert(ti, DeepEquals, tiInfos[i])
 	}
 
-	// drop schema and raise error
+	// BatchCreateTableIfNotExist will also create database
 	ctx := context.Background()
 	err = tracker.Exec(ctx, "", `drop database testdb`)
 	c.Assert(err, IsNil)
 	err = tracker.BatchCreateTableIfNotExist(tablesToCreate)
+<<<<<<< HEAD
 	c.Assert(err, NotNil)
+=======
+	c.Assert(err, IsNil)
+>>>>>>> f3bf091a6 (tracker(dm): close and recreate tracker when pause and resume (#5350))
 }
 
 func (s *trackerSuite) TestAllSchemas(c *C) {
@@ -1188,3 +1192,15 @@ func (s *trackerSuite) TestPlacementRule(c *C) {
 	_, ok := tracker.dsTracker.tableInfos[tableID]
 	c.Assert(ok, IsTrue)
 }
+<<<<<<< HEAD
+=======
+
+func TestNewTmpFolderForTracker(t *testing.T) {
+	got, err := newTmpFolderForTracker("task/db01")
+	require.NoError(t, err)
+	require.Contains(t, got, "task%2Fdb01")
+	require.DirExists(t, got)
+	err = os.RemoveAll(got)
+	require.NoError(t, err)
+}
+>>>>>>> f3bf091a6 (tracker(dm): close and recreate tracker when pause and resume (#5350))

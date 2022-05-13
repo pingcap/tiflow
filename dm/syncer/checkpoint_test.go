@@ -19,7 +19,16 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+<<<<<<< HEAD
 	"strings"
+=======
+	"testing"
+	"time"
+
+	tidbddl "github.com/pingcap/tidb/ddl"
+	"github.com/pingcap/tidb/parser/ast"
+	"github.com/stretchr/testify/require"
+>>>>>>> f3bf091a6 (tracker(dm): close and recreate tracker when pause and resume (#5350))
 
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
@@ -201,7 +210,7 @@ func (s *testCheckpointSuite) testGlobalCheckPoint(c *C, cp CheckPoint) {
 	c.Assert(cp.FlushedGlobalPoint().Position, Equals, pos1)
 
 	// test rollback
-	cp.Rollback(s.tracker)
+	cp.Rollback()
 	c.Assert(cp.GlobalPoint().Position, Equals, pos1)
 	c.Assert(cp.FlushedGlobalPoint().Position, Equals, pos1)
 
@@ -216,7 +225,7 @@ func (s *testCheckpointSuite) testGlobalCheckPoint(c *C, cp CheckPoint) {
 	s.mock.ExpectCommit()
 	err = cp.FlushPointsExcept(tctx, cp.Snapshot(true).id, nil, nil, nil)
 	c.Assert(err, IsNil)
-	cp.Rollback(s.tracker)
+	cp.Rollback()
 	c.Assert(cp.GlobalPoint().Position, Equals, pos2)
 	c.Assert(cp.FlushedGlobalPoint().Position, Equals, pos2)
 
@@ -359,8 +368,13 @@ func (s *testCheckpointSuite) testTableCheckPoint(c *C, cp CheckPoint) {
 	c.Assert(older, IsTrue)
 
 	// rollback, to min
+<<<<<<< HEAD
 	cp.Rollback(s.tracker)
 	older = cp.IsOlderThanTablePoint(table, binlog.Location{Position: pos1}, false)
+=======
+	cp.Rollback()
+	older = cp.IsOlderThanTablePoint(table, binlog.Location{Position: pos1})
+>>>>>>> f3bf091a6 (tracker(dm): close and recreate tracker when pause and resume (#5350))
 	c.Assert(older, IsFalse)
 
 	// save again
@@ -374,8 +388,13 @@ func (s *testCheckpointSuite) testTableCheckPoint(c *C, cp CheckPoint) {
 	s.mock.ExpectCommit()
 	err = cp.FlushPointsExcept(tctx, cp.Snapshot(true).id, nil, nil, nil)
 	c.Assert(err, IsNil)
+<<<<<<< HEAD
 	cp.Rollback(s.tracker)
 	older = cp.IsOlderThanTablePoint(table, binlog.Location{Position: pos1}, false)
+=======
+	cp.Rollback()
+	older = cp.IsOlderThanTablePoint(table, binlog.Location{Position: pos1})
+>>>>>>> f3bf091a6 (tracker(dm): close and recreate tracker when pause and resume (#5350))
 	c.Assert(older, IsTrue)
 
 	// save
@@ -406,19 +425,12 @@ func (s *testCheckpointSuite) testTableCheckPoint(c *C, cp CheckPoint) {
 	c.Assert(rcp.points[schemaName][tableName].TableInfo(), NotNil)
 	c.Assert(rcp.points[schemaName][tableName].flushedPoint.ti, IsNil)
 
-	cp.Rollback(s.tracker)
+	cp.Rollback()
 	rcp = cp.(*RemoteCheckPoint)
 	c.Assert(rcp.points[schemaName][tableName].TableInfo(), IsNil)
 	c.Assert(rcp.points[schemaName][tableName].flushedPoint.ti, IsNil)
 
-	_, err = s.tracker.GetTableInfo(table)
-	c.Assert(strings.Contains(err.Error(), "doesn't exist"), IsTrue)
-
 	// test save, flush and rollback to not nil table info
-	err = s.tracker.Exec(ctx, schemaName, "create table "+tableName+" (c int);")
-	c.Assert(err, IsNil)
-	ti, err = s.tracker.GetTableInfo(table)
-	c.Assert(err, IsNil)
 	cp.SaveTablePoint(table, binlog.Location{Position: pos1}, ti)
 	tiBytes, _ := json.Marshal(ti)
 	s.mock.ExpectBegin()
@@ -434,10 +446,7 @@ func (s *testCheckpointSuite) testTableCheckPoint(c *C, cp CheckPoint) {
 	ti2, err := s.tracker.GetTableInfo(table)
 	c.Assert(err, IsNil)
 	cp.SaveTablePoint(table, binlog.Location{Position: pos2}, ti2)
-	cp.Rollback(s.tracker)
-	ti11, err := s.tracker.GetTableInfo(table)
-	c.Assert(err, IsNil)
-	c.Assert(ti11.Columns, HasLen, 1)
+	cp.Rollback()
 
 	// clear, to min
 	s.mock.ExpectBegin()
@@ -470,8 +479,13 @@ func (s *testCheckpointSuite) testTableCheckPoint(c *C, cp CheckPoint) {
 	c.Assert(cp.GlobalPoint(), Equals, lastGlobalPoint)
 	c.Assert(cp.GlobalPointSaveTime(), Not(Equals), lastGlobalPointSavedTime)
 	c.Assert(err, IsNil)
+<<<<<<< HEAD
 	cp.Rollback(s.tracker)
 	older = cp.IsOlderThanTablePoint(table, binlog.Location{Position: pos1}, false)
+=======
+	cp.Rollback()
+	older = cp.IsOlderThanTablePoint(table, binlog.Location{Position: pos1})
+>>>>>>> f3bf091a6 (tracker(dm): close and recreate tracker when pause and resume (#5350))
 	c.Assert(older, IsFalse)
 
 	s.mock.ExpectBegin()

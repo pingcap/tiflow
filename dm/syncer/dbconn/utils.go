@@ -35,6 +35,8 @@ func GetTableCreateSQL(tctx *tcontext.Context, conn *DBConn, tableID string) (sq
 		if scanErr := rows.Scan(&table, &createStr); scanErr != nil {
 			return "", terror.DBErrorAdapt(scanErr, terror.ErrDBDriverError)
 		}
+	} else {
+		return "", terror.ErrSyncerDownstreamTableNotFound.Generate(tableID)
 	}
 
 	if err = rows.Close(); err != nil {

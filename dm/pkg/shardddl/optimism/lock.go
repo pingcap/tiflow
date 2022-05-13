@@ -611,7 +611,7 @@ func (l *Lock) IsDroppedColumn(source, upSchema, upTable, col string) bool {
 	return true
 }
 
-// AddDroppedColumn adds a dropped column name in both etcd and lock's column map.
+// AddDroppedColumns adds a dropped column name in both etcd and lock's column map.
 func (l *Lock) AddDroppedColumns(source, schema, table string, cols []string) error {
 	newCols := make([]string, 0, len(cols))
 	for _, col := range cols {

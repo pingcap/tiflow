@@ -241,6 +241,8 @@ function test_relay_operations() {
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 
 	run_sql_file $cur/data/db1.increment.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
+	# wait syncer begin to sync so it has deleted load task etcd KV.
+	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 
 	# relay task transfer to worker1 with no error.
 	check_metric $WORKER1_PORT "dm_relay_data_corruption" 3 -1 1

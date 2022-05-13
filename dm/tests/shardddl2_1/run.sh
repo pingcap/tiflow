@@ -148,9 +148,10 @@ function DM_050_CASE() {
 	if [[ "$1" = "pessimistic" ]]; then
 		check_log_contain_with_retry "is different with" $WORK_DIR/master/log/dm-master.log
 	else
+		# can't make sure DDL of which source comes first
 		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 			"query-status test" \
-			'ALTER TABLE `shardddl`.`tb` CHANGE COLUMN `a` `d` INT' 1 \
+			'ALTER TABLE `shardddl`.`tb` CHANGE COLUMN' 1 \
 			"\"${SOURCE_ID2}-\`${shardddl1}\`.\`${tb1}\`\"" 1
 	fi
 }
