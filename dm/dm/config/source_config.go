@@ -53,6 +53,10 @@ var getAllServerIDFunc = utils.GetAllServerID
 //go:embed source.yaml
 var SampleSourceConfig string
 
+// ObfuscatedPasswordForFeedback is the source encryption password that returns to the foreground.
+// PM's requirement, we always return obfuscated password to users.
+var ObfuscatedPasswordForFeedback string = "******"
+
 // PurgeConfig is the configuration for Purger.
 type PurgeConfig struct {
 	Interval    int64 `yaml:"interval" toml:"interval" json:"interval"`             // check whether need to purge at this @Interval (seconds)

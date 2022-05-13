@@ -356,7 +356,7 @@ type Source struct {
 	Host string `json:"host"`
 
 	// source password
-	Password string `json:"password"`
+	Password *string `json:"password"`
 
 	// source port
 	Port int `json:"port"`
@@ -412,6 +412,9 @@ type StartTaskRequest struct {
 
 	// task start time
 	StartTime *string `json:"start_time,omitempty"`
+
+	// time duration of waiting on stop
+	WaitTimeOnStop *string `json:"wait_time_on_stop,omitempty"`
 }
 
 // StopTaskRequest defines model for StopTaskRequest.

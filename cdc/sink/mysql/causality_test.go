@@ -25,6 +25,7 @@ import (
 )
 
 func TestCausality(t *testing.T) {
+	t.Parallel()
 	rows := [][][]byte{
 		{[]byte("a")},
 		{[]byte("b")},
@@ -69,6 +70,7 @@ func TestCausality(t *testing.T) {
 }
 
 func TestGenKeys(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		txn      *model.SingleTableTxn
 		expected [][]byte

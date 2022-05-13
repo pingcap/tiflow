@@ -1376,7 +1376,7 @@ components:
           type: string
           example: "123456"
           description: "source password"
-          nullable: false
+          nullable: true
         enable_gtid:
           type: boolean
           example: false
@@ -1410,7 +1410,6 @@ components:
         - "host"
         - "port"
         - "user"
-        - "password"
         - "enable_gtid"
         - "enable"
     ShardingGroup:
@@ -2182,6 +2181,10 @@ components:
           type: string
           example: "10s"
           description: time duration of safe mode
+        wait_time_on_stop:
+          type: string
+          example: "10s"
+          description: time duration of waiting on stop
     StopTaskRequest:
       type: object
       properties:
