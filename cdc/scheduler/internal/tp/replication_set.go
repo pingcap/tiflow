@@ -15,7 +15,7 @@ package tp
 
 import (
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/scheduler/tp/schedulepb"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/tp/schedulepb"
 )
 
 // ReplicationSetState is the state of ReplicationSet in owner.

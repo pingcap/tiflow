@@ -18,11 +18,11 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/model"
-	sched "github.com/pingcap/tiflow/cdc/scheduler"
-	"github.com/pingcap/tiflow/cdc/scheduler/tp/schedulepb"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/tp/schedulepb"
 )
 
-type schedule interface {
+type scheduler interface {
 	Name() string
 	Schedule(
 		currentTables []model.TableID,
@@ -31,17 +31,13 @@ type schedule interface {
 	) []*scheduleTask
 }
 
-var _ sched.Scheduler = (*coordinator)(nil)
+var _ internal.Scheduler = (*coordinator)(nil)
 
 type coordinator struct {
 	trans   transport
 	manager *replicationManager
 	// balancer and drainer
-	scheduler []schedule
-}
-
-func NewCoordinator() sched.Scheduler {
-	return nil
+	scheduler []scheduler
 }
 
 func (c *coordinator) Tick(
@@ -55,9 +51,9 @@ func (c *coordinator) Tick(
 ) (newCheckpointTs, newResolvedTs model.Ts, err error) {
 	err = c.poll(ctx, checkpointTs, currentTables, aliveCaptures)
 	if err != nil {
-		return sched.CheckpointCannotProceed, sched.CheckpointCannotProceed, errors.Trace(err)
+		return internal.CheckpointCannotProceed, internal.CheckpointCannotProceed, errors.Trace(err)
 	}
-	return sched.CheckpointCannotProceed, sched.CheckpointCannotProceed, nil
+	return internal.CheckpointCannotProceed, internal.CheckpointCannotProceed, nil
 }
 
 func (c *coordinator) MoveTable(tableID model.TableID, target model.CaptureID) {}

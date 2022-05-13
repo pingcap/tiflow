@@ -15,7 +15,7 @@ package tp
 
 import "github.com/pingcap/tiflow/cdc/model"
 
-var _ schedule = &balancer{}
+var _ scheduler = &balancer{}
 
 type balancer struct{}
 

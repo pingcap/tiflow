@@ -15,7 +15,7 @@ package tp
 
 import (
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/scheduler/tp/schedulepb"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/tp/schedulepb"
 )
 
 // captureState is the state of a capture.
