@@ -243,10 +243,11 @@ func (s *ChangefeedReactorState) getPatches() []DataPatch {
 // the etcd worker will exit and throw the ErrLeaseExpired error.
 func (s *ChangefeedReactorState) CheckCaptureAlive(captureID model.CaptureID) {
 	k := etcd.CDCKey{
+		ClusterID: s.ClusterID,
 		Tp:        etcd.CDCKeyTypeCapture,
 		CaptureID: captureID,
 	}
-	key := k.String(s.ClusterID)
+	key := k.String()
 	patch := &SingleDataPatch{
 		Key: util.NewEtcdKey(key),
 		Func: func(v []byte) ([]byte, bool, error) {
@@ -289,10 +290,11 @@ func (s *ChangefeedReactorState) CheckChangefeedNormal() {
 // PatchInfo appends a DataPatch which can modify the ChangeFeedInfo
 func (s *ChangefeedReactorState) PatchInfo(fn func(*model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error)) {
 	key := &etcd.CDCKey{
+		ClusterID:    s.ClusterID,
 		Tp:           etcd.CDCKeyTypeChangefeedInfo,
 		ChangefeedID: s.ID,
 	}
-	s.patchAny(key.String(s.ClusterID), changefeedInfoTPI, func(e interface{}) (interface{}, bool, error) {
+	s.patchAny(key.String(), changefeedInfoTPI, func(e interface{}) (interface{}, bool, error) {
 		// e == nil means that the key is not exist before this patch
 		if e == nil {
 			return fn(nil)
@@ -304,10 +306,11 @@ func (s *ChangefeedReactorState) PatchInfo(fn func(*model.ChangeFeedInfo) (*mode
 // PatchStatus appends a DataPatch which can modify the ChangeFeedStatus
 func (s *ChangefeedReactorState) PatchStatus(fn func(*model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error)) {
 	key := &etcd.CDCKey{
+		ClusterID:    s.ClusterID,
 		Tp:           etcd.CDCKeyTypeChangeFeedStatus,
 		ChangefeedID: s.ID,
 	}
-	s.patchAny(key.String(s.ClusterID), changefeedStatusTPI, func(e interface{}) (interface{}, bool, error) {
+	s.patchAny(key.String(), changefeedStatusTPI, func(e interface{}) (interface{}, bool, error) {
 		// e == nil means that the key is not exist before this patch
 		if e == nil {
 			return fn(nil)
@@ -319,11 +322,12 @@ func (s *ChangefeedReactorState) PatchStatus(fn func(*model.ChangeFeedStatus) (*
 // PatchTaskPosition appends a DataPatch which can modify the TaskPosition of a specified capture
 func (s *ChangefeedReactorState) PatchTaskPosition(captureID model.CaptureID, fn func(*model.TaskPosition) (*model.TaskPosition, bool, error)) {
 	key := &etcd.CDCKey{
+		ClusterID:    s.ClusterID,
 		Tp:           etcd.CDCKeyTypeTaskPosition,
 		CaptureID:    captureID,
 		ChangefeedID: s.ID,
 	}
-	s.patchAny(key.String(s.ClusterID), taskPositionTPI, func(e interface{}) (interface{}, bool, error) {
+	s.patchAny(key.String(), taskPositionTPI, func(e interface{}) (interface{}, bool, error) {
 		// e == nil means that the key is not exist before this patch
 		if e == nil {
 			return fn(nil)

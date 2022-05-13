@@ -112,7 +112,8 @@ func initProcessor4Test(ctx cdcContext.Context, t *testing.T) (*processor, *orch
 			checkpointTs: replicaInfo.StartTs,
 		}, nil
 	})
-	p.changefeed = orchestrator.NewChangefeedReactorState(ctx.ChangefeedVars().ID)
+	p.changefeed = orchestrator.NewChangefeedReactorState(
+		etcd.DefaultCDCClusterID, ctx.ChangefeedVars().ID)
 	captureID := ctx.GlobalVars().CaptureInfo.ID
 	changefeedID := ctx.ChangefeedVars().ID
 	return p, orchestrator.NewReactorStateTester(t, p.changefeed, map[string]string{
@@ -580,6 +581,7 @@ func TestSchemaGC(t *testing.T) {
 
 func updateChangeFeedPosition(t *testing.T, tester *orchestrator.ReactorStateTester, cfID model.ChangeFeedID, resolvedTs, checkpointTs model.Ts) {
 	key := etcd.CDCKey{
+		ClusterID:    etcd.DefaultCDCClusterID,
 		Tp:           etcd.CDCKeyTypeChangeFeedStatus,
 		ChangefeedID: cfID,
 	}

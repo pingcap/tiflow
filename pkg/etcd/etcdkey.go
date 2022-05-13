@@ -162,23 +162,23 @@ func (k *CDCKey) Parse(clusterID, key string) error {
 	return nil
 }
 
-func (k *CDCKey) String(clusterID string) string {
+func (k *CDCKey) String() string {
 	switch k.Tp {
 	case CDCKeyTypeOwner:
 		if len(k.OwnerLeaseID) == 0 {
-			return BaseKey(clusterID) + metaPrefix + ownerKey
+			return BaseKey(k.ClusterID) + metaPrefix + ownerKey
 		}
-		return BaseKey(clusterID) + metaPrefix + ownerKey + "/" + k.OwnerLeaseID
+		return BaseKey(k.ClusterID) + metaPrefix + ownerKey + "/" + k.OwnerLeaseID
 	case CDCKeyTypeCapture:
-		return BaseKey(clusterID) + metaPrefix + captureKey + "/" + k.CaptureID
+		return BaseKey(k.ClusterID) + metaPrefix + captureKey + "/" + k.CaptureID
 	case CDCKeyTypeChangefeedInfo:
-		return NamespacedPrefix(clusterID, k.ChangefeedID.Namespace) + changefeedInfoKey +
+		return NamespacedPrefix(k.ClusterID, k.ChangefeedID.Namespace) + changefeedInfoKey +
 			"/" + k.ChangefeedID.ID
 	case CDCKeyTypeChangeFeedStatus:
-		return NamespacedPrefix(clusterID, k.ChangefeedID.Namespace) + jobKey +
+		return NamespacedPrefix(k.ClusterID, k.ChangefeedID.Namespace) + jobKey +
 			"/" + k.ChangefeedID.ID
 	case CDCKeyTypeTaskPosition:
-		return NamespacedPrefix(clusterID, k.ChangefeedID.Namespace) + taskPositionKey +
+		return NamespacedPrefix(k.ClusterID, k.ChangefeedID.Namespace) + taskPositionKey +
 			"/" + k.CaptureID + "/" + k.ChangefeedID.ID
 	}
 	log.Panic("unreachable")
