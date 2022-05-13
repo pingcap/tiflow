@@ -11,12 +11,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package model
+package protocol
 
 import (
 	"fmt"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/p2p"
 	"github.com/vmihailenco/msgpack/v5"
 )
@@ -25,7 +26,7 @@ import (
 // FIXME a detailed documentation on the interaction will be added later in a separate file.
 
 // DispatchTableTopic returns a message topic for dispatching a table.
-func DispatchTableTopic(changefeedID ChangeFeedID) p2p.Topic {
+func DispatchTableTopic(changefeedID model.ChangeFeedID) p2p.Topic {
 	return fmt.Sprintf("dispatch/%s/%s", changefeedID.Namespace, changefeedID.ID)
 }
 
@@ -33,24 +34,25 @@ func DispatchTableTopic(changefeedID ChangeFeedID) p2p.Topic {
 type DispatchTableMessage struct {
 	OwnerRev int64          `json:"owner-rev"`
 	Epoch    ProcessorEpoch `json:"epoch"`
-	ID       TableID        `json:"id"`
+	ID       model.TableID  `json:"id"`
+	StartTs  model.Ts       `json:"start-ts"`
 	IsDelete bool           `json:"is-delete"`
 }
 
 // DispatchTableResponseTopic returns a message topic for the result of
 // dispatching a table. It is sent from the Processor to the Owner.
-func DispatchTableResponseTopic(changefeedID ChangeFeedID) p2p.Topic {
+func DispatchTableResponseTopic(changefeedID model.ChangeFeedID) p2p.Topic {
 	return fmt.Sprintf("dispatch-resp/%s/%s", changefeedID.Namespace, changefeedID.ID)
 }
 
 // DispatchTableResponseMessage is the message body for the result of dispatching a table.
 type DispatchTableResponseMessage struct {
-	ID    TableID        `json:"id"`
+	ID    model.TableID  `json:"id"`
 	Epoch ProcessorEpoch `json:"epoch"`
 }
 
 // AnnounceTopic returns a message topic for announcing an ownership change.
-func AnnounceTopic(changefeedID ChangeFeedID) p2p.Topic {
+func AnnounceTopic(changefeedID model.ChangeFeedID) p2p.Topic {
 	return fmt.Sprintf("send-status/%s/%s", changefeedID.Namespace, changefeedID.ID)
 }
 
@@ -62,7 +64,7 @@ type AnnounceMessage struct {
 }
 
 // SyncTopic returns a message body for syncing the current states of a processor.
-func SyncTopic(changefeedID ChangeFeedID) p2p.Topic {
+func SyncTopic(changefeedID model.ChangeFeedID) p2p.Topic {
 	return fmt.Sprintf("send-status-resp/%s/%s", changefeedID.Namespace, changefeedID.ID)
 }
 
@@ -80,9 +82,9 @@ type SyncMessage struct {
 	// it has to re-sync its states with the Owner.
 	Epoch ProcessorEpoch
 
-	Running  []TableID
-	Adding   []TableID
-	Removing []TableID
+	Running  []model.TableID
+	Adding   []model.TableID
+	Removing []model.TableID
 }
 
 // Marshal serializes the message into MsgPack format.
@@ -101,13 +103,13 @@ func (m *SyncMessage) Unmarshal(data []byte) error {
 
 // CheckpointTopic returns a topic for sending the latest checkpoint from
 // the Processor to the Owner.
-func CheckpointTopic(changefeedID ChangeFeedID) p2p.Topic {
+func CheckpointTopic(changefeedID model.ChangeFeedID) p2p.Topic {
 	return fmt.Sprintf("checkpoint/%s/%s", changefeedID.Namespace, changefeedID.ID)
 }
 
 // CheckpointMessage is the message body for sending the latest checkpoint
 // from the Processor to the Owner.
 type CheckpointMessage struct {
-	CheckpointTs Ts `json:"checkpoint-ts"`
-	ResolvedTs   Ts `json:"resolved-ts"`
+	CheckpointTs model.Ts `json:"checkpoint-ts"`
+	ResolvedTs   model.Ts `json:"resolved-ts"`
 }

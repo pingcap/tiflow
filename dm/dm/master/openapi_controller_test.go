@@ -50,7 +50,7 @@ func (s *OpenAPIControllerSuite) SetupSuite() {
 		Enable:     true,
 		EnableGtid: false,
 		Host:       dbCfg.Host,
-		Password:   dbCfg.Password,
+		Password:   &dbCfg.Password,
 		Port:       dbCfg.Port,
 		User:       dbCfg.User,
 	}
@@ -221,6 +221,40 @@ func (s *OpenAPIControllerSuite) TestSourceController() {
 		s.Nil(err)
 		s.Len(sourceList, 0)
 	}
+
+	// create and update no password source
+	{
+		// no password will use "" as password
+		source := *s.testSource
+		source.Password = nil
+		createReq := openapi.CreateSourceRequest{Source: source}
+		resp, err := server.createSource(ctx, createReq)
+		s.NoError(err)
+		s.EqualValues(source, *resp)
+		config := server.scheduler.GetSourceCfgByID(source.SourceName)
+		s.NotNil(config)
+		s.Equal("", config.From.Password)
+
+		// update to have password
+		updateReq := openapi.UpdateSourceRequest{Source: *s.testSource}
+		sourceAfterUpdated, err := server.updateSource(ctx, source.SourceName, updateReq)
+		s.NoError(err)
+		s.EqualValues(s.testSource, sourceAfterUpdated)
+
+		// update without password will use old password
+		source = *s.testSource
+		source.Password = nil
+		updateReq = openapi.UpdateSourceRequest{Source: source}
+		sourceAfterUpdated, err = server.updateSource(ctx, source.SourceName, updateReq)
+		s.NoError(err)
+		s.Equal(source, *sourceAfterUpdated)
+		// password is old
+		config = server.scheduler.GetSourceCfgByID(source.SourceName)
+		s.NotNil(config)
+		s.Equal(*s.testSource.Password, config.From.Password)
+
+		s.Nil(server.deleteSource(ctx, s.testSource.SourceName, false))
+	}
 }
 
 func (s *OpenAPIControllerSuite) TestTaskController() {
@@ -251,9 +285,9 @@ func (s *OpenAPIControllerSuite) TestTaskController() {
 	// create
 	{
 		createTaskReq := openapi.CreateTaskRequest{Task: *s.testTask}
-		task, err := server.createTask(ctx, createTaskReq)
+		res, err := server.createTask(ctx, createTaskReq)
 		s.Nil(err)
-		s.EqualValues(s.testTask, task)
+		s.EqualValues(*s.testTask, res.Task)
 	}
 
 	// update
@@ -263,15 +297,15 @@ func (s *OpenAPIControllerSuite) TestTaskController() {
 		task.SourceConfig.IncrMigrateConf.ReplBatch = &batch
 		updateReq := openapi.UpdateTaskRequest{Task: task}
 		s.NoError(failpoint.Enable("github.com/pingcap/tiflow/dm/dm/master/scheduler/operateCheckSubtasksCanUpdate", `return("success")`))
-		taskAfterUpdated, err := server.updateTask(ctx, updateReq)
+		res, err := server.updateTask(ctx, updateReq)
 		s.NoError(err)
-		s.EqualValues(task.SourceConfig.IncrMigrateConf, taskAfterUpdated.SourceConfig.IncrMigrateConf)
+		s.EqualValues(task.SourceConfig.IncrMigrateConf, res.Task.SourceConfig.IncrMigrateConf)
 
 		// update back to continue next text
 		updateReq.Task = *s.testTask
-		taskAfterUpdated, err = server.updateTask(ctx, updateReq)
+		res, err = server.updateTask(ctx, updateReq)
 		s.NoError(err)
-		s.EqualValues(s.testTask, taskAfterUpdated)
+		s.EqualValues(*s.testTask, res.Task)
 		s.NoError(failpoint.Disable("github.com/pingcap/tiflow/dm/dm/master/scheduler/operateCheckSubtasksCanUpdate"))
 	}
 

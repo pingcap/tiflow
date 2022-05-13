@@ -671,3 +671,10 @@ func GetMaxConnectionsForConn(ctx context.Context, conn *sql.Conn) (int, error) 
 func IsMariaDB(version string) bool {
 	return strings.Contains(strings.ToUpper(version), "MARIADB")
 }
+
+// CreateTableSQLToOneRow formats the result of SHOW CREATE TABLE to one row.
+func CreateTableSQLToOneRow(sql string) string {
+	sql = strings.ReplaceAll(sql, "\n", "")
+	sql = strings.ReplaceAll(sql, "  ", " ")
+	return sql
+}

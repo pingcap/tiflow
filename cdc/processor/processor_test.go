@@ -204,14 +204,14 @@ func (s *mockSchemaStorage) DoGC(ts uint64) uint64 {
 
 type mockAgent struct {
 	// dummy to satisfy the interface
-	processorAgent
+	scheduler.Agent
 
 	executor         scheduler.TableExecutor
 	lastCheckpointTs model.Ts
 	isClosed         bool
 }
 
-func (a *mockAgent) Tick(_ cdcContext.Context) error {
+func (a *mockAgent) Tick(_ context.Context) error {
 	if len(a.executor.GetAllCurrentTables()) == 0 {
 		return nil
 	}
@@ -249,16 +249,16 @@ func TestTableExecutor(t *testing.T) {
 	require.Nil(t, err)
 	tester.MustApplyPatches()
 
-	ok, err := p.AddTable(ctx, 1)
+	ok, err := p.AddTable(ctx, 1, 20)
 	require.Nil(t, err)
 	require.True(t, ok)
-	ok, err = p.AddTable(ctx, 2)
+	ok, err = p.AddTable(ctx, 2, 20)
 	require.Nil(t, err)
 	require.True(t, ok)
-	ok, err = p.AddTable(ctx, 3)
+	ok, err = p.AddTable(ctx, 3, 20)
 	require.Nil(t, err)
 	require.True(t, ok)
-	ok, err = p.AddTable(ctx, 4)
+	ok, err = p.AddTable(ctx, 4, 20)
 	require.Nil(t, err)
 	require.True(t, ok)
 	require.Len(t, p.tables, 4)

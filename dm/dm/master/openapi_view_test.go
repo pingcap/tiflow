@@ -372,7 +372,7 @@ func (s *OpenAPIViewSuite) TestTaskTemplatesAPI() {
 		SourceName: source1Name,
 		EnableGtid: false,
 		Host:       dbCfg.Host,
-		Password:   dbCfg.Password,
+		Password:   &dbCfg.Password,
 		Port:       dbCfg.Port,
 		User:       dbCfg.User,
 	}
@@ -471,7 +471,7 @@ func (s *OpenAPIViewSuite) TestSourceAPI() {
 		Enable:     true,
 		EnableGtid: false,
 		Host:       dbCfg.Host,
-		Password:   dbCfg.Password,
+		Password:   &dbCfg.Password,
 		Port:       dbCfg.Port,
 		User:       dbCfg.User,
 		Purge:      &openapi.Purge{Interval: &purgeInterVal},
@@ -702,6 +702,38 @@ func (s *OpenAPIViewSuite) TestSourceAPI() {
 	s.NoError(result.UnmarshalBodyToObject(&resultListSource2))
 	s.Len(resultListSource2.Data, 0)
 	s.Equal(0, resultListSource2.Total)
+
+	// create with no password
+	sourceNoPassword := source1
+	sourceNoPassword.Password = nil
+	createReqNoPassword := openapi.CreateSourceRequest{Source: sourceNoPassword}
+	result = testutil.NewRequest().Post(baseURL).WithJsonBody(createReqNoPassword).GoWithHTTPHandler(s.T(), s1.openapiHandles)
+	s.Equal(http.StatusCreated, result.Code())
+	s.NoError(result.UnmarshalBodyToObject(&resultSource))
+	s.Nil(resultSource.Password)
+
+	// update to have password
+	sourceHasPassword := source1
+	updateReqHasPassword := openapi.UpdateSourceRequest{Source: sourceHasPassword}
+	result = testutil.NewRequest().Put(source1URL).WithJsonBody(updateReqHasPassword).GoWithHTTPHandler(s.T(), s1.openapiHandles)
+	s.Equal(http.StatusOK, result.Code())
+	s.NoError(result.UnmarshalBodyToObject(&source1FromHTTP))
+	s.Equal(source1FromHTTP.Password, sourceHasPassword.Password)
+
+	// update with no password, will use old password
+	updateReqNoPassword := openapi.UpdateSourceRequest{Source: sourceNoPassword}
+	result = testutil.NewRequest().Put(source1URL).WithJsonBody(updateReqNoPassword).GoWithHTTPHandler(s.T(), s1.openapiHandles)
+	s.Equal(http.StatusOK, result.Code())
+	s.NoError(result.UnmarshalBodyToObject(&source1FromHTTP))
+	s.Nil(source1FromHTTP.Password)
+	// password is old
+	conf := s1.scheduler.GetSourceCfgByID(source1FromHTTP.SourceName)
+	s.NotNil(conf)
+	s.Equal(*sourceHasPassword.Password, conf.From.Password)
+
+	// delete source with --force
+	result = testutil.NewRequest().Delete(fmt.Sprintf("%s/%s?force=true", baseURL, source1.SourceName)).GoWithHTTPHandler(s.T(), s1.openapiHandles)
+	s.Equal(http.StatusNoContent, result.Code())
 }
 
 func (s *OpenAPIViewSuite) testImportTaskTemplate(task *openapi.Task, s1 *Server) {
@@ -774,7 +806,7 @@ func (s *OpenAPIViewSuite) TestTaskAPI() {
 		SourceName: source1Name,
 		EnableGtid: false,
 		Host:       dbCfg.Host,
-		Password:   dbCfg.Password,
+		Password:   &dbCfg.Password,
 		Port:       dbCfg.Port,
 		User:       dbCfg.User,
 	}
@@ -814,9 +846,9 @@ func (s *OpenAPIViewSuite) TestTaskAPI() {
 	createTaskReq := openapi.CreateTaskRequest{Task: task}
 	result = testutil.NewRequest().Post(taskURL).WithJsonBody(createTaskReq).GoWithHTTPHandler(s.T(), s1.openapiHandles)
 	s.Equal(http.StatusCreated, result.Code())
-	var createTaskResp openapi.Task
+	var createTaskResp openapi.OperateTaskResponse
 	s.NoError(result.UnmarshalBodyToObject(&createTaskResp))
-	s.Equal(createTaskResp.Name, task.Name)
+	s.Equal(createTaskResp.Task.Name, task.Name)
 	subTaskM := s1.scheduler.GetSubTaskCfgsByTask(task.Name)
 	s.Len(subTaskM, 1)
 	s.Equal(task.Name, subTaskM[source1Name].Name)
@@ -837,8 +869,9 @@ func (s *OpenAPIViewSuite) TestTaskAPI() {
 	updateReq := openapi.UpdateTaskRequest{Task: clone}
 	result = testutil.NewRequest().Put(task1URL).WithJsonBody(updateReq).GoWithHTTPHandler(s.T(), s1.openapiHandles)
 	s.Equal(http.StatusOK, result.Code())
-	s.NoError(result.UnmarshalBodyToObject(&task1FromHTTP))
-	s.EqualValues(task1FromHTTP.SourceConfig.IncrMigrateConf.ReplBatch, clone.SourceConfig.IncrMigrateConf.ReplBatch)
+	var updateResp openapi.OperateTaskResponse
+	s.NoError(result.UnmarshalBodyToObject(&updateResp))
+	s.EqualValues(updateResp.Task.SourceConfig.IncrMigrateConf.ReplBatch, clone.SourceConfig.IncrMigrateConf.ReplBatch)
 	s.NoError(failpoint.Disable("github.com/pingcap/tiflow/dm/dm/master/scheduler/operateCheckSubtasksCanUpdate"))
 
 	// list tasks
