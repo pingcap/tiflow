@@ -35,6 +35,14 @@ function cleanup_process() {
     wait_process_exit dm-syncer.test
 }
 
+function cleanup_tidb_server(){
+    tidb_server_num=$(ps aux >temp && grep "tidb-server" temp | wc -l && rm temp)
+    echo "tidb_server_num tidb-server alive"
+    pkill -hup tidb-server 2>/dev/null || true
+
+    wait_process_exit tidb-server
+}
+
 function wait_pattern_exit() {
     pattern=$1
     while true
