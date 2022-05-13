@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package scheduler
+package base
 
 import (
 	"math"
@@ -19,7 +19,7 @@ import (
 	"time"
 
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/scheduler/util"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/util"
 	"go.uber.org/zap"
 )
 
