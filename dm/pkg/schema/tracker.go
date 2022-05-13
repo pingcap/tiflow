@@ -20,6 +20,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/docker/go-units"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb-tools/pkg/filter"
 	tidbConfig "github.com/pingcap/tidb/config"
@@ -35,7 +36,13 @@ import (
 	"github.com/pingcap/tidb/session"
 	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tidb/store/mockstore"
+<<<<<<< HEAD
 	"github.com/pingcap/tidb/types"
+=======
+	unistoreConfig "github.com/pingcap/tidb/store/mockstore/unistore/config"
+	"github.com/pingcap/tidb/util/filter"
+	"go.uber.org/atomic"
+>>>>>>> f3bf091a6 (tracker(dm): close and recreate tracker when pause and resume (#5350))
 	"go.uber.org/zap"
 
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
@@ -60,6 +67,11 @@ var (
 	}
 )
 
+func init() {
+	unistoreConfig.DefaultConf.Engine.VlogFileSize = 4 * units.MiB
+	unistoreConfig.DefaultConf.Engine.L1Size = 128 * units.MiB
+}
+
 // Tracker is used to track schema locally.
 type Tracker struct {
 	storePath string
@@ -67,6 +79,7 @@ type Tracker struct {
 	dom       *domain.Domain
 	se        session.Session
 	dsTracker *downstreamTracker
+	closed    atomic.Bool
 }
 
 // downstreamTracker tracks downstream schema.
@@ -265,10 +278,7 @@ func (tr *Tracker) GetCreateTable(ctx context.Context, table *filter.Table) (str
 
 	row := req.GetRow(0)
 	str := row.GetString(1) // the first column is the table name.
-	// returned as single line.
-	str = strings.ReplaceAll(str, "\n", "")
-	str = strings.ReplaceAll(str, "  ", " ")
-	return str, nil
+	return utils.CreateTableSQLToOneRow(str), nil
 }
 
 // AllSchemas returns all schemas visible to the tracker (excluding system tables).
@@ -348,6 +358,12 @@ func (tr *Tracker) Reset() error {
 
 // Close close a tracker.
 func (tr *Tracker) Close() error {
+	if tr == nil {
+		return nil
+	}
+	if !tr.closed.CAS(false, true) {
+		return nil
+	}
 	tr.se.Close()
 	tr.dom.Close()
 	if err := tr.store.Close(); err != nil {
@@ -402,7 +418,34 @@ func (tr *Tracker) CreateTableIfNotExists(table *filter.Table, ti *model.TableIn
 	tableName := model.NewCIStr(table.Name)
 	ti = cloneTableInfo(ti)
 	ti.Name = tableName
+<<<<<<< HEAD
 	return tr.dom.DDL().CreateTableWithInfo(tr.se, schemaName, ti, ddl.OnExistIgnore, false)
+=======
+	return tr.dom.DDL().CreateTableWithInfo(tr.se, schemaName, ti, ddl.OnExistIgnore)
+}
+
+// BatchCreateTableIfNotExist will batch creating tables per schema. If the schema does not exist, it will create it.
+// The argument is { database name -> { table name -> TableInfo } }.
+func (tr *Tracker) BatchCreateTableIfNotExist(tablesToCreate map[string]map[string]*model.TableInfo) error {
+	tr.se.SetValue(sessionctx.QueryString, "skip")
+	for schema, tableNameInfo := range tablesToCreate {
+		if err := tr.CreateSchemaIfNotExists(schema); err != nil {
+			return err
+		}
+
+		var cloneTis []*model.TableInfo
+		for table, ti := range tableNameInfo {
+			cloneTi := cloneTableInfo(ti)        // clone TableInfo w.r.t the warning of the CreateTable function
+			cloneTi.Name = model.NewCIStr(table) // TableInfo has no `TableName`
+			cloneTis = append(cloneTis, cloneTi)
+		}
+		schemaName := model.NewCIStr(schema)
+		if err := tr.dom.DDL().BatchCreateTableWithInfo(tr.se, schemaName, cloneTis, ddl.OnExistIgnore); err != nil {
+			return err
+		}
+	}
+	return nil
+>>>>>>> f3bf091a6 (tracker(dm): close and recreate tracker when pause and resume (#5350))
 }
 
 // GetSystemVar gets a variable from schema tracker.
