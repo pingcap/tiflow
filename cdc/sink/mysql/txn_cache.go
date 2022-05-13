@@ -115,9 +115,6 @@ func (c *unresolvedTxnCache) Resolved(
 ) (map[model.TableID]uint64, map[model.TableID][]*model.SingleTableTxn) {
 	c.unresolvedTxnsMu.Lock()
 	defer c.unresolvedTxnsMu.Unlock()
-	if len(c.unresolvedTxns) == 0 {
-		return nil, nil
-	}
 
 	return splitResolvedTxn(resolvedTsMap, c.unresolvedTxns)
 }

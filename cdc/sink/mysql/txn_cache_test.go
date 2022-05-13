@@ -128,7 +128,7 @@ func TestSplitResolvedTxn(test *testing.T) {
 					2: uint64(13),
 					3: uint64(13),
 				},
-				expected: nil,
+				expected: map[model.TableID][]*model.SingleTableTxn{},
 			},
 			{
 				input: []*model.RowChangedEvent{
@@ -264,7 +264,7 @@ func TestSplitResolvedTxn(test *testing.T) {
 			for tableID, ts := range t.resolvedTsMap {
 				resolvedTsMap.Store(tableID, ts)
 			}
-			_, resolved := cache.Resolved(&resolvedTsMap)
+			flushedResolvedTsMap, resolved := cache.Resolved(&resolvedTsMap)
 			for tableID, txns := range resolved {
 				sort.Slice(txns, func(i, j int) bool {
 					if txns[i].CommitTs != txns[j].CommitTs {
@@ -275,6 +275,7 @@ func TestSplitResolvedTxn(test *testing.T) {
 				resolved[tableID] = txns
 			}
 			require.Equal(test, t.expected, resolved, cmp.Diff(resolved, t.expected))
+			require.Equal(test, t.resolvedTsMap, flushedResolvedTsMap)
 		}
 	}
 }
