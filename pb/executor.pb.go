@@ -236,37 +236,132 @@ func (m *ConfirmDispatchTaskResponse) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_ConfirmDispatchTaskResponse proto.InternalMessageInfo
 
+type RemoveResourceRequest struct {
+	ResourceId string `protobuf:"bytes,1,opt,name=resource_id,json=resourceId,proto3" json:"resource_id,omitempty"`
+	CreatorId  string `protobuf:"bytes,2,opt,name=creator_id,json=creatorId,proto3" json:"creator_id,omitempty"`
+}
+
+func (m *RemoveResourceRequest) Reset()         { *m = RemoveResourceRequest{} }
+func (m *RemoveResourceRequest) String() string { return proto.CompactTextString(m) }
+func (*RemoveResourceRequest) ProtoMessage()    {}
+func (*RemoveResourceRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_12d1cdcda51e000f, []int{4}
+}
+func (m *RemoveResourceRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *RemoveResourceRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_RemoveResourceRequest.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *RemoveResourceRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_RemoveResourceRequest.Merge(m, src)
+}
+func (m *RemoveResourceRequest) XXX_Size() int {
+	return m.Size()
+}
+func (m *RemoveResourceRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_RemoveResourceRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_RemoveResourceRequest proto.InternalMessageInfo
+
+func (m *RemoveResourceRequest) GetResourceId() string {
+	if m != nil {
+		return m.ResourceId
+	}
+	return ""
+}
+
+func (m *RemoveResourceRequest) GetCreatorId() string {
+	if m != nil {
+		return m.CreatorId
+	}
+	return ""
+}
+
+type RemoveResourceResponse struct {
+}
+
+func (m *RemoveResourceResponse) Reset()         { *m = RemoveResourceResponse{} }
+func (m *RemoveResourceResponse) String() string { return proto.CompactTextString(m) }
+func (*RemoveResourceResponse) ProtoMessage()    {}
+func (*RemoveResourceResponse) Descriptor() ([]byte, []int) {
+	return fileDescriptor_12d1cdcda51e000f, []int{5}
+}
+func (m *RemoveResourceResponse) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *RemoveResourceResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_RemoveResourceResponse.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *RemoveResourceResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_RemoveResourceResponse.Merge(m, src)
+}
+func (m *RemoveResourceResponse) XXX_Size() int {
+	return m.Size()
+}
+func (m *RemoveResourceResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_RemoveResourceResponse.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_RemoveResourceResponse proto.InternalMessageInfo
+
 func init() {
 	proto.RegisterType((*PreDispatchTaskRequest)(nil), "pb.PreDispatchTaskRequest")
 	proto.RegisterType((*PreDispatchTaskResponse)(nil), "pb.PreDispatchTaskResponse")
 	proto.RegisterType((*ConfirmDispatchTaskRequest)(nil), "pb.ConfirmDispatchTaskRequest")
 	proto.RegisterType((*ConfirmDispatchTaskResponse)(nil), "pb.ConfirmDispatchTaskResponse")
+	proto.RegisterType((*RemoveResourceRequest)(nil), "pb.RemoveResourceRequest")
+	proto.RegisterType((*RemoveResourceResponse)(nil), "pb.RemoveResourceResponse")
 }
 
 func init() { proto.RegisterFile("executor.proto", fileDescriptor_12d1cdcda51e000f) }
 
 var fileDescriptor_12d1cdcda51e000f = []byte{
-	// 318 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x74, 0x92, 0xcd, 0x4e, 0xc2, 0x40,
-	0x14, 0x85, 0x3b, 0xa0, 0x08, 0x57, 0xa2, 0xc9, 0x98, 0x08, 0x96, 0x30, 0x34, 0xac, 0x58, 0xb1,
-	0xd0, 0x37, 0xf0, 0x67, 0xd1, 0xc4, 0x85, 0x21, 0x2c, 0xd8, 0x91, 0xc2, 0x8c, 0xda, 0x34, 0x30,
-	0xe3, 0xcc, 0x34, 0xca, 0x5b, 0xf8, 0x2c, 0x3e, 0x85, 0x1b, 0x13, 0x96, 0x2e, 0x4d, 0xfb, 0x22,
-	0x66, 0x66, 0xea, 0x82, 0x5a, 0x96, 0x3d, 0xdf, 0xbd, 0xf7, 0x9c, 0xd3, 0x16, 0x4e, 0xd8, 0x1b,
-	0x5b, 0xa6, 0x9a, 0xcb, 0xb1, 0x90, 0x5c, 0x73, 0x5c, 0x13, 0x8b, 0xe1, 0x17, 0x82, 0xf3, 0x07,
-	0xc9, 0x6e, 0x63, 0x25, 0x22, 0xbd, 0x7c, 0x9e, 0x46, 0x2a, 0x99, 0xb0, 0x97, 0x94, 0x29, 0x8d,
-	0x03, 0x68, 0xeb, 0x48, 0x25, 0x73, 0xbd, 0x11, 0x6c, 0x1e, 0xd3, 0x2e, 0x0a, 0xd0, 0xa8, 0x3e,
-	0x01, 0xa3, 0x4d, 0x37, 0x82, 0x85, 0x14, 0x0f, 0xe0, 0xd8, 0x4e, 0x2c, 0xf9, 0xfa, 0x31, 0x7e,
-	0xea, 0xd6, 0x02, 0x34, 0x6a, 0xbb, 0x81, 0x1b, 0xab, 0xe0, 0x1e, 0xb4, 0x56, 0x91, 0xd2, 0x4c,
-	0x9a, 0xfd, 0x7a, 0x80, 0x46, 0xad, 0x49, 0xd3, 0x09, 0x21, 0x35, 0xf0, 0x95, 0xcb, 0xc4, 0xc1,
-	0x03, 0x07, 0x9d, 0x10, 0x52, 0xdc, 0x81, 0xa3, 0x54, 0x39, 0x74, 0x68, 0x51, 0xc3, 0x3c, 0x86,
-	0x14, 0xf7, 0x01, 0xa4, 0x0b, 0x68, 0x58, 0xc3, 0xb2, 0x56, 0xa1, 0x84, 0x74, 0x78, 0x01, 0x9d,
-	0x7f, 0x75, 0x94, 0xe0, 0x6b, 0xc5, 0x86, 0x33, 0xf0, 0x6d, 0x2c, 0xb9, 0xaa, 0x6a, 0xbb, 0x93,
-	0x06, 0x95, 0xd2, 0xec, 0x9a, 0xd6, 0xca, 0xa6, 0x7d, 0xe8, 0x55, 0x5e, 0x76, 0xc6, 0x97, 0x1f,
-	0x08, 0x9a, 0x77, 0xc5, 0xab, 0xc7, 0xf7, 0x70, 0x5a, 0x0a, 0x88, 0xfd, 0xb1, 0x58, 0x8c, 0xab,
-	0x3f, 0x82, 0xdf, 0xab, 0x64, 0x45, 0x23, 0x0f, 0xcf, 0xe0, 0xac, 0xc2, 0x19, 0x13, 0xb3, 0xb5,
-	0xbf, 0xac, 0x3f, 0xd8, 0xcb, 0xff, 0x2e, 0x5f, 0x77, 0x3f, 0x33, 0x82, 0xb6, 0x19, 0x41, 0x3f,
-	0x19, 0x41, 0xef, 0x39, 0xf1, 0xb6, 0x39, 0xf1, 0xbe, 0x73, 0xe2, 0x2d, 0x1a, 0xf6, 0xef, 0xb9,
-	0xfa, 0x0d, 0x00, 0x00, 0xff, 0xff, 0x98, 0xf0, 0xf7, 0xa3, 0x4f, 0x02, 0x00, 0x00,
+	// 395 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x74, 0x93, 0x41, 0x6e, 0xda, 0x40,
+	0x14, 0x86, 0x3d, 0xd0, 0x52, 0x78, 0x50, 0x2a, 0x4d, 0x55, 0x30, 0x46, 0x18, 0xcb, 0x2b, 0x56,
+	0x2c, 0xe8, 0x0d, 0x68, 0xbb, 0xb0, 0xd4, 0x45, 0xe5, 0x22, 0x15, 0x75, 0x83, 0x8c, 0xfd, 0xda,
+	0x5a, 0x16, 0x8c, 0x3b, 0x33, 0x26, 0xe1, 0x16, 0x39, 0x4b, 0x4e, 0x91, 0x4d, 0x24, 0x96, 0x59,
+	0x46, 0x70, 0x91, 0xc8, 0x1e, 0x5b, 0x09, 0x8e, 0x59, 0xfa, 0xff, 0x66, 0xfe, 0xff, 0xfd, 0x6f,
+	0x64, 0xe8, 0xe2, 0x35, 0xfa, 0x89, 0x64, 0x7c, 0x1a, 0x73, 0x26, 0x19, 0xad, 0xc5, 0x6b, 0xfb,
+	0x9e, 0x40, 0xef, 0x07, 0xc7, 0xaf, 0xa1, 0x88, 0x3d, 0xe9, 0xff, 0x5b, 0x78, 0x22, 0x72, 0xf1,
+	0x7f, 0x82, 0x42, 0x52, 0x0b, 0x3a, 0xd2, 0x13, 0xd1, 0x4a, 0xee, 0x63, 0x5c, 0x85, 0x81, 0x4e,
+	0x2c, 0x32, 0xa9, 0xbb, 0x90, 0x6a, 0x8b, 0x7d, 0x8c, 0x4e, 0x40, 0xc7, 0xd0, 0xce, 0x4e, 0xf8,
+	0x6c, 0xfb, 0x27, 0xfc, 0xab, 0xd7, 0x2c, 0x32, 0xe9, 0xa8, 0x03, 0x5f, 0x32, 0x85, 0x0e, 0xa1,
+	0xb5, 0xf1, 0x84, 0x44, 0x9e, 0xde, 0xaf, 0x5b, 0x64, 0xd2, 0x72, 0x9b, 0x4a, 0x70, 0x82, 0x14,
+	0x5e, 0x31, 0x1e, 0x29, 0xf8, 0x46, 0x41, 0x25, 0x38, 0x01, 0xed, 0xc3, 0xbb, 0x44, 0x28, 0xf4,
+	0x36, 0x43, 0x8d, 0xf4, 0xd3, 0x09, 0xe8, 0x08, 0x80, 0xab, 0x01, 0x53, 0xd6, 0xc8, 0x58, 0x2b,
+	0x57, 0x9c, 0xc0, 0x1e, 0x40, 0xff, 0x55, 0x1d, 0x11, 0xb3, 0xad, 0x40, 0x7b, 0x09, 0x46, 0x36,
+	0x16, 0xdf, 0x54, 0xb5, 0x3d, 0x9b, 0x86, 0x94, 0xa6, 0x39, 0x0f, 0xad, 0x95, 0x43, 0x47, 0x30,
+	0xac, 0x74, 0xce, 0x83, 0x7f, 0xc1, 0x27, 0x17, 0x37, 0x6c, 0x87, 0x2e, 0x0a, 0x96, 0x70, 0x1f,
+	0x8b, 0xcc, 0x31, 0xb4, 0x79, 0x2e, 0x3d, 0xa7, 0x42, 0x21, 0xa9, 0x5c, 0x9f, 0xa3, 0x27, 0x19,
+	0x7f, 0x91, 0x9b, 0x2b, 0x4e, 0x60, 0xeb, 0xd0, 0x2b, 0x1b, 0xab, 0xc8, 0xd9, 0x2d, 0x81, 0xe6,
+	0xb7, 0xfc, 0xb5, 0xe9, 0x77, 0xf8, 0x50, 0xda, 0x09, 0x35, 0xa6, 0xf1, 0x7a, 0x5a, 0xfd, 0xee,
+	0xc6, 0xb0, 0x92, 0xe5, 0x5d, 0x34, 0xba, 0x84, 0x8f, 0x15, 0x65, 0xa9, 0x99, 0xde, 0xba, 0xbc,
+	0x5f, 0x63, 0x7c, 0x91, 0x17, 0xce, 0xb3, 0xdf, 0xf0, 0x7e, 0xce, 0x59, 0x84, 0xfc, 0x27, 0xf2,
+	0x5d, 0xe8, 0x23, 0x75, 0xa0, 0x7b, 0xde, 0x8f, 0x0e, 0x52, 0x97, 0xca, 0x65, 0x1a, 0x46, 0x15,
+	0x2a, 0xbc, 0xe7, 0xfa, 0xdd, 0xd1, 0x24, 0x87, 0xa3, 0x49, 0x1e, 0x8f, 0x26, 0xb9, 0x39, 0x99,
+	0xda, 0xe1, 0x64, 0x6a, 0x0f, 0x27, 0x53, 0x5b, 0x37, 0xb2, 0x9f, 0xe1, 0xf3, 0x53, 0x00, 0x00,
+	0x00, 0xff, 0xff, 0x7b, 0x8e, 0x96, 0xe5, 0x1e, 0x03, 0x00, 0x00,
 }
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -379,6 +474,78 @@ var _Executor_serviceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ConfirmDispatchTask",
 			Handler:    _Executor_ConfirmDispatchTask_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "executor.proto",
+}
+
+// BrokerServiceClient is the client API for BrokerService service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://godoc.org/google.golang.org/grpc#ClientConn.NewStream.
+type BrokerServiceClient interface {
+	RemoveResource(ctx context.Context, in *RemoveResourceRequest, opts ...grpc.CallOption) (*RemoveResourceResponse, error)
+}
+
+type brokerServiceClient struct {
+	cc *grpc.ClientConn
+}
+
+func NewBrokerServiceClient(cc *grpc.ClientConn) BrokerServiceClient {
+	return &brokerServiceClient{cc}
+}
+
+func (c *brokerServiceClient) RemoveResource(ctx context.Context, in *RemoveResourceRequest, opts ...grpc.CallOption) (*RemoveResourceResponse, error) {
+	out := new(RemoveResourceResponse)
+	err := c.cc.Invoke(ctx, "/pb.BrokerService/RemoveResource", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// BrokerServiceServer is the server API for BrokerService service.
+type BrokerServiceServer interface {
+	RemoveResource(context.Context, *RemoveResourceRequest) (*RemoveResourceResponse, error)
+}
+
+// UnimplementedBrokerServiceServer can be embedded to have forward compatible implementations.
+type UnimplementedBrokerServiceServer struct {
+}
+
+func (*UnimplementedBrokerServiceServer) RemoveResource(ctx context.Context, req *RemoveResourceRequest) (*RemoveResourceResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RemoveResource not implemented")
+}
+
+func RegisterBrokerServiceServer(s *grpc.Server, srv BrokerServiceServer) {
+	s.RegisterService(&_BrokerService_serviceDesc, srv)
+}
+
+func _BrokerService_RemoveResource_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RemoveResourceRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BrokerServiceServer).RemoveResource(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/pb.BrokerService/RemoveResource",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BrokerServiceServer).RemoveResource(ctx, req.(*RemoveResourceRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+var _BrokerService_serviceDesc = grpc.ServiceDesc{
+	ServiceName: "pb.BrokerService",
+	HandlerType: (*BrokerServiceServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "RemoveResource",
+			Handler:    _BrokerService_RemoveResource_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
@@ -531,6 +698,66 @@ func (m *ConfirmDispatchTaskResponse) MarshalToSizedBuffer(dAtA []byte) (int, er
 	return len(dAtA) - i, nil
 }
 
+func (m *RemoveResourceRequest) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *RemoveResourceRequest) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *RemoveResourceRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if len(m.CreatorId) > 0 {
+		i -= len(m.CreatorId)
+		copy(dAtA[i:], m.CreatorId)
+		i = encodeVarintExecutor(dAtA, i, uint64(len(m.CreatorId)))
+		i--
+		dAtA[i] = 0x12
+	}
+	if len(m.ResourceId) > 0 {
+		i -= len(m.ResourceId)
+		copy(dAtA[i:], m.ResourceId)
+		i = encodeVarintExecutor(dAtA, i, uint64(len(m.ResourceId)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *RemoveResourceResponse) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *RemoveResourceResponse) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *RemoveResourceResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	return len(dAtA) - i, nil
+}
+
 func encodeVarintExecutor(dAtA []byte, offset int, v uint64) int {
 	offset -= sovExecutor(v)
 	base := offset
@@ -601,6 +828,32 @@ func (m *ConfirmDispatchTaskRequest) Size() (n int) {
 }
 
 func (m *ConfirmDispatchTaskResponse) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	return n
+}
+
+func (m *RemoveResourceRequest) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = len(m.ResourceId)
+	if l > 0 {
+		n += 1 + l + sovExecutor(uint64(l))
+	}
+	l = len(m.CreatorId)
+	if l > 0 {
+		n += 1 + l + sovExecutor(uint64(l))
+	}
+	return n
+}
+
+func (m *RemoveResourceResponse) Size() (n int) {
 	if m == nil {
 		return 0
 	}
@@ -1037,6 +1290,170 @@ func (m *ConfirmDispatchTaskResponse) Unmarshal(dAtA []byte) error {
 		}
 		if fieldNum <= 0 {
 			return fmt.Errorf("proto: ConfirmDispatchTaskResponse: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		default:
+			iNdEx = preIndex
+			skippy, err := skipExecutor(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthExecutor
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *RemoveResourceRequest) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowExecutor
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: RemoveResourceRequest: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: RemoveResourceRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ResourceId", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowExecutor
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthExecutor
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthExecutor
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.ResourceId = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field CreatorId", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowExecutor
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthExecutor
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthExecutor
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.CreatorId = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipExecutor(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthExecutor
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *RemoveResourceResponse) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowExecutor
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: RemoveResourceResponse: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: RemoveResourceResponse: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		default:

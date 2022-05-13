@@ -133,6 +133,11 @@ func (m *LocalFileManager) RemoveTemporaryFiles(creator libModel.WorkerID) error
 // RemoveResource removes a single resource from the local file system.
 // NOTE the caller should handle ErrResourceDoesNotExist appropriately.
 func (m *LocalFileManager) RemoveResource(creator libModel.WorkerID, resName resModel.ResourceName) error {
+	if creator == "" {
+		log.L().Panic("Empty creator ID is unexpected",
+			zap.String("resource-name", resName))
+	}
+
 	resourcePath := filepath.Join(m.config.BaseDir, creator, resName)
 	if _, err := os.Stat(resourcePath); err != nil {
 		if os.IsNotExist(err) {

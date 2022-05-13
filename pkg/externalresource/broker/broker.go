@@ -2,14 +2,17 @@ package broker
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/gogo/status"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/zap"
+	"google.golang.org/grpc/codes"
 
 	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/pb"
+	derrors "github.com/hanfei1991/microcosm/pkg/errors"
 	resModel "github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta/model"
 	"github.com/hanfei1991/microcosm/pkg/externalresource/storagecfg"
 	"github.com/hanfei1991/microcosm/pkg/rpcutil"
@@ -76,6 +79,37 @@ func (b *DefaultBroker) OnWorkerClosed(ctx context.Context, workerID resModel.Wo
 			zap.String("job-id", jobID),
 			zap.Error(err))
 	}
+}
+
+// RemoveResource implements pb.BrokerServiceServer.
+func (b *DefaultBroker) RemoveResource(
+	_ context.Context,
+	request *pb.RemoveResourceRequest,
+) (*pb.RemoveResourceResponse, error) {
+	tp, resName, err := resModel.ParseResourcePath(request.GetResourceId())
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+
+	if tp != resModel.ResourceTypeLocalFile {
+		return nil, status.Error(codes.InvalidArgument,
+			fmt.Sprintf("unexpected resource type %s", tp))
+	}
+
+	if request.GetCreatorId() == "" {
+		return nil, status.Error(codes.InvalidArgument,
+			fmt.Sprintf("empty creatorID"))
+	}
+
+	err = b.fileManager.RemoveResource(request.GetCreatorId(), resName)
+	if err != nil {
+		if derrors.ErrResourceDoesNotExist.Equal(err) {
+			return nil, status.Error(codes.NotFound, err.Error())
+		}
+		return nil, status.Error(codes.Unknown, err.Error())
+	}
+
+	return &pb.RemoveResourceResponse{}, nil
 }
 
 func (b *DefaultBroker) newHandleForLocalFile(

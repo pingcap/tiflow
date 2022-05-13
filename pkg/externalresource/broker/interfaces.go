@@ -4,12 +4,15 @@ import (
 	"context"
 
 	libModel "github.com/hanfei1991/microcosm/lib/model"
+	"github.com/hanfei1991/microcosm/pb"
 	resModel "github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta/model"
 )
 
 // A Broker is created and maintained by the executor
 // and provides file resources to the tasks.
 type Broker interface {
+	pb.BrokerServiceServer
+
 	// OpenStorage creates a storage Handle for a worker.
 	OpenStorage(
 		ctx context.Context,
