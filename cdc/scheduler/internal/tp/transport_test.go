@@ -19,7 +19,7 @@ import (
 	"time"
 
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/scheduler/tp/schedulepb"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/tp/schedulepb"
 	"github.com/pingcap/tiflow/pkg/p2p"
 	"github.com/stretchr/testify/require"
 )

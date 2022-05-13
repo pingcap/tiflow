@@ -52,7 +52,7 @@ $TOOLS_BIN_DIR/protoc -I"./proto" -I"$TOOLS_INCLUDE_DIR" \
 	--gogofaster_out=plugins=grpc:./proto/p2p ./proto/CDCPeerToPeer.proto
 
 echo "generate schedulepb..."
-mkdir -p ./cdc/scheduler/tp/schedulepb
+mkdir -p ./cdc/scheduler/internal/tp/schedulepb
 $TOOLS_BIN_DIR/protoc -I"./proto" -I"$TOOLS_INCLUDE_DIR" \
 	--plugin=protoc-gen-gogofaster="$GOGO_FASTER" \
-	--gogofaster_out=plugins=grpc:./cdc/scheduler/tp/schedulepb ./proto/TableSchedule.proto
+	--gogofaster_out=plugins=grpc:./cdc/scheduler/internal/tp/schedulepb ./proto/TableSchedule.proto
