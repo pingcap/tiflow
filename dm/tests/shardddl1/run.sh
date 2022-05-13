@@ -559,8 +559,8 @@ function DM_COMPACT_CASE() {
 function DM_COMPACT() {
 	# mock downstream has a high latency and upstream has a high workload
 	ps aux | grep dm-worker | awk '{print $2}' | xargs kill || true
-	check_port_offline $WORKER1_PORT 20
-	check_port_offline $WORKER2_PORT 20
+	check_process_exit worker1 20
+	check_process_exit worker2 20
 	export GO_FAILPOINTS='github.com/pingcap/tiflow/dm/syncer/BlockExecuteSQLs=return(1);github.com/pingcap/tiflow/dm/syncer/SafeModeInitPhaseSeconds=return(5)'
 	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
 	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
@@ -602,8 +602,8 @@ function DM_COMPACT_USE_DOWNSTREAM_SCHEMA_CASE() {
 function DM_COMPACT_USE_DOWNSTREAM_SCHEMA() {
 	# downstream pk/uk/column is diffrent with upstream, compact use downstream schema.
 	ps aux | grep dm-worker | awk '{print $2}' | xargs kill || true
-	check_port_offline $WORKER1_PORT 20
-	check_port_offline $WORKER2_PORT 20
+	check_process_exit worker1 20
+	check_process_exit worker2 20
 	# DownstreamIdentifyKeyCheckInCompact=return(20) will check whether the key value in compact is less than 20, if false, it will be panic.
 	# This goal is check whether it use downstream schema in compator.
 	# if use downstream schema, key will be 'b' with value less than 20.
@@ -681,8 +681,8 @@ function DM_MULTIPLE_ROWS_CASE() {
 
 function DM_MULTIPLE_ROWS() {
 	ps aux | grep dm-worker | awk '{print $2}' | xargs kill || true
-	check_port_offline $WORKER1_PORT 20
-	check_port_offline $WORKER2_PORT 20
+	check_process_exit worker1 20
+	check_process_exit worker2 20
 	export GO_FAILPOINTS='github.com/pingcap/tiflow/dm/syncer/BlockExecuteSQLs=return(1);github.com/pingcap/tiflow/dm/syncer/SafeModeInitPhaseSeconds=return(5)'
 	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
 	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
@@ -694,8 +694,8 @@ function DM_MULTIPLE_ROWS() {
 		"clean_table" ""
 
 	ps aux | grep dm-worker | awk '{print $2}' | xargs kill || true
-	check_port_offline $WORKER1_PORT 20
-	check_port_offline $WORKER2_PORT 20
+	check_process_exit worker1 20
+	check_process_exit worker2 20
 	export GO_FAILPOINTS=''
 	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
 	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
@@ -761,8 +761,8 @@ function DM_DML_EXECUTE_ERROR_CASE() {
 
 function DM_DML_EXECUTE_ERROR() {
 	ps aux | grep dm-worker | awk '{print $2}' | xargs kill || true
-	check_port_offline $WORKER1_PORT 20
-	check_port_offline $WORKER2_PORT 20
+	check_process_exit worker1 20
+	check_process_exit worker2 20
 	export GO_FAILPOINTS='github.com/pingcap/tiflow/dm/syncer/ErrorOnLastDML=return()'
 	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
 	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml

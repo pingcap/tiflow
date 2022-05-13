@@ -356,7 +356,7 @@ type Source struct {
 	Host string `json:"host"`
 
 	// source password
-	Password string `json:"password"`
+	Password *string `json:"password"`
 
 	// source port
 	Port int `json:"port"`
