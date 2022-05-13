@@ -601,6 +601,42 @@ function test_task_with_ignore_check_items() {
 	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>TEST OPENAPI: TEST TASK WITH IGNORE CHECK ITEMS SUCCESS"
 }
 
+function test_delete_task_with_stopped_downstream() {
+	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>START TEST OPENAPI: DELETE TASK WITH STOPPED DOWNSTREAM"
+	prepare_database
+
+	task_name="test-no-shard"
+	target_table_name="" # empty means no route
+
+	# create source successfully
+	openapi_source_check "create_source1_success"
+	# create source successfully
+	openapi_source_check "create_source2_success"
+	# get source list success
+	openapi_source_check "list_source_success" 2
+	# create no shard task success
+	openapi_task_check "create_noshard_task_success" $task_name $target_table_name
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status $task_name" \
+		"\"stage\": \"Stopped\"" 2
+
+	# stop downstream
+	cleanup_tidb_server
+
+	# delete task failed because downstream is stopped.
+	openapi_task_check "delete_task_failed" "$task_name"
+
+	# delete task success with force
+	openapi_task_check "delete_task_with_force_success" "$task_name"
+	openapi_task_check "get_task_list" 0
+
+	# restart downstream
+	run_tidb_server 4000 $TIDB_PASSWORD
+	sleep 2
+	clean_cluster_sources_and_tasks
+	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>TEST OPENAPI: DELETE TASK WITH STOPPED DOWNSTREAM SUCCESS"
+}
+
 function test_cluster() {
 	# list master and worker node
 	openapi_cluster_check "list_master_success" 2
@@ -645,6 +681,7 @@ function run() {
 	test_noshard_task_dump_status
 	test_complex_operations_of_source_and_task
 	test_task_with_ignore_check_items
+	test_delete_task_with_stopped_downstream
 
 	# NOTE: this test case MUST running at last, because it will offline some members of cluster
 	test_cluster
