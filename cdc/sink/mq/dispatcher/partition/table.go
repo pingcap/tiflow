@@ -14,9 +14,10 @@
 package partition
 
 import (
+	"sync"
+
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/hash"
-	"sync"
 )
 
 // TableDispatcher is a partition dispatcher which dispatches events
