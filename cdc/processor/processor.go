@@ -33,7 +33,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/puller"
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/scheduler"
-	base "github.com/pingcap/tiflow/cdc/scheduler/base"
 	"github.com/pingcap/tiflow/cdc/sink"
 	"github.com/pingcap/tiflow/cdc/sink/metrics"
 	"github.com/pingcap/tiflow/cdc/sorter/memory"
@@ -527,7 +526,7 @@ func (p *processor) newAgentImpl(ctx cdcContext.Context) (scheduler.Agent, error
 	messageServer := ctx.GlobalVars().MessageServer
 	messageRouter := ctx.GlobalVars().MessageRouter
 	etcdClient := ctx.GlobalVars().EtcdClient
-	ret, err := base.NewAgent(ctx, messageServer, messageRouter, etcdClient, p, p.changefeedID)
+	ret, err := scheduler.NewAgent(ctx, messageServer, messageRouter, etcdClient, p, p.changefeedID)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

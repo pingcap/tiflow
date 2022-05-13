@@ -29,7 +29,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/scheduler"
-	"github.com/pingcap/tiflow/cdc/scheduler/base"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
@@ -49,7 +48,7 @@ func newSchedulerV2FromCtx(
 	messageServer := ctx.GlobalVars().MessageServer
 	messageRouter := ctx.GlobalVars().MessageRouter
 	ownerRev := ctx.GlobalVars().OwnerRevision
-	ret, err := base.NewSchedulerV2(
+	ret, err := scheduler.NewScheduler(
 		ctx, changeFeedID, startTs, messageServer, messageRouter, ownerRev)
 	if err != nil {
 		return nil, errors.Trace(err)

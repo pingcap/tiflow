@@ -22,8 +22,8 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
-	pscheduler "github.com/pingcap/tiflow/cdc/scheduler"
-	"github.com/pingcap/tiflow/cdc/scheduler/base/protocol"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/base/protocol"
 	"github.com/pingcap/tiflow/pkg/p2p"
 	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/stretchr/testify/require"
@@ -72,8 +72,8 @@ func TestSchedulerBasics(t *testing.T) {
 		checkpointTs, resolvedTs, err := sched.Tick(
 			ctx, 1000, []model.TableID{1, 2, 3}, mockCaptures)
 		require.NoError(t, err)
-		require.Equal(t, pscheduler.CheckpointCannotProceed, checkpointTs)
-		require.Equal(t, pscheduler.CheckpointCannotProceed, resolvedTs)
+		require.Equal(t, internal.CheckpointCannotProceed, checkpointTs)
+		require.Equal(t, internal.CheckpointCannotProceed, resolvedTs)
 	}
 
 	announceCh := receiveToChannels(
@@ -122,8 +122,8 @@ func TestSchedulerBasics(t *testing.T) {
 		checkpointTs, resolvedTs, err := sched.Tick(
 			ctx, 1000, []model.TableID{1, 2, 3}, mockCaptures)
 		require.NoError(t, err)
-		require.Equal(t, pscheduler.CheckpointCannotProceed, checkpointTs)
-		require.Equal(t, pscheduler.CheckpointCannotProceed, resolvedTs)
+		require.Equal(t, internal.CheckpointCannotProceed, checkpointTs)
+		require.Equal(t, internal.CheckpointCannotProceed, resolvedTs)
 	}
 	log.Info("Tables have been dispatched")
 
@@ -213,8 +213,8 @@ func TestSchedulerNoPeer(t *testing.T) {
 		checkpointTs, resolvedTs, err := sched.Tick(
 			ctx, 1000, []model.TableID{1, 2, 3}, mockCaptures)
 		require.NoError(t, err)
-		require.Equal(t, pscheduler.CheckpointCannotProceed, checkpointTs)
-		require.Equal(t, pscheduler.CheckpointCannotProceed, resolvedTs)
+		require.Equal(t, internal.CheckpointCannotProceed, checkpointTs)
+		require.Equal(t, internal.CheckpointCannotProceed, resolvedTs)
 	}
 
 	// Remove the node from the captureInfos.
@@ -224,8 +224,8 @@ func TestSchedulerNoPeer(t *testing.T) {
 		checkpointTs, resolvedTs, err := sched.Tick(
 			ctx, 1000, []model.TableID{1, 2, 3}, mockCaptures)
 		require.NoError(t, err)
-		require.Equal(t, pscheduler.CheckpointCannotProceed, checkpointTs)
-		require.Equal(t, pscheduler.CheckpointCannotProceed, resolvedTs)
+		require.Equal(t, internal.CheckpointCannotProceed, checkpointTs)
+		require.Equal(t, internal.CheckpointCannotProceed, resolvedTs)
 	}
 
 	sched.Close(ctx)
@@ -235,7 +235,7 @@ func TestSchedulerNoPeer(t *testing.T) {
 func TestInfoProvider(t *testing.T) {
 	var sched interface{}
 	sched = new(SchedulerV2)
-	_, ok := sched.(pscheduler.InfoProvider)
+	_, ok := sched.(internal.InfoProvider)
 	require.True(t, ok)
 }
 

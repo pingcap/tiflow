@@ -15,7 +15,7 @@ package base
 
 import (
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/scheduler/util"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/util"
 )
 
 // GetTaskStatuses implements InfoProvider for BaseScheduleDispatcher.

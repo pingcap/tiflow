@@ -17,13 +17,13 @@ import (
 	"testing"
 
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/scheduler"
-	"github.com/pingcap/tiflow/cdc/scheduler/util"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/util"
 	"github.com/stretchr/testify/require"
 )
 
 // Asserts that BaseSchedulerDispatcher implements InfoProvider interface.
-var _ scheduler.InfoProvider = (*ScheduleDispatcher)(nil)
+var _ internal.InfoProvider = (*ScheduleDispatcher)(nil)
 
 func injectSchedulerStateForInfoProviderTest(dispatcher *ScheduleDispatcher) {
 	dispatcher.captureStatus = map[model.CaptureID]*captureStatus{

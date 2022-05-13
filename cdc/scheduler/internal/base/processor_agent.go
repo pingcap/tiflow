@@ -21,8 +21,8 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/scheduler"
-	"github.com/pingcap/tiflow/cdc/scheduler/base/protocol"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/base/protocol"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
@@ -63,15 +63,15 @@ type agentImpl struct {
 	handlerErrChs []<-chan error
 }
 
-// NewAgent returns base processor agent.
+// NewAgent returns processor agent.
 func NewAgent(
 	ctx context.Context,
 	messageServer *p2p.MessageServer,
 	messageRouter p2p.MessageRouter,
 	etcdClient *etcd.CDCEtcdClient,
-	executor scheduler.TableExecutor,
+	executor internal.TableExecutor,
 	changeFeedID model.ChangeFeedID,
-) (retVal scheduler.Agent, err error) {
+) (retVal internal.Agent, err error) {
 	ret := &agentImpl{
 		messageServer: messageServer,
 		messageRouter: messageRouter,
@@ -394,7 +394,8 @@ func (a *agentImpl) trySendMessage(
 	topic p2p.Topic,
 	value interface{},
 ) (bool, error) {
-	// TODO (zixiong): abstract this function out together with the similar method in cdc/owner/scheduler.go
+	// TODO (zixiong): abstract this function out together with the similar method
+	// in cdc/scheduler/internal/base/owner_scheduler.go
 	// We probably need more advanced logic to handle and mitigate complex failure situations.
 
 	client := a.messageRouter.GetClient(target)

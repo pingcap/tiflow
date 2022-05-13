@@ -21,9 +21,9 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
-	sched "github.com/pingcap/tiflow/cdc/scheduler"
-	"github.com/pingcap/tiflow/cdc/scheduler/base/protocol"
-	"github.com/pingcap/tiflow/cdc/scheduler/util"
+	sched "github.com/pingcap/tiflow/cdc/scheduler/internal"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/base/protocol"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/util"
 	"go.uber.org/zap"
 )
 

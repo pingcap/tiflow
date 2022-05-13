@@ -23,9 +23,9 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/scheduler"
-	"github.com/pingcap/tiflow/cdc/scheduler/base/protocol"
-	"github.com/pingcap/tiflow/cdc/scheduler/util"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/base/protocol"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/util"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/uber-go/atomic"
 	"go.uber.org/zap"
@@ -69,7 +69,7 @@ type AgentConfig struct {
 // It implements the basic logic and is useful only if the Processor
 // implements its own TableExecutor and ProcessorMessenger.
 type Agent struct {
-	executor     scheduler.TableExecutor
+	executor     internal.TableExecutor
 	communicator ProcessorMessenger
 
 	epochMu sync.RWMutex
@@ -110,7 +110,7 @@ type Agent struct {
 // NewBaseAgent creates a new BaseAgent.
 func NewBaseAgent(
 	changeFeedID model.ChangeFeedID,
-	executor scheduler.TableExecutor,
+	executor internal.TableExecutor,
 	messenger ProcessorMessenger,
 	config *AgentConfig,
 ) *Agent {
