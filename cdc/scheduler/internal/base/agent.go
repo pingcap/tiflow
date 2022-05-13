@@ -11,9 +11,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package scheduler
+package base
 
 import (
+	"context"
 	"sync"
 	"time"
 
@@ -22,86 +23,58 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/scheduler/util"
-	"github.com/pingcap/tiflow/pkg/context"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/base/protocol"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/util"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/uber-go/atomic"
 	"go.uber.org/zap"
 )
-
-// Agent is an interface for an object inside Processor that is responsible
-// for receiving commands from the Owner.
-// Ideally the processor should drive the Agent by Tick.
-type Agent interface {
-	// Tick is called periodically by the processor to drive the Agent's internal logic.
-	Tick(ctx context.Context) error
-
-	// GetLastSentCheckpointTs returns the last checkpoint-ts already sent to the Owner.
-	GetLastSentCheckpointTs() (checkpointTs model.Ts)
-}
-
-// TableExecutor is an abstraction for "Processor".
-//
-// This interface is so designed that it would be the least problematic
-// to adapt the current Processor implementation to it.
-// TODO find a way to make the semantics easier to understand.
-type TableExecutor interface {
-	AddTable(ctx context.Context, tableID model.TableID, startTs model.Ts) (done bool, err error)
-	RemoveTable(ctx context.Context, tableID model.TableID) (done bool, err error)
-	IsAddTableFinished(ctx context.Context, tableID model.TableID) (done bool)
-	IsRemoveTableFinished(ctx context.Context, tableID model.TableID) (done bool)
-
-	// GetAllCurrentTables should return all tables that are being run,
-	// being added and being removed.
-	//
-	// NOTE: two subsequent calls to the method should return the same
-	// result, unless there is a call to AddTable, RemoveTable, IsAddTableFinished
-	// or IsRemoveTableFinished in between two calls to this method.
-	GetAllCurrentTables() []model.TableID
-
-	// GetCheckpoint returns the local checkpoint-ts and resolved-ts of
-	// the processor. Its calculation should take into consideration all
-	// tables that would have been returned if GetAllCurrentTables had been
-	// called immediately before.
-	GetCheckpoint() (checkpointTs, resolvedTs model.Ts)
-}
 
 // ProcessorMessenger implements how messages should be sent to the owner,
 // and should be able to know whether there are any messages not yet acknowledged
 // by the owner.
 type ProcessorMessenger interface {
 	// FinishTableOperation notifies the owner that a table operation has finished.
-	FinishTableOperation(ctx context.Context, tableID model.TableID, epoch model.ProcessorEpoch) (done bool, err error)
+	FinishTableOperation(
+		ctx context.Context, tableID model.TableID, epoch protocol.ProcessorEpoch,
+	) (done bool, err error)
 	// SyncTaskStatuses informs the owner of the processor's current internal state.
-	SyncTaskStatuses(ctx context.Context, epoch model.ProcessorEpoch, adding, removing, running []model.TableID) (done bool, err error)
-	// SendCheckpoint sends the owner the processor's local watermarks, i.e., checkpoint-ts and resolved-ts.
-	SendCheckpoint(ctx context.Context, checkpointTs model.Ts, resolvedTs model.Ts) (done bool, err error)
+	SyncTaskStatuses(
+		ctx context.Context, epoch protocol.ProcessorEpoch,
+		adding, removing, running []model.TableID,
+	) (done bool, err error)
+	// SendCheckpoint sends the owner the processor's local watermarks,
+	// i.e., checkpoint-ts and resolved-ts.
+	SendCheckpoint(
+		ctx context.Context, checkpointTs model.Ts, resolvedTs model.Ts,
+	) (done bool, err error)
 	// Barrier returns whether there is a pending message not yet acknowledged by the owner.
 	Barrier(ctx context.Context) (done bool)
 	// OnOwnerChanged is called when the owner is changed.
-	OnOwnerChanged(ctx context.Context,
-		newOwnerCaptureID model.CaptureID,
-		newOwnerRevision int64)
+	OnOwnerChanged(
+		ctx context.Context, newOwnerCaptureID model.CaptureID, newOwnerRevision int64,
+	)
 	// Close closes the messenger and does the necessary cleanup.
 	Close() error
 }
 
-// BaseAgentConfig stores configurations for BaseAgent
-type BaseAgentConfig struct {
+// AgentConfig stores configurations for BaseAgent
+type AgentConfig struct {
 	// SendCheckpointTsInterval is the interval to send checkpoint-ts to the owner.
 	SendCheckpointTsInterval time.Duration
 }
 
-// BaseAgent is an implementation of Agent.
+// Agent is an implementation of Agent.
 // It implements the basic logic and is useful only if the Processor
 // implements its own TableExecutor and ProcessorMessenger.
-type BaseAgent struct {
-	executor     TableExecutor
+type Agent struct {
+	executor     internal.TableExecutor
 	communicator ProcessorMessenger
 
 	epochMu sync.RWMutex
 	// epoch is reset on each Sync message.
-	epoch model.ProcessorEpoch
+	epoch protocol.ProcessorEpoch
 
 	// pendingOpsMu protects pendingOps.
 	// Note that we need a mutex because some methods are expected
@@ -130,21 +103,21 @@ type BaseAgent struct {
 	ownerHasChanged *atomic.Bool
 
 	// read-only fields
-	config *BaseAgentConfig
+	config *AgentConfig
 	logger *zap.Logger
 }
 
 // NewBaseAgent creates a new BaseAgent.
 func NewBaseAgent(
 	changeFeedID model.ChangeFeedID,
-	executor TableExecutor,
+	executor internal.TableExecutor,
 	messenger ProcessorMessenger,
-	config *BaseAgentConfig,
-) *BaseAgent {
+	config *AgentConfig,
+) *Agent {
 	logger := log.L().With(
 		zap.String("namespace", changeFeedID.Namespace),
 		zap.String("changefeed", changeFeedID.ID))
-	ret := &BaseAgent{
+	ret := &Agent{
 		pendingOps:       deque.NewDeque(),
 		tableOperations:  map[model.TableID]*agentOperation{},
 		logger:           logger,
@@ -172,7 +145,7 @@ type agentOperation struct {
 	TableID  model.TableID
 	StartTs  model.Ts
 	IsDelete bool
-	Epoch    model.ProcessorEpoch
+	Epoch    protocol.ProcessorEpoch
 
 	// FromOwnerID is for debugging purposesFromOwnerID
 	FromOwnerID model.CaptureID
@@ -191,7 +164,7 @@ type ownerInfo struct {
 }
 
 // Tick implements the interface Agent.
-func (a *BaseAgent) Tick(ctx context.Context) error {
+func (a *Agent) Tick(ctx context.Context) error {
 	if a.ownerHasChanged.Swap(false) {
 		// We need to notify the communicator if the owner has changed.
 		// This is necessary because the communicator might be waiting for
@@ -242,11 +215,11 @@ func (a *BaseAgent) Tick(ctx context.Context) error {
 }
 
 // GetLastSentCheckpointTs implements the interface Agent.
-func (a *BaseAgent) GetLastSentCheckpointTs() model.Ts {
+func (a *Agent) GetLastSentCheckpointTs() model.Ts {
 	return a.checkpointSender.LastSentCheckpointTs()
 }
 
-func (a *BaseAgent) popPendingOps() (opsToApply []*agentOperation) {
+func (a *Agent) popPendingOps() (opsToApply []*agentOperation) {
 	a.pendingOpsMu.Lock()
 	defer a.pendingOpsMu.Unlock()
 
@@ -260,7 +233,7 @@ func (a *BaseAgent) popPendingOps() (opsToApply []*agentOperation) {
 }
 
 // sendSync needs to be called with a.pendingOpsMu held.
-func (a *BaseAgent) sendSync(ctx context.Context) (bool, error) {
+func (a *Agent) sendSync(ctx context.Context) (bool, error) {
 	var adding, removing, running []model.TableID
 	for _, op := range a.tableOperations {
 		if !op.IsDelete {
@@ -291,7 +264,7 @@ func (a *BaseAgent) sendSync(ctx context.Context) (bool, error) {
 
 // processOperations tries to make progress on each pending table operations.
 // It queries the executor for the current status of each table.
-func (a *BaseAgent) processOperations(ctx context.Context) error {
+func (a *Agent) processOperations(ctx context.Context) error {
 	for tableID, op := range a.tableOperations {
 		switch op.status {
 		case operationReceived:
@@ -343,7 +316,7 @@ func (a *BaseAgent) processOperations(ctx context.Context) error {
 	return nil
 }
 
-func (a *BaseAgent) sendCheckpoint(ctx context.Context) error {
+func (a *Agent) sendCheckpoint(ctx context.Context) error {
 	checkpointProvider := func() (checkpointTs, resolvedTs model.Ts, ok bool) {
 		// We cannot have a meaningful checkpoint for a processor running NO table.
 		if len(a.executor.GetAllCurrentTables()) == 0 {
@@ -363,13 +336,13 @@ func (a *BaseAgent) sendCheckpoint(ctx context.Context) error {
 
 // OnOwnerDispatchedTask should be called when the Owner sent a new dispatched task.
 // The Processor is responsible for calling this function when appropriate.
-func (a *BaseAgent) OnOwnerDispatchedTask(
+func (a *Agent) OnOwnerDispatchedTask(
 	ownerCaptureID model.CaptureID,
 	ownerRev int64,
 	tableID model.TableID,
 	startTs model.Ts,
 	isDelete bool,
-	epoch model.ProcessorEpoch,
+	epoch protocol.ProcessorEpoch,
 ) {
 	if !a.updateOwnerInfo(ownerCaptureID, ownerRev) {
 		a.logger.Info("task from stale owner ignored",
@@ -402,7 +375,7 @@ func (a *BaseAgent) OnOwnerDispatchedTask(
 //
 // ownerRev is the revision number generated by the election mechanism to
 // indicate the order in which owners are elected.
-func (a *BaseAgent) OnOwnerAnnounce(
+func (a *Agent) OnOwnerAnnounce(
 	ownerCaptureID model.CaptureID,
 	ownerRev int64,
 ) {
@@ -428,7 +401,7 @@ func (a *BaseAgent) OnOwnerAnnounce(
 //
 // ownerCaptureID: the incoming owner's capture ID
 // ownerRev: the incoming owner's revision as generated by Etcd election.
-func (a *BaseAgent) updateOwnerInfo(ownerCaptureID model.CaptureID, ownerRev int64) bool {
+func (a *Agent) updateOwnerInfo(ownerCaptureID model.CaptureID, ownerRev int64) bool {
 	a.ownerInfoMu.Lock()
 	defer a.ownerInfoMu.Unlock()
 
@@ -480,14 +453,14 @@ func (a *BaseAgent) updateOwnerInfo(ownerCaptureID model.CaptureID, ownerRev int
 	return true
 }
 
-func (a *BaseAgent) currentOwner() (model.CaptureID, int64 /* revision */) {
+func (a *Agent) currentOwner() (model.CaptureID, int64 /* revision */) {
 	a.ownerInfoMu.RLock()
 	defer a.ownerInfoMu.RUnlock()
 
 	return a.ownerInfo.OwnerCaptureID, a.ownerInfo.OwnerRev
 }
 
-func (a *BaseAgent) resetEpoch() {
+func (a *Agent) resetEpoch() {
 	a.epochMu.Lock()
 	defer a.epochMu.Unlock()
 
@@ -497,7 +470,7 @@ func (a *BaseAgent) resetEpoch() {
 	a.epoch = uuid.New().String()
 }
 
-func (a *BaseAgent) getEpoch() model.ProcessorEpoch {
+func (a *Agent) getEpoch() protocol.ProcessorEpoch {
 	a.epochMu.RLock()
 	defer a.epochMu.RUnlock()
 
@@ -506,6 +479,6 @@ func (a *BaseAgent) getEpoch() model.ProcessorEpoch {
 
 // CurrentEpoch is a public function used in unit tests for
 // checking epoch-related invariants.
-func (a *BaseAgent) CurrentEpoch() model.ProcessorEpoch {
+func (a *Agent) CurrentEpoch() protocol.ProcessorEpoch {
 	return a.getEpoch()
 }

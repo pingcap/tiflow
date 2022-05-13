@@ -11,14 +11,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package scheduler
+package base
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/context"
 	"github.com/stretchr/testify/require"
 )
 
@@ -39,7 +39,7 @@ func TestMoveTableManagerBasics(t *testing.T) {
 	ok = m.Add(2, "capture-2-1")
 	require.False(t, ok)
 
-	ctx := context.NewBackendContext4Test(false)
+	ctx := context.Background()
 	// Test 4: Remove one table
 	var removedTable model.TableID
 	ok, err := m.DoRemove(ctx, func(ctx context.Context, tableID model.TableID, _ model.CaptureID) (result removeTableResult, err error) {
@@ -92,7 +92,7 @@ func TestMoveTableManagerCaptureRemoved(t *testing.T) {
 
 	m.OnCaptureRemoved("capture-2")
 
-	ctx := context.NewBackendContext4Test(false)
+	ctx := context.Background()
 	var count int
 	ok, err := m.DoRemove(ctx,
 		func(ctx context.Context, tableID model.TableID, target model.CaptureID) (result removeTableResult, err error) {
@@ -116,7 +116,7 @@ func TestMoveTableManagerGiveUp(t *testing.T) {
 	ok = m.Add(2, "capture-2")
 	require.True(t, ok)
 
-	ctx := context.NewBackendContext4Test(false)
+	ctx := context.Background()
 	ok, err := m.DoRemove(ctx,
 		func(ctx context.Context, tableID model.TableID, target model.CaptureID) (result removeTableResult, err error) {
 			if tableID == 1 {
