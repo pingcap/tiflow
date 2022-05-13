@@ -907,7 +907,7 @@ func (p *processor) Close() error {
 	p.cancel()
 	p.wg.Wait()
 	p.upStream.Release()
-  
+
 	if p.agent == nil {
 		return nil
 	}
