@@ -127,36 +127,35 @@ func splitResolvedTxn(
 ) (flushedResolvedTsMap map[model.TableID]uint64, resolvedRowsMap map[model.TableID][]*model.SingleTableTxn) {
 	resolvedRowsMap = make(map[model.TableID][]*model.SingleTableTxn, len(unresolvedTxns))
 	flushedResolvedTsMap = make(map[model.TableID]uint64, len(unresolvedTxns))
-	for tableID, txns := range unresolvedTxns {
-		v, ok := resolvedTsMap.Load(tableID)
-		if !ok {
-			continue
-		}
-		resolvedTs := v.(uint64)
+	resolvedTsMap.Range(func(k, v any) bool {
+		tableID := k.(model.TableID)
+		resolvedTs := v.(model.Ts)
 		flushedResolvedTsMap[tableID] = resolvedTs
+
+		txns := unresolvedTxns[tableID]
 		i := sort.Search(len(txns), func(i int) bool {
 			return txns[i].commitTs > resolvedTs
 		})
-		if i == 0 {
-			continue
+		if i != 0 {
+			var resolvedTxnsWithTheSameCommitTs []*txnsWithTheSameCommitTs
+			if i == len(txns) {
+				resolvedTxnsWithTheSameCommitTs = txns
+				delete(unresolvedTxns, tableID)
+			} else {
+				resolvedTxnsWithTheSameCommitTs = txns[:i]
+				unresolvedTxns[tableID] = txns[i:]
+			}
+			var txnsLength int
+			for _, txns := range resolvedTxnsWithTheSameCommitTs {
+				txnsLength += len(txns.txns)
+			}
+			resolvedTxns := make([]*model.SingleTableTxn, 0, txnsLength)
+			for _, txns := range resolvedTxnsWithTheSameCommitTs {
+				resolvedTxns = append(resolvedTxns, txns.txns...)
+			}
+			resolvedRowsMap[tableID] = resolvedTxns
 		}
-		var resolvedTxnsWithTheSameCommitTs []*txnsWithTheSameCommitTs
-		if i == len(txns) {
-			resolvedTxnsWithTheSameCommitTs = txns
-			delete(unresolvedTxns, tableID)
-		} else {
-			resolvedTxnsWithTheSameCommitTs = txns[:i]
-			unresolvedTxns[tableID] = txns[i:]
-		}
-		var txnsLength int
-		for _, txns := range resolvedTxnsWithTheSameCommitTs {
-			txnsLength += len(txns.txns)
-		}
-		resolvedTxns := make([]*model.SingleTableTxn, 0, txnsLength)
-		for _, txns := range resolvedTxnsWithTheSameCommitTs {
-			resolvedTxns = append(resolvedTxns, txns.txns...)
-		}
-		resolvedRowsMap[tableID] = resolvedTxns
-	}
+		return true
+	})
 	return
 }
