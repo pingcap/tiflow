@@ -65,6 +65,9 @@ function test_source() {
 	# recreate source will failed
 	openapi_source_check "create_source_failed"
 
+	# update source1 without password success
+	openapi_source_check "update_source1_without_password_success"
+
 	# get source list success
 	openapi_source_check "list_source_success" 1
 
