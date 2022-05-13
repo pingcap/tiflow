@@ -24,7 +24,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// DefaultUpstremID is a pseudo upstreamID for now. It will be removed in the future.
+// DefaultUpstreamID is a pseudo upstreamID for now. It will be removed in the future.
 const DefaultUpstreamID uint64 = 0
 
 // Manager manages all upstream.

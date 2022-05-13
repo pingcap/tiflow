@@ -70,7 +70,7 @@ type Upstream struct {
 		// record the time when Upstream.hc becomes zero.
 		idleTime time.Time
 	}
-	// use clock to faciliate unit test
+	// use clock to facilitate unit test
 	clock  clock.Clock
 	wg     *sync.WaitGroup
 	status int32
@@ -78,7 +78,7 @@ type Upstream struct {
 
 func newUpstream(upstreamID uint64, pdEndpoints []string, securityConfig *config.SecurityConfig) *Upstream {
 	return &Upstream{
-		ID: upstreamID, pdEndpoints: pdEndpoints,
+		ID: upstreamID, pdEndpoints: pdEndpoints, status: uninit,
 		securityConfig: securityConfig, wg: new(sync.WaitGroup), clock: clock.New(),
 	}
 }
@@ -252,6 +252,7 @@ func (up *Upstream) hold() {
 	}
 }
 
+// Release release upstream from a holder
 func (up *Upstream) Release() {
 	up.unhold()
 }
