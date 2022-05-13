@@ -19,6 +19,7 @@ require (
 	github.com/phayes/freeport v0.0.0-20180830031419-95f893ade6f2
 	github.com/pingcap/check v0.0.0-20211026125417-57bd13f7b5f0
 	github.com/pingcap/errors v0.11.5-0.20211224045212-9687c2b0f87c
+	github.com/pingcap/failpoint v0.0.0-20220303073211-00fea37feb66
 	github.com/pingcap/log v0.0.0-20211215031037-e024ba4eb0ee
 	github.com/pingcap/tidb v1.1.0-beta.0.20220412180037-d07b66ea638c
 	github.com/pingcap/tidb-tools v6.0.0-alpha.0.20220317013353-dfc5146f4746+incompatible
@@ -154,7 +155,6 @@ require (
 	github.com/philhofer/fwd v1.1.1 // indirect
 	github.com/pierrec/lz4 v2.6.1+incompatible // indirect
 	github.com/pingcap/badger v1.5.1-0.20220314162537-ab58fbf40580 // indirect
-	github.com/pingcap/failpoint v0.0.0-20220303073211-00fea37feb66 // indirect
 	github.com/pingcap/fn v0.0.0-20200306044125-d5540d389059 // indirect
 	github.com/pingcap/goleveldb v0.0.0-20191226122134-f82aafb29989 // indirect
 	github.com/pingcap/kvproto v0.0.0-20220328072018-6e75c12dbd73 // indirect

@@ -23,7 +23,7 @@ type SuiteTestEtcd struct {
 // The SetupSuite method will be run by testify once, at the very
 // start of the testing suite, before any tests are run.
 func (suite *SuiteTestEtcd) SetupSuite() {
-	svr, endpoints, err := MockBackendEtcd()
+	svr, endpoints, err := RetryMockBackendEtcd()
 	require.NoError(suite.T(), err)
 
 	suite.e = svr

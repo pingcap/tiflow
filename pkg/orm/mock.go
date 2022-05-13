@@ -2,7 +2,9 @@ package orm
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"strings"
 
 	sqle "github.com/dolthub/go-mysql-server"
 	"github.com/dolthub/go-mysql-server/memory"
@@ -12,11 +14,14 @@ import (
 	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
 	"github.com/hanfei1991/microcosm/pkg/tenant"
 	"github.com/phayes/freeport"
+	"github.com/pingcap/failpoint"
+	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/pkg/retry"
 )
 
 // NewMockClient creates a mock orm client
 func NewMockClient() (Client, error) {
-	svr, addr, err := MockBackendDB(tenant.FrameTenantID)
+	svr, addr, err := RetryMockBackendDB(tenant.FrameTenantID)
 	if err != nil {
 		return nil, err
 	}
@@ -65,12 +70,37 @@ func allocTempURL() string {
 	return fmt.Sprintf("localhost:%d", port)
 }
 
-// MockBackendDB creates a mock mysql using go-mysql-server as backend storage
+// RetryMockBackendDB retry to create backend DB if meet 'address already in use' error
+// for at most 3 times.
+func RetryMockBackendDB(db string) (s *gsvr.Server, addr string, err error) {
+	err = retry.Do(context.TODO(), func() error {
+		s, addr, err = mockBackendDB(db)
+		if err != nil {
+			return err
+		}
+		return nil
+	},
+		retry.WithBackoffBaseDelay(1000 /* 1000 ms */),
+		retry.WithBackoffMaxDelay(3000 /* 3 seconds */),
+		retry.WithMaxTries(3 /* fail after 10 seconds*/),
+		retry.WithIsRetryableErr(func(err error) bool {
+			if strings.Contains(err.Error(), "address already in use") {
+				log.L().Info("address already in use, retry again")
+				return true
+			}
+			return false
+		}),
+	)
+
+	return
+}
+
+// mockBackendDB creates a mock mysql using go-mysql-server as backend storage
 // https://github.com/dolthub/go-mysql-server
 // go-mysql-server not support unique index
 // ref: https://github.com/dolthub/go-mysql-server/issues/571
-func MockBackendDB(db string) (*gsvr.Server, string, error) {
-	addr := allocTempURL()
+func mockBackendDB(db string) (s *gsvr.Server, addr string, err error) {
+	addr = allocTempURL()
 	engine := sqle.NewDefault(
 		gsql.NewDatabaseProvider(
 			createTestDatabase(db),
@@ -82,13 +112,21 @@ func MockBackendDB(db string) (*gsvr.Server, string, error) {
 		Address:  addr,
 	}
 
-	s, err := gsvr.NewDefaultServer(config, engine)
+	failpoint.Inject("MockDBAddressAlreadyUse", func() {
+		failpoint.Return(nil, "", errors.New("address already in use"))
+	})
+
+	failpoint.Inject("MockDBOtherError", func() {
+		failpoint.Return(nil, "", errors.New("error"))
+	})
+
+	s, err = gsvr.NewDefaultServer(config, engine)
 	if err != nil {
 		return nil, "", err
 	}
 
 	go func() {
-		err := s.Start()
+		err = s.Start()
 		if err != nil {
 			panic(err)
 		}

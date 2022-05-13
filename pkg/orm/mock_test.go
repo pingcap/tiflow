@@ -10,6 +10,7 @@ import (
 	cerrors "github.com/hanfei1991/microcosm/pkg/errors"
 	resourcemeta "github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta/model"
 	"github.com/hanfei1991/microcosm/pkg/orm/model"
+	"github.com/pingcap/failpoint"
 	"github.com/stretchr/testify/require"
 )
 
@@ -797,4 +798,23 @@ func testInnerMock(t *testing.T, cli Client, c mCase) {
 			// require.Equal(t, c.output, result[0].Interface())
 		}
 	}
+}
+
+func TestRetryMockBackendDB(t *testing.T) {
+	_ = failpoint.Enable("github.com/hanfei1991/microcosm/pkg/orm/MockDBAddressAlreadyUse", "return(true)")
+	_, _, err := RetryMockBackendDB("test")
+	require.Error(t, err)
+	require.Regexp(t, "address already in use", err)
+	_ = failpoint.Disable("github.com/hanfei1991/microcosm/pkg/orm/MockDBAddressAlreadyUse")
+
+	_ = failpoint.Enable("github.com/hanfei1991/microcosm/pkg/orm/MockDBOtherError", "return(true)")
+	_, _, err = RetryMockBackendDB("test")
+	require.Error(t, err)
+	_ = failpoint.Disable("github.com/hanfei1991/microcosm/pkg/orm/MockDBOtherError")
+
+	svr, addr, err := RetryMockBackendDB("test")
+	require.NoError(t, err)
+	require.NotNil(t, svr)
+	require.Regexp(t, "localhost", addr)
+	CloseBackendDB(svr)
 }

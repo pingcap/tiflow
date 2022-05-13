@@ -1,15 +1,20 @@
 package etcdkv
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/phayes/freeport"
+	"github.com/pingcap/failpoint"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/pkg/retry"
 	"go.etcd.io/etcd/server/v3/embed"
+	"go.uber.org/zap"
 )
 
 func allocTempURL() (string, error) {
@@ -20,8 +25,37 @@ func allocTempURL() (string, error) {
 	return fmt.Sprintf("http://127.0.0.1:%d", port), nil
 }
 
-// MockBackendEtcd mock the etcd using embedded etcd as backend storge
-func MockBackendEtcd() (*embed.Etcd, string, error) {
+// RetryMockBackendEtcd retry to create backend DB if meet 'address already in use' error
+// for at most 3 times.
+func RetryMockBackendEtcd() (s *embed.Etcd, addr string, err error) {
+	err = retry.Do(context.TODO(), func() error {
+		s, addr, err = mockBackendEtcd()
+		if err != nil {
+			return err
+		}
+		return nil
+	},
+		retry.WithBackoffBaseDelay(1000 /* 1000 ms */),
+		retry.WithBackoffMaxDelay(3000 /* 3 seconds */),
+		retry.WithMaxTries(3 /* fail after 10 seconds*/),
+		retry.WithIsRetryableErr(func(err error) bool {
+			if strings.Contains(err.Error(), "address already in use") {
+				log.L().Info("address already in use, retry again")
+				return true
+			}
+			return false
+		}),
+	)
+
+	return
+}
+
+// mockBackendEtcd mock the etcd using embedded etcd as backend storge
+func mockBackendEtcd() (*embed.Etcd, string, error) {
+	failpoint.Inject("MockEtcdAddressAlreadyUse", func() {
+		failpoint.Return(nil, "", errors.New("address already in use"))
+	})
+
 	cfg := embed.NewConfig()
 	tmpDir := "embedded-etcd"
 	dir, err := ioutil.TempDir("", tmpDir)
@@ -33,7 +67,7 @@ func MockBackendEtcd() (*embed.Etcd, string, error) {
 	if err != nil {
 		return nil, "", err
 	}
-	log.Printf("Allocate server peer port is %s", peers)
+	log.L().Info("Allocate server peer port", zap.String("peers", peers))
 	u, err := url.Parse(peers)
 	if err != nil {
 		return nil, "", err
@@ -43,7 +77,7 @@ func MockBackendEtcd() (*embed.Etcd, string, error) {
 	if err != nil {
 		return nil, "", err
 	}
-	log.Printf("Allocate server advertises port is %s", advertises)
+	log.L().Info("Allocate server advertises port", zap.String("advertises", advertises))
 	u, err = url.Parse(advertises)
 	if err != nil {
 		return nil, "", err
@@ -55,7 +89,7 @@ func MockBackendEtcd() (*embed.Etcd, string, error) {
 	}
 	select {
 	case <-svr.Server.ReadyNotify():
-		log.Printf("Server is ready!")
+		log.L().Info("Server is ready!")
 	case <-time.After(60 * time.Second):
 		svr.Server.Stop() // trigger a shutdown
 		svr.Close()
