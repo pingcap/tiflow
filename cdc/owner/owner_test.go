@@ -127,9 +127,9 @@ func TestCreateRemoveChangefeed(t *testing.T) {
 	}
 
 	// this will make changefeed always meet ErrGCTTLExceeded
-	mockedManager := &mockManager{Manager: owner.upstreamManager.Get(changefeedInfo.ClusterID).GCManager}
-	owner.upstreamManager.Get(changefeedInfo.ClusterID).GCManager = mockedManager
-	err = owner.upstreamManager.Get(changefeedInfo.ClusterID).GCManager.CheckStaleCheckpointTs(ctx, changefeedID, 0)
+	mockedManager := &mockManager{Manager: owner.upstreamManager.Get(changefeedInfo.UpstreamID).GCManager}
+	owner.upstreamManager.Get(changefeedInfo.UpstreamID).GCManager = mockedManager
+	err = owner.upstreamManager.Get(changefeedInfo.UpstreamID).GCManager.CheckStaleCheckpointTs(ctx, changefeedID, 0)
 	require.NotNil(t, err)
 
 	// this tick create remove changefeed patches
@@ -562,4 +562,42 @@ WorkLoop:
 	require.Nil(t, errIn)
 	require.NotNil(t, infos[cf1])
 	require.Nil(t, infos[cf2])
+}
+
+func TestCalculateGCSafepointTs(t *testing.T) {
+	state := orchestrator.NewGlobalState()
+	expectMinTsMap := make(map[uint64]uint64)
+	expectForceUpdateMap := make(map[uint64]interface{})
+	o := ownerImpl{changefeeds: make(map[model.ChangeFeedID]*changefeed)}
+
+	for i := 0; i < 100; i++ {
+		cfID := model.DefaultChangeFeedID(fmt.Sprintf("testChangefeed-%d", i))
+		upstreamID := uint64(i / 10)
+		cfInfo := &model.ChangeFeedInfo{UpstreamID: upstreamID, State: model.StateNormal}
+		cfStatus := &model.ChangeFeedStatus{CheckpointTs: uint64(i)}
+		changefeed := &orchestrator.ChangefeedReactorState{
+			ID:     cfID,
+			Info:   cfInfo,
+			Status: cfStatus,
+		}
+		state.Changefeeds[cfID] = changefeed
+
+		// expectMinTsMap will be like map[upstreamID]{0, 10, 20, ..., 90}
+		if i%10 == 0 {
+			expectMinTsMap[upstreamID] = uint64(i)
+		}
+
+		// If a changefeed does not exist in ownerImpl.changefeeds,
+		// forceUpdate should be true.
+		if upstreamID%2 == 0 {
+			expectForceUpdateMap[upstreamID] = nil
+		} else {
+			o.changefeeds[cfID] = nil
+		}
+	}
+
+	minCheckpoinTsMap, forceUpdateMap := o.calculateGCSagepoint(state)
+
+	require.Equal(t, expectMinTsMap, minCheckpoinTsMap)
+	require.Equal(t, expectForceUpdateMap, forceUpdateMap)
 }
