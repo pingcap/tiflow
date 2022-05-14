@@ -115,15 +115,6 @@ var (
 			Name:      "table_sink_total_rows_count",
 			Help:      "The total count of rows that are processed by table sink",
 		}, []string{"namespace", "changefeed"})
-
-	// BufferSinkTotalRowsCountCounter is the total count of rows that are processed by buffer sink.
-	BufferSinkTotalRowsCountCounter = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Namespace: "ticdc",
-			Subsystem: "sink",
-			Name:      "buffer_sink_total_rows_count",
-			Help:      "The total count of rows that are processed by buffer sink",
-		}, []string{"namespace", "changefeed"})
 )
 
 // InitMetrics registers all metrics in this file
@@ -138,5 +129,4 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(TotalRowsCountGauge)
 	registry.MustRegister(TotalFlushedRowsCountGauge)
 	registry.MustRegister(TableSinkTotalRowsCountCounter)
-	registry.MustRegister(BufferSinkTotalRowsCountCounter)
 }
