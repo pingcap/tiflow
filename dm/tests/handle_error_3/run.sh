@@ -187,6 +187,10 @@ function DM_4193_CASE() {
 		"binlog revert test -s $source2 -b $first_name2:$second_pos2" \
 		"operator not exist" 1
 
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		'"stage": "Paused"' 2
+
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"binlog skip test" \
 		"\"result\": true" 3
