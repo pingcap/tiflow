@@ -279,9 +279,9 @@ def start_task_success(task_name, source_name):
         print("start_task_failed resp=", resp.json())
     assert resp.status_code == 200
 
-def start_task_with_condition(task_name, start_time, duration, is_success, check_result):
+def start_task_with_condition(task_name, start_time, duration, wait_duration, is_success, check_result):
     url = API_ENDPOINT + "/" + task_name + "/start"
-    req = {"start_time": start_time, "safe_mode_time_duration": duration}
+    req = {"start_time": start_time, "safe_mode_time_duration": duration, "wait_time_on_stop": wait_duration}
     resp = requests.post(url=url, json=req)
     if is_success == "success":
         if resp.status_code != 200:

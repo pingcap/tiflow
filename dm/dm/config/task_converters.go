@@ -695,7 +695,7 @@ func genFilterRuleName(sourceName string, idx int) string {
 }
 
 func OpenAPIStartTaskReqToTaskCliArgs(req openapi.StartTaskRequest) (*TaskCliArgs, error) {
-	if req.StartTime == nil && req.SafeModeTimeDuration == nil {
+	if req.StartTime == nil && req.SafeModeTimeDuration == nil && req.WaitTimeOnStop == nil {
 		return nil, nil
 	}
 	cliArgs := &TaskCliArgs{}
@@ -704,6 +704,9 @@ func OpenAPIStartTaskReqToTaskCliArgs(req openapi.StartTaskRequest) (*TaskCliArg
 	}
 	if req.SafeModeTimeDuration != nil {
 		cliArgs.SafeModeDuration = *req.SafeModeTimeDuration
+	}
+	if req.WaitTimeOnStop != nil {
+		cliArgs.WaitTimeOnStop = *req.WaitTimeOnStop
 	}
 
 	if err := cliArgs.Verify(); err != nil {

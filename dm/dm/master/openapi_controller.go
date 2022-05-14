@@ -380,7 +380,7 @@ func (s *Server) checkOpenAPITaskBeforeOperate(ctx context.Context, task *openap
 		if sourceCfg := s.scheduler.GetSourceCfgByID(cfg.SourceName); sourceCfg != nil {
 			sourceCfgMap[cfg.SourceName] = sourceCfg
 		} else {
-			return nil, "", terror.ErrSchedulerSourceCfgNotExist.Generate(sourceCfg.SourceID)
+			return nil, "", terror.ErrSchedulerSourceCfgNotExist.Generate(cfg.SourceName)
 		}
 	}
 	// generate sub task configs

@@ -650,10 +650,10 @@ function test_start_task_with_condition() {
 
 	# get source status success
 	openapi_source_check "get_source_status_success" "mysql-01"
-    # create source successfully
-    openapi_source_check "create_source2_success"
-    # get source list success
-    openapi_source_check "list_source_success" 2
+	# create source successfully
+	openapi_source_check "create_source2_success"
+	# get source list success
+	openapi_source_check "list_source_success" 2
 
 	# get source status success
 	openapi_source_check "get_source_status_success" "mysql-02"
@@ -666,168 +666,213 @@ function test_start_task_with_condition() {
 	master_status1=($(get_master_status $MYSQL_HOST1 $MYSQL_PORT1))
 	master_status2=($(get_master_status $MYSQL_HOST2 $MYSQL_PORT2))
 	openapi_task_check "create_incremental_task_with_gitd_success" $task_name ${master_status1[0]} ${master_status1[1]} ${master_status1[2]} ${master_status2[0]} ${master_status2[1]} ${master_status2[2]}
-    run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-    		"query-status $task_name" \
-    		"\"stage\": \"Stopped\"" 2
-    openapi_task_check "start_task_success" $task_name ""
-    	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-    		"query-status $task_name" \
-    		"\"stage\": \"Running\"" 2
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status $task_name" \
+		"\"stage\": \"Stopped\"" 2
+	openapi_task_check "start_task_success" $task_name ""
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status $task_name" \
+		"\"stage\": \"Running\"" 2
 
-    run_sql_tidb 'CREATE DATABASE openapi;'
-    run_sql_source1 "CREATE TABLE openapi.t3(i TINYINT, j INT UNIQUE KEY);"
-    run_sql_source2 "CREATE TABLE openapi.t4(i TINYINT, j INT UNIQUE KEY);"
+	run_sql_tidb 'CREATE DATABASE openapi;'
+	run_sql_source1 "CREATE TABLE openapi.t3(i TINYINT, j INT UNIQUE KEY);"
+	run_sql_source2 "CREATE TABLE openapi.t4(i TINYINT, j INT UNIQUE KEY);"
 
-    run_sql_tidb_with_retry "show tables in openapi;" "t3"
-    run_sql_tidb_with_retry "show tables in openapi;" "t4"
-    run_sql_tidb_with_retry "SELECT count(1) FROM information_schema.tables WHERE table_schema = 'openapi';" "count(1): 2"
+	run_sql_tidb_with_retry "show tables in openapi;" "t3"
+	run_sql_tidb_with_retry "show tables in openapi;" "t4"
+	run_sql_tidb_with_retry "SELECT count(1) FROM information_schema.tables WHERE table_schema = 'openapi';" "count(1): 2"
 
-    openapi_task_check "stop_task_success" "$task_name" ""
-    openapi_task_check "delete_task_with_force_success" "$task_name"
-    openapi_task_check "get_task_list" 0
+	openapi_task_check "stop_task_success" "$task_name" ""
+	openapi_task_check "delete_task_with_force_success" "$task_name"
+	openapi_task_check "get_task_list" 0
 
-    # incremental task use start_time
-    prepare_database
-    run_sql_tidb "DROP DATABASE if exists openapi;"
-    task_name="incremental_task_use_start_time"
-    run_sql_source1 "CREATE TABLE openapi.t1(i TINYINT, j INT UNIQUE KEY);"
-    run_sql_source2 "CREATE TABLE openapi.t2(i TINYINT, j INT UNIQUE KEY);"
+	# incremental task use start_time
+	prepare_database
+	run_sql_tidb "DROP DATABASE if exists openapi;"
+	task_name="incremental_task_use_start_time"
+	run_sql_source1 "CREATE TABLE openapi.t1(i TINYINT, j INT UNIQUE KEY);"
+	run_sql_source2 "CREATE TABLE openapi.t2(i TINYINT, j INT UNIQUE KEY);"
 
-    openapi_task_check "create_incremental_task_with_gitd_success" $task_name "" "" "" "" "" ""
-    run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-      "query-status $task_name" \
-      "\"stage\": \"Stopped\"" 2
-    sleep 2
-    start_time=$(date '+%Y-%m-%d %T')
-    sleep 2
-    duration=""
-    is_success="success"
-    check_result=""
-    run_sql_tidb 'CREATE DATABASE openapi;'
-    run_sql_source1 "CREATE TABLE openapi.t3(i TINYINT, j INT UNIQUE KEY);"
-    run_sql_source2 "CREATE TABLE openapi.t4(i TINYINT, j INT UNIQUE KEY);"
-    openapi_task_check "start_task_with_condition" $task_name "$start_time" "$duration" "$is_success" "$check_result"
-    run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-      "query-status $task_name" \
-      "\"stage\": \"Running\"" 2
+	openapi_task_check "create_incremental_task_with_gitd_success" $task_name "" "" "" "" "" ""
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status $task_name" \
+		"\"stage\": \"Stopped\"" 2
+	sleep 2
+	start_time=$(date '+%Y-%m-%d %T')
+	sleep 2
+	duration=""
+	wait_duration=""
+	is_success="success"
+	check_result=""
+	run_sql_tidb 'CREATE DATABASE openapi;'
+	run_sql_source1 "CREATE TABLE openapi.t3(i TINYINT, j INT UNIQUE KEY);"
+	run_sql_source2 "CREATE TABLE openapi.t4(i TINYINT, j INT UNIQUE KEY);"
+	openapi_task_check "start_task_with_condition" $task_name "$start_time" "$duration" "$wait_duration" "$is_success" "$check_result"
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status $task_name" \
+		"\"stage\": \"Running\"" 2
 
-    run_sql_tidb_with_retry "show tables in openapi;" "t3"
-    run_sql_tidb_with_retry "show tables in openapi;" "t4"
-    run_sql_tidb_with_retry "SELECT count(1) FROM information_schema.tables WHERE table_schema = 'openapi';" "count(1): 2"
+	run_sql_tidb_with_retry "show tables in openapi;" "t3"
+	run_sql_tidb_with_retry "show tables in openapi;" "t4"
+	run_sql_tidb_with_retry "SELECT count(1) FROM information_schema.tables WHERE table_schema = 'openapi';" "count(1): 2"
 
-    openapi_task_check "stop_task_success" "$task_name" ""
-    openapi_task_check "delete_task_with_force_success" "$task_name"
-    openapi_task_check "get_task_list" 0
+	openapi_task_check "stop_task_success" "$task_name" ""
+	openapi_task_check "delete_task_with_force_success" "$task_name"
+	openapi_task_check "get_task_list" 0
 
-    # incremental task both gtid and start_time, start_time first
-    prepare_database
-    run_sql_tidb "DROP DATABASE if exists openapi;"
-    task_name="incremental_task_both_gtid_start_time"
-    run_sql_source1 "CREATE TABLE openapi.t1(i TINYINT, j INT UNIQUE KEY);"
-    run_sql_source2 "CREATE TABLE openapi.t2(i TINYINT, j INT UNIQUE KEY);"
-    master_status1=($(get_master_status $MYSQL_HOST1 $MYSQL_PORT1))
-    master_status2=($(get_master_status $MYSQL_HOST2 $MYSQL_PORT2))
-    openapi_task_check "create_incremental_task_with_gitd_success" $task_name ${master_status1[0]} ${master_status1[1]} ${master_status1[2]} ${master_status2[0]} ${master_status2[1]} ${master_status2[2]}
-    run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-      "query-status $task_name" \
-      "\"stage\": \"Stopped\"" 2
-    run_sql_source1 "CREATE TABLE openapi.t3(i TINYINT, j INT UNIQUE KEY);"
-    run_sql_source2 "CREATE TABLE openapi.t4(i TINYINT, j INT UNIQUE KEY);"
-    sleep 2
-    start_time=$(date '+%Y-%m-%d %T')
-    sleep 2
-    duration=""
-    is_success="success"
-    check_result=""
-    run_sql_tidb 'CREATE DATABASE openapi;'
-    run_sql_source1 "CREATE TABLE openapi.t5(i TINYINT, j INT UNIQUE KEY);"
-    run_sql_source2 "CREATE TABLE openapi.t6(i TINYINT, j INT UNIQUE KEY);"
-    openapi_task_check "start_task_with_condition" $task_name "$start_time" "$duration" "$is_success" "$check_result"
-    run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-      "query-status $task_name" \
-      "\"stage\": \"Running\"" 2
+	# incremental task both gtid and start_time, start_time first
+	prepare_database
+	run_sql_tidb "DROP DATABASE if exists openapi;"
+	task_name="incremental_task_both_gtid_start_time"
+	run_sql_source1 "CREATE TABLE openapi.t1(i TINYINT, j INT UNIQUE KEY);"
+	run_sql_source2 "CREATE TABLE openapi.t2(i TINYINT, j INT UNIQUE KEY);"
+	master_status1=($(get_master_status $MYSQL_HOST1 $MYSQL_PORT1))
+	master_status2=($(get_master_status $MYSQL_HOST2 $MYSQL_PORT2))
+	openapi_task_check "create_incremental_task_with_gitd_success" $task_name ${master_status1[0]} ${master_status1[1]} ${master_status1[2]} ${master_status2[0]} ${master_status2[1]} ${master_status2[2]}
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status $task_name" \
+		"\"stage\": \"Stopped\"" 2
+	run_sql_source1 "CREATE TABLE openapi.t3(i TINYINT, j INT UNIQUE KEY);"
+	run_sql_source2 "CREATE TABLE openapi.t4(i TINYINT, j INT UNIQUE KEY);"
+	sleep 2
+	start_time=$(date '+%Y-%m-%d %T')
+	sleep 2
+	duration=""
+	wait_duration=""
+	is_success="success"
+	check_result=""
+	run_sql_tidb 'CREATE DATABASE openapi;'
+	run_sql_source1 "CREATE TABLE openapi.t5(i TINYINT, j INT UNIQUE KEY);"
+	run_sql_source2 "CREATE TABLE openapi.t6(i TINYINT, j INT UNIQUE KEY);"
+	openapi_task_check "start_task_with_condition" $task_name "$start_time" "$duration" "$wait_duration" "$is_success" "$check_result"
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status $task_name" \
+		"\"stage\": \"Running\"" 2
 
-    run_sql_tidb_with_retry "show tables in openapi;" "t5"
-    run_sql_tidb_with_retry "show tables in openapi;" "t6"
-    run_sql_tidb_with_retry "SELECT count(1) FROM information_schema.tables WHERE table_schema = 'openapi';" "count(1): 2"
+	run_sql_tidb_with_retry "show tables in openapi;" "t5"
+	run_sql_tidb_with_retry "show tables in openapi;" "t6"
+	run_sql_tidb_with_retry "SELECT count(1) FROM information_schema.tables WHERE table_schema = 'openapi';" "count(1): 2"
 
-    openapi_task_check "stop_task_success" "$task_name" ""
-    openapi_task_check "delete_task_with_force_success" "$task_name"
-    openapi_task_check "get_task_list" 0
+	openapi_task_check "stop_task_success" "$task_name" ""
+	openapi_task_check "delete_task_with_force_success" "$task_name"
+	openapi_task_check "get_task_list" 0
 
-    # incremental task no duration has error
-    export GO_FAILPOINTS='github.com/pingcap/tiflow/dm/syncer/SafeModeInitPhaseSeconds=return(0)'
-    kill_dm_worker
-    check_port_offline $WORKER1_PORT 20
-    check_port_offline $WORKER2_PORT 20
+	# incremental task no duration has error
+	export GO_FAILPOINTS='github.com/pingcap/tiflow/dm/syncer/SafeModeInitPhaseSeconds=return(0)'
+	kill_dm_worker
+	check_port_offline $WORKER1_PORT 20
+	check_port_offline $WORKER2_PORT 20
 
-    # run dm-worker1
-    run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
-    check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
-    # run dm-worker2
-    run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
-    check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
-    openapi_source_check "list_source_success" 2
+	# run dm-worker1
+	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
+	# run dm-worker2
+	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
+	openapi_source_check "list_source_success" 2
 
-    prepare_database
-    run_sql_tidb "DROP DATABASE if exists openapi;"
-    task_name="incremental_task_no_duration_but_error"
-    run_sql_source1 "CREATE TABLE openapi.t1(i TINYINT, j INT UNIQUE KEY);"
-    run_sql_source2 "CREATE TABLE openapi.t2(i TINYINT, j INT UNIQUE KEY);"
+	prepare_database
+	run_sql_tidb "DROP DATABASE if exists openapi;"
+	task_name="incremental_task_no_duration_but_error"
+	run_sql_source1 "CREATE TABLE openapi.t1(i TINYINT, j INT UNIQUE KEY);"
+	run_sql_source2 "CREATE TABLE openapi.t2(i TINYINT, j INT UNIQUE KEY);"
 
-    sleep 2
-    start_time=$(date '+%Y-%m-%d %T')
-    sleep 2
-    duration=""
-    is_success="success"
-    check_result=""
+	sleep 2
+	start_time=$(date '+%Y-%m-%d %T')
+	sleep 2
+	duration=""
+	wait_duration=""
+	is_success="success"
+	check_result=""
 
-    run_sql_source1 "INSERT INTO openapi.t1(i,j) VALUES (1, 2);"
-    run_sql_source2 "INSERT INTO openapi.t2(i,j) VALUES (1, 2);"
-    run_sql_source1 "INSERT INTO openapi.t1(i,j) VALUES (3, 4);"
-    run_sql_source2 "INSERT INTO openapi.t2(i,j) VALUES (3, 4);"
-    # mock already sync data to downstream
-    run_sql_tidb 'CREATE DATABASE openapi;'
-    run_sql_tidb "CREATE TABLE openapi.t1(i TINYINT, j INT UNIQUE KEY);"
-    run_sql_tidb "CREATE TABLE openapi.t2(i TINYINT, j INT UNIQUE KEY);"
-    run_sql_tidb "INSERT INTO openapi.t1(i,j) VALUES (1, 2);"
-    run_sql_tidb "INSERT INTO openapi.t2(i,j) VALUES (1, 2);"
+	run_sql_source1 "INSERT INTO openapi.t1(i,j) VALUES (1, 2);"
+	run_sql_source2 "INSERT INTO openapi.t2(i,j) VALUES (1, 2);"
+	run_sql_source1 "INSERT INTO openapi.t1(i,j) VALUES (3, 4);"
+	run_sql_source2 "INSERT INTO openapi.t2(i,j) VALUES (3, 4);"
+	# mock already sync data to downstream
+	run_sql_tidb 'CREATE DATABASE openapi;'
+	run_sql_tidb "CREATE TABLE openapi.t1(i TINYINT, j INT UNIQUE KEY);"
+	run_sql_tidb "CREATE TABLE openapi.t2(i TINYINT, j INT UNIQUE KEY);"
+	run_sql_tidb "INSERT INTO openapi.t1(i,j) VALUES (1, 2);"
+	run_sql_tidb "INSERT INTO openapi.t2(i,j) VALUES (1, 2);"
 
-    openapi_task_check "create_incremental_task_with_gitd_success" $task_name "" "" "" "" "" ""
-    run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-      "query-status $task_name" \
-      "\"stage\": \"Stopped\"" 2
-    openapi_task_check "start_task_with_condition" $task_name "$start_time" "$duration" "$is_success" "$check_result"
-    run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-      "query-status $task_name" \
-      "Duplicate entry" 2
+	openapi_task_check "create_incremental_task_with_gitd_success" $task_name "" "" "" "" "" ""
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status $task_name" \
+		"\"stage\": \"Stopped\"" 2
+	openapi_task_check "start_task_with_condition" $task_name "$start_time" "$duration" "$wait_duration" "$is_success" "$check_result"
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status $task_name" \
+		"Duplicate entry" 2
 
-    # set duration and start again
-    openapi_task_check "stop_task_success" "$task_name" ""
-    duration="200s"
-    openapi_task_check "start_task_with_condition" $task_name "$start_time" "$duration" "$is_success" "$check_result"
+	# set duration and start again
+	openapi_task_check "stop_task_success" "$task_name" ""
+	duration="600s"
+	openapi_task_check "start_task_with_condition" $task_name "$start_time" "$duration" "$wait_duration" "$is_success" "$check_result"
 
-    run_sql_tidb_with_retry "SELECT count(1) FROM openapi.t1;" "count(1): 2"
-    run_sql_tidb_with_retry "SELECT count(1) FROM openapi.t2;" "count(1): 2"
+	run_sql_tidb_with_retry "SELECT count(1) FROM openapi.t1;" "count(1): 2"
+	run_sql_tidb_with_retry "SELECT count(1) FROM openapi.t2;" "count(1): 2"
 
-    openapi_task_check "stop_task_success" "$task_name" ""
-    openapi_task_check "delete_task_with_force_success" "$task_name"
-    openapi_task_check "get_task_list" 0
+	openapi_task_check "stop_task_success" "$task_name" ""
+	openapi_task_check "delete_task_with_force_success" "$task_name"
+	openapi_task_check "get_task_list" 0
 
-    export GO_FAILPOINTS=''
-    kill_dm_worker
-    check_port_offline $WORKER1_PORT 20
-    check_port_offline $WORKER2_PORT 20
+	# test wait_time_on_stop
+	export GO_FAILPOINTS='github.com/pingcap/tiflow/dm/syncer/recordAndIgnorePrepareTime=return();github.com/pingcap/tiflow/dm/syncer/checkWaitDuration=return("200s")'
+	kill_dm_worker
+	check_port_offline $WORKER1_PORT 20
+	check_port_offline $WORKER2_PORT 20
 
-    # run dm-worker1
-    run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
-    check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
-    # run dm-worker2
-    run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
-    check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
+	# run dm-worker1
+	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
+	# run dm-worker2
+	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
 
-    clean_cluster_sources_and_tasks
-    echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>TEST OPENAPI: START TASK WITH CONDITION SUCCESS"
+	prepare_database
+	run_sql_tidb "DROP DATABASE if exists openapi;"
+	task_name="test_wait_time_on_stop"
+	# create no shard task success
+	openapi_task_check "create_noshard_task_success" $task_name ""
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status $task_name" \
+		"\"stage\": \"Stopped\"" 2
+
+	start_time=""
+	duration=""
+	wait_duration="200s"
+	is_success="success"
+	check_result=""
+
+	openapi_task_check "start_task_with_condition" $task_name "$start_time" "$duration" "$wait_duration" "$is_success" "$check_result"
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status $task_name" \
+		"\"stage\": \"Running\"" 2
+	init_noshard_data
+	check_sync_diff $WORK_DIR $cur/conf/diff_config_no_shard.toml
+	openapi_task_check "stop_task_success" "$task_name" ""
+	echo "error check"
+	check_log_contain_with_retry 'panic: success check wait_time_on_stop !!!' $WORK_DIR/worker1/log/stdout.log
+	check_log_contain_with_retry 'panic: success check wait_time_on_stop !!!' $WORK_DIR/worker2/log/stdout.log
+
+	# clean
+	export GO_FAILPOINTS=''
+	kill_dm_worker
+	check_port_offline $WORKER1_PORT 20
+	check_port_offline $WORKER2_PORT 20
+
+	# run dm-worker1
+	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
+	# run dm-worker2
+	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
+	openapi_task_check "delete_task_with_force_success" "$task_name"
+	openapi_task_check "get_task_list" 0
+
+	clean_cluster_sources_and_tasks
+	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>TEST OPENAPI: START TASK WITH CONDITION SUCCESS"
 }
 
 function test_cluster() {
@@ -874,7 +919,7 @@ function run() {
 	test_noshard_task_dump_status
 	test_complex_operations_of_source_and_task
 	test_task_with_ignore_check_items
-    test_delete_task_with_stopped_downstream
+	test_delete_task_with_stopped_downstream
 	test_start_task_with_condition
 
 	# NOTE: this test case MUST running at last, because it will offline some members of cluster

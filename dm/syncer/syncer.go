@@ -1469,6 +1469,10 @@ func (s *Syncer) waitBeforeRunExit(ctx context.Context) {
 		s.tctx.L().Info("received subtask's done, try graceful stop")
 		needToExitTime := time.Now()
 		s.waitTransactionLock.Lock()
+
+		failpoint.Inject("checkWaitDuration", func(_ failpoint.Value) {
+			s.isTransactionEnd = false
+		})
 		if s.isTransactionEnd {
 			s.waitXIDJob.Store(int64(waitComplete))
 			s.waitTransactionLock.Unlock()
@@ -1497,6 +1501,17 @@ func (s *Syncer) waitBeforeRunExit(ctx context.Context) {
 			s.runCancel()
 			return
 		}
+		failpoint.Inject("checkWaitDuration", func(val failpoint.Value) {
+			if testDuration, testError := time.ParseDuration(val.(string)); testError == nil {
+				if testDuration.Seconds() == waitDuration.Seconds() {
+					panic("success check wait_time_on_stop !!!")
+				} else {
+					s.tctx.L().Error("checkWaitDuration fail", zap.Duration("testDuration", testDuration), zap.Duration("waitDuration", waitDuration))
+				}
+			} else {
+				s.tctx.L().Error("checkWaitDuration error", zap.Error(testError))
+			}
+		})
 
 		select {
 		case <-s.runCtx.Ctx.Done():
