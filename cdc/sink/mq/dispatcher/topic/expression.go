@@ -59,7 +59,9 @@ func (e Expression) Validate() error {
 // ValidateForAvro checks whether topic pattern is {schema}_{table}, the only allowed
 func (e Expression) ValidateForAvro() error {
 	if ok := avroTopicNameRE.MatchString(string(e)); !ok {
-		return errors.ErrKafkaInvalidTopicExpression.GenWithStackByArgs()
+		return errors.ErrKafkaInvalidTopicExpression.GenWithStackByArgs(
+			"topic rule for Avro must contain {schema} and {table}",
+		)
 	}
 
 	return nil

@@ -20,7 +20,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -120,8 +119,6 @@ func NewAvroSchemaManager(
 	}, nil
 }
 
-var regexRemoveSpaces = regexp.MustCompile(`\s`)
-
 // Register a schema in schema registry, no cache
 func (m *AvroSchemaManager) Register(
 	ctx context.Context,
@@ -129,8 +126,19 @@ func (m *AvroSchemaManager) Register(
 	codec *goavro.Codec,
 ) (int, error) {
 	// The Schema Registry expects the JSON to be without newline characters
+	buffer := new(bytes.Buffer)
+	err := json.Compact(buffer, []byte(codec.Schema()))
+	if err != nil {
+		return 0, errors.Annotate(
+			cerror.WrapError(
+				cerror.ErrAvroSchemaAPIError,
+				err,
+			),
+			"Could not marshal request to the Registry",
+		)
+	}
 	reqBody := registerRequest{
-		Schema: regexRemoveSpaces.ReplaceAllString(codec.Schema(), ""),
+		Schema: buffer.String(),
 	}
 	payload, err := json.Marshal(&reqBody)
 	if err != nil {
