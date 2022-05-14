@@ -181,12 +181,12 @@ func (a *AvroEventBatchEncoder) avroEncode(
 		}
 	}
 
-	recordName := getRecordNameFromTable(e.Table)
+	namespace := getAvroNamespace(a.namespace, e.Table)
 
 	schemaGen := func() (string, error) {
 		schema, err := rowToAvroSchema(
-			a.namespace,
-			recordName,
+			namespace,
+			e.Table.Table,
 			cols,
 			colInfos,
 			enableTiDBExtension,
@@ -298,7 +298,7 @@ const (
 
 // debezium-core/src/main/java/io/debezium/schema/FieldNameSelector.java
 // https://avro.apache.org/docs/current/spec.html#names
-func sanitizeColumnName(name string) string {
+func sanitizeSQLName(name string) string {
 	changed := false
 	var sb strings.Builder
 	for i, c := range name {
@@ -333,7 +333,7 @@ func sanitizeColumnName(name string) string {
 // https://github.com/debezium/debezium/blob/9f7ede0e0695f012c6c4e715e96aed85eecf6b5f/ \
 // debezium-core/src/main/java/io/debezium/util/SchemaNameAdjuster.java
 // record name treats '-' differently for avro name requirement is different from kafka topic name
-func sanitizeRecordName(name string) string {
+func sanitizeNamespace(name string) string {
 	changed := false
 	var sb strings.Builder
 	for i, c := range name {
@@ -374,8 +374,8 @@ func escapeEnumAndSetOptions(option string) string {
 	return option
 }
 
-func getRecordNameFromTable(tableName *model.TableName) string {
-	return sanitizeRecordName(tableName.Schema + "." + tableName.Table)
+func getAvroNamespace(namespace string, tableName *model.TableName) string {
+	return namespace + "." + tableName.Schema
 }
 
 type avroSchema struct {
@@ -401,8 +401,8 @@ func rowToAvroSchema(
 ) (string, error) {
 	top := avroSchemaTop{
 		Tp:        "record",
-		Name:      name,
-		Namespace: namespace,
+		Name:      sanitizeSQLName(name),
+		Namespace: sanitizeNamespace(namespace),
 		Fields:    nil,
 	}
 
@@ -417,7 +417,7 @@ func rowToAvroSchema(
 			return "", err
 		}
 		field := make(map[string]interface{})
-		field["name"] = sanitizeColumnName(col.Name)
+		field["name"] = sanitizeSQLName(col.Name)
 		if col.Flag.IsNullable() {
 			field["type"] = []interface{}{"null", avroType}
 			field["default"] = nil
@@ -479,9 +479,9 @@ func rowToAvroData(
 
 		// https://pkg.go.dev/github.com/linkedin/goavro/v2#Union
 		if col.Flag.IsNullable() {
-			ret[sanitizeColumnName(col.Name)] = goavro.Union(str, data)
+			ret[sanitizeSQLName(col.Name)] = goavro.Union(str, data)
 		} else {
-			ret[sanitizeColumnName(col.Name)] = data
+			ret[sanitizeSQLName(col.Name)] = data
 		}
 	}
 

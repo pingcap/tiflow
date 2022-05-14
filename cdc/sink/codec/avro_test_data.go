@@ -15,8 +15,8 @@ package codec
 
 var expectedSchemaWithoutExtension = `{
   "type": "record",
-  "name": "testdb.rowtoavroschema",
-  "namespace": "default",
+  "name": "rowtoavroschema",
+  "namespace": "default.testdb",
   "fields": [
     {
       "name": "tiny",
@@ -827,8 +827,8 @@ var expectedSchemaWithoutExtension = `{
 
 var expectedSchemaWithExtension = `{
   "type": "record",
-  "name": "testdb.rowtoavroschema",
-  "namespace": "default",
+  "name": "rowtoavroschema",
+  "namespace": "default.testdb",
   "fields": [
     {
       "name": "tiny",

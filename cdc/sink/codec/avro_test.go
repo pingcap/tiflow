@@ -634,7 +634,7 @@ func TestRowToAvroSchema(t *testing.T) {
 		Schema: "testdb",
 		Table:  "rowtoavroschema",
 	}
-	recordName := getRecordNameFromTable(&table)
+	namespace := getAvroNamespace(model.DefaultNamespace, &table)
 	var cols []*model.Column = make([]*model.Column, 0)
 	var colInfos []rowcodec.ColInfo = make([]rowcodec.ColInfo, 0)
 
@@ -650,8 +650,8 @@ func TestRowToAvroSchema(t *testing.T) {
 	}
 
 	schema, err := rowToAvroSchema(
-		model.DefaultNamespace,
-		recordName,
+		namespace,
+		table.Table,
 		cols,
 		colInfos,
 		false,
@@ -664,8 +664,8 @@ func TestRowToAvroSchema(t *testing.T) {
 	require.NoError(t, err)
 
 	schema, err = rowToAvroSchema(
-		model.DefaultNamespace,
-		recordName,
+		namespace,
+		table.Table,
 		cols,
 		colInfos,
 		true,
@@ -853,24 +853,24 @@ func TestAvroEnvelope(t *testing.T) {
 	require.Equal(t, int32(7), id)
 }
 
-func TestSanitizeColumnName(t *testing.T) {
+func TestSanitizeSQLName(t *testing.T) {
 	t.Parallel()
 
-	require.Equal(t, "normalColumnName123", sanitizeColumnName("normalColumnName123"))
+	require.Equal(t, "normalColumnName123", sanitizeSQLName("normalColumnName123"))
 	require.Equal(
 		t,
 		"_1ColumnNameStartWithNumber",
-		sanitizeColumnName("1ColumnNameStartWithNumber"),
+		sanitizeSQLName("1ColumnNameStartWithNumber"),
 	)
-	require.Equal(t, "A_B", sanitizeColumnName("A.B"))
-	require.Equal(t, "columnNameWith__", sanitizeColumnName("columnNameWith中文"))
+	require.Equal(t, "A_B", sanitizeSQLName("A.B"))
+	require.Equal(t, "columnNameWith__", sanitizeSQLName("columnNameWith中文"))
 }
 
-func TestSanitizeRecordName(t *testing.T) {
+func TestSanitizeNamespace(t *testing.T) {
 	t.Parallel()
 
-	require.Equal(t, "normalSchema.normalTable", sanitizeRecordName("normalSchema.normalTable"))
-	require.Equal(t, "_Schema.normalTable", sanitizeRecordName("1Schema.normalTable"))
-	require.Equal(t, "S_chema.T_able", sanitizeRecordName("S-chema.T-able"))
-	require.Equal(t, "recordNameWith__", sanitizeRecordName("recordNameWith中文"))
+	require.Equal(t, "normalSchema.normalTable", sanitizeNamespace("normalSchema.normalTable"))
+	require.Equal(t, "_Schema.normalTable", sanitizeNamespace("1Schema.normalTable"))
+	require.Equal(t, "S_chema.T_able", sanitizeNamespace("S-chema.T-able"))
+	require.Equal(t, "recordNameWith__", sanitizeNamespace("recordNameWith中文"))
 }
