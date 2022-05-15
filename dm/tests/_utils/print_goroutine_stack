@@ -1,8 +1,0 @@
-#!/bin/bash
-
-set +e
-curl http://127.0.0.1:8262/debug/pprof/goroutine\?debug=2
-curl http://127.0.0.1:8263/debug/pprof/goroutine\?debug=2
-set -e
-
-exit 1
