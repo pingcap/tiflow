@@ -764,9 +764,11 @@ func TestAvroEncode(t *testing.T) {
 	defer cancel()
 
 	keyCols, keyColInfos := event.HandleKeyColInfos()
+	namespace := getAvroNamespace(encoder.namespace, event.Table)
+
 	keySchema, err := rowToAvroSchema(
-		encoder.namespace,
-		"testdb.avroencode",
+		namespace,
+		event.Table.Table,
 		keyCols,
 		keyColInfos,
 		false,
@@ -789,8 +791,8 @@ func TestAvroEncode(t *testing.T) {
 	}
 
 	valueSchema, err := rowToAvroSchema(
-		encoder.namespace,
-		"testdb.avroencode",
+		namespace,
+		event.Table.Table,
 		cols,
 		colInfos,
 		true,
@@ -853,24 +855,38 @@ func TestAvroEnvelope(t *testing.T) {
 	require.Equal(t, int32(7), id)
 }
 
-func TestSanitizeSQLName(t *testing.T) {
+func TestSanitizeName(t *testing.T) {
 	t.Parallel()
 
-	require.Equal(t, "normalColumnName123", sanitizeSQLName("normalColumnName123"))
+	require.Equal(t, "normalColumnName123", sanitizeName("normalColumnName123"))
 	require.Equal(
 		t,
 		"_1ColumnNameStartWithNumber",
-		sanitizeSQLName("1ColumnNameStartWithNumber"),
+		sanitizeName("1ColumnNameStartWithNumber"),
 	)
-	require.Equal(t, "A_B", sanitizeSQLName("A.B"))
-	require.Equal(t, "columnNameWith__", sanitizeSQLName("columnNameWith中文"))
+	require.Equal(t, "A_B", sanitizeName("A.B"))
+	require.Equal(t, "columnNameWith__", sanitizeName("columnNameWith中文"))
 }
 
-func TestSanitizeNamespace(t *testing.T) {
+func TestGetAvroNamespace(t *testing.T) {
 	t.Parallel()
 
-	require.Equal(t, "normalSchema.normalTable", sanitizeNamespace("normalSchema.normalTable"))
-	require.Equal(t, "_Schema.normalTable", sanitizeNamespace("1Schema.normalTable"))
-	require.Equal(t, "S_chema.T_able", sanitizeNamespace("S-chema.T-able"))
-	require.Equal(t, "recordNameWith__", sanitizeNamespace("recordNameWith中文"))
+	require.Equal(
+		t,
+		"normalNamespace.normalSchema",
+		getAvroNamespace(
+			"normalNamespace",
+			&model.TableName{Schema: "normalSchema", Table: "normalTable"},
+		),
+	)
+	require.Equal(
+		t,
+		"_1Namespace._1Schema",
+		getAvroNamespace("1Namespace", &model.TableName{Schema: "1Schema", Table: "normalTable"}),
+	)
+	require.Equal(
+		t,
+		"N_amespace.S_chema",
+		getAvroNamespace("N-amespace", &model.TableName{Schema: "S.chema", Table: "normalTable"}),
+	)
 }

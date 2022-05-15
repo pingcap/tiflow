@@ -298,7 +298,7 @@ const (
 
 // debezium-core/src/main/java/io/debezium/schema/FieldNameSelector.java
 // https://avro.apache.org/docs/current/spec.html#names
-func sanitizeSQLName(name string) string {
+func sanitizeName(name string) string {
 	changed := false
 	var sb strings.Builder
 	for i, c := range name {
@@ -321,41 +321,7 @@ func sanitizeSQLName(name string) string {
 	if changed {
 		log.Warn(
 			fmt.Sprintf(
-				"Field '%s' name potentially not safe for serialization, replaced with '%s'",
-				name,
-				sanitizedName,
-			),
-		)
-	}
-	return sanitizedName
-}
-
-// https://github.com/debezium/debezium/blob/9f7ede0e0695f012c6c4e715e96aed85eecf6b5f/ \
-// debezium-core/src/main/java/io/debezium/util/SchemaNameAdjuster.java
-// record name treats '-' differently for avro name requirement is different from kafka topic name
-func sanitizeNamespace(name string) string {
-	changed := false
-	var sb strings.Builder
-	for i, c := range name {
-		if i == 0 && !(c == '_' || (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')) {
-			sb.WriteString(replacementChar)
-			changed = true
-		} else if !(c == '_' || c == '.' ||
-			('a' <= c && c <= 'z') ||
-			('A' <= c && c <= 'Z') ||
-			('0' <= c && c <= '9')) {
-			sb.WriteString(replacementChar)
-			changed = true
-		} else {
-			sb.WriteRune(c)
-		}
-	}
-
-	sanitizedName := sb.String()
-	if changed {
-		log.Warn(
-			fmt.Sprintf(
-				"Record '%s' name potentially not safe for serialization, replaced with '%s'",
+				"Name '%s' potentially not safe for serialization, replaced with '%s'",
 				name,
 				sanitizedName,
 			),
@@ -375,7 +341,7 @@ func escapeEnumAndSetOptions(option string) string {
 }
 
 func getAvroNamespace(namespace string, tableName *model.TableName) string {
-	return namespace + "." + tableName.Schema
+	return sanitizeName(namespace) + "." + sanitizeName(tableName.Schema)
 }
 
 type avroSchema struct {
@@ -401,8 +367,8 @@ func rowToAvroSchema(
 ) (string, error) {
 	top := avroSchemaTop{
 		Tp:        "record",
-		Name:      sanitizeSQLName(name),
-		Namespace: sanitizeNamespace(namespace),
+		Name:      sanitizeName(name),
+		Namespace: namespace,
 		Fields:    nil,
 	}
 
@@ -417,7 +383,7 @@ func rowToAvroSchema(
 			return "", err
 		}
 		field := make(map[string]interface{})
-		field["name"] = sanitizeSQLName(col.Name)
+		field["name"] = sanitizeName(col.Name)
 		if col.Flag.IsNullable() {
 			field["type"] = []interface{}{"null", avroType}
 			field["default"] = nil
@@ -479,9 +445,9 @@ func rowToAvroData(
 
 		// https://pkg.go.dev/github.com/linkedin/goavro/v2#Union
 		if col.Flag.IsNullable() {
-			ret[sanitizeSQLName(col.Name)] = goavro.Union(str, data)
+			ret[sanitizeName(col.Name)] = goavro.Union(str, data)
 		} else {
-			ret[sanitizeSQLName(col.Name)] = data
+			ret[sanitizeName(col.Name)] = data
 		}
 	}
 
