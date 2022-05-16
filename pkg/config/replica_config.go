@@ -117,8 +117,8 @@ func (c *replicaConfig) fillFromV1(v1 *outdated.ReplicaConfigV1) {
 	}
 	for _, dispatch := range v1.Sink.DispatchRules {
 		c.Sink.DispatchRules = append(c.Sink.DispatchRules, &DispatchRule{
-			Matcher:       []string{fmt.Sprintf("%s.%s", dispatch.Schema, dispatch.Name)},
-			PartitionRule: dispatch.Rule,
+			Matcher:        []string{fmt.Sprintf("%s.%s", dispatch.Schema, dispatch.Name)},
+			DispatcherRule: dispatch.Rule,
 		})
 	}
 }

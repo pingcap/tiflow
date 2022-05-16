@@ -19,6 +19,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"go.uber.org/zap"
 )
 
 // DefaultMaxMessageBytes sets the default value for max-message-bytes
@@ -40,9 +41,10 @@ type SinkConfig struct {
 
 // DispatchRule represents partition rule for a table
 type DispatchRule struct {
-	Matcher       []string `toml:"matcher" json:"matcher"`
-	PartitionRule string   `toml:"dispatcher" json:"dispatcher"`
-	TopicRule     string   `toml:"topic" json:"topic"`
+	Matcher        []string `toml:"matcher" json:"matcher"`
+	DispatcherRule string   `toml:"dispatcher" json:"dispatcher"`
+	PartitionRule  string   `toml:"partition" json:"partition"`
+	TopicRule      string   `toml:"topic" json:"topic"`
 }
 
 // ColumnSelector represents a column selector for a table.
@@ -60,6 +62,16 @@ func (s *SinkConfig) validate(enableOldValue bool) error {
 				return cerror.WrapError(cerror.ErrKafkaInvalidConfig,
 					errors.New(fmt.Sprintf("%s protocol requires old value to be enabled", s.Protocol)))
 			}
+		}
+	}
+	for _, rule := range s.DispatchRules {
+		if rule.DispatcherRule != "" && rule.PartitionRule != "" {
+			log.Error("dispatcher and partition cannot be configured both", zap.Any("rule", rule))
+			return cerror.WrapError(cerror.ErrSinkInvalidConfig,
+				errors.New(fmt.Sprintf("dispatcher and partition cannot be configured both for rule:%v", rule)))
+		}
+		if rule.DispatcherRule != "" {
+			rule.PartitionRule = rule.DispatcherRule
 		}
 	}
 
