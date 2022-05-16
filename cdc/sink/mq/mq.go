@@ -274,7 +274,7 @@ func (k *mqSink) EmitCheckpointTs(ctx context.Context, ts uint64, tables []model
 	return nil
 }
 
-// EmitDDLEvent sends a DDL event to the default Topic or the table corresponding Topic.
+// EmitDDLEvent sends a DDL event to the default topic or the table's corresponding topic.
 // Concurrency Note: EmitDDLEvent is thread-safe.
 func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 	if k.filter.ShouldIgnoreDDLEvent(ddl.StartTs, ddl.Type, ddl.TableInfo.Schema, ddl.TableInfo.Table) {
