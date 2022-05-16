@@ -29,7 +29,7 @@ Issue Number: close #xxx
 
 #### Questions <!-- Authors should answer these questions and reviewers should consider these questions. -->
 
-##### Will it cause performance setbacks or break compatibility?
+##### Will it cause performance regression or break compatibility?
 
 ##### Do you need to update user documentation, design documentation or monitoring documentation?
 
