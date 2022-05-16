@@ -66,7 +66,7 @@ type Sink interface {
 	// we need to consider the case of Table renaming.
 	// Passing the TableName directly in the DDL Sink is a more straightforward solution.
 	//
-	// EmitCheckpointTs is thread-safety.
+	// EmitCheckpointTs is thread-safe.
 	EmitCheckpointTs(ctx context.Context, ts uint64, tables []model.TableName) error
 
 	// Close closes the Sink.
