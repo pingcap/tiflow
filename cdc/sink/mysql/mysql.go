@@ -227,8 +227,8 @@ func (s *mysqlSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.Row
 	return nil
 }
 
-// FlushRowChangedEvents will flush all received events, we don't allow mysql
-// sink to receive events before resolving
+// FlushRowChangedEvents will flush all received events,
+// we do not write data downstream until we receive resolvedTs.
 // Concurrency Note: FlushRowChangedEvents is thread-safe.
 func (s *mysqlSink) FlushRowChangedEvents(ctx context.Context, tableID model.TableID, resolvedTs uint64) (uint64, error) {
 	v, ok := s.tableMaxResolvedTs.Load(tableID)
