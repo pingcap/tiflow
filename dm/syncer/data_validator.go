@@ -485,7 +485,6 @@ func (v *DataValidator) doValidate() {
 		location = *v.location
 	} else {
 		// validator always uses remote binlog streamer now.
-		// todo: when relay log enabled, need to decode location to get real location
 		if v.startWithSubtask {
 			// in extreme case, this loc may still not be the first binlog location of this task:
 			//   syncer synced some binlog and flush checkpoint, but validator still not has chance to run, then fail-over
@@ -493,6 +492,8 @@ func (v *DataValidator) doValidate() {
 		} else {
 			location = v.syncer.getFlushedGlobalPoint()
 		}
+		// when relay log enabled, binlog name may contains uuid suffix, so need to extract the real location
+		location.Position.Name = binlog.ExtractRealName(location.Position.Name)
 		// persist current location to make sure we start from the same location
 		// if fail-over happens before we flush checkpoint and data.
 		err := v.persistHelper.persist(v.tctx, location)
