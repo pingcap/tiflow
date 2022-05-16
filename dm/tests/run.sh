@@ -19,17 +19,11 @@ print_worker_stacks() {
 		# don't know which case failed, so we print them all
 		idx=1
 		for port in $MASTER_PORT1 $MASTER_PORT2 $MASTER_PORT3 $MASTER_PORT4 $MASTER_PORT5 $MASTER_PORT6; do
-			echo "####################################################"
-			echo "#         master $idx stack for port $port"
-			echo "####################################################"
 			curl -sS "127.0.0.1:$port/debug/pprof/goroutine?debug=2" > "$TEST_DIR/goroutines/stack/log/master-$port.log" || true
 			idx=$((idx + 1))
 		done
 		idx=1
 		for port in $WORKER1_PORT $WORKER2_PORT $WORKER3_PORT $WORKER4_PORT $WORKER5_PORT; do
-			echo "####################################################"
-			echo "#         worker $idx stack for port $port"
-			echo "####################################################"
 			curl -sS "127.0.0.1:$port/debug/pprof/goroutine?debug=2" > "$TEST_DIR/goroutines/stack/log/worker-$port.log" || true
 			idx=$((idx + 1))
 		done
