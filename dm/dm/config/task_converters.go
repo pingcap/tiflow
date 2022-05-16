@@ -712,7 +712,7 @@ func OpenAPIStartTaskReqToTaskCliArgs(req openapi.StartTaskRequest) (*TaskCliArg
 	return cliArgs, nil
 }
 
-func OpenAPIStopTasReqToTaskCliArgs(req openapi.StopTaskRequest) (*TaskCliArgs, error) {
+func OpenAPIStopTaskReqToTaskCliArgs(req openapi.StopTaskRequest) (*TaskCliArgs, error) {
 	if req.TimeoutDuration == nil {
 		return nil, nil
 	}

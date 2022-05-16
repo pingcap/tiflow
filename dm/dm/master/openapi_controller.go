@@ -732,7 +732,7 @@ func (s *Server) stopTask(ctx context.Context, taskName string, req openapi.Stop
 		req.SourceNameList = &sourceNameList
 	}
 	// handle task cli args
-	cliArgs, err := config.OpenAPIStopTasReqToTaskCliArgs(req)
+	cliArgs, err := config.OpenAPIStopTaskReqToTaskCliArgs(req)
 	if err != nil {
 		return terror.Annotate(err, "while converting task command line arguments")
 	}
