@@ -48,7 +48,7 @@ type Sink interface {
 	// EmitDDLEvent sends DDL Event to Sink
 	// EmitDDLEvent should execute DDL to downstream synchronously
 	//
-	// EmitDDLEvent is thread-safety.
+	// EmitDDLEvent is thread-safe.
 	EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error
 
 	// FlushRowChangedEvents flushes each row which of commitTs less than or
