@@ -257,6 +257,7 @@ func newSaramaConfig() (*sarama.Config, error) {
 	config.Metadata.Retry.Backoff = 500 * time.Millisecond
 	config.Consumer.Retry.Backoff = 500 * time.Millisecond
 	config.Consumer.Offsets.Initial = sarama.OffsetOldest
+	config.Consumer.Offsets.Retention = 1440 * time.Second
 
 	if len(ca) != 0 {
 		config.Net.TLS.Enable = true
