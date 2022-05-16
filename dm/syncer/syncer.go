@@ -40,6 +40,7 @@ import (
 	"github.com/pingcap/tidb/util/filter"
 	regexprrouter "github.com/pingcap/tidb/util/regexpr-router"
 	router "github.com/pingcap/tidb/util/table-router"
+	"github.com/pingcap/tiflow/dm/pkg/gtid"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
@@ -173,9 +174,8 @@ type Syncer struct {
 	exprFilterGroup *ExprFilterGroup
 	sessCtx         sessionctx.Context
 
-	running      atomic.Bool
-	closed       atomic.Bool
-	schemaLoaded atomic.Bool
+	running atomic.Bool
+	closed  atomic.Bool
 
 	start    atomic.Time
 	lastTime atomic.Time
@@ -263,7 +263,6 @@ func NewSyncer(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, relay rel
 	syncer.waitXIDJob.Store(int64(noWait))
 	syncer.isTransactionEnd = true
 	syncer.closed.Store(false)
-	syncer.schemaLoaded.Store(false)
 	syncer.lastBinlogSizeCount.Store(0)
 	syncer.binlogSizeCount.Store(0)
 	syncer.lastCount.Store(0)
@@ -358,11 +357,6 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 		return err
 	}
 	rollbackHolder.Add(fr.FuncRollback{Name: "close-DBs", Fn: s.closeDBs})
-
-	s.schemaTracker, err = schema.NewTracker(ctx, s.cfg.Name, s.cfg.To.Session, s.downstreamTrackConn)
-	if err != nil {
-		return terror.ErrSchemaTrackerInit.Delegate(err)
-	}
 
 	if s.cfg.CollationCompatible == config.StrictCollationCompatible {
 		s.charsetAndDefaultCollation, s.idAndCollationMap, err = dbconn.GetCharsetAndCollationInfo(tctx, s.fromConn)
@@ -1561,14 +1555,6 @@ func (s *Syncer) updateTSOffset(ctx context.Context) error {
 
 // Run starts running for sync, we should guarantee it can rerun when paused.
 func (s *Syncer) Run(ctx context.Context) (err error) {
-	if !s.schemaLoaded.Load() {
-		err = s.checkpoint.LoadIntoSchemaTracker(ctx, s.schemaTracker)
-		if err != nil {
-			return err
-		}
-		s.schemaLoaded.Store(true)
-	}
-
 	runCtx, runCancel := context.WithCancel(context.Background())
 	s.runCtx, s.runCancel = tcontext.NewContext(runCtx, s.tctx.L()), runCancel
 	syncCtx, syncCancel := context.WithCancel(context.Background())
@@ -1623,6 +1609,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		flushCheckpoint bool
 		delLoadTask     bool
 		cleanDumpFile   = s.cfg.CleanDumpFile
+		freshAndAllMode bool
 	)
 	flushCheckpoint, err = s.adjustGlobalPointGTID(s.runCtx)
 	if err != nil {
@@ -1631,14 +1618,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 	if fresh && s.cfg.Mode == config.ModeAll {
 		delLoadTask = true
 		flushCheckpoint = true
-		err = s.loadTableStructureFromDump(ctx)
-		if err != nil {
-			s.tctx.L().Warn("error happened when load table structure from dump files", zap.Error(err))
-			cleanDumpFile = false
-		}
-		if s.cfg.ShardMode == config.ShardOptimistic {
-			s.flushOptimisticTableInfos(s.runCtx)
-		}
+		freshAndAllMode = true
 	}
 
 	if s.cfg.Mode == config.ModeIncrement || !fresh {
@@ -1659,6 +1639,19 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 	go s.updateLagCronJob(s.runCtx.Ctx)
 	s.runWg.Add(1)
 	go s.updateTSOffsetCronJob(s.runCtx.Ctx)
+
+	// some prepare work before the binlog event loop:
+	// 1. first we flush checkpoint as needed, so in next resume we won't go to Load unit.
+	// 2. then since we are confident that Load unit is done we can delete the load task etcd KV.
+	//    TODO: we can't handle panic between 1. and 2., or fail to delete the load task etcd KV.
+	// 3. then we initiate schema tracker
+	// 4. - when it's a fresh task, load the table structure from dump files into schema tracker.
+	//      if it's also a optimistic sharding task, also load the table structure into checkpoints because shard tables
+	//      may not have same table structure so we can't fetch the downstream table structure for them lazily.
+	//    - when it's a resumed task, load the table structure from checkpoints into schema tracker.
+	//    TODO: we can't handle failure between 1. and 4. After 1. it's not a fresh task.
+	// 5. finally clean the dump files
+
 	if flushCheckpoint {
 		if err = s.flushCheckPoints(); err != nil {
 			s.tctx.L().Warn("fail to flush checkpoints when starting task", zap.Error(err))
@@ -1667,7 +1660,28 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 	}
 	if delLoadTask {
 		if err = s.delLoadTask(); err != nil {
-			s.tctx.L().Warn("error when del load task in etcd", zap.Error(err))
+			s.tctx.L().Error("error when del load task in etcd", zap.Error(err))
+		}
+	}
+
+	s.schemaTracker, err = schema.NewTracker(ctx, s.cfg.Name, s.cfg.To.Session, s.downstreamTrackConn)
+	if err != nil {
+		return terror.ErrSchemaTrackerInit.Delegate(err)
+	}
+
+	if freshAndAllMode {
+		err = s.loadTableStructureFromDump(ctx)
+		if err != nil {
+			s.tctx.L().Warn("error happened when load table structure from dump files", zap.Error(err))
+			cleanDumpFile = false
+		}
+		if s.cfg.ShardMode == config.ShardOptimistic {
+			s.flushOptimisticTableInfos(s.runCtx)
+		}
+	} else {
+		err = s.checkpoint.LoadIntoSchemaTracker(ctx, s.schemaTracker)
+		if err != nil {
+			return err
 		}
 	}
 
@@ -1686,7 +1700,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 
 	// startLocation is the start location for current received event
 	// currentLocation is the end location for current received event (End_log_pos in `show binlog events` for mysql)
-	// lastLocation is the end location for last received (ROTATE / QUERY / XID) event
+	// lastLocation is the end location for last received and fully executed (ROTATE / QUERY / XID) event
 	// we use startLocation to replace and skip binlog event of specified position
 	// we use currentLocation and update table checkpoint in sharding ddl
 	// we use lastLocation to update global checkpoint and table checkpoint
@@ -1850,6 +1864,31 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		}
 		s.tctx.L().Info("discard event already consumed", zap.Int("count", n),
 			zap.Any("cur_loc", currentLocation))
+		return nil
+	}
+
+	advanceLatestLocationGtidSet := func(e *replication.BinlogEvent) error {
+		if _, ok := e.Event.(*replication.MariadbGTIDEvent); ok {
+			gtidSet, err2 := gtid.ParserGTID(s.cfg.Flavor, currentGTID)
+			if err2 != nil {
+				return err2
+			}
+			if currentLocation.GetGTID().Contain(gtidSet) {
+				return nil
+			}
+		}
+
+		// clone currentLocation's gtid set to avoid its gtid is transport to table checkpoint
+		// currently table checkpoint will save  location's gtid set with shallow copy
+		newGTID := currentLocation.GetGTID().Clone()
+		err2 := newGTID.Update(currentGTID)
+		if err2 != nil {
+			return terror.Annotatef(err2, "fail to update GTID %s", currentGTID)
+		}
+		err2 = currentLocation.SetGTID(newGTID.Origin())
+		if err2 != nil {
+			return terror.Annotatef(err2, "fail to set GTID %s", newGTID.Origin())
+		}
 		return nil
 	}
 
@@ -2067,10 +2106,11 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 					Name: lastLocation.Position.Name,
 					Pos:  e.Header.LogPos,
 				},
-				lastLocation.GetGTID(),
+				currentLocation.GetGTID(),
 			)
 			currentLocation.Suffix = endSuffix
 
+			// TODO: can be removed in the future
 			if queryEvent, ok := ev.(*replication.QueryEvent); ok {
 				err = currentLocation.SetGTID(queryEvent.GSet)
 				if err != nil {
@@ -2229,11 +2269,6 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			}
 
 			currentLocation.Position.Pos = e.Header.LogPos
-			err = currentLocation.SetGTID(ev.GSet)
-			if err != nil {
-				return terror.Annotatef(err, "fail to record GTID %v", ev.GSet)
-			}
-
 			s.tctx.L().Debug("", zap.String("event", "XID"), zap.Stringer("last location", lastLocation), log.WrapStringerField("location", currentLocation))
 			lastLocation.Position.Pos = e.Header.LogPos // update lastPos
 			err = lastLocation.SetGTID(ev.GSet)
@@ -2261,6 +2296,13 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			currentGTID, err2 = event.GetGTIDStr(e)
 			if err2 != nil {
 				return err2
+			}
+			if s.cfg.EnableGTID {
+				// TODO: add mariaDB integration test
+				err2 = advanceLatestLocationGtidSet(e)
+				if err2 != nil {
+					return err2
+				}
 			}
 		}
 		if err2 != nil {
@@ -2416,7 +2458,7 @@ func (s *Syncer) handleRowsEvent(ev *replication.RowsEvent, ec eventContext) (*f
 			Name: ec.lastLocation.Position.Name,
 			Pos:  ec.header.LogPos,
 		},
-		ec.lastLocation.GetGTID(),
+		ec.currentLocation.GetGTID(),
 	)
 
 	if ec.shardingReSync != nil {
@@ -2644,6 +2686,10 @@ func generateExtendColumn(data [][]interface{}, r *regexprrouter.RouteTable, tab
 
 func (s *Syncer) handleQueryEvent(ev *replication.QueryEvent, ec eventContext, originSQL string) (err error) {
 	if originSQL == "BEGIN" {
+		failpoint.Inject("NotUpdateLatestGTID", func(_ failpoint.Value) {
+			// directly return nil without update latest GTID here
+			failpoint.Return(nil)
+		})
 		// GTID event: GTID_NEXT = xxx:11
 		// Query event: BEGIN (GTID set = xxx:1-11)
 		// Rows event: ... (GTID set = xxx:1-11)  if we update lastLocation below,
@@ -3608,7 +3654,7 @@ func (s *Syncer) Kill() {
 	s.Close()
 }
 
-// stopSync stops stream and rollbacks checkpoint now it used by Close() and Pause().
+// stopSync stops stream and rollbacks checkpoint. Now it's used by Close() and Pause().
 func (s *Syncer) stopSync() {
 	// before re-write workflow for s.syncer, simply close it
 	// when resuming, re-create s.syncer
@@ -3619,10 +3665,10 @@ func (s *Syncer) stopSync() {
 
 	// try to rollback checkpoints, if they already flushed, no effect, this operation should call before close schemaTracker
 	prePos := s.checkpoint.GlobalPoint()
-	s.checkpoint.Rollback(s.schemaTracker)
+	s.checkpoint.Rollback()
 	currPos := s.checkpoint.GlobalPoint()
 	if binlog.CompareLocation(prePos, currPos, s.cfg.EnableGTID) != 0 {
-		s.tctx.L().Warn("something wrong with rollback global checkpoint", zap.Stringer("previous position", prePos), zap.Stringer("current position", currPos))
+		s.tctx.L().Warn("rollback global checkpoint", zap.Stringer("previous position", prePos), zap.Stringer("current position", currPos))
 	}
 }
 
@@ -3640,6 +3686,9 @@ func (s *Syncer) Pause() {
 		return
 	}
 	s.stopSync()
+	if err := s.schemaTracker.Close(); err != nil {
+		s.tctx.L().Error("fail to close schema tracker", log.ShortError(err))
+	}
 }
 
 // Resume resumes the paused process.

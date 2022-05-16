@@ -22,6 +22,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
+
+	"github.com/pingcap/log"
+	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/dm/checker"
 	dmcommon "github.com/pingcap/tiflow/dm/dm/common"
@@ -30,9 +34,7 @@ import (
 	"github.com/pingcap/tiflow/dm/dm/master/workerrpc"
 	"github.com/pingcap/tiflow/dm/dm/pb"
 	"github.com/pingcap/tiflow/dm/openapi"
-	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
-	"go.uber.org/zap"
 )
 
 // nolint:unparam
@@ -135,6 +137,12 @@ func (s *Server) updateSource(ctx context.Context, sourceName string, req openap
 		return nil, terror.ErrSchedulerSourceCfgNotExist.Generate(sourceName)
 	}
 	newCfg := config.OpenAPISourceToSourceCfg(req.Source)
+
+	// update's request will be no password when user doesn't input password and wants to use old password.
+	if req.Source.Password == nil {
+		newCfg.From.Password = oldCfg.From.Password
+	}
+
 	if err := checkAndAdjustSourceConfigFunc(ctx, newCfg); err != nil {
 		return nil, err
 	}
@@ -357,11 +365,11 @@ func (s *Server) checkTask(ctx context.Context, subtaskCfgList []*config.SubTask
 	return checker.CheckSyncConfigFunc(ctx, subtaskCfgList, errCnt, warnCnt)
 }
 
-func (s *Server) checkOpenAPITaskBeforeOperate(ctx context.Context, task *openapi.Task) ([]*config.SubTaskConfig, error) {
+func (s *Server) checkOpenAPITaskBeforeOperate(ctx context.Context, task *openapi.Task) ([]*config.SubTaskConfig, string, error) {
 	// prepare target db config
 	toDBCfg := config.GetTargetDBCfgFromOpenAPITask(task)
 	if err := adjustTargetDB(ctx, toDBCfg); err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	// prepare source db config source name -> source config
 	sourceCfgMap := make(map[string]*config.SourceConfig)
@@ -369,48 +377,52 @@ func (s *Server) checkOpenAPITaskBeforeOperate(ctx context.Context, task *openap
 		if sourceCfg := s.scheduler.GetSourceCfgByID(cfg.SourceName); sourceCfg != nil {
 			sourceCfgMap[cfg.SourceName] = sourceCfg
 		} else {
-			return nil, terror.ErrSchedulerSourceCfgNotExist.Generate(sourceCfg.SourceID)
+			return nil, "", terror.ErrSchedulerSourceCfgNotExist.Generate(sourceCfg.SourceID)
 		}
 	}
 	// generate sub task configs
 	subTaskConfigList, err := config.OpenAPITaskToSubTaskConfigs(task, toDBCfg, sourceCfgMap)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	// check subtask config
 	msg, err := s.checkTask(ctx, subTaskConfigList, common.DefaultErrorCnt, common.DefaultWarnCnt)
 	if err != nil {
-		return nil, terror.WithClass(err, terror.ClassDMMaster)
+		return nil, "", terror.WithClass(err, terror.ClassDMMaster)
 	}
-	if len(msg) != 0 {
-		// TODO: return warning msg with http.StatusCreated and task together
-		log.L().Warn("openapi pre-check warning before start task", zap.String("warning", msg))
-	}
-	return subTaskConfigList, nil
+	return subTaskConfigList, msg, nil
 }
 
-func (s *Server) createTask(ctx context.Context, req openapi.CreateTaskRequest) (*openapi.Task, error) {
+func (s *Server) createTask(ctx context.Context, req openapi.CreateTaskRequest) (*openapi.OperateTaskResponse, error) {
 	task := &req.Task
 	if err := task.Adjust(); err != nil {
 		return nil, err
 	}
-	subTaskConfigList, err := s.checkOpenAPITaskBeforeOperate(ctx, task)
+	subTaskConfigList, msg, err := s.checkOpenAPITaskBeforeOperate(ctx, task)
 	if err != nil {
 		return nil, err
 	}
-	return task, s.scheduler.AddSubTasks(false, pb.Stage_Stopped, subtaskCfgPointersToInstances(subTaskConfigList...)...)
+	res := &openapi.OperateTaskResponse{
+		Task:        *task,
+		CheckResult: msg,
+	}
+	return res, s.scheduler.AddSubTasks(false, pb.Stage_Stopped, subtaskCfgPointersToInstances(subTaskConfigList...)...)
 }
 
-func (s *Server) updateTask(ctx context.Context, req openapi.UpdateTaskRequest) (*openapi.Task, error) {
+func (s *Server) updateTask(ctx context.Context, req openapi.UpdateTaskRequest) (*openapi.OperateTaskResponse, error) {
 	task := &req.Task
 	if err := task.Adjust(); err != nil {
 		return nil, err
 	}
-	subTaskConfigList, err := s.checkOpenAPITaskBeforeOperate(ctx, task)
+	subTaskConfigList, msg, err := s.checkOpenAPITaskBeforeOperate(ctx, task)
 	if err != nil {
 		return nil, err
 	}
-	return task, s.scheduler.UpdateSubTasks(ctx, subtaskCfgPointersToInstances(subTaskConfigList...)...)
+	res := &openapi.OperateTaskResponse{
+		Task:        *task,
+		CheckResult: msg,
+	}
+	return res, s.scheduler.UpdateSubTasks(ctx, subtaskCfgPointersToInstances(subTaskConfigList...)...)
 }
 
 func (s *Server) deleteTask(ctx context.Context, taskName string, force bool) error {
@@ -443,14 +455,29 @@ func (s *Server) deleteTask(ctx context.Context, taskName string, force bool) er
 	}
 	defer release()
 
+	ignoreCannotConnectError := func(err error) bool {
+		if err == nil {
+			return true
+		}
+		if force && strings.Contains(err.Error(), "connect: connection refused") {
+			log.L().Warn("connect downstream error when fore delete task", zap.Error(err))
+			return true
+		}
+		return false
+	}
+
 	toDBCfg := config.GetTargetDBCfgFromOpenAPITask(task)
 	if adjustErr := adjustTargetDB(ctx, toDBCfg); adjustErr != nil {
-		return adjustErr
+		if !ignoreCannotConnectError(adjustErr) {
+			return adjustErr
+		}
 	}
 	metaSchema := *task.MetaSchema
 	err = s.removeMetaData(ctx, taskName, metaSchema, toDBCfg)
 	if err != nil {
-		return terror.Annotate(err, "while removing metadata")
+		if !ignoreCannotConnectError(err) {
+			return terror.Annotate(err, "while removing metadata")
+		}
 	}
 	release()
 	sourceNameList := s.getTaskSourceNameList(taskName)

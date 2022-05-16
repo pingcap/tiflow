@@ -11,12 +11,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package model
+package protocol
 
 import (
 	"encoding/json"
 	"testing"
 
+	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/p2p"
 	"github.com/stretchr/testify/require"
 )
@@ -28,7 +29,7 @@ var _ p2p.Serializable = (*SyncMessage)(nil)
 // TestChangefeedNameCannotIncludeSlash asserts that changefeed names cannot include slash.
 // Or otherwise the topic name encoding would be problematic.
 func TestChangefeedNameCannotIncludeSlash(t *testing.T) {
-	err := ValidateChangefeedID("a/b")
+	err := model.ValidateChangefeedID("a/b")
 	require.Error(t, err, "changefeed name cannot include slash")
 }
 
@@ -49,9 +50,9 @@ func TestSerializeSyncMessage(t *testing.T) {
 }
 
 func makeVeryLargeSyncMessage() *SyncMessage {
-	largeSliceFn := func() (ret []TableID) {
+	largeSliceFn := func() (ret []model.TableID) {
 		for i := 0; i < 80000; i++ {
-			ret = append(ret, TableID(i))
+			ret = append(ret, model.TableID(i))
 		}
 		return
 	}
@@ -65,18 +66,19 @@ func makeVeryLargeSyncMessage() *SyncMessage {
 func TestMarshalDispatchTableMessage(t *testing.T) {
 	msg := &DispatchTableMessage{
 		OwnerRev: 1,
+		StartTs:  2,
 		Epoch:    "test-epoch",
-		ID:       TableID(1),
+		ID:       model.TableID(1),
 		IsDelete: true,
 	}
 	bytes, err := json.Marshal(msg)
 	require.NoError(t, err)
-	require.Equal(t, `{"owner-rev":1,"epoch":"test-epoch","id":1,"is-delete":true}`, string(bytes))
+	require.Equal(t, `{"owner-rev":1,"epoch":"test-epoch","id":1,"start-ts":2,"is-delete":true}`, string(bytes))
 }
 
 func TestMarshalDispatchTableResponseMessage(t *testing.T) {
 	msg := &DispatchTableResponseMessage{
-		ID:    TableID(1),
+		ID:    model.TableID(1),
 		Epoch: "test-epoch",
 	}
 	bytes, err := json.Marshal(msg)
