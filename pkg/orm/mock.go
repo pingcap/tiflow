@@ -2,24 +2,29 @@ package orm
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	cerrors "github.com/hanfei1991/microcosm/pkg/errors"
+	"github.com/hanfei1991/microcosm/pkg/uuid"
 	"github.com/pingcap/log"
 	"go.uber.org/zap"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
 
+func randomDBFile() string {
+	return uuid.NewGenerator().NewString() + ".db"
+}
+
 // NewMockClient creates a mock orm client
 func NewMockClient() (Client, error) {
 	// ref:https://www.sqlite.org/inmemorydb.html
-	// TODO: Opening in-memory db with shared cache can avoid new DB create
-	// when starting a new connection. But it will cause other cases fail because
-	// we has enabled 't.Parallel()'. Cases will share the same in-memory DB if they are
-	// in same process.
-	// db, err := gorm.Open(sqlite.Open("file::memory:?cache=shared"), &gorm.Config{
-	db, err := gorm.Open(sqlite.Open("file::memory:"), &gorm.Config{
+	// using dsn(file:%s?mode=memory&cache=shared) format here to
+	// 1. Create different DB for different TestXXX()
+	// 2. Enable DB shared for different connection
+	dsn := fmt.Sprintf("file:%s?mode=memory&cache=shared", randomDBFile())
+	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{
 		SkipDefaultTransaction: true,
 		// TODO: logger
 	})
