@@ -80,7 +80,7 @@ type Sink interface {
 	// Note once Barrier is called, the resolved ts **won't** be pushed until
 	// the Barrier call returns.
 	//
-	// NOTICE: Only MySQLSink and MQSink are implement it.
+	// NOTICE: Only MySQLSink and MQSink implement it.
 	// Barrier is thread-safe.
 	RemoveTable(ctx context.Context, tableID model.TableID) error
 }
