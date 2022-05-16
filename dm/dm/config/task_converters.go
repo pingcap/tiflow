@@ -169,7 +169,7 @@ func OpenAPITaskToSubTaskConfigs(task *openapi.Task, toDBCfg *DBConfig, sourceCf
 
 		// if there is no meta for incremental task, we print a warning log
 		if subTaskCfg.Meta == nil && subTaskCfg.Mode == ModeIncrement {
-			log.L().Warn(fmt.Sprintf("mysql-instance(%d) doesn't set meta for task-mode %s, user should specify start_time to start task.", i, ModeIncrement))
+			log.L().Warn("mysql-instance doesn't set meta for incremental mode, user should specify start_time to start task.", zap.String("sourceID", sourceCfg.SourceName))
 		}
 
 		// set shard config
