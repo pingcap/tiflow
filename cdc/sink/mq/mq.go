@@ -177,7 +177,10 @@ func (k *mqSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowCha
 	return nil
 }
 
-// FlushRowChangedEvents is thread-safety.
+// FlushRowChangedEvents asynchronously ensures
+// that the data before the resolvedTs has been
+// successfully written downstream.
+// FlushRowChangedEvents is thread-safe.
 func (k *mqSink) FlushRowChangedEvents(ctx context.Context, tableID model.TableID, resolvedTs uint64) (uint64, error) {
 	var checkpointTs uint64
 	v, ok := k.tableCheckpointTsMap.Load(tableID)

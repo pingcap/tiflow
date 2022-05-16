@@ -37,6 +37,7 @@ type Sink interface {
 	// See: https://github.com/pingcap/tiflow/issues/4464#issuecomment-1085385382.
 	//
 	// NOTICE: Only MySQLSink and MQSink implement it.
+	// AddTable is thread-safe.
 	AddTable(tableID model.TableID) error
 
 	// EmitRowChangedEvents sends Row Changed Event to Sink
@@ -81,7 +82,7 @@ type Sink interface {
 	// the Barrier call returns.
 	//
 	// NOTICE: Only MySQLSink and MQSink implement it.
-	// Barrier is thread-safe.
+	// RemoveTable is thread-safe.
 	RemoveTable(ctx context.Context, tableID model.TableID) error
 }
 
