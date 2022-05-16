@@ -97,7 +97,7 @@ type mysqlSink struct {
 	tableMaxResolvedTs sync.Map
 
 	execWaitNotifier *notify.Notifier
-	resolvedNotifier *notify.Notifier
+	resolvedCh       chan struct{}
 	errCh            chan error
 	flushSyncWg      sync.WaitGroup
 
@@ -111,6 +111,146 @@ type mysqlSink struct {
 	cancel         func()
 }
 
+<<<<<<< HEAD:cdc/sink/mysql.go
+=======
+// NewMySQLSink creates a new MySQL sink using schema storage
+func NewMySQLSink(
+	ctx context.Context,
+	changefeedID model.ChangeFeedID,
+	sinkURI *url.URL,
+	filter *tifilter.Filter,
+	replicaConfig *config.ReplicaConfig,
+	opts map[string]string,
+) (*mysqlSink, error) {
+	params, err := parseSinkURIToParams(ctx, changefeedID, sinkURI, opts)
+	if err != nil {
+		return nil, err
+	}
+
+	params.enableOldValue = replicaConfig.EnableOldValue
+
+	// dsn format of the driver:
+	// [username[:password]@][protocol[(address)]]/dbname[?param1=value1&...&paramN=valueN]
+	username := sinkURI.User.Username()
+	password, _ := sinkURI.User.Password()
+	hostName := sinkURI.Hostname()
+	port := sinkURI.Port()
+	if username == "" {
+		username = "root"
+	}
+	if port == "" {
+		port = "4000"
+	}
+
+	dsnStr := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s", username, password, hostName, port, params.tls)
+	dsn, err := dmysql.ParseDSN(dsnStr)
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
+	}
+
+	// create test db used for parameter detection
+	// Refer https://github.com/go-sql-driver/mysql#parameters
+	if dsn.Params == nil {
+		dsn.Params = make(map[string]string, 1)
+	}
+	if params.timezone != "" {
+		dsn.Params["time_zone"] = params.timezone
+	}
+	dsn.Params["readTimeout"] = params.readTimeout
+	dsn.Params["writeTimeout"] = params.writeTimeout
+	dsn.Params["timeout"] = params.dialTimeout
+	testDB, err := GetDBConnImpl(ctx, dsn.FormatDSN())
+	if err != nil {
+		return nil, err
+	}
+	defer testDB.Close()
+
+	// Adjust sql_mode for compatibility.
+	dsn.Params["sql_mode"], err = querySQLMode(ctx, testDB)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	dsn.Params["sql_mode"], err = dmutils.AdjustSQLModeCompatible(dsn.Params["sql_mode"])
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	// Adjust sql_mode for cyclic replication.
+	var sinkCyclic *cyclic.Cyclic = nil
+	if val, ok := opts[mark.OptCyclicConfig]; ok {
+		cfg := new(config.CyclicConfig)
+		err := cfg.Unmarshal([]byte(val))
+		if err != nil {
+			return nil, cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
+		}
+		sinkCyclic = cyclic.NewCyclic(cfg)
+		dsn.Params["sql_mode"] = cyclic.RelaxSQLMode(dsn.Params["sql_mode"])
+	}
+	// NOTE: quote the string is necessary to avoid ambiguities.
+	dsn.Params["sql_mode"] = strconv.Quote(dsn.Params["sql_mode"])
+
+	dsnStr, err = generateDSNByParams(ctx, dsn, params, testDB)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	// check if GBK charset is supported by downstream
+	gbkSupported, err := checkCharsetSupport(ctx, testDB, charset.CharsetGBK)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	if !gbkSupported {
+		log.Warn("gbk charset is not supported by downstream, "+
+			"some types of DDL may fail to be executed",
+			zap.String("hostname", hostName), zap.String("port", port))
+	}
+	db, err := GetDBConnImpl(ctx, dsnStr)
+	if err != nil {
+		return nil, err
+	}
+
+	log.Info("Start mysql sink")
+
+	db.SetMaxIdleConns(params.workerCount)
+	db.SetMaxOpenConns(params.workerCount)
+
+	metricConflictDetectDurationHis := metrics.ConflictDetectDurationHis.
+		WithLabelValues(params.changefeedID.Namespace, params.changefeedID.ID)
+	metricBucketSizeCounters := make([]prometheus.Counter, params.workerCount)
+	for i := 0; i < params.workerCount; i++ {
+		metricBucketSizeCounters[i] = metrics.BucketSizeCounter.
+			WithLabelValues(params.changefeedID.Namespace, params.changefeedID.ID, strconv.Itoa(i))
+	}
+	ctx, cancel := context.WithCancel(ctx)
+
+	sink := &mysqlSink{
+		db:                              db,
+		params:                          params,
+		filter:                          filter,
+		cyclic:                          sinkCyclic,
+		txnCache:                        newUnresolvedTxnCache(),
+		statistics:                      metrics.NewStatistics(ctx, metrics.SinkTypeDB),
+		metricConflictDetectDurationHis: metricConflictDetectDurationHis,
+		metricBucketSizeCounters:        metricBucketSizeCounters,
+		execWaitNotifier:                new(notify.Notifier),
+		resolvedCh:                      make(chan struct{}, 1),
+		errCh:                           make(chan error, 1),
+		forceReplicate:                  replicaConfig.ForceReplicate,
+		cancel:                          cancel,
+	}
+
+	err = sink.createSinkWorkers(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	go sink.flushRowChangedEvents(ctx)
+
+	return sink, nil
+}
+
+// EmitRowChangedEvents appends row changed events to the txn cache.
+// Concurrency Note: EmitRowChangedEvents is thread-safe.
+>>>>>>> 168062e1e (Merge pull request #5418 from CharlesCheung96/fix_5107_mysql_ck_bug):cdc/sink/mysql/mysql.go
 func (s *mysqlSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
 	count := s.txnCache.Append(s.filter, rows...)
 	s.statistics.AddRowsCount(count)
@@ -124,12 +264,15 @@ func (s *mysqlSink) FlushRowChangedEvents(ctx context.Context, tableID model.Tab
 	if !ok || v.(uint64) < resolvedTs {
 		s.tableMaxResolvedTs.Store(tableID, resolvedTs)
 	}
-	s.resolvedNotifier.Notify()
 
 	// check and throw error
 	select {
+	case <-ctx.Done():
+		return 0, ctx.Err()
 	case err := <-s.errCh:
 		return 0, err
+	case s.resolvedCh <- struct{}{}:
+		// Notify `flushRowChangedEvents` to asynchronously write data.
 	default:
 	}
 
@@ -138,28 +281,36 @@ func (s *mysqlSink) FlushRowChangedEvents(ctx context.Context, tableID model.Tab
 	return checkpointTs, nil
 }
 
-func (s *mysqlSink) flushRowChangedEvents(ctx context.Context, receiver *notify.Receiver) {
+func (s *mysqlSink) flushRowChangedEvents(ctx context.Context) {
 	defer func() {
 		for _, worker := range s.workers {
-			worker.closedCh <- struct{}{}
+			worker.close()
 		}
 	}()
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-receiver.C:
+		case <-s.resolvedCh:
 		}
-		flushedResolvedTsMap, resolvedTxnsMap := s.txnCache.Resolved(&s.tableMaxResolvedTs)
-		if len(resolvedTxnsMap) == 0 {
-			s.tableMaxResolvedTs.Range(func(key, value interface{}) bool {
-				s.tableCheckpointTs.Store(key, value)
-				return true
-			})
-			continue
-		}
+<<<<<<< HEAD:cdc/sink/mysql.go
 		s.dispatchAndExecTxns(ctx, resolvedTxnsMap)
 		for tableID, resolvedTs := range flushedResolvedTsMap {
+=======
+		checkpointTsMap, resolvedTxnsMap := s.txnCache.Resolved(&s.tableMaxResolvedTs)
+
+		if s.cyclic != nil {
+			// Filter rows if it is origin from downstream.
+			skippedRowCount := cyclic.FilterAndReduceTxns(
+				resolvedTxnsMap, s.cyclic.FilterReplicaID(), s.cyclic.ReplicaID())
+			s.statistics.SubRowsCount(skippedRowCount)
+		}
+
+		if len(resolvedTxnsMap) != 0 {
+			s.dispatchAndExecTxns(ctx, resolvedTxnsMap)
+		}
+		for tableID, resolvedTs := range checkpointTsMap {
+>>>>>>> 168062e1e (Merge pull request #5418 from CharlesCheung96/fix_5107_mysql_ck_bug):cdc/sink/mysql/mysql.go
 			s.tableCheckpointTs.Store(tableID, resolvedTs)
 		}
 	}
@@ -853,7 +1004,6 @@ func (w *mysqlSinkWorker) cleanup() {
 
 func (s *mysqlSink) Close(ctx context.Context) error {
 	s.execWaitNotifier.Close()
-	s.resolvedNotifier.Close()
 	err := s.db.Close()
 	s.cancel()
 	return cerror.WrapError(cerror.ErrMySQLConnectionError, err)
