@@ -153,7 +153,8 @@ func newAgentTestSuite(t *testing.T) *agentTestSuite {
 }
 
 func (s *agentTestSuite) CreateAgent(t *testing.T) (*agentImpl, error) {
-	cdcEtcdClient := etcd.NewCDCEtcdClient(s.ctx, s.etcdClient, etcd.DefaultCDCClusterID)
+	cdcEtcdClient, err := etcd.NewCDCEtcdClient(s.ctx, s.etcdClient, etcd.DefaultCDCClusterID)
+	require.Nil(t, err)
 	messageServer := s.cluster.Nodes["capture-1"].Server
 	messageRouter := s.cluster.Nodes["capture-1"].Router
 	s.tableExecutor = NewMockTableExecutor(t)

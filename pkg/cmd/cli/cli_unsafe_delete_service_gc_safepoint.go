@@ -17,6 +17,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/pkg/cmd/context"
 	"github.com/pingcap/tiflow/pkg/cmd/factory"
+	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	"github.com/spf13/cobra"
 	pd "github.com/tikv/pd/client"
@@ -25,7 +26,8 @@ import (
 // unsafeDeleteServiceGcSafepointOptions defines flags
 // for the `cli unsafe delete-service-gc-safepoint` command.
 type unsafeDeleteServiceGcSafepointOptions struct {
-	pdClient pd.Client
+	pdClient   pd.Client
+	etcdClient *etcd.CDCEtcdClient
 }
 
 // newUnsafeDeleteServiceGcSafepointOptions creates new unsafeDeleteServiceGcSafepointOptions
@@ -43,14 +45,16 @@ func (o *unsafeDeleteServiceGcSafepointOptions) complete(f factory.Factory) erro
 
 	o.pdClient = pdClient
 
-	return nil
+	o.etcdClient, err = f.EtcdClient()
+	return err
 }
 
 // run runs the `cli unsafe delete-service-gc-safepoint` command.
 func (o *unsafeDeleteServiceGcSafepointOptions) run(cmd *cobra.Command) error {
 	ctx := context.GetDefaultContext()
 
-	err := gc.RemoveServiceGCSafepoint(ctx, o.pdClient, gc.CDCServiceSafePointID)
+	err := gc.RemoveServiceGCSafepoint(ctx, o.pdClient,
+		o.etcdClient.GetGCServiceID())
 	if err == nil {
 		cmd.Println("CDC service GC safepoint truncated in PD!")
 	}

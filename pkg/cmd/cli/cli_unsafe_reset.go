@@ -72,7 +72,7 @@ func (o *unsafeResetOptions) run(cmd *cobra.Command) error {
 		return errors.Trace(err)
 	}
 
-	err = gc.RemoveServiceGCSafepoint(ctx, o.pdClient, gc.CDCServiceSafePointID)
+	err = gc.RemoveServiceGCSafepoint(ctx, o.pdClient, o.etcdClient.GetGCServiceID())
 	if err != nil {
 		return errors.Trace(err)
 	}

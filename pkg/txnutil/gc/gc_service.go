@@ -15,6 +15,7 @@ package gc
 
 import (
 	"context"
+	"fmt"
 	"math"
 
 	"github.com/pingcap/errors"
@@ -93,4 +94,14 @@ func RemoveServiceGCSafepoint(ctx context.Context, pdCli pd.Client, serviceID st
 		retry.WithBackoffBaseDelay(gcServiceBackoffDelay), // 1s
 		retry.WithMaxTries(gcServiceMaxRetries),
 		retry.WithIsRetryableErr(cerrors.IsRetryableError))
+}
+
+// GCServiceID returns the gc service ID of this cdc cluster
+func GCServiceID(cdcClusterID string, ectdClusterID uint64) string {
+	return fmt.Sprintf("ticdc-%s-%d", cdcClusterID, ectdClusterID)
+}
+
+// GCServiceIDForTest returns the gc service ID for tests
+func GCServiceIDForTest() string {
+	return fmt.Sprintf("ticdc-%s-%d", "default", 0)
 }

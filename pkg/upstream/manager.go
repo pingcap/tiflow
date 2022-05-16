@@ -20,6 +20,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
 )
@@ -29,6 +30,8 @@ const DefaultUpstreamID uint64 = 0
 
 // Manager manages all upstream.
 type Manager struct {
+	// gcServiceID identify the cdc cluster gc service id
+	gcServiceID string
 	// upstreamID map to *Upstream.
 	ups *sync.Map
 	// all upstream should be spawn from this ctx.
@@ -41,15 +44,21 @@ type Manager struct {
 
 // NewManager creates a new Manager.
 // ctx will be used to initialize upstream spawned by this Manager.
-func NewManager(ctx context.Context) *Manager {
+func NewManager(ctx context.Context, gcServiceID string) *Manager {
 	ctx, cancel := context.WithCancel(ctx)
-	return &Manager{ups: new(sync.Map), ctx: ctx, cancel: cancel}
+	return &Manager{
+		ups:         new(sync.Map),
+		ctx:         ctx,
+		cancel:      cancel,
+		gcServiceID: gcServiceID,
+	}
 }
 
 // NewManager4Test returns a Manager for unit test.
 func NewManager4Test(pdClient pd.Client) *Manager {
 	up := NewUpstream4Test(pdClient)
-	res := &Manager{ups: new(sync.Map), ctx: context.Background()}
+	res := &Manager{ups: new(sync.Map), ctx: context.Background(),
+		gcServiceID: gc.GCServiceIDForTest()}
 	res.ups.Store(DefaultUpstreamID, up)
 	return res
 }
@@ -67,7 +76,7 @@ func (m *Manager) Add(upstreamID uint64, pdEndpoints []string, securityConfig *c
 		return nil
 	}
 	up := newUpstream(upstreamID, pdEndpoints, securityConfig)
-	err := up.init(m.ctx)
+	err := up.init(m.ctx, m.gcServiceID)
 	if err != nil {
 		return errors.Trace(err)
 	}
