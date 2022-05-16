@@ -56,7 +56,7 @@ type Sink interface {
 	// TiCDC guarantees that all the Events whose commitTs is less than or
 	// equal to `resolvedTs` are sent to Sink through `EmitRowChangedEvents`
 	//
-	// FlushRowChangedEvents is thread-safety.
+	// FlushRowChangedEvents is thread-safe.
 	FlushRowChangedEvents(ctx context.Context, tableID model.TableID, resolvedTs uint64) (uint64, error)
 
 	// EmitCheckpointTs sends CheckpointTs to Sink.
