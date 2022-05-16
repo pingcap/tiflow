@@ -1,6 +1,6 @@
 <!--
 Thank you for contributing to TiFlow! 
-Please read MD's [CONTRIBUTING](https://github.com/pingcap/tidb-cdc/blob/master/CONTRIBUTING.md) document **BEFORE** filing this PR.
+Please read MD's [CONTRIBUTING](https://github.com/pingcap/tiflow/blob/master/CONTRIBUTING.md) document **BEFORE** filing this PR.
 -->
 
 ### What problem does this PR solve?
