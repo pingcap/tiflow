@@ -1178,6 +1178,9 @@ func TestNewMySQLSink(t *testing.T) {
 	require.Nil(t, err)
 	err = sink.Close(ctx)
 	require.Nil(t, err)
+	// Test idempotency of `Close` interface
+	err = sink.Close(ctx)
+	require.Nil(t, err)
 }
 
 func TestMySQLSinkClose(t *testing.T) {
@@ -1254,7 +1257,7 @@ func TestMySQLSinkFlushResovledTs(t *testing.T) {
 		getDBConnImpl = backupGetDBConn
 	}()
 
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
 
 	changefeed := "test-changefeed"
 	sinkURI, err := url.Parse("mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=4")
@@ -1301,7 +1304,66 @@ func TestMySQLSinkFlushResovledTs(t *testing.T) {
 	require.True(t, checkpoint <= 5)
 	time.Sleep(500 * time.Millisecond)
 	require.Nil(t, err)
+<<<<<<< HEAD:cdc/sink/mysql_test.go
 	require.Equal(t, uint64(5), sink.getTableCheckpointTs(model.TableID(2)))
+=======
+	require.True(t, sink.getTableCheckpointTs(model.TableID(2)) <= 5)
+	_ = sink.Close(ctx)
+	_, err = sink.FlushRowChangedEvents(ctx, model.TableID(2), 6)
+	require.Nil(t, err)
+
+	cancel()
+	_, err = sink.FlushRowChangedEvents(ctx, model.TableID(2), 6)
+	require.Regexp(t, ".*context canceled.*", err)
+}
+
+func TestGBKSupported(t *testing.T) {
+	dbIndex := 0
+	mockGetDBConn := func(ctx context.Context, dsnStr string) (*sql.DB, error) {
+		defer func() {
+			dbIndex++
+		}()
+		if dbIndex == 0 {
+			// test db
+			db, err := mockTestDB(true)
+			require.Nil(t, err)
+			return db, nil
+		}
+		// normal db
+		db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
+		mock.ExpectClose()
+		require.Nil(t, err)
+		return db, nil
+	}
+	backupGetDBConn := GetDBConnImpl
+	GetDBConnImpl = mockGetDBConn
+	defer func() {
+		GetDBConnImpl = backupGetDBConn
+	}()
+
+	zapcore, logs := observer.New(zap.WarnLevel)
+	conf := &log.Config{Level: "warn", File: log.FileLogConfig{}}
+	_, r, _ := log.InitLogger(conf)
+	logger := zap.New(zapcore)
+	restoreFn := log.ReplaceGlobals(logger, r)
+	defer restoreFn()
+
+	ctx := context.Background()
+	changefeed := "test-changefeed"
+	sinkURI, err := url.Parse("mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=4")
+	require.Nil(t, err)
+	rc := config.GetDefaultReplicaConfig()
+	f, err := filter.NewFilter(rc)
+	require.Nil(t, err)
+	sink, err := NewMySQLSink(ctx,
+		model.DefaultChangeFeedID(changefeed),
+		sinkURI, f, rc, map[string]string{})
+	require.Nil(t, err)
+
+	// no gbk-related warning log will be output because GBK charset is supported
+	require.Equal(t, logs.FilterMessage("gbk charset is not supported").Len(), 0)
+
+>>>>>>> 168062e1e (Merge pull request #5418 from CharlesCheung96/fix_5107_mysql_ck_bug):cdc/sink/mysql/mysql_test.go
 	err = sink.Close(ctx)
 	require.Nil(t, err)
 }
