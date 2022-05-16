@@ -26,6 +26,7 @@ TBL4=t4
 TBL5=t5
 TBL_LOWER1=t1
 TBL_LOWER3=t3
+PRE_VER=${PRE_VER:-v1.0.7}
 
 function exec_sql() {
 	echo $3 | mysql -h $1 -P $2
