@@ -2,7 +2,10 @@ import { api, ListResponse } from './api'
 
 const injectedRtkApi = api.injectEndpoints({
   endpoints: build => ({
-    dmapiCreateTask: build.mutation<Task, { task: Task }>({
+    dmapiCreateTask: build.mutation<
+      { task: Task; check_result: string },
+      { task: Task }
+    >({
       query: queryArg => ({
         url: `/tasks`,
         method: 'POST',
@@ -50,7 +53,10 @@ const injectedRtkApi = api.injectEndpoints({
         }),
       }
     ),
-    dmapiUpdateTask: build.mutation<Task, { task: Task }>({
+    dmapiUpdateTask: build.mutation<
+      { task: Task; check_result: string },
+      { task: Task }
+    >({
       query: queryArg => ({
         url: `/tasks/${queryArg.task.name}`,
         method: 'PUT',
