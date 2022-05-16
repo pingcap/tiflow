@@ -30,6 +30,10 @@ func TestIteratorWithTableFilter(t *testing.T) {
 		errmsg := fmt.Sprintf("OpenPebble fail: %v", err)
 		panic(errmsg)
 	}
+	defer func() {
+		db.Close()
+		os.RemoveAll("./TestIteratorWithTableFilter")
+	}()
 
 	// Put 7 table keys with CRTS=1, and then flush it to L0. The flush is required for generating table properties.
 	for t := 1; t <= 7; t++ {
@@ -76,9 +80,4 @@ func TestIteratorWithTableFilter(t *testing.T) {
 		}
 		require.Equal(t, x.expectedCount, count)
 	}
-
-	defer func() {
-		db.Close()
-		os.RemoveAll("./TestIteratorWithTableFilter")
-	}()
 }

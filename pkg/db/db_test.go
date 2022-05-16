@@ -43,6 +43,8 @@ func TestDB(t *testing.T) {
 	require.Nil(t, err)
 	testDB(t, db)
 
+	// Create a pebble instance without table property collectors as keys in the case
+	// are not constructed with CRTs.
 	db, err = doOpenPebble(ctx, 1, filepath.Join(t.TempDir(), "2"), 0, false, cfg)
 	require.Nil(t, err)
 	testDB(t, db)
