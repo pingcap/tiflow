@@ -24,6 +24,8 @@ import (
 	"fmt"
 	"strings"
 
+	clientv3 "go.etcd.io/etcd/client/v3"
+
 	"github.com/pingcap/log"
 	"go.uber.org/zap"
 
@@ -712,16 +714,8 @@ func (s *Server) startTask(ctx context.Context, taskName string, req openapi.Sta
 		return terror.Annotate(err, "while converting task command line arguments")
 	}
 
-	if cliArgs == nil {
-		err = ha.DeleteTaskCliArgs(s.etcdClient, taskName, *req.SourceNameList)
-		if err != nil {
-			return terror.Annotate(err, "while removing task command line arguments")
-		}
-	} else {
-		err = ha.PutTaskCliArgs(s.etcdClient, taskName, *req.SourceNameList, *cliArgs)
-		if err != nil {
-			return terror.Annotate(err, "while putting task command line arguments")
-		}
+	if err = handleCliArgs(s.etcdClient, taskName, *req.SourceNameList, cliArgs); err != nil {
+		return err
 	}
 	if release != nil {
 		release()
@@ -742,13 +736,27 @@ func (s *Server) stopTask(ctx context.Context, taskName string, req openapi.Stop
 	if err != nil {
 		return terror.Annotate(err, "while converting task command line arguments")
 	}
-	if cliArgs != nil {
-		err = ha.PutTaskCliArgs(s.etcdClient, taskName, *req.SourceNameList, *cliArgs)
+	if err = handleCliArgs(s.etcdClient, taskName, *req.SourceNameList, cliArgs); err != nil {
+		return err
+	}
+	return s.scheduler.UpdateExpectSubTaskStage(pb.Stage_Stopped, taskName, *req.SourceNameList...)
+}
+
+// handleCliArgs handles cli args.
+// it will try to delete args if cli args is nil.
+func handleCliArgs(cli *clientv3.Client, taskName string, sources []string, cliArgs *config.TaskCliArgs) error {
+	if cliArgs == nil {
+		err := ha.DeleteTaskCliArgs(cli, taskName, sources)
+		if err != nil {
+			return terror.Annotate(err, "while removing task command line arguments")
+		}
+	} else {
+		err := ha.PutTaskCliArgs(cli, taskName, sources, *cliArgs)
 		if err != nil {
 			return terror.Annotate(err, "while putting task command line arguments")
 		}
 	}
-	return s.scheduler.UpdateExpectSubTaskStage(pb.Stage_Stopped, taskName, *req.SourceNameList...)
+	return nil
 }
 
 // nolint:unparam

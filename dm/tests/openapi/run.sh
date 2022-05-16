@@ -736,6 +736,35 @@ function test_start_task_with_condition() {
 	openapi_task_check "delete_task_with_force_success" "$task_name"
 	openapi_task_check "get_task_list" 0
 
+	# incremental task use start_time, but time is after create table
+	prepare_database
+	run_sql_tidb "DROP DATABASE if exists openapi;"
+	task_name="incremental_task_use_start_time_after_create"
+	run_sql_source1 "CREATE TABLE openapi.t1(i TINYINT, j INT UNIQUE KEY);"
+	run_sql_source2 "CREATE TABLE openapi.t2(i TINYINT, j INT UNIQUE KEY);"
+
+	openapi_task_check "create_incremental_task_with_gitd_success" $task_name "" "" "" "" "" ""
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status $task_name" \
+		"\"stage\": \"Stopped\"" 2
+	sleep 2
+	start_time=$(date '+%Y-%m-%d %T')
+	sleep 2
+	duration=""
+	is_success="success"
+	check_result=""
+	run_sql_tidb 'CREATE DATABASE openapi;'
+	run_sql_source1 "INSERT INTO openapi.t1(i,j) VALUES (1, 2);"
+	run_sql_source2 "INSERT INTO openapi.t2(i,j) VALUES (3, 4);"
+	openapi_task_check "start_task_with_condition" $task_name "$start_time" "$duration" "$is_success" "$check_result"
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status $task_name" \
+		"Table 'openapi.*' doesn't exist" 2
+
+	openapi_task_check "stop_task_success" "$task_name" ""
+	openapi_task_check "delete_task_with_force_success" "$task_name"
+	openapi_task_check "get_task_list" 0
+
 	# incremental task both gtid and start_time, start_time first
 	prepare_database
 	run_sql_tidb "DROP DATABASE if exists openapi;"
