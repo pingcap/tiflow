@@ -669,6 +669,10 @@ func (s *Server) startTask(ctx context.Context, taskName string, req openapi.Sta
 		if !ok {
 			return terror.ErrSchedulerSourceCfgNotExist.Generate(sourceName)
 		}
+		// start task check. incremental task need to specify meta or start time
+		if subTaskCfg.Meta == nil && subTaskCfg.Mode == config.ModeIncrement && req.StartTime == nil {
+			return terror.ErrConfigMetadataNotSet.Generate(sourceName, config.ModeIncrement)
+		}
 		cfg := s.scheduler.GetSourceCfgByID(sourceName)
 		if cfg == nil {
 			return terror.ErrSchedulerSourceCfgNotExist.Generate(sourceName)
@@ -702,13 +706,14 @@ func (s *Server) startTask(ctx context.Context, taskName string, req openapi.Sta
 		}
 	}
 
+	// handle task cli args
 	cliArgs, err := config.OpenAPIStartTaskReqToTaskCliArgs(req)
 	if err != nil {
 		return terror.Annotate(err, "while converting task command line arguments")
 	}
 
 	if cliArgs == nil {
-		err = ha.DeleteAllTaskCliArgs(s.etcdClient, taskName)
+		err = ha.DeleteTaskCliArgs(s.etcdClient, taskName, *req.SourceNameList)
 		if err != nil {
 			return terror.Annotate(err, "while removing task command line arguments")
 		}
@@ -732,7 +737,17 @@ func (s *Server) stopTask(ctx context.Context, taskName string, req openapi.Stop
 		sourceNameList := openapi.SourceNameList(s.getTaskSourceNameList(taskName))
 		req.SourceNameList = &sourceNameList
 	}
-	// TODO(ehco): support stop req after https://github.com/pingcap/tiflow/pull/4601 merged
+	// handle task cli args
+	cliArgs, err := config.OpenAPIStopTasReqToTaskCliArgs(req)
+	if err != nil {
+		return terror.Annotate(err, "while converting task command line arguments")
+	}
+	if cliArgs != nil {
+		err = ha.PutTaskCliArgs(s.etcdClient, taskName, *req.SourceNameList, *cliArgs)
+		if err != nil {
+			return terror.Annotate(err, "while putting task command line arguments")
+		}
+	}
 	return s.scheduler.UpdateExpectSubTaskStage(pb.Stage_Stopped, taskName, *req.SourceNameList...)
 }
 

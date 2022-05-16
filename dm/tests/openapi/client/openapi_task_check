@@ -279,9 +279,21 @@ def start_task_success(task_name, source_name):
         print("start_task_failed resp=", resp.json())
     assert resp.status_code == 200
 
-def start_task_with_condition(task_name, start_time, duration, wait_duration, is_success, check_result):
+def start_task_failed(task_name, source_name, check_result):
     url = API_ENDPOINT + "/" + task_name + "/start"
-    req = {"start_time": start_time, "safe_mode_time_duration": duration, "wait_time_on_stop": wait_duration}
+    req = {}
+    if source_name != "":
+        req = {"source_name_list": [source_name], "remove_meta": True}
+    resp = requests.post(url=url, json=req)
+    if resp.status_code == 200:
+         print("start_task_failed resp should not be 200")
+    assert resp.status_code == 400
+    print("start_task_failed resp=", resp.json())
+    assert check_result in resp.json()["error_msg"]
+
+def start_task_with_condition(task_name, start_time, duration, is_success, check_result):
+    url = API_ENDPOINT + "/" + task_name + "/start"
+    req = {"start_time": start_time, "safe_mode_time_duration": duration}
     resp = requests.post(url=url, json=req)
     if is_success == "success":
         if resp.status_code != 200:
@@ -295,6 +307,16 @@ def start_task_with_condition(task_name, start_time, duration, wait_duration, is
         print("start_task_with_condition resp=", resp.json())
         assert check_result in resp.json()["error_msg"]
 
+def stop_task_with_condition(task_name, source_name, timeout_duration):
+    url = API_ENDPOINT + "/" + task_name + "/stop"
+    req = {"timeout_duration": timeout_duration}
+    if source_name != "":
+        req = {"source_name_list": [source_name], "timeout_duration": timeout_duration}
+    resp = requests.post(url=url, json=req)
+    if resp.status_code != 200:
+        print("stop_task_failed resp=", resp.json())
+    assert resp.status_code == 200
+
 def stop_task_success(task_name, source_name):
     url = API_ENDPOINT + "/" + task_name + "/stop"
     req = {}
@@ -304,7 +326,6 @@ def stop_task_success(task_name, source_name):
     if resp.status_code != 200:
         print("stop_task_failed resp=", resp.json())
     assert resp.status_code == 200
-
 
 def delete_task_success(task_name):
     resp = requests.delete(url=API_ENDPOINT + "/" + task_name)
@@ -687,7 +708,9 @@ if __name__ == "__main__":
         "delete_task_success": delete_task_success,
         "delete_task_with_force_success": delete_task_with_force_success,
         "start_task_success": start_task_success,
+        "start_task_failed": start_task_failed,
         "start_task_with_condition": start_task_with_condition,
+        "stop_task_with_condition": stop_task_with_condition,
         "stop_task_success": stop_task_success,
         "get_task_list": get_task_list,
         "get_task_list_with_status": get_task_list_with_status,

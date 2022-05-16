@@ -2181,16 +2181,13 @@ components:
           type: string
           example: "10s"
           description: time duration of safe mode
-        wait_time_on_stop:
-          type: string
-          example: "10s"
-          description: time duration of waiting on stop
     StopTaskRequest:
       type: object
       properties:
-        # timeout_duration:
-        #   example: "15s"
-        #   description: time duration waiting task stop
+        timeout_duration:
+          type: string
+          example: "15s"
+          description: time duration waiting task stop
         source_name_list:
           $ref: "#/components/schemas/SourceNameList"
     UpdateTaskRequest:

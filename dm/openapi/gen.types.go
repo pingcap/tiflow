@@ -412,15 +412,15 @@ type StartTaskRequest struct {
 
 	// task start time
 	StartTime *string `json:"start_time,omitempty"`
-
-	// time duration of waiting on stop
-	WaitTimeOnStop *string `json:"wait_time_on_stop,omitempty"`
 }
 
 // StopTaskRequest defines model for StopTaskRequest.
 type StopTaskRequest struct {
 	// source name list
 	SourceNameList *SourceNameList `json:"source_name_list,omitempty"`
+
+	// time duration waiting task stop
+	TimeoutDuration *string `json:"timeout_duration,omitempty"`
 }
 
 // SubTaskStatus defines model for SubTaskStatus.
