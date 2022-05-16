@@ -204,7 +204,7 @@ function run_validator_cmd {
 		"\"id\": \"1\"" 1 \
 		"\"id\": \"2\"" 1 \
 		"\"id\": \"3\"" 1 \
-		"\"id\": \"4\"" 1 
+		"\"id\": \"4\"" 1
 	# resolve error 1
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation make-resolve test 1"
