@@ -122,6 +122,7 @@ func (c *TableFlowController) Release(resolvedTs uint64) {
 	c.memoryQuota.release(nBytesToRelease)
 }
 
+// Note that msgs received by enqueueSingleMsg must be sorted by commitTs_startTs order.
 func (c *TableFlowController) enqueueSingleMsg(msg *model.PolymorphicEvent, size uint64) {
 	commitTs := msg.CRTs
 	lastCommitTs := atomic.LoadUint64(&c.lastCommitTs)
@@ -130,8 +131,9 @@ func (c *TableFlowController) enqueueSingleMsg(msg *model.PolymorphicEvent, size
 	defer c.queueMu.Unlock()
 
 	var e deque.Elem
-	// 1. Processing a new transaction.
+	// 1. Processing a new txn with different commitTs.
 	if e = c.queueMu.queue.Back(); e == nil || lastCommitTs < commitTs {
+		atomic.StoreUint64(&c.lastCommitTs, commitTs)
 		c.queueMu.queue.PushBack(&txnSizeEntry{
 			startTs:  msg.StartTs,
 			commitTs: commitTs,
@@ -139,7 +141,7 @@ func (c *TableFlowController) enqueueSingleMsg(msg *model.PolymorphicEvent, size
 			rowCount: 1,
 		})
 		c.batchGroupCount = 1
-		atomic.StoreUint64(&c.lastCommitTs, commitTs)
+		msg.Row.SplitTxn = true
 		return
 	}
 
@@ -151,7 +153,7 @@ func (c *TableFlowController) enqueueSingleMsg(msg *model.PolymorphicEvent, size
 			zap.Uint64("commitTsInDeque", txnEntry.commitTs))
 	}
 
-	// 2. Append row to current transaction entry.
+	// 2. Append row to current txn entry.
 	if txnEntry.startTs == msg.Row.StartTs &&
 		txnEntry.rowCount < maxRowsPerTxn && txnEntry.size < maxSizePerTxn {
 		txnEntry.size += size
@@ -167,8 +169,8 @@ func (c *TableFlowController) enqueueSingleMsg(msg *model.PolymorphicEvent, size
 		rowCount: 1,
 	})
 	c.batchGroupCount++
-	// mark the first data of new txnSizeEntry
 	msg.Row.SplitTxn = true
+
 	if c.batchGroupCount >= batchSize {
 		c.batchGroupCount = 0
 		// TODO(CharlesCheung): add batch resolve mechanism to mitigate oom problem

@@ -268,7 +268,7 @@ type RowChangedEvent struct {
 	// representation of this event.
 	ApproximateDataSize int64 `json:"-" msg:"-"`
 
-	// SplitTxn marks this RowChangedEvent as the first line of a new batch
+	// SplitTxn marks this RowChangedEvent as the first line of a new txn.
 	SplitTxn bool `json:"-" msg:"-"`
 }
 
