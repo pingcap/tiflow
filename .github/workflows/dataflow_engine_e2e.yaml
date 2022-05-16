@@ -35,9 +35,24 @@ jobs:
           cd $GITHUB_WORKSPACE/test/e2e
           go test -count=1 -v -run=TestSubmitTest
 
-      - name: Try to dump container logs
+      - name: Dump docker container logs on failure
         if: ${{ failure() }}
-        run: docker-compose -f $GITHUB_WORKSPACE/sample/3m3e.yaml logs -t
+        uses: jwalton/gh-docker-logs@v2
+        with:
+          tail: '100'
+
+      - name: Collect docker logs on failure
+        if: ${{ failure() }}
+        uses: jwalton/gh-docker-logs@v2
+        with:
+          dest: 'logs'
+
+      - name: Upload logs to GitHub
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@master
+        with:
+          name: basic-workflow-logs
+          path: logs/*
 
   Node-failure-workflow:
     runs-on: ubuntu-latest
@@ -60,9 +75,24 @@ jobs:
           cd $GITHUB_WORKSPACE/test/e2e
           go test -count=1 -v -run=TestNodeFailure
 
-      - name: Try to dump container logs
+      - name: Dump docker container logs on failure
         if: ${{ failure() }}
-        run: docker-compose -f $GITHUB_WORKSPACE/sample/3m3e.yaml logs -t
+        uses: jwalton/gh-docker-logs@v2
+        with:
+          tail: '100'
+
+      - name: Collect docker logs on failure
+        if: ${{ failure() }}
+        uses: jwalton/gh-docker-logs@v2
+        with:
+          dest: 'logs'
+
+      - name: Upload logs to GitHub
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@master
+        with:
+          name: node-failure-workflow-logs
+          path: logs/*
 
   DM-workflow:
     runs-on: ubuntu-latest
@@ -87,8 +117,21 @@ jobs:
           cd $GITHUB_WORKSPACE/test/e2e
           go test -count=1 -v -run=TestDMJob
 
-      - name: Try to dump container logs
+      - name: Dump docker container logs on failure
         if: ${{ failure() }}
-        run: |
-          docker-compose -f $GITHUB_WORKSPACE/sample/3m3e.yaml logs -t
-          docker-compose -f $GITHUB_WORKSPACE/sample/dm_databases.yaml logs -t
+        uses: jwalton/gh-docker-logs@v2
+        with:
+          tail: '100'
+
+      - name: Collect docker logs on failure
+        if: ${{ failure() }}
+        uses: jwalton/gh-docker-logs@v2
+        with:
+          dest: 'logs'
+
+      - name: Upload logs to GitHub
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@master
+        with:
+          name: dm-workflow-logs
+          path: logs/*
