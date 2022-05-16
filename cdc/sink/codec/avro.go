@@ -473,7 +473,6 @@ func rowToAvroData(
 }
 
 const (
-	decimalHandlingModeString        = "string"
 	decimalHandlingModePrecise       = "precise"
 	bigintUnsignedHandlingModeString = "string"
 	bigintUnsignedHandlingModeLong   = "long"
