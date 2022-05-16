@@ -84,19 +84,7 @@ if [ $should_run -eq 0 ]; then
 	exit 0
 fi
 
-print_worker_stacks() {
-	if [ $? != 0 ]; then
-		echo "worker 1 stack"
-		echo "------------------------------------------"
-		curl "127.0.0.1:$WORKER1_PORT/debug/pprof/goroutine?debug=2" || true
-		echo "worker 2 stack"
-		echo "------------------------------------------"
-		curl "127.0.0.1:$WORKER2_PORT/debug/pprof/goroutine?debug=2" || true
-	fi
-}
-
 trap stop_services EXIT
-trap print_worker_stacks EXIT
 start_services
 
 function run() {
