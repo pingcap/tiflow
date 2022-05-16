@@ -1692,6 +1692,9 @@ func TestNewMySQLSink(t *testing.T) {
 	require.Nil(t, err)
 	err = sink.Close(ctx)
 	require.Nil(t, err)
+	// Test idempotency of `Close` interface
+	err = sink.Close(ctx)
+	require.Nil(t, err)
 }
 
 func TestMySQLSinkClose(t *testing.T) {
@@ -1770,7 +1773,7 @@ func TestMySQLSinkFlushResolvedTs(t *testing.T) {
 		GetDBConnImpl = backupGetDBConn
 	}()
 
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
 
 	changefeed := "test-changefeed"
 	sinkURI, err := url.Parse("mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=4")
@@ -1828,6 +1831,12 @@ func TestMySQLSinkFlushResolvedTs(t *testing.T) {
 	require.Nil(t, err)
 	require.True(t, sink.getTableCheckpointTs(model.TableID(2)) <= 5)
 	_ = sink.Close(ctx)
+	_, err = sink.FlushRowChangedEvents(ctx, model.TableID(2), 6)
+	require.Nil(t, err)
+
+	cancel()
+	_, err = sink.FlushRowChangedEvents(ctx, model.TableID(2), 6)
+	require.Regexp(t, ".*context canceled.*", err)
 }
 
 func TestGBKSupported(t *testing.T) {

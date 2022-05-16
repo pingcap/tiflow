@@ -239,6 +239,8 @@ func (s *mysqlSink) FlushRowChangedEvents(ctx context.Context, tableID model.Tab
 
 	// check and throw error
 	select {
+	case <-ctx.Done():
+		return 0, ctx.Err()
 	case err := <-s.errCh:
 		return 0, err
 	case s.resolvedCh <- struct{}{}:
@@ -524,7 +526,6 @@ func (s *mysqlSink) cleanTableResource(tableID model.TableID) {
 
 func (s *mysqlSink) Close(ctx context.Context) error {
 	s.execWaitNotifier.Close()
-	close(s.resolvedCh)
 	err := s.db.Close()
 	s.cancel()
 	return cerror.WrapError(cerror.ErrMySQLConnectionError, err)
