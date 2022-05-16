@@ -28,7 +28,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo"
-	schedulerv2 "github.com/pingcap/tiflow/cdc/scheduler"
+	"github.com/pingcap/tiflow/cdc/scheduler"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
@@ -39,12 +39,33 @@ import (
 	"go.uber.org/zap"
 )
 
+// newSchedulerV2FromCtx creates a new schedulerV2 from context.
+// This function is factored out to facilitate unit testing.
+func newSchedulerV2FromCtx(
+	ctx cdcContext.Context, startTs uint64,
+) (scheduler.Scheduler, error) {
+	changeFeedID := ctx.ChangefeedVars().ID
+	messageServer := ctx.GlobalVars().MessageServer
+	messageRouter := ctx.GlobalVars().MessageRouter
+	ownerRev := ctx.GlobalVars().OwnerRevision
+	ret, err := scheduler.NewScheduler(
+		ctx, changeFeedID, startTs, messageServer, messageRouter, ownerRev)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	return ret, nil
+}
+
+func newScheduler(ctx cdcContext.Context, startTs uint64) (scheduler.Scheduler, error) {
+	return newSchedulerV2FromCtx(ctx, startTs)
+}
+
 type changefeed struct {
 	id    model.ChangeFeedID
 	state *orchestrator.ChangefeedReactorState
 
 	upStream         *upstream.Upstream
-	scheduler        scheduler
+	scheduler        scheduler.Scheduler
 	barriers         *barriers
 	feedStateManager *feedStateManager
 	redoManager      redo.LogManager
@@ -61,7 +82,7 @@ type changefeed struct {
 	// a DDL job asynchronously. After the DDL job has been executed,
 	// ddlEventCache will be set to nil. ddlEventCache contains more than
 	// one event for a rename tables DDL job.
-	ddlEventCache map[*model.DDLEvent]bool
+	ddlEventCache []*model.DDLEvent
 	// currentTableNames is the table names that the changefeed is watching.
 	// And it contains only the tables of the ddl that have been processed.
 	// The ones that have not been executed yet do not have.
@@ -85,7 +106,7 @@ type changefeed struct {
 
 	newDDLPuller func(ctx cdcContext.Context, upStream *upstream.Upstream, startTs uint64) (DDLPuller, error)
 	newSink      func() DDLSink
-	newScheduler func(ctx cdcContext.Context, startTs uint64) (scheduler, error)
+	newScheduler func(ctx cdcContext.Context, startTs uint64) (scheduler.Scheduler, error)
 }
 
 func newChangefeed(id model.ChangeFeedID, upStream *upstream.Upstream) *changefeed {
@@ -233,7 +254,8 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 	}
 
 	startTime := time.Now()
-	newCheckpointTs, newResolvedTs, err := c.scheduler.Tick(ctx, c.state, c.schema.AllPhysicalTables(), captures)
+	newCheckpointTs, newResolvedTs, err := c.scheduler.Tick(
+		ctx, c.state.Status.CheckpointTs, c.schema.AllPhysicalTables(), captures)
 	costTime := time.Since(startTime)
 	if costTime > schedulerLogsWarnDuration {
 		log.Warn("scheduler tick took too long",
@@ -249,7 +271,7 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 
 	// CheckpointCannotProceed implies that not all tables are being replicated normally,
 	// so in that case there is no need to advance the global watermarks.
-	if newCheckpointTs != schedulerv2.CheckpointCannotProceed {
+	if newCheckpointTs != scheduler.CheckpointCannotProceed {
 		if newResolvedTs > barrierTs {
 			newResolvedTs = barrierTs
 		}
@@ -569,10 +591,7 @@ func (c *changefeed) asyncExecDDLJob(ctx cdcContext.Context,
 		if err != nil {
 			return false, errors.Trace(err)
 		}
-		c.ddlEventCache = make(map[*model.DDLEvent]bool)
-		for _, event := range ddlEvents {
-			c.ddlEventCache[event] = false
-		}
+		c.ddlEventCache = ddlEvents
 		for _, ddlEvent := range ddlEvents {
 			if c.redoManager.Enabled() {
 				err = c.redoManager.EmitDDLEvent(ctx, ddlEvent)
@@ -584,16 +603,10 @@ func (c *changefeed) asyncExecDDLJob(ctx cdcContext.Context,
 	}
 
 	jobDone := true
-	for event, done := range c.ddlEventCache {
-		if done {
-			continue
-		}
+	for _, event := range c.ddlEventCache {
 		eventDone, err := c.asyncExecDDLEvent(ctx, event)
 		if err != nil {
 			return false, err
-		}
-		if eventDone {
-			c.ddlEventCache[event] = true
 		}
 		jobDone = jobDone && eventDone
 	}
@@ -656,7 +669,7 @@ func (c *changefeed) updateStatus(checkpointTs, resolvedTs model.Ts) {
 
 func (c *changefeed) Close(ctx cdcContext.Context) {
 	startTime := time.Now()
-
+	c.upStream.Release()
 	c.releaseResources(ctx)
 
 	costTime := time.Since(startTime)
@@ -669,8 +682,8 @@ func (c *changefeed) Close(ctx cdcContext.Context) {
 }
 
 // GetInfoProvider returns an InfoProvider if one is available.
-func (c *changefeed) GetInfoProvider() schedulerv2.InfoProvider {
-	if provider, ok := c.scheduler.(schedulerv2.InfoProvider); ok {
+func (c *changefeed) GetInfoProvider() scheduler.InfoProvider {
+	if provider, ok := c.scheduler.(scheduler.InfoProvider); ok {
 		return provider
 	}
 	return nil
