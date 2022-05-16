@@ -38,7 +38,10 @@ type TableFlowController struct {
 		sync.Mutex
 		queue deque.Deque
 	}
-	txnsWithSameCommitTs uint
+	// batchGroupCount is the number of txnSizeEntries with same commitTs, which could be:
+	// 1. Different txns with same commitTs but different startTs
+	// 2. TxnSizeEntry split from the same txns which exceeds max rows or max size
+	batchGroupCount uint
 
 	lastCommitTs uint64
 }
@@ -135,7 +138,7 @@ func (c *TableFlowController) enqueueSingleMsg(msg *model.PolymorphicEvent, size
 			size:     size,
 			rowCount: 1,
 		})
-		c.txnsWithSameCommitTs = 1
+		c.batchGroupCount = 1
 		atomic.StoreUint64(&c.lastCommitTs, commitTs)
 		return
 	}
@@ -163,10 +166,11 @@ func (c *TableFlowController) enqueueSingleMsg(msg *model.PolymorphicEvent, size
 		size:     size,
 		rowCount: 1,
 	})
-	c.txnsWithSameCommitTs++
+	c.batchGroupCount++
 	// mark the first data of new txnSizeEntry
 	msg.Row.SplitTxn = true
-	if c.txnsWithSameCommitTs >= batchSize {
+	if c.batchGroupCount >= batchSize {
+		c.batchGroupCount = 0
 		// TODO(CharlesCheung): add batch resolve mechanism to mitigate oom problem
 		log.Debug("emit batch resolve event throw callback")
 	}
