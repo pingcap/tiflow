@@ -1268,7 +1268,7 @@ func TestNewMySQLSinkExecDML(t *testing.T) {
 	}, retry.WithBackoffBaseDelay(20), retry.WithMaxTries(10), retry.WithIsRetryableErr(cerror.IsRetryableError))
 	require.Nil(t, err)
 
-	err = sink.Barrier(ctx, 2)
+	err = sink.RemoveTable(ctx, 2)
 	require.Nil(t, err)
 	v, ok := sink.tableMaxResolvedTs.Load(2)
 	require.False(t, ok)
@@ -1909,7 +1909,7 @@ func TestCleanTableResource(t *testing.T) {
 	s.tableMaxResolvedTs.Store(tblID, uint64(2))
 	_, ok := s.txnCache.unresolvedTxns[tblID]
 	require.True(t, ok)
-	require.Nil(t, s.Init(tblID))
+	require.Nil(t, s.AddTable(tblID))
 	_, ok = s.txnCache.unresolvedTxns[tblID]
 	require.False(t, ok)
 	_, ok = s.tableCheckpointTs.Load(tblID)
