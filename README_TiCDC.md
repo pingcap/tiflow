@@ -1,6 +1,8 @@
 # TiCDC
 
-**TiCDC** is [TiDB](https://docs.pingcap.com/tidb/stable)'s change data capture framework. It supports replicating change data to various downstreams, including MySQL protocol-compatible databases, message queues via the open CDC protocol and other systems such as local file storage.
+**TiCDC** is [TiDB](https://docs.pingcap.com/tidb/stable)'s change data capture framework.
+It supports replicating change data to various downstreams, including MySQL protocol-compatible databases
+and [Kafka](https://kafka.apache.org/).
 
 ## Architecture
 
@@ -23,18 +25,18 @@ See a detailed introduction to [the TiCDC architecture](https://docs.pingcap.com
 To check the source code, run test cases and build binaries, you can simply run:
 
 ```bash
-$ make
+$ make cdc
 $ make test
 ```
 
-Note that TiCDC supports building with Go version `Go >= 1.16`.
+Note that TiCDC supports building with Go version `Go >= 1.18`.
 
 When TiCDC is built successfully, you can find binary in the `bin` directory. Instructions for unit test and integration
 test can be found in [Running tests](./tests/integration_tests/README.md).
 
 ## Deployment
 
-You can setup a CDC cluster for replication test manually as following:
+You can set up a CDC cluster for replication test manually as following:
 
 1. Setup a TiDB cluster.
 2. Start a CDC cluster, which contains one or more CDC servers. The command to start on CDC server is `cdc server --pd http://10.0.10.25:2379`, where `http://10.0.10.25:2379` is the client-url of pd-server.
