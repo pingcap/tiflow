@@ -126,7 +126,7 @@ func (c *Capture) reset(ctx context.Context) error {
 	if c.UpstreamManager != nil {
 		c.UpstreamManager.Close()
 	}
-	c.UpstreamManager = upstream.NewManager(ctx)
+	c.UpstreamManager = upstream.NewManager(ctx, c.EtcdClient.GetGCServiceID())
 	err = c.UpstreamManager.Add(upstream.DefaultUpstreamID, c.pdEnpoints, conf.Security)
 	if err != nil {
 		return errors.Annotate(

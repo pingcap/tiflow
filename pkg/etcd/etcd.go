@@ -22,6 +22,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/tikv/pd/pkg/tempurl"
 	"go.etcd.io/etcd/api/v3/mvccpb"
@@ -91,15 +92,16 @@ func GetEtcdKeyJob(clusterID string, changeFeedID model.ChangeFeedID) string {
 
 // CDCEtcdClient is a wrap of etcd client
 type CDCEtcdClient struct {
-	Client    *Client
-	ClusterID string
+	Client        *Client
+	ClusterID     string
+	etcdClusterID uint64
 }
 
 // NewCDCEtcdClient returns a new CDCEtcdClient
 func NewCDCEtcdClient(ctx context.Context,
 	cli *clientv3.Client,
 	clusterID string,
-) CDCEtcdClient {
+) (CDCEtcdClient, error) {
 	metrics := map[string]prometheus.Counter{
 		EtcdPut:    etcdRequestCounter.WithLabelValues(EtcdPut),
 		EtcdGet:    etcdRequestCounter.WithLabelValues(EtcdGet),
@@ -108,10 +110,15 @@ func NewCDCEtcdClient(ctx context.Context,
 		EtcdGrant:  etcdRequestCounter.WithLabelValues(EtcdGrant),
 		EtcdRevoke: etcdRequestCounter.WithLabelValues(EtcdRevoke),
 	}
-	return CDCEtcdClient{
-		Client:    Wrap(cli, metrics),
-		ClusterID: clusterID,
+	resp, err := cli.MemberList(ctx)
+	if err != nil {
+		return CDCEtcdClient{}, err
 	}
+	return CDCEtcdClient{
+		etcdClusterID: resp.Header.ClusterId,
+		Client:        Wrap(cli, metrics),
+		ClusterID:     clusterID,
+	}, nil
 }
 
 // Close releases resources in CDCEtcdClient
@@ -503,6 +510,10 @@ func (c CDCEtcdClient) GetOwnerRevision(ctx context.Context, captureID string) (
 		return 0, cerror.ErrNotOwner.GenWithStackByArgs()
 	}
 	return resp.Kvs[0].ModRevision, nil
+}
+
+func (c CDCEtcdClient) GetGCServiceID() string {
+	return gc.GCServiceID(c.ClusterID, c.etcdClusterID)
 }
 
 // getFreeListenURLs get free ports and localhost as url.
