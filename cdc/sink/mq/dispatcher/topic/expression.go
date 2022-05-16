@@ -30,7 +30,8 @@ var (
 	schemaRE = regexp.MustCompile(`\{schema\}`)
 	// tableRE is used to match substring '{table}' in topic expression
 	tableRE = regexp.MustCompile(`\{table\}`)
-	// avro has different topic name pattern requirements
+	// avro has different topic name pattern requirements, '{schema}' and '{table}' placeholders
+	// are necessary
 	avroTopicNameRE = regexp.MustCompile(
 		`^[A-Za-z0-9\._\-]*\{schema\}[A-Za-z0-9\._\-]*\{table\}[A-Za-z0-9\._\-]*$`,
 	)

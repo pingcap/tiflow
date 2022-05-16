@@ -371,24 +371,14 @@ func (m *AvroSchemaManager) GetCachedOrRegister(
 
 	codec, err := goavro.NewCodec(schema)
 	if err != nil {
-		return nil, 0, errors.Annotate(
-			cerror.WrapError(
-				cerror.ErrAvroSchemaAPIError,
-				err,
-			),
-			"GetCachedOrRegister: Could not make goavro codec",
-		)
+		log.Error("GetCachedOrRegister: Could not make goavro codec")
+		return nil, 0, cerror.WrapError(cerror.ErrAvroSchemaAPIError, err)
 	}
 
 	id, err := m.Register(ctx, topicName, codec)
 	if err != nil {
-		return nil, 0, errors.Annotate(
-			cerror.WrapError(
-				cerror.ErrAvroSchemaAPIError,
-				err,
-			),
-			"GetCachedOrRegister: Could not register schema",
-		)
+		log.Error("GetCachedOrRegister: Could not register schema")
+		return nil, 0, cerror.WrapError(cerror.ErrAvroSchemaAPIError, err)
 	}
 
 	cacheEntry := new(schemaCacheEntry)

@@ -30,7 +30,8 @@ type EventBatchEncoder interface {
 	// EncodeCheckpointEvent appends a checkpoint event into the batch.
 	// This event will be broadcast to all partitions to signal a global checkpoint.
 	EncodeCheckpointEvent(ts uint64) (*MQMessage, error)
-	// AppendRowChangedEvent appends a row changed event into the batch
+	// AppendRowChangedEvent appends the calling context, a row changed event and the dispatch
+	// topic into the batch
 	AppendRowChangedEvent(context.Context, *model.RowChangedEvent, string) error
 	// EncodeDDLEvent appends a DDL event into the batch
 	EncodeDDLEvent(e *model.DDLEvent) (*MQMessage, error)
