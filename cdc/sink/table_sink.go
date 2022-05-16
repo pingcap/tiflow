@@ -48,19 +48,10 @@ func NewTableSink(
 		metricsTableSinkTotalRows: totalRowsCounter,
 	}
 
-	if err := sink.Init(tableID); err != nil {
+	if err := sink.AddTable(tableID); err != nil {
 		return nil, errors.Trace(err)
 	}
 	return sink, nil
-}
-
-func (t *tableSink) TryEmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) (bool, error) {
-	t.buffer = append(t.buffer, rows...)
-	t.metricsTableSinkTotalRows.Add(float64(len(rows)))
-	if t.redoManager.Enabled() {
-		return t.redoManager.TryEmitRowChangedEvents(ctx, t.tableID, rows...)
-	}
-	return true, nil
 }
 
 func (t *tableSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
@@ -135,17 +126,15 @@ func (t *tableSink) EmitCheckpointTs(_ context.Context, _ uint64, _ []model.Tabl
 	return nil
 }
 
-// Init table sink resources
-func (t *tableSink) Init(tableID model.TableID) error {
-	return t.backendSink.Init(tableID)
+func (t *tableSink) AddTable(tableID model.TableID) error {
+	return t.backendSink.AddTable(tableID)
 }
 
 // Close once the method is called, no more events can be written to this table sink
 func (t *tableSink) Close(ctx context.Context) error {
-	return t.Barrier(ctx, t.tableID)
+	return t.backendSink.RemoveTable(ctx, t.tableID)
 }
 
-// Barrier is not used in table sink
-func (t *tableSink) Barrier(ctx context.Context, tableID model.TableID) error {
-	return t.backendSink.Barrier(ctx, tableID)
+func (t *tableSink) RemoveTable(ctx context.Context, tableID model.TableID) error {
+	return nil
 }
