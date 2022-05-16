@@ -129,8 +129,6 @@ func TestEtcdBank(t *testing.T) {
 	totalAccountNumber := 25
 	workerNumber := 10
 	var wg sync.WaitGroup
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
-	defer cancel()
 
 	newClient, closer := setUpTest(t)
 	defer closer()
@@ -140,6 +138,8 @@ func TestEtcdBank(t *testing.T) {
 		_ = cli.Unwrap().Close()
 	}()
 
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
 	for i := 0; i < totalAccountNumber; i++ {
 		_, err := cli.Put(ctx, fmt.Sprintf("%s%d", bankTestPrefix, i), "0")
 		require.Nil(t, err)

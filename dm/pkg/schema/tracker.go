@@ -17,11 +17,13 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
+	"net/url"
 	"os"
 	"strings"
+	"sync"
 
+	"github.com/docker/go-units"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tidb-tools/pkg/filter"
 	tidbConfig "github.com/pingcap/tidb/config"
 	"github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/domain"
@@ -33,8 +35,12 @@ import (
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/parser/terror"
 	"github.com/pingcap/tidb/session"
+	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tidb/store/mockstore"
+	unistoreConfig "github.com/pingcap/tidb/store/mockstore/unistore/config"
+	"github.com/pingcap/tidb/util/filter"
+	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
@@ -60,17 +66,28 @@ var (
 	}
 )
 
+func init() {
+	unistoreConfig.DefaultConf.Engine.VlogFileSize = 4 * units.MiB
+	unistoreConfig.DefaultConf.Engine.L1Size = 128 * units.MiB
+}
+
 // Tracker is used to track schema locally.
 type Tracker struct {
+	// we're using an embedded tidb, there's no need to sync operations on it, but we may recreate(drop and create)
+	// a table such as when checkpoint rollback, we need to make sure others(validator for now) can't see the table
+	// is deleted. so we add an extra layer of synchronization for GetTableInfo/RecreateTables for now.
+	sync.RWMutex
 	storePath string
 	store     kv.Storage
 	dom       *domain.Domain
 	se        session.Session
 	dsTracker *downstreamTracker
+	closed    atomic.Bool
 }
 
 // downstreamTracker tracks downstream schema.
 type downstreamTracker struct {
+	sync.RWMutex
 	downstreamConn *dbconn.DBConn                  // downstream connection
 	stmtParser     *parser.Parser                  // statement parser
 	tableInfos     map[string]*DownstreamTableInfo // downstream table infos
@@ -142,7 +159,7 @@ func NewTracker(ctx context.Context, task string, sessionCfg map[string]string, 
 		}
 	}
 
-	storePath, err = ioutil.TempDir("./", "schema-tracker")
+	storePath, err = newTmpFolderForTracker(task)
 	if err != nil {
 		return nil, err
 	}
@@ -201,6 +218,8 @@ func NewTracker(ctx context.Context, task string, sessionCfg map[string]string, 
 			return nil, err
 		}
 	}
+	// skip DDL test https://github.com/pingcap/tidb/pull/33079
+	se.SetValue(sessionctx.QueryString, "skip")
 
 	// TiDB will unconditionally create an empty "test" schema.
 	// This interferes with MySQL/MariaDB upstream which such schema does not
@@ -225,6 +244,10 @@ func NewTracker(ctx context.Context, task string, sessionCfg map[string]string, 
 	}, nil
 }
 
+func newTmpFolderForTracker(task string) (string, error) {
+	return ioutil.TempDir("./", url.PathEscape(task)+"-tracker")
+}
+
 // Exec runs an SQL (DDL) statement.
 func (tr *Tracker) Exec(ctx context.Context, db string, sql string) error {
 	tr.se.GetSessionVars().CurrentDB = db
@@ -236,6 +259,8 @@ func (tr *Tracker) Exec(ctx context.Context, db string, sql string) error {
 func (tr *Tracker) GetTableInfo(table *filter.Table) (*model.TableInfo, error) {
 	dbName := model.NewCIStr(table.Schema)
 	tableName := model.NewCIStr(table.Name)
+	tr.RLock()
+	defer tr.RUnlock()
 	t, err := tr.dom.InfoSchema().TableByName(dbName, tableName)
 	if err != nil {
 		return nil, err
@@ -266,10 +291,7 @@ func (tr *Tracker) GetCreateTable(ctx context.Context, table *filter.Table) (str
 
 	row := req.GetRow(0)
 	str := row.GetString(1) // the first column is the table name.
-	// returned as single line.
-	str = strings.ReplaceAll(str, "\n", "")
-	str = strings.ReplaceAll(str, "  ", " ")
-	return str, nil
+	return utils.CreateTableSQLToOneRow(str), nil
 }
 
 // AllSchemas returns all schemas visible to the tracker (excluding system tables).
@@ -333,6 +355,7 @@ func IsTableNotExists(err error) bool {
 
 // Reset drops all tables inserted into this tracker.
 func (tr *Tracker) Reset() error {
+	tr.se.SetValue(sessionctx.QueryString, "skip")
 	allDBs := tr.dom.InfoSchema().AllSchemaNames()
 	ddl := tr.dom.DDL()
 	for _, db := range allDBs {
@@ -349,6 +372,12 @@ func (tr *Tracker) Reset() error {
 
 // Close close a tracker.
 func (tr *Tracker) Close() error {
+	if tr == nil {
+		return nil
+	}
+	if !tr.closed.CAS(false, true) {
+		return nil
+	}
 	tr.se.Close()
 	tr.dom.Close()
 	if err := tr.store.Close(); err != nil {
@@ -359,6 +388,7 @@ func (tr *Tracker) Close() error {
 
 // DropTable drops a table from this tracker.
 func (tr *Tracker) DropTable(table *filter.Table) error {
+	tr.se.SetValue(sessionctx.QueryString, "skip")
 	tableIdent := ast.Ident{
 		Schema: model.NewCIStr(table.Schema),
 		Name:   model.NewCIStr(table.Name),
@@ -368,6 +398,7 @@ func (tr *Tracker) DropTable(table *filter.Table) error {
 
 // DropIndex drops an index from this tracker.
 func (tr *Tracker) DropIndex(table *filter.Table, index string) error {
+	tr.se.SetValue(sessionctx.QueryString, "skip")
 	tableIdent := ast.Ident{
 		Schema: model.NewCIStr(table.Schema),
 		Name:   model.NewCIStr(table.Name),
@@ -377,6 +408,7 @@ func (tr *Tracker) DropIndex(table *filter.Table, index string) error {
 
 // CreateSchemaIfNotExists creates a SCHEMA of the given name if it did not exist.
 func (tr *Tracker) CreateSchemaIfNotExists(db string) error {
+	tr.se.SetValue(sessionctx.QueryString, "skip")
 	dbName := model.NewCIStr(db)
 	if tr.dom.InfoSchema().SchemaExists(dbName) {
 		return nil
@@ -399,6 +431,7 @@ func cloneTableInfo(ti *model.TableInfo) *model.TableInfo {
 
 // CreateTableIfNotExists creates a TABLE of the given name if it did not exist.
 func (tr *Tracker) CreateTableIfNotExists(table *filter.Table, ti *model.TableInfo) error {
+	tr.se.SetValue(sessionctx.QueryString, "skip")
 	schemaName := model.NewCIStr(table.Schema)
 	tableName := model.NewCIStr(table.Name)
 	ti = cloneTableInfo(ti)
@@ -406,8 +439,15 @@ func (tr *Tracker) CreateTableIfNotExists(table *filter.Table, ti *model.TableIn
 	return tr.dom.DDL().CreateTableWithInfo(tr.se, schemaName, ti, ddl.OnExistIgnore)
 }
 
+// BatchCreateTableIfNotExist will batch creating tables per schema. If the schema does not exist, it will create it.
+// The argument is { database name -> { table name -> TableInfo } }.
 func (tr *Tracker) BatchCreateTableIfNotExist(tablesToCreate map[string]map[string]*model.TableInfo) error {
+	tr.se.SetValue(sessionctx.QueryString, "skip")
 	for schema, tableNameInfo := range tablesToCreate {
+		if err := tr.CreateSchemaIfNotExists(schema); err != nil {
+			return err
+		}
+
 		var cloneTis []*model.TableInfo
 		for table, ti := range tableNameInfo {
 			cloneTi := cloneTableInfo(ti)        // clone TableInfo w.r.t the warning of the CreateTable function
@@ -430,22 +470,7 @@ func (tr *Tracker) GetSystemVar(name string) (string, bool) {
 // GetDownStreamTableInfo gets downstream table info.
 // note. this function will init downstreamTrack's table info.
 func (tr *Tracker) GetDownStreamTableInfo(tctx *tcontext.Context, tableID string, originTI *model.TableInfo) (*DownstreamTableInfo, error) {
-	dti, ok := tr.dsTracker.tableInfos[tableID]
-	if !ok {
-		tctx.Logger.Info("Downstream schema tracker init. ", zap.String("tableID", tableID))
-		downstreamTI, err := tr.getTableInfoByCreateStmt(tctx, tableID)
-		if err != nil {
-			tctx.Logger.Error("Init dowstream schema info error. ", zap.String("tableID", tableID), zap.Error(err))
-			return nil, err
-		}
-
-		dti = &DownstreamTableInfo{
-			TableInfo:   downstreamTI,
-			WhereHandle: sqlmodel.GetWhereHandle(originTI, downstreamTI),
-		}
-		tr.dsTracker.tableInfos[tableID] = dti
-	}
-	return dti, nil
+	return tr.dsTracker.getOrInit(tctx, tableID, originTI)
 }
 
 // RemoveDownstreamSchema just remove schema or table in downstreamTrack.
@@ -455,41 +480,76 @@ func (tr *Tracker) RemoveDownstreamSchema(tctx *tcontext.Context, targetTables [
 	}
 
 	for _, targetTable := range targetTables {
-		tableID := utils.GenTableID(targetTable)
-		_, ok := tr.dsTracker.tableInfos[tableID]
-		if !ok {
-			// handle just have schema
-			if targetTable.Schema != "" && targetTable.Name == "" {
-				for k := range tr.dsTracker.tableInfos {
-					if strings.HasPrefix(k, tableID+".") {
-						delete(tr.dsTracker.tableInfos, k)
-						tctx.Logger.Info("Remove downstream schema tracker", zap.String("tableID", k))
-					}
+		tr.dsTracker.remove(tctx, targetTable)
+	}
+}
+
+func (dt *downstreamTracker) getOrInit(tctx *tcontext.Context, tableID string, originTI *model.TableInfo) (*DownstreamTableInfo, error) {
+	dt.RLock()
+	dti, ok := dt.tableInfos[tableID]
+	dt.RUnlock()
+	if ok {
+		return dti, nil
+	}
+
+	// cache miss, get from downstream
+	dt.Lock()
+	defer dt.Unlock()
+	dti, ok = dt.tableInfos[tableID]
+	if !ok {
+		tctx.Logger.Info("Downstream schema tracker init. ", zap.String("tableID", tableID))
+		downstreamTI, err := dt.getTableInfoByCreateStmt(tctx, tableID)
+		if err != nil {
+			tctx.Logger.Error("Init dowstream schema info error. ", zap.String("tableID", tableID), zap.Error(err))
+			return nil, err
+		}
+
+		dti = &DownstreamTableInfo{
+			TableInfo:   downstreamTI,
+			WhereHandle: sqlmodel.GetWhereHandle(originTI, downstreamTI),
+		}
+		dt.tableInfos[tableID] = dti
+	}
+	return dti, nil
+}
+
+func (dt *downstreamTracker) remove(tctx *tcontext.Context, targetTable *filter.Table) {
+	dt.Lock()
+	defer dt.Unlock()
+
+	tableID := utils.GenTableID(targetTable)
+	if _, ok := dt.tableInfos[tableID]; !ok {
+		// handle just have schema
+		if targetTable.Schema != "" && targetTable.Name == "" {
+			for k := range dt.tableInfos {
+				if strings.HasPrefix(k, tableID+".") {
+					delete(dt.tableInfos, k)
+					tctx.Logger.Info("Remove downstream schema tracker", zap.String("tableID", k))
 				}
 			}
-		} else {
-			delete(tr.dsTracker.tableInfos, tableID)
-			tctx.Logger.Info("Remove downstream schema tracker", zap.String("tableID", tableID))
 		}
+	} else {
+		delete(dt.tableInfos, tableID)
+		tctx.Logger.Info("Remove downstream schema tracker", zap.String("tableID", tableID))
 	}
 }
 
 // getTableInfoByCreateStmt get downstream tableInfo by "SHOW CREATE TABLE" stmt.
-func (tr *Tracker) getTableInfoByCreateStmt(tctx *tcontext.Context, tableID string) (*model.TableInfo, error) {
-	if tr.dsTracker.stmtParser == nil {
-		err := tr.initDownStreamSQLModeAndParser(tctx)
+func (dt *downstreamTracker) getTableInfoByCreateStmt(tctx *tcontext.Context, tableID string) (*model.TableInfo, error) {
+	if dt.stmtParser == nil {
+		err := dt.initDownStreamSQLModeAndParser(tctx)
 		if err != nil {
 			return nil, err
 		}
 	}
-	createStr, err := utils.GetTableCreateSQL(tctx.Ctx, tr.dsTracker.downstreamConn.BaseConn.DBConn, tableID)
+	createStr, err := dbconn.GetTableCreateSQL(tctx, dt.downstreamConn, tableID)
 	if err != nil {
 		return nil, dmterror.ErrSchemaTrackerCannotFetchDownstreamCreateTableStmt.Delegate(err, tableID)
 	}
 
 	tctx.Logger.Info("Show create table info", zap.String("tableID", tableID), zap.String("create string", createStr))
 	// parse create table stmt.
-	stmtNode, err := tr.dsTracker.stmtParser.ParseOneStmt(createStr, "", "")
+	stmtNode, err := dt.stmtParser.ParseOneStmt(createStr, "", "")
 	if err != nil {
 		return nil, dmterror.ErrSchemaTrackerInvalidCreateTableStmt.Delegate(err, createStr)
 	}
@@ -503,9 +563,9 @@ func (tr *Tracker) getTableInfoByCreateStmt(tctx *tcontext.Context, tableID stri
 }
 
 // initDownStreamTrackerParser init downstream tracker parser by default sql_mode.
-func (tr *Tracker) initDownStreamSQLModeAndParser(tctx *tcontext.Context) error {
+func (dt *downstreamTracker) initDownStreamSQLModeAndParser(tctx *tcontext.Context) error {
 	setSQLMode := fmt.Sprintf("SET SESSION SQL_MODE = '%s'", mysql.DefaultSQLMode)
-	_, err := tr.dsTracker.downstreamConn.ExecuteSQL(tctx, []string{setSQLMode})
+	_, err := dt.downstreamConn.ExecuteSQL(tctx, []string{setSQLMode})
 	if err != nil {
 		return dmterror.ErrSchemaTrackerCannotSetDownstreamSQLMode.Delegate(err, mysql.DefaultSQLMode)
 	}
@@ -513,6 +573,6 @@ func (tr *Tracker) initDownStreamSQLModeAndParser(tctx *tcontext.Context) error 
 	if err != nil {
 		return dmterror.ErrSchemaTrackerCannotInitDownstreamParser.Delegate(err, mysql.DefaultSQLMode)
 	}
-	tr.dsTracker.stmtParser = stmtParser
+	dt.stmtParser = stmtParser
 	return nil
 }

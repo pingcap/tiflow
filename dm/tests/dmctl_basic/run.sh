@@ -282,6 +282,8 @@ function run() {
 	check_task_wrong_start_time_format $cur/conf/dm-task3.yaml
 	check_task_not_pass $cur/conf/dm-task2.yaml
 	check_task_error_count $cur/conf/dm-task3.yaml
+	check_task_not_pass_with_message $cur/conf/dm-task5.yaml "please use \`shard-mode\` only."
+	start_task_not_pass_with_message $cur/conf/dm-task5.yaml "please use \`shard-mode\` only."
 
 	echo "check_task_optimistic"
 	check_task_pass $cur/conf/dm-task4.yaml
@@ -294,6 +296,11 @@ function run() {
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"stop-task $cur/conf/only_warning.yaml" \
 		"\"result\": true" 2
+
+	echo "check task with empty unit config"
+	check_task_empty_config $cur/conf/empty-unit-task.yaml
+	echo "start task with empty unit config"
+	start_task_empty_config $cur/conf/empty-unit-task.yaml
 
 	cp $cur/conf/dm-task.yaml $WORK_DIR/dm-task-error-database-config.yaml
 	sed -i "s/password: \"\"/password: \"wrond password\"/g" $WORK_DIR/dm-task-error-database-config.yaml
@@ -425,12 +432,12 @@ function run() {
 
 	# make sure every shard table in source 1 has be forwarded to newer binlog, so older relay log could be purged
 	run_sql_source1 "flush logs"
+	run_sql_source1 "create table dmctl.flush_trigger (c int primary key);"
 	run_sql_source1 "update dmctl.t_1 set d = '' where id = 13"
 	run_sql_source1 "update dmctl.t_2 set d = '' where id = 12"
 
-	# sleep 2*1s to ensure syncer unit has flushed global checkpoint and updates
-	# updated ActiveRelayLog
-	sleep 2
+	# sleep to ensure syncer unit has resumed, read next binlog files and updated ActiveRelayLog
+	sleep 5
 	server_uuid=$(tail -n 1 $WORK_DIR/worker1/relay_log/server-uuid.index)
 	run_sql_source1 "show binary logs\G"
 	max_binlog_name=$(grep Log_name "$SQL_RESULT_FILE" | tail -n 1 | awk -F":" '{print $NF}')

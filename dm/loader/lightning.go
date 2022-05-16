@@ -200,7 +200,14 @@ func (l *LightningLoader) runLightning(ctx context.Context, cfg *lcfg.Config) er
 	if err = l.checkPointList.UpdateStatus(ctx, lightningStatusRunning); err != nil {
 		return err
 	}
-	err = l.core.RunOnce(taskCtx, cfg, nil)
+
+	var opts []lightning.Option
+	if l.cfg.ExtStorage != nil {
+		opts = append(opts,
+			lightning.WithDumpFileStorage(l.cfg.ExtStorage),
+			lightning.WithCheckpointStorage(l.cfg.ExtStorage, lightningCheckpointFileName))
+	}
+	err = l.core.RunOnceWithOptions(taskCtx, cfg, opts...)
 	failpoint.Inject("LoadDataSlowDown", nil)
 	failpoint.Inject("LoadDataSlowDownByTask", func(val failpoint.Value) {
 		tasks := val.(string)

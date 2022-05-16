@@ -43,9 +43,10 @@ import (
 
 // SourceWorker manages a source(upstream) which is mainly related to subtasks and relay.
 type SourceWorker struct {
-	// ensure no other operation can be done when closing (we can use `WatGroup`/`Context` to archive this)
+	// ensure no other operation can be done when closing (we can use `WaitGroup`/`Context` to archive this)
 	// TODO: check what does it guards. Now it's used to guard relayHolder and relayPurger (maybe subTaskHolder?) since
 	// query-status maybe access them when closing/disable functionalities
+	// This lock is used to guards source worker's source config and subtask holder(subtask configs)
 	sync.RWMutex
 
 	wg     sync.WaitGroup
@@ -202,7 +203,7 @@ func (w *SourceWorker) Start() {
 	}
 }
 
-// Close stops working and releases resources.
+// Stop stops working and releases resources.
 func (w *SourceWorker) Stop(graceful bool) {
 	if w.closed.Load() {
 		w.l.Warn("already closed")
@@ -249,9 +250,12 @@ func (w *SourceWorker) Stop(graceful bool) {
 // updateSourceStatus updates w.sourceStatus.
 func (w *SourceWorker) updateSourceStatus(ctx context.Context) error {
 	w.sourceDBMu.Lock()
+	w.RLock()
+	cfg := w.cfg
+	w.RUnlock()
 	if w.sourceDB == nil {
 		var err error
-		w.sourceDB, err = conn.DefaultDBProvider.Apply(&w.cfg.DecryptPassword().From)
+		w.sourceDB, err = conn.DefaultDBProvider.Apply(&cfg.DecryptPassword().From)
 		if err != nil {
 			w.sourceDBMu.Unlock()
 			return err
@@ -262,7 +266,7 @@ func (w *SourceWorker) updateSourceStatus(ctx context.Context) error {
 	var status binlog.SourceStatus
 	ctx, cancel := context.WithTimeout(ctx, utils.DefaultDBTimeout)
 	defer cancel()
-	pos, gtidSet, err := utils.GetPosAndGs(ctx, w.sourceDB.DB, w.cfg.Flavor)
+	pos, gtidSet, err := utils.GetPosAndGs(ctx, w.sourceDB.DB, cfg.Flavor)
 	if err != nil {
 		return err
 	}
@@ -604,7 +608,7 @@ func (w *SourceWorker) UpdateSubTask(ctx context.Context, cfg *config.SubTaskCon
 	return st.Update(ctx, cfg)
 }
 
-// OperateSubTask stop/resume/pause  sub task.
+// OperateSubTask stop/resume/pause sub task.
 func (w *SourceWorker) OperateSubTask(name string, op pb.TaskOp) error {
 	w.Lock()
 	defer w.Unlock()
@@ -668,9 +672,9 @@ func (w *SourceWorker) QueryStatus(ctx context.Context, name string) ([]*pb.SubT
 	if err := w.updateSourceStatus(ctx); err != nil {
 		if terror.ErrNoMasterStatus.Equal(err) {
 			w.l.Warn("This source's bin_log is OFF, so it only supports full_mode.", zap.String("sourceID", w.cfg.SourceID), zap.Error(err))
-			return nil, nil, nil
+		} else {
+			w.l.Error("failed to update source status", zap.Error(err))
 		}
-		w.l.Error("failed to update source status", zap.Error(err))
 	} else {
 		sourceStatus = w.sourceStatus.Load().(*binlog.SourceStatus)
 	}
@@ -1059,9 +1063,6 @@ func copyConfigFromSource(cfg *config.SubTaskConfig, sourceCfg *config.SourceCon
 	cfg.EnableGTID = sourceCfg.EnableGTID
 	cfg.UseRelay = enableRelay
 
-	// we can remove this from SubTaskConfig later, because syncer will always read from relay
-	cfg.AutoFixGTID = sourceCfg.AutoFixGTID
-
 	if cfg.CaseSensitive != sourceCfg.CaseSensitive {
 		log.L().Warn("different case-sensitive config between task config and source config, use `true` for it.")
 	}
@@ -1163,7 +1164,10 @@ func (w *SourceWorker) observeValidatorStage(ctx context.Context, lastUsedRev in
 				case <-ctx.Done():
 					return nil
 				case <-time.After(500 * time.Millisecond):
-					startRevision, err = w.getCurrentValidatorRevision(w.cfg.SourceID)
+					w.RLock()
+					sourceID := w.cfg.SourceID
+					w.RUnlock()
+					startRevision, err = w.getCurrentValidatorRevision(sourceID)
 					if err != nil {
 						log.L().Error("reset validator stage failed, will retry later", zap.Error(err), zap.Int("retryNum", retryNum))
 					}
@@ -1272,7 +1276,7 @@ func (w *SourceWorker) operateValidatorStage(stage ha.Stage) error {
 		}
 
 		subtask.SetCfg(subTaskCfg[stage.Task])
-		subtask.StartValidator(stage.Expect)
+		subtask.StartValidator(stage.Expect, false)
 	default:
 		// should not happen
 		log.L().Warn("invalid validator stage", zap.Reflect("stage", stage))
@@ -1332,4 +1336,41 @@ func (w *SourceWorker) CheckCfgCanUpdated(cfg *config.SubTaskConfig) error {
 		return err
 	}
 	return subTask.CheckUnitCfgCanUpdate(cfg)
+}
+
+func (w *SourceWorker) GetWorkerValidatorErr(taskName string, errState pb.ValidateErrorState) []*pb.ValidationError {
+	w.RLock()
+	defer w.RUnlock()
+	st := w.subTaskHolder.findSubTask(taskName)
+	if st != nil {
+		return st.GetValidatorError(errState)
+	}
+	log.L().Warn("get validator err", zap.Error(terror.ErrWorkerSubTaskNotFound.Generate(taskName)))
+	return []*pb.ValidationError{}
+}
+
+func (w *SourceWorker) OperateWorkerValidatorErr(taskName string, op pb.ValidationErrOp, errID uint64, isAll bool) error {
+	w.RLock()
+	defer w.RUnlock()
+	st := w.subTaskHolder.findSubTask(taskName)
+	if st != nil {
+		return st.OperateValidatorError(op, errID, isAll)
+	}
+	return terror.ErrWorkerSubTaskNotFound.Generate(taskName)
+}
+
+func (w *SourceWorker) GetValidatorStatus(taskName string) (*pb.ValidationStatus, error) {
+	st := w.subTaskHolder.findSubTask(taskName)
+	if st == nil {
+		return nil, terror.ErrWorkerSubTaskNotFound.Generate(taskName)
+	}
+	return st.GetValidatorStatus()
+}
+
+func (w *SourceWorker) GetValidatorTableStatus(taskName string, filterStatus pb.Stage) ([]*pb.ValidationTableStatus, error) {
+	st := w.subTaskHolder.findSubTask(taskName)
+	if st == nil {
+		return nil, terror.ErrWorkerSubTaskNotFound.Generate(taskName)
+	}
+	return st.GetValidatorTableStatus(filterStatus)
 }

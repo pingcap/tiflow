@@ -88,7 +88,7 @@ func TestSystemStopSlowly(t *testing.T) {
 	sys := NewSystem(t.TempDir(), 1, cfg)
 	require.Nil(t, sys.Start(ctx))
 	msg := message.Task{Test: &message.Test{Sleep: 2 * time.Second}}
-	sys.DBRouter.Broadcast(ctx, actormsg.SorterMessage(msg))
+	sys.DBRouter.Broadcast(ctx, actormsg.ValueMessage(msg))
 	require.Nil(t, sys.Stop())
 }
 
@@ -102,9 +102,9 @@ func TestSystemStopMailboxFull(t *testing.T) {
 	sys := NewSystem(t.TempDir(), 1, cfg)
 	require.Nil(t, sys.Start(ctx))
 	msg := message.Task{Test: &message.Test{Sleep: 2 * time.Second}}
-	sys.DBRouter.Broadcast(ctx, actormsg.SorterMessage(msg))
+	sys.DBRouter.Broadcast(ctx, actormsg.ValueMessage(msg))
 	for {
-		err := sys.DBRouter.Send(actor.ID(1), actormsg.TickMessage())
+		err := sys.DBRouter.Send(actor.ID(1), actormsg.ValueMessage(message.Task{}))
 		if err != nil {
 			break
 		}
@@ -149,13 +149,13 @@ func TestSystemStopWithManyTablesAndFewStragglers(t *testing.T) {
 	for i := 100; i < 110; i++ {
 		id := ss[i].ReaderActorID
 		sleep := message.Task{Test: &message.Test{Sleep: 2 * time.Second}}
-		require.Nil(t, sys.ReaderRouter.SendB(ctx, id, actormsg.SorterMessage(sleep)))
+		require.Nil(t, sys.ReaderRouter.SendB(ctx, id, actormsg.ValueMessage(sleep)))
 		if i%2 == 0 {
 			continue
 		}
 		// Make it channel full.
 		for {
-			err := sys.ReaderRouter.Send(id, actormsg.SorterMessage(message.Task{}))
+			err := sys.ReaderRouter.Send(id, actormsg.ValueMessage(message.Task{}))
 			if err != nil {
 				break
 			}

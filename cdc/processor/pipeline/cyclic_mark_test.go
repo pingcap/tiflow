@@ -26,6 +26,7 @@ import (
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	"github.com/pingcap/tiflow/pkg/cyclic/mark"
 	"github.com/pingcap/tiflow/pkg/pipeline"
+	pmessage "github.com/pingcap/tiflow/pkg/pipeline/message"
 	"github.com/stretchr/testify/require"
 )
 
@@ -139,9 +140,9 @@ func TestCyclicMarkNode(t *testing.T) {
 			},
 		})
 		n := newCyclicMarkNode(markTableID)
-		err := n.Init(pipeline.MockNodeContext4Test(ctx, pipeline.Message{}, nil))
+		err := n.Init(pipeline.MockNodeContext4Test(ctx, pmessage.Message{}, nil))
 		require.Nil(t, err)
-		outputCh := make(chan pipeline.Message)
+		outputCh := make(chan pmessage.Message)
 		var wg sync.WaitGroup
 		wg.Add(2)
 		go func() {
@@ -156,11 +157,14 @@ func TestCyclicMarkNode(t *testing.T) {
 					CRTs:    row.CommitTs,
 				})
 				event.Row = row
-				err := n.Receive(pipeline.MockNodeContext4Test(ctx, pipeline.PolymorphicEventMessage(event), outputCh))
+				msg := pmessage.PolymorphicEventMessage(event)
+				err := n.Receive(pipeline.MockNodeContext4Test(ctx, msg, outputCh))
 				require.Nil(t, err)
 				lastCommitTs = row.CommitTs
 			}
-			err := n.Receive(pipeline.MockNodeContext4Test(ctx, pipeline.PolymorphicEventMessage(model.NewResolvedPolymorphicEvent(0, lastCommitTs+1)), outputCh))
+			msg := pmessage.PolymorphicEventMessage(
+				model.NewResolvedPolymorphicEvent(0, lastCommitTs+1))
+			err := n.Receive(pipeline.MockNodeContext4Test(ctx, msg, outputCh))
 			require.Nil(t, err)
 		}()
 		output := []*model.RowChangedEvent{}
@@ -208,7 +212,7 @@ func TestCyclicMarkNode(t *testing.T) {
 		err := n.Init(ctx)
 		require.Nil(t, err)
 		output := []*model.RowChangedEvent{}
-		putToOutput := func(row *pipeline.Message) {
+		putToOutput := func(row *pmessage.Message) {
 			if row == nil || row.PolymorphicEvent.RawKV.OpType == model.OpTypeResolved {
 				return
 			}
@@ -224,13 +228,14 @@ func TestCyclicMarkNode(t *testing.T) {
 				CRTs:    row.CommitTs,
 			})
 			event.Row = row
-			ok, err := n.TryHandleDataMessage(ctx, pipeline.PolymorphicEventMessage(event))
+			ok, err := n.TryHandleDataMessage(ctx, pmessage.PolymorphicEventMessage(event))
 			require.Nil(t, err)
 			require.True(t, ok)
 			putToOutput(ctx.tryGetProcessedMessage())
 			lastCommitTs = row.CommitTs
 		}
-		ok, err := n.TryHandleDataMessage(ctx, pipeline.PolymorphicEventMessage(model.NewResolvedPolymorphicEvent(0, lastCommitTs+1)))
+		ok, err := n.TryHandleDataMessage(ctx,
+			pmessage.PolymorphicEventMessage(model.NewResolvedPolymorphicEvent(0, lastCommitTs+1)))
 		require.True(t, ok)
 		putToOutput(ctx.tryGetProcessedMessage())
 		require.Nil(t, err)

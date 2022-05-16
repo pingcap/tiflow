@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react'
+import React, { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useDebounce } from 'ahooks'
+import { isEqual } from 'lodash-es'
 
 import i18n from '~/i18n'
 import {
@@ -22,16 +22,33 @@ import {
 } from '~/models/task'
 import { useDmapiGetSourceQuery } from '~/models/source'
 
+interface ReplicationDetailSearchOptions {
+  currentTask?: Task
+  currentSourceName: string
+  dbPattern: string
+  tablePattern: string
+}
+
 const ReplicationDetail: React.FC = () => {
   const [t] = useTranslation()
-  const [currentTask, setCurrentTask] = useState<Task>()
-  const [currentSourceName, setCurrentSourceName] = useState<string>()
-  const [dbPattern, setDbPattern] = useState('')
-  const [tablePattern, setTablePattern] = useState('')
-  const debouncedDbPattern = useDebounce(dbPattern, { wait: 500 })
-  const debouncedTablePattern = useDebounce(tablePattern, { wait: 500 })
 
-  const currentTaskName = currentTask?.name ?? ''
+  const [
+    { currentTask, currentSourceName, dbPattern, tablePattern },
+    setSearchOptions,
+  ] = useState<ReplicationDetailSearchOptions>({
+    currentTask: undefined,
+    currentSourceName: '',
+    dbPattern: '',
+    tablePattern: '',
+  })
+
+  const [payload, setPayload] = useState({
+    taskName: currentTask?.name ?? '',
+    sourceName: currentSourceName ?? '',
+    schemaPattern: dbPattern,
+    tablePattern: tablePattern,
+  })
+
   const { data: taskList, isFetching: isFetchingTaskList } =
     useDmapiGetTaskListQuery({
       withStatus: true,
@@ -40,15 +57,9 @@ const ReplicationDetail: React.FC = () => {
     data: migrateTagetData,
     refetch,
     isFetching: isFetchingMigrateTarget,
-  } = useDmapiGetTaskMigrateTargetsQuery(
-    {
-      taskName: currentTaskName,
-      sourceName: currentSourceName ?? '',
-      schemaPattern: debouncedDbPattern,
-      tablePattern: debouncedTablePattern,
-    },
-    { skip: !currentTask || !currentSourceName }
-  )
+  } = useDmapiGetTaskMigrateTargetsQuery(payload, {
+    skip: !payload.taskName || !payload.sourceName,
+  })
   const { data: sourceData } = useDmapiGetSourceQuery(
     { sourceName: currentSourceName ?? '' },
     { skip: !currentSourceName }
@@ -113,45 +124,74 @@ const ReplicationDetail: React.FC = () => {
           <Space>
             <Select
               placeholder="Select a task"
-              value={currentTask?.name}
-              className="min-w-100px"
+              className="w-150px"
               loading={loading}
               options={taskList?.data?.map(i => ({
                 label: i.name,
                 value: i.name,
               }))}
               onSelect={(value: string) => {
-                setCurrentTask(taskList?.data.find(i => i.name === value))
+                const t = taskList?.data.find(i => i.name === value)
+                if (t) {
+                  setSearchOptions(prev => ({ ...prev, currentTask: t }))
+                }
               }}
             />
 
             <Select
               placeholder="Select a source"
-              value={currentSourceName}
-              className="min-w-100px"
+              className="w-150px"
               loading={loading}
               options={currentTask?.source_config.source_conf?.map(i => ({
                 label: i.source_name,
                 value: i.source_name,
               }))}
               onSelect={(value: string) => {
-                setCurrentSourceName(value)
+                setSearchOptions(prev => ({
+                  ...prev,
+                  currentSourceName: value,
+                }))
               }}
             />
 
             <Input
               addonBefore="database"
-              value={dbPattern}
               placeholder="source database"
-              onChange={e => setDbPattern(e.target.value)}
+              onChange={e => {
+                setSearchOptions(prev => ({
+                  ...prev,
+                  dbPattern: e.target.value,
+                }))
+              }}
             />
             <Input
               addonBefore="table"
-              value={tablePattern}
               placeholder="source table"
-              onChange={e => setTablePattern(e.target.value)}
+              onChange={e => {
+                setSearchOptions(prev => ({
+                  ...prev,
+                  tablePattern: e.target.value,
+                }))
+              }}
             />
-            <Button onClick={refetch}>{t('check')}</Button>
+            <Button
+              onClick={() => {
+                const next = {
+                  taskName: currentTask?.name ?? '',
+                  sourceName: currentSourceName ?? '',
+                  schemaPattern: dbPattern,
+                  tablePattern: tablePattern,
+                }
+
+                if (isEqual(next, payload)) {
+                  refetch()
+                } else {
+                  setPayload(next)
+                }
+              }}
+            >
+              {t('check')}
+            </Button>
           </Space>
         </Col>
       </Row>

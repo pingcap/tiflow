@@ -28,12 +28,12 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/util/memory"
+	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/sorter"
 	sorterencoding "github.com/pingcap/tiflow/cdc/sorter/encoding"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/fsutil"
-	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
 
@@ -187,7 +187,7 @@ func (p *backEndPool) alloc(ctx context.Context) (backEnd, error) {
 	}
 
 	fname := fmt.Sprintf("%s%d.tmp", p.filePrefix, atomic.AddUint64(&p.fileNameCounter, 1))
-	tableID, tableName := util.TableIDFromCtx(ctx)
+	tableID, tableName := contextutil.TableIDFromCtx(ctx)
 	log.Debug("Unified Sorter: trying to create file backEnd",
 		zap.String("filename", fname),
 		zap.Int64("tableID", tableID),

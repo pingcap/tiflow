@@ -22,11 +22,12 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/sink"
-	"github.com/pingcap/tiflow/cdc/sink/common"
+	"github.com/pingcap/tiflow/cdc/sink/flowcontrol"
 	serverConfig "github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/pipeline"
+	pmessage "github.com/pingcap/tiflow/pkg/pipeline/message"
 	"go.uber.org/zap"
 )
 
@@ -102,7 +103,7 @@ func (t *tablePipelineImpl) CheckpointTs() model.Ts {
 
 // UpdateBarrierTs updates the barrier ts in this table pipeline
 func (t *tablePipelineImpl) UpdateBarrierTs(ts model.Ts) {
-	err := t.p.SendToFirstNode(pipeline.BarrierMessage(ts))
+	err := t.p.SendToFirstNode(pmessage.BarrierMessage(ts))
 	if err != nil && !cerror.ErrSendToClosedPipeline.Equal(err) && !cerror.ErrPipelineTryAgain.Equal(err) {
 		log.Panic("unexpect error from send to first node", zap.Error(err))
 	}
@@ -110,8 +111,8 @@ func (t *tablePipelineImpl) UpdateBarrierTs(ts model.Ts) {
 
 // AsyncStop tells the pipeline to stop, and returns true if the pipeline is already stopped.
 func (t *tablePipelineImpl) AsyncStop(targetTs model.Ts) bool {
-	err := t.p.SendToFirstNode(pipeline.CommandMessage(&pipeline.Command{
-		Tp: pipeline.CommandTypeStop,
+	err := t.p.SendToFirstNode(pmessage.CommandMessage(&pmessage.Command{
+		Tp: pmessage.CommandTypeStop,
 	}))
 	log.Info("send async stop signal to table", zap.Int64("tableID", t.tableID), zap.Uint64("targetTs", targetTs))
 	if err != nil {
@@ -191,11 +192,12 @@ func NewTablePipeline(ctx cdcContext.Context,
 
 	perTableMemoryQuota := serverConfig.GetGlobalServerConfig().PerTableMemoryQuota
 	log.Debug("creating table flow controller",
-		zap.String("changefeed", ctx.ChangefeedVars().ID),
+		zap.String("namesapce", ctx.ChangefeedVars().ID.Namespace),
+		zap.String("changefeed", ctx.ChangefeedVars().ID.ID),
 		zap.String("tableName", tableName),
 		zap.Int64("tableID", tableID),
 		zap.Uint64("quota", perTableMemoryQuota))
-	flowController := common.NewTableFlowController(perTableMemoryQuota)
+	flowController := flowcontrol.NewTableFlowController(perTableMemoryQuota)
 	config := ctx.ChangefeedVars().Info.Config
 	cyclicEnabled := config.Cyclic != nil && config.Cyclic.IsEnabled()
 	runnerSize := defaultRunnersSize

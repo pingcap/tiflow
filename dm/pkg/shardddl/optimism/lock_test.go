@@ -20,11 +20,11 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	. "github.com/pingcap/check"
-	"github.com/pingcap/tidb-tools/pkg/schemacmp"
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/util/mock"
+	"github.com/pingcap/tidb/util/schemacmp"
 	"go.etcd.io/etcd/tests/v3/integration"
 
 	"github.com/pingcap/tiflow/dm/dm/config"
@@ -2158,6 +2158,7 @@ func (t *testLock) TestCheckAddDropColumns(c *C) {
 	l.tables[source][db][tbls[1]] = schemacmp.Encode(ti1)
 
 	col, err := l.checkAddDropColumn(source, db, tbls[0], DDLs1, schemacmp.Encode(ti0), schemacmp.Encode(ti1), nil)
+
 	c.Assert(err, IsNil)
 	c.Assert(len(col), Equals, 0)
 

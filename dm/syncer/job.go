@@ -19,7 +19,7 @@ import (
 	"time"
 
 	"github.com/go-mysql-org/go-mysql/replication"
-	"github.com/pingcap/tidb-tools/pkg/filter"
+	"github.com/pingcap/tidb/util/filter"
 
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	"github.com/pingcap/tiflow/pkg/sqlmodel"
@@ -167,6 +167,19 @@ func newDDLJob(qec *queryEventContext) *job {
 	}
 
 	return j
+}
+
+func getDDLJobSourceTable(j *job) *filter.Table {
+	if j.tp != ddl || len(j.sourceTbls) != 1 {
+		return nil
+	}
+	for _, tb := range j.sourceTbls {
+		if len(tb) != 1 {
+			return nil
+		}
+		return tb[0]
+	}
+	return nil
 }
 
 func newSkipJob(ec *eventContext) *job {

@@ -170,12 +170,13 @@ func TestParseCfg(t *testing.T) {
 		},
 		PerTableMemoryQuota: 10 * 1024 * 1024, // 10M
 		KVClient: &config.KVClientConfig{
-			WorkerConcurrent: 8,
-			WorkerPoolSize:   0,
-			RegionScanLimit:  40,
+			WorkerConcurrent:    8,
+			WorkerPoolSize:      0,
+			RegionScanLimit:     40,
+			RegionRetryDuration: config.TomlDuration(25 * time.Second),
 		},
 		Debug: &config.DebugConfig{
-			EnableTableActor: false,
+			EnableTableActor: true,
 			TableActor: &config.TableActorConfig{
 				EventBatchSize: 32,
 			},
@@ -243,6 +244,9 @@ max-memory-percentage = 3
 num-concurrent-worker = 4
 num-workerpool-goroutine = 5
 sort-dir = "/tmp/just_a_test"
+
+[kv-client]
+region-retry-duration = "3s"
 
 [debug]
 enable-db-sorter = false
@@ -313,12 +317,13 @@ server-worker-pool-size = 16
 		Security:            &config.SecurityConfig{},
 		PerTableMemoryQuota: 10 * 1024 * 1024, // 10M
 		KVClient: &config.KVClientConfig{
-			WorkerConcurrent: 8,
-			WorkerPoolSize:   0,
-			RegionScanLimit:  40,
+			WorkerConcurrent:    8,
+			WorkerPoolSize:      0,
+			RegionScanLimit:     40,
+			RegionRetryDuration: config.TomlDuration(3 * time.Second),
 		},
 		Debug: &config.DebugConfig{
-			EnableTableActor: false,
+			EnableTableActor: true,
 			TableActor: &config.TableActorConfig{
 				EventBatchSize: 32,
 			},
@@ -454,12 +459,13 @@ cert-allowed-cn = ["dd","ee"]
 		},
 		PerTableMemoryQuota: 10 * 1024 * 1024, // 10M
 		KVClient: &config.KVClientConfig{
-			WorkerConcurrent: 8,
-			WorkerPoolSize:   0,
-			RegionScanLimit:  40,
+			WorkerConcurrent:    8,
+			WorkerPoolSize:      0,
+			RegionScanLimit:     40,
+			RegionRetryDuration: config.TomlDuration(25 * time.Second),
 		},
 		Debug: &config.DebugConfig{
-			EnableTableActor: false,
+			EnableTableActor: true,
 			TableActor: &config.TableActorConfig{
 				EventBatchSize: 32,
 			},
@@ -519,7 +525,7 @@ unknown3 = 3
 	err = o.validate()
 	require.Nil(t, err)
 	require.Equal(t, &config.DebugConfig{
-		EnableTableActor: false,
+		EnableTableActor: true,
 		TableActor: &config.TableActorConfig{
 			EventBatchSize: 32,
 		},

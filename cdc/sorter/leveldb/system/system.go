@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/util/memory"
 	lsorter "github.com/pingcap/tiflow/cdc/sorter/leveldb"
+	"github.com/pingcap/tiflow/cdc/sorter/leveldb/message"
 	"github.com/pingcap/tiflow/pkg/actor"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/db"
@@ -46,14 +47,14 @@ const (
 // System manages db sorter resource.
 type System struct {
 	dbs           []db.DB
-	dbSystem      *actor.System
-	DBRouter      *actor.Router
-	WriterSystem  *actor.System
-	WriterRouter  *actor.Router
-	ReaderSystem  *actor.System
-	ReaderRouter  *actor.Router
-	compactSystem *actor.System
-	compactRouter *actor.Router
+	dbSystem      *actor.System[message.Task]
+	DBRouter      *actor.Router[message.Task]
+	WriterSystem  *actor.System[message.Task]
+	WriterRouter  *actor.Router[message.Task]
+	ReaderSystem  *actor.System[message.Task]
+	ReaderRouter  *actor.Router[message.Task]
+	compactSystem *actor.System[message.Task]
+	compactRouter *actor.Router[message.Task]
 	compactSched  *lsorter.CompactScheduler
 	dir           string
 	memPercentage float64
@@ -68,16 +69,16 @@ type System struct {
 // NewSystem returns a system.
 func NewSystem(dir string, memPercentage float64, cfg *config.DBConfig) *System {
 	// A system polles actors that read and write leveldb.
-	dbSystem, dbRouter := actor.NewSystemBuilder("sorter-db").
+	dbSystem, dbRouter := actor.NewSystemBuilder[message.Task]("sorter-db").
 		WorkerNumber(cfg.Count).Build()
 	// A system polles actors that compact leveldb, garbage collection.
-	compactSystem, compactRouter := actor.NewSystemBuilder("sorter-compactor").
+	compactSystem, compactRouter := actor.NewSystemBuilder[message.Task]("sorter-compactor").
 		WorkerNumber(cfg.Count).Build()
 	// A system polles actors that receive events from Puller and batch send
 	// writes to leveldb.
-	writerSystem, writerRouter := actor.NewSystemBuilder("sorter-writer").
+	writerSystem, writerRouter := actor.NewSystemBuilder[message.Task]("sorter-writer").
 		WorkerNumber(cfg.Count).Throughput(4, 64).Build()
-	readerSystem, readerRouter := actor.NewSystemBuilder("sorter-reader").
+	readerSystem, readerRouter := actor.NewSystemBuilder[message.Task]("sorter-reader").
 		WorkerNumber(cfg.Count).Throughput(4, 64).Build()
 	compactSched := lsorter.NewCompactScheduler(compactRouter)
 	return &System{

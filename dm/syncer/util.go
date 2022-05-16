@@ -19,12 +19,12 @@ import (
 	"time"
 
 	"github.com/go-mysql-org/go-mysql/replication"
-	"github.com/pingcap/tidb-tools/pkg/filter"
 	toolutils "github.com/pingcap/tidb-tools/pkg/utils"
 	"github.com/pingcap/tidb/br/pkg/version"
 	"github.com/pingcap/tidb/dumpling/export"
 	dlog "github.com/pingcap/tidb/dumpling/log"
 	"github.com/pingcap/tidb/parser/ast"
+	"github.com/pingcap/tidb/util/filter"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/dm/dm/config"

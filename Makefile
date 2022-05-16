@@ -112,7 +112,7 @@ kafka_consumer:
 install:
 	go install ./...
 
-unit_test: check_failpoint_ctl generate_mock generate-msgp-code
+unit_test: check_failpoint_ctl generate_mock generate-msgp-code generate-protobuf
 	mkdir -p "$(TEST_DIR)"
 	$(FAILPOINT_ENABLE)
 	@export log_level=error;\
@@ -167,7 +167,7 @@ integration_test_mysql:
 integration_test_kafka: check_third_party_binary
 	tests/integration_tests/run.sh kafka "$(CASE)" "$(START_AT)"
 
-fmt: tools/bin/gofumports tools/bin/shfmt generate_mock generate-msgp-code
+fmt: tools/bin/gofumports tools/bin/shfmt generate_mock generate-msgp-code generate-protobuf
 	@echo "gofmt (simplify)"
 	tools/bin/gofumports -l -w $(FILES) 2>&1 | $(FAIL_ON_STDOUT)
 	@echo "run shfmt"
@@ -212,6 +212,10 @@ endif
 generate-msgp-code: tools/bin/msgp
 	@echo "generate-msgp-code"
 	./scripts/generate-msgp-code.sh
+
+generate-protobuf: tools/bin/protoc tools/bin/protoc-gen-gogofaster
+	@echo "generate-protobuf"
+	./scripts/generate-protobuf.sh
 
 vet:
 	@echo "vet"
@@ -362,6 +366,15 @@ dm_integration_test_build_master: check_failpoint_ctl
 	$(FAILPOINT_DISABLE)
 	./dm/tests/prepare_tools.sh
 
+dm_integration_test_build_ctl: check_failpoint_ctl
+	$(FAILPOINT_ENABLE)
+	$(GOTESTNORACE) -ldflags '$(LDFLAGS)' -c -cover -covermode=count \
+		-coverpkg=github.com/pingcap/tiflow/dm/... \
+		-o bin/dmctl.test github.com/pingcap/tiflow/dm/cmd/dm-ctl \
+		|| { $(FAILPOINT_DISABLE); exit 1; }
+	$(FAILPOINT_DISABLE)
+	./dm/tests/prepare_tools.sh
+
 install_test_python_dep:
 	@echo "install python requirments for test"
 	pip install --user -q -r ./dm/tests/requirements.txt
@@ -416,9 +429,6 @@ tools/bin/protoc-gen-gogofaster: tools/check/go.mod
 tools/bin/protoc-gen-grpc-gateway: tools/check/go.mod
 	cd tools/check && $(GO) build -mod=mod -o ../bin/protoc-gen-grpc-gateway github.com/grpc-ecosystem/grpc-gateway/protoc-gen-grpc-gateway
 
-tools/bin/statik: tools/check/go.mod
-	cd tools/check && $(GO) build -mod=mod -o ../bin/statik github.com/rakyll/statik
-
 tools/bin/gofumports: tools/check/go.mod
 	cd tools/check && $(GO) build -mod=mod -o ../bin/gofumports mvdan.cc/gofumpt
 
@@ -445,6 +455,9 @@ tools/bin/swag: tools/check/go.mod
 
 tools/bin/msgp: tools/check/go.mod
 	cd tools/check && $(GO) build -mod=mod -o ../bin/msgp github.com/tinylib/msgp
+
+tools/bin/protoc:
+	./scripts/download-protoc.sh
 
 check_failpoint_ctl: tools/bin/failpoint-ctl
 

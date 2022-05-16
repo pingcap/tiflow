@@ -56,10 +56,6 @@ const (
     "id-buckets": 0,
     "sync-ddl": false
   },
-  "scheduler": {
-    "type": "table-number",
-    "polling-time": -1
-  },
   "consistent": {
     "level": "none",
     "max-log-size": 64,
@@ -105,10 +101,11 @@ const (
   "kv-client": {
     "worker-concurrent": 8,
     "worker-pool-size": 0,
-    "region-scan-limit": 40
+    "region-scan-limit": 40,
+    "region-retry-duration": 25000000000
   },
   "debug": {
-    "enable-table-actor": false,
+    "enable-table-actor": true,
     "table-actor": {
       "event-batch-size": 32
     },
@@ -179,10 +176,6 @@ const (
     "id-buckets": 0,
     "sync-ddl": false
   },
-  "scheduler": {
-    "type": "table-number",
-    "polling-time": -1
-  },
   "consistent": {
     "level": "none",
     "max-log-size": 64,
@@ -226,10 +219,6 @@ const (
     "filter-replica-ids": null,
     "id-buckets": 0,
     "sync-ddl": false
-  },
-  "scheduler": {
-    "type": "table-number",
-    "polling-time": -1
   },
   "consistent": {
     "level": "none",

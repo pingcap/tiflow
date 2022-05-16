@@ -21,6 +21,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -32,10 +33,11 @@ import (
 	"github.com/google/uuid"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink"
 	"github.com/pingcap/tiflow/cdc/sink/codec"
-	"github.com/pingcap/tiflow/cdc/sink/dispatcher"
+	"github.com/pingcap/tiflow/cdc/sink/mq/dispatcher"
 	cmdUtil "github.com/pingcap/tiflow/pkg/cmd/util"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/filter"
@@ -353,9 +355,10 @@ type partitionSink struct {
 type Consumer struct {
 	ready chan bool
 
-	ddlList          []*model.DDLEvent
-	maxDDLReceivedTs uint64
-	ddlListMu        sync.Mutex
+	ddlList []*model.DDLEvent
+
+	ddlWithMaxCommitTs *model.DDLEvent
+	ddlListMu          sync.Mutex
 
 	sinks   []*partitionSink
 	sinksMu sync.Mutex
@@ -379,7 +382,7 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 	if err != nil {
 		return nil, errors.Annotate(err, "can not load timezone")
 	}
-	ctx = util.PutTimezoneInCtx(ctx, tz)
+	ctx = contextutil.PutTimezoneInCtx(ctx, tz)
 	filter, err := cdcfilter.NewFilter(config.GetDefaultReplicaConfig())
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -411,18 +414,22 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 
 	c.sinks = make([]*partitionSink, kafkaPartitionNum)
 	ctx, cancel := context.WithCancel(ctx)
-	ctx = util.PutRoleInCtx(ctx, util.RoleKafkaConsumer)
+	ctx = contextutil.PutRoleInCtx(ctx, util.RoleKafkaConsumer)
 	errCh := make(chan error, 1)
 	opts := map[string]string{}
 	for i := 0; i < int(kafkaPartitionNum); i++ {
-		s, err := sink.New(ctx, "kafka-consumer", downstreamURIStr, filter, config.GetDefaultReplicaConfig(), opts, errCh)
+		s, err := sink.New(ctx,
+			model.DefaultChangeFeedID("kafka-consumer"),
+			downstreamURIStr, filter, config.GetDefaultReplicaConfig(), opts, errCh)
 		if err != nil {
 			cancel()
 			return nil, errors.Trace(err)
 		}
 		c.sinks[i] = &partitionSink{Sink: s, partitionNo: i}
 	}
-	sink, err := sink.New(ctx, "kafka-consumer", downstreamURIStr, filter, config.GetDefaultReplicaConfig(), opts, errCh)
+	sink, err := sink.New(ctx,
+		model.DefaultChangeFeedID("kafka-consumer"),
+		downstreamURIStr, filter, config.GetDefaultReplicaConfig(), opts, errCh)
 	if err != nil {
 		cancel()
 		return nil, errors.Trace(err)
@@ -453,9 +460,37 @@ func (c *Consumer) Cleanup(sarama.ConsumerGroupSession) error {
 	return nil
 }
 
+type eventsGroup struct {
+	events []*model.RowChangedEvent
+}
+
+func newEventsGroup() *eventsGroup {
+	return &eventsGroup{
+		events: make([]*model.RowChangedEvent, 0),
+	}
+}
+
+func (g *eventsGroup) Append(e *model.RowChangedEvent) {
+	g.events = append(g.events, e)
+}
+
+func (g *eventsGroup) Resolve(resolveTs uint64) []*model.RowChangedEvent {
+	sort.Slice(g.events, func(i, j int) bool {
+		return g.events[i].CommitTs < g.events[j].CommitTs
+	})
+
+	i := sort.Search(len(g.events), func(i int) bool {
+		return g.events[i].CommitTs > resolveTs
+	})
+	result := g.events[:i]
+	g.events = g.events[i:]
+
+	return result
+}
+
 // ConsumeClaim must start a consumer loop of ConsumerGroupClaim's Messages().
 func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim sarama.ConsumerGroupClaim) error {
-	ctx := context.TODO()
+	ctx := context.Background()
 	partition := claim.Partition()
 	c.sinksMu.Lock()
 	sink := c.sinks[partition]
@@ -464,6 +499,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 		panic("sink should initialized")
 	}
 
+	eventGroups := make(map[int64]*eventsGroup)
 	for message := range claim.Messages() {
 		var (
 			decoder codec.EventBatchDecoder
@@ -547,15 +583,16 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 				if row.Table.IsPartition {
 					partitionID = row.Table.TableID
 				}
-				row.Table.TableID = c.fakeTableIDGenerator.generateFakeTableID(row.Table.Schema, row.Table.Table, partitionID)
-				err = sink.EmitRowChangedEvents(ctx, row)
-				if err != nil {
-					log.Panic("emit row changed event failed", zap.Error(err))
+				tableID := c.fakeTableIDGenerator.
+					generateFakeTableID(row.Table.Schema, row.Table.Table, partitionID)
+				row.Table.TableID = tableID
+
+				group, ok := eventGroups[tableID]
+				if !ok {
+					group = newEventsGroup()
+					eventGroups[tableID] = group
 				}
-				lastCommitTs, ok := sink.tablesMap.Load(row.Table.TableID)
-				if !ok || lastCommitTs.(uint64) < row.CommitTs {
-					sink.tablesMap.Store(row.Table.TableID, row.CommitTs)
-				}
+				group.Append(row)
 			case model.MqMessageTypeResolved:
 				ts, err := decoder.NextResolvedEvent()
 				if err != nil {
@@ -570,7 +607,24 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 						zap.Int32("partition", partition))
 				}
 				if ts > resolvedTs {
-					log.Info("update sink resolved ts",
+					for tableID, group := range eventGroups {
+						events := group.Resolve(ts)
+						if len(events) == 0 {
+							continue
+						}
+						if err := sink.EmitRowChangedEvents(ctx, events...); err != nil {
+							log.Panic("emit row changed event failed",
+								zap.Any("events", events),
+								zap.Error(err),
+								zap.Int32("partition", partition))
+						}
+						commitTs := events[len(events)-1].CommitTs
+						lastCommitTs, ok := sink.tablesMap.Load(tableID)
+						if !ok || lastCommitTs.(uint64) < commitTs {
+							sink.tablesMap.Store(tableID, commitTs)
+						}
+					}
+					log.Debug("update sink resolved ts",
 						zap.Uint64("ts", ts),
 						zap.Int32("partition", partition))
 					atomic.StoreUint64(&sink.resolvedTs, ts)
@@ -596,22 +650,25 @@ func (c *Consumer) appendDDL(ddl *model.DDLEvent) {
 	c.ddlListMu.Lock()
 	defer c.ddlListMu.Unlock()
 	// DDL CommitTs fallback, just crash it to indicate the bug.
-	if ddl.CommitTs < c.maxDDLReceivedTs {
-		log.Panic("DDL CommitTs < maxDDLReceivedTs",
+	if c.ddlWithMaxCommitTs != nil && ddl.CommitTs < c.ddlWithMaxCommitTs.CommitTs {
+		log.Panic("DDL CommitTs < maxCommitTsDDL.CommitTs",
 			zap.Uint64("commitTs", ddl.CommitTs),
-			zap.Uint64("maxDDLReceivedTs", c.maxDDLReceivedTs),
+			zap.Uint64("maxCommitTs", c.ddlWithMaxCommitTs.CommitTs),
 			zap.Any("DDL", ddl))
 	}
 
-	if ddl.CommitTs == c.maxDDLReceivedTs {
-		log.Info("ignore redundant DDL, CommitTs = maxDDLReceivedTs",
+	// A rename tables DDL job contains multiple DDL events with same CommitTs.
+	// So to tell if a DDL is redundant or not, we must check the equivalence of
+	// the current DDL and the DDL with max CommitTs.
+	if ddl == c.ddlWithMaxCommitTs {
+		log.Info("ignore redundant DDL, the DDL is equal to ddlWithMaxCommitTs",
 			zap.Any("DDL", ddl))
 		return
 	}
 
 	c.ddlList = append(c.ddlList, ddl)
 	log.Info("DDL event received", zap.Any("DDL", ddl))
-	c.maxDDLReceivedTs = ddl.CommitTs
+	c.ddlWithMaxCommitTs = ddl
 }
 
 func (c *Consumer) getFrontDDL() *model.DDLEvent {
@@ -709,8 +766,6 @@ func (c *Consumer) Run(ctx context.Context) error {
 		}
 
 		c.globalResolvedTs = minPartitionResolvedTs
-		log.Info("update globalResolvedTs",
-			zap.Uint64("globalResolvedTs", c.globalResolvedTs))
 
 		if err := c.forEachSink(func(sink *partitionSink) error {
 			return syncFlushRowChangedEvents(ctx, sink, c.globalResolvedTs)

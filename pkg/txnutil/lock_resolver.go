@@ -135,7 +135,8 @@ func (r *resolver) Resolve(ctx context.Context, regionID uint64, maxVersion uint
 		zap.Uint64("regionID", regionID),
 		zap.Int("lockCount", lockCount),
 		zap.Uint64("maxVersion", maxVersion),
-		zap.String("changefeed", r.changefeed),
+		zap.String("namespace", r.changefeed.Namespace),
+		zap.String("changefeed", r.changefeed.ID),
 		zap.Any("role", r.role))
 	return nil
 }

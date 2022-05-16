@@ -19,12 +19,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pingcap/tidb-tools/pkg/dbutil"
 	tiddl "github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/sessionctx"
+	"github.com/pingcap/tidb/util/dbutil"
 	"github.com/pingcap/tidb/util/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -35,7 +35,6 @@ import (
 	"github.com/pingcap/tiflow/dm/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/shardddl/optimism"
-	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
 
 func TestOptimistSuite(t *testing.T) {
@@ -185,10 +184,10 @@ func (t *testOptimistSuite) TestOptimistSourceTables() {
 	// PUT st1, should find tables.
 	_, err := optimism.PutSourceTables(t.etcdTestCli, st1)
 	require.NoError(t.T(), err)
-	require.True(t.T(), utils.WaitSomething(30, 100*time.Millisecond, func() bool {
+	require.Eventually(t.T(), func() bool {
 		tts := o.tk.FindTables(task, downSchema, downTable)
 		return len(tts) == 1
-	}))
+	}, 30*100*time.Millisecond, 100*time.Millisecond)
 	tts := o.tk.FindTables(task, downSchema, downTable)
 	require.Len(t.T(), tts, 1)
 	require.Equal(t.T(), st1.TargetTable(downSchema, downTable), tts[0])
@@ -203,10 +202,10 @@ func (t *testOptimistSuite) TestOptimistSourceTables() {
 	// PUT st2, should find more tables.
 	_, err = optimism.PutSourceTables(t.etcdTestCli, st2)
 	require.NoError(t.T(), err)
-	require.True(t.T(), utils.WaitSomething(30, 100*time.Millisecond, func() bool {
+	require.Eventually(t.T(), func() bool {
 		tts = o.tk.FindTables(task, downSchema, downTable)
 		return len(tts) == 2
-	}))
+	}, 30*100*time.Millisecond, 100*time.Millisecond)
 	tts = o.tk.FindTables(task, downSchema, downTable)
 	require.Len(t.T(), tts, 2)
 	require.Equal(t.T(), st1.TargetTable(downSchema, downTable), tts[0])
@@ -224,10 +223,10 @@ func (t *testOptimistSuite) TestOptimistSourceTables() {
 	// DELETE st1, should find less tables.
 	_, err = optimism.DeleteSourceTables(t.etcdTestCli, st1)
 	require.NoError(t.T(), err)
-	require.True(t.T(), utils.WaitSomething(30, 100*time.Millisecond, func() bool {
+	require.Eventually(t.T(), func() bool {
 		tts = o.tk.FindTables(task, downSchema, downTable)
 		return len(tts) == 1
-	}))
+	}, 30*100*time.Millisecond, 100*time.Millisecond)
 	tts = o.tk.FindTables(task, downSchema, downTable)
 	require.Len(t.T(), tts, 1)
 	require.Equal(t.T(), st2.TargetTable(downSchema, downTable), tts[0])
@@ -247,10 +246,10 @@ func (t *testOptimistSuite) testOptimist(cli *clientv3.Client, restart int) {
 	}()
 
 	var (
-		backOff  = 30
-		waitTime = 100 * time.Millisecond
-		logger   = log.L()
-		o        = NewOptimist(&logger, getDownstreamMeta)
+		tick    = 100 * time.Millisecond
+		waitFor = 30 * tick
+		logger  = log.L()
+		o       = NewOptimist(&logger, getDownstreamMeta)
 
 		rebuildOptimist = func(ctx context.Context) {
 			switch restart {
@@ -316,9 +315,9 @@ func (t *testOptimistSuite) testOptimist(cli *clientv3.Client, restart int) {
 	// PUT i11, will create a lock but not synced.
 	rev1, err := optimism.PutInfo(cli, i11)
 	require.NoError(t.T(), err)
-	require.True(t.T(), utils.WaitSomething(backOff, waitTime, func() bool {
+	require.Eventually(t.T(), func() bool {
 		return len(o.Locks()) == 1
-	}))
+	}, waitFor, tick)
 	require.Contains(t.T(), o.Locks(), lockID)
 	synced, remain := o.Locks()[lockID].IsSynced()
 	require.False(t.T(), synced)
@@ -355,23 +354,23 @@ func (t *testOptimistSuite) testOptimist(cli *clientv3.Client, restart int) {
 	_, putted, err := optimism.PutOperation(cli, false, op11c, 0)
 	require.NoError(t.T(), err)
 	require.True(t.T(), putted)
-	require.True(t.T(), utils.WaitSomething(backOff, waitTime, func() bool {
+	require.Eventually(t.T(), func() bool {
 		lock := o.Locks()[lockID]
 		if lock == nil {
 			return false
 		}
 		return lock.IsDone(op11.Source, op11.UpSchema, op11.UpTable)
-	}))
+	}, waitFor, tick)
 	require.False(t.T(), o.Locks()[lockID].IsDone(i12.Source, i12.UpSchema, i12.UpTable))
 	checkLocks(t.T(), o, expectedLock, "", []string{})
 
 	// PUT i12, the lock will be synced.
 	rev2, err := optimism.PutInfo(cli, i12)
 	require.NoError(t.T(), err)
-	require.True(t.T(), utils.WaitSomething(backOff, waitTime, func() bool {
+	require.Eventually(t.T(), func() bool {
 		synced, _ = o.Locks()[lockID].IsSynced()
 		return synced
-	}))
+	}, waitFor, tick)
 
 	expectedLock = []*pb.DDLLock{
 		{
@@ -402,10 +401,10 @@ func (t *testOptimistSuite) testOptimist(cli *clientv3.Client, restart int) {
 	_, putted, err = optimism.PutOperation(cli, false, op12c, 0)
 	require.NoError(t.T(), err)
 	require.True(t.T(), putted)
-	require.True(t.T(), utils.WaitSomething(backOff, waitTime, func() bool {
+	require.Eventually(t.T(), func() bool {
 		_, ok := o.Locks()[lockID]
 		return !ok
-	}))
+	}, waitFor, tick)
 	require.Len(t.T(), o.Locks(), 0)
 	checkLocks(t.T(), o, nil, "", nil)
 
@@ -420,9 +419,9 @@ func (t *testOptimistSuite) testOptimist(cli *clientv3.Client, restart int) {
 	// put another table info.
 	rev1, err = optimism.PutInfo(cli, i21)
 	require.NoError(t.T(), err)
-	require.True(t.T(), utils.WaitSomething(backOff, waitTime, func() bool {
+	require.Eventually(t.T(), func() bool {
 		return len(o.Locks()) == 1
-	}))
+	}, waitFor, tick)
 	require.Contains(t.T(), o.Locks(), lockID)
 	synced, remain = o.Locks()[lockID].IsSynced()
 	require.False(t.T(), synced)
@@ -450,7 +449,7 @@ func (t *testOptimistSuite) testOptimist(cli *clientv3.Client, restart int) {
 	require.Eventually(t.T(), func() bool {
 		ready := o.Locks()[lockID].Ready()
 		return !ready[source2][i23.UpSchema][i23.UpTable]
-	}, time.Duration(backOff)*waitTime, waitTime)
+	}, waitFor, tick)
 	synced, remain = o.Locks()[lockID].IsSynced()
 	require.False(t.T(), synced)
 	require.Equal(t.T(), remain, 2)
@@ -512,7 +511,7 @@ func (t *testOptimistSuite) testOptimist(cli *clientv3.Client, restart int) {
 	require.Eventually(t.T(), func() bool {
 		synced, _ = o.Locks()[lockID].IsSynced()
 		return synced
-	}, time.Duration(backOff)*waitTime, waitTime)
+	}, waitFor, tick)
 	tts = o.tk.FindTables(task, downSchema, downTable)
 	require.Len(t.T(), tts, 2)
 	require.Equal(t.T(), source1, tts[0].Source)
@@ -541,9 +540,9 @@ func (t *testOptimistSuite) testOptimist(cli *clientv3.Client, restart int) {
 	_, putted, err = optimism.PutOperation(cli, false, op21c, 0)
 	require.NoError(t.T(), err)
 	require.True(t.T(), putted)
-	require.True(t.T(), utils.WaitSomething(backOff, waitTime, func() bool {
+	require.Eventually(t.T(), func() bool {
 		return o.Locks()[lockID].IsDone(i21.Source, i21.UpSchema, i21.UpTable)
-	}))
+	}, waitFor, tick)
 
 	// CASE 5: start again with some previous shard DDL info and `done` operation.
 	rebuildOptimist(ctx)
@@ -561,18 +560,18 @@ func (t *testOptimistSuite) testOptimist(cli *clientv3.Client, restart int) {
 	_, putted, err = optimism.PutOperation(cli, false, op23c, 0)
 	require.NoError(t.T(), err)
 	require.True(t.T(), putted)
-	require.True(t.T(), utils.WaitSomething(backOff, waitTime, func() bool {
+	require.Eventually(t.T(), func() bool {
 		_, ok := o.Locks()[lockID]
 		return !ok
-	}))
+	}, waitFor, tick)
 	require.Len(t.T(), o.Locks(), 0)
 
 	// PUT i31, will create a lock but not synced (to test `DROP COLUMN`)
 	rev1, err = optimism.PutInfo(cli, i31)
 	require.NoError(t.T(), err)
-	require.True(t.T(), utils.WaitSomething(backOff, waitTime, func() bool {
+	require.Eventually(t.T(), func() bool {
 		return len(o.Locks()) == 1
-	}))
+	}, waitFor, tick)
 	require.Contains(t.T(), o.Locks(), lockID)
 	synced, remain = o.Locks()[lockID].IsSynced()
 	require.False(t.T(), synced)
@@ -608,18 +607,18 @@ func (t *testOptimistSuite) testOptimist(cli *clientv3.Client, restart int) {
 	_, putted, err = optimism.PutOperation(cli, false, op31c, 0)
 	require.NoError(t.T(), err)
 	require.True(t.T(), putted)
-	require.True(t.T(), utils.WaitSomething(backOff, waitTime, func() bool {
+	require.Eventually(t.T(), func() bool {
 		return o.Locks()[lockID].IsDone(op31c.Source, op31c.UpSchema, op31c.UpTable)
-	}))
+	}, waitFor, tick)
 	checkLocks(t.T(), o, expectedLock, "", []string{})
 
 	// PUT i33, the lock will be synced.
 	rev3, err = optimism.PutInfo(cli, i33)
 	require.NoError(t.T(), err)
-	require.True(t.T(), utils.WaitSomething(backOff, waitTime, func() bool {
+	require.Eventually(t.T(), func() bool {
 		synced, _ = o.Locks()[lockID].IsSynced()
 		return synced
-	}))
+	}, waitFor, tick)
 
 	expectedLock = []*pb.DDLLock{
 		{
@@ -650,10 +649,10 @@ func (t *testOptimistSuite) testOptimist(cli *clientv3.Client, restart int) {
 	_, putted, err = optimism.PutOperation(cli, false, op33c, 0)
 	require.NoError(t.T(), err)
 	require.True(t.T(), putted)
-	require.True(t.T(), utils.WaitSomething(backOff, waitTime, func() bool {
+	require.Eventually(t.T(), func() bool {
 		_, ok := o.Locks()[lockID]
 		return !ok
-	}))
+	}, waitFor, tick)
 	require.Len(t.T(), o.Locks(), 0)
 	checkLocks(t.T(), o, nil, "", nil)
 
@@ -773,8 +772,8 @@ func (t *testOptimistSuite) TestOptimistLockConflict() {
 
 func (t *testOptimistSuite) TestOptimistLockMultipleTarget() {
 	var (
-		backOff            = 30
-		waitTime           = 100 * time.Millisecond
+		tick               = 100 * time.Millisecond
+		waitFor            = 30 * tick
 		watchTimeout       = 5 * time.Second
 		logger             = log.L()
 		o                  = NewOptimist(&logger, getDownstreamMeta)
@@ -823,9 +822,9 @@ func (t *testOptimistSuite) TestOptimistLockMultipleTarget() {
 	require.NoError(t.T(), err)
 	_, err = optimism.PutInfo(t.etcdTestCli, i21)
 	require.NoError(t.T(), err)
-	require.True(t.T(), utils.WaitSomething(backOff, waitTime, func() bool {
+	require.Eventually(t.T(), func() bool {
 		return len(o.Locks()) == 2
-	}))
+	}, waitFor, tick)
 	require.Contains(t.T(), o.Locks(), lockID1)
 	require.Contains(t.T(), o.Locks(), lockID2)
 
@@ -865,11 +864,11 @@ func (t *testOptimistSuite) TestOptimistLockMultipleTarget() {
 	require.NoError(t.T(), err)
 	rev2, err := optimism.PutInfo(t.etcdTestCli, i22)
 	require.NoError(t.T(), err)
-	require.True(t.T(), utils.WaitSomething(backOff, waitTime, func() bool {
+	require.Eventually(t.T(), func() bool {
 		synced1, _ := o.Locks()[lockID1].IsSynced()
 		synced2, _ := o.Locks()[lockID2].IsSynced()
 		return synced1 && synced2
-	}))
+	}, waitFor, tick)
 
 	expectedLock[lockID1].Synced = []string{
 		fmt.Sprintf("%s-%s", i11.Source, dbutil.TableName(i11.UpSchema, i11.UpTable)),
@@ -914,10 +913,10 @@ func (t *testOptimistSuite) TestOptimistLockMultipleTarget() {
 	_, putted, err = optimism.PutOperation(t.etcdTestCli, false, op12c, 0)
 	require.NoError(t.T(), err)
 	require.True(t.T(), putted)
-	require.True(t.T(), utils.WaitSomething(backOff, waitTime, func() bool {
+	require.Eventually(t.T(), func() bool {
 		_, ok := o.Locks()[lockID1]
 		return !ok
-	}))
+	}, waitFor, tick)
 	require.Len(t.T(), o.Locks(), 1)
 	checkLocksByMap(t.T(), o, expectedLock, nil, lockID2)
 
@@ -952,18 +951,18 @@ func (t *testOptimistSuite) TestOptimistLockMultipleTarget() {
 	_, putted, err = optimism.PutOperation(t.etcdTestCli, false, op22c, 0)
 	require.NoError(t.T(), err)
 	require.True(t.T(), putted)
-	require.True(t.T(), utils.WaitSomething(backOff, waitTime, func() bool {
+	require.Eventually(t.T(), func() bool {
 		_, ok := o.Locks()[lockID2]
 		return !ok
-	}))
+	}, waitFor, tick)
 	require.Len(t.T(), o.Locks(), 0)
 	checkLocksByMap(t.T(), o, expectedLock, nil)
 }
 
 func (t *testOptimistSuite) TestOptimistInitSchema() {
 	var (
-		backOff      = 30
-		waitTime     = 100 * time.Millisecond
+		tick         = 100 * time.Millisecond
+		waitFor      = 30 * tick
 		watchTimeout = 5 * time.Second
 		logger       = log.L()
 		o            = NewOptimist(&logger, getDownstreamMeta)
@@ -1007,10 +1006,10 @@ func (t *testOptimistSuite) TestOptimistInitSchema() {
 	// PUT i11, will creat a lock.
 	_, err = optimism.PutInfo(t.etcdTestCli, i11)
 	require.NoError(t.T(), err)
-	require.True(t.T(), utils.WaitSomething(backOff, waitTime, func() bool {
+	require.Eventually(t.T(), func() bool {
 		return len(o.Locks()) == 1
-	}))
-	time.Sleep(waitTime) // sleep one more time to wait for update of init schema.
+	}, waitFor, tick)
+	time.Sleep(tick) // sleep one more time to wait for update of init schema.
 
 	// PUT i12, the lock will be synced.
 	rev1, err := optimism.PutInfo(t.etcdTestCli, i12)
@@ -1047,17 +1046,17 @@ func (t *testOptimistSuite) TestOptimistInitSchema() {
 	_, putted, err = optimism.PutOperation(t.etcdTestCli, false, op12c, 0)
 	require.NoError(t.T(), err)
 	require.True(t.T(), putted)
-	require.True(t.T(), utils.WaitSomething(backOff, waitTime, func() bool {
+	require.Eventually(t.T(), func() bool {
 		return len(o.Locks()) == 0
-	}))
+	}, waitFor, tick)
 
 	// PUT i21 to create the lock again.
 	_, err = optimism.PutInfo(t.etcdTestCli, i21)
 	require.NoError(t.T(), err)
-	require.True(t.T(), utils.WaitSomething(backOff, waitTime, func() bool {
+	require.Eventually(t.T(), func() bool {
 		return len(o.Locks()) == 1
-	}))
-	time.Sleep(waitTime) // sleep one more time to wait for update of init schema.
+	}, waitFor, tick)
+	time.Sleep(tick) // sleep one more time to wait for update of init schema.
 }
 
 func (t *testOptimistSuite) testSortInfos(cli *clientv3.Client) {

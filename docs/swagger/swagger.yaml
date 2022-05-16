@@ -67,6 +67,8 @@ definitions:
         $ref: '#/definitions/model.RunningError'
       id:
         type: string
+      namespace:
+        type: string
       state:
         type: string
     type: object
@@ -92,6 +94,8 @@ definitions:
       mounter_worker_num:
         default: 16
         type: integer
+      namespace:
+        type: string
       sink_config:
         $ref: '#/definitions/config.SinkConfig'
       sink_uri:
@@ -123,6 +127,8 @@ definitions:
         type: array
       id:
         type: string
+      namespace:
+        type: string
       resolved_ts:
         type: integer
       sink_uri:
@@ -152,6 +158,8 @@ definitions:
       capture_id:
         type: string
       changefeed_id:
+        type: string
+      namespace:
         type: string
     type: object
   model.ProcessorDetail:
@@ -201,7 +209,7 @@ definitions:
       boundary_ts:
         description: |-
           if the operation is a delete operation, BoundaryTs is checkpoint ts
-          if the operation is a add operation, BoundaryTs is start ts
+          if the operation is an add operation, BoundaryTs is start ts
         type: integer
       delete:
         type: boolean

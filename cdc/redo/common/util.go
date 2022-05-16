@@ -65,7 +65,9 @@ func ParseLogFileName(name string) (uint64, string, error) {
 	}
 
 	// if .sort, the name should be like
-	// fmt.Sprintf("%s_%s_%d_%s_%d%s", w.cfg.captureID, w.cfg.changeFeedID, w.cfg.createTime.Unix(), w.cfg.fileType, w.commitTS.Load(), LogEXT)+SortLogEXT
+	// fmt.Sprintf("%s_%s_%s_%d_%s_%d%s", w.cfg.captureID,
+	// w.cfg.changeFeedID.Namespace,w.cfg.changeFeedID.ID,
+	// w.cfg.createTime.Unix(), w.cfg.fileType, w.commitTS.Load(), LogEXT)+SortLogEXT
 	if ext == SortLogEXT {
 		name = strings.TrimSuffix(name, SortLogEXT)
 		ext = filepath.Ext(name)
@@ -75,17 +77,33 @@ func ParseLogFileName(name string) (uint64, string, error) {
 	}
 
 	var commitTs, d1 uint64
-	var s1, s2, fileType string
-	// the log looks like: fmt.Sprintf("%s_%s_%d_%s_%d%s", w.cfg.captureID, w.cfg.changeFeedID, w.cfg.createTime.Unix(), w.cfg.fileType, w.commitTS.Load(), redo.LogEXT)
-	formatStr := "%s %s %d %s %d" + LogEXT
+	var s1, namespace, s2, fileType string
+	// if the namespace is not default, the log looks like:
+	// fmt.Sprintf("%s_%s_%s_%d_%s_%d%s", w.cfg.captureID,
+	// w.cfg.changeFeedID.Namespace,w.cfg.changeFeedID.ID,
+	// w.cfg.createTime.Unix(), w.cfg.fileType, w.commitTS.Load(), redo.LogEXT)
+	// otherwise it looks like:
+	// fmt.Sprintf("%s_%s_%d_%s_%d%s", w.cfg.captureID,
+	// w.cfg.changeFeedID.ID,
+	// w.cfg.createTime.Unix(), w.cfg.fileType, w.commitTS.Load(), redo.LogEXT)
+	var (
+		vars      []any
+		formatStr string
+	)
+	if len(strings.Split(name, "_")) == 6 {
+		formatStr = "%s %s %s %d %s %d" + LogEXT
+		vars = []any{&s1, &namespace, &s2, &d1, &fileType, &commitTs}
+	} else {
+		formatStr = "%s %s %d %s %d" + LogEXT
+		vars = []any{&s1, &s2, &d1, &fileType, &commitTs}
+	}
+	name = strings.ReplaceAll(name, "_", " ")
 	if ext == TmpEXT {
 		formatStr += TmpEXT
 	}
-	name = strings.ReplaceAll(name, "_", " ")
-	_, err := fmt.Sscanf(name, formatStr, &s1, &s2, &d1, &fileType, &commitTs)
+	_, err := fmt.Sscanf(name, formatStr, vars...)
 	if err != nil {
 		return 0, "", errors.Annotatef(err, "bad log name: %s", name)
 	}
-
 	return commitTs, fileType, nil
 }

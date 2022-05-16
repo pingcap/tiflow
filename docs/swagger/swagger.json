@@ -787,6 +787,9 @@
                 "id": {
                     "type": "string"
                 },
+                "namespace": {
+                    "type": "string"
+                },
                 "state": {
                     "type": "string"
                 }
@@ -822,6 +825,9 @@
                 "mounter_worker_num": {
                     "type": "integer",
                     "default": 16
+                },
+                "namespace": {
+                    "type": "string"
                 },
                 "sink_config": {
                     "$ref": "#/definitions/config.SinkConfig"
@@ -869,6 +875,9 @@
                 "id": {
                     "type": "string"
                 },
+                "namespace": {
+                    "type": "string"
+                },
                 "resolved_ts": {
                     "type": "integer"
                 },
@@ -913,6 +922,9 @@
                     "type": "string"
                 },
                 "changefeed_id": {
+                    "type": "string"
+                },
+                "namespace": {
                     "type": "string"
                 }
             }
@@ -983,7 +995,7 @@
             "type": "object",
             "properties": {
                 "boundary_ts": {
-                    "description": "if the operation is a delete operation, BoundaryTs is checkpoint ts\nif the operation is a add operation, BoundaryTs is start ts",
+                    "description": "if the operation is a delete operation, BoundaryTs is checkpoint ts\nif the operation is an add operation, BoundaryTs is start ts",
                     "type": "integer"
                 },
                 "delete": {

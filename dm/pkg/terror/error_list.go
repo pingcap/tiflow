@@ -446,6 +446,7 @@ const (
 	codeSyncerParseDDL
 	codeSyncerUnsupportedStmt
 	codeSyncerGetEvent
+	codeSyncerDownstreamTableNotFound
 )
 
 // DM-master error code.
@@ -593,6 +594,7 @@ const (
 	codeWorkerRelayConfigChanging
 	codeWorkerRouteTableDupMatch
 	codeWorkerUpdateSubTaskConfig
+	codeWorkerValidatorNotPaused
 )
 
 // DM-tracer error code.
@@ -607,6 +609,26 @@ const (
 	codeTracerEventAssertionFail
 	codeTracerEventTypeNotValid
 	codeTracerStartService
+)
+
+// ha related error code.
+const (
+	codeHAFailTxnOperation ErrCode = iota + 42501
+	codeHAInvalidItem
+	codeHAFailWatchEtcd
+	codeHAFailLeaseOperation
+	codeHAFailKeepalive
+)
+
+// validator error code.
+const (
+	codeValidatorLoadPersistedData ErrCode = iota + 43001
+	codeValidatorPersistData
+	codeValidatorGetEvent
+	codeValidatorProcessRowEvent
+	codeValidatorValidateChange
+	codeValidatorNotFound
+	codeValidatorPanic
 )
 
 // Schema-tracker error code.
@@ -1106,6 +1128,7 @@ var (
 	ErrSyncerParseDDL                       = New(codeSyncerParseDDL, ClassSyncUnit, ScopeInternal, LevelHigh, "parse DDL: %s", "Please confirm your DDL statement is correct and needed. For TiDB compatible DDL, see https://docs.pingcap.com/tidb/stable/mysql-compatibility#ddl. You can use `handle-error` command to skip or replace the DDL or add a binlog filter rule to ignore it if the DDL is not needed.")
 	ErrSyncerUnsupportedStmt                = New(codeSyncerUnsupportedStmt, ClassSyncUnit, ScopeInternal, LevelHigh, "`%s` statement not supported in %s mode", "")
 	ErrSyncerGetEvent                       = New(codeSyncerGetEvent, ClassSyncUnit, ScopeUpstream, LevelHigh, "get binlog event error: %v", "Please check if the binlog file could be parsed by `mysqlbinlog`.")
+	ErrSyncerDownstreamTableNotFound        = New(codeSyncerDownstreamTableNotFound, ClassSyncUnit, ScopeInternal, LevelHigh, "downstream table %s not found", "")
 
 	// DM-master error.
 	ErrMasterSQLOpNilRequest        = New(codeMasterSQLOpNilRequest, ClassDMMaster, ScopeInternal, LevelMedium, "nil request not valid", "")
@@ -1255,6 +1278,15 @@ var (
 	ErrWorkerFailConnectMaster              = New(codeWorkerFailConnectMaster, ClassDMWorker, ScopeInternal, LevelHigh, "cannot join with master endpoints: %v, error: %v", "Please check network connection of worker and check worker name is unique.")
 	ErrWorkerRelayConfigChanging            = New(codeWorkerRelayConfigChanging, ClassDMWorker, ScopeInternal, LevelLow, "relay config of worker %s is changed too frequently, last relay source %s:, new relay source %s", "Please try again later")
 	ErrWorkerRouteTableDupMatch             = New(codeWorkerRouteTableDupMatch, ClassDMWorker, ScopeInternal, LevelHigh, "table %s.%s matches more than one rule", "please check the route rules in the task config")
+	ErrWorkerValidatorNotPaused             = New(codeWorkerValidatorNotPaused, ClassDMWorker, ScopeInternal, LevelHigh, "current validator stage is %s but not paused, invalid", "")
+
+	// etcd error.
+	ErrHAFailTxnOperation   = New(codeHAFailTxnOperation, ClassHA, ScopeInternal, LevelHigh, "fail to do etcd txn operation: %s", "Please check dm-master's node status and the network between this node and dm-master")
+	ErrHAInvalidItem        = New(codeHAInvalidItem, ClassHA, ScopeInternal, LevelHigh, "meets invalid ha item: %s", "Please check if there is any compatible problem and invalid manual etcd operations")
+	ErrHAFailWatchEtcd      = New(codeHAFailWatchEtcd, ClassHA, ScopeInternal, LevelHigh, "fail to watch etcd: %s", "Please check dm-master's node status and the network between this node and dm-master")
+	ErrHAFailLeaseOperation = New(codeHAFailLeaseOperation, ClassHA, ScopeInternal, LevelHigh, "fail to do etcd lease operation: %s", "Please check dm-master's node status and the network between this node and dm-master")
+	ErrHAFailKeepalive      = New(codeHAFailKeepalive, ClassHA, ScopeInternal, LevelHigh, "fail to keepalive to etcd: %s", "Please check dm-master's node status and the network between this node and dm-master")
+
 	// DM-tracer error.
 	ErrTracerParseFlagSet        = New(codeTracerParseFlagSet, ClassDMTracer, ScopeInternal, LevelMedium, "parse dm-tracer config flag set", "")
 	ErrTracerConfigTomlTransform = New(codeTracerConfigTomlTransform, ClassDMTracer, ScopeInternal, LevelMedium, "config toml transform", "Please check the configuration file has correct TOML format.")
@@ -1266,6 +1298,15 @@ var (
 	ErrTracerEventAssertionFail  = New(codeTracerEventAssertionFail, ClassDMTracer, ScopeInternal, LevelHigh, "type %s event: %v not valid", "")
 	ErrTracerEventTypeNotValid   = New(codeTracerEventTypeNotValid, ClassDMTracer, ScopeInternal, LevelHigh, "trace event type %d not valid", "")
 	ErrTracerStartService        = New(codeTracerStartService, ClassDMTracer, ScopeInternal, LevelHigh, "start server", "")
+
+	// validator errors.
+	ErrValidatorLoadPersistedData = New(codeValidatorLoadPersistedData, ClassValidator, ScopeInternal, LevelHigh, "failed to load persisted data", "")
+	ErrValidatorPersistData       = New(codeValidatorPersistData, ClassValidator, ScopeInternal, LevelHigh, "failed to persist checkpoint and data", "")
+	ErrValidatorGetEvent          = New(codeValidatorGetEvent, ClassValidator, ScopeInternal, LevelHigh, "failed to get event", "")
+	ErrValidatorProcessRowEvent   = New(codeValidatorProcessRowEvent, ClassValidator, ScopeInternal, LevelHigh, "failed to process event", "")
+	ErrValidatorValidateChange    = New(codeValidatorValidateChange, ClassValidator, ScopeInternal, LevelHigh, "failed to validate row change", "")
+	ErrValidatorNotFound          = New(codeValidatorNotFound, ClassValidator, ScopeNotSet, LevelMedium, "validator not found for task %s", "")
+	ErrValidatorPanic             = New(codeValidatorPanic, ClassValidator, ScopeInternal, LevelHigh, "panic error: %v", "")
 
 	// Schema-tracker error.
 	ErrSchemaTrackerInvalidJSON        = New(codeSchemaTrackerInvalidJSON, ClassSchemaTracker, ScopeDownstream, LevelHigh, "saved schema of `%s`.`%s` is not proper JSON", "")
@@ -1327,7 +1368,7 @@ var (
 	ErrSchedulerRelayWorkersWrongRelay       = New(codeSchedulerRelayWorkersWrongRelay, ClassScheduler, ScopeInternal, LevelHigh, "these workers %s have started relay for another sources %s respectively", "Please correct sources in `stop-relay`.")
 	ErrSchedulerSourceOpRelayExist           = New(codeSchedulerSourceOpRelayExist, ClassScheduler, ScopeInternal, LevelHigh, "source with name %s need to operate has existing relay workers %s", "Please `stop-relay` first.")
 	ErrSchedulerLatchInUse                   = New(codeSchedulerLatchInUse, ClassScheduler, ScopeInternal, LevelLow, "when %s, resource %s is in use by other client", "Please try again later")
-	ErrSchedulerSourceCfgUpdate              = New(codeSchedulerSourceCfgUpdate, ClassScheduler, ScopeInternal, LevelLow, "source can only update when not enable relay and no running tasks for now", "")
+	ErrSchedulerSourceCfgUpdate              = New(codeSchedulerSourceCfgUpdate, ClassScheduler, ScopeInternal, LevelLow, "source %s can only be updated when relay is disabled and no tasks are running for now", "")
 	ErrSchedulerWrongWorkerInput             = New(codeSchedulerWrongWorkerInput, ClassScheduler, ScopeInternal, LevelMedium, "require DM master to modify worker [%s] with source [%s], but currently the worker is bound to source [%s]", "")
 	ErrSchedulerBoundDiffWithStartedRelay    = New(codeSchedulerCantTransferToRelayWorker, ClassScheduler, ScopeInternal, LevelMedium, "require DM worker [%s] to be bound to source [%s], but it has been started relay for source [%s]", "If you intend to bind the source with worker, you can stop-relay for current source.")
 	ErrSchedulerStartRelayOnSpecified        = New(codeSchedulerStartRelayOnSpecified, ClassScheduler, ScopeInternal, LevelLow, "the source has `start-relay` with worker name for workers %v, so it can't `start-relay` without worker name now", "Please stop all relay workers first, or specify worker name for `start-relay`.")

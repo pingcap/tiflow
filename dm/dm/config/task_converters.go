@@ -19,8 +19,8 @@ import (
 
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
 	"github.com/pingcap/tidb-tools/pkg/column-mapping"
-	"github.com/pingcap/tidb-tools/pkg/filter"
-	router "github.com/pingcap/tidb-tools/pkg/table-router"
+	"github.com/pingcap/tidb/util/filter"
+	router "github.com/pingcap/tidb/util/table-router"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/dm/openapi"
@@ -150,7 +150,7 @@ func OpenAPITaskToSubTaskConfigs(task *openapi.Task, toDBCfg *DBConfig, sourceCf
 		subTaskCfg.Name = task.Name
 		subTaskCfg.Mode = string(task.TaskMode)
 		// set task meta
-		subTaskCfg.MetaFile = *task.MetaSchema
+		subTaskCfg.MetaSchema = *task.MetaSchema
 		// add binlog meta
 		if sourceCfg.BinlogGtid != nil || sourceCfg.BinlogName != nil || sourceCfg.BinlogPos != nil {
 			meta := &Meta{}
@@ -187,7 +187,6 @@ func OpenAPITaskToSubTaskConfigs(task *openapi.Task, toDBCfg *DBConfig, sourceCf
 		subTaskCfg.From = sourceCfgMap[sourceCfg.SourceName].From
 		// set target db config
 		subTaskCfg.To = *toDBCfg.Clone()
-		// TODO set meet error policy
 		// TODO ExprFilter
 		// set full unit config
 		subTaskCfg.MydumperConfig = DefaultMydumperConfig()
@@ -219,13 +218,11 @@ func OpenAPITaskToSubTaskConfigs(task *openapi.Task, toDBCfg *DBConfig, sourceCf
 		}
 		subTaskCfg.ValidatorCfg = defaultValidatorConfig()
 		// set route,blockAllowList,filter config
-		doCnt := len(tableMigrateRuleMap[sourceCfg.SourceName])
-		doDBs := make([]string, doCnt)
-		doTables := make([]*filter.Table, doCnt)
-
+		doDBs := []string{}
+		doTables := []*filter.Table{}
 		routeRules := []*router.TableRule{}
 		filterRules := []*bf.BinlogEventRule{}
-		for j, rule := range tableMigrateRuleMap[sourceCfg.SourceName] {
+		for _, rule := range tableMigrateRuleMap[sourceCfg.SourceName] {
 			// route
 			if rule.Target != nil && (rule.Target.Schema != nil || rule.Target.Table != nil) {
 				tableRule := &router.TableRule{SchemaPattern: rule.Source.Schema, TablePattern: rule.Source.Table}
@@ -245,17 +242,34 @@ func OpenAPITaskToSubTaskConfigs(task *openapi.Task, toDBCfg *DBConfig, sourceCf
 						return nil, terror.ErrOpenAPICommonError.Generatef("filter rule name %s not found.", name)
 					}
 					filterRule.SchemaPattern = rule.Source.Schema
-					filterRule.TablePattern = rule.Source.Table
+					if rule.Source.Table != "" {
+						filterRule.TablePattern = rule.Source.Table
+					}
 					filterRules = append(filterRules, &filterRule)
 				}
 			}
 			// BlockAllowList
-			doDBs[j] = rule.Source.Schema
-			doTables[j] = &filter.Table{Schema: rule.Source.Schema, Name: rule.Source.Table}
+			if rule.Source.Table != "" {
+				doTables = append(doTables, &filter.Table{Schema: rule.Source.Schema, Name: rule.Source.Table})
+			} else {
+				doDBs = append(doDBs, rule.Source.Schema)
+			}
 		}
 		subTaskCfg.RouteRules = routeRules
 		subTaskCfg.FilterRules = filterRules
-		subTaskCfg.BAList = &filter.Rules{DoDBs: removeDuplication(doDBs), DoTables: doTables}
+		if len(doDBs) > 0 || len(doTables) > 0 {
+			bAList := &filter.Rules{}
+			if len(doDBs) > 0 {
+				bAList.DoDBs = removeDuplication(doDBs)
+			}
+			if len(doTables) > 0 {
+				bAList.DoTables = doTables
+			}
+			subTaskCfg.BAList = bAList
+		}
+		if task.IgnoreCheckingItems != nil && len(*task.IgnoreCheckingItems) != 0 {
+			subTaskCfg.IgnoreCheckingItems = *task.IgnoreCheckingItems
+		}
 		// adjust sub task config
 		if err := subTaskCfg.Adjust(true); err != nil {
 			return nil, terror.Annotatef(err, "source name %s", sourceCfg.SourceName)
@@ -514,6 +528,8 @@ func SubTaskConfigsToOpenAPITask(subTaskConfigList []*SubTaskConfig) *openapi.Ta
 	}
 	// set table migrate rules
 	tableMigrateRuleList := []openapi.TaskTableMigrateRule{}
+	// used to remove repeated rules
+	ruleMap := map[string]struct{}{}
 	appendOneRule := func(sourceName, schemaPattern, tablePattern, targetSchema, targetTable string) {
 		tableMigrateRule := openapi.TaskTableMigrateRule{
 			Source: struct {
@@ -526,13 +542,15 @@ func SubTaskConfigsToOpenAPITask(subTaskConfigList []*SubTaskConfig) *openapi.Ta
 				Table:      tablePattern,
 			},
 		}
-		if targetSchema != "" || targetTable != "" {
+		if targetSchema != "" {
 			tableMigrateRule.Target = &struct {
 				Schema *string `json:"schema,omitempty"`
 				Table  *string `json:"table,omitempty"`
 			}{
 				Schema: &targetSchema,
-				Table:  &targetTable,
+			}
+			if targetTable != "" {
+				tableMigrateRule.Target.Table = &targetTable
 			}
 		}
 		if filterRuleList, ok := filterMap[sourceName]; ok {
@@ -542,26 +560,35 @@ func SubTaskConfigsToOpenAPITask(subTaskConfigList []*SubTaskConfig) *openapi.Ta
 			}
 			tableMigrateRule.BinlogFilterRule = &ruleNameList
 		}
+		ruleKey := strings.Join([]string{sourceName, schemaPattern, tablePattern}, "-")
+		if _, ok := ruleMap[ruleKey]; ok {
+			return
+		}
+		ruleMap[ruleKey] = struct{}{}
 		tableMigrateRuleList = append(tableMigrateRuleList, tableMigrateRule)
 	}
-
+	// gen migrate rules by route
 	for sourceName, ruleList := range routeMap {
 		for _, rule := range ruleList {
 			appendOneRule(sourceName, rule.SchemaPattern, rule.TablePattern, rule.TargetSchema, rule.TargetTable)
 		}
 	}
-	// for user only set BlockAllowList without route rules, this means keep same with upstream db and table
-	if len(tableMigrateRuleList) == 0 {
-		for _, cfg := range subTaskConfigList {
-			if cfg.BAList != nil {
-				for idx := range cfg.BAList.DoTables {
-					schemaPattern := cfg.BAList.DoTables[idx].Schema
-					tablePattern := cfg.BAList.DoTables[idx].Name
-					appendOneRule(cfg.SourceID, schemaPattern, tablePattern, "", "")
-				}
+
+	// gen migrate rules by BAList
+	for _, cfg := range subTaskConfigList {
+		if cfg.BAList != nil {
+			for idx := range cfg.BAList.DoDBs {
+				schemaPattern := cfg.BAList.DoDBs[idx]
+				appendOneRule(cfg.SourceID, schemaPattern, "", "", "")
+			}
+			for idx := range cfg.BAList.DoTables {
+				schemaPattern := cfg.BAList.DoTables[idx].Schema
+				tablePattern := cfg.BAList.DoTables[idx].Name
+				appendOneRule(cfg.SourceID, schemaPattern, tablePattern, "", "")
 			}
 		}
 	}
+
 	// set basic global config
 	task := openapi.Task{
 		Name:                      oneSubtaskConfig.Name,
@@ -585,6 +612,10 @@ func SubTaskConfigsToOpenAPITask(subTaskConfigList []*SubTaskConfig) *openapi.Ta
 		task.BinlogFilterRule = &filterRuleMap
 	}
 	task.TableMigrateRule = tableMigrateRuleList
+	if len(oneSubtaskConfig.IgnoreCheckingItems) != 0 {
+		ignoreItems := oneSubtaskConfig.IgnoreCheckingItems
+		task.IgnoreCheckingItems = &ignoreItems
+	}
 	return &task
 }
 

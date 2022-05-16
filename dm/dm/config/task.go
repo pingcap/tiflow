@@ -20,14 +20,15 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/coreos/go-semver/semver"
 	"github.com/dustin/go-humanize"
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
 	"github.com/pingcap/tidb-tools/pkg/column-mapping"
-	"github.com/pingcap/tidb-tools/pkg/filter"
-	router "github.com/pingcap/tidb-tools/pkg/table-router"
 	"github.com/pingcap/tidb/parser"
+	"github.com/pingcap/tidb/util/filter"
+	router "github.com/pingcap/tidb/util/table-router"
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v2"
 
@@ -61,7 +62,12 @@ const (
 	ValidationFast = "fast"
 	ValidationFull = "full"
 
-	DefaultValidatorWorkerCount = 4
+	DefaultValidatorWorkerCount       = 4
+	DefaultValidatorValidateInterval  = 10 * time.Second
+	DefaultValidatorCheckInterval     = 5 * time.Second
+	DefaultValidatorRowErrorDelay     = 30 * time.Minute
+	DefaultValidatorMetaFlushInterval = 1 * time.Minute
+	DefaultValidatorBatchQuerySize    = 100
 )
 
 // default config item values.
@@ -306,7 +312,7 @@ type SyncerConfig struct {
 	// deprecated
 	MaxRetry int `yaml:"max-retry" toml:"max-retry" json:"max-retry"`
 
-	// refine following configs to top level configs?
+	// deprecated
 	AutoFixGTID bool `yaml:"auto-fix-gtid" toml:"auto-fix-gtid" json:"auto-fix-gtid"`
 	EnableGTID  bool `yaml:"enable-gtid" toml:"enable-gtid" json:"enable-gtid"`
 	// deprecated
@@ -340,11 +346,16 @@ func (m *SyncerConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
 }
 
 type ValidatorConfig struct {
-	Mode        string `yaml:"mode" toml:"mode" json:"mode"`
-	WorkerCount int    `yaml:"worker-count" toml:"worker-count" json:"worker-count"`
+	Mode              string   `yaml:"mode" toml:"mode" json:"mode"`
+	WorkerCount       int      `yaml:"worker-count" toml:"worker-count" json:"worker-count"`
+	ValidateInterval  Duration `yaml:"validate-interval" toml:"validate-interval" json:"validate-interval"`
+	CheckInterval     Duration `yaml:"check-interval" toml:"check-interval" json:"check-interval"`
+	RowErrorDelay     Duration `yaml:"row-error-delay" toml:"row-error-delay" json:"row-error-delay"`
+	MetaFlushInterval Duration `yaml:"meta-flush-interval" toml:"meta-flush-interval" json:"meta-flush-interval"`
+	BatchQuerySize    int      `yaml:"batch-query-size" toml:"batch-query-size" json:"batch-query-size"`
 }
 
-func (v *ValidatorConfig) adjust() error {
+func (v *ValidatorConfig) Adjust() error {
 	if v.Mode == "" {
 		v.Mode = ValidationNone
 	}
@@ -353,6 +364,21 @@ func (v *ValidatorConfig) adjust() error {
 	}
 	if v.WorkerCount <= 0 {
 		v.WorkerCount = DefaultValidatorWorkerCount
+	}
+	if v.ValidateInterval.Duration == 0 {
+		v.ValidateInterval.Duration = DefaultValidatorValidateInterval
+	}
+	if v.CheckInterval.Duration == 0 {
+		v.CheckInterval.Duration = DefaultValidatorCheckInterval
+	}
+	if v.RowErrorDelay.Duration == 0 {
+		v.RowErrorDelay.Duration = DefaultValidatorRowErrorDelay
+	}
+	if v.MetaFlushInterval.Duration == 0 {
+		v.MetaFlushInterval.Duration = DefaultValidatorMetaFlushInterval
+	}
+	if v.BatchQuerySize == 0 {
+		v.BatchQuerySize = DefaultValidatorBatchQuerySize
 	}
 	return nil
 }
@@ -610,7 +636,7 @@ func (c *TaskConfig) adjust() error {
 	}
 
 	for _, validatorCfg := range c.Validators {
-		if err := validatorCfg.adjust(); err != nil {
+		if err := validatorCfg.Adjust(); err != nil {
 			return err
 		}
 	}
@@ -675,8 +701,10 @@ func (c *TaskConfig) adjust() error {
 				return terror.ErrConfigMydumperCfgNotFound.Generate(i, inst.MydumperConfigName)
 			}
 			globalConfigReferCount[configRefPrefixes[mydumperIdx]+inst.MydumperConfigName]++
-			inst.Mydumper = new(MydumperConfig)
-			*inst.Mydumper = *rule // ref mydumper config
+			if rule != nil {
+				inst.Mydumper = new(MydumperConfig)
+				*inst.Mydumper = *rule // ref mydumper config
+			}
 		}
 		if inst.Mydumper == nil {
 			if len(c.Mydumpers) != 0 {
@@ -703,8 +731,10 @@ func (c *TaskConfig) adjust() error {
 				return terror.ErrConfigLoaderCfgNotFound.Generate(i, inst.LoaderConfigName)
 			}
 			globalConfigReferCount[configRefPrefixes[loaderIdx]+inst.LoaderConfigName]++
-			inst.Loader = new(LoaderConfig)
-			*inst.Loader = *rule // ref loader config
+			if rule != nil {
+				inst.Loader = new(LoaderConfig)
+				*inst.Loader = *rule // ref loader config
+			}
 		}
 		if inst.Loader == nil {
 			if len(c.Loaders) != 0 {
@@ -723,8 +753,10 @@ func (c *TaskConfig) adjust() error {
 				return terror.ErrConfigSyncerCfgNotFound.Generate(i, inst.SyncerConfigName)
 			}
 			globalConfigReferCount[configRefPrefixes[syncerIdx]+inst.SyncerConfigName]++
-			inst.Syncer = new(SyncerConfig)
-			*inst.Syncer = *rule // ref syncer config
+			if rule != nil {
+				inst.Syncer = new(SyncerConfig)
+				*inst.Syncer = *rule // ref syncer config
+			}
 		}
 		if inst.Syncer == nil {
 			if len(c.Syncers) != 0 {
@@ -744,7 +776,9 @@ func (c *TaskConfig) adjust() error {
 				return terror.ErrContinuousValidatorCfgNotFound.Generate(i, inst.ContinuousValidatorConfigName)
 			}
 			globalConfigReferCount[configRefPrefixes[validatorIdx]+inst.ContinuousValidatorConfigName]++
-			inst.ContinuousValidator = *rule
+			if rule != nil {
+				inst.ContinuousValidator = *rule
+			}
 		}
 
 		// for backward compatible, set global config `ansi-quotes: true` if any syncer is true
@@ -800,9 +834,12 @@ func (c *TaskConfig) adjust() error {
 			unusedConfigs = append(unusedConfigs, mydumper)
 		}
 	}
+
 	for loader, cfg := range c.Loaders {
-		if err1 := cfg.adjust(); err1 != nil {
-			return err1
+		if cfg != nil {
+			if err1 := cfg.adjust(); err1 != nil {
+				return err1
+			}
 		}
 		if globalConfigReferCount[configRefPrefixes[loaderIdx]+loader] == 0 {
 			unusedConfigs = append(unusedConfigs, loader)
@@ -828,6 +865,7 @@ func (c *TaskConfig) adjust() error {
 		sort.Strings(unusedConfigs)
 		return terror.ErrConfigGlobalConfigsUnused.Generate(unusedConfigs)
 	}
+
 	// we postpone default time_zone init in each unit so we won't change the config value in task/sub_task config
 	if c.Timezone != "" {
 		if _, err := utils.ParseTimeZone(c.Timezone); err != nil {
@@ -1019,7 +1057,6 @@ type SyncerConfigForDowngrade struct {
 	QueueSize               int    `yaml:"queue-size"`
 	CheckpointFlushInterval int    `yaml:"checkpoint-flush-interval"`
 	MaxRetry                int    `yaml:"max-retry"`
-	AutoFixGTID             bool   `yaml:"auto-fix-gtid"`
 	EnableGTID              bool   `yaml:"enable-gtid"`
 	DisableCausality        bool   `yaml:"disable-detect"`
 	SafeMode                bool   `yaml:"safe-mode"`
@@ -1040,7 +1077,6 @@ func NewSyncerConfigsForDowngrade(syncerConfigs map[string]*SyncerConfig) map[st
 			QueueSize:               syncerConfig.QueueSize,
 			CheckpointFlushInterval: syncerConfig.CheckpointFlushInterval,
 			MaxRetry:                syncerConfig.MaxRetry,
-			AutoFixGTID:             syncerConfig.AutoFixGTID,
 			EnableGTID:              syncerConfig.EnableGTID,
 			DisableCausality:        syncerConfig.DisableCausality,
 			SafeMode:                syncerConfig.SafeMode,

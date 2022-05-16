@@ -22,8 +22,8 @@ import (
 	"github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
-	"github.com/pingcap/tidb-tools/pkg/dbutil"
 	"github.com/pingcap/tidb/errno"
+	"github.com/pingcap/tidb/util/dbutil"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/dm/dm/config"

@@ -55,7 +55,7 @@ type testReaderSuite struct {
 func (t *testReaderSuite) SetUpSuite(c *C) {
 	var err error
 	t.lastPos = 0
-	t.lastGTID, err = gtid.ParserGTID(gmysql.MySQLFlavor, "ba8f633f-1f15-11eb-b1c7-0242ac110002:0")
+	t.lastGTID, err = gtid.ParserGTID(gmysql.MySQLFlavor, "ba8f633f-1f15-11eb-b1c7-0242ac110002:1")
 	c.Assert(err, IsNil)
 	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/relay/SetHeartbeatInterval", "return(10000)"), IsNil)
 }
@@ -87,13 +87,13 @@ func (t *testReaderSuite) createBinlogFileParseState(c *C, relayLogDir, relayLog
 	c.Assert(err, IsNil)
 
 	return &binlogFileParseState{
-		possibleLast:         possibleLast,
-		fullPath:             fullPath,
-		relayLogFile:         relayLogFile,
-		relayLogDir:          relayLogDir,
-		f:                    f,
-		latestPos:            offset,
-		replaceWithHeartbeat: false,
+		possibleLast: possibleLast,
+		fullPath:     fullPath,
+		relayLogFile: relayLogFile,
+		relayLogDir:  relayLogDir,
+		f:            f,
+		latestPos:    offset,
+		skipGTID:     false,
 	}
 }
 
@@ -147,7 +147,7 @@ func (t *testReaderSuite) TestParseFileBase(c *C) {
 		c.Assert(needReParse, IsFalse)
 		c.Assert(state.latestPos, Equals, int64(100))
 		c.Assert(state.formatDescEventRead, IsFalse)
-		c.Assert(state.replaceWithHeartbeat, Equals, false)
+		c.Assert(state.skipGTID, Equals, false)
 	}
 
 	// write some events to binlog file
@@ -175,7 +175,7 @@ func (t *testReaderSuite) TestParseFileBase(c *C) {
 		c.Assert(needReParse, IsFalse)
 		c.Assert(state.latestPos, Equals, int64(baseEvents[len(baseEvents)-1].Header.LogPos))
 		c.Assert(state.formatDescEventRead, IsTrue)
-		c.Assert(state.replaceWithHeartbeat, IsFalse)
+		c.Assert(state.skipGTID, IsFalse)
 
 		// try get events back, firstParse should have fake RotateEvent
 		var fakeRotateEventCount int
@@ -213,7 +213,7 @@ func (t *testReaderSuite) TestParseFileBase(c *C) {
 		c.Assert(needReParse, IsFalse)
 		c.Assert(state.latestPos, Equals, int64(baseEvents[len(baseEvents)-1].Header.LogPos))
 		c.Assert(state.formatDescEventRead, IsTrue)
-		c.Assert(state.replaceWithHeartbeat, Equals, false)
+		c.Assert(state.skipGTID, Equals, false)
 		fakeRotateEventCount := 0
 		i := 0
 		for {
@@ -256,7 +256,7 @@ func (t *testReaderSuite) TestParseFileBase(c *C) {
 		c.Assert(needReParse, IsFalse)
 		c.Assert(state.latestPos, Equals, int64(rotateEv.Header.LogPos))
 		c.Assert(state.formatDescEventRead, IsTrue)
-		c.Assert(state.replaceWithHeartbeat, Equals, false)
+		c.Assert(state.skipGTID, Equals, false)
 		t.purgeStreamer(c, s)
 	}
 
@@ -275,7 +275,7 @@ func (t *testReaderSuite) TestParseFileBase(c *C) {
 		c.Assert(needReParse, IsFalse)
 		c.Assert(state.latestPos, Equals, int64(rotateEv.Header.LogPos))
 		c.Assert(state.formatDescEventRead, IsTrue)
-		c.Assert(state.replaceWithHeartbeat, Equals, false)
+		c.Assert(state.skipGTID, Equals, false)
 
 		// should only get a RotateEvent
 		i := 0
@@ -347,7 +347,7 @@ func (t *testReaderSuite) TestParseFileRelayNeedSwitchSubDir(c *C) {
 	c.Assert(needReParse, IsFalse)
 	c.Assert(state.latestPos, Equals, int64(4))
 	c.Assert(state.formatDescEventRead, IsTrue)
-	c.Assert(state.replaceWithHeartbeat, Equals, false)
+	c.Assert(state.skipGTID, Equals, false)
 	t.purgeStreamer(c, s)
 
 	// NOTE: if we want to test the returned `needReParse` of `needSwitchSubDir`,
@@ -393,7 +393,7 @@ func (t *testReaderSuite) TestParseFileRelayWithIgnorableError(c *C) {
 		c.Assert(needReParse, IsTrue)
 		c.Assert(state.latestPos, Equals, int64(4))
 		c.Assert(state.formatDescEventRead, IsTrue)
-		c.Assert(state.replaceWithHeartbeat, Equals, false)
+		c.Assert(state.skipGTID, Equals, false)
 	}
 }
 
@@ -613,7 +613,7 @@ func (t *testReaderSuite) TestStartSyncByGTID(c *C) {
 		{
 			"ba8f633f-1f15-11eb-b1c7-0242ac110002",
 			"ba8f633f-1f15-11eb-b1c7-0242ac110002.000001",
-			"ba8f633f-1f15-11eb-b1c7-0242ac110002:0",
+			"ba8f633f-1f15-11eb-b1c7-0242ac110002:1",
 			[]FileEventResult{
 				{
 					"mysql.000001",
@@ -712,9 +712,10 @@ func (t *testReaderSuite) TestStartSyncByGTID(c *C) {
 
 	var allEvents []*replication.BinlogEvent
 	var allResults []string
+	var eventsNumOfFirstServer int
 
 	// generate binlog file
-	for _, subDir := range testCase {
+	for i, subDir := range testCase {
 		lastPos = 4
 		lastGTID, err = gtid.ParserGTID(gmysql.MySQLFlavor, subDir.gtidStr)
 		c.Assert(err, IsNil)
@@ -746,6 +747,9 @@ func (t *testReaderSuite) TestStartSyncByGTID(c *C) {
 			}
 			f.Close()
 			t.createMetaFile(c, uuidDir, fileEventResult.filename, lastPos, previousGset.String())
+		}
+		if i == 0 {
+			eventsNumOfFirstServer = len(allEvents)
 		}
 	}
 
@@ -782,11 +786,11 @@ func (t *testReaderSuite) TestStartSyncByGTID(c *C) {
 	r = newBinlogReaderForTest(log.L(), cfg, true, "")
 
 	excludeStrs := []string{}
-	// exclude first uuid
-	excludeServerUUID := testCase[0].serverUUID
-	excludeUUID := testCase[0].uuid
+	// exclude event except for first server
+	includeServerUUID := testCase[0].serverUUID
+	includeUUID := testCase[0].uuid
 	for _, s := range strings.Split(preGset.String(), ",") {
-		if !strings.Contains(s, excludeServerUUID) {
+		if !strings.Contains(s, includeServerUUID) {
 			excludeStrs = append(excludeStrs, s)
 		}
 	}
@@ -797,19 +801,19 @@ func (t *testReaderSuite) TestStartSyncByGTID(c *C) {
 	// StartSyncByGtid exclude first uuid
 	s, err = r.StartSyncByGTID(excludeGset)
 	c.Assert(err, IsNil)
-	obtainBaseEvents = readNEvents(ctx, c, s, len(allEvents), true)
+	obtainBaseEvents = readNEvents(ctx, c, s, eventsNumOfFirstServer, true)
 
 	gset := excludeGset.Clone()
-	// every gtid event not from first uuid should become heartbeat event
+	// should not receive any event not from first server
 	for i, event := range obtainBaseEvents {
 		switch event.Header.EventType {
 		case replication.HEARTBEAT_EVENT:
-			c.Assert(event.Header.LogPos, Equals, allEvents[i].Header.LogPos)
+			c.FailNow()
 		case replication.GTID_EVENT:
 			// check gtid event comes from first uuid subdir
 			ev, _ := event.Event.(*replication.GTIDEvent)
 			u, _ := uuid.FromBytes(ev.SID)
-			c.Assert(u.String(), Equals, excludeServerUUID)
+			c.Assert(u.String(), Equals, includeServerUUID)
 			c.Assert(event.Header, DeepEquals, allEvents[i].Header)
 			c.Assert(gset.Update(fmt.Sprintf("%s:%d", u.String(), ev.GNO)), IsNil)
 		default:
@@ -820,7 +824,7 @@ func (t *testReaderSuite) TestStartSyncByGTID(c *C) {
 	c.Assert(gset.Equal(preGset), IsTrue)
 
 	// purge first uuid subdir's first binlog file
-	c.Assert(os.Remove(path.Join(baseDir, excludeUUID, "mysql.000001")), IsNil)
+	c.Assert(os.Remove(path.Join(baseDir, includeUUID, "mysql.000001")), IsNil)
 
 	r.Close()
 	r = newBinlogReaderForTest(log.L(), cfg, true, "")
@@ -834,7 +838,7 @@ func (t *testReaderSuite) TestStartSyncByGTID(c *C) {
 	c.Assert(terror.ErrNoRelayPosMatchGTID.Equal(err), IsTrue)
 
 	// purge first uuid subdir
-	c.Assert(os.RemoveAll(path.Join(baseDir, excludeUUID)), IsNil)
+	c.Assert(os.RemoveAll(path.Join(baseDir, includeUUID)), IsNil)
 
 	r.Close()
 	r = newBinlogReaderForTest(log.L(), cfg, true, "")
@@ -1007,31 +1011,28 @@ func (t *testReaderSuite) TestReParseUsingGTID(c *C) {
 	var wg sync.WaitGroup
 	wg.Add(1)
 
+	ctx, cancel := context.WithCancel(context.Background())
+
 	go func() {
 		expected := map[uint32]replication.EventType{}
 		for _, e := range events {
+			// will not receive event for skipped GTID
 			switch e.Event.(type) {
-			// keeps same
 			case *replication.FormatDescriptionEvent, *replication.PreviousGTIDsEvent:
 				expected[e.Header.LogPos] = e.Header.EventType
-			default:
-				expected[e.Header.LogPos] = replication.HEARTBEAT_EVENT
 			}
 		}
 		// fake rotate
 		expected[0] = replication.ROTATE_EVENT
-		lastLogPos := events[len(events)-1].Header.LogPos
 
-		ctx, cancel := context.WithCancel(context.Background())
 		for {
 			ev, err2 := s.GetEvent(ctx)
-			c.Assert(err2, IsNil)
-			c.Assert(ev.Header.EventType, Equals, expected[ev.Header.LogPos])
-			if ev.Header.LogPos == lastLogPos {
+			if err2 == context.Canceled {
 				break
 			}
+			c.Assert(err2, IsNil)
+			c.Assert(ev.Header.EventType, Equals, expected[ev.Header.LogPos])
 		}
-		cancel()
 		wg.Done()
 	}()
 
@@ -1046,6 +1047,8 @@ func (t *testReaderSuite) TestReParseUsingGTID(c *C) {
 		default:
 		}
 	}
+	time.Sleep(time.Second)
+	cancel()
 	wg.Wait()
 }
 

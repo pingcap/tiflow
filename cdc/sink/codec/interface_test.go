@@ -14,27 +14,18 @@
 package codec
 
 import (
-	"github.com/pingcap/check"
+	"testing"
+
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/parser/types"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
-	"github.com/pingcap/tiflow/pkg/util/testleak"
+	"github.com/stretchr/testify/require"
 )
 
-type codecInterfaceSuite struct{}
-
-var _ = check.Suite(&codecInterfaceSuite{})
-
-func (s *codecInterfaceSuite) SetUpSuite(c *check.C) {
-}
-
-func (s *codecInterfaceSuite) TearDownSuite(c *check.C) {
-}
-
-func (s *codecInterfaceSuite) TestCreate(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestCreate(t *testing.T) {
+	t.Parallel()
 	rowEvent := &model.RowChangedEvent{
 		Table: &model.TableName{
 			Schema: "test",
@@ -57,13 +48,13 @@ func (s *codecInterfaceSuite) TestCreate(c *check.C) {
 
 	msg := NewMQMessage(config.ProtocolOpen, []byte("key1"), []byte("value1"), rowEvent.CommitTs, model.MqMessageTypeRow, &rowEvent.Table.Schema, &rowEvent.Table.Table)
 
-	c.Assert(msg.Key, check.BytesEquals, []byte("key1"))
-	c.Assert(msg.Value, check.BytesEquals, []byte("value1"))
-	c.Assert(msg.Ts, check.Equals, rowEvent.CommitTs)
-	c.Assert(msg.Type, check.Equals, model.MqMessageTypeRow)
-	c.Assert(*msg.Schema, check.Equals, rowEvent.Table.Schema)
-	c.Assert(*msg.Table, check.Equals, rowEvent.Table.Table)
-	c.Assert(msg.Protocol, check.Equals, config.ProtocolOpen)
+	require.Equal(t, []byte("key1"), msg.Key)
+	require.Equal(t, []byte("value1"), msg.Value)
+	require.Equal(t, rowEvent.CommitTs, msg.Ts)
+	require.Equal(t, model.MqMessageTypeRow, msg.Type)
+	require.Equal(t, rowEvent.Table.Schema, *msg.Schema)
+	require.Equal(t, rowEvent.Table.Table, *msg.Table)
+	require.Equal(t, config.ProtocolOpen, msg.Protocol)
 
 	job := &timodel.Job{
 		ID:         1071,
@@ -102,20 +93,20 @@ func (s *codecInterfaceSuite) TestCreate(c *check.C) {
 	ddlEvent.FromJob(job, preTableInfo)
 
 	msg = newDDLMQMessage(config.ProtocolMaxwell, nil, []byte("value1"), ddlEvent)
-	c.Assert(msg.Key, check.IsNil)
-	c.Assert(msg.Value, check.BytesEquals, []byte("value1"))
-	c.Assert(msg.Ts, check.Equals, ddlEvent.CommitTs)
-	c.Assert(msg.Type, check.Equals, model.MqMessageTypeDDL)
-	c.Assert(*msg.Schema, check.Equals, ddlEvent.TableInfo.Schema)
-	c.Assert(*msg.Table, check.Equals, ddlEvent.TableInfo.Table)
-	c.Assert(msg.Protocol, check.Equals, config.ProtocolMaxwell)
+	require.Nil(t, msg.Key)
+	require.Equal(t, []byte("value1"), msg.Value)
+	require.Equal(t, ddlEvent.CommitTs, msg.Ts)
+	require.Equal(t, model.MqMessageTypeDDL, msg.Type)
+	require.Equal(t, ddlEvent.TableInfo.Schema, *msg.Schema)
+	require.Equal(t, ddlEvent.TableInfo.Table, *msg.Table)
+	require.Equal(t, config.ProtocolMaxwell, msg.Protocol)
 
 	msg = newResolvedMQMessage(config.ProtocolCanal, []byte("key1"), nil, 1234)
-	c.Assert(msg.Key, check.BytesEquals, []byte("key1"))
-	c.Assert(msg.Value, check.IsNil)
-	c.Assert(msg.Ts, check.Equals, uint64(1234))
-	c.Assert(msg.Type, check.Equals, model.MqMessageTypeResolved)
-	c.Assert(msg.Schema, check.IsNil)
-	c.Assert(msg.Table, check.IsNil)
-	c.Assert(msg.Protocol, check.Equals, config.ProtocolCanal)
+	require.Equal(t, []byte("key1"), msg.Key)
+	require.Nil(t, msg.Value)
+	require.Equal(t, uint64(1234), msg.Ts)
+	require.Equal(t, model.MqMessageTypeResolved, msg.Type)
+	require.Nil(t, msg.Schema)
+	require.Nil(t, msg.Table)
+	require.Equal(t, config.ProtocolCanal, msg.Protocol)
 }

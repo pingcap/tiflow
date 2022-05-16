@@ -28,9 +28,9 @@ import (
 	"github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
-	"github.com/pingcap/tidb-tools/pkg/dbutil"
 	"github.com/pingcap/tidb/parser"
 	tmysql "github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tidb/util/dbutil"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/dm/pkg/gtid"
@@ -670,4 +670,11 @@ func GetMaxConnectionsForConn(ctx context.Context, conn *sql.Conn) (int, error) 
 // IsMariaDB tells whether the version is mariadb.
 func IsMariaDB(version string) bool {
 	return strings.Contains(strings.ToUpper(version), "MARIADB")
+}
+
+// CreateTableSQLToOneRow formats the result of SHOW CREATE TABLE to one row.
+func CreateTableSQLToOneRow(sql string) string {
+	sql = strings.ReplaceAll(sql, "\n", "")
+	sql = strings.ReplaceAll(sql, "  ", " ")
+	return sql
 }

@@ -16,12 +16,9 @@ package model
 import (
 	"encoding/json"
 	"fmt"
-	"math"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/log"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-	"go.uber.org/zap"
 )
 
 // AdminJobType represents for admin job type, both used in owner and processor
@@ -34,7 +31,7 @@ type AdminJobOption struct {
 
 // AdminJob holds an admin job
 type AdminJob struct {
-	CfID  string
+	CfID  ChangeFeedID
 	Type  AdminJobType
 	Opts  *AdminJobOption
 	Error *RunningError
@@ -78,11 +75,18 @@ func (t AdminJobType) IsStopState() bool {
 // TaskPosition records the process information of a capture
 type TaskPosition struct {
 	// The maximum event CommitTs that has been synchronized. This is updated by corresponding processor.
-	CheckPointTs uint64 `json:"checkpoint-ts"` // Deprecated
+	//
+	// Deprecated: only used in API. TODO: remove API usage.
+	CheckPointTs uint64 `json:"checkpoint-ts"`
 	// The event that satisfies CommitTs <= ResolvedTs can be synchronized. This is updated by corresponding processor.
-	ResolvedTs uint64 `json:"resolved-ts"` // Deprecated
+	//
+	// Deprecated: only used in API. TODO: remove API usage.
+	ResolvedTs uint64 `json:"resolved-ts"`
 	// The count of events were synchronized. This is updated by corresponding processor.
+	//
+	// Deprecated: only used in API. TODO: remove API usage.
 	Count uint64 `json:"count"`
+
 	// Error when error happens
 	Error *RunningError `json:"error"`
 }
@@ -123,25 +127,6 @@ func (tp *TaskPosition) Clone() *TaskPosition {
 	return ret
 }
 
-// MoveTableStatus represents for the status of a MoveTableJob
-type MoveTableStatus int
-
-// All MoveTable status
-const (
-	MoveTableStatusNone MoveTableStatus = iota
-	MoveTableStatusDeleted
-	MoveTableStatusFinished
-)
-
-// MoveTableJob records a move operation of a table
-type MoveTableJob struct {
-	From             CaptureID
-	To               CaptureID
-	TableID          TableID
-	TableReplicaInfo *TableReplicaInfo
-	Status           MoveTableStatus
-}
-
 // All TableOperation flags
 const (
 	// Move means after the delete operation, the table will be re added.
@@ -162,7 +147,7 @@ type TableOperation struct {
 	Delete bool   `json:"delete"`
 	Flag   uint64 `json:"flag,omitempty"`
 	// if the operation is a delete operation, BoundaryTs is checkpoint ts
-	// if the operation is a add operation, BoundaryTs is start ts
+	// if the operation is an add operation, BoundaryTs is start ts
 	BoundaryTs uint64 `json:"boundary_ts"`
 	Status     uint64 `json:"status,omitempty"`
 }
@@ -227,12 +212,12 @@ func (i *TableReplicaInfo) Clone() *TableReplicaInfo {
 	return &clone
 }
 
-// TaskStatus records the task information of a capture
+// TaskStatus records the task information of a capture.
+//
+// Deprecated: only used in API. TODO: remove API usage.
 type TaskStatus struct {
-	// Table information list, containing tables that processor should process,
-	// updated by owner, processor is read only.
 	Tables       map[TableID]*TableReplicaInfo `json:"tables"`
-	Operation    map[TableID]*TableOperation   `json:"operation"` // Deprecated
+	Operation    map[TableID]*TableOperation   `json:"operation"`
 	AdminJobType AdminJobType                  `json:"admin-job-type"`
 	ModRevision  int64                         `json:"-"`
 }
@@ -241,95 +226,6 @@ type TaskStatus struct {
 func (ts *TaskStatus) String() string {
 	data, _ := ts.Marshal()
 	return data
-}
-
-// RemoveTable remove the table in TableInfos and add a remove table operation.
-func (ts *TaskStatus) RemoveTable(id TableID, boundaryTs Ts, isMoveTable bool) (*TableReplicaInfo, bool) {
-	if ts.Tables == nil {
-		return nil, false
-	}
-	table, exist := ts.Tables[id]
-	if !exist {
-		return nil, false
-	}
-	delete(ts.Tables, id)
-	log.Info("remove a table", zap.Int64("tableId", id), zap.Uint64("boundaryTs", boundaryTs), zap.Bool("isMoveTable", isMoveTable))
-	if ts.Operation == nil {
-		ts.Operation = make(map[TableID]*TableOperation)
-	}
-	op := &TableOperation{
-		Delete:     true,
-		BoundaryTs: boundaryTs,
-	}
-	if isMoveTable {
-		op.Flag |= OperFlagMoveTable
-	}
-	ts.Operation[id] = op
-	return table, true
-}
-
-// AddTable add the table in TableInfos and add a add table operation.
-func (ts *TaskStatus) AddTable(id TableID, table *TableReplicaInfo, boundaryTs Ts) {
-	if ts.Tables == nil {
-		ts.Tables = make(map[TableID]*TableReplicaInfo)
-	}
-	_, exist := ts.Tables[id]
-	if exist {
-		return
-	}
-	ts.Tables[id] = table
-	log.Info("add a table", zap.Int64("tableId", id), zap.Uint64("boundaryTs", boundaryTs))
-	if ts.Operation == nil {
-		ts.Operation = make(map[TableID]*TableOperation)
-	}
-	ts.Operation[id] = &TableOperation{
-		Delete:     false,
-		BoundaryTs: boundaryTs,
-		Status:     OperDispatched,
-	}
-}
-
-// SomeOperationsUnapplied returns true if there are some operations not applied
-func (ts *TaskStatus) SomeOperationsUnapplied() bool {
-	for _, o := range ts.Operation {
-		if !o.TableApplied() {
-			return true
-		}
-	}
-	return false
-}
-
-// AppliedTs returns a Ts which less or equal to the ts boundary of any unapplied operation
-func (ts *TaskStatus) AppliedTs() Ts {
-	appliedTs := uint64(math.MaxUint64)
-	for _, o := range ts.Operation {
-		if !o.TableApplied() {
-			if appliedTs > o.BoundaryTs {
-				appliedTs = o.BoundaryTs
-			}
-		}
-	}
-	return appliedTs
-}
-
-// Snapshot takes a snapshot of `*TaskStatus` and returns a new `*ProcInfoSnap`
-func (ts *TaskStatus) Snapshot(cfID ChangeFeedID, captureID CaptureID, checkpointTs Ts) *ProcInfoSnap {
-	snap := &ProcInfoSnap{
-		CfID:      cfID,
-		CaptureID: captureID,
-		Tables:    make(map[TableID]*TableReplicaInfo, len(ts.Tables)),
-	}
-	for tableID, table := range ts.Tables {
-		ts := checkpointTs
-		if ts < table.StartTs {
-			ts = table.StartTs
-		}
-		snap.Tables[tableID] = &TableReplicaInfo{
-			StartTs:     ts,
-			MarkTableID: table.MarkTableID,
-		}
-	}
-	return snap
 }
 
 // Marshal returns the json marshal format of a TaskStatus
@@ -361,12 +257,6 @@ func (ts *TaskStatus) Clone() *TaskStatus {
 	return &clone
 }
 
-// CaptureID is the type for capture ID
-type CaptureID = string
-
-// ChangeFeedID is the type for change feed ID
-type ChangeFeedID = string
-
 // TableID is the ID of the table
 type TableID = int64
 
@@ -379,22 +269,6 @@ type Ts = uint64
 // ProcessorsInfos maps from capture IDs to TaskStatus
 type ProcessorsInfos map[CaptureID]*TaskStatus
 
-// ChangeFeedDDLState is the type for change feed status
-type ChangeFeedDDLState int
-
-const (
-	// ChangeFeedUnknown stands for all unknown status
-	ChangeFeedUnknown ChangeFeedDDLState = iota
-	// ChangeFeedSyncDML means DMLs are being processed
-	ChangeFeedSyncDML
-	// ChangeFeedWaitToExecDDL means we are waiting to execute a DDL
-	ChangeFeedWaitToExecDDL
-	// ChangeFeedExecDDL means a DDL is being executed
-	ChangeFeedExecDDL
-	// ChangeFeedDDLExecuteFailed means that an error occurred when executing a DDL
-	ChangeFeedDDLExecuteFailed
-)
-
 // String implements fmt.Stringer interface.
 func (p ProcessorsInfos) String() string {
 	s := "{"
@@ -405,21 +279,6 @@ func (p ProcessorsInfos) String() string {
 	s += "}"
 
 	return s
-}
-
-// String implements fmt.Stringer interface.
-func (s ChangeFeedDDLState) String() string {
-	switch s {
-	case ChangeFeedSyncDML:
-		return "SyncDML"
-	case ChangeFeedWaitToExecDDL:
-		return "WaitToExecDDL"
-	case ChangeFeedExecDDL:
-		return "ExecDDL"
-	case ChangeFeedDDLExecuteFailed:
-		return "DDLExecuteFailed"
-	}
-	return "Unknown"
 }
 
 // ChangeFeedStatus stores information about a ChangeFeed
@@ -444,7 +303,6 @@ func (status *ChangeFeedStatus) Unmarshal(data []byte) error {
 
 // ProcInfoSnap holds most important replication information of a processor
 type ProcInfoSnap struct {
-	CfID      string                        `json:"changefeed-id"`
-	CaptureID string                        `json:"capture-id"`
-	Tables    map[TableID]*TableReplicaInfo `json:"-"`
+	CfID      ChangeFeedID `json:"changefeed-id"`
+	CaptureID string       `json:"capture-id"`
 }

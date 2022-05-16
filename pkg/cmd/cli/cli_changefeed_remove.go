@@ -62,7 +62,7 @@ func (o *removeChangefeedOptions) complete(f factory.Factory) error {
 // run the `cli changefeed remove` command.
 func (o *removeChangefeedOptions) run() error {
 	job := model.AdminJob{
-		CfID: o.changefeedID,
+		CfID: model.DefaultChangeFeedID(o.changefeedID),
 		Type: model.AdminRemove,
 		Opts: &model.AdminJobOption{
 			ForceRemove: o.optForceRemove,

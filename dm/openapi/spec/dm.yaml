@@ -454,7 +454,7 @@ paths:
           content:
             "application/json":
               schema:
-                $ref: "#/components/schemas/Task"
+                $ref: "#/components/schemas/OperateTaskResponse"
         "400":
           description: "failed"
           content:
@@ -583,7 +583,7 @@ paths:
           content:
             "application/json":
               schema:
-                $ref: "#/components/schemas/Task"
+                $ref: "#/components/schemas/OperateTaskResponse"
         "400":
           description: "failed"
           content:
@@ -1127,6 +1127,24 @@ paths:
             "application/json":
               schema:
                 $ref: "#/components/schemas/GetClusterInfoResponse"
+    put:
+      tags:
+        - cluster
+      summary: "update cluster info."
+      operationId: "DMAPIUpdateClusterInfo"
+      requestBody:
+        description: "request body"
+        content:
+          "application/json":
+            schema:
+              $ref: "#/components/schemas/ClusterTopology"
+      responses:
+        "200":
+          description: "success"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/GetClusterInfoResponse"
   /api/v1/cluster/masters:
     get:
       tags:
@@ -1358,7 +1376,7 @@ components:
           type: string
           example: "123456"
           description: "source password"
-          nullable: false
+          nullable: true
         enable_gtid:
           type: boolean
           example: false
@@ -1392,7 +1410,6 @@ components:
         - "host"
         - "port"
         - "user"
-        - "password"
         - "enable_gtid"
         - "enable"
     ShardingGroup:
@@ -1570,7 +1587,7 @@ components:
         port:
           type: integer
           example: 3306
-          description: "ource port"
+          description: "source port"
         user:
           type: string
           example: "root"
@@ -1792,6 +1809,12 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/SubTaskStatus"
+        ignore_checking_items:
+          type: array
+          description: "ignore precheck items"
+          items:
+            type: string
+            example: "version"
       required:
         - "name"
         - "task_mode"
@@ -1848,6 +1871,91 @@ components:
         - "bound_stage"
         - "bound_source_name"
 
+    MasterTopology:
+      type: object
+      properties:
+        name:
+          type: string
+          example: master
+        host:
+          type: string
+          example: "127.0.0.1"
+        port:
+          type: integer
+          example: 8261
+      required:
+        - "name"
+        - "host"
+        - "port"
+    WorkerTopology:
+      type: object
+      properties:
+        name:
+          type: string
+          example: worker1
+        host:
+          type: string
+          example: "127.0.0.1"
+        port:
+          type: integer
+          example: 8261
+      required:
+        - "name"
+        - "host"
+        - "port"
+    GrafanaTopology:
+      type: object
+      properties:
+        host:
+          type: string
+          example: "127.0.0.1"
+        port:
+          type: integer
+          example: 3000
+      required:
+        - "host"
+        - "port"
+    PrometheusTopology:
+      type: object
+      properties:
+        host:
+          type: string
+          example: "127.0.0.1"
+        port:
+          type: integer
+          example: 9090
+      required:
+        - "host"
+        - "port"
+    AlertManagerTopology:
+      type: object
+      properties:
+        host:
+          type: string
+          example: "127.0.0.1"
+        port:
+          type: integer
+          example: 9093
+      required:
+        - "host"
+        - "port"
+    ClusterTopology:
+      type: object
+      properties:
+        master_topology_list:
+          type: array
+          items:
+            $ref: "#/components/schemas/MasterTopology"
+        worker_topology_list:
+          type: array
+          items:
+            $ref: "#/components/schemas/WorkerTopology"
+        grafana_topology:
+          $ref: "#/components/schemas/GrafanaTopology"
+        prometheus_topology:
+          $ref: "#/components/schemas/PrometheusTopology"
+        alert_manager_topology:
+          $ref: "#/components/schemas/AlertManagerTopology"
     WorkerNameList:
       description: worker name list
       type: array
@@ -2104,7 +2212,18 @@ components:
           description: "Updates the optimistic sharding metadata with this schema only used when an error occurs in the optimistic sharding DDL mode"
       required:
         - "sql_content"
-
+    OperateTaskResponse:
+      type: object
+      properties: 
+        task:
+          $ref: "#/components/schemas/Task"
+        check_result:
+          type: string
+          description: "pre-check result"
+          example: "pre-check is passed. "
+      required:
+        - "task"
+        - "check_result"
     GetTaskListResponse:
       type: object
       properties:
@@ -2208,5 +2327,7 @@ components:
           type: integer
           format: uint64
           description: "cluster id"
+        topology:
+          $ref: "#/components/schemas/ClusterTopology"
       required:
         - "cluster_id"
