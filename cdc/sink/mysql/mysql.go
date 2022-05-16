@@ -65,7 +65,7 @@ type mysqlSink struct {
 	tableMaxResolvedTs sync.Map
 
 	execWaitNotifier *notify.Notifier
-	resolvedNotifier *notify.Notifier
+	resolvedCh       chan struct{}
 	errCh            chan error
 	flushSyncWg      sync.WaitGroup
 
@@ -197,24 +197,19 @@ func NewMySQLSink(
 		statistics:                      metrics.NewStatistics(ctx, metrics.SinkTypeDB),
 		metricConflictDetectDurationHis: metricConflictDetectDurationHis,
 		metricBucketSizeCounters:        metricBucketSizeCounters,
+		execWaitNotifier:                new(notify.Notifier),
+		resolvedCh:                      make(chan struct{}, 1),
 		errCh:                           make(chan error, 1),
 		forceReplicate:                  replicaConfig.ForceReplicate,
 		cancel:                          cancel,
 	}
-
-	sink.execWaitNotifier = new(notify.Notifier)
-	sink.resolvedNotifier = new(notify.Notifier)
 
 	err = sink.createSinkWorkers(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	receiver, err := sink.resolvedNotifier.NewReceiver(50 * time.Millisecond)
-	if err != nil {
-		return nil, err
-	}
-	go sink.flushRowChangedEvents(ctx, receiver)
+	go sink.flushRowChangedEvents(ctx)
 
 	return sink, nil
 }
@@ -235,12 +230,15 @@ func (s *mysqlSink) FlushRowChangedEvents(ctx context.Context, tableID model.Tab
 	if !ok || v.(uint64) < resolvedTs {
 		s.tableMaxResolvedTs.Store(tableID, resolvedTs)
 	}
-	s.resolvedNotifier.Notify()
 
 	// check and throw error
 	select {
+	case <-ctx.Done():
+		return 0, ctx.Err()
 	case err := <-s.errCh:
 		return 0, err
+	case s.resolvedCh <- struct{}{}:
+		// Notify `flushRowChangedEvents` to asynchronously write data.
 	default:
 	}
 
@@ -249,26 +247,19 @@ func (s *mysqlSink) FlushRowChangedEvents(ctx context.Context, tableID model.Tab
 	return checkpointTs, nil
 }
 
-func (s *mysqlSink) flushRowChangedEvents(ctx context.Context, receiver *notify.Receiver) {
+func (s *mysqlSink) flushRowChangedEvents(ctx context.Context) {
 	defer func() {
 		for _, worker := range s.workers {
-			worker.closedCh <- struct{}{}
+			worker.close()
 		}
 	}()
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-receiver.C:
+		case <-s.resolvedCh:
 		}
-		flushedResolvedTsMap, resolvedTxnsMap := s.txnCache.Resolved(&s.tableMaxResolvedTs)
-		if len(resolvedTxnsMap) == 0 {
-			s.tableMaxResolvedTs.Range(func(key, value interface{}) bool {
-				s.tableCheckpointTs.Store(key, value)
-				return true
-			})
-			continue
-		}
+		checkpointTsMap, resolvedTxnsMap := s.txnCache.Resolved(&s.tableMaxResolvedTs)
 
 		if s.cyclic != nil {
 			// Filter rows if it is origin from downstream.
@@ -277,8 +268,10 @@ func (s *mysqlSink) flushRowChangedEvents(ctx context.Context, receiver *notify.
 			s.statistics.SubRowsCount(skippedRowCount)
 		}
 
-		s.dispatchAndExecTxns(ctx, resolvedTxnsMap)
-		for tableID, resolvedTs := range flushedResolvedTsMap {
+		if len(resolvedTxnsMap) != 0 {
+			s.dispatchAndExecTxns(ctx, resolvedTxnsMap)
+		}
+		for tableID, resolvedTs := range checkpointTsMap {
 			s.tableCheckpointTs.Store(tableID, resolvedTs)
 		}
 	}
@@ -529,7 +522,6 @@ func (s *mysqlSink) cleanTableResource(tableID model.TableID) {
 
 func (s *mysqlSink) Close(ctx context.Context) error {
 	s.execWaitNotifier.Close()
-	s.resolvedNotifier.Close()
 	err := s.db.Close()
 	s.cancel()
 	return cerror.WrapError(cerror.ErrMySQLConnectionError, err)
