@@ -15,6 +15,7 @@ stop_services() {
 
 print_worker_stacks() {
 	if [ $? != 0 ]; then
+		# don't know which case failed, so we print them all
 		idx=1
 		for port in $MASTER_PORT1 $MASTER_PORT2 $MASTER_PORT3 $MASTER_PORT4 $MASTER_PORT5 $MASTER_PORT6; do
 			echo "####################################################"
