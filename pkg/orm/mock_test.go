@@ -10,7 +10,6 @@ import (
 	cerrors "github.com/hanfei1991/microcosm/pkg/errors"
 	resourcemeta "github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta/model"
 	"github.com/hanfei1991/microcosm/pkg/orm/model"
-	"github.com/pingcap/failpoint"
 	"github.com/stretchr/testify/require"
 )
 
@@ -19,8 +18,9 @@ func TestGenEpochMock(t *testing.T) {
 
 	mock, err := NewMockClient()
 	require.NoError(t, err)
+	defer mock.Close()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	var epoch int64
@@ -30,24 +30,31 @@ func TestGenEpochMock(t *testing.T) {
 	}
 	require.Equal(t, int64(11), epoch)
 
-	// FIXME: go-mysql-server concurrent transaction may cause data race
-	// need mutex protection
+	// Being a lightweight database, SQLite can’t handle a high level of concurrency
+	// NOTICE: Not Recommend to do high concurrenct test in unit test
+	// TODO:
+	// (1) if we enable 'cache=shared', need disable 't.Parallel()' and close DB when the test run finish.
+	// we still will meet 'database table is lock' error for high concurrency
+	// (2) if we disable 'cache=shared', a new connection will create a new DB, and cause the 'no such table'
+	// error as consequence
 	/*
 		var wg sync.WaitGroup
 		for i := 0; i < 10; i++ {
 			wg.Add(1)
-			go func() {
+			go func(idx int) {
+				t.Logf("goroutine:%d", idx)
 				defer wg.Done()
 				for j := 0; j < 10; j++ {
 					_, err := mock.GenEpoch(ctx)
 					require.NoError(t, err)
 				}
-			}()
+			}(i)
 		}
-
-		epoch, err := mock.GenEpoch(ctx)
+		wg.Wait()
+		t.Logf("end the concurrency")
+		epoch, err = mock.GenEpoch(ctx)
 		require.NoError(t, err)
-		require.Equal(t, 102, int(epoch))
+		require.Equal(t, 112, int(epoch))
 	*/
 }
 
@@ -298,27 +305,10 @@ func TestJobMock(t *testing.T) {
 				},
 			},
 		},
-		// go-mysql-server not support unique index
-		// ref: https://github.com/dolthub/go-mysql-server/issues/571
-		/*
-			{
-				fn: "AddJob",
-				inputs: []interface{}{
-					&libModel.MasterMetaKVData{
-						ID: "j111",
-					},
-				},
-				err: cerrors.ErrMetaOpFail.GenWithStackByArgs(),
-			},
-		*/
 		{
 			fn: "UpsertJob",
 			inputs: []interface{}{
 				&libModel.MasterMetaKVData{
-					Model: model.Model{
-						// using duplicate primary key error to replace duplicate unique key
-						SeqID: 1,
-					},
 					ProjectID:  "p111",
 					ID:         "j111",
 					Tp:         1,
@@ -334,12 +324,18 @@ func TestJobMock(t *testing.T) {
 			inputs: []interface{}{
 				"j112",
 			},
+			output: ormResult{
+				rowsAffected: 0,
+			},
 		},
 		{
 			// DELETE FROM `master_meta_kv_data` WHERE project_id = '111-222-334' AND job_id = '111'
 			fn: "DeleteJob",
 			inputs: []interface{}{
 				"j113",
+			},
+			output: ormResult{
+				rowsAffected: 0,
 			},
 		},
 		{
@@ -487,7 +483,7 @@ func TestWorkerMock(t *testing.T) {
 					},
 					ProjectID:    "p111",
 					JobID:        "j111",
-					ID:           "w223",
+					ID:           "w224",
 					Type:         1,
 					Code:         1,
 					ErrorMessage: "error",
@@ -501,6 +497,9 @@ func TestWorkerMock(t *testing.T) {
 				"j111",
 				"w223",
 			},
+			output: &ormResult{
+				rowsAffected: 0,
+			},
 		},
 		{
 			// DELETE FROM `worker_statuses` WHERE project_id = '111-222-334' AND job_id = '111' AND worker_id = '222'
@@ -508,6 +507,9 @@ func TestWorkerMock(t *testing.T) {
 			inputs: []interface{}{
 				"j112",
 				"w224",
+			},
+			output: &ormResult{
+				rowsAffected: 0,
 			},
 		},
 		{
@@ -537,7 +539,7 @@ func TestWorkerMock(t *testing.T) {
 			fn: "GetWorkerByID",
 			inputs: []interface{}{
 				"j111",
-				"w224",
+				"w225",
 			},
 			err: cerrors.ErrMetaEntryNotFound.GenWithStackByArgs(),
 		},
@@ -625,9 +627,6 @@ func TestResourceMock(t *testing.T) {
 
 	testCases := []mCase{
 		{
-			// INSERT INTO `resource_meta` (`created_at`,`updated_at`,`project_id`,`job_id`,
-			// `id`,`worker_id`,`executor_id`,`deleted`,`id`) VALUES ('2022-04-14 12:16:53.353',
-			// '2022-04-14 12:16:53.353','111-222-333','j111','r333','w222','e444',true,1)
 			fn: "UpsertResource",
 			inputs: []interface{}{
 				&resourcemeta.ResourceMeta{
@@ -666,11 +665,17 @@ func TestResourceMock(t *testing.T) {
 			inputs: []interface{}{
 				"r334",
 			},
+			output: &ormResult{
+				rowsAffected: 1,
+			},
 		},
 		{
 			fn: "DeleteResource",
 			inputs: []interface{}{
 				"r335",
+			},
+			output: &ormResult{
+				rowsAffected: 0,
 			},
 		},
 		{
@@ -798,23 +803,4 @@ func testInnerMock(t *testing.T, cli Client, c mCase) {
 			// require.Equal(t, c.output, result[0].Interface())
 		}
 	}
-}
-
-func TestRetryMockBackendDB(t *testing.T) {
-	_ = failpoint.Enable("github.com/hanfei1991/microcosm/pkg/orm/MockDBAddressAlreadyUse", "return(true)")
-	_, _, err := RetryMockBackendDB("test")
-	require.Error(t, err)
-	require.Regexp(t, "address already in use", err)
-	_ = failpoint.Disable("github.com/hanfei1991/microcosm/pkg/orm/MockDBAddressAlreadyUse")
-
-	_ = failpoint.Enable("github.com/hanfei1991/microcosm/pkg/orm/MockDBOtherError", "return(true)")
-	_, _, err = RetryMockBackendDB("test")
-	require.Error(t, err)
-	_ = failpoint.Disable("github.com/hanfei1991/microcosm/pkg/orm/MockDBOtherError")
-
-	svr, addr, err := RetryMockBackendDB("test")
-	require.NoError(t, err)
-	require.NotNil(t, svr)
-	require.Regexp(t, "localhost", addr)
-	CloseBackendDB(svr)
 }

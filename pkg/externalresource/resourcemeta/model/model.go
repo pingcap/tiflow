@@ -39,10 +39,10 @@ var ResourceUpdateColumns = []string{
 type ResourceMeta struct {
 	ormModel.Model
 	ProjectID tenant.ProjectID `json:"project-id" gorm:"column:project_id;type:varchar(64) not null"`
-	ID        ResourceID       `json:"id" gorm:"column:id;type:varchar(64) not null;uniqueIndex:uidx_id;index:idx_ji,priority:2;index:idx_ei,priority:2"`
-	Job       JobID            `json:"job" gorm:"column:job_id;type:varchar(64) not null;index:idx_ji,priority:1"`
+	ID        ResourceID       `json:"id" gorm:"column:id;type:varchar(64) not null;uniqueIndex:uidx_rid;index:idx_rji,priority:2;index:idx_rei,priority:2"`
+	Job       JobID            `json:"job" gorm:"column:job_id;type:varchar(64) not null;index:idx_rji,priority:1"`
 	Worker    WorkerID         `json:"worker" gorm:"column:worker_id;type:varchar(64) not null"`
-	Executor  ExecutorID       `json:"executor" gorm:"column:executor_id;type:varchar(64) not null;index:idx_ei,priority:1"`
+	Executor  ExecutorID       `json:"executor" gorm:"column:executor_id;type:varchar(64) not null;index:idx_rei,priority:1"`
 	Deleted   bool             `json:"deleted" gorm:"column:deleted;type:BOOLEAN"`
 }
 

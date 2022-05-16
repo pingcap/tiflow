@@ -46,10 +46,10 @@ var WorkerUpdateColumns = []string{
 type WorkerStatus struct {
 	ormModel.Model
 	ProjectID    string           `json:"project-id" gorm:"column:project_id;type:varchar(64) not null"`
-	JobID        string           `json:"job-id" gorm:"column:job_id;type:varchar(64) not null;uniqueIndex:uidx_id,priority:1;index:idx_st,priority:1"`
-	ID           string           `json:"id" gorm:"column:id;type:varchar(64) not null;uniqueIndex:uidx_id,priority:2"`
+	JobID        string           `json:"job-id" gorm:"column:job_id;type:varchar(64) not null;uniqueIndex:uidx_wid,priority:1;index:idx_wst,priority:1"`
+	ID           string           `json:"id" gorm:"column:id;type:varchar(64) not null;uniqueIndex:uidx_wid,priority:2"`
 	Type         int              `json:"type" gorm:"column:type;type:tinyint not null"`
-	Code         WorkerStatusCode `json:"code" gorm:"column:status;type:tinyint not null;index:idx_st,priority:2"`
+	Code         WorkerStatusCode `json:"code" gorm:"column:status;type:tinyint not null;index:idx_wst,priority:2"`
 	ErrorMessage string           `json:"error-message" gorm:"column:errmsg;type:varchar(128)"`
 
 	// ExtBytes carries the serialized form of the Ext field, which is used in
