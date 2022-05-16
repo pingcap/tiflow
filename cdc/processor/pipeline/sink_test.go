@@ -58,13 +58,8 @@ func (c *mockFlowController) GetConsumption() uint64 {
 	return 0
 }
 
-func (s *mockSink) Init(tableID model.TableID) error {
+func (s *mockSink) AddTable(tableID model.TableID) error {
 	return nil
-}
-
-func (s *mockSink) TryEmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) (bool, error) {
-	_ = s.EmitRowChangedEvents(ctx, rows...)
-	return true, nil
 }
 
 func (s *mockSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
@@ -97,7 +92,7 @@ func (s *mockSink) Close(ctx context.Context) error {
 	return nil
 }
 
-func (s *mockSink) Barrier(ctx context.Context, tableID model.TableID) error {
+func (s *mockSink) RemoveTable(ctx context.Context, tableID model.TableID) error {
 	return nil
 }
 
