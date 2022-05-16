@@ -54,7 +54,7 @@ validators:
   global:
     mode: full
     worker-count: 1
-    validate-interval: 1ms
-    check-interval: 1ms
-    row-error-delay: 1ns
-    meta-flush-interval: 1ms
+    validate-interval: 1s
+    check-interval: 1s
+    row-error-delay: 1s
+    meta-flush-interval: 1s

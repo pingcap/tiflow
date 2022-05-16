@@ -174,16 +174,18 @@ function run_validator_cmd {
 		"\`remove-meta\` in task config is deprecated, please use \`start-task ... --remove-meta\` instead" 1
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 
+	run_sql_source1 "insert into dmctl_command.t1 values(0,'ignore-row')"
+	run_sql_source1 "insert into dmctl_command.t1 values(-1,'ignore-row')"
 	run_sql_file $cur/data/db1.increment.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
 	run_sql_file $cur/data/db2.increment.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
 	# do not do sync diff this time, will fail
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation status test" \
-		"\"processedRowsStatus\": \"insert\/update\/delete: 2\/1\/1\"" 1 \
+		"\"processedRowsStatus\": \"insert\/update\/delete: 4\/1\/1\"" 1 \
 		"\"processedRowsStatus\": \"insert\/update\/delete: 0\/0\/1\"" 1 \
 		"pendingRowsStatus\": \"insert\/update\/delete: 0\/0\/0" 2 \
 		"new\/ignored\/resolved: 0\/0\/0" 1 \
-		"new\/ignored\/resolved: 2\/0\/0" 1 \
+		"new\/ignored\/resolved: 4\/0\/0" 1 \
 		"\"stage\": \"Running\"" 4 \
 		"\"stage\": \"Stopped\"" 1
 	run_sql_source1 "create table dmctl_command.t_trigger_flush101(id int primary key)" # trigger flush
@@ -200,22 +202,26 @@ function run_validator_cmd {
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation show-errors --error all test" \
 		"\"id\": \"1\"" 1 \
-		"\"id\": \"2\"" 1
+		"\"id\": \"2\"" 1 \
+		"\"id\": \"3\"" 1 \
+		"\"id\": \"4\"" 1 
 	# resolve error 1
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation make-resolve test 1"
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation status test" \
-		"new\/ignored\/resolved: 1\/0\/1" 1
+		"new\/ignored\/resolved: 3\/0\/1" 1
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation show-errors --error unprocessed test" \
-		"\"id\": \"2\"" 1
+		"\"id\": \"2\"" 1 \
+		"\"id\": \"3\"" 1 \
+		"\"id\": \"4\"" 1
 	# ignore error 2
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation ignore-error test 2"
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation status test" \
-		"new\/ignored\/resolved: 0\/1\/1" 1
+		"new\/ignored\/resolved: 2\/1\/1" 1
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation show-errors --error ignored test" \
 		"\"id\": \"2\"" 1
@@ -224,26 +230,15 @@ function run_validator_cmd {
 		"validation clear test 1"
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation status test" \
-		"new\/ignored\/resolved: 0\/1\/0" 1
+		"new\/ignored\/resolved: 2\/1\/0" 1
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation show-errors --error ignored test" \
 		"\"id\": \"2\"" 1
-	# clear all errors
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"validation clear test --all"
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"validation status test" \
-		"new\/ignored\/resolved: 0\/0\/0" 2
-
-	# two more validation errors and then stop validator
-	run_sql_source1 "insert into dmctl_command.t1 values(0,'ignore-row')" # skip by syncer
-	run_sql_source1 "insert into dmctl_command.t1 values(-1,'ignore-row')"
-	sleep 10
+		"validation clear test 2"
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation status test" \
 		"new\/ignored\/resolved: 2\/0\/0" 1
-	run_sql_source1 "create table dmctl_command.t_trigger_flush10(id int primary key)" # trigger flush
-	sleep 5
 	# test we can get validation status even when it's stopped
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation stop test" \
