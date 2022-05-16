@@ -263,7 +263,7 @@ func (s *mysqlSink) flushRowChangedEvents(ctx context.Context) {
 			return
 		case <-s.resolvedCh:
 		}
-		flushedResolvedTsMap, resolvedTxnsMap := s.txnCache.Resolved(&s.tableMaxResolvedTs)
+		checkpointTsMap, resolvedTxnsMap := s.txnCache.Resolved(&s.tableMaxResolvedTs)
 
 		if s.cyclic != nil {
 			// Filter rows if it is origin from downstream.
@@ -275,7 +275,7 @@ func (s *mysqlSink) flushRowChangedEvents(ctx context.Context) {
 		if len(resolvedTxnsMap) != 0 {
 			s.dispatchAndExecTxns(ctx, resolvedTxnsMap)
 		}
-		for tableID, resolvedTs := range flushedResolvedTsMap {
+		for tableID, resolvedTs := range checkpointTsMap {
 			s.tableCheckpointTs.Store(tableID, resolvedTs)
 		}
 	}
