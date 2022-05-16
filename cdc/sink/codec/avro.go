@@ -403,11 +403,27 @@ func rowToAvroSchema(
 		}
 		field := make(map[string]interface{})
 		field["name"] = sanitizeName(col.Name)
+
+		copy := *col
+		copy.Value = copy.Default
+		defaultValue, _, err := columnToAvroData(
+			&copy,
+			colInfos[i].Ft,
+			decimalHandlingMode,
+			bigintUnsignedHandlingMode,
+		)
+		if err != nil {
+			log.Error("fail to get default value for avro schema")
+			return "", errors.Trace(err)
+		}
 		if col.Flag.IsNullable() {
 			field["type"] = []interface{}{"null", avroType}
-			field["default"] = nil
+			field["default"] = defaultValue
 		} else {
 			field["type"] = avroType
+			if col.Default != nil {
+				field["default"] = defaultValue
+			}
 		}
 
 		top.Fields = append(top.Fields, field)
