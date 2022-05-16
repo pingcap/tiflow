@@ -23,6 +23,10 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/pkg/chdelay"
+	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/etcd"
+	"github.com/pingcap/tiflow/pkg/orchestrator/util"
+	pkgutil "github.com/pingcap/tiflow/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.etcd.io/etcd/api/v3/etcdserverpb"
 	"go.etcd.io/etcd/api/v3/mvccpb"
@@ -32,10 +36,6 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"golang.org/x/time/rate"
-
-	cerrors "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/etcd"
-	"github.com/pingcap/tiflow/pkg/orchestrator/util"
 )
 
 const (
@@ -43,11 +43,6 @@ const (
 	// takes more than etcdWorkerLogsWarnDuration, it will print a log
 	etcdWorkerLogsWarnDuration = 1 * time.Second
 	deletionCounterKey         = "/meta/ticdc-delete-etcd-key-count"
-
-	// ProcessorRole is the role of the processor etcd worker
-	ProcessorRole = "processor"
-	// OwnerRole is the role of the owner etcd worker
-	OwnerRole = "owner"
 )
 
 // EtcdWorker handles all interactions with Etcd
@@ -140,7 +135,7 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 	defer cancel()
 	watchCh := worker.client.Watch(watchCtx, worker.prefix.String(), role, clientv3.WithPrefix(), clientv3.WithRev(worker.revision+1))
 
-	if role == ProcessorRole {
+	if role == pkgutil.RoleProcessor.String() {
 		failpoint.Inject("ProcessorEtcdDelay", func() {
 			delayer := chdelay.NewChannelDelayer(time.Second*3, watchCh, 1024, 16)
 			defer delayer.Close()
