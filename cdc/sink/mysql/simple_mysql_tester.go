@@ -97,13 +97,8 @@ func NewSimpleMySQLSink(
 	return sink, nil
 }
 
-// Init table sink resources
-func (s *simpleMySQLSink) Init(tableID model.TableID) error {
+func (s *simpleMySQLSink) AddTable(tableID model.TableID) error {
 	return nil
-}
-
-func (s *simpleMySQLSink) TryEmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) (bool, error) {
-	return true, nil
 }
 
 // EmitRowChangedEvents sends Row Changed Event to Sink
@@ -213,7 +208,7 @@ func (s *simpleMySQLSink) Close(ctx context.Context) error {
 	return s.db.Close()
 }
 
-func (s *simpleMySQLSink) Barrier(ctx context.Context, tableID model.TableID) error {
+func (s *simpleMySQLSink) RemoveTable(ctx context.Context, tableID model.TableID) error {
 	return nil
 }
 
