@@ -422,8 +422,8 @@ func (d *CanalEventBatchEncoder) EncodeCheckpointEvent(ts uint64) (*MQMessage, e
 // AppendRowChangedEvent implements the EventBatchEncoder interface
 func (d *CanalEventBatchEncoder) AppendRowChangedEvent(
 	ctx context.Context,
-	e *model.RowChangedEvent,
 	topic string,
+	e *model.RowChangedEvent,
 ) error {
 	entry, err := d.entryBuilder.FromRowEvent(e)
 	if err != nil {

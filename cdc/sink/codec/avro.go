@@ -58,8 +58,8 @@ type avroEncodeResult struct {
 // NOTE: the encoder can only store one RowChangedEvent!
 func (a *AvroEventBatchEncoder) AppendRowChangedEvent(
 	ctx context.Context,
-	e *model.RowChangedEvent,
 	topic string,
+	e *model.RowChangedEvent,
 ) error {
 	log.Debug("AppendRowChangedEvent", zap.Any("rowChangedEvent", e))
 	mqMessage := NewMQMessage(
@@ -301,6 +301,7 @@ const (
 	numberPrefix    = "_"
 )
 
+// sanitizeName escapes not permitted chars for avro
 // debezium-core/src/main/java/io/debezium/schema/FieldNameSelector.java
 // https://avro.apache.org/docs/current/spec.html#names
 func sanitizeName(name string) string {
@@ -335,7 +336,7 @@ func sanitizeName(name string) string {
 	return sanitizedName
 }
 
-// escape ".", it may has special meanings for sink connectors
+// sanitizeTopic escapes ".", it may has special meanings for sink connectors
 func sanitizeTopic(name string) string {
 	return strings.ReplaceAll(name, ".", replacementChar)
 }
@@ -472,12 +473,6 @@ func rowToAvroData(
 	return ret, nil
 }
 
-const (
-	decimalHandlingModePrecise       = "precise"
-	bigintUnsignedHandlingModeString = "string"
-	bigintUnsignedHandlingModeLong   = "long"
-)
-
 func columnToAvroSchema(
 	col *model.Column,
 	ft *types.FieldType,
@@ -535,6 +530,7 @@ func columnToAvroSchema(
 		if decimalHandlingMode == decimalHandlingModePrecise {
 			defaultFlen, defaultDecimal := mysql.GetDefaultFieldLengthAndDecimal(ft.Tp)
 			displayFlen, displayDecimal := ft.Flen, ft.Decimal
+			// length not specified, set it to system type default
 			if displayFlen == -1 {
 				displayFlen = defaultFlen
 			}

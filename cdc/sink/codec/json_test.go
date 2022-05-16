@@ -116,7 +116,7 @@ func (s *batchTester) testBatchCodec(
 		encoder := encoderBuilder.Build()
 
 		for _, row := range cs {
-			err := encoder.AppendRowChangedEvent(context.Background(), row, "")
+			err := encoder.AppendRowChangedEvent(context.Background(), "", row)
 			require.Nil(t, err)
 		}
 
@@ -180,20 +180,20 @@ func TestMaxMessageBytes(t *testing.T) {
 	a := 87 + 44
 	config := NewConfig(config.ProtocolOpen).WithMaxMessageBytes(a)
 	encoder := newJSONEventBatchEncoderBuilder(config).Build()
-	err := encoder.AppendRowChangedEvent(ctx, testEvent, topic)
+	err := encoder.AppendRowChangedEvent(ctx, topic, testEvent)
 	require.Nil(t, err)
 
 	// cannot hold a single message
 	config = config.WithMaxMessageBytes(a - 1)
 	encoder = newJSONEventBatchEncoderBuilder(config).Build()
-	err = encoder.AppendRowChangedEvent(ctx, testEvent, topic)
+	err = encoder.AppendRowChangedEvent(ctx, topic, testEvent)
 	require.NotNil(t, err)
 
 	// make sure each batch's `Length` not greater than `max-message-bytes`
 	config = config.WithMaxMessageBytes(256)
 	encoder = newJSONEventBatchEncoderBuilder(config).Build()
 	for i := 0; i < 10000; i++ {
-		err := encoder.AppendRowChangedEvent(ctx, testEvent, topic)
+		err := encoder.AppendRowChangedEvent(ctx, topic, testEvent)
 		require.Nil(t, err)
 	}
 
@@ -216,7 +216,7 @@ func TestMaxBatchSize(t *testing.T) {
 	}
 
 	for i := 0; i < 10000; i++ {
-		err := encoder.AppendRowChangedEvent(context.Background(), testEvent, "")
+		err := encoder.AppendRowChangedEvent(context.Background(), "", testEvent)
 		require.Nil(t, err)
 	}
 

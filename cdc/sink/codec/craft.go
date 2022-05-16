@@ -54,8 +54,8 @@ func (e *CraftEventBatchEncoder) flush() {
 // AppendRowChangedEvent implements the EventBatchEncoder interface
 func (e *CraftEventBatchEncoder) AppendRowChangedEvent(
 	ctx context.Context,
-	ev *model.RowChangedEvent,
 	topic string,
+	ev *model.RowChangedEvent,
 ) error {
 	rows, size := e.rowChangedBuffer.AppendRowChangedEvent(ev)
 	if size > e.maxMessageBytes || rows >= e.maxBatchSize {

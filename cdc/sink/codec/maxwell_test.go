@@ -33,7 +33,7 @@ func TestMaxwellEventBatchCodec(t *testing.T) {
 	for _, cs := range rowCases {
 		encoder := newEncoder()
 		for _, row := range cs {
-			err := encoder.AppendRowChangedEvent(context.Background(), row, "")
+			err := encoder.AppendRowChangedEvent(context.Background(), "", row)
 			require.Nil(t, err)
 		}
 		size := encoder.Size()

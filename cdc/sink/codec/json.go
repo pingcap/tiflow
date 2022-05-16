@@ -427,8 +427,8 @@ func (d *JSONEventBatchEncoder) EncodeCheckpointEvent(ts uint64) (*MQMessage, er
 // AppendRowChangedEvent implements the EventBatchEncoder interface
 func (d *JSONEventBatchEncoder) AppendRowChangedEvent(
 	ctx context.Context,
-	e *model.RowChangedEvent,
 	topic string,
+	e *model.RowChangedEvent,
 ) error {
 	keyMsg, valueMsg := rowEventToMqMessage(e)
 	key, err := keyMsg.Encode()

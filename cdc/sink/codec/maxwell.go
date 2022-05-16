@@ -166,8 +166,8 @@ func rowEventToMaxwellMessage(e *model.RowChangedEvent) (*mqMessageKey, *maxwell
 // AppendRowChangedEvent implements the EventBatchEncoder interface
 func (d *MaxwellEventBatchEncoder) AppendRowChangedEvent(
 	ctx context.Context,
-	e *model.RowChangedEvent,
 	topic string,
+	e *model.RowChangedEvent,
 ) error {
 	_, valueMsg := rowEventToMaxwellMessage(e)
 	value, err := valueMsg.Encode()

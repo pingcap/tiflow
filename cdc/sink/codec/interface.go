@@ -18,11 +18,10 @@ import (
 	"encoding/binary"
 	"time"
 
-	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/tikv/client-go/v2/oracle"
-	"go.uber.org/zap"
 )
 
 // EventBatchEncoder is an abstraction for events encoder
@@ -32,7 +31,7 @@ type EventBatchEncoder interface {
 	EncodeCheckpointEvent(ts uint64) (*MQMessage, error)
 	// AppendRowChangedEvent appends the calling context, a row changed event and the dispatch
 	// topic into the batch
-	AppendRowChangedEvent(context.Context, *model.RowChangedEvent, string) error
+	AppendRowChangedEvent(context.Context, string, *model.RowChangedEvent) error
 	// EncodeDDLEvent appends a DDL event into the batch
 	EncodeDDLEvent(e *model.DDLEvent) (*MQMessage, error)
 	// Build builds the batch and returns the bytes of key and value.
@@ -181,10 +180,6 @@ func NewEventBatchEncoderBuilder(ctx context.Context, c *Config) (EncoderBuilder
 	case config.ProtocolCraft:
 		return newCraftEventBatchEncoderBuilder(c), nil
 	default:
-		log.Warn(
-			"unknown codec protocol value of EventBatchEncoder, use open-protocol as the default",
-			zap.Any("protocolValue", int(c.protocol)),
-		)
-		return newJSONEventBatchEncoderBuilder(c), nil
+		return nil, cerror.ErrMQSinkUnknownProtocol.GenWithStackByArgs(c.protocol)
 	}
 }

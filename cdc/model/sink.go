@@ -323,8 +323,7 @@ func (r *RowChangedEvent) HandleKeyColumns() []*Column {
 	}
 
 	if len(pkeyCols) == 0 {
-		// TODO redact the message
-		log.Panic("Cannot find handle key columns, bug?", zap.Any("event", r))
+		log.Panic("Cannot find handle key columns.", zap.Any("event", r))
 	}
 
 	return pkeyCols
@@ -350,8 +349,7 @@ func (r *RowChangedEvent) HandleKeyColInfos() ([]*Column, []rowcodec.ColInfo) {
 	}
 
 	if len(pkeyCols) == 0 {
-		// TODO redact the message
-		log.Panic("Cannot find handle key columns, bug?", zap.Any("event", r))
+		log.Panic("Cannot find handle key columns.", zap.Any("event", r))
 	}
 
 	return pkeyCols, pkeyColInfos

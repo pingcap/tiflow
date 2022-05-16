@@ -66,6 +66,13 @@ const (
 	codecOPTAvroSchemaRegistry             = "schema-registry"
 )
 
+const (
+	decimalHandlingModeString        = "string"
+	decimalHandlingModePrecise       = "precise"
+	bigintUnsignedHandlingModeString = "string"
+	bigintUnsignedHandlingModeLong   = "long"
+)
+
 // Apply fill the Config
 func (c *Config) Apply(sinkURI *url.URL, config *config.ReplicaConfig) error {
 	params := sinkURI.Query()
@@ -131,18 +138,23 @@ func (c *Config) Validate() error {
 			)
 		}
 
-		if c.avroDecimalHandlingMode != "precise" && c.avroDecimalHandlingMode != "string" {
+		if c.avroDecimalHandlingMode != decimalHandlingModePrecise &&
+			c.avroDecimalHandlingMode != decimalHandlingModeString {
 			return cerror.ErrMQCodecInvalidConfig.GenWithStack(
-				`%s value could only be "string" or "precise"`,
+				`%s value could only be "%s" or "%s"`,
 				codecOPTAvroDecimalHandlingMode,
+				decimalHandlingModeString,
+				decimalHandlingModePrecise,
 			)
 		}
 
-		if c.avroBigintUnsignedHandlingMode != "long" &&
-			c.avroBigintUnsignedHandlingMode != "string" {
+		if c.avroBigintUnsignedHandlingMode != bigintUnsignedHandlingModeLong &&
+			c.avroBigintUnsignedHandlingMode != bigintUnsignedHandlingModeString {
 			return cerror.ErrMQCodecInvalidConfig.GenWithStack(
-				`%s value could only be "long" or "string"`,
+				`%s value could only be "%s" or "%s"`,
 				codecOPTAvroBigintUnsignedHandlingMode,
+				bigintUnsignedHandlingModeLong,
+				bigintUnsignedHandlingModeString,
 			)
 		}
 	}
