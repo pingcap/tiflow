@@ -68,10 +68,12 @@ func (s *SinkConfig) validate(enableOldValue bool) error {
 		if rule.DispatcherRule != "" && rule.PartitionRule != "" {
 			log.Error("dispatcher and partition cannot be configured both", zap.Any("rule", rule))
 			return cerror.WrapError(cerror.ErrSinkInvalidConfig,
-				errors.New(fmt.Sprintf("dispatcher and partition cannot be configured both for rule:%v", rule)))
+				errors.New(fmt.Sprintf("dispatcher and partition cannot be "+
+					"configured both for rule:%v", rule)))
 		}
 		if rule.DispatcherRule != "" {
 			rule.PartitionRule = rule.DispatcherRule
+			rule.DispatcherRule = ""
 		}
 	}
 

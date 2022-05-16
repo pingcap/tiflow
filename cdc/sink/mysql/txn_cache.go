@@ -121,7 +121,9 @@ func (c *unresolvedTxnCache) Resolved(
 
 func splitResolvedTxn(
 	resolvedTsMap *sync.Map, unresolvedTxns map[model.TableID][]*txnsWithTheSameCommitTs,
-) (checkpointTsMap map[model.TableID]uint64, resolvedRowsMap map[model.TableID][]*model.SingleTableTxn) {
+) (checkpointTsMap map[model.TableID]uint64,
+	resolvedRowsMap map[model.TableID][]*model.SingleTableTxn,
+) {
 	var (
 		ok                              bool
 		txnsLength                      int

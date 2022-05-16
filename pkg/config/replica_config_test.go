@@ -93,13 +93,15 @@ func TestReplicaConfigValidate(t *testing.T) {
 	conf = GetDefaultReplicaConfig()
 	conf.Sink.Protocol = "canal"
 	conf.EnableOldValue = false
-	require.Regexp(t, ".*canal protocol requires old value to be enabled.*", conf.Validate())
+	require.Regexp(t, ".*canal protocol requires old value to be enabled.*",
+		conf.Validate())
 
 	conf = GetDefaultReplicaConfig()
 	conf.Sink.DispatchRules = []*DispatchRule{
 		{Matcher: []string{"a.b"}, DispatcherRule: "d1", PartitionRule: "r1"},
 	}
-	require.Regexp(t, ".*dispatcher and partition cannot be configured both.*", conf.Validate())
+	require.Regexp(t, ".*dispatcher and partition cannot be configured both.*",
+		conf.Validate())
 
 	// Correct sink configuration.
 	conf = GetDefaultReplicaConfig()
