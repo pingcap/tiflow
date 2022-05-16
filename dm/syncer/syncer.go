@@ -1470,6 +1470,10 @@ func (s *Syncer) waitBeforeRunExit(ctx context.Context) {
 		s.tctx.L().Info("received subtask's done, try graceful stop")
 		needToExitTime := time.Now()
 		s.waitTransactionLock.Lock()
+
+		failpoint.Inject("checkWaitDuration", func(_ failpoint.Value) {
+			s.isTransactionEnd = false
+		})
 		if s.isTransactionEnd {
 			s.waitXIDJob.Store(int64(waitComplete))
 			s.waitTransactionLock.Unlock()
@@ -1498,6 +1502,17 @@ func (s *Syncer) waitBeforeRunExit(ctx context.Context) {
 			s.runCancel()
 			return
 		}
+		failpoint.Inject("checkWaitDuration", func(val failpoint.Value) {
+			if testDuration, testError := time.ParseDuration(val.(string)); testError == nil {
+				if testDuration.Seconds() == waitDuration.Seconds() {
+					panic("success check wait_time_on_stop !!!")
+				} else {
+					s.tctx.L().Error("checkWaitDuration fail", zap.Duration("testDuration", testDuration), zap.Duration("waitDuration", waitDuration))
+				}
+			} else {
+				s.tctx.L().Error("checkWaitDuration error", zap.Error(testError))
+			}
+		})
 
 		select {
 		case <-s.runCtx.Ctx.Done():
@@ -2196,7 +2211,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		}
 
 		// set exitSafeModeTS when meet first binlog
-		if s.firstMeetBinlogTS == nil && s.cliArgs != nil && s.cliArgs.SafeModeDuration != "" {
+		if s.firstMeetBinlogTS == nil && s.cliArgs != nil && s.cliArgs.SafeModeDuration != "" && int64(e.Header.Timestamp) != 0 && e.Header.EventType != replication.FORMAT_DESCRIPTION_EVENT {
 			if checkErr := s.initSafeModeExitTS(int64(e.Header.Timestamp)); checkErr != nil {
 				return checkErr
 			}
