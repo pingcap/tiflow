@@ -27,7 +27,7 @@ Issue Number: close #xxx
  - Manual test (add detailed scripts or steps below)
  - No code
 
-#### Questions <!-- Both authors and reviewers should answer and consider these questions. -->
+#### Questions <!-- Authors should answer these questions and reviewers should consider these questions. -->
 
 ##### Will it cause performance setbacks or break compatibility?
 
