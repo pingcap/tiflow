@@ -139,6 +139,38 @@ func TestJobManagerPauseJob(t *testing.T) {
 	require.Equal(t, pb.ErrorCode_UnKnownJob, resp.Err.Code)
 }
 
+func TestJobManagerCancelJob(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	mockMaster := lib.NewMockMasterImpl("", "cancel-job-test")
+	mockMaster.On("InitImpl", mock.Anything).Return(nil)
+	mgr := &JobManagerImplV2{
+		BaseMaster:       mockMaster.DefaultBaseMaster,
+		JobFsm:           NewJobFsm(),
+		clocker:          clock.New(),
+		frameMetaClient:  mockMaster.GetFrameMetaClient(),
+		masterMetaClient: metadata.NewMasterMetadataClient(metadata.JobManagerUUID, mockMaster.GetFrameMetaClient()),
+	}
+
+	err := mgr.frameMetaClient.UpsertJob(ctx, &libModel.MasterMetaKVData{
+		ID:         "job-to-be-canceled",
+		Tp:         lib.FakeJobMaster,
+		StatusCode: libModel.MasterStatusStopped,
+	})
+	require.NoError(t, err)
+
+	err = mgr.OnMasterRecovered(ctx)
+	require.NoError(t, err)
+
+	resp := mgr.CancelJob(ctx, &pb.CancelJobRequest{
+		JobIdStr: "job-to-be-canceled",
+	})
+	require.Equal(t, &pb.CancelJobResponse{}, resp)
+}
+
 func TestJobManagerQueryJob(t *testing.T) {
 	t.Parallel()
 
@@ -182,6 +214,10 @@ func TestJobManagerQueryJob(t *testing.T) {
 		frameMetaClient:  mockMaster.GetFrameMetaClient(),
 	}
 
+	statuses, err := mgr.GetJobStatuses(ctx)
+	require.NoError(t, err)
+	require.Len(t, statuses, len(testCases))
+
 	for _, tc := range testCases {
 		req := &pb.QueryJobRequest{
 			JobId: tc.meta.ID,
@@ -189,6 +225,9 @@ func TestJobManagerQueryJob(t *testing.T) {
 		resp := mgr.QueryJob(ctx, req)
 		require.Nil(t, resp.Err)
 		require.Equal(t, tc.expectedPBStatus, resp.GetStatus())
+
+		require.Contains(t, statuses, tc.meta.ID)
+		require.Equal(t, tc.meta.StatusCode, statuses[tc.meta.ID])
 	}
 }
 

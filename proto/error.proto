@@ -27,6 +27,8 @@ enum ErrorCode {
     MetaStoreNotExists = 11;
     // metastore serialize fail
     MetaStoreSerializeFail = 12;
+    // job status is not expected for the operation.
+    UnexpectedJobStatus = 13;
     
     UnknownError = 10001;
 }

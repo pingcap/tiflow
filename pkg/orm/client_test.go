@@ -3,8 +3,10 @@ package orm
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
 	"errors"
 	"reflect"
+	"regexp"
 	"testing"
 	"time"
 
@@ -37,6 +39,13 @@ func mockGetDBConn(t *testing.T, dsnStr string) (*sql.DB, sqlmock.Sqlmock, error
 	mock.ExpectQuery("SELECT VERSION()").WillReturnRows(sqlmock.NewRows(
 		[]string{"VERSION()"}).AddRow("5.7.35-log"))
 	return db, mock, nil
+}
+
+type anyTime struct{}
+
+func (a anyTime) Match(v driver.Value) bool {
+	_, ok := v.(time.Time)
+	return ok
 }
 
 func TestNewMetaOpsClient(t *testing.T) {
@@ -407,8 +416,9 @@ func TestJob(t *testing.T) {
 			},
 			err: cerrors.ErrMetaOpFail.GenWithStackByArgs(),
 			mockExpectResFn: func(mock sqlmock.Sqlmock) {
-				mock.ExpectExec("DELETE FROM `master_meta_kv_data` WHERE id").WithArgs(
-					"j111").WillReturnError(errors.New("DeleteJob error"))
+				expectedSQL := "UPDATE `master_meta_kv_data` SET `deleted`=? WHERE id = ? AND `master_meta_kv_data`.`deleted` IS NULL"
+				mock.ExpectExec(regexp.QuoteMeta(expectedSQL)).WithArgs(
+					anyTime{}, "j111").WillReturnError(errors.New("DeleteJob error"))
 			},
 		},
 		{
@@ -421,8 +431,9 @@ func TestJob(t *testing.T) {
 				rowsAffected: 1,
 			},
 			mockExpectResFn: func(mock sqlmock.Sqlmock) {
-				mock.ExpectExec("DELETE FROM `master_meta_kv_data` WHERE id").WithArgs(
-					"j112").WillReturnResult(sqlmock.NewResult(0, 1))
+				expectedSQL := "UPDATE `master_meta_kv_data` SET `deleted`=? WHERE id = ? AND `master_meta_kv_data`.`deleted` IS NULL"
+				mock.ExpectExec(regexp.QuoteMeta(expectedSQL)).WithArgs(
+					anyTime{}, "j112").WillReturnResult(sqlmock.NewResult(0, 1))
 			},
 		},
 		{
@@ -466,7 +477,8 @@ func TestJob(t *testing.T) {
 				Config:     []byte{0x11, 0x22},
 			},
 			mockExpectResFn: func(mock sqlmock.Sqlmock) {
-				mock.ExpectQuery("SELECT [*] FROM `master_meta_kv_data` WHERE id").WithArgs("j111").WillReturnRows(
+				expectedSQL := "SELECT * FROM `master_meta_kv_data` WHERE id = ? AND `master_meta_kv_data`.`deleted` IS NULL"
+				mock.ExpectQuery(regexp.QuoteMeta(expectedSQL)).WithArgs("j111").WillReturnRows(
 					sqlmock.NewRows([]string{
 						"created_at", "updated_at", "project_id", "id",
 						"type", "status", "node_id", "address", "epoch", "config", "seq_id",
@@ -553,7 +565,8 @@ func TestJob(t *testing.T) {
 				},
 			},
 			mockExpectResFn: func(mock sqlmock.Sqlmock) {
-				mock.ExpectQuery("SELECT [*] FROM `master_meta_kv_data` WHERE id").WithArgs("j111", 1).WillReturnRows(
+				expectedSQL := "SELECT * FROM `master_meta_kv_data` WHERE (id = ? AND status = ?) AND `master_meta_kv_data`.`deleted` IS NULL"
+				mock.ExpectQuery(regexp.QuoteMeta(expectedSQL)).WithArgs("j111", 1).WillReturnRows(
 					sqlmock.NewRows([]string{
 						"created_at", "updated_at", "project_id", "id",
 						"type", "status", "node_id", "address", "epoch", "config", "seq_id",
@@ -569,7 +582,8 @@ func TestJob(t *testing.T) {
 			},
 			err: cerrors.ErrMetaOpFail.GenWithStackByArgs(),
 			mockExpectResFn: func(mock sqlmock.Sqlmock) {
-				mock.ExpectQuery("SELECT [*] FROM `master_meta_kv_data` WHERE id").WithArgs("j111", 1).WillReturnError(
+				expectedSQL := "SELECT * FROM `master_meta_kv_data` WHERE (id = ? AND status = ?) AND `master_meta_kv_data`.`deleted` IS NULL"
+				mock.ExpectQuery(regexp.QuoteMeta(expectedSQL)).WithArgs("j111", 1).WillReturnError(
 					errors.New("QueryJobsByStatus error"))
 			},
 		},

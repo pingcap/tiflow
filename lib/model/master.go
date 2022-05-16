@@ -3,6 +3,8 @@ package model
 import (
 	"encoding/json"
 
+	"gorm.io/gorm"
+
 	ormModel "github.com/hanfei1991/microcosm/pkg/orm/model"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 	"github.com/hanfei1991/microcosm/pkg/tenant"
@@ -44,6 +46,10 @@ type MasterMetaKVData struct {
 	// Config holds business-specific data
 	Config []byte `json:"config" gorm:"column:config;type:blob"`
 	// TODO: add master status and checkpoint data
+
+	// Deleted is a nullable timestamp. Then master is deleted
+	// if Deleted is not null.
+	Deleted gorm.DeletedAt
 }
 
 // Marshal returns the JSON encoding of MasterMetaKVData.

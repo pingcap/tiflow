@@ -30,6 +30,8 @@ type JobManager interface {
 	QueryJob(ctx context.Context, req *pb.QueryJobRequest) *pb.QueryJobResponse
 	CancelJob(ctx context.Context, req *pb.CancelJobRequest) *pb.CancelJobResponse
 	PauseJob(ctx context.Context, req *pb.PauseJobRequest) *pb.PauseJobResponse
+
+	GetJobStatuses(ctx context.Context) (map[libModel.MasterID]libModel.MasterStatusCode, error)
 }
 
 const defaultJobMasterCost = 1
@@ -78,7 +80,44 @@ func (jm *JobManagerImplV2) PauseJob(ctx context.Context, req *pb.PauseJobReques
 
 // CancelJob implements proto/Master.CancelJob
 func (jm *JobManagerImplV2) CancelJob(ctx context.Context, req *pb.CancelJobRequest) *pb.CancelJobResponse {
-	panic("not implemented")
+	// This is a draft implementation.
+	// TODO:
+	// (1) Handle potential race conditions.
+	// (2) Refine error handling.
+
+	job, err := jm.frameMetaClient.GetJobByID(ctx, req.GetJobIdStr())
+	if pkgOrm.IsNotFoundError(err) {
+		return &pb.CancelJobResponse{Err: &pb.Error{
+			Code: pb.ErrorCode_UnKnownJob,
+		}}
+	}
+	if err != nil {
+		return &pb.CancelJobResponse{Err: &pb.Error{
+			Code:    pb.ErrorCode_UnknownError,
+			Message: err.Error(),
+		}}
+	}
+
+	// Only stopped (paused) jobs can be canceled.
+	if job.StatusCode != libModel.MasterStatusStopped {
+		return &pb.CancelJobResponse{Err: &pb.Error{
+			Code: pb.ErrorCode_UnexpectedJobStatus,
+		}}
+	}
+
+	// Note that DeleteJob is a soft delete.
+	res, err := jm.frameMetaClient.DeleteJob(ctx, req.JobIdStr)
+	if err != nil {
+		return &pb.CancelJobResponse{Err: &pb.Error{
+			Code:    pb.ErrorCode_UnknownError,
+			Message: err.Error(),
+		}}
+	}
+	if res.RowsAffected() == 0 {
+		log.L().Warn("Job not found in meta (or already deleted)",
+			zap.Any("req", req))
+	}
+	return &pb.CancelJobResponse{}
 }
 
 // QueryJob implements proto/Master.QueryJob
@@ -182,6 +221,22 @@ func (jm *JobManagerImplV2) SubmitJob(ctx context.Context, req *pb.SubmitJobRequ
 	jm.JobFsm.JobDispatched(meta, false /*addFromFailover*/)
 	resp.JobIdStr = id
 	return resp
+}
+
+// GetJobStatuses returns the status code of all jobs that are not deleted.
+func (jm *JobManagerImplV2) GetJobStatuses(
+	ctx context.Context,
+) (map[libModel.MasterID]libModel.MasterStatusCode, error) {
+	jobs, err := jm.frameMetaClient.QueryJobs(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	ret := make(map[libModel.MasterID]libModel.MasterStatusCode, len(jobs))
+	for _, jobMeta := range jobs {
+		ret[jobMeta.ID] = jobMeta.StatusCode
+	}
+	return ret, nil
 }
 
 // NewJobManagerImplV2 creates a new JobManagerImplV2 instance

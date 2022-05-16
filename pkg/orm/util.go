@@ -2,8 +2,11 @@ package orm
 
 import "strings"
 
-// IsNotFoundError chesk whether the error is ErrMetaEntryNotFound
+// IsNotFoundError checks whether the error is ErrMetaEntryNotFound
 // TODO: refine me, need wrap error for api
 func IsNotFoundError(err error) bool {
+	if err == nil {
+		return false
+	}
 	return strings.Contains(err.Error(), "ErrMetaEntryNotFound")
 }
