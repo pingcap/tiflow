@@ -42,6 +42,7 @@ type AvroEventBatchEncoder struct {
 	keySchemaManager   *AvroSchemaManager
 	valueSchemaManager *AvroSchemaManager
 	resultBuf          []*MQMessage
+	maxMessageBytes    int
 
 	enableTiDBExtension        bool
 	decimalHandlingMode        string
@@ -107,6 +108,20 @@ func (a *AvroEventBatchEncoder) AppendRowChangedEvent(
 		mqMessage.Key = nil
 	}
 	mqMessage.IncRowsCount()
+
+	if mqMessage.Length() > a.maxMessageBytes {
+		log.Error(
+			"Single message too large",
+			zap.Int(
+				"max-message-size",
+				a.maxMessageBytes,
+			),
+			zap.Int("length", mqMessage.Length()),
+			zap.Any("table", e.Table),
+		)
+		return cerror.ErrAvroEncodeFailed.GenWithStackByArgs()
+	}
+
 	a.resultBuf = append(a.resultBuf, mqMessage)
 
 	return nil
@@ -743,6 +758,7 @@ func (b *avroEventBatchEncoderBuilder) Build() EventBatchEncoder {
 	encoder.keySchemaManager = b.keySchemaManager
 	encoder.valueSchemaManager = b.valueSchemaManager
 	encoder.resultBuf = make([]*MQMessage, 0, 4096)
+	encoder.maxMessageBytes = b.config.MaxMessageBytes()
 	encoder.enableTiDBExtension = b.config.enableTiDBExtension
 	encoder.decimalHandlingMode = b.config.avroDecimalHandlingMode
 	encoder.bigintUnsignedHandlingMode = b.config.avroBigintUnsignedHandlingMode
