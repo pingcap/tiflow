@@ -284,6 +284,8 @@ function run() {
 	check_task_error_count $cur/conf/dm-task3.yaml
 	check_task_not_pass_with_message $cur/conf/dm-task5.yaml "please use \`shard-mode\` only."
 	start_task_not_pass_with_message $cur/conf/dm-task5.yaml "please use \`shard-mode\` only."
+	check_task_not_pass_with_message $cur/conf/dm-task6.yaml "please use \`shard-mode\` only."
+	start_task_not_pass_with_message $cur/conf/dm-task6.yaml "please use \`shard-mode\` only."
 
 	echo "check_task_optimistic"
 	check_task_pass $cur/conf/dm-task4.yaml
