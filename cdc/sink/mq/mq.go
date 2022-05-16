@@ -335,7 +335,7 @@ func (k *mqSink) Close(ctx context.Context) error {
 }
 
 func (k *mqSink) RemoveTable(cxt context.Context, tableID model.TableID) error {
-	// Barrier does nothing because FlushRowChangedEvents in mq sink has flushed
+	// RemoveTable does nothing because FlushRowChangedEvents in mq sink had flushed
 	// all buffered events by force.
 	return nil
 }
