@@ -36,7 +36,7 @@ type Sink interface {
 	// the residual values of the table in Sink.
 	// See: https://github.com/pingcap/tiflow/issues/4464#issuecomment-1085385382.
 	//
-	// NOTICE: Only MySQLSink and MQSink are implement it.
+	// NOTICE: Only MySQLSink and MQSink implement it.
 	AddTable(tableID model.TableID) error
 
 	// EmitRowChangedEvents sends Row Changed Event to Sink
