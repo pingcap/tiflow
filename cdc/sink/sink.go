@@ -42,7 +42,7 @@ type Sink interface {
 	// EmitRowChangedEvents sends Row Changed Event to Sink
 	// EmitRowChangedEvents may write rows to downstream directly;
 	//
-	// EmitRowChangedEvents is thread-safety.
+	// EmitRowChangedEvents is thread-safe.
 	EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error
 
 	// EmitDDLEvent sends DDL Event to Sink
