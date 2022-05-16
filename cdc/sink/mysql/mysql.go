@@ -197,13 +197,12 @@ func NewMySQLSink(
 		statistics:                      metrics.NewStatistics(ctx, metrics.SinkTypeDB),
 		metricConflictDetectDurationHis: metricConflictDetectDurationHis,
 		metricBucketSizeCounters:        metricBucketSizeCounters,
+		execWaitNotifier:                new(notify.Notifier),
+		resolvedCh:                      make(chan struct{}, 1),
 		errCh:                           make(chan error, 1),
 		forceReplicate:                  replicaConfig.ForceReplicate,
 		cancel:                          cancel,
 	}
-
-	sink.execWaitNotifier = new(notify.Notifier)
-	sink.resolvedCh = make(chan struct{})
 
 	err = sink.createSinkWorkers(ctx)
 	if err != nil {
