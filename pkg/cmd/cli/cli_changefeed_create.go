@@ -443,6 +443,8 @@ func (o *createChangefeedOptions) run(ctx context.Context, cmd *cobra.Command) e
 	if err != nil {
 		return err
 	}
+	// set the upstream tidb cluster id
+	info.UpstreamID = o.pdClient.GetClusterID(ctx)
 
 	infoStr, err := info.Marshal()
 	if err != nil {
