@@ -219,7 +219,7 @@ func NewMySQLSink(
 	return sink, nil
 }
 
-// EmitRowChangedEvents append row changed events to the txn cache.
+// EmitRowChangedEvents appends row changed events to the txn cache.
 // Concurrency Note: EmitRowChangedEvents is thread-safe.
 func (s *mysqlSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
 	count := s.txnCache.Append(s.filter, rows...)
