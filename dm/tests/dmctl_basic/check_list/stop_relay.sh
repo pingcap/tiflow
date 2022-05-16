@@ -3,7 +3,7 @@
 function stop_relay_empty_arg() {
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"stop-relay" \
-		"stop-relay <-s source-id> <worker-name> \[...worker-name\]" 1
+		"stop-relay <-s source-id>" 1
 }
 
 function stop_relay_wrong_arg() {
