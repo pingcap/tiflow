@@ -71,6 +71,7 @@ func (a *AvroEventBatchEncoder) AppendRowChangedEvent(
 		&e.Table.Schema,
 		&e.Table.Table,
 	)
+	topic = sanitizeTopic(topic)
 
 	if !e.IsDelete() {
 		res, err := a.avroEncode(ctx, e, topic, false)
@@ -328,6 +329,11 @@ func sanitizeName(name string) string {
 		)
 	}
 	return sanitizedName
+}
+
+// escape ".", it may has special meanings for sink connectors
+func sanitizeTopic(name string) string {
+	return strings.ReplaceAll(name, ".", "_")
 }
 
 // https://github.com/debezium/debezium/blob/9f7ede0e0695f012c6c4e715e96aed85eecf6b5f \
