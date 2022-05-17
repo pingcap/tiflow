@@ -105,6 +105,10 @@ func (p *processor) checkReadyForMessages() bool {
 }
 
 // AddTable implements TableExecutor interface.
+// AddTable may cause by the following scenario
+// 1. `Create Table`, a new table dispatched to the processor, `isPrepare` should be false
+// 2. Prepare phase for 2 phase scheduling, `isPrepare` should be true.
+// 3. Replicating phase for 2 phase scheduling, `isPrepare` should be false
 func (p *processor) AddTable(
 	ctx context.Context, tableID model.TableID, startTs model.Ts, isPrepare bool,
 ) (bool, error) {
@@ -112,24 +116,79 @@ func (p *processor) AddTable(
 		return false, nil
 	}
 
-	log.Info("adding table",
-		zap.Int64("tableID", tableID),
-		zap.Bool("isPrepare", isPrepare),
-		zap.Uint64("checkpointTs", startTs),
-		zap.String("namespace", p.changefeedID.Namespace),
-		zap.String("changefeed", p.changefeedID.ID))
+	if startTs == 0 {
+		log.Panic("table start ts must not be 0",
+			zap.String("captureID", p.captureInfo.ID),
+			zap.String("namespace", p.changefeedID.Namespace),
+			zap.String("changefeed", p.changefeedID.ID),
+			zap.Int64("tableID", tableID),
+			zap.Uint64("checkpointTs", startTs),
+			zap.Bool("isPrepare", isPrepare))
+	}
 
-	if isPrepare {
-		err := p.addTable(ctx.(cdcContext.Context), tableID, &model.TableReplicaInfo{StartTs: startTs})
-		if err != nil {
-			return false, errors.Trace(err)
+	table, ok := p.tables[tableID]
+	if ok {
+		switch table.Status() {
+		case pipeline.TableStatusPreparing:
+		case pipeline.TableStatusPrepared:
+		case pipeline.TableStatusReplicating:
+			log.Warn("Ignore existing table",
+				zap.String("captureID", p.captureInfo.ID),
+				zap.String("namespace", p.changefeedID.Namespace),
+				zap.String("changefeed", p.changefeedID.ID),
+				zap.Int64("tableID", tableID),
+				zap.Uint64("checkpointTs", startTs),
+				zap.Bool("isPrepare", isPrepare))
+			return true, nil
+		case pipeline.TableStatusStopping:
+		case pipeline.TableStatusStopped:
 		}
-	} else {
-		t, ok := p.tables[tableID]
-		if !ok {
-			return false, cerror.ErrTableIneligible.GenWithStackByArgs(tableID)
-		}
-		t.Start(startTs)
+		//if table.Status() == pipeline.TableStatusStopped {
+		//	log.Warn("The same table exists but is stopped. Cancel it and continue.",
+		//		zap.String("captureID", p.captureInfo.ID),
+		//		zap.String("namespace", p.changefeedID.Namespace),
+		//		zap.String("changefeed", p.changefeedID.ID),
+		//		zap.Int64("tableID", tableID),
+		//		zap.Uint64("checkpointTs", startTs),
+		//		zap.Bool("isPrepare", isPrepare))
+		//	p.removeTable(table, tableID)
+		//}
+	}
+
+	// table not found
+	// 1. this is a new table scheduling request, create the table and make it `replicating`
+	// 2. `prepare` phase for 2 phase scheduling, create the table and make it `preparing`
+	globalCheckpointTs := p.changefeed.Status.CheckpointTs
+	if startTs < globalCheckpointTs {
+		log.Warn("addTable: startTs < checkpoint",
+			zap.String("captureID", p.captureInfo.ID),
+			zap.String("namespace", p.changefeedID.Namespace),
+			zap.String("changefeed", p.changefeedID.ID),
+			zap.Int64("tableID", tableID),
+			zap.Uint64("checkpointTs", startTs))
+	}
+
+	log.Info("adding table",
+		zap.String("captureID", p.captureInfo.ID),
+		zap.String("namespace", p.changefeedID.Namespace),
+		zap.String("changefeed", p.changefeedID.ID),
+		zap.Int64("tableID", tableID),
+		zap.Uint64("checkpointTs", startTs))
+
+	table, err := p.createTablePipeline(ctx.(cdcContext.Context), tableID, &model.TableReplicaInfo{StartTs: startTs})
+	if err != nil {
+		return false, errors.Trace(err)
+	}
+	p.tables[tableID] = table
+
+	if !isPrepare {
+		table.Start(startTs)
+		log.Info("start table",
+			zap.String("captureID", p.captureInfo.ID),
+			zap.String("namespace", p.changefeedID.Namespace),
+			zap.String("changefeed", p.changefeedID.ID),
+			zap.Int64("tableID", tableID),
+			zap.Uint64("checkpointTs", startTs))
 	}
 
 	return true, nil
@@ -723,40 +782,9 @@ func (p *processor) pushResolvedTs2Table() {
 }
 
 // addTable creates a new table pipeline and adds it to the `p.tables`
-func (p *processor) addTable(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) error {
-	if replicaInfo.StartTs == 0 {
-		log.Panic("table start ts must not be 0",
-			zap.String("namespace", p.changefeedID.Namespace),
-			zap.String("changefeed", p.changefeedID.ID),
-			zap.Int64("tableID", tableID))
-	}
-
-	if table, ok := p.tables[tableID]; ok {
-		if table.Status() == pipeline.TableStatusStopped {
-			log.Warn("The same table exists but is stopped. Cancel it and continue.", cdcContext.ZapFieldChangefeed(ctx), zap.Int64("ID", tableID))
-			p.removeTable(table, tableID)
-		} else {
-			log.Warn("Ignore existing table", cdcContext.ZapFieldChangefeed(ctx), zap.Int64("ID", tableID))
-			return nil
-		}
-	}
-
-	globalCheckpointTs := p.changefeed.Status.CheckpointTs
-
-	if replicaInfo.StartTs < globalCheckpointTs {
-		log.Warn("addTable: startTs < checkpoint",
-			cdcContext.ZapFieldChangefeed(ctx),
-			zap.Int64("tableID", tableID),
-			zap.Uint64("checkpoint", globalCheckpointTs),
-			zap.Uint64("startTs", replicaInfo.StartTs))
-	}
-	table, err := p.createTablePipeline(ctx, tableID, replicaInfo)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	p.tables[tableID] = table
-	return nil
-}
+//func (p *processor) addTable(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) error {
+//
+//}
 
 func (p *processor) getTableName(ctx cdcContext.Context,
 	tableID model.TableID,

@@ -25,7 +25,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
-	tablepipeline "github.com/pingcap/tiflow/cdc/processor/pipeline"
+	"github.com/pingcap/tiflow/cdc/processor/pipeline"
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/scheduler"
 	"github.com/pingcap/tiflow/cdc/sink"
@@ -43,7 +43,7 @@ var _ scheduler.TableExecutor = (*processor)(nil)
 func newProcessor4Test(
 	ctx cdcContext.Context,
 	t *testing.T,
-	createTablePipeline func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error),
+	createTablePipeline func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (pipeline.TablePipeline, error),
 ) *processor {
 	upStream := upstream.NewUpstream4Test(nil)
 	p := newProcessor(ctx, upStream)
@@ -103,11 +103,11 @@ func initProcessor4Test(ctx cdcContext.Context, t *testing.T) (*processor, *orch
     "sync-point-interval": 600000000000
 }
 `
-	p := newProcessor4Test(ctx, t, func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error) {
+	p := newProcessor4Test(ctx, t, func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (pipeline.TablePipeline, error) {
 		return &mockTablePipeline{
 			tableID:      tableID,
 			name:         fmt.Sprintf("`test`.`table%d`", tableID),
-			status:       tablepipeline.TableStatusReplicating,
+			status:       pipeline.TableStatusReplicating,
 			resolvedTs:   replicaInfo.StartTs,
 			checkpointTs: replicaInfo.StartTs,
 		}, nil
@@ -134,7 +134,7 @@ type mockTablePipeline struct {
 	checkpointTs model.Ts
 	barrierTs    model.Ts
 	stopTs       model.Ts
-	status       tablepipeline.TableStatus
+	status       pipeline.TableStatus
 	canceled     bool
 }
 
@@ -167,7 +167,7 @@ func (m *mockTablePipeline) Workload() model.WorkloadInfo {
 	return model.WorkloadInfo{Workload: 1}
 }
 
-func (m *mockTablePipeline) Status() tablepipeline.TableStatus {
+func (m *mockTablePipeline) Status() pipeline.TableStatus {
 	return m.status
 }
 
@@ -354,7 +354,7 @@ func TestTableExecutor(t *testing.T) {
 	require.Equal(t, checkpointTs, uint64(60))
 
 	// finish remove operations
-	table3.status = tablepipeline.TableStatusStopped
+	table3.status = pipeline.TableStatusStopped
 	table3.checkpointTs = 65
 
 	_, err = p.Tick(ctx, p.changefeed)
