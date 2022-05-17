@@ -929,7 +929,7 @@ workaround = "Please check the `target-database` config in task configuration fi
 tags = ["internal", "medium"]
 
 [error.DM-config-20022]
-message = "mysql-instance(%d) must set meta for task-mode %s"
+message = "mysql-instance(%s) must set meta for task-mode %s"
 description = ""
 workaround = "Please check the `meta` config in task configuration file."
 tags = ["internal", "medium"]
