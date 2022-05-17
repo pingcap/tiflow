@@ -132,7 +132,7 @@ func (m *AvroSchemaManager) Register(
 	}
 	uri := m.registryURL + "/subjects/" + url.QueryEscape(
 		m.topicNameToSchemaSubject(topicName),
-	) + "/versions?normalize=true"
+	) + "/versions"
 	log.Info("Registering schema", zap.String("uri", uri), zap.ByteString("payload", payload))
 
 	req, err := http.NewRequestWithContext(ctx, "POST", uri, bytes.NewReader(payload))
