@@ -363,6 +363,10 @@ func TestAgentNoOwnerAtStartUp(t *testing.T) {
 	suite.etcdKVClient.On("Get", mock.Anything,
 		etcd.CaptureOwnerKey(etcd.DefaultCDCClusterID), mock.Anything).
 		Return(&clientv3.GetResponse{}, nil)
+	suite.etcdClusterClient.On("MemberList", mock.Anything).
+		Return(&clientv3.MemberListResponse{
+			Header: &etcdserverpb.ResponseHeader{ClusterId: 1},
+		}, nil)
 
 	// Test Point 1: Create an agent.
 	agent, err := suite.CreateAgent(t)
@@ -428,6 +432,10 @@ func TestAgentTolerateClientClosed(t *testing.T) {
 				},
 			},
 		}, nil)
+	suite.etcdClusterClient.On("MemberList", mock.Anything).
+		Return(&clientv3.MemberListResponse{
+			Header: &etcdserverpb.ResponseHeader{ClusterId: 1},
+		}, nil)
 
 	// Test Point 1: Create an agent.
 	agent, err := suite.CreateAgent(t)
@@ -472,6 +480,10 @@ func TestNoFinishOperationBeforeSyncIsReceived(t *testing.T) {
 					ModRevision: 1,
 				},
 			},
+		}, nil)
+	suite.etcdClusterClient.On("MemberList", mock.Anything).
+		Return(&clientv3.MemberListResponse{
+			Header: &etcdserverpb.ResponseHeader{ClusterId: 1},
 		}, nil)
 
 	agent, err := suite.CreateAgent(t)
