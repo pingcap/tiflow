@@ -100,7 +100,7 @@ Apache Avro™ is a data serialization system with rich data structures and a co
 
 - `{{RecordName}}` represents full qualified table name.
 - `{{ColumnValueBlock}}` represents a JSON block, which defines a column value of a key.
-- `_tidb_op` used to distinguish between INSERT or UPDATE events, optional values are "c" / "u".
+- `_tidb_op` is used to distinguish between INSERT or UPDATE events, optional values are "c" / "u".
 - `_tidb_commit_ts` represents a CommitTS of a transaction.
 - `_tidb_commit_physical_time` represents a physical timestamp of a transaction.
 
@@ -181,7 +181,7 @@ A `ColumnValueBlock` has the following schema:
 
 - When the schema is not in schema registry, a fresh new schema is created.
 - When the schema is in schema registry and pass compatibility check, a new version is created.
-- When the schema is in schema registry and not pass compatibility check, reports error.
+- When the schema is in schema registry and cannot pass compatibility check, reports error.
 
 #### SubjectNameStrategy Tests
 
