@@ -186,9 +186,9 @@ func TestAndWriteExampleReplicaTOML(t *testing.T) {
 		IgnoreTxnStartTs: []uint64{1, 2},
 		Rules:            []string{"*.*", "!test.*"},
 	}, cfg.Filter)
-	require.Equal(t, cfg.Mounter, &config.MounterConfig{
+	require.Equal(t, &config.MounterConfig{
 		WorkerNum: 16,
-	})
+	}, cfg.Mounter)
 	err = cfg.Validate()
 	require.Nil(t, err)
 	require.Equal(t, &config.SinkConfig{
