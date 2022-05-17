@@ -203,7 +203,12 @@ func (s *Server) Start(ctx context.Context) (err error) {
 		"/debug/": getDebugHandler(),
 	}
 	if s.cfg.OpenAPI {
-		if initOpenAPIErr := s.InitOpenAPIHandles(); initOpenAPIErr != nil {
+		// tls3 is used to openapi reverse proxy
+		tls3, err := toolutils.NewTLS(s.cfg.SSLCA, s.cfg.SSLCert, s.cfg.SSLKey, s.cfg.AdvertiseAddr, s.cfg.CertAllowedCN)
+		if err != nil {
+			return terror.ErrMasterTLSConfigNotValid.Delegate(err)
+		}
+		if initOpenAPIErr := s.InitOpenAPIHandles(tls3.TLSConfig()); initOpenAPIErr != nil {
 			return terror.ErrOpenAPICommonError.Delegate(initOpenAPIErr)
 		}
 		userHandles["/api/v1/"] = s.openapiHandles

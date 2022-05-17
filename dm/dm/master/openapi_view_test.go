@@ -22,6 +22,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 	"time"
 
@@ -345,6 +346,97 @@ func (s *OpenAPIViewSuite) TestReverseRequestToLeader() {
 	s.NoError(result.UnmarshalBodyToObject(&resultListSource2))
 	s.Len(resultListSource2.Data, 0)
 	s.Equal(0, resultListSource2.Total)
+}
+
+func (s *OpenAPIViewSuite) TestReverseRequestToHttpsLeader() {
+	pwd, err := os.Getwd()
+	require.NoError(s.T(), err)
+	caPath := pwd + "/tls_for_test/ca.pem"
+	certPath := pwd + "/tls_for_test/dm.pem"
+	keyPath := pwd + "/tls_for_test/dm.key"
+
+	// master1
+	masterAddr1 := tempurl.Alloc()[len("http://"):]
+	peerAddr1 := tempurl.Alloc()[len("http://"):]
+	cfg1 := NewConfig()
+	require.NoError(s.T(), cfg1.Parse([]string{
+		"--name=dm-master-tls-1",
+		fmt.Sprintf("--data-dir=%s", s.T().TempDir()),
+		fmt.Sprintf("--master-addr=https://%s", masterAddr1),
+		fmt.Sprintf("--advertise-addr=https://%s", masterAddr1),
+		fmt.Sprintf("--peer-urls=https://%s", peerAddr1),
+		fmt.Sprintf("--advertise-peer-urls=https://%s", peerAddr1),
+		fmt.Sprintf("--initial-cluster=dm-master-tls-1=https://%s", peerAddr1),
+		"--ssl-ca=" + caPath,
+		"--ssl-cert=" + certPath,
+		"--ssl-key=" + keyPath,
+	}))
+	cfg1.OpenAPI = true
+	s1 := NewServer(cfg1)
+	ctx1, cancel1 := context.WithCancel(context.Background())
+	require.NoError(s.T(), s1.Start(ctx1))
+	defer func() {
+		cancel1()
+		s1.Close()
+	}()
+	// wait the first one become the leader
+	require.True(s.T(), utils.WaitSomething(30, 100*time.Millisecond, func() bool {
+		return s1.election.IsLeader() && s1.scheduler.Started()
+	}))
+
+	// master2
+	masterAddr2 := tempurl.Alloc()[len("http://"):]
+	peerAddr2 := tempurl.Alloc()[len("http://"):]
+	cfg2 := NewConfig()
+	require.NoError(s.T(), cfg2.Parse([]string{
+		"--name=dm-master-tls-2",
+		fmt.Sprintf("--data-dir=%s", s.T().TempDir()),
+		fmt.Sprintf("--master-addr=https://%s", masterAddr2),
+		fmt.Sprintf("--advertise-addr=https://%s", masterAddr2),
+		fmt.Sprintf("--peer-urls=https://%s", peerAddr2),
+		fmt.Sprintf("--advertise-peer-urls=https://%s", peerAddr2),
+		"--ssl-ca=" + caPath,
+		"--ssl-cert=" + certPath,
+		"--ssl-key=" + keyPath,
+	}))
+	cfg2.OpenAPI = true
+	cfg2.Join = s1.cfg.MasterAddr // join to an existing cluster
+	s2 := NewServer(cfg2)
+	ctx2, cancel2 := context.WithCancel(context.Background())
+	require.NoError(s.T(), s2.Start(ctx2))
+	defer func() {
+		cancel2()
+		s2.Close()
+	}()
+	// wait the second master ready
+	require.False(s.T(), utils.WaitSomething(30, 100*time.Millisecond, func() bool {
+		return s2.election.IsLeader()
+	}))
+
+	baseURL := "/api/v1/sources"
+	// list source from leader
+	result := testutil.NewRequest().Get(baseURL).GoWithHTTPHandler(s.T(), s1.openapiHandles)
+	s.Equal(http.StatusOK, result.Code())
+	var resultListSource openapi.GetSourceListResponse
+	s.NoError(result.UnmarshalBodyToObject(&resultListSource))
+	s.Len(resultListSource.Data, 0)
+	s.Equal(0, resultListSource.Total)
+
+	// with tls, list source not from leader will get result too
+	result, err = HTTPTestWithTestResponseRecorder(testutil.NewRequest().Get(baseURL), s2.openapiHandles)
+	s.NoError(err)
+	s.Equal(http.StatusOK, result.Code())
+	var resultListSource2 openapi.GetSourceListResponse
+	s.NoError(result.UnmarshalBodyToObject(&resultListSource2))
+	s.Len(resultListSource2.Data, 0)
+	s.Equal(0, resultListSource2.Total)
+
+	// without tls, list source not from leader will be 502
+	s.NoError(failpoint.Enable("github.com/pingcap/tiflow/dm/dm/master/MockNotSetTls", `return()`))
+	result, err = HTTPTestWithTestResponseRecorder(testutil.NewRequest().Get(baseURL), s2.openapiHandles)
+	s.NoError(err)
+	s.Equal(http.StatusBadGateway, result.Code())
+	s.NoError(failpoint.Disable("github.com/pingcap/tiflow/dm/dm/master/MockNotSetTls"))
 }
 
 // httptest.ResponseRecorder is not http.CloseNotifier, will panic when test reverse proxy.
