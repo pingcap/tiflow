@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"go.etcd.io/etcd/api/v3/etcdserverpb"
 	"go.etcd.io/etcd/api/v3/mvccpb"
 	clientv3 "go.etcd.io/etcd/client/v3"
 
@@ -47,9 +48,10 @@ const (
 // TODO add a real unit test with mock components for the agent alone,
 // which might require refactoring some existing components.
 type agentTestSuite struct {
-	cluster      *p2p.MockCluster
-	etcdClient   *clientv3.Client
-	etcdKVClient *mockEtcdKVClient
+	cluster           *p2p.MockCluster
+	etcdClient        *clientv3.Client
+	etcdKVClient      *mockEtcdKVClient
+	etcdClusterClient *mockEtcdClusterClient
 
 	tableExecutor      *MockTableExecutor
 	dispatchResponseCh chan *protocol.DispatchTableResponseMessage
@@ -68,7 +70,7 @@ type agentTestSuite struct {
 
 func newAgentTestSuite(t *testing.T) *agentTestSuite {
 	ctx, cancel := context.WithCancel(context.Background())
-	etcdCli, KVCli := newMockEtcdClientForAgentTests(ctx)
+	etcdCli, KVCli, clusterCli := newMockEtcdClientForAgentTests(ctx)
 
 	cluster := p2p.NewMockCluster(t, agentTestMockNodeNum)
 	ownerMessageServer := cluster.Nodes[ownerCaptureID].Server
@@ -77,9 +79,10 @@ func newAgentTestSuite(t *testing.T) *agentTestSuite {
 	require.NotNil(t, ownerMessageClient)
 
 	ret := &agentTestSuite{
-		cluster:      cluster,
-		etcdClient:   etcdCli,
-		etcdKVClient: KVCli,
+		cluster:           cluster,
+		etcdClient:        etcdCli,
+		etcdKVClient:      KVCli,
+		etcdClusterClient: clusterCli,
 
 		// The channel sizes 1024 should be more than sufficient for these tests.
 		// Full channels will result in panics to make the cases fail.
@@ -194,11 +197,13 @@ func (s *agentTestSuite) Close() {
 // NOTE: The mock client does not have any useful internal logic.
 // It only supports GET operations and any output should be supplied by
 // calling the mock.Mock methods embedded in the mock client.
-func newMockEtcdClientForAgentTests(ctx context.Context) (*clientv3.Client, *mockEtcdKVClient) {
+func newMockEtcdClientForAgentTests(ctx context.Context) (*clientv3.Client, *mockEtcdKVClient, *mockEtcdClusterClient) {
 	cli := clientv3.NewCtxClient(ctx)
 	mockKVCli := &mockEtcdKVClient{}
 	cli.KV = mockKVCli
-	return cli, mockKVCli
+	mockClusterCli := &mockEtcdClusterClient{}
+	cli.Cluster = mockClusterCli
+	return cli, mockKVCli, mockClusterCli
 }
 
 type mockEtcdKVClient struct {
@@ -211,6 +216,20 @@ func (c *mockEtcdKVClient) Get(ctx context.Context, key string, opts ...clientv3
 	resp := (*clientv3.GetResponse)(nil)
 	if args.Get(0) != nil {
 		resp = args.Get(0).(*clientv3.GetResponse)
+	}
+	return resp, args.Error(1)
+}
+
+type mockEtcdClusterClient struct {
+	clientv3.Cluster // embeds a null implementation of the Etcd Cluster client
+	mock.Mock
+}
+
+func (c *mockEtcdClusterClient) MemberList(ctx context.Context) (*clientv3.MemberListResponse, error) {
+	args := c.Called(ctx)
+	resp := (*clientv3.MemberListResponse)(nil)
+	if args.Get(0) != nil {
+		resp = args.Get(0).(*clientv3.MemberListResponse)
 	}
 	return resp, args.Error(1)
 }
@@ -229,6 +248,10 @@ func TestAgentBasics(t *testing.T) {
 					ModRevision: 1,
 				},
 			},
+		}, nil)
+	suite.etcdClusterClient.On("MemberList", mock.Anything).
+		Return(&clientv3.MemberListResponse{
+			Header: &etcdserverpb.ResponseHeader{ClusterId: 1},
 		}, nil)
 
 	// Test Point 1: Create an agent.
