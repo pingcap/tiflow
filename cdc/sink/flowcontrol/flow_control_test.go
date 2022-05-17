@@ -21,11 +21,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 )
 
-func dummyCallBack() error {
+func dummyCallBack(_ bool) error {
 	return nil
 }
 
@@ -34,7 +35,7 @@ type mockCallBacker struct {
 	injectedErr error
 }
 
-func (c *mockCallBacker) cb() error {
+func (c *mockCallBacker) cb(_ bool) error {
 	c.timesCalled += 1
 	return c.injectedErr
 }
@@ -173,7 +174,7 @@ func TestFlowControlBasic(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.TODO(), time.Second*5)
 	defer cancel()
 	errg, ctx := errgroup.WithContext(ctx)
-	mockedRowsCh := make(chan *commitTsSizeEntry, 1024)
+	mockedRowsCh := make(chan *txnSizeEntry, 1024)
 	flowController := NewTableFlowController(2048)
 
 	errg.Go(func() error {
@@ -186,7 +187,7 @@ func TestFlowControlBasic(t *testing.T) {
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
-			case mockedRowsCh <- &commitTsSizeEntry{
+			case mockedRowsCh <- &txnSizeEntry{
 				commitTs: lastCommitTs,
 				size:     size,
 			}:
@@ -202,7 +203,7 @@ func TestFlowControlBasic(t *testing.T) {
 		defer close(eventCh)
 		resolvedTs := uint64(0)
 		for {
-			var mockedRow *commitTsSizeEntry
+			var mockedRow *txnSizeEntry
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
@@ -227,7 +228,8 @@ func TestFlowControlBasic(t *testing.T) {
 				resolvedTs = mockedRow.commitTs
 				updatedResolvedTs = true
 			}
-			err := flowController.Consume(mockedRow.commitTs, mockedRow.size, dummyCallBack)
+			err := flowController.Consume(model.NewEmptyPolymorphicEvent(mockedRow.commitTs),
+				mockedRow.size, dummyCallBack)
 			require.Nil(t, err)
 			select {
 			case <-ctx.Done():
@@ -290,13 +292,13 @@ func TestFlowControlAbort(t *testing.T) {
 	go func() {
 		defer wg.Done()
 
-		err := controller.Consume(1, 1000, callBacker.cb)
+		err := controller.Consume(model.NewEmptyPolymorphicEvent(1), 1000, callBacker.cb)
 		require.Nil(t, err)
 		require.Equal(t, 0, callBacker.timesCalled)
-		err = controller.Consume(2, 1000, callBacker.cb)
+		err = controller.Consume(model.NewEmptyPolymorphicEvent(2), 1000, callBacker.cb)
 		require.Regexp(t, ".*ErrFlowControllerAborted.*", err)
 		require.Equal(t, 1, callBacker.timesCalled)
-		err = controller.Consume(2, 10, callBacker.cb)
+		err = controller.Consume(model.NewEmptyPolymorphicEvent(2), 10, callBacker.cb)
 		require.Regexp(t, ".*ErrFlowControllerAborted.*", err)
 		require.Equal(t, 1, callBacker.timesCalled)
 	}()
@@ -314,7 +316,7 @@ func TestFlowControlCallBack(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.TODO(), time.Second*5)
 	defer cancel()
 	errg, ctx := errgroup.WithContext(ctx)
-	mockedRowsCh := make(chan *commitTsSizeEntry, 1024)
+	mockedRowsCh := make(chan *txnSizeEntry, 1024)
 	flowController := NewTableFlowController(512)
 
 	errg.Go(func() error {
@@ -327,7 +329,7 @@ func TestFlowControlCallBack(t *testing.T) {
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
-			case mockedRowsCh <- &commitTsSizeEntry{
+			case mockedRowsCh <- &txnSizeEntry{
 				commitTs: lastCommitTs,
 				size:     size,
 			}:
@@ -343,7 +345,7 @@ func TestFlowControlCallBack(t *testing.T) {
 		defer close(eventCh)
 		lastCRTs := uint64(0)
 		for {
-			var mockedRow *commitTsSizeEntry
+			var mockedRow *txnSizeEntry
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
@@ -355,16 +357,17 @@ func TestFlowControlCallBack(t *testing.T) {
 			}
 
 			atomic.AddUint64(&consumedBytes, mockedRow.size)
-			err := flowController.Consume(mockedRow.commitTs, mockedRow.size, func() error {
-				select {
-				case <-ctx.Done():
-					return ctx.Err()
-				case eventCh <- &mockedEvent{
-					resolvedTs: lastCRTs,
-				}:
-				}
-				return nil
-			})
+			err := flowController.Consume(model.NewEmptyPolymorphicEvent(mockedRow.commitTs),
+				mockedRow.size, func(bool) error {
+					select {
+					case <-ctx.Done():
+						return ctx.Err()
+					case eventCh <- &mockedEvent{
+						resolvedTs: lastCRTs,
+					}:
+					}
+					return nil
+				})
 			require.Nil(t, err)
 			lastCRTs = mockedRow.commitTs
 
@@ -426,7 +429,7 @@ func TestFlowControlCallBackNotBlockingRelease(t *testing.T) {
 
 	go func() {
 		defer wg.Done()
-		err := controller.Consume(1, 511, func() error {
+		err := controller.Consume(model.NewEmptyPolymorphicEvent(1), 511, func(bool) error {
 			t.Error("unreachable")
 			return nil
 		})
@@ -443,7 +446,7 @@ func TestFlowControlCallBackNotBlockingRelease(t *testing.T) {
 			cancel()
 		}()
 
-		err = controller.Consume(2, 511, func() error {
+		err = controller.Consume(model.NewEmptyPolymorphicEvent(2), 511, func(bool) error {
 			atomic.StoreInt32(&isBlocked, 1)
 			<-ctx.Done()
 			atomic.StoreInt32(&isBlocked, 0)
@@ -468,12 +471,12 @@ func TestFlowControlCallBackError(t *testing.T) {
 
 	go func() {
 		defer wg.Done()
-		err := controller.Consume(1, 511, func() error {
+		err := controller.Consume(model.NewEmptyPolymorphicEvent(1), 511, func(bool) error {
 			t.Error("unreachable")
 			return nil
 		})
 		require.Nil(t, err)
-		err = controller.Consume(2, 511, func() error {
+		err = controller.Consume(model.NewEmptyPolymorphicEvent(2), 511, func(bool) error {
 			<-ctx.Done()
 			return ctx.Err()
 		})
@@ -490,7 +493,7 @@ func TestFlowControlConsumeLargerThanQuota(t *testing.T) {
 	t.Parallel()
 
 	controller := NewTableFlowController(1024)
-	err := controller.Consume(1, 2048, func() error {
+	err := controller.Consume(model.NewEmptyPolymorphicEvent(1), 2048, func(bool) error {
 		t.Error("unreachable")
 		return nil
 	})
@@ -501,7 +504,7 @@ func BenchmarkTableFlowController(B *testing.B) {
 	ctx, cancel := context.WithTimeout(context.TODO(), time.Second*5)
 	defer cancel()
 	errg, ctx := errgroup.WithContext(ctx)
-	mockedRowsCh := make(chan *commitTsSizeEntry, 102400)
+	mockedRowsCh := make(chan *txnSizeEntry, 102400)
 	flowController := NewTableFlowController(20 * 1024 * 1024) // 20M
 
 	errg.Go(func() error {
@@ -514,7 +517,7 @@ func BenchmarkTableFlowController(B *testing.B) {
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
-			case mockedRowsCh <- &commitTsSizeEntry{
+			case mockedRowsCh <- &txnSizeEntry{
 				commitTs: lastCommitTs,
 				size:     size,
 			}:
@@ -530,7 +533,7 @@ func BenchmarkTableFlowController(B *testing.B) {
 		defer close(eventCh)
 		resolvedTs := uint64(0)
 		for {
-			var mockedRow *commitTsSizeEntry
+			var mockedRow *txnSizeEntry
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
@@ -551,7 +554,8 @@ func BenchmarkTableFlowController(B *testing.B) {
 				}
 				resolvedTs = mockedRow.commitTs
 			}
-			err := flowController.Consume(mockedRow.commitTs, mockedRow.size, dummyCallBack)
+			err := flowController.Consume(model.NewEmptyPolymorphicEvent(mockedRow.commitTs),
+				mockedRow.size, dummyCallBack)
 			if err != nil {
 				B.Fatal(err)
 			}
