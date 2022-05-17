@@ -62,7 +62,7 @@ func (t *testForEtcd) TestTaskCliArgs(c *C) {
 	c.Assert(*ret, Equals, args)
 
 	// test delete one source
-	err = DeleteTaskCliArgs(etcdTestCli, task, source1)
+	err = DeleteTaskCliArgs(etcdTestCli, task, []string{source1})
 	c.Assert(err, IsNil)
 
 	checkNotExist(source1)
