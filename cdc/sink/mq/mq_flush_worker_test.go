@@ -19,12 +19,10 @@ import (
 	"testing"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tidb/util/timeutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/codec"
 	"github.com/pingcap/tiflow/cdc/sink/metrics"
 	"github.com/pingcap/tiflow/pkg/config"
-	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/stretchr/testify/require"
 )
 
@@ -83,9 +81,8 @@ func NewMockProducer() *mockProducer {
 
 func newTestWorker() (*flushWorker, *mockProducer) {
 	// 200 is about the size of a row change.
-	encoderConfig := codec.NewConfig(config.ProtocolOpen, timeutil.SystemLocation()).
-		WithMaxMessageBytes(200)
-	builder, err := codec.NewEventBatchEncoderBuilder(encoderConfig, &security.Credential{})
+	encoderConfig := codec.NewConfig(config.ProtocolOpen).WithMaxMessageBytes(200)
+	builder, err := codec.NewEventBatchEncoderBuilder(context.Background(), encoderConfig)
 	if err != nil {
 		panic(err)
 	}

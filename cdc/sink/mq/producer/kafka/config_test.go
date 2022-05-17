@@ -23,7 +23,6 @@ import (
 
 	"github.com/Shopify/sarama"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tidb/util/timeutil"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/sink/codec"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -403,8 +402,8 @@ func TestConfigurationCombinations(t *testing.T) {
 		err = AdjustConfig(adminClient, baseConfig, saramaConfig, topic)
 		require.Nil(t, err)
 
-		encoderConfig := codec.NewConfig(config.ProtocolOpen, timeutil.SystemLocation())
-		err = encoderConfig.Apply(sinkURI, map[string]string{})
+		encoderConfig := codec.NewConfig(config.ProtocolOpen)
+		err = encoderConfig.Apply(sinkURI, &config.ReplicaConfig{})
 		require.Nil(t, err)
 		encoderConfig.WithMaxMessageBytes(saramaConfig.Producer.MaxMessageBytes)
 

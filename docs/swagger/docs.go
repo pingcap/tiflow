@@ -723,6 +723,7 @@ var doc = `{
             "type": "object",
             "properties": {
                 "dispatcher": {
+                    "description": "Deprecated, please use PartitionRule.",
                     "type": "string"
                 },
                 "matcher": {
@@ -730,6 +731,10 @@ var doc = `{
                     "items": {
                         "type": "string"
                     }
+                },
+                "partition": {
+                    "description": "PartitionRule is an alias added for DispatcherRule to mitigate confusions.\nIn the future release, the DispatcherRule is expected to be removed .",
+                    "type": "string"
                 },
                 "topic": {
                     "type": "string"

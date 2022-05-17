@@ -102,7 +102,7 @@ func NewEventRouter(cfg *config.ReplicaConfig, defaultTopic string) (*EventRoute
 		}
 
 		d := getPartitionDispatcher(ruleConfig, cfg.EnableOldValue)
-		t, err := getTopicDispatcher(ruleConfig, defaultTopic)
+		t, err := getTopicDispatcher(ruleConfig, defaultTopic, cfg.Sink.Protocol)
 		if err != nil {
 			return nil, err
 		}
@@ -112,6 +112,7 @@ func NewEventRouter(cfg *config.ReplicaConfig, defaultTopic string) (*EventRoute
 			filter.Filter
 		}{partitionDispatcher: d, topicDispatcher: t, Filter: f})
 	}
+
 	return &EventRouter{
 		defaultTopic: defaultTopic,
 		rules:        rules,
@@ -249,7 +250,7 @@ func getPartitionDispatcher(
 
 // getTopicDispatcher returns the topic dispatcher for a specific topic rule (aka topic expression).
 func getTopicDispatcher(
-	ruleConfig *config.DispatchRule, defaultTopic string,
+	ruleConfig *config.DispatchRule, defaultTopic string, protocol string,
 ) (topic.Dispatcher, error) {
 	if ruleConfig.TopicRule == "" {
 		return topic.NewStaticTopicDispatcher(defaultTopic), nil
@@ -257,9 +258,24 @@ func getTopicDispatcher(
 
 	// check if this rule is a valid topic expression
 	topicExpr := topic.Expression(ruleConfig.TopicRule)
-	err := topicExpr.Validate()
-	if err != nil {
-		return nil, err
+
+	if protocol != "" {
+		var p config.Protocol
+		if err := p.FromString(protocol); err != nil {
+			return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
+		}
+
+		if p == config.ProtocolAvro {
+			err := topicExpr.ValidateForAvro()
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			err := topicExpr.Validate()
+			if err != nil {
+				return nil, err
+			}
+		}
 	}
 	return topic.NewDynamicTopicDispatcher(topicExpr), nil
 }
