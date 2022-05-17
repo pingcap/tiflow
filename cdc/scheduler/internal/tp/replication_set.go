@@ -65,6 +65,8 @@ func (r ReplicationSetState) String() string {
 		return "Commit"
 	case ReplicationSetStateReplicating:
 		return "Replicating"
+	case ReplicationSetStateRemoving:
+		return "Removing"
 	default:
 		return fmt.Sprintf("Unknown %d", r)
 	}
@@ -281,7 +283,7 @@ func (r *ReplicationSet) pollOnAbsent(
 		schedulepb.TableState_Stopping,
 		schedulepb.TableState_Stopped:
 	}
-	log.Warn("tpscheduler: unexpected replication set state",
+	log.Warn("tpscheduler: ingore input, unexpected replication set state",
 		zap.Stringer("tableState", input),
 		zap.String("captureID", captureID),
 		zap.Any("replicationSet", r))
@@ -324,7 +326,7 @@ func (r *ReplicationSet) pollOnPrepare(
 			return nil, false, nil
 		}
 	}
-	log.Warn("tpscheduler: unexpected replication set state",
+	log.Warn("tpscheduler: ingore input, unexpected replication set state",
 		zap.Stringer("tableState", input),
 		zap.String("captureID", captureID),
 		zap.Any("replicationSet", r))
@@ -420,7 +422,7 @@ func (r *ReplicationSet) pollOnCommit(
 		}
 	case schedulepb.TableState_Preparing:
 	}
-	log.Warn("tpscheduler: unexpected replication set state",
+	log.Warn("tpscheduler: ingore input, unexpected replication set state",
 		zap.Stringer("tableState", input),
 		zap.String("captureID", captureID),
 		zap.Any("replicationSet", r))
@@ -444,7 +446,7 @@ func (r *ReplicationSet) pollOnReplicating(
 	case schedulepb.TableState_Stopping:
 	case schedulepb.TableState_Stopped:
 	}
-	log.Warn("tpscheduler: unexpected replication set state",
+	log.Warn("tpscheduler: ingore input, unexpected replication set state",
 		zap.Stringer("tableState", input),
 		zap.String("captureID", captureID),
 		zap.Any("replicationSet", r))
@@ -480,7 +482,7 @@ func (r *ReplicationSet) pollOnRemoving(
 	case schedulepb.TableState_Stopping:
 		return nil, false, nil
 	}
-	log.Warn("tpscheduler: unexpected replication set state",
+	log.Warn("tpscheduler: ingore input, unexpected replication set state",
 		zap.Stringer("tableState", input),
 		zap.String("captureID", captureID),
 		zap.Any("replicationSet", r))
@@ -498,7 +500,7 @@ func (r *ReplicationSet) handleAddTable(
 ) ([]*schedulepb.Message, error) {
 	// Ignore add table if it's not in Absent state.
 	if r.State != ReplicationSetStateAbsent {
-		log.Warn("add table is ignored",
+		log.Warn("tpscheduler: add table is ignored",
 			zap.Any("replicationSet", r), zap.Int64("tableID", r.TableID))
 		return nil, nil
 	}
@@ -520,13 +522,13 @@ func (r *ReplicationSet) handleMoveTable(
 ) ([]*schedulepb.Message, error) {
 	// Ignore move table if it has been removed already.
 	if r.hasRemoved() {
-		log.Warn("move table is ignored",
+		log.Warn("tpscheduler: move table is ignored",
 			zap.Any("replicationSet", r), zap.Int64("tableID", r.TableID))
 		return nil, nil
 	}
 	// Ignore move table if it's not in Replicating state.
 	if r.State != ReplicationSetStateReplicating {
-		log.Warn("move table is ignored",
+		log.Warn("tpscheduler: move table is ignored",
 			zap.Any("replicationSet", r), zap.Int64("tableID", r.TableID))
 		return nil, nil
 	}
@@ -547,13 +549,13 @@ func (r *ReplicationSet) handleMoveTable(
 func (r *ReplicationSet) handleRemoveTable() ([]*schedulepb.Message, error) {
 	// Ignore remove table if it has been removed already.
 	if r.hasRemoved() {
-		log.Warn("remove table is ignored",
+		log.Warn("tpscheduler: remove table is ignored",
 			zap.Any("replicationSet", r), zap.Int64("tableID", r.TableID))
 		return nil, nil
 	}
 	// Ignore remove table if it's not in Replicating state.
 	if r.State != ReplicationSetStateReplicating {
-		log.Warn("remove table is ignored",
+		log.Warn("tpscheduler: remove table is ignored",
 			zap.Any("replicationSet", r), zap.Int64("tableID", r.TableID))
 		return nil, nil
 	}
