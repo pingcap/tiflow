@@ -2264,7 +2264,7 @@ func (t *testMaster) TestStartStopValidation(c *check.C) {
 	}
 	c.Assert(stResp.Sources, check.DeepEquals, sourceResps)
 
-	// try start all validator of the task with explicit but invalid mode
+	// (fail) start all validator of the task with explicit but invalid mode
 	validatorStartReq := &pb.StartValidationRequest{
 		Mode:     &pb.StartValidationRequest_ModeValue{ModeValue: "invalid-mode"},
 		TaskName: taskName,
@@ -2278,7 +2278,7 @@ func (t *testMaster) TestStartStopValidation(c *check.C) {
 	t.validatorModeMatch(c, server.scheduler, taskName, sources[0], config.ValidationNone, "")
 	t.validatorModeMatch(c, server.scheduler, taskName, sources[1], config.ValidationNone, "")
 
-	// try start with explicit but invalid start-time
+	// (fail) start with explicit but invalid start-time
 	validatorStartReq = &pb.StartValidationRequest{
 		StartTime: &pb.StartValidationRequest_StartTimeValue{StartTimeValue: "xxx"},
 		TaskName:  taskName,
@@ -2292,7 +2292,7 @@ func (t *testMaster) TestStartStopValidation(c *check.C) {
 	t.validatorModeMatch(c, server.scheduler, taskName, sources[0], config.ValidationNone, "")
 	t.validatorModeMatch(c, server.scheduler, taskName, sources[1], config.ValidationNone, "")
 
-	// start for non-existed subtask
+	// (fail) start for non-existed subtask
 	validatorStartReq = &pb.StartValidationRequest{
 		TaskName: "not-exist-name",
 	}
@@ -2305,7 +2305,7 @@ func (t *testMaster) TestStartStopValidation(c *check.C) {
 	t.validatorModeMatch(c, server.scheduler, taskName, sources[0], config.ValidationNone, "")
 	t.validatorModeMatch(c, server.scheduler, taskName, sources[1], config.ValidationNone, "")
 
-	// start for non-exist source
+	// (fail) start for non-exist source
 	validatorStartReq = &pb.StartValidationRequest{
 		Sources: []string{"xxx"},
 	}
@@ -2318,7 +2318,7 @@ func (t *testMaster) TestStartStopValidation(c *check.C) {
 	t.validatorModeMatch(c, server.scheduler, taskName, sources[0], config.ValidationNone, "")
 	t.validatorModeMatch(c, server.scheduler, taskName, sources[1], config.ValidationNone, "")
 
-	// start validation without explicit mode for source 0
+	// (success) start validation without explicit mode for source 0
 	validatorStartReq = &pb.StartValidationRequest{
 		TaskName: taskName,
 		Sources:  []string{sources[0]},
@@ -2331,7 +2331,7 @@ func (t *testMaster) TestStartStopValidation(c *check.C) {
 	t.validatorModeMatch(c, server.scheduler, taskName, sources[0], config.ValidationFull, "")
 	t.validatorModeMatch(c, server.scheduler, taskName, sources[1], config.ValidationNone, "")
 
-	// start all validator with explicit mode
+	// (fail) start all validator with explicit mode
 	validatorStartReq = &pb.StartValidationRequest{
 		Mode:     &pb.StartValidationRequest_ModeValue{ModeValue: config.ValidationFull},
 		TaskName: taskName,
@@ -2345,7 +2345,7 @@ func (t *testMaster) TestStartStopValidation(c *check.C) {
 	t.validatorModeMatch(c, server.scheduler, taskName, sources[0], config.ValidationFull, "")
 	t.validatorModeMatch(c, server.scheduler, taskName, sources[1], config.ValidationNone, "")
 
-	// start validation with explicit mode for source 0 again
+	// (fail) start validation with explicit mode for source 0 again
 	validatorStartReq = &pb.StartValidationRequest{
 		Mode:     &pb.StartValidationRequest_ModeValue{ModeValue: config.ValidationFull},
 		TaskName: taskName,
@@ -2360,7 +2360,7 @@ func (t *testMaster) TestStartStopValidation(c *check.C) {
 	t.validatorModeMatch(c, server.scheduler, taskName, sources[0], config.ValidationFull, "")
 	t.validatorModeMatch(c, server.scheduler, taskName, sources[1], config.ValidationNone, "")
 
-	// start all validator without explicit mode
+	// (fail) start all validator without explicit mode
 	validatorStartReq = &pb.StartValidationRequest{
 		TaskName: taskName,
 	}
@@ -2373,7 +2373,7 @@ func (t *testMaster) TestStartStopValidation(c *check.C) {
 	t.validatorModeMatch(c, server.scheduler, taskName, sources[0], config.ValidationFull, "")
 	t.validatorModeMatch(c, server.scheduler, taskName, sources[1], config.ValidationNone, "")
 
-	// stop validator of source 1
+	// (fail) stop validator of source 1
 	validatorStopReq := &pb.StopValidationRequest{
 		TaskName: taskName,
 		Sources:  sources[1:],
@@ -2387,7 +2387,7 @@ func (t *testMaster) TestStartStopValidation(c *check.C) {
 	t.validatorModeMatch(c, server.scheduler, taskName, sources[0], config.ValidationFull, "")
 	t.validatorModeMatch(c, server.scheduler, taskName, sources[1], config.ValidationNone, "")
 
-	// stop all validator
+	// (fail) stop all validator
 	validatorStopReq = &pb.StopValidationRequest{
 		TaskName: taskName,
 	}
@@ -2400,7 +2400,7 @@ func (t *testMaster) TestStartStopValidation(c *check.C) {
 	t.validatorModeMatch(c, server.scheduler, taskName, sources[0], config.ValidationFull, "")
 	t.validatorModeMatch(c, server.scheduler, taskName, sources[1], config.ValidationNone, "")
 
-	// start validation with fast mode and start-time for source 1
+	// (success) start validation with fast mode and start-time for source 1
 	validatorStartReq = &pb.StartValidationRequest{
 		Mode:      &pb.StartValidationRequest_ModeValue{ModeValue: config.ValidationFast},
 		StartTime: &pb.StartValidationRequest_StartTimeValue{StartTimeValue: "2006-01-02 15:04:05"},
@@ -2417,7 +2417,7 @@ func (t *testMaster) TestStartStopValidation(c *check.C) {
 
 	// now validator of the 2 subtask is enabled(running)
 
-	// start all validator of the task without explicit param again, i.e. resuming
+	// (success) start all validator of the task without explicit param again, i.e. resuming
 	validatorStartReq = &pb.StartValidationRequest{
 		TaskName: taskName,
 	}
@@ -2429,7 +2429,7 @@ func (t *testMaster) TestStartStopValidation(c *check.C) {
 	t.validatorModeMatch(c, server.scheduler, taskName, sources[0], config.ValidationFull, "")
 	t.validatorModeMatch(c, server.scheduler, taskName, sources[1], config.ValidationFast, "2006-01-02 15:04:05")
 
-	// stop non-existed subtask's validator
+	// (fail) stop non-existed subtask's validator
 	validatorStopReq = &pb.StopValidationRequest{
 		TaskName: "not-exist-name",
 	}
@@ -2442,7 +2442,7 @@ func (t *testMaster) TestStartStopValidation(c *check.C) {
 	t.validatorModeMatch(c, server.scheduler, taskName, sources[0], config.ValidationFull, "")
 	t.validatorModeMatch(c, server.scheduler, taskName, sources[1], config.ValidationFast, "2006-01-02 15:04:05")
 
-	// stop all task but with non-exist source
+	// (fail) stop all task but with non-exist source
 	validatorStopReq = &pb.StopValidationRequest{
 		Sources: []string{"xxx"},
 	}
@@ -2455,7 +2455,7 @@ func (t *testMaster) TestStartStopValidation(c *check.C) {
 	t.validatorModeMatch(c, server.scheduler, taskName, sources[0], config.ValidationFull, "")
 	t.validatorModeMatch(c, server.scheduler, taskName, sources[1], config.ValidationFast, "2006-01-02 15:04:05")
 
-	// stop validation of source 0
+	// (success) stop validation of source 0
 	validatorStopReq = &pb.StopValidationRequest{
 		TaskName: taskName,
 		Sources:  []string{sources[0]},
@@ -2468,7 +2468,7 @@ func (t *testMaster) TestStartStopValidation(c *check.C) {
 	t.validatorModeMatch(c, server.scheduler, taskName, sources[0], config.ValidationFull, "")
 	t.validatorModeMatch(c, server.scheduler, taskName, sources[1], config.ValidationFast, "2006-01-02 15:04:05")
 
-	// stop all
+	// (success) stop all
 	validatorStopReq = &pb.StopValidationRequest{
 		TaskName: "",
 	}
@@ -2480,7 +2480,7 @@ func (t *testMaster) TestStartStopValidation(c *check.C) {
 	t.validatorModeMatch(c, server.scheduler, taskName, sources[0], config.ValidationFull, "")
 	t.validatorModeMatch(c, server.scheduler, taskName, sources[1], config.ValidationFast, "2006-01-02 15:04:05")
 
-	// stop all again
+	// (success) stop all again
 	validatorStopReq = &pb.StopValidationRequest{
 		TaskName: "",
 	}
@@ -2492,7 +2492,7 @@ func (t *testMaster) TestStartStopValidation(c *check.C) {
 	t.validatorModeMatch(c, server.scheduler, taskName, sources[0], config.ValidationFull, "")
 	t.validatorModeMatch(c, server.scheduler, taskName, sources[1], config.ValidationFast, "2006-01-02 15:04:05")
 
-	// start all tasks
+	// (success) start all tasks
 	validatorStartReq = &pb.StartValidationRequest{
 		TaskName: "",
 	}
