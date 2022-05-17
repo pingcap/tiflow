@@ -290,6 +290,10 @@ function run_validator_cmd_error() {
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation status --stage stopped" \
 		"Error" 1
+	# status: invalid stage
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation status --stage start" \
+		"Error" 1
 
 	# show errors: resolved error is illegal
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
@@ -309,6 +313,39 @@ function run_validator_cmd_error() {
 		"Error" 1
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation clear test 100 --all" \
+		"Error" 1
+
+	# operate error: more than one arguments
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation ignore-error test 100 101" \
+		"Error" 1
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation make-resolve test 100 101" \
+		"Error" 1
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation clear test 100 101" \
+		"Error" 1
+	
+	# operate error: NaN id
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation ignore-error test error-id" \
+		"Error" 1
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation make-resolve test error-id" \
+		"Error" 1
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation clear test 100 error-id" \
+		"Error" 1
+
+	# operate error: neither all nor id
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation ignore-error test" \
+		"Error" 1
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation make-resolve test" \
+		"Error" 1
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation clear test" \
 		"Error" 1
 
 	# operate error: no task name
