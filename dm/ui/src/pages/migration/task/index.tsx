@@ -278,17 +278,19 @@ const TaskList: React.FC = () => {
     },
   }
 
-  const handleRequest = (handler: (...args: any[]) => void, key: string) => {
+  const handleRequest = async (
+    handler: (...args: any[]) => void,
+    key: string
+  ) => {
     message.loading({ content: t('requesting'), key })
-    Promise.all(selectedSources.map(name => handler({ taskName: name }))).then(
-      res => {
-        if (res.some((r: any) => r?.error)) {
-          message.destroy(key)
-        } else {
-          message.success({ content: t('request success'), key })
-        }
-      }
-    )
+    try {
+      await Promise.all(
+        selectedSources.map(name => handler({ taskName: name }))
+      )
+      message.success({ content: t('request success'), key })
+    } catch (e) {
+      message.destroy(key)
+    }
   }
   const handleRequestWithConfirmModal = useCallback(
     ({ key, handler, title }) => {
@@ -346,14 +348,14 @@ const TaskList: React.FC = () => {
 
     if (startTaskMethod === StartTaskMethod.WithParams) {
       const formValues = form.getFieldsValue()
-      const date = formValues.start_time.toDate()
-      date.setMilliseconds(0)
       extraPayload.startTaskRequest = {
-        start_time: date.toISOString(),
-        safe_mode_time_duration: formValues.safe_mode_time_duration,
+        start_time: formValues.start_time
+          .milliseconds(0)
+          .utc()
+          .format('YYYY-MM-DDTHH:mm:ss'),
+        safe_mode_time_duration: formValues.safe_mode_time_duration + 's',
       }
     }
-
     handleRequest((payload: any) => {
       const p = { ...payload, ...extraPayload }
       startTask(p)
