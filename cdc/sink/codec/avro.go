@@ -417,7 +417,12 @@ func rowToAvroSchema(
 			return "", errors.Trace(err)
 		}
 		if col.Flag.IsNullable() {
-			field["type"] = []interface{}{"null", avroType}
+			// https://stackoverflow.com/questions/22938124/avro-field-default-values
+			if defaultValue == nil {
+				field["type"] = []interface{}{"null", avroType}
+			} else {
+				field["type"] = []interface{}{avroType, "null"}
+			}
 			field["default"] = defaultValue
 		} else {
 			field["type"] = avroType
