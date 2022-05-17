@@ -13,7 +13,7 @@
 
 package model
 
-// PolymorphicEvent describes an event can be in multiple states
+// PolymorphicEvent describes an event can be in multiple states.
 type PolymorphicEvent struct {
 	StartTs uint64
 	// Commit or resolved TS
@@ -23,7 +23,16 @@ type PolymorphicEvent struct {
 	Row   *RowChangedEvent
 }
 
-// NewPolymorphicEvent creates a new PolymorphicEvent with a raw KV
+// NewEmptyPolymorphicEvent creates a new empty PolymorphicEvent.
+func NewEmptyPolymorphicEvent(ts uint64) *PolymorphicEvent {
+	return &PolymorphicEvent{
+		CRTs:  ts,
+		RawKV: &RawKVEntry{},
+		Row:   &RowChangedEvent{},
+	}
+}
+
+// NewPolymorphicEvent creates a new PolymorphicEvent with a raw KV.
 func NewPolymorphicEvent(rawKV *RawKVEntry) *PolymorphicEvent {
 	if rawKV.OpType == OpTypeResolved {
 		return NewResolvedPolymorphicEvent(rawKV.RegionID, rawKV.CRTs)

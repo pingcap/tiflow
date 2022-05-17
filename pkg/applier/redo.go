@@ -181,7 +181,7 @@ func (ra *RedoApplier) consumeLogs(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		err = s.Barrier(ctx, tableID)
+		err = s.RemoveTable(ctx, tableID)
 		if err != nil {
 			return err
 		}
