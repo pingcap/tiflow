@@ -3,7 +3,6 @@
   "version": "0.1.0",
   "scripts": {
     "start": "vite",
-    "start:mock": "vite --mode=mock",
     "build": "vite build",
     "type-check": "vite optimize --force && tsc --noEmit",
     "serve": "vite preview",
@@ -66,5 +65,6 @@
   "license": "Apache-2.0",
   "msw": {
     "workerDirectory": "public"
-  }
+  },
+  "sideEffects": false
 }
