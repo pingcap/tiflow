@@ -76,20 +76,14 @@ func (a *AvroEventBatchEncoder) AppendRowChangedEvent(
 	if !e.IsDelete() {
 		res, err := a.avroEncode(ctx, e, topic, false)
 		if err != nil {
-			log.Error(
-				"AppendRowChangedEvent: avro encoding failed",
-				zap.String("table", e.Table.String()),
-			)
-			return errors.Annotate(err, "AppendRowChangedEvent could not encode to Avro")
+			log.Error("AppendRowChangedEvent: avro encoding failed", zap.Error(err))
+			return errors.Trace(err)
 		}
 
 		evlp, err := res.toEnvelope()
 		if err != nil {
-			log.Error(
-				"AppendRowChangedEvent: could not construct Avro envelope",
-				zap.String("table", e.Table.String()),
-			)
-			return errors.Annotate(err, "AppendRowChangedEvent could not construct Avro envelope")
+			log.Error("AppendRowChangedEvent: could not construct Avro envelope", zap.Error(err))
+			return errors.Trace(err)
 		}
 
 		mqMessage.Value = evlp
@@ -99,20 +93,14 @@ func (a *AvroEventBatchEncoder) AppendRowChangedEvent(
 
 	res, err := a.avroEncode(ctx, e, topic, true)
 	if err != nil {
-		log.Error(
-			"AppendRowChangedEvent: avro encoding failed",
-			zap.String("table", e.Table.String()),
-		)
-		return errors.Annotate(err, "AppendRowChangedEvent could not encode to Avro")
+		log.Error("AppendRowChangedEvent: avro encoding failed", zap.Error(err))
+		return errors.Trace(err)
 	}
 
 	evlp, err := res.toEnvelope()
 	if err != nil {
-		log.Error(
-			"AppendRowChangedEvent: could not construct Avro envelope",
-			zap.String("table", e.Table.String()),
-		)
-		return errors.Annotate(err, "AppendRowChangedEvent could not construct Avro envelope")
+		log.Error("AppendRowChangedEvent: could not construct Avro envelope", zap.Error(err))
+		return errors.Trace(err)
 	}
 
 	mqMessage.Key = evlp
@@ -202,7 +190,7 @@ func (a *AvroEventBatchEncoder) avroEncode(
 			a.bigintUnsignedHandlingMode,
 		)
 		if err != nil {
-			log.Error("AvroEventBatchEncoder: generating schema failed")
+			log.Error("AvroEventBatchEncoder: generating schema failed", zap.Error(err))
 			return "", errors.Trace(err)
 		}
 		return schema, nil
@@ -228,13 +216,13 @@ func (a *AvroEventBatchEncoder) avroEncode(
 		a.bigintUnsignedHandlingMode,
 	)
 	if err != nil {
-		log.Error("AvroEventBatchEncoder: converting to native failed")
+		log.Error("AvroEventBatchEncoder: converting to native failed", zap.Error(err))
 		return nil, errors.Trace(err)
 	}
 
 	bin, err := avroCodec.BinaryFromNative(nil, native)
 	if err != nil {
-		log.Error("AvroEventBatchEncoder: converting to Avro binary failed")
+		log.Error("AvroEventBatchEncoder: converting to Avro binary failed", zap.Error(err))
 		return nil, cerror.WrapError(cerror.ErrAvroEncodeToBinary, err)
 	}
 
