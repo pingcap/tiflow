@@ -443,19 +443,18 @@ func TestGetDefaultZeroValue(t *testing.T) {
 
 	// mysql flag null
 	ftNull := types.NewFieldType(mysql.TypeUnspecified)
-	ftNull.SetFlag(uint(0))
 
 	// mysql.TypeTiny + notnull
 	ftTinyIntNotNull := types.NewFieldType(mysql.TypeTiny)
-	ftTinyIntNotNull.SetFlag(uint(0) | mysql.NotNullFlag)
+	ftTinyIntNotNull.AddFlag(mysql.NotNullFlag)
 
 	// mysql.TypeTiny + notnull +  unsigned
 	ftTinyIntNotNullUnSigned := types.NewFieldType(mysql.TypeTiny)
-	ftTinyIntNotNull.SetFlag(mysql.NotNullFlag | mysql.UnsignedFlag)
+	ftTinyIntNotNullUnSigned.SetFlag(mysql.NotNullFlag)
+	ftTinyIntNotNullUnSigned.AddFlag(mysql.UnsignedFlag)
 
 	// mysql.TypeTiny + null
 	ftTinyIntNull := types.NewFieldType(mysql.TypeTiny)
-	ftNull.SetFlag(uint(0))
 
 	// mysql.TypeShort + notnull
 	ftShortNotNull := types.NewFieldType(mysql.TypeShort)
@@ -483,11 +482,15 @@ func TestGetDefaultZeroValue(t *testing.T) {
 
 	// mysql.TypeFloat + null
 	ftTypeFloatNull := types.NewFieldType(mysql.TypeFloat)
-	ftTypeFloatNull.SetFlag(uint(0))
 
 	// mysql.TypeDouble + notnull
 	ftTypeDoubleNotNull := types.NewFieldType(mysql.TypeDouble)
 	ftTypeDoubleNotNull.SetFlag(mysql.NotNullFlag)
+
+	// mysql.TypeNewDecimal + notnull
+	ftTypeNewDecimalNull := types.NewFieldType(mysql.TypeNewDecimal)
+	ftTypeNewDecimalNull.SetFlen(5)
+	ftTypeNewDecimalNull.SetDecimal(2)
 
 	// mysql.TypeNewDecimal + notnull
 	ftTypeNewDecimalNotNull := types.NewFieldType(mysql.TypeNewDecimal)
@@ -504,7 +507,6 @@ func TestGetDefaultZeroValue(t *testing.T) {
 
 	// mysql.TypeTimestamp + notnull
 	ftTypeTimestampNull := types.NewFieldType(mysql.TypeTimestamp)
-	ftTypeTimestampNull.SetFlag(uint(0))
 
 	// mysql.TypeDate + notnull
 	ftTypeDateNotNull := types.NewFieldType(mysql.TypeDate)
@@ -589,7 +591,7 @@ func TestGetDefaultZeroValue(t *testing.T) {
 		// mysql.TypeTiny + notnull + nodefault
 		{
 			Name:    "mysql.TypeTiny + notnull + nodefault",
-			ColInfo: timodel.ColumnInfo{FieldType: *ftTinyIntNotNull},
+			ColInfo: timodel.ColumnInfo{FieldType: *ftTinyIntNotNull.Clone()},
 			Res:     int64(0),
 		},
 		// mysql.TypeTiny + notnull + default
@@ -716,7 +718,7 @@ func TestGetDefaultZeroValue(t *testing.T) {
 		// mysql.TypeNewDecimal + null + nodefault
 		{
 			Name:    "mysql.TypeNewDecimal + null + nodefault",
-			ColInfo: timodel.ColumnInfo{FieldType: *ftTypeNewDecimalNotNull},
+			ColInfo: timodel.ColumnInfo{FieldType: *ftTypeNewDecimalNull},
 			Res:     nil,
 		},
 		// mysql.TypeNewDecimal + null + default

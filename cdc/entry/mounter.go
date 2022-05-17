@@ -480,7 +480,6 @@ func getDefaultOrZeroValue(col *timodel.ColumnInfo) (interface{}, int, string, e
 			return emptyBytes, sizeOfEmptyBytes, "", nil
 		default:
 			d = table.GetZeroValue(col)
-			log.Info("indeebug", zap.String("columnInfo", col.FieldType.String()), zap.Any("d", d), zap.Any("signed", mysql.HasUnsignedFlag(col.GetFlag())))
 			if d.IsNull() {
 				log.Error("meet unsupported column type", zap.String("columnInfo", col.FieldType.String()))
 			}
