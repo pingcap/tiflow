@@ -57,8 +57,10 @@ func NewManager(ctx context.Context, gcServiceID string) *Manager {
 // NewManager4Test returns a Manager for unit test.
 func NewManager4Test(pdClient pd.Client) *Manager {
 	up := NewUpstream4Test(pdClient)
-	res := &Manager{ups: new(sync.Map), ctx: context.Background(),
-		gcServiceID: etcd.GcServiceIDForTest()}
+	res := &Manager{
+		ups: new(sync.Map), ctx: context.Background(),
+		gcServiceID: etcd.GcServiceIDForTest(),
+	}
 	res.ups.Store(DefaultUpstreamID, up)
 	return res
 }
