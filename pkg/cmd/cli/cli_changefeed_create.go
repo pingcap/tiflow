@@ -138,7 +138,7 @@ func (o *createChangefeedOptions) addFlags(cmd *cobra.Command) {
 	cmd.PersistentFlags().Uint64Var(&o.startTs, "start-ts", 0, "Start ts of changefeed")
 	cmd.PersistentFlags().StringVar(&o.timezone, "tz", "SYSTEM", "timezone used when checking sink uri (changefeed timezone is determined by cdc server)")
 	cmd.PersistentFlags().
-		StringVar(&o.schemaRegistry, "schema-registry", "", "Avro Schema Registry uri")
+		StringVar(&o.schemaRegistry, "schema-registry", "", "Avro Schema Registry URI")
 }
 
 // complete adapts from the command line args to the data and client required.
