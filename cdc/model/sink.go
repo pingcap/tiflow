@@ -267,6 +267,9 @@ type RowChangedEvent struct {
 	// ApproximateDataSize is the approximate size of protobuf binary
 	// representation of this event.
 	ApproximateDataSize int64 `json:"-" msg:"-"`
+
+	// SplitTxn marks this RowChangedEvent as the first line of a new txn.
+	SplitTxn bool `json:"-" msg:"-"`
 }
 
 // IsDelete returns true if the row is a delete event
@@ -468,6 +471,7 @@ type DDLEvent struct {
 	PreTableInfo *SimpleTableInfo `msg:"pre-table-info"`
 	Query        string           `msg:"query"`
 	Type         model.ActionType `msg:"-"`
+	Done         bool             `msg:"-"`
 }
 
 // RedoDDLEvent represents DDL event used in redo log persistent

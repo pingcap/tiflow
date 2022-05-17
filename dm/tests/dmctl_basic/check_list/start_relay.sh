@@ -3,7 +3,7 @@
 function start_relay_empty_arg() {
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"start-relay" \
-		"start-relay <-s source-id> <worker-name> \[...worker-name\]" 1
+		"start-relay <-s source-id>" 1
 }
 
 function start_relay_wrong_arg() {

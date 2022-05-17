@@ -22,6 +22,8 @@ import (
 	"context"
 	"testing"
 
+	"github.com/pingcap/tiflow/dm/pkg/ha"
+
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tiflow/dm/checker"
 	"github.com/pingcap/tiflow/dm/dm/config"
@@ -50,7 +52,7 @@ func (s *OpenAPIControllerSuite) SetupSuite() {
 		Enable:     true,
 		EnableGtid: false,
 		Host:       dbCfg.Host,
-		Password:   dbCfg.Password,
+		Password:   &dbCfg.Password,
 		Port:       dbCfg.Port,
 		User:       dbCfg.User,
 	}
@@ -221,6 +223,40 @@ func (s *OpenAPIControllerSuite) TestSourceController() {
 		s.Nil(err)
 		s.Len(sourceList, 0)
 	}
+
+	// create and update no password source
+	{
+		// no password will use "" as password
+		source := *s.testSource
+		source.Password = nil
+		createReq := openapi.CreateSourceRequest{Source: source}
+		resp, err := server.createSource(ctx, createReq)
+		s.NoError(err)
+		s.EqualValues(source, *resp)
+		config := server.scheduler.GetSourceCfgByID(source.SourceName)
+		s.NotNil(config)
+		s.Equal("", config.From.Password)
+
+		// update to have password
+		updateReq := openapi.UpdateSourceRequest{Source: *s.testSource}
+		sourceAfterUpdated, err := server.updateSource(ctx, source.SourceName, updateReq)
+		s.NoError(err)
+		s.EqualValues(s.testSource, sourceAfterUpdated)
+
+		// update without password will use old password
+		source = *s.testSource
+		source.Password = nil
+		updateReq = openapi.UpdateSourceRequest{Source: source}
+		sourceAfterUpdated, err = server.updateSource(ctx, source.SourceName, updateReq)
+		s.NoError(err)
+		s.Equal(source, *sourceAfterUpdated)
+		// password is old
+		config = server.scheduler.GetSourceCfgByID(source.SourceName)
+		s.NotNil(config)
+		s.Equal(*s.testSource.Password, config.From.Password)
+
+		s.Nil(server.deleteSource(ctx, s.testSource.SourceName, false))
+	}
 }
 
 func (s *OpenAPIControllerSuite) TestTaskController() {
@@ -334,6 +370,24 @@ func (s *OpenAPIControllerSuite) TestTaskController() {
 		s.Nil(server.enableSource(ctx, s.testSource.SourceName))
 		s.Nil(server.startTask(ctx, s.testTask.Name, req))
 		s.Equal(server.scheduler.GetExpectSubTaskStage(s.testTask.Name, s.testSource.SourceName).Expect, pb.Stage_Running)
+
+		// stop success
+		s.Nil(server.stopTask(ctx, s.testTask.Name, openapi.StopTaskRequest{}))
+		s.Equal(server.scheduler.GetExpectSubTaskStage(s.testTask.Name, s.testSource.SourceName).Expect, pb.Stage_Stopped)
+
+		// start with cli args
+		startTime := "2022-05-05 12:12:12"
+		safeModeTimeDuration := "10s"
+		req = openapi.StartTaskRequest{
+			StartTime:            &startTime,
+			SafeModeTimeDuration: &safeModeTimeDuration,
+		}
+		s.Nil(server.startTask(ctx, s.testTask.Name, req))
+		taskCliConf, err := ha.GetTaskCliArgs(server.etcdClient, s.testTask.Name, s.testSource.SourceName)
+		s.Nil(err)
+		s.NotNil(taskCliConf)
+		s.Equal(startTime, taskCliConf.StartTime)
+		s.Equal(safeModeTimeDuration, taskCliConf.SafeModeDuration)
 
 		// stop success
 		s.Nil(server.stopTask(ctx, s.testTask.Name, openapi.StopTaskRequest{}))

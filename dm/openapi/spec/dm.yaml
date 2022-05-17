@@ -1376,7 +1376,7 @@ components:
           type: string
           example: "123456"
           description: "source password"
-          nullable: false
+          nullable: true
         enable_gtid:
           type: boolean
           example: false
@@ -1410,7 +1410,6 @@ components:
         - "host"
         - "port"
         - "user"
-        - "password"
         - "enable_gtid"
         - "enable"
     ShardingGroup:
@@ -2174,19 +2173,21 @@ components:
           description: whether to remove meta database in downstream database
         source_name_list:
           $ref: "#/components/schemas/SourceNameList"
-        # start_time:
-        #   type: string
-        #   example: "2006-01-02 15:04:05"
-        #   description: task start time
-        # safe_mode_time_duration:
-        #   example: "1s"
-        #   description: time duration of safe mode
+        start_time:
+          type: string
+          example: "2006-01-02 15:04:05"
+          description: task start time
+        safe_mode_time_duration:
+          type: string
+          example: "10s"
+          description: time duration of safe mode
     StopTaskRequest:
       type: object
       properties:
-        # timeout_duration:
-        #   example: "15s"
-        #   description: time duration waiting task stop
+        timeout_duration:
+          type: string
+          example: "15s"
+          description: time duration waiting task stop
         source_name_list:
           $ref: "#/components/schemas/SourceNameList"
     UpdateTaskRequest:

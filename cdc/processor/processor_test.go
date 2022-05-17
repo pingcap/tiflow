@@ -28,7 +28,6 @@ import (
 	tablepipeline "github.com/pingcap/tiflow/cdc/processor/pipeline"
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/scheduler"
-	"github.com/pingcap/tiflow/cdc/sink"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
@@ -51,7 +50,6 @@ func newProcessor4Test(
 		p.agent = &mockAgent{executor: p}
 		return nil
 	}
-	p.sinkManager = &sink.Manager{}
 	p.redoManager = redo.NewDisabledManager()
 	p.createTablePipeline = createTablePipeline
 	p.schemaStorage = &mockSchemaStorage{t: t, resolvedTs: math.MaxUint64}
@@ -204,14 +202,14 @@ func (s *mockSchemaStorage) DoGC(ts uint64) uint64 {
 
 type mockAgent struct {
 	// dummy to satisfy the interface
-	processorAgent
+	scheduler.Agent
 
 	executor         scheduler.TableExecutor
 	lastCheckpointTs model.Ts
 	isClosed         bool
 }
 
-func (a *mockAgent) Tick(_ cdcContext.Context) error {
+func (a *mockAgent) Tick(_ context.Context) error {
 	if len(a.executor.GetAllCurrentTables()) == 0 {
 		return nil
 	}

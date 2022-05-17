@@ -356,7 +356,7 @@ type Source struct {
 	Host string `json:"host"`
 
 	// source password
-	Password string `json:"password"`
+	Password *string `json:"password"`
 
 	// source port
 	Port int `json:"port"`
@@ -404,14 +404,23 @@ type StartTaskRequest struct {
 	// whether to remove meta database in downstream database
 	RemoveMeta *bool `json:"remove_meta,omitempty"`
 
+	// time duration of safe mode
+	SafeModeTimeDuration *string `json:"safe_mode_time_duration,omitempty"`
+
 	// source name list
 	SourceNameList *SourceNameList `json:"source_name_list,omitempty"`
+
+	// task start time
+	StartTime *string `json:"start_time,omitempty"`
 }
 
 // StopTaskRequest defines model for StopTaskRequest.
 type StopTaskRequest struct {
 	// source name list
 	SourceNameList *SourceNameList `json:"source_name_list,omitempty"`
+
+	// time duration waiting task stop
+	TimeoutDuration *string `json:"timeout_duration,omitempty"`
 }
 
 // SubTaskStatus defines model for SubTaskStatus.
