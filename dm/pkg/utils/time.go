@@ -23,6 +23,11 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
+const (
+	StartTimeFormat  = "2006-01-02 15:04:05"
+	StartTimeFormat2 = "2006-01-02T15:04:05"
+)
+
 // ParseTimeZone parse the time zone location by name or offset
 //
 // NOTE: we don't support the "SYSTEM" or "Local" time_zone.
@@ -62,4 +67,13 @@ func ParseTimeZone(s string) (*time.Location, error) {
 	}
 
 	return nil, terror.ErrConfigInvalidTimezone.Generate(s)
+}
+
+// ParseStartTime parses start-time of task-start and validation-start
+func ParseStartTime(timeStr string) (time.Time, error) {
+	t, err := time.Parse(StartTimeFormat, timeStr)
+	if err != nil {
+		return time.Parse(StartTimeFormat2, timeStr)
+	}
+	return t, nil
 }

@@ -147,7 +147,7 @@ func (t *testSchedulerSuite) testSchedulerProgress(restart int) {
 	require.True(t.T(), terror.ErrSchedulerNotStarted.Equal(s.RemoveWorker(workerName1)))
 	require.True(t.T(), terror.ErrSchedulerNotStarted.Equal(s.UpdateExpectRelayStage(pb.Stage_Running, sourceID1)))
 	require.True(t.T(), terror.ErrSchedulerNotStarted.Equal(s.UpdateExpectSubTaskStage(pb.Stage_Running, taskName1, sourceID1)))
-	require.True(t.T(), terror.ErrSchedulerNotStarted.Equal(s.OperateValidationTask(pb.Stage_Running, map[string]map[string]config.SubTaskConfig{})))
+	require.True(t.T(), terror.ErrSchedulerNotStarted.Equal(s.OperateValidationTask(nil, nil, nil)))
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -2007,27 +2007,20 @@ func (t *testSchedulerSuite) TestOperateValidatorTask() {
 	require.NoError(t.T(), s.AddSubTasks(false, pb.Stage_Running, subtaskCfg)) // create new subtask without validation
 	t.subTaskCfgExist(s, subtaskCfg)
 	subtaskCfg.ValidatorCfg.Mode = config.ValidationFull // set mode
-	stCfgs := make(map[string]map[string]config.SubTaskConfig)
-	stCfgs[subtaskCfg.Name] = make(map[string]config.SubTaskConfig)
-	stCfgs[subtaskCfg.Name][subtaskCfg.SourceID] = subtaskCfg
-	require.NoError(t.T(), s.OperateValidationTask(pb.Stage_Running, stCfgs))            // create validator task
+	tasks := []string{subtaskCfg.Name}
+	validatorStages := []ha.Stage{ha.NewValidatorStage(pb.Stage_Running, subtaskCfg.SourceID, subtaskCfg.Name)}
+	changedCfgs := []config.SubTaskConfig{subtaskCfg}
+	require.NoError(t.T(), s.OperateValidationTask(tasks, validatorStages, changedCfgs)) // create validator task
 	t.validatorStageMatch(s, subtaskCfg.Name, subtaskCfg.SourceID, pb.Stage_Running)     // task running
 	t.validatorModeMatch(s, subtaskCfg.Name, subtaskCfg.SourceID, config.ValidationFull) // succeed to change mode
-	require.NoError(t.T(), s.OperateValidationTask(pb.Stage_Running, stCfgs))            // start running validator task with no error
-	t.validatorStageMatch(s, subtaskCfg.Name, subtaskCfg.SourceID, pb.Stage_Running)     // stage not changed
 
 	// CASE 2: stop running subtask
-	require.NoError(t.T(), s.OperateValidationTask(pb.Stage_Stopped, stCfgs))
-	t.validatorStageMatch(s, subtaskCfg.Name, subtaskCfg.SourceID, pb.Stage_Stopped) // task stopped
-	require.NoError(t.T(), s.OperateValidationTask(pb.Stage_Stopped, stCfgs))        // stop stopped validator task with no error
-	t.validatorStageMatch(s, subtaskCfg.Name, subtaskCfg.SourceID, pb.Stage_Stopped) // stage not changed
-
-	// CASE 3: start subtask again, will turn into resuming
-	subtaskCfg.ValidatorCfg.Mode = config.ValidationFast
-	stCfgs[subtaskCfg.Name][subtaskCfg.SourceID] = subtaskCfg                            // set new mode
-	require.NoError(t.T(), s.OperateValidationTask(pb.Stage_Running, stCfgs))            // create validator task
-	t.validatorModeMatch(s, subtaskCfg.Name, subtaskCfg.SourceID, config.ValidationFull) // cannot change mode
-	t.validatorStageMatch(s, subtaskCfg.Name, subtaskCfg.SourceID, pb.Stage_Running)     // task resumed
+	validatorStages = []ha.Stage{ha.NewValidatorStage(pb.Stage_Stopped, subtaskCfg.SourceID, subtaskCfg.Name)}
+	changedCfgs = []config.SubTaskConfig{}
+	require.NoError(t.T(), s.OperateValidationTask(tasks, validatorStages, changedCfgs))
+	t.validatorStageMatch(s, subtaskCfg.Name, subtaskCfg.SourceID, pb.Stage_Stopped)     // task stopped
+	require.NoError(t.T(), s.OperateValidationTask(tasks, validatorStages, changedCfgs)) // stop stopped validator task with no error
+	t.validatorStageMatch(s, subtaskCfg.Name, subtaskCfg.SourceID, pb.Stage_Stopped)     // stage not changed
 }
 
 func (t *testSchedulerSuite) TestUpdateSubTasksAndSourceCfg() {
@@ -2126,4 +2119,25 @@ func (t *testSchedulerSuite) TestUpdateSubTasksAndSourceCfg() {
 	sourceCfg1.MetaDir = "new meta"
 	t.NoError(s.UpdateSourceCfg(sourceCfg1))
 	t.Equal(s.GetSourceCfgByID(sourceID1).MetaDir, sourceCfg1.MetaDir)
+}
+
+func (t *testSchedulerSuite) TestValidatorEnabledAndGetValidatorStage() {
+	logger := log.L()
+	s := NewScheduler(&logger, config.Security{})
+	task := "test"
+	source := "source"
+	m, _ := s.expectValidatorStages.LoadOrStore(task, map[string]ha.Stage{})
+	m.(map[string]ha.Stage)[source] = ha.Stage{Expect: pb.Stage_Running}
+
+	t.True(s.ValidatorEnabled(task, source))
+	t.False(s.ValidatorEnabled(task, "not-exist"))
+	t.False(s.ValidatorEnabled("not-exist", source))
+	t.False(s.ValidatorEnabled("not-exist", "not-exist"))
+
+	stage := s.GetValidatorStage(task, source)
+	t.NotNil(stage)
+	t.Equal(pb.Stage_Running, stage.Expect)
+	t.Nil(s.GetValidatorStage(task, "not-exist"))
+	t.Nil(s.GetValidatorStage("not-exist", source))
+	t.Nil(s.GetValidatorStage("not-exist", "not-exist"))
 }

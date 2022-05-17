@@ -2641,6 +2641,65 @@ func (s *Server) sharedLogic(ctx context.Context, req interface{}, respPointer i
 	return true
 }
 
+func (s *Server) checkStartValidationParams(req *pb.StartValidationRequest) (
+	map[string]map[string]config.SubTaskConfig, string, bool) {
+	explicitModeOrStartTime := req.Mode != nil || req.StartTime != nil
+	mode := config.ValidationFull
+	if req.Mode != nil {
+		mode = req.GetModeValue()
+	}
+	if mode != config.ValidationFull && mode != config.ValidationFast {
+		return nil, "validation mode should be either `full` or `fast`", false
+	}
+
+	startTime := req.GetStartTimeValue()
+	if startTime != "" {
+		if _, err := utils.ParseStartTime(startTime); err != nil {
+			return nil, "start-time should be in the format like '2006-01-02 15:04:05' or '2006-01-02T15:04:05'", false
+		}
+	}
+
+	subTaskCfgs := s.scheduler.GetSubTaskCfgsByTaskAndSource(req.TaskName, req.Sources)
+	if len(subTaskCfgs) == 0 {
+		if req.TaskName == "" {
+			return nil, fmt.Sprintf("fail to get subtask config by sources `%v`", req.Sources), false
+		}
+		return nil, fmt.Sprintf("fail to get subtask config by task name `%s` and sources `%v`",
+			req.TaskName, req.Sources), false
+	}
+
+	var enabledValidator string
+	allEnabled, noneEnabled := true, true
+	for taskName := range subTaskCfgs {
+		for sourceID := range subTaskCfgs[taskName] {
+			if s.scheduler.ValidatorEnabled(taskName, sourceID) {
+				enabledValidator = taskName + " with source " + sourceID
+				noneEnabled = false
+			} else {
+				allEnabled = false
+			}
+		}
+	}
+
+	// if user set mode or start-time explicitly, then we do start operation.
+	// none of the target validators should have enabled
+	if explicitModeOrStartTime && !noneEnabled {
+		msg := fmt.Sprintf("some of target validator(%s) has already enabled.", enabledValidator)
+		if allEnabled {
+			msg = "all target validator has enabled, cannot do 'validation start' with explicit mode or start-time"
+		}
+		return nil, msg, false
+	}
+	// no explicit mode or start-time:
+	// - do resume when all have enabled
+	// - do start when none enabled
+	if !explicitModeOrStartTime && !allEnabled && !noneEnabled {
+		return nil, fmt.Sprintf("some of target validator(%s) has already enabled.", enabledValidator), false
+	}
+
+	return subTaskCfgs, "", true
+}
+
 func (s *Server) StartValidation(ctx context.Context, req *pb.StartValidationRequest) (*pb.StartValidationResponse, error) {
 	var (
 		resp2       *pb.StartValidationResponse
@@ -2652,44 +2711,49 @@ func (s *Server) StartValidation(ctx context.Context, req *pb.StartValidationReq
 		return resp2, err2
 	}
 	resp := &pb.StartValidationResponse{}
-	if req.Mode != config.ValidationFull && req.Mode != config.ValidationFast {
-		resp.Result = false
-		resp.Msg = fmt.Sprintf("validation mode should be either `%s` or `%s`", config.ValidationFull, config.ValidationFast)
+
+	subTaskCfgs, msg, ok := s.checkStartValidationParams(req)
+	if !ok {
+		resp.Msg = msg
 		return resp, nil
 	}
-	subTaskCfgs = s.scheduler.GetSubTaskCfgsByTaskAndSource(req.TaskName, req.Sources)
-	if len(subTaskCfgs) == 0 {
-		resp.Result = false
-		name := req.TaskName
-		if name == "" {
-			name = "all"
-		}
-		resp.Msg = fmt.Sprintf("fail to get subtask config by task name `%s` and sources `%v`", name, req.Sources)
-		// nolint:nilerr
-		return resp, nil
+
+	mode := config.ValidationFull
+	if req.Mode != nil {
+		mode = req.GetModeValue()
 	}
-	// TODO: wait for #4479 and update the validator stage in etcd
-	// get the validator stage: common.StageValidatorKeyAdapter.Encode(source, task-name)
-	// if no validator exists: update the subtask config & etcd.Put(validator stage running)
-	// if the validator stage is `RUNNING`: then report error
-	// otherwise: update the subtask config & etcd.Put(validator stage: running)
+	startTime := req.GetStartTimeValue()
+	tasks := make([]string, 0)
+	changedSubtaskCfgs := make([]config.SubTaskConfig, 0)
+	validatorStages := make([]ha.Stage, 0)
 	for taskName := range subTaskCfgs {
 		for sourceID := range subTaskCfgs[taskName] {
 			cfg := subTaskCfgs[taskName][sourceID]
-			cfg.ValidatorCfg.Mode = req.Mode
+			if !s.scheduler.ValidatorEnabled(taskName, sourceID) {
+				cfg.ValidatorCfg.Mode = mode
+				cfg.ValidatorCfg.StartTime = startTime
+				changedSubtaskCfgs = append(changedSubtaskCfgs, cfg)
+				log.L().Info("enable validator",
+					zap.String("task", taskName), zap.String("source", sourceID),
+					zap.String("mode", mode), zap.String("start-time", startTime))
+			} else {
+				log.L().Info("start validator",
+					zap.String("task", taskName), zap.String("source", sourceID))
+			}
 			subTaskCfgs[taskName][sourceID] = cfg
+			validatorStages = append(validatorStages, ha.NewValidatorStage(pb.Stage_Running, cfg.SourceID, cfg.Name))
 		}
+		tasks = append(tasks, taskName)
 	}
-	err = s.scheduler.OperateValidationTask(pb.Stage_Running, subTaskCfgs)
+
+	err = s.scheduler.OperateValidationTask(tasks, validatorStages, changedSubtaskCfgs)
 	if err != nil {
-		resp.Result = false
 		resp.Msg = err.Error()
 		// nolint:nilerr
 		return resp, nil
 	}
 	resp.Result = true
 	resp.Msg = "success"
-	log.L().Info("start validation", zap.Reflect("subtask", subTaskCfgs))
 	return resp, nil
 }
 
@@ -2706,16 +2770,40 @@ func (s *Server) StopValidation(ctx context.Context, req *pb.StopValidationReque
 	resp := &pb.StopValidationResponse{}
 	subTaskCfgs = s.scheduler.GetSubTaskCfgsByTaskAndSource(req.TaskName, req.Sources)
 	if len(subTaskCfgs) == 0 {
-		resp.Result = false
-		name := req.TaskName
-		if name == "" {
-			name = "all"
+		msg := fmt.Sprintf("fail to get subtask config by task name `%s` and sources `%v`", req.TaskName, req.Sources)
+		if req.TaskName == "" {
+			msg = fmt.Sprintf("fail to get subtask config by sources `%v`", req.Sources)
 		}
-		resp.Msg = fmt.Sprintf("fail to get subtask config by task name `%s` and sources `%v`", name, req.Sources)
+		resp.Msg = msg
 		// nolint:nilerr
 		return resp, nil
 	}
-	err = s.scheduler.OperateValidationTask(pb.Stage_Stopped, subTaskCfgs)
+
+	var unEnabledValidator string
+	allEnabled := true
+	for taskName := range subTaskCfgs {
+		for sourceID := range subTaskCfgs[taskName] {
+			if !s.scheduler.ValidatorEnabled(taskName, sourceID) {
+				unEnabledValidator = taskName + " with source " + sourceID
+				allEnabled = false
+			}
+		}
+	}
+	if !allEnabled {
+		resp.Msg = fmt.Sprintf("some target validator(%s) is not enabled", unEnabledValidator)
+		return resp, nil
+	}
+
+	tasks := make([]string, 0)
+	validatorStages := make([]ha.Stage, 0)
+	for taskName := range subTaskCfgs {
+		for _, cfg := range subTaskCfgs[taskName] {
+			log.L().Info("stop validator", zap.String("task", taskName), zap.String("source", cfg.SourceID))
+			validatorStages = append(validatorStages, ha.NewValidatorStage(pb.Stage_Stopped, cfg.SourceID, cfg.Name))
+		}
+		tasks = append(tasks, taskName)
+	}
+	err = s.scheduler.OperateValidationTask(tasks, validatorStages, []config.SubTaskConfig{})
 	if err != nil {
 		resp.Result = false
 		resp.Msg = err.Error()
@@ -2724,7 +2812,6 @@ func (s *Server) StopValidation(ctx context.Context, req *pb.StopValidationReque
 	}
 	resp.Result = true
 	resp.Msg = "success"
-	log.L().Info("stop validation", zap.Reflect("subtask", subTaskCfgs))
 	return resp, nil
 }
 

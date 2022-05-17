@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/dm/ctl/common"
 	"github.com/pingcap/tiflow/dm/dm/pb"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
 
 const (
@@ -33,12 +34,13 @@ const (
 
 func NewStartValidationCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "start [-s source ...] [--mode mode] [--all-task] [task-name]",
+		Use:   "start [-s source ...] [--all-task] [task-name]",
 		Short: "start to validate the completeness of the data",
-		RunE:  startStopValidation(StartValidationOp),
+		RunE:  startValidation,
 	}
 	cmd.Flags().Bool("all-task", false, "whether applied to all tasks")
-	cmd.Flags().String("mode", "full", "specify the mode of validation: full, fast")
+	cmd.Flags().String("mode", "", "specify the mode of validation: full, fast")
+	cmd.Flags().String("start-time", "", "specify the start time of binlog for validation, e.g. '2021-10-21 00:01:00' or 2021-10-21T00:01:00")
 	return cmd
 }
 
@@ -46,92 +48,134 @@ func NewStopValidationCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "stop [-s source ...] [--all-task] [task-name]",
 		Short: "stop validating the completeness of the data",
-		RunE:  startStopValidation(StopValidationOp),
+		RunE:  stopValidation,
 	}
 	cmd.Flags().Bool("all-task", false, "whether to all tasks")
 	return cmd
 }
 
-func startStopValidation(op string) func(*cobra.Command, []string) error {
-	formatStartStopValidationError := func(cmd *cobra.Command, errMsg string) error {
-		cmd.SetOut(os.Stdout)
-		common.PrintCmdUsage(cmd)
-		return errors.New(errMsg)
+type validationStartStopArgs struct {
+	sources  []string
+	allTask  bool
+	taskName string
+
+	mode      string
+	startTime string
+	// whether user has set --mode or --start-time explicitly
+	explicitMode      bool
+	explicitStartTime bool
+}
+
+func printUsageAndFailWithMessage(cmd *cobra.Command, errMsg string) error {
+	cmd.SetOut(os.Stdout)
+	common.PrintCmdUsage(cmd)
+	return errors.New(errMsg)
+}
+
+func parseValidationStartStopArgs(cmd *cobra.Command, op string) (validationStartStopArgs, string, bool) {
+	var err error
+	args := validationStartStopArgs{}
+	if args.sources, err = common.GetSourceArgs(cmd); err != nil {
+		return args, err.Error(), false
 	}
-	return func(cmd *cobra.Command, _ []string) error {
-		var (
-			sources   []string
-			isAllTask bool
-			taskName  string
-			err       error
-		)
-		sources, err = common.GetSourceArgs(cmd)
-		if err != nil {
-			return err
-		}
-		isAllTask, err = cmd.Flags().GetBool("all-task")
-		if err != nil {
-			return err
-		}
-		switch len(cmd.Flags().Args()) {
-		case 1:
-			taskName = cmd.Flags().Arg(0)
-			if isAllTask {
-				// contradiction
-				return formatStartStopValidationError(cmd, "either `task-name` or `all-task` should be set")
-			}
-		case 0:
-			if !isAllTask {
-				// contradiction
-				return formatStartStopValidationError(cmd, "either `task-name` or `all-task` should be set")
-			}
-		default:
-			return formatStartStopValidationError(cmd, "too many arguments are specified")
-		}
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
-		if op == StartValidationOp {
-			// TODO: get `from-time` flag
-			var mode string
-			mode, err = cmd.Flags().GetString("mode")
+	if args.allTask, err = cmd.Flags().GetBool("all-task"); err != nil {
+		return args, err.Error(), false
+	}
+
+	if op == StartValidationOp {
+		args.explicitMode = cmd.Flags().Changed("mode")
+		if args.explicitMode {
+			args.mode, err = cmd.Flags().GetString("mode")
 			if err != nil {
-				return err
+				return args, err.Error(), false
 			}
-			if mode != config.ValidationFull && mode != config.ValidationFast {
+			if args.mode != config.ValidationFull && args.mode != config.ValidationFast {
 				errMsg := fmt.Sprintf("mode should be either `%s` or `%s`", config.ValidationFull, config.ValidationFast)
-				return formatStartStopValidationError(cmd, errMsg)
+				return args, errMsg, false
 			}
-			resp := &pb.StartValidationResponse{}
-			err = common.SendRequest(
-				ctx,
-				"StartValidation",
-				&pb.StartValidationRequest{
-					TaskName: taskName,
-					Sources:  sources,
-					Mode:     mode,
-				},
-				&resp,
-			)
-			if err != nil {
-				return err
-			}
-			common.PrettyPrintResponse(resp)
-		} else {
-			resp := &pb.StopValidationResponse{}
-			err = common.SendRequest(
-				ctx,
-				"StopValidation",
-				&pb.StopValidationRequest{
-					TaskName: taskName,
-					Sources:  sources,
-				},
-				&resp,
-			)
-			if err != nil {
-				return err
-			}
-			common.PrettyPrintResponse(resp)
 		}
-		return nil
+		args.explicitStartTime = cmd.Flags().Changed("start-time")
+		if args.explicitStartTime {
+			if args.startTime, err = cmd.Flags().GetString("start-time"); err != nil {
+				return args, err.Error(), false
+			}
+			if _, err = utils.ParseStartTime(args.startTime); err != nil {
+				return args, "start-time should be in the format like '2006-01-02 15:04:05' or '2006-01-02T15:04:05'", false
+			}
+		}
 	}
+
+	switch len(cmd.Flags().Args()) {
+	case 1:
+		args.taskName = cmd.Flags().Arg(0)
+		if args.allTask {
+			// contradiction
+			return args, "either `task-name` or `all-task` should be set", false
+		}
+	case 0:
+		if !args.allTask {
+			// contradiction
+			return args, "either `task-name` or `all-task` should be set", false
+		}
+	default:
+		return args, "too many arguments are specified", false
+	}
+
+	return args, "", true
+}
+
+func startValidation(cmd *cobra.Command, _ []string) error {
+	args, msg, ok := parseValidationStartStopArgs(cmd, StartValidationOp)
+	if !ok {
+		return printUsageAndFailWithMessage(cmd, msg)
+	}
+	// we use taskName="" to represent we do operation on all task, so args.allTask don't need to pass
+	req := &pb.StartValidationRequest{
+		TaskName: args.taskName,
+		Sources:  args.sources,
+	}
+	// "validation start" has 2 usages:
+	// 1. if validator never started, starts it.
+	// 2. if validator ever started, resumes it, in this case user can't set mode or start-time explicitly.
+	if args.explicitMode {
+		req.Mode = &pb.StartValidationRequest_ModeValue{ModeValue: args.mode}
+	}
+	if args.explicitStartTime {
+		req.StartTime = &pb.StartValidationRequest_StartTimeValue{StartTimeValue: args.startTime}
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	resp := &pb.StartValidationResponse{}
+	err := common.SendRequest(ctx, "StartValidation", req, &resp)
+	if err != nil {
+		return err
+	}
+	common.PrettyPrintResponse(resp)
+	return nil
+}
+
+func stopValidation(cmd *cobra.Command, _ []string) error {
+	args, msg, ok := parseValidationStartStopArgs(cmd, StopValidationOp)
+	if !ok {
+		return printUsageAndFailWithMessage(cmd, msg)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	resp := &pb.StopValidationResponse{}
+	err := common.SendRequest(
+		ctx,
+		"StopValidation",
+		// we use taskName="" to represent we do operation on all task, so args.allTask don't need to pass
+		&pb.StopValidationRequest{
+			TaskName: args.taskName,
+			Sources:  args.sources,
+		},
+		&resp,
+	)
+	if err != nil {
+		return err
+	}
+	common.PrettyPrintResponse(resp)
+	return nil
 }
