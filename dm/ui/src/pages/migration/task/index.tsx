@@ -346,8 +346,10 @@ const TaskList: React.FC = () => {
 
     if (startTaskMethod === StartTaskMethod.WithParams) {
       const formValues = form.getFieldsValue()
+      const date = formValues.start_time.toDate()
+      date.setMilliseconds(0)
       extraPayload.startTaskRequest = {
-        start_time: formValues.start_time.toISOString(),
+        start_time: date.toISOString(),
         safe_mode_time_duration: formValues.safe_mode_time_duration,
       }
     }
@@ -680,38 +682,42 @@ const TaskList: React.FC = () => {
               <Radio value={StartTaskMethod.WithParams}>
                 <div>
                   <div className="font-bold">{t('start task with params')}</div>
-                  <div className="text-gray-400 mb-2">
+                  <div className="text-gray-400">
                     {t('start task with params desc')}
                   </div>
-
-                  <Form form={form}>
-                    <Form.Item
-                      labelCol={{ span: 10 }}
-                      wrapperCol={{ span: 14 }}
-                      className="!mb-2"
-                      name="start_time"
-                      tooltip={t('start time on copy tooltip')}
-                      label={t('start time on copy')}
-                    >
-                      <DatePicker
-                        showTime
-                        placeholder="Select time"
-                        className="!w-240px"
-                      />
-                    </Form.Item>
-
-                    <Form.Item
-                      labelCol={{ span: 10 }}
-                      wrapperCol={{ span: 14 }}
-                      name="safe_mode_time_duration"
-                      tooltip={t('safe mode time duration tooltip')}
-                      label={t('safe mode time duration')}
-                    >
-                      <Input className="!w-240px" />
-                    </Form.Item>
-                  </Form>
                 </div>
               </Radio>
+
+              <Form form={form}>
+                <Form.Item
+                  labelCol={{ span: 10 }}
+                  wrapperCol={{ span: 14 }}
+                  className="!mb-2"
+                  name="start_time"
+                  tooltip={t('start time on copy tooltip')}
+                  label={t('start time on copy')}
+                >
+                  <DatePicker
+                    showTime
+                    placeholder="Select time"
+                    className="!w-240px"
+                  />
+                </Form.Item>
+
+                <Form.Item
+                  labelCol={{ span: 10 }}
+                  wrapperCol={{ span: 14 }}
+                  name="safe_mode_time_duration"
+                  tooltip={t('safe mode time duration tooltip')}
+                  label={t('safe mode time duration')}
+                >
+                  <Input
+                    type="number"
+                    className="!w-240px"
+                    addonAfter={t('second')}
+                  />
+                </Form.Item>
+              </Form>
             </Space>
           </Radio.Group>
         </div>
