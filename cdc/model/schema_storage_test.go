@@ -94,8 +94,12 @@ func TestPKShouldBeInTheFirstPlaceWhenPKIsNotHandle(t *testing.T) {
 
 func TestPKShouldBeInTheFirstPlaceWhenPKIsHandle(t *testing.T) {
 	t.Parallel()
-	ft := parser_types.NewFieldType(mysql.TypeUnspecified)
-	ft.SetFlag(mysql.NotNullFlag)
+	jobft := parser_types.NewFieldType(mysql.TypeUnspecified)
+	jobft.SetFlag(mysql.NotNullFlag)
+
+	uidft := jobft.Clone()
+	uidft.SetFlag(mysql.PriKeyFlag)
+
 	tbl := timodel.TableInfo{
 		Indices: []*timodel.IndexInfo{
 			{
@@ -113,14 +117,14 @@ func TestPKShouldBeInTheFirstPlaceWhenPKIsHandle(t *testing.T) {
 				Name: timodel.CIStr{
 					O: "job",
 				},
-				FieldType: *ft,
+				FieldType: *jobft,
 				State:     timodel.StatePublic,
 			},
 			{
 				Name: timodel.CIStr{
 					O: "uid",
 				},
-				FieldType: *ft,
+				FieldType: *uidft,
 				State:     timodel.StatePublic,
 			},
 		},
