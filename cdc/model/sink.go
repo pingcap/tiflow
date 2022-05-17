@@ -329,8 +329,8 @@ func (r *RowChangedEvent) HandleKeyColumns() []*Column {
 	return pkeyCols
 }
 
-// HandleKeyColInfos returns the column(s) and colInfo(s) corresponding to the handle key(s)
-func (r *RowChangedEvent) HandleKeyColInfos() ([]*Column, []rowcodec.ColInfo) {
+// PrimaryKeyColInfos returns the column(s) and colInfo(s) corresponding to the primary key(s)
+func (r *RowChangedEvent) PrimaryKeyColInfos() ([]*Column, []rowcodec.ColInfo) {
 	pkeyCols := make([]*Column, 0)
 	pkeyColInfos := make([]rowcodec.ColInfo, 0)
 
@@ -342,16 +342,13 @@ func (r *RowChangedEvent) HandleKeyColInfos() ([]*Column, []rowcodec.ColInfo) {
 	}
 
 	for i, col := range cols {
-		if col != nil && col.Flag.IsHandleKey() {
+		if col != nil && col.Flag.IsPrimaryKey() {
 			pkeyCols = append(pkeyCols, col)
 			pkeyColInfos = append(pkeyColInfos, r.ColInfos[i])
 		}
 	}
 
-	if len(pkeyCols) == 0 {
-		log.Panic("Cannot find handle key columns.", zap.Any("event", r))
-	}
-
+	// It is okay not to have primary keys, so the empty array is an acceptable result
 	return pkeyCols, pkeyColInfos
 }
 

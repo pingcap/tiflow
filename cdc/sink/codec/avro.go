@@ -96,13 +96,16 @@ func (a *AvroEventBatchEncoder) AppendRowChangedEvent(
 		return errors.Trace(err)
 	}
 
-	evlp, err := res.toEnvelope()
-	if err != nil {
-		log.Error("AppendRowChangedEvent: could not construct Avro envelope", zap.Error(err))
-		return errors.Trace(err)
+	if res != nil {
+		evlp, err := res.toEnvelope()
+		if err != nil {
+			log.Error("AppendRowChangedEvent: could not construct Avro envelope", zap.Error(err))
+			return errors.Trace(err)
+		}
+		mqMessage.Key = evlp
+	} else {
+		mqMessage.Key = nil
 	}
-
-	mqMessage.Key = evlp
 	mqMessage.IncRowsCount()
 	a.resultBuf = append(a.resultBuf, mqMessage)
 
@@ -148,7 +151,7 @@ func (a *AvroEventBatchEncoder) avroEncode(
 	ctx context.Context,
 	e *model.RowChangedEvent,
 	topic string,
-	hasKey bool,
+	isKey bool,
 ) (*avroEncodeResult, error) {
 	var (
 		cols                []*model.Column
@@ -157,8 +160,8 @@ func (a *AvroEventBatchEncoder) avroEncode(
 		schemaManager       *AvroSchemaManager
 		operation           string
 	)
-	if hasKey {
-		cols, colInfos = e.HandleKeyColInfos()
+	if isKey {
+		cols, colInfos = e.PrimaryKeyColInfos()
 		enableTiDBExtension = false
 		schemaManager = a.keySchemaManager
 	} else {
@@ -174,6 +177,10 @@ func (a *AvroEventBatchEncoder) avroEncode(
 			log.Error("unknown operation", zap.Any("rowChangedEvent", e))
 			return nil, cerror.ErrAvroEncodeFailed.GenWithStack("unknown operation")
 		}
+	}
+
+	if len(cols) == 0 {
+		return nil, nil
 	}
 
 	namespace := getAvroNamespace(a.namespace, e.Table)
