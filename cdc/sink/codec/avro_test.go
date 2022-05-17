@@ -727,7 +727,12 @@ func TestAvroEncode(t *testing.T) {
 
 	cols = append(
 		cols,
-		&model.Column{Name: "id", Value: int64(1), Type: mysql.TypeLong, Flag: model.PrimaryKeyFlag},
+		&model.Column{
+			Name:  "id",
+			Value: int64(1),
+			Type:  mysql.TypeLong,
+			Flag:  model.PrimaryKeyFlag,
+		},
 	)
 	colInfos = append(
 		colInfos,
