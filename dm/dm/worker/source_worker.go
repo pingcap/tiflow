@@ -183,7 +183,7 @@ func (w *SourceWorker) Start() {
 					continue
 				}
 			}
-			if err2 := w.updateSourceStatus(w.ctx); err2 != nil {
+			if err2 := w.updateSourceStatus(w.ctx, true); err2 != nil {
 				if terror.ErrNoMasterStatus.Equal(err2) {
 					w.l.Warn("This source's bin_log is OFF, so it only supports full_mode.", zap.String("sourceID", w.cfg.SourceID), zap.Error(err2))
 				} else {
@@ -248,11 +248,16 @@ func (w *SourceWorker) Stop(graceful bool) {
 }
 
 // updateSourceStatus updates w.sourceStatus.
-func (w *SourceWorker) updateSourceStatus(ctx context.Context) error {
+func (w *SourceWorker) updateSourceStatus(ctx context.Context, needLock bool) error {
+	var cfg *config.SourceConfig
+	if needLock {
+		w.RLock()
+		cfg = w.cfg
+		w.RUnlock()
+	} else {
+		cfg = w.cfg
+	}
 	w.sourceDBMu.Lock()
-	w.RLock()
-	cfg := w.cfg
-	w.RUnlock()
 	if w.sourceDB == nil {
 		var err error
 		w.sourceDB, err = conn.DefaultDBProvider.Apply(&cfg.DecryptPassword().From)
@@ -608,7 +613,7 @@ func (w *SourceWorker) UpdateSubTask(ctx context.Context, cfg *config.SubTaskCon
 	return st.Update(ctx, cfg)
 }
 
-// OperateSubTask stop/resume/pause  sub task.
+// OperateSubTask stop/resume/pause sub task.
 func (w *SourceWorker) OperateSubTask(name string, op pb.TaskOp) error {
 	w.Lock()
 	defer w.Unlock()
@@ -669,7 +674,7 @@ func (w *SourceWorker) QueryStatus(ctx context.Context, name string) ([]*pb.SubT
 		relayStatus  *pb.RelayStatus
 	)
 
-	if err := w.updateSourceStatus(ctx); err != nil {
+	if err := w.updateSourceStatus(ctx, false); err != nil {
 		if terror.ErrNoMasterStatus.Equal(err) {
 			w.l.Warn("This source's bin_log is OFF, so it only supports full_mode.", zap.String("sourceID", w.cfg.SourceID), zap.Error(err))
 		} else {

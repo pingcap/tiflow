@@ -127,7 +127,7 @@ func (c *Capture) reset(ctx context.Context) error {
 		c.UpstreamManager.Close()
 	}
 	c.UpstreamManager = upstream.NewManager(ctx)
-	err = c.UpstreamManager.Add(upstream.DefaultClusterID, c.pdEnpoints)
+	err = c.UpstreamManager.Add(upstream.DefaultUpstreamID, c.pdEnpoints, conf.Security)
 	if err != nil {
 		return errors.Annotate(
 			cerror.WrapError(cerror.ErrNewCaptureFailed, err),
@@ -490,17 +490,22 @@ func (c *Capture) AsyncClose() {
 	o, _ := c.GetOwner()
 	if o != nil {
 		o.AsyncStop()
+		log.Info("owner closed")
 	}
+
 	c.captureMu.Lock()
 	defer c.captureMu.Unlock()
 	if c.processorManager != nil {
 		c.processorManager.AsyncClose()
 	}
+	log.Info("processor manager closed")
 
 	if c.tableActorSystem != nil {
 		c.tableActorSystem.Stop()
 		c.tableActorSystem = nil
 	}
+	log.Info("table actor system closed")
+
 	if c.sorterSystem != nil {
 		err := c.sorterSystem.Stop()
 		if err != nil {
@@ -508,13 +513,15 @@ func (c *Capture) AsyncClose() {
 		}
 		c.sorterSystem = nil
 	}
-	c.grpcService.Reset(nil)
+	log.Info("sorter actor system closed")
 
+	c.grpcService.Reset(nil)
 	if c.MessageRouter != nil {
 		c.MessageRouter.Close()
 		c.MessageRouter.Wait()
 		c.MessageRouter = nil
 	}
+	log.Info("message router closed")
 }
 
 // WriteDebugInfo writes the debug info into writer.

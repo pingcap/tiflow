@@ -11,50 +11,27 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package owner
+package base
 
 import (
+	"context"
 	"sync/atomic"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
-	pscheduler "github.com/pingcap/tiflow/cdc/scheduler"
-	"github.com/pingcap/tiflow/pkg/context"
+	sched "github.com/pingcap/tiflow/cdc/scheduler/internal"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/base/protocol"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/p2p"
 	"github.com/pingcap/tiflow/pkg/version"
 	"go.uber.org/zap"
 )
 
-// scheduler is an interface for scheduling tables.
-// Since in our design, we do not record checkpoints per table,
-// how we calculate the global watermarks (checkpoint-ts and resolved-ts)
-// is heavily coupled with how tables are scheduled.
-// That is why we have a scheduler interface that also reports the global watermarks.
-type scheduler interface {
-	// Tick is called periodically from the owner, and returns
-	// updated global watermarks.
-	Tick(
-		ctx context.Context,
-		state *orchestrator.ChangefeedReactorState,
-		currentTables []model.TableID,
-		captures map[model.CaptureID]*model.CaptureInfo,
-	) (newCheckpointTs, newResolvedTs model.Ts, err error)
-
-	// MoveTable is used to trigger manual table moves.
-	MoveTable(tableID model.TableID, target model.CaptureID)
-
-	// Rebalance is used to trigger manual workload rebalances.
-	Rebalance()
-
-	// Close closes the scheduler and releases resources.
-	Close(ctx context.Context)
-}
-
-type schedulerV2 struct {
-	*pscheduler.BaseScheduleDispatcher
+// SchedulerV2 schedules tables through P2P.
+type SchedulerV2 struct {
+	*ScheduleDispatcher
+	ownerRevision int64
 
 	messageServer *p2p.MessageServer
 	messageRouter p2p.MessageRouter
@@ -65,21 +42,23 @@ type schedulerV2 struct {
 	stats *schedulerStats
 }
 
-// NewSchedulerV2 creates a new schedulerV2
+// NewSchedulerV2 creates a new SchedulerV2
 func NewSchedulerV2(
 	ctx context.Context,
 	changeFeedID model.ChangeFeedID,
 	checkpointTs model.Ts,
 	messageServer *p2p.MessageServer,
 	messageRouter p2p.MessageRouter,
-) (*schedulerV2, error) {
-	ret := &schedulerV2{
+	ownerRevision int64,
+) (*SchedulerV2, error) {
+	ret := &SchedulerV2{
 		changeFeedID:  changeFeedID,
 		messageServer: messageServer,
 		messageRouter: messageRouter,
 		stats:         &schedulerStats{},
+		ownerRevision: ownerRevision,
 	}
-	ret.BaseScheduleDispatcher = pscheduler.NewBaseScheduleDispatcher(changeFeedID, ret, checkpointTs)
+	ret.ScheduleDispatcher = NewBaseScheduleDispatcher(changeFeedID, ret, checkpointTs)
 	if err := ret.registerPeerMessageHandlers(ctx); err != nil {
 		return nil, err
 	}
@@ -87,47 +66,34 @@ func NewSchedulerV2(
 	return ret, nil
 }
 
-// newSchedulerV2FromCtx creates a new schedulerV2 from context.
-// This function is factored out to facilitate unit testing.
-func newSchedulerV2FromCtx(ctx context.Context, startTs uint64) (scheduler, error) {
-	changeFeedID := ctx.ChangefeedVars().ID
-	messageServer := ctx.GlobalVars().MessageServer
-	messageRouter := ctx.GlobalVars().MessageRouter
-	ret, err := NewSchedulerV2(ctx, changeFeedID, startTs, messageServer, messageRouter)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	return ret, nil
-}
-
-func newScheduler(ctx context.Context, startTs uint64) (scheduler, error) {
-	return newSchedulerV2FromCtx(ctx, startTs)
-}
-
-func (s *schedulerV2) Tick(
+// Tick implements the interface ScheduleDispatcher.
+func (s *SchedulerV2) Tick(
 	ctx context.Context,
-	state *orchestrator.ChangefeedReactorState,
+	checkpointTs model.Ts,
 	currentTables []model.TableID,
 	captures map[model.CaptureID]*model.CaptureInfo,
 ) (checkpoint, resolvedTs model.Ts, err error) {
 	if err := s.checkForHandlerErrors(ctx); err != nil {
-		return pscheduler.CheckpointCannotProceed, pscheduler.CheckpointCannotProceed, errors.Trace(err)
+		return sched.CheckpointCannotProceed, sched.CheckpointCannotProceed, errors.Trace(err)
 	}
-	return s.BaseScheduleDispatcher.Tick(ctx, state.Status.CheckpointTs, currentTables, captures)
+	return s.ScheduleDispatcher.Tick(ctx, checkpointTs, currentTables, captures)
 }
 
-func (s *schedulerV2) DispatchTable(
+// DispatchTable implements the interface ScheduleDispatcherCommunicator.
+func (s *SchedulerV2) DispatchTable(
 	ctx context.Context,
 	changeFeedID model.ChangeFeedID,
 	tableID model.TableID,
+	startTs model.Ts,
 	captureID model.CaptureID,
 	isDelete bool,
-	epoch model.ProcessorEpoch,
+	epoch protocol.ProcessorEpoch,
 ) (done bool, err error) {
-	topic := model.DispatchTableTopic(changeFeedID)
-	message := &model.DispatchTableMessage{
-		OwnerRev: ctx.GlobalVars().OwnerRevision,
+	topic := protocol.DispatchTableTopic(changeFeedID)
+	message := &protocol.DispatchTableMessage{
+		OwnerRev: s.ownerRevision,
 		ID:       tableID,
+		StartTs:  startTs,
 		IsDelete: isDelete,
 		Epoch:    epoch,
 	}
@@ -160,14 +126,15 @@ func (s *schedulerV2) DispatchTable(
 	return true, nil
 }
 
-func (s *schedulerV2) Announce(
+// Announce implements the interface ScheduleDispatcherCommunicator.
+func (s *SchedulerV2) Announce(
 	ctx context.Context,
 	changeFeedID model.ChangeFeedID,
 	captureID model.CaptureID,
 ) (done bool, err error) {
-	topic := model.AnnounceTopic(changeFeedID)
-	message := &model.AnnounceMessage{
-		OwnerRev:     ctx.GlobalVars().OwnerRevision,
+	topic := protocol.AnnounceTopic(changeFeedID)
+	message := &protocol.AnnounceMessage{
+		OwnerRev:     s.ownerRevision,
 		OwnerVersion: version.ReleaseSemver(),
 	}
 
@@ -199,7 +166,7 @@ func (s *schedulerV2) Announce(
 	return true, nil
 }
 
-func (s *schedulerV2) getClient(target model.CaptureID) (*p2p.MessageClient, bool) {
+func (s *SchedulerV2) getClient(target model.CaptureID) (*p2p.MessageClient, bool) {
 	client := s.messageRouter.GetClient(target)
 	if client == nil {
 		log.Warn("scheduler: no message client found, retry later",
@@ -209,13 +176,14 @@ func (s *schedulerV2) getClient(target model.CaptureID) (*p2p.MessageClient, boo
 	return client, true
 }
 
-func (s *schedulerV2) trySendMessage(
+func (s *SchedulerV2) trySendMessage(
 	ctx context.Context,
 	target model.CaptureID,
 	topic p2p.Topic,
 	value interface{},
 ) (bool, error) {
-	// TODO (zixiong): abstract this function out together with the similar method in cdc/processor/agent.go
+	// TODO (zixiong): abstract this function out together with the similar method in
+	//                 cdc/scheduler/processor_agent.go
 	// We probably need more advanced logic to handle and mitigate complex failure situations.
 
 	client, ok := s.getClient(target)
@@ -242,14 +210,15 @@ func (s *schedulerV2) trySendMessage(
 	return true, nil
 }
 
-func (s *schedulerV2) Close(ctx context.Context) {
+// Close implements the interface ScheduleDispatcher.
+func (s *SchedulerV2) Close(ctx context.Context) {
 	log.Debug("scheduler closed",
 		zap.String("namespace", s.changeFeedID.Namespace),
 		zap.String("changefeedID", s.changeFeedID.ID))
 	s.deregisterPeerMessageHandlers(ctx)
 }
 
-func (s *schedulerV2) registerPeerMessageHandlers(ctx context.Context) (ret error) {
+func (s *SchedulerV2) registerPeerMessageHandlers(ctx context.Context) (ret error) {
 	defer func() {
 		if ret != nil {
 			s.deregisterPeerMessageHandlers(ctx)
@@ -258,10 +227,10 @@ func (s *schedulerV2) registerPeerMessageHandlers(ctx context.Context) (ret erro
 
 	errCh, err := s.messageServer.SyncAddHandler(
 		ctx,
-		model.DispatchTableResponseTopic(s.changeFeedID),
-		&model.DispatchTableResponseMessage{},
+		protocol.DispatchTableResponseTopic(s.changeFeedID),
+		&protocol.DispatchTableResponseMessage{},
 		func(sender string, messageI interface{}) error {
-			message := messageI.(*model.DispatchTableResponseMessage)
+			message := messageI.(*protocol.DispatchTableResponseMessage)
 			s.stats.RecordDispatchResponse()
 			s.OnAgentFinishedTableOperation(sender, message.ID, message.Epoch)
 			return nil
@@ -273,10 +242,10 @@ func (s *schedulerV2) registerPeerMessageHandlers(ctx context.Context) (ret erro
 
 	errCh, err = s.messageServer.SyncAddHandler(
 		ctx,
-		model.SyncTopic(s.changeFeedID),
-		&model.SyncMessage{},
+		protocol.SyncTopic(s.changeFeedID),
+		&protocol.SyncMessage{},
 		func(sender string, messageI interface{}) error {
-			message := messageI.(*model.SyncMessage)
+			message := messageI.(*protocol.SyncMessage)
 			s.stats.RecordSync()
 			s.OnAgentSyncTaskStatuses(
 				sender,
@@ -293,10 +262,10 @@ func (s *schedulerV2) registerPeerMessageHandlers(ctx context.Context) (ret erro
 
 	errCh, err = s.messageServer.SyncAddHandler(
 		ctx,
-		model.CheckpointTopic(s.changeFeedID),
-		&model.CheckpointMessage{},
+		protocol.CheckpointTopic(s.changeFeedID),
+		&protocol.CheckpointMessage{},
 		func(sender string, messageI interface{}) error {
-			message := messageI.(*model.CheckpointMessage)
+			message := messageI.(*protocol.CheckpointMessage)
 			s.stats.RecordCheckpoint()
 			s.OnAgentCheckpoint(sender, message.CheckpointTs, message.ResolvedTs)
 			return nil
@@ -309,30 +278,30 @@ func (s *schedulerV2) registerPeerMessageHandlers(ctx context.Context) (ret erro
 	return nil
 }
 
-func (s *schedulerV2) deregisterPeerMessageHandlers(ctx context.Context) {
+func (s *SchedulerV2) deregisterPeerMessageHandlers(ctx context.Context) {
 	err := s.messageServer.SyncRemoveHandler(
 		ctx,
-		model.DispatchTableResponseTopic(s.changeFeedID))
+		protocol.DispatchTableResponseTopic(s.changeFeedID))
 	if err != nil {
 		log.Error("failed to remove peer message handler", zap.Error(err))
 	}
 
 	err = s.messageServer.SyncRemoveHandler(
 		ctx,
-		model.SyncTopic(s.changeFeedID))
+		protocol.SyncTopic(s.changeFeedID))
 	if err != nil {
 		log.Error("failed to remove peer message handler", zap.Error(err))
 	}
 
 	err = s.messageServer.SyncRemoveHandler(
 		ctx,
-		model.CheckpointTopic(s.changeFeedID))
+		protocol.CheckpointTopic(s.changeFeedID))
 	if err != nil {
 		log.Error("failed to remove peer message handler", zap.Error(err))
 	}
 }
 
-func (s *schedulerV2) checkForHandlerErrors(ctx context.Context) error {
+func (s *SchedulerV2) checkForHandlerErrors(ctx context.Context) error {
 	for _, errCh := range s.handlerErrChs {
 		select {
 		case <-ctx.Done():

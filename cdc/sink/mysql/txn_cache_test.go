@@ -20,13 +20,11 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/util/testleak"
 	"github.com/stretchr/testify/require"
 )
 
 func TestSplitResolvedTxn(test *testing.T) {
-	defer testleak.AfterTestT(test)()
-
+	test.Parallel()
 	testCases := [][]struct {
 		input         []*model.RowChangedEvent
 		resolvedTsMap map[model.TableID]uint64
@@ -46,6 +44,7 @@ func TestSplitResolvedTxn(test *testing.T) {
 				resolvedTsMap: map[model.TableID]uint64{
 					1: uint64(6),
 					2: uint64(6),
+					3: uint64(6),
 				},
 				expected: map[model.TableID][]*model.SingleTableTxn{
 					1: {{
@@ -72,6 +71,7 @@ func TestSplitResolvedTxn(test *testing.T) {
 					1: uint64(13),
 					2: uint64(13),
 					3: uint64(13),
+					4: uint64(6),
 				},
 				expected: map[model.TableID][]*model.SingleTableTxn{
 					1: {
@@ -130,7 +130,7 @@ func TestSplitResolvedTxn(test *testing.T) {
 					2: uint64(13),
 					3: uint64(13),
 				},
-				expected: nil,
+				expected: map[model.TableID][]*model.SingleTableTxn{},
 			},
 			{
 				input: []*model.RowChangedEvent{
@@ -141,6 +141,7 @@ func TestSplitResolvedTxn(test *testing.T) {
 				resolvedTsMap: map[model.TableID]uint64{
 					1: uint64(6),
 					2: uint64(6),
+					3: uint64(13),
 				},
 				expected: map[model.TableID][]*model.SingleTableTxn{},
 			},
@@ -161,6 +162,7 @@ func TestSplitResolvedTxn(test *testing.T) {
 				resolvedTsMap: map[model.TableID]uint64{
 					1: uint64(6),
 					2: uint64(6),
+					3: uint64(13),
 				},
 				expected: map[model.TableID][]*model.SingleTableTxn{
 					1: {
@@ -204,6 +206,7 @@ func TestSplitResolvedTxn(test *testing.T) {
 				resolvedTsMap: map[model.TableID]uint64{
 					1: uint64(13),
 					2: uint64(13),
+					3: uint64(13),
 				},
 				expected: map[model.TableID][]*model.SingleTableTxn{
 					1: {
@@ -266,7 +269,7 @@ func TestSplitResolvedTxn(test *testing.T) {
 			for tableID, ts := range t.resolvedTsMap {
 				resolvedTsMap.Store(tableID, ts)
 			}
-			_, resolved := cache.Resolved(&resolvedTsMap)
+			checkpointTsMap, resolved := cache.Resolved(&resolvedTsMap)
 			for tableID, txns := range resolved {
 				sort.Slice(txns, func(i, j int) bool {
 					if txns[i].CommitTs != txns[j].CommitTs {
@@ -277,6 +280,7 @@ func TestSplitResolvedTxn(test *testing.T) {
 				resolved[tableID] = txns
 			}
 			require.Equal(test, t.expected, resolved, cmp.Diff(resolved, t.expected))
+			require.Equal(test, t.resolvedTsMap, checkpointTsMap)
 		}
 	}
 }

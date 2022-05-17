@@ -284,6 +284,8 @@ function run() {
 	check_task_error_count $cur/conf/dm-task3.yaml
 	check_task_not_pass_with_message $cur/conf/dm-task5.yaml "please use \`shard-mode\` only."
 	start_task_not_pass_with_message $cur/conf/dm-task5.yaml "please use \`shard-mode\` only."
+	check_task_not_pass_with_message $cur/conf/dm-task6.yaml "please use \`shard-mode\` only."
+	start_task_not_pass_with_message $cur/conf/dm-task6.yaml "please use \`shard-mode\` only."
 
 	echo "check_task_optimistic"
 	check_task_pass $cur/conf/dm-task4.yaml
@@ -432,12 +434,12 @@ function run() {
 
 	# make sure every shard table in source 1 has be forwarded to newer binlog, so older relay log could be purged
 	run_sql_source1 "flush logs"
+	run_sql_source1 "create table dmctl.flush_trigger (c int primary key);"
 	run_sql_source1 "update dmctl.t_1 set d = '' where id = 13"
 	run_sql_source1 "update dmctl.t_2 set d = '' where id = 12"
 
-	# sleep 2*1s to ensure syncer unit has flushed global checkpoint and updates
-	# updated ActiveRelayLog
-	sleep 2
+	# sleep to ensure syncer unit has resumed, read next binlog files and updated ActiveRelayLog
+	sleep 5
 	server_uuid=$(tail -n 1 $WORK_DIR/worker1/relay_log/server-uuid.index)
 	run_sql_source1 "show binary logs\G"
 	max_binlog_name=$(grep Log_name "$SQL_RESULT_FILE" | tail -n 1 | awk -F":" '{print $NF}')
