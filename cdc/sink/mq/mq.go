@@ -129,19 +129,7 @@ func newMqSink(
 	return s, nil
 }
 
-// TryEmitRowChangedEvents just calls EmitRowChangedEvents internally,
-// it still blocking in current implementation.
-// TODO(dongmen): We should make this method truly non-blocking after we remove buffer sink
-func (k *mqSink) TryEmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) (bool, error) {
-	err := k.EmitRowChangedEvents(ctx, rows...)
-	if err != nil {
-		return false, err
-	}
-	return true, nil
-}
-
-// Init table sink resources
-func (k *mqSink) Init(tableID model.TableID) error {
+func (k *mqSink) AddTable(tableID model.TableID) error {
 	// We need to clean up the old values of the table,
 	// otherwise when the table is dispatched back again,
 	// it may read the old values.
@@ -155,6 +143,8 @@ func (k *mqSink) Init(tableID model.TableID) error {
 	return nil
 }
 
+// EmitRowChangedEvents emits row changed events to the flush worker by paritition.
+// Concurrency Note: This method is thread-safe.
 func (k *mqSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
 	rowsCount := 0
 	for _, row := range rows {
@@ -187,7 +177,10 @@ func (k *mqSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowCha
 	return nil
 }
 
-// FlushRowChangedEvents is thread-safety
+// FlushRowChangedEvents asynchronously ensures
+// that the data before the resolvedTs has been
+// successfully written downstream.
+// FlushRowChangedEvents is thread-safe.
 func (k *mqSink) FlushRowChangedEvents(ctx context.Context, tableID model.TableID, resolvedTs uint64) (uint64, error) {
 	var checkpointTs uint64
 	v, ok := k.tableCheckpointTsMap.Load(tableID)
@@ -241,6 +234,9 @@ func (k *mqSink) flushTsToWorker(ctx context.Context, resolvedTs model.Ts) error
 	return nil
 }
 
+// EmitCheckpointTs emits the checkpointTs to
+// default topic or the topics of all tables.
+// Concurrency Note: EmitCheckpointTs is thread-safe.
 func (k *mqSink) EmitCheckpointTs(ctx context.Context, ts uint64, tables []model.TableName) error {
 	encoder := k.encoderBuilder.Build()
 	msg, err := encoder.EncodeCheckpointEvent(ts)
@@ -281,6 +277,8 @@ func (k *mqSink) EmitCheckpointTs(ctx context.Context, ts uint64, tables []model
 	return nil
 }
 
+// EmitDDLEvent sends a DDL event to the default topic or the table's corresponding topic.
+// Concurrency Note: EmitDDLEvent is thread-safe.
 func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 	if k.filter.ShouldIgnoreDDLEvent(ddl.StartTs, ddl.Type, ddl.TableInfo.Schema, ddl.TableInfo.Table) {
 		log.Info(
@@ -339,8 +337,8 @@ func (k *mqSink) Close(ctx context.Context) error {
 	return nil
 }
 
-func (k *mqSink) Barrier(cxt context.Context, tableID model.TableID) error {
-	// Barrier does nothing because FlushRowChangedEvents in mq sink has flushed
+func (k *mqSink) RemoveTable(cxt context.Context, tableID model.TableID) error {
+	// RemoveTable does nothing because FlushRowChangedEvents in mq sink had flushed
 	// all buffered events by force.
 	return nil
 }
