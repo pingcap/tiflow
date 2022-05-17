@@ -115,7 +115,7 @@ func SplitFilenameWithUUIDSuffix(filename string) (baseName, uuidSuffix, seq str
 	return baseName, uuidSuffix, seq, nil
 }
 
-// ExtractRealName removes uuid suffix if it exists and returns real binlog name
+// ExtractRealName removes uuid suffix if it exists and returns real binlog name.
 func ExtractRealName(name string) string {
 	if !strings.Contains(name, posUUIDSuffixSeparator) {
 		return name

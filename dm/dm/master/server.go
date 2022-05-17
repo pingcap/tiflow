@@ -2642,7 +2642,8 @@ func (s *Server) sharedLogic(ctx context.Context, req interface{}, respPointer i
 }
 
 func (s *Server) checkStartValidationParams(req *pb.StartValidationRequest) (
-	map[string]map[string]config.SubTaskConfig, string, bool) {
+	map[string]map[string]config.SubTaskConfig, string, bool,
+) {
 	explicitModeOrStartTime := req.Mode != nil || req.StartTime != nil
 	mode := config.ValidationFull
 	if req.Mode != nil {

@@ -2521,7 +2521,8 @@ func (t *testMaster) validatorStageMatch(c *check.C, taskName, source string, ex
 
 //nolint:unparam
 func (t *testMaster) validatorModeMatch(c *check.C, s *scheduler.Scheduler, task, source string,
-	expectMode, expectedStartTime string) {
+	expectMode, expectedStartTime string,
+) {
 	cfgs := s.GetSubTaskCfgsByTaskAndSource(task, []string{source})
 	v, ok := cfgs[task]
 	c.Assert(ok, check.IsTrue)

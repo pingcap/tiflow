@@ -4081,11 +4081,7 @@ func (s *Syncer) flushOptimisticTableInfos(tctx *tcontext.Context) {
 }
 
 func (s *Syncer) setGlobalPointByTime(tctx *tcontext.Context, timeStr string) error {
-	// we support two layout
-	t, err := time.ParseInLocation(config.StartTimeFormat, timeStr, s.upstreamTZ)
-	if err != nil {
-		t, err = time.ParseInLocation(config.StartTimeFormat2, timeStr, s.upstreamTZ)
-	}
+	t, err := utils.ParseStartTimeInLoc(timeStr, s.upstreamTZ)
 	if err != nil {
 		return err
 	}

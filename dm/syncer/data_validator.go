@@ -465,6 +465,37 @@ func (v *DataValidator) waitSyncerRunning() error {
 	}
 }
 
+func (v *DataValidator) getInitialBinlogPosition() (binlog.Location, error) {
+	var location binlog.Location
+	timeStr := v.cfg.ValidatorCfg.StartTime
+	switch {
+	case timeStr != "":
+		// already check it when set it, will not check it again
+		t, _ := utils.ParseStartTimeInLoc(timeStr, v.timezone)
+		finder := binlog.NewRemoteBinlogPosFinder(v.tctx, v.fromDB.DB, v.syncCfg, v.cfg.EnableGTID)
+		loc, posTp, err := finder.FindByTimestamp(t.Unix())
+		if err != nil {
+			v.L.Error("fail to find binlog position by timestamp",
+				zap.Time("time", t), zap.Error(err))
+			return location, err
+		}
+		v.L.Info("find binlog pos by timestamp", zap.String("time", timeStr),
+			zap.Any("loc", loc), zap.Stringer("pos type", posTp))
+
+		if posTp == binlog.AboveUpperBoundBinlogPos {
+			return location, terror.ErrConfigStartTimeTooLate.Generate(timeStr)
+		}
+		location = *loc
+	case v.startWithSubtask:
+		// in extreme case, this loc may still not be the first binlog location of this task:
+		//   syncer synced some binlog and flush checkpoint, but validator still not has chance to run, then fail-over
+		location = v.syncer.getInitExecutedLoc()
+	default:
+		location = v.syncer.getFlushedGlobalPoint()
+	}
+	return location, nil
+}
+
 // doValidate: runs in a separate goroutine.
 func (v *DataValidator) doValidate() {
 	defer v.wg.Done()
@@ -485,18 +516,17 @@ func (v *DataValidator) doValidate() {
 		location = *v.location
 	} else {
 		// validator always uses remote binlog streamer now.
-		if v.startWithSubtask {
-			// in extreme case, this loc may still not be the first binlog location of this task:
-			//   syncer synced some binlog and flush checkpoint, but validator still not has chance to run, then fail-over
-			location = v.syncer.getInitExecutedLoc()
-		} else {
-			location = v.syncer.getFlushedGlobalPoint()
+		var err error
+		location, err = v.getInitialBinlogPosition()
+		if err != nil {
+			v.sendError(err)
+			return
 		}
-		// when relay log enabled, binlog name may contains uuid suffix, so need to extract the real location
+		// when relay log enabled, binlog name may contain uuid suffix, so need to extract the real location
 		location.Position.Name = binlog.ExtractRealName(location.Position.Name)
 		// persist current location to make sure we start from the same location
 		// if fail-over happens before we flush checkpoint and data.
-		err := v.persistHelper.persist(v.tctx, location)
+		err = v.persistHelper.persist(v.tctx, location)
 		if err != nil {
 			v.sendError(terror.ErrValidatorPersistData.Delegate(err))
 			return
