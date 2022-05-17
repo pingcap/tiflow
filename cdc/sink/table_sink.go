@@ -21,30 +21,42 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo"
+	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
 
 type tableSink struct {
 	tableID     model.TableID
-	manager     *Manager
+	backendSink Sink
 	buffer      []*model.RowChangedEvent
 	redoManager redo.LogManager
+
+	metricsTableSinkTotalRows prometheus.Counter
 }
 
 var _ Sink = (*tableSink)(nil)
 
-func (t *tableSink) TryEmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) (bool, error) {
-	t.buffer = append(t.buffer, rows...)
-	t.manager.metricsTableSinkTotalRows.Add(float64(len(rows)))
-	if t.redoManager.Enabled() {
-		return t.redoManager.TryEmitRowChangedEvents(ctx, t.tableID, rows...)
+// NewTableSink creates a new table sink
+func NewTableSink(
+	s Sink, tableID model.TableID,
+	totalRowsCounter prometheus.Counter, redoManager redo.LogManager,
+) (*tableSink, error) {
+	sink := &tableSink{
+		tableID:                   tableID,
+		backendSink:               s,
+		redoManager:               redoManager,
+		metricsTableSinkTotalRows: totalRowsCounter,
 	}
-	return true, nil
+
+	if err := sink.AddTable(tableID); err != nil {
+		return nil, errors.Trace(err)
+	}
+	return sink, nil
 }
 
 func (t *tableSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
 	t.buffer = append(t.buffer, rows...)
-	t.manager.metricsTableSinkTotalRows.Add(float64(len(rows)))
+	t.metricsTableSinkTotalRows.Add(float64(len(rows)))
 	if t.redoManager.Enabled() {
 		return t.redoManager.EmitRowChangedEvents(ctx, t.tableID, rows...)
 	}
@@ -73,7 +85,7 @@ func (t *tableSink) FlushRowChangedEvents(ctx context.Context, tableID model.Tab
 	resolvedRows := t.buffer[:i]
 	t.buffer = append(make([]*model.RowChangedEvent, 0, len(t.buffer[i:])), t.buffer[i:]...)
 
-	err := t.manager.bufSink.EmitRowChangedEvents(ctx, resolvedRows...)
+	err := t.backendSink.EmitRowChangedEvents(ctx, resolvedRows...)
 	if err != nil {
 		return 0, errors.Trace(err)
 	}
@@ -89,7 +101,7 @@ func (t *tableSink) flushResolvedTs(ctx context.Context, resolvedTs uint64) (uin
 		resolvedTs = redoTs
 	}
 
-	checkpointTs, err := t.manager.bufSink.FlushRowChangedEvents(ctx, t.tableID, resolvedTs)
+	checkpointTs, err := t.backendSink.FlushRowChangedEvents(ctx, t.tableID, resolvedTs)
 	if err != nil {
 		return 0, errors.Trace(err)
 	}
@@ -114,17 +126,15 @@ func (t *tableSink) EmitCheckpointTs(_ context.Context, _ uint64, _ []model.Tabl
 	return nil
 }
 
-// Init table sink resources
-func (t *tableSink) Init(tableID model.TableID) error {
-	return t.manager.bufSink.Init(tableID)
+func (t *tableSink) AddTable(tableID model.TableID) error {
+	return t.backendSink.AddTable(tableID)
 }
 
 // Close once the method is called, no more events can be written to this table sink
 func (t *tableSink) Close(ctx context.Context) error {
-	return t.manager.destroyTableSink(ctx, t.tableID)
+	return t.backendSink.RemoveTable(ctx, t.tableID)
 }
 
-// Barrier is not used in table sink
-func (t *tableSink) Barrier(ctx context.Context, tableID model.TableID) error {
+func (t *tableSink) RemoveTable(ctx context.Context, tableID model.TableID) error {
 	return nil
 }

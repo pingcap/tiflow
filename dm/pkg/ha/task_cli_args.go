@@ -84,9 +84,15 @@ func DeleteAllTaskCliArgs(cli *clientv3.Client, taskName string) error {
 }
 
 // DeleteTaskCliArgs deleted the command line arguments of this task.
-func DeleteTaskCliArgs(cli *clientv3.Client, taskName, source string) error {
-	key := common.TaskCliArgsKeyAdapter.Encode(taskName, source)
-	op := clientv3.OpDelete(key)
-	_, _, err := etcdutil.DoTxnWithRepeatable(cli, etcdutil.ThenOpFunc(op))
+func DeleteTaskCliArgs(cli *clientv3.Client, taskName string, sources []string) error {
+	if len(sources) == 0 {
+		return nil
+	}
+	ops := []clientv3.Op{}
+	for _, source := range sources {
+		key := common.TaskCliArgsKeyAdapter.Encode(taskName, source)
+		ops = append(ops, clientv3.OpDelete(key))
+	}
+	_, _, err := etcdutil.DoTxnWithRepeatable(cli, etcdutil.ThenOpFunc(ops...))
 	return err
 }
