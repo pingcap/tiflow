@@ -28,7 +28,6 @@ import (
 	tablepipeline "github.com/pingcap/tiflow/cdc/processor/pipeline"
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/scheduler"
-	"github.com/pingcap/tiflow/cdc/sink"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
@@ -51,7 +50,6 @@ func newProcessor4Test(
 		p.agent = &mockAgent{executor: p}
 		return nil
 	}
-	p.sinkManager = &sink.Manager{}
 	p.redoManager = redo.NewDisabledManager()
 	p.createTablePipeline = createTablePipeline
 	p.schemaStorage = &mockSchemaStorage{t: t, resolvedTs: math.MaxUint64}
@@ -112,7 +110,8 @@ func initProcessor4Test(ctx cdcContext.Context, t *testing.T) (*processor, *orch
 			checkpointTs: replicaInfo.StartTs,
 		}, nil
 	})
-	p.changefeed = orchestrator.NewChangefeedReactorState(ctx.ChangefeedVars().ID)
+	p.changefeed = orchestrator.NewChangefeedReactorState(
+		etcd.DefaultCDCClusterID, ctx.ChangefeedVars().ID)
 	captureID := ctx.GlobalVars().CaptureInfo.ID
 	changefeedID := ctx.ChangefeedVars().ID
 	return p, orchestrator.NewReactorStateTester(t, p.changefeed, map[string]string{
@@ -580,6 +579,7 @@ func TestSchemaGC(t *testing.T) {
 
 func updateChangeFeedPosition(t *testing.T, tester *orchestrator.ReactorStateTester, cfID model.ChangeFeedID, resolvedTs, checkpointTs model.Ts) {
 	key := etcd.CDCKey{
+		ClusterID:    etcd.DefaultCDCClusterID,
 		Tp:           etcd.CDCKeyTypeChangeFeedStatus,
 		ChangefeedID: cfID,
 	}

@@ -66,12 +66,17 @@ func GetEtcdKeyChangeFeedList(clusterID, namespace string) string {
 
 // GetEtcdKeyChangeFeedInfo returns the key of a changefeed config
 func GetEtcdKeyChangeFeedInfo(clusterID string, changefeedID model.ChangeFeedID) string {
-	return fmt.Sprintf("%s/%s", GetEtcdKeyChangeFeedList(clusterID, changefeedID.Namespace), changefeedID.ID)
+	return fmt.Sprintf("%s/%s", GetEtcdKeyChangeFeedList(clusterID,
+		changefeedID.Namespace), changefeedID.ID)
 }
 
 // GetEtcdKeyTaskPosition returns the key of a task position
-func GetEtcdKeyTaskPosition(clusterID string, changefeedID model.ChangeFeedID, captureID string) string {
-	return TaskPositionKeyPrefix(clusterID, changefeedID.Namespace) + "/" + captureID + "/" + changefeedID.ID
+func GetEtcdKeyTaskPosition(clusterID string,
+	changefeedID model.ChangeFeedID,
+	captureID string,
+) string {
+	return TaskPositionKeyPrefix(clusterID, changefeedID.Namespace) +
+		"/" + captureID + "/" + changefeedID.ID
 }
 
 // GetEtcdKeyCaptureInfo returns the key of a capture info
@@ -93,7 +98,8 @@ type CDCEtcdClient struct {
 // NewCDCEtcdClient returns a new CDCEtcdClient
 func NewCDCEtcdClient(ctx context.Context,
 	cli *clientv3.Client,
-	clusterID string) CDCEtcdClient {
+	clusterID string,
+) CDCEtcdClient {
 	metrics := map[string]prometheus.Counter{
 		EtcdPut:    etcdRequestCounter.WithLabelValues(EtcdPut),
 		EtcdGet:    etcdRequestCounter.WithLabelValues(EtcdGet),

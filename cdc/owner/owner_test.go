@@ -67,12 +67,13 @@ func createOwner4Test(ctx cdcContext.Context, t *testing.T) (*ownerImpl, *orches
 
 	// set captures
 	cdcKey := etcd.CDCKey{
+		ClusterID: state.ClusterID,
 		Tp:        etcd.CDCKeyTypeCapture,
 		CaptureID: ctx.GlobalVars().CaptureInfo.ID,
 	}
 	captureBytes, err := ctx.GlobalVars().CaptureInfo.Marshal()
 	require.Nil(t, err)
-	tester.MustUpdate(cdcKey.String(etcd.DefaultCDCClusterID), captureBytes)
+	tester.MustUpdate(cdcKey.String(), captureBytes)
 	return o, state, tester
 }
 
@@ -91,17 +92,18 @@ func TestCreateRemoveChangefeed(t *testing.T) {
 	changefeedStr, err := changefeedInfo.Marshal()
 	require.Nil(t, err)
 	cdcKey := etcd.CDCKey{
+		ClusterID:    state.ClusterID,
 		Tp:           etcd.CDCKeyTypeChangefeedInfo,
 		ChangefeedID: changefeedID,
 	}
-	tester.MustUpdate(cdcKey.String(etcd.DefaultCDCClusterID), []byte(changefeedStr))
+	tester.MustUpdate(cdcKey.String(), []byte(changefeedStr))
 	_, err = owner.Tick(ctx, state)
 	tester.MustApplyPatches()
 	require.Nil(t, err)
 	require.Contains(t, owner.changefeeds, changefeedID)
 
 	// delete changefeed info key to remove changefeed
-	tester.MustUpdate(cdcKey.String(etcd.DefaultCDCClusterID), nil)
+	tester.MustUpdate(cdcKey.String(), nil)
 	// this tick to clean the leak info of the removed changefeed
 	_, err = owner.Tick(ctx, state)
 	require.Nil(t, err)
@@ -114,7 +116,7 @@ func TestCreateRemoveChangefeed(t *testing.T) {
 	require.NotContains(t, owner.changefeeds, changefeedID)
 	require.NotContains(t, state.Changefeeds, changefeedID)
 
-	tester.MustUpdate(cdcKey.String(etcd.DefaultCDCClusterID), []byte(changefeedStr))
+	tester.MustUpdate(cdcKey.String(), []byte(changefeedStr))
 	_, err = owner.Tick(ctx, state)
 	tester.MustApplyPatches()
 	require.Nil(t, err)
@@ -160,10 +162,11 @@ func TestStopChangefeed(t *testing.T) {
 	changefeedStr, err := changefeedInfo.Marshal()
 	require.Nil(t, err)
 	cdcKey := etcd.CDCKey{
+		ClusterID:    state.ClusterID,
 		Tp:           etcd.CDCKeyTypeChangefeedInfo,
 		ChangefeedID: changefeedID,
 	}
-	tester.MustUpdate(cdcKey.String(etcd.DefaultCDCClusterID), []byte(changefeedStr))
+	tester.MustUpdate(cdcKey.String(), []byte(changefeedStr))
 	_, err = owner.Tick(ctx, state)
 	tester.MustApplyPatches()
 	require.Nil(t, err)
@@ -209,10 +212,11 @@ func TestFixChangefeedState(t *testing.T) {
 	changefeedStr, err := changefeedInfo.Marshal()
 	require.Nil(t, err)
 	cdcKey := etcd.CDCKey{
+		ClusterID:    state.ClusterID,
 		Tp:           etcd.CDCKeyTypeChangefeedInfo,
 		ChangefeedID: changefeedID,
 	}
-	tester.MustUpdate(cdcKey.String(etcd.DefaultCDCClusterID), []byte(changefeedStr))
+	tester.MustUpdate(cdcKey.String(), []byte(changefeedStr))
 	// For the first tick, we do a bootstrap, and it tries to fix the meta information.
 	_, err = owner.Tick(ctx, state)
 	tester.MustApplyPatches()
@@ -248,10 +252,11 @@ func TestFixChangefeedSinkProtocol(t *testing.T) {
 	changefeedStr, err := changefeedInfo.Marshal()
 	require.Nil(t, err)
 	cdcKey := etcd.CDCKey{
+		ClusterID:    state.ClusterID,
 		Tp:           etcd.CDCKeyTypeChangefeedInfo,
 		ChangefeedID: changefeedID,
 	}
-	tester.MustUpdate(cdcKey.String(etcd.DefaultCDCClusterID), []byte(changefeedStr))
+	tester.MustUpdate(cdcKey.String(), []byte(changefeedStr))
 	// For the first tick, we do a bootstrap, and it tries to fix the meta information.
 	_, err = owner.Tick(ctx, state)
 	tester.MustApplyPatches()
@@ -288,10 +293,11 @@ func TestCheckClusterVersion(t *testing.T) {
 	changefeedStr, err := changefeedInfo.Marshal()
 	require.Nil(t, err)
 	cdcKey := etcd.CDCKey{
+		ClusterID:    state.ClusterID,
 		Tp:           etcd.CDCKeyTypeChangefeedInfo,
 		ChangefeedID: changefeedID,
 	}
-	tester.MustUpdate(cdcKey.String(etcd.DefaultCDCClusterID), []byte(changefeedStr))
+	tester.MustUpdate(cdcKey.String(), []byte(changefeedStr))
 
 	// check the tick is skipped and the changefeed will not be handled
 	_, err = owner.Tick(ctx, state)
@@ -488,10 +494,11 @@ func TestHandleJobsDontBlock(t *testing.T) {
 	changefeedStr, err := cfInfo1.Marshal()
 	require.Nil(t, err)
 	cdcKey := etcd.CDCKey{
+		ClusterID:    state.ClusterID,
 		Tp:           etcd.CDCKeyTypeChangefeedInfo,
 		ChangefeedID: cf1,
 	}
-	tester.MustUpdate(cdcKey.String(etcd.DefaultCDCClusterID), []byte(changefeedStr))
+	tester.MustUpdate(cdcKey.String(), []byte(changefeedStr))
 	_, err = owner.Tick(ctx, state)
 	tester.MustApplyPatches()
 	require.Nil(t, err)
@@ -505,12 +512,13 @@ func TestHandleJobsDontBlock(t *testing.T) {
 		Version:       " v0.0.1-test-only",
 	}
 	cdcKey = etcd.CDCKey{
+		ClusterID: state.ClusterID,
 		Tp:        etcd.CDCKeyTypeCapture,
 		CaptureID: captureInfo.ID,
 	}
 	v, err := captureInfo.Marshal()
 	require.Nil(t, err)
-	tester.MustUpdate(cdcKey.String(etcd.DefaultCDCClusterID), v)
+	tester.MustUpdate(cdcKey.String(), v)
 
 	// try to add another changefeed
 	cf2 := model.DefaultChangeFeedID("test-changefeed1")
@@ -522,10 +530,11 @@ func TestHandleJobsDontBlock(t *testing.T) {
 	changefeedStr1, err := cfInfo2.Marshal()
 	require.Nil(t, err)
 	cdcKey = etcd.CDCKey{
+		ClusterID:    state.ClusterID,
 		Tp:           etcd.CDCKeyTypeChangefeedInfo,
 		ChangefeedID: cf2,
 	}
-	tester.MustUpdate(cdcKey.String(etcd.DefaultCDCClusterID), []byte(changefeedStr1))
+	tester.MustUpdate(cdcKey.String(), []byte(changefeedStr1))
 	_, err = owner.Tick(ctx, state)
 	tester.MustApplyPatches()
 	require.Nil(t, err)
@@ -565,7 +574,7 @@ WorkLoop:
 }
 
 func TestCalculateGCSafepointTs(t *testing.T) {
-	state := orchestrator.NewGlobalState()
+	state := orchestrator.NewGlobalState(etcd.DefaultCDCClusterID)
 	expectMinTsMap := make(map[uint64]uint64)
 	expectForceUpdateMap := make(map[uint64]interface{})
 	o := ownerImpl{changefeeds: make(map[model.ChangeFeedID]*changefeed)}

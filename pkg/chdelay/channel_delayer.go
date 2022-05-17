@@ -47,7 +47,7 @@ type entry[T any] struct {
 // NewChannelDelayer creates a new ChannelDelayer.
 func NewChannelDelayer[T any](
 	delayBy time.Duration,
-	in chan T,
+	in <-chan T,
 	queueSize int,
 	outChSize int,
 ) *ChannelDelayer[T] {

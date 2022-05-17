@@ -14,6 +14,8 @@
 package partition
 
 import (
+	"sync"
+
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/hash"
 )
@@ -22,6 +24,7 @@ import (
 // based on the schema and table name.
 type TableDispatcher struct {
 	hasher *hash.PositionInertia
+	lock   sync.Mutex
 }
 
 // NewTableDispatcher creates a TableDispatcher.
@@ -34,6 +37,8 @@ func NewTableDispatcher() *TableDispatcher {
 // DispatchRowChangedEvent returns the target partition to which
 // a row changed event should be dispatched.
 func (t *TableDispatcher) DispatchRowChangedEvent(row *model.RowChangedEvent, partitionNum int32) int32 {
+	t.lock.Lock()
+	defer t.lock.Unlock()
 	t.hasher.Reset()
 	// distribute partition by table
 	t.hasher.Write([]byte(row.Table.Schema), []byte(row.Table.Table))
