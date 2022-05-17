@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
 	libModel "github.com/hanfei1991/microcosm/lib/model"
@@ -53,6 +54,8 @@ type workerEntry struct {
 	expireAt time.Time
 	state    workerEntryState
 
+	receivedFinish atomic.Bool
+
 	statusMu sync.RWMutex
 	status   *libModel.WorkerStatus
 }
@@ -97,7 +100,7 @@ func (e *workerEntry) MarkAsTombstone() {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
-	if e.state == workerEntryWait || e.state == workerEntryOffline {
+	if e.state == workerEntryWait || e.state == workerEntryOffline || e.IsFinished() {
 		// Only workerEntryWait and workerEntryOffline are allowed
 		// to transition to workerEntryTombstone.
 		e.state = workerEntryTombstone
@@ -166,4 +169,12 @@ func (e *workerEntry) ExpireTime() time.Time {
 	defer e.mu.Unlock()
 
 	return e.expireAt
+}
+
+func (e *workerEntry) SetFinished() {
+	e.receivedFinish.Store(true)
+}
+
+func (e *workerEntry) IsFinished() bool {
+	return e.receivedFinish.Load()
 }

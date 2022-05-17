@@ -187,16 +187,17 @@ func (m *WorkerManager) InitAfterRecover(ctx context.Context) (retErr error) {
 			zap.Duration("duration", m.clock.Since(startTime)))
 	case <-timer.C:
 		// Wait for the worker timeout to expire
-		m.mu.Lock()
-		for _, entry := range m.workerEntries {
-			if entry.State() == workerEntryWait {
-				entry.MarkAsTombstone()
-			}
-		}
-		m.mu.Unlock()
 	}
 
+	m.mu.Lock()
+	for _, entry := range m.workerEntries {
+		if entry.State() == workerEntryWait || entry.IsFinished() {
+			entry.MarkAsTombstone()
+		}
+	}
 	m.state = workerManagerReady
+	m.mu.Unlock()
+
 	return nil
 }
 
@@ -220,6 +221,10 @@ func (m *WorkerManager) HandleHeartbeat(msg *libModel.HeartbeatPingMessage, from
 			zap.Any("message", msg),
 			zap.String("from-node", fromNode))
 		return
+	}
+
+	if msg.IsFinished {
+		entry.SetFinished()
 	}
 
 	entry.SetExpireTime(m.nextExpireTime())
@@ -463,12 +468,14 @@ func (m *WorkerManager) checkWorkerEntriesOnce() error {
 			continue
 		}
 
-		if entry.ExpireTime().After(m.clock.Now()) {
-			// Not timed out
+		hasTimedOut := entry.ExpireTime().Before(m.clock.Now())
+		shouldGoOffline := hasTimedOut || entry.IsFinished()
+		if !shouldGoOffline {
 			continue
 		}
 
-		// The worker has timed out.
+		// The worker has timed out, or has received a heartbeat
+		// with IsFinished == true.
 		entry.MarkAsOffline()
 
 		var offlineError error

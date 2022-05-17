@@ -36,12 +36,13 @@ func (s *workerManageTestSuite) AdvanceClockBy(duration time.Duration) {
 }
 
 func (s *workerManageTestSuite) SimulateHeartbeat(
-	workerID libModel.WorkerID, epoch libModel.Epoch, node p2p.NodeID,
+	workerID libModel.WorkerID, epoch libModel.Epoch, node p2p.NodeID, isFinished bool,
 ) {
 	s.manager.HandleHeartbeat(&libModel.HeartbeatPingMessage{
 		SendTime:     s.clock.Mono(),
 		FromWorkerID: workerID,
 		Epoch:        epoch,
+		IsFinished:   isFinished,
 	}, node)
 }
 
@@ -218,12 +219,14 @@ func NewWorkerManageTestSuite(isInit bool) *workerManageTestSuite {
 }
 
 func TestCreateWorkerAndWorkerOnline(t *testing.T) {
+	t.Parallel()
+
 	suite := NewWorkerManageTestSuite(true)
 	suite.manager.BeforeStartingWorker("worker-1", "executor-1")
 
-	suite.SimulateHeartbeat("worker-1", 1, "executor-1")
-	suite.SimulateHeartbeat("worker-1", 1, "executor-1")
-	suite.SimulateHeartbeat("worker-1", 1, "executor-1")
+	suite.SimulateHeartbeat("worker-1", 1, "executor-1", false)
+	suite.SimulateHeartbeat("worker-1", 1, "executor-1", false)
+	suite.SimulateHeartbeat("worker-1", 1, "executor-1", false)
 
 	event := suite.WaitForEvent(t, "worker-1")
 	require.Equal(t, workerOnlineEvent, event.Tp)
@@ -231,6 +234,8 @@ func TestCreateWorkerAndWorkerOnline(t *testing.T) {
 }
 
 func TestCreateWorkerAndWorkerTimesOut(t *testing.T) {
+	t.Parallel()
+
 	suite := NewWorkerManageTestSuite(true)
 	suite.manager.BeforeStartingWorker("worker-1", "executor-1")
 	suite.AdvanceClockBy(30 * time.Second)
@@ -246,10 +251,12 @@ func TestCreateWorkerAndWorkerTimesOut(t *testing.T) {
 }
 
 func TestCreateWorkerAndWorkerStatusUpdatedAndTimesOut(t *testing.T) {
+	t.Parallel()
+
 	suite := NewWorkerManageTestSuite(true)
 	suite.manager.BeforeStartingWorker("worker-1", "executor-1")
 
-	suite.SimulateHeartbeat("worker-1", 1, "executor-1")
+	suite.SimulateHeartbeat("worker-1", 1, "executor-1", false)
 
 	event := suite.WaitForEvent(t, "worker-1")
 	require.Equal(t, workerOnlineEvent, event.Tp)
@@ -273,6 +280,8 @@ func TestCreateWorkerAndWorkerStatusUpdatedAndTimesOut(t *testing.T) {
 }
 
 func TestRecoverAfterFailover(t *testing.T) {
+	t.Parallel()
+
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -302,9 +311,9 @@ func TestRecoverAfterFailover(t *testing.T) {
 	}()
 
 	require.Eventually(t, func() bool {
-		suite.SimulateHeartbeat("worker-1", 1, "executor-1")
-		suite.SimulateHeartbeat("worker-2", 1, "executor-2")
-		suite.SimulateHeartbeat("worker-3", 1, "executor-3")
+		suite.SimulateHeartbeat("worker-1", 1, "executor-1", false)
+		suite.SimulateHeartbeat("worker-2", 1, "executor-2", false)
+		suite.SimulateHeartbeat("worker-3", 1, "executor-3", false)
 
 		select {
 		case <-doneCh:
@@ -313,7 +322,7 @@ func TestRecoverAfterFailover(t *testing.T) {
 		}
 		suite.AdvanceClockBy(1 * time.Second)
 		return false
-	}, 1*time.Second, 10*time.Millisecond)
+	}, 5*time.Second, 10*time.Millisecond)
 
 	require.True(t, suite.manager.IsInitialized())
 	require.Len(t, suite.manager.GetWorkers(), 4)
@@ -329,6 +338,8 @@ func TestRecoverAfterFailover(t *testing.T) {
 }
 
 func TestRecoverAfterFailoverFast(t *testing.T) {
+	t.Parallel()
+
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -346,8 +357,7 @@ func TestRecoverAfterFailoverFast(t *testing.T) {
 	}()
 
 	require.Eventually(t, func() bool {
-		suite.SimulateHeartbeat("worker-1", 1, "executor-1")
-
+		suite.SimulateHeartbeat("worker-1", 1, "executor-1", false)
 		select {
 		case <-doneCh:
 			return true
@@ -363,6 +373,8 @@ func TestRecoverAfterFailoverFast(t *testing.T) {
 }
 
 func TestRecoverWithNoWorker(t *testing.T) {
+	t.Parallel()
+
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -379,6 +391,8 @@ func TestRecoverWithNoWorker(t *testing.T) {
 }
 
 func TestCleanTombstone(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	suite := NewWorkerManageTestSuite(true)
@@ -406,5 +420,80 @@ func TestCleanTombstone(t *testing.T) {
 	// Recreating a worker with the same name should work fine.
 	suite.manager.BeforeStartingWorker("worker-1", "executor-1")
 
+	suite.Close()
+}
+
+func TestWorkerGracefulExit(t *testing.T) {
+	t.Parallel()
+
+	suite := NewWorkerManageTestSuite(true)
+	suite.manager.BeforeStartingWorker("worker-1", "executor-1")
+
+	suite.SimulateHeartbeat("worker-1", 1, "executor-1", false)
+	suite.SimulateHeartbeat("worker-1", 1, "executor-1", false)
+	suite.SimulateHeartbeat("worker-1", 1, "executor-1", false)
+
+	event := suite.WaitForEvent(t, "worker-1")
+	require.Equal(t, workerOnlineEvent, event.Tp)
+
+	suite.SimulateHeartbeat("worker-1", 1, "executor-1", true)
+	event = suite.WaitForEvent(t, "worker-1")
+	require.Equal(t, workerOfflineEvent, event.Tp)
+
+	suite.Close()
+}
+
+func TestWorkerGracefulExitOnFirstHeartbeat(t *testing.T) {
+	t.Parallel()
+
+	suite := NewWorkerManageTestSuite(true)
+	suite.manager.BeforeStartingWorker("worker-1", "executor-1")
+
+	suite.SimulateHeartbeat("worker-1", 1, "executor-1", true)
+
+	// Now we expect there to be both workerOnlineEvent and workerOfflineEvent,
+	// in that order.
+	event := suite.WaitForEvent(t, "worker-1")
+	require.Equal(t, workerOnlineEvent, event.Tp)
+	event = suite.WaitForEvent(t, "worker-1")
+	require.Equal(t, workerOfflineEvent, event.Tp)
+
+	suite.Close()
+}
+
+func TestWorkerGracefulExitAfterFailover(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	suite := NewWorkerManageTestSuite(false)
+	err := suite.PutMeta("worker-1", &libModel.WorkerStatus{
+		Code: libModel.WorkerStatusNormal,
+	})
+	require.NoError(t, err)
+
+	doneCh := make(chan struct{})
+	go func() {
+		defer close(doneCh)
+		err := suite.manager.InitAfterRecover(ctx)
+		require.NoError(t, err)
+	}()
+
+	require.Eventually(t, func() bool {
+		suite.SimulateHeartbeat("worker-1", 1, "executor-1", true)
+		select {
+		case <-doneCh:
+			return true
+		default:
+		}
+		suite.AdvanceClockBy(1 * time.Second)
+		return false
+	}, 1*time.Second, 10*time.Millisecond)
+
+	require.True(t, suite.manager.IsInitialized())
+	require.Len(t, suite.manager.GetWorkers(), 1)
+	require.Contains(t, suite.manager.GetWorkers(), "worker-1")
+	require.NotNil(t, suite.manager.GetWorkers()["worker-1"].GetTombstone())
 	suite.Close()
 }

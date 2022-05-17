@@ -313,6 +313,7 @@ func (m *DefaultBaseMaster) registerMessageHandlers(ctx context.Context) error {
 					ReplyTime:  m.clock.Now(),
 					ToWorkerID: msg.FromWorkerID,
 					Epoch:      m.currentEpoch.Load(),
+					IsFinished: msg.IsFinished,
 				})
 			if err != nil {
 				return err

@@ -3,9 +3,6 @@ package lib
 import (
 	"context"
 
-	"github.com/hanfei1991/microcosm/pkg/errctx"
-	resourcemeta "github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta/model"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 
@@ -13,6 +10,9 @@ import (
 	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/model"
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
+	"github.com/hanfei1991/microcosm/pkg/errctx"
+	derror "github.com/hanfei1991/microcosm/pkg/errors"
+	resourcemeta "github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta/model"
 	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
 )
@@ -142,7 +142,10 @@ func (d *DefaultBaseJobMaster) Poll(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 	if err := d.worker.doPoll(ctx); err != nil {
-		return errors.Trace(err)
+		if derror.ErrWorkerHalfExit.NotEqual(err) {
+			return errors.Trace(err)
+		}
+		return nil
 	}
 	if err := d.impl.Tick(ctx); err != nil {
 		return errors.Trace(err)

@@ -29,6 +29,7 @@ type HeartbeatPingMessage struct {
 	SendTime     clock.MonotonicTime `json:"send-time"`
 	FromWorkerID WorkerID            `json:"from-worker-id"`
 	Epoch        Epoch               `json:"epoch"`
+	IsFinished   bool                `json:"is-finished"`
 }
 
 // HeartbeatPongMessage ships information in heartbeat pong
@@ -37,6 +38,7 @@ type HeartbeatPongMessage struct {
 	ReplyTime  time.Time           `json:"reply-time"`
 	ToWorkerID WorkerID            `json:"to-worker-id"`
 	Epoch      Epoch               `json:"epoch"`
+	IsFinished bool                `json:"is-finished"`
 }
 
 // StatusChangeRequest ships information when updating worker status

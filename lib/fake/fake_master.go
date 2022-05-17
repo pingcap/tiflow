@@ -45,6 +45,8 @@ type Config struct {
 	EtcdWatchEnable bool     `json:"etcd-watch-enable"`
 	EtcdEndpoints   []string `json:"etcd-endpoints"`
 	EtcdWatchPrefix string   `json:"etcd-watch-prefix"`
+
+	InjectErrorInterval time.Duration `json:"inject-error-interval"`
 }
 
 // Checkpoint defines the checkpoint of fake job
@@ -436,6 +438,9 @@ func (m *Master) OnWorkerMessage(worker lib.WorkerHandle, topic p2p.Topic, messa
 
 // OnWorkerStatusUpdated implements MasterImpl.OnWorkerStatusUpdated
 func (m *Master) OnWorkerStatusUpdated(worker lib.WorkerHandle, newStatus *libModel.WorkerStatus) error {
+	log.L().Info("FakeMaster: worker status updated",
+		zap.String("worker-id", worker.ID()),
+		zap.Any("worker-status", newStatus))
 	return nil
 }
 
@@ -532,7 +537,8 @@ func (m *Master) genWorkerConfig(index int, checkpoint workerCheckpoint) *Worker
 		EtcdWatchPrefix: m.config.EtcdWatchPrefix,
 
 		// loaded from checkpoint if exists
-		Checkpoint: checkpoint,
+		Checkpoint:          checkpoint,
+		InjectErrorInterval: m.config.InjectErrorInterval,
 	}
 }
 
@@ -546,7 +552,7 @@ func NewFakeMaster(ctx *dcontext.Context, workerID libModel.WorkerID, masterID l
 		workerList:          make([]lib.WorkerHandle, masterConfig.WorkerCount),
 		workerID2BusinessID: make(map[libModel.WorkerID]int),
 		config:              masterConfig,
-		statusRateLimiter:   rate.NewLimiter(rate.Every(time.Second*3), 1),
+		statusRateLimiter:   rate.NewLimiter(rate.Every(100*time.Millisecond), 1),
 		bStatus:             &businessStatus{status: make(map[libModel.WorkerID]*dummyWorkerStatus)},
 		finishedSet:         make(map[libModel.WorkerID]int),
 		ctx:                 ctx.Context,
