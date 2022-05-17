@@ -574,7 +574,7 @@ WorkLoop:
 }
 
 func TestCalculateGCSafepointTs(t *testing.T) {
-	state := orchestrator.NewGlobalState()
+	state := orchestrator.NewGlobalState(etcd.DefaultCDCClusterID)
 	expectMinTsMap := make(map[uint64]uint64)
 	expectForceUpdateMap := make(map[uint64]interface{})
 	o := ownerImpl{changefeeds: make(map[model.ChangeFeedID]*changefeed)}
