@@ -22,6 +22,8 @@ import (
 )
 
 const (
+	metaPrefix = "/__cdc_meta__"
+
 	// EtcdKeyBase is the common prefix of the keys in CDC
 	EtcdKeyBase = "/tidb/cdc"
 	ownerKey    = "/owner"
@@ -32,8 +34,18 @@ const (
 	taskStatusKey   = taskKey + "/status"
 	taskPositionKey = taskKey + "/position"
 
-	changefeedInfoKey = "/changefeed/info"
-	jobKey            = "/job"
+	changefeedInfoKey   = "/changefeed/info"
+	changefeedStatusKey = "/changefeed/status"
+	jobKey              = "/job"
+	metaVersionKey      = "/meta/meta-version"
+
+	// DeletionCounterKey is the key path for the counter of deleted keys
+	DeletionCounterKey = metaPrefix + "/meta/ticdc-delete-etcd-key-count"
+
+	// DefaultClusterAndNamespacePrefix is the default prefix of changefeed data
+	DefaultClusterAndNamespacePrefix = "/tidb/cdc/default/default"
+	// DefaultClusterAndMetaPrefix is the default prefix of cluster mata
+	DefaultClusterAndMetaPrefix = "/tidb/cdc/default" + metaPrefix
 )
 
 // CDCKeyType is the type of etcd key
@@ -51,6 +63,7 @@ const (
 	CDCKeyTypeTaskStatus
 	// Deprecated: No longer used. Kept for compatibility.
 	CDCKeyTypeTaskWorkload
+	CDCKeyTypeMetaVersionKey
 )
 
 // CDCKey represents a etcd key which is defined by TiCDC

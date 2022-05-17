@@ -70,8 +70,8 @@ type EtcdWorker struct {
 	// a `compare-and-swap` semantics, which is essential for implementing
 	// snapshot isolation for Reactor ticks.
 	deleteCounter int64
-
-	metrics *etcdWorkerMetrics
+	isOwner       bool
+	metrics       *etcdWorkerMetrics
 }
 
 type etcdWorkerMetrics struct {
@@ -120,9 +120,20 @@ func (worker *EtcdWorker) initMetrics() {
 // And the specified etcd session is nil-safety.
 func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session, timerInterval time.Duration, role string) error {
 	defer worker.cleanUp()
+
+	if role == "owner" {
+		worker.isOwner = true
+	}
+
+	// migrate data here
+	err := worker.checkAndMigrateMetaData(ctx)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
 	worker.initMetrics()
 
-	err := worker.syncRawState(ctx)
+	err = worker.syncRawState(ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -498,4 +509,26 @@ func (worker *EtcdWorker) handleDeleteCounter(value []byte) {
 	if worker.deleteCounter <= 0 {
 		log.Panic("unexpected delete counter", zap.Int64("value", worker.deleteCounter))
 	}
+}
+
+// checkAndMigrateMetaData check if should migrate meta, if we should, it will block
+// until migrate done
+func (worker *EtcdWorker) checkAndMigrateMetaData(ctx context.Context) error {
+	shouldMigrate, err := etcd.ShouldMigrate(ctx, worker.client)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	if !shouldMigrate {
+		return nil
+	}
+
+	if !worker.isOwner {
+		err := etcd.WaitMetaVersionMatched(ctx, worker.client)
+		if err != nil {
+			return errors.Trace(err)
+		}
+	}
+
+	err = etcd.MigrateData(ctx, worker.client)
+	return err
 }
