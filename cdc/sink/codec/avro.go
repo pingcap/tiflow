@@ -18,7 +18,6 @@ import (
 	"context"
 	"encoding/binary"
 	"encoding/json"
-	"fmt"
 	"math/big"
 	"strconv"
 	"strings"
@@ -314,11 +313,9 @@ func sanitizeName(name string) string {
 	sanitizedName := sb.String()
 	if changed {
 		log.Warn(
-			fmt.Sprintf(
-				"Name '%s' potentially not safe for serialization, replaced with '%s'",
-				name,
-				sanitizedName,
-			),
+			"Name is potentially not safe for serialization, replace it",
+			zap.String("name", name),
+			zap.String("replacedName", sanitizedName),
 		)
 	}
 	return sanitizedName
