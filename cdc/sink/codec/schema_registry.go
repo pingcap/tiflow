@@ -162,12 +162,8 @@ func (m *AvroSchemaManager) Register(
 		// https://docs.confluent.io/platform/current/schema-registry/develop/api.html \
 		// #post--subjects-(string-%20subject)-versions
 		// 409 for incompatible schema
-<<<<<<< HEAD
 		log.Error(
 			"Failed to register schema to the Registry, HTTP error",
-=======
-		log.Error("Failed to register schema to the Registry, HTTP error",
->>>>>>> ab69d5b03 (add default value)
 			zap.Int("status", resp.StatusCode),
 			zap.String("uri", uri),
 			zap.ByteString("requestBody", payload),

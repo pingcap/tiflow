@@ -640,16 +640,50 @@ func columnToAvroData(
 
 	switch col.Type {
 	case mysql.TypeTiny, mysql.TypeShort, mysql.TypeInt24:
+		if v, ok := col.Value.(string); ok {
+			n, err := strconv.ParseInt(v, 10, 32)
+			if err != nil {
+				return nil, "", cerror.WrapError(cerror.ErrAvroEncodeFailed, err)
+			}
+			return int32(n), "int", nil
+		}
 		if col.Flag.IsUnsigned() {
 			return int32(col.Value.(uint64)), "int", nil
 		}
 		return int32(col.Value.(int64)), "int", nil
 	case mysql.TypeLong:
+		if v, ok := col.Value.(string); ok {
+			n, err := strconv.ParseInt(v, 10, 64)
+			if err != nil {
+				return nil, "", cerror.WrapError(cerror.ErrAvroEncodeFailed, err)
+			}
+			if col.Flag.IsUnsigned() {
+				return n, "long", nil
+			}
+			return int32(n), "int", nil
+		}
 		if col.Flag.IsUnsigned() {
 			return int64(col.Value.(uint64)), "long", nil
 		}
 		return int32(col.Value.(int64)), "int", nil
 	case mysql.TypeLonglong:
+		if v, ok := col.Value.(string); ok {
+			if col.Flag.IsUnsigned() {
+				if bigintUnsignedHandlingMode == bigintUnsignedHandlingModeString {
+					return v, "string", nil
+				}
+				n, err := strconv.ParseUint(v, 10, 64)
+				if err != nil {
+					return nil, "", cerror.WrapError(cerror.ErrAvroEncodeFailed, err)
+				}
+				return int64(n), "long", nil
+			}
+			n, err := strconv.ParseInt(v, 10, 64)
+			if err != nil {
+				return nil, "", cerror.WrapError(cerror.ErrAvroEncodeFailed, err)
+			}
+			return n, "long", nil
+		}
 		if col.Flag.IsUnsigned() {
 			if bigintUnsignedHandlingMode == bigintUnsignedHandlingModeLong {
 				return int64(col.Value.(uint64)), "long", nil
@@ -659,8 +693,18 @@ func columnToAvroData(
 		}
 		return col.Value.(int64), "long", nil
 	case mysql.TypeFloat, mysql.TypeDouble:
+		if v, ok := col.Value.(string); ok {
+			n, err := strconv.ParseFloat(v, 64)
+			if err != nil {
+				return nil, "", cerror.WrapError(cerror.ErrAvroEncodeFailed, err)
+			}
+			return n, "double", nil
+		}
 		return col.Value.(float64), "double", nil
 	case mysql.TypeBit:
+		if v, ok := col.Value.(string); ok {
+			return []byte(v), "bytes", nil
+		}
 		return []byte(types.NewBinaryLiteralFromUint(col.Value.(uint64), -1)), "bytes", nil
 	case mysql.TypeNewDecimal:
 		if decimalHandlingMode == decimalHandlingModePrecise {
@@ -682,16 +726,28 @@ func columnToAvroData(
 		mysql.TypeMediumBlob,
 		mysql.TypeLongBlob:
 		if col.Flag.IsBinary() {
+			if v, ok := col.Value.(string); ok {
+				return []byte(v), "bytes", nil
+			}
 			return col.Value, "bytes", nil
+		}
+		if v, ok := col.Value.(string); ok {
+			return v, "string", nil
 		}
 		return string(col.Value.([]byte)), "string", nil
 	case mysql.TypeEnum:
+		if v, ok := col.Value.(string); ok {
+			return v, "string", nil
+		}
 		enumVar, err := types.ParseEnumValue(ft.Elems, col.Value.(uint64))
 		if err != nil {
 			return nil, "", cerror.WrapError(cerror.ErrAvroEncodeFailed, err)
 		}
 		return enumVar.Name, "string", nil
 	case mysql.TypeSet:
+		if v, ok := col.Value.(string); ok {
+			return v, "string", nil
+		}
 		setVar, err := types.ParseSetValue(ft.Elems, col.Value.(uint64))
 		if err != nil {
 			return nil, "", cerror.WrapError(cerror.ErrAvroEncodeFailed, err)
@@ -702,7 +758,14 @@ func columnToAvroData(
 	case mysql.TypeDate, mysql.TypeDatetime, mysql.TypeTimestamp, mysql.TypeDuration:
 		return col.Value.(string), "string", nil
 	case mysql.TypeYear:
-		return col.Value.(int64), "int", nil
+		if v, ok := col.Value.(string); ok {
+			n, err := strconv.ParseInt(v, 10, 32)
+			if err != nil {
+				return nil, "", cerror.WrapError(cerror.ErrAvroEncodeFailed, err)
+			}
+			return int32(n), "int", nil
+		}
+		return int32(col.Value.(int64)), "int", nil
 	default:
 		log.Error("unknown mysql type", zap.Any("mysqlType", col.Type))
 		return nil, "", cerror.ErrAvroEncodeFailed.GenWithStack("unknown mysql type")
