@@ -279,5 +279,5 @@ func RunWorkerPool(ctx context.Context) error {
 	return errors.Trace(errg.Wait())
 }
 
-func (s *Sorter) UpdateInitialCheckpoint(checkpoint model.Ts) {
+func (s *Sorter) UpdateInitialCheckpointTs(checkpoint model.Ts) {
 }

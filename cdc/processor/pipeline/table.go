@@ -43,10 +43,13 @@ type TableStatus int32
 
 // TableStatus for table pipeline
 const (
+	// TableStatusPreparing indicate that the table is preparing connecting to regions and receive data
 	TableStatusPreparing TableStatus = iota
+	// TableStatusPrepared means the first `Resolved Ts` is received, let puller report it
 	TableStatusPrepared
+	// TableStatusReplicating means that sink is consuming data from the sorter, and replicating it to downstream
 	TableStatusReplicating
-	TableStatusStopping
+	// TableStatusStopped indicate sink should not replicating more data to downtream
 	TableStatusStopped
 )
 
@@ -54,7 +57,6 @@ var tableStatusStringMap = map[TableStatus]string{
 	TableStatusPreparing:   "Preparing",
 	TableStatusPrepared:    "Prepared",
 	TableStatusReplicating: "Replicating",
-	TableStatusStopping:    "Stopping",
 	TableStatusStopped:     "Stopped",
 }
 
@@ -201,7 +203,7 @@ func (t *tablePipelineImpl) Wait() {
 }
 
 func (t *tablePipelineImpl) Start(checkpointTs model.Ts) {
-	close(t.sorterNode.startRun)
+	close(t.sorterNode.startTsCh)
 }
 
 // Assume 1KB per row in upstream TiDB, it takes about 250 MB (1024*4*64) for
@@ -248,11 +250,10 @@ func NewTablePipeline(ctx cdcContext.Context,
 		runnerSize++
 	}
 
-	status := TableStatusPreparing
 	p := pipeline.NewPipeline(ctx, 500*time.Millisecond, runnerSize, defaultOutputChannelSize)
 	sorterNode := newSorterNode(tableName, tableID, replicaInfo.StartTs,
-		flowController, mounter, replConfig, &status)
-	sinkNode := newSinkNode(tableID, sink, replicaInfo.StartTs, targetTs, flowController, &status)
+		flowController, mounter, replConfig)
+	sinkNode := newSinkNode(tableID, sink, replicaInfo.StartTs, targetTs, flowController)
 
 	p.AppendNode(ctx, "puller", newPullerNode(tableID, replicaInfo, tableName, changefeed))
 	p.AppendNode(ctx, "sorter", sorterNode)

@@ -140,19 +140,16 @@ func (p *processor) AddTable(
 				zap.Uint64("checkpointTs", startTs),
 				zap.Bool("isPrepare", isPrepare))
 			return true, nil
-		case pipeline.TableStatusStopping:
 		case pipeline.TableStatusStopped:
+			log.Warn("The same table exists but is stopped. Cancel it and continue.",
+				zap.String("captureID", p.captureInfo.ID),
+				zap.String("namespace", p.changefeedID.Namespace),
+				zap.String("changefeed", p.changefeedID.ID),
+				zap.Int64("tableID", tableID),
+				zap.Uint64("checkpointTs", startTs),
+				zap.Bool("isPrepare", isPrepare))
+			p.removeTable(table, tableID)
 		}
-		//if table.Status() == pipeline.TableStatusStopped {
-		//	log.Warn("The same table exists but is stopped. Cancel it and continue.",
-		//		zap.String("captureID", p.captureInfo.ID),
-		//		zap.String("namespace", p.changefeedID.Namespace),
-		//		zap.String("changefeed", p.changefeedID.ID),
-		//		zap.Int64("tableID", tableID),
-		//		zap.Uint64("checkpointTs", startTs),
-		//		zap.Bool("isPrepare", isPrepare))
-		//	p.removeTable(table, tableID)
-		//}
 	}
 
 	// table not found

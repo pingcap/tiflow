@@ -62,9 +62,11 @@ type sorterNode struct {
 	// The latest barrier ts that sorter has received.
 	barrierTs model.Ts
 
-	status    *TableStatus
-	isRunning int32
-	startRun  chan model.Ts
+	status TableStatus
+	// started indicate that the sink is really replicating, not idle.
+	started int32
+	// startTsCh is used to receive start-ts for sink
+	startTsCh chan model.Ts
 
 	replConfig *config.ReplicaConfig
 
@@ -75,7 +77,7 @@ type sorterNode struct {
 func newSorterNode(
 	tableName string, tableID model.TableID, startTs model.Ts,
 	flowController tableFlowController, mounter entry.Mounter,
-	replConfig *config.ReplicaConfig, status *TableStatus,
+	replConfig *config.ReplicaConfig,
 ) *sorterNode {
 	return &sorterNode{
 		tableName:      tableName,
@@ -84,8 +86,8 @@ func newSorterNode(
 		mounter:        mounter,
 		resolvedTs:     startTs,
 		barrierTs:      startTs,
-		status:         status,
-		startRun:       make(chan model.Ts, 1),
+		status:         TableStatusPreparing,
+		startTsCh:      make(chan model.Ts, 1),
 		replConfig:     replConfig,
 	}
 }
@@ -167,7 +169,11 @@ func (n *sorterNode) start(
 		metricsTicker := time.NewTicker(flushMemoryMetricsDuration)
 		defer metricsTicker.Stop()
 
-		startTs := model.Ts(0)
+		// once receive startTs, which means sink should start replicating data to downstream.
+		startTs := <-n.startTsCh
+		// original `status` can be `TableStatusPrepring` or `TableStatusPrepared`, but it doesn't matter here.
+		n.status.Store(TableStatusReplicating)
+
 		for {
 			// We must call `sorter.Output` before receiving resolved events.
 			// Skip calling `sorter.Output` and caching output channel may fail
@@ -184,29 +190,14 @@ func (n *sorterNode) start(
 					return nil
 				}
 
-				// Step from Initializing to Ready
-				if n.status.Load() == TableStatusPrepared {
-					n.status.Store(TableStatusReplicating)
-				}
-				// Step from Ready to Running
-				select {
-				case <-stdCtx.Done():
-					return nil
-
-				case ts := <-n.startRun:
-					// Wait for owner signal
-					if n.status.Load() == TableStatusPrepared {
-						n.status.Store(TableStatusReplicating)
-						startTs = ts
-					}
-				}
-
 				if msg == nil || msg.RawKV == nil {
 					log.Panic("unexpected empty msg", zap.Reflect("msg", msg))
 				}
 
 				if msg.CRTs <= startTs {
 					// Ignore messages are less than initial checkpoint ts.
+					log.Debug("ignore sorter output event",
+						zap.Uint64("CRTs", msg.CRTs), zap.Uint64("startTs", startTs))
 					continue
 				}
 
@@ -361,3 +352,5 @@ func (n *sorterNode) ResolvedTs() model.Ts {
 func (n *sorterNode) BarrierTs() model.Ts {
 	return atomic.LoadUint64(&n.barrierTs)
 }
+
+func (n *sorterNode) Status() TableStatus { return n.status.Load() }

@@ -36,7 +36,7 @@ const (
 
 type sinkNode struct {
 	sink    sink.Sink
-	status  *TableStatus
+	status  TableStatus
 	tableID model.TableID
 
 	resolvedTs   model.Ts
@@ -51,11 +51,12 @@ type sinkNode struct {
 }
 
 func newSinkNode(tableID model.TableID, sink sink.Sink, startTs model.Ts, targetTs model.Ts,
-	flowController tableFlowController, status *TableStatus) *sinkNode {
+	flowController tableFlowController) *sinkNode {
 	return &sinkNode{
-		tableID:      tableID,
-		sink:         sink,
-		status:       status,
+		tableID: tableID,
+		sink:    sink,
+		// initialize status be `TableStatusPrepared`, treat it as the start point for sink.
+		status:       TableStatusPrepared,
 		targetTs:     targetTs,
 		resolvedTs:   startTs,
 		checkpointTs: startTs,
@@ -261,6 +262,7 @@ func (n *sinkNode) HandleMessage(ctx context.Context, msg pmessage.Message) (boo
 	case pmessage.MessageTypePolymorphicEvent:
 		event := msg.PolymorphicEvent
 		if event.RawKV.OpType == model.OpTypeResolved {
+			// first resolved event received, let the sinkNode become `replicating`
 			if n.status.Load() == TableStatusPrepared {
 				n.status.Store(TableStatusReplicating)
 			}

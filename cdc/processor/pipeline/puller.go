@@ -38,6 +38,8 @@ type pullerNode struct {
 	changefeed  model.ChangeFeedID
 	cancel      context.CancelFunc
 	wg          *errgroup.Group
+
+	status TableStatus
 }
 
 func newPullerNode(

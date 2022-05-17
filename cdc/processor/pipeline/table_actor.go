@@ -279,10 +279,9 @@ func (t *tableActor) start(sdtTableContext context.Context) error {
 		zap.String("tableName", t.tableName),
 		zap.Uint64("quota", t.memoryQuota))
 
-	status := TableStatusPreparing
 	flowController := flowcontrol.NewTableFlowController(t.memoryQuota)
 	sorterNode := newSorterNode(t.tableName, t.tableID, t.replicaInfo.StartTs,
-		flowController, t.mounter, t.replicaConfig, &status)
+		flowController, t.mounter, t.replicaConfig)
 	t.sortNode = sorterNode
 	sortActorNodeContext := newContext(sdtTableContext, t.tableName,
 		t.globalVars.TableActorSystem.Router(),
@@ -315,7 +314,7 @@ func (t *tableActor) start(sdtTableContext context.Context) error {
 	}
 
 	actorSinkNode := newSinkNode(t.tableID, t.tableSink,
-		t.replicaInfo.StartTs, t.targetTs, flowController, &status)
+		t.replicaInfo.StartTs, t.targetTs, flowController)
 	actorSinkNode.initWithReplicaConfig(true, t.replicaConfig)
 	t.sinkNode = actorSinkNode
 
@@ -480,6 +479,14 @@ func (t *tableActor) Workload() model.WorkloadInfo {
 
 // Status returns the status of this table pipeline
 func (t *tableActor) Status() TableStatus {
+	sortStatus := t.sortNode.Status()
+	// first resolved ts not received yet, still preparing...
+	if sortStatus == TableStatusPreparing {
+		return TableStatusPreparing
+	}
+
+	// sortStatus can only be `TableStatusPreparing` or `TableStatusPrepared`
+	// sinkNode is status indicator now.
 	return t.sinkNode.Status()
 }
 
@@ -514,9 +521,9 @@ func (t *tableActor) Wait() {
 }
 
 func (t *tableActor) Start(checkpointTs model.Ts) {
-	if atomic.CompareAndSwapInt32(&t.sortNode.isRunning, 0, 1) {
-		t.sortNode.startRun <- checkpointTs
-		close(t.sortNode.startRun)
+	if atomic.CompareAndSwapInt32(&t.sortNode.started, 0, 1) {
+		t.sortNode.startTsCh <- checkpointTs
+		close(t.sortNode.startTsCh)
 	}
 }
 
