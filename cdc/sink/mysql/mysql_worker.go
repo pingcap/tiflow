@@ -170,3 +170,7 @@ func (w *mysqlSinkWorker) cleanup() {
 		}
 	}
 }
+
+func (w *mysqlSinkWorker) close() {
+	w.closedCh <- struct{}{}
+}
