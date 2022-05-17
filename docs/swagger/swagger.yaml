@@ -13,6 +13,7 @@ definitions:
   config.DispatchRule:
     properties:
       dispatcher:
+        description: Deprecated, please use PartitionRule.
         type: string
       matcher:
         items:

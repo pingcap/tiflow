@@ -723,6 +723,7 @@ var doc = `{
             "type": "object",
             "properties": {
                 "dispatcher": {
+                    "description": "Deprecated, please use PartitionRule.",
                     "type": "string"
                 },
                 "matcher": {
