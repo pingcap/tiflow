@@ -29,21 +29,19 @@ message Checkpoint {
 }
 
 message AddTableRequest {
-    int64 table_id = 1
-        [
-            (gogoproto.casttype) = "github.com/pingcap/tiflow/cdc/model.TableID",
-            (gogoproto.customname) = "TableID"
-        ];
+    int64 table_id = 1 [
+        (gogoproto.casttype) = "github.com/pingcap/tiflow/cdc/model.TableID",
+        (gogoproto.customname) = "TableID"
+    ];
     bool is_secondary = 2;
     Checkpoint checkpoint = 3;
 }
 
 message RemoveTableRequest {
-    int64 table_id = 1
-        [
-            (gogoproto.casttype) = "github.com/pingcap/tiflow/cdc/model.TableID",
-            (gogoproto.customname) = "TableID"
-        ];
+    int64 table_id = 1 [
+        (gogoproto.casttype) = "github.com/pingcap/tiflow/cdc/model.TableID",
+        (gogoproto.customname) = "TableID"
+    ];
 }
 
 message DispatchTableRequest {
@@ -53,23 +51,22 @@ message DispatchTableRequest {
 }
 
 message AddTableResponse {
-    int64 table_id = 1
-        [
-            (gogoproto.casttype) = "github.com/pingcap/tiflow/cdc/model.TableID",
-            (gogoproto.customname) = "TableID"
-        ];
-    bool is_secondary = 2;
+    int64 table_id = 1 [
+        (gogoproto.casttype) = "github.com/pingcap/tiflow/cdc/model.TableID",
+        (gogoproto.customname) = "TableID"
+    ];
+    TableStatus status = 2;
     Checkpoint checkpoint = 3;
     bool reject = 4;
 }
 
 message RemoveTableResponse {
-    int64 table_id = 1
-        [
-            (gogoproto.casttype) = "github.com/pingcap/tiflow/cdc/model.TableID",
-            (gogoproto.customname) = "TableID"
-        ];
-    Checkpoint checkpoint = 2;
+    int64 table_id = 1 [
+        (gogoproto.casttype) = "github.com/pingcap/tiflow/cdc/model.TableID",
+        (gogoproto.customname) = "TableID"
+    ];
+    TableStatus status = 2;
+    Checkpoint checkpoint = 3;
 }
 
 message DispatchTableResponse {
@@ -101,11 +98,10 @@ enum TableState {
 }
 
 message TableStatus {
-    int64 table_id = 1
-        [
-            (gogoproto.casttype) = "github.com/pingcap/tiflow/cdc/model.TableID",
-            (gogoproto.customname) = "TableID"
-        ];
+    int64 table_id = 1 [
+        (gogoproto.casttype) = "github.com/pingcap/tiflow/cdc/model.TableID",
+        (gogoproto.customname) = "TableID"
+    ];
     TableState state = 2;
     Checkpoint checkpoint = 3;
 }

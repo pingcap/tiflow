@@ -994,4 +994,14 @@ var (
 		"upstream not found, cluster-id: %d",
 		errors.RFCCodeText("CDC:ErrUpstreamNotFound"),
 	)
+
+	// ReplicationSet error
+	ErrReplicationSetInconsistent = errors.Normalize(
+		"replication set inconsistent: %s",
+		errors.RFCCodeText("CDC:ErrReplicationSetInconsistent"),
+	)
+	ErrReplicationSetMultiplePrimaryError = errors.Normalize(
+		"replication set multiple primary: %s",
+		errors.RFCCodeText("CDC:ErrReplicationSetMultiplePrimaryError"),
+	)
 )
