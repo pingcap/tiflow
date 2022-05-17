@@ -3,7 +3,7 @@ module github.com/pingcap/tiflow
 go 1.18
 
 require (
-	github.com/BurntSushi/toml v0.3.1
+	github.com/BurntSushi/toml v1.1.0
 	github.com/DATA-DOG/go-sqlmock v1.5.0
 	github.com/Shopify/sarama v1.29.0
 	github.com/apache/pulsar-client-go v0.6.0
@@ -11,7 +11,7 @@ require (
 	github.com/benbjohnson/clock v1.3.0
 	github.com/bradleyjkemp/grpc-tools v0.2.5
 	github.com/cenkalti/backoff/v4 v4.0.2
-	github.com/chaos-mesh/go-sqlsmith v0.0.0-20211025024535-03ae33408684
+	github.com/chaos-mesh/go-sqlsmith v0.0.0-20220512075501-53f2916ae240
 	github.com/chzyer/readline v0.0.0-20180603132655-2972be24d48e
 	github.com/cockroachdb/pebble v0.0.0-20211124172904-3ca75111760c
 	github.com/coreos/go-semver v0.3.0
@@ -89,8 +89,8 @@ require (
 	golang.org/x/text v0.3.7
 	golang.org/x/time v0.0.0-20220224211638-0e9765cccd65
 	golang.org/x/tools v0.1.10 // indirect
-	google.golang.org/genproto v0.0.0-20220216160803-4663080d8bc8
-	google.golang.org/grpc v1.44.0
+	google.golang.org/genproto v0.0.0-20220505152158-f39f71e6c8f3
+	google.golang.org/grpc v1.46.2
 	gopkg.in/yaml.v2 v2.4.0
 	upper.io/db.v3 v3.7.1+incompatible
 )
