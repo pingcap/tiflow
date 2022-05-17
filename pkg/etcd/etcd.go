@@ -22,7 +22,6 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/tikv/pd/pkg/tempurl"
 	"go.etcd.io/etcd/api/v3/mvccpb"
@@ -514,11 +513,17 @@ func (c CDCEtcdClient) GetOwnerRevision(ctx context.Context, captureID string) (
 
 // GetGCServiceID returns the cdc gc service ID
 func (c CDCEtcdClient) GetGCServiceID() string {
-	return gc.ServiceID(c.ClusterID, c.etcdClusterID)
+	return fmt.Sprintf("ticdc-%s-%d", c.ClusterID, c.etcdClusterID)
 }
 
+// GetEnsureGCServiceID return the prefix for the gc service id when changefeed is creating
 func (c CDCEtcdClient) GetEnsureGCServiceID() string {
 	return c.GetGCServiceID() + "-creating-"
+}
+
+// GcServiceIDForTest returns the gc service ID for tests
+func GcServiceIDForTest() string {
+	return fmt.Sprintf("ticdc-%s-%d", "default", 0)
 }
 
 // getFreeListenURLs get free ports and localhost as url.
