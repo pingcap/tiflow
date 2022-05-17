@@ -416,18 +416,29 @@ func rowToAvroSchema(
 			log.Error("fail to get default value for avro schema")
 			return "", errors.Trace(err)
 		}
-		if col.Flag.IsNullable() {
-			// https://stackoverflow.com/questions/22938124/avro-field-default-values
-			if defaultValue == nil {
+		// goavro doesn't support set default value for logical type
+		// https://github.com/linkedin/goavro/issues/202
+		if _, ok := avroType.(avroLogicalTypeSchema); ok {
+			if col.Flag.IsNullable() {
 				field["type"] = []interface{}{"null", avroType}
+				field["default"] = nil
 			} else {
-				field["type"] = []interface{}{avroType, "null"}
+				field["type"] = avroType
 			}
-			field["default"] = defaultValue
 		} else {
-			field["type"] = avroType
-			if col.Default != nil {
+			if col.Flag.IsNullable() {
+				// https://stackoverflow.com/questions/22938124/avro-field-default-values
+				if defaultValue == nil {
+					field["type"] = []interface{}{"null", avroType}
+				} else {
+					field["type"] = []interface{}{avroType, "null"}
+				}
 				field["default"] = defaultValue
+			} else {
+				field["type"] = avroType
+				if defaultValue != nil {
+					field["default"] = defaultValue
+				}
 			}
 		}
 
