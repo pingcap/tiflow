@@ -189,6 +189,7 @@ func (s *Syncer) handleQueryEventOptimistic(qec *queryEventContext) error {
 		return terror.ErrSyncerShardDDLConflict.Generate(qec.needHandleDDLs, op.ConflictMsg)
 	// if this ddl is a ConflictSkipWaitRedirect ddl, we should skip all this worker's following ddls/dmls until the lock is resolved.
 	// To do this, we append this table to osgk to prevent the following ddl/dmls from being executed.
+	// conflict location must be the start location for current received ddl event.
 	case optimism.ConflictSkipWaitRedirect:
 		first := s.osgk.appendConflictTable(upTable, downTable, qec.startLocation.Clone(), s.cfg.Flavor, s.cfg.EnableGTID)
 		if first {

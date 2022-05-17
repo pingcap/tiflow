@@ -74,14 +74,19 @@ type OptShardingGroupKeeper struct {
 	groups map[string]*OptShardingGroup // target table ID -> ShardingGroup
 	cfg    *config.SubTaskConfig
 	tctx   *tcontext.Context
+	// shardingReSyncUnfinished is used to save the shardingResyncs that are interrupted by another one
+	// this structure should be used as a stack
+	// saved global checkpoint should be less than the lowest current location in the unfinished shardingResync
+	shardingReSyncUnfinished []*ShardingReSync
 }
 
 // NewOptShardingGroupKeeper creates a new OptShardingGroupKeeper.
 func NewOptShardingGroupKeeper(tctx *tcontext.Context, cfg *config.SubTaskConfig) *OptShardingGroupKeeper {
 	return &OptShardingGroupKeeper{
-		groups: make(map[string]*OptShardingGroup),
-		cfg:    cfg,
-		tctx:   tctx.WithLogger(tctx.L().WithFields(zap.String("component", "optimistic shard group keeper"))),
+		groups:                   make(map[string]*OptShardingGroup),
+		cfg:                      cfg,
+		tctx:                     tctx.WithLogger(tctx.L().WithFields(zap.String("component", "optimistic shard group keeper"))),
+		shardingReSyncUnfinished: []*ShardingReSync{},
 	}
 }
 
@@ -139,19 +144,51 @@ func (k *OptShardingGroupKeeper) appendConflictTable(sourceTable, targetTable *f
 	return !ok
 }
 
+func (k *OptShardingGroupKeeper) appendShardingReSync(shardingReSync *ShardingReSync) {
+	k.Lock()
+	defer k.Unlock()
+	k.shardingReSyncUnfinished = append(k.shardingReSyncUnfinished, shardingReSync)
+}
+
+func (k *OptShardingGroupKeeper) popBackShardingReSync() *ShardingReSync {
+	k.Lock()
+	defer k.Unlock()
+	if len(k.shardingReSyncUnfinished) == 0 {
+		return nil
+	}
+	shardingReSync := k.shardingReSyncUnfinished[len(k.shardingReSyncUnfinished)-1]
+	k.shardingReSyncUnfinished = k.shardingReSyncUnfinished[:len(k.shardingReSyncUnfinished)-1]
+	return shardingReSync
+}
+
+func (k *OptShardingGroupKeeper) allShardingResyncUnfinished() []*ShardingReSync {
+	k.RLock()
+	defer k.RUnlock()
+	return k.shardingReSyncUnfinished
+}
+
 func (k *OptShardingGroupKeeper) lowestFirstLocationInGroups() *binlog.Location {
 	k.RLock()
 	defer k.RUnlock()
 	var lowest *binlog.Location
 	for _, group := range k.groups {
-		location := group.firstConflictLocation.CloneWithFlavor(k.cfg.Flavor)
-		if lowest == nil {
-			lowest = &location
-		} else if binlog.CompareLocation(*lowest, location, k.cfg.EnableGTID) > 0 {
-			lowest = &location
+		k.tctx.L().Debug("[debug] group first conflict loc", zap.Stringer("loc", group.firstConflictLocation))
+		if lowest == nil || binlog.CompareLocation(*lowest, group.firstConflictLocation, k.cfg.EnableGTID) > 0 {
+			lowest = &group.firstConflictLocation
 		}
 	}
-	return lowest
+	for _, shardingReSync := range k.shardingReSyncUnfinished {
+		k.tctx.L().Debug("[debug] unfinished shardingResync loc", zap.Stringer("loc", shardingReSync.currLocation))
+		if lowest == nil || binlog.CompareLocation(*lowest, shardingReSync.currLocation, k.cfg.EnableGTID) > 0 {
+			lowest = &shardingReSync.currLocation
+		}
+	}
+	if lowest == nil {
+		return nil
+	}
+	k.tctx.L().Debug("[debug] lowest loc", zap.Stringer("loc", lowest))
+	loc := lowest.Clone()
+	return &loc
 }
 
 // AdjustGlobalLocation adjusts globalLocation with sharding groups' lowest first point.

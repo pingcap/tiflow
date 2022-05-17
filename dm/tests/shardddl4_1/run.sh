@@ -1032,9 +1032,42 @@ function DM_155 {
 		"clean_table" "optimistic"
 }
 
+function DM_PANIC_CASE() {
+	run_sql_source1 "alter table shardddl1.tb1 change b c int;"
+	for i in $(seq 1 1000); do
+		run_sql_source1 "insert into shardddl1.tb1(a,c) values($i,$i)"
+	done
+	run_sql_source1 "alter table shardddl1.t_1 change b c int;"
+	for i in $(seq 1001 2000); do
+		run_sql_source1 "insert into shardddl1.tb1(a,c) values($i,$i)"
+	done
+	for i in $(seq 2001 3000); do
+		run_sql_source1 "insert into shardddl1.t_1(a,c) values($i,$i)"
+	done
+	run_sql_source2 "alter table shardddl1.tb1 change b c int;"
+	for i in $(seq 3001 3100); do
+		run_sql_source1 "insert into shardddl1.tb1(a,c) values($i,$i)"
+	done
+	run_sql_source2 "alter table shardddl1.t_1 change b c int;"
+	for i in $(seq 3101 3200); do
+		run_sql_source1 "insert into shardddl1.tb1(a,c) values($i,$i)"
+	done
+	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml 30
+}
+
+function DM_PANIC() {
+	run_case PANIC "double-source-optimistic" \
+		"run_sql_source1 \"create table ${shardddl1}.${tb1} (a int primary key, b int);\"; \
+     run_sql_source2 \"create table ${shardddl1}.${tb1} (a int primary key, b int);\"; \
+     run_sql_source1 \"create table ${shardddl1}.t_1 (a int primary key, b int);\"; \
+     run_sql_source2 \"create table ${shardddl1}.t_1 (a int primary key, b int);\"" \
+		"clean_table" ""
+}
+
 function run() {
 	init_cluster
 	init_database
+	DM_PANIC
 	start=131
 	end=155
 	for i in $(seq -f "%03g" ${start} ${end}); do

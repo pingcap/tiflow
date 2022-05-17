@@ -1731,13 +1731,10 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 	//    * compare last pos with current binlog's pos to determine whether re-sync completed
 	// 6. use the global streamer to continue the syncing
 	var (
-		shardingReSyncCh = make(chan *ShardingReSync, 10)
-		shardingReSync   *ShardingReSync
-		// shardingReSyncUnfinished is used to save the shardingResyncs that are interrupted by another one
-		// this structure should be used as a stack
-		shardingReSyncUnfinished = make([]*ShardingReSync, 0, 10)
-		savedGlobalLastLocation  binlog.Location
-		traceSource              = fmt.Sprintf("%s.syncer.%s", s.cfg.SourceID, s.cfg.Name)
+		shardingReSyncCh        = make(chan *ShardingReSync, 10)
+		shardingReSync          *ShardingReSync
+		savedGlobalLastLocation binlog.Location
+		traceSource             = fmt.Sprintf("%s.syncer.%s", s.cfg.SourceID, s.cfg.Name)
 	)
 
 	// this is second defer func in syncer.Run so in this time checkpointFlushWorker are still running
@@ -1765,7 +1762,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			if shardingReSync != nil {
 				saveExitSafeModeLoc(shardingReSync.latestLocation)
 			}
-			for _, shardResync := range shardingReSyncUnfinished {
+			for _, shardResync := range s.osgk.allShardingResyncUnfinished() {
 				if shardResync != nil {
 					saveExitSafeModeLoc(shardResync.latestLocation)
 				}
@@ -1941,21 +1938,28 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			// binlog
 			if (s.cfg.ShardMode == config.ShardPessimistic && shardingReSync == nil) || s.cfg.ShardMode == config.ShardOptimistic {
 				if s.cfg.ShardMode == config.ShardOptimistic && shardingReSync != nil {
+					unfinishedSavedGlobalLastLocation := savedGlobalLastLocation.Clone()
 					unfinishedShardingResync := &ShardingReSync{
-						currLocation:   currentLocation,
-						latestLocation: shardingReSync.latestLocation.Clone(),
-						targetTable:    shardingReSync.targetTable.Clone(),
-						allResolved:    true,
+						currLocation:        lastLocation,
+						latestLocation:      shardingReSync.latestLocation.Clone(),
+						targetTable:         shardingReSync.targetTable.Clone(),
+						allResolved:         true,
+						savedGlobalLocation: &unfinishedSavedGlobalLastLocation,
 					}
 					s.tctx.L().Info("shardingResync is interrupted and pushed in shardingReSyncUnfinished",
-						zap.Stringer("interruptShardingResync", shardingReSync), zap.Stringer("pushedShardingResync", unfinishedShardingResync))
+						zap.Stringer("interruptShardingResync", shardingReSync), zap.Stringer("unfinishedShardingResync", unfinishedShardingResync))
 					// save current location as the next time redirect position
-					shardingReSyncUnfinished = append(shardingReSyncUnfinished, unfinishedShardingResync)
+					s.osgk.appendShardingReSync(unfinishedShardingResync)
 				}
 				// some sharding groups need to re-syncing
 				shardingReSync = <-shardingReSyncCh
 				s.tctx.L().Debug("starts to handle new shardingResync operation", zap.Stringer("shardingResync", shardingReSync))
-				savedGlobalLastLocation = lastLocation // save global last location
+				// save global last location
+				if shardingReSync.savedGlobalLocation == nil {
+					savedGlobalLastLocation = lastLocation
+				} else {
+					savedGlobalLastLocation = *shardingReSync.savedGlobalLocation
+				}
 				lastLocation = shardingReSync.currLocation
 
 				currentLocation = shardingReSync.currLocation
@@ -1982,13 +1986,13 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 				}, &filter.Table{Schema: op.UpSchema, Name: op.UpTable}, utils.UnpackTableID(targetTableID), optimism.ConflictNone)
 				continue
 			}
+			if shardingReSync == nil {
+				if shardingReSyncUnfinished := s.osgk.popBackShardingReSync(); shardingReSyncUnfinished != nil {
+					shardingReSyncCh <- shardingReSyncUnfinished
+					continue
+				}
+			}
 		}
-		if shardingReSync == nil && len(shardingReSyncUnfinished) > 0 {
-			shardingReSyncCh <- shardingReSyncUnfinished[len(shardingReSyncUnfinished)-1]
-			shardingReSyncUnfinished = shardingReSyncUnfinished[:len(shardingReSyncUnfinished)-1]
-			continue
-		}
-
 		var e *replication.BinlogEvent
 
 		startTime := time.Now()
@@ -2473,7 +2477,7 @@ func (s *Syncer) handleRowsEvent(ev *replication.RowsEvent, ec eventContext) (*f
 		}
 		if ec.shardingReSync.targetTable.String() != targetTable.String() {
 			// in re-syncing, ignore non current sharding group's events
-			ec.tctx.L().Debug("skip event in re-replicating shard group", zap.String("event", "row"), zap.Reflect("re-shard", ec.shardingReSync))
+			ec.tctx.L().Debug("skip event in re-replicating shard group", zap.String("event", "row"), zap.Stringer("re-shard", ec.shardingReSync))
 			return nil, nil
 		}
 	}
