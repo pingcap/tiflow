@@ -73,9 +73,9 @@ func (s *SinkConfig) validate(enableOldValue bool) error {
 				errors.New(fmt.Sprintf("dispatcher and partition cannot be "+
 					"configured both for rule:%v", rule)))
 		}
-		// We only use PartitionRule in our codebase to represent partition dispatching rule.
-		// So when DispatcherRule is not empty, we assign its value to PartitionRule
-		// and clear itself.
+		// After `validate()` is called, we only use PartitionRule to represent a partition
+		// dispatching rule. So when DispatcherRule is not empty, we assign its
+		// value to PartitionRule and clear itself.
 		if rule.DispatcherRule != "" {
 			rule.PartitionRule = rule.DispatcherRule
 			rule.DispatcherRule = ""
