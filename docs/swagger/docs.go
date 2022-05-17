@@ -731,6 +731,10 @@ var doc = `{
                         "type": "string"
                     }
                 },
+                "partition": {
+                    "description": "PartitionRule is an alias added for DispatcherRule to mitigate confusions.\nIn the future release, the DispatcherRule is expected to be removed .",
+                    "type": "string"
+                },
                 "topic": {
                     "type": "string"
                 }

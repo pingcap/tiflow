@@ -18,6 +18,11 @@ definitions:
         items:
           type: string
         type: array
+      partition:
+        description: |-
+          PartitionRule is an alias added for DispatcherRule to mitigate confusions.
+          In the future release, the DispatcherRule is expected to be removed .
+        type: string
       topic:
         type: string
     type: object

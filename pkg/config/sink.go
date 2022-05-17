@@ -43,8 +43,10 @@ type SinkConfig struct {
 type DispatchRule struct {
 	Matcher        []string `toml:"matcher" json:"matcher"`
 	DispatcherRule string   `toml:"dispatcher" json:"dispatcher"`
-	PartitionRule  string   `toml:"partition" json:"partition"`
-	TopicRule      string   `toml:"topic" json:"topic"`
+	// PartitionRule is an alias added for DispatcherRule to mitigate confusions.
+	// In the future release, the DispatcherRule is expected to be removed .
+	PartitionRule string `toml:"partition" json:"partition"`
+	TopicRule     string `toml:"topic" json:"topic"`
 }
 
 // ColumnSelector represents a column selector for a table.
@@ -71,6 +73,9 @@ func (s *SinkConfig) validate(enableOldValue bool) error {
 				errors.New(fmt.Sprintf("dispatcher and partition cannot be "+
 					"configured both for rule:%v", rule)))
 		}
+		// We only use PartitionRule in our codebase to represent partition dispatching rule.
+		// So when DispatcherRule is not empty, we assign its value to PartitionRule
+		// and clear itself.
 		if rule.DispatcherRule != "" {
 			rule.PartitionRule = rule.DispatcherRule
 			rule.DispatcherRule = ""
