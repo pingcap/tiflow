@@ -53,6 +53,21 @@ def create_source2_success():
     print("create_source1_success resp=", resp.json())
     assert resp.status_code == 201
 
+def update_source1_without_password_success():
+    req = {
+        "source": {
+            "case_sensitive": False,
+            "enable": True,
+            "enable_gtid": False,
+            "host": "127.0.0.1",
+            "port": 3306,
+            "source_name": SOURCE1_NAME,
+            "user": "root",
+        }
+    }
+    resp = requests.put(url=API_ENDPOINT + "/" + SOURCE1_NAME, json=req)
+    print("update_source1_without_password_success resp=", resp.json())
+    assert resp.status_code == 200
 
 def list_source_success(source_count):
     resp = requests.get(url=API_ENDPOINT)
@@ -220,6 +235,7 @@ if __name__ == "__main__":
         "create_source_failed": create_source_failed,
         "create_source1_success": create_source1_success,
         "create_source2_success": create_source2_success,
+        "update_source1_without_password_success": update_source1_without_password_success,
         "list_source_success": list_source_success,
         "list_source_with_reverse": list_source_with_reverse,
         "list_source_with_status_success": list_source_with_status_success,

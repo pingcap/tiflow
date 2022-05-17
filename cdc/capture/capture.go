@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/pkg/util"
 	"go.etcd.io/etcd/client/v3/concurrency"
 	"go.etcd.io/etcd/server/v3/mvcc"
 	"go.uber.org/zap"
@@ -127,7 +128,7 @@ func (c *Capture) reset(ctx context.Context) error {
 		c.UpstreamManager.Close()
 	}
 	c.UpstreamManager = upstream.NewManager(ctx)
-	err = c.UpstreamManager.Add(upstream.DefaultClusterID, c.pdEnpoints)
+	err = c.UpstreamManager.Add(upstream.DefaultUpstreamID, c.pdEnpoints, conf.Security)
 	if err != nil {
 		return errors.Annotate(
 			cerror.WrapError(cerror.ErrNewCaptureFailed, err),
@@ -290,7 +291,7 @@ func (c *Capture) run(stdCtx context.Context) error {
 		// when the etcd worker of processor returns an error, it means that the processor throws an unrecoverable serious errors
 		// (recoverable errors are intercepted in the processor tick)
 		// so we should also stop the processor and let capture restart or exit
-		processorErr = c.runEtcdWorker(ctx, c.processorManager, globalState, processorFlushInterval, "processor")
+		processorErr = c.runEtcdWorker(ctx, c.processorManager, globalState, processorFlushInterval, util.RoleProcessor.String())
 		log.Info("the processor routine has exited", zap.Error(processorErr))
 	}()
 	wg.Add(1)
@@ -388,7 +389,7 @@ func (c *Capture) campaignOwner(ctx cdcContext.Context) error {
 			c.MessageRouter.RemovePeer(captureID)
 		})
 
-		err = c.runEtcdWorker(ownerCtx, owner, orchestrator.NewGlobalState(), ownerFlushInterval, "owner")
+		err = c.runEtcdWorker(ownerCtx, owner, orchestrator.NewGlobalState(), ownerFlushInterval, util.RoleOwner.String())
 		c.setOwner(nil)
 		log.Info("run owner exited", zap.Error(err))
 		// if owner exits, resign the owner key
@@ -490,17 +491,22 @@ func (c *Capture) AsyncClose() {
 	o, _ := c.GetOwner()
 	if o != nil {
 		o.AsyncStop()
+		log.Info("owner closed")
 	}
+
 	c.captureMu.Lock()
 	defer c.captureMu.Unlock()
 	if c.processorManager != nil {
 		c.processorManager.AsyncClose()
 	}
+	log.Info("processor manager closed")
 
 	if c.tableActorSystem != nil {
 		c.tableActorSystem.Stop()
 		c.tableActorSystem = nil
 	}
+	log.Info("table actor system closed")
+
 	if c.sorterSystem != nil {
 		err := c.sorterSystem.Stop()
 		if err != nil {
@@ -508,13 +514,15 @@ func (c *Capture) AsyncClose() {
 		}
 		c.sorterSystem = nil
 	}
-	c.grpcService.Reset(nil)
+	log.Info("sorter actor system closed")
 
+	c.grpcService.Reset(nil)
 	if c.MessageRouter != nil {
 		c.MessageRouter.Close()
 		c.MessageRouter.Wait()
 		c.MessageRouter = nil
 	}
+	log.Info("message router closed")
 }
 
 // WriteDebugInfo writes the debug info into writer.

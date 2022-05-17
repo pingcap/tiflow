@@ -3521,7 +3521,7 @@ func (r DMAPIGetTaskListResponse) StatusCode() int {
 type DMAPICreateTaskResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON201      *Task
+	JSON201      *OperateTaskResponse
 	JSON400      *ErrorWithMessage
 }
 
@@ -3748,7 +3748,7 @@ func (r DMAPIGetTaskResponse) StatusCode() int {
 type DMAPIUpdateTaskResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *Task
+	JSON200      *OperateTaskResponse
 	JSON400      *ErrorWithMessage
 }
 
@@ -5114,7 +5114,7 @@ func ParseDMAPICreateTaskResponse(rsp *http.Response) (*DMAPICreateTaskResponse,
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
-		var dest Task
+		var dest OperateTaskResponse
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -5420,7 +5420,7 @@ func ParseDMAPIUpdateTaskResponse(rsp *http.Response) (*DMAPIUpdateTaskResponse,
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest Task
+		var dest OperateTaskResponse
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}

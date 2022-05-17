@@ -58,6 +58,7 @@ func newMySQLSink4Test(ctx context.Context, t *testing.T) *mysqlSink {
 }
 
 func TestPrepareDML(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		input    []*model.RowChangedEvent
 		expected *preparedDMLs
@@ -127,6 +128,7 @@ func TestPrepareDML(t *testing.T) {
 }
 
 func TestPrepareUpdate(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		quoteTable   string
 		preCols      []*model.Column
@@ -361,6 +363,7 @@ func TestPrepareUpdate(t *testing.T) {
 }
 
 func TestPrepareDelete(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		quoteTable   string
 		preCols      []*model.Column
@@ -502,6 +505,7 @@ func TestPrepareDelete(t *testing.T) {
 }
 
 func TestWhereSlice(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		cols             []*model.Column
 		forceReplicate   bool
@@ -711,6 +715,7 @@ func TestWhereSlice(t *testing.T) {
 }
 
 func TestMapReplace(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		quoteTable    string
 		cols          []*model.Column
@@ -828,6 +833,7 @@ func (a sqlArgs) Less(i, j int) bool { return fmt.Sprintf("%s", a[i]) < fmt.Spri
 func (a sqlArgs) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
 
 func TestReduceReplace(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		replaces   map[string][][]interface{}
 		batchSize  int
@@ -1074,6 +1080,7 @@ func (s *mockUnavailableMySQL) Stop() {
 }
 
 func TestNewMySQLTimeout(t *testing.T) {
+	t.Parallel()
 	addr := "127.0.0.1:33333"
 	mockMySQL := newMockUnavailableMySQL(addr, t)
 	defer mockMySQL.Stop()
@@ -1261,7 +1268,7 @@ func TestNewMySQLSinkExecDML(t *testing.T) {
 	}, retry.WithBackoffBaseDelay(20), retry.WithMaxTries(10), retry.WithIsRetryableErr(cerror.IsRetryableError))
 	require.Nil(t, err)
 
-	err = sink.Barrier(ctx, 2)
+	err = sink.RemoveTable(ctx, 2)
 	require.Nil(t, err)
 	v, ok := sink.tableMaxResolvedTs.Load(2)
 	require.False(t, ok)
@@ -1598,6 +1605,7 @@ func TestNewMySQLSinkExecDDL(t *testing.T) {
 }
 
 func TestNeedSwitchDB(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		ddl        *model.DDLEvent
 		needSwitch bool
@@ -1684,6 +1692,9 @@ func TestNewMySQLSink(t *testing.T) {
 	require.Nil(t, err)
 	err = sink.Close(ctx)
 	require.Nil(t, err)
+	// Test idempotency of `Close` interface
+	err = sink.Close(ctx)
+	require.Nil(t, err)
 }
 
 func TestMySQLSinkClose(t *testing.T) {
@@ -1762,7 +1773,7 @@ func TestMySQLSinkFlushResolvedTs(t *testing.T) {
 		GetDBConnImpl = backupGetDBConn
 	}()
 
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
 
 	changefeed := "test-changefeed"
 	sinkURI, err := url.Parse("mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=4")
@@ -1820,6 +1831,12 @@ func TestMySQLSinkFlushResolvedTs(t *testing.T) {
 	require.Nil(t, err)
 	require.True(t, sink.getTableCheckpointTs(model.TableID(2)) <= 5)
 	_ = sink.Close(ctx)
+	_, err = sink.FlushRowChangedEvents(ctx, model.TableID(2), 6)
+	require.Nil(t, err)
+
+	cancel()
+	_, err = sink.FlushRowChangedEvents(ctx, model.TableID(2), 6)
+	require.Regexp(t, ".*context canceled.*", err)
 }
 
 func TestGBKSupported(t *testing.T) {
@@ -1892,7 +1909,7 @@ func TestCleanTableResource(t *testing.T) {
 	s.tableMaxResolvedTs.Store(tblID, uint64(2))
 	_, ok := s.txnCache.unresolvedTxns[tblID]
 	require.True(t, ok)
-	require.Nil(t, s.Init(tblID))
+	require.Nil(t, s.AddTable(tblID))
 	_, ok = s.txnCache.unresolvedTxns[tblID]
 	require.False(t, ok)
 	_, ok = s.tableCheckpointTs.Load(tblID)
