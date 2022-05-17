@@ -325,7 +325,7 @@ function run_validator_cmd_error() {
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation clear test 100 101" \
 		"Error" 1
-	
+
 	# operate error: NaN id
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation ignore-error test error-id" \
