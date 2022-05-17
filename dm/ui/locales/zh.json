@@ -118,6 +118,7 @@
   "save": "保存",
   "save and run": "保存并运行",
   "search placeholder": "搜索",
+  "second": "秒",
   "source": "上游",
   "source detail": "上游详情",
   "source form gtid tooltip": "除 Aurora 外的 MySQL 上游建议启用，上游需先行配置 GTID",

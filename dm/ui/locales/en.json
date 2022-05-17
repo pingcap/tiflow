@@ -118,6 +118,7 @@
   "save": "Save",
   "save and run": "Save and start",
   "search placeholder": "Search...",
+  "second": "Seconds",
   "source": "Source",
   "source detail": "Source Detail",
   "source form gtid tooltip": "It is recommended to replicate by GTID(except AWS Aurora), of course the upstream needs to configure GTID first",
