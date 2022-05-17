@@ -172,8 +172,12 @@ export type DmapiStartTaskApiArg = {
   taskName: string
   startTaskRequest?: {
     remove_meta?: boolean
-    safe_mode_time_duration?: any
+    safe_mode_time_duration?: string
     source_name_list?: string[]
+
+    /**
+     * RFC3339 format date string
+     */
     start_time?: string
   }
 }
