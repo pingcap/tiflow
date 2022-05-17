@@ -288,6 +288,14 @@ var (
 		"new s3 storage for redo log",
 		errors.RFCCodeText("CDC:ErrS3StorageInitialize"),
 	)
+	ErrBlobSinkStorageAPI = errors.Normalize(
+		"blob sink storage api",
+		errors.RFCCodeText("CDC:ErrBlobSinkStorageAPI"),
+	)
+	ErrS3SinkInitialize = errors.Normalize(
+		"initialize s3 sink",
+		errors.RFCCodeText("CDC:ErrS3SinkInitialize"),
+	)
 	ErrMQCodecInvalidConfig = errors.Normalize(
 		"MQ Codec invalid config",
 		errors.RFCCodeText("CDC:ErrMQCodecInvalidConfig"),

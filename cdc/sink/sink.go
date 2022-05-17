@@ -21,6 +21,7 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/sink/blob"
 	"github.com/pingcap/tiflow/cdc/sink/mq"
 	"github.com/pingcap/tiflow/cdc/sink/mysql"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -131,6 +132,15 @@ func init() {
 		return mq.NewPulsarSink(ctx, sinkURI, filter, config, opts, errCh)
 	}
 	sinkIniterMap["pulsar+ssl"] = sinkIniterMap["pulsar"]
+
+	// register s3 sink
+	sinkIniterMap["s3"] = func(
+		ctx context.Context, changefeedID model.ChangeFeedID, sinkURI *url.URL,
+		filter *filter.Filter, config *config.ReplicaConfig, opts map[string]string,
+		errCh chan error,
+	) (Sink, error) {
+		return blob.NewS3Sink(ctx, sinkURI, errCh)
+	}
 
 	failpoint.Inject("SimpleMySQLSinkTester", func() {
 		sinkIniterMap["simple-mysql"] = func(
