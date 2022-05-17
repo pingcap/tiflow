@@ -41,8 +41,9 @@ type SinkConfig struct {
 
 // DispatchRule represents partition rule for a table
 type DispatchRule struct {
-	Matcher        []string `toml:"matcher" json:"matcher"`
-	DispatcherRule string   `toml:"dispatcher" json:"dispatcher"`
+	Matcher []string `toml:"matcher" json:"matcher"`
+	// Deprecated, please use PartitionRule.
+	DispatcherRule string `toml:"dispatcher" json:"dispatcher"`
 	// PartitionRule is an alias added for DispatcherRule to mitigate confusions.
 	// In the future release, the DispatcherRule is expected to be removed .
 	PartitionRule string `toml:"partition" json:"partition"`
