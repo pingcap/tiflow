@@ -58,7 +58,7 @@ func NewManager(ctx context.Context, gcServiceID string) *Manager {
 func NewManager4Test(pdClient pd.Client) *Manager {
 	up := NewUpstream4Test(pdClient)
 	res := &Manager{ups: new(sync.Map), ctx: context.Background(),
-		gcServiceID: gc.GCServiceIDForTest()}
+		gcServiceID: gc.ServiceIDForTest()}
 	res.ups.Store(DefaultUpstreamID, up)
 	return res
 }

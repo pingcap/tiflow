@@ -88,7 +88,7 @@ func newUpstream(upstreamID uint64, pdEndpoints []string, securityConfig *config
 func NewUpstream4Test(pdClient pd.Client) *Upstream {
 	pdClock := pdutil.NewClock4Test()
 	gcManager := gc.NewManager(
-		gc.GCServiceID(etcd.DefaultCDCClusterID, 0),
+		gc.ServiceID(etcd.DefaultCDCClusterID, 0),
 		pdClient, pdClock)
 	res := &Upstream{
 		ID:       DefaultUpstreamID,

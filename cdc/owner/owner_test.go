@@ -421,7 +421,7 @@ func TestUpdateGCSafePoint(t *testing.T) {
 		// Owner will do a snapshot read at (checkpointTs - 1) from TiKV,
 		// set GC safepoint to (checkpointTs - 1)
 		require.Equal(t, safePoint, uint64(1))
-		require.Equal(t, serviceID, gc.CDCServiceSafePointID)
+		require.Equal(t, serviceID, gc.ServiceIDForTest())
 		ch <- struct{}{}
 		return 0, nil
 	}
@@ -462,7 +462,7 @@ func TestUpdateGCSafePoint(t *testing.T) {
 		// Owner will do a snapshot read at (checkpointTs - 1) from TiKV,
 		// set GC safepoint to (checkpointTs - 1)
 		require.Equal(t, safePoint, uint64(19))
-		require.Equal(t, serviceID, gc.CDCServiceSafePointID)
+		require.Equal(t, serviceID, gc.ServiceIDForTest())
 		ch <- struct{}{}
 		return 0, nil
 	}
