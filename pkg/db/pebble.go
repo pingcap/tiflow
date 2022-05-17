@@ -115,10 +115,10 @@ func doOpenPebble(
 ) (DB, error) {
 	option, ws := buildPebbleOption(id, memInByte, cfg)
 	if withTablePropertyCollectors {
-		// TableCRTsCollector can be used to filter out useless SSTables when iterating
+		// tableCRTsCollector can be used to filter out useless SSTables when iterating
 		// with a given timestamp range.
 		option.TablePropertyCollectors = append(option.TablePropertyCollectors, func() pebble.TablePropertyCollector {
-			return &TableCRTsCollector{minTs: math.MaxUint64, maxTs: 0}
+			return &tableCRTsCollector{minTs: math.MaxUint64, maxTs: 0}
 		})
 	}
 
@@ -297,12 +297,12 @@ const (
 	tableCRTsCollectorName string = "table-crts-collector"
 )
 
-type TableCRTsCollector struct {
+type tableCRTsCollector struct {
 	minTs uint64
 	maxTs uint64
 }
 
-func (t *TableCRTsCollector) Add(key pebble.InternalKey, value []byte) error {
+func (t *tableCRTsCollector) Add(key pebble.InternalKey, value []byte) error {
 	crts := encoding.DecodeCRTs(key.UserKey)
 	if crts > t.maxTs {
 		t.maxTs = crts
@@ -313,12 +313,12 @@ func (t *TableCRTsCollector) Add(key pebble.InternalKey, value []byte) error {
 	return nil
 }
 
-func (t *TableCRTsCollector) Finish(userProps map[string]string) error {
+func (t *tableCRTsCollector) Finish(userProps map[string]string) error {
 	userProps[minTableCRTsLabel] = fmt.Sprintf("%d", t.minTs)
 	userProps[maxTableCRTsLabel] = fmt.Sprintf("%d", t.maxTs)
 	return nil
 }
 
-func (t *TableCRTsCollector) Name() string {
+func (t *tableCRTsCollector) Name() string {
 	return tableCRTsCollectorName
 }

@@ -20,7 +20,7 @@ type DB interface {
 	// are included.
 	//
 	// For all items in [lowerBound, upperBound), if their decoded CRTS is not in the range [lowerTs, upperTs],
-	// they will be skiped when fetching from the iterator.
+	// they may (but not must) be skipped when fetching from the iterator.
 	Iterator(lowerBound, upperBound []byte, lowerTs, upperTs uint64) Iterator
 	Batch(cap int) Batch
 	DeleteRange(start, end []byte) error
