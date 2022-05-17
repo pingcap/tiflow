@@ -27,21 +27,17 @@ import (
 	"go.uber.org/zap"
 )
 
-const (
-	// cdcChangefeedCreatingServiceGCSafePointID is service GC safe point ID
-	cdcChangefeedCreatingServiceGCSafePointID = "ticdc-creating-"
-)
-
 // EnsureChangefeedStartTsSafety checks if the startTs less than the minimum of
 // service GC safepoint and this function will update the service GC to startTs
 func EnsureChangefeedStartTsSafety(
 	ctx context.Context, pdCli pd.Client,
+	gcServiceIDPrefix string,
 	changefeedID model.ChangeFeedID,
 	TTL int64, startTs uint64,
 ) error {
 	minServiceGCTs, err := setServiceGCSafepoint(
 		ctx, pdCli,
-		cdcChangefeedCreatingServiceGCSafePointID+changefeedID.Namespace+"_"+changefeedID.ID,
+		gcServiceIDPrefix+changefeedID.Namespace+"_"+changefeedID.ID,
 		TTL, startTs)
 	if err != nil {
 		return errors.Trace(err)
@@ -96,12 +92,12 @@ func RemoveServiceGCSafepoint(ctx context.Context, pdCli pd.Client, serviceID st
 		retry.WithIsRetryableErr(cerrors.IsRetryableError))
 }
 
-// GCServiceID returns the gc service ID of this cdc cluster
-func GCServiceID(cdcClusterID string, ectdClusterID uint64) string {
+// ServiceID returns the gc service ID of this cdc cluster
+func ServiceID(cdcClusterID string, ectdClusterID uint64) string {
 	return fmt.Sprintf("ticdc-%s-%d", cdcClusterID, ectdClusterID)
 }
 
-// GCServiceIDForTest returns the gc service ID for tests
-func GCServiceIDForTest() string {
+// ServiceIDForTest returns the gc service ID for tests
+func ServiceIDForTest() string {
 	return fmt.Sprintf("ticdc-%s-%d", "default", 0)
 }

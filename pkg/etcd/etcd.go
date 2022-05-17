@@ -512,8 +512,13 @@ func (c CDCEtcdClient) GetOwnerRevision(ctx context.Context, captureID string) (
 	return resp.Kvs[0].ModRevision, nil
 }
 
+// GetGCServiceID returns the cdc gc service ID
 func (c CDCEtcdClient) GetGCServiceID() string {
-	return gc.GCServiceID(c.ClusterID, c.etcdClusterID)
+	return gc.ServiceID(c.ClusterID, c.etcdClusterID)
+}
+
+func (c CDCEtcdClient) GetEnsureGCServiceID() string {
+	return c.GetGCServiceID() + "-creating-"
 }
 
 // getFreeListenURLs get free ports and localhost as url.
