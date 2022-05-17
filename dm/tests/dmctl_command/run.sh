@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -eux
+set -eu
 
 cur=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 source $cur/../_utils/test_prepare
@@ -205,6 +205,7 @@ function run_validator_cmd {
 		"\"id\": \"2\"" 1 \
 		"\"id\": \"3\"" 1 \
 		"\"id\": \"4\"" 1
+	run_validator_cmd_error
 	# resolve error 1
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation make-resolve test 1"
@@ -282,6 +283,44 @@ function run_validator_cmd {
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation status test" \
 		"validator not found for task" 2
+}
+
+function run_validator_cmd_error() {
+	# status: without taskname
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation status --stage stopped" \
+		"Error" 1
+
+	# show errors: resolved error is illegal
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation show-errors --error resolved test" \
+		"Error" 1
+	# show errors: no task name
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation show-errors --error all" \
+		"Error" 1
+
+	# operate error: conflict id and --all flag
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation ignore-error test 100 --all" \
+		"Error" 1
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation make-resolve test 100 --all" \
+		"Error" 1
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation clear test 100 --all" \
+		"Error" 1
+
+	# operate error: no task name
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation ignore-error" \
+		"Error" 1
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation make-resolve" \
+		"Error" 1
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation clear" \
+		"Error" 1
 }
 
 cleanup_data dmctl_command

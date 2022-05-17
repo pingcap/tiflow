@@ -281,10 +281,6 @@ func (v *DataValidator) routineWrapper(fn func()) {
 func (v *DataValidator) Start(expect pb.Stage) {
 	v.Lock()
 	defer v.Unlock()
-	failpoint.Inject("MockValidationQuery", func() {
-		v.setStage(pb.Stage_Running)
-		failpoint.Return()
-	})
 
 	v.L.Info("starting")
 	if v.Stage() == pb.Stage_Running {
@@ -598,10 +594,6 @@ func (v *DataValidator) doValidate() {
 }
 
 func (v *DataValidator) Stop() {
-	failpoint.Inject("MockValidationQuery", func() {
-		v.setStage(pb.Stage_Stopped)
-		failpoint.Return()
-	})
 	v.stopInner()
 	v.errProcessWg.Wait()
 }
@@ -1035,21 +1027,6 @@ func genRowKeyByString(pkValues []string) string {
 
 func (v *DataValidator) GetValidatorTableStatus(filterStatus pb.Stage) []*pb.ValidationTableStatus {
 	tblStatus := v.getTableStatusMap()
-	failpoint.Inject("MockValidationQuery", func() {
-		tblStatus = map[string]*tableValidateStatus{
-			"`testdb1`.`testtable1`": {
-				source: filter.Table{Schema: "testdb1", Name: "testtable1"},
-				target: filter.Table{Schema: "dstdb", Name: "dsttable"},
-				stage:  pb.Stage_Running,
-			},
-			"`testdb2`.`testtable2`": {
-				source:  filter.Table{Schema: "testdb2", Name: "testtable2"},
-				target:  filter.Table{Schema: "dstdb", Name: "dsttable"},
-				stage:   pb.Stage_Stopped,
-				message: tableWithoutPrimaryKeyMsg,
-			},
-		}
-	})
 
 	result := make([]*pb.ValidationTableStatus, 0)
 	for _, tblStat := range tblStatus {
@@ -1152,13 +1129,6 @@ func (v *DataValidator) getAllErrorCount(timeout time.Duration) ([errorStateType
 }
 
 func (v *DataValidator) GetValidatorStatus() *pb.ValidationStatus {
-	failpoint.Inject("MockValidationQuery", func() {
-		failpoint.Return(
-			&pb.ValidationStatus{
-				Task: v.cfg.Name,
-			},
-		)
-	})
 	var extraMsg string
 	allErrorCount, err := v.getAllErrorCount(validatorDmctlOpTimeout)
 	if err != nil {

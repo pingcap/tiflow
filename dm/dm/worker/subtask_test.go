@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/tiflow/dm/dumpling"
 	"github.com/pingcap/tiflow/dm/loader"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/relay"
 	"github.com/pingcap/tiflow/dm/syncer"
@@ -538,7 +539,7 @@ func TestGetValidatorError(t *testing.T) {
 	// validator == nil
 	validatorErrs, err := st.GetValidatorError(pb.ValidateErrorState_InvalidErr)
 	require.Nil(t, validatorErrs)
-	require.Regexp(t, ".*validator not found for task.*", err.Error())
+	require.True(t, terror.ErrValidatorNotFound.Equal(err))
 	// validator != nil: will be tested in IT
 }
 
@@ -551,7 +552,7 @@ func TestOperateValidatorError(t *testing.T) {
 	}
 	st := NewSubTaskWithStage(cfg, pb.Stage_Paused, nil, "worker")
 	// validator == nil
-	require.Regexp(t, ".*validator not found for task.*", st.OperateValidatorError(pb.ValidationErrOp_ClearErrOp, 0, true).Error())
+	require.True(t, terror.ErrValidatorNotFound.Equal(st.OperateValidatorError(pb.ValidationErrOp_ClearErrOp, 0, true)))
 	// validator != nil: will be tested in IT
 }
 
@@ -566,6 +567,6 @@ func TestValidatorStatus(t *testing.T) {
 	// validator == nil
 	stats, err := st.GetValidatorStatus()
 	require.Nil(t, stats)
-	require.Regexp(t, ".*validator not found for task.*", err.Error())
+	require.True(t, terror.ErrValidatorNotFound.Equal(err))
 	// validator != nil: will be tested in IT
 }

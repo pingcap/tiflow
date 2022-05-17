@@ -604,7 +604,7 @@ func (c *validatorPersistHelper) loadError(tctx *tcontext.Context, db *conn.Base
 	if err = rows.Err(); err != nil {
 		return []*pb.ValidationError{}, err
 	}
-	c.L.Info("load validator errors count", zap.Int("errors", len(res)))
+	c.L.Info("load validator errors", zap.Int("count", len(res)))
 	return res, nil
 }
 
