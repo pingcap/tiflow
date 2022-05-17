@@ -162,7 +162,7 @@ func TestStatus(t *testing.T) {
 		Row: &model.RowChangedEvent{},
 	})
 	require.Nil(t, node.Receive(pipeline.MockNodeContext4Test(ctx, msg, nil)))
-	require.Equal(t, TableStatusRunning, node.Status())
+	require.Equal(t, TableStatusReplicating, node.Status())
 
 	msg = pmessage.PolymorphicEventMessage(&model.PolymorphicEvent{
 		CRTs: 15, RawKV: &model.RawKVEntry{OpType: model.OpTypeResolved},
@@ -188,7 +188,7 @@ func TestStatus(t *testing.T) {
 		Row: &model.RowChangedEvent{},
 	})
 	require.Nil(t, node.Receive(pipeline.MockNodeContext4Test(ctx, msg, nil)))
-	require.Equal(t, TableStatusRunning, node.Status())
+	require.Equal(t, TableStatusReplicating, node.Status())
 
 	err = node.Receive(pipeline.MockNodeContext4Test(ctx,
 		pmessage.CommandMessage(&pmessage.Command{Tp: pmessage.CommandTypeStop}), nil))
@@ -218,7 +218,7 @@ func TestStatus(t *testing.T) {
 		Row: &model.RowChangedEvent{},
 	})
 	require.Nil(t, node.Receive(pipeline.MockNodeContext4Test(ctx, msg, nil)))
-	require.Equal(t, TableStatusRunning, node.Status())
+	require.Equal(t, TableStatusReplicating, node.Status())
 
 	err = node.Receive(pipeline.MockNodeContext4Test(ctx,
 		pmessage.CommandMessage(&pmessage.Command{Tp: pmessage.CommandTypeStop}), nil))
@@ -257,7 +257,7 @@ func TestStopStatus(t *testing.T) {
 		Row: &model.RowChangedEvent{},
 	})
 	require.Nil(t, node.Receive(pipeline.MockNodeContext4Test(ctx, msg, nil)))
-	require.Equal(t, TableStatusRunning, node.Status())
+	require.Equal(t, TableStatusReplicating, node.Status())
 
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -271,7 +271,7 @@ func TestStopStatus(t *testing.T) {
 	}()
 	// wait to ensure stop message is sent to the sink node
 	time.Sleep(time.Millisecond * 50)
-	require.Equal(t, TableStatusRunning, node.Status())
+	require.Equal(t, TableStatusReplicating, node.Status())
 	closeCh <- struct{}{}
 	wg.Wait()
 }
@@ -335,7 +335,7 @@ func TestManyTs(t *testing.T) {
 		Row: &model.RowChangedEvent{},
 	})
 	require.Nil(t, node.Receive(pipeline.MockNodeContext4Test(ctx, msg, nil)))
-	require.Equal(t, TableStatusRunning, node.Status())
+	require.Equal(t, TableStatusReplicating, node.Status())
 	sink.Check(t, []struct {
 		resolvedTs model.Ts
 		row        *model.RowChangedEvent
@@ -378,7 +378,7 @@ func TestManyTs(t *testing.T) {
 
 	require.Nil(t, node.Receive(
 		pipeline.MockNodeContext4Test(ctx, pmessage.BarrierMessage(1), nil)))
-	require.Equal(t, TableStatusRunning, node.Status())
+	require.Equal(t, TableStatusReplicating, node.Status())
 
 	sink.Check(t, []struct {
 		resolvedTs model.Ts
@@ -426,7 +426,7 @@ func TestManyTs(t *testing.T) {
 
 	require.Nil(t, node.Receive(
 		pipeline.MockNodeContext4Test(ctx, pmessage.BarrierMessage(5), nil)))
-	require.Equal(t, TableStatusRunning, node.Status())
+	require.Equal(t, TableStatusReplicating, node.Status())
 	sink.Check(t, []struct {
 		resolvedTs model.Ts
 		row        *model.RowChangedEvent

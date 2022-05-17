@@ -231,3 +231,7 @@ func SortOutput(ctx context.Context, input <-chan *model.RawKVEntry) <-chan *mod
 	}()
 	return outputCh
 }
+
+func (es *EntrySorter) UpdateInitialCheckpointTs(checkpoint model.Ts) {
+
+}

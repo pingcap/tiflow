@@ -279,11 +279,10 @@ func (t *tableActor) start(sdtTableContext context.Context) error {
 		zap.String("tableName", t.tableName),
 		zap.Uint64("quota", t.memoryQuota))
 
+	status := TableStatusPreparing
 	flowController := flowcontrol.NewTableFlowController(t.memoryQuota)
-	sorterNode := newSorterNode(t.tableName, t.tableID,
-		t.replicaInfo.StartTs, flowController,
-		t.mounter, t.replicaConfig,
-	)
+	sorterNode := newSorterNode(t.tableName, t.tableID, t.replicaInfo.StartTs,
+		flowController, t.mounter, t.replicaConfig, &status)
 	t.sortNode = sorterNode
 	sortActorNodeContext := newContext(sdtTableContext, t.tableName,
 		t.globalVars.TableActorSystem.Router(),
@@ -316,8 +315,7 @@ func (t *tableActor) start(sdtTableContext context.Context) error {
 	}
 
 	actorSinkNode := newSinkNode(t.tableID, t.tableSink,
-		t.replicaInfo.StartTs,
-		t.targetTs, flowController)
+		t.replicaInfo.StartTs, t.targetTs, flowController, &status)
 	actorSinkNode.initWithReplicaConfig(true, t.replicaConfig)
 	t.sinkNode = actorSinkNode
 
@@ -513,6 +511,13 @@ func (t *tableActor) Cancel() {
 // Wait waits for table pipeline destroyed
 func (t *tableActor) Wait() {
 	_ = t.wg.Wait()
+}
+
+func (t *tableActor) Start(checkpointTs model.Ts) {
+	if atomic.CompareAndSwapInt32(&t.sortNode.isRunning, 0, 1) {
+		t.sortNode.startRun <- checkpointTs
+		close(t.sortNode.startRun)
+	}
 }
 
 // for ut

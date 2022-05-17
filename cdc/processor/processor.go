@@ -29,7 +29,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
-	tablepipeline "github.com/pingcap/tiflow/cdc/processor/pipeline"
+	"github.com/pingcap/tiflow/cdc/processor/pipeline"
 	"github.com/pingcap/tiflow/cdc/puller"
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/scheduler"
@@ -63,7 +63,7 @@ type processor struct {
 
 	upStream *upstream.Upstream
 
-	tables map[model.TableID]tablepipeline.TablePipeline
+	tables map[model.TableID]pipeline.TablePipeline
 
 	schemaStorage entry.SchemaStorage
 	lastSchemaTs  model.Ts
@@ -80,7 +80,7 @@ type processor struct {
 	wg          sync.WaitGroup
 
 	lazyInit            func(ctx cdcContext.Context) error
-	createTablePipeline func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error)
+	createTablePipeline func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (pipeline.TablePipeline, error)
 	newAgent            func(ctx cdcContext.Context) (scheduler.Agent, error)
 
 	agent        scheduler.Agent
@@ -105,11 +105,8 @@ func (p *processor) checkReadyForMessages() bool {
 }
 
 // AddTable implements TableExecutor interface.
-// func (p *processor) AddTable(
-// 	ctx context.Context, tableID model.TableID, checkpointTs model.Ts, isPrepare bool,
-// ) (bool, error) {
 func (p *processor) AddTable(
-	ctx context.Context, tableID model.TableID, startTs model.Ts,
+	ctx context.Context, tableID model.TableID, startTs model.Ts, isPrepare bool,
 ) (bool, error) {
 	if !p.checkReadyForMessages() {
 		return false, nil
@@ -117,13 +114,24 @@ func (p *processor) AddTable(
 
 	log.Info("adding table",
 		zap.Int64("tableID", tableID),
+		zap.Bool("isPrepare", isPrepare),
 		zap.Uint64("checkpointTs", startTs),
 		zap.String("namespace", p.changefeedID.Namespace),
 		zap.String("changefeed", p.changefeedID.ID))
-	err := p.addTable(ctx.(cdcContext.Context), tableID, &model.TableReplicaInfo{StartTs: startTs})
-	if err != nil {
-		return false, errors.Trace(err)
+
+	if isPrepare {
+		err := p.addTable(ctx.(cdcContext.Context), tableID, &model.TableReplicaInfo{StartTs: startTs})
+		if err != nil {
+			return false, errors.Trace(err)
+		}
+	} else {
+		t, ok := p.tables[tableID]
+		if !ok {
+			return false, cerror.ErrTableIneligible.GenWithStackByArgs(tableID)
+		}
+		t.Start(startTs)
 	}
+
 	return true, nil
 }
 
@@ -171,8 +179,8 @@ func (p *processor) IsAddTableFinished(ctx context.Context, tableID model.TableI
 	}
 	localResolvedTs := p.resolvedTs
 	globalResolvedTs := p.changefeed.Status.ResolvedTs
-	localCheckpointTs := p.agent.GetLastSentCheckpointTs()
-	globalCheckpointTs := p.changefeed.Status.CheckpointTs
+	//localCheckpointTs := p.agent.GetLastSentCheckpointTs()
+	//globalCheckpointTs := p.changefeed.Status.CheckpointTs
 
 	// These two conditions are used to determine if the table's pipeline has finished
 	// initializing and all invariants have been preserved.
@@ -181,10 +189,19 @@ func (p *processor) IsAddTableFinished(ctx context.Context, tableID model.TableI
 	// the resolved-ts are preserved before communicating with the Owner.
 	//
 	// These conditions are similar to those in the legacy implementation of the Owner/Processor.
-	if table.CheckpointTs() < localCheckpointTs || localCheckpointTs < globalCheckpointTs {
-		return false
-	}
-	if table.ResolvedTs() < localResolvedTs || localResolvedTs < globalResolvedTs {
+	//if table.CheckpointTs() < localCheckpointTs || localCheckpointTs < globalCheckpointTs {
+	//	return false
+	//}
+	if table.ResolvedTs() < localResolvedTs || localResolvedTs < globalResolvedTs || table.Status() != pipeline.TableStatusPrepared {
+		log.Info("Add Table not finished",
+			zap.String("namespace", p.changefeedID.Namespace),
+			zap.String("changefeed", p.changefeedID.ID),
+			zap.Int64("tableID", tableID),
+			zap.Uint64("tableResolvedTs", table.ResolvedTs()),
+			zap.Uint64("localResolvedTs", localResolvedTs),
+			zap.Uint64("globalResolvedTs", globalResolvedTs),
+			zap.Stringer("status", table.Status()),
+		)
 		return false
 	}
 	log.Info("Add Table finished",
@@ -198,26 +215,26 @@ func (p *processor) IsAddTableFinished(ctx context.Context, tableID model.TableI
 // func (p *processor) IsRemoveTableFinished(
 // 	ctx context.Context, tableID model.TableID,
 // ) (model.Ts, bool) {
-func (p *processor) IsRemoveTableFinished(ctx context.Context, tableID model.TableID) bool {
+func (p *processor) IsRemoveTableFinished(ctx context.Context, tableID model.TableID) (model.Ts, bool) {
 	if !p.checkReadyForMessages() {
-		return false
+		return 0, false
 	}
 
 	table, exist := p.tables[tableID]
 	if !exist {
-		log.Panic("table which was deleted is not found",
+		log.Panic("table which should be removing is not found",
 			zap.String("namespace", p.changefeedID.Namespace),
 			zap.String("changefeed", p.changefeedID.ID),
 			zap.Int64("tableID", tableID))
-		return true
+		return 0, true
 	}
-	if table.Status() != tablepipeline.TableStatusStopped {
+	if table.Status() != pipeline.TableStatusStopped {
 		log.Debug("the table is still not stopped",
 			zap.String("namespace", p.changefeedID.Namespace),
 			zap.String("changefeed", p.changefeedID.ID),
 			zap.Uint64("checkpointTs", table.CheckpointTs()),
 			zap.Int64("tableID", tableID))
-		return false
+		return 0, false
 	}
 
 	table.Cancel()
@@ -228,7 +245,7 @@ func (p *processor) IsRemoveTableFinished(ctx context.Context, tableID model.Tab
 		zap.String("changefeed", p.changefeedID.ID),
 		zap.Int64("tableID", tableID))
 
-	return true
+	return table.CheckpointTs(), true
 }
 
 // GetAllCurrentTables implements TableExecutor interface.
@@ -250,7 +267,7 @@ func newProcessor(ctx cdcContext.Context, upStream *upstream.Upstream) *processo
 	changefeedID := ctx.ChangefeedVars().ID
 	p := &processor{
 		upStream:      upStream,
-		tables:        make(map[model.TableID]tablepipeline.TablePipeline),
+		tables:        make(map[model.TableID]pipeline.TablePipeline),
 		errCh:         make(chan error, 1),
 		changefeedID:  changefeedID,
 		captureInfo:   ctx.GlobalVars().CaptureInfo,
@@ -648,6 +665,11 @@ func (p *processor) handlePosition(currentTs int64) {
 		minResolvedTs = p.schemaStorage.ResolvedTs()
 	}
 	for _, table := range p.tables {
+		status := table.Status()
+		if status == pipeline.TableStatusPreparing ||
+			status == pipeline.TableStatusReplicating {
+			continue
+		}
 		ts := table.ResolvedTs()
 		if ts < minResolvedTs {
 			minResolvedTs = ts
@@ -658,6 +680,11 @@ func (p *processor) handlePosition(currentTs int64) {
 	minCheckpointTs := minResolvedTs
 	minCheckpointTableID := int64(0)
 	for _, table := range p.tables {
+		status := table.Status()
+		if status == pipeline.TableStatusPreparing ||
+			status == pipeline.TableStatusReplicating {
+			continue
+		}
 		ts := table.CheckpointTs()
 		if ts < minCheckpointTs {
 			minCheckpointTs = ts
@@ -705,7 +732,7 @@ func (p *processor) addTable(ctx cdcContext.Context, tableID model.TableID, repl
 	}
 
 	if table, ok := p.tables[tableID]; ok {
-		if table.Status() == tablepipeline.TableStatusStopped {
+		if table.Status() == pipeline.TableStatusStopped {
 			log.Warn("The same table exists but is stopped. Cancel it and continue.", cdcContext.ZapFieldChangefeed(ctx), zap.Int64("ID", tableID))
 			p.removeTable(table, tableID)
 		} else {
@@ -791,7 +818,7 @@ func (p *processor) createTablePipelineImpl(
 	ctx cdcContext.Context,
 	tableID model.TableID,
 	replicaInfo *model.TableReplicaInfo,
-) (tablepipeline.TablePipeline, error) {
+) (pipeline.TablePipeline, error) {
 	ctx = cdcContext.WithErrorHandler(ctx, func(err error) error {
 		if cerror.ErrTableProcessorStoppedSafely.Equal(err) ||
 			errors.Cause(errors.Cause(err)) == context.Canceled {
@@ -810,10 +837,10 @@ func (p *processor) createTablePipelineImpl(
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	var table tablepipeline.TablePipeline
+	var table pipeline.TablePipeline
 	if config.GetGlobalServerConfig().Debug.EnableTableActor {
 		var err error
-		table, err = tablepipeline.NewTableActor(
+		table, err = pipeline.NewTableActor(
 			ctx,
 			p.upStream,
 			p.mounter,
@@ -826,7 +853,7 @@ func (p *processor) createTablePipelineImpl(
 			return nil, errors.Trace(err)
 		}
 	} else {
-		table = tablepipeline.NewTablePipeline(
+		table = pipeline.NewTablePipeline(
 			ctx,
 			p.mounter,
 			tableID,
@@ -850,7 +877,7 @@ func (p *processor) createTablePipelineImpl(
 	return table, nil
 }
 
-func (p *processor) removeTable(table tablepipeline.TablePipeline, tableID model.TableID) {
+func (p *processor) removeTable(table pipeline.TablePipeline, tableID model.TableID) {
 	table.Cancel()
 	table.Wait()
 	delete(p.tables, tableID)

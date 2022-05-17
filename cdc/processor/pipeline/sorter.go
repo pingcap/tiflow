@@ -62,6 +62,10 @@ type sorterNode struct {
 	// The latest barrier ts that sorter has received.
 	barrierTs model.Ts
 
+	status    *TableStatus
+	isRunning int32
+	startRun  chan model.Ts
+
 	replConfig *config.ReplicaConfig
 
 	// isTableActorMode identify if the sorter node is run is actor mode, todo: remove it after GA
@@ -71,7 +75,7 @@ type sorterNode struct {
 func newSorterNode(
 	tableName string, tableID model.TableID, startTs model.Ts,
 	flowController tableFlowController, mounter entry.Mounter,
-	replConfig *config.ReplicaConfig,
+	replConfig *config.ReplicaConfig, status *TableStatus,
 ) *sorterNode {
 	return &sorterNode{
 		tableName:      tableName,
@@ -80,6 +84,8 @@ func newSorterNode(
 		mounter:        mounter,
 		resolvedTs:     startTs,
 		barrierTs:      startTs,
+		status:         status,
+		startRun:       make(chan model.Ts, 1),
 		replConfig:     replConfig,
 	}
 }
@@ -161,6 +167,7 @@ func (n *sorterNode) start(
 		metricsTicker := time.NewTicker(flushMemoryMetricsDuration)
 		defer metricsTicker.Stop()
 
+		startTs := model.Ts(0)
 		for {
 			// We must call `sorter.Output` before receiving resolved events.
 			// Skip calling `sorter.Output` and caching output channel may fail
@@ -176,9 +183,33 @@ func (n *sorterNode) start(
 					// sorter output channel closed
 					return nil
 				}
+
+				// Step from Initializing to Ready
+				if n.status.Load() == TableStatusPrepared {
+					n.status.Store(TableStatusReplicating)
+				}
+				// Step from Ready to Running
+				select {
+				case <-stdCtx.Done():
+					return nil
+
+				case ts := <-n.startRun:
+					// Wait for owner signal
+					if n.status.Load() == TableStatusPrepared {
+						n.status.Store(TableStatusReplicating)
+						startTs = ts
+					}
+				}
+
 				if msg == nil || msg.RawKV == nil {
 					log.Panic("unexpected empty msg", zap.Reflect("msg", msg))
 				}
+
+				if msg.CRTs <= startTs {
+					// Ignore messages are less than initial checkpoint ts.
+					continue
+				}
+
 				if msg.RawKV.OpType != model.OpTypeResolved {
 					err := n.mounter.DecodeEvent(ctx, msg)
 					if err != nil {

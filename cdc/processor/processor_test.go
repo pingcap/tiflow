@@ -107,7 +107,7 @@ func initProcessor4Test(ctx cdcContext.Context, t *testing.T) (*processor, *orch
 		return &mockTablePipeline{
 			tableID:      tableID,
 			name:         fmt.Sprintf("`test`.`table%d`", tableID),
-			status:       tablepipeline.TableStatusRunning,
+			status:       tablepipeline.TableStatusReplicating,
 			resolvedTs:   replicaInfo.StartTs,
 			checkpointTs: replicaInfo.StartTs,
 		}, nil
@@ -180,6 +180,10 @@ func (m *mockTablePipeline) Cancel() {
 
 func (m *mockTablePipeline) Wait() {
 	// do nothing
+}
+
+func (m *mockTablePipeline) Start(ts model.Ts) {
+
 }
 
 type mockSchemaStorage struct {
