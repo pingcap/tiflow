@@ -113,7 +113,7 @@ func (a *AvroEventBatchEncoder) AppendRowChangedEvent(
 		log.Error(
 			"Single message too large",
 			zap.Int(
-				"max-message-size",
+				"maxMessageBytes",
 				a.maxMessageBytes,
 			),
 			zap.Int("length", mqMessage.Length()),
