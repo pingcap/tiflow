@@ -16,7 +16,6 @@ package codec
 import (
 	"net/url"
 	"strconv"
-	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -38,33 +37,44 @@ type Config struct {
 	enableTiDBExtension bool
 
 	// avro only
-	avroRegistry string
-	tz           *time.Location
+	avroSchemaRegistry             string
+	avroDecimalHandlingMode        string
+	avroBigintUnsignedHandlingMode string
 }
 
 // NewConfig return a Config for codec
-func NewConfig(protocol config.Protocol, tz *time.Location) *Config {
+func NewConfig(protocol config.Protocol) *Config {
 	return &Config{
 		protocol: protocol,
 
 		maxMessageBytes: config.DefaultMaxMessageBytes,
 		maxBatchSize:    defaultMaxBatchSize,
 
-		enableTiDBExtension: false,
-		avroRegistry:        "",
-		tz:                  tz,
+		enableTiDBExtension:            false,
+		avroSchemaRegistry:             "",
+		avroDecimalHandlingMode:        "precise",
+		avroBigintUnsignedHandlingMode: "long",
 	}
 }
 
 const (
-	codecOPTEnableTiDBExtension = "enable-tidb-extension"
-	codecOPTMaxBatchSize        = "max-batch-size"
-	codecOPTMaxMessageBytes     = "max-message-bytes"
-	codecAvroRegistry           = "registry"
+	codecOPTEnableTiDBExtension            = "enable-tidb-extension"
+	codecOPTMaxBatchSize                   = "max-batch-size"
+	codecOPTMaxMessageBytes                = "max-message-bytes"
+	codecOPTAvroDecimalHandlingMode        = "avro-decimal-handling-mode"
+	codecOPTAvroBigintUnsignedHandlingMode = "avro-bigint-unsigned-handling-mode"
+	codecOPTAvroSchemaRegistry             = "schema-registry"
+)
+
+const (
+	decimalHandlingModeString        = "string"
+	decimalHandlingModePrecise       = "precise"
+	bigintUnsignedHandlingModeString = "string"
+	bigintUnsignedHandlingModeLong   = "long"
 )
 
 // Apply fill the Config
-func (c *Config) Apply(sinkURI *url.URL, opts map[string]string) error {
+func (c *Config) Apply(sinkURI *url.URL, config *config.ReplicaConfig) error {
 	params := sinkURI.Query()
 	if s := params.Get(codecOPTEnableTiDBExtension); s != "" {
 		b, err := strconv.ParseBool(s)
@@ -90,8 +100,16 @@ func (c *Config) Apply(sinkURI *url.URL, opts map[string]string) error {
 		c.maxMessageBytes = a
 	}
 
-	if s, ok := opts[codecAvroRegistry]; ok {
-		c.avroRegistry = s
+	if s := params.Get(codecOPTAvroDecimalHandlingMode); s != "" {
+		c.avroDecimalHandlingMode = s
+	}
+
+	if s := params.Get(codecOPTAvroBigintUnsignedHandlingMode); s != "" {
+		c.avroBigintUnsignedHandlingMode = s
+	}
+
+	if config.SchemaRegistry != "" {
+		c.avroSchemaRegistry = config.SchemaRegistry
 	}
 
 	return nil
@@ -105,26 +123,52 @@ func (c *Config) WithMaxMessageBytes(bytes int) *Config {
 
 // Validate the Config
 func (c *Config) Validate() error {
-	if c.protocol != config.ProtocolCanalJSON && c.enableTiDBExtension {
-		return cerror.ErrMQCodecInvalidConfig.GenWithStack(`enable-tidb-extension only support canal-json protocol`)
+	if c.enableTiDBExtension &&
+		!(c.protocol == config.ProtocolCanalJSON || c.protocol == config.ProtocolAvro) {
+		return cerror.ErrMQCodecInvalidConfig.GenWithStack(
+			`enable-tidb-extension only supports canal-json/avro protocol`,
+		)
 	}
 
 	if c.protocol == config.ProtocolAvro {
-		if c.avroRegistry == "" {
-			return cerror.ErrMQCodecInvalidConfig.GenWithStack(`Avro protocol requires parameter "registry"`)
+		if c.avroSchemaRegistry == "" {
+			return cerror.ErrMQCodecInvalidConfig.GenWithStack(
+				`Avro protocol requires parameter "%s"`,
+				codecOPTAvroSchemaRegistry,
+			)
 		}
 
-		if c.tz == nil {
-			return cerror.ErrMQCodecInvalidConfig.GenWithStack("Avro protocol requires timezone to be set")
+		if c.avroDecimalHandlingMode != decimalHandlingModePrecise &&
+			c.avroDecimalHandlingMode != decimalHandlingModeString {
+			return cerror.ErrMQCodecInvalidConfig.GenWithStack(
+				`%s value could only be "%s" or "%s"`,
+				codecOPTAvroDecimalHandlingMode,
+				decimalHandlingModeString,
+				decimalHandlingModePrecise,
+			)
+		}
+
+		if c.avroBigintUnsignedHandlingMode != bigintUnsignedHandlingModeLong &&
+			c.avroBigintUnsignedHandlingMode != bigintUnsignedHandlingModeString {
+			return cerror.ErrMQCodecInvalidConfig.GenWithStack(
+				`%s value could only be "%s" or "%s"`,
+				codecOPTAvroBigintUnsignedHandlingMode,
+				bigintUnsignedHandlingModeLong,
+				bigintUnsignedHandlingModeString,
+			)
 		}
 	}
 
 	if c.maxMessageBytes <= 0 {
-		return cerror.ErrMQCodecInvalidConfig.Wrap(errors.Errorf("invalid max-message-bytes %d", c.maxMessageBytes))
+		return cerror.ErrMQCodecInvalidConfig.Wrap(
+			errors.Errorf("invalid max-message-bytes %d", c.maxMessageBytes),
+		)
 	}
 
 	if c.maxBatchSize <= 0 {
-		return cerror.ErrMQCodecInvalidConfig.Wrap(errors.Errorf("invalid max-batch-size %d", c.maxBatchSize))
+		return cerror.ErrMQCodecInvalidConfig.Wrap(
+			errors.Errorf("invalid max-batch-size %d", c.maxBatchSize),
+		)
 	}
 
 	return nil

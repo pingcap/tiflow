@@ -14,11 +14,11 @@
 package codec
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
 
 	mm "github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/util/timeutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/stretchr/testify/require"
@@ -70,7 +70,7 @@ var testCaseDDL = &model.DDLEvent{
 
 func TestBuildCanalFlatEventBatchEncoder(t *testing.T) {
 	t.Parallel()
-	config := NewConfig(config.ProtocolCanalJSON, timeutil.SystemLocation())
+	config := NewConfig(config.ProtocolCanalJSON)
 
 	builder := &canalFlatEventBatchEncoderBuilder{config: config}
 	encoder, ok := builder.Build().(*CanalFlatEventBatchEncoder)
@@ -165,7 +165,7 @@ func TestNewCanalFlatEventBatchDecoder4RowMessage(t *testing.T) {
 		encoder := &CanalFlatEventBatchEncoder{builder: NewCanalEntryBuilder(), enableTiDBExtension: encodeEnable}
 		require.NotNil(t, encoder)
 
-		err := encoder.AppendRowChangedEvent(testCaseInsert)
+		err := encoder.AppendRowChangedEvent(context.Background(), "", testCaseInsert)
 		require.Nil(t, err)
 
 		mqMessages := encoder.Build()
@@ -294,7 +294,7 @@ func TestBatching(t *testing.T) {
 	for i := 1; i <= 1000; i++ {
 		ts := uint64(i)
 		updateCase.CommitTs = ts
-		err := encoder.AppendRowChangedEvent(&updateCase)
+		err := encoder.AppendRowChangedEvent(context.Background(), "", &updateCase)
 		require.Nil(t, err)
 
 		if i%100 == 0 {
