@@ -1,4 +1,4 @@
-// Copyright 2020 PingCAP, Inc.
+// Copyright 2022 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,28 +17,10 @@ import (
 	"encoding/binary"
 	"time"
 
-	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
-	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/tikv/client-go/v2/oracle"
-	"go.uber.org/zap"
 )
-
-// EventBatchEncoder is an abstraction for events encoder
-type EventBatchEncoder interface {
-	// EncodeCheckpointEvent appends a checkpoint event into the batch.
-	// This event will be broadcast to all partitions to signal a global checkpoint.
-	EncodeCheckpointEvent(ts uint64) (*MQMessage, error)
-	// AppendRowChangedEvent appends a row changed event into the batch
-	AppendRowChangedEvent(e *model.RowChangedEvent) error
-	// EncodeDDLEvent appends a DDL event into the batch
-	EncodeDDLEvent(e *model.DDLEvent) (*MQMessage, error)
-	// Build builds the batch and returns the bytes of key and value.
-	Build() []*MQMessage
-	// Size returns the size of the batch(bytes)
-	Size() int
-}
 
 // MQMessage represents an MQ message to the mqSink
 type MQMessage struct {
@@ -85,7 +67,15 @@ func (m *MQMessage) IncRowsCount() {
 }
 
 func newDDLMQMessage(proto config.Protocol, key, value []byte, event *model.DDLEvent) *MQMessage {
-	return NewMQMessage(proto, key, value, event.CommitTs, model.MqMessageTypeDDL, &event.TableInfo.Schema, &event.TableInfo.Table)
+	return NewMQMessage(
+		proto,
+		key,
+		value,
+		event.CommitTs,
+		model.MqMessageTypeDDL,
+		&event.TableInfo.Schema,
+		&event.TableInfo.Table,
+	)
 }
 
 func newResolvedMQMessage(proto config.Protocol, key, value []byte, ts uint64) *MQMessage {
@@ -94,7 +84,14 @@ func newResolvedMQMessage(proto config.Protocol, key, value []byte, ts uint64) *
 
 // NewMQMessage should be used when creating a MQMessage struct.
 // It copies the input byte slices to avoid any surprises in asynchronous MQ writes.
-func NewMQMessage(proto config.Protocol, key []byte, value []byte, ts uint64, ty model.MqMessageType, schema, table *string) *MQMessage {
+func NewMQMessage(
+	proto config.Protocol,
+	key []byte,
+	value []byte,
+	ts uint64,
+	ty model.MqMessageType,
+	schema, table *string,
+) *MQMessage {
 	ret := &MQMessage{
 		Key:       nil,
 		Value:     nil,
@@ -117,55 +114,4 @@ func NewMQMessage(proto config.Protocol, key []byte, value []byte, ts uint64, ty
 	}
 
 	return ret
-}
-
-// EventBatchDecoder is an abstraction for events decoder
-// this interface is only for testing now
-type EventBatchDecoder interface {
-	// HasNext returns
-	//     1. the type of the next event
-	//     2. a bool if the next event is exist
-	//     3. error
-	HasNext() (model.MqMessageType, bool, error)
-	// NextResolvedEvent returns the next resolved event if exists
-	NextResolvedEvent() (uint64, error)
-	// NextRowChangedEvent returns the next row changed event if exists
-	NextRowChangedEvent() (*model.RowChangedEvent, error)
-	// NextDDLEvent returns the next DDL event if exists
-	NextDDLEvent() (*model.DDLEvent, error)
-}
-
-// EncoderResult indicates an action request by the encoder to the mqSink
-type EncoderResult uint8
-
-// Enum types of EncoderResult
-const (
-	EncoderNeedAsyncWrite EncoderResult = iota
-	EncoderNeedSyncWrite
-)
-
-// EncoderBuilder builds encoder with context.
-type EncoderBuilder interface {
-	Build() EventBatchEncoder
-}
-
-// NewEventBatchEncoderBuilder returns an EncoderBuilder
-func NewEventBatchEncoderBuilder(c *Config, credential *security.Credential) (EncoderBuilder, error) {
-	switch c.protocol {
-	case config.ProtocolDefault, config.ProtocolOpen:
-		return newJSONEventBatchEncoderBuilder(c), nil
-	case config.ProtocolCanal:
-		return newCanalEventBatchEncoderBuilder(), nil
-	case config.ProtocolAvro:
-		return newAvroEventBatchEncoderBuilder(credential, c)
-	case config.ProtocolMaxwell:
-		return newMaxwellEventBatchEncoderBuilder(), nil
-	case config.ProtocolCanalJSON:
-		return newCanalFlatEventBatchEncoderBuilder(c), nil
-	case config.ProtocolCraft:
-		return newCraftEventBatchEncoderBuilder(c), nil
-	default:
-		log.Warn("unknown codec protocol value of EventBatchEncoder, use open-protocol as the default", zap.Any("protocolValue", int(c.protocol)))
-		return newJSONEventBatchEncoderBuilder(c), nil
-	}
 }

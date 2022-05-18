@@ -121,7 +121,9 @@ func (c *unresolvedTxnCache) Resolved(
 
 func splitResolvedTxn(
 	resolvedTsMap *sync.Map, unresolvedTxns map[model.TableID][]*txnsWithTheSameCommitTs,
-) (checkpointTsMap map[model.TableID]uint64, resolvedRowsMap map[model.TableID][]*model.SingleTableTxn) {
+) (checkpointTsMap map[model.TableID]uint64,
+	resolvedRowsMap map[model.TableID][]*model.SingleTableTxn,
+) {
 	var (
 		ok                              bool
 		txnsLength                      int
@@ -132,8 +134,8 @@ func splitResolvedTxn(
 	checkpointTsMap = make(map[model.TableID]uint64, len(unresolvedTxns))
 	resolvedTsMap.Range(func(k, v any) bool {
 		tableID := k.(model.TableID)
-		resolvedTs := v.(model.Ts)
-		checkpointTsMap[tableID] = resolvedTs
+		resolved := v.(model.ResolvedTs)
+		checkpointTsMap[tableID] = resolved.Ts
 		return true
 	})
 

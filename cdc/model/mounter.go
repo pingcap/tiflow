@@ -18,6 +18,8 @@ type PolymorphicEvent struct {
 	StartTs uint64
 	// Commit or resolved TS
 	CRTs uint64
+	// Identify whether the resolved event is in batch mode.
+	Mode ResolvedMode
 
 	RawKV *RawKVEntry
 	Row   *RowChangedEvent
@@ -44,7 +46,7 @@ func NewPolymorphicEvent(rawKV *RawKVEntry) *PolymorphicEvent {
 	}
 }
 
-// NewResolvedPolymorphicEvent creates a new PolymorphicEvent with the resolved ts
+// NewResolvedPolymorphicEvent creates a new PolymorphicEvent with the resolved ts.
 func NewResolvedPolymorphicEvent(regionID uint64, resolvedTs uint64) *PolymorphicEvent {
 	return &PolymorphicEvent{
 		CRTs:  resolvedTs,
@@ -58,13 +60,24 @@ func (e *PolymorphicEvent) RegionID() uint64 {
 	return e.RawKV.RegionID
 }
 
+// IsResolved returns true if the event is resolved. Note that this function can
+// only be called when `RawKV != nil`.
+func (e *PolymorphicEvent) IsResolved() bool {
+	return e.RawKV.OpType == OpTypeResolved
+}
+
+// IsBatchResolved returns true if the event is batch resolved event.
+func (e *PolymorphicEvent) IsBatchResolved() bool {
+	return e.IsResolved() && e.Mode == BatchResolvedMode
+}
+
 // ComparePolymorphicEvents compares two events by CRTs, Resolved, StartTs, Delete/Put order.
 // It returns true if and only if i should precede j.
 func ComparePolymorphicEvents(i, j *PolymorphicEvent) bool {
 	if i.CRTs == j.CRTs {
-		if i.RawKV.OpType == OpTypeResolved {
+		if i.IsResolved() {
 			return false
-		} else if j.RawKV.OpType == OpTypeResolved {
+		} else if j.IsResolved() {
 			return true
 		}
 
@@ -79,4 +92,32 @@ func ComparePolymorphicEvents(i, j *PolymorphicEvent) bool {
 		}
 	}
 	return i.CRTs < j.CRTs
+}
+
+// ResolvedMode describes the batch type of a resolved event.
+type ResolvedMode int
+
+const (
+	// NormalResolvedMode means that all events whose commitTs is less than or equal to
+	// `resolved.Ts` are sent to Sink.
+	NormalResolvedMode ResolvedMode = iota
+	// BatchResolvedMode means that all events whose commitTs is less than
+	// 'resolved.Ts' are sent to Sink.
+	BatchResolvedMode
+)
+
+// ResolvedTs is the resolved timestamp of sink module.
+type ResolvedTs struct {
+	Ts   uint64
+	Mode ResolvedMode
+}
+
+// NewResolvedTs creates a new ResolvedTs.
+func NewResolvedTs(t uint64) ResolvedTs {
+	return ResolvedTs{Ts: t, Mode: NormalResolvedMode}
+}
+
+// NewResolvedTsWithMode creates a ResolvedTs with a given batch type.
+func NewResolvedTsWithMode(t uint64, m ResolvedMode) ResolvedTs {
+	return ResolvedTs{Ts: t, Mode: m}
 }

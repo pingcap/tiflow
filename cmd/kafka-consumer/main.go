@@ -36,7 +36,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink"
-	"github.com/pingcap/tiflow/cdc/sink/codec"
+	"github.com/pingcap/tiflow/cdc/sink/mq/codec"
 	"github.com/pingcap/tiflow/cdc/sink/mq/dispatcher"
 	cmdUtil "github.com/pingcap/tiflow/pkg/cmd/util"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -790,7 +790,8 @@ func syncFlushRowChangedEvents(ctx context.Context, sink *partitionSink, resolve
 		flushedResolvedTs := true
 		sink.tablesMap.Range(func(key, value interface{}) bool {
 			tableID := key.(int64)
-			checkpointTs, err = sink.FlushRowChangedEvents(ctx, tableID, resolvedTs)
+			checkpointTs, err = sink.FlushRowChangedEvents(ctx,
+				tableID, model.NewResolvedTs(resolvedTs))
 			if err != nil {
 				return false
 			}

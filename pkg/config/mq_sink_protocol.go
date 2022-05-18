@@ -47,6 +47,8 @@ func (p *Protocol) FromString(protocol string) error {
 		*p = ProtocolCanal
 	case "avro":
 		*p = ProtocolAvro
+	case "flat-avro":
+		*p = ProtocolAvro
 	case "maxwell":
 		*p = ProtocolMaxwell
 	case "canal-json":
