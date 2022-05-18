@@ -338,7 +338,7 @@ func (s *OpenAPIViewSuite) TestReverseRequestToLeader() {
 	s.Len(resultListSource.Data, 0)
 	s.Equal(0, resultListSource.Total)
 
-	// list source not from leader will get result too
+	// list source from non-leader will get result too
 	result, err := HTTPTestWithTestResponseRecorder(testutil.NewRequest().Get(baseURL), s2.openapiHandles)
 	s.NoError(err)
 	s.Equal(http.StatusOK, result.Code())
