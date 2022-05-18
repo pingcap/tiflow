@@ -34,7 +34,7 @@
    > ([Source Installation](https://github.com/minio/minio#install-from-source)).
    > [RELEASE.2022-05-08T23-50-31Z](https://github.com/minio/minio/releases/tag/RELEASE.2022-05-08T23-50-31Z) is suggested.
 
-3. These are programs/packages shall be installed. 
+2. These are programs/packages need be installed. 
    * [mysql](https://dev.mysql.com/doc/mysql-installation-excerpt/5.7/en/) (the MySQL cli client,
      currently [mysql client 8.0 is not supported](https://github.com/pingcap/tidb/issues/14021))
    * [s3cmd](https://s3tools.org/download)
