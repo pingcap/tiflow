@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { PrismAsyncLight as SyntaxHighlighter } from 'react-syntax-highlighter'
@@ -25,6 +25,8 @@ import {
   Tabs,
   Radio,
   Select,
+  Form,
+  DatePicker,
 } from '~/uikit'
 import {
   SearchOutlined,
@@ -52,6 +54,7 @@ import {
   TaskUnit,
   SubTaskStatus,
   useDmapiConverterTaskMutation,
+  DmapiStartTaskApiArg,
 } from '~/models/task'
 import i18n from '~/i18n'
 import { useFuseSearch } from '~/utils/search'
@@ -61,9 +64,14 @@ import TaskUnitTag from '~/components/SimpleTaskPanel/TaskUnitTag'
 
 SyntaxHighlighter.registerLanguage('yaml', yaml)
 
-enum CreateTaskMethod {
+enum OpenTaskMethod {
   ByGuide,
   ByConfigFile,
+}
+
+enum StartTaskMethod {
+  Direct,
+  WithParams,
 }
 
 const SourceTable: React.FC<{
@@ -218,11 +226,15 @@ const TaskList: React.FC = () => {
   const [sourceDrawerVisible, setSourceDrawerVisible] = useState(false)
   const [currentTaskName, setCurrentTaskName] = useState<string>()
   const [selectedSources, setSelectedSources] = useState<string[]>([])
-  const [isModalVisible, setIsModalVisible] = useState(false)
-  const [method, setMethod] = useState(CreateTaskMethod.ByGuide)
+  const [isCreateTaskModalVisible, setIsCreateTaskModalVisible] =
+    useState(false)
+  const [isStartTaskModalVisible, setIsStartTaskModalVisible] = useState(false)
+  const [openTaskMethod, setOpenTaskMethod] = useState(OpenTaskMethod.ByGuide)
+  const [startTaskMethod, setStartTaskMethod] = useState(StartTaskMethod.Direct)
   const [currentTaskConfigFile, setCurrentTaskConfigFile] = useState('')
   const selectedTask = useAppSelector(state => state.globals.preloadedTask)
   const navigate = useNavigate()
+  const [form] = Form.useForm()
 
   const { data, isFetching, refetch } = useDmapiGetTaskListQuery({
     withStatus: true,
@@ -255,9 +267,9 @@ const TaskList: React.FC = () => {
 
   const [convertTaskDataToConfigFile] = useDmapiConverterTaskMutation()
 
-  const [stopTask] = useDmapiStopTaskMutation()
-  const [startTask] = useDmapiStartTaskMutation()
-  const [deleteTask] = useDmapiDeleteTaskMutation()
+  const [stopTask, stopTaskResult] = useDmapiStopTaskMutation()
+  const [startTask, startTaskResult] = useDmapiStartTaskMutation()
+  const [deleteTask, deleteTaskResult] = useDmapiDeleteTaskMutation()
 
   const rowSelection = {
     selectedRowKeys: selectedSources,
@@ -266,58 +278,86 @@ const TaskList: React.FC = () => {
     },
   }
 
-  const handleRequest = useCallback(
-    ({ key, handler, title }) => {
+  const handleRequestWithConfirmModal =
+    // @ts-ignore
+    ({ handler, title }) => {
+      if (!selectedSources.length) {
+        return
+      }
       Modal.confirm({
         title,
         icon: <ExclamationCircleOutlined />,
         onOk() {
-          message.loading({ content: t('requesting'), key })
-          Promise.all(
-            selectedSources.map(name => handler({ taskName: name }))
-          ).then(res => {
-            if (res.some(r => r?.error)) {
-              message.destroy(key)
-            } else {
-              message.success({ content: t('request success'), key })
-            }
-          })
+          Promise.all(selectedSources.map(name => handler({ taskName: name })))
         },
       })
-    },
-    [selectedSources]
-  )
-
-  const handleStopTask = useCallback(() => {
-    if (!selectedSources.length) {
-      return
     }
-    handleRequest({
+
+  const handleStopTask = () => {
+    handleRequestWithConfirmModal({
       title: t('confirm to stop task?'),
-      key: 'stopTask-' + Date.now(),
       handler: stopTask,
     })
-  }, [selectedSources, handleRequest])
-  const handleStartTask = useCallback(() => {
+  }
+  const handleStartTask = () => {
     if (!selectedSources.length) {
       return
     }
-    handleRequest({
-      title: t('confirm to start task?'),
-      key: 'startTask-' + Date.now(),
-      handler: startTask,
-    })
-  }, [selectedSources, handleRequest])
-  const handleDeleteTask = useCallback(() => {
-    if (!selectedSources.length) {
-      return
-    }
-    handleRequest({
+    setIsStartTaskModalVisible(true)
+  }
+  const handleDeleteTask = () => {
+    handleRequestWithConfirmModal({
       title: t('confirm to delete task?'),
-      key: 'deleteTask-' + Date.now(),
       handler: deleteTask,
     })
-  }, [selectedSources, handleRequest])
+  }
+  const handleConfirmOpenTask = () => {
+    if (openTaskMethod === OpenTaskMethod.ByGuide) {
+      selectedTask
+        ? navigate('/migration/task/edit')
+        : navigate('/migration/task/create')
+    } else if (openTaskMethod === OpenTaskMethod.ByConfigFile) {
+      selectedTask
+        ? navigate('/migration/task/edit#configFile')
+        : navigate('/migration/task/create#configFile')
+    }
+    setIsCreateTaskModalVisible(false)
+  }
+  const handleConfirmStartTask = () => {
+    const extraPayload: Partial<DmapiStartTaskApiArg> = {}
+
+    if (startTaskMethod === StartTaskMethod.WithParams) {
+      const formValues = form.getFieldsValue()
+      extraPayload.startTaskRequest = {
+        start_time: formValues.start_time
+          .milliseconds(0)
+          .utc()
+          .format('YYYY-MM-DDTHH:mm:ss'),
+        safe_mode_time_duration: formValues.safe_mode_time_duration + 's',
+      }
+    }
+
+    Promise.all(
+      selectedSources.map(name =>
+        startTask({ taskName: name, ...extraPayload })
+      )
+    )
+  }
+
+  const showMessage = (result: typeof startTaskResult) => {
+    if (result.isUninitialized) return
+    const key = result.requestId
+    if (result.isLoading) {
+      return message.loading({ content: t('requesting'), key })
+    }
+    if (result.isError) {
+      return message.destroy(key)
+    }
+    if (result.isSuccess) {
+      setIsStartTaskModalVisible(false)
+      return message.success({ content: t('request success'), key })
+    }
+  }
 
   const dataSource = data?.data
 
@@ -426,7 +466,7 @@ const TaskList: React.FC = () => {
               type="link"
               onClick={() => {
                 dispatch(actions.setPreloadedTask(data))
-                setIsModalVisible(true)
+                setIsCreateTaskModalVisible(true)
               }}
             >
               {t('edit')}
@@ -440,6 +480,18 @@ const TaskList: React.FC = () => {
   useEffect(() => {
     dispatch(actions.setPreloadedTask(null))
   }, [])
+
+  useEffect(() => {
+    showMessage(startTaskResult)
+  }, [startTaskResult.status])
+
+  useEffect(() => {
+    showMessage(stopTaskResult)
+  }, [stopTaskResult.status])
+
+  useEffect(() => {
+    showMessage(deleteTaskResult)
+  }, [deleteTaskResult.status])
 
   useEffect(() => {
     if (currentTaskName) {
@@ -458,6 +510,12 @@ const TaskList: React.FC = () => {
   useEffect(() => {
     refetchCurrentTaskStatus()
   }, [data])
+
+  useEffect(() => {
+    if (!isCreateTaskModalVisible) {
+      form.resetFields()
+    }
+  }, [isStartTaskModalVisible])
 
   return (
     <div>
@@ -515,7 +573,7 @@ const TaskList: React.FC = () => {
         <Col span={2}>
           <Button
             onClick={() => {
-              setIsModalVisible(true)
+              setIsCreateTaskModalVisible(true)
             }}
             icon={<PlusSquareOutlined />}
           >
@@ -572,32 +630,21 @@ const TaskList: React.FC = () => {
       </Drawer>
 
       <Modal
-        onOk={() => {
-          if (method === CreateTaskMethod.ByGuide) {
-            selectedTask
-              ? navigate('/migration/task/edit')
-              : navigate('/migration/task/create')
-          } else if (method === CreateTaskMethod.ByConfigFile) {
-            selectedTask
-              ? navigate('/migration/task/edit#configFile')
-              : navigate('/migration/task/create#configFile')
-          }
-          setIsModalVisible(false)
-        }}
-        onCancel={() => setIsModalVisible(false)}
+        onOk={handleConfirmOpenTask}
+        onCancel={() => setIsCreateTaskModalVisible(false)}
         okText={t('confirm')}
         cancelText={t('cancel')}
-        visible={isModalVisible}
+        visible={isCreateTaskModalVisible}
       >
         <div>
           <Radio.Group
             onChange={e => {
-              setMethod(e.target.value)
+              setOpenTaskMethod(e.target.value)
             }}
-            defaultValue={method}
+            defaultValue={openTaskMethod}
           >
             <Space direction="vertical">
-              <Radio value={CreateTaskMethod.ByGuide}>
+              <Radio value={OpenTaskMethod.ByGuide}>
                 <div>
                   <div className="font-bold">{t('open task by guide')}</div>
                   <div className="text-gray-400">
@@ -605,7 +652,7 @@ const TaskList: React.FC = () => {
                   </div>
                 </div>
               </Radio>
-              <Radio value={CreateTaskMethod.ByConfigFile}>
+              <Radio value={OpenTaskMethod.ByConfigFile}>
                 <div>
                   <div className="font-bold">{t('open task by config')}</div>
                   <div className="text-gray-400">
@@ -613,6 +660,75 @@ const TaskList: React.FC = () => {
                   </div>
                 </div>
               </Radio>
+            </Space>
+          </Radio.Group>
+        </div>
+      </Modal>
+
+      <Modal
+        onOk={handleConfirmStartTask}
+        onCancel={() => setIsStartTaskModalVisible(false)}
+        okText={t('confirm')}
+        cancelText={t('cancel')}
+        visible={isStartTaskModalVisible}
+      >
+        <div>
+          <Radio.Group
+            onChange={e => {
+              setStartTaskMethod(e.target.value)
+            }}
+            defaultValue={startTaskMethod}
+          >
+            <Space direction="vertical">
+              <Radio value={StartTaskMethod.Direct}>
+                <div>
+                  <div className="font-bold">
+                    {t('start task without params')}
+                  </div>
+                  <div className="text-gray-400">
+                    {t('start task without params desc')}
+                  </div>
+                </div>
+              </Radio>
+              <Radio value={StartTaskMethod.WithParams}>
+                <div>
+                  <div className="font-bold">{t('start task with params')}</div>
+                  <div className="text-gray-400">
+                    {t('start task with params desc')}
+                  </div>
+                </div>
+              </Radio>
+
+              <Form form={form}>
+                <Form.Item
+                  labelCol={{ span: 10 }}
+                  wrapperCol={{ span: 14 }}
+                  className="!mb-2"
+                  name="start_time"
+                  tooltip={t('start time on copy tooltip')}
+                  label={t('start time on copy')}
+                >
+                  <DatePicker
+                    showTime
+                    placeholder="Select time"
+                    className="!w-240px"
+                  />
+                </Form.Item>
+
+                <Form.Item
+                  labelCol={{ span: 10 }}
+                  wrapperCol={{ span: 14 }}
+                  name="safe_mode_time_duration"
+                  tooltip={t('safe mode time duration tooltip')}
+                  label={t('safe mode time duration')}
+                >
+                  <Input
+                    type="number"
+                    className="!w-240px"
+                    addonAfter={t('second')}
+                  />
+                </Form.Item>
+              </Form>
             </Space>
           </Radio.Group>
         </div>
