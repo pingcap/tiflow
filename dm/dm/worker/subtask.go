@@ -907,7 +907,7 @@ func (st *SubTask) GetValidatorStatus() (*pb.ValidationStatus, error) {
 	validator := st.getValidator()
 	if validator == nil {
 		cfg := st.getCfg()
-		return nil, terror.ErrValidatorNotFound.Generate(cfg.Name)
+		return nil, terror.ErrValidatorNotFound.Generate(cfg.Name, cfg.SourceID)
 	}
 	return validator.GetValidatorStatus(), nil
 }
@@ -916,7 +916,7 @@ func (st *SubTask) GetValidatorTableStatus(filterStatus pb.Stage) ([]*pb.Validat
 	validator := st.getValidator()
 	if validator == nil {
 		cfg := st.getCfg()
-		return nil, terror.ErrValidatorNotFound.Generate(cfg.Name)
+		return nil, terror.ErrValidatorNotFound.Generate(cfg.Name, cfg.SourceID)
 	}
 	return validator.GetValidatorTableStatus(filterStatus), nil
 }

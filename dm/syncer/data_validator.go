@@ -486,12 +486,15 @@ func (v *DataValidator) getInitialBinlogPosition() (binlog.Location, error) {
 			return location, terror.ErrConfigStartTimeTooLate.Generate(timeStr)
 		}
 		location = *loc
+		v.L.Info("do validate from timestamp", zap.Any("loc", location))
 	case v.startWithSubtask:
 		// in extreme case, this loc may still not be the first binlog location of this task:
 		//   syncer synced some binlog and flush checkpoint, but validator still not has chance to run, then fail-over
 		location = v.syncer.getInitExecutedLoc()
+		v.L.Info("do validate from init executed loc of syncer", zap.Any("loc", location))
 	default:
 		location = v.syncer.getFlushedGlobalPoint()
+		v.L.Info("do validate from current loc of syncer", zap.Any("loc", location))
 	}
 	return location, nil
 }
@@ -514,6 +517,7 @@ func (v *DataValidator) doValidate() {
 	var location binlog.Location
 	if v.location != nil {
 		location = *v.location
+		v.L.Info("do validate from checkpoint", zap.Any("loc", location))
 	} else {
 		// validator always uses remote binlog streamer now.
 		var err error
@@ -1270,6 +1274,7 @@ func (v *DataValidator) GetValidatorStatus() *pb.ValidationStatus {
 	return &pb.ValidationStatus{
 		Task:                v.cfg.Name,
 		Source:              v.cfg.SourceID,
+		Mode:                v.cfg.ValidatorCfg.Mode,
 		Stage:               v.Stage(),
 		Result:              returnedResult,
 		ValidatorBinlog:     validatorBinlog,
