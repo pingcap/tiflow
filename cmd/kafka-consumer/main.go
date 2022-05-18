@@ -257,7 +257,6 @@ func newSaramaConfig() (*sarama.Config, error) {
 	config.Metadata.Retry.Backoff = 500 * time.Millisecond
 	config.Consumer.Retry.Backoff = 500 * time.Millisecond
 	config.Consumer.Offsets.Initial = sarama.OffsetOldest
-	config.Consumer.Offsets.Retention = 1440 * time.Second
 
 	if len(ca) != 0 {
 		config.Net.TLS.Enable = true
@@ -302,6 +301,8 @@ func main() {
 		log.Panic("Error creating consumer group client", zap.Error(err))
 	}
 
+	topics := strings.Split(kafkaTopic, ",")
+
 	wg := &sync.WaitGroup{}
 	wg.Add(1)
 	go func() {
@@ -310,7 +311,7 @@ func main() {
 			// `Consume` should be called inside an infinite loop, when a
 			// server-side rebalance happens, the consumer session will need to be
 			// recreated to get the new claims
-			if err := client.Consume(ctx, strings.Split(kafkaTopic, ","), consumer); err != nil {
+			if err := client.Consume(ctx, topics, consumer); err != nil {
 				log.Error("Error from consumer", zap.Error(err))
 			}
 			// to suppress logs.
@@ -500,7 +501,14 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 	if sink == nil {
 		panic("sink should initialized")
 	}
-
+	log.Info("ConsumeClaim",
+		zap.Any("session.Claims", session.Claims()),
+		zap.Any("session.MemberID", session.MemberID()),
+		zap.Any("session.GenerationID", session.GenerationID()),
+		zap.Any("claim.Topic", claim.Topic()),
+		zap.Any("claim.Partition", claim.Partition()),
+		zap.Any("claim.InitialOffset", claim.InitialOffset()),
+		zap.Any("claim.HighWaterMarkOffset", claim.HighWaterMarkOffset()))
 	eventGroups := make(map[int64]*eventsGroup)
 	for message := range claim.Messages() {
 		var (
@@ -549,7 +557,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 					log.Panic("decode message value failed", zap.ByteString("value", message.Value))
 				}
 				if partition == 0 {
-					c.appendDDL(ddl)
+					c.appendDDL(ddl, message.Offset)
 				}
 			case model.MqMessageTypeRow:
 				row, err := decoder.NextRowChangedEvent()
@@ -607,7 +615,8 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 					log.Panic("partition resolved ts fallback",
 						zap.Uint64("ts", ts),
 						zap.Uint64("resolvedTs", resolvedTs),
-						zap.Int32("partition", partition))
+						zap.Int32("partition", partition),
+						zap.Int64("offset", message.Offset))
 				}
 				if ts > resolvedTs {
 					for tableID, group := range eventGroups {
@@ -648,7 +657,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 
 // append DDL wait to be handled, only consider the constraint among DDLs.
 // for DDL a / b received in the order, a.CommitTs < b.CommitTs should be true.
-func (c *Consumer) appendDDL(ddl *model.DDLEvent) {
+func (c *Consumer) appendDDL(ddl *model.DDLEvent, offset int64) {
 	c.ddlListMu.Lock()
 	defer c.ddlListMu.Unlock()
 	// DDL CommitTs fallback, just crash it to indicate the bug.
@@ -656,7 +665,7 @@ func (c *Consumer) appendDDL(ddl *model.DDLEvent) {
 		log.Panic("DDL CommitTs < maxCommitTsDDL.CommitTs",
 			zap.Uint64("commitTs", ddl.CommitTs),
 			zap.Uint64("maxCommitTs", c.ddlWithMaxCommitTs.CommitTs),
-			zap.Any("DDL", ddl))
+			zap.Any("DDL", ddl), zap.Int64("offset", offset))
 	}
 
 	// A rename tables DDL job contains multiple DDL events with same CommitTs.
@@ -664,12 +673,12 @@ func (c *Consumer) appendDDL(ddl *model.DDLEvent) {
 	// the current DDL and the DDL with max CommitTs.
 	if ddl == c.ddlWithMaxCommitTs {
 		log.Info("ignore redundant DDL, the DDL is equal to ddlWithMaxCommitTs",
-			zap.Any("DDL", ddl))
+			zap.Any("DDL", ddl), zap.Int64("offset", offset))
 		return
 	}
 
 	c.ddlList = append(c.ddlList, ddl)
-	log.Info("DDL event received", zap.Uint64("commitTs", ddl.CommitTs), zap.Any("DDL", ddl))
+	log.Info("DDL event received", zap.Uint64("commitTs", ddl.CommitTs), zap.Any("DDL", ddl), zap.Int64("offset", offset))
 	c.ddlWithMaxCommitTs = ddl
 }
 
