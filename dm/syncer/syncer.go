@@ -1922,7 +1922,41 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 
 		// fetch from sharding resync channel if needed, and redirect global
 		// stream to current binlog position recorded by ShardingReSync
-		if len(shardingReSyncCh) > 0 {
+		if len(shardingReSyncCh) > 0 && shardingReSync == nil {
+			if shardingReSync == nil {
+				// some sharding groups need to re-syncing
+				shardingReSync = <-shardingReSyncCh
+				s.tctx.L().Debug("starts to handle new shardingResync operation", zap.Stringer("shardingResync", shardingReSync))
+				savedGlobalLastLocation = lastLocation // save global last location
+				lastLocation = shardingReSync.currLocation
+
+				currentLocation = shardingReSync.currLocation
+				// if suffix>0, we are replacing error
+				s.isReplacingOrInjectingErr = currentLocation.Suffix != 0
+				s.locations.reset(shardingReSync.currLocation)
+				err = s.streamerController.ResetReplicationSyncer(s.runCtx, shardingReSync.currLocation)
+				if err != nil {
+					return err
+				}
+
+				failpoint.Inject("ReSyncExit", func() {
+					s.tctx.L().Warn("exit triggered", zap.String("failpoint", "ReSyncExit"))
+					utils.OsExit(1)
+				})
+			}
+		}
+		if s.cfg.ShardMode == config.ShardOptimistic {
+			op, targetTableID := s.optimist.PendingRedirectOperation()
+			if op != nil {
+				endLocation := &currentLocation
+				if shardingReSync != nil {
+					endLocation = &shardingReSync.latestLocation
+				}
+				s.resolveOptimisticDDL(&eventContext{
+					currentLocation: endLocation,
+				}, &filter.Table{Schema: op.UpSchema, Name: op.UpTable}, utils.UnpackTableID(targetTableID), optimism.ConflictNone)
+				continue
+			}
 			// for optimistic sharding mode, we must always accept new shardingResync and always use the newest sharding resync
 			// to handle the case that we finishes a shard lock before a shardingResync is finished, as the following case:
 			//                                                    newer
@@ -1951,56 +1985,6 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			//
 			// newer
 			// binlog
-			if (s.cfg.ShardMode == config.ShardPessimistic && shardingReSync == nil) || s.cfg.ShardMode == config.ShardOptimistic {
-				if s.cfg.ShardMode == config.ShardOptimistic && shardingReSync != nil {
-					unfinishedSavedGlobalLastLocation := savedGlobalLastLocation.Clone()
-					unfinishedShardingResync := &ShardingReSync{
-						currLocation:        lastLocation,
-						latestLocation:      shardingReSync.latestLocation.Clone(),
-						targetTable:         shardingReSync.targetTable.Clone(),
-						allResolved:         true,
-						savedGlobalLocation: &unfinishedSavedGlobalLastLocation,
-					}
-					s.tctx.L().Info("shardingResync is interrupted and pushed in shardingReSyncUnfinished",
-						zap.Stringer("interruptShardingResync", shardingReSync), zap.Stringer("unfinishedShardingResync", unfinishedShardingResync))
-					// save current location as the next time redirect position
-					s.osgk.appendShardingReSync(unfinishedShardingResync)
-				}
-				// some sharding groups need to re-syncing
-				shardingReSync = <-shardingReSyncCh
-				s.tctx.L().Debug("starts to handle new shardingResync operation", zap.Stringer("shardingResync", shardingReSync))
-				// save global last location
-				if shardingReSync.savedGlobalLocation == nil {
-					savedGlobalLastLocation = lastLocation
-				} else {
-					savedGlobalLastLocation = *shardingReSync.savedGlobalLocation
-				}
-				lastLocation = shardingReSync.currLocation
-
-				currentLocation = shardingReSync.currLocation
-				// if suffix>0, we are replacing error
-				s.isReplacingOrInjectingErr = currentLocation.Suffix != 0
-				s.locations.reset(shardingReSync.currLocation)
-				err = s.streamerController.ResetReplicationSyncer(s.runCtx, shardingReSync.currLocation)
-				if err != nil {
-					return err
-				}
-
-				failpoint.Inject("ReSyncExit", func() {
-					s.tctx.L().Warn("exit triggered", zap.String("failpoint", "ReSyncExit"))
-					utils.OsExit(1)
-				})
-			}
-		}
-		if s.cfg.ShardMode == config.ShardOptimistic {
-			op, targetTableID := s.optimist.PendingRedirectOperation()
-			if op != nil {
-				s.resolveOptimisticDDL(&eventContext{
-					shardingReSyncCh: &shardingReSyncCh,
-					currentLocation:  &currentLocation,
-				}, &filter.Table{Schema: op.UpSchema, Name: op.UpTable}, utils.UnpackTableID(targetTableID), optimism.ConflictNone)
-				continue
-			}
 			if shardingReSync == nil {
 				if shardingReSyncUnfinished := s.osgk.popBackShardingReSync(); shardingReSyncUnfinished != nil {
 					shardingReSyncCh <- shardingReSyncUnfinished

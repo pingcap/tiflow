@@ -770,8 +770,6 @@ type ShardingReSync struct {
 	latestLocation binlog.Location // latest DDL's binlog location
 	targetTable    *filter.Table
 	allResolved    bool
-
-	savedGlobalLocation *binlog.Location // saved global location, used to check if global location is changed
 }
 
 // String implements stringer.String.
