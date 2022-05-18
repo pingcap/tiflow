@@ -177,12 +177,14 @@ func (s *simpleMySQLSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent)
 
 // FlushRowChangedEvents flushes each row which of commitTs less than or equal to `resolvedTs` into downstream.
 // TiCDC guarantees that all of Event which of commitTs less than or equal to `resolvedTs` are sent to Sink through `EmitRowChangedEvents`
-func (s *simpleMySQLSink) FlushRowChangedEvents(ctx context.Context, _ model.TableID, resolvedTs uint64) (uint64, error) {
+func (s *simpleMySQLSink) FlushRowChangedEvents(
+	ctx context.Context, _ model.TableID, resolved model.ResolvedTs,
+) (uint64, error) {
 	s.rowsBufferLock.Lock()
 	defer s.rowsBufferLock.Unlock()
 	newBuffer := make([]*model.RowChangedEvent, 0, len(s.rowsBuffer))
 	for _, row := range s.rowsBuffer {
-		if row.CommitTs <= resolvedTs {
+		if row.CommitTs <= resolved.Ts {
 			err := s.executeRowChangedEvents(ctx, row)
 			if err != nil {
 				return 0, err
@@ -192,7 +194,7 @@ func (s *simpleMySQLSink) FlushRowChangedEvents(ctx context.Context, _ model.Tab
 		}
 	}
 	s.rowsBuffer = newBuffer
-	return resolvedTs, nil
+	return resolved.Ts, nil
 }
 
 // EmitCheckpointTs sends CheckpointTs to Sink

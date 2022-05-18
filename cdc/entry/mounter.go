@@ -101,7 +101,7 @@ func NewMounter(schemaStorage SchemaStorage,
 // this method could block indefinitely if the DDL puller is lagging.
 func (m *mounterImpl) DecodeEvent(ctx context.Context, pEvent *model.PolymorphicEvent) error {
 	m.metricTotalRows.Inc()
-	if pEvent.RawKV.OpType == model.OpTypeResolved {
+	if pEvent.IsResolved() {
 		return nil
 	}
 	start := time.Now()
