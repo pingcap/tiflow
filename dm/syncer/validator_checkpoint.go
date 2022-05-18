@@ -602,7 +602,7 @@ func (c *validatorPersistHelper) setRevision(rev int64) {
 	c.revision = rev
 }
 
-func (c *validatorPersistHelper) loadError(tctx *tcontext.Context, filterState pb.ValidateErrorState) ([]*pb.ValidationError, error) {
+func (c *validatorPersistHelper) loadError(tctx *tcontext.Context, db *conn.BaseDB, filterState pb.ValidateErrorState) ([]*pb.ValidationError, error) {
 	var (
 		rows *sql.Rows
 		err  error
@@ -611,14 +611,14 @@ func (c *validatorPersistHelper) loadError(tctx *tcontext.Context, filterState p
 	args := []interface{}{
 		c.cfg.SourceID,
 	}
-	query := "SELECT (id, source, src_schema_name, src_table_name, dst_schema_name, dst_table_name, data, dst_data, error_type, status, update_time) " +
-		"FROM " + c.errorChangeTableName + " WHERE source=?"
+	query := "SELECT id, source, src_schema_name, src_table_name, dst_schema_name, dst_table_name, data, dst_data, error_type, status, update_time " +
+		"FROM " + c.errorChangeTableName + " WHERE source = ?"
 	if filterState != pb.ValidateErrorState_InvalidErr {
 		query += " AND status=?"
 		args = append(args, int(filterState))
 	}
 	// we do not retry, let user do it
-	rows, err = c.db.QueryContext(tctx, query, args...)
+	rows, err = db.QueryContext(tctx, query, args...)
 	if err != nil {
 		return res, err
 	}
@@ -647,13 +647,13 @@ func (c *validatorPersistHelper) loadError(tctx *tcontext.Context, filterState p
 	if err = rows.Err(); err != nil {
 		return []*pb.ValidationError{}, err
 	}
-	c.L.Info("load validator errors", zap.Reflect("errors", res))
+	c.L.Info("load validator errors", zap.Int("count", len(res)))
 	return res, nil
 }
 
-func (c *validatorPersistHelper) operateError(tctx *tcontext.Context, validateOp pb.ValidationErrOp, errID uint64, isAll bool) error {
+func (c *validatorPersistHelper) operateError(tctx *tcontext.Context, db *conn.BaseDB, validateOp pb.ValidationErrOp, errID uint64, isAll bool) error {
 	if validateOp == pb.ValidationErrOp_ClearErrOp {
-		return c.deleteError(tctx, errID, isAll)
+		return c.deleteError(tctx, db, errID, isAll)
 	}
 	query := "UPDATE " + c.errorChangeTableName + " SET status=? WHERE source=?"
 	var setStatus pb.ValidateErrorState
@@ -676,11 +676,11 @@ func (c *validatorPersistHelper) operateError(tctx *tcontext.Context, validateOp
 		query += " AND id=?"
 	}
 	// we do not retry, let user do it
-	_, err := c.db.ExecContext(tctx, query, args...)
+	_, err := db.ExecContext(tctx, query, args...)
 	return err
 }
 
-func (c *validatorPersistHelper) deleteError(tctx *tcontext.Context, errID uint64, isAll bool) error {
+func (c *validatorPersistHelper) deleteError(tctx *tcontext.Context, db *conn.BaseDB, errID uint64, isAll bool) error {
 	args := []interface{}{
 		c.cfg.SourceID,
 	}
@@ -690,6 +690,6 @@ func (c *validatorPersistHelper) deleteError(tctx *tcontext.Context, errID uint6
 		args = append(args, errID)
 	}
 	// we do not retry, let user do it
-	_, err := c.db.ExecContext(tctx, query, args...)
+	_, err := db.ExecContext(tctx, query, args...)
 	return err
 }

@@ -929,7 +929,7 @@ workaround = "Please check the `target-database` config in task configuration fi
 tags = ["internal", "medium"]
 
 [error.DM-config-20022]
-message = "mysql-instance(%d) must set meta for task-mode %s"
+message = "mysql-instance(%s) must set meta for task-mode %s"
 description = ""
 workaround = "Please check the `meta` config in task configuration file."
 tags = ["internal", "medium"]
@@ -2091,6 +2091,12 @@ message = "get binlog event error: %v"
 description = ""
 workaround = "Please check if the binlog file could be parsed by `mysqlbinlog`."
 tags = ["upstream", "high"]
+
+[error.DM-sync-unit-36070]
+message = "downstream table %s not found"
+description = ""
+workaround = ""
+tags = ["internal", "high"]
 
 [error.DM-dm-master-38001]
 message = "nil request not valid"

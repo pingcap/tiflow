@@ -298,10 +298,6 @@ func (v *DataValidator) routineWrapper(fn func()) {
 func (v *DataValidator) Start(expect pb.Stage) {
 	v.Lock()
 	defer v.Unlock()
-	failpoint.Inject("MockValidationQuery", func() {
-		v.setStage(pb.Stage_Running)
-		failpoint.Return()
-	})
 
 	v.L.Info("starting")
 	if v.Stage() == pb.Stage_Running {
@@ -1105,21 +1101,6 @@ func genRowKeyByString(pkValues []string) string {
 
 func (v *DataValidator) GetValidatorTableStatus(filterStatus pb.Stage) []*pb.ValidationTableStatus {
 	tblStatus := v.getTableStatusMap()
-	failpoint.Inject("MockValidationQuery", func() {
-		tblStatus = map[string]*tableValidateStatus{
-			"`testdb1`.`testtable1`": {
-				source: filter.Table{Schema: "testdb1", Name: "testtable1"},
-				target: filter.Table{Schema: "dstdb", Name: "dsttable"},
-				stage:  pb.Stage_Running,
-			},
-			"`testdb2`.`testtable2`": {
-				source:  filter.Table{Schema: "testdb2", Name: "testtable2"},
-				target:  filter.Table{Schema: "dstdb", Name: "dsttable"},
-				stage:   pb.Stage_Stopped,
-				message: tableWithoutPrimaryKeyMsg,
-			},
-		}
-	})
 
 	result := make([]*pb.ValidationTableStatus, 0)
 	for _, tblStat := range tblStatus {
@@ -1137,36 +1118,59 @@ func (v *DataValidator) GetValidatorTableStatus(filterStatus pb.Stage) []*pb.Val
 	return result
 }
 
-func (v *DataValidator) GetValidatorError(errState pb.ValidateErrorState) []*pb.ValidationError {
-	failpoint.Inject("MockValidationQuery", func() {
-		failpoint.Return(
-			[]*pb.ValidationError{
-				{Id: "1"}, {Id: "2"},
-			},
-		)
-	})
+func (v *DataValidator) GetValidatorError(errState pb.ValidateErrorState) ([]*pb.ValidationError, error) {
 	// todo: validation error in workers cannot be returned
 	// because the errID is only allocated when the error rows are flushed
 	// user cannot handle errorRows without errID
+	var (
+		toDB  *conn.BaseDB
+		err   error
+		dbCfg config.DBConfig
+	)
 	ctx, cancel := context.WithTimeout(context.Background(), validatorDmctlOpTimeout)
-	defer cancel()
 	tctx := tcontext.NewContext(ctx, v.L)
-	ret, err := v.persistHelper.loadError(tctx, errState)
+	defer cancel()
+	failpoint.Inject("MockValidationQuery", func() {
+		toDB = v.persistHelper.db
+		failpoint.Return(v.persistHelper.loadError(tctx, toDB, errState))
+	})
+	dbCfg = v.cfg.To
+	dbCfg.RawDBCfg = config.DefaultRawDBConfig().SetMaxIdleConns(1)
+	toDB, err = dbconn.CreateBaseDB(&dbCfg)
+	if err != nil {
+		v.L.Warn("failed to create downstream db", zap.Error(err))
+		return nil, err
+	}
+	defer dbconn.CloseBaseDB(tctx, toDB)
+	ret, err := v.persistHelper.loadError(tctx, toDB, errState)
 	if err != nil {
 		v.L.Warn("fail to load validator error", zap.Error(err))
+		return nil, err
 	}
-	return ret
+	return ret, nil
 }
 
 func (v *DataValidator) OperateValidatorError(validateOp pb.ValidationErrOp, errID uint64, isAll bool) error {
-	failpoint.Inject("MockValidationOperation", func() {
-		failpoint.Return(nil)
-	})
-
+	var (
+		toDB  *conn.BaseDB
+		err   error
+		dbCfg config.DBConfig
+	)
 	ctx, cancel := context.WithTimeout(context.Background(), validatorDmctlOpTimeout)
-	defer cancel()
 	tctx := tcontext.NewContext(ctx, v.L)
-	return v.persistHelper.operateError(tctx, validateOp, errID, isAll)
+	defer cancel()
+	failpoint.Inject("MockValidationQuery", func() {
+		toDB = v.persistHelper.db
+		failpoint.Return(v.persistHelper.operateError(tctx, toDB, validateOp, errID, isAll))
+	})
+	dbCfg = v.cfg.To
+	dbCfg.RawDBCfg = config.DefaultRawDBConfig().SetMaxIdleConns(1)
+	toDB, err = dbconn.CreateBaseDB(&dbCfg)
+	if err != nil {
+		return err
+	}
+	defer dbconn.CloseBaseDB(tctx, toDB)
+	return v.persistHelper.operateError(tctx, toDB, validateOp, errID, isAll)
 }
 
 func (v *DataValidator) getAllErrorCount(timeout time.Duration) ([errorStateTypeCount]int64, error) {

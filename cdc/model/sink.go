@@ -267,6 +267,9 @@ type RowChangedEvent struct {
 	// ApproximateDataSize is the approximate size of protobuf binary
 	// representation of this event.
 	ApproximateDataSize int64 `json:"-" msg:"-"`
+
+	// SplitTxn marks this RowChangedEvent as the first line of a new txn.
+	SplitTxn bool `json:"-" msg:"-"`
 }
 
 // IsDelete returns true if the row is a delete event
@@ -323,11 +326,33 @@ func (r *RowChangedEvent) HandleKeyColumns() []*Column {
 	}
 
 	if len(pkeyCols) == 0 {
-		// TODO redact the message
-		log.Panic("Cannot find handle key columns, bug?", zap.Reflect("event", r))
+		log.Panic("Cannot find handle key columns.", zap.Any("event", r))
 	}
 
 	return pkeyCols
+}
+
+// PrimaryKeyColInfos returns the column(s) and colInfo(s) corresponding to the primary key(s)
+func (r *RowChangedEvent) PrimaryKeyColInfos() ([]*Column, []rowcodec.ColInfo) {
+	pkeyCols := make([]*Column, 0)
+	pkeyColInfos := make([]rowcodec.ColInfo, 0)
+
+	var cols []*Column
+	if r.IsDelete() {
+		cols = r.PreColumns
+	} else {
+		cols = r.Columns
+	}
+
+	for i, col := range cols {
+		if col != nil && col.Flag.IsPrimaryKey() {
+			pkeyCols = append(pkeyCols, col)
+			pkeyColInfos = append(pkeyColInfos, r.ColInfos[i])
+		}
+	}
+
+	// It is okay not to have primary keys, so the empty array is an acceptable result
+	return pkeyCols, pkeyColInfos
 }
 
 // WithHandlePrimaryFlag set `HandleKeyFlag` and `PrimaryKeyFlag`
@@ -382,6 +407,7 @@ type Column struct {
 	Charset string         `json:"charset" msg:"charset"`
 	Flag    ColumnFlagType `json:"flag" msg:"-"`
 	Value   interface{}    `json:"value" msg:"value"`
+	Default interface{}    `json:"default" msg:"-"`
 
 	// ApproximateBytes is approximate bytes consumed by the column.
 	ApproximateBytes int `json:"-"`
@@ -468,6 +494,7 @@ type DDLEvent struct {
 	PreTableInfo *SimpleTableInfo `msg:"pre-table-info"`
 	Query        string           `msg:"query"`
 	Type         model.ActionType `msg:"-"`
+	Done         bool             `msg:"-"`
 }
 
 // RedoDDLEvent represents DDL event used in redo log persistent

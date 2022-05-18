@@ -19,12 +19,10 @@ import (
 	"testing"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tidb/util/timeutil"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/sink/codec"
 	"github.com/pingcap/tiflow/cdc/sink/metrics"
+	"github.com/pingcap/tiflow/cdc/sink/mq/codec"
 	"github.com/pingcap/tiflow/pkg/config"
-	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/stretchr/testify/require"
 )
 
@@ -83,9 +81,8 @@ func NewMockProducer() *mockProducer {
 
 func newTestWorker() (*flushWorker, *mockProducer) {
 	// 200 is about the size of a row change.
-	encoderConfig := codec.NewConfig(config.ProtocolOpen, timeutil.SystemLocation()).
-		WithMaxMessageBytes(200)
-	builder, err := codec.NewEventBatchEncoderBuilder(encoderConfig, &security.Credential{})
+	encoderConfig := codec.NewConfig(config.ProtocolOpen).WithMaxMessageBytes(200)
+	builder, err := codec.NewEventBatchEncoderBuilder(context.Background(), encoderConfig)
 	if err != nil {
 		panic(err)
 	}
@@ -117,7 +114,7 @@ func TestBatch(t *testing.T) {
 			name: "Normal batching",
 			events: []mqEvent{
 				{
-					resolvedTs: 0,
+					resolved: model.NewResolvedTs(0),
 				},
 				{
 					row: &model.RowChangedEvent{
@@ -142,7 +139,7 @@ func TestBatch(t *testing.T) {
 			name: "No row change events",
 			events: []mqEvent{
 				{
-					resolvedTs: 1,
+					resolved: model.NewResolvedTs(1),
 				},
 			},
 			expectedN: 0,
@@ -159,7 +156,7 @@ func TestBatch(t *testing.T) {
 					key: key,
 				},
 				{
-					resolvedTs: 1,
+					resolved: model.NewResolvedTs(1),
 				},
 				{
 					row: &model.RowChangedEvent{
@@ -387,7 +384,7 @@ func TestFlush(t *testing.T) {
 			key: key1,
 		},
 		{
-			resolvedTs: 1,
+			resolved: model.NewResolvedTs(1),
 		},
 	}
 
@@ -464,15 +461,15 @@ func TestProducerError(t *testing.T) {
 		},
 	})
 	require.NoError(t, err)
-	err = worker.addEvent(ctx, mqEvent{resolvedTs: 100})
+	err = worker.addEvent(ctx, mqEvent{resolved: model.NewResolvedTs(100)})
 	require.NoError(t, err)
 	wg.Wait()
 
-	err = worker.addEvent(ctx, mqEvent{resolvedTs: 200})
+	err = worker.addEvent(ctx, mqEvent{resolved: model.NewResolvedTs(200)})
 	require.Error(t, err)
 	require.Regexp(t, ".*fake.*", err.Error())
 
-	err = worker.addEvent(ctx, mqEvent{resolvedTs: 300})
+	err = worker.addEvent(ctx, mqEvent{resolved: model.NewResolvedTs(300)})
 	require.Error(t, err)
 	require.Regexp(t, ".*ErrMQWorkerClosed.*", err.Error())
 }

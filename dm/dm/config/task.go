@@ -680,7 +680,7 @@ func (c *TaskConfig) adjust() error {
 			}
 		case ModeIncrement:
 			if inst.Meta == nil {
-				return terror.ErrConfigMetadataNotSet.Generate(i, c.TaskMode)
+				return terror.ErrConfigMetadataNotSet.Generate(inst.SourceID, c.TaskMode)
 			}
 			err := inst.Meta.Verify()
 			if err != nil {
