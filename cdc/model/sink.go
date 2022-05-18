@@ -407,6 +407,7 @@ type Column struct {
 	Charset string         `json:"charset" msg:"charset"`
 	Flag    ColumnFlagType `json:"flag" msg:"-"`
 	Value   interface{}    `json:"value" msg:"value"`
+	Default interface{}    `json:"default" msg:"-"`
 
 	// ApproximateBytes is approximate bytes consumed by the column.
 	ApproximateBytes int `json:"-"`
