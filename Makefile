@@ -1,6 +1,7 @@
 TEST_DIR := /tmp/dataflow_engine_test
 PARALLEL=3
 GO       := GO111MODULE=on go
+GOBUILD  := CGO_ENABLED=0 $(GO) build -trimpath
 GOTEST := CGO_ENABLED=1 go test -p $(PARALLEL) --race
 FAIL_ON_STDOUT := awk '{ print  } END { if (NR > 0) { exit 1  }  }'
 
@@ -21,19 +22,22 @@ df-proto:
 	./generate-proto.sh
 
 df-master:
-	go build -o bin/master ./cmd/master
+	$(GOBUILD) -o bin/master ./cmd/master
 	cp ./bin/master ./ansible/roles/common/files/master.bin
 
 df-executor:
-	go build -o bin/executor ./cmd/executor
+	$(GOBUILD) -o bin/executor ./cmd/executor
 	cp ./bin/executor ./ansible/roles/common/files/executor.bin
 
 df-master-client:
-	go build -o bin/master-client ./cmd/master-client
+	$(GOBUILD) -o bin/master-client ./cmd/master-client
 
 df-demo:
-	go build -o bin/demoserver ./cmd/demoserver
+	$(GOBUILD) -o bin/demoserver ./cmd/demoserver
 	cp ./bin/demoserver ./ansible/roles/common/files/demoserver.bin
+
+df-chaos-case:
+	$(GOBUILD) -o bin/df-chaos-case ./chaos/cases
 
 unit_test: check_failpoint_ctl
 	mkdir -p "$(TEST_DIR)"
