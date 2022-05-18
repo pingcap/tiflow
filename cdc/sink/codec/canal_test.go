@@ -14,6 +14,7 @@
 package codec
 
 import (
+	"context"
 	"testing"
 
 	"github.com/golang/protobuf/proto" // nolint:staticcheck
@@ -85,7 +86,7 @@ func TestCanalEventBatchEncoder(t *testing.T) {
 	for _, cs := range s.rowCases {
 		encoder := NewCanalEventBatchEncoder()
 		for _, row := range cs {
-			err := encoder.AppendRowChangedEvent(row)
+			err := encoder.AppendRowChangedEvent(context.Background(), "", row)
 			require.Nil(t, err)
 		}
 		size := encoder.Size()

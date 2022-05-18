@@ -1268,7 +1268,7 @@ func TestNewMySQLSinkExecDML(t *testing.T) {
 	}, retry.WithBackoffBaseDelay(20), retry.WithMaxTries(10), retry.WithIsRetryableErr(cerror.IsRetryableError))
 	require.Nil(t, err)
 
-	err = sink.Barrier(ctx, 2)
+	err = sink.RemoveTable(ctx, 2)
 	require.Nil(t, err)
 	v, ok := sink.tableMaxResolvedTs.Load(2)
 	require.False(t, ok)
@@ -1692,6 +1692,9 @@ func TestNewMySQLSink(t *testing.T) {
 	require.Nil(t, err)
 	err = sink.Close(ctx)
 	require.Nil(t, err)
+	// Test idempotency of `Close` interface
+	err = sink.Close(ctx)
+	require.Nil(t, err)
 }
 
 func TestMySQLSinkClose(t *testing.T) {
@@ -1770,7 +1773,7 @@ func TestMySQLSinkFlushResolvedTs(t *testing.T) {
 		GetDBConnImpl = backupGetDBConn
 	}()
 
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
 
 	changefeed := "test-changefeed"
 	sinkURI, err := url.Parse("mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=4")
@@ -1828,6 +1831,12 @@ func TestMySQLSinkFlushResolvedTs(t *testing.T) {
 	require.Nil(t, err)
 	require.True(t, sink.getTableCheckpointTs(model.TableID(2)) <= 5)
 	_ = sink.Close(ctx)
+	_, err = sink.FlushRowChangedEvents(ctx, model.TableID(2), 6)
+	require.Nil(t, err)
+
+	cancel()
+	_, err = sink.FlushRowChangedEvents(ctx, model.TableID(2), 6)
+	require.Regexp(t, ".*context canceled.*", err)
 }
 
 func TestGBKSupported(t *testing.T) {
@@ -1900,7 +1909,7 @@ func TestCleanTableResource(t *testing.T) {
 	s.tableMaxResolvedTs.Store(tblID, uint64(2))
 	_, ok := s.txnCache.unresolvedTxns[tblID]
 	require.True(t, ok)
-	require.Nil(t, s.Init(tblID))
+	require.Nil(t, s.AddTable(tblID))
 	_, ok = s.txnCache.unresolvedTxns[tblID]
 	require.False(t, ok)
 	_, ok = s.tableCheckpointTs.Load(tblID)

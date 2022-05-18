@@ -65,7 +65,7 @@ type mysqlSink struct {
 	tableMaxResolvedTs sync.Map
 
 	execWaitNotifier *notify.Notifier
-	resolvedNotifier *notify.Notifier
+	resolvedCh       chan struct{}
 	errCh            chan error
 	flushSyncWg      sync.WaitGroup
 
@@ -197,56 +197,48 @@ func NewMySQLSink(
 		statistics:                      metrics.NewStatistics(ctx, metrics.SinkTypeDB),
 		metricConflictDetectDurationHis: metricConflictDetectDurationHis,
 		metricBucketSizeCounters:        metricBucketSizeCounters,
+		execWaitNotifier:                new(notify.Notifier),
+		resolvedCh:                      make(chan struct{}, 1),
 		errCh:                           make(chan error, 1),
 		forceReplicate:                  replicaConfig.ForceReplicate,
 		cancel:                          cancel,
 	}
-
-	sink.execWaitNotifier = new(notify.Notifier)
-	sink.resolvedNotifier = new(notify.Notifier)
 
 	err = sink.createSinkWorkers(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	receiver, err := sink.resolvedNotifier.NewReceiver(50 * time.Millisecond)
-	if err != nil {
-		return nil, err
-	}
-	go sink.flushRowChangedEvents(ctx, receiver)
+	go sink.flushRowChangedEvents(ctx)
 
 	return sink, nil
 }
 
-// TryEmitRowChangedEvents just calls EmitRowChangedEvents internally.
-func (s *mysqlSink) TryEmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) (bool, error) {
-	_ = s.EmitRowChangedEvents(ctx, rows...)
-	return true, nil
-}
-
+// EmitRowChangedEvents appends row changed events to the txn cache.
+// Concurrency Note: EmitRowChangedEvents is thread-safe.
 func (s *mysqlSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
 	count := s.txnCache.Append(s.filter, rows...)
 	s.statistics.AddRowsCount(count)
 	return nil
 }
 
-// FlushRowChangedEvents will flush all received events, we don't allow mysql
-// sink to receive events before resolving
+// FlushRowChangedEvents will flush all received events,
+// we do not write data downstream until we receive resolvedTs.
+// Concurrency Note: FlushRowChangedEvents is thread-safe.
 func (s *mysqlSink) FlushRowChangedEvents(ctx context.Context, tableID model.TableID, resolvedTs uint64) (uint64, error) {
-	// Since CDC does not guarantee exactly once semantic, it won't cause any problem
-	// here even if the table was moved or removed.
-	// ref: https://github.com/pingcap/tiflow/pull/4356#discussion_r787405134
 	v, ok := s.tableMaxResolvedTs.Load(tableID)
 	if !ok || v.(uint64) < resolvedTs {
 		s.tableMaxResolvedTs.Store(tableID, resolvedTs)
 	}
-	s.resolvedNotifier.Notify()
 
 	// check and throw error
 	select {
+	case <-ctx.Done():
+		return 0, ctx.Err()
 	case err := <-s.errCh:
 		return 0, err
+	case s.resolvedCh <- struct{}{}:
+		// Notify `flushRowChangedEvents` to asynchronously write data.
 	default:
 	}
 
@@ -255,26 +247,19 @@ func (s *mysqlSink) FlushRowChangedEvents(ctx context.Context, tableID model.Tab
 	return checkpointTs, nil
 }
 
-func (s *mysqlSink) flushRowChangedEvents(ctx context.Context, receiver *notify.Receiver) {
+func (s *mysqlSink) flushRowChangedEvents(ctx context.Context) {
 	defer func() {
 		for _, worker := range s.workers {
-			worker.closedCh <- struct{}{}
+			worker.close()
 		}
 	}()
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-receiver.C:
+		case <-s.resolvedCh:
 		}
-		flushedResolvedTsMap, resolvedTxnsMap := s.txnCache.Resolved(&s.tableMaxResolvedTs)
-		if len(resolvedTxnsMap) == 0 {
-			s.tableMaxResolvedTs.Range(func(key, value interface{}) bool {
-				s.tableCheckpointTs.Store(key, value)
-				return true
-			})
-			continue
-		}
+		checkpointTsMap, resolvedTxnsMap := s.txnCache.Resolved(&s.tableMaxResolvedTs)
 
 		if s.cyclic != nil {
 			// Filter rows if it is origin from downstream.
@@ -283,8 +268,10 @@ func (s *mysqlSink) flushRowChangedEvents(ctx context.Context, receiver *notify.
 			s.statistics.SubRowsCount(skippedRowCount)
 		}
 
-		s.dispatchAndExecTxns(ctx, resolvedTxnsMap)
-		for tableID, resolvedTs := range flushedResolvedTsMap {
+		if len(resolvedTxnsMap) != 0 {
+			s.dispatchAndExecTxns(ctx, resolvedTxnsMap)
+		}
+		for tableID, resolvedTs := range checkpointTsMap {
 			s.tableCheckpointTs.Store(tableID, resolvedTs)
 		}
 	}
@@ -296,6 +283,8 @@ func (s *mysqlSink) EmitCheckpointTs(_ context.Context, ts uint64, _ []model.Tab
 	return nil
 }
 
+// EmitDDLEvent executes DDL event.
+// Concurrency Note: EmitDDLEvent is thread-safe.
 func (s *mysqlSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 	if s.filter.ShouldIgnoreDDLEvent(ddl.StartTs, ddl.Type, ddl.TableInfo.Schema, ddl.TableInfo.Table) {
 		log.Info(
@@ -507,7 +496,7 @@ func (s *mysqlSink) dispatchAndExecTxns(ctx context.Context, txnsGroup map[model
 	s.notifyAndWaitExec(ctx)
 }
 
-func (s *mysqlSink) Init(tableID model.TableID) error {
+func (s *mysqlSink) AddTable(tableID model.TableID) error {
 	s.cleanTableResource(tableID)
 	return nil
 }
@@ -533,13 +522,12 @@ func (s *mysqlSink) cleanTableResource(tableID model.TableID) {
 
 func (s *mysqlSink) Close(ctx context.Context) error {
 	s.execWaitNotifier.Close()
-	s.resolvedNotifier.Close()
 	err := s.db.Close()
 	s.cancel()
 	return cerror.WrapError(cerror.ErrMySQLConnectionError, err)
 }
 
-func (s *mysqlSink) Barrier(ctx context.Context, tableID model.TableID) error {
+func (s *mysqlSink) RemoveTable(ctx context.Context, tableID model.TableID) error {
 	defer s.cleanTableResource(tableID)
 
 	warnDuration := 3 * time.Minute
