@@ -886,7 +886,7 @@ func (st *SubTask) GetValidatorError(errState pb.ValidateErrorState) ([]*pb.Vali
 		return validator.GetValidatorError(errState)
 	}
 	cfg := st.getCfg()
-	return nil, terror.ErrValidatorNotFound.Generate(cfg.Name)
+	return nil, terror.ErrValidatorNotFound.Generate(cfg.Name, cfg.SourceID)
 }
 
 func (st *SubTask) OperateValidatorError(op pb.ValidationErrOp, errID uint64, isAll bool) error {
@@ -894,7 +894,7 @@ func (st *SubTask) OperateValidatorError(op pb.ValidationErrOp, errID uint64, is
 		return validator.OperateValidatorError(op, errID, isAll)
 	}
 	cfg := st.getCfg()
-	return terror.ErrValidatorNotFound.Generate(cfg.Name)
+	return terror.ErrValidatorNotFound.Generate(cfg.Name, cfg.SourceID)
 }
 
 func (st *SubTask) getValidator() *syncer.DataValidator {
