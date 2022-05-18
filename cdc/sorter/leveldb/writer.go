@@ -17,7 +17,6 @@ import (
 	"context"
 
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sorter/encoding"
 	"github.com/pingcap/tiflow/cdc/sorter/leveldb/message"
 	"github.com/pingcap/tiflow/pkg/actor"
@@ -57,7 +56,7 @@ func (w *writer) Poll(ctx context.Context, msgs []actormsg.Message[message.Task]
 		}
 
 		ev := msgs[i].Value.InputEvent
-		if ev.RawKV.OpType == model.OpTypeResolved {
+		if ev.IsResolved() {
 			if w.maxResolvedTs < ev.CRTs {
 				w.maxResolvedTs = ev.CRTs
 			}
