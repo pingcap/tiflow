@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { PrismAsyncLight as SyntaxHighlighter } from 'react-syntax-highlighter'
@@ -267,9 +267,9 @@ const TaskList: React.FC = () => {
 
   const [convertTaskDataToConfigFile] = useDmapiConverterTaskMutation()
 
-  const [stopTask] = useDmapiStopTaskMutation()
-  const [startTask] = useDmapiStartTaskMutation()
-  const [deleteTask] = useDmapiDeleteTaskMutation()
+  const [stopTask, stopTaskResult] = useDmapiStopTaskMutation()
+  const [startTask, startTaskResult] = useDmapiStartTaskMutation()
+  const [deleteTask, deleteTaskResult] = useDmapiDeleteTaskMutation()
 
   const rowSelection = {
     selectedRowKeys: selectedSources,
@@ -278,59 +278,39 @@ const TaskList: React.FC = () => {
     },
   }
 
-  const handleRequest = async (
-    handler: (...args: any[]) => void,
-    key: string
-  ) => {
-    message.loading({ content: t('requesting'), key })
-    try {
-      await Promise.all(
-        selectedSources.map(name => handler({ taskName: name }))
-      )
-      message.success({ content: t('request success'), key })
-    } catch (e) {
-      message.destroy(key)
-    }
-  }
-  const handleRequestWithConfirmModal = useCallback(
-    ({ key, handler, title }) => {
+  const handleRequestWithConfirmModal =
+    // @ts-ignore
+    ({ handler, title }) => {
+      if (!selectedSources.length) {
+        return
+      }
       Modal.confirm({
         title,
         icon: <ExclamationCircleOutlined />,
         onOk() {
-          handleRequest(handler, key)
+          Promise.all(selectedSources.map(name => handler({ taskName: name })))
         },
       })
-    },
-    [selectedSources]
-  )
-
-  const handleStopTask = useCallback(() => {
-    if (!selectedSources.length) {
-      return
     }
+
+  const handleStopTask = () => {
     handleRequestWithConfirmModal({
       title: t('confirm to stop task?'),
-      key: 'stopTask-' + Date.now(),
       handler: stopTask,
     })
-  }, [selectedSources, handleRequestWithConfirmModal])
-  const handleStartTask = useCallback(() => {
+  }
+  const handleStartTask = () => {
     if (!selectedSources.length) {
       return
     }
     setIsStartTaskModalVisible(true)
-  }, [selectedSources])
-  const handleDeleteTask = useCallback(() => {
-    if (!selectedSources.length) {
-      return
-    }
+  }
+  const handleDeleteTask = () => {
     handleRequestWithConfirmModal({
       title: t('confirm to delete task?'),
-      key: 'deleteTask-' + Date.now(),
       handler: deleteTask,
     })
-  }, [selectedSources, handleRequestWithConfirmModal])
+  }
   const handleConfirmOpenTask = () => {
     if (openTaskMethod === OpenTaskMethod.ByGuide) {
       selectedTask
@@ -356,10 +336,27 @@ const TaskList: React.FC = () => {
         safe_mode_time_duration: formValues.safe_mode_time_duration + 's',
       }
     }
-    handleRequest((payload: any) => {
-      const p = { ...payload, ...extraPayload }
-      startTask(p)
-    }, 'startTask-' + Date.now())
+
+    Promise.all(
+      selectedSources.map(name =>
+        startTask({ taskName: name, ...extraPayload })
+      )
+    )
+  }
+
+  const showMessage = (result: typeof startTaskResult) => {
+    if (result.isUninitialized) return
+    const key = result.requestId
+    if (result.isLoading) {
+      return message.loading({ content: t('requesting'), key })
+    }
+    if (result.isError) {
+      return message.destroy(key)
+    }
+    if (result.isSuccess) {
+      setIsStartTaskModalVisible(false)
+      return message.success({ content: t('request success'), key })
+    }
   }
 
   const dataSource = data?.data
@@ -483,6 +480,18 @@ const TaskList: React.FC = () => {
   useEffect(() => {
     dispatch(actions.setPreloadedTask(null))
   }, [])
+
+  useEffect(() => {
+    showMessage(startTaskResult)
+  }, [startTaskResult.status])
+
+  useEffect(() => {
+    showMessage(stopTaskResult)
+  }, [stopTaskResult.status])
+
+  useEffect(() => {
+    showMessage(deleteTaskResult)
+  }, [deleteTaskResult.status])
 
   useEffect(() => {
     if (currentTaskName) {
