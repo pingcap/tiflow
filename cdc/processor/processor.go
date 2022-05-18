@@ -129,8 +129,24 @@ func (p *processor) AddTable(
 	table, ok := p.tables[tableID]
 	if ok {
 		switch table.Status() {
+		// table is still `preparing`, which means the table is `replicating` on other captures.
+		// no matter `isPrepare` or not, just ignore it should be ok.
 		case pipeline.TableStatusPreparing:
+			log.Warn("table is still preparing, ignore the request",
+				zap.String("captureID", p.captureInfo.ID),
+				zap.String("namespace", p.changefeedID.Namespace),
+				zap.String("changefeed", p.changefeedID.ID),
+				zap.Int64("tableID", tableID),
+				zap.Uint64("checkpointTs", startTs),
+				zap.Bool("isPrepare", isPrepare))
+			return true, nil
 		case pipeline.TableStatusPrepared:
+			// table is `prepared`, and a `isPrepare = false` request indicate that old table should
+			// be stopped on original capture already, it's safe to start replicating data now.
+			if !isPrepare {
+				table.Start(startTs)
+			}
+			return true, nil
 		case pipeline.TableStatusReplicating:
 			log.Warn("Ignore existing table",
 				zap.String("captureID", p.captureInfo.ID),
@@ -152,7 +168,7 @@ func (p *processor) AddTable(
 		}
 	}
 
-	// table not found
+	// table not found, can happen in 2 cases
 	// 1. this is a new table scheduling request, create the table and make it `replicating`
 	// 2. `prepare` phase for 2 phase scheduling, create the table and make it `preparing`
 	globalCheckpointTs := p.changefeed.Status.CheckpointTs
@@ -162,7 +178,8 @@ func (p *processor) AddTable(
 			zap.String("namespace", p.changefeedID.Namespace),
 			zap.String("changefeed", p.changefeedID.ID),
 			zap.Int64("tableID", tableID),
-			zap.Uint64("checkpointTs", startTs))
+			zap.Uint64("checkpointTs", startTs),
+			zap.Bool("isPrepare", isPrepare))
 	}
 
 	log.Info("adding table",
@@ -170,14 +187,14 @@ func (p *processor) AddTable(
 		zap.String("namespace", p.changefeedID.Namespace),
 		zap.String("changefeed", p.changefeedID.ID),
 		zap.Int64("tableID", tableID),
-		zap.Uint64("checkpointTs", startTs))
+		zap.Uint64("checkpointTs", startTs),
+		zap.Bool("isPrepare", isPrepare))
 
 	table, err := p.createTablePipeline(ctx.(cdcContext.Context), tableID, &model.TableReplicaInfo{StartTs: startTs})
 	if err != nil {
 		return false, errors.Trace(err)
 	}
 	p.tables[tableID] = table
-
 	if !isPrepare {
 		table.Start(startTs)
 		log.Info("start table",
@@ -221,7 +238,7 @@ func (p *processor) RemoveTable(ctx context.Context, tableID model.TableID) (boo
 }
 
 // IsAddTableFinished implements TableExecutor interface.
-func (p *processor) IsAddTableFinished(ctx context.Context, tableID model.TableID) bool {
+func (p *processor) IsAddTableFinished(ctx context.Context, tableID model.TableID, isPrepare bool) bool {
 	if !p.checkReadyForMessages() {
 		return false
 	}
@@ -229,48 +246,58 @@ func (p *processor) IsAddTableFinished(ctx context.Context, tableID model.TableI
 	table, exist := p.tables[tableID]
 	if !exist {
 		log.Panic("table which was added is not found",
+			zap.String("captureID", p.captureInfo.ID),
 			zap.String("namespace", p.changefeedID.Namespace),
 			zap.String("changefeed", p.changefeedID.ID),
-			zap.Int64("tableID", tableID))
+			zap.Int64("tableID", tableID),
+			zap.Bool("isPrepare", isPrepare))
 	}
+
+	status := table.Status()
+	var done bool
+	if isPrepare {
+		done = status == pipeline.TableStatusPrepared
+	} else {
+		done = status == pipeline.TableStatusReplicating
+	}
+
 	localResolvedTs := p.resolvedTs
 	globalResolvedTs := p.changefeed.Status.ResolvedTs
-	//localCheckpointTs := p.agent.GetLastSentCheckpointTs()
-	//globalCheckpointTs := p.changefeed.Status.CheckpointTs
+	localCheckpointTs := p.agent.GetLastSentCheckpointTs()
+	globalCheckpointTs := p.changefeed.Status.CheckpointTs
 
-	// These two conditions are used to determine if the table's pipeline has finished
-	// initializing and all invariants have been preserved.
-	//
-	// The processor needs to make sure all reasonable invariants about the checkpoint-ts and
-	// the resolved-ts are preserved before communicating with the Owner.
-	//
-	// These conditions are similar to those in the legacy implementation of the Owner/Processor.
-	//if table.CheckpointTs() < localCheckpointTs || localCheckpointTs < globalCheckpointTs {
-	//	return false
-	//}
-	if table.ResolvedTs() < localResolvedTs || localResolvedTs < globalResolvedTs || table.Status() != pipeline.TableStatusPrepared {
+	if !done {
 		log.Info("Add Table not finished",
+			zap.String("captureID", p.captureInfo.ID),
 			zap.String("namespace", p.changefeedID.Namespace),
 			zap.String("changefeed", p.changefeedID.ID),
 			zap.Int64("tableID", tableID),
 			zap.Uint64("tableResolvedTs", table.ResolvedTs()),
 			zap.Uint64("localResolvedTs", localResolvedTs),
 			zap.Uint64("globalResolvedTs", globalResolvedTs),
-			zap.Stringer("status", table.Status()),
-		)
+			zap.Uint64("tableCheckpointTs", table.CheckpointTs()),
+			zap.Uint64("localCheckpointTs", localCheckpointTs),
+			zap.Uint64("globalCheckpointTs", globalCheckpointTs),
+			zap.Any("status", status), zap.Bool("isPrepare", isPrepare))
 		return false
 	}
+
 	log.Info("Add Table finished",
+		zap.String("captureID", p.captureInfo.ID),
 		zap.String("namespace", p.changefeedID.Namespace),
 		zap.String("changefeed", p.changefeedID.ID),
-		zap.Int64("tableID", tableID))
+		zap.Int64("tableID", tableID),
+		zap.Uint64("tableResolvedTs", table.ResolvedTs()),
+		zap.Uint64("localResolvedTs", localResolvedTs),
+		zap.Uint64("globalResolvedTs", globalResolvedTs),
+		zap.Uint64("tableCheckpointTs", table.CheckpointTs()),
+		zap.Uint64("localCheckpointTs", localCheckpointTs),
+		zap.Uint64("globalCheckpointTs", globalCheckpointTs),
+		zap.Any("status", status), zap.Bool("isPrepare", isPrepare))
 	return true
 }
 
 // IsRemoveTableFinished implements TableExecutor interface.
-// func (p *processor) IsRemoveTableFinished(
-// 	ctx context.Context, tableID model.TableID,
-// ) (model.Ts, bool) {
 func (p *processor) IsRemoveTableFinished(ctx context.Context, tableID model.TableID) (model.Ts, bool) {
 	if !p.checkReadyForMessages() {
 		return 0, false
@@ -278,30 +305,37 @@ func (p *processor) IsRemoveTableFinished(ctx context.Context, tableID model.Tab
 
 	table, exist := p.tables[tableID]
 	if !exist {
-		log.Panic("table which should be removing is not found",
+		log.Panic("table should be removing but not found",
+			zap.String("captureID", p.captureInfo.ID),
 			zap.String("namespace", p.changefeedID.Namespace),
 			zap.String("changefeed", p.changefeedID.ID),
 			zap.Int64("tableID", tableID))
 		return 0, true
 	}
-	if table.Status() != pipeline.TableStatusStopped {
-		log.Debug("the table is still not stopped",
+	status := table.Status()
+	if status != pipeline.TableStatusStopped {
+		log.Debug("table is still not stopped",
+			zap.String("captureID", p.captureInfo.ID),
 			zap.String("namespace", p.changefeedID.Namespace),
 			zap.String("changefeed", p.changefeedID.ID),
 			zap.Uint64("checkpointTs", table.CheckpointTs()),
-			zap.Int64("tableID", tableID))
+			zap.Int64("tableID", tableID),
+			zap.Any("tableStatus", status))
 		return 0, false
 	}
 
 	table.Cancel()
 	table.Wait()
 	delete(p.tables, tableID)
+
+	checkpointTs := table.CheckpointTs()
 	log.Info("Remove Table finished",
+		zap.String("captureID", p.captureInfo.ID),
 		zap.String("namespace", p.changefeedID.Namespace),
 		zap.String("changefeed", p.changefeedID.ID),
-		zap.Int64("tableID", tableID))
-
-	return table.CheckpointTs(), true
+		zap.Int64("tableID", tableID),
+		zap.Uint64("checkpointTs", checkpointTs))
+	return checkpointTs, true
 }
 
 // GetAllCurrentTables implements TableExecutor interface.
@@ -723,7 +757,7 @@ func (p *processor) handlePosition(currentTs int64) {
 	for _, table := range p.tables {
 		status := table.Status()
 		if status == pipeline.TableStatusPreparing ||
-			status == pipeline.TableStatusReplicating {
+			status == pipeline.TableStatusPrepared {
 			continue
 		}
 		ts := table.ResolvedTs()
@@ -738,7 +772,7 @@ func (p *processor) handlePosition(currentTs int64) {
 	for _, table := range p.tables {
 		status := table.Status()
 		if status == pipeline.TableStatusPreparing ||
-			status == pipeline.TableStatusReplicating {
+			status == pipeline.TableStatusPrepared {
 			continue
 		}
 		ts := table.CheckpointTs()

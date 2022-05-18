@@ -25,12 +25,22 @@ import (
 // to adapt the current Processor implementation to it.
 // TODO find a way to make the semantics easier to understand.
 type TableExecutor interface {
+	// AddTable add a new table with `startTs`
+	// if `isPrepare` is true, the 1st phase of the 2 phase scheduling protocol.
+	// if `isPrepare` is false, the 2nd phase.
 	AddTable(
 		ctx context.Context, tableID model.TableID, startTs model.Ts, isPrepare bool,
 	) (done bool, err error)
-	IsAddTableFinished(ctx context.Context, tableID model.TableID) (done bool)
 
+	// IsAddTableFinished make sure the requested table is in the proper status
+	IsAddTableFinished(ctx context.Context, tableID model.TableID, isPrepare bool) (done bool)
+
+	// RemoveTable remove the table, return true if the table if already removed
+	// todo: revise the logic behind `remove table`, make sure comment is correct.
 	RemoveTable(ctx context.Context, tableID model.TableID) (done bool, err error)
+	// IsRemoveTableFinished convince the table is fully stopped.
+	// return false if table is not stopped
+	// return true and corresponding checkpoint otherwise.
 	IsRemoveTableFinished(ctx context.Context, tableID model.TableID) (model.Ts, bool)
 
 	// GetAllCurrentTables should return all tables that are being run,

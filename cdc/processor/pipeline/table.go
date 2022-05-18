@@ -179,6 +179,13 @@ func (t *tablePipelineImpl) Workload() model.WorkloadInfo {
 
 // Status returns the status of this table pipeline, sinkNode maintains the table status
 func (t *tablePipelineImpl) Status() TableStatus {
+	sortStatus := t.sorterNode.Status()
+	// first resolved ts not received yet, still preparing...
+	if sortStatus == TableStatusPreparing {
+		return TableStatusPreparing
+	}
+
+	// sinkNode is status indicator now.
 	return t.sinkNode.Status()
 }
 

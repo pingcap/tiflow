@@ -485,7 +485,6 @@ func (t *tableActor) Status() TableStatus {
 		return TableStatusPreparing
 	}
 
-	// sortStatus can only be `TableStatusPreparing` or `TableStatusPrepared`
 	// sinkNode is status indicator now.
 	return t.sinkNode.Status()
 }

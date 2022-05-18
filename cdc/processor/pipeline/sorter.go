@@ -171,7 +171,7 @@ func (n *sorterNode) start(
 
 		// once receive startTs, which means sink should start replicating data to downstream.
 		startTs := <-n.startTsCh
-		// original `status` can be `TableStatusPrepring` or `TableStatusPrepared`, but it doesn't matter here.
+		// original `status` can be `TableStatusPreparing` or `TableStatusPrepared`, but it doesn't matter here.
 		n.status.Store(TableStatusReplicating)
 
 		for {
@@ -303,6 +303,11 @@ func (n *sorterNode) handleRawEvent(ctx context.Context, event *model.Polymorphi
 			// TODO: Remove redolog check once redolog decouples for global
 			//       resolved ts.
 			event = model.NewResolvedPolymorphicEvent(0, n.BarrierTs())
+		}
+		// if this is the first `Resolved event` received by the sorterNode, it's
+		// the indicator that all regions connected.
+		if n.status.Load() == TableStatusPreparing {
+			n.status.Store(TableStatusPrepared)
 		}
 	}
 	n.sorter.AddEntry(ctx, event)
