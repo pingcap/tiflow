@@ -275,7 +275,8 @@ func (s *Syncer) resolveOptimisticDDL(ec *eventContext, sourceTable, targetTable
 				}
 				s.osgk.tctx.L().Info("sending resync operation in optimistic shard mode",
 					zap.Stringer("shardingResync", resync))
-				s.osgk.appendShardingReSync(resync)
+				*ec.shardingReSyncCh <- resync
+				s.osgk.addShardingReSync(resync)
 			}
 		}
 	} else {

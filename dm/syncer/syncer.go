@@ -1777,10 +1777,8 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			if shardingReSync != nil {
 				saveExitSafeModeLoc(shardingReSync.latestLocation)
 			}
-			for _, shardResync := range s.osgk.allShardingResyncUnfinished() {
-				if shardResync != nil {
-					saveExitSafeModeLoc(shardResync.latestLocation)
-				}
+			for _, latestLoc := range s.osgk.getUnfinishedShardingResync() {
+				saveExitSafeModeLoc(latestLoc)
 			}
 		}
 		s.checkpoint.SaveSafeModeExitPoint(&exitSafeModeLoc)
@@ -1930,6 +1928,11 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 				savedGlobalLastLocation = lastLocation // save global last location
 				lastLocation = shardingReSync.currLocation
 
+				// remove sharding resync global checkpoint location limit from optimistic sharding group keeper
+				if s.cfg.ShardMode == config.ShardOptimistic {
+					s.osgk.removeShardingReSync(shardingReSync)
+				}
+
 				currentLocation = shardingReSync.currLocation
 				// if suffix>0, we are replacing error
 				s.isReplacingOrInjectingErr = currentLocation.Suffix != 0
@@ -1948,48 +1951,19 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		if s.cfg.ShardMode == config.ShardOptimistic {
 			op, targetTableID := s.optimist.PendingRedirectOperation()
 			if op != nil {
+				// for optimistic sharding mode, if a new sharding group is resolved when syncer is redirecting,
+				// instead of using the currentLocation, the next redirection should share the same latestLocation with the current shardingResync.
+				// This is to avoid syncer syncs to current shardingResync.latestLocation before,
+				// we may miss some rows events if we don't check the row events between currentLocation and shardingResync.latestLocation.
 				endLocation := &currentLocation
 				if shardingReSync != nil {
 					endLocation = &shardingReSync.latestLocation
 				}
 				s.resolveOptimisticDDL(&eventContext{
-					currentLocation: endLocation,
+					shardingReSyncCh: &shardingReSyncCh,
+					currentLocation:  endLocation,
 				}, &filter.Table{Schema: op.UpSchema, Name: op.UpTable}, utils.UnpackTableID(targetTableID), optimism.ConflictNone)
 				continue
-			}
-			// for optimistic sharding mode, we must always accept new shardingResync and always use the newest sharding resync
-			// to handle the case that we finishes a shard lock before a shardingResync is finished, as the following case:
-			//                                                    newer
-			//   │                       ───────────────────────► time
-			//   │
-			//   │ tb1 conflict DDL1     │  ▲      │
-			//   │                       │  │      │
-			//   │       ...             │  │      │
-			//   │                       │  │      │
-			//   │ tb1 conflict DDL2     │  │      │  ▲     │
-			//   │                       │  │      │  │     │
-			//   │       ...             │  │      │  │     │
-			//   │                       │  │      │  │     │
-			//   │ tb2 conflict DDL1     ▼  │      │  │     │
-			//   │                                 │  │     │
-			//   │       ...           redirect    │  │     │
-			//   │                                 │  │     │
-			//   │ tb2 conflict DDL2               ▼  │     │
-			//   │                                          │
-			//   │       ...                     redirect   │
-			//   │                                          │
-			//   │  other dml events                        ▼
-			//   │
-			//   │                                       continue
-			//   ▼                                      replicating
-			//
-			// newer
-			// binlog
-			if shardingReSync == nil {
-				if shardingReSyncUnfinished := s.osgk.popBackShardingReSync(); shardingReSyncUnfinished != nil {
-					shardingReSyncCh <- shardingReSyncUnfinished
-					continue
-				}
 			}
 		}
 		var e *replication.BinlogEvent
