@@ -181,7 +181,7 @@ func (a *agentImpl) Tick(ctx context.Context) error {
 
 func (a *agentImpl) FinishTableOperation(
 	ctx context.Context,
-	tableID model.TableID,
+	tableID model.TableID, checkpointTs model.Ts,
 	epoch protocol.ProcessorEpoch,
 ) (done bool, err error) {
 	topic := protocol.SyncTopic(a.changeFeed)
@@ -208,6 +208,8 @@ func (a *agentImpl) FinishTableOperation(
 			zap.String("changefeedID", a.changeFeed.ID),
 			zap.String("ownerID", a.ownerCaptureID))
 	}()
+
+	// how to send back the response.
 
 	done, err = a.trySendMessage(
 		ctx, a.ownerCaptureID,

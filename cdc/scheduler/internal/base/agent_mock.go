@@ -32,7 +32,7 @@ type MockProcessorMessenger struct {
 
 // FinishTableOperation marks this function as being called.
 func (m *MockProcessorMessenger) FinishTableOperation(
-	ctx context.Context, tableID model.TableID, epoch protocol.ProcessorEpoch,
+	ctx context.Context, tableID model.TableID, checkpointTs model.Ts, epoch protocol.ProcessorEpoch,
 ) (bool, error) {
 	args := m.Called(ctx, tableID, epoch)
 	return args.Bool(0), args.Error(1)
