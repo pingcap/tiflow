@@ -1,4 +1,4 @@
-// Copyright 2020 PingCAP, Inc.
+// Copyright 2022 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,31 +14,13 @@
 package codec
 
 import (
-	"context"
 	"encoding/binary"
 	"time"
 
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
-	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/tikv/client-go/v2/oracle"
 )
-
-// EventBatchEncoder is an abstraction for events encoder
-type EventBatchEncoder interface {
-	// EncodeCheckpointEvent appends a checkpoint event into the batch.
-	// This event will be broadcast to all partitions to signal a global checkpoint.
-	EncodeCheckpointEvent(ts uint64) (*MQMessage, error)
-	// AppendRowChangedEvent appends the calling context, a row changed event and the dispatch
-	// topic into the batch
-	AppendRowChangedEvent(context.Context, string, *model.RowChangedEvent) error
-	// EncodeDDLEvent appends a DDL event into the batch
-	EncodeDDLEvent(e *model.DDLEvent) (*MQMessage, error)
-	// Build builds the batch and returns the bytes of key and value.
-	Build() []*MQMessage
-	// Size returns the size of the batch(bytes)
-	Size() int
-}
 
 // MQMessage represents an MQ message to the mqSink
 type MQMessage struct {
@@ -132,54 +114,4 @@ func NewMQMessage(
 	}
 
 	return ret
-}
-
-// EventBatchDecoder is an abstraction for events decoder
-// this interface is only for testing now
-type EventBatchDecoder interface {
-	// HasNext returns
-	//     1. the type of the next event
-	//     2. a bool if the next event is exist
-	//     3. error
-	HasNext() (model.MqMessageType, bool, error)
-	// NextResolvedEvent returns the next resolved event if exists
-	NextResolvedEvent() (uint64, error)
-	// NextRowChangedEvent returns the next row changed event if exists
-	NextRowChangedEvent() (*model.RowChangedEvent, error)
-	// NextDDLEvent returns the next DDL event if exists
-	NextDDLEvent() (*model.DDLEvent, error)
-}
-
-// EncoderResult indicates an action request by the encoder to the mqSink
-type EncoderResult uint8
-
-// Enum types of EncoderResult
-const (
-	EncoderNeedAsyncWrite EncoderResult = iota
-	EncoderNeedSyncWrite
-)
-
-// EncoderBuilder builds encoder with context.
-type EncoderBuilder interface {
-	Build() EventBatchEncoder
-}
-
-// NewEventBatchEncoderBuilder returns an EncoderBuilder
-func NewEventBatchEncoderBuilder(ctx context.Context, c *Config) (EncoderBuilder, error) {
-	switch c.protocol {
-	case config.ProtocolDefault, config.ProtocolOpen:
-		return newJSONEventBatchEncoderBuilder(c), nil
-	case config.ProtocolCanal:
-		return newCanalEventBatchEncoderBuilder(), nil
-	case config.ProtocolAvro:
-		return newAvroEventBatchEncoderBuilder(ctx, c)
-	case config.ProtocolMaxwell:
-		return newMaxwellEventBatchEncoderBuilder(), nil
-	case config.ProtocolCanalJSON:
-		return newCanalFlatEventBatchEncoderBuilder(c), nil
-	case config.ProtocolCraft:
-		return newCraftEventBatchEncoderBuilder(c), nil
-	default:
-		return nil, cerror.ErrMQSinkUnknownProtocol.GenWithStackByArgs(c.protocol)
-	}
 }
