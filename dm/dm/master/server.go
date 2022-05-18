@@ -204,9 +204,9 @@ func (s *Server) Start(ctx context.Context) (err error) {
 	}
 	if s.cfg.OpenAPI {
 		// tls3 is used to openapi reverse proxy
-		tls3, err := toolutils.NewTLS(s.cfg.SSLCA, s.cfg.SSLCert, s.cfg.SSLKey, s.cfg.AdvertiseAddr, s.cfg.CertAllowedCN)
-		if err != nil {
-			return terror.ErrMasterTLSConfigNotValid.Delegate(err)
+		tls3, err1 := toolutils.NewTLS(s.cfg.SSLCA, s.cfg.SSLCert, s.cfg.SSLKey, s.cfg.AdvertiseAddr, s.cfg.CertAllowedCN)
+		if err1 != nil {
+			return terror.ErrMasterTLSConfigNotValid.Delegate(err1)
 		}
 		if initOpenAPIErr := s.InitOpenAPIHandles(tls3.TLSConfig()); initOpenAPIErr != nil {
 			return terror.ErrOpenAPICommonError.Delegate(initOpenAPIErr)

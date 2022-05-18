@@ -19,9 +19,10 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
-	"github.com/pingcap/failpoint"
 	"net/http"
 	"net/http/httputil"
+
+	"github.com/pingcap/failpoint"
 
 	ginmiddleware "github.com/deepmap/oapi-codegen/pkg/gin-middleware"
 	"github.com/gin-gonic/gin"

@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 import sys
 import requests
+import ssl
 
 SOURCE1_NAME = "mysql-01"
 SOURCE2_NAME = "mysql-02"
@@ -10,6 +11,10 @@ WORKER2_NAME = "worker2"
 
 API_ENDPOINT = "http://127.0.0.1:8261/api/v1/sources"
 API_ENDPOINT_NOT_LEADER = "http://127.0.0.1:8361/api/v1/sources"
+
+API_ENDPOINT_HTTPS = "https://127.0.0.1:8261/api/v1/sources"
+API_ENDPOINT_NOT_LEADER_HTTPS = "https://127.0.0.1:8361/api/v1/sources"
+
 
 
 def create_source_failed():
@@ -53,6 +58,23 @@ def create_source2_success():
     print("create_source1_success resp=", resp.json())
     assert resp.status_code == 201
 
+def create_source_success_https(ssl_ca, ssl_cert, ssl_key):
+    req = {
+        "source": {
+            "case_sensitive": False,
+            "enable": True,
+            "enable_gtid": False,
+            "host": "127.0.0.1",
+            "password": "123456",
+            "port": 3306,
+            "source_name": SOURCE1_NAME,
+            "user": "root",
+        }
+    }
+    resp = requests.post(url=API_ENDPOINT_HTTPS, json=req, verify=ssl_ca, cert=(ssl_cert, ssl_key))
+    print("create_source_success_https resp=", resp.json())
+    assert resp.status_code == 201
+
 def update_source1_without_password_success():
     req = {
         "source": {
@@ -76,6 +98,12 @@ def list_source_success(source_count):
     print("list_source_by_openapi_success resp=", data)
     assert data["total"] == int(source_count)
 
+def list_source_success_https(source_count, ssl_ca, ssl_cert, ssl_key):
+    resp = requests.get(url=API_ENDPOINT_HTTPS, verify=ssl_ca, cert=(ssl_cert, ssl_key))
+    assert resp.status_code == 200
+    data = resp.json()
+    print("list_source_success_https resp=", data)
+    assert data["total"] == int(source_count)
 
 def list_source_with_status_success(source_count, status_count):
     resp = requests.get(url=API_ENDPOINT + "?with_status=true")
@@ -94,6 +122,12 @@ def list_source_with_reverse(source_count):
     print("list_source_with_reverse resp=", data)
     assert data["total"] == int(source_count)
 
+def list_source_with_reverse_https(source_count, ssl_ca, ssl_cert, ssl_key):
+    resp = requests.get(url=API_ENDPOINT_NOT_LEADER_HTTPS, verify=ssl_ca, cert=(ssl_cert, ssl_key))
+    assert resp.status_code == 200
+    data = resp.json()
+    print("list_source_with_reverse_https resp=", data)
+    assert data["total"] == int(source_count)
 
 def delete_source_success(source_name):
     resp = requests.delete(url=API_ENDPOINT + "/" + source_name)
@@ -235,8 +269,11 @@ if __name__ == "__main__":
         "create_source_failed": create_source_failed,
         "create_source1_success": create_source1_success,
         "create_source2_success": create_source2_success,
+        "create_source_success_https": create_source_success_https,
         "update_source1_without_password_success": update_source1_without_password_success,
         "list_source_success": list_source_success,
+        "list_source_success_https": list_source_success_https,
+        "list_source_with_reverse_https": list_source_with_reverse_https,
         "list_source_with_reverse": list_source_with_reverse,
         "list_source_with_status_success": list_source_with_status_success,
         "delete_source_failed": delete_source_failed,
