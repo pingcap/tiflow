@@ -383,11 +383,6 @@ func (c *CanalFlatEventBatchEncoder) Build() []*MQMessage {
 	return ret
 }
 
-// Size implements the EventBatchEncoder interface
-func (c *CanalFlatEventBatchEncoder) Size() int {
-	return -1
-}
-
 // CanalFlatEventBatchDecoder decodes the byte into the original message.
 type CanalFlatEventBatchDecoder struct {
 	data                []byte
