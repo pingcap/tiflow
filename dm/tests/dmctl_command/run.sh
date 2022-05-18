@@ -176,118 +176,118 @@ function run_validation_start_stop_cmd {
 		"\"unit\": \"Sync\"" 2
 
 	echo "--> (fail) validation start: missing mode value"
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation start --mode" \
 		"Error: flag needs an argument: --mode" 1
 
 	echo "--> (fail) validation start: invalid mode"
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation start --mode xxx" \
 		"Error: mode should be either \`full\` or \`fast\`" 1
 
 	echo "--> (fail) validation start: missing start-time value"
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation start --start-time" \
 		"Error: flag needs an argument: --start-time" 1
 
 	echo "--> (fail) validation start: invalid start-time"
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation start --start-time xx" \
 		"Error: start-time should be in the format like '2006-01-02 15:04:05' or '2006-01-02T15:04:05'" 1
 
 	echo "--> (fail) validation start: without all-task and task-name"
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation start --mode full" \
 		"Error: either \`task-name\` or \`all-task\` should be set" 1
 
 	echo "--> (fail) validation start: with both all-task and task-name"
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation start --all-task test" \
 		"Error: either \`task-name\` or \`all-task\` should be set" 1
 
 	echo "--> (fail) validation start: too many arguments"
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation start test test2" \
 		"Error: too many arguments are specified" 1
 
 	echo "--> (fail) validation start: non-existed subtask"
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation start xxxxx" \
 		"\"result\": false" 1 \
 		"fail to get subtask config by task name \`xxxxx\` and sources" 1
 
 	echo "--> (fail) validation start: non-exist source"
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation start -s xxxxx --all-task" \
 		"\"result\": false" 1 \
 		"fail to get subtask config by sources" 1
 
 	echo "--> (fail) validation stop: without all-task and task-name"
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation stop" \
 		"Error: either \`task-name\` or \`all-task\` should be set" 1
 
 	echo "--> (fail) validation stop: with both all-task and task-name"
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation stop --all-task test" \
 		"Error: either \`task-name\` or \`all-task\` should be set" 1
 
 	echo "--> (fail) validation stop: too many arguments"
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation stop test test2" \
 		"Error: too many arguments are specified" 1
 
 	echo "--> (fail) validation stop: non-existed subtask"
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation stop xxxxx" \
 		"\"result\": false" 1 \
 		"fail to get subtask config by task name \`xxxxx\` and sources" 1
 
 	echo "--> (fail) validation stop: non-exist source"
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation stop -s xxxxx --all-task" \
 		"\"result\": false" 1 \
 		"fail to get subtask config by sources" 1
 
 	echo "--> (fail) validation stop: stop not-enabled validator"
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation stop -s $SOURCE_ID1 test" \
 		"\"result\": false" 1 \
 		"some target validator(test with source $SOURCE_ID1) is not enabled" 1
 
 	echo "--> (success) validation start: start validation without explicit mode for source 1"
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation start -s $SOURCE_ID1 test" \
 		"\"result\": true" 1
 	# right now validation status cannot check status of subtask.
 	# in the following case, it will be checked.
 
 	echo "--> (fail) validation start: start all validator with explicit mode, but 1 subtask already enabled"
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation start --mode full test" \
 		"\"result\": false" 1 \
 		"some of target validator(test with source $SOURCE_ID1) has already enabled" 1
 
 	echo "--> (fail) validation start: start validation with explicit mode for source 1 again"
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation start -s $SOURCE_ID1 --mode full test" \
 		"\"result\": false" 1 \
 		"all target validator has enabled, cannot do 'validation start' with explicit mode or start-time" 1
 
 	echo "--> (fail) validation start: start all validator without explicit mode"
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation start test" \
 		"\"result\": false" 1 \
 		"some of target validator(test with source $SOURCE_ID1) has already enabled" 1
 
 	echo "--> (fail) validation stop: stop all but 1 subtask is not enabled"
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation stop test" \
 		"\"result\": false" 1 \
 		"some target validator(test with source $SOURCE_ID2) is not enabled" 1
 
 	echo "--> (success) validation start: start validation with fast mode and start-time for source 2"
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation start -s $SOURCE_ID2 --mode fast --start-time '2020-01-01 00:01:00' test" \
 		"\"result\": true" 1
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
@@ -299,7 +299,7 @@ function run_validation_start_stop_cmd {
 		"\"stage\": \"Stopped\"" 0
 
 	echo "--> (success) validation start: start all validator of the task without explicit param again, i.e. resuming"
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation start test" \
 		"\"result\": true" 1
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
@@ -311,7 +311,7 @@ function run_validation_start_stop_cmd {
 		"\"stage\": \"Stopped\"" 0
 
 	echo "--> (success) validation stop: stop validation of source 1"
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation stop -s $SOURCE_ID1 test" \
 		"\"result\": true" 1
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
@@ -323,7 +323,7 @@ function run_validation_start_stop_cmd {
 		"\"stage\": \"Stopped\"" 1
 
 	echo "--> (success) validation stop: stop all of test"
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation stop test" \
 		"\"result\": true" 1
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
@@ -335,7 +335,7 @@ function run_validation_start_stop_cmd {
 		"\"stage\": \"Stopped\"" 2
 
 	echo "--> (success) validation stop: stop all of test again"
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation stop test" \
 		"\"result\": true" 1
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
@@ -347,7 +347,7 @@ function run_validation_start_stop_cmd {
 		"\"stage\": \"Stopped\"" 2
 
 	echo "--> (success) validation start: start all of test"
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation start test" \
 		"\"result\": true" 1
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
@@ -369,7 +369,7 @@ function run_validation_start_stop_cmd {
 		"\"unit\": \"Sync\"" 1
 
 	echo "--> (success) validation start: start all tasks"
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation start --all-task --mode fast" \
 		"\"result\": true" 1
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
@@ -388,7 +388,7 @@ function run_validation_start_stop_cmd {
 		"\"stage\": \"Stopped\"" 0
 
 	echo "--> (success) validation stop: stop all tasks"
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation stop --all-task" \
 		"\"result\": true" 1
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \

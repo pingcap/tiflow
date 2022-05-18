@@ -863,6 +863,14 @@ func (st *SubTask) SetCfg(subTaskConfig config.SubTaskConfig) {
 	st.Unlock()
 }
 
+func (st *SubTask) UpdateValidatorCfg(validatorCfg config.ValidatorConfig) {
+	st.Lock()
+	// if user start validator on the fly, we update validator mode and start-time
+	st.cfg.ValidatorCfg.Mode = validatorCfg.Mode
+	st.cfg.ValidatorCfg.StartTime = validatorCfg.StartTime
+	st.Unlock()
+}
+
 func (st *SubTask) getValidatorStage() pb.Stage {
 	st.RLock()
 	defer st.RUnlock()

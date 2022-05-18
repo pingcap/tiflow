@@ -299,7 +299,9 @@ func (v *DataValidator) Start(expect pb.Stage) {
 	v.Lock()
 	defer v.Unlock()
 
-	v.L.Info("starting")
+	v.L.Info("starting", zap.Any("cfg", v.cfg.ValidatorCfg),
+		zap.String("start-time", v.cfg.ValidatorCfg.StartTime),
+		zap.Bool("start with subtask", v.startWithSubtask))
 	if v.Stage() == pb.Stage_Running {
 		v.L.Info("already started")
 		return
