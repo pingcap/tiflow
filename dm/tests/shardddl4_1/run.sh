@@ -1032,7 +1032,7 @@ function DM_155 {
 		"clean_table" "optimistic"
 }
 
-function DM_PANIC_CASE() {
+function DM_TABLE_CHECKPOINT_BACKWARD_CASE() {
 	run_sql_source1 "alter table shardddl1.tb1 change b c int;"
 	for i in $(seq 1 1000); do
 		run_sql_source1 "insert into shardddl1.tb1(a,c) values($i,$i)"
@@ -1052,11 +1052,13 @@ function DM_PANIC_CASE() {
 	for i in $(seq 3101 3200); do
 		run_sql_source1 "insert into shardddl1.tb1(a,c) values($i,$i)"
 	done
-	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml 30
+	cp $cur/conf/diff_config.toml $WORK_DIR/diff_config.toml
+	sed -i "s/\[routes.rule1\]/[routes.rule2]\nschema-pattern = \"shardddl[1-2]\"\ntable-pattern = \"t_1\"\ntarget-schema = \"shardddl\"\ntarget-table = \"t_1\"\n\[routes.rule1\]/g" $WORK_DIR/diff_config.toml
+	check_sync_diff $WORK_DIR $WORK_DIR/diff_config.toml 30
 }
 
-function DM_PANIC() {
-	run_case PANIC "double-source-optimistic" \
+function DM_TABLE_CHECKPOINT_BACKWARD() {
+	run_case TABLE_CHECKPOINT_BACKWARD "double-source-optimistic" \
 		"run_sql_source1 \"create table ${shardddl1}.${tb1} (a int primary key, b int);\"; \
      run_sql_source2 \"create table ${shardddl1}.${tb1} (a int primary key, b int);\"; \
      run_sql_source1 \"create table ${shardddl1}.t_1 (a int primary key, b int);\"; \
@@ -1067,7 +1069,7 @@ function DM_PANIC() {
 function run() {
 	init_cluster
 	init_database
-	DM_PANIC
+	DM_TABLE_CHECKPOINT_BACKWARD
 	start=131
 	end=155
 	for i in $(seq -f "%03g" ${start} ${end}); do

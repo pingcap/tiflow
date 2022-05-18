@@ -185,7 +185,7 @@ func (o *Optimist) GetRedirectOperation(ctx context.Context, info optimism.Info,
 				continue
 			}
 			// check whether operation is valid
-			if op.Task == o.task && rev2 > rev {
+			if op.Task == o.task && rev2 >= rev {
 				switch op.ConflictStage {
 				case optimism.ConflictResolved, optimism.ConflictNone:
 					o.saveRedirectOperation(targetTableID, &op)
