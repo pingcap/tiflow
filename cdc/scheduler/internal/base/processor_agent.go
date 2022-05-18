@@ -197,7 +197,11 @@ func (a *agentImpl) FinishTableOperation(
 		}
 	}
 
-	message := &protocol.DispatchTableResponseMessage{ID: tableID, Epoch: epoch}
+	message := &protocol.DispatchTableResponseMessage{
+		ID:           tableID,
+		Epoch:        epoch,
+		CheckpointTs: checkpointTs,
+	}
 	defer func() {
 		if err != nil {
 			return
@@ -208,8 +212,6 @@ func (a *agentImpl) FinishTableOperation(
 			zap.String("changefeedID", a.changeFeed.ID),
 			zap.String("ownerID", a.ownerCaptureID))
 	}()
-
-	// how to send back the response.
 
 	done, err = a.trySendMessage(
 		ctx, a.ownerCaptureID,
