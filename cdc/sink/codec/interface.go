@@ -14,15 +14,14 @@
 package codec
 
 import (
+	"context"
 	"encoding/binary"
 	"time"
 
-	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
-	"github.com/pingcap/tiflow/pkg/security"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/tikv/client-go/v2/oracle"
-	"go.uber.org/zap"
 )
 
 // EventBatchEncoder is an abstraction for events encoder
@@ -30,8 +29,9 @@ type EventBatchEncoder interface {
 	// EncodeCheckpointEvent appends a checkpoint event into the batch.
 	// This event will be broadcast to all partitions to signal a global checkpoint.
 	EncodeCheckpointEvent(ts uint64) (*MQMessage, error)
-	// AppendRowChangedEvent appends a row changed event into the batch
-	AppendRowChangedEvent(e *model.RowChangedEvent) error
+	// AppendRowChangedEvent appends the calling context, a row changed event and the dispatch
+	// topic into the batch
+	AppendRowChangedEvent(context.Context, string, *model.RowChangedEvent) error
 	// EncodeDDLEvent appends a DDL event into the batch
 	EncodeDDLEvent(e *model.DDLEvent) (*MQMessage, error)
 	// Build builds the batch and returns the bytes of key and value.
@@ -85,7 +85,15 @@ func (m *MQMessage) IncRowsCount() {
 }
 
 func newDDLMQMessage(proto config.Protocol, key, value []byte, event *model.DDLEvent) *MQMessage {
-	return NewMQMessage(proto, key, value, event.CommitTs, model.MqMessageTypeDDL, &event.TableInfo.Schema, &event.TableInfo.Table)
+	return NewMQMessage(
+		proto,
+		key,
+		value,
+		event.CommitTs,
+		model.MqMessageTypeDDL,
+		&event.TableInfo.Schema,
+		&event.TableInfo.Table,
+	)
 }
 
 func newResolvedMQMessage(proto config.Protocol, key, value []byte, ts uint64) *MQMessage {
@@ -94,7 +102,14 @@ func newResolvedMQMessage(proto config.Protocol, key, value []byte, ts uint64) *
 
 // NewMQMessage should be used when creating a MQMessage struct.
 // It copies the input byte slices to avoid any surprises in asynchronous MQ writes.
-func NewMQMessage(proto config.Protocol, key []byte, value []byte, ts uint64, ty model.MqMessageType, schema, table *string) *MQMessage {
+func NewMQMessage(
+	proto config.Protocol,
+	key []byte,
+	value []byte,
+	ts uint64,
+	ty model.MqMessageType,
+	schema, table *string,
+) *MQMessage {
 	ret := &MQMessage{
 		Key:       nil,
 		Value:     nil,
@@ -150,14 +165,14 @@ type EncoderBuilder interface {
 }
 
 // NewEventBatchEncoderBuilder returns an EncoderBuilder
-func NewEventBatchEncoderBuilder(c *Config, credential *security.Credential) (EncoderBuilder, error) {
+func NewEventBatchEncoderBuilder(ctx context.Context, c *Config) (EncoderBuilder, error) {
 	switch c.protocol {
 	case config.ProtocolDefault, config.ProtocolOpen:
 		return newJSONEventBatchEncoderBuilder(c), nil
 	case config.ProtocolCanal:
 		return newCanalEventBatchEncoderBuilder(), nil
 	case config.ProtocolAvro:
-		return newAvroEventBatchEncoderBuilder(credential, c)
+		return newAvroEventBatchEncoderBuilder(ctx, c)
 	case config.ProtocolMaxwell:
 		return newMaxwellEventBatchEncoderBuilder(), nil
 	case config.ProtocolCanalJSON:
@@ -165,7 +180,6 @@ func NewEventBatchEncoderBuilder(c *Config, credential *security.Credential) (En
 	case config.ProtocolCraft:
 		return newCraftEventBatchEncoderBuilder(c), nil
 	default:
-		log.Warn("unknown codec protocol value of EventBatchEncoder, use open-protocol as the default", zap.Any("protocolValue", int(c.protocol)))
-		return newJSONEventBatchEncoderBuilder(c), nil
+		return nil, cerror.ErrMQSinkUnknownProtocol.GenWithStackByArgs(c.protocol)
 	}
 }

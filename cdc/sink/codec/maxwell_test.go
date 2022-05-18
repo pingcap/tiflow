@@ -14,6 +14,7 @@
 package codec
 
 import (
+	"context"
 	"testing"
 
 	"github.com/pingcap/tiflow/cdc/model"
@@ -32,7 +33,7 @@ func TestMaxwellEventBatchCodec(t *testing.T) {
 	for _, cs := range rowCases {
 		encoder := newEncoder()
 		for _, row := range cs {
-			err := encoder.AppendRowChangedEvent(row)
+			err := encoder.AppendRowChangedEvent(context.Background(), "", row)
 			require.Nil(t, err)
 		}
 		size := encoder.Size()
