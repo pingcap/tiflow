@@ -17,6 +17,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"math"
 	"math/big"
 	"testing"
 
@@ -60,6 +61,7 @@ func setupEncoderAndSchemaRegistry(
 		valueSchemaManager:         valueManager,
 		keySchemaManager:           keyManager,
 		resultBuf:                  make([]*MQMessage, 0, 4096),
+		maxMessageBytes:            math.MaxInt,
 		enableTiDBExtension:        enableTiDBExtension,
 		decimalHandlingMode:        decimalHandlingMode,
 		bigintUnsignedHandlingMode: bigintUnsignedHandlingMode,
@@ -565,7 +567,7 @@ var avroTestColumns = []*avroTestColumnTuple{
 			Ft:            types.NewFieldType(mysql.TypeYear),
 		},
 		avroSchema{Type: "int", Parameters: map[string]string{"tidb_type": "YEAR"}},
-		int64(1970), "int",
+		int32(1970), "int",
 	},
 }
 

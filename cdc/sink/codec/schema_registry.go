@@ -132,7 +132,7 @@ func (m *AvroSchemaManager) Register(
 	}
 	uri := m.registryURL + "/subjects/" + url.QueryEscape(
 		m.topicNameToSchemaSubject(topicName),
-	) + "/versions?normalize=true"
+	) + "/versions"
 	log.Info("Registering schema", zap.String("uri", uri), zap.ByteString("payload", payload))
 
 	req, err := http.NewRequestWithContext(ctx, "POST", uri, bytes.NewReader(payload))
@@ -145,6 +145,7 @@ func (m *AvroSchemaManager) Register(
 		"application/vnd.schemaregistry.v1+json, application/vnd.schemaregistry+json, "+
 			"application/json",
 	)
+	req.Header.Add("Content-Type", "application/vnd.schemaregistry.v1+json")
 	resp, err := httpRetry(ctx, m.credential, req)
 	if err != nil {
 		return 0, err
