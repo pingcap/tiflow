@@ -21,7 +21,6 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	cerror "github.com/pingcap/tiflow/pkg/errors"
 	clientV3 "go.etcd.io/etcd/client/v3"
 	"go.etcd.io/etcd/client/v3/concurrency"
 	"go.etcd.io/etcd/server/v3/mvcc"
@@ -31,7 +30,8 @@ import (
 const (
 	// cdcMetaVersion is hard code value indicate the metaVersion of TiCDC
 	cdcMetaVersion       = 1
-	etcdSessionTTL       = 10 * time.Second
+	etcdSessionTTL       = 10
+	noMetaVersion        = -1
 	migrationCampaignKey = "ticdc-migration"
 )
 
@@ -41,82 +41,98 @@ func (k keys) addPair(old, new string) {
 	k[old] = new
 }
 
-type migration struct {
+type migrater struct {
 	oldMetaVersion int
 	newMetaVersion int
 	metaVersionKey string
-	// cdc onwer key in source etcd
-	scrOwnerKey string
-	// destination etcd client
-	desCli           *Client
-	keys             keys
-	srcNoMetaVersion bool
+	// cdc old onwer key
+	oldOwnerKey string
+	// etcd client
+	cli *Client
+	// all keyPrefixs need to be migrated or update
+	// map from oldKeyPrefix to newKeyPrefix
+	keyPrefixs        keys
+	etcdNoMetaVersion bool
 }
 
-func (m migration) migrate(ctx context.Context) error {
+// Note: we do not use etcd transaction to migrate key
+// as it has the maximum operation limit in a single transaction.
+// So we use a double check mechanism to make sure the migration is complete.
+// 1. check and put metaVersion
+// 2. walk through all keys and migrate them
+// 3. update metaVersion
+func (m migrater) migrate(ctx context.Context) error {
 	// 1.campaign old owner to make sure old keys will not be updates
 	if err := m.campaignOldOwner(ctx); err != nil {
+		log.Error("campaign old owner failed, etcd meta data migration failed", zap.Error(err))
 		return errors.Trace(err)
 	}
 
 	// 2.campaign owner successfully, begin to migrate data
-	var cmps []clientV3.Cmp
-	var opsThen []clientV3.Op
-	txnEmptyOpsElse := []clientV3.Op{}
-
-	// make sure metaVersion
-	if m.srcNoMetaVersion {
-		cmps = append(cmps, clientV3.Compare(clientV3.CreateRevision(m.metaVersionKey), "=", 0))
-	} else {
-		cmps = append(cmps, clientV3.Compare(clientV3.Value(m.metaVersionKey), "=", fmt.Sprintf("%d", m.oldMetaVersion)))
+	metaVersion, err := getMetaVersion(ctx, m.cli)
+	if err != nil {
+		log.Error("get meta version failed, etcd meta data migration failed", zap.Error(err))
+		return errors.Trace(err)
+	}
+	// 2.1 check metaVersion, if the metaVersion in etcd does not match
+	// m.oldMetaVersion, it means that someone has migrated the meta data
+	if !m.etcdNoMetaVersion && metaVersion != m.oldMetaVersion {
+		log.Warn("meta version no match, no need to migrate")
+		return nil
 	}
 
-	for oldKey, newKey := range m.keys {
-		resp, err := m.desCli.Get(ctx, oldKey, clientV3.WithPrefix())
+	// 2.2 put metaVersionKey to etcd to panic old version cdc server
+	if m.etcdNoMetaVersion {
+		_, err := m.cli.Put(ctx, m.metaVersionKey, fmt.Sprintf("%d", m.oldMetaVersion))
 		if err != nil {
+			log.Error("put meta version failed, etcd meta data migration failed", zap.Error(err))
+			return errors.Trace(err)
+		}
+	}
+
+	// 2.3 walk through all key that need to be migrate
+	for oldPrefix, newPrefix := range m.keyPrefixs {
+		resp, err := m.cli.Get(ctx, oldPrefix, clientV3.WithPrefix())
+		if err != nil {
+			log.Error("get old meta data failed, etcd meta data migration failed", zap.Error(err))
 			return errors.Trace(err)
 		}
 		for _, v := range resp.Kvs {
 			oldKey := string(v.Key)
-			// make sure newKey doesn't exist
-			cmps = append(cmps, clientV3.Compare(clientV3.CreateRevision(newKey), "=", 0))
-			// make sure oldKey exists
-			cmps = append(cmps, clientV3.Compare(clientV3.ModRevision(oldKey), "!=", 0))
-			// put newKeys on
-			opsThen = append(opsThen, clientV3.OpPut(newKey, string(v.Value)))
+			newKey := newPrefix + oldKey[len(oldPrefix):]
+			// TODO(dongmen): we should update value after changedfeedInfo struct altered
+			_, err := m.cli.Put(ctx, newKey, string(v.Value))
+			if err != nil {
+				log.Error("put new meta data failed, etcd meta data migration failed", zap.Error(err))
+				return errors.Trace(err)
+			}
 		}
 	}
 
-	// update meataVersion
-	opsThen = append(opsThen, clientV3.OpPut(m.metaVersionKey, fmt.Sprintf("%d", m.newMetaVersion)))
-
-	txnResp, err := m.desCli.Txn(ctx, cmps, opsThen, txnEmptyOpsElse)
+	// 2.4 update meataVersion
+	_, err = m.cli.Put(ctx, m.metaVersionKey, fmt.Sprintf("%d", m.newMetaVersion))
 	if err != nil {
-		return cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
+		log.Error("update meta version failed, etcd meta data migration failed", zap.Error(err))
+		return errors.Trace(err)
 	}
-	if !txnResp.Succeeded {
-		log.Warn("migration compare failed")
-		return cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
-	}
-	log.Info("etcd data migration done")
+
+	log.Info("etcd data migration successful")
 	return nil
 }
 
-func (m migration) campaignOldOwner(ctx context.Context) error {
-	sess, err := concurrency.NewSession(m.desCli.Unwrap(),
-		concurrency.WithTTL(int(etcdSessionTTL)))
+func (m migrater) campaignOldOwner(ctx context.Context) error {
+	sess, err := concurrency.NewSession(m.cli.Unwrap(),
+		concurrency.WithTTL(etcdSessionTTL))
 	if err != nil {
 		return errors.Trace(err)
 	}
-	election := concurrency.NewElection(sess, m.scrOwnerKey)
-	electionCtx, cancel := context.WithTimeout(ctx, time.Second*2)
-	defer cancel()
+	election := concurrency.NewElection(sess, m.oldOwnerKey)
 	defer func() {
 		_ = sess.Close()
 	}()
 
 	// TODO(dongmen): do more investigration about how to handle error here
-	if err := election.Campaign(electionCtx, migrationCampaignKey); err != nil {
+	if err := election.Campaign(ctx, migrationCampaignKey); err != nil {
 		switch errors.Cause(err) {
 		case context.Canceled, mvcc.ErrCompacted:
 		default:
@@ -129,24 +145,18 @@ func (m migration) campaignOldOwner(ctx context.Context) error {
 }
 
 func MigrateData(ctx context.Context, cli *Client) error {
-	resp, err := cli.Get(ctx, metaVersionKey)
+	version, err := getMetaVersion(ctx, cli)
 	if err != nil {
 		return errors.Trace(err)
 	}
+
 	shouldMigrate := false
+	oldVersion, newVersion := 0, cdcMetaVersion
 
-	var oldVersion int
-	newVersion := cdcMetaVersion
-	noMetaVersionKey := false
-
-	if len(resp.Kvs) == 0 {
+	if version == noMetaVersion {
 		shouldMigrate = true
-		noMetaVersionKey = true
 	} else {
-		oldVersion, err = strconv.Atoi(string(resp.Kvs[0].Value))
-		if err != nil {
-			return errors.Trace(err)
-		}
+		oldVersion = version
 		shouldMigrate = oldVersion < newVersion
 	}
 
@@ -154,17 +164,18 @@ func MigrateData(ctx context.Context, cli *Client) error {
 		return nil
 	}
 
-	m := migration{
-		oldMetaVersion:   oldVersion,
-		newMetaVersion:   cdcMetaVersion,
-		metaVersionKey:   DefaultClusterAndMetaPrefix + metaVersionKey,
-		scrOwnerKey:      "/ticdc/cdc/owner",
-		desCli:           cli,
-		keys:             make(keys),
-		srcNoMetaVersion: noMetaVersionKey,
+	m := migrater{
+		oldMetaVersion:    oldVersion,
+		newMetaVersion:    cdcMetaVersion,
+		metaVersionKey:    DefaultClusterAndMetaPrefix + metaVersionKey,
+		oldOwnerKey:       "/ticdc/cdc/owner",
+		cli:               cli,
+		keyPrefixs:        make(keys),
+		etcdNoMetaVersion: version == noMetaVersion,
 	}
-	m.keys.addPair("/tidb/cdc/changefeed/info", DefaultClusterAndNamespacePrefix+changefeedInfoKey)
-	m.keys.addPair("/tidb/cdc/", DefaultClusterAndNamespacePrefix+changefeedStatusKey)
+
+	m.keyPrefixs.addPair("/tidb/cdc/changefeed/info", DefaultClusterAndNamespacePrefix+changefeedInfoKey)
+	m.keyPrefixs.addPair("/tidb/cdc/job", DefaultClusterAndNamespacePrefix+changefeedStatusKey)
 
 	return m.migrate(ctx)
 }
@@ -206,13 +217,14 @@ func WaitMetaVersionMatched(ctx context.Context, cli *Client) error {
 }
 
 func getMetaVersion(ctx context.Context, cli *Client) (int, error) {
-	metaVersionKey := DefaultClusterAndMetaPrefix + metaVersionKey
-	resp, err := cli.Get(ctx, metaVersionKey)
+	key := DefaultClusterAndMetaPrefix + metaVersionKey
+	resp, err := cli.Get(ctx, key)
 	if err != nil {
 		return 0, errors.Trace(err)
 	}
+	// means there no metaVersion in etcd
 	if len(resp.Kvs) == 0 {
-		return 0, nil
+		return noMetaVersion, nil
 	} else {
 		version, err := strconv.Atoi(string(resp.Kvs[0].Value))
 		if err != nil {
