@@ -30,7 +30,7 @@ func TestServerConfigMarshal(t *testing.T) {
 	b, err := conf.Marshal()
 	require.Nil(t, err)
 
-	require.Equal(t, rawConfig, mustIdentJSON(t, b))
+	require.Equal(t, rawConfig, mustIndentJSON(t, b))
 	conf2 := new(ServerConfig)
 	err = conf2.Unmarshal([]byte(rawConfig))
 	require.Nil(t, err)
