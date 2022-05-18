@@ -65,6 +65,16 @@ func (s *optShardingGroupSuite) TestLowestFirstPosInOptGroups() {
 	}
 
 	require.Equal(s.T(), pos21.Position, k.lowestFirstLocationInGroups().Position)
+	k.resolveGroup(utils.UnpackTableID(db2tbl))
+	k.addShardingReSync(&ShardingReSync{
+		targetTable:  utils.UnpackTableID(db2tbl),
+		currLocation: pos21,
+	})
+	// should still be pos21, because it's added to unfinishedShardingReSync
+	require.Equal(s.T(), pos21.Position, k.lowestFirstLocationInGroups().Position)
+	k.removeShardingReSync(&ShardingReSync{targetTable: utils.UnpackTableID(db2tbl)})
+	// should be pos11 now, pos21 is totally resolved
+	require.Equal(s.T(), pos11.Position, k.lowestFirstLocationInGroups().Position)
 }
 
 func (s *optShardingGroupSuite) TestSync() {
@@ -115,6 +125,9 @@ func (s *optShardingGroupSuite) TestSync() {
 		allResolved:    true,
 	}
 	require.Equal(s.T(), expectedShardingResync, shardingResync)
+	// the ShardingResync is not removed from osgk, so lowest location is still pos21
+	require.Equal(s.T(), pos21.Position, k.lowestFirstLocationInGroups().Position)
+	k.removeShardingReSync(shardingResync)
 
 	// case 2: mock receive resolved stage from dm-master in handleQueryEventOptimistic
 	require.Equal(s.T(), pos11.Position, k.lowestFirstLocationInGroups().Position)
@@ -135,6 +148,8 @@ func (s *optShardingGroupSuite) TestSync() {
 		allResolved:    true,
 	}
 	require.Equal(s.T(), expectedShardingResync, shardingResync)
+	require.Equal(s.T(), pos11.Position, k.lowestFirstLocationInGroups().Position)
+	k.removeShardingReSync(shardingResync)
 
 	// case 3: mock drop table, should resolve conflict stage
 	require.Equal(s.T(), pos3.Position, k.lowestFirstLocationInGroups().Position)

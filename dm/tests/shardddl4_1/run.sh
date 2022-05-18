@@ -1064,6 +1064,8 @@ function DM_TABLE_CHECKPOINT_BACKWARD() {
      run_sql_source1 \"create table ${shardddl1}.t_1 (a int primary key, b int);\"; \
      run_sql_source2 \"create table ${shardddl1}.t_1 (a int primary key, b int);\"" \
 		"clean_table" ""
+	run_sql_both_source "drop table if exists ${shardddl1}.t_1;"
+	run_sql_tidb "drop table if exists ${shardddl}.t_1;"
 }
 
 function run() {
