@@ -76,6 +76,11 @@ type checkSorter struct {
 	ch chan *model.PolymorphicEvent
 }
 
+func (c *checkSorter) UpdateInitialCheckpointTs(checkpoint model.Ts) {
+	//TODO implement me
+	panic("implement me")
+}
+
 var _ sorter.EventSorter = (*checkSorter)(nil)
 
 func (c *checkSorter) Run(ctx context.Context) error {

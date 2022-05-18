@@ -43,13 +43,13 @@ type TableStatus int32
 
 // TableStatus for table pipeline
 const (
-	// TableStatusPreparing indicate that the table is preparing connecting to regions and receive data
+	// TableStatusPreparing indicate that the table is preparing connecting to regions
 	TableStatusPreparing TableStatus = iota
-	// TableStatusPrepared means the first `Resolved Ts` is received, let puller report it
+	// TableStatusPrepared means the first `Resolved Ts` is received.
 	TableStatusPrepared
 	// TableStatusReplicating means that sink is consuming data from the sorter, and replicating it to downstream
 	TableStatusReplicating
-	// TableStatusStopped indicate sink should not replicating more data to downtream
+	// TableStatusStopped means sink stop all works.
 	TableStatusStopped
 )
 
