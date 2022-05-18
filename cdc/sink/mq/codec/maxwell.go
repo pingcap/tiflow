@@ -300,11 +300,6 @@ func (d *MaxwellEventBatchEncoder) Reset() {
 	d.keyBuf.Write(versionByte[:])
 }
 
-// Size implements the EventBatchEncoder interface
-func (d *MaxwellEventBatchEncoder) Size() int {
-	return d.keyBuf.Len() + d.valueBuf.Len()
-}
-
 // NewMaxwellEventBatchEncoder creates a new MaxwellEventBatchEncoder.
 func NewMaxwellEventBatchEncoder() EventBatchEncoder {
 	batch := &MaxwellEventBatchEncoder{
