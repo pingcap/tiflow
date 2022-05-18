@@ -24,8 +24,8 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/sink/codec"
 	"github.com/pingcap/tiflow/cdc/sink/metrics"
+	"github.com/pingcap/tiflow/cdc/sink/mq/codec"
 	"github.com/pingcap/tiflow/cdc/sink/mq/dispatcher"
 	"github.com/pingcap/tiflow/cdc/sink/mq/manager"
 	kafkamanager "github.com/pingcap/tiflow/cdc/sink/mq/manager/kafka"
@@ -42,8 +42,8 @@ import (
 )
 
 type resolvedTsEvent struct {
-	tableID    model.TableID
-	resolvedTs model.Ts
+	tableID  model.TableID
+	resolved model.ResolvedTs
 }
 
 const (
@@ -179,21 +179,23 @@ func (k *mqSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowCha
 // that the data before the resolvedTs has been
 // successfully written downstream.
 // FlushRowChangedEvents is thread-safe.
-func (k *mqSink) FlushRowChangedEvents(ctx context.Context, tableID model.TableID, resolvedTs uint64) (uint64, error) {
+func (k *mqSink) FlushRowChangedEvents(
+	ctx context.Context, tableID model.TableID, resolved model.ResolvedTs,
+) (uint64, error) {
 	var checkpointTs uint64
 	v, ok := k.tableCheckpointTsMap.Load(tableID)
 	if ok {
 		checkpointTs = v.(uint64)
 	}
-	if resolvedTs <= checkpointTs {
+	if resolved.Ts <= checkpointTs {
 		return checkpointTs, nil
 	}
 	select {
 	case <-ctx.Done():
 		return 0, ctx.Err()
 	case k.resolvedBuffer <- resolvedTsEvent{
-		tableID:    tableID,
-		resolvedTs: resolvedTs,
+		tableID:  tableID,
+		resolved: model.NewResolvedTs(resolved.Ts),
 	}:
 	}
 	k.statistics.PrintStatus(ctx)
@@ -207,21 +209,21 @@ func (k *mqSink) bgFlushTs(ctx context.Context) error {
 		case <-ctx.Done():
 			return errors.Trace(ctx.Err())
 		case msg := <-k.resolvedBuffer:
-			resolvedTs := msg.resolvedTs
-			err := k.flushTsToWorker(ctx, resolvedTs)
+			resolved := msg.resolved
+			err := k.flushTsToWorker(ctx, resolved)
 			if err != nil {
 				return errors.Trace(err)
 			}
 			// Since CDC does not guarantee exactly once semantic, it won't cause any problem
 			// here even if the table was moved or removed.
 			// ref: https://github.com/pingcap/tiflow/pull/4356#discussion_r787405134
-			k.tableCheckpointTsMap.Store(msg.tableID, resolvedTs)
+			k.tableCheckpointTsMap.Store(msg.tableID, resolved.Ts)
 		}
 	}
 }
 
-func (k *mqSink) flushTsToWorker(ctx context.Context, resolvedTs model.Ts) error {
-	if err := k.flushWorker.addEvent(ctx, mqEvent{resolvedTs: resolvedTs}); err != nil {
+func (k *mqSink) flushTsToWorker(ctx context.Context, resolved model.ResolvedTs) error {
+	if err := k.flushWorker.addEvent(ctx, mqEvent{resolved: resolved}); err != nil {
 		if errors.Cause(err) != context.Canceled {
 			log.Warn("failed to flush TS to worker", zap.Error(err))
 		} else {
