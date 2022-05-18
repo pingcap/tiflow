@@ -28,7 +28,7 @@ type scheduler interface {
 		checkpointTs model.Ts,
 		currentTables []model.TableID,
 		aliveCaptures map[model.CaptureID]*model.CaptureInfo,
-		captureTables map[model.CaptureID]captureStatus,
+		captureTables map[model.CaptureID]CaptureStatus,
 	) []*scheduleTask
 }
 

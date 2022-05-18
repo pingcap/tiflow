@@ -61,10 +61,10 @@ type scheduleTask struct {
 type replicationManager struct {
 	tables       map[model.TableID]ReplicationSet
 	runningTasks map[model.TableID]*scheduleTask
-	captures     map[model.CaptureID]captureStatus
+	captures     map[model.CaptureID]CaptureStatus
 }
 
-func (s *replicationManager) captureTableSets() map[model.CaptureID]captureStatus {
+func (s *replicationManager) captureTableSets() map[model.CaptureID]CaptureStatus {
 	return s.captures
 }
 
@@ -88,14 +88,17 @@ func (s *replicationManager) poll(
 	return nil, nil
 }
 
+func (s *replicationManager) checkCaptures(msg []*schedulepb.Message) {
+}
+
 func (s *replicationManager) handleMessage(msg []*schedulepb.Message) {
-	// s.handleMessageSync()
+	// s.handleMessageHeartbeat()
 	// s.handleMessageCheckpoint()
 	// s.handleMessageDispatchTableResponse()
 }
 
-func (s *replicationManager) handleMessageSync(msg *schedulepb.Sync) {
-	// TODO: build s.tables from Sync message.
+func (s *replicationManager) handleMessageHeartbeat(msg *schedulepb.Heartbeat) {
+	// TODO: build s.tables from Heartbeat message.
 }
 
 func (s *replicationManager) handleMessageDispatchTableResponse(msg *schedulepb.DispatchTableResponse) {
