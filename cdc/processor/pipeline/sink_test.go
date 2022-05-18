@@ -40,7 +40,11 @@ type mockSink struct {
 // we are testing sinkNode by itself.
 type mockFlowController struct{}
 
-func (c *mockFlowController) Consume(commitTs uint64, size uint64, blockCallBack func() error) error {
+func (c *mockFlowController) Consume(
+	msg *model.PolymorphicEvent,
+	size uint64,
+	blockCallBack func(bool) error,
+) error {
 	return nil
 }
 
@@ -72,12 +76,14 @@ func (s *mockSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error 
 	panic("unreachable")
 }
 
-func (s *mockSink) FlushRowChangedEvents(ctx context.Context, _ model.TableID, resolvedTs uint64) (uint64, error) {
+func (s *mockSink) FlushRowChangedEvents(
+	ctx context.Context, _ model.TableID, resolved model.ResolvedTs,
+) (uint64, error) {
 	s.received = append(s.received, struct {
 		resolvedTs model.Ts
 		row        *model.RowChangedEvent
-	}{resolvedTs: resolvedTs})
-	return resolvedTs, nil
+	}{resolvedTs: resolved.Ts})
+	return resolved.Ts, nil
 }
 
 func (s *mockSink) EmitCheckpointTs(_ context.Context, _ uint64, _ []model.TableName) error {
@@ -416,7 +422,7 @@ func TestManyTs(t *testing.T) {
 		{resolvedTs: 1},
 	})
 	sink.Reset()
-	require.Equal(t, uint64(2), node.ResolvedTs())
+	require.Equal(t, model.NewResolvedTs(uint64(2)), node.ResolvedTs())
 	require.Equal(t, uint64(1), node.CheckpointTs())
 
 	require.Nil(t, node.Receive(
@@ -429,7 +435,7 @@ func TestManyTs(t *testing.T) {
 		{resolvedTs: 2},
 	})
 	sink.Reset()
-	require.Equal(t, uint64(2), node.ResolvedTs())
+	require.Equal(t, model.NewResolvedTs(uint64(2)), node.ResolvedTs())
 	require.Equal(t, uint64(2), node.CheckpointTs())
 }
 
@@ -642,11 +648,13 @@ type flushSink struct {
 // fall back
 var fallBackResolvedTs = uint64(10)
 
-func (s *flushSink) FlushRowChangedEvents(ctx context.Context, _ model.TableID, resolvedTs uint64) (uint64, error) {
-	if resolvedTs == fallBackResolvedTs {
+func (s *flushSink) FlushRowChangedEvents(
+	ctx context.Context, _ model.TableID, resolved model.ResolvedTs,
+) (uint64, error) {
+	if resolved.Ts == fallBackResolvedTs {
 		return 0, nil
 	}
-	return resolvedTs, nil
+	return resolved.Ts, nil
 }
 
 // TestFlushSinkReleaseFlowController tests sinkNode.flushSink method will always
@@ -670,12 +678,12 @@ func TestFlushSinkReleaseFlowController(t *testing.T) {
 	require.Nil(t, sNode.Init(pipeline.MockNodeContext4Test(ctx, pmessage.Message{}, nil)))
 	sNode.barrierTs = 10
 
-	err := sNode.flushSink(context.Background(), uint64(8))
+	err := sNode.flushSink(context.Background(), model.NewResolvedTs(uint64(8)))
 	require.Nil(t, err)
 	require.Equal(t, uint64(8), sNode.checkpointTs)
 	require.Equal(t, 1, flowController.releaseCounter)
 	// resolvedTs will fall back in this call
-	err = sNode.flushSink(context.Background(), uint64(10))
+	err = sNode.flushSink(context.Background(), model.NewResolvedTs(uint64(10)))
 	require.Nil(t, err)
 	require.Equal(t, uint64(8), sNode.checkpointTs)
 	require.Equal(t, 2, flowController.releaseCounter)

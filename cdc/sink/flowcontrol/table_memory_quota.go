@@ -54,7 +54,9 @@ func newTableMemoryQuota(quota uint64) *tableMemoryQuota {
 // block until enough memory has been freed up by release.
 // blockCallBack will be called if the function will block.
 // Should be used with care to prevent deadlock.
-func (c *tableMemoryQuota) consumeWithBlocking(nBytes uint64, blockCallBack func() error) error {
+func (c *tableMemoryQuota) consumeWithBlocking(
+	nBytes uint64, blockCallBack func(bool) error,
+) error {
 	if nBytes >= c.quota {
 		return cerrors.ErrFlowControllerEventLargerThanQuota.GenWithStackByArgs(nBytes, c.quota)
 	}
@@ -62,7 +64,7 @@ func (c *tableMemoryQuota) consumeWithBlocking(nBytes uint64, blockCallBack func
 	c.consumed.Lock()
 	if c.consumed.bytes+nBytes >= c.quota {
 		c.consumed.Unlock()
-		err := blockCallBack()
+		err := blockCallBack(false)
 		if err != nil {
 			return errors.Trace(err)
 		}

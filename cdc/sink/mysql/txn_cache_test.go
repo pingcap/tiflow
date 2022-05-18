@@ -267,19 +267,19 @@ func TestSplitResolvedTxn(test *testing.T) {
 			cache.Append(nil, t.input...)
 			resolvedTsMap := sync.Map{}
 			for tableID, ts := range t.resolvedTsMap {
-				resolvedTsMap.Store(tableID, ts)
+				resolvedTsMap.Store(tableID, model.NewResolvedTs(ts))
 			}
-			checkpointTsMap, resolved := cache.Resolved(&resolvedTsMap)
-			for tableID, txns := range resolved {
+			checkpointTsMap, resolvedTxn := cache.Resolved(&resolvedTsMap)
+			for tableID, txns := range resolvedTxn {
 				sort.Slice(txns, func(i, j int) bool {
 					if txns[i].CommitTs != txns[j].CommitTs {
 						return txns[i].CommitTs < txns[j].CommitTs
 					}
 					return txns[i].StartTs < txns[j].StartTs
 				})
-				resolved[tableID] = txns
+				resolvedTxn[tableID] = txns
 			}
-			require.Equal(test, t.expected, resolved, cmp.Diff(resolved, t.expected))
+			require.Equal(test, t.expected, resolvedTxn, cmp.Diff(resolvedTxn, t.expected))
 			require.Equal(test, t.resolvedTsMap, checkpointTsMap)
 		}
 	}
