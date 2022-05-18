@@ -48,8 +48,8 @@ import (
 const (
 	workerChannelSize = 1000
 
-	maxAccumulatedRowBeforeValidate = config.ValidatorMaxAccumulatedRowBeforeValidate
-	queryTimeout                    = time.Minute
+	maxAccumulatedRow = config.ValidatorMaxAccumulatedRow
+	queryTimeout      = time.Minute
 )
 
 type validateFailedType int
@@ -131,7 +131,7 @@ outer:
 			vw.updateRowChange(change)
 			vw.accuRowCount.Add(1)
 			// reduce number of pending rows
-			if vw.accuRowCount.Load() >= maxAccumulatedRowBeforeValidate {
+			if vw.accuRowCount.Load() >= maxAccumulatedRow {
 				vw.validateTableChange()
 				validatedBeforeTimer = true
 			}

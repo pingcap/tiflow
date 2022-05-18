@@ -720,7 +720,7 @@ func TestValidatorMarkReachedSyncerRoutine(t *testing.T) {
 	validator.ctx, validator.cancel = context.WithCancel(context.Background())
 	require.False(t, validator.markErrorStarted.Load())
 	validator.wg.Add(1)
-	go validator.markReachedSyncerRoutine()
+	go validator.markErrorStartedRoutine()
 	validator.cancel()
 	validator.wg.Wait()
 	require.False(t, validator.markErrorStarted.Load())
@@ -729,7 +729,7 @@ func TestValidatorMarkReachedSyncerRoutine(t *testing.T) {
 	validator.ctx = context.Background()
 	require.False(t, validator.markErrorStarted.Load())
 	validator.wg.Add(1)
-	go validator.markReachedSyncerRoutine()
+	go validator.markErrorStartedRoutine()
 	validator.wg.Wait()
 	require.True(t, validator.markErrorStarted.Load())
 }

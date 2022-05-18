@@ -318,7 +318,7 @@ func (c *validatorPersistHelper) persistPendingRows(tctx *tcontext.Context, rev 
 	queries := make([]string, 0, count)
 	args := make([][]interface{}, 0, count)
 
-	// delete pending row of previous failed persist
+	// delete pending rows left by previous failed call of "persist"
 	queries = append(queries, `DELETE FROM `+c.pendingChangeTableName+` WHERE source = ? and revision = ?`)
 	args = append(args, []interface{}{c.cfg.SourceID, rev})
 	// insert pending row changes with revision=rev
@@ -372,7 +372,7 @@ func (c *validatorPersistHelper) persist(tctx *tcontext.Context, loc binlog.Loca
 	// we use "insert" to save pending data to speed up(see https://asktug.com/t/topic/33147) since
 	// the number of pending rows maybe large.
 	// we run sql one by one to avoid potential "transaction too large" error since pending data may quite large.
-	// And use revision field to correspond between checkpoint table and pending row table
+	// And use revision field to associate checkpoint table and pending row table
 	if err := c.persistPendingRows(newCtx, nextRevision); err != nil {
 		return err
 	}

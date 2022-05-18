@@ -321,7 +321,7 @@ func (v *DataValidator) Start(expect pb.Stage) {
 	go v.routineWrapper(v.printStatusRoutine)
 
 	v.wg.Add(1)
-	go utils.GoLogWrapper(v.L, v.markReachedSyncerRoutine)
+	go utils.GoLogWrapper(v.L, v.markErrorStartedRoutine)
 
 	// routineWrapper relies on errorProcessRoutine to handle panic errors,
 	// so just wrap it using a common wrapper.
@@ -332,7 +332,7 @@ func (v *DataValidator) Start(expect pb.Stage) {
 	v.L.Info("started")
 }
 
-func (v *DataValidator) markReachedSyncerRoutine() {
+func (v *DataValidator) markErrorStartedRoutine() {
 	defer v.wg.Done()
 
 	select {
@@ -1086,7 +1086,7 @@ func genRowKey(row *sqlmodel.RowChange) string {
 }
 
 func genRowKeyByString(pkValues []string) string {
-	// in scenario below, the generated key may not unique, but it's rare
+	// in the scenario below, the generated key may not be unique, but it's rare
 	// suppose a table with multiple column primary key: (v1, v2)
 	// for below case, the generated key is the same:
 	// 	 (aaa\t, bbb) and (aaa, \tbbb), the joint values both are "aaa\t\tbbb"
