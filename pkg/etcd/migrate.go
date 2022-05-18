@@ -59,29 +59,23 @@ type migrater struct {
 // as it has the maximum operation limit in a single transaction.
 // So we use a double check mechanism to make sure the migration is complete.
 // 1. check and put metaVersion
-// 2. walk through all keys and migrate them
-// 3. update metaVersion
+// 2. campaign old owner
+// 3. update keys
+// 4. update metaVersion
 func (m migrater) migrate(ctx context.Context) error {
-	// 1.campaign old owner to make sure old keys will not be updates
-	if err := m.campaignOldOwner(ctx); err != nil {
-		log.Error("campaign old owner failed, etcd meta data migration failed", zap.Error(err))
-		return errors.Trace(err)
-	}
-
-	// 2.campaign owner successfully, begin to migrate data
+	// 1.1 check metaVersion, if the metaVersion in etcd does not match
+	// m.oldMetaVersion, it means that someone has migrated the meta data
 	metaVersion, err := getMetaVersion(ctx, m.cli)
 	if err != nil {
 		log.Error("get meta version failed, etcd meta data migration failed", zap.Error(err))
 		return errors.Trace(err)
 	}
-	// 2.1 check metaVersion, if the metaVersion in etcd does not match
-	// m.oldMetaVersion, it means that someone has migrated the meta data
 	if !m.etcdNoMetaVersion && metaVersion != m.oldMetaVersion {
 		log.Warn("meta version no match, no need to migrate")
 		return nil
 	}
 
-	// 2.2 put metaVersionKey to etcd to panic old version cdc server
+	// 1.2 put metaVersionKey to etcd to panic old version cdc server
 	if m.etcdNoMetaVersion {
 		_, err := m.cli.Put(ctx, m.metaVersionKey, fmt.Sprintf("%d", m.oldMetaVersion))
 		if err != nil {
@@ -90,7 +84,13 @@ func (m migrater) migrate(ctx context.Context) error {
 		}
 	}
 
-	// 2.3 walk through all key that need to be migrate
+	// 3.campaign old owner to make sure old keys will not be updates
+	if err := m.campaignOldOwner(ctx); err != nil {
+		log.Error("campaign old owner failed, etcd meta data migration failed", zap.Error(err))
+		return errors.Trace(err)
+	}
+
+	// 4.campaign owner successfully, begin to migrate data
 	for oldPrefix, newPrefix := range m.keyPrefixs {
 		resp, err := m.cli.Get(ctx, oldPrefix, clientV3.WithPrefix())
 		if err != nil {
@@ -109,7 +109,7 @@ func (m migrater) migrate(ctx context.Context) error {
 		}
 	}
 
-	// 2.4 update meataVersion
+	// 5. update meataVersion
 	_, err = m.cli.Put(ctx, m.metaVersionKey, fmt.Sprintf("%d", m.newMetaVersion))
 	if err != nil {
 		log.Error("update meta version failed, etcd meta data migration failed", zap.Error(err))

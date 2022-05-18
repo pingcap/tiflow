@@ -122,7 +122,7 @@ func (worker *EtcdWorker) initMetrics() {
 func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session, timerInterval time.Duration, role string) error {
 	defer worker.cleanUp()
 
-	if role == "owner" {
+	if role == pkgutil.RoleOwner.String() {
 		worker.isOwner = true
 	}
 
