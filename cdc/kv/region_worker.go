@@ -725,18 +725,21 @@ func (w *regionWorker) handleEventEntry(
 					zap.Uint64("regionID", regionID))
 				return errUnreachable
 			}
+
+			if !state.initialized {
+				// TiKV incremental scan may take a long time.
+				// Caching commit rows unconditional may cause OOM!
+				// FIXME: Fix OOM!
+				state.matcher.cacheCommitRow(entry)
+				continue
+			}
 			ok := state.matcher.matchRow(entry)
 			if !ok {
-				if !state.initialized {
-					state.matcher.cacheCommitRow(entry)
-					continue
-				}
 				return cerror.ErrPrewriteNotMatch.GenWithStackByArgs(
 					hex.EncodeToString(entry.GetKey()),
 					entry.GetStartTs(), entry.GetCommitTs(),
 					entry.GetType(), entry.GetOpType())
 			}
-
 			revent, err := assembleRowEvent(regionID, entry)
 			if err != nil {
 				return errors.Trace(err)

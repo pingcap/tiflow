@@ -84,8 +84,10 @@ type RawKVEntry struct {
 }
 
 func (v *RawKVEntry) String() string {
-	return fmt.Sprintf("OpType: %v, Key: %s, Value: %s, StartTs: %d, CRTs: %d, RegionID: %d",
-		v.OpType, string(v.Key), string(v.Value), v.StartTs, v.CRTs, v.RegionID)
+	// TODO: redact values.
+	return fmt.Sprintf(
+		"OpType: %v, Key: %s, Value: %s, OldValue: %s StartTs: %d, CRTs: %d, RegionID: %d",
+		v.OpType, string(v.Key), string(v.Value), string(v.OldValue), v.StartTs, v.CRTs, v.RegionID)
 }
 
 // ApproximateDataSize calculate the approximate size of protobuf binary

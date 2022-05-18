@@ -14,6 +14,8 @@
 package kv
 
 import (
+	"unsafe"
+
 	"github.com/pingcap/kvproto/pkg/cdcpb"
 	"github.com/pingcap/log"
 	"go.uber.org/zap"
@@ -28,10 +30,22 @@ func newMatchKey(row *cdcpb.Event_Row) matchKey {
 	return matchKey{startTs: row.GetStartTs(), key: string(row.GetKey())}
 }
 
+func (m *matchKey) size() int {
+	const sizeOfEmptyMatchKey = int(unsafe.Sizeof(matchKey{}))
+	return sizeOfEmptyMatchKey + len(m.key)
+}
+
+func sizeOfEventRow(row *cdcpb.Event_Row) int {
+	const sizeOfEmptyRow = int(unsafe.Sizeof(cdcpb.Event_Row{}))
+	return sizeOfEmptyRow + len(row.Key) + len(row.Value) + len(row.OldValue)
+}
+
 type matcher struct {
 	// TODO : clear the single prewrite
 	unmatchedValue map[matchKey]*cdcpb.Event_Row
 	cachedCommit   []*cdcpb.Event_Row
+
+	unmatchedValueBytes int
 }
 
 func newMatcher() *matcher {
@@ -54,15 +68,21 @@ func (m *matcher) putPrewriteRow(row *cdcpb.Event_Row) {
 		return
 	}
 	m.unmatchedValue[key] = row
+	m.unmatchedValueBytes += (key.size() + sizeOfEventRow(row))
 }
 
 // matchRow matches the commit event with the cached prewrite event
 // the Value and OldValue will be assigned if a matched prewrite event exists.
 func (m *matcher) matchRow(row *cdcpb.Event_Row) bool {
-	if value, exist := m.unmatchedValue[newMatchKey(row)]; exist {
+	key := newMatchKey(row)
+	if value, exist := m.unmatchedValue[key]; exist {
 		row.Value = value.GetValue()
 		row.OldValue = value.GetOldValue()
 		delete(m.unmatchedValue, newMatchKey(row))
+		m.unmatchedValueBytes -= (key.size() + sizeOfEventRow(value))
+		if m.unmatchedValueBytes < 0 {
+			m.unmatchedValueBytes = 0
+		}
 		return true
 	}
 	return false
@@ -95,5 +115,13 @@ func (m *matcher) matchCachedRow() []*cdcpb.Event_Row {
 }
 
 func (m *matcher) rollbackRow(row *cdcpb.Event_Row) {
-	delete(m.unmatchedValue, newMatchKey(row))
+	key := newMatchKey(row)
+	row, ok := m.unmatchedValue[key]
+	if ok {
+		delete(m.unmatchedValue, key)
+		m.unmatchedValueBytes -= (key.size() + sizeOfEventRow(row))
+		if m.unmatchedValueBytes < 0 {
+			m.unmatchedValueBytes = 0
+		}
+	}
 }
