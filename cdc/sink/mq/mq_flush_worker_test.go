@@ -180,7 +180,6 @@ func TestBatch(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			// Can not be parallel, it tests reusing the same batch.
-
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
@@ -192,10 +191,11 @@ func TestBatch(t *testing.T) {
 			go func() {
 				for _, event := range test.events {
 					err := worker.addEvent(ctx, event)
-					if event.row == nil || event.row.CommitTs != math.MaxUint64 {
-						require.NoError(t, err)
-					} else {
+					if event.row != nil && event.row.CommitTs == math.MaxUint64 {
+						// For unprocessed events, addEvent returns after ctx has been cancelled.
 						require.Regexp(t, ".*context canceled.*", err)
+					} else {
+						require.NoError(t, err)
 					}
 				}
 			}()
