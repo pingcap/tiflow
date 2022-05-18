@@ -46,6 +46,7 @@ var defaultReplicaConfig = &ReplicaConfig{
 		FlushIntervalInMs: 1000,
 		Storage:           "",
 	},
+	SchemaRegistry: "",
 }
 
 // ReplicaConfig represents some addition replication config for a changefeed
@@ -61,6 +62,7 @@ type replicaConfig struct {
 	Sink             *SinkConfig       `toml:"sink" json:"sink"`
 	Cyclic           *CyclicConfig     `toml:"cyclic-replication" json:"cyclic-replication"`
 	Consistent       *ConsistentConfig `toml:"consistent" json:"consistent"`
+	SchemaRegistry   string            `toml:"schema-registry" json:"schema-registry"`
 }
 
 // Marshal returns the json marshal format of a ReplicationConfig
@@ -117,8 +119,8 @@ func (c *replicaConfig) fillFromV1(v1 *outdated.ReplicaConfigV1) {
 	}
 	for _, dispatch := range v1.Sink.DispatchRules {
 		c.Sink.DispatchRules = append(c.Sink.DispatchRules, &DispatchRule{
-			Matcher:       []string{fmt.Sprintf("%s.%s", dispatch.Schema, dispatch.Name)},
-			PartitionRule: dispatch.Rule,
+			Matcher:        []string{fmt.Sprintf("%s.%s", dispatch.Schema, dispatch.Name)},
+			DispatcherRule: dispatch.Rule,
 		})
 	}
 }
