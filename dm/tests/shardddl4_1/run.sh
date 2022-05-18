@@ -1057,7 +1057,6 @@ function DM_TABLE_CHECKPOINT_BACKWARD_CASE() {
 	sed -i "s/route-rules = \[\"rule1\"\]/route-rules = \[\"rule1\"\,\"rule2\"]/g" $WORK_DIR/diff_config.toml
 	sed -i "s/target-check-tables = \[\"shardddl.tb\"\]/target-check-tables = \[\"shardddl.tb\",\"shardddl.t_1\"\]/g" $WORK_DIR/diff_config.toml
 	check_sync_diff $WORK_DIR $WORK_DIR/diff_config.toml 30
-	read -n 1000
 }
 
 function DM_TABLE_CHECKPOINT_BACKWARD() {
