@@ -46,7 +46,7 @@ function check_old_value_enabled() {
 	# check if exist a delete row without a complete `pre-column`
 	# When old value is turned off, the pre-column in our delete will only include the handle columns.
 	# So here we only have 1 (id).
-	delete_without_old_value_count=$(grep "EmitRowChangedEvents" "$1/cdc.log" | grep 'pre\-columns\\\":\[' | grep 'columns\\\":null' | grep -c 'value\\\":1},null')
+	delete_without_old_value_count=$(grep "EmitRowChangedEvents" "$1/cdc.log" | grep 'pre\-columns\\\":\[' | grep 'columns\\\":null' | grep -c 'value\\\":1,\\\"default\\\":null},null')
 	if [[ "$delete_without_old_value_count" -ne 1 ]]; then
 		echo "can't found delete row without old value"
 		exit 1

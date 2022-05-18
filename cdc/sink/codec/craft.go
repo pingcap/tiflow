@@ -14,6 +14,8 @@
 package codec
 
 import (
+	"context"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/codec/craft"
@@ -50,7 +52,11 @@ func (e *CraftEventBatchEncoder) flush() {
 }
 
 // AppendRowChangedEvent implements the EventBatchEncoder interface
-func (e *CraftEventBatchEncoder) AppendRowChangedEvent(ev *model.RowChangedEvent) error {
+func (e *CraftEventBatchEncoder) AppendRowChangedEvent(
+	ctx context.Context,
+	topic string,
+	ev *model.RowChangedEvent,
+) error {
 	rows, size := e.rowChangedBuffer.AppendRowChangedEvent(ev)
 	if size > e.maxMessageBytes || rows >= e.maxBatchSize {
 		e.flush()
