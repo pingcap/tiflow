@@ -17,7 +17,7 @@
    * [bin/jq](https://stedolan.github.io/jq/)
    * [bin/minio](https://github.com/minio/minio)
 
-   > You can also download the binaies: `sync_diff_inspector` can be downloaded 
+   > You can also download the binaries. `sync_diff_inspector` can be downloaded 
    > from [tidb-community-toolkit](https://download.pingcap.org/tidb-community-toolkit-v6.0.0-linux-amd64.tar.gz), 
    > `tidb-server` related binaries can be downloaded 
    > from [tidb-community-server](https://download.pingcap.org/tidb-community-server-v6.0.0-linux-amd64.tar.gz):
@@ -30,7 +30,7 @@
    > [tidb-community-server](https://download.pingcap.org/tidb-community-server-v6.0.0-linux-amd64.tar.gz) packages. 
    > You should put `flash_cluster_manager`, `libtiflash_proxy.so` and `tiflash` into `bin` directory in TiCDC code base.
 
-   > Minio of old version may fail to run integration tests. You can get the newer version by  install it from source
+   > Old versions of Minio may cause the integration test cases to fail. You can get a newer version by installing it from source
    > ([Source Installation](https://github.com/minio/minio#install-from-source)).
    > [RELEASE.2022-05-08T23-50-31Z](https://github.com/minio/minio/releases/tag/RELEASE.2022-05-08T23-50-31Z) is suggested.
 
@@ -44,9 +44,9 @@
    > You can install `unzip` and `psmisc` using `apt-get` (Ubuntu / Debian) or `yum` (RHEL).
    
    > Since the integration test cases will use port 3306 on localhost, please make sure in advance that port 3306 is 
-   > not occupied. (You’d like to stop mysql service locally on 3306)
+   > not occupied. (You’d like to stop the local MySQL service on port 3306, if there is one)
 
-4. The user used to execute the tests must have permission to create the folder /tmp/tidb_cdc_test. All test artifacts
+3. The user used to execute the tests must have permission to create the folder /tmp/tidb_cdc_test. All test artifacts
    will be written into this folder.
 
 ### Run integration tests in docker
