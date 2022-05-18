@@ -352,7 +352,7 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 				continue
 			}
 
-			if event.CRTs > minResolvedTs || (event.CRTs == minResolvedTs && event.RawKV.OpType == model.OpTypeResolved) {
+			if event.CRTs > minResolvedTs || (event.CRTs == minResolvedTs && event.IsResolved()) {
 				// we have processed all events from this task that need to be processed in this merge
 				if event.CRTs > minResolvedTs || event.RawKV.OpType != model.OpTypeResolved {
 					pendingSet.Store(task, event)

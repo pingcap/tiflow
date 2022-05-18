@@ -43,9 +43,9 @@ type topicPartitionKey struct {
 // It carries the partition information of the message,
 // and it is also used as resolved ts messaging.
 type mqEvent struct {
-	key        topicPartitionKey
-	row        *model.RowChangedEvent
-	resolvedTs model.Ts
+	key      topicPartitionKey
+	row      *model.RowChangedEvent
+	resolved model.ResolvedTs
 }
 
 // flushWorker is responsible for sending messages to the Kafka producer on a batch basis.
@@ -98,7 +98,7 @@ func (w *flushWorker) batch(
 	case msg := <-w.msgChan:
 		// When the resolved ts is received,
 		// we need to write the previous data to the producer as soon as possible.
-		if msg.resolvedTs != 0 {
+		if msg.resolved.Ts != 0 {
 			w.needSyncFlush = true
 			return index, nil
 		}
@@ -116,7 +116,7 @@ func (w *flushWorker) batch(
 		case <-ctx.Done():
 			return index, ctx.Err()
 		case msg := <-w.msgChan:
-			if msg.resolvedTs != 0 {
+			if msg.resolved.Ts != 0 {
 				w.needSyncFlush = true
 				return index, nil
 			}

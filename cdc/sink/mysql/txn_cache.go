@@ -134,8 +134,8 @@ func splitResolvedTxn(
 	checkpointTsMap = make(map[model.TableID]uint64, len(unresolvedTxns))
 	resolvedTsMap.Range(func(k, v any) bool {
 		tableID := k.(model.TableID)
-		resolvedTs := v.(model.Ts)
-		checkpointTsMap[tableID] = resolvedTs
+		resolved := v.(model.ResolvedTs)
+		checkpointTsMap[tableID] = resolved.Ts
 		return true
 	})
 

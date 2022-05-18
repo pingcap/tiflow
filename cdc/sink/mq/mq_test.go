@@ -93,11 +93,11 @@ func (s mqSinkSuite) TestKafkaSink(c *check.C) {
 	}
 	err = sink.EmitRowChangedEvents(ctx, row)
 	c.Assert(err, check.IsNil)
-	checkpointTs, err := sink.FlushRowChangedEvents(ctx, tableID, uint64(120))
+	checkpointTs, err := sink.FlushRowChangedEvents(ctx, tableID, model.NewResolvedTs(uint64(120)))
 	c.Assert(err, check.IsNil)
 	c.Assert(checkpointTs, check.Equals, uint64(120))
 	// flush older resolved ts
-	checkpointTs, err = sink.FlushRowChangedEvents(ctx, tableID, uint64(110))
+	checkpointTs, err = sink.FlushRowChangedEvents(ctx, tableID, model.NewResolvedTs(uint64(110)))
 	c.Assert(err, check.IsNil)
 	c.Assert(checkpointTs, check.Equals, uint64(120))
 
@@ -324,20 +324,24 @@ func (s mqSinkSuite) TestFlushRowChangedEvents(c *check.C) {
 
 	// mock kafka broker processes 1 row resolvedTs event
 	leader.Returns(prodSuccess)
-	checkpointTs1, err := sink.FlushRowChangedEvents(ctx, tableID1, row1.CommitTs)
+	checkpointTs1, err := sink.FlushRowChangedEvents(ctx,
+		tableID1, model.NewResolvedTs(row1.CommitTs))
 	c.Assert(err, check.IsNil)
 	c.Assert(checkpointTs1, check.Equals, row1.CommitTs)
 
-	checkpointTs2, err := sink.FlushRowChangedEvents(ctx, tableID2, row2.CommitTs)
+	checkpointTs2, err := sink.FlushRowChangedEvents(ctx,
+		tableID2, model.NewResolvedTs(row2.CommitTs))
 	c.Assert(err, check.IsNil)
 	c.Assert(checkpointTs2, check.Equals, row2.CommitTs)
 
-	checkpointTs3, err := sink.FlushRowChangedEvents(ctx, tableID3, row3.CommitTs)
+	checkpointTs3, err := sink.FlushRowChangedEvents(ctx,
+		tableID3, model.NewResolvedTs(row3.CommitTs))
 	c.Assert(err, check.IsNil)
 	c.Assert(checkpointTs3, check.Equals, row3.CommitTs)
 
 	// flush older resolved ts
-	checkpointTsOld, err := sink.FlushRowChangedEvents(ctx, tableID1, uint64(110))
+	checkpointTsOld, err := sink.FlushRowChangedEvents(ctx, tableID1,
+		model.NewResolvedTs(uint64(110)))
 	c.Assert(err, check.IsNil)
 	c.Assert(checkpointTsOld, check.Equals, row1.CommitTs)
 
