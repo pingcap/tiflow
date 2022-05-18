@@ -37,17 +37,8 @@ type blackHoleSink struct {
 	lastAccumulated uint64
 }
 
-// Init table sink resources
-func (b *blackHoleSink) Init(tableID model.TableID) error {
+func (b *blackHoleSink) AddTable(tableID model.TableID) error {
 	return nil
-}
-
-func (b *blackHoleSink) TryEmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) (bool, error) {
-	err := b.EmitRowChangedEvents(ctx, rows...)
-	if err != nil {
-		return false, err
-	}
-	return true, nil
 }
 
 func (b *blackHoleSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
@@ -87,6 +78,6 @@ func (b *blackHoleSink) Close(ctx context.Context) error {
 	return nil
 }
 
-func (b *blackHoleSink) Barrier(ctx context.Context, tableID model.TableID) error {
+func (b *blackHoleSink) RemoveTable(ctx context.Context, tableID model.TableID) error {
 	return nil
 }

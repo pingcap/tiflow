@@ -22,6 +22,11 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/pkg/chdelay"
+	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/etcd"
+	"github.com/pingcap/tiflow/pkg/orchestrator/util"
+	pkgutil "github.com/pingcap/tiflow/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.etcd.io/etcd/api/v3/etcdserverpb"
 	"go.etcd.io/etcd/api/v3/mvccpb"
@@ -31,10 +36,6 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"golang.org/x/time/rate"
-
-	cerrors "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/etcd"
-	"github.com/pingcap/tiflow/pkg/orchestrator/util"
 )
 
 const (
@@ -144,6 +145,14 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 	watchCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	watchCh := worker.client.Watch(watchCtx, worker.prefix.String(), role, clientv3.WithPrefix(), clientv3.WithRev(worker.revision+1))
+
+	if role == pkgutil.RoleProcessor.String() {
+		failpoint.Inject("ProcessorEtcdDelay", func() {
+			delayer := chdelay.NewChannelDelayer(time.Second*3, watchCh, 1024, 16)
+			defer delayer.Close()
+			watchCh = delayer.Out()
+		})
+	}
 
 	var (
 		pendingPatches [][]DataPatch
