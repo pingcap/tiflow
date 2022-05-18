@@ -12,7 +12,7 @@ MAX_RETRIES=10
 function get_safepoint() {
 	pd_addr=$1
 	pd_cluster_id=$2
-	safe_point=$(ETCDCTL_API=3 etcdctl --endpoints=$pd_addr get /pd/$pd_cluster_id/gc/safe_point/service/ticdc | grep -oE "safe_point\":[0-9]+" | grep -oE "[0-9]+")
+	safe_point=$(ETCDCTL_API=3 etcdctl --endpoints=$pd_addr get /pd/$pd_cluster_id/gc/safe_point/service/ticdc-default --prefix | grep -oE "safe_point\":[0-9]+" | grep -oE "[0-9]+")
 	echo $safe_point
 }
 
