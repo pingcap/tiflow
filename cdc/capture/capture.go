@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strings"
 	"sync"
 	"time"
 
@@ -52,7 +53,7 @@ type Capture struct {
 	info             *model.CaptureInfo
 	processorManager *processor.Manager
 
-	pdEnpoints      []string
+	PdEnpoints      []string
 	UpstreamManager *upstream.Manager
 	ownerMu         sync.Mutex
 	owner           owner.Owner
@@ -91,7 +92,7 @@ func NewCapture(pdEnpoints []string, etcdClient *etcd.CDCEtcdClient, grpcService
 		EtcdClient:          etcdClient,
 		grpcService:         grpcService,
 		cancel:              func() {},
-		pdEnpoints:          pdEnpoints,
+		PdEnpoints:          pdEnpoints,
 		newProcessorManager: processor.NewManager,
 		newOwner:            owner.NewOwner,
 	}
@@ -128,7 +129,14 @@ func (c *Capture) reset(ctx context.Context) error {
 		c.UpstreamManager.Close()
 	}
 	c.UpstreamManager = upstream.NewManager(ctx, c.EtcdClient.GetGCServiceID())
-	err = c.UpstreamManager.Add(upstream.DefaultUpstreamID, c.pdEnpoints, conf.Security)
+
+	_, err = c.UpstreamManager.AddDefaultUpstream(upstream.Config{
+		PDEndpoints:   strings.Join(c.PdEnpoints, ","),
+		KeyPath:       conf.Security.KeyPath,
+		CertPath:      conf.Security.CertPath,
+		CAPath:        conf.Security.CAPath,
+		CertAllowedCN: conf.Security.CertAllowedCN,
+	})
 	if err != nil {
 		return errors.Annotate(
 			cerror.WrapError(cerror.ErrNewCaptureFailed, err),

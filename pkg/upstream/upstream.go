@@ -53,8 +53,8 @@ const (
 // Please be careful that never change any exported field of a Upstream.
 type Upstream struct {
 	ID             uint64
-	pdEndpoints    []string
-	securityConfig *config.SecurityConfig
+	PdEndpoints    []string
+	SecurityConfig *config.SecurityConfig
 
 	PDClient    pd.Client
 	KVStorage   tidbkv.Storage
@@ -75,12 +75,15 @@ type Upstream struct {
 	clock  clock.Clock
 	wg     *sync.WaitGroup
 	status int32
+
+	err               error
+	isDefaultUpstream bool
 }
 
 func newUpstream(upstreamID uint64, pdEndpoints []string, securityConfig *config.SecurityConfig) *Upstream {
 	return &Upstream{
-		ID: upstreamID, pdEndpoints: pdEndpoints, status: uninit,
-		securityConfig: securityConfig, wg: new(sync.WaitGroup), clock: clock.New(),
+		ID: upstreamID, PdEndpoints: pdEndpoints, status: uninit,
+		SecurityConfig: securityConfig, wg: new(sync.WaitGroup), clock: clock.New(),
 	}
 }
 
@@ -91,7 +94,7 @@ func NewUpstream4Test(pdClient pd.Client) *Upstream {
 		etcd.GcServiceIDForTest(),
 		pdClient, pdClock)
 	res := &Upstream{
-		ID:       DefaultUpstreamID,
+		ID:       testUpstreamID,
 		PDClient: pdClient, PDClock: pdClock, GCManager: gcManager,
 		status: normal, wg: new(sync.WaitGroup), clock: clock.New(),
 		hcMu: struct {
@@ -108,13 +111,13 @@ func (up *Upstream) init(ctx context.Context, gcServiceID string) error {
 	log.Info("upstream is initializing", zap.Uint64("upstreamID", up.ID))
 	var err error
 
-	grpcTLSOption, err := up.securityConfig.ToGRPCDialOption()
+	grpcTLSOption, err := up.SecurityConfig.ToGRPCDialOption()
 	if err != nil {
 		return errors.Trace(err)
 	}
 
 	up.PDClient, err = pd.NewClientWithContext(
-		ctx, up.pdEndpoints, up.securityConfig.PDSecurityOption(),
+		ctx, up.PdEndpoints, up.SecurityConfig.PDSecurityOption(),
 		pd.WithGRPCDialOptions(
 			grpcTLSOption,
 			grpc.WithBlock(),
@@ -136,18 +139,18 @@ func (up *Upstream) init(ctx context.Context, gcServiceID string) error {
 	// To not block CDC server startup, we need to warn instead of error
 	// when TiKV is incompatible.
 	errorTiKVIncompatible := false
-	err = version.CheckClusterVersion(ctx, up.PDClient, up.pdEndpoints, up.securityConfig, errorTiKVIncompatible)
+	err = version.CheckClusterVersion(ctx, up.PDClient, up.PdEndpoints, up.SecurityConfig, errorTiKVIncompatible)
 	if err != nil {
 		log.Error("init upstream error", zap.Error(err))
 	}
 
-	up.KVStorage, err = kv.CreateTiStore(strings.Join(up.pdEndpoints, ","), up.securityConfig)
+	up.KVStorage, err = kv.CreateTiStore(strings.Join(up.PdEndpoints, ","), up.SecurityConfig)
 	if err != nil {
 		return errors.Trace(err)
 	}
 	log.Info("upstream's KVStorage created", zap.Uint64("upstreamID", up.ID))
 
-	up.GrpcPool = kv.NewGrpcPoolImpl(ctx, up.securityConfig)
+	up.GrpcPool = kv.NewGrpcPoolImpl(ctx, up.SecurityConfig)
 	log.Info("upstream's GrpcPool created", zap.Uint64("upstreamID", up.ID))
 
 	up.RegionCache = tikv.NewRegionCache(up.PDClient)
@@ -168,7 +171,7 @@ func (up *Upstream) init(ctx context.Context, gcServiceID string) error {
 		log.Warn("Fail to verify region label rule",
 			zap.Error(err),
 			zap.Uint64("upstreamID", up.ID),
-			zap.Strings("upstramEndpoints", up.pdEndpoints))
+			zap.Strings("upstramEndpoints", up.PdEndpoints))
 	}
 
 	up.wg.Add(1)
@@ -219,6 +222,10 @@ func (up *Upstream) close() {
 	log.Info("upStream closed", zap.Uint64("upstreamID", up.ID))
 }
 
+func (up *Upstream) Error() error {
+	return up.err
+}
+
 // IsNormal returns true if the upstream is normal.
 func (up *Upstream) IsNormal() bool {
 	return atomic.LoadInt32(&up.status) == normal
@@ -262,11 +269,9 @@ func (up *Upstream) Release() {
 
 // return true if this upstream idleTime reachs maxIdleDuration.
 func (up *Upstream) shouldClose() bool {
-	// default upstream should never be closed.
-	if up.ID == DefaultUpstreamID {
+	if up.isDefaultUpstream {
 		return false
 	}
-
 	up.hcMu.mu.Lock()
 	defer up.hcMu.mu.Unlock()
 	if up.hcMu.hc == 0 && !up.hcMu.idleTime.IsZero() &&

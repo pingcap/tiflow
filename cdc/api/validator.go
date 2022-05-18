@@ -15,6 +15,7 @@ package api
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -42,10 +43,8 @@ func verifyCreateChangefeedConfig(
 	ctx context.Context,
 	changefeedConfig model.ChangefeedConfig,
 	capture *capture.Capture,
+	upStream *upstream.Upstream,
 ) (*model.ChangeFeedInfo, error) {
-	// TODO(dongmen): we should pass ClusterID in ChangefeedConfig in the upcoming future
-	upStream := capture.UpstreamManager.Get(upstream.DefaultUpstreamID)
-	defer upStream.Release()
 
 	// verify sinkURI
 	if changefeedConfig.SinkURI == "" {
@@ -141,6 +140,12 @@ func verifyCreateChangefeedConfig(
 		SyncPointEnabled:  false,
 		SyncPointInterval: 10 * time.Minute,
 		CreatorVersion:    version.ReleaseVersion,
+		UpstreamID:        upStream.ID,
+		PDEndpoints:       strings.Join(upStream.PdEndpoints, ","),
+		CAPath:            upStream.SecurityConfig.CAPath,
+		CertPath:          upStream.SecurityConfig.CertPath,
+		KeyPath:           upStream.SecurityConfig.KeyPath,
+		CertAllowedCN:     upStream.SecurityConfig.CertAllowedCN,
 	}
 
 	if !replicaConfig.ForceReplicate && !changefeedConfig.IgnoreIneligibleTable {

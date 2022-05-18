@@ -149,9 +149,6 @@ func (o *ownerImpl) Tick(stdCtx context.Context, rawState orchestrator.ReactorSt
 		o.bootstrapped = true
 		return state, nil
 	}
-	if err := o.upstreamManager.Tick(stdCtx); err != nil {
-		return state, errors.Trace(err)
-	}
 
 	o.captures = state.Captures
 	o.updateMetrics(state)
@@ -190,7 +187,15 @@ func (o *ownerImpl) Tick(stdCtx context.Context, rawState orchestrator.ReactorSt
 		})
 		cfReactor, exist := o.changefeeds[changefeedID]
 		if !exist {
-			upStream := o.upstreamManager.Get(changefeedState.Info.UpstreamID)
+			info := changefeedState.Info
+			upStream := o.upstreamManager.Get(upstream.Config{
+				ID:            info.UpstreamID,
+				PDEndpoints:   info.PDEndpoints,
+				KeyPath:       info.KeyPath,
+				CertPath:      info.CAPath,
+				CAPath:        info.CAPath,
+				CertAllowedCN: info.CertAllowedCN,
+			})
 			cfReactor = o.newChangefeed(changefeedID, upStream)
 			o.changefeeds[changefeedID] = cfReactor
 		}
@@ -539,30 +544,48 @@ func (o *ownerImpl) pushOwnerJob(job *ownerJob) {
 func (o *ownerImpl) updateGCSafepoint(
 	ctx context.Context, state *orchestrator.GlobalReactorState,
 ) error {
-	minChekpoinTsMap, forceUpdateMap := o.calculateGCSagepoint(state)
+	minChekpoinTsMap, forceUpdateMap := o.calculateGCSafePoint(state)
 	for upstreamID, minCheckpointTs := range minChekpoinTsMap {
-		upStream := o.upstreamManager.Get(upstreamID)
+		err := func() error {
+			upStreams := o.upstreamManager.GetByUpstreamID(upstreamID)
+			var upStream *upstream.Upstream
+			// pick a normal upstream
+			for _, up := range upStreams {
+				if up.IsNormal() {
+					upStream = up
+					break
+				}
+			}
+			if upStream == nil {
+				log.Warn("no normal upstream is found", zap.Uint64("upstream", upstreamID))
+				return nil
+			}
 
-		// When the changefeed starts up, CDC will do a snapshot read at
-		// (checkpointTs - 1) from TiKV, so (checkpointTs - 1) should be an upper
-		// bound for the GC safepoint.
-		gcSafepointUpperBound := minCheckpointTs - 1
+			// When the changefeed starts up, CDC will do a snapshot read at
+			// (checkpointTs - 1) from TiKV, so (checkpointTs - 1) should be an upper
+			// bound for the GC safepoint.
+			gcSafepointUpperBound := minCheckpointTs - 1
 
-		var forceUpdate bool
-		if _, exist := forceUpdateMap[upstreamID]; exist {
-			forceUpdate = true
-		}
+			var forceUpdate bool
+			if _, exist := forceUpdateMap[upstreamID]; exist {
+				forceUpdate = true
+			}
 
-		err := upStream.GCManager.TryUpdateGCSafePoint(ctx, gcSafepointUpperBound, forceUpdate)
+			err := upStream.GCManager.TryUpdateGCSafePoint(ctx, gcSafepointUpperBound, forceUpdate)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			return nil
+		}()
 		if err != nil {
-			return errors.Trace(err)
+			return err
 		}
 	}
 	return nil
 }
 
-// calculateGCSagepoint calculates GCSafepoint for different upstream.
-func (o *ownerImpl) calculateGCSagepoint(state *orchestrator.GlobalReactorState) (
+// calculateGCSafePoint calculates GCSafePoint for different upstream.
+func (o *ownerImpl) calculateGCSafePoint(state *orchestrator.GlobalReactorState) (
 	map[uint64]uint64, map[uint64]interface{},
 ) {
 	minCheckpointTsMap := make(map[uint64]uint64)

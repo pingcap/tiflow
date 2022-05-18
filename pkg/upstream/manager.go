@@ -15,18 +15,13 @@ package upstream
 
 import (
 	"context"
+	"strings"
 	"sync"
 
-	"github.com/pingcap/errors"
-	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/etcd"
+	"github.com/pingcap/tiflow/pkg/security"
 	pd "github.com/tikv/pd/client"
-	"go.uber.org/zap"
 )
-
-// DefaultUpstreamID is a pseudo upstreamID for now. It will be removed in the future.
-const DefaultUpstreamID uint64 = 0
 
 // Manager manages all upstream.
 type Manager struct {
@@ -40,14 +35,16 @@ type Manager struct {
 	cancel func()
 	// lock this mutex when add or delete a value of Manager.ups.
 	mu sync.Mutex
+	// defaultUpstream is the default upstream
+	defaultUpstream *Upstream
 }
 
-// UpstreamKey is the key of Manager's ups map
-type UpstreamKey struct {
-	ClusterID uint64
-	CAPath    string
-	CertPath  string
-	KeyPath   string
+// MapKey is the key of Manager's ups map
+type MapKey struct {
+	ID       uint64
+	CAPath   string
+	CertPath string
+	KeyPath  string
 }
 
 // NewManager creates a new Manager.
@@ -62,47 +59,134 @@ func NewManager(ctx context.Context, gcServiceID string) *Manager {
 	}
 }
 
+var (
+	testUpstreamID = uint64(1)
+	testMapKey     = MapKey{
+		ID:       testUpstreamID,
+		CAPath:   "",
+		CertPath: "",
+		KeyPath:  "",
+	}
+	testConfig = Config{
+		ID:       testUpstreamID,
+		CAPath:   "",
+		CertPath: "",
+		KeyPath:  "",
+	}
+)
+
 // NewManager4Test returns a Manager for unit test.
 func NewManager4Test(pdClient pd.Client) *Manager {
 	up := NewUpstream4Test(pdClient)
 	res := &Manager{ups: new(sync.Map), ctx: context.Background(),
-		gcServiceID: etcd.GcServiceIDForTest()}
-	res.ups.Store(DefaultUpstreamID, up)
+		gcServiceID:     etcd.GcServiceIDForTest(),
+		defaultUpstream: up}
+	res.ups.Store(testMapKey, up)
 	return res
 }
 
-// Add adds a upstream and init it.
-// TODO(dongmen): async init upstream and should not return any error in the future.
-func (m *Manager) Add(upstreamID uint64, pdEndpoints []string, securityConfig *config.SecurityConfig) error {
-	select {
-	case <-m.ctx.Done():
-		// This would not happen if there were no errors in the code logic.
-		panic("should not add a upstream to a closed upstream manager")
-	default:
+type Config struct {
+	ID            uint64
+	PDEndpoints   string
+	KeyPath       string
+	CertPath      string
+	CAPath        string
+	CertAllowedCN []string
+}
+
+// AddDefaultUpstream add the default upstream
+func (m *Manager) AddDefaultUpstream(conf Config) (*Upstream, error) {
+	up := newUpstream(conf.ID, strings.Split(conf.PDEndpoints, ","),
+		&security.Credential{
+			CAPath:        conf.CAPath,
+			CertPath:      conf.CertPath,
+			KeyPath:       conf.KeyPath,
+			CertAllowedCN: conf.CertAllowedCN,
+		})
+	if err := up.init(m.ctx, m.gcServiceID); err != nil {
+		return nil, err
 	}
-	if _, ok := m.ups.Load(upstreamID); ok {
-		return nil
+	mapKey := MapKey{
+		ID:       up.PDClient.GetClusterID(m.ctx),
+		CAPath:   conf.CAPath,
+		CertPath: conf.CertPath,
+		KeyPath:  conf.KeyPath,
 	}
-	up := newUpstream(upstreamID, pdEndpoints, securityConfig)
-	err := up.init(m.ctx, m.gcServiceID)
-	if err != nil {
-		return errors.Trace(err)
+	up.ID = mapKey.ID
+	up.isDefaultUpstream = true
+	m.ups.Store(mapKey, up)
+	return up, nil
+}
+
+func (m *Manager) GetDefaultUpstream() *Upstream {
+	return m.defaultUpstream
+}
+
+func (m *Manager) Add(conf Config, sync bool) *Upstream {
+	mapKey := MapKey{
+		ID:       conf.ID,
+		CAPath:   conf.CAPath,
+		CertPath: conf.CertPath,
+		KeyPath:  conf.KeyPath,
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.ups.Store(up.PDClient.GetClusterID(m.ctx), up)
-	return nil
+	// check again
+	v, ok := m.ups.Load(mapKey)
+	if ok {
+		up := v.(*Upstream)
+		up.hold()
+		return up
+	}
+	up := newUpstream(conf.ID, strings.Split(conf.PDEndpoints, ","),
+		&security.Credential{
+			CAPath:        conf.CAPath,
+			CertPath:      conf.CertPath,
+			KeyPath:       conf.KeyPath,
+			CertAllowedCN: conf.CertAllowedCN,
+		})
+	m.ups.Store(mapKey, up)
+	if sync {
+		up.err = up.init(m.ctx, m.gcServiceID)
+	} else {
+		go func() {
+			up.err = up.init(m.ctx, m.gcServiceID)
+		}()
+	}
+	up.hold()
+	return up
 }
 
 // Get gets a upstream by upstreamID.
-func (m *Manager) Get(upstreamID uint64) *Upstream {
-	v, ok := m.ups.Load(upstreamID)
-	if !ok {
-		log.Panic("upstream not exists", zap.Uint64("upstreamID", upstreamID))
+func (m *Manager) Get(conf Config) *Upstream {
+	mapKey := MapKey{
+		ID:       conf.ID,
+		CAPath:   conf.CAPath,
+		CertPath: conf.CertPath,
+		KeyPath:  conf.KeyPath,
 	}
-	up := v.(*Upstream)
-	up.hold()
-	return up
+	v, ok := m.ups.Load(mapKey)
+	if ok {
+		up := v.(*Upstream)
+		up.hold()
+		return up
+	}
+	return m.Add(conf, false)
+}
+
+func (m *Manager) GetByUpstreamID(id uint64) []*Upstream {
+	var ret []*Upstream
+	m.ups.Range(func(key, v any) bool {
+		up := v.(*Upstream)
+		if up.ID == id {
+			ret = append(ret, up)
+		}
+		return true
+	})
+	for _, up := range ret {
+		up.hold()
+	}
+	return ret
 }
 
 // Close closes all upstreams.

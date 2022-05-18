@@ -308,6 +308,9 @@ func isProcessorIgnorableError(err error) bool {
 // the `state` parameter is sent by the etcd worker, the `state` must be a snapshot of KVs in etcd
 // The main logic of processor is in this function, including the calculation of many kinds of ts, maintain table pipeline, error handling, etc.
 func (p *processor) Tick(ctx cdcContext.Context, state *orchestrator.ChangefeedReactorState) (orchestrator.ReactorState, error) {
+	if err := p.upStream.Error(); err != nil {
+		return p.handleErr(ctx, state, err)
+	}
 	// skip this tick
 	if !p.upStream.IsNormal() {
 		return state, nil
@@ -331,6 +334,10 @@ func (p *processor) Tick(ctx cdcContext.Context, state *orchestrator.ChangefeedR
 	if err == nil {
 		return state, nil
 	}
+	return p.handleErr(ctx, state, err)
+}
+
+func (p *processor) handleErr(ctx cdcContext.Context, state *orchestrator.ChangefeedReactorState, err error) (orchestrator.ReactorState, error) {
 	if isProcessorIgnorableError(err) {
 		log.Info("processor exited", cdcContext.ZapFieldCapture(ctx), cdcContext.ZapFieldChangefeed(ctx))
 		return state, cerror.ErrReactorFinished.GenWithStackByArgs()

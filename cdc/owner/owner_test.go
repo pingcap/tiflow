@@ -129,9 +129,9 @@ func TestCreateRemoveChangefeed(t *testing.T) {
 	}
 
 	// this will make changefeed always meet ErrGCTTLExceeded
-	mockedManager := &mockManager{Manager: owner.upstreamManager.Get(changefeedInfo.UpstreamID).GCManager}
-	owner.upstreamManager.Get(changefeedInfo.UpstreamID).GCManager = mockedManager
-	err = owner.upstreamManager.Get(changefeedInfo.UpstreamID).GCManager.CheckStaleCheckpointTs(ctx, changefeedID, 0)
+	mockedManager := &mockManager{Manager: owner.upstreamManager.GetDefaultUpstream().GCManager}
+	owner.upstreamManager.GetDefaultUpstream().GCManager = mockedManager
+	err = owner.upstreamManager.GetDefaultUpstream().GCManager.CheckStaleCheckpointTs(ctx, changefeedID, 0)
 	require.NotNil(t, err)
 
 	// this tick create remove changefeed patches
@@ -605,7 +605,7 @@ func TestCalculateGCSafepointTs(t *testing.T) {
 		}
 	}
 
-	minCheckpoinTsMap, forceUpdateMap := o.calculateGCSagepoint(state)
+	minCheckpoinTsMap, forceUpdateMap := o.calculateGCSafePoint(state)
 
 	require.Equal(t, expectMinTsMap, minCheckpoinTsMap)
 	require.Equal(t, expectForceUpdateMap, forceUpdateMap)
