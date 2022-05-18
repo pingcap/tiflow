@@ -28,17 +28,17 @@ type scheduler interface {
 		checkpointTs model.Ts,
 		currentTables []model.TableID,
 		aliveCaptures map[model.CaptureID]*model.CaptureInfo,
-		captureTables map[model.CaptureID]CaptureStatus,
+		captureTables map[model.CaptureID]*CaptureStatus,
 	) []*scheduleTask
 }
 
 var _ internal.Scheduler = (*coordinator)(nil)
 
 type coordinator struct {
-	trans   transport
-	manager *replicationManager
-	// balancer and drainer
-	scheduler []scheduler
+	trans        transport
+	scheduler    []scheduler
+	replicationM *replicationManager
+	captureM     *captureManager
 }
 
 func (c *coordinator) Tick(
@@ -69,14 +69,14 @@ func (c *coordinator) poll(
 	ctx context.Context, checkpointTs model.Ts, currentTables []model.TableID,
 	aliveCaptures map[model.CaptureID]*model.CaptureInfo,
 ) error {
-	captureTables := c.manager.captureTableSets()
+	captureTables := c.captureM.captureTableSets()
 	allTasks := make([]*scheduleTask, 0)
 	for _, sched := range c.scheduler {
 		tasks := sched.Schedule(checkpointTs, currentTables, aliveCaptures, captureTables)
 		allTasks = append(allTasks, tasks...)
 	}
 	recvMsgs := c.recvMessages()
-	sentMsgs, err := c.manager.poll(
+	sentMsgs, err := c.replicationM.poll(
 		ctx, checkpointTs, currentTables, aliveCaptures, recvMsgs, allTasks)
 	if err != nil {
 		return errors.Trace(err)

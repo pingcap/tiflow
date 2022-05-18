@@ -19,10 +19,6 @@ import "gogoproto/gogo.proto";
 
 option(gogoproto.goproto_enum_prefix_all) = false;
 
-message OwnerRevision { int64 revision = 1; }
-
-message ProcessorEpoch { string epoch = 1; }
-
 message Checkpoint {
     uint64 checkpoint_ts = 1 [(gogoproto.casttype) = "github.com/pingcap/tiflow/cdc/model.Ts"];
     uint64 resolved_ts = 2 [(gogoproto.casttype) = "github.com/pingcap/tiflow/cdc/model.Ts"];
@@ -45,9 +41,8 @@ message RemoveTableRequest {
 }
 
 message DispatchTableRequest {
-    OwnerRevision owner_revision = 1;
-    AddTableRequest add_table = 2;
-    RemoveTableRequest remove_table = 3;
+    AddTableRequest add_table = 1;
+    RemoveTableRequest remove_table = 2;
 }
 
 message AddTableResponse {
@@ -70,13 +65,11 @@ message RemoveTableResponse {
 }
 
 message DispatchTableResponse {
-    ProcessorEpoch processor_epoch = 1;
-
-    AddTableResponse add_table = 2;
-    RemoveTableResponse remove_table = 3;
+    AddTableResponse add_table = 1;
+    RemoveTableResponse remove_table = 2;
 }
 
-message Heartbeat { OwnerRevision owner_revision = 1; }
+message Heartbeat {}
 
 // TableState is the state of table repliction in processor.
 //
@@ -107,11 +100,8 @@ message TableStatus {
 }
 
 message HeartbeatResponse {
-    ProcessorEpoch processor_epoch = 1 [(gogoproto.nullable) = false];
-    OwnerRevision owner_revision = 2 [(gogoproto.nullable) = false];
-
-    repeated TableStatus tables = 3 [(gogoproto.nullable) = false];
-    bool is_stopping = 4;
+    repeated TableStatus tables = 1 [(gogoproto.nullable) = false];
+    bool is_stopping = 2;
 }
 
 enum MessageType {
@@ -123,10 +113,16 @@ enum MessageType {
     MsgHeartbeatResponse = 5 [(gogoproto.enumvalue_customname) = "MsgHeartbeatResponse"];
 }
 
+message OwnerRevision { int64 revision = 1; }
+
+message ProcessorEpoch { string epoch = 1; }
+
 message Message {
     message Header {
         // The semantic version of the node that sent this message.
         string version = 1;
+        OwnerRevision owner_revision = 2 [(gogoproto.nullable) = false];
+        ProcessorEpoch processor_epoch = 3 [(gogoproto.nullable) = false];
     }
     Header header = 1;
     MessageType msg_type = 2;
