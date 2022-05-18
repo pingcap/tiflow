@@ -1955,6 +1955,10 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 				// instead of using the currentLocation, the next redirection should share the same latestLocation with the current shardingResync.
 				// This is to avoid syncer syncs to current shardingResync.latestLocation before,
 				// we may miss some rows events if we don't check the row events between currentLocation and shardingResync.latestLocation.
+				// TODO: This will cause a potential performance issue. If we have multiple tables not resolved after a huge amount of binlogs but resolved in a short time,
+				//   	current implementation will cause syncer to redirect and replay the binlogs in this segment several times. One possible solution is to
+				//      interrupt current resync once syncer meets a new redirect operation, force other tables to be resolved together in the interrupted shardingResync.
+				//      If we want to do this, we also neet to remove the target table check at https://github.com/pingcap/tiflow/blob/af849add84bf26feb2628d3e1e4344830b915fd9/dm/syncer/syncer.go#L2489
 				endLocation := &currentLocation
 				if shardingReSync != nil {
 					endLocation = &shardingReSync.latestLocation
