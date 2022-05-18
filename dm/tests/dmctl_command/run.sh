@@ -288,76 +288,76 @@ function run_validator_cmd {
 function run_validator_cmd_error() {
 	# status: without taskname
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"validation status --stage stopped" \
-		"Error" 1
+		"validation status --table-stage stopped" \
+		"Error: task name should be specified" 1
 	# status: invalid stage
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"validation status --stage start" \
-		"Error" 1
+		"validation status --table-stage start test" \
+		"Error: stage should be either" 1
 
 	# show errors: resolved error is illegal
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation show-errors --error resolved test" \
-		"Error" 1
+		"Error: error flag should be either" 1
 	# show errors: no task name
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation show-errors --error all" \
-		"Error" 1
+		"Error: task name should be specified" 1
 
 	# operate error: conflict id and --all flag
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation ignore-error test 100 --all" \
-		"Error" 1
+		"Error: either \`--all\` or \`error-id\` should be set" 1
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation make-resolve test 100 --all" \
-		"Error" 1
+		"Error: either \`--all\` or \`error-id\` should be set" 1
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation clear test 100 --all" \
-		"Error" 1
+		"Error: either \`--all\` or \`error-id\` should be set" 1
 
 	# operate error: more than one arguments
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation ignore-error test 100 101" \
-		"Error" 1
+		"Error: too many arguments are specified" 1
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation make-resolve test 100 101" \
-		"Error" 1
+		"Error: too many arguments are specified" 1
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation clear test 100 101" \
-		"Error" 1
+		"Error: too many arguments are specified" 1
 
 	# operate error: NaN id
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation ignore-error test error-id" \
-		"Error" 1
+		"Error: \`error-id\` should be integer when \`--all\` is not set" 1
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation make-resolve test error-id" \
-		"Error" 1
+		"Error: \`error-id\` should be integer when \`--all\` is not set" 1
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"validation clear test 100 error-id" \
-		"Error" 1
+		"validation clear test error-id" \
+		"Error: \`error-id\` should be integer when \`--all\` is not set" 1
 
 	# operate error: neither all nor id
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation ignore-error test" \
-		"Error" 1
+		"Error: either \`--all\` or \`error-id\` should be set" 1
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation make-resolve test" \
-		"Error" 1
+		"Error: either \`--all\` or \`error-id\` should be set" 1
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation clear test" \
-		"Error" 1
+		"Error: either \`--all\` or \`error-id\` should be set" 1
 
 	# operate error: no task name
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation ignore-error" \
-		"Error" 1
+		"Error: task name should be specified" 1
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation make-resolve" \
-		"Error" 1
+		"Error: task name should be specified" 1
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation clear" \
-		"Error" 1
+		"Error: task name should be specified" 1
 }
 
 cleanup_data dmctl_command
