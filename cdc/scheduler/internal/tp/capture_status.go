@@ -14,32 +14,63 @@
 package tp
 
 import (
-	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/tp/schedulepb"
+	"go.uber.org/zap"
 )
 
-// captureState is the state of a capture.
+// CaptureState is the state of a capture.
 //
-//            ┌────────┐ onSync() ┌────────┐
-//  Absent ─> │ UnSync ├─────────>│ Synced │
-//            └───┬────┘          └────┬───┘
-//                │                    │
-//     onReject() │    ┌──────────┐    │ onReject()
-//                └──> │ Rejected │ <──┘
-//                     └──────────┘
-type captureState int
+//      ┌──────────────┐ Heartbeat Resp ┌─────────────┐
+//      │ Uninitialize ├───────────────>│ Initialized │
+//      └──────┬───────┘                └──────┬──────┘
+//             │                               │
+//  IsStopping │          ┌──────────┐         │ IsStopping
+//             └────────> │ Stopping │ <───────┘
+//                        └──────────┘
+type CaptureState int
 
 const (
-	captureStateUnSync  captureState = 1
-	captureStateSynced  captureState = 2
-	captureStateRejcted captureState = 3
+	// CaptureStateUninitialize means the capture status is unknown,
+	// no heartbeat response received yet.
+	CaptureStateUninitialize CaptureState = 1
+	// CaptureStateInitialized means owner has received heartbeat response.
+	CaptureStateInitialized CaptureState = 2
+	// CaptureStateStopping means the capture is removing, e.g., shutdown.
+	CaptureStateStopping CaptureState = 3
 )
 
-type captureStatus struct {
-	state captureState
-	// tableSet is a set of table ID that is in a capture.
-	tableSet map[model.TableID]schedulepb.TableState
+// CaptureStatus represent captrue's status.
+type CaptureStatus struct {
+	OwnerRev schedulepb.OwnerRevision
+	Epoch    schedulepb.ProcessorEpoch
+	State    CaptureState
 }
 
-func (c *captureStatus) onSync(sync *schedulepb.Sync)   {}
-func (c *captureStatus) onReject(sync *schedulepb.Sync) {}
+func newCaptureStatus(rev schedulepb.OwnerRevision) *CaptureStatus {
+	return &CaptureStatus{OwnerRev: rev, State: CaptureStateUninitialize}
+}
+
+func (c *CaptureStatus) handleHeartbeatResponse(
+	resp *schedulepb.HeartbeatResponse,
+) {
+	revMismatch := c.OwnerRev.Revision != resp.OwnerRevision.Revision
+	epochMismatch := c.State != CaptureStateUninitialize &&
+		c.Epoch.Epoch != resp.ProcessorEpoch.Epoch
+	if revMismatch || epochMismatch {
+		log.Warn("tpscheduler: ignore heartbeat response",
+			zap.String("epoch", c.Epoch.Epoch),
+			zap.String("respEpoch", resp.ProcessorEpoch.Epoch),
+			zap.Int64("ownerRev", c.OwnerRev.Revision),
+			zap.Int64("respOwnerRev", resp.OwnerRevision.Revision))
+		return
+	}
+
+	if c.State == CaptureStateUninitialize {
+		c.Epoch = resp.ProcessorEpoch
+		c.State = CaptureStateInitialized
+	}
+	if resp.IsStopping {
+		c.State = CaptureStateStopping
+	}
+}

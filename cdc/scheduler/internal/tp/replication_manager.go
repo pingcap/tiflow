@@ -59,12 +59,12 @@ type scheduleTask struct {
 }
 
 type replicationManager struct {
-	tables       map[model.TableID]ReplicationSet
+	tables       map[model.TableID]*ReplicationSet
 	runningTasks map[model.TableID]*scheduleTask
-	captures     map[model.CaptureID]CaptureStatus
+	captures     map[model.CaptureID]*CaptureStatus
 }
 
-func (s *replicationManager) captureTableSets() map[model.CaptureID]CaptureStatus {
+func (s *replicationManager) captureTableSets() map[model.CaptureID]*CaptureStatus {
 	return s.captures
 }
 
