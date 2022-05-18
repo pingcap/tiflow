@@ -118,7 +118,7 @@ func (h *heapSorter) flush(ctx context.Context, maxResolvedTs uint64) error {
 	// Since when a table is mostly idle or near-idle, most flushes would contain one ResolvedEvent alone,
 	// this optimization will greatly improve performance when (1) total number of table is large,
 	// and (2) most tables do not have many events.
-	if h.heap.Len() == 1 && h.heap[0].entry.RawKV.OpType == model.OpTypeResolved {
+	if h.heap.Len() == 1 && h.heap[0].entry.IsResolved() {
 		h.heap.Pop()
 	}
 
@@ -303,7 +303,7 @@ func (h *heapSorter) init(ctx context.Context, onError func(err error)) {
 	poolHandle := heapSorterPool.RegisterEvent(func(ctx context.Context, eventI interface{}) error {
 		event := eventI.(*model.PolymorphicEvent)
 		heap.Push(&h.heap, &sortItem{entry: event})
-		isResolvedEvent := event.RawKV != nil && event.RawKV.OpType == model.OpTypeResolved
+		isResolvedEvent := event.RawKV != nil && event.IsResolved()
 
 		if isResolvedEvent {
 			if event.RawKV.CRTs < state.maxResolved {

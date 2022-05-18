@@ -71,7 +71,10 @@ func (t *tableSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error
 // FlushRowChangedEvents flushes sorted rows to sink manager, note the resolvedTs
 // is required to be no more than global resolvedTs, table barrierTs and table
 // redo log watermarkTs.
-func (t *tableSink) FlushRowChangedEvents(ctx context.Context, tableID model.TableID, resolvedTs uint64) (uint64, error) {
+func (t *tableSink) FlushRowChangedEvents(
+	ctx context.Context, tableID model.TableID, resolved model.ResolvedTs,
+) (uint64, error) {
+	resolvedTs := resolved.Ts
 	if tableID != t.tableID {
 		log.Panic("inconsistent table sink",
 			zap.Int64("tableID", tableID), zap.Int64("sinkTableID", t.tableID))
@@ -80,7 +83,7 @@ func (t *tableSink) FlushRowChangedEvents(ctx context.Context, tableID model.Tab
 		return t.buffer[i].CommitTs > resolvedTs
 	})
 	if i == 0 {
-		return t.flushResolvedTs(ctx, resolvedTs)
+		return t.flushResolvedTs(ctx, resolved)
 	}
 	resolvedRows := t.buffer[:i]
 	t.buffer = append(make([]*model.RowChangedEvent, 0, len(t.buffer[i:])), t.buffer[i:]...)
@@ -89,19 +92,21 @@ func (t *tableSink) FlushRowChangedEvents(ctx context.Context, tableID model.Tab
 	if err != nil {
 		return 0, errors.Trace(err)
 	}
-	return t.flushResolvedTs(ctx, resolvedTs)
+	return t.flushResolvedTs(ctx, resolved)
 }
 
-func (t *tableSink) flushResolvedTs(ctx context.Context, resolvedTs uint64) (uint64, error) {
-	redoTs, err := t.flushRedoLogs(ctx, resolvedTs)
+func (t *tableSink) flushResolvedTs(
+	ctx context.Context, resolved model.ResolvedTs,
+) (uint64, error) {
+	redoTs, err := t.flushRedoLogs(ctx, resolved.Ts)
 	if err != nil {
 		return 0, errors.Trace(err)
 	}
-	if redoTs < resolvedTs {
-		resolvedTs = redoTs
+	if redoTs < resolved.Ts {
+		resolved.Ts = redoTs
 	}
 
-	checkpointTs, err := t.backendSink.FlushRowChangedEvents(ctx, t.tableID, resolvedTs)
+	checkpointTs, err := t.backendSink.FlushRowChangedEvents(ctx, t.tableID, resolved)
 	if err != nil {
 		return 0, errors.Trace(err)
 	}
