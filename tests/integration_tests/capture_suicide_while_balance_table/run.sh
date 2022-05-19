@@ -65,7 +65,7 @@ function run() {
 	sleep 2
 
 	# revoke lease of etcd capture key to simulate etcd session done
-	lease=$(ETCDCTL_API=3 etcdctl get /tidb/cdc/capture/${capture2_id} -w json | grep -o 'lease":[0-9]*' | awk -F: '{print $2}')
+	lease=$(ETCDCTL_API=3 etcdctl get /tidb/cdc/default/__cdc_meta__/capture/${capture2_id} -w json | grep -o 'lease":[0-9]*' | awk -F: '{print $2}')
 	lease_hex=$(printf '%x\n' $lease)
 	ETCDCTL_API=3 etcdctl lease revoke $lease_hex
 

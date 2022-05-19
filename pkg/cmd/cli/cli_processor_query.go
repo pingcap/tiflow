@@ -99,12 +99,10 @@ func (o *queryProcessorOptions) addFlags(cmd *cobra.Command) {
 
 // run cli cmd with etcd client
 func (o *queryProcessorOptions) runCliWithEtcdClient(ctx context.Context, cmd *cobra.Command) error {
-	_, status, err := o.etcdClient.GetTaskStatus(ctx, o.changefeedID, o.captureID)
-	if err != nil && cerror.ErrTaskStatusNotExists.Equal(err) {
-		return err
-	}
+	status := &model.TaskStatus{}
 
-	_, position, err := o.etcdClient.GetTaskPosition(ctx, o.changefeedID, o.captureID)
+	_, position, err := o.etcdClient.GetTaskPosition(ctx,
+		model.DefaultChangeFeedID(o.changefeedID), o.captureID)
 	if err != nil && cerror.ErrTaskPositionNotExists.Equal(err) {
 		return err
 	}

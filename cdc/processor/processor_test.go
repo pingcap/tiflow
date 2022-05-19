@@ -114,14 +114,15 @@ func initProcessor4Test(ctx cdcContext.Context, t *testing.T) (*processor, *orch
 	captureID := ctx.GlobalVars().CaptureInfo.ID
 	changefeedID := ctx.ChangefeedVars().ID
 	return p, orchestrator.NewReactorStateTester(t, p.changefeed, map[string]string{
-		"/tidb/cdc/capture/" +
-			captureID: `{"id":"` + captureID + `","address":"127.0.0.1:8300"}`,
-		"/tidb/cdc/changefeed/info/" +
-			changefeedID.ID: changefeedInfo,
-		"/tidb/cdc/job/" +
-			ctx.ChangefeedVars().ID.ID: `{"resolved-ts":0,"checkpoint-ts":0,"admin-job-type":0}`,
-		"/tidb/cdc/task/status/" +
-			captureID + "/" + changefeedID.ID: `{"tables":{},"operation":null,"admin-job-type":0}`,
+		fmt.Sprintf("%s/capture/%s",
+			etcd.DefaultClusterAndMetaPrefix,
+			captureID): `{"id":"` + captureID + `","address":"127.0.0.1:8300"}`,
+		fmt.Sprintf("%s/changefeed/info/%s",
+			etcd.DefaultClusterAndNamespacePrefix,
+			changefeedID.ID): changefeedInfo,
+		fmt.Sprintf("%s/job/%s",
+			etcd.DefaultClusterAndNamespacePrefix,
+			ctx.ChangefeedVars().ID.ID): `{"resolved-ts":0,"checkpoint-ts":0,"admin-job-type":0}`,
 	})
 }
 

@@ -27,6 +27,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/stretchr/testify/require"
@@ -64,7 +65,9 @@ func (s *managerTester) resetSuit(ctx cdcContext.Context, t *testing.T) {
 	captureInfoBytes, err := ctx.GlobalVars().CaptureInfo.Marshal()
 	require.Nil(t, err)
 	s.tester = orchestrator.NewReactorStateTester(t, s.state, map[string]string{
-		fmt.Sprintf("/tidb/cdc/capture/%s", ctx.GlobalVars().CaptureInfo.ID): string(captureInfoBytes),
+		fmt.Sprintf("%s/capture/%s",
+			etcd.DefaultClusterAndMetaPrefix,
+			ctx.GlobalVars().CaptureInfo.ID): string(captureInfoBytes),
 	})
 }
 
