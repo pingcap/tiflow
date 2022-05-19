@@ -36,7 +36,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	"github.com/pingcap/tiflow/pkg/upstream"
-	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/stretchr/testify/require"
 	"github.com/tikv/client-go/v2/oracle"
 )
@@ -237,6 +236,7 @@ func TestInitialize(t *testing.T) {
 	tester.MustApplyPatches()
 
 	// initialize
+	ctx.GlobalVars().EtcdClient = &etcd.CDCEtcdClient{}
 	cf.Tick(ctx, state, captures)
 	tester.MustApplyPatches()
 	require.Equal(t, state.Status.CheckpointTs, ctx.ChangefeedVars().Info.StartTs)
@@ -271,20 +271,8 @@ func TestExecDDL(t *testing.T) {
 	job := helper.DDL2Job("create table test0.table0(id int primary key)")
 	startTs := job.BinlogInfo.FinishedTS + 1000
 
-	ctx := cdcContext.NewContext(context.Background(), &cdcContext.GlobalVars{
-		CaptureInfo: &model.CaptureInfo{
-			ID:            "capture-id-test",
-			AdvertiseAddr: "127.0.0.1:0000",
-			Version:       version.ReleaseVersion,
-		},
-	})
-	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
-		ID: model.DefaultChangeFeedID("changefeed-id-test"),
-		Info: &model.ChangeFeedInfo{
-			StartTs: startTs,
-			Config:  config.GetDefaultReplicaConfig(),
-		},
-	})
+	ctx := cdcContext.NewContext4Test(context.Background(), true)
+	ctx.ChangefeedVars().Info.StartTs = startTs
 
 	cf, state, captures, tester := createChangefeed4Test(ctx, t)
 	cf.upStream.KVStorage = helper.Storage()
@@ -361,20 +349,8 @@ func TestEmitCheckpointTs(t *testing.T) {
 	job := helper.DDL2Job("create table test0.table0(id int primary key)")
 	startTs := job.BinlogInfo.FinishedTS + 1000
 
-	ctx := cdcContext.NewContext(context.Background(), &cdcContext.GlobalVars{
-		CaptureInfo: &model.CaptureInfo{
-			ID:            "capture-id-test",
-			AdvertiseAddr: "127.0.0.1:0000",
-			Version:       version.ReleaseVersion,
-		},
-	})
-	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
-		ID: model.DefaultChangeFeedID("changefeed-id-test"),
-		Info: &model.ChangeFeedInfo{
-			StartTs: startTs,
-			Config:  config.GetDefaultReplicaConfig(),
-		},
-	})
+	ctx := cdcContext.NewContext4Test(context.Background(), true)
+	ctx.ChangefeedVars().Info.StartTs = startTs
 
 	cf, state, captures, tester := createChangefeed4Test(ctx, t)
 	cf.upStream.KVStorage = helper.Storage()
