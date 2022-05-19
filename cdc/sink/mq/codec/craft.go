@@ -80,11 +80,6 @@ func (e *CraftEventBatchEncoder) Build() []*MQMessage {
 	return ret
 }
 
-// Size implements the EventBatchEncoder interface
-func (e *CraftEventBatchEncoder) Size() int {
-	return e.rowChangedBuffer.Size()
-}
-
 // NewCraftEventBatchEncoder creates a new CraftEventBatchEncoder.
 func NewCraftEventBatchEncoder() EventBatchEncoder {
 	// 64 is a magic number that come up with these assumptions and manual benchmark.
