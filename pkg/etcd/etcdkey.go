@@ -54,7 +54,7 @@ const (
 	CDCKeyTypeTaskPosition
 )
 
-// CDCKey represents a etcd key which is defined by TiCDC
+// CDCKey represents an etcd key which is defined by TiCDC
 /*
  Usage:
  we can parse a raw etcd key:

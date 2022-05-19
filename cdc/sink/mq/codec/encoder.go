@@ -33,8 +33,6 @@ type EventBatchEncoder interface {
 	EncodeDDLEvent(e *model.DDLEvent) (*MQMessage, error)
 	// Build builds the batch and returns the bytes of key and value.
 	Build() []*MQMessage
-	// Size returns the size of the batch(bytes)
-	Size() int
 }
 
 // EncoderBuilder builds encoder with context.

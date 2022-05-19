@@ -59,7 +59,6 @@ const SiderMenu: React.FC<{
 
   const items = useMemo(
     () => [
-      { itemKey: '/', text: 'Dashboard', icon: <DashboardOutlined /> },
       {
         itemKey: '/migration',
         text: t('migration'),
