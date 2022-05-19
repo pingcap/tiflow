@@ -30,14 +30,14 @@ func TestEtcdKey(t *testing.T) {
 		expected: &CDCKey{
 			Tp:           CDCKeyTypeOwner,
 			OwnerLeaseID: "223176cb44d20a13",
-			ClusterID:    "default",
+			ClusterID:    DefaultCDCClusterID,
 		},
 	}, {
 		key: fmt.Sprintf("%s/owner", DefaultClusterAndMetaPrefix),
 		expected: &CDCKey{
 			Tp:           CDCKeyTypeOwner,
 			OwnerLeaseID: "",
-			ClusterID:    "default",
+			ClusterID:    DefaultCDCClusterID,
 		},
 	}, {
 		key: fmt.Sprintf("%s/capture/6bbc01c8-0605-4f86-a0f9-b3119109b225",
@@ -45,7 +45,7 @@ func TestEtcdKey(t *testing.T) {
 		expected: &CDCKey{
 			Tp:        CDCKeyTypeCapture,
 			CaptureID: "6bbc01c8-0605-4f86-a0f9-b3119109b225",
-			ClusterID: "default",
+			ClusterID: DefaultCDCClusterID,
 		},
 	}, {
 		key: fmt.Sprintf("%s", DefaultClusterAndNamespacePrefix) +
@@ -53,7 +53,7 @@ func TestEtcdKey(t *testing.T) {
 		expected: &CDCKey{
 			Tp:           CDCKeyTypeChangefeedInfo,
 			ChangefeedID: model.DefaultChangeFeedID("test-_@#$%changefeed"),
-			ClusterID:    "default",
+			ClusterID:    DefaultCDCClusterID,
 		},
 	}, {
 		key: fmt.Sprintf("%s", DefaultClusterAndNamespacePrefix) +
@@ -61,7 +61,7 @@ func TestEtcdKey(t *testing.T) {
 		expected: &CDCKey{
 			Tp:           CDCKeyTypeChangefeedInfo,
 			ChangefeedID: model.DefaultChangeFeedID("test/changefeed"),
-			ClusterID:    "default",
+			ClusterID:    DefaultCDCClusterID,
 		},
 	}, {
 		key: fmt.Sprintf("%s", DefaultClusterAndNamespacePrefix) +
@@ -69,7 +69,7 @@ func TestEtcdKey(t *testing.T) {
 		expected: &CDCKey{
 			Tp:           CDCKeyTypeChangeFeedStatus,
 			ChangefeedID: model.DefaultChangeFeedID("test-changefeed"),
-			ClusterID:    "default",
+			ClusterID:    DefaultCDCClusterID,
 		},
 	}, {
 		key: "/tidb/cdc/default/name/task" +
@@ -81,7 +81,7 @@ func TestEtcdKey(t *testing.T) {
 				ID:        "test-changefeed",
 			},
 			CaptureID: "6bbc01c8-0605-4f86-a0f9-b3119109b225",
-			ClusterID: "default",
+			ClusterID: DefaultCDCClusterID,
 		},
 	}, {
 		key: fmt.Sprintf("%s", DefaultClusterAndNamespacePrefix) +
@@ -90,12 +90,12 @@ func TestEtcdKey(t *testing.T) {
 			Tp:           CDCKeyTypeTaskPosition,
 			ChangefeedID: model.DefaultChangeFeedID("test/changefeed"),
 			CaptureID:    "6bbc01c8-0605-4f86-a0f9-b3119109b225",
-			ClusterID:    "default",
+			ClusterID:    DefaultCDCClusterID,
 		},
 	}}
 	for _, tc := range testcases {
 		k := new(CDCKey)
-		err := k.Parse(tc.key)
+		err := k.Parse(DefaultCDCClusterID, tc.key)
 		require.NoError(t, err)
 		require.Equal(t, k, tc.expected)
 		require.Equal(t, k.String(), tc.key)
@@ -127,7 +127,7 @@ func TestEtcdKeyParseError(t *testing.T) {
 	}}
 	for _, tc := range testCases {
 		k := new(CDCKey)
-		err := k.Parse(tc.key)
+		err := k.Parse(DefaultCDCClusterID, tc.key)
 		if tc.error {
 			require.NotNil(t, err)
 		} else {

@@ -62,11 +62,12 @@ func createOwner4Test(ctx cdcContext.Context, t *testing.T) (*ownerImpl, *orches
 	o := owner.(*ownerImpl)
 	o.upstreamManager = upstream.NewManager4Test(pdClient)
 
-	state := orchestrator.NewGlobalState()
+	state := orchestrator.NewGlobalState(etcd.DefaultCDCClusterID)
 	tester := orchestrator.NewReactorStateTester(t, state, nil)
 
 	// set captures
 	cdcKey := etcd.CDCKey{
+		ClusterID: state.ClusterID,
 		Tp:        etcd.CDCKeyTypeCapture,
 		CaptureID: ctx.GlobalVars().CaptureInfo.ID,
 	}
@@ -91,6 +92,7 @@ func TestCreateRemoveChangefeed(t *testing.T) {
 	changefeedStr, err := changefeedInfo.Marshal()
 	require.Nil(t, err)
 	cdcKey := etcd.CDCKey{
+		ClusterID:    state.ClusterID,
 		Tp:           etcd.CDCKeyTypeChangefeedInfo,
 		ChangefeedID: changefeedID,
 	}
@@ -160,6 +162,7 @@ func TestStopChangefeed(t *testing.T) {
 	changefeedStr, err := changefeedInfo.Marshal()
 	require.Nil(t, err)
 	cdcKey := etcd.CDCKey{
+		ClusterID:    state.ClusterID,
 		Tp:           etcd.CDCKeyTypeChangefeedInfo,
 		ChangefeedID: changefeedID,
 	}
@@ -209,6 +212,7 @@ func TestFixChangefeedState(t *testing.T) {
 	changefeedStr, err := changefeedInfo.Marshal()
 	require.Nil(t, err)
 	cdcKey := etcd.CDCKey{
+		ClusterID:    state.ClusterID,
 		Tp:           etcd.CDCKeyTypeChangefeedInfo,
 		ChangefeedID: changefeedID,
 	}
@@ -248,6 +252,7 @@ func TestFixChangefeedSinkProtocol(t *testing.T) {
 	changefeedStr, err := changefeedInfo.Marshal()
 	require.Nil(t, err)
 	cdcKey := etcd.CDCKey{
+		ClusterID:    state.ClusterID,
 		Tp:           etcd.CDCKeyTypeChangefeedInfo,
 		ChangefeedID: changefeedID,
 	}
@@ -288,6 +293,7 @@ func TestCheckClusterVersion(t *testing.T) {
 	changefeedStr, err := changefeedInfo.Marshal()
 	require.Nil(t, err)
 	cdcKey := etcd.CDCKey{
+		ClusterID:    state.ClusterID,
 		Tp:           etcd.CDCKeyTypeChangefeedInfo,
 		ChangefeedID: changefeedID,
 	}
@@ -369,7 +375,7 @@ func TestUpdateGCSafePoint(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(true)
 	ctx, cancel := cdcContext.WithCancel(ctx)
 	defer cancel()
-	state := orchestrator.NewGlobalState()
+	state := orchestrator.NewGlobalState(etcd.DefaultCDCClusterID)
 	tester := orchestrator.NewReactorStateTester(t, state, nil)
 
 	// no changefeed, the gc safe point should be max uint64
@@ -488,6 +494,7 @@ func TestHandleJobsDontBlock(t *testing.T) {
 	changefeedStr, err := cfInfo1.Marshal()
 	require.Nil(t, err)
 	cdcKey := etcd.CDCKey{
+		ClusterID:    state.ClusterID,
 		Tp:           etcd.CDCKeyTypeChangefeedInfo,
 		ChangefeedID: cf1,
 	}
@@ -505,6 +512,7 @@ func TestHandleJobsDontBlock(t *testing.T) {
 		Version:       " v0.0.1-test-only",
 	}
 	cdcKey = etcd.CDCKey{
+		ClusterID: state.ClusterID,
 		Tp:        etcd.CDCKeyTypeCapture,
 		CaptureID: captureInfo.ID,
 	}
@@ -522,6 +530,7 @@ func TestHandleJobsDontBlock(t *testing.T) {
 	changefeedStr1, err := cfInfo2.Marshal()
 	require.Nil(t, err)
 	cdcKey = etcd.CDCKey{
+		ClusterID:    state.ClusterID,
 		Tp:           etcd.CDCKeyTypeChangefeedInfo,
 		ChangefeedID: cf2,
 	}
@@ -565,7 +574,7 @@ WorkLoop:
 }
 
 func TestCalculateGCSafepointTs(t *testing.T) {
-	state := orchestrator.NewGlobalState()
+	state := orchestrator.NewGlobalState(etcd.DefaultCDCClusterID)
 	expectMinTsMap := make(map[uint64]uint64)
 	expectForceUpdateMap := make(map[uint64]interface{})
 	o := ownerImpl{changefeeds: make(map[model.ChangeFeedID]*changefeed)}

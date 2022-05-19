@@ -75,10 +75,14 @@ func (f *factoryImpl) GetCredential() *security.Credential {
 	return f.clientGetter.GetCredential()
 }
 
+// GetClusterID returns cdc cluster id.
+func (f *factoryImpl) GetClusterID() string {
+	return f.clientGetter.GetClusterID()
+}
+
 // EtcdClient creates new cdc etcd client.
 func (f *factoryImpl) EtcdClient() (*etcd.CDCEtcdClient, error) {
 	ctx := cmdconetxt.GetDefaultContext()
-
 	tlsConfig, err := f.ToTLSConfig()
 	if err != nil {
 		return nil, err
@@ -126,7 +130,7 @@ func (f *factoryImpl) EtcdClient() (*etcd.CDCEtcdClient, error) {
 			"fail to open PD client, please check pd address \"%s\"", pdAddr)
 	}
 
-	client := etcd.NewCDCEtcdClient(ctx, etcdClient)
+	client := etcd.NewCDCEtcdClient(ctx, etcdClient, f.clientGetter.GetClusterID())
 	return &client, nil
 }
 

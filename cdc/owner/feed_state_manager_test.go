@@ -29,7 +29,8 @@ import (
 func TestHandleJob(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(true)
 	manager := newFeedStateManager4Test()
-	state := orchestrator.NewChangefeedReactorState(ctx.ChangefeedVars().ID)
+	state := orchestrator.NewChangefeedReactorState(etcd.DefaultCDCClusterID,
+		ctx.ChangefeedVars().ID)
 	tester := orchestrator.NewReactorStateTester(t, state, nil)
 	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 		require.Nil(t, info)
@@ -105,7 +106,8 @@ func TestHandleJob(t *testing.T) {
 func TestMarkFinished(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(true)
 	manager := newFeedStateManager4Test()
-	state := orchestrator.NewChangefeedReactorState(ctx.ChangefeedVars().ID)
+	state := orchestrator.NewChangefeedReactorState(etcd.DefaultCDCClusterID,
+		ctx.ChangefeedVars().ID)
 	tester := orchestrator.NewReactorStateTester(t, state, nil)
 	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 		require.Nil(t, info)
@@ -133,7 +135,8 @@ func TestMarkFinished(t *testing.T) {
 func TestCleanUpInfos(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(true)
 	manager := newFeedStateManager4Test()
-	state := orchestrator.NewChangefeedReactorState(ctx.ChangefeedVars().ID)
+	state := orchestrator.NewChangefeedReactorState(etcd.DefaultCDCClusterID,
+		ctx.ChangefeedVars().ID)
 	tester := orchestrator.NewReactorStateTester(t, state, nil)
 	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 		require.Nil(t, info)
@@ -165,7 +168,8 @@ func TestCleanUpInfos(t *testing.T) {
 func TestHandleError(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(true)
 	manager := newFeedStateManager4Test()
-	state := orchestrator.NewChangefeedReactorState(ctx.ChangefeedVars().ID)
+	state := orchestrator.NewChangefeedReactorState(etcd.DefaultCDCClusterID,
+		ctx.ChangefeedVars().ID)
 	tester := orchestrator.NewReactorStateTester(t, state, nil)
 	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 		require.Nil(t, info)
@@ -228,7 +232,8 @@ func TestHandleError(t *testing.T) {
 func TestHandleFastFailError(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(true)
 	manager := new(feedStateManager)
-	state := orchestrator.NewChangefeedReactorState(ctx.ChangefeedVars().ID)
+	state := orchestrator.NewChangefeedReactorState(etcd.DefaultCDCClusterID,
+		ctx.ChangefeedVars().ID)
 	tester := orchestrator.NewReactorStateTester(t, state, nil)
 	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 		require.Nil(t, info)
@@ -308,7 +313,8 @@ func TestChangefeedStatusNotExist(t *testing.T) {
 `
 	ctx := cdcContext.NewBackendContext4Test(true)
 	manager := newFeedStateManager4Test()
-	state := orchestrator.NewChangefeedReactorState(ctx.ChangefeedVars().ID)
+	state := orchestrator.NewChangefeedReactorState(etcd.DefaultCDCClusterID,
+		ctx.ChangefeedVars().ID)
 	tester := orchestrator.NewReactorStateTester(t, state, map[string]string{
 		fmt.Sprintf("%s/capture/d563bfc0-f406-4f34-bc7d-6dc2e35a44e5",
 			etcd.DefaultClusterAndMetaPrefix): `
