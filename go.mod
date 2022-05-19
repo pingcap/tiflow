@@ -109,6 +109,7 @@ require (
 	github.com/google/btree v1.0.1 // indirect
 	github.com/google/go-cmp v0.5.7 // indirect
 	github.com/google/pprof v0.0.0-20211122183932-1daafda22083 // indirect
+	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510 // indirect
 	github.com/googleapis/gax-go/v2 v2.1.1 // indirect
 	github.com/gorilla/mux v1.8.0 // indirect
 	github.com/gorilla/websocket v1.4.2 // indirect

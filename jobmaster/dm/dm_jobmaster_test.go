@@ -11,6 +11,8 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	resourcemeta "github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta/model"
+	"github.com/pingcap/tiflow/dm/checker"
+	dmconfig "github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 
@@ -70,8 +72,7 @@ type masterParamListForTest struct {
 }
 
 // Init -> Poll -> Close
-// FIXME: database is closed ???
-func (t *testDMJobmasterSuite) testRunDMJobMaster() {
+func (t *testDMJobmasterSuite) TestRunDMJobMaster() {
 	cli, err := pkgOrm.NewMockClient()
 	require.NoError(t.T(), err)
 	mockServerMasterClient := &client.MockServerMasterClient{}
@@ -99,30 +100,27 @@ func (t *testDMJobmasterSuite) testRunDMJobMaster() {
 	require.NoError(t.T(), err)
 	jobmaster, err := registry.GlobalWorkerRegistry().CreateWorker(dctx, lib.DMJobMaster, "dm-jobmaster", libMetadata.JobManagerUUID, cfgBytes)
 	require.NoError(t.T(), err)
-
 	// Init
 	_, mockDB, err := conn.InitMockDBFull()
 	require.NoError(t.T(), err)
 	mockDB.ExpectExec(".*").WillReturnResult(sqlmock.NewResult(1, 1))
 	mockDB.ExpectExec(".*").WillReturnResult(sqlmock.NewResult(1, 1))
 	mockDB.ExpectExec(".*").WillReturnResult(sqlmock.NewResult(1, 1))
+	checker.CheckSyncConfigFunc = func(_ context.Context, _ []*dmconfig.SubTaskConfig, _, _ int64) (string, error) {
+		return "check pass", nil
+	}
 	require.NoError(t.T(), jobmaster.Init(context.Background()))
 
 	// mock master failed and recoverd after init
-	dctx = dcontext.Background()
-	dp = deps.NewDeps()
-	require.NoError(t.T(), dp.Provide(func() masterParamListForTest {
-		return depsForTest
-	}))
-	dctx = dctx.WithDeps(dp)
 	require.NoError(t.T(), jobmaster.Close(context.Background()))
 
-	// FIXME: seems that mock db close unexpected here
-	cli, err = pkgOrm.NewMockClient()
-	require.NoError(t.T(), err)
-	depsForTest.FrameMetaClient = cli
 	jobmaster, err = registry.GlobalWorkerRegistry().CreateWorker(dctx, lib.DMJobMaster, "dm-jobmaster", libMetadata.JobManagerUUID, cfgBytes)
 	require.NoError(t.T(), err)
+	_, mockDB, err = conn.InitMockDBFull()
+	require.NoError(t.T(), err)
+	mockDB.ExpectExec(".*").WillReturnResult(sqlmock.NewResult(1, 1))
+	mockDB.ExpectExec(".*").WillReturnResult(sqlmock.NewResult(1, 1))
+	mockDB.ExpectExec(".*").WillReturnResult(sqlmock.NewResult(1, 1))
 	require.NoError(t.T(), jobmaster.Init(context.Background()))
 
 	// Poll
@@ -154,6 +152,17 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	}
 
 	// init
+	precheckError := errors.New("precheck error")
+	checker.CheckSyncConfigFunc = func(_ context.Context, _ []*dmconfig.SubTaskConfig, _, _ int64) (string, error) {
+		return "", precheckError
+	}
+	mockBaseJobmaster.On("MetaKVClient").Return(metaKVClient)
+	mockBaseJobmaster.On("GetWorkers").Return(map[string]lib.WorkerHandle{}).Once()
+	require.EqualError(t.T(), jm.InitImpl(context.Background()), precheckError.Error())
+
+	checker.CheckSyncConfigFunc = func(_ context.Context, _ []*dmconfig.SubTaskConfig, _, _ int64) (string, error) {
+		return "check pass", nil
+	}
 	mockBaseJobmaster.On("MetaKVClient").Return(metaKVClient)
 	mockBaseJobmaster.On("GetWorkers").Return(map[string]lib.WorkerHandle{}).Once()
 	require.NoError(t.T(), jm.InitImpl(context.Background()))

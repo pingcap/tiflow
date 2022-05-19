@@ -15,26 +15,29 @@ const (
 )
 
 func TestJobCfg(t *testing.T) {
-	t.Parallel()
-
 	jobCfg := &JobCfg{}
 	require.NoError(t, jobCfg.DecodeFile(jobTemplatePath))
 	require.Equal(t, "test", jobCfg.Name)
 	content, err := jobCfg.Yaml()
 	require.NoError(t, err)
-	jobCfg2 := &JobCfg{}
-	require.NoError(t, jobCfg2.Decode([]byte(content)))
-	require.Equal(t, jobCfg, jobCfg2)
 
 	clone, err := jobCfg.Clone()
 	require.NoError(t, err)
-	require.EqualValues(t, clone, jobCfg)
+	content2, err := clone.Yaml()
+	require.NoError(t, err)
+	require.Equal(t, content2, content)
+
+	dmTaskCfg, err := clone.toDMTaskCfg()
+	require.NoError(t, err)
+	require.NoError(t, clone.fromDMTaskCfg(dmTaskCfg))
+	content3, err := clone.Yaml()
+	require.NoError(t, err)
+	require.Equal(t, content3, content)
 
 	require.Error(t, jobCfg.DecodeFile("./job_not_exist.yaml"))
 }
 
 func TestTaskCfg(t *testing.T) {
-	t.Parallel()
 	jobCfg := &JobCfg{}
 	require.NoError(t, jobCfg.DecodeFile(jobTemplatePath))
 

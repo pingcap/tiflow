@@ -21,6 +21,9 @@ import (
 	dcontext "github.com/hanfei1991/microcosm/pkg/context"
 	dmpkg "github.com/hanfei1991/microcosm/pkg/dm"
 	"github.com/hanfei1991/microcosm/pkg/p2p"
+	"github.com/pingcap/tiflow/dm/checker"
+	dmconfig "github.com/pingcap/tiflow/dm/dm/config"
+	ctlcommon "github.com/pingcap/tiflow/dm/dm/ctl/common"
 )
 
 // JobMaster defines job master of dm job
@@ -90,6 +93,9 @@ func (jm *JobMaster) createComponents() error {
 func (jm *JobMaster) InitImpl(ctx context.Context) error {
 	log.L().Info("initializing the dm jobmaster", zap.String("id", jm.workerID), zap.String("jobmaster_id", jm.JobMasterID()))
 	if err := jm.createComponents(); err != nil {
+		return err
+	}
+	if err := jm.preCheck(ctx); err != nil {
 		return err
 	}
 	if err := jm.registerMessageHandler(ctx); err != nil {
@@ -290,4 +296,22 @@ func (jm *JobMaster) getInitStatus() ([]runtime.TaskStatus, []runtime.WorkerStat
 	}
 
 	return taskStatusList, workerStatusList, sendHandleMap, nil
+}
+
+func (jm *JobMaster) preCheck(ctx context.Context) error {
+	log.L().Info("start pre-checking job config", zap.String("id", jm.workerID), zap.String("jobmaster_id", jm.JobMasterID()))
+
+	taskCfgs := jm.jobCfg.ToTaskConfigs()
+	dmSubtaskCfgs := make([]*dmconfig.SubTaskConfig, 0, len(taskCfgs))
+	for _, taskCfg := range taskCfgs {
+		dmSubtaskCfgs = append(dmSubtaskCfgs, taskCfg.ToDMSubTaskCfg())
+	}
+
+	msg, err := checker.CheckSyncConfigFunc(ctx, dmSubtaskCfgs, ctlcommon.DefaultErrorCnt, ctlcommon.DefaultWarnCnt)
+	if err != nil {
+		log.L().Info("error when pre-checking", zap.String("id", jm.workerID), zap.String("jobmaster_id", jm.JobMasterID()), log.ShortError(err))
+		return err
+	}
+	log.L().Info("finish pre-checking job config", zap.String("id", jm.workerID), zap.String("jobmaster_id", jm.JobMasterID()), zap.String("result", msg))
+	return nil
 }

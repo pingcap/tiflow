@@ -1,4 +1,4 @@
-is-sharding = true
+is-sharding = false
 shard-mode = "pessimistic"
 online-ddl = true
 shadow-table-rules = []
