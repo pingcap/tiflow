@@ -3112,10 +3112,10 @@ ms@^2.1.1:
   resolved "https://registry.yarnpkg.com/ms/-/ms-2.1.3.tgz#574c8138ce1d2b5861f0b44579dbadd60c6615b2"
   integrity sha512-6FlzubTLZG3J2a/NVCAleEhjzq5oxgHyaCU9yYXvcLsvoVaHJq/s5xXI6/XXP6tz7R9xAOtHnSO/tXtF3WRTlA==
 
-msw-auto-mock@^0.5.2:
-  version "0.5.2"
-  resolved "https://registry.yarnpkg.com/msw-auto-mock/-/msw-auto-mock-0.5.2.tgz#f58b8385e134f3414e1682a885120047ed9ed0fe"
-  integrity sha512-NNctZiHIFZZf4rDIBdq/x48F+JQclROW8jf96cAl36ZYkIT8DbWw9gCUk4SzJIEY8Z6tj0cP3lBX8RWYXnKgtg==
+msw-auto-mock@^0.6.0:
+  version "0.6.0"
+  resolved "https://registry.npmmirror.com/msw-auto-mock/-/msw-auto-mock-0.6.0.tgz#5f51e5325d07c910abf3c63bc9362846be088063"
+  integrity sha512-xsrFBicORgKJrl0Tt9yOb7G7xLdHX3uItzVp7yw2lBsjhfKUNL9mqfxLjRbZFyC1Y4qUav7rg47EhAPzfwQd4w==
   dependencies:
     "@apidevtools/swagger-parser" "^10.0.3"
     cac "^6.7.12"

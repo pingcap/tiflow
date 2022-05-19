@@ -493,16 +493,6 @@ func (d *CanalEventBatchEncoder) Build() []*MQMessage {
 	return []*MQMessage{ret}
 }
 
-// Size implements the EventBatchEncoder interface
-func (d *CanalEventBatchEncoder) Size() int {
-	// TODO: avoid marshaling the messages every time for calculating the size of the packet
-	err := d.refreshPacketBody()
-	if err != nil {
-		panic(err)
-	}
-	return proto.Size(d.packet)
-}
-
 // refreshPacketBody() marshals the messages to the packet body
 func (d *CanalEventBatchEncoder) refreshPacketBody() error {
 	oldSize := len(d.packet.Body)

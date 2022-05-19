@@ -36,7 +36,6 @@ func TestMaxwellEventBatchCodec(t *testing.T) {
 			err := encoder.AppendRowChangedEvent(context.Background(), "", row)
 			require.Nil(t, err)
 		}
-		size := encoder.Size()
 		messages := encoder.Build()
 		if len(cs) == 0 {
 			require.Nil(t, messages)
@@ -44,7 +43,6 @@ func TestMaxwellEventBatchCodec(t *testing.T) {
 		}
 		require.Len(t, messages, 1)
 		require.Equal(t, len(cs), messages[0].GetRowsCount())
-		require.Equal(t, size, len(messages[0].Key)+len(messages[0].Value))
 	}
 
 	ddlCases := [][]*model.DDLEvent{{{
