@@ -249,16 +249,20 @@ func (s *Syncer) handleQueryEventOptimistic(qec *queryEventContext) error {
 		}
 	}
 
-	s.resolveOptimisticDDL(qec.eventContext, getDDLJobSourceTable(job), job.targetTable, op.ConflictStage)
+	// we don't resolveOptimisticDDL here because it may cause correctness problem
+	// There are two cases if we receive ConflictNone here:
+	// 1. This shard table is the only shard table on this worker. We don't need to redirect in this case.
+	// 2. This shard table isn't the only shard table. The conflicted table before will receive a redirection event.
+	// If we resolveOptimisticDDL here, if this ddl event is idempotent, it may falsely resolve the conflict which
+	// has a totally different ddl.
 
 	s.tctx.L().Info("finish to handle ddls in optimistic shard mode", zap.String("event", "query"), zap.Stringer("queryEventContext", qec))
 	return nil
 }
 
-func (s *Syncer) resolveOptimisticDDL(ec *eventContext, sourceTable, targetTable *filter.Table, stage optimism.ConflictStage) {
+func (s *Syncer) resolveOptimisticDDL(ec *eventContext, sourceTable, targetTable *filter.Table) {
 	if sourceTable != nil && targetTable != nil {
-		if (stage == optimism.ConflictNone && s.osgk.tableInConflict(targetTable)) ||
-			s.osgk.inConflictStage(sourceTable, targetTable) {
+		if s.osgk.inConflictStage(sourceTable, targetTable) {
 			// in the following two situations we should resolve this ddl lock at now
 			// 1. after this worker's ddl, the ddl lock is resolved
 			// 2. other worker has resolved this ddl lock, receives resolve command from master

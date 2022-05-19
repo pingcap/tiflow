@@ -25,7 +25,6 @@ import (
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/schema"
-	"github.com/pingcap/tiflow/dm/pkg/shardddl/optimism"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/syncer/shardddl"
 )
@@ -113,7 +112,7 @@ func (s *optShardingGroupSuite) TestSync() {
 	syncer.resolveOptimisticDDL(&eventContext{
 		shardingReSyncCh: &shardingReSyncCh,
 		currentLocation:  &endPos3,
-	}, utils.UnpackTableID(sourceTbls[2]), utils.UnpackTableID(db2tbl), optimism.ConflictNone)
+	}, utils.UnpackTableID(sourceTbls[2]), utils.UnpackTableID(db2tbl))
 	require.False(s.T(), k.tableInConflict(utils.UnpackTableID(db2tbl)))
 	require.False(s.T(), k.inConflictStage(utils.UnpackTableID(sourceTbls[3]), utils.UnpackTableID(db2tbl)))
 	require.Len(s.T(), shardingReSyncCh, 1)
@@ -136,7 +135,7 @@ func (s *optShardingGroupSuite) TestSync() {
 	syncer.resolveOptimisticDDL(&eventContext{
 		shardingReSyncCh: &shardingReSyncCh,
 		currentLocation:  &endPos12,
-	}, utils.UnpackTableID(sourceTbls[1]), utils.UnpackTableID(db1tbl), optimism.ConflictResolved)
+	}, utils.UnpackTableID(sourceTbls[1]), utils.UnpackTableID(db1tbl))
 	require.False(s.T(), k.tableInConflict(utils.UnpackTableID(db1tbl)))
 	require.False(s.T(), k.inConflictStage(utils.UnpackTableID(sourceTbls[0]), utils.UnpackTableID(db1tbl)))
 	require.Len(s.T(), shardingReSyncCh, 1)
