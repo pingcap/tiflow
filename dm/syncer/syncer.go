@@ -40,10 +40,11 @@ import (
 	"github.com/pingcap/tidb/util/filter"
 	regexprrouter "github.com/pingcap/tidb/util/regexpr-router"
 	router "github.com/pingcap/tidb/util/table-router"
-	"github.com/pingcap/tiflow/dm/pkg/gtid"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
+
+	"github.com/pingcap/tiflow/dm/pkg/gtid"
 
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/dm/pb"
@@ -185,7 +186,8 @@ type Syncer struct {
 	// the status of this track may change over time.
 	safeMode *sm.SafeMode
 
-	timezone *time.Location
+	upstreamTZ *time.Location
+	timezone   *time.Location
 
 	binlogSizeCount     atomic.Int64
 	lastBinlogSizeCount atomic.Int64
@@ -342,6 +344,10 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 	}()
 
 	tctx := s.tctx.WithContext(ctx)
+	s.upstreamTZ, err = str2TimezoneOrFromDB(tctx, "", &s.cfg.From)
+	if err != nil {
+		return
+	}
 	s.timezone, err = str2TimezoneOrFromDB(tctx, s.cfg.Timezone, &s.cfg.To)
 	if err != nil {
 		return
@@ -4077,9 +4083,9 @@ func (s *Syncer) flushOptimisticTableInfos(tctx *tcontext.Context) {
 
 func (s *Syncer) setGlobalPointByTime(tctx *tcontext.Context, timeStr string) error {
 	// we support two layout
-	t, err := time.ParseInLocation(config.StartTimeFormat, timeStr, s.timezone)
+	t, err := time.ParseInLocation(config.StartTimeFormat, timeStr, s.upstreamTZ)
 	if err != nil {
-		t, err = time.ParseInLocation(config.StartTimeFormat2, timeStr, s.timezone)
+		t, err = time.ParseInLocation(config.StartTimeFormat2, timeStr, s.upstreamTZ)
 	}
 	if err != nil {
 		return err
