@@ -739,6 +739,9 @@
                 },
                 "protocol": {
                     "type": "string"
+                },
+                "schema-registry": {
+                    "type": "string"
                 }
             }
         },
