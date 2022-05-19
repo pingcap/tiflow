@@ -758,6 +758,9 @@ var doc = `{
                 },
                 "protocol": {
                     "type": "string"
+                },
+                "schema-registry": {
+                    "type": "string"
                 }
             }
         },
