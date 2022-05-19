@@ -195,6 +195,14 @@ func (tm *TaskManager) removeTaskStatus(job *metadata.Job) {
 	})
 }
 
+func (tm *TaskManager) GetTaskStatus(taskID string) (runtime.TaskStatus, bool) {
+	if value, ok := tm.tasks.Load(taskID); !ok {
+		return nil, false
+	} else {
+		return value.(runtime.TaskStatus), true
+	}
+}
+
 // check a task runs as expected.
 func taskAsExpected(persistentTask *metadata.Task, taskStatus runtime.TaskStatus) bool {
 	// TODO: when running is expected but task is paused, we may still need return true,

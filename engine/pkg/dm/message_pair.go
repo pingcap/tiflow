@@ -78,6 +78,12 @@ func (m *MessagePair) SendRequest(ctx context.Context, topic p2p.Topic, req Requ
 	}
 }
 
+// SendResponse sends a response with message ID.
+func (m *MessagePair) SendResponse(ctx context.Context, topic p2p.Topic, id uint64, resp Response, sender Sender) error {
+	msg := MessageWithID{ID: id, Message: resp}
+	return sender.SendMessage(ctx, topic, msg, true /* nonblock */)
+}
+
 // OnResponse receives a response message.
 func (m *MessagePair) OnResponse(msg MessageWithID) error {
 	respCh, ok := m.pendings.Load(msg.ID)

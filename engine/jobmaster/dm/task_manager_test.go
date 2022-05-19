@@ -195,6 +195,13 @@ func (t *testDMJobmasterSuite) TestClearTaskStatus() {
 	taskManager.removeTaskStatus(job)
 	require.Len(t.T(), taskManager.TaskStatus(), 1)
 
+	taskStatus, ok := taskManager.GetTaskStatus("source2")
+	require.False(t.T(), ok)
+	require.Nil(t.T(), taskStatus)
+	taskStatus, ok = taskManager.GetTaskStatus("source1")
+	require.True(t.T(), ok)
+	require.Equal(t.T(), syncStatus1, taskStatus)
+
 	taskManager.onJobNotExist(context.Background())
 	require.Len(t.T(), taskManager.TaskStatus(), 0)
 

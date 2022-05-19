@@ -77,20 +77,25 @@ func TestMessagePair(t *testing.T) {
 		mockSender.SetResult([]error{nil})
 		ctx3, cancel3 := context.WithTimeout(ctx, 5*time.Second)
 		defer cancel3()
-		resp, err := messagePair.SendRequest(ctx3, "topic", "request", mockSender)
+		resp, err := messagePair.SendRequest(ctx3, "request-topic", "request", mockSender)
 		require.NoError(t, err)
 		require.Equal(t, "response", resp)
 	}()
 	require.Eventually(t, func() bool {
 		return mockSender.Len() == 1
 	}, 5*time.Second, 100*time.Millisecond)
-	msg = mockSender.PopMessage().(MessageWithID)
-	require.NoError(t, messagePair.OnResponse(MessageWithID{ID: msg.ID, Message: "response"}))
+	req := mockSender.PopMessage().(MessageWithID)
+
+	// send response
+	mockSender.SetResult([]error{nil})
+	require.NoError(t, messagePair.SendResponse(ctx, "response-topic", req.ID, "response", mockSender))
+	resp2 := mockSender.PopMessage().(MessageWithID)
+	require.NoError(t, messagePair.OnResponse(resp2))
 
 	// duplicate response
 	require.Eventually(t, func() bool {
-		err := messagePair.OnResponse(MessageWithID{ID: msg.ID, Message: "response"})
-		return err != nil && err.Error() == fmt.Sprintf("request %d not found", msg.ID)
+		err := messagePair.OnResponse(resp2)
+		return err != nil && err.Error() == fmt.Sprintf("request %d not found", req.ID)
 	}, 5*time.Second, 100*time.Millisecond)
 }
 

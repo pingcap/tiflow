@@ -29,7 +29,10 @@ import (
 	resourcemeta "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 )
 
-var defaultMessageTimeOut = time.Second * 2
+var (
+	defaultMessageTimeOut = time.Second * 2
+	defaultRequestTimeOut = time.Second * 30
+)
 
 // Master defines an interface for dm master operation
 type Master interface {
@@ -146,6 +149,28 @@ func (agent *MessageAgent) OperateTask(ctx context.Context, taskID string, stage
 	ctx, cancel := context.WithTimeout(ctx, defaultMessageTimeOut)
 	defer cancel()
 	return v.(SendHandle).SendMessage(ctx, topic, message, true)
+}
+
+// OperateTask delegates to send query-status request with p2p messaging system
+func (agent *MessageAgent) QueryStatus(ctx context.Context, taskID string) (*dmpkg.QueryStatusResponse, error) {
+	v, ok := agent.sendHandles.Load(taskID)
+	if !ok {
+		return nil, errors.Errorf("worker for task %s not exist", taskID)
+	}
+
+	topic := dmpkg.QueryStatusRequestTopic(agent.id, taskID)
+	request := &dmpkg.QueryStatusRequest{
+		Task: taskID,
+	}
+	ctx, cancel := context.WithTimeout(ctx, defaultRequestTimeOut)
+	defer cancel()
+
+	response, err := agent.messagePair.SendRequest(ctx, topic, request, v.(SendHandle))
+	if err != nil {
+		return nil, err
+	}
+	queryStatusResponse := response.(dmpkg.QueryStatusResponse)
+	return &queryStatusResponse, nil
 }
 
 // OnWorkerMessage is the callback for worker message
