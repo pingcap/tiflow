@@ -119,7 +119,7 @@ function run() {
 	check_log_contains $WORK_DIR/goroutine.worker1 "chan send"
 
 	# try to kill, but can't kill (NOTE: the port will be shutdown, but the process still exists)
-	kill_process dm-worker
+	ps aux | grep dm-worker | awk '{print $2}' | xargs kill || true
 	sleep 5
 	worker_cnt=$(ps aux | grep dm-worker | grep -v "grep" | wc -l)
 	if [ $worker_cnt -lt 1 ]; then

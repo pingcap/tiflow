@@ -45,7 +45,7 @@ function cleanup_tidb_server(){
 
 function kill_process() {
     keyword=$1
-    ps aux | grep $keyword | awk '{print $2}' | xargs kill || true
+    ps aux | grep $keyword | grep -v 'grep' | awk '{print $2}' | xargs kill || true
     wait_process_exit $keyword
 }
 
