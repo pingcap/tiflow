@@ -95,7 +95,7 @@ function run() {
 		"inject failpoint dispatchError" 1
 
 	echo "restart dm-workers block in sending to chan"
-	ps aux | grep dm-worker | awk '{print $2}' | xargs kill || true
+	kill_process dm-worker
 	check_port_offline $WORKER1_PORT 20
 
 	# use a small job chan size to block the sender
@@ -119,7 +119,7 @@ function run() {
 	check_log_contains $WORK_DIR/goroutine.worker1 "chan send"
 
 	# try to kill, but can't kill (NOTE: the port will be shutdown, but the process still exists)
-	ps aux | grep dm-worker | awk '{print $2}' | xargs kill || true
+	kill_process dm-worker
 	sleep 5
 	worker_cnt=$(ps aux | grep dm-worker | grep -v "grep" | wc -l)
 	if [ $worker_cnt -lt 1 ]; then

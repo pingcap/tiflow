@@ -13,7 +13,7 @@ WORKER3="worker3"
 function test_worker_restart() {
 	echo "test worker restart"
 	# worker1 offline
-	ps aux | grep dm-worker1 | awk '{print $2}' | xargs kill || true
+	kill_process dm-worker1
 	check_port_offline $WORKER1_PORT 20
 
 	# source1 bound to worker3
@@ -59,7 +59,7 @@ function test_worker_restart() {
 function test_transfer_two_sources() {
 	echo "test_transfer_two_sources"
 	# worker2 offline
-	ps aux | grep dm-worker2 | awk '{print $2}' | xargs kill || true
+	kill_process dm-worker2
 	check_port_offline $WORKER2_PORT 20
 
 	# source2 bound to worker3
@@ -90,7 +90,7 @@ function test_transfer_two_sources() {
 		"\"stage\": \"free\"" 1
 
 	# worker1 offline
-	ps aux | grep dm-worker1 | awk '{print $2}' | xargs kill || true
+	kill_process dm-worker1
 	check_port_offline $WORKER1_PORT 20
 
 	# source1 bound to worker2
@@ -119,7 +119,7 @@ function test_transfer_two_sources() {
 
 	# now, worker2 waiting worker3 finish load_task3, worker1 waiting worker2 finish load_task4
 	# worker3 offline
-	ps aux | grep dm-worker3 | awk '{print $2}' | xargs kill || true
+	kill_process dm-worker3
 	check_port_offline $WORKER3_PORT 20
 
 	# source2 bound to worker1
@@ -189,7 +189,7 @@ function stop_task_left_load() {
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
 
 	# kill worker1, load_task1 will be transferred to worker2, but lack local files
-	ps aux | grep dm-worker1 | awk '{print $2}' | xargs kill || true
+	kill_process dm-worker1
 	check_port_offline $WORKER1_PORT 20
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status load_task1" \
@@ -226,7 +226,7 @@ function stop_task_left_load() {
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"stop-task load_task1" \
 		"\"result\": true" 2
-	ps aux | grep dm-worker1 | awk '{print $2}' | xargs kill || true
+	kill_process dm-worker1
 	check_port_offline $WORKER1_PORT 20
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
