@@ -37,10 +37,18 @@ function trigger_checkpoint_flush() {
 	run_sql_source1 "alter table $db_name.t1 comment 'a';" # force flush checkpoint
 }
 
-function restore_task_config() {
-	# restore config
+function restore_timezone() {
+	echo "restore time_zone"
+	run_sql_source1 "set global time_zone = SYSTEM"
+	run_sql_tidb "set global time_zone = SYSTEM"
+}
+
+function restore_on_case_exit() {
+	echo "restore config"
 	mv $cur/conf/dm-task-standalone.yaml.bak $cur/conf/dm-task-standalone.yaml
 	mv $cur/conf/source1.yaml.bak $cur/conf/source1.yaml
+
+	restore_timezone
 }
 
 function test_validator_together_with_task() {
@@ -152,7 +160,7 @@ function test_start_validator_with_time_in_range_of_binlog_pos() {
 	run_sql_source1 "delete from $db_name.t1 where id=3"
 	run_sql_source1 "insert into $db_name.t1(id, name) values(100,'d'), (101, 'e')"
 	sleep 2
-	start_time="$(date '+%Y-%m-%d %T')"
+	start_time="$(TZ='UTC-2' date '+%Y-%m-%d %T')" # TZ=UTC-2 means +02:00
 	run_sql_source1 "insert into $db_name.t1(id, name) values(200,'d'), (201, 'e')"
 	run_sql_source1 "delete from $db_name.t1 where id=200"
 	run_sql_source1 "update $db_name.t1 set name='dd' where id=100"
@@ -181,7 +189,16 @@ function run_standalone() {
 	# backup it, will change it in the following case
 	cp $cur/conf/dm-task-standalone.yaml $cur/conf/dm-task-standalone.yaml.bak
 	cp $cur/conf/source1.yaml $cur/conf/source1.yaml.bak
-	trap restore_task_config EXIT
+
+	trap restore_on_case_exit EXIT
+
+	# use different timezone for upstream and tidb
+	run_sql_source1 "set global time_zone = '+02:00'"
+	run_sql_source1 "SELECT cast(TIMEDIFF(NOW(6), UTC_TIMESTAMP(6)) as time) time"
+	check_contains "time: 02:00:00"
+	run_sql_tidb "set global time_zone = '+06:00'"
+	run_sql_tidb "SELECT cast(TIMEDIFF(NOW(6), UTC_TIMESTAMP(6)) as time) time"
+	check_contains "time: 06:00:00"
 
 	test_validator_together_with_task false false
 	test_validator_together_with_task false true

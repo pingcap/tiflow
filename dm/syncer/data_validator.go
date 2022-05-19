@@ -163,6 +163,7 @@ type DataValidator struct {
 	L                  log.Logger
 	fromDB             *conn.BaseDB
 	toDB               *conn.BaseDB
+	upstreamTZ         *time.Location
 	timezone           *time.Location
 	syncCfg            replication.BinlogSyncerConfig
 	streamerController *StreamerController
@@ -270,6 +271,10 @@ func (v *DataValidator) initialize() error {
 		return err
 	}
 
+	v.upstreamTZ, err = str2TimezoneOrFromDB(newCtx, "", &v.cfg.From)
+	if err != nil {
+		return err
+	}
 	v.timezone, err = str2TimezoneOrFromDB(newCtx, v.cfg.Timezone, &v.cfg.To)
 	if err != nil {
 		return err
@@ -473,7 +478,7 @@ func (v *DataValidator) getInitialBinlogPosition() (binlog.Location, error) {
 	switch {
 	case timeStr != "":
 		// already check it when set it, will not check it again
-		t, _ := utils.ParseStartTimeInLoc(timeStr, v.timezone)
+		t, _ := utils.ParseStartTimeInLoc(timeStr, v.upstreamTZ)
 		finder := binlog.NewRemoteBinlogPosFinder(v.tctx, v.fromDB.DB, v.syncCfg, v.cfg.EnableGTID)
 		loc, posTp, err := finder.FindByTimestamp(t.Unix())
 		if err != nil {
