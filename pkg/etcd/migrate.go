@@ -49,7 +49,7 @@ type migrater struct {
 	oldOwnerKey string
 	// etcd client
 	cli *Client
-	// all keyPrefixs need to be migrated or update
+	// all keyPrefixs needed to be migrated or update
 	// map from oldKeyPrefix to newKeyPrefix
 	keyPrefixs        keys
 	etcdNoMetaVersion bool
