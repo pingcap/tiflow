@@ -22,6 +22,8 @@ import (
 const (
 	// DefaultMockTopicName specifies the default mock topic name.
 	DefaultMockTopicName = "mock_topic"
+	// DefaultMockPartitionNum is the default partition number of default mock topic.
+	DefaultMockPartitionNum = 3
 	// defaultMockControllerID specifies the default mock controller ID.
 	defaultMockControllerID = 1
 )

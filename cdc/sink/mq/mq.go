@@ -28,8 +28,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/mq/codec"
 	"github.com/pingcap/tiflow/cdc/sink/mq/dispatcher"
 	"github.com/pingcap/tiflow/cdc/sink/mq/manager"
-	kafkamanager "github.com/pingcap/tiflow/cdc/sink/mq/manager/kafka"
-	pulsarmanager "github.com/pingcap/tiflow/cdc/sink/mq/manager/pulsar"
 	"github.com/pingcap/tiflow/cdc/sink/mq/producer"
 	"github.com/pingcap/tiflow/cdc/sink/mq/producer/kafka"
 	"github.com/pingcap/tiflow/cdc/sink/mq/producer/pulsar"
@@ -431,7 +429,7 @@ func NewKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
 
-	topicManager := kafkamanager.NewTopicManager(
+	topicManager := manager.NewKafkaTopicManager(
 		client,
 		adminClient,
 		baseConfig.DeriveTopicConfig(),
@@ -500,7 +498,7 @@ func NewPulsarSink(ctx context.Context, sinkURI *url.URL, filter *filter.Filter,
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	fakeTopicManager := pulsarmanager.NewTopicManager(
+	fakeTopicManager := manager.NewPulsarTopicManager(
 		producer.GetPartitionNum(),
 	)
 	sink, err := newMqSink(

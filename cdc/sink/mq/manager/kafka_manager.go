@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package kafka
+package manager
 
 import (
 	"fmt"
@@ -28,8 +28,8 @@ import (
 	"go.uber.org/zap"
 )
 
-// TopicManager is a manager for kafka topics.
-type TopicManager struct {
+// kafkaTopicManager is a manager for kafka topics.
+type kafkaTopicManager struct {
 	client kafka.Client
 	admin  kafka.ClusterAdminClient
 
@@ -40,13 +40,13 @@ type TopicManager struct {
 	lastMetadataRefresh atomic.Int64
 }
 
-// NewTopicManager creates a new topic manager.
-func NewTopicManager(
+// NewKafkaTopicManager creates a new topic manager.
+func NewKafkaTopicManager(
 	client kafka.Client,
 	admin kafka.ClusterAdminClient,
 	cfg *kafkaconfig.AutoCreateTopicConfig,
-) *TopicManager {
-	return &TopicManager{
+) *kafkaTopicManager {
+	return &kafkaTopicManager{
 		client: client,
 		admin:  admin,
 		cfg:    cfg,
@@ -55,7 +55,7 @@ func NewTopicManager(
 
 // GetPartitionNum returns the number of partitions of the topic.
 // It may also try to update the topics' information maintained by manager.
-func (m *TopicManager) GetPartitionNum(topic string) (int32, error) {
+func (m *kafkaTopicManager) GetPartitionNum(topic string) (int32, error) {
 	err := m.tryRefreshMeta()
 	if err != nil {
 		return 0, errors.Trace(err)
@@ -69,7 +69,7 @@ func (m *TopicManager) GetPartitionNum(topic string) (int32, error) {
 }
 
 // tryRefreshMeta try to refresh the topics' information maintained by manager.
-func (m *TopicManager) tryRefreshMeta() error {
+func (m *kafkaTopicManager) tryRefreshMeta() error {
 	if time.Since(time.Unix(m.lastMetadataRefresh.Load(), 0)) > time.Minute {
 		topics, err := m.client.Topics()
 		if err != nil {
@@ -90,7 +90,7 @@ func (m *TopicManager) tryRefreshMeta() error {
 }
 
 // tryUpdatePartitionsAndLogging try to update the partitions of the topic.
-func (m *TopicManager) tryUpdatePartitionsAndLogging(topic string, partitions int32) {
+func (m *kafkaTopicManager) tryUpdatePartitionsAndLogging(topic string, partitions int32) {
 	oldPartitions, ok := m.topics.Load(topic)
 	if ok {
 		if oldPartitions.(int32) != partitions {
@@ -114,7 +114,7 @@ func (m *TopicManager) tryUpdatePartitionsAndLogging(topic string, partitions in
 
 // CreateTopic creates a topic with the given name
 // and returns the number of partitions.
-func (m *TopicManager) CreateTopic(topicName string) (int32, error) {
+func (m *kafkaTopicManager) CreateTopic(topicName string) (int32, error) {
 	start := time.Now()
 	topics, err := m.admin.ListTopics()
 	if err != nil {
