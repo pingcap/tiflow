@@ -34,7 +34,7 @@ type Client struct {
 func NewClient(credential *security.Credential) (*Client, error) {
 	transport := http.DefaultTransport
 	if credential != nil {
-		tlsConf, err := credential.ToTLSConfig()
+		tlsConf, err := credential.ToTLSConfigWithVerify()
 		if err != nil {
 			return nil, err
 		}
