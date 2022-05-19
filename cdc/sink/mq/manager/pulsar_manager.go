@@ -11,30 +11,30 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package pulsar
+package manager
 
-// TopicManager is the interface
+// pulsarTopicManager is the interface
 // that wraps the basic Pulsar topic management operations.
 // Right now it doesn't have any implementation,
 // Pulsar doesn't support multiple topics yet.
 // So it now just returns a fixed number of partitions for a fixed topic.
-type TopicManager struct {
+type pulsarTopicManager struct {
 	partitionNum int32
 }
 
-// NewTopicManager creates a new TopicManager.
-func NewTopicManager(partitionNum int32) *TopicManager {
-	return &TopicManager{
+// NewPulsarTopicManager creates a new TopicManager.
+func NewPulsarTopicManager(partitionNum int32) *pulsarTopicManager {
+	return &pulsarTopicManager{
 		partitionNum: partitionNum,
 	}
 }
 
 // GetPartitionNum returns the number of partitions of the topic.
-func (m *TopicManager) GetPartitionNum(_ string) (int32, error) {
+func (m *pulsarTopicManager) GetPartitionNum(_ string) (int32, error) {
 	return m.partitionNum, nil
 }
 
 // CreateTopic do nothing.
-func (m *TopicManager) CreateTopic(_ string) (int32, error) {
+func (m *pulsarTopicManager) CreateTopic(_ string) (int32, error) {
 	return m.partitionNum, nil
 }

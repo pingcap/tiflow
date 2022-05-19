@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package kafka
+package manager
 
 import (
 	"testing"
@@ -36,7 +36,7 @@ func TestPartitions(t *testing.T) {
 		ReplicationFactor: 1,
 	}
 
-	manager := NewTopicManager(client, adminClient, cfg)
+	manager := NewKafkaTopicManager(client, adminClient, cfg)
 	partitionsNum, err := manager.GetPartitionNum(
 		kafkamock.DefaultMockTopicName)
 	require.Nil(t, err)
@@ -57,7 +57,7 @@ func TestTryRefreshMeta(t *testing.T) {
 		ReplicationFactor: 1,
 	}
 
-	manager := NewTopicManager(client, adminClient, cfg)
+	manager := NewKafkaTopicManager(client, adminClient, cfg)
 	partitionsNum, err := manager.GetPartitionNum(
 		kafkamock.DefaultMockTopicName)
 	require.Nil(t, err)
@@ -92,7 +92,7 @@ func TestCreateTopic(t *testing.T) {
 		ReplicationFactor: 1,
 	}
 
-	manager := NewTopicManager(client, adminClient, cfg)
+	manager := NewKafkaTopicManager(client, adminClient, cfg)
 	partitionNum, err := manager.CreateTopic(kafkamock.DefaultMockTopicName)
 	require.Nil(t, err)
 	require.Equal(t, int32(3), partitionNum)
@@ -106,7 +106,7 @@ func TestCreateTopic(t *testing.T) {
 
 	// Try to create a topic without auto create.
 	cfg.AutoCreate = false
-	manager = NewTopicManager(client, adminClient, cfg)
+	manager = NewKafkaTopicManager(client, adminClient, cfg)
 	_, err = manager.CreateTopic("new-topic2")
 	require.Regexp(
 		t,

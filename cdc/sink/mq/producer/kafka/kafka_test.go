@@ -21,7 +21,6 @@ import (
 	"time"
 
 	"github.com/Shopify/sarama"
-	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -30,10 +29,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
 )
-
-type kafkaSuite struct{}
-
-var _ = check.Suite(&kafkaSuite{})
 
 func TestClientID(t *testing.T) {
 	testCases := []struct {

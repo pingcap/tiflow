@@ -16,9 +16,13 @@
 package master
 
 import (
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/http/httputil"
+
+	"github.com/pingcap/failpoint"
 
 	ginmiddleware "github.com/deepmap/oapi-codegen/pkg/gin-middleware"
 	"github.com/gin-gonic/gin"
@@ -39,9 +43,8 @@ const (
 	docJSONBasePath = "/api/v1/dm.json"
 )
 
-// redirectRequestToLeaderMW a middleware auto redirect request to leader.
-// because the leader has some data in memory, only the leader can process the request.
-func (s *Server) redirectRequestToLeaderMW() gin.HandlerFunc {
+// reverseRequestToLeaderMW reverses request to leader.
+func (s *Server) reverseRequestToLeaderMW(tlsCfg *tls.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ctx2 := c.Request.Context()
 		isLeader, _ := s.isLeaderAndNeedForward(ctx2)
@@ -54,14 +57,36 @@ func (s *Server) redirectRequestToLeaderMW() gin.HandlerFunc {
 				_ = c.AbortWithError(http.StatusBadRequest, err)
 				return
 			}
-			c.Redirect(http.StatusTemporaryRedirect, fmt.Sprintf("http://%s%s", leaderOpenAPIAddr, c.Request.RequestURI))
-			c.AbortWithStatus(http.StatusTemporaryRedirect)
+
+			failpoint.Inject("MockNotSetTls", func() {
+				tlsCfg = nil
+			})
+			// simpleProxy just reverses to leader host
+			simpleProxy := httputil.ReverseProxy{
+				Director: func(req *http.Request) {
+					if tlsCfg != nil {
+						req.URL.Scheme = "https"
+					} else {
+						req.URL.Scheme = "http"
+					}
+					req.URL.Host = leaderOpenAPIAddr
+					req.Host = leaderOpenAPIAddr
+				},
+			}
+			if tlsCfg != nil {
+				transport := http.DefaultTransport.(*http.Transport).Clone()
+				transport.TLSClientConfig = tlsCfg
+				simpleProxy.Transport = transport
+			}
+			log.L().Info("reverse request to leader", zap.String("Request URL", c.Request.URL.String()), zap.String("leader", leaderOpenAPIAddr), zap.Bool("hasTLS", tlsCfg != nil))
+			simpleProxy.ServeHTTP(c.Writer, c.Request)
+			c.Abort()
 		}
 	}
 }
 
 // InitOpenAPIHandles init openapi handlers.
-func (s *Server) InitOpenAPIHandles() error {
+func (s *Server) InitOpenAPIHandles(tlsCfg *tls.Config) error {
 	swagger, err := openapi.GetSwagger()
 	if err != nil {
 		return err
@@ -73,7 +98,7 @@ func (s *Server) InitOpenAPIHandles() error {
 	// middlewares
 	r.Use(gin.Recovery())
 	r.Use(openapi.ZapLogger(log.L().WithFields(zap.String("component", "openapi")).Logger))
-	r.Use(s.redirectRequestToLeaderMW())
+	r.Use(s.reverseRequestToLeaderMW(tlsCfg))
 	r.Use(terrorHTTPErrorHandler())
 	// use validation middleware to check all requests against the OpenAPI schema.
 	r.Use(ginmiddleware.OapiRequestValidator(swagger))

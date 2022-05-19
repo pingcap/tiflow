@@ -523,11 +523,6 @@ func (d *JSONEventBatchEncoder) Build() (mqMessages []*MQMessage) {
 	return ret
 }
 
-// Size implements the EventBatchEncoder interface
-func (d *JSONEventBatchEncoder) Size() int {
-	return -1
-}
-
 type jsonEventBatchEncoderBuilder struct {
 	config *Config
 }

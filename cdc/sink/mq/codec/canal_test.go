@@ -89,7 +89,6 @@ func TestCanalEventBatchEncoder(t *testing.T) {
 			err := encoder.AppendRowChangedEvent(context.Background(), "", row)
 			require.Nil(t, err)
 		}
-		size := encoder.Size()
 		res := encoder.Build()
 
 		if len(cs) == 0 {
@@ -99,7 +98,6 @@ func TestCanalEventBatchEncoder(t *testing.T) {
 
 		require.Len(t, res, 1)
 		require.Nil(t, res[0].Key)
-		require.Equal(t, size, len(res[0].Value))
 		require.Equal(t, len(cs), res[0].GetRowsCount())
 
 		packet := &canal.Packet{}
