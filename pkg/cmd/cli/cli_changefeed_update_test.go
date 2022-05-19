@@ -21,6 +21,7 @@ import (
 	"github.com/pingcap/check"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/util/testleak"
 )
 
@@ -68,7 +69,25 @@ func (s *changefeedUpdateSuite) TestApplyChanges(c *check.C) {
 	c.Assert(newInfo.SortDir, check.Equals, ".")
 	file, err := os.ReadFile(filename)
 	c.Assert(err, check.IsNil)
-	c.Assert(strings.Contains(string(file), "this flag cannot be updated and will be ignored"), check.IsTrue)
+	c.Assert(
+		strings.Contains(string(file), "this flag cannot be updated and will be ignored"),
+		check.IsTrue,
+	)
+
+	// Test schema registry update
+	oldInfo = &model.ChangeFeedInfo{Config: config.GetDefaultReplicaConfig()}
+	c.Assert(oldInfo.Config.Sink.SchemaRegistry, check.Equals, "")
+	c.Assert(
+		cmd.ParseFlags([]string{"--schema-registry=https://username:password@localhost:8081"}),
+		check.IsNil,
+	)
+	newInfo, err = o.applyChanges(oldInfo, cmd)
+	c.Assert(err, check.IsNil)
+	c.Assert(
+		newInfo.Config.Sink.SchemaRegistry,
+		check.Equals,
+		"https://username:password@localhost:8081",
+	)
 }
 
 func initTestLogger(filename string) (func(), error) {
