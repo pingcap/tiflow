@@ -15,6 +15,7 @@ package dumpling
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -222,7 +223,24 @@ func (m *Dumpling) Status(_ *binlog.SourceStatus) interface{} {
 		FinishedRows:      mid.FinishedRows,
 		EstimateTotalRows: mid.EstimateTotalRows,
 	}
+	go m.printStatus(*s)
 	return s
+}
+
+func (m *Dumpling) printStatus(status pb.DumpStatus) {
+	var estimateProgress string
+	if status.FinishedRows >= status.EstimateTotalRows {
+		estimateProgress = "100.00%"
+	} else {
+		estimateProgress = fmt.Sprintf("%.2f %%", status.FinishedRows/status.EstimateTotalRows*100)
+	}
+	m.logger.Info("progress status of dumpling",
+		zap.Int64("total_tables", status.TotalTables),
+		zap.Int64("finished_tables", int64(status.CompletedTables)),
+		zap.Int64("estimated_total_rows", int64(status.EstimateTotalRows)),
+		zap.Int64("finished_rows", int64(status.FinishedRows)),
+		zap.String("estimated_progress", estimateProgress),
+	)
 }
 
 // Type implements Unit.Type.

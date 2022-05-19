@@ -412,5 +412,16 @@ func (l *LightningLoader) status() *pb.LoadStatus {
 
 // Status returns the unit's current status.
 func (l *LightningLoader) Status(_ *binlog.SourceStatus) interface{} {
+	go l.printStatus()
 	return l.status()
+}
+
+func (l *LightningLoader) printStatus() {
+	finished, total := l.core.Status()
+	progress := percent(finished, total, l.finish.Load())
+	l.logger.Info("progress status of lightning",
+		zap.Int64("finished_bytes", finished),
+		zap.Int64("total_bytes", total),
+		zap.String("progress", progress),
+	)
 }
