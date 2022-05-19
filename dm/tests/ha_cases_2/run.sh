@@ -48,7 +48,7 @@ function test_kill_master_in_sync() {
 	load_data $MYSQL_PORT1 $MYSQL_PASSWORD1 "a" &
 	load_data $MYSQL_PORT2 $MYSQL_PASSWORD2 "b" &
 
-	ps aux | grep dm-master1 | awk '{print $2}' | xargs kill || true
+	kill_process dm-master1
 	check_master_port_offline 1
 
 	echo "wait and check task running"
@@ -77,7 +77,7 @@ function test_kill_worker_in_sync() {
 	load_data $MYSQL_PORT2 $MYSQL_PASSWORD2 "b" &
 
 	echo "kill dm-worker1"
-	ps aux | grep dm-worker1 | awk '{print $2}' | xargs kill || true
+	kill_process dm-worker1
 	echo "start worker3"
 	run_dm_worker $WORK_DIR/worker3 $WORKER3_PORT $cur/conf/dm-worker3.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER3_PORT
@@ -88,7 +88,7 @@ function test_kill_worker_in_sync() {
 		"\"result\": true" 2
 
 	echo "kill dm-worker2"
-	ps aux | grep dm-worker2 | awk '{print $2}' | xargs kill || true
+	kill_process dm-worker2
 	echo "start worker4"
 	run_dm_worker $WORK_DIR/worker4 $WORKER4_PORT $cur/conf/dm-worker4.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER4_PORT

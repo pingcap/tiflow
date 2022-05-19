@@ -1002,11 +1002,18 @@ func (s *Server) GetValidatorError(ctx context.Context, req *pb.GetValidationErr
 		resp.Msg = terror.ErrWorkerNoStart.Error()
 		return resp, nil
 	}
-	resp.Error = w.GetWorkerValidatorErr(req.TaskName, req.ErrState)
+	validatorErrs, err := w.GetWorkerValidatorErr(req.TaskName, req.ErrState)
+	if err != nil {
+		resp.Msg = err.Error()
+		resp.Result = false
+	} else {
+		resp.Error = validatorErrs
+	}
 	return resp, nil
 }
 
 func (s *Server) OperateValidatorError(ctx context.Context, req *pb.OperateValidationErrorRequest) (*pb.OperateValidationErrorResponse, error) {
+	log.L().Info("operate validation error", zap.Stringer("payload", req))
 	w := s.getSourceWorker(true)
 	resp := &pb.OperateValidationErrorResponse{
 		Result: true,

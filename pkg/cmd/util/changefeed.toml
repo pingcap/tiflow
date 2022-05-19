@@ -27,7 +27,7 @@ worker-num = 16
 # For MQ Sinks, you can configure event distribution rules through dispatchers
 # Dispatchers support default, ts, rowid and table
 dispatchers = [
-    { matcher = ['test1.*', 'test2.*'], dispatcher = "ts", topic = "hello_{schema}" },
+    { matcher = ['test1.*', 'test2.*'], partition = "ts", topic = "hello_{schema}" },
     { matcher = ['test3.*', 'test4.*'], dispatcher = "rowid", topic = "{schema}_world" },
 ]
 # 对于 MQ 类的 Sink，可以通过 column-selectors 配置 column 选择器

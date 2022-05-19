@@ -167,7 +167,8 @@ const (
           "b"
         ]
       }
-    ]
+    ],
+    "schema-registry": ""
   },
   "cyclic-replication": {
     "enable": false,

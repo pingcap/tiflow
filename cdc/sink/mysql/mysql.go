@@ -65,7 +65,7 @@ type mysqlSink struct {
 	tableMaxResolvedTs sync.Map
 
 	execWaitNotifier *notify.Notifier
-	resolvedNotifier *notify.Notifier
+	resolvedCh       chan struct{}
 	errCh            chan error
 	flushSyncWg      sync.WaitGroup
 
@@ -197,56 +197,50 @@ func NewMySQLSink(
 		statistics:                      metrics.NewStatistics(ctx, metrics.SinkTypeDB),
 		metricConflictDetectDurationHis: metricConflictDetectDurationHis,
 		metricBucketSizeCounters:        metricBucketSizeCounters,
+		execWaitNotifier:                new(notify.Notifier),
+		resolvedCh:                      make(chan struct{}, 1),
 		errCh:                           make(chan error, 1),
 		forceReplicate:                  replicaConfig.ForceReplicate,
 		cancel:                          cancel,
 	}
-
-	sink.execWaitNotifier = new(notify.Notifier)
-	sink.resolvedNotifier = new(notify.Notifier)
 
 	err = sink.createSinkWorkers(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	receiver, err := sink.resolvedNotifier.NewReceiver(50 * time.Millisecond)
-	if err != nil {
-		return nil, err
-	}
-	go sink.flushRowChangedEvents(ctx, receiver)
+	go sink.flushRowChangedEvents(ctx)
 
 	return sink, nil
 }
 
-// TryEmitRowChangedEvents just calls EmitRowChangedEvents internally.
-func (s *mysqlSink) TryEmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) (bool, error) {
-	_ = s.EmitRowChangedEvents(ctx, rows...)
-	return true, nil
-}
-
+// EmitRowChangedEvents appends row changed events to the txn cache.
+// Concurrency Note: EmitRowChangedEvents is thread-safe.
 func (s *mysqlSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
 	count := s.txnCache.Append(s.filter, rows...)
 	s.statistics.AddRowsCount(count)
 	return nil
 }
 
-// FlushRowChangedEvents will flush all received events, we don't allow mysql
-// sink to receive events before resolving
-func (s *mysqlSink) FlushRowChangedEvents(ctx context.Context, tableID model.TableID, resolvedTs uint64) (uint64, error) {
-	// Since CDC does not guarantee exactly once semantic, it won't cause any problem
-	// here even if the table was moved or removed.
-	// ref: https://github.com/pingcap/tiflow/pull/4356#discussion_r787405134
-	v, ok := s.tableMaxResolvedTs.Load(tableID)
-	if !ok || v.(uint64) < resolvedTs {
-		s.tableMaxResolvedTs.Store(tableID, resolvedTs)
+// FlushRowChangedEvents will flush all received events,
+// we do not write data downstream until we receive resolvedTs.
+// Concurrency Note: FlushRowChangedEvents is thread-safe.
+func (s *mysqlSink) FlushRowChangedEvents(
+	ctx context.Context, tableID model.TableID, resolved model.ResolvedTs,
+) (uint64, error) {
+	v, ok := s.getTableResolvedTs(tableID)
+	if !ok || v.Ts < resolved.Ts {
+		s.tableMaxResolvedTs.Store(tableID, resolved)
 	}
-	s.resolvedNotifier.Notify()
 
 	// check and throw error
 	select {
+	case <-ctx.Done():
+		return 0, ctx.Err()
 	case err := <-s.errCh:
 		return 0, err
+	case s.resolvedCh <- struct{}{}:
+		// Notify `flushRowChangedEvents` to asynchronously write data.
 	default:
 	}
 
@@ -255,26 +249,19 @@ func (s *mysqlSink) FlushRowChangedEvents(ctx context.Context, tableID model.Tab
 	return checkpointTs, nil
 }
 
-func (s *mysqlSink) flushRowChangedEvents(ctx context.Context, receiver *notify.Receiver) {
+func (s *mysqlSink) flushRowChangedEvents(ctx context.Context) {
 	defer func() {
 		for _, worker := range s.workers {
-			worker.closedCh <- struct{}{}
+			worker.close()
 		}
 	}()
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-receiver.C:
+		case <-s.resolvedCh:
 		}
-		flushedResolvedTsMap, resolvedTxnsMap := s.txnCache.Resolved(&s.tableMaxResolvedTs)
-		if len(resolvedTxnsMap) == 0 {
-			s.tableMaxResolvedTs.Range(func(key, value interface{}) bool {
-				s.tableCheckpointTs.Store(key, value)
-				return true
-			})
-			continue
-		}
+		checkpointTsMap, resolvedTxnsMap := s.txnCache.Resolved(&s.tableMaxResolvedTs)
 
 		if s.cyclic != nil {
 			// Filter rows if it is origin from downstream.
@@ -283,8 +270,10 @@ func (s *mysqlSink) flushRowChangedEvents(ctx context.Context, receiver *notify.
 			s.statistics.SubRowsCount(skippedRowCount)
 		}
 
-		s.dispatchAndExecTxns(ctx, resolvedTxnsMap)
-		for tableID, resolvedTs := range flushedResolvedTsMap {
+		if len(resolvedTxnsMap) != 0 {
+			s.dispatchAndExecTxns(ctx, resolvedTxnsMap)
+		}
+		for tableID, resolvedTs := range checkpointTsMap {
 			s.tableCheckpointTs.Store(tableID, resolvedTs)
 		}
 	}
@@ -296,6 +285,8 @@ func (s *mysqlSink) EmitCheckpointTs(_ context.Context, ts uint64, _ []model.Tab
 	return nil
 }
 
+// EmitDDLEvent executes DDL event.
+// Concurrency Note: EmitDDLEvent is thread-safe.
 func (s *mysqlSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 	if s.filter.ShouldIgnoreDDLEvent(ddl.StartTs, ddl.Type, ddl.TableInfo.Schema, ddl.TableInfo.Table) {
 		log.Info(
@@ -507,7 +498,7 @@ func (s *mysqlSink) dispatchAndExecTxns(ctx context.Context, txnsGroup map[model
 	s.notifyAndWaitExec(ctx)
 }
 
-func (s *mysqlSink) Init(tableID model.TableID) error {
+func (s *mysqlSink) AddTable(tableID model.TableID) error {
 	s.cleanTableResource(tableID)
 	return nil
 }
@@ -517,10 +508,10 @@ func (s *mysqlSink) cleanTableResource(tableID model.TableID) {
 	// otherwise when the table is dispatched back again,
 	// it may read the old values.
 	// See: https://github.com/pingcap/tiflow/issues/4464#issuecomment-1085385382.
-	if resolvedTs, loaded := s.tableMaxResolvedTs.LoadAndDelete(tableID); loaded {
+	if resolved, loaded := s.tableMaxResolvedTs.LoadAndDelete(tableID); loaded {
 		log.Info("clean up table max resolved ts in MySQL sink",
 			zap.Int64("tableID", tableID),
-			zap.Uint64("resolvedTs", resolvedTs.(uint64)))
+			zap.Uint64("resolvedTs", resolved.(model.ResolvedTs).Ts))
 	}
 	if checkpointTs, loaded := s.tableCheckpointTs.LoadAndDelete(tableID); loaded {
 		log.Info("clean up table checkpoint ts in MySQL sink",
@@ -533,13 +524,12 @@ func (s *mysqlSink) cleanTableResource(tableID model.TableID) {
 
 func (s *mysqlSink) Close(ctx context.Context) error {
 	s.execWaitNotifier.Close()
-	s.resolvedNotifier.Close()
 	err := s.db.Close()
 	s.cancel()
 	return cerror.WrapError(cerror.ErrMySQLConnectionError, err)
 }
 
-func (s *mysqlSink) Barrier(ctx context.Context, tableID model.TableID) error {
+func (s *mysqlSink) RemoveTable(ctx context.Context, tableID model.TableID) error {
 	defer s.cleanTableResource(tableID)
 
 	warnDuration := 3 * time.Minute
@@ -550,27 +540,26 @@ func (s *mysqlSink) Barrier(ctx context.Context, tableID model.TableID) error {
 		case <-ctx.Done():
 			return errors.Trace(ctx.Err())
 		case <-ticker.C:
-			maxResolvedTs, ok := s.tableMaxResolvedTs.Load(tableID)
+			maxResolved, ok := s.getTableResolvedTs(tableID)
 			log.Warn("Barrier doesn't return in time, may be stuck",
 				zap.Int64("tableID", tableID),
 				zap.Bool("hasResolvedTs", ok),
-				zap.Any("resolvedTs", maxResolvedTs),
+				zap.Any("resolvedTs", maxResolved.Ts),
 				zap.Uint64("checkpointTs", s.getTableCheckpointTs(tableID)))
 		default:
-			v, ok := s.tableMaxResolvedTs.Load(tableID)
+			maxResolved, ok := s.getTableResolvedTs(tableID)
 			if !ok {
 				log.Info("No table resolvedTs is found", zap.Int64("tableID", tableID))
 				return nil
 			}
-			maxResolvedTs := v.(uint64)
-			if s.getTableCheckpointTs(tableID) >= maxResolvedTs {
+			if s.getTableCheckpointTs(tableID) >= maxResolved.Ts {
 				return nil
 			}
-			checkpointTs, err := s.FlushRowChangedEvents(ctx, tableID, maxResolvedTs)
+			checkpointTs, err := s.FlushRowChangedEvents(ctx, tableID, maxResolved)
 			if err != nil {
 				return err
 			}
-			if checkpointTs >= maxResolvedTs {
+			if checkpointTs >= maxResolved.Ts {
 				return nil
 			}
 			// short sleep to avoid cpu spin
@@ -585,6 +574,15 @@ func (s *mysqlSink) getTableCheckpointTs(tableID model.TableID) uint64 {
 		return v.(uint64)
 	}
 	return uint64(0)
+}
+
+func (s *mysqlSink) getTableResolvedTs(tableID model.TableID) (model.ResolvedTs, bool) {
+	v, ok := s.tableMaxResolvedTs.Load(tableID)
+	var resolved model.ResolvedTs
+	if ok {
+		resolved = v.(model.ResolvedTs)
+	}
+	return resolved, ok
 }
 
 func logDMLTxnErr(err error) error {

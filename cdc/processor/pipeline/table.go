@@ -78,7 +78,7 @@ type tablePipelineImpl struct {
 // TODO find a better name or avoid using an interface
 // We use an interface here for ease in unit testing.
 type tableFlowController interface {
-	Consume(commitTs uint64, size uint64, blockCallBack func() error) error
+	Consume(msg *model.PolymorphicEvent, size uint64, blockCallBack func(batch bool) error) error
 	Release(resolvedTs uint64)
 	Abort()
 	GetConsumption() uint64
@@ -91,7 +91,7 @@ func (t *tablePipelineImpl) ResolvedTs() model.Ts {
 	// another replication barrier for consistent replication instead of reusing
 	// the global resolved-ts.
 	if redo.IsConsistentEnabled(t.replConfig.Consistent.Level) {
-		return t.sinkNode.ResolvedTs()
+		return t.sinkNode.ResolvedTs().Ts
 	}
 	return t.sorterNode.ResolvedTs()
 }
