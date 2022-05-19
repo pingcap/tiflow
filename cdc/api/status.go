@@ -48,7 +48,7 @@ func RegisterStatusAPIRoutes(router *gin.Engine, capture *capture.Capture) {
 }
 
 func (h *statusAPI) writeEtcdInfo(ctx context.Context, cli *etcd.CDCEtcdClient, w io.Writer) {
-	resp, err := cli.Client.Get(ctx, etcd.EtcdKeyBase, clientv3.WithPrefix())
+	resp, err := cli.Client.Get(ctx, etcd.BaseKey(), clientv3.WithPrefix())
 	if err != nil {
 		fmt.Fprintf(w, "failed to get info: %s\n\n", err.Error())
 		return

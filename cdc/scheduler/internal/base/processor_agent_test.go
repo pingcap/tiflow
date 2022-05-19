@@ -219,11 +219,11 @@ func TestAgentBasics(t *testing.T) {
 	defer suite.Close()
 
 	suite.etcdKVClient.On("Get", mock.Anything,
-		etcd.CaptureOwnerKey, mock.Anything).
+		etcd.CaptureOwnerKey(), mock.Anything).
 		Return(&clientv3.GetResponse{
 			Kvs: []*mvccpb.KeyValue{
 				{
-					Key:         []byte(etcd.CaptureOwnerKey),
+					Key:         []byte(etcd.CaptureOwnerKey()),
 					Value:       []byte(ownerCaptureID),
 					ModRevision: 1,
 				},
@@ -337,7 +337,7 @@ func TestAgentNoOwnerAtStartUp(t *testing.T) {
 
 	// Empty response implies no owner.
 	suite.etcdKVClient.On("Get", mock.Anything,
-		etcd.CaptureOwnerKey, mock.Anything).
+		etcd.CaptureOwnerKey(), mock.Anything).
 		Return(&clientv3.GetResponse{}, nil)
 
 	// Test Point 1: Create an agent.
@@ -393,11 +393,11 @@ func TestAgentTolerateClientClosed(t *testing.T) {
 	defer suite.Close()
 
 	suite.etcdKVClient.On("Get", mock.Anything,
-		etcd.CaptureOwnerKey, mock.Anything).
+		etcd.CaptureOwnerKey(), mock.Anything).
 		Return(&clientv3.GetResponse{
 			Kvs: []*mvccpb.KeyValue{
 				{
-					Key:         []byte(etcd.CaptureOwnerKey),
+					Key:         []byte(etcd.CaptureOwnerKey()),
 					Value:       []byte(ownerCaptureID),
 					ModRevision: 1,
 				},
@@ -438,11 +438,11 @@ func TestNoFinishOperationBeforeSyncIsReceived(t *testing.T) {
 	defer suite.Close()
 
 	suite.etcdKVClient.On("Get", mock.Anything,
-		etcd.CaptureOwnerKey, mock.Anything).
+		etcd.CaptureOwnerKey(), mock.Anything).
 		Return(&clientv3.GetResponse{
 			Kvs: []*mvccpb.KeyValue{
 				{
-					Key:         []byte(etcd.CaptureOwnerKey),
+					Key:         []byte(etcd.CaptureOwnerKey()),
 					Value:       []byte(ownerCaptureID),
 					ModRevision: 1,
 				},
