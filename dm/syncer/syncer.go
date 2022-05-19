@@ -2903,11 +2903,15 @@ func (s *Syncer) handleQueryEvent(ev *replication.QueryEvent, ec eventContext, o
 			if s.osgk.inConflictStage(sourceTable, targetTable) {
 				// if in unsync stage and not before active DDL, filter it
 				// if in sharding re-sync stage and not before active DDL (the next DDL to be synced), filter it
-				ec.tctx.L().Debug("replicate sharding DDL, filter Conflicted table's ddl events",
+				ec.tctx.L().Info("replicate sharding DDL, filter Conflicted table's ddl events",
 					zap.String("event", "query"),
 					zap.Stringer("source", sourceTable),
 					log.WrapStringerField("location", ec.currentLocation))
-				return nil
+				continue
+			} else if ec.shardingReSync != nil && ec.shardingReSync.targetTable.String() != targetTable.String() {
+				// in re-syncing, ignore non current sharding group's events
+				ec.tctx.L().Info("skip event in re-replicating shard group", zap.String("event", "query"), zap.Stringer("re-shard", ec.shardingReSync))
+				continue
 			}
 			switch ddlInfo.originStmt.(type) {
 			case *ast.TruncateTableStmt:
