@@ -37,21 +37,19 @@ function run() {
 	fi
 
 	run_sql "CREATE DATABASE processor_delay;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-	for i in {1..50}
-	do
-	run_sql "CREATE table processor_delay.t$i(id int primary key auto_increment, val int);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-	run_sql "INSERT INTO processor_delay.t$i VALUES (),(),();" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+	for i in {1..50}; do
+		run_sql "CREATE table processor_delay.t$i(id int primary key auto_increment, val int);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+		run_sql "INSERT INTO processor_delay.t$i VALUES (),(),();" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	done
-	for i in {1..50}
-	do
-	check_table_exists "processor_delay.t$i" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	for i in {1..50}; do
+		check_table_exists "processor_delay.t$i" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 	done
-	panic_log=$(grep -a '\[PANIC\]'  ${WORK_DIR}/cdc.log)
-  if [ ! -z "$panic_log" ] ; then
-    echo $panic_log
-    exit 1
-  fi
-  check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
+
+	if grep -Fa "[PANIC]" ${WORK_DIR}/cdc.log; then
+		echo "ticdc panic"
+		exit 1
+	fi
+	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
 
 	cleanup_process $CDC_BINARY
 }
