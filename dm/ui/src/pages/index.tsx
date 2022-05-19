@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useLocalStorageState } from 'ahooks'
 import { useTranslation } from 'react-i18next'
 import clsx from 'clsx'
@@ -159,4 +160,14 @@ const Dashboard = () => {
   )
 }
 
-export default Dashboard
+const DashboardV2 = () => {
+  const navigate = useNavigate()
+
+  useEffect(() => {
+    navigate('/migration/task')
+  }, [])
+
+  return null
+}
+
+export default DashboardV2
