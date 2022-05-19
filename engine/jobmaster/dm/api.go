@@ -11,12 +11,14 @@ import (
 	dmpkg "github.com/hanfei1991/microcosm/pkg/dm"
 )
 
+// TaskStatus represents status of a task
 type TaskStatus struct {
 	ExpectedStage metadata.TaskStage
 	WorkerID      libModel.WorkerID
 	Status        *dmpkg.QueryStatusResponse
 }
 
+// JobStatus represents status of a job
 type JobStatus struct {
 	JobMasterID libModel.MasterID
 	WorkerID    libModel.WorkerID
@@ -24,6 +26,7 @@ type JobStatus struct {
 	TaskStatus map[string]TaskStatus
 }
 
+// QueryStatus is the api of query status request
 func (jm *JobMaster) QueryStatus(ctx context.Context, tasks []string) (*JobStatus, error) {
 	state, err := jm.metadata.JobStore().Get(ctx)
 	if err != nil {
@@ -81,6 +84,7 @@ func (jm *JobMaster) QueryStatus(ctx context.Context, tasks []string) (*JobStatu
 	return jobStatus, nil
 }
 
+// QueryTaskStatus query status for a task
 func (jm *JobMaster) QueryTaskStatus(ctx context.Context, taskID string, workerStatus runtime.WorkerStatus) *dmpkg.QueryStatusResponse {
 	if workerStatus.Stage == runtime.WorkerFinished {
 		status, ok := jm.taskManager.GetTaskStatus(taskID)

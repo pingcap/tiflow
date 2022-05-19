@@ -195,12 +195,13 @@ func (tm *TaskManager) removeTaskStatus(job *metadata.Job) {
 	})
 }
 
+// GetTaskStatus gets task status by taskID
 func (tm *TaskManager) GetTaskStatus(taskID string) (runtime.TaskStatus, bool) {
-	if value, ok := tm.tasks.Load(taskID); !ok {
+	value, ok := tm.tasks.Load(taskID)
+	if !ok {
 		return nil, false
-	} else {
-		return value.(runtime.TaskStatus), true
 	}
+	return value.(runtime.TaskStatus), true
 }
 
 // check a task runs as expected.

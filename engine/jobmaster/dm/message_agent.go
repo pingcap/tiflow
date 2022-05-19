@@ -151,7 +151,7 @@ func (agent *MessageAgent) OperateTask(ctx context.Context, taskID string, stage
 	return v.(SendHandle).SendMessage(ctx, topic, message, true)
 }
 
-// OperateTask delegates to send query-status request with p2p messaging system
+// QueryStatus delegates to send query-status request with p2p messaging system
 func (agent *MessageAgent) QueryStatus(ctx context.Context, taskID string) (*dmpkg.QueryStatusResponse, error) {
 	v, ok := agent.sendHandles.Load(taskID)
 	if !ok {
