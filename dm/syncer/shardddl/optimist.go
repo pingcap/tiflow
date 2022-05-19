@@ -177,6 +177,7 @@ func (o *Optimist) GetRedirectOperation(ctx context.Context, info optimism.Info,
 	o.mu.Unlock()
 
 	go func() {
+		o.logger.Info("start to wait redirect operation", zap.Stringer("info", info), zap.Int64("revision", rev))
 		for {
 			op, rev2, err := optimism.GetOperation(o.cli, o.task, o.source, info.UpSchema, info.UpTable)
 			if err != nil {
@@ -270,6 +271,7 @@ func (o *Optimist) PendingRedirectOperation() (*optimism.Operation, string) {
 
 // saveRedirectOperation saves the redirect shard DDL lock operation.
 func (o *Optimist) saveRedirectOperation(targetTableID string, op *optimism.Operation) {
+	o.logger.Info("receive redirection operation from master", zap.Stringer("op", op))
 	o.mu.Lock()
 	if _, ok := o.pendingRedirectCancelFunc[targetTableID]; ok {
 		o.pendingRedirectCancelFunc[targetTableID]()
