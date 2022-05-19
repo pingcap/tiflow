@@ -39,6 +39,8 @@ definitions:
         type: array
       protocol:
         type: string
+      schema-registry:
+        type: string
     type: object
   model.Capture:
     properties:
