@@ -1121,6 +1121,17 @@ function DM_RESYNC_NOT_FLUSHED_CASE() {
 	run_sql_source2 "insert into ${shardddl1}.${tb1} values(31,31,31);"
 	run_sql_source2 "insert into ${shardddl1}.${tb2} values(32,32);"
 
+	for ((k = 100; k < 120; k++)); do
+		run_sql_source1 "insert into ${shardddl1}.${tb1} values(${k},${k},${k});"
+		k=$((k + 1))
+		run_sql_source1 "insert into ${shardddl1}.${tb2} values(${k},${k},${k});"
+		k=$((k + 1))
+		run_sql_source2 "insert into ${shardddl1}.${tb1} values(${k},${k},${k});"
+		k=$((k + 1))
+		run_sql_source2 "insert into ${shardddl1}.${tb2} values(${k},${k});"
+		sleep 1
+	done
+
 	# lock finished at first time, both workers should exit
 	check_process_exit worker1 20
 	check_process_exit worker2 20
@@ -1136,7 +1147,7 @@ function DM_RESYNC_NOT_FLUSHED_CASE() {
 	run_sql_source2 "insert into ${shardddl1}.${tb1} values(35,35,35);"
 	run_sql_source2 "insert into ${shardddl1}.${tb2} values(36,36,36);"
 
-	for ((k = 100; k < 140; k++)); do
+	for ((k = 200; k < 240; k++)); do
 		run_sql_source1 "insert into ${shardddl1}.${tb1} values(${k},${k},${k});"
 		k=$((k + 1))
 		run_sql_source1 "insert into ${shardddl1}.${tb2} values(${k},${k},${k});"
