@@ -202,7 +202,7 @@ func (p *processor) AddTable(
 			zap.String("namespace", p.changefeedID.Namespace),
 			zap.String("changefeed", p.changefeedID.ID),
 			zap.Int64("tableID", tableID),
-			zap.Uint64("checkpointTs", startTs))
+			zap.Uint64("startTs", startTs))
 	}
 
 	return true, nil
@@ -277,7 +277,7 @@ func (p *processor) IsAddTableFinished(ctx context.Context, tableID model.TableI
 	}
 
 	if !done() {
-		log.Info("Add Table not finished",
+		log.Debug("Add Table not finished",
 			zap.String("captureID", p.captureInfo.ID),
 			zap.String("namespace", p.changefeedID.Namespace),
 			zap.String("changefeed", p.changefeedID.ID),
@@ -823,11 +823,6 @@ func (p *processor) pushResolvedTs2Table() {
 		}
 	}
 }
-
-// addTable creates a new table pipeline and adds it to the `p.tables`
-//func (p *processor) addTable(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) error {
-//
-//}
 
 func (p *processor) getTableName(ctx cdcContext.Context,
 	tableID model.TableID,

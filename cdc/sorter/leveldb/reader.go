@@ -416,6 +416,8 @@ func (r *reader) Poll(ctx context.Context, msgs []actormsg.Message[message.Task]
 		}
 		if msgs[i].Value.StartTs != 0 {
 			atomic.StoreUint64(&r.state.startTs, msgs[i].Value.StartTs)
+			log.Info("table reader receive start ts",
+				zap.Uint64("startTs", msgs[i].Value.StartTs))
 			continue
 		}
 		// Update the max commit ts and resolved ts of all received events.

@@ -62,7 +62,9 @@ type sorterNode struct {
 	// The latest barrier ts that sorter has received.
 	barrierTs model.Ts
 
-	status TableStatus
+	status     TableStatus
+	preparedCh chan struct{}
+
 	// started indicate that the sink is really replicating, not idle.
 	started int32
 	// startTsCh is used to receive start-ts for sink
@@ -79,7 +81,7 @@ func newSorterNode(
 	flowController tableFlowController, mounter entry.Mounter,
 	replConfig *config.ReplicaConfig,
 ) *sorterNode {
-	return &sorterNode{
+	n := &sorterNode{
 		tableName:      tableName,
 		tableID:        tableID,
 		flowController: flowController,
@@ -87,9 +89,11 @@ func newSorterNode(
 		resolvedTs:     startTs,
 		barrierTs:      startTs,
 		status:         TableStatusPreparing,
+		preparedCh:     make(chan struct{}, 1),
 		startTsCh:      make(chan model.Ts, 1),
 		replConfig:     replConfig,
 	}
+	return n
 }
 
 func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
@@ -170,8 +174,19 @@ func (n *sorterNode) start(
 		defer metricsTicker.Stop()
 
 		// once receive startTs, which means sink should start replicating data to downstream.
-		startTs := <-n.startTsCh
-		// original `status` can be `TableStatusPreparing` or `TableStatusPrepared`, but it doesn't matter here.
+		var startTs model.Ts
+		select {
+		case <-stdCtx.Done():
+			return nil
+		case startTs = <-n.startTsCh:
+		}
+
+		select {
+		case <-stdCtx.Done():
+			return nil
+		case <-n.preparedCh:
+		}
+
 		n.status.Store(TableStatusReplicating)
 		eventSorter.EmitStartTs(stdCtx, startTs)
 
@@ -192,12 +207,12 @@ func (n *sorterNode) start(
 				}
 
 				if msg == nil || msg.RawKV == nil {
-					log.Panic("unexpected empty msg", zap.Reflect("msg", msg))
+					log.Panic("unexpected empty msg", zap.Any("msg", msg))
 				}
 
-				if msg.CRTs <= startTs {
+				if msg.CRTs < startTs {
 					// Ignore messages are less than initial checkpoint ts.
-					log.Debug("ignore sorter output event",
+					log.Info("sorterNode: ignore sorter output event",
 						zap.Uint64("CRTs", msg.CRTs), zap.Uint64("startTs", startTs))
 					continue
 				}
@@ -305,10 +320,12 @@ func (n *sorterNode) handleRawEvent(ctx context.Context, event *model.Polymorphi
 			//       resolved ts.
 			event = model.NewResolvedPolymorphicEvent(0, n.BarrierTs())
 		}
-		// if this is the first `Resolved event` received by the sorterNode, it's
+		// sorterNode is preparing, this is must the first `Resolved event` received
 		// the indicator that all regions connected.
 		if n.status.Load() == TableStatusPreparing {
+			log.Info("sorterNode, first resolved event received", zap.Any("event", event))
 			n.status.Store(TableStatusPrepared)
+			close(n.preparedCh)
 		}
 	}
 	n.sorter.AddEntry(ctx, event)
