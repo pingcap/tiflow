@@ -475,9 +475,10 @@ func TestProcessorClose(t *testing.T) {
 	// add tables
 	done, err := p.AddTable(ctx, model.TableID(1), 20, false)
 	require.Nil(t, err)
-	require.False(t, done)
+	require.True(t, done)
 	done, err = p.AddTable(ctx, model.TableID(2), 30, false)
 	require.Nil(t, err)
+	require.True(t, done)
 
 	_, err = p.Tick(ctx, p.changefeed)
 	require.Nil(t, err)
@@ -514,10 +515,10 @@ func TestProcessorClose(t *testing.T) {
 	// add tables
 	done, err = p.AddTable(ctx, model.TableID(1), 20, false)
 	require.Nil(t, err)
-	require.False(t, done)
+	require.True(t, done)
 	done, err = p.AddTable(ctx, model.TableID(2), 30, false)
 	require.Nil(t, err)
-	require.False(t, done)
+	require.True(t, done)
 	_, err = p.Tick(ctx, p.changefeed)
 	require.Nil(t, err)
 	tester.MustApplyPatches()
@@ -546,10 +547,10 @@ func TestPositionDeleted(t *testing.T) {
 	// add table
 	done, err := p.AddTable(ctx, model.TableID(1), 30, false)
 	require.Nil(t, err)
-	require.False(t, done)
+	require.True(t, done)
 	done, err = p.AddTable(ctx, model.TableID(2), 40, false)
 	require.Nil(t, err)
-	require.False(t, done)
+	require.True(t, done)
 	// init tick
 	_, err = p.Tick(ctx, p.changefeed)
 	require.Nil(t, err)
@@ -652,7 +653,7 @@ func TestUpdateBarrierTs(t *testing.T) {
 
 	done, err := p.AddTable(ctx, model.TableID(1), 5, false)
 	require.Nil(t, err)
-	require.False(t, done)
+	require.True(t, done)
 	_, err = p.Tick(ctx, p.changefeed)
 	require.Nil(t, err)
 	tester.MustApplyPatches()
