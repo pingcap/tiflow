@@ -51,7 +51,8 @@ type sinkNode struct {
 }
 
 func newSinkNode(tableID model.TableID, sink sink.Sink, startTs model.Ts, targetTs model.Ts,
-	flowController tableFlowController) *sinkNode {
+	flowController tableFlowController,
+) *sinkNode {
 	return &sinkNode{
 		tableID: tableID,
 		sink:    sink,

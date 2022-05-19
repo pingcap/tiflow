@@ -77,7 +77,7 @@ type checkSorter struct {
 }
 
 func (c *checkSorter) UpdateInitialCheckpointTs(checkpoint model.Ts) {
-	//TODO implement me
+	// TODO implement me
 	panic("implement me")
 }
 

@@ -90,7 +90,7 @@ type TablePipeline interface {
 	AsyncStop(targetTs model.Ts) bool
 
 	// Start the sink consume data from the given `ts`
-	Start(ts model.Ts)
+	Start(ts model.Ts) bool
 
 	// Workload returns the workload of this table
 	Workload() model.WorkloadInfo
@@ -209,8 +209,9 @@ func (t *tablePipelineImpl) Wait() {
 	t.p.Wait()
 }
 
-func (t *tablePipelineImpl) Start(checkpointTs model.Ts) {
+func (t *tablePipelineImpl) Start(ts model.Ts) bool {
 	close(t.sorterNode.startTsCh)
+	return true
 }
 
 // Assume 1KB per row in upstream TiDB, it takes about 250 MB (1024*4*64) for

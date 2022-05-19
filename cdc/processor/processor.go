@@ -253,20 +253,30 @@ func (p *processor) IsAddTableFinished(ctx context.Context, tableID model.TableI
 			zap.Bool("isPrepare", isPrepare))
 	}
 
-	status := table.Status()
-	var done bool
-	if isPrepare {
-		done = status == pipeline.TableStatusPrepared
-	} else {
-		done = status == pipeline.TableStatusReplicating
-	}
-
 	localResolvedTs := p.resolvedTs
 	globalResolvedTs := p.changefeed.Status.ResolvedTs
 	localCheckpointTs := p.agent.GetLastSentCheckpointTs()
 	globalCheckpointTs := p.changefeed.Status.CheckpointTs
 
-	if !done {
+	status := table.Status()
+
+	done := func() bool {
+		if isPrepare {
+			// todo: add ut to cover this, after 2ps supported.
+			return status == pipeline.TableStatusPrepared
+		}
+
+		if table.CheckpointTs() < localCheckpointTs || localCheckpointTs < globalCheckpointTs {
+			return false
+		}
+		if table.ResolvedTs() < localResolvedTs ||
+			localResolvedTs < globalResolvedTs {
+			return false
+		}
+		return true
+	}
+
+	if !done() {
 		log.Info("Add Table not finished",
 			zap.String("captureID", p.captureInfo.ID),
 			zap.String("namespace", p.changefeedID.Namespace),

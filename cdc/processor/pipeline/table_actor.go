@@ -466,7 +466,7 @@ func (t *tableActor) AsyncStop(targetTs model.Ts) bool {
 		if cerror.ErrActorNotFound.Equal(err) || cerror.ErrActorStopped.Equal(err) {
 			return true
 		}
-		log.Panic("send fails", zap.Reflect("msg", msg), zap.Error(err))
+		log.Panic("send fails", zap.Any("msg", msg), zap.Error(err))
 	}
 	return true
 }
@@ -519,11 +519,13 @@ func (t *tableActor) Wait() {
 	_ = t.wg.Wait()
 }
 
-func (t *tableActor) Start(checkpointTs model.Ts) {
+func (t *tableActor) Start(ts model.Ts) bool {
 	if atomic.CompareAndSwapInt32(&t.sortNode.started, 0, 1) {
-		t.sortNode.startTsCh <- checkpointTs
+		t.sortNode.startTsCh <- ts
 		close(t.sortNode.startTsCh)
+		return true
 	}
+	return false
 }
 
 // for ut
