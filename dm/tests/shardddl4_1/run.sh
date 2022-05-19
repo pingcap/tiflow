@@ -1070,10 +1070,103 @@ function DM_TABLE_CHECKPOINT_BACKWARD() {
 	run_sql_tidb "drop table if exists ${shardddl}.t_1;"
 }
 
+function DM_RESYNC_NOT_FLUSHED_CASE() {
+  export GO_FAILPOINTS='github.com/pingcap/tiflow/dm/syncer/ReSyncExit=return(true)'
+  restart_worker1
+  restart_worker2
+	run_sql_source1 "insert into ${shardddl1}.${tb1} values(1,1);"
+	run_sql_source1 "insert into ${shardddl1}.${tb2} values(2,2);"
+	run_sql_source2 "insert into ${shardddl1}.${tb1} values(3,3);"
+	run_sql_source2 "insert into ${shardddl1}.${tb2} values(4,4);"
+
+	run_sql_source1 "alter table ${shardddl1}.${tb1} change b c int;"
+	run_sql_source1 "insert into ${shardddl1}.${tb1} values(5,5);"
+	run_sql_source1 "insert into ${shardddl1}.${tb2} values(6,6);"
+	run_sql_source2 "insert into ${shardddl1}.${tb1} values(7,7);"
+	run_sql_source2 "insert into ${shardddl1}.${tb2} values(8,8);"
+
+	run_sql_source1 "alter table ${shardddl1}.${tb1} add column d int not null;"
+	run_sql_source1 "insert into ${shardddl1}.${tb1} values(9,9,9);"
+	run_sql_source1 "insert into ${shardddl1}.${tb2} values(10,10);"
+	run_sql_source2 "insert into ${shardddl1}.${tb1} values(11,11);"
+	run_sql_source2 "insert into ${shardddl1}.${tb2} values(12,12);"
+
+	run_sql_source1 "alter table ${shardddl1}.${tb2} change b c int;"
+	run_sql_source1 "insert into ${shardddl1}.${tb1} values(13,13,13);"
+	run_sql_source1 "insert into ${shardddl1}.${tb2} values(14,14);"
+	run_sql_source2 "insert into ${shardddl1}.${tb1} values(15,15);"
+	run_sql_source2 "insert into ${shardddl1}.${tb2} values(16,16);"
+
+	run_sql_source1 "alter table ${shardddl1}.${tb2} add column d int not null;"
+	run_sql_source1 "insert into ${shardddl1}.${tb1} values(17,17,17);"
+	run_sql_source1 "insert into ${shardddl1}.${tb2} values(18,18,18);"
+	run_sql_source2 "insert into ${shardddl1}.${tb1} values(19,19);"
+	run_sql_source2 "insert into ${shardddl1}.${tb2} values(20,20);"
+
+	run_sql_source2 "alter table ${shardddl1}.${tb1} change b c int;"
+	run_sql_source1 "insert into ${shardddl1}.${tb1} values(21,21,21);"
+	run_sql_source1 "insert into ${shardddl1}.${tb2} values(22,22,22);"
+	run_sql_source2 "insert into ${shardddl1}.${tb1} values(23,23);"
+	run_sql_source2 "insert into ${shardddl1}.${tb2} values(24,24);"
+
+	run_sql_source2 "alter table ${shardddl1}.${tb1} add column d int not null;"
+	run_sql_source1 "insert into ${shardddl1}.${tb1} values(25,25,25);"
+	run_sql_source1 "insert into ${shardddl1}.${tb2} values(26,26,26);"
+	run_sql_source2 "insert into ${shardddl1}.${tb1} values(27,27,27);"
+	run_sql_source2 "insert into ${shardddl1}.${tb2} values(28,28);"
+
+	run_sql_source2 "alter table ${shardddl1}.${tb2} change b c int;"
+	run_sql_source1 "insert into ${shardddl1}.${tb1} values(29,29,29);"
+	run_sql_source1 "insert into ${shardddl1}.${tb2} values(30,30,30);"
+	run_sql_source2 "insert into ${shardddl1}.${tb1} values(31,31,31);"
+	run_sql_source2 "insert into ${shardddl1}.${tb2} values(32,32);"
+
+	# lock finished at first time, both workers should exit
+	check_process_exit worker1 20
+	check_process_exit worker2 20
+  export GO_FAILPOINTS='github.com/pingcap/tiflow/dm/syncer/FakeRedirect=1*return("`shardddl`.`tb`")'
+	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
+	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
+
+	run_sql_source2 "alter table ${shardddl1}.${tb2} add column d int not null;"
+	run_sql_source1 "insert into ${shardddl1}.${tb1} values(33,33,33);"
+	run_sql_source1 "insert into ${shardddl1}.${tb2} values(34,34,34);"
+	run_sql_source2 "insert into ${shardddl1}.${tb1} values(35,35,35);"
+	run_sql_source2 "insert into ${shardddl1}.${tb2} values(36,36,36);"
+
+	for ((k = 100; k < 140; k++)); do
+		run_sql_source1 "insert into ${shardddl1}.${tb1} values(${k},${k},${k});"
+		k=$((k + 1))
+		run_sql_source1 "insert into ${shardddl1}.${tb2} values(${k},${k},${k});"
+		k=$((k + 1))
+		run_sql_source2 "insert into ${shardddl1}.${tb1} values(${k},${k},${k});"
+		k=$((k + 1))
+		run_sql_source2 "insert into ${shardddl1}.${tb2} values(${k},${k},${k});"
+		sleep 1
+	done
+
+	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
+  export GO_FAILPOINTS=''
+  restart_worker1
+  restart_worker2
+}
+
+function DM_RESYNC_NOT_FLUSHED() {
+	run_case RESYNC_NOT_FLUSHED "double-source-optimistic" \
+		"run_sql_source1 \"create table ${shardddl1}.${tb1} (a int primary key, b int);\"; \
+		 run_sql_source1 \"create table ${shardddl1}.${tb2} (a int primary key, b int);\"; \
+		 run_sql_source2 \"create table ${shardddl1}.${tb1} (a int primary key, b int);\"; \
+     run_sql_source2 \"create table ${shardddl1}.${tb2} (a int primary key, b int);\"" \
+		"clean_table" ""
+}
+
 function run() {
 	init_cluster
 	init_database
 	DM_TABLE_CHECKPOINT_BACKWARD
+	DM_RESYNC_NOT_FLUSHED
 	start=131
 	end=155
 	for i in $(seq -f "%03g" ${start} ${end}); do
