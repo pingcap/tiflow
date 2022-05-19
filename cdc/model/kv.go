@@ -86,7 +86,7 @@ type RawKVEntry struct {
 func (v *RawKVEntry) String() string {
 	// TODO: redact values.
 	return fmt.Sprintf(
-		"OpType: %v, Key: %s, Value: %s, OldValue: %s StartTs: %d, CRTs: %d, RegionID: %d",
+		"OpType: %v, Key: %s, Value: %s, OldValue: %s, StartTs: %d, CRTs: %d, RegionID: %d",
 		v.OpType, string(v.Key), string(v.Value), string(v.OldValue), v.StartTs, v.CRTs, v.RegionID)
 }
 
