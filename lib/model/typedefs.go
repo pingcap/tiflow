@@ -11,4 +11,6 @@ type (
 	WorkerID = string
 	// Epoch is an increasing only value
 	Epoch = int64
+	// JobType is the unique identifier for job
+	JobType = string
 )
