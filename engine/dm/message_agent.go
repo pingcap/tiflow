@@ -11,12 +11,12 @@ import (
 
 var defaultResponseTimeOut = time.Second * 2
 
+// SendHandle defines an interface that supports SendMessage
 type SendHandle interface {
-	ID() libModel.WorkerID
 	SendMessage(ctx context.Context, topic string, message interface{}, nonblocking bool) error
 }
 
-// MessageAgent hold by TaskWorker, it manage all interactions with jobmaster
+// MessageAgent hold by TaskWorker, it manage all interactions with DMJobmaster
 type MessageAgent struct {
 	messagePair *dmpkg.MessagePair
 	sendHandle  SendHandle
@@ -24,6 +24,7 @@ type MessageAgent struct {
 	taskID      string
 }
 
+// NewMessageAgent creates a new MessageAgent instance
 func NewMessageAgent(sender SendHandle) *MessageAgent {
 	messageAgent := &MessageAgent{
 		messagePair: dmpkg.NewMessagePair(),
@@ -32,7 +33,8 @@ func NewMessageAgent(sender SendHandle) *MessageAgent {
 	return messageAgent
 }
 
-func (agent *MessageAgent) OperateTaskResponse(ctx context.Context, messageID uint64, taskStatus runtime.TaskStatus, errMsg string) error {
+// QueryStatusResponse delegates to send query-status response with p2p messaging system
+func (agent *MessageAgent) QueryStatusResponse(ctx context.Context, messageID uint64, taskStatus runtime.TaskStatus, errMsg string) error {
 	topic := dmpkg.QueryStatusRequestTopic(agent.id, agent.taskID)
 	response := &dmpkg.QueryStatusResponse{
 		ErrorMsg:   errMsg,

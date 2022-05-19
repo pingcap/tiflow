@@ -23,8 +23,8 @@ func TestMessageAgent(t *testing.T) {
 			Stage: metadata.StageRunning,
 		},
 	}
-	require.Nil(t, messageAgent.OperateTaskResponse(context.Background(), 1, dumpStatus, ""))
-	require.Nil(t, messageAgent.OperateTaskResponse(context.Background(), 1, nil, "status error"))
+	require.Nil(t, messageAgent.QueryStatusResponse(context.Background(), 1, dumpStatus, ""))
+	require.Nil(t, messageAgent.QueryStatusResponse(context.Background(), 1, nil, "status error"))
 }
 
 type MockSender struct {
