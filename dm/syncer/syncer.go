@@ -38,6 +38,13 @@ import (
 	"github.com/pingcap/tidb/parser/format"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/sessionctx"
+<<<<<<< HEAD
+=======
+	"github.com/pingcap/tidb/util/dbutil"
+	"github.com/pingcap/tidb/util/filter"
+	regexprrouter "github.com/pingcap/tidb/util/regexpr-router"
+	router "github.com/pingcap/tidb/util/table-router"
+>>>>>>> 6148c45ab (dm: parse start-time using upstream timezone (#5476))
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
@@ -51,6 +58,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	fr "github.com/pingcap/tiflow/dm/pkg/func-rollback"
+	"github.com/pingcap/tiflow/dm/pkg/gtid"
 	"github.com/pingcap/tiflow/dm/pkg/ha"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	parserpkg "github.com/pingcap/tiflow/dm/pkg/parser"
@@ -182,7 +190,8 @@ type Syncer struct {
 	// the status of this track may change over time.
 	safeMode *sm.SafeMode
 
-	timezone *time.Location
+	upstreamTZ *time.Location
+	timezone   *time.Location
 
 	binlogSizeCount     atomic.Int64
 	lastBinlogSizeCount atomic.Int64
@@ -336,6 +345,10 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 	}()
 
 	tctx := s.tctx.WithContext(ctx)
+	s.upstreamTZ, err = str2TimezoneOrFromDB(tctx, "", &s.cfg.From)
+	if err != nil {
+		return
+	}
 	s.timezone, err = str2TimezoneOrFromDB(tctx, s.cfg.Timezone, &s.cfg.To)
 	if err != nil {
 		return
@@ -3916,9 +3929,9 @@ func (s *Syncer) flushOptimisticTableInfos(tctx *tcontext.Context) {
 
 func (s *Syncer) setGlobalPointByTime(tctx *tcontext.Context, timeStr string) error {
 	// we support two layout
-	t, err := time.ParseInLocation(config.StartTimeFormat, timeStr, s.timezone)
+	t, err := time.ParseInLocation(config.StartTimeFormat, timeStr, s.upstreamTZ)
 	if err != nil {
-		t, err = time.ParseInLocation(config.StartTimeFormat2, timeStr, s.timezone)
+		t, err = time.ParseInLocation(config.StartTimeFormat2, timeStr, s.upstreamTZ)
 	}
 	if err != nil {
 		return err

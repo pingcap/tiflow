@@ -138,7 +138,8 @@ func str2TimezoneOrFromDB(tctx *tcontext.Context, tzStr string, dbCfg *config.DB
 	if err != nil {
 		return nil, err
 	}
-	tctx.L().Info("use timezone", zap.String("location", loc.String()))
+	tctx.L().Info("use timezone", zap.String("location", loc.String()),
+		zap.String("host", dbCfg.Host), zap.Int("port", dbCfg.Port))
 	return loc, nil
 }
 
