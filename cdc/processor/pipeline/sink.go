@@ -56,7 +56,7 @@ func newSinkNode(tableID model.TableID, sink sink.Sink, startTs model.Ts, target
 	return &sinkNode{
 		tableID: tableID,
 		sink:    sink,
-		// initialize status be `TableStatusPrepared`, treat it as the start point for sink.
+		// sink is always at least prepared, for receiving data from upstream.
 		status:       TableStatusPrepared,
 		targetTs:     targetTs,
 		resolvedTs:   startTs,

@@ -136,11 +136,12 @@ func TestStatus(t *testing.T) {
 	// test stop at targetTs
 	node := newSinkNode(1, &mockSink{}, 0, 10, &mockFlowController{})
 	require.Nil(t, node.Init(pipeline.MockNodeContext4Test(ctx, pmessage.Message{}, nil)))
-	require.Equal(t, TableStatusPreparing, node.Status())
+	require.Equal(t, TableStatusPrepared, node.Status())
 
-	require.Nil(t, node.Receive(
-		pipeline.MockNodeContext4Test(ctx, pmessage.BarrierMessage(20), nil)))
-	require.Equal(t, TableStatusPreparing, node.Status())
+	err := node.Receive(
+		pipeline.MockNodeContext4Test(ctx, pmessage.BarrierMessage(20), nil))
+	require.NoError(t, err)
+	require.Equal(t, TableStatusPrepared, node.Status())
 	require.Equal(t, model.Ts(20), node.BarrierTs())
 
 	msg := pmessage.PolymorphicEventMessage(&model.PolymorphicEvent{
@@ -168,7 +169,7 @@ func TestStatus(t *testing.T) {
 		CRTs: 15, RawKV: &model.RawKVEntry{OpType: model.OpTypeResolved},
 		Row: &model.RowChangedEvent{},
 	})
-	err := node.Receive(pipeline.MockNodeContext4Test(ctx, msg, nil))
+	err = node.Receive(pipeline.MockNodeContext4Test(ctx, msg, nil))
 	require.True(t, cerrors.ErrTableProcessorStoppedSafely.Equal(err))
 	require.Equal(t, TableStatusStopped, node.Status())
 	require.Equal(t, uint64(10), node.CheckpointTs())
