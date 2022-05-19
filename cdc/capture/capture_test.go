@@ -42,7 +42,7 @@ func TestReset(t *testing.T) {
 		DialTimeout: 3 * time.Second,
 	})
 	require.NoError(t, err)
-	client := etcd.NewCDCEtcdClient(ctx, etcdCli)
+	client := etcd.NewCDCEtcdClient(ctx, etcdCli, etcd.DefaultCDCClusterID)
 	// Close the client before the test function exits to prevent possible
 	// ctx leaks.
 	// Ref: https://github.com/grpc/grpc-go/blob/master/stream.go#L229

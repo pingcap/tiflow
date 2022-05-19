@@ -36,6 +36,7 @@ type Factory interface {
 
 // ClientGetter defines the client getter.
 type ClientGetter interface {
+	GetClusterID() string
 	ToTLSConfig() (*tls.Config, error)
 	ToGRPCDialOption() (grpc.DialOption, error)
 	GetPdAddr() string
@@ -45,11 +46,12 @@ type ClientGetter interface {
 
 // ClientFlags specifies the parameters needed to construct the client.
 type ClientFlags struct {
-	pdAddr   string
-	logLevel string
-	caPath   string
-	certPath string
-	keyPath  string
+	clusterID string
+	pdAddr    string
+	logLevel  string
+	caPath    string
+	certPath  string
+	keyPath   string
 }
 
 var _ ClientGetter = &ClientFlags{}
@@ -85,6 +87,11 @@ func (c *ClientFlags) GetLogLevel() string {
 	return c.logLevel
 }
 
+// GetClusterID returns cdc cluster id.
+func (c *ClientFlags) GetClusterID() string {
+	return c.clusterID
+}
+
 // NewClientFlags creates new client flags.
 func NewClientFlags() *ClientFlags {
 	return &ClientFlags{}
@@ -93,6 +100,7 @@ func NewClientFlags() *ClientFlags {
 // AddFlags receives a *cobra.Command reference and binds
 // flags related to template printing to it.
 func (c *ClientFlags) AddFlags(cmd *cobra.Command) {
+	cmd.PersistentFlags().StringVar(&c.clusterID, "cluster-id", "default", "Set the cdc cluster id")
 	cmd.PersistentFlags().StringVar(&c.pdAddr, "pd", "http://127.0.0.1:2379", "PD address, use ',' to separate multiple PDs")
 	cmd.PersistentFlags().StringVar(&c.caPath, "ca", "", "CA certificate path for TLS connection")
 	cmd.PersistentFlags().StringVar(&c.certPath, "cert", "", "Certificate path for TLS connection")
