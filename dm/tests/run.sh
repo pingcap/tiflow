@@ -18,10 +18,10 @@ print_worker_stacks() {
 		mkdir -p "$TEST_DIR/goroutines/stack/log"
 		# don't know which case failed, so we print them all
 		for port in $MASTER_PORT1 $MASTER_PORT2 $MASTER_PORT3 $MASTER_PORT4 $MASTER_PORT5 $MASTER_PORT6; do
-			curl -sS "127.0.0.1:$port/debug/pprof/goroutine?debug=2" > "$TEST_DIR/goroutines/stack/log/master-$port.log" || true
+			curl -sS "127.0.0.1:$port/debug/pprof/goroutine?debug=2" >"$TEST_DIR/goroutines/stack/log/master-$port.log" || true
 		done
 		for port in $WORKER1_PORT $WORKER2_PORT $WORKER3_PORT $WORKER4_PORT $WORKER5_PORT; do
-			curl -sS "127.0.0.1:$port/debug/pprof/goroutine?debug=2" > "$TEST_DIR/goroutines/stack/log/worker-$port.log" || true
+			curl -sS "127.0.0.1:$port/debug/pprof/goroutine?debug=2" >"$TEST_DIR/goroutines/stack/log/worker-$port.log" || true
 		done
 	fi
 }
