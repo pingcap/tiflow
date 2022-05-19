@@ -108,8 +108,8 @@ func (c *Config) Apply(sinkURI *url.URL, config *config.ReplicaConfig) error {
 		c.avroBigintUnsignedHandlingMode = s
 	}
 
-	if config.SchemaRegistry != "" {
-		c.avroSchemaRegistry = config.SchemaRegistry
+	if config.Sink != nil && config.Sink.SchemaRegistry != "" {
+		c.avroSchemaRegistry = config.Sink.SchemaRegistry
 	}
 
 	return nil

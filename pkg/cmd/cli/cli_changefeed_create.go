@@ -49,6 +49,7 @@ type changefeedCommonOptions struct {
 	noConfirm              bool
 	targetTs               uint64
 	sinkURI                string
+	schemaRegistry         string
 	configFile             string
 	opts                   []string
 	sortEngine             string
@@ -84,6 +85,8 @@ func (o *changefeedCommonOptions) addFlags(cmd *cobra.Command) {
 	cmd.PersistentFlags().BoolVar(&o.cyclicSyncDDL, "cyclic-sync-ddl", true, "(Experimental) Cyclic replication sync DDL of changefeed")
 	cmd.PersistentFlags().BoolVar(&o.syncPointEnabled, "sync-point", false, "(Experimental) Set and Record syncpoint in replication(default off)")
 	cmd.PersistentFlags().DurationVar(&o.syncPointInterval, "sync-interval", 10*time.Minute, "(Experimental) Set the interval for syncpoint in replication(default 10min)")
+	cmd.PersistentFlags().
+		StringVar(&o.schemaRegistry, "schema-registry", "", "Avro Schema Registry URI")
 	_ = cmd.PersistentFlags().MarkHidden("sort-dir")
 }
 
@@ -113,7 +116,6 @@ type createChangefeedOptions struct {
 	disableGCSafePointCheck bool
 	startTs                 uint64
 	timezone                string
-	schemaRegistry          string
 
 	cfg *config.ReplicaConfig
 }
@@ -137,8 +139,6 @@ func (o *createChangefeedOptions) addFlags(cmd *cobra.Command) {
 	cmd.PersistentFlags().BoolVarP(&o.disableGCSafePointCheck, "disable-gc-check", "", false, "Disable GC safe point check")
 	cmd.PersistentFlags().Uint64Var(&o.startTs, "start-ts", 0, "Start ts of changefeed")
 	cmd.PersistentFlags().StringVar(&o.timezone, "tz", "SYSTEM", "timezone used when checking sink uri (changefeed timezone is determined by cdc server)")
-	cmd.PersistentFlags().
-		StringVar(&o.schemaRegistry, "schema-registry", "", "Avro Schema Registry URI")
 }
 
 // complete adapts from the command line args to the data and client required.
@@ -232,6 +232,10 @@ func (o *createChangefeedOptions) completeCfg(
 		}
 	}
 
+	if o.commonChangefeedOptions.schemaRegistry != "" {
+		cfg.Sink.SchemaRegistry = o.commonChangefeedOptions.schemaRegistry
+	}
+
 	switch o.commonChangefeedOptions.sortEngine {
 	case model.SortInMemory:
 	case model.SortInFile:
@@ -271,7 +275,6 @@ func (o *createChangefeedOptions) completeCfg(
 			// TODO(neil) enable ID bucket.
 		}
 	}
-	cfg.SchemaRegistry = o.schemaRegistry
 	// Complete cfg.
 	o.cfg = cfg
 

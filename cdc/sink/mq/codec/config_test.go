@@ -52,7 +52,7 @@ func TestConfigApplyValidate(t *testing.T) {
 	c := NewConfig(p)
 	require.Equal(t, config.ProtocolCanalJSON, c.protocol)
 
-	replicaConfig := &config.ReplicaConfig{}
+	replicaConfig := config.GetDefaultReplicaConfig()
 	err = c.Apply(sinkURI, replicaConfig)
 	require.NoError(t, err)
 	require.True(t, c.enableTiDBExtension)
@@ -102,7 +102,7 @@ func TestConfigApplyValidate(t *testing.T) {
 	err = c.Validate()
 	require.ErrorContains(t, err, `Avro protocol requires parameter "schema-registry"`)
 
-	replicaConfig.SchemaRegistry = "this-is-a-uri"
+	replicaConfig.Sink.SchemaRegistry = "this-is-a-uri"
 	err = c.Apply(sinkURI, replicaConfig)
 	require.NoError(t, err)
 	require.Equal(t, "this-is-a-uri", c.avroSchemaRegistry)
