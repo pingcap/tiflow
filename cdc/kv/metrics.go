@@ -51,6 +51,13 @@ var (
 			Help:      "Size of KV events.",
 			Buckets:   prometheus.ExponentialBuckets(16, 2, 25),
 		}, []string{"type"})
+	cacheEventsSize = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "ticdc",
+			Subsystem: "kvclient",
+			Name:      "cache_event_size_bytes",
+			Help:      "Size of cached KV events.",
+		}, []string{"namespace", "changefeed"})
 	pullEventCounter = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Namespace: "ticdc",
@@ -109,6 +116,7 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(scanRegionsDuration)
 	registry.MustRegister(eventSize)
 	registry.MustRegister(eventFeedGauge)
+	registry.MustRegister(cacheEventsSize)
 	registry.MustRegister(pullEventCounter)
 	registry.MustRegister(sendEventCounter)
 	registry.MustRegister(clientChannelSize)

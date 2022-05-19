@@ -23,33 +23,43 @@ import (
 func TestMatchRow(t *testing.T) {
 	t.Parallel()
 	matcher := newMatcher()
-	matcher.putPrewriteRow(&cdcpb.Event_Row{
+	p1 := &cdcpb.Event_Row{
 		StartTs: 1,
 		Key:     []byte("k1"),
 		Value:   []byte("v1"),
-	})
-	matcher.putPrewriteRow(&cdcpb.Event_Row{
+	}
+	p1Key := newMatchKey(p1)
+	size := matcher.putPrewriteRow(p1)
+	require.Equal(t, sizeOfEventRow(p1)+(&p1Key).size(), size)
+	p2 := &cdcpb.Event_Row{
 		StartTs:  2,
 		Key:      []byte("k1"),
 		Value:    []byte("v2"),
 		OldValue: []byte("v3"),
-	})
+	}
+	p2Key := newMatchKey(p2)
+	size = matcher.putPrewriteRow(p2)
+	require.Equal(t, sizeOfEventRow(p2)+(&p2Key).size(), size)
 
 	// test rollback
-	matcher.rollbackRow(&cdcpb.Event_Row{
+	r1 := &cdcpb.Event_Row{
 		StartTs: 1,
 		Key:     []byte("k1"),
-	})
+	}
+	size = matcher.rollbackRow(r1)
+	require.Equal(t, -(sizeOfEventRow(p1) + (&p1Key).size()), size)
+
 	commitRow1 := &cdcpb.Event_Row{
 		StartTs: 1,
 		Key:     []byte("k1"),
 	}
-	ok := matcher.matchRow(commitRow1)
+	ok, size := matcher.matchRow(commitRow1)
 	require.False(t, ok)
 	require.Equal(t, &cdcpb.Event_Row{
 		StartTs: 1,
 		Key:     []byte("k1"),
 	}, commitRow1)
+	require.Equal(t, 0, size)
 
 	// test match commit
 	commitRow2 := &cdcpb.Event_Row{
@@ -57,7 +67,7 @@ func TestMatchRow(t *testing.T) {
 		CommitTs: 3,
 		Key:      []byte("k1"),
 	}
-	ok = matcher.matchRow(commitRow2)
+	ok, size = matcher.matchRow(commitRow2)
 	require.True(t, ok)
 	require.Equal(t, &cdcpb.Event_Row{
 		StartTs:  2,
@@ -66,30 +76,37 @@ func TestMatchRow(t *testing.T) {
 		Value:    []byte("v2"),
 		OldValue: []byte("v3"),
 	}, commitRow2)
+	require.Equal(t, -(sizeOfEventRow(p2) + (&p2Key).size()), size)
 }
 
 func TestMatchFakePrewrite(t *testing.T) {
 	t.Parallel()
 	matcher := newMatcher()
-	matcher.putPrewriteRow(&cdcpb.Event_Row{
+	p1 := &cdcpb.Event_Row{
 		StartTs:  1,
 		Key:      []byte("k1"),
 		Value:    []byte("v1"),
 		OldValue: []byte("v3"),
-	})
+	}
+	p1Key := newMatchKey(p1)
+	size := matcher.putPrewriteRow(p1)
+	require.Equal(t, sizeOfEventRow(p1)+(&p1Key).size(), size)
+
 	// fake prewrite
-	matcher.putPrewriteRow(&cdcpb.Event_Row{
+	size = matcher.putPrewriteRow(&cdcpb.Event_Row{
 		StartTs:  1,
 		Key:      []byte("k1"),
 		OldValue: []byte("v4"),
 	})
+	require.Equal(t, 0, size)
 
 	commitRow1 := &cdcpb.Event_Row{
 		StartTs:  1,
 		CommitTs: 2,
 		Key:      []byte("k1"),
 	}
-	ok := matcher.matchRow(commitRow1)
+	c1Key := newMatchKey(commitRow1)
+	ok, size := matcher.matchRow(commitRow1)
 	require.Equal(t, &cdcpb.Event_Row{
 		StartTs:  1,
 		CommitTs: 2,
@@ -98,12 +115,15 @@ func TestMatchFakePrewrite(t *testing.T) {
 		OldValue: []byte("v3"),
 	}, commitRow1)
 	require.True(t, ok)
+	require.Equal(t, -(sizeOfEventRow(commitRow1) + (&c1Key).size()), size)
 }
 
 func TestMatchMatchCachedRow(t *testing.T) {
 	t.Parallel()
 	matcher := newMatcher()
-	require.Equal(t, 0, len(matcher.matchCachedRow()))
+	rows, size := matcher.matchCachedRow()
+	require.Empty(t, 0, rows)
+	require.Equal(t, 0, size)
 	matcher.cacheCommitRow(&cdcpb.Event_Row{
 		StartTs:  1,
 		CommitTs: 2,
@@ -119,7 +139,9 @@ func TestMatchMatchCachedRow(t *testing.T) {
 		CommitTs: 5,
 		Key:      []byte("k3"),
 	})
-	require.Equal(t, 0, len(matcher.matchCachedRow()))
+	rows, size = matcher.matchCachedRow()
+	require.Empty(t, 0, rows)
+	require.Equal(t, 0, size)
 
 	matcher.cacheCommitRow(&cdcpb.Event_Row{
 		StartTs:  1,
@@ -156,6 +178,7 @@ func TestMatchMatchCachedRow(t *testing.T) {
 		OldValue: []byte("ov3"),
 	})
 
+	rows, size = matcher.matchCachedRow()
 	require.Equal(t, []*cdcpb.Event_Row{{
 		StartTs:  1,
 		CommitTs: 2,
@@ -168,5 +191,6 @@ func TestMatchMatchCachedRow(t *testing.T) {
 		Key:      []byte("k2"),
 		Value:    []byte("v2"),
 		OldValue: []byte("ov2"),
-	}}, matcher.matchCachedRow())
+	}}, rows)
+	require.True(t, 0 > size)
 }

@@ -44,8 +44,6 @@ type matcher struct {
 	// TODO : clear the single prewrite
 	unmatchedValue map[matchKey]*cdcpb.Event_Row
 	cachedCommit   []*cdcpb.Event_Row
-
-	unmatchedValueBytes int
 }
 
 func newMatcher() *matcher {
@@ -54,7 +52,7 @@ func newMatcher() *matcher {
 	}
 }
 
-func (m *matcher) putPrewriteRow(row *cdcpb.Event_Row) {
+func (m *matcher) putPrewriteRow(row *cdcpb.Event_Row) int {
 	key := newMatchKey(row)
 	// tikv may send a fake prewrite event with empty value caused by txn heartbeat.
 	// here we need to avoid the fake prewrite event overwrite the prewrite value.
@@ -65,40 +63,38 @@ func (m *matcher) putPrewriteRow(row *cdcpb.Event_Row) {
 	// We can distinguish fake prewrite events by whether the value is empty,
 	// no matter the old-value is enabled or disabled
 	if _, exist := m.unmatchedValue[key]; exist && len(row.GetValue()) == 0 {
-		return
+		return 0
 	}
 	m.unmatchedValue[key] = row
-	m.unmatchedValueBytes += (key.size() + sizeOfEventRow(row))
+	return key.size() + sizeOfEventRow(row)
 }
 
 // matchRow matches the commit event with the cached prewrite event
 // the Value and OldValue will be assigned if a matched prewrite event exists.
-func (m *matcher) matchRow(row *cdcpb.Event_Row) bool {
+func (m *matcher) matchRow(row *cdcpb.Event_Row) (bool, int) {
 	key := newMatchKey(row)
 	if value, exist := m.unmatchedValue[key]; exist {
 		row.Value = value.GetValue()
 		row.OldValue = value.GetOldValue()
 		delete(m.unmatchedValue, newMatchKey(row))
-		m.unmatchedValueBytes -= (key.size() + sizeOfEventRow(value))
-		if m.unmatchedValueBytes < 0 {
-			m.unmatchedValueBytes = 0
-		}
-		return true
+		return true, -(key.size() + sizeOfEventRow(value))
 	}
-	return false
+	return false, 0
 }
 
 func (m *matcher) cacheCommitRow(row *cdcpb.Event_Row) {
 	m.cachedCommit = append(m.cachedCommit, row)
 }
 
-func (m *matcher) matchCachedRow() []*cdcpb.Event_Row {
+func (m *matcher) matchCachedRow() ([]*cdcpb.Event_Row, int) {
+	size := 0
 	cachedCommit := m.cachedCommit
 	m.cachedCommit = nil
 	top := 0
 	for i := 0; i < len(cachedCommit); i++ {
 		cacheEntry := cachedCommit[i]
-		ok := m.matchRow(cacheEntry)
+		ok, sz := m.matchRow(cacheEntry)
+		size += sz
 		if !ok {
 			// when cdc receives a commit log without a corresponding
 			// prewrite log before initialized, a committed log  with
@@ -111,17 +107,15 @@ func (m *matcher) matchCachedRow() []*cdcpb.Event_Row {
 		cachedCommit[top] = cacheEntry
 		top++
 	}
-	return cachedCommit[:top]
+	return cachedCommit[:top], size
 }
 
-func (m *matcher) rollbackRow(row *cdcpb.Event_Row) {
+func (m *matcher) rollbackRow(row *cdcpb.Event_Row) int {
 	key := newMatchKey(row)
 	row, ok := m.unmatchedValue[key]
 	if ok {
 		delete(m.unmatchedValue, key)
-		m.unmatchedValueBytes -= (key.size() + sizeOfEventRow(row))
-		if m.unmatchedValueBytes < 0 {
-			m.unmatchedValueBytes = 0
-		}
+		return -(key.size() + sizeOfEventRow(row))
 	}
+	return 0
 }

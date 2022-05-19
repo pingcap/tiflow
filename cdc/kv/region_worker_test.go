@@ -135,7 +135,7 @@ func TestRegionWorkerPoolSize(t *testing.T) {
 func TestRegionWokerHandleEventEntryEventOutOfOrder(t *testing.T) {
 	// For UPDATE SQL, its prewrite event has both value and old value.
 	// It is possible that TiDB prewrites multiple times for the same row when
-	// there are other transcations it conflicts with. For this case,
+	// there are other transactions it conflicts with. For this case,
 	// if the value is not "short", only the first prewrite contains the value.
 	//
 	// TiKV may output events for the UPDATE SQL as following:
@@ -158,8 +158,7 @@ func TestRegionWokerHandleEventEntryEventOutOfOrder(t *testing.T) {
 		regionspan.ToComparableSpan(span),
 		0, &tikv.RPCContext{}), 0)
 	state.start()
-	worker := newRegionWorker(s, "")
-	worker.initMetrics(ctx)
+	worker := newRegionWorker(model.ChangeFeedID{}, s, "")
 	require.Equal(t, 2, cap(worker.outputCh))
 
 	// Receive prewrite2 with empty value.
@@ -233,7 +232,8 @@ func TestRegionWokerHandleEventEntryEventOutOfOrder(t *testing.T) {
 			Entries: []*cdcpb.Event_Row{
 				{
 					Type: cdcpb.Event_INITIALIZED,
-				}},
+				},
+			},
 		},
 	}
 	err = worker.handleEventEntry(ctx, events, state)
@@ -255,5 +255,6 @@ func TestRegionWokerHandleEventEntryEventOutOfOrder(t *testing.T) {
 			CRTs:     2,
 			RegionID: 0,
 			OldValue: []byte("oldvalue"),
-		}}, event, "%v", event)
+		},
+	}, event, "%v", event)
 }

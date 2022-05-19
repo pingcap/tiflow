@@ -25,7 +25,6 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/kvproto/pkg/cdcpb"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -118,6 +117,7 @@ type regionWorkerMetrics struct {
 	metricSendEventResolvedCounter    prometheus.Counter
 	metricSendEventCommitCounter      prometheus.Counter
 	metricSendEventCommittedCounter   prometheus.Counter
+	metricCacheEventsSize             prometheus.Gauge
 
 	// TODO: add region runtime related metrics
 }
@@ -157,24 +157,9 @@ type regionWorker struct {
 	storeAddr string
 }
 
-func newRegionWorker(s *eventFeedSession, addr string) *regionWorker {
-	worker := &regionWorker{
-		session:       s,
-		inputCh:       make(chan *regionStatefulEvent, regionWorkerInputChanSize),
-		outputCh:      s.eventCh,
-		errorCh:       make(chan error, 1),
-		statesManager: newRegionStateManager(-1),
-		rtsManager:    newRegionTsManager(),
-		rtsUpdateCh:   make(chan *regionTsInfo, 1024),
-		storeAddr:     addr,
-		concurrent:    s.client.config.WorkerConcurrent,
-	}
-	return worker
-}
-
-func (w *regionWorker) initMetrics(ctx context.Context) {
-	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
-
+func newRegionWorker(
+	changefeedID model.ChangeFeedID, s *eventFeedSession, addr string,
+) *regionWorker {
 	metrics := &regionWorkerMetrics{}
 	metrics.metricReceivedEventSize = eventSize.WithLabelValues("received")
 	metrics.metricDroppedEventSize = eventSize.WithLabelValues("dropped")
@@ -194,8 +179,21 @@ func (w *regionWorker) initMetrics(ctx context.Context) {
 		WithLabelValues("commit", changefeedID.Namespace, changefeedID.ID)
 	metrics.metricSendEventCommittedCounter = sendEventCounter.
 		WithLabelValues("committed", changefeedID.Namespace, changefeedID.ID)
+	metrics.metricCacheEventsSize = cacheEventsSize.
+		WithLabelValues(changefeedID.Namespace, changefeedID.ID)
 
-	w.metrics = metrics
+	return &regionWorker{
+		session:       s,
+		inputCh:       make(chan *regionStatefulEvent, regionWorkerInputChanSize),
+		outputCh:      s.eventCh,
+		errorCh:       make(chan error, 1),
+		statesManager: newRegionStateManager(-1),
+		rtsManager:    newRegionTsManager(),
+		rtsUpdateCh:   make(chan *regionTsInfo, 1024),
+		storeAddr:     addr,
+		concurrent:    s.client.config.WorkerConcurrent,
+		metrics:       metrics,
+	}
 }
 
 func (w *regionWorker) getRegionState(regionID uint64) (*regionFeedState, bool) {
@@ -618,7 +616,6 @@ func (w *regionWorker) run(parentCtx context.Context) error {
 	w.parentCtx = parentCtx
 	ctx, cancel := context.WithCancel(parentCtx)
 	wg, ctx := errgroup.WithContext(ctx)
-	w.initMetrics(ctx)
 	w.initPoolHandles(w.concurrent)
 
 	var retErr error
@@ -654,6 +651,7 @@ func (w *regionWorker) handleEventEntry(
 	state *regionFeedState,
 ) error {
 	regionID := state.sri.verID.GetID()
+	cachedSize := 0
 	for _, entry := range x.Entries.GetEntries() {
 		// if a region with kv range [a, z)
 		// and we only want the get [b, c) from this region,
@@ -678,7 +676,8 @@ func (w *regionWorker) handleEventEntry(
 
 			state.initialized = true
 			w.session.regionRouter.Release(state.sri.rpcCtx.Addr)
-			cachedEvents := state.matcher.matchCachedRow()
+			cachedEvents, size := state.matcher.matchCachedRow()
+			cachedSize += size
 			for _, cachedEvent := range cachedEvents {
 				revent, err := assembleRowEvent(regionID, cachedEvent)
 				if err != nil {
@@ -714,7 +713,8 @@ func (w *regionWorker) handleEventEntry(
 			}
 		case cdcpb.Event_PREWRITE:
 			w.metrics.metricPullEventPrewriteCounter.Inc()
-			state.matcher.putPrewriteRow(entry)
+			size := state.matcher.putPrewriteRow(entry)
+			cachedSize += size
 		case cdcpb.Event_COMMIT:
 			w.metrics.metricPullEventCommitCounter.Inc()
 			if entry.CommitTs <= state.lastResolvedTs {
@@ -733,7 +733,8 @@ func (w *regionWorker) handleEventEntry(
 				state.matcher.cacheCommitRow(entry)
 				continue
 			}
-			ok := state.matcher.matchRow(entry)
+			ok, size := state.matcher.matchRow(entry)
+			cachedSize += size
 			if !ok {
 				return cerror.ErrPrewriteNotMatch.GenWithStackByArgs(
 					hex.EncodeToString(entry.GetKey()),
@@ -753,8 +754,12 @@ func (w *regionWorker) handleEventEntry(
 			}
 		case cdcpb.Event_ROLLBACK:
 			w.metrics.metricPullEventRollbackCounter.Inc()
-			state.matcher.rollbackRow(entry)
+			size := state.matcher.rollbackRow(entry)
+			cachedSize += size
 		}
+	}
+	if cachedSize != 0 {
+		w.metrics.metricCacheEventsSize.Add(float64(cachedSize))
 	}
 	return nil
 }
