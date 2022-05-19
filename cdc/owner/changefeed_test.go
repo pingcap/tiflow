@@ -192,7 +192,8 @@ func createChangefeed4Test(ctx cdcContext.Context, t *testing.T) (
 		return &mockScheduler{}, nil
 	}
 	cf.upStream = upStream
-	state := orchestrator.NewChangefeedReactorState(ctx.ChangefeedVars().ID)
+	state := orchestrator.NewChangefeedReactorState(etcd.DefaultCDCClusterID,
+		ctx.ChangefeedVars().ID)
 	tester := orchestrator.NewReactorStateTester(t, state, nil)
 	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 		require.Nil(t, info)

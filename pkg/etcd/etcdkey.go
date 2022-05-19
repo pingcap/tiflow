@@ -19,7 +19,6 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 )
 
@@ -55,7 +54,7 @@ const (
 	CDCKeyTypeTaskPosition
 )
 
-// CDCKey represents a etcd key which is defined by TiCDC
+// CDCKey represents an etcd key which is defined by TiCDC
 /*
  Usage:
  we can parse a raw etcd key:
@@ -88,19 +87,18 @@ type CDCKey struct {
 }
 
 // BaseKey is the common prefix of the keys with cluster id in CDC
-func BaseKey() string {
-	clusterID := config.GetGlobalServerConfig().ClusterID
+func BaseKey(clusterID string) string {
 	return fmt.Sprintf("/tidb/cdc/%s", clusterID)
 }
 
 // NamespacedPrefix returns the etcd prefix of changefeed data
-func NamespacedPrefix(namespace string) string {
-	return BaseKey() + "/" + namespace
+func NamespacedPrefix(clusterID, namespace string) string {
+	return BaseKey(clusterID) + "/" + namespace
 }
 
 // Parse parses the given etcd key
-func (k *CDCKey) Parse(key string) error {
-	if !strings.HasPrefix(key, BaseKey()) {
+func (k *CDCKey) Parse(clusterID, key string) error {
+	if !strings.HasPrefix(key, BaseKey(clusterID)) {
 		return cerror.ErrInvalidEtcdKey.GenWithStackByArgs(key)
 	}
 	key = key[len("/tidb/cdc"):]
@@ -168,19 +166,19 @@ func (k *CDCKey) String() string {
 	switch k.Tp {
 	case CDCKeyTypeOwner:
 		if len(k.OwnerLeaseID) == 0 {
-			return BaseKey() + metaPrefix + ownerKey
+			return BaseKey(k.ClusterID) + metaPrefix + ownerKey
 		}
-		return BaseKey() + metaPrefix + ownerKey + "/" + k.OwnerLeaseID
+		return BaseKey(k.ClusterID) + metaPrefix + ownerKey + "/" + k.OwnerLeaseID
 	case CDCKeyTypeCapture:
-		return BaseKey() + metaPrefix + captureKey + "/" + k.CaptureID
+		return BaseKey(k.ClusterID) + metaPrefix + captureKey + "/" + k.CaptureID
 	case CDCKeyTypeChangefeedInfo:
-		return NamespacedPrefix(k.ChangefeedID.Namespace) + changefeedInfoKey +
+		return NamespacedPrefix(k.ClusterID, k.ChangefeedID.Namespace) + changefeedInfoKey +
 			"/" + k.ChangefeedID.ID
 	case CDCKeyTypeChangeFeedStatus:
-		return NamespacedPrefix(k.ChangefeedID.Namespace) + jobKey +
+		return NamespacedPrefix(k.ClusterID, k.ChangefeedID.Namespace) + jobKey +
 			"/" + k.ChangefeedID.ID
 	case CDCKeyTypeTaskPosition:
-		return NamespacedPrefix(k.ChangefeedID.Namespace) + taskPositionKey +
+		return NamespacedPrefix(k.ClusterID, k.ChangefeedID.Namespace) + taskPositionKey +
 			"/" + k.CaptureID + "/" + k.ChangefeedID.ID
 	}
 	log.Panic("unreachable")

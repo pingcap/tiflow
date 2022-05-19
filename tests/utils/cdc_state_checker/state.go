@@ -35,11 +35,14 @@ type cdcReactorState struct {
 }
 
 var (
-	captureRegex    = regexp.MustCompile(regexp.QuoteMeta(etcd.CaptureInfoKeyPrefix()) + "/(.+)")
+	captureRegex = regexp.MustCompile(regexp.QuoteMeta(
+		etcd.CaptureInfoKeyPrefix(etcd.DefaultCDCClusterID)) + "/(.+)")
 	changefeedRegex = regexp.MustCompile(regexp.
-			QuoteMeta(etcd.JobKeyPrefix(model.DefaultNamespace)) + "/(.+)")
+			QuoteMeta(etcd.JobKeyPrefix(etcd.DefaultCDCClusterID,
+			model.DefaultNamespace)) + "/(.+)")
 	positionRegex = regexp.MustCompile(regexp.
-			QuoteMeta(etcd.TaskPositionKeyPrefix(model.DefaultNamespace)) + "/(.+?)/(.+)")
+			QuoteMeta(etcd.TaskPositionKeyPrefix(etcd.DefaultCDCClusterID,
+			model.DefaultNamespace)) + "/(.+?)/(.+)")
 )
 
 func newCDCReactorState() *cdcReactorState {
@@ -52,7 +55,7 @@ func newCDCReactorState() *cdcReactorState {
 }
 
 func (s *cdcReactorState) Update(key util.EtcdKey, value []byte, isInit bool) error {
-	if key.String() == etcd.CaptureOwnerKey() {
+	if key.String() == etcd.CaptureOwnerKey(etcd.DefaultCDCClusterID) {
 		if value == nil {
 			log.Info("Owner lost", zap.String("oldOwner", s.Owner))
 			return nil

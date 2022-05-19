@@ -29,7 +29,8 @@ import (
 )
 
 func TestCheckCaptureAlive(t *testing.T) {
-	state := NewChangefeedReactorState(model.DefaultChangeFeedID("test"))
+	state := NewChangefeedReactorState(etcd.DefaultCDCClusterID,
+		model.DefaultChangeFeedID("test"))
 	stateTester := NewReactorStateTester(t, state, nil)
 	state.CheckCaptureAlive("6bbc01c8-0605-4f86-a0f9-b3119109b225")
 	require.Contains(t, stateTester.ApplyPatches().Error(), "[CDC:ErrLeaseExpired]")
@@ -117,7 +118,8 @@ func TestChangefeedStateUpdate(t *testing.T) {
 				`{"id":"6bbc01c8-0605-4f86-a0f9-b3119109b225","address":"127.0.0.1:8300"}`,
 			},
 			expected: ChangefeedReactorState{
-				ID: model.DefaultChangeFeedID("test1"),
+				ClusterID: etcd.DefaultCDCClusterID,
+				ID:        model.DefaultChangeFeedID("test1"),
 				Info: &model.ChangeFeedInfo{
 					SinkURI:           "blackhole://",
 					Opts:              map[string]string{},
@@ -167,7 +169,8 @@ func TestChangefeedStateUpdate(t *testing.T) {
 				`{"id":"666777888","address":"127.0.0.1:8300"}`,
 			},
 			expected: ChangefeedReactorState{
-				ID: model.DefaultChangeFeedID("test1"),
+				ClusterID: etcd.DefaultCDCClusterID,
+				ID:        model.DefaultChangeFeedID("test1"),
 				Info: &model.ChangeFeedInfo{
 					SinkURI:           "blackhole://",
 					Opts:              map[string]string{},
@@ -221,7 +224,8 @@ func TestChangefeedStateUpdate(t *testing.T) {
 				`fake value`,
 			},
 			expected: ChangefeedReactorState{
-				ID: model.DefaultChangeFeedID("test1"),
+				ClusterID: etcd.DefaultCDCClusterID,
+				ID:        model.DefaultChangeFeedID("test1"),
 				Info: &model.ChangeFeedInfo{
 					SinkURI:           "blackhole://",
 					Opts:              map[string]string{},
@@ -282,9 +286,10 @@ func TestChangefeedStateUpdate(t *testing.T) {
 				``,
 			},
 			expected: ChangefeedReactorState{
-				ID:     model.DefaultChangeFeedID("test1"),
-				Info:   nil,
-				Status: nil,
+				ClusterID: etcd.DefaultCDCClusterID,
+				ID:        model.DefaultChangeFeedID("test1"),
+				Info:      nil,
+				Status:    nil,
 				TaskPositions: map[model.CaptureID]*model.TaskPosition{
 					"666777888": {CheckPointTs: 11332244, ResolvedTs: 312321, Count: 8},
 				},
@@ -292,7 +297,8 @@ func TestChangefeedStateUpdate(t *testing.T) {
 		},
 	}
 	for i, tc := range testCases {
-		state := NewChangefeedReactorState(model.DefaultChangeFeedID(tc.changefeedID))
+		state := NewChangefeedReactorState(etcd.DefaultCDCClusterID,
+			model.DefaultChangeFeedID(tc.changefeedID))
 		for i, k := range tc.updateKey {
 			value := []byte(tc.updateValue[i])
 			if len(value) == 0 {
@@ -307,7 +313,8 @@ func TestChangefeedStateUpdate(t *testing.T) {
 }
 
 func TestPatchInfo(t *testing.T) {
-	state := NewChangefeedReactorState(model.DefaultChangeFeedID("test1"))
+	state := NewChangefeedReactorState(etcd.DefaultCDCClusterID,
+		model.DefaultChangeFeedID("test1"))
 	stateTester := NewReactorStateTester(t, state, nil)
 	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 		require.Nil(t, info)
@@ -351,7 +358,8 @@ func TestPatchInfo(t *testing.T) {
 }
 
 func TestPatchStatus(t *testing.T) {
-	state := NewChangefeedReactorState(model.DefaultChangeFeedID("test1"))
+	state := NewChangefeedReactorState(etcd.DefaultCDCClusterID,
+		model.DefaultChangeFeedID("test1"))
 	stateTester := NewReactorStateTester(t, state, nil)
 	state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
 		require.Nil(t, status)
@@ -373,7 +381,8 @@ func TestPatchStatus(t *testing.T) {
 }
 
 func TestPatchTaskPosition(t *testing.T) {
-	state := NewChangefeedReactorState(model.DefaultChangeFeedID("test1"))
+	state := NewChangefeedReactorState(etcd.DefaultCDCClusterID,
+		model.DefaultChangeFeedID("test1"))
 	stateTester := NewReactorStateTester(t, state, nil)
 	captureID1 := "capture1"
 	captureID2 := "capture2"
@@ -464,20 +473,23 @@ func TestGlobalStateUpdate(t *testing.T) {
 "admin-job-type":0}`,
 			},
 			expected: GlobalReactorState{
-				Owner: map[string]struct{}{"22317526c4fc9a37": {}, "22317526c4fc9a38": {}},
+				ClusterID: etcd.DefaultCDCClusterID,
+				Owner:     map[string]struct{}{"22317526c4fc9a37": {}, "22317526c4fc9a38": {}},
 				Captures: map[model.CaptureID]*model.CaptureInfo{"6bbc01c8-0605-4f86-a0f9-b3119109b225": {
 					ID:            "6bbc01c8-0605-4f86-a0f9-b3119109b225",
 					AdvertiseAddr: "127.0.0.1:8300",
 				}},
 				Changefeeds: map[model.ChangeFeedID]*ChangefeedReactorState{
 					model.DefaultChangeFeedID("test1"): {
-						ID: model.DefaultChangeFeedID("test1"),
+						ClusterID: etcd.DefaultCDCClusterID,
+						ID:        model.DefaultChangeFeedID("test1"),
 						TaskPositions: map[model.CaptureID]*model.TaskPosition{
 							"6bbc01c8-0605-4f86-a0f9-b3119109b225": {CheckPointTs: 421980719742451713, ResolvedTs: 421980720003809281},
 						},
 					},
 					model.DefaultChangeFeedID("test2"): {
-						ID: model.DefaultChangeFeedID("test2"),
+						ClusterID: etcd.DefaultCDCClusterID,
+						ID:        model.DefaultChangeFeedID("test2"),
 						TaskPositions: map[model.CaptureID]*model.TaskPosition{
 							"6bbc01c8-0605-4f86-a0f9-b3119109b225": {
 								CheckPointTs: 421980719742451713,
@@ -520,11 +532,13 @@ func TestGlobalStateUpdate(t *testing.T) {
 				``,
 			},
 			expected: GlobalReactorState{
-				Owner:    map[string]struct{}{"22317526c4fc9a38": {}},
-				Captures: map[model.CaptureID]*model.CaptureInfo{},
+				ClusterID: etcd.DefaultCDCClusterID,
+				Owner:     map[string]struct{}{"22317526c4fc9a38": {}},
+				Captures:  map[model.CaptureID]*model.CaptureInfo{},
 				Changefeeds: map[model.ChangeFeedID]*ChangefeedReactorState{
 					model.DefaultChangeFeedID("test2"): {
-						ID: model.DefaultChangeFeedID("test2"),
+						ClusterID: etcd.DefaultCDCClusterID,
+						ID:        model.DefaultChangeFeedID("test2"),
 						TaskPositions: map[model.CaptureID]*model.TaskPosition{
 							"6bbc01c8-0605-4f86-a0f9-b3119109b225": {
 								CheckPointTs: 421980719742451713,
@@ -537,7 +551,7 @@ func TestGlobalStateUpdate(t *testing.T) {
 		},
 	}
 	for _, tc := range testCases {
-		state := NewGlobalState()
+		state := NewGlobalState(etcd.DefaultCDCClusterID)
 		for i, k := range tc.updateKey {
 			value := []byte(tc.updateValue[i])
 			if len(value) == 0 {
@@ -552,7 +566,7 @@ func TestGlobalStateUpdate(t *testing.T) {
 }
 
 func TestCaptureChangeHooks(t *testing.T) {
-	state := NewGlobalState()
+	state := NewGlobalState(etcd.DefaultCDCClusterID)
 
 	var callCount int
 	state.onCaptureAdded = func(captureID model.CaptureID, addr string) {
@@ -572,19 +586,22 @@ func TestCaptureChangeHooks(t *testing.T) {
 	captureInfoBytes, err := json.Marshal(captureInfo)
 	require.Nil(t, err)
 
-	err = state.Update(util.NewEtcdKey(etcd.CaptureInfoKeyPrefix()+"/capture-1"),
+	err = state.Update(util.NewEtcdKey(
+		etcd.CaptureInfoKeyPrefix(etcd.DefaultCDCClusterID)+"/capture-1"),
 		captureInfoBytes, false)
 	require.Nil(t, err)
 	require.Equal(t, callCount, 1)
 
-	err = state.Update(util.NewEtcdKey(etcd.CaptureInfoKeyPrefix()+"/capture-1"),
+	err = state.Update(util.NewEtcdKey(
+		etcd.CaptureInfoKeyPrefix(etcd.DefaultCDCClusterID)+"/capture-1"),
 		nil /* delete */, false)
 	require.Nil(t, err)
 	require.Equal(t, callCount, 2)
 }
 
 func TestCheckChangefeedNormal(t *testing.T) {
-	state := NewChangefeedReactorState(model.DefaultChangeFeedID("test1"))
+	state := NewChangefeedReactorState(etcd.DefaultCDCClusterID,
+		model.DefaultChangeFeedID("test1"))
 	stateTester := NewReactorStateTester(t, state, nil)
 	state.CheckChangefeedNormal()
 	stateTester.MustApplyPatches()

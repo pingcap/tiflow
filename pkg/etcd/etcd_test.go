@@ -70,7 +70,7 @@ func (s *etcdTester) setUpTest(t *testing.T) {
 		LogConfig:   &logConfig,
 	})
 	require.NoError(t, err)
-	s.client = NewCDCEtcdClient(context.TODO(), client)
+	s.client = NewCDCEtcdClient(context.TODO(), client, DefaultCDCClusterID)
 	s.ctx, s.cancel = context.WithCancel(context.Background())
 	s.errg = util.HandleErrWithErrGroup(s.ctx, s.etcd.Err(), func(e error) { t.Log(e) })
 }
@@ -133,7 +133,8 @@ func TestGetChangeFeeds(t *testing.T) {
 	for _, tc := range testCases {
 		for i := 0; i < len(tc.ids); i++ {
 			_, err := s.client.Client.Put(context.Background(),
-				GetEtcdKeyChangeFeedInfo(model.DefaultChangeFeedID(tc.ids[i])),
+				GetEtcdKeyChangeFeedInfo(DefaultCDCClusterID,
+					model.DefaultChangeFeedID(tc.ids[i])),
 				tc.details[i])
 			require.NoError(t, err)
 		}
@@ -233,7 +234,7 @@ func putChangeFeedStatus(
 	changefeedID model.ChangeFeedID,
 	status *model.ChangeFeedStatus,
 ) error {
-	key := GetEtcdKeyJob(changefeedID)
+	key := GetEtcdKeyJob(DefaultCDCClusterID, changefeedID)
 	value, err := status.Marshal()
 	if err != nil {
 		return errors.Trace(err)
@@ -369,7 +370,8 @@ func TestGetOwnerRevision(t *testing.T) {
 			sess, err := concurrency.NewSession(s.client.Client.Unwrap(),
 				concurrency.WithTTL(10 /* seconds */))
 			require.Nil(t, err)
-			election := concurrency.NewElection(sess, CaptureOwnerKey())
+			election := concurrency.NewElection(sess,
+				CaptureOwnerKey(DefaultCDCClusterID))
 
 			mockCaptureID := fmt.Sprintf("capture-%d", i)
 

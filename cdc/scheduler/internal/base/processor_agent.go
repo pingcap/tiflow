@@ -122,7 +122,7 @@ func NewAgent(
 	etcdCliCtx, cancel := context.WithTimeout(ctx, getOwnerFromEtcdTimeout)
 	defer cancel()
 	ownerCaptureID, err := ret.etcdClient.
-		GetOwnerID(etcdCliCtx, etcd.CaptureOwnerKey())
+		GetOwnerID(etcdCliCtx, etcd.CaptureOwnerKey(etcd.DefaultCDCClusterID))
 	if err != nil {
 		if err != concurrency.ErrElectionNoLeader {
 			return nil, errors.Trace(err)
