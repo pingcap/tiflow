@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"os"
 	"path"
 	"reflect"
 	"strconv"
@@ -1917,6 +1918,26 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		s.currentLocationMu.currentLocation = currentLocation
 		s.currentLocationMu.Unlock()
 
+		failpoint.Inject("FakeRedirect", func(val failpoint.Value) {
+			if len(shardingReSyncCh) == 0 && shardingReSync == nil {
+				if strVal, ok := val.(string); ok {
+					pos, gtidSet, err := s.fromDB.GetMasterStatus(ctx, s.cfg.Flavor)
+					if err != nil {
+						s.tctx.L().Error("fail to get master status in failpoint FakeRedirect", zap.Error(err))
+						os.Exit(1)
+					}
+					loc := binlog.InitLocation(pos, gtidSet)
+					s.tctx.L().Info("fake redirect", zap.Stringer("currentLocation", currentLocation), zap.Stringer("latestLocation", loc))
+					resync := &ShardingReSync{
+						currLocation:   currentLocation.Clone(),
+						latestLocation: loc,
+						targetTable:    utils.UnpackTableID(strVal),
+						allResolved:    true,
+					}
+					shardingReSyncCh <- resync
+				}
+			}
+		})
 		// fetch from sharding resync channel if needed, and redirect global
 		// stream to current binlog position recorded by ShardingReSync
 		if len(shardingReSyncCh) > 0 && shardingReSync == nil {
@@ -1962,10 +1983,17 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 				if shardingReSync != nil {
 					endLocation = &shardingReSync.latestLocation
 				}
-				s.resolveOptimisticDDL(&eventContext{
+				resolved := s.resolveOptimisticDDL(&eventContext{
 					shardingReSyncCh: &shardingReSyncCh,
 					currentLocation:  endLocation,
 				}, &filter.Table{Schema: op.UpSchema, Name: op.UpTable}, utils.UnpackTableID(targetTableID))
+				// if resolved and targetTableID == shardingResync.TargetTableID, we should resolve this resync before we continue
+				if resolved && shardingReSync != nil && targetTableID == shardingReSync.targetTable.String() {
+					err = closeShardingResync()
+					if err != nil {
+						return err
+					}
+				}
 				continue
 			}
 		}

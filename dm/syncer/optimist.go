@@ -260,7 +260,7 @@ func (s *Syncer) handleQueryEventOptimistic(qec *queryEventContext) error {
 	return nil
 }
 
-func (s *Syncer) resolveOptimisticDDL(ec *eventContext, sourceTable, targetTable *filter.Table) {
+func (s *Syncer) resolveOptimisticDDL(ec *eventContext, sourceTable, targetTable *filter.Table) bool {
 	if sourceTable != nil && targetTable != nil {
 		if s.osgk.inConflictStage(sourceTable, targetTable) {
 			// in the following two situations we should resolve this ddl lock at now
@@ -281,6 +281,7 @@ func (s *Syncer) resolveOptimisticDDL(ec *eventContext, sourceTable, targetTable
 					zap.Stringer("shardingResync", resync))
 				*ec.shardingReSyncCh <- resync
 				s.osgk.addShardingReSync(resync)
+				return true
 			}
 		}
 	} else {
@@ -288,4 +289,5 @@ func (s *Syncer) resolveOptimisticDDL(ec *eventContext, sourceTable, targetTable
 			zap.Bool("emptySourceTable", sourceTable == nil),
 			zap.Bool("emptyTargetTable", targetTable == nil))
 	}
+	return false
 }
