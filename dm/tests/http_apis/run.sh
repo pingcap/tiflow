@@ -87,7 +87,7 @@ function run() {
 
 	sleep 1
 	echo "kill dm-worker1"
-	ps aux | grep dm-worker1 | awk '{print $2}' | xargs kill || true
+	kill_process dm-worker1
 	check_port_offline $WORKER1_PORT 20
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"list-member --worker --name=worker1" \
