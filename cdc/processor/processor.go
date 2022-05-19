@@ -818,7 +818,9 @@ func (p *processor) pushResolvedTs2Table() {
 		resolvedTs = schemaResolvedTs
 	}
 	for _, table := range p.tables {
-		table.UpdateBarrierTs(resolvedTs)
+		if table.Status() == pipeline.TableStatusReplicating {
+			table.UpdateBarrierTs(resolvedTs)
+		}
 	}
 }
 
