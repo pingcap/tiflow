@@ -144,7 +144,7 @@ function test_multi_task_reduce_and_restart_worker() {
 			echo "restart unuse worker${idx}"
 
 			echo "try to kill worker port ${worker_ports[$(($idx - 1))]}"
-			ps aux | grep dm-worker${idx} | awk '{print $2}' | xargs kill || true
+			kill_process dm-worker${idx}
 			run_dm_ctl_with_retry $WORK_DIR 127.0.0.1:$MASTER_PORT2 "list-member --worker --name=worker$idx" '"stage": "offline"' 1
 
 			echo "start dm-worker${idx}"
@@ -156,7 +156,7 @@ function test_multi_task_reduce_and_restart_worker() {
 	for ((i = 0; i < ${#worker_inuse[@]}; i++)); do
 		wk=${worker_inuse[$i]:0-1:1}                                 # get worker id, such as ("1", "4")
 		echo "try to kill worker port ${worker_ports[$(($wk - 1))]}" # get relative worker port
-		ps aux | grep dm-${worker_inuse[$i]} | awk '{print $2}' | xargs kill || true
+		kill_process dm-${worker_inuse[$i]}
 		check_port_offline ${worker_ports[$(($wk - 1))]} 20
 		# just one worker was killed should be safe
 		echo "${worker_inuse[$i]} was killed"
