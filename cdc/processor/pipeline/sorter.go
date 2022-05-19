@@ -105,7 +105,7 @@ func createSorter(ctx pipeline.NodeContext, tableName string, tableID model.Tabl
 	case model.SortUnified, model.SortInFile /* `file` becomes an alias of `unified` for backward compatibility */ :
 		if sortEngine == model.SortInFile {
 			log.Warn("File sorter is obsolete and replaced by unified sorter. Please revise your changefeed settings",
-				zap.String("namesapce", ctx.ChangefeedVars().ID.Namespace),
+				zap.String("namespace", ctx.ChangefeedVars().ID.Namespace),
 				zap.String("changefeed", ctx.ChangefeedVars().ID.ID),
 				zap.String("tableName", tableName))
 		}
@@ -173,6 +173,7 @@ func (n *sorterNode) start(
 		startTs := <-n.startTsCh
 		// original `status` can be `TableStatusPreparing` or `TableStatusPrepared`, but it doesn't matter here.
 		n.status.Store(TableStatusReplicating)
+		eventSorter.EmitStartTs(stdCtx, startTs)
 
 		for {
 			// We must call `sorter.Output` before receiving resolved events.

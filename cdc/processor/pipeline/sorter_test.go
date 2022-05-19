@@ -76,11 +76,6 @@ type checkSorter struct {
 	ch chan *model.PolymorphicEvent
 }
 
-func (c *checkSorter) UpdateInitialCheckpointTs(checkpoint model.Ts) {
-	// TODO implement me
-	panic("implement me")
-}
-
 var _ sorter.EventSorter = (*checkSorter)(nil)
 
 func (c *checkSorter) Run(ctx context.Context) error {
@@ -104,6 +99,10 @@ func (c *checkSorter) TryAddEntry(
 
 func (c *checkSorter) Output() <-chan *model.PolymorphicEvent {
 	return c.ch
+}
+
+func (c *checkSorter) EmitStartTs(ctx context.Context, ts uint64) {
+	panic("unimplemented")
 }
 
 func TestSorterResolvedTsLessEqualBarrierTs(t *testing.T) {

@@ -245,7 +245,8 @@ type pollState struct {
 	// All resolved events before the resolved ts are read into buffer.
 	exhaustedResolvedTs uint64
 
-	initialCheckpointTs *uint64
+	// read data after `startTs`
+	startTs uint64
 
 	// ID and router of the reader itself.
 	readerID     actor.ID
@@ -327,12 +328,12 @@ func (state *pollState) tryGetIterator(uid uint32, tableID uint64) (*message.Ite
 	}
 
 	if state.iterCh == nil {
-		// We haven't send request.
+		// We haven't sent request.
 		iterCh := make(chan *message.LimitedIterator, 1)
 		state.iterCh = iterCh
 		readerRouter := state.readerRouter
 		readerID := state.readerID
-		lowerBoundTs := atomic.LoadUint64(state.initialCheckpointTs)
+		lowerBoundTs := atomic.LoadUint64(&state.startTs)
 		if lowerBoundTs < state.exhaustedResolvedTs {
 			lowerBoundTs = state.exhaustedResolvedTs
 		}
@@ -356,7 +357,7 @@ func (state *pollState) tryGetIterator(uid uint32, tableID uint64) (*message.Ite
 		}, false
 	}
 
-	// Try receive iterator.
+	// Try to receive iterator.
 	select {
 	case iter := <-state.iterCh:
 		// Iterator received, reset state.iterCh
@@ -412,6 +413,10 @@ func (r *reader) Poll(ctx context.Context, msgs []actormsg.Message[message.Task]
 			return false
 		default:
 			log.Panic("unexpected message", zap.Any("message", msgs[i]))
+		}
+		if msgs[i].Value.StartTs != 0 {
+			atomic.StoreUint64(&r.state.startTs, msgs[i].Value.StartTs)
+			continue
 		}
 		// Update the max commit ts and resolved ts of all received events.
 		ts := msgs[i].Value.ReadTs
@@ -511,4 +516,8 @@ func (r *reader) OnClose() {
 	// Must release iterator before stopping, otherwise it leaks iterator.
 	_ = r.state.tryReleaseIterator()
 	r.common.closedWg.Done()
+}
+
+func (r *reader) UpdateStartTs(ts uint64) {
+	atomic.StoreUint64(&r.state.startTs, ts)
 }

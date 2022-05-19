@@ -81,9 +81,8 @@ type Sorter struct {
 	readerRouter  *actor.Router[message.Task]
 	ReaderActorID actor.ID
 
-	outputCh            chan *model.PolymorphicEvent
-	initialCheckpointTs *uint64
-	closed              int32
+	outputCh chan *model.PolymorphicEvent
+	closed   int32
 }
 
 // NewSorter creates a new Sorter
@@ -137,7 +136,6 @@ func NewSorter(
 	}
 	c.closedWg.Add(1)
 
-	initialCheckpointTs := uint64(0)
 	r := &reader{
 		common: c,
 
@@ -147,7 +145,7 @@ func NewSorter(
 			maxCommitTs:         uint64(0),
 			maxResolvedTs:       uint64(0),
 			exhaustedResolvedTs: uint64(0),
-			initialCheckpointTs: &initialCheckpointTs,
+			startTs:             uint64(0),
 
 			readerID:     actorID,
 			readerRouter: readerRouter,
@@ -181,13 +179,12 @@ func NewSorter(
 	c.closedWg.Add(1)
 
 	return &Sorter{
-		common:              c,
-		writerRouter:        writerRouter,
-		writerActorID:       actorID,
-		readerRouter:        readerRouter,
-		ReaderActorID:       actorID,
-		outputCh:            r.outputCh,
-		initialCheckpointTs: &initialCheckpointTs,
+		common:        c,
+		writerRouter:  writerRouter,
+		writerActorID: actorID,
+		readerRouter:  readerRouter,
+		ReaderActorID: actorID,
+		outputCh:      r.outputCh,
 	}, nil
 }
 
@@ -200,7 +197,7 @@ func (ls *Sorter) Run(ctx context.Context) error {
 	case err = <-ls.errCh:
 	}
 	atomic.StoreInt32(&ls.closed, 1)
-	// We should never lost message, make sure StopMessage is sent.
+	// We should never have lost message, make sure StopMessage is sent.
 	ctx1 := context.TODO()
 	// As the context can't be cancelled. SendB can only return an error
 	// ActorStopped or ActorNotFound, and they mean actors have closed.
@@ -281,6 +278,11 @@ func (ls *Sorter) cleanup(ctx context.Context) error {
 	return ls.dbRouter.SendB(ctx, ls.dbActorID, actormsg.ValueMessage(task))
 }
 
-func (ls *Sorter) UpdateInitialCheckpointTs(checkpoint model.Ts) {
-	atomic.StoreUint64(ls.initialCheckpointTs, checkpoint)
+func (ls *Sorter) EmitStartTs(ctx context.Context, ts uint64) {
+	msg := actormsg.ValueMessage(message.Task{
+		UID:     ls.uid,
+		TableID: ls.tableID,
+		StartTs: ts,
+	})
+	_ = ls.readerRouter.SendB(ctx, ls.ReaderActorID, msg)
 }
