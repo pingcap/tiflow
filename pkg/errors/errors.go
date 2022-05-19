@@ -698,10 +698,6 @@ var (
 		errors.RFCCodeText("CDC:ErrTableIneligible"),
 	)
 
-	ErrTableNotFound = errors.Normalize(
-		"replicating table not found",
-		errors.RFCCodeText("CDC:ErrTableNotFound"))
-
 	// EtcdWorker related errors. Internal use only.
 	// ErrEtcdTryAgain is used by a PatchFunc to force a transaction abort.
 	ErrEtcdTryAgain = errors.Normalize(
