@@ -262,7 +262,6 @@ func (n *sinkNode) HandleMessage(ctx context.Context, msg pmessage.Message) (boo
 	switch msg.Tp {
 	case pmessage.MessageTypePolymorphicEvent:
 		event := msg.PolymorphicEvent
-		log.Info("sinkNode receive event", zap.Any("event", event))
 		if event.RawKV.OpType == model.OpTypeResolved {
 			// first resolved event received, let the sinkNode become `replicating`
 			if n.status.Load() == TableStatusPrepared {
