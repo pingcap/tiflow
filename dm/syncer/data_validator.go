@@ -116,7 +116,9 @@ type rowValidationJob struct {
 	// the memory taken for a row change job is more than this size
 	size int32
 	wg   *sync.WaitGroup
-	// timestamp of first validation of this row. will reset when merge row changes
+	// timestamp of first validation of this row. will reset when merge row changes.
+	// if the job is loaded from meta, it's reset too, in case validator stopped for a long time,
+	// then those failed row change maybe marked as error row immediately.
 	FirstValidateTS int64
 	FailedCnt       int
 }
@@ -968,9 +970,8 @@ func (v *DataValidator) loadPersistedData() error {
 					validateTbl.srcTableInfo, validateTbl.downstreamTableInfo.TableInfo,
 					nil,
 				),
-				size:            row.Size,
-				FirstValidateTS: row.FirstValidateTS,
-				FailedCnt:       row.FailedCnt,
+				size:      row.Size,
+				FailedCnt: row.FailedCnt,
 			}
 		}
 	}
