@@ -62,20 +62,12 @@ function run() {
 	python3 $CUR/util/test_case.py check_health $TLS_DIR
 	python3 $CUR/util/test_case.py get_status $TLS_DIR
 
-<<<<<<< HEAD
-	python $CUR/util/test_case.py create_changefeed $TLS_DIR "$SINK_URI"
+	python3 $CUR/util/test_case.py create_changefeed $TLS_DIR "$SINK_URI"
 	# wait for changefeed created
 	sleep 2
-=======
-	python3 $CUR/util/test_case.py create_changefeed $TLS_DIR "$SINK_URI"
-	# wait for all changefeed created
-	ensure $MAX_RETRIES check_changefeed_state "https://${TLS_PD_HOST}:${TLS_PD_PORT}" "changefeed-test1" "normal" "null" ${TLS_DIR}
-	ensure $MAX_RETRIES check_changefeed_state "https://${TLS_PD_HOST}:${TLS_PD_PORT}" "changefeed-test2" "normal" "null" ${TLS_DIR}
-	ensure $MAX_RETRIES check_changefeed_state "https://${TLS_PD_HOST}:${TLS_PD_PORT}" "changefeed-test3" "normal" "null" ${TLS_DIR}
->>>>>>> 7473aebbb (tests: use python3 to run http_api test to fix failed integration_tests (#5473))
 
 	# test processor query with no attached tables
-	python $CUR/util/test_case.py get_processor $TLS_DIR
+	python3 $CUR/util/test_case.py get_processor $TLS_DIR
 
 	run_sql "CREATE table test.simple0(id int primary key, val int);"
 	run_sql "CREATE table test.\`simple-dash\`(id int primary key, val int);"
