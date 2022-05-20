@@ -100,7 +100,7 @@ func (m *Manager) Tick(stdCtx context.Context, state orchestrator.ReactorState) 
 				ID:            info.UpstreamID,
 				PDEndpoints:   info.PDEndpoints,
 				KeyPath:       info.KeyPath,
-				CertPath:      info.CAPath,
+				CertPath:      info.CertPath,
 				CAPath:        info.CAPath,
 				CertAllowedCN: info.CertAllowedCN,
 			})

@@ -192,7 +192,7 @@ func (o *ownerImpl) Tick(stdCtx context.Context, rawState orchestrator.ReactorSt
 				ID:            info.UpstreamID,
 				PDEndpoints:   info.PDEndpoints,
 				KeyPath:       info.KeyPath,
-				CertPath:      info.CAPath,
+				CertPath:      info.CertPath,
 				CAPath:        info.CAPath,
 				CertAllowedCN: info.CertAllowedCN,
 			})
