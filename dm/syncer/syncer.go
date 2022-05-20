@@ -1968,7 +1968,9 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 				})
 			}
 		}
-		if s.cfg.ShardMode == config.ShardOptimistic {
+		// len(affectedSourceTables) == 0 can make sure there isn't any table whose table checkpoint are not saved
+		// If this happens, some row events may be written duplicate times.
+		if s.cfg.ShardMode == config.ShardOptimistic && len(affectedSourceTables) == 0 {
 			op, targetTableID := s.optimist.PendingRedirectOperation()
 			if op != nil {
 				// for optimistic sharding mode, if a new sharding group is resolved when syncer is redirecting,
