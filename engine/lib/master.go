@@ -1,3 +1,16 @@
+// Copyright 2022 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package lib
 
 import (
@@ -14,29 +27,29 @@ import (
 	"go.uber.org/dig"
 	"go.uber.org/zap"
 
-	"github.com/hanfei1991/microcosm/client"
-	runtime "github.com/hanfei1991/microcosm/executor/worker"
-	"github.com/hanfei1991/microcosm/lib/config"
-	"github.com/hanfei1991/microcosm/lib/master"
-	"github.com/hanfei1991/microcosm/lib/metadata"
-	libModel "github.com/hanfei1991/microcosm/lib/model"
-	"github.com/hanfei1991/microcosm/lib/statusutil"
-	"github.com/hanfei1991/microcosm/model"
-	"github.com/hanfei1991/microcosm/pb"
-	"github.com/hanfei1991/microcosm/pkg/clock"
-	dcontext "github.com/hanfei1991/microcosm/pkg/context"
-	"github.com/hanfei1991/microcosm/pkg/deps"
-	"github.com/hanfei1991/microcosm/pkg/errctx"
-	derror "github.com/hanfei1991/microcosm/pkg/errors"
-	resourcemeta "github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta/model"
-	extkv "github.com/hanfei1991/microcosm/pkg/meta/extension"
-	"github.com/hanfei1991/microcosm/pkg/meta/kvclient"
-	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
-	pkgOrm "github.com/hanfei1991/microcosm/pkg/orm"
-	"github.com/hanfei1991/microcosm/pkg/p2p"
-	"github.com/hanfei1991/microcosm/pkg/quota"
-	"github.com/hanfei1991/microcosm/pkg/tenant"
-	"github.com/hanfei1991/microcosm/pkg/uuid"
+	"github.com/pingcap/tiflow/engine/client"
+	runtime "github.com/pingcap/tiflow/engine/executor/worker"
+	"github.com/pingcap/tiflow/engine/lib/config"
+	"github.com/pingcap/tiflow/engine/lib/master"
+	"github.com/pingcap/tiflow/engine/lib/metadata"
+	libModel "github.com/pingcap/tiflow/engine/lib/model"
+	"github.com/pingcap/tiflow/engine/lib/statusutil"
+	"github.com/pingcap/tiflow/engine/model"
+	"github.com/pingcap/tiflow/engine/pb"
+	"github.com/pingcap/tiflow/engine/pkg/clock"
+	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
+	"github.com/pingcap/tiflow/engine/pkg/deps"
+	"github.com/pingcap/tiflow/engine/pkg/errctx"
+	derror "github.com/pingcap/tiflow/engine/pkg/errors"
+	resourcemeta "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
+	extkv "github.com/pingcap/tiflow/engine/pkg/meta/extension"
+	"github.com/pingcap/tiflow/engine/pkg/meta/kvclient"
+	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
+	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
+	"github.com/pingcap/tiflow/engine/pkg/p2p"
+	"github.com/pingcap/tiflow/engine/pkg/quota"
+	"github.com/pingcap/tiflow/engine/pkg/tenant"
+	"github.com/pingcap/tiflow/engine/pkg/uuid"
 )
 
 // Master defines a basic interface that can run in dataflow engine runtime

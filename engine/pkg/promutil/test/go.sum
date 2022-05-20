@@ -184,8 +184,8 @@ github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0 h1:Ovs26xHkKqVztRpIrF/92Bcuy
 github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0/go.mod h1:8NvIoxWQoOIhqOTXgfV/d3M/q6VIi02HzZEHgUlZvzk=
 github.com/grpc-ecosystem/grpc-gateway v1.12.1/go.mod h1:8XEsbTttt/W+VvjtQhLACqCisSPWTxCZ7sBRjU6iH9c=
 github.com/grpc-ecosystem/grpc-gateway v1.16.0/go.mod h1:BDjrQk3hbvj6Nolgz8mAMFbcEtjT1g+wF4CSlocrBnw=
-github.com/hanfei1991/microcosm v0.0.0-20220519065215-9a7a74c24c30 h1:xiGvrGge63dtLlHgGyvs08eDXtkUVp/HWu35XBH3/5M=
-github.com/hanfei1991/microcosm v0.0.0-20220519065215-9a7a74c24c30/go.mod h1:/jgB2hbAERvEaqPctscImYE9EdWDoWdYqy8riYrC5sw=
+github.com/pingcap/tiflow/engine v0.0.0-20220519065215-9a7a74c24c30 h1:xiGvrGge63dtLlHgGyvs08eDXtkUVp/HWu35XBH3/5M=
+github.com/pingcap/tiflow/engine v0.0.0-20220519065215-9a7a74c24c30/go.mod h1:/jgB2hbAERvEaqPctscImYE9EdWDoWdYqy8riYrC5sw=
 github.com/hashicorp/go-uuid v1.0.2 h1:cfejS+Tpcp13yd5nYHWDI6qVCny6wyX2Mt5SGur2IGE=
 github.com/hashicorp/go-uuid v1.0.2/go.mod h1:6SBZvOh/SIDV7/2o3Jml5SYk/TvGqwFJ/bN7x4byOro=
 github.com/hashicorp/golang-lru v0.5.0/go.mod h1:/m3WP610KZHVQ1SGc6re/UDhFvYD7pJ4Ao+sR/qLZy8=

@@ -1,3 +1,16 @@
+// Copyright 2022 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package lib
 
 import (
@@ -5,7 +18,7 @@ import (
 	"encoding/json"
 	"sync"
 
-	"github.com/hanfei1991/microcosm/lib/master"
+	"github.com/pingcap/tiflow/engine/lib/master"
 
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/stretchr/testify/mock"
@@ -13,16 +26,16 @@ import (
 	"go.uber.org/dig"
 	"go.uber.org/zap"
 
-	"github.com/hanfei1991/microcosm/client"
-	libModel "github.com/hanfei1991/microcosm/lib/model"
-	"github.com/hanfei1991/microcosm/pb"
-	dcontext "github.com/hanfei1991/microcosm/pkg/context"
-	"github.com/hanfei1991/microcosm/pkg/deps"
-	"github.com/hanfei1991/microcosm/pkg/externalresource/broker"
-	extkv "github.com/hanfei1991/microcosm/pkg/meta/extension"
-	mockkv "github.com/hanfei1991/microcosm/pkg/meta/kvclient/mock"
-	pkgOrm "github.com/hanfei1991/microcosm/pkg/orm"
-	"github.com/hanfei1991/microcosm/pkg/p2p"
+	"github.com/pingcap/tiflow/engine/client"
+	libModel "github.com/pingcap/tiflow/engine/lib/model"
+	"github.com/pingcap/tiflow/engine/pb"
+	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
+	"github.com/pingcap/tiflow/engine/pkg/deps"
+	"github.com/pingcap/tiflow/engine/pkg/externalresource/broker"
+	extkv "github.com/pingcap/tiflow/engine/pkg/meta/extension"
+	mockkv "github.com/pingcap/tiflow/engine/pkg/meta/kvclient/mock"
+	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
+	"github.com/pingcap/tiflow/engine/pkg/p2p"
 )
 
 // MockMasterImpl implements a mock MasterImpl

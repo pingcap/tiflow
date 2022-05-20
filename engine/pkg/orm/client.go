@@ -1,3 +1,16 @@
+// Copyright 2022 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package orm
 
 import (
@@ -13,12 +26,12 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
-	libModel "github.com/hanfei1991/microcosm/lib/model"
-	cerrors "github.com/hanfei1991/microcosm/pkg/errors"
-	resourcemeta "github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta/model"
-	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
-	"github.com/hanfei1991/microcosm/pkg/orm/model"
-	"github.com/hanfei1991/microcosm/pkg/tenant"
+	libModel "github.com/pingcap/tiflow/engine/lib/model"
+	cerrors "github.com/pingcap/tiflow/engine/pkg/errors"
+	resourcemeta "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
+	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
+	"github.com/pingcap/tiflow/engine/pkg/orm/model"
+	"github.com/pingcap/tiflow/engine/pkg/tenant"
 )
 
 var globalModels = []interface{}{

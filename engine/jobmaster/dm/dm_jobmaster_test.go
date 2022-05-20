@@ -1,3 +1,16 @@
+// Copyright 2022 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package dm
 
 import (
@@ -10,31 +23,31 @@ import (
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
-	resourcemeta "github.com/hanfei1991/microcosm/pkg/externalresource/resourcemeta/model"
 	"github.com/pingcap/tiflow/dm/checker"
 	dmconfig "github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	resourcemeta "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 
-	"github.com/hanfei1991/microcosm/client"
-	"github.com/hanfei1991/microcosm/jobmaster/dm/config"
-	"github.com/hanfei1991/microcosm/jobmaster/dm/metadata"
-	"github.com/hanfei1991/microcosm/jobmaster/dm/runtime"
-	"github.com/hanfei1991/microcosm/lib"
-	libMetadata "github.com/hanfei1991/microcosm/lib/metadata"
-	libModel "github.com/hanfei1991/microcosm/lib/model"
-	"github.com/hanfei1991/microcosm/lib/registry"
-	"github.com/hanfei1991/microcosm/model"
-	"github.com/hanfei1991/microcosm/pb"
-	dcontext "github.com/hanfei1991/microcosm/pkg/context"
-	"github.com/hanfei1991/microcosm/pkg/deps"
-	dmpkg "github.com/hanfei1991/microcosm/pkg/dm"
-	"github.com/hanfei1991/microcosm/pkg/externalresource/broker"
-	extkv "github.com/hanfei1991/microcosm/pkg/meta/extension"
-	kvmock "github.com/hanfei1991/microcosm/pkg/meta/kvclient/mock"
-	"github.com/hanfei1991/microcosm/pkg/meta/metaclient"
-	pkgOrm "github.com/hanfei1991/microcosm/pkg/orm"
-	"github.com/hanfei1991/microcosm/pkg/p2p"
+	"github.com/pingcap/tiflow/engine/client"
+	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
+	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
+	"github.com/pingcap/tiflow/engine/jobmaster/dm/runtime"
+	"github.com/pingcap/tiflow/engine/lib"
+	libMetadata "github.com/pingcap/tiflow/engine/lib/metadata"
+	libModel "github.com/pingcap/tiflow/engine/lib/model"
+	"github.com/pingcap/tiflow/engine/lib/registry"
+	"github.com/pingcap/tiflow/engine/model"
+	"github.com/pingcap/tiflow/engine/pb"
+	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
+	"github.com/pingcap/tiflow/engine/pkg/deps"
+	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
+	"github.com/pingcap/tiflow/engine/pkg/externalresource/broker"
+	extkv "github.com/pingcap/tiflow/engine/pkg/meta/extension"
+	kvmock "github.com/pingcap/tiflow/engine/pkg/meta/kvclient/mock"
+	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
+	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
+	"github.com/pingcap/tiflow/engine/pkg/p2p"
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"

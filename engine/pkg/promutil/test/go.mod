@@ -1,9 +1,9 @@
-module github.com/hanfei1991/microcosm/pkg/promutil/example
+module github.com/pingcap/tiflow/engine/pkg/promutil/example
 
 go 1.18
 
 require (
-	github.com/hanfei1991/microcosm v0.0.0-20220519065215-9a7a74c24c30
+	github.com/pingcap/tiflow/engine v0.0.0-20220519065215-9a7a74c24c30
 	github.com/prometheus/client_golang v1.12.2
 )
 

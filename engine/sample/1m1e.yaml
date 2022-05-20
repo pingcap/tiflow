@@ -6,7 +6,7 @@ services:
                         - ./config/master.toml:/config.toml
                         - /tmp/df:/tmp/df
                 command:
-                        - "./bin/master"
+                        - "./bin/df-master"
                         - "--config"
                         - "/config.toml"
                         - "--master-addr"
@@ -34,7 +34,7 @@ services:
                         - ./config/executor.toml:/config.toml
                         - /tmp/dataflow:/tmp/dataflow
                 command:
-                        - "./bin/executor"
+                        - "./bin/df-executor"
                         - "--config"
                         - "/config.toml"
                         - "--join"

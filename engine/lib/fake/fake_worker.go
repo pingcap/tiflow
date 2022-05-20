@@ -1,3 +1,16 @@
+// Copyright 2022 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package fake
 
 import (
@@ -16,12 +29,12 @@ import (
 	"golang.org/x/time/rate"
 	"google.golang.org/grpc"
 
-	"github.com/hanfei1991/microcosm/lib"
-	libModel "github.com/hanfei1991/microcosm/lib/model"
-	"github.com/hanfei1991/microcosm/model"
-	dcontext "github.com/hanfei1991/microcosm/pkg/context"
-	derrors "github.com/hanfei1991/microcosm/pkg/errors"
-	"github.com/hanfei1991/microcosm/pkg/p2p"
+	"github.com/pingcap/tiflow/engine/lib"
+	libModel "github.com/pingcap/tiflow/engine/lib/model"
+	"github.com/pingcap/tiflow/engine/model"
+	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
+	derrors "github.com/pingcap/tiflow/engine/pkg/errors"
+	"github.com/pingcap/tiflow/engine/pkg/p2p"
 )
 
 var _ lib.Worker = (*dummyWorker)(nil)
