@@ -14,8 +14,8 @@
 package executor
 
 import (
-	_ "github.com/pingcap/tiflow/engine/dm" // register dm
 	cvstask "github.com/pingcap/tiflow/engine/executor/cvsTask"
+	dmtask "github.com/pingcap/tiflow/engine/executor/dmTask"
 	cvs "github.com/pingcap/tiflow/engine/jobmaster/cvsJob"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm"
 	"github.com/pingcap/tiflow/engine/lib/registry"
@@ -25,5 +25,6 @@ func init() {
 	cvstask.RegisterWorker()
 	cvs.RegisterWorker()
 	dm.RegisterWorker()
+	dmtask.RegisterWorker()
 	registry.RegisterFake(registry.GlobalWorkerRegistry())
 }
