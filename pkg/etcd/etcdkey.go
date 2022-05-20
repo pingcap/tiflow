@@ -38,7 +38,7 @@ const (
 
 	// DefaultClusterAndNamespacePrefix is the default prefix of changefeed data
 	DefaultClusterAndNamespacePrefix = "/tidb/cdc/default/default"
-	// DefaultClusterAndMetaPrefix is the default prefix of cluster mata
+	// DefaultClusterAndMetaPrefix is the default prefix of cluster meta
 	DefaultClusterAndMetaPrefix = "/tidb/cdc/default" + metaPrefix
 )
 

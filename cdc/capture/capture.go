@@ -414,7 +414,7 @@ func (c *Capture) runEtcdWorker(
 	timerInterval time.Duration,
 	role string,
 ) error {
-	etcdWorker, err := orchestrator.NewEtcdWorker(ctx.GlobalVars().EtcdClient.Client,
+	etcdWorker, err := orchestrator.NewEtcdWorker(ctx.GlobalVars().EtcdClient,
 		etcd.BaseKey(c.EtcdClient.ClusterID), reactor, reactorState)
 	if err != nil {
 		return errors.Trace(err)
