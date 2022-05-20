@@ -95,8 +95,6 @@ require (
 	upper.io/db.v3 v3.7.1+incompatible
 )
 
-require github.com/ngaut/log v0.0.0-20180314031856-b8e36e7ba5ac // indirect
-
 require (
 	cloud.google.com/go v0.100.2 // indirect
 	cloud.google.com/go/compute v1.2.0 // indirect
@@ -196,6 +194,7 @@ require (
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/mtibben/percent v0.2.1 // indirect
 	github.com/ncw/directio v1.0.5 // indirect
+	github.com/ngaut/log v0.0.0-20180314031856-b8e36e7ba5ac // indirect
 	github.com/ngaut/pools v0.0.0-20180318154953-b7bc8c42aac7 // indirect
 	github.com/ngaut/sync2 v0.0.0-20141008032647-7a24ed77b2ef // indirect
 	github.com/opentracing/basictracer-go v1.0.0 // indirect
