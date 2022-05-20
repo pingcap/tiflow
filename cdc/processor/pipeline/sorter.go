@@ -81,7 +81,7 @@ func newSorterNode(
 	flowController tableFlowController, mounter entry.Mounter,
 	replConfig *config.ReplicaConfig,
 ) *sorterNode {
-	n := &sorterNode{
+	return &sorterNode{
 		tableName:      tableName,
 		tableID:        tableID,
 		flowController: flowController,
@@ -93,7 +93,6 @@ func newSorterNode(
 		startTsCh:      make(chan model.Ts, 1),
 		replConfig:     replConfig,
 	}
-	return n
 }
 
 func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
