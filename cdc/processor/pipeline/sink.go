@@ -30,41 +30,6 @@ import (
 	"go.uber.org/zap"
 )
 
-// TableStatus is status of the table pipeline
-type TableStatus int32
-
-// TableStatus for table pipeline
-const (
-	TableStatusPreparing TableStatus = iota
-	TableStatusPrepared
-	TableStatusRunning
-	TableStatusStopped
-)
-
-func (s TableStatus) String() string {
-	switch s {
-	case TableStatusPreparing:
-		return "Preparing"
-	case TableStatusPrepared:
-		return "Prepared"
-	case TableStatusRunning:
-		return "Running"
-	case TableStatusStopped:
-		return "Stopped"
-	}
-	return "Unknown"
-}
-
-// Load TableStatus with THREAD-SAFE
-func (s *TableStatus) Load() TableStatus {
-	return TableStatus(atomic.LoadInt32((*int32)(s)))
-}
-
-// Store TableStatus with THREAD-SAFE
-func (s *TableStatus) Store(new TableStatus) {
-	atomic.StoreInt32((*int32)(s), int32(new))
-}
-
 type sinkNode struct {
 	sink    sink.Sink
 	status  TableStatus
@@ -91,7 +56,7 @@ func newSinkNode(
 	sn := &sinkNode{
 		tableID:        tableID,
 		sink:           sink,
-		status:         TableStatusPreparing,
+		status:         TableStatusPrepared,
 		targetTs:       targetTs,
 		barrierTs:      startTs,
 		flowController: flowController,
@@ -327,8 +292,8 @@ func (n *sinkNode) HandleMessage(ctx context.Context, msg pmessage.Message) (boo
 	case pmessage.MessageTypePolymorphicEvent:
 		event := msg.PolymorphicEvent
 		if event.IsResolved() {
-			if n.status.Load() == TableStatusPreparing {
-				n.status.Store(TableStatusRunning)
+			if n.status.Load() == TableStatusPrepared {
+				n.status.Store(TableStatusReplicating)
 			}
 			failpoint.Inject("ProcessorSyncResolvedError", func() {
 				failpoint.Return(false, errors.New("processor sync resolved injected error"))

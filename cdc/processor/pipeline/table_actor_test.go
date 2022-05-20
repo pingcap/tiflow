@@ -63,7 +63,7 @@ func TestAsyncStopFailed(t *testing.T) {
 }
 
 func TestTableActorInterface(t *testing.T) {
-	sink := &sinkNode{status: TableStatusPreparing}
+	sink := &sinkNode{status: TableStatusPrepared}
 	sorter := &sorterNode{resolvedTs: 5}
 	tbl := &tableActor{
 		markTableID: 2,
@@ -83,6 +83,8 @@ func TestTableActorInterface(t *testing.T) {
 	require.Equal(t, int64(2), markID)
 	require.Equal(t, "t1", tbl.Name())
 	require.Equal(t, TableStatusPreparing, tbl.Status())
+
+	sorter.status.Store(TableStatusPrepared)
 	sink.status.Store(TableStatusStopped)
 	require.Equal(t, TableStatusStopped, tbl.Status())
 	require.Equal(t, uint64(1), tbl.Workload().Workload)

@@ -18,8 +18,8 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/tp/schedulepb"
 	cerror "github.com/pingcap/tiflow/pkg/errors"

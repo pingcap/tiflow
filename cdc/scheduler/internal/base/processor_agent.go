@@ -180,7 +180,7 @@ func (a *agentImpl) Tick(ctx context.Context) error {
 
 func (a *agentImpl) FinishTableOperation(
 	ctx context.Context,
-	tableID model.TableID,
+	tableID model.TableID, checkpointTs model.Ts,
 	epoch protocol.ProcessorEpoch,
 ) (done bool, err error) {
 	topic := protocol.SyncTopic(a.changeFeed)
@@ -196,7 +196,11 @@ func (a *agentImpl) FinishTableOperation(
 		}
 	}
 
-	message := &protocol.DispatchTableResponseMessage{ID: tableID, Epoch: epoch}
+	message := &protocol.DispatchTableResponseMessage{
+		ID:           tableID,
+		Epoch:        epoch,
+		CheckpointTs: checkpointTs,
+	}
 	defer func() {
 		if err != nil {
 			return
