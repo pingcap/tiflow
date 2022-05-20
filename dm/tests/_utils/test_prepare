@@ -49,6 +49,14 @@ function kill_process() {
     wait_process_exit $keyword
 }
 
+function kill_dm_master() {
+    kill_process dm-master.test
+}
+
+function kill_dm_worker() {
+    kill_process dm-worker.test
+}
+
 function wait_pattern_exit() {
     pattern=$1
     while true
