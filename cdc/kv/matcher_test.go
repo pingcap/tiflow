@@ -23,43 +23,33 @@ import (
 func TestMatchRow(t *testing.T) {
 	t.Parallel()
 	matcher := newMatcher()
-	p1 := &cdcpb.Event_Row{
+	matcher.putPrewriteRow(&cdcpb.Event_Row{
 		StartTs: 1,
 		Key:     []byte("k1"),
 		Value:   []byte("v1"),
-	}
-	p1Key := newMatchKey(p1)
-	size := matcher.putPrewriteRow(p1)
-	require.Equal(t, sizeOfEventRow(p1)+(&p1Key).size(), size)
-	p2 := &cdcpb.Event_Row{
+	})
+	matcher.putPrewriteRow(&cdcpb.Event_Row{
 		StartTs:  2,
 		Key:      []byte("k1"),
 		Value:    []byte("v2"),
 		OldValue: []byte("v3"),
-	}
-	p2Key := newMatchKey(p2)
-	size = matcher.putPrewriteRow(p2)
-	require.Equal(t, sizeOfEventRow(p2)+(&p2Key).size(), size)
+	})
 
 	// test rollback
-	r1 := &cdcpb.Event_Row{
+	matcher.rollbackRow(&cdcpb.Event_Row{
 		StartTs: 1,
 		Key:     []byte("k1"),
-	}
-	size = matcher.rollbackRow(r1)
-	require.Equal(t, -(sizeOfEventRow(p1) + (&p1Key).size()), size)
-
+	})
 	commitRow1 := &cdcpb.Event_Row{
 		StartTs: 1,
 		Key:     []byte("k1"),
 	}
-	ok, size := matcher.matchRow(commitRow1)
+	ok := matcher.matchRow(commitRow1, true)
 	require.False(t, ok)
 	require.Equal(t, &cdcpb.Event_Row{
 		StartTs: 1,
 		Key:     []byte("k1"),
 	}, commitRow1)
-	require.Equal(t, 0, size)
 
 	// test match commit
 	commitRow2 := &cdcpb.Event_Row{
@@ -67,7 +57,7 @@ func TestMatchRow(t *testing.T) {
 		CommitTs: 3,
 		Key:      []byte("k1"),
 	}
-	ok, size = matcher.matchRow(commitRow2)
+	ok = matcher.matchRow(commitRow2, true)
 	require.True(t, ok)
 	require.Equal(t, &cdcpb.Event_Row{
 		StartTs:  2,
@@ -76,37 +66,30 @@ func TestMatchRow(t *testing.T) {
 		Value:    []byte("v2"),
 		OldValue: []byte("v3"),
 	}, commitRow2)
-	require.Equal(t, -(sizeOfEventRow(p2) + (&p2Key).size()), size)
 }
 
 func TestMatchFakePrewrite(t *testing.T) {
 	t.Parallel()
 	matcher := newMatcher()
-	p1 := &cdcpb.Event_Row{
+	matcher.putPrewriteRow(&cdcpb.Event_Row{
 		StartTs:  1,
 		Key:      []byte("k1"),
 		Value:    []byte("v1"),
 		OldValue: []byte("v3"),
-	}
-	p1Key := newMatchKey(p1)
-	size := matcher.putPrewriteRow(p1)
-	require.Equal(t, sizeOfEventRow(p1)+(&p1Key).size(), size)
-
+	})
 	// fake prewrite
-	size = matcher.putPrewriteRow(&cdcpb.Event_Row{
+	matcher.putPrewriteRow(&cdcpb.Event_Row{
 		StartTs:  1,
 		Key:      []byte("k1"),
 		OldValue: []byte("v4"),
 	})
-	require.Equal(t, 0, size)
 
 	commitRow1 := &cdcpb.Event_Row{
 		StartTs:  1,
 		CommitTs: 2,
 		Key:      []byte("k1"),
 	}
-	c1Key := newMatchKey(commitRow1)
-	ok, size := matcher.matchRow(commitRow1)
+	ok := matcher.matchRow(commitRow1, true)
 	require.Equal(t, &cdcpb.Event_Row{
 		StartTs:  1,
 		CommitTs: 2,
@@ -115,15 +98,78 @@ func TestMatchFakePrewrite(t *testing.T) {
 		OldValue: []byte("v3"),
 	}, commitRow1)
 	require.True(t, ok)
-	require.Equal(t, -(sizeOfEventRow(commitRow1) + (&c1Key).size()), size)
+}
+
+func TestMatchRowUninitialized(t *testing.T) {
+	t.Parallel()
+	matcher := newMatcher()
+
+	// fake prewrite before init.
+	matcher.putPrewriteRow(&cdcpb.Event_Row{
+		StartTs:  1,
+		Key:      []byte("k1"),
+		OldValue: []byte("v4"),
+	})
+	commitRow1 := &cdcpb.Event_Row{
+		StartTs:  1,
+		CommitTs: 2,
+		Key:      []byte("k1"),
+	}
+	ok := matcher.matchRow(commitRow1, false)
+	require.Equal(t, &cdcpb.Event_Row{
+		StartTs:  1,
+		CommitTs: 2,
+		Key:      []byte("k1"),
+	}, commitRow1)
+	require.False(t, ok)
+	matcher.cacheCommitRow(commitRow1)
+
+	// actual prewrite before init.
+	matcher.putPrewriteRow(&cdcpb.Event_Row{
+		StartTs:  1,
+		Key:      []byte("k1"),
+		Value:    []byte("v3"),
+		OldValue: []byte("v4"),
+	})
+
+	// normal prewrite and commit before init.
+	matcher.putPrewriteRow(&cdcpb.Event_Row{
+		StartTs:  2,
+		Key:      []byte("k2"),
+		Value:    []byte("v3"),
+		OldValue: []byte("v4"),
+	})
+	commitRow2 := &cdcpb.Event_Row{
+		StartTs:  2,
+		CommitTs: 3,
+		Key:      []byte("k2"),
+	}
+	ok = matcher.matchRow(commitRow2, false)
+	require.Equal(t, &cdcpb.Event_Row{
+		StartTs:  2,
+		CommitTs: 3,
+		Key:      []byte("k2"),
+		Value:    []byte("v3"),
+		OldValue: []byte("v4"),
+	}, commitRow2)
+	require.True(t, ok)
+
+	// match cached row after init.
+	rows := matcher.matchCachedRow(true)
+	require.Len(t, rows, 1)
+	require.Equal(t, &cdcpb.Event_Row{
+		StartTs:  1,
+		CommitTs: 2,
+		Key:      []byte("k1"),
+		Value:    []byte("v3"),
+		OldValue: []byte("v4"),
+	}, rows[0])
 }
 
 func TestMatchMatchCachedRow(t *testing.T) {
 	t.Parallel()
 	matcher := newMatcher()
-	rows, size := matcher.matchCachedRow()
-	require.Empty(t, 0, rows)
-	require.Equal(t, 0, size)
+	require.Equal(t, 0, len(matcher.matchCachedRow(true)))
 	matcher.cacheCommitRow(&cdcpb.Event_Row{
 		StartTs:  1,
 		CommitTs: 2,
@@ -139,9 +185,7 @@ func TestMatchMatchCachedRow(t *testing.T) {
 		CommitTs: 5,
 		Key:      []byte("k3"),
 	})
-	rows, size = matcher.matchCachedRow()
-	require.Empty(t, 0, rows)
-	require.Equal(t, 0, size)
+	require.Equal(t, 0, len(matcher.matchCachedRow(true)))
 
 	matcher.cacheCommitRow(&cdcpb.Event_Row{
 		StartTs:  1,
@@ -178,7 +222,6 @@ func TestMatchMatchCachedRow(t *testing.T) {
 		OldValue: []byte("ov3"),
 	})
 
-	rows, size = matcher.matchCachedRow()
 	require.Equal(t, []*cdcpb.Event_Row{{
 		StartTs:  1,
 		CommitTs: 2,
@@ -191,6 +234,59 @@ func TestMatchMatchCachedRow(t *testing.T) {
 		Key:      []byte("k2"),
 		Value:    []byte("v2"),
 		OldValue: []byte("ov2"),
-	}}, rows)
-	require.True(t, 0 > size)
+	}}, matcher.matchCachedRow(true))
+}
+
+func TestMatchMatchCachedRollbackRow(t *testing.T) {
+	t.Parallel()
+	matcher := newMatcher()
+	matcher.matchCachedRollbackRow(true)
+	matcher.cacheRollbackRow(&cdcpb.Event_Row{
+		StartTs: 1,
+		Key:     []byte("k1"),
+	})
+	matcher.cacheRollbackRow(&cdcpb.Event_Row{
+		StartTs: 3,
+		Key:     []byte("k2"),
+	})
+	matcher.cacheRollbackRow(&cdcpb.Event_Row{
+		StartTs: 4,
+		Key:     []byte("k3"),
+	})
+	matcher.matchCachedRollbackRow(true)
+
+	matcher.cacheRollbackRow(&cdcpb.Event_Row{
+		StartTs: 1,
+		Key:     []byte("k1"),
+	})
+	matcher.cacheRollbackRow(&cdcpb.Event_Row{
+		StartTs: 3,
+		Key:     []byte("k2"),
+	})
+	matcher.cacheRollbackRow(&cdcpb.Event_Row{
+		StartTs: 4,
+		Key:     []byte("k3"),
+	})
+
+	matcher.putPrewriteRow(&cdcpb.Event_Row{
+		StartTs:  1,
+		Key:      []byte("k1"),
+		Value:    []byte("v1"),
+		OldValue: []byte("ov1"),
+	})
+	matcher.putPrewriteRow(&cdcpb.Event_Row{
+		StartTs:  3,
+		Key:      []byte("k2"),
+		Value:    []byte("v2"),
+		OldValue: []byte("ov2"),
+	})
+	matcher.putPrewriteRow(&cdcpb.Event_Row{
+		StartTs:  4,
+		Key:      []byte("k3"),
+		Value:    []byte("v3"),
+		OldValue: []byte("ov3"),
+	})
+
+	matcher.matchCachedRollbackRow(true)
+	require.Empty(t, matcher.unmatchedValue)
 }
