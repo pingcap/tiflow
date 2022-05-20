@@ -117,7 +117,6 @@ type regionWorkerMetrics struct {
 	metricSendEventResolvedCounter    prometheus.Counter
 	metricSendEventCommitCounter      prometheus.Counter
 	metricSendEventCommittedCounter   prometheus.Counter
-	metricCacheEventsSize             prometheus.Gauge
 
 	// TODO: add region runtime related metrics
 }
@@ -179,8 +178,6 @@ func newRegionWorker(
 		WithLabelValues("commit", changefeedID.Namespace, changefeedID.ID)
 	metrics.metricSendEventCommittedCounter = sendEventCounter.
 		WithLabelValues("committed", changefeedID.Namespace, changefeedID.ID)
-	metrics.metricCacheEventsSize = cacheEventsSize.
-		WithLabelValues(changefeedID.Namespace, changefeedID.ID)
 
 	return &regionWorker{
 		session:       s,
@@ -651,7 +648,6 @@ func (w *regionWorker) handleEventEntry(
 	state *regionFeedState,
 ) error {
 	regionID := state.sri.verID.GetID()
-	cachedSize := 0
 	for _, entry := range x.Entries.GetEntries() {
 		// if a region with kv range [a, z)
 		// and we only want the get [b, c) from this region,
@@ -676,8 +672,7 @@ func (w *regionWorker) handleEventEntry(
 
 			state.initialized = true
 			w.session.regionRouter.Release(state.sri.rpcCtx.Addr)
-			cachedEvents, size := state.matcher.matchCachedRow()
-			cachedSize += size
+			cachedEvents := state.matcher.matchCachedRow(state.initialized)
 			for _, cachedEvent := range cachedEvents {
 				revent, err := assembleRowEvent(regionID, cachedEvent)
 				if err != nil {
@@ -690,6 +685,7 @@ func (w *regionWorker) handleEventEntry(
 					return errors.Trace(ctx.Err())
 				}
 			}
+			state.matcher.matchCachedRollbackRow(state.initialized)
 		case cdcpb.Event_COMMITTED:
 			w.metrics.metricPullEventCommittedCounter.Inc()
 			revent, err := assembleRowEvent(regionID, entry)
@@ -713,8 +709,7 @@ func (w *regionWorker) handleEventEntry(
 			}
 		case cdcpb.Event_PREWRITE:
 			w.metrics.metricPullEventPrewriteCounter.Inc()
-			size := state.matcher.putPrewriteRow(entry)
-			cachedSize += size
+			state.matcher.putPrewriteRow(entry)
 		case cdcpb.Event_COMMIT:
 			w.metrics.metricPullEventCommitCounter.Inc()
 			if entry.CommitTs <= state.lastResolvedTs {
@@ -725,22 +720,18 @@ func (w *regionWorker) handleEventEntry(
 					zap.Uint64("regionID", regionID))
 				return errUnreachable
 			}
-
-			if !state.initialized {
-				// TiKV incremental scan may take a long time.
-				// Caching commit rows unconditional may cause OOM!
-				// FIXME: Fix OOM!
-				state.matcher.cacheCommitRow(entry)
-				continue
-			}
-			ok, size := state.matcher.matchRow(entry)
-			cachedSize += size
+			ok := state.matcher.matchRow(entry, state.initialized)
 			if !ok {
+				if !state.initialized {
+					state.matcher.cacheCommitRow(entry)
+					continue
+				}
 				return cerror.ErrPrewriteNotMatch.GenWithStackByArgs(
 					hex.EncodeToString(entry.GetKey()),
 					entry.GetStartTs(), entry.GetCommitTs(),
 					entry.GetType(), entry.GetOpType())
 			}
+
 			revent, err := assembleRowEvent(regionID, entry)
 			if err != nil {
 				return errors.Trace(err)
@@ -754,12 +745,12 @@ func (w *regionWorker) handleEventEntry(
 			}
 		case cdcpb.Event_ROLLBACK:
 			w.metrics.metricPullEventRollbackCounter.Inc()
-			size := state.matcher.rollbackRow(entry)
-			cachedSize += size
+			if !state.initialized {
+				state.matcher.cacheRollbackRow(entry)
+				continue
+			}
+			state.matcher.rollbackRow(entry)
 		}
-	}
-	if cachedSize != 0 {
-		w.metrics.metricCacheEventsSize.Add(float64(cachedSize))
 	}
 	return nil
 }
