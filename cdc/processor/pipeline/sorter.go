@@ -58,6 +58,14 @@ type sorterNode struct {
 	// The latest barrier ts that sorter has received.
 	barrierTs model.Ts
 
+	status     TableStatus
+	preparedCh chan struct{}
+
+	// started indicate that the sink is really replicating, not idle.
+	started int32
+	// startTsCh is used to receive start-ts for sink
+	startTsCh chan model.Ts
+
 	replConfig *config.ReplicaConfig
 }
 
@@ -73,6 +81,9 @@ func newSorterNode(
 		mounter:        mounter,
 		resolvedTs:     startTs,
 		barrierTs:      startTs,
+		status:         TableStatusPreparing,
+		preparedCh:     make(chan struct{}, 1),
+		startTsCh:      make(chan model.Ts, 1),
 		replConfig:     replConfig,
 	}
 }
@@ -85,7 +96,7 @@ func createSorter(ctx pipeline.NodeContext, tableName string, tableID model.Tabl
 	case model.SortUnified, model.SortInFile /* `file` becomes an alias of `unified` for backward compatibility */ :
 		if sortEngine == model.SortInFile {
 			log.Warn("File sorter is obsolete and replaced by unified sorter. Please revise your changefeed settings",
-				zap.String("namesapce", ctx.ChangefeedVars().ID.Namespace),
+				zap.String("namespace", ctx.ChangefeedVars().ID.Namespace),
 				zap.String("changefeed", ctx.ChangefeedVars().ID.ID),
 				zap.String("tableName", tableName))
 		}
@@ -157,6 +168,23 @@ func (n *sorterNode) start(
 			ctx.SendToNextNode(pmessage.PolymorphicEventMessage(msg))
 		}
 
+		// once receive startTs, which means sink should start replicating data to downstream.
+		var startTs model.Ts
+		select {
+		case <-stdCtx.Done():
+			return nil
+		case startTs = <-n.startTsCh:
+		}
+
+		select {
+		case <-stdCtx.Done():
+			return nil
+		case <-n.preparedCh:
+		}
+
+		n.status.Store(TableStatusReplicating)
+		eventSorter.EmitStartTs(stdCtx, startTs)
+
 		for {
 			// We must call `sorter.Output` before receiving resolved events.
 			// Skip calling `sorter.Output` and caching output channel may fail
@@ -170,9 +198,18 @@ func (n *sorterNode) start(
 					// sorter output channel closed
 					return nil
 				}
+
 				if msg == nil || msg.RawKV == nil {
-					log.Panic("unexpected empty msg", zap.Reflect("msg", msg))
+					log.Panic("unexpected empty msg", zap.Any("msg", msg))
 				}
+
+				if msg.CRTs < startTs {
+					// Ignore messages are less than initial checkpoint ts.
+					log.Info("sorterNode: ignore sorter output event",
+						zap.Uint64("CRTs", msg.CRTs), zap.Uint64("startTs", startTs))
+					continue
+				}
+
 				if msg.RawKV.OpType != model.OpTypeResolved {
 					err := n.mounter.DecodeEvent(ctx, msg)
 					if err != nil {
@@ -269,6 +306,13 @@ func (n *sorterNode) handleRawEvent(ctx context.Context, event *model.Polymorphi
 			//       resolved ts.
 			event = model.NewResolvedPolymorphicEvent(0, n.BarrierTs())
 		}
+		// sorterNode is preparing, this is must the first `Resolved event` received
+		// the indicator that all regions connected.
+		if n.status.Load() == TableStatusPreparing {
+			log.Info("sorterNode, first resolved event received", zap.Any("event", event))
+			n.status.Store(TableStatusPrepared)
+			close(n.preparedCh)
+		}
 	}
 	n.sorter.AddEntry(ctx, event)
 }
@@ -310,3 +354,5 @@ func (n *sorterNode) ResolvedTs() model.Ts {
 func (n *sorterNode) BarrierTs() model.Ts {
 	return atomic.LoadUint64(&n.barrierTs)
 }
+
+func (n *sorterNode) Status() TableStatus { return n.status.Load() }

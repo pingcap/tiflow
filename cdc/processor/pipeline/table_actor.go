@@ -430,7 +430,7 @@ func (t *tableActor) AsyncStop(targetTs model.Ts) bool {
 		if cerror.ErrActorNotFound.Equal(err) || cerror.ErrActorStopped.Equal(err) {
 			return true
 		}
-		log.Panic("send fails", zap.Reflect("msg", msg), zap.Error(err))
+		log.Panic("send fails", zap.Any("msg", msg), zap.Error(err))
 	}
 	return true
 }
@@ -443,6 +443,13 @@ func (t *tableActor) Workload() model.WorkloadInfo {
 
 // Status returns the status of this table pipeline
 func (t *tableActor) Status() TableStatus {
+	sortStatus := t.sortNode.Status()
+	// first resolved ts not received yet, still preparing...
+	if sortStatus == TableStatusPreparing {
+		return TableStatusPreparing
+	}
+
+	// sinkNode is status indicator now.
 	return t.sinkNode.Status()
 }
 
@@ -479,6 +486,15 @@ func (t *tableActor) Wait() {
 // MemoryConsumption return the memory consumption in bytes
 func (t *tableActor) MemoryConsumption() uint64 {
 	return t.sortNode.flowController.GetConsumption()
+}
+
+func (t *tableActor) Start(ts model.Ts) bool {
+	if atomic.CompareAndSwapInt32(&t.sortNode.started, 0, 1) {
+		t.sortNode.startTsCh <- ts
+		close(t.sortNode.startTsCh)
+		return true
+	}
+	return false
 }
 
 // for ut
