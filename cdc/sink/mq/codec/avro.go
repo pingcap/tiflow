@@ -144,19 +144,6 @@ func (a *AvroEventBatchEncoder) Build() (mqMessages []*MQMessage) {
 	return old
 }
 
-// Size is the current size of resultBuf
-func (a *AvroEventBatchEncoder) Size() int {
-	if a.resultBuf == nil {
-		return 0
-	}
-	sum := 0
-	for _, msg := range a.resultBuf {
-		sum += len(msg.Key)
-		sum += len(msg.Value)
-	}
-	return sum
-}
-
 const (
 	insertOperation = "c"
 	updateOperation = "u"

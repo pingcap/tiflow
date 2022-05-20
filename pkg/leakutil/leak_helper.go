@@ -24,6 +24,8 @@ var defaultOpts = []goleak.Option{
 	goleak.IgnoreTopFunction("go.etcd.io/etcd/client/pkg/v3/logutil.(*MergeLogger).outputLoop"),
 	goleak.IgnoreTopFunction("go.opencensus.io/stats/view.(*worker).start"),
 	goleak.IgnoreTopFunction("github.com/golang/glog.(*loggingT).flushDaemon"),
+	// library used by sarama, ref: https://github.com/rcrowley/go-metrics/pull/266
+	goleak.IgnoreTopFunction("github.com/rcrowley/go-metrics.(*meterArbiter).tick"),
 }
 
 // VerifyNone verifies that no unexpected leaks occur

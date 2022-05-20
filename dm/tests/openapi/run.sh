@@ -94,7 +94,7 @@ function test_source() {
 	openapi_source_check "delete_source_failed" "mysql-01"
 
 	# send request to not leader node
-	openapi_source_check "list_source_with_redirect" 0
+	openapi_source_check "list_source_with_reverse" 0
 
 	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>TEST OPENAPI: SOURCE SUCCESS"
 }
@@ -715,7 +715,7 @@ function test_start_task_with_condition() {
 		"query-status $task_name" \
 		"\"stage\": \"Stopped\"" 2
 	sleep 2
-	start_time=$(date '+%Y-%m-%d %T')
+	start_time=$(TZ='UTC' date '+%Y-%m-%d %T') # mysql 3306 and 3307 is in UTC
 	sleep 2
 	duration=""
 	is_success="success"
@@ -748,7 +748,7 @@ function test_start_task_with_condition() {
 		"query-status $task_name" \
 		"\"stage\": \"Stopped\"" 2
 	sleep 2
-	start_time=$(date '+%Y-%m-%d %T')
+	start_time=$(TZ='UTC' date '+%Y-%m-%d %T') # mysql 3306 and 3307 is in UTC
 	sleep 2
 	duration=""
 	is_success="success"
@@ -780,7 +780,7 @@ function test_start_task_with_condition() {
 	run_sql_source1 "CREATE TABLE openapi.t3(i TINYINT, j INT UNIQUE KEY);"
 	run_sql_source2 "CREATE TABLE openapi.t4(i TINYINT, j INT UNIQUE KEY);"
 	sleep 2
-	start_time=$(date '+%Y-%m-%d %T')
+	start_time=$(TZ='UTC' date '+%Y-%m-%d %T') # mysql 3306 and 3307 is in UTC
 	sleep 2
 	duration=""
 	is_success="success"
@@ -822,7 +822,7 @@ function test_start_task_with_condition() {
 	run_sql_source2 "CREATE TABLE openapi.t2(i TINYINT, j INT UNIQUE KEY);"
 
 	sleep 2
-	start_time=$(date '+%Y-%m-%d %T')
+	start_time=$(TZ='UTC' date '+%Y-%m-%d %T') # mysql 3306 and 3307 is in UTC
 	sleep 2
 	duration=""
 	is_success="success"
@@ -935,6 +935,62 @@ function test_stop_task_with_condition() {
 	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>TEST OPENAPI: START TASK WITH CONDITION SUCCESS"
 }
 
+function test_reverse_https() {
+	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>START TEST OPENAPI: REVERSE HTTPS"
+	cleanup_data openapi
+	cleanup_process
+
+	cp $cur/tls_conf/dm-master1.toml $WORK_DIR/
+	cp $cur/tls_conf/dm-master2.toml $WORK_DIR/
+	cp $cur/tls_conf/dm-worker1.toml $WORK_DIR/
+	cp $cur/tls_conf/dm-worker2.toml $WORK_DIR/
+	sed -i "s%dir-placeholer%$cur\/tls_conf%g" $WORK_DIR/dm-master1.toml
+	sed -i "s%dir-placeholer%$cur\/tls_conf%g" $WORK_DIR/dm-master2.toml
+	sed -i "s%dir-placeholer%$cur\/tls_conf%g" $WORK_DIR/dm-worker1.toml
+	sed -i "s%dir-placeholer%$cur\/tls_conf%g" $WORK_DIR/dm-worker2.toml
+
+	# run dm-master1
+	run_dm_master $WORK_DIR/master1 $MASTER_PORT1 $WORK_DIR/dm-master1.toml
+	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT1 "$cur/tls_conf/ca.pem" "$cur/tls_conf/dm.pem" "$cur/tls_conf/dm.key"
+	# join master2
+	run_dm_master $WORK_DIR/master2 $MASTER_PORT2 $WORK_DIR/dm-master2.toml
+	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT2 "$cur/tls_conf/ca.pem" "$cur/tls_conf/dm.pem" "$cur/tls_conf/dm.key"
+	# run dm-worker1
+	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $WORK_DIR/dm-worker1.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT "$cur/tls_conf/ca.pem" "$cur/tls_conf/dm.pem" "$cur/tls_conf/dm.key"
+	# run dm-worker2
+	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $WORK_DIR/dm-worker2.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT "$cur/tls_conf/ca.pem" "$cur/tls_conf/dm.pem" "$cur/tls_conf/dm.key"
+
+	prepare_database
+	# create source successfully
+	openapi_source_check "create_source_success_https" "$cur/tls_conf/ca.pem" "$cur/tls_conf/dm.pem" "$cur/tls_conf/dm.key"
+
+	# get source list success
+	openapi_source_check "list_source_success_https" 1 "$cur/tls_conf/ca.pem" "$cur/tls_conf/dm.pem" "$cur/tls_conf/dm.key"
+
+	# send request to not leader node
+	openapi_source_check "list_source_with_reverse_https" 1 "$cur/tls_conf/ca.pem" "$cur/tls_conf/dm.pem" "$cur/tls_conf/dm.key"
+
+	cleanup_data openapi
+	cleanup_process
+
+	# run dm-master1
+	run_dm_master $WORK_DIR/master1 $MASTER_PORT1 $cur/conf/dm-master1.toml
+	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT1
+	# join master2
+	run_dm_master $WORK_DIR/master2 $MASTER_PORT2 $cur/conf/dm-master2.toml
+	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT2
+	# run dm-worker1
+	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
+	# run dm-worker2
+	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
+
+	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>TEST OPENAPI: REVERSE HTTPS"
+}
+
 function test_cluster() {
 	# list master and worker node
 	openapi_cluster_check "list_master_success" 2
@@ -982,6 +1038,7 @@ function run() {
 	test_delete_task_with_stopped_downstream
 	test_start_task_with_condition
 	test_stop_task_with_condition
+	test_reverse_https
 
 	# NOTE: this test case MUST running at last, because it will offline some members of cluster
 	test_cluster

@@ -43,6 +43,12 @@ function cleanup_tidb_server(){
     wait_process_exit tidb-server
 }
 
+function kill_process() {
+    keyword=$1
+    ps aux | grep $keyword | grep -v 'grep' | awk '{print $2}' | xargs kill || true
+    wait_process_exit $keyword
+}
+
 function wait_pattern_exit() {
     pattern=$1
     while true
@@ -199,8 +205,15 @@ function run_case() {
     done
     DM_${case}_CASE $args
 
-    run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-            "stop-task test"
+    if [[ "$task_conf" == *"single"* ]]; then
+        run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+            "stop-task test" \
+            "\"result\": true" 2
+    elif [[ "$task_conf" == *"double"* ]]; then
+        run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+            "stop-task test" \
+            "\"result\": true" 3
+    fi
 
     eval ${clean_table_cmd}
 
