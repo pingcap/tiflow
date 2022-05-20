@@ -519,7 +519,3 @@ func (r *reader) OnClose() {
 	_ = r.state.tryReleaseIterator()
 	r.common.closedWg.Done()
 }
-
-func (r *reader) UpdateStartTs(ts uint64) {
-	atomic.StoreUint64(&r.state.startTs, ts)
-}
