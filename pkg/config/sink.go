@@ -19,6 +19,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"go.uber.org/zap"
 )
 
 // DefaultMaxMessageBytes sets the default value for max-message-bytes
@@ -36,13 +37,18 @@ type SinkConfig struct {
 	DispatchRules   []*DispatchRule   `toml:"dispatchers" json:"dispatchers"`
 	Protocol        string            `toml:"protocol" json:"protocol"`
 	ColumnSelectors []*ColumnSelector `toml:"column-selectors" json:"column-selectors"`
+	SchemaRegistry  string            `toml:"schema-registry" json:"schema-registry"`
 }
 
 // DispatchRule represents partition rule for a table
 type DispatchRule struct {
-	Matcher       []string `toml:"matcher" json:"matcher"`
-	PartitionRule string   `toml:"dispatcher" json:"dispatcher"`
-	TopicRule     string   `toml:"topic" json:"topic"`
+	Matcher []string `toml:"matcher" json:"matcher"`
+	// Deprecated, please use PartitionRule.
+	DispatcherRule string `toml:"dispatcher" json:"dispatcher"`
+	// PartitionRule is an alias added for DispatcherRule to mitigate confusions.
+	// In the future release, the DispatcherRule is expected to be removed .
+	PartitionRule string `toml:"partition" json:"partition"`
+	TopicRule     string `toml:"topic" json:"topic"`
 }
 
 // ColumnSelector represents a column selector for a table.
@@ -60,6 +66,21 @@ func (s *SinkConfig) validate(enableOldValue bool) error {
 				return cerror.WrapError(cerror.ErrKafkaInvalidConfig,
 					errors.New(fmt.Sprintf("%s protocol requires old value to be enabled", s.Protocol)))
 			}
+		}
+	}
+	for _, rule := range s.DispatchRules {
+		if rule.DispatcherRule != "" && rule.PartitionRule != "" {
+			log.Error("dispatcher and partition cannot be configured both", zap.Any("rule", rule))
+			return cerror.WrapError(cerror.ErrSinkInvalidConfig,
+				errors.New(fmt.Sprintf("dispatcher and partition cannot be "+
+					"configured both for rule:%v", rule)))
+		}
+		// After `validate()` is called, we only use PartitionRule to represent a partition
+		// dispatching rule. So when DispatcherRule is not empty, we assign its
+		// value to PartitionRule and clear itself.
+		if rule.DispatcherRule != "" {
+			rule.PartitionRule = rule.DispatcherRule
+			rule.DispatcherRule = ""
 		}
 	}
 

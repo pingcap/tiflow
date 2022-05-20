@@ -40,7 +40,6 @@ import (
 	"github.com/pingcap/tidb/util/filter"
 	regexprrouter "github.com/pingcap/tidb/util/regexpr-router"
 	router "github.com/pingcap/tidb/util/table-router"
-	"github.com/pingcap/tiflow/dm/pkg/gtid"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
@@ -54,6 +53,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	fr "github.com/pingcap/tiflow/dm/pkg/func-rollback"
+	"github.com/pingcap/tiflow/dm/pkg/gtid"
 	"github.com/pingcap/tiflow/dm/pkg/ha"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	parserpkg "github.com/pingcap/tiflow/dm/pkg/parser"
@@ -185,7 +185,8 @@ type Syncer struct {
 	// the status of this track may change over time.
 	safeMode *sm.SafeMode
 
-	timezone *time.Location
+	upstreamTZ *time.Location
+	timezone   *time.Location
 
 	binlogSizeCount     atomic.Int64
 	lastBinlogSizeCount atomic.Int64
@@ -342,6 +343,10 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 	}()
 
 	tctx := s.tctx.WithContext(ctx)
+	s.upstreamTZ, err = str2TimezoneOrFromDB(tctx, "", &s.cfg.From)
+	if err != nil {
+		return
+	}
 	s.timezone, err = str2TimezoneOrFromDB(tctx, s.cfg.Timezone, &s.cfg.To)
 	if err != nil {
 		return
@@ -1470,6 +1475,10 @@ func (s *Syncer) waitBeforeRunExit(ctx context.Context) {
 		s.tctx.L().Info("received subtask's done, try graceful stop")
 		needToExitTime := time.Now()
 		s.waitTransactionLock.Lock()
+
+		failpoint.Inject("checkWaitDuration", func(_ failpoint.Value) {
+			s.isTransactionEnd = false
+		})
 		if s.isTransactionEnd {
 			s.waitXIDJob.Store(int64(waitComplete))
 			s.waitTransactionLock.Unlock()
@@ -1498,6 +1507,17 @@ func (s *Syncer) waitBeforeRunExit(ctx context.Context) {
 			s.runCancel()
 			return
 		}
+		failpoint.Inject("checkWaitDuration", func(val failpoint.Value) {
+			if testDuration, testError := time.ParseDuration(val.(string)); testError == nil {
+				if testDuration.Seconds() == waitDuration.Seconds() {
+					panic("success check wait_time_on_stop !!!")
+				} else {
+					s.tctx.L().Error("checkWaitDuration fail", zap.Duration("testDuration", testDuration), zap.Duration("waitDuration", waitDuration))
+				}
+			} else {
+				s.tctx.L().Error("checkWaitDuration error", zap.Error(testError))
+			}
+		})
 
 		select {
 		case <-s.runCtx.Ctx.Done():
@@ -2196,7 +2216,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		}
 
 		// set exitSafeModeTS when meet first binlog
-		if s.firstMeetBinlogTS == nil && s.cliArgs != nil && s.cliArgs.SafeModeDuration != "" {
+		if s.firstMeetBinlogTS == nil && s.cliArgs != nil && s.cliArgs.SafeModeDuration != "" && int64(e.Header.Timestamp) != 0 && e.Header.EventType != replication.FORMAT_DESCRIPTION_EVENT {
 			if checkErr := s.initSafeModeExitTS(int64(e.Header.Timestamp)); checkErr != nil {
 				return checkErr
 			}
@@ -4062,9 +4082,9 @@ func (s *Syncer) flushOptimisticTableInfos(tctx *tcontext.Context) {
 
 func (s *Syncer) setGlobalPointByTime(tctx *tcontext.Context, timeStr string) error {
 	// we support two layout
-	t, err := time.ParseInLocation(config.StartTimeFormat, timeStr, s.timezone)
+	t, err := time.ParseInLocation(config.StartTimeFormat, timeStr, s.upstreamTZ)
 	if err != nil {
-		t, err = time.ParseInLocation(config.StartTimeFormat2, timeStr, s.timezone)
+		t, err = time.ParseInLocation(config.StartTimeFormat2, timeStr, s.upstreamTZ)
 	}
 	if err != nil {
 		return err
