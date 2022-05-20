@@ -1,0 +1,16 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: chaos-test-case
+spec:
+  template:
+    spec:
+      containers:
+        - name: chaos-test-case
+          image: dataflow:chaos
+          imagePullPolicy: IfNotPresent
+          command:
+            - "/df-chaos-case"
+            - "--duration=20m"
+      restartPolicy: Never
+  backoffLimit: 0 # fail immediately
