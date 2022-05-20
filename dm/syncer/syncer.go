@@ -2259,6 +2259,13 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		case *replication.XIDEvent:
 			// reset eventIndex and force safeMode flag here.
 			eventIndex = 0
+			currentLocation.Position.Pos = e.Header.LogPos
+			for schemaName, tableMap := range affectedSourceTables {
+				for table := range tableMap {
+					s.saveTablePoint(&filter.Table{Schema: schemaName, Name: table}, currentLocation)
+				}
+			}
+			affectedSourceTables = make(map[string]map[string]struct{})
 			if shardingReSync != nil {
 				shardingReSync.currLocation.Position.Pos = e.Header.LogPos
 				shardingReSync.currLocation.Suffix = currentLocation.Suffix
@@ -2269,11 +2276,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 
 				// only need compare binlog position?
 				lastLocation = shardingReSync.currLocation
-				expectedCmp := 0
-				if s.cfg.ShardMode == config.ShardOptimistic {
-					expectedCmp = 1
-				}
-				if binlog.CompareLocation(shardingReSync.currLocation, shardingReSync.latestLocation, s.cfg.EnableGTID) >= expectedCmp {
+				if binlog.CompareLocation(shardingReSync.currLocation, shardingReSync.latestLocation, s.cfg.EnableGTID) >= 0 {
 					s.tctx.L().Info("re-replicate shard group was completed", zap.String("event", "XID"), zap.Stringer("re-shard", shardingReSync))
 					err = closeShardingResync()
 					if err != nil {
@@ -2283,19 +2286,12 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 				}
 			}
 
-			currentLocation.Position.Pos = e.Header.LogPos
 			s.tctx.L().Debug("", zap.String("event", "XID"), zap.Stringer("last location", lastLocation), log.WrapStringerField("location", currentLocation))
 			lastLocation.Position.Pos = e.Header.LogPos // update lastPos
 			err = lastLocation.SetGTID(ev.GSet)
 			if err != nil {
 				return terror.Annotatef(err, "fail to record GTID %v", ev.GSet)
 			}
-			for schemaName, tableMap := range affectedSourceTables {
-				for table := range tableMap {
-					s.saveTablePoint(&filter.Table{Schema: schemaName, Name: table}, currentLocation)
-				}
-			}
-			affectedSourceTables = make(map[string]map[string]struct{})
 
 			job := newXIDJob(currentLocation, startLocation, currentLocation)
 			_, err2 = s.handleJobFunc(job)
@@ -2434,11 +2430,7 @@ func (s *Syncer) handleRotateEvent(ev *replication.RotateEvent, ec eventContext)
 		if binlog.CompareLocation(*ec.currentLocation, ec.shardingReSync.currLocation, s.cfg.EnableGTID) > 0 {
 			ec.shardingReSync.currLocation = *ec.currentLocation
 		}
-		expectedCmp := 0
-		if s.cfg.ShardMode == config.ShardOptimistic {
-			expectedCmp = 1
-		}
-		if binlog.CompareLocation(ec.shardingReSync.currLocation, ec.shardingReSync.latestLocation, s.cfg.EnableGTID) >= expectedCmp {
+		if binlog.CompareLocation(ec.shardingReSync.currLocation, ec.shardingReSync.latestLocation, s.cfg.EnableGTID) >= 0 {
 			ec.tctx.L().Info("re-replicate shard group was completed", zap.String("event", "rotate"), zap.Stringer("re-shard", ec.shardingReSync))
 			err := ec.closeShardingResync()
 			if err != nil {
@@ -2478,11 +2470,7 @@ func (s *Syncer) handleRowsEvent(ev *replication.RowsEvent, ec eventContext) (*f
 
 	if ec.shardingReSync != nil {
 		ec.shardingReSync.currLocation = *ec.currentLocation
-		expectedCmp := 0
-		if s.cfg.ShardMode == config.ShardOptimistic {
-			expectedCmp = 1
-		}
-		if binlog.CompareLocation(ec.shardingReSync.currLocation, ec.shardingReSync.latestLocation, s.cfg.EnableGTID) >= expectedCmp {
+		if binlog.CompareLocation(ec.shardingReSync.currLocation, ec.shardingReSync.latestLocation, s.cfg.EnableGTID) >= 0 {
 			ec.tctx.L().Info("re-replicate shard group was completed", zap.String("event", "row"), zap.Stringer("re-shard", ec.shardingReSync))
 			return nil, ec.closeShardingResync()
 		}
@@ -2789,11 +2777,7 @@ func (s *Syncer) handleQueryEvent(ev *replication.QueryEvent, ec eventContext, o
 
 	if qec.shardingReSync != nil {
 		qec.shardingReSync.currLocation = *qec.currentLocation
-		expectedCmp := 0
-		if s.cfg.ShardMode == config.ShardOptimistic {
-			expectedCmp = 1
-		}
-		if binlog.CompareLocation(qec.shardingReSync.currLocation, qec.shardingReSync.latestLocation, s.cfg.EnableGTID) >= expectedCmp {
+		if binlog.CompareLocation(qec.shardingReSync.currLocation, qec.shardingReSync.latestLocation, s.cfg.EnableGTID) >= 0 {
 			qec.tctx.L().Info("re-replicate shard group was completed", zap.String("event", "query"), zap.Stringer("queryEventContext", qec))
 			return qec.closeShardingResync()
 		} else if s.cfg.ShardMode != config.ShardOptimistic {
