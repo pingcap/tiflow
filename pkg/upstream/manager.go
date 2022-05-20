@@ -117,6 +117,7 @@ func (m *Manager) AddDefaultUpstream(conf Config) (*Upstream, error) {
 	}
 	up.ID = mapKey.ID
 	up.isDefaultUpstream = true
+	m.defaultUpstream = up
 	m.ups.Store(mapKey, up)
 	return up, nil
 }
