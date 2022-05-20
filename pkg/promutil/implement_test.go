@@ -105,7 +105,7 @@ func TestNewCounter(t *testing.T) {
 	projectKey := constLabelProjectKey
 	tenantKey := constLabelTenantKey
 
-	factory := NewFactory4JobMaster(
+	factory := NewFactory4JobMasterImpl(
 		reg,
 		tenant,
 		jobType,
@@ -156,7 +156,7 @@ func TestNewCounter(t *testing.T) {
 
 	// different jobID of the same project, but with same metric
 	jobID = "job1"
-	factory = NewFactory4JobMaster(
+	factory = NewFactory4JobMasterImpl(
 		reg,
 		tenant,
 		jobType,
@@ -173,7 +173,7 @@ func TestNewCounter(t *testing.T) {
 
 	// different project but with same metric
 	tenant.ProjectID = "project1"
-	factory = NewFactory4JobMaster(
+	factory = NewFactory4JobMasterImpl(
 		reg,
 		tenant,
 		jobType,
@@ -191,7 +191,7 @@ func TestNewCounter(t *testing.T) {
 	// JobMaster and Worker of the same job type can't has same
 	// metric name
 	workerID := "worker0"
-	factory = NewFactory4Worker(
+	factory = NewFactory4WorkerImpl(
 		reg,
 		tenant,
 		jobType,
@@ -209,7 +209,7 @@ func TestNewCounter(t *testing.T) {
 
 	// different workerID of the same job, but with same metric
 	workerID = "worker1"
-	factory = NewFactory4Worker(
+	factory = NewFactory4WorkerImpl(
 		reg,
 		tenant,
 		jobType,
@@ -226,7 +226,7 @@ func TestNewCounter(t *testing.T) {
 	})
 
 	// framework with same metric
-	factory = NewFactory4Framework(
+	factory = NewFactory4FrameworkImpl(
 		reg,
 	)
 	counter = factory.NewCounter(prometheus.CounterOpts{
@@ -239,13 +239,114 @@ func TestNewCounter(t *testing.T) {
 	})
 }
 
-func TestNewCounterFail(t *testing.T) {
-	// [TODO]: const label conflict with inner const labels
+// const label conflict with inner const labels
+func TestNewCounterFailConstLabelConflict(t *testing.T) {
+	t.Parallel()
 
-	// [TODO]: metric duplicate
+	defer func() {
+		err := recover()
+		require.NotNil(t, err)
+		require.Regexp(t, "duplicate label name", err.(string))
+	}()
+
+	reg := NewRegistry()
+	require.NotNil(t, reg)
+
+	factory := NewFactory4JobMasterImpl(
+		reg,
+		tenant.ProjectInfo{
+			TenantID:  "user0",
+			ProjectID: "proj0",
+		},
+		"DM",
+		"job0",
+	)
+	_ = factory.NewCounter(prometheus.CounterOpts{
+		Namespace: "dm",
+		Subsystem: "worker",
+		Name:      "http_request",
+		ConstLabels: prometheus.Labels{
+			constLabelJobKey: "job0", // conflict with inner const labels
+		},
+	})
 }
 
-// TODO: add more uts to solidate the api behavior
+func TestNewCounterVec(t *testing.T) {
+	t.Parallel()
+
+	reg := NewRegistry()
+	require.NotNil(t, reg)
+
+	factory := NewFactory4JobMasterImpl(
+		reg,
+		tenant.ProjectInfo{
+			TenantID:  "user0",
+			ProjectID: "proj0",
+		},
+		"DM",
+		"job0",
+	)
+	counterVec := factory.NewCounterVec(prometheus.CounterOpts{
+		Namespace: "dm",
+		Subsystem: "worker",
+		Name:      "http_request",
+		ConstLabels: prometheus.Labels{
+			"k1": "v1",
+		},
+	},
+		[]string{"k2", "k3", "k4"},
+	)
+
+	counter, err := counterVec.GetMetricWithLabelValues([]string{"v1", "v2", "v3"}...)
+	require.NoError(t, err)
+	counter.Inc()
+
+	// unmatch label values count
+	_, err = counterVec.GetMetricWithLabelValues([]string{"v1", "v2"}...)
+	require.Error(t, err)
+
+	counter, err = counterVec.GetMetricWith(prometheus.Labels{
+		"k2": "v2", "k3": "v3", "k4": "v4",
+	})
+	require.NoError(t, err)
+	counter.Inc()
+
+	// unmatch label values count
+	counter, err = counterVec.GetMetricWith(prometheus.Labels{
+		"k3": "v3", "k4": "v4",
+	})
+	require.Error(t, err)
+
+	require.True(t, counterVec.DeleteLabelValues([]string{"v1", "v2", "v3"}...))
+	require.False(t, counterVec.DeleteLabelValues([]string{"v1", "v2"}...))
+	require.False(t, counterVec.DeleteLabelValues([]string{"v1", "v2", "v4"}...))
+
+	require.True(t, counterVec.Delete(prometheus.Labels{
+		"k2": "v2", "k3": "v3", "k4": "v4",
+	}))
+	require.False(t, counterVec.Delete(prometheus.Labels{
+		"k3": "v3", "k4": "v4",
+	}))
+	require.False(t, counterVec.Delete(prometheus.Labels{
+		"k2": "v3", "k3": "v3", "k4": "v4",
+	}))
+
+	curryCounterVec, err := counterVec.CurryWith(prometheus.Labels{
+		"k2": "v2",
+	})
+	require.NoError(t, err)
+	counter, err = curryCounterVec.GetMetricWith(prometheus.Labels{
+		"k3": "v3", "k4": "v4",
+	})
+	require.NoError(t, err)
+	counter.Add(1)
+
+	// unmatch label values count after curry
+	_, err = curryCounterVec.GetMetricWith(prometheus.Labels{
+		"k2": "v2", "k3": "v3", "k4": "v4",
+	})
+	require.Error(t, err)
+}
 
 func compareMetric(t *testing.T, expected *dto.Metric, actual *dto.Metric) {
 	// compare label pairs

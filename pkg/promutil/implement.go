@@ -89,8 +89,13 @@ func wrapHistogramOpts(prefix string, constLabels prometheus.Labels, opts *prome
 }
 
 func wrapOptsCommon(prefix string, constLabels prometheus.Labels, namespace *string, cls prometheus.Labels) {
+	// namespace SHOULD NOT be nil
 	if prefix != "" {
-		*namespace = prefix + "_" + *namespace
+		if *namespace != "" {
+			*namespace = prefix + "_" + *namespace
+		} else {
+			*namespace = prefix
+		}
 	}
 	for name, value := range constLabels {
 		if _, exists := cls[name]; exists {

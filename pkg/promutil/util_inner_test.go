@@ -42,7 +42,7 @@ func TestNewFactory4JobMaster(t *testing.T) {
 	}
 
 	for _, c := range cases {
-		f := NewFactory4JobMaster(reg, c.info, c.jobType, c.jobID)
+		f := NewFactory4JobMasterImpl(reg, c.info, c.jobType, c.jobID)
 		require.Equal(t, c.output, f)
 	}
 }
@@ -82,7 +82,7 @@ func TestNewFactory4Worker(t *testing.T) {
 	}
 
 	for _, c := range cases {
-		f := NewFactory4Worker(reg, c.info, c.jobType, c.jobID, c.workerID)
+		f := NewFactory4WorkerImpl(reg, c.info, c.jobType, c.jobID, c.workerID)
 		require.Equal(t, c.output, f)
 	}
 }
@@ -108,7 +108,7 @@ func TestNewFactory4Framework(t *testing.T) {
 	}
 
 	for _, c := range cases {
-		f := NewFactory4Framework(reg)
+		f := NewFactory4FrameworkImpl(reg)
 		require.Equal(t, c.output, f)
 	}
 }

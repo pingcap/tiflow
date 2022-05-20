@@ -5,8 +5,6 @@ import (
 
 	libModel "github.com/hanfei1991/microcosm/lib/model"
 	"github.com/hanfei1991/microcosm/pkg/tenant"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 // Routine to get a Factory:
@@ -40,53 +38,24 @@ const (
 
 // HTTPHandlerForMetric return http.Handler for prometheus metric
 func HTTPHandlerForMetric() http.Handler {
-	return promhttp.HandlerFor(
-		globalMetricGatherer,
-		promhttp.HandlerOpts{},
-	)
+	return HTTPHandlerForMetricImpl(globalMetricGatherer)
 }
 
 // NewFactory4JobMaster return a Factory for jobmaster
-func NewFactory4JobMaster(reg *Registry, info tenant.ProjectInfo, jobType libModel.JobType, jobID libModel.MasterID) Factory {
-	return &wrappingFactory{
-		r:      reg,
-		prefix: jobType,
-		id:     jobID,
-		constLabels: prometheus.Labels{
-			constLabelTenantKey:  info.TenantID,
-			constLabelProjectKey: info.ProjectID,
-			constLabelJobKey:     jobID,
-		},
-	}
+func NewFactory4JobMaster(info tenant.ProjectInfo, jobType libModel.JobType, jobID libModel.MasterID) Factory {
+	return NewFactory4JobMasterImpl(globalMetricRegistry, info, jobType, jobID)
 }
 
 // NewFactory4Worker return a Factory for worker
 func NewFactory4Worker(reg *Registry, info tenant.ProjectInfo, jobType libModel.JobType, jobID libModel.MasterID,
 	workerID libModel.WorkerID,
 ) Factory {
-	return &wrappingFactory{
-		r:      reg,
-		prefix: jobType,
-		id:     workerID,
-		constLabels: prometheus.Labels{
-			constLabelTenantKey:  info.TenantID,
-			constLabelProjectKey: info.ProjectID,
-			constLabelJobKey:     jobID,
-			constLabelWorkerKey:  workerID,
-		},
-	}
+	return NewFactory4WorkerImpl(globalMetricRegistry, info, jobType, jobID, workerID)
 }
 
 // NewFactory4Framework return a Factory for dataflow framework
 // NOTICE: we use auto service label tagged by cloud service to distinguish
 // different dataflow engine or different executor
-func NewFactory4Framework(reg *Registry) Factory {
-	return &wrappingFactory{
-		r:      reg,
-		prefix: frameworkMetricPrefix,
-		id:     frameworkID,
-		constLabels: prometheus.Labels{
-			constLabelFrameworkKey: "true",
-		},
-	}
+func NewFactory4Framework() Factory {
+	return NewFactory4FrameworkImpl(globalMetricRegistry)
 }
