@@ -337,7 +337,10 @@ func (p *processor) Tick(ctx cdcContext.Context, state *orchestrator.ChangefeedR
 	return p.handleErr(ctx, state, err)
 }
 
-func (p *processor) handleErr(ctx cdcContext.Context, state *orchestrator.ChangefeedReactorState, err error) (orchestrator.ReactorState, error) {
+func (p *processor) handleErr(ctx cdcContext.Context,
+	state *orchestrator.ChangefeedReactorState,
+	err error,
+) (orchestrator.ReactorState, error) {
 	if isProcessorIgnorableError(err) {
 		log.Info("processor exited", cdcContext.ZapFieldCapture(ctx), cdcContext.ZapFieldChangefeed(ctx))
 		return state, cerror.ErrReactorFinished.GenWithStackByArgs()

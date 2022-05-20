@@ -60,7 +60,7 @@ func NewManager(ctx context.Context, gcServiceID string) *Manager {
 }
 
 var (
-	testUpstreamID = uint64(1)
+	testUpstreamID = uint64(0)
 	testMapKey     = MapKey{
 		ID:       testUpstreamID,
 		CAPath:   "",
@@ -78,13 +78,16 @@ var (
 // NewManager4Test returns a Manager for unit test.
 func NewManager4Test(pdClient pd.Client) *Manager {
 	up := NewUpstream4Test(pdClient)
-	res := &Manager{ups: new(sync.Map), ctx: context.Background(),
+	res := &Manager{
+		ups: new(sync.Map), ctx: context.Background(),
 		gcServiceID:     etcd.GcServiceIDForTest(),
-		defaultUpstream: up}
+		defaultUpstream: up,
+	}
 	res.ups.Store(testMapKey, up)
 	return res
 }
 
+// Config contains all info to connect to the upstream
 type Config struct {
 	ID            uint64
 	PDEndpoints   string
@@ -118,11 +121,12 @@ func (m *Manager) AddDefaultUpstream(conf Config) (*Upstream, error) {
 	return up, nil
 }
 
+// GetDefaultUpstream return the ticdc dependent pd upstream
 func (m *Manager) GetDefaultUpstream() *Upstream {
 	return m.defaultUpstream
 }
 
-func (m *Manager) Add(conf Config, sync bool) *Upstream {
+func (m *Manager) add(conf Config) *Upstream {
 	mapKey := MapKey{
 		ID:       conf.ID,
 		CAPath:   conf.CAPath,
@@ -146,13 +150,9 @@ func (m *Manager) Add(conf Config, sync bool) *Upstream {
 			CertAllowedCN: conf.CertAllowedCN,
 		})
 	m.ups.Store(mapKey, up)
-	if sync {
+	go func() {
 		up.err = up.init(m.ctx, m.gcServiceID)
-	} else {
-		go func() {
-			up.err = up.init(m.ctx, m.gcServiceID)
-		}()
-	}
+	}()
 	up.hold()
 	return up
 }
@@ -171,9 +171,10 @@ func (m *Manager) Get(conf Config) *Upstream {
 		up.hold()
 		return up
 	}
-	return m.Add(conf, false)
+	return m.add(conf)
 }
 
+// GetByUpstreamID returns a list of upstreams matches the specified id
 func (m *Manager) GetByUpstreamID(id uint64) []*Upstream {
 	var ret []*Upstream
 	m.ups.Range(func(key, v any) bool {
@@ -211,7 +212,6 @@ func (m *Manager) Tick(ctx context.Context) error {
 			return false
 		default:
 		}
-		id := k.(uint64)
 
 		up := v.(*Upstream)
 		if up.shouldClose() {
@@ -220,7 +220,7 @@ func (m *Manager) Tick(ctx context.Context) error {
 
 		if up.IsClosed() {
 			m.mu.Lock()
-			m.ups.Delete(id)
+			m.ups.Delete(k)
 			m.mu.Unlock()
 		}
 		return true

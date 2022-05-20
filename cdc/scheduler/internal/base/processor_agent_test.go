@@ -197,7 +197,8 @@ func (s *agentTestSuite) Close() {
 // NOTE: The mock client does not have any useful internal logic.
 // It only supports GET operations and any output should be supplied by
 // calling the mock.Mock methods embedded in the mock client.
-func newMockEtcdClientForAgentTests(ctx context.Context) (*clientv3.Client, *mockEtcdKVClient, *mockEtcdClusterClient) {
+func newMockEtcdClientForAgentTests(ctx context.Context,
+) (*clientv3.Client, *mockEtcdKVClient, *mockEtcdClusterClient) {
 	cli := clientv3.NewCtxClient(ctx)
 	mockKVCli := &mockEtcdKVClient{}
 	cli.KV = mockKVCli
@@ -225,7 +226,8 @@ type mockEtcdClusterClient struct {
 	mock.Mock
 }
 
-func (c *mockEtcdClusterClient) MemberList(ctx context.Context) (*clientv3.MemberListResponse, error) {
+func (c *mockEtcdClusterClient) MemberList(ctx context.Context,
+) (*clientv3.MemberListResponse, error) {
 	args := c.Called(ctx)
 	resp := (*clientv3.MemberListResponse)(nil)
 	if args.Get(0) != nil {

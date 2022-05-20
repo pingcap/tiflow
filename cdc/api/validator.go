@@ -45,7 +45,6 @@ func verifyCreateChangefeedConfig(
 	capture *capture.Capture,
 	upStream *upstream.Upstream,
 ) (*model.ChangeFeedInfo, error) {
-
 	// verify sinkURI
 	if changefeedConfig.SinkURI == "" {
 		return nil, cerror.ErrSinkURIInvalid.GenWithStackByArgs("sink-uri is empty, can't not create a changefeed without sink-uri")

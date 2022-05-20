@@ -139,7 +139,8 @@ func (up *Upstream) init(ctx context.Context, gcServiceID string) error {
 	// To not block CDC server startup, we need to warn instead of error
 	// when TiKV is incompatible.
 	errorTiKVIncompatible := false
-	err = version.CheckClusterVersion(ctx, up.PDClient, up.PdEndpoints, up.SecurityConfig, errorTiKVIncompatible)
+	err = version.CheckClusterVersion(ctx, up.PDClient,
+		up.PdEndpoints, up.SecurityConfig, errorTiKVIncompatible)
 	if err != nil {
 		log.Error("init upstream error", zap.Error(err))
 	}
@@ -228,7 +229,7 @@ func (up *Upstream) Error() error {
 
 // IsNormal returns true if the upstream is normal.
 func (up *Upstream) IsNormal() bool {
-	return atomic.LoadInt32(&up.status) == normal
+	return atomic.LoadInt32(&up.status) == normal && up.err == nil
 }
 
 // IsClosed returns true if the upstream is closed.

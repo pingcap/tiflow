@@ -30,29 +30,28 @@ func TestUpstream(t *testing.T) {
 	require.NotNil(t, up1)
 
 	// test Add
-	manager.Add(testConfig, true)
+	conf := Config{
+		ID:          1,
+		PDEndpoints: "",
+		KeyPath:     "",
+		CertPath:    "",
+		CAPath:      "",
+	}
+	manager.add(conf)
 
 	// test Get
-	testID := uint64(1)
-	require.NotNil(t, manager.Get(testConfig))
+	require.NotNil(t, manager.Get(conf))
 	up2 := NewUpstream4Test(pdClient)
-	up2.ID = testID
+	up2.ID = conf.ID
 	mockClock := clock.NewMock()
 	up2.clock = mockClock
-
-	manager.ups.Store(testID, up2)
 	require.NotNil(t, manager.Get(testConfig))
 
 	// test Tick
 	up2.Release()
-	up2.Release()
 	mockClock.Add(maxIdleDuration * 2)
 
 	manager.Tick(context.Background())
-	// wait until up2 is closed
-	for !up2.IsClosed() {
-	}
-	manager.Tick(context.Background())
-	require.Panics(t, func() { manager.Get(testConfig) })
 	require.NotNil(t, manager.Get(testConfig))
+	require.NotNil(t, manager.Get(conf))
 }
