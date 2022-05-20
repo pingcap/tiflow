@@ -101,6 +101,10 @@ func (c *checkSorter) Output() <-chan *model.PolymorphicEvent {
 	return c.ch
 }
 
+func (c *checkSorter) EmitStartTs(ctx context.Context, ts uint64) {
+	panic("unimplemented")
+}
+
 func TestSorterResolvedTsLessEqualBarrierTs(t *testing.T) {
 	t.Parallel()
 	sch := make(chan *model.PolymorphicEvent, 1)

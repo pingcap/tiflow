@@ -280,10 +280,8 @@ func (t *tableActor) start(sdtTableContext context.Context) error {
 		zap.Uint64("quota", t.memoryQuota))
 
 	flowController := flowcontrol.NewTableFlowController(t.memoryQuota)
-	sorterNode := newSorterNode(t.tableName, t.tableID,
-		t.replicaInfo.StartTs, flowController,
-		t.mounter, t.replicaConfig,
-	)
+	sorterNode := newSorterNode(t.tableName, t.tableID, t.replicaInfo.StartTs,
+		flowController, t.mounter, t.replicaConfig)
 	t.sortNode = sorterNode
 	sortActorNodeContext := newContext(sdtTableContext, t.tableName,
 		t.globalVars.TableActorSystem.Router(),
@@ -316,8 +314,7 @@ func (t *tableActor) start(sdtTableContext context.Context) error {
 	}
 
 	actorSinkNode := newSinkNode(t.tableID, t.tableSink,
-		t.replicaInfo.StartTs,
-		t.targetTs, flowController)
+		t.replicaInfo.StartTs, t.targetTs, flowController)
 	actorSinkNode.initWithReplicaConfig(true, t.replicaConfig)
 	t.sinkNode = actorSinkNode
 
@@ -469,7 +466,7 @@ func (t *tableActor) AsyncStop(targetTs model.Ts) bool {
 		if cerror.ErrActorNotFound.Equal(err) || cerror.ErrActorStopped.Equal(err) {
 			return true
 		}
-		log.Panic("send fails", zap.Reflect("msg", msg), zap.Error(err))
+		log.Panic("send fails", zap.Any("msg", msg), zap.Error(err))
 	}
 	return true
 }
@@ -482,6 +479,13 @@ func (t *tableActor) Workload() model.WorkloadInfo {
 
 // Status returns the status of this table pipeline
 func (t *tableActor) Status() TableStatus {
+	sortStatus := t.sortNode.Status()
+	// first resolved ts not received yet, still preparing...
+	if sortStatus == TableStatusPreparing {
+		return TableStatusPreparing
+	}
+
+	// sinkNode is status indicator now.
 	return t.sinkNode.Status()
 }
 
@@ -513,6 +517,15 @@ func (t *tableActor) Cancel() {
 // Wait waits for table pipeline destroyed
 func (t *tableActor) Wait() {
 	_ = t.wg.Wait()
+}
+
+func (t *tableActor) Start(ts model.Ts) bool {
+	if atomic.CompareAndSwapInt32(&t.sortNode.started, 0, 1) {
+		t.sortNode.startTsCh <- ts
+		close(t.sortNode.startTsCh)
+		return true
+	}
+	return false
 }
 
 // for ut

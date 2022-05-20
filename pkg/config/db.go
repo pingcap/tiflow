@@ -21,7 +21,7 @@ import (
 type DBConfig struct {
 	// Count is the number of leveldb count.
 	//
-	// The default value is 16.
+	// The default value is 8.
 	Count int `toml:"count" json:"count"`
 	// Concurrency is the maximum write and read concurrency.
 	//

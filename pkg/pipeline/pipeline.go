@@ -103,7 +103,7 @@ func (p *Pipeline) driveRunner(ctx context.Context, previousRunner, runner runne
 	}
 }
 
-var pipelineTryAgainError error = cerror.ErrPipelineTryAgain.FastGenByArgs()
+var pipelineTryAgainError = cerror.ErrPipelineTryAgain.FastGenByArgs()
 
 // SendToFirstNode sends the message to the first node
 func (p *Pipeline) SendToFirstNode(msg pmessage.Message) error {

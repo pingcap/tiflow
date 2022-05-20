@@ -34,41 +34,6 @@ const (
 	defaultSyncResolvedBatch = 64
 )
 
-// TableStatus is status of the table pipeline
-type TableStatus int32
-
-// TableStatus for table pipeline
-const (
-	TableStatusPreparing TableStatus = iota
-	TableStatusPrepared
-	TableStatusRunning
-	TableStatusStopped
-)
-
-func (s TableStatus) String() string {
-	switch s {
-	case TableStatusPreparing:
-		return "Preparing"
-	case TableStatusPrepared:
-		return "Prepared"
-	case TableStatusRunning:
-		return "Running"
-	case TableStatusStopped:
-		return "Stopped"
-	}
-	return "Unknown"
-}
-
-// Load TableStatus with THREAD-SAFE
-func (s *TableStatus) Load() TableStatus {
-	return TableStatus(atomic.LoadInt32((*int32)(s)))
-}
-
-// Store TableStatus with THREAD-SAFE
-func (s *TableStatus) Store(new TableStatus) {
-	atomic.StoreInt32((*int32)(s), int32(new))
-}
-
 type sinkNode struct {
 	sink    sink.Sink
 	status  TableStatus
@@ -85,11 +50,14 @@ type sinkNode struct {
 	isTableActorMode bool
 }
 
-func newSinkNode(tableID model.TableID, sink sink.Sink, startTs model.Ts, targetTs model.Ts, flowController tableFlowController) *sinkNode {
+func newSinkNode(tableID model.TableID, sink sink.Sink, startTs model.Ts, targetTs model.Ts,
+	flowController tableFlowController,
+) *sinkNode {
 	return &sinkNode{
-		tableID:      tableID,
-		sink:         sink,
-		status:       TableStatusPreparing,
+		tableID: tableID,
+		sink:    sink,
+		// sink is always at least prepared, for receiving data from upstream.
+		status:       TableStatusPrepared,
 		targetTs:     targetTs,
 		resolvedTs:   startTs,
 		checkpointTs: startTs,
@@ -295,8 +263,9 @@ func (n *sinkNode) HandleMessage(ctx context.Context, msg pmessage.Message) (boo
 	case pmessage.MessageTypePolymorphicEvent:
 		event := msg.PolymorphicEvent
 		if event.RawKV.OpType == model.OpTypeResolved {
-			if n.status.Load() == TableStatusPreparing {
-				n.status.Store(TableStatusRunning)
+			// first resolved event received, let the sinkNode become `replicating`
+			if n.status.Load() == TableStatusPrepared {
+				n.status.Store(TableStatusReplicating)
 			}
 			failpoint.Inject("ProcessorSyncResolvedError", func() {
 				failpoint.Return(false, errors.New("processor sync resolved injected error"))

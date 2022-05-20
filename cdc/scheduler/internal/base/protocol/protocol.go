@@ -49,6 +49,8 @@ func DispatchTableResponseTopic(changefeedID model.ChangeFeedID) p2p.Topic {
 type DispatchTableResponseMessage struct {
 	ID    model.TableID  `json:"id"`
 	Epoch ProcessorEpoch `json:"epoch"`
+
+	CheckpointTs model.Ts `json:"checkpoint"`
 }
 
 // AnnounceTopic returns a message topic for announcing an ownership change.

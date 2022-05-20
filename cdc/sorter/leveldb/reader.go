@@ -15,6 +15,7 @@ package leveldb
 
 import (
 	"context"
+	"sync/atomic"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -244,6 +245,9 @@ type pollState struct {
 	// All resolved events before the resolved ts are read into buffer.
 	exhaustedResolvedTs uint64
 
+	// read data after `startTs`
+	startTs uint64
+
 	// ID and router of the reader itself.
 	readerID     actor.ID
 	readerRouter *actor.Router[message.Task]
@@ -324,14 +328,18 @@ func (state *pollState) tryGetIterator(uid uint32, tableID uint64) (*message.Ite
 	}
 
 	if state.iterCh == nil {
-		// We haven't send request.
+		// We haven't sent request.
 		iterCh := make(chan *message.LimitedIterator, 1)
 		state.iterCh = iterCh
 		readerRouter := state.readerRouter
 		readerID := state.readerID
+		lowerBoundTs := atomic.LoadUint64(&state.startTs)
+		if lowerBoundTs < state.exhaustedResolvedTs {
+			lowerBoundTs = state.exhaustedResolvedTs
+		}
 		return &message.IterRequest{
 			Range: [2][]byte{
-				encoding.EncodeTsKey(uid, tableID, state.exhaustedResolvedTs+1),
+				encoding.EncodeTsKey(uid, tableID, lowerBoundTs+1),
 				encoding.EncodeTsKey(uid, tableID, state.maxResolvedTs+1),
 			},
 			ResolvedTs: state.maxResolvedTs,
@@ -349,7 +357,7 @@ func (state *pollState) tryGetIterator(uid uint32, tableID uint64) (*message.Ite
 		}, false
 	}
 
-	// Try receive iterator.
+	// Try to receive iterator.
 	select {
 	case iter := <-state.iterCh:
 		// Iterator received, reset state.iterCh
@@ -405,6 +413,12 @@ func (r *reader) Poll(ctx context.Context, msgs []actormsg.Message[message.Task]
 			return false
 		default:
 			log.Panic("unexpected message", zap.Any("message", msgs[i]))
+		}
+		if msgs[i].Value.StartTs != 0 {
+			atomic.StoreUint64(&r.state.startTs, msgs[i].Value.StartTs)
+			log.Info("table reader receive start ts",
+				zap.Uint64("startTs", msgs[i].Value.StartTs))
+			continue
 		}
 		// Update the max commit ts and resolved ts of all received events.
 		ts := msgs[i].Value.ReadTs
