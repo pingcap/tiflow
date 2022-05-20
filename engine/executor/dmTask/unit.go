@@ -107,6 +107,7 @@ func (u *unitHolder) checkAndAutoResume() {
 
 	if strategy == worker.ResumeDispatch {
 		log.L().Info("dispatch auto resume task")
+		u.lastResult = nil
 		// TODO: manage goroutines
 		go u.unit.Resume(u.ctx, u.resultCh)
 	}
