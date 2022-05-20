@@ -278,6 +278,7 @@ func (ls *Sorter) cleanup(ctx context.Context) error {
 	return ls.dbRouter.SendB(ctx, ls.dbActorID, actormsg.ValueMessage(task))
 }
 
+// EmitStartTs implement sorter interface
 func (ls *Sorter) EmitStartTs(ctx context.Context, ts uint64) {
 	msg := actormsg.ValueMessage(message.Task{
 		UID:     ls.uid,

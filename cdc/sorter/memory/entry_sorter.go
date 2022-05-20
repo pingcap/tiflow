@@ -163,6 +163,7 @@ func (es *EntrySorter) Output() <-chan *model.PolymorphicEvent {
 	return es.outputCh
 }
 
+// EmitStartTs implement sorter interface
 func (es *EntrySorter) EmitStartTs(ctx context.Context, ts uint64) {}
 
 func eventLess(i *model.PolymorphicEvent, j *model.PolymorphicEvent) bool {
