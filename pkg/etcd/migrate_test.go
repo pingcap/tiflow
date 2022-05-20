@@ -98,13 +98,13 @@ func TestMigration(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		err = WaitMetaVersionMatched(ctx, cdcCli, "default")
+		err := WaitMetaVersionMatched(ctx, cdcCli, "default")
 		require.NoError(t, err)
 	}()
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		err = WaitMetaVersionMatched(ctx, cdcCli, "default")
+		err := WaitMetaVersionMatched(ctx, cdcCli, "default")
 		require.NoError(t, err)
 	}()
 

@@ -65,7 +65,7 @@ func TestEtcdKey(t *testing.T) {
 		},
 	}, {
 		key: fmt.Sprintf("%s", DefaultClusterAndNamespacePrefix) +
-			"/job/test-changefeed",
+			"/changefeed/status/test-changefeed",
 		expected: &CDCKey{
 			Tp:           CDCKeyTypeChangeFeedStatus,
 			ChangefeedID: model.DefaultChangeFeedID("test-changefeed"),
