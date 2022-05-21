@@ -84,7 +84,7 @@ function test_kill_and_isolate_worker() {
 
 	echo "kill dm-worker2"
 	kill_process dm-worker2
-	check_process_exit worker2 20
+	check_port_offline $WORKER2_PORT 20
 	rm -rf $WORK_DIR/worker2/relay_log
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT1" \
 		"query-status test" \
@@ -105,7 +105,7 @@ function test_kill_and_isolate_worker() {
 
 	echo "restart dm-worker3"
 	kill_process dm-worker3
-	check_process_exit worker3 20
+	check_port_offline $WORKER3_PORT 20
 	rm -rf $WORK_DIR/worker3/relay_log
 
 	echo "wait and check task running"
@@ -152,7 +152,7 @@ function test_kill_and_isolate_worker() {
 
 	echo "restart worker4"
 	kill_process dm-worker4
-	check_process_exit worker4 20
+	check_port_offline $WORKER4_PORT 20
 	rm -rf $WORK_DIR/worker4/relay_log
 	run_dm_worker $WORK_DIR/worker4 $WORKER4_PORT $cur/conf/dm-worker4.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER4_PORT

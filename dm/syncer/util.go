@@ -176,3 +176,13 @@ func subtaskCfg2BinlogSyncerCfg(cfg *config.SubTaskConfig, timezone *time.Locati
 	common.SetDefaultReplicationCfg(&syncCfg, 1)
 	return syncCfg, nil
 }
+
+func safeToRedirect(e *replication.BinlogEvent) bool {
+	if e != nil {
+		switch e.Event.(type) {
+		case *replication.GenericEvent, *replication.GTIDEvent, *replication.MariadbGTIDEvent:
+			return true
+		}
+	}
+	return false
+}

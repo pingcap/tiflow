@@ -1973,9 +1973,13 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 				})
 			}
 		}
-		// len(affectedSourceTables) == 0 can make sure there isn't any table whose table checkpoint are not saved
-		// If this happens, some row events may be written duplicate times.
-		if s.cfg.ShardMode == config.ShardOptimistic && len(affectedSourceTables) == 0 {
+		var e *replication.BinlogEvent
+
+		startTime := time.Now()
+		e, err = s.getEvent(s.runCtx, currentLocation)
+		// for position mode, we can redirect at any time
+		// for gitd mode, we can redirect only when current location related gtid's transaction is totally executed
+		if err == nil && s.cfg.ShardMode == config.ShardOptimistic && (!s.cfg.EnableGTID || safeToRedirect(e)) {
 			op, targetTableID := s.optimist.PendingRedirectOperation()
 			if op != nil {
 				// for optimistic sharding mode, if a new sharding group is resolved when syncer is redirecting,
@@ -2004,10 +2008,6 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 				continue
 			}
 		}
-		var e *replication.BinlogEvent
-
-		startTime := time.Now()
-		e, err = s.getEvent(s.runCtx, currentLocation)
 
 		failpoint.Inject("SafeModeExit", func(val failpoint.Value) {
 			if intVal, ok := val.(int); ok && intVal == 1 {
