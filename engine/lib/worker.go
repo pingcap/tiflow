@@ -87,7 +87,7 @@ type BaseWorker interface {
 
 	MetaKVClient() metaclient.KVClient
 	UpdateStatus(ctx context.Context, status libModel.WorkerStatus) error
-	SendMessage(ctx context.Context, topic p2p.Topic, message interface{}) (bool, error)
+	SendMessage(ctx context.Context, topic p2p.Topic, message interface{}, nonblocking bool) error
 	OpenStorage(ctx context.Context, resourcePath resourcemeta.ResourceID) (broker.Handle, error)
 	// Exit should be called when worker (in user logic) wants to exit.
 	// When `err` is not nil, the status code is assigned WorkerStatusError.
@@ -390,9 +390,16 @@ func (w *DefaultBaseWorker) SendMessage(
 	ctx context.Context,
 	topic p2p.Topic,
 	message interface{},
-) (bool, error) {
+	nonblocking bool,
+) error {
+	var err error
 	ctx = w.errCenter.WithCancelOnFirstError(ctx)
-	return w.messageSender.SendToNode(ctx, w.masterClient.MasterNode(), topic, message)
+	if nonblocking {
+		_, err = w.messageSender.SendToNode(ctx, w.masterClient.MasterNode(), topic, message)
+	} else {
+		err = w.messageSender.SendToNodeB(ctx, w.masterClient.MasterNode(), topic, message)
+	}
+	return err
 }
 
 // OpenStorage implements BaseWorker.OpenStorage

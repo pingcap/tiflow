@@ -85,7 +85,8 @@ type DMTask interface {
 type BaseDMTask struct {
 	DMTask
 	lib.BaseWorker
-	unitHolder *unitHolder
+	unitHolder   *unitHolder
+	messageAgent *MessageAgent
 
 	cfg                *dmconfig.SubTaskConfig
 	storageWriteHandle broker.Handle
@@ -104,9 +105,18 @@ func NewBaseDMTask(ctx *dcontext.Context, workerType libModel.WorkerType, conf l
 	}
 }
 
+func (t *BaseDMTask) createComponents(ctx context.Context) error {
+	log.L().Debug("create components")
+	t.messageAgent = NewMessageAgent(t)
+	return nil
+}
+
 // InitImpl implements lib.BaseWorker.InitImpl
 func (t *BaseDMTask) InitImpl(ctx context.Context) error {
 	log.L().Info("init task")
+	if err := t.createComponents(ctx); err != nil {
+		return err
+	}
 	if err := t.onInit(ctx); err != nil {
 		return err
 	}

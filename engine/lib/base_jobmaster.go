@@ -232,11 +232,11 @@ func (d *DefaultBaseJobMaster) IsBaseJobMaster() {
 }
 
 // SendMessage delegates the SendMessage or inner worker
-func (d *DefaultBaseJobMaster) SendMessage(ctx context.Context, topic p2p.Topic, message interface{}) (bool, error) {
+func (d *DefaultBaseJobMaster) SendMessage(ctx context.Context, topic p2p.Topic, message interface{}, nonblocking bool) error {
 	ctx = d.errCenter.WithCancelOnFirstError(ctx)
 
 	// master will use WorkerHandle to send message
-	return d.worker.SendMessage(ctx, topic, message)
+	return d.worker.SendMessage(ctx, topic, message, nonblocking)
 }
 
 // IsMasterReady implements BaseJobMaster.IsMasterReady
