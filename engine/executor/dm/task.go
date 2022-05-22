@@ -30,6 +30,7 @@ import (
 	"github.com/pingcap/tiflow/engine/lib/registry"
 	"github.com/pingcap/tiflow/engine/model"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
+	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/broker"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"go.uber.org/zap"
@@ -63,7 +64,7 @@ func (f taskFactory) DeserializeConfig(configBytes []byte) (registry.WorkerConfi
 
 // NewWorkerImpl implements WorkerFactory.NewWorkerImpl
 func (f taskFactory) NewWorkerImpl(ctx *dcontext.Context, workerID libModel.WorkerID, masterID libModel.MasterID, conf lib.WorkerConfig) (lib.WorkerImpl, error) {
-	baseDMTask := NewBaseDMTask(ctx, f.workerType, conf)
+	baseDMTask := NewBaseDMTask(ctx, masterID, f.workerType, conf)
 	switch f.workerType {
 	case lib.WorkerDMDump:
 		return newDumpTask(baseDMTask), nil
@@ -74,45 +75,52 @@ func (f taskFactory) NewWorkerImpl(ctx *dcontext.Context, workerID libModel.Work
 	}
 }
 
-// DMTask defines the interface for dump/load/sync
-type DMTask interface {
+// Task defines the interface for dump/load/sync
+type Task interface {
 	onInit(ctx context.Context) error
 	onFinished(ctx context.Context) error
 	createUnitHolder(cfg *config.SubTaskConfig) *unitHolder
 }
 
-// BaseDMTask implements some default methods for dm task
-type BaseDMTask struct {
-	DMTask
+// BaseTask implements some default methods for dm task
+type BaseTask struct {
+	Task
 	lib.BaseWorker
 	unitHolder   *unitHolder
 	messageAgent *MessageAgent
 
+	ctx                context.Context
+	cancel             context.CancelFunc
 	cfg                *dmconfig.SubTaskConfig
 	storageWriteHandle broker.Handle
 	stage              metadata.TaskStage
 	workerType         libModel.WorkerType
 	taskID             string
+	masterID           libModel.MasterID
 }
 
 // NewBaseDMTask creates BaseDMTask instances
-func NewBaseDMTask(ctx *dcontext.Context, workerType libModel.WorkerType, conf lib.WorkerConfig) BaseDMTask {
-	return BaseDMTask{
+func NewBaseDMTask(dCtx *dcontext.Context, masterID libModel.MasterID, workerType libModel.WorkerType, conf lib.WorkerConfig) BaseTask {
+	ctx, cancel := context.WithCancel(context.Background())
+	return BaseTask{
+		ctx:        ctx,
+		cancel:     cancel,
 		cfg:        conf.(*config.SubTaskConfig),
 		stage:      metadata.StageInit,
 		workerType: workerType,
 		taskID:     conf.(*config.SubTaskConfig).SourceID,
+		masterID:   masterID,
 	}
 }
 
-func (t *BaseDMTask) createComponents(ctx context.Context) error {
+func (t *BaseTask) createComponents(ctx context.Context) error {
 	log.L().Debug("create components")
 	t.messageAgent = NewMessageAgent(t)
 	return nil
 }
 
 // InitImpl implements lib.BaseWorker.InitImpl
-func (t *BaseDMTask) InitImpl(ctx context.Context) error {
+func (t *BaseTask) InitImpl(ctx context.Context) error {
 	log.L().Info("init task")
 	if err := t.createComponents(ctx); err != nil {
 		return err
@@ -125,8 +133,8 @@ func (t *BaseDMTask) InitImpl(ctx context.Context) error {
 }
 
 // Tick implements lib.WorkerImpl.Tick
-func (t *BaseDMTask) Tick(ctx context.Context) error {
-	t.unitHolder.lazyProcess()
+func (t *BaseTask) Tick(ctx context.Context) error {
+	t.unitHolder.lazyProcess(ctx)
 	if err := t.unitHolder.tick(ctx); err != nil {
 		return err
 	}
@@ -134,31 +142,40 @@ func (t *BaseDMTask) Tick(ctx context.Context) error {
 }
 
 // Workload implements lib.WorkerImpl.Worload
-func (t *BaseDMTask) Workload() model.RescUnit {
+func (t *BaseTask) Workload() model.RescUnit {
 	log.L().Info("dmtask.Workload")
 	return 0
 }
 
 // OnMasterFailover implements lib.WorkerImpl.OnMasterFailover
-func (t *BaseDMTask) OnMasterFailover(reason lib.MasterFailoverReason) error {
+func (t *BaseTask) OnMasterFailover(reason lib.MasterFailoverReason) error {
 	log.L().Info("dmtask.OnMasterFailover")
 	return nil
 }
 
 // OnMasterMessage implements lib.WorkerImpl.OnMasterMessage
-func (t *BaseDMTask) OnMasterMessage(topic p2p.Topic, message p2p.MessageValue) error {
-	log.L().Info("dmtask.OnMasterMessage", zap.Any("message", message))
+func (t *BaseTask) OnMasterMessage(topic p2p.Topic, message p2p.MessageValue) error {
+	log.L().Info("dmtask.OnMasterMessage", zap.String("topic", topic), zap.Any("message", message))
+	switch msg := message.(type) {
+	case dmpkg.MessageWithID:
+		switch payload := msg.Message.(type) {
+		case dmpkg.QueryStatusRequest:
+			t.QueryStatus(t.ctx, &payload)
+		}
+	case dmpkg.OperateTaskMessage:
+	}
 	return nil
 }
 
 // CloseImpl implements lib.WorkerImpl.CloseImpl
-func (t *BaseDMTask) CloseImpl(ctx context.Context) error {
+func (t *BaseTask) CloseImpl(ctx context.Context) error {
+	t.cancel()
 	t.unitHolder.close()
 	return nil
 }
 
 // setupStorge Open and configs external storage
-func (t *BaseDMTask) setupStorge(ctx context.Context) error {
+func (t *BaseTask) setupStorge(ctx context.Context) error {
 	rid := dm.NewDMResourceID(t.cfg.Name, t.cfg.SourceID)
 	h, err := t.OpenStorage(ctx, rid)
 	for status.Code(err) == codes.Unavailable {
@@ -175,11 +192,11 @@ func (t *BaseDMTask) setupStorge(ctx context.Context) error {
 }
 
 // persistStorge persist storge.
-func (t *BaseDMTask) persistStorge(ctx context.Context) error {
+func (t *BaseTask) persistStorge(ctx context.Context) error {
 	return t.storageWriteHandle.Persist(ctx)
 }
 
-func (t *BaseDMTask) tryUpdateStatus(ctx context.Context) error {
+func (t *BaseTask) tryUpdateStatus(ctx context.Context) error {
 	stage := t.unitHolder.Stage()
 	if stage == t.stage {
 		return nil
@@ -200,16 +217,12 @@ func (t *BaseDMTask) tryUpdateStatus(ctx context.Context) error {
 	return t.Exit(ctx, status, nil)
 }
 
-func (t *BaseDMTask) workerStatus(stage metadata.TaskStage) libModel.WorkerStatus {
+func (t *BaseTask) workerStatus(stage metadata.TaskStage) libModel.WorkerStatus {
 	code := libModel.WorkerStatusNormal
 	if stage == metadata.StageFinished {
 		code = libModel.WorkerStatusFinished
 	}
-	status := runtime.DefaultTaskStatus{
-		Unit:  t.workerType,
-		Task:  t.taskID,
-		Stage: stage,
-	}
+	status := runtime.NewTaskStatus(t.workerType, t.taskID, stage)
 	// nolint:errcheck
 	statusBytes, _ := json.Marshal(status)
 	return libModel.WorkerStatus{

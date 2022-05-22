@@ -23,15 +23,15 @@ import (
 
 // DumpTask represents a dump task
 type DumpTask struct {
-	BaseDMTask
+	BaseTask
 }
 
 // newDumpTask create a dump task
-func newDumpTask(baseDMTask BaseDMTask) lib.WorkerImpl {
+func newDumpTask(baseDMTask BaseTask) lib.WorkerImpl {
 	dumpTask := &DumpTask{
-		BaseDMTask: baseDMTask,
+		BaseTask: baseDMTask,
 	}
-	dumpTask.BaseDMTask.DMTask = dumpTask
+	dumpTask.BaseTask.Task = dumpTask
 	return dumpTask
 }
 

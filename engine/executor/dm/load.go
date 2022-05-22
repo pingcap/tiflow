@@ -23,15 +23,15 @@ import (
 
 // LoadTask represents a load task
 type LoadTask struct {
-	BaseDMTask
+	BaseTask
 }
 
 // newLoadTask create a load task
-func newLoadTask(baseDMTask BaseDMTask) lib.WorkerImpl {
+func newLoadTask(baseDMTask BaseTask) lib.WorkerImpl {
 	loadTask := &LoadTask{
-		BaseDMTask: baseDMTask,
+		BaseTask: baseDMTask,
 	}
-	loadTask.BaseDMTask.DMTask = loadTask
+	loadTask.BaseTask.Task = loadTask
 	return loadTask
 }
 

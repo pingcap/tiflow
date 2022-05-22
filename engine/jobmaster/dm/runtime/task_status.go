@@ -37,6 +37,33 @@ type DefaultTaskStatus struct {
 	Stage metadata.TaskStage
 }
 
+// NewTaskStatus create a task status by unit.
+func NewTaskStatus(unit libModel.WorkerType, task string, stage metadata.TaskStage) TaskStatus {
+	var taskStatus TaskStatus
+	defaultTaskStatus := DefaultTaskStatus{
+		Unit:  unit,
+		Task:  task,
+		Stage: stage,
+	}
+	switch unit {
+	case lib.WorkerDMDump:
+		taskStatus = &DumpStatus{DefaultTaskStatus: defaultTaskStatus}
+	case lib.WorkerDMLoad:
+		taskStatus = &LoadStatus{DefaultTaskStatus: defaultTaskStatus}
+	case lib.WorkerDMSync:
+		taskStatus = &SyncStatus{DefaultTaskStatus: defaultTaskStatus}
+	case 0:
+		taskStatus = &defaultTaskStatus
+	}
+	return taskStatus
+}
+
+// NewOfflineStatus is used when jobmaster receives a worker offline.
+// No need to serialize.
+func NewOfflineStatus(taskID string) TaskStatus {
+	return NewTaskStatus(0, taskID, metadata.StageUnscheduled)
+}
+
 // GetUnit implements TaskStatus.GetUnit
 func (s *DefaultTaskStatus) GetUnit() libModel.WorkerType {
 	return s.Unit
@@ -95,17 +122,7 @@ type SyncStatus struct {
 	ConflictMsg         string
 }
 
-// NewOfflineStatus is used when jobmaster receives a worker offline.
-// No need to serialize.
-func NewOfflineStatus(taskID string) *DefaultTaskStatus {
-	return &DefaultTaskStatus{
-		Unit:  0,
-		Task:  taskID,
-		Stage: metadata.StageUnscheduled,
-	}
-}
-
-// UnmarshalTaskStatus unmarshal a task status base on the unit.
+// UnmarshalTaskStatus unmarshal a task status.
 func UnmarshalTaskStatus(data []byte) (TaskStatus, error) {
 	var typ struct {
 		Unit libModel.WorkerType
@@ -113,18 +130,13 @@ func UnmarshalTaskStatus(data []byte) (TaskStatus, error) {
 	if err := json.Unmarshal(data, &typ); err != nil {
 		return nil, errors.Trace(err)
 	}
-
-	var taskStatus TaskStatus
 	switch typ.Unit {
-	case lib.WorkerDMDump:
-		taskStatus = &DumpStatus{}
-	case lib.WorkerDMLoad:
-		taskStatus = &LoadStatus{}
-	case lib.WorkerDMSync:
-		taskStatus = &SyncStatus{}
+	case lib.WorkerDMDump, lib.WorkerDMLoad, lib.WorkerDMSync:
 	default:
 		return nil, errors.Errorf("unknown unit: %d", typ.Unit)
 	}
+
+	taskStatus := NewTaskStatus(typ.Unit, "", 0)
 	err := json.Unmarshal(data, taskStatus)
 	return taskStatus, errors.Trace(err)
 }

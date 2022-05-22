@@ -43,7 +43,6 @@ type unitHolder struct {
 }
 
 func newUnitHolder(workerType lib.WorkerType, task string, u unit.Unit) *unitHolder {
-	ctx, cancel := context.WithCancel(context.Background())
 	// TODO: support config later
 	// nolint:errcheck
 	bf, _ := backoff.NewBackoff(
@@ -57,8 +56,6 @@ func newUnitHolder(workerType lib.WorkerType, task string, u unit.Unit) *unitHol
 		LatestResumeTime: time.Now(),
 	}
 	return &unitHolder{
-		ctx:        ctx,
-		cancel:     cancel,
 		autoResume: autoResume,
 		unit:       u,
 		resultCh:   make(chan pb.ProcessResult, 1),
@@ -69,8 +66,9 @@ func (u *unitHolder) init(ctx context.Context) error {
 	return u.unit.Init(ctx)
 }
 
-func (u *unitHolder) lazyProcess() {
+func (u *unitHolder) lazyProcess(ctx context.Context) {
 	u.processOnce.Do(func() {
+		u.ctx, u.cancel = context.WithCancel(ctx)
 		go u.unit.Process(u.ctx, u.resultCh)
 	})
 }
@@ -133,4 +131,8 @@ func (u *unitHolder) Stage() metadata.TaskStage {
 	default:
 		return metadata.StagePaused
 	}
+}
+
+func (u *unitHolder) Status(ctx context.Context) interface{} {
+	return u.unit.Status(nil)
 }

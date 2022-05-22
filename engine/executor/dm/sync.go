@@ -24,15 +24,15 @@ import (
 
 // SyncTask represents a sync task
 type SyncTask struct {
-	BaseDMTask
+	BaseTask
 }
 
 // newSyncTask create a sync task
-func newSyncTask(baseDMTask BaseDMTask) lib.WorkerImpl {
+func newSyncTask(baseDMTask BaseTask) lib.WorkerImpl {
 	syncTask := &SyncTask{
-		BaseDMTask: baseDMTask,
+		BaseTask: baseDMTask,
 	}
-	syncTask.BaseDMTask.DMTask = syncTask
+	syncTask.BaseTask.Task = syncTask
 	return syncTask
 }
 

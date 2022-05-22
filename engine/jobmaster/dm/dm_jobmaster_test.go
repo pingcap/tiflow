@@ -156,12 +156,11 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	jobCfg := &config.JobCfg{}
 	require.NoError(t.T(), jobCfg.DecodeFile(jobTemplatePath))
 	jm := &JobMaster{
-		workerID:              "jobmaster-id",
-		jobCfg:                jobCfg,
-		closeCh:               make(chan struct{}),
-		messageHandlerManager: p2p.NewMockMessageHandlerManager(),
-		BaseJobMaster:         mockBaseJobmaster,
-		checkpointAgent:       mockCheckpointAgent,
+		workerID:        "jobmaster-id",
+		jobCfg:          jobCfg,
+		closeCh:         make(chan struct{}),
+		BaseJobMaster:   mockBaseJobmaster,
+		checkpointAgent: mockCheckpointAgent,
 	}
 
 	// init
@@ -186,12 +185,11 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 
 	// recover
 	jm = &JobMaster{
-		workerID:              "jobmaster-id",
-		jobCfg:                jobCfg,
-		closeCh:               make(chan struct{}),
-		messageHandlerManager: p2p.NewMockMessageHandlerManager(),
-		BaseJobMaster:         mockBaseJobmaster,
-		checkpointAgent:       mockCheckpointAgent,
+		workerID:        "jobmaster-id",
+		jobCfg:          jobCfg,
+		closeCh:         make(chan struct{}),
+		BaseJobMaster:   mockBaseJobmaster,
+		checkpointAgent: mockCheckpointAgent,
 	}
 	mockBaseJobmaster.On("GetWorkers").Return(map[string]lib.WorkerHandle{}).Once()
 	jm.OnMasterRecovered(context.Background())
@@ -284,12 +282,11 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 
 	// master failover
 	jm = &JobMaster{
-		workerID:              "jobmaster-id",
-		jobCfg:                jobCfg,
-		closeCh:               make(chan struct{}),
-		messageHandlerManager: p2p.NewMockMessageHandlerManager(),
-		BaseJobMaster:         mockBaseJobmaster,
-		checkpointAgent:       mockCheckpointAgent,
+		workerID:        "jobmaster-id",
+		jobCfg:          jobCfg,
+		closeCh:         make(chan struct{}),
+		BaseJobMaster:   mockBaseJobmaster,
+		checkpointAgent: mockCheckpointAgent,
 	}
 	mockBaseJobmaster.On("GetWorkers").Return(map[string]lib.WorkerHandle{worker4: workerHandle1, worker3: workerHandle2}).Once()
 	workerHandle1.On("Status").Return(&libModel.WorkerStatus{ExtBytes: bytes1}).Once()

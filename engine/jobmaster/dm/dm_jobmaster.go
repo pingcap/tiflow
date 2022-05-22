@@ -48,12 +48,11 @@ type JobMaster struct {
 	wg       sync.WaitGroup
 	closeCh  chan struct{}
 
-	metadata              *metadata.MetaData
-	workerManager         *WorkerManager
-	taskManager           *TaskManager
-	messageAgent          *MessageAgent
-	messageHandlerManager p2p.MessageHandlerManager
-	checkpointAgent       checkpoint.Agent
+	metadata        *metadata.MetaData
+	workerManager   *WorkerManager
+	taskManager     *TaskManager
+	messageAgent    *MessageAgent
+	checkpointAgent checkpoint.Agent
 }
 
 type dmJobMasterFactory struct{}
@@ -73,20 +72,12 @@ func (j dmJobMasterFactory) DeserializeConfig(configBytes []byte) (registry.Work
 // NewWorkerImpl implements WorkerFactory.NewWorkerImpl
 func (j dmJobMasterFactory) NewWorkerImpl(ctx *dcontext.Context, workerID libModel.WorkerID, masterID libModel.MasterID, conf lib.WorkerConfig) (lib.WorkerImpl, error) {
 	log.L().Info("new dm jobmaster", zap.String("id", workerID))
-	jm := &JobMaster{
+	return &JobMaster{
 		workerID:        workerID,
 		jobCfg:          conf.(*config.JobCfg),
 		closeCh:         make(chan struct{}),
 		checkpointAgent: checkpoint.NewAgentImpl(conf.(*config.JobCfg)),
-	}
-
-	// TODO: we should expose the message handler register Func in base master.
-	// nolint:errcheck
-	ctx.Deps().Construct(func(m p2p.MessageHandlerManager) (p2p.MessageHandlerManager, error) {
-		jm.messageHandlerManager = m
-		return m, nil
-	})
-	return jm, nil
+	}, nil
 }
 
 func (jm *JobMaster) createComponents() error {
@@ -109,9 +100,6 @@ func (jm *JobMaster) InitImpl(ctx context.Context) error {
 		return err
 	}
 	if err := jm.preCheck(ctx); err != nil {
-		return err
-	}
-	if err := jm.registerMessageHandler(ctx); err != nil {
 		return err
 	}
 	if err := jm.checkpointAgent.Init(ctx); err != nil {
@@ -201,11 +189,14 @@ func (jm *JobMaster) OnJobManagerMessage(topic p2p.Topic, message interface{}) e
 func (jm *JobMaster) OnWorkerMessage(worker lib.WorkerHandle, topic p2p.Topic, message interface{}) error {
 	log.L().Debug("on worker message", zap.String("id", jm.workerID), zap.String("worker_id", worker.ID()))
 	// TODO: handle DDL request
-	response, ok := message.(dmpkg.MessageWithID)
-	if !ok {
-		return errors.Errorf("unexpected message type %T", message)
+	switch msg := message.(type) {
+	case dmpkg.MessageWithID:
+		switch msg.Message.(type) {
+		case dmpkg.QueryStatusResponse:
+			return jm.messageAgent.OnWorkerMessage(msg)
+		}
 	}
-	return jm.messageAgent.OnWorkerMessage(response)
+	return nil
 }
 
 // OnMasterMessage implements JobMasterImpl.OnMasterMessage
@@ -271,20 +262,6 @@ func (jm *JobMaster) OnJobManagerFailover(reason lib.MasterFailoverReason) error
 // IsJobMasterImpl implements JobMasterImpl.IsJobMasterImpl
 func (jm *JobMaster) IsJobMasterImpl() {
 	panic("unreachable")
-}
-
-func (jm *JobMaster) registerMessageHandler(ctx context.Context) error {
-	log.L().Debug("register message handler", zap.String("id", jm.workerID))
-	// TODO: register jobmanager request and worker request/response
-	//	ok, err := jm.messageHandlerManager.RegisterHandler(
-	//		ctx,
-	//		"",
-	//		nil,
-	//		func(sender p2p.NodeID, value p2p.MessageValue) error {
-	//			return jm.OnWorkerMessage(workerHandle, topic , message)
-	//		},
-	//	)
-	return nil
 }
 
 func (jm *JobMaster) getInitStatus() ([]runtime.TaskStatus, []runtime.WorkerStatus, map[string]SendHandle, error) {
