@@ -129,6 +129,8 @@ validators:
     row-error-delay: 30m0s
     meta-flush-interval: 1m0s
     batch-query-size: 100
+    max-pending-row-size: 500m
+    max-pending-row-count: 8000
 clean-dump-file: false
 ansi-quotes: false
 remove-meta: false
