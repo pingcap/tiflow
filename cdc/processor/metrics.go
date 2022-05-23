@@ -97,6 +97,14 @@ var (
 			Help:      "Bucketed histogram of processorManager close processor time (s).",
 			Buckets:   prometheus.ExponentialBuckets(0.01 /* 10 ms */, 2, 18),
 		})
+
+	processorMemoryGauge = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "ticdc",
+			Subsystem: "processor",
+			Name:      "processor_memory_consumption",
+			Help:      "estimated memory consumption for all tables after the sorter",
+		}, []string{"namespace", "changefeed"})
 )
 
 // InitMetrics registers all metrics used in processor
@@ -112,4 +120,5 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(processorSchemaStorageGcTsGauge)
 	registry.MustRegister(processorTickDuration)
 	registry.MustRegister(processorCloseDuration)
+	registry.MustRegister(processorMemoryGauge)
 }

@@ -99,6 +99,7 @@ type processor struct {
 	metricProcessorErrorCounter     prometheus.Counter
 	metricProcessorTickDuration     prometheus.Observer
 	metricsTableSinkTotalRows       prometheus.Counter
+	metricsProcessorMemoryGauge     prometheus.Gauge
 }
 
 // checkReadyForMessages checks whether all necessary Etcd keys have been established.
@@ -273,7 +274,10 @@ func newProcessor(ctx cdcContext.Context, upStream *upstream.Upstream) *processo
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		metricProcessorTickDuration: processorTickDuration.
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
-		metricsTableSinkTotalRows: sinkmetric.TableSinkTotalRowsCountCounter.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
+		metricsTableSinkTotalRows: sinkmetric.TableSinkTotalRowsCountCounter.
+			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
+		metricsProcessorMemoryGauge: processorMemoryGauge.
+			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 	}
 	p.createTablePipeline = p.createTablePipelineImpl
 	p.lazyInit = p.lazyInitImpl
@@ -326,7 +330,10 @@ func (p *processor) Tick(ctx cdcContext.Context, state *orchestrator.ChangefeedR
 		log.Warn("processor tick took too long", zap.String("changefeed", p.changefeedID.ID),
 			zap.String("capture", ctx.GlobalVars().CaptureInfo.ID), zap.Duration("duration", costTime))
 	}
+
 	p.metricProcessorTickDuration.Observe(costTime.Seconds())
+	p.metricsProcessorMemoryGauge.Set(p.memoryConsumption())
+	p.metricSyncTableNumGauge.Set(float64(len(p.tables)))
 
 	if err == nil {
 		return state, nil
@@ -387,12 +394,19 @@ func (p *processor) tick(ctx cdcContext.Context, state *orchestrator.ChangefeedR
 	p.pushResolvedTs2Table()
 
 	p.doGCSchemaStorage(ctx)
-	p.metricSyncTableNumGauge.Set(float64(len(p.tables)))
 
 	if err := p.agent.Tick(ctx); err != nil {
 		return errors.Trace(err)
 	}
 	return nil
+}
+
+func (p *processor) memoryConsumption() float64 {
+	var result uint64
+	for _, table := range p.tables {
+		result += table.MemoryConsumption()
+	}
+	return float64(result)
 }
 
 // checkChangefeedNormal checks if the changefeed is runnable.
@@ -945,7 +959,7 @@ func (p *processor) Close() error {
 	processorErrorCounter.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
 	processorSchemaStorageGcTsGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
 	sinkmetric.TableSinkTotalRowsCountCounter.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
-
+	processorMemoryGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
 	return nil
 }
 
