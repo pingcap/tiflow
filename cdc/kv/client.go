@@ -1125,9 +1125,15 @@ func (s *eventFeedSession) receiveFromStream(
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
 	metricSendEventBatchResolvedSize := batchResolvedEventSize.WithLabelValues(captureAddr, changefeedID)
 
+<<<<<<< HEAD
 	// always create a new region worker, because `receiveFromStreamV2` is ensured
 	// to call exactly once from outter code logic
 	worker := newRegionWorker(s, addr)
+=======
+	// always create a new region worker, because `receiveFromStream` is ensured
+	// to call exactly once from outer code logic
+	worker := newRegionWorker(changefeedID, s, addr)
+>>>>>>> b1795957d (kv(ticdc): fix data loss when upstream txn conflicts during scan (#5477))
 
 	defer worker.evictAllRegions()
 
