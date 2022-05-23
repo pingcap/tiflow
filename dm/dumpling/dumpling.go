@@ -215,6 +215,10 @@ func (m *Dumpling) Status(_ *binlog.SourceStatus) interface{} {
 	if m.core == nil {
 		return &pb.DumpStatus{}
 	}
+	return m.printStatus()
+}
+
+func (m *Dumpling) printStatus() *pb.DumpStatus {
 	mid := m.core.GetParameters()
 	s := &pb.DumpStatus{
 		TotalTables:       mid.TotalTables,
@@ -223,24 +227,20 @@ func (m *Dumpling) Status(_ *binlog.SourceStatus) interface{} {
 		FinishedRows:      mid.FinishedRows,
 		EstimateTotalRows: mid.EstimateTotalRows,
 	}
-	go m.printStatus(*s)
-	return s
-}
-
-func (m *Dumpling) printStatus(status pb.DumpStatus) {
 	var estimateProgress string
-	if status.FinishedRows >= status.EstimateTotalRows {
+	if s.FinishedRows >= s.EstimateTotalRows {
 		estimateProgress = "100.00%"
 	} else {
-		estimateProgress = fmt.Sprintf("%.2f %%", status.FinishedRows/status.EstimateTotalRows*100)
+		estimateProgress = fmt.Sprintf("%.2f %%", s.FinishedRows/s.EstimateTotalRows*100)
 	}
 	m.logger.Info("progress status of dumpling",
-		zap.Int64("total_tables", status.TotalTables),
-		zap.Int64("finished_tables", int64(status.CompletedTables)),
-		zap.Int64("estimated_total_rows", int64(status.EstimateTotalRows)),
-		zap.Int64("finished_rows", int64(status.FinishedRows)),
+		zap.Int64("total_tables", s.TotalTables),
+		zap.Int64("finished_tables", int64(s.CompletedTables)),
+		zap.Int64("estimated_total_rows", int64(s.EstimateTotalRows)),
+		zap.Int64("finished_rows", int64(s.FinishedRows)),
 		zap.String("estimated_progress", estimateProgress),
 	)
+	return s
 }
 
 // Type implements Unit.Type.
