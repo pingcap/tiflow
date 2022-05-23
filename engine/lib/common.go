@@ -74,27 +74,13 @@ func WorkerTypeForMetric(t WorkerType) string {
 	case JobManager:
 		// jobmanager is the framework level job
 		return ""
-	case CvsJobMaster:
+	case CvsJobMaster, CvsTask:
 		return "cvs"
-	case CvsTask:
-		return "cvs"
-	case FakeJobMaster:
+	case FakeJobMaster, FakeTask:
 		return "fake"
-	case FakeTask:
-		return "fake"
-	case DMJobMaster:
+	case DMJobMaster, DmTask, WorkerDMDump, WorkerDMLoad, WorkerDMSync:
 		return "dm"
-	case DmTask:
-		return "dm"
-	case WorkerDMDump:
-		return "dm"
-	case WorkerDMLoad:
-		return "dm"
-	case WorkerDMSync:
-		return "dm"
-	case CdcJobMaster:
-		return "cdc"
-	case CdcTask:
+	case CdcJobMaster, CdcTask:
 		return "cdc"
 	}
 
