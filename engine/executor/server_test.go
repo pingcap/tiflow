@@ -103,9 +103,7 @@ func testPrometheusMetrics(t *testing.T, addr string) {
 	}
 }
 
-// TODO: disable this test temporary until we replace framework metric
-// nolint: deadcode
-func testCollectMetric(t *testing.T) {
+func TestCollectMetric(t *testing.T) {
 	wg, ctx := errgroup.WithContext(context.Background())
 	cfg := NewConfig()
 	port, err := freeport.GetFreePort()
