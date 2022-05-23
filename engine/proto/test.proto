@@ -1,0 +1,28 @@
+syntax = "proto3";
+package pb;
+
+import "error.proto";
+
+message Record {
+    enum RecordType {
+        Data = 0;
+        DDL = 1;
+    }
+    RecordType tp = 1;
+    int32 schema_ver = 2;
+    int32 tid = 3;
+    int32 gtid = 4;
+    int32 pk = 5;
+    // for record time
+    repeated int64 time_tracer = 6;
+    // error
+    Error err = 7;
+}
+
+message TestBinlogRequest {
+    int32 gtid = 1;
+}
+
+service TestService {
+    rpc FeedBinlog(TestBinlogRequest) returns(stream Record);
+}

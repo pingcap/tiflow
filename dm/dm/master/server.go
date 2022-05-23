@@ -1798,6 +1798,14 @@ func (s *Server) waitOperationOk(
 	}
 
 	for num := 0; num < maxRetryNum; num++ {
+		if num > 0 {
+			select {
+			case <-ctx.Done():
+				return false, "", nil, ctx.Err()
+			case <-time.After(retryInterval):
+			}
+		}
+
 		// check whether source relative worker has been removed by scheduler
 		if _, ok := masterReq.(*pb.OperateSourceRequest); ok {
 			if expect == pb.Stage_Stopped {
@@ -1813,6 +1821,7 @@ func (s *Server) waitOperationOk(
 			}
 		}
 
+		// TODO: this is 30s, too long compared with retryInterval
 		resp, err := cli.SendRequest(ctx, req, s.cfg.RPCTimeout)
 		if err != nil {
 			log.L().Error("fail to query operation",
@@ -1924,12 +1933,6 @@ func (s *Server) waitOperationOk(
 			}
 			log.L().Info("fail to get expect operation result", zap.Int("retryNum", num), zap.String("task", taskName),
 				zap.String("source", sourceID), zap.Stringer("expect", expect), zap.Stringer("resp", queryResp))
-		}
-
-		select {
-		case <-ctx.Done():
-			return false, "", nil, ctx.Err()
-		case <-time.After(retryInterval):
 		}
 	}
 

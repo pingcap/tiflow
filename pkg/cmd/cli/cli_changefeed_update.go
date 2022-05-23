@@ -162,6 +162,8 @@ func (o *updateChangefeedOptions) applyChanges(oldInfo *model.ChangeFeedInfo, cm
 			if err = o.commonChangefeedOptions.strictDecodeConfig("TiCDC changefeed", cfg); err != nil {
 				log.Error("decode config file error", zap.Error(err))
 			}
+		case "schema-registry":
+			newInfo.Config.Sink.SchemaRegistry = o.commonChangefeedOptions.schemaRegistry
 		case "opts":
 			for _, opt := range o.commonChangefeedOptions.opts {
 				s := strings.SplitN(opt, "=", 2)

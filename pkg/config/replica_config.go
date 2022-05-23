@@ -46,7 +46,6 @@ var defaultReplicaConfig = &ReplicaConfig{
 		FlushIntervalInMs: 1000,
 		Storage:           "",
 	},
-	SchemaRegistry: "",
 }
 
 // ReplicaConfig represents some addition replication config for a changefeed
@@ -62,7 +61,6 @@ type replicaConfig struct {
 	Sink             *SinkConfig       `toml:"sink" json:"sink"`
 	Cyclic           *CyclicConfig     `toml:"cyclic-replication" json:"cyclic-replication"`
 	Consistent       *ConsistentConfig `toml:"consistent" json:"consistent"`
-	SchemaRegistry   string            `toml:"schema-registry" json:"schema-registry"`
 }
 
 // Marshal returns the json marshal format of a ReplicationConfig

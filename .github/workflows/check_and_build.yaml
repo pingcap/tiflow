@@ -29,6 +29,9 @@ jobs:
       - name: Build-dm
         run: docker build -f ./dm/Dockerfile .
 
+      - name: Build-engine
+        run: docker build -f ./engine/Dockerfile .
+
   mac_build:
     name: Mac OS Build
     runs-on: macos-latest

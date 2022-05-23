@@ -196,7 +196,7 @@ function test_worker_download_certs_from_master() {
 
 	# kill dm-worker 1 and clean the failpoint
 	export GO_FAILPOINTS=''
-	ps aux | grep dm-worker1 | awk '{print $2}' | xargs kill || true
+	kill_process dm-worker1
 	check_port_offline $WORKER1_PORT 20
 
 	rm -rf "$WORK_DIR/tidb_lightning_tls_config*"
@@ -269,7 +269,7 @@ function test_worker_ha_when_enable_source_tls() {
 		"\"result\": true" 2
 
 	echo "start dm-worker2 and kill dm-worker1"
-	ps aux | grep dm-worker1 | awk '{print $2}' | xargs kill || true
+	kill_process dm-worker1
 	check_port_offline $WORKER1_PORT 20
 
 	mysql_data_path=$(get_mysql_ssl_data_path)
