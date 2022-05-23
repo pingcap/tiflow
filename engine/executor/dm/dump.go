@@ -18,34 +18,35 @@ import (
 
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/dumpling"
+	"github.com/pingcap/tiflow/engine/executor/dm/unit"
 	"github.com/pingcap/tiflow/engine/lib"
 )
 
-// DumpTask represents a dump task
-type DumpTask struct {
-	BaseTask
+// dumpTask represents a dump task
+type dumpTask struct {
+	*baseTask
 }
 
 // newDumpTask create a dump task
-func newDumpTask(baseDMTask BaseTask) lib.WorkerImpl {
-	dumpTask := &DumpTask{
-		BaseTask: baseDMTask,
+func newDumpTask(baseDMTask *baseTask) lib.WorkerImpl {
+	dumpTask := &dumpTask{
+		baseTask: baseDMTask,
 	}
-	dumpTask.BaseTask.Task = dumpTask
+	dumpTask.baseTask.task = dumpTask
 	return dumpTask
 }
 
 // onInit implements DMTask.onInit
-func (t *DumpTask) onInit(ctx context.Context) error {
+func (t *dumpTask) onInit(ctx context.Context) error {
 	return t.setupStorge(ctx)
 }
 
 // onFinished implements DMTask.onFinished
-func (t *DumpTask) onFinished(ctx context.Context) error {
+func (t *dumpTask) onFinished(ctx context.Context) error {
 	return t.persistStorge(ctx)
 }
 
 // createUnitHolder implements DMTask.createUnitHolder
-func (t *DumpTask) createUnitHolder(cfg *config.SubTaskConfig) *unitHolder {
-	return newUnitHolder(lib.WorkerDMDump, cfg.SourceID, dumpling.NewDumpling(cfg))
+func (t *dumpTask) createUnitHolder(cfg *config.SubTaskConfig) unit.Holder {
+	return unit.NewHolderImpl(lib.WorkerDMDump, cfg.SourceID, dumpling.NewDumpling(cfg))
 }

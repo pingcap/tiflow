@@ -39,7 +39,7 @@ func TestLoadWorker(t *testing.T) {
 		dcontext.Background(), lib.WorkerDMLoad, workerID, masterID, mockWorkerConfig())
 	require.NoError(t, err)
 
-	worker := workerWrapped.(*LoadTask)
+	worker := workerWrapped.(*loadTask)
 	worker.BaseWorker = lib.MockBaseWorker(workerID, masterID, worker)
 
 	putMasterMeta(context.Background(), t, worker.MetaKVClient(), &libModel.MasterMetaKVData{

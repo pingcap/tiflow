@@ -19,25 +19,26 @@ import (
 	"github.com/pingcap/tiflow/dm/dm/config"
 	dmconfig "github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/syncer"
+	"github.com/pingcap/tiflow/engine/executor/dm/unit"
 	"github.com/pingcap/tiflow/engine/lib"
 )
 
-// SyncTask represents a sync task
-type SyncTask struct {
-	BaseTask
+// syncTask represents a sync task
+type syncTask struct {
+	*baseTask
 }
 
 // newSyncTask create a sync task
-func newSyncTask(baseDMTask BaseTask) lib.WorkerImpl {
-	syncTask := &SyncTask{
-		BaseTask: baseDMTask,
+func newSyncTask(baseDMTask *baseTask) lib.WorkerImpl {
+	syncTask := &syncTask{
+		baseTask: baseDMTask,
 	}
-	syncTask.BaseTask.Task = syncTask
+	syncTask.baseTask.task = syncTask
 	return syncTask
 }
 
 // onInit implements DMTask.onInit
-func (t *SyncTask) onInit(ctx context.Context) error {
+func (t *syncTask) onInit(ctx context.Context) error {
 	if t.cfg.Mode == dmconfig.ModeAll {
 		return t.setupStorge(ctx)
 	}
@@ -46,11 +47,11 @@ func (t *SyncTask) onInit(ctx context.Context) error {
 
 // onFinished implements DMTask.onFinished
 // Should not happened.
-func (t *SyncTask) onFinished(ctx context.Context) error {
+func (t *syncTask) onFinished(ctx context.Context) error {
 	return nil
 }
 
 // createUnitHolder implements DMTask.createUnitHolder
-func (t *SyncTask) createUnitHolder(cfg *config.SubTaskConfig) *unitHolder {
-	return newUnitHolder(lib.WorkerDMSync, cfg.SourceID, syncer.NewSyncer(cfg, nil, nil))
+func (t *syncTask) createUnitHolder(cfg *config.SubTaskConfig) unit.Holder {
+	return unit.NewHolderImpl(lib.WorkerDMSync, cfg.SourceID, syncer.NewSyncer(cfg, nil, nil))
 }

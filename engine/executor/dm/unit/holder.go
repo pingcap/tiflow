@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package dm
+package unit
 
 import (
 	"context"
@@ -29,8 +29,18 @@ import (
 	"go.uber.org/zap"
 )
 
-// unitHolder wrap the dm-worker unit.
-type unitHolder struct {
+// Holder hold a unit of DM
+type Holder interface {
+	Init(ctx context.Context) error
+	LazyProcess(ctx context.Context)
+	Tick(ctx context.Context) error
+	Stage() metadata.TaskStage
+	Status(ctx context.Context) interface{}
+	Close()
+}
+
+// HolderImpl wrap the dm-worker unit.
+type HolderImpl struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
@@ -42,7 +52,8 @@ type unitHolder struct {
 	processOnce sync.Once
 }
 
-func newUnitHolder(workerType lib.WorkerType, task string, u unit.Unit) *unitHolder {
+// NewHolderImpl creates a HolderImpl
+func NewHolderImpl(workerType lib.WorkerType, task string, u unit.Unit) *HolderImpl {
 	// TODO: support config later
 	// nolint:errcheck
 	bf, _ := backoff.NewBackoff(
@@ -55,25 +66,27 @@ func newUnitHolder(workerType lib.WorkerType, task string, u unit.Unit) *unitHol
 		LatestPausedTime: time.Now(),
 		LatestResumeTime: time.Now(),
 	}
-	return &unitHolder{
+	return &HolderImpl{
 		autoResume: autoResume,
 		unit:       u,
 		resultCh:   make(chan pb.ProcessResult, 1),
 	}
 }
 
-func (u *unitHolder) init(ctx context.Context) error {
+// Init implement Holder.Init
+func (u *HolderImpl) Init(ctx context.Context) error {
 	return u.unit.Init(ctx)
 }
 
-func (u *unitHolder) lazyProcess(ctx context.Context) {
+// LazyProcess implement Holder.LazyProcess
+func (u *HolderImpl) LazyProcess(ctx context.Context) {
 	u.processOnce.Do(func() {
 		u.ctx, u.cancel = context.WithCancel(ctx)
 		go u.unit.Process(u.ctx, u.resultCh)
 	})
 }
 
-func (u *unitHolder) getResult() (bool, *pb.ProcessResult) {
+func (u *HolderImpl) getResult() (bool, *pb.ProcessResult) {
 	if u.lastResult != nil {
 		return true, u.lastResult
 	}
@@ -86,7 +99,7 @@ func (u *unitHolder) getResult() (bool, *pb.ProcessResult) {
 	}
 }
 
-func (u *unitHolder) checkAndAutoResume() {
+func (u *HolderImpl) checkAndAutoResume() {
 	hasResult, result := u.getResult()
 	if !hasResult || len(result.Errors) == 0 {
 		return
@@ -111,17 +124,20 @@ func (u *unitHolder) checkAndAutoResume() {
 	}
 }
 
-func (u *unitHolder) tick(ctx context.Context) error {
+// Tick implement Holder.Tick
+func (u *HolderImpl) Tick(ctx context.Context) error {
 	u.checkAndAutoResume()
 	return nil
 }
 
-func (u *unitHolder) close() {
+// Close implement Holder.Close
+func (u *HolderImpl) Close() {
 	u.cancel()
 	u.unit.Close()
 }
 
-func (u *unitHolder) Stage() metadata.TaskStage {
+// Stage implement Holder.Stage
+func (u *HolderImpl) Stage() metadata.TaskStage {
 	hasResult, result := u.getResult()
 	switch {
 	case !hasResult:
@@ -133,6 +149,7 @@ func (u *unitHolder) Stage() metadata.TaskStage {
 	}
 }
 
-func (u *unitHolder) Status(ctx context.Context) interface{} {
+// Status implement Holder.Status
+func (u *HolderImpl) Status(ctx context.Context) interface{} {
 	return u.unit.Status(nil)
 }

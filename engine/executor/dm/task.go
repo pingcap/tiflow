@@ -16,12 +16,14 @@ package dm
 import (
 	"context"
 	"encoding/json"
+	"sync"
 	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/dm/config"
 	dmconfig "github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/engine/executor/dm/unit"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/runtime"
@@ -64,7 +66,7 @@ func (f taskFactory) DeserializeConfig(configBytes []byte) (registry.WorkerConfi
 
 // NewWorkerImpl implements WorkerFactory.NewWorkerImpl
 func (f taskFactory) NewWorkerImpl(ctx *dcontext.Context, workerID libModel.WorkerID, masterID libModel.MasterID, conf lib.WorkerConfig) (lib.WorkerImpl, error) {
-	baseDMTask := NewBaseDMTask(ctx, masterID, f.workerType, conf)
+	baseDMTask := newBaseTask(ctx, masterID, f.workerType, conf)
 	switch f.workerType {
 	case lib.WorkerDMDump:
 		return newDumpTask(baseDMTask), nil
@@ -75,22 +77,23 @@ func (f taskFactory) NewWorkerImpl(ctx *dcontext.Context, workerID libModel.Work
 	}
 }
 
-// Task defines the interface for dump/load/sync
-type Task interface {
+// task defines the interface for dump/load/sync
+type task interface {
 	onInit(ctx context.Context) error
 	onFinished(ctx context.Context) error
-	createUnitHolder(cfg *config.SubTaskConfig) *unitHolder
+	createUnitHolder(cfg *config.SubTaskConfig) unit.Holder
 }
 
-// BaseTask implements some default methods for dm task
-type BaseTask struct {
-	Task
+// baseTask implements some default methods for dm task
+type baseTask struct {
+	task
 	lib.BaseWorker
-	unitHolder   *unitHolder
-	messageAgent *dmpkg.MessageAgentImpl
+	unitHolder   unit.Holder
+	messageAgent dmpkg.MessageAgent
 
 	ctx                context.Context
 	cancel             context.CancelFunc
+	mu                 sync.RWMutex
 	cfg                *dmconfig.SubTaskConfig
 	storageWriteHandle broker.Handle
 	stage              metadata.TaskStage
@@ -99,10 +102,10 @@ type BaseTask struct {
 	masterID           libModel.MasterID
 }
 
-// NewBaseDMTask creates BaseDMTask instances
-func NewBaseDMTask(dCtx *dcontext.Context, masterID libModel.MasterID, workerType libModel.WorkerType, conf lib.WorkerConfig) BaseTask {
+// newBaseTask creates BaseDMTask instances
+func newBaseTask(dCtx *dcontext.Context, masterID libModel.MasterID, workerType libModel.WorkerType, conf lib.WorkerConfig) *baseTask {
 	ctx, cancel := context.WithCancel(context.Background())
-	return BaseTask{
+	return &baseTask{
 		ctx:        ctx,
 		cancel:     cancel,
 		cfg:        conf.(*config.SubTaskConfig),
@@ -113,14 +116,14 @@ func NewBaseDMTask(dCtx *dcontext.Context, masterID libModel.MasterID, workerTyp
 	}
 }
 
-func (t *BaseTask) createComponents(ctx context.Context) error {
+func (t *baseTask) createComponents(ctx context.Context) error {
 	log.L().Debug("create components")
 	t.messageAgent = dmpkg.NewMessageAgent(t.ctx, map[string]dmpkg.Sender{t.masterID: t}, t)
 	return nil
 }
 
 // InitImpl implements lib.BaseWorker.InitImpl
-func (t *BaseTask) InitImpl(ctx context.Context) error {
+func (t *baseTask) InitImpl(ctx context.Context) error {
 	log.L().Info("init task")
 	if err := t.createComponents(ctx); err != nil {
 		return err
@@ -129,45 +132,52 @@ func (t *BaseTask) InitImpl(ctx context.Context) error {
 		return err
 	}
 	t.unitHolder = t.createUnitHolder(t.cfg)
-	return t.unitHolder.init(ctx)
+	return t.unitHolder.Init(ctx)
 }
 
 // Tick implements lib.WorkerImpl.Tick
-func (t *BaseTask) Tick(ctx context.Context) error {
-	t.unitHolder.lazyProcess(ctx)
-	if err := t.unitHolder.tick(ctx); err != nil {
+func (t *baseTask) Tick(ctx context.Context) error {
+	t.unitHolder.LazyProcess(ctx)
+	if err := t.unitHolder.Tick(ctx); err != nil {
 		return err
 	}
 	return t.tryUpdateStatus(ctx)
 }
 
 // Workload implements lib.WorkerImpl.Worload
-func (t *BaseTask) Workload() model.RescUnit {
+func (t *baseTask) Workload() model.RescUnit {
 	log.L().Info("dmtask.Workload")
 	return 0
 }
 
 // OnMasterFailover implements lib.WorkerImpl.OnMasterFailover
-func (t *BaseTask) OnMasterFailover(reason lib.MasterFailoverReason) error {
+func (t *baseTask) OnMasterFailover(reason lib.MasterFailoverReason) error {
 	log.L().Info("dmtask.OnMasterFailover")
 	return nil
 }
 
 // OnMasterMessage implements lib.WorkerImpl.OnMasterMessage
-func (t *BaseTask) OnMasterMessage(topic p2p.Topic, message p2p.MessageValue) error {
+func (t *baseTask) OnMasterMessage(topic p2p.Topic, message p2p.MessageValue) error {
 	log.L().Info("dmtask.OnMasterMessage", zap.String("topic", topic), zap.Any("message", message))
 	return t.messageAgent.OnMessage(t.masterID, topic, message)
 }
 
 // CloseImpl implements lib.WorkerImpl.CloseImpl
-func (t *BaseTask) CloseImpl(ctx context.Context) error {
+func (t *baseTask) CloseImpl(ctx context.Context) error {
 	t.cancel()
-	t.unitHolder.close()
+	t.unitHolder.Close()
 	return nil
 }
 
+func (t *baseTask) exit(ctx context.Context, status libModel.WorkerStatus, err error) error {
+	if err := t.CloseImpl(ctx); err != nil {
+		log.L().Warn("fail to close task", log.ShortError(err))
+	}
+	return t.Exit(ctx, status, err)
+}
+
 // setupStorge Open and configs external storage
-func (t *BaseTask) setupStorge(ctx context.Context) error {
+func (t *baseTask) setupStorge(ctx context.Context) error {
 	rid := dm.NewDMResourceID(t.cfg.Name, t.cfg.SourceID)
 	h, err := t.OpenStorage(ctx, rid)
 	for status.Code(err) == codes.Unavailable {
@@ -184,19 +194,19 @@ func (t *BaseTask) setupStorge(ctx context.Context) error {
 }
 
 // persistStorge persist storge.
-func (t *BaseTask) persistStorge(ctx context.Context) error {
+func (t *baseTask) persistStorge(ctx context.Context) error {
 	return t.storageWriteHandle.Persist(ctx)
 }
 
-func (t *BaseTask) tryUpdateStatus(ctx context.Context) error {
+func (t *baseTask) tryUpdateStatus(ctx context.Context) error {
 	stage := t.unitHolder.Stage()
-	if stage == t.stage {
+	if stage == t.getStage() {
 		return nil
 	}
 	log.L().Info("task stage changed", zap.Int("from", int(stage)), zap.Int("to", int(t.stage)))
-	t.stage = stage
+	t.setStage(stage)
 
-	status := t.workerStatus(stage)
+	status := t.workerStatus()
 	if stage != metadata.StageFinished {
 		return t.UpdateStatus(ctx, status)
 	}
@@ -206,10 +216,11 @@ func (t *BaseTask) tryUpdateStatus(ctx context.Context) error {
 		// retry next tick
 		return nil
 	}
-	return t.Exit(ctx, status, nil)
+	return t.exit(ctx, status, nil)
 }
 
-func (t *BaseTask) workerStatus(stage metadata.TaskStage) libModel.WorkerStatus {
+func (t *baseTask) workerStatus() libModel.WorkerStatus {
+	stage := t.getStage()
 	code := libModel.WorkerStatusNormal
 	if stage == metadata.StageFinished {
 		code = libModel.WorkerStatusFinished
@@ -221,4 +232,16 @@ func (t *BaseTask) workerStatus(stage metadata.TaskStage) libModel.WorkerStatus 
 		Code:     code,
 		ExtBytes: statusBytes,
 	}
+}
+
+func (t *baseTask) getStage() metadata.TaskStage {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	return t.stage
+}
+
+func (t *baseTask) setStage(stage metadata.TaskStage) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.stage = stage
 }

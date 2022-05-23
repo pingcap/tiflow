@@ -55,7 +55,7 @@ func TestQueryStatusAPI(t *testing.T) {
 				Task:  "task5",
 				Stage: metadata.StageRunning,
 			},
-			DumpStatus: pb.DumpStatus{
+			DumpStatus: &pb.DumpStatus{
 				TotalTables:       10,
 				CompletedTables:   1,
 				FinishedBytes:     100,
@@ -69,7 +69,7 @@ func TestQueryStatusAPI(t *testing.T) {
 				Task:  "task3",
 				Stage: metadata.StageFinished,
 			},
-			LoadStatus: pb.LoadStatus{
+			LoadStatus: &pb.LoadStatus{
 				FinishedBytes:  100,
 				TotalBytes:     100,
 				Progress:       "100%",
@@ -83,7 +83,7 @@ func TestQueryStatusAPI(t *testing.T) {
 				Task:  "task6",
 				Stage: metadata.StagePaused,
 			},
-			SyncStatus: pb.SyncStatus{
+			SyncStatus: &pb.SyncStatus{
 				TotalEvents:         100,
 				TotalTps:            10,
 				RecentTps:           5,

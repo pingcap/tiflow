@@ -82,7 +82,7 @@ func TestSyncWorker(t *testing.T) {
 		dcontext.Background(), lib.WorkerDMSync, workerID, masterID, mockWorkerConfigIncremental())
 	require.NoError(t, err)
 
-	worker := workerWrapped.(*SyncTask)
+	worker := workerWrapped.(*syncTask)
 	worker.BaseWorker = lib.MockBaseWorker(workerID, masterID, worker)
 
 	putMasterMeta(context.Background(), t, worker.MetaKVClient(), &libModel.MasterMetaKVData{

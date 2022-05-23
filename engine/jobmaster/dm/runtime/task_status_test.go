@@ -43,7 +43,7 @@ func TestTaskStatus(t *testing.T) {
 			Task:  "dump-task",
 			Stage: metadata.StageRunning,
 		},
-		DumpStatus: pb.DumpStatus{
+		DumpStatus: &pb.DumpStatus{
 			TotalTables:       10,
 			CompletedTables:   1,
 			FinishedBytes:     2.0,
@@ -63,7 +63,7 @@ func TestTaskStatus(t *testing.T) {
 			Task:  "load-task",
 			Stage: metadata.StageFinished,
 		},
-		LoadStatus: pb.LoadStatus{
+		LoadStatus: &pb.LoadStatus{
 			FinishedBytes:  4,
 			TotalBytes:     100,
 			Progress:       "4%",
@@ -83,7 +83,7 @@ func TestTaskStatus(t *testing.T) {
 			Task:  "sync-task",
 			Stage: metadata.StagePaused,
 		},
-		SyncStatus: pb.SyncStatus{
+		SyncStatus: &pb.SyncStatus{
 			TotalEvents:         10,
 			TotalTps:            10,
 			RecentTps:           10,

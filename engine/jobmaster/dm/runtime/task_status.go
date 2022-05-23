@@ -83,19 +83,19 @@ func (s *DefaultTaskStatus) GetStage() metadata.TaskStage {
 // DumpStatus records necessary information of a dump unit
 type DumpStatus struct {
 	DefaultTaskStatus
-	pb.DumpStatus
+	*pb.DumpStatus
 }
 
 // LoadStatus records necessary information of a load unit
 type LoadStatus struct {
 	DefaultTaskStatus
-	pb.LoadStatus
+	*pb.LoadStatus
 }
 
 // SyncStatus records necessary information of a sync unit
 type SyncStatus struct {
 	DefaultTaskStatus
-	pb.SyncStatus
+	*pb.SyncStatus
 }
 
 // UnmarshalTaskStatus unmarshal a task status.

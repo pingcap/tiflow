@@ -100,7 +100,7 @@ func TestDumpWorker(t *testing.T) {
 		dcontext.Background(), lib.WorkerDMDump, workerID, masterID, mockWorkerConfig())
 	require.NoError(t, err)
 
-	worker := workerWrapped.(*DumpTask)
+	worker := workerWrapped.(*dumpTask)
 	worker.BaseWorker = lib.MockBaseWorker(workerID, masterID, worker)
 
 	putMasterMeta(context.Background(), t, worker.MetaKVClient(), &libModel.MasterMetaKVData{

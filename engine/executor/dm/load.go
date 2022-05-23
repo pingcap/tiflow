@@ -18,37 +18,38 @@ import (
 
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/loader"
+	"github.com/pingcap/tiflow/engine/executor/dm/unit"
 	"github.com/pingcap/tiflow/engine/lib"
 )
 
-// LoadTask represents a load task
-type LoadTask struct {
-	BaseTask
+// loadTask represents a load task
+type loadTask struct {
+	*baseTask
 }
 
 // newLoadTask create a load task
-func newLoadTask(baseDMTask BaseTask) lib.WorkerImpl {
-	loadTask := &LoadTask{
-		BaseTask: baseDMTask,
+func newLoadTask(baseDMTask *baseTask) lib.WorkerImpl {
+	loadTask := &loadTask{
+		baseTask: baseDMTask,
 	}
-	loadTask.BaseTask.Task = loadTask
+	loadTask.baseTask.task = loadTask
 	return loadTask
 }
 
 // onInit implements DMTask.onInit
-func (t *LoadTask) onInit(ctx context.Context) error {
+func (t *loadTask) onInit(ctx context.Context) error {
 	return t.setupStorge(ctx)
 }
 
 // onFinished implements DMTask.onFinished
-func (t *LoadTask) onFinished(ctx context.Context) error {
+func (t *loadTask) onFinished(ctx context.Context) error {
 	return nil
 }
 
 // createUnitHolder implements DMTask.createUnitHolder
-func (t *LoadTask) createUnitHolder(cfg *config.SubTaskConfig) *unitHolder {
+func (t *loadTask) createUnitHolder(cfg *config.SubTaskConfig) unit.Holder {
 	// `workerName` and `etcdClient` of `NewLightning` are not used in dataflow
 	// scenario, we just use readable values here.
 	workerName := "dataflow-worker"
-	return newUnitHolder(lib.WorkerDMLoad, cfg.SourceID, loader.NewLightning(cfg, nil, workerName))
+	return unit.NewHolderImpl(lib.WorkerDMLoad, cfg.SourceID, loader.NewLightning(cfg, nil, workerName))
 }
