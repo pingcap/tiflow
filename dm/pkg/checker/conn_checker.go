@@ -96,9 +96,12 @@ func NewSyncerConnAmountCheker(targetDB *conn.BaseDB, stCfgs []*config.SubTaskCo
 				// 2. checkpoint
 				// 3. ddl connection
 				// 4. downstream tracker
-				// 5. shard group keeper
+				// 5. shard group keeper (shard group keeps one conn)
 				// 6. online ddl
-				syncerConn += stCfg.SyncerConfig.WorkerCount + 5
+				syncerConn += stCfg.SyncerConfig.WorkerCount + 4
+				if stCfg.ShardMode != "" {
+					syncerConn += 1
+				}
 			}
 			return syncerConn
 		}, "syncer"),

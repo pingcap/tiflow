@@ -3,6 +3,7 @@ name: test
 task-mode: incremental
 meta-schema: "dm_meta"
 enable-heartbeat: false
+shard-mode: "pessimistic"
 target-database:
   host: "127.0.0.1"
   port: 4000

@@ -186,6 +186,9 @@ function checktask_incr_mode_conn() {
 }
 
 function check_full_mode_conn() {
+	# TODO: currently, pool-size are not efficacious for Lightning
+	# which simply determines the concurrency by hardware conditions.
+	# This should be solved in the future.
 	run_sql_tidb "drop database if exists dmctl_conn"
 	run_sql_both_source "drop database if exists dmctl_conn"
 	run_sql_both_source "create database dmctl_conn"
@@ -376,6 +379,8 @@ function run_check_task() {
 	check_full_mode_conn
 	checktask_full_mode_conn
 	checktask_incr_mode_conn
+}
+
 function run_validator_cmd_error() {
 	# status: without taskname
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
