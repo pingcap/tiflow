@@ -18,15 +18,14 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pingcap/tiflow/engine/pkg/notifier"
-
-	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
 
+	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pb"
 	"github.com/pingcap/tiflow/engine/pkg/errors"
+	"github.com/pingcap/tiflow/engine/pkg/notifier"
 	"github.com/pingcap/tiflow/engine/pkg/uuid"
 	"github.com/pingcap/tiflow/engine/servermaster/resource"
 	"github.com/pingcap/tiflow/engine/servermaster/scheduler"
