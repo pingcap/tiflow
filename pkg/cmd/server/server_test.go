@@ -173,7 +173,7 @@ func TestParseCfg(t *testing.T) {
 			WorkerConcurrent:    8,
 			WorkerPoolSize:      0,
 			RegionScanLimit:     40,
-			RegionRetryDuration: config.TomlDuration(25 * time.Second),
+			RegionRetryDuration: config.TomlDuration(time.Minute),
 		},
 		Debug: &config.DebugConfig{
 			EnableTableActor: false,
@@ -454,7 +454,7 @@ cert-allowed-cn = ["dd","ee"]
 			WorkerConcurrent:    8,
 			WorkerPoolSize:      0,
 			RegionScanLimit:     40,
-			RegionRetryDuration: config.TomlDuration(25 * time.Second),
+			RegionRetryDuration: config.TomlDuration(time.Minute),
 		},
 		Debug: &config.DebugConfig{
 			EnableTableActor: false,
