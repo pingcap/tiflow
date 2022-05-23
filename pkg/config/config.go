@@ -191,6 +191,41 @@ var defaultServerConfig = &ServerConfig{
 		WorkerConcurrent: 8,
 		WorkerPoolSize:   0, // 0 will use NumCPU() * 2
 		RegionScanLimit:  40,
+<<<<<<< HEAD:pkg/config/config.go
+=======
+		// The default TiKV region election timeout is [10s, 20s],
+		// Use 1 minute to cover region leader missing.
+		RegionRetryDuration: TomlDuration(time.Minute),
+	},
+	Debug: &DebugConfig{
+		EnableTableActor: true,
+		TableActor: &TableActorConfig{
+			EventBatchSize: 32,
+		},
+		EnableNewScheduler: true,
+		// Default leveldb sorter config
+		EnableDBSorter: true,
+		DB: &DBConfig{
+			Count: 8,
+			// Following configs are optimized for write/read throughput.
+			// Users should not change them.
+			Concurrency:                 128,
+			MaxOpenFiles:                10000,
+			BlockSize:                   65536,
+			BlockCacheSize:              4294967296,
+			WriterBufferSize:            8388608,
+			Compression:                 "snappy",
+			TargetFileSizeBase:          8388608,
+			WriteL0SlowdownTrigger:      math.MaxInt32,
+			WriteL0PauseTrigger:         math.MaxInt32,
+			CompactionL0Trigger:         160,
+			CompactionDeletionThreshold: 10485760,
+			CompactionPeriod:            1800,
+			IteratorMaxAliveDuration:    10000,
+			IteratorSlowReadDuration:    256,
+		},
+		Messages: defaultMessageConfig.Clone(),
+>>>>>>> 4d48968a0 (config(ticdc): use 1 minute kv retry time (#5499)):pkg/config/server_config.go
 	},
 }
 
