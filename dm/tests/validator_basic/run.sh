@@ -26,10 +26,31 @@ function prepare_for_standalone_test() {
 	# sync-diff seems cannot handle float/double well, will skip it here
 }
 
-function run_standalone() {
-	echo "--> normal case, check we validate different data types"
-	prepare_for_standalone_test
+function trigger_validator_flush() {
+	run_sql_source1 "alter table $db_name.t1 comment 'a';" # force flush checkpoint
+}
 
+function restore_task_config() {
+	# restore config
+	cp $cur/conf/dm-task-standalone.yaml.bak $cur/conf/dm-task-standalone.yaml
+	rm $cur/conf/dm-task-standalone.yaml.bak
+}
+
+function run_standalone() {
+	#
+	# we have set row-error-delay and meta-flush-interval small enough for cases below,
+	# but it maybe unstable if validator reached progress of syncer before the last ddl,
+	# and then validator start to mark failed rows as error. So we may have more errors
+	# than expected.
+	#
+
+	# backup it, will change it in the following case
+	cp $cur/conf/dm-task-standalone.yaml $cur/conf/dm-task-standalone.yaml.bak
+	trap restore_task_config EXIT
+
+	echo "--> full mode, check we validate different data types"
+	cp $cur/conf/dm-task-standalone.yaml.bak $cur/conf/dm-task-standalone.yaml
+	prepare_for_standalone_test
 	# key=6, mysql store as 1.2345679e+17, but in tidb it's 1.23457e17
 	# so will fail in current compare rule
 	# note: key=1 has the same condition, but it's not validated, since it's migrated in full phase.
@@ -42,9 +63,24 @@ function run_standalone() {
 	run_sql "SELECT count(*) from $db_name.t1" $TIDB_PORT $TIDB_PASSWORD
 	check_contains "count(*): 6"
 
+	echo "--> fast mode, check we validate different data types"
+	cp $cur/conf/dm-task-standalone.yaml.bak $cur/conf/dm-task-standalone.yaml
+	sed -i 's/    mode: full/    mode: fast/' $cur/conf/dm-task-standalone.yaml
+	prepare_for_standalone_test
+	# in fast mode we don't check col by col, so key=6 will pass
+	run_sql_file $cur/data/db1.increment.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation status test" \
+		"\"processedRowsStatus\": \"insert\/update\/delete: 6\/1\/1\"" 1 \
+		"pendingRowsStatus\": \"insert\/update\/delete: 0\/0\/0" 1 \
+		"new\/ignored\/resolved: 0\/0\/0" 1
+	run_sql "SELECT count(*) from $db_name.t1" $TIDB_PORT $TIDB_PASSWORD
+	check_contains "count(*): 6"
+
 	echo "--> check we can catch inconsistent rows"
 	# skip incremental rows with id <= 5
 	export GO_FAILPOINTS='github.com/pingcap/tiflow/dm/syncer/SkipDML=return(5)'
+	cp $cur/conf/dm-task-standalone.yaml.bak $cur/conf/dm-task-standalone.yaml
 	prepare_for_standalone_test
 	run_sql_file $cur/data/db1.increment.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
@@ -57,7 +93,7 @@ function run_standalone() {
 
 	echo "--> check update pk(split into insert and delete)"
 	run_sql_source1 "update $db_name.t1 set id=100 where id=7"
-	run_sql_source1 "alter table $db_name.t1 comment 'a';" # force flush checkpoint
+	trigger_validator_flush
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation status test" \
 		"\"processedRowsStatus\": \"insert\/update\/delete: 7\/1\/2\"" 1 \
@@ -68,6 +104,7 @@ function run_standalone() {
 
 	echo "--> check validator panic and we can catch it"
 	export GO_FAILPOINTS='github.com/pingcap/tiflow/dm/syncer/ValidatorPanic=panic("validator panic")'
+	cp $cur/conf/dm-task-standalone.yaml.bak $cur/conf/dm-task-standalone.yaml
 	prepare_for_standalone_test
 	run_sql_file $cur/data/db1.increment.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
@@ -77,6 +114,7 @@ function run_standalone() {
 	echo "--> check validator worker panic and we can catch it"
 	# panic 1 times
 	export GO_FAILPOINTS='github.com/pingcap/tiflow/dm/syncer/ValidatorWorkerPanic=1*panic("validator worker panic")'
+	cp $cur/conf/dm-task-standalone.yaml.bak $cur/conf/dm-task-standalone.yaml
 	prepare_for_standalone_test
 	run_sql_file $cur/data/db1.increment.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
 	sleep 5
@@ -96,6 +134,45 @@ function run_standalone() {
 		"new\/ignored\/resolved: 1\/0\/0" 1
 	run_sql "SELECT count(*) from $db_name.t1" $TIDB_PORT $TIDB_PASSWORD
 	check_contains "count(*): 6"
+
+	echo "--> check validator stop when pending row size too large"
+	# skip incremental rows with id <= 5
+	export GO_FAILPOINTS='github.com/pingcap/tiflow/dm/syncer/SkipDML=return(5)'
+	cp $cur/conf/dm-task-standalone.yaml.bak $cur/conf/dm-task-standalone.yaml
+	sed -i 's/row-error-delay: .*$/row-error-delay: 30m/' $cur/conf/dm-task-standalone.yaml
+	sed -i 's/max-pending-row-size: .*$/max-pending-row-size: 20/' $cur/conf/dm-task-standalone.yaml
+	prepare_for_standalone_test
+	run_sql_source1 "create table $db_name.t1_large_col(id int primary key, c varchar(100))"
+	run_sql_source1 "insert into $db_name.t1_large_col values(1, 'this-text-is-more-than-20-bytes')"
+	trigger_validator_flush
+	# since multiple worker may send this error, there should be at least one "too much pending data" error
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation status test" \
+		"\"stage\": \"Stopped\"" 1 \
+		"too much pending data, stop validator" 1+ \
+		"\"processedRowsStatus\": \"insert\/update\/delete: 1\/0\/0\"" 1 \
+		"pendingRowsStatus\": \"insert\/update\/delete: 1\/0\/0" 1 \
+		"new\/ignored\/resolved: 0\/0\/0" 1
+
+	echo "--> check validator stop when pending row count too many"
+	# skip incremental rows with id <= 5
+	export GO_FAILPOINTS='github.com/pingcap/tiflow/dm/syncer/SkipDML=return(5)'
+	cp $cur/conf/dm-task-standalone.yaml.bak $cur/conf/dm-task-standalone.yaml
+	sed -i 's/row-error-delay: .*$/row-error-delay: 30m/' $cur/conf/dm-task-standalone.yaml
+	sed -i 's/max-pending-row-count: .*$/max-pending-row-count: 2/' $cur/conf/dm-task-standalone.yaml
+	prepare_for_standalone_test
+	run_sql_source1 "create table $db_name.t1_large_col(id int primary key)"
+	run_sql_source1 "insert into $db_name.t1_large_col values(1)"
+	run_sql_source1 "insert into $db_name.t1_large_col values(2)"
+	run_sql_source1 "insert into $db_name.t1_large_col values(3)"
+	trigger_validator_flush
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation status test" \
+		"\"stage\": \"Stopped\"" 1 \
+		"too much pending data, stop validator" 1+ \
+		"\"processedRowsStatus\": \"insert\/update\/delete: 3\/0\/0\"" 1 \
+		"pendingRowsStatus\": \"insert\/update\/delete: 3\/0\/0" 1 \
+		"new\/ignored\/resolved: 0\/0\/0" 1
 }
 
 run_standalone $*
