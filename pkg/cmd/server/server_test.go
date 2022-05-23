@@ -170,9 +170,16 @@ func TestParseCfg(t *testing.T) {
 		},
 		PerTableMemoryQuota: 10 * 1024 * 1024, // 10M
 		KVClient: &config.KVClientConfig{
+<<<<<<< HEAD
 			WorkerConcurrent: 8,
 			WorkerPoolSize:   0,
 			RegionScanLimit:  40,
+=======
+			WorkerConcurrent:    8,
+			WorkerPoolSize:      0,
+			RegionScanLimit:     40,
+			RegionRetryDuration: config.TomlDuration(time.Minute),
+>>>>>>> 4d48968a0 (config(ticdc): use 1 minute kv retry time (#5499))
 		},
 		Debug: &config.DebugConfig{
 			EnableTableActor: false,
@@ -446,9 +453,16 @@ cert-allowed-cn = ["dd","ee"]
 		},
 		PerTableMemoryQuota: 10 * 1024 * 1024, // 10M
 		KVClient: &config.KVClientConfig{
+<<<<<<< HEAD
 			WorkerConcurrent: 8,
 			WorkerPoolSize:   0,
 			RegionScanLimit:  40,
+=======
+			WorkerConcurrent:    8,
+			WorkerPoolSize:      0,
+			RegionScanLimit:     40,
+			RegionRetryDuration: config.TomlDuration(time.Minute),
+>>>>>>> 4d48968a0 (config(ticdc): use 1 minute kv retry time (#5499))
 		},
 		Debug: &config.DebugConfig{
 			EnableTableActor: false,

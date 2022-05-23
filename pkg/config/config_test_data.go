@@ -105,7 +105,12 @@ const (
   "kv-client": {
     "worker-concurrent": 8,
     "worker-pool-size": 0,
+<<<<<<< HEAD
     "region-scan-limit": 40
+=======
+    "region-scan-limit": 40,
+    "region-retry-duration": 60000000000
+>>>>>>> 4d48968a0 (config(ticdc): use 1 minute kv retry time (#5499))
   },
   "debug": {
     "enable-table-actor": false,
