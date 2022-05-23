@@ -18,6 +18,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pingcap/tiflow/engine/pkg/notifier"
+
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
@@ -43,6 +45,7 @@ type ExecutorManager interface {
 	ListExecutors() []string
 	CapacityProvider() scheduler.CapacityProvider
 	GetAddr(executorID model.ExecutorID) (string, bool)
+	WatchExecutors(ctx context.Context) ([]model.ExecutorID, *notifier.Receiver[model.ExecutorID], error)
 }
 
 // ExecutorManagerImpl holds all the executors info, including liveness, status, resource usage.
@@ -280,4 +283,12 @@ func (e *ExecutorManagerImpl) GetAddr(executorID model.ExecutorID) (string, bool
 	}
 
 	return executor.Addr, true
+}
+
+// WatchExecutors implements the ExecutorManager interface.
+func (e *ExecutorManagerImpl) WatchExecutors(
+	ctx context.Context,
+) ([]model.ExecutorID, *notifier.Receiver[model.ExecutorID], error) {
+	// TODO This method will be implemented before we enable local file GC.
+	panic("implement me")
 }

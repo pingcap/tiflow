@@ -24,6 +24,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pingcap/tiflow/engine/pkg/notifier"
+
 	"github.com/pingcap/tiflow/engine/lib"
 	libModel "github.com/pingcap/tiflow/engine/lib/model"
 	"github.com/pingcap/tiflow/engine/model"
@@ -55,7 +57,7 @@ advertise-addr = "127.0.0.1:%d"
 store-id = "root"
 endpoints = ["127.0.0.1:%d"]
 [frame-metastore-conf.auth]
-user = "root" 
+user = "root"
 [user-metastore-conf]
 store-id = "default"
 endpoints = ["127.0.0.1:%d"]
@@ -113,7 +115,7 @@ advertise-addr = "127.0.0.1:%d"
 store-id = "root"
 endpoints = ["127.0.0.1:%d"]
 [frame-metastore-conf.auth]
-user = "root" 
+user = "root"
 [user-metastore-conf]
 store-id = "default"
 endpoints = ["127.0.0.1:%d"]
@@ -269,6 +271,12 @@ func (m *mockJobManager) GetJobStatuses(ctx context.Context) (map[libModel.Maste
 type mockExecutorManager struct {
 	executorMu sync.RWMutex
 	count      map[model.ExecutorStatus]int
+}
+
+func (m *mockExecutorManager) WatchExecutors(
+	ctx context.Context,
+) ([]model.ExecutorID, *notifier.Receiver[model.ExecutorID], error) {
+	panic("implement me")
 }
 
 func (m *mockExecutorManager) GetAddr(executorID model.ExecutorID) (string, bool) {
