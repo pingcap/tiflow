@@ -63,7 +63,7 @@ func (m *matcher) matchRow(row *cdcpb.Event_Row, initialized bool) bool {
 	if value, exist := m.unmatchedValue[newMatchKey(row)]; exist {
 		// TiKV may send a fake prewrite event with empty value caused by txn heartbeat.
 		//
-		// We need to skip match if the region is not initalized,
+		// We need to skip match if the region is not initialized,
 		// as prewrite events may be sent out of order.
 		if !initialized && len(value.GetValue()) == 0 {
 			return false
