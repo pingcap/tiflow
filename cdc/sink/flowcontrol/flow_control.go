@@ -41,7 +41,8 @@ type TableFlowController struct {
 	// batchGroupCount is the number of txnSizeEntries with same commitTs, which could be:
 	// 1. Different txns with same commitTs but different startTs
 	// 2. TxnSizeEntry split from the same txns which exceeds max rows or max size
-	batchGroupCount uint
+	batchGroupCount uint64
+	batchID         uint64
 
 	lastCommitTs uint64
 }
@@ -50,6 +51,8 @@ type txnSizeEntry struct {
 	// txn id
 	startTs  uint64
 	commitTs uint64
+
+	batchID  uint64
 	size     uint64
 	rowCount uint64
 }
@@ -72,10 +75,19 @@ func NewTableFlowController(quota uint64) *TableFlowController {
 func (c *TableFlowController) Consume(
 	msg *model.PolymorphicEvent,
 	size uint64,
-	callBack func(batch bool) error,
+	callBack func(batchID uint64) error,
 ) error {
 	commitTs := msg.CRTs
 	lastCommitTs := atomic.LoadUint64(&c.lastCommitTs)
+	blockingCallBack := func() error {
+		err := callBack(c.batchID)
+
+		if commitTs == lastCommitTs {
+			c.batchID++
+			c.batchGroupCount = 0
+		}
+		return err
+	}
 
 	if commitTs < lastCommitTs {
 		log.Panic("commitTs regressed, report a bug",
@@ -84,7 +96,7 @@ func (c *TableFlowController) Consume(
 	}
 
 	if commitTs > lastCommitTs {
-		err := c.memoryQuota.consumeWithBlocking(size, callBack)
+		err := c.memoryQuota.consumeWithBlocking(size, blockingCallBack)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -100,17 +112,19 @@ func (c *TableFlowController) Consume(
 		}
 	}
 
-	c.enqueueSingleMsg(msg, size)
+	c.enqueueSingleMsg(msg, size, blockingCallBack)
 	return nil
 }
 
-// Release is called when all events committed before resolvedTs has been freed from memory.
-func (c *TableFlowController) Release(resolvedTs uint64) {
+// Release releases the memory quota based on the given resolved timestamp.
+func (c *TableFlowController) Release(resolved model.ResolvedTs) {
 	var nBytesToRelease uint64
 
 	c.queueMu.Lock()
 	for c.queueMu.queue.Len() > 0 {
-		if peeked := c.queueMu.queue.Front().(*txnSizeEntry); peeked.commitTs <= resolvedTs {
+		peeked := c.queueMu.queue.Front().(*txnSizeEntry)
+		if peeked.commitTs < resolved.Ts ||
+			(peeked.commitTs == resolved.Ts && peeked.batchID <= resolved.BatchID) {
 			nBytesToRelease += peeked.size
 			c.queueMu.queue.PopFront()
 		} else {
@@ -123,7 +137,9 @@ func (c *TableFlowController) Release(resolvedTs uint64) {
 }
 
 // Note that msgs received by enqueueSingleMsg must be sorted by commitTs_startTs order.
-func (c *TableFlowController) enqueueSingleMsg(msg *model.PolymorphicEvent, size uint64) {
+func (c *TableFlowController) enqueueSingleMsg(
+	msg *model.PolymorphicEvent, size uint64, callback func() error,
+) {
 	commitTs := msg.CRTs
 	lastCommitTs := atomic.LoadUint64(&c.lastCommitTs)
 
@@ -134,14 +150,8 @@ func (c *TableFlowController) enqueueSingleMsg(msg *model.PolymorphicEvent, size
 	// 1. Processing a new txn with different commitTs.
 	if e = c.queueMu.queue.Back(); e == nil || lastCommitTs < commitTs {
 		atomic.StoreUint64(&c.lastCommitTs, commitTs)
-		c.queueMu.queue.PushBack(&txnSizeEntry{
-			startTs:  msg.StartTs,
-			commitTs: commitTs,
-			size:     size,
-			rowCount: 1,
-		})
-		c.batchGroupCount = 1
-		msg.Row.SplitTxn = true
+		c.resetBatch()
+		c.addEntry(msg, size)
 		return
 	}
 
@@ -154,7 +164,7 @@ func (c *TableFlowController) enqueueSingleMsg(msg *model.PolymorphicEvent, size
 	}
 
 	// 2. Append row to current txn entry.
-	if txnEntry.startTs == msg.Row.StartTs &&
+	if txnEntry.batchID == c.batchID && txnEntry.startTs == msg.Row.StartTs &&
 		txnEntry.rowCount < maxRowsPerTxn && txnEntry.size < maxSizePerTxn {
 		txnEntry.size += size
 		txnEntry.rowCount++
@@ -162,20 +172,29 @@ func (c *TableFlowController) enqueueSingleMsg(msg *model.PolymorphicEvent, size
 	}
 
 	// 3. Split the txn or handle a new txn with the same commitTs.
+	if c.batchGroupCount+1 >= batchSize {
+		_ = callback()
+	}
+	c.addEntry(msg, size)
+}
+
+// addEntry should be called only if c.queueMu is locked.
+func (c *TableFlowController) addEntry(msg *model.PolymorphicEvent, size uint64) {
+	c.batchGroupCount++
 	c.queueMu.queue.PushBack(&txnSizeEntry{
 		startTs:  msg.StartTs,
-		commitTs: commitTs,
+		commitTs: msg.CRTs,
 		size:     size,
 		rowCount: 1,
+		batchID:  c.batchID,
 	})
-	c.batchGroupCount++
 	msg.Row.SplitTxn = true
+}
 
-	if c.batchGroupCount >= batchSize {
-		c.batchGroupCount = 0
-		// TODO(CharlesCheung): add batch resolve mechanism to mitigate oom problem
-		log.Debug("emit batch resolve event throw callback")
-	}
+func (c *TableFlowController) resetBatch() {
+	// At least one batch for each txn.
+	c.batchID = 1
+	c.batchGroupCount = 0
 }
 
 // Abort interrupts any ongoing Consume call

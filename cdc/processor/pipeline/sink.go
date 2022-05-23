@@ -135,15 +135,15 @@ func (n *sinkNode) flushSink(ctx context.Context, resolved model.ResolvedTs) (er
 	currentBarrierTs := atomic.LoadUint64(&n.barrierTs)
 	currentCheckpointTs := atomic.LoadUint64(&n.checkpointTs)
 	if resolved.Ts > currentBarrierTs {
-		resolved.Ts = currentBarrierTs
+		resolved = model.NewResolvedTs(currentBarrierTs)
 	}
 	if resolved.Ts > n.targetTs {
-		resolved.Ts = n.targetTs
+		resolved = model.NewResolvedTs(n.targetTs)
 	}
 	if resolved.Ts <= currentCheckpointTs {
 		return nil
 	}
-	checkpointTs, err := n.sink.FlushRowChangedEvents(ctx, n.tableID, resolved)
+	checkpoint, err := n.sink.FlushRowChangedEvents(ctx, n.tableID, resolved)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -151,16 +151,16 @@ func (n *sinkNode) flushSink(ctx context.Context, resolved model.ResolvedTs) (er
 	// we must call flowController.Release immediately after we call
 	// FlushRowChangedEvents to prevent deadlock cause by checkpointTs
 	// fall back
-	n.flowController.Release(checkpointTs)
+	n.flowController.Release(checkpoint)
 
 	// the checkpointTs may fall back in some situation such as:
 	//   1. This table is newly added to the processor
 	//   2. There is one table in the processor that has a smaller
 	//   checkpointTs than this one
-	if checkpointTs <= currentCheckpointTs {
+	if checkpoint.ParseTs() <= currentCheckpointTs {
 		return nil
 	}
-	atomic.StoreUint64(&n.checkpointTs, checkpointTs)
+	atomic.StoreUint64(&n.checkpointTs, checkpoint.ParseTs())
 
 	return nil
 }
@@ -286,7 +286,13 @@ func (n *sinkNode) HandleMessage(ctx context.Context, msg pmessage.Message) (boo
 				failpoint.Return(false, errors.New("processor sync resolved injected error"))
 			})
 
-			resolved := model.NewResolvedTsWithMode(event.CRTs, event.Mode)
+			var resolved model.ResolvedTs
+			if event.Resolved != nil {
+				resolved = *(event.Resolved)
+			} else {
+				resolved = model.NewResolvedTs(event.CRTs)
+			}
+
 			if err := n.flushSink(ctx, resolved); err != nil {
 				return false, errors.Trace(err)
 			}

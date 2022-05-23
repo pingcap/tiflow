@@ -43,12 +43,12 @@ type mockFlowController struct{}
 func (c *mockFlowController) Consume(
 	msg *model.PolymorphicEvent,
 	size uint64,
-	blockCallBack func(bool) error,
+	blockCallBack func(uint64) error,
 ) error {
 	return nil
 }
 
-func (c *mockFlowController) Release(resolvedTs uint64) {
+func (c *mockFlowController) Release(resolved model.ResolvedTs) {
 }
 
 func (c *mockFlowController) Abort() {
@@ -78,12 +78,12 @@ func (s *mockSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error 
 
 func (s *mockSink) FlushRowChangedEvents(
 	ctx context.Context, _ model.TableID, resolved model.ResolvedTs,
-) (uint64, error) {
+) (model.ResolvedTs, error) {
 	s.received = append(s.received, struct {
 		resolvedTs model.Ts
 		row        *model.RowChangedEvent
 	}{resolvedTs: resolved.Ts})
-	return resolved.Ts, nil
+	return resolved, nil
 }
 
 func (s *mockSink) EmitCheckpointTs(_ context.Context, _ uint64, _ []model.TableName) error {
@@ -686,7 +686,7 @@ type flushFlowController struct {
 	releaseCounter int
 }
 
-func (c *flushFlowController) Release(resolvedTs uint64) {
+func (c *flushFlowController) Release(resolved model.ResolvedTs) {
 	c.releaseCounter++
 }
 
@@ -700,11 +700,11 @@ var fallBackResolvedTs = uint64(10)
 
 func (s *flushSink) FlushRowChangedEvents(
 	ctx context.Context, _ model.TableID, resolved model.ResolvedTs,
-) (uint64, error) {
+) (model.ResolvedTs, error) {
 	if resolved.Ts == fallBackResolvedTs {
-		return 0, nil
+		return model.NewResolvedTs(0), nil
 	}
-	return resolved.Ts, nil
+	return resolved, nil
 }
 
 // TestFlushSinkReleaseFlowController tests sinkNode.flushSink method will always
