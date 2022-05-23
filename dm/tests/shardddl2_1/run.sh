@@ -146,9 +146,10 @@ function DM_050_CASE() {
 	if [[ "$1" = "pessimistic" ]]; then
 		check_log_contain_with_retry "is different with" $WORK_DIR/master/log/dm-master.log
 	else
+		# can't make sure DDL of which source comes first
 		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 			"query-status test" \
-			'ALTER TABLE `shardddl`.`tb` CHANGE COLUMN `a` `d` INT' 1 \
+			'ALTER TABLE `shardddl`.`tb` CHANGE COLUMN' 1 \
 			"\"${SOURCE_ID2}-\`${shardddl1}\`.\`${tb1}\`\"" 1
 	fi
 }
@@ -535,10 +536,10 @@ function DM_068() {
 function restart_worker() {
 	echo "restart dm-worker" $1
 	if [[ "$1" = "1" ]]; then
-		ps aux | grep dm-worker1 | awk '{print $2}' | xargs kill || true
+		kill_process dm-worker1
 		check_port_offline $WORKER1_PORT 20
 	else
-		ps aux | grep dm-worker2 | awk '{print $2}' | xargs kill || true
+		kill_process dm-worker2
 		check_port_offline $WORKER2_PORT 20
 	fi
 	export GO_FAILPOINTS=$2

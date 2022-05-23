@@ -1,3 +1,4 @@
+validator_basic
 drop_column_with_index
 downstream_diff_index
 full_mode

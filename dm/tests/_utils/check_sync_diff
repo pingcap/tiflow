@@ -9,7 +9,7 @@ conf=$2
 if [ $# -ge 3 ]; then
 	check_time=$3
 else
-	check_time=10
+	check_time=20
 fi
 
 PWD=$(pwd)

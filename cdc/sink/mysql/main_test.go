@@ -17,8 +17,12 @@ import (
 	"testing"
 
 	"github.com/pingcap/tiflow/pkg/leakutil"
+	"go.uber.org/goleak"
 )
 
 func TestMain(m *testing.M) {
-	leakutil.SetUpLeakTest(m)
+	// FIXME: after https://github.com/pingcap/tiflow/issues/5356 is fixed, we
+	// should remove this opt.
+	opt := goleak.IgnoreTopFunction("sync.runtime_Semacquire")
+	leakutil.SetUpLeakTest(m, opt)
 }

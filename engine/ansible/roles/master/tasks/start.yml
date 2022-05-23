@@ -1,0 +1,4 @@
+- name: start etcd 
+  shell: "nohup {{ df_bin_dir }}/etcd --config-file {{ df_config_dir }}/etcd.yml > {{ df_data_prefix }}/etcd.log 2>&1 &"
+- name: start master
+  shell: "nohup {{ df_script_dir }}/start_master.sh > /dev/null 2>&1 &"

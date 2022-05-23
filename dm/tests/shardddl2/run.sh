@@ -226,10 +226,10 @@ function DM_INIT_SCHEMA() {
 function restart_worker() {
 	echo "restart dm-worker" $1
 	if [[ "$1" = "1" ]]; then
-		ps aux | grep dm-worker1 | awk '{print $2}' | xargs kill || true
+		kill_process dm-worker1
 		check_port_offline $WORKER1_PORT 20
 	else
-		ps aux | grep dm-worker2 | awk '{print $2}' | xargs kill || true
+		kill_process dm-worker2
 		check_port_offline $WORKER2_PORT 20
 	fi
 	export GO_FAILPOINTS=$2

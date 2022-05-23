@@ -231,6 +231,15 @@ type MasterTopology struct {
 	Port int    `json:"port"`
 }
 
+// OperateTaskResponse defines model for OperateTaskResponse.
+type OperateTaskResponse struct {
+	// pre-check result
+	CheckResult string `json:"check_result"`
+
+	// task
+	Task Task `json:"task"`
+}
+
 // action to operate table request
 type OperateTaskTableStructureRequest struct {
 	// Writes the schema to the checkpoint so that DM can load it after restarting the task
@@ -347,7 +356,7 @@ type Source struct {
 	Host string `json:"host"`
 
 	// source password
-	Password string `json:"password"`
+	Password *string `json:"password"`
 
 	// source port
 	Port int `json:"port"`
@@ -395,14 +404,23 @@ type StartTaskRequest struct {
 	// whether to remove meta database in downstream database
 	RemoveMeta *bool `json:"remove_meta,omitempty"`
 
+	// time duration of safe mode
+	SafeModeTimeDuration *string `json:"safe_mode_time_duration,omitempty"`
+
 	// source name list
 	SourceNameList *SourceNameList `json:"source_name_list,omitempty"`
+
+	// task start time
+	StartTime *string `json:"start_time,omitempty"`
 }
 
 // StopTaskRequest defines model for StopTaskRequest.
 type StopTaskRequest struct {
 	// source name list
 	SourceNameList *SourceNameList `json:"source_name_list,omitempty"`
+
+	// time duration waiting task stop
+	TimeoutDuration *string `json:"timeout_duration,omitempty"`
 }
 
 // SubTaskStatus defines model for SubTaskStatus.
@@ -463,6 +481,9 @@ type Task struct {
 
 	// whether to enable support for the online ddl plugin
 	EnhanceOnlineSchemaChange bool `json:"enhance_online_schema_change"`
+
+	// ignore precheck items
+	IgnoreCheckingItems *[]string `json:"ignore_checking_items,omitempty"`
 
 	// downstream database for storing meta information
 	MetaSchema *string `json:"meta_schema,omitempty"`

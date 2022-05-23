@@ -37,17 +37,10 @@ type blackHoleSink struct {
 	lastAccumulated uint64
 }
 
-// Init table sink resources
-func (b *blackHoleSink) Init(tableID model.TableID) error {
-	return nil
-}
+var _ Sink = (*blackHoleSink)(nil)
 
-func (b *blackHoleSink) TryEmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) (bool, error) {
-	err := b.EmitRowChangedEvents(ctx, rows...)
-	if err != nil {
-		return false, err
-	}
-	return true, nil
+func (b *blackHoleSink) AddTable(tableID model.TableID) error {
+	return nil
 }
 
 func (b *blackHoleSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
@@ -60,8 +53,10 @@ func (b *blackHoleSink) EmitRowChangedEvents(ctx context.Context, rows ...*model
 	return nil
 }
 
-func (b *blackHoleSink) FlushRowChangedEvents(ctx context.Context, _ model.TableID, resolvedTs uint64) (uint64, error) {
-	log.Debug("BlockHoleSink: FlushRowChangedEvents", zap.Uint64("resolvedTs", resolvedTs))
+func (b *blackHoleSink) FlushRowChangedEvents(
+	ctx context.Context, _ model.TableID, resolved model.ResolvedTs,
+) (uint64, error) {
+	log.Debug("BlockHoleSink: FlushRowChangedEvents", zap.Uint64("resolvedTs", resolved.Ts))
 	err := b.statistics.RecordBatchExecution(func() (int, error) {
 		// TODO: add some random replication latency
 		accumulated := atomic.LoadUint64(&b.accumulated)
@@ -70,7 +65,7 @@ func (b *blackHoleSink) FlushRowChangedEvents(ctx context.Context, _ model.Table
 		return int(batchSize), nil
 	})
 	b.statistics.PrintStatus(ctx)
-	return resolvedTs, err
+	return resolved.Ts, err
 }
 
 func (b *blackHoleSink) EmitCheckpointTs(ctx context.Context, ts uint64, tables []model.TableName) error {
@@ -87,6 +82,6 @@ func (b *blackHoleSink) Close(ctx context.Context) error {
 	return nil
 }
 
-func (b *blackHoleSink) Barrier(ctx context.Context, tableID model.TableID) error {
+func (b *blackHoleSink) RemoveTable(ctx context.Context, tableID model.TableID) error {
 	return nil
 }

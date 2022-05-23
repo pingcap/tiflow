@@ -242,18 +242,21 @@ function run_validator_cmd {
 		"\`remove-meta\` in task config is deprecated, please use \`start-task ... --remove-meta\` instead" 1
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 
+	run_sql_source1 "insert into dmctl_command.t1 values(0,'ignore-row')"
+	run_sql_source1 "insert into dmctl_command.t1 values(-1,'ignore-row')"
 	run_sql_file $cur/data/db1.increment.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
 	run_sql_file $cur/data/db2.increment.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
 	# do not do sync diff this time, will fail
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation status test" \
-		"\"processedRowsStatus\": \"insert\/update\/delete: 2\/1\/1\"" 1 \
+		"\"processedRowsStatus\": \"insert\/update\/delete: 4\/1\/1\"" 1 \
 		"\"processedRowsStatus\": \"insert\/update\/delete: 0\/0\/1\"" 1 \
 		"pendingRowsStatus\": \"insert\/update\/delete: 0\/0\/0" 2 \
 		"new\/ignored\/resolved: 0\/0\/0" 1 \
-		"new\/ignored\/resolved: 2\/0\/0" 1 \
+		"new\/ignored\/resolved: 4\/0\/0" 1 \
 		"\"stage\": \"Running\"" 4 \
 		"\"stage\": \"Stopped\"" 1
+	run_sql_source1 "create table dmctl_command.t_trigger_flush101(id int primary key)" # trigger flush
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation status --table-stage running test" \
@@ -264,6 +267,80 @@ function run_validator_cmd {
 		"\"stage\": \"Running\"" 2 \
 		"\"stage\": \"Stopped\"" 1 \
 		"no primary key" 1
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation show-errors --error all test" \
+		"\"id\": \"1\"" 1 \
+		"\"id\": \"2\"" 1 \
+		"\"id\": \"3\"" 1 \
+		"\"id\": \"4\"" 1
+	run_validator_cmd_error
+	# resolve error 1
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation make-resolve test 1"
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation status test" \
+		"new\/ignored\/resolved: 3\/0\/1" 1
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation show-errors --error unprocessed test" \
+		"\"id\": \"2\"" 1 \
+		"\"id\": \"3\"" 1 \
+		"\"id\": \"4\"" 1
+	# ignore error 2
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation ignore-error test 2"
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation status test" \
+		"new\/ignored\/resolved: 2\/1\/1" 1
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation show-errors --error ignored test" \
+		"\"id\": \"2\"" 1
+	# clear error 1
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation clear test 1"
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation status test" \
+		"new\/ignored\/resolved: 2\/1\/0" 1
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation show-errors --error ignored test" \
+		"\"id\": \"2\"" 1
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation clear test 2"
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation status test" \
+		"new\/ignored\/resolved: 2\/0\/0" 1
+	# test we can get validation status even when it's stopped
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation stop test" \
+		"\"result\": true" 1
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation status test" \
+		"\"processedRowsStatus\": \"insert\/update\/delete: 4\/1\/1\"" 1 \
+		"\"processedRowsStatus\": \"insert\/update\/delete: 0\/0\/1\"" 1 \
+		"pendingRowsStatus\": \"insert\/update\/delete: 0\/0\/0" 2 \
+		"new\/ignored\/resolved: 0\/0\/0" 1 \
+		"new\/ignored\/resolved: 2\/0\/0" 1 \
+		"\"stage\": \"Running\"" 2 \
+		"\"stage\": \"Stopped\"" 3
+	# still able to query validation error
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation show-errors --error all test" \
+		"\"id\": \"3\"" 1 \
+		"\"id\": \"4\"" 1
+	# still able to operate validation error
+	# ignore error 3
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation ignore-error test 3"
+	# resolve error 4
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation make-resolve test 4"
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation status test" \
+		"new\/ignored\/resolved: 0\/1\/1" 1
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation clear test --all"
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation status test" \
+		"new\/ignored\/resolved: 0\/0\/0" 2
 
 	dmctl_stop_task "test"
 	echo "clean up data" # pre-check will not pass, since there is a table without pk
@@ -299,6 +376,79 @@ function run_check_task() {
 	check_full_mode_conn
 	checktask_full_mode_conn
 	checktask_incr_mode_conn
+function run_validator_cmd_error() {
+	# status: without taskname
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation status --table-stage stopped" \
+		"Error: task name should be specified" 1
+	# status: invalid stage
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation status --table-stage start test" \
+		"Error: stage should be either" 1
+
+	# show errors: resolved error is illegal
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation show-errors --error resolved test" \
+		"Error: error flag should be either" 1
+	# show errors: no task name
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation show-errors --error all" \
+		"Error: task name should be specified" 1
+
+	# operate error: conflict id and --all flag
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation ignore-error test 100 --all" \
+		"Error: either \`--all\` or \`error-id\` should be set" 1
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation make-resolve test 100 --all" \
+		"Error: either \`--all\` or \`error-id\` should be set" 1
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation clear test 100 --all" \
+		"Error: either \`--all\` or \`error-id\` should be set" 1
+
+	# operate error: more than one arguments
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation ignore-error test 100 101" \
+		"Error: too many arguments are specified" 1
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation make-resolve test 100 101" \
+		"Error: too many arguments are specified" 1
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation clear test 100 101" \
+		"Error: too many arguments are specified" 1
+
+	# operate error: NaN id
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation ignore-error test error-id" \
+		"Error: \`error-id\` should be integer when \`--all\` is not set" 1
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation make-resolve test error-id" \
+		"Error: \`error-id\` should be integer when \`--all\` is not set" 1
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation clear test error-id" \
+		"Error: \`error-id\` should be integer when \`--all\` is not set" 1
+
+	# operate error: neither all nor id
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation ignore-error test" \
+		"Error: either \`--all\` or \`error-id\` should be set" 1
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation make-resolve test" \
+		"Error: either \`--all\` or \`error-id\` should be set" 1
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation clear test" \
+		"Error: either \`--all\` or \`error-id\` should be set" 1
+
+	# operate error: no task name
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation ignore-error" \
+		"Error: task name should be specified" 1
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation make-resolve" \
+		"Error: task name should be specified" 1
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation clear" \
+		"Error: task name should be specified" 1
 }
 
 cleanup_data dmctl_command

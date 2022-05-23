@@ -171,7 +171,7 @@ func TestCyclicMarkNode(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			for row := range outputCh {
-				if row.PolymorphicEvent.RawKV.OpType == model.OpTypeResolved {
+				if row.PolymorphicEvent.IsResolved() {
 					continue
 				}
 				output = append(output, row.PolymorphicEvent.Row)
@@ -213,7 +213,7 @@ func TestCyclicMarkNode(t *testing.T) {
 		require.Nil(t, err)
 		output := []*model.RowChangedEvent{}
 		putToOutput := func(row *pmessage.Message) {
-			if row == nil || row.PolymorphicEvent.RawKV.OpType == model.OpTypeResolved {
+			if row == nil || row.PolymorphicEvent.IsResolved() {
 				return
 			}
 			output = append(output, row.PolymorphicEvent.Row)
