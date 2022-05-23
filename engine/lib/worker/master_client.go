@@ -195,6 +195,7 @@ func (m *MasterClient) CheckMasterTimeout(clk clock.Clock) (ok bool, err error) 
 
 		// We ignore the error here
 		_ = m.asyncReloadMasterInfo(context.Background())
+		return true, nil
 	}
 
 	return false, nil
