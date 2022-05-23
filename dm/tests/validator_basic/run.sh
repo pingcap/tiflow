@@ -137,7 +137,7 @@ function test_start_validator_with_time_smaller_than_min_binlog_pos() {
 	echo "--> start validator from time < min mysql binlog pos(gtid=$enable_gtid)"
 	test_start_validator_on_the_fly_prepare $enable_gtid false
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"validation start --start-time '$(($(date "+%Y")-2))-01-01 00:00:00' test" \
+		"validation start --start-time '$(($(date "+%Y") - 2))-01-01 00:00:00' test" \
 		"\"result\": true" 1
 	run_sql_source1 "insert into $db_name.t1(id, name) values(4,'d'), (5, 'e')"
 	run_sql_source1 "update $db_name.t1 set name='bb' where id=2"
@@ -330,7 +330,7 @@ function run_standalone() {
 	echo "--> start validator from time > max mysql binlog pos"
 	test_start_validator_on_the_fly_prepare false false
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"validation start --start-time '$(($(date "+%Y")+2))-01-01 00:00:00' test" \
+		"validation start --start-time '$(($(date "+%Y") + 2))-01-01 00:00:00' test" \
 		"\"result\": true" 1
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation status test" \
