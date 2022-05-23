@@ -975,7 +975,6 @@ function DM_155_CASE {
 	run_sql_source2 "insert into ${shardddl1}.${tb2} values(27,27,27);"
 
 	run_sql_source2 "alter table ${shardddl1}.${tb2} change c b int;"
-	sleep 15
 	check_log_contain_with_retry "finish to handle ddls in optimistic shard mode.*alter table ${shardddl1}.${tb1} change c b int" \
 		$WORK_DIR/worker1/log/dm-worker.log
 	check_log_contain_with_retry "finish to handle ddls in optimistic shard mode.*alter table ${shardddl1}.${tb1} change c b int" \
@@ -987,7 +986,6 @@ function DM_155_CASE {
 	run_sql_source2 "insert into ${shardddl1}.${tb2} values(30,30,30);"
 
 	run_sql_source2 "alter table ${shardddl1}.${tb2} change d f int;"
-	sleep 15
 	check_log_contain_with_retry "finish to handle ddls in optimistic shard mode.*alter table ${shardddl1}.${tb1} change d f int" \
 		$WORK_DIR/worker1/log/dm-worker.log
 	check_log_contain_with_retry "finish to handle ddls in optimistic shard mode.*alter table ${shardddl1}.${tb1} change d f int" \
@@ -999,7 +997,6 @@ function DM_155_CASE {
 	run_sql_source2 "insert into ${shardddl1}.${tb2} values(33,33,33);"
 
 	run_sql_source2 "alter table ${shardddl1}.${tb2} add column e int not null after f;"
-	sleep 15
 	check_log_contain_with_retry "finish to handle ddls in optimistic shard mode.*alter table ${shardddl1}.${tb1} add column e int not null after f" \
 		$WORK_DIR/worker1/log/dm-worker.log
 	check_log_contain_with_retry "finish to handle ddls in optimistic shard mode.*alter table ${shardddl1}.${tb1} add column e int not null after f" \
