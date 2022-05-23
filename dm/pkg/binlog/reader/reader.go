@@ -18,8 +18,6 @@ import (
 
 	gmysql "github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/go-mysql-org/go-mysql/replication"
-
-	"github.com/pingcap/tiflow/dm/pkg/gtid"
 )
 
 // Reader is a binlog event reader, it may read binlog events from a TCP stream, binlog files or any other in-memory buffer.
@@ -29,7 +27,7 @@ type Reader interface {
 	StartSyncByPos(pos gmysql.Position) error
 
 	// StartSyncByGTID prepares the reader for reading binlog from the specified GTID set.
-	StartSyncByGTID(gSet gtid.Set) error
+	StartSyncByGTID(gSet gmysql.GTIDSet) error
 
 	// Close closes the reader and release the resource.
 	// Close will be blocked if `GetEvent` has not returned.
