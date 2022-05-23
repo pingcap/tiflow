@@ -821,7 +821,7 @@ func (s *testSyncerSuite) TestRun(c *C) {
 	}
 
 	mockStreamerProducer := &MockStreamProducer{s.generateEvents(events1, c)}
-	mockStreamer, err := mockStreamerProducer.generateStreamer(binlog.NewLocation(""))
+	mockStreamer, err := mockStreamerProducer.generateStreamer(binlog.MustZeroLocation(mysql.MySQLFlavor))
 	c.Assert(err, IsNil)
 	syncer.streamerController = &StreamerController{
 		streamerProducer: mockStreamerProducer,
@@ -977,7 +977,7 @@ func (s *testSyncerSuite) TestRun(c *C) {
 	// simulate `syncer.Resume` here, but doesn't reset database conns
 	syncer.reset()
 	mockStreamerProducer = &MockStreamProducer{s.generateEvents(events2, c)}
-	mockStreamer, err = mockStreamerProducer.generateStreamer(binlog.NewLocation(""))
+	mockStreamer, err = mockStreamerProducer.generateStreamer(binlog.MustZeroLocation(mysql.MySQLFlavor))
 	c.Assert(err, IsNil)
 	syncer.streamerController = &StreamerController{
 		streamerProducer: mockStreamerProducer,
@@ -1103,7 +1103,7 @@ func (s *testSyncerSuite) TestExitSafeModeByConfig(c *C) {
 	generatedEvents1 := s.generateEvents(events1, c)
 	// make sure [18] is last event, and use [18]'s position as safeModeExitLocation
 	c.Assert(len(generatedEvents1), Equals, 19)
-	safeModeExitLocation := binlog.NewLocation("")
+	safeModeExitLocation := binlog.MustZeroLocation(mysql.MySQLFlavor)
 	safeModeExitLocation.Position.Pos = generatedEvents1[18].Header.LogPos
 	syncer.checkpoint.SaveSafeModeExitPoint(&safeModeExitLocation)
 
@@ -1119,7 +1119,7 @@ func (s *testSyncerSuite) TestExitSafeModeByConfig(c *C) {
 	generatedEvents = append(generatedEvents, generatedEvents2...)
 
 	mockStreamerProducer := &MockStreamProducer{generatedEvents}
-	mockStreamer, err := mockStreamerProducer.generateStreamer(binlog.NewLocation(""))
+	mockStreamer, err := mockStreamerProducer.generateStreamer(binlog.MustZeroLocation(mysql.MySQLFlavor))
 	c.Assert(err, IsNil)
 	syncer.streamerController = &StreamerController{
 		streamerProducer: mockStreamerProducer,
@@ -1803,7 +1803,7 @@ func TestWaitBeforeRunExit(t *testing.T) {
 	require.NoError(t, syncer.genRouter())
 
 	mockStreamerProducer := &MockStreamProducer{}
-	mockStreamer, err := mockStreamerProducer.generateStreamer(binlog.NewLocation(""))
+	mockStreamer, err := mockStreamerProducer.generateStreamer(binlog.MustZeroLocation(mysql.MySQLFlavor))
 	require.NoError(t, err)
 	// let getEvent pending until ctx.Done()
 	mockStreamer.(*MockStreamer).pending = true

@@ -748,8 +748,8 @@ func (st *SubTask) ShardDDLOperation() *pessimism.Operation {
 // from Load unit to Sync unit, wait for relay-log catched up with mydumper binlog position.
 func (st *SubTask) unitTransWaitCondition(subTaskCtx context.Context) error {
 	var (
-		gset1 gtid.Set
-		gset2 gtid.Set
+		gset1 mysql.GTIDSet
+		gset2 mysql.GTIDSet
 		pos1  *mysql.Position
 		pos2  *mysql.Position
 		err   error
