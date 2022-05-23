@@ -350,17 +350,18 @@ func (w *DefaultBaseWorker) doClose() {
 	}
 
 	w.wg.Wait()
+	promutil.UnregisterWorkerMetrics(w.id)
 }
 
 // Close implements BaseWorker.Close
 func (w *DefaultBaseWorker) Close(ctx context.Context) error {
-	if err := w.Impl.CloseImpl(ctx); err != nil {
+	err := w.Impl.CloseImpl(ctx)
+	if err != nil {
 		log.L().Error("Failed to close WorkerImpl", zap.Error(err))
-		return errors.Trace(err)
 	}
 
 	w.doClose()
-	return nil
+	return errors.Trace(err)
 }
 
 // ID implements BaseWorker.ID

@@ -18,6 +18,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/engine/executor/worker"
 	libModel "github.com/pingcap/tiflow/engine/lib/model"
@@ -180,13 +181,14 @@ func (d *DefaultBaseJobMaster) GetWorkers() map[libModel.WorkerID]WorkerHandle {
 
 // Close implements BaseJobMaster.Close
 func (d *DefaultBaseJobMaster) Close(ctx context.Context) error {
-	if err := d.impl.CloseImpl(ctx); err != nil {
-		return errors.Trace(err)
+	err := d.impl.CloseImpl(ctx)
+	if err != nil {
+		log.L().Error("Failed to close JobMasterImpl", zap.Error(err))
 	}
 
 	d.master.doClose()
 	d.worker.doClose()
-	return nil
+	return errors.Trace(err)
 }
 
 // OnError implements BaseJobMaster.OnError
