@@ -1173,11 +1173,59 @@ function DM_RESYNC_NOT_FLUSHED() {
 		"clean_table" ""
 }
 
+function DM_RESYNC_TXN_INTERRUPT_CASE() {
+	# continue at the middle of a dml transaction
+	export GO_FAILPOINTS='github.com/pingcap/tiflow/dm/syncer/SleepInTxn=return("index:20")'
+	restart_worker1
+	restart_worker2
+
+	run_sql_source2 "alter table shardddl1.tb2 change b c int;"
+	run_sql_with_txn "shardddl1.tb2" 2 1 10 $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
+	run_sql_with_txn "shardddl1.t_1" 2 11 50 $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
+	sleep 1 # make sure source2 in skip and wait redirect
+	run_sql_source1 "alter table shardddl1.tb1 change b c int;"
+	run_sql_with_txn "shardddl1.tb1" 2 51 60 $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
+	run_sql_with_txn "shardddl1.t_1" 2 61 70 $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
+
+	cp $cur/conf/diff_config.toml $WORK_DIR/diff_config.toml
+	sed -i "s/\[routes.rule1\]/[routes.rule2]\nschema-pattern = \"shardddl[1-2]\"\ntable-pattern = \"t_1\"\ntarget-schema = \"shardddl\"\ntarget-table = \"t_1\"\n\[routes.rule1\]/g" $WORK_DIR/diff_config.toml
+	sed -i "s/route-rules = \[\"rule1\"\]/route-rules = \[\"rule1\"\,\"rule2\"]/g" $WORK_DIR/diff_config.toml
+	sed -i "s/target-check-tables = \[\"shardddl.tb\"\]/target-check-tables = \[\"shardddl.tb\",\"shardddl.t_1\"\]/g" $WORK_DIR/diff_config.toml
+	check_sync_diff $WORK_DIR $WORK_DIR/diff_config.toml 30
+
+	# continue after gtid event but before query event
+	export GO_FAILPOINTS='github.com/pingcap/tiflow/dm/syncer/SleepInTxn=return("ddl:tb2 change c d")'
+	restart_worker1
+	restart_worker2
+
+	run_sql_source2 "alter table shardddl1.tb2 change c d int;"
+	run_sql_with_txn "shardddl1.tb2" 2 101 110 $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
+	sleep 1 # make sure source2 in skip and wait redirect
+	run_sql_source1 "alter table shardddl1.tb1 change c d int;"
+	run_sql_with_txn "shardddl1.tb1" 2 111 120 $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
+	run_sql_with_txn "shardddl1.t_1" 2 121 130 $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
+	check_sync_diff $WORK_DIR $WORK_DIR/diff_config.toml 30
+	export GO_FAILPOINTS=""
+	restart_worker1
+	restart_worker2
+}
+
+function DM_RESYNC_TXN_INTERRUPT() {
+	run_case RESYNC_TXN_INTERRUPT "double-source-optimistic" \
+		"run_sql_source1 \"create table ${shardddl1}.${tb1} (a int primary key, b int);\"; \
+     run_sql_source2 \"create table ${shardddl1}.t_1 (a int primary key, b int);\"; \
+     run_sql_source2 \"create table ${shardddl1}.${tb2} (a int primary key, b int);\"" \
+		"clean_table" ""
+	run_sql_source1 "drop table if exists ${shardddl1}.t_1;"
+	run_sql_tidb "drop table if exists ${shardddl}.t_1;"
+}
+
 function run() {
 	init_cluster
 	init_database
 	DM_TABLE_CHECKPOINT_BACKWARD
 	DM_RESYNC_NOT_FLUSHED
+	DM_RESYNC_TXN_INTERRUPT
 	start=131
 	end=155
 	for i in $(seq -f "%03g" ${start} ${end}); do

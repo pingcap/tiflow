@@ -1755,6 +1755,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		shardingReSync          *ShardingReSync
 		savedGlobalLastLocation binlog.Location
 		traceSource             = fmt.Sprintf("%s.syncer.%s", s.cfg.SourceID, s.cfg.Name)
+		lastEvent               *replication.BinlogEvent
 	)
 
 	// this is second defer func in syncer.Run so in this time checkpointFlushWorker are still running
@@ -1882,7 +1883,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		return nil
 	}
 
-	advanceLatestLocationGtidSet := func(e *replication.BinlogEvent) error {
+	advanceCurrentLocationGtidSet := func(e *replication.BinlogEvent) error {
 		if _, ok := e.Event.(*replication.MariadbGTIDEvent); ok {
 			gtidSet, err2 := gtid.ParserGTID(s.cfg.Flavor, currentGTID)
 			if err2 != nil {
@@ -1915,6 +1916,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 	// the relay log file may be truncated(not end with an RotateEvent), in this situation, we may read some rows events
 	// and then read from the gtid again, so we force enter safe-mode for one more transaction to avoid failure due to
 	// conflict
+	failPointTriggered := false // used for failpoint
 	for {
 		if s.execError.Load() != nil {
 			return nil
@@ -1974,12 +1976,10 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			}
 		}
 		var e *replication.BinlogEvent
-
-		startTime := time.Now()
-		e, err = s.getEvent(s.runCtx, currentLocation)
 		// for position mode, we can redirect at any time
-		// for gitd mode, we can redirect only when current location related gtid's transaction is totally executed
-		if err == nil && s.cfg.ShardMode == config.ShardOptimistic && (!s.cfg.EnableGTID || safeToRedirect(e)) {
+		// for gtid mode, we can redirect only when current location related gtid's transaction is totally executed and
+		//  next gtid is just updated (because we check if we can end resync by currLoc >= latestLoc)
+		if s.cfg.ShardMode == config.ShardOptimistic && (!s.cfg.EnableGTID || safeToRedirect(lastEvent)) {
 			op, targetTableID := s.optimist.PendingRedirectOperation()
 			if op != nil {
 				// for optimistic sharding mode, if a new sharding group is resolved when syncer is redirecting,
@@ -2009,6 +2009,9 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			}
 		}
 
+		startTime := time.Now()
+		e, err = s.getEvent(s.runCtx, currentLocation)
+
 		failpoint.Inject("SafeModeExit", func(val failpoint.Value) {
 			if intVal, ok := val.(int); ok && intVal == 1 {
 				s.tctx.L().Warn("fail to get event", zap.String("failpoint", "SafeModeExit"))
@@ -2021,6 +2024,29 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 				s.tctx.L().Warn("failed to get event", zap.Int("event_index", eventIndex),
 					zap.Any("cur_pos", currentLocation), zap.Any("las_pos", lastLocation),
 					zap.Any("pos", e.Header.LogPos), log.ShortError(err))
+			}
+		})
+		failpoint.Inject("SleepInTxn", func(val failpoint.Value) {
+			if strVal, ok := val.(string); ok && !failOnceForTest.Load() {
+				a := strings.SplitN(strVal, ":", 2)
+				if len(a) == 2 {
+					switch a[0] {
+					case "index":
+						eventIdx, err := strconv.ParseInt(a[1], 10, 64)
+						if err == nil && int(eventIdx) == eventIndex {
+							failOnceForTest.Store(true)
+							s.tctx.L().Warn("start to sleep 6s and continue for this event", zap.Int("event_index", eventIndex),
+								zap.Any("cur_pos", currentLocation), zap.Any("las_pos", lastLocation),
+								zap.Any("pos", e.Header.LogPos))
+							time.Sleep(6 * time.Second)
+						}
+					case "ddl":
+						if ev, ok := e.Event.(*replication.QueryEvent); ok && strings.Contains(string(ev.Query), a[1]) {
+							failOnceForTest.Store(true)
+							failPointTriggered = true
+						}
+					}
+				}
 			}
 		})
 		switch {
@@ -2101,6 +2127,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		// we calculate startLocation and endLocation(currentLocation) for Query event here
 		// set startLocation empty for other events to avoid misuse
 		startLocation = binlog.Location{}
+		lastEvent = e
 		switch ev := e.Event.(type) {
 		case *replication.QueryEvent, *replication.RowsEvent:
 			startLocation = binlog.InitLocation(
@@ -2256,6 +2283,15 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		case *replication.QueryEvent:
 			originSQL = strings.TrimSpace(string(ev.Query))
 			err2 = s.handleQueryEvent(ev, ec, originSQL)
+			failpoint.Inject("SleepInTxn", func(_ failpoint.Value) {
+				if err2 == nil && failPointTriggered {
+					s.tctx.L().Warn("start to sleep 6s and continue for this event", zap.Int("event_index", eventIndex),
+						zap.Any("cur_pos", currentLocation), zap.Any("las_pos", lastLocation),
+						zap.Any("pos", e.Header.LogPos))
+					time.Sleep(6 * time.Second)
+					failPointTriggered = false
+				}
+			})
 		case *replication.XIDEvent:
 			// reset eventIndex and force safeMode flag here.
 			eventIndex = 0
@@ -2310,7 +2346,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			}
 			if s.cfg.EnableGTID {
 				// TODO: add mariaDB integration test
-				err2 = advanceLatestLocationGtidSet(e)
+				err2 = advanceCurrentLocationGtidSet(e)
 				if err2 != nil {
 					return err2
 				}
