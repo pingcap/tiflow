@@ -31,14 +31,14 @@ import (
 type MockExecutorInfoProvider struct {
 	mu          sync.RWMutex
 	executorSet map[resModel.ExecutorID]struct{}
-	notifier    *notifier.Notifier[model.ExecutorID]
+	notifier    *notifier.Notifier[model.ExecutorStatusChange]
 }
 
 // NewMockExecutorInfoProvider creates a new MockExecutorInfoProvider instance
 func NewMockExecutorInfoProvider() *MockExecutorInfoProvider {
 	return &MockExecutorInfoProvider{
 		executorSet: make(map[resModel.ExecutorID]struct{}),
-		notifier:    notifier.NewNotifier[model.ExecutorID](),
+		notifier:    notifier.NewNotifier[model.ExecutorStatusChange](),
 	}
 }
 
@@ -48,6 +48,10 @@ func (p *MockExecutorInfoProvider) AddExecutor(executorID string) {
 	defer p.mu.Unlock()
 
 	p.executorSet[resModel.ExecutorID(executorID)] = struct{}{}
+	p.notifier.Notify(model.ExecutorStatusChange{
+		ID: model.ExecutorID(executorID),
+		Tp: model.EventExecutorOnline,
+	})
 }
 
 // RemoveExecutor removes an executor from the mock.
@@ -56,7 +60,10 @@ func (p *MockExecutorInfoProvider) RemoveExecutor(executorID string) {
 	defer p.mu.Unlock()
 
 	delete(p.executorSet, resModel.ExecutorID(executorID))
-	p.notifier.Notify(model.ExecutorID(executorID))
+	p.notifier.Notify(model.ExecutorStatusChange{
+		ID: model.ExecutorID(executorID),
+		Tp: model.EventExecutorOffline,
+	})
 }
 
 // HasExecutor returns whether the mock contains the given executor.
@@ -64,10 +71,8 @@ func (p *MockExecutorInfoProvider) HasExecutor(executorID string) bool {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
-	if _, exists := p.executorSet[resModel.ExecutorID(executorID)]; exists {
-		return true
-	}
-	return false
+	_, exists := p.executorSet[resModel.ExecutorID(executorID)]
+	return exists
 }
 
 // ListExecutors lists all executors.
@@ -84,7 +89,7 @@ func (p *MockExecutorInfoProvider) ListExecutors() (ret []string) {
 // WatchExecutors implements ExecutorManager.WatchExecutors
 func (p *MockExecutorInfoProvider) WatchExecutors(
 	ctx context.Context,
-) ([]model.ExecutorID, *notifier.Receiver[model.ExecutorID], error) {
+) ([]model.ExecutorID, *notifier.Receiver[model.ExecutorStatusChange], error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 

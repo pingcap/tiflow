@@ -38,13 +38,19 @@ type ExecutorManager interface {
 	AllocateNewExec(req *pb.RegisterExecutorRequest) (*model.NodeInfo, error)
 	RegisterExec(info *model.NodeInfo)
 	Start(ctx context.Context)
-	// Count returns executor count with given status
+	// ExecutorCount returns executor count with given status
 	ExecutorCount(status model.ExecutorStatus) int
 	HasExecutor(executorID string) bool
 	ListExecutors() []string
 	CapacityProvider() scheduler.CapacityProvider
 	GetAddr(executorID model.ExecutorID) (string, bool)
-	WatchExecutors(ctx context.Context) ([]model.ExecutorID, *notifier.Receiver[model.ExecutorID], error)
+
+	// WatchExecutors returns a snapshot of all online executors plus
+	// a stream of events describing changes that happen to the executors
+	// after the snapshot is taken.
+	WatchExecutors(ctx context.Context) (
+		snap []model.ExecutorID, stream *notifier.Receiver[model.ExecutorStatusChange], err error,
+	)
 }
 
 // ExecutorManagerImpl holds all the executors info, including liveness, status, resource usage.
@@ -287,7 +293,7 @@ func (e *ExecutorManagerImpl) GetAddr(executorID model.ExecutorID) (string, bool
 // WatchExecutors implements the ExecutorManager interface.
 func (e *ExecutorManagerImpl) WatchExecutors(
 	ctx context.Context,
-) ([]model.ExecutorID, *notifier.Receiver[model.ExecutorID], error) {
+) ([]model.ExecutorID, *notifier.Receiver[model.ExecutorStatusChange], error) {
 	// TODO This method will be implemented before we enable local file GC.
 	panic("implement me")
 }
