@@ -186,16 +186,28 @@ func (n *sorterNode) start(
 					size := uint64(msg.Row.ApproximateBytes())
 					// NOTE we allow the quota to be exceeded if blocking means interrupting a transaction.
 					// Otherwise the pipeline would deadlock.
-					err = n.flowController.Consume(msg, size, func(batch bool) error {
-						if batch {
-							log.Panic("cdc does not support the batch resolve mechanism at this time")
-						} else if lastCRTs > lastSentResolvedTs {
+					err = n.flowController.Consume(msg, size, func(batchID uint64) error {
+						if lastCRTs >= lastSentResolvedTs && commitTs > lastCRTs {
 							// If we are blocking, we send a Resolved Event here to elicit a sink-flush.
 							// Not sending a Resolved Event here will very likely deadlock the pipeline.
 							lastSentResolvedTs = lastCRTs
 							lastSendResolvedTsTime = time.Now()
 							msg := model.NewResolvedPolymorphicEvent(0, lastCRTs)
 							ctx.SendToNextNode(pmessage.PolymorphicEventMessage(msg))
+						} else if commitTs == lastCRTs {
+							// send batch resolve event
+							msg := model.NewResolvedPolymorphicEvent(0, lastCRTs)
+							msg.Resolved = &model.ResolvedTs{
+								Ts:      commitTs,
+								Mode:    model.BatchResolvedMode,
+								BatchID: batchID,
+							}
+							ctx.SendToNextNode(pmessage.PolymorphicEventMessage(msg))
+						} else {
+							log.Panic("flow control blocked, report a bug",
+								zap.Uint64("commitTs", commitTs),
+								zap.Uint64("lastCommitTs", lastCRTs),
+								zap.Uint64("lastSentResolvedTs", lastSentResolvedTs))
 						}
 						return nil
 					})
@@ -209,7 +221,6 @@ func (n *sorterNode) start(
 						}
 						return nil
 					}
-					lastCRTs = commitTs
 				} else {
 					// handle OpTypeResolved
 					if msg.CRTs < lastSentResolvedTs {
@@ -220,6 +231,7 @@ func (n *sorterNode) start(
 					lastSentResolvedTs = msg.CRTs
 					lastSendResolvedTsTime = time.Now()
 				}
+				lastCRTs = msg.CRTs
 				ctx.SendToNextNode(pmessage.PolymorphicEventMessage(msg))
 			}
 		}
