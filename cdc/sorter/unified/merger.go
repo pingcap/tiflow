@@ -38,12 +38,16 @@ import (
 func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out chan *model.PolymorphicEvent, onExit func()) error {
 	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
 
-	metricSorterEventCount := sorter.EventCount.MustCurryWith(map[string]string{
+	metricSorterEventCount := sorter.OutputEventCount.MustCurryWith(map[string]string{
+		"namespace":  changefeedID.Namespace,
 		"changefeed": changefeedID.ID,
 	})
-	metricSorterResolvedTsGauge := sorter.ResolvedTsGauge.WithLabelValues(changefeedID.ID)
-	metricSorterMergerStartTsGauge := sorterMergerStartTsGauge.WithLabelValues(changefeedID.ID)
-	metricSorterMergeCountHistogram := sorterMergeCountHistogram.WithLabelValues(changefeedID.ID)
+	metricSorterResolvedTsGauge := sorter.ResolvedTsGauge.
+		WithLabelValues(changefeedID.Namespace, changefeedID.ID)
+	metricSorterMergerStartTsGauge := sorterMergerStartTsGauge.
+		WithLabelValues(changefeedID.Namespace, changefeedID.ID)
+	metricSorterMergeCountHistogram := sorterMergeCountHistogram.
+		WithLabelValues(changefeedID.Namespace, changefeedID.ID)
 
 	lastResolvedTs := make([]uint64, numSorters)
 	minResolvedTs := uint64(0)
@@ -348,7 +352,7 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 				continue
 			}
 
-			if event.CRTs > minResolvedTs || (event.CRTs == minResolvedTs && event.RawKV.OpType == model.OpTypeResolved) {
+			if event.CRTs > minResolvedTs || (event.CRTs == minResolvedTs && event.IsResolved()) {
 				// we have processed all events from this task that need to be processed in this merge
 				if event.CRTs > minResolvedTs || event.RawKV.OpType != model.OpTypeResolved {
 					pendingSet.Store(task, event)

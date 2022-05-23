@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/sorter"
 	"github.com/pingcap/tiflow/cdc/sorter/encoding"
 	"github.com/pingcap/tiflow/cdc/sorter/leveldb/message"
 	"github.com/pingcap/tiflow/pkg/actor"
@@ -34,7 +35,15 @@ import (
 
 func newTestReader() *reader {
 	metricIterDuration := sorterIterReadDurationHistogram.MustCurryWith(
-		prometheus.Labels{"id": "test"})
+		prometheus.Labels{
+			"namespace": "default",
+			"id":        "test",
+		})
+
+	metricOutputKV := sorter.OutputEventCount.
+		WithLabelValues("default", "test", "kv")
+	metricOutputResolved := sorter.InputEventCount.
+		WithLabelValues("default", "test", "resolved")
 	return &reader{
 		common: common{
 			dbActorID: 1,
@@ -47,8 +56,10 @@ func newTestReader() *reader {
 			metricIterFirst:   metricIterDuration.WithLabelValues("first"),
 			metricIterRelease: metricIterDuration.WithLabelValues("release"),
 		},
-		metricIterReadDuration: metricIterDuration.WithLabelValues("read"),
-		metricIterNextDuration: metricIterDuration.WithLabelValues("next"),
+		metricIterReadDuration:    metricIterDuration.WithLabelValues("read"),
+		metricIterNextDuration:    metricIterDuration.WithLabelValues("next"),
+		metricTotalEventsKV:       metricOutputKV,
+		metricTotalEventsResolved: metricOutputResolved,
 	}
 }
 
@@ -781,7 +792,10 @@ func TestReaderPoll(t *testing.T) {
 	}
 
 	metricIterDuration := sorterIterReadDurationHistogram.MustCurryWith(
-		prometheus.Labels{"id": t.Name()})
+		prometheus.Labels{
+			"namespace": "default",
+			"id":        t.Name(),
+		})
 	for i, css := range cases {
 		r.state = css[0].state
 		r.state.readerRouter = router

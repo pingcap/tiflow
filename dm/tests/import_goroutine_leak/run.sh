@@ -95,7 +95,7 @@ function run() {
 		"inject failpoint dispatchError" 1
 
 	echo "restart dm-workers block in sending to chan"
-	ps aux | grep dm-worker | awk '{print $2}' | xargs kill || true
+	kill_process dm-worker
 	check_port_offline $WORKER1_PORT 20
 
 	# use a small job chan size to block the sender

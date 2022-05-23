@@ -42,7 +42,7 @@ type SchemaStorage interface {
 	GetLastSnapshot() *schema.Snapshot
 	// HandleDDLJob creates a new snapshot in storage and handles the ddl job
 	HandleDDLJob(job *timodel.Job) error
-	// AdvanceResolvedTs advances the resolved
+	// AdvanceResolvedTs advances the resolved ts
 	AdvanceResolvedTs(ts uint64)
 	// ResolvedTs returns the resolved ts of the schema storage
 	ResolvedTs() uint64

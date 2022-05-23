@@ -33,7 +33,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/pdtime"
+	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/pingcap/tiflow/pkg/regionspan"
 	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/pingcap/tiflow/pkg/txnutil"
@@ -314,7 +314,7 @@ type CDCClient struct {
 
 	regionCache *tikv.RegionCache
 	kvStorage   tikv.Storage
-	pdClock     pdtime.Clock
+	pdClock     pdutil.Clock
 	changefeed  model.ChangeFeedID
 
 	regionLimiters *regionEventFeedLimiters
@@ -327,7 +327,7 @@ func NewCDCClient(
 	kvStorage tikv.Storage,
 	grpcPool GrpcPool,
 	regionCache *tikv.RegionCache,
-	pdClock pdtime.Clock,
+	pdClock pdutil.Clock,
 	changefeed model.ChangeFeedID,
 	cfg *config.KVClientConfig,
 ) (c CDCKVClient) {
@@ -1171,7 +1171,8 @@ func (s *eventFeedSession) receiveFromStream(
 	}()
 
 	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
-	metricSendEventBatchResolvedSize := batchResolvedEventSize.WithLabelValues(changefeedID.ID)
+	metricSendEventBatchResolvedSize := batchResolvedEventSize.
+		WithLabelValues(changefeedID.Namespace, changefeedID.ID)
 
 	// always create a new region worker, because `receiveFromStream` is ensured
 	// to call exactly once from outter code logic

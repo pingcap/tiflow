@@ -16,9 +16,13 @@
 package master
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"net/http"
+	"net/http/httptest"
+	"os"
 	"testing"
 	"time"
 
@@ -292,7 +296,7 @@ func (s *OpenAPIViewSuite) TestClusterAPI() {
 	cancel1()
 }
 
-func (s *OpenAPIViewSuite) TestRedirectRequestToLeader() {
+func (s *OpenAPIViewSuite) TestReverseRequestToLeader() {
 	ctx1, cancel1 := context.WithCancel(context.Background())
 	s1 := setupTestServer(ctx1, s.T())
 	defer func() {
@@ -334,9 +338,159 @@ func (s *OpenAPIViewSuite) TestRedirectRequestToLeader() {
 	s.Len(resultListSource.Data, 0)
 	s.Equal(0, resultListSource.Total)
 
-	// list source not from leader will get a redirect
-	result = testutil.NewRequest().Get(baseURL).GoWithHTTPHandler(s.T(), s2.openapiHandles)
-	s.Equal(http.StatusTemporaryRedirect, result.Code())
+	// list source from non-leader will get result too
+	result, err := HTTPTestWithTestResponseRecorder(testutil.NewRequest().Get(baseURL), s2.openapiHandles)
+	s.NoError(err)
+	s.Equal(http.StatusOK, result.Code())
+	var resultListSource2 openapi.GetSourceListResponse
+	s.NoError(result.UnmarshalBodyToObject(&resultListSource2))
+	s.Len(resultListSource2.Data, 0)
+	s.Equal(0, resultListSource2.Total)
+}
+
+func (s *OpenAPIViewSuite) TestReverseRequestToHttpsLeader() {
+	pwd, err := os.Getwd()
+	require.NoError(s.T(), err)
+	caPath := pwd + "/tls_for_test/ca.pem"
+	certPath := pwd + "/tls_for_test/dm.pem"
+	keyPath := pwd + "/tls_for_test/dm.key"
+
+	// master1
+	masterAddr1 := tempurl.Alloc()[len("http://"):]
+	peerAddr1 := tempurl.Alloc()[len("http://"):]
+	cfg1 := NewConfig()
+	require.NoError(s.T(), cfg1.Parse([]string{
+		"--name=dm-master-tls-1",
+		fmt.Sprintf("--data-dir=%s", s.T().TempDir()),
+		fmt.Sprintf("--master-addr=https://%s", masterAddr1),
+		fmt.Sprintf("--advertise-addr=https://%s", masterAddr1),
+		fmt.Sprintf("--peer-urls=https://%s", peerAddr1),
+		fmt.Sprintf("--advertise-peer-urls=https://%s", peerAddr1),
+		fmt.Sprintf("--initial-cluster=dm-master-tls-1=https://%s", peerAddr1),
+		"--ssl-ca=" + caPath,
+		"--ssl-cert=" + certPath,
+		"--ssl-key=" + keyPath,
+	}))
+	cfg1.OpenAPI = true
+	s1 := NewServer(cfg1)
+	ctx1, cancel1 := context.WithCancel(context.Background())
+	require.NoError(s.T(), s1.Start(ctx1))
+	defer func() {
+		cancel1()
+		s1.Close()
+	}()
+	// wait the first one become the leader
+	require.True(s.T(), utils.WaitSomething(30, 100*time.Millisecond, func() bool {
+		return s1.election.IsLeader() && s1.scheduler.Started()
+	}))
+
+	// master2
+	masterAddr2 := tempurl.Alloc()[len("http://"):]
+	peerAddr2 := tempurl.Alloc()[len("http://"):]
+	cfg2 := NewConfig()
+	require.NoError(s.T(), cfg2.Parse([]string{
+		"--name=dm-master-tls-2",
+		fmt.Sprintf("--data-dir=%s", s.T().TempDir()),
+		fmt.Sprintf("--master-addr=https://%s", masterAddr2),
+		fmt.Sprintf("--advertise-addr=https://%s", masterAddr2),
+		fmt.Sprintf("--peer-urls=https://%s", peerAddr2),
+		fmt.Sprintf("--advertise-peer-urls=https://%s", peerAddr2),
+		"--ssl-ca=" + caPath,
+		"--ssl-cert=" + certPath,
+		"--ssl-key=" + keyPath,
+	}))
+	cfg2.OpenAPI = true
+	cfg2.Join = s1.cfg.MasterAddr // join to an existing cluster
+	s2 := NewServer(cfg2)
+	ctx2, cancel2 := context.WithCancel(context.Background())
+	require.NoError(s.T(), s2.Start(ctx2))
+	defer func() {
+		cancel2()
+		s2.Close()
+	}()
+	// wait the second master ready
+	require.False(s.T(), utils.WaitSomething(30, 100*time.Millisecond, func() bool {
+		return s2.election.IsLeader()
+	}))
+
+	baseURL := "/api/v1/sources"
+	// list source from leader
+	result := testutil.NewRequest().Get(baseURL).GoWithHTTPHandler(s.T(), s1.openapiHandles)
+	s.Equal(http.StatusOK, result.Code())
+	var resultListSource openapi.GetSourceListResponse
+	s.NoError(result.UnmarshalBodyToObject(&resultListSource))
+	s.Len(resultListSource.Data, 0)
+	s.Equal(0, resultListSource.Total)
+
+	// with tls, list source not from leader will get result too
+	result, err = HTTPTestWithTestResponseRecorder(testutil.NewRequest().Get(baseURL), s2.openapiHandles)
+	s.NoError(err)
+	s.Equal(http.StatusOK, result.Code())
+	var resultListSource2 openapi.GetSourceListResponse
+	s.NoError(result.UnmarshalBodyToObject(&resultListSource2))
+	s.Len(resultListSource2.Data, 0)
+	s.Equal(0, resultListSource2.Total)
+
+	// without tls, list source not from leader will be 502
+	s.NoError(failpoint.Enable("github.com/pingcap/tiflow/dm/dm/master/MockNotSetTls", `return()`))
+	result, err = HTTPTestWithTestResponseRecorder(testutil.NewRequest().Get(baseURL), s2.openapiHandles)
+	s.NoError(err)
+	s.Equal(http.StatusBadGateway, result.Code())
+	s.NoError(failpoint.Disable("github.com/pingcap/tiflow/dm/dm/master/MockNotSetTls"))
+}
+
+// httptest.ResponseRecorder is not http.CloseNotifier, will panic when test reverse proxy.
+// We need to implement the interface ourselves.
+// ref: https://github.com/gin-gonic/gin/blob/ce20f107f5dc498ec7489d7739541a25dcd48463/context_test.go#L1747-L1765
+type TestResponseRecorder struct {
+	*httptest.ResponseRecorder
+	closeChannel chan bool
+}
+
+func (r *TestResponseRecorder) CloseNotify() <-chan bool {
+	return r.closeChannel
+}
+
+func (r *TestResponseRecorder) closeClient() {
+	r.closeChannel <- true
+}
+
+func CreateTestResponseRecorder() *TestResponseRecorder {
+	return &TestResponseRecorder{
+		httptest.NewRecorder(),
+		make(chan bool, 1),
+	}
+}
+
+func HTTPTestWithTestResponseRecorder(r *testutil.RequestBuilder, handler http.Handler) (*testutil.CompletedRequest, error) {
+	if r == nil {
+		return nil, nil
+	}
+	if r.Error != nil {
+		return nil, r.Error
+	}
+	var bodyReader io.Reader
+	if r.Body != nil {
+		bodyReader = bytes.NewReader(r.Body)
+	}
+
+	req := httptest.NewRequest(r.Method, r.Path, bodyReader)
+	for h, v := range r.Headers {
+		req.Header.Add(h, v)
+	}
+	if host, ok := r.Headers["Host"]; ok {
+		req.Host = host
+	}
+	for _, c := range r.Cookies {
+		req.AddCookie(c)
+	}
+
+	rec := CreateTestResponseRecorder()
+	handler.ServeHTTP(rec, req)
+
+	return &testutil.CompletedRequest{
+		Recorder: rec.ResponseRecorder,
+	}, nil
 }
 
 func (s *OpenAPIViewSuite) TestOpenAPIWillNotStartInDefaultConfig() {
@@ -372,7 +526,7 @@ func (s *OpenAPIViewSuite) TestTaskTemplatesAPI() {
 		SourceName: source1Name,
 		EnableGtid: false,
 		Host:       dbCfg.Host,
-		Password:   dbCfg.Password,
+		Password:   &dbCfg.Password,
 		Port:       dbCfg.Port,
 		User:       dbCfg.User,
 	}
@@ -471,7 +625,7 @@ func (s *OpenAPIViewSuite) TestSourceAPI() {
 		Enable:     true,
 		EnableGtid: false,
 		Host:       dbCfg.Host,
-		Password:   dbCfg.Password,
+		Password:   &dbCfg.Password,
 		Port:       dbCfg.Port,
 		User:       dbCfg.User,
 		Purge:      &openapi.Purge{Interval: &purgeInterVal},
@@ -702,6 +856,38 @@ func (s *OpenAPIViewSuite) TestSourceAPI() {
 	s.NoError(result.UnmarshalBodyToObject(&resultListSource2))
 	s.Len(resultListSource2.Data, 0)
 	s.Equal(0, resultListSource2.Total)
+
+	// create with no password
+	sourceNoPassword := source1
+	sourceNoPassword.Password = nil
+	createReqNoPassword := openapi.CreateSourceRequest{Source: sourceNoPassword}
+	result = testutil.NewRequest().Post(baseURL).WithJsonBody(createReqNoPassword).GoWithHTTPHandler(s.T(), s1.openapiHandles)
+	s.Equal(http.StatusCreated, result.Code())
+	s.NoError(result.UnmarshalBodyToObject(&resultSource))
+	s.Nil(resultSource.Password)
+
+	// update to have password
+	sourceHasPassword := source1
+	updateReqHasPassword := openapi.UpdateSourceRequest{Source: sourceHasPassword}
+	result = testutil.NewRequest().Put(source1URL).WithJsonBody(updateReqHasPassword).GoWithHTTPHandler(s.T(), s1.openapiHandles)
+	s.Equal(http.StatusOK, result.Code())
+	s.NoError(result.UnmarshalBodyToObject(&source1FromHTTP))
+	s.Equal(source1FromHTTP.Password, sourceHasPassword.Password)
+
+	// update with no password, will use old password
+	updateReqNoPassword := openapi.UpdateSourceRequest{Source: sourceNoPassword}
+	result = testutil.NewRequest().Put(source1URL).WithJsonBody(updateReqNoPassword).GoWithHTTPHandler(s.T(), s1.openapiHandles)
+	s.Equal(http.StatusOK, result.Code())
+	s.NoError(result.UnmarshalBodyToObject(&source1FromHTTP))
+	s.Nil(source1FromHTTP.Password)
+	// password is old
+	conf := s1.scheduler.GetSourceCfgByID(source1FromHTTP.SourceName)
+	s.NotNil(conf)
+	s.Equal(*sourceHasPassword.Password, conf.From.Password)
+
+	// delete source with --force
+	result = testutil.NewRequest().Delete(fmt.Sprintf("%s/%s?force=true", baseURL, source1.SourceName)).GoWithHTTPHandler(s.T(), s1.openapiHandles)
+	s.Equal(http.StatusNoContent, result.Code())
 }
 
 func (s *OpenAPIViewSuite) testImportTaskTemplate(task *openapi.Task, s1 *Server) {
@@ -774,7 +960,7 @@ func (s *OpenAPIViewSuite) TestTaskAPI() {
 		SourceName: source1Name,
 		EnableGtid: false,
 		Host:       dbCfg.Host,
-		Password:   dbCfg.Password,
+		Password:   &dbCfg.Password,
 		Port:       dbCfg.Port,
 		User:       dbCfg.User,
 	}
@@ -814,9 +1000,9 @@ func (s *OpenAPIViewSuite) TestTaskAPI() {
 	createTaskReq := openapi.CreateTaskRequest{Task: task}
 	result = testutil.NewRequest().Post(taskURL).WithJsonBody(createTaskReq).GoWithHTTPHandler(s.T(), s1.openapiHandles)
 	s.Equal(http.StatusCreated, result.Code())
-	var createTaskResp openapi.Task
+	var createTaskResp openapi.OperateTaskResponse
 	s.NoError(result.UnmarshalBodyToObject(&createTaskResp))
-	s.Equal(createTaskResp.Name, task.Name)
+	s.Equal(createTaskResp.Task.Name, task.Name)
 	subTaskM := s1.scheduler.GetSubTaskCfgsByTask(task.Name)
 	s.Len(subTaskM, 1)
 	s.Equal(task.Name, subTaskM[source1Name].Name)
@@ -837,8 +1023,9 @@ func (s *OpenAPIViewSuite) TestTaskAPI() {
 	updateReq := openapi.UpdateTaskRequest{Task: clone}
 	result = testutil.NewRequest().Put(task1URL).WithJsonBody(updateReq).GoWithHTTPHandler(s.T(), s1.openapiHandles)
 	s.Equal(http.StatusOK, result.Code())
-	s.NoError(result.UnmarshalBodyToObject(&task1FromHTTP))
-	s.EqualValues(task1FromHTTP.SourceConfig.IncrMigrateConf.ReplBatch, clone.SourceConfig.IncrMigrateConf.ReplBatch)
+	var updateResp openapi.OperateTaskResponse
+	s.NoError(result.UnmarshalBodyToObject(&updateResp))
+	s.EqualValues(updateResp.Task.SourceConfig.IncrMigrateConf.ReplBatch, clone.SourceConfig.IncrMigrateConf.ReplBatch)
 	s.NoError(failpoint.Disable("github.com/pingcap/tiflow/dm/dm/master/scheduler/operateCheckSubtasksCanUpdate"))
 
 	// list tasks

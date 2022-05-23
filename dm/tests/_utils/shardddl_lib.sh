@@ -47,7 +47,7 @@ function clean_table() {
 
 function restart_master() {
 	echo "restart dm-master"
-	ps aux | grep dm-master | awk '{print $2}' | xargs kill || true
+	kill_process dm-master
 	check_master_port_offline 1
 	sleep 2
 
@@ -57,16 +57,16 @@ function restart_master() {
 
 function restart_worker1() {
 	echo "restart dm-worker1"
-	ps aux | grep worker1 | awk '{print $2}' | xargs kill || true
-	check_port_offline $WORKER1_PORT 20
+	kill_process worker1
+	check_process_exit worker1 20
 	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
 }
 
 function restart_worker2() {
 	echo "restart dm-worker2"
-	ps aux | grep worker2 | awk '{print $2}' | xargs kill || true
-	check_port_offline $WORKER2_PORT 20
+	kill_process worker2
+	check_process_exit worker2 20
 	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
 }
@@ -88,5 +88,26 @@ function restart_task() {
 		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 			"query-status test" \
 			"\"unit\": \"Sync\"" 2
+	fi
+}
+
+function random_restart() {
+	modN=4
+	if [ $# -ge 1 ]; then
+		modN=$1
+	fi
+	mod=$(($RANDOM % $modN))
+	if [[ "$mod" == "0" ]]; then
+		echo "restart master"
+		restart_master
+	elif [[ "$mod" == "1" ]]; then
+		echo "restart worker1"
+		restart_worker1
+	elif [[ "$mod" == "2" ]]; then
+		echo "restart worker2"
+		restart_worker2
+	else
+		echo "restart task"
+		restart_task $cur/conf/double-source-optimistic.yaml
 	fi
 }

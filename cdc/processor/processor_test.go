@@ -28,7 +28,6 @@ import (
 	tablepipeline "github.com/pingcap/tiflow/cdc/processor/pipeline"
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/scheduler"
-	"github.com/pingcap/tiflow/cdc/sink"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
@@ -47,11 +46,10 @@ func newProcessor4Test(
 ) *processor {
 	upStream := upstream.NewUpstream4Test(nil)
 	p := newProcessor(ctx, upStream)
-	// disable new scheduler to pass old test cases
-	// TODO refactor the test cases so that new scheduler can be enabled
-	p.newSchedulerEnabled = false
-	p.lazyInit = func(ctx cdcContext.Context) error { return nil }
-	p.sinkManager = &sink.Manager{}
+	p.lazyInit = func(ctx cdcContext.Context) error {
+		p.agent = &mockAgent{executor: p}
+		return nil
+	}
 	p.redoManager = redo.NewDisabledManager()
 	p.createTablePipeline = createTablePipeline
 	p.schemaStorage = &mockSchemaStorage{t: t, resolvedTs: math.MaxUint64}
@@ -204,14 +202,14 @@ func (s *mockSchemaStorage) DoGC(ts uint64) uint64 {
 
 type mockAgent struct {
 	// dummy to satisfy the interface
-	processorAgent
+	scheduler.Agent
 
 	executor         scheduler.TableExecutor
 	lastCheckpointTs model.Ts
 	isClosed         bool
 }
 
-func (a *mockAgent) Tick(_ cdcContext.Context) error {
+func (a *mockAgent) Tick(_ context.Context) error {
 	if len(a.executor.GetAllCurrentTables()) == 0 {
 		return nil
 	}
@@ -228,345 +226,9 @@ func (a *mockAgent) Close() error {
 	return nil
 }
 
-func TestCheckTablesNum(t *testing.T) {
-	ctx := cdcContext.NewBackendContext4Test(true)
-	p, tester := initProcessor4Test(ctx, t)
-	var err error
-	_, err = p.Tick(ctx, p.changefeed)
-	require.Nil(t, err)
-	tester.MustApplyPatches()
-	require.Equal(t, p.changefeed.TaskPositions[p.captureInfo.ID],
-		&model.TaskPosition{
-			CheckPointTs: 0,
-			ResolvedTs:   0,
-			Count:        0,
-			Error:        nil,
-		})
-
-	p, tester = initProcessor4Test(ctx, t)
-	p.changefeed.Info.StartTs = 66
-	p.changefeed.Status.CheckpointTs = 88
-	_, err = p.Tick(ctx, p.changefeed)
-	require.Nil(t, err)
-	tester.MustApplyPatches()
-	require.Equal(t, p.changefeed.TaskPositions[p.captureInfo.ID],
-		&model.TaskPosition{
-			CheckPointTs: 88,
-			ResolvedTs:   88,
-			Count:        0,
-			Error:        nil,
-		})
-}
-
-func TestHandleTableOperation4SingleTable(t *testing.T) {
-	ctx := cdcContext.NewBackendContext4Test(true)
-	p, tester := initProcessor4Test(ctx, t)
-	var err error
-	// init tick
-	_, err = p.Tick(ctx, p.changefeed)
-	require.Nil(t, err)
-	tester.MustApplyPatches()
-	p.changefeed.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
-		status.CheckpointTs = 90
-		status.ResolvedTs = 100
-		return status, true, nil
-	})
-	p.changefeed.PatchTaskPosition(p.captureInfo.ID, func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
-		position.ResolvedTs = 100
-		return position, true, nil
-	})
-	tester.MustApplyPatches()
-
-	// no operation
-	_, err = p.Tick(ctx, p.changefeed)
-	require.Nil(t, err)
-	tester.MustApplyPatches()
-
-	// add table, in processing
-	// in current implementation of owner, the startTs and BoundaryTs of add table operation should be always equaled.
-	p.changefeed.PatchTaskStatus(p.captureInfo.ID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
-		status.AddTable(66, &model.TableReplicaInfo{StartTs: 60}, 60)
-		return status, true, nil
-	})
-	tester.MustApplyPatches()
-	_, err = p.Tick(ctx, p.changefeed)
-	require.Nil(t, err)
-	tester.MustApplyPatches()
-	require.Equal(t, p.changefeed.TaskStatuses[p.captureInfo.ID], &model.TaskStatus{
-		Tables: map[int64]*model.TableReplicaInfo{
-			66: {StartTs: 60},
-		},
-		Operation: map[int64]*model.TableOperation{
-			66: {Delete: false, BoundaryTs: 60, Status: model.OperProcessed},
-		},
-	})
-
-	// add table, not finished
-	_, err = p.Tick(ctx, p.changefeed)
-	require.Nil(t, err)
-	tester.MustApplyPatches()
-	require.Equal(t, p.changefeed.TaskStatuses[p.captureInfo.ID], &model.TaskStatus{
-		Tables: map[int64]*model.TableReplicaInfo{
-			66: {StartTs: 60},
-		},
-		Operation: map[int64]*model.TableOperation{
-			66: {Delete: false, BoundaryTs: 60, Status: model.OperProcessed},
-		},
-	})
-
-	// add table, push the resolvedTs
-	table66 := p.tables[66].(*mockTablePipeline)
-	table66.resolvedTs = 101
-	_, err = p.Tick(ctx, p.changefeed)
-	require.Nil(t, err)
-	tester.MustApplyPatches()
-	require.Equal(t, p.changefeed.TaskStatuses[p.captureInfo.ID], &model.TaskStatus{
-		Tables: map[int64]*model.TableReplicaInfo{
-			66: {StartTs: 60},
-		},
-		Operation: map[int64]*model.TableOperation{
-			66: {Delete: false, BoundaryTs: 60, Status: model.OperProcessed},
-		},
-	})
-	require.Equal(t, p.changefeed.TaskPositions[p.captureInfo.ID].ResolvedTs, uint64(101))
-
-	// finish the operation
-	_, err = p.Tick(ctx, p.changefeed)
-	require.Nil(t, err)
-	tester.MustApplyPatches()
-	require.Equal(t, p.changefeed.TaskStatuses[p.captureInfo.ID], &model.TaskStatus{
-		Tables: map[int64]*model.TableReplicaInfo{
-			66: {StartTs: 60},
-		},
-		Operation: map[int64]*model.TableOperation{
-			66: {Delete: false, BoundaryTs: 60, Status: model.OperFinished},
-		},
-	})
-
-	// clear finished operations
-	cleanUpFinishedOpOperation(p.changefeed, p.captureInfo.ID, tester)
-
-	// remove table, in processing
-	p.changefeed.PatchTaskStatus(p.captureInfo.ID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
-		status.RemoveTable(66, 120, false)
-		return status, true, nil
-	})
-	tester.MustApplyPatches()
-	_, err = p.Tick(ctx, p.changefeed)
-	require.Nil(t, err)
-	tester.MustApplyPatches()
-	require.Equal(t, p.changefeed.TaskStatuses[p.captureInfo.ID], &model.TaskStatus{
-		Tables: map[int64]*model.TableReplicaInfo{},
-		Operation: map[int64]*model.TableOperation{
-			66: {Delete: true, BoundaryTs: 120, Status: model.OperProcessed},
-		},
-	})
-	require.Equal(t, table66.stopTs, uint64(120))
-
-	// remove table, not finished
-	_, err = p.Tick(ctx, p.changefeed)
-	require.Nil(t, err)
-	tester.MustApplyPatches()
-	require.Equal(t, p.changefeed.TaskStatuses[p.captureInfo.ID], &model.TaskStatus{
-		Tables: map[int64]*model.TableReplicaInfo{},
-		Operation: map[int64]*model.TableOperation{
-			66: {Delete: true, BoundaryTs: 120, Status: model.OperProcessed},
-		},
-	})
-
-	// remove table, finished
-	table66.status = tablepipeline.TableStatusStopped
-	table66.checkpointTs = 121
-	_, err = p.Tick(ctx, p.changefeed)
-	require.Nil(t, err)
-	tester.MustApplyPatches()
-	require.Equal(t, p.changefeed.TaskStatuses[p.captureInfo.ID], &model.TaskStatus{
-		Tables: map[int64]*model.TableReplicaInfo{},
-		Operation: map[int64]*model.TableOperation{
-			66: {Delete: true, BoundaryTs: 121, Status: model.OperFinished},
-		},
-	})
-	require.True(t, table66.canceled)
-	require.Nil(t, p.tables[66])
-}
-
-func TestHandleTableOperation4MultiTable(t *testing.T) {
-	ctx := cdcContext.NewBackendContext4Test(true)
-	p, tester := initProcessor4Test(ctx, t)
-	var err error
-	// init tick
-	_, err = p.Tick(ctx, p.changefeed)
-	require.Nil(t, err)
-	tester.MustApplyPatches()
-	p.changefeed.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
-		status.CheckpointTs = 20
-		status.ResolvedTs = 20
-		return status, true, nil
-	})
-	p.changefeed.PatchTaskPosition(p.captureInfo.ID, func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
-		position.ResolvedTs = 100
-		position.CheckPointTs = 90
-		return position, true, nil
-	})
-	tester.MustApplyPatches()
-
-	// no operation
-	_, err = p.Tick(ctx, p.changefeed)
-	require.Nil(t, err)
-	tester.MustApplyPatches()
-
-	// add table, in processing
-	// in current implementation of owner, the startTs and BoundaryTs of add table operation should be always equaled.
-	p.changefeed.PatchTaskStatus(p.captureInfo.ID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
-		status.AddTable(1, &model.TableReplicaInfo{StartTs: 60}, 60)
-		status.AddTable(2, &model.TableReplicaInfo{StartTs: 50}, 50)
-		status.AddTable(3, &model.TableReplicaInfo{StartTs: 40}, 40)
-		status.Tables[4] = &model.TableReplicaInfo{StartTs: 30}
-		return status, true, nil
-	})
-	tester.MustApplyPatches()
-	_, err = p.Tick(ctx, p.changefeed)
-	require.Nil(t, err)
-	tester.MustApplyPatches()
-	require.Equal(t, p.changefeed.TaskStatuses[p.captureInfo.ID], &model.TaskStatus{
-		Tables: map[int64]*model.TableReplicaInfo{
-			1: {StartTs: 60},
-			2: {StartTs: 50},
-			3: {StartTs: 40},
-			4: {StartTs: 30},
-		},
-		Operation: map[int64]*model.TableOperation{
-			1: {Delete: false, BoundaryTs: 60, Status: model.OperProcessed},
-			2: {Delete: false, BoundaryTs: 50, Status: model.OperProcessed},
-			3: {Delete: false, BoundaryTs: 40, Status: model.OperProcessed},
-		},
-	})
-	require.Len(t, p.tables, 4)
-	require.Equal(t, p.changefeed.TaskPositions[p.captureInfo.ID].CheckPointTs, uint64(30))
-	require.Equal(t, p.changefeed.TaskPositions[p.captureInfo.ID].ResolvedTs, uint64(30))
-
-	// add table, push the resolvedTs, finished add table
-	table1 := p.tables[1].(*mockTablePipeline)
-	table2 := p.tables[2].(*mockTablePipeline)
-	table3 := p.tables[3].(*mockTablePipeline)
-	table4 := p.tables[4].(*mockTablePipeline)
-	table1.resolvedTs = 101
-	table2.resolvedTs = 101
-	table3.resolvedTs = 102
-	table4.resolvedTs = 103
-	// removed table 3
-	p.changefeed.PatchTaskStatus(p.captureInfo.ID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
-		status.RemoveTable(3, 60, false)
-		return status, true, nil
-	})
-	tester.MustApplyPatches()
-	_, err = p.Tick(ctx, p.changefeed)
-	require.Nil(t, err)
-	tester.MustApplyPatches()
-	require.Equal(t, p.changefeed.TaskStatuses[p.captureInfo.ID], &model.TaskStatus{
-		Tables: map[int64]*model.TableReplicaInfo{
-			1: {StartTs: 60},
-			2: {StartTs: 50},
-			4: {StartTs: 30},
-		},
-		Operation: map[int64]*model.TableOperation{
-			1: {Delete: false, BoundaryTs: 60, Status: model.OperFinished},
-			2: {Delete: false, BoundaryTs: 50, Status: model.OperFinished},
-			3: {Delete: true, BoundaryTs: 60, Status: model.OperProcessed},
-		},
-	})
-	require.Len(t, p.tables, 4)
-	require.False(t, table3.canceled)
-	require.Equal(t, table3.stopTs, uint64(60))
-	require.Equal(t, p.changefeed.TaskPositions[p.captureInfo.ID].ResolvedTs, uint64(101))
-
-	// finish remove operations
-	table3.status = tablepipeline.TableStatusStopped
-	table3.checkpointTs = 65
-	_, err = p.Tick(ctx, p.changefeed)
-	require.Nil(t, err)
-	tester.MustApplyPatches()
-	require.Equal(t, p.changefeed.TaskStatuses[p.captureInfo.ID], &model.TaskStatus{
-		Tables: map[int64]*model.TableReplicaInfo{
-			1: {StartTs: 60},
-			2: {StartTs: 50},
-			4: {StartTs: 30},
-		},
-		Operation: map[int64]*model.TableOperation{
-			1: {Delete: false, BoundaryTs: 60, Status: model.OperFinished},
-			2: {Delete: false, BoundaryTs: 50, Status: model.OperFinished},
-			3: {Delete: true, BoundaryTs: 65, Status: model.OperFinished},
-		},
-	})
-	require.Len(t, p.tables, 3)
-	require.True(t, table3.canceled)
-
-	// clear finished operations
-	cleanUpFinishedOpOperation(p.changefeed, p.captureInfo.ID, tester)
-
-	// remove table, in processing
-	p.changefeed.PatchTaskStatus(p.captureInfo.ID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
-		status.RemoveTable(1, 120, false)
-		status.RemoveTable(4, 120, false)
-		delete(status.Tables, 2)
-		return status, true, nil
-	})
-	tester.MustApplyPatches()
-	_, err = p.Tick(ctx, p.changefeed)
-	require.Nil(t, err)
-	tester.MustApplyPatches()
-	require.Equal(t, p.changefeed.TaskStatuses[p.captureInfo.ID], &model.TaskStatus{
-		Tables: map[int64]*model.TableReplicaInfo{},
-		Operation: map[int64]*model.TableOperation{
-			1: {Delete: true, BoundaryTs: 120, Status: model.OperProcessed},
-			4: {Delete: true, BoundaryTs: 120, Status: model.OperProcessed},
-		},
-	})
-	require.Equal(t, table1.stopTs, uint64(120))
-	require.Equal(t, table4.stopTs, uint64(120))
-	require.True(t, table2.canceled)
-	require.Len(t, p.tables, 2)
-
-	// remove table, not finished
-	_, err = p.Tick(ctx, p.changefeed)
-	require.Nil(t, err)
-	tester.MustApplyPatches()
-	require.Equal(t, p.changefeed.TaskStatuses[p.captureInfo.ID], &model.TaskStatus{
-		Tables: map[int64]*model.TableReplicaInfo{},
-		Operation: map[int64]*model.TableOperation{
-			1: {Delete: true, BoundaryTs: 120, Status: model.OperProcessed},
-			4: {Delete: true, BoundaryTs: 120, Status: model.OperProcessed},
-		},
-	})
-
-	// remove table, finished
-	table1.status = tablepipeline.TableStatusStopped
-	table1.checkpointTs = 121
-	table4.status = tablepipeline.TableStatusStopped
-	table4.checkpointTs = 122
-	_, err = p.Tick(ctx, p.changefeed)
-	require.Nil(t, err)
-	tester.MustApplyPatches()
-	require.Equal(t, p.changefeed.TaskStatuses[p.captureInfo.ID], &model.TaskStatus{
-		Tables: map[int64]*model.TableReplicaInfo{},
-		Operation: map[int64]*model.TableOperation{
-			1: {Delete: true, BoundaryTs: 121, Status: model.OperFinished},
-			4: {Delete: true, BoundaryTs: 122, Status: model.OperFinished},
-		},
-	})
-	require.True(t, table1.canceled)
-	require.True(t, table4.canceled)
-	require.Len(t, p.tables, 0)
-}
-
 func TestTableExecutor(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(true)
 	p, tester := initProcessor4Test(ctx, t)
-	p.newSchedulerEnabled = true
-	p.lazyInit = func(ctx cdcContext.Context) error {
-		p.agent = &mockAgent{executor: p}
-		return nil
-	}
 
 	var err error
 	// init tick
@@ -578,11 +240,6 @@ func TestTableExecutor(t *testing.T) {
 		status.ResolvedTs = 20
 		return status, true, nil
 	})
-	p.changefeed.PatchTaskPosition(p.captureInfo.ID, func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
-		position.ResolvedTs = 100
-		position.CheckPointTs = 90
-		return position, true, nil
-	})
 	tester.MustApplyPatches()
 
 	// no operation
@@ -590,16 +247,16 @@ func TestTableExecutor(t *testing.T) {
 	require.Nil(t, err)
 	tester.MustApplyPatches()
 
-	ok, err := p.AddTable(ctx, 1)
+	ok, err := p.AddTable(ctx, 1, 20)
 	require.Nil(t, err)
 	require.True(t, ok)
-	ok, err = p.AddTable(ctx, 2)
+	ok, err = p.AddTable(ctx, 2, 20)
 	require.Nil(t, err)
 	require.True(t, ok)
-	ok, err = p.AddTable(ctx, 3)
+	ok, err = p.AddTable(ctx, 3, 20)
 	require.Nil(t, err)
 	require.True(t, ok)
-	ok, err = p.AddTable(ctx, 4)
+	ok, err = p.AddTable(ctx, 4, 20)
 	require.Nil(t, err)
 	require.True(t, ok)
 	require.Len(t, p.tables, 4)
@@ -720,28 +377,6 @@ func TestTableExecutor(t *testing.T) {
 	require.Nil(t, p.agent)
 }
 
-func TestInitTable(t *testing.T) {
-	ctx := cdcContext.NewBackendContext4Test(true)
-	p, tester := initProcessor4Test(ctx, t)
-	var err error
-	// init tick
-	_, err = p.Tick(ctx, p.changefeed)
-	require.Nil(t, err)
-	tester.MustApplyPatches()
-
-	p.changefeed.PatchTaskStatus(p.captureInfo.ID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
-		status.Tables[1] = &model.TableReplicaInfo{StartTs: 20}
-		status.Tables[2] = &model.TableReplicaInfo{StartTs: 30}
-		return status, true, nil
-	})
-	tester.MustApplyPatches()
-	_, err = p.Tick(ctx, p.changefeed)
-	require.Nil(t, err)
-	tester.MustApplyPatches()
-	require.NotNil(t, p.tables[1])
-	require.NotNil(t, p.tables[2])
-}
-
 func TestProcessorError(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(true)
 	p, tester := initProcessor4Test(ctx, t)
@@ -794,10 +429,6 @@ func TestProcessorExit(t *testing.T) {
 		status.AdminJobType = model.AdminStop
 		return status, true, nil
 	})
-	p.changefeed.PatchTaskStatus(ctx.GlobalVars().CaptureInfo.ID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
-		status.AdminJobType = model.AdminStop
-		return status, true, nil
-	})
 	tester.MustApplyPatches()
 	_, err = p.Tick(ctx, p.changefeed)
 	require.True(t, cerror.ErrReactorFinished.Equal(errors.Cause(err)))
@@ -817,12 +448,11 @@ func TestProcessorClose(t *testing.T) {
 	tester.MustApplyPatches()
 
 	// add tables
-	p.changefeed.PatchTaskStatus(p.captureInfo.ID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
-		status.Tables[1] = &model.TableReplicaInfo{StartTs: 20}
-		status.Tables[2] = &model.TableReplicaInfo{StartTs: 30}
-		return status, true, nil
-	})
-	tester.MustApplyPatches()
+	err = p.addTable(ctx, model.TableID(1), &model.TableReplicaInfo{StartTs: 20})
+	require.Nil(t, err)
+	err = p.addTable(ctx, model.TableID(2), &model.TableReplicaInfo{StartTs: 30})
+	require.Nil(t, err)
+
 	_, err = p.Tick(ctx, p.changefeed)
 	require.Nil(t, err)
 	tester.MustApplyPatches()
@@ -840,15 +470,9 @@ func TestProcessorClose(t *testing.T) {
 	_, err = p.Tick(ctx, p.changefeed)
 	require.Nil(t, err)
 	tester.MustApplyPatches()
-	require.Equal(t, p.changefeed.TaskPositions[p.captureInfo.ID], &model.TaskPosition{
-		CheckPointTs: 90,
-		ResolvedTs:   90,
-		Error:        nil,
-	})
-	require.Equal(t, p.changefeed.TaskStatuses[p.captureInfo.ID], &model.TaskStatus{
-		Tables: map[int64]*model.TableReplicaInfo{1: {StartTs: 20}, 2: {StartTs: 30}},
-	})
-	require.Equal(t, p.changefeed.Workloads[p.captureInfo.ID], model.TaskWorkload{1: {Workload: 1}, 2: {Workload: 1}})
+	require.EqualValues(t, p.checkpointTs, 90)
+	require.EqualValues(t, p.resolvedTs, 90)
+	require.Contains(t, p.changefeed.TaskPositions, p.captureInfo.ID)
 
 	require.Nil(t, p.Close())
 	tester.MustApplyPatches()
@@ -862,12 +486,10 @@ func TestProcessorClose(t *testing.T) {
 	tester.MustApplyPatches()
 
 	// add tables
-	p.changefeed.PatchTaskStatus(p.captureInfo.ID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
-		status.Tables[1] = &model.TableReplicaInfo{StartTs: 20}
-		status.Tables[2] = &model.TableReplicaInfo{StartTs: 30}
-		return status, true, nil
-	})
-	tester.MustApplyPatches()
+	err = p.addTable(ctx, model.TableID(1), &model.TableReplicaInfo{StartTs: 20})
+	require.Nil(t, err)
+	err = p.addTable(ctx, model.TableID(2), &model.TableReplicaInfo{StartTs: 30})
+	require.Nil(t, err)
 	_, err = p.Tick(ctx, p.changefeed)
 	require.Nil(t, err)
 	tester.MustApplyPatches()
@@ -892,12 +514,12 @@ func TestProcessorClose(t *testing.T) {
 func TestPositionDeleted(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(true)
 	p, tester := initProcessor4Test(ctx, t)
-	p.changefeed.PatchTaskStatus(p.captureInfo.ID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
-		status.Tables[1] = &model.TableReplicaInfo{StartTs: 30}
-		status.Tables[2] = &model.TableReplicaInfo{StartTs: 40}
-		return status, true, nil
-	})
 	var err error
+	// add table
+	err = p.addTable(ctx, model.TableID(1), &model.TableReplicaInfo{StartTs: 30})
+	require.Nil(t, err)
+	err = p.addTable(ctx, model.TableID(2), &model.TableReplicaInfo{StartTs: 40})
+	require.Nil(t, err)
 	// init tick
 	_, err = p.Tick(ctx, p.changefeed)
 	require.Nil(t, err)
@@ -907,10 +529,9 @@ func TestPositionDeleted(t *testing.T) {
 	_, err = p.Tick(ctx, p.changefeed)
 	require.Nil(t, err)
 	tester.MustApplyPatches()
-	require.Equal(t, p.changefeed.TaskPositions[p.captureInfo.ID], &model.TaskPosition{
-		CheckPointTs: 30,
-		ResolvedTs:   30,
-	})
+	require.EqualValues(t, 30, p.checkpointTs)
+	require.EqualValues(t, 30, p.resolvedTs)
+	require.Contains(t, p.changefeed.TaskPositions, p.captureInfo.ID)
 
 	// some other delete the task position
 	p.changefeed.PatchTaskPosition(p.captureInfo.ID, func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
@@ -921,29 +542,20 @@ func TestPositionDeleted(t *testing.T) {
 	_, err = p.Tick(ctx, p.changefeed)
 	require.Nil(t, err)
 	tester.MustApplyPatches()
-	require.Equal(t, p.changefeed.TaskPositions[p.captureInfo.ID], &model.TaskPosition{
-		CheckPointTs: 0,
-		ResolvedTs:   0,
-	})
+	require.Equal(t, &model.TaskPosition{}, p.changefeed.TaskPositions[p.captureInfo.ID])
 
 	// cal position
 	_, err = p.Tick(ctx, p.changefeed)
 	require.Nil(t, err)
 	tester.MustApplyPatches()
-	require.Equal(t, p.changefeed.TaskPositions[p.captureInfo.ID], &model.TaskPosition{
-		CheckPointTs: 30,
-		ResolvedTs:   30,
-	})
+	require.EqualValues(t, 30, p.checkpointTs)
+	require.EqualValues(t, 30, p.resolvedTs)
+	require.Contains(t, p.changefeed.TaskPositions, p.captureInfo.ID)
 }
 
 func TestSchemaGC(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(true)
 	p, tester := initProcessor4Test(ctx, t)
-	p.changefeed.PatchTaskStatus(p.captureInfo.ID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
-		status.Tables[1] = &model.TableReplicaInfo{StartTs: 30}
-		status.Tables[2] = &model.TableReplicaInfo{StartTs: 40}
-		return status, true, nil
-	})
 
 	var err error
 	// init tick
@@ -961,21 +573,6 @@ func TestSchemaGC(t *testing.T) {
 	// GC Ts should be (checkpoint - 1).
 	require.Equal(t, p.schemaStorage.(*mockSchemaStorage).lastGcTs, uint64(49))
 	require.Equal(t, p.lastSchemaTs, uint64(49))
-}
-
-func cleanUpFinishedOpOperation(state *orchestrator.ChangefeedReactorState, captureID model.CaptureID, tester *orchestrator.ReactorStateTester) {
-	state.PatchTaskStatus(captureID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
-		if status == nil || status.Operation == nil {
-			return status, false, nil
-		}
-		for tableID, opt := range status.Operation {
-			if opt.Status == model.OperFinished {
-				delete(status.Operation, tableID)
-			}
-		}
-		return status, true, nil
-	})
-	tester.MustApplyPatches()
 }
 
 func updateChangeFeedPosition(t *testing.T, tester *orchestrator.ReactorStateTester, cfID model.ChangeFeedID, resolvedTs, checkpointTs model.Ts) {
@@ -1021,17 +618,10 @@ func TestUpdateBarrierTs(t *testing.T) {
 		status.ResolvedTs = 10
 		return status, true, nil
 	})
-	p.changefeed.PatchTaskStatus(p.captureInfo.ID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
-		status.AddTable(1, &model.TableReplicaInfo{StartTs: 5}, 5)
-		return status, true, nil
-	})
 	p.schemaStorage.(*mockSchemaStorage).resolvedTs = 10
 
-	// init tick, add table OperDispatched.
-	_, err := p.Tick(ctx, p.changefeed)
+	err := p.addTable(ctx, model.TableID(1), &model.TableReplicaInfo{StartTs: 5})
 	require.Nil(t, err)
-	tester.MustApplyPatches()
-	// tick again, add table OperProcessed.
 	_, err = p.Tick(ctx, p.changefeed)
 	require.Nil(t, err)
 	tester.MustApplyPatches()

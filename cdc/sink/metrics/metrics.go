@@ -29,7 +29,7 @@ var (
 			Name:      "txn_batch_size",
 			Help:      "Bucketed histogram of batch size of a txn.",
 			Buckets:   prometheus.ExponentialBuckets(1, 2, 18),
-		}, []string{"changefeed", "type"}) // type is for `sinkType`
+		}, []string{"namespace", "changefeed", "type"}) // type is for `sinkType`
 
 	// ExecTxnHistogram records the execution time of a txn.
 	ExecTxnHistogram = prometheus.NewHistogramVec(
@@ -39,7 +39,7 @@ var (
 			Name:      "txn_exec_duration",
 			Help:      "Bucketed histogram of processing time (s) of a txn.",
 			Buckets:   prometheus.ExponentialBuckets(0.002 /* 2 ms */, 2, 18),
-		}, []string{"changefeed", "type"}) // type is for `sinkType`
+		}, []string{"namespace", "changefeed", "type"}) // type is for `sinkType`
 
 	// LargeRowSizeHistogram records the row size of events.
 	LargeRowSizeHistogram = prometheus.NewHistogramVec(
@@ -49,7 +49,7 @@ var (
 			Name:      "large_row_changed_event_size",
 			Help:      "The size of all received row changed events (in bytes)",
 			Buckets:   prometheus.ExponentialBuckets(rowSizeLowBound, 2, 10),
-		}, []string{"changefeed", "type"}) // type is for `sinkType`
+		}, []string{"namespace", "changefeed", "type"}) // type is for `sinkType`
 
 	// ExecDDLHistogram records the exexution time of a DDL.
 	ExecDDLHistogram = prometheus.NewHistogramVec(
@@ -59,7 +59,7 @@ var (
 			Name:      "ddl_exec_duration",
 			Help:      "Bucketed histogram of processing time (s) of a ddl.",
 			Buckets:   prometheus.ExponentialBuckets(0.01, 2, 18),
-		}, []string{"changefeed", "type"}) // type is for `sinkType`
+		}, []string{"namespace", "changefeed", "type"}) // type is for `sinkType`
 
 	// ExecutionErrorCounter is the counter of execution errors.
 	ExecutionErrorCounter = prometheus.NewCounterVec(
@@ -68,7 +68,7 @@ var (
 			Subsystem: "sink",
 			Name:      "execution_error",
 			Help:      "total count of execution errors",
-		}, []string{"changefeed"})
+		}, []string{"namespace", "changefeed"})
 
 	// ConflictDetectDurationHis records the duration of detecting conflict.
 	ConflictDetectDurationHis = prometheus.NewHistogramVec(
@@ -78,7 +78,7 @@ var (
 			Name:      "conflict_detect_duration",
 			Help:      "Bucketed histogram of conflict detect time (s) for single DML statement",
 			Buckets:   prometheus.ExponentialBuckets(0.001 /* 1 ms */, 2, 20),
-		}, []string{"changefeed"})
+		}, []string{"namespace", "changefeed"})
 
 	// BucketSizeCounter is the counter of bucket size.
 	BucketSizeCounter = prometheus.NewCounterVec(
@@ -87,7 +87,7 @@ var (
 			Subsystem: "sink",
 			Name:      "bucket_size",
 			Help:      "size of the DML bucket",
-		}, []string{"changefeed", "bucket"})
+		}, []string{"namespace", "changefeed", "bucket"})
 
 	// TotalRowsCountGauge is the total number of rows that are processed by sink.
 	TotalRowsCountGauge = prometheus.NewGaugeVec(
@@ -96,7 +96,7 @@ var (
 			Subsystem: "sink",
 			Name:      "total_rows_count",
 			Help:      "The total count of rows that are processed by sink",
-		}, []string{"changefeed"})
+		}, []string{"namespace", "changefeed"})
 
 	// TotalFlushedRowsCountGauge is the total count of rows that are flushed to sink.
 	TotalFlushedRowsCountGauge = prometheus.NewGaugeVec(
@@ -105,7 +105,7 @@ var (
 			Subsystem: "sink",
 			Name:      "total_flushed_rows_count",
 			Help:      "The total count of rows that are flushed by sink",
-		}, []string{"changefeed"})
+		}, []string{"namespace", "changefeed"})
 
 	// TableSinkTotalRowsCountCounter is the total count of rows that are processed by sink.
 	TableSinkTotalRowsCountCounter = prometheus.NewCounterVec(
@@ -114,16 +114,7 @@ var (
 			Subsystem: "sink",
 			Name:      "table_sink_total_rows_count",
 			Help:      "The total count of rows that are processed by table sink",
-		}, []string{"changefeed"})
-
-	// BufferSinkTotalRowsCountCounter is the total count of rows that are processed by buffer sink.
-	BufferSinkTotalRowsCountCounter = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Namespace: "ticdc",
-			Subsystem: "sink",
-			Name:      "buffer_sink_total_rows_count",
-			Help:      "The total count of rows that are processed by buffer sink",
-		}, []string{"changefeed"})
+		}, []string{"namespace", "changefeed"})
 )
 
 // InitMetrics registers all metrics in this file
@@ -138,5 +129,4 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(TotalRowsCountGauge)
 	registry.MustRegister(TotalFlushedRowsCountGauge)
 	registry.MustRegister(TableSinkTotalRowsCountCounter)
-	registry.MustRegister(BufferSinkTotalRowsCountCounter)
 }

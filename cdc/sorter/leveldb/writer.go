@@ -17,7 +17,6 @@ import (
 	"context"
 
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sorter/encoding"
 	"github.com/pingcap/tiflow/cdc/sorter/leveldb/message"
 	"github.com/pingcap/tiflow/pkg/actor"
@@ -38,8 +37,8 @@ type writer struct {
 	maxResolvedTs uint64
 	maxCommitTs   uint64
 
-	metricTotalEventsKV         prometheus.Counter
-	metricTotalEventsResolvedTs prometheus.Counter
+	metricTotalEventsKV       prometheus.Counter
+	metricTotalEventsResolved prometheus.Counter
 }
 
 var _ actor.Actor[message.Task] = (*writer)(nil)
@@ -57,7 +56,7 @@ func (w *writer) Poll(ctx context.Context, msgs []actormsg.Message[message.Task]
 		}
 
 		ev := msgs[i].Value.InputEvent
-		if ev.RawKV.OpType == model.OpTypeResolved {
+		if ev.IsResolved() {
 			if w.maxResolvedTs < ev.CRTs {
 				w.maxResolvedTs = ev.CRTs
 			}
@@ -79,7 +78,7 @@ func (w *writer) Poll(ctx context.Context, msgs []actormsg.Message[message.Task]
 		writes[message.Key(key)] = value
 	}
 	w.metricTotalEventsKV.Add(float64(kvEventCount))
-	w.metricTotalEventsResolvedTs.Add(float64(resolvedEventCount))
+	w.metricTotalEventsResolved.Add(float64(resolvedEventCount))
 
 	if len(writes) != 0 {
 		// Send write task to leveldb.

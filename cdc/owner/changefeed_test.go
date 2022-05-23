@@ -15,7 +15,9 @@ package owner
 
 import (
 	"context"
+	"encoding/json"
 	"io/ioutil"
+	"math"
 	"os"
 	"path/filepath"
 	"sync"
@@ -26,6 +28,7 @@ import (
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/scheduler"
 	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
@@ -69,7 +72,13 @@ type mockDDLSink struct {
 	// DDLSink
 	ddlExecuting *model.DDLEvent
 	ddlDone      bool
-	mu           struct {
+	// whether to reset ddlDone flag, only for rename table
+	resetDDLDone bool
+	// whether to record the DDL history, only for rename table
+	recordDDLHistory bool
+	// a slice of DDL history, only for rename table
+	ddlHistory []string
+	mu         struct {
 		sync.Mutex
 		checkpointTs      model.Ts
 		currentTableNames []model.TableName
@@ -90,7 +99,16 @@ func (m *mockDDLSink) run(ctx cdcContext.Context, _ model.ChangeFeedID, _ *model
 
 func (m *mockDDLSink) emitDDLEvent(ctx cdcContext.Context, ddl *model.DDLEvent) (bool, error) {
 	m.ddlExecuting = ddl
-	defer func() { m.ddlDone = false }()
+	defer func() {
+		if m.resetDDLDone {
+			m.ddlDone = false
+		}
+	}()
+	if m.recordDDLHistory {
+		m.ddlHistory = append(m.ddlHistory, ddl.Query)
+	} else {
+		m.ddlHistory = nil
+	}
 	return m.ddlDone, nil
 }
 
@@ -125,6 +143,29 @@ func (m *mockDDLSink) Barrier(ctx context.Context) error {
 	return nil
 }
 
+type mockScheduler struct {
+	currentTables []model.TableID
+}
+
+func (m *mockScheduler) Tick(
+	ctx context.Context,
+	checkpointTs model.Ts,
+	currentTables []model.TableID,
+	captures map[model.CaptureID]*model.CaptureInfo,
+) (newCheckpointTs, newResolvedTs model.Ts, err error) {
+	m.currentTables = currentTables
+	return model.Ts(math.MaxUint64), model.Ts(math.MaxUint64), nil
+}
+
+// MoveTable is used to trigger manual table moves.
+func (m *mockScheduler) MoveTable(tableID model.TableID, target model.CaptureID) {}
+
+// Rebalance is used to trigger manual workload rebalances.
+func (m *mockScheduler) Rebalance() {}
+
+// Close closes the scheduler and releases resources.
+func (m *mockScheduler) Close(ctx context.Context) {}
+
 func createChangefeed4Test(ctx cdcContext.Context, t *testing.T) (
 	*changefeed, *orchestrator.ChangefeedReactorState,
 	map[model.CaptureID]*model.CaptureInfo, *orchestrator.ReactorStateTester,
@@ -138,10 +179,15 @@ func createChangefeed4Test(ctx cdcContext.Context, t *testing.T) (
 	cf := newChangefeed4Test(ctx.ChangefeedVars().ID, upStream, func(ctx cdcContext.Context, upStream *upstream.Upstream, startTs uint64) (DDLPuller, error) {
 		return &mockDDLPuller{resolvedTs: startTs - 1}, nil
 	}, func() DDLSink {
-		return &mockDDLSink{}
+		return &mockDDLSink{
+			resetDDLDone:     true,
+			recordDDLHistory: false,
+		}
 	})
-	cf.newScheduler = func(ctx cdcContext.Context, startTs uint64) (scheduler, error) {
-		return newSchedulerV1(), nil
+	cf.newScheduler = func(
+		ctx cdcContext.Context, startTs uint64,
+	) (scheduler.Scheduler, error) {
+		return &mockScheduler{}, nil
 	}
 	cf.upStream = upStream
 	state := orchestrator.NewChangefeedReactorState(ctx.ChangefeedVars().ID)
@@ -163,28 +209,18 @@ func TestPreCheck(t *testing.T) {
 	cf.Tick(ctx, state, captures)
 	tester.MustApplyPatches()
 	require.NotNil(t, state.Status)
-	require.Contains(t, state.TaskStatuses, ctx.GlobalVars().CaptureInfo.ID)
 
 	// test clean the meta data of offline capture
 	offlineCaputreID := "offline-capture"
-	state.PatchTaskStatus(offlineCaputreID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
-		return new(model.TaskStatus), true, nil
-	})
 	state.PatchTaskPosition(offlineCaputreID, func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
 		return new(model.TaskPosition), true, nil
-	})
-	state.PatchTaskWorkload(offlineCaputreID, func(workload model.TaskWorkload) (model.TaskWorkload, bool, error) {
-		return make(model.TaskWorkload), true, nil
 	})
 	tester.MustApplyPatches()
 
 	cf.Tick(ctx, state, captures)
 	tester.MustApplyPatches()
 	require.NotNil(t, state.Status)
-	require.Contains(t, state.TaskStatuses, ctx.GlobalVars().CaptureInfo.ID)
-	require.NotContains(t, state.TaskStatuses, offlineCaputreID)
 	require.NotContains(t, state.TaskPositions, offlineCaputreID)
-	require.NotContains(t, state.Workloads, offlineCaputreID)
 }
 
 func TestInitialize(t *testing.T) {
@@ -259,8 +295,6 @@ func TestExecDDL(t *testing.T) {
 	// pre check and initialize
 	tickThreeTime()
 	require.Len(t, cf.schema.AllPhysicalTables(), 1)
-	require.Len(t, state.TaskStatuses[ctx.GlobalVars().CaptureInfo.ID].Operation, 0)
-	require.Len(t, state.TaskStatuses[ctx.GlobalVars().CaptureInfo.ID].Tables, 0)
 
 	job = helper.DDL2Job("drop table test0.table0")
 	// ddl puller resolved ts grow up
@@ -310,7 +344,7 @@ func TestExecDDL(t *testing.T) {
 	mockDDLSink.ddlDone = true
 	mockDDLPuller.resolvedTs += 1000
 	tickThreeTime()
-	require.Contains(t, state.TaskStatuses[ctx.GlobalVars().CaptureInfo.ID].Tables, job.TableID)
+	require.Contains(t, cf.scheduler.(*mockScheduler).currentTables, job.TableID)
 }
 
 func TestEmitCheckpointTs(t *testing.T) {
@@ -354,8 +388,6 @@ func TestEmitCheckpointTs(t *testing.T) {
 	mockDDLSink := cf.sink.(*mockDDLSink)
 
 	require.Len(t, cf.schema.AllTableNames(), 1)
-	require.Len(t, state.TaskStatuses[ctx.GlobalVars().CaptureInfo.ID].Operation, 0)
-	require.Len(t, state.TaskStatuses[ctx.GlobalVars().CaptureInfo.ID].Tables, 0)
 	ts, names := mockDDLSink.getCheckpointTsAndTableNames()
 	require.Equal(t, ts, startTs)
 	require.Len(t, names, 1)
@@ -747,4 +779,208 @@ func TestAddSpecialComment(t *testing.T) {
 	require.Panics(t, func() {
 		_, _ = addSpecialComment("alter table t force, auto_increment = 12;alter table t force, auto_increment = 12;")
 	}, "invalid ddlQuery statement size")
+}
+
+func TestExecRenameTablesDDL(t *testing.T) {
+	helper := entry.NewSchemaTestHelper(t)
+	defer helper.Close()
+	ctx := cdcContext.NewBackendContext4Test(true)
+	cf, state, captures, tester := createChangefeed4Test(ctx, t)
+	defer cf.Close(ctx)
+	// pre check
+	cf.Tick(ctx, state, captures)
+	tester.MustApplyPatches()
+
+	// initialize
+	cf.Tick(ctx, state, captures)
+	tester.MustApplyPatches()
+	mockDDLSink := cf.sink.(*mockDDLSink)
+
+	var oldSchemaIDs, newSchemaIDs, oldTableIDs []int64
+	var newTableNames, oldSchemaNames []timodel.CIStr
+
+	execCreateStmt := func(tp, actualDDL, expectedDDL string) {
+		job := helper.DDL2Job(actualDDL)
+		done, err := cf.asyncExecDDLJob(ctx, job)
+		if tp == "database" {
+			oldSchemaIDs = append(oldSchemaIDs, job.SchemaID)
+		} else {
+			oldTableIDs = append(oldTableIDs, job.TableID)
+		}
+		require.Nil(t, err)
+		require.Equal(t, false, done)
+		require.Equal(t, expectedDDL, mockDDLSink.ddlExecuting.Query)
+		mockDDLSink.ddlDone = true
+		done, err = cf.asyncExecDDLJob(ctx, job)
+		require.Nil(t, err)
+		require.Equal(t, true, done)
+		require.Equal(t, expectedDDL, mockDDLSink.ddlExecuting.Query)
+	}
+
+	execCreateStmt("database", "create database test1",
+		"CREATE DATABASE `test1`")
+	execCreateStmt("table", "create table test1.tb1(id int primary key)",
+		"CREATE TABLE `test1`.`tb1` (`id` INT PRIMARY KEY)")
+	execCreateStmt("database", "create database test2",
+		"CREATE DATABASE `test2`")
+	execCreateStmt("table", "create table test2.tb2(id int primary key)",
+		"CREATE TABLE `test2`.`tb2` (`id` INT PRIMARY KEY)")
+
+	require.Len(t, oldSchemaIDs, 2)
+	require.Len(t, oldTableIDs, 2)
+	newSchemaIDs = []int64{oldSchemaIDs[1], oldSchemaIDs[0]}
+	oldSchemaNames = []timodel.CIStr{
+		timodel.NewCIStr("test1"),
+		timodel.NewCIStr("test2"),
+	}
+	newTableNames = []timodel.CIStr{
+		timodel.NewCIStr("tb20"),
+		timodel.NewCIStr("tb10"),
+	}
+	require.Len(t, newSchemaIDs, 2)
+	require.Len(t, oldSchemaNames, 2)
+	require.Len(t, newTableNames, 2)
+	args := []interface{}{
+		oldSchemaIDs, newSchemaIDs, newTableNames,
+		oldTableIDs, oldSchemaNames,
+	}
+	rawArgs, err := json.Marshal(args)
+	require.Nil(t, err)
+	job := helper.DDL2Job(
+		"rename table test1.tb1 to test2.tb10, test2.tb2 to test1.tb20")
+	// the RawArgs field in job fetched from tidb snapshot meta is incorrent,
+	// so we manually construct `job.RawArgs` to do the workaround.
+	job.RawArgs = rawArgs
+
+	mockDDLSink.recordDDLHistory = true
+	done, err := cf.asyncExecDDLJob(ctx, job)
+	require.Nil(t, err)
+	require.Equal(t, false, done)
+	require.Len(t, mockDDLSink.ddlHistory, 2)
+	require.Equal(t, "RENAME TABLE `test1`.`tb1` TO `test2`.`tb10`",
+		mockDDLSink.ddlHistory[0])
+	require.Equal(t, "RENAME TABLE `test2`.`tb2` TO `test1`.`tb20`",
+		mockDDLSink.ddlHistory[1])
+
+	// mock all of the rename table statements have been done
+	mockDDLSink.resetDDLDone = false
+	mockDDLSink.ddlDone = true
+	done, err = cf.asyncExecDDLJob(ctx, job)
+	require.Nil(t, err)
+	require.Equal(t, true, done)
+}
+
+func TestExecDropTablesDDL(t *testing.T) {
+	helper := entry.NewSchemaTestHelper(t)
+	defer helper.Close()
+	ctx := cdcContext.NewBackendContext4Test(true)
+	cf, state, captures, tester := createChangefeed4Test(ctx, t)
+	defer cf.Close(ctx)
+
+	// pre check
+	cf.Tick(ctx, state, captures)
+	tester.MustApplyPatches()
+	// initialize
+	cf.Tick(ctx, state, captures)
+	tester.MustApplyPatches()
+
+	mockDDLSink := cf.sink.(*mockDDLSink)
+	execCreateStmt := func(actualDDL, expectedDDL string) {
+		job := helper.DDL2Job(actualDDL)
+		done, err := cf.asyncExecDDLJob(ctx, job)
+		require.Nil(t, err)
+		require.Equal(t, false, done)
+		require.Equal(t, expectedDDL, mockDDLSink.ddlExecuting.Query)
+		mockDDLSink.ddlDone = true
+		done, err = cf.asyncExecDDLJob(ctx, job)
+		require.Nil(t, err)
+		require.Equal(t, true, done)
+	}
+
+	execCreateStmt("create database test1",
+		"CREATE DATABASE `test1`")
+	execCreateStmt("create table test1.tb1(id int primary key)",
+		"CREATE TABLE `test1`.`tb1` (`id` INT PRIMARY KEY)")
+	execCreateStmt("create table test1.tb2(id int primary key)",
+		"CREATE TABLE `test1`.`tb2` (`id` INT PRIMARY KEY)")
+
+	// drop tables is different from rename tables, it will generate
+	// multiple DDL jobs instead of one.
+	jobs := helper.DDL2Jobs("drop table test1.tb1, test1.tb2", 2)
+	require.Len(t, jobs, 2)
+
+	execDropStmt := func(job *timodel.Job, expectedDDL string) {
+		done, err := cf.asyncExecDDLJob(ctx, job)
+		require.Nil(t, err)
+		require.Equal(t, false, done)
+		require.Equal(t, mockDDLSink.ddlExecuting.Query, expectedDDL)
+		mockDDLSink.ddlDone = true
+		done, err = cf.asyncExecDDLJob(ctx, job)
+		require.Nil(t, err)
+		require.Equal(t, true, done)
+	}
+
+	execDropStmt(jobs[0], "DROP TABLE `test1`.`tb2`")
+	execDropStmt(jobs[1], "DROP TABLE `test1`.`tb1`")
+}
+
+func TestExecDropViewsDDL(t *testing.T) {
+	helper := entry.NewSchemaTestHelper(t)
+	defer helper.Close()
+	ctx := cdcContext.NewBackendContext4Test(true)
+	cf, state, captures, tester := createChangefeed4Test(ctx, t)
+	defer cf.Close(ctx)
+
+	// pre check
+	cf.Tick(ctx, state, captures)
+	tester.MustApplyPatches()
+	// initialize
+	cf.Tick(ctx, state, captures)
+	tester.MustApplyPatches()
+
+	mockDDLSink := cf.sink.(*mockDDLSink)
+	execCreateStmt := func(actualDDL, expectedDDL string) {
+		job := helper.DDL2Job(actualDDL)
+		done, err := cf.asyncExecDDLJob(ctx, job)
+		require.Nil(t, err)
+		require.Equal(t, false, done)
+		require.Equal(t, expectedDDL, mockDDLSink.ddlExecuting.Query)
+		mockDDLSink.ddlDone = true
+		done, err = cf.asyncExecDDLJob(ctx, job)
+		require.Nil(t, err)
+		require.Equal(t, true, done)
+	}
+	execCreateStmt("create database test1",
+		"CREATE DATABASE `test1`")
+	execCreateStmt("create table test1.tb1(id int primary key)",
+		"CREATE TABLE `test1`.`tb1` (`id` INT PRIMARY KEY)")
+	execCreateStmt("create view test1.view1 as "+
+		"select * from test1.tb1 where id > 100",
+		"CREATE ALGORITHM = UNDEFINED DEFINER = CURRENT_USER SQL "+
+			"SECURITY DEFINER VIEW `test1`.`view1` AS "+
+			"SELECT * FROM `test1`.`tb1` WHERE `id`>100")
+	execCreateStmt("create view test1.view2 as "+
+		"select * from test1.tb1 where id > 200",
+		"CREATE ALGORITHM = UNDEFINED DEFINER = CURRENT_USER SQL "+
+			"SECURITY DEFINER VIEW `test1`.`view2` AS "+
+			"SELECT * FROM `test1`.`tb1` WHERE `id`>200")
+
+	// drop views is similar to drop tables, it will also generate
+	// multiple DDL jobs.
+	jobs := helper.DDL2Jobs("drop view test1.view1, test1.view2", 2)
+	require.Len(t, jobs, 2)
+
+	execDropStmt := func(job *timodel.Job, expectedDDL string) {
+		done, err := cf.asyncExecDDLJob(ctx, job)
+		require.Nil(t, err)
+		require.Equal(t, false, done)
+		require.Equal(t, expectedDDL, mockDDLSink.ddlExecuting.Query)
+		mockDDLSink.ddlDone = true
+		done, err = cf.asyncExecDDLJob(ctx, job)
+		require.Nil(t, err)
+		require.Equal(t, true, done)
+	}
+
+	execDropStmt(jobs[0], "DROP VIEW `test1`.`view2`")
+	execDropStmt(jobs[1], "DROP VIEW `test1`.`view1`")
 }

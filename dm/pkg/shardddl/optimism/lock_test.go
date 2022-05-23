@@ -2158,6 +2158,7 @@ func (t *testLock) TestCheckAddDropColumns(c *C) {
 	l.tables[source][db][tbls[1]] = schemacmp.Encode(ti1)
 
 	col, err := l.checkAddDropColumn(source, db, tbls[0], DDLs1, schemacmp.Encode(ti0), schemacmp.Encode(ti1), nil)
+
 	c.Assert(err, IsNil)
 	c.Assert(len(col), Equals, 0)
 
@@ -2582,7 +2583,7 @@ func (t *testLock) TestAllTableSmallerLarger(c *C) {
 	// tb1: rename id to a
 	l.addConflictTable(source, schema, table1, t9)
 	l.finalTables[source][schema][table1] = t9
-	c.Assert(l.noConflictWithNormalTables(source, schema, table1, t1), IsFalse)
+	c.Assert(l.noConflictWithOneNormalTable(source, schema, table1, t1, t9), IsFalse)
 	c.Assert(l.allConflictTableSmaller(), IsTrue)
 	c.Assert(l.allConflictTableLarger(), IsTrue)
 	c.Assert(l.allFinalTableSmaller(), IsFalse)
@@ -2591,13 +2592,13 @@ func (t *testLock) TestAllTableSmallerLarger(c *C) {
 	l.tables[source][schema][table2] = t0
 	l.addConflictTable(source, schema, table2, t1)
 	l.finalTables[source][schema][table2] = t1
-	c.Assert(l.noConflictWithNormalTables(source, schema, table2, t1), IsTrue)
+	c.Assert(l.noConflictWithOneNormalTable(source, schema, table2, t0, t1), IsTrue)
 	l.removeConflictTable(source, schema, table2)
 	l.tables[source][schema][table2] = t1
 	// tb2: rename id to a
 	l.addConflictTable(source, schema, table2, t9)
 	l.finalTables[source][schema][table2] = t9
-	c.Assert(l.noConflictWithNormalTables(source, schema, table2, t9), IsFalse)
+	c.Assert(l.noConflictWithOneNormalTable(source, schema, table2, t1, t9), IsFalse)
 	c.Assert(l.allConflictTableSmaller(), IsTrue)
 	c.Assert(l.allConflictTableLarger(), IsTrue)
 	c.Assert(l.allFinalTableSmaller(), IsTrue)
@@ -2611,6 +2612,58 @@ func (t *testLock) TestAllTableSmallerLarger(c *C) {
 	c.Assert(l.tables[source][schema], HasLen, 2)
 	c.Assert(l.tables[source][schema][table1], DeepEquals, t0)
 	c.Assert(l.tables[source][schema][table2], DeepEquals, t0)
+}
+
+func (t *testLock) TestNoConflictWithOneNormalTable(c *C) {
+	var (
+		source       = "source"
+		schema       = "schema"
+		table1       = "table1"
+		table2       = "table2"
+		p            = parser.New()
+		se           = mock.NewContext()
+		tblID  int64 = 111
+		ti0          = createTableInfo(c, p, se, tblID, `CREATE TABLE bar (id INT PRIMARY KEY, a int, col int)`)
+		ti1          = createTableInfo(c, p, se, tblID, `CREATE TABLE bar (id INT PRIMARY KEY, a int, new_col int)`)
+		ti2          = createTableInfo(c, p, se, tblID, `CREATE TABLE bar (id INT PRIMARY KEY, a int, col varchar(4))`)
+		ti3          = createTableInfo(c, p, se, tblID, `CREATE TABLE bar (id INT PRIMARY KEY, a int, new_col2 int)`)
+		ti4          = createTableInfo(c, p, se, tblID, `CREATE TABLE bar (id INT PRIMARY KEY, b int, new_col int)`)
+		t0           = schemacmp.Encode(ti0)
+		t1           = schemacmp.Encode(ti1)
+		t2           = schemacmp.Encode(ti2)
+		t3           = schemacmp.Encode(ti3)
+		t4           = schemacmp.Encode(ti4)
+	)
+	l := &Lock{
+		tables: map[string]map[string]map[string]schemacmp.Table{
+			source: {
+				schema: {table1: t0, table2: t0},
+			},
+		},
+	}
+
+	// table1 nothing happened.
+	// table2 rename column
+	c.Assert(l.noConflictWithOneNormalTable(source, schema, table2, t0, t1), IsFalse)
+
+	// mock table1 rename column already
+	l.tables[source][schema][table1] = t1
+	// table2 rename column
+	c.Assert(l.noConflictWithOneNormalTable(source, schema, table2, t0, t1), IsTrue)
+	// table2 modify column
+	c.Assert(l.noConflictWithOneNormalTable(source, schema, table2, t0, t2), IsFalse)
+	// table2 different rename
+	c.Assert(l.noConflictWithOneNormalTable(source, schema, table2, t0, t3), IsFalse)
+
+	// mock table1 rename another column already
+	l.tables[source][schema][table1] = t4
+	// same results
+	// table2 rename column
+	c.Assert(l.noConflictWithOneNormalTable(source, schema, table2, t0, t1), IsTrue)
+	// table2 modify column
+	c.Assert(l.noConflictWithOneNormalTable(source, schema, table2, t0, t2), IsFalse)
+	// table2 different rename
+	c.Assert(l.noConflictWithOneNormalTable(source, schema, table2, t0, t3), IsFalse)
 }
 
 func checkRedirectOp(c *C, task, source, schema, table string) bool {

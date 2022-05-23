@@ -157,7 +157,7 @@ func (n *sorterNode) start(
 		lastCRTs := uint64(0)                // the commit-ts of the last row changed we sent.
 
 		metricsTableMemoryHistogram := tableMemoryHistogram.
-			WithLabelValues(ctx.ChangefeedVars().ID.ID)
+			WithLabelValues(ctx.ChangefeedVars().ID.Namespace, ctx.ChangefeedVars().ID.ID)
 		metricsTicker := time.NewTicker(flushMemoryMetricsDuration)
 		defer metricsTicker.Stop()
 
@@ -206,8 +206,10 @@ func (n *sorterNode) start(
 					size := uint64(msg.Row.ApproximateBytes())
 					// NOTE we allow the quota to be exceeded if blocking means interrupting a transaction.
 					// Otherwise the pipeline would deadlock.
-					err = n.flowController.Consume(commitTs, size, func() error {
-						if lastCRTs > lastSentResolvedTs {
+					err = n.flowController.Consume(msg, size, func(batch bool) error {
+						if batch {
+							log.Panic("cdc does not support the batch resolve mechanism at this time")
+						} else if lastCRTs > lastSentResolvedTs {
 							// If we are blocking, we send a Resolved Event here to elicit a sink-flush.
 							// Not sending a Resolved Event here will very likely deadlock the pipeline.
 							lastSentResolvedTs = lastCRTs
@@ -309,7 +311,7 @@ func (n *sorterNode) updateBarrierTs(barrierTs model.Ts) {
 }
 
 func (n *sorterNode) releaseResource(changefeedID model.ChangeFeedID) {
-	defer tableMemoryHistogram.DeleteLabelValues(changefeedID.ID)
+	defer tableMemoryHistogram.DeleteLabelValues(changefeedID.Namespace, changefeedID.ID)
 	// Since the flowController is implemented by `Cond`, it is not cancelable by a context
 	// the flowController will be blocked in a background goroutine,
 	// We need to abort the flowController manually in the nodeRunner

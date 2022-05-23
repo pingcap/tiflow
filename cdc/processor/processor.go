@@ -32,8 +32,10 @@ import (
 	tablepipeline "github.com/pingcap/tiflow/cdc/processor/pipeline"
 	"github.com/pingcap/tiflow/cdc/puller"
 	"github.com/pingcap/tiflow/cdc/redo"
+	"github.com/pingcap/tiflow/cdc/scheduler"
 	"github.com/pingcap/tiflow/cdc/sink"
 	"github.com/pingcap/tiflow/cdc/sink/metrics"
+	sinkmetric "github.com/pingcap/tiflow/cdc/sink/metrics"
 	"github.com/pingcap/tiflow/cdc/sorter/memory"
 	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
@@ -69,7 +71,7 @@ type processor struct {
 
 	filter        *filter.Filter
 	mounter       entry.Mounter
-	sinkManager   *sink.Manager
+	sink          sink.Sink
 	redoManager   redo.LogManager
 	lastRedoFlush time.Time
 
@@ -80,13 +82,11 @@ type processor struct {
 
 	lazyInit            func(ctx cdcContext.Context) error
 	createTablePipeline func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error)
-	newAgent            func(ctx cdcContext.Context) (processorAgent, error)
+	newAgent            func(ctx cdcContext.Context) (scheduler.Agent, error)
 
-	// fields for integration with Scheduler(V2).
-	newSchedulerEnabled bool
-	agent               processorAgent
-	checkpointTs        model.Ts
-	resolvedTs          model.Ts
+	agent        scheduler.Agent
+	checkpointTs model.Ts
+	resolvedTs   model.Ts
 
 	metricResolvedTsGauge           prometheus.Gauge
 	metricResolvedTsLagGauge        prometheus.Gauge
@@ -98,6 +98,7 @@ type processor struct {
 	metricSchemaStorageGcTsGauge    prometheus.Gauge
 	metricProcessorErrorCounter     prometheus.Counter
 	metricProcessorTickDuration     prometheus.Observer
+	metricsTableSinkTotalRows       prometheus.Counter
 }
 
 // checkReadyForMessages checks whether all necessary Etcd keys have been established.
@@ -106,15 +107,19 @@ func (p *processor) checkReadyForMessages() bool {
 }
 
 // AddTable implements TableExecutor interface.
-func (p *processor) AddTable(ctx cdcContext.Context, tableID model.TableID) (bool, error) {
+func (p *processor) AddTable(
+	ctx context.Context, tableID model.TableID, startTs model.Ts,
+) (bool, error) {
 	if !p.checkReadyForMessages() {
 		return false, nil
 	}
 
 	log.Info("adding table",
 		zap.Int64("tableID", tableID),
-		cdcContext.ZapFieldChangefeed(ctx))
-	err := p.addTable(ctx, tableID, &model.TableReplicaInfo{})
+		zap.Uint64("checkpointTs", startTs),
+		zap.String("namespace", p.changefeedID.Namespace),
+		zap.String("changefeed", p.changefeedID.ID))
+	err := p.addTable(ctx.(cdcContext.Context), tableID, &model.TableReplicaInfo{StartTs: startTs})
 	if err != nil {
 		return false, errors.Trace(err)
 	}
@@ -122,7 +127,7 @@ func (p *processor) AddTable(ctx cdcContext.Context, tableID model.TableID) (boo
 }
 
 // RemoveTable implements TableExecutor interface.
-func (p *processor) RemoveTable(ctx cdcContext.Context, tableID model.TableID) (bool, error) {
+func (p *processor) RemoveTable(ctx context.Context, tableID model.TableID) (bool, error) {
 	if !p.checkReadyForMessages() {
 		return false, nil
 	}
@@ -130,7 +135,9 @@ func (p *processor) RemoveTable(ctx cdcContext.Context, tableID model.TableID) (
 	table, ok := p.tables[tableID]
 	if !ok {
 		log.Warn("table which will be deleted is not found",
-			cdcContext.ZapFieldChangefeed(ctx), zap.Int64("tableID", tableID))
+			zap.String("namespace", p.changefeedID.Namespace),
+			zap.String("changefeed", p.changefeedID.ID),
+			zap.Int64("tableID", tableID))
 		return true, nil
 	}
 
@@ -139,7 +146,8 @@ func (p *processor) RemoveTable(ctx cdcContext.Context, tableID model.TableID) (
 		// We use a Debug log because it is conceivable for the pipeline to block for a legitimate reason,
 		// and we do not want to alarm the user.
 		log.Debug("AsyncStop has failed, possible due to a full pipeline",
-			cdcContext.ZapFieldChangefeed(ctx),
+			zap.String("namespace", p.changefeedID.Namespace),
+			zap.String("changefeed", p.changefeedID.ID),
 			zap.Uint64("checkpointTs", table.CheckpointTs()),
 			zap.Int64("tableID", tableID))
 		return false, nil
@@ -148,7 +156,7 @@ func (p *processor) RemoveTable(ctx cdcContext.Context, tableID model.TableID) (
 }
 
 // IsAddTableFinished implements TableExecutor interface.
-func (p *processor) IsAddTableFinished(ctx cdcContext.Context, tableID model.TableID) bool {
+func (p *processor) IsAddTableFinished(ctx context.Context, tableID model.TableID) bool {
 	if !p.checkReadyForMessages() {
 		return false
 	}
@@ -156,7 +164,8 @@ func (p *processor) IsAddTableFinished(ctx cdcContext.Context, tableID model.Tab
 	table, exist := p.tables[tableID]
 	if !exist {
 		log.Panic("table which was added is not found",
-			cdcContext.ZapFieldChangefeed(ctx),
+			zap.String("namespace", p.changefeedID.Namespace),
+			zap.String("changefeed", p.changefeedID.ID),
 			zap.Int64("tableID", tableID))
 	}
 	localResolvedTs := p.resolvedTs
@@ -178,13 +187,14 @@ func (p *processor) IsAddTableFinished(ctx cdcContext.Context, tableID model.Tab
 		return false
 	}
 	log.Info("Add Table finished",
-		cdcContext.ZapFieldChangefeed(ctx),
+		zap.String("namespace", p.changefeedID.Namespace),
+		zap.String("changefeed", p.changefeedID.ID),
 		zap.Int64("tableID", tableID))
 	return true
 }
 
 // IsRemoveTableFinished implements TableExecutor interface.
-func (p *processor) IsRemoveTableFinished(ctx cdcContext.Context, tableID model.TableID) bool {
+func (p *processor) IsRemoveTableFinished(ctx context.Context, tableID model.TableID) bool {
 	if !p.checkReadyForMessages() {
 		return false
 	}
@@ -192,13 +202,15 @@ func (p *processor) IsRemoveTableFinished(ctx cdcContext.Context, tableID model.
 	table, exist := p.tables[tableID]
 	if !exist {
 		log.Panic("table which was deleted is not found",
-			cdcContext.ZapFieldChangefeed(ctx),
+			zap.String("namespace", p.changefeedID.Namespace),
+			zap.String("changefeed", p.changefeedID.ID),
 			zap.Int64("tableID", tableID))
 		return true
 	}
 	if table.Status() != tablepipeline.TableStatusStopped {
 		log.Debug("the table is still not stopped",
-			cdcContext.ZapFieldChangefeed(ctx),
+			zap.String("namespace", p.changefeedID.Namespace),
+			zap.String("changefeed", p.changefeedID.ID),
 			zap.Uint64("checkpointTs", table.CheckpointTs()),
 			zap.Int64("tableID", tableID))
 		return false
@@ -208,7 +220,8 @@ func (p *processor) IsRemoveTableFinished(ctx cdcContext.Context, tableID model.
 	table.Wait()
 	delete(p.tables, tableID)
 	log.Info("Remove Table finished",
-		cdcContext.ZapFieldChangefeed(ctx),
+		zap.String("namespace", p.changefeedID.Namespace),
+		zap.String("changefeed", p.changefeedID.ID),
 		zap.Int64("tableID", tableID))
 
 	return true
@@ -231,7 +244,6 @@ func (p *processor) GetCheckpoint() (checkpointTs, resolvedTs model.Ts) {
 // newProcessor creates a new processor
 func newProcessor(ctx cdcContext.Context, upStream *upstream.Upstream) *processor {
 	changefeedID := ctx.ChangefeedVars().ID
-	conf := config.GetGlobalServerConfig()
 	p := &processor{
 		upStream:      upStream,
 		tables:        make(map[model.TableID]tablepipeline.TablePipeline),
@@ -241,28 +253,27 @@ func newProcessor(ctx cdcContext.Context, upStream *upstream.Upstream) *processo
 		cancel:        func() {},
 		lastRedoFlush: time.Now(),
 
-		newSchedulerEnabled: conf.Debug.EnableNewScheduler,
-
 		metricResolvedTsGauge: resolvedTsGauge.
-			WithLabelValues(changefeedID.ID),
+			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		metricResolvedTsLagGauge: resolvedTsLagGauge.
-			WithLabelValues(changefeedID.ID),
+			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		metricMinResolvedTableIDGuage: resolvedTsMinTableIDGauge.
-			WithLabelValues(changefeedID.ID),
+			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		metricCheckpointTsGauge: checkpointTsGauge.
-			WithLabelValues(changefeedID.ID),
+			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		metricCheckpointTsLagGauge: checkpointTsLagGauge.
-			WithLabelValues(changefeedID.ID),
+			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		metricMinCheckpointTableIDGuage: checkpointTsMinTableIDGauge.
-			WithLabelValues(changefeedID.ID),
+			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		metricSyncTableNumGauge: syncTableNumGauge.
-			WithLabelValues(changefeedID.ID),
+			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		metricProcessorErrorCounter: processorErrorCounter.
-			WithLabelValues(changefeedID.ID),
+			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		metricSchemaStorageGcTsGauge: processorSchemaStorageGcTsGauge.
-			WithLabelValues(changefeedID.ID),
+			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		metricProcessorTickDuration: processorTickDuration.
-			WithLabelValues(changefeedID.ID),
+			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
+		metricsTableSinkTotalRows: sinkmetric.TableSinkTotalRowsCountCounter.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 	}
 	p.createTablePipeline = p.createTablePipelineImpl
 	p.lazyInit = p.lazyInitImpl
@@ -365,14 +376,6 @@ func (p *processor) tick(ctx cdcContext.Context, state *orchestrator.ChangefeedR
 	if err := p.lazyInit(ctx); err != nil {
 		return errors.Trace(err)
 	}
-	// sink manager will return this checkpointTs to sink node if sink node resolvedTs flush failed
-	p.sinkManager.UpdateChangeFeedCheckpointTs(state.Info.GetCheckpointTs(state.Status))
-	if err := p.handleTableOperation(ctx); err != nil {
-		return errors.Trace(err)
-	}
-	if err := p.checkTablesNum(ctx); err != nil {
-		return errors.Trace(err)
-	}
 	if err := p.flushRedoLogMeta(ctx); err != nil {
 		return err
 	}
@@ -383,22 +386,11 @@ func (p *processor) tick(ctx cdcContext.Context, state *orchestrator.ChangefeedR
 	p.handlePosition(oracle.GetPhysical(pdTime))
 	p.pushResolvedTs2Table()
 
-	// The workload key does not contain extra information and
-	// will not be used in the new scheduler. If we wrote to the
-	// key while there are many tables (>10000), we would risk burdening Etcd.
-	//
-	// The keys will still exist but will no longer be written to
-	// if we do not call handleWorkload.
-	if !p.newSchedulerEnabled {
-		p.handleWorkload()
-	}
 	p.doGCSchemaStorage(ctx)
 	p.metricSyncTableNumGauge.Set(float64(len(p.tables)))
 
-	if p.newSchedulerEnabled {
-		if err := p.agent.Tick(ctx); err != nil {
-			return errors.Trace(err)
-		}
+	if err := p.agent.Tick(ctx); err != nil {
+		return errors.Trace(err)
 	}
 	return nil
 }
@@ -423,13 +415,9 @@ func (p *processor) createTaskPosition() (skipThisTick bool) {
 	if p.initialized {
 		log.Warn("position is nil, maybe position info is removed unexpected", zap.Any("state", p.changefeed))
 	}
-	checkpointTs := p.changefeed.Info.GetCheckpointTs(p.changefeed.Status)
 	p.changefeed.PatchTaskPosition(p.captureInfo.ID, func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
 		if position == nil {
-			return &model.TaskPosition{
-				CheckPointTs: checkpointTs,
-				ResolvedTs:   checkpointTs,
-			}, true, nil
+			return &model.TaskPosition{}, true, nil
 		}
 		return position, false, nil
 	})
@@ -501,14 +489,14 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 	}
 	opts[metrics.OptCaptureAddr] = ctx.GlobalVars().CaptureInfo.AdvertiseAddr
 	log.Info("processor try new sink",
-		zap.String("namespace", p.changefeed.ID.Namespace),
+		zap.String("namespace", p.changefeedID.Namespace),
 		zap.String("changefeed", p.changefeed.ID.ID))
 
 	start := time.Now()
-	s, err := sink.New(stdCtx, p.changefeed.ID, p.changefeed.Info.SinkURI, p.filter, p.changefeed.Info.Config, opts, errCh)
+	p.sink, err = sink.New(stdCtx, p.changefeed.ID, p.changefeed.Info.SinkURI, p.filter, p.changefeed.Info.Config, opts, errCh)
 	if err != nil {
 		log.Info("processor new sink failed",
-			zap.String("namespace", p.changefeed.ID.Namespace),
+			zap.String("namespace", p.changefeedID.Namespace),
 			zap.String("changefeed", p.changefeed.ID.ID),
 			zap.Duration("duration", time.Since(start)))
 		return errors.Trace(err)
@@ -516,20 +504,15 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 	log.Info("processor try new sink success",
 		zap.Duration("duration", time.Since(start)))
 
-	checkpointTs := p.changefeed.Info.GetCheckpointTs(p.changefeed.Status)
-	captureAddr := ctx.GlobalVars().CaptureInfo.AdvertiseAddr
-	p.sinkManager = sink.NewManager(stdCtx, s, errCh, checkpointTs, captureAddr, p.changefeedID)
 	redoManagerOpts := &redo.ManagerOptions{EnableBgRunner: true, ErrCh: errCh}
 	p.redoManager, err = redo.NewManager(stdCtx, p.changefeed.Info.Config.Consistent, redoManagerOpts)
 	if err != nil {
 		return err
 	}
 
-	if p.newSchedulerEnabled {
-		p.agent, err = p.newAgent(ctx)
-		if err != nil {
-			return err
-		}
+	p.agent, err = p.newAgent(ctx)
+	if err != nil {
+		return err
 	}
 
 	p.initialized = true
@@ -537,10 +520,11 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 	return nil
 }
 
-func (p *processor) newAgentImpl(ctx cdcContext.Context) (processorAgent, error) {
+func (p *processor) newAgentImpl(ctx cdcContext.Context) (scheduler.Agent, error) {
 	messageServer := ctx.GlobalVars().MessageServer
 	messageRouter := ctx.GlobalVars().MessageRouter
-	ret, err := newAgent(ctx, messageServer, messageRouter, p, p.changefeedID)
+	etcdClient := ctx.GlobalVars().EtcdClient
+	ret, err := scheduler.NewAgent(ctx, messageServer, messageRouter, etcdClient, p, p.changefeedID)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -564,129 +548,6 @@ func (p *processor) handleErrorCh(ctx cdcContext.Context) error {
 	}
 	log.Info("processor exited", cdcContext.ZapFieldCapture(ctx), cdcContext.ZapFieldChangefeed(ctx))
 	return cerror.ErrReactorFinished
-}
-
-// handleTableOperation handles the operation of `TaskStatus`(add table operation and remove table operation)
-func (p *processor) handleTableOperation(ctx cdcContext.Context) error {
-	if p.newSchedulerEnabled {
-		return nil
-	}
-
-	patchOperation := func(tableID model.TableID, fn func(operation *model.TableOperation) error) {
-		p.changefeed.PatchTaskStatus(p.captureInfo.ID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
-			if status == nil || status.Operation == nil {
-				log.Error("Operation not found, may be remove by other patch", zap.Int64("tableID", tableID), zap.Any("status", status))
-				return nil, false, cerror.ErrTaskStatusNotExists.GenWithStackByArgs()
-			}
-			opt := status.Operation[tableID]
-			if opt == nil {
-				log.Error("Operation not found, may be remove by other patch", zap.Int64("tableID", tableID), zap.Any("status", status))
-				return nil, false, cerror.ErrTaskStatusNotExists.GenWithStackByArgs()
-			}
-			if err := fn(opt); err != nil {
-				return nil, false, errors.Trace(err)
-			}
-			return status, true, nil
-		})
-	}
-	taskStatus := p.changefeed.TaskStatuses[p.captureInfo.ID]
-	for tableID, opt := range taskStatus.Operation {
-		if opt.TableApplied() {
-			continue
-		}
-		globalCheckpointTs := p.changefeed.Status.CheckpointTs
-		if opt.Delete {
-			table, exist := p.tables[tableID]
-			if !exist {
-				log.Warn("table which will be deleted is not found",
-					cdcContext.ZapFieldChangefeed(ctx), zap.Int64("tableID", tableID))
-				patchOperation(tableID, func(operation *model.TableOperation) error {
-					operation.Status = model.OperFinished
-					return nil
-				})
-				continue
-			}
-			switch opt.Status {
-			case model.OperDispatched:
-				if opt.BoundaryTs < globalCheckpointTs {
-					log.Warn("the BoundaryTs of remove table operation is smaller than global checkpoint ts", zap.Uint64("globalCheckpointTs", globalCheckpointTs), zap.Any("operation", opt))
-				}
-				if !table.AsyncStop(opt.BoundaryTs) {
-					// We use a Debug log because it is conceivable for the pipeline to block for a legitimate reason,
-					// and we do not want to alarm the user.
-					log.Debug("AsyncStop has failed, possible due to a full pipeline",
-						zap.Uint64("checkpointTs", table.CheckpointTs()), zap.Int64("tableID", tableID))
-					continue
-				}
-				patchOperation(tableID, func(operation *model.TableOperation) error {
-					operation.Status = model.OperProcessed
-					return nil
-				})
-			case model.OperProcessed:
-				if table.Status() != tablepipeline.TableStatusStopped {
-					log.Debug("the table is still not stopped", zap.Uint64("checkpointTs", table.CheckpointTs()), zap.Int64("tableID", tableID))
-					continue
-				}
-				patchOperation(tableID, func(operation *model.TableOperation) error {
-					operation.BoundaryTs = table.CheckpointTs()
-					operation.Status = model.OperFinished
-					return nil
-				})
-				p.removeTable(table, tableID)
-				log.Debug("Operation done signal received",
-					cdcContext.ZapFieldChangefeed(ctx),
-					zap.Int64("tableID", tableID),
-					zap.Reflect("operation", opt))
-			default:
-				log.Panic("unreachable")
-			}
-		} else {
-			switch opt.Status {
-			case model.OperDispatched:
-				replicaInfo, exist := taskStatus.Tables[tableID]
-				if !exist {
-					return cerror.ErrProcessorTableNotFound.GenWithStack("replicaInfo of table(%d)", tableID)
-				}
-				if replicaInfo.StartTs != opt.BoundaryTs {
-					log.Warn("the startTs and BoundaryTs of add table operation should be always equaled", zap.Any("replicaInfo", replicaInfo))
-				}
-				err := p.addTable(ctx, tableID, replicaInfo)
-				if err != nil {
-					return errors.Trace(err)
-				}
-				patchOperation(tableID, func(operation *model.TableOperation) error {
-					operation.Status = model.OperProcessed
-					return nil
-				})
-			case model.OperProcessed:
-				table, exist := p.tables[tableID]
-				if !exist {
-					log.Warn("table which was added is not found",
-						cdcContext.ZapFieldChangefeed(ctx), zap.Int64("tableID", tableID))
-					patchOperation(tableID, func(operation *model.TableOperation) error {
-						operation.Status = model.OperDispatched
-						return nil
-					})
-					continue
-				}
-				localResolvedTs := p.changefeed.TaskPositions[p.captureInfo.ID].ResolvedTs
-				globalResolvedTs := p.changefeed.Status.ResolvedTs
-				if table.ResolvedTs() >= localResolvedTs && localResolvedTs >= globalResolvedTs {
-					patchOperation(tableID, func(operation *model.TableOperation) error {
-						operation.Status = model.OperFinished
-						return nil
-					})
-					log.Debug("Operation done signal received",
-						cdcContext.ZapFieldChangefeed(ctx),
-						zap.Int64("tableID", tableID),
-						zap.Reflect("operation", opt))
-				}
-			default:
-				log.Panic("unreachable")
-			}
-		}
-	}
-	return nil
 }
 
 func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.SchemaStorage, error) {
@@ -771,55 +632,6 @@ func (p *processor) sendError(err error) {
 	}
 }
 
-// checkTablesNum if the number of table pipelines is equal to the number of TaskStatus in etcd state.
-// if the table number is not right, create or remove the odd tables.
-func (p *processor) checkTablesNum(ctx cdcContext.Context) error {
-	if p.newSchedulerEnabled {
-		// No need to check this for the new scheduler.
-		return nil
-	}
-
-	taskStatus := p.changefeed.TaskStatuses[p.captureInfo.ID]
-	if len(p.tables) == len(taskStatus.Tables) {
-		return nil
-	}
-	// check if a table should be listen but not
-	// this only could be happened in the first tick.
-	for tableID, replicaInfo := range taskStatus.Tables {
-		if _, exist := p.tables[tableID]; exist {
-			continue
-		}
-		opt := taskStatus.Operation
-		// TODO(leoppro): check if the operation is a undone add operation
-		if opt != nil && opt[tableID] != nil {
-			continue
-		}
-		log.Info("start to listen to the table immediately", zap.Int64("tableID", tableID), zap.Any("replicaInfo", replicaInfo))
-		if replicaInfo.StartTs < p.changefeed.Status.CheckpointTs {
-			replicaInfo.StartTs = p.changefeed.Status.CheckpointTs
-		}
-		err := p.addTable(ctx, tableID, replicaInfo)
-		if err != nil {
-			return errors.Trace(err)
-		}
-	}
-	// check if a table should be removed but still exist
-	// this shouldn't be happened in any time.
-	for tableID, tablePipeline := range p.tables {
-		if _, exist := taskStatus.Tables[tableID]; exist {
-			continue
-		}
-		opt := taskStatus.Operation
-		if opt != nil && opt[tableID] != nil && opt[tableID].Delete {
-			// table will be removed by normal logic
-			continue
-		}
-		p.removeTable(tablePipeline, tableID)
-		log.Warn("the table was forcibly deleted", zap.Int64("tableID", tableID), zap.Any("taskStatus", taskStatus))
-	}
-	return nil
-}
-
 // handlePosition calculates the local resolved ts and local checkpoint ts
 func (p *processor) handlePosition(currentTs int64) {
 	minResolvedTs := uint64(math.MaxUint64)
@@ -855,53 +667,8 @@ func (p *processor) handlePosition(currentTs int64) {
 	p.metricCheckpointTsGauge.Set(float64(checkpointPhyTs))
 	p.metricMinCheckpointTableIDGuage.Set(float64(minCheckpointTableID))
 
-	if p.newSchedulerEnabled {
-		p.checkpointTs = minCheckpointTs
-		p.resolvedTs = minResolvedTs
-		return
-	}
-
-	// minResolvedTs and minCheckpointTs may less than global resolved ts and global checkpoint ts when a new table added, the startTs of the new table is less than global checkpoint ts.
-	if minResolvedTs != p.changefeed.TaskPositions[p.captureInfo.ID].ResolvedTs ||
-		minCheckpointTs != p.changefeed.TaskPositions[p.captureInfo.ID].CheckPointTs {
-		p.changefeed.PatchTaskPosition(p.captureInfo.ID, func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
-			failpoint.Inject("ProcessorUpdatePositionDelaying", nil)
-			if position == nil {
-				// when the captureInfo is deleted, the old owner will delete task status, task position, task workload in non-atomic
-				// so processor may see a intermediate state, for example the task status is exist but task position is deleted.
-				log.Warn("task position is not exist, skip to update position",
-					zap.String("namespace", p.changefeed.ID.Namespace),
-					zap.String("changefeed", p.changefeed.ID.ID))
-				return nil, false, nil
-			}
-			position.CheckPointTs = minCheckpointTs
-			position.ResolvedTs = minResolvedTs
-			return position, true, nil
-		})
-	}
-}
-
-// handleWorkload calculates the workload of all tables
-func (p *processor) handleWorkload() {
-	p.changefeed.PatchTaskWorkload(p.captureInfo.ID, func(workloads model.TaskWorkload) (model.TaskWorkload, bool, error) {
-		changed := false
-		if workloads == nil {
-			workloads = make(model.TaskWorkload)
-		}
-		for tableID := range workloads {
-			if _, exist := p.tables[tableID]; !exist {
-				delete(workloads, tableID)
-				changed = true
-			}
-		}
-		for tableID, table := range p.tables {
-			if workloads[tableID] != table.Workload() {
-				workloads[tableID] = table.Workload()
-				changed = true
-			}
-		}
-		return workloads, changed, nil
-	})
+	p.checkpointTs = minCheckpointTs
+	p.resolvedTs = minResolvedTs
 }
 
 // pushResolvedTs2Table sends global resolved ts to all the table pipelines.
@@ -923,7 +690,10 @@ func (p *processor) pushResolvedTs2Table() {
 // addTable creates a new table pipeline and adds it to the `p.tables`
 func (p *processor) addTable(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) error {
 	if replicaInfo.StartTs == 0 {
-		replicaInfo.StartTs = p.changefeed.Status.CheckpointTs
+		log.Panic("table start ts must not be 0",
+			zap.String("namespace", p.changefeedID.Namespace),
+			zap.String("changefeed", p.changefeedID.ID),
+			zap.Int64("tableID", tableID))
 	}
 
 	if table, ok := p.tables[tableID]; ok {
@@ -1028,7 +798,7 @@ func (p *processor) createTablePipelineImpl(
 		return nil, errors.Trace(err)
 	}
 
-	sink, err := p.sinkManager.CreateTableSink(tableID, p.redoManager)
+	s, err := sink.NewTableSink(p.sink, tableID, p.metricsTableSinkTotalRows, p.redoManager)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -1042,7 +812,7 @@ func (p *processor) createTablePipelineImpl(
 			tableID,
 			tableName,
 			replicaInfo,
-			sink,
+			s,
 			p.changefeed.Info.GetTargetTs())
 		if err != nil {
 			return nil, errors.Trace(err)
@@ -1054,7 +824,7 @@ func (p *processor) createTablePipelineImpl(
 			tableID,
 			tableName,
 			replicaInfo,
-			sink,
+			s,
 			p.changefeed.Info.GetTargetTs(),
 		)
 	}
@@ -1124,7 +894,7 @@ func (p *processor) flushRedoLogMeta(ctx context.Context) error {
 
 func (p *processor) Close() error {
 	log.Info("processor closing ...",
-		zap.String("namespace", p.changefeed.ID.Namespace),
+		zap.String("namespace", p.changefeedID.Namespace),
 		zap.String("changefeed", p.changefeed.ID.ID))
 	for _, tbl := range p.tables {
 		tbl.Cancel()
@@ -1134,47 +904,47 @@ func (p *processor) Close() error {
 	}
 	p.cancel()
 	p.wg.Wait()
+	p.upStream.Release()
 
-	if p.newSchedulerEnabled {
-		if p.agent == nil {
-			return nil
-		}
-		if err := p.agent.Close(); err != nil {
-			return errors.Trace(err)
-		}
-		p.agent = nil
+	if p.agent == nil {
+		return nil
 	}
+	if err := p.agent.Close(); err != nil {
+		return errors.Trace(err)
+	}
+	p.agent = nil
 
 	// sink close might be time-consuming, do it the last.
-	if p.sinkManager != nil {
+	if p.sink != nil {
 		// pass a canceled context is ok here, since we don't need to wait Close
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
-		log.Info("processor try to close the sinkManager",
+		log.Info("processor try to close the sink",
 			zap.String("namespace", p.changefeedID.Namespace),
 			zap.String("changefeed", p.changefeedID.ID))
 		start := time.Now()
-		if err := p.sinkManager.Close(ctx); err != nil {
-			log.Info("processor close sinkManager failed",
+		if err := p.sink.Close(ctx); err != nil && errors.Cause(err) != context.Canceled {
+			log.Info("processor close sink failed",
 				zap.String("namespace", p.changefeedID.Namespace),
 				zap.String("changefeed", p.changefeedID.ID),
 				zap.Duration("duration", time.Since(start)))
 			return errors.Trace(err)
 		}
-		log.Info("processor close sinkManager success",
+		log.Info("processor close sink success",
 			zap.String("namespace", p.changefeedID.Namespace),
 			zap.String("changefeed", p.changefeedID.ID),
 			zap.Duration("duration", time.Since(start)))
 	}
 	// mark tables share the same cdcContext with its original table, don't need to cancel
 	failpoint.Inject("processorStopDelay", nil)
-	resolvedTsGauge.DeleteLabelValues(p.changefeedID.ID)
-	resolvedTsLagGauge.DeleteLabelValues(p.changefeedID.ID)
-	checkpointTsGauge.DeleteLabelValues(p.changefeedID.ID)
-	checkpointTsLagGauge.DeleteLabelValues(p.changefeedID.ID)
-	syncTableNumGauge.DeleteLabelValues(p.changefeedID.ID)
-	processorErrorCounter.DeleteLabelValues(p.changefeedID.ID)
-	processorSchemaStorageGcTsGauge.DeleteLabelValues(p.changefeedID.ID)
+	resolvedTsGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
+	resolvedTsLagGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
+	checkpointTsGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
+	checkpointTsLagGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
+	syncTableNumGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
+	processorErrorCounter.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
+	processorSchemaStorageGcTsGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
+	sinkmetric.TableSinkTotalRowsCountCounter.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
 
 	return nil
 }

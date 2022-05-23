@@ -74,6 +74,8 @@ const (
 
 	rowChangeTypeCount  = 3
 	errorStateTypeCount = 4 // pb.ValidateErrorState_*
+
+	validatorDmctlOpTimeout = 5 * time.Second
 )
 
 // change of table
@@ -149,7 +151,6 @@ type DataValidator struct {
 	L                  log.Logger
 	fromDB             *conn.BaseDB
 	toDB               *conn.BaseDB
-	toDBConns          []*dbconn.DBConn
 	timezone           *time.Location
 	syncCfg            replication.BinlogSyncerConfig
 	streamerController *StreamerController
@@ -205,6 +206,9 @@ func (v *DataValidator) reset() {
 
 	v.reachedSyncer.Store(false)
 	v.resetResult()
+	for i := range v.processedRowCounts {
+		v.processedRowCounts[i].Store(0)
+	}
 	for i := range v.pendingRowCounts {
 		v.pendingRowCounts[i].Store(0)
 	}
@@ -215,42 +219,41 @@ func (v *DataValidator) reset() {
 func (v *DataValidator) initialize() error {
 	v.ctx, v.cancel = context.WithCancel(context.Background())
 	v.tctx = tcontext.NewContext(v.ctx, v.L)
-	// todo: enhance error handling
 	v.reset()
 
-	if err := v.persistHelper.init(v.tctx); err != nil {
-		return err
-	}
-
-	newCtx, cancelFunc := context.WithTimeout(v.ctx, unit.DefaultInitTimeout)
+	newCtx, cancelFunc := v.tctx.WithTimeout(unit.DefaultInitTimeout)
 	defer cancelFunc()
-	tctx := tcontext.NewContext(newCtx, v.L)
 
 	var err error
 	defer func() {
 		if err == nil {
 			return
 		}
-		dbconn.CloseBaseDB(tctx, v.fromDB)
-		dbconn.CloseBaseDB(tctx, v.toDB)
+		dbconn.CloseBaseDB(newCtx, v.fromDB)
+		dbconn.CloseBaseDB(newCtx, v.toDB)
 		v.cancel()
 	}()
 
 	dbCfg := v.cfg.From
-	dbCfg.RawDBCfg = config.DefaultRawDBConfig().SetReadTimeout(maxDMLConnectionTimeout)
-	v.fromDB, _, err = dbconn.CreateConns(tctx, v.cfg, &dbCfg, 0)
+	dbCfg.RawDBCfg = config.DefaultRawDBConfig().SetReadTimeout(maxDMLConnectionTimeout).SetMaxIdleConns(1)
+	v.fromDB, err = dbconn.CreateBaseDB(&dbCfg)
 	if err != nil {
 		return err
 	}
 
 	dbCfg = v.cfg.To
-	dbCfg.RawDBCfg = config.DefaultRawDBConfig().SetReadTimeout(maxDMLConnectionTimeout).SetMaxIdleConns(v.workerCnt)
-	v.toDB, v.toDBConns, err = dbconn.CreateConns(tctx, v.cfg, &dbCfg, v.workerCnt)
+	// worker count + checkpoint connection, others concurrent access can create it on the fly
+	dbCfg.RawDBCfg = config.DefaultRawDBConfig().SetReadTimeout(maxDMLConnectionTimeout).SetMaxIdleConns(v.workerCnt + 1)
+	v.toDB, err = dbconn.CreateBaseDB(&dbCfg)
 	if err != nil {
 		return err
 	}
 
-	v.timezone, err = str2TimezoneOrFromDB(tctx, v.cfg.Timezone, &v.cfg.To)
+	if err = v.persistHelper.init(newCtx); err != nil {
+		return err
+	}
+
+	v.timezone, err = str2TimezoneOrFromDB(newCtx, v.cfg.Timezone, &v.cfg.To)
 	if err != nil {
 		return err
 	}
@@ -264,13 +267,20 @@ func (v *DataValidator) initialize() error {
 	return nil
 }
 
+func (v *DataValidator) routineWrapper(fn func()) {
+	defer func() {
+		if err := recover(); err != nil {
+			v.L.Error("panic", zap.Any("err", err))
+			v.sendError(terror.ErrValidatorPanic.Generate(err))
+		}
+	}()
+
+	fn()
+}
+
 func (v *DataValidator) Start(expect pb.Stage) {
 	v.Lock()
 	defer v.Unlock()
-	failpoint.Inject("MockValidationQuery", func() {
-		v.setStage(pb.Stage_Running)
-		failpoint.Return()
-	})
 
 	v.L.Info("starting")
 	if v.Stage() == pb.Stage_Running {
@@ -288,13 +298,19 @@ func (v *DataValidator) Start(expect pb.Stage) {
 	}
 
 	v.wg.Add(1)
-	go v.doValidate()
+	go v.routineWrapper(func() {
+		v.doValidate()
+	})
 
 	v.wg.Add(1)
-	go v.printStatusRoutine()
+	go v.routineWrapper(func() {
+		v.printStatusRoutine()
+	})
 
+	// routineWrapper relies on errorProcessRoutine to handle panic errors,
+	// so just wrap it using a common wrapper.
 	v.errProcessWg.Add(1)
-	go v.errorProcessRoutine()
+	go utils.GoLogWrapper(v.L, v.errorProcessRoutine)
 
 	v.setStage(pb.Stage_Running)
 	v.L.Info("started")
@@ -332,13 +348,15 @@ func (v *DataValidator) fillResult(err error, needLock bool) {
 		defer v.Unlock()
 	}
 
-	// todo: if error, validation is stopped( and cancelled), and we may receive a cancelled error.
-	// todo: do we need this cancel field?
+	// when met a non-retryable error, we'll call stopInner, then v.ctx is cancelled,
+	// don't set IsCanceled in this case
 	isCanceled := false
-	select {
-	case <-v.ctx.Done():
-		isCanceled = true
-	default:
+	if len(v.result.Errors) == 0 {
+		select {
+		case <-v.ctx.Done():
+			isCanceled = true
+		default:
+		}
 	}
 
 	var processErr *pb.ProcessError
@@ -357,7 +375,6 @@ func (v *DataValidator) errorProcessRoutine() {
 		v.fillResult(err, true)
 
 		if errors.Cause(err) != context.Canceled {
-			// todo: need a better way to handle err(auto resuming on some error, etc.)
 			v.stopInner()
 		}
 	}
@@ -366,14 +383,13 @@ func (v *DataValidator) errorProcessRoutine() {
 func (v *DataValidator) waitSyncerSynced(currLoc binlog.Location) error {
 	syncLoc := v.syncer.getFlushedGlobalPoint()
 	cmp := binlog.CompareLocation(currLoc, syncLoc, v.cfg.EnableGTID)
-	switch {
-	case cmp < 0:
-		return nil
-	case cmp == 0:
+	if cmp >= 0 && !v.reachedSyncer.Load() {
+		// todo: need to make sure reachedSyncer=true at some time
 		v.reachedSyncer.Store(true)
+		v.L.Info("validator progress reached syncer")
+	}
+	if cmp <= 0 {
 		return nil
-	default:
-		v.reachedSyncer.Store(true)
 	}
 
 	for {
@@ -419,7 +435,7 @@ func (v *DataValidator) doValidate() {
 		return
 	}
 
-	if err := v.loadPersistedData(v.tctx); err != nil {
+	if err := v.loadPersistedData(); err != nil {
 		v.sendError(terror.ErrValidatorLoadPersistedData.Delegate(err))
 		return
 	}
@@ -437,7 +453,7 @@ func (v *DataValidator) doValidate() {
 		}
 		// persist current location to make sure we start from the same location
 		// if fail-over happens before we flush checkpoint and data.
-		err := v.persistHelper.persist(location)
+		err := v.persistHelper.persist(v.tctx, location)
 		if err != nil {
 			v.sendError(terror.ErrValidatorPersistData.Delegate(err))
 			return
@@ -549,6 +565,21 @@ func (v *DataValidator) doValidate() {
 				v.sendError(terror.ErrValidatorPersistData.Delegate(err))
 				return
 			}
+		case *replication.QueryEvent:
+			locationForFlush.Position = currLoc.Position
+			query := string(ev.Query)
+			if query == "COMMIT" || query == "BEGIN" {
+				break
+			}
+			err = locationForFlush.SetGTID(ev.GSet)
+			if err != nil {
+				v.sendError(terror.Annotate(err, "failed to set gtid"))
+				return
+			}
+			if err = v.checkAndPersistCheckpointAndData(locationForFlush); err != nil {
+				v.sendError(terror.ErrValidatorPersistData.Delegate(err))
+				return
+			}
 		case *replication.GenericEvent:
 			if e.Header.EventType == replication.HEARTBEAT_EVENT {
 				if err = v.checkAndPersistCheckpointAndData(locationForFlush); err != nil {
@@ -580,7 +611,6 @@ func (v *DataValidator) stopInner() {
 	v.streamerController.Close()
 	v.fromDB.Close()
 	v.toDB.Close()
-	v.persistHelper.close()
 
 	v.wg.Wait()
 	close(v.errChan) // close error chan after all possible sender goroutines stopped
@@ -595,10 +625,12 @@ func (v *DataValidator) startValidateWorkers() {
 	for i := 0; i < v.workerCnt; i++ {
 		worker := newValidateWorker(v, i)
 		v.workers[i] = worker
-		go func() {
-			v.wg.Done()
+		// worker handles panic in validateTableChange, so we can see it in `dmctl validation status`,
+		// for other panics we just log it.
+		go utils.GoLogWrapper(v.L, func() {
+			defer v.wg.Done()
 			worker.run()
-		}()
+		})
 	}
 
 	for _, tblChange := range v.loadedPendingChanges {
@@ -670,6 +702,8 @@ func (v *DataValidator) processRowsEvent(header *replication.EventHeader, ev *re
 		Schema: string(ev.Table.Schema),
 		Name:   string(ev.Table.Table),
 	}
+
+	failpoint.Inject("ValidatorPanic", func() {})
 
 	if err := checkLogColumns(ev.SkippedColumns); err != nil {
 		return terror.Annotate(err, sourceTable.String())
@@ -779,7 +813,7 @@ func (v *DataValidator) persistCheckpointAndData(loc binlog.Location) error {
 	}
 	wg.Wait()
 
-	err := v.persistHelper.persist(loc)
+	err := v.persistHelper.persist(v.tctx, loc)
 	if err != nil {
 		return err
 	}
@@ -794,22 +828,14 @@ func (v *DataValidator) persistCheckpointAndData(loc binlog.Location) error {
 	return nil
 }
 
-func (v *DataValidator) loadPersistedData(tctx *tcontext.Context) error {
-	var err error
-	v.location, err = v.persistHelper.loadCheckpoint(tctx)
-	if err != nil {
-		return err
-	}
-
-	loadedPendingChanges, rev, err := v.persistHelper.loadPendingChange(tctx)
+func (v *DataValidator) loadPersistedData() error {
+	data, err := v.persistHelper.loadPersistedDataRetry(v.tctx)
 	if err != nil {
 		return err
 	}
 	// table info of pending change is not persisted in order to save space, so need to init them after load.
 	pendingChanges := make(map[string]*tableChangeJob)
-	for tblName, tblChange := range loadedPendingChanges {
-		pendingTblChange := newTableChangeJob()
-		pendingChanges[tblName] = pendingTblChange
+	for _, tblChange := range data.pendingChanges {
 		// todo: if table is dropped since last run, we should skip rows related to this table & update table status
 		// see https://github.com/pingcap/tiflow/pull/4881#discussion_r834093316
 		sourceTable := tblChange.sourceTable
@@ -820,6 +846,9 @@ func (v *DataValidator) loadPersistedData(tctx *tcontext.Context) error {
 		if validateTbl.message != "" {
 			return errors.New("failed to get table info " + validateTbl.message)
 		}
+		pendingTblChange := newTableChangeJob()
+		// aggregate using target table just as worker did.
+		pendingChanges[validateTbl.targetTable.String()] = pendingTblChange
 		for _, row := range tblChange.rows {
 			var beforeImage, afterImage []interface{}
 			switch row.Tp {
@@ -847,15 +876,12 @@ func (v *DataValidator) loadPersistedData(tctx *tcontext.Context) error {
 			}
 		}
 	}
+
+	v.location = data.checkpoint
 	v.loadedPendingChanges = pendingChanges
+	v.persistHelper.setRevision(data.rev)
+	v.initTableStatus(data.tableStatus)
 
-	v.persistHelper.setRevision(rev)
-
-	tableStatus, err := v.persistHelper.loadTableStatus(tctx)
-	if err != nil {
-		return err
-	}
-	v.initTableStatus(tableStatus)
 	return nil
 }
 
@@ -938,8 +964,8 @@ func (v *DataValidator) getTableStatus(fullTableName string) (*tableValidateStat
 
 // return snapshot of the current table status.
 func (v *DataValidator) getTableStatusMap() map[string]*tableValidateStatus {
-	v.RLock()
-	defer v.RUnlock()
+	v.stateMutex.RLock()
+	defer v.stateMutex.RUnlock()
 	tblStatus := make(map[string]*tableValidateStatus)
 	for key, tblStat := range v.tableStatus {
 		stat := &tableValidateStatus{}
@@ -1001,21 +1027,6 @@ func genRowKeyByString(pkValues []string) string {
 
 func (v *DataValidator) GetValidatorTableStatus(filterStatus pb.Stage) []*pb.ValidationTableStatus {
 	tblStatus := v.getTableStatusMap()
-	failpoint.Inject("MockValidationQuery", func() {
-		tblStatus = map[string]*tableValidateStatus{
-			"`testdb1`.`testtable1`": {
-				source: filter.Table{Schema: "testdb1", Name: "testtable1"},
-				target: filter.Table{Schema: "dstdb", Name: "dsttable"},
-				stage:  pb.Stage_Running,
-			},
-			"`testdb2`.`testtable2`": {
-				source:  filter.Table{Schema: "testdb2", Name: "testtable2"},
-				target:  filter.Table{Schema: "dstdb", Name: "dsttable"},
-				stage:   pb.Stage_Stopped,
-				message: tableWithoutPrimaryKeyMsg,
-			},
-		}
-	})
 
 	result := make([]*pb.ValidationTableStatus, 0)
 	for _, tblStat := range tblStatus {
@@ -1033,42 +1044,79 @@ func (v *DataValidator) GetValidatorTableStatus(filterStatus pb.Stage) []*pb.Val
 	return result
 }
 
-func (v *DataValidator) GetValidatorError(errState pb.ValidateErrorState) []*pb.ValidationError {
-	failpoint.Inject("MockValidationQuery", func() {
-		failpoint.Return(
-			[]*pb.ValidationError{
-				{Id: "1"}, {Id: "2"},
-			},
-		)
-	})
+func (v *DataValidator) GetValidatorError(errState pb.ValidateErrorState) ([]*pb.ValidationError, error) {
 	// todo: validation error in workers cannot be returned
 	// because the errID is only allocated when the error rows are flushed
 	// user cannot handle errorRows without errID
-	ret, err := v.persistHelper.loadError(errState)
+	var (
+		toDB  *conn.BaseDB
+		err   error
+		dbCfg config.DBConfig
+	)
+	ctx, cancel := context.WithTimeout(context.Background(), validatorDmctlOpTimeout)
+	tctx := tcontext.NewContext(ctx, v.L)
+	defer cancel()
+	failpoint.Inject("MockValidationQuery", func() {
+		toDB = v.persistHelper.db
+		failpoint.Return(v.persistHelper.loadError(tctx, toDB, errState))
+	})
+	dbCfg = v.cfg.To
+	dbCfg.RawDBCfg = config.DefaultRawDBConfig().SetMaxIdleConns(1)
+	toDB, err = dbconn.CreateBaseDB(&dbCfg)
+	if err != nil {
+		v.L.Warn("failed to create downstream db", zap.Error(err))
+		return nil, err
+	}
+	defer dbconn.CloseBaseDB(tctx, toDB)
+	ret, err := v.persistHelper.loadError(tctx, toDB, errState)
 	if err != nil {
 		v.L.Warn("fail to load validator error", zap.Error(err))
+		return nil, err
 	}
-	return ret
+	return ret, nil
 }
 
 func (v *DataValidator) OperateValidatorError(validateOp pb.ValidationErrOp, errID uint64, isAll bool) error {
-	failpoint.Inject("MockValidationOperation", func() {
-		failpoint.Return(nil)
+	var (
+		toDB  *conn.BaseDB
+		err   error
+		dbCfg config.DBConfig
+	)
+	ctx, cancel := context.WithTimeout(context.Background(), validatorDmctlOpTimeout)
+	tctx := tcontext.NewContext(ctx, v.L)
+	defer cancel()
+	failpoint.Inject("MockValidationQuery", func() {
+		toDB = v.persistHelper.db
+		failpoint.Return(v.persistHelper.operateError(tctx, toDB, validateOp, errID, isAll))
 	})
-	return v.persistHelper.operateError(validateOp, errID, isAll)
+	dbCfg = v.cfg.To
+	dbCfg.RawDBCfg = config.DefaultRawDBConfig().SetMaxIdleConns(1)
+	toDB, err = dbconn.CreateBaseDB(&dbCfg)
+	if err != nil {
+		return err
+	}
+	defer dbconn.CloseBaseDB(tctx, toDB)
+	return v.persistHelper.operateError(tctx, toDB, validateOp, errID, isAll)
 }
 
 func (v *DataValidator) getAllErrorCount(timeout time.Duration) ([errorStateTypeCount]int64, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	tctx := tcontext.NewContext(ctx, v.L)
-	// todo: should create a separate db to get error count, since validator may be stopped or being initialized,
-	// else may fail due to concurrent access
-	// todo: should not rely on fields which need to be inited in 'init', such as c.tctx,
-	// else this method may fail due to concurrent access.
-	countMap, err := v.persistHelper.loadErrorCount(tctx)
+
+	// use a separate db to get error count, since validator maybe stopped or initializing
+	dbCfg := v.cfg.To
+	dbCfg.RawDBCfg = config.DefaultRawDBConfig().SetMaxIdleConns(1)
+	countMap := map[pb.ValidateErrorState]int64{}
+	toDB, err := dbconn.CreateBaseDB(&dbCfg)
 	if err != nil {
-		v.L.Warn("failed to load error count", zap.Error(err))
+		v.L.Warn("failed to create downstream db", zap.Error(err))
+	} else {
+		defer dbconn.CloseBaseDB(tctx, toDB)
+		countMap, err = v.persistHelper.loadErrorCount(tctx, toDB)
+		if err != nil {
+			v.L.Warn("failed to load error count", zap.Error(err))
+		}
 	}
 	var allErrorCount [errorStateTypeCount]int64
 	allErrorCount[pb.ValidateErrorState_NewErr] = countMap[pb.ValidateErrorState_NewErr]
@@ -1082,7 +1130,7 @@ func (v *DataValidator) getAllErrorCount(timeout time.Duration) ([errorStateType
 
 func (v *DataValidator) GetValidatorStatus() *pb.ValidationStatus {
 	var extraMsg string
-	allErrorCount, err := v.getAllErrorCount(5 * time.Second)
+	allErrorCount, err := v.getAllErrorCount(validatorDmctlOpTimeout)
 	if err != nil {
 		// nolint:nilerr
 		extraMsg = fmt.Sprintf(" (failed to load error count from meta db: %s)", err.Error())

@@ -17,10 +17,12 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
+	"net/url"
 	"os"
 	"strings"
 	"sync"
 
+	"github.com/docker/go-units"
 	"github.com/pingcap/errors"
 	tidbConfig "github.com/pingcap/tidb/config"
 	"github.com/pingcap/tidb/ddl"
@@ -36,7 +38,9 @@ import (
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tidb/store/mockstore"
+	unistoreConfig "github.com/pingcap/tidb/store/mockstore/unistore/config"
 	"github.com/pingcap/tidb/util/filter"
+	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
@@ -62,6 +66,11 @@ var (
 	}
 )
 
+func init() {
+	unistoreConfig.DefaultConf.Engine.VlogFileSize = 4 * units.MiB
+	unistoreConfig.DefaultConf.Engine.L1Size = 128 * units.MiB
+}
+
 // Tracker is used to track schema locally.
 type Tracker struct {
 	// we're using an embedded tidb, there's no need to sync operations on it, but we may recreate(drop and create)
@@ -73,6 +82,7 @@ type Tracker struct {
 	dom       *domain.Domain
 	se        session.Session
 	dsTracker *downstreamTracker
+	closed    atomic.Bool
 }
 
 // downstreamTracker tracks downstream schema.
@@ -149,7 +159,7 @@ func NewTracker(ctx context.Context, task string, sessionCfg map[string]string, 
 		}
 	}
 
-	storePath, err = ioutil.TempDir("./", "schema-tracker")
+	storePath, err = newTmpFolderForTracker(task)
 	if err != nil {
 		return nil, err
 	}
@@ -234,6 +244,10 @@ func NewTracker(ctx context.Context, task string, sessionCfg map[string]string, 
 	}, nil
 }
 
+func newTmpFolderForTracker(task string) (string, error) {
+	return ioutil.TempDir("./", url.PathEscape(task)+"-tracker")
+}
+
 // Exec runs an SQL (DDL) statement.
 func (tr *Tracker) Exec(ctx context.Context, db string, sql string) error {
 	tr.se.GetSessionVars().CurrentDB = db
@@ -277,10 +291,7 @@ func (tr *Tracker) GetCreateTable(ctx context.Context, table *filter.Table) (str
 
 	row := req.GetRow(0)
 	str := row.GetString(1) // the first column is the table name.
-	// returned as single line.
-	str = strings.ReplaceAll(str, "\n", "")
-	str = strings.ReplaceAll(str, "  ", " ")
-	return str, nil
+	return utils.CreateTableSQLToOneRow(str), nil
 }
 
 // AllSchemas returns all schemas visible to the tracker (excluding system tables).
@@ -361,6 +372,12 @@ func (tr *Tracker) Reset() error {
 
 // Close close a tracker.
 func (tr *Tracker) Close() error {
+	if tr == nil {
+		return nil
+	}
+	if !tr.closed.CAS(false, true) {
+		return nil
+	}
 	tr.se.Close()
 	tr.dom.Close()
 	if err := tr.store.Close(); err != nil {
@@ -422,29 +439,15 @@ func (tr *Tracker) CreateTableIfNotExists(table *filter.Table, ti *model.TableIn
 	return tr.dom.DDL().CreateTableWithInfo(tr.se, schemaName, ti, ddl.OnExistIgnore)
 }
 
-func (tr *Tracker) RecreateTables(logCtx *tcontext.Context, tablesToDrop []*filter.Table, tablesToCreate map[string]map[string]*model.TableInfo) error {
-	tr.Lock()
-	defer tr.Unlock()
-	for _, tbl := range tablesToDrop {
-		// schema changed
-		if err := tr.DropTable(tbl); err != nil {
-			logCtx.L().Warn("failed to drop table from schema tracker",
-				zap.Stringer("table", tbl), log.ShortError(err))
-		}
-	}
-	for schemaName := range tablesToCreate {
-		// TODO: Figure out how to recover from errors.
-		if err := tr.CreateSchemaIfNotExists(schemaName); err != nil {
-			logCtx.L().Error("failed to rollback schema on schema tracker: cannot create schema",
-				zap.String("schema", schemaName), log.ShortError(err))
-		}
-	}
-	return tr.batchCreateTableIfNotExist(tablesToCreate)
-}
-
-func (tr *Tracker) batchCreateTableIfNotExist(tablesToCreate map[string]map[string]*model.TableInfo) error {
+// BatchCreateTableIfNotExist will batch creating tables per schema. If the schema does not exist, it will create it.
+// The argument is { database name -> { table name -> TableInfo } }.
+func (tr *Tracker) BatchCreateTableIfNotExist(tablesToCreate map[string]map[string]*model.TableInfo) error {
 	tr.se.SetValue(sessionctx.QueryString, "skip")
 	for schema, tableNameInfo := range tablesToCreate {
+		if err := tr.CreateSchemaIfNotExists(schema); err != nil {
+			return err
+		}
+
 		var cloneTis []*model.TableInfo
 		for table, ti := range tableNameInfo {
 			cloneTi := cloneTableInfo(ti)        // clone TableInfo w.r.t the warning of the CreateTable function

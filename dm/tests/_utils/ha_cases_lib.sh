@@ -163,7 +163,7 @@ function isolate_master() {
 		export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/dm/master/FailToElect=return(\"master$1\")"
 	fi
 	echo "kill dm-master$1"
-	ps aux | grep dm-master$1 | awk '{print $2}' | xargs kill || true
+	kill_process dm-master$1
 	check_master_port_offline $1
 	run_dm_master $WORK_DIR/master$1 $port $cur/conf/dm-master$1.toml
 	export GO_FAILPOINTS=''
@@ -175,7 +175,7 @@ function isolate_worker() {
 		export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/dm/worker/FailToKeepAlive=return(\"worker$1\")"
 	fi
 	echo "kill dm-worker$1"
-	ps aux | grep dm-worker$1 | awk '{print $2}' | xargs kill || true
+	kill_process dm-worker$1
 	check_port_offline $port 20
 	run_dm_worker $WORK_DIR/worker$1 $port $cur/conf/dm-worker$1.toml
 	export GO_FAILPOINTS=''
@@ -212,9 +212,9 @@ function kill_2_worker_ensure_unbound() {
 	worker_ports_2=(0 $WORKER1_PORT $WORKER2_PORT $WORKER3_PORT $WORKER4_PORT $WORKER5_PORT)
 
 	echo "kill dm-worker$1"
-	ps aux | grep dm-worker$1 | awk '{print $2}' | xargs kill || true
+	kill_process dm-worker$1
 	echo "kill dm-worker$2"
-	ps aux | grep dm-worker$2 | awk '{print $2}' | xargs kill || true
+	kill_process dm-worker$2
 
 	check_port_offline ${worker_ports_2[$1]} 20
 	check_port_offline ${worker_ports_2[$2]} 20

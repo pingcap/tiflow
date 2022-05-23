@@ -173,6 +173,8 @@ function DM_RESTART_TASK_MASTER_WORKER_CASE() {
 	run_sql_source2 "insert into ${shardddl1}.${tb2} values(8,'8','88');"
 
 	run_sql_source1 "alter table ${shardddl1}.${tb1} add column c text;"
+	check_log_contain_with_retry "finish to handle ddls in optimistic shard mode.*alter table ${shardddl1}.${tb1} add column c text" \
+		$WORK_DIR/worker1/log/dm-worker.log $WORK_DIR/worker2/log/dm-worker.log
 	random_restart
 
 	# source1.tb1(a,c); source1.tb2(a,b); source2.tb1(a,c); source2.tb2(a,b,c)
@@ -182,6 +184,8 @@ function DM_RESTART_TASK_MASTER_WORKER_CASE() {
 	run_sql_source2 "insert into ${shardddl1}.${tb2} values(12,'1212','121212');"
 
 	run_sql_source2 "alter table ${shardddl1}.${tb2} drop column b;"
+	check_log_contain_with_retry "finish to handle ddls in optimistic shard mode.*alter table ${shardddl1}.${tb2} drop column b" \
+		$WORK_DIR/worker1/log/dm-worker.log $WORK_DIR/worker2/log/dm-worker.log
 	random_restart
 
 	# source1.tb1(a,c); source1.tb2(a,b); source2.tb1(a,c); source2.tb2(a,c)
@@ -191,6 +195,10 @@ function DM_RESTART_TASK_MASTER_WORKER_CASE() {
 	run_sql_source2 "insert into ${shardddl1}.${tb2} values(16,'161616');"
 
 	run_sql_source1 "alter table ${shardddl1}.${tb2} drop column b;"
+	check_log_contain_with_retry "finish to handle ddls in optimistic shard mode.*alter table ${shardddl1}.${tb2} drop column b" \
+		$WORK_DIR/worker1/log/dm-worker.log
+	check_log_contain_with_retry "finish to handle ddls in optimistic shard mode.*alter table ${shardddl1}.${tb2} drop column b" \
+		$WORK_DIR/worker2/log/dm-worker.log
 	random_restart
 
 	# source1.tb1(a,c); source1.tb2(a); source2.tb1(a,c); source2.tb2(a,c)
@@ -200,6 +208,8 @@ function DM_RESTART_TASK_MASTER_WORKER_CASE() {
 	run_sql_source2 "insert into ${shardddl1}.${tb2} values(20,'202020');"
 
 	run_sql_source1 "alter table ${shardddl1}.${tb2} add column c text;"
+	check_log_contain_with_retry "finish to handle ddls in optimistic shard mode.*alter table ${shardddl1}.${tb2} add column c text" \
+		$WORK_DIR/worker1/log/dm-worker.log $WORK_DIR/worker2/log/dm-worker.log
 	random_restart
 
 	# source1.tb1(a,c); source1.tb2(a,c); source2.tb1(a,c); source2.tb2(a,c)
@@ -226,23 +236,6 @@ function DM_RESTART_TASK_MASTER_WORKER() {
    	run_sql_tidb \"create database if not exists ${shardddl};\"; \
    	run_sql_tidb \"create table ${shardddl}.${tb} (a int primary key, b varchar(10), c text);\"" \
 		"clean_table" "optimistic"
-}
-
-function random_restart() {
-	mod=$(($RANDOM % 4))
-	if [[ "$mod" == "0" ]]; then
-		echo "restart master"
-		restart_master
-	elif [[ "$mod" == "1" ]]; then
-		echo "restart worker1"
-		restart_worker1
-	elif [[ "$mod" == "2" ]]; then
-		echo "restart worker2"
-		restart_worker2
-	else
-		echo "restart task"
-		restart_task $cur/conf/double-source-optimistic.yaml
-	fi
 }
 
 function DM_STOP_TASK_FOR_A_SOURCE_CASE() {

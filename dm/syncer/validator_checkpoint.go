@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"time"
 
 	"github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/pingcap/errors"
@@ -29,17 +30,19 @@ import (
 
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/dm/pb"
-	"github.com/pingcap/tiflow/dm/dm/unit"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/cputil"
 	"github.com/pingcap/tiflow/dm/pkg/gtid"
-	"github.com/pingcap/tiflow/dm/syncer/dbconn"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/retry"
 )
 
 const (
 	maxRowKeyLength = 64
+
+	validationDBTimeout = queryTimeout
 )
 
 var mapErrType2Str = map[validateFailedType]string{
@@ -51,25 +54,37 @@ var mapErrType2Str = map[validateFailedType]string{
 var maxRowKeyLengthStr = strconv.Itoa(maxRowKeyLength)
 
 type validatorPersistHelper struct {
-	tctx              *tcontext.Context
-	cfg               *config.SubTaskConfig
-	db                *conn.BaseDB
-	dbConn            *dbconn.DBConn
-	validator         *DataValidator
-	schemaInitialized atomic.Bool
+	L         log.Logger
+	cfg       *config.SubTaskConfig
+	validator *DataValidator
+	retryer   *retry.FiniteRetryer
 
 	checkpointTableName    string
 	pendingChangeTableName string
 	errorChangeTableName   string
 	tableStatusTableName   string
-	revision               int64
+
+	db                *conn.BaseDB
+	schemaInitialized atomic.Bool
+	revision          int64
 }
 
 func newValidatorCheckpointHelper(validator *DataValidator) *validatorPersistHelper {
 	cfg := validator.cfg
+	logger := validator.L
+	retryer := &retry.FiniteRetryer{
+		Params: retry.NewParams(3, 5*time.Second, retry.LinearIncrease,
+			func(i int, err error) bool {
+				logger.Warn("met error", zap.Error(err))
+				return isRetryableDBError(err)
+			},
+		),
+	}
 	c := &validatorPersistHelper{
+		L:         logger,
 		cfg:       cfg,
 		validator: validator,
+		retryer:   retryer,
 
 		checkpointTableName:    dbutil.TableName(cfg.MetaSchema, cputil.ValidatorCheckpoint(cfg.Name)),
 		pendingChangeTableName: dbutil.TableName(cfg.MetaSchema, cputil.ValidatorPendingChange(cfg.Name)),
@@ -81,44 +96,34 @@ func newValidatorCheckpointHelper(validator *DataValidator) *validatorPersistHel
 }
 
 func (c *validatorPersistHelper) init(tctx *tcontext.Context) error {
-	c.tctx = tctx
-
-	newCtx, cancelFunc := c.tctx.WithTimeout(unit.DefaultInitTimeout)
-	defer cancelFunc()
-
-	dbCfg := c.cfg.To
-	dbCfg.RawDBCfg = config.DefaultRawDBConfig().SetReadTimeout(maxDMLConnectionTimeout)
-	db, conns, err := dbconn.CreateConns(newCtx, c.cfg, &dbCfg, 1)
-	if err != nil {
-		return err
-	}
-
-	c.db = db
-	c.dbConn = conns[0]
-	defer func() {
-		if err == nil {
-			return
-		}
-		dbconn.CloseBaseDB(newCtx, c.db)
-	}()
+	c.db = c.validator.toDB
 
 	if !c.schemaInitialized.Load() {
-		if err = c.createSchema(newCtx); err != nil {
+		workFunc := func(tctx *tcontext.Context) (interface{}, error) {
+			return nil, c.createSchemaAndTables(tctx)
+		}
+		if _, cnt, err := c.retryer.Apply(tctx, workFunc); err != nil {
+			tctx.L().Error("failed to init validator helper after retry",
+				zap.Int("retry-times", cnt), zap.Error(err))
 			return err
 		}
 
-		err = c.createTable(newCtx)
-
 		c.schemaInitialized.Store(true)
 	}
-	return err
+	return nil
+}
+
+func (c *validatorPersistHelper) createSchemaAndTables(tctx *tcontext.Context) error {
+	if err := c.createSchema(tctx); err != nil {
+		return err
+	}
+	return c.createTable(tctx)
 }
 
 func (c *validatorPersistHelper) createSchema(tctx *tcontext.Context) error {
-	sql2 := fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s", dbutil.ColumnName(c.cfg.MetaSchema))
-	args := make([]interface{}, 0)
-	_, err := c.dbConn.ExecuteSQL(tctx, []string{sql2}, [][]interface{}{args}...)
-	tctx.L().Info("create checkpoint schema", zap.String("statement", sql2))
+	query := fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s", dbutil.ColumnName(c.cfg.MetaSchema))
+	_, err := c.db.ExecContext(tctx, query)
+	tctx.L().Info("create checkpoint schema", zap.String("statement", query))
 	return err
 }
 
@@ -175,12 +180,17 @@ func (c *validatorPersistHelper) createTable(tctx *tcontext.Context) error {
             message VARCHAR(512) NOT NULL,
 			create_time timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			update_time timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-			UNIQUE KEY uk_source_schema_table_key(source, src_schema_name, src_table_name)
+			UNIQUE KEY uk_source_schema_table_key(source, src_schema_name, src_table_name),
+			INDEX idx_stage(stage)
 		)`,
 	}
-	_, err := c.dbConn.ExecuteSQL(tctx, sqls)
 	tctx.L().Info("create checkpoint and data table", zap.Strings("statements", sqls))
-	return err
+	for _, q := range sqls {
+		if _, err := c.db.ExecContext(tctx, q); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 type tableChangeDataForPersist struct {
@@ -197,7 +207,7 @@ type rowChangeDataForPersist struct {
 	FailedCnt       int              `json:"failed-cnt"` // failed count
 }
 
-func (c *validatorPersistHelper) persist(loc binlog.Location) error {
+func (c *validatorPersistHelper) persist(tctx *tcontext.Context, loc binlog.Location) error {
 	// get snapshot of the current table status
 	tableStatus := c.validator.getTableStatusMap()
 	count := len(tableStatus)
@@ -211,7 +221,7 @@ func (c *validatorPersistHelper) persist(loc binlog.Location) error {
 	args := make([][]interface{}, 0, count+2)
 	nextRevision := c.revision + 1
 
-	c.tctx.L().Info("persist checkpoint and intermediate data")
+	c.L.Info("persist checkpoint and intermediate data")
 
 	// update checkpoint
 	queries = append(queries, `INSERT INTO `+c.checkpointTableName+
@@ -239,7 +249,7 @@ func (c *validatorPersistHelper) persist(loc binlog.Location) error {
 				if err != nil {
 					return err
 				}
-				sql := `INSERT INTO ` + c.pendingChangeTableName + `
+				query := `INSERT INTO ` + c.pendingChangeTableName + `
 						(source, schema_name, table_name, row_pk, data, revision) VALUES (?, ?, ?, ?, ?, ?)
 						ON DUPLICATE KEY UPDATE
 							source = VALUES(source),
@@ -248,7 +258,7 @@ func (c *validatorPersistHelper) persist(loc binlog.Location) error {
 							row_pk = VALUES(row_pk),
 							data = VALUES(data),
 							revision = VALUES(revision)`
-				queries = append(queries, sql)
+				queries = append(queries, query)
 				sourceTable := row.GetSourceTable()
 				args = append(args, []interface{}{
 					c.cfg.SourceID,
@@ -263,12 +273,12 @@ func (c *validatorPersistHelper) persist(loc binlog.Location) error {
 	}
 
 	// delete success row changes, i.e. rows with different revision
-	queries = append(queries, `DELETE FROM `+c.pendingChangeTableName+` WHERE revision != ?`)
-	args = append(args, []interface{}{nextRevision})
+	queries = append(queries, `DELETE FROM `+c.pendingChangeTableName+` WHERE source = ? and revision != ?`)
+	args = append(args, []interface{}{c.cfg.SourceID, nextRevision})
 
-	// unsupported table info
+	// insert/update table status
 	for _, state := range tableStatus {
-		sql := `INSERT INTO ` + c.tableStatusTableName + `
+		query := `INSERT INTO ` + c.tableStatusTableName + `
 					(source, src_schema_name, src_table_name, dst_schema_name, dst_table_name, stage, message)
 					VALUES (?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE
 					source = VALUES(source),
@@ -279,7 +289,7 @@ func (c *validatorPersistHelper) persist(loc binlog.Location) error {
 					stage = VALUES(stage),
 					message = VALUES(message)
 				`
-		queries = append(queries, sql)
+		queries = append(queries, query)
 		args = append(args, []interface{}{
 			c.cfg.SourceID, state.source.Schema, state.source.Name, state.target.Schema, state.target.Name,
 			int(state.stage), state.message,
@@ -289,7 +299,7 @@ func (c *validatorPersistHelper) persist(loc binlog.Location) error {
 	// error rows
 	for _, worker := range c.validator.getWorkers() {
 		for _, r := range worker.getErrorRows() {
-			sql := `INSERT INTO ` + c.errorChangeTableName + `
+			query := `INSERT INTO ` + c.errorChangeTableName + `
 					(source, src_schema_name, src_table_name, row_pk, dst_schema_name, dst_table_name, data, dst_data, error_type, status)
 					VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE
 					source = VALUES(source),
@@ -303,7 +313,7 @@ func (c *validatorPersistHelper) persist(loc binlog.Location) error {
 					error_type = VALUES(error_type),
 					status = VALUES(status)
 			`
-			queries = append(queries, sql)
+			queries = append(queries, query)
 
 			row := r.srcJob.row
 			srcDataStr, err := json.Marshal(row.RowValues())
@@ -332,6 +342,8 @@ func (c *validatorPersistHelper) persist(loc binlog.Location) error {
 	// todo: performance issue when using insert on duplicate? https://asktug.com/t/topic/33147
 	// todo: will this transaction too big? but checkpoint & pending changes should be saved in one tx
 	var err error
+	newCtx, cancelFunc := tctx.WithTimeout(validationDBTimeout)
+	defer cancelFunc()
 	failpoint.Inject("ValidatorCheckPointSkipExecuteSQL", func(val failpoint.Value) {
 		str := val.(string)
 		if str != "" {
@@ -339,7 +351,8 @@ func (c *validatorPersistHelper) persist(loc binlog.Location) error {
 		}
 		failpoint.Goto("afterExecuteSQL")
 	})
-	_, err = c.dbConn.ExecuteSQL(c.tctx, queries, args...)
+	// baseconn retries too much and with a lot of metric stuff, so use a simpler one.
+	err = c.db.DoTxWithRetry(newCtx, queries, args, c.retryer)
 	failpoint.Label("afterExecuteSQL")
 	if err != nil {
 		return err
@@ -352,15 +365,51 @@ func (c *validatorPersistHelper) incrRevision() {
 	c.revision++
 }
 
-func (c *validatorPersistHelper) close() {
-	if c.db != nil {
-		c.db.Close()
+type persistedData struct {
+	checkpoint     *binlog.Location
+	pendingChanges map[string]*tableChangeDataForPersist // key is full name of source table
+	rev            int64
+	tableStatus    map[string]*tableValidateStatus // key is full name of source table
+}
+
+func (c *validatorPersistHelper) loadPersistedDataRetry(tctx *tcontext.Context) (*persistedData, error) {
+	newCtx, cancelFunc := tctx.WithTimeout(validationDBTimeout)
+	defer cancelFunc()
+	workFunc := func(tctx *tcontext.Context) (interface{}, error) {
+		return c.loadPersistedData(tctx)
 	}
+	ret, i, err := c.retryer.Apply(newCtx, workFunc)
+	if err != nil {
+		c.L.Error("failed load persisted data after retry", zap.Int("retry-times", i), zap.Error(err))
+		return nil, err
+	}
+	return ret.(*persistedData), err
+}
+
+func (c *validatorPersistHelper) loadPersistedData(tctx *tcontext.Context) (*persistedData, error) {
+	var err error
+	data := &persistedData{}
+	data.checkpoint, err = c.loadCheckpoint(tctx)
+	if err != nil {
+		return data, err
+	}
+
+	data.pendingChanges, data.rev, err = c.loadPendingChange(tctx)
+	if err != nil {
+		return data, err
+	}
+
+	data.tableStatus, err = c.loadTableStatus(tctx)
+	if err != nil {
+		return data, err
+	}
+
+	return data, err
 }
 
 func (c *validatorPersistHelper) loadCheckpoint(tctx *tcontext.Context) (*binlog.Location, error) {
-	sql := "select binlog_name, binlog_pos, binlog_gtid from " + c.checkpointTableName + " where source = ?"
-	rows, err := c.dbConn.QuerySQL(tctx, sql, c.cfg.SourceID)
+	query := "select binlog_name, binlog_pos, binlog_gtid from " + c.checkpointTableName + " where source = ?"
+	rows, err := c.db.QueryContext(tctx, query, c.cfg.SourceID)
 	if err != nil {
 		return nil, err
 	}
@@ -389,15 +438,15 @@ func (c *validatorPersistHelper) loadCheckpoint(tctx *tcontext.Context) (*binlog
 	if err = rows.Err(); err != nil {
 		return nil, err
 	}
-	c.tctx.L().Info("checkpoint loaded", zap.Reflect("loc", location))
+	c.L.Info("checkpoint loaded", zap.Reflect("loc", location))
 	return location, nil
 }
 
 func (c *validatorPersistHelper) loadPendingChange(tctx *tcontext.Context) (map[string]*tableChangeDataForPersist, int64, error) {
 	res := make(map[string]*tableChangeDataForPersist)
 	rev := int64(1)
-	sql := "select schema_name, table_name, row_pk, data, revision from " + c.pendingChangeTableName + " where source = ?"
-	rows, err := c.dbConn.QuerySQL(tctx, sql, c.cfg.SourceID)
+	query := "select schema_name, table_name, row_pk, data, revision from " + c.pendingChangeTableName + " where source = ?"
+	rows, err := c.db.QueryContext(tctx, query, c.cfg.SourceID)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -439,15 +488,15 @@ func (c *validatorPersistHelper) loadPendingChange(tctx *tcontext.Context) (map[
 	if err = rows.Err(); err != nil {
 		return nil, 0, err
 	}
-	c.tctx.L().Info("pending change loaded", zap.Reflect("count", count), zap.Reflect("rev", rev))
+	c.L.Info("pending change loaded", zap.Reflect("count", count), zap.Reflect("rev", rev))
 	return res, rev, nil
 }
 
 func (c *validatorPersistHelper) loadTableStatus(tctx *tcontext.Context) (map[string]*tableValidateStatus, error) {
 	res := make(map[string]*tableValidateStatus)
-	sql := "select src_schema_name, src_table_name, dst_schema_name, dst_table_name, stage, message from " +
+	query := "select src_schema_name, src_table_name, dst_schema_name, dst_table_name, stage, message from " +
 		c.tableStatusTableName + " where source = ?"
-	rows, err := c.dbConn.QuerySQL(tctx, sql, c.cfg.SourceID)
+	rows, err := c.db.QueryContext(tctx, query, c.cfg.SourceID)
 	if err != nil {
 		return nil, err
 	}
@@ -476,14 +525,14 @@ func (c *validatorPersistHelper) loadTableStatus(tctx *tcontext.Context) (map[st
 	if err = rows.Err(); err != nil {
 		return nil, err
 	}
-	c.tctx.L().Info("table status loaded", zap.Reflect("count", len(res)))
+	c.L.Info("table status loaded", zap.Reflect("count", len(res)))
 	return res, nil
 }
 
-func (c *validatorPersistHelper) loadErrorCount(tctx *tcontext.Context) (map[pb.ValidateErrorState]int64, error) {
+func (c *validatorPersistHelper) loadErrorCount(tctx *tcontext.Context, db *conn.BaseDB) (map[pb.ValidateErrorState]int64, error) {
 	res := make(map[pb.ValidateErrorState]int64)
-	sql := "select status, count(*) from " + c.errorChangeTableName + " where source = ? group by status"
-	rows, err := c.dbConn.QuerySQL(tctx, sql, c.cfg.SourceID)
+	query := "select status, count(*) from " + c.errorChangeTableName + " where source = ? group by status"
+	rows, err := db.QueryContext(tctx, query, c.cfg.SourceID)
 	if err != nil {
 		return nil, err
 	}
@@ -502,7 +551,7 @@ func (c *validatorPersistHelper) loadErrorCount(tctx *tcontext.Context) (map[pb.
 	if err = rows.Err(); err != nil {
 		return nil, err
 	}
-	c.tctx.L().Info("error count loaded", zap.Reflect("counts", res))
+	c.L.Info("error count loaded", zap.Reflect("counts", res))
 	return res, nil
 }
 
@@ -510,7 +559,7 @@ func (c *validatorPersistHelper) setRevision(rev int64) {
 	c.revision = rev
 }
 
-func (c *validatorPersistHelper) loadError(filterState pb.ValidateErrorState) ([]*pb.ValidationError, error) {
+func (c *validatorPersistHelper) loadError(tctx *tcontext.Context, db *conn.BaseDB, filterState pb.ValidateErrorState) ([]*pb.ValidationError, error) {
 	var (
 		rows *sql.Rows
 		err  error
@@ -519,13 +568,14 @@ func (c *validatorPersistHelper) loadError(filterState pb.ValidateErrorState) ([
 	args := []interface{}{
 		c.cfg.SourceID,
 	}
-	sql := "SELECT (id, source, src_schema_name, src_table_name, dst_schema_name, dst_table_name, data, dst_data, error_type, status, update_time) " +
-		"FROM " + c.errorChangeTableName + " WHERE source=?"
+	query := "SELECT id, source, src_schema_name, src_table_name, dst_schema_name, dst_table_name, data, dst_data, error_type, status, update_time " +
+		"FROM " + c.errorChangeTableName + " WHERE source = ?"
 	if filterState != pb.ValidateErrorState_InvalidErr {
-		sql += " AND status=?"
+		query += " AND status=?"
 		args = append(args, int(filterState))
 	}
-	rows, err = c.dbConn.QuerySQL(c.tctx, sql, args...)
+	// we do not retry, let user do it
+	rows, err = db.QueryContext(tctx, query, args...)
 	if err != nil {
 		return res, err
 	}
@@ -554,15 +604,15 @@ func (c *validatorPersistHelper) loadError(filterState pb.ValidateErrorState) ([
 	if err = rows.Err(); err != nil {
 		return []*pb.ValidationError{}, err
 	}
-	c.tctx.L().Info("load validator errors", zap.Reflect("errors", res))
+	c.L.Info("load validator errors", zap.Int("count", len(res)))
 	return res, nil
 }
 
-func (c *validatorPersistHelper) operateError(validateOp pb.ValidationErrOp, errID uint64, isAll bool) error {
+func (c *validatorPersistHelper) operateError(tctx *tcontext.Context, db *conn.BaseDB, validateOp pb.ValidationErrOp, errID uint64, isAll bool) error {
 	if validateOp == pb.ValidationErrOp_ClearErrOp {
-		return c.deleteError(errID, isAll)
+		return c.deleteError(tctx, db, errID, isAll)
 	}
-	sql := "UPDATE " + c.errorChangeTableName + " SET status=? WHERE source=?"
+	query := "UPDATE " + c.errorChangeTableName + " SET status=? WHERE source=?"
 	var setStatus pb.ValidateErrorState
 	switch validateOp {
 	case pb.ValidationErrOp_IgnoreErrOp:
@@ -571,7 +621,7 @@ func (c *validatorPersistHelper) operateError(validateOp pb.ValidationErrOp, err
 		setStatus = pb.ValidateErrorState_ResolvedErr
 	default:
 		// unsupported op should be caught by caller
-		c.tctx.L().Warn("unsupported validator error operation", zap.Reflect("op", validateOp))
+		c.L.Warn("unsupported validator error operation", zap.Reflect("op", validateOp))
 		return nil
 	}
 	args := []interface{}{
@@ -580,21 +630,23 @@ func (c *validatorPersistHelper) operateError(validateOp pb.ValidationErrOp, err
 	}
 	if !isAll {
 		args = append(args, errID)
-		sql += " AND id=?"
+		query += " AND id=?"
 	}
-	_, err := c.dbConn.QuerySQL(c.tctx, sql, args...)
+	// we do not retry, let user do it
+	_, err := db.ExecContext(tctx, query, args...)
 	return err
 }
 
-func (c *validatorPersistHelper) deleteError(errID uint64, isAll bool) error {
+func (c *validatorPersistHelper) deleteError(tctx *tcontext.Context, db *conn.BaseDB, errID uint64, isAll bool) error {
 	args := []interface{}{
 		c.cfg.SourceID,
 	}
-	sql := "DELETE FROM " + c.errorChangeTableName + " WHERE source=?"
+	query := "DELETE FROM " + c.errorChangeTableName + " WHERE source=?"
 	if !isAll {
-		sql += " AND id=?"
+		query += " AND id=?"
 		args = append(args, errID)
 	}
-	_, err := c.dbConn.QuerySQL(c.tctx, sql, args...)
+	// we do not retry, let user do it
+	_, err := db.ExecContext(tctx, query, args...)
 	return err
 }

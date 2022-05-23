@@ -47,7 +47,9 @@ const (
 	CDCKeyTypeChangefeedInfo
 	CDCKeyTypeChangeFeedStatus
 	CDCKeyTypeTaskPosition
+	// Deprecated: No longer used. Kept for compatibility.
 	CDCKeyTypeTaskStatus
+	// Deprecated: No longer used. Kept for compatibility.
 	CDCKeyTypeTaskWorkload
 )
 

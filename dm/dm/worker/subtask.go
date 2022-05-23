@@ -273,9 +273,6 @@ func (st *SubTask) StartValidator(expect pb.Stage, startWithSubtask bool) {
 	}
 	var syncerObj *syncer.Syncer
 	var ok bool
-	failpoint.Inject("MockValidationQuery", func(_ failpoint.Value) {
-		failpoint.Goto("StartValidatorWithoutCheck")
-	})
 	for _, u := range st.units {
 		if syncerObj, ok = u.(*syncer.Syncer); ok {
 			break
@@ -285,7 +282,6 @@ func (st *SubTask) StartValidator(expect pb.Stage, startWithSubtask bool) {
 		st.l.Warn("cannot start validator without syncer")
 		return
 	}
-	failpoint.Label("StartValidatorWithoutCheck")
 	if st.validator == nil {
 		st.validator = syncer.NewContinuousDataValidator(st.cfg, syncerObj, startWithSubtask)
 	}
@@ -678,7 +674,7 @@ func (st *SubTask) OperateSchema(ctx context.Context, req *pb.OperateWorkerSchem
 	}
 
 	if st.validatorStage() == pb.Stage_Running && req.Op != pb.SchemaOp_ListMigrateTargets {
-		return "", terror.ErrWorkerNotPausedStage.Generate(pb.Stage_Running.String())
+		return "", terror.ErrWorkerValidatorNotPaused.Generate(pb.Stage_Running.String())
 	}
 
 	return syncUnit.OperateSchema(ctx, req)
@@ -885,27 +881,20 @@ func updateTaskMetric(task, sourceID string, stage pb.Stage, workerName string) 
 	}
 }
 
-func (st *SubTask) GetValidatorError(errState pb.ValidateErrorState) []*pb.ValidationError {
-	validator := st.getValidator()
-	// todo: should be able to get status even validator is stopped
-	if validator != nil && validator.Started() {
+func (st *SubTask) GetValidatorError(errState pb.ValidateErrorState) ([]*pb.ValidationError, error) {
+	if validator := st.getValidator(); validator != nil {
 		return validator.GetValidatorError(errState)
 	}
-	st.l.Warn("validator not start")
-	// todo: should it inform the user of this error
-	return []*pb.ValidationError{}
+	cfg := st.getCfg()
+	return nil, terror.ErrValidatorNotFound.Generate(cfg.Name)
 }
 
 func (st *SubTask) OperateValidatorError(op pb.ValidationErrOp, errID uint64, isAll bool) error {
-	validator := st.getValidator()
-	// todo: should be able to get status even validator is stopped
-	if validator != nil && validator.Started() {
+	if validator := st.getValidator(); validator != nil {
 		return validator.OperateValidatorError(op, errID, isAll)
 	}
-	st.l.Warn("validator not start")
-	// todo: should it inform the user of this error
-	// silently exists
-	return nil
+	cfg := st.getCfg()
+	return terror.ErrValidatorNotFound.Generate(cfg.Name)
 }
 
 func (st *SubTask) getValidator() *syncer.DataValidator {
@@ -916,9 +905,7 @@ func (st *SubTask) getValidator() *syncer.DataValidator {
 
 func (st *SubTask) GetValidatorStatus() (*pb.ValidationStatus, error) {
 	validator := st.getValidator()
-	// todo: should be able to get status even validator is stopped
-	// current ErrValidatorNotFound looks odd, will fix it in next pr
-	if validator == nil || !validator.Started() {
+	if validator == nil {
 		cfg := st.getCfg()
 		return nil, terror.ErrValidatorNotFound.Generate(cfg.Name)
 	}
@@ -927,9 +914,7 @@ func (st *SubTask) GetValidatorStatus() (*pb.ValidationStatus, error) {
 
 func (st *SubTask) GetValidatorTableStatus(filterStatus pb.Stage) ([]*pb.ValidationTableStatus, error) {
 	validator := st.getValidator()
-	// todo: should be able to get status even validator is stopped
-	// current ErrValidatorNotFound looks odd, will fix it in next pr
-	if validator == nil || !validator.Started() {
+	if validator == nil {
 		cfg := st.getCfg()
 		return nil, terror.ErrValidatorNotFound.Generate(cfg.Name)
 	}

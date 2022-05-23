@@ -166,10 +166,12 @@ func OpenAPITaskToSubTaskConfigs(task *openapi.Task, toDBCfg *DBConfig, sourceCf
 			}
 			subTaskCfg.Meta = meta
 		}
-		// check must set meta when mode is ModeIncrement
+
+		// if there is no meta for incremental task, we print a warning log
 		if subTaskCfg.Meta == nil && subTaskCfg.Mode == ModeIncrement {
-			return nil, terror.ErrConfigMetadataNotSet.Generate(i, ModeIncrement)
+			log.L().Warn("mysql-instance doesn't set meta for incremental mode, user should specify start_time to start task.", zap.String("sourceID", sourceCfg.SourceName))
 		}
+
 		// set shard config
 		if task.ShardMode != nil {
 			subTaskCfg.IsSharding = true
@@ -266,6 +268,9 @@ func OpenAPITaskToSubTaskConfigs(task *openapi.Task, toDBCfg *DBConfig, sourceCf
 				bAList.DoTables = doTables
 			}
 			subTaskCfg.BAList = bAList
+		}
+		if task.IgnoreCheckingItems != nil && len(*task.IgnoreCheckingItems) != 0 {
+			subTaskCfg.IgnoreCheckingItems = *task.IgnoreCheckingItems
 		}
 		// adjust sub task config
 		if err := subTaskCfg.Adjust(true); err != nil {
@@ -609,6 +614,10 @@ func SubTaskConfigsToOpenAPITask(subTaskConfigList []*SubTaskConfig) *openapi.Ta
 		task.BinlogFilterRule = &filterRuleMap
 	}
 	task.TableMigrateRule = tableMigrateRuleList
+	if len(oneSubtaskConfig.IgnoreCheckingItems) != 0 {
+		ignoreItems := oneSubtaskConfig.IgnoreCheckingItems
+		task.IgnoreCheckingItems = &ignoreItems
+	}
 	return &task
 }
 
@@ -683,4 +692,35 @@ func removeDuplication(in []string) []string {
 func genFilterRuleName(sourceName string, idx int) string {
 	// NOTE that we don't have user input filter rule name in sub task config, so we make one by ourself
 	return fmt.Sprintf("%s-filter-rule-%d", sourceName, idx)
+}
+
+func OpenAPIStartTaskReqToTaskCliArgs(req openapi.StartTaskRequest) (*TaskCliArgs, error) {
+	if req.StartTime == nil && req.SafeModeTimeDuration == nil {
+		return nil, nil
+	}
+	cliArgs := &TaskCliArgs{}
+	if req.StartTime != nil {
+		cliArgs.StartTime = *req.StartTime
+	}
+	if req.SafeModeTimeDuration != nil {
+		cliArgs.SafeModeDuration = *req.SafeModeTimeDuration
+	}
+
+	if err := cliArgs.Verify(); err != nil {
+		return nil, err
+	}
+	return cliArgs, nil
+}
+
+func OpenAPIStopTaskReqToTaskCliArgs(req openapi.StopTaskRequest) (*TaskCliArgs, error) {
+	if req.TimeoutDuration == nil {
+		return nil, nil
+	}
+	cliArgs := &TaskCliArgs{
+		WaitTimeOnStop: *req.TimeoutDuration,
+	}
+	if err := cliArgs.Verify(); err != nil {
+		return nil, err
+	}
+	return cliArgs, nil
 }

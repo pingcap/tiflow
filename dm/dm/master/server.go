@@ -203,7 +203,12 @@ func (s *Server) Start(ctx context.Context) (err error) {
 		"/debug/": getDebugHandler(),
 	}
 	if s.cfg.OpenAPI {
-		if initOpenAPIErr := s.InitOpenAPIHandles(); initOpenAPIErr != nil {
+		// tls3 is used to openapi reverse proxy
+		tls3, err1 := toolutils.NewTLS(s.cfg.SSLCA, s.cfg.SSLCert, s.cfg.SSLKey, s.cfg.AdvertiseAddr, s.cfg.CertAllowedCN)
+		if err1 != nil {
+			return terror.ErrMasterTLSConfigNotValid.Delegate(err1)
+		}
+		if initOpenAPIErr := s.InitOpenAPIHandles(tls3.TLSConfig()); initOpenAPIErr != nil {
 			return terror.ErrOpenAPICommonError.Delegate(initOpenAPIErr)
 		}
 		userHandles["/api/v1/"] = s.openapiHandles
@@ -1793,6 +1798,14 @@ func (s *Server) waitOperationOk(
 	}
 
 	for num := 0; num < maxRetryNum; num++ {
+		if num > 0 {
+			select {
+			case <-ctx.Done():
+				return false, "", nil, ctx.Err()
+			case <-time.After(retryInterval):
+			}
+		}
+
 		// check whether source relative worker has been removed by scheduler
 		if _, ok := masterReq.(*pb.OperateSourceRequest); ok {
 			if expect == pb.Stage_Stopped {
@@ -1808,6 +1821,7 @@ func (s *Server) waitOperationOk(
 			}
 		}
 
+		// TODO: this is 30s, too long compared with retryInterval
 		resp, err := cli.SendRequest(ctx, req, s.cfg.RPCTimeout)
 		if err != nil {
 			log.L().Error("fail to query operation",
@@ -1919,12 +1933,6 @@ func (s *Server) waitOperationOk(
 			}
 			log.L().Info("fail to get expect operation result", zap.Int("retryNum", num), zap.String("task", taskName),
 				zap.String("source", sourceID), zap.Stringer("expect", expect), zap.Stringer("resp", queryResp))
-		}
-
-		select {
-		case <-ctx.Done():
-			return false, "", nil, ctx.Err()
-		case <-time.After(retryInterval):
 		}
 	}
 
@@ -2316,7 +2324,7 @@ func (s *Server) GetCfg(ctx context.Context, req *pb.GetCfgRequest) (*pb.GetCfgR
 		// For the get-config command, we want to filter out fields that are not easily readable by humans,
 		// such as SSLXXBytes field in `Security` struct
 		taskCfg := config.SubTaskConfigsToTaskConfig(subCfgList...)
-		taskCfg.TargetDB.Password = "******"
+		taskCfg.TargetDB.Password = config.ObfuscatedPasswordForFeedback
 		if taskCfg.TargetDB.Security != nil {
 			taskCfg.TargetDB.Security.ClearSSLBytesData()
 		}
@@ -2420,7 +2428,7 @@ func (s *Server) GetCfg(ctx context.Context, req *pb.GetCfgRequest) (*pb.GetCfgR
 
 			return resp2, nil
 		}
-		sourceCfg.From.Password = "******"
+		sourceCfg.From.Password = config.ObfuscatedPasswordForFeedback
 		if sourceCfg.From.Security != nil {
 			sourceCfg.From.Security.ClearSSLBytesData()
 		}

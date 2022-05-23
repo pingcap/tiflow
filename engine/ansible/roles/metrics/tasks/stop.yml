@@ -1,0 +1,5 @@
+- name:  stop prometheus 
+  shell: "ps -e | grep prometheus | awk '{ print $1 }' | xargs -r kill"
+
+- name:  stop node_exporter
+  shell: "ps -e | grep node_exporter | awk '{ print $1 }' | xargs -r kill"

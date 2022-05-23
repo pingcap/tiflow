@@ -51,6 +51,10 @@ func TestFromString(t *testing.T) {
 			expectedProtocolEnum: ProtocolAvro,
 		},
 		{
+			protocol:             "flat-avro",
+			expectedProtocolEnum: ProtocolAvro,
+		},
+		{
 			protocol:             "craft",
 			expectedProtocolEnum: ProtocolCraft,
 		},
