@@ -88,7 +88,7 @@ func UpdateSchema(tctx *tcontext.Context, db *conn.BaseDB, cfg *config.SubTaskCo
 func updateSyncerCheckpoint(tctx *tcontext.Context, dbConn *conn.BaseConn, taskName, tableName, sourceID string, fillGTIDs bool, tcpReader reader.Reader) error {
 	logger := log.L().WithFields(zap.String("task", taskName), zap.String("source", sourceID))
 	logger.Info("updating syncer checkpoint", zap.Bool("fill GTID", fillGTIDs))
-	var gs gtid.Set
+	var gs gmysql.GTIDSet
 	if fillGTIDs {
 		// NOTE: get GTID sets for all (global & tables) binlog position has many problems, at least including:
 		//   - it is a heavy work because it should read binlog events once for each position
@@ -179,7 +179,7 @@ func getGlobalPos(tctx *tcontext.Context, dbConn *conn.BaseConn, tableName, sour
 }
 
 // getGTIDsForPos gets the GTID sets for the position.
-func getGTIDsForPos(tctx *tcontext.Context, pos gmysql.Position, tcpReader reader.Reader) (gs gtid.Set, err error) {
+func getGTIDsForPos(tctx *tcontext.Context, pos gmysql.Position, tcpReader reader.Reader) (gs gmysql.GTIDSet, err error) {
 	// NOTE: because we have multiple unit test cases updating/clearing binlog in the upstream,
 	// we may encounter errors when reading binlog event but cleared by another test case.
 	failpoint.Inject("MockGetGTIDsForPos", func(val failpoint.Value) {

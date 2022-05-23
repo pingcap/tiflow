@@ -54,13 +54,13 @@ func HTTPHandlerForMetric() http.Handler {
 	return HTTPHandlerForMetricImpl(globalMetricGatherer)
 }
 
-// NewFactory4JobMaster return a Factory for jobmaster
-func NewFactory4JobMaster(info tenant.ProjectInfo, jobType libModel.JobType, jobID libModel.MasterID) Factory {
-	return NewFactory4JobMasterImpl(globalMetricRegistry, info, jobType, jobID)
+// NewFactory4Master return a Factory for jobmaster
+func NewFactory4Master(info tenant.ProjectInfo, jobType libModel.JobType, jobID libModel.MasterID) Factory {
+	return NewFactory4MasterImpl(globalMetricRegistry, info, jobType, jobID)
 }
 
 // NewFactory4Worker return a Factory for worker
-func NewFactory4Worker(reg *Registry, info tenant.ProjectInfo, jobType libModel.JobType, jobID libModel.MasterID,
+func NewFactory4Worker(info tenant.ProjectInfo, jobType libModel.JobType, jobID libModel.MasterID,
 	workerID libModel.WorkerID,
 ) Factory {
 	return NewFactory4WorkerImpl(globalMetricRegistry, info, jobType, jobID, workerID)
