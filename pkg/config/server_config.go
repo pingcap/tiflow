@@ -96,6 +96,12 @@ var defaultServerConfig = &ServerConfig{
 		WorkerConcurrent: 8,
 		WorkerPoolSize:   0, // 0 will use NumCPU() * 2
 		RegionScanLimit:  40,
+<<<<<<< HEAD
+=======
+		// The default TiKV region election timeout is [10s, 20s],
+		// Use 1 minute to cover region leader missing.
+		RegionRetryDuration: TomlDuration(time.Minute),
+>>>>>>> 4d48968a0 (config(ticdc): use 1 minute kv retry time (#5499))
 	},
 	Debug: &DebugConfig{
 		EnableTableActor: false,
