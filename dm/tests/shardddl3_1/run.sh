@@ -24,7 +24,7 @@ function DM_099_CASE() {
 	run_sql_source1 "alter table ${shardddl1}.${tb1} add column new_col1 int;"
 	run_sql_source2 "alter table ${shardddl1}.${tb1} add column new_col1 int;"
 
-	ps aux | grep dm-worker2 | awk '{print $2}' | xargs kill || true
+	kill_process dm-worker2
 	check_port_offline $WORKER2_PORT 20
 
 	run_sql_source1 "alter table ${shardddl1}.${tb2} add column new_col1 int;"
@@ -57,7 +57,7 @@ function DM_100_CASE() {
 
 	run_sql_source1 "alter table ${shardddl1}.${tb1} add column new_col1 int;"
 
-	ps aux | grep dm-worker1 | awk '{print $2}' | xargs kill || true
+	kill_process dm-worker1
 	check_port_offline $WORKER1_PORT 20
 
 	run_sql_source2 "alter table ${shardddl1}.${tb1} add column new_col1 int;"
@@ -92,7 +92,7 @@ function DM_101_CASE() {
 	run_sql_source1 "alter table ${shardddl1}.${tb1} add column new_col1 int;"
 	run_sql_source2 "alter table ${shardddl1}.${tb1} add column new_col1 int;"
 
-	ps aux | grep dm-worker2 | awk '{print $2}' | xargs kill || true
+	kill_process dm-worker2
 	check_port_offline $WORKER2_PORT 20
 
 	run_sql_source1 "alter table ${shardddl1}.${tb2} add column new_col1 int;"
