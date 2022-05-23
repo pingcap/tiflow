@@ -1,0 +1,86 @@
+
+- name: Create data dir
+  file: path={{ df_data_prefix }} owner=root group=root state=directory
+
+- name: Create bin dir
+  file: path={{ df_bin_dir }} owner=root group=root state=directory
+
+- name: Create file dir
+  file: path={{ df_file_dir }} owner=root group=root state=directory
+
+- name: Create log dir
+  file: path={{ df_log_dir }} owner=root group=root state=directory
+
+- name: Create script dir
+  file: path={{ df_script_dir }} owner=root group=root state=directory
+
+- name: Create config dir
+  file: path={{ df_config_dir }} owner=root group=root state=directory
+
+- name: Create prometheus dir
+  file: path={{ prom_data_dir }} owner=root group=root state=directory
+
+- name: Copy bins
+  copy: src="{{ item }}.bin" dest="{{ df_bin_dir }}/{{ item }}-{{ cluster_name }}" mode=0655
+  loop:
+    - master
+    - executor
+    - demoserver
+
+- name: Download etcd
+  get_url:
+    url="https://github.com/etcd-io/etcd/releases/download/v{{ etcd_version }}/etcd-v{{ etcd_version }}-linux-amd64.tar.gz" dest={{ df_file_dir }}/etcd-v{{ etcd_version }}-linux-amd64.tar.gz
+  run_once: true
+  delegate_to: localhost
+
+- name: Download promethus-server 
+  get_url:
+    url="https://github.com/prometheus/prometheus/releases/download/v{{ prom_version }}/prometheus-{{ prom_version }}.linux-amd64.tar.gz" dest={{ df_file_dir }}/prometheus-{{ prom_version }}.linux-amd64.tar.gz
+  run_once: true
+  delegate_to: localhost
+
+- name: Download node-exporter 
+  get_url:
+    url="https://github.com/prometheus/node_exporter/releases/download/v{{ node_exporter_version }}/node_exporter-{{ node_exporter_version }}.linux-amd64.tar.gz" dest={{ df_file_dir }}/node_exporter-{{ node_exporter_version }}.linux-amd64.tar.gz
+  run_once: true
+  delegate_to: localhost
+
+
+- name: extract etcd
+  unarchive:
+    src: "{{ df_file_dir }}/etcd-v{{ etcd_version }}-linux-amd64.tar.gz"
+    dest: "{{ df_file_dir }}"
+  run_once: true
+  delegate_to: localhost
+
+- name: copy etcd
+  copy: src="{{ df_file_dir }}/etcd-v{{ etcd_version }}-linux-amd64/etcd" dest="{{ df_bin_dir }}" mode=0655
+
+- name: extract premetheus
+  unarchive:
+    src: "{{ df_file_dir }}/prometheus-{{ prom_version }}.linux-amd64.tar.gz"
+    dest: "{{ df_file_dir }}"
+  run_once: true
+  delegate_to: localhost
+
+- name: copy premetheus
+  copy: 
+    src: "{{ df_file_dir }}/prometheus-{{ prom_version }}.linux-amd64/prometheus" 
+    dest: "{{ df_bin_dir }}" 
+    mode: 0655
+  run_once: true
+  delegate_to: localhost
+
+- name: extract node-exporter
+  unarchive:
+    src: "{{ df_file_dir }}/node_exporter-{{ node_exporter_version }}.linux-amd64.tar.gz"
+    dest: "{{ df_file_dir }}"
+  run_once: true
+  delegate_to: localhost
+
+- name: copy node-exporter 
+  copy: 
+    src: "{{ df_file_dir }}/node_exporter-{{ node_exporter_version }}.linux-amd64/node_exporter" 
+    dest: "{{ df_bin_dir }}" 
+    mode: 0655
+

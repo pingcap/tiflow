@@ -1,7 +1,8 @@
 ### Makefile for ticdc
 .PHONY: build test check clean fmt cdc kafka_consumer coverage \
 	integration_test_build integration_test integration_test_mysql integration_test_kafka bank \
-	dm dm-master dm-worker dmctl dm-syncer dm_coverage
+	dm dm-master dm-worker dmctl dm-syncer dm_coverage \
+	engine df-master df-executor df-master-client df-demo df-chaos-case
 
 PROJECT=tiflow
 P=3
@@ -16,6 +17,7 @@ SHELL := /usr/bin/env bash
 
 TEST_DIR := /tmp/tidb_cdc_test
 DM_TEST_DIR := /tmp/dm_test
+ENGINE_TEST_DIR := /tmp/engine_test
 
 GO       := GO111MODULE=on go
 ifeq (${CDC_ENABLE_VENDOR}, 1)
@@ -33,11 +35,13 @@ MAC   := "Darwin"
 CDC_PKG := github.com/pingcap/tiflow
 DM_PKG := github.com/pingcap/tiflow/dm
 PACKAGE_LIST := go list ./... | grep -vE 'vendor|proto|tiflow\/tests|integration|testing_utils|pb|pbmock|tiflow\/bin'
-PACKAGE_LIST_WITHOUT_DM := $(PACKAGE_LIST) | grep -vE 'github.com/pingcap/tiflow/dm'
+PACKAGE_LIST_WITHOUT_DM_ENGINE := $(PACKAGE_LIST) | grep -vE 'github.com/pingcap/tiflow/dm|github.com/pingcap/tiflow/engine'
 DM_PACKAGE_LIST := go list github.com/pingcap/tiflow/dm/... | grep -vE 'pb|pbmock|dm/cmd'
 PACKAGES := $$($(PACKAGE_LIST))
-PACKAGES_WITHOUT_DM := $$($(PACKAGE_LIST_WITHOUT_DM))
+PACKAGES_TICDC := $$($(PACKAGE_LIST_WITHOUT_DM_ENGINE))
 DM_PACKAGES := $$($(DM_PACKAGE_LIST))
+ENGINE_PACKAGE_LIST := go list github.com/pingcap/tiflow/engine/... | grep -vE 'pb|proto|engine/cmd|engine/test/e2e'
+ENGINE_PACKAGES := $$($(ENGINE_PACKAGE_LIST))
 FILES := $$(find . -name '*.go' -type f | grep -vE 'vendor|kv_gen|proto|pb\.go|pb\.gw\.go')
 TEST_FILES := $$(find . -name '*_test.go' -type f | grep -vE 'vendor|kv_gen|integration|testing_utils')
 TEST_FILES_WITHOUT_DM := $$(find . -name '*_test.go' -type f | grep -vE 'vendor|kv_gen|integration|testing_utils|^\./dm')
@@ -91,9 +95,9 @@ all: dev install
 
 dev: check test
 
-test: unit_test dm_unit_test
+test: unit_test dm_unit_test engine_unit_test
 
-build: cdc dm
+build: cdc dm engine
 
 bank:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/bank ./tests/bank/bank.go ./tests/bank/case.go
@@ -112,11 +116,11 @@ kafka_consumer:
 install:
 	go install ./...
 
-unit_test: check_failpoint_ctl generate_mock generate-msgp-code
+unit_test: check_failpoint_ctl generate_mock generate-msgp-code generate-protobuf
 	mkdir -p "$(TEST_DIR)"
 	$(FAILPOINT_ENABLE)
 	@export log_level=error;\
-	$(GOTEST) -cover -covermode=atomic -coverprofile="$(TEST_DIR)/cov.unit.out" $(PACKAGES_WITHOUT_DM) \
+	$(GOTEST) -cover -covermode=atomic -coverprofile="$(TEST_DIR)/cov.unit.out" $(PACKAGES_TICDC) \
 	|| { $(FAILPOINT_DISABLE); exit 1; }
 	$(FAILPOINT_DISABLE)
 
@@ -125,7 +129,7 @@ unit_test_in_verify_ci: check_failpoint_ctl tools/bin/gotestsum tools/bin/gocov 
 	$(FAILPOINT_ENABLE)
 	@export log_level=error;\
 	CGO_ENABLED=1 tools/bin/gotestsum --junitfile cdc-junit-report.xml -- -v -timeout 5m -p $(P) --race \
-	-covermode=atomic -coverprofile="$(TEST_DIR)/cov.unit.out" $(PACKAGES_WITHOUT_DM) \
+	-covermode=atomic -coverprofile="$(TEST_DIR)/cov.unit.out" $(PACKAGES_TICDC) \
 	|| { $(FAILPOINT_DISABLE); exit 1; }
 	tools/bin/gocov convert "$(TEST_DIR)/cov.unit.out" | tools/bin/gocov-xml > cdc-coverage.xml
 	$(FAILPOINT_DISABLE)
@@ -134,7 +138,7 @@ unit_test_in_verify_ci: check_failpoint_ctl tools/bin/gotestsum tools/bin/gocov 
 leak_test: check_failpoint_ctl
 	$(FAILPOINT_ENABLE)
 	@export log_level=error;\
-	$(GOTEST) -count=1 --tags leak $(PACKAGES_WITHOUT_DM) || { $(FAILPOINT_DISABLE); exit 1; }
+	$(GOTEST) -count=1 --tags leak $(PACKAGES_TICDC) || { $(FAILPOINT_DISABLE); exit 1; }
 	$(FAILPOINT_DISABLE)
 
 check_third_party_binary:
@@ -167,7 +171,7 @@ integration_test_mysql:
 integration_test_kafka: check_third_party_binary
 	tests/integration_tests/run.sh kafka "$(CASE)" "$(START_AT)"
 
-fmt: tools/bin/gofumports tools/bin/shfmt generate_mock generate-msgp-code
+fmt: tools/bin/gofumports tools/bin/shfmt generate_mock generate-msgp-code generate-protobuf
 	@echo "gofmt (simplify)"
 	tools/bin/gofumports -l -w $(FILES) 2>&1 | $(FAIL_ON_STDOUT)
 	@echo "run shfmt"
@@ -212,6 +216,10 @@ endif
 generate-msgp-code: tools/bin/msgp
 	@echo "generate-msgp-code"
 	./scripts/generate-msgp-code.sh
+
+generate-protobuf: tools/bin/protoc tools/bin/protoc-gen-gogofaster
+	@echo "generate-protobuf"
+	./scripts/generate-protobuf.sh
 
 vet:
 	@echo "vet"
@@ -362,6 +370,15 @@ dm_integration_test_build_master: check_failpoint_ctl
 	$(FAILPOINT_DISABLE)
 	./dm/tests/prepare_tools.sh
 
+dm_integration_test_build_ctl: check_failpoint_ctl
+	$(FAILPOINT_ENABLE)
+	$(GOTESTNORACE) -ldflags '$(LDFLAGS)' -c -cover -covermode=count \
+		-coverpkg=github.com/pingcap/tiflow/dm/... \
+		-o bin/dmctl.test github.com/pingcap/tiflow/dm/cmd/dm-ctl \
+		|| { $(FAILPOINT_DISABLE); exit 1; }
+	$(FAILPOINT_DISABLE)
+	./dm/tests/prepare_tools.sh
+
 install_test_python_dep:
 	@echo "install python requirments for test"
 	pip install --user -q -r ./dm/tests/requirements.txt
@@ -443,6 +460,9 @@ tools/bin/swag: tools/check/go.mod
 tools/bin/msgp: tools/check/go.mod
 	cd tools/check && $(GO) build -mod=mod -o ../bin/msgp github.com/tinylib/msgp
 
+tools/bin/protoc:
+	./scripts/download-protoc.sh
+
 check_failpoint_ctl: tools/bin/failpoint-ctl
 
 failpoint-enable: check_failpoint_ctl
@@ -450,3 +470,43 @@ failpoint-enable: check_failpoint_ctl
 
 failpoint-disable: check_failpoint_ctl
 	$(FAILPOINT_DISABLE)
+
+engine: df-master df-executor df-master-client df-demo
+
+df-proto:
+	./engine/generate-proto.sh
+
+df-master:
+	$(GOBUILD) -o bin/df-master ./engine/cmd/master
+	cp ./bin/df-master ./engine/ansible/roles/common/files/master.bin
+
+df-executor:
+	$(GOBUILD) -o bin/df-executor ./engine/cmd/executor
+	cp ./bin/df-executor ./engine/ansible/roles/common/files/executor.bin
+
+df-master-client:
+	$(GOBUILD) -o bin/df-master-client ./engine/cmd/master-client
+
+df-demo:
+	$(GOBUILD) -o bin/df-demoserver ./engine/cmd/demoserver
+	cp ./bin/df-demoserver ./engine/ansible/roles/common/files/demoserver.bin
+
+df-chaos-case:
+	$(GOBUILD) -o bin/df-chaos-case ./engine/chaos/cases
+
+df-kvmock: tools/bin/mockgen tools/bin/protoc tools/bin/protoc-gen-gogofaster
+	tools/bin/mockgen -package mock github.com/pingcap/tiflow/engine/pkg/meta/metaclient KVClient \
+	> engine/pkg/meta/kvclient/mock/mockclient.go
+
+engine_unit_test: check_failpoint_ctl
+	$(call run_engine_unit_test,$(ENGINE_PACKAGES))
+
+define run_engine_unit_test
+	@echo "running unit test for packages:" $(1)
+	mkdir -p $(ENGINE_TEST_DIR)
+	$(FAILPOINT_ENABLE)
+	@export log_level=error; \
+	$(GOTEST) -timeout 5m -covermode=atomic -coverprofile="$(ENGINE_TEST_DIR)/cov.unit_test.out" $(1) \
+	|| { $(FAILPOINT_DISABLE); exit 1; }
+	$(FAILPOINT_DISABLE)
+endef

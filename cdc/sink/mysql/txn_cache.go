@@ -24,28 +24,32 @@ import (
 )
 
 type txnsWithTheSameCommitTs struct {
-	txns     map[model.Ts]*model.SingleTableTxn
+	txns     []*model.SingleTableTxn
 	commitTs model.Ts
 }
 
 func (t *txnsWithTheSameCommitTs) Append(row *model.RowChangedEvent) {
 	if row.CommitTs != t.commitTs {
 		log.Panic("unexpected row change event",
-			zap.Uint64("commitTs of txn", t.commitTs),
+			zap.Uint64("commitTs", t.commitTs),
 			zap.Any("row", row))
 	}
-	if t.txns == nil {
-		t.txns = make(map[model.Ts]*model.SingleTableTxn)
-	}
-	txn, exist := t.txns[row.StartTs]
-	if !exist {
+
+	var txn *model.SingleTableTxn
+	if len(t.txns) == 0 || row.SplitTxn || t.txns[len(t.txns)-1].StartTs < row.StartTs {
 		txn = &model.SingleTableTxn{
 			StartTs:   row.StartTs,
 			CommitTs:  row.CommitTs,
 			Table:     row.Table,
 			ReplicaID: row.ReplicaID,
 		}
-		t.txns[row.StartTs] = txn
+		t.txns = append(t.txns, txn)
+	} else if t.txns[len(t.txns)-1].StartTs == row.StartTs {
+		txn = t.txns[len(t.txns)-1]
+	} else {
+		log.Panic("Row changed event received by the sink module should be ordered",
+			zap.Any("previousTxn", t.txns[len(t.txns)-1]),
+			zap.Any("currentRow", row))
 	}
 	txn.Append(row)
 }
@@ -82,7 +86,7 @@ func (c *unresolvedTxnCache) Append(filter *filter.Filter, rows ...*model.RowCha
 	appendRows := 0
 	for _, row := range rows {
 		if filter != nil && filter.ShouldIgnoreDMLEvent(row.StartTs, row.Table.Schema, row.Table.Table) {
-			log.Info("Row changed event ignored", zap.Uint64("start-ts", row.StartTs))
+			log.Info("Row changed event ignored", zap.Uint64("startTs", row.StartTs))
 			continue
 		}
 		txns := c.unresolvedTxns[row.Table.TableID]
@@ -111,50 +115,56 @@ func (c *unresolvedTxnCache) Resolved(
 ) (map[model.TableID]uint64, map[model.TableID][]*model.SingleTableTxn) {
 	c.unresolvedTxnsMu.Lock()
 	defer c.unresolvedTxnsMu.Unlock()
-	if len(c.unresolvedTxns) == 0 {
-		return nil, nil
-	}
 
 	return splitResolvedTxn(resolvedTsMap, c.unresolvedTxns)
 }
 
 func splitResolvedTxn(
 	resolvedTsMap *sync.Map, unresolvedTxns map[model.TableID][]*txnsWithTheSameCommitTs,
-) (flushedResolvedTsMap map[model.TableID]uint64, resolvedRowsMap map[model.TableID][]*model.SingleTableTxn) {
+) (checkpointTsMap map[model.TableID]uint64,
+	resolvedRowsMap map[model.TableID][]*model.SingleTableTxn,
+) {
+	var (
+		ok                              bool
+		txnsLength                      int
+		txns                            []*txnsWithTheSameCommitTs
+		resolvedTxnsWithTheSameCommitTs []*txnsWithTheSameCommitTs
+	)
+
+	checkpointTsMap = make(map[model.TableID]uint64, len(unresolvedTxns))
+	resolvedTsMap.Range(func(k, v any) bool {
+		tableID := k.(model.TableID)
+		resolved := v.(model.ResolvedTs)
+		checkpointTsMap[tableID] = resolved.Ts
+		return true
+	})
+
 	resolvedRowsMap = make(map[model.TableID][]*model.SingleTableTxn, len(unresolvedTxns))
-	flushedResolvedTsMap = make(map[model.TableID]uint64, len(unresolvedTxns))
-	for tableID, txns := range unresolvedTxns {
-		v, ok := resolvedTsMap.Load(tableID)
-		if !ok {
+	for tableID, resolvedTs := range checkpointTsMap {
+		if txns, ok = unresolvedTxns[tableID]; !ok {
 			continue
 		}
-		resolvedTs := v.(uint64)
 		i := sort.Search(len(txns), func(i int) bool {
 			return txns[i].commitTs > resolvedTs
 		})
-		if i == 0 {
-			continue
-		}
-		var resolvedTxnsWithTheSameCommitTs []*txnsWithTheSameCommitTs
-		if i == len(txns) {
-			resolvedTxnsWithTheSameCommitTs = txns
-			delete(unresolvedTxns, tableID)
-		} else {
-			resolvedTxnsWithTheSameCommitTs = txns[:i]
-			unresolvedTxns[tableID] = txns[i:]
-		}
-		var txnsLength int
-		for _, txns := range resolvedTxnsWithTheSameCommitTs {
-			txnsLength += len(txns.txns)
-		}
-		resolvedTxns := make([]*model.SingleTableTxn, 0, txnsLength)
-		for _, txns := range resolvedTxnsWithTheSameCommitTs {
-			for _, txn := range txns.txns {
-				resolvedTxns = append(resolvedTxns, txn)
+		if i != 0 {
+			if i == len(txns) {
+				resolvedTxnsWithTheSameCommitTs = txns
+				delete(unresolvedTxns, tableID)
+			} else {
+				resolvedTxnsWithTheSameCommitTs = txns[:i]
+				unresolvedTxns[tableID] = txns[i:]
 			}
+			for _, txns := range resolvedTxnsWithTheSameCommitTs {
+				txnsLength += len(txns.txns)
+			}
+			resolvedTxns := make([]*model.SingleTableTxn, 0, txnsLength)
+			for _, txns := range resolvedTxnsWithTheSameCommitTs {
+				resolvedTxns = append(resolvedTxns, txns.txns...)
+			}
+			resolvedRowsMap[tableID] = resolvedTxns
 		}
-		resolvedRowsMap[tableID] = resolvedTxns
-		flushedResolvedTsMap[tableID] = resolvedTs
 	}
+
 	return
 }

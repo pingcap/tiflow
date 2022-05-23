@@ -40,6 +40,7 @@ func IsIgnorableMySQLDDLError(err error) bool {
 		infoschema.ErrTableExists.Code(), infoschema.ErrTableDropExists.Code(),
 		infoschema.ErrColumnExists.Code(), infoschema.ErrIndexExists.Code(),
 		infoschema.ErrKeyNotExists.Code(), dbterror.ErrCantDropFieldOrKey.Code(),
+		infoschema.ErrColumnNotExists.Code(),
 		mysql.ErrDupKeyName, mysql.ErrSameNamePartition,
 		mysql.ErrDropPartitionNonExistent, mysql.ErrMultiplePriKey:
 		return true

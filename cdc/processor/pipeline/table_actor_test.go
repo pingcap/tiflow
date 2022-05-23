@@ -91,7 +91,7 @@ func TestTableActorInterface(t *testing.T) {
 
 	require.Equal(t, model.Ts(5), tbl.ResolvedTs())
 	tbl.replicaConfig.Consistent.Level = string(redo.ConsistentLevelEventual)
-	atomic.StoreUint64(&sink.resolvedTs, 6)
+	sink.resolvedTs.Store(model.NewResolvedTs(6))
 	require.Equal(t, model.Ts(6), tbl.ResolvedTs())
 }
 
@@ -184,15 +184,18 @@ func TestPollStoppedActor(t *testing.T) {
 
 func TestPollTickMessage(t *testing.T) {
 	startTime := time.Now().Add(-sinkFlushInterval)
+
+	sn := &sinkNode{
+		status:         TableStatusInitializing,
+		sink:           &mockSink{},
+		flowController: &mockFlowController{},
+		checkpointTs:   10,
+		targetTs:       11,
+	}
+	sn.resolvedTs.Store(model.NewResolvedTs(10))
+
 	tbl := tableActor{
-		sinkNode: &sinkNode{
-			status:         TableStatusInitializing,
-			sink:           &mockSink{},
-			flowController: &mockFlowController{},
-			resolvedTs:     10,
-			checkpointTs:   10,
-			targetTs:       11,
-		},
+		sinkNode:          sn,
 		lastFlushSinkTime: time.Now().Add(-2 * sinkFlushInterval),
 		cancel:            func() {},
 		reportErr:         func(err error) {},
@@ -235,13 +238,15 @@ func TestPollStopMessage(t *testing.T) {
 }
 
 func TestPollBarrierTsMessage(t *testing.T) {
+	sn := &sinkNode{
+		targetTs:     10,
+		checkpointTs: 5,
+		barrierTs:    8,
+	}
+	sn.resolvedTs.Store(model.NewResolvedTs(5))
+
 	tbl := tableActor{
-		sinkNode: &sinkNode{
-			targetTs:     10,
-			checkpointTs: 5,
-			resolvedTs:   5,
-			barrierTs:    8,
-		},
+		sinkNode: sn,
 		sortNode: &sorterNode{
 			barrierTs: 8,
 		},
@@ -284,6 +289,41 @@ func TestPollDataFailed(t *testing.T) {
 	require.Equal(t, stopped, tbl.stopped)
 }
 
+func TestPollDataAfterSinkStopped(t *testing.T) {
+	// process failed
+	msgPulled := false
+	var pN asyncMessageHolderFunc = func() *pmessage.Message {
+		msgPulled = true
+		return &pmessage.Message{
+			Tp:        pmessage.MessageTypeBarrier,
+			BarrierTs: 1,
+		}
+	}
+	var dp asyncMessageProcessorFunc = func(
+		ctx context.Context, msg pmessage.Message,
+	) (bool, error) {
+		return false, errors.New("error")
+	}
+	tbl := tableActor{
+		cancel:            func() {},
+		reportErr:         func(err error) {},
+		sinkNode:          &sinkNode{sink: &mockSink{}, flowController: &mockFlowController{}},
+		lastFlushSinkTime: time.Now(),
+		nodes: []*ActorNode{
+			{
+				parentNode:       pN,
+				messageProcessor: dp,
+			},
+		},
+		sinkStopped: true,
+	}
+	require.True(t, tbl.Poll(context.TODO(), []message.Message[pmessage.Message]{
+		message.ValueMessage[pmessage.Message](pmessage.TickMessage()),
+	}))
+	require.False(t, msgPulled)
+	require.NotEqual(t, stopped, tbl.stopped)
+}
+
 func TestNewTableActor(t *testing.T) {
 	realStartPullerFunc := startPuller
 	realStartSorterFunc := startSorter
@@ -303,7 +343,7 @@ func TestNewTableActor(t *testing.T) {
 	cctx := cdcContext.WithChangefeedVars(
 		cdcContext.NewContext(ctx, globalVars),
 		&cdcContext.ChangefeedVars{
-			ID: "changefeed-1",
+			ID: model.DefaultChangeFeedID("changefeed-id-test"),
 			Info: &model.ChangeFeedInfo{
 				Config: config.GetDefaultReplicaConfig(),
 			},
@@ -315,7 +355,7 @@ func TestNewTableActor(t *testing.T) {
 	startSorter = func(t *tableActor, ctx *actorNodeContext) error {
 		return nil
 	}
-	tbl, err := NewTableActor(cctx, nil, 1, "t1",
+	tbl, err := NewTableActor(cctx, nil, nil, 1, "t1",
 		&model.TableReplicaInfo{
 			StartTs:     0,
 			MarkTableID: 1,
@@ -331,7 +371,7 @@ func TestNewTableActor(t *testing.T) {
 		return errors.New("failed to start puller")
 	}
 
-	tbl, err = NewTableActor(cctx, nil, 1, "t1",
+	tbl, err = NewTableActor(cctx, nil, nil, 1, "t1",
 		&model.TableReplicaInfo{
 			StartTs:     0,
 			MarkTableID: 1,
@@ -366,7 +406,7 @@ func TestTableActorStart(t *testing.T) {
 	tbl := &tableActor{
 		globalVars: globalVars,
 		changefeedVars: &cdcContext.ChangefeedVars{
-			ID: "changefeed-1",
+			ID: model.DefaultChangeFeedID("changefeed-id-test"),
 			Info: &model.ChangeFeedInfo{
 				Config: config.GetDefaultReplicaConfig(),
 			},
@@ -383,7 +423,7 @@ func TestTableActorStart(t *testing.T) {
 	tbl = &tableActor{
 		globalVars: globalVars,
 		changefeedVars: &cdcContext.ChangefeedVars{
-			ID: "changefeed-1",
+			ID: model.DefaultChangeFeedID("changefeed-id-test"),
 			Info: &model.ChangeFeedInfo{
 				Config: config.GetDefaultReplicaConfig(),
 			},

@@ -35,9 +35,7 @@ import (
 	"go.uber.org/zap"
 )
 
-const (
-	dummyChangeFeedID = "dummy_changefeed"
-)
+var dummyChangeFeedID = model.DefaultChangeFeedID("dummy_changefeed")
 
 func TestMounterDisableOldValue(t *testing.T) {
 	testCases := []struct {
@@ -276,7 +274,7 @@ func testMounterDisableOldValue(t *testing.T, tc struct {
 		err := scheamStorage.HandleDDLJob(job)
 		require.Nil(t, err)
 	}
-	tableInfo, ok := scheamStorage.GetLastSnapshot().GetTableByName("test", tc.tableName)
+	tableInfo, ok := scheamStorage.GetLastSnapshot().TableByName("test", tc.tableName)
 	require.True(t, ok)
 	if tableInfo.IsCommonHandle {
 		// we can check this log to make sure if the clustered-index is enabled
@@ -291,7 +289,9 @@ func testMounterDisableOldValue(t *testing.T, tc struct {
 	ver, err := store.CurrentVersion(oracle.GlobalTxnScope)
 	require.Nil(t, err)
 	scheamStorage.AdvanceResolvedTs(ver.Ver)
-	mounter := NewMounter(scheamStorage, "c1", time.UTC, false).(*mounterImpl)
+	mounter := NewMounter(scheamStorage,
+		model.DefaultChangeFeedID("c1"),
+		time.UTC, false).(*mounterImpl)
 	mounter.tz = time.Local
 	ctx := context.Background()
 
@@ -444,6 +444,7 @@ func TestGetDefaultZeroValue(t *testing.T) {
 		Name    string
 		ColInfo timodel.ColumnInfo
 		Res     interface{}
+		Default interface{}
 	}{
 		// mysql flag null
 		{
@@ -453,7 +454,8 @@ func TestGetDefaultZeroValue(t *testing.T) {
 					Flag: uint(0),
 				},
 			},
-			Res: nil,
+			Res:     nil,
+			Default: nil,
 		},
 		// mysql.TypeTiny + notnull + nodefault
 		{
@@ -464,7 +466,8 @@ func TestGetDefaultZeroValue(t *testing.T) {
 					Flag: mysql.NotNullFlag,
 				},
 			},
-			Res: int64(0),
+			Res:     int64(0),
+			Default: nil,
 		},
 		// mysql.TypeTiny + notnull + default
 		{
@@ -476,22 +479,24 @@ func TestGetDefaultZeroValue(t *testing.T) {
 					Flag: mysql.NotNullFlag,
 				},
 			},
-			Res: int64(-1314),
+			Res:     int64(-1314),
+			Default: int64(-1314),
 		},
-		// mysql.TypeTiny + notnull + default + unsigned
+		// mysql.TypeTiny + notnull + unsigned
 		{
-			Name: "mysql.TypeTiny + notnull + default + unsigned",
+			Name: "mysql.TypeTiny + notnull + unsigned",
 			ColInfo: timodel.ColumnInfo{
 				FieldType: types.FieldType{
 					Tp:   mysql.TypeTiny,
 					Flag: mysql.NotNullFlag | mysql.UnsignedFlag,
 				},
 			},
-			Res: uint64(0),
+			Res:     uint64(0),
+			Default: nil,
 		},
-		// mysql.TypeTiny + notnull + unsigned
+		// mysql.TypeTiny + notnull + default + unsigned
 		{
-			Name: "mysql.TypeTiny + notnull + unsigned",
+			Name: "mysql.TypeTiny + notnull + default + unsigned",
 			ColInfo: timodel.ColumnInfo{
 				OriginDefaultValue: uint64(1314),
 				FieldType: types.FieldType{
@@ -499,7 +504,8 @@ func TestGetDefaultZeroValue(t *testing.T) {
 					Flag: mysql.NotNullFlag | mysql.UnsignedFlag,
 				},
 			},
-			Res: uint64(1314),
+			Res:     uint64(1314),
+			Default: uint64(1314),
 		},
 		// mysql.TypeTiny + null + default
 		{
@@ -511,7 +517,8 @@ func TestGetDefaultZeroValue(t *testing.T) {
 					Flag: uint(0),
 				},
 			},
-			Res: int64(-1314),
+			Res:     int64(-1314),
+			Default: int64(-1314),
 		},
 		// mysql.TypeTiny + null + nodefault
 		{
@@ -522,7 +529,8 @@ func TestGetDefaultZeroValue(t *testing.T) {
 					Flag: uint(0),
 				},
 			},
-			Res: nil,
+			Res:     nil,
+			Default: nil,
 		},
 		// mysql.TypeShort, others testCases same as tiny
 		{
@@ -533,7 +541,8 @@ func TestGetDefaultZeroValue(t *testing.T) {
 					Flag: mysql.NotNullFlag,
 				},
 			},
-			Res: int64(0),
+			Res:     int64(0),
+			Default: nil,
 		},
 		// mysql.TypeLong, others testCases same as tiny
 		{
@@ -544,7 +553,8 @@ func TestGetDefaultZeroValue(t *testing.T) {
 					Flag: mysql.NotNullFlag,
 				},
 			},
-			Res: int64(0),
+			Res:     int64(0),
+			Default: nil,
 		},
 		// mysql.TypeLonglong, others testCases same as tiny
 		{
@@ -555,7 +565,8 @@ func TestGetDefaultZeroValue(t *testing.T) {
 					Flag: mysql.NotNullFlag,
 				},
 			},
-			Res: int64(0),
+			Res:     int64(0),
+			Default: nil,
 		},
 		// mysql.TypeInt24, others testCases same as tiny
 		{
@@ -566,7 +577,8 @@ func TestGetDefaultZeroValue(t *testing.T) {
 					Flag: mysql.NotNullFlag,
 				},
 			},
-			Res: int64(0),
+			Res:     int64(0),
+			Default: nil,
 		},
 		// mysql.TypeFloat + notnull + nodefault
 		{
@@ -577,7 +589,8 @@ func TestGetDefaultZeroValue(t *testing.T) {
 					Flag: mysql.NotNullFlag,
 				},
 			},
-			Res: float64(0),
+			Res:     float64(0),
+			Default: nil,
 		},
 		// mysql.TypeFloat + notnull + default
 		{
@@ -589,7 +602,8 @@ func TestGetDefaultZeroValue(t *testing.T) {
 					Flag: mysql.NotNullFlag,
 				},
 			},
-			Res: float64(-3.1415),
+			Res:     float64(-3.1415),
+			Default: float64(-3.1415),
 		},
 		// mysql.TypeFloat + notnull + default + unsigned
 		{
@@ -601,7 +615,8 @@ func TestGetDefaultZeroValue(t *testing.T) {
 					Flag: mysql.NotNullFlag | mysql.UnsignedFlag,
 				},
 			},
-			Res: float64(3.1415),
+			Res:     float64(3.1415),
+			Default: float64(3.1415),
 		},
 		// mysql.TypeFloat + notnull + unsigned
 		{
@@ -612,7 +627,8 @@ func TestGetDefaultZeroValue(t *testing.T) {
 					Flag: mysql.NotNullFlag | mysql.UnsignedFlag,
 				},
 			},
-			Res: float64(0),
+			Res:     float64(0),
+			Default: nil,
 		},
 		// mysql.TypeFloat + null + default
 		{
@@ -624,7 +640,8 @@ func TestGetDefaultZeroValue(t *testing.T) {
 					Flag: uint(0),
 				},
 			},
-			Res: float64(-3.1415),
+			Res:     float64(-3.1415),
+			Default: float64(-3.1415),
 		},
 		// mysql.TypeFloat + null + nodefault
 		{
@@ -635,7 +652,8 @@ func TestGetDefaultZeroValue(t *testing.T) {
 					Flag: uint(0),
 				},
 			},
-			Res: nil,
+			Res:     nil,
+			Default: nil,
 		},
 		// mysql.TypeDouble, other testCases same as float
 		{
@@ -646,7 +664,8 @@ func TestGetDefaultZeroValue(t *testing.T) {
 					Flag: mysql.NotNullFlag,
 				},
 			},
-			Res: float64(0),
+			Res:     float64(0),
+			Default: nil,
 		},
 		// mysql.TypeNewDecimal + notnull + nodefault
 		{
@@ -659,7 +678,8 @@ func TestGetDefaultZeroValue(t *testing.T) {
 					Decimal: 2,
 				},
 			},
-			Res: "0", // related with Flen and Decimal
+			Res:     "0", // related with Flen and Decimal
+			Default: nil,
 		},
 		// mysql.TypeNewDecimal + null + nodefault
 		{
@@ -672,7 +692,8 @@ func TestGetDefaultZeroValue(t *testing.T) {
 					Decimal: 2,
 				},
 			},
-			Res: nil,
+			Res:     nil,
+			Default: nil,
 		},
 		// mysql.TypeNewDecimal + null + default
 		{
@@ -686,7 +707,8 @@ func TestGetDefaultZeroValue(t *testing.T) {
 					Decimal: 2,
 				},
 			},
-			Res: "-3.14",
+			Res:     "-3.14",
+			Default: "-3.14",
 		},
 		// mysql.TypeNull
 		{
@@ -696,7 +718,8 @@ func TestGetDefaultZeroValue(t *testing.T) {
 					Tp: mysql.TypeNull,
 				},
 			},
-			Res: nil,
+			Res:     nil,
+			Default: nil,
 		},
 		// mysql.TypeTimestamp + notnull + nodefault
 		{
@@ -707,7 +730,8 @@ func TestGetDefaultZeroValue(t *testing.T) {
 					Flag: mysql.NotNullFlag,
 				},
 			},
-			Res: "0000-00-00 00:00:00",
+			Res:     "0000-00-00 00:00:00",
+			Default: nil,
 		},
 		// mysql.TypeTimestamp + notnull + default
 		{
@@ -719,7 +743,8 @@ func TestGetDefaultZeroValue(t *testing.T) {
 					Flag: mysql.NotNullFlag,
 				},
 			},
-			Res: "2020-11-19 12:12:12",
+			Res:     "2020-11-19 12:12:12",
+			Default: "2020-11-19 12:12:12",
 		},
 		// mysql.TypeTimestamp + null + default
 		{
@@ -731,7 +756,8 @@ func TestGetDefaultZeroValue(t *testing.T) {
 					Flag: mysql.NotNullFlag,
 				},
 			},
-			Res: "2020-11-19 12:12:12",
+			Res:     "2020-11-19 12:12:12",
+			Default: "2020-11-19 12:12:12",
 		},
 		// mysql.TypeDate, other testCases same as TypeTimestamp
 		{
@@ -742,7 +768,8 @@ func TestGetDefaultZeroValue(t *testing.T) {
 					Flag: mysql.NotNullFlag,
 				},
 			},
-			Res: "0000-00-00",
+			Res:     "0000-00-00",
+			Default: nil,
 		},
 		// mysql.TypeDuration, other testCases same as TypeTimestamp
 		{
@@ -753,7 +780,8 @@ func TestGetDefaultZeroValue(t *testing.T) {
 					Flag: mysql.NotNullFlag,
 				},
 			},
-			Res: "00:00:00",
+			Res:     "00:00:00",
+			Default: nil,
 		},
 		// mysql.TypeDatetime, other testCases same as TypeTimestamp
 		{
@@ -764,7 +792,8 @@ func TestGetDefaultZeroValue(t *testing.T) {
 					Flag: mysql.NotNullFlag,
 				},
 			},
-			Res: "0000-00-00 00:00:00",
+			Res:     "0000-00-00 00:00:00",
+			Default: nil,
 		},
 		// mysql.TypeYear + notnull + nodefault
 		{
@@ -775,7 +804,8 @@ func TestGetDefaultZeroValue(t *testing.T) {
 					Flag: mysql.NotNullFlag,
 				},
 			},
-			Res: int64(0),
+			Res:     int64(0),
+			Default: nil,
 		},
 		// mysql.TypeYear + notnull + default
 		{
@@ -788,7 +818,8 @@ func TestGetDefaultZeroValue(t *testing.T) {
 				},
 			},
 			// TypeYear default value will be a string and then translate to []byte
-			Res: "2021",
+			Res:     "2021",
+			Default: "2021",
 		},
 		// mysql.TypeNewDate
 		{
@@ -799,7 +830,8 @@ func TestGetDefaultZeroValue(t *testing.T) {
 					Flag: mysql.NotNullFlag,
 				},
 			},
-			Res: nil, // [TODO] seems not support by TiDB, need check
+			Res:     nil, // [TODO] seems not support by TiDB, need check
+			Default: nil,
 		},
 		// mysql.TypeVarchar + notnull + nodefault
 		{
@@ -810,7 +842,8 @@ func TestGetDefaultZeroValue(t *testing.T) {
 					Flag: mysql.NotNullFlag,
 				},
 			},
-			Res: []byte{},
+			Res:     []byte{},
+			Default: nil,
 		},
 		// mysql.TypeVarchar + notnull + default
 		{
@@ -823,7 +856,8 @@ func TestGetDefaultZeroValue(t *testing.T) {
 				},
 			},
 			// TypeVarchar default value will be a string and then translate to []byte
-			Res: "e0",
+			Res:     "e0",
+			Default: "e0",
 		},
 		// mysql.TypeTinyBlob
 		{
@@ -834,7 +868,8 @@ func TestGetDefaultZeroValue(t *testing.T) {
 					Flag: mysql.NotNullFlag,
 				},
 			},
-			Res: []byte{},
+			Res:     []byte{},
+			Default: nil,
 		},
 		// mysql.TypeMediumBlob
 		{
@@ -845,7 +880,8 @@ func TestGetDefaultZeroValue(t *testing.T) {
 					Flag: mysql.NotNullFlag,
 				},
 			},
-			Res: []byte{},
+			Res:     []byte{},
+			Default: nil,
 		},
 		// mysql.TypeLongBlob
 		{
@@ -856,7 +892,8 @@ func TestGetDefaultZeroValue(t *testing.T) {
 					Flag: mysql.NotNullFlag,
 				},
 			},
-			Res: []byte{},
+			Res:     []byte{},
+			Default: nil,
 		},
 		// mysql.TypeBlob
 		{
@@ -867,7 +904,8 @@ func TestGetDefaultZeroValue(t *testing.T) {
 					Flag: mysql.NotNullFlag,
 				},
 			},
-			Res: []byte{},
+			Res:     []byte{},
+			Default: nil,
 		},
 		// mysql.TypeVarString
 		{
@@ -878,7 +916,8 @@ func TestGetDefaultZeroValue(t *testing.T) {
 					Flag: mysql.NotNullFlag,
 				},
 			},
-			Res: []byte{},
+			Res:     []byte{},
+			Default: nil,
 		},
 		// mysql.TypeString
 		{
@@ -889,7 +928,8 @@ func TestGetDefaultZeroValue(t *testing.T) {
 					Flag: mysql.NotNullFlag,
 				},
 			},
-			Res: []byte{},
+			Res:     []byte{},
+			Default: nil,
 		},
 		// mysql.TypeBit
 		{
@@ -900,7 +940,8 @@ func TestGetDefaultZeroValue(t *testing.T) {
 					Tp:   mysql.TypeBit,
 				},
 			},
-			Res: uint64(0),
+			Res:     uint64(0),
+			Default: nil,
 		},
 		// BLOB, TEXT, GEOMETRY or JSON column can't have a default value
 		// mysql.TypeJSON
@@ -912,7 +953,8 @@ func TestGetDefaultZeroValue(t *testing.T) {
 					Flag: mysql.NotNullFlag,
 				},
 			},
-			Res: "null",
+			Res:     "null",
+			Default: nil,
 		},
 		// mysql.TypeEnum + notnull + nodefault
 		{
@@ -926,7 +968,8 @@ func TestGetDefaultZeroValue(t *testing.T) {
 			},
 			// TypeEnum value will be a string and then translate to []byte
 			// NotNull && no default will choose first element
-			Res: uint64(0),
+			Res:     uint64(0),
+			Default: nil,
 		},
 		// mysql.TypeEnum + notnull + default
 		{
@@ -940,7 +983,8 @@ func TestGetDefaultZeroValue(t *testing.T) {
 				},
 			},
 			// TypeEnum default value will be a string and then translate to []byte
-			Res: "e1",
+			Res:     "e1",
+			Default: "e1",
 		},
 		// mysql.TypeSet + notnull
 		{
@@ -951,7 +995,8 @@ func TestGetDefaultZeroValue(t *testing.T) {
 					Flag: mysql.NotNullFlag,
 				},
 			},
-			Res: uint64(0),
+			Res:     uint64(0),
+			Default: nil,
 		},
 		// mysql.TypeSet + notnull + default
 		{
@@ -964,7 +1009,8 @@ func TestGetDefaultZeroValue(t *testing.T) {
 				},
 			},
 			// TypeSet default value will be a string and then translate to []byte
-			Res: "1,e",
+			Res:     "1,e",
+			Default: "1,e",
 		},
 		// mysql.TypeGeometry
 		{
@@ -975,12 +1021,15 @@ func TestGetDefaultZeroValue(t *testing.T) {
 					Flag: mysql.NotNullFlag,
 				},
 			},
-			Res: nil, // not support yet
+			Res:     nil, // not support yet
+			Default: nil,
 		},
 	}
 
 	for _, tc := range testCases {
 		val, _, _, _ := getDefaultOrZeroValue(&tc.ColInfo)
 		require.Equal(t, tc.Res, val, tc.Name)
+		val = getDDLDefaultDefinition(&tc.ColInfo)
+		require.Equal(t, tc.Default, val, tc.Name)
 	}
 }

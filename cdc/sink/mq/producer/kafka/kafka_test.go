@@ -21,17 +21,14 @@ import (
 	"time"
 
 	"github.com/Shopify/sarama"
-	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tiflow/cdc/sink/codec"
+	"github.com/pingcap/tiflow/cdc/contextutil"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/sink/mq/codec"
 	"github.com/pingcap/tiflow/pkg/kafka"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
 )
-
-type kafkaSuite struct{}
-
-var _ = check.Suite(&kafkaSuite{})
 
 func TestClientID(t *testing.T) {
 	testCases := []struct {
@@ -42,14 +39,34 @@ func TestClientID(t *testing.T) {
 		hasError     bool
 		expected     string
 	}{
-		{"owner", "domain:1234", "123-121-121-121", "", false, "TiCDC_sarama_producer_owner_domain_1234_123-121-121-121"},
-		{"owner", "127.0.0.1:1234", "123-121-121-121", "", false, "TiCDC_sarama_producer_owner_127.0.0.1_1234_123-121-121-121"},
-		{"owner", "127.0.0.1:1234?:,\"", "123-121-121-121", "", false, "TiCDC_sarama_producer_owner_127.0.0.1_1234_____123-121-121-121"},
-		{"owner", "中文", "123-121-121-121", "", true, ""},
-		{"owner", "127.0.0.1:1234", "123-121-121-121", "cdc-changefeed-1", false, "cdc-changefeed-1"},
+		{
+			"owner", "domain:1234", "123-121-121-121",
+			"", false,
+			"TiCDC_sarama_producer_owner_domain_1234_default_123-121-121-121",
+		},
+		{
+			"owner", "127.0.0.1:1234", "123-121-121-121",
+			"", false,
+			"TiCDC_sarama_producer_owner_127.0.0.1_1234_default_123-121-121-121",
+		},
+		{
+			"owner", "127.0.0.1:1234?:,\"", "123-121-121-121",
+			"", false,
+			"TiCDC_sarama_producer_owner_127.0.0.1_1234_____default_123-121-121-121",
+		},
+		{
+			"owner", "中文", "123-121-121-121",
+			"", true, "",
+		},
+		{
+			"owner", "127.0.0.1:1234",
+			"123-121-121-121", "cdc-changefeed-1", false,
+			"cdc-changefeed-1",
+		},
 	}
 	for _, tc := range testCases {
-		id, err := kafkaClientID(tc.role, tc.addr, tc.changefeedID, tc.configuredID)
+		id, err := kafkaClientID(tc.role, tc.addr,
+			model.DefaultChangeFeedID(tc.changefeedID), tc.configuredID)
 		if tc.hasError {
 			require.Error(t, err)
 		} else {
@@ -96,7 +113,7 @@ func TestNewSaramaProducer(t *testing.T) {
 		NewAdminClientImpl = kafka.NewSaramaAdminClient
 	}()
 
-	ctx = util.PutRoleInCtx(ctx, util.RoleTester)
+	ctx = contextutil.PutRoleInCtx(ctx, util.RoleTester)
 	saramaConfig, err := NewSaramaConfig(ctx, config)
 	require.Nil(t, err)
 	saramaConfig.Producer.Flush.MaxMessages = 1
@@ -306,18 +323,34 @@ func TestAdjustConfigMinInsyncReplicas(t *testing.T) {
 	err = AdjustConfig(adminClient, config, saramaConfig, "create-new-fail-invalid-min-insync-replicas")
 	require.Regexp(
 		t,
-		".*`replication-factor` cannot be smaller than the `min.insync.replicas` of broker.*",
+		".*`replication-factor` is smaller than the `min.insync.replicas` of broker.*",
 		errors.Cause(err),
 	)
+
+	// topic not exist, and `min.insync.replicas` not found in broker's configuration
+	adminClient.DropBrokerConfig()
+	err = AdjustConfig(adminClient, config, saramaConfig, "no-topic-no-min-insync-replicas")
+	require.Regexp(t, ".*cannot find the `min.insync.replicas` from the broker's configuration",
+		errors.Cause(err))
 
 	// Report an error if the replication-factor is less than min.insync.replicas
 	// when the topic does exist.
 	saramaConfig, err = NewSaramaConfig(context.Background(), config)
 	require.Nil(t, err)
+
+	// topic exist, but `min.insync.replicas` not found in topic and broker configuration
+	topicName := "topic-no-config-entry"
+	err = adminClient.CreateTopic(topicName, &sarama.TopicDetail{}, false)
+	require.Nil(t, err)
+	err = AdjustConfig(adminClient, config, saramaConfig, topicName)
+	require.Regexp(t, ".*cannot find the `min.insync.replicas` from the broker's configuration",
+		errors.Cause(err))
+
+	// topic found, and have `min.insync.replicas`, but set to 2, larger than `replication-factor`.
 	adminClient.SetMinInsyncReplicas("2")
 	err = AdjustConfig(adminClient, config, saramaConfig, adminClient.GetDefaultMockTopicName())
 	require.Regexp(t,
-		".*`replication-factor` cannot be smaller than the `min.insync.replicas` of topic.*",
+		".*`replication-factor` is smaller than the `min.insync.replicas` of topic.*",
 		errors.Cause(err),
 	)
 }
@@ -359,7 +392,7 @@ func TestProducerSendMessageFailed(t *testing.T) {
 	}()
 
 	errCh := make(chan error, 1)
-	ctx = util.PutRoleInCtx(ctx, util.RoleTester)
+	ctx = contextutil.PutRoleInCtx(ctx, util.RoleTester)
 	saramaConfig, err := NewSaramaConfig(context.Background(), config)
 	require.Nil(t, err)
 	saramaConfig.Producer.Flush.MaxMessages = 1
@@ -443,7 +476,7 @@ func TestProducerDoubleClose(t *testing.T) {
 	}()
 
 	errCh := make(chan error, 1)
-	ctx = util.PutRoleInCtx(ctx, util.RoleTester)
+	ctx = contextutil.PutRoleInCtx(ctx, util.RoleTester)
 	saramaConfig, err := NewSaramaConfig(context.Background(), config)
 	require.Nil(t, err)
 	client, err := sarama.NewClient(config.BrokerEndpoints, saramaConfig)

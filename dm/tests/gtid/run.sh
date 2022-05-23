@@ -8,7 +8,58 @@ WORK_DIR=$TEST_DIR/$TEST_NAME
 API_VERSION="v1alpha1"
 TASK_NAME="test"
 
+function advance_gtid_test() {
+	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/syncer/NotUpdateLatestGTID=return()"
+	run_sql_file $cur/data/db1.prepare.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
+	run_sql_file $cur/data/db2.prepare.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
+	cp $cur/conf/source1.yaml $WORK_DIR/source1.yaml
+	cp $cur/conf/source2.yaml $WORK_DIR/source2.yaml
+	sed -i "/from:/i\relay-dir: $WORK_DIR/worker1/relay_log" $WORK_DIR/source1.yaml
+	sed -i "/from:/i\relay-dir: $WORK_DIR/worker2/relay_log" $WORK_DIR/source2.yaml
+
+	# start DM worker and source one-by-one, make sure the source1 bound to worker1
+	run_dm_master $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master.toml
+	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT
+	check_metric $MASTER_PORT 'start_leader_counter' 3 0 2
+	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
+	dmctl_operate_source create $WORK_DIR/source1.yaml $SOURCE_ID1
+
+	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
+	dmctl_operate_source create $WORK_DIR/source2.yaml $SOURCE_ID2
+
+	dmctl_start_task "$cur/conf/dm-task.yaml" "--remove-meta"
+	check_metric $WORKER1_PORT "dm_worker_task_state{source_id=\"mysql-replica-01\",task=\"test\",worker=\"worker1\"}" 10 1 3
+	check_metric $WORKER2_PORT "dm_worker_task_state{source_id=\"mysql-replica-02\",task=\"test\",worker=\"worker2\"}" 10 1 3
+
+	run_sql_file $cur/data/db1.increment.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
+	run_sql_file $cur/data/db2.increment.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
+	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
+
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"pause-task test" \
+		"\"result\": true" 3
+
+	run_sql_file $cur/data/db1.increment2.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
+	run_sql_file $cur/data/db2.increment2.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
+
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"resume-task test" \
+		"\"result\": true" 3
+	check_metric $WORKER1_PORT "dm_worker_task_state{source_id=\"mysql-replica-01\",task=\"test\",worker=\"worker1\"}" 10 1 3
+	check_metric $WORKER2_PORT "dm_worker_task_state{source_id=\"mysql-replica-02\",task=\"test\",worker=\"worker2\"}" 10 1 3
+
+	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
+
+	export GO_FAILPOINTS=""
+	cleanup_process $*
+	cleanup_data gtid
+}
+
 function run() {
+	advance_gtid_test
+
 	run_sql_file $cur/data/db1.prepare.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
 	run_sql_file $cur/data/db2.prepare.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
 

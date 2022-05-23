@@ -14,6 +14,8 @@
 package partition
 
 import (
+	"sync"
+
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/hash"
 )
@@ -21,6 +23,7 @@ import (
 // IndexValueDispatcher is a partition dispatcher which dispatches events based on the index value.
 type IndexValueDispatcher struct {
 	hasher *hash.PositionInertia
+	lock   sync.Mutex
 }
 
 // NewIndexValueDispatcher creates a IndexValueDispatcher.
@@ -33,6 +36,8 @@ func NewIndexValueDispatcher() *IndexValueDispatcher {
 // DispatchRowChangedEvent returns the target partition to which
 // a row changed event should be dispatched.
 func (r *IndexValueDispatcher) DispatchRowChangedEvent(row *model.RowChangedEvent, partitionNum int32) int32 {
+	r.lock.Lock()
+	defer r.lock.Unlock()
 	r.hasher.Reset()
 	r.hasher.Write([]byte(row.Table.Schema), []byte(row.Table.Table))
 	// FIXME(leoppro): if the row events includes both pre-cols and cols

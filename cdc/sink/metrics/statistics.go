@@ -19,14 +19,13 @@ import (
 	"time"
 
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/pkg/util"
+	"github.com/pingcap/tiflow/cdc/contextutil"
+	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
 
 const (
-	// OptChangefeedID is the key for changefeed id.
-	OptChangefeedID = "_changefeed_id"
 	// OptCaptureAddr is the key for capture address.
 	OptCaptureAddr = "_capture_addr"
 
@@ -57,26 +56,36 @@ func (t sinkType) String() string {
 func NewStatistics(ctx context.Context, t sinkType) *Statistics {
 	statistics := &Statistics{
 		sinkType:            t,
-		changefeedID:        util.ChangefeedIDFromCtx(ctx),
+		changefeedID:        contextutil.ChangefeedIDFromCtx(ctx),
 		lastPrintStatusTime: time.Now(),
 	}
 
 	s := t.String()
-	statistics.metricExecTxnHis = ExecTxnHistogram.WithLabelValues(statistics.changefeedID, s)
-	statistics.metricExecBatchHis = ExecBatchHistogram.WithLabelValues(statistics.changefeedID, s)
-	statistics.metricExecDDLHis = ExecDDLHistogram.WithLabelValues(statistics.changefeedID)
-	statistics.metricExecErrCnt = ExecutionErrorCounter.WithLabelValues(statistics.changefeedID)
+	statistics.metricExecTxnHis = ExecTxnHistogram.
+		WithLabelValues(statistics.changefeedID.Namespace, statistics.changefeedID.ID, s)
+	statistics.metricExecBatchHis = ExecBatchHistogram.
+		WithLabelValues(statistics.changefeedID.Namespace, statistics.changefeedID.ID, s)
+	statistics.metricRowSizesHis = LargeRowSizeHistogram.
+		WithLabelValues(statistics.changefeedID.Namespace, statistics.changefeedID.ID, s)
+	statistics.metricExecDDLHis = ExecDDLHistogram.
+		WithLabelValues(statistics.changefeedID.Namespace, statistics.changefeedID.ID, s)
+	statistics.metricExecErrCnt = ExecutionErrorCounter.
+		WithLabelValues(statistics.changefeedID.Namespace, statistics.changefeedID.ID)
 
 	// Flush metrics in background for better accuracy and efficiency.
 	changefeedID := statistics.changefeedID
 	ticker := time.NewTicker(flushMetricsInterval)
 	go func() {
 		defer ticker.Stop()
-		metricTotalRows := TotalRowsCountGauge.WithLabelValues(changefeedID)
-		metricTotalFlushedRows := TotalFlushedRowsCountGauge.WithLabelValues(changefeedID)
+		metricTotalRows := TotalRowsCountGauge.
+			WithLabelValues(changefeedID.Namespace, changefeedID.ID)
+		metricTotalFlushedRows := TotalFlushedRowsCountGauge.
+			WithLabelValues(changefeedID.Namespace, changefeedID.ID)
 		defer func() {
-			TotalRowsCountGauge.DeleteLabelValues(changefeedID)
-			TotalFlushedRowsCountGauge.DeleteLabelValues(changefeedID)
+			TotalRowsCountGauge.
+				DeleteLabelValues(changefeedID.Namespace, changefeedID.ID)
+			TotalFlushedRowsCountGauge.
+				DeleteLabelValues(changefeedID.Namespace, changefeedID.ID)
 		}()
 		for {
 			select {
@@ -95,7 +104,7 @@ func NewStatistics(ctx context.Context, t sinkType) *Statistics {
 // Statistics maintains some status and metrics of the Sink
 type Statistics struct {
 	sinkType         sinkType
-	changefeedID     string
+	changefeedID     model.ChangeFeedID
 	totalRows        uint64
 	totalFlushedRows uint64
 	totalDDLCount    uint64
@@ -107,11 +116,24 @@ type Statistics struct {
 	metricExecDDLHis   prometheus.Observer
 	metricExecBatchHis prometheus.Observer
 	metricExecErrCnt   prometheus.Counter
+
+	metricRowSizesHis prometheus.Observer
 }
 
 // AddRowsCount records total number of rows needs to flush
 func (b *Statistics) AddRowsCount(count int) {
 	atomic.AddUint64(&b.totalRows, uint64(count))
+}
+
+// ObserveRows record the size of all received `RowChangedEvent`
+func (b *Statistics) ObserveRows(rows ...*model.RowChangedEvent) {
+	for _, row := range rows {
+		// only track row with data size larger than `rowSizeLowBound` to reduce
+		// the overhead of calling `Observe` method.
+		if row.ApproximateDataSize >= rowSizeLowBound {
+			b.metricRowSizesHis.Observe(float64(row.ApproximateDataSize))
+		}
+	}
 }
 
 // SubRowsCount records total number of rows needs to flush
@@ -175,8 +197,9 @@ func (b *Statistics) PrintStatus(ctx context.Context) {
 
 	log.Info("sink replication status",
 		zap.Stringer("sinkType", b.sinkType),
-		zap.String("changefeed", b.changefeedID),
-		util.ZapFieldCapture(ctx),
+		zap.String("namespace", b.changefeedID.Namespace),
+		zap.String("changefeed", b.changefeedID.ID),
+		contextutil.ZapFieldCapture(ctx),
 		zap.Uint64("count", count),
 		zap.Uint64("qps", qps),
 		zap.Uint64("ddl", totalDDLCount))

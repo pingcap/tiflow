@@ -53,6 +53,10 @@ var getAllServerIDFunc = utils.GetAllServerID
 //go:embed source.yaml
 var SampleSourceConfig string
 
+// ObfuscatedPasswordForFeedback is the source encryption password that returns to the foreground.
+// PM's requirement, we always return obfuscated password to users.
+var ObfuscatedPasswordForFeedback string = "******"
+
 // PurgeConfig is the configuration for Purger.
 type PurgeConfig struct {
 	Interval    int64 `yaml:"interval" toml:"interval" json:"interval"`             // check whether need to purge at this @Interval (seconds)
@@ -67,9 +71,11 @@ type SourceConfig struct {
 	// deprecated
 	AutoFixGTID bool   `yaml:"auto-fix-gtid" toml:"auto-fix-gtid" json:"auto-fix-gtid"`
 	RelayDir    string `yaml:"relay-dir" toml:"relay-dir" json:"relay-dir"`
-	MetaDir     string `yaml:"meta-dir" toml:"meta-dir" json:"meta-dir"`
-	Flavor      string `yaml:"flavor" toml:"flavor" json:"flavor"`
-	Charset     string `yaml:"charset" toml:"charset" json:"charset"`
+	// deprecated
+	MetaDir string `yaml:"meta-dir" toml:"meta-dir" json:"meta-dir"`
+	Flavor  string `yaml:"flavor" toml:"flavor" json:"flavor"`
+	// deprecated
+	Charset string `yaml:"charset" toml:"charset" json:"charset"`
 
 	EnableRelay bool `yaml:"enable-relay" toml:"enable-relay" json:"enable-relay"`
 	// relay synchronous starting point (if specified)
@@ -306,7 +312,7 @@ func (c *SourceConfig) Adjust(ctx context.Context, db *sql.DB) (err error) {
 		log.L().Warn("using an absolute relay path, relay log can't work when starting multiple relay worker")
 	}
 
-	return c.AdjustCaseSensitive(ctx2, db)
+	return nil
 }
 
 // AdjustCaseSensitive adjust CaseSensitive from DB.
@@ -412,7 +418,6 @@ type SourceConfigForDowngrade struct {
 	Enable          bool                   `yaml:"enable,omitempty"`
 	EnableGTID      bool                   `yaml:"enable-gtid"`
 	RelayDir        string                 `yaml:"relay-dir"`
-	MetaDir         string                 `yaml:"meta-dir"`
 	Flavor          string                 `yaml:"flavor"`
 	Charset         string                 `yaml:"charset"`
 	EnableRelay     bool                   `yaml:"enable-relay"`
@@ -436,7 +441,6 @@ func NewSourceConfigForDowngrade(sourceCfg *SourceConfig) *SourceConfigForDowngr
 		Enable:          sourceCfg.Enable,
 		EnableGTID:      sourceCfg.EnableGTID,
 		RelayDir:        sourceCfg.RelayDir,
-		MetaDir:         sourceCfg.MetaDir,
 		Flavor:          sourceCfg.Flavor,
 		Charset:         sourceCfg.Charset,
 		EnableRelay:     sourceCfg.EnableRelay,

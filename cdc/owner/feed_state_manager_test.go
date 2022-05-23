@@ -44,7 +44,7 @@ func TestHandleJob(t *testing.T) {
 
 	// an admin job which of changefeed is not match
 	manager.PushAdminJob(&model.AdminJob{
-		CfID: "fake-changefeed-id",
+		CfID: model.DefaultChangeFeedID("fake-changefeed-id"),
 		Type: model.AdminStop,
 	})
 	manager.Tick(state)
@@ -141,19 +141,11 @@ func TestCleanUpInfos(t *testing.T) {
 		require.Nil(t, status)
 		return &model.ChangeFeedStatus{}, true, nil
 	})
-	state.PatchTaskStatus(ctx.GlobalVars().CaptureInfo.ID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
-		return &model.TaskStatus{}, true, nil
-	})
 	state.PatchTaskPosition(ctx.GlobalVars().CaptureInfo.ID, func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
 		return &model.TaskPosition{}, true, nil
 	})
-	state.PatchTaskWorkload(ctx.GlobalVars().CaptureInfo.ID, func(workload model.TaskWorkload) (model.TaskWorkload, bool, error) {
-		return model.TaskWorkload{}, true, nil
-	})
 	tester.MustApplyPatches()
-	require.Contains(t, state.TaskStatuses, ctx.GlobalVars().CaptureInfo.ID)
 	require.Contains(t, state.TaskPositions, ctx.GlobalVars().CaptureInfo.ID)
-	require.Contains(t, state.Workloads, ctx.GlobalVars().CaptureInfo.ID)
 	manager.Tick(state)
 	tester.MustApplyPatches()
 	require.True(t, manager.ShouldRunning())
@@ -165,9 +157,7 @@ func TestCleanUpInfos(t *testing.T) {
 	require.Equal(t, state.Info.State, model.StateFinished)
 	require.Equal(t, state.Info.AdminJobType, model.AdminFinish)
 	require.Equal(t, state.Status.AdminJobType, model.AdminFinish)
-	require.NotContains(t, state.TaskStatuses, ctx.GlobalVars().CaptureInfo.ID)
 	require.NotContains(t, state.TaskPositions, ctx.GlobalVars().CaptureInfo.ID)
-	require.NotContains(t, state.Workloads, ctx.GlobalVars().CaptureInfo.ID)
 }
 
 func TestHandleError(t *testing.T) {
@@ -183,13 +173,7 @@ func TestHandleError(t *testing.T) {
 		require.Nil(t, status)
 		return &model.ChangeFeedStatus{}, true, nil
 	})
-	state.PatchTaskStatus(ctx.GlobalVars().CaptureInfo.ID, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
-		return &model.TaskStatus{}, true, nil
-	})
 
-	state.PatchTaskWorkload(ctx.GlobalVars().CaptureInfo.ID, func(workload model.TaskWorkload) (model.TaskWorkload, bool, error) {
-		return model.TaskWorkload{}, true, nil
-	})
 	tester.MustApplyPatches()
 	manager.Tick(state)
 	tester.MustApplyPatches()
@@ -324,9 +308,12 @@ func TestChangefeedStatusNotExist(t *testing.T) {
 	manager := newFeedStateManager4Test()
 	state := orchestrator.NewChangefeedReactorState(ctx.ChangefeedVars().ID)
 	tester := orchestrator.NewReactorStateTester(t, state, map[string]string{
-		"/tidb/cdc/capture/d563bfc0-f406-4f34-bc7d-6dc2e35a44e5": `{"id":"d563bfc0-f406-4f34-bc7d-6dc2e35a44e5","address":"172.16.6.147:8300","version":"v5.0.0-master-dirty"}`,
-		"/tidb/cdc/changefeed/info/" + ctx.ChangefeedVars().ID:   changefeedInfo,
-		"/tidb/cdc/owner/156579d017f84a68":                       "d563bfc0-f406-4f34-bc7d-6dc2e35a44e5",
+		"/tidb/cdc/capture/d563bfc0-f406-4f34-bc7d-6dc2e35a44e5": `
+{"id":"d563bfc0-f406-4f34-bc7d-6dc2e35a44e5",
+"address":"172.16.6.147:8300","version":"v5.0.0-master-dirty"}`,
+		"/tidb/cdc/changefeed/info/" +
+			ctx.ChangefeedVars().ID.ID: changefeedInfo,
+		"/tidb/cdc/owner/156579d017f84a68": "d563bfc0-f406-4f34-bc7d-6dc2e35a44e5",
 	})
 	manager.Tick(state)
 	require.False(t, manager.ShouldRunning())

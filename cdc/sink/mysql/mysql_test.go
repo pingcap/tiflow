@@ -58,6 +58,7 @@ func newMySQLSink4Test(ctx context.Context, t *testing.T) *mysqlSink {
 }
 
 func TestPrepareDML(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		input    []*model.RowChangedEvent
 		expected *preparedDMLs
@@ -127,6 +128,7 @@ func TestPrepareDML(t *testing.T) {
 }
 
 func TestPrepareUpdate(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		quoteTable   string
 		preCols      []*model.Column
@@ -361,6 +363,7 @@ func TestPrepareUpdate(t *testing.T) {
 }
 
 func TestPrepareDelete(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		quoteTable   string
 		preCols      []*model.Column
@@ -502,6 +505,7 @@ func TestPrepareDelete(t *testing.T) {
 }
 
 func TestWhereSlice(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		cols             []*model.Column
 		forceReplicate   bool
@@ -711,6 +715,7 @@ func TestWhereSlice(t *testing.T) {
 }
 
 func TestMapReplace(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		quoteTable    string
 		cols          []*model.Column
@@ -828,6 +833,7 @@ func (a sqlArgs) Less(i, j int) bool { return fmt.Sprintf("%s", a[i]) < fmt.Spri
 func (a sqlArgs) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
 
 func TestReduceReplace(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		replaces   map[string][][]interface{}
 		batchSize  int
@@ -1017,7 +1023,9 @@ func TestAdjustSQLMode(t *testing.T) {
 	opts := map[string]string{
 		mark.OptCyclicConfig: cyclicConfig,
 	}
-	sink, err := NewMySQLSink(ctx, changefeed, sinkURI, f, rc, opts)
+	sink, err := NewMySQLSink(ctx,
+		model.DefaultChangeFeedID(changefeed),
+		sinkURI, f, rc, opts)
 	require.Nil(t, err)
 
 	err = sink.Close(ctx)
@@ -1072,6 +1080,7 @@ func (s *mockUnavailableMySQL) Stop() {
 }
 
 func TestNewMySQLTimeout(t *testing.T) {
+	t.Parallel()
 	addr := "127.0.0.1:33333"
 	mockMySQL := newMockUnavailableMySQL(addr, t)
 	defer mockMySQL.Stop()
@@ -1084,7 +1093,8 @@ func TestNewMySQLTimeout(t *testing.T) {
 	rc := config.GetDefaultReplicaConfig()
 	f, err := filter.NewFilter(rc)
 	require.Nil(t, err)
-	_, err = NewMySQLSink(ctx, changefeed, sinkURI, f, rc, map[string]string{})
+	_, err = NewMySQLSink(ctx, model.DefaultChangeFeedID(changefeed),
+		sinkURI, f, rc, map[string]string{})
 	require.Equal(t, driver.ErrBadConn, errors.Cause(err))
 }
 
@@ -1130,7 +1140,9 @@ func TestNewMySQLSinkExecDML(t *testing.T) {
 	rc := config.GetDefaultReplicaConfig()
 	f, err := filter.NewFilter(rc)
 	require.Nil(t, err)
-	sink, err := NewMySQLSink(ctx, changefeed, sinkURI, f, rc, map[string]string{})
+	sink, err := NewMySQLSink(ctx,
+		model.DefaultChangeFeedID(changefeed),
+		sinkURI, f, rc, map[string]string{})
 	require.Nil(t, err)
 
 	rows := []*model.RowChangedEvent{
@@ -1236,7 +1248,7 @@ func TestNewMySQLSinkExecDML(t *testing.T) {
 
 	// retry to make sure event is flushed
 	err = retry.Do(context.Background(), func() error {
-		ts, err := sink.FlushRowChangedEvents(ctx, 1, uint64(2))
+		ts, err := sink.FlushRowChangedEvents(ctx, 1, model.NewResolvedTs(uint64(2)))
 		require.Nil(t, err)
 		if ts < uint64(2) {
 			return errors.Errorf("checkpoint ts %d less than resolved ts %d", ts, 2)
@@ -1247,7 +1259,7 @@ func TestNewMySQLSinkExecDML(t *testing.T) {
 	require.Nil(t, err)
 
 	err = retry.Do(context.Background(), func() error {
-		ts, err := sink.FlushRowChangedEvents(ctx, 2, uint64(4))
+		ts, err := sink.FlushRowChangedEvents(ctx, 2, model.NewResolvedTs(uint64(4)))
 		require.Nil(t, err)
 		if ts < uint64(4) {
 			return errors.Errorf("checkpoint ts %d less than resolved ts %d", ts, 4)
@@ -1256,7 +1268,7 @@ func TestNewMySQLSinkExecDML(t *testing.T) {
 	}, retry.WithBackoffBaseDelay(20), retry.WithMaxTries(10), retry.WithIsRetryableErr(cerror.IsRetryableError))
 	require.Nil(t, err)
 
-	err = sink.Barrier(ctx, 2)
+	err = sink.RemoveTable(ctx, 2)
 	require.Nil(t, err)
 	v, ok := sink.tableMaxResolvedTs.Load(2)
 	require.False(t, ok)
@@ -1335,7 +1347,9 @@ func TestExecDMLRollbackErrDatabaseNotExists(t *testing.T) {
 	rc := config.GetDefaultReplicaConfig()
 	f, err := filter.NewFilter(rc)
 	require.Nil(t, err)
-	sink, err := NewMySQLSink(ctx, changefeed, sinkURI, f, rc, map[string]string{})
+	sink, err := NewMySQLSink(ctx,
+		model.DefaultChangeFeedID(changefeed),
+		sinkURI, f, rc, map[string]string{})
 	require.Nil(t, err)
 
 	err = sink.execDMLs(ctx, rows, 1 /* replicaID */, 1 /* bucket */)
@@ -1411,7 +1425,9 @@ func TestExecDMLRollbackErrTableNotExists(t *testing.T) {
 	rc := config.GetDefaultReplicaConfig()
 	f, err := filter.NewFilter(rc)
 	require.Nil(t, err)
-	sink, err := NewMySQLSink(ctx, changefeed, sinkURI, f, rc, map[string]string{})
+	sink, err := NewMySQLSink(ctx,
+		model.DefaultChangeFeedID(changefeed),
+		sinkURI, f, rc, map[string]string{})
 	require.Nil(t, err)
 
 	err = sink.execDMLs(ctx, rows, 1 /* replicaID */, 1 /* bucket */)
@@ -1465,7 +1481,7 @@ func TestExecDMLRollbackErrRetryable(t *testing.T) {
 		// normal db
 		db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
 		require.Nil(t, err)
-		for i := 0; i < int(defaultDMLMaxRetryTime); i++ {
+		for i := 0; i < int(defaultDMLMaxRetry); i++ {
 			mock.ExpectBegin()
 			mock.ExpectExec("REPLACE INTO `s1`.`t1`(`a`) VALUES (?),(?)").
 				WithArgs(1, 2).
@@ -1477,11 +1493,11 @@ func TestExecDMLRollbackErrRetryable(t *testing.T) {
 	}
 	backupGetDBConn := GetDBConnImpl
 	GetDBConnImpl = mockGetDBConnErrDatabaseNotExists
-	backupMaxRetry := defaultDMLMaxRetryTime
-	defaultDMLMaxRetryTime = 2
+	backupMaxRetry := defaultDMLMaxRetry
+	defaultDMLMaxRetry = 2
 	defer func() {
 		GetDBConnImpl = backupGetDBConn
-		defaultDMLMaxRetryTime = backupMaxRetry
+		defaultDMLMaxRetry = backupMaxRetry
 	}()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -1492,7 +1508,9 @@ func TestExecDMLRollbackErrRetryable(t *testing.T) {
 	rc := config.GetDefaultReplicaConfig()
 	f, err := filter.NewFilter(rc)
 	require.Nil(t, err)
-	sink, err := NewMySQLSink(ctx, changefeed, sinkURI, f, rc, map[string]string{})
+	sink, err := NewMySQLSink(ctx,
+		model.DefaultChangeFeedID(changefeed),
+		sinkURI, f, rc, map[string]string{})
 	require.Nil(t, err)
 
 	err = sink.execDMLs(ctx, rows, 1 /* replicaID */, 1 /* bucket */)
@@ -1548,7 +1566,9 @@ func TestNewMySQLSinkExecDDL(t *testing.T) {
 	}
 	f, err := filter.NewFilter(rc)
 	require.Nil(t, err)
-	sink, err := NewMySQLSink(ctx, changefeed, sinkURI, f, rc, map[string]string{})
+	sink, err := NewMySQLSink(ctx,
+		model.DefaultChangeFeedID(changefeed),
+		sinkURI, f, rc, map[string]string{})
 	require.Nil(t, err)
 
 	ddl1 := &model.DDLEvent{
@@ -1585,6 +1605,7 @@ func TestNewMySQLSinkExecDDL(t *testing.T) {
 }
 
 func TestNeedSwitchDB(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		ddl        *model.DDLEvent
 		needSwitch bool
@@ -1665,8 +1686,13 @@ func TestNewMySQLSink(t *testing.T) {
 	rc := config.GetDefaultReplicaConfig()
 	f, err := filter.NewFilter(rc)
 	require.Nil(t, err)
-	sink, err := NewMySQLSink(ctx, changefeed, sinkURI, f, rc, map[string]string{})
+	sink, err := NewMySQLSink(ctx,
+		model.DefaultChangeFeedID(changefeed),
+		sinkURI, f, rc, map[string]string{})
 	require.Nil(t, err)
+	err = sink.Close(ctx)
+	require.Nil(t, err)
+	// Test idempotency of `Close` interface
 	err = sink.Close(ctx)
 	require.Nil(t, err)
 }
@@ -1705,7 +1731,9 @@ func TestMySQLSinkClose(t *testing.T) {
 	require.Nil(t, err)
 
 	// test sink.Close will work correctly even if the ctx pass in has not been cancel
-	sink, err := NewMySQLSink(ctx, changefeed, sinkURI, f, rc, map[string]string{})
+	sink, err := NewMySQLSink(ctx,
+		model.DefaultChangeFeedID(changefeed),
+		sinkURI, f, rc, map[string]string{})
 	require.Nil(t, err)
 	err = sink.Close(ctx)
 	require.Nil(t, err)
@@ -1745,7 +1773,7 @@ func TestMySQLSinkFlushResolvedTs(t *testing.T) {
 		GetDBConnImpl = backupGetDBConn
 	}()
 
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
 
 	changefeed := "test-changefeed"
 	sinkURI, err := url.Parse("mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=4")
@@ -1755,9 +1783,11 @@ func TestMySQLSinkFlushResolvedTs(t *testing.T) {
 	require.Nil(t, err)
 
 	// test sink.Close will work correctly even if the ctx pass in has not been cancel
-	sink, err := NewMySQLSink(ctx, changefeed, sinkURI, f, rc, map[string]string{})
+	sink, err := NewMySQLSink(ctx,
+		model.DefaultChangeFeedID(changefeed),
+		sinkURI, f, rc, map[string]string{})
 	require.Nil(t, err)
-	checkpoint, err := sink.FlushRowChangedEvents(ctx, model.TableID(1), 1)
+	checkpoint, err := sink.FlushRowChangedEvents(ctx, model.TableID(1), model.NewResolvedTs(1))
 	require.Nil(t, err)
 	require.True(t, checkpoint <= 1)
 	rows := []*model.RowChangedEvent{
@@ -1776,7 +1806,7 @@ func TestMySQLSinkFlushResolvedTs(t *testing.T) {
 	}
 	err = sink.EmitRowChangedEvents(ctx, rows...)
 	require.Nil(t, err)
-	checkpoint, err = sink.FlushRowChangedEvents(ctx, model.TableID(1), 6)
+	checkpoint, err = sink.FlushRowChangedEvents(ctx, model.TableID(1), model.NewResolvedTs(6))
 	require.True(t, checkpoint <= 6)
 	require.Nil(t, err)
 	require.True(t, sink.getTableCheckpointTs(model.TableID(1)) <= 6)
@@ -1796,11 +1826,17 @@ func TestMySQLSinkFlushResolvedTs(t *testing.T) {
 	}
 	err = sink.EmitRowChangedEvents(ctx, rows...)
 	require.Nil(t, err)
-	checkpoint, err = sink.FlushRowChangedEvents(ctx, model.TableID(2), 5)
+	checkpoint, err = sink.FlushRowChangedEvents(ctx, model.TableID(2), model.NewResolvedTs(5))
 	require.True(t, checkpoint <= 5)
 	require.Nil(t, err)
 	require.True(t, sink.getTableCheckpointTs(model.TableID(2)) <= 5)
 	_ = sink.Close(ctx)
+	_, err = sink.FlushRowChangedEvents(ctx, model.TableID(2), model.NewResolvedTs(6))
+	require.Nil(t, err)
+
+	cancel()
+	_, err = sink.FlushRowChangedEvents(ctx, model.TableID(2), model.NewResolvedTs(6))
+	require.Regexp(t, ".*context canceled.*", err)
 }
 
 func TestGBKSupported(t *testing.T) {
@@ -1841,7 +1877,9 @@ func TestGBKSupported(t *testing.T) {
 	rc := config.GetDefaultReplicaConfig()
 	f, err := filter.NewFilter(rc)
 	require.Nil(t, err)
-	sink, err := NewMySQLSink(ctx, changefeed, sinkURI, f, rc, map[string]string{})
+	sink, err := NewMySQLSink(ctx,
+		model.DefaultChangeFeedID(changefeed),
+		sinkURI, f, rc, map[string]string{})
 	require.Nil(t, err)
 
 	// no gbk-related warning log will be output because GBK charset is supported
@@ -1868,14 +1906,34 @@ func TestCleanTableResource(t *testing.T) {
 		Table: &model.TableName{TableID: tblID, Schema: "test", Table: "t1"},
 	}))
 	s.tableCheckpointTs.Store(tblID, uint64(1))
-	s.tableMaxResolvedTs.Store(tblID, uint64(2))
+	s.tableMaxResolvedTs.Store(tblID, model.NewResolvedTs(uint64(2)))
 	_, ok := s.txnCache.unresolvedTxns[tblID]
 	require.True(t, ok)
-	require.Nil(t, s.Init(tblID))
+	require.Nil(t, s.AddTable(tblID))
 	_, ok = s.txnCache.unresolvedTxns[tblID]
 	require.False(t, ok)
 	_, ok = s.tableCheckpointTs.Load(tblID)
 	require.False(t, ok)
 	_, ok = s.tableMaxResolvedTs.Load(tblID)
 	require.False(t, ok)
+}
+
+func TestHolderString(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		count    int
+		expected string
+	}{
+		{1, "?"},
+		{2, "?,?"},
+		{10, "?,?,?,?,?,?,?,?,?,?"},
+	}
+	for _, tc := range testCases {
+		s := placeHolder(tc.count)
+		require.Equal(t, tc.expected, s)
+	}
+	// test invalid input
+	require.Panics(t, func() { placeHolder(0) }, "strings.Builder.Grow: negative count")
+	require.Panics(t, func() { placeHolder(-1) }, "strings.Builder.Grow: negative count")
 }

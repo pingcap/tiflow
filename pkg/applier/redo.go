@@ -19,6 +19,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/redo/reader"
@@ -113,8 +114,10 @@ func (ra *RedoApplier) consumeLogs(ctx context.Context) error {
 		return err
 	}
 	opts := map[string]string{}
-	ctx = util.PutRoleInCtx(ctx, util.RoleRedoLogApplier)
-	s, err := sink.New(ctx, applierChangefeed, ra.cfg.SinkURI, ft, replicaConfig, opts, ra.errCh)
+	ctx = contextutil.PutRoleInCtx(ctx, util.RoleRedoLogApplier)
+	s, err := sink.New(ctx,
+		model.DefaultChangeFeedID(applierChangefeed),
+		ra.cfg.SinkURI, ft, replicaConfig, opts, ra.errCh)
 	if err != nil {
 		return err
 	}
@@ -162,7 +165,7 @@ func (ra *RedoApplier) consumeLogs(ctx context.Context) error {
 		}
 
 		for tableID, tableLastResolvedTs := range tableResolvedTsMap {
-			_, err = s.FlushRowChangedEvents(ctx, tableID, tableLastResolvedTs)
+			_, err = s.FlushRowChangedEvents(ctx, tableID, model.NewResolvedTs(tableLastResolvedTs))
 			if err != nil {
 				return err
 			}
@@ -174,11 +177,11 @@ func (ra *RedoApplier) consumeLogs(ctx context.Context) error {
 	}
 
 	for tableID := range tableResolvedTsMap {
-		_, err = s.FlushRowChangedEvents(ctx, tableID, resolvedTs)
+		_, err = s.FlushRowChangedEvents(ctx, tableID, model.NewResolvedTs(resolvedTs))
 		if err != nil {
 			return err
 		}
-		err = s.Barrier(ctx, tableID)
+		err = s.RemoveTable(ctx, tableID)
 		if err != nil {
 			return err
 		}

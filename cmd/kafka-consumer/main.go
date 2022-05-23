@@ -33,9 +33,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink"
-	"github.com/pingcap/tiflow/cdc/sink/codec"
+	"github.com/pingcap/tiflow/cdc/sink/mq/codec"
 	"github.com/pingcap/tiflow/cdc/sink/mq/dispatcher"
 	cmdUtil "github.com/pingcap/tiflow/pkg/cmd/util"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -354,9 +355,10 @@ type partitionSink struct {
 type Consumer struct {
 	ready chan bool
 
-	ddlList          []*model.DDLEvent
-	maxDDLReceivedTs uint64
-	ddlListMu        sync.Mutex
+	ddlList []*model.DDLEvent
+
+	ddlWithMaxCommitTs *model.DDLEvent
+	ddlListMu          sync.Mutex
 
 	sinks   []*partitionSink
 	sinksMu sync.Mutex
@@ -380,7 +382,7 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 	if err != nil {
 		return nil, errors.Annotate(err, "can not load timezone")
 	}
-	ctx = util.PutTimezoneInCtx(ctx, tz)
+	ctx = contextutil.PutTimezoneInCtx(ctx, tz)
 	filter, err := cdcfilter.NewFilter(config.GetDefaultReplicaConfig())
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -412,18 +414,22 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 
 	c.sinks = make([]*partitionSink, kafkaPartitionNum)
 	ctx, cancel := context.WithCancel(ctx)
-	ctx = util.PutRoleInCtx(ctx, util.RoleKafkaConsumer)
+	ctx = contextutil.PutRoleInCtx(ctx, util.RoleKafkaConsumer)
 	errCh := make(chan error, 1)
 	opts := map[string]string{}
 	for i := 0; i < int(kafkaPartitionNum); i++ {
-		s, err := sink.New(ctx, "kafka-consumer", downstreamURIStr, filter, config.GetDefaultReplicaConfig(), opts, errCh)
+		s, err := sink.New(ctx,
+			model.DefaultChangeFeedID("kafka-consumer"),
+			downstreamURIStr, filter, config.GetDefaultReplicaConfig(), opts, errCh)
 		if err != nil {
 			cancel()
 			return nil, errors.Trace(err)
 		}
 		c.sinks[i] = &partitionSink{Sink: s, partitionNo: i}
 	}
-	sink, err := sink.New(ctx, "kafka-consumer", downstreamURIStr, filter, config.GetDefaultReplicaConfig(), opts, errCh)
+	sink, err := sink.New(ctx,
+		model.DefaultChangeFeedID("kafka-consumer"),
+		downstreamURIStr, filter, config.GetDefaultReplicaConfig(), opts, errCh)
 	if err != nil {
 		cancel()
 		return nil, errors.Trace(err)
@@ -644,22 +650,25 @@ func (c *Consumer) appendDDL(ddl *model.DDLEvent) {
 	c.ddlListMu.Lock()
 	defer c.ddlListMu.Unlock()
 	// DDL CommitTs fallback, just crash it to indicate the bug.
-	if ddl.CommitTs < c.maxDDLReceivedTs {
-		log.Panic("DDL CommitTs < maxDDLReceivedTs",
+	if c.ddlWithMaxCommitTs != nil && ddl.CommitTs < c.ddlWithMaxCommitTs.CommitTs {
+		log.Panic("DDL CommitTs < maxCommitTsDDL.CommitTs",
 			zap.Uint64("commitTs", ddl.CommitTs),
-			zap.Uint64("maxDDLReceivedTs", c.maxDDLReceivedTs),
+			zap.Uint64("maxCommitTs", c.ddlWithMaxCommitTs.CommitTs),
 			zap.Any("DDL", ddl))
 	}
 
-	if ddl.CommitTs == c.maxDDLReceivedTs {
-		log.Info("ignore redundant DDL, CommitTs = maxDDLReceivedTs",
+	// A rename tables DDL job contains multiple DDL events with same CommitTs.
+	// So to tell if a DDL is redundant or not, we must check the equivalence of
+	// the current DDL and the DDL with max CommitTs.
+	if ddl == c.ddlWithMaxCommitTs {
+		log.Info("ignore redundant DDL, the DDL is equal to ddlWithMaxCommitTs",
 			zap.Any("DDL", ddl))
 		return
 	}
 
 	c.ddlList = append(c.ddlList, ddl)
 	log.Info("DDL event received", zap.Any("DDL", ddl))
-	c.maxDDLReceivedTs = ddl.CommitTs
+	c.ddlWithMaxCommitTs = ddl
 }
 
 func (c *Consumer) getFrontDDL() *model.DDLEvent {
@@ -757,8 +766,6 @@ func (c *Consumer) Run(ctx context.Context) error {
 		}
 
 		c.globalResolvedTs = minPartitionResolvedTs
-		log.Info("update globalResolvedTs",
-			zap.Uint64("globalResolvedTs", c.globalResolvedTs))
 
 		if err := c.forEachSink(func(sink *partitionSink) error {
 			return syncFlushRowChangedEvents(ctx, sink, c.globalResolvedTs)
@@ -783,7 +790,8 @@ func syncFlushRowChangedEvents(ctx context.Context, sink *partitionSink, resolve
 		flushedResolvedTs := true
 		sink.tablesMap.Range(func(key, value interface{}) bool {
 			tableID := key.(int64)
-			checkpointTs, err = sink.FlushRowChangedEvents(ctx, tableID, resolvedTs)
+			checkpointTs, err = sink.FlushRowChangedEvents(ctx,
+				tableID, model.NewResolvedTs(resolvedTs))
 			if err != nil {
 				return false
 			}

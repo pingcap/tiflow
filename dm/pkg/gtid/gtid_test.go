@@ -66,3 +66,31 @@ func TestParseGTIDNoFlavor(t *testing.T) {
 	_, err = ParserGTID("", "")
 	require.Error(t, err)
 }
+
+func TestIsNilGTIDSet(t *testing.T) {
+	t.Parallel()
+
+	require.False(t, IsZeroMySQLGTIDSet(""))
+	require.False(t, IsZeroMySQLGTIDSet("xxxxx"))
+	require.False(t, IsZeroMySQLGTIDSet("xxxxx:0,yyyy:0"))
+	require.False(t, IsZeroMySQLGTIDSet("xxxxx:1-2"))
+	require.False(t, IsZeroMySQLGTIDSet("xxxxx:0-0"))
+	require.True(t, IsZeroMySQLGTIDSet("xxxxx:0"))
+	require.True(t, IsZeroMySQLGTIDSet(" xxxxx:0 "))
+}
+
+func TestParseZeroAsEmptyGTIDSet(t *testing.T) {
+	t.Parallel()
+
+	gset, err := ParserGTID(mysql.MariaDBFlavor, "0-0-0")
+	require.NoError(t, err)
+	require.Equal(t, "", gset.String())
+
+	gset, err = ParserGTID(mysql.MySQLFlavor, "")
+	require.NoError(t, err)
+	require.Equal(t, "", gset.String())
+
+	gset, err = ParserGTID(mysql.MySQLFlavor, "3ccc475b-2343-11e7-be21-6c0b84d59f30:0")
+	require.NoError(t, err)
+	require.Equal(t, "", gset.String())
+}

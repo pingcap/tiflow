@@ -20,8 +20,8 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/sink/codec"
 	"github.com/pingcap/tiflow/cdc/sink/metrics"
+	"github.com/pingcap/tiflow/cdc/sink/mq/codec"
 	"github.com/pingcap/tiflow/cdc/sink/mq/producer"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
@@ -43,9 +43,9 @@ type topicPartitionKey struct {
 // It carries the partition information of the message,
 // and it is also used as resolved ts messaging.
 type mqEvent struct {
-	key        topicPartitionKey
-	row        *model.RowChangedEvent
-	resolvedTs model.Ts
+	key      topicPartitionKey
+	row      *model.RowChangedEvent
+	resolved model.ResolvedTs
 }
 
 // flushWorker is responsible for sending messages to the Kafka producer on a batch basis.
@@ -98,7 +98,7 @@ func (w *flushWorker) batch(
 	case msg := <-w.msgChan:
 		// When the resolved ts is received,
 		// we need to write the previous data to the producer as soon as possible.
-		if msg.resolvedTs != 0 {
+		if msg.resolved.Ts != 0 {
 			w.needSyncFlush = true
 			return index, nil
 		}
@@ -116,7 +116,7 @@ func (w *flushWorker) batch(
 		case <-ctx.Done():
 			return index, ctx.Err()
 		case msg := <-w.msgChan:
-			if msg.resolvedTs != 0 {
+			if msg.resolved.Ts != 0 {
 				w.needSyncFlush = true
 				return index, nil
 			}
@@ -137,24 +137,24 @@ func (w *flushWorker) batch(
 
 // group is responsible for grouping messages by the partition.
 func (w *flushWorker) group(events []mqEvent) map[topicPartitionKey][]*model.RowChangedEvent {
-	paritionedRows := make(map[topicPartitionKey][]*model.RowChangedEvent)
+	partitionedRows := make(map[topicPartitionKey][]*model.RowChangedEvent)
 	for _, event := range events {
-		if _, ok := paritionedRows[event.key]; !ok {
-			paritionedRows[event.key] = make([]*model.RowChangedEvent, 0)
+		if _, ok := partitionedRows[event.key]; !ok {
+			partitionedRows[event.key] = make([]*model.RowChangedEvent, 0)
 		}
-		paritionedRows[event.key] = append(paritionedRows[event.key], event.row)
+		partitionedRows[event.key] = append(partitionedRows[event.key], event.row)
 	}
-	return paritionedRows
+	return partitionedRows
 }
 
 // asyncSend is responsible for sending messages to the Kafka producer.
 func (w *flushWorker) asyncSend(
 	ctx context.Context,
-	paritionedRows map[topicPartitionKey][]*model.RowChangedEvent,
+	partitionedRows map[topicPartitionKey][]*model.RowChangedEvent,
 ) error {
-	for key, events := range paritionedRows {
+	for key, events := range partitionedRows {
 		for _, event := range events {
-			err := w.encoder.AppendRowChangedEvent(event)
+			err := w.encoder.AppendRowChangedEvent(ctx, key.topic, event)
 			if err != nil {
 				return err
 			}
@@ -175,6 +175,7 @@ func (w *flushWorker) asyncSend(
 		if err != nil {
 			return err
 		}
+		w.statistics.ObserveRows(events...)
 	}
 
 	if w.needSyncFlush {
@@ -211,8 +212,8 @@ func (w *flushWorker) run(ctx context.Context) (retErr error) {
 			continue
 		}
 		msgs := eventsBuf[:endIndex]
-		paritionedRows := w.group(msgs)
-		err = w.asyncSend(ctx, paritionedRows)
+		partitionedRows := w.group(msgs)
+		err = w.asyncSend(ctx, partitionedRows)
 		if err != nil {
 			return errors.Trace(err)
 		}

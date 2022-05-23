@@ -15,20 +15,26 @@ package topic
 
 import (
 	"regexp"
-	"strings"
 
 	"github.com/pingcap/tiflow/pkg/errors"
 )
 
 var (
 	// topicNameRE is used to match a valid topic expression
-	topicNameRE = regexp.MustCompile(`^[A-Za-z0-9\._\-]*\{schema\}[A-Za-z0-9\._\-]*$|^\{schema\}_\{table\}$`)
+	topicNameRE = regexp.MustCompile(
+		`^[A-Za-z0-9\._\-]*\{schema\}([A-Za-z0-9\._\-]*\{table\})?[A-Za-z0-9\._\-]*$`,
+	)
 	// kafkaForbidRE is used to reject the characters which are forbidden in kafka topic name
 	kafkaForbidRE = regexp.MustCompile(`[^a-zA-Z0-9\._\-]`)
 	// schemaRE is used to match substring '{schema}' in topic expression
 	schemaRE = regexp.MustCompile(`\{schema\}`)
 	// tableRE is used to match substring '{table}' in topic expression
 	tableRE = regexp.MustCompile(`\{table\}`)
+	// avro has different topic name pattern requirements, '{schema}' and '{table}' placeholders
+	// are necessary
+	avroTopicNameRE = regexp.MustCompile(
+		`^[A-Za-z0-9\._\-]*\{schema\}[A-Za-z0-9\._\-]*\{table\}[A-Za-z0-9\._\-]*$`,
+	)
 )
 
 // The max length of kafka topic name is 249.
@@ -36,9 +42,9 @@ var (
 const kafkaTopicNameMaxLength = 249
 
 // Expression represent a kafka topic expression.
-// Only two types of expression are allowed:
-//   1. [prefix]{schema}[suffix], the prefix/suffix is optional and matches [A-Za-z0-9\._\-]*
-//   2. {schema}_{table}
+// The expression should be in form of: [prefix]{schema}[middle][{table}][suffix]
+// prefix/suffix/middle are optional and should match the regex of [A-Za-z0-9\._\-]*
+// {table} can also be optional.
 type Expression string
 
 // Validate checks whether a kafka topic name is valid or not.
@@ -51,14 +57,24 @@ func (e Expression) Validate() error {
 	return nil
 }
 
+// ValidateForAvro checks whether topic pattern is {schema}_{table}, the only allowed
+func (e Expression) ValidateForAvro() error {
+	if ok := avroTopicNameRE.MatchString(string(e)); !ok {
+		return errors.ErrKafkaInvalidTopicExpression.GenWithStackByArgs(
+			"topic rule for Avro must contain {schema} and {table}",
+		)
+	}
+
+	return nil
+}
+
 // Substitute converts schema/table name in a topic expression to kafka topic name.
 // When doing conversion, the special characters other than [A-Za-z0-9\._\-] in schema/table
 // will be substituted for underscore '_'.
 func (e Expression) Substitute(schema, table string) string {
-	// the upper case letters in schema/table will be converted to lower case,
-	// and some of the special characters will be replaced with '_'
-	replacedSchema := kafkaForbidRE.ReplaceAllString(strings.ToLower(schema), "_")
-	replacedTable := kafkaForbidRE.ReplaceAllString(strings.ToLower(table), "_")
+	// some of the special characters will be replaced with '_'
+	replacedSchema := kafkaForbidRE.ReplaceAllString(schema, "_")
+	replacedTable := kafkaForbidRE.ReplaceAllString(table, "_")
 
 	topicExpr := string(e)
 	// doing the real conversion things

@@ -196,12 +196,12 @@ func (t *testMaster) SetUpSuite(c *check.C) {
 	t.workerClients = make(map[string]workerrpc.Client)
 	t.saveMaxRetryNum = maxRetryNum
 	maxRetryNum = 2
-	checkAndAdjustSourceConfigFunc = checkAndNoAdjustSourceConfigMock
+	checkAndAdjustSourceConfigForDMCtlFunc = checkAndNoAdjustSourceConfigMock
 }
 
 func (t *testMaster) TearDownSuite(c *check.C) {
 	maxRetryNum = t.saveMaxRetryNum
-	checkAndAdjustSourceConfigFunc = checkAndAdjustSourceConfig
+	checkAndAdjustSourceConfigForDMCtlFunc = checkAndAdjustSourceConfig
 }
 
 func (t *testMaster) SetUpTest(c *check.C) {
@@ -2230,7 +2230,7 @@ func (t *testMaster) TestGRPCLongResponse(c *check.C) {
 	c.Assert(err, check.IsNil)
 }
 
-func (t *testMaster) TestStartStopValidion(c *check.C) {
+func (t *testMaster) TestStartStopValidation(c *check.C) {
 	var (
 		wg       sync.WaitGroup
 		taskName = "test"
@@ -2276,7 +2276,7 @@ func (t *testMaster) TestStartStopValidion(c *check.C) {
 	t.validatorModeMatch(c, server.scheduler, taskName, sources[0], config.ValidationFull)
 	t.validatorModeMatch(c, server.scheduler, taskName, sources[1], config.ValidationFull)
 
-	// 1.2 start existed validaion task
+	// 1.2 start existed validation task
 	startResp, err = server.StartValidation(context.Background(), validatorStartReq)
 	c.Assert(err, check.IsNil)
 	c.Assert(startResp.Result, check.IsTrue) // return with no error
@@ -2314,18 +2314,7 @@ func (t *testMaster) TestStartStopValidion(c *check.C) {
 	t.validatorStageMatch(c, validatorStopReq.TaskName, sources[0], pb.Stage_InvalidStage) // stage not found
 	t.validatorStageMatch(c, validatorStopReq.TaskName, sources[1], pb.Stage_InvalidStage)
 
-	// 3.1 start validation with mode fast
-	validatorStartReq.TaskName = taskName
-	validatorStartReq.Mode = config.ValidationFast
-	startResp, err = server.StartValidation(context.Background(), validatorStartReq)
-	c.Assert(err, check.IsNil)
-	c.Assert(startResp.Result, check.IsTrue)
-	t.validatorStageMatch(c, taskName, sources[0], pb.Stage_Running)
-	t.validatorStageMatch(c, taskName, sources[1], pb.Stage_Running)
-	t.validatorModeMatch(c, server.scheduler, taskName, sources[0], config.ValidationFast)
-	t.validatorModeMatch(c, server.scheduler, taskName, sources[1], config.ValidationFast)
-
-	// 4.1 stop all tasks
+	// stop all tasks
 	validatorStopReq.TaskName = ""
 	stopResp, err = server.StopValidation(context.Background(), validatorStopReq)
 	c.Assert(err, check.IsNil)
@@ -2333,7 +2322,7 @@ func (t *testMaster) TestStartStopValidion(c *check.C) {
 	t.validatorStageMatch(c, taskName, sources[0], pb.Stage_Stopped)
 	t.validatorStageMatch(c, taskName, sources[1], pb.Stage_Stopped)
 
-	// 4.2 start all tasks
+	// start all tasks
 	validatorStartReq.TaskName = ""
 	startResp, err = server.StartValidation(context.Background(), validatorStartReq)
 	c.Assert(err, check.IsNil)
@@ -2386,7 +2375,7 @@ func (t *testMaster) TestGetValidatorStatus(c *check.C) {
 			gomock.Any(),
 		).Return(&pb.GetValidationStatusResponse{
 			Result: true,
-			Status: []*pb.ValidationStatus{
+			TableStatuses: []*pb.ValidationTableStatus{
 				{
 					SrcTable: "tbl1",
 				},
@@ -2432,7 +2421,7 @@ func (t *testMaster) TestGetValidatorStatus(c *check.C) {
 	c.Assert(err, check.IsNil)
 	c.Assert(resp.Msg, check.Equals, "")
 	c.Assert(resp.Result, check.IsTrue)
-	c.Assert(len(resp.Status), check.Equals, 2)
+	c.Assert(len(resp.TableStatuses), check.Equals, 2)
 	// 2. query invalid task's status
 	statusReq.TaskName = "invalid-task"
 	resp, err = server.GetValidationStatus(context.Background(), statusReq)

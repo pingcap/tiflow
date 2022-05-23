@@ -24,15 +24,12 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
-	tidbkv "github.com/pingcap/tidb/kv"
-	"github.com/tikv/client-go/v2/tikv"
-	pd "github.com/tikv/pd/client"
+	"github.com/pingcap/tiflow/pkg/util"
 	"go.etcd.io/etcd/client/v3/concurrency"
 	"go.etcd.io/etcd/server/v3/mvcc"
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
 
-	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/owner"
 	"github.com/pingcap/tiflow/cdc/processor"
@@ -44,7 +41,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/p2p"
-	"github.com/pingcap/tiflow/pkg/pdtime"
+	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/version"
 )
 
@@ -55,23 +52,18 @@ type Capture struct {
 	info             *model.CaptureInfo
 	processorManager *processor.Manager
 
-	ownerMu sync.Mutex
-	owner   owner.Owner
+	pdEnpoints      []string
+	UpstreamManager *upstream.Manager
+	ownerMu         sync.Mutex
+	owner           owner.Owner
 
 	// session keeps alive between the capture and etcd
 	session  *concurrency.Session
 	election *concurrency.Election
 
-	PDClient     pd.Client
-	Storage      tidbkv.Storage
-	EtcdClient   *etcd.CDCEtcdClient
-	grpcPool     kv.GrpcPool
-	regionCache  *tikv.RegionCache
-	pdClock      *pdtime.PDClock
-	sorterSystem *ssystem.System
-
-	enableNewScheduler bool
-	tableActorSystem   *system.System
+	EtcdClient       *etcd.CDCEtcdClient
+	sorterSystem     *ssystem.System
+	tableActorSystem *system.System
 
 	// MessageServer is the receiver of the messages from the other nodes.
 	// It should be recreated each time the capture is restarted.
@@ -89,21 +81,17 @@ type Capture struct {
 
 	cancel context.CancelFunc
 
-	newProcessorManager func() *processor.Manager
-	newOwner            func(pd.Client) owner.Owner
+	newProcessorManager func(upstreamManager *upstream.Manager) *processor.Manager
+	newOwner            func(upstreamManager *upstream.Manager) owner.Owner
 }
 
 // NewCapture returns a new Capture instance
-func NewCapture(pdClient pd.Client, kvStorage tidbkv.Storage, etcdClient *etcd.CDCEtcdClient, grpcService *p2p.ServerWrapper) *Capture {
-	conf := config.GetGlobalServerConfig()
+func NewCapture(pdEnpoints []string, etcdClient *etcd.CDCEtcdClient, grpcService *p2p.ServerWrapper) *Capture {
 	return &Capture{
-		PDClient:    pdClient,
-		Storage:     kvStorage,
-		EtcdClient:  etcdClient,
-		grpcService: grpcService,
-		cancel:      func() {},
-
-		enableNewScheduler:  conf.Debug.EnableNewScheduler,
+		EtcdClient:          etcdClient,
+		grpcService:         grpcService,
+		cancel:              func() {},
+		pdEnpoints:          pdEnpoints,
 		newProcessorManager: processor.NewManager,
 		newOwner:            owner.NewOwner,
 	}
@@ -135,22 +123,25 @@ func (c *Capture) reset(ctx context.Context) error {
 		AdvertiseAddr: conf.AdvertiseAddr,
 		Version:       version.ReleaseVersion,
 	}
-	c.processorManager = c.newProcessorManager()
+
+	if c.UpstreamManager != nil {
+		c.UpstreamManager.Close()
+	}
+	c.UpstreamManager = upstream.NewManager(ctx)
+	err = c.UpstreamManager.Add(upstream.DefaultUpstreamID, c.pdEnpoints, conf.Security)
+	if err != nil {
+		return errors.Annotate(
+			cerror.WrapError(cerror.ErrNewCaptureFailed, err),
+			"add default upstream failed")
+	}
+
+	c.processorManager = c.newProcessorManager(c.UpstreamManager)
 	if c.session != nil {
 		// It can't be handled even after it fails, so we ignore it.
 		_ = c.session.Close()
 	}
 	c.session = sess
 	c.election = concurrency.NewElection(sess, etcd.CaptureOwnerKey)
-
-	if c.pdClock != nil {
-		c.pdClock.Stop()
-	}
-
-	c.pdClock, err = pdtime.NewClock(ctx, c.PDClient)
-	if err != nil {
-		return errors.Trace(err)
-	}
 
 	if c.tableActorSystem != nil {
 		c.tableActorSystem.Stop()
@@ -183,41 +174,27 @@ func (c *Capture) reset(ctx context.Context) error {
 				"create sorter system")
 		}
 	}
-	if c.grpcPool != nil {
-		c.grpcPool.Close()
+
+	c.grpcService.Reset(nil)
+
+	if c.MessageRouter != nil {
+		c.MessageRouter.Close()
+		c.MessageRouter.Wait()
+		c.MessageRouter = nil
 	}
+	messageServerConfig := conf.Debug.Messages.ToMessageServerConfig()
+	c.MessageServer = p2p.NewMessageServer(c.info.ID, messageServerConfig)
+	c.grpcService.Reset(c.MessageServer)
 
-	if c.enableNewScheduler {
-		c.grpcService.Reset(nil)
+	messageClientConfig := conf.Debug.Messages.ToMessageClientConfig()
 
-		if c.MessageRouter != nil {
-			c.MessageRouter.Close()
-			c.MessageRouter.Wait()
-			c.MessageRouter = nil
-		}
-	}
+	// Puts the advertise-addr of the local node to the client config.
+	// This is for metrics purpose only, so that the receiver knows which
+	// node the connections are from.
+	advertiseAddr := conf.AdvertiseAddr
+	messageClientConfig.AdvertisedAddr = advertiseAddr
 
-	c.grpcPool = kv.NewGrpcPoolImpl(ctx, conf.Security)
-	if c.regionCache != nil {
-		c.regionCache.Close()
-	}
-	c.regionCache = tikv.NewRegionCache(c.PDClient)
-
-	if c.enableNewScheduler {
-		messageServerConfig := conf.Debug.Messages.ToMessageServerConfig()
-		c.MessageServer = p2p.NewMessageServer(c.info.ID, messageServerConfig)
-		c.grpcService.Reset(c.MessageServer)
-
-		messageClientConfig := conf.Debug.Messages.ToMessageClientConfig()
-
-		// Puts the advertise-addr of the local node to the client config.
-		// This is for metrics purpose only, so that the receiver knows which
-		// node the connections are from.
-		advertiseAddr := conf.AdvertiseAddr
-		messageClientConfig.AdvertisedAddr = advertiseAddr
-
-		c.MessageRouter = p2p.NewMessageRouter(c.info.ID, conf.Security, messageClientConfig)
-	}
+	c.MessageRouter = p2p.NewMessageRouter(c.info.ID, conf.Security, messageClientConfig)
 
 	log.Info("init capture",
 		zap.String("captureID", c.info.ID),
@@ -265,13 +242,8 @@ func (c *Capture) Run(ctx context.Context) error {
 
 func (c *Capture) run(stdCtx context.Context) error {
 	ctx := cdcContext.NewContext(stdCtx, &cdcContext.GlobalVars{
-		PDClient:         c.PDClient,
-		KVStorage:        c.Storage,
 		CaptureInfo:      c.info,
 		EtcdClient:       c.EtcdClient,
-		GrpcPool:         c.grpcPool,
-		RegionCache:      c.regionCache,
-		PDClock:          c.pdClock,
 		TableActorSystem: c.tableActorSystem,
 		SorterSystem:     c.sorterSystem,
 		MessageServer:    c.MessageServer,
@@ -309,40 +281,26 @@ func (c *Capture) run(stdCtx context.Context) error {
 
 		globalState := orchestrator.NewGlobalState()
 
-		if c.enableNewScheduler {
-			globalState.SetOnCaptureAdded(func(captureID model.CaptureID, addr string) {
-				c.MessageRouter.AddPeer(captureID, addr)
-			})
-			globalState.SetOnCaptureRemoved(func(captureID model.CaptureID) {
-				c.MessageRouter.RemovePeer(captureID)
-			})
-		}
+		globalState.SetOnCaptureAdded(func(captureID model.CaptureID, addr string) {
+			c.MessageRouter.AddPeer(captureID, addr)
+		})
+		globalState.SetOnCaptureRemoved(func(captureID model.CaptureID) {
+			c.MessageRouter.RemovePeer(captureID)
+		})
 
 		// when the etcd worker of processor returns an error, it means that the processor throws an unrecoverable serious errors
 		// (recoverable errors are intercepted in the processor tick)
 		// so we should also stop the processor and let capture restart or exit
-		processorErr = c.runEtcdWorker(ctx, c.processorManager, globalState, processorFlushInterval, "processor")
+		processorErr = c.runEtcdWorker(ctx, c.processorManager, globalState, processorFlushInterval, util.RoleProcessor.String())
 		log.Info("the processor routine has exited", zap.Error(processorErr))
 	}()
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		c.pdClock.Run(ctx)
+		defer c.AsyncClose()
+		defer c.grpcService.Reset(nil)
+		messageServerErr = c.MessageServer.Run(ctx)
 	}()
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		c.grpcPool.RecycleConn(ctx)
-	}()
-	if c.enableNewScheduler {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			defer c.AsyncClose()
-			defer c.grpcService.Reset(nil)
-			messageServerErr = c.MessageServer.Run(ctx)
-		}()
-	}
 	wg.Wait()
 	if ownerErr != nil {
 		return errors.Annotate(ownerErr, "owner exited with error")
@@ -419,21 +377,19 @@ func (c *Capture) campaignOwner(ctx cdcContext.Context) error {
 			zap.String("captureID", c.info.ID),
 			zap.Int64("ownerRev", ownerRev))
 
-		owner := c.newOwner(c.PDClient)
+		owner := c.newOwner(c.UpstreamManager)
 		c.setOwner(owner)
 
 		globalState := orchestrator.NewGlobalState()
 
-		if c.enableNewScheduler {
-			globalState.SetOnCaptureAdded(func(captureID model.CaptureID, addr string) {
-				c.MessageRouter.AddPeer(captureID, addr)
-			})
-			globalState.SetOnCaptureRemoved(func(captureID model.CaptureID) {
-				c.MessageRouter.RemovePeer(captureID)
-			})
-		}
+		globalState.SetOnCaptureAdded(func(captureID model.CaptureID, addr string) {
+			c.MessageRouter.AddPeer(captureID, addr)
+		})
+		globalState.SetOnCaptureRemoved(func(captureID model.CaptureID) {
+			c.MessageRouter.RemovePeer(captureID)
+		})
 
-		err = c.runEtcdWorker(ownerCtx, owner, orchestrator.NewGlobalState(), ownerFlushInterval, "owner")
+		err = c.runEtcdWorker(ownerCtx, owner, orchestrator.NewGlobalState(), ownerFlushInterval, util.RoleOwner.String())
 		c.setOwner(nil)
 		log.Info("run owner exited", zap.Error(err))
 		// if owner exits, resign the owner key
@@ -535,23 +491,22 @@ func (c *Capture) AsyncClose() {
 	o, _ := c.GetOwner()
 	if o != nil {
 		o.AsyncStop()
+		log.Info("owner closed")
 	}
+
 	c.captureMu.Lock()
 	defer c.captureMu.Unlock()
 	if c.processorManager != nil {
 		c.processorManager.AsyncClose()
 	}
-	if c.grpcPool != nil {
-		c.grpcPool.Close()
-	}
-	if c.regionCache != nil {
-		c.regionCache.Close()
-		c.regionCache = nil
-	}
+	log.Info("processor manager closed")
+
 	if c.tableActorSystem != nil {
 		c.tableActorSystem.Stop()
 		c.tableActorSystem = nil
 	}
+	log.Info("table actor system closed")
+
 	if c.sorterSystem != nil {
 		err := c.sorterSystem.Stop()
 		if err != nil {
@@ -559,15 +514,15 @@ func (c *Capture) AsyncClose() {
 		}
 		c.sorterSystem = nil
 	}
-	if c.enableNewScheduler {
-		c.grpcService.Reset(nil)
+	log.Info("sorter actor system closed")
 
-		if c.MessageRouter != nil {
-			c.MessageRouter.Close()
-			c.MessageRouter.Wait()
-			c.MessageRouter = nil
-		}
+	c.grpcService.Reset(nil)
+	if c.MessageRouter != nil {
+		c.MessageRouter.Close()
+		c.MessageRouter.Wait()
+		c.MessageRouter = nil
 	}
+	log.Info("message router closed")
 }
 
 // WriteDebugInfo writes the debug info into writer.

@@ -22,6 +22,8 @@ import (
 const (
 	// DefaultMockTopicName specifies the default mock topic name.
 	DefaultMockTopicName = "mock_topic"
+	// DefaultMockPartitionNum is the default partition number of default mock topic.
+	DefaultMockPartitionNum = 3
 	// defaultMockControllerID specifies the default mock controller ID.
 	defaultMockControllerID = 1
 )
@@ -143,4 +145,9 @@ func (c *ClusterAdminClientMockImpl) GetBrokerMessageMaxBytes() int {
 func (c *ClusterAdminClientMockImpl) GetTopicMaxMessageBytes() int {
 	maxMessageBytes, _ := strconv.Atoi(TopicMaxMessageBytes)
 	return maxMessageBytes
+}
+
+// DropBrokerConfig remove all broker level configuration for test purpose.
+func (c *ClusterAdminClientMockImpl) DropBrokerConfig() {
+	c.brokerConfigs = c.brokerConfigs[:0]
 }

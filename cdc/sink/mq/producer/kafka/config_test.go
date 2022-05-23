@@ -23,13 +23,12 @@ import (
 
 	"github.com/Shopify/sarama"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tidb/util/timeutil"
-	"github.com/pingcap/tiflow/cdc/sink/codec"
+	"github.com/pingcap/tiflow/cdc/contextutil"
+	"github.com/pingcap/tiflow/cdc/sink/mq/codec"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/kafka"
 	"github.com/pingcap/tiflow/pkg/security"
-	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
 )
 
@@ -39,7 +38,7 @@ func TestNewSaramaConfig(t *testing.T) {
 	config.Version = "invalid"
 	_, err := NewSaramaConfig(ctx, config)
 	require.Regexp(t, "invalid version.*", errors.Cause(err))
-	ctx = util.SetOwnerInCtx(ctx)
+	ctx = contextutil.SetOwnerInCtx(ctx)
 	config.Version = "2.6.0"
 	config.ClientID = "^invalid$"
 	_, err = NewSaramaConfig(ctx, config)
@@ -403,8 +402,8 @@ func TestConfigurationCombinations(t *testing.T) {
 		err = AdjustConfig(adminClient, baseConfig, saramaConfig, topic)
 		require.Nil(t, err)
 
-		encoderConfig := codec.NewConfig(config.ProtocolOpen, timeutil.SystemLocation())
-		err = encoderConfig.Apply(sinkURI, map[string]string{})
+		encoderConfig := codec.NewConfig(config.ProtocolOpen)
+		err = encoderConfig.Apply(sinkURI, &config.ReplicaConfig{})
 		require.Nil(t, err)
 		encoderConfig.WithMaxMessageBytes(saramaConfig.Producer.MaxMessageBytes)
 
@@ -438,13 +437,13 @@ func TestApplySASL(t *testing.T) {
 		{
 			name: "valid PLAIN SASL",
 			URI: "kafka://127.0.0.1:9092/abc?kafka-version=2.6.0&partition-num=0" +
-				"&sasl-username=user&sasl-password=password&sasl-mechanism=plain",
+				"&sasl-user=user&sasl-password=password&sasl-mechanism=plain",
 			exceptErr: "",
 		},
 		{
 			name: "valid SCRAM SASL",
 			URI: "kafka://127.0.0.1:9092/abc?kafka-version=2.6.0&partition-num=0" +
-				"&sasl-username=user&sasl-password=password&sasl-mechanism=SCRAM-SHA-512",
+				"&sasl-user=user&sasl-password=password&sasl-mechanism=SCRAM-SHA-512",
 			exceptErr: "",
 		},
 		{

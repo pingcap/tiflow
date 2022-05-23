@@ -24,6 +24,7 @@ import (
 
 	"github.com/go-mysql-org/go-mysql/mysql"
 	. "github.com/pingcap/check"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/tikv/pd/pkg/tempurl"
 	v3rpc "go.etcd.io/etcd/api/v3/v3rpc/rpctypes"
@@ -486,7 +487,7 @@ func (t *testServer) TestWatchSourceBoundEtcdCompact(c *C) {
 	ha.WatchSourceBound(ctx, etcdCli, cfg.Name, startRev, sourceBoundCh, sourceBoundErrCh)
 	select {
 	case err = <-sourceBoundErrCh:
-		c.Assert(err, Equals, etcdErrCompacted)
+		c.Assert(errors.Cause(err), Equals, etcdErrCompacted)
 	case <-time.After(300 * time.Millisecond):
 		c.Fatal("fail to get etcd error compacted")
 	}

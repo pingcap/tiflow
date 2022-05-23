@@ -22,15 +22,16 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	dmysql "github.com/go-sql-driver/mysql"
+	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/metrics"
-	"github.com/pingcap/tiflow/pkg/util/testleak"
 	"github.com/stretchr/testify/require"
 )
 
 func TestSinkParamsClone(t *testing.T) {
+	t.Parallel()
 	param1 := defaultParams.Clone()
 	param2 := param1.Clone()
-	param2.changefeedID = "123"
+	param2.changefeedID = model.DefaultChangeFeedID("123")
 	param2.batchReplaceEnabled = false
 	param2.maxTxnRow = 1
 	require.Equal(t, &sinkParams{
@@ -45,7 +46,7 @@ func TestSinkParamsClone(t *testing.T) {
 		safeMode:            defaultSafeMode,
 	}, param1)
 	require.Equal(t, &sinkParams{
-		changefeedID:        "123",
+		changefeedID:        model.DefaultChangeFeedID("123"),
 		workerCount:         DefaultWorkerCount,
 		maxTxnRow:           1,
 		tidbTxnMode:         defaultTiDBTxnMode,
@@ -59,6 +60,7 @@ func TestSinkParamsClone(t *testing.T) {
 }
 
 func TestGenerateDSNByParams(t *testing.T) {
+	t.Parallel()
 	testDefaultParams := func() {
 		db, err := mockTestDB(false)
 		require.Nil(t, err)
@@ -107,7 +109,8 @@ func TestGenerateDSNByParams(t *testing.T) {
 		require.Nil(t, err)
 		uri, err := url.Parse("mysql://127.0.0.1:3306/?read-timeout=4m&write-timeout=5m&timeout=3m")
 		require.Nil(t, err)
-		params, err := parseSinkURIToParams(context.TODO(), uri, map[string]string{})
+		params, err := parseSinkURIToParams(context.TODO(),
+			model.DefaultChangeFeedID("123"), uri, map[string]string{})
 		require.Nil(t, err)
 		dsnStr, err := generateDSNByParams(context.TODO(), dsn, params, db)
 		require.Nil(t, err)
@@ -194,7 +197,8 @@ func TestGenerateDSNByParams(t *testing.T) {
 }
 
 func TestParseSinkURIToParams(t *testing.T) {
-	defer testleak.AfterTestT(t)()
+	t.Parallel()
+
 	expected := defaultParams.Clone()
 	expected.workerCount = 64
 	expected.maxTxnRow = 20
@@ -202,25 +206,25 @@ func TestParseSinkURIToParams(t *testing.T) {
 	expected.batchReplaceSize = 50
 	expected.safeMode = true
 	expected.timezone = `"UTC"`
-	expected.changefeedID = "cf-id"
+	expected.changefeedID = model.DefaultChangeFeedID("cf-id")
 	expected.captureAddr = "127.0.0.1:8300"
 	expected.tidbTxnMode = "pessimistic"
 	uriStr := "mysql://127.0.0.1:3306/?worker-count=64&max-txn-row=20" +
 		"&batch-replace-enable=true&batch-replace-size=50&safe-mode=true" +
 		"&tidb-txn-mode=pessimistic"
 	opts := map[string]string{
-		metrics.OptChangefeedID: expected.changefeedID,
-		metrics.OptCaptureAddr:  expected.captureAddr,
+		metrics.OptCaptureAddr: expected.captureAddr,
 	}
 	uri, err := url.Parse(uriStr)
 	require.Nil(t, err)
-	params, err := parseSinkURIToParams(context.TODO(), uri, opts)
+	params, err := parseSinkURIToParams(context.TODO(), expected.changefeedID, uri, opts)
 	require.Nil(t, err)
 	require.Equal(t, expected, params)
 }
 
 func TestParseSinkURITimezone(t *testing.T) {
-	defer testleak.AfterTestT(t)()
+	t.Parallel()
+
 	uris := []string{
 		"mysql://127.0.0.1:3306/?time-zone=Asia/Shanghai&worker-count=32",
 		"mysql://127.0.0.1:3306/?time-zone=&worker-count=32",
@@ -236,14 +240,17 @@ func TestParseSinkURITimezone(t *testing.T) {
 	for i, uriStr := range uris {
 		uri, err := url.Parse(uriStr)
 		require.Nil(t, err)
-		params, err := parseSinkURIToParams(ctx, uri, opts)
+		params, err := parseSinkURIToParams(ctx,
+			model.DefaultChangeFeedID("cf"),
+			uri, opts)
 		require.Nil(t, err)
 		require.Equal(t, expected[i], params.timezone)
 	}
 }
 
 func TestParseSinkURIOverride(t *testing.T) {
-	defer testleak.AfterTestT(t)()
+	t.Parallel()
+
 	cases := []struct {
 		uri     string
 		checker func(*sinkParams)
@@ -264,7 +271,6 @@ func TestParseSinkURIOverride(t *testing.T) {
 		},
 	}}
 	ctx := context.TODO()
-	opts := map[string]string{metrics.OptChangefeedID: "changefeed-01"}
 	var uri *url.URL
 	var err error
 	for _, cs := range cases {
@@ -274,14 +280,17 @@ func TestParseSinkURIOverride(t *testing.T) {
 		} else {
 			uri = nil
 		}
-		p, err := parseSinkURIToParams(ctx, uri, opts)
+		p, err := parseSinkURIToParams(ctx,
+			model.DefaultChangeFeedID("changefeed-01"),
+			uri, map[string]string{})
 		require.Nil(t, err)
 		cs.checker(p)
 	}
 }
 
 func TestParseSinkURIBadQueryString(t *testing.T) {
-	defer testleak.AfterTestT(t)()
+	t.Parallel()
+
 	uris := []string{
 		"",
 		"postgre://127.0.0.1:3306",
@@ -301,7 +310,7 @@ func TestParseSinkURIBadQueryString(t *testing.T) {
 		"mysql://127.0.0.1:3306/?timeout=badduration",
 	}
 	ctx := context.TODO()
-	opts := map[string]string{metrics.OptChangefeedID: "changefeed-01"}
+	opts := map[string]string{}
 	var uri *url.URL
 	var err error
 	for _, uriStr := range uris {
@@ -311,13 +320,15 @@ func TestParseSinkURIBadQueryString(t *testing.T) {
 		} else {
 			uri = nil
 		}
-		_, err = parseSinkURIToParams(ctx, uri, opts)
+		_, err = parseSinkURIToParams(ctx,
+			model.DefaultChangeFeedID("changefeed-01"), uri, opts)
 		require.Error(t, err)
 	}
 }
 
 func TestCheckTiDBVariable(t *testing.T) {
-	defer testleak.AfterTestT(t)()
+	t.Parallel()
+
 	db, mock, err := sqlmock.New()
 	require.Nil(t, err)
 	defer db.Close() //nolint:errcheck

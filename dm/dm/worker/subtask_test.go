@@ -16,19 +16,21 @@ package worker
 import (
 	"context"
 	"strings"
+	"testing"
 	"time"
 
 	"github.com/go-mysql-org/go-mysql/mysql"
-	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/dm/pb"
 	"github.com/pingcap/tiflow/dm/dm/unit"
 	"github.com/pingcap/tiflow/dm/dumpling"
 	"github.com/pingcap/tiflow/dm/loader"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/relay"
 	"github.com/pingcap/tiflow/dm/syncer"
+	"github.com/stretchr/testify/require"
 
 	. "github.com/pingcap/check"
 	"github.com/pingcap/errors"
@@ -528,7 +530,7 @@ func (t *testSubTask) TestSubtaskFastQuit(c *C) {
 	c.Assert(st.Stage(), Equals, pb.Stage_Stopped)
 }
 
-func (t *testSubTask) TestGetValidatorError(c *C) {
+func TestGetValidatorError(t *testing.T) {
 	cfg := &config.SubTaskConfig{
 		Name: "test-validate-error",
 		ValidatorCfg: config.ValidatorConfig{
@@ -537,23 +539,13 @@ func (t *testSubTask) TestGetValidatorError(c *C) {
 	}
 	st := NewSubTaskWithStage(cfg, pb.Stage_Paused, nil, "worker")
 	// validator == nil
-	c.Assert(len(st.GetValidatorError(pb.ValidateErrorState_InvalidErr)), Equals, 0)
-	// validator != nil, validator not start
-	st.validator = syncer.NewContinuousDataValidator(st.cfg, nil, false)
-	c.Assert(len(st.GetValidatorError(pb.ValidateErrorState_InvalidErr)), Equals, 0)
-	// validator != nil, validator started
-	st.validator = nil
-	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/syncer/MockValidationQuery", `return(true)`), IsNil)
-	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/dm/worker/MockValidationQuery", `return(true)`), IsNil)
-	defer func() {
-		c.Assert(failpoint.Disable("github.com/pingcap/tiflow/dm/syncer/MockValidationQuery"), IsNil)
-		c.Assert(failpoint.Disable("github.com/pingcap/tiflow/dm/dm/worker/MockValidationQuery"), IsNil)
-	}()
-	st.StartValidator(pb.Stage_Running, false)
-	c.Assert(len(st.GetValidatorError(pb.ValidateErrorState_InvalidErr)), Equals, 2)
+	validatorErrs, err := st.GetValidatorError(pb.ValidateErrorState_InvalidErr)
+	require.Nil(t, validatorErrs)
+	require.True(t, terror.ErrValidatorNotFound.Equal(err))
+	// validator != nil: will be tested in IT
 }
 
-func (t *testSubTask) TestOperateValidatorError(c *C) {
+func TestOperateValidatorError(t *testing.T) {
 	cfg := &config.SubTaskConfig{
 		Name: "test-validate-error",
 		ValidatorCfg: config.ValidatorConfig{
@@ -562,20 +554,21 @@ func (t *testSubTask) TestOperateValidatorError(c *C) {
 	}
 	st := NewSubTaskWithStage(cfg, pb.Stage_Paused, nil, "worker")
 	// validator == nil
-	c.Assert(st.OperateValidatorError(pb.ValidationErrOp_ClearErrOp, 0, true), IsNil)
-	// validator != nil, validator not start
-	st.validator = syncer.NewContinuousDataValidator(st.cfg, nil, false)
-	c.Assert(st.OperateValidatorError(pb.ValidationErrOp_ClearErrOp, 0, true), IsNil)
-	// validator != nil, validator started
-	st.validator = nil
-	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/syncer/MockValidationQuery", `return(true)`), IsNil)
-	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/syncer/MockValidationOperation", `return(true)`), IsNil)
-	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/dm/worker/MockValidationQuery", `return(true)`), IsNil)
-	defer func() {
-		c.Assert(failpoint.Disable("github.com/pingcap/tiflow/dm/syncer/MockValidationOperation"), IsNil)
-		c.Assert(failpoint.Disable("github.com/pingcap/tiflow/dm/syncer/MockValidationQuery"), IsNil)
-		c.Assert(failpoint.Disable("github.com/pingcap/tiflow/dm/dm/worker/MockValidationQuery"), IsNil)
-	}()
-	st.StartValidator(pb.Stage_Running, false)
-	c.Assert(st.OperateValidatorError(pb.ValidationErrOp_ClearErrOp, 0, true), IsNil)
+	require.True(t, terror.ErrValidatorNotFound.Equal(st.OperateValidatorError(pb.ValidationErrOp_ClearErrOp, 0, true)))
+	// validator != nil: will be tested in IT
+}
+
+func TestValidatorStatus(t *testing.T) {
+	cfg := &config.SubTaskConfig{
+		Name: "test-validate-status",
+		ValidatorCfg: config.ValidatorConfig{
+			Mode: config.ValidationFast,
+		},
+	}
+	st := NewSubTaskWithStage(cfg, pb.Stage_Paused, nil, "worker")
+	// validator == nil
+	stats, err := st.GetValidatorStatus()
+	require.Nil(t, stats)
+	require.True(t, terror.ErrValidatorNotFound.Equal(err))
+	// validator != nil: will be tested in IT
 }

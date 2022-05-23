@@ -30,7 +30,6 @@ import (
 	"github.com/pingcap/tiflow/dm/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
-	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/retry"
 	"github.com/pingcap/tiflow/dm/pkg/schema"
 	"github.com/pingcap/tiflow/dm/syncer/dbconn"
@@ -40,6 +39,7 @@ func TestValidatorCheckpointPersist(t *testing.T) {
 	var (
 		schemaName     = "test"
 		tableName      = "tbl"
+		tbl            = filter.Table{Schema: schemaName, Name: tableName}
 		createTableSQL = "CREATE TABLE `" + tableName + "`(id int primary key, v varchar(100))"
 	)
 	cfg := genSubtaskConfig(t)
@@ -51,9 +51,17 @@ func TestValidatorCheckpointPersist(t *testing.T) {
 	dbMock.ExpectQuery("select .* from .*_validator_checkpoint.*").WillReturnRows(
 		dbMock.NewRows([]string{"", "", ""}).AddRow("mysql-bin.000001", 100, ""))
 	dbMock.ExpectQuery("select .* from .*_validator_pending_change.*").WillReturnRows(
-		dbMock.NewRows([]string{"", "", "", "", ""}).AddRow(schemaName, tableName, "11",
+		dbMock.NewRows([]string{"", "", "", "", ""}).
 			// insert with pk=11
-			"{\"key\": \"11\", \"data\": [\"11\", \"a\"], \"tp\": 0, \"first-validate-ts\": 0, \"failed-cnt\": 0}", 1))
+			AddRow(schemaName, tableName, "11",
+				"{\"key\": \"11\", \"data\": [\"11\", \"a\"], \"tp\": 0, \"first-ts\": 0, \"failed-cnt\": 0}", 1).
+			// delete with pk=12
+			AddRow(schemaName, tableName, "12",
+				"{\"key\": \"12\", \"data\": [\"12\", \"a\"], \"tp\": 1, \"first-ts\": 0, \"failed-cnt\": 0}", 1).
+			// update with pk=13
+			AddRow(schemaName, tableName, "13",
+				"{\"key\": \"13\", \"data\": [\"13\", \"a\"], \"tp\": 2, \"first-ts\": 0, \"failed-cnt\": 0}", 1),
+	)
 	dbMock.ExpectQuery("select .* from .*_validator_table_status.*").WillReturnRows(
 		dbMock.NewRows([]string{"", "", "", "", "", ""}).AddRow(schemaName, tableName, schemaName, tableName, 2, ""))
 	dbMock.ExpectQuery("select .* from .*_validator_error_change.*").WillReturnRows(
@@ -76,9 +84,11 @@ func TestValidatorCheckpointPersist(t *testing.T) {
 	}
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
-	mock.ExpectQuery("SHOW VARIABLES LIKE 'sql_mode'").WillReturnRows(
-		mock.NewRows([]string{"Variable_name", "Value"}).AddRow("sql_mode", ""),
-	)
+	mock.ExpectBegin()
+	mock.ExpectExec("SET SESSION SQL_MODE.*").WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectCommit()
+	mock.ExpectQuery("SHOW CREATE TABLE.*").WillReturnRows(
+		mock.NewRows([]string{"Table", "Create Table"}).AddRow(tableName, createTableSQL))
 	dbConn, err := db.Conn(context.Background())
 	require.NoError(t, err)
 	syncerObj.downstreamTrackConn = dbconn.NewDBConn(cfg, conn.NewBaseConn(dbConn, &retry.FiniteRetryStrategy{}))
@@ -93,8 +103,10 @@ func TestValidatorCheckpointPersist(t *testing.T) {
 	validator.persistHelper.schemaInitialized.Store(true)
 	validator.Start(pb.Stage_Stopped)
 	validator.Stop()
-	require.NoError(t, validator.loadPersistedData(tcontext.Background()))
+	require.NoError(t, validator.loadPersistedData())
 	require.Equal(t, int64(1), validator.persistHelper.revision)
+	require.Equal(t, 1, len(validator.loadedPendingChanges))
+	require.Equal(t, 3, len(validator.loadedPendingChanges[tbl.String()].jobs))
 
 	testFunc := func(errStr string) {
 		validator.Start(pb.Stage_Stopped)
@@ -104,19 +116,14 @@ func TestValidatorCheckpointPersist(t *testing.T) {
 			require.NoError(t, failpoint.Disable("github.com/pingcap/tiflow/dm/syncer/ValidatorCheckPointSkipExecuteSQL"))
 		}()
 		validator.startValidateWorkers()
+		tblInfo := genValidateTableInfo(t, createTableSQL)
 		validator.workers[0].errorRows = append(validator.workers[0].errorRows, &validateFailedRow{
 			tp:      deletedRowExists,
-			dstData: []*sql.NullString{{String: "", Valid: true}},
-			srcRow: &rowChange{
-				table: &validateTableInfo{
-					Source: &filter.Table{Schema: schemaName, Name: tableName},
-					Target: &filter.Table{Schema: schemaName, Name: tableName},
-				},
-				Key: "1",
-			},
+			dstData: []*sql.NullString{{String: "1", Valid: true}, {String: "a", Valid: true}},
+			srcJob:  genRowChangeJob(tbl, tblInfo, "1", rowDeleted, []interface{}{1, "a"}),
 		})
 		lastRev := validator.persistHelper.revision
-		err2 := validator.flushCheckpointAndData(*validator.location)
+		err2 := validator.persistCheckpointAndData(*validator.location)
 		if errStr == "" {
 			require.NoError(t, err2)
 			require.Equal(t, lastRev+1, validator.persistHelper.revision)

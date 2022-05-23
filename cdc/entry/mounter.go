@@ -70,7 +70,7 @@ type mounterImpl struct {
 	tz             *time.Location
 	workerNum      int
 	enableOldValue bool
-	changefeedID   string
+	changefeedID   model.ChangeFeedID
 
 	// index is an atomic variable to dispatch input events to workers.
 	index int64
@@ -81,17 +81,19 @@ type mounterImpl struct {
 
 // NewMounter creates a mounter
 func NewMounter(schemaStorage SchemaStorage,
-	changefeedID string,
+	changefeedID model.ChangeFeedID,
 	tz *time.Location,
 	enableOldValue bool,
 ) Mounter {
 	return &mounterImpl{
-		schemaStorage:       schemaStorage,
-		changefeedID:        changefeedID,
-		enableOldValue:      enableOldValue,
-		metricMountDuration: mountDuration.WithLabelValues(changefeedID),
-		metricTotalRows:     totalRowsCountGauge.WithLabelValues(changefeedID),
-		tz:                  tz,
+		schemaStorage:  schemaStorage,
+		changefeedID:   changefeedID,
+		enableOldValue: enableOldValue,
+		metricMountDuration: mountDuration.
+			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
+		metricTotalRows: totalRowsCountGauge.
+			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
+		tz: tz,
 	}
 }
 
@@ -99,7 +101,7 @@ func NewMounter(schemaStorage SchemaStorage,
 // this method could block indefinitely if the DDL puller is lagging.
 func (m *mounterImpl) DecodeEvent(ctx context.Context, pEvent *model.PolymorphicEvent) error {
 	m.metricTotalRows.Inc()
-	if pEvent.RawKV.OpType == model.OpTypeResolved {
+	if pEvent.IsResolved() {
 		return nil
 	}
 	start := time.Now()
@@ -268,12 +270,14 @@ func datum2Column(tableInfo *model.TableInfo, datums map[int64]types.Datum, fill
 		if warn != "" {
 			log.Warn(warn, zap.String("table", tableInfo.TableName.String()), zap.String("column", colInfo.Name.String()))
 		}
+		defaultValue := getDDLDefaultDefinition(colInfo)
 		colSize += size
 		cols[tableInfo.RowColumnsOffset[colInfo.ID]] = &model.Column{
 			Name:    colName,
 			Type:    colInfo.Tp,
 			Charset: colInfo.Charset,
 			Value:   colValue,
+			Default: defaultValue,
 			Flag:    tableInfo.ColumnsFlag[colInfo.ID],
 			// ApproximateBytes = column data size + column struct size
 			ApproximateBytes: colSize + sizeOfEmptyColumn,
@@ -485,6 +489,15 @@ func getDefaultOrZeroValue(col *timodel.ColumnInfo) (interface{}, int, string, e
 	}
 
 	return formatColVal(d, col)
+}
+
+func getDDLDefaultDefinition(col *timodel.ColumnInfo) interface{} {
+	defaultValue := col.GetDefaultValue()
+	if defaultValue == nil {
+		defaultValue = col.GetOriginDefaultValue()
+	}
+	defaultDatum := types.NewDatum(defaultValue)
+	return defaultDatum.GetValue()
 }
 
 // DecodeTableID decodes the raw key to a table ID

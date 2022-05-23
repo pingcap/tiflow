@@ -14,17 +14,14 @@
 package mysql
 
 import (
-	"github.com/pingcap/check"
+	"testing"
+
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/util/testleak"
+	"github.com/stretchr/testify/require"
 )
 
-type TxnsHeapSuite struct{}
-
-var _ = check.Suite(&TxnsHeapSuite{})
-
-func (s TxnsHeapSuite) TestTxnsHeap(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestTxnsHeap(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		txnsMap  map[model.TableID][]*model.SingleTableTxn
 		expected []*model.SingleTableTxn
@@ -66,7 +63,7 @@ func (s TxnsHeapSuite) TestTxnsHeap(c *check.C) {
 		h := newTxnsHeap(tc.txnsMap)
 		i := 0
 		h.iter(func(txn *model.SingleTableTxn) {
-			c.Assert(txn, check.DeepEquals, tc.expected[i])
+			require.Equal(t, tc.expected[i], txn)
 			i++
 		})
 	}

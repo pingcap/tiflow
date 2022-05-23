@@ -183,10 +183,10 @@ func TestMessageClientBasic(t *testing.T) {
 }
 
 func TestMessageClientBasicMultiTopics(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.TODO(), defaultTimeout)
+	ctx, cancel := context.WithTimeout(context.TODO(), defaultTimeout*2)
 	defer cancel()
 
-	runP2PIntegrationTest(ctx, t, defaultMessageBatchSizeLarge, 4, 16)
+	runP2PIntegrationTest(ctx, t, defaultMessageBatchSizeLarge, 4, 4)
 }
 
 func TestMessageClientServerRestart(t *testing.T) {

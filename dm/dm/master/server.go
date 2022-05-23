@@ -15,6 +15,7 @@ package master
 
 import (
 	"context"
+	"database/sql"
 	"encoding/binary"
 	"fmt"
 	"math/rand"
@@ -86,7 +87,11 @@ var (
 	registerOnce      sync.Once
 	runBackgroundOnce sync.Once
 
-	checkAndAdjustSourceConfigFunc = checkAndAdjustSourceConfig
+	// the difference of below functions is checkAndAdjustSourceConfigForDMCtlFunc will not AdjustCaseSensitive. It's a
+	// compatibility compromise.
+	// When we need to change the implementation of dmctl to OpenAPI, we should notice the user about this change.
+	checkAndAdjustSourceConfigFunc         = checkAndAdjustSourceConfig
+	checkAndAdjustSourceConfigForDMCtlFunc = checkAndAdjustSourceConfigForDMCtl
 )
 
 // Server handles RPC requests for dm-master.
@@ -198,7 +203,12 @@ func (s *Server) Start(ctx context.Context) (err error) {
 		"/debug/": getDebugHandler(),
 	}
 	if s.cfg.OpenAPI {
-		if initOpenAPIErr := s.InitOpenAPIHandles(); initOpenAPIErr != nil {
+		// tls3 is used to openapi reverse proxy
+		tls3, err1 := toolutils.NewTLS(s.cfg.SSLCA, s.cfg.SSLCert, s.cfg.SSLKey, s.cfg.AdvertiseAddr, s.cfg.CertAllowedCN)
+		if err1 != nil {
+			return terror.ErrMasterTLSConfigNotValid.Delegate(err1)
+		}
+		if initOpenAPIErr := s.InitOpenAPIHandles(tls3.TLSConfig()); initOpenAPIErr != nil {
 			return terror.ErrOpenAPICommonError.Delegate(initOpenAPIErr)
 		}
 		userHandles["/api/v1/"] = s.openapiHandles
@@ -1311,7 +1321,7 @@ func parseAndAdjustSourceConfig(ctx context.Context, contents []string) ([]*conf
 		if err != nil {
 			return cfgs, err
 		}
-		if err := checkAndAdjustSourceConfigFunc(ctx, cfg); err != nil {
+		if err := checkAndAdjustSourceConfigForDMCtlFunc(ctx, cfg); err != nil {
 			return cfgs, err
 		}
 		cfgs[i] = cfg
@@ -1319,7 +1329,11 @@ func parseAndAdjustSourceConfig(ctx context.Context, contents []string) ([]*conf
 	return cfgs, nil
 }
 
-func checkAndAdjustSourceConfig(ctx context.Context, cfg *config.SourceConfig) error {
+func innerCheckAndAdjustSourceConfig(
+	ctx context.Context,
+	cfg *config.SourceConfig,
+	hook func(sourceConfig *config.SourceConfig, ctx context.Context, db *sql.DB) error,
+) error {
 	dbConfig := cfg.GenerateDBConfig()
 	fromDB, err := conn.DefaultDBProvider.Apply(dbConfig)
 	if err != nil {
@@ -1329,10 +1343,23 @@ func checkAndAdjustSourceConfig(ctx context.Context, cfg *config.SourceConfig) e
 	if err = cfg.Adjust(ctx, fromDB.DB); err != nil {
 		return err
 	}
+	if hook != nil {
+		if err = hook(cfg, ctx, fromDB.DB); err != nil {
+			return err
+		}
+	}
 	if _, err = cfg.Yaml(); err != nil {
 		return err
 	}
 	return cfg.Verify()
+}
+
+func checkAndAdjustSourceConfig(ctx context.Context, cfg *config.SourceConfig) error {
+	return innerCheckAndAdjustSourceConfig(ctx, cfg, (*config.SourceConfig).AdjustCaseSensitive)
+}
+
+func checkAndAdjustSourceConfigForDMCtl(ctx context.Context, cfg *config.SourceConfig) error {
+	return innerCheckAndAdjustSourceConfig(ctx, cfg, nil)
 }
 
 func parseSourceConfig(contents []string) ([]*config.SourceConfig, error) {
@@ -1771,6 +1798,14 @@ func (s *Server) waitOperationOk(
 	}
 
 	for num := 0; num < maxRetryNum; num++ {
+		if num > 0 {
+			select {
+			case <-ctx.Done():
+				return false, "", nil, ctx.Err()
+			case <-time.After(retryInterval):
+			}
+		}
+
 		// check whether source relative worker has been removed by scheduler
 		if _, ok := masterReq.(*pb.OperateSourceRequest); ok {
 			if expect == pb.Stage_Stopped {
@@ -1786,6 +1821,7 @@ func (s *Server) waitOperationOk(
 			}
 		}
 
+		// TODO: this is 30s, too long compared with retryInterval
 		resp, err := cli.SendRequest(ctx, req, s.cfg.RPCTimeout)
 		if err != nil {
 			log.L().Error("fail to query operation",
@@ -1897,12 +1933,6 @@ func (s *Server) waitOperationOk(
 			}
 			log.L().Info("fail to get expect operation result", zap.Int("retryNum", num), zap.String("task", taskName),
 				zap.String("source", sourceID), zap.Stringer("expect", expect), zap.Stringer("resp", queryResp))
-		}
-
-		select {
-		case <-ctx.Done():
-			return false, "", nil, ctx.Err()
-		case <-time.After(retryInterval):
 		}
 	}
 
@@ -2294,7 +2324,7 @@ func (s *Server) GetCfg(ctx context.Context, req *pb.GetCfgRequest) (*pb.GetCfgR
 		// For the get-config command, we want to filter out fields that are not easily readable by humans,
 		// such as SSLXXBytes field in `Security` struct
 		taskCfg := config.SubTaskConfigsToTaskConfig(subCfgList...)
-		taskCfg.TargetDB.Password = "******"
+		taskCfg.TargetDB.Password = config.ObfuscatedPasswordForFeedback
 		if taskCfg.TargetDB.Security != nil {
 			taskCfg.TargetDB.Security.ClearSSLBytesData()
 		}
@@ -2398,7 +2428,7 @@ func (s *Server) GetCfg(ctx context.Context, req *pb.GetCfgRequest) (*pb.GetCfgR
 
 			return resp2, nil
 		}
-		sourceCfg.From.Password = "******"
+		sourceCfg.From.Password = config.ObfuscatedPasswordForFeedback
 		if sourceCfg.From.Security != nil {
 			sourceCfg.From.Security.ClearSSLBytesData()
 		}
@@ -2754,7 +2784,8 @@ func (s *Server) GetValidationStatus(ctx context.Context, req *pb.GetValidationS
 			resp.Msg += wresp.Msg + "; "
 			continue
 		}
-		resp.Status = append(resp.Status, wresp.Status...)
+		resp.Validators = append(resp.Validators, wresp.Validators...)
+		resp.TableStatuses = append(resp.TableStatuses, wresp.TableStatuses...)
 	}
 	// nolint:nilerr
 	return resp, nil
