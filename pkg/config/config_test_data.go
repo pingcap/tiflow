@@ -167,7 +167,8 @@ const (
           "b"
         ]
       }
-    ]
+    ],
+    "schema-registry": ""
   },
   "cyclic-replication": {
     "enable": false,
@@ -181,8 +182,7 @@ const (
     "max-log-size": 64,
     "flush-interval": 1000,
     "storage": ""
-  },
-  "schema-registry": ""
+  }
 }`
 
 	testCfgTestReplicaConfigMarshal2 = `{

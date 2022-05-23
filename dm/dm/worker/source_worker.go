@@ -522,7 +522,7 @@ func (w *SourceWorker) DisableHandleSubtasks() {
 
 	// close all sub tasks
 	w.subTaskHolder.closeAllSubTasks()
-	w.l.Info("handling subtask enabled")
+	w.l.Info("handling subtask disabled")
 }
 
 // fetchSubTasksAndAdjust gets source's subtask stages and configs, adjust some values by worker's config and status

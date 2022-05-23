@@ -715,7 +715,7 @@ function test_start_task_with_condition() {
 		"query-status $task_name" \
 		"\"stage\": \"Stopped\"" 2
 	sleep 2
-	start_time=$(date '+%Y-%m-%d %T')
+	start_time=$(TZ='UTC' date '+%Y-%m-%d %T') # mysql 3306 and 3307 is in UTC
 	sleep 2
 	duration=""
 	is_success="success"
@@ -748,7 +748,7 @@ function test_start_task_with_condition() {
 		"query-status $task_name" \
 		"\"stage\": \"Stopped\"" 2
 	sleep 2
-	start_time=$(date '+%Y-%m-%d %T')
+	start_time=$(TZ='UTC' date '+%Y-%m-%d %T') # mysql 3306 and 3307 is in UTC
 	sleep 2
 	duration=""
 	is_success="success"
@@ -780,7 +780,7 @@ function test_start_task_with_condition() {
 	run_sql_source1 "CREATE TABLE openapi.t3(i TINYINT, j INT UNIQUE KEY);"
 	run_sql_source2 "CREATE TABLE openapi.t4(i TINYINT, j INT UNIQUE KEY);"
 	sleep 2
-	start_time=$(date '+%Y-%m-%d %T')
+	start_time=$(TZ='UTC' date '+%Y-%m-%d %T') # mysql 3306 and 3307 is in UTC
 	sleep 2
 	duration=""
 	is_success="success"
@@ -822,7 +822,7 @@ function test_start_task_with_condition() {
 	run_sql_source2 "CREATE TABLE openapi.t2(i TINYINT, j INT UNIQUE KEY);"
 
 	sleep 2
-	start_time=$(date '+%Y-%m-%d %T')
+	start_time=$(TZ='UTC' date '+%Y-%m-%d %T') # mysql 3306 and 3307 is in UTC
 	sleep 2
 	duration=""
 	is_success="success"
