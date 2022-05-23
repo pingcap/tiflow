@@ -182,9 +182,51 @@ func (s *serverSuite) TestParseCfg(c *check.C) {
 		},
 		PerTableMemoryQuota: 10 * 1024 * 1024, // 10M
 		KVClient: &config.KVClientConfig{
+<<<<<<< HEAD
 			WorkerConcurrent: 8,
 			WorkerPoolSize:   0,
 			RegionScanLimit:  40,
+=======
+			WorkerConcurrent:    8,
+			WorkerPoolSize:      0,
+			RegionScanLimit:     40,
+			RegionRetryDuration: config.TomlDuration(time.Minute),
+		},
+		Debug: &config.DebugConfig{
+			EnableTableActor: true,
+			TableActor: &config.TableActorConfig{
+				EventBatchSize: 32,
+			},
+			EnableDBSorter:     true,
+			EnableNewScheduler: true,
+			DB: &config.DBConfig{
+				Count:                       8,
+				Concurrency:                 128,
+				MaxOpenFiles:                10000,
+				BlockSize:                   65536,
+				BlockCacheSize:              4294967296,
+				WriterBufferSize:            8388608,
+				Compression:                 "snappy",
+				TargetFileSizeBase:          8388608,
+				WriteL0SlowdownTrigger:      math.MaxInt32,
+				WriteL0PauseTrigger:         math.MaxInt32,
+				CompactionL0Trigger:         160,
+				CompactionDeletionThreshold: 10485760,
+				CompactionPeriod:            1800,
+				IteratorMaxAliveDuration:    10000,
+				IteratorSlowReadDuration:    256,
+			},
+			// We expect the default configuration here.
+			Messages: &config.MessagesConfig{
+				ClientMaxBatchInterval:       config.TomlDuration(time.Millisecond * 10),
+				ClientMaxBatchSize:           8 * 1024 * 1024,
+				ClientMaxBatchCount:          128,
+				ClientRetryRateLimit:         1.0,
+				ServerMaxPendingMessageCount: 102400,
+				ServerAckInterval:            config.TomlDuration(time.Millisecond * 100),
+				ServerWorkerPoolSize:         4,
+			},
+>>>>>>> 4d48968a0 (config(ticdc): use 1 minute kv retry time (#5499))
 		},
 	})
 }
@@ -371,9 +413,110 @@ cert-allowed-cn = ["dd","ee"]
 		},
 		PerTableMemoryQuota: 10 * 1024 * 1024, // 10M
 		KVClient: &config.KVClientConfig{
+<<<<<<< HEAD
 			WorkerConcurrent: 8,
 			WorkerPoolSize:   0,
 			RegionScanLimit:  40,
+=======
+			WorkerConcurrent:    8,
+			WorkerPoolSize:      0,
+			RegionScanLimit:     40,
+			RegionRetryDuration: config.TomlDuration(time.Minute),
+		},
+		Debug: &config.DebugConfig{
+			EnableTableActor: true,
+			TableActor: &config.TableActorConfig{
+				EventBatchSize: 32,
+			},
+			EnableDBSorter:     true,
+			EnableNewScheduler: true,
+			DB: &config.DBConfig{
+				Count:                       8,
+				Concurrency:                 128,
+				MaxOpenFiles:                10000,
+				BlockSize:                   65536,
+				BlockCacheSize:              4294967296,
+				WriterBufferSize:            8388608,
+				Compression:                 "snappy",
+				TargetFileSizeBase:          8388608,
+				WriteL0SlowdownTrigger:      math.MaxInt32,
+				WriteL0PauseTrigger:         math.MaxInt32,
+				CompactionL0Trigger:         160,
+				CompactionDeletionThreshold: 10485760,
+				CompactionPeriod:            1800,
+				IteratorMaxAliveDuration:    10000,
+				IteratorSlowReadDuration:    256,
+			},
+			// We expect the default configuration here.
+			Messages: &config.MessagesConfig{
+				ClientMaxBatchInterval:       config.TomlDuration(time.Millisecond * 10),
+				ClientMaxBatchSize:           8 * 1024 * 1024,
+				ClientMaxBatchCount:          128,
+				ClientRetryRateLimit:         1.0,
+				ServerMaxPendingMessageCount: 102400,
+				ServerAckInterval:            config.TomlDuration(time.Millisecond * 100),
+				ServerWorkerPoolSize:         4,
+			},
+		},
+	}, o.serverConfig)
+}
+
+func TestDecodeUnkownDebugCfg(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "ticdc.toml")
+	configContent := `
+[debug]
+unknown1 = 1
+[debug.unknown2]
+unknown3 = 3
+`
+	err := os.WriteFile(configPath, []byte(configContent), 0o644)
+	require.Nil(t, err)
+
+	cmd := new(cobra.Command)
+	o := newOptions()
+	o.addFlags(cmd)
+
+	require.Nil(t, cmd.ParseFlags([]string{"--config", configPath}))
+
+	err = o.complete(cmd)
+	require.Nil(t, err)
+	err = o.validate()
+	require.Nil(t, err)
+	require.Equal(t, &config.DebugConfig{
+		EnableTableActor: true,
+		TableActor: &config.TableActorConfig{
+			EventBatchSize: 32,
+		},
+		EnableDBSorter:     true,
+		EnableNewScheduler: true,
+		DB: &config.DBConfig{
+			Count:                       8,
+			Concurrency:                 128,
+			MaxOpenFiles:                10000,
+			BlockSize:                   65536,
+			BlockCacheSize:              4294967296,
+			WriterBufferSize:            8388608,
+			Compression:                 "snappy",
+			TargetFileSizeBase:          8388608,
+			WriteL0SlowdownTrigger:      math.MaxInt32,
+			WriteL0PauseTrigger:         math.MaxInt32,
+			CompactionL0Trigger:         160,
+			CompactionDeletionThreshold: 10485760,
+			CompactionPeriod:            1800,
+			IteratorMaxAliveDuration:    10000,
+			IteratorSlowReadDuration:    256,
+		},
+		// We expect the default configuration here.
+		Messages: &config.MessagesConfig{
+			ClientMaxBatchInterval:       config.TomlDuration(time.Millisecond * 10),
+			ClientMaxBatchSize:           8 * 1024 * 1024,
+			ClientMaxBatchCount:          128,
+			ClientRetryRateLimit:         1.0,
+			ServerMaxPendingMessageCount: 102400,
+			ServerAckInterval:            config.TomlDuration(time.Millisecond * 100),
+			ServerWorkerPoolSize:         4,
+>>>>>>> 4d48968a0 (config(ticdc): use 1 minute kv retry time (#5499))
 		},
 	})
 }
