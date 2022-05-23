@@ -277,6 +277,7 @@ func NewJobManagerImplV2(
 		dctx,
 		impl,
 		id,
+		lib.JobManager,
 	)
 
 	// Note the meta data of job manager is not used, it is safe to overwrite it
