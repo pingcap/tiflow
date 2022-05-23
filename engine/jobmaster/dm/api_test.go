@@ -18,10 +18,10 @@ import (
 	"encoding/json"
 	"sort"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
+	"github.com/pingcap/tiflow/dm/dm/pb"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/runtime"
 	"github.com/pingcap/tiflow/engine/lib"
@@ -55,11 +55,13 @@ func TestQueryStatusAPI(t *testing.T) {
 				Task:  "task5",
 				Stage: metadata.StageRunning,
 			},
-			TotalTables:       10,
-			CompletedTables:   1,
-			FinishedBytes:     100,
-			FinishedRows:      10,
-			EstimateTotalRows: 1000,
+			DumpStatus: pb.DumpStatus{
+				TotalTables:       10,
+				CompletedTables:   1,
+				FinishedBytes:     100,
+				FinishedRows:      10,
+				EstimateTotalRows: 1000,
+			},
 		}
 		loadStatus = &runtime.LoadStatus{
 			DefaultTaskStatus: runtime.DefaultTaskStatus{
@@ -67,11 +69,13 @@ func TestQueryStatusAPI(t *testing.T) {
 				Task:  "task3",
 				Stage: metadata.StageFinished,
 			},
-			FinishedBytes:  100,
-			TotalBytes:     100,
-			Progress:       "100%",
-			MetaBinlog:     "mysql-bin.000002,154",
-			MetaBinlogGTID: "0-1-2",
+			LoadStatus: pb.LoadStatus{
+				FinishedBytes:  100,
+				TotalBytes:     100,
+				Progress:       "100%",
+				MetaBinlog:     "mysql-bin.000002,154",
+				MetaBinlogGTID: "0-1-2",
+			},
 		}
 		syncStatus = &runtime.SyncStatus{
 			DefaultTaskStatus: runtime.DefaultTaskStatus{
@@ -79,29 +83,29 @@ func TestQueryStatusAPI(t *testing.T) {
 				Task:  "task6",
 				Stage: metadata.StagePaused,
 			},
-			TotalEvents:         100,
-			TotalTps:            10,
-			RecentTps:           5,
-			MasterBinlog:        "mysql-bin.000004,1000",
-			MasterBinlogGtid:    "0-1-100",
-			SyncerBinlog:        "mysql-bin.000004,4",
-			SyncerBinlogGtid:    "0-1-10",
-			Synced:              false,
-			BinlogType:          "remote",
-			SecondsBehindMaster: 2,
+			SyncStatus: pb.SyncStatus{
+				TotalEvents:         100,
+				TotalTps:            10,
+				RecentTps:           5,
+				MasterBinlog:        "mysql-bin.000004,1000",
+				MasterBinlogGtid:    "0-1-100",
+				SyncerBinlog:        "mysql-bin.000004,4",
+				SyncerBinlogGtid:    "0-1-10",
+				Synced:              false,
+				BinlogType:          "remote",
+				SecondsBehindMaster: 2,
+			},
 		}
 	)
-	jm.taskManager = NewTaskManager(nil, jm.metadata.JobStore(), nil)
-	jm.workerManager = NewWorkerManager(nil, jm.metadata.JobStore(), nil, nil)
-	jm.messageAgent = NewMessageAgent(nil, jm.ID(), jm)
+	messageAgent := &dmpkg.MockMessageAgent{}
+	jm.messageAgent = messageAgent
+	jm.workerManager = NewWorkerManager(nil, jm.metadata.JobStore(), nil, nil, nil)
+	jm.taskManager = NewTaskManager(nil, nil, nil)
 	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus("task2", lib.WorkerDMLoad, "worker2", runtime.WorkerFinished))
 	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus("task3", lib.WorkerDMLoad, "worker3", runtime.WorkerFinished))
 	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus("task4", lib.WorkerDMDump, "worker4", runtime.WorkerOnline))
 	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus("task5", lib.WorkerDMDump, "worker5", runtime.WorkerOnline))
 	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus("task6", lib.WorkerDMSync, "worker6", runtime.WorkerOnline))
-	jm.messageAgent.UpdateWorkerHandle("task4", &MockSender{})
-	jm.messageAgent.UpdateWorkerHandle("task5", &MockSender{})
-	jm.messageAgent.UpdateWorkerHandle("task6", &MockSender{})
 	jm.taskManager.UpdateTaskStatus(loadStatus)
 
 	// no job
@@ -110,23 +114,14 @@ func TestQueryStatusAPI(t *testing.T) {
 	require.Nil(t, jobStatus)
 
 	require.NoError(t, jm.metadata.JobStore().Put(context.Background(), job))
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-		defer cancel()
-		jobStatus, err = jm.QueryStatus(ctx, nil)
-		require.NoError(t, err)
-	}()
-	// receive query status response
-	time.Sleep(50 * time.Millisecond)
 
-	queryStatus1 := dmpkg.QueryStatusResponse{TaskStatus: dumpStatus}
-	queryStatus2 := dmpkg.QueryStatusResponse{TaskStatus: syncStatus}
-	jm.messageAgent.OnWorkerMessage(dmpkg.MessageWithID{ID: 2, Message: queryStatus1})
-	jm.messageAgent.OnWorkerMessage(dmpkg.MessageWithID{ID: 3, Message: queryStatus2})
-	wg.Wait()
+	messageAgent.On("SendRequest").Return(nil, context.DeadlineExceeded).Once()
+	messageAgent.On("SendRequest").Return(dmpkg.QueryStatusResponse{TaskStatus: dumpStatus}, nil).Once()
+	messageAgent.On("SendRequest").Return(dmpkg.QueryStatusResponse{TaskStatus: syncStatus}, nil).Once()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	jobStatus, err = jm.QueryStatus(ctx, nil)
+	require.NoError(t, err)
 
 	expectedStatus := `{
 	"JobMasterID": "dm-jobmaster-id",
@@ -157,11 +152,11 @@ func TestQueryStatusAPI(t *testing.T) {
 					"Unit": 11,
 					"Task": "task3",
 					"Stage": 3,
-					"FinishedBytes": 100,
-					"TotalBytes": 100,
-					"Progress": "100%",
-					"MetaBinlog": "mysql-bin.000002,154",
-					"MetaBinlogGTID": "0-1-2"
+					"finishedBytes": 100,
+					"totalBytes": 100,
+					"progress": "100%",
+					"metaBinlog": "mysql-bin.000002,154",
+					"metaBinlogGTID": "0-1-2"
 				}
 			}
 		},
@@ -182,11 +177,11 @@ func TestQueryStatusAPI(t *testing.T) {
 					"Unit": 10,
 					"Task": "task5",
 					"Stage": 1,
-					"TotalTables": 10,
-					"CompletedTables": 1,
-					"FinishedBytes": 100,
-					"FinishedRows": 10,
-					"EstimateTotalRows": 1000
+					"totalTables": 10,
+					"completedTables": 1,
+					"finishedBytes": 100,
+					"finishedRows": 10,
+					"estimateTotalRows": 1000
 				}
 			}
 		},
@@ -199,19 +194,15 @@ func TestQueryStatusAPI(t *testing.T) {
 					"Unit": 12,
 					"Task": "task6",
 					"Stage": 2,
-					"TotalEvents": 100,
-					"TotalTps": 10,
-					"RecentTps": 5,
-					"MasterBinlog": "mysql-bin.000004,1000",
-					"MasterBinlogGtid": "0-1-100",
-					"SyncerBinlog": "mysql-bin.000004,4",
-					"SyncerBinlogGtid": "0-1-10",
-					"BlockingDDLs": null,
-					"Synced": false,
-					"BinlogType": "remote",
-					"SecondsBehindMaster": 2,
-					"BlockDDLOwner": "",
-					"ConflictMsg": ""
+					"totalEvents": 100,
+					"totalTps": 10,
+					"recentTps": 5,
+					"masterBinlog": "mysql-bin.000004,1000",
+					"masterBinlogGtid": "0-1-100",
+					"syncerBinlog": "mysql-bin.000004,4",
+					"syncerBinlogGtid": "0-1-10",
+					"binlogType": "remote",
+					"secondsBehindMaster": 2
 				}
 			}
 		}

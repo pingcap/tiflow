@@ -41,7 +41,6 @@ import (
 	"github.com/pingcap/tiflow/engine/pb"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/deps"
-	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/broker"
 	extkv "github.com/pingcap/tiflow/engine/pkg/meta/extension"
 	kvmock "github.com/pingcap/tiflow/engine/pkg/meta/kvclient/mock"
@@ -158,7 +157,6 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	jm := &JobMaster{
 		workerID:        "jobmaster-id",
 		jobCfg:          jobCfg,
-		closeCh:         make(chan struct{}),
 		BaseJobMaster:   mockBaseJobmaster,
 		checkpointAgent: mockCheckpointAgent,
 	}
@@ -187,7 +185,6 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	jm = &JobMaster{
 		workerID:        "jobmaster-id",
 		jobCfg:          jobCfg,
-		closeCh:         make(chan struct{}),
 		BaseJobMaster:   mockBaseJobmaster,
 		checkpointAgent: mockCheckpointAgent,
 	}
@@ -281,10 +278,13 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	require.NoError(t.T(), jm.Tick(context.Background()))
 
 	// master failover
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	jm = &JobMaster{
+		ctx:             ctx,
+		cancel:          cancel,
 		workerID:        "jobmaster-id",
 		jobCfg:          jobCfg,
-		closeCh:         make(chan struct{}),
 		BaseJobMaster:   mockBaseJobmaster,
 		checkpointAgent: mockCheckpointAgent,
 	}
@@ -303,7 +303,6 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	require.NoError(t.T(), jm.OnMasterFailover(lib.MasterFailoverReason{}))
 	require.Equal(t.T(), jm.Workload(), model.RescUnit(2))
 	require.NoError(t.T(), jm.OnWorkerStatusUpdated(workerHandle1, &libModel.WorkerStatus{ExtBytes: bytes1}))
-	require.EqualError(t.T(), jm.OnWorkerMessage(workerHandle1, "", dmpkg.MessageWithID{}), "request 0 not found")
 
 	// Close
 	workerHandle1.On("SendMessage", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()

@@ -15,7 +15,6 @@ package dm
 
 import (
 	"context"
-	"sync"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -43,15 +42,15 @@ import (
 type JobMaster struct {
 	lib.BaseJobMaster
 
+	ctx      context.Context
+	cancel   context.CancelFunc
 	workerID libModel.WorkerID
 	jobCfg   *config.JobCfg
-	wg       sync.WaitGroup
-	closeCh  chan struct{}
 
 	metadata        *metadata.MetaData
 	workerManager   *WorkerManager
 	taskManager     *TaskManager
-	messageAgent    *MessageAgent
+	messageAgent    dmpkg.MessageAgent
 	checkpointAgent checkpoint.Agent
 }
 
@@ -75,7 +74,6 @@ func (j dmJobMasterFactory) NewWorkerImpl(ctx *dcontext.Context, workerID libMod
 	return &JobMaster{
 		workerID:        workerID,
 		jobCfg:          conf.(*config.JobCfg),
-		closeCh:         make(chan struct{}),
 		checkpointAgent: checkpoint.NewAgentImpl(conf.(*config.JobCfg)),
 	}, nil
 }
@@ -87,15 +85,16 @@ func (jm *JobMaster) createComponents() error {
 		return err
 	}
 	jm.metadata = metadata.NewMetaData(jm.ID(), jm.MetaKVClient())
-	jm.messageAgent = NewMessageAgent(workerHandles, jm.ID(), jm.BaseJobMaster)
+	jm.messageAgent = dmpkg.NewMessageAgent(jm.ctx, workerHandles, jm)
 	jm.taskManager = NewTaskManager(taskStatus, jm.metadata.JobStore(), jm.messageAgent)
-	jm.workerManager = NewWorkerManager(workerStatus, jm.metadata.JobStore(), jm.messageAgent, jm.checkpointAgent)
+	jm.workerManager = NewWorkerManager(workerStatus, jm.metadata.JobStore(), jm, jm.messageAgent, jm.checkpointAgent)
 	return nil
 }
 
 // InitImpl implements JobMasterImpl.InitImpl
 func (jm *JobMaster) InitImpl(ctx context.Context) error {
 	log.L().Info("initializing the dm jobmaster", zap.String("id", jm.workerID), zap.String("jobmaster_id", jm.JobMasterID()))
+	jm.ctx, jm.cancel = context.WithCancel(context.Background())
 	if err := jm.createComponents(); err != nil {
 		return err
 	}
@@ -142,7 +141,7 @@ func (jm *JobMaster) OnWorkerOnline(worker lib.WorkerHandle) error {
 
 	jm.taskManager.UpdateTaskStatus(taskStatus)
 	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus(taskStatus.GetTask(), taskStatus.GetUnit(), worker.ID(), runtime.WorkerOnline))
-	jm.messageAgent.UpdateWorkerHandle(taskStatus.GetTask(), worker.Unwrap())
+	jm.messageAgent.UpdateSender(taskStatus.GetTask(), worker.Unwrap())
 	return nil
 }
 
@@ -159,7 +158,7 @@ func (jm *JobMaster) OnWorkerOffline(worker lib.WorkerHandle, reason error) erro
 	}
 	jm.taskManager.UpdateTaskStatus(runtime.NewOfflineStatus(taskStatus.GetTask()))
 	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus(taskStatus.GetTask(), taskStatus.GetUnit(), worker.ID(), runtime.WorkerOffline))
-	jm.messageAgent.UpdateWorkerHandle(taskStatus.GetTask(), nil)
+	jm.messageAgent.UpdateSender(taskStatus.GetTask(), nil)
 	jm.workerManager.SetNextCheckTime(time.Now())
 	return nil
 }
@@ -168,7 +167,7 @@ func (jm *JobMaster) onWorkerFinished(taskStatus runtime.TaskStatus, worker lib.
 	log.L().Info("on worker finished", zap.String("id", jm.workerID), zap.String("worker_id", worker.ID()))
 	jm.taskManager.UpdateTaskStatus(taskStatus)
 	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus(taskStatus.GetTask(), taskStatus.GetUnit(), worker.ID(), runtime.WorkerFinished))
-	jm.messageAgent.UpdateWorkerHandle(taskStatus.GetTask(), nil)
+	jm.messageAgent.UpdateSender(taskStatus.GetTask(), nil)
 	jm.workerManager.SetNextCheckTime(time.Now())
 	return nil
 }
@@ -188,15 +187,11 @@ func (jm *JobMaster) OnJobManagerMessage(topic p2p.Topic, message interface{}) e
 // OnWorkerMessage implements JobMasterImpl.OnWorkerMessage
 func (jm *JobMaster) OnWorkerMessage(worker lib.WorkerHandle, topic p2p.Topic, message interface{}) error {
 	log.L().Debug("on worker message", zap.String("id", jm.workerID), zap.String("worker_id", worker.ID()))
-	// TODO: handle DDL request
-	switch msg := message.(type) {
-	case dmpkg.MessageWithID:
-		switch msg.Message.(type) {
-		case dmpkg.QueryStatusResponse:
-			return jm.messageAgent.OnWorkerMessage(msg)
-		}
+	taskID, err := runtime.GetTaskIDFromStatusBytes(worker.Status().ExtBytes)
+	if err != nil {
+		return err
 	}
-	return nil
+	return jm.messageAgent.OnMessage(taskID, topic, message)
 }
 
 // OnMasterMessage implements JobMasterImpl.OnMasterMessage
@@ -231,8 +226,7 @@ outer:
 	}
 
 	// place holder
-	close(jm.closeCh)
-	jm.wg.Wait()
+	jm.cancel()
 	return nil
 }
 
@@ -264,14 +258,14 @@ func (jm *JobMaster) IsJobMasterImpl() {
 	panic("unreachable")
 }
 
-func (jm *JobMaster) getInitStatus() ([]runtime.TaskStatus, []runtime.WorkerStatus, map[string]SendHandle, error) {
+func (jm *JobMaster) getInitStatus() ([]runtime.TaskStatus, []runtime.WorkerStatus, map[string]dmpkg.Sender, error) {
 	log.L().Debug("get init status", zap.String("id", jm.workerID))
 	// NOTE: GetWorkers should return all online workers,
 	// and no further OnWorkerOnline will be received if JobMaster doesn't CreateWorker.
 	workerHandles := jm.GetWorkers()
 	taskStatusList := make([]runtime.TaskStatus, 0, len(workerHandles))
 	workerStatusList := make([]runtime.WorkerStatus, 0, len(workerHandles))
-	sendHandleMap := make(map[string]SendHandle, len(workerHandles))
+	sendHandleMap := make(map[string]dmpkg.Sender, len(workerHandles))
 	for _, workerHandle := range workerHandles {
 		if workerHandle.GetTombstone() != nil {
 			continue

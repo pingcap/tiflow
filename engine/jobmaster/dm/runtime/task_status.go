@@ -18,6 +18,7 @@ import (
 
 	"github.com/pingcap/errors"
 
+	"github.com/pingcap/tiflow/dm/dm/pb"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
 	"github.com/pingcap/tiflow/engine/lib"
 	libModel "github.com/pingcap/tiflow/engine/lib/model"
@@ -82,44 +83,19 @@ func (s *DefaultTaskStatus) GetStage() metadata.TaskStage {
 // DumpStatus records necessary information of a dump unit
 type DumpStatus struct {
 	DefaultTaskStatus
-	// copy from tiflow/dm/dm/proto/dmworker.proto:DumpStatus
-	TotalTables       int64
-	CompletedTables   float64
-	FinishedBytes     float64
-	FinishedRows      float64
-	EstimateTotalRows float64
+	pb.DumpStatus
 }
 
 // LoadStatus records necessary information of a load unit
 type LoadStatus struct {
 	DefaultTaskStatus
-	// copy from tiflow/dm/dm/proto/dmworker.proto:LoadStatus
-	FinishedBytes  int64
-	TotalBytes     int64
-	Progress       string
-	MetaBinlog     string
-	MetaBinlogGTID string
+	pb.LoadStatus
 }
 
 // SyncStatus records necessary information of a sync unit
 type SyncStatus struct {
 	DefaultTaskStatus
-	// copy from tiflow/dm/dm/proto/dmworker.proto:SyncStatus
-	TotalEvents      int64
-	TotalTps         int64
-	RecentTps        int64
-	MasterBinlog     string
-	MasterBinlogGtid string
-	SyncerBinlog     string
-	SyncerBinlogGtid string
-	BlockingDDLs     []string
-	// TODO: add sharding group
-	// ShardingGroup unresolvedGroups = 9; // sharding groups which current are un-resolved
-	Synced              bool
-	BinlogType          string
-	SecondsBehindMaster int64
-	BlockDDLOwner       string
-	ConflictMsg         string
+	pb.SyncStatus
 }
 
 // UnmarshalTaskStatus unmarshal a task status.
@@ -144,4 +120,13 @@ func UnmarshalTaskStatus(data []byte) (TaskStatus, error) {
 // MarshalTaskStatus returns the JSON encoding of task status.
 func MarshalTaskStatus(taskStatus TaskStatus) ([]byte, error) {
 	return json.Marshal(taskStatus)
+}
+
+// GetTaskIDFromStatusBytes gets task-id from status bytes.
+func GetTaskIDFromStatusBytes(data []byte) (string, error) {
+	var task struct {
+		Task string
+	}
+	err := json.Unmarshal(data, &task)
+	return task.Task, err
 }

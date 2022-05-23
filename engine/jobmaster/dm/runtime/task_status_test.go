@@ -18,6 +18,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/pingcap/tiflow/dm/dm/pb"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
 	"github.com/pingcap/tiflow/engine/lib"
 	libModel "github.com/pingcap/tiflow/engine/lib/model"
@@ -42,11 +43,13 @@ func TestTaskStatus(t *testing.T) {
 			Task:  "dump-task",
 			Stage: metadata.StageRunning,
 		},
-		TotalTables:       10,
-		CompletedTables:   1,
-		FinishedBytes:     2.0,
-		FinishedRows:      3.0,
-		EstimateTotalRows: 100.0,
+		DumpStatus: pb.DumpStatus{
+			TotalTables:       10,
+			CompletedTables:   1,
+			FinishedBytes:     2.0,
+			FinishedRows:      3.0,
+			EstimateTotalRows: 100.0,
+		},
 	}
 	bytes, err = MarshalTaskStatus(dumpStatus)
 	require.Nil(t, err)
@@ -60,11 +63,13 @@ func TestTaskStatus(t *testing.T) {
 			Task:  "load-task",
 			Stage: metadata.StageFinished,
 		},
-		FinishedBytes:  4,
-		TotalBytes:     100,
-		Progress:       "4%",
-		MetaBinlog:     "mysql-bin.000002, 8",
-		MetaBinlogGTID: "1-2-3",
+		LoadStatus: pb.LoadStatus{
+			FinishedBytes:  4,
+			TotalBytes:     100,
+			Progress:       "4%",
+			MetaBinlog:     "mysql-bin.000002, 8",
+			MetaBinlogGTID: "1-2-3",
+		},
 	}
 	bytes, err = MarshalTaskStatus(loadStatus)
 	require.Nil(t, err)
@@ -78,23 +83,29 @@ func TestTaskStatus(t *testing.T) {
 			Task:  "sync-task",
 			Stage: metadata.StagePaused,
 		},
-		TotalEvents:         10,
-		TotalTps:            10,
-		RecentTps:           10,
-		MasterBinlog:        "mysql-bin.000002, 4",
-		MasterBinlogGtid:    "1-2-20",
-		SyncerBinlog:        "mysql-bin.000001, 432",
-		SyncerBinlogGtid:    "1-2-10",
-		BlockingDDLs:        []string{"ALTER TABLE `db`.`tb` ADD COLUMN a INT"},
-		Synced:              false,
-		BinlogType:          "remote",
-		SecondsBehindMaster: 10,
-		BlockDDLOwner:       "",
-		ConflictMsg:         "",
+		SyncStatus: pb.SyncStatus{
+			TotalEvents:         10,
+			TotalTps:            10,
+			RecentTps:           10,
+			MasterBinlog:        "mysql-bin.000002, 4",
+			MasterBinlogGtid:    "1-2-20",
+			SyncerBinlog:        "mysql-bin.000001, 432",
+			SyncerBinlogGtid:    "1-2-10",
+			BlockingDDLs:        []string{"ALTER TABLE `db`.`tb` ADD COLUMN a INT"},
+			Synced:              false,
+			BinlogType:          "remote",
+			SecondsBehindMaster: 10,
+			BlockDDLOwner:       "",
+			ConflictMsg:         "",
+		},
 	}
 	bytes, err = MarshalTaskStatus(syncStatus)
 	require.Nil(t, err)
 	newSyncStatus, err := UnmarshalTaskStatus(bytes)
 	require.Nil(t, err)
 	require.Equal(t, newSyncStatus, syncStatus)
+
+	taskID, err := GetTaskIDFromStatusBytes(bytes)
+	require.NoError(t, err)
+	require.Equal(t, "sync-task", taskID)
 }

@@ -20,6 +20,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
@@ -48,28 +49,23 @@ var (
 	taskErrorInterval  = time.Second * 10
 )
 
-// TaskAgent defines an interface to operate task
-type TaskAgent interface {
-	OperateTask(ctx context.Context, taskID string, stage metadata.TaskStage) error
-}
-
 // TaskManager checks and operates task.
 type TaskManager struct {
 	*ticker.DefaultTicker
 
-	jobStore  *metadata.JobStore
-	taskAgent TaskAgent
+	jobStore     *metadata.JobStore
+	messageAgent dmpkg.MessageAgent
 	// tasks record the runtime task status
 	// taskID -> TaskStatus
 	tasks sync.Map
 }
 
 // NewTaskManager creates a new TaskManager instance
-func NewTaskManager(initTaskStatus []runtime.TaskStatus, jobStore *metadata.JobStore, agent TaskAgent) *TaskManager {
+func NewTaskManager(initTaskStatus []runtime.TaskStatus, jobStore *metadata.JobStore, messageAgent dmpkg.MessageAgent) *TaskManager {
 	taskManager := &TaskManager{
 		DefaultTicker: ticker.NewDefaultTicker(taskNormalInterval, taskErrorInterval),
 		jobStore:      jobStore,
-		taskAgent:     agent,
+		messageAgent:  messageAgent,
 	}
 	taskManager.DefaultTicker.Ticker = taskManager
 
@@ -164,8 +160,8 @@ func (tm *TaskManager) checkAndOperateTasks(ctx context.Context, job *metadata.J
 		}
 
 		log.L().Info("unexpected task status", zap.String("task_id", taskID), zap.Int("expected_stage", int(persistentTask.Stage)), zap.Int("stage", int(runningTask.GetStage())))
-		// OperateTask should be a asynchronous request
-		if err := tm.taskAgent.OperateTask(ctx, taskID, persistentTask.Stage); err != nil {
+		// operateTaskMessage should be a asynchronous request
+		if err := tm.operateTaskMessage(ctx, taskID, persistentTask.Stage); err != nil {
 			recordError = err
 			log.L().Error("operate task failed", zap.Error(recordError))
 			continue
@@ -209,4 +205,16 @@ func taskAsExpected(persistentTask *metadata.Task, taskStatus runtime.TaskStatus
 	// TODO: when running is expected but task is paused, we may still need return true,
 	// because worker will resume it automatically.
 	return persistentTask.Stage == taskStatus.GetStage()
+}
+
+func (tm *TaskManager) operateTaskMessage(ctx context.Context, taskID string, stage metadata.TaskStage) error {
+	if stage != metadata.StageRunning && stage != metadata.StagePaused {
+		return errors.Errorf("invalid expected stage %d for task %s", stage, taskID)
+	}
+
+	msg := &dmpkg.OperateTaskMessage{
+		TaskID: taskID,
+		Stage:  stage,
+	}
+	return tm.messageAgent.SendMessage(ctx, taskID, dmpkg.OperateTask, msg)
 }

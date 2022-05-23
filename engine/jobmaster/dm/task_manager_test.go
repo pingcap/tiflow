@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/runtime"
 	"github.com/pingcap/tiflow/engine/lib"
+	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
 	"github.com/pingcap/tiflow/engine/pkg/meta/kvclient/mock"
 )
 
@@ -228,7 +229,7 @@ func (t *testDMJobmasterSuite) TestCheckAndOperateTasks() {
 	jobCfg := &config.JobCfg{}
 	require.NoError(t.T(), jobCfg.DecodeFile(jobTemplatePath))
 	job := metadata.NewJob(jobCfg)
-	mockAgent := &MockTaskAgent{}
+	mockAgent := &dmpkg.MockMessageAgent{}
 	taskManager := NewTaskManager(nil, nil, mockAgent)
 
 	require.EqualError(t.T(), taskManager.checkAndOperateTasks(context.Background(), job), "get task running status failed")
@@ -251,11 +252,10 @@ func (t *testDMJobmasterSuite) TestCheckAndOperateTasks() {
 	taskManager.UpdateTaskStatus(dumpStatus2)
 	require.NoError(t.T(), taskManager.checkAndOperateTasks(context.Background(), job))
 
-	mockAgent.SetStages(map[string]metadata.TaskStage{jobCfg.Upstreams[0].SourceID: metadata.StageRunning, jobCfg.Upstreams[1].SourceID: metadata.StagePaused})
 	dumpStatus2.Stage = metadata.StagePaused
 	taskManager.UpdateTaskStatus(dumpStatus2)
 	e := errors.New("operate task failed")
-	mockAgent.SetResult([]error{e})
+	mockAgent.On("SendMessage").Return(e).Once()
 	require.EqualError(t.T(), taskManager.checkAndOperateTasks(context.Background(), job), e.Error())
 }
 
@@ -266,7 +266,7 @@ func (t *testDMJobmasterSuite) TestTaskManager() {
 	jobStore := metadata.NewJobStore("task_manager_test", mock.NewMetaMock())
 	require.NoError(t.T(), jobStore.Put(context.Background(), job))
 
-	mockAgent := &MockTaskAgent{}
+	mockAgent := &dmpkg.MockMessageAgent{}
 	taskManager := NewTaskManager(nil, jobStore, mockAgent)
 	source1 := jobCfg.Upstreams[0].SourceID
 	source2 := jobCfg.Upstreams[1].SourceID
@@ -305,37 +305,30 @@ func (t *testDMJobmasterSuite) TestTaskManager() {
 		},
 	}
 
-	mockAgent.SetStages(map[string]metadata.TaskStage{source1: metadata.StageRunning, source2: metadata.StageRunning})
 	// receive worker online
 	taskManager.UpdateTaskStatus(syncStatus1)
 	taskManager.UpdateTaskStatus(syncStatus2)
 
 	// task1 paused unexpectedly
 	agentError := errors.New("agent error")
-	mockAgent.SetResult([]error{agentError, agentError, agentError, nil})
+	mockAgent.On("SendMessage").Return(agentError).Times(3)
+	mockAgent.On("SendMessage").Return(nil).Once()
 	syncStatus1.Stage = metadata.StagePaused
 	taskManager.UpdateTaskStatus(syncStatus1)
 
 	// mock check by interval
-	taskManager.SetNextCheckTime(time.Now().Add(time.Second))
+	taskManager.SetNextCheckTime(time.Now().Add(10 * time.Millisecond))
+	time.Sleep(time.Second)
 	// resumed eventually
-	require.Eventually(t.T(), func() bool {
-		mockAgent.Lock()
-		defer mockAgent.Unlock()
-		return len(mockAgent.results) == 0 && mockAgent.stages[source1] == metadata.StageRunning
-	}, 5*time.Second, 100*time.Millisecond)
 	syncStatus1.Stage = metadata.StageRunning
 	taskManager.UpdateTaskStatus(syncStatus1)
 
 	// manually pause task2
 	taskManager.OperateTask(ctx, Pause, nil, []string{source2})
-	mockAgent.SetResult([]error{agentError, agentError, agentError, nil})
+	mockAgent.On("SendMessage").Return(agentError).Times(3)
+	mockAgent.On("SendMessage").Return(nil).Once()
+	time.Sleep(time.Second)
 	// paused eventually
-	require.Eventually(t.T(), func() bool {
-		mockAgent.Lock()
-		defer mockAgent.Unlock()
-		return len(mockAgent.results) == 0 && mockAgent.stages[source2] == metadata.StagePaused
-	}, 5*time.Second, 100*time.Millisecond)
 	syncStatus2.Stage = metadata.StagePaused
 	taskManager.UpdateTaskStatus(syncStatus2)
 
@@ -353,49 +346,16 @@ func (t *testDMJobmasterSuite) TestTaskManager() {
 	jobCfg.Upstreams = jobCfg.Upstreams[:1]
 	taskManager.OperateTask(ctx, Update, jobCfg, nil)
 	require.Eventually(t.T(), func() bool {
-		mockAgent.Lock()
-		defer mockAgent.Unlock()
-		return len(mockAgent.results) == 0 && len(taskManager.TaskStatus()) == 1
+		return len(taskManager.TaskStatus()) == 1
 	}, 5*time.Second, 100*time.Millisecond)
 
 	// mock delete job
 	taskManager.OperateTask(ctx, Delete, nil, nil)
 	require.Eventually(t.T(), func() bool {
-		mockAgent.Lock()
-		defer mockAgent.Unlock()
-		return len(mockAgent.results) == 0 && len(taskManager.TaskStatus()) == 0
+		return len(taskManager.TaskStatus()) == 0
 	}, 5*time.Second, 100*time.Millisecond)
 
 	cancel()
 	wg.Wait()
-}
-
-type MockTaskAgent struct {
-	sync.Mutex
-	results []error
-	stages  map[string]metadata.TaskStage
-}
-
-func (mockAgent *MockTaskAgent) SetResult(results []error) {
-	mockAgent.Lock()
-	defer mockAgent.Unlock()
-	mockAgent.results = append(mockAgent.results, results...)
-}
-
-func (mockAgent *MockTaskAgent) SetStages(stages map[string]metadata.TaskStage) {
-	mockAgent.Lock()
-	defer mockAgent.Unlock()
-	mockAgent.stages = stages
-}
-
-func (mockAgent *MockTaskAgent) OperateTask(ctx context.Context, taskID string, stage metadata.TaskStage) error {
-	mockAgent.Lock()
-	defer mockAgent.Unlock()
-	if len(mockAgent.results) == 0 {
-		panic("no result in mock agent")
-	}
-	mockAgent.stages[taskID] = stage
-	result := mockAgent.results[0]
-	mockAgent.results = mockAgent.results[1:]
-	return result
+	mockAgent.AssertExpectations(t.T())
 }

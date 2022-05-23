@@ -87,7 +87,7 @@ type BaseTask struct {
 	Task
 	lib.BaseWorker
 	unitHolder   *unitHolder
-	messageAgent *MessageAgent
+	messageAgent *dmpkg.MessageAgentImpl
 
 	ctx                context.Context
 	cancel             context.CancelFunc
@@ -115,7 +115,7 @@ func NewBaseDMTask(dCtx *dcontext.Context, masterID libModel.MasterID, workerTyp
 
 func (t *BaseTask) createComponents(ctx context.Context) error {
 	log.L().Debug("create components")
-	t.messageAgent = NewMessageAgent(t)
+	t.messageAgent = dmpkg.NewMessageAgent(t.ctx, map[string]dmpkg.Sender{t.masterID: t}, t)
 	return nil
 }
 
@@ -156,15 +156,7 @@ func (t *BaseTask) OnMasterFailover(reason lib.MasterFailoverReason) error {
 // OnMasterMessage implements lib.WorkerImpl.OnMasterMessage
 func (t *BaseTask) OnMasterMessage(topic p2p.Topic, message p2p.MessageValue) error {
 	log.L().Info("dmtask.OnMasterMessage", zap.String("topic", topic), zap.Any("message", message))
-	switch msg := message.(type) {
-	case dmpkg.MessageWithID:
-		switch payload := msg.Message.(type) {
-		case dmpkg.QueryStatusRequest:
-			t.QueryStatus(t.ctx, &payload)
-		}
-	case dmpkg.OperateTaskMessage:
-	}
-	return nil
+	return t.messageAgent.OnMessage(t.masterID, topic, message)
 }
 
 // CloseImpl implements lib.WorkerImpl.CloseImpl
