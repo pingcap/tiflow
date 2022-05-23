@@ -102,7 +102,7 @@ var (
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
 			Subsystem: "processor",
-			Name:      "processor_memory_consumption",
+			Name:      "memory_consumption",
 			Help:      "estimated memory consumption for all tables after the sorter",
 		}, []string{"namespace", "changefeed"})
 )
