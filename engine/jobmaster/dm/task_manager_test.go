@@ -19,14 +19,16 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/atomic"
 
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/runtime"
 	"github.com/pingcap/tiflow/engine/lib"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
-	"github.com/pingcap/tiflow/engine/pkg/meta/kvclient/mock"
+	kvmock "github.com/pingcap/tiflow/engine/pkg/meta/kvclient/mock"
 )
 
 const (
@@ -37,7 +39,7 @@ func (t *testDMJobmasterSuite) TestUpdateTaskStatus() {
 	jobCfg := &config.JobCfg{}
 	require.NoError(t.T(), jobCfg.DecodeFile(jobTemplatePath))
 	job := metadata.NewJob(jobCfg)
-	jobStore := metadata.NewJobStore("task_manager_test", mock.NewMetaMock())
+	jobStore := metadata.NewJobStore("task_manager_test", kvmock.NewMetaMock())
 	require.NoError(t.T(), jobStore.Put(context.Background(), job))
 	taskManager := NewTaskManager(nil, jobStore, nil)
 
@@ -118,7 +120,7 @@ func (t *testDMJobmasterSuite) TestUpdateTaskStatus() {
 func (t *testDMJobmasterSuite) TestOperateTask() {
 	jobCfg := &config.JobCfg{}
 	require.NoError(t.T(), jobCfg.DecodeFile(jobTemplatePath))
-	jobStore := metadata.NewJobStore("task_manager_test", mock.NewMetaMock())
+	jobStore := metadata.NewJobStore("task_manager_test", kvmock.NewMetaMock())
 	taskManager := NewTaskManager(nil, jobStore, nil)
 
 	source1 := jobCfg.Upstreams[0].SourceID
@@ -260,10 +262,13 @@ func (t *testDMJobmasterSuite) TestCheckAndOperateTasks() {
 }
 
 func (t *testDMJobmasterSuite) TestTaskManager() {
+	var (
+		meetExpected atomic.Bool
+	)
 	jobCfg := &config.JobCfg{}
 	require.NoError(t.T(), jobCfg.DecodeFile(jobTemplatePath))
 	job := metadata.NewJob(jobCfg)
-	jobStore := metadata.NewJobStore("task_manager_test", mock.NewMetaMock())
+	jobStore := metadata.NewJobStore("task_manager_test", kvmock.NewMetaMock())
 	require.NoError(t.T(), jobStore.Put(context.Background(), job))
 
 	mockAgent := &dmpkg.MockMessageAgent{}
@@ -312,13 +317,15 @@ func (t *testDMJobmasterSuite) TestTaskManager() {
 	// task1 paused unexpectedly
 	agentError := errors.New("agent error")
 	mockAgent.On("SendMessage").Return(agentError).Times(3)
-	mockAgent.On("SendMessage").Return(nil).Once()
+	mockAgent.On("SendMessage").Return(nil).Once().Run(func(args mock.Arguments) { meetExpected.Store(true) })
 	syncStatus1.Stage = metadata.StagePaused
 	taskManager.UpdateTaskStatus(syncStatus1)
 
 	// mock check by interval
 	taskManager.SetNextCheckTime(time.Now().Add(10 * time.Millisecond))
-	time.Sleep(time.Second)
+	require.Eventually(t.T(), func() bool {
+		return meetExpected.CAS(true, false)
+	}, 5*time.Second, 100*time.Millisecond)
 	// resumed eventually
 	syncStatus1.Stage = metadata.StageRunning
 	taskManager.UpdateTaskStatus(syncStatus1)
@@ -326,8 +333,10 @@ func (t *testDMJobmasterSuite) TestTaskManager() {
 	// manually pause task2
 	taskManager.OperateTask(ctx, Pause, nil, []string{source2})
 	mockAgent.On("SendMessage").Return(agentError).Times(3)
-	mockAgent.On("SendMessage").Return(nil).Once()
-	time.Sleep(time.Second)
+	mockAgent.On("SendMessage").Return(nil).Once().Run(func(args mock.Arguments) { meetExpected.Store(true) })
+	require.Eventually(t.T(), func() bool {
+		return meetExpected.CAS(true, false)
+	}, 5*time.Second, 100*time.Millisecond)
 	// paused eventually
 	syncStatus2.Stage = metadata.StagePaused
 	taskManager.UpdateTaskStatus(syncStatus2)
