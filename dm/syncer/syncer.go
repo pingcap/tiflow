@@ -1899,15 +1899,15 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		}
 
 		// clone currentLocation's gtid set to avoid its gtid is transport to table checkpoint
-		// currently table checkpoint will save  location's gtid set with shallow copy
+		// currently table checkpoint will save location's gtid set with shallow copy
 		newGTID := currentLocation.GetGTID().Clone()
 		err2 := newGTID.Update(currentGTID)
 		if err2 != nil {
 			return terror.Annotatef(err2, "fail to update GTID %s", currentGTID)
 		}
-		err2 = currentLocation.SetGTID(newGTID.Origin())
+		err2 = currentLocation.SetGTID(newGTID)
 		if err2 != nil {
-			return terror.Annotatef(err2, "fail to set GTID %s", newGTID.Origin())
+			return terror.Annotatef(err2, "fail to set GTID %s", newGTID)
 		}
 		return nil
 	}
