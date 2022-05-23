@@ -19,6 +19,8 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"io"
+	"strings"
 	"sync"
 	"time"
 
@@ -70,8 +72,23 @@ type tablePoint struct {
 	ti       *model.TableInfo
 }
 
-func (b *tablePoint) String() string {
-	return fmt.Sprintf("location(%v), tableInfo(ID: %d, Name:%s, ColNum: %d, IdxNum: %d, PKIsHandle: %t)", b.location, b.ti.ID, b.ti.Name, len(b.ti.Columns), len(b.ti.Indices), b.ti.PKIsHandle)
+func (t *tablePoint) writeString(buf io.Writer) {
+	if t == nil {
+		return
+	}
+	fmt.Fprintf(buf, "location(%s)", t.location)
+	if t.ti != nil {
+		fmt.Fprintf(buf, ", tableInfo(ID: %d, Name:%s, ColNum: %d, IdxNum: %d, PKIsHandle: %t)", t.ti.ID, t.ti.Name, len(t.ti.Columns), len(t.ti.Indices), t.ti.PKIsHandle)
+	}
+}
+
+func (t *tablePoint) String() string {
+	if t == nil {
+		return ""
+	}
+	var buf strings.Builder
+	t.writeString(&buf)
+	return buf.String()
 }
 
 type binlogPoint struct {
@@ -184,7 +201,13 @@ func (b *binlogPoint) String() string {
 	b.RLock()
 	defer b.RUnlock()
 
-	return fmt.Sprintf("%v(flushed %v)", b.savedPoint, b.flushedPoint)
+	var buf strings.Builder
+	b.savedPoint.writeString(&buf)
+	buf.WriteString("(flushed ")
+	b.flushedPoint.writeString(&buf)
+	buf.WriteString(")")
+
+	return buf.String()
 }
 
 // SnapshotInfo contains:
@@ -359,7 +382,7 @@ func NewRemoteCheckPoint(tctx *tcontext.Context, cfg *config.SubTaskConfig, id s
 		tableName:   dbutil.TableName(cfg.MetaSchema, cputil.SyncerCheckpoint(cfg.Name)),
 		id:          id,
 		points:      make(map[string]map[string]*binlogPoint),
-		globalPoint: newBinlogPoint(binlog.NewLocation(cfg.Flavor), binlog.NewLocation(cfg.Flavor), nil, nil, cfg.EnableGTID),
+		globalPoint: newBinlogPoint(binlog.MustZeroLocation(cfg.Flavor), binlog.MustZeroLocation(cfg.Flavor), nil, nil, cfg.EnableGTID),
 		logCtx:      tcontext.Background().WithLogger(tctx.L().WithFields(zap.String("component", "remote checkpoint"))),
 		snapshots:   make([]*remoteCheckpointSnapshot, 0),
 		snapshotSeq: 0,
@@ -474,7 +497,7 @@ func (cp *RemoteCheckPoint) Clear(tctx *tcontext.Context) error {
 		return err
 	}
 
-	cp.globalPoint = newBinlogPoint(binlog.NewLocation(cp.cfg.Flavor), binlog.NewLocation(cp.cfg.Flavor), nil, nil, cp.cfg.EnableGTID)
+	cp.globalPoint = newBinlogPoint(binlog.MustZeroLocation(cp.cfg.Flavor), binlog.MustZeroLocation(cp.cfg.Flavor), nil, nil, cp.cfg.EnableGTID)
 	cp.globalPointSaveTime = time.Time{}
 	cp.lastSnapshotCreationTime = time.Time{}
 	cp.points = make(map[string]map[string]*binlogPoint)
@@ -506,7 +529,7 @@ func (cp *RemoteCheckPoint) saveTablePoint(sourceTable *filter.Table, location b
 	}
 	point, ok := mSchema[sourceTable.Name]
 	if !ok {
-		mSchema[sourceTable.Name] = newBinlogPoint(location, binlog.NewLocation(cp.cfg.Flavor), ti, nil, cp.cfg.EnableGTID)
+		mSchema[sourceTable.Name] = newBinlogPoint(location, binlog.MustZeroLocation(cp.cfg.Flavor), ti, nil, cp.cfg.EnableGTID)
 	} else if err := point.save(location, ti); err != nil {
 		cp.logCtx.L().Error("fail to save table point", zap.Stringer("table", sourceTable), log.ShortError(err))
 	}
@@ -645,7 +668,7 @@ func (cp *RemoteCheckPoint) SaveGlobalPointForcibly(location binlog.Location) {
 	defer cp.Unlock()
 
 	cp.logCtx.L().Info("reset global checkpoint", zap.Stringer("location", location))
-	cp.globalPoint = newBinlogPoint(location, binlog.NewLocation(cp.cfg.Flavor), nil, nil, cp.cfg.EnableGTID)
+	cp.globalPoint = newBinlogPoint(location, binlog.MustZeroLocation(cp.cfg.Flavor), nil, nil, cp.cfg.EnableGTID)
 }
 
 // FlushPointsExcept implements CheckPoint.FlushPointsExcept.
@@ -1017,7 +1040,7 @@ func (cp *RemoteCheckPoint) Load(tctx *tcontext.Context) error {
 			return err
 		}
 
-		location := binlog.InitLocation(
+		location := binlog.NewLocation(
 			mysql.Position{
 				Name: binlogName,
 				Pos:  binlogPos,
@@ -1038,7 +1061,7 @@ func (cp *RemoteCheckPoint) Load(tctx *tcontext.Context) error {
 					if err2 != nil {
 						return err2
 					}
-					exitSafeModeLoc := binlog.InitLocation(
+					exitSafeModeLoc := binlog.NewLocation(
 						mysql.Position{
 							Name: exitSafeBinlogName,
 							Pos:  exitSafeBinlogPos,
@@ -1046,7 +1069,7 @@ func (cp *RemoteCheckPoint) Load(tctx *tcontext.Context) error {
 						gset2,
 					)
 					cp.SaveSafeModeExitPoint(&exitSafeModeLoc)
-				}
+				} // TODO: we forget to handle else...
 			} else {
 				if exitSafeBinlogName != "" {
 					exitSafeModeLoc := binlog.Location{
@@ -1164,7 +1187,7 @@ func (cp *RemoteCheckPoint) LoadMeta(ctx context.Context) error {
 		// load meta from task config
 		if cp.cfg.Meta == nil {
 			cp.logCtx.L().Warn("didn't set meta in increment task-mode")
-			cp.globalPoint = newBinlogPoint(binlog.NewLocation(cp.cfg.Flavor), binlog.NewLocation(cp.cfg.Flavor), nil, nil, cp.cfg.EnableGTID)
+			cp.globalPoint = newBinlogPoint(binlog.MustZeroLocation(cp.cfg.Flavor), binlog.MustZeroLocation(cp.cfg.Flavor), nil, nil, cp.cfg.EnableGTID)
 			return nil
 		}
 		gset, err := gtid.ParserGTID(cp.cfg.Flavor, cp.cfg.Meta.BinLogGTID)
@@ -1172,7 +1195,7 @@ func (cp *RemoteCheckPoint) LoadMeta(ctx context.Context) error {
 			return err
 		}
 
-		loc := binlog.InitLocation(
+		loc := binlog.NewLocation(
 			mysql.Position{
 				Name: cp.cfg.Meta.BinLogName,
 				Pos:  cp.cfg.Meta.BinLogPos,
