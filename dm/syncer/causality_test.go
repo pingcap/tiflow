@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-mysql-org/go-mysql/mysql"
 	. "github.com/pingcap/check"
 	"github.com/stretchr/testify/require"
 
@@ -105,7 +106,7 @@ func TestCausality(t *testing.T) {
 	}
 	results := []opType{dml, dml, dml, dml, conflict, dml}
 	table := &cdcmodel.TableName{Schema: "test", Table: "t1"}
-	location := binlog.NewLocation("")
+	location := binlog.MustZeroLocation(mysql.MySQLFlavor)
 	ec := &eventContext{startLocation: &location, currentLocation: &location, lastLocation: &location}
 
 	for _, tc := range testCases {
