@@ -215,10 +215,10 @@ func (m *Dumpling) Status(_ *binlog.SourceStatus) interface{} {
 	if m.core == nil {
 		return &pb.DumpStatus{}
 	}
-	return m.printStatus()
+	return m.status()
 }
 
-func (m *Dumpling) printStatus() *pb.DumpStatus {
+func (m *Dumpling) status() *pb.DumpStatus {
 	mid := m.core.GetParameters()
 	s := &pb.DumpStatus{
 		TotalTables:       mid.TotalTables,
