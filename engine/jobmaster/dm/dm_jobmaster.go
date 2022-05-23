@@ -18,6 +18,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/zap"
@@ -55,6 +56,8 @@ type JobMaster struct {
 	messageHandlerManager p2p.MessageHandlerManager
 	checkpointAgent       checkpoint.Agent
 }
+
+var _ lib.JobMasterImpl = (*JobMaster)(nil)
 
 type dmJobMasterFactory struct{}
 
@@ -196,6 +199,9 @@ func (jm *JobMaster) OnJobManagerMessage(topic p2p.Topic, message interface{}) e
 	// TODO: receive user request
 	return nil
 }
+
+// OnOpenAPIInitialized implements JobMasterImpl.OnOpenAPIInitialized
+func (jm *JobMaster) OnOpenAPIInitialized(apiGroup *gin.RouterGroup) {}
 
 // OnWorkerMessage implements JobMasterImpl.OnWorkerMessage
 func (jm *JobMaster) OnWorkerMessage(worker lib.WorkerHandle, topic p2p.Topic, message interface{}) error {

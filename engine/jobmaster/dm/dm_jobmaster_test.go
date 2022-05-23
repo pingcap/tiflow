@@ -22,7 +22,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gin-gonic/gin"
+
 	"github.com/DATA-DOG/go-sqlmock"
+
 	"github.com/pingcap/tiflow/dm/checker"
 	dmconfig "github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/dm/master"
@@ -379,6 +382,8 @@ func (m *MockBaseJobmaster) CreateWorker(workerType lib.WorkerType, config lib.W
 func (m *MockBaseJobmaster) CurrentEpoch() int64 {
 	return 0
 }
+
+func (m *MockBaseJobmaster) OnOpenAPIInitialized(apiGroup *gin.RouterGroup) {}
 
 type MockCheckpointAgent struct {
 	mu sync.Mutex

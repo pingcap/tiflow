@@ -255,7 +255,7 @@ data-flow-diagram: docs/data-flow.dot
 	dot -Tsvg docs/data-flow.dot > docs/data-flow.svg
 
 swagger-spec: tools/bin/swag
-	tools/bin/swag init --parseVendor -generalInfo cdc/api/v1/api.go --output docs/swagger
+	tools/bin/swag init --exclude dm,engine  --parseVendor -generalInfo cdc/api/v1/api.go --output docs/swagger
 
 generate_mock: tools/bin/mockgen
 	tools/bin/mockgen -source cdc/owner/owner.go -destination cdc/owner/mock/owner_mock.go
@@ -497,6 +497,9 @@ df-chaos-case:
 df-kvmock: tools/bin/mockgen tools/bin/protoc tools/bin/protoc-gen-gogofaster
 	tools/bin/mockgen -package mock github.com/pingcap/tiflow/engine/pkg/meta/metaclient KVClient \
 	> engine/pkg/meta/kvclient/mock/mockclient.go
+
+df-swagger-spec: tools/bin/swag
+	tools/bin/swag init --exclude dm,cdc  --parseVendor -generalInfo engine/servermaster/openapi.go --output engine/docs/swagger
 
 engine_unit_test: check_failpoint_ctl
 	$(call run_engine_unit_test,$(ENGINE_PACKAGES))

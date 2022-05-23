@@ -22,10 +22,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
-	"github.com/pingcap/tiflow/dm/pkg/log"
-	p2pProtocol "github.com/pingcap/tiflow/proto/p2p"
 	"github.com/prometheus/client_golang/prometheus"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.etcd.io/etcd/client/v3/concurrency"
@@ -38,6 +36,8 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
+	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/engine/client"
 	"github.com/pingcap/tiflow/engine/lib"
 	"github.com/pingcap/tiflow/engine/lib/metadata"
@@ -55,7 +55,6 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
-	"github.com/pingcap/tiflow/engine/pkg/promutil"
 	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
 	"github.com/pingcap/tiflow/engine/pkg/serverutils"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
@@ -64,6 +63,7 @@ import (
 	schedModel "github.com/pingcap/tiflow/engine/servermaster/scheduler/model"
 	"github.com/pingcap/tiflow/engine/test"
 	"github.com/pingcap/tiflow/engine/test/mock"
+	p2pProtocol "github.com/pingcap/tiflow/proto/p2p"
 )
 
 // Server handles PRC requests for df master.
@@ -566,9 +566,13 @@ func (s *Server) startGrpcSrv(ctx context.Context) (err error) {
 		p2pProtocol.RegisterCDCPeerToPeerServer(gs, s.msgService.GetMessageServer())
 	}
 
+	router := gin.New()
+	RegisterRoutes(router, s)
 	httpHandlers := map[string]http.Handler{
-		"/debug/":  getDebugHandler(),
-		"/metrics": promutil.HTTPHandlerForMetric(),
+		"/debug/":   router,
+		"/swagger/": router,
+		"/api/v1/":  router,
+		"/metrics":  router,
 	}
 
 	// generate grpcServer

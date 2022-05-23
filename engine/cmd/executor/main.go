@@ -16,15 +16,17 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"os"
 	"os/signal"
 	"strings"
 	"syscall"
 
 	"github.com/pingcap/errors"
+	"go.uber.org/zap"
+
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/engine/executor"
-	"go.uber.org/zap"
 )
 
 // 1. parse config
@@ -40,6 +42,7 @@ func main() {
 	case flag.ErrHelp:
 		os.Exit(0)
 	default:
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(2)
 	}
 

@@ -19,6 +19,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
@@ -41,6 +42,8 @@ type testJobMasterImpl struct {
 
 	*DefaultBaseJobMaster
 }
+
+var _ JobMasterImpl = (*testJobMasterImpl)(nil)
 
 func (m *testJobMasterImpl) InitImpl(ctx context.Context) error {
 	m.mu.Lock()
@@ -129,6 +132,8 @@ func (m *testJobMasterImpl) OnJobManagerMessage(topic p2p.Topic, message p2p.Mes
 	args := m.Called(topic, message)
 	return args.Error(0)
 }
+
+func (m *testJobMasterImpl) OnOpenAPIInitialized(apiGroup *gin.RouterGroup) {}
 
 func (m *testJobMasterImpl) IsJobMasterImpl() {
 	panic("unreachable")

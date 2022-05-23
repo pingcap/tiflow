@@ -16,15 +16,13 @@ package executor
 import (
 	"context"
 	"encoding/json"
+	"net/http"
+	"net/http/pprof"
 	"strings"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	pcErrors "github.com/pingcap/errors"
-	"github.com/pingcap/tiflow/dm/pkg/log"
-	p2pImpl "github.com/pingcap/tiflow/pkg/p2p"
-	"github.com/pingcap/tiflow/pkg/retry"
-	"github.com/pingcap/tiflow/pkg/security"
-	"github.com/pingcap/tiflow/pkg/tcpserver"
 	"go.etcd.io/etcd/client/pkg/v3/logutil"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/zap"
@@ -36,8 +34,11 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/pingcap/tiflow/dm/dm/common"
+	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/engine/client"
 	"github.com/pingcap/tiflow/engine/executor/worker"
+	"github.com/pingcap/tiflow/engine/lib"
 	libModel "github.com/pingcap/tiflow/engine/lib/model"
 	"github.com/pingcap/tiflow/engine/lib/registry"
 	"github.com/pingcap/tiflow/engine/model"
@@ -53,10 +54,15 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
+	"github.com/pingcap/tiflow/engine/pkg/promutil"
 	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
 	"github.com/pingcap/tiflow/engine/pkg/serverutils"
 	"github.com/pingcap/tiflow/engine/test"
 	"github.com/pingcap/tiflow/engine/test/mock"
+	p2pImpl "github.com/pingcap/tiflow/pkg/p2p"
+	"github.com/pingcap/tiflow/pkg/retry"
+	"github.com/pingcap/tiflow/pkg/security"
+	"github.com/pingcap/tiflow/pkg/tcpserver"
 )
 
 // Server is a executor server abstraction
@@ -88,6 +94,7 @@ type Server struct {
 	p2pMsgRouter    p2pImpl.MessageRouter
 	discoveryKeeper *serverutils.DiscoveryKeepaliver
 	resourceBroker  broker.Broker
+	jobAPISrv       *jobAPIServer
 }
 
 // NewServer creates a new executor server instance
@@ -96,6 +103,7 @@ func NewServer(cfg *Config, ctx *test.Context) *Server {
 		cfg:         cfg,
 		testCtx:     ctx,
 		cliUpdateCh: make(chan cliUpdateInfo),
+		jobAPISrv:   newJobAPIServer(),
 	}
 	return &s
 }
@@ -192,6 +200,12 @@ func (s *Server) makeTask(
 	if err != nil {
 		log.L().Error("Failed to create worker", zap.Error(err))
 		return nil, err
+	}
+	if jm, ok := newWorker.(lib.BaseJobMaster); ok {
+		engine := gin.New()
+		apiGroup := engine.Group(jobAPIBasePath(jm.JobMasterID()))
+		jm.OnOpenAPIInitialized(apiGroup)
+		s.jobAPISrv.addHandler(jm.JobMasterID(), engine)
 	}
 	return newWorker, nil
 }
@@ -336,6 +350,20 @@ func (s *Server) Run(ctx context.Context) error {
 		return s.taskRunner.Run(ctx)
 	})
 
+	wg.Go(func() error {
+		taskStopReceiver := s.taskRunner.TaskStopReceiver()
+		defer taskStopReceiver.Close()
+
+		for {
+			select {
+			case id := <-taskStopReceiver.C:
+				s.jobAPISrv.removeHandler(id)
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		}
+	})
+
 	err := s.initClients(ctx)
 	if err != nil {
 		return err
@@ -416,7 +444,24 @@ func (s *Server) startTCPService(ctx context.Context, wg *errgroup.Group) error 
 	})
 
 	wg.Go(func() error {
-		return httpHandler(s.tcpServer.HTTP1Listener())
+		mux := http.NewServeMux()
+
+		mux.HandleFunc("/debug/pprof/", pprof.Index)
+		mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
+		mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
+		mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+		mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
+		mux.Handle("/metrics", promutil.HTTPHandlerForMetric())
+		mux.Handle(jobAPIPrefix, s.jobAPISrv)
+
+		httpSrv := &http.Server{
+			Handler: mux,
+		}
+		err := httpSrv.Serve(s.tcpServer.HTTP1Listener())
+		if err != nil && !common.IsErrNetClosing(err) && err != http.ErrServerClosed {
+			log.L().Error("http server returned", log.ShortError(err))
+		}
+		return err
 	})
 	return nil
 }

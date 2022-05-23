@@ -16,10 +16,11 @@ package lib
 import (
 	"context"
 
+	"github.com/gin-gonic/gin"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/zap"
 
+	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/engine/executor/worker"
 	libModel "github.com/pingcap/tiflow/engine/lib/model"
 	"github.com/pingcap/tiflow/engine/model"
@@ -46,6 +47,7 @@ type BaseJobMaster interface {
 	JobMasterID() libModel.MasterID
 	UpdateJobStatus(ctx context.Context, status libModel.WorkerStatus) error
 	CurrentEpoch() libModel.Epoch
+	OnOpenAPIInitialized(apiGroup *gin.RouterGroup)
 
 	// Exit should be called when job master (in user logic) wants to exit
 	// - If err is nil, it means job master exits normally
@@ -79,6 +81,7 @@ type JobMasterImpl interface {
 
 	Workload() model.RescUnit
 	OnJobManagerMessage(topic p2p.Topic, message interface{}) error
+	OnOpenAPIInitialized(apiGroup *gin.RouterGroup)
 	// IsJobMasterImpl is an empty function used to prevent accidental implementation
 	// of this interface.
 	IsJobMasterImpl()
@@ -235,6 +238,11 @@ func (d *DefaultBaseJobMaster) UpdateJobStatus(ctx context.Context, status libMo
 // CurrentEpoch implements BaseJobMaster.CurrentEpoch
 func (d *DefaultBaseJobMaster) CurrentEpoch() libModel.Epoch {
 	return d.master.currentEpoch.Load()
+}
+
+// OnOpenAPIInitialized implements BaseJobMaster.BaseJobMaster
+func (d *DefaultBaseJobMaster) OnOpenAPIInitialized(apiGroup *gin.RouterGroup) {
+	d.impl.OnOpenAPIInitialized(apiGroup)
 }
 
 // IsBaseJobMaster implements BaseJobMaster.IsBaseJobMaster
