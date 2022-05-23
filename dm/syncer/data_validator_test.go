@@ -294,7 +294,7 @@ func TestValidatorDoValidate(t *testing.T) {
 		conn.DefaultDBProvider = &conn.DefaultDBProviderImpl{}
 	}()
 	dbMock.ExpectQuery("select .* from .*_validator_checkpoint.*").WillReturnRows(
-		dbMock.NewRows([]string{"", "", ""}).AddRow("mysql-bin.000001", 100, ""))
+		dbMock.NewRows([]string{"", "", "", ""}).AddRow("mysql-bin.000001", 100, "", 1))
 	dbMock.ExpectQuery("select .* from .*_validator_pending_change.*").WillReturnRows(
 		dbMock.NewRows([]string{"", "", "", "", ""}).AddRow(schemaName, tableName, "11",
 			// insert with pk=11
@@ -709,4 +709,27 @@ func TestValidatorOperateValidationError(t *testing.T) {
 	// mark error as ignored with id
 	err = validator.OperateValidatorError(pb.ValidationErrOp_IgnoreErrOp, 1, false)
 	require.NoError(t, err)
+}
+
+func TestValidatorMarkReachedSyncerRoutine(t *testing.T) {
+	cfg := genSubtaskConfig(t)
+	syncerObj := NewSyncer(cfg, nil, nil)
+	validator := NewContinuousDataValidator(cfg, syncerObj, false)
+
+	markErrorRowDelay = time.Minute
+	validator.ctx, validator.cancel = context.WithCancel(context.Background())
+	require.False(t, validator.markErrorStarted.Load())
+	validator.wg.Add(1)
+	go validator.markErrorStartedRoutine()
+	validator.cancel()
+	validator.wg.Wait()
+	require.False(t, validator.markErrorStarted.Load())
+
+	markErrorRowDelay = time.Second
+	validator.ctx = context.Background()
+	require.False(t, validator.markErrorStarted.Load())
+	validator.wg.Add(1)
+	go validator.markErrorStartedRoutine()
+	validator.wg.Wait()
+	require.True(t, validator.markErrorStarted.Load())
 }
