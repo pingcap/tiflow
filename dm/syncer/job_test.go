@@ -16,6 +16,7 @@ package syncer
 import (
 	"testing"
 
+	"github.com/go-mysql-org/go-mysql/mysql"
 	. "github.com/pingcap/check"
 	"github.com/pingcap/tidb/util/filter"
 	"github.com/stretchr/testify/require"
@@ -72,7 +73,7 @@ func TestJob(t *testing.T) {
 		targetTables: []*filter.Table{{Schema: "test2", Name: "t2"}},
 	}
 	table := &cdcmodel.TableName{Schema: "test", Table: "t1"}
-	location := binlog.NewLocation("")
+	location := binlog.MustZeroLocation(mysql.MySQLFlavor)
 	ec := &eventContext{startLocation: &location, currentLocation: &location, lastLocation: &location, safeMode: true}
 	qec := &queryEventContext{
 		eventContext:    ec,
@@ -97,7 +98,7 @@ func TestJob(t *testing.T) {
 			newDDLJob(qec),
 			"tp: ddl, flushSeq: 0, dml: [], safemode: false, ddls: [create database test], last_location: position: (, 4), gtid-set: , start_location: position: (, 4), gtid-set: , current_location: position: (, 4), gtid-set: ",
 		}, {
-			newXIDJob(binlog.NewLocation(""), binlog.NewLocation(""), binlog.NewLocation("")),
+			newXIDJob(binlog.MustZeroLocation(mysql.MySQLFlavor), binlog.MustZeroLocation(mysql.MySQLFlavor), binlog.MustZeroLocation(mysql.MySQLFlavor)),
 			"tp: xid, flushSeq: 0, dml: [], safemode: false, ddls: [], last_location: position: (, 4), gtid-set: , start_location: position: (, 4), gtid-set: , current_location: position: (, 4), gtid-set: ",
 		}, {
 			newFlushJob(16, 1),

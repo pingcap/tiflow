@@ -1895,15 +1895,15 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		}
 
 		// clone currentLocation's gtid set to avoid its gtid is transport to table checkpoint
-		// currently table checkpoint will save  location's gtid set with shallow copy
+		// currently table checkpoint will save location's gtid set with shallow copy
 		newGTID := currentLocation.GetGTID().Clone()
 		err2 := newGTID.Update(currentGTID)
 		if err2 != nil {
 			return terror.Annotatef(err2, "fail to update GTID %s", currentGTID)
 		}
-		err2 = currentLocation.SetGTID(newGTID.Origin())
+		err2 = currentLocation.SetGTID(newGTID)
 		if err2 != nil {
-			return terror.Annotatef(err2, "fail to set GTID %s", newGTID.Origin())
+			return terror.Annotatef(err2, "fail to set GTID %s", newGTID)
 		}
 		return nil
 	}
@@ -2130,7 +2130,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		lastEvent = e
 		switch ev := e.Event.(type) {
 		case *replication.QueryEvent, *replication.RowsEvent:
-			startLocation = binlog.InitLocation(
+			startLocation = binlog.NewLocation(
 				mysql.Position{
 					Name: lastLocation.Position.Name,
 					Pos:  e.Header.LogPos - e.Header.EventSize,
@@ -2143,7 +2143,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			if s.isReplacingOrInjectingErr {
 				endSuffix++
 			}
-			currentLocation = binlog.InitLocation(
+			currentLocation = binlog.NewLocation(
 				mysql.Position{
 					Name: lastLocation.Position.Name,
 					Pos:  e.Header.LogPos,
@@ -2450,7 +2450,7 @@ func (s *Syncer) handleRotateEvent(ev *replication.RotateEvent, ec eventContext)
 		}
 	}
 
-	*ec.currentLocation = binlog.InitLocation(
+	*ec.currentLocation = binlog.NewLocation(
 		mysql.Position{
 			Name: string(ev.NextLogName),
 			Pos:  uint32(ev.Position),
@@ -2496,7 +2496,7 @@ func (s *Syncer) handleRowsEvent(ev *replication.RowsEvent, ec eventContext) (*f
 	}
 	targetTable := s.route(sourceTable)
 
-	*ec.currentLocation = binlog.InitLocation(
+	*ec.currentLocation = binlog.NewLocation(
 		mysql.Position{
 			Name: ec.lastLocation.Position.Name,
 			Pos:  ec.header.LogPos,
@@ -4038,7 +4038,7 @@ func (s *Syncer) adjustGlobalPointGTID(tctx *tcontext.Context) (bool, error) {
 		s.tctx.L().Warn("fail to merge purged gtidSet", zap.Stringer("pos", location), zap.Error(err))
 		return false, err
 	}
-	err = location.SetGTID(gs.Origin())
+	err = location.SetGTID(gs)
 	if err != nil {
 		s.tctx.L().Warn("fail to set gtid for global location", zap.Stringer("pos", location),
 			zap.String("adjusted_gtid", gs.String()), zap.Error(err))
