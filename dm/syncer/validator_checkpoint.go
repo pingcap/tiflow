@@ -286,7 +286,7 @@ func (c *validatorPersistHelper) persistTableStatusAndErrors(tctx *tcontext.Cont
 			queries = append(queries, query)
 
 			row := r.srcJob.row
-			srcDataStr, err := json.Marshal(row.RowValues())
+			srcDataBytes, err := json.Marshal(row.RowValues())
 			if err != nil {
 				return err
 			}
@@ -296,7 +296,7 @@ func (c *validatorPersistHelper) persistTableStatusAndErrors(tctx *tcontext.Cont
 					dstData[i] = d.String
 				}
 			}
-			dstDataStr, err := json.Marshal(dstData)
+			dstDataBytes, err := json.Marshal(dstData)
 			if err != nil {
 				return err
 			}
@@ -305,7 +305,7 @@ func (c *validatorPersistHelper) persistTableStatusAndErrors(tctx *tcontext.Cont
 			args = append(args, []interface{}{
 				c.cfg.SourceID, sourceTable.Schema, sourceTable.Table, r.srcJob.Key,
 				targetTable.Schema, targetTable.Table,
-				string(srcDataStr), string(dstDataStr), r.tp, pb.ValidateErrorState_NewErr,
+				string(srcDataBytes), string(dstDataBytes), r.tp, pb.ValidateErrorState_NewErr,
 			})
 		}
 	}
