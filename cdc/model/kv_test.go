@@ -56,6 +56,13 @@ func (s *kvSuite) TestRawKVEntry(c *check.C) {
 		Value:   []byte("345"),
 	}
 
+<<<<<<< HEAD
 	c.Assert(raw.String(), check.Equals, "OpType: 1, Key: 123, Value: 345, StartTs: 100, CRTs: 101, RegionID: 0")
 	c.Assert(raw.ApproximateSize(), check.Equals, int64(6))
+=======
+	require.Equal(t,
+		"OpType: 1, Key: 123, Value: 345, OldValue: , StartTs: 100, CRTs: 101, RegionID: 0",
+		raw.String())
+	require.Equal(t, int64(6), raw.ApproximateDataSize())
+>>>>>>> b1795957d (kv(ticdc): fix data loss when upstream txn conflicts during scan (#5477))
 }

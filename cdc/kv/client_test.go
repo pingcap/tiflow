@@ -3235,9 +3235,17 @@ func (s *etcdSuite) TestRegionWorkerExitWhenIsIdle(c *check.C) {
 	server1, addr1 := newMockService(ctx, c, srv1, wg)
 	srv1.recvLoop = func(server cdcpb.ChangeData_EventFeedServer) {
 		defer func() {
+<<<<<<< HEAD
 			close(ch1)
 			server1.Stop()
 			server1Stopped <- struct{}{}
+=======
+			// When meet regionWorker some error, new stream may be created successfully before the old one close.
+			select {
+			case server1Stopped <- struct{}{}:
+			default:
+			}
+>>>>>>> b1795957d (kv(ticdc): fix data loss when upstream txn conflicts during scan (#5477))
 		}()
 		for {
 			_, err := server.Recv()
