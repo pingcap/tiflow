@@ -58,14 +58,14 @@ type MasterClient struct {
 func NewMasterClient(
 	masterID libModel.MasterID,
 	workerID libModel.WorkerID,
-	messageRouter p2p.MessageSender,
+	messageSender p2p.MessageSender,
 	metaCli pkgOrm.Client,
 	initTime clock.MonotonicTime,
 ) *MasterClient {
 	return &MasterClient{
 		masterID:                masterID,
 		workerID:                workerID,
-		messageSender:           messageRouter,
+		messageSender:           messageSender,
 		frameMetaClient:         metaCli,
 		lastMasterAckedPingTime: *atomic.NewDuration(time.Duration(initTime)),
 		timeoutConfig:           config.DefaultTimeoutConfig(),
