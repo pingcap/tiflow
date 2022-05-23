@@ -130,7 +130,7 @@ func (s *testFilterSuite) TestSkipQueryEvent(c *C) {
 	}
 	p := parser.New()
 
-	loc := binlog.NewLocation(mysql.MySQLFlavor)
+	loc := binlog.MustZeroLocation(mysql.MySQLFlavor)
 
 	for _, ca := range cases {
 		qec := &queryEventContext{
