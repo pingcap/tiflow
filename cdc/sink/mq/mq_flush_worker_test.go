@@ -15,16 +15,15 @@ package mq
 
 import (
 	"context"
+	"math"
 	"sync"
 	"testing"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tidb/util/timeutil"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/sink/codec"
 	"github.com/pingcap/tiflow/cdc/sink/metrics"
+	"github.com/pingcap/tiflow/cdc/sink/mq/codec"
 	"github.com/pingcap/tiflow/pkg/config"
-	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/stretchr/testify/require"
 )
 
@@ -81,11 +80,10 @@ func NewMockProducer() *mockProducer {
 	}
 }
 
-func newTestWorker() (*flushWorker, *mockProducer) {
+func newTestWorker(ctx context.Context) (*flushWorker, *mockProducer) {
 	// 200 is about the size of a row change.
-	encoderConfig := codec.NewConfig(config.ProtocolOpen, timeutil.SystemLocation()).
-		WithMaxMessageBytes(200)
-	builder, err := codec.NewEventBatchEncoderBuilder(encoderConfig, &security.Credential{})
+	encoderConfig := codec.NewConfig(config.ProtocolOpen).WithMaxMessageBytes(200)
+	builder, err := codec.NewEventBatchEncoderBuilder(context.Background(), encoderConfig)
 	if err != nil {
 		panic(err)
 	}
@@ -95,14 +93,16 @@ func newTestWorker() (*flushWorker, *mockProducer) {
 	}
 	producer := NewMockProducer()
 	return newFlushWorker(encoder, producer,
-		metrics.NewStatistics(context.Background(), metrics.SinkTypeMQ)), producer
+		metrics.NewStatistics(ctx, metrics.SinkTypeMQ)), producer
 }
 
 //nolint:tparallel
 func TestBatch(t *testing.T) {
 	t.Parallel()
 
-	worker, _ := newTestWorker()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	worker, _ := newTestWorker(ctx)
 	key := topicPartitionKey{
 		topic:     "test",
 		partition: 1,
@@ -117,7 +117,7 @@ func TestBatch(t *testing.T) {
 			name: "Normal batching",
 			events: []mqEvent{
 				{
-					resolvedTs: 0,
+					resolved: model.NewResolvedTs(0),
 				},
 				{
 					row: &model.RowChangedEvent{
@@ -142,7 +142,7 @@ func TestBatch(t *testing.T) {
 			name: "No row change events",
 			events: []mqEvent{
 				{
-					resolvedTs: 1,
+					resolved: model.NewResolvedTs(1),
 				},
 			},
 			expectedN: 0,
@@ -159,11 +159,12 @@ func TestBatch(t *testing.T) {
 					key: key,
 				},
 				{
-					resolvedTs: 1,
+					resolved: model.NewResolvedTs(1),
 				},
 				{
 					row: &model.RowChangedEvent{
-						CommitTs: 2,
+						// Indicates that this event is not expected to be processed
+						CommitTs: math.MaxUint64,
 						Table:    &model.TableName{Schema: "a", Table: "b"},
 						Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
 					},
@@ -175,12 +176,10 @@ func TestBatch(t *testing.T) {
 	}
 
 	var wg sync.WaitGroup
-	ctx := context.Background()
 	batch := make([]mqEvent, 3)
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			// Can not be parallel, it tests reusing the same batch.
-
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
@@ -191,8 +190,13 @@ func TestBatch(t *testing.T) {
 
 			go func() {
 				for _, event := range test.events {
-					err := worker.addEvent(context.Background(), event)
-					require.NoError(t, err)
+					err := worker.addEvent(ctx, event)
+					if event.row != nil && event.row.CommitTs == math.MaxUint64 {
+						// For unprocessed events, addEvent returns after ctx has been cancelled.
+						require.Regexp(t, ".*context canceled.*", err)
+					} else {
+						require.NoError(t, err)
+					}
 				}
 			}()
 			wg.Wait()
@@ -215,7 +219,9 @@ func TestGroup(t *testing.T) {
 		topic:     "test1",
 		partition: 2,
 	}
-	worker, _ := newTestWorker()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	worker, _ := newTestWorker(ctx)
 
 	events := []mqEvent{
 		{
@@ -291,7 +297,9 @@ func TestAsyncSend(t *testing.T) {
 		partition: 3,
 	}
 
-	worker, producer := newTestWorker()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	worker, producer := newTestWorker(ctx)
 	events := []mqEvent{
 		{
 			row: &model.RowChangedEvent{
@@ -359,7 +367,10 @@ func TestFlush(t *testing.T) {
 		topic:     "test",
 		partition: 1,
 	}
-	worker, producer := newTestWorker()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	worker, producer := newTestWorker(ctx)
 
 	events := []mqEvent{
 		{
@@ -387,7 +398,7 @@ func TestFlush(t *testing.T) {
 			key: key1,
 		},
 		{
-			resolvedTs: 1,
+			resolved: model.NewResolvedTs(1),
 		},
 	}
 
@@ -420,8 +431,8 @@ func TestFlush(t *testing.T) {
 func TestAbort(t *testing.T) {
 	t.Parallel()
 
-	worker, _ := newTestWorker()
 	ctx, cancel := context.WithCancel(context.Background())
+	worker, _ := newTestWorker(ctx)
 
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -438,9 +449,9 @@ func TestAbort(t *testing.T) {
 func TestProducerError(t *testing.T) {
 	t.Parallel()
 
-	worker, prod := newTestWorker()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	worker, prod := newTestWorker(ctx)
 
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -464,15 +475,15 @@ func TestProducerError(t *testing.T) {
 		},
 	})
 	require.NoError(t, err)
-	err = worker.addEvent(ctx, mqEvent{resolvedTs: 100})
+	err = worker.addEvent(ctx, mqEvent{resolved: model.NewResolvedTs(100)})
 	require.NoError(t, err)
 	wg.Wait()
 
-	err = worker.addEvent(ctx, mqEvent{resolvedTs: 200})
+	err = worker.addEvent(ctx, mqEvent{resolved: model.NewResolvedTs(200)})
 	require.Error(t, err)
 	require.Regexp(t, ".*fake.*", err.Error())
 
-	err = worker.addEvent(ctx, mqEvent{resolvedTs: 300})
+	err = worker.addEvent(ctx, mqEvent{resolved: model.NewResolvedTs(300)})
 	require.Error(t, err)
 	require.Regexp(t, ".*ErrMQWorkerClosed.*", err.Error())
 }

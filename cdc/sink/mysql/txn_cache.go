@@ -36,7 +36,7 @@ func (t *txnsWithTheSameCommitTs) Append(row *model.RowChangedEvent) {
 	}
 
 	var txn *model.SingleTableTxn
-	if len(t.txns) == 0 || t.txns[len(t.txns)-1].StartTs < row.StartTs {
+	if len(t.txns) == 0 || row.SplitTxn || t.txns[len(t.txns)-1].StartTs < row.StartTs {
 		txn = &model.SingleTableTxn{
 			StartTs:   row.StartTs,
 			CommitTs:  row.CommitTs,
@@ -121,7 +121,9 @@ func (c *unresolvedTxnCache) Resolved(
 
 func splitResolvedTxn(
 	resolvedTsMap *sync.Map, unresolvedTxns map[model.TableID][]*txnsWithTheSameCommitTs,
-) (checkpointTsMap map[model.TableID]uint64, resolvedRowsMap map[model.TableID][]*model.SingleTableTxn) {
+) (checkpointTsMap map[model.TableID]uint64,
+	resolvedRowsMap map[model.TableID][]*model.SingleTableTxn,
+) {
 	var (
 		ok                              bool
 		txnsLength                      int
@@ -132,8 +134,8 @@ func splitResolvedTxn(
 	checkpointTsMap = make(map[model.TableID]uint64, len(unresolvedTxns))
 	resolvedTsMap.Range(func(k, v any) bool {
 		tableID := k.(model.TableID)
-		resolvedTs := v.(model.Ts)
-		checkpointTsMap[tableID] = resolvedTs
+		resolved := v.(model.ResolvedTs)
+		checkpointTsMap[tableID] = resolved.Ts
 		return true
 	})
 

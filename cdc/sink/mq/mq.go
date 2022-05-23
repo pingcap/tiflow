@@ -24,27 +24,24 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/sink/codec"
 	"github.com/pingcap/tiflow/cdc/sink/metrics"
+	"github.com/pingcap/tiflow/cdc/sink/mq/codec"
 	"github.com/pingcap/tiflow/cdc/sink/mq/dispatcher"
 	"github.com/pingcap/tiflow/cdc/sink/mq/manager"
-	kafkamanager "github.com/pingcap/tiflow/cdc/sink/mq/manager/kafka"
-	pulsarmanager "github.com/pingcap/tiflow/cdc/sink/mq/manager/pulsar"
 	"github.com/pingcap/tiflow/cdc/sink/mq/producer"
 	"github.com/pingcap/tiflow/cdc/sink/mq/producer/kafka"
 	"github.com/pingcap/tiflow/cdc/sink/mq/producer/pulsar"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
-	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
 
 type resolvedTsEvent struct {
-	tableID    model.TableID
-	resolvedTs model.Ts
+	tableID  model.TableID
+	resolved model.ResolvedTs
 }
 
 const (
@@ -73,7 +70,6 @@ type mqSink struct {
 
 func newMqSink(
 	ctx context.Context,
-	credential *security.Credential,
 	topicManager manager.TopicManager,
 	mqProducer producer.Producer,
 	filter *filter.Filter,
@@ -81,7 +77,7 @@ func newMqSink(
 	replicaConfig *config.ReplicaConfig, encoderConfig *codec.Config,
 	errCh chan error,
 ) (*mqSink, error) {
-	encoderBuilder, err := codec.NewEventBatchEncoderBuilder(encoderConfig, credential)
+	encoderBuilder, err := codec.NewEventBatchEncoderBuilder(ctx, encoderConfig)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
@@ -181,21 +177,23 @@ func (k *mqSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowCha
 // that the data before the resolvedTs has been
 // successfully written downstream.
 // FlushRowChangedEvents is thread-safe.
-func (k *mqSink) FlushRowChangedEvents(ctx context.Context, tableID model.TableID, resolvedTs uint64) (uint64, error) {
+func (k *mqSink) FlushRowChangedEvents(
+	ctx context.Context, tableID model.TableID, resolved model.ResolvedTs,
+) (uint64, error) {
 	var checkpointTs uint64
 	v, ok := k.tableCheckpointTsMap.Load(tableID)
 	if ok {
 		checkpointTs = v.(uint64)
 	}
-	if resolvedTs <= checkpointTs {
+	if resolved.Ts <= checkpointTs {
 		return checkpointTs, nil
 	}
 	select {
 	case <-ctx.Done():
 		return 0, ctx.Err()
 	case k.resolvedBuffer <- resolvedTsEvent{
-		tableID:    tableID,
-		resolvedTs: resolvedTs,
+		tableID:  tableID,
+		resolved: model.NewResolvedTs(resolved.Ts),
 	}:
 	}
 	k.statistics.PrintStatus(ctx)
@@ -209,21 +207,21 @@ func (k *mqSink) bgFlushTs(ctx context.Context) error {
 		case <-ctx.Done():
 			return errors.Trace(ctx.Err())
 		case msg := <-k.resolvedBuffer:
-			resolvedTs := msg.resolvedTs
-			err := k.flushTsToWorker(ctx, resolvedTs)
+			resolved := msg.resolved
+			err := k.flushTsToWorker(ctx, resolved)
 			if err != nil {
 				return errors.Trace(err)
 			}
 			// Since CDC does not guarantee exactly once semantic, it won't cause any problem
 			// here even if the table was moved or removed.
 			// ref: https://github.com/pingcap/tiflow/pull/4356#discussion_r787405134
-			k.tableCheckpointTsMap.Store(msg.tableID, resolvedTs)
+			k.tableCheckpointTsMap.Store(msg.tableID, resolved.Ts)
 		}
 	}
 }
 
-func (k *mqSink) flushTsToWorker(ctx context.Context, resolvedTs model.Ts) error {
-	if err := k.flushWorker.addEvent(ctx, mqEvent{resolvedTs: resolvedTs}); err != nil {
+func (k *mqSink) flushTsToWorker(ctx context.Context, resolved model.ResolvedTs) error {
+	if err := k.flushWorker.addEvent(ctx, mqEvent{resolved: resolved}); err != nil {
 		if errors.Cause(err) != context.Canceled {
 			log.Warn("failed to flush TS to worker", zap.Error(err))
 		} else {
@@ -414,8 +412,8 @@ func NewKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
 
-	encoderConfig := codec.NewConfig(protocol, contextutil.TimezoneFromCtx(ctx))
-	if err := encoderConfig.Apply(sinkURI, opts); err != nil {
+	encoderConfig := codec.NewConfig(protocol)
+	if err := encoderConfig.Apply(sinkURI, replicaConfig); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
 	// always set encoder's `MaxMessageBytes` equal to producer's `MaxMessageBytes`
@@ -431,7 +429,7 @@ func NewKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
 
-	topicManager := kafkamanager.NewTopicManager(
+	topicManager := manager.NewKafkaTopicManager(
 		client,
 		adminClient,
 		baseConfig.DeriveTopicConfig(),
@@ -454,7 +452,6 @@ func NewKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 
 	sink, err := newMqSink(
 		ctx,
-		baseConfig.Credential,
 		topicManager,
 		sProducer,
 		filter,
@@ -487,8 +484,8 @@ func NewPulsarSink(ctx context.Context, sinkURI *url.URL, filter *filter.Filter,
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
 
-	encoderConfig := codec.NewConfig(protocol, contextutil.TimezoneFromCtx(ctx))
-	if err := encoderConfig.Apply(sinkURI, opts); err != nil {
+	encoderConfig := codec.NewConfig(protocol)
+	if err := encoderConfig.Apply(sinkURI, replicaConfig); err != nil {
 		return nil, errors.Trace(err)
 	}
 	// todo: set by pulsar producer's `max.message.bytes`
@@ -501,15 +498,11 @@ func NewPulsarSink(ctx context.Context, sinkURI *url.URL, filter *filter.Filter,
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	// For now, it's a placeholder. Avro format have to make connection to Schema Registry,
-	// and it may need credential.
-	credential := &security.Credential{}
-	fakeTopicManager := pulsarmanager.NewTopicManager(
+	fakeTopicManager := manager.NewPulsarTopicManager(
 		producer.GetPartitionNum(),
 	)
 	sink, err := newMqSink(
 		ctx,
-		credential,
 		fakeTopicManager,
 		producer,
 		filter,

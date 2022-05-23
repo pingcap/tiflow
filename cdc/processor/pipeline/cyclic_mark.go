@@ -95,7 +95,7 @@ func (n *cyclicMarkNode) TryHandleDataMessage(
 	case pmessage.MessageTypePolymorphicEvent:
 		event := msg.PolymorphicEvent
 		n.flush(ctx, event.CRTs)
-		if event.RawKV.OpType == model.OpTypeResolved {
+		if event.IsResolved() {
 			ctx.SendToNextNode(msg)
 			return true, nil
 		}

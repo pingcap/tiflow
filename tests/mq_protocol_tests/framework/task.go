@@ -44,10 +44,11 @@ type TaskContext struct {
 
 // CDCProfile represents the command line arguments used to create the changefeed
 type CDCProfile struct {
-	PDUri      string
-	SinkURI    string
-	ConfigFile string
-	Opts       map[string]string
+	PDUri          string
+	SinkURI        string
+	ConfigFile     string
+	SchemaRegistry string
+	Opts           map[string]string
 }
 
 // CreateDB creates a database in both the upstream and the downstream
@@ -97,6 +98,10 @@ func (p *CDCProfile) String() string {
 
 	if p.ConfigFile != "" {
 		builder.WriteString(fmt.Sprintf("--config=%s ", strconv.Quote(p.ConfigFile)))
+	}
+
+	if p.SchemaRegistry != "" {
+		builder.WriteString(fmt.Sprintf("--schema-registry=%s ", strconv.Quote(p.SchemaRegistry)))
 	}
 
 	if p.Opts == nil || len(p.Opts) == 0 {

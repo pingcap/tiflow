@@ -165,7 +165,7 @@ func (ra *RedoApplier) consumeLogs(ctx context.Context) error {
 		}
 
 		for tableID, tableLastResolvedTs := range tableResolvedTsMap {
-			_, err = s.FlushRowChangedEvents(ctx, tableID, tableLastResolvedTs)
+			_, err = s.FlushRowChangedEvents(ctx, tableID, model.NewResolvedTs(tableLastResolvedTs))
 			if err != nil {
 				return err
 			}
@@ -177,7 +177,7 @@ func (ra *RedoApplier) consumeLogs(ctx context.Context) error {
 	}
 
 	for tableID := range tableResolvedTsMap {
-		_, err = s.FlushRowChangedEvents(ctx, tableID, resolvedTs)
+		_, err = s.FlushRowChangedEvents(ctx, tableID, model.NewResolvedTs(resolvedTs))
 		if err != nil {
 			return err
 		}

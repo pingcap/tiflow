@@ -13,11 +13,17 @@ definitions:
   config.DispatchRule:
     properties:
       dispatcher:
+        description: Deprecated, please use PartitionRule.
         type: string
       matcher:
         items:
           type: string
         type: array
+      partition:
+        description: |-
+          PartitionRule is an alias added for DispatcherRule to mitigate confusions.
+          In the future release, the DispatcherRule is expected to be removed .
+        type: string
       topic:
         type: string
     type: object
@@ -32,6 +38,8 @@ definitions:
           $ref: '#/definitions/config.DispatchRule'
         type: array
       protocol:
+        type: string
+      schema-registry:
         type: string
     type: object
   model.Capture:
