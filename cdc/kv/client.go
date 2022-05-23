@@ -1153,8 +1153,8 @@ func (s *eventFeedSession) receiveFromStream(
 	metricSendEventBatchResolvedSize := batchResolvedEventSize.WithLabelValues(changefeedID)
 
 	// always create a new region worker, because `receiveFromStream` is ensured
-	// to call exactly once from outter code logic
-	worker := newRegionWorker(s, addr)
+	// to call exactly once from outer code logic
+	worker := newRegionWorker(changefeedID, s, addr)
 
 	defer worker.evictAllRegions()
 

@@ -3305,7 +3305,10 @@ func TestRegionWorkerExitWhenIsIdle(t *testing.T) {
 	srv1.recvLoop = func(server cdcpb.ChangeData_EventFeedServer) {
 		defer func() {
 			// When meet regionWorker some error, new stream may be created successfully before the old one close.
-			server1Stopped <- struct{}{}
+			select {
+			case server1Stopped <- struct{}{}:
+			default:
+			}
 		}()
 		for {
 			_, err := server.Recv()

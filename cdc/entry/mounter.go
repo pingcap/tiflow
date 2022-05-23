@@ -190,6 +190,12 @@ func (m *mounterImpl) unmarshalAndMountRowChanged(ctx context.Context, raw *mode
 	if err != nil {
 		return nil, err
 	}
+	if len(raw.OldValue) == 0 && len(raw.Value) == 0 {
+		log.Warn("empty value and old value",
+			zap.String("namespace", m.changefeedID.Namespace),
+			zap.String("changefeed", m.changefeedID.ID),
+			zap.Any("row", raw))
+	}
 	baseInfo := baseKVEntry{
 		StartTs:         raw.StartTs,
 		CRTs:            raw.CRTs,
