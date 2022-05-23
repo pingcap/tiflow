@@ -975,13 +975,29 @@ function DM_155_CASE {
 	run_sql_source2 "insert into ${shardddl1}.${tb2} values(27,27,27);"
 
 	run_sql_source2 "alter table ${shardddl1}.${tb2} change c b int;"
+<<<<<<< HEAD
+=======
+	check_log_contain_with_retry "finish to handle ddls in optimistic shard mode.*alter table ${shardddl1}.${tb1} change c b int" \
+		$WORK_DIR/worker1/log/dm-worker.log
+	check_log_contain_with_retry "finish to handle ddls in optimistic shard mode.*alter table ${shardddl1}.${tb1} change c b int" \
+		$WORK_DIR/worker2/log/dm-worker.log
+	random_restart 3
+
+>>>>>>> 35d285121 (DM: Fix some unstable tests (#5507))
 	run_sql_source1 "insert into ${shardddl1}.${tb1} values(28,28,28,28,28);"
 	run_sql_source2 "insert into ${shardddl1}.${tb1} values(29,29,29,29,29);" # source2 won't redirect until it receives new event
 	run_sql_source2 "insert into ${shardddl1}.${tb2} values(30,30,30);"
 
+<<<<<<< HEAD
 	check_log_contain_with_retry "finish to handle ddls in optimistic shard mode.*alter table ${shardddl1}.${tb1} change c b int" \
 		$WORK_DIR/worker1/log/dm-worker.log
 	check_log_contain_with_retry "finish to handle ddls in optimistic shard mode.*alter table ${shardddl1}.${tb1} change c b int" \
+=======
+	run_sql_source2 "alter table ${shardddl1}.${tb2} change d f int;"
+	check_log_contain_with_retry "finish to handle ddls in optimistic shard mode.*alter table ${shardddl1}.${tb1} change d f int" \
+		$WORK_DIR/worker1/log/dm-worker.log
+	check_log_contain_with_retry "finish to handle ddls in optimistic shard mode.*alter table ${shardddl1}.${tb1} change d f int" \
+>>>>>>> 35d285121 (DM: Fix some unstable tests (#5507))
 		$WORK_DIR/worker2/log/dm-worker.log
 	random_restart 3
 
@@ -1005,10 +1021,13 @@ function DM_155_CASE {
 	run_sql_source2 "insert into ${shardddl1}.${tb2} values(39,39,39);"
 
 	run_sql_source2 "alter table ${shardddl1}.${tb2} add column e int not null after f;"
+<<<<<<< HEAD
 	run_sql_source1 "insert into ${shardddl1}.${tb1} values(40,40,40,40,40);"
 	run_sql_source2 "insert into ${shardddl1}.${tb1} values(41,41,41,41,41);"
 	run_sql_source2 "insert into ${shardddl1}.${tb2} values(42,42,42,42);" # source2 won't redirect until it receives new event
 
+=======
+>>>>>>> 35d285121 (DM: Fix some unstable tests (#5507))
 	check_log_contain_with_retry "finish to handle ddls in optimistic shard mode.*alter table ${shardddl1}.${tb1} add column e int not null after f" \
 		$WORK_DIR/worker1/log/dm-worker.log
 	check_log_contain_with_retry "finish to handle ddls in optimistic shard mode.*alter table ${shardddl1}.${tb1} add column e int not null after f" \
