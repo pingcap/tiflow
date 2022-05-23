@@ -27,7 +27,6 @@ import (
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
-	"github.com/pingcap/tiflow/dm/pkg/gtid"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
@@ -51,7 +50,7 @@ func NewUpStreamConn(dbCfg *config.DBConfig) (*UpStreamConn, error) {
 }
 
 // GetMasterStatus returns binlog location that extracted from SHOW MASTER STATUS.
-func (conn *UpStreamConn) GetMasterStatus(ctx context.Context, flavor string) (mysql.Position, gtid.Set, error) {
+func (conn *UpStreamConn) GetMasterStatus(ctx context.Context, flavor string) (mysql.Position, mysql.GTIDSet, error) {
 	pos, gtidSet, err := utils.GetPosAndGs(ctx, conn.BaseDB.DB, flavor)
 
 	failpoint.Inject("GetMasterStatusFailed", func(val failpoint.Value) {
