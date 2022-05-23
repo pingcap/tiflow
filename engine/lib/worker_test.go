@@ -238,7 +238,7 @@ func TestWorkerMasterFailover(t *testing.T) {
 	worker.clock.(*clock.Mock).Add(3 * config.DefaultTimeoutConfig().WorkerHeartbeatInterval)
 
 	require.Eventually(t, func() bool {
-		return worker.failoverCount.Load() == 1
+		return worker.masterClient.MasterNode() == executorNodeID3
 	}, time.Second*3, time.Millisecond*10)
 }
 
