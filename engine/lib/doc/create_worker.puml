@@ -1,0 +1,31 @@
+@startuml
+start
+:baseMaster.CreateWorker(...);
+repeat
+    if (retry limit reached) then (yes)
+        :return err;
+        stop
+    endif
+    :requestID = uuid.New();
+    :err := PreDispatchTask(requestID, workerID);
+    if (isRetryable(err)) then (true)
+        :return err;
+        stop
+    endif
+    backward:backoff;
+repeat while(err != nil) is (false) not (true)
+
+:err := ConfirmDispatchTask(requestID, workerID);
+if (isFatal(err)) then (true)
+note right
+    "isFatal" means the operation has failed
+    preconditions and is never completed
+end note
+    :return err;
+    stop
+else (false)
+endif
+:wait for heartbeat;
+stop
+
+@enduml
