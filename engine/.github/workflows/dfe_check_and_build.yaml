@@ -1,0 +1,90 @@
+name: Check & Build
+
+env:
+  PROTOC_VERSION: 3.8.0
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+
+# See: https://docs.github.com/en/actions/reference/workflow-syntax-for-github-actions#concurrency.
+concurrency:
+  group: ${{ github.ref }}-${{ github.workflow }}
+  cancel-in-progress: true
+
+jobs:
+  linux_build:
+    name: Linux Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v2
+
+      - name: Setup Go environment
+        uses: actions/setup-go@v3
+        with:
+          go-version: 1.18
+
+      - name: Build
+        run: make build
+
+  mac_build:
+    name: Mac OS Build
+    runs-on: macos-latest
+    steps:
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v2
+
+      - name: Setup Go environment
+        uses: actions/setup-go@v3
+        with:
+          go-version: 1.18
+
+      - name: Build
+        run: make build
+
+  check:
+    name: Make Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v2
+
+      - name: Setup Go environment
+        uses: actions/setup-go@v3
+        with:
+          go-version: 1.18
+
+      - name: Check
+        run: |
+          curl -L https://github.com/google/protobuf/releases/download/v${{env.PROTOC_VERSION}}/protoc-${{env.PROTOC_VERSION}}-linux-x86_64.zip -o protoc.zip && \
+            unzip protoc.zip -d protoc && \
+            mv protoc/bin/protoc /usr/bin/ && \
+            chmod +x /usr/bin/protoc
+          make check
+
+  unit_test:
+    name: Make unit_test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v2
+
+      - name: Setup Go environment
+        uses: actions/setup-go@v3
+        with:
+          go-version: 1.18
+
+      - name: Test
+        run: make unit_test
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v2
+        with:
+          fail_ci_if_error: true
+          files: /tmp/dataflow_engine_test/cov.unit.out
+          verbose: true
