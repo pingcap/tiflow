@@ -6,6 +6,8 @@ cur=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 source $cur/../_utils/test_prepare
 WORK_DIR=$TEST_DIR/$TEST_NAME
 
+db_name=$TEST_NAME
+
 help_cnt=45
 
 function run() {
@@ -431,7 +433,15 @@ function run_validation_start_stop_cmd {
 		"\"stage\": \"Stopped\"" 1
 }
 
-function run_validator_cmd {
+function trigger_checkpoint_flush() {
+	sleep 1.5
+	run_sql_source1 "alter table $db_name.t1 comment 'a';" # force flush checkpoint
+}
+
+function prepare_for_validator_cmd {
+	cleanup_process $*
+	cleanup_data $db_name
+	cleanup_data_upstream $db_name
 	run_dm_master $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master.toml
 	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT
 	# skip incremental rows with id <= 2
@@ -448,9 +458,7 @@ function run_validator_cmd {
 	cp $cur/conf/source2.yaml $WORK_DIR/source2.yaml
 	dmctl_operate_source create $WORK_DIR/source1.yaml $SOURCE_ID1
 	dmctl_operate_source create $WORK_DIR/source2.yaml $SOURCE_ID2
-	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"start-task $cur/conf/dm-task.yaml" \
-		"\`remove-meta\` in task config is deprecated, please use \`start-task ... --remove-meta\` instead" 1
+	dmctl_start_task $cur/conf/dm-task.yaml --remove-meta
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 
 	run_sql_source1 "insert into dmctl_command.t1 values(0,'ignore-row')"
@@ -467,8 +475,15 @@ function run_validator_cmd {
 		"new\/ignored\/resolved: 4\/0\/0" 1 \
 		"\"stage\": \"Running\"" 4 \
 		"\"stage\": \"Stopped\"" 1
-	run_sql_source1 "create table dmctl_command.t_trigger_flush101(id int primary key)" # trigger flush
+	trigger_checkpoint_flush
+}
 
+function run_validator_cmd {
+	prepare_for_validator_cmd
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation status test" \
+		"\"stage\": \"Running\"" 4 \
+		"\"stage\": \"Stopped\"" 1
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation status --table-stage running test" \
 		"\"stage\": \"Running\"" 4 \
@@ -493,6 +508,18 @@ function run_validator_cmd {
 		"new\/ignored\/resolved: 3\/0\/1" 1
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation show-errors --error unprocessed test" \
+		"\"id\": \"2\"" 1 \
+		"\"id\": \"3\"" 1 \
+		"\"id\": \"4\"" 1
+	# default we show unprocessed
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation show-errors test" \
+		"\"id\": \"2\"" 1 \
+		"\"id\": \"3\"" 1 \
+		"\"id\": \"4\"" 1
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation show-errors --error all test" \
+		"\"id\": \"1\"" 1 \
 		"\"id\": \"2\"" 1 \
 		"\"id\": \"3\"" 1 \
 		"\"id\": \"4\"" 1
@@ -562,6 +589,40 @@ function run_validator_cmd {
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation status test" \
 		"validator not found for task" 2
+
+	echo "--> validation make-resolve --all"
+	prepare_for_validator_cmd
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation show-errors test" \
+		"\"id\": \"1\"" 1 \
+		"\"id\": \"2\"" 1 \
+		"\"id\": \"3\"" 1 \
+		"\"id\": \"4\"" 1
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation make-resolve test --all"
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation show-errors test" \
+		"\"id\": " 0
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation status test" \
+		"new\/ignored\/resolved: 0\/0\/4" 1
+
+	echo "--> validation ignore-error --all"
+	prepare_for_validator_cmd
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation show-errors test" \
+		"\"id\": \"1\"" 1 \
+		"\"id\": \"2\"" 1 \
+		"\"id\": \"3\"" 1 \
+		"\"id\": \"4\"" 1
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation ignore-error test --all"
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation show-errors test" \
+		"\"id\": " 0
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation status test" \
+		"new\/ignored\/resolved: 0\/4\/0" 1
 }
 
 function run_validator_cmd_error() {
