@@ -36,14 +36,7 @@ var (
 )
 
 func putMasterMeta(ctx context.Context, t *testing.T, metaclient pkgOrm.Client, metaData *libModel.MasterMetaKVData) {
-	// FIXME: current backend mock db is not support unique index
-	if _, err := metaclient.GetJobByID(ctx, metaData.ID); err != nil {
-		err := metaclient.UpsertJob(ctx, metaData)
-		require.NoError(t, err)
-		return
-	}
-
-	err := metaclient.UpdateJob(ctx, metaData)
+	err := metaclient.UpsertJob(ctx, metaData)
 	require.NoError(t, err)
 }
 
