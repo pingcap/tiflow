@@ -93,3 +93,20 @@ func (e *NodeInfo) ToJSON() (string, error) {
 	}
 	return string(data), nil
 }
+
+// ExecutorStatusChangeType describes the types of ExecutorStatusChange.
+type ExecutorStatusChangeType string
+
+const (
+	// EventExecutorOnline indicates that an executor has gone online.
+	EventExecutorOnline = ExecutorStatusChangeType("online")
+	// EventExecutorOffline indicates that an executor has gone offline.
+	EventExecutorOffline = ExecutorStatusChangeType("offline")
+)
+
+// ExecutorStatusChange describes an event where an
+// executor's status has changed.
+type ExecutorStatusChange struct {
+	ID ExecutorID
+	Tp ExecutorStatusChangeType
+}

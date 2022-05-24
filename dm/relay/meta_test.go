@@ -33,7 +33,7 @@ type MetaTestCase struct {
 	uuid           string
 	uuidWithSuffix string
 	pos            mysql.Position
-	gset           gtid.Set
+	gset           mysql.GTIDSet
 }
 
 func (r *testMetaSuite) TestLocalMeta(c *C) {
@@ -257,7 +257,6 @@ func (r *testMetaSuite) TestLocalMetaPotentialDataRace(c *C) {
 		defer func() {
 			ch1 <- err
 		}()
-		_, lastGTID := lm.GTID()
 		var theMGSet mysql.GTIDSet
 		for i := 2; i < 100; i++ {
 			theMGSet, err = mysql.ParseGTIDSet("mysql", fmt.Sprintf("%s:1-%d", uuidStr, i*10))
@@ -265,7 +264,7 @@ func (r *testMetaSuite) TestLocalMetaPotentialDataRace(c *C) {
 				return
 			}
 
-			err = lastGTID.Set(theMGSet)
+			lastGTID := theMGSet
 			if err != nil {
 				return
 			}
