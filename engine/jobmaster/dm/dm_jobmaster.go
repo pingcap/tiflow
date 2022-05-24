@@ -256,18 +256,6 @@ func (jm *JobMaster) Workload() model.RescUnit {
 	return 2
 }
 
-// OnMasterFailover implements JobMasterImpl.OnMasterFailover
-func (jm *JobMaster) OnMasterFailover(reason lib.MasterFailoverReason) error {
-	// No need to do anything here
-	return nil
-}
-
-// OnJobManagerFailover implements JobMasterImpl.OnJobManagerFailover
-func (jm *JobMaster) OnJobManagerFailover(reason lib.MasterFailoverReason) error {
-	// No need to do anything here
-	return nil
-}
-
 // IsJobMasterImpl implements JobMasterImpl.IsJobMasterImpl
 func (jm *JobMaster) IsJobMasterImpl() {
 	panic("unreachable")

@@ -1175,8 +1175,8 @@ func (s *eventFeedSession) receiveFromStream(
 		WithLabelValues(changefeedID.Namespace, changefeedID.ID)
 
 	// always create a new region worker, because `receiveFromStream` is ensured
-	// to call exactly once from outter code logic
-	worker := newRegionWorker(s, addr)
+	// to call exactly once from outer code logic
+	worker := newRegionWorker(changefeedID, s, addr)
 
 	defer worker.evictAllRegions()
 

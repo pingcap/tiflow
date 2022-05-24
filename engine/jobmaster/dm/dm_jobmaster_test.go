@@ -317,8 +317,6 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	require.NoError(t.T(), jm.OnWorkerStatusUpdated(workerHandle1, &libModel.WorkerStatus{ExtBytes: bytes1}))
 	require.NoError(t.T(), jm.OnJobManagerMessage("", ""))
 	require.NoError(t.T(), jm.OnMasterMessage("", ""))
-	require.NoError(t.T(), jm.OnJobManagerFailover(lib.MasterFailoverReason{}))
-	require.NoError(t.T(), jm.OnMasterFailover(lib.MasterFailoverReason{}))
 	require.Equal(t.T(), jm.Workload(), model.RescUnit(2))
 	require.NoError(t.T(), jm.OnWorkerStatusUpdated(workerHandle1, &libModel.WorkerStatus{ExtBytes: bytes1}))
 	require.EqualError(t.T(), jm.OnWorkerMessage(workerHandle1, "", dmpkg.MessageWithID{}), "request 0 not found")

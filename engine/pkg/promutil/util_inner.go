@@ -33,8 +33,8 @@ func HTTPHandlerForMetricImpl(gather prometheus.Gatherer) http.Handler {
 	)
 }
 
-// NewFactory4JobMasterImpl return a Factory for jobmaster
-func NewFactory4JobMasterImpl(reg *Registry, info tenant.ProjectInfo, jobType libModel.JobType, jobID libModel.MasterID) Factory {
+// NewFactory4MasterImpl return a Factory for jobmaster
+func NewFactory4MasterImpl(reg *Registry, info tenant.ProjectInfo, jobType libModel.JobType, jobID libModel.MasterID) Factory {
 	return &wrappingFactory{
 		r:      reg,
 		prefix: jobType,
