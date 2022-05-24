@@ -40,9 +40,9 @@ func TestJobCfg(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, content2, content)
 
-	dmTaskCfg, err := clone.toDMTaskCfg()
+	dmTaskCfg, err := clone.toDMTaskConfig()
 	require.NoError(t, err)
-	require.NoError(t, clone.fromDMTaskCfg(dmTaskCfg))
+	require.NoError(t, clone.fromDMTaskConfig(dmTaskCfg))
 	content3, err := clone.Yaml()
 	require.NoError(t, err)
 	require.Equal(t, content3, content)
@@ -54,7 +54,7 @@ func TestTaskCfg(t *testing.T) {
 	jobCfg := &JobCfg{}
 	require.NoError(t, jobCfg.DecodeFile(jobTemplatePath))
 
-	taskCfgs := jobCfg.ToTaskConfigs()
+	taskCfgs := jobCfg.ToTaskCfgs()
 	for _, taskCfg := range taskCfgs {
 		subTaskCfg := taskCfg.ToDMSubTaskCfg()
 		expectCfg := &dmconfig.SubTaskConfig{}

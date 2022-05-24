@@ -88,7 +88,7 @@ func TestOperateWorker(t *testing.T) {
 	worker1 := "worker1"
 	jobCfg := &config.JobCfg{}
 	require.NoError(t, jobCfg.DecodeFile(jobTemplatePath))
-	taskCfgs := jobCfg.ToTaskConfigs()
+	taskCfgs := jobCfg.ToTaskCfgs()
 	taskCfg := taskCfgs[jobCfg.Upstreams[0].SourceID]
 
 	// create worker
