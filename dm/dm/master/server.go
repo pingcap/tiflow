@@ -2645,9 +2645,8 @@ func (s *Server) checkStartValidationParams(req *pb.StartValidationRequest) (
 	map[string]map[string]config.SubTaskConfig, string, bool,
 ) {
 	explicitModeOrStartTime := req.Mode != nil || req.StartTime != nil
-	mode := config.ValidationFull
 	if req.Mode != nil {
-		mode = req.GetModeValue()
+		mode := req.GetModeValue()
 		if mode != config.ValidationFull && mode != config.ValidationFast {
 			msg := fmt.Sprintf("validation mode should be either `%s` or `%s`",
 				config.ValidationFull, config.ValidationFast)
