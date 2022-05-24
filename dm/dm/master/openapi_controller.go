@@ -24,8 +24,13 @@ import (
 	"fmt"
 	"strings"
 
+	clientv3 "go.etcd.io/etcd/client/v3"
+
 	"github.com/pingcap/log"
 	"go.uber.org/zap"
+
+	"github.com/pingcap/tiflow/dm/dm/master/scheduler"
+	"github.com/pingcap/tiflow/dm/pkg/ha"
 
 	"github.com/pingcap/tiflow/dm/checker"
 	dmcommon "github.com/pingcap/tiflow/dm/dm/common"
@@ -110,7 +115,7 @@ func (s *Server) getSourceStatusListFromWorker(ctx context.Context, sourceName s
 
 func (s *Server) createSource(ctx context.Context, req openapi.CreateSourceRequest) (*openapi.Source, error) {
 	cfg := config.OpenAPISourceToSourceCfg(req.Source)
-	if err := checkAndAdjustSourceConfigFunc(ctx, cfg); err != nil {
+	if err := CheckAndAdjustSourceConfigFunc(ctx, cfg); err != nil {
 		return nil, err
 	}
 
@@ -143,7 +148,7 @@ func (s *Server) updateSource(ctx context.Context, sourceName string, req openap
 		newCfg.From.Password = oldCfg.From.Password
 	}
 
-	if err := checkAndAdjustSourceConfigFunc(ctx, newCfg); err != nil {
+	if err := CheckAndAdjustSourceConfigFunc(ctx, newCfg); err != nil {
 		return nil, err
 	}
 	if err := s.scheduler.UpdateSourceCfg(newCfg); err != nil {
@@ -377,7 +382,7 @@ func (s *Server) checkOpenAPITaskBeforeOperate(ctx context.Context, task *openap
 		if sourceCfg := s.scheduler.GetSourceCfgByID(cfg.SourceName); sourceCfg != nil {
 			sourceCfgMap[cfg.SourceName] = sourceCfg
 		} else {
-			return nil, "", terror.ErrSchedulerSourceCfgNotExist.Generate(sourceCfg.SourceID)
+			return nil, "", terror.ErrSchedulerSourceCfgNotExist.Generate(cfg.SourceName)
 		}
 	}
 	// generate sub task configs
@@ -666,6 +671,10 @@ func (s *Server) startTask(ctx context.Context, taskName string, req openapi.Sta
 		if !ok {
 			return terror.ErrSchedulerSourceCfgNotExist.Generate(sourceName)
 		}
+		// start task check. incremental task need to specify meta or start time
+		if subTaskCfg.Meta == nil && subTaskCfg.Mode == config.ModeIncrement && req.StartTime == nil {
+			return terror.ErrConfigMetadataNotSet.Generate(sourceName, config.ModeIncrement)
+		}
 		cfg := s.scheduler.GetSourceCfgByID(sourceName)
 		if cfg == nil {
 			return terror.ErrSchedulerSourceCfgNotExist.Generate(sourceName)
@@ -679,10 +688,14 @@ func (s *Server) startTask(ctx context.Context, taskName string, req openapi.Sta
 		return nil
 	}
 
-	// TODO(ehco) support other start args after https://github.com/pingcap/tiflow/pull/4601 merged
+	var (
+		release scheduler.ReleaseFunc
+		err     error
+	)
+	// removeMeta
 	if req.RemoveMeta != nil && *req.RemoveMeta {
 		// use same latch for remove-meta and start-task
-		release, err := s.scheduler.AcquireSubtaskLatch(taskName)
+		release, err = s.scheduler.AcquireSubtaskLatch(taskName)
 		if err != nil {
 			return terror.ErrSchedulerLatchInUse.Generate("RemoveMeta", taskName)
 		}
@@ -693,8 +706,21 @@ func (s *Server) startTask(ctx context.Context, taskName string, req openapi.Sta
 		if err != nil {
 			return terror.Annotate(err, "while removing metadata")
 		}
+	}
+
+	// handle task cli args
+	cliArgs, err := config.OpenAPIStartTaskReqToTaskCliArgs(req)
+	if err != nil {
+		return terror.Annotate(err, "while converting task command line arguments")
+	}
+
+	if err = handleCliArgs(s.etcdClient, taskName, *req.SourceNameList, cliArgs); err != nil {
+		return err
+	}
+	if release != nil {
 		release()
 	}
+
 	return s.scheduler.UpdateExpectSubTaskStage(pb.Stage_Running, taskName, *req.SourceNameList...)
 }
 
@@ -705,8 +731,32 @@ func (s *Server) stopTask(ctx context.Context, taskName string, req openapi.Stop
 		sourceNameList := openapi.SourceNameList(s.getTaskSourceNameList(taskName))
 		req.SourceNameList = &sourceNameList
 	}
-	// TODO(ehco): support stop req after https://github.com/pingcap/tiflow/pull/4601 merged
+	// handle task cli args
+	cliArgs, err := config.OpenAPIStopTaskReqToTaskCliArgs(req)
+	if err != nil {
+		return terror.Annotate(err, "while converting task command line arguments")
+	}
+	if err = handleCliArgs(s.etcdClient, taskName, *req.SourceNameList, cliArgs); err != nil {
+		return err
+	}
 	return s.scheduler.UpdateExpectSubTaskStage(pb.Stage_Stopped, taskName, *req.SourceNameList...)
+}
+
+// handleCliArgs handles cli args.
+// it will try to delete args if cli args is nil.
+func handleCliArgs(cli *clientv3.Client, taskName string, sources []string, cliArgs *config.TaskCliArgs) error {
+	if cliArgs == nil {
+		err := ha.DeleteTaskCliArgs(cli, taskName, sources)
+		if err != nil {
+			return terror.Annotate(err, "while removing task command line arguments")
+		}
+	} else {
+		err := ha.PutTaskCliArgs(cli, taskName, sources, *cliArgs)
+		if err != nil {
+			return terror.Annotate(err, "while putting task command line arguments")
+		}
+	}
+	return nil
 }
 
 // nolint:unparam

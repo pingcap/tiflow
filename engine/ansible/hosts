@@ -1,0 +1,20 @@
+[df_master_servers]
+cosm1    name=ip1
+cosm2    name=ip2
+cosm3    name=ip3
+
+[df_executor_servers]
+cosm1
+cosm2
+cosm3
+cosm4
+cosm5
+cosm6
+cosm7
+cosm8
+cosm9
+cosm10
+
+[df_demo_servers]
+demo0
+demo1

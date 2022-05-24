@@ -28,7 +28,6 @@ import (
 
 	"github.com/pingcap/tiflow/dm/pkg/binlog/common"
 	"github.com/pingcap/tiflow/dm/pkg/binlog/event"
-	"github.com/pingcap/tiflow/dm/pkg/gtid"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
@@ -39,7 +38,7 @@ type testFileReaderSuite struct{}
 func (t *testFileReaderSuite) TestInterfaceMethods(c *C) {
 	var (
 		cfg                       = &FileReaderConfig{}
-		gSet                      gtid.Set // nil GTID set
+		gSet                      gmysql.GTIDSet // nil GTID set
 		timeoutCtx, timeoutCancel = context.WithTimeout(context.Background(), 10*time.Second)
 	)
 	defer timeoutCancel()

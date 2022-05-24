@@ -183,7 +183,7 @@ func (s *Sorter) Run(ctx context.Context) error {
 			case <-subctx.Done():
 				return subctx.Err()
 			case event := <-s.inputCh:
-				if event.RawKV != nil && event.RawKV.OpType == model.OpTypeResolved {
+				if event.RawKV != nil && event.IsResolved() {
 					// broadcast resolved events
 					for _, sorter := range heapSorters {
 						select {

@@ -3,7 +3,7 @@ module github.com/pingcap/tiflow
 go 1.18
 
 require (
-	github.com/BurntSushi/toml v0.3.1
+	github.com/BurntSushi/toml v1.0.0
 	github.com/DATA-DOG/go-sqlmock v1.5.0
 	github.com/Shopify/sarama v1.29.0
 	github.com/apache/pulsar-client-go v0.6.0
@@ -22,18 +22,20 @@ require (
 	github.com/edwingeng/deque v0.0.0-20191220032131-8596380dee17
 	github.com/facebookgo/subset v0.0.0-20200203212716-c811ad88dec4
 	github.com/fatih/color v1.13.0
+	github.com/gavv/monotime v0.0.0-20190418164738-30dba4353424
 	github.com/getkin/kin-openapi v0.80.0
 	github.com/gin-gonic/gin v1.7.4
 	github.com/go-mysql-org/go-mysql v1.4.1-0.20220221114137-89145541e0d4
 	github.com/go-sql-driver/mysql v1.6.0
 	github.com/gogo/gateway v1.1.0
 	github.com/gogo/protobuf v1.3.2
+	github.com/gogo/status v1.1.0
 	github.com/golang/mock v1.6.0
 	github.com/golang/protobuf v1.5.2
 	github.com/google/btree v1.0.1
 	github.com/google/go-cmp v0.5.7
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510
-	github.com/google/uuid v1.1.2
+	github.com/google/uuid v1.2.0
 	github.com/grpc-ecosystem/go-grpc-middleware v1.3.0
 	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0
 	github.com/grpc-ecosystem/grpc-gateway v1.16.0
@@ -61,7 +63,7 @@ require (
 	github.com/soheilhy/cmux v0.1.5
 	github.com/spf13/cobra v1.4.0
 	github.com/spf13/pflag v1.0.5
-	github.com/stretchr/testify v1.7.0
+	github.com/stretchr/testify v1.7.1
 	github.com/swaggo/files v0.0.0-20190704085106-630677cd5c14
 	github.com/swaggo/gin-swagger v1.2.0
 	github.com/swaggo/swag v1.6.6-0.20200529100950-7c765ddd0476
@@ -80,8 +82,10 @@ require (
 	go.etcd.io/etcd/server/v3 v3.5.2
 	go.etcd.io/etcd/tests/v3 v3.5.2
 	go.uber.org/atomic v1.9.0
+	go.uber.org/dig v1.13.0
 	go.uber.org/goleak v1.1.12
 	go.uber.org/multierr v1.8.0
+	go.uber.org/ratelimit v0.2.0
 	go.uber.org/zap v1.21.0
 	golang.org/x/net v0.0.0-20220127200216-cd36cc0744dd
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
@@ -92,6 +96,9 @@ require (
 	google.golang.org/genproto v0.0.0-20220216160803-4663080d8bc8
 	google.golang.org/grpc v1.44.0
 	gopkg.in/yaml.v2 v2.4.0
+	gorm.io/driver/mysql v1.3.3
+	gorm.io/driver/sqlite v1.3.2
+	gorm.io/gorm v1.23.4
 	upper.io/db.v3 v3.7.1+incompatible
 )
 
@@ -111,6 +118,7 @@ require (
 	github.com/PuerkitoBio/purell v1.1.1 // indirect
 	github.com/PuerkitoBio/urlesc v0.0.0-20170810143723-de5bf2ad4578 // indirect
 	github.com/VividCortex/ewma v1.1.1 // indirect
+	github.com/andres-erbsen/clock v0.0.0-20160526145045-9e14626cd129 // indirect
 	github.com/apache/pulsar-client-go/oauth2 v0.0.0-20201120111947-b8bd55bc02bd // indirect
 	github.com/apache/thrift v0.13.1-0.20201008052519-daf620915714 // indirect
 	github.com/ardielle/ardielle-go v1.5.2 // indirect
@@ -152,6 +160,7 @@ require (
 	github.com/go-playground/universal-translator v0.18.0 // indirect
 	github.com/go-playground/validator/v10 v10.9.0 // indirect
 	github.com/godbus/dbus v0.0.0-20190726142602-4481cbc300e2 // indirect
+	github.com/gogo/googleapis v1.1.0 // indirect
 	github.com/golang-jwt/jwt v3.2.2+incompatible // indirect
 	github.com/golang/glog v1.0.0 // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
@@ -171,6 +180,8 @@ require (
 	github.com/jcmturner/gokrb5/v8 v8.4.2 // indirect
 	github.com/jcmturner/rpc/v2 v2.0.3 // indirect
 	github.com/jedib0t/go-pretty/v6 v6.2.2 // indirect
+	github.com/jinzhu/inflection v1.0.0 // indirect
+	github.com/jinzhu/now v1.1.5 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/joho/sqltocsv v0.0.0-20210428211105-a6d6801d59df // indirect
 	github.com/jonboulle/clockwork v0.2.2 // indirect
@@ -211,13 +222,13 @@ require (
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/power-devops/perfstat v0.0.0-20210106213030-5aafc221ea8c // indirect
 	github.com/prometheus/common v0.32.1 // indirect
-	github.com/prometheus/procfs v0.6.0 // indirect
+	github.com/prometheus/procfs v0.7.3 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20200410134404-eec4a21b6bb0 // indirect
 	github.com/rivo/uniseg v0.2.0 // indirect
 	github.com/rogpeppe/go-internal v1.8.0 // indirect
 	github.com/rs/cors v1.7.0 // indirect
 	github.com/satori/go.uuid v1.2.0 // indirect
-	github.com/shirou/gopsutil/v3 v3.21.12 // indirect
+	github.com/shirou/gopsutil/v3 v3.22.2 // indirect
 	github.com/shurcooL/httpfs v0.0.0-20190707220628-8d4bc4ba7749 // indirect
 	github.com/shurcooL/httpgzip v0.0.0-20190720172056-320755c1c1b0 // indirect
 	github.com/shurcooL/vfsgen v0.0.0-20200824052919-0d455de96546 // indirect

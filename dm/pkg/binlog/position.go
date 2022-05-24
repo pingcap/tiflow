@@ -226,26 +226,39 @@ func ComparePosition(pos1, pos2 gmysql.Position) int {
 	return adjustedPos1.Compare(adjustedPos2)
 }
 
-// Location is used for save binlog's position and gtid
-// TODO: encapsulate all attributes in Location.
+// Location identifies the location of binlog events.
 type Location struct {
+	// a structure represents the file offset in binlog file
 	Position gmysql.Position
-
-	gtidSet gtid.Set
-
-	Suffix int // use for replace event
+	// executed GTID set at this location.
+	gtidSet gmysql.GTIDSet
+	// used to distinguish injected events by DM when it's not 0
+	Suffix int
 }
 
-// NewLocation returns a new Location.
-func NewLocation(flavor string) Location {
+// ZeroLocation returns a new Location. The flavor should not be empty.
+func ZeroLocation(flavor string) (Location, error) {
+	gset, err := gtid.ZeroGTIDSet(flavor)
+	if err != nil {
+		return Location{}, err
+	}
 	return Location{
 		Position: MinPosition,
-		gtidSet:  gtid.MinGTIDSet(flavor),
+		gtidSet:  gset,
+	}, nil
+}
+
+// MustZeroLocation returns a new Location. The flavor must not be empty.
+// in DM the flavor is adjusted before write to etcd.
+func MustZeroLocation(flavor string) Location {
+	return Location{
+		Position: MinPosition,
+		gtidSet:  gtid.MustZeroGTIDSet(flavor),
 	}
 }
 
-// InitLocation init a new Location.
-func InitLocation(pos gmysql.Position, gset gtid.Set) Location {
+// NewLocation creates a new Location from given binlog position and GTID.
+func NewLocation(pos gmysql.Position, gset gmysql.GTIDSet) Location {
 	return Location{
 		Position: pos,
 		gtidSet:  gset,
@@ -276,11 +289,11 @@ func (l Location) Clone() Location {
 
 // CloneWithFlavor clones the location, and if the GTIDSet is nil, will create a GTIDSet with specified flavor.
 func (l Location) CloneWithFlavor(flavor string) Location {
-	var newGTIDSet gtid.Set
+	var newGTIDSet gmysql.GTIDSet
 	if l.gtidSet != nil {
 		newGTIDSet = l.gtidSet.Clone()
 	} else if len(flavor) != 0 {
-		newGTIDSet = gtid.MinGTIDSet(flavor)
+		newGTIDSet = gtid.MustZeroGTIDSet(flavor)
 	}
 
 	return Location{
@@ -319,31 +332,31 @@ func CompareLocation(location1, location2 Location, cmpGTID bool) int {
 }
 
 // IsFreshPosition returns true when location1 is a fresh location without any info.
-func IsFreshPosition(location1 Location, flavor string, cmpGTID bool) bool {
-	location2 := NewLocation(flavor)
+func IsFreshPosition(location Location, flavor string, cmpGTID bool) bool {
+	zeroLocation := MustZeroLocation(flavor)
 	if cmpGTID {
-		cmp, canCmp := CompareGTID(location1.gtidSet, location2.gtidSet)
+		cmp, canCmp := CompareGTID(location.gtidSet, zeroLocation.gtidSet)
 		if canCmp {
-			if cmp != 0 {
-				return cmp <= 0
-			}
-			// not supposed to happen, for safety here.
-			if location1.gtidSet != nil && location1.gtidSet.String() != "" {
+			switch {
+			case cmp > 0:
 				return false
+			case cmp < 0:
+				// should not happen
+				return true
 			}
 			// empty GTIDSet, then compare by position
-			log.L().Warn("both gtidSets are empty, will compare by position", zap.Stringer("location1", location1), zap.Stringer("location2", location2))
+			log.L().Warn("given gtidSets is empty, will compare by position", zap.Stringer("location", location))
 		} else {
 			// if can't compare by GTIDSet, then compare by position
-			log.L().Warn("gtidSet can't be compared, will compare by position", zap.Stringer("location1", location1), zap.Stringer("location2", location2))
+			log.L().Warn("gtidSet can't be compared, will compare by position", zap.Stringer("location", location))
 		}
 	}
 
-	cmp := ComparePosition(location1.Position, location2.Position)
+	cmp := ComparePosition(location.Position, zeroLocation.Position)
 	if cmp != 0 {
 		return cmp <= 0
 	}
-	return compareIndex(location1.Suffix, location2.Suffix) <= 0
+	return compareIndex(location.Suffix, zeroLocation.Suffix) <= 0
 }
 
 // CompareGTID returns:
@@ -351,7 +364,7 @@ func IsFreshPosition(location1 Location, flavor string, cmpGTID bool) bool {
 //   0, true if gSet1 is equal to gSet2
 //   -1, true if gSet1 is less than gSet2
 // but if can't compare gSet1 and gSet2, will returns 0, false.
-func CompareGTID(gSet1, gSet2 gtid.Set) (int, bool) {
+func CompareGTID(gSet1, gSet2 gmysql.GTIDSet) (int, bool) {
 	gSetIsEmpty1 := gSet1 == nil || len(gSet1.String()) == 0
 	gSetIsEmpty2 := gSet2 == nil || len(gSet2.String()) == 0
 
@@ -398,37 +411,23 @@ func (l *Location) ResetSuffix() {
 	l.Suffix = 0
 }
 
-// SetGTID set new gtid for location
-// Use this func instead of GITSet.Set to avoid change other location.
+// SetGTID set new gtid for location.
+// TODO: don't change old Location and return a new one to copy-on-write.
 func (l *Location) SetGTID(gset gmysql.GTIDSet) error {
-	var flavor string
-
-	switch gset.(type) {
-	case *gmysql.MysqlGTIDSet:
-		flavor = gmysql.MySQLFlavor
-	case *gmysql.MariadbGTIDSet:
-		flavor = gmysql.MariaDBFlavor
-	case nil:
-		l.gtidSet = nil
-		return nil
-	default:
-		return fmt.Errorf("unknown GTIDSet type: %T", gset)
-	}
-
-	newGTID := gtid.MinGTIDSet(flavor)
-	if err := newGTID.Set(gset); err != nil {
-		return err
-	}
-
-	l.gtidSet = newGTID
+	l.gtidSet = gset
 	return nil
 }
 
 // GetGTID return gtidSet of Location.
-func (l *Location) GetGTID() gtid.Set {
+// NOTE: for most cases you should clone before call Update on the returned GTID
+// set, unless you know there's no other reference using the GTID set.
+func (l *Location) GetGTID() gmysql.GTIDSet {
 	return l.gtidSet
 }
 
+// Update will update GTIDSet of Location.
+// caller should be aware that this will change the GTID set of other copies.
+// TODO: don't change old Location and return a new one to copy-on-write.
 func (l *Location) Update(gtidStr string) error {
 	return l.gtidSet.Update(gtidStr)
 }

@@ -44,6 +44,7 @@ func TestSplitResolvedTxn(test *testing.T) {
 				resolvedTsMap: map[model.TableID]uint64{
 					1: uint64(6),
 					2: uint64(6),
+					3: uint64(6),
 				},
 				expected: map[model.TableID][]*model.SingleTableTxn{
 					1: {{
@@ -70,6 +71,7 @@ func TestSplitResolvedTxn(test *testing.T) {
 					1: uint64(13),
 					2: uint64(13),
 					3: uint64(13),
+					4: uint64(6),
 				},
 				expected: map[model.TableID][]*model.SingleTableTxn{
 					1: {
@@ -128,7 +130,7 @@ func TestSplitResolvedTxn(test *testing.T) {
 					2: uint64(13),
 					3: uint64(13),
 				},
-				expected: nil,
+				expected: map[model.TableID][]*model.SingleTableTxn{},
 			},
 			{
 				input: []*model.RowChangedEvent{
@@ -139,6 +141,7 @@ func TestSplitResolvedTxn(test *testing.T) {
 				resolvedTsMap: map[model.TableID]uint64{
 					1: uint64(6),
 					2: uint64(6),
+					3: uint64(13),
 				},
 				expected: map[model.TableID][]*model.SingleTableTxn{},
 			},
@@ -159,6 +162,7 @@ func TestSplitResolvedTxn(test *testing.T) {
 				resolvedTsMap: map[model.TableID]uint64{
 					1: uint64(6),
 					2: uint64(6),
+					3: uint64(13),
 				},
 				expected: map[model.TableID][]*model.SingleTableTxn{
 					1: {
@@ -202,6 +206,7 @@ func TestSplitResolvedTxn(test *testing.T) {
 				resolvedTsMap: map[model.TableID]uint64{
 					1: uint64(13),
 					2: uint64(13),
+					3: uint64(13),
 				},
 				expected: map[model.TableID][]*model.SingleTableTxn{
 					1: {
@@ -262,19 +267,20 @@ func TestSplitResolvedTxn(test *testing.T) {
 			cache.Append(nil, t.input...)
 			resolvedTsMap := sync.Map{}
 			for tableID, ts := range t.resolvedTsMap {
-				resolvedTsMap.Store(tableID, ts)
+				resolvedTsMap.Store(tableID, model.NewResolvedTs(ts))
 			}
-			_, resolved := cache.Resolved(&resolvedTsMap)
-			for tableID, txns := range resolved {
+			checkpointTsMap, resolvedTxn := cache.Resolved(&resolvedTsMap)
+			for tableID, txns := range resolvedTxn {
 				sort.Slice(txns, func(i, j int) bool {
 					if txns[i].CommitTs != txns[j].CommitTs {
 						return txns[i].CommitTs < txns[j].CommitTs
 					}
 					return txns[i].StartTs < txns[j].StartTs
 				})
-				resolved[tableID] = txns
+				resolvedTxn[tableID] = txns
 			}
-			require.Equal(test, t.expected, resolved, cmp.Diff(resolved, t.expected))
+			require.Equal(test, t.expected, resolvedTxn, cmp.Diff(resolvedTxn, t.expected))
+			require.Equal(test, t.resolvedTsMap, checkpointTsMap)
 		}
 	}
 }

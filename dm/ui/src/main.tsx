@@ -16,12 +16,4 @@ function mountApp() {
   )
 }
 
-if (import.meta.env.MODE === 'mock') {
-  // @ts-ignore
-  import('./mock').then(({ startWorker }) => {
-    startWorker()
-    mountApp()
-  })
-} else {
-  mountApp()
-}
+mountApp()

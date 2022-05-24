@@ -141,7 +141,7 @@ func (es *EntrySorter) AddEntry(_ context.Context, entry *model.PolymorphicEvent
 	}
 	es.lock.Lock()
 	defer es.lock.Unlock()
-	if entry.RawKV.OpType == model.OpTypeResolved {
+	if entry.IsResolved() {
 		es.resolvedTsGroup = append(es.resolvedTsGroup, entry.CRTs)
 		es.resolvedNotifier.Notify()
 	} else {

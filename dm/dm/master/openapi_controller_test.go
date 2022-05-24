@@ -22,6 +22,8 @@ import (
 	"context"
 	"testing"
 
+	"github.com/pingcap/tiflow/dm/pkg/ha"
+
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tiflow/dm/checker"
 	"github.com/pingcap/tiflow/dm/dm/config"
@@ -60,13 +62,13 @@ func (s *OpenAPIControllerSuite) SetupSuite() {
 	s.testTask = &task
 
 	checker.CheckSyncConfigFunc = mockCheckSyncConfig
-	checkAndAdjustSourceConfigFunc = checkAndNoAdjustSourceConfigMock
+	CheckAndAdjustSourceConfigFunc = checkAndNoAdjustSourceConfigMock
 	s.Nil(failpoint.Enable("github.com/pingcap/tiflow/dm/dm/master/MockSkipAdjustTargetDB", `return(true)`))
 	s.Nil(failpoint.Enable("github.com/pingcap/tiflow/dm/dm/master/MockSkipRemoveMetaData", `return(true)`))
 }
 
 func (s *OpenAPIControllerSuite) TearDownSuite() {
-	checkAndAdjustSourceConfigFunc = checkAndAdjustSourceConfig
+	CheckAndAdjustSourceConfigFunc = checkAndAdjustSourceConfig
 	checker.CheckSyncConfigFunc = checker.CheckSyncConfig
 	s.Nil(failpoint.Disable("github.com/pingcap/tiflow/dm/dm/master/MockSkipAdjustTargetDB"))
 	s.Nil(failpoint.Disable("github.com/pingcap/tiflow/dm/dm/master/MockSkipRemoveMetaData"))
@@ -368,6 +370,24 @@ func (s *OpenAPIControllerSuite) TestTaskController() {
 		s.Nil(server.enableSource(ctx, s.testSource.SourceName))
 		s.Nil(server.startTask(ctx, s.testTask.Name, req))
 		s.Equal(server.scheduler.GetExpectSubTaskStage(s.testTask.Name, s.testSource.SourceName).Expect, pb.Stage_Running)
+
+		// stop success
+		s.Nil(server.stopTask(ctx, s.testTask.Name, openapi.StopTaskRequest{}))
+		s.Equal(server.scheduler.GetExpectSubTaskStage(s.testTask.Name, s.testSource.SourceName).Expect, pb.Stage_Stopped)
+
+		// start with cli args
+		startTime := "2022-05-05 12:12:12"
+		safeModeTimeDuration := "10s"
+		req = openapi.StartTaskRequest{
+			StartTime:            &startTime,
+			SafeModeTimeDuration: &safeModeTimeDuration,
+		}
+		s.Nil(server.startTask(ctx, s.testTask.Name, req))
+		taskCliConf, err := ha.GetTaskCliArgs(server.etcdClient, s.testTask.Name, s.testSource.SourceName)
+		s.Nil(err)
+		s.NotNil(taskCliConf)
+		s.Equal(startTime, taskCliConf.StartTime)
+		s.Equal(safeModeTimeDuration, taskCliConf.SafeModeDuration)
 
 		// stop success
 		s.Nil(server.stopTask(ctx, s.testTask.Name, openapi.StopTaskRequest{}))

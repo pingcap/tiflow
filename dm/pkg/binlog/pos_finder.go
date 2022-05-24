@@ -214,7 +214,7 @@ func (r *binlogPosFinder) initTargetBinlogFile(ts int64) error {
 	return nil
 }
 
-func (r *binlogPosFinder) processGTIDRelatedEvent(ev *replication.BinlogEvent, prevSet gtid.Set) (gtid.Set, error) {
+func (r *binlogPosFinder) processGTIDRelatedEvent(ev *replication.BinlogEvent, prevSet mysql.GTIDSet) (mysql.GTIDSet, error) {
 	ev, err := r.parser.Parse(ev.RawData)
 	if err != nil {
 		return nil, err
@@ -305,7 +305,10 @@ func (r *binlogPosFinder) FindByTimestamp(ts int64) (*Location, PosType, error) 
 
 	targetTS := uint32(ts)
 	position := mysql.Position{Name: r.targetBinlog.name, Pos: FileHeaderLen}
-	gtidSet := gtid.MinGTIDSet(r.flavor)
+	gtidSet, err := gtid.ZeroGTIDSet(r.flavor)
+	if err != nil {
+		return nil, InvalidBinlogPos, err
+	}
 
 	binlogReader, err := r.startSync(position)
 	if err != nil {
@@ -362,9 +365,9 @@ func (r *binlogPosFinder) FindByTimestamp(ts int64) (*Location, PosType, error) 
 	}
 	if r.tsBeforeFirstBinlog {
 		// always return the position of the first event in target binlog
-		loc := InitLocation(mysql.Position{Name: r.targetBinlog.name, Pos: FileHeaderLen}, gtidSet)
+		loc := NewLocation(mysql.Position{Name: r.targetBinlog.name, Pos: FileHeaderLen}, gtidSet)
 		return &loc, BelowLowerBoundBinlogPos, nil
 	}
-	loc := InitLocation(position, gtidSet)
+	loc := NewLocation(position, gtidSet)
 	return &loc, InRangeBinlogPos, nil
 }
