@@ -77,7 +77,6 @@ type JobMasterImpl interface {
 	MasterImpl
 
 	Workload() model.RescUnit
-	OnJobManagerFailover(reason MasterFailoverReason) error
 	OnJobManagerMessage(topic p2p.Topic, message interface{}) error
 	// IsJobMasterImpl is an empty function used to prevent accidental implementation
 	// of this interface.
@@ -285,10 +284,6 @@ func (j *jobMasterImplAsWorkerImpl) Tick(ctx context.Context) error {
 
 func (j *jobMasterImplAsWorkerImpl) Workload() model.RescUnit {
 	return j.inner.Workload()
-}
-
-func (j *jobMasterImplAsWorkerImpl) OnMasterFailover(reason MasterFailoverReason) error {
-	return j.inner.OnJobManagerFailover(reason)
 }
 
 func (j *jobMasterImplAsWorkerImpl) OnMasterMessage(topic p2p.Topic, message interface{}) error {

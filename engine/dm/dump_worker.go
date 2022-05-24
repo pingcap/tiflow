@@ -78,11 +78,6 @@ func (d *dumpWorker) Workload() model.RescUnit {
 	return 0
 }
 
-func (d *dumpWorker) OnMasterFailover(reason lib.MasterFailoverReason) error {
-	log.L().Info("dumpWorker.OnMasterFailover")
-	return nil
-}
-
 func (d *dumpWorker) OnMasterMessage(topic p2p.Topic, message p2p.MessageValue) error {
 	log.L().Info("dumpWorker.OnMasterMessage", zap.Any("message", message))
 	return nil
