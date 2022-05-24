@@ -114,7 +114,7 @@ func (w *Writer) sendStatusMessageWithRetry(
 		})
 		if err != nil {
 			if derrors.ErrExecutorNotFoundForMessage.Equal(err) {
-				if err := w.masterInfo.RefreshMasterInfo(ctx); err != nil {
+				if err := w.masterInfo.SyncRefreshMasterInfo(ctx); err != nil {
 					log.L().Warn("failed to refresh master info",
 						zap.String("worker-id", w.workerID),
 						zap.String("master-id", w.masterInfo.MasterID()),

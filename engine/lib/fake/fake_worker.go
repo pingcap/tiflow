@@ -187,10 +187,6 @@ func (d *dummyWorker) Workload() model.RescUnit {
 	return model.RescUnit(10)
 }
 
-func (d *dummyWorker) OnMasterFailover(_ lib.MasterFailoverReason) error {
-	return nil
-}
-
 func (d *dummyWorker) OnMasterMessage(topic p2p.Topic, message p2p.MessageValue) error {
 	log.L().Info("fakeWorker: OnMasterMessage", zap.Any("message", message))
 	switch msg := message.(type) {

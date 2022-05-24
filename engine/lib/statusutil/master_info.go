@@ -29,7 +29,7 @@ type MasterInfoProvider interface {
 	MasterID() libModel.MasterID
 	MasterNode() p2p.NodeID
 	Epoch() libModel.Epoch
-	RefreshMasterInfo(ctx context.Context) error
+	SyncRefreshMasterInfo(ctx context.Context) error
 }
 
 // MockMasterInfoProvider defines a mock provider that implements MasterInfoProvider
@@ -66,8 +66,8 @@ func (p *MockMasterInfoProvider) Epoch() libModel.Epoch {
 	return p.epoch
 }
 
-// RefreshMasterInfo implements MasterInfoProvider.RefreshMasterInfo
-func (p *MockMasterInfoProvider) RefreshMasterInfo(ctx context.Context) error {
+// SyncRefreshMasterInfo implements MasterInfoProvider.RefreshMasterInfo
+func (p *MockMasterInfoProvider) SyncRefreshMasterInfo(ctx context.Context) error {
 	p.refreshCount.Add(1)
 	return nil
 }

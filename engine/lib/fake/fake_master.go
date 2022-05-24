@@ -124,12 +124,6 @@ type businessStatus struct {
 	status map[libModel.WorkerID]*dummyWorkerStatus
 }
 
-// OnJobManagerFailover implements JobMasterImpl.OnJobManagerFailover
-func (m *Master) OnJobManagerFailover(reason lib.MasterFailoverReason) error {
-	log.L().Info("FakeMaster: OnJobManagerFailover", zap.Any("reason", reason))
-	return nil
-}
-
 // OnJobManagerMessage implements JobMasterImpl.OnJobManagerMessage
 func (m *Master) OnJobManagerMessage(topic p2p.Topic, message p2p.MessageValue) error {
 	log.L().Info("FakeMaster: OnJobManagerMessage", zap.Any("message", message))
@@ -460,12 +454,6 @@ func (m *Master) OnWorkerStatusUpdated(worker lib.WorkerHandle, newStatus *libMo
 // CloseImpl implements MasterImpl.CloseImpl
 func (m *Master) CloseImpl(ctx context.Context) error {
 	log.L().Info("FakeMaster: Close", zap.Stack("stack"))
-	return nil
-}
-
-// OnMasterFailover implements MasterImpl.OnMasterFailover
-func (m *Master) OnMasterFailover(reason lib.MasterFailoverReason) error {
-	log.L().Info("FakeMaster: OnMasterFailover", zap.Stack("stack"))
 	return nil
 }
 
