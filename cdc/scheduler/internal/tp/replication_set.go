@@ -97,7 +97,7 @@ func newReplicationSet(
 		}
 
 		switch table.State {
-		case schedulepb.TableState_Replicating:
+		case schedulepb.TableStateReplicating:
 			// Recognize primary if it's table is in replicating state.
 			if len(r.Primary) == 0 {
 				r.Primary = captureID
@@ -107,18 +107,18 @@ func newReplicationSet(
 					table, captureID, "tpscheduler: multiple primary",
 					zap.Any("status", tableStatus))
 			}
-		case schedulepb.TableState_Preparing:
+		case schedulepb.TableStatePreparing:
 			// Recognize secondary if it's table is in preparing state.
 			r.Secondary = captureID
 			r.Captures[captureID] = struct{}{}
-		case schedulepb.TableState_Prepared:
+		case schedulepb.TableStatePrepared:
 			// Recognize secondary and Commit state if it's table is in prepared state.
 			committed = true
 			r.Secondary = captureID
 			r.Captures[captureID] = struct{}{}
-		case schedulepb.TableState_Absent,
-			schedulepb.TableState_Stopping,
-			schedulepb.TableState_Stopped:
+		case schedulepb.TableStateAbsent,
+			schedulepb.TableStateStopping,
+			schedulepb.TableStateStopped:
 			// Ignore stop state.
 		default:
 			log.Warn("tpscheduler: unknown table state",
@@ -154,7 +154,8 @@ func (r *ReplicationSet) inconsistentError(
 	fields = append(fields, []zap.Field{
 		zap.String("captureID", captureID),
 		zap.Stringer("tableState", input),
-		zap.Any("replicationSet", r)}...)
+		zap.Any("replicationSet", r),
+	}...)
 	log.L().WithOptions(zap.AddCallerSkip(1)).Error(msg, fields...)
 	return cerror.ErrReplicationSetInconsistent.GenWithStackByArgs(
 		fmt.Sprintf("tableID %d, %s", r.TableID, msg))
@@ -166,7 +167,8 @@ func (r *ReplicationSet) multiplePrimaryError(
 	fields = append(fields, []zap.Field{
 		zap.String("captureID", captureID),
 		zap.Stringer("tableState", input),
-		zap.Any("replicationSet", r)}...)
+		zap.Any("replicationSet", r),
+	}...)
 	log.L().WithOptions(zap.AddCallerSkip(1)).Error(msg, fields...)
 	return cerror.ErrReplicationSetMultiplePrimaryError.GenWithStackByArgs(
 		fmt.Sprintf("tableID %d, %s", r.TableID, msg))
@@ -220,7 +222,7 @@ func (r *ReplicationSet) poll(
 			zap.String("captureID", captureID), zap.Any("replicationSet", r))
 		return []*schedulepb.Message{{
 			To:      captureID,
-			MsgType: schedulepb.MessageType_MsgDispatchTableRequest,
+			MsgType: schedulepb.MsgDispatchTableRequest,
 			DispatchTableRequest: &schedulepb.DispatchTableRequest{
 				RemoveTable: &schedulepb.RemoveTableRequest{TableID: r.TableID},
 			},
@@ -268,7 +270,7 @@ func (r *ReplicationSet) pollOnAbsent(
 	input *schedulepb.TableStatus, captureID model.CaptureID,
 ) (*schedulepb.Message, bool, error) {
 	switch input.State {
-	case schedulepb.TableState_Absent:
+	case schedulepb.TableStateAbsent:
 		if r.Primary != "" || r.Secondary != "" {
 			return nil, false, r.inconsistentError(
 				input, captureID, "tpscheduler: there must be no primary or secondary")
@@ -277,11 +279,11 @@ func (r *ReplicationSet) pollOnAbsent(
 		r.Secondary = captureID
 		return nil, true, nil
 
-	case schedulepb.TableState_Preparing,
-		schedulepb.TableState_Prepared,
-		schedulepb.TableState_Replicating,
-		schedulepb.TableState_Stopping,
-		schedulepb.TableState_Stopped:
+	case schedulepb.TableStatePreparing,
+		schedulepb.TableStatePrepared,
+		schedulepb.TableStateReplicating,
+		schedulepb.TableStateStopping,
+		schedulepb.TableStateStopped:
 	}
 	log.Warn("tpscheduler: ingore input, unexpected replication set state",
 		zap.Stringer("tableState", input),
@@ -294,13 +296,13 @@ func (r *ReplicationSet) pollOnPrepare(
 	input *schedulepb.TableStatus, captureID model.CaptureID,
 ) (*schedulepb.Message, bool, error) {
 	switch input.State {
-	case schedulepb.TableState_Absent,
-		schedulepb.TableState_Stopping,
-		schedulepb.TableState_Stopped:
+	case schedulepb.TableStateAbsent,
+		schedulepb.TableStateStopping,
+		schedulepb.TableStateStopped:
 		if r.Secondary == captureID {
 			return &schedulepb.Message{
 				To:      captureID,
-				MsgType: schedulepb.MessageType_MsgDispatchTableRequest,
+				MsgType: schedulepb.MsgDispatchTableRequest,
 				DispatchTableRequest: &schedulepb.DispatchTableRequest{
 					AddTable: &schedulepb.AddTableRequest{
 						TableID:     r.TableID,
@@ -310,18 +312,18 @@ func (r *ReplicationSet) pollOnPrepare(
 				},
 			}, false, nil
 		}
-	case schedulepb.TableState_Preparing:
+	case schedulepb.TableStatePreparing:
 		if r.Secondary == captureID {
 			// Ignore secondary Preparing, it may take a long time.
 			return nil, false, nil
 		}
-	case schedulepb.TableState_Prepared:
+	case schedulepb.TableStatePrepared:
 		if r.Secondary == captureID {
 			// Secondary is prepared, transit to Commit state.
 			r.State = ReplicationSetStateCommit
 			return nil, true, nil
 		}
-	case schedulepb.TableState_Replicating:
+	case schedulepb.TableStateReplicating:
 		if r.Primary == captureID {
 			return nil, false, nil
 		}
@@ -337,14 +339,14 @@ func (r *ReplicationSet) pollOnCommit(
 	input *schedulepb.TableStatus, captureID model.CaptureID,
 ) (*schedulepb.Message, bool, error) {
 	switch input.State {
-	case schedulepb.TableState_Prepared:
+	case schedulepb.TableStatePrepared:
 		if r.Secondary == captureID {
 			if r.Primary != "" {
 				// Secondary capture is prepared and waiting for stopping primary.
 				// Send message to primary, ask for stopping.
 				return &schedulepb.Message{
 					To:      r.Primary,
-					MsgType: schedulepb.MessageType_MsgDispatchTableRequest,
+					MsgType: schedulepb.MsgDispatchTableRequest,
 					DispatchTableRequest: &schedulepb.DispatchTableRequest{
 						RemoveTable: &schedulepb.RemoveTableRequest{TableID: r.TableID},
 					},
@@ -360,7 +362,7 @@ func (r *ReplicationSet) pollOnCommit(
 				zap.String("captureID", captureID))
 			return &schedulepb.Message{
 				To:      captureID,
-				MsgType: schedulepb.MessageType_MsgDispatchTableRequest,
+				MsgType: schedulepb.MsgDispatchTableRequest,
 				DispatchTableRequest: &schedulepb.DispatchTableRequest{
 					AddTable: &schedulepb.AddTableRequest{
 						TableID:     r.TableID,
@@ -370,7 +372,7 @@ func (r *ReplicationSet) pollOnCommit(
 				},
 			}, false, nil
 		}
-	case schedulepb.TableState_Stopped, schedulepb.TableState_Absent:
+	case schedulepb.TableStateStopped, schedulepb.TableStateAbsent:
 		if r.Primary == captureID && r.Secondary != "" {
 			// Primary is stopped, promote secondary to primary.
 			original := r.Primary
@@ -382,7 +384,7 @@ func (r *ReplicationSet) pollOnCommit(
 				zap.String("captureID", captureID))
 			return &schedulepb.Message{
 				To:      r.Primary,
-				MsgType: schedulepb.MessageType_MsgDispatchTableRequest,
+				MsgType: schedulepb.MsgDispatchTableRequest,
 				DispatchTableRequest: &schedulepb.DispatchTableRequest{
 					AddTable: &schedulepb.AddTableRequest{
 						TableID:     r.TableID,
@@ -393,12 +395,12 @@ func (r *ReplicationSet) pollOnCommit(
 			}, false, nil
 		}
 
-	case schedulepb.TableState_Replicating:
+	case schedulepb.TableStateReplicating:
 		if r.Secondary != "" && r.Primary == captureID {
 			// Original primary is not stopped, ask for stopping.
 			return &schedulepb.Message{
 				To:      captureID,
-				MsgType: schedulepb.MessageType_MsgDispatchTableRequest,
+				MsgType: schedulepb.MsgDispatchTableRequest,
 				DispatchTableRequest: &schedulepb.DispatchTableRequest{
 					RemoveTable: &schedulepb.RemoveTableRequest{
 						TableID: r.TableID,
@@ -416,11 +418,11 @@ func (r *ReplicationSet) pollOnCommit(
 		return nil, false, r.multiplePrimaryError(
 			input, captureID, "tpscheduler: multiple primary")
 
-	case schedulepb.TableState_Stopping:
+	case schedulepb.TableStateStopping:
 		if r.Primary == captureID && r.Secondary != "" {
 			return nil, false, nil
 		}
-	case schedulepb.TableState_Preparing:
+	case schedulepb.TableStatePreparing:
 	}
 	log.Warn("tpscheduler: ingore input, unexpected replication set state",
 		zap.Stringer("tableState", input),
@@ -433,18 +435,18 @@ func (r *ReplicationSet) pollOnReplicating(
 	input *schedulepb.TableStatus, captureID model.CaptureID,
 ) (*schedulepb.Message, bool, error) {
 	switch input.State {
-	case schedulepb.TableState_Replicating:
+	case schedulepb.TableStateReplicating:
 		if r.Primary == captureID {
 			return nil, false, nil
 		}
 		return nil, false, r.multiplePrimaryError(
 			input, captureID, "tpscheduler: multiple primary")
 
-	case schedulepb.TableState_Absent:
-	case schedulepb.TableState_Preparing:
-	case schedulepb.TableState_Prepared:
-	case schedulepb.TableState_Stopping:
-	case schedulepb.TableState_Stopped:
+	case schedulepb.TableStateAbsent:
+	case schedulepb.TableStatePreparing:
+	case schedulepb.TableStatePrepared:
+	case schedulepb.TableStateStopping:
+	case schedulepb.TableStateStopped:
 	}
 	log.Warn("tpscheduler: ingore input, unexpected replication set state",
 		zap.Stringer("tableState", input),
@@ -457,18 +459,18 @@ func (r *ReplicationSet) pollOnRemoving(
 	input *schedulepb.TableStatus, captureID model.CaptureID,
 ) (*schedulepb.Message, bool, error) {
 	switch input.State {
-	case schedulepb.TableState_Absent,
-		schedulepb.TableState_Preparing,
-		schedulepb.TableState_Prepared,
-		schedulepb.TableState_Replicating:
+	case schedulepb.TableStateAbsent,
+		schedulepb.TableStatePreparing,
+		schedulepb.TableStatePrepared,
+		schedulepb.TableStateReplicating:
 		return &schedulepb.Message{
 			To:      captureID,
-			MsgType: schedulepb.MessageType_MsgDispatchTableRequest,
+			MsgType: schedulepb.MsgDispatchTableRequest,
 			DispatchTableRequest: &schedulepb.DispatchTableRequest{
 				RemoveTable: &schedulepb.RemoveTableRequest{TableID: r.TableID},
 			},
 		}, false, nil
-	case schedulepb.TableState_Stopped:
+	case schedulepb.TableStateStopped:
 		if r.Primary == captureID {
 			r.Primary = ""
 		} else if r.Secondary == captureID {
@@ -479,7 +481,7 @@ func (r *ReplicationSet) pollOnRemoving(
 			zap.Stringer("tableState", input),
 			zap.String("captureID", captureID))
 		return nil, false, nil
-	case schedulepb.TableState_Stopping:
+	case schedulepb.TableStateStopping:
 		return nil, false, nil
 	}
 	log.Warn("tpscheduler: ingore input, unexpected replication set state",
@@ -511,8 +513,8 @@ func (r *ReplicationSet) handleAddTable(
 	r.Captures[captureID] = struct{}{}
 	status := &schedulepb.TableStatus{
 		TableID:    r.TableID,
-		State:      schedulepb.TableState_Absent,
-		Checkpoint: &schedulepb.Checkpoint{},
+		State:      schedulepb.TableStateAbsent,
+		Checkpoint: schedulepb.Checkpoint{},
 	}
 	return r.poll(status, captureID)
 }
@@ -540,8 +542,8 @@ func (r *ReplicationSet) handleMoveTable(
 	r.Captures[dest] = struct{}{}
 	status := &schedulepb.TableStatus{
 		TableID:    r.TableID,
-		State:      schedulepb.TableState_Absent,
-		Checkpoint: &schedulepb.Checkpoint{},
+		State:      schedulepb.TableStateAbsent,
+		Checkpoint: schedulepb.Checkpoint{},
 	}
 	return r.poll(status, r.Secondary)
 }
@@ -565,8 +567,8 @@ func (r *ReplicationSet) handleRemoveTable() ([]*schedulepb.Message, error) {
 		zap.Stringer("old", oldState), zap.Stringer("new", r.State))
 	status := &schedulepb.TableStatus{
 		TableID:    r.TableID,
-		State:      schedulepb.TableState_Replicating,
-		Checkpoint: &schedulepb.Checkpoint{CheckpointTs: r.CheckpointTs},
+		State:      schedulepb.TableStateReplicating,
+		Checkpoint: schedulepb.Checkpoint{CheckpointTs: r.CheckpointTs},
 	}
 	return r.poll(status, r.Primary)
 }

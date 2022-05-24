@@ -24,7 +24,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestSendRecv(t *testing.T) {
+func TestTransSendRecv(t *testing.T) {
 	t.Parallel()
 
 	cluster := p2p.NewMockCluster(t, 3)
@@ -44,9 +44,8 @@ func TestSendRecv(t *testing.T) {
 	// Send messages
 	for _, trans := range transMap {
 		for addr := range transMap {
-			done, err := trans.Send(ctx, addr, []*schedulepb.Message{{To: addr}})
+			err := trans.Send(ctx, []*schedulepb.Message{{To: addr}})
 			require.Nil(t, err)
-			require.True(t, done)
 		}
 	}
 
@@ -64,7 +63,7 @@ func TestSendRecv(t *testing.T) {
 	}
 }
 
-func TestUnknownAddr(t *testing.T) {
+func TestTransUnknownAddr(t *testing.T) {
 	t.Parallel()
 
 	cluster := p2p.NewMockCluster(t, 3)
@@ -84,13 +83,12 @@ func TestUnknownAddr(t *testing.T) {
 	unknownAddr := "unknown"
 	require.NotContains(t, transMap, unknownAddr)
 	for _, trans := range transMap {
-		done, err := trans.Send(ctx, unknownAddr, []*schedulepb.Message{})
+		err := trans.Send(ctx, []*schedulepb.Message{{To: unknownAddr}})
 		require.Nil(t, err)
-		require.False(t, done)
 	}
 }
 
-func TestEmptyRecv(t *testing.T) {
+func TestTransEmptyRecv(t *testing.T) {
 	t.Parallel()
 
 	cluster := p2p.NewMockCluster(t, 3)

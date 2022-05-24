@@ -16,6 +16,7 @@ package tp
 import (
 	"context"
 
+	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/tp/schedulepb"
 )
@@ -24,6 +25,7 @@ type callback func(model.TableID)
 
 // burstBalance for changefeed set up or unplaned TiCDC node failure.
 // TiCDC needs to balance intrrupted tables as soon as possible.
+//nolint:deadcode
 type burstBalance struct {
 	tables map[model.TableID]model.CaptureID
 
@@ -59,72 +61,81 @@ type scheduleTask struct {
 }
 
 type replicationManager struct {
-	tables       map[model.TableID]ReplicationSet
+	version      string
+	tables       map[model.TableID]*ReplicationSet
 	runningTasks map[model.TableID]*scheduleTask
-	captures     map[model.CaptureID]captureStatus
 }
 
-func (s *replicationManager) captureTableSets() map[model.CaptureID]captureStatus {
-	return s.captures
-}
-
-func (s *replicationManager) poll(
+func (r *replicationManager) poll(
 	ctx context.Context,
 	// Latest global checkpoint of the changefeed
 	checkpointTs model.Ts,
 	// All tables that SHOULD be replicated (or started) at the current checkpoint.
 	currentTables []model.TableID,
 	// All captures that are alive according to the latest Etcd states.
-	captures map[model.CaptureID]*model.CaptureInfo,
+	aliveCaptures map[model.CaptureID]*model.CaptureInfo,
 	msgs []*schedulepb.Message,
 	tasks []*scheduleTask,
 ) ([]*schedulepb.Message, error) {
-	// s.handleMessage(msgs)
-	//
-	// s.handleTasks(tasks)
-	//
-	// s.sendMessages(msgs)
+	msgBuf := make([]*schedulepb.Message, 0)
 
+	sendMsgs, err := r.handleMessage(msgs)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	msgBuf = append(msgBuf, sendMsgs...)
+
+	sendMsgs, err = r.handleMessage(msgs)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	msgBuf = append(msgBuf, sendMsgs...)
+
+	return msgBuf, nil
+}
+
+func (r *replicationManager) handleMessage(
+	msg []*schedulepb.Message,
+) ([]*schedulepb.Message, error) {
+	// s.handleMessageHeartbeat()
+	// s.handleMessageCheckpoint()
+	// s.handleMessageDispatchTableResponse()
 	return nil, nil
 }
 
-func (s *replicationManager) handleMessage(msg []*schedulepb.Message) {
-	// s.handleMessageSync()
-	// s.handleMessageCheckpoint()
-	// s.handleMessageDispatchTableResponse()
+func (r *replicationManager) handleMessageHeartbeat(msg *schedulepb.Heartbeat) {
+	// TODO: build s.tables from Heartbeat message.
 }
 
-func (s *replicationManager) handleMessageSync(msg *schedulepb.Sync) {
-	// TODO: build s.tables from Sync message.
-}
-
-func (s *replicationManager) handleMessageDispatchTableResponse(msg *schedulepb.DispatchTableResponse) {
+func (r *replicationManager) handleMessageDispatchTableResponse(
+	msg *schedulepb.DispatchTableResponse,
+) {
 	// TODO: update s.tables from DispatchTableResponse message.
 }
 
-func (s *replicationManager) handleMessageCheckpoint(msg *schedulepb.Checkpoint) {
+func (r *replicationManager) handleMessageCheckpoint(msg *schedulepb.Checkpoint) {
 	// TODO: update s.tables from Checkpoint message.
 }
 
 // ========
 
-func (s *replicationManager) handleTasks(tasks []*scheduleTask) {
+func (r *replicationManager) handleTasks(tasks []*scheduleTask) {
 	// s.handleTaskAddTable(nil)
 	// s.handleTaskMoveTable(nil)
 	// s.handleTaskDeleteTable(nil)
 }
 
-func (s *replicationManager) handleTaskMoveTable(task *moveTable) error {
+func (r *replicationManager) handleTaskMoveTable(task *moveTable) error {
 	// TODO: update s.runingTasks and s.tables.
 	return nil
 }
 
-func (s *replicationManager) handleTaskAddTable(task *addTable) error {
+func (r *replicationManager) handleTaskAddTable(task *addTable) error {
 	// TODO: update s.runingTasks and s.tables.
 	return nil
 }
 
-func (s *replicationManager) handleTaskDeleteTable(task *deleteTable) error {
+func (r *replicationManager) handleTaskDeleteTable(task *deleteTable) error {
 	// TODO: update s.runingTasks and s.tables.
 	return nil
 }

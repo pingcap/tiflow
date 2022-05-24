@@ -44,12 +44,12 @@ func (a *agent) Close() error {
 }
 
 func (a *agent) handleMessage(msg []*schedulepb.Message) {
-	// s.handleMessageAnnounce()
+	// s.handleMessageHeartbeat()
 	// s.handleMessageDispatchTableRequest()
 }
 
-func (a *agent) handleMessageAnnounce(msg *schedulepb.Sync) {
-	// TODO: build s.tables from Sync message.
+func (a *agent) handleMessageHeartbeat(msg *schedulepb.Heartbeat) {
+	// TODO: build s.tables from Heartbeat message.
 }
 
 func (a *agent) handleMessageDispatchTableRequest(msg *schedulepb.DispatchTableResponse) {
