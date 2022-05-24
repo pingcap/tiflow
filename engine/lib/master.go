@@ -441,6 +441,8 @@ func (m *DefaultBaseMaster) doClose() {
 // Close implements BaseMaster.Close
 func (m *DefaultBaseMaster) Close(ctx context.Context) error {
 	err := m.Impl.CloseImpl(ctx)
+	// We don't return here if CloseImpl return error to ensure
+	// that we can close inner resources of the framework
 	if err != nil {
 		log.L().Error("Failed to close MasterImpl", zap.Error(err))
 	}

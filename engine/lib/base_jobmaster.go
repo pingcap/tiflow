@@ -182,6 +182,8 @@ func (d *DefaultBaseJobMaster) GetWorkers() map[libModel.WorkerID]WorkerHandle {
 // Close implements BaseJobMaster.Close
 func (d *DefaultBaseJobMaster) Close(ctx context.Context) error {
 	err := d.impl.CloseImpl(ctx)
+	// We don't return here if CloseImpl return error to ensure
+	// that we can close inner resources of the framework
 	if err != nil {
 		log.L().Error("Failed to close JobMasterImpl", zap.Error(err))
 	}

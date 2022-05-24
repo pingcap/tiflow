@@ -356,6 +356,8 @@ func (w *DefaultBaseWorker) doClose() {
 // Close implements BaseWorker.Close
 func (w *DefaultBaseWorker) Close(ctx context.Context) error {
 	err := w.Impl.CloseImpl(ctx)
+	// We don't return here if CloseImpl return error to ensure
+	// that we can close inner resources of the framework
 	if err != nil {
 		log.L().Error("Failed to close WorkerImpl", zap.Error(err))
 	}
