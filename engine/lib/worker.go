@@ -429,11 +429,11 @@ func (w *DefaultBaseWorker) Exit(ctx context.Context, status libModel.WorkerStat
 	w.workerStatus.ErrorMessage = status.ErrorMessage
 	w.workerStatus.ExtBytes = status.ExtBytes
 	if errRet = w.statusSender.UpdateStatus(ctx, w.workerStatus); errRet != nil {
-		return errRet
+		return
 	}
 
 	errRet = derror.ErrWorkerFinish.FastGenByArgs()
-	return errRet
+	return
 }
 
 func (w *DefaultBaseWorker) startBackgroundTasks() {
