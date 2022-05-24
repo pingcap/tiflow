@@ -46,7 +46,7 @@ func (u *UpstreamCfg) fromDMSourceConfig(from *dmconfig.SourceConfig) {
 }
 
 func (u *UpstreamCfg) toDMSourceConfig() *dmconfig.SourceConfig {
-	ret := &dmconfig.SourceConfig{}
+	ret := dmconfig.NewSourceConfig()
 	ret.SourceID = u.SourceID
 	ret.From = *u.DBCfg.Clone()
 	ret.ServerID = u.ServerID

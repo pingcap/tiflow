@@ -14,11 +14,13 @@
 package config
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
 	"github.com/BurntSushi/toml"
 	dmconfig "github.com/pingcap/tiflow/dm/dm/config"
+	dmmaster "github.com/pingcap/tiflow/dm/dm/master"
 	"github.com/stretchr/testify/require"
 )
 
@@ -27,7 +29,20 @@ const (
 	subtaskTemplateDir = "."
 )
 
+func checkAndNoAdjustSourceConfigMock(ctx context.Context, cfg *dmconfig.SourceConfig) error {
+	if _, err := cfg.Yaml(); err != nil {
+		return err
+	}
+	return cfg.Verify()
+}
+
 func TestJobCfg(t *testing.T) {
+	funcBackup := dmmaster.CheckAndAdjustSourceConfigFunc
+	dmmaster.CheckAndAdjustSourceConfigFunc = checkAndNoAdjustSourceConfigMock
+	defer func() {
+		dmmaster.CheckAndAdjustSourceConfigFunc = funcBackup
+	}()
+
 	jobCfg := &JobCfg{}
 	require.NoError(t, jobCfg.DecodeFile(jobTemplatePath))
 	require.Equal(t, "test", jobCfg.Name)
@@ -51,6 +66,12 @@ func TestJobCfg(t *testing.T) {
 }
 
 func TestTaskCfg(t *testing.T) {
+	funcBackup := dmmaster.CheckAndAdjustSourceConfigFunc
+	dmmaster.CheckAndAdjustSourceConfigFunc = checkAndNoAdjustSourceConfigMock
+	defer func() {
+		dmmaster.CheckAndAdjustSourceConfigFunc = funcBackup
+	}()
+
 	jobCfg := &JobCfg{}
 	require.NoError(t, jobCfg.DecodeFile(jobTemplatePath))
 

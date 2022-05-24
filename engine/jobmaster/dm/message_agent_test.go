@@ -19,6 +19,7 @@ import (
 	"sync"
 	"testing"
 
+	dmmaster "github.com/pingcap/tiflow/dm/dm/master"
 	"github.com/pingcap/tiflow/engine/lib/master"
 	resourcemeta "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 
@@ -82,6 +83,12 @@ func TestUpdateWorkerHandle(t *testing.T) {
 }
 
 func TestOperateWorker(t *testing.T) {
+	funcBackup := dmmaster.CheckAndAdjustSourceConfigFunc
+	dmmaster.CheckAndAdjustSourceConfigFunc = checkAndNoAdjustSourceConfigMock
+	defer func() {
+		dmmaster.CheckAndAdjustSourceConfigFunc = funcBackup
+	}()
+
 	mockMasterImpl := &MockMaster{}
 	messageAgent := NewMessageAgent(nil, "mock-jobmaster", mockMasterImpl)
 	task1 := "task1"
