@@ -411,28 +411,12 @@ func AdjustConfig(
 		return errors.Trace(err)
 	}
 
+	err = validateMinInsyncReplicas(admin, topics, topic, int(config.ReplicationFactor))
+	if err != nil {
+		return errors.Trace(err)
+	}
+
 	info, exists := topics[topic]
-	shouldValidateMinInsyncReplica := true
-	if !exists {
-		_, err = getBrokerConfig(admin, kafka.MinInsyncReplicasConfigName)
-		if err != nil {
-			// 'min.insync.replica' is invisible for Confluent Cloud
-			if strings.Contains(err.Error(),
-				string(cerror.ErrKafkaBrokerConfigNotFound.RFCCode())) {
-				shouldValidateMinInsyncReplica = false
-			} else {
-				return errors.Trace(err)
-			}
-		}
-	}
-
-	if shouldValidateMinInsyncReplica {
-		err = validateMinInsyncReplicas(admin, topics, topic, int(config.ReplicationFactor))
-		if err != nil {
-			return errors.Trace(err)
-		}
-	}
-
 	// once we have found the topic, no matter `auto-create-topic`, make sure user input parameters are valid.
 	if exists {
 		// make sure that producer's `MaxMessageBytes` smaller than topic's `max.message.bytes`
@@ -524,7 +508,12 @@ func validateMinInsyncReplicas(
 
 	minInsyncReplicasStr, exists, err := minInsyncReplicasConfigGetter()
 	if err != nil {
-		return err
+		if strings.Contains(err.Error(),
+			string(cerror.ErrKafkaBrokerConfigNotFound.RFCCode())) {
+			return nil
+		} else {
+			return err
+		}
 	}
 	minInsyncReplicas, err := strconv.Atoi(minInsyncReplicasStr)
 	if err != nil {
