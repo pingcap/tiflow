@@ -27,7 +27,6 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	p2pProtocol "github.com/pingcap/tiflow/proto/p2p"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.etcd.io/etcd/client/v3/concurrency"
 	"go.etcd.io/etcd/server/v3/embed"
@@ -56,6 +55,7 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
+	"github.com/pingcap/tiflow/engine/pkg/promutil"
 	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
 	"github.com/pingcap/tiflow/engine/pkg/serverutils"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
@@ -447,8 +447,6 @@ func (s *Server) Run(ctx context.Context) (err error) {
 		return s.startForTest(ctx)
 	}
 
-	registerMetrics()
-
 	err = s.registerMetaStore()
 	if err != nil {
 		return err
@@ -570,7 +568,7 @@ func (s *Server) startGrpcSrv(ctx context.Context) (err error) {
 
 	httpHandlers := map[string]http.Handler{
 		"/debug/":  getDebugHandler(),
-		"/metrics": promhttp.Handler(),
+		"/metrics": promutil.HTTPHandlerForMetric(),
 	}
 
 	// generate grpcServer

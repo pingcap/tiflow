@@ -88,7 +88,6 @@ func TestStartGrpcSrv(t *testing.T) {
 	defer cleanup()
 
 	s := &Server{cfg: cfg}
-	registerMetrics()
 	ctx := context.Background()
 	err := s.startGrpcSrv(ctx)
 	require.Nil(t, err)
@@ -328,7 +327,6 @@ func TestCollectMetric(t *testing.T) {
 	masterAddr, cfg, cleanup := prepareServerEnv(t, "test-collect-metric")
 	defer cleanup()
 
-	registerMetrics()
 	s := &Server{
 		cfg:     cfg,
 		metrics: newServerMasterMetric(),
