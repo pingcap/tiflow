@@ -124,7 +124,7 @@ func (t *baseTask) createComponents(ctx context.Context) error {
 	return nil
 }
 
-// InitImpl implements lib.BaseWorker.InitImpl
+// InitImpl implements lib.WorkerImpl.InitImpl
 func (t *baseTask) InitImpl(ctx context.Context) error {
 	log.L().Info("init task")
 	if err := t.createComponents(ctx); err != nil {

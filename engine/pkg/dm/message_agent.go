@@ -126,7 +126,7 @@ func (m *messagePair) onResponse(id messageID, resp interface{}) error {
 // HandlerFunc defines handler func type.
 type HandlerFunc func(interface{}) error
 
-// MessageAgent defines interface for message communicate.
+// MessageAgent defines interface for message communication.
 type MessageAgent interface {
 	RegisterHandler(topic string, handler HandlerFunc)
 	UpdateSender(senderID string, sender Sender)
@@ -217,6 +217,12 @@ func (agent *MessageAgentImpl) RegisterHandler(topic string, handler HandlerFunc
 }
 
 // OnMessage receive message/request/response.
+// Forward the response to the corresponding request request.
+// According to the topic, the corresponding message processing function is called.
+// According to the topic, the corresponding request processing function is called, and send the response to caller.
+// NOTE: processing function name should same as topic name.
+// MessageFuncType: func(ctx context.Context, msg interface{}) error {}
+// RequestFuncType: func(ctx context.Context, req interface{}) (resp interface{}, err error) {}
 func (agent *MessageAgentImpl) OnMessage(senderID string, topic string, msg interface{}) error {
 	// matches the registered handler firstly
 	if val, ok := agent.handlers.Load(topic); ok {
