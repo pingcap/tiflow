@@ -458,16 +458,6 @@ func TestApplySASL(t *testing.T) {
 			exceptErr: "",
 		},
 		{
-			name: "valid GSSAPI user auth SASL with SSL encryption",
-			URI: "kafka://127.0.0.1:9092/abc?kafka-version=2.6.0&partition-num=0" +
-				"&sasl-mechanism=GSSAPI&sasl-gssapi-auth-type=USER" +
-				"&sasl-gssapi-kerberos-config-path=/root/config" +
-				"&sasl-gssapi-service-name=a&sasl-gssapi-user=user" +
-				"&sasl-gssapi-password=pwd" +
-				"&sasl-gssapi-realm=realm&sasl-gssapi-disable-pafxfast=false&enable-tls=true",
-			exceptErr: "",
-		},
-		{
 			name: "valid GSSAPI keytab auth SASL",
 			URI: "kafka://127.0.0.1:9092/abc?kafka-version=2.6.0&partition-num=0" +
 				"&sasl-mechanism=GSSAPI&sasl-gssapi-auth-type=keytab" +
@@ -475,16 +465,6 @@ func TestApplySASL(t *testing.T) {
 				"&sasl-gssapi-service-name=a&sasl-gssapi-user=user" +
 				"&sasl-gssapi-keytab-path=/root/keytab" +
 				"&sasl-gssapi-realm=realm&sasl-gssapi-disable-pafxfast=false",
-			exceptErr: "",
-		},
-		{
-			name: "valid GSSAPI keytab auth SASL with SSL encryption",
-			URI: "kafka://127.0.0.1:9092/abc?kafka-version=2.6.0&partition-num=0" +
-				"&sasl-mechanism=GSSAPI&sasl-gssapi-auth-type=keytab" +
-				"&sasl-gssapi-kerberos-config-path=/root/config" +
-				"&sasl-gssapi-service-name=a&sasl-gssapi-user=user" +
-				"&sasl-gssapi-keytab-path=/root/keytab" +
-				"&sasl-gssapi-realm=realm&sasl-gssapi-disable-pafxfast=false&enable-tls=true",
 			exceptErr: "",
 		},
 		{
