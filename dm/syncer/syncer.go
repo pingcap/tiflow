@@ -1983,12 +1983,10 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			canRedirect := !s.cfg.EnableGTID
 			if s.cfg.EnableGTID {
 				canRedirect = safeToRedirect(lastEvent)
-			} else {
-				if lastEvent != nil {
-					if _, ok := lastEvent.Event.(*replication.QueryEvent); ok {
-						if op := s.optimist.PendingOperation(); op != nil && op.ConflictStage == optimism.ConflictSkipWaitRedirect {
-							canRedirect = false // don't redirect here at least after a row event
-						}
+			} else if lastEvent != nil {
+				if _, ok := lastEvent.Event.(*replication.QueryEvent); ok {
+					if op := s.optimist.PendingOperation(); op != nil && op.ConflictStage == optimism.ConflictSkipWaitRedirect {
+						canRedirect = false // don't redirect here at least after a row event
 					}
 				}
 			}
