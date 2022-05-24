@@ -233,12 +233,11 @@ func TestWorkerMasterFailover(t *testing.T) {
 		StatusCode: libModel.MasterStatusInit,
 	})
 
-	worker.On("OnMasterFailover", mock.Anything).Return(nil)
 	// Trigger a pull from Meta for the latest master's info.
 	worker.clock.(*clock.Mock).Add(3 * config.DefaultTimeoutConfig().WorkerHeartbeatInterval)
 
 	require.Eventually(t, func() bool {
-		return worker.failoverCount.Load() == 1
+		return worker.masterClient.MasterNode() == executorNodeID3
 	}, time.Second*3, time.Millisecond*10)
 }
 
