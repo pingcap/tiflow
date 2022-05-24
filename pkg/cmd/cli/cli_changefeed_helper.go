@@ -21,7 +21,8 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tiflow/cdc/api"
+	ownerAPI "github.com/pingcap/tiflow/cdc/api/owner"
+	"github.com/pingcap/tiflow/cdc/api/validator"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/cmd/util"
@@ -84,7 +85,7 @@ func getTables(cliPdAddr string, credential *security.Credential, cfg *config.Re
 		return nil, nil, err
 	}
 
-	return api.VerifyTables(cfg, kvStore, startTs)
+	return validator.VerifyTables(cfg, kvStore, startTs)
 }
 
 // sendOwnerChangefeedQuery sends owner changefeed query request.
@@ -108,7 +109,7 @@ func sendOwnerChangefeedQuery(ctx context.Context, etcdClient *etcd.CDCEtcdClien
 	}
 
 	resp, err := httpClient.PostForm(ctx, url, map[string][]string{
-		api.OpVarChangefeedID: {id.ID},
+		ownerAPI.OpVarChangefeedID: {id.ID},
 	})
 	if err != nil {
 		return "", err
@@ -150,9 +151,9 @@ func sendOwnerAdminChangeQuery(ctx context.Context, etcdClient *etcd.CDCEtcdClie
 	}
 
 	resp, err := httpClient.PostForm(ctx, url, map[string][]string{
-		api.OpVarAdminJob:           {fmt.Sprint(int(job.Type))},
-		api.OpVarChangefeedID:       {job.CfID.ID},
-		api.OpForceRemoveChangefeed: {forceRemoveOpt},
+		ownerAPI.OpVarAdminJob:           {fmt.Sprint(int(job.Type))},
+		ownerAPI.OpVarChangefeedID:       {job.CfID.ID},
+		ownerAPI.OpForceRemoveChangefeed: {forceRemoveOpt},
 	})
 	if err != nil {
 		return err
