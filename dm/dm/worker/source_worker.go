@@ -275,7 +275,7 @@ func (w *SourceWorker) updateSourceStatus(ctx context.Context, needLock bool) er
 	if err != nil {
 		return err
 	}
-	status.Location = binlog.InitLocation(pos, gtidSet)
+	status.Location = binlog.NewLocation(pos, gtidSet)
 	ctx2, cancel2 := context.WithTimeout(ctx, utils.DefaultDBTimeout)
 	defer cancel2()
 	binlogs, err := binlog.GetBinaryLogs(ctx2, w.sourceDB.DB)
@@ -522,7 +522,7 @@ func (w *SourceWorker) DisableHandleSubtasks() {
 
 	// close all sub tasks
 	w.subTaskHolder.closeAllSubTasks()
-	w.l.Info("handling subtask enabled")
+	w.l.Info("handling subtask disabled")
 }
 
 // fetchSubTasksAndAdjust gets source's subtask stages and configs, adjust some values by worker's config and status

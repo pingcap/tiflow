@@ -843,7 +843,9 @@ func (h *openAPI) forwardToOwner(c *gin.Context) {
 	}
 
 	req.URL.Host = owner.AdvertiseAddr
-	if security != nil {
+	// we should check tls config instead of security here because
+	// security will never be nil
+	if tls, _ := security.ToTLSConfigWithVerify(); tls != nil {
 		req.URL.Scheme = "https"
 	} else {
 		req.URL.Scheme = "http"

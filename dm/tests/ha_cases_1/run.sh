@@ -43,7 +43,7 @@ function test_kill_master() {
 	test_running
 
 	echo "kill dm-master1"
-	ps aux | grep dm-master1 | awk '{print $2}' | xargs kill || true
+	kill_process dm-master1
 	check_master_port_offline 1
 	rm -rf $WORK_DIR/master1/default.master1
 
@@ -83,7 +83,7 @@ function test_kill_and_isolate_worker() {
 		"\"result\": true" 2
 
 	echo "kill dm-worker2"
-	ps aux | grep dm-worker2 | awk '{print $2}' | xargs kill || true
+	kill_process dm-worker2
 	check_port_offline $WORKER2_PORT 20
 	rm -rf $WORK_DIR/worker2/relay_log
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT1" \
@@ -104,7 +104,7 @@ function test_kill_and_isolate_worker() {
 		"\"result\": true" 3
 
 	echo "restart dm-worker3"
-	ps aux | grep dm-worker3 | awk '{print $2}' | xargs kill || true
+	kill_process dm-worker3
 	check_port_offline $WORKER3_PORT 20
 	rm -rf $WORK_DIR/worker3/relay_log
 
@@ -151,7 +151,7 @@ function test_kill_and_isolate_worker() {
 		"\"result\": true" 3
 
 	echo "restart worker4"
-	ps aux | grep dm-worker4 | awk '{print $2}' | xargs kill || true
+	kill_process dm-worker4
 	check_port_offline $WORKER4_PORT 20
 	rm -rf $WORK_DIR/worker4/relay_log
 	run_dm_worker $WORK_DIR/worker4 $WORKER4_PORT $cur/conf/dm-worker4.toml

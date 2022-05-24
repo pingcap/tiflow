@@ -484,11 +484,11 @@ func (s *testCheckpointSuite) testTableCheckPoint(c *C, cp CheckPoint) {
 			AddRow(schemaName, tableName, pos2.Name, pos2.Pos, gs.String(), "", 0, "", tiBytes, false))
 	err = cp.Load(tctx)
 	c.Assert(err, IsNil)
-	c.Assert(cp.GlobalPoint(), DeepEquals, binlog.InitLocation(pos2, gs))
+	c.Assert(cp.GlobalPoint(), DeepEquals, binlog.NewLocation(pos2, gs))
 	rcp = cp.(*RemoteCheckPoint)
 	c.Assert(rcp.points[schemaName][tableName].TableInfo(), NotNil)
 	c.Assert(rcp.points[schemaName][tableName].flushedPoint.ti, NotNil)
-	c.Assert(*rcp.safeModeExitPoint, DeepEquals, binlog.InitLocation(pos2, gs))
+	c.Assert(*rcp.safeModeExitPoint, DeepEquals, binlog.NewLocation(pos2, gs))
 }
 
 func TestRemoteCheckPointLoadIntoSchemaTracker(t *testing.T) {
