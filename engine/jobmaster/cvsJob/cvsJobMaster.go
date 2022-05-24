@@ -349,19 +349,8 @@ func (jm *JobMaster) Workload() model.RescUnit {
 	return 2
 }
 
-// OnMasterFailover implements JobMasterImpl.OnMasterFailover
-func (jm *JobMaster) OnMasterFailover(reason lib.MasterFailoverReason) error {
-	return nil
-}
-
 // OnMasterMessage implements JobMasterImpl.OnMasterMessage
 func (jm *JobMaster) OnMasterMessage(topic p2p.Topic, message p2p.MessageValue) error {
-	return nil
-}
-
-// OnJobManagerFailover implements JobMasterImpl.OnJobManagerFailover
-func (jm *JobMaster) OnJobManagerFailover(reason lib.MasterFailoverReason) error {
-	log.L().Info("cvs jobmaster: OnJobManagerFailover", zap.Any("reason", reason))
 	return nil
 }
 
