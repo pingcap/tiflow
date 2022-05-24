@@ -351,7 +351,8 @@ func TestAdjustConfigMinInsyncReplicas(t *testing.T) {
 	}, false)
 	require.Nil(t, err)
 	err = AdjustConfig(adminClient, config, saramaConfig, topicName)
-	require.Nil(t, err)
+	require.Regexp(t, ".*cannot find the `min.insync.replicas` from the broker's configuration",
+		errors.Cause(err))
 
 	// topic found, and have `min.insync.replicas`, but set to 2, larger than `replication-factor`.
 	adminClient.SetMinInsyncReplicas("2")
