@@ -427,6 +427,7 @@ type persistedData struct {
 }
 
 func (c *validatorPersistHelper) loadPersistedDataRetry(tctx *tcontext.Context) (*persistedData, error) {
+	start := time.Now()
 	newCtx, cancelFunc := tctx.WithTimeout(validationDBTimeout)
 	defer cancelFunc()
 	workFunc := func(tctx *tcontext.Context) (interface{}, error) {
@@ -437,6 +438,8 @@ func (c *validatorPersistHelper) loadPersistedDataRetry(tctx *tcontext.Context) 
 		c.L.Error("failed load persisted data after retry", zap.Int("retry-times", i), zap.Error(err))
 		return nil, err
 	}
+
+	c.L.Info("loaded persisted data", zap.Duration("time taken", time.Since(start)))
 	return ret.(*persistedData), nil
 }
 
@@ -462,6 +465,7 @@ func (c *validatorPersistHelper) loadPersistedData(tctx *tcontext.Context) (*per
 }
 
 func (c *validatorPersistHelper) loadCheckpoint(tctx *tcontext.Context) (*binlog.Location, []int64, int64, error) {
+	start := time.Now()
 	query := `select
 				binlog_name, binlog_pos, binlog_gtid,
 				procd_ins, procd_upd, procd_del,
@@ -501,11 +505,13 @@ func (c *validatorPersistHelper) loadCheckpoint(tctx *tcontext.Context) (*binlog
 		return nil, nil, 0, err
 	}
 	c.L.Info("checkpoint loaded", zap.Reflect("loc", location),
-		zap.Int64s("processed(i, u, d)", processRowCounts), zap.Int64("rev", revision))
+		zap.Int64s("processed(i, u, d)", processRowCounts), zap.Int64("rev", revision),
+		zap.Duration("time taken", time.Since(start)))
 	return location, processRowCounts, revision, nil
 }
 
 func (c *validatorPersistHelper) loadPendingChange(tctx *tcontext.Context, rev int64) (map[string]*tableChangeDataForPersist, error) {
+	start := time.Now()
 	res := make(map[string]*tableChangeDataForPersist)
 	query := "select schema_name, table_name, row_pk, data, revision from " + c.pendingChangeTableName +
 		" where source = ? and revision = ?"
@@ -551,11 +557,13 @@ func (c *validatorPersistHelper) loadPendingChange(tctx *tcontext.Context, rev i
 	if err = rows.Err(); err != nil {
 		return nil, err
 	}
-	c.L.Info("pending change loaded", zap.Reflect("count", count), zap.Reflect("rev", rev))
+	c.L.Info("pending change loaded", zap.Reflect("count", count), zap.Reflect("rev", rev),
+		zap.Duration("time taken", time.Since(start)))
 	return res, nil
 }
 
 func (c *validatorPersistHelper) loadTableStatus(tctx *tcontext.Context) (map[string]*tableValidateStatus, error) {
+	start := time.Now()
 	res := make(map[string]*tableValidateStatus)
 	query := "select src_schema_name, src_table_name, dst_schema_name, dst_table_name, stage, message from " +
 		c.tableStatusTableName + " where source = ?"
@@ -588,7 +596,8 @@ func (c *validatorPersistHelper) loadTableStatus(tctx *tcontext.Context) (map[st
 	if err = rows.Err(); err != nil {
 		return nil, err
 	}
-	c.L.Info("table status loaded", zap.Reflect("count", len(res)))
+	c.L.Info("table status loaded", zap.Reflect("count", len(res)),
+		zap.Duration("time taken", time.Since(start)))
 	return res, nil
 }
 
