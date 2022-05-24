@@ -19,6 +19,7 @@ var _ scheduler = &balancer{}
 
 type balancer struct{}
 
+//nolint:deadcode
 func newBalancer() *balancer {
 	return nil
 }
@@ -31,7 +32,7 @@ func (b *balancer) Schedule(
 	checkpointTs model.Ts,
 	currentTables []model.TableID,
 	captures map[model.CaptureID]*model.CaptureInfo,
-	captureTables map[model.CaptureID]captureStatus,
+	captureTables map[model.CaptureID]*CaptureStatus,
 ) []*scheduleTask {
 	return nil
 }
