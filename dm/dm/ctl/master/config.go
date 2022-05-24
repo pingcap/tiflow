@@ -337,9 +337,9 @@ func getRelayCfgs(cli *clientv3.Client) (map[string]map[string]struct{}, error) 
 	if err != nil {
 		return nil, err
 	}
-	// try to get all source cfgs before v6.1.0
+	// try to get all source cfgs before v6.2.0
 	if len(relayCfgsMap) == 0 {
-		relayCfgsMap, _, err = ha.GetAllRelayConfigBeforeV610(cli)
+		relayCfgsMap, _, err = ha.GetAllRelayConfigBeforeV620(cli)
 		if err != nil {
 			return nil, err
 		}

@@ -95,9 +95,9 @@ func GetAllRelayConfig(cli *clientv3.Client) (map[string]map[string]struct{}, in
 	return ret, resp.Header.Revision, nil
 }
 
-// GetAllRelayConfigBeforeV610 gets all upstream relay configs before v6.1.0.
+// GetAllRelayConfigBeforeV620 gets all upstream relay configs before v6.2.0.
 // This func only use for config export command.
-func GetAllRelayConfigBeforeV610(cli *clientv3.Client) (map[string]map[string]struct{}, int64, error) {
+func GetAllRelayConfigBeforeV620(cli *clientv3.Client) (map[string]map[string]struct{}, int64, error) {
 	ctx, cancel := context.WithTimeout(cli.Ctx(), etcdutil.DefaultRequestTimeout)
 	defer cancel()
 
