@@ -57,7 +57,7 @@ func TestConfirmLargeDataGap(t *testing.T) {
 }
 
 func TestConfirmIgnoreIneligibleTables(t *testing.T) {
-
+	t.Parallel()
 	cmd := &cobra.Command{}
 
 	// check start ts more than 1 day before current ts, and type N when confirming
