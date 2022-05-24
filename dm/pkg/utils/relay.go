@@ -28,8 +28,6 @@ import (
 )
 
 // not support to config yet.
-// TODO: rename UUIDIndexFilename to RelaySubDirIndexFilename and rename uuids to subdirs
-// also write comments about naming of relay log subdirectory
 var (
 	UUIDIndexFilename  = "server-uuid.index"
 	MetaFilename       = "relay.meta"
@@ -69,13 +67,13 @@ func ParseUUIDIndex(indexPath string) ([]string, error) {
 	return uuids, nil
 }
 
-// AddSuffixForUUID adds a suffix for UUID.
+// AddSuffixForUUID adds a suffix for UUID, returns the name for relay log subdirectory.
 func AddSuffixForUUID(uuid string, id int) string {
 	return fmt.Sprintf("%s%s%06d", uuid, uuidIndexSeparator, id) // eg. 53ea0ed1-9bf8-11e6-8bea-64006a897c73.000001
 }
 
 // SuffixIntToStr convert int-represented suffix to string-represented.
-// TODO: assign RelaySubDirSuffix a type and implement Stringer
+// TODO: assign RelaySubDirSuffix a type and implement Stringer.
 func SuffixIntToStr(id int) string {
 	return fmt.Sprintf("%06d", id)
 }

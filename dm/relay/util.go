@@ -42,16 +42,16 @@ func isNewServer(ctx context.Context, prevUUID string, db *sql.DB, flavor string
 	return true, nil
 }
 
-// getNextUUID gets (the nextUUID and its suffix) after the current UUID.
-func getNextUUID(currUUID string, uuids []string) (string, string, error) {
-	for i := len(uuids) - 2; i >= 0; i-- {
-		if uuids[i] == currUUID {
-			nextUUID := uuids[i+1]
-			_, suffixInt, err := utils.ParseSuffixFromRelaySubDir(nextUUID)
+// getNextRelaySubDir gets next relay log subdirectory after the current subdirectory.
+func getNextRelaySubDir(currSubDir string, subDirs []string) (string, string, error) {
+	for i := len(subDirs) - 2; i >= 0; i-- {
+		if subDirs[i] == currSubDir {
+			nextSubDir := subDirs[i+1]
+			_, suffixInt, err := utils.ParseSuffixFromRelaySubDir(nextSubDir)
 			if err != nil {
-				return "", "", terror.Annotatef(err, "UUID %s", nextUUID)
+				return "", "", terror.Annotatef(err, "UUID %s", nextSubDir)
 			}
-			return nextUUID, utils.SuffixIntToStr(suffixInt), nil
+			return nextSubDir, utils.SuffixIntToStr(suffixInt), nil
 		}
 	}
 	return "", "", nil

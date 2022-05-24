@@ -42,7 +42,7 @@ var _ = Suite(&testPurgerSuite{
 	},
 	activeRelayLog: &streamer.RelayLogInfo{
 		TaskName:   fakeStrategyTaskName,
-		UUID:       "e9540a0d-f16d-11e8-8cb7-0242ac130008.000002",
+		SubDir:     "e9540a0d-f16d-11e8-8cb7-0242ac130008.000002",
 		UUIDSuffix: 2,
 		Filename:   "mysql-bin.000003", // last in second sub dir
 	},

@@ -96,12 +96,12 @@ func (r *testMetaSuite) TestLocalMeta(c *C) {
 	dirty := lm.Dirty()
 	c.Assert(dirty, IsFalse)
 
-	// set currentUUID because lm.doFlush need it
+	// set currentSubDir because lm.doFlush need it
 	currentUUID := "uuid.000001"
 	c.Assert(os.MkdirAll(path.Join(dir, currentUUID), 0o777), IsNil)
 	setLocalMetaWithCurrentUUID := func() {
 		lm = NewLocalMeta("mysql", dir)
-		lm.(*LocalMeta).currentUUID = currentUUID
+		lm.(*LocalMeta).currentSubDir = currentUUID
 	}
 
 	// adjust to start pos
@@ -155,7 +155,7 @@ func (r *testMetaSuite) TestLocalMeta(c *C) {
 	c.Assert(gset.String(), Equals, latestGTIDStr)
 
 	// reset
-	lm.(*LocalMeta).currentUUID = ""
+	lm.(*LocalMeta).currentSubDir = ""
 
 	for _, cs := range cases {
 		err = lm.AddDir(cs.uuid, nil, nil, 0)
@@ -241,7 +241,7 @@ func (r *testMetaSuite) TestLocalMetaPotentialDataRace(c *C) {
 	lm := NewLocalMeta("mysql", "/FAKE_DIR")
 	uuidStr := "85ab69d1-b21f-11e6-9c5e-64006a8978d2"
 	initGSet, _ := gtid.ParserGTID("mysql", fmt.Sprintf("%s:1", uuidStr))
-	lm.(*LocalMeta).currentUUID = uuidStr
+	lm.(*LocalMeta).currentSubDir = uuidStr
 	err = lm.Save(
 		mysql.Position{Name: "mysql-bin.000001", Pos: 234},
 		initGSet,

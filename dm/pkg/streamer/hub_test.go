@@ -49,8 +49,8 @@ func (t *testHubSuite) TestRelayLogInfo(c *C) {
 	c.Assert(rli3.Earlier(&rli1), IsFalse)
 
 	// string representation
-	rli3.UUID = "c6ae5afe-c7a3-11e8-a19d-0242ac130006.000001"
-	c.Assert(rli3.String(), Equals, filepath.Join(rli3.UUID, rli3.Filename))
+	rli3.SubDir = "c6ae5afe-c7a3-11e8-a19d-0242ac130006.000001"
+	c.Assert(rli3.String(), Equals, filepath.Join(rli3.SubDir, rli3.Filename))
 }
 
 func (t *testHubSuite) TestRelayLogInfoHub(c *C) {
@@ -85,7 +85,7 @@ func (t *testHubSuite) TestRelayLogInfoHub(c *C) {
 		c.Assert(err, IsNil)
 		taskName, earliest = rlih.earliest()
 		c.Assert(taskName, Equals, cs.taskName)
-		c.Assert(earliest.UUID, Equals, cs.uuid)
+		c.Assert(earliest.SubDir, Equals, cs.uuid)
 		c.Assert(earliest.Filename, Equals, cs.filename)
 	}
 	c.Assert(len(rlih.logs), Equals, 3)
@@ -98,7 +98,7 @@ func (t *testHubSuite) TestRelayLogInfoHub(c *C) {
 	taskName, earliest = rlih.earliest()
 	cs = cases[1]
 	c.Assert(taskName, Equals, cs.taskName)
-	c.Assert(earliest.UUID, Equals, cs.uuid)
+	c.Assert(earliest.SubDir, Equals, cs.uuid)
 	c.Assert(earliest.Filename, Equals, cs.filename)
 
 	// remove non-earliest
@@ -109,7 +109,7 @@ func (t *testHubSuite) TestRelayLogInfoHub(c *C) {
 	taskName, earliest = rlih.earliest()
 	cs = cases[1]
 	c.Assert(taskName, Equals, cs.taskName)
-	c.Assert(earliest.UUID, Equals, cs.uuid)
+	c.Assert(earliest.SubDir, Equals, cs.uuid)
 	c.Assert(earliest.Filename, Equals, cs.filename)
 
 	// all removed
@@ -141,7 +141,7 @@ func (t *testHubSuite) TestReaderHub(c *C) {
 	// the only one is the earliest
 	erli = h.EarliestActiveRelayLog()
 	c.Assert(erli, NotNil)
-	c.Assert(erli.UUID, Equals, "c6ae5afe-c7a3-11e8-a19d-0242ac130006.000004")
+	c.Assert(erli.SubDir, Equals, "c6ae5afe-c7a3-11e8-a19d-0242ac130006.000004")
 	c.Assert(erli.Filename, Equals, "mysql-bin.000001")
 
 	// update an earlier one
@@ -151,7 +151,7 @@ func (t *testHubSuite) TestReaderHub(c *C) {
 	// the earlier one is the earliest
 	erli = h.EarliestActiveRelayLog()
 	c.Assert(erli, NotNil)
-	c.Assert(erli.UUID, Equals, "c6ae5afe-c7a3-11e8-a19d-0242ac130006.000002")
+	c.Assert(erli.SubDir, Equals, "c6ae5afe-c7a3-11e8-a19d-0242ac130006.000002")
 	c.Assert(erli.Filename, Equals, "mysql-bin.000002")
 
 	// remove the earlier one
@@ -160,7 +160,7 @@ func (t *testHubSuite) TestReaderHub(c *C) {
 	// the only one is the earliest
 	erli = h.EarliestActiveRelayLog()
 	c.Assert(erli, NotNil)
-	c.Assert(erli.UUID, Equals, "c6ae5afe-c7a3-11e8-a19d-0242ac130006.000004")
+	c.Assert(erli.SubDir, Equals, "c6ae5afe-c7a3-11e8-a19d-0242ac130006.000004")
 	c.Assert(erli.Filename, Equals, "mysql-bin.000001")
 
 	// remove the only one

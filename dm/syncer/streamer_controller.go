@@ -206,7 +206,7 @@ func (c *StreamerController) resetReplicationSyncer(tctx *tcontext.Context, loca
 			// check the uuid before close
 			ctx, cancel := context.WithTimeout(tctx.Ctx, utils.DefaultDBTimeout)
 			defer cancel()
-			uuidSameWithUpstream, err = c.checkUUIDSameWithUpstream(ctx, location.Position, t.reader.GetUUIDs())
+			uuidSameWithUpstream, err = c.checkUUIDSameWithUpstream(ctx, location.Position, t.reader.GetSubDirs())
 			if err != nil {
 				return err
 			}
@@ -337,6 +337,7 @@ func (c *StreamerController) IsClosed() bool {
 }
 
 func (c *StreamerController) extractRelaySubDirSuffix(filename string) string {
+	// nolint:dogsled
 	_, uuidSuffix, _, _ := binlog.SplitFilenameWithUUIDSuffix(filename)
 	return uuidSuffix
 }

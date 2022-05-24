@@ -31,7 +31,7 @@ var (
 // RelayLogInfo represents information for relay log.
 type RelayLogInfo struct {
 	TaskName   string
-	UUID       string
+	SubDir     string
 	UUIDSuffix int
 	Filename   string
 }
@@ -48,7 +48,7 @@ func (info *RelayLogInfo) Earlier(other *RelayLogInfo) bool {
 
 // String implements Stringer.String.
 func (info *RelayLogInfo) String() string {
-	return filepath.Join(info.UUID, info.Filename)
+	return filepath.Join(info.SubDir, info.Filename)
 }
 
 // relayLogInfoHub holds information for all active relay logs.
@@ -63,8 +63,8 @@ func newRelayLogInfoHub() *relayLogInfoHub {
 	}
 }
 
-func (h *relayLogInfoHub) update(taskName, uuid, filename string) error {
-	_, suffix, err := utils.ParseSuffixFromRelaySubDir(uuid)
+func (h *relayLogInfoHub) update(taskName, subDir, filename string) error {
+	_, suffix, err := utils.ParseSuffixFromRelaySubDir(subDir)
 	if err != nil {
 		return err
 	}
@@ -75,7 +75,7 @@ func (h *relayLogInfoHub) update(taskName, uuid, filename string) error {
 	defer h.mu.Unlock()
 	h.logs[taskName] = RelayLogInfo{
 		TaskName:   taskName,
-		UUID:       uuid,
+		SubDir:     subDir,
 		UUIDSuffix: suffix,
 		Filename:   filename,
 	}
@@ -123,8 +123,8 @@ func GetReaderHub() *ReaderHub {
 }
 
 // UpdateActiveRelayLog updates active relay log for taskName.
-func (h *ReaderHub) UpdateActiveRelayLog(taskName, uuid, filename string) error {
-	return h.rlih.update(taskName, uuid, filename)
+func (h *ReaderHub) UpdateActiveRelayLog(taskName, subDir, filename string) error {
+	return h.rlih.update(taskName, subDir, filename)
 }
 
 // RemoveActiveRelayLog removes active relay log for taskName.

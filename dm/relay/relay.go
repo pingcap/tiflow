@@ -201,7 +201,7 @@ func (r *Relay) process(ctx context.Context) error {
 		return err
 	}
 
-	isNew, err := isNewServer(ctx, r.meta.UUID(), r.db.DB, r.cfg.Flavor)
+	isNew, err := isNewServer(ctx, r.meta.SubDir(), r.db.DB, r.cfg.Flavor)
 	if err != nil {
 		return err
 	}
@@ -251,7 +251,7 @@ func (r *Relay) process(ctx context.Context) error {
 		}
 
 		if isRelayMetaOutdated {
-			uuidWithSuffix := r.meta.UUID() // only change after switch
+			uuidWithSuffix := r.meta.SubDir() // only change after switch
 			err2 = r.PurgeRelayDir()
 			if err2 != nil {
 				return err2
@@ -634,7 +634,7 @@ func (r *Relay) handleEvents(
 		}
 
 		if _, ok := e.Event.(*replication.RotateEvent); ok && utils.IsFakeRotateEvent(e.Header) {
-			isNew, err2 := isNewServer(ctx, r.meta.UUID(), r.db.DB, r.cfg.Flavor)
+			isNew, err2 := isNewServer(ctx, r.meta.SubDir(), r.db.DB, r.cfg.Flavor)
 			// should start from the transaction beginning when switch to a new server
 			if err2 != nil {
 				return err2
@@ -821,7 +821,7 @@ func (r *Relay) reSetupMeta(ctx context.Context) error {
 func (r *Relay) updateMetricsRelaySubDirIndex() {
 	// when switching master server, update sub dir index metrics
 	node := r.masterNode()
-	uuidWithSuffix := r.meta.UUID() // only change after switch
+	uuidWithSuffix := r.meta.SubDir() // only change after switch
 	_, suffix, err := utils.ParseSuffixFromRelaySubDir(uuidWithSuffix)
 	if err != nil {
 		r.logger.Error("parse suffix for UUID", zap.String("UUID", uuidWithSuffix), zap.Error(err))
@@ -884,7 +884,7 @@ func (r *Relay) doIntervalOps(ctx context.Context) {
 				r.RUnlock()
 				return
 			}
-			trimmed, err := r.meta.TrimUUIDs()
+			trimmed, err := r.meta.TrimUUIDIndexFile()
 			if err != nil {
 				r.logger.Error("trim UUIDs", zap.Error(err))
 			} else if len(trimmed) > 0 {
@@ -1096,11 +1096,11 @@ func (r *Relay) Reload(newCfg *Config) error {
 
 // setActiveRelayLog sets or updates the current active relay log to file.
 func (r *Relay) setActiveRelayLog(filename string) {
-	uuid := r.meta.UUID()
+	uuid := r.meta.SubDir()
 	_, suffix, _ := utils.ParseSuffixFromRelaySubDir(uuid)
 	rli := &pkgstreamer.RelayLogInfo{
 		TaskName:   fakeRelayTaskName,
-		UUID:       uuid,
+		SubDir:     uuid,
 		UUIDSuffix: suffix,
 		Filename:   filename,
 	}

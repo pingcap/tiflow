@@ -100,7 +100,7 @@ func (fa *filenameArgs) SetActiveRelayLog(active *streamer.RelayLogInfo) {
 
 	safeRelayLog := &streamer.RelayLogInfo{
 		TaskName:   fakeStrategyTaskName,
-		UUID:       uuid,
+		SubDir:     uuid,
 		UUIDSuffix: endSuffix,
 		Filename:   fa.filename,
 	}
