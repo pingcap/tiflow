@@ -88,18 +88,18 @@ type processor struct {
 	checkpointTs model.Ts
 	resolvedTs   model.Ts
 
-	metricResolvedTsGauge           prometheus.Gauge
-	metricResolvedTsLagGauge        prometheus.Gauge
-	metricMinResolvedTableIDGuage   prometheus.Gauge
-	metricCheckpointTsGauge         prometheus.Gauge
-	metricCheckpointTsLagGauge      prometheus.Gauge
-	metricMinCheckpointTableIDGuage prometheus.Gauge
-	metricSyncTableNumGauge         prometheus.Gauge
-	metricSchemaStorageGcTsGauge    prometheus.Gauge
-	metricProcessorErrorCounter     prometheus.Counter
-	metricProcessorTickDuration     prometheus.Observer
-	metricsTableSinkTotalRows       prometheus.Counter
-	metricsProcessorMemoryGauge     prometheus.Gauge
+	metricResolvedTsGauge             prometheus.Gauge
+	metricResolvedTsLagGauge          prometheus.Gauge
+	metricMinResolvedTableIDGauge     prometheus.Gauge
+	metricCheckpointTsGauge           prometheus.Gauge
+	metricCheckpointTsLagGauge        prometheus.Gauge
+	metricMinCheckpointTableIDGauge   prometheus.Gauge
+	metricSyncTableNumGauge           prometheus.Gauge
+	metricSchemaStorageGcTsGauge      prometheus.Gauge
+	metricProcessorErrorCounter       prometheus.Counter
+	metricProcessorTickDuration       prometheus.Observer
+	metricsTableSinkTotalRows         prometheus.Counter
+	metricsProcessorMemoryConsumption prometheus.Observer
 }
 
 // checkReadyForMessages checks whether all necessary Etcd keys have been established.
@@ -258,13 +258,13 @@ func newProcessor(ctx cdcContext.Context, upStream *upstream.Upstream) *processo
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		metricResolvedTsLagGauge: resolvedTsLagGauge.
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
-		metricMinResolvedTableIDGuage: resolvedTsMinTableIDGauge.
+		metricMinResolvedTableIDGauge: resolvedTsMinTableIDGauge.
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		metricCheckpointTsGauge: checkpointTsGauge.
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		metricCheckpointTsLagGauge: checkpointTsLagGauge.
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
-		metricMinCheckpointTableIDGuage: checkpointTsMinTableIDGauge.
+		metricMinCheckpointTableIDGauge: checkpointTsMinTableIDGauge.
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		metricSyncTableNumGauge: syncTableNumGauge.
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
@@ -276,7 +276,7 @@ func newProcessor(ctx cdcContext.Context, upStream *upstream.Upstream) *processo
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		metricsTableSinkTotalRows: sinkmetric.TableSinkTotalRowsCountCounter.
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
-		metricsProcessorMemoryGauge: processorMemoryGauge.
+		metricsProcessorMemoryConsumption: processorMemoryHistogram.
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 	}
 	p.createTablePipeline = p.createTablePipelineImpl
@@ -332,7 +332,8 @@ func (p *processor) Tick(ctx cdcContext.Context, state *orchestrator.ChangefeedR
 	}
 
 	p.metricProcessorTickDuration.Observe(costTime.Seconds())
-	p.metricsProcessorMemoryGauge.Set(p.memoryConsumption())
+
+	//p.metricsProcessorMemoryConsumption.Set(p.memoryConsumption())
 	p.metricSyncTableNumGauge.Set(float64(len(p.tables)))
 
 	if err == nil {
@@ -674,12 +675,12 @@ func (p *processor) handlePosition(currentTs int64) {
 	resolvedPhyTs := oracle.ExtractPhysical(minResolvedTs)
 	p.metricResolvedTsLagGauge.Set(float64(currentTs-resolvedPhyTs) / 1e3)
 	p.metricResolvedTsGauge.Set(float64(resolvedPhyTs))
-	p.metricMinResolvedTableIDGuage.Set(float64(minResolvedTableID))
+	p.metricMinResolvedTableIDGauge.Set(float64(minResolvedTableID))
 
 	checkpointPhyTs := oracle.ExtractPhysical(minCheckpointTs)
 	p.metricCheckpointTsLagGauge.Set(float64(currentTs-checkpointPhyTs) / 1e3)
 	p.metricCheckpointTsGauge.Set(float64(checkpointPhyTs))
-	p.metricMinCheckpointTableIDGuage.Set(float64(minCheckpointTableID))
+	p.metricMinCheckpointTableIDGauge.Set(float64(minCheckpointTableID))
 
 	p.checkpointTs = minCheckpointTs
 	p.resolvedTs = minResolvedTs

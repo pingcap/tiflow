@@ -98,12 +98,13 @@ var (
 			Buckets:   prometheus.ExponentialBuckets(0.01 /* 10 ms */, 2, 18),
 		})
 
-	processorMemoryGauge = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
+	processorMemoryHistogram = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
 			Namespace: "ticdc",
 			Subsystem: "processor",
 			Name:      "memory_consumption",
 			Help:      "estimated memory consumption for all tables after the sorter",
+			Buckets:   prometheus.ExponentialBuckets(1*1024*1024 /* mb */, 2, 10),
 		}, []string{"namespace", "changefeed"})
 )
 
@@ -120,5 +121,5 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(processorSchemaStorageGcTsGauge)
 	registry.MustRegister(processorTickDuration)
 	registry.MustRegister(processorCloseDuration)
-	registry.MustRegister(processorMemoryGauge)
+	registry.MustRegister(processorMemoryHistogram)
 }
