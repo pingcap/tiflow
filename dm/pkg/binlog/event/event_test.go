@@ -641,8 +641,8 @@ func (t *testEventSuite) TestGenMariaDBGTIDListEvent(c *C) {
 			ServerID:  11,
 			Flags:     0x01,
 		}
-		latestPos uint32   = 4
-		gSet      gtid.Set // invalid
+		latestPos uint32         = 4
+		gSet      gmysql.GTIDSet // invalid
 	)
 
 	// invalid gSet
@@ -654,7 +654,7 @@ func (t *testEventSuite) TestGenMariaDBGTIDListEvent(c *C) {
 	gSet, err = gtid.ParserGTID(gmysql.MariaDBFlavor, "1-2-3")
 	c.Assert(err, IsNil)
 	c.Assert(gSet, NotNil)
-	mGSet, ok := gSet.Origin().(*gmysql.MariadbGTIDSet)
+	mGSet, ok := gSet.(*gmysql.MariadbGTIDSet)
 	c.Assert(ok, IsTrue)
 	c.Assert(mGSet, NotNil)
 
@@ -676,7 +676,7 @@ func (t *testEventSuite) TestGenMariaDBGTIDListEvent(c *C) {
 	gSet, err = gtid.ParserGTID(gmysql.MariaDBFlavor, "1-2-12,2-2-3,3-3-8,4-4-4")
 	c.Assert(err, IsNil)
 	c.Assert(gSet, NotNil)
-	mGSet, ok = gSet.Origin().(*gmysql.MariadbGTIDSet)
+	mGSet, ok = gSet.(*gmysql.MariadbGTIDSet)
 	c.Assert(ok, IsTrue)
 	c.Assert(mGSet, NotNil)
 
