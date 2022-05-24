@@ -19,6 +19,7 @@ var _ scheduler = &balancer{}
 
 type balancer struct{}
 
+//nolint:deadcode
 func newBalancer() *balancer {
 	return nil
 }

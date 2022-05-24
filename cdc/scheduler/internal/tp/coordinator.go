@@ -19,7 +19,6 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal"
-	"github.com/pingcap/tiflow/cdc/scheduler/internal/tp/schedulepb"
 )
 
 type scheduler interface {
@@ -69,28 +68,33 @@ func (c *coordinator) poll(
 	ctx context.Context, checkpointTs model.Ts, currentTables []model.TableID,
 	aliveCaptures map[model.CaptureID]*model.CaptureInfo,
 ) error {
+	recvMsgs, err := c.trans.Recv(ctx)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	sentMsgs, hasInit := c.captureM.poll(aliveCaptures, recvMsgs)
+	if !hasInit {
+		err := c.trans.Send(ctx, sentMsgs)
+		return errors.Trace(err)
+	}
+
 	captureTables := c.captureM.captureTableSets()
 	allTasks := make([]*scheduleTask, 0)
 	for _, sched := range c.scheduler {
 		tasks := sched.Schedule(checkpointTs, currentTables, aliveCaptures, captureTables)
 		allTasks = append(allTasks, tasks...)
 	}
-	recvMsgs := c.recvMessages()
-	sentMsgs, err := c.replicationM.poll(
+	msgs, err := c.replicationM.poll(
 		ctx, checkpointTs, currentTables, aliveCaptures, recvMsgs, allTasks)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	c.sendMessages(sentMsgs)
+	sentMsgs = append(sentMsgs, msgs...)
+	err = c.trans.Send(ctx, sentMsgs)
+	if err != nil {
+		return errors.Trace(err)
+	}
 
 	// checkpoint calcuation
-	return nil
-}
-
-func (c *coordinator) recvMessages() []*schedulepb.Message {
-	return nil
-}
-
-func (c *coordinator) sendMessages(msgs []*schedulepb.Message) error {
 	return nil
 }

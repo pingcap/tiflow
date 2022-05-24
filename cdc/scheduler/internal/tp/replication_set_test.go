@@ -67,8 +67,10 @@ func TestNewReplicationSet(t *testing.T) {
 				Captures: map[string]struct{}{"1": {}},
 			},
 			tableStatus: map[model.CaptureID]*schedulepb.TableStatus{
-				"1": {State: schedulepb.TableStateReplicating,
-					Checkpoint: schedulepb.Checkpoint{}},
+				"1": {
+					State:      schedulepb.TableStateReplicating,
+					Checkpoint: schedulepb.Checkpoint{},
+				},
 			},
 		},
 		{
@@ -79,8 +81,10 @@ func TestNewReplicationSet(t *testing.T) {
 				Captures:  map[string]struct{}{"1": {}},
 			},
 			tableStatus: map[model.CaptureID]*schedulepb.TableStatus{
-				"1": {State: schedulepb.TableStatePreparing,
-					Checkpoint: schedulepb.Checkpoint{}},
+				"1": {
+					State:      schedulepb.TableStatePreparing,
+					Checkpoint: schedulepb.Checkpoint{},
+				},
 			},
 		},
 		{
@@ -92,10 +96,14 @@ func TestNewReplicationSet(t *testing.T) {
 				Captures:  map[string]struct{}{"1": {}, "2": {}},
 			},
 			tableStatus: map[model.CaptureID]*schedulepb.TableStatus{
-				"1": {State: schedulepb.TableStatePreparing,
-					Checkpoint: schedulepb.Checkpoint{}},
-				"2": {State: schedulepb.TableStateReplicating,
-					Checkpoint: schedulepb.Checkpoint{}},
+				"1": {
+					State:      schedulepb.TableStatePreparing,
+					Checkpoint: schedulepb.Checkpoint{},
+				},
+				"2": {
+					State:      schedulepb.TableStateReplicating,
+					Checkpoint: schedulepb.Checkpoint{},
+				},
 			},
 		},
 		{
@@ -107,10 +115,14 @@ func TestNewReplicationSet(t *testing.T) {
 				Captures:  map[string]struct{}{"1": {}, "2": {}},
 			},
 			tableStatus: map[model.CaptureID]*schedulepb.TableStatus{
-				"1": {State: schedulepb.TableStatePrepared,
-					Checkpoint: schedulepb.Checkpoint{}},
-				"2": {State: schedulepb.TableStateReplicating,
-					Checkpoint: schedulepb.Checkpoint{}},
+				"1": {
+					State:      schedulepb.TableStatePrepared,
+					Checkpoint: schedulepb.Checkpoint{},
+				},
+				"2": {
+					State:      schedulepb.TableStateReplicating,
+					Checkpoint: schedulepb.Checkpoint{},
+				},
 			},
 		},
 		{
@@ -121,10 +133,14 @@ func TestNewReplicationSet(t *testing.T) {
 				Captures:  map[string]struct{}{"1": {}},
 			},
 			tableStatus: map[model.CaptureID]*schedulepb.TableStatus{
-				"1": {State: schedulepb.TableStatePrepared,
-					Checkpoint: schedulepb.Checkpoint{}},
-				"2": {State: schedulepb.TableStateStopping,
-					Checkpoint: schedulepb.Checkpoint{}},
+				"1": {
+					State:      schedulepb.TableStatePrepared,
+					Checkpoint: schedulepb.Checkpoint{},
+				},
+				"2": {
+					State:      schedulepb.TableStateStopping,
+					Checkpoint: schedulepb.Checkpoint{},
+				},
 			},
 		},
 		{
@@ -135,10 +151,14 @@ func TestNewReplicationSet(t *testing.T) {
 				Captures:  map[string]struct{}{"1": {}},
 			},
 			tableStatus: map[model.CaptureID]*schedulepb.TableStatus{
-				"1": {State: schedulepb.TableStatePrepared,
-					Checkpoint: schedulepb.Checkpoint{}},
-				"2": {State: schedulepb.TableStateStopped,
-					Checkpoint: schedulepb.Checkpoint{}},
+				"1": {
+					State:      schedulepb.TableStatePrepared,
+					Checkpoint: schedulepb.Checkpoint{},
+				},
+				"2": {
+					State:      schedulepb.TableStateStopped,
+					Checkpoint: schedulepb.Checkpoint{},
+				},
 			},
 		},
 		{
@@ -148,20 +168,28 @@ func TestNewReplicationSet(t *testing.T) {
 				Captures: map[string]struct{}{},
 			},
 			tableStatus: map[model.CaptureID]*schedulepb.TableStatus{
-				"1": {State: schedulepb.TableStateStopping,
-					Checkpoint: schedulepb.Checkpoint{}},
-				"2": {State: schedulepb.TableStateStopping,
-					Checkpoint: schedulepb.Checkpoint{}},
+				"1": {
+					State:      schedulepb.TableStateStopping,
+					Checkpoint: schedulepb.Checkpoint{},
+				},
+				"2": {
+					State:      schedulepb.TableStateStopping,
+					Checkpoint: schedulepb.Checkpoint{},
+				},
 			},
 		},
 		{
 			// Multiple primary error.
 			set: nil,
 			tableStatus: map[model.CaptureID]*schedulepb.TableStatus{
-				"1": {State: schedulepb.TableStateReplicating,
-					Checkpoint: schedulepb.Checkpoint{}},
-				"2": {State: schedulepb.TableStateReplicating,
-					Checkpoint: schedulepb.Checkpoint{}},
+				"1": {
+					State:      schedulepb.TableStateReplicating,
+					Checkpoint: schedulepb.Checkpoint{},
+				},
+				"2": {
+					State:      schedulepb.TableStateReplicating,
+					Checkpoint: schedulepb.Checkpoint{},
+				},
 			},
 		},
 	}

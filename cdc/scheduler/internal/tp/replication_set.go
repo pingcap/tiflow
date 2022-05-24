@@ -154,7 +154,8 @@ func (r *ReplicationSet) inconsistentError(
 	fields = append(fields, []zap.Field{
 		zap.String("captureID", captureID),
 		zap.Stringer("tableState", input),
-		zap.Any("replicationSet", r)}...)
+		zap.Any("replicationSet", r),
+	}...)
 	log.L().WithOptions(zap.AddCallerSkip(1)).Error(msg, fields...)
 	return cerror.ErrReplicationSetInconsistent.GenWithStackByArgs(
 		fmt.Sprintf("tableID %d, %s", r.TableID, msg))
@@ -166,7 +167,8 @@ func (r *ReplicationSet) multiplePrimaryError(
 	fields = append(fields, []zap.Field{
 		zap.String("captureID", captureID),
 		zap.Stringer("tableState", input),
-		zap.Any("replicationSet", r)}...)
+		zap.Any("replicationSet", r),
+	}...)
 	log.L().WithOptions(zap.AddCallerSkip(1)).Error(msg, fields...)
 	return cerror.ErrReplicationSetMultiplePrimaryError.GenWithStackByArgs(
 		fmt.Sprintf("tableID %d, %s", r.TableID, msg))

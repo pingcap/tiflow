@@ -66,20 +66,25 @@ func TestCaptureManagerPoll(t *testing.T) {
 
 	// Poll one response
 	msgs, hasInit = cm.poll(ms, []*schedulepb.Message{
-		{Header: &schedulepb.Message_Header{}, From: "1",
+		{
+			Header: &schedulepb.Message_Header{}, From: "1",
 			MsgType:           schedulepb.MsgHeartbeatResponse,
-			HeartbeatResponse: &schedulepb.HeartbeatResponse{}},
+			HeartbeatResponse: &schedulepb.HeartbeatResponse{},
+		},
 	})
 	require.False(t, hasInit)
 	require.Empty(t, msgs)
 
 	// Poll another response
 	msgs, hasInit = cm.poll(ms, []*schedulepb.Message{
-		{Header: &schedulepb.Message_Header{}, From: "2",
+		{
+			Header: &schedulepb.Message_Header{}, From: "2",
 			MsgType:           schedulepb.MsgHeartbeatResponse,
-			HeartbeatResponse: &schedulepb.HeartbeatResponse{}},
+			HeartbeatResponse: &schedulepb.HeartbeatResponse{},
+		},
 	})
 	require.True(t, hasInit, "%v %v", cm.Captures["1"], cm.Captures["2"])
+	require.Empty(t, msgs)
 }
 
 func TestCaptureManagerTick(t *testing.T) {
