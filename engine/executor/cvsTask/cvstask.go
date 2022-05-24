@@ -199,11 +199,6 @@ func (task *cvsTask) Workload() model.RescUnit {
 	return 1
 }
 
-// OnMasterFailover is called when the master is failed over.
-func (task *cvsTask) OnMasterFailover(reason lib.MasterFailoverReason) error {
-	return nil
-}
-
 func (task *cvsTask) OnMasterMessage(topic p2p.Topic, message p2p.MessageValue) error {
 	switch msg := message.(type) {
 	case *libModel.StatusChangeRequest:
