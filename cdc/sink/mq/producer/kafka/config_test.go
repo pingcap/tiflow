@@ -442,21 +442,9 @@ func TestApplySASL(t *testing.T) {
 			exceptErr: "",
 		},
 		{
-			name: "valid PLAIN SASL with SSL encryption",
-			URI: "kafka://127.0.0.1:9092/abc?kafka-version=2.6.0&partition-num=0" +
-				"&sasl-user=user&sasl-password=password&sasl-mechanism=plain&enable-tls=true",
-			exceptErr: "",
-		},
-		{
 			name: "valid SCRAM SASL",
 			URI: "kafka://127.0.0.1:9092/abc?kafka-version=2.6.0&partition-num=0" +
 				"&sasl-user=user&sasl-password=password&sasl-mechanism=SCRAM-SHA-512",
-			exceptErr: "",
-		},
-		{
-			name: "valid SCRAM SASL with SSL encryption",
-			URI: "kafka://127.0.0.1:9092/abc?kafka-version=2.6.0&partition-num=0&sasl-user=user" +
-				"&sasl-password=password&sasl-mechanism=SCRAM-SHA-512&enable-tls=true",
 			exceptErr: "",
 		},
 		{
@@ -524,6 +512,63 @@ func TestApplySASL(t *testing.T) {
 			} else {
 				require.Regexp(t, test.exceptErr, cfg.applySASL(sinkURI.Query()).Error())
 			}
+		})
+	}
+}
+
+func TestApplyTLS(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		URI        string
+		tlsEnabled bool
+		exceptErr  string
+	}{
+		{
+			name: "tls config with 'enable-tls' set to true",
+			URI: "kafka://127.0.0.1:9092/abc?kafka-version=2.6.0&partition-num=0" +
+				"&sasl-user=user&sasl-password=password&sasl-mechanism=plain&enable-tls=true",
+			tlsEnabled: true,
+			exceptErr:  "",
+		},
+		{
+			name: "tls config with no 'enable-tls', and credential files are supplied",
+			URI: "kafka://127.0.0.1:9092/abc?kafka-version=2.6.0&partition-num=0" +
+				"&sasl-user=user&sasl-password=password&sasl-mechanism=plain" +
+				"&ca=/root/ca.file&cert=/root/cert.file&key=/root/key.file",
+			tlsEnabled: true,
+			exceptErr:  "",
+		},
+		{
+			name: "tls config with no 'enable-tls', and credential files are not supplied",
+			URI: "kafka://127.0.0.1:9092/abc?kafka-version=2.6.0&partition-num=0" +
+				"&sasl-user=user&sasl-password=password&sasl-mechanism=plain",
+			tlsEnabled: false,
+			exceptErr:  "",
+		},
+		{
+			name: "tls config with 'enable-tls' set to false, and credential files are supplied",
+			URI: "kafka://127.0.0.1:9092/abc?kafka-version=2.6.0&partition-num=0" +
+				"&sasl-user=user&sasl-password=password&sasl-mechanism=plain&enable-tls=false" +
+				"&ca=/root/ca&cert=/root/cert&key=/root/key",
+			tlsEnabled: false,
+			exceptErr:  "credential files are supplied, but 'enable-tls' is set to false",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			cfg := NewConfig()
+			sinkURI, err := url.Parse(test.URI)
+			require.Nil(t, err)
+			if test.exceptErr == "" {
+				require.Nil(t, cfg.applyTLS(sinkURI.Query()))
+			} else {
+				require.Regexp(t, test.exceptErr, cfg.applyTLS(sinkURI.Query()).Error())
+			}
+			require.Equal(t, test.tlsEnabled, cfg.EnableTLS)
 		})
 	}
 }
