@@ -417,7 +417,9 @@ func (w *DefaultBaseWorker) OpenStorage(ctx context.Context, resourcePath resour
 // Exit implements BaseWorker.Exit
 func (w *DefaultBaseWorker) Exit(ctx context.Context, status libModel.WorkerStatus, err error) (errRet error) {
 	// Set the errCenter to prevent user from forgetting to return directly after calling 'Exit'
-	defer w.onError(errRet)
+	defer func() {
+		w.onError(errRet)
+	}()
 
 	if err != nil {
 		status.Code = libModel.WorkerStatusError
@@ -698,7 +700,6 @@ func (m *masterClient) CheckMasterTimeout(ctx context.Context, clock clock.Clock
 
 	if sinceLastAcked > 2*m.timeoutConfig.WorkerHeartbeatInterval &&
 		sinceLastAcked < m.timeoutConfig.WorkerTimeoutDuration {
-
 		if err := m.RefreshMasterInfo(ctx); err != nil {
 			return false, errors.Trace(err)
 		}
@@ -797,6 +798,10 @@ func (c *workerExitController) PollExit() error {
 			c.workerExitFsm.Store(workerExited)
 			return err
 		}
+		// workerExitWaitForMasterTimeout is used for the case that
+		// 'master is busy to reply or ignore reply for some bugs when heartbeat is ok'.
+		// Master need wait (WorkerTimeoutDuration + WorkerTimeoutGracefulDuration) to know worker had already exited without halfExit,
+		// so workerExitWaitForMasterTimeout < (WorkerTimeoutDuration + WorkerTimeoutGracefulDuration) is reasonable.
 		sinceStartExiting := c.clock.Since(c.halfExitTime.Load())
 		if sinceStartExiting > workerExitWaitForMasterTimeout {
 			// TODO log worker ID and master ID.
