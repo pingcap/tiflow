@@ -389,12 +389,16 @@ func NewSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
 	}
 
 	if c.EnableTLS {
+		// for SSL encryption with a trust CA certificate, we must populate the
+		// following two params of config.Net.TLS
 		config.Net.TLS.Enable = true
 		config.Net.TLS.Config = &tls.Config{
 			MinVersion: tls.VersionTLS12,
 			NextProtos: []string{"h2", "http/1.1"},
 		}
 
+		// for SSL encryption with self-signed CA certificate, we reassign the
+		// config.Net.TLS.Config using the relevant credential files.
 		if c.Credential != nil && len(c.Credential.CAPath) != 0 {
 			config.Net.TLS.Config, err = c.Credential.ToTLSConfig()
 			if err != nil {
