@@ -87,10 +87,11 @@ var (
 	registerOnce      sync.Once
 	runBackgroundOnce sync.Once
 
+	// CheckAndAdjustSourceConfigFunc is exposed to dataflow engine.
 	// the difference of below functions is checkAndAdjustSourceConfigForDMCtlFunc will not AdjustCaseSensitive. It's a
 	// compatibility compromise.
 	// When we need to change the implementation of dmctl to OpenAPI, we should notice the user about this change.
-	checkAndAdjustSourceConfigFunc         = CheckAndAdjustSourceConfig
+	CheckAndAdjustSourceConfigFunc         = checkAndAdjustSourceConfig
 	checkAndAdjustSourceConfigForDMCtlFunc = checkAndAdjustSourceConfigForDMCtl
 )
 
@@ -1354,9 +1355,7 @@ func innerCheckAndAdjustSourceConfig(
 	return cfg.Verify()
 }
 
-// CheckAndAdjustSourceConfig adjusts most fields of SourceConfig, it's used by
-// OpenAPI and dataflow engine.
-func CheckAndAdjustSourceConfig(ctx context.Context, cfg *config.SourceConfig) error {
+func checkAndAdjustSourceConfig(ctx context.Context, cfg *config.SourceConfig) error {
 	return innerCheckAndAdjustSourceConfig(ctx, cfg, (*config.SourceConfig).AdjustCaseSensitive)
 }
 

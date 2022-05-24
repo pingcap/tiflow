@@ -201,7 +201,7 @@ func (t *testMaster) SetUpSuite(c *check.C) {
 
 func (t *testMaster) TearDownSuite(c *check.C) {
 	maxRetryNum = t.saveMaxRetryNum
-	checkAndAdjustSourceConfigForDMCtlFunc = CheckAndAdjustSourceConfig
+	checkAndAdjustSourceConfigForDMCtlFunc = checkAndAdjustSourceConfig
 }
 
 func (t *testMaster) SetUpTest(c *check.C) {

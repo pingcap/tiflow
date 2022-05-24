@@ -47,6 +47,7 @@ func (u *UpstreamCfg) fromDMSourceConfig(from *dmconfig.SourceConfig) {
 
 func (u *UpstreamCfg) toDMSourceConfig() *dmconfig.SourceConfig {
 	ret := &dmconfig.SourceConfig{}
+	ret.SourceID = u.SourceID
 	ret.From = *u.DBCfg.Clone()
 	ret.ServerID = u.ServerID
 	ret.Flavor = u.Flavor
@@ -59,7 +60,7 @@ func (u *UpstreamCfg) adjust() error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 	dmSource := u.toDMSourceConfig()
-	err := master.CheckAndAdjustSourceConfig(ctx, dmSource)
+	err := master.CheckAndAdjustSourceConfigFunc(ctx, dmSource)
 	if err != nil {
 		return err
 	}
