@@ -57,34 +57,45 @@ func TestCaptureManagerPoll(t *testing.T) {
 	cm := newCaptureManager(rev, 2)
 
 	// Initial poll for alive captures.
-	msgs, hasInit := cm.poll(ms, nil)
-	require.False(t, hasInit)
+	msgs := cm.Poll(ms, nil)
 	require.ElementsMatch(t, []*schedulepb.Message{
 		{To: "1", MsgType: schedulepb.MsgHeartbeat, Heartbeat: &schedulepb.Heartbeat{}},
 		{To: "2", MsgType: schedulepb.MsgHeartbeat, Heartbeat: &schedulepb.Heartbeat{}},
 	}, msgs)
+	require.False(t, cm.CheckAllCaptureInitialized())
 
 	// Poll one response
-	msgs, hasInit = cm.poll(ms, []*schedulepb.Message{
+	msgs = cm.Poll(ms, []*schedulepb.Message{
 		{
 			Header: &schedulepb.Message_Header{}, From: "1",
 			MsgType:           schedulepb.MsgHeartbeatResponse,
 			HeartbeatResponse: &schedulepb.HeartbeatResponse{},
 		},
 	})
-	require.False(t, hasInit)
 	require.Empty(t, msgs)
+	require.False(t, cm.CheckAllCaptureInitialized())
 
 	// Poll another response
-	msgs, hasInit = cm.poll(ms, []*schedulepb.Message{
+	msgs = cm.Poll(ms, []*schedulepb.Message{
 		{
 			Header: &schedulepb.Message_Header{}, From: "2",
 			MsgType:           schedulepb.MsgHeartbeatResponse,
 			HeartbeatResponse: &schedulepb.HeartbeatResponse{},
 		},
 	})
-	require.True(t, hasInit, "%v %v", cm.Captures["1"], cm.Captures["2"])
 	require.Empty(t, msgs)
+	require.True(t, cm.CheckAllCaptureInitialized(), "%v %v", cm.Captures["1"], cm.Captures["2"])
+
+	// Poll unknown capture response
+	msgs = cm.Poll(ms, []*schedulepb.Message{
+		{
+			Header: &schedulepb.Message_Header{}, From: "unknown",
+			MsgType:           schedulepb.MsgHeartbeatResponse,
+			HeartbeatResponse: &schedulepb.HeartbeatResponse{},
+		},
+	})
+	require.Empty(t, msgs)
+	require.True(t, cm.CheckAllCaptureInitialized())
 }
 
 func TestCaptureManagerTick(t *testing.T) {
@@ -94,22 +105,22 @@ func TestCaptureManagerTick(t *testing.T) {
 	cm := newCaptureManager(rev, 2)
 
 	// No heartbeat if there is no capture.
-	msgs := cm.tick()
+	msgs := cm.Tick()
 	require.Empty(t, msgs)
-	msgs = cm.tick()
+	msgs = cm.Tick()
 	require.Empty(t, msgs)
 
 	ms := map[model.CaptureID]*model.CaptureInfo{
 		"1": {},
 		"2": {},
 	}
-	_, hasInit := cm.poll(ms, nil)
-	require.False(t, hasInit)
+	cm.Poll(ms, nil)
+	require.False(t, cm.CheckAllCaptureInitialized())
 
 	// Heartbeat even if capture is uninitialize.
-	msgs = cm.tick()
+	msgs = cm.Tick()
 	require.Empty(t, msgs)
-	msgs = cm.tick()
+	msgs = cm.Tick()
 	require.ElementsMatch(t, []*schedulepb.Message{
 		{To: "1", MsgType: schedulepb.MsgHeartbeat, Heartbeat: &schedulepb.Heartbeat{}},
 		{To: "2", MsgType: schedulepb.MsgHeartbeat, Heartbeat: &schedulepb.Heartbeat{}},
@@ -119,10 +130,10 @@ func TestCaptureManagerTick(t *testing.T) {
 	for _, s := range []CaptureState{CaptureStateInitialized, CaptureStateStopping} {
 		cm.Captures["1"].State = s
 		cm.Captures["2"].State = s
-		require.True(t, cm.checkAllCaptureInitialized())
-		msgs = cm.tick()
+		require.True(t, cm.CheckAllCaptureInitialized())
+		msgs = cm.Tick()
 		require.Empty(t, msgs)
-		msgs = cm.tick()
+		msgs = cm.Tick()
 		require.ElementsMatch(t, []*schedulepb.Message{
 			{To: "1", MsgType: schedulepb.MsgHeartbeat, Heartbeat: &schedulepb.Heartbeat{}},
 			{To: "2", MsgType: schedulepb.MsgHeartbeat, Heartbeat: &schedulepb.Heartbeat{}},

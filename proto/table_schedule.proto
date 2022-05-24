@@ -41,32 +41,28 @@ message RemoveTableRequest {
 }
 
 message DispatchTableRequest {
-    AddTableRequest add_table = 1;
-    RemoveTableRequest remove_table = 2;
+    oneof request {
+        AddTableRequest add_table = 1;
+        RemoveTableRequest remove_table = 2;
+    }
 }
 
 message AddTableResponse {
-    int64 table_id = 1 [
-        (gogoproto.casttype) = "github.com/pingcap/tiflow/cdc/model.TableID",
-        (gogoproto.customname) = "TableID"
-    ];
-    TableStatus status = 2;
-    Checkpoint checkpoint = 3;
-    bool reject = 4;
+    TableStatus status = 1;
+    Checkpoint checkpoint = 2;
+    bool reject = 3;
 }
 
 message RemoveTableResponse {
-    int64 table_id = 1 [
-        (gogoproto.casttype) = "github.com/pingcap/tiflow/cdc/model.TableID",
-        (gogoproto.customname) = "TableID"
-    ];
-    TableStatus status = 2;
-    Checkpoint checkpoint = 3;
+    TableStatus status = 1;
+    Checkpoint checkpoint = 2;
 }
 
 message DispatchTableResponse {
-    AddTableResponse add_table = 1;
-    RemoveTableResponse remove_table = 2;
+    oneof response {
+        AddTableResponse add_table = 1;
+        RemoveTableResponse remove_table = 2;
+    }
 }
 
 message Heartbeat {}
@@ -132,5 +128,8 @@ message Message {
     DispatchTableResponse dispatch_table_response = 6;
     Heartbeat heartbeat = 7;
     HeartbeatResponse heartbeat_response = 8;
-    Checkpoint checkpoint = 9;
+    map<int64, Checkpoint> checkpoints = 9 [
+        (gogoproto.castkey) = "github.com/pingcap/tiflow/cdc/model.TableID",
+        (gogoproto.nullable) = false
+    ];
 }
