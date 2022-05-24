@@ -24,13 +24,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pingcap/tiflow/engine/pkg/externalresource/manager"
-
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/engine/lib"
 	libModel "github.com/pingcap/tiflow/engine/lib/model"
 	"github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pb"
+	"github.com/pingcap/tiflow/engine/pkg/externalresource/manager"
 	"github.com/pingcap/tiflow/engine/pkg/notifier"
 	"github.com/pingcap/tiflow/engine/servermaster/scheduler"
 
