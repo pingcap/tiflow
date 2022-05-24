@@ -412,6 +412,8 @@ func AdjustConfig(
 	}
 
 	err = validateMinInsyncReplicas(admin, topics, topic, int(config.ReplicationFactor))
+	// 'min.insync.replica' if invisible for Confluent Cloud. Moreover, replication-factor is
+	// required to be 3 for Confluent Cloud.
 	if err != nil && !strings.Contains(err.Error(),
 		string(cerror.ErrKafkaBrokerConfigNotFound.RFCCode())) {
 		return errors.Trace(err)
@@ -553,6 +555,7 @@ func getBrokerConfig(admin kafka.ClusterAdminClient, brokerConfigName string) (s
 	}
 
 	if len(configEntries) == 0 || configEntries[0].Name != brokerConfigName {
+		log.Warn("Kafka config item not found", zap.String("configName", brokerConfigName))
 		return "", cerror.ErrKafkaBrokerConfigNotFound.GenWithStack(
 			"cannot find the `%s` from the broker's configuration", brokerConfigName)
 	}
