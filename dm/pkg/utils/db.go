@@ -168,10 +168,10 @@ func GetSlaveServerID(ctx context.Context, db *sql.DB) (map[uint32]struct{}, err
 	return serverIDs, nil
 }
 
-// GetPosAndGs get binlog position and gtid.Set from `show master status`.
+// GetPosAndGs get binlog position and gmysql.GTIDSet from `show master status`.
 func GetPosAndGs(ctx context.Context, db *sql.DB, flavor string) (
 	binlogPos gmysql.Position,
-	gs gtid.Set,
+	gs gmysql.GTIDSet,
 	err error,
 ) {
 	binlogName, pos, _, _, gtidStr, err := GetMasterStatus(ctx, db, flavor)
@@ -195,7 +195,7 @@ func GetBinlogDB(ctx context.Context, db *sql.DB, flavor string) (string, string
 }
 
 // GetMasterStatus gets status from master.
-// When the returned error is nil, the gtid.Set must be not nil.
+// When the returned error is nil, the gtid must be not nil.
 func GetMasterStatus(ctx context.Context, db *sql.DB, flavor string) (
 	string, uint32, string, string, string, error,
 ) {
@@ -275,7 +275,7 @@ func GetMasterStatus(ctx context.Context, db *sql.DB, flavor string) (
 
 // GetMariaDBGTID gets MariaDB's `gtid_binlog_pos`
 // it can not get by `SHOW MASTER STATUS`.
-func GetMariaDBGTID(ctx context.Context, db *sql.DB) (gtid.Set, error) {
+func GetMariaDBGTID(ctx context.Context, db *sql.DB) (gmysql.GTIDSet, error) {
 	gtidStr, err := GetGlobalVariable(ctx, db, "gtid_binlog_pos")
 	if err != nil {
 		return nil, err
@@ -545,8 +545,8 @@ func ExtractTiDBVersion(version string) (*semver.Version, error) {
 // because it doesn't cover all gtid_purged. The error of using it will be
 // ERROR 1236 (HY000): The slave is connecting using CHANGE MASTER TO MASTER_AUTO_POSITION = 1, but the master has purged binary logs containing GTIDs that the slave requires.
 // so we add gtid_purged to it.
-func AddGSetWithPurged(ctx context.Context, gset gtid.Set, conn *sql.Conn) (gtid.Set, error) {
-	if _, ok := gset.(*gtid.MariadbGTIDSet); ok {
+func AddGSetWithPurged(ctx context.Context, gset gmysql.GTIDSet, conn *sql.Conn) (gmysql.GTIDSet, error) {
+	if _, ok := gset.(*gmysql.MariadbGTIDSet); ok {
 		return gset, nil
 	}
 
@@ -572,14 +572,12 @@ func AddGSetWithPurged(ctx context.Context, gset gtid.Set, conn *sql.Conn) (gtid
 		return gset, nil
 	}
 
-	newGset := gset.Origin()
-	err = newGset.Update(gtidStr)
+	cloned := gset.Clone()
+	err = cloned.Update(gtidStr)
 	if err != nil {
 		return nil, err
 	}
-	ret := &gtid.MySQLGTIDSet{}
-	_ = ret.Set(newGset)
-	return ret, nil
+	return cloned, nil
 }
 
 // AdjustSQLModeCompatible adjust downstream sql mode to compatible.

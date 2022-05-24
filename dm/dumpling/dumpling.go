@@ -15,6 +15,7 @@ package dumpling
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -214,6 +215,10 @@ func (m *Dumpling) Status(_ *binlog.SourceStatus) interface{} {
 	if m.core == nil {
 		return &pb.DumpStatus{}
 	}
+	return m.status()
+}
+
+func (m *Dumpling) status() *pb.DumpStatus {
 	mid := m.core.GetParameters()
 	s := &pb.DumpStatus{
 		TotalTables:       mid.TotalTables,
@@ -222,6 +227,19 @@ func (m *Dumpling) Status(_ *binlog.SourceStatus) interface{} {
 		FinishedRows:      mid.FinishedRows,
 		EstimateTotalRows: mid.EstimateTotalRows,
 	}
+	var estimateProgress string
+	if s.FinishedRows >= s.EstimateTotalRows {
+		estimateProgress = "100.00%"
+	} else {
+		estimateProgress = fmt.Sprintf("%.2f %%", s.FinishedRows/s.EstimateTotalRows*100)
+	}
+	m.logger.Info("progress status of dumpling",
+		zap.Int64("total_tables", s.TotalTables),
+		zap.Int64("finished_tables", int64(s.CompletedTables)),
+		zap.Int64("estimated_total_rows", int64(s.EstimateTotalRows)),
+		zap.Int64("finished_rows", int64(s.FinishedRows)),
+		zap.String("estimated_progress", estimateProgress),
+	)
 	return s
 }
 

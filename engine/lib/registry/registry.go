@@ -105,7 +105,7 @@ func (r *registryImpl) CreateWorker(
 			impl,
 			workerID,
 			masterID,
-			// tp,
+			tp,
 		)
 		setImplMember(impl, nameOfBaseWorker, base)
 		return base, nil
@@ -117,6 +117,7 @@ func (r *registryImpl) CreateWorker(
 			impl.(lib.JobMasterImpl),
 			masterID,
 			workerID,
+			tp,
 		)
 		setImplMember(impl, nameOfBaseJobMaster, base)
 		return base, nil
