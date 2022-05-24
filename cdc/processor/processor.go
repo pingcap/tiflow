@@ -332,9 +332,10 @@ func (p *processor) Tick(ctx cdcContext.Context, state *orchestrator.ChangefeedR
 	}
 
 	p.metricProcessorTickDuration.Observe(costTime.Seconds())
-
-	//p.metricsProcessorMemoryConsumption.Set(p.memoryConsumption())
 	p.metricSyncTableNumGauge.Set(float64(len(p.tables)))
+	for _, table := range p.tables {
+		p.metricsProcessorMemoryConsumption.Observe(float64(table.MemoryConsumption()))
+	}
 
 	if err == nil {
 		return state, nil
@@ -960,7 +961,7 @@ func (p *processor) Close() error {
 	processorErrorCounter.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
 	processorSchemaStorageGcTsGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
 	sinkmetric.TableSinkTotalRowsCountCounter.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
-	processorMemoryGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
+	processorMemoryHistogram.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
 	return nil
 }
 
