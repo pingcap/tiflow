@@ -415,8 +415,8 @@ func AdjustConfig(
 	shouldValidateMinInsyncReplica := true
 	if !exists {
 		_, err = getBrokerConfig(admin, kafka.MinInsyncReplicasConfigName)
-		// 'min.insync.replica' is invisible for Confluent Cloud
 		if err != nil {
+			// 'min.insync.replica' is invisible for Confluent Cloud
 			if strings.Contains(err.Error(),
 				string(cerror.ErrKafkaBrokerConfigNotFound.RFCCode())) {
 				shouldValidateMinInsyncReplica = false
