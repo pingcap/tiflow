@@ -19,17 +19,17 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tiflow/dm/pkg/log"
-	"github.com/pingcap/tiflow/pkg/workerpool"
 	"go.uber.org/atomic"
 	"go.uber.org/dig"
 	"go.uber.org/zap"
 
+	"github.com/pingcap/tiflow/dm/pkg/log"
 	runtime "github.com/pingcap/tiflow/engine/executor/worker"
 	"github.com/pingcap/tiflow/engine/lib/config"
 	"github.com/pingcap/tiflow/engine/lib/metadata"
 	libModel "github.com/pingcap/tiflow/engine/lib/model"
 	"github.com/pingcap/tiflow/engine/lib/statusutil"
+	"github.com/pingcap/tiflow/engine/lib/worker"
 	"github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/clock"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
@@ -44,6 +44,7 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/pingcap/tiflow/engine/pkg/promutil"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
+	"github.com/pingcap/tiflow/pkg/workerpool"
 )
 
 // Worker defines an interface that provides all methods that will be used in
@@ -70,9 +71,6 @@ type WorkerImpl interface {
 
 	// Workload returns the current workload of the worker.
 	Workload() model.RescUnit
-
-	// OnMasterFailover is called when the master is failed over.
-	OnMasterFailover(reason MasterFailoverReason) error
 
 	// OnMasterMessage is called when worker receives master message
 	OnMasterMessage(topic p2p.Topic, message p2p.MessageValue) error
@@ -118,7 +116,7 @@ type DefaultBaseWorker struct {
 	userRawKVClient extkv.KVClientEx
 	resourceBroker  broker.Broker
 
-	masterClient *masterClient
+	masterClient *worker.MasterClient
 	masterID     libModel.MasterID
 
 	workerMetaClient *metadata.WorkerMetadataClient
@@ -252,18 +250,12 @@ func (w *DefaultBaseWorker) doPreInit(ctx context.Context) error {
 		initTime = clock.ToMono(rctx.SubmitTime())
 	}
 
-	w.masterClient = newMasterClient(
+	w.masterClient = worker.NewMasterClient(
 		w.masterID,
 		w.id,
 		w.messageSender,
 		w.frameMetaClient,
-		initTime,
-		func() error {
-			return errors.Trace(w.Impl.OnMasterFailover(MasterFailoverReason{
-				// TODO support other fail-over reasons
-				Code: MasterTimedOut,
-			}))
-		})
+		initTime)
 
 	w.exitController = newWorkerExitController(w.masterClient, w.errCenter, w.clock)
 	w.workerMetaClient = metadata.NewWorkerMetadataClient(w.masterID, w.frameMetaClient)
@@ -350,17 +342,20 @@ func (w *DefaultBaseWorker) doClose() {
 	}
 
 	w.wg.Wait()
+	promutil.UnregisterWorkerMetrics(w.id)
 }
 
 // Close implements BaseWorker.Close
 func (w *DefaultBaseWorker) Close(ctx context.Context) error {
-	if err := w.Impl.CloseImpl(ctx); err != nil {
+	err := w.Impl.CloseImpl(ctx)
+	// We don't return here if CloseImpl return error to ensure
+	// that we can close inner resources of the framework
+	if err != nil {
 		log.L().Error("Failed to close WorkerImpl", zap.Error(err))
-		return errors.Trace(err)
 	}
 
 	w.doClose()
-	return nil
+	return errors.Trace(err)
 }
 
 // ID implements BaseWorker.ID
@@ -415,7 +410,12 @@ func (w *DefaultBaseWorker) OpenStorage(ctx context.Context, resourcePath resour
 }
 
 // Exit implements BaseWorker.Exit
-func (w *DefaultBaseWorker) Exit(ctx context.Context, status libModel.WorkerStatus, err error) error {
+func (w *DefaultBaseWorker) Exit(ctx context.Context, status libModel.WorkerStatus, err error) (errRet error) {
+	// Set the errCenter to prevent user from forgetting to return directly after calling 'Exit'
+	defer func() {
+		w.onError(errRet)
+	}()
+
 	if err != nil {
 		status.Code = libModel.WorkerStatusError
 	}
@@ -423,11 +423,12 @@ func (w *DefaultBaseWorker) Exit(ctx context.Context, status libModel.WorkerStat
 	w.workerStatus.Code = status.Code
 	w.workerStatus.ErrorMessage = status.ErrorMessage
 	w.workerStatus.ExtBytes = status.ExtBytes
-	if err1 := w.statusSender.UpdateStatus(ctx, w.workerStatus); err1 != nil {
-		return err1
+	if errRet = w.statusSender.UpdateStatus(ctx, w.workerStatus); errRet != nil {
+		return
 	}
 
-	return derror.ErrWorkerFinish.FastGenByArgs()
+	errRet = derror.ErrWorkerFinish.FastGenByArgs()
+	return
 }
 
 func (w *DefaultBaseWorker) startBackgroundTasks() {
@@ -486,7 +487,7 @@ func (w *DefaultBaseWorker) runWatchDog(ctx context.Context) error {
 		case <-ticker.C:
 		}
 
-		isNormal, err := w.masterClient.CheckMasterTimeout(ctx, w.clock)
+		isNormal, err := w.masterClient.CheckMasterTimeout(w.clock)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -556,194 +557,6 @@ func (w *DefaultBaseWorker) onError(err error) {
 	w.errCenter.OnError(err)
 }
 
-type masterClient struct {
-	mu          sync.RWMutex
-	masterID    libModel.MasterID
-	masterNode  p2p.NodeID
-	masterEpoch libModel.Epoch
-
-	workerID libModel.WorkerID
-
-	messageSender           p2p.MessageSender
-	frameMetaClient         pkgOrm.Client
-	lastMasterAckedPingTime clock.MonotonicTime
-
-	// masterSideClosed records whether the master
-	// has marked us as closed
-	masterSideClosed atomic.Bool
-
-	timeoutConfig config.TimeoutConfig
-
-	onMasterFailOver func() error
-}
-
-func newMasterClient(
-	masterID libModel.MasterID,
-	workerID libModel.WorkerID,
-	messageRouter p2p.MessageSender,
-	metaCli pkgOrm.Client,
-	initTime clock.MonotonicTime,
-	onMasterFailOver func() error,
-) *masterClient {
-	return &masterClient{
-		masterID:                masterID,
-		workerID:                workerID,
-		messageSender:           messageRouter,
-		frameMetaClient:         metaCli,
-		lastMasterAckedPingTime: initTime,
-		timeoutConfig:           config.DefaultTimeoutConfig(),
-		onMasterFailOver:        onMasterFailOver,
-	}
-}
-
-func (m *masterClient) InitMasterInfoFromMeta(ctx context.Context) error {
-	metaClient := metadata.NewMasterMetadataClient(m.masterID, m.frameMetaClient)
-	masterMeta, err := metaClient.Load(ctx)
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	m.masterNode = masterMeta.NodeID
-	m.masterEpoch = masterMeta.Epoch
-	return nil
-}
-
-func (m *masterClient) MasterNodeID() p2p.NodeID {
-	return m.masterID
-}
-
-func (m *masterClient) RefreshMasterInfo(ctx context.Context) error {
-	metaClient := metadata.NewMasterMetadataClient(m.masterID, m.frameMetaClient)
-	masterMeta, err := metaClient.Load(ctx)
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	m.mu.Lock()
-	m.masterNode = masterMeta.NodeID
-	if m.masterEpoch < masterMeta.Epoch {
-		log.L().Info("refresh master info", zap.String("masterID", m.masterID),
-			zap.Int64("oldEpoch", m.masterEpoch), zap.Int64("newEpoch", masterMeta.Epoch),
-		)
-		m.masterEpoch = masterMeta.Epoch
-		m.mu.Unlock()
-		if err := m.onMasterFailOver(); err != nil {
-			return errors.Trace(err)
-		}
-	} else {
-		m.mu.Unlock()
-	}
-	return nil
-}
-
-func (m *masterClient) MasterID() libModel.MasterID {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	return m.masterID
-}
-
-func (m *masterClient) MasterNode() p2p.NodeID {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	return m.masterNode
-}
-
-func (m *masterClient) Epoch() libModel.Epoch {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	return m.masterEpoch
-}
-
-func (m *masterClient) HandleHeartbeat(sender p2p.NodeID, msg *libModel.HeartbeatPongMessage) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	if msg.Epoch < m.masterEpoch {
-		log.L().Info("epoch does not match, ignore stale heartbeat",
-			zap.Any("msg", msg),
-			zap.Int64("master-epoch", m.masterEpoch))
-		return
-	}
-
-	if msg.Epoch > m.masterEpoch {
-		// We received a heartbeat from a restarted master, we need to record
-		// its information.
-		// TODO refine the logic of this part
-		m.masterEpoch = msg.Epoch
-		m.masterNode = sender
-	}
-
-	if msg.IsFinished {
-		m.masterSideClosed.Store(true)
-	}
-	m.lastMasterAckedPingTime = msg.SendTime
-}
-
-func (m *masterClient) CheckMasterTimeout(ctx context.Context, clock clock.Clock) (ok bool, err error) {
-	m.mu.RLock()
-	lastMasterAckedPingTime := m.lastMasterAckedPingTime
-	m.mu.RUnlock()
-
-	sinceLastAcked := clock.Mono().Sub(lastMasterAckedPingTime)
-	if sinceLastAcked <= 2*m.timeoutConfig.WorkerHeartbeatInterval {
-		return true, nil
-	}
-
-	if sinceLastAcked > 2*m.timeoutConfig.WorkerHeartbeatInterval &&
-		sinceLastAcked < m.timeoutConfig.WorkerTimeoutDuration {
-
-		if err := m.RefreshMasterInfo(ctx); err != nil {
-			return false, errors.Trace(err)
-		}
-		return true, nil
-	}
-
-	return false, nil
-}
-
-func (m *masterClient) SendHeartBeat(ctx context.Context, clock clock.Clock, isFinished bool) error {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	// We use the monotonic time because we would like to serialize a local timestamp.
-	// The timestamp will be returned in a PONG for time-out check, so we need
-	// the timestamp to be a local monotonic timestamp, which is not exposed by the
-	// standard library `time`.
-	sendTime := clock.Mono()
-	heartbeatMsg := &libModel.HeartbeatPingMessage{
-		SendTime:     sendTime,
-		FromWorkerID: m.workerID,
-		Epoch:        m.masterEpoch,
-		IsFinished:   isFinished,
-	}
-
-	log.L().Debug("sending heartbeat", zap.String("worker", m.workerID))
-	ok, err := m.messageSender.SendToNode(ctx, m.masterNode, libModel.HeartbeatPingTopic(m.masterID), heartbeatMsg)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	log.L().Info("sending heartbeat success", zap.String("worker", m.workerID),
-		zap.String("master-id", m.masterID))
-	if !ok {
-		log.L().Warn("sending heartbeat ping encountered ErrPeerMessageSendTryAgain")
-	}
-	return nil
-}
-
-func (m *masterClient) IsMasterSideClosed() bool {
-	return m.masterSideClosed.Load()
-}
-
-// used in unit test only
-func (m *masterClient) getLastMasterAckedPingTime() clock.MonotonicTime {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	return m.lastMasterAckedPingTime
-}
-
 const (
 	workerExitWaitForMasterTimeout = time.Second * 15
 )
@@ -755,14 +568,14 @@ type workerExitController struct {
 	workerExitFsm atomic.Int32
 	halfExitTime  atomic.Time
 	errCenter     *errctx.ErrCenter
-	masterClient  *masterClient
+	masterClient  *worker.MasterClient
 
 	// clock is to facilitate unit testing.
 	clock clock.Clock
 }
 
 func newWorkerExitController(
-	masterClient *masterClient,
+	masterClient *worker.MasterClient,
 	errCenter *errctx.ErrCenter,
 	clock clock.Clock,
 ) *workerExitController {
@@ -793,6 +606,10 @@ func (c *workerExitController) PollExit() error {
 			c.workerExitFsm.Store(workerExited)
 			return err
 		}
+		// workerExitWaitForMasterTimeout is used for the case that
+		// 'master is busy to reply or ignore reply for some bugs when heartbeat is ok'.
+		// Master need wait (WorkerTimeoutDuration + WorkerTimeoutGracefulDuration) to know worker had already exited without halfExit,
+		// so workerExitWaitForMasterTimeout < (WorkerTimeoutDuration + WorkerTimeoutGracefulDuration) is reasonable.
 		sinceStartExiting := c.clock.Since(c.halfExitTime.Load())
 		if sinceStartExiting > workerExitWaitForMasterTimeout {
 			// TODO log worker ID and master ID.

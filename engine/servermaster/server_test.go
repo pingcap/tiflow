@@ -29,6 +29,7 @@ import (
 	libModel "github.com/pingcap/tiflow/engine/lib/model"
 	"github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pb"
+	"github.com/pingcap/tiflow/engine/pkg/externalresource/manager"
 	"github.com/pingcap/tiflow/engine/pkg/notifier"
 	"github.com/pingcap/tiflow/engine/servermaster/scheduler"
 
@@ -87,7 +88,6 @@ func TestStartGrpcSrv(t *testing.T) {
 	defer cleanup()
 
 	s := &Server{cfg: cfg}
-	registerMetrics()
 	ctx := context.Background()
 	err := s.startGrpcSrv(ctx)
 	require.Nil(t, err)
@@ -267,6 +267,13 @@ func (m *mockJobManager) GetJobStatuses(ctx context.Context) (map[libModel.Maste
 	panic("not implemented")
 }
 
+func (m *mockJobManager) WatchJobStatuses(
+	ctx context.Context,
+) (manager.JobStatusesSnapshot, *notifier.Receiver[manager.JobStatusChangeEvent], error) {
+	// TODO implement me
+	panic("implement me")
+}
+
 type mockExecutorManager struct {
 	executorMu sync.RWMutex
 	count      map[model.ExecutorStatus]int
@@ -320,7 +327,6 @@ func TestCollectMetric(t *testing.T) {
 	masterAddr, cfg, cleanup := prepareServerEnv(t, "test-collect-metric")
 	defer cleanup()
 
-	registerMetrics()
 	s := &Server{
 		cfg:     cfg,
 		metrics: newServerMasterMetric(),
