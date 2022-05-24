@@ -738,8 +738,15 @@ func (w *regionWorker) handleResolvedTs(
 	}
 
 	if resolvedTs < state.lastResolvedTs {
+<<<<<<< HEAD
 		log.Warn("The resolvedTs is fallen back in kvclient",
 			zap.String("Event Type", "RESOLVED"),
+=======
+		log.Debug("The resolvedTs is fallen back in kvclient",
+			zap.String("namesapce", w.session.client.changefeed.Namespace),
+			zap.String("changefeed", w.session.client.changefeed.ID),
+			zap.String("EventType", "RESOLVED"),
+>>>>>>> 377f8022f (kv(ticdc): set debug level for resolved ts fallback log (#5558))
 			zap.Uint64("resolvedTs", resolvedTs),
 			zap.Uint64("lastResolvedTs", state.lastResolvedTs),
 			zap.Uint64("regionID", regionID))
