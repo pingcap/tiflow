@@ -28,25 +28,25 @@ type loadTask struct {
 }
 
 // newLoadTask create a load task
-func newLoadTask(baseDMTask *baseTask) lib.WorkerImpl {
+func newLoadTask(baseTask *baseTask) lib.WorkerImpl {
 	loadTask := &loadTask{
-		baseTask: baseDMTask,
+		baseTask: baseTask,
 	}
 	loadTask.baseTask.task = loadTask
 	return loadTask
 }
 
-// onInit implements DMTask.onInit
+// onInit implements task.onInit
 func (t *loadTask) onInit(ctx context.Context) error {
 	return t.setupStorge(ctx)
 }
 
-// onFinished implements DMTask.onFinished
+// onFinished implements task.onFinished
 func (t *loadTask) onFinished(ctx context.Context) error {
 	return nil
 }
 
-// createUnitHolder implements DMTask.createUnitHolder
+// createUnitHolder implements task.createUnitHolder
 func (t *loadTask) createUnitHolder(cfg *config.SubTaskConfig) unit.Holder {
 	// `workerName` and `etcdClient` of `NewLightning` are not used in dataflow
 	// scenario, we just use readable values here.

@@ -28,25 +28,25 @@ type dumpTask struct {
 }
 
 // newDumpTask create a dump task
-func newDumpTask(baseDMTask *baseTask) lib.WorkerImpl {
+func newDumpTask(baseTask *baseTask) lib.WorkerImpl {
 	dumpTask := &dumpTask{
-		baseTask: baseDMTask,
+		baseTask: baseTask,
 	}
 	dumpTask.baseTask.task = dumpTask
 	return dumpTask
 }
 
-// onInit implements DMTask.onInit
+// onInit implements task.onInit
 func (t *dumpTask) onInit(ctx context.Context) error {
 	return t.setupStorge(ctx)
 }
 
-// onFinished implements DMTask.onFinished
+// onFinished implements task.onFinished
 func (t *dumpTask) onFinished(ctx context.Context) error {
 	return t.persistStorge(ctx)
 }
 
-// createUnitHolder implements DMTask.createUnitHolder
+// createUnitHolder implements task.createUnitHolder
 func (t *dumpTask) createUnitHolder(cfg *config.SubTaskConfig) unit.Holder {
 	return unit.NewHolderImpl(lib.WorkerDMDump, cfg.SourceID, dumpling.NewDumpling(cfg))
 }

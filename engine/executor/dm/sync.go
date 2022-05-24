@@ -29,15 +29,15 @@ type syncTask struct {
 }
 
 // newSyncTask create a sync task
-func newSyncTask(baseDMTask *baseTask) lib.WorkerImpl {
+func newSyncTask(baseTask *baseTask) lib.WorkerImpl {
 	syncTask := &syncTask{
-		baseTask: baseDMTask,
+		baseTask: baseTask,
 	}
 	syncTask.baseTask.task = syncTask
 	return syncTask
 }
 
-// onInit implements DMTask.onInit
+// onInit implements task.onInit
 func (t *syncTask) onInit(ctx context.Context) error {
 	if t.cfg.Mode == dmconfig.ModeAll {
 		return t.setupStorge(ctx)
@@ -45,13 +45,13 @@ func (t *syncTask) onInit(ctx context.Context) error {
 	return nil
 }
 
-// onFinished implements DMTask.onFinished
+// onFinished implements task.onFinished
 // Should not happened.
 func (t *syncTask) onFinished(ctx context.Context) error {
 	return nil
 }
 
-// createUnitHolder implements DMTask.createUnitHolder
+// createUnitHolder implements task.createUnitHolder
 func (t *syncTask) createUnitHolder(cfg *config.SubTaskConfig) unit.Holder {
 	return unit.NewHolderImpl(lib.WorkerDMSync, cfg.SourceID, syncer.NewSyncer(cfg, nil, nil))
 }

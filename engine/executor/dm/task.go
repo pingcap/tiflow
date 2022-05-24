@@ -72,8 +72,10 @@ func (f taskFactory) NewWorkerImpl(ctx *dcontext.Context, workerID libModel.Work
 		return newDumpTask(baseDMTask), nil
 	case lib.WorkerDMLoad:
 		return newLoadTask(baseDMTask), nil
-	default:
+	case lib.WorkerDMSync:
 		return newSyncTask(baseDMTask), nil
+	default:
+		return nil, errors.Errorf("unexpected worker type %d", f.workerType)
 	}
 }
 
@@ -169,6 +171,7 @@ func (t *baseTask) CloseImpl(ctx context.Context) error {
 	return nil
 }
 
+// exit closes the task and exits.
 func (t *baseTask) exit(ctx context.Context, status libModel.WorkerStatus, err error) error {
 	if err := t.CloseImpl(ctx); err != nil {
 		log.L().Warn("fail to close task", log.ShortError(err))
@@ -176,7 +179,7 @@ func (t *baseTask) exit(ctx context.Context, status libModel.WorkerStatus, err e
 	return t.Exit(ctx, status, err)
 }
 
-// setupStorge Open and configs external storage
+// setupStorge opens and configs external storage
 func (t *baseTask) setupStorge(ctx context.Context) error {
 	rid := dm.NewDMResourceID(t.cfg.Name, t.cfg.SourceID)
 	h, err := t.OpenStorage(ctx, rid)
@@ -193,11 +196,12 @@ func (t *baseTask) setupStorge(ctx context.Context) error {
 	return nil
 }
 
-// persistStorge persist storge.
+// persistStorge persists storge.
 func (t *baseTask) persistStorge(ctx context.Context) error {
 	return t.storageWriteHandle.Persist(ctx)
 }
 
+// tryUpdateStatus updates status when task stage changed.
 func (t *baseTask) tryUpdateStatus(ctx context.Context) error {
 	stage := t.unitHolder.Stage()
 	if stage == t.getStage() {
@@ -219,6 +223,7 @@ func (t *baseTask) tryUpdateStatus(ctx context.Context) error {
 	return t.exit(ctx, status, nil)
 }
 
+// workerStatus gets worker status.
 func (t *baseTask) workerStatus() libModel.WorkerStatus {
 	stage := t.getStage()
 	code := libModel.WorkerStatusNormal
@@ -234,6 +239,7 @@ func (t *baseTask) workerStatus() libModel.WorkerStatus {
 	}
 }
 
+// getStage gets stage.
 func (t *baseTask) getStage() metadata.TaskStage {
 	t.mu.RLock()
 	defer t.mu.RUnlock()

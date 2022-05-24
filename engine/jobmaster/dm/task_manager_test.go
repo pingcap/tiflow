@@ -262,9 +262,7 @@ func (t *testDMJobmasterSuite) TestCheckAndOperateTasks() {
 }
 
 func (t *testDMJobmasterSuite) TestTaskManager() {
-	var (
-		meetExpected atomic.Bool
-	)
+	var meetExpected atomic.Bool
 	jobCfg := &config.JobCfg{}
 	require.NoError(t.T(), jobCfg.DecodeFile(jobTemplatePath))
 	job := metadata.NewJob(jobCfg)
