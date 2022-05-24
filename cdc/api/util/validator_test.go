@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package api
+package util
 
 import (
 	"context"
@@ -31,7 +31,7 @@ func TestVerifyUpdateChangefeedConfig(t *testing.T) {
 	// test startTs > targetTs
 	changefeedConfig := model.ChangefeedConfig{TargetTS: 20}
 	oldInfo.StartTs = 40
-	newInfo, err := verifyUpdateChangefeedConfig(ctx, changefeedConfig, oldInfo)
+	newInfo, err := VerifyUpdateChangefeedConfig(ctx, changefeedConfig, oldInfo)
 	require.NotNil(t, err)
 	require.Regexp(t, ".*can not update target-ts.*less than start-ts.*", err)
 	require.Nil(t, newInfo)
@@ -39,14 +39,14 @@ func TestVerifyUpdateChangefeedConfig(t *testing.T) {
 	// test no change error
 	changefeedConfig = model.ChangefeedConfig{SinkURI: "blackhole://"}
 	oldInfo.SinkURI = "blackhole://"
-	newInfo, err = verifyUpdateChangefeedConfig(ctx, changefeedConfig, oldInfo)
+	newInfo, err = VerifyUpdateChangefeedConfig(ctx, changefeedConfig, oldInfo)
 	require.NotNil(t, err)
 	require.Regexp(t, ".*changefeed config is the same with the old one.*", err)
 	require.Nil(t, newInfo)
 
 	// test verify success
 	changefeedConfig = model.ChangefeedConfig{MounterWorkerNum: 32}
-	newInfo, err = verifyUpdateChangefeedConfig(ctx, changefeedConfig, oldInfo)
+	newInfo, err = VerifyUpdateChangefeedConfig(ctx, changefeedConfig, oldInfo)
 	require.Nil(t, err)
 	require.NotNil(t, newInfo)
 }

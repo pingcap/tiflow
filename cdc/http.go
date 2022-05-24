@@ -19,7 +19,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/failpoint"
-	"github.com/pingcap/tiflow/cdc/api"
+	"github.com/pingcap/tiflow/cdc/api/private"
+	"github.com/pingcap/tiflow/cdc/api/v1"
 	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
@@ -41,16 +42,16 @@ func RegisterRoutes(
 	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	// Open API
-	api.RegisterOpenAPIRoutes(router, api.NewOpenAPI(capture))
+	v1.RegisterOpenAPIRoutes(router, v1.NewOpenAPI(capture))
 
 	// Owner API
-	api.RegisterOwnerAPIRoutes(router, capture)
+	private.RegisterOwnerAPIRoutes(router, capture)
 
 	// Status API
-	api.RegisterStatusAPIRoutes(router, capture)
+	private.RegisterStatusAPIRoutes(router, capture)
 
 	// Log API
-	router.POST("/admin/log", gin.WrapF(api.HandleAdminLogLevel))
+	router.POST("/admin/log", gin.WrapF(private.HandleAdminLogLevel))
 
 	// pprof debug API
 	pprofGroup := router.Group("/debug/pprof/")

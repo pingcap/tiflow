@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package api
+package util
 
 import (
 	"context"
@@ -57,7 +57,8 @@ func IsHTTPBadRequestError(err error) bool {
 	return false
 }
 
-func writeError(w http.ResponseWriter, statusCode int, err error) {
+// WriteError write error message to response
+func WriteError(w http.ResponseWriter, statusCode int, err error) {
 	w.WriteHeader(statusCode)
 	_, err = w.Write([]byte(err.Error()))
 	if err != nil {
@@ -65,11 +66,12 @@ func writeError(w http.ResponseWriter, statusCode int, err error) {
 	}
 }
 
-func writeData(w http.ResponseWriter, data interface{}) {
+// WriteData write data to response with http status code 200
+func WriteData(w http.ResponseWriter, data interface{}) {
 	js, err := json.MarshalIndent(data, "", " ")
 	if err != nil {
 		log.Error("invalid json data", zap.Reflect("data", data), zap.Error(err))
-		writeError(w, http.StatusInternalServerError, err)
+		WriteError(w, http.StatusInternalServerError, err)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -80,7 +82,8 @@ func writeData(w http.ResponseWriter, data interface{}) {
 	}
 }
 
-func handleOwnerJob(
+// HandleOwnerJob enqueue the admin job
+func HandleOwnerJob(
 	ctx context.Context, capture *capture.Capture, job model.AdminJob,
 ) error {
 	// Use buffered channel to prevernt blocking owner.
@@ -98,7 +101,8 @@ func handleOwnerJob(
 	}
 }
 
-func handleOwnerRebalance(
+// HandleOwnerBalance balance the changefeed tables
+func HandleOwnerBalance(
 	ctx context.Context, capture *capture.Capture, changefeedID model.ChangeFeedID,
 ) error {
 	// Use buffered channel to prevernt blocking owner.
@@ -116,7 +120,8 @@ func handleOwnerRebalance(
 	}
 }
 
-func handleOwnerScheduleTable(
+// HandleOwnerScheduleTable schedule tables
+func HandleOwnerScheduleTable(
 	ctx context.Context, capture *capture.Capture,
 	changefeedID model.ChangeFeedID, captureID string, tableID int64,
 ) error {
