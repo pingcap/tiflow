@@ -55,9 +55,8 @@ func newCaptureStatus(rev schedulepb.OwnerRevision) *CaptureStatus {
 func (c *CaptureStatus) handleHeartbeatResponse(
 	resp *schedulepb.HeartbeatResponse, epoch schedulepb.ProcessorEpoch,
 ) {
-	epochMismatch := c.State != CaptureStateUninitialize &&
-		c.Epoch.Epoch != epoch.Epoch
-	if epochMismatch {
+	// Check epoch for initialized captures.
+	if c.State != CaptureStateUninitialize && c.Epoch.Epoch != epoch.Epoch {
 		log.Warn("tpscheduler: ignore heartbeat response",
 			zap.String("epoch", c.Epoch.Epoch),
 			zap.String("respEpoch", epoch.Epoch),
@@ -95,14 +94,13 @@ func (c *captureManager) captureTableSets() map[model.CaptureID]*CaptureStatus {
 	return c.Captures
 }
 
-func (c *captureManager) checkCaptureInitialized() bool {
-	allInitialized := true
+func (c *captureManager) checkAllCaptureInitialized() bool {
 	for _, captrueStatus := range c.Captures {
 		if captrueStatus.State == CaptureStateUninitialize {
-			allInitialized = false
+			return false
 		}
 	}
-	return allInitialized
+	return true
 }
 
 func (c *captureManager) tick() []*schedulepb.Message {
@@ -137,7 +135,7 @@ func (c *captureManager) poll(
 				msg.GetHeartbeatResponse(), msg.Header.ProcessorEpoch)
 		}
 	}
-	return outMsgs, c.checkCaptureInitialized()
+	return outMsgs, c.checkAllCaptureInitialized()
 }
 
 func (c *captureManager) onAliveCaptureUpdate(

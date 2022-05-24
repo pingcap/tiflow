@@ -107,7 +107,9 @@ func (r *replicationManager) handleMessageHeartbeat(msg *schedulepb.Heartbeat) {
 	// TODO: build s.tables from Heartbeat message.
 }
 
-func (r *replicationManager) handleMessageDispatchTableResponse(msg *schedulepb.DispatchTableResponse) {
+func (r *replicationManager) handleMessageDispatchTableResponse(
+	msg *schedulepb.DispatchTableResponse,
+) {
 	// TODO: update s.tables from DispatchTableResponse message.
 }
 

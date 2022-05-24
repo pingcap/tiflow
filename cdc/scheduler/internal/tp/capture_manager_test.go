@@ -119,7 +119,7 @@ func TestCaptureManagerTick(t *testing.T) {
 	for _, s := range []CaptureState{CaptureStateInitialized, CaptureStateStopping} {
 		cm.Captures["1"].State = s
 		cm.Captures["2"].State = s
-		require.True(t, cm.checkCaptureInitialized())
+		require.True(t, cm.checkAllCaptureInitialized())
 		msgs = cm.tick()
 		require.Empty(t, msgs)
 		msgs = cm.tick()
