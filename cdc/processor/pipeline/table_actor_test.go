@@ -93,7 +93,7 @@ func TestTableActorInterface(t *testing.T) {
 
 	require.Equal(t, model.Ts(5), tbl.ResolvedTs())
 	tbl.replicaConfig.Consistent.Level = string(redo.ConsistentLevelEventual)
-	atomic.StoreUint64(&sink.resolvedTs, 6)
+	sink.resolvedTs.Store(model.NewResolvedTs(6))
 	require.Equal(t, model.Ts(6), tbl.ResolvedTs())
 }
 
@@ -186,15 +186,18 @@ func TestPollStoppedActor(t *testing.T) {
 
 func TestPollTickMessage(t *testing.T) {
 	startTime := time.Now().Add(-sinkFlushInterval)
+
+	sn := &sinkNode{
+		status:         TableStatusPreparing,
+		sink:           &mockSink{},
+		flowController: &mockFlowController{},
+		checkpointTs:   10,
+		targetTs:       11,
+	}
+	sn.resolvedTs.Store(model.NewResolvedTs(10))
+
 	tbl := tableActor{
-		sinkNode: &sinkNode{
-			status:         TableStatusPreparing,
-			sink:           &mockSink{},
-			flowController: &mockFlowController{},
-			resolvedTs:     10,
-			checkpointTs:   10,
-			targetTs:       11,
-		},
+		sinkNode:          sn,
 		lastFlushSinkTime: time.Now().Add(-2 * sinkFlushInterval),
 		cancel:            func() {},
 		reportErr:         func(err error) {},
@@ -237,13 +240,15 @@ func TestPollStopMessage(t *testing.T) {
 }
 
 func TestPollBarrierTsMessage(t *testing.T) {
+	sn := &sinkNode{
+		targetTs:     10,
+		checkpointTs: 5,
+		barrierTs:    8,
+	}
+	sn.resolvedTs.Store(model.NewResolvedTs(5))
+
 	tbl := tableActor{
-		sinkNode: &sinkNode{
-			targetTs:     10,
-			checkpointTs: 5,
-			resolvedTs:   5,
-			barrierTs:    8,
-		},
+		sinkNode: sn,
 		sortNode: &sorterNode{
 			barrierTs: 8,
 		},

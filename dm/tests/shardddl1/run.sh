@@ -206,7 +206,7 @@ function DM_RemoveLock_CASE() {
 }
 
 function DM_RemoveLock() {
-	ps aux | grep dm-master | awk '{print $2}' | xargs kill || true
+	kill_process dm-master
 	check_master_port_offline 1
 	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/dm/master/shardddl/SleepWhenRemoveLock=return(30)"
 	run_dm_master $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master.toml
@@ -227,7 +227,7 @@ function DM_RemoveLock() {
 		"clean_table" "optimistic"
 
 	export GO_FAILPOINTS=""
-	ps aux | grep dm-master | awk '{print $2}' | xargs kill || true
+	kill_process dm-master
 	check_master_port_offline 1
 	run_dm_master $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master.toml
 	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT
@@ -558,7 +558,7 @@ function DM_COMPACT_CASE() {
 
 function DM_COMPACT() {
 	# mock downstream has a high latency and upstream has a high workload
-	ps aux | grep dm-worker | awk '{print $2}' | xargs kill || true
+	kill_process dm-worker
 	check_process_exit worker1 20
 	check_process_exit worker2 20
 	export GO_FAILPOINTS='github.com/pingcap/tiflow/dm/syncer/BlockExecuteSQLs=return(1);github.com/pingcap/tiflow/dm/syncer/SafeModeInitPhaseSeconds=return(5)'
@@ -601,7 +601,7 @@ function DM_COMPACT_USE_DOWNSTREAM_SCHEMA_CASE() {
 
 function DM_COMPACT_USE_DOWNSTREAM_SCHEMA() {
 	# downstream pk/uk/column is diffrent with upstream, compact use downstream schema.
-	ps aux | grep dm-worker | awk '{print $2}' | xargs kill || true
+	kill_process dm-worker
 	check_process_exit worker1 20
 	check_process_exit worker2 20
 	# DownstreamIdentifyKeyCheckInCompact=return(20) will check whether the key value in compact is less than 20, if false, it will be panic.
@@ -680,7 +680,7 @@ function DM_MULTIPLE_ROWS_CASE() {
 }
 
 function DM_MULTIPLE_ROWS() {
-	ps aux | grep dm-worker | awk '{print $2}' | xargs kill || true
+	kill_process dm-worker
 	check_process_exit worker1 20
 	check_process_exit worker2 20
 	export GO_FAILPOINTS='github.com/pingcap/tiflow/dm/syncer/BlockExecuteSQLs=return(1);github.com/pingcap/tiflow/dm/syncer/SafeModeInitPhaseSeconds=return(5)'
@@ -693,7 +693,7 @@ function DM_MULTIPLE_ROWS() {
 		"run_sql_source1 \"create table ${shardddl1}.${tb1} (a int primary key, b int unique, c int);\"" \
 		"clean_table" ""
 
-	ps aux | grep dm-worker | awk '{print $2}' | xargs kill || true
+	kill_process dm-worker
 	check_process_exit worker1 20
 	check_process_exit worker2 20
 	export GO_FAILPOINTS=''
@@ -760,7 +760,7 @@ function DM_DML_EXECUTE_ERROR_CASE() {
 }
 
 function DM_DML_EXECUTE_ERROR() {
-	ps aux | grep dm-worker | awk '{print $2}' | xargs kill || true
+	kill_process dm-worker
 	check_process_exit worker1 20
 	check_process_exit worker2 20
 	export GO_FAILPOINTS='github.com/pingcap/tiflow/dm/syncer/ErrorOnLastDML=return()'

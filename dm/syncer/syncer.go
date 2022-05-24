@@ -53,6 +53,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	fr "github.com/pingcap/tiflow/dm/pkg/func-rollback"
+	"github.com/pingcap/tiflow/dm/pkg/gtid"
 	"github.com/pingcap/tiflow/dm/pkg/ha"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	parserpkg "github.com/pingcap/tiflow/dm/pkg/parser"
@@ -184,7 +185,8 @@ type Syncer struct {
 	// the status of this track may change over time.
 	safeMode *sm.SafeMode
 
-	timezone *time.Location
+	upstreamTZ *time.Location
+	timezone   *time.Location
 
 	binlogSizeCount     atomic.Int64
 	lastBinlogSizeCount atomic.Int64
@@ -341,6 +343,10 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 	}()
 
 	tctx := s.tctx.WithContext(ctx)
+	s.upstreamTZ, err = str2TimezoneOrFromDB(tctx, "", &s.cfg.From)
+	if err != nil {
+		return
+	}
 	s.timezone, err = str2TimezoneOrFromDB(tctx, s.cfg.Timezone, &s.cfg.To)
 	if err != nil {
 		return
@@ -1469,6 +1475,10 @@ func (s *Syncer) waitBeforeRunExit(ctx context.Context) {
 		s.tctx.L().Info("received subtask's done, try graceful stop")
 		needToExitTime := time.Now()
 		s.waitTransactionLock.Lock()
+
+		failpoint.Inject("checkWaitDuration", func(_ failpoint.Value) {
+			s.isTransactionEnd = false
+		})
 		if s.isTransactionEnd {
 			s.waitXIDJob.Store(int64(waitComplete))
 			s.waitTransactionLock.Unlock()
@@ -1497,6 +1507,17 @@ func (s *Syncer) waitBeforeRunExit(ctx context.Context) {
 			s.runCancel()
 			return
 		}
+		failpoint.Inject("checkWaitDuration", func(val failpoint.Value) {
+			if testDuration, testError := time.ParseDuration(val.(string)); testError == nil {
+				if testDuration.Seconds() == waitDuration.Seconds() {
+					panic("success check wait_time_on_stop !!!")
+				} else {
+					s.tctx.L().Error("checkWaitDuration fail", zap.Duration("testDuration", testDuration), zap.Duration("waitDuration", waitDuration))
+				}
+			} else {
+				s.tctx.L().Error("checkWaitDuration error", zap.Error(testError))
+			}
+		})
 
 		select {
 		case <-s.runCtx.Ctx.Done():
@@ -1699,7 +1720,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 
 	// startLocation is the start location for current received event
 	// currentLocation is the end location for current received event (End_log_pos in `show binlog events` for mysql)
-	// lastLocation is the end location for last received (ROTATE / QUERY / XID) event
+	// lastLocation is the end location for last received and fully executed (ROTATE / QUERY / XID) event
 	// we use startLocation to replace and skip binlog event of specified position
 	// we use currentLocation and update table checkpoint in sharding ddl
 	// we use lastLocation to update global checkpoint and table checkpoint
@@ -1863,6 +1884,31 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		}
 		s.tctx.L().Info("discard event already consumed", zap.Int("count", n),
 			zap.Any("cur_loc", currentLocation))
+		return nil
+	}
+
+	advanceLatestLocationGtidSet := func(e *replication.BinlogEvent) error {
+		if _, ok := e.Event.(*replication.MariadbGTIDEvent); ok {
+			gtidSet, err2 := gtid.ParserGTID(s.cfg.Flavor, currentGTID)
+			if err2 != nil {
+				return err2
+			}
+			if currentLocation.GetGTID().Contain(gtidSet) {
+				return nil
+			}
+		}
+
+		// clone currentLocation's gtid set to avoid its gtid is transport to table checkpoint
+		// currently table checkpoint will save location's gtid set with shallow copy
+		newGTID := currentLocation.GetGTID().Clone()
+		err2 := newGTID.Update(currentGTID)
+		if err2 != nil {
+			return terror.Annotatef(err2, "fail to update GTID %s", currentGTID)
+		}
+		err2 = currentLocation.SetGTID(newGTID)
+		if err2 != nil {
+			return terror.Annotatef(err2, "fail to set GTID %s", newGTID)
+		}
 		return nil
 	}
 
@@ -2062,7 +2108,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		startLocation = binlog.Location{}
 		switch ev := e.Event.(type) {
 		case *replication.QueryEvent, *replication.RowsEvent:
-			startLocation = binlog.InitLocation(
+			startLocation = binlog.NewLocation(
 				mysql.Position{
 					Name: lastLocation.Position.Name,
 					Pos:  e.Header.LogPos - e.Header.EventSize,
@@ -2075,15 +2121,16 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			if s.isReplacingOrInjectingErr {
 				endSuffix++
 			}
-			currentLocation = binlog.InitLocation(
+			currentLocation = binlog.NewLocation(
 				mysql.Position{
 					Name: lastLocation.Position.Name,
 					Pos:  e.Header.LogPos,
 				},
-				lastLocation.GetGTID(),
+				currentLocation.GetGTID(),
 			)
 			currentLocation.Suffix = endSuffix
 
+			// TODO: can be removed in the future
 			if queryEvent, ok := ev.(*replication.QueryEvent); ok {
 				err = currentLocation.SetGTID(queryEvent.GSet)
 				if err != nil {
@@ -2169,7 +2216,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		}
 
 		// set exitSafeModeTS when meet first binlog
-		if s.firstMeetBinlogTS == nil && s.cliArgs != nil && s.cliArgs.SafeModeDuration != "" {
+		if s.firstMeetBinlogTS == nil && s.cliArgs != nil && s.cliArgs.SafeModeDuration != "" && int64(e.Header.Timestamp) != 0 && e.Header.EventType != replication.FORMAT_DESCRIPTION_EVENT {
 			if checkErr := s.initSafeModeExitTS(int64(e.Header.Timestamp)); checkErr != nil {
 				return checkErr
 			}
@@ -2242,11 +2289,6 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			}
 
 			currentLocation.Position.Pos = e.Header.LogPos
-			err = currentLocation.SetGTID(ev.GSet)
-			if err != nil {
-				return terror.Annotatef(err, "fail to record GTID %v", ev.GSet)
-			}
-
 			s.tctx.L().Debug("", zap.String("event", "XID"), zap.Stringer("last location", lastLocation), log.WrapStringerField("location", currentLocation))
 			lastLocation.Position.Pos = e.Header.LogPos // update lastPos
 			err = lastLocation.SetGTID(ev.GSet)
@@ -2274,6 +2316,13 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			currentGTID, err2 = event.GetGTIDStr(e)
 			if err2 != nil {
 				return err2
+			}
+			if s.cfg.EnableGTID {
+				// TODO: add mariaDB integration test
+				err2 = advanceLatestLocationGtidSet(e)
+				if err2 != nil {
+					return err2
+				}
 			}
 		}
 		if err2 != nil {
@@ -2374,7 +2423,7 @@ func (s *Syncer) handleRotateEvent(ev *replication.RotateEvent, ec eventContext)
 		}
 	}
 
-	*ec.currentLocation = binlog.InitLocation(
+	*ec.currentLocation = binlog.NewLocation(
 		mysql.Position{
 			Name: string(ev.NextLogName),
 			Pos:  uint32(ev.Position),
@@ -2424,12 +2473,12 @@ func (s *Syncer) handleRowsEvent(ev *replication.RowsEvent, ec eventContext) (*f
 	}
 	targetTable := s.route(sourceTable)
 
-	*ec.currentLocation = binlog.InitLocation(
+	*ec.currentLocation = binlog.NewLocation(
 		mysql.Position{
 			Name: ec.lastLocation.Position.Name,
 			Pos:  ec.header.LogPos,
 		},
-		ec.lastLocation.GetGTID(),
+		ec.currentLocation.GetGTID(),
 	)
 
 	if ec.shardingReSync != nil {
@@ -2657,6 +2706,10 @@ func generateExtendColumn(data [][]interface{}, r *regexprrouter.RouteTable, tab
 
 func (s *Syncer) handleQueryEvent(ev *replication.QueryEvent, ec eventContext, originSQL string) (err error) {
 	if originSQL == "BEGIN" {
+		failpoint.Inject("NotUpdateLatestGTID", func(_ failpoint.Value) {
+			// directly return nil without update latest GTID here
+			failpoint.Return(nil)
+		})
 		// GTID event: GTID_NEXT = xxx:11
 		// Query event: BEGIN (GTID set = xxx:1-11)
 		// Rows event: ... (GTID set = xxx:1-11)  if we update lastLocation below,
@@ -3966,7 +4019,7 @@ func (s *Syncer) adjustGlobalPointGTID(tctx *tcontext.Context) (bool, error) {
 		s.tctx.L().Warn("fail to merge purged gtidSet", zap.Stringer("pos", location), zap.Error(err))
 		return false, err
 	}
-	err = location.SetGTID(gs.Origin())
+	err = location.SetGTID(gs)
 	if err != nil {
 		s.tctx.L().Warn("fail to set gtid for global location", zap.Stringer("pos", location),
 			zap.String("adjusted_gtid", gs.String()), zap.Error(err))
@@ -4029,9 +4082,9 @@ func (s *Syncer) flushOptimisticTableInfos(tctx *tcontext.Context) {
 
 func (s *Syncer) setGlobalPointByTime(tctx *tcontext.Context, timeStr string) error {
 	// we support two layout
-	t, err := time.ParseInLocation(config.StartTimeFormat, timeStr, s.timezone)
+	t, err := time.ParseInLocation(config.StartTimeFormat, timeStr, s.upstreamTZ)
 	if err != nil {
-		t, err = time.ParseInLocation(config.StartTimeFormat2, timeStr, s.timezone)
+		t, err = time.ParseInLocation(config.StartTimeFormat2, timeStr, s.upstreamTZ)
 	}
 	if err != nil {
 		return err

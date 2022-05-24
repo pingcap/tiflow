@@ -14,7 +14,7 @@ your contribution accepted.
 
 Developing TiDB-CDC requires:
 
-* [Go 1.16+](https://go.dev/doc/code)
+* [Go 1.18+](https://go.dev/doc/code)
 * An internet connection to download the dependencies
 
 Simply run `make` to build the program.
@@ -76,7 +76,7 @@ Improve documentation.
 The format can be described more formally as follows:
 
 ```
-<subsystem>(ticdc|dm|both): <what changed>
+<subsystem>(ticdc|dm|engine|all): <what changed>
 <BLANK LINE>
 <why this change was made>
 <BLANK LINE>
@@ -90,8 +90,10 @@ git tools.
 If the change affects more than one subsystem, you can use comma to separate them like ```capture,puller:```. If the
 change affects many subsystems, you can use ```*``` instead, like ```*:```.
 
-If this change affects ticdc, fill in ```<subsystem>(ticdc)```, if it affects dm, fill in ```<subsystem>(dm)```. If it
-involves a code that is used by both products, fill in ```<subsystem>(both)```.
+If this change only affects ticdc, fill in ```<subsystem>(ticdc)```,
+if it only affects dm, fill in ```<subsystem>(dm)```,
+if it only affects dataflow engine, fill in ```<subsystem>(engine)```.
+If it involves a code that is used by all products, fill in ```<subsystem>(all)```.
 
 For the why part, if no specific reason for the change, you can use one of some generic reasons like "Improve
 documentation.",

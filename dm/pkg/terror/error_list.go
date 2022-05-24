@@ -629,6 +629,7 @@ const (
 	codeValidatorValidateChange
 	codeValidatorNotFound
 	codeValidatorPanic
+	codeValidatorTooMuchPending
 )
 
 // Schema-tracker error code.
@@ -915,7 +916,7 @@ var (
 	ErrConfigNeedUniqueTaskName     = New(codeConfigNeedUniqueTaskName, ClassConfig, ScopeInternal, LevelMedium, "must specify a unique task name", "Please check the `name` config in task configuration file.")
 	ErrConfigInvalidTaskMode        = New(codeConfigInvalidTaskMode, ClassConfig, ScopeInternal, LevelMedium, "please specify right task-mode, support `full`, `incremental`, `all`", "Please check the `task-mode` config in task configuration file.")
 	ErrConfigNeedTargetDB           = New(codeConfigNeedTargetDB, ClassConfig, ScopeInternal, LevelMedium, "must specify target-database", "Please check the `target-database` config in task configuration file.")
-	ErrConfigMetadataNotSet         = New(codeConfigMetadataNotSet, ClassConfig, ScopeInternal, LevelMedium, "mysql-instance(%d) must set meta for task-mode %s", "Please check the `meta` config in task configuration file.")
+	ErrConfigMetadataNotSet         = New(codeConfigMetadataNotSet, ClassConfig, ScopeInternal, LevelMedium, "mysql-instance(%s) must set meta for task-mode %s", "Please check the `meta` config in task configuration file.")
 	ErrConfigRouteRuleNotFound      = New(codeConfigRouteRuleNotFound, ClassConfig, ScopeInternal, LevelMedium, "mysql-instance(%d)'s route-rules %s not exist in routes", "Please check the `route-rules` config in task configuration file.")
 	ErrConfigFilterRuleNotFound     = New(codeConfigFilterRuleNotFound, ClassConfig, ScopeInternal, LevelMedium, "mysql-instance(%d)'s filter-rules %s not exist in filters", "Please check the `filter-rules` config in task configuration file.")
 	ErrConfigColumnMappingNotFound  = New(codeConfigColumnMappingNotFound, ClassConfig, ScopeInternal, LevelMedium, "mysql-instance(%d)'s column-mapping-rules %s not exist in column-mapping", "Please check the `column-mapping-rules` config in task configuration file.")
@@ -1307,6 +1308,7 @@ var (
 	ErrValidatorValidateChange    = New(codeValidatorValidateChange, ClassValidator, ScopeInternal, LevelHigh, "failed to validate row change", "")
 	ErrValidatorNotFound          = New(codeValidatorNotFound, ClassValidator, ScopeNotSet, LevelMedium, "validator not found for task %s", "")
 	ErrValidatorPanic             = New(codeValidatorPanic, ClassValidator, ScopeInternal, LevelHigh, "panic error: %v", "")
+	ErrValidatorTooMuchPending    = New(codeValidatorTooMuchPending, ClassValidator, ScopeInternal, LevelMedium, "too much pending data, stop validator. row size(curr/max): %d/%d, row count(curr/max): %d/%d", "")
 
 	// Schema-tracker error.
 	ErrSchemaTrackerInvalidJSON        = New(codeSchemaTrackerInvalidJSON, ClassSchemaTracker, ScopeDownstream, LevelHigh, "saved schema of `%s`.`%s` is not proper JSON", "")
