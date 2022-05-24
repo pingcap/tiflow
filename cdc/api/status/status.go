@@ -21,7 +21,7 @@ import (
 	"os"
 
 	"github.com/gin-gonic/gin"
-	"github.com/pingcap/tiflow/cdc/api/util"
+	"github.com/pingcap/tiflow/cdc/api"
 	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/version"
@@ -78,5 +78,5 @@ func (h *statusAPI) handleStatus(w http.ResponseWriter, req *http.Request) {
 		st.ID = h.capture.Info().ID
 		st.IsOwner = h.capture.IsOwner()
 	}
-	util.WriteData(w, st)
+	api.WriteData(w, st)
 }

@@ -20,8 +20,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc/api"
 	"github.com/pingcap/tiflow/cdc/api/middleware"
-	"github.com/pingcap/tiflow/cdc/api/util"
 	"github.com/pingcap/tiflow/cdc/api/validator"
 	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -328,7 +328,7 @@ func (h *openAPI) PauseChangefeed(c *gin.Context) {
 		Type: model.AdminStop,
 	}
 
-	if err := util.HandleOwnerJob(ctx, h.capture, job); err != nil {
+	if err := api.HandleOwnerJob(ctx, h.capture, job); err != nil {
 		_ = c.Error(err)
 		return
 	}
@@ -370,7 +370,7 @@ func (h *openAPI) ResumeChangefeed(c *gin.Context) {
 		Type: model.AdminResume,
 	}
 
-	if err := util.HandleOwnerJob(ctx, h.capture, job); err != nil {
+	if err := api.HandleOwnerJob(ctx, h.capture, job); err != nil {
 		_ = c.Error(err)
 		return
 	}
@@ -475,7 +475,7 @@ func (h *openAPI) RemoveChangefeed(c *gin.Context) {
 		Type: model.AdminRemove,
 	}
 
-	if err := util.HandleOwnerJob(ctx, h.capture, job); err != nil {
+	if err := api.HandleOwnerJob(ctx, h.capture, job); err != nil {
 		_ = c.Error(err)
 		return
 	}
@@ -513,7 +513,7 @@ func (h *openAPI) RebalanceTables(c *gin.Context) {
 		return
 	}
 
-	if err := util.HandleOwnerBalance(ctx, h.capture, changefeedID); err != nil {
+	if err := api.HandleOwnerBalance(ctx, h.capture, changefeedID); err != nil {
 		_ = c.Error(err)
 		return
 	}
@@ -567,7 +567,7 @@ func (h *openAPI) MoveTable(c *gin.Context) {
 		return
 	}
 
-	err = util.HandleOwnerScheduleTable(
+	err = api.HandleOwnerScheduleTable(
 		ctx, h.capture, changefeedID, data.CaptureID, data.TableID)
 	if err != nil {
 		_ = c.Error(err)
