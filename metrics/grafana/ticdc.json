@@ -125,7 +125,7 @@
   "gnetId": null,
   "graphTooltip": 1,
   "id": null,
-  "iteration": 1653379075125,
+  "iteration": 1653388230363,
   "links": [],
   "panels": [
     {
@@ -4368,112 +4368,75 @@
           }
         },
         {
-          "aliasColors": {},
-          "bars": false,
-          "dashLength": 10,
-          "dashes": false,
+          "cards": {
+            "cardPadding": null,
+            "cardRound": null
+          },
+          "color": {
+            "cardColor": "#b4ff00",
+            "colorScale": "sqrt",
+            "colorScheme": "interpolateOranges",
+            "exponent": 0.5,
+            "mode": "spectrum"
+          },
+          "dataFormat": "timeseries",
           "datasource": "${DS_TEST-CLUSTER}",
+          "description": "HeatMap of all table's memory consumption",
           "fieldConfig": {
-            "defaults": {
-              "unit": "bytes"
-            },
+            "defaults": {},
             "overrides": []
           },
-          "fill": 1,
-          "fillGradient": 0,
           "gridPos": {
             "h": 7,
             "w": 12,
             "x": 0,
             "y": 42
           },
-          "hiddenSeries": false,
+          "heatmap": {},
+          "hideZeroBuckets": false,
+          "highlightCards": true,
           "id": 149,
           "legend": {
-            "alignAsTable": true,
-            "avg": false,
-            "current": true,
-            "max": true,
-            "min": false,
-            "rightSide": false,
-            "show": true,
-            "total": false,
-            "values": true
+            "show": false
           },
-          "lines": true,
-          "linewidth": 1,
           "links": [],
-          "nullPointMode": "null",
-          "options": {
-            "alertThreshold": true
-          },
-          "percentage": false,
           "pluginVersion": "7.5.10",
-          "pointradius": 2,
-          "points": false,
-          "renderer": "flot",
-          "seriesOverrides": [],
-          "spaceLength": 10,
-          "stack": false,
-          "steppedLine": false,
+          "reverseYBuckets": false,
           "targets": [
             {
               "exemplar": true,
-              "expr": "sum(rate(ticdc_processor_memory_consumption_bucket{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", instance=~\"$ticdc_instance\"}[30s])) by (instance)",
+              "expr": "max(rate(ticdc_processor_table_memory_consumption_bucket{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", instance=~\"$ticdc_instance\"}[1m])) by (le)",
               "hide": false,
               "interval": "",
-              "legendFormat": "{{instance}}",
+              "legendFormat": "{{le}}",
               "refId": "A"
-            },
-            {
-              "exemplar": true,
-              "expr": "sum(rate(ticdc_processor_memory_consumption_bucket{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", instance=~\"$ticdc_instance\"}[30s])) by (changefeed, instance)",
-              "hide": false,
-              "interval": "",
-              "legendFormat": "{{changefeed}}-{{instance}}",
-              "refId": "B"
             }
           ],
-          "thresholds": [],
           "timeFrom": null,
-          "timeRegions": [],
           "timeShift": null,
-          "title": "Processor Memory Consumption Per Capture",
+          "title": "table Memory Consumption Per Processor",
           "tooltip": {
-            "shared": true,
-            "sort": 0,
-            "value_type": "individual"
-          },
-          "type": "graph",
-          "xaxis": {
-            "buckets": null,
-            "mode": "time",
-            "name": null,
             "show": true,
-            "values": []
+            "showHistogram": false
           },
-          "yaxes": [
-            {
-              "format": "bytes",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": null,
-              "show": true
-            },
-            {
-              "format": "short",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": null,
-              "show": true
-            }
-          ],
-          "yaxis": {
-            "align": false,
-            "alignLevel": null
-          }
+          "type": "heatmap",
+          "xAxis": {
+            "show": true
+          },
+          "xBucketNumber": null,
+          "xBucketSize": null,
+          "yAxis": {
+            "decimals": null,
+            "format": "bytes",
+            "logBase": 1,
+            "max": null,
+            "min": null,
+            "show": true,
+            "splitFactor": null
+          },
+          "yBucketBound": "auto",
+          "yBucketNumber": null,
+          "yBucketSize": null
         },
         {
           "aliasColors": {},
@@ -4524,11 +4487,18 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "sum(rate(ticdc_processor_memory_consumption_bucket{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", instance=~\"$ticdc_instance\"}[30s])) by (changefeed)",
-              "format": "time_series",
+              "expr": "sum(ticdc_processor_memory_consumption{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", instance=~\"$ticdc_instance\"}) by (changefeed)",
+              "hide": false,
               "interval": "",
-              "intervalFactor": 1,
-              "legendFormat": "{{ changefeed }}",
+              "legendFormat": "{{changefeed}}",
+              "refId": "B"
+            },
+            {
+              "exemplar": true,
+              "expr": "max(ticdc_processor_memory_consumption{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", instance=~\"$ticdc_instance\"}) by (changefeed, instance)",
+              "hide": false,
+              "interval": "",
+              "legendFormat": "{{changefeed}}-{{instance}}",
               "refId": "A"
             }
           ],
@@ -4536,7 +4506,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "Processor Memory Consumption Per Changefeed",
+          "title": "Memory Consumption Per Processor",
           "tooltip": {
             "shared": true,
             "sort": 0,
@@ -4941,7 +4911,7 @@
               "exemplar": true,
               "expr": "histogram_quantile(0.99, sum(rate(ticdc_sink_txn_exec_duration_bucket{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", type=\"DB\"}[1m])) by (le,instance, changefeed))",
               "format": "time_series",
-              "hide": false,
+              "hide": true,
               "interval": "",
               "intervalFactor": 1,
               "legendFormat": "{{changefeed}}-{{instance}}-p99",
@@ -4951,7 +4921,7 @@
               "exemplar": true,
               "expr": "histogram_quantile(0.999, sum(rate(ticdc_sink_txn_exec_duration_bucket{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", type=\"DB\"}[1m])) by (le,instance, changefeed))",
               "format": "time_series",
-              "hide": false,
+              "hide": true,
               "interval": "",
               "intervalFactor": 1,
               "legendFormat": "{{changefeed}}-{{instance}}-p999",
@@ -7086,7 +7056,7 @@
             "h": 6,
             "w": 8,
             "x": 0,
-            "y": 41
+            "y": 6
           },
           "hiddenSeries": false,
           "id": 271,
@@ -7180,7 +7150,7 @@
             "h": 6,
             "w": 8,
             "x": 8,
-            "y": 41
+            "y": 6
           },
           "hiddenSeries": false,
           "id": 273,
@@ -7288,7 +7258,7 @@
             "h": 6,
             "w": 8,
             "x": 16,
-            "y": 41
+            "y": 6
           },
           "hiddenSeries": false,
           "id": 272,
@@ -7392,7 +7362,7 @@
             "h": 6,
             "w": 8,
             "x": 0,
-            "y": 47
+            "y": 12
           },
           "heatmap": {},
           "hideZeroBuckets": true,
@@ -7468,7 +7438,7 @@
             "h": 6,
             "w": 8,
             "x": 8,
-            "y": 47
+            "y": 12
           },
           "hiddenSeries": false,
           "id": 288,
@@ -7596,7 +7566,7 @@
             "h": 6,
             "w": 8,
             "x": 16,
-            "y": 47
+            "y": 12
           },
           "hiddenSeries": false,
           "id": 286,
@@ -7708,7 +7678,7 @@
             "h": 6,
             "w": 8,
             "x": 0,
-            "y": 53
+            "y": 18
           },
           "heatmap": {},
           "hideZeroBuckets": true,
@@ -7784,7 +7754,7 @@
             "h": 6,
             "w": 8,
             "x": 8,
-            "y": 53
+            "y": 18
           },
           "hiddenSeries": false,
           "id": 279,
@@ -7887,7 +7857,7 @@
             "h": 6,
             "w": 8,
             "x": 16,
-            "y": 53
+            "y": 18
           },
           "hiddenSeries": false,
           "id": 275,
@@ -8010,7 +7980,7 @@
             "h": 6,
             "w": 8,
             "x": 0,
-            "y": 59
+            "y": 24
           },
           "heatmap": {},
           "hideZeroBuckets": true,
@@ -8094,7 +8064,7 @@
             "h": 6,
             "w": 8,
             "x": 8,
-            "y": 59
+            "y": 24
           },
           "heatmap": {},
           "hideZeroBuckets": true,
@@ -8178,7 +8148,7 @@
             "h": 6,
             "w": 8,
             "x": 16,
-            "y": 59
+            "y": 24
           },
           "heatmap": {},
           "hideZeroBuckets": true,
@@ -8254,7 +8224,7 @@
             "h": 6,
             "w": 8,
             "x": 0,
-            "y": 65
+            "y": 30
           },
           "hiddenSeries": false,
           "id": 280,
@@ -8354,7 +8324,7 @@
             "h": 6,
             "w": 8,
             "x": 8,
-            "y": 65
+            "y": 30
           },
           "hiddenSeries": false,
           "id": 283,
@@ -8454,7 +8424,7 @@
             "h": 6,
             "w": 8,
             "x": 16,
-            "y": 65
+            "y": 30
           },
           "hiddenSeries": false,
           "id": 287,
@@ -8562,7 +8532,7 @@
             "h": 6,
             "w": 8,
             "x": 0,
-            "y": 71
+            "y": 36
           },
           "heatmap": {},
           "hideZeroBuckets": true,

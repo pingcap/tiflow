@@ -88,18 +88,20 @@ type processor struct {
 	checkpointTs model.Ts
 	resolvedTs   model.Ts
 
-	metricResolvedTsGauge             prometheus.Gauge
-	metricResolvedTsLagGauge          prometheus.Gauge
-	metricMinResolvedTableIDGauge     prometheus.Gauge
-	metricCheckpointTsGauge           prometheus.Gauge
-	metricCheckpointTsLagGauge        prometheus.Gauge
-	metricMinCheckpointTableIDGauge   prometheus.Gauge
-	metricSyncTableNumGauge           prometheus.Gauge
-	metricSchemaStorageGcTsGauge      prometheus.Gauge
-	metricProcessorErrorCounter       prometheus.Counter
-	metricProcessorTickDuration       prometheus.Observer
-	metricsTableSinkTotalRows         prometheus.Counter
-	metricsProcessorMemoryConsumption prometheus.Observer
+	metricResolvedTsGauge           prometheus.Gauge
+	metricResolvedTsLagGauge        prometheus.Gauge
+	metricMinResolvedTableIDGauge   prometheus.Gauge
+	metricCheckpointTsGauge         prometheus.Gauge
+	metricCheckpointTsLagGauge      prometheus.Gauge
+	metricMinCheckpointTableIDGauge prometheus.Gauge
+	metricSyncTableNumGauge         prometheus.Gauge
+	metricSchemaStorageGcTsGauge    prometheus.Gauge
+	metricProcessorErrorCounter     prometheus.Counter
+	metricProcessorTickDuration     prometheus.Observer
+	metricsTableSinkTotalRows       prometheus.Counter
+
+	metricsTableMemoryHistogram prometheus.Observer
+	metricsProcessorMemoryGauge prometheus.Gauge
 }
 
 // checkReadyForMessages checks whether all necessary Etcd keys have been established.
@@ -276,7 +278,9 @@ func newProcessor(ctx cdcContext.Context, upStream *upstream.Upstream) *processo
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		metricsTableSinkTotalRows: sinkmetric.TableSinkTotalRowsCountCounter.
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
-		metricsProcessorMemoryConsumption: processorMemoryHistogram.
+		metricsTableMemoryHistogram: tableMemoryHistogram.
+			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
+		metricsProcessorMemoryGauge: processorMemoryGauge.
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 	}
 	p.createTablePipeline = p.createTablePipelineImpl
@@ -332,10 +336,7 @@ func (p *processor) Tick(ctx cdcContext.Context, state *orchestrator.ChangefeedR
 	}
 
 	p.metricProcessorTickDuration.Observe(costTime.Seconds())
-	p.metricSyncTableNumGauge.Set(float64(len(p.tables)))
-	for _, table := range p.tables {
-		p.metricsProcessorMemoryConsumption.Observe(float64(table.MemoryConsumption()))
-	}
+	p.refreshMetrics()
 
 	if err == nil {
 		return state, nil
@@ -900,6 +901,17 @@ func (p *processor) flushRedoLogMeta(ctx context.Context) error {
 	return nil
 }
 
+func (p *processor) refreshMetrics() {
+	var total uint64
+	for _, table := range p.tables {
+		consumed := table.MemoryConsumption()
+		p.metricsTableMemoryHistogram.Observe(float64(consumed))
+		total += consumed
+	}
+	p.metricsProcessorMemoryGauge.Set(float64(total))
+	p.metricSyncTableNumGauge.Set(float64(len(p.tables)))
+}
+
 func (p *processor) Close() error {
 	log.Info("processor closing ...",
 		zap.String("namespace", p.changefeedID.Namespace),
@@ -953,7 +965,8 @@ func (p *processor) Close() error {
 	processorErrorCounter.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
 	processorSchemaStorageGcTsGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
 	sinkmetric.TableSinkTotalRowsCountCounter.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
-	processorMemoryHistogram.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
+	tableMemoryHistogram.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
+	processorMemoryGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
 	return nil
 }
 
