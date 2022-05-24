@@ -89,16 +89,6 @@ func (w *mockWorkerImpl) Status() libModel.WorkerStatus {
 	return args.Get(0).(libModel.WorkerStatus)
 }
 
-func (w *mockWorkerImpl) OnMasterFailover(reason MasterFailoverReason) error {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-
-	w.failoverCount.Add(1)
-
-	args := w.Called(reason)
-	return args.Error(0)
-}
-
 func (w *mockWorkerImpl) OnMasterMessage(topic p2p.Topic, message p2p.MessageValue) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
