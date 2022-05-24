@@ -15,7 +15,7 @@ function prepare() {
 
 	# Use '--tidb-config' here to suppress the default config for other integration tests
 	# Maybe it can specify some options for the rest test cases in the future
-	start_tidb_cluster --workdir $WORK_DIR --tidb-config=$TIDB_CONFIG
+	start_tidb_cluster --workdir $WORK_DIR --tidb-config $TIDB_CONFIG
 
 	cd $WORK_DIR
 
