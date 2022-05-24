@@ -17,6 +17,8 @@ import (
 	"context"
 	"testing"
 
+	dmconfig "github.com/pingcap/tiflow/dm/dm/config"
+	dmmaster "github.com/pingcap/tiflow/dm/dm/master"
 	"github.com/stretchr/testify/require"
 
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
@@ -28,7 +30,20 @@ const (
 	jobTemplatePath = "../config/job_template.yaml"
 )
 
+func checkAndNoAdjustSourceConfigMock(ctx context.Context, cfg *dmconfig.SourceConfig) error {
+	if _, err := cfg.Yaml(); err != nil {
+		return err
+	}
+	return cfg.Verify()
+}
+
 func TestJobStore(t *testing.T) {
+	funcBackup := dmmaster.CheckAndAdjustSourceConfigFunc
+	dmmaster.CheckAndAdjustSourceConfigFunc = checkAndNoAdjustSourceConfigMock
+	defer func() {
+		dmmaster.CheckAndAdjustSourceConfigFunc = funcBackup
+	}()
+
 	var (
 		source1 = "mysql-replica-01"
 		source2 = "mysql-replica-02"
