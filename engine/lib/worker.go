@@ -342,17 +342,20 @@ func (w *DefaultBaseWorker) doClose() {
 	}
 
 	w.wg.Wait()
+	promutil.UnregisterWorkerMetrics(w.id)
 }
 
 // Close implements BaseWorker.Close
 func (w *DefaultBaseWorker) Close(ctx context.Context) error {
-	if err := w.Impl.CloseImpl(ctx); err != nil {
+	err := w.Impl.CloseImpl(ctx)
+	// We don't return here if CloseImpl return error to ensure
+	// that we can close inner resources of the framework
+	if err != nil {
 		log.L().Error("Failed to close WorkerImpl", zap.Error(err))
-		return errors.Trace(err)
 	}
 
 	w.doClose()
-	return nil
+	return errors.Trace(err)
 }
 
 // ID implements BaseWorker.ID
@@ -407,7 +410,12 @@ func (w *DefaultBaseWorker) OpenStorage(ctx context.Context, resourcePath resour
 }
 
 // Exit implements BaseWorker.Exit
-func (w *DefaultBaseWorker) Exit(ctx context.Context, status libModel.WorkerStatus, err error) error {
+func (w *DefaultBaseWorker) Exit(ctx context.Context, status libModel.WorkerStatus, err error) (errRet error) {
+	// Set the errCenter to prevent user from forgetting to return directly after calling 'Exit'
+	defer func() {
+		w.onError(errRet)
+	}()
+
 	if err != nil {
 		status.Code = libModel.WorkerStatusError
 	}
@@ -415,11 +423,12 @@ func (w *DefaultBaseWorker) Exit(ctx context.Context, status libModel.WorkerStat
 	w.workerStatus.Code = status.Code
 	w.workerStatus.ErrorMessage = status.ErrorMessage
 	w.workerStatus.ExtBytes = status.ExtBytes
-	if err1 := w.statusSender.UpdateStatus(ctx, w.workerStatus); err1 != nil {
-		return err1
+	if errRet = w.statusSender.UpdateStatus(ctx, w.workerStatus); errRet != nil {
+		return
 	}
 
-	return derror.ErrWorkerFinish.FastGenByArgs()
+	errRet = derror.ErrWorkerFinish.FastGenByArgs()
+	return
 }
 
 func (w *DefaultBaseWorker) startBackgroundTasks() {
@@ -597,6 +606,10 @@ func (c *workerExitController) PollExit() error {
 			c.workerExitFsm.Store(workerExited)
 			return err
 		}
+		// workerExitWaitForMasterTimeout is used for the case that
+		// 'master is busy to reply or ignore reply for some bugs when heartbeat is ok'.
+		// Master need wait (WorkerTimeoutDuration + WorkerTimeoutGracefulDuration) to know worker had already exited without halfExit,
+		// so workerExitWaitForMasterTimeout < (WorkerTimeoutDuration + WorkerTimeoutGracefulDuration) is reasonable.
 		sinceStartExiting := c.clock.Since(c.halfExitTime.Load())
 		if sinceStartExiting > workerExitWaitForMasterTimeout {
 			// TODO log worker ID and master ID.
