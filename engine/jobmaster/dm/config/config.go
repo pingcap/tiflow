@@ -182,6 +182,9 @@ func (c *JobCfg) toDMTaskConfig() (*dmconfig.TaskConfig, error) {
 
 	// transform all the fields not contained in dmTaskCfg.
 	for _, upstream := range c.Upstreams {
+		if err = upstream.adjust(); err != nil {
+			return nil, err
+		}
 		dmTaskCfg.MySQLInstances = append(dmTaskCfg.MySQLInstances, &upstream.MySQLInstance)
 	}
 	return dmTaskCfg, nil
@@ -197,12 +200,6 @@ func (c *JobCfg) fromDMTaskConfig(dmTaskCfg *dmconfig.TaskConfig) error {
 }
 
 func (c *JobCfg) adjust() error {
-	for _, upstream := range c.Upstreams {
-		if err := upstream.adjust(); err != nil {
-			return err
-		}
-	}
-
 	dmTaskCfg, err := c.toDMTaskConfig()
 	if err != nil {
 		return err
