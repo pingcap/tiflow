@@ -171,7 +171,11 @@ func (c *DefaultGCCoordinator) gcByStatusSnapshots(
 	}
 
 	var (
-		toGC     []resModel.ResourceID
+		toGC []resModel.ResourceID
+
+		// toRemove is used to remove meta records when
+		// the associated executors are offline.
+		// TODO adjust the mechanism when we implement S3 support.
 		toRemove []resModel.ResourceID
 	)
 	for _, resMeta := range resources {
@@ -200,6 +204,7 @@ func (c *DefaultGCCoordinator) gcByStatusSnapshots(
 	if len(toRemove) > 0 {
 		log.L().Info("Removing stale resources for offlined executors",
 			zap.Any("resource-ids", toRemove))
+		// Note: soft delete has not been implemented for resources yet.
 		if _, err := c.metaClient.DeleteResources(ctx, toRemove); err != nil {
 			return err
 		}
