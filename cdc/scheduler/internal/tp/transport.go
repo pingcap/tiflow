@@ -28,7 +28,7 @@ import (
 )
 
 type transport interface {
-	Send(ctx context.Context, to model.CaptureID, msgs []*schedulepb.Message) (bool, error)
+	Send(ctx context.Context, msgs []*schedulepb.Message) error
 	Recv(ctx context.Context) ([]*schedulepb.Message, error)
 }
 
@@ -82,23 +82,24 @@ func newTranport(
 }
 
 func (t *p2pTransport) Send(
-	ctx context.Context, to model.CaptureID, msgs []*schedulepb.Message,
-) (bool, error) {
-	client := t.messageRouter.GetClient(to)
-	if client == nil {
-		log.Warn("tpscheduler: no message client found, retry later",
-			zap.String("namespace", t.changefeed.Namespace),
-			zap.String("changefeed", t.changefeed.ID),
-			zap.String("to", to))
-		return false, nil
-	}
-
+	ctx context.Context, msgs []*schedulepb.Message,
+) error {
 	for i := range msgs {
 		value := msgs[i]
+		to := value.To
+		client := t.messageRouter.GetClient(to)
+		if client == nil {
+			log.Warn("tpscheduler: no message client found, retry later",
+				zap.String("namespace", t.changefeed.Namespace),
+				zap.String("changefeed", t.changefeed.ID),
+				zap.String("to", to))
+			continue
+		}
+
 		_, err := client.TrySendMessage(ctx, t.topic, value)
 		if err != nil {
 			if cerror.ErrPeerMessageSendTryAgain.Equal(err) {
-				return false, nil
+				return nil
 			}
 			if cerror.ErrPeerMessageClientClosed.Equal(err) {
 				log.Warn("tpscheduler: peer messaging client is closed"+
@@ -107,18 +108,17 @@ func (t *p2pTransport) Send(
 					zap.String("namespace", t.changefeed.Namespace),
 					zap.String("changefeed", t.changefeed.ID),
 					zap.String("to", to))
-				return false, nil
+				return nil
 			}
-			return false, errors.Trace(err)
+			return errors.Trace(err)
 		}
 	}
 
 	log.Debug("tpscheduler: all messages sent",
 		zap.String("namespace", t.changefeed.Namespace),
 		zap.String("changefeed", t.changefeed.ID),
-		zap.Int("len", len(msgs)),
-		zap.String("to", to))
-	return true, nil
+		zap.Int("len", len(msgs)))
+	return nil
 }
 
 func (t *p2pTransport) Recv(ctx context.Context) ([]*schedulepb.Message, error) {

@@ -17,15 +17,11 @@ option go_package = "schedulepb";
 
 import "gogoproto/gogo.proto";
 
-message OwnerRevision { int64 revision = 1; }
-
-message ProcessorEpoch { string epoch = 1; }
+option(gogoproto.goproto_enum_prefix_all) = false;
 
 message Checkpoint {
-    uint64 checkpoint_ts =
-        1 [(gogoproto.casttype) = "github.com/pingcap/tiflow/cdc/model.Ts"];
-    uint64 resolved_ts =
-        2 [(gogoproto.casttype) = "github.com/pingcap/tiflow/cdc/model.Ts"];
+    uint64 checkpoint_ts = 1 [(gogoproto.casttype) = "github.com/pingcap/tiflow/cdc/model.Ts"];
+    uint64 resolved_ts = 2 [(gogoproto.casttype) = "github.com/pingcap/tiflow/cdc/model.Ts"];
 }
 
 message AddTableRequest {
@@ -45,9 +41,8 @@ message RemoveTableRequest {
 }
 
 message DispatchTableRequest {
-    OwnerRevision owner_revision = 1;
-    AddTableRequest add_table = 2;
-    RemoveTableRequest remove_table = 3;
+    AddTableRequest add_table = 1;
+    RemoveTableRequest remove_table = 2;
 }
 
 message AddTableResponse {
@@ -70,13 +65,11 @@ message RemoveTableResponse {
 }
 
 message DispatchTableResponse {
-    ProcessorEpoch processor_epoch = 1;
-
-    AddTableResponse add_table = 2;
-    RemoveTableResponse remove_table = 3;
+    AddTableResponse add_table = 1;
+    RemoveTableResponse remove_table = 2;
 }
 
-message Announce { OwnerRevision owner_revision = 1; }
+message Heartbeat {}
 
 // TableState is the state of table repliction in processor.
 //
@@ -88,13 +81,13 @@ message Announce { OwnerRevision owner_revision = 1; }
 //  │ Stopped │ <─┤ Stopping │ <─┤ Replicating │
 //  └─────────┘   └──────────┘   └─────────────┘
 enum TableState {
-    Unknown = 0;
-    Absent = 1;
-    Preparing = 2;
-    Prepared = 3;
-    Replicating = 4;
-    Stopping = 5;
-    Stopped = 6;
+    Unknown = 0 [(gogoproto.enumvalue_customname) = "TableStateUnknown"];
+    Absent = 1 [(gogoproto.enumvalue_customname) = "TableStateAbsent"];
+    Preparing = 2 [(gogoproto.enumvalue_customname) = "TableStatePreparing"];
+    Prepared = 3 [(gogoproto.enumvalue_customname) = "TableStatePrepared"];
+    Replicating = 4 [(gogoproto.enumvalue_customname) = "TableStateReplicating"];
+    Stopping = 5 [(gogoproto.enumvalue_customname) = "TableStateStopping"];
+    Stopped = 6 [(gogoproto.enumvalue_customname) = "TableStateStopped"];
 }
 
 message TableStatus {
@@ -103,38 +96,41 @@ message TableStatus {
         (gogoproto.customname) = "TableID"
     ];
     TableState state = 2;
-    Checkpoint checkpoint = 3;
+    Checkpoint checkpoint = 3 [(gogoproto.nullable) = false];
 }
 
-message Sync {
-    ProcessorEpoch processor_epoch = 1;
-
-    repeated TableStatus tables = 2;
+message HeartbeatResponse {
+    repeated TableStatus tables = 1 [(gogoproto.nullable) = false];
+    bool is_stopping = 2;
 }
 
 enum MessageType {
-    MsgUnknown = 0;
-    MsgCheckpoint = 1;
-    MsgDispatchTableRequest = 2;
-    MsgDispatchTableResponse = 3;
-    MsgAnnounce = 4;
-    MsgSync = 5;
+    MsgUnknown = 0 [(gogoproto.enumvalue_customname) = "MsgUnknown"];
+    MsgCheckpoint = 1 [(gogoproto.enumvalue_customname) = "MsgCheckpoint"];
+    MsgDispatchTableRequest = 2 [(gogoproto.enumvalue_customname) = "MsgDispatchTableRequest"];
+    MsgDispatchTableResponse = 3 [(gogoproto.enumvalue_customname) = "MsgDispatchTableResponse"];
+    MsgHeartbeat = 4 [(gogoproto.enumvalue_customname) = "MsgHeartbeat"];
+    MsgHeartbeatResponse = 5 [(gogoproto.enumvalue_customname) = "MsgHeartbeatResponse"];
 }
+
+message OwnerRevision { int64 revision = 1; }
+
+message ProcessorEpoch { string epoch = 1; }
 
 message Message {
     message Header {
         // The semantic version of the node that sent this message.
         string version = 1;
+        OwnerRevision owner_revision = 2 [(gogoproto.nullable) = false];
+        ProcessorEpoch processor_epoch = 3 [(gogoproto.nullable) = false];
     }
     Header header = 1;
     MessageType msg_type = 2;
-    string from = 3 [(gogoproto.casttype) =
-                         "github.com/pingcap/tiflow/cdc/model.CaptureID"];
-    string to = 4 [(gogoproto.casttype) =
-                       "github.com/pingcap/tiflow/cdc/model.CaptureID"];
+    string from = 3 [(gogoproto.casttype) = "github.com/pingcap/tiflow/cdc/model.CaptureID"];
+    string to = 4 [(gogoproto.casttype) = "github.com/pingcap/tiflow/cdc/model.CaptureID"];
     DispatchTableRequest dispatch_table_request = 5;
     DispatchTableResponse dispatch_table_response = 6;
-    Checkpoint checkpoint = 7;
-    Announce announce = 8;
-    Sync sync = 9;
+    Heartbeat heartbeat = 7;
+    HeartbeatResponse heartbeat_response = 8;
+    Checkpoint checkpoint = 9;
 }
