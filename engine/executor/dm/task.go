@@ -90,8 +90,9 @@ type task interface {
 type baseTask struct {
 	task
 	lib.BaseWorker
-	unitHolder   unit.Holder
-	messageAgent dmpkg.MessageAgent
+	unitHolder            unit.Holder
+	messageAgent          dmpkg.MessageAgent
+	messageHandlerManager p2p.MessageHandlerManager
 
 	ctx                context.Context
 	cancel             context.CancelFunc
@@ -107,7 +108,7 @@ type baseTask struct {
 // newBaseTask creates BaseDMTask instances
 func newBaseTask(dCtx *dcontext.Context, masterID libModel.MasterID, workerType libModel.WorkerType, conf lib.WorkerConfig) *baseTask {
 	ctx, cancel := context.WithCancel(context.Background())
-	return &baseTask{
+	t := &baseTask{
 		ctx:        ctx,
 		cancel:     cancel,
 		cfg:        conf.(*config.SubTaskConfig),
@@ -116,11 +117,18 @@ func newBaseTask(dCtx *dcontext.Context, masterID libModel.MasterID, workerType 
 		taskID:     conf.(*config.SubTaskConfig).SourceID,
 		masterID:   masterID,
 	}
+
+	// nolint:errcheck
+	dCtx.Deps().Construct(func(m p2p.MessageHandlerManager) (p2p.MessageHandlerManager, error) {
+		t.messageHandlerManager = m
+		return m, nil
+	})
+	return t
 }
 
 func (t *baseTask) createComponents(ctx context.Context) error {
 	log.L().Debug("create components")
-	t.messageAgent = dmpkg.NewMessageAgent(t.ctx, t.taskID, map[string]dmpkg.Sender{t.masterID: t}, t)
+	t.messageAgent = dmpkg.NewMessageAgent(t.ctx, t.taskID, map[string]dmpkg.Sender{t.masterID: t}, t, t.messageHandlerManager)
 	return nil
 }
 
@@ -128,6 +136,9 @@ func (t *baseTask) createComponents(ctx context.Context) error {
 func (t *baseTask) InitImpl(ctx context.Context) error {
 	log.L().Info("init task")
 	if err := t.createComponents(ctx); err != nil {
+		return err
+	}
+	if err := t.messageAgent.RegisterTopic(ctx, t.masterID); err != nil {
 		return err
 	}
 	if err := t.onInit(ctx); err != nil {

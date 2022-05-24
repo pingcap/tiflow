@@ -31,14 +31,14 @@ var (
 	defaultResponseTimeOut = time.Second * 2
 )
 
-// GenerateTopic generate dm message topic.
-func GenerateTopic(sendID string, receiverID string) string {
+// generateTopic generate dm message topic.
+func generateTopic(sendID string, receiverID string) string {
 	return fmt.Sprintf("DM---%s---%s", sendID, receiverID)
 }
 
-// ExtractTopic extract dm message topic.
+// extractTopic extract dm message topic.
 // TODO: handle special case.
-func ExtractTopic(topic string) (string, string) {
+func extractTopic(topic string) (string, string) {
 	parts := strings.Split(topic, "---")
 	return parts[1], parts[2]
 }
@@ -143,33 +143,39 @@ type HandlerFunc func(interface{}) error
 
 // MessageAgent defines interface for message communication.
 type MessageAgent interface {
-	RegisterHandler(topic string, handler HandlerFunc)
+	RegisterCommandHandler(command string, handler HandlerFunc)
 	UpdateSender(senderID string, sender Sender)
 	SendMessage(ctx context.Context, senderID string, command string, msg interface{}) error
 	SendRequest(ctx context.Context, senderID string, command string, req interface{}) (interface{}, error)
 	SendResponse(ctx context.Context, senderID string, id messageID, command string, resp interface{}) error
 	OnMessage(topic string, msg interface{}) error
+	RegisterTopic(ctx context.Context, senderID string) error
+	UnregisterTopic(ctx context.Context, senderID string) error
 }
 
 // MessageAgentImpl implements the message processing mechanism.
 type MessageAgentImpl struct {
-	ctx         context.Context
-	messagePair *messagePair
+	ctx                   context.Context
+	messagePair           *messagePair
+	messageHandlerManager p2p.MessageHandlerManager
 	// sender-id -> Sender
 	senders sync.Map
 	// topic -> handler
-	handlers       sync.Map
-	defaultHandler interface{}
-	id             string
+	handlers              sync.Map
+	defaultCommandHandler interface{}
+	id                    string
 }
 
 // NewMessageAgent creates a new MessageAgent instance.
-func NewMessageAgent(ctx context.Context, id string, initSenders map[string]Sender, defaultHandler interface{}) *MessageAgentImpl {
+func NewMessageAgent(ctx context.Context, id string, initSenders map[string]Sender,
+	defaultCommandHandler interface{}, messageHandlerManager p2p.MessageHandlerManager,
+) *MessageAgentImpl {
 	messageAgent := &MessageAgentImpl{
-		ctx:            ctx,
-		messagePair:    newMessagePair(),
-		defaultHandler: defaultHandler,
-		id:             id,
+		ctx:                   ctx,
+		messagePair:           newMessagePair(),
+		defaultCommandHandler: defaultCommandHandler,
+		messageHandlerManager: messageHandlerManager,
+		id:                    id,
 	}
 	for senderID, sender := range initSenders {
 		messageAgent.UpdateSender(senderID, sender)
@@ -203,7 +209,7 @@ func (agent *MessageAgentImpl) SendMessage(ctx context.Context, senderID string,
 	}
 	ctx2, cancel := context.WithTimeout(ctx, defaultMessageTimeOut)
 	defer cancel()
-	return sender.SendMessage(ctx2, GenerateTopic(agent.id, senderID), message{ID: 0, Type: messageTp, Command: command, Payload: msg}, true)
+	return sender.SendMessage(ctx2, generateTopic(agent.id, senderID), message{ID: 0, Type: messageTp, Command: command, Payload: msg}, true)
 }
 
 // SendRequest send request synchronously.
@@ -214,7 +220,7 @@ func (agent *MessageAgentImpl) SendRequest(ctx context.Context, senderID string,
 	}
 	ctx2, cancel := context.WithTimeout(ctx, defaultRequestTimeOut)
 	defer cancel()
-	return agent.messagePair.sendRequest(ctx2, GenerateTopic(agent.id, senderID), command, req, sender)
+	return agent.messagePair.sendRequest(ctx2, generateTopic(agent.id, senderID), command, req, sender)
 }
 
 // SendResponse send response asynchronously.
@@ -225,12 +231,12 @@ func (agent *MessageAgentImpl) SendResponse(ctx context.Context, senderID string
 	}
 	ctx2, cancel := context.WithTimeout(ctx, defaultResponseTimeOut)
 	defer cancel()
-	return agent.messagePair.sendResponse(ctx2, GenerateTopic(agent.id, senderID), msgID, command, resp, sender)
+	return agent.messagePair.sendResponse(ctx2, generateTopic(agent.id, senderID), msgID, command, resp, sender)
 }
 
-// RegisterHandler register topic handler.
-func (agent *MessageAgentImpl) RegisterHandler(topic string, handler HandlerFunc) {
-	agent.handlers.Store(topic, handler)
+// RegisterCommandHandler register command handler.
+func (agent *MessageAgentImpl) RegisterCommandHandler(command string, handler HandlerFunc) {
+	agent.handlers.Store(command, handler)
 }
 
 // OnMessage receive message/request/response.
@@ -255,7 +261,7 @@ func (agent *MessageAgentImpl) OnMessage(topic string, msg interface{}) error {
 	case responseTp:
 		return agent.handleResponse(m.ID, m.Payload)
 	case requestTp:
-		sendID, _ := ExtractTopic(topic)
+		sendID, _ := extractTopic(topic)
 		return agent.handleRequest(sendID, m.ID, m.Command, m.Payload)
 	default:
 		return agent.handleMessage(m.Command, m.Payload)
@@ -270,7 +276,7 @@ func (agent *MessageAgentImpl) handleResponse(id messageID, resp interface{}) er
 // handleRequest receive request, call request handler and send response.
 func (agent *MessageAgentImpl) handleRequest(senderID string, msgID messageID, command string, req interface{}) error {
 	// TODO: check input/output num/type if needed, panic now
-	handler := reflect.ValueOf(agent.defaultHandler).MethodByName(command)
+	handler := reflect.ValueOf(agent.defaultCommandHandler).MethodByName(command)
 	if !handler.IsValid() {
 		return errors.Errorf("request handler for command %s not found", command)
 	}
@@ -292,7 +298,7 @@ func (agent *MessageAgentImpl) handleRequest(senderID string, msgID messageID, c
 // handle message receive message and call message handler.
 func (agent *MessageAgentImpl) handleMessage(command string, msg interface{}) error {
 	// TODO: check input/output num/type if needed, panic now
-	handler := reflect.ValueOf(agent.defaultHandler).MethodByName(command)
+	handler := reflect.ValueOf(agent.defaultCommandHandler).MethodByName(command)
 	if !handler.IsValid() {
 		return errors.Errorf("message handler for command %s not found", command)
 	}
@@ -306,4 +312,24 @@ func (agent *MessageAgentImpl) handleMessage(command string, msg interface{}) er
 		return nil
 	}
 	return err.(error)
+}
+
+// RegisterTopic register p2p topic.
+func (agent *MessageAgentImpl) RegisterTopic(ctx context.Context, senderID string) error {
+	topic := generateTopic(senderID, agent.id)
+	_, err := agent.messageHandlerManager.RegisterHandler(
+		ctx,
+		topic,
+		message{},
+		func(sender p2p.NodeID, value p2p.MessageValue) error {
+			return agent.OnMessage(topic, value)
+		},
+	)
+	return err
+}
+
+// UnregisterTopic unregister p2p topic.
+func (agent *MessageAgentImpl) UnregisterTopic(ctx context.Context, senderID string) error {
+	_, err := agent.messageHandlerManager.UnregisterHandler(ctx, generateTopic(senderID, agent.id))
+	return err
 }

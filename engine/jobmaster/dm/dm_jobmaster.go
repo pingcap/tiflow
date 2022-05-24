@@ -47,11 +47,12 @@ type JobMaster struct {
 	workerID libModel.WorkerID
 	jobCfg   *config.JobCfg
 
-	metadata        *metadata.MetaData
-	workerManager   *WorkerManager
-	taskManager     *TaskManager
-	messageAgent    dmpkg.MessageAgent
-	checkpointAgent checkpoint.Agent
+	metadata              *metadata.MetaData
+	workerManager         *WorkerManager
+	taskManager           *TaskManager
+	messageAgent          dmpkg.MessageAgent
+	messageHandlerManager p2p.MessageHandlerManager
+	checkpointAgent       checkpoint.Agent
 }
 
 type dmJobMasterFactory struct{}
@@ -71,11 +72,17 @@ func (j dmJobMasterFactory) DeserializeConfig(configBytes []byte) (registry.Work
 // NewWorkerImpl implements WorkerFactory.NewWorkerImpl
 func (j dmJobMasterFactory) NewWorkerImpl(ctx *dcontext.Context, workerID libModel.WorkerID, masterID libModel.MasterID, conf lib.WorkerConfig) (lib.WorkerImpl, error) {
 	log.L().Info("new dm jobmaster", zap.String("id", workerID))
-	return &JobMaster{
+	jm := &JobMaster{
 		workerID:        workerID,
 		jobCfg:          conf.(*config.JobCfg),
 		checkpointAgent: checkpoint.NewAgentImpl(conf.(*config.JobCfg)),
-	}, nil
+	}
+	// nolint:errcheck
+	ctx.Deps().Construct(func(m p2p.MessageHandlerManager) (p2p.MessageHandlerManager, error) {
+		jm.messageHandlerManager = m
+		return m, nil
+	})
+	return jm, nil
 }
 
 func (jm *JobMaster) createComponents() error {
@@ -85,7 +92,7 @@ func (jm *JobMaster) createComponents() error {
 		return err
 	}
 	jm.metadata = metadata.NewMetaData(jm.ID(), jm.MetaKVClient())
-	jm.messageAgent = dmpkg.NewMessageAgent(jm.ctx, jm.JobMasterID(), workerHandles, jm)
+	jm.messageAgent = dmpkg.NewMessageAgent(jm.ctx, jm.JobMasterID(), workerHandles, jm, jm.messageHandlerManager)
 	jm.taskManager = NewTaskManager(taskStatus, jm.metadata.JobStore(), jm.messageAgent)
 	jm.workerManager = NewWorkerManager(workerStatus, jm.metadata.JobStore(), jm, jm.messageAgent, jm.checkpointAgent)
 	return nil

@@ -24,8 +24,10 @@ import (
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/runtime"
 	"github.com/pingcap/tiflow/engine/lib"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
+	"github.com/pingcap/tiflow/engine/pkg/deps"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
 	"github.com/pingcap/tiflow/engine/pkg/errors"
+	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/stretchr/testify/require"
 )
 
@@ -85,7 +87,15 @@ func TestQueryStatusAPI(t *testing.T) {
 			SyncStatus: syncStatus,
 		}
 	)
-	task := newBaseTask(dcontext.Background(), "master-id", lib.WorkerDMDump, &config.SubTaskConfig{SourceID: "task-id"})
+
+	dctx := dcontext.Background()
+	dp := deps.NewDeps()
+	require.NoError(t, dp.Provide(func() p2p.MessageHandlerManager {
+		return p2p.NewMockMessageHandlerManager()
+	}))
+	dctx = dctx.WithDeps(dp)
+
+	task := newBaseTask(dctx, "master-id", lib.WorkerDMDump, &config.SubTaskConfig{SourceID: "task-id"})
 	unitHolder := &unit.MockHolder{}
 	task.unitHolder = unitHolder
 
@@ -114,7 +124,14 @@ func TestQueryStatusAPI(t *testing.T) {
 }
 
 func TestStopWorker(t *testing.T) {
-	baseTask := newBaseTask(dcontext.Background(), "master-id", lib.WorkerDMDump, &config.SubTaskConfig{SourceID: "task-id"})
+	dctx := dcontext.Background()
+	dp := deps.NewDeps()
+	require.NoError(t, dp.Provide(func() p2p.MessageHandlerManager {
+		return p2p.NewMockMessageHandlerManager()
+	}))
+	dctx = dctx.WithDeps(dp)
+
+	baseTask := newBaseTask(dctx, "master-id", lib.WorkerDMDump, &config.SubTaskConfig{SourceID: "task-id"})
 	baseTask.BaseWorker = lib.MockBaseWorker("worker-id", "master-id", baseTask)
 	baseTask.BaseWorker.Init(context.Background())
 	baseTask.unitHolder = &unit.MockHolder{}

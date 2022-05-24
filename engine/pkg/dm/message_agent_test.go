@@ -97,7 +97,7 @@ func TestMessagePair(t *testing.T) {
 }
 
 func TestUpdateSender(t *testing.T) {
-	messageAgent := NewMessageAgent(context.Background(), "", nil, nil)
+	messageAgent := NewMessageAgent(context.Background(), "", nil, nil, nil)
 	require.Equal(t, lenSyncMap(&messageAgent.senders), 0)
 	workerHandle1 := &master.MockHandle{WorkerID: "worker1"}
 	workerHandle2 := &master.MockHandle{WorkerID: "worker2"}
@@ -141,7 +141,7 @@ func TestUpdateSender(t *testing.T) {
 		initWorkerHandleMap[key.(string)] = value.(Sender)
 		return true
 	})
-	messageAgent = NewMessageAgent(context.Background(), "", initWorkerHandleMap, nil)
+	messageAgent = NewMessageAgent(context.Background(), "", initWorkerHandleMap, nil, nil)
 	require.Equal(t, lenSyncMap(&messageAgent.senders), 1)
 	sender, err = messageAgent.getSender("task1")
 	require.NoError(t, err)
@@ -149,7 +149,7 @@ func TestUpdateSender(t *testing.T) {
 }
 
 func TestMessageAgent(t *testing.T) {
-	messageAgent := NewMessageAgent(context.Background(), "id", nil, nil)
+	messageAgent := NewMessageAgent(context.Background(), "id", nil, nil, nil)
 	require.Equal(t, lenSyncMap(&messageAgent.senders), 0)
 	senderID := "sender-id"
 	mockSender := &MockSender{}
@@ -187,10 +187,10 @@ func TestMessageHandler(t *testing.T) {
 	command := "command"
 
 	// mock no handler
-	messageAgent := NewMessageAgent(context.Background(), "id", nil, &MockNothing{})
+	messageAgent := NewMessageAgent(context.Background(), "id", nil, &MockNothing{}, nil)
 	require.EqualError(t, messageAgent.OnMessage(topic, "msg"), "unknown message type of msg")
 	// register handler
-	messageAgent.RegisterHandler(command, func(interface{}) error { return nil })
+	messageAgent.RegisterCommandHandler(command, func(interface{}) error { return nil })
 	require.NoError(t, messageAgent.OnMessage(command, message{ID: 1, Type: requestTp, Command: command, Payload: "msg"}))
 
 	// mock no handler
@@ -201,7 +201,7 @@ func TestMessageHandler(t *testing.T) {
 
 	// mock has handler
 	mockHandler := &MockHanlder{}
-	messageAgent = NewMessageAgent(context.Background(), "id", nil, mockHandler)
+	messageAgent = NewMessageAgent(context.Background(), "id", nil, mockHandler, nil)
 	mockSender := &MockSender{}
 	messageAgent.UpdateSender(senderID, mockSender)
 	mockSender.On("SendMessage").Return(nil).Once()

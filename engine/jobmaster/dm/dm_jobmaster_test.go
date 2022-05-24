@@ -155,10 +155,11 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	jobCfg := &config.JobCfg{}
 	require.NoError(t.T(), jobCfg.DecodeFile(jobTemplatePath))
 	jm := &JobMaster{
-		workerID:        "jobmaster-id",
-		jobCfg:          jobCfg,
-		BaseJobMaster:   mockBaseJobmaster,
-		checkpointAgent: mockCheckpointAgent,
+		workerID:              "jobmaster-id",
+		jobCfg:                jobCfg,
+		BaseJobMaster:         mockBaseJobmaster,
+		checkpointAgent:       mockCheckpointAgent,
+		messageHandlerManager: p2p.NewMockMessageHandlerManager(),
 	}
 
 	// init

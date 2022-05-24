@@ -88,6 +88,9 @@ func (tm *TaskManager) OperateTask(ctx context.Context, op OperateType, jobCfg *
 	var stage metadata.TaskStage
 	switch op {
 	case Create, Update:
+		if err := tm.updateTopic(ctx, jobCfg); err != nil {
+			return err
+		}
 		return tm.jobStore.Put(ctx, metadata.NewJob(jobCfg))
 	case Delete:
 		return tm.jobStore.Delete(ctx)
@@ -217,4 +220,34 @@ func (tm *TaskManager) operateTaskMessage(ctx context.Context, taskID string, st
 		Stage:  stage,
 	}
 	return tm.messageAgent.SendMessage(ctx, taskID, dmpkg.OperateTask, msg)
+}
+
+// updateTopic register/unregister topic by diffs old and new tasks.
+func (tm *TaskManager) updateTopic(ctx context.Context, jobCfg *config.JobCfg) error {
+	originTasks := make(map[string]struct{})
+	state, err := tm.jobStore.Get(ctx)
+	if err == nil {
+		job := state.(*metadata.Job)
+		for task := range job.Tasks {
+			originTasks[task] = struct{}{}
+		}
+	} else if err.Error() != "state not found" { // TODO: better error checking
+		return err
+	}
+
+	for _, upstream := range jobCfg.Upstreams {
+		if _, ok := originTasks[upstream.SourceID]; !ok {
+			if err := tm.messageAgent.RegisterTopic(ctx, upstream.SourceID); err != nil {
+				return err
+			}
+		} else {
+			delete(originTasks, upstream.SourceID)
+		}
+	}
+	for task := range originTasks {
+		if err := tm.messageAgent.UnregisterTopic(ctx, task); err != nil {
+			return err
+		}
+	}
+	return nil
 }

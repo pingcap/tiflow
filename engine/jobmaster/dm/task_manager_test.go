@@ -121,7 +121,7 @@ func (t *testDMJobmasterSuite) TestOperateTask() {
 	jobCfg := &config.JobCfg{}
 	require.NoError(t.T(), jobCfg.DecodeFile(jobTemplatePath))
 	jobStore := metadata.NewJobStore("task_manager_test", kvmock.NewMetaMock())
-	taskManager := NewTaskManager(nil, jobStore, nil)
+	taskManager := NewTaskManager(nil, jobStore, &dmpkg.MockMessageAgent{})
 
 	source1 := jobCfg.Upstreams[0].SourceID
 	source2 := jobCfg.Upstreams[1].SourceID
