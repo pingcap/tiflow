@@ -136,6 +136,9 @@ func (c *validatorPersistHelper) createTable(tctx *tcontext.Context) error {
 			binlog_name VARCHAR(128),
 			binlog_pos INT UNSIGNED,
 			binlog_gtid TEXT,
+			procd_ins BIGINT UNSIGNED NOT NULL,
+			procd_upd BIGINT UNSIGNED NOT NULL,
+			procd_del BIGINT UNSIGNED NOT NULL,
 			revision bigint NOT NULL,
 			create_time timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			update_time timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -378,14 +381,23 @@ func (c *validatorPersistHelper) persist(tctx *tcontext.Context, loc binlog.Loca
 
 	// upsert checkpoint
 	query := `INSERT INTO ` + c.checkpointTableName +
-		`(source, binlog_name, binlog_pos, binlog_gtid, revision) VALUES (?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE
+		`(source, binlog_name, binlog_pos, binlog_gtid, procd_ins, procd_upd, procd_del, revision)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE
 			source = VALUES(source),
 			binlog_name = VALUES(binlog_name),
 			binlog_pos = VALUES(binlog_pos),
 			binlog_gtid = VALUES(binlog_gtid),
+			procd_ins = VALUES(procd_ins),
+			procd_upd = VALUES(procd_upd),
+			procd_del = VALUES(procd_del),
 			revision = VALUES(revision)
 		`
-	args := []interface{}{c.cfg.SourceID, loc.Position.Name, loc.Position.Pos, loc.GTIDSetStr(), nextRevision}
+	rowCounts := c.validator.getProcessedRowCounts()
+	args := []interface{}{
+		c.cfg.SourceID, loc.Position.Name, loc.Position.Pos, loc.GTIDSetStr(),
+		rowCounts[rowInsert], rowCounts[rowUpdated], rowCounts[rowDeleted],
+		nextRevision,
+	}
 	if err := c.execQueriesWithRetry(newCtx, []string{query}, [][]interface{}{args}); err != nil {
 		return err
 	}
@@ -407,10 +419,11 @@ func (c *validatorPersistHelper) persist(tctx *tcontext.Context, loc binlog.Loca
 }
 
 type persistedData struct {
-	checkpoint     *binlog.Location
-	pendingChanges map[string]*tableChangeDataForPersist // key is full name of source table
-	rev            int64
-	tableStatus    map[string]*tableValidateStatus // key is full name of source table
+	checkpoint         *binlog.Location
+	processedRowCounts []int64
+	pendingChanges     map[string]*tableChangeDataForPersist // key is full name of source table
+	rev                int64
+	tableStatus        map[string]*tableValidateStatus // key is full name of source table
 }
 
 func (c *validatorPersistHelper) loadPersistedDataRetry(tctx *tcontext.Context) (*persistedData, error) {
@@ -430,7 +443,7 @@ func (c *validatorPersistHelper) loadPersistedDataRetry(tctx *tcontext.Context) 
 func (c *validatorPersistHelper) loadPersistedData(tctx *tcontext.Context) (*persistedData, error) {
 	var err error
 	data := &persistedData{}
-	data.checkpoint, data.rev, err = c.loadCheckpoint(tctx)
+	data.checkpoint, data.processedRowCounts, data.rev, err = c.loadCheckpoint(tctx)
 	if err != nil {
 		return data, err
 	}
@@ -448,40 +461,48 @@ func (c *validatorPersistHelper) loadPersistedData(tctx *tcontext.Context) (*per
 	return data, nil
 }
 
-func (c *validatorPersistHelper) loadCheckpoint(tctx *tcontext.Context) (*binlog.Location, int64, error) {
-	query := "select binlog_name, binlog_pos, binlog_gtid, revision from " + c.checkpointTableName + " where source = ?"
+func (c *validatorPersistHelper) loadCheckpoint(tctx *tcontext.Context) (*binlog.Location, []int64, int64, error) {
+	query := `select
+				binlog_name, binlog_pos, binlog_gtid,
+				procd_ins, procd_upd, procd_del,
+				revision
+			  from ` + c.checkpointTableName + ` where source = ?`
 	rows, err := c.db.QueryContext(tctx, query, c.cfg.SourceID)
 	if err != nil {
-		return nil, 0, err
+		return nil, nil, 0, err
 	}
 	defer rows.Close()
 
 	var location *binlog.Location
+	processRowCounts := make([]int64, rowChangeTypeCount)
 
 	// at most one row
 	var revision int64
 	if rows.Next() {
 		var (
 			binlogName, binlogGtidStr string
+			ins, upd, del             int64
 			binlogPos                 uint32
 		)
 
-		err = rows.Scan(&binlogName, &binlogPos, &binlogGtidStr, &revision)
+		err = rows.Scan(&binlogName, &binlogPos, &binlogGtidStr, &ins, &upd, &del, &revision)
 		if err != nil {
-			return nil, 0, err
+			return nil, nil, 0, err
 		}
 		gset, err2 := gtid.ParserGTID(c.cfg.Flavor, binlogGtidStr)
 		if err2 != nil {
-			return nil, 0, err2
+			return nil, nil, 0, err2
 		}
 		tmpLoc := binlog.NewLocation(mysql.Position{Name: binlogName, Pos: binlogPos}, gset)
 		location = &tmpLoc
+		processRowCounts = []int64{ins, upd, del}
 	}
 	if err = rows.Err(); err != nil {
-		return nil, 0, err
+		return nil, nil, 0, err
 	}
-	c.L.Info("checkpoint loaded", zap.Reflect("loc", location), zap.Int64("rev", revision))
-	return location, revision, nil
+	c.L.Info("checkpoint loaded", zap.Reflect("loc", location),
+		zap.Int64s("processed(i, u, d)", processRowCounts), zap.Int64("rev", revision))
+	return location, processRowCounts, revision, nil
 }
 
 func (c *validatorPersistHelper) loadPendingChange(tctx *tcontext.Context, rev int64) (map[string]*tableChangeDataForPersist, error) {
