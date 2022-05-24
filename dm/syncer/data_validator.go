@@ -68,8 +68,8 @@ type rowChangeJobType int
 
 const (
 	rowInsert rowChangeJobType = iota
-	rowDeleted
 	rowUpdated
+	rowDeleted
 	flushCheckpoint
 
 	rowChangeTypeCount  = 3
@@ -77,6 +77,9 @@ const (
 
 	validatorDmctlOpTimeout = 5 * time.Second
 )
+
+// to make ut easier, we define it as a var, so we can change it.
+var markErrorRowDelay = config.DefaultValidatorRowErrorDelay
 
 // change of table
 // binlog changes are clustered into table changes
@@ -93,6 +96,7 @@ func newTableChangeJob() *tableChangeJob {
 func (tc *tableChangeJob) addOrUpdate(job *rowValidationJob) bool {
 	if val, ok := tc.jobs[job.Key]; ok {
 		val.row = job.row
+		val.size = job.size
 		val.Tp = job.Tp
 		val.FirstValidateTS = 0
 		val.FailedCnt = 0 // clear failed count
@@ -108,7 +112,10 @@ type rowValidationJob struct {
 	Tp  rowChangeJobType
 	row *sqlmodel.RowChange
 
-	wg *sync.WaitGroup
+	// estimated memory size taken by this row, we use binlog size of the row to estimated it now.
+	// the memory taken for a row change job is more than this size
+	size int32
+	wg   *sync.WaitGroup
 	// timestamp of first validation of this row. will reset when merge row changes
 	FirstValidateTS int64
 	FailedCnt       int
@@ -119,6 +126,11 @@ type tableValidateStatus struct {
 	target  filter.Table
 	stage   pb.Stage // either Running or Stopped
 	message string
+}
+
+func (vs *tableValidateStatus) String() string {
+	return fmt.Sprintf("source=%s, target=%s, stage=%s, message=%s",
+		vs.source, vs.target, vs.stage, vs.message)
 }
 
 func (vs *tableValidateStatus) stopped(msg string) {
@@ -161,9 +173,10 @@ type DataValidator struct {
 	workers          []*validateWorker
 	workerCnt        int
 
-	// whether the validation progress ever reached syncer
+	// whether we start to mark failed rows as error rows
 	// if it's false, we don't mark failed row change as error to reduce false-positive
-	reachedSyncer atomic.Bool
+	// it's set to true when validator reached the progress of syncer once or after markErrorRowDelay
+	markErrorStarted atomic.Bool
 
 	// fields in this field block are guarded by stateMutex
 	stateMutex  sync.RWMutex
@@ -175,6 +188,8 @@ type DataValidator struct {
 	processedRowCounts   []atomic.Int64
 	pendingRowCounts     []atomic.Int64
 	newErrorRowCount     atomic.Int64
+	processedBinlogSize  atomic.Int64
+	pendingRowSize       atomic.Int64 // accumulation of rowValidationJob.size
 	lastFlushTime        time.Time
 	location             *binlog.Location
 	loadedPendingChanges map[string]*tableChangeJob
@@ -204,7 +219,7 @@ func (v *DataValidator) reset() {
 	v.errChan = make(chan error, 10)
 	v.workers = []*validateWorker{}
 
-	v.reachedSyncer.Store(false)
+	v.markErrorStarted.Store(false)
 	v.resetResult()
 	for i := range v.processedRowCounts {
 		v.processedRowCounts[i].Store(0)
@@ -213,6 +228,8 @@ func (v *DataValidator) reset() {
 		v.pendingRowCounts[i].Store(0)
 	}
 	v.newErrorRowCount.Store(0)
+	v.processedBinlogSize.Store(0)
+	v.pendingRowSize.Store(0)
 	v.initTableStatus(map[string]*tableValidateStatus{})
 }
 
@@ -298,14 +315,13 @@ func (v *DataValidator) Start(expect pb.Stage) {
 	}
 
 	v.wg.Add(1)
-	go v.routineWrapper(func() {
-		v.doValidate()
-	})
+	go v.routineWrapper(v.doValidate)
 
 	v.wg.Add(1)
-	go v.routineWrapper(func() {
-		v.printStatusRoutine()
-	})
+	go v.routineWrapper(v.printStatusRoutine)
+
+	v.wg.Add(1)
+	go utils.GoLogWrapper(v.L, v.markErrorStartedRoutine)
 
 	// routineWrapper relies on errorProcessRoutine to handle panic errors,
 	// so just wrap it using a common wrapper.
@@ -316,8 +332,25 @@ func (v *DataValidator) Start(expect pb.Stage) {
 	v.L.Info("started")
 }
 
+func (v *DataValidator) markErrorStartedRoutine() {
+	defer v.wg.Done()
+
+	select {
+	case <-v.ctx.Done():
+	case <-time.After(markErrorRowDelay):
+		if !v.markErrorStarted.Load() {
+			v.L.Info("mark markErrorStarted=true after error row delay")
+			v.markErrorStarted.Store(true)
+		}
+	}
+}
+
 func (v *DataValidator) printStatusRoutine() {
 	defer v.wg.Done()
+	var (
+		prevProcessedBinlogSize = v.processedBinlogSize.Load()
+		prevTime                = time.Now()
+	)
 	for {
 		select {
 		case <-v.ctx.Done():
@@ -333,10 +366,18 @@ func (v *DataValidator) printStatusRoutine() {
 				v.pendingRowCounts[rowUpdated].Load(),
 				v.pendingRowCounts[rowDeleted].Load(),
 			}
+			currProcessedBinlogSize := v.processedBinlogSize.Load()
+			currTime := time.Now()
+			interval := time.Since(prevTime)
+			speed := float64((currProcessedBinlogSize-prevProcessedBinlogSize)>>20) / interval.Seconds()
+			prevProcessedBinlogSize = currProcessedBinlogSize
+			prevTime = currTime
+
 			v.L.Info("validator status",
 				zap.Int64s("processed(i, u, d)", processed),
 				zap.Int64s("pending(i, u, d)", pending),
 				zap.Int64("new error rows(not flushed)", v.newErrorRowCount.Load()),
+				zap.String("binlog process speed", fmt.Sprintf("%.2f MB/s", speed)),
 			)
 		}
 	}
@@ -383,9 +424,8 @@ func (v *DataValidator) errorProcessRoutine() {
 func (v *DataValidator) waitSyncerSynced(currLoc binlog.Location) error {
 	syncLoc := v.syncer.getFlushedGlobalPoint()
 	cmp := binlog.CompareLocation(currLoc, syncLoc, v.cfg.EnableGTID)
-	if cmp >= 0 && !v.reachedSyncer.Load() {
-		// todo: need to make sure reachedSyncer=true at some time
-		v.reachedSyncer.Store(true)
+	if cmp >= 0 && !v.markErrorStarted.Load() {
+		v.markErrorStarted.Store(true)
 		v.L.Info("validator progress reached syncer")
 	}
 	if cmp <= 0 {
@@ -444,6 +484,8 @@ func (v *DataValidator) doValidate() {
 	if v.location != nil {
 		location = *v.location
 	} else {
+		// validator always uses remote binlog streamer now.
+		// todo: when relay log enabled, need to decode location to get real location
 		if v.startWithSubtask {
 			// in extreme case, this loc may still not be the first binlog location of this task:
 			//   syncer synced some binlog and flush checkpoint, but validator still not has chance to run, then fail-over
@@ -544,6 +586,8 @@ func (v *DataValidator) doValidate() {
 			v.sendError(err)
 			return
 		}
+
+		v.processedBinlogSize.Add(int64(e.Header.EventSize))
 
 		switch ev := e.Event.(type) {
 		case *replication.RowsEvent:
@@ -735,6 +779,8 @@ func (v *DataValidator) processRowsEvent(header *replication.EventHeader, ev *re
 			target: *targetTable,
 			stage:  pb.Stage_Running,
 		}
+
+		v.L.Info("put table status", zap.Stringer("state", state))
 		v.putTableStatus(fullTableName, state)
 	}
 	if validateTbl.message != "" {
@@ -752,6 +798,7 @@ func (v *DataValidator) processRowsEvent(header *replication.EventHeader, ev *re
 	if changeType == rowUpdated {
 		step = 2
 	}
+	estimatedRowSize := int32(header.EventSize) / int32(len(ev.Rows))
 	for i := 0; i < len(ev.Rows); i += step {
 		var beforeImage, afterImage []interface{}
 		switch changeType {
@@ -771,18 +818,22 @@ func (v *DataValidator) processRowsEvent(header *replication.EventHeader, ev *re
 			nil,
 		)
 		rowChange.SetWhereHandle(downstreamTableInfo.WhereHandle)
+		size := estimatedRowSize
 		if changeType == rowUpdated && rowChange.IsIdentityUpdated() {
 			delRow, insRow := rowChange.SplitUpdate()
 			delRowKey := genRowKey(delRow)
-			v.dispatchRowChange(delRowKey, &rowValidationJob{Key: delRowKey, Tp: rowDeleted, row: delRow})
+			v.dispatchRowChange(delRowKey, &rowValidationJob{Key: delRowKey, Tp: rowDeleted, row: delRow, size: size})
 			v.processedRowCounts[rowDeleted].Inc()
 
 			insRowKey := genRowKey(insRow)
-			v.dispatchRowChange(insRowKey, &rowValidationJob{Key: insRowKey, Tp: rowInsert, row: insRow})
+			v.dispatchRowChange(insRowKey, &rowValidationJob{Key: insRowKey, Tp: rowInsert, row: insRow, size: size})
 			v.processedRowCounts[rowInsert].Inc()
 		} else {
 			rowKey := genRowKey(rowChange)
-			v.dispatchRowChange(rowKey, &rowValidationJob{Key: rowKey, Tp: changeType, row: rowChange})
+			if changeType == rowUpdated {
+				size *= 2
+			}
+			v.dispatchRowChange(rowKey, &rowValidationJob{Key: rowKey, Tp: changeType, row: rowChange, size: size})
 			v.processedRowCounts[changeType].Inc()
 		}
 	}
@@ -813,12 +864,16 @@ func (v *DataValidator) persistCheckpointAndData(loc binlog.Location) error {
 	}
 	wg.Wait()
 
+	v.L.Info("persist checkpoint and intermediate data",
+		zap.Int64("pending size", v.getPendingRowSize()),
+		zap.Int64("pending count", v.getAllPendingRowCount()),
+		zap.Int64("new error", v.newErrorRowCount.Load()))
+
 	err := v.persistHelper.persist(v.tctx, loc)
 	if err != nil {
 		return err
 	}
 
-	v.persistHelper.incrRevision()
 	// reset errors after save
 	for _, worker := range v.workers {
 		worker.resetErrorRows()
@@ -871,6 +926,7 @@ func (v *DataValidator) loadPersistedData() error {
 					validateTbl.srcTableInfo, validateTbl.downstreamTableInfo.TableInfo,
 					nil,
 				),
+				size:            row.Size,
 				FirstValidateTS: row.FirstValidateTS,
 				FailedCnt:       row.FailedCnt,
 			}
@@ -981,16 +1037,34 @@ func (v *DataValidator) putTableStatus(name string, status *tableValidateStatus)
 	v.tableStatus[name] = status
 }
 
-func (v *DataValidator) hasReachedSyncer() bool {
-	return v.reachedSyncer.Load()
+func (v *DataValidator) isMarkErrorStarted() bool {
+	return v.markErrorStarted.Load()
 }
 
 func (v *DataValidator) addPendingRowCount(tp rowChangeJobType, cnt int64) {
 	v.pendingRowCounts[tp].Add(cnt)
 }
 
+func (v *DataValidator) getAllPendingRowCount() int64 {
+	return v.pendingRowCounts[rowInsert].Load() +
+		v.pendingRowCounts[rowUpdated].Load() +
+		v.pendingRowCounts[rowDeleted].Load()
+}
+
+func (v *DataValidator) addPendingRowSize(size int64) {
+	v.pendingRowSize.Add(size)
+}
+
+func (v *DataValidator) getPendingRowSize() int64 {
+	return v.pendingRowSize.Load()
+}
+
 func (v *DataValidator) sendError(err error) {
 	v.errChan <- err
+}
+
+func (v *DataValidator) getNewErrorRowCount() int64 {
+	return v.newErrorRowCount.Load()
 }
 
 // getRowChangeType should be called only when the event type is RowsEvent.
@@ -1012,7 +1086,7 @@ func genRowKey(row *sqlmodel.RowChange) string {
 }
 
 func genRowKeyByString(pkValues []string) string {
-	// TODO: in scenario below, the generated key may not unique, but it's rare
+	// in the scenario below, the generated key may not be unique, but it's rare
 	// suppose a table with multiple column primary key: (v1, v2)
 	// for below case, the generated key is the same:
 	// 	 (aaa\t, bbb) and (aaa, \tbbb), the joint values both are "aaa\t\tbbb"

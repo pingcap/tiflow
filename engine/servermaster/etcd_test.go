@@ -53,7 +53,11 @@ func TestStartEtcdTimeout(t *testing.T) {
 	cfgCluster.Name = name1
 	cfgCluster.DataDir = dir
 	peer1 := allocTempURL(t)
-	peer2 := allocTempURL(t)
+	peer2 := peer1
+	require.Eventually(t, func() bool {
+		peer2 = allocTempURL(t)
+		return peer2 != peer1
+	}, time.Second, time.Millisecond*10)
 	cfgCluster.PeerUrls = "http://" + peer1
 	cfgCluster.InitialCluster = fmt.Sprintf("%s=http://%s,%s=http://%s", name1, peer1, name2, peer2)
 	cfgCluster.Adjust("", embed.ClusterStateFlagNew)

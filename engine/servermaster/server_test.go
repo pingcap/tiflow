@@ -55,7 +55,7 @@ advertise-addr = "127.0.0.1:%d"
 store-id = "root"
 endpoints = ["127.0.0.1:%d"]
 [frame-metastore-conf.auth]
-user = "root" 
+user = "root"
 [user-metastore-conf]
 store-id = "default"
 endpoints = ["127.0.0.1:%d"]
@@ -113,7 +113,7 @@ advertise-addr = "127.0.0.1:%d"
 store-id = "root"
 endpoints = ["127.0.0.1:%d"]
 [frame-metastore-conf.auth]
-user = "root" 
+user = "root"
 [user-metastore-conf]
 store-id = "default"
 endpoints = ["127.0.0.1:%d"]

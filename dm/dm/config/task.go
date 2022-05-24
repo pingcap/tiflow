@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/coreos/go-semver/semver"
+	"github.com/docker/go-units"
 	"github.com/dustin/go-humanize"
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
 	"github.com/pingcap/tidb-tools/pkg/column-mapping"
@@ -68,6 +69,9 @@ const (
 	DefaultValidatorRowErrorDelay     = 30 * time.Minute
 	DefaultValidatorMetaFlushInterval = 1 * time.Minute
 	DefaultValidatorBatchQuerySize    = 100
+	DefaultValidatorMaxPendingRowSize = "500m"
+
+	ValidatorMaxAccumulatedRow = 500
 )
 
 // default config item values.
@@ -346,13 +350,15 @@ func (m *SyncerConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
 }
 
 type ValidatorConfig struct {
-	Mode              string   `yaml:"mode" toml:"mode" json:"mode"`
-	WorkerCount       int      `yaml:"worker-count" toml:"worker-count" json:"worker-count"`
-	ValidateInterval  Duration `yaml:"validate-interval" toml:"validate-interval" json:"validate-interval"`
-	CheckInterval     Duration `yaml:"check-interval" toml:"check-interval" json:"check-interval"`
-	RowErrorDelay     Duration `yaml:"row-error-delay" toml:"row-error-delay" json:"row-error-delay"`
-	MetaFlushInterval Duration `yaml:"meta-flush-interval" toml:"meta-flush-interval" json:"meta-flush-interval"`
-	BatchQuerySize    int      `yaml:"batch-query-size" toml:"batch-query-size" json:"batch-query-size"`
+	Mode               string   `yaml:"mode" toml:"mode" json:"mode"`
+	WorkerCount        int      `yaml:"worker-count" toml:"worker-count" json:"worker-count"`
+	ValidateInterval   Duration `yaml:"validate-interval" toml:"validate-interval" json:"validate-interval"`
+	CheckInterval      Duration `yaml:"check-interval" toml:"check-interval" json:"check-interval"`
+	RowErrorDelay      Duration `yaml:"row-error-delay" toml:"row-error-delay" json:"row-error-delay"`
+	MetaFlushInterval  Duration `yaml:"meta-flush-interval" toml:"meta-flush-interval" json:"meta-flush-interval"`
+	BatchQuerySize     int      `yaml:"batch-query-size" toml:"batch-query-size" json:"batch-query-size"`
+	MaxPendingRowSize  string   `yaml:"max-pending-row-size" toml:"max-pending-row-size" json:"max-pending-row-size"`
+	MaxPendingRowCount int      `yaml:"max-pending-row-count" toml:"max-pending-row-count" json:"max-pending-row-count"`
 }
 
 func (v *ValidatorConfig) Adjust() error {
@@ -379,6 +385,20 @@ func (v *ValidatorConfig) Adjust() error {
 	}
 	if v.BatchQuerySize == 0 {
 		v.BatchQuerySize = DefaultValidatorBatchQuerySize
+	}
+	if v.MaxPendingRowSize == "" {
+		v.MaxPendingRowSize = DefaultValidatorMaxPendingRowSize
+	}
+
+	_, err := units.RAMInBytes(v.MaxPendingRowSize)
+	if err != nil {
+		return err
+	}
+	if v.MaxPendingRowCount == 0 {
+		// validator validates every ValidatorMaxAccumulatedRow rows.
+		// if after 4 validation on each worker, we still cannot reduce the row count,
+		// we take it as a signal that there are too many validation failures.
+		v.MaxPendingRowCount = v.WorkerCount * 4 * ValidatorMaxAccumulatedRow
 	}
 	return nil
 }
