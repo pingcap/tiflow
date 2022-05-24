@@ -78,11 +78,6 @@ func (s *syncWorker) Workload() model.RescUnit {
 	return 0
 }
 
-func (s *syncWorker) OnMasterFailover(reason lib.MasterFailoverReason) error {
-	log.L().Info("syncWorker.OnMasterFailover")
-	return nil
-}
-
 func (s *syncWorker) OnMasterMessage(topic p2p.Topic, message p2p.MessageValue) error {
 	log.L().Info("syncWorker.OnMasterMessage", zap.Any("message", message))
 	return nil
