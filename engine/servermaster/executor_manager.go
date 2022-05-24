@@ -309,7 +309,7 @@ func (e *ExecutorManagerImpl) WatchExecutors(
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
-	for executorID, _ := range e.executors {
+	for executorID := range e.executors {
 		snap = append(snap, executorID)
 	}
 
