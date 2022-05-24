@@ -197,16 +197,7 @@ func (c *Config) Apply(sinkURI *url.URL) error {
 }
 
 func (c *Config) applyTLS(params url.Values) error {
-	s := params.Get("enable-tls")
-	if s != "" {
-		enableTLS, err := strconv.ParseBool(s)
-		if err != nil {
-			return err
-		}
-		c.EnableTLS = enableTLS
-	}
-
-	s = params.Get("ca")
+	s := params.Get("ca")
 	if s != "" {
 		c.Credential.CAPath = s
 	}
@@ -219,6 +210,30 @@ func (c *Config) applyTLS(params url.Values) error {
 	s = params.Get("key")
 	if s != "" {
 		c.Credential.KeyPath = s
+	}
+
+	// if enable-tls is not set, but credential files are set,
+	//    then tls should be enabled, and the self-signed CA certificate is used.
+	// if enable-tls is set to true, and credential files are not set,
+	//	  then tls should be enabled, and the trusted CA certificate on OS is used.
+	// if enable-tls is set to false, and credential files are set,
+	//	  then an error is returned.
+	s = params.Get("enable-tls")
+	if s != "" {
+		enableTLS, err := strconv.ParseBool(s)
+		if err != nil {
+			return err
+		}
+
+		if c.Credential != nil && c.Credential.IsTLSEnabled() && !enableTLS {
+			return cerror.WrapError(cerror.ErrKafkaInvalidConfig,
+				errors.New("credential files are supplied, but 'enable-tls' is set to false"))
+		}
+		c.EnableTLS = enableTLS
+	} else {
+		if c.Credential != nil && c.Credential.IsTLSEnabled() {
+			c.EnableTLS = true
+		}
 	}
 
 	return nil
@@ -399,7 +414,7 @@ func NewSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
 
 		// for SSL encryption with self-signed CA certificate, we reassign the
 		// config.Net.TLS.Config using the relevant credential files.
-		if c.Credential != nil && len(c.Credential.CAPath) != 0 {
+		if c.Credential != nil && c.Credential.IsTLSEnabled() {
 			config.Net.TLS.Config, err = c.Credential.ToTLSConfig()
 			if err != nil {
 				return nil, errors.Trace(err)
