@@ -18,13 +18,14 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
 
+	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pb"
 	"github.com/pingcap/tiflow/engine/pkg/errors"
+	"github.com/pingcap/tiflow/engine/pkg/notifier"
 	"github.com/pingcap/tiflow/engine/pkg/uuid"
 	"github.com/pingcap/tiflow/engine/servermaster/resource"
 	"github.com/pingcap/tiflow/engine/servermaster/scheduler"
@@ -37,12 +38,19 @@ type ExecutorManager interface {
 	AllocateNewExec(req *pb.RegisterExecutorRequest) (*model.NodeInfo, error)
 	RegisterExec(info *model.NodeInfo)
 	Start(ctx context.Context)
-	// Count returns executor count with given status
+	// ExecutorCount returns executor count with given status
 	ExecutorCount(status model.ExecutorStatus) int
 	HasExecutor(executorID string) bool
 	ListExecutors() []string
 	CapacityProvider() scheduler.CapacityProvider
 	GetAddr(executorID model.ExecutorID) (string, bool)
+
+	// WatchExecutors returns a snapshot of all online executors plus
+	// a stream of events describing changes that happen to the executors
+	// after the snapshot is taken.
+	WatchExecutors(ctx context.Context) (
+		snap []model.ExecutorID, stream *notifier.Receiver[model.ExecutorStatusChange], err error,
+	)
 }
 
 // ExecutorManagerImpl holds all the executors info, including liveness, status, resource usage.
@@ -280,4 +288,12 @@ func (e *ExecutorManagerImpl) GetAddr(executorID model.ExecutorID) (string, bool
 	}
 
 	return executor.Addr, true
+}
+
+// WatchExecutors implements the ExecutorManager interface.
+func (e *ExecutorManagerImpl) WatchExecutors(
+	ctx context.Context,
+) ([]model.ExecutorID, *notifier.Receiver[model.ExecutorStatusChange], error) {
+	// TODO This method will be implemented before we enable local file GC.
+	panic("implement me")
 }

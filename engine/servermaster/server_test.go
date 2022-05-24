@@ -24,14 +24,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/engine/lib"
 	libModel "github.com/pingcap/tiflow/engine/lib/model"
 	"github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pb"
+	"github.com/pingcap/tiflow/engine/pkg/notifier"
 	"github.com/pingcap/tiflow/engine/servermaster/scheduler"
 
 	"github.com/phayes/freeport"
-	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/stretchr/testify/require"
 )
 
@@ -268,6 +269,12 @@ func (m *mockJobManager) GetJobStatuses(ctx context.Context) (map[libModel.Maste
 type mockExecutorManager struct {
 	executorMu sync.RWMutex
 	count      map[model.ExecutorStatus]int
+}
+
+func (m *mockExecutorManager) WatchExecutors(
+	ctx context.Context,
+) ([]model.ExecutorID, *notifier.Receiver[model.ExecutorStatusChange], error) {
+	panic("implement me")
 }
 
 func (m *mockExecutorManager) GetAddr(executorID model.ExecutorID) (string, bool) {
