@@ -455,8 +455,8 @@ func TestApplySASL(t *testing.T) {
 		},
 		{
 			name: "valid SCRAM SASL with SSL encryption",
-			URI: "kafka://127.0.0.1:9092/abc?kafka-version=2.6.0&partition-num=0" +
-				"&sasl-user=user&sasl-password=password&sasl-mechanism=SCRAM-SHA-512&enable-tls=true",
+			URI: "kafka://127.0.0.1:9092/abc?kafka-version=2.6.0&partition-num=0&sasl-user=user" +
+				"&sasl-password=password&sasl-mechanism=SCRAM-SHA-512&enable-tls=true",
 			exceptErr: "",
 		},
 		{
