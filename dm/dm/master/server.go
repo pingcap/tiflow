@@ -2650,7 +2650,9 @@ func (s *Server) checkStartValidationParams(req *pb.StartValidationRequest) (
 		mode = req.GetModeValue()
 	}
 	if mode != config.ValidationFull && mode != config.ValidationFast {
-		return nil, "validation mode should be either `full` or `fast`", false
+		msg := fmt.Sprintf("validation mode should be either `%s` or `%s`",
+			config.ValidationFull, config.ValidationFast)
+		return nil, msg, false
 	}
 
 	startTime := req.GetStartTimeValue()

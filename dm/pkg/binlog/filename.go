@@ -18,6 +18,9 @@ import (
 	"strconv"
 	"strings"
 
+	"go.uber.org/zap"
+
+	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
@@ -115,13 +118,14 @@ func SplitFilenameWithUUIDSuffix(filename string) (baseName, uuidSuffix, seq str
 	return baseName, uuidSuffix, seq, nil
 }
 
-// ExtractRealName removes uuid suffix if it exists and returns real binlog name.
+// ExtractRealName removes relay log uuid suffix if it exists and returns real binlog name.
 func ExtractRealName(name string) string {
 	if !strings.Contains(name, posUUIDSuffixSeparator) {
 		return name
 	}
 	baseName, _, seq, err := SplitFilenameWithUUIDSuffix(name)
 	if err != nil {
+		log.L().Error("failed to split binlog name with uuid suffix", zap.String("name", name), zap.Error(err))
 		// nolint:nilerr
 		return name
 	}

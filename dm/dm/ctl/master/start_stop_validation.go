@@ -90,7 +90,8 @@ func parseValidationStartStopArgs(cmd *cobra.Command, op string) (validationStar
 				return args, err.Error(), false
 			}
 			if args.mode != config.ValidationFull && args.mode != config.ValidationFast {
-				errMsg := fmt.Sprintf("mode should be either `%s` or `%s`", config.ValidationFull, config.ValidationFast)
+				errMsg := fmt.Sprintf("mode should be either `%s` or `%s`, current is `%s`",
+					config.ValidationFull, config.ValidationFast, args.mode)
 				return args, errMsg, false
 			}
 		}
