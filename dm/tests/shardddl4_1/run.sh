@@ -1195,7 +1195,6 @@ function DM_RESYNC_TXN_INTERRUPT_CASE() {
 		grep 'worker' | awk -F: '{print $2}' | cut -d'"' -f 2)
 	# make sure source2 in skip and wait redirect
 	check_log_contain_with_retry 'got a shard DDL lock operation.*CHANGE COLUMN `b` `c` INT' $WORK_DIR/$source2worker/log/dm-worker.log
-	sleep 1 # make sure source2 in skip and wait redirect
 	run_sql_source1 "alter table shardddl1.tb1 change b c int;"
 	run_sql_with_txn "shardddl1.tb1" 2 51 60 $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
 	run_sql_with_txn "shardddl1.t_1" 2 61 70 $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
@@ -1227,7 +1226,6 @@ function DM_RESYNC_TXN_INTERRUPT_CASE() {
 	# make sure source2 in skip and wait redirect
 	source2worker=$($PWD/bin/dmctl.test DEVEL --master-addr "127.0.0.1:$MASTER_PORT1" operate-source show -s "mysql-replica-02" |
 		grep 'worker' | awk -F: '{print $2}' | cut -d'"' -f 2)
-	# make sure source2 in skip and wait redirect
 	check_log_contain_with_retry 'got a shard DDL lock operation.*CHANGE COLUMN `d` `e` INT' $WORK_DIR/$source2worker/log/dm-worker.log
 	run_sql_source1 "alter table shardddl1.tb1 change d e int;"
 	run_sql_with_txn "shardddl1.tb2" 2 201 210 $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
