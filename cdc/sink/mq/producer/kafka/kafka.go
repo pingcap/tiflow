@@ -512,9 +512,8 @@ func validateMinInsyncReplicas(
 		if strings.Contains(err.Error(),
 			string(cerror.ErrKafkaBrokerConfigNotFound.RFCCode())) {
 			return nil
-		} else {
-			return err
 		}
+		return err
 	}
 	minInsyncReplicas, err := strconv.Atoi(minInsyncReplicasStr)
 	if err != nil {
