@@ -18,11 +18,12 @@ package master
 import (
 	"context"
 	"fmt"
-	"github.com/stretchr/testify/require"
 	"net/http"
 	"os"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/deepmap/oapi-codegen/pkg/testutil"

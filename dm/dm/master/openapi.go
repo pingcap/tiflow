@@ -19,9 +19,10 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
-	"github.com/pingcap/failpoint"
 	"net/http"
 	"net/http/httputil"
+
+	"github.com/pingcap/failpoint"
 
 	"github.com/deepmap/oapi-codegen/pkg/middleware"
 	"github.com/labstack/echo/v4"
