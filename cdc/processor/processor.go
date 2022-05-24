@@ -403,14 +403,6 @@ func (p *processor) tick(ctx cdcContext.Context, state *orchestrator.ChangefeedR
 	return nil
 }
 
-func (p *processor) memoryConsumption() float64 {
-	var result uint64
-	for _, table := range p.tables {
-		result += table.MemoryConsumption()
-	}
-	return float64(result)
-}
-
 // checkChangefeedNormal checks if the changefeed is runnable.
 func (p *processor) checkChangefeedNormal() bool {
 	// check the state in this tick, make sure that the admin job type of the changefeed is not stopped
