@@ -41,7 +41,6 @@ type partitionDispatchRule int
 
 const (
 	partitionDispatchRuleDefault partitionDispatchRule = iota
-	partitionDispatchRuleRowID
 	partitionDispatchRuleTS
 	partitionDispatchRuleTable
 	partitionDispatchRuleIndexValue
@@ -51,8 +50,6 @@ func (r *partitionDispatchRule) fromString(rule string) {
 	switch strings.ToLower(rule) {
 	case "default":
 		*r = partitionDispatchRuleDefault
-	case "rowid":
-		*r = partitionDispatchRuleRowID
 	case "ts":
 		*r = partitionDispatchRuleTS
 	case "table":
@@ -61,7 +58,7 @@ func (r *partitionDispatchRule) fromString(rule string) {
 		*r = partitionDispatchRuleIndexValue
 	default:
 		*r = partitionDispatchRuleDefault
-		log.Warn("can't support dispatch rule, using default rule", zap.String("rule", rule))
+		log.Warn("the partition dispatch rule is not default/ts/table/index-val, use the default rule instead.")
 	}
 }
 
@@ -230,7 +227,7 @@ func getPartitionDispatcher(
 	)
 	rule.fromString(ruleConfig.PartitionRule)
 	switch rule {
-	case partitionDispatchRuleRowID, partitionDispatchRuleIndexValue:
+	case partitionDispatchRuleIndexValue:
 		if enableOldValue {
 			log.Warn("This index-value distribution mode " +
 				"does not guarantee row-level orderliness when " +

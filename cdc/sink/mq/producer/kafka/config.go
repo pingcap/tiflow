@@ -15,6 +15,7 @@ package kafka
 
 import (
 	"context"
+	"crypto/tls"
 	"net/url"
 	"strconv"
 	"strings"
@@ -42,6 +43,7 @@ type Config struct {
 	MaxMessageBytes int
 	Compression     string
 	ClientID        string
+	EnableTLS       bool
 	Credential      *security.Credential
 	SASL            *security.SASL
 	// control whether to create topic
@@ -145,21 +147,6 @@ func (c *Config) Apply(sinkURI *url.URL) error {
 
 	c.ClientID = params.Get("kafka-client-id")
 
-	s = params.Get("ca")
-	if s != "" {
-		c.Credential.CAPath = s
-	}
-
-	s = params.Get("cert")
-	if s != "" {
-		c.Credential.CertPath = s
-	}
-
-	s = params.Get("key")
-	if s != "" {
-		c.Credential.KeyPath = s
-	}
-
 	s = params.Get("auto-create-topic")
 	if s != "" {
 		autoCreate, err := strconv.ParseBool(s)
@@ -199,6 +186,39 @@ func (c *Config) Apply(sinkURI *url.URL) error {
 	err := c.applySASL(params)
 	if err != nil {
 		return err
+	}
+
+	err = c.applyTLS(params)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (c *Config) applyTLS(params url.Values) error {
+	s := params.Get("enable-tls")
+	if s != "" {
+		enableTLS, err := strconv.ParseBool(s)
+		if err != nil {
+			return err
+		}
+		c.EnableTLS = enableTLS
+	}
+
+	s = params.Get("ca")
+	if s != "" {
+		c.Credential.CAPath = s
+	}
+
+	s = params.Get("cert")
+	if s != "" {
+		c.Credential.CertPath = s
+	}
+
+	s = params.Get("key")
+	if s != "" {
+		c.Credential.KeyPath = s
 	}
 
 	return nil
@@ -368,11 +388,18 @@ func NewSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
 		config.Producer.Compression = sarama.CompressionNone
 	}
 
-	if c.Credential != nil && len(c.Credential.CAPath) != 0 {
+	if c.EnableTLS {
 		config.Net.TLS.Enable = true
-		config.Net.TLS.Config, err = c.Credential.ToTLSConfig()
-		if err != nil {
-			return nil, errors.Trace(err)
+		config.Net.TLS.Config = &tls.Config{
+			MinVersion: tls.VersionTLS12,
+			NextProtos: []string{"h2", "http/1.1"},
+		}
+
+		if c.Credential != nil && len(c.Credential.CAPath) != 0 {
+			config.Net.TLS.Config, err = c.Credential.ToTLSConfig()
+			if err != nil {
+				return nil, errors.Trace(err)
+			}
 		}
 	}
 
