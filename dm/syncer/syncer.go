@@ -41,6 +41,7 @@ import (
 	"github.com/pingcap/tidb/util/filter"
 	regexprrouter "github.com/pingcap/tidb/util/regexpr-router"
 	router "github.com/pingcap/tidb/util/table-router"
+	"github.com/pingcap/tiflow/dm/pkg/shardddl/optimism"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
@@ -1916,7 +1917,6 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 	// the relay log file may be truncated(not end with an RotateEvent), in this situation, we may read some rows events
 	// and then read from the gtid again, so we force enter safe-mode for one more transaction to avoid failure due to
 	// conflict
-	failPointTriggered := false // used for failpoint
 	for {
 		if s.execError.Load() != nil {
 			return nil
@@ -1979,33 +1979,47 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		// for position mode, we can redirect at any time
 		// for gtid mode, we can redirect only when current location related gtid's transaction is totally executed and
 		//  next gtid is just updated (because we check if we can end resync by currLoc >= latestLoc)
-		if s.cfg.ShardMode == config.ShardOptimistic && (!s.cfg.EnableGTID || safeToRedirect(lastEvent)) {
-			op, targetTableID := s.optimist.PendingRedirectOperation()
-			if op != nil {
-				// for optimistic sharding mode, if a new sharding group is resolved when syncer is redirecting,
-				// instead of using the currentLocation, the next redirection should share the same latestLocation with the current shardingResync.
-				// This is to avoid syncer syncs to current shardingResync.latestLocation before,
-				// we may miss some rows events if we don't check the row events between currentLocation and shardingResync.latestLocation.
-				// TODO: This will cause a potential performance issue. If we have multiple tables not resolved after a huge amount of binlogs but resolved in a short time,
-				//   	current implementation will cause syncer to redirect and replay the binlogs in this segment several times. One possible solution is to
-				//      interrupt current resync once syncer meets a new redirect operation, force other tables to be resolved together in the interrupted shardingResync.
-				//      If we want to do this, we also neet to remove the target table check at https://github.com/pingcap/tiflow/blob/af849add84bf26feb2628d3e1e4344830b915fd9/dm/syncer/syncer.go#L2489
-				endLocation := &currentLocation
-				if shardingReSync != nil {
-					endLocation = &shardingReSync.latestLocation
-				}
-				resolved := s.resolveOptimisticDDL(&eventContext{
-					shardingReSyncCh: &shardingReSyncCh,
-					currentLocation:  endLocation,
-				}, &filter.Table{Schema: op.UpSchema, Name: op.UpTable}, utils.UnpackTableID(targetTableID))
-				// if resolved and targetTableID == shardingResync.TargetTableID, we should resolve this resync before we continue
-				if resolved && shardingReSync != nil && targetTableID == shardingReSync.targetTable.String() {
-					err = closeShardingResync()
-					if err != nil {
-						return err
+		if s.cfg.ShardMode == config.ShardOptimistic {
+			canRedirect := !s.cfg.EnableGTID
+			if s.cfg.EnableGTID {
+				canRedirect = safeToRedirect(lastEvent)
+			} else {
+				if lastEvent != nil {
+					if _, ok := lastEvent.Event.(*replication.QueryEvent); ok {
+						if op := s.optimist.PendingOperation(); op != nil && op.ConflictStage == optimism.ConflictSkipWaitRedirect {
+							canRedirect = false // don't redirect here at least after a row event
+						}
 					}
 				}
-				continue
+			}
+			if canRedirect {
+				op, targetTableID := s.optimist.PendingRedirectOperation()
+				if op != nil {
+					// for optimistic sharding mode, if a new sharding group is resolved when syncer is redirecting,
+					// instead of using the currentLocation, the next redirection should share the same latestLocation with the current shardingResync.
+					// This is to avoid syncer syncs to current shardingResync.latestLocation before,
+					// we may miss some rows events if we don't check the row events between currentLocation and shardingResync.latestLocation.
+					// TODO: This will cause a potential performance issue. If we have multiple tables not resolved after a huge amount of binlogs but resolved in a short time,
+					//   	current implementation will cause syncer to redirect and replay the binlogs in this segment several times. One possible solution is to
+					//      interrupt current resync once syncer meets a new redirect operation, force other tables to be resolved together in the interrupted shardingResync.
+					//      If we want to do this, we also neet to remove the target table check at https://github.com/pingcap/tiflow/blob/af849add84bf26feb2628d3e1e4344830b915fd9/dm/syncer/syncer.go#L2489
+					endLocation := &currentLocation
+					if shardingReSync != nil {
+						endLocation = &shardingReSync.latestLocation
+					}
+					resolved := s.resolveOptimisticDDL(&eventContext{
+						shardingReSyncCh: &shardingReSyncCh,
+						currentLocation:  endLocation,
+					}, &filter.Table{Schema: op.UpSchema, Name: op.UpTable}, utils.UnpackTableID(targetTableID))
+					// if resolved and targetTableID == shardingResync.TargetTableID, we should resolve this resync before we continue
+					if resolved && shardingReSync != nil && targetTableID == shardingReSync.targetTable.String() {
+						err = closeShardingResync()
+						if err != nil {
+							return err
+						}
+					}
+					continue
+				}
 			}
 		}
 
@@ -2027,26 +2041,11 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			}
 		})
 		failpoint.Inject("SleepInTxn", func(val failpoint.Value) {
-			if strVal, ok := val.(string); ok && !failOnceForTest.Load() {
-				a := strings.SplitN(strVal, ":", 2)
-				if len(a) == 2 {
-					switch a[0] {
-					case "index":
-						eventIdx, err := strconv.ParseInt(a[1], 10, 64)
-						if err == nil && int(eventIdx) == eventIndex {
-							failOnceForTest.Store(true)
-							s.tctx.L().Warn("start to sleep 6s and continue for this event", zap.Int("event_index", eventIndex),
-								zap.Any("cur_pos", currentLocation), zap.Any("las_pos", lastLocation),
-								zap.Any("pos", e.Header.LogPos))
-							time.Sleep(6 * time.Second)
-						}
-					case "ddl":
-						if ev, ok := e.Event.(*replication.QueryEvent); ok && strings.Contains(string(ev.Query), a[1]) {
-							failOnceForTest.Store(true)
-							failPointTriggered = true
-						}
-					}
-				}
+			if intVal, ok := val.(int); ok && intVal == eventIndex && failOnceForTest.CAS(false, true) {
+				s.tctx.L().Warn("start to sleep 6s and continue for this event", zap.Int("event_index", eventIndex),
+					zap.Any("cur_pos", currentLocation), zap.Any("las_pos", lastLocation),
+					zap.Any("pos", e.Header.LogPos))
+				time.Sleep(6 * time.Second)
 			}
 		})
 		switch {
@@ -2127,7 +2126,9 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		// we calculate startLocation and endLocation(currentLocation) for Query event here
 		// set startLocation empty for other events to avoid misuse
 		startLocation = binlog.Location{}
-		lastEvent = e
+		if _, ok := e.Event.(*replication.GenericEvent); !ok {
+			lastEvent = e
+		}
 		switch ev := e.Event.(type) {
 		case *replication.QueryEvent, *replication.RowsEvent:
 			startLocation = binlog.NewLocation(
@@ -2283,15 +2284,6 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		case *replication.QueryEvent:
 			originSQL = strings.TrimSpace(string(ev.Query))
 			err2 = s.handleQueryEvent(ev, ec, originSQL)
-			failpoint.Inject("SleepInTxn", func(_ failpoint.Value) {
-				if err2 == nil && failPointTriggered {
-					s.tctx.L().Warn("start to sleep 6s and continue for this event", zap.Int("event_index", eventIndex),
-						zap.Any("cur_pos", currentLocation), zap.Any("las_pos", lastLocation),
-						zap.Any("pos", e.Header.LogPos))
-					time.Sleep(6 * time.Second)
-					failPointTriggered = false
-				}
-			})
 		case *replication.XIDEvent:
 			// reset eventIndex and force safeMode flag here.
 			eventIndex = 0
@@ -2344,6 +2336,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			if err2 != nil {
 				return err2
 			}
+			currentLocation.Position.Pos = e.Header.LogPos // update currentLocation's position here to make sure optimism redirection can end correctly
 			if s.cfg.EnableGTID {
 				// TODO: add mariaDB integration test
 				err2 = advanceCurrentLocationGtidSet(e)
