@@ -4,6 +4,7 @@ task-mode: incremental
 is-sharding: true
 meta-schema: "dm_meta"
 enable-heartbeat: false
+ignore-checking-items: ["version"]
 
 target-database:
   host: "127.0.0.1"
