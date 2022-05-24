@@ -54,6 +54,9 @@ func (r *partitionDispatchRule) fromString(rule string) {
 		*r = partitionDispatchRuleTS
 	case "table":
 		*r = partitionDispatchRuleTable
+	case "rowid":
+		*r = partitionDispatchRuleIndexValue
+		log.Warn("rowid is deprecated, please use index-value instead.")
 	case "index-value":
 		*r = partitionDispatchRuleIndexValue
 	default:
