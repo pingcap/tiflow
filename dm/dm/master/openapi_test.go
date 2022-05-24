@@ -18,7 +18,9 @@ package master
 import (
 	"context"
 	"fmt"
+	"github.com/stretchr/testify/require"
 	"net/http"
+	"os"
 	"testing"
 	"time"
 
@@ -75,7 +77,7 @@ func (t *openAPISuite) SetUpTest(c *check.C) {
 	c.Assert(ha.ClearTestInfoOperation(t.etcdTestCli), check.IsNil)
 }
 
-func (t *openAPISuite) TestRedirectRequestToLeader(c *check.C) {
+func (t *openAPISuite) TestReverseRequestToLeader(c *check.C) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -134,9 +136,103 @@ func (t *openAPISuite) TestRedirectRequestToLeader(c *check.C) {
 	c.Assert(resultListSource.Data, check.HasLen, 0)
 	c.Assert(resultListSource.Total, check.Equals, 0)
 
-	// list source not from leader will get a redirect
+	// list source from non-leader will get result too
 	result2 := testutil.NewRequest().Get(baseURL).Go(t.testT, s2.echo)
-	c.Assert(result2.Code(), check.Equals, http.StatusTemporaryRedirect)
+	c.Assert(result2.Code(), check.Equals, http.StatusOK)
+	var resultListSource2 openapi.GetSourceListResponse
+	err = result2.UnmarshalBodyToObject(&resultListSource2)
+	c.Assert(err, check.IsNil)
+	c.Assert(resultListSource2.Data, check.HasLen, 0)
+	c.Assert(resultListSource2.Total, check.Equals, 0)
+}
+
+func (t *openAPISuite) TestReverseRequestToHttpsLeader(c *check.C) {
+	pwd, err := os.Getwd()
+	require.NoError(t.testT, err)
+	caPath := pwd + "/tls_for_test/ca.pem"
+	certPath := pwd + "/tls_for_test/dm.pem"
+	keyPath := pwd + "/tls_for_test/dm.key"
+
+	// master1
+	masterAddr1 := tempurl.Alloc()[len("http://"):]
+	peerAddr1 := tempurl.Alloc()[len("http://"):]
+	cfg1 := NewConfig()
+	require.NoError(t.testT, cfg1.Parse([]string{
+		"--name=dm-master-tls-1",
+		fmt.Sprintf("--data-dir=%s", t.testT.TempDir()),
+		fmt.Sprintf("--master-addr=https://%s", masterAddr1),
+		fmt.Sprintf("--advertise-addr=https://%s", masterAddr1),
+		fmt.Sprintf("--peer-urls=https://%s", peerAddr1),
+		fmt.Sprintf("--advertise-peer-urls=https://%s", peerAddr1),
+		fmt.Sprintf("--initial-cluster=dm-master-tls-1=https://%s", peerAddr1),
+		"--ssl-ca=" + caPath,
+		"--ssl-cert=" + certPath,
+		"--ssl-key=" + keyPath,
+	}))
+	cfg1.ExperimentalFeatures.OpenAPI = true
+	s1 := NewServer(cfg1)
+	ctx1, cancel1 := context.WithCancel(context.Background())
+	require.NoError(t.testT, s1.Start(ctx1))
+	defer func() {
+		cancel1()
+		s1.Close()
+	}()
+	// wait the first one become the leader
+	require.True(t.testT, utils.WaitSomething(30, 100*time.Millisecond, func() bool {
+		return s1.election.IsLeader() && s1.scheduler.Started()
+	}))
+
+	// master2
+	masterAddr2 := tempurl.Alloc()[len("http://"):]
+	peerAddr2 := tempurl.Alloc()[len("http://"):]
+	cfg2 := NewConfig()
+	require.NoError(t.testT, cfg2.Parse([]string{
+		"--name=dm-master-tls-2",
+		fmt.Sprintf("--data-dir=%s", t.testT.TempDir()),
+		fmt.Sprintf("--master-addr=https://%s", masterAddr2),
+		fmt.Sprintf("--advertise-addr=https://%s", masterAddr2),
+		fmt.Sprintf("--peer-urls=https://%s", peerAddr2),
+		fmt.Sprintf("--advertise-peer-urls=https://%s", peerAddr2),
+		"--ssl-ca=" + caPath,
+		"--ssl-cert=" + certPath,
+		"--ssl-key=" + keyPath,
+	}))
+	cfg2.ExperimentalFeatures.OpenAPI = true
+	cfg2.Join = s1.cfg.MasterAddr // join to an existing cluster
+	s2 := NewServer(cfg2)
+	ctx2, cancel2 := context.WithCancel(context.Background())
+	require.NoError(t.testT, s2.Start(ctx2))
+	defer func() {
+		cancel2()
+		s2.Close()
+	}()
+	// wait the second master ready
+	require.False(t.testT, utils.WaitSomething(30, 100*time.Millisecond, func() bool {
+		return s2.election.IsLeader()
+	}))
+
+	baseURL := "/api/v1/sources"
+	// list source from leader
+	result := testutil.NewRequest().Get(baseURL).Go(t.testT, s1.echo)
+	require.Equal(t.testT, http.StatusOK, result.Code())
+	var resultListSource openapi.GetSourceListResponse
+	require.NoError(t.testT, result.UnmarshalBodyToObject(&resultListSource))
+	require.Len(t.testT, resultListSource.Data, 0)
+	require.Equal(t.testT, 0, resultListSource.Total)
+
+	// with tls, list source not from leader will get result too
+	result = testutil.NewRequest().Get(baseURL).Go(t.testT, s2.echo)
+	require.Equal(t.testT, http.StatusOK, result.Code())
+	var resultListSource2 openapi.GetSourceListResponse
+	require.NoError(t.testT, result.UnmarshalBodyToObject(&resultListSource2))
+	require.Len(t.testT, resultListSource2.Data, 0)
+	require.Equal(t.testT, 0, resultListSource2.Total)
+
+	// without tls, list source not from leader will be 502
+	require.NoError(t.testT, failpoint.Enable("github.com/pingcap/tiflow/dm/dm/master/MockNotSetTls", `return()`))
+	result = testutil.NewRequest().Get(baseURL).Go(t.testT, s2.echo)
+	require.Equal(t.testT, http.StatusBadGateway, result.Code())
+	require.NoError(t.testT, failpoint.Disable("github.com/pingcap/tiflow/dm/dm/master/MockNotSetTls"))
 }
 
 func (t *openAPISuite) TestOpenAPIWillNotStartInDefaultConfig(c *check.C) {

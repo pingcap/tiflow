@@ -52,41 +52,19 @@ def create_source2_success():
     print("create_source1_success resp=", resp.json())
     assert resp.status_code == 201
 
-<<<<<<< HEAD
-=======
 def create_source_success_https(ssl_ca, ssl_cert, ssl_key):
     req = {
-        "source": {
             "case_sensitive": False,
-            "enable": True,
             "enable_gtid": False,
             "host": "127.0.0.1",
             "password": "123456",
             "port": 3306,
             "source_name": SOURCE1_NAME,
             "user": "root",
-        }
     }
     resp = requests.post(url=API_ENDPOINT_HTTPS, json=req, verify=ssl_ca, cert=(ssl_cert, ssl_key))
     print("create_source_success_https resp=", resp.json())
     assert resp.status_code == 201
-
-def update_source1_without_password_success():
-    req = {
-        "source": {
-            "case_sensitive": False,
-            "enable": True,
-            "enable_gtid": False,
-            "host": "127.0.0.1",
-            "port": 3306,
-            "source_name": SOURCE1_NAME,
-            "user": "root",
-        }
-    }
-    resp = requests.put(url=API_ENDPOINT + "/" + SOURCE1_NAME, json=req)
-    print("update_source1_without_password_success resp=", resp.json())
-    assert resp.status_code == 200
->>>>>>> 359af1861 (DM/Openapi: use reverse proxy instead of redirect (#5390))
 
 def list_source_success(source_count):
     resp = requests.get(url=API_ENDPOINT)
@@ -267,11 +245,7 @@ if __name__ == "__main__":
         "create_source_failed": create_source_failed,
         "create_source1_success": create_source1_success,
         "create_source2_success": create_source2_success,
-<<<<<<< HEAD
-=======
         "create_source_success_https": create_source_success_https,
-        "update_source1_without_password_success": update_source1_without_password_success,
->>>>>>> 359af1861 (DM/Openapi: use reverse proxy instead of redirect (#5390))
         "list_source_success": list_source_success,
         "list_source_success_https": list_source_success_https,
         "list_source_with_reverse_https": list_source_with_reverse_https,
