@@ -508,6 +508,7 @@ func validateMinInsyncReplicas(
 
 	minInsyncReplicasStr, exists, err := minInsyncReplicasConfigGetter()
 	if err != nil {
+		// 'min.insync.replica' is invisible to us in Confluent Cloud Kafka.
 		if strings.Contains(err.Error(),
 			string(cerror.ErrKafkaBrokerConfigNotFound.RFCCode())) {
 			return nil
