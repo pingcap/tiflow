@@ -61,7 +61,7 @@ func (r *partitionDispatchRule) fromString(rule string) {
 		*r = partitionDispatchRuleIndexValue
 	default:
 		*r = partitionDispatchRuleDefault
-		log.Warn("the partition dispatch rule is not default/ts/table/index-val," +
+		log.Warn("the partition dispatch rule is not default/ts/table/index-value," +
 			" use the default rule instead.")
 	}
 }
