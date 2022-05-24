@@ -121,12 +121,3 @@ func UnmarshalTaskStatus(data []byte) (TaskStatus, error) {
 func MarshalTaskStatus(taskStatus TaskStatus) ([]byte, error) {
 	return json.Marshal(taskStatus)
 }
-
-// GetTaskIDFromStatusBytes gets task-id from status bytes.
-func GetTaskIDFromStatusBytes(data []byte) (string, error) {
-	var task struct {
-		Task string
-	}
-	err := json.Unmarshal(data, &task)
-	return task.Task, err
-}

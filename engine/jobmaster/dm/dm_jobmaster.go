@@ -85,7 +85,7 @@ func (jm *JobMaster) createComponents() error {
 		return err
 	}
 	jm.metadata = metadata.NewMetaData(jm.ID(), jm.MetaKVClient())
-	jm.messageAgent = dmpkg.NewMessageAgent(jm.ctx, workerHandles, jm)
+	jm.messageAgent = dmpkg.NewMessageAgent(jm.ctx, jm.JobMasterID(), workerHandles, jm)
 	jm.taskManager = NewTaskManager(taskStatus, jm.metadata.JobStore(), jm.messageAgent)
 	jm.workerManager = NewWorkerManager(workerStatus, jm.metadata.JobStore(), jm, jm.messageAgent, jm.checkpointAgent)
 	return nil
@@ -187,11 +187,7 @@ func (jm *JobMaster) OnJobManagerMessage(topic p2p.Topic, message interface{}) e
 // OnWorkerMessage implements JobMasterImpl.OnWorkerMessage
 func (jm *JobMaster) OnWorkerMessage(worker lib.WorkerHandle, topic p2p.Topic, message interface{}) error {
 	log.L().Debug("on worker message", zap.String("id", jm.workerID), zap.String("worker_id", worker.ID()))
-	taskID, err := runtime.GetTaskIDFromStatusBytes(worker.Status().ExtBytes)
-	if err != nil {
-		return err
-	}
-	return jm.messageAgent.OnMessage(taskID, topic, message)
+	return jm.messageAgent.OnMessage(topic, message)
 }
 
 // OnMasterMessage implements JobMasterImpl.OnMasterMessage

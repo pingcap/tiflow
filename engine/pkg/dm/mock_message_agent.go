@@ -33,7 +33,7 @@ func (m *MockMessageAgent) RegisterHandler(topic string, handler HandlerFunc) {}
 func (m *MockMessageAgent) UpdateSender(senderID string, sender Sender) {}
 
 // SendMessage implement MessageAgent.SendMessage
-func (m *MockMessageAgent) SendMessage(ctx context.Context, senderID string, topic string, msg interface{}) error {
+func (m *MockMessageAgent) SendMessage(ctx context.Context, senderID string, command string, msg interface{}) error {
 	m.Lock()
 	defer m.Unlock()
 	args := m.Called()
@@ -41,7 +41,7 @@ func (m *MockMessageAgent) SendMessage(ctx context.Context, senderID string, top
 }
 
 // SendRequest implement MessageAgent.SendRequest
-func (m *MockMessageAgent) SendRequest(ctx context.Context, senderID string, topic string, req interface{}) (interface{}, error) {
+func (m *MockMessageAgent) SendRequest(ctx context.Context, senderID string, command string, req interface{}) (interface{}, error) {
 	m.Lock()
 	defer m.Unlock()
 	args := m.Called()
@@ -49,7 +49,7 @@ func (m *MockMessageAgent) SendRequest(ctx context.Context, senderID string, top
 }
 
 // SendResponse implement MessageAgent.SendResponse
-func (m *MockMessageAgent) SendResponse(ctx context.Context, senderID string, topic string, id messageID, resp interface{}) error {
+func (m *MockMessageAgent) SendResponse(ctx context.Context, senderID string, id messageID, command string, resp interface{}) error {
 	m.Lock()
 	defer m.Unlock()
 	args := m.Called()
@@ -57,7 +57,7 @@ func (m *MockMessageAgent) SendResponse(ctx context.Context, senderID string, to
 }
 
 // OnMessage implement MessageAgent.OnMessage
-func (m *MockMessageAgent) OnMessage(senderID string, topic string, msg interface{}) error {
+func (m *MockMessageAgent) OnMessage(topic string, msg interface{}) error {
 	m.Lock()
 	defer m.Unlock()
 	args := m.Called()

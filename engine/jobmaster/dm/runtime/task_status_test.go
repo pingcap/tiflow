@@ -104,8 +104,4 @@ func TestTaskStatus(t *testing.T) {
 	newSyncStatus, err := UnmarshalTaskStatus(bytes)
 	require.Nil(t, err)
 	require.Equal(t, newSyncStatus, syncStatus)
-
-	taskID, err := GetTaskIDFromStatusBytes(bytes)
-	require.NoError(t, err)
-	require.Equal(t, "sync-task", taskID)
 }

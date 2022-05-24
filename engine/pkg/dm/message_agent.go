@@ -15,7 +15,9 @@ package dm
 
 import (
 	"context"
+	"fmt"
 	"reflect"
+	"strings"
 	"sync"
 	"time"
 
@@ -29,9 +31,21 @@ var (
 	defaultResponseTimeOut = time.Second * 2
 )
 
-type messageType int
+// GenerateTopic generate dm message topic.
+func GenerateTopic(sendID string, receiverID string) string {
+	return fmt.Sprintf("DM---%s---%s", sendID, receiverID)
+}
+
+// ExtractTopic extract dm message topic.
+// TODO: handle special case.
+func ExtractTopic(topic string) (string, string) {
+	parts := strings.Split(topic, "---")
+	return parts[1], parts[2]
+}
 
 type messageID uint64
+
+type messageType int
 
 const (
 	messageTp messageType = iota
@@ -43,6 +57,7 @@ const (
 type message struct {
 	ID      messageID
 	Type    messageType
+	Command string
 	Payload interface{}
 }
 
@@ -84,8 +99,8 @@ func newMessagePair() *messagePair {
 }
 
 // sendRequest sends a request message and wait for response.
-func (m *messagePair) sendRequest(ctx context.Context, topic p2p.Topic, req interface{}, sender Sender) (interface{}, error) {
-	msg := message{ID: m.idAllocator.alloc(), Type: requestTp, Payload: req}
+func (m *messagePair) sendRequest(ctx context.Context, topic p2p.Topic, command string, req interface{}, sender Sender) (interface{}, error) {
+	msg := message{ID: m.idAllocator.alloc(), Type: requestTp, Command: command, Payload: req}
 	respCh := make(chan interface{}, 1)
 	m.pendings.Store(msg.ID, respCh)
 	defer m.pendings.Delete(msg.ID)
@@ -103,8 +118,8 @@ func (m *messagePair) sendRequest(ctx context.Context, topic p2p.Topic, req inte
 }
 
 // sendResponse sends a response with message ID.
-func (m *messagePair) sendResponse(ctx context.Context, topic p2p.Topic, id messageID, resp interface{}, sender Sender) error {
-	msg := message{ID: id, Type: responseTp, Payload: resp}
+func (m *messagePair) sendResponse(ctx context.Context, topic p2p.Topic, id messageID, command string, resp interface{}, sender Sender) error {
+	msg := message{ID: id, Type: responseTp, Command: command, Payload: resp}
 	return sender.SendMessage(ctx, topic, msg, true /* nonblock */)
 }
 
@@ -130,10 +145,10 @@ type HandlerFunc func(interface{}) error
 type MessageAgent interface {
 	RegisterHandler(topic string, handler HandlerFunc)
 	UpdateSender(senderID string, sender Sender)
-	SendMessage(ctx context.Context, senderID string, topic string, msg interface{}) error
-	SendRequest(ctx context.Context, senderID string, topic string, req interface{}) (interface{}, error)
-	SendResponse(ctx context.Context, senderID string, topic string, id messageID, resp interface{}) error
-	OnMessage(senderID string, topic string, msg interface{}) error
+	SendMessage(ctx context.Context, senderID string, command string, msg interface{}) error
+	SendRequest(ctx context.Context, senderID string, command string, req interface{}) (interface{}, error)
+	SendResponse(ctx context.Context, senderID string, id messageID, command string, resp interface{}) error
+	OnMessage(topic string, msg interface{}) error
 }
 
 // MessageAgentImpl implements the message processing mechanism.
@@ -145,14 +160,16 @@ type MessageAgentImpl struct {
 	// topic -> handler
 	handlers       sync.Map
 	defaultHandler interface{}
+	id             string
 }
 
 // NewMessageAgent creates a new MessageAgent instance.
-func NewMessageAgent(ctx context.Context, initSenders map[string]Sender, defaultHandler interface{}) *MessageAgentImpl {
+func NewMessageAgent(ctx context.Context, id string, initSenders map[string]Sender, defaultHandler interface{}) *MessageAgentImpl {
 	messageAgent := &MessageAgentImpl{
 		ctx:            ctx,
 		messagePair:    newMessagePair(),
 		defaultHandler: defaultHandler,
+		id:             id,
 	}
 	for senderID, sender := range initSenders {
 		messageAgent.UpdateSender(senderID, sender)
@@ -179,36 +196,36 @@ func (agent *MessageAgentImpl) getSender(senderID string) (Sender, error) {
 }
 
 // SendMessage send message asynchronously.
-func (agent *MessageAgentImpl) SendMessage(ctx context.Context, senderID string, topic string, msg interface{}) error {
+func (agent *MessageAgentImpl) SendMessage(ctx context.Context, senderID string, command string, msg interface{}) error {
 	sender, err := agent.getSender(senderID)
 	if err != nil {
 		return err
 	}
 	ctx2, cancel := context.WithTimeout(ctx, defaultMessageTimeOut)
 	defer cancel()
-	return sender.SendMessage(ctx2, topic, message{ID: 0, Type: messageTp, Payload: msg}, true)
+	return sender.SendMessage(ctx2, GenerateTopic(agent.id, senderID), message{ID: 0, Type: messageTp, Command: command, Payload: msg}, true)
 }
 
 // SendRequest send request synchronously.
-func (agent *MessageAgentImpl) SendRequest(ctx context.Context, senderID string, topic string, req interface{}) (interface{}, error) {
+func (agent *MessageAgentImpl) SendRequest(ctx context.Context, senderID string, command string, req interface{}) (interface{}, error) {
 	sender, err := agent.getSender(senderID)
 	if err != nil {
 		return nil, err
 	}
 	ctx2, cancel := context.WithTimeout(ctx, defaultRequestTimeOut)
 	defer cancel()
-	return agent.messagePair.sendRequest(ctx2, topic, req, sender)
+	return agent.messagePair.sendRequest(ctx2, GenerateTopic(agent.id, senderID), command, req, sender)
 }
 
 // SendResponse send response asynchronously.
-func (agent *MessageAgentImpl) SendResponse(ctx context.Context, senderID string, topic string, id messageID, resp interface{}) error {
+func (agent *MessageAgentImpl) SendResponse(ctx context.Context, senderID string, msgID messageID, command string, resp interface{}) error {
 	sender, err := agent.getSender(senderID)
 	if err != nil {
 		return err
 	}
 	ctx2, cancel := context.WithTimeout(ctx, defaultResponseTimeOut)
 	defer cancel()
-	return agent.messagePair.sendResponse(ctx2, topic, id, resp, sender)
+	return agent.messagePair.sendResponse(ctx2, GenerateTopic(agent.id, senderID), msgID, command, resp, sender)
 }
 
 // RegisterHandler register topic handler.
@@ -218,29 +235,30 @@ func (agent *MessageAgentImpl) RegisterHandler(topic string, handler HandlerFunc
 
 // OnMessage receive message/request/response.
 // Forward the response to the corresponding request request.
-// According to the topic, the corresponding message processing function is called.
-// According to the topic, the corresponding request processing function is called, and send the response to caller.
+// According to the command, the corresponding message processing function is called.
+// According to the command, the corresponding request processing function is called, and send the response to caller.
 // NOTE: processing function name should same as topic name.
 // MessageFuncType: func(ctx context.Context, msg interface{}) error {}
 // RequestFuncType: func(ctx context.Context, req interface{}) (resp interface{}, err error) {}
-func (agent *MessageAgentImpl) OnMessage(senderID string, topic string, msg interface{}) error {
-	// matches the registered handler firstly
-	if val, ok := agent.handlers.Load(topic); ok {
-		return val.(HandlerFunc)(msg)
-	}
-
+func (agent *MessageAgentImpl) OnMessage(topic string, msg interface{}) error {
 	m, ok := msg.(message)
 	if !ok {
-		return errors.Errorf("unknow message type for topic %s", topic)
+		return errors.Errorf("unknown message type of %v", msg)
+	}
+
+	// matches the registered handler firstly
+	if val, ok := agent.handlers.Load(m.Command); ok {
+		return val.(HandlerFunc)(m.Payload)
 	}
 
 	switch m.Type {
 	case responseTp:
 		return agent.handleResponse(m.ID, m.Payload)
 	case requestTp:
-		return agent.handleRequest(senderID, topic, m.ID, m.Payload)
+		sendID, _ := ExtractTopic(topic)
+		return agent.handleRequest(sendID, m.ID, m.Command, m.Payload)
 	default:
-		return agent.handleMessage(topic, m.Payload)
+		return agent.handleMessage(m.Command, m.Payload)
 	}
 }
 
@@ -250,11 +268,11 @@ func (agent *MessageAgentImpl) handleResponse(id messageID, resp interface{}) er
 }
 
 // handleRequest receive request, call request handler and send response.
-func (agent *MessageAgentImpl) handleRequest(senderID string, topic string, id messageID, req interface{}) error {
+func (agent *MessageAgentImpl) handleRequest(senderID string, msgID messageID, command string, req interface{}) error {
 	// TODO: check input/output num/type if needed, panic now
-	handler := reflect.ValueOf(agent.defaultHandler).MethodByName(topic)
+	handler := reflect.ValueOf(agent.defaultHandler).MethodByName(command)
 	if !handler.IsValid() {
-		return errors.Errorf("request handler for topic %s not found", topic)
+		return errors.Errorf("request handler for command %s not found", command)
 	}
 
 	// call request handler
@@ -268,15 +286,15 @@ func (agent *MessageAgentImpl) handleRequest(senderID string, topic string, id m
 	// send response
 	ctx2, cancel2 := context.WithTimeout(agent.ctx, defaultRequestTimeOut)
 	defer cancel2()
-	return agent.SendResponse(ctx2, senderID, topic, id, rets[0].Interface())
+	return agent.SendResponse(ctx2, senderID, msgID, command, rets[0].Interface())
 }
 
 // handle message receive message and call message handler.
-func (agent *MessageAgentImpl) handleMessage(topic string, msg interface{}) error {
+func (agent *MessageAgentImpl) handleMessage(command string, msg interface{}) error {
 	// TODO: check input/output num/type if needed, panic now
-	handler := reflect.ValueOf(agent.defaultHandler).MethodByName(topic)
+	handler := reflect.ValueOf(agent.defaultHandler).MethodByName(command)
 	if !handler.IsValid() {
-		return errors.Errorf("message handler for topic %s not found", topic)
+		return errors.Errorf("message handler for command %s not found", command)
 	}
 
 	// call message handler

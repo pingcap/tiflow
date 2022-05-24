@@ -120,7 +120,7 @@ func newBaseTask(dCtx *dcontext.Context, masterID libModel.MasterID, workerType 
 
 func (t *baseTask) createComponents(ctx context.Context) error {
 	log.L().Debug("create components")
-	t.messageAgent = dmpkg.NewMessageAgent(t.ctx, map[string]dmpkg.Sender{t.masterID: t}, t)
+	t.messageAgent = dmpkg.NewMessageAgent(t.ctx, t.taskID, map[string]dmpkg.Sender{t.masterID: t}, t)
 	return nil
 }
 
@@ -161,7 +161,7 @@ func (t *baseTask) OnMasterFailover(reason lib.MasterFailoverReason) error {
 // OnMasterMessage implements lib.WorkerImpl.OnMasterMessage
 func (t *baseTask) OnMasterMessage(topic p2p.Topic, message p2p.MessageValue) error {
 	log.L().Info("dmtask.OnMasterMessage", zap.String("topic", topic), zap.Any("message", message))
-	return t.messageAgent.OnMessage(t.masterID, topic, message)
+	return t.messageAgent.OnMessage(topic, message)
 }
 
 // CloseImpl implements lib.WorkerImpl.CloseImpl

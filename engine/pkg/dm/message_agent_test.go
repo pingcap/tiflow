@@ -60,14 +60,14 @@ func TestMessagePair(t *testing.T) {
 	messageErr := errors.New("message error")
 	// synchronous send
 	mockSender.On("SendMessage").Return(messageErr).Once()
-	resp, err := messagePair.sendRequest(ctx, "topic", "request", mockSender)
+	resp, err := messagePair.sendRequest(ctx, "topic", "command", "request", mockSender)
 	require.EqualError(t, err, messageErr.Error())
 	require.Nil(t, resp)
 	// deadline exceeded
 	mockSender.On("SendMessage").Return(nil).Once()
 	ctx2, cancel2 := context.WithTimeout(ctx, 100*time.Millisecond)
 	defer cancel2()
-	resp, err = messagePair.sendRequest(ctx2, "topic", "request", mockSender)
+	resp, err = messagePair.sendRequest(ctx2, "topic", "command", "request", mockSender)
 	require.EqualError(t, err, context.DeadlineExceeded.Error())
 	require.Nil(t, resp)
 	// late response
@@ -78,7 +78,7 @@ func TestMessagePair(t *testing.T) {
 		mockSender.On("SendMessage").Return(nil).Once()
 		ctx3, cancel3 := context.WithTimeout(ctx, 5*time.Second)
 		defer cancel3()
-		resp3, err := messagePair.sendRequest(ctx3, "request-topic", "request", mockSender)
+		resp3, err := messagePair.sendRequest(ctx3, "request-topic", "command", "request", mockSender)
 		require.NoError(t, err)
 		require.Equal(t, "response", resp3)
 	}()
@@ -86,7 +86,7 @@ func TestMessagePair(t *testing.T) {
 	// send response
 	time.Sleep(time.Second)
 	mockSender.On("SendMessage").Return(nil).Once()
-	require.NoError(t, messagePair.sendResponse(ctx, "response-topic", 3, resp2, mockSender))
+	require.NoError(t, messagePair.sendResponse(ctx, "response-topic", 3, "command", resp2, mockSender))
 	require.NoError(t, messagePair.onResponse(3, resp2))
 
 	// duplicate response
@@ -97,7 +97,7 @@ func TestMessagePair(t *testing.T) {
 }
 
 func TestUpdateSender(t *testing.T) {
-	messageAgent := NewMessageAgent(context.Background(), nil, nil)
+	messageAgent := NewMessageAgent(context.Background(), "", nil, nil)
 	require.Equal(t, lenSyncMap(&messageAgent.senders), 0)
 	workerHandle1 := &master.MockHandle{WorkerID: "worker1"}
 	workerHandle2 := &master.MockHandle{WorkerID: "worker2"}
@@ -141,7 +141,7 @@ func TestUpdateSender(t *testing.T) {
 		initWorkerHandleMap[key.(string)] = value.(Sender)
 		return true
 	})
-	messageAgent = NewMessageAgent(context.Background(), initWorkerHandleMap, nil)
+	messageAgent = NewMessageAgent(context.Background(), "", initWorkerHandleMap, nil)
 	require.Equal(t, lenSyncMap(&messageAgent.senders), 1)
 	sender, err = messageAgent.getSender("task1")
 	require.NoError(t, err)
@@ -149,27 +149,27 @@ func TestUpdateSender(t *testing.T) {
 }
 
 func TestMessageAgent(t *testing.T) {
-	messageAgent := NewMessageAgent(context.Background(), nil, nil)
+	messageAgent := NewMessageAgent(context.Background(), "id", nil, nil)
 	require.Equal(t, lenSyncMap(&messageAgent.senders), 0)
 	senderID := "sender-id"
 	mockSender := &MockSender{}
 	messageAgent.UpdateSender(senderID, mockSender)
 
-	require.Error(t, messageAgent.SendMessage(context.Background(), "wrong-id", "topic", "msg"), "sender wrong-id not found")
-	require.Error(t, messageAgent.SendResponse(context.Background(), "wrong-id", "topic", 1, "resp"), "sender wrong-id not found")
-	ret, err := messageAgent.SendRequest(context.Background(), "wrong-id", "topic", "request")
+	require.Error(t, messageAgent.SendMessage(context.Background(), "wrong-id", "command", "msg"), "sender wrong-id not found")
+	require.Error(t, messageAgent.SendResponse(context.Background(), "wrong-id", 1, "command", "resp"), "sender wrong-id not found")
+	ret, err := messageAgent.SendRequest(context.Background(), "wrong-id", "command", "request")
 	require.EqualError(t, err, "sender wrong-id not found")
 	require.Nil(t, ret)
 
 	mockSender.On("SendMessage").Return(nil).Once()
-	require.NoError(t, messageAgent.SendMessage(context.Background(), senderID, "topic", "msg"))
+	require.NoError(t, messageAgent.SendMessage(context.Background(), senderID, "command", "msg"))
 
 	resp := "response"
 	go func() {
 		mockSender.On("SendMessage").Return(nil).Once()
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		resp2, err := messageAgent.SendRequest(ctx, senderID, "request-topic", "request")
+		resp2, err := messageAgent.SendRequest(ctx, senderID, "command", "request")
 		require.NoError(t, err)
 		require.Equal(t, resp, resp2)
 	}()
@@ -177,47 +177,47 @@ func TestMessageAgent(t *testing.T) {
 	time.Sleep(time.Second)
 	// send response
 	mockSender.On("SendMessage").Return(nil).Once()
-	require.NoError(t, messageAgent.SendResponse(context.Background(), senderID, "response-topic", 2, "response"))
-	messageAgent.OnMessage(senderID, "response-topic", message{ID: 2, Type: responseTp, Payload: resp})
+	require.NoError(t, messageAgent.SendResponse(context.Background(), senderID, 2, "command", "response"))
+	messageAgent.OnMessage("DM---Sender---Receiver", message{ID: 2, Type: responseTp, Payload: resp})
 }
 
 func TestMessageHandler(t *testing.T) {
 	senderID := "sender-id"
+	topic := "DM---" + senderID + "---receive-id"
+	command := "command"
 
 	// mock no handler
-	messageAgent := NewMessageAgent(context.Background(), nil, &MockNothing{})
-	require.EqualError(t, messageAgent.OnMessage(senderID, "topic", "msg"), "unknow message type for topic topic")
+	messageAgent := NewMessageAgent(context.Background(), "id", nil, &MockNothing{})
+	require.EqualError(t, messageAgent.OnMessage(topic, "msg"), "unknown message type of msg")
 	// register handler
-	messageAgent.RegisterHandler("topic", func(interface{}) error { return nil })
-	require.NoError(t, messageAgent.OnMessage(senderID, "topic", "msg"))
+	messageAgent.RegisterHandler(command, func(interface{}) error { return nil })
+	require.NoError(t, messageAgent.OnMessage(command, message{ID: 1, Type: requestTp, Command: command, Payload: "msg"}))
 
 	// mock no handler
-	msg := message{ID: 0, Type: messageTp, Payload: MessageAPIMessage{}}
-	require.EqualError(t, messageAgent.OnMessage(senderID, messageAPI, msg), "message handler for topic MessageAPI not found")
-	req := message{ID: 1, Type: requestTp, Payload: RequestAPIRequest{}}
-	require.EqualError(t, messageAgent.OnMessage(senderID, requestAPI, req), "request handler for topic RequestAPI not found")
+	msg := message{ID: 0, Type: messageTp, Command: messageAPI, Payload: MessageAPIMessage{}}
+	require.EqualError(t, messageAgent.OnMessage(topic, msg), "message handler for command MessageAPI not found")
+	req := message{ID: 1, Type: requestTp, Command: requestAPI, Payload: RequestAPIRequest{}}
+	require.EqualError(t, messageAgent.OnMessage(topic, req), "request handler for command RequestAPI not found")
 
 	// mock has handler
 	mockHandler := &MockHanlder{}
-	messageAgent = NewMessageAgent(context.Background(), nil, mockHandler)
+	messageAgent = NewMessageAgent(context.Background(), "id", nil, mockHandler)
 	mockSender := &MockSender{}
 	messageAgent.UpdateSender(senderID, mockSender)
 	mockSender.On("SendMessage").Return(nil).Once()
 	// handle message
-	msg = message{ID: 0, Type: messageTp, Payload: MessageAPIMessage{}}
 	mockHandler.On(messageAPI).Return(nil).Once()
-	require.NoError(t, messageAgent.OnMessage(senderID, messageAPI, msg))
+	require.NoError(t, messageAgent.OnMessage(topic, msg))
 	mockHandler.On(messageAPI).Return(errors.New("error")).Once()
-	require.EqualError(t, messageAgent.OnMessage(senderID, messageAPI, msg), "error")
+	require.EqualError(t, messageAgent.OnMessage(topic, msg), "error")
 	// handle request
-	req = message{ID: 1, Type: requestTp, Payload: RequestAPIRequest{}}
 	mockHandler.On(requestAPI).Return(RequestAPIResponse{}, nil).Once()
-	require.NoError(t, messageAgent.OnMessage(senderID, requestAPI, req))
+	require.NoError(t, messageAgent.OnMessage(topic, req))
 	mockHandler.On(requestAPI).Return(RequestAPIResponse{}, errors.New("error")).Once()
-	require.EqualError(t, messageAgent.OnMessage(senderID, requestAPI, req), "error")
+	require.EqualError(t, messageAgent.OnMessage(topic, req), "error")
 	// handle response
 	res := message{ID: 1, Type: responseTp, Payload: RequestAPIResponse{}}
-	require.EqualError(t, messageAgent.OnMessage(senderID, requestAPI, res), "request 1 not found")
+	require.EqualError(t, messageAgent.OnMessage(topic, res), "request 1 not found")
 }
 
 const (
