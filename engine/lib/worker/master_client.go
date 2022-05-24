@@ -46,12 +46,11 @@ type MasterClient struct {
 	masterSideClosed atomic.Bool
 
 	// Immutable fields
-	workerID         libModel.WorkerID
-	masterID         libModel.MasterID
-	timeoutConfig    config.TimeoutConfig
-	messageSender    p2p.MessageSender
-	frameMetaClient  pkgOrm.Client
-	onMasterFailOver func() error
+	workerID        libModel.WorkerID
+	masterID        libModel.MasterID
+	timeoutConfig   config.TimeoutConfig
+	messageSender   p2p.MessageSender
+	frameMetaClient pkgOrm.Client
 }
 
 // NewMasterClient creates a new MasterClient.

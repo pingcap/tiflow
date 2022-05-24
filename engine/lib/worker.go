@@ -71,9 +71,6 @@ type WorkerImpl interface {
 	// Workload returns the current workload of the worker.
 	Workload() model.RescUnit
 
-	// OnMasterFailover is called when the master is failed over.
-	OnMasterFailover(reason MasterFailoverReason) error
-
 	// OnMasterMessage is called when worker receives master message
 	OnMasterMessage(topic p2p.Topic, message p2p.MessageValue) error
 

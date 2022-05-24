@@ -122,14 +122,6 @@ func (m *testJobMasterImpl) Workload() model.RescUnit {
 	return args.Get(0).(model.RescUnit)
 }
 
-func (m *testJobMasterImpl) OnJobManagerFailover(reason MasterFailoverReason) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	args := m.Called(reason)
-	return args.Error(0)
-}
-
 func (m *testJobMasterImpl) OnJobManagerMessage(topic p2p.Topic, message p2p.MessageValue) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()

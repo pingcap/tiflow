@@ -79,11 +79,6 @@ func (l *loadWorker) Workload() model.RescUnit {
 	return 0
 }
 
-func (l *loadWorker) OnMasterFailover(reason lib.MasterFailoverReason) error {
-	log.L().Info("loadWorker.OnMasterFailover")
-	return nil
-}
-
 func (l *loadWorker) OnMasterMessage(topic p2p.Topic, message p2p.MessageValue) error {
 	log.L().Info("loadWorker.OnMasterMessage", zap.Any("message", message))
 	return nil
