@@ -103,7 +103,7 @@ var (
 			Subsystem: "processor",
 			Name:      "memory_consumption",
 			Help:      "estimated memory consumption for all tables after the sorter",
-			Buckets:   prometheus.ExponentialBuckets(1*1024*1024 /* mb */, 2, 10),
+			Buckets:   prometheus.ExponentialBuckets(16, 2.0, 20),
 		}, []string{"namespace", "changefeed"})
 )
 
