@@ -22,7 +22,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/api/private"
-	util2 "github.com/pingcap/tiflow/cdc/api/util"
+	util2 "github.com/pingcap/tiflow/cdc/api/validator"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/cmd/util"
