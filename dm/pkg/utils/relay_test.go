@@ -48,23 +48,9 @@ func (t *testUtilsSuite) TestParseUUIDIndex(c *C) {
 	c.Assert(err, IsNil)
 	c.Assert(obtainedUUIDs, DeepEquals, uuids)
 
-	// test GetSuffixUUID
-	uuid := uuids[1]
-	uuidWS, err := GetSuffixUUID(f.Name(), uuid[:len(uuid)-7])
-	c.Assert(err, IsNil)
-	c.Assert(uuidWS, Equals, uuid)
-
-	uuid = uuids[2]
-	uuidWS, err = GetSuffixUUID(f.Name(), uuid[:len(uuid)-7])
-	c.Assert(err, IsNil)
-	c.Assert(uuidWS, Equals, uuid)
-
-	_, err = GetSuffixUUID(f.Name(), "uuid-not-in-file")
-	c.Assert(err, NotNil)
-
 	// test GetUUIDBySuffix
-	uuid = uuids[1]
-	uuidWS = GetUUIDBySuffix(uuids, uuid[len(uuid)-6:])
+	uuid := uuids[1]
+	uuidWS := GetUUIDBySuffix(uuids, uuid[len(uuid)-6:])
 	c.Assert(uuidWS, Equals, uuid)
 
 	uuidWS = GetUUIDBySuffix(uuids, "100000")
@@ -85,7 +71,7 @@ func (t *testUtilsSuite) TestSuffixForUUID(c *C) {
 		uuidWS := AddSuffixForUUID(cs.uuid, cs.ID)
 		c.Assert(uuidWS, Equals, cs.uuidWithSuffix)
 
-		uuidWOS, id, err := ParseSuffixForUUID(cs.uuidWithSuffix)
+		uuidWOS, id, err := ParseSuffixFromRelaySubDir(cs.uuidWithSuffix)
 		c.Assert(err, IsNil)
 		c.Assert(uuidWOS, Equals, cs.uuid)
 		c.Assert(id, Equals, cs.ID)
@@ -95,16 +81,16 @@ func (t *testUtilsSuite) TestSuffixForUUID(c *C) {
 		c.Assert(hasSuffix, Equals, true)
 	}
 
-	_, _, err := ParseSuffixForUUID("uuid-with-out-suffix")
+	_, _, err := ParseSuffixFromRelaySubDir("uuid-with-out-suffix")
 	c.Assert(err, NotNil)
 
-	_, _, err = ParseSuffixForUUID("uuid-invalid-suffix-len.01")
+	_, _, err = ParseSuffixFromRelaySubDir("uuid-invalid-suffix-len.01")
 	c.Assert(err, NotNil)
 
-	_, _, err = ParseSuffixForUUID("uuid-invalid-suffix-fmt.abc")
+	_, _, err = ParseSuffixFromRelaySubDir("uuid-invalid-suffix-fmt.abc")
 	c.Assert(err, NotNil)
 
-	_, _, err = ParseSuffixForUUID("uuid-invalid-fmt.abc.000001")
+	_, _, err = ParseSuffixFromRelaySubDir("uuid-invalid-fmt.abc.000001")
 	c.Assert(err, NotNil)
 }
 

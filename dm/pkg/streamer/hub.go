@@ -64,7 +64,7 @@ func newRelayLogInfoHub() *relayLogInfoHub {
 }
 
 func (h *relayLogInfoHub) update(taskName, uuid, filename string) error {
-	_, suffix, err := utils.ParseSuffixForUUID(uuid)
+	_, suffix, err := utils.ParseSuffixFromRelaySubDir(uuid)
 	if err != nil {
 		return err
 	}

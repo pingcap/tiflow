@@ -158,7 +158,7 @@ func (lm *LocalMeta) AdjustWithStartPos(binlogName string, binlogGTID string, en
 
 	// check whether already have meaningful pos
 	if len(lm.currentUUID) > 0 {
-		_, suffix, err := utils.ParseSuffixForUUID(lm.currentUUID)
+		_, suffix, err := utils.ParseSuffixFromRelaySubDir(lm.currentUUID)
 		if err != nil {
 			return false, err
 		}
@@ -283,7 +283,7 @@ func (lm *LocalMeta) AddDir(serverUUID string, newPos *mysql.Position, newGTID m
 			newUUID = utils.AddSuffixForUUID(serverUUID, uuidSuffix)
 		}
 	} else {
-		_, suffix, err := utils.ParseSuffixForUUID(lm.currentUUID)
+		_, suffix, err := utils.ParseSuffixFromRelaySubDir(lm.currentUUID)
 		if err != nil {
 			return err
 		}
@@ -415,7 +415,7 @@ func (lm *LocalMeta) updateIndexFile(uuids []string) error {
 func (lm *LocalMeta) verifyUUIDs(uuids []string) error {
 	previousSuffix := 0
 	for _, uuid := range uuids {
-		_, suffix, err := utils.ParseSuffixForUUID(uuid)
+		_, suffix, err := utils.ParseSuffixFromRelaySubDir(uuid)
 		if err != nil {
 			return terror.Annotatef(err, "UUID %s", uuid)
 		}
@@ -432,13 +432,13 @@ func (lm *LocalMeta) verifyUUIDs(uuids []string) error {
 
 // updateCurrentUUID updates current UUID.
 func (lm *LocalMeta) updateCurrentUUID(uuid string) error {
-	_, suffix, err := utils.ParseSuffixForUUID(uuid)
+	_, suffix, err := utils.ParseSuffixFromRelaySubDir(uuid)
 	if err != nil {
 		return err
 	}
 
 	if len(lm.currentUUID) > 0 {
-		_, previousSuffix, err := utils.ParseSuffixForUUID(lm.currentUUID)
+		_, previousSuffix, err := utils.ParseSuffixFromRelaySubDir(lm.currentUUID)
 		if err != nil {
 			return err // should not happen
 		}

@@ -351,7 +351,7 @@ func (w *SourceWorker) EnableRelay(startBySourceCfg bool) (err error) {
 	} else {
 		// set UUIDSuffix even not checkpoint exist
 		// so we will still remove relay dir
-		w.cfg.UUIDSuffix = binlog.MinUUIDSuffix
+		w.cfg.UUIDSuffix = binlog.MinRelaySubDirSuffix
 	}
 
 	// 2. initial relay holder, the cfg's password need decrypt

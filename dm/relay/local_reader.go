@@ -173,7 +173,7 @@ func (r *BinlogReader) getPosByGTID(gset mysql.GTIDSet) (*mysql.Position, error)
 	// start from newest uuid dir
 	for i := len(r.uuids) - 1; i >= 0; i-- {
 		uuid := r.uuids[i]
-		_, suffix, err := utils.ParseSuffixForUUID(uuid)
+		_, suffix, err := utils.ParseSuffixFromRelaySubDir(uuid)
 		if err != nil {
 			return nil, err
 		}
@@ -503,7 +503,7 @@ func (r *BinlogReader) parseFile(
 	firstParse bool,
 	state *binlogFileParseState,
 ) (needSwitch, needReParse bool, err error) {
-	_, suffixInt, err := utils.ParseSuffixForUUID(r.currentUUID)
+	_, suffixInt, err := utils.ParseSuffixFromRelaySubDir(r.currentUUID)
 	if err != nil {
 		return false, false, err
 	}

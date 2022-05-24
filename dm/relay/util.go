@@ -47,7 +47,7 @@ func getNextUUID(currUUID string, uuids []string) (string, string, error) {
 	for i := len(uuids) - 2; i >= 0; i-- {
 		if uuids[i] == currUUID {
 			nextUUID := uuids[i+1]
-			_, suffixInt, err := utils.ParseSuffixForUUID(nextUUID)
+			_, suffixInt, err := utils.ParseSuffixFromRelaySubDir(nextUUID)
 			if err != nil {
 				return "", "", terror.Annotatef(err, "UUID %s", nextUUID)
 			}

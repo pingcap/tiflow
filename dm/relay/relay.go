@@ -258,7 +258,7 @@ func (r *Relay) process(ctx context.Context) error {
 			}
 			r.ResetMeta()
 
-			uuid, _, err3 := utils.ParseSuffixForUUID(uuidWithSuffix)
+			uuid, _, err3 := utils.ParseSuffixFromRelaySubDir(uuidWithSuffix)
 			if err3 != nil {
 				r.logger.Error("parse suffix for UUID when relay meta outdated", zap.String("UUID", uuidWithSuffix), zap.Error(err))
 				return err3
@@ -822,7 +822,7 @@ func (r *Relay) updateMetricsRelaySubDirIndex() {
 	// when switching master server, update sub dir index metrics
 	node := r.masterNode()
 	uuidWithSuffix := r.meta.UUID() // only change after switch
-	_, suffix, err := utils.ParseSuffixForUUID(uuidWithSuffix)
+	_, suffix, err := utils.ParseSuffixFromRelaySubDir(uuidWithSuffix)
 	if err != nil {
 		r.logger.Error("parse suffix for UUID", zap.String("UUID", uuidWithSuffix), zap.Error(err))
 		return
@@ -1097,7 +1097,7 @@ func (r *Relay) Reload(newCfg *Config) error {
 // setActiveRelayLog sets or updates the current active relay log to file.
 func (r *Relay) setActiveRelayLog(filename string) {
 	uuid := r.meta.UUID()
-	_, suffix, _ := utils.ParseSuffixForUUID(uuid)
+	_, suffix, _ := utils.ParseSuffixFromRelaySubDir(uuid)
 	rli := &pkgstreamer.RelayLogInfo{
 		TaskName:   fakeRelayTaskName,
 		UUID:       uuid,

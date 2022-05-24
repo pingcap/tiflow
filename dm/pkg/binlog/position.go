@@ -28,15 +28,16 @@ import (
 )
 
 const (
-	// in order to differ binlog pos from multi (switched) masters, we added a UUID-suffix field into binlogPos.Name
-	// and we also need support: with UUIDSuffix's pos should always > without UUIDSuffix's pos, so we can update from @without to @with automatically
-	// conversion: originalPos.NamePrefix + posUUIDSuffixSeparator + UUIDSuffix + binlogFilenameSep + originalPos.NameSuffix => convertedPos.Name
-	// UUIDSuffix is the suffix of sub relay directory name, and when new sub directory created, UUIDSuffix is incremented
-	// eg. mysql-bin.000003 in c6ae5afe-c7a3-11e8-a19d-0242ac130006.000002 => mysql-bin|000002.000003
-	// where `000002` in `c6ae5afe-c7a3-11e8-a19d-0242ac130006.000002` is the UUIDSuffix.
-	posUUIDSuffixSeparator = "|"
-	// MinUUIDSuffix is same as relay.MinUUIDSuffix.
-	MinUUIDSuffix = 1
+	// in order to differ binlog position from multiple (switched) masters, we added a suffix which comes from relay log
+	// subdirectory into binlogPos.Name. And we also need support position with RelaySubDirSuffix should always > position
+	// without RelaySubDirSuffix, so we can continue from latter to former automatically.
+	// convertedPos.BinlogName =
+	//   originalPos.BinlogBaseName + posRelaySubDirSuffixSeparator + RelaySubDirSuffix + binlogFilenameSep + originalPos.BinlogSeq
+	// eg. mysql-bin.000003 under folder c6ae5afe-c7a3-11e8-a19d-0242ac130006.000002 => mysql-bin|000002.000003
+	// when new relay log subdirectory is created, RelaySubDirSuffix should increase.
+	posRelaySubDirSuffixSeparator = "|"
+	// MinRelaySubDirSuffix is same as relay.MinRelaySubDirSuffix.
+	MinRelaySubDirSuffix = 1
 	// FileHeaderLen is the length of binlog file header.
 	FileHeaderLen = 4
 )
@@ -87,8 +88,8 @@ func PositionFromPosStr(str string) (gmysql.Position, error) {
 }
 
 // RealMySQLPos parses a relay position and returns a mysql position and whether error occurs
-// if parsed successfully and `UUIDSuffix` exists, sets position Name to
-// `originalPos.NamePrefix + binlogFilenameSep + originalPos.NameSuffix`.
+// if parsed successfully and `RelaySubDirSuffix` in binlog filename exists, sets position Name to
+// `originalPos.BinlogBaseName + binlogFilenameSep + originalPos.BinlogSeq`.
 // if parsed failed returns the given position and the traced error.
 func RealMySQLPos(pos gmysql.Position) (gmysql.Position, error) {
 	parsed, err := ParseFilename(pos.Name)
@@ -96,9 +97,9 @@ func RealMySQLPos(pos gmysql.Position) (gmysql.Position, error) {
 		return pos, err
 	}
 
-	sepIdx := strings.LastIndex(parsed.BaseName, posUUIDSuffixSeparator)
-	if sepIdx > 0 && sepIdx+len(posUUIDSuffixSeparator) < len(parsed.BaseName) {
-		if !verifyUUIDSuffix(parsed.BaseName[sepIdx+len(posUUIDSuffixSeparator):]) {
+	sepIdx := strings.LastIndex(parsed.BaseName, posRelaySubDirSuffixSeparator)
+	if sepIdx > 0 && sepIdx+len(posRelaySubDirSuffixSeparator) < len(parsed.BaseName) {
+		if !verifyRelaySubDirSuffix(parsed.BaseName[sepIdx+len(posRelaySubDirSuffixSeparator):]) {
 			// NOTE: still can't handle the case where `log-bin` has the format of `mysql-bin|666888`.
 			return pos, nil // pos is just the real pos
 		}
@@ -111,27 +112,27 @@ func RealMySQLPos(pos gmysql.Position) (gmysql.Position, error) {
 	return pos, nil
 }
 
-// ExtractSuffix extracts uuidSuffix from input name.
+// ExtractSuffix extracts RelaySubDirSuffix from input name.
 func ExtractSuffix(name string) (int, error) {
 	if len(name) == 0 {
-		return MinUUIDSuffix, nil
+		return MinRelaySubDirSuffix, nil
 	}
 	filename, err := ParseFilename(name)
 	if err != nil {
 		return 0, err
 	}
-	sepIdx := strings.LastIndex(filename.BaseName, posUUIDSuffixSeparator)
-	if sepIdx > 0 && sepIdx+len(posUUIDSuffixSeparator) < len(filename.BaseName) {
-		suffix := filename.BaseName[sepIdx+len(posUUIDSuffixSeparator):]
+	sepIdx := strings.LastIndex(filename.BaseName, posRelaySubDirSuffixSeparator)
+	if sepIdx > 0 && sepIdx+len(posRelaySubDirSuffixSeparator) < len(filename.BaseName) {
+		suffix := filename.BaseName[sepIdx+len(posRelaySubDirSuffixSeparator):]
 		v, err := strconv.ParseInt(suffix, 10, 64)
 		return int(v), err
 	}
-	return MinUUIDSuffix, nil
+	return MinRelaySubDirSuffix, nil
 }
 
-// ExtractPos extracts (uuidWithSuffix, uuidSuffix, originalPos) from input pos (originalPos or convertedPos).
+// ExtractPos extracts (uuidWithSuffix, RelaySubDirSuffix, originalPos) from input position (originalPos or convertedPos).
 // nolint:nakedret
-func ExtractPos(pos gmysql.Position, uuids []string) (uuidWithSuffix string, uuidSuffix string, realPos gmysql.Position, err error) {
+func ExtractPos(pos gmysql.Position, uuids []string) (uuidWithSuffix string, relaySubDirSuffix string, realPos gmysql.Position, err error) {
 	if len(uuids) == 0 {
 		err = terror.ErrBinlogExtractPosition.New("empty UUIDs not valid")
 		return
@@ -141,27 +142,27 @@ func ExtractPos(pos gmysql.Position, uuids []string) (uuidWithSuffix string, uui
 	if err != nil {
 		return
 	}
-	sepIdx := strings.LastIndex(parsed.BaseName, posUUIDSuffixSeparator)
-	if sepIdx > 0 && sepIdx+len(posUUIDSuffixSeparator) < len(parsed.BaseName) {
-		realBaseName, masterUUIDSuffix := parsed.BaseName[:sepIdx], parsed.BaseName[sepIdx+len(posUUIDSuffixSeparator):]
-		if !verifyUUIDSuffix(masterUUIDSuffix) {
-			err = terror.ErrBinlogExtractPosition.Generatef("invalid UUID suffix %s", masterUUIDSuffix)
+	sepIdx := strings.LastIndex(parsed.BaseName, posRelaySubDirSuffixSeparator)
+	if sepIdx > 0 && sepIdx+len(posRelaySubDirSuffixSeparator) < len(parsed.BaseName) {
+		realBaseName, masterRelaySubDirSuffix := parsed.BaseName[:sepIdx], parsed.BaseName[sepIdx+len(posRelaySubDirSuffixSeparator):]
+		if !verifyRelaySubDirSuffix(masterRelaySubDirSuffix) {
+			err = terror.ErrBinlogExtractPosition.Generatef("invalid UUID suffix %s", masterRelaySubDirSuffix)
 			return
 		}
 
 		// NOTE: still can't handle the case where `log-bin` has the format of `mysql-bin|666888` and UUID suffix `666888` exists.
-		uuid := utils.GetUUIDBySuffix(uuids, masterUUIDSuffix)
+		uuid := utils.GetUUIDBySuffix(uuids, masterRelaySubDirSuffix)
 
 		if len(uuid) > 0 {
 			// valid UUID found
 			uuidWithSuffix = uuid
-			uuidSuffix = masterUUIDSuffix
+			relaySubDirSuffix = masterRelaySubDirSuffix
 			realPos = gmysql.Position{
 				Name: ConstructFilename(realBaseName, parsed.Seq),
 				Pos:  pos.Pos,
 			}
 		} else {
-			err = terror.ErrBinlogExtractPosition.Generatef("UUID suffix %s with UUIDs %v not found", masterUUIDSuffix, uuids)
+			err = terror.ErrBinlogExtractPosition.Generatef("UUID suffix %s with UUIDs %v not found", masterRelaySubDirSuffix, uuids)
 		}
 		return
 	}
@@ -169,18 +170,18 @@ func ExtractPos(pos gmysql.Position, uuids []string) (uuidWithSuffix string, uui
 	// use the latest
 	var suffixInt int
 	uuid := uuids[len(uuids)-1]
-	_, suffixInt, err = utils.ParseSuffixForUUID(uuid)
+	_, suffixInt, err = utils.ParseSuffixFromRelaySubDir(uuid)
 	if err != nil {
 		return
 	}
 	uuidWithSuffix = uuid
-	uuidSuffix = utils.SuffixIntToStr(suffixInt)
+	relaySubDirSuffix = utils.SuffixIntToStr(suffixInt)
 	realPos = pos // pos is realPos
 	return
 }
 
-// verifyUUIDSuffix verifies suffix whether is a valid UUID suffix.
-func verifyUUIDSuffix(suffix string) bool {
+// verifyRelaySubDirSuffix verifies suffix whether is a valid relay log subdirectory suffix.
+func verifyRelaySubDirSuffix(suffix string) bool {
 	v, err := strconv.ParseInt(suffix, 10, 64)
 	if err != nil || v <= 0 {
 		return false
