@@ -660,11 +660,12 @@ func (c *TaskConfig) adjust() error {
 			}
 		case ModeIncrement:
 			if inst.Meta == nil {
-				return terror.ErrConfigMetadataNotSet.Generate(inst.SourceID, c.TaskMode)
-			}
-			err := inst.Meta.Verify()
-			if err != nil {
-				return terror.Annotatef(err, "mysql-instance: %d", i)
+				log.L().Warn("mysql-instance doesn't set meta for incremental mode, user should specify start_time to start task.", zap.String("sourceID", inst.SourceID))
+			} else {
+				err := inst.Meta.Verify()
+				if err != nil {
+					return terror.Annotatef(err, "mysql-instance: %d", i)
+				}
 			}
 		}
 
