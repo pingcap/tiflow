@@ -52,9 +52,8 @@ func (t *dummyTask) Prepare(taskContext *framework.TaskContext) error {
 
 func (t *dummyTask) GetCDCProfile() *framework.CDCProfile {
 	return &framework.CDCProfile{
-		PDUri: framework.UpstreamPD,
-		SinkURI: "kafka://kafka:9092/testdb_test?protocol=avro" +
-			"&avro-decimal-handling-mode=string&avro-bigint-unsigned-handling-mode=string",
+		PDUri:          framework.UpstreamPD,
+		SinkURI:        "kafka://kafka:9092/testdb_test?protocol=avro",
 		SchemaRegistry: "http://schema-registry:8081",
 	}
 }
