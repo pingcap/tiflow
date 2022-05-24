@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"regexp"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -411,7 +412,8 @@ func AdjustConfig(
 	}
 
 	err = validateMinInsyncReplicas(admin, topics, topic, int(config.ReplicationFactor))
-	if err != nil {
+	if err != nil && !strings.Contains(err.Error(),
+		string(cerror.ErrKafkaBrokerConfigNotFound.RFCCode())) {
 		return errors.Trace(err)
 	}
 
@@ -551,8 +553,8 @@ func getBrokerConfig(admin kafka.ClusterAdminClient, brokerConfigName string) (s
 	}
 
 	if len(configEntries) == 0 || configEntries[0].Name != brokerConfigName {
-		return "", errors.New(fmt.Sprintf(
-			"cannot find the `%s` from the broker's configuration", brokerConfigName))
+		return "", cerror.ErrKafkaBrokerConfigNotFound.GenWithStack(
+			"cannot find the `%s` from the broker's configuration", brokerConfigName)
 	}
 
 	return configEntries[0].Value, nil
