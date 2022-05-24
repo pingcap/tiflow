@@ -2648,11 +2648,11 @@ func (s *Server) checkStartValidationParams(req *pb.StartValidationRequest) (
 	mode := config.ValidationFull
 	if req.Mode != nil {
 		mode = req.GetModeValue()
-	}
-	if mode != config.ValidationFull && mode != config.ValidationFast {
-		msg := fmt.Sprintf("validation mode should be either `%s` or `%s`",
-			config.ValidationFull, config.ValidationFast)
-		return nil, msg, false
+		if mode != config.ValidationFull && mode != config.ValidationFast {
+			msg := fmt.Sprintf("validation mode should be either `%s` or `%s`",
+				config.ValidationFull, config.ValidationFast)
+			return nil, msg, false
+		}
 	}
 
 	startTime := req.GetStartTimeValue()
