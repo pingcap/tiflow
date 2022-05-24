@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package api
+package private
 
 import (
 	"context"
@@ -21,6 +21,7 @@ import (
 	"os"
 
 	"github.com/gin-gonic/gin"
+	"github.com/pingcap/tiflow/cdc/api/util"
 	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/version"
@@ -77,5 +78,5 @@ func (h *statusAPI) handleStatus(w http.ResponseWriter, req *http.Request) {
 		st.ID = h.capture.Info().ID
 		st.IsOwner = h.capture.IsOwner()
 	}
-	writeData(w, st)
+	util.WriteData(w, st)
 }

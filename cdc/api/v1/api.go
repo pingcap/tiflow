@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package api
+package v1
 
 import (
 	"bufio"
@@ -20,6 +20,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc/api/middleware"
+	"github.com/pingcap/tiflow/cdc/api/util"
 	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/owner"
@@ -71,8 +73,8 @@ func (h *openAPI) statusProvider() owner.StatusProvider {
 func RegisterOpenAPIRoutes(router *gin.Engine, api openAPI) {
 	v1 := router.Group("/api/v1")
 
-	v1.Use(logMiddleware())
-	v1.Use(errorHandleMiddleware())
+	v1.Use(middleware.LogMiddleware())
+	v1.Use(middleware.ErrorHandleMiddleware())
 
 	// common API
 	v1.GET("/status", api.ServerStatus)
@@ -266,7 +268,7 @@ func (h *openAPI) CreateChangefeed(c *gin.Context) {
 		return
 	}
 
-	info, err := verifyCreateChangefeedConfig(ctx, changefeedConfig, h.capture)
+	info, err := util.VerifyCreateChangefeedConfig(ctx, changefeedConfig, h.capture)
 	if err != nil {
 		_ = c.Error(err)
 		return
@@ -325,7 +327,7 @@ func (h *openAPI) PauseChangefeed(c *gin.Context) {
 		Type: model.AdminStop,
 	}
 
-	if err := handleOwnerJob(ctx, h.capture, job); err != nil {
+	if err := util.HandleOwnerJob(ctx, h.capture, job); err != nil {
 		_ = c.Error(err)
 		return
 	}
@@ -367,7 +369,7 @@ func (h *openAPI) ResumeChangefeed(c *gin.Context) {
 		Type: model.AdminResume,
 	}
 
-	if err := handleOwnerJob(ctx, h.capture, job); err != nil {
+	if err := util.HandleOwnerJob(ctx, h.capture, job); err != nil {
 		_ = c.Error(err)
 		return
 	}
@@ -422,7 +424,7 @@ func (h *openAPI) UpdateChangefeed(c *gin.Context) {
 		return
 	}
 
-	newInfo, err := verifyUpdateChangefeedConfig(ctx, changefeedConfig, info)
+	newInfo, err := util.VerifyUpdateChangefeedConfig(ctx, changefeedConfig, info)
 	if err != nil {
 		_ = c.Error(err)
 		return
@@ -472,7 +474,7 @@ func (h *openAPI) RemoveChangefeed(c *gin.Context) {
 		Type: model.AdminRemove,
 	}
 
-	if err := handleOwnerJob(ctx, h.capture, job); err != nil {
+	if err := util.HandleOwnerJob(ctx, h.capture, job); err != nil {
 		_ = c.Error(err)
 		return
 	}
@@ -510,7 +512,7 @@ func (h *openAPI) RebalanceTables(c *gin.Context) {
 		return
 	}
 
-	if err := handleOwnerRebalance(ctx, h.capture, changefeedID); err != nil {
+	if err := util.HandleOwnerBalance(ctx, h.capture, changefeedID); err != nil {
 		_ = c.Error(err)
 		return
 	}
@@ -564,7 +566,7 @@ func (h *openAPI) MoveTable(c *gin.Context) {
 		return
 	}
 
-	err = handleOwnerScheduleTable(
+	err = util.HandleOwnerScheduleTable(
 		ctx, h.capture, changefeedID, data.CaptureID, data.TableID)
 	if err != nil {
 		_ = c.Error(err)

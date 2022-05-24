@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package api
+package middleware
 
 import (
 	"net/http"
@@ -19,11 +19,13 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc/api/util"
 	"github.com/pingcap/tiflow/cdc/model"
 	"go.uber.org/zap"
 )
 
-func logMiddleware() gin.HandlerFunc {
+// LogMiddleware logs the api requests
+func LogMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()
 		path := c.Request.URL.Path
@@ -51,7 +53,8 @@ func logMiddleware() gin.HandlerFunc {
 	}
 }
 
-func errorHandleMiddleware() gin.HandlerFunc {
+// ErrorHandleMiddleware puts the error into response
+func ErrorHandleMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Next()
 		// because we will return immediately after an error occurs in http_handler
@@ -60,7 +63,7 @@ func errorHandleMiddleware() gin.HandlerFunc {
 		if lastError != nil {
 			err := lastError.Err
 			// put the error into response
-			if IsHTTPBadRequestError(err) {
+			if util.IsHTTPBadRequestError(err) {
 				c.IndentedJSON(http.StatusBadRequest, model.NewHTTPError(err))
 			} else {
 				c.IndentedJSON(http.StatusInternalServerError, model.NewHTTPError(err))
