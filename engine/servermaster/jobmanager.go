@@ -147,7 +147,9 @@ func (jm *JobManagerImplV2) deleteJobMeta(ctx context.Context, jobID string) err
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	jm.jobStatusChangeMu.Lock(ctx)
+	if ok := jm.jobStatusChangeMu.Lock(ctx); !ok {
+		return errors.Trace(ctx.Err())
+	}
 	defer jm.jobStatusChangeMu.Unlock()
 
 	// Note that DeleteJob is a soft delete.
@@ -206,6 +208,7 @@ func (jm *JobManagerImplV2) QueryJob(ctx context.Context, req *pb.QueryJobReques
 
 // SubmitJob processes "SubmitJobRequest".
 func (jm *JobManagerImplV2) SubmitJob(ctx context.Context, req *pb.SubmitJobRequest) *pb.SubmitJobResponse {
+	// TODO call jm.notifier.Notify when we want to support "add job" event.
 	log.L().Logger.Info("submit job", zap.String("config", string(req.Config)))
 	resp := &pb.SubmitJobResponse{}
 	var (
@@ -482,7 +485,9 @@ func (jm *JobManagerImplV2) WatchJobStatuses(
 	defer cancel()
 
 	// Note that the lock is cancellable by the context.
-	jm.jobStatusChangeMu.Lock(ctx)
+	if ok := jm.jobStatusChangeMu.Lock(ctx); !ok {
+		return nil, nil, errors.Trace(ctx.Err())
+	}
 	defer jm.jobStatusChangeMu.Unlock()
 
 	snapshot, err := jm.GetJobStatuses(ctx)
