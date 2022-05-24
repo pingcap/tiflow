@@ -200,6 +200,7 @@ function run_standalone() {
 	run_sql_tidb "SELECT cast(TIMEDIFF(NOW(6), UTC_TIMESTAMP(6)) as time) time"
 	check_contains "time: 06:00:00"
 
+	# validator is started together with task
 	test_validator_together_with_task false false
 	test_validator_together_with_task false true
 	test_validator_together_with_task true false
@@ -219,17 +220,38 @@ function run_standalone() {
 	run_sql "SELECT count(*) from $db_name.t1" $TIDB_PORT $TIDB_PASSWORD
 	check_contains "count(*): 6"
 
-	echo "--> check we can catch inconsistent rows"
+	echo "--> check we can catch inconsistent rows: full mode"
 	# skip incremental rows with id <= 5
 	export GO_FAILPOINTS='github.com/pingcap/tiflow/dm/syncer/SkipDML=return(5)'
 	cp $cur/conf/dm-task-standalone.yaml.bak $cur/conf/dm-task-standalone.yaml
 	prepare_for_standalone_test
 	run_sql_file $cur/data/db1.increment.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
+	# 6 inconsistent rows:
+	# insert of id = 3, 4, 5 are skipped.
+	# insert & update of id = 2 are merged and skipped
+	# delete of id = 1 are skipped
+	# id = 6, float precision problem, so inconsistent
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation status test" \
 		"\"processedRowsStatus\": \"insert\/update\/delete: 6\/1\/1\"" 1 \
 		"pendingRowsStatus\": \"insert\/update\/delete: 0\/0\/0" 1 \
 		"new\/ignored\/resolved: 6\/0\/0" 1
+	run_sql "SELECT count(*) from $db_name.t1" $TIDB_PORT $TIDB_PASSWORD
+	check_contains "count(*): 3"
+
+	echo "--> check we can catch inconsistent rows: fast mode"
+	# skip incremental rows with id <= 5
+	export GO_FAILPOINTS='github.com/pingcap/tiflow/dm/syncer/SkipDML=return(5)'
+	cp $cur/conf/dm-task-standalone.yaml.bak $cur/conf/dm-task-standalone.yaml
+	sed -i 's/    mode: full/    mode: fast/' $cur/conf/dm-task-standalone.yaml
+	prepare_for_standalone_test
+	run_sql_file $cur/data/db1.increment.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
+	# 5 inconsistent rows, nearly same as previous test, but id = 6 success in fast mode
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation status test" \
+		"\"processedRowsStatus\": \"insert\/update\/delete: 6\/1\/1\"" 1 \
+		"pendingRowsStatus\": \"insert\/update\/delete: 0\/0\/0" 1 \
+		"new\/ignored\/resolved: 5\/0\/0" 1
 	run_sql "SELECT count(*) from $db_name.t1" $TIDB_PORT $TIDB_PASSWORD
 	check_contains "count(*): 3"
 
