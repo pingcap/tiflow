@@ -27,7 +27,7 @@ type loadTask struct {
 	*baseTask
 }
 
-// newLoadTask create a load task
+// newLoadTask creates a load task
 func newLoadTask(baseTask *baseTask) lib.WorkerImpl {
 	loadTask := &loadTask{
 		baseTask: baseTask,

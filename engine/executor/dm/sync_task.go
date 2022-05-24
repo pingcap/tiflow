@@ -28,7 +28,7 @@ type syncTask struct {
 	*baseTask
 }
 
-// newSyncTask create a sync task
+// newSyncTask creates a sync task
 func newSyncTask(baseTask *baseTask) lib.WorkerImpl {
 	syncTask := &syncTask{
 		baseTask: baseTask,

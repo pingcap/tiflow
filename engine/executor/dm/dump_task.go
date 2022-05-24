@@ -27,7 +27,7 @@ type dumpTask struct {
 	*baseTask
 }
 
-// newDumpTask create a dump task
+// newDumpTask creates a dump task
 func newDumpTask(baseTask *baseTask) lib.WorkerImpl {
 	dumpTask := &dumpTask{
 		baseTask: baseTask,
