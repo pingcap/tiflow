@@ -31,6 +31,10 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 )
 
+const (
+	reloadMasterInfoTimeout = 10 * time.Second
+)
+
 // MasterClient is used by the BaseWorker to communicate with
 type MasterClient struct {
 	// infoLock protects master's information,
@@ -103,8 +107,12 @@ func (m *MasterClient) asyncReloadMasterInfo(ctx context.Context) <-chan error {
 	errCh := make(chan error, 1)
 	go func() {
 		defer close(errCh)
+
+		timeoutCtx, cancel := context.WithTimeout(ctx, reloadMasterInfoTimeout)
+		defer cancel()
+
 		metaClient := metadata.NewMasterMetadataClient(m.masterID, m.frameMetaClient)
-		masterMeta, err := metaClient.Load(ctx)
+		masterMeta, err := metaClient.Load(timeoutCtx)
 		if err != nil {
 			errCh <- err
 		}
@@ -229,6 +237,7 @@ func (m *MasterClient) SendHeartBeat(ctx context.Context, clock clock.Clock, isF
 		zap.String("master-id", m.masterID))
 	if !ok {
 		// Reloads master info asynchronously.
+		// Not using `ctx` because the caller might cancel unexpectedly.
 		_ = m.asyncReloadMasterInfo(context.Background())
 	}
 	return nil
