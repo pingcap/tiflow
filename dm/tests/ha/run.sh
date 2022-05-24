@@ -71,7 +71,7 @@ function run() {
 		"\"result\": true" 3
 
 	echo "start dm-worker3 and kill dm-worker2"
-	ps aux | grep dm-worker2 | awk '{print $2}' | xargs kill || true
+	kill_process dm-worker2
 	check_port_offline $WORKER2_PORT 20
 	rm -rf $WORK_DIR/worker2/relay_log
 
@@ -92,7 +92,7 @@ function run() {
 		"\"result\": true" 3
 
 	echo "start dm-worker2 and kill dm-worker3"
-	ps aux | grep dm-worker3 | awk '{print $2}' | xargs kill || true
+	kill_process dm-worker3
 	check_port_offline $WORKER3_PORT 20
 	rm -rf $WORK_DIR/worker3/relay_log
 
@@ -153,10 +153,10 @@ function run() {
 	sleep 5
 
 	echo "kill dm-master1"
-	ps aux | grep dm-master1 | awk '{print $2}' | xargs kill || true
+	kill_process dm-master1
 	check_master_port_offline 1
 	echo "kill dm-master2"
-	ps aux | grep dm-master2 | awk '{print $2}' | xargs kill || true
+	kill_process dm-master2
 	check_master_port_offline 2
 
 	echo "initial cluster of dm-masters have been killed"

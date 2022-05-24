@@ -1,0 +1,6 @@
+- name: Copy start script
+  template: src=start.sh.j2 dest={{ df_script_dir }}/start_master.sh mode=0655
+- name: Copy stop script
+  template: src=stop.sh.j2 dest={{ df_script_dir }}/stop_master.sh mode=0655
+- name: Copy etcd config
+  template: src=etcd.yml.j2 dest={{ df_config_dir }}/etcd.yml

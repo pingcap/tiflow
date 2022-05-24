@@ -1,0 +1,15 @@
+version: "2.3"
+services:
+        demo-server:
+                image: dataflow:test
+                ports:
+                        - "1234:1234"
+                command:
+                        - ./bin/df-demoserver
+                          # use following flags if you want to test locally.
+                          #- -d 
+                          #- /datax 
+                          #- -a 
+                          #- 0.0.0.0:1234 
+                          #- -r 
+                          #- "1000000"
