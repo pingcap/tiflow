@@ -23,6 +23,7 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/util/filter"
 	regexprrouter "github.com/pingcap/tidb/util/regexpr-router"
 	router "github.com/pingcap/tidb/util/table-router"
@@ -96,17 +97,21 @@ func TestValidatorCheckpointPersist(t *testing.T) {
 	require.NoError(t, syncerObj.schemaTracker.CreateSchemaIfNotExists(schemaName))
 	require.NoError(t, syncerObj.schemaTracker.Exec(context.Background(), schemaName, createTableSQL))
 
+	require.Nil(t, failpoint.Enable("github.com/pingcap/tiflow/dm/syncer/ValidatorMockUpstreamTZ", `return()`))
+	defer func() {
+		require.Nil(t, failpoint.Disable("github.com/pingcap/tiflow/dm/syncer/ValidatorMockUpstreamTZ"))
+	}()
 	validator := NewContinuousDataValidator(cfg, syncerObj, false)
 	validator.validateInterval = 10 * time.Minute // we don't want worker start validate
 	validator.persistHelper.schemaInitialized.Store(true)
-	validator.Start(pb.Stage_Stopped)
+	require.NoError(t, validator.initialize())
 	validator.Stop()
 	require.NoError(t, validator.loadPersistedData())
 	require.Equal(t, int64(1), validator.persistHelper.revision)
 	require.Equal(t, 1, len(validator.loadedPendingChanges))
 	require.Equal(t, 3, len(validator.loadedPendingChanges[tbl.String()].jobs))
 
-	validator.Start(pb.Stage_Stopped)
+	require.NoError(t, validator.initialize())
 	defer validator.Stop()
 	validator.persistHelper.setRevision(100)
 	validator.loadedPendingChanges = nil

@@ -273,7 +273,11 @@ func (v *DataValidator) initialize() error {
 		return err
 	}
 
-	v.upstreamTZ, err = str2TimezoneOrFromDB(newCtx, "", &v.cfg.From)
+	var defaultUpstreamTZ string
+	failpoint.Inject("ValidatorMockUpstreamTZ", func() {
+		defaultUpstreamTZ = "UTC"
+	})
+	v.upstreamTZ, err = str2TimezoneOrFromDB(newCtx, defaultUpstreamTZ, &v.cfg.From)
 	if err != nil {
 		return err
 	}
@@ -308,18 +312,20 @@ func (v *DataValidator) Start(expect pb.Stage) {
 
 	v.L.Info("starting", zap.Any("cfg", v.cfg.ValidatorCfg),
 		zap.String("start-time", v.cfg.ValidatorCfg.StartTime),
-		zap.Bool("start with subtask", v.startWithSubtask))
+		zap.Bool("start with subtask", v.startWithSubtask),
+		zap.Any("expect", expect))
 	if v.Stage() == pb.Stage_Running {
 		v.L.Info("already started")
 		return
 	}
 
-	if err := v.initialize(); err != nil {
-		v.fillResult(err, false)
+	if expect != pb.Stage_Running {
+		v.L.Info("expect stage is not running", zap.Any("expect", expect))
 		return
 	}
 
-	if expect != pb.Stage_Running {
+	if err := v.initialize(); err != nil {
+		v.fillResult(err, false)
 		return
 	}
 

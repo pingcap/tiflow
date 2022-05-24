@@ -93,7 +93,11 @@ func genSubtaskConfig(t *testing.T) *config.SubTaskConfig {
 	return cfg
 }
 
-func TestValidatorStartStop(t *testing.T) {
+func TestValidatorStartStopAndInitialize(t *testing.T) {
+	require.Nil(t, failpoint.Enable("github.com/pingcap/tiflow/dm/syncer/ValidatorMockUpstreamTZ", `return()`))
+	defer func() {
+		require.Nil(t, failpoint.Disable("github.com/pingcap/tiflow/dm/syncer/ValidatorMockUpstreamTZ"))
+	}()
 	cfg := genSubtaskConfig(t)
 	syncerObj := NewSyncer(cfg, nil, nil)
 
@@ -111,21 +115,20 @@ func TestValidatorStartStop(t *testing.T) {
 		User: "root",
 	}
 	validator = NewContinuousDataValidator(cfg, syncerObj, false)
-	validator.Start(pb.Stage_Stopped)
+	err := validator.initialize()
 	require.Equal(t, pb.Stage_Stopped, validator.Stage())
-	require.Len(t, validator.result.Errors, 1)
+	require.Error(t, err)
 
-	// start with Stopped stage
-	_, _, err := conn.InitMockDBFull()
+	// init using mocked db
+	_, _, err = conn.InitMockDBFull()
 	require.NoError(t, err)
 	defer func() {
 		conn.DefaultDBProvider = &conn.DefaultDBProviderImpl{}
 	}()
 	validator = NewContinuousDataValidator(cfg, syncerObj, false)
 	validator.persistHelper.schemaInitialized.Store(true)
-	validator.Start(pb.Stage_Stopped)
-	require.Equal(t, pb.Stage_Stopped, validator.Stage())
-	require.Len(t, validator.result.Errors, 0)
+	err = validator.initialize()
+	require.NoError(t, err)
 
 	// normal start & stop
 	validator = NewContinuousDataValidator(cfg, syncerObj, false)
@@ -144,6 +147,10 @@ func TestValidatorStartStop(t *testing.T) {
 }
 
 func TestValidatorFillResult(t *testing.T) {
+	require.Nil(t, failpoint.Enable("github.com/pingcap/tiflow/dm/syncer/ValidatorMockUpstreamTZ", `return()`))
+	defer func() {
+		require.Nil(t, failpoint.Disable("github.com/pingcap/tiflow/dm/syncer/ValidatorMockUpstreamTZ"))
+	}()
 	cfg := genSubtaskConfig(t)
 	syncerObj := NewSyncer(cfg, nil, nil)
 	_, _, err := conn.InitMockDBFull()
@@ -166,6 +173,10 @@ func TestValidatorFillResult(t *testing.T) {
 }
 
 func TestValidatorErrorProcessRoutine(t *testing.T) {
+	require.Nil(t, failpoint.Enable("github.com/pingcap/tiflow/dm/syncer/ValidatorMockUpstreamTZ", `return()`))
+	defer func() {
+		require.Nil(t, failpoint.Disable("github.com/pingcap/tiflow/dm/syncer/ValidatorMockUpstreamTZ"))
+	}()
 	cfg := genSubtaskConfig(t)
 	syncerObj := NewSyncer(cfg, nil, nil)
 	_, _, err := conn.InitMockDBFull()
@@ -202,6 +213,10 @@ func (c *mockedCheckPointForValidator) FlushedGlobalPoint() binlog.Location {
 }
 
 func TestValidatorWaitSyncerSynced(t *testing.T) {
+	require.Nil(t, failpoint.Enable("github.com/pingcap/tiflow/dm/syncer/ValidatorMockUpstreamTZ", `return()`))
+	defer func() {
+		require.Nil(t, failpoint.Disable("github.com/pingcap/tiflow/dm/syncer/ValidatorMockUpstreamTZ"))
+	}()
 	cfg := genSubtaskConfig(t)
 	syncerObj := NewSyncer(cfg, nil, nil)
 	_, _, err := conn.InitMockDBFull()
@@ -213,7 +228,7 @@ func TestValidatorWaitSyncerSynced(t *testing.T) {
 	currLoc := binlog.NewLocation(cfg.Flavor)
 	validator := NewContinuousDataValidator(cfg, syncerObj, false)
 	validator.persistHelper.schemaInitialized.Store(true)
-	validator.Start(pb.Stage_Stopped)
+	require.NoError(t, validator.initialize())
 	require.NoError(t, validator.waitSyncerSynced(currLoc))
 
 	// cancelled
@@ -223,7 +238,7 @@ func TestValidatorWaitSyncerSynced(t *testing.T) {
 	}
 	validator = NewContinuousDataValidator(cfg, syncerObj, false)
 	validator.persistHelper.schemaInitialized.Store(true)
-	validator.Start(pb.Stage_Stopped)
+	require.NoError(t, validator.initialize())
 	validator.cancel()
 	require.ErrorIs(t, validator.waitSyncerSynced(currLoc), context.Canceled)
 
@@ -237,11 +252,15 @@ func TestValidatorWaitSyncerSynced(t *testing.T) {
 	}
 	validator = NewContinuousDataValidator(cfg, syncerObj, false)
 	validator.persistHelper.schemaInitialized.Store(true)
-	validator.Start(pb.Stage_Stopped)
+	require.NoError(t, validator.initialize())
 	require.NoError(t, validator.waitSyncerSynced(currLoc))
 }
 
 func TestValidatorWaitSyncerRunning(t *testing.T) {
+	require.Nil(t, failpoint.Enable("github.com/pingcap/tiflow/dm/syncer/ValidatorMockUpstreamTZ", `return()`))
+	defer func() {
+		require.Nil(t, failpoint.Disable("github.com/pingcap/tiflow/dm/syncer/ValidatorMockUpstreamTZ"))
+	}()
 	cfg := genSubtaskConfig(t)
 	syncerObj := NewSyncer(cfg, nil, nil)
 	_, _, err := conn.InitMockDBFull()
@@ -252,19 +271,19 @@ func TestValidatorWaitSyncerRunning(t *testing.T) {
 
 	validator := NewContinuousDataValidator(cfg, syncerObj, false)
 	validator.persistHelper.schemaInitialized.Store(true)
-	validator.Start(pb.Stage_Stopped)
+	require.NoError(t, validator.initialize())
 	validator.cancel()
 	require.Error(t, validator.waitSyncerRunning())
 
 	validator = NewContinuousDataValidator(cfg, syncerObj, false)
 	validator.persistHelper.schemaInitialized.Store(true)
-	validator.Start(pb.Stage_Stopped)
+	require.NoError(t, validator.initialize())
 	syncerObj.running.Store(true)
 	require.NoError(t, validator.waitSyncerRunning())
 
 	validator = NewContinuousDataValidator(cfg, syncerObj, false)
 	validator.persistHelper.schemaInitialized.Store(true)
-	validator.Start(pb.Stage_Stopped)
+	require.NoError(t, validator.initialize())
 	syncerObj.running.Store(false)
 	go func() {
 		time.Sleep(3 * time.Second)
@@ -446,10 +465,14 @@ func TestValidatorDoValidate(t *testing.T) {
 	mockStreamer, err := mockStreamerProducer.generateStreamer(binlog.NewLocation(""))
 	require.NoError(t, err)
 
+	require.Nil(t, failpoint.Enable("github.com/pingcap/tiflow/dm/syncer/ValidatorMockUpstreamTZ", `return()`))
+	defer func() {
+		require.Nil(t, failpoint.Disable("github.com/pingcap/tiflow/dm/syncer/ValidatorMockUpstreamTZ"))
+	}()
 	validator := NewContinuousDataValidator(cfg, syncerObj, false)
 	validator.validateInterval = 10 * time.Minute // we don't want worker start validate
 	validator.persistHelper.schemaInitialized.Store(true)
-	validator.Start(pb.Stage_Stopped)
+	require.NoError(t, validator.initialize())
 	validator.streamerController = &StreamerController{
 		streamerProducer: mockStreamerProducer,
 		streamer:         mockStreamer,
