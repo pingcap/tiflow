@@ -19,7 +19,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/failpoint"
-	"github.com/pingcap/tiflow/cdc/api/private"
+	"github.com/pingcap/tiflow/cdc/api/owner"
+	"github.com/pingcap/tiflow/cdc/api/status"
 	v1 "github.com/pingcap/tiflow/cdc/api/v1"
 	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/pkg/util"
@@ -45,13 +46,13 @@ func RegisterRoutes(
 	v1.RegisterOpenAPIRoutes(router, v1.NewOpenAPI(capture))
 
 	// Owner API
-	private.RegisterOwnerAPIRoutes(router, capture)
+	owner.RegisterOwnerAPIRoutes(router, capture)
 
 	// Status API
-	private.RegisterStatusAPIRoutes(router, capture)
+	status.RegisterStatusAPIRoutes(router, capture)
 
 	// Log API
-	router.POST("/admin/log", gin.WrapF(private.HandleAdminLogLevel))
+	router.POST("/admin/log", gin.WrapF(owner.HandleAdminLogLevel))
 
 	// pprof debug API
 	pprofGroup := router.Group("/debug/pprof/")
