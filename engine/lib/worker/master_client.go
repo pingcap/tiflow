@@ -159,8 +159,13 @@ func (m *MasterClient) Epoch() libModel.Epoch {
 
 // HandleHeartbeat handles heartbeat messages received from the master.
 func (m *MasterClient) HandleHeartbeat(sender p2p.NodeID, msg *libModel.HeartbeatPongMessage) {
-	_, epoch := m.getMasterInfo()
+	if msg.ToWorkerID != m.workerID {
+		log.L().Warn("Received heartbeat for wrong workerID",
+			zap.Any("msg", msg), zap.String("actual-worker-id", m.workerID))
+		return
+	}
 
+	_, epoch := m.getMasterInfo()
 	if msg.Epoch < epoch {
 		log.L().Info("epoch does not match, ignore stale heartbeat",
 			zap.Any("msg", msg),
