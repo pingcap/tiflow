@@ -20,7 +20,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tiflow/cdc/api/private"
-	"github.com/pingcap/tiflow/cdc/api/v1"
+	v1 "github.com/pingcap/tiflow/cdc/api/v1"
 	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"

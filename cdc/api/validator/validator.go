@@ -165,7 +165,10 @@ func VerifyCreateChangefeedConfig(
 }
 
 // VerifyUpdateChangefeedConfig verify ChangefeedConfig for update a changefeed
-func VerifyUpdateChangefeedConfig(ctx context.Context, changefeedConfig model.ChangefeedConfig, oldInfo *model.ChangeFeedInfo) (*model.ChangeFeedInfo, error) {
+func VerifyUpdateChangefeedConfig(ctx context.Context,
+	changefeedConfig model.ChangefeedConfig,
+	oldInfo *model.ChangeFeedInfo,
+) (*model.ChangeFeedInfo, error) {
 	newInfo, err := oldInfo.Clone()
 	if err != nil {
 		return nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByArgs(err.Error())
