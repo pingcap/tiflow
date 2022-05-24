@@ -34,6 +34,7 @@ function prepare_for_standalone_test() {
 }
 
 function trigger_checkpoint_flush() {
+	sleep 0.1
 	run_sql_source1 "alter table $db_name.t1 comment 'a';" # force flush checkpoint
 }
 
@@ -363,7 +364,64 @@ function run_standalone() {
 		"new\/ignored\/resolved: 0\/0\/0" 1
 }
 
+function validate_table_with_different_pk() {
+	export GO_FAILPOINTS=""
+
+	# int type uk already tested in run_standalone, so not test it here
+	echo "--> single varchar col pk"
+	prepare_for_standalone_test
+	run_sql_source1 "create table $db_name.t2(c1 varchar(10) primary key, c2 varchar(10))"
+	run_sql_source1 "insert into $db_name.t2 values('a', NULL), ('b', 'b'), ('c', 'c')"
+	run_sql_source1 "update $db_name.t2 set c2='bb' where c1='b'"
+	run_sql_source1 "update $db_name.t2 set c2='cc' where c1='c'"
+	run_sql_source1 "delete from $db_name.t2 where c1='a'"
+	trigger_checkpoint_flush
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation status test" \
+		"\"processedRowsStatus\": \"insert\/update\/delete: 3\/2\/1\"" 1 \
+		"pendingRowsStatus\": \"insert\/update\/delete: 0\/0\/0" 1 \
+		"new\/ignored\/resolved: 0\/0\/0" 1
+	run_sql "SELECT count(*) from $db_name.t2" $TIDB_PORT $TIDB_PASSWORD
+	check_contains "count(*): 2"
+
+	echo "--> single datetime col pk"
+	prepare_for_standalone_test
+	run_sql_source1 "create table $db_name.t2(c1 datetime primary key, c2 varchar(10))"
+	run_sql_source1 "insert into $db_name.t2 values('2022-01-01 00:00:00', NULL), ('2022-01-01 00:00:01', 'b'), ('2022-01-01 00:00:02', 'c')"
+	run_sql_source1 "update $db_name.t2 set c2='bb' where c1='2022-01-01 00:00:01'"
+	run_sql_source1 "update $db_name.t2 set c2='cc' where c1='2022-01-01 00:00:02'"
+	run_sql_source1 "delete from $db_name.t2 where c1='2022-01-01 00:00:00'"
+	trigger_checkpoint_flush
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation status test" \
+		"\"processedRowsStatus\": \"insert\/update\/delete: 3\/2\/1\"" 1 \
+		"pendingRowsStatus\": \"insert\/update\/delete: 0\/0\/0" 1 \
+		"new\/ignored\/resolved: 0\/0\/0" 1
+	run_sql "SELECT count(*) from $db_name.t2" $TIDB_PORT $TIDB_PASSWORD
+	check_contains "count(*): 2"
+
+	echo "--> compound pk (datetime, timestamp, int, varchar)"
+	prepare_for_standalone_test
+	run_sql_source1 "create table $db_name.t2(c1 datetime, c2 timestamp DEFAULT CURRENT_TIMESTAMP, c3 int, c4 varchar(10), c5 int, primary key(c1, c2, c3, c4))"
+	run_sql_source1 "insert into $db_name.t2 values('2022-01-01 00:00:00', '2022-01-01 00:00:00', 1, 'a', 1)"
+	run_sql_source1 "insert into $db_name.t2 values('2022-01-01 00:00:00', '2022-01-01 00:00:00', 1, 'b', 2)"
+	run_sql_source1 "insert into $db_name.t2 values('2022-01-01 00:00:00', '2012-12-01 00:00:00', 1, 'a', 3)"
+	run_sql_source1 "insert into $db_name.t2 values('2012-12-01 00:00:00', '2022-01-01 00:00:00', 1, 'a', 4)"
+	run_sql_source1 "update $db_name.t2 set c5=11 where c1='2022-01-01 00:00:00'" # update 3 rows
+	run_sql_source1 "update $db_name.t2 set c5=22 where c2='2012-12-01 00:00:00'" # update 1 row
+	run_sql_source1 "delete from $db_name.t2 where c4='a'" # delete 3 row
+	trigger_checkpoint_flush
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation status test" \
+		"\"processedRowsStatus\": \"insert\/update\/delete: 4\/4\/3\"" 1 \
+		"pendingRowsStatus\": \"insert\/update\/delete: 0\/0\/0" 1 \
+		"new\/ignored\/resolved: 0\/0\/0" 1
+	run_sql "SELECT count(*) from $db_name.t2" $TIDB_PORT $TIDB_PASSWORD
+	check_contains "count(*): 1"
+}
+
 run_standalone $*
+validate_table_with_different_pk
 cleanup_process $*
 cleanup_data $db_name
 cleanup_data_upstream $db_name
