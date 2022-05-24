@@ -73,7 +73,7 @@ func NewFactory4Framework() Factory {
 	return NewFactory4FrameworkImpl(globalMetricRegistry)
 }
 
-// UnregisterWorkerMetrics unregisters all metric of workerID
+// UnregisterWorkerMetrics unregisters all metrics of workerID
 // IF 'worker' is a job master, use job id as workerID
 // IF 'worker' is a worker, use worke id as workerID
 func UnregisterWorkerMetrics(workerID libModel.WorkerID) {
