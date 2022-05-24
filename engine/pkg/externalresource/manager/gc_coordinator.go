@@ -85,6 +85,10 @@ func (c *DefaultGCCoordinator) Run(ctx context.Context) error {
 		if gerrors.Is(err, context.Canceled) || gerrors.Is(err, context.DeadlineExceeded) {
 			return errors.Trace(err)
 		}
+
+		// TODO collect the error for observability.
+		log.L().Warn("Error running GC coordinator. Retrying...", zap.Error(err))
+
 		rl.Take()
 	}
 }
@@ -235,5 +239,11 @@ func (c *DefaultGCCoordinator) gcByOfflineJobID(ctx context.Context, jobID strin
 func (c *DefaultGCCoordinator) gcByOfflineExecutorID(ctx context.Context, executorID model.ExecutorID) error {
 	log.L().Info("Cleaning up resources meta for offlined executor",
 		zap.String("executor-id", string(executorID)))
+
+	// Currently, we only support local files, so the resources are bound to
+	// the executors. Hence, executors going offline means that the resource is
+	// already gone.
+	// TODO Trigger GC for all resources and let the GCRunner decide whether to
+	// perform any action, or just remove the meta record.
 	return c.metaClient.DeleteResourcesByExecutorID(ctx, string(executorID))
 }

@@ -119,6 +119,40 @@ func TestGCRunnerNotify(t *testing.T) {
 	helper.Close()
 }
 
+func TestGCRunnerUnsupportedResourceType(t *testing.T) {
+	helper := newGCRunnerTestHelper()
+
+	// Unsupported resources should be ignored by the GCRunner.
+	err := helper.Meta.CreateResource(context.Background(), &resModel.ResourceMeta{
+		ID:        "/unsupported/resource-1",
+		Job:       "job-1",
+		Worker:    "worker-1",
+		Executor:  "executor-1",
+		GCPending: true,
+	})
+	require.NoError(t, err)
+
+	helper.Start()
+	helper.Runner.Notify()
+
+	// Assert that unsupported resources should not cause panic
+	// and are NOT removed from meta.
+	startTime := time.Now()
+	for {
+		if time.Since(startTime) > 1*time.Second {
+			break
+		}
+
+		res, err := helper.Meta.GetResourceByID(
+			context.Background(),
+			"/unsupported/resource-1")
+		require.NoError(t, err)
+		require.True(t, res.GCPending)
+	}
+
+	helper.Close()
+}
+
 func TestGCRunnerTicker(t *testing.T) {
 	helper := newGCRunnerTestHelper()
 

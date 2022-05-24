@@ -117,6 +117,9 @@ func (r *DefaultGCRunner) gcOnce(
 	if !exists {
 		log.L().Warn("no gc handler is found for given resource type",
 			zap.Any("resource-id", res.ID))
+		// Return nil here for potential backward compatibility when we do
+		// rolling upgrades online.
+		return nil
 	}
 
 	if err := handler(ctx, res); err != nil {
