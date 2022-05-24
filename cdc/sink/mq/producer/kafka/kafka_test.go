@@ -15,7 +15,6 @@ package kafka
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"sync"
 	"testing"
@@ -341,7 +340,6 @@ func TestAdjustConfigMinInsyncReplicas(t *testing.T) {
 	// when the topic does exist.
 	saramaConfig, err = NewSaramaConfig(context.Background(), config)
 	require.Nil(t, err)
-	fmt.Println(config.PartitionNum)
 
 	// topic exist, but `min.insync.replicas` not found in topic and broker configuration
 	topicName = "topic-no-config-entry"

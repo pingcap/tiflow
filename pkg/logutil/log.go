@@ -119,11 +119,15 @@ func InitLogger(cfg *Config) error {
 	if err != nil {
 		return err
 	}
-	reset, err := initSaramaLogger(pclogConfig)
-	defer reset()
-	if err != nil {
-		return err
+
+	if cfg.File == "" {
+		reset, err := initSaramaLogger()
+		defer reset()
+		if err != nil {
+			return err
+		}
 	}
+
 	return nil
 }
 
@@ -138,10 +142,10 @@ func ZapErrorFilter(err error, filterErrors ...error) zap.Field {
 	return zap.Error(err)
 }
 
-// InitSaramaLogger hacks logger used in sarama lib.
+// initSaramaLogger hacks logger used in sarama lib.
 // this function use info-level logging for sarama and returns a function
 // to restore the original logger later.
-func initSaramaLogger(cfg *log.Config) (func(), error) {
+func initSaramaLogger() (func(), error) {
 	conf := &log.Config{Level: "info"}
 	logger, props, _ := log.InitLogger(conf)
 	restoreFn := log.ReplaceGlobals(logger, props)
