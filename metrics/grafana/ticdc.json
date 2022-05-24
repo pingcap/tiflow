@@ -4414,7 +4414,7 @@
           ],
           "timeFrom": null,
           "timeShift": null,
-          "title": "table Memory Consumption Per Processor",
+          "title": "table Memory Consumption",
           "tooltip": {
             "show": true,
             "showHistogram": false
