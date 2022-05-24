@@ -24,6 +24,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pingcap/tiflow/engine/pkg/externalresource/manager"
+
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/engine/lib"
 	libModel "github.com/pingcap/tiflow/engine/lib/model"
@@ -265,6 +267,13 @@ func (m *mockJobManager) PauseJob(ctx context.Context, req *pb.PauseJobRequest) 
 
 func (m *mockJobManager) GetJobStatuses(ctx context.Context) (map[libModel.MasterID]libModel.MasterStatusCode, error) {
 	panic("not implemented")
+}
+
+func (m *mockJobManager) WatchJobStatuses(
+	ctx context.Context,
+) (manager.JobStatusesSnapshot, *notifier.Receiver[manager.JobStatusChangeEvent], error) {
+	// TODO implement me
+	panic("implement me")
 }
 
 type mockExecutorManager struct {
