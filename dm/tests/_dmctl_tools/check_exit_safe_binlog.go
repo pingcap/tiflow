@@ -42,7 +42,7 @@ func parseBinlogLocation(binlogName string, binlogPos uint32, binlogGTID string)
 	if err != nil {
 		return binlog.Location{}, err
 	}
-	return binlog.InitLocation(
+	return binlog.NewLocation(
 		mysql.Position{
 			Name: binlogName,
 			Pos:  binlogPos,

@@ -96,7 +96,7 @@ type Process interface {
 	// IsClosed returns whether relay log process unit was closed
 	IsClosed() bool
 	// SaveMeta save relay meta
-	SaveMeta(pos mysql.Position, gset gtid.Set) error
+	SaveMeta(pos mysql.Position, gset mysql.GTIDSet) error
 	// ResetMeta reset relay meta
 	ResetMeta()
 	// PurgeRelayDir will clear all contents under w.cfg.RelayDir
@@ -398,13 +398,14 @@ func (r *Relay) tryRecoverLatestFile(ctx context.Context, parser2 *parser.Parser
 				}
 			}
 
-			if result.LatestGTIDs != nil && !result.LatestGTIDs.Equal(latestGTID) && result.LatestGTIDs.Contain(latestGTID) {
-				r.logger.Warn("some GTIDs are missing in the meta data, this is usually due to the process was interrupted while writing the meta data. force to update GTIDs",
-					log.WrapStringerField("from GTID set", latestGTID), log.WrapStringerField("to GTID set", result.LatestGTIDs))
+			if result.LatestGTIDs != nil && !result.LatestGTIDs.Equal(latestGTID) {
+				if result.LatestGTIDs.Contain(latestGTID) {
+					r.logger.Warn("some GTIDs are missing in the meta data, this is usually due to the process was interrupted while writing the meta data. force to update GTIDs",
+						log.WrapStringerField("from GTID set", latestGTID), log.WrapStringerField("to GTID set", result.LatestGTIDs))
+				}
 				latestGTID = result.LatestGTIDs.Clone()
-			} else if err = latestGTID.Truncate(result.LatestGTIDs); err != nil {
-				return err
 			}
+
 			err = r.SaveMeta(result.LatestPos, latestGTID)
 			if err != nil {
 				return terror.Annotatef(err, "save position %s, GTID sets %v after recovered", result.LatestPos, result.LatestGTIDs)
@@ -421,7 +422,7 @@ type recoverResult struct {
 	// the latest binlog position after recover operation has done.
 	LatestPos mysql.Position
 	// the latest binlog GTID set after recover operation has done.
-	LatestGTIDs gtid.Set
+	LatestGTIDs mysql.GTIDSet
 }
 
 // doRecovering tries to recover the current binlog file.
@@ -682,10 +683,7 @@ func (r *Relay) handleEvents(
 		// 4. update meta and metrics
 		needSavePos := tResult.CanSaveGTID
 		lastPos.Pos = tResult.LogPos
-		err = lastGTID.Set(tResult.GTIDSet)
-		if err != nil {
-			return terror.ErrRelayUpdateGTID.Delegate(err, lastGTID, tResult.GTIDSet)
-		}
+		lastGTID = tResult.GTIDSet
 		if !r.cfg.EnableGTID {
 			// if go-mysql set RawModeEnabled to true
 			// then it will only parse FormatDescriptionEvent and RotateEvent
@@ -725,7 +723,7 @@ func (r *Relay) handleEvents(
 	}
 }
 
-func (r *Relay) saveAndFlushMeta(lastPos mysql.Position, lastGTID gtid.Set) error {
+func (r *Relay) saveAndFlushMeta(lastPos mysql.Position, lastGTID mysql.GTIDSet) error {
 	if err := r.SaveMeta(lastPos, lastGTID); err != nil {
 		return terror.Annotatef(err, "save position %s, GTID sets %v into meta", lastPos, lastGTID)
 	}
@@ -750,7 +748,7 @@ func (r *Relay) reSetupMeta(ctx context.Context) error {
 	}
 
 	var newPos *mysql.Position
-	var newGset gtid.Set
+	var newGset mysql.GTIDSet
 	var newUUIDSuffix int
 	if r.cfg.UUIDSuffix > 0 {
 		// if bound or rebound to a source, clear all relay log and meta
@@ -945,7 +943,7 @@ func (r *Relay) IsClosed() bool {
 }
 
 // SaveMeta save relay meta and update meta in RelayLogInfo.
-func (r *Relay) SaveMeta(pos mysql.Position, gset gtid.Set) error {
+func (r *Relay) SaveMeta(pos mysql.Position, gset mysql.GTIDSet) error {
 	return r.meta.Save(pos, gset)
 }
 
@@ -1161,7 +1159,7 @@ func (r *Relay) setSyncConfig() error {
 
 // AdjustGTID implements Relay.AdjustGTID
 // starting sync at returned gset will wholly fetch a binlog from beginning of the file.
-func (r *Relay) adjustGTID(ctx context.Context, gset gtid.Set) (gtid.Set, error) {
+func (r *Relay) adjustGTID(ctx context.Context, gset mysql.GTIDSet) (mysql.GTIDSet, error) {
 	// setup a TCP binlog reader (because no relay can be used when upgrading).
 	syncCfg := r.syncerCfg
 	// always use a new random serverID

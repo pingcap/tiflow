@@ -169,6 +169,7 @@ func newBaseJobMasterForTests(impl JobMasterImpl) *DefaultBaseJobMaster {
 		impl,
 		masterName,
 		workerID1,
+		FakeTask,
 	).(*DefaultBaseJobMaster)
 }
 

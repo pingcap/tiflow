@@ -42,6 +42,7 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
+	"github.com/pingcap/tiflow/engine/pkg/promutil"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	"github.com/pingcap/tiflow/pkg/workerpool"
 )
@@ -84,6 +85,7 @@ type BaseWorker interface {
 	Worker
 
 	MetaKVClient() metaclient.KVClient
+	MetricFactory() promutil.Factory
 	UpdateStatus(ctx context.Context, status libModel.WorkerStatus) error
 	SendMessage(ctx context.Context, topic p2p.Topic, message interface{}) (bool, error)
 	OpenStorage(ctx context.Context, resourcePath resourcemeta.ResourceID) (broker.Handle, error)
@@ -141,6 +143,7 @@ type DefaultBaseWorker struct {
 	// user metastore prefix kvclient
 	// Don't close it. It's just a prefix wrapper for underlying userRawKVClient
 	userMetaKVClient metaclient.KVClient
+	metricFactory    promutil.Factory
 }
 
 type workerParams struct {
@@ -159,7 +162,7 @@ func NewBaseWorker(
 	impl WorkerImpl,
 	workerID libModel.WorkerID,
 	masterID libModel.MasterID,
-	// tp libModel.WorkerType,
+	tp libModel.WorkerType,
 ) BaseWorker {
 	var params workerParams
 	if err := ctx.Deps().Fill(&params); err != nil {
@@ -191,6 +194,11 @@ func NewBaseWorker(
 		clock:     clock.New(),
 		// [TODO] use tenantID if support multi-tenant
 		userMetaKVClient: kvclient.NewPrefixKVClient(params.UserRawKVClient, tenant.DefaultUserTenantID),
+		// TODO: tenant info and job type
+		metricFactory: promutil.NewFactory4Worker(tenant.ProjectInfo{
+			TenantID:  tenant.DefaultUserTenantID,
+			ProjectID: "TODO",
+		}, WorkerTypeForMetric(tp), masterID, workerID),
 	}
 }
 
@@ -355,6 +363,11 @@ func (w *DefaultBaseWorker) ID() runtime.RunnableID {
 // MetaKVClient implements BaseWorker.MetaKVClient
 func (w *DefaultBaseWorker) MetaKVClient() metaclient.KVClient {
 	return w.userMetaKVClient
+}
+
+// MetricFactory implements BaseWorker.MetricFactory
+func (w *DefaultBaseWorker) MetricFactory() promutil.Factory {
+	return w.metricFactory
 }
 
 // UpdateStatus updates the worker's status and tries to notify the master.

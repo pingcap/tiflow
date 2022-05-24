@@ -47,3 +47,5 @@ validators:
     check-interval: 1s
     row-error-delay: 1ms
     meta-flush-interval: 1ns
+    max-pending-row-size: 500m
+    max-pending-row-count: 1000
