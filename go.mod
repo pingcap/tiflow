@@ -43,7 +43,7 @@ require (
 	github.com/jarcoal/httpmock v1.0.8
 	github.com/jmoiron/sqlx v1.3.3
 	github.com/kami-zh/go-capturer v0.0.0-20171211120116-e492ea43421d
-	github.com/linkedin/goavro/v2 v2.9.8
+	github.com/linkedin/goavro/v2 v2.11.1
 	github.com/mattn/go-shellwords v1.0.12
 	github.com/modern-go/reflect2 v1.0.2
 	github.com/phayes/freeport v0.0.0-20180830031419-95f893ade6f2
@@ -82,7 +82,7 @@ require (
 	go.etcd.io/etcd/server/v3 v3.5.2
 	go.etcd.io/etcd/tests/v3 v3.5.2
 	go.uber.org/atomic v1.9.0
-	go.uber.org/dig v1.9.0
+	go.uber.org/dig v1.13.0
 	go.uber.org/goleak v1.1.12
 	go.uber.org/multierr v1.8.0
 	go.uber.org/ratelimit v0.2.0
@@ -159,7 +159,7 @@ require (
 	github.com/go-playground/universal-translator v0.18.0 // indirect
 	github.com/go-playground/validator/v10 v10.9.0 // indirect
 	github.com/godbus/dbus v0.0.0-20190726142602-4481cbc300e2 // indirect
-	github.com/gogo/googleapis v0.0.0-20180223154316-0cd9801be74a // indirect
+	github.com/gogo/googleapis v1.1.0 // indirect
 	github.com/golang-jwt/jwt v3.2.2+incompatible // indirect
 	github.com/golang/glog v1.0.0 // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect

@@ -26,7 +26,7 @@ import (
 
 	"github.com/pingcap/tiflow/engine/pb"
 	derror "github.com/pingcap/tiflow/engine/pkg/errors"
-	resourcemeta "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
+	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
 )
@@ -39,7 +39,7 @@ type serviceTestSuite struct {
 	meta                 pkgOrm.Client
 }
 
-var serviceMockData = []*resourcemeta.ResourceMeta{
+var serviceMockData = []*resModel.ResourceMeta{
 	{
 		ID:       "/local/test/1",
 		Job:      "test-job-1",
@@ -105,7 +105,7 @@ func (s *serviceTestSuite) Stop() {
 	s.service.Stop()
 }
 
-func (s *serviceTestSuite) OfflineExecutor(t *testing.T, executor resourcemeta.ExecutorID) {
+func (s *serviceTestSuite) OfflineExecutor(t *testing.T, executor resModel.ExecutorID) {
 	s.executorInfoProvider.RemoveExecutor(string(executor))
 	err := s.service.onExecutorOffline(executor)
 	require.NoError(t, err)
@@ -193,7 +193,7 @@ func TestServiceBasics(t *testing.T) {
 
 func TestServiceNotReady(t *testing.T) {
 	// skip for now
-	t.SkipNow()
+	t.Skip()
 
 	suite := newServiceTestSuite(t)
 	// We do not call Start()

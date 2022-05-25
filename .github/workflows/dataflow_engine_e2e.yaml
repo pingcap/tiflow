@@ -9,6 +9,7 @@ on:
     branches: [ master ]
     paths:
       - 'engine/**'
+      - 'dm/**'
 
 # See: https://docs.github.com/en/actions/reference/workflow-syntax-for-github-actions#concurrency.
 concurrency:

@@ -29,7 +29,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/dm/pkg/binlog/common"
-	"github.com/pingcap/tiflow/dm/pkg/gtid"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
@@ -131,7 +130,7 @@ func (r *FileReader) StartSyncByPos(pos gmysql.Position) error {
 }
 
 // StartSyncByGTID implements Reader.StartSyncByGTID.
-func (r *FileReader) StartSyncByGTID(gSet gtid.Set) error {
+func (r *FileReader) StartSyncByGTID(gSet gmysql.GTIDSet) error {
 	// NOTE: may be supported later.
 	return terror.ErrBinlogReadFileByGTID.Generate()
 }

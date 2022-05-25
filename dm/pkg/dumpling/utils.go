@@ -160,7 +160,7 @@ func parseMetaDataByReader(filename, flavor string, rd io.Reader) (*binlog.Locat
 	if err != nil {
 		return nil, nil, invalidErr
 	}
-	loc := binlog.InitLocation(pos, gset)
+	loc := binlog.NewLocation(pos, gset)
 	locPtr = &loc
 
 	if useLocation2 {
@@ -171,7 +171,7 @@ func parseMetaDataByReader(filename, flavor string, rd io.Reader) (*binlog.Locat
 		if err != nil {
 			return nil, nil, invalidErr
 		}
-		loc2 := binlog.InitLocation(pos2, gset2)
+		loc2 := binlog.NewLocation(pos2, gset2)
 		locPtr2 = &loc2
 	}
 

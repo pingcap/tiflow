@@ -24,14 +24,16 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/engine/lib"
 	libModel "github.com/pingcap/tiflow/engine/lib/model"
 	"github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pb"
+	"github.com/pingcap/tiflow/engine/pkg/externalresource/manager"
+	"github.com/pingcap/tiflow/engine/pkg/notifier"
 	"github.com/pingcap/tiflow/engine/servermaster/scheduler"
 
 	"github.com/phayes/freeport"
-	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/stretchr/testify/require"
 )
 
@@ -55,7 +57,7 @@ advertise-addr = "127.0.0.1:%d"
 store-id = "root"
 endpoints = ["127.0.0.1:%d"]
 [frame-metastore-conf.auth]
-user = "root" 
+user = "root"
 [user-metastore-conf]
 store-id = "default"
 endpoints = ["127.0.0.1:%d"]
@@ -86,7 +88,6 @@ func TestStartGrpcSrv(t *testing.T) {
 	defer cleanup()
 
 	s := &Server{cfg: cfg}
-	registerMetrics()
 	ctx := context.Background()
 	err := s.startGrpcSrv(ctx)
 	require.Nil(t, err)
@@ -113,7 +114,7 @@ advertise-addr = "127.0.0.1:%d"
 store-id = "root"
 endpoints = ["127.0.0.1:%d"]
 [frame-metastore-conf.auth]
-user = "root" 
+user = "root"
 [user-metastore-conf]
 store-id = "default"
 endpoints = ["127.0.0.1:%d"]
@@ -266,9 +267,22 @@ func (m *mockJobManager) GetJobStatuses(ctx context.Context) (map[libModel.Maste
 	panic("not implemented")
 }
 
+func (m *mockJobManager) WatchJobStatuses(
+	ctx context.Context,
+) (manager.JobStatusesSnapshot, *notifier.Receiver[manager.JobStatusChangeEvent], error) {
+	// TODO implement me
+	panic("implement me")
+}
+
 type mockExecutorManager struct {
 	executorMu sync.RWMutex
 	count      map[model.ExecutorStatus]int
+}
+
+func (m *mockExecutorManager) WatchExecutors(
+	ctx context.Context,
+) ([]model.ExecutorID, *notifier.Receiver[model.ExecutorStatusChange], error) {
+	panic("implement me")
 }
 
 func (m *mockExecutorManager) GetAddr(executorID model.ExecutorID) (string, bool) {
@@ -313,7 +327,6 @@ func TestCollectMetric(t *testing.T) {
 	masterAddr, cfg, cleanup := prepareServerEnv(t, "test-collect-metric")
 	defer cleanup()
 
-	registerMetrics()
 	s := &Server{
 		cfg:     cfg,
 		metrics: newServerMasterMetric(),

@@ -58,6 +58,7 @@ func (s *testFilterSuite) TearDownSuite(c *C) {
 
 func (s *testFilterSuite) TestSkipQueryEvent(c *C) {
 	cfg := &config.SubTaskConfig{
+		Flavor: mysql.MySQLFlavor,
 		BAList: &filter.Rules{
 			IgnoreTables: []*filter.Table{{Schema: "s1", Name: "test"}},
 		},
@@ -129,7 +130,7 @@ func (s *testFilterSuite) TestSkipQueryEvent(c *C) {
 	}
 	p := parser.New()
 
-	loc := binlog.NewLocation(mysql.MySQLFlavor)
+	loc := binlog.MustZeroLocation(mysql.MySQLFlavor)
 
 	for _, ca := range cases {
 		qec := &queryEventContext{
@@ -201,6 +202,7 @@ func (s *testFilterSuite) TestSkipRowsEvent(c *C) {
 
 func (s *testFilterSuite) TestSkipByFilter(c *C) {
 	cfg := &config.SubTaskConfig{
+		Flavor: mysql.MySQLFlavor,
 		BAList: &filter.Rules{
 			IgnoreDBs: []string{"s1"},
 		},
@@ -271,6 +273,7 @@ func (s *testFilterSuite) TestSkipByFilter(c *C) {
 
 func (s *testFilterSuite) TestSkipByTable(c *C) {
 	cfg := &config.SubTaskConfig{
+		Flavor: mysql.MySQLFlavor,
 		BAList: &filter.Rules{
 			IgnoreDBs: []string{"s1"},
 		},

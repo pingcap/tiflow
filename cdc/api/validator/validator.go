@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package api
+package validator
 
 import (
 	"context"
@@ -37,8 +37,8 @@ import (
 	"github.com/tikv/client-go/v2/oracle"
 )
 
-// verifyCreateChangefeedConfig verify ChangefeedConfig for create a changefeed
-func verifyCreateChangefeedConfig(
+// VerifyCreateChangefeedConfig verify ChangefeedConfig for create a changefeed
+func VerifyCreateChangefeedConfig(
 	ctx context.Context,
 	changefeedConfig model.ChangefeedConfig,
 	capture *capture.Capture,
@@ -164,8 +164,11 @@ func verifyCreateChangefeedConfig(
 	return info, nil
 }
 
-// verifyUpdateChangefeedConfig verify ChangefeedConfig for update a changefeed
-func verifyUpdateChangefeedConfig(ctx context.Context, changefeedConfig model.ChangefeedConfig, oldInfo *model.ChangeFeedInfo) (*model.ChangeFeedInfo, error) {
+// VerifyUpdateChangefeedConfig verify ChangefeedConfig for update a changefeed
+func VerifyUpdateChangefeedConfig(ctx context.Context,
+	changefeedConfig model.ChangefeedConfig,
+	oldInfo *model.ChangeFeedInfo,
+) (*model.ChangeFeedInfo, error) {
 	newInfo, err := oldInfo.Clone()
 	if err != nil {
 		return nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByArgs(err.Error())

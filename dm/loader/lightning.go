@@ -400,6 +400,11 @@ func (l *LightningLoader) Update(ctx context.Context, cfg *config.SubTaskConfig)
 func (l *LightningLoader) status() *pb.LoadStatus {
 	finished, total := l.core.Status()
 	progress := percent(finished, total, l.finish.Load())
+	l.logger.Info("progress status of lightning",
+		zap.Int64("finished_bytes", finished),
+		zap.Int64("total_bytes", total),
+		zap.String("progress", progress),
+	)
 	s := &pb.LoadStatus{
 		FinishedBytes:  finished,
 		TotalBytes:     total,

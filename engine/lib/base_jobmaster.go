@@ -18,6 +18,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/engine/executor/worker"
 	libModel "github.com/pingcap/tiflow/engine/lib/model"
@@ -28,6 +29,7 @@ import (
 	resourcemeta "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
+	"github.com/pingcap/tiflow/engine/pkg/promutil"
 )
 
 // BaseJobMaster defines an interface that can workr as a job master, it embeds
@@ -38,6 +40,7 @@ type BaseJobMaster interface {
 
 	OnError(err error)
 	MetaKVClient() metaclient.KVClient
+	MetricFactory() promutil.Factory
 	GetWorkers() map[libModel.WorkerID]WorkerHandle
 	CreateWorker(workerType WorkerType, config WorkerConfig, cost model.RescUnit, resources ...resourcemeta.ResourceID) (libModel.WorkerID, error)
 	JobMasterID() libModel.MasterID
@@ -75,7 +78,6 @@ type JobMasterImpl interface {
 	MasterImpl
 
 	Workload() model.RescUnit
-	OnJobManagerFailover(reason MasterFailoverReason) error
 	OnJobManagerMessage(topic p2p.Topic, message interface{}) error
 	// IsJobMasterImpl is an empty function used to prevent accidental implementation
 	// of this interface.
@@ -88,16 +90,16 @@ func NewBaseJobMaster(
 	jobMasterImpl JobMasterImpl,
 	masterID libModel.MasterID,
 	workerID libModel.WorkerID,
+	tp libModel.WorkerType,
 ) BaseJobMaster {
 	// master-worker pair: job manager <-> job master(`baseWorker` following)
 	// master-worker pair: job master(`baseMaster` following) <-> real workers
 	// `masterID` is always the ID of master role, against current object
 	// `workerID` is the ID of current object
 	baseMaster := NewBaseMaster(
-		ctx, &jobMasterImplAsMasterImpl{jobMasterImpl}, workerID)
+		ctx, &jobMasterImplAsMasterImpl{jobMasterImpl}, workerID, tp)
 	baseWorker := NewBaseWorker(
-		// TODO: need worker_type
-		ctx, &jobMasterImplAsWorkerImpl{jobMasterImpl}, workerID, masterID)
+		ctx, &jobMasterImplAsWorkerImpl{jobMasterImpl}, workerID, masterID, tp)
 	errCenter := errctx.NewErrCenter()
 	baseMaster.(*DefaultBaseMaster).errCenter = errCenter
 	baseWorker.(*DefaultBaseWorker).errCenter = errCenter
@@ -112,6 +114,11 @@ func NewBaseJobMaster(
 // MetaKVClient implements BaseJobMaster.MetaKVClient
 func (d *DefaultBaseJobMaster) MetaKVClient() metaclient.KVClient {
 	return d.master.MetaKVClient()
+}
+
+// MetricFactory implements BaseJobMaster.MetricFactory
+func (d *DefaultBaseJobMaster) MetricFactory() promutil.Factory {
+	return d.master.MetricFactory()
 }
 
 // Init implements BaseJobMaster.Init
@@ -173,13 +180,16 @@ func (d *DefaultBaseJobMaster) GetWorkers() map[libModel.WorkerID]WorkerHandle {
 
 // Close implements BaseJobMaster.Close
 func (d *DefaultBaseJobMaster) Close(ctx context.Context) error {
-	if err := d.impl.CloseImpl(ctx); err != nil {
-		return errors.Trace(err)
+	err := d.impl.CloseImpl(ctx)
+	// We don't return here if CloseImpl return error to ensure
+	// that we can close inner resources of the framework
+	if err != nil {
+		log.L().Error("Failed to close JobMasterImpl", zap.Error(err))
 	}
 
 	d.master.doClose()
 	d.worker.doClose()
-	return nil
+	return errors.Trace(err)
 }
 
 // OnError implements BaseJobMaster.OnError
@@ -278,10 +288,6 @@ func (j *jobMasterImplAsWorkerImpl) Tick(ctx context.Context) error {
 
 func (j *jobMasterImplAsWorkerImpl) Workload() model.RescUnit {
 	return j.inner.Workload()
-}
-
-func (j *jobMasterImplAsWorkerImpl) OnMasterFailover(reason MasterFailoverReason) error {
-	return j.inner.OnJobManagerFailover(reason)
 }
 
 func (j *jobMasterImplAsWorkerImpl) OnMasterMessage(topic p2p.Topic, message interface{}) error {

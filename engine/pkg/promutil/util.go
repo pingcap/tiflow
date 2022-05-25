@@ -54,13 +54,13 @@ func HTTPHandlerForMetric() http.Handler {
 	return HTTPHandlerForMetricImpl(globalMetricGatherer)
 }
 
-// NewFactory4JobMaster return a Factory for jobmaster
-func NewFactory4JobMaster(info tenant.ProjectInfo, jobType libModel.JobType, jobID libModel.MasterID) Factory {
-	return NewFactory4JobMasterImpl(globalMetricRegistry, info, jobType, jobID)
+// NewFactory4Master return a Factory for jobmaster
+func NewFactory4Master(info tenant.ProjectInfo, jobType libModel.JobType, jobID libModel.MasterID) Factory {
+	return NewFactory4MasterImpl(globalMetricRegistry, info, jobType, jobID)
 }
 
 // NewFactory4Worker return a Factory for worker
-func NewFactory4Worker(reg *Registry, info tenant.ProjectInfo, jobType libModel.JobType, jobID libModel.MasterID,
+func NewFactory4Worker(info tenant.ProjectInfo, jobType libModel.JobType, jobID libModel.MasterID,
 	workerID libModel.WorkerID,
 ) Factory {
 	return NewFactory4WorkerImpl(globalMetricRegistry, info, jobType, jobID, workerID)
@@ -71,4 +71,11 @@ func NewFactory4Worker(reg *Registry, info tenant.ProjectInfo, jobType libModel.
 // different dataflow engine or different executor
 func NewFactory4Framework() Factory {
 	return NewFactory4FrameworkImpl(globalMetricRegistry)
+}
+
+// UnregisterWorkerMetrics unregisters all metrics of workerID
+// IF 'worker' is a job master, use job id as workerID
+// IF 'worker' is a worker, use worker id as workerID
+func UnregisterWorkerMetrics(workerID libModel.WorkerID) {
+	globalMetricRegistry.Unregister(workerID)
 }
