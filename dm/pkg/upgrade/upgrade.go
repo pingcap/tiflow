@@ -301,12 +301,12 @@ func upgradeToVer5(ctx context.Context, cli *clientv3.Client) error {
 			common.UpstreamRelayWorkerKeyAdapter,
 		},
 	}
-	generateNewKey := func(kv *mvccpb.KeyValue, old, new common.KeyAdapter) (string, error) {
-		keys, err := old.Decode(string(kv.Key))
+	generateNewKey := func(kv *mvccpb.KeyValue, oldKey, newKey common.KeyAdapter) (string, error) {
+		keys, err := oldKey.Decode(string(kv.Key))
 		if err != nil {
 			return "", err
 		}
-		switch old {
+		switch oldKey {
 		case common.UpstreamBoundWorkerKeyAdapterV1:
 			var b ha.SourceBound
 			err = json.Unmarshal(kv.Value, &b)
@@ -314,19 +314,19 @@ func upgradeToVer5(ctx context.Context, cli *clientv3.Client) error {
 				return "", err
 			}
 			keys = append(keys, b.Source)
-			return new.Encode(keys...), nil
+			return newKey.Encode(keys...), nil
 		case common.UpstreamLastBoundWorkerKeyAdapterV1:
 			var b ha.SourceBound
 			err = json.Unmarshal(kv.Value, &b)
 			if err != nil {
 				return "", err
 			}
-			return new.Encode(b.Source), nil
+			return newKey.Encode(b.Source), nil
 		case common.UpstreamRelayWorkerKeyAdapterV1:
 			keys = append(keys, string(kv.Value))
-			return new.Encode(keys...), nil
+			return newKey.Encode(keys...), nil
 		}
-		return "", errors.Errorf("unknown old key adapter: %s", old)
+		return "", errors.Errorf("unknown old key adapter: %s", oldKey)
 	}
 
 	ops := make([]clientv3.Op, 0, len(etcdKeyUpgrades))
