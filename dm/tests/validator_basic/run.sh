@@ -420,8 +420,109 @@ function validate_table_with_different_pk() {
 	check_contains "count(*): 1"
 }
 
+function test_unsupported_table_status() {
+	export GO_FAILPOINTS=""
+
+	echo "--> table without primary key"
+	prepare_for_standalone_test
+	run_sql_source1 "create table $db_name.t2(c1 int)"
+	run_sql_source1 "insert into $db_name.t2 values(1)"
+	trigger_checkpoint_flush
+	# skipped row is not add to processed rows
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation status test" \
+		"\"processedRowsStatus\": \"insert\/update\/delete: 0\/0\/0\"" 1 \
+		"pendingRowsStatus\": \"insert\/update\/delete: 0\/0\/0" 1 \
+		"new\/ignored\/resolved: 0\/0\/0" 1 \
+		"\"stage\": \"Running\"" 1 \
+		"\"stage\": \"Stopped\"" 1 \
+		"no primary key" 1
+	run_sql "SELECT count(*) from $db_name.t2" $TIDB_PORT $TIDB_PASSWORD
+	check_contains "count(*): 1"
+
+	echo "--> table is deleted on downstream"
+	prepare_dm_and_source
+	run_sql_source1 "reset master"
+	dmctl_start_task_standalone $cur/conf/dm-task-standalone-no-validator.yaml --remove-meta
+	run_sql_source1 "create table $db_name.t2(c1 int primary key, c2 int, c3 int)"
+	run_sql_source1 "insert into $db_name.t2 values(1, 1, 1)"
+	run_sql_source1 "insert into $db_name.t2 values(2, 2, 2)"
+	run_sql_source1 "drop table $db_name.t2"
+	trigger_checkpoint_flush
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		"\"synced\": true" 1
+	run_sql_tidb "select count(*) from information_schema.tables where TABLE_SCHEMA='${db_name}' and TABLE_NAME = 't2'"
+	check_contains "count(*): 0"
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation start --start-time '$(($(date "+%Y") - 2))-01-01 00:00:00' test" \
+		"\"result\": true" 1
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation status test" \
+		"\"processedRowsStatus\": \"insert\/update\/delete: 0\/0\/0\"" 1 \
+		"pendingRowsStatus\": \"insert\/update\/delete: 0\/0\/0" 1 \
+		"new\/ignored\/resolved: 0\/0\/0" 1 \
+		"\"stage\": \"Running\"" 1 \
+		"\"stage\": \"Stopped\"" 1 \
+		"table is not synced or dropped" 1
+
+	echo "--> table in schema-tracker has less column than binlog"
+	prepare_dm_and_source
+	run_sql_source1 "reset master"
+	dmctl_start_task_standalone $cur/conf/dm-task-standalone-no-validator.yaml --remove-meta
+	run_sql_source1 "create table $db_name.t2(c1 int primary key, c2 int, c3 int)"
+	run_sql_source1 "insert into $db_name.t2 values(1, 1, 1)"
+	run_sql_source1 "alter table $db_name.t2 drop column c3"
+	run_sql_source1 "insert into $db_name.t2 values(2, 2)"
+	trigger_checkpoint_flush
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		"\"synced\": true" 1
+	run_sql_tidb "SELECT count(*) from $db_name.t2"
+	check_contains "count(*): 2"
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation start --start-time '$(($(date "+%Y") - 2))-01-01 00:00:00' test" \
+		"\"result\": true" 1
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation status test" \
+		"\"processedRowsStatus\": \"insert\/update\/delete: 0\/0\/0\"" 1 \
+		"pendingRowsStatus\": \"insert\/update\/delete: 0\/0\/0" 1 \
+		"new\/ignored\/resolved: 0\/0\/0" 1 \
+		"\"stage\": \"Running\"" 1 \
+		"\"stage\": \"Stopped\"" 1 \
+		"binlog has more columns than current table" 1
+
+	echo "--> pk column of downstream table not in range of binlog column"
+	prepare_dm_and_source
+	run_sql_source1 "reset master"
+	dmctl_start_task_standalone $cur/conf/dm-task-standalone-no-validator.yaml --remove-meta
+	run_sql_source1 "create table $db_name.t2(c1 int)"
+	run_sql_source1 "insert into $db_name.t2 values(1)"
+	run_sql_source1 "alter table $db_name.t2 add column c2 int default 1"
+	run_sql_source1 "alter table $db_name.t2 add primary key(c2)"
+	run_sql_source1 "insert into $db_name.t2 values(2, 2)"
+	trigger_checkpoint_flush
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		"\"synced\": true" 1
+	run_sql_tidb "SELECT count(*) from $db_name.t2"
+	check_contains "count(*): 2"
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation start --start-time '$(($(date "+%Y") - 2))-01-01 00:00:00' test" \
+		"\"result\": true" 1
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation status test" \
+		"\"processedRowsStatus\": \"insert\/update\/delete: 0\/0\/0\"" 1 \
+		"pendingRowsStatus\": \"insert\/update\/delete: 0\/0\/0" 1 \
+		"new\/ignored\/resolved: 0\/0\/0" 1 \
+		"\"stage\": \"Running\"" 1 \
+		"\"stage\": \"Stopped\"" 1 \
+		"primary key column of downstream table out of range of binlog event row" 1
+}
+
 run_standalone $*
 validate_table_with_different_pk
+test_unsupported_table_status
 cleanup_process $*
 cleanup_data $db_name
 cleanup_data_upstream $db_name
