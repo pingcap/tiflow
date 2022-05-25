@@ -541,7 +541,7 @@ func columnToAvroSchema(
 			Parameters: map[string]string{tidbType: tt},
 		}, nil
 	case mysql.TypeBit:
-		displayFlen := ft.Flen
+		displayFlen := ft.GetFlen()
 		if displayFlen == -1 {
 			displayFlen, _ = mysql.GetDefaultFieldLengthAndDecimal(col.Type)
 		}
@@ -554,8 +554,8 @@ func columnToAvroSchema(
 		}, nil
 	case mysql.TypeNewDecimal:
 		if decimalHandlingMode == decimalHandlingModePrecise {
-			defaultFlen, defaultDecimal := mysql.GetDefaultFieldLengthAndDecimal(ft.Tp)
-			displayFlen, displayDecimal := ft.Flen, ft.Decimal
+			defaultFlen, defaultDecimal := mysql.GetDefaultFieldLengthAndDecimal(ft.GetType())
+			displayFlen, displayDecimal := ft.GetFlen(), ft.GetDecimal()
 			// length not specified, set it to system type default
 			if displayFlen == -1 {
 				displayFlen = defaultFlen
@@ -598,8 +598,8 @@ func columnToAvroSchema(
 			Parameters: map[string]string{tidbType: tt},
 		}, nil
 	case mysql.TypeEnum, mysql.TypeSet:
-		es := make([]string, 0, len(ft.Elems))
-		for _, e := range ft.Elems {
+		es := make([]string, 0, len(ft.GetElems()))
+		for _, e := range ft.GetElems() {
 			e = escapeEnumAndSetOptions(e)
 			es = append(es, e)
 		}
@@ -742,7 +742,7 @@ func columnToAvroData(
 		if v, ok := col.Value.(string); ok {
 			return v, "string", nil
 		}
-		enumVar, err := types.ParseEnumValue(ft.Elems, col.Value.(uint64))
+		enumVar, err := types.ParseEnumValue(ft.GetElems(), col.Value.(uint64))
 		if err != nil {
 			return nil, "", cerror.WrapError(cerror.ErrAvroEncodeFailed, err)
 		}
@@ -751,7 +751,7 @@ func columnToAvroData(
 		if v, ok := col.Value.(string); ok {
 			return v, "string", nil
 		}
-		setVar, err := types.ParseSetValue(ft.Elems, col.Value.(uint64))
+		setVar, err := types.ParseSetValue(ft.GetElems(), col.Value.(uint64))
 		if err != nil {
 			return nil, "", cerror.WrapError(cerror.ErrAvroEncodeFailed, err)
 		}
