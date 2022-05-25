@@ -264,7 +264,7 @@ function run_standalone() {
 		"validation status test" \
 		"\"processedRowsStatus\": \"insert\/update\/delete: 7\/1\/2\"" 1 \
 		"pendingRowsStatus\": \"insert\/update\/delete: 0\/0\/0" 1 \
-		"new\/ignored\/resolved: 6\/0\/0" 1
+		"new\/ignored\/resolved: 5\/0\/0" 1
 	run_sql "SELECT count(*) from $db_name.t1" $TIDB_PORT $TIDB_PASSWORD
 	check_contains "count(*): 3"
 
@@ -568,7 +568,7 @@ function stopped_validator_fail_over() {
 		"\"stage\": \"Running\"" 0 \
 		"\"stage\": \"Stopped\"" 1
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"validation show-errors --error all test" \
+		"validation show-error --error all test" \
 		"\"result\": true" 1 \
 		"\"id\": \"1\"" 1
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
