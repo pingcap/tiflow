@@ -24,13 +24,8 @@ import (
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
 	"github.com/pingcap/tidb-tools/pkg/filter"
 	"github.com/pingcap/tidb/parser"
-<<<<<<< HEAD
-=======
-	"github.com/pingcap/tidb/util/filter"
-	"github.com/pingcap/tiflow/dm/pkg/binlog"
->>>>>>> 7744c05a7 (syncer(dm): save table checkpoint after a DDL is filtered (#5273))
-
 	"github.com/pingcap/tiflow/dm/dm/config"
+	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/schema"
@@ -132,28 +127,16 @@ func (s *testFilterSuite) TestSkipQueryEvent(c *C) {
 		},
 	}
 	p := parser.New()
-<<<<<<< HEAD
+	loc := binlog.NewLocation(mysql.MySQLFlavor)
 	qec := &queryEventContext{
-		eventContext: &eventContext{tctx: tcontext.Background()},
-		p:            p,
+		eventContext: &eventContext{
+			tctx:         tcontext.Background(),
+			lastLocation: &loc,
+		},
+		p: p,
 	}
 	for _, ca := range cases {
 		ddlInfo, err := syncer.genDDLInfo(p, ca.schema, ca.sql)
-=======
-
-	loc := binlog.NewLocation(mysql.MySQLFlavor)
-
-	for _, ca := range cases {
-		qec := &queryEventContext{
-			eventContext: &eventContext{
-				tctx:         tcontext.Background(),
-				lastLocation: &loc,
-			},
-			p:         p,
-			ddlSchema: ca.schema,
-		}
-		ddlInfo, err := syncer.genDDLInfo(qec, ca.sql)
->>>>>>> 7744c05a7 (syncer(dm): save table checkpoint after a DDL is filtered (#5273))
 		c.Assert(err, IsNil)
 		qec.ddlSchema = ca.schema
 		qec.originSQL = ca.sql
