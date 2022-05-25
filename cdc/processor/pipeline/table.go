@@ -59,6 +59,8 @@ type TablePipeline interface {
 	Cancel()
 	// Wait waits for table pipeline destroyed
 	Wait()
+	// MemoryConsumption return the memory consumption in bytes
+	MemoryConsumption() uint64
 }
 
 type tablePipelineImpl struct {
@@ -159,6 +161,11 @@ func (t *tablePipelineImpl) Cancel() {
 // Wait waits for table pipeline destroyed
 func (t *tablePipelineImpl) Wait() {
 	t.p.Wait()
+}
+
+// MemoryConsumption return the memory consumption in bytes
+func (t *tablePipelineImpl) MemoryConsumption() uint64 {
+	return t.sorterNode.flowController.GetConsumption()
 }
 
 // Assume 1KB per row in upstream TiDB, it takes about 250 MB (1024*4*64) for
