@@ -25,7 +25,6 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/kvproto/pkg/cdcpb"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -157,24 +156,9 @@ type regionWorker struct {
 	storeAddr string
 }
 
-func newRegionWorker(s *eventFeedSession, addr string) *regionWorker {
-	worker := &regionWorker{
-		session:       s,
-		inputCh:       make(chan *regionStatefulEvent, regionWorkerInputChanSize),
-		outputCh:      s.eventCh,
-		errorCh:       make(chan error, 1),
-		statesManager: newRegionStateManager(-1),
-		rtsManager:    newRegionTsManager(),
-		rtsUpdateCh:   make(chan *regionTsInfo, 1024),
-		storeAddr:     addr,
-		concurrent:    s.client.config.WorkerConcurrent,
-	}
-	return worker
-}
-
-func (w *regionWorker) initMetrics(ctx context.Context) {
-	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
-
+func newRegionWorker(
+	changefeedID model.ChangeFeedID, s *eventFeedSession, addr string,
+) *regionWorker {
 	metrics := &regionWorkerMetrics{}
 	metrics.metricReceivedEventSize = eventSize.WithLabelValues("received")
 	metrics.metricDroppedEventSize = eventSize.WithLabelValues("dropped")
@@ -195,7 +179,18 @@ func (w *regionWorker) initMetrics(ctx context.Context) {
 	metrics.metricSendEventCommittedCounter = sendEventCounter.
 		WithLabelValues("committed", changefeedID.Namespace, changefeedID.ID)
 
-	w.metrics = metrics
+	return &regionWorker{
+		session:       s,
+		inputCh:       make(chan *regionStatefulEvent, regionWorkerInputChanSize),
+		outputCh:      s.eventCh,
+		errorCh:       make(chan error, 1),
+		statesManager: newRegionStateManager(-1),
+		rtsManager:    newRegionTsManager(),
+		rtsUpdateCh:   make(chan *regionTsInfo, 1024),
+		storeAddr:     addr,
+		concurrent:    s.client.config.WorkerConcurrent,
+		metrics:       metrics,
+	}
 }
 
 func (w *regionWorker) getRegionState(regionID uint64) (*regionFeedState, bool) {
@@ -618,7 +613,6 @@ func (w *regionWorker) run(parentCtx context.Context) error {
 	w.parentCtx = parentCtx
 	ctx, cancel := context.WithCancel(parentCtx)
 	wg, ctx := errgroup.WithContext(ctx)
-	w.initMetrics(ctx)
 	w.initPoolHandles(w.concurrent)
 
 	var retErr error
@@ -678,7 +672,7 @@ func (w *regionWorker) handleEventEntry(
 
 			state.initialized = true
 			w.session.regionRouter.Release(state.sri.rpcCtx.Addr)
-			cachedEvents := state.matcher.matchCachedRow()
+			cachedEvents := state.matcher.matchCachedRow(state.initialized)
 			for _, cachedEvent := range cachedEvents {
 				revent, err := assembleRowEvent(regionID, cachedEvent)
 				if err != nil {
@@ -691,6 +685,7 @@ func (w *regionWorker) handleEventEntry(
 					return errors.Trace(ctx.Err())
 				}
 			}
+			state.matcher.matchCachedRollbackRow(state.initialized)
 		case cdcpb.Event_COMMITTED:
 			w.metrics.metricPullEventCommittedCounter.Inc()
 			revent, err := assembleRowEvent(regionID, entry)
@@ -725,7 +720,7 @@ func (w *regionWorker) handleEventEntry(
 					zap.Uint64("regionID", regionID))
 				return errUnreachable
 			}
-			ok := state.matcher.matchRow(entry)
+			ok := state.matcher.matchRow(entry, state.initialized)
 			if !ok {
 				if !state.initialized {
 					state.matcher.cacheCommitRow(entry)
@@ -750,6 +745,10 @@ func (w *regionWorker) handleEventEntry(
 			}
 		case cdcpb.Event_ROLLBACK:
 			w.metrics.metricPullEventRollbackCounter.Inc()
+			if !state.initialized {
+				state.matcher.cacheRollbackRow(entry)
+				continue
+			}
 			state.matcher.rollbackRow(entry)
 		}
 	}
