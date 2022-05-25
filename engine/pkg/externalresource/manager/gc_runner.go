@@ -81,9 +81,9 @@ func (r *DefaultGCRunner) Run(ctx context.Context) error {
 	}
 }
 
-// Notify is used to ask GCRunner to GC the next resource immediately.
+// GCNotify is used to ask GCRunner to GC the next resource immediately.
 // It is used when we have just marked a resource as gc_pending.
-func (r *DefaultGCRunner) Notify() {
+func (r *DefaultGCRunner) GCNotify() {
 	select {
 	case r.notifyCh <- struct{}{}:
 	default:

@@ -111,7 +111,7 @@ func TestGCRunnerNotify(t *testing.T) {
 	helper.Start()
 	// Note that since we are not advancing the clock,
 	// GC can only be triggered by calling Notify.
-	helper.Runner.Notify()
+	helper.Runner.GCNotify()
 
 	gcRes := helper.WaitGC(t)
 	require.Equal(t, "/local/resource-1", gcRes.ID)
@@ -133,7 +133,7 @@ func TestGCRunnerUnsupportedResourceType(t *testing.T) {
 	require.NoError(t, err)
 
 	helper.Start()
-	helper.Runner.Notify()
+	helper.Runner.GCNotify()
 
 	// Assert that unsupported resources should not cause panic
 	// and are NOT removed from meta.
@@ -208,7 +208,7 @@ loop:
 		default:
 		}
 
-		helper.Runner.Notify()
+		helper.Runner.GCNotify()
 	}
 
 	helper.Close()

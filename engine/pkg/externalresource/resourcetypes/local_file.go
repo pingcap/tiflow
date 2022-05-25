@@ -29,6 +29,16 @@ type LocalFileResourceType struct {
 	clientManager client.ClientsManager
 }
 
+// NewLocalFileResourceType creates a new LocalFileResourceType.
+func NewLocalFileResourceType(clientManager client.ClientsManager) *LocalFileResourceType {
+	return &LocalFileResourceType{clientManager: clientManager}
+}
+
+// GCHandler returns a closure to the invoker to perform GC.
+func (r *LocalFileResourceType) GCHandler() func(context.Context, *resModel.ResourceMeta) error {
+	return r.removeFilesOnExecutor
+}
+
 func (r *LocalFileResourceType) removeFilesOnExecutor(ctx context.Context, resource *resModel.ResourceMeta) error {
 	cli := r.clientManager.ExecutorClient(resource.Executor)
 	if cli == nil {
