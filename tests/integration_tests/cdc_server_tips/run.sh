@@ -33,6 +33,7 @@ function try_to_run_cdc() {
 
 	#Wait the failed cdc to quit
 	sleep 20
+	echo $1" ~~~ running cdc " "$(ps -a | grep 'cdc')"
 
 	if [[ $(ps -a | grep "cdc.test") == "" ]]; then
 		cdc_launched="false"
@@ -56,18 +57,13 @@ function try_to_run_cdc() {
 	echo 'Succeed to create a changefeed, no usage tips should be printed'
 }
 
-stop_cdc_and_do_check() {
-	# If the cdc was launched, send a SIGINT signal to stop it
-	if [[ "$cdc_launched" == "true" ]]; then
-		echo "Later, cdc will receive a signal(SIGINT) and exit"
-		cdc_pid=$(ps -a | grep -m 1 "cdc.test" | awk '{print $1}')
-		echo "cdc pid is "$cdc_pid
-		sleep 60
-		kill -2 $cdc_pid
-	fi
+stop_cdc() {
+	echo "Later, cdc will receive a signal(SIGINT) and exit"
+	cdc_pid=$(ps -a | grep -m 1 "cdc.test" | awk '{print $1}')
+	echo "cdc pid is "$cdc_pid
+	sleep 60
+	kill -2 $cdc_pid
 	sleep 30
-	# Check the stdout
-	check_usage_tips $stdout_file $cdc_launched
 }
 
 trap stop_tidb_cluster EXIT
@@ -75,12 +71,21 @@ prepare_tidb_cluster
 
 # If cdc gets started normally, no usage tips should be printed when exit
 try_to_run_cdc "valid"
-stop_cdc_and_do_check
+if [[ "$cdc_launched" == "true" ]]; then
+	# If the cdc was launched, send a signal to stop it and check stdout
+	stop_cdc
+	check_usage_tips "$stdout_file" "true"
+fi
 echo " 1st test case $TEST_NAME success! "
 
 # invalid command and should print usage tips
 try_to_run_cdc "invalid"
-stop_cdc_and_do_check
+if [[ "$cdc_launched" == "false" ]]; then
+	check_usage_tips "$stdout_file" "false"
+else
+	echo "CDC should not get started with invalid argument"
+	exit 1
+fi
 echo " 2nd test case $TEST_NAME success! "
 
 echo "[$(date)] <<<<<< run all test cases $TEST_NAME success! >>>>>> "
