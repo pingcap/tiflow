@@ -516,6 +516,11 @@ func (t *tableActor) Wait() {
 	_ = t.wg.Wait()
 }
 
+// MemoryConsumption return the memory consumption in bytes
+func (t *tableActor) MemoryConsumption() uint64 {
+	return t.sortNode.flowController.GetConsumption()
+}
+
 // for ut
 var startPuller = func(t *tableActor, ctx *actorNodeContext) error {
 	return t.pullerNode.start(ctx, t.upStream, t.wg, t.sortNode)

@@ -25,7 +25,6 @@ import (
 	"google.golang.org/grpc/codes"
 
 	"github.com/pingcap/tiflow/engine/pb"
-	derror "github.com/pingcap/tiflow/engine/pkg/errors"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
@@ -189,30 +188,6 @@ func TestServiceBasics(t *testing.T) {
 	require.Equal(t, codes.NotFound, status.Convert(err).Code())
 
 	suite.Stop()
-}
-
-func TestServiceNotReady(t *testing.T) {
-	// skip for now
-	t.Skip()
-
-	suite := newServiceTestSuite(t)
-	// We do not call Start()
-
-	ctx := context.Background()
-	_, err := suite.service.CreateResource(ctx, &pb.CreateResourceRequest{
-		ResourceId:      "/local/test/test-resource",
-		CreatorExecutor: "executor-1",
-		JobId:           "test-job-1",
-		CreatorWorkerId: "test-worker-4",
-	})
-	require.Error(t, err)
-	st, ok := status.FromError(err)
-	require.True(t, ok)
-	require.Equal(t, codes.Unavailable, st.Code())
-
-	_, _, err = suite.service.GetPlacementConstraint(ctx, "/local/test/test-resource")
-	require.Error(t, err)
-	require.True(t, derror.ErrResourceManagerNotReady.Equal(err))
 }
 
 func TestServiceResourceTypeNoConstraint(t *testing.T) {
