@@ -58,7 +58,6 @@ function start_task_no_source_meta_but_start_time() {
 		"start-task $task_conf --start-time '2006-01-02 15:04:05'" \
 		"\"result\": true" 3
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"query-status" \
-		"\"result\": true" 1 \
-		"\"taskStatus\": \"Running\"" 1
+		"query-status $task_conf" \
+		"\"result\": true" 3
 }
