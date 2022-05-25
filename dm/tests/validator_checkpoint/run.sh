@@ -4,6 +4,7 @@ set -eu
 
 cur=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 source $cur/../_utils/test_prepare
+source $cur/../_utils/shardddl_lib.sh
 WORK_DIR=$TEST_DIR/$TEST_NAME
 
 db_name=$TEST_NAME
@@ -44,9 +45,10 @@ function run() {
 	# wait until task is in sync unit
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"\"unit\": \"Sync\"" 2
-	run_sql_source1 "insert into $db_name.t1_1 values(1)"
-	run_sql_source1 "insert into $db_name.t1_1 values(2)"
-	run_sql_source1 "insert into $db_name.t1_1 values(6)"
+	run_sql_source1 "insert into $db_name.t1_1 values(1, 1)"
+	run_sql_source1 "insert into $db_name.t1_1 values(2, 2)"
+	run_sql_source1 "insert into $db_name.t1_1 values(6, 6)"
+	run_sql_source1 "update $db_name.t1_1 set value=22 where id=2"
 	run_sql_source1 "insert into $db_name.t1_2 values(6)"
 	run_sql_source1 "insert into $db_name.t1_3 values(6)"
 	run_sql_source2 "insert into $db_name.t2_1 values(1)"
@@ -54,9 +56,9 @@ function run() {
 	trigger_validator_flush
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation status test" \
-		"processedRowsStatus\": \"insert\/update\/delete: 3\/0\/0\"" 1 \
+		"processedRowsStatus\": \"insert\/update\/delete: 3\/1\/0\"" 1 \
 		"processedRowsStatus\": \"insert\/update\/delete: 1\/0\/0\"" 1 \
-		"pendingRowsStatus\": \"insert\/update\/delete: 2\/0\/0" 1 \
+		"pendingRowsStatus\": \"insert\/update\/delete: 1\/1\/0" 1 \
 		"pendingRowsStatus\": \"insert\/update\/delete: 1\/0\/0" 1 \
 		"new\/ignored\/resolved: 0\/0\/0" 2
 	run_sql_tidb_with_retry "select count(*) from dm_meta.test_validator_pending_change where source='mysql-replica-01'" \
@@ -90,23 +92,23 @@ function run() {
                                and a.binlog_gtid=b.binlog_gtid;" \
 		"count(*): 2"
 
-	echo "--> check validator can restart from previous position"
-	dmctl_stop_task $cur/conf/dm-task.yaml
-	dmctl_start_task $cur/conf/dm-task.yaml
+	echo "--> check validator can restart from previous position on fail over"
+	restart_worker1
+	restart_worker2
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation status test" \
-		"processedRowsStatus\": \"insert\/update\/delete: 3\/0\/0\"" 1 \
+		"processedRowsStatus\": \"insert\/update\/delete: 3\/1\/0\"" 1 \
 		"processedRowsStatus\": \"insert\/update\/delete: 1\/0\/0\"" 1 \
-		"pendingRowsStatus\": \"insert\/update\/delete: 2\/0\/0" 1 \
+		"pendingRowsStatus\": \"insert\/update\/delete: 1\/1\/0" 1 \
 		"pendingRowsStatus\": \"insert\/update\/delete: 1\/0\/0" 1 \
 		"new\/ignored\/resolved: 0\/0\/0" 2
 	# insert missed data manually
-	run_sql_tidb "insert into $db_name.t1_1 values(1)"
-	run_sql_tidb "insert into $db_name.t1_1 values(2)"
+	run_sql_tidb "insert into $db_name.t1_1 values(1, 1)"
+	run_sql_tidb "insert into $db_name.t1_1 values(2, 22)"
 	run_sql_tidb "insert into $db_name.t2_1 values(1)"
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation status test" \
-		"processedRowsStatus\": \"insert\/update\/delete: 3\/0\/0\"" 1 \
+		"processedRowsStatus\": \"insert\/update\/delete: 3\/1\/0\"" 1 \
 		"processedRowsStatus\": \"insert\/update\/delete: 1\/0\/0\"" 1 \
 		"pendingRowsStatus\": \"insert\/update\/delete: 0\/0\/0" 2 \
 		"new\/ignored\/resolved: 0\/0\/0" 2
@@ -139,12 +141,12 @@ function run() {
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"\"unit\": \"Sync\"" 2
 	for id in $(seq 4); do
-		run_sql_source1 "insert into $db_name.t1_1 values($id)"
+		run_sql_source1 "insert into $db_name.t1_1 values($id, $id)"
 		run_sql_source2 "insert into $db_name.t2_1 values($id)"
 	done
 	# trigger a success persist with 4 pending rows
 	trigger_validator_flush
-	run_sql_source1 "insert into $db_name.t1_1 values(5)"
+	run_sql_source1 "insert into $db_name.t1_1 values(5, 5)"
 	run_sql_source2 "insert into $db_name.t2_1 values(5)"
 	# this persist fails
 	trigger_validator_flush
@@ -249,7 +251,7 @@ function run() {
 
 	echo "--> check validate success after insert data manually"
 	for id in $(seq 5); do
-		run_sql_tidb "insert into $db_name.t1_1 values($id)"
+		run_sql_tidb "insert into $db_name.t1_1 values($id, $id)"
 		run_sql_tidb "insert into $db_name.t2_1 values($id)"
 	done
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
