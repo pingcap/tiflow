@@ -22,6 +22,11 @@ option(gogoproto.goproto_enum_prefix_all) = false;
 message Checkpoint {
     uint64 checkpoint_ts = 1 [(gogoproto.casttype) = "github.com/pingcap/tiflow/cdc/model.Ts"];
     uint64 resolved_ts = 2 [(gogoproto.casttype) = "github.com/pingcap/tiflow/cdc/model.Ts"];
+
+    repeated uint64 table_id = 3 [
+            (gogoproto.casttype) = "github.com/pingcap/tiflow/cdc/model.TableID",
+            (gogoproto.customname) = "TableIDs"
+        ];
 }
 
 message AddTableRequest {
@@ -41,32 +46,28 @@ message RemoveTableRequest {
 }
 
 message DispatchTableRequest {
-    AddTableRequest add_table = 1;
-    RemoveTableRequest remove_table = 2;
+    oneof request {
+        AddTableRequest add_table = 1;
+        RemoveTableRequest remove_table = 2;
+    }
 }
 
 message AddTableResponse {
-    int64 table_id = 1 [
-        (gogoproto.casttype) = "github.com/pingcap/tiflow/cdc/model.TableID",
-        (gogoproto.customname) = "TableID"
-    ];
-    TableStatus status = 2;
-    Checkpoint checkpoint = 3;
-    bool reject = 4;
+    TableStatus status = 1;
+    Checkpoint checkpoint = 2;
+    bool reject = 3;
 }
 
 message RemoveTableResponse {
-    int64 table_id = 1 [
-        (gogoproto.casttype) = "github.com/pingcap/tiflow/cdc/model.TableID",
-        (gogoproto.customname) = "TableID"
-    ];
-    TableStatus status = 2;
-    Checkpoint checkpoint = 3;
+    TableStatus status = 1;
+    Checkpoint checkpoint = 2;
 }
 
 message DispatchTableResponse {
-    AddTableResponse add_table = 1;
-    RemoveTableResponse remove_table = 2;
+    oneof response {
+        AddTableResponse add_table = 1;
+        RemoveTableResponse remove_table = 2;
+    }
 }
 
 message Heartbeat {}
