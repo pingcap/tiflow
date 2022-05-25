@@ -18,6 +18,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"math/rand"
 	"net"
 	"os"
@@ -248,8 +249,8 @@ func (s *DataRWServer) IsReady(ctx context.Context, req *pb.IsReadyRequest) (*pb
 }
 
 func (s *DataRWServer) compareDBs(db1, db2 db.DB) error {
-	iter1 := db1.Iterator([]byte{}, []byte{0xff})
-	iter2 := db2.Iterator([]byte{}, []byte{0xff})
+	iter1 := db1.Iterator([]byte{}, []byte{0xff}, 0, math.MaxUint64)
+	iter2 := db2.Iterator([]byte{}, []byte{0xff}, 0, math.MaxUint64)
 	iter1.Seek([]byte{})
 	iter2.Seek([]byte{})
 	var lastBytes string
@@ -317,7 +318,7 @@ func (s *DataRWServer) ReadLines(req *pb.ReadLinesRequest, stream pb.DataRWServi
 	if !ok {
 		return stream.Send(&pb.ReadLinesResponse{ErrMsg: fmt.Sprintf("file idx %d is out of range %d", req.FileIdx, len(s.dbMap[demoAddress])), IsEof: true})
 	}
-	iter := db.Iterator([]byte{}, []byte{0xff})
+	iter := db.Iterator([]byte{}, []byte{0xff}, 0, math.MaxUint64)
 	if !iter.Seek(req.LineNo) {
 		return stream.Send(&pb.ReadLinesResponse{ErrMsg: "Cannot find key " + string(req.LineNo)})
 	}
