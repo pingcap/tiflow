@@ -23,8 +23,8 @@ import (
 
 type callback func(model.TableID)
 
-// burstBalance for changefeed set up or unplaned TiCDC node failure.
-// TiCDC needs to balance intrrupted tables as soon as possible.
+// burstBalance for changefeed set up or unplanned TiCDC node failure.
+// TiCDC needs to balance interrupted tables as soon as possible.
 //nolint:deadcode
 type burstBalance struct {
 	tables map[model.TableID]model.CaptureID

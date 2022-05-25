@@ -41,7 +41,7 @@ const (
 	CaptureStateStopping CaptureState = 3
 )
 
-// CaptureStatus represent captrue's status.
+// CaptureStatus represent capture's status.
 type CaptureStatus struct {
 	OwnerRev schedulepb.OwnerRevision
 	Epoch    schedulepb.ProcessorEpoch
@@ -95,8 +95,8 @@ func (c *captureManager) captureTableSets() map[model.CaptureID]*CaptureStatus {
 }
 
 func (c *captureManager) checkAllCaptureInitialized() bool {
-	for _, captrueStatus := range c.Captures {
-		if captrueStatus.State == CaptureStateUninitialize {
+	for _, captureStatus := range c.Captures {
+		if captureStatus.State == CaptureStateUninitialize {
 			return false
 		}
 	}

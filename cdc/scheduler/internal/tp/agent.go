@@ -31,14 +31,17 @@ type agent struct {
 	runningTasks map[model.TableID]*schedulepb.Message
 }
 
+// Tick implement agent interface
 func (a *agent) Tick(ctx context.Context) error {
 	return nil
 }
 
+// GetLastSentCheckpointTs implement agent interface
 func (a *agent) GetLastSentCheckpointTs() (checkpointTs model.Ts) {
 	return internal.CheckpointCannotProceed
 }
 
+// Close implement agent interface
 func (a *agent) Close() error {
 	return nil
 }

@@ -52,7 +52,7 @@ type p2pTransport struct {
 	}
 }
 
-func newTranport(
+func newTransport(
 	ctx context.Context, changefeed model.ChangeFeedID,
 	server *p2p.MessageServer, router p2p.MessageRouter,
 ) (*p2pTransport, error) {

@@ -95,6 +95,6 @@ func (c *coordinator) poll(
 		return errors.Trace(err)
 	}
 
-	// checkpoint calcuation
+	// checkpoint calculation
 	return nil
 }

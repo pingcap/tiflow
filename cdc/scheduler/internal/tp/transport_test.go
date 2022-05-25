@@ -37,7 +37,7 @@ func TestTransSendRecv(t *testing.T) {
 	var err error
 	transMap := make(map[string]transport)
 	for addr, node := range cluster.Nodes {
-		transMap[addr], err = newTranport(ctx, changefeedID, node.Server, node.Router)
+		transMap[addr], err = newTransport(ctx, changefeedID, node.Server, node.Router)
 		require.Nil(t, err)
 	}
 
@@ -76,7 +76,7 @@ func TestTransUnknownAddr(t *testing.T) {
 	var err error
 	transMap := make(map[string]transport)
 	for addr, node := range cluster.Nodes {
-		transMap[addr], err = newTranport(ctx, changefeedID, node.Server, node.Router)
+		transMap[addr], err = newTransport(ctx, changefeedID, node.Server, node.Router)
 		require.Nil(t, err)
 	}
 
@@ -101,7 +101,7 @@ func TestTransEmptyRecv(t *testing.T) {
 	var err error
 	transMap := make(map[string]transport)
 	for addr, node := range cluster.Nodes {
-		transMap[addr], err = newTranport(ctx, changefeedID, node.Server, node.Router)
+		transMap[addr], err = newTransport(ctx, changefeedID, node.Server, node.Router)
 		require.Nil(t, err)
 	}
 

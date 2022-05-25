@@ -74,10 +74,11 @@ func (r ReplicationSetState) String() string {
 
 // ReplicationSet is a state machine that manages replication states.
 type ReplicationSet struct {
-	TableID      model.TableID
-	State        ReplicationSetState
-	Primary      model.CaptureID
-	Secondary    model.CaptureID
+	TableID   model.TableID
+	State     ReplicationSetState
+	Primary   model.CaptureID
+	Secondary model.CaptureID
+	// todo: Why Captures here
 	Captures     map[model.CaptureID]struct{}
 	CheckpointTs model.Ts
 }
@@ -285,7 +286,7 @@ func (r *ReplicationSet) pollOnAbsent(
 		schedulepb.TableStateStopping,
 		schedulepb.TableStateStopped:
 	}
-	log.Warn("tpscheduler: ingore input, unexpected replication set state",
+	log.Warn("tpscheduler: ignore input, unexpected replication set state",
 		zap.Stringer("tableState", input),
 		zap.String("captureID", captureID),
 		zap.Any("replicationSet", r))
@@ -328,7 +329,7 @@ func (r *ReplicationSet) pollOnPrepare(
 			return nil, false, nil
 		}
 	}
-	log.Warn("tpscheduler: ingore input, unexpected replication set state",
+	log.Warn("tpscheduler: ignore input, unexpected replication set state",
 		zap.Stringer("tableState", input),
 		zap.String("captureID", captureID),
 		zap.Any("replicationSet", r))
@@ -358,7 +359,7 @@ func (r *ReplicationSet) pollOnCommit(
 			r.Secondary = ""
 			log.Info("tpscheduler: replication state promote secondary",
 				zap.Stringer("tableState", input),
-				zap.String("orignial", original),
+				zap.String("original", original),
 				zap.String("captureID", captureID))
 			return &schedulepb.Message{
 				To:      captureID,
@@ -380,7 +381,7 @@ func (r *ReplicationSet) pollOnCommit(
 			r.Secondary = ""
 			log.Info("tpscheduler: replication state promote secondary",
 				zap.Stringer("tableState", input),
-				zap.String("orignial", original),
+				zap.String("original", original),
 				zap.String("captureID", captureID))
 			return &schedulepb.Message{
 				To:      r.Primary,
@@ -424,7 +425,7 @@ func (r *ReplicationSet) pollOnCommit(
 		}
 	case schedulepb.TableStatePreparing:
 	}
-	log.Warn("tpscheduler: ingore input, unexpected replication set state",
+	log.Warn("tpscheduler: ignore input, unexpected replication set state",
 		zap.Stringer("tableState", input),
 		zap.String("captureID", captureID),
 		zap.Any("replicationSet", r))
@@ -448,7 +449,7 @@ func (r *ReplicationSet) pollOnReplicating(
 	case schedulepb.TableStateStopping:
 	case schedulepb.TableStateStopped:
 	}
-	log.Warn("tpscheduler: ingore input, unexpected replication set state",
+	log.Warn("tpscheduler: ignore input, unexpected replication set state",
 		zap.Stringer("tableState", input),
 		zap.String("captureID", captureID),
 		zap.Any("replicationSet", r))
@@ -484,7 +485,7 @@ func (r *ReplicationSet) pollOnRemoving(
 	case schedulepb.TableStateStopping:
 		return nil, false, nil
 	}
-	log.Warn("tpscheduler: ingore input, unexpected replication set state",
+	log.Warn("tpscheduler: ignore input, unexpected replication set state",
 		zap.Stringer("tableState", input),
 		zap.String("captureID", captureID),
 		zap.Any("replicationSet", r))
@@ -506,6 +507,7 @@ func (r *ReplicationSet) handleAddTable(
 			zap.Any("replicationSet", r), zap.Int64("tableID", r.TableID))
 		return nil, nil
 	}
+	// todo (Ling Jin): this looks unnecessary, must be `absent` here.
 	oldState := r.State
 	r.State = ReplicationSetStateAbsent
 	log.Info("tpscheduler: replication state transition, add table",
@@ -534,6 +536,7 @@ func (r *ReplicationSet) handleMoveTable(
 			zap.Any("replicationSet", r), zap.Int64("tableID", r.TableID))
 		return nil, nil
 	}
+	// todo: OldState must be `replicating`
 	oldState := r.State
 	r.State = ReplicationSetStatePrepare
 	log.Info("tpscheduler: replication state transition, move table",
@@ -561,6 +564,7 @@ func (r *ReplicationSet) handleRemoveTable() ([]*schedulepb.Message, error) {
 			zap.Any("replicationSet", r), zap.Int64("tableID", r.TableID))
 		return nil, nil
 	}
+	// todo: OldState must be `replicating` here
 	oldState := r.State
 	r.State = ReplicationSetStateRemoving
 	log.Info("tpscheduler: replication state transition, remove table",
