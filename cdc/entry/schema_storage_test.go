@@ -821,7 +821,7 @@ func TestExplicitTables(t *testing.T) {
 	require.GreaterOrEqual(t, snap2.TableCount(false), 4)
 
 	require.Equal(t, snap3.TableCount(true)-snap1.TableCount(true), 5)
-	require.Equal(t, snap3.TableCount(false), 36)
+	require.Equal(t, snap3.TableCount(false), 37)
 }
 
 /*
