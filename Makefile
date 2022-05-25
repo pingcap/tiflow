@@ -460,6 +460,9 @@ tools/bin/swag: tools/check/go.mod
 tools/bin/msgp: tools/check/go.mod
 	cd tools/check && $(GO) build -mod=mod -o ../bin/msgp github.com/tinylib/msgp
 
+tools/bin/goimports: tools/check/go.mod
+	cd tools/check && $(GO) build -mod=mod -o ../bin/goimports golang.org/x/tools/cmd/goimports
+
 tools/bin/protoc:
 	./scripts/download-protoc.sh
 
@@ -476,8 +479,13 @@ failpoint-disable: check_failpoint_ctl
 
 engine: df-master df-executor df-master-client df-demo
 
+<<<<<<< HEAD
 df-proto: tools/bin/protoc tools/bin/protoc-gen-gogofaster tools/bin/goimports
 	./engine/generate-proto.sh
+=======
+df-proto: tools/bin/protoc-gen-gogofaster tools/bin/goimports
+	 ./engine/generate-proto.sh
+>>>>>>> 067f67c6e (feat(proto): add project proto)
 
 df-master:
 	$(GOBUILD) -o bin/df-master ./engine/cmd/master
