@@ -61,6 +61,7 @@ type Server struct {
 	sync.Mutex
 	wg     sync.WaitGroup
 	kaWg   sync.WaitGroup
+	httpWg sync.WaitGroup
 	closed atomic.Bool
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -207,25 +208,11 @@ func (s *Server) Start() error {
 		}
 	}(s.ctx)
 
-	httpExitCh := make(chan struct{}, 1)
-	s.wg.Add(1)
+	s.httpWg.Add(1)
 	go func() {
+		s.httpWg.Done()
 		InitStatus(httpL) // serve status
-		httpExitCh <- struct{}{}
 	}()
-	go func(ctx context.Context) {
-		defer s.wg.Done()
-		select {
-		case <-ctx.Done():
-			if s.rootLis != nil {
-				err2 := s.rootLis.Close()
-				if err2 != nil && !common.IsErrNetClosing(err2) {
-					log.L().Error("fail to close net listener", log.ShortError(err2))
-				}
-			}
-		case <-httpExitCh:
-		}
-	}(s.ctx)
 
 	s.closed.Store(false)
 	log.L().Info("listening gRPC API and status request", zap.String("address", s.cfg.WorkerAddr))
@@ -450,10 +437,21 @@ func (s *Server) doClose() {
 	// stop server in advance, stop receiving source bound and relay bound
 	s.cancel()
 	s.wg.Wait()
+
 	// stop worker and wait for return(we already lock the whole Sever, so no need use lock to get source worker)
 	if w := s.getSourceWorker(false); w != nil {
 		w.Stop(true)
 	}
+
+	// close listener at last, so we can get status from it if worker failed to close in previous step
+	if s.rootLis != nil {
+		err2 := s.rootLis.Close()
+		if err2 != nil && !common.IsErrNetClosing(err2) {
+			log.L().Error("fail to close net listener", log.ShortError(err2))
+		}
+	}
+	s.httpWg.Wait()
+
 	s.closed.Store(true)
 }
 
@@ -1004,11 +1002,18 @@ func (s *Server) GetValidatorError(ctx context.Context, req *pb.GetValidationErr
 		resp.Msg = terror.ErrWorkerNoStart.Error()
 		return resp, nil
 	}
-	resp.Error = w.GetWorkerValidatorErr(req.TaskName, req.ErrState)
+	validatorErrs, err := w.GetWorkerValidatorErr(req.TaskName, req.ErrState)
+	if err != nil {
+		resp.Msg = err.Error()
+		resp.Result = false
+	} else {
+		resp.Error = validatorErrs
+	}
 	return resp, nil
 }
 
 func (s *Server) OperateValidatorError(ctx context.Context, req *pb.OperateValidationErrorRequest) (*pb.OperateValidationErrorResponse, error) {
+	log.L().Info("operate validation error", zap.Stringer("payload", req))
 	w := s.getSourceWorker(true)
 	resp := &pb.OperateValidationErrorResponse{
 		Result: true,

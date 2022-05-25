@@ -8,11 +8,13 @@ on:
       - master
     paths-ignore:
       - 'dm/**'
+      - 'engine/**'
   pull_request:
     branches:
       - master
     paths-ignore:
       - 'dm/**'
+      - 'engine/**'
 
 # See: https://docs.github.com/en/actions/reference/workflow-syntax-for-github-actions#concurrency.
 concurrency:

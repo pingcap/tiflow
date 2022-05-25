@@ -113,7 +113,7 @@ function run() {
 		"\"stage\": \"Running\"" 1
 
 	echo "kill dm-worker1"
-	ps aux | grep dm-worker1 | awk '{print $2}' | xargs kill || true
+	kill_process dm-worker1
 	check_port_offline $WORKER1_PORT 20
 	rm -rf $WORK_DIR/worker1
 	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml

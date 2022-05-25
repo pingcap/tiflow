@@ -21,7 +21,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func mustIdentJSON(t *testing.T, j string) string {
+func mustIndentJSON(t *testing.T, j string) string {
 	var buf bytes.Buffer
 	err := json.Indent(&buf, []byte(j), "", "  ")
 	require.Nil(t, err)
@@ -44,7 +44,7 @@ func TestReplicaConfigMarshal(t *testing.T) {
 	}
 	b, err := conf.Marshal()
 	require.Nil(t, err)
-	require.Equal(t, testCfgTestReplicaConfigMarshal1, mustIdentJSON(t, b))
+	require.Equal(t, testCfgTestReplicaConfigMarshal1, mustIndentJSON(t, b))
 	conf2 := new(ReplicaConfig)
 	err = conf2.Unmarshal([]byte(testCfgTestReplicaConfigMarshal2))
 	require.Nil(t, err)
@@ -77,9 +77,9 @@ func TestReplicaConfigOutDated(t *testing.T) {
 	conf.Mounter.WorkerNum = 3
 	conf.Sink.Protocol = "open-protocol"
 	conf.Sink.DispatchRules = []*DispatchRule{
-		{Matcher: []string{"a.b"}, PartitionRule: "r1"},
-		{Matcher: []string{"a.c"}, PartitionRule: "r2"},
-		{Matcher: []string{"a.d"}, PartitionRule: "r2"},
+		{Matcher: []string{"a.b"}, DispatcherRule: "r1"},
+		{Matcher: []string{"a.c"}, DispatcherRule: "r2"},
+		{Matcher: []string{"a.d"}, DispatcherRule: "r2"},
 	}
 	require.Equal(t, conf, conf2)
 }
@@ -93,5 +93,27 @@ func TestReplicaConfigValidate(t *testing.T) {
 	conf = GetDefaultReplicaConfig()
 	conf.Sink.Protocol = "canal"
 	conf.EnableOldValue = false
-	require.Regexp(t, ".*canal protocol requires old value to be enabled.*", conf.Validate())
+	require.Regexp(t, ".*canal protocol requires old value to be enabled.*",
+		conf.Validate())
+
+	conf = GetDefaultReplicaConfig()
+	conf.Sink.DispatchRules = []*DispatchRule{
+		{Matcher: []string{"a.b"}, DispatcherRule: "d1", PartitionRule: "r1"},
+	}
+	require.Regexp(t, ".*dispatcher and partition cannot be configured both.*",
+		conf.Validate())
+
+	// Correct sink configuration.
+	conf = GetDefaultReplicaConfig()
+	conf.Sink.DispatchRules = []*DispatchRule{
+		{Matcher: []string{"a.b"}, DispatcherRule: "d1"},
+		{Matcher: []string{"a.c"}, PartitionRule: "p1"},
+		{Matcher: []string{"a.d"}},
+	}
+	err := conf.Validate()
+	require.Nil(t, err)
+	rules := conf.Sink.DispatchRules
+	require.Equal(t, "d1", rules[0].PartitionRule)
+	require.Equal(t, "p1", rules[1].PartitionRule)
+	require.Equal(t, "", rules[2].PartitionRule)
 }
