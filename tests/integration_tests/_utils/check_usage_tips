@@ -6,8 +6,9 @@ cmd_status=$2
 should_print=
 set +e
 
-## check data race
+## check stdout
 if [ ! -f "$stdout_file" ]; then
+  echo "stdout log file does not exist"
 	exit 0
 fi
 

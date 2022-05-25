@@ -6,7 +6,7 @@ CUR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 source $CUR/../_utils/test_prepare
 WORK_DIR=$OUT_DIR/$TEST_NAME
 CDC_BINARY=cdc.test
-SINK_TYPE="mysql"
+SINK_TYPE=$1
 stdout_file=$WORK_DIR/stdout.log
 cdc_launched=
 
@@ -56,41 +56,29 @@ function try_to_run_cdc() {
 	echo 'Succeed to create a changefeed, no usage tips should be printed'
 }
 
-function region_label_test() {
-	i=0
-	while [ -z "$(curl -X GET http://127.0.0.1:2379/pd/api/v1/config/region-label/rules 2>/dev/null | grep 'meta')" ]; do
-		i=$((i + 1))
-		if [ "$i" -gt 5 ]; then
-			echo 'Failed to verify meta region labels'
-			exit 1
-		fi
-		sleep 1
-	done
-	echo 'succeed to verify meta placement rules'
-}
-
 stop_cdc_and_do_check() {
+    # If the cdc was launched, send a SIGINT signal to stop it
 	if [[ "$cdc_launched" == "true" ]]; then
-		region_label_test
 		echo "Later, cdc will receive a signal(SIGINT) and exit"
-		sleep 60
 		cdc_pid=$(ps -a | grep -m 1 "cdc.test" | awk '{print $1}')
 		echo "cdc pid is "$cdc_pid
-		kill -2 $cdc_pid
+		sleep 60
+        kill -2 $cdc_pid
 	fi
-	sleep 10
+	sleep 30
+    # Check the stdout
 	check_usage_tips $stdout_file $cdc_launched
 }
+
+# If cdc gets started normally, no usage tips should be printed when exit
+trap stop_tidb_cluster EXIT
+try_to_run_cdc "valid"
+stop_cdc_and_do_check
+echo " 1st test case $TEST_NAME success! "
 
 # invalid command and should print usage tips
 trap stop_tidb_cluster EXIT
 try_to_run_cdc "invalid"
-stop_cdc_and_do_check
-echo " 1st test case $TEST_NAME success! "
-
-# should not print usage tips
-trap stop_tidb_cluster EXIT
-try_to_run_cdc "valid"
 stop_cdc_and_do_check
 echo " 2nd test case $TEST_NAME success! "
 
