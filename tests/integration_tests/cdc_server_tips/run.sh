@@ -10,9 +10,8 @@ SINK_TYPE=$1
 stdout_file=$WORK_DIR/stdout.log
 cdc_launched=
 
-function try_to_run_cdc() {
-	# $*: invalid args to avoid lauching cdc server
-	rm -rf $WORK_DIR && mkdir -p $WORK_DIR
+function prepare_tidb_cluster() {
+    rm -rf $WORK_DIR && mkdir -p $WORK_DIR
 	start_tidb_cluster --workdir $WORK_DIR
 
 	cd $WORK_DIR
@@ -21,7 +20,9 @@ function try_to_run_cdc() {
 	start_ts=$(run_cdc_cli_tso_query ${UP_PD_HOST_1} ${UP_PD_PORT_1})
 
 	run_sql "CREATE table test.simple1(id int primary key, val int);"
+}
 
+function try_to_run_cdc() {
 	if [[ $1 == "valid" ]]; then
 		echo "try a VALID cdc server command"
 		run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
@@ -37,23 +38,22 @@ function try_to_run_cdc() {
 		cdc_launched="false"
 		echo 'Failed to start cdc, the usage tips should be printed'
 		return 0
-	else
-		cdc_launched="true"
-		echo 'Succeed to run cdc, now create a changefeed, no usage tips should be printed'
-		echo "pid"$(ps -a | grep "cdc.test")
-	fi
+    fi
 
-	TOPIC_NAME="ticdc-server-tips-test-$RANDOM"
-	case $SINK_TYPE in
-	kafka) SINK_URI="kafka+ssl://127.0.0.1:9092/$TOPIC_NAME?protocol=open-protocol&partition-num=4&kafka-client-id=cdc_server_tips&kafka-version=${KAFKA_VERSION}&max-message-bytes=10485760" ;;
-	*) SINK_URI="mysql+ssl://normal:123456@127.0.0.1:3306/" ;;
-	esac
-	run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI"
-	if [ "$SINK_TYPE" == "kafka" ]; then
-		run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=open-protocol&partition-num=4&version=${KAFKA_VERSION}&max-message-bytes=10485760"
-	fi
+    cdc_launched="true"
+    echo 'Succeed to run cdc, now create a changefeed, no usage tips should be printed'
+    echo "pid"$(ps -a | grep "cdc.test")
 
-	echo 'Succeed to create a changefeed, no usage tips should be printed'
+    TOPIC_NAME="ticdc-server-tips-test-$RANDOM"
+    case $SINK_TYPE in
+    kafka) SINK_URI="kafka+ssl://127.0.0.1:9092/$TOPIC_NAME?protocol=open-protocol&partition-num=4&kafka-client-id=cdc_server_tips&kafka-version=${KAFKA_VERSION}&max-message-bytes=10485760" ;;
+    *) SINK_URI="mysql+ssl://normal:123456@127.0.0.1:3306/" ;;
+    esac
+    run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI"
+    if [ "$SINK_TYPE" == "kafka" ]; then
+        run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=open-protocol&partition-num=4&version=${KAFKA_VERSION}&max-message-bytes=10485760"
+    fi
+    echo 'Succeed to create a changefeed, no usage tips should be printed'
 }
 
 stop_cdc_and_do_check() {
@@ -70,14 +70,15 @@ stop_cdc_and_do_check() {
 	check_usage_tips $stdout_file $cdc_launched
 }
 
-# If cdc gets started normally, no usage tips should be printed when exit
 trap stop_tidb_cluster EXIT
+prepare_tidb_cluster
+
+# If cdc gets started normally, no usage tips should be printed when exit
 try_to_run_cdc "valid"
 stop_cdc_and_do_check
 echo " 1st test case $TEST_NAME success! "
 
 # invalid command and should print usage tips
-trap stop_tidb_cluster EXIT
 try_to_run_cdc "invalid"
 stop_cdc_and_do_check
 echo " 2nd test case $TEST_NAME success! "
