@@ -1,0 +1,27 @@
+#!/bin/bash
+# parameter 1: stdout file
+# parameter 2: cmd_status true: cmd is valid and should not print usage tips, false: otherwise
+stdout_file=$1
+cmd_status=$2
+should_print=
+set +e
+
+## check data race
+if [ ! -f "$stdout_file" ]; then
+	exit 0
+fi
+
+if [[ "$cmd_status" == "true" ]]; then
+	should_print=0
+else
+	should_print=1
+fi
+
+grep -q 'Usage:' "$stdout_file"
+
+if [ ! $? -eq "$should_print" ]; then
+	exit 0
+else
+	echo "Check Usage Tips Failed!"
+	exit 1
+fi
