@@ -15,6 +15,13 @@ package client
 
 import (
 	"context"
+
+	"github.com/gogo/status"
+	"github.com/pingcap/errors"
+	"google.golang.org/grpc/codes"
+
+	"github.com/pingcap/tiflow/engine/pb"
+	"github.com/pingcap/tiflow/pkg/retry"
 )
 
 // ExecutorClient defines an interface that supports sending gRPC from server
@@ -27,6 +34,11 @@ type ExecutorClient interface {
 		args *DispatchTaskArgs,
 		startWorkerTimer StartWorkerCallback,
 		abortWorker AbortWorkerCallback,
+	) error
+
+	RemoveLocalResource(
+		ctx context.Context,
+		req *pb.RemoveLocalResourceRequest,
 	) error
 }
 
@@ -46,4 +58,29 @@ func newExecutorClient(addr string) (ExecutorClient, error) {
 type executorClientImpl struct {
 	*baseExecutorClientImpl
 	*TaskDispatcher
+}
+
+func (c *executorClientImpl) RemoveLocalResource(
+	ctx context.Context,
+	req *pb.RemoveLocalResourceRequest,
+) error {
+	err := retry.Do(ctx, func() error {
+		_, err := c.Send(ctx, &ExecutorRequest{
+			Cmd: CmdRemoveLocalResourceRequest,
+			Req: req,
+		})
+		return err
+	}, retry.WithIsRetryableErr(func(err error) bool {
+		st := status.Convert(err)
+		switch st.Code() {
+		case codes.NotFound, codes.InvalidArgument, codes.Unknown:
+			return false
+		default:
+			return true
+		}
+	}))
+	if err != nil {
+		return errors.Trace(err)
+	}
+	return nil
 }
