@@ -1,4 +1,4 @@
-name: test
+name: <placeholder>
 task-mode: all
 #is-sharding: true
 #shard-mode: pessimistic
@@ -144,7 +144,7 @@ block-allow-list:
     #ignore-tables: []
     #ignore-dbs: []
     do-dbs:
-    - test
+    - <placeholder>
 mydumpers:
   dump-01:
     mydumper-path: ./bin/mydumper
