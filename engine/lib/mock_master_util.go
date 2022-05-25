@@ -68,7 +68,9 @@ func MockBaseMaster(id libModel.MasterID, masterImpl MasterImpl) *DefaultBaseMas
 	ret := NewBaseMaster(
 		ctx,
 		masterImpl,
-		id)
+		id,
+		FakeTask,
+	)
 
 	return ret.(*DefaultBaseMaster)
 }
