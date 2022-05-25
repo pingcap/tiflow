@@ -11,7 +11,7 @@ stdout_file=$WORK_DIR/stdout.log
 cdc_launched=
 
 function prepare_tidb_cluster() {
-    rm -rf $WORK_DIR && mkdir -p $WORK_DIR
+	rm -rf $WORK_DIR && mkdir -p $WORK_DIR
 	start_tidb_cluster --workdir $WORK_DIR
 
 	cd $WORK_DIR
@@ -38,35 +38,35 @@ function try_to_run_cdc() {
 		cdc_launched="false"
 		echo 'Failed to start cdc, the usage tips should be printed'
 		return 0
-    fi
+	fi
 
-    cdc_launched="true"
-    echo 'Succeed to run cdc, now create a changefeed, no usage tips should be printed'
-    echo "pid"$(ps -a | grep "cdc.test")
+	cdc_launched="true"
+	echo 'Succeed to run cdc, now create a changefeed, no usage tips should be printed'
+	echo "pid"$(ps -a | grep "cdc.test")
 
-    TOPIC_NAME="ticdc-server-tips-test-$RANDOM"
-    case $SINK_TYPE in
-    kafka) SINK_URI="kafka+ssl://127.0.0.1:9092/$TOPIC_NAME?protocol=open-protocol&partition-num=4&kafka-client-id=cdc_server_tips&kafka-version=${KAFKA_VERSION}&max-message-bytes=10485760" ;;
-    *) SINK_URI="mysql+ssl://normal:123456@127.0.0.1:3306/" ;;
-    esac
-    run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI"
-    if [ "$SINK_TYPE" == "kafka" ]; then
-        run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=open-protocol&partition-num=4&version=${KAFKA_VERSION}&max-message-bytes=10485760"
-    fi
-    echo 'Succeed to create a changefeed, no usage tips should be printed'
+	TOPIC_NAME="ticdc-server-tips-test-$RANDOM"
+	case $SINK_TYPE in
+	kafka) SINK_URI="kafka+ssl://127.0.0.1:9092/$TOPIC_NAME?protocol=open-protocol&partition-num=4&kafka-client-id=cdc_server_tips&kafka-version=${KAFKA_VERSION}&max-message-bytes=10485760" ;;
+	*) SINK_URI="mysql+ssl://normal:123456@127.0.0.1:3306/" ;;
+	esac
+	run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI"
+	if [ "$SINK_TYPE" == "kafka" ]; then
+		run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=open-protocol&partition-num=4&version=${KAFKA_VERSION}&max-message-bytes=10485760"
+	fi
+	echo 'Succeed to create a changefeed, no usage tips should be printed'
 }
 
 stop_cdc_and_do_check() {
-    # If the cdc was launched, send a SIGINT signal to stop it
+	# If the cdc was launched, send a SIGINT signal to stop it
 	if [[ "$cdc_launched" == "true" ]]; then
 		echo "Later, cdc will receive a signal(SIGINT) and exit"
 		cdc_pid=$(ps -a | grep -m 1 "cdc.test" | awk '{print $1}')
 		echo "cdc pid is "$cdc_pid
 		sleep 60
-        kill -2 $cdc_pid
+		kill -2 $cdc_pid
 	fi
 	sleep 30
-    # Check the stdout
+	# Check the stdout
 	check_usage_tips $stdout_file $cdc_launched
 }
 
