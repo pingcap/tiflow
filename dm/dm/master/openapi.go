@@ -16,13 +16,9 @@
 package master
 
 import (
-<<<<<<< HEAD:dm/dm/master/openapi.go
 	"context"
-=======
 	"crypto/tls"
->>>>>>> 359af1861 (DM/Openapi: use reverse proxy instead of redirect (#5390)):dm/dm/master/openapi_view.go
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/http/httputil"
 

@@ -389,19 +389,9 @@ function run() {
 
 	test_shard_task
 	test_noshard_task
-<<<<<<< HEAD
-=======
-	test_task_templates
-	test_noshard_task_dump_status
-	test_complex_operations_of_source_and_task
-	test_task_with_ignore_check_items
-	test_delete_task_with_stopped_downstream
-	test_start_task_with_condition
-	test_stop_task_with_condition
 	test_reverse_https
 
 	# NOTE: this test case MUST running at last, because it will offline some members of cluster
->>>>>>> 359af1861 (DM/Openapi: use reverse proxy instead of redirect (#5390))
 	test_cluster
 }
 
