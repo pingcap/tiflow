@@ -14,8 +14,8 @@ your contribution accepted.
 
 Developing TiDB-CDC requires:
 
-- [Go 1.18+](https://go.dev/doc/code)
-- An internet connection to download the dependencies
+* [Go 1.18+](https://go.dev/doc/code)
+* An internet connection to download the dependencies
 
 Simply run `make` to build the program.
 
@@ -31,7 +31,6 @@ See [tests/integration_tests/README.md](./tests/integration_tests/README.md) for
 For more information on how to trigger these tests, please see the [command help](./docs/ci/command.md).
 
 ### Debug with [delve](https://github.com/go-delve/delve)
-
 ```shell
 dlv debug --build-flags="-ldflags='-X github.com/pingcap/tiflow/pkg/version.ReleaseVersion=$(git describe --tags)'" ./cmd/cdc -- server
 ```
@@ -88,13 +87,13 @@ The first line is the subject and should be no longer than 70 characters, the se
 lines should be wrapped at 80 characters. This allows the message to be easier to read on GitHub as well as in various
 git tools.
 
-If the change affects more than one subsystem, you can use comma to separate them like `capture,puller:`. If the
-change affects many subsystems, you can use `*` instead, like `*:`.
+If the change affects more than one subsystem, you can use comma to separate them like ```capture,puller:```. If the
+change affects many subsystems, you can use ```*``` instead, like ```*:```.
 
-If this change only affects ticdc, fill in `<subsystem>(ticdc)`,
-if it only affects dm, fill in `<subsystem>(dm)`,
-if it only affects dataflow engine, fill in `<subsystem>(engine)`.
-If it involves a code that is used by all products, fill in `<subsystem>(all)`.
+If this change only affects ticdc, fill in ```<subsystem>(ticdc)```,
+if it only affects dm, fill in ```<subsystem>(dm)```,
+if it only affects dataflow engine, fill in ```<subsystem>(engine)```.
+If it involves a code that is used by all products, fill in ```<subsystem>(all)```.
 
 For the why part, if no specific reason for the change, you can use one of some generic reasons like "Improve
 documentation.",

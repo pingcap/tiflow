@@ -28,7 +28,7 @@ Use `make unit_test` to run unit test and integrated test.
 
 Run `make dev` before submitting pr.
 
-# Run it
+# Run it 
 
 ## Master
 
@@ -53,7 +53,7 @@ TODO
 ### Start Master on Single Node
 
 ```[shell]
-./bin/master --config=./sample/config/master.toml --master-addr 0.0.0.0:10240 --advertise-addr ${ip0}:10240
+./bin/master --config=./sample/config/master.toml --master-addr 0.0.0.0:10240 --advertise-addr ${ip0}:10240 
 ```
 
 Replace **ip0** with your advertising ip.

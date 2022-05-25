@@ -11,14 +11,14 @@ executor-server is in charge of:
 
 The task runtime maintains some important structures and implements the interface:
 
-- **runtime**, the _singleton_ instance organizes and executes tasks.
+- **runtime**, the *singleton* instance organizes and executes tasks.
   - **Run** function that actually drives the execution of the tasks and is thread-safe.
-  - _Queue_ field that contains the runnable tasks.
+  - *Queue* field that contains the runnable tasks.
 - **taskContainer** wraps the logic of operator and maintains the status and input/output channels.
   - **Poll** triggers a executing action of the task, which will return quickly. During the poll action, the task will
     - read inputs channels, if the channels are empty, return `blocked`. The read action fetches a batch of data.
-  - _status_ records the current status of task, including
-    - `runnable` means the task is in the _Queue_ and can run immediately.
+  - *status* records the current status of task, including
+    - `runnable` means the task is in the *Queue* and can run immediately.
     - `blocked` means the task is waiting someone to trigger, say output data consuming, input data arriving or i/o task completed.
     - `awaiting` means this task has been awoken by someone. If the **Poll** function ends and checks this status, we should put this task back to queue and reset the status to runnable.
 - **Operator** actually implement the user logic. Every operator is contained by a task. Ideally, operators can construct an operating tree like a typical sql engine.

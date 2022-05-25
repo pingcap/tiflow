@@ -6,7 +6,7 @@ This component shows how to start the cluster and run some tests by docker and d
 
 To build this repo, you can simply run `./prepare.sh`. Make sure you have installed docker and have run the docker daemon.
 
-If you have build the binary on your local Linux, you can try `./build_image_from_local.sh`.
+If you have build the binary on your local Linux, you can try `./build_image_from_local.sh`. 
 
 ## Deploy
 
