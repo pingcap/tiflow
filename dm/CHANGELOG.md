@@ -224,7 +224,7 @@ As of DM v2.0, DM uses a TiDB-independent version number; after DM v2.0, DM uses
 
 ### Bug fixes
 
-- Fix the issue that restarting a task might cause `fail to initial unit Sync of subtask` error [#1274](https://github.com/pingcap/dm/pull/1274)
+- Fix the issue that restarting a task might cause `fail to initialize unit Sync of subtask` error [#1274](https://github.com/pingcap/dm/pull/1274)
 - Fix the issue that the `pause-task` command might be blocked when it is executed during the full import [#1269](https://github.com/pingcap/dm/pull/1269) [#1277](https://github.com/pingcap/dm/pull/1277)
 - Fix the issue that DM fails to create a data source for a MariaDB instance when `enable-gtid: true` is configured [#1344](https://github.com/pingcap/dm/pull/1344)
 - Fix the issue that the `query-status` command might be blocked when it is executed [#1293](https://github.com/pingcap/dm/pull/1293)
