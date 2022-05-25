@@ -193,7 +193,7 @@ function run_validator_cmd {
 		"insert\/update\/delete: 4\/1\/1\"" 1 \
 		"insert\/update\/delete: 0\/0\/1\"" 1 \
 		"new\/ignored\/resolved: 0\/0\/0" 1 \
-		"new\/ignored\/resolved: 4\/0\/0" 1 
+		"new\/ignored\/resolved: 4\/0\/0" 1
 	run_sql_source1 "create table dmctl_command.t_trigger_flush101(id int primary key)" # trigger flush
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
