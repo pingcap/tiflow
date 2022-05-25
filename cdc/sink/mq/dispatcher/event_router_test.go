@@ -57,7 +57,7 @@ func TestEventRouter(t *testing.T) {
 				},
 				{
 					Matcher:       []string{"test.*"},
-					PartitionRule: "index-value",
+					PartitionRule: "rowid",
 					TopicRule:     "hello_{schema}",
 				},
 				{
