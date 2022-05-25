@@ -87,16 +87,25 @@ func (f *wrappingFactory) NewHistogramVec(opts prometheus.HistogramOpts, labelNa
 }
 
 func wrapCounterOpts(prefix string, constLabels prometheus.Labels, opts *prometheus.CounterOpts) *prometheus.CounterOpts {
+	if opts.ConstLabels == nil && constLabels != nil {
+		opts.ConstLabels = make(prometheus.Labels)
+	}
 	wrapOptsCommon(prefix, constLabels, &opts.Namespace, opts.ConstLabels)
 	return opts
 }
 
 func wrapGaugeOpts(prefix string, constLabels prometheus.Labels, opts *prometheus.GaugeOpts) *prometheus.GaugeOpts {
+	if opts.ConstLabels == nil && constLabels != nil {
+		opts.ConstLabels = make(prometheus.Labels)
+	}
 	wrapOptsCommon(prefix, constLabels, &opts.Namespace, opts.ConstLabels)
 	return opts
 }
 
 func wrapHistogramOpts(prefix string, constLabels prometheus.Labels, opts *prometheus.HistogramOpts) *prometheus.HistogramOpts {
+	if opts.ConstLabels == nil && constLabels != nil {
+		opts.ConstLabels = make(prometheus.Labels)
+	}
 	wrapOptsCommon(prefix, constLabels, &opts.Namespace, opts.ConstLabels)
 	return opts
 }

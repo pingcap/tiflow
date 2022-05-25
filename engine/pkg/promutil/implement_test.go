@@ -69,6 +69,17 @@ func TestWrapCounterOpts(t *testing.T) {
 				},
 			},
 		},
+		{
+			constLabels: prometheus.Labels{
+				"k2": "v2",
+			},
+			inputOpts: &prometheus.CounterOpts{},
+			outputOpts: &prometheus.CounterOpts{
+				ConstLabels: prometheus.Labels{
+					"k2": "v2",
+				},
+			},
+		},
 	}
 
 	for _, c := range cases {

@@ -72,3 +72,10 @@ func NewFactory4Worker(info tenant.ProjectInfo, jobType libModel.JobType, jobID 
 func NewFactory4Framework() Factory {
 	return NewFactory4FrameworkImpl(globalMetricRegistry)
 }
+
+// UnregisterWorkerMetrics unregisters all metrics of workerID
+// IF 'worker' is a job master, use job id as workerID
+// IF 'worker' is a worker, use worker id as workerID
+func UnregisterWorkerMetrics(workerID libModel.WorkerID) {
+	globalMetricRegistry.Unregister(workerID)
+}
