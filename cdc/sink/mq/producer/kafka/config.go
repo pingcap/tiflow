@@ -212,7 +212,8 @@ func (c *Config) applyTLS(params url.Values) error {
 		c.Credential.KeyPath = s
 	}
 
-	if c.Credential != nil && !c.Credential.IsTLSEnabled() {
+	if c.Credential != nil && !c.Credential.IsEmpty() &&
+		!c.Credential.IsTLSEnabled() {
 		return cerror.WrapError(cerror.ErrKafkaInvalidConfig,
 			errors.New("ca, cert and key files should all be supplied"))
 	}
@@ -230,14 +231,13 @@ func (c *Config) applyTLS(params url.Values) error {
 			return err
 		}
 
-		if c.Credential != nil && !enableTLS {
+		if c.Credential != nil && c.Credential.IsTLSEnabled() && !enableTLS {
 			return cerror.WrapError(cerror.ErrKafkaInvalidConfig,
 				errors.New("credential files are supplied, but 'enable-tls' is set to false"))
-
 		}
 		c.EnableTLS = enableTLS
 	} else {
-		if c.Credential != nil {
+		if c.Credential != nil && c.Credential.IsTLSEnabled() {
 			c.EnableTLS = true
 		}
 	}
