@@ -535,6 +535,15 @@ func TestApplyTLS(t *testing.T) {
 			tlsEnabled: false,
 			exceptErr:  "credential files are supplied, but 'enable-tls' is set to false",
 		},
+		{
+			name: "tls config with 'enable-tls' set to true, and some of " +
+				"the credential files are not supplied ",
+			URI: "kafka://127.0.0.1:9092/abc?kafka-version=2.6.0&partition-num=0" +
+				"&sasl-user=user&sasl-password=password&sasl-mechanism=plain&enable-tls=true" +
+				"&ca=/root/ca&cert=/root/cert&",
+			tlsEnabled: false,
+			exceptErr:  "ca, cert and key files should all be supplied",
+		},
 	}
 
 	for _, test := range tests {

@@ -16,11 +16,8 @@ package cli
 import (
 	"fmt"
 	"io"
-	"io/ioutil"
-	"log"
 	"os"
 
-	"github.com/Shopify/sarama"
 	"github.com/chzyer/readline"
 	"github.com/mattn/go-shellwords"
 	"github.com/pingcap/tiflow/pkg/cmd/factory"
@@ -70,10 +67,6 @@ func NewCmdCli() *cobra.Command {
 			if o.interact {
 				run()
 			}
-		},
-		PersistentPostRun: func(cmd *cobra.Command, args []string) {
-			// discard sarama logging after executing the cli cmd.
-			sarama.Logger = log.New(ioutil.Discard, "[Sarama] ", log.LstdFlags)
 		},
 	}
 

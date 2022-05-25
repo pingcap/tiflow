@@ -212,6 +212,11 @@ func (c *Config) applyTLS(params url.Values) error {
 		c.Credential.KeyPath = s
 	}
 
+	if c.Credential != nil && !c.Credential.IsTLSEnabled() {
+		return cerror.WrapError(cerror.ErrKafkaInvalidConfig,
+			errors.New("ca, cert and key files should all be supplied"))
+	}
+
 	// if enable-tls is not set, but credential files are set,
 	//    then tls should be enabled, and the self-signed CA certificate is used.
 	// if enable-tls is set to true, and credential files are not set,
@@ -225,13 +230,14 @@ func (c *Config) applyTLS(params url.Values) error {
 			return err
 		}
 
-		if c.Credential != nil && c.Credential.IsTLSEnabled() && !enableTLS {
+		if c.Credential != nil && !enableTLS {
 			return cerror.WrapError(cerror.ErrKafkaInvalidConfig,
 				errors.New("credential files are supplied, but 'enable-tls' is set to false"))
+
 		}
 		c.EnableTLS = enableTLS
 	} else {
-		if c.Credential != nil && c.Credential.IsTLSEnabled() {
+		if c.Credential != nil {
 			c.EnableTLS = true
 		}
 	}
