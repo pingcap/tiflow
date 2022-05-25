@@ -66,6 +66,21 @@ type validateTableInfo struct {
 
 type rowChangeJobType int
 
+func (r rowChangeJobType) String() string {
+	switch r {
+	case rowInsert:
+		return "row-insert"
+	case rowUpdated:
+		return "row-update"
+	case rowDeleted:
+		return "row-delete"
+	case flushCheckpoint:
+		return "flush"
+	default:
+		return "unknown"
+	}
+}
+
 const (
 	rowInsert rowChangeJobType = iota
 	rowUpdated
@@ -733,6 +748,9 @@ func (v *DataValidator) startValidateWorkers() {
 func (v *DataValidator) dispatchRowChange(key string, row *rowValidationJob) {
 	hashVal := int(utils.GenHashKey(key)) % v.workerCnt
 	v.workers[hashVal].rowChangeCh <- row
+
+	v.L.Debug("dispatch row change job", zap.Any("table", row.row.GetSourceTable()),
+		zap.Stringer("type", row.Tp), zap.String("key", key), zap.Int("worker id", hashVal))
 }
 
 func (v *DataValidator) genValidateTableInfo(sourceTable *filter.Table, columnCount int) (*validateTableInfo, error) {
@@ -905,7 +923,8 @@ func (v *DataValidator) persistCheckpointAndData(loc binlog.Location) error {
 		Tp: flushCheckpoint,
 		wg: &wg,
 	}
-	for _, worker := range v.workers {
+	for i, worker := range v.workers {
+		v.L.Debug("dispatch flush job", zap.Int("worker id", i))
 		worker.rowChangeCh <- flushJob
 	}
 	wg.Wait()
