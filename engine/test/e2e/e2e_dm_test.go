@@ -14,8 +14,11 @@
 package e2e_test
 
 import (
+	"bytes"
 	"context"
+	"database/sql"
 	"io/ioutil"
+	"sync"
 	"testing"
 	"time"
 
@@ -30,10 +33,6 @@ func TestDMJob(t *testing.T) {
 	ctx := context.Background()
 	masterClient, err := client.NewMasterClient(ctx, []string{"127.0.0.1:10245"})
 	require.NoError(t, err)
-
-	noError := func(_ interface{}, err error) {
-		require.NoError(t, err)
-	}
 
 	mysqlCfg := util.DBConfig{
 		Host:     "127.0.0.1",
@@ -60,22 +59,48 @@ func TestDMJob(t *testing.T) {
 	}()
 
 	// clean up
-	noError(tidb.Exec("drop database if exists dm_meta"))
-	noError(tidb.Exec("drop database if exists test"))
-	noError(mysql.Exec("drop database if exists test"))
+	_, err = tidb.Exec("drop database if exists dm_meta")
+	require.NoError(t, err)
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		testSimpleAllModeTask(t, masterClient, mysql, tidb, "test1")
+	}()
+	go func() {
+		defer wg.Done()
+		testSimpleAllModeTask(t, masterClient, mysql, tidb, "test2")
+	}()
+	wg.Wait()
+}
+
+// testSimpleAllModeTask extracts the common logic for a DM "all" mode task,
+// `db` should not contain special character.
+func testSimpleAllModeTask(
+	t *testing.T,
+	client client.MasterClient,
+	mysql, tidb *sql.DB,
+	db string,
+) {
+	ctx := context.Background()
+	noError := func(_ interface{}, err error) {
+		require.NoError(t, err)
+	}
+
+	noError(tidb.Exec("drop database if exists " + db))
+	noError(mysql.Exec("drop database if exists " + db))
 
 	// full phase
-	noError(mysql.Exec("create database test"))
-	noError(mysql.Exec("create table test.t1(c int primary key)"))
-	noError(mysql.Exec("insert into test.t1 values(1)"))
+	noError(mysql.Exec("create database " + db))
+	noError(mysql.Exec("create table " + db + ".t1(c int primary key)"))
+	noError(mysql.Exec("insert into " + db + ".t1 values(1)"))
 
 	dmJobCfg, err := ioutil.ReadFile("./dm-job.yaml")
 	require.NoError(t, err)
-	// TODO: in #272, Server.jobManager is assigned after Server.leader.Store(), so even if we pass the PreRPC check,
-	// Server.jobManager may not be assigned yet. We simply sleep here
-	time.Sleep(time.Second)
+	dmJobCfg = bytes.ReplaceAll(dmJobCfg, []byte("<placeholder>"), []byte(db))
 	require.Eventually(t, func() bool {
-		resp, err := masterClient.SubmitJob(ctx, &pb.SubmitJobRequest{
+		resp, err := client.SubmitJob(ctx, &pb.SubmitJobRequest{
 			Tp:     pb.JobType_DM,
 			Config: dmJobCfg,
 		})
@@ -85,7 +110,7 @@ func TestDMJob(t *testing.T) {
 	// check full phase
 	waitRow := func(where string) {
 		require.Eventually(t, func() bool {
-			rs, err := tidb.Query("select 1 from test.t1 where " + where)
+			rs, err := tidb.Query("select 1 from " + db + ".t1 where " + where)
 			if err != nil {
 				t.Logf("query error: %v", err)
 				return false
@@ -104,14 +129,14 @@ func TestDMJob(t *testing.T) {
 	waitRow("c = 1")
 
 	// incremental phase
-	noError(mysql.Exec("insert into test.t1 values(2)"))
+	noError(mysql.Exec("insert into " + db + ".t1 values(2)"))
 	waitRow("c = 2")
 
 	// imitate an error that can auto resume
-	noError(tidb.Exec("drop table test.t1"))
-	noError(mysql.Exec("insert into test.t1 values(3)"))
+	noError(tidb.Exec("drop table " + db + ".t1"))
+	noError(mysql.Exec("insert into " + db + ".t1 values(3)"))
 	time.Sleep(time.Second)
-	noError(tidb.Exec("create table test.t1(c int primary key)"))
+	noError(tidb.Exec("create table " + db + ".t1(c int primary key)"))
 	time.Sleep(time.Second)
 
 	// check auto resume
