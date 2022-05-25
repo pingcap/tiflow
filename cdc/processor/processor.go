@@ -802,31 +802,17 @@ func (p *processor) createTablePipelineImpl(
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	var table tablepipeline.TablePipeline
-	if config.GetGlobalServerConfig().Debug.EnableTableActor {
-		var err error
-		table, err = tablepipeline.NewTableActor(
-			ctx,
-			p.upStream,
-			p.mounter,
-			tableID,
-			tableName,
-			replicaInfo,
-			s,
-			p.changefeed.Info.GetTargetTs())
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-	} else {
-		table = tablepipeline.NewTablePipeline(
-			ctx,
-			p.mounter,
-			tableID,
-			tableName,
-			replicaInfo,
-			s,
-			p.changefeed.Info.GetTargetTs(),
-		)
+	table, err := tablepipeline.NewTableActor(
+		ctx,
+		p.upStream,
+		p.mounter,
+		tableID,
+		tableName,
+		replicaInfo,
+		s,
+		p.changefeed.Info.GetTargetTs())
+	if err != nil {
+		return nil, errors.Trace(err)
 	}
 
 	if p.redoManager.Enabled() {

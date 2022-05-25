@@ -25,7 +25,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/pipeline"
 	pmessage "github.com/pingcap/tiflow/pkg/pipeline/message"
 	"go.uber.org/zap"
 )
@@ -79,8 +78,7 @@ type sinkNode struct {
 
 	flowController tableFlowController
 
-	replicaConfig    *config.ReplicaConfig
-	isTableActorMode bool
+	replicaConfig *config.ReplicaConfig
 }
 
 func newSinkNode(tableID model.TableID, sink sink.Sink, startTs model.Ts, targetTs model.Ts, flowController tableFlowController) *sinkNode {
@@ -103,14 +101,7 @@ func (n *sinkNode) CheckpointTs() model.Ts       { return atomic.LoadUint64(&n.c
 func (n *sinkNode) BarrierTs() model.Ts          { return atomic.LoadUint64(&n.barrierTs) }
 func (n *sinkNode) Status() TableStatus          { return n.status.Load() }
 
-func (n *sinkNode) Init(ctx pipeline.NodeContext) error {
-	n.replicaConfig = ctx.ChangefeedVars().Info.Config
-	n.initWithReplicaConfig(false, ctx.ChangefeedVars().Info.Config)
-	return nil
-}
-
-func (n *sinkNode) initWithReplicaConfig(isTableActorMode bool, replicaConfig *config.ReplicaConfig) {
-	n.isTableActorMode = isTableActorMode
+func (n *sinkNode) initWithReplicaConfig(replicaConfig *config.ReplicaConfig) {
 	n.replicaConfig = replicaConfig
 }
 
@@ -280,12 +271,6 @@ func splitUpdateEvent(updateEvent *model.PolymorphicEvent) (*model.PolymorphicEv
 	return &deleteEvent, &insertEvent, nil
 }
 
-// Receive receives the message from the previous node
-func (n *sinkNode) Receive(ctx pipeline.NodeContext) error {
-	_, err := n.HandleMessage(ctx, ctx.Message())
-	return err
-}
-
 func (n *sinkNode) HandleMessage(ctx context.Context, msg pmessage.Message) (bool, error) {
 	if n.status.Load() == TableStatusStopped {
 		return false, cerror.ErrTableProcessorStoppedSafely.GenWithStackByArgs()
@@ -335,10 +320,6 @@ func (n *sinkNode) updateBarrierTs(ctx context.Context, ts model.Ts) error {
 		return errors.Trace(err)
 	}
 	return nil
-}
-
-func (n *sinkNode) Destroy(ctx pipeline.NodeContext) error {
-	return n.releaseResource(ctx)
 }
 
 func (n *sinkNode) releaseResource(ctx context.Context) error {
