@@ -1260,10 +1260,10 @@ function DM_RESYNC_TXN_INTERRUPT() {
 function run() {
 	init_cluster
 	init_database
-#	DM_TABLE_CHECKPOINT_BACKWARD
-#	DM_RESYNC_NOT_FLUSHED
-#	DM_RESYNC_TXN_INTERRUPT
-	start=155
+	DM_TABLE_CHECKPOINT_BACKWARD
+	DM_RESYNC_NOT_FLUSHED
+	DM_RESYNC_TXN_INTERRUPT
+	start=131
 	end=155
 	for i in $(seq -f "%03g" ${start} ${end}); do
 		DM_${i}
