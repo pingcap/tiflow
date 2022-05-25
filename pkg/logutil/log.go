@@ -120,12 +120,9 @@ func InitLogger(cfg *Config) error {
 		return err
 	}
 
-	if cfg.File == "" {
-		reset, err := initSaramaLogger()
-		defer reset()
-		if err != nil {
-			return err
-		}
+	err = initSaramaLogger(level)
+	if err != nil {
+		return err
 	}
 
 	return nil
@@ -142,21 +139,17 @@ func ZapErrorFilter(err error, filterErrors ...error) zap.Field {
 	return zap.Error(err)
 }
 
-// initSaramaLogger hacks logger used in sarama lib.
-// this function use info-level logging for sarama and returns a function
-// to restore the original logger later.
-func initSaramaLogger() (func(), error) {
-	conf := &log.Config{Level: "info"}
-	logger, props, _ := log.InitLogger(conf)
-	restoreFn := log.ReplaceGlobals(logger, props)
-
-	stdLogger, err := zap.NewStdLogAt(logger.With(zap.String("name", "sarama")), zap.InfoLevel)
-	if err != nil {
-		return nil, errors.Trace(err)
+// initSaramaLogger hacks logger used in sarama lib
+func initSaramaLogger(level zapcore.Level) error {
+	// only available less than info level
+	if !zapcore.InfoLevel.Enabled(level) {
+		logger, err := zap.NewStdLogAt(log.L().With(zap.String("name", "sarama")), level)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		sarama.Logger = logger
 	}
-	sarama.Logger = stdLogger
-
-	return restoreFn, nil
+	return nil
 }
 
 type grpcLoggerWriter struct {

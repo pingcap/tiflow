@@ -18,7 +18,6 @@ import (
 	"fmt"
 	"regexp"
 	"strconv"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -509,8 +508,7 @@ func validateMinInsyncReplicas(
 	minInsyncReplicasStr, exists, err := minInsyncReplicasConfigGetter()
 	if err != nil {
 		// 'min.insync.replica' is invisible to us in Confluent Cloud Kafka.
-		if strings.Contains(err.Error(),
-			string(cerror.ErrKafkaBrokerConfigNotFound.RFCCode())) {
+		if cerror.ErrKafkaBrokerConfigNotFound.Equal(err) {
 			return nil
 		}
 		return err
