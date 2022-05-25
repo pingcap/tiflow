@@ -65,7 +65,9 @@ func TestNewSaramaConfig(t *testing.T) {
 
 	config.EnableTLS = true
 	config.Credential = &security.Credential{
-		CAPath: "/invalid/ca/path",
+		CAPath:   "/invalid/ca/path",
+		CertPath: "/invalid/cert/path",
+		KeyPath:  "/invalid/key/path",
 	}
 	_, err = NewSaramaConfig(ctx, config)
 	require.Regexp(t, ".*no such file or directory", errors.Cause(err))
