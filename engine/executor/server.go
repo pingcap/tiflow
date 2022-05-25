@@ -325,8 +325,6 @@ func (s *Server) Run(ctx context.Context) error {
 		return s.startForTest(ctx)
 	}
 
-	registerMetrics()
-
 	wg, ctx := errgroup.WithContext(ctx)
 	s.taskRunner = worker.NewTaskRunner(defaultRuntimeIncomingQueueLen, defaultRuntimeInitConcurrency)
 	s.taskCommitter = worker.NewTaskCommitter(s.taskRunner, defaultTaskPreDispatchRequestTTL)

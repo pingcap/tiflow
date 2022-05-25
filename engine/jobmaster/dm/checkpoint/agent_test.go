@@ -194,7 +194,7 @@ func TestIsFresh(t *testing.T) {
 			},
 		},
 	}
-	taskCfg := jobCfg.ToTaskConfigs()[source1]
+	taskCfg := jobCfg.ToTaskCfgs()[source1]
 	checkpointAgent := NewAgentImpl(jobCfg)
 
 	isFresh, err := checkpointAgent.IsFresh(context.Background(), lib.WorkerDMDump, &metadata.Task{Cfg: taskCfg})
