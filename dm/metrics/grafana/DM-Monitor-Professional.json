@@ -3,7 +3,7 @@
     "list": [
       {
         "builtIn": 1,
-        "datasource": "dm-test",
+        "datasource": "DS_TEST-CLUSTER",
         "enable": true,
         "hide": false,
         "iconColor": "rgba(0, 211, 255, 1)",
@@ -20,7 +20,7 @@
   "panels": [
     {
       "collapsed": true,
-      "datasource": "dm-test",
+      "datasource": "${DS_TEST-CLUSTER}",
       "gridPos": {
         "h": 1,
         "w": 24,
@@ -35,7 +35,7 @@
           "cacheTimeout": null,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "dm-test",
+          "datasource": "${DS_TEST-CLUSTER}",
           "decimals": 1,
           "description": "The data import process percentage of Dumpling. The value is an estimated value and may exceed less than 100%.",
           "fieldConfig": {
@@ -139,7 +139,7 @@
           "cacheTimeout": null,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "dm-test",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "The data import process percentage of Loader. The value range is 0% ~ 100%",
           "fieldConfig": {
             "defaults": {},
@@ -241,7 +241,7 @@
           "cacheTimeout": null,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "dm-test",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "The predicted remaining time it takes Syncer to be completely synchronized with the master (in seconds)",
           "fieldConfig": {
             "defaults": {
@@ -347,7 +347,7 @@
           "cacheTimeout": null,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "dm-test",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "Dumper encounters an error within the DM-worker and exits",
           "fieldConfig": {
             "defaults": {},
@@ -446,7 +446,7 @@
           "cacheTimeout": null,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "dm-test",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "Loader encounters an error within the DM-worker and exits",
           "fieldConfig": {
             "defaults": {},
@@ -544,7 +544,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "dm-test",
+          "datasource": "${DS_TEST-CLUSTER}",
           "decimals": 1,
           "description": "The time it takes loader to execute every statement to the downstream (in seconds)",
           "fieldConfig": {
@@ -665,7 +665,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "dm-test",
+          "datasource": "${DS_TEST-CLUSTER}",
           "decimals": 1,
           "description": "number of sql executed per second",
           "fieldConfig": {
@@ -769,7 +769,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "dm-test",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "The duration that Loader executes a transaction (in seconds)",
           "fieldConfig": {
             "defaults": {},
@@ -885,7 +885,7 @@
           "cacheTimeout": null,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "dm-test",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "The total number of tables in the full data imported by Loader",
           "fieldConfig": {
             "defaults": {},
@@ -984,7 +984,7 @@
           "cacheTimeout": null,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "dm-test",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "The total number of data files in the full data imported by Loader (including the `INSERT INTO` statement)",
           "fieldConfig": {
             "defaults": {},
@@ -1083,7 +1083,7 @@
           "cacheTimeout": null,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "dm-test",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "The total size of the data files in the full data imported by Loader (including the `INSERT INTO` statement)",
           "fieldConfig": {
             "defaults": {},
@@ -1182,7 +1182,7 @@
     },
     {
       "collapsed": true,
-      "datasource": "dm-test",
+      "datasource": "${DS_TEST-CLUSTER}",
       "gridPos": {
         "h": 1,
         "w": 24,
@@ -1198,7 +1198,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "dm-test",
+          "datasource": "${DS_TEST-CLUSTER}",
           "decimals": 1,
           "description": "number of sql executed per second(one minute average value, dm_syncer_finished_jobs_total )",
           "fieldConfig": {
@@ -1305,7 +1305,7 @@
           "cacheTimeout": null,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "dm-test",
+          "datasource": "${DS_TEST-CLUSTER}",
           "decimals": 1,
           "description": "The predicted remaining time it takes Syncer to be completely synchronized with the master (in seconds)",
           "fieldConfig": {
@@ -1408,7 +1408,7 @@
           "cacheTimeout": null,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "dm-test",
+          "datasource": "${DS_TEST-CLUSTER}",
           "decimals": 1,
           "description": "The latency time it takes to replicate the binlog from master to Syncer (in seconds)",
           "fieldConfig": {
@@ -1528,7 +1528,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "dm-test",
+          "datasource": "${DS_TEST-CLUSTER}",
           "decimals": 1,
           "description": "number of sql executed per second(one minute average value, dm_syncer_finished_jobs_total )\n\nThe maximum TPS estimated according to the recent SQL time-consuming, may vary greatly with different SQL",
           "fieldConfig": {
@@ -1644,7 +1644,7 @@
           "cacheTimeout": null,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "dm-test",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "The binlog replication unit process encounters an error within the DM-worker and exits",
           "fieldConfig": {
             "defaults": {},
@@ -1744,7 +1744,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "dm-test",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "The number of add/finished jobs per unit of time",
           "fieldConfig": {
             "defaults": {},
@@ -1858,7 +1858,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "dm-test",
+          "datasource": "${DS_TEST-CLUSTER}",
           "decimals": 1,
           "description": "The time it takes binlog replication unit to detect conflicts between DMLs (in seconds)",
           "fieldConfig": {
@@ -1975,7 +1975,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "dm-test",
+          "datasource": "${DS_TEST-CLUSTER}",
           "decimals": 1,
           "description": "The number of binlog events received per unit of time (this number does not include the events that need to be skipped)",
           "fieldConfig": {
@@ -2079,7 +2079,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "dm-test",
+          "datasource": "${DS_TEST-CLUSTER}",
           "decimals": 1,
           "description": "The time it takes binlog replication unit to add a job to the queue (in seconds)",
           "fieldConfig": {
@@ -2196,7 +2196,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "dm-test",
+          "datasource": "${DS_TEST-CLUSTER}",
           "decimals": 1,
           "description": "The time it takes binlog replication unit to execute the transaction to the downstream (in seconds)",
           "fieldConfig": {
@@ -2353,7 +2353,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "dm-test",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "The time it takes binlog replication unit to execute every statement to the downstream (in seconds)",
           "fieldConfig": {
             "defaults": {},
@@ -2478,7 +2478,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "dm-test",
+          "datasource": "${DS_TEST-CLUSTER}",
           "decimals": 1,
           "description": "The number of binlog events received per unit of time that needs to be skipped",
           "fieldConfig": {
@@ -2587,7 +2587,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "dm-test",
+          "datasource": "${DS_TEST-CLUSTER}",
           "decimals": 0,
           "description": "The remain length of DML job queues",
           "fieldConfig": {
@@ -2692,7 +2692,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "dm-test",
+          "datasource": "${DS_TEST-CLUSTER}",
           "decimals": 1,
           "description": "The size of a single binlog event that the binlog replication unit reads from relay log or upstream master",
           "fieldConfig": {
@@ -2816,7 +2816,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "dm-test",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "The number of binlog files in binlog replication unit that are behind the master",
           "fieldConfig": {
             "defaults": {},
@@ -2916,7 +2916,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "dm-test",
+          "datasource": "${DS_TEST-CLUSTER}",
           "decimals": 1,
           "description": "The number of rows of each binlog event that enters the DM",
           "fieldConfig": {
@@ -3016,7 +3016,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "dm-test",
+          "datasource": "${DS_TEST-CLUSTER}",
           "decimals": 1,
           "description": "The duration that the binlog replication unit reads binlog event from the relay log or upstream MySQL (in seconds)",
           "fieldConfig": {
@@ -3133,7 +3133,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "dm-test",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "The time it takes binlog replication unit to parse and transform the binlog into SQL statements (in seconds)",
           "fieldConfig": {
             "defaults": {},
@@ -3255,7 +3255,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "dm-test",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "The time it takes binlog replication unit to dispatch a binlog event (in seconds)",
           "fieldConfig": {
             "defaults": {},
@@ -3371,7 +3371,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "dm-test",
+          "datasource": "${DS_TEST-CLUSTER}",
           "decimals": 1,
           "description": "The number of unsynced tables in the subtask",
           "fieldConfig": {
@@ -3472,7 +3472,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "dm-test",
+          "datasource": "${DS_TEST-CLUSTER}",
           "decimals": 1,
           "description": "The number of binlog files in binlog replication unit that are behind relay",
           "fieldConfig": {
@@ -3573,7 +3573,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "dm-test",
+          "datasource": "${DS_TEST-CLUSTER}",
           "decimals": 1,
           "description": "The time interval of DM written to disk",
           "fieldConfig": {
@@ -3676,7 +3676,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "dm-test",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "Is waiting shard DDL lock to be resolved, >0 means waiting",
           "fieldConfig": {
             "defaults": {},
@@ -3776,7 +3776,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "dm-test",
+          "datasource": "${DS_TEST-CLUSTER}",
           "decimals": 1,
           "description": "The time it takes binlog replication unit to skip a binlog event (in seconds)",
           "fieldConfig": {
@@ -3893,7 +3893,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "dm-test",
+          "datasource": "${DS_TEST-CLUSTER}",
           "decimals": 1,
           "description": "Display the number of sql contained in the dm copy incremental data to the downstream transaction from each latitude",
           "fieldConfig": {
@@ -3996,7 +3996,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "dm-test",
+          "datasource": "${DS_TEST-CLUSTER}",
           "decimals": 1,
           "description": "",
           "fieldConfig": {
@@ -4136,7 +4136,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "dm-test",
+          "datasource": "${DS_TEST-CLUSTER}",
           "fieldConfig": {
             "defaults": {},
             "overrides": []
@@ -4229,7 +4229,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "dm-test",
+          "datasource": "${DS_TEST-CLUSTER}",
           "fieldConfig": {
             "defaults": {},
             "overrides": []
@@ -4322,7 +4322,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "dm-test",
+          "datasource": "${DS_TEST-CLUSTER}",
           "fieldConfig": {
             "defaults": {},
             "overrides": []
@@ -4415,7 +4415,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "dm-test",
+          "datasource": "${DS_TEST-CLUSTER}",
           "fieldConfig": {
             "defaults": {},
             "overrides": []
@@ -4508,7 +4508,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "dm-test",
+          "datasource": "${DS_TEST-CLUSTER}",
           "fieldConfig": {
             "defaults": {},
             "overrides": []
@@ -4602,7 +4602,7 @@
     },
     {
       "collapsed": true,
-      "datasource": "dm-test",
+      "datasource": "${DS_TEST-CLUSTER}",
       "gridPos": {
         "h": 1,
         "w": 24,
@@ -4617,7 +4617,7 @@
           "cacheTimeout": null,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "dm-test",
+          "datasource": "${DS_TEST-CLUSTER}",
           "decimals": 1,
           "description": "The storage capacity of the disk occupied by the relay log",
           "fieldConfig": {
@@ -4718,7 +4718,7 @@
           "cacheTimeout": null,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "dm-test",
+          "datasource": "${DS_TEST-CLUSTER}",
           "decimals": 1,
           "description": "The remaining storage capacity of the disk occupied by the relay log",
           "fieldConfig": {
@@ -4819,7 +4819,7 @@
           "cacheTimeout": null,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "dm-test",
+          "datasource": "${DS_TEST-CLUSTER}",
           "decimals": 0,
           "description": "The relay log encounters an error within the DM-worker and exits",
           "fieldConfig": {
@@ -4921,7 +4921,7 @@
           "cacheTimeout": null,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "dm-test",
+          "datasource": "${DS_TEST-CLUSTER}",
           "decimals": null,
           "description": "The number of corrupted relay log files",
           "fieldConfig": {
@@ -5021,7 +5021,7 @@
           "cacheTimeout": null,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "dm-test",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "The number of errors encountered when the relay log reads the binlog from the upstream MySQL",
           "fieldConfig": {
             "defaults": {},
@@ -5121,7 +5121,7 @@
           "cacheTimeout": null,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "dm-test",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "The number of errors encountered when the relay log writes the binlog to disks",
           "fieldConfig": {
             "defaults": {},
@@ -5219,7 +5219,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "dm-test",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "The largest index number of relay log files. E.g. \"value = 1\" indicates \"mysql-bin.000001\"",
           "fieldConfig": {
             "defaults": {},
@@ -5327,7 +5327,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "dm-test",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "The number of binlog files in the relay log that are behind the upstream master",
           "fieldConfig": {
             "defaults": {},
@@ -5426,7 +5426,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "dm-test",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "The write offset of the latest relay log file",
           "fieldConfig": {
             "defaults": {},
@@ -5534,7 +5534,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "dm-test",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "The duration that the relay log reads binlog event from the upstream MySQL (in seconds)",
           "fieldConfig": {
             "defaults": {},
@@ -5648,7 +5648,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "dm-test",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "The duration that the relay log writes binlog event into the disks each time (in seconds)",
           "fieldConfig": {
             "defaults": {},
@@ -5761,7 +5761,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "dm-test",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "The size of a single binlog event that the relay log writes into the disks",
           "fieldConfig": {
             "defaults": {},
@@ -5876,7 +5876,7 @@
     },
     {
       "collapsed": true,
-      "datasource": "dm-test",
+      "datasource": "${DS_TEST-CLUSTER}",
       "gridPos": {
         "h": 1,
         "w": 24,
@@ -5890,7 +5890,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "dm-test",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "number of dm-masters try to start leader components per minute",
           "fieldConfig": {
             "defaults": {},
@@ -5988,7 +5988,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "dm-test",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "number of worker in different states, -1 - unrecognized, 0 - offline, 1 - free, 2 - bound",
           "fieldConfig": {
             "defaults": {},
@@ -6085,7 +6085,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "dm-test",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "state of worker, -1 - unrecognized, 0 - offline, 1 - free, 2 - bound",
           "fieldConfig": {
             "defaults": {},
@@ -6182,7 +6182,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "dm-test",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "number of worker event error",
           "fieldConfig": {
             "defaults": {},
@@ -6279,7 +6279,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "dm-test",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "number of shard DDL lock/operation error in one minute",
           "fieldConfig": {
             "defaults": {},
@@ -6376,7 +6376,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "dm-test",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "number of pending shard DDL in different states, Un-synced (waiting all upstream), Synced (all upstream finished, waiting all downstream)",
           "fieldConfig": {
             "defaults": {},
@@ -6475,7 +6475,7 @@
     },
     {
       "collapsed": true,
-      "datasource": "dm-test",
+      "datasource": "${DS_TEST-CLUSTER}",
       "gridPos": {
         "h": 1,
         "w": 24,
@@ -6489,7 +6489,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "dm-test",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "The number of error happens before operate",
           "fieldConfig": {
             "defaults": {},
@@ -6583,7 +6583,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "dm-test",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "The number of error happens in operate source bound",
           "fieldConfig": {
             "defaults": {},
@@ -6677,7 +6677,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "dm-test",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "The number of error happens in operate start",
           "fieldConfig": {
             "defaults": {},
@@ -6771,7 +6771,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "dm-test",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "The number of error happens in operate pause",
           "fieldConfig": {
             "defaults": {},
@@ -6865,7 +6865,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "dm-test",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "The number of error happens in operate resume",
           "fieldConfig": {
             "defaults": {},
@@ -6959,7 +6959,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "dm-test",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "The number of error happens in operate auto-resume",
           "fieldConfig": {
             "defaults": {},
@@ -7053,7 +7053,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "dm-test",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "The number of error happens in operate update",
           "fieldConfig": {
             "defaults": {},
@@ -7147,7 +7147,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "dm-test",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "The number of error happens in operate stop",
           "fieldConfig": {
             "defaults": {},
@@ -7254,7 +7254,7 @@
           "text": "All",
           "value": "$__all"
         },
-        "datasource": "dm-test",
+        "datasource": "${DS_TEST-CLUSTER}",
         "definition": "label_values(dm_worker_task_state, task)",
         "description": null,
         "error": null,
@@ -7285,7 +7285,7 @@
           "text": "All",
           "value": "$__all"
         },
-        "datasource": "dm-test",
+        "datasource": "${DS_TEST-CLUSTER}",
         "definition": "label_values(dm_worker_task_state, source_id)",
         "description": null,
         "error": null,
@@ -7316,7 +7316,7 @@
           "text": "All",
           "value": "$__all"
         },
-        "datasource": "dm-test",
+        "datasource": "${DS_TEST-CLUSTER}",
         "definition": "label_values(dm_worker_task_state{task=~\"$task\"}, instance)",
         "description": null,
         "error": null,
@@ -7347,7 +7347,7 @@
           "text": "All",
           "value": "$__all"
         },
-        "datasource": "dm-test",
+        "datasource": "${DS_TEST-CLUSTER}",
         "definition": "label_values(dm_syncer_finished_jobs_total, queueNo)",
         "description": null,
         "error": null,
@@ -7378,7 +7378,7 @@
           "text": "All",
           "value": "$__all"
         },
-        "datasource": "dm-test",
+        "datasource": "${DS_TEST-CLUSTER}",
         "definition": "label_values(dm_syncer_finished_jobs_total,type)",
         "description": null,
         "error": null,
@@ -7409,7 +7409,7 @@
           "text": "All",
           "value": "$__all"
         },
-        "datasource": "dm-test",
+        "datasource": "${DS_TEST-CLUSTER}",
         "definition": "label_values(dm_syncer_binlog_transform_cost_count,stage)",
         "description": null,
         "error": null,
@@ -7440,7 +7440,7 @@
           "text": "All",
           "value": "$__all"
         },
-        "datasource": "dm-test",
+        "datasource": "${DS_TEST-CLUSTER}",
         "definition": "label_values(dm_syncer_finished_jobs_total, target_schema)",
         "description": null,
         "error": null,
@@ -7471,7 +7471,7 @@
           "text": "All",
           "value": "$__all"
         },
-        "datasource": "dm-test",
+        "datasource": "${DS_TEST-CLUSTER}",
         "definition": "label_values(dm_syncer_finished_jobs_total, target_table)",
         "description": null,
         "error": null,
@@ -7583,7 +7583,7 @@
           "text": "All",
           "value": "$__all"
         },
-        "datasource": "dm-test",
+        "datasource": "${DS_TEST-CLUSTER}",
         "definition": "label_values(dm_syncer_finished_jobs_total,worker)",
         "description": null,
         "error": null,
