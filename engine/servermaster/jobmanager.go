@@ -35,7 +35,12 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/notifier"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
+<<<<<<< HEAD
 	"github.com/pingcap/tiflow/pkg/uuid"
+=======
+	"github.com/pingcap/tiflow/engine/pkg/tenant"
+	"github.com/pingcap/tiflow/engine/pkg/uuid"
+>>>>>>> 6d214f177 (feat(project): framework support multi-projects)
 )
 
 // JobManager defines manager of job master
@@ -217,7 +222,7 @@ func (jm *JobManagerImplV2) SubmitJob(ctx context.Context, req *pb.SubmitJobRequ
 	)
 
 	meta := &libModel.MasterMetaKVData{
-		ProjectID: req.GetUser(),
+		ProjectID: req.GetProjectInfo().GetProjectId(),
 		// TODO: we can use job name provided from user, but we must check the
 		// job name is unique before using it.
 		ID:         jm.uuidGen.NewString(),
@@ -250,6 +255,17 @@ func (jm *JobManagerImplV2) SubmitJob(ctx context.Context, req *pb.SubmitJobRequ
 	if err != nil {
 		resp.Err = derrors.ToPBError(err)
 		return resp
+	}
+
+	// Triky way here to set the worker(jobmaster)'s project info
+	defaultMaster, ok := jm.BaseMaster.(*lib.DefaultBaseMaster)
+	if ok {
+		defaultMaster.SetWorkerProjectInfo(tenant.ProjectInfo{
+			TenantID:  req.GetProjectInfo().GetTenantId(),
+			ProjectID: req.GetProjectInfo().GetProjectId(),
+		})
+	} else {
+		log.L().Error("jobmanager's base master is not a DefaultBaseMaster")
 	}
 
 	// CreateWorker here is to create job master actually

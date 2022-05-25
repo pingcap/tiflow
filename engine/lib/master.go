@@ -158,6 +158,16 @@ type DefaultBaseMaster struct {
 	timeoutConfig config.TimeoutConfig
 	masterMeta    *libModel.MasterMetaKVData
 
+	// JobManager is a special master which has workers(jobMaster) with different project info,
+	// so projectMux is to protect the Read-Write of projectInfo
+	projectMux sync.RWMutex
+	// projectInfoSelf is the project info for master itself
+	projectInfoSelf tenant.ProjectInfo
+	// projectInfoWorker is the project info for its worker
+	// When 'master' is the jobmaster, projectInfoWorker is the same as projectInfoSelf
+	// When 'master' is the jobmanager, projectInfoWorker is different from projectInfoSelf
+	projectInfoWorker tenant.ProjectInfo
+
 	// user metastore prefix kvclient
 	// Don't close it. It's just a prefix wrapper for underlying userRawKVClient
 	userMetaKVClient metaclient.KVClient
@@ -234,17 +244,18 @@ func NewBaseMaster(
 
 		uuidGen: uuid.NewGenerator(),
 
-		nodeID:        nodeID,
-		advertiseAddr: advertiseAddr,
+		nodeID:            nodeID,
+		advertiseAddr:     advertiseAddr,
+		projectInfoSelf:   ctx.ProjectInfo,
+		projectInfoWorker: ctx.ProjectInfo,
 
 		createWorkerQuota: quota.NewConcurrencyQuota(maxCreateWorkerConcurrency),
-		// [TODO] use tenantID if support muliti-tenant
-		userMetaKVClient: kvclient.NewPrefixKVClient(params.UserRawKVClient, tenant.DefaultUserTenantID),
-		// TODO: tenant info and job type
+		userMetaKVClient:  kvclient.NewPrefixKVClient(params.UserRawKVClient, ctx.ProjectInfo.ProjectID),
 		metricFactory: promutil.NewFactory4Master(tenant.ProjectInfo{
-			TenantID:  tenant.DefaultUserTenantID,
-			ProjectID: "TODO",
+			TenantID:  ctx.ProjectInfo.TenantID,
+			ProjectID: ctx.ProjectInfo.ProjectID,
 		}, WorkerTypeForMetric(tp), id),
+
 		deps: ctx.Deps(),
 	}
 }
@@ -595,6 +606,7 @@ func (m *DefaultBaseMaster) CreateWorker(
 
 		executorClient := m.executorClientManager.ExecutorClient(executorID)
 		dispatchArgs := &client.DispatchTaskArgs{
+			ProjectInfo:  m.WorkerProjectInfo(),
 			WorkerID:     workerID,
 			MasterID:     m.id,
 			WorkerType:   int64(workerType),
@@ -624,4 +636,21 @@ func (m *DefaultBaseMaster) CreateWorker(
 // IsMasterReady implements BaseMaster.IsMasterReady
 func (m *DefaultBaseMaster) IsMasterReady() bool {
 	return m.workerManager.IsInitialized()
+}
+
+// SetWorkerProjectInfo set the project info of master
+// Currently, it is used by JobManager only
+func (m *DefaultBaseMaster) SetWorkerProjectInfo(projectInfo tenant.ProjectInfo) {
+	m.projectMux.Lock()
+	defer m.projectMux.Unlock()
+
+	m.projectInfoWorker = projectInfo
+}
+
+// WorkerProjectInfo get the project info of master
+func (m *DefaultBaseMaster) WorkerProjectInfo() tenant.ProjectInfo {
+	m.projectMux.RLock()
+	defer m.projectMux.RUnlock()
+
+	return m.projectInfoWorker
 }

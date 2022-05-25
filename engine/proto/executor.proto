@@ -18,7 +18,7 @@ message PreDispatchTaskRequest {
     bytes task_config = 2;
     string master_id = 3;
     string worker_id = 4;
-    ProjectInfo project = 5;
+    ProjectInfo project_info = 5;
     
     // request_id should be a UUID unique for each RPC call.
     string request_id = 6;

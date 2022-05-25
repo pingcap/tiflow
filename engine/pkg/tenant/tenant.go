@@ -22,9 +22,12 @@ type (
 
 // tenant const variables
 const (
-	FrameTenantID       = "dfe_root"
-	TestTenantID        = "dfe_test"
-	DefaultUserTenantID = "def_default_user"
+	FrameTenantID        = "dfe_tenant_root"
+	FrameProjectID       = "dfe_proj_root"
+	TestTenantID         = "dfe_tenant_test"
+	TestProjectID        = "dfe_proj_test"
+	DefaultUserTenantID  = "dfe_tenant_default"
+	DefaultUserProjectID = "dfe_proj_default"
 )
 
 // ProjectInfo is the tenant/project information which is consistent with cloud service provider

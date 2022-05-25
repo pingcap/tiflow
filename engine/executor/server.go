@@ -156,6 +156,7 @@ func (s *Server) buildDeps() (*deps.Deps, error) {
 
 func (s *Server) makeTask(
 	ctx context.Context,
+	projectInfo *pb.ProjectInfo,
 	workerID libModel.WorkerID,
 	masterID libModel.MasterID,
 	workerType libModel.WorkerType,
@@ -169,6 +170,8 @@ func (s *Server) makeTask(
 	dctx = dctx.WithDeps(dp)
 	dctx.Environ.NodeID = p2p.NodeID(s.info.ID)
 	dctx.Environ.Addr = s.info.Addr
+	dctx.ProjectInfo.TenantID = projectInfo.GetTenantId()
+	dctx.ProjectInfo.ProjectID = projectInfo.GetProjectId()
 
 	// NOTICE: only take effect when job type is job master
 	masterMeta := &libModel.MasterMetaKVData{
@@ -200,6 +203,7 @@ func (s *Server) makeTask(
 func (s *Server) PreDispatchTask(ctx context.Context, req *pb.PreDispatchTaskRequest) (*pb.PreDispatchTaskResponse, error) {
 	task, err := s.makeTask(
 		ctx,
+		req.GetProjectInfo(),
 		req.GetWorkerId(),
 		req.GetMasterId(),
 		libModel.WorkerType(req.GetTaskTypeId()),

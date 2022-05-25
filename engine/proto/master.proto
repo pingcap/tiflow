@@ -81,13 +81,13 @@ enum JobType {
 message SubmitJobRequest {
     JobType tp = 1;
     bytes config = 2;
-    ProjectInfo project = 3;
+    ProjectInfo project_info = 3;
     // TODO: Resource Limit
 }
 
 message QueryJobRequest {
     string job_id = 1;
-    ProjectInfo project = 2;
+    ProjectInfo project_info = 2;
 }
 
 message WorkerInfo {
@@ -119,13 +119,13 @@ message QueryJobResponse {
 message CancelJobRequest {
     int32 job_id = 1 [deprecated=true];
     string job_id_str = 2;
-    ProjectInfo project = 3;
+    ProjectInfo project_info = 3;
 }
 
 message PauseJobRequest {
     int32 job_id = 1 [deprecated=true];
     string job_id_str = 2;
-    ProjectInfo project = 3;
+    ProjectInfo project_info = 3;
 }
 
 message SubmitJobResponse {

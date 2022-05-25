@@ -673,9 +673,11 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 	dctx := dcontext.NewContext(ctx, log.L())
 	dctx.Environ.Addr = s.cfg.AdvertiseAddr
 	dctx.Environ.NodeID = s.name()
+	dctx.ProjectInfo.TenantID = tenant.FrameTenantID
+	dctx.ProjectInfo.ProjectID = tenant.FrameProjectID
 
 	masterMeta := &libModel.MasterMetaKVData{
-		ProjectID: tenant.FrameTenantID,
+		ProjectID: tenant.FrameProjectID,
 		ID:        metadata.JobManagerUUID,
 		Tp:        lib.JobManager,
 		// TODO: add other infos

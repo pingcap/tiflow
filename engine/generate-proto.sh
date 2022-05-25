@@ -8,12 +8,16 @@
 GOPATH=$(go env GOPATH)
 echo "using GOPATH=$GOPATH"
 <<<<<<< HEAD
+<<<<<<< HEAD
 
 CUR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 TOOLS_BIN_DIR=${CUR}/../tools/bin
 =======
 PWD_NOW=`pwd`
+=======
+PWD_NOW=$(pwd)
+>>>>>>> 6d214f177 (feat(project): framework support multi-projects)
 TOOLS_BIN_DIR=${PWD_NOW}/tools/bin
 >>>>>>> 067f67c6e (feat(proto): add project proto)
 
