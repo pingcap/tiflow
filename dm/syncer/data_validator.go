@@ -44,6 +44,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/relay"
 	"github.com/pingcap/tiflow/dm/syncer/dbconn"
+	"github.com/pingcap/tiflow/dm/syncer/metrics"
 	"github.com/pingcap/tiflow/pkg/sqlmodel"
 )
 
@@ -578,7 +579,14 @@ func (v *DataValidator) doValidate() {
 		default:
 			currLoc.Position.Pos = e.Header.LogPos
 		}
-
+		// update validator metric
+		metrics.ValidatorBinlogPos.WithLabelValues(v.cfg.Name, v.cfg.SourceID, v.cfg.WorkerName).Set(float64(currLoc.Position.Pos))
+		index, err := binlog.GetFilenameIndex(currLoc.Position.Name)
+		if err != nil {
+			v.L.Warn("fail to record validator binlog file index")
+		} else {
+			metrics.ValidatorBinlogFile.WithLabelValues(v.cfg.Name, v.cfg.SourceID, v.cfg.WorkerName).Set(float64(index))
+		}
 		// wait until syncer synced current event
 		err = v.waitSyncerSynced(currLoc)
 		if err != nil {
@@ -586,7 +594,24 @@ func (v *DataValidator) doValidate() {
 			v.sendError(err)
 			return
 		}
-
+		v.syncer.currentLocationMu.RLock()
+		syncerLoc := v.syncer.currentLocationMu.currentLocation
+		v.syncer.currentLocationMu.RUnlock()
+		if syncerLoc.Position.Name == currLoc.Position.Name {
+			// same file: record the log pos latency
+			metrics.ValidatorLogPosLatency.WithLabelValues(v.cfg.Name, v.cfg.SourceID, v.cfg.WorkerName).Set(float64(syncerLoc.Position.Pos - currLoc.Position.Pos))
+			metrics.ValidatorLogFileLatency.WithLabelValues(v.cfg.Name, v.cfg.SourceID, v.cfg.WorkerName).Set(float64(0))
+		} else {
+			var syncerLogIdx int64
+			metrics.ValidatorLogPosLatency.WithLabelValues(v.cfg.Name, v.cfg.SourceID, v.cfg.WorkerName).Set(float64(0))
+			syncerLogIdx, err = binlog.GetFilenameIndex(syncerLoc.Position.Name)
+			if err != nil {
+				metrics.ValidatorLogFileLatency.WithLabelValues(v.cfg.Name, v.cfg.SourceID, v.cfg.WorkerName).Set(float64(syncerLogIdx - index))
+			} else {
+				metrics.ValidatorLogFileLatency.WithLabelValues(v.cfg.Name, v.cfg.SourceID, v.cfg.WorkerName).Set(float64(0))
+				v.L.Warn("fail to get syncer's log file index")
+			}
+		}
 		v.processedBinlogSize.Add(int64(e.Header.EventSize))
 
 		switch ev := e.Event.(type) {
@@ -640,6 +665,7 @@ func (v *DataValidator) doValidate() {
 func (v *DataValidator) Stop() {
 	v.stopInner()
 	v.errProcessWg.Wait()
+	metrics.RemoveValidatorLabelValuesWithTask(v.cfg.Name)
 }
 
 func (v *DataValidator) stopInner() {
