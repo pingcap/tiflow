@@ -38,10 +38,6 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-const (
-	flushMemoryMetricsDuration = time.Second * 5
-)
-
 type sorterNode struct {
 	sorter sorter.EventSorter
 
@@ -156,11 +152,6 @@ func (n *sorterNode) start(
 		lastSendResolvedTsTime := time.Now() // the time at which we last sent a resolved-ts.
 		lastCRTs := uint64(0)                // the commit-ts of the last row changed we sent.
 
-		metricsTableMemoryHistogram := tableMemoryHistogram.
-			WithLabelValues(ctx.ChangefeedVars().ID.Namespace, ctx.ChangefeedVars().ID.ID)
-		metricsTicker := time.NewTicker(flushMemoryMetricsDuration)
-		defer metricsTicker.Stop()
-
 		for {
 			// We must call `sorter.Output` before receiving resolved events.
 			// Skip calling `sorter.Output` and caching output channel may fail
@@ -169,8 +160,6 @@ func (n *sorterNode) start(
 			select {
 			case <-stdCtx.Done():
 				return nil
-			case <-metricsTicker.C:
-				metricsTableMemoryHistogram.Observe(float64(n.flowController.GetConsumption()))
 			case msg, ok := <-output:
 				if !ok {
 					// sorter output channel closed
@@ -311,7 +300,6 @@ func (n *sorterNode) updateBarrierTs(barrierTs model.Ts) {
 }
 
 func (n *sorterNode) releaseResource(changefeedID model.ChangeFeedID) {
-	defer tableMemoryHistogram.DeleteLabelValues(changefeedID.Namespace, changefeedID.ID)
 	// Since the flowController is implemented by `Cond`, it is not cancelable by a context
 	// the flowController will be blocked in a background goroutine,
 	// We need to abort the flowController manually in the nodeRunner
