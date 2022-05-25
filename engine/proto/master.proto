@@ -87,6 +87,7 @@ message SubmitJobRequest {
 
 message QueryJobRequest {
     string job_id = 1;
+    ProjectInfo project = 2;
 }
 
 message WorkerInfo {
@@ -118,11 +119,13 @@ message QueryJobResponse {
 message CancelJobRequest {
     int32 job_id = 1 [deprecated=true];
     string job_id_str = 2;
+    ProjectInfo project = 3;
 }
 
 message PauseJobRequest {
     int32 job_id = 1 [deprecated=true];
     string job_id_str = 2;
+    ProjectInfo project = 3;
 }
 
 message SubmitJobResponse {
