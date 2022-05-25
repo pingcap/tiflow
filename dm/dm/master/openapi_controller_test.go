@@ -62,13 +62,13 @@ func (s *OpenAPIControllerSuite) SetupSuite() {
 	s.testTask = &task
 
 	checker.CheckSyncConfigFunc = mockCheckSyncConfig
-	checkAndAdjustSourceConfigFunc = checkAndNoAdjustSourceConfigMock
+	CheckAndAdjustSourceConfigFunc = checkAndNoAdjustSourceConfigMock
 	s.Nil(failpoint.Enable("github.com/pingcap/tiflow/dm/dm/master/MockSkipAdjustTargetDB", `return(true)`))
 	s.Nil(failpoint.Enable("github.com/pingcap/tiflow/dm/dm/master/MockSkipRemoveMetaData", `return(true)`))
 }
 
 func (s *OpenAPIControllerSuite) TearDownSuite() {
-	checkAndAdjustSourceConfigFunc = checkAndAdjustSourceConfig
+	CheckAndAdjustSourceConfigFunc = checkAndAdjustSourceConfig
 	checker.CheckSyncConfigFunc = checker.CheckSyncConfig
 	s.Nil(failpoint.Disable("github.com/pingcap/tiflow/dm/dm/master/MockSkipAdjustTargetDB"))
 	s.Nil(failpoint.Disable("github.com/pingcap/tiflow/dm/dm/master/MockSkipRemoveMetaData"))
