@@ -47,6 +47,8 @@ type TablePipeline interface {
 	Cancel()
 	// Wait waits for table pipeline destroyed
 	Wait()
+	// MemoryConsumption return the memory consumption in bytes
+	MemoryConsumption() uint64
 }
 
 // TODO find a better name or avoid using an interface
