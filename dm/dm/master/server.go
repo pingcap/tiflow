@@ -87,10 +87,11 @@ var (
 	registerOnce      sync.Once
 	runBackgroundOnce sync.Once
 
+	// CheckAndAdjustSourceConfigFunc is exposed to dataflow engine.
 	// the difference of below functions is checkAndAdjustSourceConfigForDMCtlFunc will not AdjustCaseSensitive. It's a
 	// compatibility compromise.
 	// When we need to change the implementation of dmctl to OpenAPI, we should notice the user about this change.
-	checkAndAdjustSourceConfigFunc         = checkAndAdjustSourceConfig
+	CheckAndAdjustSourceConfigFunc         = checkAndAdjustSourceConfig
 	checkAndAdjustSourceConfigForDMCtlFunc = checkAndAdjustSourceConfigForDMCtl
 )
 
@@ -1296,7 +1297,7 @@ func (s *Server) CheckTask(ctx context.Context, req *pb.CheckTaskRequest) (*pb.C
 		}, nil
 	}
 	resp := &pb.CheckTaskResponse{}
-	_, stCfgs, err := s.generateSubTask(ctx, req.Task, nil)
+	_, stCfgs, err := s.generateSubTask(ctx, req.Task, &cliArgs)
 	if err != nil {
 		resp.Msg = err.Error()
 		// nolint:nilerr
@@ -1602,6 +1603,15 @@ func (s *Server) generateSubTask(
 	}
 	if err != nil {
 		return nil, nil, terror.WithClass(err, terror.ClassDMMaster)
+	}
+
+	if cfg.TaskMode == config.ModeIncrement && (cliArgs == nil || cliArgs.StartTime == "") {
+		for _, inst := range cfg.MySQLInstances {
+			// incremental task need to specify meta or start time
+			if inst.Meta == nil {
+				return nil, nil, terror.ErrConfigMetadataNotSet.Generate(inst.SourceID, config.ModeIncrement)
+			}
+		}
 	}
 
 	err = adjustTargetDB(ctx, cfg.TargetDB)

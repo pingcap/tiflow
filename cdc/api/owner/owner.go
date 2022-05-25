@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package api
+package owner
 
 import (
 	"context"
@@ -24,6 +24,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc/api"
+	"github.com/pingcap/tiflow/cdc/api/middleware"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.etcd.io/etcd/client/v3/concurrency"
 	"go.uber.org/zap"
@@ -84,8 +86,8 @@ func RegisterOwnerAPIRoutes(router *gin.Engine, capture *capture.Capture) {
 	ownerAPI := ownerAPI{capture: capture}
 	owner := router.Group("/capture/owner")
 
-	owner.Use(errorHandleMiddleware())
-	owner.Use(logMiddleware())
+	owner.Use(middleware.ErrorHandleMiddleware())
+	owner.Use(middleware.LogMiddleware())
 
 	owner.POST("/resign", gin.WrapF(ownerAPI.handleResignOwner))
 	owner.POST("/admin", gin.WrapF(ownerAPI.handleChangefeedAdmin))
@@ -97,13 +99,13 @@ func RegisterOwnerAPIRoutes(router *gin.Engine, capture *capture.Capture) {
 func handleOwnerResp(w http.ResponseWriter, err error) {
 	if err != nil {
 		if errors.Cause(err) == concurrency.ErrElectionNotLeader {
-			writeError(w, http.StatusBadRequest, err)
+			api.WriteError(w, http.StatusBadRequest, err)
 			return
 		}
-		writeError(w, http.StatusInternalServerError, err)
+		api.WriteError(w, http.StatusInternalServerError, err)
 		return
 	}
-	writeData(w, commonResp{Status: true})
+	api.WriteData(w, commonResp{Status: true})
 }
 
 func (h *ownerAPI) handleResignOwner(w http.ResponseWriter, req *http.Request) {
@@ -128,20 +130,21 @@ func (h *ownerAPI) handleChangefeedAdmin(w http.ResponseWriter, req *http.Reques
 
 	err := req.ParseForm()
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err)
+		api.WriteError(w, http.StatusInternalServerError, err)
 		return
 	}
 	typeStr := req.Form.Get(OpVarAdminJob)
 	typ, err := strconv.ParseInt(typeStr, 10, 64)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, cerror.ErrAPIInvalidParam.GenWithStack("invalid admin job type: %s", typeStr))
+		api.WriteError(w, http.StatusBadRequest,
+			cerror.ErrAPIInvalidParam.GenWithStack("invalid admin job type: %s", typeStr))
 		return
 	}
 	opts := &model.AdminJobOption{}
 	if forceRemoveStr := req.Form.Get(OpForceRemoveChangefeed); forceRemoveStr != "" {
 		forceRemoveOpt, err := strconv.ParseBool(forceRemoveStr)
 		if err != nil {
-			writeError(w, http.StatusBadRequest,
+			api.WriteError(w, http.StatusBadRequest,
 				cerror.ErrAPIInvalidParam.GenWithStack("invalid force remove option: %s", forceRemoveStr))
 			return
 		}
@@ -153,7 +156,7 @@ func (h *ownerAPI) handleChangefeedAdmin(w http.ResponseWriter, req *http.Reques
 		Opts: opts,
 	}
 
-	err = handleOwnerJob(req.Context(), h.capture, job)
+	err = api.HandleOwnerJob(req.Context(), h.capture, job)
 	handleOwnerResp(w, err)
 }
 
@@ -166,17 +169,17 @@ func (h *ownerAPI) handleRebalanceTrigger(w http.ResponseWriter, req *http.Reque
 
 	err := req.ParseForm()
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err)
+		api.WriteError(w, http.StatusInternalServerError, err)
 		return
 	}
 	changefeedID := model.DefaultChangeFeedID(req.Form.Get(OpVarChangefeedID))
 	if err := model.ValidateChangefeedID(changefeedID.ID); err != nil {
-		writeError(w, http.StatusBadRequest,
+		api.WriteError(w, http.StatusBadRequest,
 			cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed id: %s", changefeedID.ID))
 		return
 	}
 
-	err = handleOwnerRebalance(req.Context(), h.capture, changefeedID)
+	err = api.HandleOwnerBalance(req.Context(), h.capture, changefeedID)
 	handleOwnerResp(w, err)
 }
 
@@ -189,31 +192,31 @@ func (h *ownerAPI) handleMoveTable(w http.ResponseWriter, req *http.Request) {
 
 	err := req.ParseForm()
 	if err != nil {
-		writeError(w, http.StatusInternalServerError,
+		api.WriteError(w, http.StatusInternalServerError,
 			cerror.WrapError(cerror.ErrInternalServerError, err))
 		return
 	}
 	changefeedID := model.DefaultChangeFeedID(req.Form.Get(OpVarChangefeedID))
 	if err := model.ValidateChangefeedID(changefeedID.ID); err != nil {
-		writeError(w, http.StatusBadRequest,
+		api.WriteError(w, http.StatusBadRequest,
 			cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed id: %s", changefeedID.ID))
 		return
 	}
 	to := req.Form.Get(OpVarTargetCaptureID)
 	if err := model.ValidateChangefeedID(to); err != nil {
-		writeError(w, http.StatusBadRequest,
+		api.WriteError(w, http.StatusBadRequest,
 			cerror.ErrAPIInvalidParam.GenWithStack("invalid target capture id: %s", to))
 		return
 	}
 	tableIDStr := req.Form.Get(OpVarTableID)
 	tableID, err := strconv.ParseInt(tableIDStr, 10, 64)
 	if err != nil {
-		writeError(w, http.StatusBadRequest,
+		api.WriteError(w, http.StatusBadRequest,
 			cerror.ErrAPIInvalidParam.GenWithStack("invalid tableID: %s", tableIDStr))
 		return
 	}
 
-	err = handleOwnerScheduleTable(
+	err = api.HandleOwnerScheduleTable(
 		req.Context(), h.capture, changefeedID, to, tableID)
 	handleOwnerResp(w, err)
 }
@@ -227,12 +230,12 @@ func (h *ownerAPI) handleChangefeedQuery(w http.ResponseWriter, req *http.Reques
 
 	err := req.ParseForm()
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err)
+		api.WriteError(w, http.StatusInternalServerError, err)
 		return
 	}
 	changefeedID := model.DefaultChangeFeedID(req.Form.Get(OpVarChangefeedID))
 	if err := model.ValidateChangefeedID(changefeedID.ID); err != nil {
-		writeError(w, http.StatusBadRequest,
+		api.WriteError(w, http.StatusBadRequest,
 			cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed id: %s", changefeedID.ID))
 		return
 	}
@@ -240,13 +243,13 @@ func (h *ownerAPI) handleChangefeedQuery(w http.ResponseWriter, req *http.Reques
 	defer cancel()
 	cfInfo, err := h.capture.EtcdClient.GetChangeFeedInfo(ctx, changefeedID)
 	if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
-		writeError(w, http.StatusBadRequest,
+		api.WriteError(w, http.StatusBadRequest,
 			cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed id: %s", changefeedID))
 		return
 	}
 	cfStatus, _, err := h.capture.EtcdClient.GetChangeFeedStatus(ctx, changefeedID)
 	if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
-		writeError(w, http.StatusBadRequest, err)
+		api.WriteError(w, http.StatusBadRequest, err)
 		return
 	}
 
@@ -260,7 +263,7 @@ func (h *ownerAPI) handleChangefeedQuery(w http.ResponseWriter, req *http.Reques
 		tm := oracle.GetTimeFromTS(cfStatus.CheckpointTs)
 		resp.Checkpoint = tm.Format("2006-01-02 15:04:05.000")
 	}
-	writeData(w, resp)
+	api.WriteData(w, resp)
 }
 
 // HandleAdminLogLevel handles requests to set the log level.
@@ -269,23 +272,23 @@ func HandleAdminLogLevel(w http.ResponseWriter, r *http.Request) {
 	data, err := io.ReadAll(r.Body)
 	r.Body.Close()
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err)
+		api.WriteError(w, http.StatusInternalServerError, err)
 		return
 	}
 	err = json.Unmarshal(data, &level)
 	if err != nil {
-		writeError(w, http.StatusBadRequest,
+		api.WriteError(w, http.StatusBadRequest,
 			cerror.ErrAPIInvalidParam.GenWithStack("invalid log level: %s", err))
 		return
 	}
 
 	err = logutil.SetLogLevel(level)
 	if err != nil {
-		writeError(w, http.StatusBadRequest,
+		api.WriteError(w, http.StatusBadRequest,
 			cerror.ErrAPIInvalidParam.GenWithStack("fail to change log level: %s", err))
 		return
 	}
 	log.Warn("log level changed", zap.String("level", level))
 
-	writeData(w, struct{}{})
+	api.WriteData(w, struct{}{})
 }
