@@ -20,10 +20,11 @@ function prepare_dm_and_source() {
 
 	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
+	# source 1 should bound to worker 1
+	dmctl_operate_source create $cur/conf/source1.yaml $SOURCE_ID1
+
 	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
-
-	dmctl_operate_source create $cur/conf/source1.yaml $SOURCE_ID1
 }
 
 function prepare_for_standalone_test() {
@@ -520,9 +521,74 @@ function test_unsupported_table_status() {
 		"primary key column of downstream table out of range of binlog event row" 1
 }
 
+function stopped_validator_fail_over() {
+	export GO_FAILPOINTS=""
+
+	echo "--> stopped validator fail over"
+	# skip incremental rows with c1 <= 1
+	export GO_FAILPOINTS='github.com/pingcap/tiflow/dm/syncer/SkipDML=return(1)'
+	prepare_for_standalone_test
+	run_sql_source1 "create table $db_name.t2(c1 int primary key, c2 int)"
+	run_sql_source1 "insert into $db_name.t2 values(1, 1), (2, 2), (3, 3)"
+	run_sql_source1 "update $db_name.t2 set c2=11 where c2=1"
+	run_sql_source1 "update $db_name.t2 set c2=22 where c2=2"
+	run_sql_source1 "delete from $db_name.t2 where c1=3"
+	trigger_checkpoint_flush
+	# skipped row is not add to processed rows
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation status test" \
+		"\"processedRowsStatus\": \"insert\/update\/delete: 3\/2\/1\"" 1 \
+		"pendingRowsStatus\": \"insert\/update\/delete: 0\/0\/0" 1 \
+		"new\/ignored\/resolved: 1\/0\/0" 1 \
+		"\"stage\": \"Running\"" 2
+	# make sure validator checkpoint is flushed
+	trigger_checkpoint_flush
+	run_sql_tidb_with_retry "select concat_ws('/', procd_ins, procd_upd, procd_del) processed
+														from dm_meta.test_validator_checkpoint where source='mysql-replica-01'" \
+		"processed: 3/2/1"
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation stop test" \
+		"\"result\": true" 1
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation status test" \
+		"\"processedRowsStatus\": \"insert\/update\/delete: 3\/2\/1\"" 1 \
+		"pendingRowsStatus\": \"insert\/update\/delete: 0\/0\/0" 1 \
+		"new\/ignored\/resolved: 1\/0\/0" 1 \
+		"\"stage\": \"Running\"" 1 \
+		"\"stage\": \"Stopped\"" 1
+	# source1 bound to worker1, so source1 will bound to worker2. see prepare_dm_and_source
+	kill_process worker1
+	# stopped task fail over, processed row status and table status is not loaded into memory, so they're zero
+	# but we can see errors, since it's loaded from db all the time
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation status test" \
+		"\"processedRowsStatus\": \"insert\/update\/delete: 0\/0\/0\"" 1 \
+		"pendingRowsStatus\": \"insert\/update\/delete: 0\/0\/0" 1 \
+		"new\/ignored\/resolved: 1\/0\/0" 1 \
+		"\"stage\": \"Running\"" 0 \
+		"\"stage\": \"Stopped\"" 1
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation show-errors --error all test" \
+		"\"result\": true" 1 \
+		"\"id\": \"1\"" 1
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation start test" \
+		"\"result\": true" 1
+	run_sql_source1 "insert into $db_name.t2 values(4, 4), (5, 5), (6, 6)"
+	run_sql_source1 "update $db_name.t2 set c2=55 where c2=5"
+	trigger_checkpoint_flush
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation status test" \
+		"\"processedRowsStatus\": \"insert\/update\/delete: 6\/3\/1\"" 1 \
+		"pendingRowsStatus\": \"insert\/update\/delete: 0\/0\/0" 1 \
+		"new\/ignored\/resolved: 1\/0\/0" 1 \
+		"\"stage\": \"Running\"" 2
+}
+
 run_standalone $*
 validate_table_with_different_pk
 test_unsupported_table_status
+stopped_validator_fail_over
 cleanup_process $*
 cleanup_data $db_name
 cleanup_data_upstream $db_name
