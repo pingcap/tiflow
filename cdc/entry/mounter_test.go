@@ -619,6 +619,7 @@ func TestGetDefaultZeroValue(t *testing.T) {
 			Name:    "mysql.TypeTiny + notnull + unsigned",
 			ColInfo: timodel.ColumnInfo{OriginDefaultValue: uint64(1314), FieldType: *ftTinyIntNotNullUnSigned},
 			Res:     uint64(1314),
+			Default: uint64(1314),
 		},
 		// mysql.TypeTiny + null + default
 		{
@@ -627,7 +628,8 @@ func TestGetDefaultZeroValue(t *testing.T) {
 				OriginDefaultValue: -1314,
 				FieldType:          *ftTinyIntNull,
 			},
-			Res: int64(-1314),
+			Res:     int64(-1314),
+			Default: int64(-1314),
 		},
 		// mysql.TypeTiny + null + nodefault
 		{
@@ -953,7 +955,6 @@ func TestGetDefaultZeroValue(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		println("run case", tc.Name)
 		val, _, _, _ := getDefaultOrZeroValue(&tc.ColInfo)
 		require.Equal(t, tc.Res, val, tc.Name)
 		val = getDDLDefaultDefinition(&tc.ColInfo)
