@@ -4158,7 +4158,7 @@
     },
     {
       "collapsed": true,
-      "datasource": null,
+      "datasource": "${DS_TEST-CLUSTER}",
       "gridPos": {
         "h": 1,
         "w": 24,
