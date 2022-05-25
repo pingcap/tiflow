@@ -29,15 +29,16 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/br/pkg/storage"
-	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/uber-go/atomic"
 	pioutil "go.etcd.io/etcd/pkg/v3/ioutil"
 	"go.uber.org/multierr"
 	"go.uber.org/zap"
 
+	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo/common"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/uuid"
 )
 
 const (
@@ -93,7 +94,8 @@ type FileWriterConfig struct {
 type Option func(writer *writerOptions)
 
 type writerOptions struct {
-	getLogFileName func() string
+	getLogFileName   func() string
+	getUUIDGenerator func() uuid.Generator
 }
 
 // WithLogFileName provide the Option for fileName
@@ -101,6 +103,15 @@ func WithLogFileName(f func() string) Option {
 	return func(o *writerOptions) {
 		if f != nil {
 			o.getLogFileName = f
+		}
+	}
+}
+
+// WithUUIDGenerator provides the Option for uuid generator
+func WithUUIDGenerator(f func() uuid.Generator) Option {
+	return func(o *writerOptions) {
+		if f != nil {
+			o.getUUIDGenerator = f
 		}
 	}
 }
@@ -123,6 +134,7 @@ type Writer struct {
 	uint64buf     []byte
 	storage       storage.ExternalStorage
 	sync.RWMutex
+	uuidGenerator uuid.Generator
 
 	metricFsyncDuration    prometheus.Observer
 	metricFlushAllDuration prometheus.Observer
@@ -167,6 +179,11 @@ func NewWriter(ctx context.Context, cfg *FileWriterConfig, opts ...Option) (*Wri
 			WithLabelValues(cfg.ChangeFeedID.Namespace, cfg.ChangeFeedID.ID),
 		metricWriteBytes: redoWriteBytesGauge.
 			WithLabelValues(cfg.ChangeFeedID.Namespace, cfg.ChangeFeedID.ID),
+	}
+	if w.op.getUUIDGenerator != nil {
+		w.uuidGenerator = w.op.getUUIDGenerator()
+	} else {
+		w.uuidGenerator = uuid.NewGenerator()
 	}
 
 	w.running.Store(true)
@@ -344,14 +361,15 @@ func (w *Writer) getLogFileName() string {
 	if w.op != nil && w.op.getLogFileName != nil {
 		return w.op.getLogFileName()
 	}
+	uid := w.uuidGenerator.NewString()
 	if model.DefaultNamespace == w.cfg.ChangeFeedID.Namespace {
-		return fmt.Sprintf("%s_%s_%d_%s_%d%s", w.cfg.CaptureID,
-			w.cfg.ChangeFeedID.ID,
-			w.cfg.CreateTime.Unix(), w.cfg.FileType, w.commitTS.Load(), common.LogEXT)
+		return fmt.Sprintf(common.RedoLogFileFormatV1,
+			w.cfg.CaptureID, w.cfg.ChangeFeedID.ID, w.cfg.FileType,
+			w.commitTS.Load(), uid, common.LogEXT)
 	}
-	return fmt.Sprintf("%s_%s_%s_%d_%s_%d%s", w.cfg.CaptureID,
-		w.cfg.ChangeFeedID.Namespace, w.cfg.ChangeFeedID.ID,
-		w.cfg.CreateTime.Unix(), w.cfg.FileType, w.commitTS.Load(), common.LogEXT)
+	return fmt.Sprintf(common.RedoLogFileFormatV2,
+		w.cfg.CaptureID, w.cfg.ChangeFeedID.Namespace, w.cfg.ChangeFeedID.ID,
+		w.cfg.FileType, w.commitTS.Load(), uid, common.LogEXT)
 }
 
 func (w *Writer) filePath() string {
