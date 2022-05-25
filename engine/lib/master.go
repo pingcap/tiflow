@@ -435,16 +435,20 @@ func (m *DefaultBaseMaster) doClose() {
 		log.L().Warn("Failed to clean up message handlers",
 			zap.String("master-id", m.id))
 	}
+	promutil.UnregisterWorkerMetrics(m.id)
 }
 
 // Close implements BaseMaster.Close
 func (m *DefaultBaseMaster) Close(ctx context.Context) error {
-	if err := m.Impl.CloseImpl(ctx); err != nil {
-		return errors.Trace(err)
+	err := m.Impl.CloseImpl(ctx)
+	// We don't return here if CloseImpl return error to ensure
+	// that we can close inner resources of the framework
+	if err != nil {
+		log.L().Error("Failed to close MasterImpl", zap.Error(err))
 	}
 
 	m.doClose()
-	return nil
+	return errors.Trace(err)
 }
 
 // OnError implements BaseMaster.OnError
