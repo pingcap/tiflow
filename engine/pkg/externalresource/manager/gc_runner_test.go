@@ -56,7 +56,7 @@ func newGCRunnerTestHelper() *gcRunnerTestHelper {
 		}
 		return nil
 	}
-	runner := NewGCRunner(meta, map[resModel.ResourceType]gcHandlerFunc{"local": mockHandler})
+	runner := NewGCRunner(meta, map[resModel.ResourceType]GCHandlerFunc{"local": mockHandler})
 	clk := clock.NewMock()
 	runner.clock = clk
 	ctx, cancel := context.WithCancel(context.Background())

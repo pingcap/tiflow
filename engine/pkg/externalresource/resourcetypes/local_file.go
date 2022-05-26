@@ -50,6 +50,6 @@ func (r *LocalFileResourceType) removeFilesOnExecutor(ctx context.Context, resou
 
 	return cli.RemoveLocalResource(ctx, &pb.RemoveLocalResourceRequest{
 		ResourceId: resource.ID,
-		CreatorId:  string(resource.Executor),
+		CreatorId:  resource.Worker,
 	})
 }

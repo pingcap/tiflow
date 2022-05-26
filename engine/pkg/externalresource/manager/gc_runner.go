@@ -31,12 +31,13 @@ const (
 	gcTimeout       = 10 * time.Second
 )
 
-type gcHandlerFunc = func(ctx context.Context, meta *resModel.ResourceMeta) error
+// GCHandlerFunc is the type for a function that actually removes a resource.
+type GCHandlerFunc = func(ctx context.Context, meta *resModel.ResourceMeta) error
 
 // DefaultGCRunner implements GCRunner.
 type DefaultGCRunner struct {
 	client     pkgOrm.ResourceClient
-	gcHandlers map[resModel.ResourceType]gcHandlerFunc
+	gcHandlers map[resModel.ResourceType]GCHandlerFunc
 	notifyCh   chan struct{}
 
 	clock clock.Clock
@@ -45,7 +46,7 @@ type DefaultGCRunner struct {
 // NewGCRunner returns a new GCRunner.
 func NewGCRunner(
 	client pkgOrm.ResourceClient,
-	gcHandlers map[resModel.ResourceType]gcHandlerFunc,
+	gcHandlers map[resModel.ResourceType]GCHandlerFunc,
 ) *DefaultGCRunner {
 	return &DefaultGCRunner{
 		client:     client,

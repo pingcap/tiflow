@@ -27,7 +27,7 @@ import (
 // ExecutorClient defines an interface that supports sending gRPC from server
 // master to executor.
 type ExecutorClient interface {
-	baseExecutorClient
+	// baseExecutorClient
 
 	DispatchTask(
 		ctx context.Context,

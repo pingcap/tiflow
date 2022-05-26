@@ -11,64 +11,143 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package integration_test
+package integration
 
 import (
-	"sync"
+	"context"
+	"path/filepath"
+	"testing"
+	"time"
 
-	"go.uber.org/atomic"
-	"golang.org/x/time/rate"
-
-	"github.com/pingcap/tiflow/engine/client"
-	"github.com/pingcap/tiflow/engine/pb"
-	"github.com/pingcap/tiflow/engine/pkg/externalresource/broker"
-	"github.com/pingcap/tiflow/engine/pkg/externalresource/manager"
+	libModel "github.com/pingcap/tiflow/engine/lib/model"
+	"github.com/pingcap/tiflow/engine/model"
+	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
-	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
+	"github.com/stretchr/testify/require"
 )
 
-type mockGCCluster struct {
-	executorInfo *manager.MockExecutorInfoProvider
+func TestLocalFileTriggeredByJobRemoval(t *testing.T) {
+	ctx := context.Background()
 
-	service        *manager.Service
-	gcCoordinator  *manager.DefaultGCCoordinator
-	gcRunner       *manager.DefaultGCRunner
-	clientsManager *client.Manager
+	cluster := newMockGCCluster()
+	cluster.Start(t)
 
-	meta pkgOrm.Client
+	baseDir := t.TempDir()
+	cluster.AddBroker("executor-1", baseDir)
+	brk := cluster.MustGetBroker(t, "executor-1")
 
-	brokerLock sync.RWMutex
-	brokers    []*broker.LocalBroker
+	cluster.jobInfo.SetJobStatus("job-1", libModel.MasterStatusInit)
+
+	handle, err := brk.OpenStorage(
+		context.Background(),
+		"worker-1",
+		"job-1",
+		"/local/resource-1")
+	require.NoError(t, err)
+
+	_, err = handle.BrExternalStorage().Create(context.Background(), "1.txt")
+	require.NoError(t, err)
+	err = handle.Persist(ctx)
+	require.NoError(t, err)
+
+	// Assert meta exists for `/local/resource-1`
+	resMeta, err := cluster.meta.GetResourceByID(ctx, "/local/resource-1")
+	require.NoError(t, err)
+	require.Equal(t, model.ExecutorID("executor-1"), resMeta.Executor)
+	require.FileExists(t, filepath.Join(baseDir, "worker-1", "resource-1", "1.txt"))
+
+	// Triggers GC by removing the job
+	cluster.jobInfo.RemoveJob("job-1")
+	require.Eventually(t, func() bool {
+		_, err := cluster.meta.GetResourceByID(ctx, "/local/resource-1")
+		return err != nil && pkgOrm.IsNotFoundError(err)
+	}, 1*time.Second, 5*time.Millisecond)
+	require.NoFileExists(t, filepath.Join(baseDir, "worker-1", "resource-1", "1.txt"))
+
+	cluster.Stop()
 }
 
-func newMockGCCluster() *mockGCCluster {
-	meta, err := pkgOrm.NewMockClient()
-	if err != nil {
-		panic(err)
-	}
+func TestLocalFileRecordRemovedTriggeredByExecutorOffline(t *testing.T) {
+	ctx := context.Background()
 
-	executorInfo := manager.NewMockExecutorInfoProvider()
-	jobInfo := manager.NewMockJobStatusProvider()
+	cluster := newMockGCCluster()
+	cluster.Start(t)
 
-	id := "leader"
-	leaderVal := &atomic.Value{}
-	leaderVal.Store(&rpcutil.Member{Name: id})
-	service := manager.NewService(meta, executorInfo, rpcutil.NewPreRPCHook[pb.ResourceManagerClient](
-		id,
-		leaderVal,
-		&rpcutil.LeaderClientWithLock[pb.ResourceManagerClient]{},
-		atomic.NewBool(true),
-		&rate.Limiter{}))
+	baseDir := t.TempDir()
+	cluster.AddBroker("executor-1", baseDir)
+	brk := cluster.MustGetBroker(t, "executor-1")
 
-	gcRunner := manager.NewGCRunner(meta, nil)
-	gcCoordinator := manager.NewGCCoordinator(executorInfo, jobInfo, meta, gcRunner)
+	cluster.jobInfo.SetJobStatus("job-1", libModel.MasterStatusInit)
 
-	return &mockGCCluster{
-		executorInfo:  executorInfo,
-		service:       service,
-		gcCoordinator: gcCoordinator,
-		gcRunner:      gcRunner,
-		brokers:       make([]*broker.LocalBroker, 0),
-		meta:          meta,
-	}
+	handle, err := brk.OpenStorage(
+		context.Background(),
+		"worker-1",
+		"job-1",
+		"/local/resource-1")
+	require.NoError(t, err)
+	_, err = handle.BrExternalStorage().Create(context.Background(), "1.txt")
+	require.NoError(t, err)
+	err = handle.Persist(ctx)
+	require.NoError(t, err)
+
+	cluster.executorInfo.RemoveExecutor("executor-1")
+	require.Eventually(t, func() bool {
+		_, err := cluster.meta.GetResourceByID(ctx, "/local/resource-1")
+		return err != nil && pkgOrm.IsNotFoundError(err)
+	}, 1*time.Second, 5*time.Millisecond)
+}
+
+func TestCleanUpStaleResourcesOnStartUp(t *testing.T) {
+	ctx := context.Background()
+
+	cluster := newMockGCCluster()
+
+	baseDir := t.TempDir()
+
+	// We do not start the cluster until we have initialized
+	// the mock cluster to the desired initial state.
+	cluster.AddBroker("executor-1", baseDir)
+	brk := cluster.MustGetBroker(t, "executor-1")
+
+	// Putting "non-existent-job" here is acceptable because resource
+	// creation does not check job existence.
+	handle, err := brk.OpenStorage(
+		context.Background(),
+		"worker-1",
+		"non-existent-job",
+		"/local/resource-1")
+	require.NoError(t, err)
+	_, err = handle.BrExternalStorage().Create(context.Background(), "1.txt")
+	require.NoError(t, err)
+	err = handle.Persist(ctx)
+	require.NoError(t, err)
+	require.FileExists(t, filepath.Join(baseDir, "worker-1", "resource-1", "1.txt"))
+
+	// Asserts that the job exists.
+	_, err = cluster.meta.GetResourceByID(ctx, "/local/resource-1")
+	require.NoError(t, err)
+
+	cluster.jobInfo.SetJobStatus("job-1", libModel.MasterStatusInit)
+	err = cluster.meta.CreateResource(ctx, &resModel.ResourceMeta{
+		ID:        "/local/resource-2",
+		Job:       "job-1",
+		Worker:    "worker-1",
+		Executor:  "non-existent-executor",
+		GCPending: false,
+	})
+	require.NoError(t, err)
+
+	cluster.Start(t)
+
+	require.Eventually(t, func() bool {
+		_, err := cluster.meta.GetResourceByID(ctx, "/local/resource-1")
+		return err != nil && pkgOrm.IsNotFoundError(err)
+	}, 1*time.Second, 5*time.Millisecond)
+	require.Eventually(t, func() bool {
+		_, err := cluster.meta.GetResourceByID(ctx, "/local/resource-2")
+		return err != nil && pkgOrm.IsNotFoundError(err)
+	}, 1*time.Second, 5*time.Millisecond)
+	require.NoFileExists(t, filepath.Join(baseDir, "worker-1", "resource-1", "1.txt"))
+
+	cluster.Stop()
 }
