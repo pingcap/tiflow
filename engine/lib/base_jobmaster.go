@@ -240,7 +240,7 @@ func (d *DefaultBaseJobMaster) CurrentEpoch() libModel.Epoch {
 	return d.master.currentEpoch.Load()
 }
 
-// OnOpenAPIInitialized implements BaseJobMaster.BaseJobMaster
+// OnOpenAPIInitialized implements BaseJobMaster.OnOpenAPIInitialized
 func (d *DefaultBaseJobMaster) OnOpenAPIInitialized(apiGroup *gin.RouterGroup) {
 	d.impl.OnOpenAPIInitialized(apiGroup)
 }
