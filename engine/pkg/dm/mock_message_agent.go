@@ -47,7 +47,7 @@ func (m *MockMessageAgent) UpdateSender(senderID string, sender Sender) error {
 func (m *MockMessageAgent) SendMessage(ctx context.Context, senderID string, command string, msg interface{}) error {
 	m.Lock()
 	defer m.Unlock()
-	args := m.Called()
+	args := m.Called(ctx, senderID, command, msg)
 	return args.Error(0)
 }
 

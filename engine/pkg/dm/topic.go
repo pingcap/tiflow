@@ -14,8 +14,10 @@
 package dm
 
 import (
+	"encoding/json"
+
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
-	"github.com/pingcap/tiflow/engine/jobmaster/dm/runtime"
+	libModel "github.com/pingcap/tiflow/engine/lib/model"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 )
 
@@ -44,6 +46,8 @@ type QueryStatusRequest struct {
 
 // QueryStatusResponse is query status response
 type QueryStatusResponse struct {
-	ErrorMsg   string
-	TaskStatus runtime.TaskStatus
+	ErrorMsg string
+	Unit     libModel.WorkerType
+	Stage    metadata.TaskStage
+	Status   json.RawMessage
 }

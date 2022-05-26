@@ -19,26 +19,23 @@ import (
 
 	"github.com/pingcap/errors"
 
-	"github.com/pingcap/tiflow/engine/jobmaster/dm/runtime"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
 )
 
 // QueryStatus implements the api of query status request.
-func (t *baseTask) QueryStatus(ctx context.Context, req *dmpkg.QueryStatusRequest) (*dmpkg.QueryStatusResponse, error) {
+func (t *baseTask) QueryStatus(ctx context.Context, req *dmpkg.QueryStatusRequest) *dmpkg.QueryStatusResponse {
 	// get status from unit
 	status := t.unitHolder.Status(ctx)
 	// copy status via json
 	statusBytes, err := json.Marshal(status)
 	if err != nil {
-		return &dmpkg.QueryStatusResponse{ErrorMsg: err.Error()}, nil
+		return &dmpkg.QueryStatusResponse{ErrorMsg: err.Error()}
 	}
-	taskStatus := runtime.TaskStatus{
+	return &dmpkg.QueryStatusResponse{
 		Unit:   t.workerType,
-		Task:   t.taskID,
-		Stage:  t.stage,
+		Stage:  t.getStage(),
 		Status: statusBytes,
 	}
-	return &dmpkg.QueryStatusResponse{TaskStatus: taskStatus}, nil
 }
 
 // StopWorker implements the api of stop worker message which kill itself.

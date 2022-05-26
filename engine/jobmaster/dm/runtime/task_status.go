@@ -14,18 +14,15 @@
 package runtime
 
 import (
-	"encoding/json"
-
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
 	libModel "github.com/pingcap/tiflow/engine/lib/model"
 )
 
 // TaskStatus defines the running task status.
 type TaskStatus struct {
-	Unit   libModel.WorkerType
-	Task   string
-	Stage  metadata.TaskStage
-	Status json.RawMessage
+	Unit  libModel.WorkerType
+	Task  string
+	Stage metadata.TaskStage
 }
 
 // NewOfflineStatus is used when jobmaster receives a worker offline.

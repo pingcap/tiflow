@@ -41,7 +41,7 @@ type JobStatus struct {
 	TaskStatus map[string]TaskStatus
 }
 
-// QueryJobStatus is the api of query status request
+// QueryJobStatus is the api of query job status.
 func (jm *JobMaster) QueryJobStatus(ctx context.Context, tasks []string) (*JobStatus, error) {
 	state, err := jm.metadata.JobStore().Get(ctx)
 	if err != nil {
@@ -87,9 +87,13 @@ func (jm *JobMaster) QueryJobStatus(ctx context.Context, tasks []string) (*JobSt
 				if !ok {
 					// worker unscheduled
 					queryStatusResp = &dmpkg.QueryStatusResponse{ErrorMsg: fmt.Sprintf("worker for task %s not found", taskID)}
+				} else if workerStatus.Stage == runtime.WorkerFinished {
+					// task finished
+					workerID = workerStatus.ID
+					queryStatusResp = &dmpkg.QueryStatusResponse{Unit: workerStatus.Unit, Stage: metadata.StageFinished}
 				} else {
 					workerID = workerStatus.ID
-					queryStatusResp = jm.QueryStatus(ctx, taskID, workerStatus)
+					queryStatusResp = jm.QueryStatus(ctx, taskID)
 				}
 			}
 
@@ -107,15 +111,7 @@ func (jm *JobMaster) QueryJobStatus(ctx context.Context, tasks []string) (*JobSt
 }
 
 // QueryStatus query status for a task
-func (jm *JobMaster) QueryStatus(ctx context.Context, taskID string, workerStatus runtime.WorkerStatus) *dmpkg.QueryStatusResponse {
-	if workerStatus.Stage == runtime.WorkerFinished {
-		status, ok := jm.taskManager.GetTaskStatus(taskID)
-		if !ok || status.Stage != metadata.StageFinished {
-			return &dmpkg.QueryStatusResponse{ErrorMsg: fmt.Sprintf("finished task status for task %s not found", taskID)}
-		}
-		return &dmpkg.QueryStatusResponse{TaskStatus: status}
-	}
-
+func (jm *JobMaster) QueryStatus(ctx context.Context, taskID string) *dmpkg.QueryStatusResponse {
 	req := &dmpkg.QueryStatusRequest{
 		Task: taskID,
 	}
@@ -127,7 +123,7 @@ func (jm *JobMaster) QueryStatus(ctx context.Context, taskID string, workerStatu
 }
 
 // DebugJob debugs job.
-func (jm *JobMaster) DebugJob(ctx context.Context, req *pb.DebugJobRequest) (*pb.DebugJobResponse, error) {
+func (jm *JobMaster) DebugJob(ctx context.Context, req *pb.DebugJobRequest) *pb.DebugJobResponse {
 	var (
 		resp interface{}
 		err  error
@@ -141,7 +137,7 @@ func (jm *JobMaster) DebugJob(ctx context.Context, req *pb.DebugJobRequest) (*pb
 			return &pb.DebugJobResponse{Err: &pb.Error{
 				Code:    pb.ErrorCode_UnknownError,
 				Message: err.Error(),
-			}}, nil
+			}}
 		}
 		resp, err = jm.QueryJobStatus(ctx, jsonArg.Tasks)
 	default:
@@ -151,14 +147,14 @@ func (jm *JobMaster) DebugJob(ctx context.Context, req *pb.DebugJobRequest) (*pb
 		return &pb.DebugJobResponse{Err: &pb.Error{
 			Code:    pb.ErrorCode_UnknownError,
 			Message: err.Error(),
-		}}, nil
+		}}
 	}
 	jsonRet, err := json.Marshal(resp)
 	if err != nil {
 		return &pb.DebugJobResponse{Err: &pb.Error{
 			Code:    pb.ErrorCode_UnknownError,
 			Message: err.Error(),
-		}}, nil
+		}}
 	}
-	return &pb.DebugJobResponse{JsonRet: string(jsonRet)}, nil
+	return &pb.DebugJobResponse{JsonRet: string(jsonRet)}
 }

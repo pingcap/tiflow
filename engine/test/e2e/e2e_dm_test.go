@@ -162,6 +162,6 @@ func testSimpleAllModeTask(
 	var jobStatus dm.JobStatus
 	require.NoError(t, json.Unmarshal([]byte(resp2.JsonRet), &jobStatus))
 	require.Equal(t, resp.JobIdStr, jobStatus.JobMasterID)
-	require.Contains(t, string(jobStatus.TaskStatus[source1].Status.TaskStatus.Status), "totalEvents")
+	require.Contains(t, string(jobStatus.TaskStatus[source1].Status.Status), "totalEvents")
 	require.Contains(t, jobStatus.TaskStatus[source2].Status.ErrorMsg, fmt.Sprintf("task %s for job not found", source2))
 }
