@@ -1490,7 +1490,7 @@ func (s *eventFeedSession) singleEventFeed(
 						metricPullEventInitializedCounter.Inc()
 						initialized = true
 						s.regionRouter.Release(storeAddr)
-						cachedEvents := matcher.matchCachedRow()
+						cachedEvents := matcher.matchCachedRow(initialized)
 						for _, cachedEvent := range cachedEvents {
 							revent, err = assembleRowEvent(regionID, cachedEvent, s.enableOldValue)
 							if err != nil {
@@ -1504,6 +1504,7 @@ func (s *eventFeedSession) singleEventFeed(
 								return
 							}
 						}
+						matcher.matchCachedRollbackRow(initialized)
 					case cdcpb.Event_COMMITTED:
 						metricPullEventCommittedCounter.Inc()
 						revent, err = assembleRowEvent(regionID, entry, s.enableOldValue)
@@ -1541,7 +1542,7 @@ func (s *eventFeedSession) singleEventFeed(
 							err = errUnreachable
 							return
 						}
-						ok := matcher.matchRow(entry)
+						ok := matcher.matchRow(entry, initialized)
 						if !ok {
 							if !initialized {
 								matcher.cacheCommitRow(entry)
@@ -1565,6 +1566,10 @@ func (s *eventFeedSession) singleEventFeed(
 						}
 					case cdcpb.Event_ROLLBACK:
 						metricPullEventRollbackCounter.Inc()
+						if !initialized {
+							matcher.cacheRollbackRow(entry)
+							continue
+						}
 						matcher.rollbackRow(entry)
 					}
 				}
