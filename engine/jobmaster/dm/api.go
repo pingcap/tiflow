@@ -15,12 +15,14 @@ package dm
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"sync"
 
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/runtime"
 	libModel "github.com/pingcap/tiflow/engine/lib/model"
+	"github.com/pingcap/tiflow/engine/pb"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
 )
 
@@ -28,7 +30,7 @@ import (
 type TaskStatus struct {
 	ExpectedStage metadata.TaskStage
 	WorkerID      libModel.WorkerID
-	Status        dmpkg.QueryStatusResponse
+	Status        *dmpkg.QueryStatusResponse
 }
 
 // JobStatus represents status of a job
@@ -39,8 +41,8 @@ type JobStatus struct {
 	TaskStatus map[string]TaskStatus
 }
 
-// QueryStatus is the api of query status request
-func (jm *JobMaster) QueryStatus(ctx context.Context, tasks []string) (*JobStatus, error) {
+// QueryJobStatus is the api of query status request
+func (jm *JobMaster) QueryJobStatus(ctx context.Context, tasks []string) (*JobStatus, error) {
 	state, err := jm.metadata.JobStore().Get(ctx)
 	if err != nil {
 		return nil, err
@@ -71,22 +73,29 @@ func (jm *JobMaster) QueryStatus(ctx context.Context, tasks []string) (*JobStatu
 			defer wg.Done()
 
 			var (
-				queryStatusResp dmpkg.QueryStatusResponse
+				queryStatusResp *dmpkg.QueryStatusResponse
 				workerID        string
+				expectedStage   metadata.TaskStage
 			)
 
-			workerStatus, ok := workerStatusMap[taskID]
-			if !ok {
-				// worker unscheduled
-				queryStatusResp = dmpkg.QueryStatusResponse{ErrorMsg: fmt.Sprintf("worker for task %s not found", taskID)}
+			// task not exist
+			if t, ok := job.Tasks[taskID]; !ok {
+				queryStatusResp = &dmpkg.QueryStatusResponse{ErrorMsg: fmt.Sprintf("task %s for job not found", taskID)}
 			} else {
-				workerID = workerStatus.ID
-				queryStatusResp = jm.QueryTaskStatus(ctx, taskID, workerStatus)
+				expectedStage = t.Stage
+				workerStatus, ok := workerStatusMap[taskID]
+				if !ok {
+					// worker unscheduled
+					queryStatusResp = &dmpkg.QueryStatusResponse{ErrorMsg: fmt.Sprintf("worker for task %s not found", taskID)}
+				} else {
+					workerID = workerStatus.ID
+					queryStatusResp = jm.QueryStatus(ctx, taskID, workerStatus)
+				}
 			}
 
 			mu.Lock()
 			jobStatus.TaskStatus[taskID] = TaskStatus{
-				ExpectedStage: job.Tasks[taskID].Stage,
+				ExpectedStage: expectedStage,
 				WorkerID:      workerID,
 				Status:        queryStatusResp,
 			}
@@ -97,22 +106,59 @@ func (jm *JobMaster) QueryStatus(ctx context.Context, tasks []string) (*JobStatu
 	return jobStatus, nil
 }
 
-// QueryTaskStatus query status for a task
-func (jm *JobMaster) QueryTaskStatus(ctx context.Context, taskID string, workerStatus runtime.WorkerStatus) dmpkg.QueryStatusResponse {
+// QueryStatus query status for a task
+func (jm *JobMaster) QueryStatus(ctx context.Context, taskID string, workerStatus runtime.WorkerStatus) *dmpkg.QueryStatusResponse {
 	if workerStatus.Stage == runtime.WorkerFinished {
 		status, ok := jm.taskManager.GetTaskStatus(taskID)
-		if !ok || status.GetStage() != metadata.StageFinished {
-			return dmpkg.QueryStatusResponse{ErrorMsg: fmt.Sprintf("finished task status for task %s not found", taskID)}
+		if !ok || status.Stage != metadata.StageFinished {
+			return &dmpkg.QueryStatusResponse{ErrorMsg: fmt.Sprintf("finished task status for task %s not found", taskID)}
 		}
-		return dmpkg.QueryStatusResponse{TaskStatus: status}
+		return &dmpkg.QueryStatusResponse{TaskStatus: status}
 	}
 
-	req := dmpkg.QueryStatusRequest{
+	req := &dmpkg.QueryStatusRequest{
 		Task: taskID,
 	}
 	resp, err := jm.messageAgent.SendRequest(ctx, taskID, dmpkg.QueryStatus, req)
 	if err != nil {
-		return dmpkg.QueryStatusResponse{ErrorMsg: err.Error()}
+		return &dmpkg.QueryStatusResponse{ErrorMsg: err.Error()}
 	}
-	return resp.(dmpkg.QueryStatusResponse)
+	return resp.(*dmpkg.QueryStatusResponse)
+}
+
+// DebugJob debugs job.
+func (jm *JobMaster) DebugJob(ctx context.Context, req *pb.DebugJobRequest) (*pb.DebugJobResponse, error) {
+	var (
+		resp interface{}
+		err  error
+	)
+	switch req.Command {
+	case dmpkg.QueryStatus:
+		var jsonArg struct {
+			Tasks []string
+		}
+		if err := json.Unmarshal([]byte(req.JsonArg), &jsonArg); err != nil {
+			return &pb.DebugJobResponse{Err: &pb.Error{
+				Code:    pb.ErrorCode_UnknownError,
+				Message: err.Error(),
+			}}, nil
+		}
+		resp, err = jm.QueryJobStatus(ctx, jsonArg.Tasks)
+	default:
+	}
+
+	if err != nil {
+		return &pb.DebugJobResponse{Err: &pb.Error{
+			Code:    pb.ErrorCode_UnknownError,
+			Message: err.Error(),
+		}}, nil
+	}
+	jsonRet, err := json.Marshal(resp)
+	if err != nil {
+		return &pb.DebugJobResponse{Err: &pb.Error{
+			Code:    pb.ErrorCode_UnknownError,
+			Message: err.Error(),
+		}}, nil
+	}
+	return &pb.DebugJobResponse{JsonRet: string(jsonRet)}, nil
 }

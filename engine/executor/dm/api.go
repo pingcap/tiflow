@@ -24,23 +24,25 @@ import (
 )
 
 // QueryStatus implements the api of query status request.
-func (t *baseTask) QueryStatus(ctx context.Context, req dmpkg.QueryStatusRequest) (dmpkg.QueryStatusResponse, error) {
+func (t *baseTask) QueryStatus(ctx context.Context, req *dmpkg.QueryStatusRequest) (*dmpkg.QueryStatusResponse, error) {
 	// get status from unit
 	status := t.unitHolder.Status(ctx)
 	// copy status via json
 	statusBytes, err := json.Marshal(status)
 	if err != nil {
-		return dmpkg.QueryStatusResponse{ErrorMsg: err.Error()}, nil
+		return &dmpkg.QueryStatusResponse{ErrorMsg: err.Error()}, nil
 	}
-	taskStatus := runtime.NewTaskStatus(t.workerType, t.taskID, t.stage)
-	if err = json.Unmarshal(statusBytes, taskStatus); err != nil {
-		return dmpkg.QueryStatusResponse{ErrorMsg: err.Error()}, nil
+	taskStatus := runtime.TaskStatus{
+		Unit:   t.workerType,
+		Task:   t.taskID,
+		Stage:  t.stage,
+		Status: statusBytes,
 	}
-	return dmpkg.QueryStatusResponse{TaskStatus: taskStatus}, nil
+	return &dmpkg.QueryStatusResponse{TaskStatus: taskStatus}, nil
 }
 
 // StopWorker implements the api of stop worker message which kill itself.
-func (t *baseTask) StopWorker(ctx context.Context, msg dmpkg.StopWorkerMessage) error {
+func (t *baseTask) StopWorker(ctx context.Context, msg *dmpkg.StopWorkerMessage) error {
 	if t.taskID != msg.Task {
 		return errors.Errorf("task id mismatch, get %s, actually %s", msg.Task, t.taskID)
 	}

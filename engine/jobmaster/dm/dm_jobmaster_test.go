@@ -27,6 +27,7 @@ import (
 	dmconfig "github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
 	resourcemeta "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 
 	"github.com/pingcap/tiflow/engine/client"
@@ -152,14 +153,15 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	metaKVClient := kvmock.NewMetaMock()
 	mockBaseJobmaster := &MockBaseJobmaster{}
 	mockCheckpointAgent := &MockCheckpointAgent{}
+	mockMessageAgent := &dmpkg.MockMessageAgent{}
 	jobCfg := &config.JobCfg{}
 	require.NoError(t.T(), jobCfg.DecodeFile(jobTemplatePath))
 	jm := &JobMaster{
-		workerID:              "jobmaster-id",
-		jobCfg:                jobCfg,
-		BaseJobMaster:         mockBaseJobmaster,
-		checkpointAgent:       mockCheckpointAgent,
-		messageHandlerManager: p2p.NewMockMessageHandlerManager(),
+		workerID:        "jobmaster-id",
+		jobCfg:          jobCfg,
+		BaseJobMaster:   mockBaseJobmaster,
+		checkpointAgent: mockCheckpointAgent,
+		messageAgent:    mockMessageAgent,
 	}
 
 	// init
@@ -188,6 +190,7 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 		jobCfg:          jobCfg,
 		BaseJobMaster:   mockBaseJobmaster,
 		checkpointAgent: mockCheckpointAgent,
+		messageAgent:    mockMessageAgent,
 	}
 	mockBaseJobmaster.On("GetWorkers").Return(map[string]lib.WorkerHandle{}).Once()
 	jm.OnMasterRecovered(context.Background())
@@ -202,17 +205,13 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	require.NoError(t.T(), jm.Tick(context.Background()))
 	require.NoError(t.T(), jm.Tick(context.Background()))
 	// make sure workerHandle1 bound to task status1, workerHandle2 bound to task status2.
-	taskStatus1 := runtime.DumpStatus{
-		DefaultTaskStatus: runtime.DefaultTaskStatus{
-			Unit:  lib.WorkerDMDump,
-			Stage: metadata.StageRunning,
-		},
+	taskStatus1 := runtime.TaskStatus{
+		Unit:  lib.WorkerDMDump,
+		Stage: metadata.StageRunning,
 	}
-	taskStatus2 := runtime.DumpStatus{
-		DefaultTaskStatus: runtime.DefaultTaskStatus{
-			Unit:  lib.WorkerDMDump,
-			Stage: metadata.StageRunning,
-		},
+	taskStatus2 := runtime.TaskStatus{
+		Unit:  lib.WorkerDMDump,
+		Stage: metadata.StageRunning,
 	}
 	jm.workerManager.workerStatusMap.Range(func(key, val interface{}) bool {
 		if val.(runtime.WorkerStatus).ID == worker1 {
@@ -279,21 +278,18 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	require.NoError(t.T(), jm.Tick(context.Background()))
 
 	// master failover
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 	jm = &JobMaster{
-		ctx:             ctx,
-		cancel:          cancel,
 		workerID:        "jobmaster-id",
 		jobCfg:          jobCfg,
 		BaseJobMaster:   mockBaseJobmaster,
 		checkpointAgent: mockCheckpointAgent,
+		messageAgent:    mockMessageAgent,
 	}
 	mockBaseJobmaster.On("GetWorkers").Return(map[string]lib.WorkerHandle{worker4: workerHandle1, worker3: workerHandle2}).Once()
 	workerHandle1.On("Status").Return(&libModel.WorkerStatus{ExtBytes: bytes1}).Once()
 	workerHandle2.On("Status").Return(&libModel.WorkerStatus{ExtBytes: bytes2}).Once()
-	workerHandle1.On("IsTombStone").Return(false).Twice()
-	workerHandle2.On("IsTombStone").Return(false).Twice()
+	workerHandle1.On("IsTombStone").Return(false).Once()
+	workerHandle2.On("IsTombStone").Return(false).Once()
 	jm.OnMasterRecovered(context.Background())
 	require.NoError(t.T(), jm.Tick(context.Background()))
 	// placeholder
@@ -306,8 +302,8 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	require.NoError(t.T(), jm.OnWorkerStatusUpdated(workerHandle1, &libModel.WorkerStatus{ExtBytes: bytes1}))
 
 	// Close
-	workerHandle1.On("SendMessage", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
-	workerHandle2.On("SendMessage", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
+	mockMessageAgent.On("SendMessage").Return(nil).Once()
+	mockMessageAgent.On("SendMessage").Return(nil).Once()
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {

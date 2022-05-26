@@ -90,12 +90,9 @@ type task interface {
 type baseTask struct {
 	task
 	lib.BaseWorker
-	unitHolder            unit.Holder
-	messageAgent          dmpkg.MessageAgent
-	messageHandlerManager p2p.MessageHandlerManager
+	unitHolder   unit.Holder
+	messageAgent dmpkg.MessageAgent
 
-	ctx                context.Context
-	cancel             context.CancelFunc
 	mu                 sync.RWMutex
 	cfg                *dmconfig.SubTaskConfig
 	storageWriteHandle broker.Handle
@@ -107,10 +104,7 @@ type baseTask struct {
 
 // newBaseTask creates BaseDMTask instances
 func newBaseTask(dCtx *dcontext.Context, masterID libModel.MasterID, workerType libModel.WorkerType, conf lib.WorkerConfig) *baseTask {
-	ctx, cancel := context.WithCancel(context.Background())
 	t := &baseTask{
-		ctx:        ctx,
-		cancel:     cancel,
 		cfg:        conf.(*config.SubTaskConfig),
 		stage:      metadata.StageInit,
 		workerType: workerType,
@@ -120,25 +114,19 @@ func newBaseTask(dCtx *dcontext.Context, masterID libModel.MasterID, workerType 
 
 	// nolint:errcheck
 	dCtx.Deps().Construct(func(m p2p.MessageHandlerManager) (p2p.MessageHandlerManager, error) {
-		t.messageHandlerManager = m
+		t.messageAgent = dmpkg.NewMessageAgentImpl(t.taskID, t, m)
 		return m, nil
 	})
 	return t
 }
 
-func (t *baseTask) createComponents(ctx context.Context) error {
-	log.L().Debug("create components")
-	t.messageAgent = dmpkg.NewMessageAgent(t.ctx, t.taskID, map[string]dmpkg.Sender{t.masterID: t}, t, t.messageHandlerManager)
-	return nil
-}
-
 // InitImpl implements lib.WorkerImpl.InitImpl
 func (t *baseTask) InitImpl(ctx context.Context) error {
-	log.L().Info("init task")
-	if err := t.createComponents(ctx); err != nil {
+	if err := t.messageAgent.Init(ctx); err != nil {
 		return err
 	}
-	if err := t.messageAgent.RegisterTopic(ctx, t.masterID); err != nil {
+	// update jobMaster sender
+	if err := t.messageAgent.UpdateSender(t.masterID, t); err != nil {
 		return err
 	}
 	if err := t.onInit(ctx); err != nil {
@@ -154,7 +142,10 @@ func (t *baseTask) Tick(ctx context.Context) error {
 	if err := t.unitHolder.Tick(ctx); err != nil {
 		return err
 	}
-	return t.tryUpdateStatus(ctx)
+	if err := t.tryUpdateStatus(ctx); err != nil {
+		return err
+	}
+	return t.messageAgent.Tick(ctx)
 }
 
 // Workload implements lib.WorkerImpl.Worload
@@ -172,13 +163,16 @@ func (t *baseTask) OnMasterFailover(reason lib.MasterFailoverReason) error {
 // OnMasterMessage implements lib.WorkerImpl.OnMasterMessage
 func (t *baseTask) OnMasterMessage(topic p2p.Topic, message p2p.MessageValue) error {
 	log.L().Info("dmtask.OnMasterMessage", zap.String("topic", topic), zap.Any("message", message))
-	return t.messageAgent.OnMessage(topic, message)
+	return nil
 }
 
 // CloseImpl implements lib.WorkerImpl.CloseImpl
 func (t *baseTask) CloseImpl(ctx context.Context) error {
-	t.cancel()
+	if err := t.messageAgent.UpdateSender(t.masterID, nil); err != nil {
+		return err
+	}
 	t.unitHolder.Close()
+	t.messageAgent.Close(ctx)
 	return nil
 }
 
@@ -241,7 +235,7 @@ func (t *baseTask) workerStatus() libModel.WorkerStatus {
 	if stage == metadata.StageFinished {
 		code = libModel.WorkerStatusFinished
 	}
-	status := runtime.NewTaskStatus(t.workerType, t.taskID, stage)
+	status := runtime.TaskStatus{Unit: t.workerType, Task: t.taskID, Stage: stage}
 	// nolint:errcheck
 	statusBytes, _ := json.Marshal(status)
 	return libModel.WorkerStatus{

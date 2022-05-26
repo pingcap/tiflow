@@ -329,7 +329,7 @@ func (wm *WorkerManager) createWorker(
 func (wm *WorkerManager) stopWorker(ctx context.Context, taskID string, workerID libModel.WorkerID) error {
 	log.L().Info("start to stop worker", zap.String("task_id", taskID), zap.String("worker_id", workerID))
 
-	msg := dmpkg.StopWorkerMessage{
+	msg := &dmpkg.StopWorkerMessage{
 		Task: taskID,
 	}
 	if err := wm.messageAgent.SendMessage(ctx, taskID, dmpkg.StopWorker, msg); err != nil {

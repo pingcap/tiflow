@@ -45,6 +45,7 @@ type BaseJobMaster interface {
 	JobMasterID() libModel.MasterID
 	UpdateJobStatus(ctx context.Context, status libModel.WorkerStatus) error
 	CurrentEpoch() libModel.Epoch
+	SendMessage(ctx context.Context, topic p2p.Topic, message interface{}, nonblocking bool) error
 
 	// Exit should be called when job master (in user logic) wants to exit
 	// - If err is nil, it means job master exits normally

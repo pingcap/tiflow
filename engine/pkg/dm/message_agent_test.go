@@ -15,6 +15,7 @@ package dm
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sync"
@@ -97,8 +98,8 @@ func TestMessagePair(t *testing.T) {
 }
 
 func TestUpdateSender(t *testing.T) {
-	messageAgent := NewMessageAgent(context.Background(), "", nil, nil, nil)
-	require.Equal(t, lenSyncMap(&messageAgent.senders), 0)
+	messageAgent := NewMessageAgentImpl("", nil, p2p.NewMockMessageHandlerManager())
+	require.NoError(t, messageAgent.Init(context.Background()))
 	workerHandle1 := &master.MockHandle{WorkerID: "worker1"}
 	workerHandle2 := &master.MockHandle{WorkerID: "worker2"}
 
@@ -134,23 +135,11 @@ func TestUpdateSender(t *testing.T) {
 	sender, err = messageAgent.getSender("task1")
 	require.NoError(t, err)
 	require.Equal(t, sender, workerHandle1)
-
-	// mock init with map
-	initWorkerHandleMap := make(map[string]Sender)
-	messageAgent.senders.Range(func(key, value interface{}) bool {
-		initWorkerHandleMap[key.(string)] = value.(Sender)
-		return true
-	})
-	messageAgent = NewMessageAgent(context.Background(), "", initWorkerHandleMap, nil, nil)
-	require.Equal(t, lenSyncMap(&messageAgent.senders), 1)
-	sender, err = messageAgent.getSender("task1")
-	require.NoError(t, err)
-	require.Equal(t, sender, workerHandle1)
 }
 
 func TestMessageAgent(t *testing.T) {
-	messageAgent := NewMessageAgent(context.Background(), "id", nil, nil, nil)
-	require.Equal(t, lenSyncMap(&messageAgent.senders), 0)
+	messageAgent := NewMessageAgentImpl("id", nil, p2p.NewMockMessageHandlerManager())
+	require.NoError(t, messageAgent.Init(context.Background()))
 	senderID := "sender-id"
 	mockSender := &MockSender{}
 	messageAgent.UpdateSender(senderID, mockSender)
@@ -178,46 +167,57 @@ func TestMessageAgent(t *testing.T) {
 	// send response
 	mockSender.On("SendMessage").Return(nil).Once()
 	require.NoError(t, messageAgent.SendResponse(context.Background(), senderID, 2, "command", "response"))
-	messageAgent.OnMessage("DM---Sender---Receiver", message{ID: 2, Type: responseTp, Payload: resp})
+	messageAgent.onMessage("DM---Sender---Receiver", message{ID: 2, Type: responseTp, Payload: resp})
 }
 
 func TestMessageHandler(t *testing.T) {
-	senderID := "sender-id"
-	topic := "DM---" + senderID + "---receive-id"
-	command := "command"
+	var (
+		senderID      = "sender-id"
+		receiveID     = "receiver-id"
+		topic         = generateTopic(senderID, receiveID)
+		msg           = message{ID: 0, Type: messageTp, Command: messageAPI, Payload: &MessageAPIMessage{Msg: "msg"}}
+		req           = message{ID: 1, Type: requestTp, Command: requestAPI, Payload: &RequestAPIRequest{Req: "req"}}
+		resp          = message{ID: 1, Type: responseTp, Command: requestAPI, Payload: &RequestAPIResponse{Resp: "resp"}}
+		serializeMsg  = &message{}
+		serializeReq  = &message{}
+		serializeResp = &message{}
+	)
+	// mock serializeMessage
+	serialize(t, msg, serializeMsg)
+	serialize(t, req, serializeReq)
+	serialize(t, resp, serializeResp)
 
 	// mock no handler
-	messageAgent := NewMessageAgent(context.Background(), "id", nil, &MockNothing{}, nil)
-	require.EqualError(t, messageAgent.OnMessage(topic, "msg"), "unknown message type of msg")
-	// register handler
-	messageAgent.RegisterCommandHandler(command, func(interface{}) error { return nil })
-	require.NoError(t, messageAgent.OnMessage(command, message{ID: 1, Type: requestTp, Command: command, Payload: "msg"}))
-
-	// mock no handler
-	msg := message{ID: 0, Type: messageTp, Command: messageAPI, Payload: MessageAPIMessage{}}
-	require.EqualError(t, messageAgent.OnMessage(topic, msg), "message handler for command MessageAPI not found")
-	req := message{ID: 1, Type: requestTp, Command: requestAPI, Payload: RequestAPIRequest{}}
-	require.EqualError(t, messageAgent.OnMessage(topic, req), "request handler for command RequestAPI not found")
+	messageAgent := NewMessageAgentImpl("id", &MockNothing{}, p2p.NewMockMessageHandlerManager())
+	require.NoError(t, messageAgent.Init(context.Background()))
+	require.EqualError(t, messageAgent.onMessage(topic, serializeMsg), "message handler for command MessageAPI not found")
+	require.EqualError(t, messageAgent.onMessage(topic, serializeReq), "request handler for command RequestAPI not found")
 
 	// mock has handler
 	mockHandler := &MockHanlder{}
-	messageAgent = NewMessageAgent(context.Background(), "id", nil, mockHandler, nil)
+	messageAgent = NewMessageAgentImpl("id", mockHandler, p2p.NewMockMessageHandlerManager())
+	require.NoError(t, messageAgent.Init(context.Background()))
 	mockSender := &MockSender{}
 	messageAgent.UpdateSender(senderID, mockSender)
 	mockSender.On("SendMessage").Return(nil).Once()
 	// handle message
 	mockHandler.On(messageAPI).Return(nil).Once()
-	require.NoError(t, messageAgent.OnMessage(topic, msg))
+	require.NoError(t, messageAgent.onMessage(topic, serializeMsg))
 	mockHandler.On(messageAPI).Return(errors.New("error")).Once()
-	require.EqualError(t, messageAgent.OnMessage(topic, msg), "error")
+	require.EqualError(t, messageAgent.onMessage(topic, serializeMsg), "error")
 	// handle request
-	mockHandler.On(requestAPI).Return(RequestAPIResponse{}, nil).Once()
-	require.NoError(t, messageAgent.OnMessage(topic, req))
-	mockHandler.On(requestAPI).Return(RequestAPIResponse{}, errors.New("error")).Once()
-	require.EqualError(t, messageAgent.OnMessage(topic, req), "error")
+	mockHandler.On(requestAPI).Return(&RequestAPIResponse{}, nil).Once()
+	require.NoError(t, messageAgent.onMessage(topic, serializeReq))
+	mockHandler.On(requestAPI).Return(&RequestAPIResponse{}, errors.New("error")).Once()
+	require.EqualError(t, messageAgent.onMessage(topic, serializeReq), "error")
 	// handle response
-	res := message{ID: 1, Type: responseTp, Payload: RequestAPIResponse{}}
-	require.EqualError(t, messageAgent.OnMessage(topic, res), "request 1 not found")
+	require.EqualError(t, messageAgent.onMessage(topic, serializeResp), "request 1 not found")
+}
+
+func serialize(t *testing.T, m message, mPtr *message) {
+	bytes, err := json.Marshal(m)
+	require.NoError(t, err)
+	require.NoError(t, json.Unmarshal(bytes, mPtr))
 }
 
 const (
@@ -226,9 +226,15 @@ const (
 )
 
 type (
-	MessageAPIMessage  struct{}
-	RequestAPIRequest  struct{}
-	RequestAPIResponse struct{}
+	MessageAPIMessage struct {
+		Msg string
+	}
+	RequestAPIRequest struct {
+		Req string
+	}
+	RequestAPIResponse struct {
+		Resp string
+	}
 )
 
 type MockNothing struct{}
@@ -238,18 +244,18 @@ type MockHanlder struct {
 	mock.Mock
 }
 
-func (m *MockHanlder) MessageAPI(ctx context.Context, msg MessageAPIMessage) error {
+func (m *MockHanlder) MessageAPI(ctx context.Context, msg *MessageAPIMessage) error {
 	m.Lock()
 	defer m.Unlock()
 	args := m.Called()
 	return args.Error(0)
 }
 
-func (m *MockHanlder) RequestAPI(ctx context.Context, req RequestAPIRequest) (RequestAPIResponse, error) {
+func (m *MockHanlder) RequestAPI(ctx context.Context, req *RequestAPIRequest) (*RequestAPIResponse, error) {
 	m.Lock()
 	defer m.Unlock()
 	args := m.Called()
-	return args.Get(0).(RequestAPIResponse), args.Error(1)
+	return args.Get(0).(*RequestAPIResponse), args.Error(1)
 }
 
 func lenSyncMap(m *sync.Map) int {

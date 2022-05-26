@@ -15,6 +15,7 @@ package dm
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	"github.com/pingcap/tiflow/dm/dm/config"
@@ -62,29 +63,26 @@ func TestQueryStatusAPI(t *testing.T) {
 			BlockDDLOwner:       "",
 			ConflictMsg:         "",
 		}
-		dumpStatusResp = &runtime.DumpStatus{
-			DefaultTaskStatus: runtime.DefaultTaskStatus{
-				Unit:  lib.WorkerDMDump,
-				Task:  "task-id",
-				Stage: metadata.StageRunning,
-			},
-			DumpStatus: dumpStatus,
+		dumpStatusBytes, _ = json.Marshal(dumpStatus)
+		loadStatusBytes, _ = json.Marshal(loadStatus)
+		syncStatusBytes, _ = json.Marshal(syncStatus)
+		dumpStatusResp     = runtime.TaskStatus{
+			Unit:   lib.WorkerDMDump,
+			Task:   "task-id",
+			Stage:  metadata.StageRunning,
+			Status: dumpStatusBytes,
 		}
-		loadStatusResp = &runtime.LoadStatus{
-			DefaultTaskStatus: runtime.DefaultTaskStatus{
-				Unit:  lib.WorkerDMLoad,
-				Task:  "task-id",
-				Stage: metadata.StageFinished,
-			},
-			LoadStatus: loadStatus,
+		loadStatusResp = runtime.TaskStatus{
+			Unit:   lib.WorkerDMLoad,
+			Task:   "task-id",
+			Stage:  metadata.StageFinished,
+			Status: loadStatusBytes,
 		}
-		syncStatusResp = &runtime.SyncStatus{
-			DefaultTaskStatus: runtime.DefaultTaskStatus{
-				Unit:  lib.WorkerDMSync,
-				Task:  "task-id",
-				Stage: metadata.StagePaused,
-			},
-			SyncStatus: syncStatus,
+		syncStatusResp = runtime.TaskStatus{
+			Unit:   lib.WorkerDMSync,
+			Task:   "task-id",
+			Stage:  metadata.StagePaused,
+			Status: syncStatusBytes,
 		}
 	)
 
@@ -101,7 +99,7 @@ func TestQueryStatusAPI(t *testing.T) {
 
 	unitHolder.On("Status").Return(dumpStatus).Once()
 	task.setStage(metadata.StageRunning)
-	resp, err := task.QueryStatus(context.Background(), dmpkg.QueryStatusRequest{Task: "task-id"})
+	resp, err := task.QueryStatus(context.Background(), &dmpkg.QueryStatusRequest{Task: "task-id"})
 	require.NoError(t, err)
 	require.Equal(t, "", resp.ErrorMsg)
 	require.Equal(t, dumpStatusResp, resp.TaskStatus)
@@ -109,7 +107,7 @@ func TestQueryStatusAPI(t *testing.T) {
 	unitHolder.On("Status").Return(loadStatus).Once()
 	task.workerType = lib.WorkerDMLoad
 	task.setStage(metadata.StageFinished)
-	resp, err = task.QueryStatus(context.Background(), dmpkg.QueryStatusRequest{Task: "task-id"})
+	resp, err = task.QueryStatus(context.Background(), &dmpkg.QueryStatusRequest{Task: "task-id"})
 	require.NoError(t, err)
 	require.Equal(t, "", resp.ErrorMsg)
 	require.Equal(t, loadStatusResp, resp.TaskStatus)
@@ -117,7 +115,7 @@ func TestQueryStatusAPI(t *testing.T) {
 	unitHolder.On("Status").Return(syncStatus).Once()
 	task.workerType = lib.WorkerDMSync
 	task.setStage(metadata.StagePaused)
-	resp, err = task.QueryStatus(context.Background(), dmpkg.QueryStatusRequest{Task: "task-id"})
+	resp, err = task.QueryStatus(context.Background(), &dmpkg.QueryStatusRequest{Task: "task-id"})
 	require.NoError(t, err)
 	require.Equal(t, "", resp.ErrorMsg)
 	require.Equal(t, syncStatusResp, resp.TaskStatus)
@@ -136,8 +134,8 @@ func TestStopWorker(t *testing.T) {
 	baseTask.BaseWorker.Init(context.Background())
 	baseTask.unitHolder = &unit.MockHolder{}
 
-	require.EqualError(t, baseTask.StopWorker(context.Background(), dmpkg.StopWorkerMessage{Task: "wrong-task-id"}), "task id mismatch, get wrong-task-id, actually task-id")
-	err := baseTask.StopWorker(context.Background(), dmpkg.StopWorkerMessage{Task: "task-id"})
+	require.EqualError(t, baseTask.StopWorker(context.Background(), &dmpkg.StopWorkerMessage{Task: "wrong-task-id"}), "task id mismatch, get wrong-task-id, actually task-id")
+	err := baseTask.StopWorker(context.Background(), &dmpkg.StopWorkerMessage{Task: "task-id"})
 	require.True(t, errors.ErrWorkerFinish.Equal(err))
 }
 

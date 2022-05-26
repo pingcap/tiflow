@@ -30,7 +30,7 @@ type TaskStage int
 
 // These stages may updated in later pr.
 const (
-	StageInit TaskStage = iota
+	StageInit TaskStage = iota + 1
 	StageRunning
 	StagePaused
 	StageFinished

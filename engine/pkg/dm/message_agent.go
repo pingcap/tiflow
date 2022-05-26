@@ -15,6 +15,7 @@ package dm
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"reflect"
 	"strings"
@@ -22,13 +23,18 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/engine/lib"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
+	"github.com/pingcap/tiflow/pkg/workerpool"
+	"go.uber.org/zap"
 )
 
 var (
 	defaultMessageTimeOut  = time.Second * 2
 	defaultRequestTimeOut  = time.Second * 30
 	defaultResponseTimeOut = time.Second * 2
+	defaultHandlerTimeOut  = time.Second * 30
 )
 
 // generateTopic generate dm message topic.
@@ -105,7 +111,7 @@ func (m *messagePair) sendRequest(ctx context.Context, topic p2p.Topic, command 
 	m.pendings.Store(msg.ID, respCh)
 	defer m.pendings.Delete(msg.ID)
 
-	if err := sender.SendMessage(ctx, topic, msg, false /* block */); err != nil {
+	if err := sender.SendMessage(ctx, topic, msg, true /* block */); err != nil {
 		return nil, err
 	}
 
@@ -120,7 +126,7 @@ func (m *messagePair) sendRequest(ctx context.Context, topic p2p.Topic, command 
 // sendResponse sends a response with message ID.
 func (m *messagePair) sendResponse(ctx context.Context, topic p2p.Topic, id messageID, command string, resp interface{}, sender Sender) error {
 	msg := message{ID: id, Type: responseTp, Command: command, Payload: resp}
-	return sender.SendMessage(ctx, topic, msg, true /* nonblock */)
+	return sender.SendMessage(ctx, topic, msg, false /* nonblock */)
 }
 
 // onResponse receives and pairs a response message.
@@ -138,58 +144,87 @@ func (m *messagePair) onResponse(id messageID, resp interface{}) error {
 	return errors.Errorf("duplicated response of request %d, and the last response is not consumed", id)
 }
 
-// HandlerFunc defines handler func type.
-type HandlerFunc func(interface{}) error
-
 // MessageAgent defines interface for message communication.
 type MessageAgent interface {
-	RegisterCommandHandler(command string, handler HandlerFunc)
-	UpdateSender(senderID string, sender Sender)
+	Init(ctx context.Context) error
+	Tick(ctx context.Context) error
+	Close(ctx context.Context) error
+	UpdateSender(senderID string, sender Sender) error
 	SendMessage(ctx context.Context, senderID string, command string, msg interface{}) error
 	SendRequest(ctx context.Context, senderID string, command string, req interface{}) (interface{}, error)
 	SendResponse(ctx context.Context, senderID string, id messageID, command string, resp interface{}) error
-	OnMessage(topic string, msg interface{}) error
-	RegisterTopic(ctx context.Context, senderID string) error
-	UnregisterTopic(ctx context.Context, senderID string) error
 }
 
 // MessageAgentImpl implements the message processing mechanism.
 type MessageAgentImpl struct {
 	ctx                   context.Context
+	cancel                context.CancelFunc
 	messagePair           *messagePair
 	messageHandlerManager p2p.MessageHandlerManager
+	pool                  workerpool.AsyncPool
+	messageRouter         *lib.MessageRouter
+	wg                    sync.WaitGroup
 	// sender-id -> Sender
-	senders sync.Map
-	// topic -> handler
-	handlers              sync.Map
-	defaultCommandHandler interface{}
-	id                    string
+	senders        sync.Map
+	commandHandler interface{}
+	id             string
 }
 
-// NewMessageAgent creates a new MessageAgent instance.
-func NewMessageAgent(ctx context.Context, id string, initSenders map[string]Sender,
-	defaultCommandHandler interface{}, messageHandlerManager p2p.MessageHandlerManager,
-) *MessageAgentImpl {
-	messageAgent := &MessageAgentImpl{
-		ctx:                   ctx,
+// NewMessageAgentImpl creates a new MessageAgent instance.
+func NewMessageAgentImpl(id string, commandHandler interface{}, messageHandlerManager p2p.MessageHandlerManager) *MessageAgentImpl {
+	agent := &MessageAgentImpl{
 		messagePair:           newMessagePair(),
-		defaultCommandHandler: defaultCommandHandler,
+		commandHandler:        commandHandler,
 		messageHandlerManager: messageHandlerManager,
+		pool:                  workerpool.NewDefaultAsyncPool(10),
 		id:                    id,
 	}
-	for senderID, sender := range initSenders {
-		messageAgent.UpdateSender(senderID, sender)
-	}
-	return messageAgent
+	agent.messageRouter = lib.NewMessageRouter(agent.id, agent.pool, 100,
+		func(topic p2p.Topic, msg p2p.MessageValue) error {
+			err := agent.onMessage(topic, msg)
+			if err != nil {
+				// Todo: handle error
+				log.L().Error("failed to handle message", log.ShortError(err))
+			}
+			return err
+		},
+	)
+	return agent
 }
 
-// UpdateSender adds or deletes the sender by sender-id.
-func (agent *MessageAgentImpl) UpdateSender(senderID string, sender Sender) {
-	if sender == nil {
-		agent.senders.Delete(senderID)
-	} else {
-		agent.senders.Store(senderID, sender)
+func (agent *MessageAgentImpl) Init(ctx context.Context) error {
+	agent.ctx, agent.cancel = context.WithCancel(context.Background())
+	agent.wg.Add(1)
+	go func() {
+		defer agent.wg.Done()
+		err := agent.pool.Run(agent.ctx)
+		log.L().Info("workerpool exited", zap.Error(err))
+	}()
+	return nil
+}
+
+func (agent *MessageAgentImpl) Tick(ctx context.Context) error {
+	return agent.messageRouter.Tick(ctx)
+}
+
+func (agent *MessageAgentImpl) Close(ctx context.Context) error {
+	if agent.cancel != nil {
+		agent.cancel()
 	}
+	agent.wg.Wait()
+	return nil
+}
+
+// UpdateSender adds or deletes the sender by sender-id and register/unreigster topic.
+func (agent *MessageAgentImpl) UpdateSender(senderID string, sender Sender) error {
+	if sender == nil {
+		if _, loaded := agent.senders.LoadAndDelete(senderID); loaded {
+			return agent.unregisterTopic(agent.ctx, senderID)
+		}
+	} else if _, loaded := agent.senders.LoadOrStore(senderID, sender); !loaded {
+		return agent.registerTopic(agent.ctx, senderID)
+	}
+	return nil
 }
 
 // getSender gets sender by senderID.
@@ -209,7 +244,8 @@ func (agent *MessageAgentImpl) SendMessage(ctx context.Context, senderID string,
 	}
 	ctx2, cancel := context.WithTimeout(ctx, defaultMessageTimeOut)
 	defer cancel()
-	return sender.SendMessage(ctx2, generateTopic(agent.id, senderID), message{ID: 0, Type: messageTp, Command: command, Payload: msg}, true)
+	log.L().Debug("send message", zap.String("sender-id", senderID), zap.String("command", command), zap.Any("msg", msg))
+	return sender.SendMessage(ctx2, generateTopic(agent.id, senderID), message{ID: 0, Type: messageTp, Command: command, Payload: msg}, false /* nonblock */)
 }
 
 // SendRequest send request synchronously.
@@ -220,6 +256,7 @@ func (agent *MessageAgentImpl) SendRequest(ctx context.Context, senderID string,
 	}
 	ctx2, cancel := context.WithTimeout(ctx, defaultRequestTimeOut)
 	defer cancel()
+	log.L().Debug("send request", zap.String("sender-id", senderID), zap.String("command", command), zap.Any("req", req))
 	return agent.messagePair.sendRequest(ctx2, generateTopic(agent.id, senderID), command, req, sender)
 }
 
@@ -231,35 +268,28 @@ func (agent *MessageAgentImpl) SendResponse(ctx context.Context, senderID string
 	}
 	ctx2, cancel := context.WithTimeout(ctx, defaultResponseTimeOut)
 	defer cancel()
+	log.L().Debug("send response", zap.String("sender-id", senderID), zap.String("command", command), zap.Any("resp", resp))
 	return agent.messagePair.sendResponse(ctx2, generateTopic(agent.id, senderID), msgID, command, resp, sender)
 }
 
-// RegisterCommandHandler register command handler.
-func (agent *MessageAgentImpl) RegisterCommandHandler(command string, handler HandlerFunc) {
-	agent.handlers.Store(command, handler)
-}
-
-// OnMessage receive message/request/response.
+// onMessage receive message/request/response.
 // Forward the response to the corresponding request request.
 // According to the command, the corresponding message processing function is called.
 // According to the command, the corresponding request processing function is called, and send the response to caller.
 // NOTE: processing function name should same as topic name.
-// MessageFuncType: func(ctx context.Context, msg interface{}) error {}
-// RequestFuncType: func(ctx context.Context, req interface{}) (resp interface{}, err error) {}
-func (agent *MessageAgentImpl) OnMessage(topic string, msg interface{}) error {
-	m, ok := msg.(message)
+// MessageFuncType: func(ctx context.Context, msg *interface{}) error {}
+// RequestFuncType: func(ctx context.Context, req *interface{}) (resp *interface{}, err error) {}
+// RequestFuncType(protobuf): func(ctx context.Context, req *interface{}) (resp *interface{}) {}
+func (agent *MessageAgentImpl) onMessage(topic string, msg interface{}) error {
+	log.L().Debug("on message", zap.String("topic", topic), zap.Any("msg", msg))
+	m, ok := msg.(*message)
 	if !ok {
-		return errors.Errorf("unknown message type of %v", msg)
-	}
-
-	// matches the registered handler firstly
-	if val, ok := agent.handlers.Load(m.Command); ok {
-		return val.(HandlerFunc)(m.Payload)
+		return errors.Errorf("unknown message type of topic %s", topic)
 	}
 
 	switch m.Type {
 	case responseTp:
-		return agent.handleResponse(m.ID, m.Payload)
+		return agent.handleResponse(m.ID, m.Command, m.Payload)
 	case requestTp:
 		sendID, _ := extractTopic(topic)
 		return agent.handleRequest(sendID, m.ID, m.Command, m.Payload)
@@ -269,44 +299,76 @@ func (agent *MessageAgentImpl) OnMessage(topic string, msg interface{}) error {
 }
 
 // handleResponse receive response.
-func (agent *MessageAgentImpl) handleResponse(id messageID, resp interface{}) error {
-	return agent.messagePair.onResponse(id, resp)
+func (agent *MessageAgentImpl) handleResponse(id messageID, command string, resp interface{}) error {
+	handler := reflect.ValueOf(agent.commandHandler).MethodByName(command)
+	if !handler.IsValid() {
+		return errors.Errorf("response handler for command %s not found", command)
+	}
+	handlerType := handler.Type()
+	if handlerType.NumOut() != 1 && handlerType.NumOut() != 2 {
+		return errors.Errorf("wrong response handler type for command %s", command)
+	}
+	ret := reflect.New(handlerType.Out(0).Elem())
+	if bytes, err := json.Marshal(resp); err != nil {
+		return err
+	} else if err := json.Unmarshal(bytes, ret.Interface()); err != nil {
+		return err
+	}
+	return agent.messagePair.onResponse(id, ret.Interface())
 }
 
 // handleRequest receive request, call request handler and send response.
 func (agent *MessageAgentImpl) handleRequest(senderID string, msgID messageID, command string, req interface{}) error {
-	// TODO: check input/output num/type if needed, panic now
-	handler := reflect.ValueOf(agent.defaultCommandHandler).MethodByName(command)
+	handler := reflect.ValueOf(agent.commandHandler).MethodByName(command)
 	if !handler.IsValid() {
 		return errors.Errorf("request handler for command %s not found", command)
 	}
+	handlerType := handler.Type()
+	if handlerType.NumIn() != 2 || handlerType.NumOut() != 2 {
+		return errors.Errorf("wrong request handler type for command %s", command)
+	}
+	arg := reflect.New(handlerType.In(1).Elem())
+	if bytes, err := json.Marshal(req); err != nil {
+		return err
+	} else if err := json.Unmarshal(bytes, arg.Interface()); err != nil {
+		return err
+	}
 
 	// call request handler
-	ctx, cancel := context.WithTimeout(agent.ctx, defaultRequestTimeOut)
+	ctx, cancel := context.WithTimeout(agent.ctx, defaultHandlerTimeOut)
 	defer cancel()
-	params := []reflect.Value{reflect.ValueOf(ctx), reflect.ValueOf(req)}
+	params := []reflect.Value{reflect.ValueOf(ctx), arg}
 	rets := handler.Call(params)
 	if err := rets[1].Interface(); err != nil {
 		return err.(error)
 	}
 	// send response
-	ctx2, cancel2 := context.WithTimeout(agent.ctx, defaultRequestTimeOut)
+	ctx2, cancel2 := context.WithTimeout(agent.ctx, defaultResponseTimeOut)
 	defer cancel2()
 	return agent.SendResponse(ctx2, senderID, msgID, command, rets[0].Interface())
 }
 
 // handle message receive message and call message handler.
 func (agent *MessageAgentImpl) handleMessage(command string, msg interface{}) error {
-	// TODO: check input/output num/type if needed, panic now
-	handler := reflect.ValueOf(agent.defaultCommandHandler).MethodByName(command)
+	handler := reflect.ValueOf(agent.commandHandler).MethodByName(command)
 	if !handler.IsValid() {
 		return errors.Errorf("message handler for command %s not found", command)
 	}
+	handlerType := handler.Type()
+	if handlerType.NumIn() != 2 || handlerType.NumOut() != 1 {
+		return errors.Errorf("wrong message handler type for command %s", command)
+	}
+	arg := reflect.New(handlerType.In(1).Elem())
+	if bytes, err := json.Marshal(msg); err != nil {
+		return err
+	} else if err := json.Unmarshal(bytes, arg.Interface()); err != nil {
+		return err
+	}
 
 	// call message handler
-	ctx, cancel := context.WithTimeout(agent.ctx, defaultMessageTimeOut)
+	ctx, cancel := context.WithTimeout(agent.ctx, defaultHandlerTimeOut)
 	defer cancel()
-	params := []reflect.Value{reflect.ValueOf(ctx), reflect.ValueOf(msg)}
+	params := []reflect.Value{reflect.ValueOf(ctx), arg}
 	err := handler.Call(params)[0].Interface()
 	if err == nil {
 		return nil
@@ -315,21 +377,24 @@ func (agent *MessageAgentImpl) handleMessage(command string, msg interface{}) er
 }
 
 // RegisterTopic register p2p topic.
-func (agent *MessageAgentImpl) RegisterTopic(ctx context.Context, senderID string) error {
+func (agent *MessageAgentImpl) registerTopic(ctx context.Context, senderID string) error {
 	topic := generateTopic(senderID, agent.id)
+	log.L().Debug("register topic", zap.String("topic", topic))
 	_, err := agent.messageHandlerManager.RegisterHandler(
 		ctx,
 		topic,
-		message{},
-		func(sender p2p.NodeID, value p2p.MessageValue) error {
-			return agent.OnMessage(topic, value)
+		&message{},
+		func(sender p2p.NodeID, msg p2p.MessageValue) error {
+			agent.messageRouter.AppendMessage(topic, msg)
+			return nil
 		},
 	)
 	return err
 }
 
-// UnregisterTopic unregister p2p topic.
-func (agent *MessageAgentImpl) UnregisterTopic(ctx context.Context, senderID string) error {
+// unregisterTopic unregister p2p topic.
+func (agent *MessageAgentImpl) unregisterTopic(ctx context.Context, senderID string) error {
+	log.L().Debug("unregister topic", zap.String("topic", generateTopic(senderID, agent.id)))
 	_, err := agent.messageHandlerManager.UnregisterHandler(ctx, generateTopic(senderID, agent.id))
 	return err
 }

@@ -104,6 +104,11 @@ func (c *masterServerClient) CancelJob(ctx context.Context, req *pb.CancelJobReq
 	return resp.(*pb.CancelJobResponse), err
 }
 
+func (c *masterServerClient) DebugJob(ctx context.Context, req *pb.DebugJobRequest, opts ...grpc.CallOption) (*pb.DebugJobResponse, error) {
+	resp, err := c.conn.sendRequest(ctx, req)
+	return resp.(*pb.DebugJobResponse), err
+}
+
 func (c *masterServerClient) Heartbeat(ctx context.Context, req *pb.HeartbeatRequest, opts ...grpc.CallOption) (*pb.HeartbeatResponse, error) {
 	resp, err := c.conn.sendRequest(ctx, req)
 	return resp.(*pb.HeartbeatResponse), err

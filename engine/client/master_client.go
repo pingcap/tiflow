@@ -125,6 +125,11 @@ func (c *MasterClientImpl) CancelJob(ctx context.Context, req *pb.CancelJobReque
 	return rpcutil.DoFailoverRPC(ctx, c.FailoverRPCClients, req, pb.MasterClient.CancelJob)
 }
 
+// DebugJob implemeents MasterClient.DebugJob
+func (c *MasterClientImpl) DebugJob(ctx context.Context, req *pb.DebugJobRequest) (resp *pb.DebugJobResponse, err error) {
+	return rpcutil.DoFailoverRPC(ctx, c.FailoverRPCClients, req, pb.MasterClient.DebugJob)
+}
+
 // QueryMetaStore implemeents MasterClient.QueryMetaStore
 func (c *MasterClientImpl) QueryMetaStore(
 	ctx context.Context, req *pb.QueryMetaStoreRequest, timeout time.Duration,

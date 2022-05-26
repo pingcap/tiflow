@@ -16,6 +16,7 @@ package servermaster
 import (
 	"context"
 	"encoding/json"
+	"sync"
 	"time"
 
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -28,6 +29,7 @@ import (
 	"github.com/pingcap/tiflow/engine/pb"
 	"github.com/pingcap/tiflow/engine/pkg/clock"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
+	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
 	derrors "github.com/pingcap/tiflow/engine/pkg/errors"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
@@ -43,6 +45,7 @@ type JobManager interface {
 	QueryJob(ctx context.Context, req *pb.QueryJobRequest) *pb.QueryJobResponse
 	CancelJob(ctx context.Context, req *pb.CancelJobRequest) *pb.CancelJobResponse
 	PauseJob(ctx context.Context, req *pb.PauseJobRequest) *pb.PauseJobResponse
+	DebugJob(ctx context.Context, req *pb.DebugJobRequest) *pb.DebugJobResponse
 
 	GetJobStatuses(ctx context.Context) (map[libModel.MasterID]libModel.MasterStatusCode, error)
 }
@@ -64,6 +67,9 @@ type JobManagerImplV2 struct {
 	clocker          clock.Clock
 	frameMetaClient  pkgOrm.Client
 	tombstoneCleaned bool
+
+	// Use for DebugJob, since we now has no openapi
+	messageAgent dmpkg.MessageAgent
 }
 
 // PauseJob implements proto/Master.PauseJob
@@ -89,6 +95,83 @@ func (jm *JobManagerImplV2) PauseJob(ctx context.Context, req *pb.PauseJobReques
 	return &pb.PauseJobResponse{Err: &pb.Error{
 		Code: pb.ErrorCode_UnKnownJob,
 	}}
+}
+
+// DebugJob implements proto/Master.DebugJob
+func (jm *JobManagerImplV2) DebugJob(ctx context.Context, req *pb.DebugJobRequest) (resp *pb.DebugJobResponse) {
+	job := jm.JobFsm.QueryOnlineJob(req.JobIdStr)
+	if job == nil {
+		return &pb.DebugJobResponse{Err: &pb.Error{
+			Code: pb.ErrorCode_UnKnownJob,
+		}}
+	}
+	handle := job.WorkerHandle.Unwrap()
+	if handle == nil {
+		return &pb.DebugJobResponse{Err: &pb.Error{
+			Code: pb.ErrorCode_UnKnownJob,
+		}}
+	}
+
+	// we only call MessageAgent.Init/UpdateSender/Close in DebugJob func
+	if err := jm.messageAgent.Init(ctx); err != nil {
+		return &pb.DebugJobResponse{Err: &pb.Error{
+			Code:    pb.ErrorCode_UnknownError,
+			Message: err.Error(),
+		}}
+	}
+	defer func() {
+		if err := jm.messageAgent.Close(ctx); err != nil {
+			resp = &pb.DebugJobResponse{Err: &pb.Error{
+				Code:    pb.ErrorCode_UnknownError,
+				Message: err.Error(),
+			}}
+		}
+	}()
+	if err := jm.messageAgent.UpdateSender(req.JobIdStr, handle); err != nil {
+		return &pb.DebugJobResponse{Err: &pb.Error{
+			Code:    pb.ErrorCode_UnknownError,
+			Message: err.Error(),
+		}}
+	}
+	defer func() {
+		if err := jm.messageAgent.UpdateSender(req.JobIdStr, nil); err != nil {
+			resp = &pb.DebugJobResponse{Err: &pb.Error{
+				Code:    pb.ErrorCode_UnknownError,
+				Message: err.Error(),
+			}}
+		}
+	}()
+
+	runCtx, runCancel := context.WithCancel(ctx)
+	defer runCancel()
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for {
+			if err := jm.messageAgent.Tick(runCtx); err != nil {
+				log.L().Error("failed to run message agent tick", log.ShortError(err))
+				return
+			}
+			select {
+			case <-runCtx.Done():
+				return
+			default:
+				time.Sleep(100 * time.Millisecond)
+			}
+		}
+	}()
+
+	resp2, err := jm.messageAgent.SendRequest(ctx, req.JobIdStr, "DebugJob", req)
+	if err != nil {
+		return &pb.DebugJobResponse{Err: &pb.Error{
+			Code:    pb.ErrorCode_UnknownError,
+			Message: err.Error(),
+		}}
+	}
+	runCancel()
+	wg.Wait()
+	return resp2.(*pb.DebugJobResponse)
 }
 
 // CancelJob implements proto/Master.CancelJob
@@ -294,7 +377,13 @@ func NewJobManagerImplV2(
 		_ = impl.BaseMaster.Close(dctx)
 		return nil, err
 	}
-	return impl, nil
+
+	// nolint:errcheck
+	_, err = dctx.Deps().Construct(func(m p2p.MessageHandlerManager) (p2p.MessageHandlerManager, error) {
+		impl.messageAgent = dmpkg.NewMessageAgentImpl(id, impl, m)
+		return m, nil
+	})
+	return impl, err
 }
 
 // InitImpl implements lib.MasterImpl.InitImpl

@@ -26,11 +26,22 @@ type MockMessageAgent struct {
 	mock.Mock
 }
 
-// RegisterCommandHandler implement MessageAgent.RegisterCommandHandler
-func (m *MockMessageAgent) RegisterCommandHandler(command string, handler HandlerFunc) {}
+func (m *MockMessageAgent) Init(ctx context.Context) error {
+	return nil
+}
+
+func (m *MockMessageAgent) Tick(ctx context.Context) error {
+	return nil
+}
+
+func (m *MockMessageAgent) Close(ctx context.Context) error {
+	return nil
+}
 
 // UpdateSender implement MessageAgent.UpdateSender
-func (m *MockMessageAgent) UpdateSender(senderID string, sender Sender) {}
+func (m *MockMessageAgent) UpdateSender(senderID string, sender Sender) error {
+	return nil
+}
 
 // SendMessage implement MessageAgent.SendMessage
 func (m *MockMessageAgent) SendMessage(ctx context.Context, senderID string, command string, msg interface{}) error {
@@ -62,14 +73,4 @@ func (m *MockMessageAgent) OnMessage(topic string, msg interface{}) error {
 	defer m.Unlock()
 	args := m.Called()
 	return args.Error(0)
-}
-
-// RegisterTopic implement MessageAgent.RegisterTopic
-func (m *MockMessageAgent) RegisterTopic(ctx context.Context, senderID string) error {
-	return nil
-}
-
-// UnregisterTopic implement MessageAgent.UnregisterTopic
-func (m *MockMessageAgent) UnregisterTopic(ctx context.Context, sendID string) error {
-	return nil
 }

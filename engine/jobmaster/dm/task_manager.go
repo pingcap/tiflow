@@ -88,9 +88,6 @@ func (tm *TaskManager) OperateTask(ctx context.Context, op OperateType, jobCfg *
 	var stage metadata.TaskStage
 	switch op {
 	case Create, Update:
-		if err := tm.updateTopic(ctx, jobCfg); err != nil {
-			return err
-		}
 		return tm.jobStore.Put(ctx, metadata.NewJob(jobCfg))
 	case Delete:
 		return tm.jobStore.Delete(ctx)
@@ -107,8 +104,8 @@ func (tm *TaskManager) OperateTask(ctx context.Context, op OperateType, jobCfg *
 
 // UpdateTaskStatus is called when receive task status from worker.
 func (tm *TaskManager) UpdateTaskStatus(taskStatus runtime.TaskStatus) {
-	log.L().Debug("update task status", zap.String("task_id", taskStatus.GetTask()), zap.Int("stage", int(taskStatus.GetStage())), zap.Int("unit", int(taskStatus.GetUnit())))
-	tm.tasks.Store(taskStatus.GetTask(), taskStatus)
+	log.L().Debug("update task status", zap.String("task_id", taskStatus.Task), zap.Int("stage", int(taskStatus.Stage)), zap.Int("unit", int(taskStatus.Unit)))
+	tm.tasks.Store(taskStatus.Task, taskStatus)
 }
 
 // TaskStatus return the task status.
@@ -151,18 +148,18 @@ func (tm *TaskManager) checkAndOperateTasks(ctx context.Context, job *metadata.J
 		}
 
 		// task unbounded or worker offline
-		if !ok || runningTask.GetStage() == metadata.StageUnscheduled {
+		if !ok || runningTask.Stage == metadata.StageUnscheduled {
 			recordError = errors.New("get task running status failed")
 			log.L().Error("failed to schedule task", zap.String("task_id", taskID), zap.Error(recordError))
 			continue
 		}
 
 		if taskAsExpected(persistentTask, runningTask) {
-			log.L().Debug("task status as expected", zap.String("task_id", taskID), zap.Int("stage", int(runningTask.GetStage())))
+			log.L().Debug("task status as expected", zap.String("task_id", taskID), zap.Int("stage", int(runningTask.Stage)))
 			continue
 		}
 
-		log.L().Info("unexpected task status", zap.String("task_id", taskID), zap.Int("expected_stage", int(persistentTask.Stage)), zap.Int("stage", int(runningTask.GetStage())))
+		log.L().Info("unexpected task status", zap.String("task_id", taskID), zap.Int("expected_stage", int(persistentTask.Stage)), zap.Int("stage", int(runningTask.Stage)))
 		// operateTaskMessage should be a asynchronous request
 		if err := tm.operateTaskMessage(ctx, taskID, persistentTask.Stage); err != nil {
 			recordError = err
@@ -198,7 +195,7 @@ func (tm *TaskManager) removeTaskStatus(job *metadata.Job) {
 func (tm *TaskManager) GetTaskStatus(taskID string) (runtime.TaskStatus, bool) {
 	value, ok := tm.tasks.Load(taskID)
 	if !ok {
-		return nil, false
+		return runtime.NewOfflineStatus(taskID), false
 	}
 	return value.(runtime.TaskStatus), true
 }
@@ -207,7 +204,7 @@ func (tm *TaskManager) GetTaskStatus(taskID string) (runtime.TaskStatus, bool) {
 func taskAsExpected(persistentTask *metadata.Task, taskStatus runtime.TaskStatus) bool {
 	// TODO: when running is expected but task is paused, we may still need return true,
 	// because worker will resume it automatically.
-	return persistentTask.Stage == taskStatus.GetStage()
+	return persistentTask.Stage == taskStatus.Stage
 }
 
 func (tm *TaskManager) operateTaskMessage(ctx context.Context, taskID string, stage metadata.TaskStage) error {
@@ -220,34 +217,4 @@ func (tm *TaskManager) operateTaskMessage(ctx context.Context, taskID string, st
 		Stage:  stage,
 	}
 	return tm.messageAgent.SendMessage(ctx, taskID, dmpkg.OperateTask, msg)
-}
-
-// updateTopic register/unregister topic by diffs old and new tasks.
-func (tm *TaskManager) updateTopic(ctx context.Context, jobCfg *config.JobCfg) error {
-	originTasks := make(map[string]struct{})
-	state, err := tm.jobStore.Get(ctx)
-	if err == nil {
-		job := state.(*metadata.Job)
-		for task := range job.Tasks {
-			originTasks[task] = struct{}{}
-		}
-	} else if err.Error() != "state not found" { // TODO: better error checking
-		return err
-	}
-
-	for _, upstream := range jobCfg.Upstreams {
-		if _, ok := originTasks[upstream.SourceID]; !ok {
-			if err := tm.messageAgent.RegisterTopic(ctx, upstream.SourceID); err != nil {
-				return err
-			}
-		} else {
-			delete(originTasks, upstream.SourceID)
-		}
-	}
-	for task := range originTasks {
-		if err := tm.messageAgent.UnregisterTopic(ctx, task); err != nil {
-			return err
-		}
-	}
-	return nil
 }
