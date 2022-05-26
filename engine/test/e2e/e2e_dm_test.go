@@ -17,6 +17,8 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"sync"
 	"testing"
@@ -26,7 +28,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/pingcap/tiflow/engine/client"
+	"github.com/pingcap/tiflow/engine/jobmaster/dm"
 	"github.com/pingcap/tiflow/engine/pb"
+	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
 )
 
 func TestDMJob(t *testing.T) {
@@ -99,8 +103,9 @@ func testSimpleAllModeTask(
 	dmJobCfg, err := ioutil.ReadFile("./dm-job.yaml")
 	require.NoError(t, err)
 	dmJobCfg = bytes.ReplaceAll(dmJobCfg, []byte("<placeholder>"), []byte(db))
+	var resp *pb.SubmitJobResponse
 	require.Eventually(t, func() bool {
-		resp, err := client.SubmitJob(ctx, &pb.SubmitJobRequest{
+		resp, err = client.SubmitJob(ctx, &pb.SubmitJobRequest{
 			Tp:     pb.JobType_DM,
 			Config: dmJobCfg,
 		})
@@ -141,4 +146,22 @@ func testSimpleAllModeTask(
 
 	// check auto resume
 	waitRow("c = 3")
+
+	// check query status
+	var args struct {
+		Tasks []string
+	}
+	source1 := "mysql-replica-01"
+	source2 := "mysql-replica-02"
+	args.Tasks = []string{source1, source2}
+	jsonArg, err := json.Marshal(args)
+	require.NoError(t, err)
+	resp2, err := client.DebugJob(ctx, &pb.DebugJobRequest{JobIdStr: resp.JobIdStr, Command: dmpkg.QueryStatus, JsonArg: string(jsonArg)})
+	require.NoError(t, err)
+	require.Nil(t, resp2.Err)
+	var jobStatus dm.JobStatus
+	require.NoError(t, json.Unmarshal([]byte(resp2.JsonRet), &jobStatus))
+	require.Equal(t, resp.JobIdStr, jobStatus.JobMasterID)
+	require.Contains(t, string(jobStatus.TaskStatus[source1].Status.TaskStatus.Status), "totalEvents")
+	require.Contains(t, jobStatus.TaskStatus[source2].Status.ErrorMsg, fmt.Sprintf("task %s for job not found", source2))
 }
