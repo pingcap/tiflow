@@ -15,6 +15,7 @@ package kafka
 
 import (
 	"context"
+	"crypto/tls"
 	"net/url"
 	"strconv"
 	"strings"
@@ -42,6 +43,7 @@ type Config struct {
 	MaxMessageBytes int
 	Compression     string
 	ClientID        string
+	EnableTLS       bool
 	Credential      *security.Credential
 	SASL            *security.SASL
 	// control whether to create topic
@@ -145,21 +147,6 @@ func (c *Config) Apply(sinkURI *url.URL) error {
 
 	c.ClientID = params.Get("kafka-client-id")
 
-	s = params.Get("ca")
-	if s != "" {
-		c.Credential.CAPath = s
-	}
-
-	s = params.Get("cert")
-	if s != "" {
-		c.Credential.CertPath = s
-	}
-
-	s = params.Get("key")
-	if s != "" {
-		c.Credential.KeyPath = s
-	}
-
 	s = params.Get("auto-create-topic")
 	if s != "" {
 		autoCreate, err := strconv.ParseBool(s)
@@ -199,6 +186,60 @@ func (c *Config) Apply(sinkURI *url.URL) error {
 	err := c.applySASL(params)
 	if err != nil {
 		return err
+	}
+
+	err = c.applyTLS(params)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (c *Config) applyTLS(params url.Values) error {
+	s := params.Get("ca")
+	if s != "" {
+		c.Credential.CAPath = s
+	}
+
+	s = params.Get("cert")
+	if s != "" {
+		c.Credential.CertPath = s
+	}
+
+	s = params.Get("key")
+	if s != "" {
+		c.Credential.KeyPath = s
+	}
+
+	if c.Credential != nil && !c.Credential.IsEmpty() &&
+		!c.Credential.IsTLSEnabled() {
+		return cerror.WrapError(cerror.ErrKafkaInvalidConfig,
+			errors.New("ca, cert and key files should all be supplied"))
+	}
+
+	// if enable-tls is not set, but credential files are set,
+	//    then tls should be enabled, and the self-signed CA certificate is used.
+	// if enable-tls is set to true, and credential files are not set,
+	//	  then tls should be enabled, and the trusted CA certificate on OS is used.
+	// if enable-tls is set to false, and credential files are set,
+	//	  then an error is returned.
+	s = params.Get("enable-tls")
+	if s != "" {
+		enableTLS, err := strconv.ParseBool(s)
+		if err != nil {
+			return err
+		}
+
+		if c.Credential != nil && c.Credential.IsTLSEnabled() && !enableTLS {
+			return cerror.WrapError(cerror.ErrKafkaInvalidConfig,
+				errors.New("credential files are supplied, but 'enable-tls' is set to false"))
+		}
+		c.EnableTLS = enableTLS
+	} else {
+		if c.Credential != nil && c.Credential.IsTLSEnabled() {
+			c.EnableTLS = true
+		}
 	}
 
 	return nil
@@ -368,11 +409,22 @@ func NewSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
 		config.Producer.Compression = sarama.CompressionNone
 	}
 
-	if c.Credential != nil && len(c.Credential.CAPath) != 0 {
+	if c.EnableTLS {
+		// for SSL encryption with a trust CA certificate, we must populate the
+		// following two params of config.Net.TLS
 		config.Net.TLS.Enable = true
-		config.Net.TLS.Config, err = c.Credential.ToTLSConfig()
-		if err != nil {
-			return nil, errors.Trace(err)
+		config.Net.TLS.Config = &tls.Config{
+			MinVersion: tls.VersionTLS12,
+			NextProtos: []string{"h2", "http/1.1"},
+		}
+
+		// for SSL encryption with self-signed CA certificate, we reassign the
+		// config.Net.TLS.Config using the relevant credential files.
+		if c.Credential != nil && c.Credential.IsTLSEnabled() {
+			config.Net.TLS.Config, err = c.Credential.ToTLSConfig()
+			if err != nil {
+				return nil, errors.Trace(err)
+			}
 		}
 	}
 
