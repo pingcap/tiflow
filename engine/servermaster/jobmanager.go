@@ -222,7 +222,10 @@ func (jm *JobManagerImplV2) SubmitJob(ctx context.Context, req *pb.SubmitJobRequ
 	)
 
 	meta := &libModel.MasterMetaKVData{
-		ProjectID: req.GetProjectInfo().GetProjectId(),
+		ProjectID: tenant.NewProjectInfo(
+			req.GetProjectInfo().GetTenantId(),
+			req.GetProjectInfo().GetProjectId(),
+		).UniqueID(),
 		// TODO: we can use job name provided from user, but we must check the
 		// job name is unique before using it.
 		ID:         jm.uuidGen.NewString(),
@@ -260,10 +263,10 @@ func (jm *JobManagerImplV2) SubmitJob(ctx context.Context, req *pb.SubmitJobRequ
 	// Triky way here to set the worker(jobmaster)'s project info
 	defaultMaster, ok := jm.BaseMaster.(*lib.DefaultBaseMaster)
 	if ok {
-		defaultMaster.SetWorkerProjectInfo(tenant.ProjectInfo{
-			TenantID:  req.GetProjectInfo().GetTenantId(),
-			ProjectID: req.GetProjectInfo().GetProjectId(),
-		})
+		defaultMaster.SetWorkerProjectInfo(tenant.NewProjectInfo(
+			req.GetProjectInfo().GetTenantId(),
+			req.GetProjectInfo().GetProjectId(),
+		))
 	} else {
 		log.L().Error("jobmanager's base master is not a DefaultBaseMaster")
 	}

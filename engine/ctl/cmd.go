@@ -45,30 +45,25 @@ func newQueryJob() *cobra.Command {
 }
 
 func getProjectInfo(cmd *cobra.Command) tenant.ProjectInfo {
-	project := tenant.ProjectInfo{
-		TenantID:  tenant.DefaultUserTenantID,
-		ProjectID: tenant.DefaultUserProjectID,
-	}
-
 	tenantID, err := cmd.Flags().GetString("tenant-id")
 	if err != nil {
 		log.L().Error("error in parse `--tenant-id`, use default tenant id", zap.Error(err))
+		tenantID = tenant.DefaultUserProjectInfo.TenantID()
 	} else if tenantID == "" {
 		log.L().Warn("tenant-id is empty, use default tenant id")
-	} else {
-		project.TenantID = tenantID
+		tenantID = tenant.DefaultUserProjectInfo.TenantID()
 	}
 
 	projectID, err := cmd.Flags().GetString("project-id")
 	if err != nil {
 		log.L().Error("error in parse `--project-id`, use default project id", zap.Error(err))
+		projectID = tenant.DefaultUserProjectInfo.ProjectID()
 	} else if projectID == "" {
 		log.L().Warn("project-id is empty, use default project id")
-	} else {
-		project.ProjectID = projectID
+		projectID = tenant.DefaultUserProjectInfo.ProjectID()
 	}
 
-	return project
+	return tenant.NewProjectInfo(tenantID, projectID)
 }
 
 func runQueryJob(cmd *cobra.Command, _ []string) error {
@@ -89,8 +84,8 @@ func runQueryJob(cmd *cobra.Command, _ []string) error {
 	resp, err := cltManager.MasterClient().QueryJob(ctx, &pb.QueryJobRequest{
 		JobId: id,
 		ProjectInfo: &pb.ProjectInfo{
-			TenantId:  project.TenantID,
-			ProjectId: project.ProjectID,
+			TenantId:  project.TenantID(),
+			ProjectId: project.ProjectID(),
 		},
 	})
 	if err != nil {
@@ -183,8 +178,8 @@ func runSubmitJob(cmd *cobra.Command, _ []string) error {
 		Tp:     jobType,
 		Config: jobConfig,
 		ProjectInfo: &pb.ProjectInfo{
-			TenantId:  project.TenantID,
-			ProjectId: project.ProjectID,
+			TenantId:  project.TenantID(),
+			ProjectId: project.ProjectID(),
 		},
 	})
 	if err != nil {
@@ -224,8 +219,8 @@ func runPauseJob(cmd *cobra.Command, _ []string) error {
 	resp, err := cltManager.MasterClient().PauseJob(ctx, &pb.PauseJobRequest{
 		JobIdStr: id,
 		ProjectInfo: &pb.ProjectInfo{
-			TenantId:  project.TenantID,
-			ProjectId: project.ProjectID,
+			TenantId:  project.TenantID(),
+			ProjectId: project.ProjectID(),
 		},
 	})
 	if err != nil {

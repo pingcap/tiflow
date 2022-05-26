@@ -185,7 +185,7 @@ func NewBaseWorker(
 		id:          workerID,
 		projectInfo: ctx.ProjectInfo,
 		workerStatus: &libModel.WorkerStatus{
-			ProjectID: ctx.ProjectInfo.ProjectID,
+			ProjectID: ctx.ProjectInfo.UniqueID(),
 			JobID:     masterID,
 			ID:        workerID,
 			Type:      int(tp),
@@ -196,11 +196,8 @@ func NewBaseWorker(
 
 		errCenter:        errctx.NewErrCenter(),
 		clock:            clock.New(),
-		userMetaKVClient: kvclient.NewPrefixKVClient(params.UserRawKVClient, ctx.ProjectInfo.ProjectID),
-		metricFactory: promutil.NewFactory4Worker(tenant.ProjectInfo{
-			TenantID:  ctx.ProjectInfo.TenantID,
-			ProjectID: ctx.ProjectInfo.ProjectID,
-		}, WorkerTypeForMetric(tp), masterID, workerID),
+		userMetaKVClient: kvclient.NewPrefixKVClient(params.UserRawKVClient, ctx.ProjectInfo.UniqueID()),
+		metricFactory:    promutil.NewFactory4Worker(ctx.ProjectInfo, WorkerTypeForMetric(tp), masterID, workerID),
 	}
 }
 

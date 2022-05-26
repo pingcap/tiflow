@@ -167,8 +167,8 @@ func (d *TaskDispatcher) preDispatchTaskOnce(
 		Cmd: CmdPreDispatchTask,
 		Req: &pb.PreDispatchTaskRequest{
 			ProjectInfo: &pb.ProjectInfo{
-				TenantId:  args.ProjectInfo.TenantID,
-				ProjectId: args.ProjectInfo.ProjectID,
+				TenantId:  args.ProjectInfo.TenantID(),
+				ProjectId: args.ProjectInfo.ProjectID(),
 			},
 			TaskTypeId: args.WorkerType,
 			TaskConfig: args.WorkerConfig,

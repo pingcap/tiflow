@@ -68,7 +68,7 @@ func NewUTCli(
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	metaCli := kvclient.NewPrefixKVClient(userRawKVClient, tenant.DefaultUserTenantID)
+	metaCli := kvclient.NewPrefixKVClient(userRawKVClient, tenant.DefaultUserProjectInfo.UniqueID())
 
 	fakeJobCli, err := clientv3.New(clientv3.Config{
 		Endpoints:   userMetaAddrs,

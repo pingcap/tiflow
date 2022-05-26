@@ -159,7 +159,7 @@ type DefaultBaseMaster struct {
 	masterMeta    *libModel.MasterMetaKVData
 
 	// JobManager is a special master which has workers(jobMaster) with different project info,
-	// so projectMux is to protect the Read-Write of projectInfo
+	// so projectMux is to protect the Read-Write of projectInfoWorker
 	projectMux sync.RWMutex
 	// projectInfoSelf is the project info for master itself
 	projectInfoSelf tenant.ProjectInfo
@@ -250,11 +250,8 @@ func NewBaseMaster(
 		projectInfoWorker: ctx.ProjectInfo,
 
 		createWorkerQuota: quota.NewConcurrencyQuota(maxCreateWorkerConcurrency),
-		userMetaKVClient:  kvclient.NewPrefixKVClient(params.UserRawKVClient, ctx.ProjectInfo.ProjectID),
-		metricFactory: promutil.NewFactory4Master(tenant.ProjectInfo{
-			TenantID:  ctx.ProjectInfo.TenantID,
-			ProjectID: ctx.ProjectInfo.ProjectID,
-		}, WorkerTypeForMetric(tp), id),
+		userMetaKVClient:  kvclient.NewPrefixKVClient(params.UserRawKVClient, ctx.ProjectInfo.UniqueID()),
+		metricFactory:     promutil.NewFactory4Master(ctx.ProjectInfo, WorkerTypeForMetric(tp), id),
 
 		deps: ctx.Deps(),
 	}
