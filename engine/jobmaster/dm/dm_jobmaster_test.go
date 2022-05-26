@@ -25,6 +25,7 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/pingcap/tiflow/dm/checker"
 	dmconfig "github.com/pingcap/tiflow/dm/dm/config"
+	"github.com/pingcap/tiflow/dm/dm/master"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
@@ -61,6 +62,7 @@ func TestDMJobmasterSuite(t *testing.T) {
 
 type testDMJobmasterSuite struct {
 	suite.Suite
+	funcBackup func(ctx context.Context, cfg *dmconfig.SourceConfig) error
 }
 
 func (t *testDMJobmasterSuite) SetupSuite() {
@@ -70,6 +72,19 @@ func (t *testDMJobmasterSuite) SetupSuite() {
 	WorkerErrorInterval = 100 * time.Millisecond
 	runtime.HeartbeatInterval = 1 * time.Second
 	require.NoError(t.T(), log.InitLogger(&log.Config{Level: "debug"}))
+	t.funcBackup = master.CheckAndAdjustSourceConfigFunc
+	master.CheckAndAdjustSourceConfigFunc = checkAndNoAdjustSourceConfigMock
+}
+
+func checkAndNoAdjustSourceConfigMock(ctx context.Context, cfg *dmconfig.SourceConfig) error {
+	if _, err := cfg.Yaml(); err != nil {
+		return err
+	}
+	return cfg.Verify()
+}
+
+func (t *testDMJobmasterSuite) TearDownSuite() {
+	master.CheckAndAdjustSourceConfigFunc = t.funcBackup
 }
 
 type masterParamListForTest struct {
@@ -296,8 +311,6 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	require.NoError(t.T(), jm.OnWorkerStatusUpdated(workerHandle1, &libModel.WorkerStatus{ExtBytes: bytes1}))
 	require.NoError(t.T(), jm.OnJobManagerMessage("", ""))
 	require.NoError(t.T(), jm.OnMasterMessage("", ""))
-	require.NoError(t.T(), jm.OnJobManagerFailover(lib.MasterFailoverReason{}))
-	require.NoError(t.T(), jm.OnMasterFailover(lib.MasterFailoverReason{}))
 	require.Equal(t.T(), jm.Workload(), model.RescUnit(2))
 	require.NoError(t.T(), jm.OnWorkerStatusUpdated(workerHandle1, &libModel.WorkerStatus{ExtBytes: bytes1}))
 

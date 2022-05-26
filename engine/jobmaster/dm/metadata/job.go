@@ -49,7 +49,7 @@ type Job struct {
 
 // NewJob creates a new Job instance
 func NewJob(jobCfg *config.JobCfg) *Job {
-	taskCfgs := jobCfg.ToTaskConfigs()
+	taskCfgs := jobCfg.ToTaskCfgs()
 	job := &Job{
 		Tasks: make(map[string]*Task, len(taskCfgs)),
 	}

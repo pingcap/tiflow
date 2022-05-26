@@ -112,11 +112,6 @@ func (w *exampleWorker) Status() libModel.WorkerStatus {
 	return libModel.WorkerStatus{Code: code}
 }
 
-func (w *exampleWorker) OnMasterFailover(reason lib.MasterFailoverReason) error {
-	log.L().Info("OnMasterFailover")
-	return nil
-}
-
 func (w *exampleWorker) OnMasterMessage(topic p2p.Topic, message p2p.MessageValue) error {
 	log.L().Info("OnMasterMessage", zap.Any("message", message))
 	return nil

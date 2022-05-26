@@ -246,18 +246,6 @@ func (jm *JobMaster) Workload() model.RescUnit {
 	return 2
 }
 
-// OnMasterFailover implements JobMasterImpl.OnMasterFailover
-func (jm *JobMaster) OnMasterFailover(reason lib.MasterFailoverReason) error {
-	// No need to do anything here
-	return nil
-}
-
-// OnJobManagerFailover implements JobMasterImpl.OnJobManagerFailover
-func (jm *JobMaster) OnJobManagerFailover(reason lib.MasterFailoverReason) error {
-	// No need to do anything here
-	return nil
-}
-
 // IsJobMasterImpl implements JobMasterImpl.IsJobMasterImpl
 func (jm *JobMaster) IsJobMasterImpl() {
 	panic("unreachable")
@@ -289,7 +277,7 @@ func (jm *JobMaster) getInitStatus() ([]runtime.TaskStatus, []runtime.WorkerStat
 func (jm *JobMaster) preCheck(ctx context.Context) error {
 	log.L().Info("start pre-checking job config", zap.String("id", jm.workerID), zap.String("jobmaster_id", jm.JobMasterID()))
 
-	taskCfgs := jm.jobCfg.ToTaskConfigs()
+	taskCfgs := jm.jobCfg.ToTaskCfgs()
 	dmSubtaskCfgs := make([]*dmconfig.SubTaskConfig, 0, len(taskCfgs))
 	for _, taskCfg := range taskCfgs {
 		dmSubtaskCfgs = append(dmSubtaskCfgs, taskCfg.ToDMSubTaskCfg())

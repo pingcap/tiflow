@@ -114,11 +114,13 @@ func InitLogger(cfg *Config) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	err = initSaramaLogger(level)
+
+	err = initGRPCLogger(level)
 	if err != nil {
 		return err
 	}
-	err = initGRPCLogger(level)
+
+	err = initSaramaLogger(level)
 	if err != nil {
 		return err
 	}
@@ -137,7 +139,7 @@ func ZapErrorFilter(err error, filterErrors ...error) zap.Field {
 	return zap.Error(err)
 }
 
-// InitSaramaLogger hacks logger used in sarama lib
+// initSaramaLogger hacks logger used in sarama lib
 func initSaramaLogger(level zapcore.Level) error {
 	// only available less than info level
 	if !zapcore.InfoLevel.Enabled(level) {

@@ -18,6 +18,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/engine/executor/worker"
 	libModel "github.com/pingcap/tiflow/engine/lib/model"
@@ -78,7 +79,6 @@ type JobMasterImpl interface {
 	MasterImpl
 
 	Workload() model.RescUnit
-	OnJobManagerFailover(reason MasterFailoverReason) error
 	OnJobManagerMessage(topic p2p.Topic, message interface{}) error
 	// IsJobMasterImpl is an empty function used to prevent accidental implementation
 	// of this interface.
@@ -181,13 +181,16 @@ func (d *DefaultBaseJobMaster) GetWorkers() map[libModel.WorkerID]WorkerHandle {
 
 // Close implements BaseJobMaster.Close
 func (d *DefaultBaseJobMaster) Close(ctx context.Context) error {
-	if err := d.impl.CloseImpl(ctx); err != nil {
-		return errors.Trace(err)
+	err := d.impl.CloseImpl(ctx)
+	// We don't return here if CloseImpl return error to ensure
+	// that we can close inner resources of the framework
+	if err != nil {
+		log.L().Error("Failed to close JobMasterImpl", zap.Error(err))
 	}
 
 	d.master.doClose()
 	d.worker.doClose()
-	return nil
+	return errors.Trace(err)
 }
 
 // OnError implements BaseJobMaster.OnError
@@ -286,10 +289,6 @@ func (j *jobMasterImplAsWorkerImpl) Tick(ctx context.Context) error {
 
 func (j *jobMasterImplAsWorkerImpl) Workload() model.RescUnit {
 	return j.inner.Workload()
-}
-
-func (j *jobMasterImplAsWorkerImpl) OnMasterFailover(reason MasterFailoverReason) error {
-	return j.inner.OnJobManagerFailover(reason)
 }
 
 func (j *jobMasterImplAsWorkerImpl) OnMasterMessage(topic p2p.Topic, message interface{}) error {

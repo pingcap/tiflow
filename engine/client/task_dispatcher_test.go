@@ -92,14 +92,17 @@ func TestPreDispatchAborted(t *testing.T) {
 		Return((*ExecutorResponse)(nil), status.Error(codes.Aborted, "aborted error")).
 		Once() // Aborted calls should NOT be retried.
 
+	var abortCalled atomic.Bool
 	err := dispatcher.DispatchTask(context.Background(), args, func() {
 		require.Fail(t, "the callback should never be called")
 	}, func(error) {
-		require.Fail(t, "not expected")
+		require.False(t, abortCalled.Swap(true))
 	})
 	require.Error(t, err)
 	require.Regexp(t, ".*aborted error.*", err)
 	mockExecClient.AssertExpectations(t)
+
+	require.True(t, abortCalled.Load())
 }
 
 func TestAlreadyExistsPanics(t *testing.T) {
@@ -144,8 +147,9 @@ func TestDispatchRetryCanceled(t *testing.T) {
 	}
 
 	var (
-		retryCount atomic.Int64
-		wg         sync.WaitGroup
+		retryCount  atomic.Int64
+		abortCalled atomic.Bool
+		wg          sync.WaitGroup
 	)
 	mockExecClient.On("Send", mock.Anything, mock.Anything).
 		Return((*ExecutorResponse)(nil), status.Error(codes.Unknown, "should retry")).Run(
@@ -168,10 +172,11 @@ func TestDispatchRetryCanceled(t *testing.T) {
 	err := dispatcher.DispatchTask(cancelCtx, args, func() {
 		require.Fail(t, "the callback should never be called")
 	}, func(error) {
-		require.Fail(t, "not expected")
+		require.False(t, abortCalled.Swap(true))
 	})
 	require.Error(t, err)
 	require.Regexp(t, ".*ErrExecutorPreDispatchFailed.*", err)
+	require.True(t, abortCalled.Load())
 
 	wg.Wait()
 }

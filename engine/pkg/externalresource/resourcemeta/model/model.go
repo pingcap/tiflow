@@ -56,7 +56,10 @@ type ResourceMeta struct {
 	Worker    WorkerID         `json:"worker" gorm:"column:worker_id;type:varchar(64) not null"`
 	Executor  ExecutorID       `json:"executor" gorm:"column:executor_id;type:varchar(64) not null;index:idx_rei,priority:1"`
 	GCPending bool             `json:"gc-pending" gorm:"column:gc_pending;type:BOOLEAN"`
-	Deleted   bool             `json:"deleted" gorm:"column:deleted;type:BOOLEAN"`
+
+	// TODO soft delete has not be implemented, because it requires modifying too many
+	// unit tests in engine/pkg/orm
+	Deleted bool `json:"deleted" gorm:"column:deleted;type:BOOLEAN"`
 }
 
 // GetID implements dataset.DataEntry
