@@ -12,3 +12,79 @@
 // limitations under the License.
 
 package tp
+
+import (
+	"context"
+	"testing"
+
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/tp/schedulepb"
+	"github.com/stretchr/testify/require"
+)
+
+type mockTrans struct {
+	send func(ctx context.Context, msgs []*schedulepb.Message) error
+	recv func(ctx context.Context) ([]*schedulepb.Message, error)
+}
+
+func (m *mockTrans) Send(ctx context.Context, msgs []*schedulepb.Message) error {
+	return m.send(ctx, msgs)
+}
+func (m *mockTrans) Recv(ctx context.Context) ([]*schedulepb.Message, error) {
+	return m.recv(ctx)
+}
+
+func TestCoordinatorSendMsgs(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	trans := &mockTrans{}
+	cood := coordinator{
+		version:  "6.2.0",
+		revision: schedulepb.OwnerRevision{Revision: 3},
+		trans:    trans,
+	}
+	trans.send = func(ctx context.Context, msgs []*schedulepb.Message) error {
+		require.EqualValues(t, []*schedulepb.Message{{
+			Header: &schedulepb.Message_Header{
+				Version:       cood.version,
+				OwnerRevision: cood.revision,
+			},
+			To: "1", MsgType: schedulepb.MsgDispatchTableRequest,
+		}}, msgs)
+		return nil
+	}
+	cood.sendMsgs(
+		ctx, []*schedulepb.Message{{To: "1", MsgType: schedulepb.MsgDispatchTableRequest}})
+}
+
+func TestCoordinatorRecvMsgs(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	trans := &mockTrans{}
+	cood := coordinator{
+		version:  "6.2.0",
+		revision: schedulepb.OwnerRevision{Revision: 3},
+		trans:    trans,
+	}
+	trans.recv = func(ctx context.Context) ([]*schedulepb.Message, error) {
+		return []*schedulepb.Message{{
+			Header: &schedulepb.Message_Header{
+				OwnerRevision: cood.revision,
+			},
+			From: "1", MsgType: schedulepb.MsgDispatchTableResponse,
+		}, {
+			Header: &schedulepb.Message_Header{
+				OwnerRevision: schedulepb.OwnerRevision{Revision: 4},
+			},
+			From: "2", MsgType: schedulepb.MsgDispatchTableResponse,
+		}}, nil
+	}
+	msgs, err := cood.recvMsgs(ctx)
+	require.Nil(t, err)
+	require.EqualValues(t, []*schedulepb.Message{{
+		Header: &schedulepb.Message_Header{
+			OwnerRevision: cood.revision,
+		},
+		From: "1", MsgType: schedulepb.MsgDispatchTableResponse,
+	}}, msgs)
+}

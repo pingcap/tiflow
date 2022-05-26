@@ -85,16 +85,16 @@ type captureManager struct {
 func newCaptureManager(rev schedulepb.OwnerRevision, heartbeatTick int) *captureManager {
 	return &captureManager{
 		OwnerRev:      rev,
-		Captures:      make(map[string]*CaptureStatus),
+		Captures:      make(map[model.CaptureID]*CaptureStatus),
 		heartbeatTick: heartbeatTick,
 	}
 }
 
-func (c *captureManager) captureTableSets() map[model.CaptureID]*CaptureStatus {
+func (c *captureManager) CaptureTableSets() map[model.CaptureID]*CaptureStatus {
 	return c.Captures
 }
 
-func (c *captureManager) checkAllCaptureInitialized() bool {
+func (c *captureManager) CheckAllCaptureInitialized() bool {
 	for _, captrueStatus := range c.Captures {
 		if captrueStatus.State == CaptureStateUninitialize {
 			return false
@@ -103,7 +103,7 @@ func (c *captureManager) checkAllCaptureInitialized() bool {
 	return true
 }
 
-func (c *captureManager) tick() []*schedulepb.Message {
+func (c *captureManager) Tick() []*schedulepb.Message {
 	c.tickCounter++
 	if c.tickCounter < c.heartbeatTick {
 		return nil
@@ -120,10 +120,10 @@ func (c *captureManager) tick() []*schedulepb.Message {
 	return msgs
 }
 
-func (c *captureManager) poll(
+func (c *captureManager) Poll(
 	aliveCaptures map[model.CaptureID]*model.CaptureInfo,
 	msgs []*schedulepb.Message,
-) ([]*schedulepb.Message, bool) {
+) []*schedulepb.Message {
 	outMsgs := c.onAliveCaptureUpdate(aliveCaptures)
 	for _, msg := range msgs {
 		if msg.MsgType == schedulepb.MsgHeartbeatResponse {
@@ -135,7 +135,7 @@ func (c *captureManager) poll(
 				msg.GetHeartbeatResponse(), msg.Header.ProcessorEpoch)
 		}
 	}
-	return outMsgs, c.checkAllCaptureInitialized()
+	return outMsgs
 }
 
 func (c *captureManager) onAliveCaptureUpdate(
