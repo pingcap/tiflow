@@ -585,10 +585,67 @@ function stopped_validator_fail_over() {
 		"\"stage\": \"Running\"" 2
 }
 
+# some events are filtered in syncer, validator should filter them too.
+# validator only support below 3 filter.
+function test_data_filter() {
+	export GO_FAILPOINTS=""
+
+	echo "--> filter online ddl shadow table"
+	prepare_dm_and_source
+	dmctl_start_task_standalone $cur/conf/test-filter.yaml --remove-meta
+	run_sql_source1 "create table $db_name.t2(id int primary key)"
+	run_sql_source1 "insert into $db_name.t2 values(1), (2), (3)"
+	run_sql_source1 "create table $db_name._t_gho(id int primary key)"
+	run_sql_source1 "insert into $db_name._t_gho values(1), (2), (3)"
+	trigger_checkpoint_flush
+	# skipped table has no table status, so number of running = 2
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation status test" \
+		"\"processedRowsStatus\": \"insert\/update\/delete: 3\/0\/0\"" 1 \
+		"pendingRowsStatus\": \"insert\/update\/delete: 0\/0\/0" 1 \
+		"new\/ignored\/resolved: 0\/0\/0" 1 \
+		"\"stage\": \"Running\"" 2
+
+	echo "--> filter by ba list"
+	run_sql_source1 "create table $db_name.x1(id int primary key)"
+	run_sql_source1 "insert into $db_name.x1 values(1), (2), (3)"
+	trigger_checkpoint_flush
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		"\"synced\": true" 1
+	# skipped table has no table status, so number of running is still 2
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation status test" \
+		"\"processedRowsStatus\": \"insert\/update\/delete: 3\/0\/0\"" 1 \
+		"pendingRowsStatus\": \"insert\/update\/delete: 0\/0\/0" 1 \
+		"new\/ignored\/resolved: 0\/0\/0" 1 \
+		"\"stage\": \"Running\"" 2
+
+	echo "--> filter by filter-rules"
+	run_sql_source1 "create table $db_name.t_filter_del(id int primary key, val int)"
+	run_sql_source1 "insert into $db_name.t_filter_del values(1, 1), (2, 2), (3, 3), (4, 4)"
+	run_sql_source1 "update $db_name.t_filter_del set val=11 where id=1"
+	run_sql_source1 "update $db_name.t_filter_del set val=22 where id=2"
+	run_sql_source1 "delete from $db_name.t_filter_del where id in (1, 2, 3)"
+	trigger_checkpoint_flush
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		"\"synced\": true" 1
+	run_sql_tidb "SELECT count(*) from $db_name.t_filter_del"
+	check_contains "count(*): 4"
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation status test" \
+		"\"processedRowsStatus\": \"insert\/update\/delete: 7\/2\/0\"" 1 \
+		"pendingRowsStatus\": \"insert\/update\/delete: 0\/0\/0" 1 \
+		"new\/ignored\/resolved: 0\/0\/0" 1 \
+		"\"stage\": \"Running\"" 3
+}
+
 run_standalone $*
 validate_table_with_different_pk
 test_unsupported_table_status
 stopped_validator_fail_over
+test_data_filter
 cleanup_process $*
 cleanup_data $db_name
 cleanup_data_upstream $db_name

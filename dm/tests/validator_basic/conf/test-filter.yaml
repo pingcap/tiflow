@@ -3,6 +3,7 @@ name: test
 task-mode: all
 heartbeat-update-interval: 1
 heartbeat-report-interval: 1
+online-ddl: true
 
 target-database:
   host: "127.0.0.1"
@@ -13,36 +14,28 @@ target-database:
 mysql-instances:
   - source-id: "mysql-replica-01"
     block-allow-list:  "instance"
-    route-rules: ["global", "t1"]
-    syncer-config-name: "global"
+    filter-rules: ["global"]
     continuous-validator-config-name: global
 
 block-allow-list:
   instance:
-    do-dbs: ["validator_basic"]
+    do-tables:
+      - db-name: validator_basic
+        tbl-name: "t*"
+      - db-name: validator_basic
+        tbl-name: "_t*"
 
-routes:
+filters:
   global:
     schema-pattern: validator_basic
-    target-schema: validator_basic
-  t1:
-    schema-pattern: validator_basic
-    table-pattern: t1
-    target-schema: validator_basic
-    target-table: t1_down
-
-syncers:
-  global:
-    worker-count: 16
-    batch: 100
+    table-pattern: t_filter_del
+    events: ["delete"]
+    action: Ignore
 
 validators:
   global:
     mode: full
-    worker-count: 4
     validate-interval: 1s
     check-interval: 1s
-    row-error-delay: 1ms
-    meta-flush-interval: 1ns
-    max-pending-row-size: 500m
-    max-pending-row-count: 1000
+    row-error-delay: 1s
+    meta-flush-interval: 1s
