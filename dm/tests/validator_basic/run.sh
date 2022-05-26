@@ -77,7 +77,7 @@ function test_validator_together_with_task() {
 		"\"processedRowsStatus\": \"insert\/update\/delete: 6\/1\/1\"" 1 \
 		"pendingRowsStatus\": \"insert\/update\/delete: 0\/0\/0" 1 \
 		"new\/ignored\/resolved: 1\/0\/0" 1
-	run_sql "SELECT count(*) from $db_name.t1" $TIDB_PORT $TIDB_PASSWORD
+	run_sql_tidb "SELECT count(*) from $db_name.t1_down"
 	check_contains "count(*): 6"
 }
 
@@ -219,7 +219,7 @@ function run_standalone() {
 		"\"processedRowsStatus\": \"insert\/update\/delete: 6\/1\/1\"" 1 \
 		"pendingRowsStatus\": \"insert\/update\/delete: 0\/0\/0" 1 \
 		"new\/ignored\/resolved: 0\/0\/0" 1
-	run_sql "SELECT count(*) from $db_name.t1" $TIDB_PORT $TIDB_PASSWORD
+	run_sql_tidb "SELECT count(*) from $db_name.t1_down"
 	check_contains "count(*): 6"
 
 	echo "--> check we can catch inconsistent rows: full mode"
@@ -238,7 +238,7 @@ function run_standalone() {
 		"\"processedRowsStatus\": \"insert\/update\/delete: 6\/1\/1\"" 1 \
 		"pendingRowsStatus\": \"insert\/update\/delete: 0\/0\/0" 1 \
 		"new\/ignored\/resolved: 6\/0\/0" 1
-	run_sql "SELECT count(*) from $db_name.t1" $TIDB_PORT $TIDB_PASSWORD
+	run_sql_tidb "SELECT count(*) from $db_name.t1_down"
 	check_contains "count(*): 3"
 
 	echo "--> check we can catch inconsistent rows: fast mode"
@@ -254,7 +254,7 @@ function run_standalone() {
 		"\"processedRowsStatus\": \"insert\/update\/delete: 6\/1\/1\"" 1 \
 		"pendingRowsStatus\": \"insert\/update\/delete: 0\/0\/0" 1 \
 		"new\/ignored\/resolved: 5\/0\/0" 1
-	run_sql "SELECT count(*) from $db_name.t1" $TIDB_PORT $TIDB_PASSWORD
+	run_sql_tidb "SELECT count(*) from $db_name.t1_down"
 	check_contains "count(*): 3"
 
 	echo "--> check update pk(split into insert and delete)"
@@ -265,7 +265,7 @@ function run_standalone() {
 		"\"processedRowsStatus\": \"insert\/update\/delete: 7\/1\/2\"" 1 \
 		"pendingRowsStatus\": \"insert\/update\/delete: 0\/0\/0" 1 \
 		"new\/ignored\/resolved: 5\/0\/0" 1
-	run_sql "SELECT count(*) from $db_name.t1" $TIDB_PORT $TIDB_PASSWORD
+	run_sql_tidb "SELECT count(*) from $db_name.t1_down"
 	check_contains "count(*): 3"
 
 	echo "--> check validator panic and we can catch it"
@@ -298,7 +298,7 @@ function run_standalone() {
 		"\"processedRowsStatus\": \"insert\/update\/delete: 6\/1\/1\"" 1 \
 		"pendingRowsStatus\": \"insert\/update\/delete: 0\/0\/0" 1 \
 		"new\/ignored\/resolved: 1\/0\/0" 1
-	run_sql "SELECT count(*) from $db_name.t1" $TIDB_PORT $TIDB_PASSWORD
+	run_sql_tidb "SELECT count(*) from $db_name.t1_down"
 	check_contains "count(*): 6"
 
 	echo "--> check validator stop when pending row size too large"
@@ -382,7 +382,7 @@ function validate_table_with_different_pk() {
 		"\"processedRowsStatus\": \"insert\/update\/delete: 3\/2\/1\"" 1 \
 		"pendingRowsStatus\": \"insert\/update\/delete: 0\/0\/0" 1 \
 		"new\/ignored\/resolved: 0\/0\/0" 1
-	run_sql "SELECT count(*) from $db_name.t2" $TIDB_PORT $TIDB_PASSWORD
+	run_sql_tidb "SELECT count(*) from $db_name.t2"
 	check_contains "count(*): 2"
 
 	echo "--> single datetime col pk"
@@ -398,7 +398,7 @@ function validate_table_with_different_pk() {
 		"\"processedRowsStatus\": \"insert\/update\/delete: 3\/2\/1\"" 1 \
 		"pendingRowsStatus\": \"insert\/update\/delete: 0\/0\/0" 1 \
 		"new\/ignored\/resolved: 0\/0\/0" 1
-	run_sql "SELECT count(*) from $db_name.t2" $TIDB_PORT $TIDB_PASSWORD
+	run_sql_tidb "SELECT count(*) from $db_name.t2"
 	check_contains "count(*): 2"
 
 	echo "--> compound pk (datetime, timestamp, int, varchar)"
@@ -417,7 +417,7 @@ function validate_table_with_different_pk() {
 		"\"processedRowsStatus\": \"insert\/update\/delete: 4\/4\/3\"" 1 \
 		"pendingRowsStatus\": \"insert\/update\/delete: 0\/0\/0" 1 \
 		"new\/ignored\/resolved: 0\/0\/0" 1
-	run_sql "SELECT count(*) from $db_name.t2" $TIDB_PORT $TIDB_PASSWORD
+	run_sql_tidb "SELECT count(*) from $db_name.t2"
 	check_contains "count(*): 1"
 }
 
@@ -438,7 +438,7 @@ function test_unsupported_table_status() {
 		"\"stage\": \"Running\"" 1 \
 		"\"stage\": \"Stopped\"" 1 \
 		"no primary key" 1
-	run_sql "SELECT count(*) from $db_name.t2" $TIDB_PORT $TIDB_PASSWORD
+	run_sql_tidb "SELECT count(*) from $db_name.t2"
 	check_contains "count(*): 1"
 
 	echo "--> table is deleted on downstream"
