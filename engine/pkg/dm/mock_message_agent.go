@@ -26,29 +26,23 @@ type MockMessageAgent struct {
 	mock.Mock
 }
 
-func (m *MockMessageAgent) Init(ctx context.Context) error {
-	return nil
-}
+// Init implement MessageAgent.Init
+func (m *MockMessageAgent) Init(ctx context.Context) error { return nil }
 
-func (m *MockMessageAgent) Tick(ctx context.Context) error {
-	return nil
-}
+// Tick implement MessageAgent.Tick
+func (m *MockMessageAgent) Tick(ctx context.Context) error { return nil }
 
-func (m *MockMessageAgent) Close(ctx context.Context) error {
-	return nil
-}
+// Close implement MessageAgent.Close
+func (m *MockMessageAgent) Close(ctx context.Context) error { return nil }
 
 // UpdateSender implement MessageAgent.UpdateSender
-func (m *MockMessageAgent) UpdateSender(senderID string, sender Sender) error {
-	return nil
-}
+func (m *MockMessageAgent) UpdateSender(senderID string, sender Sender) error { return nil }
 
 // SendMessage implement MessageAgent.SendMessage
 func (m *MockMessageAgent) SendMessage(ctx context.Context, senderID string, command string, msg interface{}) error {
 	m.Lock()
 	defer m.Unlock()
-	args := m.Called(ctx, senderID, command, msg)
-	return args.Error(0)
+	return m.Called().Error(0)
 }
 
 // SendRequest implement MessageAgent.SendRequest
@@ -63,14 +57,12 @@ func (m *MockMessageAgent) SendRequest(ctx context.Context, senderID string, com
 func (m *MockMessageAgent) SendResponse(ctx context.Context, senderID string, id messageID, command string, resp interface{}) error {
 	m.Lock()
 	defer m.Unlock()
-	args := m.Called()
-	return args.Error(0)
+	return m.Called().Error(0)
 }
 
 // OnMessage implement MessageAgent.OnMessage
 func (m *MockMessageAgent) OnMessage(topic string, msg interface{}) error {
 	m.Lock()
 	defer m.Unlock()
-	args := m.Called()
-	return args.Error(0)
+	return m.Called().Error(0)
 }

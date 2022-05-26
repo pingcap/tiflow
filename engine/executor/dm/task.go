@@ -125,7 +125,7 @@ func (t *baseTask) InitImpl(ctx context.Context) error {
 	if err := t.messageAgent.Init(ctx); err != nil {
 		return err
 	}
-	// update jobMaster sender
+	// register jobmaster sender
 	if err := t.messageAgent.UpdateSender(t.masterID, t); err != nil {
 		return err
 	}
@@ -168,6 +168,7 @@ func (t *baseTask) OnMasterMessage(topic p2p.Topic, message p2p.MessageValue) er
 
 // CloseImpl implements lib.WorkerImpl.CloseImpl
 func (t *baseTask) CloseImpl(ctx context.Context) error {
+	// unreigster jobmaster sender
 	if err := t.messageAgent.UpdateSender(t.masterID, nil); err != nil {
 		return err
 	}

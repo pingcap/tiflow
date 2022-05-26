@@ -22,6 +22,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pingcap/tiflow/engine/lib"
 	"github.com/pingcap/tiflow/engine/lib/master"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/stretchr/testify/mock"
@@ -145,7 +146,7 @@ func TestMessageAgent(t *testing.T) {
 	messageAgent.UpdateSender(senderID, mockSender)
 
 	require.Error(t, messageAgent.SendMessage(context.Background(), "wrong-id", "command", "msg"), "sender wrong-id not found")
-	require.Error(t, messageAgent.SendResponse(context.Background(), "wrong-id", 1, "command", "resp"), "sender wrong-id not found")
+	require.Error(t, messageAgent.sendResponse(context.Background(), "wrong-id", 1, "command", "resp"), "sender wrong-id not found")
 	ret, err := messageAgent.SendRequest(context.Background(), "wrong-id", "command", "request")
 	require.EqualError(t, err, "sender wrong-id not found")
 	require.Nil(t, ret)
@@ -166,32 +167,42 @@ func TestMessageAgent(t *testing.T) {
 	time.Sleep(time.Second)
 	// send response
 	mockSender.On("SendMessage").Return(nil).Once()
-	require.NoError(t, messageAgent.SendResponse(context.Background(), senderID, 2, "command", "response"))
+	require.NoError(t, messageAgent.sendResponse(context.Background(), senderID, 2, "command", "response"))
 	messageAgent.onMessage("DM---Sender---Receiver", message{ID: 2, Type: responseTp, Payload: resp})
 }
 
 func TestMessageHandler(t *testing.T) {
 	var (
-		senderID      = "sender-id"
-		receiveID     = "receiver-id"
-		topic         = generateTopic(senderID, receiveID)
-		msg           = message{ID: 0, Type: messageTp, Command: messageAPI, Payload: &MessageAPIMessage{Msg: "msg"}}
-		req           = message{ID: 1, Type: requestTp, Command: requestAPI, Payload: &RequestAPIRequest{Req: "req"}}
-		resp          = message{ID: 1, Type: responseTp, Command: requestAPI, Payload: &RequestAPIResponse{Resp: "resp"}}
-		serializeMsg  = &message{}
-		serializeReq  = &message{}
-		serializeResp = &message{}
+		senderID           = "sender-id"
+		receiveID          = "receiver-id"
+		topic              = generateTopic(senderID, receiveID)
+		msg                = message{ID: 0, Type: messageTp, Command: messageAPI, Payload: &MessageAPIMessage{Msg: "msg"}}
+		req                = message{ID: 1, Type: requestTp, Command: requestAPI, Payload: &RequestAPIRequest{Req: "req"}}
+		resp               = message{ID: 1, Type: responseTp, Command: requestAPI, Payload: &RequestAPIResponse{Resp: "resp"}}
+		wrongMsg           = message{ID: 0, Type: messageTp, Command: wrongAPI, Payload: &MessageAPIMessage{Msg: "msg"}}
+		wrongReq           = message{ID: 0, Type: requestTp, Command: wrongAPI, Payload: &MessageAPIMessage{Msg: "msg"}}
+		wrongResp          = message{ID: 0, Type: responseTp, Command: wrongAPI, Payload: &MessageAPIMessage{Msg: "msg"}}
+		serializeMsg       = &message{}
+		serializeReq       = &message{}
+		serializeResp      = &message{}
+		serializeWrongMsg  = &message{}
+		serializeWrongReq  = &message{}
+		serializeWrongResp = &message{}
 	)
 	// mock serializeMessage
 	serialize(t, msg, serializeMsg)
 	serialize(t, req, serializeReq)
 	serialize(t, resp, serializeResp)
+	serialize(t, wrongMsg, serializeWrongMsg)
+	serialize(t, wrongReq, serializeWrongReq)
+	serialize(t, wrongResp, serializeWrongResp)
 
 	// mock no handler
 	messageAgent := NewMessageAgentImpl("id", &MockNothing{}, p2p.NewMockMessageHandlerManager())
 	require.NoError(t, messageAgent.Init(context.Background()))
 	require.EqualError(t, messageAgent.onMessage(topic, serializeMsg), "message handler for command MessageAPI not found")
 	require.EqualError(t, messageAgent.onMessage(topic, serializeReq), "request handler for command RequestAPI not found")
+	require.EqualError(t, messageAgent.onMessage(topic, serializeResp), "response handler for command RequestAPI not found")
 
 	// mock has handler
 	mockHandler := &MockHanlder{}
@@ -200,6 +211,11 @@ func TestMessageHandler(t *testing.T) {
 	mockSender := &MockSender{}
 	messageAgent.UpdateSender(senderID, mockSender)
 	mockSender.On("SendMessage").Return(nil).Once()
+	// wrong handler type
+	require.Error(t, messageAgent.onMessage(topic, serializeWrongMsg), "wrong message handler type for command WrongAPI")
+	require.Error(t, messageAgent.onMessage(topic, serializeWrongReq), "wrong request handler type for command WrongAPI")
+	require.Error(t, messageAgent.onMessage(topic, serializeWrongResp), "wrong response handler type for command WrongAPI")
+
 	// handle message
 	mockHandler.On(messageAPI).Return(nil).Once()
 	require.NoError(t, messageAgent.onMessage(topic, serializeMsg))
@@ -214,6 +230,15 @@ func TestMessageHandler(t *testing.T) {
 	require.EqualError(t, messageAgent.onMessage(topic, serializeResp), "request 1 not found")
 }
 
+func TestMessageHandlerLifeCycle(t *testing.T) {
+	messageAgent := NewMessageAgentImpl("id", nil, p2p.NewMockMessageHandlerManager())
+	messageAgent.Init(context.Background())
+	messageAgent.Tick(context.Background())
+	messageAgent.UpdateSender("sender-id", &lib.MockWorkerHandler{})
+	messageAgent.UpdateSender("sender-id", nil)
+	messageAgent.Close(context.Background())
+}
+
 func serialize(t *testing.T, m message, mPtr *message) {
 	bytes, err := json.Marshal(m)
 	require.NoError(t, err)
@@ -221,11 +246,15 @@ func serialize(t *testing.T, m message, mPtr *message) {
 }
 
 const (
+	wrongAPI   p2p.Topic = "WrongAPI"
 	messageAPI p2p.Topic = "MessageAPI"
 	requestAPI p2p.Topic = "RequestAPI"
 )
 
 type (
+	WrongAPIMessage struct {
+		Msg string
+	}
 	MessageAPIMessage struct {
 		Msg string
 	}
@@ -243,6 +272,8 @@ type MockHanlder struct {
 	sync.Mutex
 	mock.Mock
 }
+
+func (m *MockHanlder) WrongAPI() {}
 
 func (m *MockHanlder) MessageAPI(ctx context.Context, msg *MessageAPIMessage) error {
 	m.Lock()

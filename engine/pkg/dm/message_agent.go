@@ -152,7 +152,6 @@ type MessageAgent interface {
 	UpdateSender(senderID string, sender Sender) error
 	SendMessage(ctx context.Context, senderID string, command string, msg interface{}) error
 	SendRequest(ctx context.Context, senderID string, command string, req interface{}) (interface{}, error)
-	SendResponse(ctx context.Context, senderID string, id messageID, command string, resp interface{}) error
 }
 
 // MessageAgentImpl implements the message processing mechanism.
@@ -192,6 +191,7 @@ func NewMessageAgentImpl(id string, commandHandler interface{}, messageHandlerMa
 	return agent
 }
 
+// Init inits message agent.
 func (agent *MessageAgentImpl) Init(ctx context.Context) error {
 	agent.ctx, agent.cancel = context.WithCancel(context.Background())
 	agent.wg.Add(1)
@@ -203,10 +203,12 @@ func (agent *MessageAgentImpl) Init(ctx context.Context) error {
 	return nil
 }
 
+// Tick implements MessageAgent.Tick
 func (agent *MessageAgentImpl) Tick(ctx context.Context) error {
 	return agent.messageRouter.Tick(ctx)
 }
 
+// Close closes message agent.
 func (agent *MessageAgentImpl) Close(ctx context.Context) error {
 	if agent.cancel != nil {
 		agent.cancel()
@@ -260,8 +262,8 @@ func (agent *MessageAgentImpl) SendRequest(ctx context.Context, senderID string,
 	return agent.messagePair.sendRequest(ctx2, generateTopic(agent.id, senderID), command, req, sender)
 }
 
-// SendResponse send response asynchronously.
-func (agent *MessageAgentImpl) SendResponse(ctx context.Context, senderID string, msgID messageID, command string, resp interface{}) error {
+// sendResponse send response asynchronously.
+func (agent *MessageAgentImpl) sendResponse(ctx context.Context, senderID string, msgID messageID, command string, resp interface{}) error {
 	sender, err := agent.getSender(senderID)
 	if err != nil {
 		return err
@@ -274,12 +276,12 @@ func (agent *MessageAgentImpl) SendResponse(ctx context.Context, senderID string
 
 // onMessage receive message/request/response.
 // Forward the response to the corresponding request request.
-// According to the command, the corresponding message processing function is called.
-// According to the command, the corresponding request processing function is called, and send the response to caller.
-// NOTE: processing function name should same as topic name.
+// According to the command, the corresponding message processing function of defaultHandler will be called.
+// According to the command, the corresponding request processing function of defaultHandler will be called, and send the response to caller.
+// NOTE: comand name should same as handler name.
 // MessageFuncType: func(ctx context.Context, msg *interface{}) error {}
-// RequestFuncType: func(ctx context.Context, req *interface{}) (resp *interface{}, err error) {}
-// RequestFuncType(protobuf): func(ctx context.Context, req *interface{}) (resp *interface{}) {}
+// RequestFuncType(1): func(ctx context.Context, req *interface{}) (resp *interface{}, err error) {}
+// RequestFuncType(2): func(ctx context.Context, req *interface{}) (resp *interface{}) {}
 func (agent *MessageAgentImpl) onMessage(topic string, msg interface{}) error {
 	log.L().Debug("on message", zap.String("topic", topic), zap.Any("msg", msg))
 	m, ok := msg.(*message)
@@ -324,7 +326,7 @@ func (agent *MessageAgentImpl) handleRequest(senderID string, msgID messageID, c
 		return errors.Errorf("request handler for command %s not found", command)
 	}
 	handlerType := handler.Type()
-	if handlerType.NumIn() != 2 || handlerType.NumOut() != 2 {
+	if handlerType.NumIn() != 2 || (handlerType.NumOut() != 1 && handlerType.NumOut() != 2) {
 		return errors.Errorf("wrong request handler type for command %s", command)
 	}
 	arg := reflect.New(handlerType.In(1).Elem())
@@ -345,7 +347,7 @@ func (agent *MessageAgentImpl) handleRequest(senderID string, msgID messageID, c
 	// send response
 	ctx2, cancel2 := context.WithTimeout(agent.ctx, defaultResponseTimeOut)
 	defer cancel2()
-	return agent.SendResponse(ctx2, senderID, msgID, command, rets[0].Interface())
+	return agent.sendResponse(ctx2, senderID, msgID, command, rets[0].Interface())
 }
 
 // handle message receive message and call message handler.
@@ -376,7 +378,7 @@ func (agent *MessageAgentImpl) handleMessage(command string, msg interface{}) er
 	return err.(error)
 }
 
-// RegisterTopic register p2p topic.
+// registerTopic register p2p topic.
 func (agent *MessageAgentImpl) registerTopic(ctx context.Context, senderID string) error {
 	topic := generateTopic(senderID, agent.id)
 	log.L().Debug("register topic", zap.String("topic", topic))

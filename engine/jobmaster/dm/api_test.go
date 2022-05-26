@@ -16,7 +16,6 @@ package dm
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"sort"
 	"strings"
 	"testing"
@@ -26,6 +25,7 @@ import (
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/runtime"
 	"github.com/pingcap/tiflow/engine/lib"
+	pb2 "github.com/pingcap/tiflow/engine/pb"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
 	kvmock "github.com/pingcap/tiflow/engine/pkg/meta/kvclient/mock"
 	"github.com/stretchr/testify/require"
@@ -210,9 +210,26 @@ func TestQueryStatusAPI(t *testing.T) {
 	}
 }`
 	status, err := json.MarshalIndent(jobStatus, "", "\t")
-	fmt.Println(string(status))
 	require.NoError(t, err)
 	require.Equal(t, sortString(expectedStatus), sortString(string(status)))
+
+	// test with DebugJob
+	var args struct {
+		Tasks []string
+	}
+	args.Tasks = []string{"task1", "task2", "task3", "task4", "task5", "task6"}
+	jsonArg, err := json.Marshal(args)
+	require.NoError(t, err)
+	messageAgent.On("SendRequest").Return(nil, context.DeadlineExceeded).Once()
+	messageAgent.On("SendRequest").Return(dumpStatusResp, nil).Once()
+	messageAgent.On("SendRequest").Return(loadStatusResp, nil).Once()
+	messageAgent.On("SendRequest").Return(syncStatusResp, nil).Once()
+	resp2 := jm.DebugJob(ctx, &pb2.DebugJobRequest{Command: dmpkg.QueryStatus, JsonArg: string(jsonArg)})
+	var jobStatus2 JobStatus
+	require.NoError(t, json.Unmarshal([]byte(resp2.JsonRet), &jobStatus2))
+	status2, err := json.MarshalIndent(jobStatus, "", "\t")
+	require.NoError(t, err)
+	require.Equal(t, sortString(string(status)), sortString(string(status2)))
 }
 
 func sortString(w string) string {

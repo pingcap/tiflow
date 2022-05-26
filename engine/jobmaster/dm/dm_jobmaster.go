@@ -96,7 +96,7 @@ func (jm *JobMaster) initComponents(ctx context.Context) error {
 	jm.metadata = metadata.NewMetaData(jm.ID(), jm.MetaKVClient())
 	jm.taskManager = NewTaskManager(taskStatus, jm.metadata.JobStore(), jm.messageAgent)
 	jm.workerManager = NewWorkerManager(workerStatus, jm.metadata.JobStore(), jm, jm.messageAgent, jm.checkpointAgent)
-	// update jobmanager sender
+	// register jobmanager sender
 	return jm.messageAgent.UpdateSender(libMetadata.JobManagerUUID, jm)
 }
 
@@ -232,7 +232,9 @@ outer:
 		}
 	}
 
-	return nil
+	// unreigster jobmanager sender
+	jm.messageAgent.UpdateSender(libMetadata.JobManagerUUID, nil)
+	return jm.messageAgent.Close(ctx)
 }
 
 // ID implements JobMasterImpl.ID

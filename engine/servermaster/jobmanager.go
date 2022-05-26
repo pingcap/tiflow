@@ -83,7 +83,7 @@ type JobManagerImplV2 struct {
 	jobStatusChangeMu *ctxmu.CtxMutex
 	notifier          *notifier.Notifier[resManager.JobStatusChangeEvent]
 
-	// Use for DebugJob, since we now has no openapi
+	// only use for DebugJob
 	messageAgent dmpkg.MessageAgent
 }
 
@@ -113,6 +113,7 @@ func (jm *JobManagerImplV2) PauseJob(ctx context.Context, req *pb.PauseJobReques
 }
 
 // DebugJob implements proto/Master.DebugJob
+// Used for request/response with jobmaster
 func (jm *JobManagerImplV2) DebugJob(ctx context.Context, req *pb.DebugJobRequest) (resp *pb.DebugJobResponse) {
 	job := jm.JobFsm.QueryOnlineJob(req.JobIdStr)
 	if job == nil {
