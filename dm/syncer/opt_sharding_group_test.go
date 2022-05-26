@@ -69,7 +69,7 @@ func (s *optShardingGroupSuite) TestLowestFirstPosInOptGroups() {
 		targetTable:  utils.UnpackTableID(db2tbl),
 		currLocation: pos21,
 	})
-	// should still be pos21, because it's added to unfinishedShardingReSync
+	// should still be pos21, because it's added to shardingReSyncs
 	require.Equal(s.T(), pos21.Position, k.lowestFirstLocationInGroups().Position)
 	k.removeShardingReSync(&ShardingReSync{targetTable: utils.UnpackTableID(db2tbl)})
 	// should be pos11 now, pos21 is totally resolved

@@ -1784,7 +1784,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			if shardingReSync != nil {
 				saveExitSafeModeLoc(shardingReSync.latestLocation)
 			}
-			for _, latestLoc := range s.osgk.getUnfinishedShardingResync() {
+			for _, latestLoc := range s.osgk.getShardingResyncs() {
 				saveExitSafeModeLoc(latestLoc)
 			}
 		}
@@ -1948,39 +1948,37 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		// fetch from sharding resync channel if needed, and redirect global
 		// stream to current binlog position recorded by ShardingReSync
 		if len(shardingReSyncCh) > 0 && shardingReSync == nil {
-			if shardingReSync == nil {
-				// some sharding groups need to re-syncing
-				shardingReSync = <-shardingReSyncCh
-				s.tctx.L().Debug("starts to handle new shardingResync operation", zap.Stringer("shardingResync", shardingReSync))
-				savedGlobalLastLocation = lastLocation // save global last location
-				lastLocation = shardingReSync.currLocation
+			// some sharding groups need to re-syncing
+			shardingReSync = <-shardingReSyncCh
+			s.tctx.L().Debug("starts to handle new shardingResync operation", zap.Stringer("shardingResync", shardingReSync))
+			savedGlobalLastLocation = lastLocation // save global last location
+			lastLocation = shardingReSync.currLocation
 
-				// remove sharding resync global checkpoint location limit from optimistic sharding group keeper
-				if s.cfg.ShardMode == config.ShardOptimistic {
-					s.osgk.removeShardingReSync(shardingReSync)
-				}
-
-				currentLocation = shardingReSync.currLocation
-				// if suffix>0, we are replacing error
-				s.isReplacingOrInjectingErr = currentLocation.Suffix != 0
-				s.locations.reset(shardingReSync.currLocation)
-				err = s.streamerController.ResetReplicationSyncer(s.runCtx, shardingReSync.currLocation)
-				if err != nil {
-					return err
-				}
-
-				failpoint.Inject("ReSyncExit", func() {
-					s.tctx.L().Warn("exit triggered", zap.String("failpoint", "ReSyncExit"))
-					utils.OsExit(1)
-				})
+			// remove sharding resync global checkpoint location limit from optimistic sharding group keeper
+			if s.cfg.ShardMode == config.ShardOptimistic {
+				s.osgk.removeShardingReSync(shardingReSync)
 			}
+
+			currentLocation = shardingReSync.currLocation
+			// if suffix>0, we are replacing error
+			s.isReplacingOrInjectingErr = currentLocation.Suffix != 0
+			s.locations.reset(shardingReSync.currLocation)
+			err = s.streamerController.ResetReplicationSyncer(s.runCtx, shardingReSync.currLocation)
+			if err != nil {
+				return err
+			}
+
+			failpoint.Inject("ReSyncExit", func() {
+				s.tctx.L().Warn("exit triggered", zap.String("failpoint", "ReSyncExit"))
+				utils.OsExit(1)
+			})
 		}
 		var e *replication.BinlogEvent
 		// for position mode, we can redirect at any time
 		// for gtid mode, we can redirect only when current location related gtid's transaction is totally executed and
 		//  next gtid is just updated (because we check if we can end resync by currLoc >= latestLoc)
 		if s.cfg.ShardMode == config.ShardOptimistic {
-			canRedirect := !s.cfg.EnableGTID
+			canRedirect := true
 			if s.cfg.EnableGTID {
 				canRedirect = safeToRedirect(lastEvent)
 			} else if lastEvent != nil {
@@ -2000,7 +1998,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 					// TODO: This will cause a potential performance issue. If we have multiple tables not resolved after a huge amount of binlogs but resolved in a short time,
 					//   	current implementation will cause syncer to redirect and replay the binlogs in this segment several times. One possible solution is to
 					//      interrupt current resync once syncer meets a new redirect operation, force other tables to be resolved together in the interrupted shardingResync.
-					//      If we want to do this, we also neet to remove the target table check at https://github.com/pingcap/tiflow/blob/af849add84bf26feb2628d3e1e4344830b915fd9/dm/syncer/syncer.go#L2489
+					//      If we want to do this, we also need to remove the target table check at https://github.com/pingcap/tiflow/blob/af849add84bf26feb2628d3e1e4344830b915fd9/dm/syncer/syncer.go#L2489
 					endLocation := &currentLocation
 					if shardingReSync != nil {
 						endLocation = &shardingReSync.latestLocation

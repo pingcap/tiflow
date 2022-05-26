@@ -102,17 +102,17 @@ type OptShardingGroupKeeper struct {
 	groups map[string]*OptShardingGroup // target table ID -> ShardingGroup
 	cfg    *config.SubTaskConfig
 	tctx   *tcontext.Context
-	// unfinishedShardingReSync is used to save the shardingResyncs's redirect locations that are resolved but not finished
-	unfinishedShardingReSync map[string]binlog.Location
+	// shardingReSyncs is used to save the shardingResyncs' redirect locations that are resolved but not finished
+	shardingReSyncs map[string]binlog.Location
 }
 
 // NewOptShardingGroupKeeper creates a new OptShardingGroupKeeper.
 func NewOptShardingGroupKeeper(tctx *tcontext.Context, cfg *config.SubTaskConfig) *OptShardingGroupKeeper {
 	return &OptShardingGroupKeeper{
-		groups:                   make(map[string]*OptShardingGroup),
-		cfg:                      cfg,
-		tctx:                     tctx.WithLogger(tctx.L().WithFields(zap.String("component", "optimistic shard group keeper"))),
-		unfinishedShardingReSync: make(map[string]binlog.Location),
+		groups:          make(map[string]*OptShardingGroup),
+		cfg:             cfg,
+		tctx:            tctx.WithLogger(tctx.L().WithFields(zap.String("component", "optimistic shard group keeper"))),
+		shardingReSyncs: make(map[string]binlog.Location),
 	}
 }
 
@@ -172,18 +172,18 @@ func (k *OptShardingGroupKeeper) appendConflictTable(sourceTable, targetTable *f
 
 func (k *OptShardingGroupKeeper) addShardingReSync(shardingReSync *ShardingReSync) {
 	if shardingReSync != nil {
-		k.unfinishedShardingReSync[shardingReSync.targetTable.String()] = shardingReSync.currLocation
+		k.shardingReSyncs[shardingReSync.targetTable.String()] = shardingReSync.currLocation
 	}
 }
 
 func (k *OptShardingGroupKeeper) removeShardingReSync(shardingReSync *ShardingReSync) {
 	if shardingReSync != nil {
-		delete(k.unfinishedShardingReSync, shardingReSync.targetTable.String())
+		delete(k.shardingReSyncs, shardingReSync.targetTable.String())
 	}
 }
 
-func (k *OptShardingGroupKeeper) getUnfinishedShardingResync() map[string]binlog.Location {
-	return k.unfinishedShardingReSync
+func (k *OptShardingGroupKeeper) getShardingResyncs() map[string]binlog.Location {
+	return k.shardingReSyncs
 }
 
 func (k *OptShardingGroupKeeper) lowestFirstLocationInGroups() *binlog.Location {
@@ -195,7 +195,7 @@ func (k *OptShardingGroupKeeper) lowestFirstLocationInGroups() *binlog.Location 
 			lowest = &group.firstConflictLocation
 		}
 	}
-	for _, currLocation := range k.unfinishedShardingReSync {
+	for _, currLocation := range k.shardingReSyncs {
 		if lowest == nil || binlog.CompareLocation(*lowest, currLocation, k.cfg.EnableGTID) > 0 {
 			loc := currLocation // make sure lowest can point to correct variable
 			lowest = &loc
