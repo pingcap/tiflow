@@ -22,24 +22,24 @@ import (
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 )
 
-// LocalFileResourceType defines operations specific to
+// LocalFileResourceController defines operations specific to
 // the local file type.
-type LocalFileResourceType struct {
+type LocalFileResourceController struct {
 	// clientManager is used to communicate with executors.
 	clientManager client.ClientsManager
 }
 
-// NewLocalFileResourceType creates a new LocalFileResourceType.
-func NewLocalFileResourceType(clientManager client.ClientsManager) *LocalFileResourceType {
-	return &LocalFileResourceType{clientManager: clientManager}
+// NewLocalFileResourceType creates a new LocalFileResourceController.
+func NewLocalFileResourceType(clientManager client.ClientsManager) *LocalFileResourceController {
+	return &LocalFileResourceController{clientManager: clientManager}
 }
 
 // GCHandler returns a closure to the invoker to perform GC.
-func (r *LocalFileResourceType) GCHandler() func(context.Context, *resModel.ResourceMeta) error {
+func (r *LocalFileResourceController) GCHandler() func(context.Context, *resModel.ResourceMeta) error {
 	return r.removeFilesOnExecutor
 }
 
-func (r *LocalFileResourceType) removeFilesOnExecutor(ctx context.Context, resource *resModel.ResourceMeta) error {
+func (r *LocalFileResourceController) removeFilesOnExecutor(ctx context.Context, resource *resModel.ResourceMeta) error {
 	cli := r.clientManager.ExecutorClient(resource.Executor)
 	if cli == nil {
 		// TODO we should retry here.

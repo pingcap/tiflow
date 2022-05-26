@@ -19,8 +19,8 @@ import (
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 )
 
-// ResourceType is an interface providing relevant operations related
+// ResourceTypeController is an interface providing relevant operations related
 // to one resource type.
-type ResourceType interface {
+type ResourceTypeController interface {
 	GCHandler() func(context.Context, *resModel.ResourceMeta) error
 }
