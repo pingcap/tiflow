@@ -8,7 +8,7 @@
 GOPATH=$(go env GOPATH)
 echo "using GOPATH=$GOPATH"
 
-TOOLS_BIN_DIR=$(pwd)/tools/bin
+TOOLS_BIN_DIR=$(pwd)/../tools/bin
 
 case "$(uname)" in
 MINGW*)

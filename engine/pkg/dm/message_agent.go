@@ -341,8 +341,8 @@ func (agent *MessageAgentImpl) handleRequest(senderID string, msgID messageID, c
 	defer cancel()
 	params := []reflect.Value{reflect.ValueOf(ctx), arg}
 	rets := handler.Call(params)
-	if err := rets[1].Interface(); err != nil {
-		return err.(error)
+	if len(rets) == 2 && rets[1].Interface() != nil {
+		return rets[1].Interface().(error)
 	}
 	// send response
 	ctx2, cancel2 := context.WithTimeout(agent.ctx, defaultResponseTimeOut)
