@@ -29,6 +29,7 @@ import (
 	"github.com/pingcap/tiflow/engine/pb"
 	"github.com/pingcap/tiflow/engine/pkg/clock"
 	"github.com/pingcap/tiflow/engine/pkg/ctxmu"
+	"github.com/pingcap/tiflow/engine/pkg/dm"
 	"github.com/pingcap/tiflow/engine/pkg/errors"
 	resManager "github.com/pingcap/tiflow/engine/pkg/externalresource/manager"
 	resourcemeta "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
@@ -192,6 +193,47 @@ func TestJobManagerCancelJob(t *testing.T) {
 		JobIdStr: "job-to-be-canceled",
 	})
 	require.Equal(t, &pb.CancelJobResponse{}, resp)
+}
+
+func TestJobManagerDebug(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	mockMaster := lib.NewMockMasterImpl("", "debug-job-test")
+	mockMaster.On("InitImpl", mock.Anything).Return(nil)
+	messageAgent := &dm.MockMessageAgent{}
+	mgr := &JobManagerImplV2{
+		BaseMaster:        mockMaster.DefaultBaseMaster,
+		JobFsm:            NewJobFsm(),
+		clocker:           clock.New(),
+		frameMetaClient:   mockMaster.GetFrameMetaClient(),
+		jobStatusChangeMu: ctxmu.New(),
+		messageAgent:      messageAgent,
+	}
+
+	debugJobID := "Debug-Job-id"
+	meta := &libModel.MasterMetaKVData{ID: debugJobID}
+	mgr.JobFsm.JobDispatched(meta, false)
+
+	mockWorkerHandle := &master.MockHandle{WorkerID: debugJobID, ExecutorID: "executor-1"}
+	err := mgr.JobFsm.JobOnline(mockWorkerHandle)
+	require.Nil(t, err)
+
+	req := &pb.DebugJobRequest{
+		JobIdStr: debugJobID,
+		Command:  "Debug",
+		JsonArg:  "",
+	}
+	messageAgent.On("SendRequest").Return(&pb.DebugJobResponse{}, nil)
+	resp := mgr.DebugJob(ctx, req)
+	require.Nil(t, resp.Err)
+
+	req.JobIdStr = debugJobID + "-unknown"
+	resp = mgr.DebugJob(ctx, req)
+	require.NotNil(t, resp.Err)
+	require.Equal(t, pb.ErrorCode_UnKnownJob, resp.Err.Code)
 }
 
 func TestJobManagerQueryJob(t *testing.T) {

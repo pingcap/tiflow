@@ -52,17 +52,3 @@ func (m *MockMessageAgent) SendRequest(ctx context.Context, senderID string, com
 	args := m.Called()
 	return args.Get(0), args.Error(1)
 }
-
-// SendResponse implement MessageAgent.SendResponse
-func (m *MockMessageAgent) SendResponse(ctx context.Context, senderID string, id messageID, command string, resp interface{}) error {
-	m.Lock()
-	defer m.Unlock()
-	return m.Called().Error(0)
-}
-
-// OnMessage implement MessageAgent.OnMessage
-func (m *MockMessageAgent) OnMessage(topic string, msg interface{}) error {
-	m.Lock()
-	defer m.Unlock()
-	return m.Called().Error(0)
-}
