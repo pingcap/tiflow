@@ -287,6 +287,27 @@ function run_sql_tidb_with_retry_times() {
     fi
 }
 
+# shortcut for run tidb sql and check result with retry
+# $1: table
+# $2: fields numbers
+# $3: value starts range(closed interval)
+# $4: value ends range(closed interval)
+# $5: database host
+# $6: database port
+# $7: database password
+function run_sql_with_txn() {
+    template="(?"
+    for _ in {2..$2..1}
+    do
+        template+=",?"
+    done
+    template+=")"
+    echo "begin;" | tee $WORK_DIR/tmp.sql
+    seq $3 $4 | xargs -I\? echo "insert into $1 values $template;" | tee -a $WORK_DIR/tmp.sql
+    echo "commit;" | tee -a $WORK_DIR/tmp.sql
+    run_sql_file $WORK_DIR/tmp.sql $5 $6 $7
+}
+
 # shortcut for check log contain with retry
 function check_log_contain_with_retry() {
     text=$1
