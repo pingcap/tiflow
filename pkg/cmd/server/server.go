@@ -295,7 +295,9 @@ func NewCmdServer() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return o.run(cmd)
+			err = o.run(cmd)
+			cobra.CheckErr(err)
+			return nil
 		},
 	}
 
