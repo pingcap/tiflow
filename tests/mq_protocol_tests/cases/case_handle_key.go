@@ -37,7 +37,7 @@ func (s *HandleKeyCase) Name() string {
 
 // Run impl framework.Task interface
 func (s *HandleKeyCase) Run(ctx *framework.TaskContext) error {
-	_, err := ctx.Upstream.ExecContext(ctx.Ctx, "create table test (key int not null unique, value int")
+	_, err := ctx.Upstream.ExecContext(ctx.Ctx, "create table test (id int not null unique, value int)")
 	if err != nil {
 		return err
 	}
@@ -46,7 +46,7 @@ func (s *HandleKeyCase) Run(ctx *framework.TaskContext) error {
 	table := ctx.SQLHelper().GetTable("test")
 	// Create an SQL request, send it to the upstream, wait for completion and check the correctness of replication
 	err = table.Insert(map[string]interface{}{
-		"key":   0,
+		"id":    0,
 		"value": 0,
 	}).Send().Wait().Check()
 	if err != nil {
@@ -54,7 +54,7 @@ func (s *HandleKeyCase) Run(ctx *framework.TaskContext) error {
 	}
 
 	err = table.Upsert(map[string]interface{}{
-		"key":   0,
+		"id":    0,
 		"value": 1,
 	}).Send().Wait().Check()
 	if err != nil {
@@ -62,7 +62,7 @@ func (s *HandleKeyCase) Run(ctx *framework.TaskContext) error {
 	}
 
 	err = table.Delete(map[string]interface{}{
-		"key": 0,
+		"id": 0,
 	}).Send().Wait().Check()
 	return err
 }
