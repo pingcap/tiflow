@@ -15,10 +15,16 @@ package tp
 
 import (
 	"context"
+	"log"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/tp/schedulepb"
+	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/p2p"
+	"github.com/pingcap/tiflow/pkg/version"
+	"go.uber.org/zap"
 )
 
 type scheduler interface {
@@ -34,10 +40,36 @@ type scheduler interface {
 var _ internal.Scheduler = (*coordinator)(nil)
 
 type coordinator struct {
+	version      string
+	revision     schedulepb.OwnerRevision
 	trans        transport
 	scheduler    []scheduler
 	replicationM *replicationManager
 	captureM     *captureManager
+}
+
+// NewCoordinator returns a two phase scheduler.
+func NewCoordinator(
+	ctx context.Context,
+	changeFeedID model.ChangeFeedID,
+	checkpointTs model.Ts,
+	messageServer *p2p.MessageServer,
+	messageRouter p2p.MessageRouter,
+	ownerRevision int64,
+	cfg *config.SchedulerConfig,
+) (internal.Scheduler, error) {
+	trans, err := newTranport(ctx, changeFeedID, messageServer, messageRouter)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	revision := schedulepb.OwnerRevision{Revision: ownerRevision}
+	return &coordinator{
+		version:      version.ReleaseSemver(),
+		revision:     revision,
+		trans:        trans,
+		replicationM: newReplicationManager(cfg.MaxTaskConcurrency),
+		captureM:     newCaptureManager(revision, cfg.HeartbeatTick),
+	}, nil
 }
 
 func (c *coordinator) Tick(
@@ -68,33 +100,81 @@ func (c *coordinator) poll(
 	ctx context.Context, checkpointTs model.Ts, currentTables []model.TableID,
 	aliveCaptures map[model.CaptureID]*model.CaptureInfo,
 ) error {
-	recvMsgs, err := c.trans.Recv(ctx)
+	recvMsgs, err := c.recvMsgs(ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	sentMsgs, hasInit := c.captureM.poll(aliveCaptures, recvMsgs)
-	if !hasInit {
+
+	sentMsgs := c.captureM.Tick()
+	msgs := c.captureM.Poll(aliveCaptures, recvMsgs)
+	sentMsgs = append(sentMsgs, msgs...)
+	if c.captureM.CheckAllCaptureInitialized() {
+		// Skip polling replication manager as not all capture are initialized.
 		err := c.trans.Send(ctx, sentMsgs)
 		return errors.Trace(err)
 	}
 
-	captureTables := c.captureM.captureTableSets()
+	// Handling received messages to advance replication set.
+	msgs, err = c.replicationM.HandleMessage(recvMsgs)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	sentMsgs = append(sentMsgs, msgs...)
+
+	// Generate schedule tasks based on the current status.
+	captureTables := c.captureM.CaptureTableSets()
 	allTasks := make([]*scheduleTask, 0)
 	for _, sched := range c.scheduler {
 		tasks := sched.Schedule(checkpointTs, currentTables, aliveCaptures, captureTables)
 		allTasks = append(allTasks, tasks...)
 	}
-	msgs, err := c.replicationM.poll(
-		ctx, checkpointTs, currentTables, aliveCaptures, recvMsgs, allTasks)
+
+	// Handling generated schedule tasks.
+	msgs, err = c.replicationM.HandleTasks(allTasks)
 	if err != nil {
 		return errors.Trace(err)
 	}
 	sentMsgs = append(sentMsgs, msgs...)
-	err = c.trans.Send(ctx, sentMsgs)
+
+	// Send new messages.
+	err = c.sendMsgs(ctx, sentMsgs)
 	if err != nil {
 		return errors.Trace(err)
 	}
 
 	// checkpoint calcuation
 	return nil
+}
+
+func (c *coordinator) recvMsgs(ctx context.Context) ([]*schedulepb.Message, error) {
+	recvMsgs, err := c.trans.Recv(ctx)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	n := 0
+	for _, val := range recvMsgs {
+		// Filter stale messages.
+		if val.Header.OwnerRevision == c.revision {
+			recvMsgs[n] = val
+			n++
+		}
+	}
+	return recvMsgs[:n], nil
+}
+
+func (c *coordinator) sendMsgs(ctx context.Context, msgs []*schedulepb.Message) error {
+	for i := range msgs {
+		m := msgs[i]
+		m.Header = &schedulepb.Message_Header{
+			Version:       c.version,
+			OwnerRevision: c.revision,
+		}
+		// Correctness check.
+		if len(m.To) == 0 || m.MsgType == schedulepb.MsgUnknown {
+			log.Panic("invalid message no destination or unknown message type",
+				zap.Any("message", m))
+		}
+	}
+	return c.trans.Send(ctx, msgs)
 }
