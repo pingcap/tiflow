@@ -225,7 +225,9 @@ func (r *ReplicationSet) poll(
 			To:      captureID,
 			MsgType: schedulepb.MsgDispatchTableRequest,
 			DispatchTableRequest: &schedulepb.DispatchTableRequest{
-				RemoveTable: &schedulepb.RemoveTableRequest{TableID: r.TableID},
+				Request: &schedulepb.DispatchTableRequest_RemoveTable{
+					RemoveTable: &schedulepb.RemoveTableRequest{TableID: r.TableID},
+				},
 			},
 		}}, nil
 	}
@@ -305,10 +307,12 @@ func (r *ReplicationSet) pollOnPrepare(
 				To:      captureID,
 				MsgType: schedulepb.MsgDispatchTableRequest,
 				DispatchTableRequest: &schedulepb.DispatchTableRequest{
-					AddTable: &schedulepb.AddTableRequest{
-						TableID:     r.TableID,
-						IsSecondary: true,
-						Checkpoint:  &schedulepb.Checkpoint{CheckpointTs: r.CheckpointTs},
+					Request: &schedulepb.DispatchTableRequest_AddTable{
+						AddTable: &schedulepb.AddTableRequest{
+							TableID:     r.TableID,
+							IsSecondary: true,
+							Checkpoint:  &schedulepb.Checkpoint{CheckpointTs: r.CheckpointTs},
+						},
 					},
 				},
 			}, false, nil
@@ -349,7 +353,9 @@ func (r *ReplicationSet) pollOnCommit(
 					To:      r.Primary,
 					MsgType: schedulepb.MsgDispatchTableRequest,
 					DispatchTableRequest: &schedulepb.DispatchTableRequest{
-						RemoveTable: &schedulepb.RemoveTableRequest{TableID: r.TableID},
+						Request: &schedulepb.DispatchTableRequest_RemoveTable{
+							RemoveTable: &schedulepb.RemoveTableRequest{TableID: r.TableID},
+						},
 					},
 				}, false, nil
 			}
@@ -365,10 +371,12 @@ func (r *ReplicationSet) pollOnCommit(
 				To:      captureID,
 				MsgType: schedulepb.MsgDispatchTableRequest,
 				DispatchTableRequest: &schedulepb.DispatchTableRequest{
-					AddTable: &schedulepb.AddTableRequest{
-						TableID:     r.TableID,
-						IsSecondary: false,
-						Checkpoint:  &schedulepb.Checkpoint{CheckpointTs: r.CheckpointTs},
+					Request: &schedulepb.DispatchTableRequest_AddTable{
+						AddTable: &schedulepb.AddTableRequest{
+							TableID:     r.TableID,
+							IsSecondary: false,
+							Checkpoint:  &schedulepb.Checkpoint{CheckpointTs: r.CheckpointTs},
+						},
 					},
 				},
 			}, false, nil
@@ -387,10 +395,12 @@ func (r *ReplicationSet) pollOnCommit(
 				To:      r.Primary,
 				MsgType: schedulepb.MsgDispatchTableRequest,
 				DispatchTableRequest: &schedulepb.DispatchTableRequest{
-					AddTable: &schedulepb.AddTableRequest{
-						TableID:     r.TableID,
-						IsSecondary: false,
-						Checkpoint:  &schedulepb.Checkpoint{CheckpointTs: r.CheckpointTs},
+					Request: &schedulepb.DispatchTableRequest_AddTable{
+						AddTable: &schedulepb.AddTableRequest{
+							TableID:     r.TableID,
+							IsSecondary: false,
+							Checkpoint:  &schedulepb.Checkpoint{CheckpointTs: r.CheckpointTs},
+						},
 					},
 				},
 			}, false, nil
@@ -403,8 +413,8 @@ func (r *ReplicationSet) pollOnCommit(
 				To:      captureID,
 				MsgType: schedulepb.MsgDispatchTableRequest,
 				DispatchTableRequest: &schedulepb.DispatchTableRequest{
-					RemoveTable: &schedulepb.RemoveTableRequest{
-						TableID: r.TableID,
+					Request: &schedulepb.DispatchTableRequest_RemoveTable{
+						RemoveTable: &schedulepb.RemoveTableRequest{TableID: r.TableID},
 					},
 				},
 			}, false, nil
@@ -468,7 +478,9 @@ func (r *ReplicationSet) pollOnRemoving(
 			To:      captureID,
 			MsgType: schedulepb.MsgDispatchTableRequest,
 			DispatchTableRequest: &schedulepb.DispatchTableRequest{
-				RemoveTable: &schedulepb.RemoveTableRequest{TableID: r.TableID},
+				Request: &schedulepb.DispatchTableRequest_RemoveTable{
+					RemoveTable: &schedulepb.RemoveTableRequest{TableID: r.TableID},
+				},
 			},
 		}, false, nil
 	case schedulepb.TableStateStopped:
