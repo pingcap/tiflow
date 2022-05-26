@@ -1933,7 +1933,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 						s.tctx.L().Error("fail to get master status in failpoint FakeRedirect", zap.Error(err2))
 						os.Exit(1)
 					}
-					loc := binlog.NewLocation(pos, gtidSet)
+					loc := binlog.InitLocation(pos, gtidSet)
 					s.tctx.L().Info("fake redirect", zap.Stringer("currentLocation", currentLocation), zap.Stringer("latestLocation", loc))
 					resync := &ShardingReSync{
 						currLocation:   currentLocation.Clone(),
