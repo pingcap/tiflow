@@ -84,7 +84,7 @@ type JobManagerImplV2 struct {
 	notifier          *notifier.Notifier[resManager.JobStatusChangeEvent]
 
 	// only use for DebugJob
-	messageAgent dmpkg.MessageAgent
+	messageHandlerManager p2p.MessageHandlerManager
 }
 
 // PauseJob implements proto/Master.PauseJob
@@ -128,29 +128,29 @@ func (jm *JobManagerImplV2) DebugJob(ctx context.Context, req *pb.DebugJobReques
 		}}
 	}
 
-	// we only call MessageAgent.Init/UpdateSender/Close in DebugJob func
-	if err := jm.messageAgent.Init(ctx); err != nil {
+	messageAgent := dmpkg.NewMessageAgentImpl(jm.MasterID(), jm, jm.messageHandlerManager)
+	if err := messageAgent.Init(ctx); err != nil {
 		return &pb.DebugJobResponse{Err: &pb.Error{
 			Code:    pb.ErrorCode_UnknownError,
 			Message: err.Error(),
 		}}
 	}
 	defer func() {
-		if err := jm.messageAgent.Close(ctx); err != nil {
+		if err := messageAgent.Close(ctx); err != nil {
 			resp = &pb.DebugJobResponse{Err: &pb.Error{
 				Code:    pb.ErrorCode_UnknownError,
 				Message: err.Error(),
 			}}
 		}
 	}()
-	if err := jm.messageAgent.UpdateSender(req.JobIdStr, handle); err != nil {
+	if err := messageAgent.UpdateSender(req.JobIdStr, handle); err != nil {
 		return &pb.DebugJobResponse{Err: &pb.Error{
 			Code:    pb.ErrorCode_UnknownError,
 			Message: err.Error(),
 		}}
 	}
 	defer func() {
-		if err := jm.messageAgent.UpdateSender(req.JobIdStr, nil); err != nil {
+		if err := messageAgent.UpdateSender(req.JobIdStr, nil); err != nil {
 			resp = &pb.DebugJobResponse{Err: &pb.Error{
 				Code:    pb.ErrorCode_UnknownError,
 				Message: err.Error(),
@@ -170,14 +170,14 @@ func (jm *JobManagerImplV2) DebugJob(ctx context.Context, req *pb.DebugJobReques
 				return
 			case <-time.After(100 * time.Millisecond):
 			}
-			if err := jm.messageAgent.Tick(runCtx); err != nil {
+			if err := messageAgent.Tick(runCtx); err != nil {
 				log.L().Error("failed to run message agent tick", log.ShortError(err))
 				return
 			}
 		}
 	}()
 
-	resp2, err := jm.messageAgent.SendRequest(ctx, req.JobIdStr, "DebugJob", req)
+	resp2, err := messageAgent.SendRequest(ctx, req.JobIdStr, "DebugJob", req)
 	if err != nil {
 		return &pb.DebugJobResponse{Err: &pb.Error{
 			Code:    pb.ErrorCode_UnknownError,
@@ -419,7 +419,7 @@ func NewJobManagerImplV2(
 
 	// nolint:errcheck
 	_, err = dctx.Deps().Construct(func(m p2p.MessageHandlerManager) (p2p.MessageHandlerManager, error) {
-		impl.messageAgent = dmpkg.NewMessageAgentImpl(id, impl, m)
+		impl.messageHandlerManager = m
 		return m, nil
 	})
 	return impl, err

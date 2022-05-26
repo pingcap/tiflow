@@ -15,6 +15,7 @@ package servermaster
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -34,6 +35,7 @@ import (
 	resManager "github.com/pingcap/tiflow/engine/pkg/externalresource/manager"
 	resourcemeta "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	"github.com/pingcap/tiflow/engine/pkg/notifier"
+	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/pingcap/tiflow/engine/pkg/uuid"
 )
 
@@ -201,16 +203,17 @@ func TestJobManagerDebug(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	mockMaster := lib.NewMockMasterImpl("", "debug-job-test")
+	jobmanagerID := "debug-job-test"
+	mockMaster := lib.NewMockMasterImpl("", jobmanagerID)
 	mockMaster.On("InitImpl", mock.Anything).Return(nil)
-	messageAgent := &dm.MockMessageAgent{}
+	manager := p2p.NewMockMessageHandlerManager()
 	mgr := &JobManagerImplV2{
-		BaseMaster:        mockMaster.DefaultBaseMaster,
-		JobFsm:            NewJobFsm(),
-		clocker:           clock.New(),
-		frameMetaClient:   mockMaster.GetFrameMetaClient(),
-		jobStatusChangeMu: ctxmu.New(),
-		messageAgent:      messageAgent,
+		BaseMaster:            mockMaster.DefaultBaseMaster,
+		JobFsm:                NewJobFsm(),
+		clocker:               clock.New(),
+		frameMetaClient:       mockMaster.GetFrameMetaClient(),
+		jobStatusChangeMu:     ctxmu.New(),
+		messageHandlerManager: manager,
 	}
 
 	debugJobID := "Debug-Job-id"
@@ -226,7 +229,12 @@ func TestJobManagerDebug(t *testing.T) {
 		Command:  "Debug",
 		JsonArg:  "",
 	}
-	messageAgent.On("SendRequest").Return(&pb.DebugJobResponse{}, nil)
+
+	go func() {
+		time.Sleep(time.Second)
+		manager.InvokeHandler(t, fmt.Sprintf("DM---%s---%s", debugJobID, jobmanagerID),
+			"node-1", dm.GenerateResponse(1, "DebugJob", &pb.DebugJobResponse{}))
+	}()
 	resp := mgr.DebugJob(ctx, req)
 	require.Nil(t, resp.Err)
 

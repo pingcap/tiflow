@@ -15,6 +15,7 @@ package dm
 
 import (
 	"context"
+	"encoding/json"
 	"sync"
 
 	"github.com/stretchr/testify/mock"
@@ -24,6 +25,17 @@ import (
 type MockMessageAgent struct {
 	sync.Mutex
 	mock.Mock
+}
+
+// GenerateResponse generate mock response message.
+func GenerateResponse(id messageID, command string, msg interface{}) interface{} {
+	resp := message{ID: id, Type: responseTp, Command: command, Payload: msg}
+	// nolint:errcheck
+	bytes, _ := json.Marshal(resp)
+	var resp2 message
+	// nolint:errcheck
+	json.Unmarshal(bytes, &resp2)
+	return &resp2
 }
 
 // Init implement MessageAgent.Init
