@@ -47,17 +47,22 @@ type agent struct {
 	runningTasks map[model.TableID]*schedulepb.Message
 
 	// maintain owner information
-	etcdClient     *etcd.CDCEtcdClient
-	ownerCaptureID string
-	ownerRevision  int64
+	etcdClient *etcd.CDCEtcdClient
+	ownerInfo  *ownerInfo
 
 	// maintain capture information
-	epoch        schedulepb.ProcessorEpoch
+	epoch        string
 	captureID    model.CaptureID
 	changeFeedID model.ChangeFeedID
 
 	// todo: these fields need to be revised
 	barrierSeqs map[p2p.Topic]p2p.Seq
+}
+
+type ownerInfo struct {
+	version   string
+	captureID string
+	revision  int64
 }
 
 func NewAgent(ctx context.Context,
@@ -100,7 +105,7 @@ func NewAgent(ctx context.Context,
 func (a *agent) refreshOwnerInfo(ctx context.Context) error {
 	etcdCliCtx, cancel := context.WithTimeout(ctx, getOwnerFromEtcdTimeout)
 	defer cancel()
-	ownerCaptureID, err := a.etcdClient.GetOwnerID(etcdCliCtx, etcd.CaptureOwnerKey)
+	captureID, err := a.etcdClient.GetOwnerID(etcdCliCtx, etcd.CaptureOwnerKey)
 	if err != nil {
 		if err != concurrency.ErrElectionNoLeader {
 			return err
@@ -114,14 +119,14 @@ func (a *agent) refreshOwnerInfo(ctx context.Context) error {
 			zap.Error(err))
 		return nil
 	}
+	a.ownerInfo.captureID = captureID
 
-	a.ownerCaptureID = ownerCaptureID
 	log.Debug("found owner",
 		zap.String("namespace", a.changeFeedID.Namespace),
 		zap.String("changefeed", a.changeFeedID.ID),
-		zap.String("ownerID", ownerCaptureID))
+		zap.String("ownerID", captureID))
 
-	a.ownerRevision, err = a.etcdClient.GetOwnerRevision(etcdCliCtx, ownerCaptureID)
+	revision, err := a.etcdClient.GetOwnerRevision(etcdCliCtx, captureID)
 	if err != nil {
 		if cerror.ErrOwnerNotFound.Equal(err) || cerror.ErrNotOwner.Equal(err) {
 			// These are expected errors when no owner has been elected
@@ -129,11 +134,12 @@ func (a *agent) refreshOwnerInfo(ctx context.Context) error {
 				zap.String("namespace", a.changeFeedID.Namespace),
 				zap.String("changefeed", a.changeFeedID.ID),
 				zap.Error(err))
-			a.ownerCaptureID = ""
+			a.ownerInfo.captureID = ""
 			return nil
 		}
 		return err
 	}
+	a.ownerInfo.revision = revision
 
 	return nil
 }
@@ -163,7 +169,12 @@ func (a *agent) Tick(ctx context.Context) error {
 func (a *agent) handleMessage(ctx context.Context, msg []*schedulepb.Message) ([]*schedulepb.Message, error) {
 	result := make([]*schedulepb.Message, 0)
 	for _, message := range msg {
-		switch message.MsgType {
+		header := message.GetHeader()
+		if !a.updateOwnerInfo(message.GetFrom(), header.GetVersion(), header.GetOwnerRevision().Revision) {
+			continue
+		}
+
+		switch message.GetMsgType() {
 		case schedulepb.MsgDispatchTableRequest:
 			response, err := a.handleMessageDispatchTableRequest(ctx, message.DispatchTableRequest)
 			if err != nil {
@@ -171,11 +182,13 @@ func (a *agent) handleMessage(ctx context.Context, msg []*schedulepb.Message) ([
 			}
 			result = append(result, response)
 		case schedulepb.MsgHeartbeat:
-			response, err := a.handleMessageHeartbeat(message.Heartbeat)
+			response, err := a.handleMessageHeartbeat()
 			if err != nil {
 				log.Warn("agent: handle heartbeat failed", zap.Error(err))
 			}
-			result = append(result, response)
+			if response != nil {
+				result = append(result, response)
+			}
 		case schedulepb.MsgUnknown:
 		default:
 			log.Warn("unknown message received")
@@ -185,26 +198,23 @@ func (a *agent) handleMessage(ctx context.Context, msg []*schedulepb.Message) ([
 	return result, nil
 }
 
-func (a *agent) handleMessageHeartbeat(msg *schedulepb.Heartbeat) (*schedulepb.Message, error) {
+func (a *agent) handleMessageHeartbeat() (*schedulepb.Message, error) {
 	// TODO: build s.tables from Heartbeat message.
-	// 1. 处理 heartbeat
-	// 2. 返回 heartbeatResponse
 	tables := make([]schedulepb.TableStatus, 0, len(a.tables))
 	for _, table := range a.tables {
 		// `table` should always track the latest information ?
 		tables = append(tables, *table)
 	}
-
 	response := &schedulepb.HeartbeatResponse{
-		Tables:     tables,
+		Tables: tables,
+		// todo (Ling Jin): how to set `IsStopping`
 		IsStopping: false,
 	}
-
 	return &schedulepb.Message{
 		Header:            a.newMessageHeader(),
 		MsgType:           schedulepb.MsgHeartbeatResponse,
 		From:              a.captureID,
-		To:                a.ownerCaptureID,
+		To:                a.ownerInfo.captureID,
 		HeartbeatResponse: response,
 	}, nil
 }
@@ -224,6 +234,40 @@ func (a *agent) handleMessageDispatchTableRequest(ctx context.Context, msg *sche
 	log.Panic("agent: dispatch table request is nil")
 	return nil, nil
 }
+
+//func (a *Agent) OnOwnerDispatchedTask(
+//	ownerCaptureID model.CaptureID,
+//	ownerRev int64,
+//	tableID model.TableID,
+//	startTs model.Ts,
+//	isDelete bool,
+//	epoch protocol.ProcessorEpoch,
+//) {
+//	if !a.updateOwnerInfo(ownerCaptureID, ownerRev) {
+//		a.logger.Info("task from stale owner ignored",
+//			zap.Int64("tableID", tableID),
+//			zap.Bool("isDelete", isDelete))
+//		return
+//	}
+//
+//	a.pendingOpsMu.Lock()
+//	defer a.pendingOpsMu.Unlock()
+//
+//	op := &agentOperation{
+//		TableID:     tableID,
+//		StartTs:     startTs,
+//		IsDelete:    isDelete,
+//		Epoch:       epoch,
+//		FromOwnerID: ownerCaptureID,
+//		status:      operationReceived,
+//	}
+//	a.pendingOps.PushBack(op)
+//
+//	a.logger.Info("OnOwnerDispatchedTask",
+//		zap.String("ownerCaptureID", ownerCaptureID),
+//		zap.Int64("ownerRev", ownerRev),
+//		zap.Any("op", op))
+//}
 
 func (a *agent) handleAddTableRequest(ctx context.Context, request *schedulepb.AddTableRequest) (*schedulepb.Message, error) {
 	var (
@@ -247,7 +291,7 @@ func (a *agent) handleAddTableRequest(ctx context.Context, request *schedulepb.A
 		Header:  a.newMessageHeader(),
 		MsgType: schedulepb.MsgDispatchTableResponse,
 		From:    a.captureID,
-		To:      a.ownerCaptureID,
+		To:      a.ownerInfo.captureID,
 		DispatchTableResponse: &schedulepb.DispatchTableResponse{
 			Response: &schedulepb.DispatchTableResponse_AddTable{
 				AddTable: &schedulepb.AddTableResponse{
@@ -285,7 +329,7 @@ func (a *agent) handleRemoveTableRequest(ctx context.Context, request *schedulep
 		Header:  a.newMessageHeader(),
 		MsgType: schedulepb.MsgDispatchTableResponse,
 		From:    a.captureID,
-		To:      a.ownerCaptureID,
+		To:      a.ownerInfo.captureID,
 		DispatchTableResponse: &schedulepb.DispatchTableResponse{
 			Response: &schedulepb.DispatchTableResponse_RemoveTable{
 				RemoveTable: &schedulepb.RemoveTableResponse{
@@ -317,7 +361,7 @@ func (a *agent) Close() error {
 	return nil
 }
 
-func (a *agent) newCheckpointMessage() *schedulepb.Message {
+func (a *agent) newCheckpointMessage(version string, revision int64) *schedulepb.Message {
 	tableIDs := make([]model.TableID, 0, len(a.tables))
 	for tableID := range a.tables {
 		tableIDs = append(tableIDs, tableID)
@@ -327,16 +371,16 @@ func (a *agent) newCheckpointMessage() *schedulepb.Message {
 		Header:     a.newMessageHeader(),
 		MsgType:    schedulepb.MsgCheckpoint,
 		From:       a.captureID,
-		To:         a.ownerCaptureID,
+		To:         a.ownerInfo.captureID,
 		Checkpoint: a.newCheckpoint(checkpointTs, resolvedTs, tableIDs...),
 	}
 }
 
 func (a *agent) newMessageHeader() *schedulepb.Message_Header {
 	return &schedulepb.Message_Header{
-		Version:        "",
-		OwnerRevision:  schedulepb.OwnerRevision{},
-		ProcessorEpoch: schedulepb.ProcessorEpoch{},
+		Version:        a.ownerInfo.version,
+		OwnerRevision:  schedulepb.OwnerRevision{Revision: a.ownerInfo.revision},
+		ProcessorEpoch: schedulepb.ProcessorEpoch{Epoch: a.epoch},
 	}
 }
 
@@ -346,4 +390,51 @@ func (a *agent) newCheckpoint(checkpointTs, resolvedTs model.Ts, tables ...model
 		ResolvedTs:   resolvedTs,
 		TableIDs:     tables,
 	}
+}
+
+// updateOwnerInfo tries to update the stored ownerInfo, and returns false if the
+// owner is stale, in which case the incoming message should be ignored since
+// it has come from an owner that for sure is dead.
+//
+// ownerCaptureID: the incoming owner's capture ID
+// ownerRev: the incoming owner's revision as generated by Etcd election.
+func (a *agent) updateOwnerInfo(id model.CaptureID, version string, revision int64) bool {
+	// staled owner heartbeat, just ignore it.
+	if a.ownerInfo.revision > revision {
+		log.Info("heartbeat: from staled owner",
+			zap.Any("staledOwner", ownerInfo{
+				captureID: id,
+				revision:  revision,
+			}),
+			zap.Any("owner", a.ownerInfo))
+		return false
+	}
+
+	if a.ownerInfo.revision == revision && a.ownerInfo.captureID != id {
+		// This panic will happen only if two messages have been received
+		// with the same ownerRev but with different ownerIDs.
+		// This should never happen unless the election via Etcd is buggy.
+		log.Panic("owner IDs do not match",
+			zap.String("expected", a.ownerInfo.captureID),
+			zap.String("actual", id))
+	}
+
+	if a.ownerInfo.revision < revision {
+		a.ownerInfo.captureID = id
+		a.ownerInfo.revision = revision
+		a.ownerInfo.version = version
+
+		log.Info("new owner in power", zap.Any("owner", a.ownerInfo))
+
+		// todo: shall drop all pending operations ?
+		// Resets the deque so that pending operations from the previous owner
+		// will not be processed.
+		// Note: these pending operations have not yet been processed by the agent,
+		// so it is okay to lose them.
+		//a.pendingOpsMu.Lock()
+		//a.pendingOps = deque.NewDeque()
+		//a.pendingOpsMu.Unlock()
+		//return true
+	}
+	return true
 }
