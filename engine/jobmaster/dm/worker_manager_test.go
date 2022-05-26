@@ -192,7 +192,7 @@ func (t *testDMJobmasterSuite) TestCreateWorker() {
 
 	jobCfg := &config.JobCfg{}
 	require.NoError(t.T(), jobCfg.DecodeFile(jobTemplatePath))
-	taskCfgs := jobCfg.ToTaskConfigs()
+	taskCfgs := jobCfg.ToTaskCfgs()
 	task1 := jobCfg.Upstreams[0].SourceID
 	worker1 := "worker1"
 	createError := errors.New("create error")

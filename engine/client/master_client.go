@@ -43,6 +43,7 @@ type MasterClient interface {
 	QueryJob(ctx context.Context, req *pb.QueryJobRequest) (resp *pb.QueryJobResponse, err error)
 	PauseJob(ctx context.Context, req *pb.PauseJobRequest) (resp *pb.PauseJobResponse, err error)
 	CancelJob(ctx context.Context, req *pb.CancelJobRequest) (resp *pb.CancelJobResponse, err error)
+	DebugJob(ctx context.Context, req *pb.DebugJobRequest) (resp *pb.DebugJobResponse, err error)
 	QueryMetaStore(
 		ctx context.Context, req *pb.QueryMetaStoreRequest, timeout time.Duration,
 	) (resp *pb.QueryMetaStoreResponse, err error)
