@@ -1086,9 +1086,7 @@ function DM_TABLE_CHECKPOINT_BACKWARD() {
      run_sql_source2 \"create table ${shardddl1}.${tb1} (a int primary key, b int);\"; \
      run_sql_source1 \"create table ${shardddl1}.t_1 (a int primary key, b int);\"; \
      run_sql_source2 \"create table ${shardddl1}.t_1 (a int primary key, b int);\"" \
-		"clean_table" ""
-	run_sql_both_source "drop table if exists ${shardddl1}.t_1;"
-	run_sql_tidb "drop table if exists ${shardddl}.t_1;"
+		"clean_table" "optimistic"
 }
 
 function DM_RESYNC_NOT_FLUSHED_CASE() {
@@ -1191,7 +1189,7 @@ function DM_RESYNC_NOT_FLUSHED() {
 		 run_sql_source1 \"create table ${shardddl1}.${tb2} (a int primary key, b int);\"; \
 		 run_sql_source2 \"create table ${shardddl1}.${tb1} (a int primary key, b int);\"; \
      run_sql_source2 \"create table ${shardddl1}.${tb2} (a int primary key, b int);\"" \
-		"clean_table" ""
+		"clean_table" "optimistic"
 }
 
 function DM_RESYNC_TXN_INTERRUPT_CASE() {
@@ -1252,9 +1250,7 @@ function DM_RESYNC_TXN_INTERRUPT() {
 		"run_sql_source1 \"create table ${shardddl1}.${tb1} (a int primary key, b int);\"; \
      run_sql_source2 \"create table ${shardddl1}.t_1 (a int primary key, b int);\"; \
      run_sql_source2 \"create table ${shardddl1}.${tb2} (a int primary key, b int);\"" \
-		"clean_table" ""
-	run_sql_source1 "drop table if exists ${shardddl1}.t_1;"
-	run_sql_tidb "drop table if exists ${shardddl}.t_1;"
+		"clean_table" "optimistic"
 }
 
 function run() {
