@@ -19,18 +19,18 @@ import (
 	"github.com/pingcap/tiflow/cdc/capture"
 )
 
-// OPenAPIV2 provides CDC v2 APIs
-type OPenAPIV2 struct {
+// OpenAPIV2 provides CDC v2 APIs
+type OpenAPIV2 struct {
 	capture *capture.Capture
 }
 
 // NewOpenAPI creates a new openAPIs.
-func NewOpenAPI(c *capture.Capture) *OPenAPIV2 {
-	return &OPenAPIV2{capture: c}
+func NewOpenAPI(c *capture.Capture) *OpenAPIV2 {
+	return &OpenAPIV2{capture: c}
 }
 
 // RegisterOpenAPIRoutes registers routes for OpenAPI
-func RegisterOpenAPIRoutes(router *gin.Engine, api *OPenAPIV2) {
+func RegisterOpenAPIRoutes(router *gin.Engine, api *OpenAPIV2) {
 	v1 := router.Group("/api/v2")
 
 	v1.Use(middleware.LogMiddleware())
