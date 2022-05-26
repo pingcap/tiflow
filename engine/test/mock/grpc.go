@@ -71,6 +71,8 @@ func (s *masterServerConn) sendRequest(ctx context.Context, req interface{}) (in
 		return s.server.Heartbeat(ctx, x)
 	case *pb.CancelJobRequest:
 		return s.server.CancelJob(ctx, x)
+	case *pb.DebugJobRequest:
+		return s.server.DebugJob(ctx, x)
 	}
 	return nil, errors.New("unknown request")
 }
