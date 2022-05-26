@@ -285,7 +285,8 @@ func (c *StreamerController) GetEvent(tctx *tcontext.Context) (event *replicatio
 	switch ev := event.Event.(type) {
 	case *replication.RotateEvent:
 		// if is local binlog but switch to remote on error, need to add uuid information in binlog's name
-		relaySubDirSuffix := c.extractRelaySubDirSuffix(string(ev.NextLogName))
+		// nolint:dogsled
+		_, relaySubDirSuffix, _, _ := binlog.SplitFilenameWithUUIDSuffix(string(ev.NextLogName))
 		if relaySubDirSuffix != "" {
 			c.relaySubDirSuffix = relaySubDirSuffix
 		} else if c.relaySubDirSuffix != "" {
@@ -335,12 +336,6 @@ func (c *StreamerController) IsClosed() bool {
 	defer c.RUnlock()
 
 	return c.closed
-}
-
-func (c *StreamerController) extractRelaySubDirSuffix(filename string) string {
-	// nolint:dogsled
-	_, uuidSuffix, _, _ := binlog.SplitFilenameWithUUIDSuffix(filename)
-	return uuidSuffix
 }
 
 // UpdateSyncCfg updates sync config and fromDB.
