@@ -314,7 +314,7 @@ func (s *Server) observeRelayConfig(ctx context.Context, rev int64) error {
 						// has relaySource but no worker
 						if w, ok := ws[relaySource.SourceID]; !ok {
 							log.L().Info(fmt.Sprintf("didn't find source_worker but found relay config %s after etcd retryable error. Will start source_worker", relaySource.SourceID))
-							if err2 := s.enableRelay(relaySource, false); err2 != nil {
+							if err2 := s.enableRelay(relaySource, true); err2 != nil {
 								return err2
 							}
 						} else {
@@ -416,7 +416,7 @@ func (s *Server) observeSourceBound(ctx context.Context, rev int64) error {
 						// has bound but no worker
 						if w, ok := ws[bound.Source]; !ok {
 							log.L().Info(fmt.Sprintf("didn't find source_worker but found bound %v after etcd retryable error. Will start source_worker", bound))
-							if err2 := s.enableHandleSubtasks(cfgs[i], false); err2 != nil {
+							if err2 := s.enableHandleSubtasks(cfgs[i], true); err2 != nil {
 								return err2
 							}
 						} else {
