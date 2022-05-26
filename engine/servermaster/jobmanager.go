@@ -168,8 +168,7 @@ func (jm *JobManagerImplV2) DebugJob(ctx context.Context, req *pb.DebugJobReques
 			select {
 			case <-runCtx.Done():
 				return
-			default:
-				time.Sleep(100 * time.Millisecond)
+			case <-time.After(100 * time.Millisecond):
 			}
 			if err := jm.messageAgent.Tick(runCtx); err != nil {
 				log.L().Error("failed to run message agent tick", log.ShortError(err))
