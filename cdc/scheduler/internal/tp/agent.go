@@ -17,6 +17,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -43,15 +44,17 @@ type agent struct {
 	trans     transport
 	tableExec internal.TableExecutor
 
-	tables       map[model.TableID]*schedulepb.TableStatus
-	runningTasks map[model.TableID]*schedulepb.Message
+	tables map[model.TableID]*schedulepb.TableStatus
+
+	// runningTasks track all in progress dispatch table request
+	runningTasks map[model.TableID]*dispatchTableTask
 
 	// maintain owner information
-	etcdClient *etcd.CDCEtcdClient
-	ownerInfo  *ownerInfo
+	ownerInfo *ownerInfo
 
 	// maintain capture information
-	epoch        string
+	epoch string
+	// todo: shall we maintain this?
 	captureID    model.CaptureID
 	changeFeedID model.ChangeFeedID
 
@@ -72,11 +75,11 @@ func NewAgent(ctx context.Context,
 	etcdClient *etcd.CDCEtcdClient,
 	tableExecutor internal.TableExecutor) (internal.Agent, error) {
 	result := &agent{
+		epoch:        uuid.New().String(),
 		changeFeedID: changeFeedID,
 		tableExec:    tableExecutor,
 		tables:       make(map[model.TableID]*schedulepb.TableStatus),
-		runningTasks: make(map[model.TableID]*schedulepb.Message),
-		etcdClient:   etcdClient,
+		runningTasks: make(map[model.TableID]*dispatchTableTask),
 	}
 	trans, err := newTransport(ctx, changeFeedID, messageServer, messageRouter)
 	if err != nil {
@@ -93,71 +96,68 @@ func NewAgent(ctx context.Context,
 		zap.Duration("sendCheckpointTsInterval", flushInterval))
 
 	//result.Agent = base.NewBaseAgent(changeFeedID, tableExecutor, result, &base.AgentConfig{SendCheckpointTsInterval: flushInterval})
-
-	result.etcdClient = etcdClient
-	if err := result.refreshOwnerInfo(ctx); err != nil {
-		return result, errors.Trace(err)
-	}
-
-	return result, nil
-}
-
-func (a *agent) refreshOwnerInfo(ctx context.Context) error {
 	etcdCliCtx, cancel := context.WithTimeout(ctx, getOwnerFromEtcdTimeout)
 	defer cancel()
-	captureID, err := a.etcdClient.GetOwnerID(etcdCliCtx, etcd.CaptureOwnerKey)
+
+	captureID, err := etcdClient.GetOwnerID(etcdCliCtx, etcd.CaptureOwnerKey)
 	if err != nil {
 		if err != concurrency.ErrElectionNoLeader {
-			return err
+			return nil, err
 		}
 		// We tolerate the situation where there is no owner.
 		// If we are registered in Etcd, an elected Owner will have to
 		// contact us before it can schedule any table.
 		log.Info("no owner found. We will wait for an owner to contact us.",
-			zap.String("namespace", a.changeFeedID.Namespace),
-			zap.String("changefeed", a.changeFeedID.ID),
+			zap.String("namespace", changeFeedID.Namespace),
+			zap.String("changefeed", changeFeedID.ID),
 			zap.Error(err))
-		return nil
+		return nil, err
 	}
-	a.ownerInfo.captureID = captureID
 
 	log.Debug("found owner",
-		zap.String("namespace", a.changeFeedID.Namespace),
-		zap.String("changefeed", a.changeFeedID.ID),
+		zap.String("namespace", changeFeedID.Namespace),
+		zap.String("changefeed", changeFeedID.ID),
 		zap.String("ownerID", captureID))
 
-	revision, err := a.etcdClient.GetOwnerRevision(etcdCliCtx, captureID)
+	revision, err := etcdClient.GetOwnerRevision(etcdCliCtx, captureID)
 	if err != nil {
 		if cerror.ErrOwnerNotFound.Equal(err) || cerror.ErrNotOwner.Equal(err) {
 			// These are expected errors when no owner has been elected
 			log.Info("no owner found when querying for the owner revision",
-				zap.String("namespace", a.changeFeedID.Namespace),
-				zap.String("changefeed", a.changeFeedID.ID),
+				zap.String("namespace", changeFeedID.Namespace),
+				zap.String("changefeed", changeFeedID.ID),
 				zap.Error(err))
-			a.ownerInfo.captureID = ""
-			return nil
+			return nil, nil
 		}
-		return err
+		return nil, err
 	}
-	a.ownerInfo.revision = revision
 
-	return nil
+	result.ownerInfo = &ownerInfo{
+		// todo: how to get owner's `version` ?
+		version:   "",
+		captureID: captureID,
+		revision:  revision,
+	}
+	return result, nil
 }
 
 // Tick implement agent interface
 func (a *agent) Tick(ctx context.Context) error {
-	if err := a.refreshOwnerInfo(ctx); err != nil {
-		return errors.Trace(err)
-	}
-
 	inboundMessages, err := a.trans.Recv(ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	outboundMessages, err := a.handleMessage(ctx, inboundMessages)
+	outboundMessages, err := a.handleMessage(inboundMessages)
 	if err != nil {
 		return errors.Trace(err)
 	}
+
+	responses, err := a.handleDispatchTableTasks(ctx)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	outboundMessages = append(outboundMessages, responses...)
 
 	if err := a.trans.Send(ctx, outboundMessages); err != nil {
 		return errors.Trace(err)
@@ -166,7 +166,7 @@ func (a *agent) Tick(ctx context.Context) error {
 	return nil
 }
 
-func (a *agent) handleMessage(ctx context.Context, msg []*schedulepb.Message) ([]*schedulepb.Message, error) {
+func (a *agent) handleMessage(msg []*schedulepb.Message) ([]*schedulepb.Message, error) {
 	result := make([]*schedulepb.Message, 0)
 	for _, message := range msg {
 		header := message.GetHeader()
@@ -176,11 +176,7 @@ func (a *agent) handleMessage(ctx context.Context, msg []*schedulepb.Message) ([
 
 		switch message.GetMsgType() {
 		case schedulepb.MsgDispatchTableRequest:
-			response, err := a.handleMessageDispatchTableRequest(ctx, message.DispatchTableRequest)
-			if err != nil {
-				log.Warn("agent: handle dispatch table request failed", zap.Error(err))
-			}
-			result = append(result, response)
+			a.handleMessageDispatchTableRequest(message.DispatchTableRequest, message.GetFrom(), header.GetProcessorEpoch())
 		case schedulepb.MsgHeartbeat:
 			response, err := a.handleMessageHeartbeat()
 			if err != nil {
@@ -219,113 +215,94 @@ func (a *agent) handleMessageHeartbeat() (*schedulepb.Message, error) {
 	}, nil
 }
 
-func (a *agent) handleMessageDispatchTableRequest(ctx context.Context, msg *schedulepb.DispatchTableRequest) (*schedulepb.Message, error) {
-	// TODO: update s.tables from DispatchTableResponse message.
-	addTableRequest := msg.GetAddTable()
-	if addTableRequest != nil {
-		return a.handleAddTableRequest(ctx, addTableRequest)
-	}
+type dispatchTableRequestStatus int32
 
-	removeTableRequest := msg.GetRemoveTable()
-	if removeTableRequest != nil {
-		return a.handleRemoveTableRequest(ctx, removeTableRequest)
-	}
+const (
+	dispatchTableRequestReceived = dispatchTableRequestStatus(iota + 1)
+	dispatchTableRequestProcessed
+	dispatchTableRequestFinished
+)
 
-	log.Panic("agent: dispatch table request is nil")
-	return nil, nil
+type dispatchTableTask struct {
+	TableID   model.TableID
+	StartTs   model.Ts
+	IsRemove  bool
+	IsPrepare bool
+	Epoch     schedulepb.ProcessorEpoch
+
+	// FromOwnerID is for debugging purposesFromOwnerID
+	FromOwnerID model.CaptureID
+
+	status dispatchTableRequestStatus
 }
 
-//func (a *Agent) OnOwnerDispatchedTask(
-//	ownerCaptureID model.CaptureID,
-//	ownerRev int64,
-//	tableID model.TableID,
-//	startTs model.Ts,
-//	isDelete bool,
-//	epoch protocol.ProcessorEpoch,
-//) {
-//	if !a.updateOwnerInfo(ownerCaptureID, ownerRev) {
-//		a.logger.Info("task from stale owner ignored",
-//			zap.Int64("tableID", tableID),
-//			zap.Bool("isDelete", isDelete))
-//		return
-//	}
-//
-//	a.pendingOpsMu.Lock()
-//	defer a.pendingOpsMu.Unlock()
-//
-//	op := &agentOperation{
-//		TableID:     tableID,
-//		StartTs:     startTs,
-//		IsDelete:    isDelete,
-//		Epoch:       epoch,
-//		FromOwnerID: ownerCaptureID,
-//		status:      operationReceived,
-//	}
-//	a.pendingOps.PushBack(op)
-//
-//	a.logger.Info("OnOwnerDispatchedTask",
-//		zap.String("ownerCaptureID", ownerCaptureID),
-//		zap.Int64("ownerRev", ownerRev),
-//		zap.Any("op", op))
-//}
-
-func (a *agent) handleAddTableRequest(ctx context.Context, request *schedulepb.AddTableRequest) (*schedulepb.Message, error) {
-	var (
-		checkpointTs model.Ts
-		resolvedTs   model.Ts
-	)
-
-	tableID := request.GetTableID()
-	isPrepare := !request.GetIsSecondary()
-	checkpoint := request.GetCheckpoint().GetCheckpointTs()
-
-	done, err := a.tableExec.AddTable(ctx, tableID, checkpoint, isPrepare)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	if done {
-		// todo: how to handle done here ?
+func (a *agent) handleMessageDispatchTableRequest(request *schedulepb.DispatchTableRequest, from model.CaptureID, epoch schedulepb.ProcessorEpoch) {
+	if epoch.Epoch != a.epoch {
+		log.Info("dispatch table request epoch does not match, ignore it",
+			zap.String("epoch", epoch.Epoch),
+			zap.String("expected", a.epoch))
+		return
 	}
 
-	message := &schedulepb.Message{
-		Header:  a.newMessageHeader(),
-		MsgType: schedulepb.MsgDispatchTableResponse,
-		From:    a.captureID,
-		To:      a.ownerInfo.captureID,
-		DispatchTableResponse: &schedulepb.DispatchTableResponse{
-			Response: &schedulepb.DispatchTableResponse_AddTable{
-				AddTable: &schedulepb.AddTableResponse{
-					Status: &schedulepb.TableStatus{
-						TableID:    0,
-						State:      0,
-						Checkpoint: schedulepb.Checkpoint{},
-					},
-					Checkpoint: a.newCheckpoint(checkpointTs, resolvedTs, tableID),
-					Reject:     false,
-				},
-			},
-		},
+	var task *dispatchTableTask
+	if addTable := request.GetAddTable(); addTable != nil {
+		task = &dispatchTableTask{
+			TableID:     addTable.GetTableID(),
+			StartTs:     addTable.GetCheckpoint().GetCheckpointTs(),
+			IsRemove:    false,
+			IsPrepare:   addTable.GetIsSecondary(),
+			Epoch:       epoch,
+			FromOwnerID: from,
+			status:      dispatchTableRequestReceived,
+		}
+	} else if removeTable := request.GetRemoveTable(); removeTable != nil {
+		task = &dispatchTableTask{
+			TableID:     removeTable.GetTableID(),
+			IsRemove:    true,
+			Epoch:       epoch,
+			FromOwnerID: from,
+			status:      dispatchTableRequestReceived,
+		}
 	}
 
-	return message, nil
+	if task == nil {
+		log.Panic("invalid dispatch table request", zap.Any("request", request))
+	}
+
+	if _, ok := a.runningTasks[task.TableID]; ok {
+		log.Panic("duplicate dispatch table request", zap.Any("request", request))
+	}
+
+	a.runningTasks[task.TableID] = task
 }
 
-func (a *agent) handleRemoveTableRequest(ctx context.Context, request *schedulepb.RemoveTableRequest) (*schedulepb.Message, error) {
+func (a *agent) handleRemoveTableTask(ctx context.Context, task *dispatchTableTask) (response *schedulepb.Message, err error) {
 	var (
 		checkpointTs model.Ts
-		resolvedTs   model.Ts
+		done         bool
 	)
-
-	tableID := request.GetTableID()
-	done, err := a.tableExec.RemoveTable(ctx, tableID)
-	if err != nil {
-		return nil, errors.Trace(err)
+	switch task.status {
+	case dispatchTableRequestReceived:
+		done, err = a.tableExec.RemoveTable(ctx, task.TableID)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		if !done {
+			return nil, nil
+		}
+		task.status = dispatchTableRequestProcessed
+		fallthrough
+	case dispatchTableRequestProcessed:
+		checkpointTs, done = a.tableExec.IsRemoveTableFinished(ctx, task.TableID)
+		if !done {
+			return nil, nil
+		}
+		task.status = dispatchTableRequestFinished
+		fallthrough
+	case dispatchTableRequestFinished:
 	}
-	if done {
-		// todo: how to handle it here
-	}
-
-	message := &schedulepb.Message{
+	log.Info("finish processing add table task", zap.Any("task", task))
+	response = &schedulepb.Message{
 		Header:  a.newMessageHeader(),
 		MsgType: schedulepb.MsgDispatchTableResponse,
 		From:    a.captureID,
@@ -334,21 +311,98 @@ func (a *agent) handleRemoveTableRequest(ctx context.Context, request *schedulep
 			Response: &schedulepb.DispatchTableResponse_RemoveTable{
 				RemoveTable: &schedulepb.RemoveTableResponse{
 					Status: &schedulepb.TableStatus{
-						TableID: tableID,
+						TableID: task.TableID,
 						State:   0,
+						Checkpoint: schedulepb.Checkpoint{
+							CheckpointTs: checkpointTs,
+						},
+					},
+					Checkpoint: &schedulepb.Checkpoint{
+						CheckpointTs: checkpointTs,
+						ResolvedTs:   0,
+					},
+				}},
+		},
+	}
+
+	// todo: delete the task here, is ok ?
+	delete(a.runningTasks, task.TableID)
+
+	return response, nil
+}
+
+func (a *agent) handleAddTableTask(ctx context.Context, task *dispatchTableTask) (*schedulepb.Message, error) {
+	switch task.status {
+	case dispatchTableRequestReceived:
+		done, err := a.tableExec.AddTable(ctx, task.TableID, task.StartTs, task.IsPrepare)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		if !done {
+			return nil, nil
+		}
+		task.status = dispatchTableRequestProcessed
+		fallthrough
+	case dispatchTableRequestProcessed:
+		done := a.tableExec.IsAddTableFinished(ctx, task.TableID, task.IsPrepare)
+		if !done {
+			return nil, nil
+		}
+		task.status = dispatchTableRequestFinished
+		fallthrough
+	case dispatchTableRequestFinished:
+	}
+	log.Info("finish processing add table task", zap.Any("task", task))
+	response := &schedulepb.Message{
+		Header:  a.newMessageHeader(),
+		MsgType: schedulepb.MsgDispatchTableResponse,
+		From:    a.captureID,
+		To:      a.ownerInfo.captureID,
+		DispatchTableResponse: &schedulepb.DispatchTableResponse{
+			Response: &schedulepb.DispatchTableResponse_AddTable{
+				AddTable: &schedulepb.AddTableResponse{
+					Status: &schedulepb.TableStatus{
+						TableID: task.TableID,
+						// todo: how to the set the state
+						State: schedulepb.TableStatePreparing,
 						Checkpoint: schedulepb.Checkpoint{
 							CheckpointTs: 0,
 							ResolvedTs:   0,
-							TableIDs:     []model.TableID{tableID},
 						},
 					},
-					Checkpoint: a.newCheckpoint(checkpointTs, resolvedTs, tableID),
+					Checkpoint: &schedulepb.Checkpoint{
+						CheckpointTs: 0,
+						ResolvedTs:   0,
+					},
+					Reject: false,
 				},
 			},
 		},
 	}
 
-	return message, nil
+	// todo: delete the task here, is ok ?
+	delete(a.runningTasks, task.TableID)
+
+	return response, nil
+}
+
+func (a *agent) handleDispatchTableTasks(ctx context.Context) (result []*schedulepb.Message, err error) {
+	result = make([]*schedulepb.Message, 0)
+	for _, task := range a.runningTasks {
+		var response *schedulepb.Message
+		if task.IsRemove {
+			response, err = a.handleRemoveTableTask(ctx, task)
+		} else {
+			response, err = a.handleAddTableTask(ctx, task)
+		}
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		if response != nil {
+			result = append(result, response)
+		}
+	}
+	return result, nil
 }
 
 // GetLastSentCheckpointTs implement agent interface
@@ -361,18 +415,19 @@ func (a *agent) Close() error {
 	return nil
 }
 
-func (a *agent) newCheckpointMessage(version string, revision int64) *schedulepb.Message {
+func (a *agent) newCheckpointMessage() *schedulepb.Message {
 	tableIDs := make([]model.TableID, 0, len(a.tables))
 	for tableID := range a.tables {
 		tableIDs = append(tableIDs, tableID)
 	}
-	checkpointTs, resolvedTs := a.tableExec.GetCheckpoint()
+	// checkpointTs, resolvedTs := a.tableExec.GetCheckpoint()
 	return &schedulepb.Message{
-		Header:     a.newMessageHeader(),
-		MsgType:    schedulepb.MsgCheckpoint,
-		From:       a.captureID,
-		To:         a.ownerInfo.captureID,
-		Checkpoint: a.newCheckpoint(checkpointTs, resolvedTs, tableIDs...),
+		Header:  a.newMessageHeader(),
+		MsgType: schedulepb.MsgCheckpoint,
+		From:    a.captureID,
+		To:      a.ownerInfo.captureID,
+		// Checkpoints: a.newCheckpoint(),
+		//Checkpoint: a.newCheckpoint(checkpointTs, resolvedTs, tableIDs...),
 	}
 }
 
@@ -384,11 +439,11 @@ func (a *agent) newMessageHeader() *schedulepb.Message_Header {
 	}
 }
 
-func (a *agent) newCheckpoint(checkpointTs, resolvedTs model.Ts, tables ...model.TableID) *schedulepb.Checkpoint {
-	return &schedulepb.Checkpoint{
+func (a *agent) newCheckpoint(checkpointTs, resolvedTs model.Ts) schedulepb.Checkpoint {
+	return schedulepb.Checkpoint{
 		CheckpointTs: checkpointTs,
 		ResolvedTs:   resolvedTs,
-		TableIDs:     tables,
+		//TableIDs:     tables,
 	}
 }
 

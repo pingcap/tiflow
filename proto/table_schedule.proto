@@ -22,11 +22,6 @@ option(gogoproto.goproto_enum_prefix_all) = false;
 message Checkpoint {
     uint64 checkpoint_ts = 1 [(gogoproto.casttype) = "github.com/pingcap/tiflow/cdc/model.Ts"];
     uint64 resolved_ts = 2 [(gogoproto.casttype) = "github.com/pingcap/tiflow/cdc/model.Ts"];
-
-    repeated uint64 table_id = 3 [
-            (gogoproto.casttype) = "github.com/pingcap/tiflow/cdc/model.TableID",
-            (gogoproto.customname) = "TableIDs"
-        ];
 }
 
 message AddTableRequest {
@@ -133,5 +128,8 @@ message Message {
     DispatchTableResponse dispatch_table_response = 6;
     Heartbeat heartbeat = 7;
     HeartbeatResponse heartbeat_response = 8;
-    Checkpoint checkpoint = 9;
+    map<int64, Checkpoint> checkpoints = 9 [
+        (gogoproto.castkey) = "github.com/pingcap/tiflow/cdc/model.TableID",
+        (gogoproto.nullable) = false
+    ];
 }
