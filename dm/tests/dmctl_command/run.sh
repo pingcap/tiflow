@@ -214,13 +214,13 @@ function run_validation_start_stop_cmd {
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation start xxxxx" \
 		"\"result\": false" 1 \
-		"fail to get subtask config by task name \`xxxxx\` and sources" 1
+		"cannot get subtask by task name \`xxxxx\` and sources" 1
 
 	echo "--> (fail) validation start: non-exist source"
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation start -s xxxxx --all-task" \
 		"\"result\": false" 1 \
-		"fail to get subtask config by sources" 1
+		"cannot get subtask by sources" 1
 
 	echo "--> (fail) validation stop: without all-task and task-name"
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
@@ -241,13 +241,13 @@ function run_validation_start_stop_cmd {
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation stop xxxxx" \
 		"\"result\": false" 1 \
-		"fail to get subtask config by task name \`xxxxx\` and sources" 1
+		"cannot get subtask by task name \`xxxxx\` and sources" 1
 
 	echo "--> (fail) validation stop: non-exist source"
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation stop -s xxxxx --all-task" \
 		"\"result\": false" 1 \
-		"fail to get subtask config by sources" 1
+		"cannot get subtask by sources" 1
 
 	echo "--> (fail) validation stop: stop not-enabled validator"
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \

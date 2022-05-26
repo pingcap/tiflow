@@ -2736,24 +2736,13 @@ func (s *Scheduler) handleLoadTask(ctx context.Context, loadTaskCh <-chan ha.Loa
 // OperateValidationTask operate validator of subtask.
 // 	tasks: tasks need to operate
 // 	validatorStages: stage info of subtask validators
-// 	changedSubtaskCfgs: length should be 0 or equal to validatorStages
+// 	changedSubtaskCfgs: changed subtask configs
 // see server.StartValidation/StopValidation for more detail.
-func (s *Scheduler) OperateValidationTask(
-	tasks []string,
-	validatorStages []ha.Stage,
-	changedSubtaskCfgs []config.SubTaskConfig,
-) error {
+func (s *Scheduler) OperateValidationTask(validatorStages []ha.Stage, changedSubtaskCfgs []config.SubTaskConfig) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if !s.started.Load() {
 		return terror.ErrSchedulerNotStarted.Generate()
-	}
-	for _, taskName := range tasks {
-		release, err := s.subtaskLatch.tryAcquire(taskName)
-		if err != nil {
-			return terror.Annotatef(err, "fail to require lock for validation task")
-		}
-		defer release()
 	}
 
 	// 2. setting subtask stage in etcd

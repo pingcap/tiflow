@@ -2299,7 +2299,7 @@ func (t *testMaster) TestStartStopValidation(c *check.C) {
 	startResp, err = server.StartValidation(context.Background(), validatorStartReq)
 	c.Assert(err, check.IsNil)
 	c.Assert(startResp.Result, check.IsFalse)
-	c.Assert(startResp.Msg, check.Matches, ".*fail to get subtask config by task name.*")
+	c.Assert(startResp.Msg, check.Matches, ".*cannot get subtask by task name.*")
 	t.validatorStageMatch(c, taskName, sources[0], pb.Stage_InvalidStage)
 	t.validatorStageMatch(c, taskName, sources[1], pb.Stage_InvalidStage)
 	t.validatorModeMatch(c, server.scheduler, taskName, sources[0], config.ValidationNone, "")
@@ -2312,7 +2312,7 @@ func (t *testMaster) TestStartStopValidation(c *check.C) {
 	startResp, err = server.StartValidation(context.Background(), validatorStartReq)
 	c.Assert(err, check.IsNil)
 	c.Assert(startResp.Result, check.IsFalse)
-	c.Assert(startResp.Msg, check.Matches, ".*fail to get subtask config by sources.*")
+	c.Assert(startResp.Msg, check.Matches, ".*cannot get subtask by sources.*")
 	t.validatorStageMatch(c, taskName, sources[0], pb.Stage_InvalidStage)
 	t.validatorStageMatch(c, taskName, sources[1], pb.Stage_InvalidStage)
 	t.validatorModeMatch(c, server.scheduler, taskName, sources[0], config.ValidationNone, "")
@@ -2436,7 +2436,7 @@ func (t *testMaster) TestStartStopValidation(c *check.C) {
 	stopResp, err = server.StopValidation(context.Background(), validatorStopReq)
 	c.Assert(err, check.IsNil)
 	c.Assert(stopResp.Result, check.IsFalse)
-	c.Assert(stopResp.Msg, check.Matches, ".*fail to get subtask config by task name.*")
+	c.Assert(stopResp.Msg, check.Matches, ".*cannot get subtask by task name.*")
 	t.validatorStageMatch(c, taskName, sources[0], pb.Stage_Running)
 	t.validatorStageMatch(c, taskName, sources[1], pb.Stage_Running)
 	t.validatorModeMatch(c, server.scheduler, taskName, sources[0], config.ValidationFull, "")
@@ -2449,7 +2449,7 @@ func (t *testMaster) TestStartStopValidation(c *check.C) {
 	stopResp, err = server.StopValidation(context.Background(), validatorStopReq)
 	c.Assert(err, check.IsNil)
 	c.Assert(stopResp.Result, check.IsFalse)
-	c.Assert(stopResp.Msg, check.Matches, ".*fail to get subtask config by sources.*")
+	c.Assert(stopResp.Msg, check.Matches, ".*cannot get subtask by sources.*")
 	t.validatorStageMatch(c, taskName, sources[0], pb.Stage_Running)
 	t.validatorStageMatch(c, taskName, sources[1], pb.Stage_Running)
 	t.validatorModeMatch(c, server.scheduler, taskName, sources[0], config.ValidationFull, "")
@@ -2605,7 +2605,7 @@ func (t *testMaster) TestGetValidatorStatus(c *check.C) {
 	statusReq.TaskName = "invalid-task"
 	resp, err = server.GetValidationStatus(context.Background(), statusReq)
 	c.Assert(err, check.IsNil)
-	c.Assert(resp.Msg, check.Matches, ".*fail to get subtask config by task name.*")
+	c.Assert(resp.Msg, check.Matches, ".*cannot get subtask by task name.*")
 	c.Assert(resp.Result, check.IsFalse)
 	// 3. query invalid stage
 	statusReq.TaskName = taskName
@@ -2703,7 +2703,7 @@ func (t *testMaster) TestGetValidationError(c *check.C) {
 	errReq.TaskName = "invalid-task"
 	resp, err = server.GetValidationError(context.Background(), errReq)
 	c.Assert(err, check.IsNil)
-	c.Assert(resp.Msg, check.Matches, ".*fail to get subtask config by task name.*")
+	c.Assert(resp.Msg, check.Matches, ".*cannot get subtask by task name.*")
 	c.Assert(resp.Result, check.IsFalse)
 	// 3. query invalid state
 	errReq.TaskName = taskName
@@ -2795,7 +2795,7 @@ func (t *testMaster) TestOperateValidationError(c *check.C) {
 	opReq.TaskName = "invalid-task"
 	resp, err = server.OperateValidationError(context.Background(), opReq)
 	c.Assert(err, check.IsNil)
-	c.Assert(resp.Msg, check.Matches, ".*fail to get subtask config by task name.*")
+	c.Assert(resp.Msg, check.Matches, ".*cannot get subtask by task name.*")
 	c.Assert(resp.Result, check.IsFalse)
 	// 3. worker error
 	opReq.TaskName = taskName

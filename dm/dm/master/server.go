@@ -2641,33 +2641,25 @@ func (s *Server) sharedLogic(ctx context.Context, req interface{}, respPointer i
 	return true
 }
 
-func (s *Server) checkStartValidationParams(req *pb.StartValidationRequest) (
-	map[string]map[string]config.SubTaskConfig, string, bool,
-) {
+func (s *Server) checkStartValidationParams(
+	subTaskCfgs map[string]map[string]config.SubTaskConfig,
+	req *pb.StartValidationRequest,
+) (string, bool) {
 	explicitModeOrStartTime := req.Mode != nil || req.StartTime != nil
 	if req.Mode != nil {
 		mode := req.GetModeValue()
 		if mode != config.ValidationFull && mode != config.ValidationFast {
 			msg := fmt.Sprintf("validation mode should be either `%s` or `%s`",
 				config.ValidationFull, config.ValidationFast)
-			return nil, msg, false
+			return msg, false
 		}
 	}
 
 	startTime := req.GetStartTimeValue()
 	if startTime != "" {
 		if _, err := utils.ParseStartTime(startTime); err != nil {
-			return nil, "start-time should be in the format like '2006-01-02 15:04:05' or '2006-01-02T15:04:05'", false
+			return "start-time should be in the format like '2006-01-02 15:04:05' or '2006-01-02T15:04:05'", false
 		}
-	}
-
-	subTaskCfgs := s.scheduler.GetSubTaskCfgsByTaskAndSource(req.TaskName, req.Sources)
-	if len(subTaskCfgs) == 0 {
-		if req.TaskName == "" {
-			return nil, fmt.Sprintf("fail to get subtask config by sources `%v`", req.Sources), false
-		}
-		return nil, fmt.Sprintf("fail to get subtask config by task name `%s` and sources `%v`",
-			req.TaskName, req.Sources), false
 	}
 
 	var enabledValidator string
@@ -2683,30 +2675,31 @@ func (s *Server) checkStartValidationParams(req *pb.StartValidationRequest) (
 		}
 	}
 
-	// if user set mode or start-time explicitly, then we do start operation.
+	// if user set mode or start-time explicitly, then we do enable operation.
 	// none of the target validators should have enabled
 	if explicitModeOrStartTime && !noneEnabled {
-		msg := fmt.Sprintf("some of target validator(%s) has already enabled.", enabledValidator)
+		msg := fmt.Sprintf("some of target validator(%s) has already enabled, so we can't enable them in one command",
+			enabledValidator)
 		if allEnabled {
 			msg = "all target validator has enabled, cannot do 'validation start' with explicit mode or start-time"
 		}
-		return nil, msg, false
+		return msg, false
 	}
 	// no explicit mode or start-time:
-	// - do resume when all have enabled
-	// - do start when none enabled
+	// - do start when all have enabled
+	// - do enable when none enabled
 	if !explicitModeOrStartTime && !allEnabled && !noneEnabled {
-		return nil, fmt.Sprintf("some of target validator(%s) has already enabled.", enabledValidator), false
+		return fmt.Sprintf("some of target validator(%s) has already enabled, so we can't enable or start them in one command",
+			enabledValidator), false
 	}
 
-	return subTaskCfgs, "", true
+	return "", true
 }
 
 func (s *Server) StartValidation(ctx context.Context, req *pb.StartValidationRequest) (*pb.StartValidationResponse, error) {
 	var (
-		resp2       *pb.StartValidationResponse
-		err, err2   error
-		subTaskCfgs map[string]map[string]config.SubTaskConfig // task-name->sourceID->*config.SubTaskConfig
+		resp2     *pb.StartValidationResponse
+		err, err2 error
 	)
 	shouldRet := s.sharedLogic(ctx, req, &resp2, &err2)
 	if shouldRet {
@@ -2714,7 +2707,28 @@ func (s *Server) StartValidation(ctx context.Context, req *pb.StartValidationReq
 	}
 	resp := &pb.StartValidationResponse{}
 
-	subTaskCfgs, msg, ok := s.checkStartValidationParams(req)
+	subTaskCfgs := s.scheduler.GetSubTaskCfgsByTaskAndSource(req.TaskName, req.Sources)
+	if len(subTaskCfgs) == 0 {
+		if req.TaskName == "" {
+			resp.Msg = fmt.Sprintf("cannot get subtask by sources `%v`", req.Sources)
+		} else {
+			resp.Msg = fmt.Sprintf("cannot get subtask by task name `%s` and sources `%v`",
+				req.TaskName, req.Sources)
+		}
+		return resp, nil
+	}
+
+	for taskName := range subTaskCfgs {
+		release, err3 := s.scheduler.AcquireSubtaskLatch(taskName)
+		if err3 != nil {
+			resp.Msg = err3.Error()
+			// nolint:nilerr
+			return resp, nil
+		}
+		defer release()
+	}
+
+	msg, ok := s.checkStartValidationParams(subTaskCfgs, req)
 	if !ok {
 		resp.Msg = msg
 		return resp, nil
@@ -2725,7 +2739,6 @@ func (s *Server) StartValidation(ctx context.Context, req *pb.StartValidationReq
 		mode = req.GetModeValue()
 	}
 	startTime := req.GetStartTimeValue()
-	tasks := make([]string, 0)
 	changedSubtaskCfgs := make([]config.SubTaskConfig, 0)
 	validatorStages := make([]ha.Stage, 0)
 	for taskName := range subTaskCfgs {
@@ -2745,10 +2758,9 @@ func (s *Server) StartValidation(ctx context.Context, req *pb.StartValidationReq
 			subTaskCfgs[taskName][sourceID] = cfg
 			validatorStages = append(validatorStages, ha.NewValidatorStage(pb.Stage_Running, cfg.SourceID, cfg.Name))
 		}
-		tasks = append(tasks, taskName)
 	}
 
-	err = s.scheduler.OperateValidationTask(tasks, validatorStages, changedSubtaskCfgs)
+	err = s.scheduler.OperateValidationTask(validatorStages, changedSubtaskCfgs)
 	if err != nil {
 		resp.Msg = err.Error()
 		// nolint:nilerr
@@ -2772,13 +2784,23 @@ func (s *Server) StopValidation(ctx context.Context, req *pb.StopValidationReque
 	resp := &pb.StopValidationResponse{}
 	subTaskCfgs = s.scheduler.GetSubTaskCfgsByTaskAndSource(req.TaskName, req.Sources)
 	if len(subTaskCfgs) == 0 {
-		msg := fmt.Sprintf("fail to get subtask config by task name `%s` and sources `%v`", req.TaskName, req.Sources)
+		msg := fmt.Sprintf("cannot get subtask by task name `%s` and sources `%v`", req.TaskName, req.Sources)
 		if req.TaskName == "" {
-			msg = fmt.Sprintf("fail to get subtask config by sources `%v`", req.Sources)
+			msg = fmt.Sprintf("cannot get subtask by sources `%v`", req.Sources)
 		}
 		resp.Msg = msg
 		// nolint:nilerr
 		return resp, nil
+	}
+
+	for taskName := range subTaskCfgs {
+		release, err3 := s.scheduler.AcquireSubtaskLatch(taskName)
+		if err3 != nil {
+			resp.Msg = err3.Error()
+			// nolint:nilerr
+			return resp, nil
+		}
+		defer release()
 	}
 
 	var unEnabledValidator string
@@ -2796,16 +2818,14 @@ func (s *Server) StopValidation(ctx context.Context, req *pb.StopValidationReque
 		return resp, nil
 	}
 
-	tasks := make([]string, 0)
 	validatorStages := make([]ha.Stage, 0)
 	for taskName := range subTaskCfgs {
 		for _, cfg := range subTaskCfgs[taskName] {
 			log.L().Info("stop validator", zap.String("task", taskName), zap.String("source", cfg.SourceID))
 			validatorStages = append(validatorStages, ha.NewValidatorStage(pb.Stage_Stopped, cfg.SourceID, cfg.Name))
 		}
-		tasks = append(tasks, taskName)
 	}
-	err = s.scheduler.OperateValidationTask(tasks, validatorStages, []config.SubTaskConfig{})
+	err = s.scheduler.OperateValidationTask(validatorStages, []config.SubTaskConfig{})
 	if err != nil {
 		resp.Result = false
 		resp.Msg = err.Error()
@@ -2844,7 +2864,7 @@ func (s *Server) GetValidationStatus(ctx context.Context, req *pb.GetValidationS
 	subTaskCfgs = s.scheduler.GetSubTaskCfgsByTaskAndSource(req.TaskName, []string{})
 	if len(subTaskCfgs) == 0 {
 		resp.Result = false
-		resp.Msg = fmt.Sprintf("fail to get subtask config by task name `%s`", req.TaskName)
+		resp.Msg = fmt.Sprintf("cannot get subtask by task name `%s`", req.TaskName)
 		// nolint:nilerr
 		return resp, nil
 	}
@@ -2906,7 +2926,7 @@ func (s *Server) GetValidationError(ctx context.Context, req *pb.GetValidationEr
 	subTaskCfgs = s.scheduler.GetSubTaskCfgsByTaskAndSource(req.TaskName, []string{})
 	if len(subTaskCfgs) == 0 {
 		resp.Result = false
-		resp.Msg = fmt.Sprintf("fail to get subtask config by task name `%s`", req.TaskName)
+		resp.Msg = fmt.Sprintf("cannot get subtask by task name `%s`", req.TaskName)
 		// nolint:nilerr
 		return resp, nil
 	}
@@ -2961,7 +2981,7 @@ func (s *Server) OperateValidationError(ctx context.Context, req *pb.OperateVali
 	subTaskCfgs = s.scheduler.GetSubTaskCfgsByTaskAndSource(req.TaskName, []string{})
 	if len(subTaskCfgs) == 0 {
 		resp.Result = false
-		resp.Msg = fmt.Sprintf("fail to get subtask config by task name `%s`", req.TaskName)
+		resp.Msg = fmt.Sprintf("cannot get subtask by task name `%s`", req.TaskName)
 		// nolint:nilerr
 		return resp, nil
 	}

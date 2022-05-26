@@ -147,7 +147,7 @@ func (t *testSchedulerSuite) testSchedulerProgress(restart int) {
 	require.True(t.T(), terror.ErrSchedulerNotStarted.Equal(s.RemoveWorker(workerName1)))
 	require.True(t.T(), terror.ErrSchedulerNotStarted.Equal(s.UpdateExpectRelayStage(pb.Stage_Running, sourceID1)))
 	require.True(t.T(), terror.ErrSchedulerNotStarted.Equal(s.UpdateExpectSubTaskStage(pb.Stage_Running, taskName1, sourceID1)))
-	require.True(t.T(), terror.ErrSchedulerNotStarted.Equal(s.OperateValidationTask(nil, nil, nil)))
+	require.True(t.T(), terror.ErrSchedulerNotStarted.Equal(s.OperateValidationTask(nil, nil)))
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -2007,20 +2007,19 @@ func (t *testSchedulerSuite) TestOperateValidatorTask() {
 	require.NoError(t.T(), s.AddSubTasks(false, pb.Stage_Running, subtaskCfg)) // create new subtask without validation
 	t.subTaskCfgExist(s, subtaskCfg)
 	subtaskCfg.ValidatorCfg.Mode = config.ValidationFull // set mode
-	tasks := []string{subtaskCfg.Name}
 	validatorStages := []ha.Stage{ha.NewValidatorStage(pb.Stage_Running, subtaskCfg.SourceID, subtaskCfg.Name)}
 	changedCfgs := []config.SubTaskConfig{subtaskCfg}
-	require.NoError(t.T(), s.OperateValidationTask(tasks, validatorStages, changedCfgs)) // create validator task
+	require.NoError(t.T(), s.OperateValidationTask(validatorStages, changedCfgs))        // create validator task
 	t.validatorStageMatch(s, subtaskCfg.Name, subtaskCfg.SourceID, pb.Stage_Running)     // task running
 	t.validatorModeMatch(s, subtaskCfg.Name, subtaskCfg.SourceID, config.ValidationFull) // succeed to change mode
 
 	// CASE 2: stop running subtask
 	validatorStages = []ha.Stage{ha.NewValidatorStage(pb.Stage_Stopped, subtaskCfg.SourceID, subtaskCfg.Name)}
 	changedCfgs = []config.SubTaskConfig{}
-	require.NoError(t.T(), s.OperateValidationTask(tasks, validatorStages, changedCfgs))
-	t.validatorStageMatch(s, subtaskCfg.Name, subtaskCfg.SourceID, pb.Stage_Stopped)     // task stopped
-	require.NoError(t.T(), s.OperateValidationTask(tasks, validatorStages, changedCfgs)) // stop stopped validator task with no error
-	t.validatorStageMatch(s, subtaskCfg.Name, subtaskCfg.SourceID, pb.Stage_Stopped)     // stage not changed
+	require.NoError(t.T(), s.OperateValidationTask(validatorStages, changedCfgs))
+	t.validatorStageMatch(s, subtaskCfg.Name, subtaskCfg.SourceID, pb.Stage_Stopped) // task stopped
+	require.NoError(t.T(), s.OperateValidationTask(validatorStages, changedCfgs))    // stop stopped validator task with no error
+	t.validatorStageMatch(s, subtaskCfg.Name, subtaskCfg.SourceID, pb.Stage_Stopped) // stage not changed
 }
 
 func (t *testSchedulerSuite) TestUpdateSubTasksAndSourceCfg() {
