@@ -31,7 +31,7 @@ func NewOpenAPI(c *capture.Capture) *OpenAPIV2 {
 
 // RegisterOpenAPIRoutes registers routes for OpenAPI
 func RegisterOpenAPIRoutes(router *gin.Engine, api *OpenAPIV2) {
-	v1 := router.Group("/api/v2")
+	v2 := router.Group("/api/v2")
 
 	v1.Use(middleware.LogMiddleware())
 	v1.Use(middleware.ErrorHandleMiddleware())
