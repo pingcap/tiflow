@@ -170,7 +170,7 @@ func ExtractPos(pos gmysql.Position, uuids []string) (uuidWithSuffix string, rel
 	// use the latest
 	var suffixInt int
 	uuid := uuids[len(uuids)-1]
-	_, suffixInt, err = utils.ParseSuffixFromRelaySubDir(uuid)
+	_, suffixInt, err = utils.ParseRelaySubDir(uuid)
 	if err != nil {
 		return
 	}

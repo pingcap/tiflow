@@ -25,9 +25,9 @@ type testHubSuite struct{}
 
 func (t *testHubSuite) TestRelayLogInfo(c *C) {
 	rli1 := RelayLogInfo{}
-	rli1.UUIDSuffix = 1
+	rli1.SubDirSuffix = 1
 	rli2 := RelayLogInfo{}
-	rli2.UUIDSuffix = 2
+	rli2.SubDirSuffix = 2
 
 	// compare by UUIDSuffix
 	c.Assert(rli1.Earlier(&rli1), IsFalse)
@@ -37,7 +37,7 @@ func (t *testHubSuite) TestRelayLogInfo(c *C) {
 
 	// compare by filename
 	rli3 := RelayLogInfo{}
-	rli3.UUIDSuffix = 1
+	rli3.SubDirSuffix = 1
 
 	rli1.Filename = "mysql-bin.000001"
 	rli3.Filename = "mysql-bin.000001" // equal

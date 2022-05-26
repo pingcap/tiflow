@@ -71,7 +71,7 @@ func (t *testUtilsSuite) TestSuffixForUUID(c *C) {
 		uuidWS := AddSuffixForUUID(cs.uuid, cs.ID)
 		c.Assert(uuidWS, Equals, cs.uuidWithSuffix)
 
-		uuidWOS, id, err := ParseSuffixFromRelaySubDir(cs.uuidWithSuffix)
+		uuidWOS, id, err := ParseRelaySubDir(cs.uuidWithSuffix)
 		c.Assert(err, IsNil)
 		c.Assert(uuidWOS, Equals, cs.uuid)
 		c.Assert(id, Equals, cs.ID)
@@ -81,16 +81,16 @@ func (t *testUtilsSuite) TestSuffixForUUID(c *C) {
 		c.Assert(hasSuffix, Equals, true)
 	}
 
-	_, _, err := ParseSuffixFromRelaySubDir("uuid-with-out-suffix")
+	_, _, err := ParseRelaySubDir("uuid-with-out-suffix")
 	c.Assert(err, NotNil)
 
-	_, _, err = ParseSuffixFromRelaySubDir("uuid-invalid-suffix-len.01")
+	_, _, err = ParseRelaySubDir("uuid-invalid-suffix-len.01")
 	c.Assert(err, NotNil)
 
-	_, _, err = ParseSuffixFromRelaySubDir("uuid-invalid-suffix-fmt.abc")
+	_, _, err = ParseRelaySubDir("uuid-invalid-suffix-fmt.abc")
 	c.Assert(err, NotNil)
 
-	_, _, err = ParseSuffixFromRelaySubDir("uuid-invalid-fmt.abc.000001")
+	_, _, err = ParseRelaySubDir("uuid-invalid-fmt.abc.000001")
 	c.Assert(err, NotNil)
 }
 

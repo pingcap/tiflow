@@ -30,17 +30,17 @@ var (
 
 // RelayLogInfo represents information for relay log.
 type RelayLogInfo struct {
-	TaskName   string
-	SubDir     string
-	UUIDSuffix int
-	Filename   string
+	TaskName     string
+	SubDir       string
+	SubDirSuffix int
+	Filename     string
 }
 
 // Earlier checks whether this relay log file is earlier than the other.
 func (info *RelayLogInfo) Earlier(other *RelayLogInfo) bool {
-	if info.UUIDSuffix < other.UUIDSuffix {
+	if info.SubDirSuffix < other.SubDirSuffix {
 		return true
-	} else if info.UUIDSuffix > other.UUIDSuffix {
+	} else if info.SubDirSuffix > other.SubDirSuffix {
 		return false
 	}
 	return strings.Compare(info.Filename, other.Filename) < 0
@@ -64,7 +64,7 @@ func newRelayLogInfoHub() *relayLogInfoHub {
 }
 
 func (h *relayLogInfoHub) update(taskName, subDir, filename string) error {
-	_, suffix, err := utils.ParseSuffixFromRelaySubDir(subDir)
+	_, suffix, err := utils.ParseRelaySubDir(subDir)
 	if err != nil {
 		return err
 	}
@@ -74,10 +74,10 @@ func (h *relayLogInfoHub) update(taskName, subDir, filename string) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.logs[taskName] = RelayLogInfo{
-		TaskName:   taskName,
-		SubDir:     subDir,
-		UUIDSuffix: suffix,
-		Filename:   filename,
+		TaskName:     taskName,
+		SubDir:       subDir,
+		SubDirSuffix: suffix,
+		Filename:     filename,
 	}
 	return nil
 }

@@ -47,7 +47,7 @@ func getNextRelaySubDir(currSubDir string, subDirs []string) (string, string, er
 	for i := len(subDirs) - 2; i >= 0; i-- {
 		if subDirs[i] == currSubDir {
 			nextSubDir := subDirs[i+1]
-			_, suffixInt, err := utils.ParseSuffixFromRelaySubDir(nextSubDir)
+			_, suffixInt, err := utils.ParseRelaySubDir(nextSubDir)
 			if err != nil {
 				return "", "", terror.Annotatef(err, "UUID %s", nextSubDir)
 			}

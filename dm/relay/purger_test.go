@@ -41,10 +41,10 @@ var _ = Suite(&testPurgerSuite{
 		{"mysql-bin.000001", "mysql-bin.000002", "mysql-bin.000003"},
 	},
 	activeRelayLog: &streamer.RelayLogInfo{
-		TaskName:   fakeStrategyTaskName,
-		SubDir:     "e9540a0d-f16d-11e8-8cb7-0242ac130008.000002",
-		UUIDSuffix: 2,
-		Filename:   "mysql-bin.000003", // last in second sub dir
+		TaskName:     fakeStrategyTaskName,
+		SubDir:       "e9540a0d-f16d-11e8-8cb7-0242ac130008.000002",
+		SubDirSuffix: 2,
+		Filename:     "mysql-bin.000003", // last in second sub dir
 	},
 })
 

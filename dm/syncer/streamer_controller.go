@@ -114,7 +114,7 @@ type StreamerController struct {
 
 	fromDB *dbconn.UpStreamConn
 
-	uuidSuffix string
+	relaySubDirSuffix string
 
 	closed bool
 
@@ -284,15 +284,16 @@ func (c *StreamerController) GetEvent(tctx *tcontext.Context) (event *replicatio
 
 	switch ev := event.Event.(type) {
 	case *replication.RotateEvent:
-		// if is local binlog, binlog's name contain uuid information, need to save it
-		// if is remote binlog, need to add uuid information in binlog's name (?)
-		uuidSuffix := c.extractRelaySubDirSuffix(string(ev.NextLogName))
-		if len(uuidSuffix) != 0 {
+		// if is local binlog but switch to remote on error, need to add uuid information in binlog's name
+		relaySubDirSuffix := c.extractRelaySubDirSuffix(string(ev.NextLogName))
+		if relaySubDirSuffix != "" {
+			c.relaySubDirSuffix = relaySubDirSuffix
+		} else if c.relaySubDirSuffix != "" {
 			filename, err := binlog.ParseFilename(string(ev.NextLogName))
 			if err != nil {
 				return nil, terror.Annotate(err, "fail to parse binlog file name from rotate event")
 			}
-			ev.NextLogName = []byte(binlog.ConstructFilenameWithUUIDSuffix(filename, uuidSuffix))
+			ev.NextLogName = []byte(binlog.ConstructFilenameWithUUIDSuffix(filename, c.relaySubDirSuffix))
 			event.Event = ev
 		}
 	default:

@@ -78,8 +78,8 @@ func SuffixIntToStr(id int) string {
 	return fmt.Sprintf("%06d", id)
 }
 
-// ParseSuffixFromRelaySubDir parses relay log subdirectory name to (server UUID, RelaySubDirSuffix) pair.
-func ParseSuffixFromRelaySubDir(uuid string) (string, int, error) {
+// ParseRelaySubDir parses relay log subdirectory name to (server UUID, RelaySubDirSuffix) pair.
+func ParseRelaySubDir(uuid string) (string, int, error) {
 	parts := strings.Split(uuid, uuidIndexSeparator)
 	if len(parts) != 2 || len(parts[1]) != 6 {
 		return "", 0, terror.ErrRelayParseUUIDSuffix.Generate(uuid)
