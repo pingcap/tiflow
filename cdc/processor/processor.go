@@ -211,9 +211,9 @@ func (p *processor) AddTable(
 }
 
 // RemoveTable implements TableExecutor interface.
-func (p *processor) RemoveTable(ctx context.Context, tableID model.TableID) (bool, error) {
+func (p *processor) RemoveTable(ctx context.Context, tableID model.TableID) bool {
 	if !p.checkReadyForMessages() {
-		return false, nil
+		return false
 	}
 
 	table, ok := p.tables[tableID]
@@ -222,7 +222,7 @@ func (p *processor) RemoveTable(ctx context.Context, tableID model.TableID) (boo
 			zap.String("namespace", p.changefeedID.Namespace),
 			zap.String("changefeed", p.changefeedID.ID),
 			zap.Int64("tableID", tableID))
-		return true, nil
+		return true
 	}
 
 	boundaryTs := p.changefeed.Status.CheckpointTs
@@ -234,9 +234,9 @@ func (p *processor) RemoveTable(ctx context.Context, tableID model.TableID) (boo
 			zap.String("changefeed", p.changefeedID.ID),
 			zap.Uint64("checkpointTs", table.CheckpointTs()),
 			zap.Int64("tableID", tableID))
-		return false, nil
+		return false
 	}
-	return true, nil
+	return true
 }
 
 // IsAddTableFinished implements TableExecutor interface.
@@ -361,6 +361,15 @@ func (p *processor) GetAllCurrentTables() []model.TableID {
 // GetCheckpoint implements TableExecutor interface.
 func (p *processor) GetCheckpoint() (checkpointTs, resolvedTs model.Ts) {
 	return p.checkpointTs, p.resolvedTs
+}
+
+func (p *processor) GetTable(tableID model.TableID) (checkpointTs, resolvedTs model.Ts, status pipeline.TableStatus) {
+	table, ok := p.tables[tableID]
+	if !ok {
+		log.Panic("table not found", zap.Any("tableID", tableID))
+	}
+
+	return table.CheckpointTs(), table.ResolvedTs(), table.Status()
 }
 
 // newProcessor creates a new processor

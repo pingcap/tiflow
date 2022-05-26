@@ -49,6 +49,8 @@ const (
 	TableStatusPrepared
 	// TableStatusReplicating means that sink is consuming data from the sorter, and replicating it to downstream
 	TableStatusReplicating
+	// TableStatusStopping means the table is stopping, but not guaranteed yet.
+	TableStatusStopping
 	// TableStatusStopped means sink stop all works.
 	TableStatusStopped
 )
@@ -57,6 +59,7 @@ var tableStatusStringMap = map[TableStatus]string{
 	TableStatusPreparing:   "Preparing",
 	TableStatusPrepared:    "Prepared",
 	TableStatusReplicating: "Replicating",
+	TableStatusStopping:    "Stopping",
 	TableStatusStopped:     "Stopped",
 }
 

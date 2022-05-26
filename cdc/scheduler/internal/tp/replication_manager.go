@@ -23,8 +23,8 @@ import (
 
 type callback func()
 
-// burstBalance for changefeed set up or unplaned TiCDC node failure.
-// TiCDC needs to balance intrrupted tables as soon as possible.
+// burstBalance for changefeed set up or unplanned TiCDC node failure.
+// TiCDC needs to balance interrupted tables as soon as possible.
 type burstBalance struct {
 	// Add tables to captures
 	Tables map[model.TableID]model.CaptureID
@@ -194,7 +194,7 @@ func (r *replicationManager) HandleTasks(
 			continue
 		}
 
-		// Check if accpeting one more task exceeds maxTaskConcurrency.
+		// Check if accepting one more task exceeds maxTaskConcurrency.
 		if len(r.runningTasks)+1 > r.maxTaskConcurrency {
 			log.Debug("tpcheduler: too many running task")
 			// Does not use break, in case there is burst balance task

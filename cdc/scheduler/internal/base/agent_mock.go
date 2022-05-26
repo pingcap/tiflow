@@ -19,6 +19,7 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/processor/pipeline"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/base/protocol"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -135,14 +136,14 @@ func (e *MockTableExecutor) AddTable(
 }
 
 // RemoveTable removes a table from the executor.
-func (e *MockTableExecutor) RemoveTable(ctx context.Context, tableID model.TableID) (bool, error) {
+func (e *MockTableExecutor) RemoveTable(ctx context.Context, tableID model.TableID) bool {
 	log.Info("RemoveTable", zap.Int64("tableID", tableID))
 	args := e.Called(ctx, tableID)
 	require.Contains(e.t, e.Running, tableID)
 	require.NotContains(e.t, e.Removing, tableID)
 	delete(e.Running, tableID)
 	e.Removing[tableID] = struct{}{}
-	return args.Bool(0), args.Error(1)
+	return args.Bool(0)
 }
 
 // IsAddTableFinished determines if the table has been added.
@@ -180,4 +181,8 @@ func (e *MockTableExecutor) GetAllCurrentTables() []model.TableID {
 func (e *MockTableExecutor) GetCheckpoint() (checkpointTs, resolvedTs model.Ts) {
 	args := e.Called()
 	return args.Get(0).(model.Ts), args.Get(1).(model.Ts)
+}
+
+func (e *MockTableExecutor) GetTable(tableID model.TableID) (checkpointTs, resolvedTs model.Ts, status pipeline.TableStatus) {
+	return 0, 0, status
 }

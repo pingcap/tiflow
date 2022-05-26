@@ -345,7 +345,7 @@ func TestTableExecutorAddingTableDirectly(t *testing.T) {
 	require.Nil(t, err)
 	tester.MustApplyPatches()
 
-	ok, err = p.RemoveTable(ctx, 3)
+	ok = p.RemoveTable(ctx, 3)
 	require.Nil(t, err)
 	require.True(t, ok)
 
