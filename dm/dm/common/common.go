@@ -125,7 +125,8 @@ func keyAdapterKeysLen(s KeyAdapter) int {
 	case ShardDDLOptimismDroppedColumnsKeyAdapter:
 		return 5
 	// used in upgrading
-	case UpstreamConfigKeyAdapterV1, StageRelayKeyAdapterV1:
+	case UpstreamConfigKeyAdapterV1, StageRelayKeyAdapterV1, UpstreamBoundWorkerKeyAdapterV1,
+		UpstreamLastBoundWorkerKeyAdapterV1, UpstreamRelayWorkerKeyAdapterV1:
 		return 1
 	}
 	return -1
