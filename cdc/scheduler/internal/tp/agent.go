@@ -33,13 +33,6 @@ import (
 	"go.uber.org/zap"
 )
 
-const (
-	getOwnerFromEtcdTimeout         = time.Second * 5
-	messageHandlerOperationsTimeout = time.Second * 5
-	barrierNotAdvancingWarnDuration = time.Second * 10
-	printWarnLogMinInterval         = time.Second * 1
-)
-
 var _ internal.Agent = (*agent)(nil)
 
 type agent struct {
@@ -57,15 +50,11 @@ type agent struct {
 	ownerInfo *ownerInfo
 
 	// maintain capture information
-	epoch schedulepb.ProcessorEpoch
-	// todo: shall we maintain this?
+	epoch        schedulepb.ProcessorEpoch
 	captureID    model.CaptureID
 	changeFeedID model.ChangeFeedID
 
 	reject bool
-
-	// todo: these fields need to be revised
-	barrierSeqs map[p2p.Topic]p2p.Seq
 }
 
 type ownerInfo struct {
@@ -75,13 +64,14 @@ type ownerInfo struct {
 }
 
 func NewAgent(ctx context.Context,
+	captureID model.CaptureID,
 	changeFeedID model.ChangeFeedID,
 	messageServer *p2p.MessageServer,
 	messageRouter p2p.MessageRouter,
 	etcdClient *etcd.CDCEtcdClient,
 	tableExecutor internal.TableExecutor) (internal.Agent, error) {
 	result := &agent{
-		epoch:        schedulepb.ProcessorEpoch{Epoch: uuid.New().String()},
+		captureID:    captureID,
 		changeFeedID: changeFeedID,
 		tableExec:    tableExecutor,
 		pendingTasks: deque.NewDeque(),
@@ -101,11 +91,10 @@ func NewAgent(ctx context.Context,
 		zap.String("changefeed", changeFeedID.ID),
 		zap.Duration("sendCheckpointTsInterval", flushInterval))
 
-	//result.Agent = base.NewBaseAgent(changeFeedID, tableExecutor, result, &base.AgentConfig{SendCheckpointTsInterval: flushInterval})
-	etcdCliCtx, cancel := context.WithTimeout(ctx, getOwnerFromEtcdTimeout)
+	etcdCliCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	captureID, err := etcdClient.GetOwnerID(etcdCliCtx, etcd.CaptureOwnerKey)
+	ownerCaptureID, err := etcdClient.GetOwnerID(etcdCliCtx, etcd.CaptureOwnerKey)
 	if err != nil {
 		if err != concurrency.ErrElectionNoLeader {
 			return nil, err
@@ -138,10 +127,11 @@ func NewAgent(ctx context.Context,
 		return nil, err
 	}
 
+	result.resetEpoch()
 	result.ownerInfo = &ownerInfo{
 		// todo: how to get owner's `version` ?
 		version:   "",
-		captureID: captureID,
+		captureID: ownerCaptureID,
 		revision:  revision,
 	}
 	return result, nil
@@ -186,7 +176,7 @@ func (a *agent) handleMessage(msg []*schedulepb.Message) ([]*schedulepb.Message,
 		if !a.updateOwnerInfo(ownerCaptureID, ownerVersion, ownerRevision) {
 			continue
 		}
-		if a.epoch.Epoch == processorEpoch.Epoch {
+		if a.epoch != processorEpoch {
 			log.Info("agent: dispatch table request epoch does not match, ignore it",
 				zap.Any("epoch", processorEpoch),
 				zap.Any("expected", a.epoch))
@@ -195,13 +185,13 @@ func (a *agent) handleMessage(msg []*schedulepb.Message) ([]*schedulepb.Message,
 
 		switch message.GetMsgType() {
 		case schedulepb.MsgDispatchTableRequest:
-			a.handleMessageDispatchTableRequest(message.DispatchTableRequest, ownerCaptureID, processorEpoch)
+			a.handleMessageDispatchTableRequest(message.DispatchTableRequest, processorEpoch)
 		case schedulepb.MsgHeartbeat:
 			response := a.handleMessageHeartbeat()
 			result = append(result, response)
 		case schedulepb.MsgUnknown:
 		default:
-			log.Warn("unknown message received")
+			log.Warn("unknown message received", zap.Any("message", message))
 		}
 	}
 
@@ -226,9 +216,12 @@ func tableStatus2PB(status pipeline.TableStatus) schedulepb.TableState {
 
 func newTableStatus(meta *pipeline.TableMeta) schedulepb.TableStatus {
 	return schedulepb.TableStatus{
-		TableID:    meta.TableID,
-		State:      tableStatus2PB(meta.Status),
-		Checkpoint: schedulepb.Checkpoint{CheckpointTs: meta.CheckpointTs, ResolvedTs: meta.ResolvedTs},
+		TableID: meta.TableID,
+		State:   tableStatus2PB(meta.Status),
+		Checkpoint: schedulepb.Checkpoint{
+			CheckpointTs: meta.CheckpointTs,
+			ResolvedTs:   meta.ResolvedTs,
+		},
 	}
 }
 
@@ -274,32 +267,27 @@ type dispatchTableTask struct {
 	IsPrepare bool
 	Epoch     schedulepb.ProcessorEpoch
 
-	// FromOwnerID is for debugging purposesFromOwnerID
-	FromOwnerID model.CaptureID
-
 	status dispatchTableTaskStatus
 }
 
-func (a *agent) handleMessageDispatchTableRequest(request *schedulepb.DispatchTableRequest, from model.CaptureID, epoch schedulepb.ProcessorEpoch) {
+func (a *agent) handleMessageDispatchTableRequest(request *schedulepb.DispatchTableRequest, epoch schedulepb.ProcessorEpoch) {
 	var task *dispatchTableTask
 	switch req := request.Request.(type) {
 	case *schedulepb.DispatchTableRequest_AddTable:
 		task = &dispatchTableTask{
-			TableID:     req.AddTable.GetTableID(),
-			StartTs:     req.AddTable.GetCheckpoint().GetCheckpointTs(),
-			IsRemove:    false,
-			IsPrepare:   req.AddTable.GetIsSecondary(),
-			Epoch:       epoch,
-			FromOwnerID: from,
-			status:      dispatchTableTaskReceived,
+			TableID:   req.AddTable.GetTableID(),
+			StartTs:   req.AddTable.GetCheckpoint().GetCheckpointTs(),
+			IsRemove:  false,
+			IsPrepare: req.AddTable.GetIsSecondary(),
+			Epoch:     epoch,
+			status:    dispatchTableTaskReceived,
 		}
 	case *schedulepb.DispatchTableRequest_RemoveTable:
 		task = &dispatchTableTask{
-			TableID:     req.RemoveTable.GetTableID(),
-			IsRemove:    true,
-			Epoch:       epoch,
-			FromOwnerID: from,
-			status:      dispatchTableTaskReceived,
+			TableID:  req.RemoveTable.GetTableID(),
+			IsRemove: true,
+			Epoch:    epoch,
+			status:   dispatchTableTaskReceived,
 		}
 	default:
 		log.Warn("agent: ignore unknown dispatch table request",
@@ -381,14 +369,11 @@ func (a *agent) handleAddTableTask(ctx context.Context, task *dispatchTableTask)
 		task.status = dispatchTableTaskProcessed
 	}
 
-	if task.status == dispatchTableTaskProcessed {
-		done := a.tableExec.IsAddTableFinished(ctx, task.TableID, task.IsPrepare)
-		if !done {
-			// not finished yet, do not return any message since the state is not stable now.
-			return nil, nil
-		}
+	done := a.tableExec.IsAddTableFinished(ctx, task.TableID, task.IsPrepare)
+	if !done {
+		// not finished yet, do not return any message since the state is not stable now.
+		return nil, nil
 	}
-
 	// must be finished here
 	log.Info("finish processing add table task", zap.Any("task", task))
 
@@ -465,7 +450,8 @@ func (a *agent) GetLastSentCheckpointTs() (checkpointTs model.Ts) {
 
 // Close implement agent interface
 func (a *agent) Close() error {
-	return nil
+	log.Debug("agent: closing")
+	return a.trans.Close()
 }
 
 func (a *agent) newCheckpointMessage() *schedulepb.Message {
@@ -529,6 +515,8 @@ func (a *agent) updateOwnerInfo(id model.CaptureID, version string, revision int
 	a.ownerInfo.revision = revision
 	a.ownerInfo.version = version
 
+	a.resetEpoch()
+
 	log.Info("new owner in power, drop pending dispatch table tasks",
 		zap.Any("owner", a.ownerInfo),
 		zap.Int("droppedTaskCount", a.pendingTasks.Len()))
@@ -538,4 +526,8 @@ func (a *agent) updateOwnerInfo(id model.CaptureID, version string, revision int
 	// so it is okay to lose them.
 	a.pendingTasks = deque.NewDeque()
 	return true
+}
+
+func (a *agent) resetEpoch() {
+	a.epoch = schedulepb.ProcessorEpoch{Epoch: uuid.New().String()}
 }
