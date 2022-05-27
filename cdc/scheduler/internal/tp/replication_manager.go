@@ -69,10 +69,51 @@ func newReplicationManager(maxTaskConcurrency int) *replicationManager {
 	}
 }
 
+func (r *replicationManager) HandleCaptureChanges(
+	changes *captureChanges,
+) ([]*schedulepb.Message, error) {
+	if changes.Init != nil {
+		if len(r.tables) != 0 {
+			log.Panic("tpscheduler: init again",
+				zap.Any("init", changes.Init), zap.Any("tables", r.tables))
+		}
+		tableStatus := map[model.TableID]map[model.CaptureID]*schedulepb.TableStatus{}
+		for captureID, tables := range changes.Init {
+			for i := range tables {
+				table := tables[i]
+				if _, ok := tableStatus[table.TableID]; !ok {
+					tableStatus[table.TableID] = map[string]*schedulepb.TableStatus{}
+				}
+				tableStatus[table.TableID][captureID] = &table
+			}
+		}
+		for tableID, status := range tableStatus {
+			table, err := newReplicationSet(tableID, status)
+			if err != nil {
+				return nil, errors.Trace(err)
+			}
+			r.tables[tableID] = table
+		}
+	}
+	sentMsgs := make([]*schedulepb.Message, 0)
+	if changes.Removed != nil {
+		for _, table := range r.tables {
+			for captureID := range changes.Removed {
+				msgs, err := table.handleCaptureShutdown(captureID)
+				if err != nil {
+					return nil, errors.Trace(err)
+				}
+				sentMsgs = append(sentMsgs, msgs...)
+			}
+		}
+	}
+	return sentMsgs, nil
+}
+
 func (r *replicationManager) HandleMessage(
 	msgs []*schedulepb.Message,
 ) ([]*schedulepb.Message, error) {
-	sentMegs := make([]*schedulepb.Message, 0)
+	sentMsgs := make([]*schedulepb.Message, 0)
 	for i := range msgs {
 		msg := msgs[i]
 		switch msg.MsgType {
@@ -81,16 +122,19 @@ func (r *replicationManager) HandleMessage(
 			if err != nil {
 				return nil, errors.Trace(err)
 			}
-			sentMegs = append(sentMegs, msgs...)
+			sentMsgs = append(sentMsgs, msgs...)
 		case schedulepb.MsgHeartbeatResponse:
 			msgs, err := r.handleMessageHeartbeatResponse(msg.From, msg.HeartbeatResponse)
 			if err != nil {
 				return nil, errors.Trace(err)
 			}
-			sentMegs = append(sentMegs, msgs...)
+			sentMsgs = append(sentMsgs, msgs...)
+		default:
+			log.Warn("tpscheduler: ignore message",
+				zap.Stringer("type", msg.MsgType), zap.Any("message", msg))
 		}
 	}
-	return sentMegs, nil
+	return sentMsgs, nil
 }
 
 func (r *replicationManager) handleMessageHeartbeatResponse(

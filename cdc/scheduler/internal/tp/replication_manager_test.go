@@ -458,3 +458,38 @@ func TestReplicationManagerMaxTaskConcurrency(t *testing.T) {
 	require.Nil(t, err)
 	require.Len(t, msgs, 0)
 }
+
+func TestReplicationManagerHandleCaptureChanges(t *testing.T) {
+	t.Parallel()
+
+	r := newReplicationManager(1)
+	changes := captureChanges{Init: map[model.CaptureID][]schedulepb.TableStatus{
+		"1": {{TableID: 1, State: schedulepb.TableStateReplicating}},
+		"2": {{TableID: 2, State: schedulepb.TableStateReplicating}},
+		"3": {
+			{TableID: 3, State: schedulepb.TableStateReplicating},
+			{TableID: 2, State: schedulepb.TableStatePreparing},
+		},
+		"4": {{TableID: 4, State: schedulepb.TableStateStopping}},
+	}}
+	msgs, err := r.HandleCaptureChanges(&changes)
+	require.Nil(t, err)
+	require.Len(t, msgs, 0)
+	require.Len(t, r.tables, 4)
+	require.Equal(t, ReplicationSetStateReplicating, r.tables[1].State)
+	require.Equal(t, ReplicationSetStatePrepare, r.tables[2].State)
+	require.Equal(t, ReplicationSetStateReplicating, r.tables[3].State)
+	require.Equal(t, ReplicationSetStateAbsent, r.tables[4].State)
+
+	changes = captureChanges{Removed: map[string][]schedulepb.TableStatus{
+		"1": {{TableID: 1, State: schedulepb.TableStateReplicating}},
+	}}
+	msgs, err = r.HandleCaptureChanges(&changes)
+	require.Nil(t, err)
+	require.Len(t, msgs, 0)
+	require.Len(t, r.tables, 4)
+	require.Equal(t, ReplicationSetStateAbsent, r.tables[1].State)
+	require.Equal(t, ReplicationSetStatePrepare, r.tables[2].State)
+	require.Equal(t, ReplicationSetStateReplicating, r.tables[3].State)
+	require.Equal(t, ReplicationSetStateAbsent, r.tables[4].State)
+}

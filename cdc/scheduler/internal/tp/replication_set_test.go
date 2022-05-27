@@ -268,6 +268,27 @@ func TestReplicationSetPoll(t *testing.T) {
 	}
 }
 
+func TestReplicationSetPollUnknownCapture(t *testing.T) {
+	t.Parallel()
+
+	tableID := model.TableID(1)
+	r, err := newReplicationSet(tableID, map[model.CaptureID]*schedulepb.TableStatus{
+		"1": {
+			TableID:    tableID,
+			State:      schedulepb.TableStateReplicating,
+			Checkpoint: schedulepb.Checkpoint{},
+		},
+	})
+	require.Nil(t, err)
+
+	msgs, err := r.poll(&schedulepb.TableStatus{
+		TableID: tableID,
+		State:   schedulepb.TableStateAbsent,
+	}, "unknown")
+	require.Nil(t, msgs)
+	require.Error(t, err)
+}
+
 func TestReplicationSetAddTable(t *testing.T) {
 	t.Parallel()
 
@@ -429,6 +450,15 @@ func TestReplicationSetRemoveTable(t *testing.T) {
 	require.True(t, r.hasRemoved())
 }
 
+func clone(r *ReplicationSet) *ReplicationSet {
+	rClone := *r
+	rClone.Captures = make(map[string]struct{})
+	for captureID := range r.Captures {
+		rClone.Captures[captureID] = struct{}{}
+	}
+	return &rClone
+}
+
 func TestReplicationSetMoveTable(t *testing.T) {
 	t.Parallel()
 
@@ -552,7 +582,7 @@ func TestReplicationSetMoveTable(t *testing.T) {
 	require.Equal(t, dest, r.Secondary)
 
 	// Source is removed.
-	rSnapshot := *r
+	rClone := clone(r)
 	msgs, err = r.handleTableStatus(source, &schedulepb.TableStatus{
 		TableID: tableID,
 		State:   schedulepb.TableStateStopped,
@@ -577,7 +607,7 @@ func TestReplicationSetMoveTable(t *testing.T) {
 	require.Equal(t, "", r.Secondary)
 
 	// Source stopped message is lost somehow.
-	msgs, err = rSnapshot.handleTableStatus(source, &schedulepb.TableStatus{
+	msgs, err = rClone.handleTableStatus(source, &schedulepb.TableStatus{
 		TableID: tableID,
 		State:   schedulepb.TableStateAbsent,
 	})
@@ -599,6 +629,279 @@ func TestReplicationSetMoveTable(t *testing.T) {
 	require.Equal(t, ReplicationSetStateCommit, r.State)
 	require.Equal(t, dest, r.Primary)
 	require.Equal(t, "", r.Secondary)
+
+	// Commit -> Replicating
+	msgs, err = r.handleTableStatus(dest, &schedulepb.TableStatus{
+		TableID: tableID,
+		State:   schedulepb.TableStateReplicating,
+	})
+	require.Nil(t, err)
+	require.Len(t, msgs, 0)
+	require.Equal(t, ReplicationSetStateReplicating, r.State)
+	require.Equal(t, dest, r.Primary)
+	require.Equal(t, "", r.Secondary)
+}
+
+func TestReplicationSetCaptureShutdown(t *testing.T) {
+	t.Parallel()
+
+	from := "1"
+	tableID := model.TableID(1)
+	r, err := newReplicationSet(tableID, nil)
+	require.Nil(t, err)
+
+	// Add table, Absent -> Prepare
+	msgs, err := r.handleAddTable(from)
+	require.Nil(t, err)
+	require.Len(t, msgs, 1)
+	require.EqualValues(t, &schedulepb.Message{
+		To:      from,
+		MsgType: schedulepb.MsgDispatchTableRequest,
+		DispatchTableRequest: &schedulepb.DispatchTableRequest{
+			Request: &schedulepb.DispatchTableRequest_AddTable{
+				AddTable: &schedulepb.AddTableRequest{
+					TableID:     r.TableID,
+					IsSecondary: true,
+					Checkpoint:  &schedulepb.Checkpoint{CheckpointTs: r.CheckpointTs},
+				},
+			},
+		},
+	}, msgs[0])
+	require.Equal(t, ReplicationSetStatePrepare, r.State)
+	require.Equal(t, from, r.Secondary)
+
+	// Secondary shutdown during Prepare, Prepare -> Absent
+	t.Run("AddTableSecondaryShutdownDuringPrepare", func(t *testing.T) {
+		rClone := clone(r)
+		msgs, err = rClone.handleCaptureShutdown(from)
+		require.Nil(t, err)
+		require.Len(t, msgs, 0)
+		require.Empty(t, rClone.Captures)
+		require.Equal(t, "", rClone.Primary)
+		require.Equal(t, "", rClone.Secondary)
+		require.Equal(t, ReplicationSetStateAbsent, rClone.State)
+	})
+
+	// Add table, Prepare -> Commit
+	msgs, err = r.handleTableStatus(from, &schedulepb.TableStatus{
+		TableID: tableID,
+		State:   schedulepb.TableStatePrepared,
+	})
+	require.Nil(t, err)
+	require.Len(t, msgs, 1)
+	require.Equal(t, ReplicationSetStateCommit, r.State)
+	require.Equal(t, from, r.Primary)
+	require.Equal(t, "", r.Secondary)
+
+	// Secondary shutdown during Commit, Commit -> Absent
+	t.Run("AddTableSecondaryShutdownDuringCommit", func(t *testing.T) {
+		rClone := clone(r)
+		msgs, err = rClone.handleCaptureShutdown(from)
+		require.Nil(t, err)
+		require.Len(t, msgs, 0)
+		require.Empty(t, rClone.Captures)
+		require.Equal(t, "", rClone.Primary)
+		require.Equal(t, "", rClone.Secondary)
+		require.Equal(t, ReplicationSetStateAbsent, rClone.State)
+	})
+
+	// Add table, Commit -> Replicating
+	msgs, err = r.handleTableStatus(from, &schedulepb.TableStatus{
+		TableID: tableID,
+		State:   schedulepb.TableStateReplicating,
+	})
+	require.Nil(t, err)
+	require.Len(t, msgs, 0)
+	require.Equal(t, ReplicationSetStateReplicating, r.State)
+	require.Equal(t, from, r.Primary)
+	require.Equal(t, "", r.Secondary)
+
+	// Primary shutdown during Replicating, Replicating -> Absent
+	t.Run("AddTablePrimaryShutdownDuringReplicating", func(t *testing.T) {
+		rClone := clone(r)
+		msgs, err = rClone.handleCaptureShutdown(from)
+		require.Nil(t, err)
+		require.Len(t, msgs, 0)
+		require.Empty(t, rClone.Captures)
+		require.Equal(t, "", rClone.Primary)
+		require.Equal(t, "", rClone.Secondary)
+		require.Equal(t, ReplicationSetStateAbsent, rClone.State)
+	})
+
+	// Move table, Replicating -> Prepare
+	dest := "2"
+	msgs, err = r.handleMoveTable(dest)
+	require.Nil(t, err)
+	require.Len(t, msgs, 1)
+	require.Equal(t, ReplicationSetStatePrepare, r.State)
+	require.Equal(t, dest, r.Secondary)
+
+	// Primary shutdown during Prepare, Prepare -> Prepare
+	t.Run("MoveTablePrimaryShutdownDuringPrepare", func(t *testing.T) {
+		rClone := clone(r)
+		msgs, err = rClone.handleCaptureShutdown(rClone.Primary)
+		require.Nil(t, err)
+		require.Len(t, msgs, 0)
+		require.EqualValues(t, map[string]struct{}{dest: {}}, rClone.Captures)
+		require.Equal(t, "", rClone.Primary)
+		require.Equal(t, dest, rClone.Secondary)
+		require.Equal(t, ReplicationSetStatePrepare, rClone.State)
+		// Secondary shutdown after primary shutdown, Prepare -> Absent
+		msgs, err = rClone.handleCaptureShutdown(rClone.Secondary)
+		require.Nil(t, err)
+		require.Len(t, msgs, 0)
+		require.Empty(t, rClone.Captures)
+		require.Equal(t, "", rClone.Primary)
+		require.Equal(t, "", rClone.Secondary)
+		require.Equal(t, ReplicationSetStateAbsent, rClone.State)
+	})
+	// Primary shutdown during Prepare, Prepare -> Prepare
+	t.Run("MoveTableSecondaryShutdownDuringPrepare", func(t *testing.T) {
+		rClone := clone(r)
+		msgs, err = rClone.handleCaptureShutdown(rClone.Secondary)
+		require.Nil(t, err)
+		require.Len(t, msgs, 0)
+		require.EqualValues(t, map[string]struct{}{from: {}}, rClone.Captures)
+		require.Equal(t, from, rClone.Primary)
+		require.Equal(t, "", rClone.Secondary)
+		require.Equal(t, ReplicationSetStateReplicating, rClone.State)
+	})
+
+	// Move table, Prepare -> Commit
+	msgs, err = r.handleTableStatus(dest, &schedulepb.TableStatus{
+		TableID: tableID,
+		State:   schedulepb.TableStatePrepared,
+	})
+	require.Nil(t, err)
+	require.Len(t, msgs, 1)
+	require.Equal(t, ReplicationSetStateCommit, r.State)
+	require.Equal(t, from, r.Primary)
+	require.Equal(t, dest, r.Secondary)
+
+	// Original primary shutdown during Commit, Commit -> Commit
+	t.Run("MoveTableOriginalPrimaryShutdownDuringCommit", func(t *testing.T) {
+		rClone := clone(r)
+		msgs, err = rClone.handleCaptureShutdown(rClone.Primary)
+		require.Nil(t, err)
+		require.Len(t, msgs, 1)
+		require.EqualValues(t, &schedulepb.Message{
+			To:      dest,
+			MsgType: schedulepb.MsgDispatchTableRequest,
+			DispatchTableRequest: &schedulepb.DispatchTableRequest{
+				Request: &schedulepb.DispatchTableRequest_AddTable{
+					AddTable: &schedulepb.AddTableRequest{
+						TableID:     r.TableID,
+						IsSecondary: false,
+						Checkpoint:  &schedulepb.Checkpoint{CheckpointTs: r.CheckpointTs},
+					},
+				},
+			},
+		}, msgs[0])
+		require.EqualValues(t, map[string]struct{}{dest: {}}, rClone.Captures)
+		require.Equal(t, dest, rClone.Primary)
+		require.Equal(t, "", rClone.Secondary)
+		require.Equal(t, ReplicationSetStateCommit, rClone.State)
+		// New primary shutdown after original primary shutdown, Commit -> Absent
+		msgs, err = rClone.handleCaptureShutdown(dest)
+		require.Nil(t, err)
+		require.Len(t, msgs, 0)
+		require.Empty(t, rClone.Captures)
+		require.Equal(t, "", rClone.Primary)
+		require.Equal(t, "", rClone.Secondary)
+		require.Equal(t, ReplicationSetStateAbsent, rClone.State)
+	})
+
+	// Secondary shutdown during Commit, Commit -> Commit
+	t.Run("MoveTableSecondaryShutdownDuringCommit", func(t *testing.T) {
+		rClone := clone(r)
+		msgs, err = rClone.handleCaptureShutdown(rClone.Secondary)
+		require.Nil(t, err)
+		require.Len(t, msgs, 0)
+		require.EqualValues(t, map[string]struct{}{from: {}}, rClone.Captures)
+		require.Equal(t, from, rClone.Primary)
+		require.Equal(t, "", rClone.Secondary)
+		require.Equal(t, ReplicationSetStateCommit, rClone.State)
+
+		// Original primary is still replicating, Commit -> Replicating
+		t.Run("OriginalPrimaryReplicating", func(t *testing.T) {
+			rClone1 := clone(rClone)
+			msgs, err = rClone1.handleTableStatus(rClone1.Primary, &schedulepb.TableStatus{
+				TableID: 1,
+				State:   schedulepb.TableStateReplicating,
+			})
+			require.Nil(t, err)
+			require.Len(t, msgs, 0)
+			require.EqualValues(t, map[string]struct{}{from: {}}, rClone1.Captures)
+			require.Equal(t, from, rClone1.Primary)
+			require.Equal(t, "", rClone1.Secondary)
+			require.Equal(t, ReplicationSetStateReplicating, rClone1.State)
+		})
+
+		// Original primary is stopped, Commit -> Absent
+		t.Run("OriginalPrimaryStopped", func(t *testing.T) {
+			rClone1 := clone(rClone)
+			msgs, err = rClone1.handleTableStatus(rClone1.Primary, &schedulepb.TableStatus{
+				TableID: 1,
+				State:   schedulepb.TableStateStopped,
+			})
+			require.Nil(t, err)
+			require.Len(t, msgs, 0)
+			require.Empty(t, rClone1.Captures)
+			require.Equal(t, "", rClone1.Primary)
+			require.Equal(t, "", rClone1.Secondary)
+			require.Equal(t, ReplicationSetStateAbsent, rClone1.State)
+		})
+
+		// Original primary is absent, Commit -> Absent,
+		// and then add the original primary back, Absent -> Prepare
+		t.Run("OriginalPrimaryAbsent", func(t *testing.T) {
+			rClone1 := clone(rClone)
+			msgs, err = rClone1.handleTableStatus(rClone1.Primary, &schedulepb.TableStatus{
+				TableID: 1,
+				State:   schedulepb.TableStateAbsent,
+			})
+			require.Nil(t, err)
+			require.Len(t, msgs, 1)
+			require.EqualValues(t, &schedulepb.Message{
+				To:      from,
+				MsgType: schedulepb.MsgDispatchTableRequest,
+				DispatchTableRequest: &schedulepb.DispatchTableRequest{
+					Request: &schedulepb.DispatchTableRequest_AddTable{
+						AddTable: &schedulepb.AddTableRequest{
+							TableID:     r.TableID,
+							IsSecondary: true,
+							Checkpoint:  &schedulepb.Checkpoint{CheckpointTs: r.CheckpointTs},
+						},
+					},
+				},
+			}, msgs[0])
+			require.Empty(t, rClone1.Captures)
+			require.Equal(t, "", rClone1.Primary)
+			require.Equal(t, from, rClone1.Secondary)
+			require.Equal(t, ReplicationSetStatePrepare, rClone1.State)
+		})
+	})
+
+	// Move table, original primary is stopped.
+	msgs, err = r.handleTableStatus(from, &schedulepb.TableStatus{
+		TableID: tableID,
+		State:   schedulepb.TableStateStopped,
+	})
+	require.Nil(t, err)
+	require.Len(t, msgs, 1)
+	require.Equal(t, ReplicationSetStateCommit, r.State)
+	require.Equal(t, dest, r.Primary)
+	require.Equal(t, "", r.Secondary)
+	t.Run("MoveTableNewPrimaryShutdownDuringCommit", func(t *testing.T) {
+		rClone := clone(r)
+		msgs, err = rClone.handleCaptureShutdown(rClone.Primary)
+		require.Nil(t, err)
+		require.Len(t, msgs, 0)
+		require.Empty(t, rClone.Captures)
+		require.Equal(t, "", rClone.Primary)
+		require.Equal(t, "", rClone.Secondary)
+		require.Equal(t, ReplicationSetStateAbsent, rClone.State)
+	})
 
 	// Commit -> Replicating
 	msgs, err = r.handleTableStatus(dest, &schedulepb.TableStatus{
