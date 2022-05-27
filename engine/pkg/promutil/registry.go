@@ -94,3 +94,58 @@ func (r *Registry) Gather() ([]*dto.MetricFamily, error) {
 	// NOT NEED lock here. prometheus.Registry has thread-safe methods
 	return r.Registry.Gather()
 }
+
+// AutoRegisterFactory uses inner Factory to create metrics and register metrics
+// to Registry with id.
+type AutoRegisterFactory struct {
+	inner Factory
+	r     *Registry
+	// ID identify the worker(jobmaster/worker) the factory owns
+	// It's used to unregister all collectors when worker exits normally or commits suicide
+	id libModel.WorkerID
+}
+
+// NewAutoRegisterFactory creates a AutoRegisterFactory.
+func NewAutoRegisterFactory(f Factory, r *Registry, id libModel.WorkerID) Factory {
+	return &AutoRegisterFactory{
+		inner: f,
+		r:     r,
+		id:    id,
+	}
+}
+
+func (f *AutoRegisterFactory) NewCounter(opts prometheus.CounterOpts) prometheus.Counter {
+	c := f.inner.NewCounter(opts)
+	f.r.MustRegister(f.id, c)
+	return c
+}
+
+func (f *AutoRegisterFactory) NewCounterVec(opts prometheus.CounterOpts, labelNames []string) *prometheus.CounterVec {
+	c := f.inner.NewCounterVec(opts, labelNames)
+	f.r.MustRegister(f.id, c)
+	return c
+}
+
+func (f *AutoRegisterFactory) NewGauge(opts prometheus.GaugeOpts) prometheus.Gauge {
+	c := f.inner.NewGauge(opts)
+	f.r.MustRegister(f.id, c)
+	return c
+}
+
+func (f *AutoRegisterFactory) NewGaugeVec(opts prometheus.GaugeOpts, labelNames []string) *prometheus.GaugeVec {
+	c := f.inner.NewGaugeVec(opts, labelNames)
+	f.r.MustRegister(f.id, c)
+	return c
+}
+
+func (f *AutoRegisterFactory) NewHistogram(opts prometheus.HistogramOpts) prometheus.Histogram {
+	c := f.inner.NewHistogram(opts)
+	f.r.MustRegister(f.id, c)
+	return c
+}
+
+func (f *AutoRegisterFactory) NewHistogramVec(opts prometheus.HistogramOpts, labelNames []string) *prometheus.HistogramVec {
+	c := f.inner.NewHistogramVec(opts, labelNames)
+	f.r.MustRegister(f.id, c)
+	return c
+}
