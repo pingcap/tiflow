@@ -14,7 +14,10 @@
 package binlog
 
 import (
+	"testing"
+
 	. "github.com/pingcap/check"
+	"github.com/stretchr/testify/require"
 )
 
 var _ = Suite(&testFilenameSuite{})
@@ -236,5 +239,16 @@ func (t *testFilenameSuite) TestConstructFilenameWithUUIDSuffix(c *C) {
 	for _, fileName := range invalidFileName {
 		_, _, _, err := SplitFilenameWithUUIDSuffix(fileName)
 		c.Assert(err, ErrorMatches, ".*invalid binlog filename with uuid suffix.*")
+	}
+}
+
+func TestExtractRealName(t *testing.T) {
+	cases := map[string]string{
+		"mysql-bin.000001":        "mysql-bin.000001",
+		"mysql-bin.000001|":       "mysql-bin.000001|", // should not happen in real case, just for test
+		"mysql-bin|000001.000001": "mysql-bin.000001",
+	}
+	for k, expected := range cases {
+		require.Equal(t, expected, ExtractRealName(k))
 	}
 }

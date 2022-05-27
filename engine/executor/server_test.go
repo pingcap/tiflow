@@ -32,7 +32,7 @@ import (
 	"github.com/pingcap/tiflow/engine/client"
 	"github.com/pingcap/tiflow/engine/executor/worker"
 	"github.com/pingcap/tiflow/engine/pb"
-	"github.com/pingcap/tiflow/engine/pkg/uuid"
+	"github.com/pingcap/tiflow/pkg/uuid"
 )
 
 func init() {
@@ -53,7 +53,6 @@ func TestStartTCPSrv(t *testing.T) {
 	s := NewServer(cfg, nil)
 
 	s.grpcSrv = grpc.NewServer()
-	registerMetrics()
 	wg, ctx := errgroup.WithContext(context.Background())
 	err = s.startTCPService(ctx, wg)
 	require.Nil(t, err)
@@ -114,7 +113,6 @@ func TestCollectMetric(t *testing.T) {
 	s.taskRunner = worker.NewTaskRunner(defaultRuntimeIncomingQueueLen, defaultRuntimeInitConcurrency)
 
 	s.grpcSrv = grpc.NewServer()
-	registerMetrics()
 	err = s.startTCPService(ctx, wg)
 	require.Nil(t, err)
 

@@ -49,28 +49,28 @@ function run() {
 			"start-task $task_conf" \
 			"\"result\": true" 1 \
 			"\"source\": \"$SOURCE_ID1\"" 1 \
-			"fail to initial unit Sync of subtask test" 1
+			"fail to initialize unit Sync of subtask test" 1
 
 		sleep 2
 		run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 			"query-status test" \
 			"\"stage\": \"Paused\"" 1 \
 			"\"unit\": \"InvalidUnit\"" 1 \
-			"fail to initial unit Sync of subtask test" 1
+			"fail to initialize unit Sync of subtask test" 1
 
 		echo "resume task will also initial failed"
 		run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 			"resume-task test" \
 			"\"result\": true" 1 \
 			"\"source\": \"$SOURCE_ID1\"" 1 \
-			"fail to initial unit Sync of subtask test" 1
+			"fail to initialize unit Sync of subtask test" 1
 
 		sleep 2
 		run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 			"query-status test" \
 			"\"stage\": \"Paused\"" 1 \
 			"\"unit\": \"InvalidUnit\"" 1 \
-			"fail to initial unit Sync of subtask test" 1
+			"fail to initialize unit Sync of subtask test" 1
 
 		echo "reset go failpoints, and need restart dm-worker"
 		echo "then resume task, task will recover success"
