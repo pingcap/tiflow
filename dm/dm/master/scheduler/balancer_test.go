@@ -91,12 +91,12 @@ func (t *testBalancerSuite) SetupSuite() {
 	integration.BeforeTestExternal(t.T())
 	t.mockCluster = integration.NewClusterV3(t.T(), &integration.ClusterConfig{Size: 1})
 	t.etcdTestCli = t.mockCluster.RandClient()
-
 }
 
 func (t *testBalancerSuite) TearDownSuite() {
 	t.mockCluster.Terminate(t.T())
 }
+
 func (t *testBalancerSuite) TearDownTest() {
 	t.clearTestInfoOperation()
 }
