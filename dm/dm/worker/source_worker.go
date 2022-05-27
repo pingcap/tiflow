@@ -183,7 +183,7 @@ func (w *SourceWorker) Start() {
 					continue
 				}
 			}
-			if err2 := w.updateSourceStatus(w.ctx); err2 != nil {
+			if err2 := w.updateSourceStatus(w.ctx, true); err2 != nil {
 				if terror.ErrNoMasterStatus.Equal(err2) {
 					w.l.Warn("This source's bin_log is OFF, so it only supports full_mode.", zap.String("sourceID", w.cfg.SourceID), zap.Error(err2))
 				} else {
@@ -248,11 +248,16 @@ func (w *SourceWorker) Stop(graceful bool) {
 }
 
 // updateSourceStatus updates w.sourceStatus.
-func (w *SourceWorker) updateSourceStatus(ctx context.Context) error {
+func (w *SourceWorker) updateSourceStatus(ctx context.Context, needLock bool) error {
+	var cfg *config.SourceConfig
+	if needLock {
+		w.RLock()
+		cfg = w.cfg
+		w.RUnlock()
+	} else {
+		cfg = w.cfg
+	}
 	w.sourceDBMu.Lock()
-	w.RLock()
-	cfg := w.cfg
-	w.RUnlock()
 	if w.sourceDB == nil {
 		var err error
 		w.sourceDB, err = conn.DefaultDBProvider.Apply(&cfg.DecryptPassword().From)
@@ -270,7 +275,7 @@ func (w *SourceWorker) updateSourceStatus(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	status.Location = binlog.InitLocation(pos, gtidSet)
+	status.Location = binlog.NewLocation(pos, gtidSet)
 	ctx2, cancel2 := context.WithTimeout(ctx, utils.DefaultDBTimeout)
 	defer cancel2()
 	binlogs, err := binlog.GetBinaryLogs(ctx2, w.sourceDB.DB)
@@ -346,7 +351,7 @@ func (w *SourceWorker) EnableRelay(startBySourceCfg bool) (err error) {
 	} else {
 		// set UUIDSuffix even not checkpoint exist
 		// so we will still remove relay dir
-		w.cfg.UUIDSuffix = binlog.MinUUIDSuffix
+		w.cfg.UUIDSuffix = binlog.MinRelaySubDirSuffix
 	}
 
 	// 2. initial relay holder, the cfg's password need decrypt
@@ -517,7 +522,7 @@ func (w *SourceWorker) DisableHandleSubtasks() {
 
 	// close all sub tasks
 	w.subTaskHolder.closeAllSubTasks()
-	w.l.Info("handling subtask enabled")
+	w.l.Info("handling subtask disabled")
 }
 
 // fetchSubTasksAndAdjust gets source's subtask stages and configs, adjust some values by worker's config and status
@@ -608,7 +613,7 @@ func (w *SourceWorker) UpdateSubTask(ctx context.Context, cfg *config.SubTaskCon
 	return st.Update(ctx, cfg)
 }
 
-// OperateSubTask stop/resume/pause  sub task.
+// OperateSubTask stop/resume/pause sub task.
 func (w *SourceWorker) OperateSubTask(name string, op pb.TaskOp) error {
 	w.Lock()
 	defer w.Unlock()
@@ -669,7 +674,7 @@ func (w *SourceWorker) QueryStatus(ctx context.Context, name string) ([]*pb.SubT
 		relayStatus  *pb.RelayStatus
 	)
 
-	if err := w.updateSourceStatus(ctx); err != nil {
+	if err := w.updateSourceStatus(ctx, false); err != nil {
 		if terror.ErrNoMasterStatus.Equal(err) {
 			w.l.Warn("This source's bin_log is OFF, so it only supports full_mode.", zap.String("sourceID", w.cfg.SourceID), zap.Error(err))
 		} else {
@@ -995,7 +1000,7 @@ func (w *SourceWorker) PurgeRelay(ctx context.Context, req *pb.PurgeRelayRequest
 	if !w.subTaskEnabled.Load() {
 		w.l.Info("worker received purge-relay but didn't handling subtasks, read global checkpoint to decided active relay log")
 
-		uuid := w.relayHolder.Status(nil).RelaySubDir
+		subDir := w.relayHolder.Status(nil).RelaySubDir
 
 		_, _, subTaskCfgs, _, err := w.fetchSubTasksAndAdjust()
 		if err != nil {
@@ -1008,9 +1013,9 @@ func (w *SourceWorker) PurgeRelay(ctx context.Context, req *pb.PurgeRelayRequest
 			}
 			w.l.Info("update active relay log with",
 				zap.String("task name", subTaskCfg.Name),
-				zap.String("uuid", uuid),
+				zap.String("subDir", subDir),
 				zap.String("binlog name", loc.Position.Name))
-			if err3 := streamer.GetReaderHub().UpdateActiveRelayLog(subTaskCfg.Name, uuid, loc.Position.Name); err3 != nil {
+			if err3 := streamer.GetReaderHub().UpdateActiveRelayLog(subTaskCfg.Name, subDir, loc.Position.Name); err3 != nil {
 				w.l.Error("Error when update active relay log", zap.Error(err3))
 			}
 		}
@@ -1270,12 +1275,12 @@ func (w *SourceWorker) operateValidatorStage(stage ha.Stage) error {
 		if err != nil {
 			return err
 		}
-		if _, ok := subTaskCfg[stage.Task]; !ok {
+		targetCfg, ok := subTaskCfg[stage.Task]
+		if !ok {
 			log.L().Error("failed to get subtask config", zap.Reflect("stage", stage))
 			return errors.New("failed to get subtask config")
 		}
-
-		subtask.SetCfg(subTaskCfg[stage.Task])
+		subtask.UpdateValidatorCfg(targetCfg.ValidatorCfg)
 		subtask.StartValidator(stage.Expect, false)
 	default:
 		// should not happen
@@ -1338,20 +1343,15 @@ func (w *SourceWorker) CheckCfgCanUpdated(cfg *config.SubTaskConfig) error {
 	return subTask.CheckUnitCfgCanUpdate(cfg)
 }
 
-func (w *SourceWorker) GetWorkerValidatorErr(taskName string, errState pb.ValidateErrorState) []*pb.ValidationError {
-	w.RLock()
-	defer w.RUnlock()
+func (w *SourceWorker) GetWorkerValidatorErr(taskName string, errState pb.ValidateErrorState) ([]*pb.ValidationError, error) {
 	st := w.subTaskHolder.findSubTask(taskName)
 	if st != nil {
 		return st.GetValidatorError(errState)
 	}
-	log.L().Warn("get validator err", zap.Error(terror.ErrWorkerSubTaskNotFound.Generate(taskName)))
-	return []*pb.ValidationError{}
+	return nil, terror.ErrWorkerSubTaskNotFound.Generate(taskName)
 }
 
 func (w *SourceWorker) OperateWorkerValidatorErr(taskName string, op pb.ValidationErrOp, errID uint64, isAll bool) error {
-	w.RLock()
-	defer w.RUnlock()
 	st := w.subTaskHolder.findSubTask(taskName)
 	if st != nil {
 		return st.OperateValidatorError(op, errID, isAll)

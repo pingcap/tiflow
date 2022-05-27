@@ -39,9 +39,6 @@ type cyclicMarkNode struct {
 	// startTs -> replicaID
 	currentReplicaIDs map[model.Ts]uint64
 	currentCommitTs   uint64
-
-	// todo : remove this flag after table actor is GA
-	isTableActorMode bool
 }
 
 func newCyclicMarkNode(markTableID model.TableID) *cyclicMarkNode {
@@ -52,50 +49,28 @@ func newCyclicMarkNode(markTableID model.TableID) *cyclicMarkNode {
 	}
 }
 
-func (n *cyclicMarkNode) Init(ctx pipeline.NodeContext) error {
-	return n.InitTableActor(ctx.ChangefeedVars().Info.Config.Cyclic.ReplicaID, ctx.ChangefeedVars().Info.Config.Cyclic.FilterReplicaID, false)
-}
-
-func (n *cyclicMarkNode) InitTableActor(localReplicaID uint64, filterReplicaID []uint64, isTableActorMode bool) error {
+func (n *cyclicMarkNode) InitTableActor(localReplicaID uint64, filterReplicaID []uint64) error {
 	n.localReplicaID = localReplicaID
 	n.filterReplicaID = make(map[uint64]struct{})
 	for _, rID := range filterReplicaID {
 		n.filterReplicaID[rID] = struct{}{}
 	}
-	n.isTableActorMode = isTableActorMode
 	// do nothing
 	return nil
-}
-
-// Receive receives the message from the previous node.
-// In the previous nodes(puller node and sorter node),
-// the change logs of mark table and normal table are listen by one puller,
-// and sorted by one sorter.
-// So, this node will receive a commitTs-ordered stream
-// which include the mark row events and normal row events.
-// Under the above conditions, we need to cache at most one
-// transaction's row events to matching row events.
-// For every row event, Receive function flushes
-// every the last transaction's row events,
-// and adds the mark row event or normal row event into the cache.
-func (n *cyclicMarkNode) Receive(ctx pipeline.NodeContext) error {
-	msg := ctx.Message()
-	_, err := n.TryHandleDataMessage(ctx, msg)
-	return err
 }
 
 func (n *cyclicMarkNode) TryHandleDataMessage(
 	ctx pipeline.NodeContext, msg pmessage.Message,
 ) (bool, error) {
-	// limit the queue size when the table actor mode is enabled
-	if n.isTableActorMode && ctx.(*cyclicNodeContext).queue.Len() >= defaultSyncResolvedBatch {
+	// limit the queue size
+	if ctx.(*cyclicNodeContext).queue.Len() >= defaultSyncResolvedBatch {
 		return false, nil
 	}
 	switch msg.Tp {
 	case pmessage.MessageTypePolymorphicEvent:
 		event := msg.PolymorphicEvent
 		n.flush(ctx, event.CRTs)
-		if event.RawKV.OpType == model.OpTypeResolved {
+		if event.IsResolved() {
 			ctx.SendToNextNode(msg)
 			return true, nil
 		}
@@ -175,11 +150,6 @@ func (n *cyclicMarkNode) sendNormalRowEventToNextNode(ctx pipeline.NodeContext, 
 		event.Row.ReplicaID = replicaID
 		ctx.SendToNextNode(pmessage.PolymorphicEventMessage(event))
 	}
-}
-
-func (n *cyclicMarkNode) Destroy(ctx pipeline.NodeContext) error {
-	// do nothing
-	return nil
 }
 
 // extractReplicaID extracts replica ID from the given mark row.

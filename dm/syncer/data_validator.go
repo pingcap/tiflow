@@ -68,13 +68,18 @@ type rowChangeJobType int
 
 const (
 	rowInsert rowChangeJobType = iota
-	rowDeleted
 	rowUpdated
+	rowDeleted
 	flushCheckpoint
 
 	rowChangeTypeCount  = 3
 	errorStateTypeCount = 4 // pb.ValidateErrorState_*
+
+	validatorDmctlOpTimeout = 5 * time.Second
 )
+
+// to make ut easier, we define it as a var, so we can change it.
+var markErrorRowDelay = config.DefaultValidatorRowErrorDelay
 
 // change of table
 // binlog changes are clustered into table changes
@@ -91,6 +96,7 @@ func newTableChangeJob() *tableChangeJob {
 func (tc *tableChangeJob) addOrUpdate(job *rowValidationJob) bool {
 	if val, ok := tc.jobs[job.Key]; ok {
 		val.row = job.row
+		val.size = job.size
 		val.Tp = job.Tp
 		val.FirstValidateTS = 0
 		val.FailedCnt = 0 // clear failed count
@@ -106,8 +112,13 @@ type rowValidationJob struct {
 	Tp  rowChangeJobType
 	row *sqlmodel.RowChange
 
-	wg *sync.WaitGroup
-	// timestamp of first validation of this row. will reset when merge row changes
+	// estimated memory size taken by this row, we use binlog size of the row to estimated it now.
+	// the memory taken for a row change job is more than this size
+	size int32
+	wg   *sync.WaitGroup
+	// timestamp of first validation of this row. will reset when merge row changes.
+	// if the job is loaded from meta, it's reset too, in case validator stopped for a long time,
+	// then those failed row change maybe marked as error row immediately.
 	FirstValidateTS int64
 	FailedCnt       int
 }
@@ -117,6 +128,11 @@ type tableValidateStatus struct {
 	target  filter.Table
 	stage   pb.Stage // either Running or Stopped
 	message string
+}
+
+func (vs *tableValidateStatus) String() string {
+	return fmt.Sprintf("source=%s, target=%s, stage=%s, message=%s",
+		vs.source, vs.target, vs.stage, vs.message)
 }
 
 func (vs *tableValidateStatus) stopped(msg string) {
@@ -149,7 +165,7 @@ type DataValidator struct {
 	L                  log.Logger
 	fromDB             *conn.BaseDB
 	toDB               *conn.BaseDB
-	toDBConns          []*dbconn.DBConn
+	upstreamTZ         *time.Location
 	timezone           *time.Location
 	syncCfg            replication.BinlogSyncerConfig
 	streamerController *StreamerController
@@ -160,9 +176,10 @@ type DataValidator struct {
 	workers          []*validateWorker
 	workerCnt        int
 
-	// whether the validation progress ever reached syncer
+	// whether we start to mark failed rows as error rows
 	// if it's false, we don't mark failed row change as error to reduce false-positive
-	reachedSyncer atomic.Bool
+	// it's set to true when validator reached the progress of syncer once or after markErrorRowDelay
+	markErrorStarted atomic.Bool
 
 	// fields in this field block are guarded by stateMutex
 	stateMutex  sync.RWMutex
@@ -174,6 +191,8 @@ type DataValidator struct {
 	processedRowCounts   []atomic.Int64
 	pendingRowCounts     []atomic.Int64
 	newErrorRowCount     atomic.Int64
+	processedBinlogSize  atomic.Int64
+	pendingRowSize       atomic.Int64 // accumulation of rowValidationJob.size
 	lastFlushTime        time.Time
 	location             *binlog.Location
 	loadedPendingChanges map[string]*tableChangeJob
@@ -203,54 +222,66 @@ func (v *DataValidator) reset() {
 	v.errChan = make(chan error, 10)
 	v.workers = []*validateWorker{}
 
-	v.reachedSyncer.Store(false)
+	v.markErrorStarted.Store(false)
 	v.resetResult()
+	for i := range v.processedRowCounts {
+		v.processedRowCounts[i].Store(0)
+	}
 	for i := range v.pendingRowCounts {
 		v.pendingRowCounts[i].Store(0)
 	}
 	v.newErrorRowCount.Store(0)
+	v.processedBinlogSize.Store(0)
+	v.pendingRowSize.Store(0)
 	v.initTableStatus(map[string]*tableValidateStatus{})
 }
 
 func (v *DataValidator) initialize() error {
 	v.ctx, v.cancel = context.WithCancel(context.Background())
 	v.tctx = tcontext.NewContext(v.ctx, v.L)
-	// todo: enhance error handling
 	v.reset()
 
-	if err := v.persistHelper.init(v.tctx); err != nil {
-		return err
-	}
-
-	newCtx, cancelFunc := context.WithTimeout(v.ctx, unit.DefaultInitTimeout)
+	newCtx, cancelFunc := v.tctx.WithTimeout(unit.DefaultInitTimeout)
 	defer cancelFunc()
-	tctx := tcontext.NewContext(newCtx, v.L)
 
 	var err error
 	defer func() {
 		if err == nil {
 			return
 		}
-		dbconn.CloseBaseDB(tctx, v.fromDB)
-		dbconn.CloseBaseDB(tctx, v.toDB)
+		dbconn.CloseBaseDB(newCtx, v.fromDB)
+		dbconn.CloseBaseDB(newCtx, v.toDB)
 		v.cancel()
 	}()
 
 	dbCfg := v.cfg.From
-	dbCfg.RawDBCfg = config.DefaultRawDBConfig().SetReadTimeout(maxDMLConnectionTimeout)
-	v.fromDB, _, err = dbconn.CreateConns(tctx, v.cfg, &dbCfg, 0)
+	dbCfg.RawDBCfg = config.DefaultRawDBConfig().SetReadTimeout(maxDMLConnectionTimeout).SetMaxIdleConns(1)
+	v.fromDB, err = dbconn.CreateBaseDB(&dbCfg)
 	if err != nil {
 		return err
 	}
 
 	dbCfg = v.cfg.To
-	dbCfg.RawDBCfg = config.DefaultRawDBConfig().SetReadTimeout(maxDMLConnectionTimeout).SetMaxIdleConns(v.workerCnt)
-	v.toDB, v.toDBConns, err = dbconn.CreateConns(tctx, v.cfg, &dbCfg, v.workerCnt)
+	// worker count + checkpoint connection, others concurrent access can create it on the fly
+	dbCfg.RawDBCfg = config.DefaultRawDBConfig().SetReadTimeout(maxDMLConnectionTimeout).SetMaxIdleConns(v.workerCnt + 1)
+	v.toDB, err = dbconn.CreateBaseDB(&dbCfg)
 	if err != nil {
 		return err
 	}
 
-	v.timezone, err = str2TimezoneOrFromDB(tctx, v.cfg.Timezone, &v.cfg.To)
+	if err = v.persistHelper.init(newCtx); err != nil {
+		return err
+	}
+
+	var defaultUpstreamTZ string
+	failpoint.Inject("ValidatorMockUpstreamTZ", func() {
+		defaultUpstreamTZ = "UTC"
+	})
+	v.upstreamTZ, err = str2TimezoneOrFromDB(newCtx, defaultUpstreamTZ, &v.cfg.From)
+	if err != nil {
+		return err
+	}
+	v.timezone, err = str2TimezoneOrFromDB(newCtx, v.cfg.Timezone, &v.cfg.To)
 	if err != nil {
 		return err
 	}
@@ -264,17 +295,32 @@ func (v *DataValidator) initialize() error {
 	return nil
 }
 
+func (v *DataValidator) routineWrapper(fn func()) {
+	defer func() {
+		if err := recover(); err != nil {
+			v.L.Error("panic", zap.Any("err", err))
+			v.sendError(terror.ErrValidatorPanic.Generate(err))
+		}
+	}()
+
+	fn()
+}
+
 func (v *DataValidator) Start(expect pb.Stage) {
 	v.Lock()
 	defer v.Unlock()
-	failpoint.Inject("MockValidationQuery", func() {
-		v.setStage(pb.Stage_Running)
-		failpoint.Return()
-	})
 
-	v.L.Info("starting")
+	v.L.Info("starting", zap.Any("cfg", v.cfg.ValidatorCfg),
+		zap.String("start-time", v.cfg.ValidatorCfg.StartTime),
+		zap.Bool("start with subtask", v.startWithSubtask),
+		zap.Any("expect", expect))
 	if v.Stage() == pb.Stage_Running {
 		v.L.Info("already started")
+		return
+	}
+
+	if expect != pb.Stage_Running {
+		v.L.Info("expect stage is not running", zap.Any("expect", expect))
 		return
 	}
 
@@ -283,25 +329,43 @@ func (v *DataValidator) Start(expect pb.Stage) {
 		return
 	}
 
-	if expect != pb.Stage_Running {
-		return
-	}
+	v.wg.Add(1)
+	go v.routineWrapper(v.doValidate)
 
 	v.wg.Add(1)
-	go v.doValidate()
+	go v.routineWrapper(v.printStatusRoutine)
 
 	v.wg.Add(1)
-	go v.printStatusRoutine()
+	go utils.GoLogWrapper(v.L, v.markErrorStartedRoutine)
 
+	// routineWrapper relies on errorProcessRoutine to handle panic errors,
+	// so just wrap it using a common wrapper.
 	v.errProcessWg.Add(1)
-	go v.errorProcessRoutine()
+	go utils.GoLogWrapper(v.L, v.errorProcessRoutine)
 
 	v.setStage(pb.Stage_Running)
 	v.L.Info("started")
 }
 
+func (v *DataValidator) markErrorStartedRoutine() {
+	defer v.wg.Done()
+
+	select {
+	case <-v.ctx.Done():
+	case <-time.After(markErrorRowDelay):
+		if !v.markErrorStarted.Load() {
+			v.L.Info("mark markErrorStarted=true after error row delay")
+			v.markErrorStarted.Store(true)
+		}
+	}
+}
+
 func (v *DataValidator) printStatusRoutine() {
 	defer v.wg.Done()
+	var (
+		prevProcessedBinlogSize = v.processedBinlogSize.Load()
+		prevTime                = time.Now()
+	)
 	for {
 		select {
 		case <-v.ctx.Done():
@@ -317,10 +381,18 @@ func (v *DataValidator) printStatusRoutine() {
 				v.pendingRowCounts[rowUpdated].Load(),
 				v.pendingRowCounts[rowDeleted].Load(),
 			}
+			currProcessedBinlogSize := v.processedBinlogSize.Load()
+			currTime := time.Now()
+			interval := time.Since(prevTime)
+			speed := float64((currProcessedBinlogSize-prevProcessedBinlogSize)>>20) / interval.Seconds()
+			prevProcessedBinlogSize = currProcessedBinlogSize
+			prevTime = currTime
+
 			v.L.Info("validator status",
 				zap.Int64s("processed(i, u, d)", processed),
 				zap.Int64s("pending(i, u, d)", pending),
 				zap.Int64("new error rows(not flushed)", v.newErrorRowCount.Load()),
+				zap.String("binlog process speed", fmt.Sprintf("%.2f MB/s", speed)),
 			)
 		}
 	}
@@ -332,13 +404,15 @@ func (v *DataValidator) fillResult(err error, needLock bool) {
 		defer v.Unlock()
 	}
 
-	// todo: if error, validation is stopped( and cancelled), and we may receive a cancelled error.
-	// todo: do we need this cancel field?
+	// when met a non-retryable error, we'll call stopInner, then v.ctx is cancelled,
+	// don't set IsCanceled in this case
 	isCanceled := false
-	select {
-	case <-v.ctx.Done():
-		isCanceled = true
-	default:
+	if len(v.result.Errors) == 0 {
+		select {
+		case <-v.ctx.Done():
+			isCanceled = true
+		default:
+		}
 	}
 
 	var processErr *pb.ProcessError
@@ -357,7 +431,6 @@ func (v *DataValidator) errorProcessRoutine() {
 		v.fillResult(err, true)
 
 		if errors.Cause(err) != context.Canceled {
-			// todo: need a better way to handle err(auto resuming on some error, etc.)
 			v.stopInner()
 		}
 	}
@@ -366,14 +439,12 @@ func (v *DataValidator) errorProcessRoutine() {
 func (v *DataValidator) waitSyncerSynced(currLoc binlog.Location) error {
 	syncLoc := v.syncer.getFlushedGlobalPoint()
 	cmp := binlog.CompareLocation(currLoc, syncLoc, v.cfg.EnableGTID)
-	switch {
-	case cmp < 0:
+	if cmp >= 0 && !v.markErrorStarted.Load() {
+		v.markErrorStarted.Store(true)
+		v.L.Info("validator progress reached syncer")
+	}
+	if cmp <= 0 {
 		return nil
-	case cmp == 0:
-		v.reachedSyncer.Store(true)
-		return nil
-	default:
-		v.reachedSyncer.Store(true)
 	}
 
 	for {
@@ -409,6 +480,40 @@ func (v *DataValidator) waitSyncerRunning() error {
 	}
 }
 
+func (v *DataValidator) getInitialBinlogPosition() (binlog.Location, error) {
+	var location binlog.Location
+	timeStr := v.cfg.ValidatorCfg.StartTime
+	switch {
+	case timeStr != "":
+		// already check it when set it, will not check it again
+		t, _ := utils.ParseStartTimeInLoc(timeStr, v.upstreamTZ)
+		finder := binlog.NewRemoteBinlogPosFinder(v.tctx, v.fromDB.DB, v.syncCfg, v.cfg.EnableGTID)
+		loc, posTp, err := finder.FindByTimestamp(t.Unix())
+		if err != nil {
+			v.L.Error("fail to find binlog position by timestamp",
+				zap.Time("time", t), zap.Error(err))
+			return location, err
+		}
+		v.L.Info("find binlog pos by timestamp", zap.String("time", timeStr),
+			zap.Any("loc", loc), zap.Stringer("pos type", posTp))
+
+		if posTp == binlog.AboveUpperBoundBinlogPos {
+			return location, terror.ErrConfigStartTimeTooLate.Generate(timeStr)
+		}
+		location = *loc
+		v.L.Info("do validate from timestamp", zap.Any("loc", location))
+	case v.startWithSubtask:
+		// in extreme case, this loc may still not be the first binlog location of this task:
+		//   syncer synced some binlog and flush checkpoint, but validator still not has chance to run, then fail-over
+		location = v.syncer.getInitExecutedLoc()
+		v.L.Info("do validate from init executed loc of syncer", zap.Any("loc", location))
+	default:
+		location = v.syncer.getFlushedGlobalPoint()
+		v.L.Info("do validate from current loc of syncer", zap.Any("loc", location))
+	}
+	return location, nil
+}
+
 // doValidate: runs in a separate goroutine.
 func (v *DataValidator) doValidate() {
 	defer v.wg.Done()
@@ -419,7 +524,7 @@ func (v *DataValidator) doValidate() {
 		return
 	}
 
-	if err := v.loadPersistedData(v.tctx); err != nil {
+	if err := v.loadPersistedData(); err != nil {
 		v.sendError(terror.ErrValidatorLoadPersistedData.Delegate(err))
 		return
 	}
@@ -427,17 +532,20 @@ func (v *DataValidator) doValidate() {
 	var location binlog.Location
 	if v.location != nil {
 		location = *v.location
+		v.L.Info("do validate from checkpoint", zap.Any("loc", location))
 	} else {
-		if v.startWithSubtask {
-			// in extreme case, this loc may still not be the first binlog location of this task:
-			//   syncer synced some binlog and flush checkpoint, but validator still not has chance to run, then fail-over
-			location = v.syncer.getInitExecutedLoc()
-		} else {
-			location = v.syncer.getFlushedGlobalPoint()
+		// validator always uses remote binlog streamer now.
+		var err error
+		location, err = v.getInitialBinlogPosition()
+		if err != nil {
+			v.sendError(err)
+			return
 		}
+		// when relay log enabled, binlog name may contain uuid suffix, so need to extract the real location
+		location.Position.Name = binlog.ExtractRealName(location.Position.Name)
 		// persist current location to make sure we start from the same location
 		// if fail-over happens before we flush checkpoint and data.
-		err := v.persistHelper.persist(location)
+		err = v.persistHelper.persist(v.tctx, location)
 		if err != nil {
 			v.sendError(terror.ErrValidatorPersistData.Delegate(err))
 			return
@@ -529,6 +637,8 @@ func (v *DataValidator) doValidate() {
 			return
 		}
 
+		v.processedBinlogSize.Add(int64(e.Header.EventSize))
+
 		switch ev := e.Event.(type) {
 		case *replication.RowsEvent:
 			if err = v.processRowsEvent(e.Header, ev); err != nil {
@@ -540,6 +650,21 @@ func (v *DataValidator) doValidate() {
 			locationForFlush.Position = currLoc.Position
 		case *replication.XIDEvent:
 			locationForFlush.Position = currLoc.Position
+			err = locationForFlush.SetGTID(ev.GSet)
+			if err != nil {
+				v.sendError(terror.Annotate(err, "failed to set gtid"))
+				return
+			}
+			if err = v.checkAndPersistCheckpointAndData(locationForFlush); err != nil {
+				v.sendError(terror.ErrValidatorPersistData.Delegate(err))
+				return
+			}
+		case *replication.QueryEvent:
+			locationForFlush.Position = currLoc.Position
+			query := string(ev.Query)
+			if query == "COMMIT" || query == "BEGIN" {
+				break
+			}
 			err = locationForFlush.SetGTID(ev.GSet)
 			if err != nil {
 				v.sendError(terror.Annotate(err, "failed to set gtid"))
@@ -580,7 +705,6 @@ func (v *DataValidator) stopInner() {
 	v.streamerController.Close()
 	v.fromDB.Close()
 	v.toDB.Close()
-	v.persistHelper.close()
 
 	v.wg.Wait()
 	close(v.errChan) // close error chan after all possible sender goroutines stopped
@@ -595,10 +719,12 @@ func (v *DataValidator) startValidateWorkers() {
 	for i := 0; i < v.workerCnt; i++ {
 		worker := newValidateWorker(v, i)
 		v.workers[i] = worker
-		go func() {
-			v.wg.Done()
+		// worker handles panic in validateTableChange, so we can see it in `dmctl validation status`,
+		// for other panics we just log it.
+		go utils.GoLogWrapper(v.L, func() {
+			defer v.wg.Done()
 			worker.run()
-		}()
+		})
 	}
 
 	for _, tblChange := range v.loadedPendingChanges {
@@ -671,6 +797,8 @@ func (v *DataValidator) processRowsEvent(header *replication.EventHeader, ev *re
 		Name:   string(ev.Table.Table),
 	}
 
+	failpoint.Inject("ValidatorPanic", func() {})
+
 	if err := checkLogColumns(ev.SkippedColumns); err != nil {
 		return terror.Annotate(err, sourceTable.String())
 	}
@@ -701,6 +829,8 @@ func (v *DataValidator) processRowsEvent(header *replication.EventHeader, ev *re
 			target: *targetTable,
 			stage:  pb.Stage_Running,
 		}
+
+		v.L.Info("put table status", zap.Stringer("state", state))
 		v.putTableStatus(fullTableName, state)
 	}
 	if validateTbl.message != "" {
@@ -718,6 +848,7 @@ func (v *DataValidator) processRowsEvent(header *replication.EventHeader, ev *re
 	if changeType == rowUpdated {
 		step = 2
 	}
+	estimatedRowSize := int32(header.EventSize) / int32(len(ev.Rows))
 	for i := 0; i < len(ev.Rows); i += step {
 		var beforeImage, afterImage []interface{}
 		switch changeType {
@@ -737,18 +868,22 @@ func (v *DataValidator) processRowsEvent(header *replication.EventHeader, ev *re
 			nil,
 		)
 		rowChange.SetWhereHandle(downstreamTableInfo.WhereHandle)
+		size := estimatedRowSize
 		if changeType == rowUpdated && rowChange.IsIdentityUpdated() {
 			delRow, insRow := rowChange.SplitUpdate()
 			delRowKey := genRowKey(delRow)
-			v.dispatchRowChange(delRowKey, &rowValidationJob{Key: delRowKey, Tp: rowDeleted, row: delRow})
+			v.dispatchRowChange(delRowKey, &rowValidationJob{Key: delRowKey, Tp: rowDeleted, row: delRow, size: size})
 			v.processedRowCounts[rowDeleted].Inc()
 
 			insRowKey := genRowKey(insRow)
-			v.dispatchRowChange(insRowKey, &rowValidationJob{Key: insRowKey, Tp: rowInsert, row: insRow})
+			v.dispatchRowChange(insRowKey, &rowValidationJob{Key: insRowKey, Tp: rowInsert, row: insRow, size: size})
 			v.processedRowCounts[rowInsert].Inc()
 		} else {
 			rowKey := genRowKey(rowChange)
-			v.dispatchRowChange(rowKey, &rowValidationJob{Key: rowKey, Tp: changeType, row: rowChange})
+			if changeType == rowUpdated {
+				size *= 2
+			}
+			v.dispatchRowChange(rowKey, &rowValidationJob{Key: rowKey, Tp: changeType, row: rowChange, size: size})
 			v.processedRowCounts[changeType].Inc()
 		}
 	}
@@ -779,12 +914,16 @@ func (v *DataValidator) persistCheckpointAndData(loc binlog.Location) error {
 	}
 	wg.Wait()
 
-	err := v.persistHelper.persist(loc)
+	v.L.Info("persist checkpoint and intermediate data",
+		zap.Int64("pending size", v.getPendingRowSize()),
+		zap.Int64("pending count", v.getAllPendingRowCount()),
+		zap.Int64("new error", v.newErrorRowCount.Load()))
+
+	err := v.persistHelper.persist(v.tctx, loc)
 	if err != nil {
 		return err
 	}
 
-	v.persistHelper.incrRevision()
 	// reset errors after save
 	for _, worker := range v.workers {
 		worker.resetErrorRows()
@@ -794,22 +933,14 @@ func (v *DataValidator) persistCheckpointAndData(loc binlog.Location) error {
 	return nil
 }
 
-func (v *DataValidator) loadPersistedData(tctx *tcontext.Context) error {
-	var err error
-	v.location, err = v.persistHelper.loadCheckpoint(tctx)
-	if err != nil {
-		return err
-	}
-
-	loadedPendingChanges, rev, err := v.persistHelper.loadPendingChange(tctx)
+func (v *DataValidator) loadPersistedData() error {
+	data, err := v.persistHelper.loadPersistedDataRetry(v.tctx)
 	if err != nil {
 		return err
 	}
 	// table info of pending change is not persisted in order to save space, so need to init them after load.
 	pendingChanges := make(map[string]*tableChangeJob)
-	for tblName, tblChange := range loadedPendingChanges {
-		pendingTblChange := newTableChangeJob()
-		pendingChanges[tblName] = pendingTblChange
+	for _, tblChange := range data.pendingChanges {
 		// todo: if table is dropped since last run, we should skip rows related to this table & update table status
 		// see https://github.com/pingcap/tiflow/pull/4881#discussion_r834093316
 		sourceTable := tblChange.sourceTable
@@ -820,6 +951,9 @@ func (v *DataValidator) loadPersistedData(tctx *tcontext.Context) error {
 		if validateTbl.message != "" {
 			return errors.New("failed to get table info " + validateTbl.message)
 		}
+		pendingTblChange := newTableChangeJob()
+		// aggregate using target table just as worker did.
+		pendingChanges[validateTbl.targetTable.String()] = pendingTblChange
 		for _, row := range tblChange.rows {
 			var beforeImage, afterImage []interface{}
 			switch row.Tp {
@@ -842,20 +976,17 @@ func (v *DataValidator) loadPersistedData(tctx *tcontext.Context) error {
 					validateTbl.srcTableInfo, validateTbl.downstreamTableInfo.TableInfo,
 					nil,
 				),
-				FirstValidateTS: row.FirstValidateTS,
-				FailedCnt:       row.FailedCnt,
+				size:      row.Size,
+				FailedCnt: row.FailedCnt,
 			}
 		}
 	}
+
+	v.location = data.checkpoint
 	v.loadedPendingChanges = pendingChanges
+	v.persistHelper.setRevision(data.rev)
+	v.initTableStatus(data.tableStatus)
 
-	v.persistHelper.setRevision(rev)
-
-	tableStatus, err := v.persistHelper.loadTableStatus(tctx)
-	if err != nil {
-		return err
-	}
-	v.initTableStatus(tableStatus)
 	return nil
 }
 
@@ -938,8 +1069,8 @@ func (v *DataValidator) getTableStatus(fullTableName string) (*tableValidateStat
 
 // return snapshot of the current table status.
 func (v *DataValidator) getTableStatusMap() map[string]*tableValidateStatus {
-	v.RLock()
-	defer v.RUnlock()
+	v.stateMutex.RLock()
+	defer v.stateMutex.RUnlock()
 	tblStatus := make(map[string]*tableValidateStatus)
 	for key, tblStat := range v.tableStatus {
 		stat := &tableValidateStatus{}
@@ -955,16 +1086,34 @@ func (v *DataValidator) putTableStatus(name string, status *tableValidateStatus)
 	v.tableStatus[name] = status
 }
 
-func (v *DataValidator) hasReachedSyncer() bool {
-	return v.reachedSyncer.Load()
+func (v *DataValidator) isMarkErrorStarted() bool {
+	return v.markErrorStarted.Load()
 }
 
 func (v *DataValidator) addPendingRowCount(tp rowChangeJobType, cnt int64) {
 	v.pendingRowCounts[tp].Add(cnt)
 }
 
+func (v *DataValidator) getAllPendingRowCount() int64 {
+	return v.pendingRowCounts[rowInsert].Load() +
+		v.pendingRowCounts[rowUpdated].Load() +
+		v.pendingRowCounts[rowDeleted].Load()
+}
+
+func (v *DataValidator) addPendingRowSize(size int64) {
+	v.pendingRowSize.Add(size)
+}
+
+func (v *DataValidator) getPendingRowSize() int64 {
+	return v.pendingRowSize.Load()
+}
+
 func (v *DataValidator) sendError(err error) {
 	v.errChan <- err
+}
+
+func (v *DataValidator) getNewErrorRowCount() int64 {
+	return v.newErrorRowCount.Load()
 }
 
 // getRowChangeType should be called only when the event type is RowsEvent.
@@ -986,7 +1135,7 @@ func genRowKey(row *sqlmodel.RowChange) string {
 }
 
 func genRowKeyByString(pkValues []string) string {
-	// TODO: in scenario below, the generated key may not unique, but it's rare
+	// in the scenario below, the generated key may not be unique, but it's rare
 	// suppose a table with multiple column primary key: (v1, v2)
 	// for below case, the generated key is the same:
 	// 	 (aaa\t, bbb) and (aaa, \tbbb), the joint values both are "aaa\t\tbbb"
@@ -1001,21 +1150,6 @@ func genRowKeyByString(pkValues []string) string {
 
 func (v *DataValidator) GetValidatorTableStatus(filterStatus pb.Stage) []*pb.ValidationTableStatus {
 	tblStatus := v.getTableStatusMap()
-	failpoint.Inject("MockValidationQuery", func() {
-		tblStatus = map[string]*tableValidateStatus{
-			"`testdb1`.`testtable1`": {
-				source: filter.Table{Schema: "testdb1", Name: "testtable1"},
-				target: filter.Table{Schema: "dstdb", Name: "dsttable"},
-				stage:  pb.Stage_Running,
-			},
-			"`testdb2`.`testtable2`": {
-				source:  filter.Table{Schema: "testdb2", Name: "testtable2"},
-				target:  filter.Table{Schema: "dstdb", Name: "dsttable"},
-				stage:   pb.Stage_Stopped,
-				message: tableWithoutPrimaryKeyMsg,
-			},
-		}
-	})
 
 	result := make([]*pb.ValidationTableStatus, 0)
 	for _, tblStat := range tblStatus {
@@ -1033,42 +1167,79 @@ func (v *DataValidator) GetValidatorTableStatus(filterStatus pb.Stage) []*pb.Val
 	return result
 }
 
-func (v *DataValidator) GetValidatorError(errState pb.ValidateErrorState) []*pb.ValidationError {
-	failpoint.Inject("MockValidationQuery", func() {
-		failpoint.Return(
-			[]*pb.ValidationError{
-				{Id: "1"}, {Id: "2"},
-			},
-		)
-	})
+func (v *DataValidator) GetValidatorError(errState pb.ValidateErrorState) ([]*pb.ValidationError, error) {
 	// todo: validation error in workers cannot be returned
 	// because the errID is only allocated when the error rows are flushed
 	// user cannot handle errorRows without errID
-	ret, err := v.persistHelper.loadError(errState)
+	var (
+		toDB  *conn.BaseDB
+		err   error
+		dbCfg config.DBConfig
+	)
+	ctx, cancel := context.WithTimeout(context.Background(), validatorDmctlOpTimeout)
+	tctx := tcontext.NewContext(ctx, v.L)
+	defer cancel()
+	failpoint.Inject("MockValidationQuery", func() {
+		toDB = v.persistHelper.db
+		failpoint.Return(v.persistHelper.loadError(tctx, toDB, errState))
+	})
+	dbCfg = v.cfg.To
+	dbCfg.RawDBCfg = config.DefaultRawDBConfig().SetMaxIdleConns(1)
+	toDB, err = dbconn.CreateBaseDB(&dbCfg)
+	if err != nil {
+		v.L.Warn("failed to create downstream db", zap.Error(err))
+		return nil, err
+	}
+	defer dbconn.CloseBaseDB(tctx, toDB)
+	ret, err := v.persistHelper.loadError(tctx, toDB, errState)
 	if err != nil {
 		v.L.Warn("fail to load validator error", zap.Error(err))
+		return nil, err
 	}
-	return ret
+	return ret, nil
 }
 
 func (v *DataValidator) OperateValidatorError(validateOp pb.ValidationErrOp, errID uint64, isAll bool) error {
-	failpoint.Inject("MockValidationOperation", func() {
-		failpoint.Return(nil)
+	var (
+		toDB  *conn.BaseDB
+		err   error
+		dbCfg config.DBConfig
+	)
+	ctx, cancel := context.WithTimeout(context.Background(), validatorDmctlOpTimeout)
+	tctx := tcontext.NewContext(ctx, v.L)
+	defer cancel()
+	failpoint.Inject("MockValidationQuery", func() {
+		toDB = v.persistHelper.db
+		failpoint.Return(v.persistHelper.operateError(tctx, toDB, validateOp, errID, isAll))
 	})
-	return v.persistHelper.operateError(validateOp, errID, isAll)
+	dbCfg = v.cfg.To
+	dbCfg.RawDBCfg = config.DefaultRawDBConfig().SetMaxIdleConns(1)
+	toDB, err = dbconn.CreateBaseDB(&dbCfg)
+	if err != nil {
+		return err
+	}
+	defer dbconn.CloseBaseDB(tctx, toDB)
+	return v.persistHelper.operateError(tctx, toDB, validateOp, errID, isAll)
 }
 
 func (v *DataValidator) getAllErrorCount(timeout time.Duration) ([errorStateTypeCount]int64, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	tctx := tcontext.NewContext(ctx, v.L)
-	// todo: should create a separate db to get error count, since validator may be stopped or being initialized,
-	// else may fail due to concurrent access
-	// todo: should not rely on fields which need to be inited in 'init', such as c.tctx,
-	// else this method may fail due to concurrent access.
-	countMap, err := v.persistHelper.loadErrorCount(tctx)
+
+	// use a separate db to get error count, since validator maybe stopped or initializing
+	dbCfg := v.cfg.To
+	dbCfg.RawDBCfg = config.DefaultRawDBConfig().SetMaxIdleConns(1)
+	countMap := map[pb.ValidateErrorState]int64{}
+	toDB, err := dbconn.CreateBaseDB(&dbCfg)
 	if err != nil {
-		v.L.Warn("failed to load error count", zap.Error(err))
+		v.L.Warn("failed to create downstream db", zap.Error(err))
+	} else {
+		defer dbconn.CloseBaseDB(tctx, toDB)
+		countMap, err = v.persistHelper.loadErrorCount(tctx, toDB)
+		if err != nil {
+			v.L.Warn("failed to load error count", zap.Error(err))
+		}
 	}
 	var allErrorCount [errorStateTypeCount]int64
 	allErrorCount[pb.ValidateErrorState_NewErr] = countMap[pb.ValidateErrorState_NewErr]
@@ -1082,7 +1253,7 @@ func (v *DataValidator) getAllErrorCount(timeout time.Duration) ([errorStateType
 
 func (v *DataValidator) GetValidatorStatus() *pb.ValidationStatus {
 	var extraMsg string
-	allErrorCount, err := v.getAllErrorCount(5 * time.Second)
+	allErrorCount, err := v.getAllErrorCount(validatorDmctlOpTimeout)
 	if err != nil {
 		// nolint:nilerr
 		extraMsg = fmt.Sprintf(" (failed to load error count from meta db: %s)", err.Error())
@@ -1117,6 +1288,7 @@ func (v *DataValidator) GetValidatorStatus() *pb.ValidationStatus {
 	return &pb.ValidationStatus{
 		Task:                v.cfg.Name,
 		Source:              v.cfg.SourceID,
+		Mode:                v.cfg.ValidatorCfg.Mode,
 		Stage:               v.Stage(),
 		Result:              returnedResult,
 		ValidatorBinlog:     validatorBinlog,

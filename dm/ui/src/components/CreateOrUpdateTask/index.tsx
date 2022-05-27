@@ -106,11 +106,15 @@ const CreateTaskConfig: React.FC<{
     const key = 'createTask-' + Date.now()
     message.loading({ content: t('requesting'), key })
     try {
-      await handler({ task: payload as Task }).unwrap()
+      const data = await handler({ task: payload as Task }).unwrap()
       if (startAfterSaved) {
         await startTask({ taskName: payload.name }).unwrap()
       }
-      message.success({ content: t('request success'), key })
+      if (data.check_result) {
+        message.success({ content: data.check_result, key })
+      } else {
+        message.success({ content: t('request success'), key })
+      }
       navigate('/migration/task')
     } catch (e) {
       message.destroy(key)

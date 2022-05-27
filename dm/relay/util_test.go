@@ -128,7 +128,7 @@ func (t *testUtilSuite) TestGetNextUUID(c *C) {
 	}
 
 	for _, cs := range cases {
-		nu, nus, err := getNextUUID(cs.currUUID, cs.UUIDs)
+		nu, nus, err := getNextRelaySubDir(cs.currUUID, cs.UUIDs)
 		if len(cs.errMsgReg) > 0 {
 			c.Assert(err, ErrorMatches, cs.errMsgReg)
 		} else {

@@ -16,7 +16,6 @@ package pipeline
 import (
 	"context"
 	"sort"
-	"sync"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -25,7 +24,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	"github.com/pingcap/tiflow/pkg/cyclic/mark"
-	"github.com/pingcap/tiflow/pkg/pipeline"
 	pmessage "github.com/pingcap/tiflow/pkg/pipeline/message"
 	"github.com/stretchr/testify/require"
 )
@@ -125,77 +123,6 @@ func TestCyclicMarkNode(t *testing.T) {
 			replicaID: 1,
 		},
 	}
-
-	for _, tc := range testCases {
-		ctx := cdcContext.NewContext(context.Background(), &cdcContext.GlobalVars{})
-		ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
-			Info: &model.ChangeFeedInfo{
-				Config: &config.ReplicaConfig{
-					Cyclic: &config.CyclicConfig{
-						Enable:          true,
-						ReplicaID:       tc.replicaID,
-						FilterReplicaID: tc.filterID,
-					},
-				},
-			},
-		})
-		n := newCyclicMarkNode(markTableID)
-		err := n.Init(pipeline.MockNodeContext4Test(ctx, pmessage.Message{}, nil))
-		require.Nil(t, err)
-		outputCh := make(chan pmessage.Message)
-		var wg sync.WaitGroup
-		wg.Add(2)
-		go func() {
-			defer wg.Done()
-			defer close(outputCh)
-			var lastCommitTs model.Ts
-			for _, row := range tc.input {
-				event := model.NewPolymorphicEvent(&model.RawKVEntry{
-					OpType:  model.OpTypePut,
-					Key:     tablecodec.GenTableRecordPrefix(row.Table.TableID),
-					StartTs: row.StartTs,
-					CRTs:    row.CommitTs,
-				})
-				event.Row = row
-				msg := pmessage.PolymorphicEventMessage(event)
-				err := n.Receive(pipeline.MockNodeContext4Test(ctx, msg, outputCh))
-				require.Nil(t, err)
-				lastCommitTs = row.CommitTs
-			}
-			msg := pmessage.PolymorphicEventMessage(
-				model.NewResolvedPolymorphicEvent(0, lastCommitTs+1))
-			err := n.Receive(pipeline.MockNodeContext4Test(ctx, msg, outputCh))
-			require.Nil(t, err)
-		}()
-		output := []*model.RowChangedEvent{}
-		go func() {
-			defer wg.Done()
-			for row := range outputCh {
-				if row.PolymorphicEvent.RawKV.OpType == model.OpTypeResolved {
-					continue
-				}
-				output = append(output, row.PolymorphicEvent.Row)
-			}
-		}()
-		wg.Wait()
-		// check the commitTs is increasing
-		var lastCommitTs model.Ts
-		for _, row := range output {
-			require.GreaterOrEqual(t, row.CommitTs, lastCommitTs)
-			// Ensure that the ReplicaID of the row is set correctly.
-			require.NotEqual(t, 0, row.ReplicaID)
-			lastCommitTs = row.CommitTs
-		}
-		sort.Slice(output, func(i, j int) bool {
-			if output[i].CommitTs == output[j].CommitTs {
-				return output[i].StartTs < output[j].StartTs
-			}
-			return output[i].CommitTs < output[j].CommitTs
-		})
-		require.Equal(t, tc.expected, output, cmp.Diff(output, tc.expected))
-	}
-
-	// table actor
 	for _, tc := range testCases {
 		ctx := newCyclicNodeContext(newContext(context.TODO(), "a.test", nil, 1, &cdcContext.ChangefeedVars{
 			Info: &model.ChangeFeedInfo{
@@ -209,11 +136,11 @@ func TestCyclicMarkNode(t *testing.T) {
 			},
 		}, nil, throwDoNothing))
 		n := newCyclicMarkNode(markTableID)
-		err := n.Init(ctx)
+		err := n.InitTableActor(tc.replicaID, tc.filterID)
 		require.Nil(t, err)
 		output := []*model.RowChangedEvent{}
 		putToOutput := func(row *pmessage.Message) {
-			if row == nil || row.PolymorphicEvent.RawKV.OpType == model.OpTypeResolved {
+			if row == nil || row.PolymorphicEvent.IsResolved() {
 				return
 			}
 			output = append(output, row.PolymorphicEvent.Row)

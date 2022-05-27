@@ -31,43 +31,47 @@ import (
 
 // Sink is an abstraction for anything that a changefeed may emit into.
 type Sink interface {
-	// Init initializes the sink resource
-	// when the sink is added, this function will be called
-	// init resource or clean up the old values in this function
-	Init(tableID model.TableID) error
+	// AddTable adds the table to MySQLSink or MQSink,
+	// which is currently responsible for cleaning up
+	// the residual values of the table in Sink.
+	// See: https://github.com/pingcap/tiflow/issues/4464#issuecomment-1085385382.
+	//
+	// NOTICE: Only MySQLSink and MQSink implement it.
+	// AddTable is thread-safe.
+	AddTable(tableID model.TableID) error
 
 	// EmitRowChangedEvents sends Row Changed Event to Sink
 	// EmitRowChangedEvents may write rows to downstream directly;
 	//
-	// EmitRowChangedEvents is thread-safety.
-	// FIXME: some sink implementation is not thread-safety, but they should be.
+	// EmitRowChangedEvents is thread-safe.
 	EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error
-
-	// TryEmitRowChangedEvents is thread-safety and non-blocking.
-	TryEmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) (bool, error)
 
 	// EmitDDLEvent sends DDL Event to Sink
 	// EmitDDLEvent should execute DDL to downstream synchronously
 	//
-	// EmitDDLEvent is thread-safety.
-	// FIXME: some sink implementation is not thread-safety, but they should be.
+	// EmitDDLEvent is thread-safe.
 	EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error
 
 	// FlushRowChangedEvents flushes each row which of commitTs less than or
-	// equal to `resolvedTs` into downstream.
-	// TiCDC guarantees that all the Events whose commitTs is less than or
-	// equal to `resolvedTs` are sent to Sink through `EmitRowChangedEvents`
+	// equal to `resolved.Ts` into downstream.
+	// With `resolved.Mode == NormalResolvedMode`, TiCDC guarantees that all events whose commitTs
+	// is less than or equal to `resolved.Ts` are sent to Sink.
+	// With `resolved.Mode == BatchResolvedMode`, TiCDC guarantees that all events whose commitTs
+	// is less than 'resolved.Ts' are sent to Sink.
 	//
-	// FlushRowChangedEvents is thread-safety.
-	// FIXME: some sink implementation is not thread-safety, but they should be.
-	FlushRowChangedEvents(ctx context.Context, tableID model.TableID, resolvedTs uint64) (uint64, error)
+	// FlushRowChangedEvents is thread-safe.
+	FlushRowChangedEvents(
+		ctx context.Context, tableID model.TableID, resolved model.ResolvedTs,
+	) (uint64, error)
 
 	// EmitCheckpointTs sends CheckpointTs to Sink.
 	// TiCDC guarantees that all Events **in the cluster** which of commitTs
 	// less than or equal `checkpointTs` are sent to downstream successfully.
+	// We use TableName instead of TableID here because
+	// we need to consider the case of Table renaming.
+	// Passing the TableName directly in the DDL Sink is a more straightforward solution.
 	//
-	// EmitCheckpointTs is thread-safety.
-	// FIXME: some sink implementation is not thread-safety, but they should be.
+	// EmitCheckpointTs is thread-safe.
 	EmitCheckpointTs(ctx context.Context, ts uint64, tables []model.TableName) error
 
 	// Close closes the Sink.
@@ -75,13 +79,15 @@ type Sink interface {
 	// Close is thread-safe and idempotent.
 	Close(ctx context.Context) error
 
-	// Barrier is a synchronous function to wait all events to be flushed
-	// in underlying sink.
-	// Note once Barrier is called, the resolved ts won't be pushed until
+	// RemoveTable is a synchronous function to wait
+	// all events of the table to be flushed in
+	// underlying sink before we remove the table from sink.
+	// Note once Barrier is called, the resolved ts **won't** be pushed until
 	// the Barrier call returns.
 	//
-	// Barrier is thread-safe.
-	Barrier(ctx context.Context, tableID model.TableID) error
+	// NOTICE: Only MySQLSink and MQSink implement it.
+	// RemoveTable is thread-safe.
+	RemoveTable(ctx context.Context, tableID model.TableID) error
 }
 
 var sinkIniterMap = make(map[string]sinkInitFunc)

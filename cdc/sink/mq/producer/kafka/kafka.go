@@ -28,7 +28,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/sink/codec"
+	"github.com/pingcap/tiflow/cdc/sink/mq/codec"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/kafka"
 	"github.com/pingcap/tiflow/pkg/util"
@@ -507,6 +507,10 @@ func validateMinInsyncReplicas(
 
 	minInsyncReplicasStr, exists, err := minInsyncReplicasConfigGetter()
 	if err != nil {
+		// 'min.insync.replica' is invisible to us in Confluent Cloud Kafka.
+		if cerror.ErrKafkaBrokerConfigNotFound.Equal(err) {
+			return nil
+		}
 		return err
 	}
 	minInsyncReplicas, err := strconv.Atoi(minInsyncReplicasStr)
@@ -551,8 +555,9 @@ func getBrokerConfig(admin kafka.ClusterAdminClient, brokerConfigName string) (s
 	}
 
 	if len(configEntries) == 0 || configEntries[0].Name != brokerConfigName {
-		return "", errors.New(fmt.Sprintf(
-			"cannot find the `%s` from the broker's configuration", brokerConfigName))
+		log.Warn("Kafka config item not found", zap.String("configName", brokerConfigName))
+		return "", cerror.ErrKafkaBrokerConfigNotFound.GenWithStack(
+			"cannot find the `%s` from the broker's configuration", brokerConfigName)
 	}
 
 	return configEntries[0].Value, nil

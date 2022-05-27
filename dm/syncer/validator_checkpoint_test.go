@@ -16,11 +16,13 @@ package syncer
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
 	"testing"
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/go-mysql-org/go-mysql/mysql"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/util/filter"
 	regexprrouter "github.com/pingcap/tidb/util/regexpr-router"
@@ -30,8 +32,6 @@ import (
 	"github.com/pingcap/tiflow/dm/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
-	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
-	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/retry"
 	"github.com/pingcap/tiflow/dm/pkg/schema"
 	"github.com/pingcap/tiflow/dm/syncer/dbconn"
@@ -51,7 +51,7 @@ func TestValidatorCheckpointPersist(t *testing.T) {
 		conn.DefaultDBProvider = &conn.DefaultDBProviderImpl{}
 	}()
 	dbMock.ExpectQuery("select .* from .*_validator_checkpoint.*").WillReturnRows(
-		dbMock.NewRows([]string{"", "", ""}).AddRow("mysql-bin.000001", 100, ""))
+		dbMock.NewRows([]string{"", "", "", ""}).AddRow("mysql-bin.000001", 100, "", 1))
 	dbMock.ExpectQuery("select .* from .*_validator_pending_change.*").WillReturnRows(
 		dbMock.NewRows([]string{"", "", "", "", ""}).
 			// insert with pk=11
@@ -66,21 +66,18 @@ func TestValidatorCheckpointPersist(t *testing.T) {
 	)
 	dbMock.ExpectQuery("select .* from .*_validator_table_status.*").WillReturnRows(
 		dbMock.NewRows([]string{"", "", "", "", "", ""}).AddRow(schemaName, tableName, schemaName, tableName, 2, ""))
-	dbMock.ExpectQuery("select .* from .*_validator_error_change.*").WillReturnRows(
-		dbMock.NewRows([]string{"", ""}).AddRow(pb.ValidateErrorState_NewErr, 2).AddRow(pb.ValidateErrorState_IgnoredErr, 3).
-			AddRow(pb.ValidateErrorState_ResolvedErr, 4))
 
 	syncerObj := NewSyncer(cfg, nil, nil)
 	syncerObj.running.Store(true)
 	syncerObj.tableRouter, err = regexprrouter.NewRegExprRouter(cfg.CaseSensitive, []*router.TableRule{})
 	require.NoError(t, err)
-	currLoc := binlog.NewLocation(cfg.Flavor)
+	currLoc := binlog.MustZeroLocation(cfg.Flavor)
 	currLoc.Position = mysql.Position{
 		Name: "mysql-bin.000001",
 		Pos:  3000,
 	}
 	syncerObj.checkpoint = &mockedCheckPointForValidator{
-		currLoc: binlog.NewLocation(cfg.Flavor),
+		currLoc: binlog.MustZeroLocation(cfg.Flavor),
 		nextLoc: currLoc,
 		cnt:     2,
 	}
@@ -100,61 +97,94 @@ func TestValidatorCheckpointPersist(t *testing.T) {
 	require.NoError(t, syncerObj.schemaTracker.CreateSchemaIfNotExists(schemaName))
 	require.NoError(t, syncerObj.schemaTracker.Exec(context.Background(), schemaName, createTableSQL))
 
+	require.Nil(t, failpoint.Enable("github.com/pingcap/tiflow/dm/syncer/ValidatorMockUpstreamTZ", `return()`))
+	defer func() {
+		require.Nil(t, failpoint.Disable("github.com/pingcap/tiflow/dm/syncer/ValidatorMockUpstreamTZ"))
+	}()
 	validator := NewContinuousDataValidator(cfg, syncerObj, false)
 	validator.validateInterval = 10 * time.Minute // we don't want worker start validate
 	validator.persistHelper.schemaInitialized.Store(true)
-	validator.Start(pb.Stage_Stopped)
+	require.NoError(t, validator.initialize())
 	validator.Stop()
-	require.NoError(t, validator.loadPersistedData(tcontext.Background()))
+	require.NoError(t, validator.loadPersistedData())
 	require.Equal(t, int64(1), validator.persistHelper.revision)
 	require.Equal(t, 1, len(validator.loadedPendingChanges))
 	require.Equal(t, 3, len(validator.loadedPendingChanges[tbl.String()].jobs))
 
-	testFunc := func(errStr string) {
-		validator.Start(pb.Stage_Stopped)
-		defer validator.Stop()
-		require.NoError(t, failpoint.Enable("github.com/pingcap/tiflow/dm/syncer/ValidatorCheckPointSkipExecuteSQL", `return("`+errStr+`")`))
-		defer func() {
-			require.NoError(t, failpoint.Disable("github.com/pingcap/tiflow/dm/syncer/ValidatorCheckPointSkipExecuteSQL"))
-		}()
-		validator.startValidateWorkers()
-		tblInfo := genValidateTableInfo(t, createTableSQL)
-		validator.workers[0].errorRows = append(validator.workers[0].errorRows, &validateFailedRow{
-			tp:      deletedRowExists,
-			dstData: []*sql.NullString{{String: "1", Valid: true}, {String: "a", Valid: true}},
-			srcJob:  genRowChangeJob(tbl, tblInfo, "1", rowDeleted, []interface{}{1, "a"}),
-		})
-		lastRev := validator.persistHelper.revision
-		err2 := validator.persistCheckpointAndData(*validator.location)
-		if errStr == "" {
-			require.NoError(t, err2)
-			require.Equal(t, lastRev+1, validator.persistHelper.revision)
-			require.Len(t, validator.workers[0].errorRows, 0)
-		} else {
-			require.Error(t, err2)
-			require.Equal(t, lastRev, validator.persistHelper.revision)
-			require.Len(t, validator.workers[0].errorRows, 1)
-		}
-	}
+	require.NoError(t, validator.initialize())
+	defer validator.Stop()
+	validator.persistHelper.setRevision(100)
+	validator.loadedPendingChanges = nil
+	validator.startValidateWorkers()
+	validator.tableStatus = map[string]*tableValidateStatus{tbl.String(): {
+		tbl, tbl, pb.Stage_Running, "",
+	}}
+	tblInfo := genValidateTableInfo(t, createTableSQL)
+	validator.workers[0].errorRows = append(validator.workers[0].errorRows, &validateFailedRow{
+		tp:      deletedRowExists,
+		dstData: []*sql.NullString{{String: "1", Valid: true}, {String: "a", Valid: true}},
+		srcJob:  genRowChangeJob(tbl, tblInfo, "1", rowDeleted, []interface{}{1, "a"}),
+	})
+	validator.dispatchRowChange("1", genRowChangeJob(tbl, tblInfo, "1", rowInsert, []interface{}{1, "a"}))
+	validator.newErrorRowCount.Store(1)
 
-	testFunc("")
-	testFunc("failed")
-}
+	// fail on first persist
+	dbMock.ExpectExec("INSERT INTO .*_validator_table_status.*ON DUPLICATE.*").WillReturnResult(driver.ResultNoRows)
+	dbMock.ExpectExec("INSERT INTO .*_validator_error_change.*ON DUPLICATE.*").WillReturnResult(driver.ResultNoRows)
+	dbMock.ExpectExec("DELETE FROM .*_validator_pending_change.*WHERE source = \\? and revision = \\?").
+		WithArgs("", 101).WillReturnResult(driver.ResultNoRows)
+	dbMock.ExpectExec("INSERT INTO .*_validator_pending_change.*VALUES \\(\\?, \\?, \\?, \\?, \\?, \\?\\)").
+		WillReturnResult(driver.ResultNoRows)
+	dbMock.ExpectExec("INSERT INTO .*_validator_checkpoint.*ON DUPLICATE.*").
+		WillReturnError(errors.New("failed on persist checkpoint"))
+	require.Nil(t, validator.flushedLoc)
+	err2 := validator.persistCheckpointAndData(*validator.location)
+	require.EqualError(t, err2, "failed on persist checkpoint")
+	require.Equal(t, int64(100), validator.persistHelper.revision)
+	require.Len(t, validator.workers[0].errorRows, 1)
+	require.Nil(t, validator.flushedLoc)
+	require.Equal(t, int64(1), validator.newErrorRowCount.Load())
 
-func TestCheckpointNotPanic(t *testing.T) {
-	// validator will try persisting data before starting
-	// if it visits and persists workers, which are not intialized before starting,
-	// the program will panick.
-	// This issue is fixed by putting off initializing workers
-	var err error
-	cfg := genSubtaskConfig(t)
-	syncerObj := NewSyncer(cfg, nil, nil)
-	require.Equal(t, log.InitLogger(&log.Config{}), nil)
-	validator := NewContinuousDataValidator(cfg, syncerObj, false)
-	validator.ctx, validator.cancel = context.WithCancel(context.Background())
-	validator.tctx = tcontext.NewContext(validator.ctx, validator.L)
-	validator.persistHelper.tctx = validator.tctx
-	currLoc := binlog.NewLocation(cfg.Flavor)
-	err = validator.persistHelper.persist(currLoc) // persist nil worker
-	require.NotNil(t, err)                         // err not nil but program not panicks
+	// fail on last clean up， but it doesn't matter
+	dbMock.ExpectExec("INSERT INTO .*_validator_table_status.*ON DUPLICATE.*").WillReturnResult(driver.ResultNoRows)
+	dbMock.ExpectExec("INSERT INTO .*_validator_error_change.*ON DUPLICATE.*").WillReturnResult(driver.ResultNoRows)
+	dbMock.ExpectExec("DELETE FROM .*_validator_pending_change.*WHERE source = \\? and revision = \\?").
+		WithArgs("", 101).WillReturnResult(driver.ResultNoRows)
+	dbMock.ExpectExec("INSERT INTO .*_validator_pending_change.*VALUES \\(\\?, \\?, \\?, \\?, \\?, \\?\\)").
+		WillReturnResult(driver.ResultNoRows)
+	dbMock.ExpectExec("INSERT INTO .*_validator_checkpoint.*ON DUPLICATE.*").
+		WillReturnResult(driver.ResultNoRows)
+	dbMock.ExpectExec("DELETE FROM .*_validator_pending_change.*WHERE source = \\? and revision != \\?").
+		WillReturnError(errors.New("failed on delete pending change"))
+	err2 = validator.persistCheckpointAndData(*validator.location)
+	require.NoError(t, err2)
+	require.Equal(t, int64(101), validator.persistHelper.revision)
+	require.Len(t, validator.workers[0].errorRows, 0)
+	require.Equal(t, validator.location.String(), validator.flushedLoc.String())
+	require.Equal(t, int64(0), validator.newErrorRowCount.Load())
+
+	// all success
+	dbMock.ExpectExec("INSERT INTO .*_validator_table_status.*ON DUPLICATE.*").WillReturnResult(driver.ResultNoRows)
+	dbMock.ExpectExec("INSERT INTO .*_validator_error_change.*ON DUPLICATE.*").WillReturnResult(driver.ResultNoRows)
+	dbMock.ExpectExec("DELETE FROM .*_validator_pending_change.*WHERE source = \\? and revision = \\?").
+		WithArgs("", 102).WillReturnResult(driver.ResultNoRows)
+	dbMock.ExpectExec("INSERT INTO .*_validator_pending_change.*VALUES \\(\\?, \\?, \\?, \\?, \\?, \\?\\)").
+		WillReturnResult(driver.ResultNoRows)
+	dbMock.ExpectExec("INSERT INTO .*_validator_checkpoint.*ON DUPLICATE.*").
+		WillReturnResult(driver.ResultNoRows)
+	dbMock.ExpectExec("DELETE FROM .*_validator_pending_change.*WHERE source = \\? and revision != \\?").
+		WithArgs("", 102).WillReturnResult(driver.ResultNoRows)
+	validator.workers[0].errorRows = append(validator.workers[0].errorRows, &validateFailedRow{
+		tp:      deletedRowExists,
+		dstData: []*sql.NullString{{String: "1", Valid: true}, {String: "a", Valid: true}},
+		srcJob:  genRowChangeJob(tbl, tblInfo, "1", rowDeleted, []interface{}{1, "a"}),
+	})
+	validator.newErrorRowCount.Store(1)
+	validator.flushedLoc = nil
+	err2 = validator.persistCheckpointAndData(*validator.location)
+	require.NoError(t, err2)
+	require.Equal(t, int64(102), validator.persistHelper.revision)
+	require.Len(t, validator.workers[0].errorRows, 0)
+	require.Equal(t, validator.location.String(), validator.flushedLoc.String())
+	require.Equal(t, int64(0), validator.newErrorRowCount.Load())
 }

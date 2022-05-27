@@ -25,11 +25,13 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/go-sql-driver/mysql"
+	perrors "github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/util"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/dm/dm/config"
+	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/retry"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
@@ -173,6 +175,61 @@ func (d *BaseDB) GetBaseConn(ctx context.Context) (*BaseConn, error) {
 	defer d.mu.Unlock()
 	d.conns[baseConn] = struct{}{}
 	return baseConn, nil
+}
+
+func (d *BaseDB) ExecContext(tctx *tcontext.Context, query string, args ...interface{}) (sql.Result, error) {
+	if tctx.L().Core().Enabled(zap.DebugLevel) {
+		tctx.L().Debug("exec context",
+			zap.String("query", utils.TruncateString(query, -1)),
+			zap.String("argument", utils.TruncateInterface(args, -1)))
+	}
+	return d.DB.ExecContext(tctx.Ctx, query, args...)
+}
+
+func (d *BaseDB) QueryContext(tctx *tcontext.Context, query string, args ...interface{}) (*sql.Rows, error) {
+	if tctx.L().Core().Enabled(zap.DebugLevel) {
+		tctx.L().Debug("query context",
+			zap.String("query", utils.TruncateString(query, -1)),
+			zap.String("argument", utils.TruncateInterface(args, -1)))
+	}
+	return d.DB.QueryContext(tctx.Ctx, query, args...)
+}
+
+func (d *BaseDB) DoTxWithRetry(tctx *tcontext.Context, queries []string, args [][]interface{}, retryer retry.Retryer) error {
+	workFunc := func(tctx *tcontext.Context) (interface{}, error) {
+		var (
+			err error
+			tx  *sql.Tx
+		)
+		tx, err = d.DB.BeginTx(tctx.Ctx, nil)
+		if err != nil {
+			return nil, perrors.Trace(err)
+		}
+		defer func() {
+			if err != nil {
+				if rollbackErr := tx.Rollback(); rollbackErr != nil {
+					tctx.L().Warn("failed to rollback", zap.Error(perrors.Trace(rollbackErr)))
+				}
+			} else {
+				err = tx.Commit()
+			}
+		}()
+		for i := range queries {
+			q := queries[i]
+			if tctx.L().Core().Enabled(zap.DebugLevel) {
+				tctx.L().Debug("exec in tx",
+					zap.String("query", utils.TruncateString(q, -1)),
+					zap.String("argument", utils.TruncateInterface(args[i], -1)))
+			}
+			if _, err = tx.ExecContext(tctx.Ctx, q, args[i]...); err != nil {
+				return nil, perrors.Trace(err)
+			}
+		}
+		return nil, perrors.Trace(err)
+	}
+
+	_, _, err := retryer.Apply(tctx, workFunc)
+	return err
 }
 
 // CloseBaseConn release BaseConn resource from BaseDB, and close BaseConn.

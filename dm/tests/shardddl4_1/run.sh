@@ -911,76 +911,121 @@ function DM_155_CASE {
 	run_sql_source2 "insert into ${shardddl1}.${tb2} values(3,3,3);"
 
 	run_sql_source1 "alter table ${shardddl1}.${tb1} change c b int;"
+	sleep 1
 	random_restart 3
+
 	run_sql_source1 "insert into ${shardddl1}.${tb1} values(4,4,4);"
 	run_sql_source2 "insert into ${shardddl1}.${tb1} values(5,5,5);"
 	run_sql_source2 "insert into ${shardddl1}.${tb2} values(6,6,6);"
 
 	run_sql_source1 "alter table ${shardddl1}.${tb1} add column g int;"
+	sleep 1
 	random_restart 3
+
 	run_sql_source1 "insert into ${shardddl1}.${tb1} values(7,7,7,7);"
 	run_sql_source2 "insert into ${shardddl1}.${tb1} values(8,8,8);"
 	run_sql_source2 "insert into ${shardddl1}.${tb2} values(9,9,9);"
 
 	run_sql_source1 "alter table ${shardddl1}.${tb1} change d f int;"
+	sleep 1
 	random_restart 3
+
 	run_sql_source1 "insert into ${shardddl1}.${tb1} values(10,10,10,10);"
 	run_sql_source2 "insert into ${shardddl1}.${tb1} values(11,11,11);"
 	run_sql_source2 "insert into ${shardddl1}.${tb2} values(12,12,12);"
 
 	run_sql_source1 "alter table ${shardddl1}.${tb1} add column e int not null after f;"
+	sleep 1
 	random_restart 3
+
 	run_sql_source1 "insert into ${shardddl1}.${tb1} values(13,13,13,13,13);"
 	run_sql_source2 "insert into ${shardddl1}.${tb1} values(14,14,14);"
 	run_sql_source2 "insert into ${shardddl1}.${tb2} values(15,15,15);"
 
 	run_sql_source2 "alter table ${shardddl1}.${tb1} change c b int;"
+	sleep 1
 	random_restart 3
+
 	run_sql_source1 "insert into ${shardddl1}.${tb1} values(16,16,16,16,16);"
 	run_sql_source2 "insert into ${shardddl1}.${tb1} values(17,17,17);"
 	run_sql_source2 "insert into ${shardddl1}.${tb2} values(18,18,18);"
 
 	run_sql_source2 "alter table ${shardddl1}.${tb1} change d f int;"
+	sleep 1
 	random_restart 3
+
 	run_sql_source1 "insert into ${shardddl1}.${tb1} values(19,19,19,19,19);"
 	run_sql_source2 "insert into ${shardddl1}.${tb1} values(20,20,20);"
 	run_sql_source2 "insert into ${shardddl1}.${tb2} values(21,21,21);"
 
 	run_sql_source2 "alter table ${shardddl1}.${tb1} add column g int;"
+	sleep 1
 	random_restart 3
+
 	run_sql_source1 "insert into ${shardddl1}.${tb1} values(22,22,22,22,22);"
 	run_sql_source2 "insert into ${shardddl1}.${tb1} values(23,23,23,23);"
 	run_sql_source2 "insert into ${shardddl1}.${tb2} values(24,24,24);"
 
 	run_sql_source2 "alter table ${shardddl1}.${tb1} add column e int not null after f;"
+	sleep 1
 	random_restart 3
+
 	run_sql_source1 "insert into ${shardddl1}.${tb1} values(25,25,25,25,25);"
 	run_sql_source2 "insert into ${shardddl1}.${tb1} values(26,26,26,26,26);"
 	run_sql_source2 "insert into ${shardddl1}.${tb2} values(27,27,27);"
 
 	run_sql_source2 "alter table ${shardddl1}.${tb2} change c b int;"
-	random_restart 3
 	run_sql_source1 "insert into ${shardddl1}.${tb1} values(28,28,28,28,28);"
-	run_sql_source2 "insert into ${shardddl1}.${tb1} values(29,29,29,29,29);"
+	run_sql_source2 "insert into ${shardddl1}.${tb1} values(29,29,29,29,29);" # source2 won't redirect until it receives new event
 	run_sql_source2 "insert into ${shardddl1}.${tb2} values(30,30,30);"
 
-	run_sql_source2 "alter table ${shardddl1}.${tb2} change d f int;"
+	check_log_contain_with_retry "finish to handle ddls in optimistic shard mode.*alter table ${shardddl1}.${tb1} change c b int" \
+		$WORK_DIR/worker1/log/dm-worker.log
+	check_log_contain_with_retry "finish to handle ddls in optimistic shard mode.*alter table ${shardddl1}.${tb1} change c b int" \
+		$WORK_DIR/worker2/log/dm-worker.log
 	random_restart 3
+
 	run_sql_source1 "insert into ${shardddl1}.${tb1} values(31,31,31,31,31);"
 	run_sql_source2 "insert into ${shardddl1}.${tb1} values(32,32,32,32,32);"
 	run_sql_source2 "insert into ${shardddl1}.${tb2} values(33,33,33);"
 
-	run_sql_source2 "alter table ${shardddl1}.${tb2} add column e int not null after f;"
-	random_restart 3
+	run_sql_source2 "alter table ${shardddl1}.${tb2} change d f int;"
 	run_sql_source1 "insert into ${shardddl1}.${tb1} values(34,34,34,34,34);"
 	run_sql_source2 "insert into ${shardddl1}.${tb1} values(35,35,35,35,35);"
-	run_sql_source2 "insert into ${shardddl1}.${tb2} values(36,36,36,36);"
+	run_sql_source2 "insert into ${shardddl1}.${tb2} values(36,36,36);" # source2 won't redirect until it receives new event
 
-	run_sql_source2 "alter table ${shardddl1}.${tb2} add column g int;"
+	check_log_contain_with_retry "finish to handle ddls in optimistic shard mode.*alter table ${shardddl1}.${tb1} change d f int" \
+		$WORK_DIR/worker1/log/dm-worker.log
+	check_log_contain_with_retry "finish to handle ddls in optimistic shard mode.*alter table ${shardddl1}.${tb1} change d f int" \
+		$WORK_DIR/worker2/log/dm-worker.log
 	random_restart 3
+
 	run_sql_source1 "insert into ${shardddl1}.${tb1} values(37,37,37,37,37);"
 	run_sql_source2 "insert into ${shardddl1}.${tb1} values(38,38,38,38,38);"
-	run_sql_source2 "insert into ${shardddl1}.${tb2} values(39,39,39,39,39);"
+	run_sql_source2 "insert into ${shardddl1}.${tb2} values(39,39,39);"
+
+	run_sql_source2 "alter table ${shardddl1}.${tb2} add column e int not null after f;"
+	run_sql_source1 "insert into ${shardddl1}.${tb1} values(40,40,40,40,40);"
+	run_sql_source2 "insert into ${shardddl1}.${tb1} values(41,41,41,41,41);"
+	run_sql_source2 "insert into ${shardddl1}.${tb2} values(42,42,42,42);" # source2 won't redirect until it receives new event
+
+	check_log_contain_with_retry "finish to handle ddls in optimistic shard mode.*alter table ${shardddl1}.${tb1} add column e int not null after f" \
+		$WORK_DIR/worker1/log/dm-worker.log
+	check_log_contain_with_retry "finish to handle ddls in optimistic shard mode.*alter table ${shardddl1}.${tb1} add column e int not null after f" \
+		$WORK_DIR/worker2/log/dm-worker.log
+	random_restart 3
+
+	run_sql_source1 "insert into ${shardddl1}.${tb1} values(43,43,43,43,43);"
+	run_sql_source2 "insert into ${shardddl1}.${tb1} values(44,44,44,44,44);"
+	run_sql_source2 "insert into ${shardddl1}.${tb2} values(45,45,45,45);"
+
+	run_sql_source2 "alter table ${shardddl1}.${tb2} add column g int;"
+	sleep 1
+	random_restart 3
+
+	run_sql_source1 "insert into ${shardddl1}.${tb1} values(46,46,46,46,46);"
+	run_sql_source2 "insert into ${shardddl1}.${tb1} values(47,47,47,47,47);"
+	run_sql_source2 "insert into ${shardddl1}.${tb2} values(48,48,48,48,48);"
 
 	# sleep 15 seconds to make sure both dm-workers have reached their final event
 	# then insert some dmls to avoid dm-worker get blocked at getting heart event which may cause 30s
@@ -1008,9 +1053,212 @@ function DM_155 {
 		"clean_table" "optimistic"
 }
 
+function DM_TABLE_CHECKPOINT_BACKWARD_CASE() {
+	run_sql_source1 "alter table shardddl1.tb1 change b c int;"
+	for i in $(seq 1 1000); do
+		run_sql_source1 "insert into shardddl1.tb1(a,c) values($i,$i)"
+	done
+	run_sql_source1 "alter table shardddl1.t_1 change b c int;"
+	for i in $(seq 1001 2000); do
+		run_sql_source1 "insert into shardddl1.tb1(a,c) values($i,$i)"
+	done
+	for i in $(seq 2001 3000); do
+		run_sql_source1 "insert into shardddl1.t_1(a,c) values($i,$i)"
+	done
+	run_sql_source2 "alter table shardddl1.tb1 change b c int;"
+	for i in $(seq 3001 3100); do
+		run_sql_source1 "insert into shardddl1.tb1(a,c) values($i,$i)"
+	done
+	run_sql_source2 "alter table shardddl1.t_1 change b c int;"
+	for i in $(seq 3101 3200); do
+		run_sql_source1 "insert into shardddl1.tb1(a,c) values($i,$i)"
+	done
+	cp $cur/conf/diff_config.toml $WORK_DIR/diff_config.toml
+	sed -i "s/\[routes.rule1\]/[routes.rule2]\nschema-pattern = \"shardddl[1-2]\"\ntable-pattern = \"t_1\"\ntarget-schema = \"shardddl\"\ntarget-table = \"t_1\"\n\[routes.rule1\]/g" $WORK_DIR/diff_config.toml
+	sed -i "s/route-rules = \[\"rule1\"\]/route-rules = \[\"rule1\"\,\"rule2\"]/g" $WORK_DIR/diff_config.toml
+	sed -i "s/target-check-tables = \[\"shardddl.tb\"\]/target-check-tables = \[\"shardddl.tb\",\"shardddl.t_1\"\]/g" $WORK_DIR/diff_config.toml
+	check_sync_diff $WORK_DIR $WORK_DIR/diff_config.toml 30
+}
+
+function DM_TABLE_CHECKPOINT_BACKWARD() {
+	run_case TABLE_CHECKPOINT_BACKWARD "double-source-optimistic" \
+		"run_sql_source1 \"create table ${shardddl1}.${tb1} (a int primary key, b int);\"; \
+     run_sql_source2 \"create table ${shardddl1}.${tb1} (a int primary key, b int);\"; \
+     run_sql_source1 \"create table ${shardddl1}.t_1 (a int primary key, b int);\"; \
+     run_sql_source2 \"create table ${shardddl1}.t_1 (a int primary key, b int);\"" \
+		"clean_table" "optimistic"
+}
+
+function DM_RESYNC_NOT_FLUSHED_CASE() {
+	export GO_FAILPOINTS='github.com/pingcap/tiflow/dm/syncer/ReSyncExit=return(true)'
+	restart_worker1
+	restart_worker2
+	run_sql_source1 "insert into ${shardddl1}.${tb1} values(1,1);"
+	run_sql_source1 "insert into ${shardddl1}.${tb2} values(2,2);"
+	run_sql_source2 "insert into ${shardddl1}.${tb1} values(3,3);"
+	run_sql_source2 "insert into ${shardddl1}.${tb2} values(4,4);"
+
+	run_sql_source1 "alter table ${shardddl1}.${tb1} change b c int;"
+	run_sql_source1 "insert into ${shardddl1}.${tb1} values(5,5);"
+	run_sql_source1 "insert into ${shardddl1}.${tb2} values(6,6);"
+	run_sql_source2 "insert into ${shardddl1}.${tb1} values(7,7);"
+	run_sql_source2 "insert into ${shardddl1}.${tb2} values(8,8);"
+
+	run_sql_source1 "alter table ${shardddl1}.${tb1} add column d int not null;"
+	run_sql_source1 "insert into ${shardddl1}.${tb1} values(9,9,9);"
+	run_sql_source1 "insert into ${shardddl1}.${tb2} values(10,10);"
+	run_sql_source2 "insert into ${shardddl1}.${tb1} values(11,11);"
+	run_sql_source2 "insert into ${shardddl1}.${tb2} values(12,12);"
+
+	run_sql_source1 "alter table ${shardddl1}.${tb2} change b c int;"
+	run_sql_source1 "insert into ${shardddl1}.${tb1} values(13,13,13);"
+	run_sql_source1 "insert into ${shardddl1}.${tb2} values(14,14);"
+	run_sql_source2 "insert into ${shardddl1}.${tb1} values(15,15);"
+	run_sql_source2 "insert into ${shardddl1}.${tb2} values(16,16);"
+
+	run_sql_source1 "alter table ${shardddl1}.${tb2} add column d int not null;"
+	run_sql_source1 "insert into ${shardddl1}.${tb1} values(17,17,17);"
+	run_sql_source1 "insert into ${shardddl1}.${tb2} values(18,18,18);"
+	run_sql_source2 "insert into ${shardddl1}.${tb1} values(19,19);"
+	run_sql_source2 "insert into ${shardddl1}.${tb2} values(20,20);"
+
+	run_sql_source2 "alter table ${shardddl1}.${tb1} change b c int;"
+	run_sql_source1 "insert into ${shardddl1}.${tb1} values(21,21,21);"
+	run_sql_source1 "insert into ${shardddl1}.${tb2} values(22,22,22);"
+	run_sql_source2 "insert into ${shardddl1}.${tb1} values(23,23);"
+	run_sql_source2 "insert into ${shardddl1}.${tb2} values(24,24);"
+
+	run_sql_source2 "alter table ${shardddl1}.${tb1} add column d int not null;"
+	run_sql_source1 "insert into ${shardddl1}.${tb1} values(25,25,25);"
+	run_sql_source1 "insert into ${shardddl1}.${tb2} values(26,26,26);"
+	run_sql_source2 "insert into ${shardddl1}.${tb1} values(27,27,27);"
+	run_sql_source2 "insert into ${shardddl1}.${tb2} values(28,28);"
+
+	run_sql_source2 "alter table ${shardddl1}.${tb2} change b c int;"
+	run_sql_source1 "insert into ${shardddl1}.${tb1} values(29,29,29);"
+	run_sql_source1 "insert into ${shardddl1}.${tb2} values(30,30,30);"
+	run_sql_source2 "insert into ${shardddl1}.${tb1} values(31,31,31);"
+	run_sql_source2 "insert into ${shardddl1}.${tb2} values(32,32);"
+
+	for ((k = 100; k < 120; k++)); do
+		run_sql_source1 "insert into ${shardddl1}.${tb1} values(${k},${k},${k});"
+		k=$((k + 1))
+		run_sql_source1 "insert into ${shardddl1}.${tb2} values(${k},${k},${k});"
+		k=$((k + 1))
+		run_sql_source2 "insert into ${shardddl1}.${tb1} values(${k},${k},${k});"
+		k=$((k + 1))
+		run_sql_source2 "insert into ${shardddl1}.${tb2} values(${k},${k});"
+		sleep 1
+	done
+
+	# lock finished at first time, both workers should exit
+	check_process_exit worker1 20
+	check_process_exit worker2 20
+	export GO_FAILPOINTS='github.com/pingcap/tiflow/dm/syncer/FakeRedirect=1*return("`shardddl`.`tb`")'
+	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
+	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
+
+	run_sql_source2 "alter table ${shardddl1}.${tb2} add column d int not null;"
+	run_sql_source1 "insert into ${shardddl1}.${tb1} values(33,33,33);"
+	run_sql_source1 "insert into ${shardddl1}.${tb2} values(34,34,34);"
+	run_sql_source2 "insert into ${shardddl1}.${tb1} values(35,35,35);"
+	run_sql_source2 "insert into ${shardddl1}.${tb2} values(36,36,36);"
+
+	for ((k = 200; k < 240; k++)); do
+		run_sql_source1 "insert into ${shardddl1}.${tb1} values(${k},${k},${k});"
+		k=$((k + 1))
+		run_sql_source1 "insert into ${shardddl1}.${tb2} values(${k},${k},${k});"
+		k=$((k + 1))
+		run_sql_source2 "insert into ${shardddl1}.${tb1} values(${k},${k},${k});"
+		k=$((k + 1))
+		run_sql_source2 "insert into ${shardddl1}.${tb2} values(${k},${k},${k});"
+		sleep 1
+	done
+
+	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
+	export GO_FAILPOINTS=''
+	restart_worker1
+	restart_worker2
+}
+
+function DM_RESYNC_NOT_FLUSHED() {
+	run_case RESYNC_NOT_FLUSHED "double-source-optimistic" \
+		"run_sql_source1 \"create table ${shardddl1}.${tb1} (a int primary key, b int);\"; \
+		 run_sql_source1 \"create table ${shardddl1}.${tb2} (a int primary key, b int);\"; \
+		 run_sql_source2 \"create table ${shardddl1}.${tb1} (a int primary key, b int);\"; \
+     run_sql_source2 \"create table ${shardddl1}.${tb2} (a int primary key, b int);\"" \
+		"clean_table" "optimistic"
+}
+
+function DM_RESYNC_TXN_INTERRUPT_CASE() {
+	# continue at the middle of a dml transaction
+	export GO_FAILPOINTS='github.com/pingcap/tiflow/dm/syncer/SleepInTxn=return(20)'
+	restart_worker1
+	restart_worker2
+
+	run_sql_source2 "alter table shardddl1.tb2 change b c int;"
+	run_sql_with_txn "shardddl1.tb2" 2 1 10 $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
+	run_sql_with_txn "shardddl1.t_1" 2 11 50 $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
+	source2worker=$($PWD/bin/dmctl.test DEVEL --master-addr "127.0.0.1:$MASTER_PORT1" operate-source show -s "mysql-replica-02" |
+		grep 'worker' | awk -F: '{print $2}' | cut -d'"' -f 2)
+	# make sure source2 in skip and wait redirect
+	check_log_contain_with_retry 'got a shard DDL lock operation.*CHANGE COLUMN `b` `c` INT' $WORK_DIR/$source2worker/log/dm-worker.log
+	run_sql_source1 "alter table shardddl1.tb1 change b c int;"
+	run_sql_with_txn "shardddl1.tb1" 2 51 60 $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
+	run_sql_with_txn "shardddl1.t_1" 2 61 70 $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
+
+	cp $cur/conf/diff_config.toml $WORK_DIR/diff_config.toml
+	sed -i "s/\[routes.rule1\]/[routes.rule2]\nschema-pattern = \"shardddl[1-2]\"\ntable-pattern = \"t_1\"\ntarget-schema = \"shardddl\"\ntarget-table = \"t_1\"\n\[routes.rule1\]/g" $WORK_DIR/diff_config.toml
+	sed -i "s/route-rules = \[\"rule1\"\]/route-rules = \[\"rule1\"\,\"rule2\"]/g" $WORK_DIR/diff_config.toml
+	sed -i "s/target-check-tables = \[\"shardddl.tb\"\]/target-check-tables = \[\"shardddl.tb\",\"shardddl.t_1\"\]/g" $WORK_DIR/diff_config.toml
+	check_sync_diff $WORK_DIR $WORK_DIR/diff_config.toml 30
+
+	# continue after gtid event but before query event
+	export GO_FAILPOINTS=""
+	restart_worker1
+	restart_worker2
+
+	run_sql_source1 "alter table shardddl1.tb1 change c d int;"
+	source1worker=$($PWD/bin/dmctl.test DEVEL --master-addr "127.0.0.1:$MASTER_PORT1" operate-source show -s "mysql-replica-01" |
+		grep 'worker' | awk -F: '{print $2}' | cut -d'"' -f 2)
+	# make sure source2 in skip and wait redirect
+	check_log_contain_with_retry 'got a shard DDL lock operation.*CHANGE COLUMN `c` `d` INT' $WORK_DIR/$source1worker/log/dm-worker.log
+	run_sql_source2 "alter table shardddl1.tb2 change c d int;"
+	run_sql_with_txn "shardddl1.tb2" 2 101 110 $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
+	run_sql_with_txn "shardddl1.tb1" 2 111 120 $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
+	run_sql_with_txn "shardddl1.tb2" 2 121 130 $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
+	run_sql_with_txn "shardddl1.t_1" 2 131 140 $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
+	check_sync_diff $WORK_DIR $WORK_DIR/diff_config.toml 30
+
+	run_sql_source2 "alter table shardddl1.tb2 change d e int;"
+	# make sure source2 in skip and wait redirect
+	source2worker=$($PWD/bin/dmctl.test DEVEL --master-addr "127.0.0.1:$MASTER_PORT1" operate-source show -s "mysql-replica-02" |
+		grep 'worker' | awk -F: '{print $2}' | cut -d'"' -f 2)
+	check_log_contain_with_retry 'got a shard DDL lock operation.*CHANGE COLUMN `d` `e` INT' $WORK_DIR/$source2worker/log/dm-worker.log
+	run_sql_source1 "alter table shardddl1.tb1 change d e int;"
+	run_sql_with_txn "shardddl1.tb2" 2 201 210 $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
+	run_sql_with_txn "shardddl1.tb1" 2 211 220 $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
+	run_sql_with_txn "shardddl1.tb2" 2 221 230 $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
+	run_sql_with_txn "shardddl1.t_1" 2 231 240 $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
+	check_sync_diff $WORK_DIR $WORK_DIR/diff_config.toml 30
+}
+
+function DM_RESYNC_TXN_INTERRUPT() {
+	run_case RESYNC_TXN_INTERRUPT "double-source-optimistic" \
+		"run_sql_source1 \"create table ${shardddl1}.${tb1} (a int primary key, b int);\"; \
+     run_sql_source2 \"create table ${shardddl1}.t_1 (a int primary key, b int);\"; \
+     run_sql_source2 \"create table ${shardddl1}.${tb2} (a int primary key, b int);\"" \
+		"clean_table" "optimistic"
+}
+
 function run() {
 	init_cluster
 	init_database
+	DM_TABLE_CHECKPOINT_BACKWARD
+	DM_RESYNC_NOT_FLUSHED
+	DM_RESYNC_TXN_INTERRUPT
 	start=131
 	end=155
 	for i in $(seq -f "%03g" ${start} ${end}); do

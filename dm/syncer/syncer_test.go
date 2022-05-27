@@ -25,8 +25,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/require"
-
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
@@ -45,6 +43,7 @@ import (
 	"github.com/pingcap/tiflow/dm/syncer/dbconn"
 	"github.com/pingcap/tiflow/pkg/errorutil"
 	"github.com/pingcap/tiflow/pkg/sqlmodel"
+	"github.com/stretchr/testify/require"
 
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
 	"github.com/go-mysql-org/go-mysql/mysql"
@@ -767,6 +766,10 @@ func (s *testSyncerSuite) TestRun(c *C) {
 	s.cfg.Batch = 1000
 	s.cfg.WorkerCount = 2
 	s.cfg.MaxRetry = 1
+	s.cfg.To.Session = map[string]string{
+		"sql_mode":             "ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION",
+		"tidb_skip_utf8_check": "0",
+	}
 
 	cfg, err := s.cfg.Clone()
 	c.Assert(err, IsNil)
@@ -789,10 +792,7 @@ func (s *testSyncerSuite) TestRun(c *C) {
 	mock.ExpectQuery("SHOW CREATE TABLE " + "`test_1`.`t_1`").WillReturnRows(
 		sqlmock.NewRows([]string{"Table", "Create Table"}).
 			AddRow("t_1", "create table t_1(id int primary key, name varchar(24), KEY `index1` (`name`))"))
-	mockGetServerUnixTS(mock)
-	mock.ExpectQuery("SHOW CREATE TABLE " + "`test_1`.`t_2`").WillReturnRows(
-		sqlmock.NewRows([]string{"Table", "Create Table"}).
-			AddRow("t_2", "create table t_2(id int primary key, name varchar(24))"))
+
 	syncer.exprFilterGroup = NewExprFilterGroup(utils.NewSessionCtx(nil), nil)
 	c.Assert(err, IsNil)
 	c.Assert(syncer.Type(), Equals, pb.UnitType_Sync)
@@ -821,7 +821,7 @@ func (s *testSyncerSuite) TestRun(c *C) {
 	}
 
 	mockStreamerProducer := &MockStreamProducer{s.generateEvents(events1, c)}
-	mockStreamer, err := mockStreamerProducer.generateStreamer(binlog.NewLocation(""))
+	mockStreamer, err := mockStreamerProducer.generateStreamer(binlog.MustZeroLocation(mysql.MySQLFlavor))
 	c.Assert(err, IsNil)
 	syncer.streamerController = &StreamerController{
 		streamerProducer: mockStreamerProducer,
@@ -951,6 +951,19 @@ func (s *testSyncerSuite) TestRun(c *C) {
 	mockDBProvider := conn.InitMockDB(c)
 	mockDBProvider.ExpectQuery("SELECT cast\\(TIMEDIFF\\(NOW\\(6\\), UTC_TIMESTAMP\\(6\\)\\) as time\\);").
 		WillReturnRows(sqlmock.NewRows([]string{""}).AddRow("01:00:00"))
+	mockGetServerUnixTS(mock)
+	mock.ExpectQuery("SHOW VARIABLES LIKE 'sql_mode'").WillReturnRows(
+		sqlmock.NewRows([]string{"Variable_name", "Value"}).AddRow("sql_mode", ""))
+	mock.ExpectQuery("SHOW CREATE TABLE " + "`test_1`.`t_2`").WillReturnRows(
+		sqlmock.NewRows([]string{"Table", "Create Table"}).
+			AddRow("t_2", "create table t_2(id int primary key, name varchar(24))"))
+	mock.ExpectBegin()
+	mock.ExpectExec(fmt.Sprintf("SET SESSION SQL_MODE = '%s'", pmysql.DefaultSQLMode)).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectCommit()
+	mock.ExpectQuery("SHOW CREATE TABLE " + "`test_1`.`t_2`").WillReturnRows(
+		sqlmock.NewRows([]string{"Table", "Create Table"}).
+			AddRow("t_2", "create table t_2(id int primary key, name varchar(24))"))
+
 	c.Assert(syncer.Update(context.Background(), s.cfg), IsNil)
 	c.Assert(syncer.timezone.String(), Equals, "+01:00")
 
@@ -964,7 +977,7 @@ func (s *testSyncerSuite) TestRun(c *C) {
 	// simulate `syncer.Resume` here, but doesn't reset database conns
 	syncer.reset()
 	mockStreamerProducer = &MockStreamProducer{s.generateEvents(events2, c)}
-	mockStreamer, err = mockStreamerProducer.generateStreamer(binlog.NewLocation(""))
+	mockStreamer, err = mockStreamerProducer.generateStreamer(binlog.MustZeroLocation(mysql.MySQLFlavor))
 	c.Assert(err, IsNil)
 	syncer.streamerController = &StreamerController{
 		streamerProducer: mockStreamerProducer,
@@ -1044,6 +1057,10 @@ func (s *testSyncerSuite) TestExitSafeModeByConfig(c *C) {
 			{Schema: "test_1", Name: "t_1"},
 		},
 	}
+	s.cfg.To.Session = map[string]string{
+		"sql_mode":             "ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION",
+		"tidb_skip_utf8_check": "0",
+	}
 
 	cfg, err := s.cfg.Clone()
 	c.Assert(err, IsNil)
@@ -1086,7 +1103,7 @@ func (s *testSyncerSuite) TestExitSafeModeByConfig(c *C) {
 	generatedEvents1 := s.generateEvents(events1, c)
 	// make sure [18] is last event, and use [18]'s position as safeModeExitLocation
 	c.Assert(len(generatedEvents1), Equals, 19)
-	safeModeExitLocation := binlog.NewLocation("")
+	safeModeExitLocation := binlog.MustZeroLocation(mysql.MySQLFlavor)
 	safeModeExitLocation.Position.Pos = generatedEvents1[18].Header.LogPos
 	syncer.checkpoint.SaveSafeModeExitPoint(&safeModeExitLocation)
 
@@ -1102,7 +1119,7 @@ func (s *testSyncerSuite) TestExitSafeModeByConfig(c *C) {
 	generatedEvents = append(generatedEvents, generatedEvents2...)
 
 	mockStreamerProducer := &MockStreamProducer{generatedEvents}
-	mockStreamer, err := mockStreamerProducer.generateStreamer(binlog.NewLocation(""))
+	mockStreamer, err := mockStreamerProducer.generateStreamer(binlog.MustZeroLocation(mysql.MySQLFlavor))
 	c.Assert(err, IsNil)
 	syncer.streamerController = &StreamerController{
 		streamerProducer: mockStreamerProducer,
@@ -1128,6 +1145,13 @@ func (s *testSyncerSuite) TestExitSafeModeByConfig(c *C) {
 	// disable 1-minute safe mode
 	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/syncer/SafeModeInitPhaseSeconds", "return(0)"), IsNil)
 	go syncer.Process(ctx, resultCh)
+	go func() {
+		for r := range resultCh {
+			if len(r.Errors) > 0 {
+				c.Fatal(r.String())
+			}
+		}
+	}()
 
 	expectJobs := []*expectJob{
 		// now every ddl job will start with a flush job
@@ -1764,6 +1788,10 @@ func TestWaitBeforeRunExit(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cfg := genDefaultSubTaskConfig4Test()
 	cfg.WorkerCount = 0
+	cfg.To.Session = map[string]string{
+		"sql_mode":             "ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION",
+		"tidb_skip_utf8_check": "0",
+	}
 	syncer := NewSyncer(cfg, nil, nil)
 
 	db, mock, err := sqlmock.New()
@@ -1775,7 +1803,7 @@ func TestWaitBeforeRunExit(t *testing.T) {
 	require.NoError(t, syncer.genRouter())
 
 	mockStreamerProducer := &MockStreamProducer{}
-	mockStreamer, err := mockStreamerProducer.generateStreamer(binlog.NewLocation(""))
+	mockStreamer, err := mockStreamerProducer.generateStreamer(binlog.MustZeroLocation(mysql.MySQLFlavor))
 	require.NoError(t, err)
 	// let getEvent pending until ctx.Done()
 	mockStreamer.(*MockStreamer).pending = true
@@ -1793,13 +1821,10 @@ func TestWaitBeforeRunExit(t *testing.T) {
 	time.Sleep(time.Second) // wait s.Run start
 
 	// test s.Run will not exit unit caller cancel ctx or call s.runCancel
+	require.Len(t, errCh, 0)
 	cancel() // this will make s.Run exit
 	wg.Wait()
-	require.Nil(t, <-errCh)
-	require.Equal(t, 0, len(errCh))
-	require.NotNil(t, syncer.runCtx)
-	require.NotNil(t, syncer.runCancel)
-	require.True(t, syncer.schemaLoaded.Load())
+	<-errCh
 
 	// test syncer wait time not more than maxPauseOrStopWaitTime
 	oldMaxPauseOrStopWaitTime := defaultMaxPauseOrStopWaitTime

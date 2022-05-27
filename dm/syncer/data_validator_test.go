@@ -16,7 +16,6 @@ package syncer
 import (
 	"context"
 	"crypto/sha256"
-	"database/sql"
 	"encoding/hex"
 	"testing"
 	"time"
@@ -25,6 +24,7 @@ import (
 	"github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/go-mysql-org/go-mysql/replication"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/util/filter"
 	regexprrouter "github.com/pingcap/tidb/util/regexpr-router"
 	router "github.com/pingcap/tidb/util/table-router"
@@ -93,15 +93,11 @@ func genSubtaskConfig(t *testing.T) *config.SubTaskConfig {
 	return cfg
 }
 
-func genDBConn(t *testing.T, db *sql.DB, cfg *config.SubTaskConfig) *dbconn.DBConn {
-	t.Helper()
-	baseDB := conn.NewBaseDB(db, func() {})
-	baseConn, err := baseDB.GetBaseConn(context.Background())
-	require.NoError(t, err)
-	return dbconn.NewDBConn(cfg, baseConn)
-}
-
-func TestValidatorStartStop(t *testing.T) {
+func TestValidatorStartStopAndInitialize(t *testing.T) {
+	require.Nil(t, failpoint.Enable("github.com/pingcap/tiflow/dm/syncer/ValidatorMockUpstreamTZ", `return()`))
+	defer func() {
+		require.Nil(t, failpoint.Disable("github.com/pingcap/tiflow/dm/syncer/ValidatorMockUpstreamTZ"))
+	}()
 	cfg := genSubtaskConfig(t)
 	syncerObj := NewSyncer(cfg, nil, nil)
 
@@ -119,21 +115,20 @@ func TestValidatorStartStop(t *testing.T) {
 		User: "root",
 	}
 	validator = NewContinuousDataValidator(cfg, syncerObj, false)
-	validator.Start(pb.Stage_Stopped)
+	err := validator.initialize()
 	require.Equal(t, pb.Stage_Stopped, validator.Stage())
-	require.Len(t, validator.result.Errors, 1)
+	require.Error(t, err)
 
-	// start with Stopped stage
-	_, _, err := conn.InitMockDBFull()
+	// init using mocked db
+	_, _, err = conn.InitMockDBFull()
 	require.NoError(t, err)
 	defer func() {
 		conn.DefaultDBProvider = &conn.DefaultDBProviderImpl{}
 	}()
 	validator = NewContinuousDataValidator(cfg, syncerObj, false)
 	validator.persistHelper.schemaInitialized.Store(true)
-	validator.Start(pb.Stage_Stopped)
-	require.Equal(t, pb.Stage_Stopped, validator.Stage())
-	require.Len(t, validator.result.Errors, 0)
+	err = validator.initialize()
+	require.NoError(t, err)
 
 	// normal start & stop
 	validator = NewContinuousDataValidator(cfg, syncerObj, false)
@@ -152,6 +147,10 @@ func TestValidatorStartStop(t *testing.T) {
 }
 
 func TestValidatorFillResult(t *testing.T) {
+	require.Nil(t, failpoint.Enable("github.com/pingcap/tiflow/dm/syncer/ValidatorMockUpstreamTZ", `return()`))
+	defer func() {
+		require.Nil(t, failpoint.Disable("github.com/pingcap/tiflow/dm/syncer/ValidatorMockUpstreamTZ"))
+	}()
 	cfg := genSubtaskConfig(t)
 	syncerObj := NewSyncer(cfg, nil, nil)
 	_, _, err := conn.InitMockDBFull()
@@ -174,6 +173,10 @@ func TestValidatorFillResult(t *testing.T) {
 }
 
 func TestValidatorErrorProcessRoutine(t *testing.T) {
+	require.Nil(t, failpoint.Enable("github.com/pingcap/tiflow/dm/syncer/ValidatorMockUpstreamTZ", `return()`))
+	defer func() {
+		require.Nil(t, failpoint.Disable("github.com/pingcap/tiflow/dm/syncer/ValidatorMockUpstreamTZ"))
+	}()
 	cfg := genSubtaskConfig(t)
 	syncerObj := NewSyncer(cfg, nil, nil)
 	_, _, err := conn.InitMockDBFull()
@@ -210,6 +213,10 @@ func (c *mockedCheckPointForValidator) FlushedGlobalPoint() binlog.Location {
 }
 
 func TestValidatorWaitSyncerSynced(t *testing.T) {
+	require.Nil(t, failpoint.Enable("github.com/pingcap/tiflow/dm/syncer/ValidatorMockUpstreamTZ", `return()`))
+	defer func() {
+		require.Nil(t, failpoint.Disable("github.com/pingcap/tiflow/dm/syncer/ValidatorMockUpstreamTZ"))
+	}()
 	cfg := genSubtaskConfig(t)
 	syncerObj := NewSyncer(cfg, nil, nil)
 	_, _, err := conn.InitMockDBFull()
@@ -218,10 +225,10 @@ func TestValidatorWaitSyncerSynced(t *testing.T) {
 		conn.DefaultDBProvider = &conn.DefaultDBProviderImpl{}
 	}()
 
-	currLoc := binlog.NewLocation(cfg.Flavor)
+	currLoc := binlog.MustZeroLocation(cfg.Flavor)
 	validator := NewContinuousDataValidator(cfg, syncerObj, false)
 	validator.persistHelper.schemaInitialized.Store(true)
-	validator.Start(pb.Stage_Stopped)
+	require.NoError(t, validator.initialize())
 	require.NoError(t, validator.waitSyncerSynced(currLoc))
 
 	// cancelled
@@ -231,7 +238,7 @@ func TestValidatorWaitSyncerSynced(t *testing.T) {
 	}
 	validator = NewContinuousDataValidator(cfg, syncerObj, false)
 	validator.persistHelper.schemaInitialized.Store(true)
-	validator.Start(pb.Stage_Stopped)
+	require.NoError(t, validator.initialize())
 	validator.cancel()
 	require.ErrorIs(t, validator.waitSyncerSynced(currLoc), context.Canceled)
 
@@ -240,16 +247,20 @@ func TestValidatorWaitSyncerSynced(t *testing.T) {
 		Pos:  100,
 	}
 	syncerObj.checkpoint = &mockedCheckPointForValidator{
-		currLoc: binlog.NewLocation(cfg.Flavor),
+		currLoc: binlog.MustZeroLocation(cfg.Flavor),
 		nextLoc: currLoc,
 	}
 	validator = NewContinuousDataValidator(cfg, syncerObj, false)
 	validator.persistHelper.schemaInitialized.Store(true)
-	validator.Start(pb.Stage_Stopped)
+	require.NoError(t, validator.initialize())
 	require.NoError(t, validator.waitSyncerSynced(currLoc))
 }
 
 func TestValidatorWaitSyncerRunning(t *testing.T) {
+	require.Nil(t, failpoint.Enable("github.com/pingcap/tiflow/dm/syncer/ValidatorMockUpstreamTZ", `return()`))
+	defer func() {
+		require.Nil(t, failpoint.Disable("github.com/pingcap/tiflow/dm/syncer/ValidatorMockUpstreamTZ"))
+	}()
 	cfg := genSubtaskConfig(t)
 	syncerObj := NewSyncer(cfg, nil, nil)
 	_, _, err := conn.InitMockDBFull()
@@ -260,19 +271,19 @@ func TestValidatorWaitSyncerRunning(t *testing.T) {
 
 	validator := NewContinuousDataValidator(cfg, syncerObj, false)
 	validator.persistHelper.schemaInitialized.Store(true)
-	validator.Start(pb.Stage_Stopped)
+	require.NoError(t, validator.initialize())
 	validator.cancel()
 	require.Error(t, validator.waitSyncerRunning())
 
 	validator = NewContinuousDataValidator(cfg, syncerObj, false)
 	validator.persistHelper.schemaInitialized.Store(true)
-	validator.Start(pb.Stage_Stopped)
+	require.NoError(t, validator.initialize())
 	syncerObj.running.Store(true)
 	require.NoError(t, validator.waitSyncerRunning())
 
 	validator = NewContinuousDataValidator(cfg, syncerObj, false)
 	validator.persistHelper.schemaInitialized.Store(true)
-	validator.Start(pb.Stage_Stopped)
+	require.NoError(t, validator.initialize())
 	syncerObj.running.Store(false)
 	go func() {
 		time.Sleep(3 * time.Second)
@@ -302,7 +313,7 @@ func TestValidatorDoValidate(t *testing.T) {
 		conn.DefaultDBProvider = &conn.DefaultDBProviderImpl{}
 	}()
 	dbMock.ExpectQuery("select .* from .*_validator_checkpoint.*").WillReturnRows(
-		dbMock.NewRows([]string{"", "", ""}).AddRow("mysql-bin.000001", 100, ""))
+		dbMock.NewRows([]string{"", "", "", ""}).AddRow("mysql-bin.000001", 100, "", 1))
 	dbMock.ExpectQuery("select .* from .*_validator_pending_change.*").WillReturnRows(
 		dbMock.NewRows([]string{"", "", "", "", ""}).AddRow(schemaName, tableName, "11",
 			// insert with pk=11
@@ -314,13 +325,13 @@ func TestValidatorDoValidate(t *testing.T) {
 	syncerObj.running.Store(true)
 	syncerObj.tableRouter, err = regexprrouter.NewRegExprRouter(cfg.CaseSensitive, []*router.TableRule{})
 	require.NoError(t, err)
-	currLoc := binlog.NewLocation(cfg.Flavor)
+	currLoc := binlog.MustZeroLocation(cfg.Flavor)
 	currLoc.Position = mysql.Position{
 		Name: "mysql-bin.000001",
 		Pos:  3000,
 	}
 	syncerObj.checkpoint = &mockedCheckPointForValidator{
-		currLoc: binlog.NewLocation(cfg.Flavor),
+		currLoc: binlog.MustZeroLocation(cfg.Flavor),
 		nextLoc: currLoc,
 		cnt:     2,
 	}
@@ -451,13 +462,17 @@ func TestValidatorDoValidate(t *testing.T) {
 	allEvents = append(allEvents, updateEvents...)
 	allEvents = append(allEvents, deleteEvents...)
 	mockStreamerProducer := &MockStreamProducer{events: allEvents}
-	mockStreamer, err := mockStreamerProducer.generateStreamer(binlog.NewLocation(""))
+	mockStreamer, err := mockStreamerProducer.generateStreamer(binlog.MustZeroLocation(mysql.MySQLFlavor))
 	require.NoError(t, err)
 
+	require.Nil(t, failpoint.Enable("github.com/pingcap/tiflow/dm/syncer/ValidatorMockUpstreamTZ", `return()`))
+	defer func() {
+		require.Nil(t, failpoint.Disable("github.com/pingcap/tiflow/dm/syncer/ValidatorMockUpstreamTZ"))
+	}()
 	validator := NewContinuousDataValidator(cfg, syncerObj, false)
 	validator.validateInterval = 10 * time.Minute // we don't want worker start validate
 	validator.persistHelper.schemaInitialized.Store(true)
-	validator.Start(pb.Stage_Stopped)
+	require.NoError(t, validator.initialize())
 	validator.streamerController = &StreamerController{
 		streamerProducer: mockStreamerProducer,
 		streamer:         mockStreamer,
@@ -587,7 +602,11 @@ func TestValidatorGetValidationStatus(t *testing.T) {
 	}
 }
 
-func TestGetValidationError(t *testing.T) {
+func TestValidatorGetValidationError(t *testing.T) {
+	require.Nil(t, failpoint.Enable("github.com/pingcap/tiflow/dm/syncer/MockValidationQuery", `return(true)`))
+	defer func() {
+		require.Nil(t, failpoint.Disable("github.com/pingcap/tiflow/dm/syncer/MockValidationQuery"))
+	}()
 	db, dbMock, err := sqlmock.New()
 	require.Equal(t, log.InitLogger(&log.Config{}), nil)
 	require.NoError(t, err)
@@ -596,7 +615,6 @@ func TestGetValidationError(t *testing.T) {
 	validator := NewContinuousDataValidator(cfg, syncerObj, false)
 	validator.ctx, validator.cancel = context.WithCancel(context.Background())
 	validator.tctx = tcontext.NewContext(validator.ctx, validator.L)
-	validator.persistHelper.tctx = validator.tctx
 	// all error
 	dbMock.ExpectQuery("SELECT .* FROM " + validator.persistHelper.errorChangeTableName + " WHERE source=?").WithArgs(validator.cfg.SourceID).WillReturnRows(
 		sqlmock.NewRows([]string{"id", "source", "src_schema_name", "src_table_name", "dst_schema_name", "dst_table_name", "data", "dst_data", "error_type", "status", "update_time"}).AddRow(
@@ -604,7 +622,7 @@ func TestGetValidationError(t *testing.T) {
 		),
 	)
 	// filter by status
-	dbMock.ExpectQuery("SELECT .* FROM "+validator.persistHelper.errorChangeTableName+" WHERE source=\\? AND status=\\?").
+	dbMock.ExpectQuery("SELECT .* FROM "+validator.persistHelper.errorChangeTableName+" WHERE source = \\? AND status=\\?").
 		WithArgs(validator.cfg.SourceID, int(pb.ValidateErrorState_IgnoredErr)).
 		WillReturnRows(
 			sqlmock.NewRows([]string{"id", "source", "src_schema_name", "src_table_name", "dst_schema_name", "dst_table_name", "data", "dst_data", "error_type", "status", "update_time"}).AddRow(
@@ -652,14 +670,20 @@ func TestGetValidationError(t *testing.T) {
 			},
 		},
 	}
-	validator.persistHelper.dbConn = genDBConn(t, db, cfg)
-	res := validator.GetValidatorError(pb.ValidateErrorState_InvalidErr)
+	validator.persistHelper.db = conn.NewBaseDB(db, func() {})
+	res, err := validator.GetValidatorError(pb.ValidateErrorState_InvalidErr)
+	require.Nil(t, err)
 	require.EqualValues(t, expected[0], res)
-	res = validator.GetValidatorError(pb.ValidateErrorState_IgnoredErr)
+	res, err = validator.GetValidatorError(pb.ValidateErrorState_IgnoredErr)
+	require.Nil(t, err)
 	require.EqualValues(t, expected[1], res)
 }
 
-func TestOperateValidationError(t *testing.T) {
+func TestValidatorOperateValidationError(t *testing.T) {
+	require.Nil(t, failpoint.Enable("github.com/pingcap/tiflow/dm/syncer/MockValidationQuery", `return(true)`))
+	defer func() {
+		require.Nil(t, failpoint.Disable("github.com/pingcap/tiflow/dm/syncer/MockValidationQuery"))
+	}()
 	var err error
 	db, dbMock, err := sqlmock.New()
 	require.Equal(t, log.InitLogger(&log.Config{}), nil)
@@ -669,26 +693,26 @@ func TestOperateValidationError(t *testing.T) {
 	validator := NewContinuousDataValidator(cfg, syncerObj, false)
 	validator.ctx, validator.cancel = context.WithCancel(context.Background())
 	validator.tctx = tcontext.NewContext(validator.ctx, validator.L)
-	validator.persistHelper.tctx = validator.tctx
-	validator.persistHelper.dbConn = genDBConn(t, db, cfg)
+	validator.persistHelper.db = conn.NewBaseDB(db, func() {})
 	sourceID := validator.cfg.SourceID
 	// 1. clear all error
-	dbMock.ExpectQuery("DELETE FROM " + validator.persistHelper.errorChangeTableName + " WHERE source=?").WillReturnRows()
+	dbMock.ExpectExec("DELETE FROM " + validator.persistHelper.errorChangeTableName + " WHERE source=\\?").
+		WithArgs(sourceID).WillReturnResult(sqlmock.NewResult(0, 1))
 	// 2. clear error of errID
-	dbMock.ExpectQuery("DELETE FROM "+validator.persistHelper.errorChangeTableName+" WHERE source=\\? AND id=\\?").
-		WithArgs(sourceID, 1).WillReturnRows()
+	dbMock.ExpectExec("DELETE FROM "+validator.persistHelper.errorChangeTableName+" WHERE source=\\? AND id=\\?").
+		WithArgs(sourceID, 1).WillReturnResult(sqlmock.NewResult(0, 1))
 	// 3. mark all error as resolved
-	dbMock.ExpectQuery("UPDATE "+validator.persistHelper.errorChangeTableName+" SET status=\\? WHERE source=\\?").
-		WithArgs(int(pb.ValidateErrorState_ResolvedErr), sourceID).WillReturnRows()
+	dbMock.ExpectExec("UPDATE "+validator.persistHelper.errorChangeTableName+" SET status=\\? WHERE source=\\?").
+		WithArgs(int(pb.ValidateErrorState_ResolvedErr), sourceID).WillReturnResult(sqlmock.NewResult(0, 1))
 	// 4. mark all error as ignored
-	dbMock.ExpectQuery("UPDATE "+validator.persistHelper.errorChangeTableName+" SET status=\\? WHERE source=\\?").
-		WithArgs(int(pb.ValidateErrorState_IgnoredErr), sourceID).WillReturnRows()
+	dbMock.ExpectExec("UPDATE "+validator.persistHelper.errorChangeTableName+" SET status=\\? WHERE source=\\?").
+		WithArgs(int(pb.ValidateErrorState_IgnoredErr), sourceID).WillReturnResult(sqlmock.NewResult(0, 1))
 	// 5. mark error as resolved of errID
-	dbMock.ExpectQuery("UPDATE "+validator.persistHelper.errorChangeTableName+" SET status=\\? WHERE source=\\? AND id=\\?").
-		WithArgs(int(pb.ValidateErrorState_ResolvedErr), sourceID, 1).WillReturnRows()
+	dbMock.ExpectExec("UPDATE "+validator.persistHelper.errorChangeTableName+" SET status=\\? WHERE source=\\? AND id=\\?").
+		WithArgs(int(pb.ValidateErrorState_ResolvedErr), sourceID, 1).WillReturnResult(sqlmock.NewResult(0, 1))
 	// 6. mark error as ignored of errID
-	dbMock.ExpectQuery("UPDATE "+validator.persistHelper.errorChangeTableName+" SET status=\\? WHERE source=\\? AND id=\\?").
-		WithArgs(int(pb.ValidateErrorState_IgnoredErr), sourceID, 1).WillReturnRows()
+	dbMock.ExpectExec("UPDATE "+validator.persistHelper.errorChangeTableName+" SET status=\\? WHERE source=\\? AND id=\\?").
+		WithArgs(int(pb.ValidateErrorState_IgnoredErr), sourceID, 1).WillReturnResult(sqlmock.NewResult(0, 1))
 
 	// clear all error
 	err = validator.OperateValidatorError(pb.ValidationErrOp_ClearErrOp, 0, true)
@@ -708,4 +732,27 @@ func TestOperateValidationError(t *testing.T) {
 	// mark error as ignored with id
 	err = validator.OperateValidatorError(pb.ValidationErrOp_IgnoreErrOp, 1, false)
 	require.NoError(t, err)
+}
+
+func TestValidatorMarkReachedSyncerRoutine(t *testing.T) {
+	cfg := genSubtaskConfig(t)
+	syncerObj := NewSyncer(cfg, nil, nil)
+	validator := NewContinuousDataValidator(cfg, syncerObj, false)
+
+	markErrorRowDelay = time.Minute
+	validator.ctx, validator.cancel = context.WithCancel(context.Background())
+	require.False(t, validator.markErrorStarted.Load())
+	validator.wg.Add(1)
+	go validator.markErrorStartedRoutine()
+	validator.cancel()
+	validator.wg.Wait()
+	require.False(t, validator.markErrorStarted.Load())
+
+	markErrorRowDelay = time.Second
+	validator.ctx = context.Background()
+	require.False(t, validator.markErrorStarted.Load())
+	validator.wg.Add(1)
+	go validator.markErrorStartedRoutine()
+	validator.wg.Wait()
+	require.True(t, validator.markErrorStarted.Load())
 }

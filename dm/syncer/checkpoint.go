@@ -19,6 +19,8 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"io"
+	"strings"
 	"sync"
 	"time"
 
@@ -70,8 +72,23 @@ type tablePoint struct {
 	ti       *model.TableInfo
 }
 
-func (b *tablePoint) String() string {
-	return fmt.Sprintf("location(%v), tableInfo(ID: %d, Name:%s, ColNum: %d, IdxNum: %d, PKIsHandle: %t)", b.location, b.ti.ID, b.ti.Name, len(b.ti.Columns), len(b.ti.Indices), b.ti.PKIsHandle)
+func (t *tablePoint) writeString(buf io.Writer) {
+	if t == nil {
+		return
+	}
+	fmt.Fprintf(buf, "location(%s)", t.location)
+	if t.ti != nil {
+		fmt.Fprintf(buf, ", tableInfo(ID: %d, Name:%s, ColNum: %d, IdxNum: %d, PKIsHandle: %t)", t.ti.ID, t.ti.Name, len(t.ti.Columns), len(t.ti.Indices), t.ti.PKIsHandle)
+	}
+}
+
+func (t *tablePoint) String() string {
+	if t == nil {
+		return ""
+	}
+	var buf strings.Builder
+	t.writeString(&buf)
+	return buf.String()
 }
 
 type binlogPoint struct {
@@ -120,7 +137,7 @@ func (b *binlogPoint) flushBy(tp tablePoint) {
 	b.flushedPoint = tp
 }
 
-func (b *binlogPoint) rollback(schemaTracker *schema.Tracker, schema string) (isSchemaChanged bool) {
+func (b *binlogPoint) rollback() {
 	b.Lock()
 	defer b.Unlock()
 
@@ -135,15 +152,14 @@ func (b *binlogPoint) rollback(schemaTracker *schema.Tracker, schema string) (is
 
 	// NOTE: no `Equal` function for `model.TableInfo` exists now, so we compare `pointer` directly,
 	// and after a new DDL applied to the schema, the returned pointer of `model.TableInfo` changed now.
-	trackedTi, _ := schemaTracker.GetTableInfo(&filter.Table{Schema: schema, Name: b.savedPoint.ti.Name.O}) // ignore the returned error, only compare `trackerTi` is enough.
-	// may three versions of schema exist:
-	// - the one tracked in the TiDB-with-mockTiKV.
+	// there may be three versions of schema:
+	// - the one tracked in the schema tracker (TiDB-with-unistore).
 	// - the one in the checkpoint but not flushed.
 	// - the one in the checkpoint and flushed.
-	// if any of them are not equal, then we rollback them:
+	// schema tracker will be closed after task is paused, and it will load all schemas from checkpoint when task resumes.
+	// if the later two are not equal, then we rollback them:
 	// - set the one in the checkpoint but not flushed to the one flushed.
-	// - set the one tracked to the one in the checkpoint by the caller of this method (both flushed and not flushed are the same now)
-	if isSchemaChanged = (trackedTi != b.savedPoint.ti) || (b.savedPoint.ti != b.flushedPoint.ti); isSchemaChanged {
+	if b.savedPoint.ti != b.flushedPoint.ti {
 		b.savedPoint.ti = b.flushedPoint.ti
 	}
 	return
@@ -185,7 +201,13 @@ func (b *binlogPoint) String() string {
 	b.RLock()
 	defer b.RUnlock()
 
-	return fmt.Sprintf("%v(flushed %v)", b.savedPoint, b.flushedPoint)
+	var buf strings.Builder
+	b.savedPoint.writeString(&buf)
+	buf.WriteString("(flushed ")
+	b.flushedPoint.writeString(&buf)
+	buf.WriteString(")")
+
+	return buf.String()
 }
 
 // SnapshotInfo contains:
@@ -278,6 +300,9 @@ type CheckPoint interface {
 	// TablePoint returns all table's stream checkpoint
 	TablePoint() map[string]map[string]binlog.Location
 
+	// GetTableInfo returns the saved table info from table checkpoint for the given table, return nil when not found
+	GetTableInfo(schema string, table string) *model.TableInfo
+
 	// FlushedGlobalPoint returns the flushed global binlog stream's checkpoint
 	// corresponding to to Meta.Pos and gtid
 	FlushedGlobalPoint() binlog.Location
@@ -287,7 +312,7 @@ type CheckPoint interface {
 	LastFlushOutdated() bool
 
 	// Rollback rolls global checkpoint and all table checkpoints back to flushed checkpoints
-	Rollback(schemaTracker *schema.Tracker)
+	Rollback()
 
 	// String return text of global position
 	String() string
@@ -357,7 +382,7 @@ func NewRemoteCheckPoint(tctx *tcontext.Context, cfg *config.SubTaskConfig, id s
 		tableName:   dbutil.TableName(cfg.MetaSchema, cputil.SyncerCheckpoint(cfg.Name)),
 		id:          id,
 		points:      make(map[string]map[string]*binlogPoint),
-		globalPoint: newBinlogPoint(binlog.NewLocation(cfg.Flavor), binlog.NewLocation(cfg.Flavor), nil, nil, cfg.EnableGTID),
+		globalPoint: newBinlogPoint(binlog.MustZeroLocation(cfg.Flavor), binlog.MustZeroLocation(cfg.Flavor), nil, nil, cfg.EnableGTID),
 		logCtx:      tcontext.Background().WithLogger(tctx.L().WithFields(zap.String("component", "remote checkpoint"))),
 		snapshots:   make([]*remoteCheckpointSnapshot, 0),
 		snapshotSeq: 0,
@@ -472,7 +497,7 @@ func (cp *RemoteCheckPoint) Clear(tctx *tcontext.Context) error {
 		return err
 	}
 
-	cp.globalPoint = newBinlogPoint(binlog.NewLocation(cp.cfg.Flavor), binlog.NewLocation(cp.cfg.Flavor), nil, nil, cp.cfg.EnableGTID)
+	cp.globalPoint = newBinlogPoint(binlog.MustZeroLocation(cp.cfg.Flavor), binlog.MustZeroLocation(cp.cfg.Flavor), nil, nil, cp.cfg.EnableGTID)
 	cp.globalPointSaveTime = time.Time{}
 	cp.lastSnapshotCreationTime = time.Time{}
 	cp.points = make(map[string]map[string]*binlogPoint)
@@ -504,7 +529,7 @@ func (cp *RemoteCheckPoint) saveTablePoint(sourceTable *filter.Table, location b
 	}
 	point, ok := mSchema[sourceTable.Name]
 	if !ok {
-		mSchema[sourceTable.Name] = newBinlogPoint(location, binlog.NewLocation(cp.cfg.Flavor), ti, nil, cp.cfg.EnableGTID)
+		mSchema[sourceTable.Name] = newBinlogPoint(location, binlog.MustZeroLocation(cp.cfg.Flavor), ti, nil, cp.cfg.EnableGTID)
 	} else if err := point.save(location, ti); err != nil {
 		cp.logCtx.L().Error("fail to save table point", zap.Stringer("table", sourceTable), log.ShortError(err))
 	}
@@ -643,7 +668,7 @@ func (cp *RemoteCheckPoint) SaveGlobalPointForcibly(location binlog.Location) {
 	defer cp.Unlock()
 
 	cp.logCtx.L().Info("reset global checkpoint", zap.Stringer("location", location))
-	cp.globalPoint = newBinlogPoint(location, binlog.NewLocation(cp.cfg.Flavor), nil, nil, cp.cfg.EnableGTID)
+	cp.globalPoint = newBinlogPoint(location, binlog.MustZeroLocation(cp.cfg.Flavor), nil, nil, cp.cfg.EnableGTID)
 }
 
 // FlushPointsExcept implements CheckPoint.FlushPointsExcept.
@@ -780,6 +805,9 @@ func (cp *RemoteCheckPoint) FlushPointsWithTableInfos(tctx *tcontext.Context, ta
 			if point == nil {
 				cp.saveTablePoint(table, cp.globalPoint.MySQLLocation(), ti)
 				point = cp.points[sourceSchema][sourceTable]
+			} else {
+				point.savedPoint.ti = ti
+				point.flushedPoint.ti = ti
 			}
 			tiBytes, err := json.Marshal(ti)
 			if err != nil {
@@ -861,6 +889,21 @@ func (cp *RemoteCheckPoint) TablePoint() map[string]map[string]binlog.Location {
 	return tablePoint
 }
 
+func (cp *RemoteCheckPoint) GetTableInfo(schema string, table string) *model.TableInfo {
+	cp.RLock()
+	defer cp.RUnlock()
+
+	tables, ok := cp.points[schema]
+	if !ok {
+		return nil
+	}
+	tablePoint, ok := tables[table]
+	if !ok {
+		return nil
+	}
+	return tablePoint.TableInfo()
+}
+
 // FlushedGlobalPoint implements CheckPoint.FlushedGlobalPoint.
 func (cp *RemoteCheckPoint) FlushedGlobalPoint() binlog.Location {
 	cp.RLock()
@@ -892,12 +935,10 @@ func (cp *RemoteCheckPoint) LastFlushOutdated() bool {
 }
 
 // Rollback implements CheckPoint.Rollback.
-func (cp *RemoteCheckPoint) Rollback(schemaTracker *schema.Tracker) {
+func (cp *RemoteCheckPoint) Rollback() {
 	cp.RLock()
 	defer cp.RUnlock()
-	cp.globalPoint.rollback(schemaTracker, "")
-	tablesToDrop := make([]*filter.Table, 0)
-	tablesToCreate := make(map[string]map[string]*model.TableInfo)
+	cp.globalPoint.rollback()
 	for schemaName, mSchema := range cp.points {
 		for tableName, point := range mSchema {
 			table := &filter.Table{
@@ -906,37 +947,7 @@ func (cp *RemoteCheckPoint) Rollback(schemaTracker *schema.Tracker) {
 			}
 			logger := cp.logCtx.L().WithFields(zap.Stringer("table", table))
 			logger.Debug("try to rollback checkpoint", log.WrapStringerField("checkpoint", point))
-			from := point.MySQLLocation()
-			if point.rollback(schemaTracker, schemaName) {
-				logger.Info("rollback checkpoint", zap.Stringer("from", from), zap.Stringer("to", point.FlushedMySQLLocation()))
-				tablesToDrop = append(tablesToDrop, table)
-				if point.savedPoint.ti != nil {
-					if _, ok := tablesToCreate[schemaName]; !ok {
-						tablesToCreate[schemaName] = map[string]*model.TableInfo{}
-					}
-					tablesToCreate[schemaName][tableName] = point.savedPoint.ti
-				}
-			}
-		}
-	}
-	if err := schemaTracker.RecreateTables(cp.logCtx, tablesToDrop, tablesToCreate); err != nil {
-		cp.logCtx.L().Error("failed to rollback schema on schema tracker: cannot recreate table",
-			zap.Reflect("tables to drop", tablesToDrop), zap.Reflect("batch recreate table", tablesToCreate),
-			log.ShortError(err))
-	}
-
-	// drop any tables in the tracker if no corresponding checkpoint exists.
-	for _, schema := range schemaTracker.AllSchemas() {
-		_, ok1 := cp.points[schema.Name.O]
-		for _, table := range schema.Tables {
-			var ok2 bool
-			if ok1 {
-				_, ok2 = cp.points[schema.Name.O][table.Name.O]
-			}
-			if !ok2 {
-				err := schemaTracker.DropTable(&filter.Table{Schema: schema.Name.O, Name: table.Name.O})
-				cp.logCtx.L().Info("drop table in schema tracker because no checkpoint exists", zap.String("schema", schema.Name.O), zap.String("table", table.Name.O), log.ShortError(err))
-			}
+			point.rollback()
 		}
 	}
 }
@@ -1029,7 +1040,7 @@ func (cp *RemoteCheckPoint) Load(tctx *tcontext.Context) error {
 			return err
 		}
 
-		location := binlog.InitLocation(
+		location := binlog.NewLocation(
 			mysql.Position{
 				Name: binlogName,
 				Pos:  binlogPos,
@@ -1050,7 +1061,7 @@ func (cp *RemoteCheckPoint) Load(tctx *tcontext.Context) error {
 					if err2 != nil {
 						return err2
 					}
-					exitSafeModeLoc := binlog.InitLocation(
+					exitSafeModeLoc := binlog.NewLocation(
 						mysql.Position{
 							Name: exitSafeBinlogName,
 							Pos:  exitSafeBinlogPos,
@@ -1058,7 +1069,7 @@ func (cp *RemoteCheckPoint) Load(tctx *tcontext.Context) error {
 						gset2,
 					)
 					cp.SaveSafeModeExitPoint(&exitSafeModeLoc)
-				}
+				} // TODO: we forget to handle else...
 			} else {
 				if exitSafeBinlogName != "" {
 					exitSafeModeLoc := binlog.Location{
@@ -1097,23 +1108,23 @@ func (cp *RemoteCheckPoint) LoadIntoSchemaTracker(ctx context.Context, schemaTra
 	cp.RLock()
 	defer cp.RUnlock()
 
+	tablesToCreate := map[string]map[string]*model.TableInfo{}
 	for cpSchema, mSchema := range cp.points {
 		for cpTable, point := range mSchema {
 			// for create database DDL, we'll create a table point with no table name and table info, need to skip.
 			if point.flushedPoint.ti == nil {
 				continue
 			}
-			if err := schemaTracker.CreateSchemaIfNotExists(cpSchema); err != nil {
-				return terror.ErrSchemaTrackerCannotCreateSchema.Delegate(err, cpSchema)
+			if _, ok := tablesToCreate[cpSchema]; !ok {
+				tablesToCreate[cpSchema] = make(map[string]*model.TableInfo)
 			}
-			tbl := filter.Table{Schema: cpSchema, Name: cpTable}
-			if err := schemaTracker.CreateTableIfNotExists(&tbl, point.flushedPoint.ti); err != nil {
-				return terror.ErrSchemaTrackerCannotCreateTable.Delegate(err, cpSchema, cpTable)
-			}
-			cp.logCtx.L().Debug("init table info in schema tracker", zap.Stringer("table", &tbl))
+			tablesToCreate[cpSchema][cpTable] = point.flushedPoint.ti
+			cp.logCtx.L().Debug("will init table info in schema tracker",
+				zap.String("database", cpSchema),
+				zap.String("table", cpTable))
 		}
 	}
-	return nil
+	return schemaTracker.BatchCreateTableIfNotExist(tablesToCreate)
 }
 
 // CheckAndUpdate check the checkpoint data consistency and try to fix them if possible.
@@ -1176,7 +1187,7 @@ func (cp *RemoteCheckPoint) LoadMeta(ctx context.Context) error {
 		// load meta from task config
 		if cp.cfg.Meta == nil {
 			cp.logCtx.L().Warn("didn't set meta in increment task-mode")
-			cp.globalPoint = newBinlogPoint(binlog.NewLocation(cp.cfg.Flavor), binlog.NewLocation(cp.cfg.Flavor), nil, nil, cp.cfg.EnableGTID)
+			cp.globalPoint = newBinlogPoint(binlog.MustZeroLocation(cp.cfg.Flavor), binlog.MustZeroLocation(cp.cfg.Flavor), nil, nil, cp.cfg.EnableGTID)
 			return nil
 		}
 		gset, err := gtid.ParserGTID(cp.cfg.Flavor, cp.cfg.Meta.BinLogGTID)
@@ -1184,7 +1195,7 @@ func (cp *RemoteCheckPoint) LoadMeta(ctx context.Context) error {
 			return err
 		}
 
-		loc := binlog.InitLocation(
+		loc := binlog.NewLocation(
 			mysql.Position{
 				Name: cp.cfg.Meta.BinLogName,
 				Pos:  cp.cfg.Meta.BinLogPos,

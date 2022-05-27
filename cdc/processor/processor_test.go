@@ -28,7 +28,6 @@ import (
 	tablepipeline "github.com/pingcap/tiflow/cdc/processor/pipeline"
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/scheduler"
-	"github.com/pingcap/tiflow/cdc/sink"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
@@ -51,7 +50,6 @@ func newProcessor4Test(
 		p.agent = &mockAgent{executor: p}
 		return nil
 	}
-	p.sinkManager = &sink.Manager{}
 	p.redoManager = redo.NewDisabledManager()
 	p.createTablePipeline = createTablePipeline
 	p.schemaStorage = &mockSchemaStorage{t: t, resolvedTs: math.MaxUint64}
@@ -182,6 +180,11 @@ func (m *mockTablePipeline) Wait() {
 	// do nothing
 }
 
+// MemoryConsumption return the memory consumption in bytes
+func (m *mockTablePipeline) MemoryConsumption() uint64 {
+	return 0
+}
+
 type mockSchemaStorage struct {
 	// dummy to provide default versions of unimplemented interface methods,
 	// as we only need ResolvedTs() and DoGC() in unit tests.
@@ -204,14 +207,14 @@ func (s *mockSchemaStorage) DoGC(ts uint64) uint64 {
 
 type mockAgent struct {
 	// dummy to satisfy the interface
-	processorAgent
+	scheduler.Agent
 
 	executor         scheduler.TableExecutor
 	lastCheckpointTs model.Ts
 	isClosed         bool
 }
 
-func (a *mockAgent) Tick(_ cdcContext.Context) error {
+func (a *mockAgent) Tick(_ context.Context) error {
 	if len(a.executor.GetAllCurrentTables()) == 0 {
 		return nil
 	}
@@ -249,16 +252,16 @@ func TestTableExecutor(t *testing.T) {
 	require.Nil(t, err)
 	tester.MustApplyPatches()
 
-	ok, err := p.AddTable(ctx, 1)
+	ok, err := p.AddTable(ctx, 1, 20)
 	require.Nil(t, err)
 	require.True(t, ok)
-	ok, err = p.AddTable(ctx, 2)
+	ok, err = p.AddTable(ctx, 2, 20)
 	require.Nil(t, err)
 	require.True(t, ok)
-	ok, err = p.AddTable(ctx, 3)
+	ok, err = p.AddTable(ctx, 3, 20)
 	require.Nil(t, err)
 	require.True(t, ok)
-	ok, err = p.AddTable(ctx, 4)
+	ok, err = p.AddTable(ctx, 4, 20)
 	require.Nil(t, err)
 	require.True(t, ok)
 	require.Len(t, p.tables, 4)

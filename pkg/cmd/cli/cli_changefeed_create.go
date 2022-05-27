@@ -49,6 +49,7 @@ type changefeedCommonOptions struct {
 	noConfirm              bool
 	targetTs               uint64
 	sinkURI                string
+	schemaRegistry         string
 	configFile             string
 	opts                   []string
 	sortEngine             string
@@ -84,6 +85,8 @@ func (o *changefeedCommonOptions) addFlags(cmd *cobra.Command) {
 	cmd.PersistentFlags().BoolVar(&o.cyclicSyncDDL, "cyclic-sync-ddl", true, "(Experimental) Cyclic replication sync DDL of changefeed")
 	cmd.PersistentFlags().BoolVar(&o.syncPointEnabled, "sync-point", false, "(Experimental) Set and Record syncpoint in replication(default off)")
 	cmd.PersistentFlags().DurationVar(&o.syncPointInterval, "sync-interval", 10*time.Minute, "(Experimental) Set the interval for syncpoint in replication(default 10min)")
+	cmd.PersistentFlags().
+		StringVar(&o.schemaRegistry, "schema-registry", "", "Avro Schema Registry URI")
 	_ = cmd.PersistentFlags().MarkHidden("sort-dir")
 }
 
@@ -227,6 +230,10 @@ func (o *createChangefeedOptions) completeCfg(
 					"switching on the old value, so please use caution! dispatch-rules: %#v", rules)
 			}
 		}
+	}
+
+	if o.commonChangefeedOptions.schemaRegistry != "" {
+		cfg.Sink.SchemaRegistry = o.commonChangefeedOptions.schemaRegistry
 	}
 
 	switch o.commonChangefeedOptions.sortEngine {

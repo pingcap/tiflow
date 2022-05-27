@@ -275,7 +275,7 @@ func TestEntrySorterRandomly(t *testing.T) {
 		}
 		lastTs = entry.CRTs
 		lastOpType = entry.RawKV.OpType
-		if entry.RawKV.OpType == model.OpTypeResolved {
+		if entry.IsResolved() {
 			resolvedTs = entry.CRTs
 		}
 		if resolvedTs == maxTs {
@@ -509,7 +509,7 @@ func BenchmarkSorter(b *testing.B) {
 	}()
 	var resolvedTs uint64
 	for entry := range es.Output() {
-		if entry.RawKV.OpType == model.OpTypeResolved {
+		if entry.IsResolved() {
 			resolvedTs = entry.CRTs
 		}
 		if resolvedTs == maxTs {

@@ -134,6 +134,12 @@ function DM_050_CASE() {
 	run_sql_source1 "insert into ${shardddl1}.${tb1} values(1,'aaa');"
 	run_sql_source2 "insert into ${shardddl1}.${tb1} values(2,'bbb');"
 	run_sql_source2 "insert into ${shardddl1}.${tb2} values(3,'ccc');"
+	if [[ "$1" = "optimistic" ]]; then
+		relate_worker=$($PWD/bin/dmctl.test DEVEL --master-addr "127.0.0.1:$MASTER_PORT1" operate-source show -s "mysql-replica-01" |
+			grep 'worker' | awk -F: '{print $2}' | cut -d'"' -f 2)
+		# make sure in skip and wait redirect
+		check_log_contain_with_retry 'got a shard DDL lock operation.*CHANGE COLUMN `a` `c` INT' $WORK_DIR/$relate_worker/log/dm-worker.log
+	fi
 	run_sql_source2 "alter table ${shardddl1}.${tb1} change a d int;"
 	run_sql_source1 "insert into ${shardddl1}.${tb1} values(4,'ddd');"
 	run_sql_source2 "insert into ${shardddl1}.${tb1} values(5,'eee');"
@@ -146,9 +152,10 @@ function DM_050_CASE() {
 	if [[ "$1" = "pessimistic" ]]; then
 		check_log_contain_with_retry "is different with" $WORK_DIR/master/log/dm-master.log
 	else
+		# can't make sure DDL of which source comes first
 		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 			"query-status test" \
-			'ALTER TABLE `shardddl`.`tb` CHANGE COLUMN `a` `d` INT' 1 \
+			'ALTER TABLE `shardddl`.`tb` CHANGE COLUMN' 1 \
 			"\"${SOURCE_ID2}-\`${shardddl1}\`.\`${tb1}\`\"" 1
 	fi
 }
@@ -171,6 +178,13 @@ function DM_051_CASE() {
 	run_sql_source1 "insert into ${shardddl1}.${tb1} values(1,1);"
 	run_sql_source2 "insert into ${shardddl1}.${tb1} values(2,2);"
 	run_sql_source2 "insert into ${shardddl1}.${tb2} values(3,3);"
+	if [[ "$1" = "optimistic" ]]; then
+		relate_worker=$($PWD/bin/dmctl.test DEVEL --master-addr "127.0.0.1:$MASTER_PORT1" operate-source show -s "mysql-replica-01" |
+			grep 'worker' | awk -F: '{print $2}' | cut -d'"' -f 2)
+		# make sure in skip and wait redirect
+		check_log_contain_with_retry 'got a shard DDL lock operation.*CHANGE COLUMN `a` `c` INT' $WORK_DIR/$relate_worker/log/dm-worker.log
+	fi
+
 	run_sql_source2 "alter table ${shardddl1}.${tb1} change b c int;"
 	run_sql_source1 "insert into ${shardddl1}.${tb1} values(4,4);"
 	run_sql_source2 "insert into ${shardddl1}.${tb1} values(5,5);"
@@ -276,6 +290,12 @@ function DM_058_CASE() {
 	run_sql_source1 "insert into ${shardddl1}.${tb1} values(1);"
 	run_sql_source2 "insert into ${shardddl1}.${tb1} values(2);"
 	run_sql_source2 "insert into ${shardddl1}.${tb2} values(3);"
+	if [[ "$1" = "optimistic" ]]; then
+		relate_worker=$($PWD/bin/dmctl.test DEVEL --master-addr "127.0.0.1:$MASTER_PORT1" operate-source show -s "mysql-replica-01" |
+			grep 'worker' | awk -F: '{print $2}' | cut -d'"' -f 2)
+		# make sure in skip and wait redirect
+		check_log_contain_with_retry 'got a shard DDL lock operation.*CHANGE COLUMN `id` `new_col`' $WORK_DIR/$relate_worker/log/dm-worker.log
+	fi
 	run_sql_source2 "alter table ${shardddl1}.${tb1} change id new_col int default 2;"
 	run_sql_source1 "insert into ${shardddl1}.${tb1} values(4);"
 	run_sql_source2 "insert into ${shardddl1}.${tb1} values(5);"
@@ -479,6 +499,12 @@ function DM_067_CASE() {
 	run_sql_source1 "insert into ${shardddl1}.${tb1} values(1);"
 	run_sql_source2 "insert into ${shardddl1}.${tb1} values(2);"
 	run_sql_source2 "insert into ${shardddl1}.${tb2} values(3);"
+	if [[ "$1" = "optimistic" ]]; then
+		relate_worker=$($PWD/bin/dmctl.test DEVEL --master-addr "127.0.0.1:$MASTER_PORT1" operate-source show -s "mysql-replica-01" |
+			grep 'worker' | awk -F: '{print $2}' | cut -d'"' -f 2)
+		# make sure in skip and wait redirect
+		check_log_contain_with_retry 'got a shard DDL lock operation.*MODIFY COLUMN `id` INT' $WORK_DIR/$relate_worker/log/dm-worker.log
+	fi
 	run_sql_source2 "alter table ${shardddl1}.${tb1} modify id int default 2;"
 	run_sql_source1 "insert into ${shardddl1}.${tb1} values(4);"
 	run_sql_source2 "insert into ${shardddl1}.${tb1} values(5);"
@@ -535,10 +561,10 @@ function DM_068() {
 function restart_worker() {
 	echo "restart dm-worker" $1
 	if [[ "$1" = "1" ]]; then
-		ps aux | grep dm-worker1 | awk '{print $2}' | xargs kill || true
+		kill_process dm-worker1
 		check_port_offline $WORKER1_PORT 20
 	else
-		ps aux | grep dm-worker2 | awk '{print $2}' | xargs kill || true
+		kill_process dm-worker2
 		check_port_offline $WORKER2_PORT 20
 	fi
 	export GO_FAILPOINTS=$2

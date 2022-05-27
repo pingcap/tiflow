@@ -126,6 +126,8 @@ block-allow-list:
     do-tables:
     - db-name: dmctl
       tbl-name: ~^t_[\d]+
+    - db-name: dmctl
+      tbl-name: flush_trigger
     do-dbs:
     - dmctl
     ignore-tables: []
@@ -170,6 +172,8 @@ validators:
     row-error-delay: 30m0s
     meta-flush-interval: 1m0s
     batch-query-size: 100
+    max-pending-row-size: 500m
+    max-pending-row-count: 8000
 clean-dump-file: true
 ansi-quotes: false
 remove-meta: false

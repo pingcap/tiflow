@@ -20,7 +20,10 @@ import (
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	gmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/failpoint"
+	"github.com/pingcap/tidb/errno"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/parser/types"
@@ -29,7 +32,6 @@ import (
 
 	cdcmodel "github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/dm/dm/config"
-	"github.com/pingcap/tiflow/dm/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/pkg/sqlmodel"
@@ -57,6 +59,10 @@ func genRowChangeJob(tbl filter.Table, tblInfo *model.TableInfo, key string, tp 
 }
 
 func TestValidatorWorkerValidateTableChanges(t *testing.T) {
+	require.Nil(t, failpoint.Enable("github.com/pingcap/tiflow/dm/syncer/ValidatorMockUpstreamTZ", `return()`))
+	defer func() {
+		require.Nil(t, failpoint.Disable("github.com/pingcap/tiflow/dm/syncer/ValidatorMockUpstreamTZ"))
+	}()
 	testFunc := func(t *testing.T, mode string) {
 		t.Helper()
 		tbl1 := filter.Table{Schema: "test", Name: "tbl1"}
@@ -77,9 +83,9 @@ func TestValidatorWorkerValidateTableChanges(t *testing.T) {
 		syncerObj := NewSyncer(cfg, nil, nil)
 		validator := NewContinuousDataValidator(cfg, syncerObj, false)
 		validator.persistHelper.schemaInitialized.Store(true)
-		validator.Start(pb.Stage_Stopped)
+		require.NoError(t, validator.initialize())
 		defer validator.cancel()
-		validator.reachedSyncer.Store(true)
+		validator.markErrorStarted.Store(true)
 
 		worker := newValidateWorker(validator, 0)
 
@@ -266,8 +272,8 @@ func TestValidatorWorkerValidateTableChanges(t *testing.T) {
 			checkInitStatus()
 		}
 
-		// set reachedSyncer = false, there should not be any errors and failedCount=0
-		validator.reachedSyncer.Store(false)
+		// set markErrorStarted = false, there should not be any errors and failedCount=0
+		validator.markErrorStarted.Store(false)
 		worker.updateRowChange(genRowChangeJob(tbl1, tableInfo1, "1", rowInsert, []interface{}{1, "a"}))
 
 		mock.ExpectQuery("SELECT .* FROM .*tbl1.* WHERE .*").WillReturnRows(
@@ -296,8 +302,8 @@ func TestValidatorWorkerValidateTableChanges(t *testing.T) {
 		// everything is validated successfully, no error rows
 		checkInitStatus()
 
-		// set reachedSyncer=true, rowErrorDelayInSec = 0, failed rows became error directly
-		validator.reachedSyncer.Store(true)
+		// set markErrorStarted=true, rowErrorDelayInSec = 0, failed rows became error directly
+		validator.markErrorStarted.Store(true)
 		worker.rowErrorDelayInSec = 0
 		worker.updateRowChange(genRowChangeJob(tbl1, tableInfo1, "1", rowInsert, []interface{}{1, "a"}))
 		mock.ExpectQuery("SELECT .* FROM .*tbl1.* WHERE .*").WillReturnRows(
@@ -319,45 +325,67 @@ func TestValidatorWorkerValidateTableChanges(t *testing.T) {
 }
 
 func TestValidatorWorkerCompareData(t *testing.T) {
-	worker := validateWorker{}
-	eq, err := worker.compareData([]*sql.NullString{{String: "1", Valid: true}},
-		[]*sql.NullString{{Valid: false}},
-		[]*model.ColumnInfo{{FieldType: types.FieldType{Tp: mysql.TypeLong}}})
+	compareContext := validateCompareContext{
+		logger:  log.L(),
+		columns: []*model.ColumnInfo{{FieldType: types.FieldType{Tp: mysql.TypeLong}}},
+	}
+	eq, err := compareContext.compareData("", []*sql.NullString{{String: "1", Valid: true}}, []*sql.NullString{{Valid: false}})
 	require.NoError(t, err)
 	require.False(t, eq)
-	eq, err = worker.compareData([]*sql.NullString{{String: "1.1", Valid: true}},
-		[]*sql.NullString{{String: "1.x", Valid: true}},
-		[]*model.ColumnInfo{{FieldType: types.FieldType{Tp: mysql.TypeFloat}}})
+
+	compareContext = validateCompareContext{
+		logger:  log.L(),
+		columns: []*model.ColumnInfo{{FieldType: types.FieldType{Tp: mysql.TypeFloat}}},
+	}
+	eq, err = compareContext.compareData("", []*sql.NullString{{String: "1.1", Valid: true}}, []*sql.NullString{{String: "1.x", Valid: true}})
 	require.Error(t, err)
 	require.False(t, eq)
-	eq, err = worker.compareData([]*sql.NullString{{String: "1.1", Valid: true}},
-		[]*sql.NullString{{String: "1.1000011", Valid: true}},
-		[]*model.ColumnInfo{{FieldType: types.FieldType{Tp: mysql.TypeFloat}}})
+
+	compareContext = validateCompareContext{
+		logger:  log.L(),
+		columns: []*model.ColumnInfo{{FieldType: types.FieldType{Tp: mysql.TypeFloat}}},
+	}
+	eq, err = compareContext.compareData("", []*sql.NullString{{String: "1.1", Valid: true}}, []*sql.NullString{{String: "1.1000011", Valid: true}})
 	require.NoError(t, err)
 	require.False(t, eq)
-	eq, err = worker.compareData([]*sql.NullString{{String: "1.1", Valid: true}},
-		[]*sql.NullString{{String: "1.1000001", Valid: true}},
-		[]*model.ColumnInfo{{FieldType: types.FieldType{Tp: mysql.TypeFloat}}})
+
+	compareContext = validateCompareContext{
+		logger:  log.L(),
+		columns: []*model.ColumnInfo{{FieldType: types.FieldType{Tp: mysql.TypeFloat}}},
+	}
+	eq, err = compareContext.compareData("", []*sql.NullString{{String: "1.1", Valid: true}}, []*sql.NullString{{String: "1.1000001", Valid: true}})
 	require.NoError(t, err)
 	require.True(t, eq)
-	eq, err = worker.compareData([]*sql.NullString{{String: "1.1", Valid: true}},
-		[]*sql.NullString{{String: "1.1000001", Valid: true}},
-		[]*model.ColumnInfo{{FieldType: types.FieldType{Tp: mysql.TypeDouble}}})
+
+	compareContext = validateCompareContext{
+		logger:  log.L(),
+		columns: []*model.ColumnInfo{{FieldType: types.FieldType{Tp: mysql.TypeDouble}}},
+	}
+	eq, err = compareContext.compareData("", []*sql.NullString{{String: "1.1", Valid: true}}, []*sql.NullString{{String: "1.1000001", Valid: true}})
 	require.NoError(t, err)
 	require.True(t, eq)
-	eq, err = worker.compareData([]*sql.NullString{{String: "1", Valid: true}},
-		[]*sql.NullString{{String: "1", Valid: true}},
-		[]*model.ColumnInfo{{FieldType: types.FieldType{Tp: mysql.TypeLong}}})
+
+	compareContext = validateCompareContext{
+		logger:  log.L(),
+		columns: []*model.ColumnInfo{{FieldType: types.FieldType{Tp: mysql.TypeLong}}},
+	}
+	eq, err = compareContext.compareData("", []*sql.NullString{{String: "1", Valid: true}}, []*sql.NullString{{String: "1", Valid: true}})
 	require.NoError(t, err)
 	require.True(t, eq)
-	eq, err = worker.compareData([]*sql.NullString{{String: "aaa", Valid: true}},
-		[]*sql.NullString{{String: "aaa", Valid: true}},
-		[]*model.ColumnInfo{{FieldType: types.FieldType{Tp: mysql.TypeVarchar}}})
+
+	compareContext = validateCompareContext{
+		logger:  log.L(),
+		columns: []*model.ColumnInfo{{FieldType: types.FieldType{Tp: mysql.TypeVarchar}}},
+	}
+	eq, err = compareContext.compareData("", []*sql.NullString{{String: "aaa", Valid: true}}, []*sql.NullString{{String: "aaa", Valid: true}})
 	require.NoError(t, err)
 	require.True(t, eq)
-	eq, err = worker.compareData([]*sql.NullString{{String: "\x01\x02", Valid: true}},
-		[]*sql.NullString{{String: "\x01\x02", Valid: true}},
-		[]*model.ColumnInfo{{FieldType: types.FieldType{Tp: mysql.TypeVarString}}})
+
+	compareContext = validateCompareContext{
+		logger:  log.L(),
+		columns: []*model.ColumnInfo{{FieldType: types.FieldType{Tp: mysql.TypeVarString}}},
+	}
+	eq, err = compareContext.compareData("", []*sql.NullString{{String: "\x01\x02", Valid: true}}, []*sql.NullString{{String: "\x01\x02", Valid: true}})
 	require.NoError(t, err)
 	require.True(t, eq)
 }
@@ -437,12 +465,11 @@ func TestValidatorWorkerGetTargetRows(t *testing.T) {
 			PK:        tblInfo.Indices[0],
 			PkValues:  tc.pkValues,
 		}
-		dbConn := genDBConn(t, db, genSubtaskConfig(t))
 
 		worker := &validateWorker{
-			ctx:  context.Background(),
-			conn: dbConn,
-			L:    log.L(),
+			ctx: context.Background(),
+			db:  conn.NewBaseDB(db, func() {}),
+			L:   log.L(),
 		}
 		targetRows, err2 := worker.getTargetRows(cond)
 		require.NoError(t, err2)
@@ -472,9 +499,9 @@ func TestValidatorWorkerGetTargetRows(t *testing.T) {
 		PkValues:  [][]string{{"1"}},
 	}
 	worker := &validateWorker{
-		ctx:  context.Background(),
-		conn: genDBConn(t, db, genSubtaskConfig(t)),
-		L:    log.L(),
+		ctx: context.Background(),
+		db:  conn.NewBaseDB(db, func() {}),
+		L:   log.L(),
 	}
 
 	// query error
@@ -497,4 +524,44 @@ func TestValidatorWorkerGetSourceRowsForCompare(t *testing.T) {
 	require.Equal(t, "1", rows["a"][1].String)
 	require.Equal(t, "1", rows["b"][0].String)
 	require.Equal(t, "2", rows["b"][1].String)
+}
+
+func TestValidatorIsRetryableDBError(t *testing.T) {
+	require.True(t, isRetryableDBError(&gmysql.MySQLError{Number: errno.ErrPDServerTimeout}))
+	require.True(t, isRetryableDBError(gmysql.ErrInvalidConn))
+	require.True(t, isRetryableDBError(context.DeadlineExceeded))
+	require.True(t, isRetryableDBError(driver.ErrBadConn))
+	require.True(t, isRetryableDBError(errors.Annotate(driver.ErrBadConn, "test")))
+}
+
+func TestValidatorRowCountAndSize(t *testing.T) {
+	cfg := genSubtaskConfig(t)
+	cfg.ValidatorCfg.Mode = config.ValidationFull
+	syncerObj := NewSyncer(cfg, nil, nil)
+	validator := NewContinuousDataValidator(cfg, syncerObj, false)
+	validator.persistHelper.schemaInitialized.Store(true)
+	validator.markErrorStarted.Store(true)
+
+	worker := newValidateWorker(validator, 0)
+	worker.newJobAdded(&rowValidationJob{Tp: rowInsert, size: 100})
+	worker.newJobAdded(&rowValidationJob{Tp: rowUpdated, size: 200})
+	worker.newJobAdded(&rowValidationJob{Tp: rowDeleted, size: 400})
+	worker.newJobAdded(&rowValidationJob{Tp: rowInsert, size: 800})
+	require.Equal(t, int64(2), worker.pendingRowCounts[rowInsert])
+	require.Equal(t, int64(1), worker.pendingRowCounts[rowUpdated])
+	require.Equal(t, int64(1), worker.pendingRowCounts[rowDeleted])
+	require.Equal(t, int64(1500), worker.pendingRowSize)
+	require.Equal(t, int64(2), validator.pendingRowCounts[rowInsert].Load())
+	require.Equal(t, int64(1), validator.pendingRowCounts[rowUpdated].Load())
+	require.Equal(t, int64(1), validator.pendingRowCounts[rowDeleted].Load())
+	require.Equal(t, int64(1500), validator.pendingRowSize.Load())
+	worker.setPendingRowCountsAndSize([]int64{0, 0, 0}, 300)
+	require.Equal(t, int64(0), worker.pendingRowCounts[rowInsert])
+	require.Equal(t, int64(0), worker.pendingRowCounts[rowUpdated])
+	require.Equal(t, int64(0), worker.pendingRowCounts[rowDeleted])
+	require.Equal(t, int64(300), worker.pendingRowSize)
+	require.Equal(t, int64(0), validator.pendingRowCounts[rowInsert].Load())
+	require.Equal(t, int64(0), validator.pendingRowCounts[rowUpdated].Load())
+	require.Equal(t, int64(0), validator.pendingRowCounts[rowDeleted].Load())
+	require.Equal(t, int64(300), validator.pendingRowSize.Load())
 }

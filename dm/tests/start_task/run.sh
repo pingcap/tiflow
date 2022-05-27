@@ -62,7 +62,20 @@ function init_tracker_test() {
 	cleanup_data start_task
 }
 
+function restore_timezone() {
+	run_sql_source1 "set global time_zone = SYSTEM"
+	run_sql_tidb "set global time_zone = SYSTEM"
+}
+
 function start_task_by_time() {
+	run_sql_source1 "set global time_zone = '+02:00'"
+	run_sql_source1 "SELECT cast(TIMEDIFF(NOW(6), UTC_TIMESTAMP(6)) as time) time"
+	check_contains "time: 02:00:00"
+	run_sql_tidb "set global time_zone = '+06:00'"
+	run_sql_tidb "SELECT cast(TIMEDIFF(NOW(6), UTC_TIMESTAMP(6)) as time) time"
+	check_contains "time: 06:00:00"
+	trap restore_timezone EXIT
+
 	export GO_FAILPOINTS='github.com/pingcap/tiflow/dm/syncer/SafeModeInitPhaseSeconds=return(0)'
 	run_dm_master $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master.toml
 	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT
@@ -75,7 +88,7 @@ function start_task_by_time() {
 	run_sql_source1 'CREATE TABLE start_task.t1 (c INT PRIMARY KEY);'
 
 	sleep 2
-	start_time=$(date '+%Y-%m-%d %T') # 2022-01-26 17:32:22
+	start_time=$(TZ='UTC-2' date '+%Y-%m-%d %T') # TZ=UTC-2 means +02:00
 	sleep 2
 
 	run_sql_source1 'CREATE TABLE start_task.t2 (c INT PRIMARY KEY);'

@@ -780,45 +780,17 @@ func (t *testServer) TestQueryValidator(c *C) {
 	w, err := NewSourceWorker(cfg, nil, "", "")
 	w.closed.Store(false)
 	c.Assert(err, IsNil)
-	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/syncer/MockValidationQuery", `return(true)`), IsNil)
-	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/dm/worker/MockValidationQuery", `return(true)`), IsNil)
-	defer func() {
-		c.Assert(failpoint.Disable("github.com/pingcap/tiflow/dm/syncer/MockValidationQuery"), IsNil)
-		c.Assert(failpoint.Disable("github.com/pingcap/tiflow/dm/dm/worker/MockValidationQuery"), IsNil)
-	}()
 	st := NewSubTaskWithStage(&config.SubTaskConfig{
 		Name: "testQueryValidator",
 		ValidatorCfg: config.ValidatorConfig{
 			Mode: config.ValidationFull,
 		},
 	}, pb.Stage_Running, nil, "")
-	st.StartValidator(pb.Stage_Running, false)
 	w.subTaskHolder.recordSubTask(st)
-	expected := []*pb.ValidationTableStatus{
-		{
-			SrcTable: "`testdb1`.`testtable1`",
-			DstTable: "`dstdb`.`dsttable`",
-			Stage:    pb.Stage_Running,
-		},
-		{
-			SrcTable: "`testdb2`.`testtable2`",
-			DstTable: "`dstdb`.`dsttable`",
-			Stage:    pb.Stage_Stopped,
-			Message:  "no primary key",
-		},
-	}
-	ret, err := w.GetValidatorTableStatus("testQueryValidator", pb.Stage_Running)
-	c.Assert(err, IsNil)
-	c.Assert(len(ret), Equals, 1)
-	c.Assert(ret[0], DeepEquals, expected[0])
-	ret, err = w.GetValidatorTableStatus("testQueryValidator", pb.Stage_Stopped)
-	c.Assert(err, IsNil)
-	c.Assert(len(ret), Equals, 1)
-	c.Assert(ret[0], DeepEquals, expected[1])
-	ret, err = w.GetValidatorTableStatus("testQueryValidator", pb.Stage_InvalidStage)
-	c.Assert(err, IsNil)
-	c.Assert(len(ret), Equals, 2)
-	c.Assert(ret, DeepEquals, expected)
+	var ret *pb.ValidationStatus
+	ret, err = w.GetValidatorStatus("invalidTaskName")
+	c.Assert(ret, IsNil)
+	c.Assert(terror.ErrWorkerSubTaskNotFound.Equal(err), IsTrue)
 }
 
 func (t *testServer) setupValidator(c *C) *SourceWorker {
@@ -843,18 +815,12 @@ func (t *testServer) setupValidator(c *C) *SourceWorker {
 }
 
 func (t *testServer) TestGetWorkerValidatorErr(c *C) {
-	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/syncer/MockValidationQuery", `return(true)`), IsNil)
-	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/dm/worker/MockValidationQuery", `return(true)`), IsNil)
-	defer func() {
-		c.Assert(failpoint.Disable("github.com/pingcap/tiflow/dm/syncer/MockValidationQuery"), IsNil)
-		c.Assert(failpoint.Disable("github.com/pingcap/tiflow/dm/dm/worker/MockValidationQuery"), IsNil)
-	}()
 	w := t.setupValidator(c)
 	// when subtask name not exists
 	// return empty array
-	c.Assert(len(w.GetWorkerValidatorErr("invalidTask", pb.ValidateErrorState_InvalidErr)), Equals, 0)
-	// subtask match
-	c.Assert(len(w.GetWorkerValidatorErr("testQueryValidator", pb.ValidateErrorState_InvalidErr)), Equals, 2)
+	errs, err := w.GetWorkerValidatorErr("invalidTask", pb.ValidateErrorState_InvalidErr)
+	c.Assert(terror.ErrWorkerSubTaskNotFound.Equal(err), IsTrue)
+	c.Assert(errs, IsNil)
 }
 
 func (t *testServer) TestOperateWorkerValidatorErr(c *C) {
@@ -863,8 +829,6 @@ func (t *testServer) TestOperateWorkerValidatorErr(c *C) {
 	// return empty array
 	taskNotFound := terror.ErrWorkerSubTaskNotFound.Generate("invalidTask")
 	c.Assert(w.OperateWorkerValidatorErr("invalidTask", pb.ValidationErrOp_ClearErrOp, 0, true).Error(), Equals, taskNotFound.Error())
-	// subtask match
-	c.Assert(w.OperateWorkerValidatorErr("testQueryValidator", pb.ValidationErrOp_ClearErrOp, 0, true), IsNil)
 }
 
 func TestMasterBinlogOff(t *testing.T) {

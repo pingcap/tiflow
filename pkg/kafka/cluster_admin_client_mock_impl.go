@@ -22,8 +22,12 @@ import (
 const (
 	// DefaultMockTopicName specifies the default mock topic name.
 	DefaultMockTopicName = "mock_topic"
+	// DefaultMockPartitionNum is the default partition number of default mock topic.
+	DefaultMockPartitionNum = 3
 	// defaultMockControllerID specifies the default mock controller ID.
 	defaultMockControllerID = 1
+	// topic replication factor must be 3 for Confluent Cloud Kafka.
+	defaultReplicationFactor = 3
 )
 
 const (
@@ -108,6 +112,20 @@ func (c *ClusterAdminClientMockImpl) DescribeConfig(resource sarama.ConfigResour
 
 // CreateTopic adds topic into map.
 func (c *ClusterAdminClientMockImpl) CreateTopic(topic string, detail *sarama.TopicDetail, _ bool) error {
+	minInsyncReplicaConfigFound := false
+
+	for _, config := range c.brokerConfigs {
+		if config.Name == MinInsyncReplicasConfigName {
+			minInsyncReplicaConfigFound = true
+		}
+	}
+	// For Confluent Cloud, min.insync.replica is invisible and replication factor must be 3.
+	// Otherwise, ErrPolicyViolation is expected to be returned.
+	if !minInsyncReplicaConfigFound &&
+		detail.ReplicationFactor != defaultReplicationFactor {
+		return sarama.ErrPolicyViolation
+	}
+
 	c.topics[topic] = *detail
 	return nil
 }
@@ -146,6 +164,15 @@ func (c *ClusterAdminClientMockImpl) GetTopicMaxMessageBytes() int {
 }
 
 // DropBrokerConfig remove all broker level configuration for test purpose.
-func (c *ClusterAdminClientMockImpl) DropBrokerConfig() {
-	c.brokerConfigs = c.brokerConfigs[:0]
+func (c *ClusterAdminClientMockImpl) DropBrokerConfig(configName string) {
+	targetIdx := 0
+	for i, config := range c.brokerConfigs {
+		if config.Name == configName {
+			targetIdx = i
+		}
+	}
+
+	if targetIdx != 0 {
+		c.brokerConfigs = append(c.brokerConfigs[:targetIdx], c.brokerConfigs[targetIdx+1:]...)
+	}
 }

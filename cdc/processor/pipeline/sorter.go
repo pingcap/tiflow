@@ -38,10 +38,6 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-const (
-	flushMemoryMetricsDuration = time.Second * 5
-)
-
 type sorterNode struct {
 	sorter sorter.EventSorter
 
@@ -63,9 +59,6 @@ type sorterNode struct {
 	barrierTs model.Ts
 
 	replConfig *config.ReplicaConfig
-
-	// isTableActorMode identify if the sorter node is run is actor mode, todo: remove it after GA
-	isTableActorMode bool
 }
 
 func newSorterNode(
@@ -82,11 +75,6 @@ func newSorterNode(
 		barrierTs:      startTs,
 		replConfig:     replConfig,
 	}
-}
-
-func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
-	wg := errgroup.Group{}
-	return n.start(ctx, false, &wg, 0, nil)
 }
 
 func createSorter(ctx pipeline.NodeContext, tableName string, tableID model.TableID) (sorter.EventSorter, error) {
@@ -131,10 +119,9 @@ func createSorter(ctx pipeline.NodeContext, tableName string, tableID model.Tabl
 }
 
 func (n *sorterNode) start(
-	ctx pipeline.NodeContext, isTableActorMode bool, eg *errgroup.Group,
+	ctx pipeline.NodeContext, eg *errgroup.Group,
 	tableActorID actor.ID, tableActorRouter *actor.Router[pmessage.Message],
 ) error {
-	n.isTableActorMode = isTableActorMode
 	n.eg = eg
 	stdCtx, cancel := context.WithCancel(ctx)
 	n.cancel = cancel
@@ -156,11 +143,6 @@ func (n *sorterNode) start(
 		lastSendResolvedTsTime := time.Now() // the time at which we last sent a resolved-ts.
 		lastCRTs := uint64(0)                // the commit-ts of the last row changed we sent.
 
-		metricsTableMemoryHistogram := tableMemoryHistogram.
-			WithLabelValues(ctx.ChangefeedVars().ID.Namespace, ctx.ChangefeedVars().ID.ID)
-		metricsTicker := time.NewTicker(flushMemoryMetricsDuration)
-		defer metricsTicker.Stop()
-
 		for {
 			// We must call `sorter.Output` before receiving resolved events.
 			// Skip calling `sorter.Output` and caching output channel may fail
@@ -169,8 +151,6 @@ func (n *sorterNode) start(
 			select {
 			case <-stdCtx.Done():
 				return nil
-			case <-metricsTicker.C:
-				metricsTableMemoryHistogram.Observe(float64(n.flowController.GetConsumption()))
 			case msg, ok := <-output:
 				if !ok {
 					// sorter output channel closed
@@ -206,8 +186,10 @@ func (n *sorterNode) start(
 					size := uint64(msg.Row.ApproximateBytes())
 					// NOTE we allow the quota to be exceeded if blocking means interrupting a transaction.
 					// Otherwise the pipeline would deadlock.
-					err = n.flowController.Consume(commitTs, size, func() error {
-						if lastCRTs > lastSentResolvedTs {
+					err = n.flowController.Consume(msg, size, func(batch bool) error {
+						if batch {
+							log.Panic("cdc does not support the batch resolve mechanism at this time")
+						} else if lastCRTs > lastSentResolvedTs {
 							// If we are blocking, we send a Resolved Event here to elicit a sink-flush.
 							// Not sending a Resolved Event here will very likely deadlock the pipeline.
 							lastSentResolvedTs = lastCRTs
@@ -233,10 +215,8 @@ func (n *sorterNode) start(
 					if msg.CRTs < lastSentResolvedTs {
 						continue
 					}
-					if isTableActorMode {
-						msg := message.ValueMessage(pmessage.TickMessage())
-						_ = tableActorRouter.Send(tableActorID, msg)
-					}
+					tickMsg := message.ValueMessage(pmessage.TickMessage())
+					_ = tableActorRouter.Send(tableActorID, tickMsg)
 					lastSentResolvedTs = msg.CRTs
 					lastSendResolvedTsTime = time.Now()
 				}
@@ -246,12 +226,6 @@ func (n *sorterNode) start(
 	})
 	n.sorter = eventSorter
 	return nil
-}
-
-// Receive receives the message from the previous node
-func (n *sorterNode) Receive(ctx pipeline.NodeContext) error {
-	_, err := n.TryHandleDataMessage(ctx, ctx.Message())
-	return err
 }
 
 // handleRawEvent process the raw kv event,send it to sorter
@@ -309,17 +283,10 @@ func (n *sorterNode) updateBarrierTs(barrierTs model.Ts) {
 }
 
 func (n *sorterNode) releaseResource(changefeedID model.ChangeFeedID) {
-	defer tableMemoryHistogram.DeleteLabelValues(changefeedID.Namespace, changefeedID.ID)
 	// Since the flowController is implemented by `Cond`, it is not cancelable by a context
 	// the flowController will be blocked in a background goroutine,
 	// We need to abort the flowController manually in the nodeRunner
 	n.flowController.Abort()
-}
-
-func (n *sorterNode) Destroy(ctx pipeline.NodeContext) error {
-	n.cancel()
-	n.releaseResource(ctx.ChangefeedVars().ID)
-	return n.eg.Wait()
 }
 
 func (n *sorterNode) ResolvedTs() model.Ts {

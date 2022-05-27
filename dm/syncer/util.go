@@ -138,7 +138,8 @@ func str2TimezoneOrFromDB(tctx *tcontext.Context, tzStr string, dbCfg *config.DB
 	if err != nil {
 		return nil, err
 	}
-	tctx.L().Info("use timezone", zap.String("location", loc.String()))
+	tctx.L().Info("use timezone", zap.String("location", loc.String()),
+		zap.String("host", dbCfg.Host), zap.Int("port", dbCfg.Port))
 	return loc, nil
 }
 
@@ -174,4 +175,14 @@ func subtaskCfg2BinlogSyncerCfg(cfg *config.SubTaskConfig, timezone *time.Locati
 	// will exit when meet error, and then auto resume by DM itself.
 	common.SetDefaultReplicationCfg(&syncCfg, 1)
 	return syncCfg, nil
+}
+
+func safeToRedirect(e *replication.BinlogEvent) bool {
+	if e != nil {
+		switch e.Event.(type) {
+		case *replication.GTIDEvent, *replication.MariadbGTIDEvent:
+			return true
+		}
+	}
+	return false
 }

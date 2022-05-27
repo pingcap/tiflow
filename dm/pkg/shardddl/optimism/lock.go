@@ -614,7 +614,7 @@ func (l *Lock) IsDroppedColumn(source, upSchema, upTable, col string) bool {
 	return true
 }
 
-// AddDroppedColumn adds a dropped column name in both etcd and lock's column map.
+// AddDroppedColumns adds a dropped column name in both etcd and lock's column map.
 func (l *Lock) AddDroppedColumns(source, schema, table string, cols []string) error {
 	newCols := make([]string, 0, len(cols))
 	for _, col := range cols {
@@ -889,8 +889,8 @@ func (l *Lock) trySyncForOneDDL(source, schema, table string, prevTable, postTab
 
 	log.L().Info("found conflict for DDL", zap.String("source", source), zap.String("schema", schema), zap.String("table", table), zap.Stringer("prevTable", prevTable), zap.Stringer("postTable", postTable), log.ShortError(tableErr))
 
-	if idempotent {
-		log.L().Info("return conflict DDL for idempotent DDL", zap.String("source", source), zap.String("schema", schema), zap.String("table", table), zap.Stringer("prevTable", prevTable), zap.Stringer("postTable", postTable))
+	if idempotent || l.noConflictWithOneNormalTable(source, schema, table, prevTable, postTable) {
+		log.L().Info("directly return conflict DDL", zap.Bool("idempotent", idempotent), zap.String("source", source), zap.String("schema", schema), zap.String("table", table), zap.Stringer("prevTable", prevTable), zap.Stringer("postTable", postTable))
 		l.tables[source][schema][table] = postTable
 		l.finalTables[source][schema][table] = postTable
 		return true, ConflictNone
@@ -901,15 +901,6 @@ func (l *Lock) trySyncForOneDDL(source, schema, table string, prevTable, postTab
 	l.tables[source][schema][table] = prevTable
 	l.addConflictTable(source, schema, table, postTable)
 	l.finalTables[source][schema][table] = postTable
-
-	// if more than one conflict tables and this conflict DDL has no conflict with normal tables
-	// e.g. tb1,tb2 put ddl1(rename a to b); tb1 put ddl2(rename c to d); tb2 crash and reput ddl1(rename a to b)
-	// now tb2's ddl1 is a conflict DDL but has no conflict with normal tables
-	if l.multipleConflictTables() && l.noConflictWithNormalTables(source, schema, table, postTable) {
-		l.removeConflictTable(source, schema, table)
-		l.tables[source][schema][table] = postTable
-		return true, ConflictNone
-	}
 
 	// if any conflict happened between conflict DDLs, return error
 	// e.g. tb1: "ALTER TABLE RENAME a TO b", tb2: "ALTER TABLE RENAME c TO d"
@@ -1085,33 +1076,39 @@ func (l *Lock) allFinalTableLarger() bool {
 	return l.allTableLarger(finalTables)
 }
 
-// judge whether a conflict DDL has no conflict with all normal tables.
-func (l *Lock) noConflictWithNormalTables(source, schema, table string, postTable schemacmp.Table) bool {
-	// revert conflict tables and final tables
-	currentConflictTables := l.conflictTables
-	currentFinalTables := l.finalTables
-	defer func() {
-		l.conflictTables = currentConflictTables
-		l.finalTables = currentFinalTables
-	}()
-
-	// reset conflict tables and final tables
-	l.conflictTables = make(map[string]map[string]map[string]schemacmp.Table)
-	l.finalTables = make(map[string]map[string]map[string]schemacmp.Table)
+// jude a conflict ddl is no conflict with at least one normal table.
+func (l *Lock) noConflictWithOneNormalTable(callerSource, callerSchema, callerTable string, prevTable, postTable schemacmp.Table) bool {
 	for source, schemaTables := range l.tables {
-		l.finalTables[source] = make(map[string]map[string]schemacmp.Table)
 		for schema, tables := range schemaTables {
-			l.finalTables[source][schema] = make(map[string]schemacmp.Table)
 			for table, ti := range tables {
-				l.finalTables[source][schema][table] = ti
+				if source == callerSource && schema == callerSchema && table == callerTable {
+					continue
+				}
+
+				// judge joined no error
+				joined, err := postTable.Join(ti)
+				if err != nil {
+					continue
+				}
+
+				// judge this normal table is smaller(same as allTableSmaller)
+				if _, err = joined.Compare(prevTable); err == nil {
+					continue
+				}
+
+				// judge this normal table is larger(same as allTableLarger)
+				if joined, err = prevTable.Join(ti); err != nil {
+					joined = ti
+				}
+				if cmp, err := joined.Compare(postTable); err != nil || cmp < 0 {
+					continue
+				}
+
+				return true
 			}
 		}
 	}
-	// update for current conflict DDL
-	l.addConflictTable(source, schema, table, postTable)
-	l.finalTables[source][schema][table] = postTable
-
-	return l.noConflictForFinalTables()
+	return false
 }
 
 // judge whether all conflict tables has no conflict.
@@ -1201,20 +1198,4 @@ func (l *Lock) redirectForConflictTables(callerSource, callerSchema, callerTable
 		}
 	}
 	return nil
-}
-
-// multipleConflictTables check whether a lock has multiple conflict tables.
-func (l *Lock) multipleConflictTables() bool {
-	cnt := 0
-	for _, schemaTables := range l.conflictTables {
-		for _, tables := range schemaTables {
-			for range tables {
-				cnt++
-				if cnt > 1 {
-					return true
-				}
-			}
-		}
-	}
-	return false
 }
