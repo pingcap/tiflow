@@ -375,7 +375,7 @@ func (w *Writer) getLogFileName() string {
 }
 
 // filePath always creates a new, unique file path, note this function is not
-// thread-safe, writer needs to ensure lock is aquired when calling it.
+// thread-safe, writer needs to ensure lock is acquired when calling it.
 func (w *Writer) filePath() string {
 	fp := filepath.Join(w.cfg.Dir, w.getLogFileName())
 	w.ongoingFilePath = fp
