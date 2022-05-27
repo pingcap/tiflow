@@ -78,7 +78,7 @@ function run() {
 	run_sql "CREATE table consistent_replicate_s3.check1(id int primary key);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	check_table_exists "consistent_replicate_s3.USERTABLE" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 	check_table_exists "consistent_replicate_s3.check1" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
-	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
+	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml 120
 
 	# Inject the failpoint to prevent sink execution, but the global resolved can be moved forward.
 	# Then we can apply redo log to reach an eventual consistent state in downstream.
@@ -101,7 +101,7 @@ function run() {
 	cdc redo apply --tmp-dir="$WORK_DIR/redo/apply" \
 		--storage="s3://logbucket/test-changefeed?endpoint=http://127.0.0.1:24927/" \
 		--sink-uri="mysql://normal:123456@127.0.0.1:3306/"
-	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
+	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml 120
 }
 
 trap stop EXIT
