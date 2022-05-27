@@ -81,13 +81,9 @@ func ParseLogFileName(name string) (uint64, string, error) {
 	}
 
 	// if .sort, the name should be like
-<<<<<<< HEAD
-	// fmt.Sprintf("%s_%s_%d_%s_%d%s", w.cfg.captureID, w.cfg.changeFeedID, w.cfg.createTime.Unix(), w.cfg.fileType, w.commitTS.Load(), LogEXT)+SortLogEXT
-=======
 	// fmt.Sprintf("%s_%s_%s_%d_%s_%d%s", w.cfg.captureID,
 	// w.cfg.changeFeedID.Namespace,w.cfg.changeFeedID.ID,
 	// w.cfg.fileType, w.commitTS.Load(), uuid, LogEXT)+SortLogEXT
->>>>>>> c467834a6 (redo(ticdc): use uuid in s3 log file to avoid name conflict (#5595))
 	if ext == SortLogEXT {
 		name = strings.TrimSuffix(name, SortLogEXT)
 		ext = filepath.Ext(name)
@@ -96,41 +92,12 @@ func ParseLogFileName(name string) (uint64, string, error) {
 		return 0, "", nil
 	}
 
-<<<<<<< HEAD
-	var commitTs, d1 uint64
-	var s1, s2, fileType string
-	// the log looks like: fmt.Sprintf("%s_%s_%d_%s_%d%s", w.cfg.captureID, w.cfg.changeFeedID, w.cfg.createTime.Unix(), w.cfg.fileType, w.commitTS.Load(), redo.LogEXT)
-	formatStr := "%s %s %d %s %d" + LogEXT
-	if ext == TmpEXT {
-		formatStr += TmpEXT
-	}
-	name = strings.ReplaceAll(name, "_", " ")
-	_, err := fmt.Sscanf(name, formatStr, &s1, &s2, &d1, &fileType, &commitTs)
-=======
 	var commitTs uint64
-	var s1, namespace, s2, fileType, uid string
-	// if the namespace is not default, the log looks like:
-	// fmt.Sprintf("%s_%s_%s_%d_%s_%d%s", w.cfg.captureID,
-	// w.cfg.changeFeedID.Namespace,w.cfg.changeFeedID.ID,
-	// w.cfg.fileType, w.commitTS.Load(), uuid, redo.LogEXT)
-	// otherwise it looks like:
-	// fmt.Sprintf("%s_%s_%d_%s_%d%s", w.cfg.captureID,
-	// w.cfg.changeFeedID.ID,
-	// w.cfg.fileType, w.commitTS.Load(), uuid, redo.LogEXT)
-	var (
-		vars      []any
-		formatStr string
-	)
-	if len(strings.Split(name, "_")) == 6 {
-		formatStr = logFormat2ParseFormat(RedoLogFileFormatV2)
-		vars = []any{&s1, &namespace, &s2, &fileType, &commitTs, &uid}
-	} else {
-		formatStr = logFormat2ParseFormat(RedoLogFileFormatV1)
-		vars = []any{&s1, &s2, &fileType, &commitTs, &uid}
-	}
+	var s1, s2, fileType, uid string
+	// the log looks like: fmt.Sprintf("%s_%s_%d_%s_%d%s", w.cfg.captureID, w.cfg.changeFeedID, w.cfg.createTime.Unix(), w.cfg.fileType, w.commitTS.Load(), redo.LogEXT)
+	formatStr := logFormat2ParseFormat(RedoLogFileFormatV1)
 	name = strings.ReplaceAll(name, "_", " ")
-	_, err := fmt.Sscanf(name, formatStr, vars...)
->>>>>>> c467834a6 (redo(ticdc): use uuid in s3 log file to avoid name conflict (#5595))
+	_, err := fmt.Sscanf(name, formatStr, &s1, &s2, &fileType, &commitTs, &uid)
 	if err != nil {
 		return 0, "", errors.Annotatef(err, "bad log name: %s", name)
 	}

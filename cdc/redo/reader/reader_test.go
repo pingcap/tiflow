@@ -85,13 +85,9 @@ func TestLogReaderResetReader(t *testing.T) {
 		MaxLogSize: 100000,
 		Dir:        dir,
 	}
-<<<<<<< HEAD
-	fileName := fmt.Sprintf("%s_%s_%d_%s_%d%s", "cp", "test-cf100", time.Now().Unix(), common.DefaultDDLLogFileType, 100, common.LogEXT)
-=======
-	fileName := fmt.Sprintf(common.RedoLogFileFormatV2, "cp",
+	fileName := fmt.Sprintf(common.RedoLogFileFormatV1, "cp",
 		"default", "test-cf100",
-		common.DefaultDDLLogFileType, 100, uuid.NewString(), common.LogEXT)
->>>>>>> c467834a6 (redo(ticdc): use uuid in s3 log file to avoid name conflict (#5595))
+		common.DefaultDDLLogFileType, 100, uuid.New().String(), common.LogEXT)
 	w, err := writer.NewWriter(ctx, cfg, writer.WithLogFileName(func() string {
 		return fileName
 	}))
@@ -110,13 +106,9 @@ func TestLogReaderResetReader(t *testing.T) {
 	f, err := os.Open(path)
 	require.Nil(t, err)
 
-<<<<<<< HEAD
-	fileName = fmt.Sprintf("%s_%s_%d_%s_%d%s", "cp", "test-cf10", time.Now().Unix(), common.DefaultRowLogFileType, 10, common.LogEXT)
-=======
-	fileName = fmt.Sprintf(common.RedoLogFileFormatV2, "cp",
+	fileName = fmt.Sprintf(common.RedoLogFileFormatV1, "cp",
 		"default", "test-cf10",
-		common.DefaultRowLogFileType, 10, uuid.NewString(), common.LogEXT)
->>>>>>> c467834a6 (redo(ticdc): use uuid in s3 log file to avoid name conflict (#5595))
+		common.DefaultRowLogFileType, 10, uuid.New().String(), common.LogEXT)
 	w, err = writer.NewWriter(ctx, cfg, writer.WithLogFileName(func() string {
 		return fileName
 	}))

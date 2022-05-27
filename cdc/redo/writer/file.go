@@ -29,24 +29,15 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/br/pkg/storage"
-<<<<<<< HEAD
-	"github.com/pingcap/tiflow/cdc/redo/common"
-	cerror "github.com/pingcap/tiflow/pkg/errors"
-=======
->>>>>>> c467834a6 (redo(ticdc): use uuid in s3 log file to avoid name conflict (#5595))
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/uber-go/atomic"
 	pioutil "go.etcd.io/etcd/pkg/ioutil"
 	"go.uber.org/multierr"
 	"go.uber.org/zap"
-<<<<<<< HEAD
-=======
 
-	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo/common"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/uuid"
->>>>>>> c467834a6 (redo(ticdc): use uuid in s3 log file to avoid name conflict (#5595))
 )
 
 const (
@@ -360,19 +351,10 @@ func (w *Writer) getLogFileName() string {
 	if w.op != nil && w.op.getLogFileName != nil {
 		return w.op.getLogFileName()
 	}
-<<<<<<< HEAD
-	return fmt.Sprintf("%s_%s_%d_%s_%d%s", w.cfg.CaptureID, w.cfg.ChangeFeedID, w.cfg.CreateTime.Unix(), w.cfg.FileType, w.commitTS.Load(), common.LogEXT)
-=======
 	uid := w.uuidGenerator.NewString()
-	if model.DefaultNamespace == w.cfg.ChangeFeedID.Namespace {
-		return fmt.Sprintf(common.RedoLogFileFormatV1,
-			w.cfg.CaptureID, w.cfg.ChangeFeedID.ID, w.cfg.FileType,
-			w.commitTS.Load(), uid, common.LogEXT)
-	}
-	return fmt.Sprintf(common.RedoLogFileFormatV2,
-		w.cfg.CaptureID, w.cfg.ChangeFeedID.Namespace, w.cfg.ChangeFeedID.ID,
-		w.cfg.FileType, w.commitTS.Load(), uid, common.LogEXT)
->>>>>>> c467834a6 (redo(ticdc): use uuid in s3 log file to avoid name conflict (#5595))
+	return fmt.Sprintf(common.RedoLogFileFormatV1,
+		w.cfg.CaptureID, w.cfg.ChangeFeedID, w.cfg.FileType,
+		w.commitTS.Load(), uid, common.LogEXT)
 }
 
 // filePath always creates a new, unique file path, note this function is not
