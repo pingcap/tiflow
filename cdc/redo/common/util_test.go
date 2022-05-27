@@ -37,7 +37,7 @@ func TestParseLogFileName(t *testing.T) {
 			args: arg{
 				name: fmt.Sprintf(RedoLogFileFormatV1, "cp",
 					"test",
-					DefaultRowLogFileType, 1, uuid.NewString(), LogEXT),
+					DefaultRowLogFileType, 1, uuid.New().String(), LogEXT),
 			},
 			wantTs:       1,
 			wantFileType: DefaultRowLogFileType,
@@ -47,7 +47,7 @@ func TestParseLogFileName(t *testing.T) {
 			args: arg{
 				name: fmt.Sprintf(RedoLogFileFormatV2, "cp",
 					"namespace", "test",
-					DefaultRowLogFileType, 1, uuid.NewString(), LogEXT),
+					DefaultRowLogFileType, 1, uuid.New().String(), LogEXT),
 			},
 			wantTs:       1,
 			wantFileType: DefaultRowLogFileType,
@@ -57,7 +57,7 @@ func TestParseLogFileName(t *testing.T) {
 			args: arg{
 				name: fmt.Sprintf(RedoLogFileFormatV1, "cp",
 					"test",
-					DefaultRowLogFileType, 1, uuid.NewString(), LogEXT) + TmpEXT,
+					DefaultRowLogFileType, 1, uuid.New().String(), LogEXT) + TmpEXT,
 			},
 			wantTs:       1,
 			wantFileType: DefaultRowLogFileType,
@@ -67,7 +67,7 @@ func TestParseLogFileName(t *testing.T) {
 			args: arg{
 				name: fmt.Sprintf(RedoLogFileFormatV2, "cp",
 					"namespace", "test",
-					DefaultRowLogFileType, 1, uuid.NewString(), LogEXT) + TmpEXT,
+					DefaultRowLogFileType, 1, uuid.New().String(), LogEXT) + TmpEXT,
 			},
 			wantTs:       1,
 			wantFileType: DefaultRowLogFileType,
@@ -77,7 +77,7 @@ func TestParseLogFileName(t *testing.T) {
 			args: arg{
 				name: fmt.Sprintf(RedoLogFileFormatV1, "cp",
 					"test",
-					DefaultDDLLogFileType, 1, uuid.NewString(), LogEXT),
+					DefaultDDLLogFileType, 1, uuid.New().String(), LogEXT),
 			},
 			wantTs:       1,
 			wantFileType: DefaultDDLLogFileType,
@@ -87,7 +87,7 @@ func TestParseLogFileName(t *testing.T) {
 			args: arg{
 				name: fmt.Sprintf(RedoLogFileFormatV2, "cp",
 					"namespace", "test",
-					DefaultDDLLogFileType, 1, uuid.NewString(), LogEXT),
+					DefaultDDLLogFileType, 1, uuid.New().String(), LogEXT),
 			},
 			wantTs:       1,
 			wantFileType: DefaultDDLLogFileType,
@@ -97,7 +97,7 @@ func TestParseLogFileName(t *testing.T) {
 			args: arg{
 				name: fmt.Sprintf(RedoLogFileFormatV2, "cp",
 					"default", "test",
-					DefaultDDLLogFileType, 1, uuid.NewString(), LogEXT) + SortLogEXT,
+					DefaultDDLLogFileType, 1, uuid.New().String(), LogEXT) + SortLogEXT,
 			},
 			wantTs:       1,
 			wantFileType: DefaultDDLLogFileType,
@@ -107,7 +107,7 @@ func TestParseLogFileName(t *testing.T) {
 			args: arg{
 				name: fmt.Sprintf(RedoLogFileFormatV2, "cp",
 					"namespace", "test",
-					DefaultDDLLogFileType, 1, uuid.NewString(), LogEXT) + SortLogEXT,
+					DefaultDDLLogFileType, 1, uuid.New().String(), LogEXT) + SortLogEXT,
 			},
 			wantTs:       1,
 			wantFileType: DefaultDDLLogFileType,
@@ -117,7 +117,7 @@ func TestParseLogFileName(t *testing.T) {
 			args: arg{
 				name: fmt.Sprintf(RedoLogFileFormatV1, "cp",
 					"test",
-					DefaultDDLLogFileType, 1, uuid.NewString(), LogEXT) + TmpEXT,
+					DefaultDDLLogFileType, 1, uuid.New().String(), LogEXT) + TmpEXT,
 			},
 			wantTs:       1,
 			wantFileType: DefaultDDLLogFileType,
@@ -127,7 +127,7 @@ func TestParseLogFileName(t *testing.T) {
 			args: arg{
 				name: fmt.Sprintf(RedoLogFileFormatV2, "cp",
 					"namespace", "test",
-					DefaultDDLLogFileType, 1, uuid.NewString(), LogEXT) + TmpEXT,
+					DefaultDDLLogFileType, 1, uuid.New().String(), LogEXT) + TmpEXT,
 			},
 			wantTs:       1,
 			wantFileType: DefaultDDLLogFileType,
@@ -151,7 +151,7 @@ func TestParseLogFileName(t *testing.T) {
 			args: arg{
 				name: fmt.Sprintf("%s_%s_%s_%s_%d%s%s", /* a wrong format */
 					"cp", "default", "test",
-					DefaultDDLLogFileType, 1, uuid.NewString(), LogEXT) + TmpEXT,
+					DefaultDDLLogFileType, 1, uuid.New().String(), LogEXT) + TmpEXT,
 			},
 			wantErr: ".*bad log name*.",
 		},
