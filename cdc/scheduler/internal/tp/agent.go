@@ -197,7 +197,6 @@ func (a *agent) handleMessage(msg []*schedulepb.Message) ([]*schedulepb.Message,
 	return result, nil
 }
 
-// protobuf also define api.
 func tableStatus2PB(status pipeline.TableStatus) schedulepb.TableState {
 	switch status {
 	case pipeline.TableStatusPreparing:
@@ -214,7 +213,8 @@ func tableStatus2PB(status pipeline.TableStatus) schedulepb.TableState {
 	return schedulepb.TableStateAbsent
 }
 
-func newTableStatus(meta *pipeline.TableMeta) schedulepb.TableStatus {
+func (a *agent) newTableStatus(tableID model.TableID) schedulepb.TableStatus {
+	meta := a.tableExec.GetTableMeta(tableID)
 	return schedulepb.TableStatus{
 		TableID: meta.TableID,
 		State:   tableStatus2PB(meta.Status),
@@ -231,8 +231,7 @@ func (a *agent) collectTableStatus() []schedulepb.TableStatus {
 	// todo: make this a field of the agent if necessary, to prevent frequent memory allocation.
 	tables := make([]schedulepb.TableStatus, 0, len(allTables))
 	for _, tableID := range allTables {
-		meta := a.tableExec.GetTableMeta(tableID)
-		status := newTableStatus(meta)
+		status := a.newTableStatus(tableID)
 		tables = append(tables, status)
 	}
 	return tables
@@ -310,8 +309,7 @@ func (a *agent) handleRemoveTableTask(ctx context.Context, task *dispatchTableTa
 	if task.status == dispatchTableTaskReceived {
 		done := a.tableExec.RemoveTable(ctx, task.TableID)
 		if !done {
-			meta := a.tableExec.GetTableMeta(task.TableID)
-			status := newTableStatus(meta)
+			status := a.newTableStatus(task.TableID)
 			return a.newRemoveTableResponseMessage(status), nil
 		}
 		task.status = dispatchTableTaskProcessed
@@ -357,8 +355,7 @@ func (a *agent) newRemoveTableResponseMessage(status schedulepb.TableStatus) *sc
 
 func (a *agent) handleAddTableTask(ctx context.Context, task *dispatchTableTask) (*schedulepb.Message, error) {
 	if a.stopping {
-		meta := a.tableExec.GetTableMeta(task.TableID)
-		status := newTableStatus(meta)
+		status := a.newTableStatus(task.TableID)
 		message := a.newAddTableResponseMessage(status, true)
 		return message, nil
 	}
@@ -368,8 +365,7 @@ func (a *agent) handleAddTableTask(ctx context.Context, task *dispatchTableTask)
 		if err != nil || !done {
 			// create table failed
 			log.Info("add table failed", zap.Error(err), zap.Any("task", task))
-			meta := a.tableExec.GetTableMeta(task.TableID)
-			status := newTableStatus(meta)
+			status := a.newTableStatus(task.TableID)
 			message := a.newAddTableResponseMessage(status, false)
 			return message, errors.Trace(err)
 		}
@@ -384,8 +380,7 @@ func (a *agent) handleAddTableTask(ctx context.Context, task *dispatchTableTask)
 	// must be finished here
 	log.Info("finish processing add table task", zap.Any("task", task))
 
-	meta := a.tableExec.GetTableMeta(task.TableID)
-	status := newTableStatus(meta)
+	status := a.newTableStatus(task.TableID)
 	message := a.newAddTableResponseMessage(status, false)
 	delete(a.runningTasks, task.TableID)
 
