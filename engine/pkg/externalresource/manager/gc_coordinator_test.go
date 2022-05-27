@@ -193,3 +193,25 @@ func TestGCCoordinatorRemoveJobs(t *testing.T) {
 
 	helper.Close()
 }
+
+func TestGCCoordinatorRemoveJobAndExecutor(t *testing.T) {
+	helper := newGCTestHelper()
+	helper.LoadDefaultMockData(t)
+	helper.Start()
+
+	require.False(t, helper.IsGCPending(t, "resource-1"))
+	require.False(t, helper.IsGCPending(t, "resource-2"))
+
+	helper.JobInfo.RemoveJob("job-1")
+	helper.ExecInfo.RemoveExecutor("executor-2")
+
+	helper.Notifier.WaitNotify(t, 1*time.Second)
+	require.Eventually(t, func() bool {
+		return helper.IsGCPending(t, "resource-1")
+	}, 1*time.Second, 10*time.Millisecond)
+	require.Eventually(t, func() bool {
+		return helper.IsRemoved(t, "resource-2")
+	}, 1*time.Second, 10*time.Millisecond)
+
+	helper.Close()
+}
