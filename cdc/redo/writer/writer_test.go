@@ -34,6 +34,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo/common"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/uuid"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/multierr"
@@ -625,7 +626,10 @@ func TestNewLogWriter(t *testing.T) {
 		CreateTime:        time.Date(2000, 1, 1, 1, 1, 1, 1, &time.Location{}),
 		FlushIntervalInMs: 5,
 	}
-	ll, err := NewLogWriter(ctx, cfg)
+	uuidGen := uuid.NewConstGenerator("const-uuid")
+	ll, err := NewLogWriter(ctx, cfg,
+		WithUUIDGenerator(func() uuid.Generator { return uuidGen }),
+	)
 	require.Nil(t, err)
 	time.Sleep(time.Duration(defaultGCIntervalInMs+1) * time.Millisecond)
 	require.Equal(t, map[int64]uint64{}, ll.meta.ResolvedTsList)
