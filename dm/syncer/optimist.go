@@ -189,6 +189,7 @@ func (s *Syncer) handleQueryEventOptimistic(qec *queryEventContext) error {
 		return terror.ErrSyncerShardDDLConflict.Generate(qec.needHandleDDLs, op.ConflictMsg)
 	// if this ddl is a ConflictSkipWaitRedirect ddl, we should skip all this worker's following ddls/dmls until the lock is resolved.
 	// To do this, we append this table to osgk to prevent the following ddl/dmls from being executed.
+	// conflict location must be the start location for current received ddl event.
 	case optimism.ConflictSkipWaitRedirect:
 		first := s.osgk.appendConflictTable(upTable, downTable, qec.startLocation.Clone(), s.cfg.Flavor, s.cfg.EnableGTID)
 		if first {
@@ -248,16 +249,20 @@ func (s *Syncer) handleQueryEventOptimistic(qec *queryEventContext) error {
 		}
 	}
 
-	s.resolveOptimisticDDL(qec.eventContext, getDDLJobSourceTable(job), job.targetTable, op.ConflictStage)
+	// we don't resolveOptimisticDDL here because it may cause correctness problem
+	// There are two cases if we receive ConflictNone here:
+	// 1. This shard table is the only shard table on this worker. We don't need to redirect in this case.
+	// 2. This shard table isn't the only shard table. The conflicted table before will receive a redirection event.
+	// If we resolveOptimisticDDL here, if this ddl event is idempotent, it may falsely resolve the conflict which
+	// has a totally different ddl.
 
 	s.tctx.L().Info("finish to handle ddls in optimistic shard mode", zap.String("event", "query"), zap.Stringer("queryEventContext", qec))
 	return nil
 }
 
-func (s *Syncer) resolveOptimisticDDL(ec *eventContext, sourceTable, targetTable *filter.Table, stage optimism.ConflictStage) {
+func (s *Syncer) resolveOptimisticDDL(ec *eventContext, sourceTable, targetTable *filter.Table) bool {
 	if sourceTable != nil && targetTable != nil {
-		if (stage == optimism.ConflictNone && s.osgk.tableInConflict(targetTable)) ||
-			s.osgk.inConflictStage(sourceTable, targetTable) {
+		if s.osgk.inConflictStage(sourceTable, targetTable) {
 			// in the following two situations we should resolve this ddl lock at now
 			// 1. after this worker's ddl, the ddl lock is resolved
 			// 2. other worker has resolved this ddl lock, receives resolve command from master
@@ -275,6 +280,8 @@ func (s *Syncer) resolveOptimisticDDL(ec *eventContext, sourceTable, targetTable
 				s.osgk.tctx.L().Info("sending resync operation in optimistic shard mode",
 					zap.Stringer("shardingResync", resync))
 				*ec.shardingReSyncCh <- resync
+				s.osgk.addShardingReSync(resync)
+				return true
 			}
 		}
 	} else {
@@ -282,4 +289,5 @@ func (s *Syncer) resolveOptimisticDDL(ec *eventContext, sourceTable, targetTable
 			zap.Bool("emptySourceTable", sourceTable == nil),
 			zap.Bool("emptyTargetTable", targetTable == nil))
 	}
+	return false
 }
