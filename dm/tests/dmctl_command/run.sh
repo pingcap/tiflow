@@ -358,6 +358,30 @@ function run_validation_start_stop_cmd {
 		"\"stage\": \"Running\"" 2 \
 		"\"stage\": \"Stopped\"" 0
 
+	echo "--> (success) validation stop: multiple source"
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation stop -s $SOURCE_ID1 -s $SOURCE_ID2 test" \
+		"\"result\": true" 1
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation status test" \
+		"\"result\": true" 1 \
+		"\"mode\": \"full\"" 1 \
+		"\"mode\": \"fast\"" 1 \
+		"\"stage\": \"Running\"" 0 \
+		"\"stage\": \"Stopped\"" 2
+
+	echo "--> (success) validation start: multiple source"
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation start -s $SOURCE_ID1 -s $SOURCE_ID2 test" \
+		"\"result\": true" 1
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation status test" \
+		"\"result\": true" 1 \
+		"\"mode\": \"full\"" 1 \
+		"\"mode\": \"fast\"" 1 \
+		"\"stage\": \"Running\"" 2 \
+		"\"stage\": \"Stopped\"" 0
+
 	dmctl_stop_task "test"
 	dmctl_start_task $cur/conf/dm-task-no-validator.yaml --remove-meta
 	dmctl_start_task_standalone $cur/conf/dm-task2-no-validator.yaml --remove-meta
