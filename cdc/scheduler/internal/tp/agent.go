@@ -130,7 +130,7 @@ func NewAgent(ctx context.Context,
 
 	result.resetEpoch()
 	result.ownerInfo = &ownerInfo{
-		// todo: how to get owner's `version` ?
+		// owner's version can only be got by receiving heartbeat
 		version:   "",
 		captureID: ownerCaptureID,
 		revision:  revision,
@@ -225,7 +225,7 @@ func (a *agent) newTableStatus(tableID model.TableID) schedulepb.TableStatus {
 	}
 }
 
-// bench mark: 1.6w tables 收集时间 / serialization
+// benchmark: 1.6w tables 收集时间 / serialization
 func (a *agent) collectTableStatus() []schedulepb.TableStatus {
 	allTables := a.tableExec.GetAllCurrentTables()
 	// todo: make this a field of the agent if necessary, to prevent frequent memory allocation.
@@ -265,11 +265,13 @@ type dispatchTableTask struct {
 	IsRemove  bool
 	IsPrepare bool
 	Epoch     schedulepb.ProcessorEpoch
-
-	status dispatchTableTaskStatus
+	status    dispatchTableTaskStatus
 }
 
-func (a *agent) handleMessageDispatchTableRequest(request *schedulepb.DispatchTableRequest, epoch schedulepb.ProcessorEpoch) {
+func (a *agent) handleMessageDispatchTableRequest(
+	request *schedulepb.DispatchTableRequest,
+	epoch schedulepb.ProcessorEpoch,
+) {
 	var task *dispatchTableTask
 	switch req := request.Request.(type) {
 	case *schedulepb.DispatchTableRequest_AddTable:
@@ -295,17 +297,22 @@ func (a *agent) handleMessageDispatchTableRequest(request *schedulepb.DispatchTa
 	}
 
 	if task == nil {
-		log.Panic("invalid dispatch table request", zap.Any("request", request))
+		log.Panic("invalid dispatch table request",
+			zap.Any("request", request))
 	}
 
 	if _, ok := a.runningTasks[task.TableID]; ok {
-		log.Panic("duplicate dispatch table request", zap.Any("request", request))
+		log.Panic("duplicate dispatch table request",
+			zap.Any("request", request))
 	}
 
 	a.pendingTasks.PushBack(task)
 }
 
-func (a *agent) handleRemoveTableTask(ctx context.Context, task *dispatchTableTask) (response *schedulepb.Message, err error) {
+func (a *agent) handleRemoveTableTask(
+	ctx context.Context,
+	task *dispatchTableTask,
+) (response *schedulepb.Message, err error) {
 	if task.status == dispatchTableTaskReceived {
 		done := a.tableExec.RemoveTable(ctx, task.TableID)
 		if !done {
@@ -334,7 +341,9 @@ func (a *agent) handleRemoveTableTask(ctx context.Context, task *dispatchTableTa
 	return message, nil
 }
 
-func (a *agent) newRemoveTableResponseMessage(status schedulepb.TableStatus) *schedulepb.Message {
+func (a *agent) newRemoveTableResponseMessage(
+	status schedulepb.TableStatus,
+) *schedulepb.Message {
 	message := &schedulepb.Message{
 		Header:  a.newMessageHeader(),
 		MsgType: schedulepb.MsgDispatchTableResponse,
@@ -353,7 +362,10 @@ func (a *agent) newRemoveTableResponseMessage(status schedulepb.TableStatus) *sc
 	return message
 }
 
-func (a *agent) handleAddTableTask(ctx context.Context, task *dispatchTableTask) (*schedulepb.Message, error) {
+func (a *agent) handleAddTableTask(
+	ctx context.Context,
+	task *dispatchTableTask,
+) (*schedulepb.Message, error) {
 	if a.stopping {
 		status := a.newTableStatus(task.TableID)
 		message := a.newAddTableResponseMessage(status, true)
@@ -364,7 +376,9 @@ func (a *agent) handleAddTableTask(ctx context.Context, task *dispatchTableTask)
 		done, err := a.tableExec.AddTable(ctx, task.TableID, task.StartTs, task.IsPrepare)
 		if err != nil || !done {
 			// create table failed
-			log.Info("add table failed", zap.Error(err), zap.Any("task", task))
+			log.Info("add table failed",
+				zap.Error(err),
+				zap.Any("task", task))
 			status := a.newTableStatus(task.TableID)
 			message := a.newAddTableResponseMessage(status, false)
 			return message, errors.Trace(err)
@@ -387,7 +401,10 @@ func (a *agent) handleAddTableTask(ctx context.Context, task *dispatchTableTask)
 	return message, nil
 }
 
-func (a *agent) newAddTableResponseMessage(status schedulepb.TableStatus, reject bool) *schedulepb.Message {
+func (a *agent) newAddTableResponseMessage(
+	status schedulepb.TableStatus,
+	reject bool,
+) *schedulepb.Message {
 	return &schedulepb.Message{
 		Header:  a.newMessageHeader(),
 		MsgType: schedulepb.MsgDispatchTableResponse,
@@ -426,7 +443,9 @@ func (a *agent) fetchPendingTasks() {
 	}
 }
 
-func (a *agent) handleDispatchTableTasks(ctx context.Context) (result []*schedulepb.Message, err error) {
+func (a *agent) handleDispatchTableTasks(
+	ctx context.Context,
+) (result []*schedulepb.Message, err error) {
 	a.fetchPendingTasks()
 	result = make([]*schedulepb.Message, 0)
 	for _, task := range a.runningTasks {
@@ -475,7 +494,7 @@ func (a *agent) newMessageHeader() *schedulepb.Message_Header {
 func (a *agent) updateOwnerInfo(id model.CaptureID, version string, revision int64) bool {
 	if a.ownerInfo.revision == revision {
 		if a.ownerInfo.captureID == id {
-			return false
+			return true
 		}
 		// This panic will happen only if two messages have been received
 		// with the same ownerRev but with different ownerIDs.
@@ -493,7 +512,7 @@ func (a *agent) updateOwnerInfo(id model.CaptureID, version string, revision int
 				revision:  revision,
 			}),
 			zap.Any("owner", a.ownerInfo))
-		return false
+		return true
 	}
 
 	a.ownerInfo.captureID = id
@@ -510,7 +529,7 @@ func (a *agent) updateOwnerInfo(id model.CaptureID, version string, revision int
 	// Note: these pending operations have not yet been processed by the agent,
 	// so it is okay to lose them.
 	a.pendingTasks = deque.NewDeque()
-	return true
+	return false
 }
 
 func (a *agent) resetEpoch() {

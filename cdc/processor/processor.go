@@ -363,7 +363,7 @@ func (p *processor) GetCheckpoint() (checkpointTs, resolvedTs model.Ts) {
 	return p.checkpointTs, p.resolvedTs
 }
 
-// GetTable implements TableExecutor interface
+// GetTableMeta implements TableExecutor interface
 func (p *processor) GetTableMeta(tableID model.TableID) *pipeline.TableMeta {
 	table, ok := p.tables[tableID]
 	if !ok {
