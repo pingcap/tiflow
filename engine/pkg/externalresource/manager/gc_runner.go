@@ -31,12 +31,13 @@ const (
 	gcTimeout       = 10 * time.Second
 )
 
-type gcHandlerFunc = func(ctx context.Context, meta *resModel.ResourceMeta) error
+// GCHandlerFunc is the type for a function that actually removes a resource.
+type GCHandlerFunc = func(ctx context.Context, meta *resModel.ResourceMeta) error
 
 // DefaultGCRunner implements GCRunner.
 type DefaultGCRunner struct {
 	client     pkgOrm.ResourceClient
-	gcHandlers map[resModel.ResourceType]gcHandlerFunc
+	gcHandlers map[resModel.ResourceType]GCHandlerFunc
 	notifyCh   chan struct{}
 
 	clock clock.Clock
@@ -45,7 +46,7 @@ type DefaultGCRunner struct {
 // NewGCRunner returns a new GCRunner.
 func NewGCRunner(
 	client pkgOrm.ResourceClient,
-	gcHandlers map[resModel.ResourceType]gcHandlerFunc,
+	gcHandlers map[resModel.ResourceType]GCHandlerFunc,
 ) *DefaultGCRunner {
 	return &DefaultGCRunner{
 		client:     client,
@@ -81,9 +82,9 @@ func (r *DefaultGCRunner) Run(ctx context.Context) error {
 	}
 }
 
-// Notify is used to ask GCRunner to GC the next resource immediately.
+// GCNotify is used to ask GCRunner to GC the next resource immediately.
 // It is used when we have just marked a resource as gc_pending.
-func (r *DefaultGCRunner) Notify() {
+func (r *DefaultGCRunner) GCNotify() {
 	select {
 	case r.notifyCh <- struct{}{}:
 	default:

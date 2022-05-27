@@ -733,14 +733,14 @@ func TestAvroEncode(t *testing.T) {
 			Name:  "id",
 			Value: int64(1),
 			Type:  mysql.TypeLong,
-			Flag:  model.PrimaryKeyFlag,
+			Flag:  model.HandleKeyFlag,
 		},
 	)
 	colInfos = append(
 		colInfos,
 		rowcodec.ColInfo{
 			ID:            1000,
-			IsPKHandle:    false,
+			IsPKHandle:    true,
 			VirtualGenCol: false,
 			Ft:            types.NewFieldType(mysql.TypeLong),
 		},
@@ -770,7 +770,7 @@ func TestAvroEncode(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	keyCols, keyColInfos := event.PrimaryKeyColInfos()
+	keyCols, keyColInfos := event.HandleKeyColInfos()
 	namespace := getAvroNamespace(encoder.namespace, event.Table)
 
 	keySchema, err := rowToAvroSchema(

@@ -85,6 +85,7 @@ func (d *TaskDispatcher) DispatchTask(
 ) error {
 	requestID, err := d.preDispatchTaskWithRetry(ctx, args)
 	if err != nil {
+		abortWorker(err)
 		return derrors.ErrExecutorPreDispatchFailed.Wrap(err)
 	}
 

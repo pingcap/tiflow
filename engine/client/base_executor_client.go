@@ -41,8 +41,9 @@ type closeableConnIface interface {
 // baseExecutorClientImpl implements baseExecutorClient.
 // TODO unit tests.
 type baseExecutorClientImpl struct {
-	conn   closeableConnIface
-	client pb.ExecutorClient
+	conn         closeableConnIface
+	client       pb.ExecutorClient
+	brokerClient pb.BrokerServiceClient
 }
 
 func newExecutorClientForTest(addr string) (*baseExecutorClientImpl, error) {
@@ -73,8 +74,9 @@ func newBaseExecutorClient(addr string) (*baseExecutorClientImpl, error) {
 	}
 
 	return &baseExecutorClientImpl{
-		conn:   conn,
-		client: pb.NewExecutorClient(conn),
+		conn:         conn,
+		client:       pb.NewExecutorClient(conn),
+		brokerClient: pb.NewBrokerServiceClient(conn),
 	}, nil
 }
 
@@ -86,6 +88,8 @@ func (c *baseExecutorClientImpl) Send(ctx context.Context, req *ExecutorRequest)
 		resp.Resp, err = c.client.PreDispatchTask(ctx, req.PreDispatchTask())
 	case CmdConfirmDispatchTask:
 		resp.Resp, err = c.client.ConfirmDispatchTask(ctx, req.ConfirmDispatchTask())
+	case CmdRemoveLocalResourceRequest:
+		resp.Resp, err = c.brokerClient.RemoveResource(ctx, req.RemoveLocalResourceRequest())
 	}
 	if err != nil {
 		log.L().Logger.Error("send req meet error", zap.Error(err))
@@ -100,6 +104,7 @@ type CmdType uint16
 const (
 	CmdPreDispatchTask CmdType = 1 + iota
 	CmdConfirmDispatchTask
+	CmdRemoveLocalResourceRequest
 )
 
 // ExecutorRequest wraps CmdType and dispatch task request object
@@ -116,6 +121,11 @@ func (e *ExecutorRequest) PreDispatchTask() *pb.PreDispatchTaskRequest {
 // ConfirmDispatchTask unwraps gRPC ConfirmDispatchTask from ExecutorRequest
 func (e *ExecutorRequest) ConfirmDispatchTask() *pb.ConfirmDispatchTaskRequest {
 	return e.Req.(*pb.ConfirmDispatchTaskRequest)
+}
+
+// RemoveLocalResourceRequest unwraps gRPC RemoveLocalResourceRequest from ExecutorRequest
+func (e *ExecutorRequest) RemoveLocalResourceRequest() *pb.RemoveLocalResourceRequest {
+	return e.Req.(*pb.RemoveLocalResourceRequest)
 }
 
 // ExecutorResponse wraps DispatchTaskResponse object

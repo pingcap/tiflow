@@ -22,6 +22,7 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	gmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/errno"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
@@ -31,7 +32,6 @@ import (
 
 	cdcmodel "github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/dm/dm/config"
-	"github.com/pingcap/tiflow/dm/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/pkg/sqlmodel"
@@ -59,6 +59,10 @@ func genRowChangeJob(tbl filter.Table, tblInfo *model.TableInfo, key string, tp 
 }
 
 func TestValidatorWorkerValidateTableChanges(t *testing.T) {
+	require.Nil(t, failpoint.Enable("github.com/pingcap/tiflow/dm/syncer/ValidatorMockUpstreamTZ", `return()`))
+	defer func() {
+		require.Nil(t, failpoint.Disable("github.com/pingcap/tiflow/dm/syncer/ValidatorMockUpstreamTZ"))
+	}()
 	testFunc := func(t *testing.T, mode string) {
 		t.Helper()
 		tbl1 := filter.Table{Schema: "test", Name: "tbl1"}
@@ -79,7 +83,7 @@ func TestValidatorWorkerValidateTableChanges(t *testing.T) {
 		syncerObj := NewSyncer(cfg, nil, nil)
 		validator := NewContinuousDataValidator(cfg, syncerObj, false)
 		validator.persistHelper.schemaInitialized.Store(true)
-		validator.Start(pb.Stage_Stopped)
+		require.NoError(t, validator.initialize())
 		defer validator.cancel()
 		validator.markErrorStarted.Store(true)
 
@@ -536,8 +540,6 @@ func TestValidatorRowCountAndSize(t *testing.T) {
 	syncerObj := NewSyncer(cfg, nil, nil)
 	validator := NewContinuousDataValidator(cfg, syncerObj, false)
 	validator.persistHelper.schemaInitialized.Store(true)
-	validator.Start(pb.Stage_Stopped)
-	defer validator.cancel()
 	validator.markErrorStarted.Store(true)
 
 	worker := newValidateWorker(validator, 0)

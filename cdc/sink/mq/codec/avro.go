@@ -163,7 +163,7 @@ func (a *AvroEventBatchEncoder) avroEncode(
 		operation           string
 	)
 	if isKey {
-		cols, colInfos = e.PrimaryKeyColInfos()
+		cols, colInfos = e.HandleKeyColInfos()
 		enableTiDBExtension = false
 		schemaManager = a.keySchemaManager
 	} else {

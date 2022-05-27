@@ -141,6 +141,26 @@ func TestRowChangedEventFuncs(t *testing.T) {
 	require.False(t, insertRow.IsDelete())
 	require.Equal(t, expectedPrimaryKeyCols, insertRow.PrimaryKeyColumns())
 	require.Equal(t, expectedHandleKeyCols, insertRow.HandleKeyColumns())
+
+	forceReplicaRow := &RowChangedEvent{
+		Table: &TableName{
+			Schema: "test",
+			Table:  "t1",
+		},
+		Columns: []*Column{
+			{
+				Name:  "a",
+				Value: 1,
+				Flag:  0,
+			}, {
+				Name:  "b",
+				Value: 2,
+				Flag:  0,
+			},
+		},
+	}
+	require.Empty(t, forceReplicaRow.PrimaryKeyColumns())
+	require.Empty(t, forceReplicaRow.HandleKeyColumns())
 }
 
 func TestColumnValueString(t *testing.T) {

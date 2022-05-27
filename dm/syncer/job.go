@@ -169,19 +169,6 @@ func newDDLJob(qec *queryEventContext) *job {
 	return j
 }
 
-func getDDLJobSourceTable(j *job) *filter.Table {
-	if j.tp != ddl || len(j.sourceTbls) != 1 {
-		return nil
-	}
-	for _, tb := range j.sourceTbls {
-		if len(tb) != 1 {
-			return nil
-		}
-		return tb[0]
-	}
-	return nil
-}
-
 func newSkipJob(ec *eventContext) *job {
 	return &job{
 		tp:          skip,

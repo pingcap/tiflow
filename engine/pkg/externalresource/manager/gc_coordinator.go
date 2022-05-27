@@ -187,7 +187,7 @@ func (c *DefaultGCCoordinator) gcByStatusSnapshots(
 
 		if _, exists := executorSet[resMeta.Executor]; !exists {
 			// The resource belongs to an offlined executor.
-			toRemove = append(toGC, resMeta.ID)
+			toRemove = append(toRemove, resMeta.ID)
 			continue
 		}
 	}
