@@ -1275,12 +1275,12 @@ func (w *SourceWorker) operateValidatorStage(stage ha.Stage) error {
 		if err != nil {
 			return err
 		}
-		if _, ok := subTaskCfg[stage.Task]; !ok {
+		targetCfg, ok := subTaskCfg[stage.Task]
+		if !ok {
 			log.L().Error("failed to get subtask config", zap.Reflect("stage", stage))
 			return errors.New("failed to get subtask config")
 		}
-
-		subtask.SetCfg(subTaskCfg[stage.Task])
+		subtask.UpdateValidatorCfg(targetCfg.ValidatorCfg)
 		subtask.StartValidator(stage.Expect, false)
 	default:
 		// should not happen
