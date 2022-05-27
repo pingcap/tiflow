@@ -18,73 +18,81 @@ import (
 	testing "testing"
 
 	"github.com/gogo/protobuf/proto"
+	"github.com/pingcap/tiflow/cdc/model"
 )
 
-func benchmarkMessageCheckpoints(b *testing.B, bench func(b *testing.B, m *Message)) {
+func benchmarkMessageHeartbeatResponse(b *testing.B, bench func(b *testing.B, m *Message)) {
 	size := 16384
 	for total := 1; total <= size; total *= 2 {
-		msg := Message{
-			Checkpoints: map[int64]Checkpoint{},
-		}
+		var tables []TableStatus
 		for i := 0; i < total; i++ {
-			msg.Checkpoints[int64(10000+i)] = Checkpoint{
-				CheckpointTs: 433331421532337260,
-				ResolvedTs:   433331421532337261,
-			}
+			tables = append(tables, TableStatus{
+				TableID: model.TableID(i),
+				State:   TableStateReplicating,
+				Checkpoint: Checkpoint{
+					CheckpointTs: 433331421532337260,
+					ResolvedTs:   433331421532337261,
+				},
+			})
+		}
+		msg := Message{
+			MsgType: MsgHeartbeatResponse,
+			HeartbeatResponse: &HeartbeatResponse{
+				Tables:     tables,
+				IsStopping: false,
+			},
 		}
 		b.ResetTimer()
 		bench(b, &msg)
 		b.StopTimer()
 	}
-
 }
 
-func BenchmarkMessageCheckpointsProtoMarshal(b *testing.B) {
-	benchmarkMessageCheckpoints(b, func(b *testing.B, msg *Message) {
-		total := len(msg.Checkpoints)
-		b.Run(fmt.Sprintf("%d checkpoint(s) marshal", total), func(b *testing.B) {
-			totalLen := 0
+func BenchmarkMessageHeartbeatResponseProtoMarshal(b *testing.B) {
+	benchmarkMessageHeartbeatResponse(b, func(b *testing.B, m *Message) {
+		total := len(m.HeartbeatResponse.Tables)
+		b.Run(fmt.Sprintf("%d checkpoints(s) marshal", total), func(b *testing.B) {
+			size := 0
 			for i := 0; i < b.N; i++ {
-				dAtA, err := proto.Marshal(msg)
+				bytes, err := proto.Marshal(m)
 				if err != nil {
 					panic(err)
 				}
-				totalLen += len(dAtA)
+				size += len(bytes)
 			}
-			b.SetBytes(int64(totalLen / b.N))
+			b.SetBytes(int64(size / b.N))
 		})
 	})
 }
 
-func BenchmarkMessageCheckpointsProtoUnmarshal(b *testing.B) {
-	benchmarkMessageCheckpoints(b, func(b *testing.B, msg *Message) {
-		total := len(msg.Checkpoints)
-		b.Run(fmt.Sprintf("%d checkpoint(s) unmarshal", total), func(b *testing.B) {
-			dAtA, err := proto.Marshal(msg)
+func BenchmarkMessageHeartbeatResponseProtoUnmarshal(b *testing.B) {
+	benchmarkMessageHeartbeatResponse(b, func(b *testing.B, m *Message) {
+		total := len(m.HeartbeatResponse.Tables)
+		b.Run(fmt.Sprintf("%d checkpoints(s) marshal", total), func(b *testing.B) {
+			bytes, err := proto.Marshal(m)
 			if err != nil {
 				panic(err)
 			}
+
 			dst := Message{}
 			totalLen := 0
-
 			for i := 0; i < b.N; i++ {
-				err := proto.Unmarshal(dAtA, &dst)
-				if err != nil {
+				if err := proto.Unmarshal(bytes, &dst); err != nil {
 					panic(err)
 				}
-				totalLen += len(dAtA)
+				totalLen += len(bytes)
 			}
 			b.SetBytes(int64(totalLen / b.N))
 		})
 	})
 }
 
-func BenchmarkMessageCheckpointsProtoSize(b *testing.B) {
-	benchmarkMessageCheckpoints(b, func(b *testing.B, msg *Message) {
-		total := len(msg.Checkpoints)
+func BenchmarkMessageHeartbeatResponseProtoSize(b *testing.B) {
+	benchmarkMessageHeartbeatResponse(b, func(b *testing.B, m *Message) {
+		total := len(m.HeartbeatResponse.Tables)
 		b.Run(fmt.Sprintf("%d checkpoint(s) size", total), func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
-				msg.Size()
+				m.Size()
 			}
 		})
 	})
