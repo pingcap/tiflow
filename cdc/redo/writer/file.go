@@ -130,9 +130,11 @@ type Writer struct {
 	gcRunning     atomic.Bool
 	size          int64
 	file          *os.File
-	bw            *pioutil.PageWriter
-	uint64buf     []byte
-	storage       storage.ExternalStorage
+	// record the filepath that is being written, and has not been flushed
+	ongoingFilePath string
+	bw              *pioutil.PageWriter
+	uint64buf       []byte
+	storage         storage.ExternalStorage
 	sync.RWMutex
 	uuidGenerator uuid.Generator
 
@@ -338,7 +340,7 @@ func (w *Writer) close() error {
 		ctx, cancel := context.WithTimeout(context.Background(), defaultS3Timeout)
 		defer cancel()
 
-		err = w.renameInS3(ctx, w.file.Name(), w.filePath())
+		err = w.renameInS3(ctx, w.file.Name(), w.ongoingFilePath)
 		if err != nil {
 			return cerror.WrapError(cerror.ErrS3StorageAPI, err)
 		}
@@ -372,8 +374,12 @@ func (w *Writer) getLogFileName() string {
 		w.cfg.FileType, w.commitTS.Load(), uid, common.LogEXT)
 }
 
+// filePath always creates a new, unique file path, note this function is not
+// thread-safe, writer needs to ensure lock is aquired when calling it.
 func (w *Writer) filePath() string {
-	return filepath.Join(w.cfg.Dir, w.getLogFileName())
+	fp := filepath.Join(w.cfg.Dir, w.getLogFileName())
+	w.ongoingFilePath = fp
+	return fp
 }
 
 func openTruncFile(name string) (*os.File, error) {
@@ -404,7 +410,10 @@ func (w *Writer) openNew() error {
 }
 
 func (w *Writer) openOrNew(writeLen int) error {
-	path := w.filePath()
+	path := w.ongoingFilePath
+	if path == "" {
+		return w.openNew()
+	}
 	info, err := os.Stat(path)
 	if os.IsNotExist(err) {
 		return w.openNew()
