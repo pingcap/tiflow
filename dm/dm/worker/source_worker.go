@@ -275,7 +275,7 @@ func (w *SourceWorker) updateSourceStatus(ctx context.Context, needLock bool) er
 	if err != nil {
 		return err
 	}
-	status.Location = binlog.InitLocation(pos, gtidSet)
+	status.Location = binlog.NewLocation(pos, gtidSet)
 	ctx2, cancel2 := context.WithTimeout(ctx, utils.DefaultDBTimeout)
 	defer cancel2()
 	binlogs, err := binlog.GetBinaryLogs(ctx2, w.sourceDB.DB)

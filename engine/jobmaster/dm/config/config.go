@@ -14,7 +14,9 @@
 package config
 
 import (
+	"context"
 	"os"
+	"time"
 
 	"github.com/pingcap/errors"
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
@@ -22,10 +24,52 @@ import (
 	"github.com/pingcap/tidb/util/filter"
 	router "github.com/pingcap/tidb/util/table-router"
 	dmconfig "github.com/pingcap/tiflow/dm/dm/config"
+	"github.com/pingcap/tiflow/dm/dm/master"
 	"gopkg.in/yaml.v2"
 )
 
-// JobCfg copies from tiflow/dm/config/config.go and removes some deprecated fields.
+// UpstreamCfg copies the needed fields from DM SourceCfg and MySQLInstance part
+// of DM task config.
+type UpstreamCfg struct {
+	dmconfig.MySQLInstance `yaml:",inline" toml:",inline" json:",inline"`
+	DBCfg                  *dmconfig.DBConfig `yaml:"db-config" toml:"db-config" json:"db-config"`
+	ServerID               uint32             `yaml:"server-id" toml:"server-id" json:"server-id"`
+	Flavor                 string             `yaml:"flavor" toml:"flavor" json:"flavor"`
+	EnableGTID             bool               `yaml:"enable-gtid" toml:"enable-gtid" json:"enable-gtid"`
+}
+
+func (u *UpstreamCfg) fromDMSourceConfig(from *dmconfig.SourceConfig) {
+	u.DBCfg = from.From.Clone()
+	u.ServerID = from.ServerID
+	u.Flavor = from.Flavor
+	u.EnableGTID = from.EnableGTID
+}
+
+func (u *UpstreamCfg) toDMSourceConfig() *dmconfig.SourceConfig {
+	ret := dmconfig.NewSourceConfig()
+	ret.SourceID = u.SourceID
+	ret.From = *u.DBCfg.Clone()
+	ret.ServerID = u.ServerID
+	ret.Flavor = u.Flavor
+	ret.EnableGTID = u.EnableGTID
+
+	return ret
+}
+
+func (u *UpstreamCfg) adjust() error {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	dmSource := u.toDMSourceConfig()
+	err := master.CheckAndAdjustSourceConfigFunc(ctx, dmSource)
+	if err != nil {
+		return err
+	}
+	u.fromDMSourceConfig(dmSource)
+	return nil
+}
+
+// JobCfg copies from SubTaskConfig and removes some deprecated fields.
+// It represents a DM subtask with multiple source configs embedded as Upstreams.
 // DISCUSS: support command line args. e.g. --start-time.
 type JobCfg struct {
 	Name                string                                `yaml:"name" toml:"name" json:"name"`
@@ -46,7 +90,6 @@ type JobCfg struct {
 	Syncers             map[string]*dmconfig.SyncerConfig     `yaml:"syncers" toml:"syncers" json:"syncers"`
 	Routes              map[string]*router.TableRule          `yaml:"routes" toml:"routes" json:"routes"`
 	Validators          map[string]*dmconfig.ValidatorConfig  `yaml:"validators" toml:"validators" json:"validators"`
-
 	// remove source config, use db config instead.
 	Upstreams []*UpstreamCfg `yaml:"upstreams" toml:"upstreams" json:"upstreams"`
 
@@ -75,16 +118,6 @@ type JobCfg struct {
 	// RemoveMeta bool `yaml:"remove-meta"`
 }
 
-// TaskCfg alias JobCfg
-// The difference between task configuration and job configuration is that a task has only one usptream.
-type TaskCfg JobCfg
-
-// UpstreamCfg add db-config to dmconfig.MySQLInstance, because we no need source cfg now.
-type UpstreamCfg struct {
-	dmconfig.MySQLInstance `yaml:",inline" toml:",inline" json:",inline"`
-	DBCfg                  *dmconfig.DBConfig `yaml:"db-config" toml:"db-config" json:"db-config"`
-}
-
 // DecodeFile reads file content from a given path and decodes it.
 func (c *JobCfg) DecodeFile(fpath string) error {
 	bs, err := os.ReadFile(fpath)
@@ -105,9 +138,8 @@ func (c *JobCfg) Decode(content []byte) error {
 }
 
 // Yaml serializes the JobCfg into a YAML document.
-func (c *JobCfg) Yaml() (string, error) {
-	b, err := yaml.Marshal(c)
-	return string(b), err
+func (c *JobCfg) Yaml() ([]byte, error) {
+	return yaml.Marshal(c)
 }
 
 // Clone returns a deep copy of JobCfg
@@ -117,27 +149,26 @@ func (c *JobCfg) Clone() (*JobCfg, error) {
 		return nil, err
 	}
 	clone := &JobCfg{}
-	err = yaml.Unmarshal([]byte(content), clone)
+	err = yaml.Unmarshal(content, clone)
 	return clone, err
 }
 
-// ToTaskConfigs converts job config to a map, mapping from upstream source id
+// ToTaskCfgs converts job config to a map, mapping from upstream source id
 // to task config.
-func (c *JobCfg) ToTaskConfigs() map[string]*TaskCfg {
+func (c *JobCfg) ToTaskCfgs() map[string]*TaskCfg {
 	taskCfgs := make(map[string]*TaskCfg, len(c.Upstreams))
 	for _, mysqlInstance := range c.Upstreams {
 		// nolint:errcheck
 		jobCfg, _ := c.Clone()
-		jobCfg.Upstreams = []*UpstreamCfg{mysqlInstance}
-
 		taskCfg := (*TaskCfg)(jobCfg)
+		taskCfg.Upstreams = []*UpstreamCfg{mysqlInstance}
 		taskCfgs[mysqlInstance.SourceID] = taskCfg
 	}
 	return taskCfgs
 }
 
-// toDMTaskCfg transform a jobCfg to dm TaskCfg.
-func (c *JobCfg) toDMTaskCfg() (*dmconfig.TaskConfig, error) {
+// toDMTaskConfig transform a jobCfg to DM TaskCfg.
+func (c *JobCfg) toDMTaskConfig() (*dmconfig.TaskConfig, error) {
 	dmTaskCfg := &dmconfig.TaskConfig{}
 
 	// Copy all the fields contained in dmTaskCfg.
@@ -145,18 +176,21 @@ func (c *JobCfg) toDMTaskCfg() (*dmconfig.TaskConfig, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err = yaml.Unmarshal([]byte(content), dmTaskCfg); err != nil {
+	if err = yaml.Unmarshal(content, dmTaskCfg); err != nil {
 		return nil, err
 	}
 
 	// transform all the fields not contained in dmTaskCfg.
 	for _, upstream := range c.Upstreams {
+		if err = upstream.adjust(); err != nil {
+			return nil, err
+		}
 		dmTaskCfg.MySQLInstances = append(dmTaskCfg.MySQLInstances, &upstream.MySQLInstance)
 	}
 	return dmTaskCfg, nil
 }
 
-func (c *JobCfg) fromDMTaskCfg(dmTaskCfg *dmconfig.TaskConfig) error {
+func (c *JobCfg) fromDMTaskConfig(dmTaskCfg *dmconfig.TaskConfig) error {
 	// Copy all the fields contained in jobCfg.
 	return yaml.Unmarshal([]byte(dmTaskCfg.String()), c)
 
@@ -166,15 +200,19 @@ func (c *JobCfg) fromDMTaskCfg(dmTaskCfg *dmconfig.TaskConfig) error {
 }
 
 func (c *JobCfg) adjust() error {
-	dmTaskCfg, err := c.toDMTaskCfg()
+	dmTaskCfg, err := c.toDMTaskConfig()
 	if err != nil {
 		return err
 	}
 	if err := dmTaskCfg.Adjust(); err != nil {
 		return err
 	}
-	return c.fromDMTaskCfg(dmTaskCfg)
+	return c.fromDMTaskConfig(dmTaskCfg)
 }
+
+// TaskCfg shares same struct as JobCfg, but it only serves one upstream.
+// TaskCfg can be converted to an equivalent DM subtask by ToDMSubTaskCfg.
+type TaskCfg JobCfg
 
 // ToDMSubTaskCfg adapts a TaskCfg to a SubTaskCfg for worker now.
 // TODO: fully support all fields
@@ -191,13 +229,16 @@ func (c *TaskCfg) ToDMSubTaskCfg() *dmconfig.SubTaskConfig {
 	cfg.IgnoreCheckingItems = c.IgnoreCheckingItems
 	cfg.MetaSchema = c.MetaSchema
 	cfg.Timezone = c.Timezone
-	cfg.Meta = c.Upstreams[0].Meta
-	cfg.From = *c.Upstreams[0].DBCfg
 	cfg.To = *c.TargetDB
 	cfg.Experimental = c.Experimental
 	cfg.CollationCompatible = c.CollationCompatible
-	cfg.SourceID = c.Upstreams[0].SourceID
 	cfg.BAList = c.BAList[c.Upstreams[0].BAListName]
+
+	cfg.SourceID = c.Upstreams[0].SourceID
+	cfg.Meta = c.Upstreams[0].Meta
+	cfg.From = *c.Upstreams[0].DBCfg
+	cfg.ServerID = c.Upstreams[0].ServerID
+	cfg.Flavor = c.Upstreams[0].Flavor
 
 	cfg.RouteRules = make([]*router.TableRule, len(c.Upstreams[0].RouteRules))
 	for j, name := range c.Upstreams[0].RouteRules {

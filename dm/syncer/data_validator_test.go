@@ -225,7 +225,7 @@ func TestValidatorWaitSyncerSynced(t *testing.T) {
 		conn.DefaultDBProvider = &conn.DefaultDBProviderImpl{}
 	}()
 
-	currLoc := binlog.NewLocation(cfg.Flavor)
+	currLoc := binlog.MustZeroLocation(cfg.Flavor)
 	validator := NewContinuousDataValidator(cfg, syncerObj, false)
 	validator.persistHelper.schemaInitialized.Store(true)
 	require.NoError(t, validator.initialize())
@@ -247,7 +247,7 @@ func TestValidatorWaitSyncerSynced(t *testing.T) {
 		Pos:  100,
 	}
 	syncerObj.checkpoint = &mockedCheckPointForValidator{
-		currLoc: binlog.NewLocation(cfg.Flavor),
+		currLoc: binlog.MustZeroLocation(cfg.Flavor),
 		nextLoc: currLoc,
 	}
 	validator = NewContinuousDataValidator(cfg, syncerObj, false)
@@ -325,13 +325,13 @@ func TestValidatorDoValidate(t *testing.T) {
 	syncerObj.running.Store(true)
 	syncerObj.tableRouter, err = regexprrouter.NewRegExprRouter(cfg.CaseSensitive, []*router.TableRule{})
 	require.NoError(t, err)
-	currLoc := binlog.NewLocation(cfg.Flavor)
+	currLoc := binlog.MustZeroLocation(cfg.Flavor)
 	currLoc.Position = mysql.Position{
 		Name: "mysql-bin.000001",
 		Pos:  3000,
 	}
 	syncerObj.checkpoint = &mockedCheckPointForValidator{
-		currLoc: binlog.NewLocation(cfg.Flavor),
+		currLoc: binlog.MustZeroLocation(cfg.Flavor),
 		nextLoc: currLoc,
 		cnt:     2,
 	}
@@ -462,7 +462,7 @@ func TestValidatorDoValidate(t *testing.T) {
 	allEvents = append(allEvents, updateEvents...)
 	allEvents = append(allEvents, deleteEvents...)
 	mockStreamerProducer := &MockStreamProducer{events: allEvents}
-	mockStreamer, err := mockStreamerProducer.generateStreamer(binlog.NewLocation(""))
+	mockStreamer, err := mockStreamerProducer.generateStreamer(binlog.MustZeroLocation(mysql.MySQLFlavor))
 	require.NoError(t, err)
 
 	require.Nil(t, failpoint.Enable("github.com/pingcap/tiflow/dm/syncer/ValidatorMockUpstreamTZ", `return()`))

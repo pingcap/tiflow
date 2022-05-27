@@ -184,7 +184,7 @@ func (st *SubTask) initUnits(relay relay.Process) error {
 			for j := 0; j < i; j++ {
 				needCloseUnits = append(needCloseUnits, st.units[j])
 			}
-			return terror.Annotatef(err, "fail to initial unit %s of subtask %s ", u.Type(), st.cfg.Name)
+			return terror.Annotatef(err, "fail to initialize unit %s of subtask %s ", u.Type(), st.cfg.Name)
 		}
 	}
 
@@ -223,7 +223,7 @@ func (st *SubTask) Run(expectStage pb.Stage, expectValidatorStage pb.Stage, rela
 	}
 
 	if err := st.initUnits(relay); err != nil {
-		st.l.Error("fail to initial subtask", log.ShortError(err))
+		st.l.Error("fail to initialize subtask", log.ShortError(err))
 		st.fail(err)
 		return
 	}
@@ -748,8 +748,8 @@ func (st *SubTask) ShardDDLOperation() *pessimism.Operation {
 // from Load unit to Sync unit, wait for relay-log catched up with mydumper binlog position.
 func (st *SubTask) unitTransWaitCondition(subTaskCtx context.Context) error {
 	var (
-		gset1 gtid.Set
-		gset2 gtid.Set
+		gset1 mysql.GTIDSet
+		gset2 mysql.GTIDSet
 		pos1  *mysql.Position
 		pos2  *mysql.Position
 		err   error

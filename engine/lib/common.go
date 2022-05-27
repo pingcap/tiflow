@@ -66,3 +66,23 @@ type WorkerHandle = master.WorkerHandle
 
 // nolint:revive
 var StopAfterTick = errors.New("stop after tick")
+
+// WorkerTypeForMetric return a prefix for metric
+// TODO: let user register a unique identifier for the metric prefix
+func WorkerTypeForMetric(t WorkerType) string {
+	switch t {
+	case JobManager:
+		// jobmanager is the framework level job
+		return ""
+	case CvsJobMaster, CvsTask:
+		return "cvs"
+	case FakeJobMaster, FakeTask:
+		return "fake"
+	case DMJobMaster, DmTask, WorkerDMDump, WorkerDMLoad, WorkerDMSync:
+		return "dm"
+	case CdcJobMaster, CdcTask:
+		return "cdc"
+	}
+
+	return "unknown_job"
+}

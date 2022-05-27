@@ -71,13 +71,13 @@ func TestValidatorCheckpointPersist(t *testing.T) {
 	syncerObj.running.Store(true)
 	syncerObj.tableRouter, err = regexprrouter.NewRegExprRouter(cfg.CaseSensitive, []*router.TableRule{})
 	require.NoError(t, err)
-	currLoc := binlog.NewLocation(cfg.Flavor)
+	currLoc := binlog.MustZeroLocation(cfg.Flavor)
 	currLoc.Position = mysql.Position{
 		Name: "mysql-bin.000001",
 		Pos:  3000,
 	}
 	syncerObj.checkpoint = &mockedCheckPointForValidator{
-		currLoc: binlog.NewLocation(cfg.Flavor),
+		currLoc: binlog.MustZeroLocation(cfg.Flavor),
 		nextLoc: currLoc,
 		cnt:     2,
 	}

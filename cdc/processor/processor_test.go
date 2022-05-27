@@ -180,6 +180,11 @@ func (m *mockTablePipeline) Wait() {
 	// do nothing
 }
 
+// MemoryConsumption return the memory consumption in bytes
+func (m *mockTablePipeline) MemoryConsumption() uint64 {
+	return 0
+}
+
 type mockSchemaStorage struct {
 	// dummy to provide default versions of unimplemented interface methods,
 	// as we only need ResolvedTs() and DoGC() in unit tests.

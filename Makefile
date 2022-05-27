@@ -255,7 +255,7 @@ data-flow-diagram: docs/data-flow.dot
 	dot -Tsvg docs/data-flow.dot > docs/data-flow.svg
 
 swagger-spec: tools/bin/swag
-	tools/bin/swag init --parseVendor -generalInfo cdc/api/open.go --output docs/swagger
+	tools/bin/swag init --parseVendor -generalInfo cdc/api/v1/api.go --output docs/swagger
 
 generate_mock: tools/bin/mockgen
 	tools/bin/mockgen -source cdc/owner/owner.go -destination cdc/owner/mock/owner_mock.go
@@ -510,3 +510,14 @@ define run_engine_unit_test
 	|| { $(FAILPOINT_DISABLE); exit 1; }
 	$(FAILPOINT_DISABLE)
 endef
+
+engine_unit_test_in_verify_ci: check_failpoint_ctl tools/bin/gotestsum tools/bin/gocov tools/bin/gocov-xml
+	mkdir -p $(ENGINE_TEST_DIR)
+	$(FAILPOINT_ENABLE)
+	@export log_level=error; \
+	CGO_ENABLED=1 tools/bin/gotestsum --junitfile engine-junit-report.xml -- -v -timeout 5m -p $(P) --race \
+	-covermode=atomic -coverprofile="$(ENGINE_TEST_DIR)/cov.unit_test.out" $(ENGINE_PACKAGES) \
+	|| { $(FAILPOINT_DISABLE); exit 1; }
+	tools/bin/gocov convert "$(ENGINE_TEST_DIR)/cov.unit_test.out" | tools/bin/gocov-xml > engine-coverage.xml
+	$(FAILPOINT_DISABLE)
+	@bash <(curl -s https://codecov.io/bash) -F engine -f $(ENGINE_TEST_DIR)/cov.unit_test.out -t $(TICDC_CODECOV_TOKEN)

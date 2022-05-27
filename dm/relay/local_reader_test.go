@@ -49,7 +49,7 @@ var _ = Suite(&testReaderSuite{})
 
 type testReaderSuite struct {
 	lastPos  uint32
-	lastGTID gtid.Set
+	lastGTID gmysql.GTIDSet
 }
 
 func (t *testReaderSuite) SetUpSuite(c *C) {
@@ -590,7 +590,7 @@ func (t *testReaderSuite) TestStartSyncByGTID(c *C) {
 		cfg             = &BinlogReaderConfig{RelayDir: baseDir, Flavor: gmysql.MySQLFlavor}
 		r               = newBinlogReaderForTest(log.L(), cfg, false, "")
 		lastPos         uint32
-		lastGTID        gtid.Set
+		lastGTID        gmysql.GTIDSet
 		previousGset, _ = gtid.ParserGTID(gmysql.MySQLFlavor, "")
 	)
 
@@ -755,7 +755,7 @@ func (t *testReaderSuite) TestStartSyncByGTID(c *C) {
 
 	startGTID, err := gtid.ParserGTID(gmysql.MySQLFlavor, "")
 	c.Assert(err, IsNil)
-	s, err := r.StartSyncByGTID(startGTID.Origin().Clone())
+	s, err := r.StartSyncByGTID(startGTID.Clone())
 	c.Assert(err, IsNil)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -877,7 +877,7 @@ func (t *testReaderSuite) TestStartSyncError(c *C) {
 	c.Assert(err, ErrorMatches, ".*empty UUIDs not valid.*")
 	c.Assert(s, IsNil)
 
-	s, err = r.StartSyncByGTID(t.lastGTID.Origin().Clone())
+	s, err = r.StartSyncByGTID(t.lastGTID.Clone())
 	c.Assert(err, ErrorMatches, ".*no relay pos match gtid.*")
 	c.Assert(s, IsNil)
 
@@ -892,7 +892,7 @@ func (t *testReaderSuite) TestStartSyncError(c *C) {
 	c.Assert(err, ErrorMatches, fmt.Sprintf(".*%s.*not found.*", startPos.Name))
 	c.Assert(s, IsNil)
 
-	s, err = r.StartSyncByGTID(t.lastGTID.Origin().Clone())
+	s, err = r.StartSyncByGTID(t.lastGTID.Clone())
 	c.Assert(err, ErrorMatches, ".*no such file or directory.*")
 	c.Assert(s, IsNil)
 
@@ -904,7 +904,7 @@ func (t *testReaderSuite) TestStartSyncError(c *C) {
 	r.Close()
 
 	r.running = true
-	s, err = r.StartSyncByGTID(t.lastGTID.Origin().Clone())
+	s, err = r.StartSyncByGTID(t.lastGTID.Clone())
 	c.Assert(terror.ErrReaderAlreadyRunning.Equal(err), IsTrue)
 	c.Assert(s, IsNil)
 	r.Close()
@@ -1006,7 +1006,7 @@ func (t *testReaderSuite) TestReParseUsingGTID(c *C) {
 	c.Assert(err, IsNil)
 
 	// we use latestGTIDSet to start sync, which means we already received all binlog events, so expect no DML/DDL
-	s, err := r.StartSyncByGTID(latestGTIDSet.Origin())
+	s, err := r.StartSyncByGTID(latestGTIDSet)
 	c.Assert(err, IsNil)
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -1052,7 +1052,7 @@ func (t *testReaderSuite) TestReParseUsingGTID(c *C) {
 	wg.Wait()
 }
 
-func (t *testReaderSuite) genBinlogEvents(c *C, latestPos uint32, latestGTID gtid.Set) ([]*replication.BinlogEvent, uint32, gtid.Set) {
+func (t *testReaderSuite) genBinlogEvents(c *C, latestPos uint32, latestGTID gmysql.GTIDSet) ([]*replication.BinlogEvent, uint32, gmysql.GTIDSet) {
 	var (
 		header = &replication.EventHeader{
 			Timestamp: uint32(time.Now().Unix()),
@@ -1081,7 +1081,13 @@ func (t *testReaderSuite) genBinlogEvents(c *C, latestPos uint32, latestGTID gti
 	return events, latestPos, latestGTID
 }
 
-func (t *testReaderSuite) genEvents(c *C, eventTypes []replication.EventType, latestPos uint32, latestGTID gtid.Set, previousGset gtid.Set) ([]*replication.BinlogEvent, uint32, gtid.Set, gtid.Set) {
+func (t *testReaderSuite) genEvents(
+	c *C,
+	eventTypes []replication.EventType,
+	latestPos uint32,
+	latestGTID gmysql.GTIDSet,
+	previousGset gmysql.GTIDSet,
+) ([]*replication.BinlogEvent, uint32, gmysql.GTIDSet, gmysql.GTIDSet) {
 	var (
 		header = &replication.EventHeader{
 			Timestamp: uint32(time.Now().Unix()),
@@ -1089,7 +1095,7 @@ func (t *testReaderSuite) genEvents(c *C, eventTypes []replication.EventType, la
 		}
 		events    = make([]*replication.BinlogEvent, 0, 10)
 		pGset     = previousGset.Clone()
-		originSet = pGset.Origin()
+		originSet = pGset
 	)
 
 	if latestPos <= 4 { // generate a FormatDescriptionEvent if needed
@@ -1144,9 +1150,7 @@ func (t *testReaderSuite) genEvents(c *C, eventTypes []replication.EventType, la
 			latestPos = ev.Header.LogPos
 		}
 	}
-	err := pGset.Set(originSet)
-	c.Assert(err, IsNil)
-	return events, latestPos, latestGTID, pGset
+	return events, latestPos, latestGTID, originSet
 }
 
 func (t *testReaderSuite) purgeStreamer(c *C, s reader.Streamer) {

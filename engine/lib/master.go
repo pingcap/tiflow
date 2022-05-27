@@ -47,6 +47,7 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
+	"github.com/pingcap/tiflow/engine/pkg/promutil"
 	"github.com/pingcap/tiflow/engine/pkg/quota"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	"github.com/pingcap/tiflow/engine/pkg/uuid"
@@ -106,6 +107,7 @@ type BaseMaster interface {
 
 	// MetaKVClient return user metastore kv client
 	MetaKVClient() metaclient.KVClient
+	MetricFactory() promutil.Factory
 	MasterMeta() *libModel.MasterMetaKVData
 	GetWorkers() map[libModel.WorkerID]WorkerHandle
 	IsMasterReady() bool
@@ -159,6 +161,7 @@ type DefaultBaseMaster struct {
 	// user metastore prefix kvclient
 	// Don't close it. It's just a prefix wrapper for underlying userRawKVClient
 	userMetaKVClient metaclient.KVClient
+	metricFactory    promutil.Factory
 
 	// components for easier unit testing
 	uuidGen uuid.Generator
@@ -188,6 +191,7 @@ func NewBaseMaster(
 	ctx *dcontext.Context,
 	impl MasterImpl,
 	id libModel.MasterID,
+	tp libModel.WorkerType,
 ) BaseMaster {
 	var (
 		nodeID        p2p.NodeID
@@ -236,13 +240,23 @@ func NewBaseMaster(
 		createWorkerQuota: quota.NewConcurrencyQuota(maxCreateWorkerConcurrency),
 		// [TODO] use tenantID if support muliti-tenant
 		userMetaKVClient: kvclient.NewPrefixKVClient(params.UserRawKVClient, tenant.DefaultUserTenantID),
-		deps:             ctx.Deps(),
+		// TODO: tenant info and job type
+		metricFactory: promutil.NewFactory4Master(tenant.ProjectInfo{
+			TenantID:  tenant.DefaultUserTenantID,
+			ProjectID: "TODO",
+		}, WorkerTypeForMetric(tp), id),
+		deps: ctx.Deps(),
 	}
 }
 
 // MetaKVClient returns the user space metaclient
 func (m *DefaultBaseMaster) MetaKVClient() metaclient.KVClient {
 	return m.userMetaKVClient
+}
+
+// MetricFactory implements BaseMaster.MetricFactory
+func (m *DefaultBaseMaster) MetricFactory() promutil.Factory {
+	return m.metricFactory
 }
 
 // Init implements BaseMaster.Init
@@ -421,16 +435,20 @@ func (m *DefaultBaseMaster) doClose() {
 		log.L().Warn("Failed to clean up message handlers",
 			zap.String("master-id", m.id))
 	}
+	promutil.UnregisterWorkerMetrics(m.id)
 }
 
 // Close implements BaseMaster.Close
 func (m *DefaultBaseMaster) Close(ctx context.Context) error {
-	if err := m.Impl.CloseImpl(ctx); err != nil {
-		return errors.Trace(err)
+	err := m.Impl.CloseImpl(ctx)
+	// We don't return here if CloseImpl return error to ensure
+	// that we can close inner resources of the framework
+	if err != nil {
+		log.L().Error("Failed to close MasterImpl", zap.Error(err))
 	}
 
 	m.doClose()
-	return nil
+	return errors.Trace(err)
 }
 
 // OnError implements BaseMaster.OnError
