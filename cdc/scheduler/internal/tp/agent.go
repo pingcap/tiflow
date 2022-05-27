@@ -54,7 +54,8 @@ type agent struct {
 	captureID    model.CaptureID
 	changeFeedID model.ChangeFeedID
 
-	reject bool
+	// capture is stopping, should reject all add table request
+	stopping bool
 }
 
 type ownerInfo struct {
@@ -155,8 +156,6 @@ func (a *agent) Tick(ctx context.Context) error {
 	}
 	outboundMessages = append(outboundMessages, responses...)
 
-	outboundMessages = append(outboundMessages, a.newCheckpointMessage())
-
 	if err := a.trans.Send(ctx, outboundMessages); err != nil {
 		return errors.Trace(err)
 	}
@@ -198,6 +197,7 @@ func (a *agent) handleMessage(msg []*schedulepb.Message) ([]*schedulepb.Message,
 	return result, nil
 }
 
+// protobuf also define api.
 func tableStatus2PB(status pipeline.TableStatus) schedulepb.TableState {
 	switch status {
 	case pipeline.TableStatusPreparing:
@@ -225,6 +225,7 @@ func newTableStatus(meta *pipeline.TableMeta) schedulepb.TableStatus {
 	}
 }
 
+// bench mark: 1.6w tables 收集时间 / serialization
 func (a *agent) collectTableStatus() []schedulepb.TableStatus {
 	allTables := a.tableExec.GetAllCurrentTables()
 	// todo: make this a field of the agent if necessary, to prevent frequent memory allocation.
@@ -356,6 +357,13 @@ func (a *agent) newRemoveTableResponseMessage(status schedulepb.TableStatus) *sc
 }
 
 func (a *agent) handleAddTableTask(ctx context.Context, task *dispatchTableTask) (*schedulepb.Message, error) {
+	if a.stopping {
+		meta := a.tableExec.GetTableMeta(task.TableID)
+		status := newTableStatus(meta)
+		message := a.newAddTableResponseMessage(status, true)
+		return message, nil
+	}
+
 	if task.status == dispatchTableTaskReceived {
 		done, err := a.tableExec.AddTable(ctx, task.TableID, task.StartTs, task.IsPrepare)
 		if err != nil || !done {
@@ -363,7 +371,7 @@ func (a *agent) handleAddTableTask(ctx context.Context, task *dispatchTableTask)
 			log.Info("add table failed", zap.Error(err), zap.Any("task", task))
 			meta := a.tableExec.GetTableMeta(task.TableID)
 			status := newTableStatus(meta)
-			message := a.newAddTableResponseMessage(status, a.reject)
+			message := a.newAddTableResponseMessage(status, false)
 			return message, errors.Trace(err)
 		}
 		task.status = dispatchTableTaskProcessed
@@ -379,7 +387,7 @@ func (a *agent) handleAddTableTask(ctx context.Context, task *dispatchTableTask)
 
 	meta := a.tableExec.GetTableMeta(task.TableID)
 	status := newTableStatus(meta)
-	message := a.newAddTableResponseMessage(status, a.reject)
+	message := a.newAddTableResponseMessage(status, false)
 	delete(a.runningTasks, task.TableID)
 
 	return message, nil
@@ -403,6 +411,7 @@ func (a *agent) newAddTableResponseMessage(status schedulepb.TableStatus, reject
 	}
 }
 
+// todo: table 状态变更，table 状态，消息类型。
 func (a *agent) fetchPendingTasks() {
 	for !a.pendingTasks.Empty() {
 		batch := a.pendingTasks.PopManyFront(128 /* batch size */)
@@ -445,6 +454,7 @@ func (a *agent) handleDispatchTableTasks(ctx context.Context) (result []*schedul
 
 // GetLastSentCheckpointTs implement agent interface
 func (a *agent) GetLastSentCheckpointTs() (checkpointTs model.Ts) {
+	// no need to implement this.
 	return internal.CheckpointCannotProceed
 }
 
@@ -452,25 +462,6 @@ func (a *agent) GetLastSentCheckpointTs() (checkpointTs model.Ts) {
 func (a *agent) Close() error {
 	log.Debug("agent: closing")
 	return a.trans.Close()
-}
-
-func (a *agent) newCheckpointMessage() *schedulepb.Message {
-	allTables := a.tableExec.GetAllCurrentTables()
-	response := make(map[model.TableID]schedulepb.Checkpoint, len(allTables))
-	for _, tableID := range allTables {
-		meta := a.tableExec.GetTableMeta(tableID)
-		response[tableID] = schedulepb.Checkpoint{
-			CheckpointTs: meta.CheckpointTs,
-			ResolvedTs:   meta.ResolvedTs,
-		}
-	}
-	return &schedulepb.Message{
-		Header:      a.newMessageHeader(),
-		MsgType:     schedulepb.MsgCheckpoint,
-		From:        a.captureID,
-		To:          a.ownerInfo.captureID,
-		Checkpoints: response,
-	}
 }
 
 func (a *agent) newMessageHeader() *schedulepb.Message_Header {
