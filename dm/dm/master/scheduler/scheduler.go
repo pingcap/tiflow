@@ -2143,24 +2143,21 @@ func (s *Scheduler) handleWorkerOffline(ev ha.WorkerEvent, toLock bool) error {
 		return nil
 	}
 
-	// 2. find the bound relationship.
-	bounds := w.Bounds()
-
-	// 3. check whether bound before.
-	if len(bounds) == 0 {
+	// 2. find the bound relationship and check whether bound exists before.
+	if bounds := w.Bounds(); len(bounds) == 0 {
 		// 3.1. change the stage (from Free) to Offline.
 		w.ToOffline()
 		s.logger.Info("worker not bound, no need to unbound", zap.Stringer("event", ev))
 		return nil
 	}
 
-	// 4. delete the bound relationship in etcd.
+	// 3. delete the bound relationship in etcd.
 	_, err := ha.DeleteSourceBoundByWorker(s.etcdCli, w.baseInfo.Name)
 	if err != nil {
 		return err
 	}
 
-	// 5. unbound for the source.
+	// 4. unbound for the source.
 	boundSourcesByWeight := s.balance.GetWorkerBoundsByWeight(w, s.relayWorkers, s.hasLoadTaskByWorkerAndSource)
 	unbounds := make([]string, 0, len(boundSourcesByWeight))
 	for _, bound := range boundSourcesByWeight {
@@ -2170,15 +2167,15 @@ func (s *Scheduler) handleWorkerOffline(ev ha.WorkerEvent, toLock bool) error {
 	}
 	defer func() {
 		// renew last bounds after we finish this round of operation
-		for _, bound := range bounds {
-			s.lastBound[bound.Source] = bound
+		for _, source := range unbounds {
+			s.lastBound[source] = ha.NewSourceBound(source, w.BaseInfo().Name)
 		}
 	}()
 
-	// 6. change the stage (from Bound) to Offline.
+	// 5. change the stage (from Bound) to Offline.
 	w.ToOffline()
 
-	// 7. try to bound the source to a Free worker again.
+	// 6. try to bound the source to a Free worker again.
 	for i := len(unbounds) - 1; i >= 0; i-- {
 		source := unbounds[i]
 		_, err = s.tryBoundForSource(source)

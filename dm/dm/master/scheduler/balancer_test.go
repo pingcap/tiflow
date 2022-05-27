@@ -40,6 +40,7 @@ func genSourceID(i int) string {
 }
 
 func genSourceCfg(t *testing.T, i int) *config.SourceConfig {
+	t.Helper()
 	sourceCfg, err := config.ParseYamlAndVerify(config.SampleSourceConfig)
 	require.NoError(t, err)
 	sourceCfg.SourceID = genSourceID(i)
@@ -56,17 +57,6 @@ func genWorkerAddr(i int) string {
 
 func genTaskName(i int) string {
 	return "task" + strconv.Itoa(i)
-}
-
-func genSourceBounds(lSource, rSource, worker int) []ha.SourceBound {
-	bounds := make([]ha.SourceBound, rSource-lSource+1)
-	for i := lSource; i <= rSource; i++ {
-		bounds = append(bounds, ha.SourceBound{
-			Source: genSourceID(i),
-			Worker: genWorkerName(worker),
-		})
-	}
-	return bounds
 }
 
 func TestBalancerSuite(t *testing.T) {
@@ -99,6 +89,14 @@ func (t *testBalancerSuite) TearDownSuite() {
 
 func (t *testBalancerSuite) TearDownTest() {
 	t.clearTestInfoOperation()
+}
+
+func getSourceNumFromID(t *testing.T, sourceID string) int {
+	t.Helper()
+	sourceNumStr := strings.TrimLeft(sourceID, "mysql-replica-")
+	sourceNum, err := strconv.Atoi(sourceNumStr)
+	require.NoError(t, err)
+	return sourceNum
 }
 
 func (t *testBalancerSuite) TestTableNumberBalancer() {
@@ -168,9 +166,7 @@ func (t *testBalancerSuite) TestTableNumberBalancer() {
 
 		rangeSourceNum := make([]int, 2)
 		for _, bound := range w.Bounds() {
-			sourceNumStr := strings.TrimLeft(bound.Source, "mysql-replica-")
-			sourceNum, err := strconv.Atoi(sourceNumStr)
-			require.NoError(t.T(), err)
+			sourceNum := getSourceNumFromID(t.T(), bound.Source)
 			if wNum <= 3 {
 				l, r := expectRange[wNum-1][0], expectRange[wNum-1][1]
 				require.GreaterOrEqual(t.T(), sourceNum, l)
@@ -282,10 +278,7 @@ func (t *testBalancerSuite) TestTableNumberBalancerWithPrivileges() {
 			}
 			sourceIDs := make([]int, 0, len(sources))
 			for _, bound := range w.Bounds() {
-				sourceNumStr := strings.TrimLeft(bound.Source, "mysql-replica-")
-				sourceID, err := strconv.Atoi(sourceNumStr)
-				require.NoError(t.T(), err)
-				sourceIDs = append(sourceIDs, sourceID)
+				sourceIDs = append(sourceIDs, getSourceNumFromID(t.T(), bound.Source))
 			}
 			sort.Ints(sourceIDs)
 			require.Equal(t.T(), sources, sourceIDs)
