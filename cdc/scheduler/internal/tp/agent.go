@@ -241,9 +241,8 @@ func (a *agent) collectTableStatus() []schedulepb.TableStatus {
 func (a *agent) handleMessageHeartbeat() *schedulepb.Message {
 	tables := a.collectTableStatus()
 	response := &schedulepb.HeartbeatResponse{
-		Tables: tables,
-		// todo (Ling Jin): how to set `IsStopping`
-		IsStopping: false,
+		Tables:     tables,
+		IsStopping: a.stopping,
 	}
 	return &schedulepb.Message{
 		Header:            a.newMessageHeader(),
