@@ -419,13 +419,14 @@ message GetValidationStatusRequest {
 message ValidationStatus {
     string task = 1;
     string source = 2;
-    Stage stage = 3;
-    string validatorBinlog = 4;
-    string validatorBinlogGtid = 5;
-    ProcessResult result = 6;
-    string processedRowsStatus = 7;
-    string pendingRowsStatus = 8;
-    string allErrorRowsStatus = 9;
+    string mode = 3;
+    Stage stage = 4;
+    string validatorBinlog = 5;
+    string validatorBinlogGtid = 6;
+    ProcessResult result = 7;
+    string processedRowsStatus = 8;
+    string pendingRowsStatus = 9;
+    string allErrorRowsStatus = 10;
 }
 
 message ValidationTableStatus {

@@ -9,7 +9,3 @@ from:
   user: root
   password: '123456'
   port: 3306
-checker:
-  check-enable: true
-  backoff-rollback: 5m
-  backoff-max: 5m
