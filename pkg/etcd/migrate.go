@@ -16,11 +16,13 @@ package etcd
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"strconv"
 	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 	clientV3 "go.etcd.io/etcd/client/v3"
 	"go.etcd.io/etcd/client/v3/concurrency"
 	"go.uber.org/zap"
@@ -30,6 +32,7 @@ const (
 	// cdcMetaVersion is hard code value indicate the metaVersion of TiCDC
 	cdcMetaVersion          = 1
 	etcdSessionTTL          = 10
+	campaignTimeoutDuration = 1 * time.Minute
 	noMetaVersion           = -1
 	migrateLogsWarnDuration = 5 * time.Second
 	migrationCampaignKey    = "ticdc-migration"
@@ -62,14 +65,15 @@ type migrator struct {
 // 1. check and put metaVersion
 // 2. campaign old owner
 // 3. update keys
-// 4. update metaVersion
+// 4. check meta data consistency
+// 5. update metaVersion
 func (m migrator) migrate(ctx context.Context) error {
 	// 1.1 check metaVersion, if the metaVersion in etcd does not match
 	// m.oldMetaVersion, it means that someone has migrated the meta data
 	metaVersion, err := getMetaVersion(ctx, m.cli, m.clusterID)
 	if err != nil {
 		log.Error("get meta version failed, etcd meta data migration failed", zap.Error(err))
-		return errors.Trace(err)
+		return cerror.WrapError(cerror.ErrEtcdMigrateFailed, err)
 	}
 
 	if metaVersion > m.newMetaVersion {
@@ -78,7 +82,7 @@ func (m migrator) migrate(ctx context.Context) error {
 	}
 
 	// if metaVersion in etcd is equal to m.newMetaVersion,
-	// it means that no need to migrate
+	// it means that there is no need to migrate
 	if !m.etcdNoMetaVersion && metaVersion == m.newMetaVersion {
 		log.Warn("meta version no match, no need to migrate")
 		return nil
@@ -89,41 +93,70 @@ func (m migrator) migrate(ctx context.Context) error {
 		_, err := m.cli.Put(ctx, m.metaVersionKey, fmt.Sprintf("%d", m.oldMetaVersion))
 		if err != nil {
 			log.Error("put meta version failed, etcd meta data migration failed", zap.Error(err))
-			return errors.Trace(err)
+			return cerror.WrapError(cerror.ErrEtcdMigrateFailed, err)
 		}
 	}
 
 	// 3.campaign old owner to make sure old keys will not be updates
-	if err := m.campaignOldOwner(ctx); err != nil {
-		log.Error("campaign old owner failed, etcd meta data migration failed", zap.Error(err))
-		return errors.Trace(err)
+	campaignCtx, cancel := context.WithTimeout(ctx, campaignTimeoutDuration)
+	defer cancel()
+	if err := m.campaignOldOwner(campaignCtx); err != nil {
+		if errors.ErrorEqual(err, context.DeadlineExceeded) {
+			log.Error("campaign old owner timeout",
+				zap.Duration("duration", campaignTimeoutDuration))
+		}
+		log.Error("campaign old owner failed, etcd meta data migration failed",
+			zap.Error(err))
+		return cerror.WrapError(cerror.ErrEtcdMigrateFailed, err)
 	}
 
+	beforeKV := make(map[string][]byte)
 	// 4.campaign owner successfully, begin to migrate data
 	for oldPrefix, newPrefix := range m.keyPrefixes {
 		resp, err := m.cli.Get(ctx, oldPrefix, clientV3.WithPrefix())
 		if err != nil {
-			log.Error("get old meta data failed, etcd meta data migration failed", zap.Error(err))
-			return errors.Trace(err)
+			log.Error("get old meta data failed, etcd meta data migration failed",
+				zap.Error(err))
+			return cerror.WrapError(cerror.ErrEtcdMigrateFailed, err)
 		}
 		for _, v := range resp.Kvs {
 			oldKey := string(v.Key)
 			newKey := newPrefix + oldKey[len(oldPrefix):]
+			beforeKV[newKey] = v.Value
 			log.Info("migrate key", zap.String("oldKey", oldKey), zap.String("newKey", newKey))
 			// TODO(dongmen): we should update value after changefeedInfo struct altered
 			_, err := m.cli.Put(ctx, newKey, string(v.Value))
 			if err != nil {
-				log.Error("put new meta data failed, etcd meta data migration failed", zap.Error(err))
-				return errors.Trace(err)
+				log.Error("put new meta data failed, etcd meta data migration failed",
+					zap.Error(err))
+				return cerror.WrapError(cerror.ErrEtcdMigrateFailed, err)
 			}
 		}
 	}
+	// 5. get all migrated data
+	afterKV := make(map[string][]byte)
+	for _, newPrefix := range m.keyPrefixes {
+		resp, err := m.cli.Get(ctx, newPrefix, clientV3.WithPrefix())
+		if err != nil {
+			log.Error("get old meta data failed, etcd meta data migration failed", zap.Error(err))
+			return cerror.WrapError(cerror.ErrEtcdMigrateFailed, err)
+		}
+		for _, v := range resp.Kvs {
+			afterKV[string(v.Key)] = v.Value
+		}
+	}
 
-	// 5. update metaVersion
+	// 6. check if data is same before and after migrate
+	if !reflect.DeepEqual(beforeKV, afterKV) {
+		return cerror.ErrEtcdMigrateFailed.GenWithStackByArgs(
+			"etcd meta data do not consistent between before and after migration")
+	}
+
+	// 7. update metaVersion
 	_, err = m.cli.Put(ctx, m.metaVersionKey, fmt.Sprintf("%d", m.newMetaVersion))
 	if err != nil {
 		log.Error("update meta version failed, etcd meta data migration failed", zap.Error(err))
-		return errors.Trace(err)
+		return cerror.WrapError(cerror.ErrEtcdMigrateFailed, err)
 	}
 
 	log.Info("etcd data migration successful")
@@ -147,6 +180,7 @@ func (m migrator) campaignOldOwner(ctx context.Context) error {
 	return nil
 }
 
+// MigrateData migrate etcd meta data
 func MigrateData(ctx context.Context, cli *Client, clusterID string) error {
 	version, err := getMetaVersion(ctx, cli, clusterID)
 	if err != nil {
@@ -178,12 +212,15 @@ func MigrateData(ctx context.Context, cli *Client, clusterID string) error {
 		etcdNoMetaVersion: version == noMetaVersion,
 	}
 
-	m.keyPrefixes.addPair("/tidb/cdc/changefeed/info", DefaultClusterAndNamespacePrefix+changefeedInfoKey)
-	m.keyPrefixes.addPair("/tidb/cdc/job", DefaultClusterAndNamespacePrefix+changefeedStatusKey)
+	m.keyPrefixes.addPair("/tidb/cdc/changefeed/info",
+		DefaultClusterAndNamespacePrefix+changefeedInfoKey)
+	m.keyPrefixes.addPair("/tidb/cdc/job",
+		DefaultClusterAndNamespacePrefix+changefeedStatusKey)
 
 	return m.migrate(ctx)
 }
 
+// ShouldMigrate checks if we should migrate etcd meta data
 func ShouldMigrate(ctx context.Context, cli *Client, clusterID string) (bool, error) {
 	version, err := getMetaVersion(ctx, cli, clusterID)
 	if err != nil {
@@ -221,7 +258,8 @@ func WaitMetaVersionMatched(ctx context.Context, cli *Client, clusterID string) 
 				return nil
 			}
 		case <-warnLogTicker.C:
-			log.Warn("meta data migrating last too long", zap.Duration("duration", time.Since(start)))
+			log.Warn("meta data migrating last too long",
+				zap.Duration("duration", time.Since(start)))
 		}
 	}
 }
@@ -235,11 +273,11 @@ func getMetaVersion(ctx context.Context, cli *Client, clusterID string) (int, er
 	// means there no metaVersion in etcd
 	if len(resp.Kvs) == 0 {
 		return noMetaVersion, nil
-	} else {
-		version, err := strconv.Atoi(string(resp.Kvs[0].Value))
-		if err != nil {
-			return 0, errors.Trace(err)
-		}
-		return version, nil
 	}
+
+	version, err := strconv.Atoi(string(resp.Kvs[0].Value))
+	if err != nil {
+		return 0, errors.Trace(err)
+	}
+	return version, nil
 }

@@ -735,6 +735,10 @@ var (
 		"patch ops:%d of a single changefeed exceed etcd txn max ops:%d",
 		errors.RFCCodeText("CDC:ErrEtcdTxnOpsExceed"),
 	)
+	ErrEtcdMigrateFailed = errors.Normalize(
+		"etcd meta data migrate failed:%s",
+		errors.RFCCodeText("CDC:ErrEtcdMigrateFailed"),
+	)
 
 	// pipeline errors
 	ErrSendToClosedPipeline = errors.Normalize(

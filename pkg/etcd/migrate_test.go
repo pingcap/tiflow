@@ -42,11 +42,20 @@ func TestMigration(t *testing.T) {
 	})
 	require.NoError(t, err)
 	defer cli.Close()
-	info1 := model.ChangeFeedInfo{SinkURI: "test1", StartTs: 1, TargetTs: 100, State: model.StateNormal}
+	info1 := model.ChangeFeedInfo{
+		SinkURI: "test1",
+		StartTs: 1, TargetTs: 100, State: model.StateNormal,
+	}
 	status1 := model.ChangeFeedStatus{ResolvedTs: 2, CheckpointTs: 1}
-	info2 := model.ChangeFeedInfo{SinkURI: "test1", StartTs: 2, TargetTs: 200, State: model.StateError}
+	info2 := model.ChangeFeedInfo{
+		SinkURI: "test1",
+		StartTs: 2, TargetTs: 200, State: model.StateError,
+	}
 	status2 := model.ChangeFeedStatus{ResolvedTs: 3, CheckpointTs: 2}
-	info3 := model.ChangeFeedInfo{SinkURI: "test1", StartTs: 3, TargetTs: 300, State: model.StateFailed}
+	info3 := model.ChangeFeedInfo{
+		SinkURI: "test1",
+		StartTs: 3, TargetTs: 300, State: model.StateFailed,
+	}
 	status3 := model.ChangeFeedStatus{ResolvedTs: 4, CheckpointTs: 3}
 
 	testCases := []struct {
@@ -74,13 +83,15 @@ func TestMigration(t *testing.T) {
 	}
 	// 2. check old version data in etcd is expected
 	for _, tc := range testCases {
-		infoResp, err := cli.Get(context.Background(), fmt.Sprintf(oldInfoKeyBase, tc.id))
+		infoResp, err := cli.Get(context.Background(),
+			fmt.Sprintf(oldInfoKeyBase, tc.id))
 		require.NoError(t, err)
 		info := model.ChangeFeedInfo{}
 		err = info.Unmarshal(infoResp.Kvs[0].Value)
 		require.NoError(t, err)
 		require.Equal(t, tc.info, info)
-		statusResp, err := cli.Get(context.Background(), fmt.Sprintf(oldStatusKeyBase, tc.id))
+		statusResp, err := cli.Get(context.Background(),
+			fmt.Sprintf(oldStatusKeyBase, tc.id))
 		require.NoError(t, err)
 		status := model.ChangeFeedStatus{}
 		err = status.Unmarshal(statusResp.Kvs[0].Value)
@@ -128,14 +139,16 @@ func TestMigration(t *testing.T) {
 	// 7. check new version data in etcd is expected
 	for _, tc := range testCases {
 		infoResp, err := cli.Get(context.Background(),
-			fmt.Sprintf("%s%s/%s", DefaultClusterAndNamespacePrefix, changefeedInfoKey, tc.id))
+			fmt.Sprintf("%s%s/%s", DefaultClusterAndNamespacePrefix,
+				changefeedInfoKey, tc.id))
 		require.NoError(t, err)
 		info := model.ChangeFeedInfo{}
 		err = info.Unmarshal(infoResp.Kvs[0].Value)
 		require.NoError(t, err)
 		require.Equal(t, tc.info, info)
 		statusResp, err := cli.Get(context.Background(),
-			fmt.Sprintf("%s%s/%s", DefaultClusterAndNamespacePrefix, changefeedStatusKey, tc.id))
+			fmt.Sprintf("%s%s/%s", DefaultClusterAndNamespacePrefix,
+				changefeedStatusKey, tc.id))
 		require.NoError(t, err)
 		status := model.ChangeFeedStatus{}
 		err = status.Unmarshal(statusResp.Kvs[0].Value)

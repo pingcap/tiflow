@@ -226,6 +226,11 @@ error = '''
 this patch should be excluded from the current etcd txn
 '''
 
+["CDC:ErrEtcdMigrateFailed"]
+error = '''
+etcd meta data migrate failed:%s
+'''
+
 ["CDC:ErrEtcdSessionDone"]
 error = '''
 the etcd session is done

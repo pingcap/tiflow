@@ -57,7 +57,6 @@ func TaskPositionKeyPrefix(clusterID, namespace string) string {
 // ChangefeedStatusKeyPrefix is the prefix of changefeed status keys
 func ChangefeedStatusKeyPrefix(clusterID, namespace string) string {
 	return NamespacedPrefix(clusterID, namespace) + changefeedStatusKey
-
 }
 
 // GetEtcdKeyChangeFeedList returns the prefix key of all changefeed config

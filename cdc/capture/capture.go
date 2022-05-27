@@ -52,7 +52,7 @@ type Capture struct {
 	info             *model.CaptureInfo
 	processorManager *processor.Manager
 
-	pdEnpoints      []string
+	pdEndpoints     []string
 	UpstreamManager *upstream.Manager
 	ownerMu         sync.Mutex
 	owner           owner.Owner
@@ -86,12 +86,15 @@ type Capture struct {
 }
 
 // NewCapture returns a new Capture instance
-func NewCapture(pdEnpoints []string, etcdClient *etcd.CDCEtcdClient, grpcService *p2p.ServerWrapper) *Capture {
+func NewCapture(pdEndpoints []string,
+	etcdClient *etcd.CDCEtcdClient,
+	grpcService *p2p.ServerWrapper,
+) *Capture {
 	return &Capture{
 		EtcdClient:          etcdClient,
 		grpcService:         grpcService,
 		cancel:              func() {},
-		pdEnpoints:          pdEnpoints,
+		pdEndpoints:         pdEndpoints,
 		newProcessorManager: processor.NewManager,
 		newOwner:            owner.NewOwner,
 	}
@@ -128,7 +131,7 @@ func (c *Capture) reset(ctx context.Context) error {
 		c.UpstreamManager.Close()
 	}
 	c.UpstreamManager = upstream.NewManager(ctx, c.EtcdClient.GetGCServiceID())
-	err = c.UpstreamManager.Add(upstream.DefaultUpstreamID, c.pdEnpoints, conf.Security)
+	err = c.UpstreamManager.Add(upstream.DefaultUpstreamID, c.pdEndpoints, conf.Security)
 	if err != nil {
 		return errors.Annotate(
 			cerror.WrapError(cerror.ErrNewCaptureFailed, err),
@@ -485,7 +488,7 @@ func (c *Capture) register(ctx cdcContext.Context) error {
 	return nil
 }
 
-// AsyncClose closes the capture by unregistering it from etcd
+// AsyncClose closes the capture by deregister it from etcd
 // Note: this function should be reentrant
 func (c *Capture) AsyncClose() {
 	defer c.cancel()

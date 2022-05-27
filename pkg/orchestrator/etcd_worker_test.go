@@ -257,7 +257,8 @@ func TestEtcdSum(t *testing.T) {
 			}
 
 			cli := newClient()
-			cdcCli := etcd.NewCDCEtcdClient(ctx, cli.Unwrap(), "default")
+			cdcCli, err := etcd.NewCDCEtcdClient(ctx, cli.Unwrap(), "default")
+			require.Nil(t, err)
 			defer func() {
 				_ = cli.Unwrap().Close()
 			}()
@@ -334,8 +335,8 @@ func TestLinearizability(t *testing.T) {
 	defer closer()
 
 	cli0 := newClient()
-	cdcCli := etcd.NewCDCEtcdClient(ctx, cli0.Unwrap(), "default")
-
+	cdcCli, err := etcd.NewCDCEtcdClient(ctx, cli0.Unwrap(), "default")
+	require.Nil(t, err)
 	cli := newClient()
 	for i := 0; i < 1000; i++ {
 		_, err := cli.Put(ctx, testEtcdKeyPrefix+"/lin", strconv.Itoa(i))
@@ -428,7 +429,8 @@ func TestFinished(t *testing.T) {
 	defer closer()
 
 	cli := newClient()
-	cdcCli := etcd.NewCDCEtcdClient(ctx, cli.Unwrap(), "default")
+	cdcCli, err := etcd.NewCDCEtcdClient(ctx, cli.Unwrap(), "default")
+	require.Nil(t, err)
 
 	prefix := testEtcdKeyPrefix + "/finished"
 	reactor, err := NewEtcdWorker(&cdcCli, prefix, &finishedReactor{
@@ -497,7 +499,8 @@ func TestCover(t *testing.T) {
 	defer closer()
 
 	cli := newClient()
-	cdcCli := etcd.NewCDCEtcdClient(ctx, cli.Unwrap(), "default")
+	cdcCli, err := etcd.NewCDCEtcdClient(ctx, cli.Unwrap(), "default")
+	require.Nil(t, err)
 
 	prefix := testEtcdKeyPrefix + "/cover"
 	reactor, err := NewEtcdWorker(&cdcCli, prefix, &coverReactor{
@@ -575,7 +578,9 @@ func TestEmptyTxn(t *testing.T) {
 	defer closer()
 
 	cli := newClient()
-	cdcCli := etcd.NewCDCEtcdClient(ctx, cli.Unwrap(), "default")
+	cdcCli, err := etcd.NewCDCEtcdClient(ctx, cli.Unwrap(), "default")
+	require.Nil(t, err)
+
 	prefix := testEtcdKeyPrefix + "/empty_txn"
 	reactor, err := NewEtcdWorker(&cdcCli, prefix, &emptyTxnReactor{
 		prefix: prefix,
@@ -642,7 +647,8 @@ func TestEmptyOrNil(t *testing.T) {
 	defer closer()
 
 	cli := newClient()
-	cdcCli := etcd.NewCDCEtcdClient(ctx, cli.Unwrap(), "default")
+	cdcCli, err := etcd.NewCDCEtcdClient(ctx, cli.Unwrap(), "default")
+	require.Nil(t, err)
 
 	prefix := testEtcdKeyPrefix + "/emptyOrNil"
 	reactor, err := NewEtcdWorker(&cdcCli, prefix, &emptyOrNilReactor{
@@ -711,11 +717,14 @@ func TestModifyAfterDelete(t *testing.T) {
 	defer closer()
 
 	cli1 := newClient()
-	cdcCli1 := etcd.NewCDCEtcdClient(ctx, cli1.Unwrap(), "default")
-	cli2 := newClient()
-	cdcCli2 := etcd.NewCDCEtcdClient(ctx, cli2.Unwrap(), "default")
+	cdcCli1, err := etcd.NewCDCEtcdClient(ctx, cli1.Unwrap(), "default")
+	require.Nil(t, err)
 
-	_, err := cli1.Put(ctx, "/test/key1", "original value")
+	cli2 := newClient()
+	cdcCli2, err := etcd.NewCDCEtcdClient(ctx, cli2.Unwrap(), "default")
+	require.Nil(t, err)
+
+	_, err = cli1.Put(ctx, "/test/key1", "original value")
 	require.Nil(t, err)
 
 	modifyReactor := &modifyOneReactor{

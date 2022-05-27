@@ -136,7 +136,8 @@ func TestEtcdBank(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	cli := newClient()
-	cdcCli := etcd.NewCDCEtcdClient(ctx, cli.Unwrap(), "default")
+	cdcCli, err := etcd.NewCDCEtcdClient(ctx, cli.Unwrap(), "default")
+	require.Nil(t, err)
 
 	defer func() {
 		_ = cli.Unwrap().Close()

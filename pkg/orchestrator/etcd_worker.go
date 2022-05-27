@@ -95,7 +95,11 @@ type rawStateEntry struct {
 }
 
 // NewEtcdWorker returns a new EtcdWorker
-func NewEtcdWorker(client *etcd.CDCEtcdClient, prefix string, reactor Reactor, initState ReactorState) (*EtcdWorker, error) {
+func NewEtcdWorker(client *etcd.CDCEtcdClient,
+	prefix string,
+	reactor Reactor,
+	initState ReactorState,
+) (*EtcdWorker, error) {
 	return &EtcdWorker{
 		clusterID:  client.ClusterID,
 		client:     client.Client,
@@ -523,7 +527,9 @@ func (worker *EtcdWorker) handleDeleteCounter(value []byte) {
 
 // checkAndMigrateMetaData check if should migrate meta, if we should, it will block
 // until migrate done
-func (worker *EtcdWorker) checkAndMigrateMetaData(ctx context.Context, clusterID, role string) error {
+func (worker *EtcdWorker) checkAndMigrateMetaData(ctx context.Context,
+	clusterID, role string,
+) error {
 	shouldMigrate, err := etcd.ShouldMigrate(ctx, worker.client, clusterID)
 	if err != nil {
 		return errors.Trace(err)
@@ -533,7 +539,6 @@ func (worker *EtcdWorker) checkAndMigrateMetaData(ctx context.Context, clusterID
 	}
 
 	if role != pkgutil.RoleOwner.String() {
-		log.Info("gaga", zap.String("role", role))
 		err := etcd.WaitMetaVersionMatched(ctx, worker.client, clusterID)
 		return errors.Trace(err)
 	}
