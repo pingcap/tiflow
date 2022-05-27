@@ -422,6 +422,26 @@ func (s *OpenAPIControllerSuite) TestTaskController() {
 		s.NotNil(taskCfg2)
 		s.EqualValues(task2, task)
 		s.Equal(taskCfg2.String(), taskCfg.String())
+
+		// incremental task without source meta
+		taskTest := *s.testTask
+		taskTest.TaskMode = config.ModeIncrement
+		req = openapi.ConverterTaskRequest{Task: &taskTest}
+		task3, taskCfg3, err := server.convertTaskConfig(ctx, req)
+		s.NoError(err)
+		s.NotNil(task3)
+		s.NotNil(taskCfg3)
+		s.EqualValues(&taskTest, task3)
+
+		req.Task = nil
+		taskCfgStr = taskCfg3.String()
+		req.TaskConfigFile = &taskCfgStr
+		task4, taskCfg4, err := server.convertTaskConfig(ctx, req)
+		s.NoError(err)
+		s.NotNil(task4)
+		s.NotNil(taskCfg4)
+		s.EqualValues(task4, task3)
+		s.Equal(taskCfg4.String(), taskCfg3.String())
 	}
 }
 
