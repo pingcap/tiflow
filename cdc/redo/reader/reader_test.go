@@ -86,7 +86,7 @@ func TestLogReaderResetReader(t *testing.T) {
 		Dir:        dir,
 	}
 	fileName := fmt.Sprintf(common.RedoLogFileFormatV1, "cp",
-		"default", "test-cf100",
+		"test-cf100",
 		common.DefaultDDLLogFileType, 100, uuid.New().String(), common.LogEXT)
 	w, err := writer.NewWriter(ctx, cfg, writer.WithLogFileName(func() string {
 		return fileName
@@ -107,7 +107,7 @@ func TestLogReaderResetReader(t *testing.T) {
 	require.Nil(t, err)
 
 	fileName = fmt.Sprintf(common.RedoLogFileFormatV1, "cp",
-		"default", "test-cf10",
+		"test-cf10",
 		common.DefaultRowLogFileType, 10, uuid.New().String(), common.LogEXT)
 	w, err = writer.NewWriter(ctx, cfg, writer.WithLogFileName(func() string {
 		return fileName
