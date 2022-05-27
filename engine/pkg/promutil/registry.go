@@ -96,7 +96,7 @@ func (r *Registry) Gather() ([]*dto.MetricFamily, error) {
 }
 
 // AutoRegisterFactory uses inner Factory to create metrics and register metrics
-// to Registry with id.
+// to Registry with id. Panic if it can't register successfully.
 type AutoRegisterFactory struct {
 	inner Factory
 	r     *Registry
