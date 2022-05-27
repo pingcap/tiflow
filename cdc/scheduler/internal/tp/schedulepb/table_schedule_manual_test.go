@@ -21,7 +21,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 )
 
-func benchmarkMessageHeartbeatResponse(b *testing.B, bench func(b *testing.B, m *Message)) {
+func benchmarkMessageHeartbeatResponse(b *testing.B, bench func(b *testing.B, m *Message, total int)) {
 	size := 16384
 	for total := 1; total <= size; total *= 2 {
 		msg := Message{
@@ -45,14 +45,13 @@ func benchmarkMessageHeartbeatResponse(b *testing.B, bench func(b *testing.B, m 
 		}
 
 		b.ResetTimer()
-		bench(b, &msg)
+		bench(b, &msg, total)
 		b.StopTimer()
 	}
 }
 
 func BenchmarkMessageHeartbeatResponseProtoMarshal(b *testing.B) {
-	benchmarkMessageHeartbeatResponse(b, func(b *testing.B, m *Message) {
-		total := len(m.HeartbeatResponse.Tables)
+	benchmarkMessageHeartbeatResponse(b, func(b *testing.B, m *Message, total int) {
 		b.Run(fmt.Sprintf("%d checkpoints(s) marshal", total), func(b *testing.B) {
 			totalLen := 0
 			for i := 0; i < b.N; i++ {
@@ -68,8 +67,7 @@ func BenchmarkMessageHeartbeatResponseProtoMarshal(b *testing.B) {
 }
 
 func BenchmarkMessageHeartbeatResponseProtoUnmarshal(b *testing.B) {
-	benchmarkMessageHeartbeatResponse(b, func(b *testing.B, m *Message) {
-		total := len(m.HeartbeatResponse.Tables)
+	benchmarkMessageHeartbeatResponse(b, func(b *testing.B, m *Message, total int) {
 		b.Run(fmt.Sprintf("%d checkpoints(s) marshal", total), func(b *testing.B) {
 			bytes, err := proto.Marshal(m)
 			if err != nil {
@@ -90,8 +88,7 @@ func BenchmarkMessageHeartbeatResponseProtoUnmarshal(b *testing.B) {
 }
 
 func BenchmarkMessageHeartbeatResponseProtoSize(b *testing.B) {
-	benchmarkMessageHeartbeatResponse(b, func(b *testing.B, m *Message) {
-		total := len(m.HeartbeatResponse.Tables)
+	benchmarkMessageHeartbeatResponse(b, func(b *testing.B, m *Message, total int) {
 		b.Run(fmt.Sprintf("%d checkpoint(s) size", total), func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
 				m.Size()
