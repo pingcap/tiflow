@@ -87,7 +87,6 @@ var (
 	maxDDLConnectionTimeout = fmt.Sprintf("%dm", MaxDDLConnectionTimeoutMinute)
 
 	maxDMLConnectionDuration, _ = time.ParseDuration(maxDMLConnectionTimeout)
-	maxDMLExecutionDuration     = 30 * time.Second
 
 	maxPauseOrStopWaitTime = 10 * time.Second
 
@@ -2933,6 +2932,9 @@ func (s *Syncer) loadTableStructureFromDump(ctx context.Context) error {
 					zap.Error(err))
 				setFirstErr(err)
 			}
+			// TODO: we should save table checkpoint here, but considering when
+			// the first time of flushing checkpoint, user may encounter https://github.com/pingcap/tiflow/issues/5010
+			// we should fix that problem first.
 		}
 	}
 	return firstErr
