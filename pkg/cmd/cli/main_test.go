@@ -11,17 +11,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package servermaster
+package cli
 
-import "github.com/prometheus/client_golang/prometheus"
+import (
+	"testing"
 
-// registerMetrics registers metrics for server master
-func registerMetrics() {
-	registry := prometheus.NewRegistry()
-	registry.MustRegister(prometheus.NewProcessCollector(prometheus.ProcessCollectorOpts{}))
-	registry.MustRegister(prometheus.NewGoCollector())
+	"github.com/pingcap/tiflow/pkg/leakutil"
+	"go.uber.org/goleak"
+)
 
-	initServerMetrics(registry)
-
-	prometheus.DefaultGatherer = registry
+func TestMain(m *testing.M) {
+	opts := []goleak.Option{
+		// library used by log
+		goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
+	}
+	leakutil.SetUpLeakTest(m, opts...)
 }

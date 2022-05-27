@@ -202,12 +202,11 @@ type tableChangeDataForPersist struct {
 }
 
 type rowChangeDataForPersist struct {
-	Key             string           `json:"key"`
-	Tp              rowChangeJobType `json:"tp"`
-	Size            int32            `json:"size"`
-	Data            []interface{}    `json:"data"`
-	FirstValidateTS int64            `json:"first-ts"`
-	FailedCnt       int              `json:"failed-cnt"` // failed count
+	Key       string           `json:"key"`
+	Tp        rowChangeJobType `json:"tp"`
+	Size      int32            `json:"size"`
+	Data      []interface{}    `json:"data"`
+	FailedCnt int              `json:"failed-cnt"` // failed count
 }
 
 var triggeredFailOnPersistForIntegrationTest bool
@@ -326,13 +325,13 @@ func (c *validatorPersistHelper) persistPendingRows(tctx *tcontext.Context, rev 
 		for _, tblChange := range worker.getPendingChangesMap() {
 			for key, j := range tblChange.jobs {
 				row := j.row
+				// we don't store FirstValidateTS into meta
 				rowForPersist := rowChangeDataForPersist{
-					Key:             key,
-					Tp:              j.Tp,
-					Size:            j.size,
-					Data:            row.RowValues(),
-					FirstValidateTS: j.FirstValidateTS,
-					FailedCnt:       j.FailedCnt,
+					Key:       key,
+					Tp:        j.Tp,
+					Size:      j.size,
+					Data:      row.RowValues(),
+					FailedCnt: j.FailedCnt,
 				}
 				rowJSON, err := json.Marshal(&rowForPersist)
 				if err != nil {

@@ -351,7 +351,8 @@ func (t *tableActor) getSinkAsyncMessageHolder(
 				t.globalVars.TableActorSystem.Router(),
 				t.actorID, t.changefeedVars,
 				t.globalVars, t.reportErr))
-		if err := cyclicNode.Init(cyclicActorNodeContext); err != nil {
+		if err := cyclicNode.InitTableActor(t.changefeedVars.Info.Config.Cyclic.ReplicaID,
+			t.changefeedVars.Info.Config.Cyclic.FilterReplicaID, true); err != nil {
 			log.Error("failed to start cyclic node",
 				zap.String("tableName", t.tableName),
 				zap.Int64("tableID", t.tableID),
@@ -513,6 +514,11 @@ func (t *tableActor) Cancel() {
 // Wait waits for table pipeline destroyed
 func (t *tableActor) Wait() {
 	_ = t.wg.Wait()
+}
+
+// MemoryConsumption return the memory consumption in bytes
+func (t *tableActor) MemoryConsumption() uint64 {
+	return t.sortNode.flowController.GetConsumption()
 }
 
 // for ut

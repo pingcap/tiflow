@@ -263,6 +263,22 @@ func TestCreateWorkerAndWorkerTimesOut(t *testing.T) {
 	suite.Close()
 }
 
+func TestCreateWorkerPredispatchFailed(t *testing.T) {
+	t.Parallel()
+
+	suite := NewWorkerManageTestSuite(true)
+	suite.manager.AbortCreatingWorker("worker-1", errors.New("injected error"))
+
+	event := suite.WaitForEvent(t, "worker-1")
+	require.Equal(t, workerDispatchFailedEvent, event.Tp)
+	require.NotNil(t, event.Handle.GetTombstone())
+	require.Error(t, event.Err)
+	require.Regexp(t, ".*injected error.*", event.Err)
+
+	suite.AssertNoEvents(t, "worker-1", 500*time.Millisecond)
+	suite.Close()
+}
+
 func TestCreateWorkerAndWorkerStatusUpdatedAndTimesOut(t *testing.T) {
 	t.Parallel()
 
