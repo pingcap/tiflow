@@ -120,7 +120,7 @@ func SplitFilenameWithUUIDSuffix(filename string) (baseName, uuidSuffix, seq str
 
 // ExtractRealName removes relay log uuid suffix if it exists and returns real binlog name.
 func ExtractRealName(name string) string {
-	if !strings.Contains(name, posUUIDSuffixSeparator) {
+	if !strings.Contains(name, posRelaySubDirSuffixSeparator) {
 		return name
 	}
 	baseName, _, seq, err := SplitFilenameWithUUIDSuffix(name)
