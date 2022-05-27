@@ -66,7 +66,8 @@ func (n *pullerNode) tableSpan(ctx cdcContext.Context) []regionspan.Span {
 
 func (n *pullerNode) start(ctx pipeline.NodeContext,
 	upStream *upstream.Upstream, wg *errgroup.Group,
-	sorter *sorterNode) error {
+	sorter *sorterNode,
+) error {
 	n.wg = wg
 	ctxC, cancel := context.WithCancel(ctx)
 	ctxC = contextutil.PutTableInfoInCtx(ctxC, n.tableID, n.tableName)

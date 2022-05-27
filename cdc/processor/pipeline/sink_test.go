@@ -192,6 +192,7 @@ func TestStatus(t *testing.T) {
 	msg = pmessage.BarrierMessage(20)
 	ok, err = node.HandleMessage(ctx, msg)
 	require.True(t, ok)
+	require.Nil(t, err)
 	require.Equal(t, TableStatusInitializing, node.Status())
 	require.Equal(t, model.Ts(20), node.BarrierTs())
 
