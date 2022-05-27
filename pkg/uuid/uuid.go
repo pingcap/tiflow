@@ -13,9 +13,7 @@
 
 package uuid
 
-import (
-	guuid "github.com/google/uuid"
-)
+import guuid "github.com/google/uuid"
 
 // Generator defines an interface that can generate a uuid
 type Generator interface {
