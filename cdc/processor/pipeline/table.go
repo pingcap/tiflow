@@ -53,6 +53,8 @@ const (
 	TableStatusStopping
 	// TableStatusStopped means sink stop all works.
 	TableStatusStopped
+	// TableStatusAbsent means the table not found
+	TableStatusAbsent
 )
 
 var tableStatusStringMap = map[TableStatus]string{
@@ -61,6 +63,7 @@ var tableStatusStringMap = map[TableStatus]string{
 	TableStatusReplicating: "Replicating",
 	TableStatusStopping:    "Stopping",
 	TableStatusStopped:     "Stopped",
+	TableStatusAbsent:      "Absent",
 }
 
 func (s TableStatus) String() string {
@@ -75,6 +78,13 @@ func (s *TableStatus) Load() TableStatus {
 // Store TableStatus with THREAD-SAFE
 func (s *TableStatus) Store(new TableStatus) {
 	atomic.StoreInt32((*int32)(s), int32(new))
+}
+
+type TableMeta struct {
+	TableID      model.TableID
+	CheckpointTs model.Ts
+	ResolvedTs   model.Ts
+	Status       TableStatus
 }
 
 // TablePipeline is a pipeline which capture the change log from tikv in a table

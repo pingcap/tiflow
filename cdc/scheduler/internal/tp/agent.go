@@ -46,13 +46,11 @@ type agent struct {
 	trans     transport
 	tableExec internal.TableExecutor
 
-	tables map[model.TableID]*schedulepb.TableStatus
-
-	// runningTasks track all in progress dispatch table request
+	// runningTasks track all in progress dispatch table task
 	runningTasks map[model.TableID]*dispatchTableTask
 
-	// pendingOps is a queue of operations yet to be processed.
-	// the Deque stores *agentOperation.
+	// pendingTasks is a queue of dispatch table task yet to be processed.
+	// the Deque stores *dispatchTableTask.
 	pendingTasks deque.Deque
 
 	// maintain owner information
@@ -63,6 +61,8 @@ type agent struct {
 	// todo: shall we maintain this?
 	captureID    model.CaptureID
 	changeFeedID model.ChangeFeedID
+
+	reject bool
 
 	// todo: these fields need to be revised
 	barrierSeqs map[p2p.Topic]p2p.Seq
@@ -84,7 +84,6 @@ func NewAgent(ctx context.Context,
 		epoch:        schedulepb.ProcessorEpoch{Epoch: uuid.New().String()},
 		changeFeedID: changeFeedID,
 		tableExec:    tableExecutor,
-		tables:       make(map[model.TableID]*schedulepb.TableStatus),
 		pendingTasks: deque.NewDeque(),
 		runningTasks: make(map[model.TableID]*dispatchTableTask),
 	}
@@ -154,6 +153,7 @@ func (a *agent) Tick(ctx context.Context) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
+
 	outboundMessages, err := a.handleMessage(inboundMessages)
 	if err != nil {
 		return errors.Trace(err)
@@ -163,8 +163,9 @@ func (a *agent) Tick(ctx context.Context) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-
 	outboundMessages = append(outboundMessages, responses...)
+
+	outboundMessages = append(outboundMessages, a.newCheckpointMessage())
 
 	if err := a.trans.Send(ctx, outboundMessages); err != nil {
 		return errors.Trace(err)
@@ -223,21 +224,28 @@ func tableStatus2PB(status pipeline.TableStatus) schedulepb.TableState {
 	return schedulepb.TableStateAbsent
 }
 
-func (a *agent) handleMessageHeartbeat() *schedulepb.Message {
-	// TODO: build s.tables from Heartbeat message.
+func newTableStatus(meta *pipeline.TableMeta) schedulepb.TableStatus {
+	return schedulepb.TableStatus{
+		TableID:    meta.TableID,
+		State:      tableStatus2PB(meta.Status),
+		Checkpoint: schedulepb.Checkpoint{CheckpointTs: meta.CheckpointTs, ResolvedTs: meta.ResolvedTs},
+	}
+}
+
+func (a *agent) collectTableStatus() []schedulepb.TableStatus {
 	allTables := a.tableExec.GetAllCurrentTables()
+	// todo: make this a field of the agent if necessary, to prevent frequent memory allocation.
 	tables := make([]schedulepb.TableStatus, 0, len(allTables))
 	for _, tableID := range allTables {
-		checkpoint, resolved, status := a.tableExec.GetTable(tableID)
-		table := schedulepb.TableStatus{
-			TableID:    tableID,
-			State:      tableStatus2PB(status),
-			Checkpoint: schedulepb.Checkpoint{CheckpointTs: checkpoint, ResolvedTs: resolved},
-		}
-		a.tables[tableID] = &table
-		tables = append(tables, table)
+		meta := a.tableExec.GetTableMeta(tableID)
+		status := newTableStatus(meta)
+		tables = append(tables, status)
 	}
+	return tables
+}
 
+func (a *agent) handleMessageHeartbeat() *schedulepb.Message {
+	tables := a.collectTableStatus()
 	response := &schedulepb.HeartbeatResponse{
 		Tables: tables,
 		// todo (Ling Jin): how to set `IsStopping`
@@ -311,38 +319,36 @@ func (a *agent) handleMessageDispatchTableRequest(request *schedulepb.DispatchTa
 }
 
 func (a *agent) handleRemoveTableTask(ctx context.Context, task *dispatchTableTask) (response *schedulepb.Message, err error) {
-	status, ok := a.tables[task.TableID]
-	if !ok {
-		// todo: shall just reconstruct the status, no need to panic.
-		log.Panic("agent: table to be remove not found", zap.Any("task", task))
-	}
 	if task.status == dispatchTableTaskReceived {
 		done := a.tableExec.RemoveTable(ctx, task.TableID)
-		if done {
-			status.State = schedulepb.TableStateStopping
+		if !done {
+			meta := a.tableExec.GetTableMeta(task.TableID)
+			status := newTableStatus(meta)
+			return a.newRemoveTableResponseMessage(status), nil
 		}
 		task.status = dispatchTableTaskProcessed
 	}
 
-	if task.status == dispatchTableTaskProcessed {
-		checkpointTs, done := a.tableExec.IsRemoveTableFinished(ctx, task.TableID)
-		if !done {
-			// table is not fully stopped yet, do not return any message
-			return nil, nil
-		}
-		status.Checkpoint.CheckpointTs = checkpointTs
+	checkpointTs, done := a.tableExec.IsRemoveTableFinished(ctx, task.TableID)
+	if !done {
+		// table is not fully stopped yet, do not return any message
+		return nil, nil
 	}
 
 	log.Info("finish processing add table task", zap.Any("task", task))
+	status := schedulepb.TableStatus{
+		TableID: task.TableID,
+		State:   schedulepb.TableStateStopped,
+		Checkpoint: schedulepb.Checkpoint{
+			CheckpointTs: checkpointTs,
+		},
+	}
 	message := a.newRemoveTableResponseMessage(status)
-
-	delete(a.tables, task.TableID)
 	delete(a.runningTasks, task.TableID)
-
 	return message, nil
 }
 
-func (a *agent) newRemoveTableResponseMessage(status *schedulepb.TableStatus) *schedulepb.Message {
+func (a *agent) newRemoveTableResponseMessage(status schedulepb.TableStatus) *schedulepb.Message {
 	message := &schedulepb.Message{
 		Header:  a.newMessageHeader(),
 		MsgType: schedulepb.MsgDispatchTableResponse,
@@ -351,11 +357,7 @@ func (a *agent) newRemoveTableResponseMessage(status *schedulepb.TableStatus) *s
 		DispatchTableResponse: &schedulepb.DispatchTableResponse{
 			Response: &schedulepb.DispatchTableResponse_RemoveTable{
 				RemoveTable: &schedulepb.RemoveTableResponse{
-					Status: &schedulepb.TableStatus{
-						TableID:    status.TableID,
-						State:      status.State,
-						Checkpoint: status.Checkpoint,
-					},
+					Status:     &status,
 					Checkpoint: &status.Checkpoint,
 				},
 			},
@@ -365,40 +367,17 @@ func (a *agent) newRemoveTableResponseMessage(status *schedulepb.TableStatus) *s
 	return message
 }
 
-func (a *agent) getTableStatus(task *dispatchTableTask) *schedulepb.TableStatus {
-	status, ok := a.tables[task.TableID]
-	if !ok {
-		status = &schedulepb.TableStatus{
-			TableID:    task.TableID,
-			State:      schedulepb.TableStatePreparing,
-			Checkpoint: schedulepb.Checkpoint{},
-		}
-		a.tables[task.TableID] = status
-		return status
-	}
-	// todo: what happen if the table is prepared before, caused by 1st phase of 2 phase scheduling.
-	if task.status == dispatchTableTaskReceived {
-		log.Panic("agent: unexpected table found", zap.Any("task", task))
-	}
-	return status
-}
-
 func (a *agent) handleAddTableTask(ctx context.Context, task *dispatchTableTask) (*schedulepb.Message, error) {
-	tableStatus := a.getTableStatus(task)
-	defer func() {
-		a.tables[task.TableID] = tableStatus
-	}()
-
 	if task.status == dispatchTableTaskReceived {
 		done, err := a.tableExec.AddTable(ctx, task.TableID, task.StartTs, task.IsPrepare)
 		if err != nil || !done {
 			// create table failed
 			log.Info("add table failed", zap.Error(err), zap.Any("task", task))
-			message := a.newAddTableResponseMessage(task.TableID, tableStatus.State, tableStatus.Checkpoint, false)
+			meta := a.tableExec.GetTableMeta(task.TableID)
+			status := newTableStatus(meta)
+			message := a.newAddTableResponseMessage(status, a.reject)
 			return message, errors.Trace(err)
 		}
-		// todo: revise this state, shall we consider `isPrepare` ?
-		tableStatus.State = schedulepb.TableStatePreparing
 		task.status = dispatchTableTaskProcessed
 	}
 
@@ -408,26 +387,20 @@ func (a *agent) handleAddTableTask(ctx context.Context, task *dispatchTableTask)
 			// not finished yet, do not return any message since the state is not stable now.
 			return nil, nil
 		}
-		tableStatus.State = schedulepb.TableStatePrepared
-		if !task.IsPrepare {
-			tableStatus.State = schedulepb.TableStateReplicating
-		}
-
-		checkpoint, resolved, _ := a.tableExec.GetTable(task.TableID)
-		tableStatus.Checkpoint.CheckpointTs = checkpoint
-		tableStatus.Checkpoint.ResolvedTs = resolved
 	}
 
 	// must be finished here
 	log.Info("finish processing add table task", zap.Any("task", task))
 
-	message := a.newAddTableResponseMessage(task.TableID, tableStatus.State, a.tables[task.TableID].Checkpoint, false)
+	meta := a.tableExec.GetTableMeta(task.TableID)
+	status := newTableStatus(meta)
+	message := a.newAddTableResponseMessage(status, a.reject)
 	delete(a.runningTasks, task.TableID)
 
 	return message, nil
 }
 
-func (a *agent) newAddTableResponseMessage(tableID model.TableID, state schedulepb.TableState, checkpoint schedulepb.Checkpoint, reject bool) *schedulepb.Message {
+func (a *agent) newAddTableResponseMessage(status schedulepb.TableStatus, reject bool) *schedulepb.Message {
 	return &schedulepb.Message{
 		Header:  a.newMessageHeader(),
 		MsgType: schedulepb.MsgDispatchTableResponse,
@@ -436,12 +409,8 @@ func (a *agent) newAddTableResponseMessage(tableID model.TableID, state schedule
 		DispatchTableResponse: &schedulepb.DispatchTableResponse{
 			Response: &schedulepb.DispatchTableResponse_AddTable{
 				AddTable: &schedulepb.AddTableResponse{
-					Status: &schedulepb.TableStatus{
-						TableID:    tableID,
-						State:      state,
-						Checkpoint: checkpoint,
-					},
-					Checkpoint: &checkpoint,
+					Status:     &status,
+					Checkpoint: &status.Checkpoint,
 					Reject:     reject,
 				},
 			},
@@ -500,18 +469,21 @@ func (a *agent) Close() error {
 }
 
 func (a *agent) newCheckpointMessage() *schedulepb.Message {
-	tableIDs := make([]model.TableID, 0, len(a.tables))
-	for tableID := range a.tables {
-		tableIDs = append(tableIDs, tableID)
+	allTables := a.tableExec.GetAllCurrentTables()
+	response := make(map[model.TableID]schedulepb.Checkpoint, len(allTables))
+	for _, tableID := range allTables {
+		meta := a.tableExec.GetTableMeta(tableID)
+		response[tableID] = schedulepb.Checkpoint{
+			CheckpointTs: meta.CheckpointTs,
+			ResolvedTs:   meta.ResolvedTs,
+		}
 	}
-	// checkpointTs, resolvedTs := a.tableExec.GetCheckpoint()
 	return &schedulepb.Message{
-		Header:  a.newMessageHeader(),
-		MsgType: schedulepb.MsgCheckpoint,
-		From:    a.captureID,
-		To:      a.ownerInfo.captureID,
-		// Checkpoints: a.newCheckpoint(),
-		//Checkpoint: a.newCheckpoint(checkpointTs, resolvedTs, tableIDs...),
+		Header:      a.newMessageHeader(),
+		MsgType:     schedulepb.MsgCheckpoint,
+		From:        a.captureID,
+		To:          a.ownerInfo.captureID,
+		Checkpoints: response,
 	}
 }
 
@@ -520,14 +492,6 @@ func (a *agent) newMessageHeader() *schedulepb.Message_Header {
 		Version:        a.ownerInfo.version,
 		OwnerRevision:  schedulepb.OwnerRevision{Revision: a.ownerInfo.revision},
 		ProcessorEpoch: a.epoch,
-	}
-}
-
-func (a *agent) newCheckpoint(checkpointTs, resolvedTs model.Ts) schedulepb.Checkpoint {
-	return schedulepb.Checkpoint{
-		CheckpointTs: checkpointTs,
-		ResolvedTs:   resolvedTs,
-		//TableIDs:     tables,
 	}
 }
 

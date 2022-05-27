@@ -183,6 +183,7 @@ func (e *MockTableExecutor) GetCheckpoint() (checkpointTs, resolvedTs model.Ts) 
 	return args.Get(0).(model.Ts), args.Get(1).(model.Ts)
 }
 
-func (e *MockTableExecutor) GetTable(tableID model.TableID) (checkpointTs, resolvedTs model.Ts, status pipeline.TableStatus) {
-	return 0, 0, status
+// GetTableMeta implements TableExecutor interface
+func (e *MockTableExecutor) GetTableMeta(tableID model.TableID) *pipeline.TableMeta {
+	return nil
 }

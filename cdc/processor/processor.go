@@ -363,13 +363,21 @@ func (p *processor) GetCheckpoint() (checkpointTs, resolvedTs model.Ts) {
 	return p.checkpointTs, p.resolvedTs
 }
 
-func (p *processor) GetTable(tableID model.TableID) (checkpointTs, resolvedTs model.Ts, status pipeline.TableStatus) {
+// GetTable implements TableExecutor interface
+func (p *processor) GetTableMeta(tableID model.TableID) *pipeline.TableMeta {
 	table, ok := p.tables[tableID]
 	if !ok {
-		log.Panic("table not found", zap.Any("tableID", tableID))
+		return &pipeline.TableMeta{
+			CheckpointTs: 0,
+			ResolvedTs:   0,
+			Status:       pipeline.TableStatusStopped,
+		}
 	}
-
-	return table.CheckpointTs(), table.ResolvedTs(), table.Status()
+	return &pipeline.TableMeta{
+		CheckpointTs: table.CheckpointTs(),
+		ResolvedTs:   table.ResolvedTs(),
+		Status:       table.Status(),
+	}
 }
 
 // newProcessor creates a new processor
