@@ -27,6 +27,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/redo/common"
 	"github.com/pingcap/tiflow/cdc/redo/writer"
 	"github.com/pingcap/tiflow/pkg/leakutil"
+	"github.com/pingcap/tiflow/pkg/uuid"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/context"
 )
@@ -62,7 +63,10 @@ func TestReaderRead(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	w, err := writer.NewWriter(ctx, cfg)
+	uuidGen := uuid.NewConstGenerator("const-uuid")
+	w, err := writer.NewWriter(ctx, cfg,
+		writer.WithUUIDGenerator(func() uuid.Generator { return uuidGen }),
+	)
 	require.Nil(t, err)
 	log := &model.RedoLog{
 		RedoRow: &model.RedoRowChangedEvent{Row: &model.RowChangedEvent{CommitTs: 1123}},
@@ -75,9 +79,9 @@ func TestReaderRead(t *testing.T) {
 	err = w.Close()
 	require.Nil(t, err)
 	require.True(t, !w.IsRunning())
-	fileName := fmt.Sprintf("%s_%s_%d_%s_%d%s", cfg.CaptureID,
+	fileName := fmt.Sprintf(common.RedoLogFileFormatV1, cfg.CaptureID,
 		cfg.ChangeFeedID.ID,
-		cfg.CreateTime.Unix(), cfg.FileType, 11, common.LogEXT)
+		cfg.FileType, 11, uuidGen.NewString(), common.LogEXT)
 	path := filepath.Join(cfg.Dir, fileName)
 	info, err := os.Stat(path)
 	require.Nil(t, err)
@@ -110,9 +114,10 @@ func TestReaderOpenSelectedFiles(t *testing.T) {
 		MaxLogSize: 100000,
 		Dir:        dir,
 	}
-	fileName := fmt.Sprintf("%s_%s_%s_%d_%s_%d%s", "cp",
-		"default", "test-cf",
-		time.Now().Unix(), common.DefaultDDLLogFileType, 11, common.LogEXT+common.TmpEXT)
+	uuidGen := uuid.NewGenerator()
+	fileName := fmt.Sprintf(common.RedoLogFileFormatV2, "cp",
+		"default", "test-cf", common.DefaultDDLLogFileType, 11,
+		uuidGen.NewString(), common.LogEXT+common.TmpEXT)
 	w, err := writer.NewWriter(ctx, cfg, writer.WithLogFileName(func() string {
 		return fileName
 	}))
@@ -138,17 +143,17 @@ func TestReaderOpenSelectedFiles(t *testing.T) {
 	require.Nil(t, err)
 
 	// no data, wil not open
-	fileName = fmt.Sprintf("%s_%s_%s_%d_%s_%d%s", "cp",
-		"default", "test-cf11",
-		time.Now().Unix(), common.DefaultDDLLogFileType, 10, common.LogEXT)
+	fileName = fmt.Sprintf(common.RedoLogFileFormatV2, "cp",
+		"default", "test-cf11", common.DefaultDDLLogFileType, 10,
+		uuidGen.NewString(), common.LogEXT)
 	path = filepath.Join(dir, fileName)
 	_, err = os.Create(path)
 	require.Nil(t, err)
 
 	// SortLogEXT, wil open
-	fileName = fmt.Sprintf("%s_%s_%s_%d_%s_%d%s", "cp",
-		"default", "test-cf111",
-		time.Now().Unix(), common.DefaultDDLLogFileType, 10, common.LogEXT) + common.SortLogEXT
+	fileName = fmt.Sprintf(common.RedoLogFileFormatV2, "cp", "default",
+		"test-cf111", common.DefaultDDLLogFileType, 10, uuidGen.NewString(),
+		common.LogEXT) + common.SortLogEXT
 	path = filepath.Join(dir, fileName)
 	f1, err := os.Create(path)
 	require.Nil(t, err)
@@ -156,9 +161,8 @@ func TestReaderOpenSelectedFiles(t *testing.T) {
 	dir1, err := ioutil.TempDir("", "redo-openSelectedFiles1")
 	require.Nil(t, err)
 	defer os.RemoveAll(dir1) //nolint:errcheck
-	fileName = fmt.Sprintf("%s_%s_%s_%d_%s_%d%s", "cp",
-		"default", "test-cf",
-		time.Now().Unix(), common.DefaultDDLLogFileType, 11, common.LogEXT+"test")
+	fileName = fmt.Sprintf(common.RedoLogFileFormatV2, "cp", "default", "test-cf",
+		common.DefaultDDLLogFileType, 11, uuidGen.NewString(), common.LogEXT+"test")
 	path = filepath.Join(dir1, fileName)
 	_, err = os.Create(path)
 	require.Nil(t, err)
