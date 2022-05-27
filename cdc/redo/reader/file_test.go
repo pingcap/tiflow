@@ -79,13 +79,9 @@ func TestReaderRead(t *testing.T) {
 	err = w.Close()
 	require.Nil(t, err)
 	require.True(t, !w.IsRunning())
-<<<<<<< HEAD
-	fileName := fmt.Sprintf("%s_%s_%d_%s_%d%s", cfg.CaptureID, cfg.ChangeFeedID, cfg.CreateTime.Unix(), cfg.FileType, 11, common.LogEXT)
-=======
 	fileName := fmt.Sprintf(common.RedoLogFileFormatV1, cfg.CaptureID,
-		cfg.ChangeFeedID.ID,
+		cfg.ChangeFeedID,
 		cfg.FileType, 11, uuidGen.NewString(), common.LogEXT)
->>>>>>> c467834a6 (redo(ticdc): use uuid in s3 log file to avoid name conflict (#5595))
 	path := filepath.Join(cfg.Dir, fileName)
 	info, err := os.Stat(path)
 	require.Nil(t, err)
@@ -118,14 +114,10 @@ func TestReaderOpenSelectedFiles(t *testing.T) {
 		MaxLogSize: 100000,
 		Dir:        dir,
 	}
-<<<<<<< HEAD
-	fileName := fmt.Sprintf("%s_%s_%d_%s_%d%s", "cp", "test-cf", time.Now().Unix(), common.DefaultDDLLogFileType, 11, common.LogEXT+common.TmpEXT)
-=======
 	uuidGen := uuid.NewGenerator()
-	fileName := fmt.Sprintf(common.RedoLogFileFormatV2, "cp",
-		"default", "test-cf", common.DefaultDDLLogFileType, 11,
+	fileName := fmt.Sprintf(common.RedoLogFileFormatV1, "cp",
+		"test-cf", common.DefaultDDLLogFileType, 11,
 		uuidGen.NewString(), common.LogEXT+common.TmpEXT)
->>>>>>> c467834a6 (redo(ticdc): use uuid in s3 log file to avoid name conflict (#5595))
 	w, err := writer.NewWriter(ctx, cfg, writer.WithLogFileName(func() string {
 		return fileName
 	}))
@@ -151,25 +143,17 @@ func TestReaderOpenSelectedFiles(t *testing.T) {
 	require.Nil(t, err)
 
 	// no data, wil not open
-<<<<<<< HEAD
-	fileName = fmt.Sprintf("%s_%s_%d_%s_%d%s", "cp", "test-cf11", time.Now().Unix(), common.DefaultDDLLogFileType, 10, common.LogEXT)
-=======
-	fileName = fmt.Sprintf(common.RedoLogFileFormatV2, "cp",
-		"default", "test-cf11", common.DefaultDDLLogFileType, 10,
+	fileName = fmt.Sprintf(common.RedoLogFileFormatV1, "cp",
+		"test-cf11", common.DefaultDDLLogFileType, 10,
 		uuidGen.NewString(), common.LogEXT)
->>>>>>> c467834a6 (redo(ticdc): use uuid in s3 log file to avoid name conflict (#5595))
 	path = filepath.Join(dir, fileName)
 	_, err = os.Create(path)
 	require.Nil(t, err)
 
 	// SortLogEXT, wil open
-<<<<<<< HEAD
-	fileName = fmt.Sprintf("%s_%s_%d_%s_%d%s", "cp", "test-cf111", time.Now().Unix(), common.DefaultDDLLogFileType, 10, common.LogEXT) + common.SortLogEXT
-=======
-	fileName = fmt.Sprintf(common.RedoLogFileFormatV2, "cp", "default",
+	fileName = fmt.Sprintf(common.RedoLogFileFormatV1, "cp",
 		"test-cf111", common.DefaultDDLLogFileType, 10, uuidGen.NewString(),
 		common.LogEXT) + common.SortLogEXT
->>>>>>> c467834a6 (redo(ticdc): use uuid in s3 log file to avoid name conflict (#5595))
 	path = filepath.Join(dir, fileName)
 	f1, err := os.Create(path)
 	require.Nil(t, err)
@@ -177,12 +161,8 @@ func TestReaderOpenSelectedFiles(t *testing.T) {
 	dir1, err := ioutil.TempDir("", "redo-openSelectedFiles1")
 	require.Nil(t, err)
 	defer os.RemoveAll(dir1) //nolint:errcheck
-<<<<<<< HEAD
-	fileName = fmt.Sprintf("%s_%s_%d_%s_%d%s", "cp", "test-cf", time.Now().Unix(), common.DefaultDDLLogFileType, 11, common.LogEXT+"test")
-=======
-	fileName = fmt.Sprintf(common.RedoLogFileFormatV2, "cp", "default", "test-cf",
+	fileName = fmt.Sprintf(common.RedoLogFileFormatV1, "cp", "test-cf",
 		common.DefaultDDLLogFileType, 11, uuidGen.NewString(), common.LogEXT+"test")
->>>>>>> c467834a6 (redo(ticdc): use uuid in s3 log file to avoid name conflict (#5595))
 	path = filepath.Join(dir1, fileName)
 	_, err = os.Create(path)
 	require.Nil(t, err)
