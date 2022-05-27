@@ -26,10 +26,10 @@ import (
 	"github.com/pingcap/tiflow/engine/pb"
 	"github.com/pingcap/tiflow/engine/pkg/errors"
 	"github.com/pingcap/tiflow/engine/pkg/notifier"
-	"github.com/pingcap/tiflow/engine/pkg/uuid"
 	"github.com/pingcap/tiflow/engine/servermaster/resource"
 	"github.com/pingcap/tiflow/engine/servermaster/scheduler"
 	"github.com/pingcap/tiflow/engine/test"
+	"github.com/pingcap/tiflow/pkg/uuid"
 )
 
 // ExecutorManager defines an interface to manager all executors
