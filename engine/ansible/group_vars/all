@@ -1,0 +1,29 @@
+cluster_name: hanfei
+
+master_port: 10240
+
+master_peer_port: 8291
+
+executor_port: 10241
+
+df_data_prefix: /data/df-data-{{ cluster_name }}
+df_bin_dir: "{{ df_data_prefix }}/bin"
+df_script_dir: "{{ df_data_prefix }}/script"
+df_config_dir: "{{ df_data_prefix }}/config"
+df_log_dir: "{{ df_data_prefix }}/log"
+df_file_dir: "/tmp/{{ df_data_prefix }}"
+
+log_level: info
+df_executor_std_log: "{{ df_log_dir }}/executor_std.log"
+
+etcd_version: 3.5.2
+etcd_peer_port: 2379
+etcd_port: 2380
+etcd_dir: "{{ df_data_prefix }}/etcd"
+
+prom_version: 2.34.0
+prom_port: 9090
+prom_data_dir: "{{ df_data_prefix}}/prometheus"
+
+node_exporter_version: 1.3.1
+

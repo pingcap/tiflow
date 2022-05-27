@@ -139,7 +139,7 @@ function test_list_member() {
 
 		# kill leader
 		echo "kill leader" $leader
-		ps aux | grep $leader | awk '{print $2}' | xargs kill || true
+		kill_process $leader
 		check_master_port_offline $leader_idx
 	done
 
@@ -179,7 +179,7 @@ function test_list_member() {
 			continue
 		fi
 		echo "kill master$idx"
-		ps aux | grep dm-master$idx | awk '{print $2}' | xargs kill || true
+		kill_process dm-master$idx
 		check_master_port_offline $idx
 		sleep 5
 		run_dm_master $WORK_DIR/master${idx} ${master_ports[$idx]} $cur/conf/dm-master${idx}.toml
@@ -216,7 +216,7 @@ function test_list_member() {
 
 	# kill worker
 	echo "kill worker1"
-	ps aux | grep dm-worker1 | awk '{print $2}' | xargs kill || true
+	kill_process dm-worker1
 	check_port_offline $WORKER1_PORT 20
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
@@ -226,7 +226,7 @@ function test_list_member() {
 
 	# kill worker
 	echo "kill worker2"
-	ps aux | grep dm-worker2 | awk '{print $2}' | xargs kill || true
+	kill_process dm-worker2
 	check_port_offline $WORKER2_PORT 20
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
@@ -283,9 +283,9 @@ function run() {
 
 	# kill dm-master1 and dm-master2 to simulate the first two dm-master addr in join config are invalid
 	echo "kill dm-master1 and kill dm-master2"
-	ps aux | grep dm-master1 | awk '{print $2}' | xargs kill || true
+	kill_process dm-master1
 	check_master_port_offline 1
-	ps aux | grep dm-master2 | awk '{print $2}' | xargs kill || true
+	kill_process dm-master2
 	check_master_port_offline 2
 
 	# wait for master switch leader and re-setup
@@ -335,9 +335,9 @@ function run() {
 	run_sql "flush logs;" $MYSQL_PORT2 $MYSQL_PASSWORD2
 
 	echo "kill dm-master1 and kill dm-master2"
-	ps aux | grep dm-master1 | awk '{print $2}' | xargs kill || true
+	kill_process dm-master1
 	check_master_port_offline 1
-	ps aux | grep dm-master2 | awk '{print $2}' | xargs kill || true
+	kill_process dm-master2
 	check_master_port_offline 2
 
 	echo "wait and check task running"
@@ -361,7 +361,7 @@ function run() {
 		"\"result\": true" 1
 
 	echo "kill dm-master3"
-	ps aux | grep dm-master3 | awk '{print $2}' | xargs kill || true
+	kill_process dm-master3
 	check_master_port_offline 3
 
 	sleep 2

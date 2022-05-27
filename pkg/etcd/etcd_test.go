@@ -70,7 +70,9 @@ func (s *etcdTester) setUpTest(t *testing.T) {
 		LogConfig:   &logConfig,
 	})
 	require.NoError(t, err)
-	s.client = NewCDCEtcdClient(context.TODO(), client, DefaultCDCClusterID)
+
+	s.client, err = NewCDCEtcdClient(context.TODO(), client, DefaultCDCClusterID)
+	require.Nil(t, err)
 	s.ctx, s.cancel = context.WithCancel(context.Background())
 	s.errg = util.HandleErrWithErrGroup(s.ctx, s.etcd.Err(), func(e error) { t.Log(e) })
 }

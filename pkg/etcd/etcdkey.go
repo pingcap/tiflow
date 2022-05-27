@@ -140,6 +140,7 @@ func (k *CDCKey) Parse(clusterID, key string) error {
 			}
 			k.OwnerLeaseID = ""
 		case strings.HasPrefix(key, changefeedStatusKey):
+
 			k.Tp = CDCKeyTypeChangeFeedStatus
 			k.CaptureID = ""
 			k.ChangefeedID = model.ChangeFeedID{
@@ -180,6 +181,7 @@ func (k *CDCKey) String() string {
 			"/" + k.ChangefeedID.ID
 	case CDCKeyTypeChangeFeedStatus:
 		return NamespacedPrefix(k.ClusterID, k.ChangefeedID.Namespace) + changefeedStatusKey +
+
 			"/" + k.ChangefeedID.ID
 	case CDCKeyTypeTaskPosition:
 		return NamespacedPrefix(k.ClusterID, k.ChangefeedID.Namespace) + taskPositionKey +

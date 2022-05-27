@@ -115,7 +115,7 @@ func (s *Server) getSourceStatusListFromWorker(ctx context.Context, sourceName s
 
 func (s *Server) createSource(ctx context.Context, req openapi.CreateSourceRequest) (*openapi.Source, error) {
 	cfg := config.OpenAPISourceToSourceCfg(req.Source)
-	if err := checkAndAdjustSourceConfigFunc(ctx, cfg); err != nil {
+	if err := CheckAndAdjustSourceConfigFunc(ctx, cfg); err != nil {
 		return nil, err
 	}
 
@@ -148,7 +148,7 @@ func (s *Server) updateSource(ctx context.Context, sourceName string, req openap
 		newCfg.From.Password = oldCfg.From.Password
 	}
 
-	if err := checkAndAdjustSourceConfigFunc(ctx, newCfg); err != nil {
+	if err := CheckAndAdjustSourceConfigFunc(ctx, newCfg); err != nil {
 		return nil, err
 	}
 	if err := s.scheduler.UpdateSourceCfg(newCfg); err != nil {

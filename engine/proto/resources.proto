@@ -1,0 +1,50 @@
+syntax = "proto3";
+
+package pb;
+
+service ResourceManager {
+  rpc CreateResource(CreateResourceRequest) returns (CreateResourceResponse){}
+  rpc QueryResource(QueryResourceRequest) returns (QueryResourceResponse){}
+
+  // RemoveResource cleans up the metadata only of the resource.
+  // The invoker should handle the actual cleaning up on its own.
+  rpc RemoveResource(RemoveResourceRequest) returns (RemoveResourceResponse){}
+}
+
+message CreateResourceRequest {
+  string resource_id = 1;
+  string creator_executor = 2;
+  string job_id = 3;
+  string creator_worker_id = 4;
+}
+
+message CreateResourceResponse {}
+
+message QueryResourceRequest {
+  string resource_id = 1;
+}
+
+message QueryResourceResponse {
+  string creator_executor = 2;
+  string job_id = 3;
+  string creator_worker_id = 4;
+}
+
+message RemoveResourceRequest {
+  string resource_id = 1;
+}
+
+message RemoveResourceResponse {}
+
+message ResourceError {
+  ResourceErrorCode error_code = 1;
+  string stack_trace = 2;
+}
+
+enum ResourceErrorCode {
+  ResourceIDConflict = 0;
+  ResourceTypeUnrecognized = 1;
+  ResourceManagerInternalError = 2;
+  ResourceNotFound = 3;
+}
+

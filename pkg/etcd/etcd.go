@@ -57,6 +57,7 @@ func TaskPositionKeyPrefix(clusterID, namespace string) string {
 // ChangefeedStatusKeyPrefix is the prefix of changefeed status keys
 func ChangefeedStatusKeyPrefix(clusterID, namespace string) string {
 	return NamespacedPrefix(clusterID, namespace) + changefeedStatusKey
+
 }
 
 // GetEtcdKeyChangeFeedList returns the prefix key of all changefeed config
@@ -91,15 +92,16 @@ func GetEtcdKeyJob(clusterID string, changeFeedID model.ChangeFeedID) string {
 
 // CDCEtcdClient is a wrap of etcd client
 type CDCEtcdClient struct {
-	Client    *Client
-	ClusterID string
+	Client        *Client
+	ClusterID     string
+	etcdClusterID uint64
 }
 
 // NewCDCEtcdClient returns a new CDCEtcdClient
 func NewCDCEtcdClient(ctx context.Context,
 	cli *clientv3.Client,
 	clusterID string,
-) CDCEtcdClient {
+) (CDCEtcdClient, error) {
 	metrics := map[string]prometheus.Counter{
 		EtcdPut:    etcdRequestCounter.WithLabelValues(EtcdPut),
 		EtcdGet:    etcdRequestCounter.WithLabelValues(EtcdGet),
@@ -108,10 +110,15 @@ func NewCDCEtcdClient(ctx context.Context,
 		EtcdGrant:  etcdRequestCounter.WithLabelValues(EtcdGrant),
 		EtcdRevoke: etcdRequestCounter.WithLabelValues(EtcdRevoke),
 	}
-	return CDCEtcdClient{
-		Client:    Wrap(cli, metrics),
-		ClusterID: clusterID,
+	resp, err := cli.MemberList(ctx)
+	if err != nil {
+		return CDCEtcdClient{}, err
 	}
+	return CDCEtcdClient{
+		etcdClusterID: resp.Header.ClusterId,
+		Client:        Wrap(cli, metrics),
+		ClusterID:     clusterID,
+	}, nil
 }
 
 // Close releases resources in CDCEtcdClient
@@ -210,6 +217,7 @@ func (c CDCEtcdClient) GetAllChangeFeedStatus(ctx context.Context) (
 ) {
 	// todo: support namespace
 	key := ChangefeedStatusKeyPrefix(c.ClusterID, model.DefaultNamespace)
+
 	resp, err := c.Client.Get(ctx, key, clientv3.WithPrefix())
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
@@ -503,6 +511,21 @@ func (c CDCEtcdClient) GetOwnerRevision(ctx context.Context, captureID string) (
 		return 0, cerror.ErrNotOwner.GenWithStackByArgs()
 	}
 	return resp.Kvs[0].ModRevision, nil
+}
+
+// GetGCServiceID returns the cdc gc service ID
+func (c CDCEtcdClient) GetGCServiceID() string {
+	return fmt.Sprintf("ticdc-%s-%d", c.ClusterID, c.etcdClusterID)
+}
+
+// GetEnsureGCServiceID return the prefix for the gc service id when changefeed is creating
+func (c CDCEtcdClient) GetEnsureGCServiceID() string {
+	return c.GetGCServiceID() + "-creating-"
+}
+
+// GcServiceIDForTest returns the gc service ID for tests
+func GcServiceIDForTest() string {
+	return fmt.Sprintf("ticdc-%s-%d", "default", 0)
 }
 
 // getFreeListenURLs get free ports and localhost as url.

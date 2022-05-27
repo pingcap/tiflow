@@ -3070,6 +3070,12 @@ description = ""
 workaround = ""
 tags = ["internal", "high"]
 
+[error.DM-validator-43008]
+message = "too much pending data, stop validator. row size(curr/max): %d/%d, row count(curr/max): %d/%d"
+description = ""
+workaround = ""
+tags = ["internal", "medium"]
+
 [error.DM-schema-tracker-44001]
 message = "saved schema of `%s`.`%s` is not proper JSON"
 description = ""

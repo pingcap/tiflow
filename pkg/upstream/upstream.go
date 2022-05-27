@@ -26,6 +26,7 @@ import (
 	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	"github.com/pingcap/tiflow/pkg/version"
@@ -86,7 +87,9 @@ func newUpstream(upstreamID uint64, pdEndpoints []string, securityConfig *config
 // NewUpstream4Test new a upstream for unit test.
 func NewUpstream4Test(pdClient pd.Client) *Upstream {
 	pdClock := pdutil.NewClock4Test()
-	gcManager := gc.NewManager(pdClient, pdClock)
+	gcManager := gc.NewManager(
+		etcd.GcServiceIDForTest(),
+		pdClient, pdClock)
 	res := &Upstream{
 		ID:       DefaultUpstreamID,
 		PDClient: pdClient, PDClock: pdClock, GCManager: gcManager,
@@ -101,7 +104,7 @@ func NewUpstream4Test(pdClient pd.Client) *Upstream {
 	return res
 }
 
-func (up *Upstream) init(ctx context.Context) error {
+func (up *Upstream) init(ctx context.Context, gcServiceID string) error {
 	log.Info("upstream is initializing", zap.Uint64("upstreamID", up.ID))
 	var err error
 
@@ -156,7 +159,7 @@ func (up *Upstream) init(ctx context.Context) error {
 	}
 	log.Info("upstream's PDClock created", zap.Uint64("upstreamID", up.ID))
 
-	up.GCManager = gc.NewManager(up.PDClient, up.PDClock)
+	up.GCManager = gc.NewManager(gcServiceID, up.PDClient, up.PDClock)
 	log.Info("upstream's GCManager created", zap.Uint64("upstreamID", up.ID))
 
 	// Update meta-region label to ensure that meta region isolated from data regions.
