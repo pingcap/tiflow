@@ -14,8 +14,8 @@
 package schedulepb
 
 import (
-	fmt "fmt"
-	testing "testing"
+	"fmt"
+	"testing"
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -24,24 +24,26 @@ import (
 func benchmarkMessageHeartbeatResponse(b *testing.B, bench func(b *testing.B, m *Message)) {
 	size := 16384
 	for total := 1; total <= size; total *= 2 {
-		var tables []TableStatus
-		for i := 0; i < total; i++ {
-			tables = append(tables, TableStatus{
-				TableID: model.TableID(i),
-				State:   TableStateReplicating,
-				Checkpoint: Checkpoint{
-					CheckpointTs: 433331421532337260,
-					ResolvedTs:   433331421532337261,
-				},
-			})
-		}
 		msg := Message{
 			MsgType: MsgHeartbeatResponse,
 			HeartbeatResponse: &HeartbeatResponse{
-				Tables:     tables,
+				Tables:     make([]TableStatus, 0, total),
 				IsStopping: false,
 			},
 		}
+
+		for i := 0; i < total; i++ {
+			msg.HeartbeatResponse.Tables = append(msg.HeartbeatResponse.Tables,
+				TableStatus{
+					TableID: model.TableID(i),
+					State:   TableStateReplicating,
+					Checkpoint: Checkpoint{
+						CheckpointTs: 433331421532337260,
+						ResolvedTs:   433331421532337261,
+					},
+				})
+		}
+
 		b.ResetTimer()
 		bench(b, &msg)
 		b.StopTimer()
@@ -52,15 +54,15 @@ func BenchmarkMessageHeartbeatResponseProtoMarshal(b *testing.B) {
 	benchmarkMessageHeartbeatResponse(b, func(b *testing.B, m *Message) {
 		total := len(m.HeartbeatResponse.Tables)
 		b.Run(fmt.Sprintf("%d checkpoints(s) marshal", total), func(b *testing.B) {
-			size := 0
+			totalLen := 0
 			for i := 0; i < b.N; i++ {
 				bytes, err := proto.Marshal(m)
 				if err != nil {
 					panic(err)
 				}
-				size += len(bytes)
+				totalLen += len(bytes)
 			}
-			b.SetBytes(int64(size / b.N))
+			b.SetBytes(int64(totalLen / b.N))
 		})
 	})
 }
