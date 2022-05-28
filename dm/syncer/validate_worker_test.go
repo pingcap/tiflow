@@ -323,7 +323,7 @@ func TestValidatorWorkerValidateTableChanges(t *testing.T) {
 func TestValidatorWorkerCompareData(t *testing.T) {
 	compareContext := validateCompareContext{
 		logger:  log.L(),
-		columns: []*model.ColumnInfo{{FieldType: types.FieldType{Tp: mysql.TypeLong}}},
+		columns: []*model.ColumnInfo{{FieldType: *types.NewFieldType(mysql.TypeLong)}},
 	}
 	eq, err := compareContext.compareData("", []*sql.NullString{{String: "1", Valid: true}}, []*sql.NullString{{Valid: false}})
 	require.NoError(t, err)
@@ -331,7 +331,7 @@ func TestValidatorWorkerCompareData(t *testing.T) {
 
 	compareContext = validateCompareContext{
 		logger:  log.L(),
-		columns: []*model.ColumnInfo{{FieldType: types.FieldType{Tp: mysql.TypeFloat}}},
+		columns: []*model.ColumnInfo{{FieldType: *types.NewFieldType(mysql.TypeFloat)}},
 	}
 	eq, err = compareContext.compareData("", []*sql.NullString{{String: "1.1", Valid: true}}, []*sql.NullString{{String: "1.x", Valid: true}})
 	require.Error(t, err)
@@ -339,7 +339,7 @@ func TestValidatorWorkerCompareData(t *testing.T) {
 
 	compareContext = validateCompareContext{
 		logger:  log.L(),
-		columns: []*model.ColumnInfo{{FieldType: types.FieldType{Tp: mysql.TypeFloat}}},
+		columns: []*model.ColumnInfo{{FieldType: *types.NewFieldType(mysql.TypeFloat)}},
 	}
 	eq, err = compareContext.compareData("", []*sql.NullString{{String: "1.1", Valid: true}}, []*sql.NullString{{String: "1.1000011", Valid: true}})
 	require.NoError(t, err)
@@ -347,7 +347,7 @@ func TestValidatorWorkerCompareData(t *testing.T) {
 
 	compareContext = validateCompareContext{
 		logger:  log.L(),
-		columns: []*model.ColumnInfo{{FieldType: types.FieldType{Tp: mysql.TypeFloat}}},
+		columns: []*model.ColumnInfo{{FieldType: *types.NewFieldType(mysql.TypeFloat)}},
 	}
 	eq, err = compareContext.compareData("", []*sql.NullString{{String: "1.1", Valid: true}}, []*sql.NullString{{String: "1.1000001", Valid: true}})
 	require.NoError(t, err)
@@ -355,7 +355,7 @@ func TestValidatorWorkerCompareData(t *testing.T) {
 
 	compareContext = validateCompareContext{
 		logger:  log.L(),
-		columns: []*model.ColumnInfo{{FieldType: types.FieldType{Tp: mysql.TypeDouble}}},
+		columns: []*model.ColumnInfo{{FieldType: *types.NewFieldType(mysql.TypeDouble)}},
 	}
 	eq, err = compareContext.compareData("", []*sql.NullString{{String: "1.1", Valid: true}}, []*sql.NullString{{String: "1.1000001", Valid: true}})
 	require.NoError(t, err)
@@ -363,7 +363,7 @@ func TestValidatorWorkerCompareData(t *testing.T) {
 
 	compareContext = validateCompareContext{
 		logger:  log.L(),
-		columns: []*model.ColumnInfo{{FieldType: types.FieldType{Tp: mysql.TypeLong}}},
+		columns: []*model.ColumnInfo{{FieldType: *types.NewFieldType(mysql.TypeLong)}},
 	}
 	eq, err = compareContext.compareData("", []*sql.NullString{{String: "1", Valid: true}}, []*sql.NullString{{String: "1", Valid: true}})
 	require.NoError(t, err)
@@ -371,7 +371,7 @@ func TestValidatorWorkerCompareData(t *testing.T) {
 
 	compareContext = validateCompareContext{
 		logger:  log.L(),
-		columns: []*model.ColumnInfo{{FieldType: types.FieldType{Tp: mysql.TypeVarchar}}},
+		columns: []*model.ColumnInfo{{FieldType: *types.NewFieldType(mysql.TypeVarchar)}},
 	}
 	eq, err = compareContext.compareData("", []*sql.NullString{{String: "aaa", Valid: true}}, []*sql.NullString{{String: "aaa", Valid: true}})
 	require.NoError(t, err)
@@ -379,7 +379,7 @@ func TestValidatorWorkerCompareData(t *testing.T) {
 
 	compareContext = validateCompareContext{
 		logger:  log.L(),
-		columns: []*model.ColumnInfo{{FieldType: types.FieldType{Tp: mysql.TypeVarString}}},
+		columns: []*model.ColumnInfo{{FieldType: *types.NewFieldType(mysql.TypeVarString)}},
 	}
 	eq, err = compareContext.compareData("", []*sql.NullString{{String: "\x01\x02", Valid: true}}, []*sql.NullString{{String: "\x01\x02", Valid: true}})
 	require.NoError(t, err)

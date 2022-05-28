@@ -450,7 +450,7 @@ func (c *validateCompareContext) compareData(key string, sourceData, targetData 
 		str1, str2 := data1.String, data2.String
 		if str1 == str2 {
 			continue
-		} else if column.FieldType.Tp == tidbmysql.TypeFloat || column.FieldType.Tp == tidbmysql.TypeDouble {
+		} else if column.FieldType.GetType() == tidbmysql.TypeFloat || column.FieldType.GetType() == tidbmysql.TypeDouble {
 			// source and target data have different precision?
 			num1, err1 := strconv.ParseFloat(str1, 64)
 			num2, err2 := strconv.ParseFloat(str2, 64)
