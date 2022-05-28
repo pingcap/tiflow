@@ -258,6 +258,9 @@ func (m *ManagerImpl) TryEmitRowChangedEvents(
 // error ErrBufferLogTimeout will be returned.
 // TODO: if the API is truly non-blocking, we should return an error immediately
 // when the log buffer channel is full.
+// TODO: After buffer sink in sink node is removed, there is no batch mechanism
+// before sending row changed events to redo manager, the original log buffer
+// design may have performance issue.
 func (m *ManagerImpl) EmitRowChangedEvents(
 	ctx context.Context,
 	tableID model.TableID,
