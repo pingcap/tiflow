@@ -22,6 +22,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/cdc/contextutil"
@@ -121,6 +122,11 @@ type ManagerOptions struct {
 type cacheRows struct {
 	tableID model.TableID
 	rows    []*model.RowChangedEvent
+	// When calling FlushLog for a table, we must ensure that all data of this
+	// table has been written to underlying writer. Since the EmitRowChangedEvents
+	// and FlushLog of the same table can't be executed concurrently, we can
+	// insert a simple barrier data into data stream to achieve this goal.
+	flushCallback chan struct{}
 }
 
 // ManagerImpl manages redo log writer, buffers un-persistent redo logs, calculates
@@ -286,6 +292,20 @@ func (m *ManagerImpl) FlushLog(
 		return nil
 	}
 	defer atomic.StoreInt64(&m.flushing, 0)
+
+	// Adding a barrier to data stream, to ensure all logs of this table has been
+	// written to underlying writer.
+	flushCh := make(chan struct{})
+	m.logBuffer <- cacheRows{
+		tableID:       tableID,
+		flushCallback: flushCh,
+	}
+	select {
+	case <-ctx.Done():
+		return errors.Trace(ctx.Err())
+	case <-flushCh:
+	}
+
 	return m.writer.FlushLog(ctx, tableID, resolvedTs)
 }
 
@@ -400,6 +420,10 @@ func (m *ManagerImpl) bgWriteLog(ctx context.Context, errCh chan<- error) {
 		case <-ctx.Done():
 			return
 		case cache := <-m.logBuffer:
+			if cache.flushCallback != nil {
+				close(cache.flushCallback)
+				continue
+			}
 			logs := make([]*model.RedoRowChangedEvent, 0, len(cache.rows))
 			for _, row := range cache.rows {
 				logs = append(logs, RowToRedo(row))
