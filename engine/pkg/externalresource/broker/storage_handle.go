@@ -18,8 +18,10 @@ import (
 
 	"github.com/pingcap/errors"
 	brStorage "github.com/pingcap/tidb/br/pkg/storage"
+	"go.uber.org/atomic"
 
 	"github.com/pingcap/tiflow/engine/pb"
+	derrors "github.com/pingcap/tiflow/engine/pkg/errors"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
 )
@@ -32,33 +34,69 @@ type Handle interface {
 	Discard(ctx context.Context) error
 }
 
-// BrExternalStorageHandle contains a brStorage.ExternalStorage.
+// LocalResourceHandle contains a brStorage.ExternalStorage.
 // It helps Dataflow Engine reuse the external storage facilities
 // implemented in Br.
-type BrExternalStorageHandle struct {
+type LocalResourceHandle struct {
 	id         resModel.ResourceID
-	name       resModel.ResourceName
 	jobID      resModel.JobID
-	workerID   resModel.WorkerID
 	executorID resModel.ExecutorID
+	desc       *resModel.LocalFileResourceDescriptor
 
-	inner       brStorage.ExternalStorage
-	client      *rpcutil.FailoverRPCClients[pb.ResourceManagerClient]
+	inner  brStorage.ExternalStorage
+	client *rpcutil.FailoverRPCClients[pb.ResourceManagerClient]
+
 	fileManager FileManager
+
+	// isPersisted should be set to true if the
+	// resource has been registered with the servermaster.
+	isPersisted atomic.Bool
+	isInvalid   atomic.Bool
+}
+
+func newLocalResourceHandle(
+	resourceID resModel.ResourceID,
+	jobID resModel.JobID,
+	executorID resModel.ExecutorID,
+	fm FileManager,
+	desc *resModel.LocalFileResourceDescriptor,
+	client ResourceManagerClient,
+) (*LocalResourceHandle, error) {
+	ls, err := newBrStorageForLocalFile(desc.AbsolutePath())
+	if err != nil {
+		return nil, err
+	}
+
+	return &LocalResourceHandle{
+		id:         resourceID,
+		jobID:      jobID,
+		executorID: executorID,
+
+		inner:  ls,
+		client: client,
+		desc:   desc,
+
+		fileManager: fm,
+	}, nil
 }
 
 // ID implements Handle.ID
-func (h *BrExternalStorageHandle) ID() resModel.ResourceID {
+func (h *LocalResourceHandle) ID() resModel.ResourceID {
 	return h.id
 }
 
 // BrExternalStorage implements Handle.BrExternalStorage
-func (h *BrExternalStorageHandle) BrExternalStorage() brStorage.ExternalStorage {
+func (h *LocalResourceHandle) BrExternalStorage() brStorage.ExternalStorage {
 	return h.inner
 }
 
 // Persist implements Handle.Persist
-func (h *BrExternalStorageHandle) Persist(ctx context.Context) error {
+func (h *LocalResourceHandle) Persist(ctx context.Context) error {
+	if h.isInvalid.Load() {
+		// Trying to persist invalid resource.
+		return derrors.ErrInvalidResourceHandle.FastGenByArgs()
+	}
+
 	_, err := rpcutil.DoFailoverRPC(
 		ctx,
 		h.client,
@@ -66,7 +104,7 @@ func (h *BrExternalStorageHandle) Persist(ctx context.Context) error {
 			ResourceId:      h.id,
 			CreatorExecutor: string(h.executorID),
 			JobId:           h.jobID,
-			CreatorWorkerId: h.workerID,
+			CreatorWorkerId: h.desc.Creator,
 		},
 		pb.ResourceManagerClient.CreateResource,
 	)
@@ -75,13 +113,41 @@ func (h *BrExternalStorageHandle) Persist(ctx context.Context) error {
 		// We do not need to handle it for now, as the
 		// dangling meta records will be cleaned up by
 		// garbage collection eventually.
+		// TODO proper retrying.
 		return errors.Trace(err)
 	}
-	h.fileManager.SetPersisted(h.workerID, h.name)
+	// We only support local file resources, so fileManager is never nil.
+	h.fileManager.SetPersisted(h.desc.Creator, h.desc.ResourceName)
+	h.isPersisted.Store(true)
 	return nil
 }
 
 // Discard implements Handle.Discard
-func (h *BrExternalStorageHandle) Discard(ctx context.Context) error {
+func (h *LocalResourceHandle) Discard(ctx context.Context) error {
+	if h.isInvalid.Load() {
+		// Trying to discard invalid resource.
+		return derrors.ErrInvalidResourceHandle.FastGenByArgs()
+	}
+
+	err := h.fileManager.RemoveResource(h.desc.Creator, h.desc.ResourceName)
+	if err != nil {
+		return err
+	}
+
+	if h.isPersisted.Load() {
+		_, err := rpcutil.DoFailoverRPC(ctx,
+			h.client,
+			&pb.RemoveResourceRequest{
+				ResourceId: h.id,
+			},
+			pb.ResourceManagerClient.RemoveResource)
+		if err != nil {
+			// TODO proper retrying.
+			return errors.Trace(err)
+		}
+		h.isPersisted.Store(false)
+	}
+
+	h.isInvalid.Store(true)
 	return nil
 }
