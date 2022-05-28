@@ -295,15 +295,15 @@ func (m *ManagerImpl) FlushLog(
 
 	// Adding a barrier to data stream, to ensure all logs of this table has been
 	// written to underlying writer.
-	flushCh := make(chan struct{})
+	flushCallbackCh := make(chan struct{})
 	m.logBuffer <- cacheRows{
 		tableID:       tableID,
-		flushCallback: flushCh,
+		flushCallback: flushCallbackCh,
 	}
 	select {
 	case <-ctx.Done():
 		return errors.Trace(ctx.Err())
-	case <-flushCh:
+	case <-flushCallbackCh:
 	}
 
 	return m.writer.FlushLog(ctx, tableID, resolvedTs)
