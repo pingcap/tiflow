@@ -76,12 +76,6 @@ func (r *replicationManager) HandleMessage(
 	for i := range msgs {
 		msg := msgs[i]
 		switch msg.MsgType {
-		case schedulepb.MsgCheckpoint:
-			msgs, err := r.handleMessageCheckpoint(msg.Checkpoints)
-			if err != nil {
-				return nil, errors.Trace(err)
-			}
-			sentMegs = append(sentMegs, msgs...)
 		case schedulepb.MsgDispatchTableResponse:
 			msgs, err := r.handleMessageDispatchTableResponse(msg.From, msg.DispatchTableResponse)
 			if err != nil {
@@ -154,12 +148,6 @@ func (r *replicationManager) handleMessageDispatchTableResponse(
 		delete(r.tables, status.TableID)
 	}
 	return msgs, nil
-}
-
-func (r *replicationManager) handleMessageCheckpoint(
-	checkpoints map[model.TableID]schedulepb.Checkpoint,
-) ([]*schedulepb.Message, error) {
-	return nil, nil
 }
 
 func (r *replicationManager) HandleTasks(

@@ -95,8 +95,8 @@ func (c *captureManager) CaptureTableSets() map[model.CaptureID]*CaptureStatus {
 }
 
 func (c *captureManager) CheckAllCaptureInitialized() bool {
-	for _, captrueStatus := range c.Captures {
-		if captrueStatus.State == CaptureStateUninitialize {
+	for _, captureStatus := range c.Captures {
+		if captureStatus.State == CaptureStateUninitialize {
 			return false
 		}
 	}
