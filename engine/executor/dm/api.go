@@ -23,7 +23,7 @@ import (
 )
 
 // QueryStatus implements the api of query status request.
-func (t *baseTask) QueryStatus(ctx context.Context, req *dmpkg.QueryStatusRequest) *dmpkg.QueryStatusResponse {
+func (t *dmWorker) QueryStatus(ctx context.Context, req *dmpkg.QueryStatusRequest) *dmpkg.QueryStatusResponse {
 	// get status from unit
 	status := t.unitHolder.Status(ctx)
 	// copy status via json
@@ -39,7 +39,7 @@ func (t *baseTask) QueryStatus(ctx context.Context, req *dmpkg.QueryStatusReques
 }
 
 // StopWorker implements the api of stop worker message which kill itself.
-func (t *baseTask) StopWorker(ctx context.Context, msg *dmpkg.StopWorkerMessage) error {
+func (t *dmWorker) StopWorker(ctx context.Context, msg *dmpkg.StopWorkerMessage) error {
 	if t.taskID != msg.Task {
 		return errors.Errorf("task id mismatch, get %s, actually %s", msg.Task, t.taskID)
 	}

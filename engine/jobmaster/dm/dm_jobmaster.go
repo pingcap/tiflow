@@ -233,7 +233,9 @@ outer:
 	}
 
 	// unreigster jobmanager sender
-	jm.messageAgent.UpdateSender(libMetadata.JobManagerUUID, nil)
+	if err := jm.messageAgent.UpdateSender(libMetadata.JobManagerUUID, nil); err != nil {
+		return err
+	}
 	return jm.messageAgent.Close(ctx)
 }
 

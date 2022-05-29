@@ -20,7 +20,6 @@ import (
 
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/dm/pb"
-	"github.com/pingcap/tiflow/engine/executor/dm/unit"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
 	"github.com/pingcap/tiflow/engine/lib"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
@@ -89,27 +88,27 @@ func TestQueryStatusAPI(t *testing.T) {
 	}))
 	dctx = dctx.WithDeps(dp)
 
-	task := newBaseTask(dctx, "master-id", lib.WorkerDMDump, &config.SubTaskConfig{SourceID: "task-id"})
-	unitHolder := &unit.MockHolder{}
-	task.unitHolder = unitHolder
+	dmWorker := newDMWorker(dctx, "", lib.WorkerDMDump, &config.SubTaskConfig{SourceID: "task-id"})
+	unitHolder := &mockUnitHolder{}
+	dmWorker.unitHolder = unitHolder
 
 	unitHolder.On("Status").Return(dumpStatus).Once()
-	task.setStage(metadata.StageRunning)
-	resp := task.QueryStatus(context.Background(), &dmpkg.QueryStatusRequest{Task: "task-id"})
+	dmWorker.setStage(metadata.StageRunning)
+	resp := dmWorker.QueryStatus(context.Background(), &dmpkg.QueryStatusRequest{Task: "task-id"})
 	require.Equal(t, "", resp.ErrorMsg)
 	require.Equal(t, dumpStatusResp, resp)
 
 	unitHolder.On("Status").Return(loadStatus).Once()
-	task.workerType = lib.WorkerDMLoad
-	task.setStage(metadata.StageFinished)
-	resp = task.QueryStatus(context.Background(), &dmpkg.QueryStatusRequest{Task: "task-id"})
+	dmWorker.workerType = lib.WorkerDMLoad
+	dmWorker.setStage(metadata.StageFinished)
+	resp = dmWorker.QueryStatus(context.Background(), &dmpkg.QueryStatusRequest{Task: "task-id"})
 	require.Equal(t, "", resp.ErrorMsg)
 	require.Equal(t, loadStatusResp, resp)
 
 	unitHolder.On("Status").Return(syncStatus).Once()
-	task.workerType = lib.WorkerDMSync
-	task.setStage(metadata.StagePaused)
-	resp = task.QueryStatus(context.Background(), &dmpkg.QueryStatusRequest{Task: "task-id"})
+	dmWorker.workerType = lib.WorkerDMSync
+	dmWorker.setStage(metadata.StagePaused)
+	resp = dmWorker.QueryStatus(context.Background(), &dmpkg.QueryStatusRequest{Task: "task-id"})
 	require.Equal(t, "", resp.ErrorMsg)
 	require.Equal(t, syncStatusResp, resp)
 }
@@ -122,20 +121,12 @@ func TestStopWorker(t *testing.T) {
 	}))
 	dctx = dctx.WithDeps(dp)
 
-	baseTask := newBaseTask(dctx, "master-id", lib.WorkerDMDump, &config.SubTaskConfig{SourceID: "task-id"})
-	baseTask.BaseWorker = lib.MockBaseWorker("worker-id", "master-id", baseTask)
-	baseTask.BaseWorker.Init(context.Background())
-	baseTask.unitHolder = &unit.MockHolder{}
+	dmWorker := newDMWorker(dctx, "master-id", lib.WorkerDMDump, &config.SubTaskConfig{SourceID: "task-id"})
+	dmWorker.BaseWorker = lib.MockBaseWorker("worker-id", "master-id", dmWorker)
+	dmWorker.BaseWorker.Init(context.Background())
+	dmWorker.unitHolder = &mockUnitHolder{}
 
-	require.EqualError(t, baseTask.StopWorker(context.Background(), &dmpkg.StopWorkerMessage{Task: "wrong-task-id"}), "task id mismatch, get wrong-task-id, actually task-id")
-	err := baseTask.StopWorker(context.Background(), &dmpkg.StopWorkerMessage{Task: "task-id"})
+	require.EqualError(t, dmWorker.StopWorker(context.Background(), &dmpkg.StopWorkerMessage{Task: "wrong-task-id"}), "task id mismatch, get wrong-task-id, actually task-id")
+	err := dmWorker.StopWorker(context.Background(), &dmpkg.StopWorkerMessage{Task: "task-id"})
 	require.True(t, errors.ErrWorkerFinish.Equal(err))
-}
-
-func (t *baseTask) onInit(ctx context.Context) error {
-	return nil
-}
-
-func (t *baseTask) createUnitHolder(*config.SubTaskConfig) unit.Holder {
-	return &unit.MockHolder{}
 }

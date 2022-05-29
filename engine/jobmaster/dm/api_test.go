@@ -115,6 +115,14 @@ func TestQueryStatusAPI(t *testing.T) {
 	messageAgent.On("SendRequest").Return(syncStatusResp, nil).Once()
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
+
+	jobStatus, err = jm.QueryJobStatus(ctx, []string{"task7"})
+	require.NoError(t, err)
+	taskStatus := jobStatus.TaskStatus["task7"]
+	require.Equal(t, "", taskStatus.WorkerID)
+	require.Equal(t, 0, int(taskStatus.ExpectedStage))
+	require.Equal(t, &dmpkg.QueryStatusResponse{ErrorMsg: "task task7 for job not found"}, taskStatus.Status)
+
 	jobStatus, err = jm.QueryJobStatus(ctx, nil)
 	require.NoError(t, err)
 
