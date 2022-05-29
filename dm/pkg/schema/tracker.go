@@ -126,6 +126,7 @@ func NewTracker(ctx context.Context, task string, sessionCfg map[string]string, 
 		conf.TiKVClient.AsyncCommit.AllowedClockDrift = 0
 		// explicitly disable new-collation for better compatibility as tidb only support a subset of all mysql collations.
 		conf.NewCollationsEnabledOnFirstBootstrap = false
+		conf.Performance.RunAutoAnalyze = false
 	})
 
 	if len(sessionCfg) == 0 {
@@ -178,7 +179,6 @@ func NewTracker(ctx context.Context, task string, sessionCfg map[string]string, 
 	}})
 
 	// avoid data race and of course no use in DM
-	domain.RunAutoAnalyze = false
 	session.DisableStats4Test()
 
 	dom, err = session.BootstrapSession(store)
