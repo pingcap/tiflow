@@ -3,11 +3,7 @@ module github.com/pingcap/tiflow
 go 1.18
 
 require (
-<<<<<<< HEAD
-	github.com/BurntSushi/toml v0.3.1
-=======
 	github.com/BurntSushi/toml v1.1.0
->>>>>>> 3faaeb6da (tls(dm): support init tls without client kay/certs (#5393))
 	github.com/DATA-DOG/go-sqlmock v1.5.0
 	github.com/Shopify/sarama v1.29.0
 	github.com/apache/pulsar-client-go v0.6.0
@@ -37,11 +33,7 @@ require (
 	github.com/google/btree v1.0.1
 	github.com/google/go-cmp v0.5.7
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510
-<<<<<<< HEAD
-	github.com/google/uuid v1.1.2
-=======
 	github.com/google/uuid v1.3.0
->>>>>>> 3faaeb6da (tls(dm): support init tls without client kay/certs (#5393))
 	github.com/grpc-ecosystem/go-grpc-middleware v1.3.0
 	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0
 	github.com/grpc-ecosystem/grpc-gateway v1.16.0
@@ -117,11 +109,7 @@ require (
 	github.com/DataDog/zstd v1.4.6-0.20210211175136-c6db21d202f4 // indirect
 	github.com/KyleBanks/depth v1.2.1 // indirect
 	github.com/VividCortex/ewma v1.1.1 // indirect
-<<<<<<< HEAD
-=======
 	github.com/aliyun/alibaba-cloud-sdk-go v1.61.1581 // indirect
-	github.com/andres-erbsen/clock v0.0.0-20160526145045-9e14626cd129 // indirect
->>>>>>> 3faaeb6da (tls(dm): support init tls without client kay/certs (#5393))
 	github.com/apache/pulsar-client-go/oauth2 v0.0.0-20201120111947-b8bd55bc02bd // indirect
 	github.com/apache/thrift v0.13.1-0.20201008052519-daf620915714 // indirect
 	github.com/ardielle/ardielle-go v1.5.2 // indirect
@@ -224,17 +212,13 @@ require (
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/power-devops/perfstat v0.0.0-20210106213030-5aafc221ea8c // indirect
 	github.com/prometheus/common v0.32.1 // indirect
-	github.com/prometheus/procfs v0.6.0 // indirect
+	github.com/prometheus/procfs v0.7.3 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20200410134404-eec4a21b6bb0 // indirect
 	github.com/rivo/uniseg v0.2.0 // indirect
 	github.com/rogpeppe/go-internal v1.8.0 // indirect
 	github.com/rs/cors v1.7.0 // indirect
 	github.com/satori/go.uuid v1.2.0 // indirect
-<<<<<<< HEAD
-	github.com/shirou/gopsutil/v3 v3.21.12 // indirect
-=======
 	github.com/shirou/gopsutil/v3 v3.22.4 // indirect
->>>>>>> 3faaeb6da (tls(dm): support init tls without client kay/certs (#5393))
 	github.com/shurcooL/httpfs v0.0.0-20190707220628-8d4bc4ba7749 // indirect
 	github.com/shurcooL/httpgzip v0.0.0-20190720172056-320755c1c1b0 // indirect
 	github.com/shurcooL/vfsgen v0.0.0-20200824052919-0d455de96546 // indirect

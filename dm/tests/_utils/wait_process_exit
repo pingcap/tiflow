@@ -16,9 +16,5 @@ while [ $WAIT_COUNT -lt 120 ]; do
 	((WAIT_COUNT++))
 done
 
-<<<<<<< HEAD
-echo "process $process didn't exit after 30 seconds"
-=======
 echo "process $process didn't exit after 120 seconds, current processlist: $(pgrep $process)"
->>>>>>> 3faaeb6da (tls(dm): support init tls without client kay/certs (#5393))
 exit 1
