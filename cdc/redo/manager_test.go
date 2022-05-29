@@ -16,6 +16,7 @@ package redo
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -271,4 +272,74 @@ func TestLogManagerInOwner(t *testing.T) {
 
 	err = logMgr.writer.DeleteAllLogs(ctx)
 	require.Nil(t, err)
+}
+
+// TestWriteLogFlushLogSequence tests flush log must be executed after table's
+// log has been written to writer.
+func TestWriteLogFlushLogSequence(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cfg := &config.ConsistentConfig{
+		Level:   string(ConsistentLevelEventual),
+		Storage: "blackhole://",
+	}
+	errCh := make(chan error, 1)
+	opts := &ManagerOptions{
+		EnableBgRunner: false,
+		ErrCh:          errCh,
+	}
+	logMgr, err := NewManager(ctx, cfg, opts)
+	require.Nil(t, err)
+
+	var (
+		wg sync.WaitGroup
+
+		tableID    = int64(53)
+		startTs    = uint64(100)
+		resolvedTs = uint64(150)
+	)
+	logMgr.AddTable(tableID, startTs)
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		select {
+		case <-ctx.Done():
+			return
+		case err := <-errCh:
+			require.Nil(t, err)
+		}
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		// FlushLog blocks until bgWriteLog consumes data and close callback chan.
+		err := logMgr.FlushLog(ctx, tableID, resolvedTs)
+		require.Nil(t, err)
+	}()
+
+	// Sleep a short time to ensure `logMgr.FlushLog` is called
+	time.Sleep(time.Millisecond * 100)
+	// FlushLog is still ongoing
+	require.Equal(t, int64(1), atomic.LoadInt64(&logMgr.flushing))
+	err = logMgr.updateTableResolvedTs(ctx)
+	require.Nil(t, err)
+	require.Equal(t, startTs, logMgr.GetMinResolvedTs())
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		logMgr.bgWriteLog(ctx, errCh)
+	}()
+
+	require.Eventually(t, func() bool {
+		err = logMgr.updateTableResolvedTs(ctx)
+		require.Nil(t, err)
+		return logMgr.GetMinResolvedTs() == resolvedTs
+	}, time.Second, time.Millisecond*20)
+
+	cancel()
+	wg.Wait()
 }
