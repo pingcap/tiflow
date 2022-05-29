@@ -19,11 +19,11 @@ import (
 	"time"
 
 	"github.com/go-mysql-org/go-mysql/replication"
-	toolutils "github.com/pingcap/tidb-tools/pkg/utils"
 	"github.com/pingcap/tidb/br/pkg/version"
 	"github.com/pingcap/tidb/dumpling/export"
 	dlog "github.com/pingcap/tidb/dumpling/log"
 	"github.com/pingcap/tidb/parser/ast"
+	"github.com/pingcap/tidb/util"
 	"github.com/pingcap/tidb/util/filter"
 	"go.uber.org/zap"
 
@@ -150,7 +150,7 @@ func subtaskCfg2BinlogSyncerCfg(cfg *config.SubTaskConfig, timezone *time.Locati
 		if loadErr := cfg.From.Security.LoadTLSContent(); loadErr != nil {
 			return replication.BinlogSyncerConfig{}, terror.ErrCtlLoadTLSCfg.Delegate(loadErr)
 		}
-		tlsConfig, err = toolutils.ToTLSConfigWithVerifyByRawbytes(cfg.From.Security.SSLCABytes,
+		tlsConfig, err = util.ToTLSConfigWithVerifyByRawbytes(cfg.From.Security.SSLCABytes,
 			cfg.From.Security.SSLCertBytes, cfg.From.Security.SSLKEYBytes, cfg.From.Security.CertAllowedCN)
 		if err != nil {
 			return replication.BinlogSyncerConfig{}, terror.ErrConnInvalidTLSConfig.Delegate(err)
