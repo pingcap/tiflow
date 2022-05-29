@@ -276,6 +276,12 @@ func (a *agent) handleMessageDispatchTableRequest(
 	var task *dispatchTableTask
 	switch req := request.Request.(type) {
 	case *schedulepb.DispatchTableRequest_AddTable:
+		if a.stopping {
+			log.Info("agent: decline handle add table request",
+				zap.String("capture", a.captureID),
+				zap.Any("changefeed", a.changeFeedID))
+			return
+		}
 		task = &dispatchTableTask{
 			TableID:   req.AddTable.GetTableID(),
 			StartTs:   req.AddTable.GetCheckpoint().GetCheckpointTs(),
@@ -313,33 +319,33 @@ func (a *agent) handleMessageDispatchTableRequest(
 func (a *agent) handleRemoveTableTask(
 	ctx context.Context,
 	task *dispatchTableTask,
-) (response *schedulepb.Message, err error) {
+) (response *schedulepb.Message) {
 	if task.status == dispatchTableTaskReceived {
 		done := a.tableExec.RemoveTable(ctx, task.TableID)
 		if !done {
 			status := a.newTableStatus(task.TableID)
-			return a.newRemoveTableResponseMessage(status), nil
+			return a.newRemoveTableResponseMessage(status)
 		}
 		task.status = dispatchTableTaskProcessed
 	}
 
 	checkpointTs, done := a.tableExec.IsRemoveTableFinished(ctx, task.TableID)
 	if !done {
-		// table is not fully stopped yet, do not return any message
-		return nil, nil
+		// todo: table should be in `stopped` already, `stopping` is useless at the moment
+		// if we return a message here, owner can directly start the table on other capture, to save a few tick.
+		return nil
 	}
-
 	log.Info("finish processing add table task", zap.Any("task", task))
 	status := schedulepb.TableStatus{
 		TableID: task.TableID,
-		State:   schedulepb.TableStateStopped,
+		State:   schedulepb.TableStateStopped, // todo: if the table is `absent`, also return a stopped here, `stopped` is identical to `absent`.
 		Checkpoint: schedulepb.Checkpoint{
 			CheckpointTs: checkpointTs,
 		},
 	}
 	message := a.newRemoveTableResponseMessage(status)
 	delete(a.runningTasks, task.TableID)
-	return message, nil
+	return message
 }
 
 func (a *agent) newRemoveTableResponseMessage(
@@ -367,13 +373,13 @@ func (a *agent) handleAddTableTask(
 	ctx context.Context,
 	task *dispatchTableTask,
 ) (*schedulepb.Message, error) {
-	if a.stopping {
-		status := a.newTableStatus(task.TableID)
-		message := a.newAddTableResponseMessage(status, true)
-		return message, nil
-	}
-
 	if task.status == dispatchTableTaskReceived {
+		if a.stopping {
+			status := a.newTableStatus(task.TableID)
+			message := a.newAddTableResponseMessage(status, true)
+			delete(a.runningTasks, task.TableID)
+			return message, nil
+		}
 		done, err := a.tableExec.AddTable(ctx, task.TableID, task.StartTs, task.IsPrepare)
 		if err != nil || !done {
 			// create table failed
@@ -451,7 +457,7 @@ func (a *agent) handleDispatchTableTasks(
 	for _, task := range a.runningTasks {
 		var response *schedulepb.Message
 		if task.IsRemove {
-			response, err = a.handleRemoveTableTask(ctx, task)
+			response = a.handleRemoveTableTask(ctx, task)
 		} else {
 			response, err = a.handleAddTableTask(ctx, task)
 		}
