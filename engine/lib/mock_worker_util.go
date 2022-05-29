@@ -104,4 +104,3 @@ func MockBaseWorkerWaitUpdateStatus(
 		return ok
 	}, time.Second, 100*time.Millisecond)
 }
-
