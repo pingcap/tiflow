@@ -17,7 +17,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/pingcap/tiflow/engine/pb"
+	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/pkg/errors"
 	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
 	"google.golang.org/grpc"

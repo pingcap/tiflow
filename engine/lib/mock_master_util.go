@@ -25,11 +25,11 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/pingcap/tiflow/engine/client"
+	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/lib/metadata"
 	libModel "github.com/pingcap/tiflow/engine/lib/model"
 	"github.com/pingcap/tiflow/engine/lib/statusutil"
 	"github.com/pingcap/tiflow/engine/model"
-	"github.com/pingcap/tiflow/engine/pb"
 	"github.com/pingcap/tiflow/engine/pkg/clock"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/deps"

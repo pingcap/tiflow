@@ -19,7 +19,7 @@ import (
 	"github.com/pingcap/errors"
 	brStorage "github.com/pingcap/tidb/br/pkg/storage"
 
-	"github.com/pingcap/tiflow/engine/pb"
+	pb "github.com/pingcap/tiflow/engine/enginepb"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
 )

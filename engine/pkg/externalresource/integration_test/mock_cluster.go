@@ -24,8 +24,8 @@ import (
 	"golang.org/x/time/rate"
 
 	"github.com/pingcap/tiflow/engine/client"
+	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/model"
-	"github.com/pingcap/tiflow/engine/pb"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/broker"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/manager"
 	resourcemeta "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
