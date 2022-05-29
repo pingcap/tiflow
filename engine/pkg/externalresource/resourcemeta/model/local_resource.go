@@ -15,6 +15,7 @@ package model
 
 import (
 	"path/filepath"
+	"strings"
 
 	libModel "github.com/pingcap/tiflow/engine/lib/model"
 )
@@ -30,5 +31,6 @@ type LocalFileResourceDescriptor struct {
 // AbsolutePath returns the absolute path of the given resource
 // in the local file system.
 func (d *LocalFileResourceDescriptor) AbsolutePath() string {
-	return filepath.Join(d.BasePath, d.Creator, d.ResourceName)
+	escapedName := strings.ReplaceAll(d.ResourceName, "/", "_")
+	return filepath.Join(d.BasePath, d.Creator, escapedName)
 }
