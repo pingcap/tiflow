@@ -478,13 +478,14 @@ func testDoDDLAndCheck(t *testing.T, snap *schema.Snapshot, job *timodel.Job, is
 }
 
 func TestPKShouldBeInTheFirstPlaceWhenPKIsNotHandle(t *testing.T) {
+	ft := types.NewFieldType(mysql.TypeUnspecified)
+	ft.SetFlag(mysql.NotNullFlag)
+
 	tblInfo := timodel.TableInfo{
 		Columns: []*timodel.ColumnInfo{
 			{
-				Name: timodel.CIStr{O: "name"},
-				FieldType: types.FieldType{
-					Flag: mysql.NotNullFlag,
-				},
+				Name:      timodel.CIStr{O: "name"},
+				FieldType: *ft,
 			},
 			{Name: timodel.CIStr{O: "id"}},
 		},
@@ -524,6 +525,12 @@ func TestPKShouldBeInTheFirstPlaceWhenPKIsNotHandle(t *testing.T) {
 }
 
 func TestPKShouldBeInTheFirstPlaceWhenPKIsHandle(t *testing.T) {
+	ftNotNUll := types.NewFieldType(mysql.TypeUnspecified)
+	ftNotNUll.SetFlag(mysql.NotNullFlag)
+
+	ftPK := types.NewFieldType(mysql.TypeUnspecified)
+	ftPK.SetFlag(mysql.PriKeyFlag)
+
 	tblInfo := timodel.TableInfo{
 		Indices: []*timodel.IndexInfo{
 			{
@@ -541,17 +548,13 @@ func TestPKShouldBeInTheFirstPlaceWhenPKIsHandle(t *testing.T) {
 				Name: timodel.CIStr{
 					O: "job",
 				},
-				FieldType: types.FieldType{
-					Flag: mysql.NotNullFlag,
-				},
+				FieldType: *ftNotNUll,
 			},
 			{
 				Name: timodel.CIStr{
 					O: "uid",
 				},
-				FieldType: types.FieldType{
-					Flag: mysql.PriKeyFlag,
-				},
+				FieldType: *ftPK,
 			},
 		},
 		PKIsHandle: true,
@@ -818,7 +821,7 @@ func TestExplicitTables(t *testing.T) {
 	require.GreaterOrEqual(t, snap2.TableCount(false), 4)
 
 	require.Equal(t, snap3.TableCount(true)-snap1.TableCount(true), 5)
-	require.Equal(t, snap3.TableCount(false), 36)
+	require.Equal(t, snap3.TableCount(false), 37)
 }
 
 /*

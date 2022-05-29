@@ -27,8 +27,8 @@ import (
 	"github.com/go-mysql-org/go-mysql/replication"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
-	toolutils "github.com/pingcap/tidb-tools/pkg/utils"
 	"github.com/pingcap/tidb/parser"
+	"github.com/pingcap/tidb/util"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
@@ -1123,7 +1123,7 @@ func (r *Relay) setSyncConfig() error {
 		if loadErr := r.cfg.From.Security.LoadTLSContent(); loadErr != nil {
 			return terror.ErrCtlLoadTLSCfg.Delegate(loadErr)
 		}
-		tlsConfig, err = toolutils.ToTLSConfigWithVerifyByRawbytes(r.cfg.From.Security.SSLCABytes,
+		tlsConfig, err = util.ToTLSConfigWithVerifyByRawbytes(r.cfg.From.Security.SSLCABytes,
 			r.cfg.From.Security.SSLCertBytes, r.cfg.From.Security.SSLKEYBytes, r.cfg.From.Security.CertAllowedCN)
 		if err != nil {
 			return terror.ErrConnInvalidTLSConfig.Delegate(err)
