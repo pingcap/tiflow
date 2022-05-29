@@ -50,12 +50,12 @@ type FileManager interface {
 	CreateResource(
 		creator libModel.WorkerID,
 		resName resModel.ResourceName,
-	) (*resModel.LocalFileResourceDescriptor, error)
+	) (*LocalFileResourceDescriptor, error)
 
 	GetPersistedResource(
 		creator libModel.WorkerID,
 		resName resModel.ResourceName,
-	) (*resModel.LocalFileResourceDescriptor, error)
+	) (*LocalFileResourceDescriptor, error)
 
 	RemoveTemporaryFiles(creator libModel.WorkerID) error
 

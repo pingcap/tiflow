@@ -15,10 +15,18 @@ package broker
 
 import (
 	"context"
+	"encoding/hex"
+	"path/filepath"
+	"testing"
+
+	"github.com/pingcap/errors"
+	libModel "github.com/pingcap/tiflow/engine/lib/model"
+	"github.com/stretchr/testify/require"
 
 	brStorage "github.com/pingcap/tidb/br/pkg/storage"
 
 	derrors "github.com/pingcap/tiflow/engine/pkg/errors"
+	"github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 )
 
 func newBrStorageForLocalFile(filePath string) (brStorage.ExternalStorage, error) {
@@ -31,4 +39,50 @@ func newBrStorageForLocalFile(filePath string) (brStorage.ExternalStorage, error
 		return nil, derrors.ErrFailToCreateExternalStorage.Wrap(err)
 	}
 	return ls, nil
+}
+
+func resourceNameToFilePathName(resName model.ResourceName) string {
+	return hex.EncodeToString([]byte(resName))
+}
+
+func filePathNameToResourceName(filePath string) (model.ResourceName, error) {
+	result, err := hex.DecodeString(filePath)
+	if err != nil {
+		return "", errors.Trace(err)
+	}
+	return model.ResourceName(result), nil
+}
+
+// AssertLocalFileExists is a test helper.
+func AssertLocalFileExists(
+	t *testing.T,
+	baseDir string,
+	creator libModel.WorkerID,
+	resName model.ResourceName,
+	suffixes ...string,
+) {
+	joinSegments := []string{
+		baseDir, creator, resourceNameToFilePathName(resName),
+	}
+	joinSegments = append(joinSegments, suffixes...)
+	path := filepath.Join(joinSegments...)
+	require.FileExistsf(t, path, "local file does not exist: baseDir %s, creator %s, resName %s",
+		baseDir, creator, resName)
+}
+
+// AssertNoLocalFileExists is a test helper.
+func AssertNoLocalFileExists(
+	t *testing.T,
+	baseDir string,
+	creator libModel.WorkerID,
+	resName model.ResourceName,
+	suffixes ...string,
+) {
+	joinSegments := []string{
+		baseDir, creator, resourceNameToFilePathName(resName),
+	}
+	joinSegments = append(joinSegments, suffixes...)
+	path := filepath.Join(joinSegments...)
+	require.NoFileExists(t, path, "local file does not exist: baseDir %s, creator %s, resName %s",
+		baseDir, creator, resName)
 }

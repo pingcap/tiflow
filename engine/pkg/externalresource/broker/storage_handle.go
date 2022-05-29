@@ -41,7 +41,7 @@ type LocalResourceHandle struct {
 	id         resModel.ResourceID
 	jobID      resModel.JobID
 	executorID resModel.ExecutorID
-	desc       *resModel.LocalFileResourceDescriptor
+	desc       *LocalFileResourceDescriptor
 
 	inner  brStorage.ExternalStorage
 	client *rpcutil.FailoverRPCClients[pb.ResourceManagerClient]
@@ -59,7 +59,7 @@ func newLocalResourceHandle(
 	jobID resModel.JobID,
 	executorID resModel.ExecutorID,
 	fm FileManager,
-	desc *resModel.LocalFileResourceDescriptor,
+	desc *LocalFileResourceDescriptor,
 	client ResourceManagerClient,
 ) (*LocalResourceHandle, error) {
 	ls, err := newBrStorageForLocalFile(desc.AbsolutePath())

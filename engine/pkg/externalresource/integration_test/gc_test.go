@@ -15,12 +15,12 @@ package integration
 
 import (
 	"context"
-	"path/filepath"
 	"testing"
 	"time"
 
 	libModel "github.com/pingcap/tiflow/engine/lib/model"
 	"github.com/pingcap/tiflow/engine/model"
+	"github.com/pingcap/tiflow/engine/pkg/externalresource/broker"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/stretchr/testify/require"
@@ -54,7 +54,7 @@ func TestLocalFileTriggeredByJobRemoval(t *testing.T) {
 	resMeta, err := cluster.meta.GetResourceByID(ctx, "/local/resource-1")
 	require.NoError(t, err)
 	require.Equal(t, model.ExecutorID("executor-1"), resMeta.Executor)
-	require.FileExists(t, filepath.Join(baseDir, "worker-1", "resource-1", "1.txt"))
+	broker.AssertLocalFileExists(t, baseDir, "worker-1", "resource-1", "1.txt")
 
 	// Triggers GC by removing the job
 	cluster.jobInfo.RemoveJob("job-1")
@@ -62,7 +62,7 @@ func TestLocalFileTriggeredByJobRemoval(t *testing.T) {
 		_, err := cluster.meta.GetResourceByID(ctx, "/local/resource-1")
 		return err != nil && pkgOrm.IsNotFoundError(err)
 	}, 1*time.Second, 5*time.Millisecond)
-	require.NoFileExists(t, filepath.Join(baseDir, "worker-1", "resource-1", "1.txt"))
+	broker.AssertNoLocalFileExists(t, baseDir, "worker-1", "resource-1", "1.txt")
 
 	cluster.Stop()
 }
@@ -121,7 +121,7 @@ func TestCleanUpStaleResourcesOnStartUp(t *testing.T) {
 	require.NoError(t, err)
 	err = handle.Persist(ctx)
 	require.NoError(t, err)
-	require.FileExists(t, filepath.Join(baseDir, "worker-1", "resource-1", "1.txt"))
+	broker.AssertLocalFileExists(t, baseDir, "worker-1", "resource-1", "1.txt")
 
 	// Asserts that the job exists.
 	_, err = cluster.meta.GetResourceByID(ctx, "/local/resource-1")
@@ -147,7 +147,7 @@ func TestCleanUpStaleResourcesOnStartUp(t *testing.T) {
 		_, err := cluster.meta.GetResourceByID(ctx, "/local/resource-2")
 		return err != nil && pkgOrm.IsNotFoundError(err)
 	}, 1*time.Second, 5*time.Millisecond)
-	require.NoFileExists(t, filepath.Join(baseDir, "worker-1", "resource-1", "1.txt"))
+	broker.AssertNoLocalFileExists(t, baseDir, "worker-1", "resource-1", "1.txt")
 
 	cluster.Stop()
 }

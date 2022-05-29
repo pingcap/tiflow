@@ -150,7 +150,7 @@ func (b *DefaultBroker) newHandleForLocalFile(
 		return nil, err
 	}
 
-	var desc *resModel.LocalFileResourceDescriptor
+	var desc *LocalFileResourceDescriptor
 
 	if !exists {
 		desc, err = b.fileManager.CreateResource(workerID, resName)
