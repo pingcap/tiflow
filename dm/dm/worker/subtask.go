@@ -863,6 +863,14 @@ func (st *SubTask) SetCfg(subTaskConfig config.SubTaskConfig) {
 	st.Unlock()
 }
 
+func (st *SubTask) UpdateValidatorCfg(validatorCfg config.ValidatorConfig) {
+	st.Lock()
+	// if user start validator on the fly, we update validator mode and start-time
+	st.cfg.ValidatorCfg.Mode = validatorCfg.Mode
+	st.cfg.ValidatorCfg.StartTime = validatorCfg.StartTime
+	st.Unlock()
+}
+
 func (st *SubTask) getValidatorStage() pb.Stage {
 	st.RLock()
 	defer st.RUnlock()
@@ -886,7 +894,7 @@ func (st *SubTask) GetValidatorError(errState pb.ValidateErrorState) ([]*pb.Vali
 		return validator.GetValidatorError(errState)
 	}
 	cfg := st.getCfg()
-	return nil, terror.ErrValidatorNotFound.Generate(cfg.Name)
+	return nil, terror.ErrValidatorNotFound.Generate(cfg.Name, cfg.SourceID)
 }
 
 func (st *SubTask) OperateValidatorError(op pb.ValidationErrOp, errID uint64, isAll bool) error {
@@ -894,7 +902,7 @@ func (st *SubTask) OperateValidatorError(op pb.ValidationErrOp, errID uint64, is
 		return validator.OperateValidatorError(op, errID, isAll)
 	}
 	cfg := st.getCfg()
-	return terror.ErrValidatorNotFound.Generate(cfg.Name)
+	return terror.ErrValidatorNotFound.Generate(cfg.Name, cfg.SourceID)
 }
 
 func (st *SubTask) getValidator() *syncer.DataValidator {
@@ -907,7 +915,7 @@ func (st *SubTask) GetValidatorStatus() (*pb.ValidationStatus, error) {
 	validator := st.getValidator()
 	if validator == nil {
 		cfg := st.getCfg()
-		return nil, terror.ErrValidatorNotFound.Generate(cfg.Name)
+		return nil, terror.ErrValidatorNotFound.Generate(cfg.Name, cfg.SourceID)
 	}
 	return validator.GetValidatorStatus(), nil
 }
@@ -916,7 +924,7 @@ func (st *SubTask) GetValidatorTableStatus(filterStatus pb.Stage) ([]*pb.Validat
 	validator := st.getValidator()
 	if validator == nil {
 		cfg := st.getCfg()
-		return nil, terror.ErrValidatorNotFound.Generate(cfg.Name)
+		return nil, terror.ErrValidatorNotFound.Generate(cfg.Name, cfg.SourceID)
 	}
 	return validator.GetValidatorTableStatus(filterStatus), nil
 }

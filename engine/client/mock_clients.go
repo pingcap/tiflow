@@ -54,6 +54,15 @@ func (c *MockExecutorClient) DispatchTask(
 	return retArgs.Error(0)
 }
 
+// RemoveLocalResource implements ExecutorClient.RemoveLocalResource
+func (c *MockExecutorClient) RemoveLocalResource(ctx context.Context, req *pb.RemoveLocalResourceRequest) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	args := c.Mock.Called(ctx, req)
+	return args.Error(0)
+}
+
 // MockServerMasterClient mocks server master gRPC client
 type MockServerMasterClient struct {
 	mu sync.Mutex

@@ -78,12 +78,12 @@ func setBinChsClnFlag(ft *types.FieldType) *types.FieldType {
 }
 
 func setFlag(ft *types.FieldType, flag uint) *types.FieldType {
-	types.SetTypeFlag(&ft.Flag, flag, true)
+	ft.SetFlag(flag)
 	return ft
 }
 
 func setElems(ft *types.FieldType, elems []string) *types.FieldType {
-	ft.Elems = elems
+	ft.SetElems(elems)
 	return ft
 }
 

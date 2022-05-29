@@ -22,6 +22,7 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	gmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/errno"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
@@ -31,7 +32,6 @@ import (
 
 	cdcmodel "github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/dm/dm/config"
-	"github.com/pingcap/tiflow/dm/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/pkg/sqlmodel"
@@ -59,6 +59,10 @@ func genRowChangeJob(tbl filter.Table, tblInfo *model.TableInfo, key string, tp 
 }
 
 func TestValidatorWorkerValidateTableChanges(t *testing.T) {
+	require.Nil(t, failpoint.Enable("github.com/pingcap/tiflow/dm/syncer/ValidatorMockUpstreamTZ", `return()`))
+	defer func() {
+		require.Nil(t, failpoint.Disable("github.com/pingcap/tiflow/dm/syncer/ValidatorMockUpstreamTZ"))
+	}()
 	testFunc := func(t *testing.T, mode string) {
 		t.Helper()
 		tbl1 := filter.Table{Schema: "test", Name: "tbl1"}
@@ -79,7 +83,7 @@ func TestValidatorWorkerValidateTableChanges(t *testing.T) {
 		syncerObj := NewSyncer(cfg, nil, nil)
 		validator := NewContinuousDataValidator(cfg, syncerObj, false)
 		validator.persistHelper.schemaInitialized.Store(true)
-		validator.Start(pb.Stage_Stopped)
+		require.NoError(t, validator.initialize())
 		defer validator.cancel()
 		validator.markErrorStarted.Store(true)
 
@@ -323,7 +327,7 @@ func TestValidatorWorkerValidateTableChanges(t *testing.T) {
 func TestValidatorWorkerCompareData(t *testing.T) {
 	compareContext := validateCompareContext{
 		logger:  log.L(),
-		columns: []*model.ColumnInfo{{FieldType: types.FieldType{Tp: mysql.TypeLong}}},
+		columns: []*model.ColumnInfo{{FieldType: *types.NewFieldType(mysql.TypeLong)}},
 	}
 	eq, err := compareContext.compareData("", []*sql.NullString{{String: "1", Valid: true}}, []*sql.NullString{{Valid: false}})
 	require.NoError(t, err)
@@ -331,7 +335,7 @@ func TestValidatorWorkerCompareData(t *testing.T) {
 
 	compareContext = validateCompareContext{
 		logger:  log.L(),
-		columns: []*model.ColumnInfo{{FieldType: types.FieldType{Tp: mysql.TypeFloat}}},
+		columns: []*model.ColumnInfo{{FieldType: *types.NewFieldType(mysql.TypeFloat)}},
 	}
 	eq, err = compareContext.compareData("", []*sql.NullString{{String: "1.1", Valid: true}}, []*sql.NullString{{String: "1.x", Valid: true}})
 	require.Error(t, err)
@@ -339,7 +343,7 @@ func TestValidatorWorkerCompareData(t *testing.T) {
 
 	compareContext = validateCompareContext{
 		logger:  log.L(),
-		columns: []*model.ColumnInfo{{FieldType: types.FieldType{Tp: mysql.TypeFloat}}},
+		columns: []*model.ColumnInfo{{FieldType: *types.NewFieldType(mysql.TypeFloat)}},
 	}
 	eq, err = compareContext.compareData("", []*sql.NullString{{String: "1.1", Valid: true}}, []*sql.NullString{{String: "1.1000011", Valid: true}})
 	require.NoError(t, err)
@@ -347,7 +351,7 @@ func TestValidatorWorkerCompareData(t *testing.T) {
 
 	compareContext = validateCompareContext{
 		logger:  log.L(),
-		columns: []*model.ColumnInfo{{FieldType: types.FieldType{Tp: mysql.TypeFloat}}},
+		columns: []*model.ColumnInfo{{FieldType: *types.NewFieldType(mysql.TypeFloat)}},
 	}
 	eq, err = compareContext.compareData("", []*sql.NullString{{String: "1.1", Valid: true}}, []*sql.NullString{{String: "1.1000001", Valid: true}})
 	require.NoError(t, err)
@@ -355,7 +359,7 @@ func TestValidatorWorkerCompareData(t *testing.T) {
 
 	compareContext = validateCompareContext{
 		logger:  log.L(),
-		columns: []*model.ColumnInfo{{FieldType: types.FieldType{Tp: mysql.TypeDouble}}},
+		columns: []*model.ColumnInfo{{FieldType: *types.NewFieldType(mysql.TypeDouble)}},
 	}
 	eq, err = compareContext.compareData("", []*sql.NullString{{String: "1.1", Valid: true}}, []*sql.NullString{{String: "1.1000001", Valid: true}})
 	require.NoError(t, err)
@@ -363,7 +367,7 @@ func TestValidatorWorkerCompareData(t *testing.T) {
 
 	compareContext = validateCompareContext{
 		logger:  log.L(),
-		columns: []*model.ColumnInfo{{FieldType: types.FieldType{Tp: mysql.TypeLong}}},
+		columns: []*model.ColumnInfo{{FieldType: *types.NewFieldType(mysql.TypeLong)}},
 	}
 	eq, err = compareContext.compareData("", []*sql.NullString{{String: "1", Valid: true}}, []*sql.NullString{{String: "1", Valid: true}})
 	require.NoError(t, err)
@@ -371,7 +375,7 @@ func TestValidatorWorkerCompareData(t *testing.T) {
 
 	compareContext = validateCompareContext{
 		logger:  log.L(),
-		columns: []*model.ColumnInfo{{FieldType: types.FieldType{Tp: mysql.TypeVarchar}}},
+		columns: []*model.ColumnInfo{{FieldType: *types.NewFieldType(mysql.TypeVarchar)}},
 	}
 	eq, err = compareContext.compareData("", []*sql.NullString{{String: "aaa", Valid: true}}, []*sql.NullString{{String: "aaa", Valid: true}})
 	require.NoError(t, err)
@@ -379,7 +383,7 @@ func TestValidatorWorkerCompareData(t *testing.T) {
 
 	compareContext = validateCompareContext{
 		logger:  log.L(),
-		columns: []*model.ColumnInfo{{FieldType: types.FieldType{Tp: mysql.TypeVarString}}},
+		columns: []*model.ColumnInfo{{FieldType: *types.NewFieldType(mysql.TypeVarString)}},
 	}
 	eq, err = compareContext.compareData("", []*sql.NullString{{String: "\x01\x02", Valid: true}}, []*sql.NullString{{String: "\x01\x02", Valid: true}})
 	require.NoError(t, err)
@@ -536,8 +540,6 @@ func TestValidatorRowCountAndSize(t *testing.T) {
 	syncerObj := NewSyncer(cfg, nil, nil)
 	validator := NewContinuousDataValidator(cfg, syncerObj, false)
 	validator.persistHelper.schemaInitialized.Store(true)
-	validator.Start(pb.Stage_Stopped)
-	defer validator.cancel()
 	validator.markErrorStarted.Store(true)
 
 	worker := newValidateWorker(validator, 0)

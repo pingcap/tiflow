@@ -116,7 +116,9 @@ type rowValidationJob struct {
 	// the memory taken for a row change job is more than this size
 	size int32
 	wg   *sync.WaitGroup
-	// timestamp of first validation of this row. will reset when merge row changes
+	// timestamp of first validation of this row. will reset when merge row changes.
+	// if the job is loaded from meta, it's reset too, in case validator stopped for a long time,
+	// then those failed row change maybe marked as error row immediately.
 	FirstValidateTS int64
 	FailedCnt       int
 }
@@ -163,6 +165,7 @@ type DataValidator struct {
 	L                  log.Logger
 	fromDB             *conn.BaseDB
 	toDB               *conn.BaseDB
+	upstreamTZ         *time.Location
 	timezone           *time.Location
 	syncCfg            replication.BinlogSyncerConfig
 	streamerController *StreamerController
@@ -270,6 +273,14 @@ func (v *DataValidator) initialize() error {
 		return err
 	}
 
+	var defaultUpstreamTZ string
+	failpoint.Inject("ValidatorMockUpstreamTZ", func() {
+		defaultUpstreamTZ = "UTC"
+	})
+	v.upstreamTZ, err = str2TimezoneOrFromDB(newCtx, defaultUpstreamTZ, &v.cfg.From)
+	if err != nil {
+		return err
+	}
 	v.timezone, err = str2TimezoneOrFromDB(newCtx, v.cfg.Timezone, &v.cfg.To)
 	if err != nil {
 		return err
@@ -299,18 +310,22 @@ func (v *DataValidator) Start(expect pb.Stage) {
 	v.Lock()
 	defer v.Unlock()
 
-	v.L.Info("starting")
+	v.L.Info("starting", zap.Any("cfg", v.cfg.ValidatorCfg),
+		zap.String("start-time", v.cfg.ValidatorCfg.StartTime),
+		zap.Bool("start with subtask", v.startWithSubtask),
+		zap.Any("expect", expect))
 	if v.Stage() == pb.Stage_Running {
 		v.L.Info("already started")
 		return
 	}
 
-	if err := v.initialize(); err != nil {
-		v.fillResult(err, false)
+	if expect != pb.Stage_Running {
+		v.L.Info("expect stage is not running", zap.Any("expect", expect))
 		return
 	}
 
-	if expect != pb.Stage_Running {
+	if err := v.initialize(); err != nil {
+		v.fillResult(err, false)
 		return
 	}
 
@@ -465,6 +480,40 @@ func (v *DataValidator) waitSyncerRunning() error {
 	}
 }
 
+func (v *DataValidator) getInitialBinlogPosition() (binlog.Location, error) {
+	var location binlog.Location
+	timeStr := v.cfg.ValidatorCfg.StartTime
+	switch {
+	case timeStr != "":
+		// already check it when set it, will not check it again
+		t, _ := utils.ParseStartTimeInLoc(timeStr, v.upstreamTZ)
+		finder := binlog.NewRemoteBinlogPosFinder(v.tctx, v.fromDB.DB, v.syncCfg, v.cfg.EnableGTID)
+		loc, posTp, err := finder.FindByTimestamp(t.Unix())
+		if err != nil {
+			v.L.Error("fail to find binlog position by timestamp",
+				zap.Time("time", t), zap.Error(err))
+			return location, err
+		}
+		v.L.Info("find binlog pos by timestamp", zap.String("time", timeStr),
+			zap.Any("loc", loc), zap.Stringer("pos type", posTp))
+
+		if posTp == binlog.AboveUpperBoundBinlogPos {
+			return location, terror.ErrConfigStartTimeTooLate.Generate(timeStr)
+		}
+		location = *loc
+		v.L.Info("do validate from timestamp", zap.Any("loc", location))
+	case v.startWithSubtask:
+		// in extreme case, this loc may still not be the first binlog location of this task:
+		//   syncer synced some binlog and flush checkpoint, but validator still not has chance to run, then fail-over
+		location = v.syncer.getInitExecutedLoc()
+		v.L.Info("do validate from init executed loc of syncer", zap.Any("loc", location))
+	default:
+		location = v.syncer.getFlushedGlobalPoint()
+		v.L.Info("do validate from current loc of syncer", zap.Any("loc", location))
+	}
+	return location, nil
+}
+
 // doValidate: runs in a separate goroutine.
 func (v *DataValidator) doValidate() {
 	defer v.wg.Done()
@@ -483,19 +532,20 @@ func (v *DataValidator) doValidate() {
 	var location binlog.Location
 	if v.location != nil {
 		location = *v.location
+		v.L.Info("do validate from checkpoint", zap.Any("loc", location))
 	} else {
 		// validator always uses remote binlog streamer now.
-		// todo: when relay log enabled, need to decode location to get real location
-		if v.startWithSubtask {
-			// in extreme case, this loc may still not be the first binlog location of this task:
-			//   syncer synced some binlog and flush checkpoint, but validator still not has chance to run, then fail-over
-			location = v.syncer.getInitExecutedLoc()
-		} else {
-			location = v.syncer.getFlushedGlobalPoint()
+		var err error
+		location, err = v.getInitialBinlogPosition()
+		if err != nil {
+			v.sendError(err)
+			return
 		}
+		// when relay log enabled, binlog name may contain uuid suffix, so need to extract the real location
+		location.Position.Name = binlog.ExtractRealName(location.Position.Name)
 		// persist current location to make sure we start from the same location
 		// if fail-over happens before we flush checkpoint and data.
-		err := v.persistHelper.persist(v.tctx, location)
+		err = v.persistHelper.persist(v.tctx, location)
 		if err != nil {
 			v.sendError(terror.ErrValidatorPersistData.Delegate(err))
 			return
@@ -926,9 +976,8 @@ func (v *DataValidator) loadPersistedData() error {
 					validateTbl.srcTableInfo, validateTbl.downstreamTableInfo.TableInfo,
 					nil,
 				),
-				size:            row.Size,
-				FirstValidateTS: row.FirstValidateTS,
-				FailedCnt:       row.FailedCnt,
+				size:      row.Size,
+				FailedCnt: row.FailedCnt,
 			}
 		}
 	}
@@ -1239,6 +1288,7 @@ func (v *DataValidator) GetValidatorStatus() *pb.ValidationStatus {
 	return &pb.ValidationStatus{
 		Task:                v.cfg.Name,
 		Source:              v.cfg.SourceID,
+		Mode:                v.cfg.ValidatorCfg.Mode,
 		Stage:               v.Stage(),
 		Result:              returnedResult,
 		ValidatorBinlog:     validatorBinlog,

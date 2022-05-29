@@ -96,13 +96,13 @@ func (fa *filenameArgs) SetActiveRelayLog(active *streamer.RelayLogInfo) {
 		// no sub dir specified, use the latest one
 		uuid = fa.uuids[len(fa.uuids)-1]
 	}
-	_, endSuffix, _ := utils.ParseSuffixForUUID(uuid)
+	_, endSuffix, _ := utils.ParseRelaySubDir(uuid)
 
 	safeRelayLog := &streamer.RelayLogInfo{
-		TaskName:   fakeStrategyTaskName,
-		UUID:       uuid,
-		UUIDSuffix: endSuffix,
-		Filename:   fa.filename,
+		TaskName:     fakeStrategyTaskName,
+		SubDir:       uuid,
+		SubDirSuffix: endSuffix,
+		Filename:     fa.filename,
 	}
 
 	if active.Earlier(safeRelayLog) {
@@ -114,7 +114,7 @@ func (fa *filenameArgs) SetActiveRelayLog(active *streamer.RelayLogInfo) {
 	// discard newer UUIDs
 	uuids := make([]string, 0, len(fa.uuids))
 	for _, uuid := range fa.uuids {
-		_, suffix, _ := utils.ParseSuffixForUUID(uuid)
+		_, suffix, _ := utils.ParseRelaySubDir(uuid)
 		if suffix > endSuffix {
 			break
 		}
