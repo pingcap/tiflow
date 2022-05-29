@@ -20,11 +20,10 @@ import (
 	"testing"
 
 	"github.com/pingcap/errors"
-	libModel "github.com/pingcap/tiflow/engine/lib/model"
+	brStorage "github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/stretchr/testify/require"
 
-	brStorage "github.com/pingcap/tidb/br/pkg/storage"
-
+	libModel "github.com/pingcap/tiflow/engine/lib/model"
 	derrors "github.com/pingcap/tiflow/engine/pkg/errors"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 )

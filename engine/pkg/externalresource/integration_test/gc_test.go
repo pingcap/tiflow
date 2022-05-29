@@ -18,12 +18,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
+
 	libModel "github.com/pingcap/tiflow/engine/lib/model"
 	"github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/broker"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
-	"github.com/stretchr/testify/require"
 )
 
 func TestLocalFileTriggeredByJobRemoval(t *testing.T) {
