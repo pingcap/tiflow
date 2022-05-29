@@ -22,6 +22,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -120,6 +121,11 @@ type ManagerOptions struct {
 type cacheRows struct {
 	tableID model.TableID
 	rows    []*model.RowChangedEvent
+	// When calling FlushLog for a table, we must ensure that all data of this
+	// table has been written to underlying writer. Since the EmitRowChangedEvents
+	// and FlushLog of the same table can't be executed concurrently, we can
+	// insert a simple barrier data into data stream to achieve this goal.
+	flushCallback chan struct{}
 }
 
 // ManagerImpl manages redo log writer, buffers un-persistent redo logs, calculates
@@ -217,6 +223,9 @@ func (m *ManagerImpl) Enabled() bool {
 // error ErrBufferLogTimeout will be returned.
 // TODO: if the API is truly non-blocking, we should return an error immediately
 // when the log buffer channel is full.
+// TODO: After buffer sink in sink node is removed, there is no batch mechanism
+// before sending row changed events to redo manager, the original log buffer
+// design may have performance issue.
 func (m *ManagerImpl) EmitRowChangedEvents(
 	ctx context.Context,
 	tableID model.TableID,
@@ -251,6 +260,20 @@ func (m *ManagerImpl) FlushLog(
 		return nil
 	}
 	defer atomic.StoreInt64(&m.flushing, 0)
+
+	// Adding a barrier to data stream, to ensure all logs of this table has been
+	// written to underlying writer.
+	flushCallbackCh := make(chan struct{})
+	m.logBuffer <- cacheRows{
+		tableID:       tableID,
+		flushCallback: flushCallbackCh,
+	}
+	select {
+	case <-ctx.Done():
+		return errors.Trace(ctx.Err())
+	case <-flushCallbackCh:
+	}
+
 	return m.writer.FlushLog(ctx, tableID, resolvedTs)
 }
 
@@ -362,6 +385,10 @@ func (m *ManagerImpl) bgWriteLog(ctx context.Context, errCh chan<- error) {
 		case <-ctx.Done():
 			return
 		case cache := <-m.logBuffer:
+			if cache.flushCallback != nil {
+				close(cache.flushCallback)
+				continue
+			}
 			logs := make([]*model.RedoRowChangedEvent, 0, len(cache.rows))
 			for _, row := range cache.rows {
 				logs = append(logs, RowToRedo(row))
