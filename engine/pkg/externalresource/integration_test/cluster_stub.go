@@ -19,7 +19,7 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/pingcap/tiflow/engine/client"
-	"github.com/pingcap/tiflow/engine/pb"
+	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/broker"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/manager"
 )

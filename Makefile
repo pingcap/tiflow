@@ -463,6 +463,9 @@ tools/bin/msgp: tools/check/go.mod
 tools/bin/protoc:
 	./scripts/download-protoc.sh
 
+tools/bin/goimports:
+	cd tools/check && $(GO) build -mod=mod -o ../bin/goimports golang.org/x/tools/cmd/goimports
+
 check_failpoint_ctl: tools/bin/failpoint-ctl
 
 failpoint-enable: check_failpoint_ctl
@@ -473,7 +476,7 @@ failpoint-disable: check_failpoint_ctl
 
 engine: df-master df-executor df-master-client df-demo
 
-df-proto:
+df-proto: tools/bin/protoc tools/bin/protoc-gen-gogofaster tools/bin/goimports
 	./engine/generate-proto.sh
 
 df-master:

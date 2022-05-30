@@ -25,7 +25,7 @@ import (
 	"go.uber.org/atomic"
 	"google.golang.org/grpc/codes"
 
-	"github.com/pingcap/tiflow/engine/pb"
+	pb "github.com/pingcap/tiflow/engine/enginepb"
 )
 
 func TestDispatchTaskNormal(t *testing.T) {

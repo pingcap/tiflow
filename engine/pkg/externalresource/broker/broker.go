@@ -23,7 +23,7 @@ import (
 	"google.golang.org/grpc/codes"
 
 	"github.com/pingcap/tiflow/dm/pkg/log"
-	"github.com/pingcap/tiflow/engine/pb"
+	pb "github.com/pingcap/tiflow/engine/enginepb"
 	derrors "github.com/pingcap/tiflow/engine/pkg/errors"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/storagecfg"

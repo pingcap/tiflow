@@ -27,7 +27,7 @@ import (
 	"syscall"
 
 	"github.com/pingcap/tiflow/dm/pkg/log"
-	"github.com/pingcap/tiflow/engine/pb"
+	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/db"
 	"go.uber.org/zap"

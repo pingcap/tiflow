@@ -24,7 +24,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 
-	"github.com/pingcap/tiflow/engine/pb"
+	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/manager"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/storagecfg"
 	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
