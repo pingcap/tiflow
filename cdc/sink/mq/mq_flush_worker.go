@@ -57,7 +57,9 @@ type mqEvent struct {
 type flushWorker struct {
 	msgChan chan mqEvent
 	ticker  *time.Ticker
-	flushed chan<- struct{}
+	// needsFlush is used to indicate whether the flush worker needs to flush the messages.
+	// It is also used to notify that the flush has completed.
+	needsFlush chan<- struct{}
 
 	// errCh is used to store one error if `run` exits unexpectedly.
 	// After sending an error to errCh, errCh must be closed so that
@@ -104,7 +106,7 @@ func (w *flushWorker) batch(
 		// When the flush event is received,
 		// we need to write the previous data to the producer as soon as possible.
 		if msg.flush != nil {
-			w.flushed = msg.flush.flushed
+			w.needsFlush = msg.flush.flushed
 			return index, nil
 		}
 
@@ -124,7 +126,7 @@ func (w *flushWorker) batch(
 			// When the flush event is received,
 			// we need to write the previous data to the producer as soon as possible.
 			if msg.flush != nil {
-				w.flushed = msg.flush.flushed
+				w.needsFlush = msg.flush.flushed
 				return index, nil
 			}
 
@@ -186,15 +188,13 @@ func (w *flushWorker) asyncSend(
 	}
 
 	// Wait for all messages to ack.
-	if w.flushed != nil {
+	if w.needsFlush != nil {
 		start := time.Now()
 		err := w.producer.Flush(ctx)
 		if err != nil {
 			return err
 		}
-		w.flushed <- struct{}{}
-		close(w.flushed)
-		w.flushed = nil
+		w.notifyFlushed()
 		log.Debug("flush worker flushed", zap.Duration("duration", time.Since(start)))
 	}
 
@@ -219,6 +219,9 @@ func (w *flushWorker) run(ctx context.Context) (retErr error) {
 			return errors.Trace(err)
 		}
 		if endIndex == 0 {
+			if w.needsFlush != nil {
+				w.notifyFlushed()
+			}
 			continue
 		}
 		msgs := eventsBuf[:endIndex]
@@ -244,4 +247,12 @@ func (w *flushWorker) addEvent(ctx context.Context, event mqEvent) error {
 	case w.msgChan <- event:
 		return nil
 	}
+}
+
+// notifyFlushed is used to notify the mqSink that all events has been flushed.
+func (w *flushWorker) notifyFlushed() {
+	w.needsFlush <- struct{}{}
+	close(w.needsFlush)
+	// NOTICE: Do not forget to reset the needsFlush.
+	w.needsFlush = nil
 }
