@@ -183,7 +183,7 @@ func TestUpdateResolvedTsWithDelayedTable(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cfg := &config.ConsistentConfig{
-		Level:   string(ConsistentLevelEventual),
+		Level:   string(consistentLevelEventual),
 		Storage: "blackhole://",
 	}
 	errCh := make(chan error, 1)
