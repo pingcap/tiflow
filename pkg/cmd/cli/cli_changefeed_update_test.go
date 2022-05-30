@@ -17,20 +17,16 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"testing"
 
-	"github.com/pingcap/check"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
-	"github.com/pingcap/tiflow/pkg/util/testleak"
+	"github.com/stretchr/testify/require"
 )
 
-type changefeedUpdateSuite struct{}
-
-var _ = check.Suite(&changefeedUpdateSuite{})
-
-func (s *changefeedUpdateSuite) TestApplyChanges(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestApplyChanges(t *testing.T) {
+	t.Parallel()
 
 	cmd := NewCmdCli()
 	commonChangefeedOptions := newChangefeedCommonOptions()
@@ -39,55 +35,45 @@ func (s *changefeedUpdateSuite) TestApplyChanges(c *check.C) {
 
 	// Test normal update.
 	oldInfo := &model.ChangeFeedInfo{SinkURI: "blackhole://"}
-	c.Assert(cmd.ParseFlags([]string{"--sink-uri=mysql://root@downstream-tidb:4000"}), check.IsNil)
+	require.Nil(t, cmd.ParseFlags([]string{"--sink-uri=mysql://root@downstream-tidb:4000"}))
 	newInfo, err := o.applyChanges(oldInfo, cmd)
-	c.Assert(err, check.IsNil)
-	c.Assert(newInfo.SinkURI, check.Equals, "mysql://root@downstream-tidb:4000")
+	require.Nil(t, err)
+	require.Equal(t, "mysql://root@downstream-tidb:4000", newInfo.SinkURI)
 
 	// Test for cli command flags that should be ignored.
 	oldInfo = &model.ChangeFeedInfo{SortDir: "."}
-	c.Assert(cmd.ParseFlags([]string{"--interact"}), check.IsNil)
+	require.Nil(t, cmd.ParseFlags([]string{"--interact"}))
 	_, err = o.applyChanges(oldInfo, cmd)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 
 	oldInfo = &model.ChangeFeedInfo{SortDir: "."}
-	c.Assert(cmd.ParseFlags([]string{"--pd=http://127.0.0.1:2379"}), check.IsNil)
+	require.Nil(t, cmd.ParseFlags([]string{"--pd=http://127.0.0.1:2379"}))
 	_, err = o.applyChanges(oldInfo, cmd)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 
-	dir := c.MkDir()
+	dir := t.TempDir()
 	filename := filepath.Join(dir, "log.txt")
 	reset, err := initTestLogger(filename)
 	defer reset()
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 
 	// Test for flag that cannot be updated.
 	oldInfo = &model.ChangeFeedInfo{SortDir: "."}
-	c.Assert(cmd.ParseFlags([]string{"--sort-dir=/home"}), check.IsNil)
+	require.Nil(t, cmd.ParseFlags([]string{"--sort-dir=/home"}))
 	newInfo, err = o.applyChanges(oldInfo, cmd)
-	c.Assert(err, check.IsNil)
-	c.Assert(newInfo.SortDir, check.Equals, ".")
+	require.Nil(t, err)
+	require.Equal(t, ".", newInfo.SortDir)
 	file, err := os.ReadFile(filename)
-	c.Assert(err, check.IsNil)
-	c.Assert(
-		strings.Contains(string(file), "this flag cannot be updated and will be ignored"),
-		check.IsTrue,
-	)
+	require.Nil(t, err)
+	require.True(t, strings.Contains(string(file), "this flag cannot be updated and will be ignored"))
 
 	// Test schema registry update
 	oldInfo = &model.ChangeFeedInfo{Config: config.GetDefaultReplicaConfig()}
-	c.Assert(oldInfo.Config.Sink.SchemaRegistry, check.Equals, "")
-	c.Assert(
-		cmd.ParseFlags([]string{"--schema-registry=https://username:password@localhost:8081"}),
-		check.IsNil,
-	)
+	require.Equal(t, "", oldInfo.Config.Sink.SchemaRegistry)
+	require.Nil(t, cmd.ParseFlags([]string{"--schema-registry=https://username:password@localhost:8081"}))
 	newInfo, err = o.applyChanges(oldInfo, cmd)
-	c.Assert(err, check.IsNil)
-	c.Assert(
-		newInfo.Config.Sink.SchemaRegistry,
-		check.Equals,
-		"https://username:password@localhost:8081",
-	)
+	require.Nil(t, err)
+	require.Equal(t, "https://username:password@localhost:8081", newInfo.Config.Sink.SchemaRegistry)
 }
 
 func initTestLogger(filename string) (func(), error) {

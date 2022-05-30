@@ -32,7 +32,7 @@ import (
 	"github.com/pingcap/tiflow/engine/client"
 	"github.com/pingcap/tiflow/engine/executor/worker"
 	"github.com/pingcap/tiflow/engine/pb"
-	"github.com/pingcap/tiflow/engine/pkg/uuid"
+	"github.com/pingcap/tiflow/pkg/uuid"
 )
 
 func init() {

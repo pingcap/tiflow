@@ -139,14 +139,9 @@ func doDDLProcess(table *table, db *sql.DB) {
 	// do add  column ddl
 	index = randInt(2, len(table.columns)-1)
 	colName := randString(5)
-
-	col = &column{
-		name: colName,
-		tp: &types.FieldType{
-			Tp:   mysql.TypeVarchar,
-			Flen: 45,
-		},
-	}
+	tp := types.NewFieldType(mysql.TypeVarchar)
+	tp.SetFlen(45)
+	col = &column{name: colName, tp: tp}
 
 	newCols := make([]*column, 0, len(table.columns)+1)
 	newCols = append(newCols, table.columns[:index]...)

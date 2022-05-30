@@ -64,7 +64,7 @@ func (s *testSyncerSuite) TestCastUnsigned(c *C) {
 	for _, cs := range cases {
 		ft := types.NewFieldType(cs.Type)
 		if cs.unsigned {
-			ft.Flag |= mysql.UnsignedFlag
+			ft.AddFlag(mysql.UnsignedFlag)
 		}
 		obtained := castUnsigned(cs.data, ft)
 		c.Assert(obtained, Equals, cs.expected)

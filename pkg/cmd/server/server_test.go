@@ -176,7 +176,6 @@ func TestParseCfg(t *testing.T) {
 			RegionRetryDuration: config.TomlDuration(time.Minute),
 		},
 		Debug: &config.DebugConfig{
-			EnableTableActor: true,
 			TableActor: &config.TableActorConfig{
 				EventBatchSize: 32,
 			},
@@ -324,7 +323,6 @@ server-worker-pool-size = 16
 			RegionRetryDuration: config.TomlDuration(3 * time.Second),
 		},
 		Debug: &config.DebugConfig{
-			EnableTableActor: true,
 			TableActor: &config.TableActorConfig{
 				EventBatchSize: 32,
 			},
@@ -467,7 +465,6 @@ cert-allowed-cn = ["dd","ee"]
 			RegionRetryDuration: config.TomlDuration(time.Minute),
 		},
 		Debug: &config.DebugConfig{
-			EnableTableActor: true,
 			TableActor: &config.TableActorConfig{
 				EventBatchSize: 32,
 			},
@@ -528,7 +525,6 @@ unknown3 = 3
 	err = o.validate()
 	require.Nil(t, err)
 	require.Equal(t, &config.DebugConfig{
-		EnableTableActor: true,
 		TableActor: &config.TableActorConfig{
 			EventBatchSize: 32,
 		},

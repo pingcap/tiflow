@@ -149,14 +149,12 @@ func (c *Capture) reset(ctx context.Context) error {
 	if c.tableActorSystem != nil {
 		c.tableActorSystem.Stop()
 	}
-	if conf.Debug.EnableTableActor {
-		c.tableActorSystem = system.NewSystem()
-		err = c.tableActorSystem.Start(ctx)
-		if err != nil {
-			return errors.Annotate(
-				cerror.WrapError(cerror.ErrNewCaptureFailed, err),
-				"create table actor system")
-		}
+	c.tableActorSystem = system.NewSystem()
+	err = c.tableActorSystem.Start(ctx)
+	if err != nil {
+		return errors.Annotate(
+			cerror.WrapError(cerror.ErrNewCaptureFailed, err),
+			"create table actor system")
 	}
 	if conf.Debug.EnableDBSorter {
 		if c.sorterSystem != nil {

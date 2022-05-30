@@ -87,7 +87,7 @@ func WrapTableInfo(schemaID int64, schemaName string, version uint64, info *mode
 		if IsColCDCVisible(col) {
 			ti.RowColumnsOffset[col.ID] = rowColumnsCurrentOffset
 			rowColumnsCurrentOffset++
-			pkIsHandle = (ti.PKIsHandle && mysql.HasPriKeyFlag(col.Flag)) || col.ID == model.ExtraHandleID
+			pkIsHandle = (ti.PKIsHandle && mysql.HasPriKeyFlag(col.GetFlag())) || col.ID == model.ExtraHandleID
 			if pkIsHandle {
 				// pk is handle
 				ti.handleColID = []int64{col.ID}
@@ -173,28 +173,28 @@ func (ti *TableInfo) findHandleIndex() {
 func (ti *TableInfo) initColumnsFlag() {
 	for _, colInfo := range ti.Columns {
 		var flag ColumnFlagType
-		if colInfo.Charset == "binary" {
+		if colInfo.GetCharset() == "binary" {
 			flag.SetIsBinary()
 		}
 		if colInfo.IsGenerated() {
 			flag.SetIsGeneratedColumn()
 		}
-		if mysql.HasPriKeyFlag(colInfo.Flag) {
+		if mysql.HasPriKeyFlag(colInfo.GetFlag()) {
 			flag.SetIsPrimaryKey()
 			if ti.HandleIndexID == HandleIndexPKIsHandle {
 				flag.SetIsHandleKey()
 			}
 		}
-		if mysql.HasUniKeyFlag(colInfo.Flag) {
+		if mysql.HasUniKeyFlag(colInfo.GetFlag()) {
 			flag.SetIsUniqueKey()
 		}
-		if !mysql.HasNotNullFlag(colInfo.Flag) {
+		if !mysql.HasNotNullFlag(colInfo.GetFlag()) {
 			flag.SetIsNullable()
 		}
-		if mysql.HasMultipleKeyFlag(colInfo.Flag) {
+		if mysql.HasMultipleKeyFlag(colInfo.GetFlag()) {
 			flag.SetIsMultipleKey()
 		}
-		if mysql.HasUnsignedFlag(colInfo.Flag) {
+		if mysql.HasUnsignedFlag(colInfo.GetFlag()) {
 			flag.SetIsUnsigned()
 		}
 		ti.ColumnsFlag[colInfo.ID] = flag
@@ -269,7 +269,7 @@ func (ti *TableInfo) GetUniqueKeys() [][]string {
 	var uniqueKeys [][]string
 	if ti.PKIsHandle {
 		for _, col := range ti.Columns {
-			if mysql.HasPriKeyFlag(col.Flag) {
+			if mysql.HasPriKeyFlag(col.GetFlag()) {
 				// Prepend to make sure the primary key ends up at the front
 				uniqueKeys = [][]string{{col.Name.O}}
 				break
@@ -327,7 +327,7 @@ func (ti *TableInfo) IsIndexUnique(indexInfo *model.IndexInfo) bool {
 	if indexInfo.Unique {
 		for _, col := range indexInfo.Columns {
 			colInfo := ti.Columns[col.Offset]
-			if !mysql.HasNotNullFlag(colInfo.Flag) {
+			if !mysql.HasNotNullFlag(colInfo.GetFlag()) {
 				return false
 			}
 			// this column is a virtual generated column

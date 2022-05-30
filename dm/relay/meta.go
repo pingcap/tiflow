@@ -30,11 +30,11 @@ import (
 )
 
 var (
-	minUUIDSufix  = 1
+	minUUIDSuffix = 1
 	minCheckpoint = mysql.Position{Pos: 4}
 )
 
-// Meta represents binlog meta information for sync source
+// Meta represents relay log meta information for sync source
 // when re-syncing, we should reload meta info to guarantee continuous transmission
 // in order to support master-slave switching, Meta should support switching binlog meta info to newer master
 // should support the case, where switching from A to B, then switching from B back to A.
@@ -56,14 +56,14 @@ type Meta interface {
 	// Dirty checks whether meta in memory is dirty (need to Flush)
 	Dirty() bool
 
-	// AddDir adds sub relay directory for server UUID (without suffix)
-	// if uuidSuffix is not zero value, add sub relay directory with uuidSuffix (bound to a new source)
+	// AddDir adds relay log subdirectory for a new server. The name of new subdirectory
+	// consists of the server_uuid of new server and a suffix.
+	// if suffix is not zero value, add sub relay directory with suffix (bound to a new source)
 	// otherwise the added sub relay directory's suffix is incremented (master/slave switch)
 	// after sub relay directory added, the internal binlog pos should be reset
 	// and binlog pos will be set again when new binlog events received
-	// @serverUUID should be a server_uuid for MySQL or MariaDB
 	// if set @newPos / @newGTID, old value will be replaced
-	AddDir(serverUUID string, newPos *mysql.Position, newGTID mysql.GTIDSet, uuidSuffix int) error
+	AddDir(serverUUID string, newPos *mysql.Position, newGTID mysql.GTIDSet, suffix int) error
 
 	// Pos returns current (UUID with suffix, Position) pair
 	Pos() (string, mysql.Position)
@@ -71,14 +71,14 @@ type Meta interface {
 	// GTID returns current (UUID with suffix, GTID) pair
 	GTID() (string, mysql.GTIDSet)
 
-	// UUID returns current UUID (with suffix)
-	UUID() string
+	// SubDir returns the name of current relay log subdirectory.
+	SubDir() string
 
-	// TrimUUIDs trim invalid UUIDs from memory and update the server-uuid.index file
-	// return trimmed UUIDs
-	TrimUUIDs() ([]string, error)
+	// TrimUUIDIndexFile trim invalid relay log subdirectories from memory and update the server-uuid.index file
+	// return trimmed result.
+	TrimUUIDIndexFile() ([]string, error)
 
-	// Dir returns current relay log (sub) directory
+	// Dir returns the full path of relay log subdirectory.
 	Dir() string
 
 	// String returns string representation of current meta info
@@ -91,8 +91,8 @@ type LocalMeta struct {
 	flavor        string
 	baseDir       string
 	uuidIndexPath string
-	currentUUID   string   // current UUID with suffix
-	uuids         []string // all valid UUIDs
+	currentSubDir string
+	subDirs       []string
 	gset          mysql.GTIDSet
 	emptyGSet     mysql.GTIDSet
 	dirty         bool
@@ -108,8 +108,8 @@ func NewLocalMeta(flavor, baseDir string) Meta {
 		flavor:        flavor,
 		baseDir:       baseDir,
 		uuidIndexPath: filepath.Join(baseDir, utils.UUIDIndexFilename),
-		currentUUID:   "",
-		uuids:         make([]string, 0),
+		currentSubDir: "",
+		subDirs:       make([]string, 0),
 		dirty:         false,
 		BinLogName:    minCheckpoint.Name,
 		BinLogPos:     minCheckpoint.Pos,
@@ -124,24 +124,24 @@ func (lm *LocalMeta) Load() error {
 	lm.Lock()
 	defer lm.Unlock()
 
-	uuids, err := utils.ParseUUIDIndex(lm.uuidIndexPath)
+	subDirs, err := utils.ParseUUIDIndex(lm.uuidIndexPath)
 	if err != nil {
 		return err
 	}
 
-	err = lm.verifyUUIDs(uuids)
+	err = lm.verifySubDirs(subDirs)
 	if err != nil {
 		return err
 	}
 
-	if len(uuids) > 0 {
+	if len(subDirs) > 0 {
 		// update to the latest
-		err = lm.updateCurrentUUID(uuids[len(uuids)-1])
+		err = lm.updateCurrentSubDir(subDirs[len(subDirs)-1])
 		if err != nil {
 			return err
 		}
 	}
-	lm.uuids = uuids
+	lm.subDirs = subDirs
 
 	err = lm.loadMetaData()
 	if err != nil {
@@ -157,13 +157,13 @@ func (lm *LocalMeta) AdjustWithStartPos(binlogName string, binlogGTID string, en
 	defer lm.Unlock()
 
 	// check whether already have meaningful pos
-	if len(lm.currentUUID) > 0 {
-		_, suffix, err := utils.ParseSuffixForUUID(lm.currentUUID)
+	if len(lm.currentSubDir) > 0 {
+		_, suffix, err := utils.ParseRelaySubDir(lm.currentSubDir)
 		if err != nil {
 			return false, err
 		}
 		currPos := mysql.Position{Name: lm.BinLogName, Pos: lm.BinLogPos}
-		if suffix != minUUIDSufix || currPos.Compare(minCheckpoint) > 0 || len(lm.BinlogGTID) > 0 {
+		if suffix != minUUIDSuffix || currPos.Compare(minCheckpoint) > 0 || len(lm.BinlogGTID) > 0 {
 			return false, nil // current pos is meaningful, do nothing
 		}
 	}
@@ -202,7 +202,7 @@ func (lm *LocalMeta) Save(pos mysql.Position, gset mysql.GTIDSet) error {
 	lm.Lock()
 	defer lm.Unlock()
 
-	if len(lm.currentUUID) == 0 {
+	if len(lm.currentSubDir) == 0 {
 		return terror.ErrRelayNoCurrentUUID.Generate()
 	}
 
@@ -230,7 +230,7 @@ func (lm *LocalMeta) Flush() error {
 
 // doFlush does the real flushing.
 func (lm *LocalMeta) doFlush() error {
-	if len(lm.currentUUID) == 0 {
+	if len(lm.currentSubDir) == 0 {
 		return terror.ErrRelayNoCurrentUUID.Generate()
 	}
 
@@ -241,7 +241,7 @@ func (lm *LocalMeta) doFlush() error {
 		return terror.ErrRelayFlushLocalMeta.Delegate(err)
 	}
 
-	filename := filepath.Join(lm.baseDir, lm.currentUUID, utils.MetaFilename)
+	filename := filepath.Join(lm.baseDir, lm.currentSubDir, utils.MetaFilename)
 	err = utils.WriteFileAtomic(filename, buf.Bytes(), 0o644)
 	if err != nil {
 		return terror.ErrRelayFlushLocalMeta.Delegate(err)
@@ -265,7 +265,7 @@ func (lm *LocalMeta) Dir() string {
 	lm.RLock()
 	defer lm.RUnlock()
 
-	return filepath.Join(lm.baseDir, lm.currentUUID)
+	return filepath.Join(lm.baseDir, lm.currentSubDir)
 }
 
 // AddDir implements Meta.AddDir.
@@ -273,22 +273,22 @@ func (lm *LocalMeta) AddDir(serverUUID string, newPos *mysql.Position, newGTID m
 	lm.Lock()
 	defer lm.Unlock()
 
-	var newUUID string
+	var newSubDir string
 
-	if len(lm.currentUUID) == 0 {
+	if len(lm.currentSubDir) == 0 {
 		// no UUID exists yet, simply add it
 		if uuidSuffix == 0 {
-			newUUID = utils.AddSuffixForUUID(serverUUID, minUUIDSufix)
+			newSubDir = utils.AddSuffixForUUID(serverUUID, minUUIDSuffix)
 		} else {
-			newUUID = utils.AddSuffixForUUID(serverUUID, uuidSuffix)
+			newSubDir = utils.AddSuffixForUUID(serverUUID, uuidSuffix)
 		}
 	} else {
-		_, suffix, err := utils.ParseSuffixForUUID(lm.currentUUID)
+		_, suffix, err := utils.ParseRelaySubDir(lm.currentSubDir)
 		if err != nil {
 			return err
 		}
-		// even newUUID == currentUUID, we still append it (for some cases, like `RESET MASTER`)
-		newUUID = utils.AddSuffixForUUID(serverUUID, suffix+1)
+		// even newSubDir == currentSubDir, we still append it (for some cases, like `RESET MASTER`)
+		newSubDir = utils.AddSuffixForUUID(serverUUID, suffix+1)
 	}
 
 	// flush previous meta
@@ -300,22 +300,22 @@ func (lm *LocalMeta) AddDir(serverUUID string, newPos *mysql.Position, newGTID m
 	}
 
 	// make sub dir for UUID
-	err := os.Mkdir(filepath.Join(lm.baseDir, newUUID), 0o744)
+	err := os.Mkdir(filepath.Join(lm.baseDir, newSubDir), 0o744)
 	if err != nil {
 		return terror.ErrRelayMkdir.Delegate(err)
 	}
 
 	// update UUID index file
-	uuids := lm.uuids
-	uuids = append(uuids, newUUID)
+	uuids := lm.subDirs
+	uuids = append(uuids, newSubDir)
 	err = lm.updateIndexFile(uuids)
 	if err != nil {
 		return err
 	}
 
 	// update current UUID
-	lm.currentUUID = newUUID
-	lm.uuids = uuids
+	lm.currentSubDir = newSubDir
+	lm.subDirs = uuids
 
 	if newPos != nil {
 		lm.BinLogName = newPos.Name
@@ -341,7 +341,7 @@ func (lm *LocalMeta) Pos() (string, mysql.Position) {
 	lm.RLock()
 	defer lm.RUnlock()
 
-	return lm.currentUUID, mysql.Position{Name: lm.BinLogName, Pos: lm.BinLogPos}
+	return lm.currentSubDir, mysql.Position{Name: lm.BinLogName, Pos: lm.BinLogPos}
 }
 
 // GTID implements Meta.GTID.
@@ -350,32 +350,32 @@ func (lm *LocalMeta) GTID() (string, mysql.GTIDSet) {
 	defer lm.RUnlock()
 
 	if lm.gset != nil {
-		return lm.currentUUID, lm.gset.Clone()
+		return lm.currentSubDir, lm.gset.Clone()
 	}
-	return lm.currentUUID, nil
+	return lm.currentSubDir, nil
 }
 
-// UUID implements Meta.UUID.
-func (lm *LocalMeta) UUID() string {
+// SubDir implements Meta.SubDir.
+func (lm *LocalMeta) SubDir() string {
 	lm.RLock()
 	defer lm.RUnlock()
-	return lm.currentUUID
+	return lm.currentSubDir
 }
 
-// TrimUUIDs implements Meta.TrimUUIDs.
-func (lm *LocalMeta) TrimUUIDs() ([]string, error) {
+// TrimUUIDIndexFile implements Meta.TrimUUIDIndexFile.
+func (lm *LocalMeta) TrimUUIDIndexFile() ([]string, error) {
 	lm.Lock()
 	defer lm.Unlock()
 
-	kept := make([]string, 0, len(lm.uuids))
+	kept := make([]string, 0, len(lm.subDirs))
 	trimmed := make([]string, 0)
-	for _, uuid := range lm.uuids {
+	for _, subDir := range lm.subDirs {
 		// now, only check if the sub dir exists
-		fp := filepath.Join(lm.baseDir, uuid)
+		fp := filepath.Join(lm.baseDir, subDir)
 		if utils.IsDirExists(fp) {
-			kept = append(kept, uuid)
+			kept = append(kept, subDir)
 		} else {
-			trimmed = append(trimmed, uuid)
+			trimmed = append(trimmed, subDir)
 		}
 	}
 
@@ -388,8 +388,8 @@ func (lm *LocalMeta) TrimUUIDs() ([]string, error) {
 		return nil, err
 	}
 
-	// currentUUID should be not changed
-	lm.uuids = kept
+	// currentSubDir should be not changed
+	lm.subDirs = kept
 	return trimmed, nil
 }
 
@@ -412,10 +412,10 @@ func (lm *LocalMeta) updateIndexFile(uuids []string) error {
 	return terror.ErrRelayUpdateIndexFile.Delegate(err, lm.uuidIndexPath)
 }
 
-func (lm *LocalMeta) verifyUUIDs(uuids []string) error {
+func (lm *LocalMeta) verifySubDirs(uuids []string) error {
 	previousSuffix := 0
 	for _, uuid := range uuids {
-		_, suffix, err := utils.ParseSuffixForUUID(uuid)
+		_, suffix, err := utils.ParseRelaySubDir(uuid)
 		if err != nil {
 			return terror.Annotatef(err, "UUID %s", uuid)
 		}
@@ -430,24 +430,24 @@ func (lm *LocalMeta) verifyUUIDs(uuids []string) error {
 	return nil
 }
 
-// updateCurrentUUID updates current UUID.
-func (lm *LocalMeta) updateCurrentUUID(uuid string) error {
-	_, suffix, err := utils.ParseSuffixForUUID(uuid)
+// updateCurrentSubDir updates current relay log subdirectory.
+func (lm *LocalMeta) updateCurrentSubDir(uuid string) error {
+	_, suffix, err := utils.ParseRelaySubDir(uuid)
 	if err != nil {
 		return err
 	}
 
-	if len(lm.currentUUID) > 0 {
-		_, previousSuffix, err := utils.ParseSuffixForUUID(lm.currentUUID)
+	if len(lm.currentSubDir) > 0 {
+		_, previousSuffix, err := utils.ParseRelaySubDir(lm.currentSubDir)
 		if err != nil {
 			return err // should not happen
 		}
 		if previousSuffix > suffix {
-			return terror.ErrRelayUUIDSuffixLessThanPrev.Generate(lm.currentUUID, uuid)
+			return terror.ErrRelayUUIDSuffixLessThanPrev.Generate(lm.currentSubDir, uuid)
 		}
 	}
 
-	lm.currentUUID = uuid
+	lm.currentSubDir = uuid
 	return nil
 }
 
@@ -455,11 +455,11 @@ func (lm *LocalMeta) updateCurrentUUID(uuid string) error {
 func (lm *LocalMeta) loadMetaData() error {
 	lm.gset = lm.emptyGSet.Clone()
 
-	if len(lm.currentUUID) == 0 {
+	if len(lm.currentSubDir) == 0 {
 		return nil
 	}
 
-	filename := filepath.Join(lm.baseDir, lm.currentUUID, utils.MetaFilename)
+	filename := filepath.Join(lm.baseDir, lm.currentSubDir, utils.MetaFilename)
 
 	fd, err := os.Open(filename)
 	if os.IsNotExist(err) {
