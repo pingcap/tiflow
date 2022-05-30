@@ -19,10 +19,10 @@ import (
 	"fmt"
 	"sync"
 
+	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/runtime"
 	libModel "github.com/pingcap/tiflow/engine/lib/model"
-	"github.com/pingcap/tiflow/engine/pb"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
 )
 

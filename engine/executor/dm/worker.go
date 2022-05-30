@@ -158,8 +158,8 @@ func (w *dmWorker) CloseImpl(ctx context.Context) error {
 	return nil
 }
 
-// exit closes the task and exits.
-func (w *dmWorker) exit(ctx context.Context, status libModel.WorkerStatus, err error) error {
+// closeAndExit closes the task and exits.
+func (w *dmWorker) closeAndExit(ctx context.Context, status libModel.WorkerStatus, err error) error {
 	if err := w.CloseImpl(ctx); err != nil {
 		log.L().Warn("fail to close task", log.ShortError(err))
 	}
@@ -208,7 +208,7 @@ func (w *dmWorker) tryUpdateStatus(ctx context.Context) error {
 			return nil
 		}
 	}
-	return w.exit(ctx, status, nil)
+	return w.closeAndExit(ctx, status, nil)
 }
 
 // workerStatus gets worker status.
