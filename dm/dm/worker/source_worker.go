@@ -129,8 +129,6 @@ func NewSourceWorker(
 		w.taskStatusChecker = tsc
 	}
 
-	InitConditionHub(w)
-
 	w.l.Info("initialized", zap.Stringer("cfg", cfg))
 
 	return w, nil

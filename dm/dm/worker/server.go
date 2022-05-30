@@ -58,7 +58,7 @@ var (
 // dispatches requests to worker
 // sends responses to RPC client.
 type Server struct {
-	sync.Mutex
+	sync.RWMutex
 	wg     sync.WaitGroup
 	kaWg   sync.WaitGroup
 	closed atomic.Bool
@@ -70,9 +70,15 @@ type Server struct {
 
 	cfg *Config
 
-	rootLis    net.Listener
-	svr        *grpc.Server
-	worker     *SourceWorker
+	rootLis net.Listener
+	svr     *grpc.Server
+	// all sources bound to this worker, source name -> SourceWorker.
+	// add:
+	// - add worker by user request (calling `AddWorker`).
+	// - recover from etcd (calling `recoverWorkersBounds`).
+	// delete:
+	// - remove worker by user request (calling `RemoveWorker`).
+	// - close worker Server
 	workers    map[string]*SourceWorker
 	etcdClient *clientv3.Client
 
@@ -118,7 +124,10 @@ func (s *Server) Start() error {
 		return err
 	}
 
-	s.setWorker(nil, true)
+	err = s.stopAllWorkers(false)
+	if err != nil {
+		return err
+	}
 
 	s.wg.Add(1)
 	go func() {
@@ -311,7 +320,7 @@ func (s *Server) observeRelayConfig(ctx context.Context, rev int64) error {
 						// check whether all sources are started through enable relay
 						// if not, stop the relaySources that are operated to this worker
 						startedByCfg := true
-						for _, w := range s.getSourceWorkers(true) {
+						for _, w := range s.getAllWorkers(true) {
 							if !w.startedRelayBySourceCfg {
 								startedByCfg = false
 								break
@@ -335,7 +344,7 @@ func (s *Server) observeRelayConfig(ctx context.Context, rev int64) error {
 							// mark relay workers in etcd as set A, relay workers started in dm-worker server as set B
 							// make sure relay workers in set `A` are all started and else are stopped
 							// TODO: batch these operations to avoid error
-							sourceWorkersSet := s.getSourceWorkers(false)
+							sourceWorkersSet := s.getAllWorkers(false)
 							for source, sourceCfg := range relaySources {
 								if w, ok := sourceWorkersSet[source]; ok {
 									// we may face both relay config and subtask bound changed in a compaction error, so here
@@ -442,7 +451,7 @@ func (s *Server) observeSourceBound(ctx context.Context, rev int64) error {
 							// mark source bound workers in etcd as set A, source bound workers started in dm-worker server as set B
 							// make sure source bound workers in set `A` are all started and else are stopped
 							// TODO: batch these operations to avoid error
-							sourceWorkersSet := s.getSourceWorkers(false)
+							sourceWorkersSet := s.getAllWorkers(false)
 							for i, bound := range bounds {
 								source := bound.Source
 								sourceCfg := cfgs[i]
@@ -503,8 +512,14 @@ func (s *Server) doClose() {
 	s.cancel()
 	s.wg.Wait()
 	// stop worker and wait for return(we already lock the whole Sever, so no need use lock to get source worker)
-	if w := s.getSourceWorker(false); w != nil {
-		w.Stop(true)
+	if sws := s.getAllWorkers(false); len(sws) > 0 {
+		for _, w := range sws {
+			if w == nil {
+				continue
+			}
+			w.Stop(true)
+			s.delWorker(w.cfg.SourceID, false)
+		}
 	}
 	s.closed.Store(true)
 }
@@ -519,10 +534,19 @@ func (s *Server) Close() {
 }
 
 // if needLock is false, we should make sure Server has been locked in caller.
-func (s *Server) getSourceWorkers(needLock bool) map[string]*SourceWorker {
+func (s *Server) getWorkerBySource(source string, needLock bool) *SourceWorker {
 	if needLock {
-		s.Lock()
-		defer s.Unlock()
+		s.RLock()
+		defer s.RUnlock()
+	}
+	return s.workers[source]
+}
+
+// if needLock is false, we should make sure Server has been locked in caller.
+func (s *Server) getAllWorkers(needLock bool) map[string]*SourceWorker {
+	if needLock {
+		s.RLock()
+		defer s.RUnlock()
 	}
 	sws := make(map[string]*SourceWorker, len(s.workers))
 	for source, w := range s.workers {
@@ -532,21 +556,23 @@ func (s *Server) getSourceWorkers(needLock bool) map[string]*SourceWorker {
 }
 
 // if needLock is false, we should make sure Server has been locked in caller.
-func (s *Server) getSourceWorker(needLock bool) *SourceWorker {
+func (s *Server) addWorker(worker *SourceWorker, needLock bool) {
+	sourceID := worker.cfg.SourceID
+	UpdateConditionHub(worker, sourceID, true)
 	if needLock {
 		s.Lock()
 		defer s.Unlock()
 	}
-	return s.worker
+	s.workers[sourceID] = worker
 }
 
-// if needLock is false, we should make sure Server has been locked in caller.
-func (s *Server) setWorker(worker *SourceWorker, needLock bool) {
+func (s *Server) delWorker(sourceID string, needLock bool) {
+	UpdateConditionHub(nil, sourceID, true)
 	if needLock {
 		s.Lock()
 		defer s.Unlock()
 	}
-	s.worker = worker
+	delete(s.workers, sourceID)
 }
 
 // nolint:unparam
@@ -558,14 +584,14 @@ func (s *Server) getSourceStatus(needLock bool) pb.SourceStatus {
 	return s.sourceStatus
 }
 
-// TODO: move some call to setWorker/getOrStartWorker.
+// TODO: move some call to addWorker/getOrStartWorker.
 func (s *Server) setSourceStatus(source string, err error, needLock bool) {
 	if needLock {
 		s.Lock()
 		defer s.Unlock()
 	}
 	// now setSourceStatus will be concurrently called. skip setting a source status if worker has been closed
-	if s.getSourceWorker(false) == nil && source != "" {
+	if s.getWorkerBySource(source, false) == nil && source != "" {
 		return
 	}
 	s.sourceStatus = pb.SourceStatus{
@@ -582,7 +608,7 @@ func (s *Server) setSourceStatus(source string, err error, needLock bool) {
 }
 
 func (s *Server) stopAllWorkers(onlyRelay bool) error {
-	workers := s.getSourceWorkers(false)
+	workers := s.getAllWorkers(false)
 	for source, w := range workers {
 		if onlyRelay && !w.relayEnabled.Load() {
 			continue
@@ -600,7 +626,7 @@ func (s *Server) stopSourceWorker(sourceID string, needLock, graceful bool) erro
 		s.Lock()
 		defer s.Unlock()
 	}
-	w := s.getSourceWorker(false)
+	w := s.getWorkerBySource(sourceID, false)
 	if w == nil {
 		log.L().Warn("worker has not been started, no need to stop", zap.String("source", sourceID))
 		return nil // no need to stop because not started yet
@@ -609,7 +635,8 @@ func (s *Server) stopSourceWorker(sourceID string, needLock, graceful bool) erro
 		return terror.ErrWorkerSourceNotMatch
 	}
 	s.UpdateKeepAliveTTL(s.cfg.KeepAliveTTL)
-	s.setWorker(nil, false)
+	// needLock is handled before
+	s.delWorker(sourceID, false)
 	s.setSourceStatus("", nil, false)
 	w.Stop(graceful)
 	return nil
@@ -741,7 +768,7 @@ func (s *Server) enableHandleSubtasks(sourceCfg *config.SourceConfig, needLock b
 func (s *Server) disableHandleSubtasks(source string) error {
 	s.Lock()
 	defer s.Unlock()
-	w := s.getSourceWorker(false)
+	w := s.getWorkerBySource(source, false)
 	if w == nil {
 		log.L().Warn("worker has already stopped before DisableHandleSubtasks", zap.String("source", source))
 		return nil
@@ -804,7 +831,7 @@ func (s *Server) enableRelay(sourceCfg *config.SourceConfig, needLock bool) erro
 func (s *Server) disableRelay(source string) error {
 	s.Lock()
 	defer s.Unlock()
-	w := s.getSourceWorker(false)
+	w := s.getWorkerBySource(source, false)
 	if w == nil {
 		log.L().Warn("worker has already stopped before DisableRelay", zap.Any("relaySource", source))
 		return nil
@@ -830,7 +857,8 @@ func (s *Server) QueryStatus(ctx context.Context, req *pb.QueryStatusRequest) (*
 		SourceStatus: &sourceStatus,
 	}
 
-	w := s.getSourceWorker(true)
+	// FIXME: add source demands in purgeRelayRequest
+	w := s.getWorkerBySource("", true)
 	if w == nil {
 		log.L().Warn("fail to call QueryStatus, because no mysql source is being handled in the worker")
 		resp.Result = false
@@ -852,7 +880,8 @@ func (s *Server) QueryStatus(ctx context.Context, req *pb.QueryStatusRequest) (*
 // PurgeRelay implements WorkerServer.PurgeRelay.
 func (s *Server) PurgeRelay(ctx context.Context, req *pb.PurgeRelayRequest) (*pb.CommonWorkerResponse, error) {
 	log.L().Info("", zap.String("request", "PurgeRelay"), zap.Stringer("payload", req))
-	w := s.getSourceWorker(true)
+	// FIXME: add source demands in purgeRelayRequest
+	w := s.getWorkerBySource("", true)
 	if w == nil {
 		log.L().Warn("fail to call StartSubTask, because no mysql source is being handled in the worker")
 		return makeCommonWorkerResponse(terror.ErrWorkerNoStart.Generate()), nil
@@ -869,7 +898,7 @@ func (s *Server) PurgeRelay(ctx context.Context, req *pb.PurgeRelayRequest) (*pb
 func (s *Server) OperateSchema(ctx context.Context, req *pb.OperateWorkerSchemaRequest) (*pb.CommonWorkerResponse, error) {
 	log.L().Info("", zap.String("request", "OperateSchema"), zap.Stringer("payload", req))
 
-	w := s.getSourceWorker(true)
+	w := s.getWorkerBySource(req.Source, true)
 	if w == nil {
 		log.L().Warn("fail to call OperateSchema, because no mysql source is being handled in the worker")
 		return makeCommonWorkerResponse(terror.ErrWorkerNoStart.Generate()), nil
@@ -896,9 +925,9 @@ func (s *Server) getOrStartWorker(cfg *config.SourceConfig, needLock bool) (*Sou
 		defer s.Unlock()
 	}
 
-	if w := s.getSourceWorker(false); w != nil {
+	if w := s.getWorkerBySource(cfg.SourceID, false); w != nil {
 		if w.cfg.SourceID == cfg.SourceID {
-			log.L().Info("mysql source is being handled", zap.String("sourceID", s.worker.cfg.SourceID))
+			log.L().Info("mysql source is being handled", zap.String("sourceID", w.cfg.SourceID))
 			return w, nil
 		}
 		return nil, terror.ErrWorkerAlreadyStart.Generate(w.name, w.cfg.SourceID, cfg.SourceID)
@@ -909,7 +938,7 @@ func (s *Server) getOrStartWorker(cfg *config.SourceConfig, needLock bool) (*Sou
 	if err != nil {
 		return nil, err
 	}
-	s.setWorker(w, false)
+	s.addWorker(w, false)
 
 	go w.Start()
 
@@ -987,7 +1016,8 @@ func getMinLocForSubTask(ctx context.Context, subTaskCfg config.SubTaskConfig) (
 func (s *Server) HandleError(ctx context.Context, req *pb.HandleWorkerErrorRequest) (*pb.CommonWorkerResponse, error) {
 	log.L().Info("", zap.String("request", "HandleError"), zap.Stringer("payload", req))
 
-	w := s.getSourceWorker(true)
+	// FIXME: add source demands in purgeRelayRequest
+	w := s.getWorkerBySource("", true)
 	if w == nil {
 		log.L().Warn("fail to call HandleError, because no mysql source is being handled in the worker")
 		return makeCommonWorkerResponse(terror.ErrWorkerNoStart.Generate()), nil
@@ -1021,7 +1051,8 @@ func (s *Server) CheckSubtasksCanUpdate(ctx context.Context, req *pb.CheckSubtas
 	defer func() {
 		log.L().Info("", zap.String("request", "CheckSubtasksCanUpdate"), zap.Stringer("resp", resp))
 	}()
-	w := s.getSourceWorker(true)
+	// FIXME: add source demands in purgeRelayRequest
+	w := s.getWorkerBySource("", true)
 	if w == nil {
 		msg := "fail to call CheckSubtasksCanUpdate, because no mysql source is being handled in the worker"
 		log.L().Warn(msg)

@@ -463,8 +463,9 @@ func (t *testSubTask) TestSubtaskWithStage(c *C) {
 func (t *testSubTask) TestSubtaskFastQuit(c *C) {
 	// case: test subtask stuck into unitTransWaitCondition
 	cfg := &config.SubTaskConfig{
-		Name: "testSubtaskFastQuit",
-		Mode: config.ModeAll,
+		SourceID: "source",
+		Name:     "testSubtaskFastQuit",
+		Mode:     config.ModeAll,
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -475,7 +476,8 @@ func (t *testSubTask) TestSubtaskFastQuit(c *C) {
 		// loadStatus relay MetaBinlog must be greater
 		relayHolder: NewDummyRelayHolderWithRelayBinlog(config.NewSourceConfig(), relayHolderBinlog),
 	}
-	InitConditionHub(w)
+	UpdateConditionHub(w, cfg.SourceID, true)
+	defer UpdateConditionHub(w, cfg.SourceID, false)
 
 	mockLoader := NewMockUnit(pb.UnitType_Load)
 	mockSyncer := NewMockUnit(pb.UnitType_Sync)
