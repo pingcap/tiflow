@@ -18,6 +18,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"os"
 	"sort"
 	"testing"
 	"time"
@@ -25,13 +26,14 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	. "github.com/pingcap/check"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb-tools/pkg/filter"
 	"github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tidb/util/filter"
 	timock "github.com/pingcap/tidb/util/mock"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zapcore"
 
 	"github.com/pingcap/tiflow/dm/dm/config"
@@ -66,7 +68,7 @@ func (s *trackerSuite) SetUpSuite(c *C) {
 	c.Assert(err, IsNil)
 	con, err := db.Conn(context.Background())
 	c.Assert(err, IsNil)
-	s.dbConn = &dbconn.DBConn{Cfg: s.cfg, BaseConn: conn.NewBaseConn(con, nil)}
+	s.dbConn = dbconn.NewDBConn(s.cfg, conn.NewBaseConn(con, nil))
 }
 
 func (s *trackerSuite) TearDownSuite(c *C) {
@@ -87,7 +89,7 @@ func (s *trackerSuite) TestTiDBAndSessionCfg(c *C) {
 	con, err := db.Conn(context.Background())
 	c.Assert(err, IsNil)
 	baseConn := conn.NewBaseConn(con, nil)
-	dbConn := &dbconn.DBConn{Cfg: s.cfg, BaseConn: baseConn}
+	dbConn := dbconn.NewDBConn(s.cfg, baseConn)
 	// user give correct session config
 
 	t, err := NewTracker(context.Background(), "test-tracker", defaultTestSessionCfg, dbConn)
@@ -590,12 +592,12 @@ func (s *trackerSuite) TestBatchCreateTableIfNotExist(c *C) {
 		c.Assert(ti, DeepEquals, tiInfos[i])
 	}
 
-	// drop schema and raise error
+	// BatchCreateTableIfNotExist will also create database
 	ctx := context.Background()
 	err = tracker.Exec(ctx, "", `drop database testdb`)
 	c.Assert(err, IsNil)
 	err = tracker.BatchCreateTableIfNotExist(tablesToCreate)
-	c.Assert(err, NotNil)
+	c.Assert(err, IsNil)
 }
 
 func (s *trackerSuite) TestAllSchemas(c *C) {
@@ -689,7 +691,7 @@ func (s *trackerSuite) TestNotSupportedVariable(c *C) {
 	con, err := db.Conn(context.Background())
 	c.Assert(err, IsNil)
 	baseConn := conn.NewBaseConn(con, nil)
-	dbConn := &dbconn.DBConn{Cfg: s.cfg, BaseConn: baseConn}
+	dbConn := dbconn.NewDBConn(s.cfg, baseConn)
 
 	mock.ExpectQuery("SHOW VARIABLES LIKE 'sql_mode'").WillReturnRows(
 		sqlmock.NewRows([]string{"Variable_name", "Value"}).
@@ -716,7 +718,7 @@ func (s *trackerSuite) TestInitDownStreamSQLModeAndParser(c *C) {
 	con, err := db.Conn(context.Background())
 	c.Assert(err, IsNil)
 	baseConn := conn.NewBaseConn(con, nil)
-	dbConn := &dbconn.DBConn{Cfg: s.cfg, BaseConn: baseConn}
+	dbConn := dbconn.NewDBConn(s.cfg, baseConn)
 
 	tracker, err := NewTracker(context.Background(), "test-tracker", defaultTestSessionCfg, dbConn)
 	c.Assert(err, IsNil)
@@ -731,7 +733,7 @@ func (s *trackerSuite) TestInitDownStreamSQLModeAndParser(c *C) {
 
 	tctx := tcontext.NewContext(context.Background(), dlog.L())
 
-	err = tracker.initDownStreamSQLModeAndParser(tctx)
+	err = tracker.dsTracker.initDownStreamSQLModeAndParser(tctx)
 	c.Assert(err, IsNil)
 	c.Assert(tracker.dsTracker.stmtParser, NotNil)
 }
@@ -754,7 +756,7 @@ func (s *trackerSuite) TestGetDownStreamIndexInfo(c *C) {
 	con, err := db.Conn(context.Background())
 	c.Assert(err, IsNil)
 	baseConn := conn.NewBaseConn(con, nil)
-	dbConn := &dbconn.DBConn{Cfg: s.cfg, BaseConn: baseConn}
+	dbConn := dbconn.NewDBConn(s.cfg, baseConn)
 	tracker, err := NewTracker(context.Background(), "test-tracker", defaultTestSessionCfg, dbConn)
 	c.Assert(err, IsNil)
 	defer func() {
@@ -796,7 +798,7 @@ func (s *trackerSuite) TestReTrackDownStreamIndex(c *C) {
 	con, err := db.Conn(context.Background())
 	c.Assert(err, IsNil)
 	baseConn := conn.NewBaseConn(con, nil)
-	dbConn := &dbconn.DBConn{Cfg: s.cfg, BaseConn: baseConn}
+	dbConn := dbconn.NewDBConn(s.cfg, baseConn)
 	tracker, err := NewTracker(context.Background(), "test-tracker", defaultTestSessionCfg, dbConn)
 	c.Assert(err, IsNil)
 	defer func() {
@@ -888,7 +890,7 @@ func (s *trackerSuite) TestVarchar20000(c *C) {
 	con, err := db.Conn(context.Background())
 	c.Assert(err, IsNil)
 	baseConn := conn.NewBaseConn(con, nil)
-	dbConn := &dbconn.DBConn{Cfg: s.cfg, BaseConn: baseConn}
+	dbConn := dbconn.NewDBConn(s.cfg, baseConn)
 	tracker, err := NewTracker(context.Background(), "test-tracker", defaultTestSessionCfg, dbConn)
 	c.Assert(err, IsNil)
 	defer func() {
@@ -928,7 +930,7 @@ func (s *trackerSuite) TestPlacementRule(c *C) {
 	con, err := db.Conn(context.Background())
 	c.Assert(err, IsNil)
 	baseConn := conn.NewBaseConn(con, nil)
-	dbConn := &dbconn.DBConn{Cfg: s.cfg, BaseConn: baseConn}
+	dbConn := dbconn.NewDBConn(s.cfg, baseConn)
 	tracker, err := NewTracker(context.Background(), "test-tracker", defaultTestSessionCfg, dbConn)
 	c.Assert(err, IsNil)
 	defer func() {
@@ -952,4 +954,13 @@ func (s *trackerSuite) TestPlacementRule(c *C) {
 	c.Assert(err, IsNil)
 	_, ok := tracker.dsTracker.tableInfos[tableID]
 	c.Assert(ok, IsTrue)
+}
+
+func TestNewTmpFolderForTracker(t *testing.T) {
+	got, err := newTmpFolderForTracker("task/db01")
+	require.NoError(t, err)
+	require.Contains(t, got, "task%2Fdb01")
+	require.DirExists(t, got)
+	err = os.RemoveAll(got)
+	require.NoError(t, err)
 }

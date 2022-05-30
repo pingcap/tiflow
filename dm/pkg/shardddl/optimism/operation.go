@@ -21,8 +21,11 @@ import (
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.etcd.io/etcd/client/v3/clientv3util"
 
+	"github.com/pingcap/errors"
+
 	"github.com/pingcap/tiflow/dm/dm/common"
 	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
 // ConflictStage represents the current shard DDL conflict stage in the optimistic mode.
@@ -42,7 +45,7 @@ const (
 	// ConflictUnlocked indicates a conflict will be unlocked after applied the shard DDL.
 	// in this stage, DM-worker should directly execute/skip DDLs.
 	ConflictUnlocked ConflictStage = "unlocked"
-	// ConflictSkipWaitRedirect indicates a conflict hapend and will be skipped and redirected until all tables has no conflict
+	// ConflictSkipWaitRedirect indicates a conflict happened and will be skipped and redirected until all tables has no conflict
 	// in this stage, DM-worker should skip all DML and DDL for the conflict table until redirect.
 	ConflictSkipWaitRedirect ConflictStage = "skip and wait for redirect" // #nosec
 	// ConflictError indicates an error happened when we try to sync the DDLs
@@ -68,8 +71,9 @@ type Operation struct {
 	ConflictMsg   string        `json:"conflict-message"` // current conflict message
 	Done          bool          `json:"done"`             // whether the operation has done
 	Cols          []string      `json:"cols"`             // drop columns' name
+
 	// only set it when get from etcd
-	// use for sort infos in recoverlock
+	// use for sort infos in recovering locks
 	Revision int64 `json:"-"`
 }
 
@@ -142,7 +146,7 @@ func PutOperation(cli *clientv3.Client, skipDone bool, op Operation, infoModRev 
 	// txn 1: try to PUT if the key "not exist".
 	resp, err := cli.Txn(ctx).If(cmpsNotExist...).Then(opPut).Commit()
 	if err != nil {
-		return 0, false, err
+		return 0, false, terror.ErrHAFailTxnOperation.Delegate(err, "fail to put operation at not exist")
 	} else if resp.Succeeded {
 		return resp.Header.Revision, resp.Succeeded, nil
 	}
@@ -150,7 +154,7 @@ func PutOperation(cli *clientv3.Client, skipDone bool, op Operation, infoModRev 
 	// txn 2: try to PUT if the key "the `done`" field is not `true`.
 	resp, err = cli.Txn(ctx).If(cmpsNotDone...).Then(opPut).Commit()
 	if err != nil {
-		return 0, false, err
+		return 0, false, terror.ErrHAFailTxnOperation.Delegate(err, "fail to put operation at not done")
 	} else if resp.Succeeded {
 		return resp.Header.Revision, resp.Succeeded, nil
 	}
@@ -164,7 +168,7 @@ func PutOperation(cli *clientv3.Client, skipDone bool, op Operation, infoModRev 
 	// 5. dm-worker didn't receive a DDL operation, will get blocked forever
 	resp, err = cli.Txn(ctx).If(cmpsLessRev...).Then(opPut).Commit()
 	if err != nil {
-		return 0, false, err
+		return 0, false, terror.ErrHAFailTxnOperation.Delegate(err, "fail to put operation at less rev")
 	}
 	return resp.Header.Revision, resp.Succeeded, nil
 }
@@ -173,7 +177,7 @@ func PutOperation(cli *clientv3.Client, skipDone bool, op Operation, infoModRev 
 // This function should often be called by DM-master.
 // k/k/k/k/v: task-name -> source-ID -> upstream-schema-name -> upstream-table-name -> shard DDL operation.
 func GetAllOperations(cli *clientv3.Client) (map[string]map[string]map[string]map[string]Operation, int64, error) {
-	respTxn, _, err := etcdutil.DoOpsInOneTxnWithRetry(cli, clientv3.OpGet(common.ShardDDLOptimismOperationKeyAdapter.Path(), clientv3.WithPrefix()))
+	respTxn, _, err := etcdutil.DoTxnWithRepeatable(cli, etcdutil.ThenOpFunc(clientv3.OpGet(common.ShardDDLOptimismOperationKeyAdapter.Path(), clientv3.WithPrefix())))
 	if err != nil {
 		return nil, 0, err
 	}
@@ -185,6 +189,7 @@ func GetAllOperations(cli *clientv3.Client) (map[string]map[string]map[string]ma
 		if err2 != nil {
 			return nil, 0, err2
 		}
+		op.Revision = kv.ModRevision
 
 		if _, ok := opm[op.Task]; !ok {
 			opm[op.Task] = make(map[string]map[string]map[string]Operation)
@@ -195,19 +200,43 @@ func GetAllOperations(cli *clientv3.Client) (map[string]map[string]map[string]ma
 		if _, ok := opm[op.Task][op.Source][op.UpSchema]; !ok {
 			opm[op.Task][op.Source][op.UpSchema] = make(map[string]Operation)
 		}
-		op.Revision = kv.ModRevision
 		opm[op.Task][op.Source][op.UpSchema][op.UpTable] = op
 	}
 
 	return opm, resp.Header.Revision, nil
 }
 
+// GetOperation gets shard DDL operation in etcd currently.
+// This function should often be called by DM-worker.
+// (task-name, source-ID, upstream-schema-name, upstream-table-name) -> shard DDL operation.
+func GetOperation(cli *clientv3.Client, task, source, upSchema, upTable string) (Operation, int64, error) {
+	respTxn, _, err := etcdutil.DoTxnWithRepeatable(cli, etcdutil.ThenOpFunc(clientv3.OpGet(common.ShardDDLOptimismOperationKeyAdapter.Encode(task, source, upSchema, upTable))))
+	if err != nil {
+		return Operation{}, 0, err
+	}
+	resp := respTxn.Responses[0].GetResponseRange()
+
+	switch {
+	case resp.Count == 0:
+		return Operation{}, resp.Header.Revision, nil
+	case resp.Count > 1:
+		return Operation{}, 0, errors.Errorf("too many operations for %s/%s/%s/%s", task, source, upSchema, upTable)
+	default:
+		op, err2 := operationFromJSON(string(resp.Kvs[0].Value))
+		if err2 != nil {
+			return Operation{}, 0, err2
+		}
+		op.Revision = resp.Kvs[0].ModRevision
+		return op, op.Revision, nil
+	}
+}
+
 // GetInfosOperationsByTask gets all shard DDL info and operation in etcd currently.
 // This function should often be called by DM-master.
 func GetInfosOperationsByTask(cli *clientv3.Client, task string) ([]Info, []Operation, int64, error) {
-	respTxn, _, err := etcdutil.DoOpsInOneTxnWithRetry(cli,
+	respTxn, _, err := etcdutil.DoTxnWithRepeatable(cli, etcdutil.ThenOpFunc(
 		clientv3.OpGet(common.ShardDDLOptimismInfoKeyAdapter.Encode(task), clientv3.WithPrefix()),
-		clientv3.OpGet(common.ShardDDLOptimismOperationKeyAdapter.Encode(task), clientv3.WithPrefix()))
+		clientv3.OpGet(common.ShardDDLOptimismOperationKeyAdapter.Encode(task), clientv3.WithPrefix())))
 	if err != nil {
 		return nil, nil, 0, err
 	}
@@ -276,7 +305,6 @@ func WatchOperationPut(ctx context.Context, cli *clientv3.Client,
 				}
 
 				op, err := operationFromJSON(string(ev.Kv.Value))
-				op.Revision = ev.Kv.ModRevision
 				if err != nil {
 					select {
 					case errCh <- err:
@@ -284,6 +312,7 @@ func WatchOperationPut(ctx context.Context, cli *clientv3.Client,
 						return
 					}
 				} else {
+					op.Revision = ev.Kv.ModRevision
 					select {
 					case outCh <- op:
 					case <-ctx.Done():
@@ -334,7 +363,7 @@ func CheckOperations(cli *clientv3.Client, source string, schemaMap map[string]s
 						return err
 					}
 					deleteOp := deleteOperationOp(info)
-					_, _, err = etcdutil.DoOpsInOneTxnWithRetry(cli, deleteOp)
+					_, _, err = etcdutil.DoTxnWithRepeatable(cli, etcdutil.ThenOpFunc(deleteOp))
 					if err != nil {
 						return err
 					}

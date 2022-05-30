@@ -76,16 +76,16 @@ type CompactActor struct {
 	metricCompactDuration prometheus.Observer
 }
 
-var _ actor.Actor = (*CompactActor)(nil)
+var _ actor.Actor[message.Task] = (*CompactActor)(nil)
 
 // NewCompactActor returns a compactor actor.
 func NewCompactActor(
 	id int, db db.DB, wg *sync.WaitGroup, cfg *config.DBConfig,
-) (*CompactActor, actor.Mailbox, error) {
+) (*CompactActor, actor.Mailbox[message.Task], error) {
 	wg.Add(1)
 	idTag := strconv.Itoa(id)
 	// Compact is CPU intensive, set capacity to 1 to reduce unnecessary tasks.
-	mb := actor.NewMailbox(actor.ID(id), 1)
+	mb := actor.NewMailbox[message.Task](actor.ID(id), 1)
 	return &CompactActor{
 		id:       actor.ID(id),
 		db:       db,
@@ -100,7 +100,7 @@ func NewCompactActor(
 }
 
 // Poll implements actor.Actor.
-func (c *CompactActor) Poll(ctx context.Context, tasks []actormsg.Message) bool {
+func (c *CompactActor) Poll(ctx context.Context, tasks []actormsg.Message[message.Task]) bool {
 	select {
 	case <-ctx.Done():
 		return false
@@ -112,8 +112,8 @@ func (c *CompactActor) Poll(ctx context.Context, tasks []actormsg.Message) bool 
 	for pos := range tasks {
 		msg := tasks[pos]
 		switch msg.Tp {
-		case actormsg.TypeSorterTask:
-			count += msg.SorterTask.DeleteReq.Count
+		case actormsg.TypeValue:
+			count += msg.Value.DeleteReq.Count
 		case actormsg.TypeStop:
 			return false
 		default:
@@ -127,7 +127,7 @@ func (c *CompactActor) Poll(ctx context.Context, tasks []actormsg.Message) bool 
 	}
 
 	// A range that is large enough to cover entire db effectively.
-	// See see sorter/encoding/key.go.
+	// See sorter/encoding/key.go.
 	start, end := []byte{0x0}, bytes.Repeat([]byte{0xff}, 128)
 	if err := c.db.Compact(start, end); err != nil {
 		log.Error("db compact error", zap.Error(err))
@@ -144,14 +144,14 @@ func (c *CompactActor) OnClose() {
 }
 
 // NewCompactScheduler returns a new compact scheduler.
-func NewCompactScheduler(router *actor.Router) *CompactScheduler {
+func NewCompactScheduler(router *actor.Router[message.Task]) *CompactScheduler {
 	return &CompactScheduler{router: router}
 }
 
 // CompactScheduler schedules compact tasks to compactors.
 type CompactScheduler struct {
 	// A router to compactors.
-	router *actor.Router
+	router *actor.Router[message.Task]
 }
 
 // tryScheduleCompact try to schedule a compact task.
@@ -163,7 +163,7 @@ func (s *CompactScheduler) tryScheduleCompact(id actor.ID, deleteCount int) bool
 			Count: deleteCount,
 		},
 	}
-	err := s.router.Send(id, actormsg.SorterMessage(task))
+	err := s.router.Send(id, actormsg.ValueMessage(task))
 	// An ongoing compaction may block compactor and cause channel full,
 	// skip send the task as there is a pending task.
 	if err != nil && cerrors.ErrMailboxFull.NotEqual(err) {

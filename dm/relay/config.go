@@ -22,7 +22,8 @@ import (
 
 // Config is the configuration for Relay.
 type Config struct {
-	EnableGTID  bool            `toml:"enable-gtid" json:"enable-gtid"`
+	EnableGTID bool `toml:"enable-gtid" json:"enable-gtid"`
+	// deprecated
 	AutoFixGTID bool            `toml:"auto-fix-gtid" json:"auto-fix-gtid"`
 	RelayDir    string          `toml:"relay-dir" json:"relay-dir"`
 	ServerID    uint32          `toml:"server-id" json:"server-id"`
@@ -52,16 +53,15 @@ func (c *Config) String() string {
 func FromSourceCfg(sourceCfg *config.SourceConfig) *Config {
 	clone := sourceCfg.DecryptPassword()
 	cfg := &Config{
-		EnableGTID:  clone.EnableGTID,
-		AutoFixGTID: clone.AutoFixGTID,
-		Flavor:      clone.Flavor,
-		RelayDir:    clone.RelayDir,
-		ServerID:    clone.ServerID,
-		Charset:     clone.Charset,
-		From:        clone.From,
-		BinLogName:  clone.RelayBinLogName,
-		BinlogGTID:  clone.RelayBinlogGTID,
-		UUIDSuffix:  clone.UUIDSuffix,
+		EnableGTID: clone.EnableGTID,
+		Flavor:     clone.Flavor,
+		RelayDir:   clone.RelayDir,
+		ServerID:   clone.ServerID,
+		Charset:    clone.Charset,
+		From:       clone.From,
+		BinLogName: clone.RelayBinLogName,
+		BinlogGTID: clone.RelayBinlogGTID,
+		UUIDSuffix: clone.UUIDSuffix,
 		ReaderRetry: ReaderRetryConfig{ // we use config from TaskChecker now
 			BackoffRollback: clone.Checker.BackoffRollback.Duration,
 			BackoffMax:      clone.Checker.BackoffMax.Duration,

@@ -11,6 +11,7 @@ fi
 ${PKILL} cdc.test || true
 ${PKILL} cdc || true
 ${PKILL} cdc_state_checker || true
+${PKILL} cdc_kafka_consumer || true
 ${PKILL} tidb-server || true
 ${PKILL} tikv-server || true
 ${PKILL} tiflash || true

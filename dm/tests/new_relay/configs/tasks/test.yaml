@@ -51,7 +51,6 @@ syncers:
     queue-size: 1024
     checkpoint-flush-interval: 30
     max-retry: 0
-    auto-fix-gtid: false
     enable-gtid: false
     disable-detect: false
     safe-mode: false

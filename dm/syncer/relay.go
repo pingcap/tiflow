@@ -33,18 +33,18 @@ func (s *Syncer) setInitActiveRelayLog(ctx context.Context) error {
 	}
 
 	var (
-		pos        mysql.Position
-		activeUUID string
-		extractPos bool
-		err        error
+		pos          mysql.Position
+		activeSubDir string
+		extractPos   bool
+		err          error
 	)
 
 	indexPath := filepath.Join(s.cfg.RelayDir, utils.UUIDIndexFilename)
-	uuids, err := utils.ParseUUIDIndex(indexPath)
+	subDirs, err := utils.ParseUUIDIndex(indexPath)
 	if err != nil {
 		return terror.Annotatef(err, "UUID index file path %s", indexPath)
 	}
-	if len(uuids) == 0 {
+	if len(subDirs) == 0 {
 		return terror.ErrRelayNoValidRelaySubDir.Generate(s.cfg.RelayDir)
 	}
 
@@ -69,29 +69,29 @@ func (s *Syncer) setInitActiveRelayLog(ctx context.Context) error {
 	}
 
 	if extractPos {
-		activeUUID, _, pos, err = binlog.ExtractPos(pos, uuids)
+		activeSubDir, _, pos, err = binlog.ExtractPos(pos, subDirs)
 		if err != nil {
 			return err
 		}
 	} else {
 		var uuid string
-		latestUUID := uuids[len(uuids)-1]
+		latestSubDir := subDirs[len(subDirs)-1]
 		uuid, err = s.fromDB.GetServerUUID(ctx, s.cfg.Flavor)
 		if err != nil {
 			return terror.WithScope(terror.Annotatef(err, "get server UUID"), terror.ScopeUpstream)
 		}
 		// latest should be the current
-		if !strings.HasPrefix(latestUUID, uuid) {
-			return terror.ErrSyncerUnitUUIDNotLatest.Generate(uuid, uuids)
+		if !strings.HasPrefix(latestSubDir, uuid) {
+			return terror.ErrSyncerUnitUUIDNotLatest.Generate(uuid, subDirs)
 		}
-		activeUUID = latestUUID
+		activeSubDir = latestSubDir
 	}
 
 	if len(pos.Name) == 0 {
 		s.tctx.Logger.Warn("empty position, may because only specify GTID and hasn't saved according binlog position")
 		return nil
 	}
-	err = s.readerHub.UpdateActiveRelayLog(s.cfg.Name, activeUUID, pos.Name)
+	err = s.readerHub.UpdateActiveRelayLog(s.cfg.Name, activeSubDir, pos.Name)
 	s.recordedActiveRelayLog = true
 	s.tctx.L().Info("current earliest active relay log", log.WrapStringerField("active relay log", s.readerHub.EarliestActiveRelayLog()))
 	return err
@@ -116,12 +116,12 @@ func (s *Syncer) updateActiveRelayLog(pos mysql.Position) error {
 		return terror.ErrRelayNoValidRelaySubDir.Generate(s.cfg.RelayDir)
 	}
 
-	activeUUID, _, pos, err := binlog.ExtractPos(pos, uuids)
+	activeSubDir, _, pos, err := binlog.ExtractPos(pos, uuids)
 	if err != nil {
 		return err
 	}
 
-	err = s.readerHub.UpdateActiveRelayLog(s.cfg.Name, activeUUID, pos.Name)
+	err = s.readerHub.UpdateActiveRelayLog(s.cfg.Name, activeSubDir, pos.Name)
 	s.tctx.L().Info("current earliest active relay log", log.WrapStringerField("active relay log", s.readerHub.EarliestActiveRelayLog()))
 	return err
 }

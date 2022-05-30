@@ -14,15 +14,20 @@
 package syncer
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"regexp"
 	"strings"
 
-	"github.com/pingcap/tidb-tools/pkg/filter"
+	ddl2 "github.com/pingcap/tidb/ddl"
+	"github.com/pingcap/tidb/executor"
+	"github.com/pingcap/tidb/meta/autoid"
 	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/parser/format"
 	"github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tidb/util/filter"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/dm/dm/config"
@@ -30,7 +35,6 @@ import (
 	"github.com/pingcap/tiflow/dm/openapi"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/log"
-	"github.com/pingcap/tiflow/dm/pkg/schema"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/syncer/dbconn"
 )
@@ -66,9 +70,19 @@ func (s *Syncer) OperateSchema(ctx context.Context, req *pb.OperateWorkerSchemaR
 		}
 		return string(tableListJSON), err
 	case pb.SchemaOp_GetSchema:
-		// we only try to get schema from schema-tracker now.
-		// in other words, we can not get the schema if any DDL/DML has been replicated, or set a schema previously.
-		return s.schemaTracker.GetCreateTable(ctx, sourceTable)
+		// when task is paused, schemaTracker is closed. We get the table structure from checkpoint.
+		ti := s.checkpoint.GetTableInfo(req.Database, req.Table)
+		if ti == nil {
+			s.tctx.L().Info("table schema is not in checkpoint, fetch from downstream",
+				zap.String("table", sourceTable.String()))
+			targetTable := s.route(sourceTable)
+			return dbconn.GetTableCreateSQL(s.tctx.WithContext(ctx), s.downstreamTrackConn, targetTable.String())
+		}
+
+		result := bytes.NewBuffer(make([]byte, 0, 512))
+		err2 := executor.ConstructResultOfShowCreateTable(s.sessCtx, ti, autoid.Allocators{}, result)
+		return utils.CreateTableSQLToOneRow(result.String()), err2
+
 	case pb.SchemaOp_SetSchema:
 		// from source or target need get schema
 		if req.FromSource {
@@ -89,7 +103,6 @@ func (s *Syncer) OperateSchema(ctx context.Context, req *pb.OperateWorkerSchemaR
 		}
 
 		// for set schema, we must ensure it's a valid `CREATE TABLE` statement.
-		// now, we only set schema for schema-tracker,
 		// if want to update the one in checkpoint, it should wait for the flush of checkpoint.
 		parser2, err := s.fromDB.GetParser(ctx)
 		if err != nil {
@@ -115,37 +128,21 @@ func (s *Syncer) OperateSchema(ctx context.Context, req *pb.OperateWorkerSchemaR
 		}
 		newSQL := newCreateSQLBuilder.String()
 
-		// drop the previous schema first.
-		err = s.schemaTracker.DropTable(sourceTable)
-		if err != nil && !schema.IsTableNotExists(err) {
-			return "", terror.ErrSchemaTrackerCannotDropTable.Delegate(err, sourceTable)
-		}
-		err = s.schemaTracker.CreateSchemaIfNotExists(req.Database)
-		if err != nil {
-			return "", terror.ErrSchemaTrackerCannotCreateSchema.Delegate(err, req.Database)
-		}
-		err = s.schemaTracker.Exec(ctx, req.Database, newSQL)
-		if err != nil {
-			return "", terror.ErrSchemaTrackerCannotCreateTable.Delegate(err, sourceTable)
-		}
-
 		s.exprFilterGroup.ResetExprs(sourceTable)
 
-		if !req.Flush && !req.Sync {
-			break
+		if !req.Flush {
+			s.tctx.L().Info("overwrite --flush to true for operate-schema")
 		}
 
-		ti, err := s.schemaTracker.GetTableInfo(sourceTable)
+		ti, err2 := ddl2.BuildTableInfoFromAST(stmt)
+		if err2 != nil {
+			return "", terror.ErrSchemaTrackerRestoreStmtFail.Delegate(err2)
+		}
+
+		s.tctx.L().Info("flush table info", zap.String("table info", newSQL))
+		err = s.checkpoint.FlushPointsWithTableInfos(tcontext.NewContext(ctx, log.L()), []*filter.Table{sourceTable}, []*model.TableInfo{ti})
 		if err != nil {
 			return "", err
-		}
-
-		if req.Flush {
-			log.L().Info("flush table info", zap.String("table info", newSQL))
-			err = s.checkpoint.FlushPointsWithTableInfos(tcontext.NewContext(ctx, log.L()), []*filter.Table{sourceTable}, []*model.TableInfo{ti})
-			if err != nil {
-				return "", err
-			}
 		}
 
 		if req.Sync {
@@ -165,9 +162,9 @@ func (s *Syncer) OperateSchema(ctx context.Context, req *pb.OperateWorkerSchemaR
 		}
 
 	case pb.SchemaOp_RemoveSchema:
-		// we only drop the schema in the schema-tracker now,
-		// so if we drop the schema and continue to replicate any DDL/DML, it will try to get schema from downstream again.
-		return "", s.schemaTracker.DropTable(sourceTable)
+		// as the doc says, `operate-schema remove` will let DM-worker use table structure in checkpoint, which does not
+		// need further actions.
+		return "", nil
 	}
 	return "", nil
 }

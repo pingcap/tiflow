@@ -18,8 +18,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-sql-driver/mysql"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
-	"github.com/pingcap/tidb-tools/pkg/dbutil"
+	"github.com/pingcap/tidb/errno"
+	"github.com/pingcap/tidb/util/dbutil"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/dm/dm/config"
@@ -56,26 +59,33 @@ func CloseBaseDB(logCtx *tcontext.Context, baseDB *conn.BaseDB) {
 // DBConn represents a live DB connection
 // it's not thread-safe.
 type DBConn struct {
-	Cfg      *config.SubTaskConfig
-	BaseConn *conn.BaseConn
+	cfg      *config.SubTaskConfig
+	baseConn *conn.BaseConn
 
 	// generate new BaseConn and close old one
 	ResetBaseConnFn func(*tcontext.Context, *conn.BaseConn) (*conn.BaseConn, error)
 }
 
+func NewDBConn(cfg *config.SubTaskConfig, baseConn *conn.BaseConn) *DBConn {
+	return &DBConn{
+		cfg:      cfg,
+		baseConn: baseConn,
+	}
+}
+
 // ResetConn reset one worker connection from specify *BaseDB.
 func (conn *DBConn) ResetConn(tctx *tcontext.Context) error {
-	baseConn, err := conn.ResetBaseConnFn(tctx, conn.BaseConn)
+	baseConn, err := conn.ResetBaseConnFn(tctx, conn.baseConn)
 	if err != nil {
 		return err
 	}
-	conn.BaseConn = baseConn
+	conn.baseConn = baseConn
 	return nil
 }
 
 // QuerySQL does one query.
 func (conn *DBConn) QuerySQL(tctx *tcontext.Context, query string, args ...interface{}) (*sql.Rows, error) {
-	if conn == nil || conn.BaseConn == nil {
+	if conn == nil || conn.baseConn == nil {
 		return nil, terror.ErrDBUnExpect.Generate("database base connection not valid")
 	}
 	// nolint:dupl
@@ -93,7 +103,7 @@ func (conn *DBConn) QuerySQL(tctx *tcontext.Context, query string, args ...inter
 						log.ShortError(err))
 					return false
 				}
-				metrics.SQLRetriesTotal.WithLabelValues("query", conn.Cfg.Name).Add(1)
+				metrics.SQLRetriesTotal.WithLabelValues("query", conn.cfg.Name).Add(1)
 				return true
 			}
 			if dbutil.IsRetryableError(err) {
@@ -101,19 +111,19 @@ func (conn *DBConn) QuerySQL(tctx *tcontext.Context, query string, args ...inter
 					zap.String("query", utils.TruncateString(query, -1)),
 					zap.String("argument", utils.TruncateInterface(args, -1)),
 					log.ShortError(err))
-				metrics.SQLRetriesTotal.WithLabelValues("query", conn.Cfg.Name).Add(1)
+				metrics.SQLRetriesTotal.WithLabelValues("query", conn.cfg.Name).Add(1)
 				return true
 			}
 			return false
 		},
 	}
 
-	ret, _, err := conn.BaseConn.ApplyRetryStrategy(
+	ret, _, err := conn.baseConn.ApplyRetryStrategy(
 		tctx,
 		params,
 		func(ctx *tcontext.Context) (interface{}, error) {
 			startTime := time.Now()
-			ret, err := conn.BaseConn.QuerySQL(ctx, query, args...)
+			ret, err := conn.baseConn.QuerySQL(ctx, query, args...)
 			if err == nil {
 				if ret.Err() != nil {
 					return err, ret.Err()
@@ -121,7 +131,7 @@ func (conn *DBConn) QuerySQL(tctx *tcontext.Context, query string, args ...inter
 				cost := time.Since(startTime)
 				// duration seconds
 				ds := cost.Seconds()
-				metrics.QueryHistogram.WithLabelValues(conn.Cfg.Name, conn.Cfg.WorkerName, conn.Cfg.SourceID).Observe(ds)
+				metrics.QueryHistogram.WithLabelValues(conn.cfg.Name, conn.cfg.WorkerName, conn.cfg.SourceID).Observe(ds)
 				if ds > 1 {
 					ctx.L().Warn("query statement too slow",
 						zap.Duration("cost time", cost),
@@ -156,7 +166,7 @@ func (conn *DBConn) ExecuteSQLWithIgnore(tctx *tcontext.Context, ignoreError fun
 		return 0, nil
 	}
 
-	if conn == nil || conn.BaseConn == nil {
+	if conn == nil || conn.baseConn == nil {
 		return 0, terror.ErrDBUnExpect.Generate("database base connection not valid")
 	}
 
@@ -177,7 +187,7 @@ func (conn *DBConn) ExecuteSQLWithIgnore(tctx *tcontext.Context, ignoreError fun
 				}
 				tctx.L().Warn("execute sql failed by connection error", zap.Int("retry", retryTime),
 					zap.Error(err))
-				metrics.SQLRetriesTotal.WithLabelValues("stmt_exec", conn.Cfg.Name).Add(1)
+				metrics.SQLRetriesTotal.WithLabelValues("stmt_exec", conn.cfg.Name).Add(1)
 				return true
 			}
 			if dbutil.IsRetryableError(err) {
@@ -187,27 +197,28 @@ func (conn *DBConn) ExecuteSQLWithIgnore(tctx *tcontext.Context, ignoreError fun
 					log.ShortError(err))
 				tctx.L().Warn("execute sql failed by retryable error", zap.Int("retry", retryTime),
 					zap.Error(err))
-				metrics.SQLRetriesTotal.WithLabelValues("stmt_exec", conn.Cfg.Name).Add(1)
+				metrics.SQLRetriesTotal.WithLabelValues("stmt_exec", conn.cfg.Name).Add(1)
 				return true
 			}
-			return false
+			// TODO: move it to above IsRetryableError
+			return isRetryableError(err)
 		},
 	}
 
-	ret, _, err := conn.BaseConn.ApplyRetryStrategy(
+	ret, _, err := conn.baseConn.ApplyRetryStrategy(
 		tctx,
 		params,
 		func(ctx *tcontext.Context) (interface{}, error) {
 			startTime := time.Now()
-			ret, err := conn.BaseConn.ExecuteSQLWithIgnoreError(ctx, metrics.StmtHistogram, conn.Cfg.Name, ignoreError, queries, args...)
+			ret, err := conn.baseConn.ExecuteSQLWithIgnoreError(ctx, metrics.StmtHistogram, conn.cfg.Name, ignoreError, queries, args...)
 			if err == nil {
 				cost := time.Since(startTime)
 				// duration seconds
 				ds := cost.Seconds()
-				metrics.TxnHistogram.WithLabelValues(conn.Cfg.Name, conn.Cfg.WorkerName, conn.Cfg.SourceID).Observe(ds)
+				metrics.TxnHistogram.WithLabelValues(conn.cfg.Name, conn.cfg.WorkerName, conn.cfg.SourceID).Observe(ds)
 				// calculate idealJobCount metric: connection count * 1 / (one sql cost time)
-				qps := float64(conn.Cfg.WorkerCount) / (cost.Seconds() / float64(len(queries)))
-				metrics.IdealQPS.WithLabelValues(conn.Cfg.Name, conn.Cfg.WorkerName, conn.Cfg.SourceID).Set(qps)
+				qps := float64(conn.cfg.WorkerCount) / (cost.Seconds() / float64(len(queries)))
+				metrics.IdealQPS.WithLabelValues(conn.cfg.Name, conn.cfg.WorkerName, conn.cfg.SourceID).Set(qps)
 				if ds > 1 {
 					ctx.L().Warn("execute transaction too slow",
 						zap.Duration("cost time", cost),
@@ -225,6 +236,16 @@ func (conn *DBConn) ExecuteSQLWithIgnore(tctx *tcontext.Context, ignoreError fun
 		return ret.(int), err
 	}
 	return ret.(int), nil
+}
+
+func isRetryableError(err error) bool {
+	err = errors.Cause(err) // check the original error
+	mysqlErr, ok := err.(*mysql.MySQLError)
+	if !ok {
+		return false
+	}
+
+	return mysqlErr.Number == errno.ErrKeyColumnDoesNotExits
 }
 
 // ExecuteSQL does some SQL executions.
@@ -252,7 +273,7 @@ func CreateConns(tctx *tcontext.Context, cfg *config.SubTaskConfig, dbCfg *confi
 			}
 			return baseDB.GetBaseConn(tctx.Context())
 		}
-		conns = append(conns, &DBConn{BaseConn: baseConn, Cfg: cfg, ResetBaseConnFn: resetBaseConnFn})
+		conns = append(conns, &DBConn{baseConn: baseConn, cfg: cfg, ResetBaseConnFn: resetBaseConnFn})
 	}
 	return baseDB, conns, nil
 }

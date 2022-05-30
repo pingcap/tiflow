@@ -19,12 +19,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pingcap/tidb-tools/pkg/dbutil"
 	tiddl "github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/sessionctx"
+	"github.com/pingcap/tidb/util/dbutil"
 	"github.com/pingcap/tidb/util/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -190,6 +190,7 @@ func (t *testOptimistSuite) TestOptimistSourceTables() {
 		tts := o.tk.FindTables(task, downSchema, downTable)
 		return len(tts) == 1
 	}, waitFor, tick)
+
 	tts := o.tk.FindTables(task, downSchema, downTable)
 	require.Len(t.T(), tts, 1)
 	require.Equal(t.T(), st1.TargetTable(downSchema, downTable), tts[0])

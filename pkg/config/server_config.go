@@ -96,9 +96,11 @@ var defaultServerConfig = &ServerConfig{
 		WorkerConcurrent: 8,
 		WorkerPoolSize:   0, // 0 will use NumCPU() * 2
 		RegionScanLimit:  40,
+		// The default TiKV region election timeout is [10s, 20s],
+		// Use 1 minute to cover region leader missing.
+		RegionRetryDuration: TomlDuration(time.Minute),
 	},
 	Debug: &DebugConfig{
-		EnableTableActor: false,
 		TableActor: &TableActorConfig{
 			EventBatchSize: 32,
 		},
@@ -250,11 +252,8 @@ func (c *ServerConfig) ValidateAndAdjust() error {
 	if c.KVClient == nil {
 		c.KVClient = defaultCfg.KVClient
 	}
-	if c.KVClient.WorkerConcurrent <= 0 {
-		return cerror.ErrInvalidServerOption.GenWithStackByArgs("region-scan-limit should be at least 1")
-	}
-	if c.KVClient.RegionScanLimit <= 0 {
-		return cerror.ErrInvalidServerOption.GenWithStackByArgs("region-scan-limit should be at least 1")
+	if err = c.KVClient.ValidateAndAdjust(); err != nil {
+		return errors.Trace(err)
 	}
 
 	if c.Debug == nil {

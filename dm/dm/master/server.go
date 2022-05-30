@@ -15,6 +15,7 @@ package master
 
 import (
 	"context"
+	"database/sql"
 	"encoding/binary"
 	"fmt"
 	"math/rand"
@@ -30,8 +31,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
-	"github.com/pingcap/tidb-tools/pkg/dbutil"
 	toolutils "github.com/pingcap/tidb-tools/pkg/utils"
+	"github.com/pingcap/tidb/util/dbutil"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.etcd.io/etcd/server/v3/embed"
 	"go.uber.org/atomic"
@@ -42,7 +43,6 @@ import (
 	dmcommon "github.com/pingcap/tiflow/dm/dm/common"
 	"github.com/pingcap/tiflow/dm/dm/config"
 	ctlcommon "github.com/pingcap/tiflow/dm/dm/ctl/common"
-	ctlmaster "github.com/pingcap/tiflow/dm/dm/ctl/master"
 	"github.com/pingcap/tiflow/dm/dm/master/metrics"
 	"github.com/pingcap/tiflow/dm/dm/master/scheduler"
 	"github.com/pingcap/tiflow/dm/dm/master/shardddl"
@@ -87,7 +87,12 @@ var (
 	registerOnce      sync.Once
 	runBackgroundOnce sync.Once
 
-	checkAndAdjustSourceConfigFunc = checkAndAdjustSourceConfig
+	// CheckAndAdjustSourceConfigFunc is exposed to dataflow engine.
+	// the difference of below functions is checkAndAdjustSourceConfigForDMCtlFunc will not AdjustCaseSensitive. It's a
+	// compatibility compromise.
+	// When we need to change the implementation of dmctl to OpenAPI, we should notice the user about this change.
+	CheckAndAdjustSourceConfigFunc         = checkAndAdjustSourceConfig
+	checkAndAdjustSourceConfigForDMCtlFunc = checkAndAdjustSourceConfigForDMCtl
 )
 
 // Server handles RPC requests for dm-master.
@@ -199,7 +204,12 @@ func (s *Server) Start(ctx context.Context) (err error) {
 		"/debug/": getDebugHandler(),
 	}
 	if s.cfg.OpenAPI {
-		if initOpenAPIErr := s.InitOpenAPIHandles(); initOpenAPIErr != nil {
+		// tls3 is used to openapi reverse proxy
+		tls3, err1 := toolutils.NewTLS(s.cfg.SSLCA, s.cfg.SSLCert, s.cfg.SSLKey, s.cfg.AdvertiseAddr, s.cfg.CertAllowedCN)
+		if err1 != nil {
+			return terror.ErrMasterTLSConfigNotValid.Delegate(err1)
+		}
+		if initOpenAPIErr := s.InitOpenAPIHandles(tls3.TLSConfig()); initOpenAPIErr != nil {
 			return terror.ErrOpenAPICommonError.Delegate(initOpenAPIErr)
 		}
 		userHandles["/api/v1/"] = s.openapiHandles
@@ -1287,7 +1297,7 @@ func (s *Server) CheckTask(ctx context.Context, req *pb.CheckTaskRequest) (*pb.C
 		}, nil
 	}
 	resp := &pb.CheckTaskResponse{}
-	_, stCfgs, err := s.generateSubTask(ctx, req.Task, nil)
+	_, stCfgs, err := s.generateSubTask(ctx, req.Task, &cliArgs)
 	if err != nil {
 		resp.Msg = err.Error()
 		// nolint:nilerr
@@ -1312,7 +1322,7 @@ func parseAndAdjustSourceConfig(ctx context.Context, contents []string) ([]*conf
 		if err != nil {
 			return cfgs, err
 		}
-		if err := checkAndAdjustSourceConfigFunc(ctx, cfg); err != nil {
+		if err := checkAndAdjustSourceConfigForDMCtlFunc(ctx, cfg); err != nil {
 			return cfgs, err
 		}
 		cfgs[i] = cfg
@@ -1320,7 +1330,11 @@ func parseAndAdjustSourceConfig(ctx context.Context, contents []string) ([]*conf
 	return cfgs, nil
 }
 
-func checkAndAdjustSourceConfig(ctx context.Context, cfg *config.SourceConfig) error {
+func innerCheckAndAdjustSourceConfig(
+	ctx context.Context,
+	cfg *config.SourceConfig,
+	hook func(sourceConfig *config.SourceConfig, ctx context.Context, db *sql.DB) error,
+) error {
 	dbConfig := cfg.GenerateDBConfig()
 	fromDB, err := conn.DefaultDBProvider.Apply(dbConfig)
 	if err != nil {
@@ -1330,10 +1344,23 @@ func checkAndAdjustSourceConfig(ctx context.Context, cfg *config.SourceConfig) e
 	if err = cfg.Adjust(ctx, fromDB.DB); err != nil {
 		return err
 	}
+	if hook != nil {
+		if err = hook(cfg, ctx, fromDB.DB); err != nil {
+			return err
+		}
+	}
 	if _, err = cfg.Yaml(); err != nil {
 		return err
 	}
 	return cfg.Verify()
+}
+
+func checkAndAdjustSourceConfig(ctx context.Context, cfg *config.SourceConfig) error {
+	return innerCheckAndAdjustSourceConfig(ctx, cfg, (*config.SourceConfig).AdjustCaseSensitive)
+}
+
+func checkAndAdjustSourceConfigForDMCtl(ctx context.Context, cfg *config.SourceConfig) error {
+	return innerCheckAndAdjustSourceConfig(ctx, cfg, nil)
 }
 
 func parseSourceConfig(contents []string) ([]*config.SourceConfig, error) {
@@ -1578,6 +1605,15 @@ func (s *Server) generateSubTask(
 		return nil, nil, terror.WithClass(err, terror.ClassDMMaster)
 	}
 
+	if cfg.TaskMode == config.ModeIncrement && (cliArgs == nil || cliArgs.StartTime == "") {
+		for _, inst := range cfg.MySQLInstances {
+			// incremental task need to specify meta or start time
+			if inst.Meta == nil {
+				return nil, nil, terror.ErrConfigMetadataNotSet.Generate(inst.SourceID, config.ModeIncrement)
+			}
+		}
+	}
+
 	err = adjustTargetDB(ctx, cfg.TargetDB)
 	if err != nil {
 		return nil, nil, terror.WithClass(err, terror.ClassDMMaster)
@@ -1677,6 +1713,14 @@ func (s *Server) removeMetaData(ctx context.Context, taskName, metaSchema string
 		dbutil.TableName(metaSchema, cputil.SyncerShardMeta(taskName))))
 	sqls = append(sqls, fmt.Sprintf("DROP TABLE IF EXISTS %s",
 		dbutil.TableName(metaSchema, cputil.SyncerOnlineDDL(taskName))))
+	sqls = append(sqls, fmt.Sprintf("DROP TABLE IF EXISTS %s",
+		dbutil.TableName(metaSchema, cputil.ValidatorCheckpoint(taskName))))
+	sqls = append(sqls, fmt.Sprintf("DROP TABLE IF EXISTS %s",
+		dbutil.TableName(metaSchema, cputil.ValidatorPendingChange(taskName))))
+	sqls = append(sqls, fmt.Sprintf("DROP TABLE IF EXISTS %s",
+		dbutil.TableName(metaSchema, cputil.ValidatorErrorChange(taskName))))
+	sqls = append(sqls, fmt.Sprintf("DROP TABLE IF EXISTS %s",
+		dbutil.TableName(metaSchema, cputil.ValidatorTableStatus(taskName))))
 
 	_, err = dbConn.ExecuteSQL(ctctx, nil, taskName, sqls)
 	if err == nil {
@@ -1764,6 +1808,14 @@ func (s *Server) waitOperationOk(
 	}
 
 	for num := 0; num < maxRetryNum; num++ {
+		if num > 0 {
+			select {
+			case <-ctx.Done():
+				return false, "", nil, ctx.Err()
+			case <-time.After(retryInterval):
+			}
+		}
+
 		// check whether source relative worker has been removed by scheduler
 		if _, ok := masterReq.(*pb.OperateSourceRequest); ok {
 			if expect == pb.Stage_Stopped {
@@ -1779,6 +1831,7 @@ func (s *Server) waitOperationOk(
 			}
 		}
 
+		// TODO: this is 30s, too long compared with retryInterval
 		resp, err := cli.SendRequest(ctx, req, s.cfg.RPCTimeout)
 		if err != nil {
 			log.L().Error("fail to query operation",
@@ -1890,12 +1943,6 @@ func (s *Server) waitOperationOk(
 			}
 			log.L().Info("fail to get expect operation result", zap.Int("retryNum", num), zap.String("task", taskName),
 				zap.String("source", sourceID), zap.Stringer("expect", expect), zap.Stringer("resp", queryResp))
-		}
-
-		select {
-		case <-ctx.Done():
-			return false, "", nil, ctx.Err()
-		case <-time.After(retryInterval):
 		}
 	}
 
@@ -2294,7 +2341,7 @@ func (s *Server) GetCfg(ctx context.Context, req *pb.GetCfgRequest) (*pb.GetCfgR
 		// For the get-config command, we want to filter out fields that are not easily readable by humans,
 		// such as SSLXXBytes field in `Security` struct
 		taskCfg := config.SubTaskConfigsToTaskConfig(subCfgList...)
-		taskCfg.TargetDB.Password = "******"
+		taskCfg.TargetDB.Password = config.ObfuscatedPasswordForFeedback
 		if taskCfg.TargetDB.Security != nil {
 			taskCfg.TargetDB.Security.ClearSSLBytesData()
 		}
@@ -2398,7 +2445,7 @@ func (s *Server) GetCfg(ctx context.Context, req *pb.GetCfgRequest) (*pb.GetCfgR
 
 			return resp2, nil
 		}
-		sourceCfg.From.Password = "******"
+		sourceCfg.From.Password = config.ObfuscatedPasswordForFeedback
 		if sourceCfg.From.Security != nil {
 			sourceCfg.From.Security.ClearSSLBytesData()
 		}
@@ -2611,55 +2658,133 @@ func (s *Server) sharedLogic(ctx context.Context, req interface{}, respPointer i
 	return true
 }
 
+func (s *Server) checkStartValidationParams(
+	subTaskCfgs map[string]map[string]config.SubTaskConfig,
+	req *pb.StartValidationRequest,
+) (string, bool) {
+	explicitModeOrStartTime := req.Mode != nil || req.StartTime != nil
+	if req.Mode != nil {
+		mode := req.GetModeValue()
+		if mode != config.ValidationFull && mode != config.ValidationFast {
+			msg := fmt.Sprintf("validation mode should be either `%s` or `%s`",
+				config.ValidationFull, config.ValidationFast)
+			return msg, false
+		}
+	}
+
+	startTime := req.GetStartTimeValue()
+	if startTime != "" {
+		if _, err := utils.ParseStartTime(startTime); err != nil {
+			return "start-time should be in the format like '2006-01-02 15:04:05' or '2006-01-02T15:04:05'", false
+		}
+	}
+
+	var enabledValidator string
+	allEnabled, noneEnabled := true, true
+	for taskName := range subTaskCfgs {
+		for sourceID := range subTaskCfgs[taskName] {
+			if s.scheduler.ValidatorEnabled(taskName, sourceID) {
+				enabledValidator = taskName + " with source " + sourceID
+				noneEnabled = false
+			} else {
+				allEnabled = false
+			}
+		}
+	}
+
+	// if user set mode or start-time explicitly, then we do enable operation.
+	// none of the target validators should have enabled
+	if explicitModeOrStartTime && !noneEnabled {
+		msg := fmt.Sprintf("some of target validator(%s) has already enabled, so we can't enable them in one command",
+			enabledValidator)
+		if allEnabled {
+			msg = "all target validator has enabled, cannot do 'validation start' with explicit mode or start-time"
+		}
+		return msg, false
+	}
+	// no explicit mode or start-time:
+	// - do start when all have enabled
+	// - do enable when none enabled
+	if !explicitModeOrStartTime && !allEnabled && !noneEnabled {
+		return fmt.Sprintf("some of target validator(%s) has already enabled, so we can't enable or start them in one command",
+			enabledValidator), false
+	}
+
+	return "", true
+}
+
 func (s *Server) StartValidation(ctx context.Context, req *pb.StartValidationRequest) (*pb.StartValidationResponse, error) {
 	var (
-		resp2       *pb.StartValidationResponse
-		err, err2   error
-		subTaskCfgs map[string]map[string]config.SubTaskConfig // task-name->sourceID->*config.SubTaskConfig
+		resp2     *pb.StartValidationResponse
+		err, err2 error
 	)
 	shouldRet := s.sharedLogic(ctx, req, &resp2, &err2)
 	if shouldRet {
 		return resp2, err2
 	}
 	resp := &pb.StartValidationResponse{}
-	if req.Mode != config.ValidationFull && req.Mode != config.ValidationFast {
-		resp.Result = false
-		resp.Msg = fmt.Sprintf("validation mode should be either `%s` or `%s`", config.ValidationFull, config.ValidationFast)
-		return resp, nil
-	}
-	subTaskCfgs = s.scheduler.GetSubTaskCfgsByTaskAndSource(req.TaskName, req.Sources)
+
+	subTaskCfgs := s.scheduler.GetSubTaskCfgsByTaskAndSource(req.TaskName, req.Sources)
 	if len(subTaskCfgs) == 0 {
-		resp.Result = false
-		name := req.TaskName
-		if name == "" {
-			name = "all"
+		if req.TaskName == "" {
+			resp.Msg = fmt.Sprintf("cannot get subtask by sources `%v`", req.Sources)
+		} else {
+			resp.Msg = fmt.Sprintf("cannot get subtask by task name `%s` and sources `%v`",
+				req.TaskName, req.Sources)
 		}
-		resp.Msg = fmt.Sprintf("fail to get subtask config by task name `%s` and sources `%v`", name, req.Sources)
-		// nolint:nilerr
 		return resp, nil
 	}
-	// TODO: wait for #4479 and update the validator stage in etcd
-	// get the validator stage: common.StageValidatorKeyAdapter.Encode(source, task-name)
-	// if no validator exists: update the subtask config & etcd.Put(validator stage running)
-	// if the validator stage is `RUNNING`: then report error
-	// otherwise: update the subtask config & etcd.Put(validator stage: running)
+
+	for taskName := range subTaskCfgs {
+		release, err3 := s.scheduler.AcquireSubtaskLatch(taskName)
+		if err3 != nil {
+			resp.Msg = err3.Error()
+			// nolint:nilerr
+			return resp, nil
+		}
+		defer release()
+	}
+
+	msg, ok := s.checkStartValidationParams(subTaskCfgs, req)
+	if !ok {
+		resp.Msg = msg
+		return resp, nil
+	}
+
+	mode := config.ValidationFull
+	if req.Mode != nil {
+		mode = req.GetModeValue()
+	}
+	startTime := req.GetStartTimeValue()
+	changedSubtaskCfgs := make([]config.SubTaskConfig, 0)
+	validatorStages := make([]ha.Stage, 0)
 	for taskName := range subTaskCfgs {
 		for sourceID := range subTaskCfgs[taskName] {
 			cfg := subTaskCfgs[taskName][sourceID]
-			cfg.ValidatorCfg.Mode = req.Mode
+			if !s.scheduler.ValidatorEnabled(taskName, sourceID) {
+				cfg.ValidatorCfg.Mode = mode
+				cfg.ValidatorCfg.StartTime = startTime
+				changedSubtaskCfgs = append(changedSubtaskCfgs, cfg)
+				log.L().Info("enable validator",
+					zap.String("task", taskName), zap.String("source", sourceID),
+					zap.String("mode", mode), zap.String("start-time", startTime))
+			} else {
+				log.L().Info("start validator",
+					zap.String("task", taskName), zap.String("source", sourceID))
+			}
 			subTaskCfgs[taskName][sourceID] = cfg
+			validatorStages = append(validatorStages, ha.NewValidatorStage(pb.Stage_Running, cfg.SourceID, cfg.Name))
 		}
 	}
-	err = s.scheduler.OperateValidationTask(pb.Stage_Running, subTaskCfgs)
+
+	err = s.scheduler.OperateValidationTask(validatorStages, changedSubtaskCfgs)
 	if err != nil {
-		resp.Result = false
 		resp.Msg = err.Error()
 		// nolint:nilerr
 		return resp, nil
 	}
 	resp.Result = true
 	resp.Msg = "success"
-	log.L().Info("start validation", zap.Reflect("subtask", subTaskCfgs))
 	return resp, nil
 }
 
@@ -2676,16 +2801,48 @@ func (s *Server) StopValidation(ctx context.Context, req *pb.StopValidationReque
 	resp := &pb.StopValidationResponse{}
 	subTaskCfgs = s.scheduler.GetSubTaskCfgsByTaskAndSource(req.TaskName, req.Sources)
 	if len(subTaskCfgs) == 0 {
-		resp.Result = false
-		name := req.TaskName
-		if name == "" {
-			name = "all"
+		msg := fmt.Sprintf("cannot get subtask by task name `%s` and sources `%v`", req.TaskName, req.Sources)
+		if req.TaskName == "" {
+			msg = fmt.Sprintf("cannot get subtask by sources `%v`", req.Sources)
 		}
-		resp.Msg = fmt.Sprintf("fail to get subtask config by task name `%s` and sources `%v`", name, req.Sources)
+		resp.Msg = msg
 		// nolint:nilerr
 		return resp, nil
 	}
-	err = s.scheduler.OperateValidationTask(pb.Stage_Stopped, subTaskCfgs)
+
+	for taskName := range subTaskCfgs {
+		release, err3 := s.scheduler.AcquireSubtaskLatch(taskName)
+		if err3 != nil {
+			resp.Msg = err3.Error()
+			// nolint:nilerr
+			return resp, nil
+		}
+		defer release()
+	}
+
+	var unEnabledValidator string
+	allEnabled := true
+	for taskName := range subTaskCfgs {
+		for sourceID := range subTaskCfgs[taskName] {
+			if !s.scheduler.ValidatorEnabled(taskName, sourceID) {
+				unEnabledValidator = taskName + " with source " + sourceID
+				allEnabled = false
+			}
+		}
+	}
+	if !allEnabled {
+		resp.Msg = fmt.Sprintf("some target validator(%s) is not enabled", unEnabledValidator)
+		return resp, nil
+	}
+
+	validatorStages := make([]ha.Stage, 0)
+	for taskName := range subTaskCfgs {
+		for _, cfg := range subTaskCfgs[taskName] {
+			log.L().Info("stop validator", zap.String("task", taskName), zap.String("source", cfg.SourceID))
+			validatorStages = append(validatorStages, ha.NewValidatorStage(pb.Stage_Stopped, cfg.SourceID, cfg.Name))
+		}
+	}
+	err = s.scheduler.OperateValidationTask(validatorStages, []config.SubTaskConfig{})
 	if err != nil {
 		resp.Result = false
 		resp.Msg = err.Error()
@@ -2694,19 +2851,18 @@ func (s *Server) StopValidation(ctx context.Context, req *pb.StopValidationReque
 	}
 	resp.Result = true
 	resp.Msg = "success"
-	log.L().Info("stop validation", zap.Reflect("subtask", subTaskCfgs))
 	return resp, nil
 }
 
 func (s *Server) GetValidationStatus(ctx context.Context, req *pb.GetValidationStatusRequest) (*pb.GetValidationStatusResponse, error) {
 	var (
 		resp2       *pb.GetValidationStatusResponse
-		err2, err   error
+		err         error
 		subTaskCfgs map[string]map[string]config.SubTaskConfig
 	)
-	shouldRet := s.sharedLogic(ctx, req, &resp2, &err2)
+	shouldRet := s.sharedLogic(ctx, req, &resp2, &err)
 	if shouldRet {
-		return resp2, err2
+		return resp2, err
 	}
 	resp := &pb.GetValidationStatusResponse{
 		Result: true,
@@ -2716,21 +2872,49 @@ func (s *Server) GetValidationStatus(ctx context.Context, req *pb.GetValidationS
 		resp.Msg = "task name should be specified"
 		return resp, nil
 	}
-	if req.FilterStatus != strings.ToLower(pb.Stage_Running.String()) && req.FilterStatus != strings.ToLower(pb.Stage_Stopped.String()) {
+	if req.FilterStatus != pb.Stage_InvalidStage && req.FilterStatus != pb.Stage_Running && req.FilterStatus != pb.Stage_Stopped {
 		resp.Result = false
-		resp.Msg = fmt.Sprintf("filtering stage should be either `%s` or `%s`", strings.ToLower(pb.Stage_Running.String()), strings.ToLower(pb.Stage_Stopped.String()))
-		return resp, err
+		resp.Msg = fmt.Sprintf("filtering stage should be either `%s`, `%s`, or empty", strings.ToLower(pb.Stage_Running.String()), strings.ToLower(pb.Stage_Stopped.String()))
+		// nolint:nilerr
+		return resp, nil
 	}
 	subTaskCfgs = s.scheduler.GetSubTaskCfgsByTaskAndSource(req.TaskName, []string{})
 	if len(subTaskCfgs) == 0 {
 		resp.Result = false
-		resp.Msg = fmt.Sprintf("fail to get subtask config by task name `%s`", req.TaskName)
+		resp.Msg = fmt.Sprintf("cannot get subtask by task name `%s`", req.TaskName)
 		// nolint:nilerr
 		return resp, nil
 	}
-	// TODO: get validation status from worker
 	log.L().Info("query validation status", zap.Reflect("subtask", subTaskCfgs))
-	return resp, err
+	var (
+		workerResps  = make([]*pb.GetValidationStatusResponse, 0)
+		workerRespMu sync.Mutex
+		wg           sync.WaitGroup
+	)
+	for taskName, mSource := range subTaskCfgs {
+		for sourceID := range mSource {
+			newReq := &workerrpc.Request{
+				GetValidationStatus: &pb.GetValidationStatusRequest{},
+				Type:                workerrpc.CmdGetValidationStatus,
+			}
+			*newReq.GetValidationStatus = *req
+			newReq.GetValidationStatus.TaskName = taskName
+			sendValidationRequest(ctx, s, newReq, sourceID, &wg, &workerRespMu, &workerResps, "get validation status")
+		}
+	}
+	wg.Wait()
+	// todo: sort?
+	for _, wresp := range workerResps {
+		if !wresp.Result {
+			resp.Result = wresp.Result
+			resp.Msg += wresp.Msg + "; "
+			continue
+		}
+		resp.Validators = append(resp.Validators, wresp.Validators...)
+		resp.TableStatuses = append(resp.TableStatuses, wresp.TableStatuses...)
+	}
+	// nolint:nilerr
+	return resp, nil
 }
 
 func (s *Server) GetValidationError(ctx context.Context, req *pb.GetValidationErrorRequest) (*pb.GetValidationErrorResponse, error) {
@@ -2751,32 +2935,57 @@ func (s *Server) GetValidationError(ctx context.Context, req *pb.GetValidationEr
 		resp.Msg = "task name should be specified"
 		return resp, nil
 	}
-	if req.ErrState != ctlmaster.ValidationAllErr && req.ErrState != ctlmaster.ValidationIgnoredErr && req.ErrState != ctlmaster.ValidationUnprocessedErr {
+	if req.ErrState == pb.ValidateErrorState_ResolvedErr {
 		resp.Result = false
-		resp.Msg = fmt.Sprintf("error flag should be either `%s`, `%s`, or `%s`", ctlmaster.ValidationAllErr, ctlmaster.ValidationIgnoredErr, ctlmaster.ValidationUnprocessedErr)
+		resp.Msg = "only support querying `all`, `unprocessed`, and `ignored` error"
 		return resp, nil
 	}
 	subTaskCfgs = s.scheduler.GetSubTaskCfgsByTaskAndSource(req.TaskName, []string{})
 	if len(subTaskCfgs) == 0 {
 		resp.Result = false
-		resp.Msg = fmt.Sprintf("fail to get subtask config by task name `%s`", req.TaskName)
+		resp.Msg = fmt.Sprintf("cannot get subtask by task name `%s`", req.TaskName)
 		// nolint:nilerr
 		return resp, nil
 	}
-	// TODO: get validation error from worker
 	log.L().Info("query validation error", zap.Reflect("subtask", subTaskCfgs))
+	var (
+		workerResps  = make([]*pb.GetValidationErrorResponse, 0)
+		workerRespMu sync.Mutex
+		wg           sync.WaitGroup
+	)
+	for taskName, mSource := range subTaskCfgs {
+		for sourceID := range mSource {
+			newReq := workerrpc.Request{
+				GetValidationError: &pb.GetValidationErrorRequest{},
+				Type:               workerrpc.CmdGetValidationError,
+			}
+			*newReq.GetValidationError = *req
+			newReq.GetValidationError.TaskName = taskName
+			sendValidationRequest(ctx, s, &newReq, sourceID, &wg, &workerRespMu, &workerResps, "get validator error")
+		}
+	}
+	wg.Wait()
+	// todo: sort?
+	for _, wresp := range workerResps {
+		if !wresp.Result {
+			resp.Result = wresp.Result
+			resp.Msg += wresp.Msg + "; "
+			continue
+		}
+		resp.Error = append(resp.Error, wresp.Error...)
+	}
 	return resp, err
 }
 
 func (s *Server) OperateValidationError(ctx context.Context, req *pb.OperateValidationErrorRequest) (*pb.OperateValidationErrorResponse, error) {
 	var (
 		resp2       *pb.OperateValidationErrorResponse
-		err2, err   error
+		err         error
 		subTaskCfgs map[string]map[string]config.SubTaskConfig
 	)
-	shouldRet := s.sharedLogic(ctx, req, &resp2, &err2)
+	shouldRet := s.sharedLogic(ctx, req, &resp2, &err)
 	if shouldRet {
-		return resp2, err2
+		return resp2, err
 	}
 	resp := &pb.OperateValidationErrorResponse{
 		Result: true,
@@ -2786,19 +2995,117 @@ func (s *Server) OperateValidationError(ctx context.Context, req *pb.OperateVali
 		resp.Msg = "task name should be specified"
 		return resp, nil
 	}
-	if req.IsAllError && req.ErrId != "" {
-		resp.Result = false
-		resp.Msg = "either `all` error flags or `error id` should be set"
-		return resp, nil
-	}
 	subTaskCfgs = s.scheduler.GetSubTaskCfgsByTaskAndSource(req.TaskName, []string{})
 	if len(subTaskCfgs) == 0 {
 		resp.Result = false
-		resp.Msg = fmt.Sprintf("fail to get subtask config by task name `%s`", req.TaskName)
+		resp.Msg = fmt.Sprintf("cannot get subtask by task name `%s`", req.TaskName)
 		// nolint:nilerr
 		return resp, nil
 	}
-	// TODO: operate validation error at worker
 	log.L().Info("operate validation error", zap.Reflect("subtask", subTaskCfgs))
-	return resp, err
+	var (
+		workerResps  = make([]*pb.OperateValidationErrorResponse, 0)
+		workerRespMu sync.Mutex
+		wg           sync.WaitGroup
+	)
+	for taskName, mSource := range subTaskCfgs {
+		for sourceID := range mSource {
+			newReq := workerrpc.Request{
+				Type:                   workerrpc.CmdOperateValidationError,
+				OperateValidationError: &pb.OperateValidationErrorRequest{},
+			}
+			*newReq.OperateValidationError = *req
+			newReq.OperateValidationError.TaskName = taskName
+			sendValidationRequest(ctx, s, &newReq, sourceID, &wg, &workerRespMu, &workerResps, "operate validator")
+		}
+	}
+	wg.Wait()
+	// todo: sort?
+	for _, wresp := range workerResps {
+		if !wresp.Result {
+			resp.Result = wresp.Result
+			resp.Msg += wresp.Msg + "; "
+		}
+	}
+	// nolint:nilerr
+	return resp, nil
+}
+
+func appendWorkerResp[T any](workerRespMu *sync.Mutex, workerResps *[]T, resp T) {
+	workerRespMu.Lock()
+	*workerResps = append(*workerResps, resp)
+	workerRespMu.Unlock()
+}
+
+func sendValidationRequest[T any](
+	ctx context.Context,
+	s *Server,
+	req *workerrpc.Request,
+	sourceID string,
+	wg *sync.WaitGroup,
+	workerRespMu *sync.Mutex,
+	workerResps *[]T,
+	logMsg string,
+) {
+	worker := s.scheduler.GetWorkerBySource(sourceID)
+	if worker == nil {
+		err := terror.ErrMasterWorkerArgsExtractor.Generatef("%s relevant worker-client not found", sourceID)
+		resp := genValidationWorkerErrorResp(req, err, logMsg, "", sourceID)
+		appendWorkerResp(workerRespMu, workerResps, resp.(T))
+		return
+	}
+	wg.Add(1)
+	go s.ap.Emit(ctx, 0, func(args ...interface{}) {
+		// send request in parallel
+		defer wg.Done()
+		workerResp, err := worker.SendRequest(ctx, req, s.cfg.RPCTimeout)
+		if err != nil {
+			resp := genValidationWorkerErrorResp(req, err, logMsg, worker.BaseInfo().Name, sourceID)
+			appendWorkerResp(workerRespMu, workerResps, resp.(T))
+		} else {
+			resp := getValidationWorkerResp(req, workerResp)
+			appendWorkerResp(workerRespMu, workerResps, resp.(T))
+		}
+	}, func(args ...interface{}) {
+		defer wg.Done()
+		err := terror.ErrMasterNoEmitToken.Generate(sourceID)
+		resp := genValidationWorkerErrorResp(req, err, logMsg, worker.BaseInfo().Name, sourceID)
+		appendWorkerResp(workerRespMu, workerResps, resp.(T))
+	})
+}
+
+func getValidationWorkerResp(req *workerrpc.Request, resp *workerrpc.Response) interface{} {
+	switch req.Type {
+	case workerrpc.CmdGetValidationStatus:
+		return resp.GetValidationStatus
+	case workerrpc.CmdGetValidationError:
+		return resp.GetValidationError
+	case workerrpc.CmdOperateValidationError:
+		return resp.OperateValidationError
+	default:
+		return nil
+	}
+}
+
+func genValidationWorkerErrorResp(req *workerrpc.Request, err error, logMsg, workerID, sourceID string) interface{} {
+	log.L().Error(logMsg, zap.Error(err), zap.String("source", sourceID), zap.String("worker", workerID))
+	switch req.Type {
+	case workerrpc.CmdGetValidationStatus:
+		return &pb.GetValidationStatusResponse{
+			Result: false,
+			Msg:    err.Error(),
+		}
+	case workerrpc.CmdGetValidationError:
+		return &pb.GetValidationErrorResponse{
+			Result: false,
+			Msg:    err.Error(),
+		}
+	case workerrpc.CmdOperateValidationError:
+		return &pb.OperateValidationErrorResponse{
+			Result: false,
+			Msg:    err.Error(),
+		}
+	default:
+		return nil
+	}
 }

@@ -244,6 +244,10 @@ var (
 		"invalid topic expression",
 		errors.RFCCodeText("CDC:ErrKafkaTopicExprInvalid"),
 	)
+	ErrKafkaBrokerConfigNotFound = errors.Normalize(
+		"kafka broker config item not found",
+		errors.RFCCodeText("CDC:ErrKafkaBrokerConfigNotFound"),
+	)
 	ErrPulsarNewProducer = errors.Normalize(
 		"new pulsar producer",
 		errors.RFCCodeText("CDC:ErrPulsarNewProducer"),
@@ -886,7 +890,7 @@ var (
 	)
 
 	// retry error
-	ErrReachMaxTry = errors.Normalize("reach maximum try: %d",
+	ErrReachMaxTry = errors.Normalize("reach maximum try: %s, error: %s",
 		errors.RFCCodeText("CDC:ErrReachMaxTry"),
 	)
 
@@ -978,5 +982,11 @@ var (
 	ErrInvalidHost = errors.Normalize(
 		"host must be a URL or a host:port pair: %q",
 		errors.RFCCodeText("CDC:ErrInvalidHost"),
+	)
+
+	// UpStream error
+	ErrUpStreamNotFound = errors.Normalize(
+		"upStram not found, cluster-id: %d",
+		errors.RFCCodeText("CDC:ErrUpStreamNotFound"),
 	)
 )

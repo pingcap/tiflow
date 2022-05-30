@@ -24,6 +24,7 @@ import (
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/pipeline"
+	pmessage "github.com/pingcap/tiflow/pkg/pipeline/message"
 	"github.com/stretchr/testify/require"
 	"github.com/tikv/client-go/v2/oracle"
 )
@@ -39,7 +40,11 @@ type mockSink struct {
 // we are testing sinkNode by itself.
 type mockFlowController struct{}
 
-func (c *mockFlowController) Consume(commitTs uint64, size uint64, blockCallBack func() error) error {
+func (c *mockFlowController) Consume(
+	msg *model.PolymorphicEvent,
+	size uint64,
+	blockCallBack func(bool) error,
+) error {
 	return nil
 }
 
@@ -53,9 +58,8 @@ func (c *mockFlowController) GetConsumption() uint64 {
 	return 0
 }
 
-func (s *mockSink) TryEmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) (bool, error) {
-	_ = s.EmitRowChangedEvents(ctx, rows...)
-	return true, nil
+func (s *mockSink) AddTable(tableID model.TableID) error {
+	return nil
 }
 
 func (s *mockSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
@@ -72,12 +76,14 @@ func (s *mockSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error 
 	panic("unreachable")
 }
 
-func (s *mockSink) FlushRowChangedEvents(ctx context.Context, _ model.TableID, resolvedTs uint64) (uint64, error) {
+func (s *mockSink) FlushRowChangedEvents(
+	ctx context.Context, _ model.TableID, resolved model.ResolvedTs,
+) (uint64, error) {
 	s.received = append(s.received, struct {
 		resolvedTs model.Ts
 		row        *model.RowChangedEvent
-	}{resolvedTs: resolvedTs})
-	return resolvedTs, nil
+	}{resolvedTs: resolved.Ts})
+	return resolved.Ts, nil
 }
 
 func (s *mockSink) EmitCheckpointTs(_ context.Context, _ uint64, _ []model.TableName) error {
@@ -88,7 +94,7 @@ func (s *mockSink) Close(ctx context.Context) error {
 	return nil
 }
 
-func (s *mockSink) Barrier(ctx context.Context, tableID model.TableID) error {
+func (s *mockSink) RemoveTable(ctx context.Context, tableID model.TableID) error {
 	return nil
 }
 
@@ -121,7 +127,7 @@ func (s *mockCloseControlSink) Close(ctx context.Context) error {
 func TestStatus(t *testing.T) {
 	ctx := cdcContext.NewContext(context.Background(), &cdcContext.GlobalVars{})
 	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
-		ID: "changefeed-id-test-status",
+		ID: model.DefaultChangeFeedID("changefeed-id-test-status"),
 		Info: &model.ChangeFeedInfo{
 			StartTs: oracle.GoTimeToTS(time.Now()),
 			Config:  config.GetDefaultReplicaConfig(),
@@ -130,74 +136,124 @@ func TestStatus(t *testing.T) {
 
 	// test stop at targetTs
 	node := newSinkNode(1, &mockSink{}, 0, 10, &mockFlowController{})
-	require.Nil(t, node.Init(pipeline.MockNodeContext4Test(ctx, pipeline.Message{}, nil)))
+	node.initWithReplicaConfig(pipeline.MockNodeContext4Test(ctx, pmessage.Message{}, nil).
+		ChangefeedVars().Info.Config)
 	require.Equal(t, TableStatusInitializing, node.Status())
 
-	require.Nil(t, node.Receive(pipeline.MockNodeContext4Test(ctx, pipeline.BarrierMessage(20), nil)))
+	ok, err := node.HandleMessage(ctx, pmessage.BarrierMessage(20))
+	require.Nil(t, err)
+	require.True(t, ok)
 	require.Equal(t, TableStatusInitializing, node.Status())
 	require.Equal(t, model.Ts(20), node.BarrierTs())
 
-	require.Nil(t, node.Receive(pipeline.MockNodeContext4Test(ctx,
-		pipeline.PolymorphicEventMessage(&model.PolymorphicEvent{CRTs: 1, RawKV: &model.RawKVEntry{OpType: model.OpTypePut}, Row: &model.RowChangedEvent{}}), nil)))
+	msg := pmessage.PolymorphicEventMessage(&model.PolymorphicEvent{
+		CRTs: 1, RawKV: &model.RawKVEntry{OpType: model.OpTypePut},
+		Row: &model.RowChangedEvent{},
+	})
+	ok, err = node.HandleMessage(ctx, msg)
+	require.Nil(t, err)
+	require.True(t, ok)
 	require.Equal(t, TableStatusInitializing, node.Status())
 
-	require.Nil(t, node.Receive(pipeline.MockNodeContext4Test(ctx,
-		pipeline.PolymorphicEventMessage(&model.PolymorphicEvent{CRTs: 2, RawKV: &model.RawKVEntry{OpType: model.OpTypePut}, Row: &model.RowChangedEvent{}}), nil)))
+	msg = pmessage.PolymorphicEventMessage(&model.PolymorphicEvent{
+		CRTs: 2, RawKV: &model.RawKVEntry{OpType: model.OpTypePut},
+		Row: &model.RowChangedEvent{},
+	})
+	ok, err = node.HandleMessage(ctx, msg)
+	require.Nil(t, err)
+	require.True(t, ok)
 	require.Equal(t, TableStatusInitializing, node.Status())
 
-	require.Nil(t, node.Receive(pipeline.MockNodeContext4Test(ctx,
-		pipeline.PolymorphicEventMessage(&model.PolymorphicEvent{CRTs: 2, RawKV: &model.RawKVEntry{OpType: model.OpTypeResolved}, Row: &model.RowChangedEvent{}}), nil)))
+	msg = pmessage.PolymorphicEventMessage(&model.PolymorphicEvent{
+		CRTs: 2, RawKV: &model.RawKVEntry{OpType: model.OpTypeResolved},
+		Row: &model.RowChangedEvent{},
+	})
+	ok, err = node.HandleMessage(ctx, msg)
+	require.Nil(t, err)
+	require.True(t, ok)
 	require.Equal(t, TableStatusRunning, node.Status())
 
-	err := node.Receive(pipeline.MockNodeContext4Test(ctx,
-		pipeline.PolymorphicEventMessage(&model.PolymorphicEvent{CRTs: 15, RawKV: &model.RawKVEntry{OpType: model.OpTypeResolved}, Row: &model.RowChangedEvent{}}), nil))
+	msg = pmessage.PolymorphicEventMessage(&model.PolymorphicEvent{
+		CRTs: 15, RawKV: &model.RawKVEntry{OpType: model.OpTypeResolved},
+		Row: &model.RowChangedEvent{},
+	})
+	ok, err = node.HandleMessage(ctx, msg)
+	require.False(t, ok)
 	require.True(t, cerrors.ErrTableProcessorStoppedSafely.Equal(err))
 	require.Equal(t, TableStatusStopped, node.Status())
 	require.Equal(t, uint64(10), node.CheckpointTs())
 
 	// test the stop at ts command
 	node = newSinkNode(1, &mockSink{}, 0, 10, &mockFlowController{})
-	require.Nil(t, node.Init(pipeline.MockNodeContext4Test(ctx, pipeline.Message{}, nil)))
+	node.initWithReplicaConfig(pipeline.MockNodeContext4Test(ctx,
+		pmessage.Message{}, nil).ChangefeedVars().Info.Config)
 	require.Equal(t, TableStatusInitializing, node.Status())
 
-	require.Nil(t, node.Receive(pipeline.MockNodeContext4Test(ctx, pipeline.BarrierMessage(20), nil)))
+	msg = pmessage.BarrierMessage(20)
+	ok, err = node.HandleMessage(ctx, msg)
+	require.True(t, ok)
+	require.Nil(t, err)
 	require.Equal(t, TableStatusInitializing, node.Status())
 	require.Equal(t, model.Ts(20), node.BarrierTs())
 
-	require.Nil(t, node.Receive(pipeline.MockNodeContext4Test(ctx,
-		pipeline.PolymorphicEventMessage(&model.PolymorphicEvent{CRTs: 2, RawKV: &model.RawKVEntry{OpType: model.OpTypeResolved}, Row: &model.RowChangedEvent{}}), nil)))
+	msg = pmessage.PolymorphicEventMessage(&model.PolymorphicEvent{
+		CRTs: 2, RawKV: &model.RawKVEntry{OpType: model.OpTypeResolved},
+		Row: &model.RowChangedEvent{},
+	})
+	ok, err = node.HandleMessage(ctx, msg)
+	require.Nil(t, err)
+	require.True(t, ok)
 	require.Equal(t, TableStatusRunning, node.Status())
 
-	err = node.Receive(pipeline.MockNodeContext4Test(ctx,
-		pipeline.CommandMessage(&pipeline.Command{Tp: pipeline.CommandTypeStop}), nil))
+	msg = pmessage.CommandMessage(&pmessage.Command{Tp: pmessage.CommandTypeStop})
+	ok, err = node.HandleMessage(ctx, msg)
+	require.False(t, ok)
 	require.True(t, cerrors.ErrTableProcessorStoppedSafely.Equal(err))
 	require.Equal(t, TableStatusStopped, node.Status())
 
-	err = node.Receive(pipeline.MockNodeContext4Test(ctx,
-		pipeline.PolymorphicEventMessage(&model.PolymorphicEvent{CRTs: 7, RawKV: &model.RawKVEntry{OpType: model.OpTypeResolved}, Row: &model.RowChangedEvent{}}), nil))
+	msg = pmessage.PolymorphicEventMessage(&model.PolymorphicEvent{
+		CRTs: 7, RawKV: &model.RawKVEntry{OpType: model.OpTypeResolved},
+		Row: &model.RowChangedEvent{},
+	})
+	ok, err = node.HandleMessage(ctx, msg)
+	require.False(t, ok)
 	require.True(t, cerrors.ErrTableProcessorStoppedSafely.Equal(err))
 	require.Equal(t, TableStatusStopped, node.Status())
 	require.Equal(t, uint64(2), node.CheckpointTs())
 
 	// test the stop at ts command is after then resolvedTs and checkpointTs is greater than stop ts
 	node = newSinkNode(1, &mockSink{}, 0, 10, &mockFlowController{})
-	require.Nil(t, node.Init(pipeline.MockNodeContext4Test(ctx, pipeline.Message{}, nil)))
+	node.initWithReplicaConfig(pipeline.MockNodeContext4Test(ctx,
+		pmessage.Message{}, nil).ChangefeedVars().Info.Config)
 	require.Equal(t, TableStatusInitializing, node.Status())
 
-	require.Nil(t, node.Receive(pipeline.MockNodeContext4Test(ctx, pipeline.BarrierMessage(20), nil)))
+	msg = pmessage.BarrierMessage(20)
+	ok, err = node.HandleMessage(ctx, msg)
+	require.Nil(t, err)
+	require.True(t, ok)
 	require.Equal(t, TableStatusInitializing, node.Status())
 
-	require.Nil(t, node.Receive(pipeline.MockNodeContext4Test(ctx,
-		pipeline.PolymorphicEventMessage(&model.PolymorphicEvent{CRTs: 7, RawKV: &model.RawKVEntry{OpType: model.OpTypeResolved}, Row: &model.RowChangedEvent{}}), nil)))
+	msg = pmessage.PolymorphicEventMessage(&model.PolymorphicEvent{
+		CRTs: 7, RawKV: &model.RawKVEntry{OpType: model.OpTypeResolved},
+		Row: &model.RowChangedEvent{},
+	})
+	ok, err = node.HandleMessage(ctx, msg)
+	require.Nil(t, err)
+	require.True(t, ok)
 	require.Equal(t, TableStatusRunning, node.Status())
 
-	err = node.Receive(pipeline.MockNodeContext4Test(ctx,
-		pipeline.CommandMessage(&pipeline.Command{Tp: pipeline.CommandTypeStop}), nil))
+	msg = pmessage.CommandMessage(&pmessage.Command{Tp: pmessage.CommandTypeStop})
+	ok, err = node.HandleMessage(ctx, msg)
+	require.False(t, ok)
 	require.True(t, cerrors.ErrTableProcessorStoppedSafely.Equal(err))
 	require.Equal(t, TableStatusStopped, node.Status())
 
-	err = node.Receive(pipeline.MockNodeContext4Test(ctx,
-		pipeline.PolymorphicEventMessage(&model.PolymorphicEvent{CRTs: 7, RawKV: &model.RawKVEntry{OpType: model.OpTypeResolved}, Row: &model.RowChangedEvent{}}), nil))
+	msg = pmessage.PolymorphicEventMessage(&model.PolymorphicEvent{
+		CRTs: 7, RawKV: &model.RawKVEntry{OpType: model.OpTypeResolved},
+		Row: &model.RowChangedEvent{},
+	})
+	ok, err = node.HandleMessage(ctx, msg)
+	require.False(t, ok)
 	require.True(t, cerrors.ErrTableProcessorStoppedSafely.Equal(err))
 	require.Equal(t, TableStatusStopped, node.Status())
 	require.Equal(t, uint64(7), node.CheckpointTs())
@@ -208,7 +264,7 @@ func TestStatus(t *testing.T) {
 func TestStopStatus(t *testing.T) {
 	ctx := cdcContext.NewContext(context.Background(), &cdcContext.GlobalVars{})
 	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
-		ID: "changefeed-id-test-status",
+		ID: model.DefaultChangeFeedID("changefeed-id-test-status"),
 		Info: &model.ChangeFeedInfo{
 			StartTs: oracle.GoTimeToTS(time.Now()),
 			Config:  config.GetDefaultReplicaConfig(),
@@ -217,10 +273,17 @@ func TestStopStatus(t *testing.T) {
 
 	closeCh := make(chan interface{}, 1)
 	node := newSinkNode(1, &mockCloseControlSink{mockSink: mockSink{}, closeCh: closeCh}, 0, 100, &mockFlowController{})
-	require.Nil(t, node.Init(pipeline.MockNodeContext4Test(ctx, pipeline.Message{}, nil)))
+	node.initWithReplicaConfig(pipeline.MockNodeContext4Test(ctx,
+		pmessage.Message{}, nil).ChangefeedVars().Info.Config)
 	require.Equal(t, TableStatusInitializing, node.Status())
-	require.Nil(t, node.Receive(pipeline.MockNodeContext4Test(ctx,
-		pipeline.PolymorphicEventMessage(&model.PolymorphicEvent{CRTs: 2, RawKV: &model.RawKVEntry{OpType: model.OpTypeResolved}, Row: &model.RowChangedEvent{}}), nil)))
+
+	msg := pmessage.PolymorphicEventMessage(&model.PolymorphicEvent{
+		CRTs: 2, RawKV: &model.RawKVEntry{OpType: model.OpTypeResolved},
+		Row: &model.RowChangedEvent{},
+	})
+	ok, err := node.HandleMessage(ctx, msg)
+	require.Nil(t, err)
+	require.True(t, ok)
 	require.Equal(t, TableStatusRunning, node.Status())
 
 	var wg sync.WaitGroup
@@ -228,8 +291,9 @@ func TestStopStatus(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		// This will block until sink Close returns
-		err := node.Receive(pipeline.MockNodeContext4Test(ctx,
-			pipeline.CommandMessage(&pipeline.Command{Tp: pipeline.CommandTypeStop}), nil))
+		msg := pmessage.CommandMessage(&pmessage.Command{Tp: pmessage.CommandTypeStop})
+		ok, err := node.HandleMessage(ctx, msg)
+		require.False(t, ok)
 		require.True(t, cerrors.ErrTableProcessorStoppedSafely.Equal(err))
 		require.Equal(t, TableStatusStopped, node.Status())
 	}()
@@ -243,7 +307,7 @@ func TestStopStatus(t *testing.T) {
 func TestManyTs(t *testing.T) {
 	ctx := cdcContext.NewContext(context.Background(), &cdcContext.GlobalVars{})
 	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
-		ID: "changefeed-id-test-many-ts",
+		ID: model.DefaultChangeFeedID("changefeed-id-test"),
 		Info: &model.ChangeFeedInfo{
 			StartTs: oracle.GoTimeToTS(time.Now()),
 			Config:  config.GetDefaultReplicaConfig(),
@@ -251,12 +315,68 @@ func TestManyTs(t *testing.T) {
 	})
 	sink := &mockSink{}
 	node := newSinkNode(1, sink, 0, 10, &mockFlowController{})
-	require.Nil(t, node.Init(pipeline.MockNodeContext4Test(ctx, pipeline.Message{}, nil)))
+	node.initWithReplicaConfig(pipeline.MockNodeContext4Test(ctx,
+		pmessage.Message{}, nil).ChangefeedVars().Info.Config)
 	require.Equal(t, TableStatusInitializing, node.Status())
 
-	require.Nil(t, node.Receive(pipeline.MockNodeContext4Test(ctx,
-		pipeline.PolymorphicEventMessage(&model.PolymorphicEvent{
-			CRTs: 1, RawKV: &model.RawKVEntry{OpType: model.OpTypePut}, Row: &model.RowChangedEvent{
+	msg := pmessage.PolymorphicEventMessage(&model.PolymorphicEvent{
+		CRTs: 1, RawKV: &model.RawKVEntry{OpType: model.OpTypePut}, Row: &model.RowChangedEvent{
+			CommitTs: 1,
+			Columns: []*model.Column{
+				{
+					Name:  "col1",
+					Flag:  model.BinaryFlag,
+					Value: "col1-value-updated",
+				},
+				{
+					Name:  "col2",
+					Flag:  model.HandleKeyFlag,
+					Value: "col2-value",
+				},
+			},
+		},
+	})
+	require.Equal(t, TableStatusInitializing, node.Status())
+	ok, err := node.HandleMessage(ctx, msg)
+	require.Nil(t, err)
+	require.True(t, ok)
+
+	msg = pmessage.PolymorphicEventMessage(&model.PolymorphicEvent{
+		CRTs: 2, RawKV: &model.RawKVEntry{OpType: model.OpTypePut}, Row: &model.RowChangedEvent{
+			CommitTs: 2,
+			Columns: []*model.Column{
+				{
+					Name:  "col1",
+					Flag:  model.BinaryFlag,
+					Value: "col1-value-updated",
+				},
+				{
+					Name:  "col2",
+					Flag:  model.HandleKeyFlag,
+					Value: "col2-value",
+				},
+			},
+		},
+	})
+	require.Equal(t, TableStatusInitializing, node.Status())
+	ok, err = node.HandleMessage(ctx, msg)
+	require.Nil(t, err)
+	require.True(t, ok)
+
+	msg = pmessage.PolymorphicEventMessage(&model.PolymorphicEvent{
+		CRTs: 2, RawKV: &model.RawKVEntry{OpType: model.OpTypeResolved},
+		Row: &model.RowChangedEvent{},
+	})
+	ok, err = node.HandleMessage(ctx, msg)
+	require.Nil(t, err)
+	require.True(t, ok)
+	require.Equal(t, TableStatusRunning, node.Status())
+	sink.Check(t, []struct {
+		resolvedTs model.Ts
+		row        *model.RowChangedEvent
+	}{
+		{
+			row: &model.RowChangedEvent{
 				CommitTs: 1,
 				Columns: []*model.Column{
 					{
@@ -271,12 +391,9 @@ func TestManyTs(t *testing.T) {
 					},
 				},
 			},
-		}), nil)))
-	require.Equal(t, TableStatusInitializing, node.Status())
-
-	require.Nil(t, node.Receive(pipeline.MockNodeContext4Test(ctx,
-		pipeline.PolymorphicEventMessage(&model.PolymorphicEvent{
-			CRTs: 2, RawKV: &model.RawKVEntry{OpType: model.OpTypePut}, Row: &model.RowChangedEvent{
+		},
+		{
+			row: &model.RowChangedEvent{
 				CommitTs: 2,
 				Columns: []*model.Column{
 					{
@@ -291,15 +408,13 @@ func TestManyTs(t *testing.T) {
 					},
 				},
 			},
-		}), nil)))
-	require.Equal(t, TableStatusInitializing, node.Status())
+		},
+	})
 
-	require.Nil(t, node.Receive(pipeline.MockNodeContext4Test(ctx,
-		pipeline.PolymorphicEventMessage(&model.PolymorphicEvent{CRTs: 2, RawKV: &model.RawKVEntry{OpType: model.OpTypeResolved}, Row: &model.RowChangedEvent{}}), nil)))
-	require.Equal(t, TableStatusRunning, node.Status())
-	sink.Check(t, nil)
-
-	require.Nil(t, node.Receive(pipeline.MockNodeContext4Test(ctx, pipeline.BarrierMessage(1), nil)))
+	msg = pmessage.BarrierMessage(1)
+	ok, err = node.HandleMessage(ctx, msg)
+	require.Nil(t, err)
+	require.True(t, ok)
 	require.Equal(t, TableStatusRunning, node.Status())
 
 	sink.Check(t, []struct {
@@ -343,10 +458,13 @@ func TestManyTs(t *testing.T) {
 		{resolvedTs: 1},
 	})
 	sink.Reset()
-	require.Equal(t, uint64(2), node.ResolvedTs())
+	require.Equal(t, model.NewResolvedTs(uint64(2)), node.ResolvedTs())
 	require.Equal(t, uint64(1), node.CheckpointTs())
 
-	require.Nil(t, node.Receive(pipeline.MockNodeContext4Test(ctx, pipeline.BarrierMessage(5), nil)))
+	msg = pmessage.BarrierMessage(5)
+	ok, err = node.HandleMessage(ctx, msg)
+	require.Nil(t, err)
+	require.True(t, ok)
 	require.Equal(t, TableStatusRunning, node.Status())
 	sink.Check(t, []struct {
 		resolvedTs model.Ts
@@ -355,14 +473,14 @@ func TestManyTs(t *testing.T) {
 		{resolvedTs: 2},
 	})
 	sink.Reset()
-	require.Equal(t, uint64(2), node.ResolvedTs())
+	require.Equal(t, model.NewResolvedTs(uint64(2)), node.ResolvedTs())
 	require.Equal(t, uint64(2), node.CheckpointTs())
 }
 
 func TestIgnoreEmptyRowChangeEvent(t *testing.T) {
 	ctx := cdcContext.NewContext(context.Background(), &cdcContext.GlobalVars{})
 	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
-		ID: "changefeed-id-test-ignore-empty-row-change-event",
+		ID: model.DefaultChangeFeedID("changefeed-id-test"),
 		Info: &model.ChangeFeedInfo{
 			StartTs: oracle.GoTimeToTS(time.Now()),
 			Config:  config.GetDefaultReplicaConfig(),
@@ -370,18 +488,24 @@ func TestIgnoreEmptyRowChangeEvent(t *testing.T) {
 	})
 	sink := &mockSink{}
 	node := newSinkNode(1, sink, 0, 10, &mockFlowController{})
-	require.Nil(t, node.Init(pipeline.MockNodeContext4Test(ctx, pipeline.Message{}, nil)))
+	node.initWithReplicaConfig(pipeline.MockNodeContext4Test(ctx,
+		pmessage.Message{}, nil).ChangefeedVars().Info.Config)
 
 	// empty row, no Columns and PreColumns.
-	require.Nil(t, node.Receive(pipeline.MockNodeContext4Test(ctx,
-		pipeline.PolymorphicEventMessage(&model.PolymorphicEvent{CRTs: 1, RawKV: &model.RawKVEntry{OpType: model.OpTypePut}, Row: &model.RowChangedEvent{CommitTs: 1}}), nil)))
-	require.Equal(t, 0, len(node.rowBuffer))
+	msg := pmessage.PolymorphicEventMessage(&model.PolymorphicEvent{
+		CRTs: 1, RawKV: &model.RawKVEntry{OpType: model.OpTypePut},
+		Row: &model.RowChangedEvent{CommitTs: 1},
+	})
+	ok, err := node.HandleMessage(ctx, msg)
+	require.Nil(t, err)
+	require.True(t, ok)
+	require.Len(t, sink.received, 0)
 }
 
 func TestSplitUpdateEventWhenEnableOldValue(t *testing.T) {
 	ctx := cdcContext.NewContext(context.Background(), &cdcContext.GlobalVars{})
 	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
-		ID: "changefeed-id-test-split-update-event",
+		ID: model.DefaultChangeFeedID("changefeed-id-test"),
 		Info: &model.ChangeFeedInfo{
 			StartTs: oracle.GoTimeToTS(time.Now()),
 			Config:  config.GetDefaultReplicaConfig(),
@@ -389,12 +513,17 @@ func TestSplitUpdateEventWhenEnableOldValue(t *testing.T) {
 	})
 	sink := &mockSink{}
 	node := newSinkNode(1, sink, 0, 10, &mockFlowController{})
-	require.Nil(t, node.Init(pipeline.MockNodeContext4Test(ctx, pipeline.Message{}, nil)))
+	node.initWithReplicaConfig(pipeline.MockNodeContext4Test(ctx,
+		pmessage.Message{}, nil).ChangefeedVars().Info.Config)
 
 	// nil row.
-	require.Nil(t, node.Receive(pipeline.MockNodeContext4Test(ctx,
-		pipeline.PolymorphicEventMessage(&model.PolymorphicEvent{CRTs: 1, RawKV: &model.RawKVEntry{OpType: model.OpTypePut}}), nil)))
-	require.Equal(t, 0, len(node.rowBuffer))
+	msg := pmessage.PolymorphicEventMessage(&model.PolymorphicEvent{
+		CRTs: 1, RawKV: &model.RawKVEntry{OpType: model.OpTypePut},
+	})
+	ok, err := node.HandleMessage(ctx, msg)
+	require.Nil(t, err)
+	require.True(t, ok)
+	require.Len(t, sink.received, 0)
 
 	columns := []*model.Column{
 		{
@@ -420,16 +549,17 @@ func TestSplitUpdateEventWhenEnableOldValue(t *testing.T) {
 			Value: "col2-value",
 		},
 	}
-	require.Nil(t, node.Receive(pipeline.MockNodeContext4Test(
-		ctx,
-		pipeline.PolymorphicEventMessage(&model.PolymorphicEvent{
-			CRTs:  1,
-			RawKV: &model.RawKVEntry{OpType: model.OpTypePut},
-			Row:   &model.RowChangedEvent{CommitTs: 1, Columns: columns, PreColumns: preColumns},
-		}), nil)))
-	require.Equal(t, 1, len(node.rowBuffer))
-	require.Equal(t, 2, len(node.rowBuffer[0].Columns))
-	require.Equal(t, 2, len(node.rowBuffer[0].PreColumns))
+	msg = pmessage.PolymorphicEventMessage(&model.PolymorphicEvent{
+		CRTs:  1,
+		RawKV: &model.RawKVEntry{OpType: model.OpTypePut},
+		Row:   &model.RowChangedEvent{CommitTs: 1, Columns: columns, PreColumns: preColumns},
+	})
+	ok, err = node.HandleMessage(ctx, msg)
+	require.Nil(t, err)
+	require.True(t, ok)
+	require.Len(t, sink.received, 1)
+	require.Len(t, sink.received[0].row.Columns, 2)
+	require.Len(t, sink.received[0].row.PreColumns, 2)
 }
 
 func TestSplitUpdateEventWhenDisableOldValue(t *testing.T) {
@@ -437,7 +567,7 @@ func TestSplitUpdateEventWhenDisableOldValue(t *testing.T) {
 	cfg := config.GetDefaultReplicaConfig()
 	cfg.EnableOldValue = false
 	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
-		ID: "changefeed-id-test-split-update-event",
+		ID: model.DefaultChangeFeedID("changefeed-id-test"),
 		Info: &model.ChangeFeedInfo{
 			StartTs: oracle.GoTimeToTS(time.Now()),
 			Config:  cfg,
@@ -445,12 +575,17 @@ func TestSplitUpdateEventWhenDisableOldValue(t *testing.T) {
 	})
 	sink := &mockSink{}
 	node := newSinkNode(1, sink, 0, 10, &mockFlowController{})
-	require.Nil(t, node.Init(pipeline.MockNodeContext4Test(ctx, pipeline.Message{}, nil)))
+	node.initWithReplicaConfig(pipeline.MockNodeContext4Test(ctx,
+		pmessage.Message{}, nil).ChangefeedVars().Info.Config)
 
 	// nil row.
-	require.Nil(t, node.Receive(pipeline.MockNodeContext4Test(ctx,
-		pipeline.PolymorphicEventMessage(&model.PolymorphicEvent{CRTs: 1, RawKV: &model.RawKVEntry{OpType: model.OpTypePut}}), nil)))
-	require.Equal(t, 0, len(node.rowBuffer))
+	msg := pmessage.PolymorphicEventMessage(&model.PolymorphicEvent{
+		CRTs: 1, RawKV: &model.RawKVEntry{OpType: model.OpTypePut},
+	})
+	ok, err := node.HandleMessage(ctx, msg)
+	require.Nil(t, err)
+	require.True(t, ok)
+	require.Len(t, sink.received, 0)
 
 	// No update to the handle key column.
 	columns := []*model.Column{
@@ -478,19 +613,20 @@ func TestSplitUpdateEventWhenDisableOldValue(t *testing.T) {
 		},
 	}
 
-	require.Nil(t, node.Receive(pipeline.MockNodeContext4Test(
-		ctx,
-		pipeline.PolymorphicEventMessage(&model.PolymorphicEvent{
-			CRTs:  1,
-			RawKV: &model.RawKVEntry{OpType: model.OpTypePut},
-			Row:   &model.RowChangedEvent{CommitTs: 1, Columns: columns, PreColumns: preColumns},
-		}), nil)))
-	require.Equal(t, 1, len(node.rowBuffer))
-	require.Equal(t, 2, len(node.rowBuffer[0].Columns))
-	require.Equal(t, 0, len(node.rowBuffer[0].PreColumns))
+	msg = pmessage.PolymorphicEventMessage(&model.PolymorphicEvent{
+		CRTs:  1,
+		RawKV: &model.RawKVEntry{OpType: model.OpTypePut},
+		Row:   &model.RowChangedEvent{CommitTs: 1, Columns: columns, PreColumns: preColumns},
+	})
+	ok, err = node.HandleMessage(ctx, msg)
+	require.Nil(t, err)
+	require.True(t, ok)
+	require.Len(t, sink.received, 1)
+	require.Len(t, sink.received[0].row.Columns, 2)
+	require.Len(t, sink.received[0].row.PreColumns, 0)
 
 	// Cleanup.
-	node.rowBuffer = []*model.RowChangedEvent{}
+	sink.Reset()
 	// Update to the handle key column.
 	columns = []*model.Column{
 		{
@@ -517,29 +653,32 @@ func TestSplitUpdateEventWhenDisableOldValue(t *testing.T) {
 		},
 	}
 
-	require.Nil(t, node.Receive(pipeline.MockNodeContext4Test(
-		ctx,
-		pipeline.PolymorphicEventMessage(&model.PolymorphicEvent{
-			CRTs:  1,
-			RawKV: &model.RawKVEntry{OpType: model.OpTypePut},
-			Row:   &model.RowChangedEvent{CommitTs: 1, Columns: columns, PreColumns: preColumns},
-		}), nil)))
+	msg = pmessage.PolymorphicEventMessage(&model.PolymorphicEvent{
+		CRTs:  1,
+		RawKV: &model.RawKVEntry{OpType: model.OpTypePut},
+		Row:   &model.RowChangedEvent{CommitTs: 1, Columns: columns, PreColumns: preColumns},
+	})
+	ok, err = node.HandleMessage(ctx, msg)
+	require.Nil(t, err)
+	require.True(t, ok)
 	// Split an update event into a delete and an insert event.
-	require.Equal(t, 2, len(node.rowBuffer))
+	require.Len(t, sink.received, 2)
 
 	deleteEventIndex := 0
-	require.Equal(t, 0, len(node.rowBuffer[deleteEventIndex].Columns))
-	require.Equal(t, 2, len(node.rowBuffer[deleteEventIndex].PreColumns))
+	require.Len(t, sink.received[deleteEventIndex].row.Columns, 0)
+	require.Len(t, sink.received[deleteEventIndex].row.PreColumns, 2)
 	nonHandleKeyColIndex := 0
 	handleKeyColIndex := 1
 	// NOTICE: When old value disabled, we only keep the handle key pre cols.
-	require.Nil(t, node.rowBuffer[deleteEventIndex].PreColumns[nonHandleKeyColIndex])
-	require.Equal(t, "col2", node.rowBuffer[deleteEventIndex].PreColumns[handleKeyColIndex].Name)
-	require.True(t, node.rowBuffer[deleteEventIndex].PreColumns[handleKeyColIndex].Flag.IsHandleKey())
+	require.Nil(t, sink.received[deleteEventIndex].row.PreColumns[nonHandleKeyColIndex])
+	require.Equal(t, "col2", sink.received[deleteEventIndex].row.PreColumns[handleKeyColIndex].Name)
+	require.True(t,
+		sink.received[deleteEventIndex].row.PreColumns[handleKeyColIndex].Flag.IsHandleKey(),
+	)
 
 	insertEventIndex := 1
-	require.Equal(t, 2, len(node.rowBuffer[insertEventIndex].Columns))
-	require.Equal(t, 0, len(node.rowBuffer[insertEventIndex].PreColumns))
+	require.Len(t, sink.received[insertEventIndex].row.Columns, 2)
+	require.Len(t, sink.received[insertEventIndex].row.PreColumns, 0)
 }
 
 type flushFlowController struct {
@@ -559,11 +698,13 @@ type flushSink struct {
 // fall back
 var fallBackResolvedTs = uint64(10)
 
-func (s *flushSink) FlushRowChangedEvents(ctx context.Context, _ model.TableID, resolvedTs uint64) (uint64, error) {
-	if resolvedTs == fallBackResolvedTs {
+func (s *flushSink) FlushRowChangedEvents(
+	ctx context.Context, _ model.TableID, resolved model.ResolvedTs,
+) (uint64, error) {
+	if resolved.Ts == fallBackResolvedTs {
 		return 0, nil
 	}
-	return resolvedTs, nil
+	return resolved.Ts, nil
 }
 
 // TestFlushSinkReleaseFlowController tests sinkNode.flushSink method will always
@@ -574,7 +715,7 @@ func TestFlushSinkReleaseFlowController(t *testing.T) {
 	cfg := config.GetDefaultReplicaConfig()
 	cfg.EnableOldValue = false
 	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
-		ID: "changefeed-id-test-flushSink",
+		ID: model.DefaultChangeFeedID("changefeed-id-test"),
 		Info: &model.ChangeFeedInfo{
 			StartTs: oracle.GoTimeToTS(time.Now()),
 			Config:  cfg,
@@ -584,15 +725,16 @@ func TestFlushSinkReleaseFlowController(t *testing.T) {
 	sink := &flushSink{}
 	// sNode is a sinkNode
 	sNode := newSinkNode(1, sink, 0, 10, flowController)
-	require.Nil(t, sNode.Init(pipeline.MockNodeContext4Test(ctx, pipeline.Message{}, nil)))
+	sNode.initWithReplicaConfig(pipeline.MockNodeContext4Test(ctx,
+		pmessage.Message{}, nil).ChangefeedVars().Info.Config)
 	sNode.barrierTs = 10
 
-	err := sNode.flushSink(context.Background(), uint64(8))
+	err := sNode.flushSink(context.Background(), model.NewResolvedTs(uint64(8)))
 	require.Nil(t, err)
 	require.Equal(t, uint64(8), sNode.checkpointTs)
 	require.Equal(t, 1, flowController.releaseCounter)
 	// resolvedTs will fall back in this call
-	err = sNode.flushSink(context.Background(), uint64(10))
+	err = sNode.flushSink(context.Background(), model.NewResolvedTs(uint64(10)))
 	require.Nil(t, err)
 	require.Equal(t, uint64(8), sNode.checkpointTs)
 	require.Equal(t, 2, flowController.releaseCounter)

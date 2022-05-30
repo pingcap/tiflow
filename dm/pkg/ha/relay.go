@@ -15,6 +15,7 @@ package ha
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"go.etcd.io/etcd/api/v3/mvccpb"
@@ -46,7 +47,7 @@ func PutRelayConfig(cli *clientv3.Client, bounds ...SourceBound) (int64, error) 
 	for _, bound := range bounds {
 		ops = append(ops, putRelayConfigOp(bound))
 	}
-	_, rev, err := etcdutil.DoOpsInOneTxnWithRetry(cli, ops...)
+	_, rev, err := etcdutil.DoTxnWithRepeatable(cli, etcdutil.ThenOpFunc(ops...))
 	return rev, err
 }
 
@@ -56,7 +57,7 @@ func DeleteRelayConfig(cli *clientv3.Client, source string, workers ...string) (
 	for _, worker := range workers {
 		ops = append(ops, deleteRelayConfigOp(NewSourceBound(source, worker)))
 	}
-	_, rev, err := etcdutil.DoOpsInOneTxnWithRetry(cli, ops...)
+	_, rev, err := etcdutil.DoTxnWithRepeatable(cli, etcdutil.ThenOpFunc(ops...))
 	return rev, err
 }
 
@@ -68,7 +69,7 @@ func GetAllRelayConfig(cli *clientv3.Client) (map[string]map[string]struct{}, in
 
 	resp, err := cli.Get(ctx, common.UpstreamRelayWorkerKeyAdapter.Path(), clientv3.WithPrefix())
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, terror.ErrHAFailTxnOperation.Delegate(err, "fail to get all relay config")
 	}
 
 	ret := map[string]map[string]struct{}{}
@@ -92,6 +93,42 @@ func GetAllRelayConfig(cli *clientv3.Client) (map[string]map[string]struct{}, in
 		}
 		workers[worker] = struct{}{}
 	}
+	return ret, resp.Header.Revision, nil
+}
+
+// GetAllRelayConfigBeforeV620 gets all upstream relay configs before v6.2.0.
+// This func only use for config export command.
+func GetAllRelayConfigBeforeV620(cli *clientv3.Client) (map[string]map[string]struct{}, int64, error) {
+	ctx, cancel := context.WithTimeout(cli.Ctx(), etcdutil.DefaultRequestTimeout)
+	defer cancel()
+
+	resp, err := cli.Get(ctx, common.UpstreamRelayWorkerKeyAdapterV1.Path(), clientv3.WithPrefix())
+	if err != nil {
+		return nil, 0, err
+	}
+
+	ret := map[string]map[string]struct{}{}
+	for _, kv := range resp.Kvs {
+		keys, err2 := common.UpstreamRelayWorkerKeyAdapterV1.Decode(string(kv.Key))
+		if err2 != nil {
+			return nil, 0, err2
+		}
+		if len(keys) != 1 {
+			// should not happened
+			return nil, 0, terror.ErrDecodeEtcdKeyFail.Generate("illegal key of UpstreamRelayWorkerKeyAdapterV1")
+		}
+		worker, source := keys[0], string(kv.Value)
+		var (
+			ok      bool
+			workers map[string]struct{}
+		)
+		if workers, ok = ret[source]; !ok {
+			workers = map[string]struct{}{}
+			ret[source] = workers
+		}
+		workers[worker] = struct{}{}
+	}
+
 	return ret, resp.Header.Revision, nil
 }
 
@@ -128,7 +165,7 @@ func GetRelayConfig(cli *clientv3.Client, worker string) (map[string]*config.Sou
 
 	resp, err := cli.Get(ctx, common.UpstreamRelayWorkerKeyAdapter.Encode(worker), clientv3.WithPrefix())
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, terror.ErrHAFailTxnOperation.Delegate(err, "fail to get relay config")
 	}
 	sources, rev, err = getSourceIDsFromResp(resp)
 	if err != nil || len(sources) == 0 {
@@ -136,9 +173,9 @@ func GetRelayConfig(cli *clientv3.Client, worker string) (map[string]*config.Sou
 	}
 
 	for retryCnt := 1; retryCnt <= retryNum; retryCnt++ {
-		txnResp, _, err2 := etcdutil.DoOpsInOneTxnWithRetry(cli,
+		txnResp, _, err2 := etcdutil.DoTxnWithRepeatable(cli, etcdutil.ThenOpFunc(
 			clientv3.OpGet(common.UpstreamRelayWorkerKeyAdapter.Encode(worker), clientv3.WithPrefix()),
-			clientv3.OpGet(common.UpstreamConfigKeyAdapter.Path(), clientv3.WithPrefix()))
+			clientv3.OpGet(common.UpstreamConfigKeyAdapter.Path(), clientv3.WithPrefix())))
 		if err2 != nil {
 			return nil, 0, err
 		}
@@ -248,7 +285,7 @@ func WatchRelayConfig(ctx context.Context, cli *clientv3.Client,
 				// TODO(csuzhangxc): do retry here.
 				if resp.Err() != nil {
 					select {
-					case errCh <- resp.Err():
+					case errCh <- terror.ErrHAFailWatchEtcd.Delegate(resp.Err(), fmt.Sprintf("watch relay config canceled, worker %s", worker)):
 					case <-ctx.Done():
 					}
 				}

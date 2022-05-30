@@ -23,7 +23,8 @@ function test_restart_relay_status() {
 	dmctl_operate_source create $cur/conf/source1.yaml $SOURCE_ID1
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"start-relay -s $SOURCE_ID1 worker1"
+		"start-relay -s $SOURCE_ID1 worker1" \
+		"will be deprecated soon" 1
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status -s $SOURCE_ID1" \
 		"\"result\": true" 2 \
@@ -107,7 +108,7 @@ function test_cant_dail_upstream() {
 		"\"result\": true" 2
 
 	echo "kill dm-worker1"
-	ps aux | grep dm-worker1 | awk '{print $2}' | xargs kill || true
+	kill_process dm-worker1
 	check_port_offline $WORKER1_PORT 20
 
 	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/pkg/conn/failDBPing=return()"
@@ -140,7 +141,7 @@ function test_cant_dail_downstream() {
 	dmctl_start_task_standalone $cur/conf/dm-task.yaml "--remove-meta"
 
 	echo "kill dm-worker1"
-	ps aux | grep dm-worker1 | awk '{print $2}' | xargs kill || true
+	kill_process dm-worker1
 	check_port_offline $WORKER1_PORT 20
 	# kill tidb
 	pkill -hup tidb-server 2>/dev/null || true
@@ -241,6 +242,8 @@ function test_relay_operations() {
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 
 	run_sql_file $cur/data/db1.increment.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
+	# wait syncer begin to sync so it has deleted load task etcd KV.
+	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 
 	# relay task transfer to worker1 with no error.
 	check_metric $WORKER1_PORT "dm_relay_data_corruption" 3 -1 1
@@ -251,7 +254,7 @@ function test_relay_operations() {
 
 	# subtask is preferred to scheduled to another relay worker
 	echo "kill dm-worker1"
-	ps aux | grep dm-worker1 | awk '{print $2}' | xargs kill || true
+	kill_process dm-worker1
 	check_port_offline $WORKER1_PORT 20
 	# worker1 is down, worker2 has running relay and sync unit
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
@@ -294,10 +297,10 @@ function test_relay_operations() {
 	[ "$new_relay_log_count_2" -eq 1 ]
 
 	echo "kill dm-worker1"
-	ps aux | grep dm-worker1 | awk '{print $2}' | xargs kill || true
+	kill_process dm-worker1
 	check_port_offline $WORKER1_PORT 20
 	echo "kill dm-worker2"
-	ps aux | grep dm-worker2 | awk '{print $2}' | xargs kill || true
+	kill_process dm-worker2
 	check_port_offline $WORKER1_PORT 20
 	# if all relay workers are offline, relay-not-enabled worker should continue to sync
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \

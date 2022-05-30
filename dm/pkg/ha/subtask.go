@@ -44,7 +44,7 @@ func GetSubTaskCfg(cli *clientv3.Client, source, task string, rev int64) (map[st
 	}
 
 	if err != nil {
-		return tsm, 0, err
+		return tsm, 0, terror.ErrHAFailTxnOperation.Delegate(err, "fail to get subtask config, source: %s, task: %s", source, task)
 	}
 
 	cfgs, err := subTaskCfgFromResp(source, task, resp)
@@ -64,7 +64,7 @@ func GetAllSubTaskCfg(cli *clientv3.Client) (map[string]map[string]config.SubTas
 
 	resp, err := cli.Get(ctx, common.UpstreamSubTaskKeyAdapter.Path(), clientv3.WithPrefix())
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, terror.ErrHAFailTxnOperation.Delegate(err, "fail to get all subtask configs")
 	}
 
 	cfgs, err := subTaskCfgFromResp("", "", resp)

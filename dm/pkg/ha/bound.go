@@ -70,7 +70,7 @@ func (b SourceBound) String() string {
 func (b SourceBound) toJSON() (string, error) {
 	data, err := json.Marshal(b)
 	if err != nil {
-		return "", err
+		return "", terror.ErrHAInvalidItem.Delegate(err, fmt.Sprintf("fail to marshal SourceBound %+v", b))
 	}
 	return string(data), nil
 }
@@ -83,7 +83,9 @@ func (b SourceBound) IsEmpty() bool {
 
 // sourceBoundFromJSON constructs SourceBound from its JSON represent.
 func sourceBoundFromJSON(s string) (b SourceBound, err error) {
-	err = json.Unmarshal([]byte(s), &b)
+	if err = json.Unmarshal([]byte(s), &b); err != nil {
+		err = terror.ErrHAInvalidItem.Delegate(err, fmt.Sprintf("fail to unmarshal SourceBound %s", s))
+	}
 	return
 }
 
@@ -98,7 +100,7 @@ func PutSourceBound(cli *clientv3.Client, bounds ...SourceBound) (int64, error) 
 		}
 		ops = append(ops, boundOps...)
 	}
-	_, rev, err := etcdutil.DoOpsInOneTxnWithRetry(cli, ops...)
+	_, rev, err := etcdutil.DoTxnWithRepeatable(cli, etcdutil.ThenOpFunc(ops...))
 	return rev, err
 }
 
@@ -108,7 +110,7 @@ func DeleteSourceBoundByWorker(cli *clientv3.Client, workers ...string) (int64, 
 	for _, worker := range workers {
 		ops = append(ops, deleteSourceBoundByWorkerOp(worker)...)
 	}
-	_, rev, err := etcdutil.DoOpsInOneTxnWithRetry(cli, ops...)
+	_, rev, err := etcdutil.DoTxnWithRepeatable(cli, etcdutil.ThenOpFunc(ops...))
 	return rev, err
 }
 
@@ -118,7 +120,7 @@ func DeleteSourceBoundByBound(cli *clientv3.Client, bounds ...SourceBound) (int6
 	for _, bound := range bounds {
 		ops = append(ops, deleteSourceBoundByBoundOp(bound)...)
 	}
-	_, rev, err := etcdutil.DoOpsInOneTxnWithRetry(cli, ops...)
+	_, rev, err := etcdutil.DoTxnWithRepeatable(cli, etcdutil.ThenOpFunc(ops...))
 	return rev, err
 }
 
@@ -133,7 +135,7 @@ func ReplaceSourceBound(cli *clientv3.Client, source, oldWorker, newWorker strin
 	ops := make([]clientv3.Op, 0, len(deleteOps)+len(putOps))
 	ops = append(ops, deleteOps...)
 	ops = append(ops, putOps...)
-	_, rev, err := etcdutil.DoOpsInOneTxnWithRetry(cli, ops...)
+	_, rev, err := etcdutil.DoTxnWithRepeatable(cli, etcdutil.ThenOpFunc(ops...))
 	return rev, err
 }
 
@@ -164,7 +166,7 @@ func GetSourceBound(cli *clientv3.Client, worker, source string) (map[string]map
 	}
 
 	if err != nil {
-		return sbm, 0, err
+		return sbm, 0, terror.ErrHAFailTxnOperation.Delegate(err, "fail to get bound relationship")
 	}
 
 	sbm, err = sourceBoundFromResp(resp)
@@ -184,7 +186,7 @@ func GetLastSourceBounds(cli *clientv3.Client) (map[string]SourceBound, int64, e
 	sbm := make(map[string]SourceBound)
 	resp, err := cli.Get(ctx, common.UpstreamLastBoundWorkerKeyAdapter.Path(), clientv3.WithPrefix())
 	if err != nil {
-		return sbm, 0, err
+		return sbm, 0, terror.ErrHAFailTxnOperation.Delegate(err, "fail to get last bound relationship")
 	}
 
 	sbm, err = lastSourceBoundFromResp(resp)
@@ -217,8 +219,8 @@ func GetSourceBoundConfig(cli *clientv3.Client, worker, source string) (map[stri
 	}
 
 	for retryCnt := 1; retryCnt <= retryNum; retryCnt++ {
-		txnResp, rev2, err2 := etcdutil.DoOpsInOneTxnWithRetry(cli, clientv3.OpGet(common.UpstreamBoundWorkerKeyAdapter.Encode(worker), clientv3.WithPrefix()),
-			clientv3.OpGet(common.UpstreamConfigKeyAdapter.Path(), clientv3.WithPrefix()))
+		txnResp, rev2, err2 := etcdutil.DoTxnWithRepeatable(cli, etcdutil.ThenOpFunc(clientv3.OpGet(common.UpstreamBoundWorkerKeyAdapter.Encode(worker), clientv3.WithPrefix()),
+			clientv3.OpGet(common.UpstreamConfigKeyAdapter.Path(), clientv3.WithPrefix())))
 		if err2 != nil {
 			return nil, nil, 0, err2
 		}
@@ -310,7 +312,7 @@ func WatchSourceBound(ctx context.Context, cli *clientv3.Client, worker string, 
 				// TODO(csuzhangxc): do retry here.
 				if resp.Err() != nil {
 					select {
-					case errCh <- resp.Err():
+					case errCh <- terror.ErrHAFailWatchEtcd.Delegate(resp.Err(), "watch source bound key canceled"):
 					case <-ctx.Done():
 					}
 				}

@@ -55,7 +55,7 @@ func TestCompactorPoll(t *testing.T) {
 	// Must not trigger compact.
 	task := message.Task{DeleteReq: &message.DeleteRequest{}}
 	task.DeleteReq.Count = 0
-	closed := !compactor.Poll(ctx, []actormsg.Message{actormsg.SorterMessage(task)})
+	closed := !compactor.Poll(ctx, []actormsg.Message[message.Task]{actormsg.ValueMessage(task)})
 	require.False(t, closed)
 	select {
 	case <-mockDB.compact:
@@ -65,7 +65,7 @@ func TestCompactorPoll(t *testing.T) {
 
 	// Must trigger compact.
 	task.DeleteReq.Count = 2 * cfg.CompactionDeletionThreshold
-	closed = !compactor.Poll(ctx, []actormsg.Message{actormsg.SorterMessage(task)})
+	closed = !compactor.Poll(ctx, []actormsg.Message[message.Task]{actormsg.ValueMessage(task)})
 	require.False(t, closed)
 	select {
 	case <-time.After(5 * time.Second):
@@ -76,7 +76,7 @@ func TestCompactorPoll(t *testing.T) {
 	// Must trigger compact.
 	time.Sleep(time.Duration(cfg.CompactionPeriod) * time.Second * 2)
 	task.DeleteReq.Count = cfg.CompactionDeletionThreshold / 2
-	closed = !compactor.Poll(ctx, []actormsg.Message{actormsg.SorterMessage(task)})
+	closed = !compactor.Poll(ctx, []actormsg.Message[message.Task]{actormsg.ValueMessage(task)})
 	require.False(t, closed)
 	select {
 	case <-time.After(5 * time.Second):
@@ -85,7 +85,8 @@ func TestCompactorPoll(t *testing.T) {
 	}
 
 	// Close leveldb.
-	closed = !compactor.Poll(ctx, []actormsg.Message{actormsg.StopMessage()})
+	stopMsg := actormsg.StopMessage[message.Task]()
+	closed = !compactor.Poll(ctx, []actormsg.Message[message.Task]{stopMsg})
 	require.True(t, closed)
 	compactor.OnClose()
 	closedWg.Wait()
@@ -106,7 +107,7 @@ func TestComactorContextCancel(t *testing.T) {
 
 	cancel()
 	closed := !ldb.Poll(
-		ctx, []actormsg.Message{actormsg.SorterMessage(message.Task{})})
+		ctx, []actormsg.Message[message.Task]{actormsg.ValueMessage(message.Task{})})
 	require.True(t, closed)
 	ldb.OnClose()
 	closedWg.Wait()
@@ -115,8 +116,8 @@ func TestComactorContextCancel(t *testing.T) {
 
 func TestScheduleCompact(t *testing.T) {
 	t.Parallel()
-	router := actor.NewRouter(t.Name())
-	mb := actor.NewMailbox(actor.ID(1), 1)
+	router := actor.NewRouter[message.Task](t.Name())
+	mb := actor.NewMailbox[message.Task](actor.ID(1), 1)
 	router.InsertMailbox4Test(mb.ID(), mb)
 	compact := NewCompactScheduler(router)
 
@@ -126,14 +127,14 @@ func TestScheduleCompact(t *testing.T) {
 	require.True(t, ok)
 	task := message.Task{DeleteReq: &message.DeleteRequest{}}
 	task.DeleteReq.Count = 3
-	require.EqualValues(t, actormsg.SorterMessage(task), msg)
+	require.EqualValues(t, actormsg.ValueMessage(task), msg)
 
 	// Skip sending unnecessary tasks.
 	require.True(t, compact.tryScheduleCompact(mb.ID(), 3))
 	require.True(t, compact.tryScheduleCompact(mb.ID(), 3))
 	msg, ok = mb.Receive()
 	require.True(t, ok)
-	require.EqualValues(t, actormsg.SorterMessage(task), msg)
+	require.EqualValues(t, actormsg.ValueMessage(task), msg)
 	_, ok = mb.Receive()
 	require.False(t, ok)
 }
