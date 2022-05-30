@@ -42,7 +42,6 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
-	"github.com/pingcap/tiflow/dm/syncer/metrics"
 	"github.com/pingcap/tiflow/pkg/sqlmodel"
 )
 
@@ -275,7 +274,6 @@ func (vw *validateWorker) updatePendingAndErrorRows(failedChanges map[string]map
 	vw.pendingChangesMap = newPendingChanges
 	vw.errorRows = append(vw.errorRows, allErrorRows...)
 	vw.validator.incrErrorRowCount(len(allErrorRows))
-	metrics.ValidatorErrorCount.WithLabelValues(vw.validator.cfg.Name, vw.validator.cfg.SourceID, vw.validator.cfg.WorkerName).Add(float64(len(allErrorRows)))
 }
 
 func (vw *validateWorker) validateRowChanges(rows []*rowValidationJob, deleteChange bool) (map[string]*validateFailedRow, error) {

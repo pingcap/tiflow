@@ -197,6 +197,8 @@ type DataValidator struct {
 	lastFlushTime        time.Time
 	location             *binlog.Location
 	loadedPendingChanges map[string]*tableChangeJob
+
+	vmetric *metrics.ValidatorMetrics
 }
 
 func NewContinuousDataValidator(cfg *config.SubTaskConfig, syncerObj *Syncer, startWithSubtask bool) *DataValidator {
@@ -204,6 +206,7 @@ func NewContinuousDataValidator(cfg *config.SubTaskConfig, syncerObj *Syncer, st
 		cfg:              cfg,
 		syncer:           syncerObj,
 		startWithSubtask: startWithSubtask,
+		vmetric:          metrics.NewValidatorMetrics(cfg.Name, cfg.SourceID),
 	}
 	v.L = log.With(zap.String("task", cfg.Name), zap.String("unit", "continuous validator"))
 
@@ -388,7 +391,7 @@ func (v *DataValidator) printStatusRoutine() {
 			speed := float64((currProcessedBinlogSize-prevProcessedBinlogSize)>>20) / interval.Seconds()
 			prevProcessedBinlogSize = currProcessedBinlogSize
 			prevTime = currTime
-
+			v.vmetric.ValidatorErrorCount.Set(float64(v.newErrorRowCount.Load()))
 			v.L.Info("validator status",
 				zap.Int64s("processed(i, u, d)", processed),
 				zap.Int64s("pending(i, u, d)", pending),
@@ -459,6 +462,39 @@ func (v *DataValidator) waitSyncerSynced(currLoc binlog.Location) error {
 				return nil
 			}
 			v.L.Debug("wait syncer synced", zap.Reflect("loc", currLoc))
+		}
+	}
+}
+
+func (v *DataValidator) updateValidatorBinlogMetric(currLoc binlog.Location) {
+	v.vmetric.ValidatorBinlogPos.Set(float64(currLoc.Position.Pos))
+	index, err := binlog.GetFilenameIndex(currLoc.Position.Name)
+	if err != nil {
+		v.L.Warn("fail to record validator binlog file index")
+	} else {
+		v.vmetric.ValidatorBinlogFile.Set(float64(index))
+	}
+}
+
+func (v *DataValidator) updateValidatorBinlogLag(currLoc binlog.Location) {
+	syncerLoc := v.syncer.getFlushedGlobalPoint()
+	index, err := binlog.GetFilenameIndex(currLoc.Position.Name)
+	if err != nil {
+		v.L.Warn("fail to record validator binlog file index")
+	}
+	if syncerLoc.Position.Name == currLoc.Position.Name {
+		// same file: record the log pos latency
+		v.vmetric.ValidatorLogPosLatency.Set(float64(syncerLoc.Position.Pos - currLoc.Position.Pos))
+		v.vmetric.ValidatorLogFileLatency.Set(float64(0))
+	} else {
+		var syncerLogIdx int64
+		v.vmetric.ValidatorLogPosLatency.Set(float64(0))
+		syncerLogIdx, err = binlog.GetFilenameIndex(syncerLoc.Position.Name)
+		if err != nil {
+			v.vmetric.ValidatorLogFileLatency.Set(float64(syncerLogIdx - index))
+		} else {
+			v.vmetric.ValidatorLogFileLatency.Set(float64(0))
+			v.L.Warn("fail to get syncer's log file index")
 		}
 	}
 }
@@ -630,13 +666,7 @@ func (v *DataValidator) doValidate() {
 			currLoc.Position.Pos = e.Header.LogPos
 		}
 		// update validator metric
-		metrics.ValidatorBinlogPos.WithLabelValues(v.cfg.Name, v.cfg.SourceID, v.cfg.WorkerName).Set(float64(currLoc.Position.Pos))
-		index, err := binlog.GetFilenameIndex(currLoc.Position.Name)
-		if err != nil {
-			v.L.Warn("fail to record validator binlog file index")
-		} else {
-			metrics.ValidatorBinlogFile.WithLabelValues(v.cfg.Name, v.cfg.SourceID, v.cfg.WorkerName).Set(float64(index))
-		}
+		v.updateValidatorBinlogMetric(currLoc)
 		// wait until syncer synced current event
 		err = v.waitSyncerSynced(currLoc)
 		if err != nil {
@@ -644,24 +674,7 @@ func (v *DataValidator) doValidate() {
 			v.sendError(err)
 			return
 		}
-		v.syncer.currentLocationMu.RLock()
-		syncerLoc := v.syncer.currentLocationMu.currentLocation
-		v.syncer.currentLocationMu.RUnlock()
-		if syncerLoc.Position.Name == currLoc.Position.Name {
-			// same file: record the log pos latency
-			metrics.ValidatorLogPosLatency.WithLabelValues(v.cfg.Name, v.cfg.SourceID, v.cfg.WorkerName).Set(float64(syncerLoc.Position.Pos - currLoc.Position.Pos))
-			metrics.ValidatorLogFileLatency.WithLabelValues(v.cfg.Name, v.cfg.SourceID, v.cfg.WorkerName).Set(float64(0))
-		} else {
-			var syncerLogIdx int64
-			metrics.ValidatorLogPosLatency.WithLabelValues(v.cfg.Name, v.cfg.SourceID, v.cfg.WorkerName).Set(float64(0))
-			syncerLogIdx, err = binlog.GetFilenameIndex(syncerLoc.Position.Name)
-			if err != nil {
-				metrics.ValidatorLogFileLatency.WithLabelValues(v.cfg.Name, v.cfg.SourceID, v.cfg.WorkerName).Set(float64(syncerLogIdx - index))
-			} else {
-				metrics.ValidatorLogFileLatency.WithLabelValues(v.cfg.Name, v.cfg.SourceID, v.cfg.WorkerName).Set(float64(0))
-				v.L.Warn("fail to get syncer's log file index")
-			}
-		}
+		v.updateValidatorBinlogLag(currLoc)
 		v.processedBinlogSize.Add(int64(e.Header.EventSize))
 
 		switch ev := e.Event.(type) {

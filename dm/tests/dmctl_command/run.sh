@@ -430,6 +430,13 @@ function run_validation_start_stop_cmd {
 		"\"stage\": \"Running\"" 0 \
 		"\"stage\": \"Stopped\"" 1
 }
+function query_status_disable_validator() {
+	dmctl_start_task $cur/conf/dm-task2.yaml --remove-meta
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test2" \
+		"\"validation\": null"
+	dmctl_stop_task "test2"
+}
 
 function run_validator_cmd {
 	run_dm_master $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master.toml
@@ -448,6 +455,7 @@ function run_validator_cmd {
 	cp $cur/conf/source2.yaml $WORK_DIR/source2.yaml
 	dmctl_operate_source create $WORK_DIR/source1.yaml $SOURCE_ID1
 	dmctl_operate_source create $WORK_DIR/source2.yaml $SOURCE_ID2
+	query_status_disable_validator
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"start-task $cur/conf/dm-task.yaml" \
 		"\`remove-meta\` in task config is deprecated, please use \`start-task ... --remove-meta\` instead" 1
@@ -555,6 +563,16 @@ function run_validator_cmd {
 		"new\/ignored\/resolved: 0\/1\/1" 1
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation clear test --all"
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation status test" \
+		"new\/ignored\/resolved: 0\/0\/0" 2
+	run_sql_source1 "insert into dmctl_command.t1 values(-10,'ignore-row')"
+	run_sql_source1 "create table dmctl_command.t_trigger_flush110(id int primary key)" # trigger flush
+	sleep 1                                                                             # wait sync
+	run_sql_tidb "select * from dmctl_command.t1"
+	check_not_contains "id: -10" # sync failed due to GO_FAILPOINTS
+	sleep 5                      # wait validator
+	# no validation error, because validator has been stopped
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation status test" \
 		"new\/ignored\/resolved: 0\/0\/0" 2
