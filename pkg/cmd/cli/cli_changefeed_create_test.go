@@ -19,57 +19,51 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/pingcap/check"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
-	"github.com/pingcap/tiflow/pkg/util/testleak"
 	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/spf13/cobra"
+	"github.com/stretchr/testify/require"
 )
 
-func TestChangefeedSuite(t *testing.T) { check.TestingT(t) }
+func TestStrictDecodeConfig(t *testing.T) {
+	t.Parallel()
 
-type changefeedSuite struct{}
-
-var _ = check.Suite(&changefeedSuite{})
-
-func (s *changefeedSuite) TestStrictDecodeConfig(c *check.C) {
-	defer testleak.AfterTest(c)()
 	cmd := new(cobra.Command)
 	o := newChangefeedCommonOptions()
 	o.addFlags(cmd)
 
-	dir := c.MkDir()
+	dir := t.TempDir()
 	path := filepath.Join(dir, "config.toml")
 	content := `
 	[filter]
 	rules = ['*.*', '!test.*']`
 	err := os.WriteFile(path, []byte(content), 0o644)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 
-	c.Assert(cmd.ParseFlags([]string{fmt.Sprintf("--config=%s", path)}), check.IsNil)
+	require.Nil(t, cmd.ParseFlags([]string{fmt.Sprintf("--config=%s", path)}))
 
 	cfg := config.GetDefaultReplicaConfig()
 	err = o.strictDecodeConfig("cdc", cfg)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 
 	path = filepath.Join(dir, "config1.toml")
 	content = `
 	[filter]
 	rules = ['*.*', '!test.*','rtest1']`
 	err = os.WriteFile(path, []byte(content), 0o644)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 
-	c.Assert(cmd.ParseFlags([]string{fmt.Sprintf("--config=%s", path)}), check.IsNil)
+	require.Nil(t, cmd.ParseFlags([]string{fmt.Sprintf("--config=%s", path)}))
 
 	cfg = config.GetDefaultReplicaConfig()
 	err = o.strictDecodeConfig("cdc", cfg)
-	c.Assert(err, check.NotNil)
-	c.Assert(err, check.ErrorMatches, ".*CDC:ErrFilterRuleInvalid.*")
+	require.NotNil(t, err)
+	require.Regexp(t, ".*CDC:ErrFilterRuleInvalid.*", err)
 }
 
-func (s *changefeedSuite) TestInvalidSortEngine(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestInvalidSortEngine(t *testing.T) {
+	t.Parallel()
 
 	cases := []struct {
 		input  string
@@ -91,11 +85,11 @@ func (s *changefeedSuite) TestInvalidSortEngine(c *check.C) {
 		cmd := new(cobra.Command)
 		o := newChangefeedCommonOptions()
 		o.addFlags(cmd)
-		c.Assert(cmd.ParseFlags([]string{"--sort-engine=" + cs.input}), check.IsNil)
+		require.Nil(t, cmd.ParseFlags([]string{"--sort-engine=" + cs.input}))
 		opt := newCreateChangefeedOptions(o)
 		err := opt.completeCfg(cmd,
 			[]*model.CaptureInfo{{Version: version.MinTiCDCVersion.String()}})
-		c.Assert(err, check.IsNil)
-		c.Assert(opt.commonChangefeedOptions.sortEngine, check.Equals, cs.expect)
+		require.Nil(t, err)
+		require.Equal(t, cs.expect, opt.commonChangefeedOptions.sortEngine)
 	}
 }

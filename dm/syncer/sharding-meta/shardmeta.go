@@ -18,8 +18,8 @@ import (
 	"fmt"
 
 	"github.com/go-mysql-org/go-mysql/mysql"
-	"github.com/pingcap/tidb-tools/pkg/dbutil"
-	"github.com/pingcap/tidb-tools/pkg/filter"
+	"github.com/pingcap/tidb/util/dbutil"
+	"github.com/pingcap/tidb/util/filter"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
@@ -35,7 +35,7 @@ type DDLItem struct {
 	DDLs          []string        `json:"ddls"`   // DDLs, these ddls are in the same QueryEvent
 	Source        string          `json:"source"` // source table ID
 
-	// just used for json's marshal and unmarshal, because gtid.Set in FirstLocation is interface,
+	// just used for json's marshal and unmarshal, because gtid set in FirstLocation is interface,
 	// can't be marshal and unmarshal
 	FirstPosition mysql.Position `json:"first-position"`
 	FirstGTIDSet  string         `json:"first-gtid-set"`
@@ -127,7 +127,7 @@ func (meta *ShardingMeta) RestoreFromData(sourceTableID string, activeIdx int, i
 		if err1 != nil {
 			return err1
 		}
-		item.FirstLocation = binlog.InitLocation(
+		item.FirstLocation = binlog.NewLocation(
 			item.FirstPosition,
 			gset,
 		)

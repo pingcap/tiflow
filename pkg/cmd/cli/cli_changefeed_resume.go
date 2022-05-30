@@ -17,7 +17,7 @@ import (
 	"context"
 	"encoding/json"
 
-	"github.com/pingcap/tiflow/cdc/api"
+	"github.com/pingcap/tiflow/cdc/api/owner"
 	"github.com/pingcap/tiflow/cdc/model"
 	cmdcontext "github.com/pingcap/tiflow/pkg/cmd/context"
 	"github.com/pingcap/tiflow/pkg/cmd/factory"
@@ -74,12 +74,14 @@ func (o *resumeChangefeedOptions) complete(f factory.Factory) error {
 
 // confirmResumeChangefeedCheck prompts the user to confirm the use of a large data gap when noConfirm is turned off.
 func (o *resumeChangefeedOptions) confirmResumeChangefeedCheck(ctx context.Context, cmd *cobra.Command) error {
-	resp, err := sendOwnerChangefeedQuery(ctx, o.etcdClient, o.changefeedID, o.credential)
+	resp, err := sendOwnerChangefeedQuery(ctx, o.etcdClient,
+		model.DefaultChangeFeedID(o.changefeedID),
+		o.credential)
 	if err != nil {
 		return err
 	}
 
-	info := &api.ChangefeedResp{}
+	info := &owner.ChangefeedResp{}
 	err = json.Unmarshal([]byte(resp), info)
 	if err != nil {
 		return err
@@ -106,7 +108,7 @@ func (o *resumeChangefeedOptions) run(cmd *cobra.Command) error {
 	}
 
 	job := model.AdminJob{
-		CfID: o.changefeedID,
+		CfID: model.DefaultChangeFeedID(o.changefeedID),
 		Type: model.AdminResume,
 	}
 

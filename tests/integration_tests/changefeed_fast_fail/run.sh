@@ -9,26 +9,6 @@ CDC_BINARY=cdc.test
 SINK_TYPE=$1
 MAX_RETRIES=20
 
-function check_changefeed_mark_failed_regex() {
-	endpoints=$1
-	changefeedid=$2
-	error_msg=$3
-	info=$(cdc cli changefeed query --pd=$endpoints -c $changefeedid -s)
-	echo "$info"
-	state=$(echo $info | jq -r '.state')
-	if [[ ! "$state" == "failed" ]]; then
-		echo "changefeed state $state does not equal to failed"
-		exit 1
-	fi
-	message=$(echo $info | jq -r '.error.message')
-	if [[ ! "$message" =~ $error_msg ]]; then
-		echo "error message '$message' does not match '$error_msg'"
-		exit 1
-	fi
-}
-
-export -f check_changefeed_mark_failed_regex
-
 function run() {
 	# it is no need to test kafka
 	# the logic are all the same
@@ -52,7 +32,7 @@ function run() {
 	changefeedid="changefeed-fast-fail"
 	run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" -c $changefeedid
 
-	ensure $MAX_RETRIES check_changefeed_mark_failed_regex http://${UP_PD_HOST_1}:${UP_PD_PORT_1} ${changefeedid} "ErrGCTTLExceeded"
+	ensure $MAX_RETRIES check_changefeed_state http://${UP_PD_HOST_1}:${UP_PD_PORT_1} ${changefeedid} "failed" "ErrGCTTLExceeded" ""
 	run_cdc_cli changefeed remove -c $changefeedid
 	sleep 2
 	#result=$(curl -X GET "http://127.0.0.1:8300/api/v1/changefeeds")

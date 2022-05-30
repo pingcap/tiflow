@@ -11,6 +11,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// TODO remove following line once revive supports generic.
+//revive:disable:receiver-naming
+
 package actor
 
 import (
@@ -68,14 +71,14 @@ const (
 )
 
 // proc is wrapper of a running actor.
-type proc struct {
+type proc[T any] struct {
 	state uint64
-	mb    Mailbox
-	actor Actor
+	mb    Mailbox[T]
+	actor Actor[T]
 }
 
 // batchReceiveMsgs receives messages into batchMsg.
-func (p *proc) batchReceiveMsgs(batchMsg []message.Message) int {
+func (p *proc[T]) batchReceiveMsgs(batchMsg []message.Message[T]) int {
 	n := 0
 	max := len(batchMsg)
 	for i := 0; i < max; i++ {
@@ -91,14 +94,14 @@ func (p *proc) batchReceiveMsgs(batchMsg []message.Message) int {
 }
 
 // isClosed returns ture, means its mailbox and actor are closed.
-// isClosed is threadsafe.
-func (p *proc) isClosed() bool {
+// isClosed is thread-safe.
+func (p *proc[T]) isClosed() bool {
 	return atomic.LoadUint64(&p.state) == uint64(procStateClosed)
 }
 
 // closeMailbox close mailbox and set state to closed for graceful close.
-// onSystemStop is threadsafe.
-func (p *proc) onSystemStop() {
+// onSystemStop is thread-safe.
+func (p *proc[T]) onSystemStop() {
 	// Running -> MailboxClosed
 	if atomic.CompareAndSwapUint64(
 		&p.state, uint64(procStateRunning), uint64(procStateMailboxClosed)) {
@@ -107,8 +110,8 @@ func (p *proc) onSystemStop() {
 }
 
 // closeMailbox close mailbox and set state to closed.
-// onMailboxEmpty is threadsafe.
-func (p *proc) onMailboxEmpty() {
+// onMailboxEmpty is thread-safe.
+func (p *proc[T]) onMailboxEmpty() {
 	// MailboxClosed -> Close
 	if atomic.CompareAndSwapUint64(
 		&p.state, uint64(procStateMailboxClosed), uint64(procStateClosed)) {
@@ -116,9 +119,9 @@ func (p *proc) onMailboxEmpty() {
 	}
 }
 
-// onActorClosed all mailbox and actor.
-// onActorClosed is threadsafe.
-func (p *proc) onActorClosed() {
+// onActorClosed closes all mailbox and actor.
+// onActorClosed is thread-safe.
+func (p *proc[T]) onActorClosed() {
 	if atomic.CompareAndSwapUint64(
 		&p.state, uint64(procStateRunning), uint64(procStateClosed)) {
 		p.mb.close()
@@ -142,9 +145,9 @@ const (
 	readyStateStopped readyState = 2
 )
 
-// ready is a centralize notification struct, shared by a router and a system.
+// ready is a centralized notification struct, shared by a router and a system.
 // It schedules notification and actors.
-type ready struct {
+type ready[T any] struct {
 	sync.Mutex
 	cond *sync.Cond
 
@@ -159,13 +162,13 @@ type ready struct {
 	metricDropMessage prometheus.Counter
 }
 
-func (rd *ready) prepareStop() {
+func (rd *ready[T]) prepareStop() {
 	rd.Lock()
 	rd.state = readyStateStopping
 	rd.Unlock()
 }
 
-func (rd *ready) stop() {
+func (rd *ready[T]) stop() {
 	rd.Lock()
 	rd.state = readyStateStopped
 	rd.Unlock()
@@ -176,7 +179,7 @@ func (rd *ready) stop() {
 // If the proc is already enqueued, it ignores.
 // Set force to true to force enqueue. It is useful to force the proc to be
 // polled again.
-func (rd *ready) enqueueLocked(p *proc, force bool) error {
+func (rd *ready[T]) enqueueLocked(p *proc[T], force bool) error {
 	if p.isClosed() {
 		return errActorStopped
 	}
@@ -189,7 +192,7 @@ func (rd *ready) enqueueLocked(p *proc, force bool) error {
 }
 
 // schedule schedules the proc to system.
-func (rd *ready) schedule(p *proc) error {
+func (rd *ready[T]) schedule(p *proc[T]) error {
 	rd.Lock()
 	err := rd.enqueueLocked(p, false)
 	rd.Unlock()
@@ -203,7 +206,7 @@ func (rd *ready) schedule(p *proc) error {
 
 // scheduleN schedules a slice of procs to system.
 // It ignores stopped procs.
-func (rd *ready) scheduleN(procs []*proc) {
+func (rd *ready[T]) scheduleN(procs []*proc[T]) {
 	rd.Lock()
 	for _, p := range procs {
 		_ = rd.enqueueLocked(p, false)
@@ -213,7 +216,7 @@ func (rd *ready) scheduleN(procs []*proc) {
 }
 
 // batchReceiveProcs receives ready procs into batchP.
-func (rd *ready) batchReceiveProcs(batchP []*proc) int {
+func (rd *ready[T]) batchReceiveProcs(batchP []*proc[T]) int {
 	n := 0
 	max := len(batchP)
 	for i := 0; i < max; i++ {
@@ -223,7 +226,7 @@ func (rd *ready) batchReceiveProcs(batchP []*proc) int {
 		}
 		element := rd.queue.Front()
 		rd.queue.Remove(element)
-		p := element.Value.(*proc)
+		p := element.Value.(*proc[T])
 		batchP[i] = p
 		n++
 	}
@@ -231,17 +234,17 @@ func (rd *ready) batchReceiveProcs(batchP []*proc) int {
 }
 
 // Router send messages to actors.
-type Router struct {
-	rd *ready
+type Router[T any] struct {
+	rd *ready[T]
 
 	// Map of ID to proc
 	procs sync.Map
 }
 
 // NewRouter returns a new router.
-func NewRouter(name string) *Router {
-	r := &Router{
-		rd: &ready{},
+func NewRouter[T any](name string) *Router[T] {
+	r := &Router[T]{
+		rd: &ready[T]{},
 	}
 	r.rd.cond = sync.NewCond(&r.rd.Mutex)
 	r.rd.procs = make(map[ID]struct{})
@@ -253,12 +256,12 @@ func NewRouter(name string) *Router {
 // Send a message to an actor. It's a non-blocking send.
 // ErrMailboxFull when the actor full.
 // ErrActorNotFound when the actor not found.
-func (r *Router) Send(id ID, msg message.Message) error {
+func (r *Router[T]) Send(id ID, msg message.Message[T]) error {
 	value, ok := r.procs.Load(id)
 	if !ok {
 		return errActorNotFound
 	}
-	p := value.(*proc)
+	p := value.(*proc[T])
 	err := p.mb.Send(msg)
 	if err != nil {
 		return err
@@ -269,12 +272,12 @@ func (r *Router) Send(id ID, msg message.Message) error {
 // SendB sends a message to an actor, blocks when it's full.
 // ErrActorNotFound when the actor not found.
 // Canceled or DeadlineExceeded when the context is canceled or done.
-func (r *Router) SendB(ctx context.Context, id ID, msg message.Message) error {
+func (r *Router[T]) SendB(ctx context.Context, id ID, msg message.Message[T]) error {
 	value, ok := r.procs.Load(id)
 	if !ok {
 		return errActorNotFound
 	}
-	p := value.(*proc)
+	p := value.(*proc[T])
 	err := p.mb.SendB(ctx, msg)
 	if err != nil {
 		return err
@@ -284,11 +287,11 @@ func (r *Router) SendB(ctx context.Context, id ID, msg message.Message) error {
 
 // Broadcast a message to all actors in the router.
 // The message may be dropped when context is canceled.
-func (r *Router) Broadcast(ctx context.Context, msg message.Message) {
+func (r *Router[T]) Broadcast(ctx context.Context, msg message.Message[T]) {
 	batchSize := 128
-	ps := make([]*proc, 0, batchSize)
+	ps := make([]*proc[T], 0, batchSize)
 	r.procs.Range(func(key, value interface{}) bool {
-		p := value.(*proc)
+		p := value.(*proc[T])
 		if err := p.mb.SendB(ctx, msg); err != nil {
 			log.Warn("failed to send to message",
 				zap.Error(err), zap.Uint64("id", uint64(p.mb.ID())),
@@ -309,7 +312,7 @@ func (r *Router) Broadcast(ctx context.Context, msg message.Message) {
 	}
 }
 
-func (r *Router) insert(id ID, p *proc) error {
+func (r *Router[T]) insert(id ID, p *proc[T]) error {
 	_, exist := r.procs.LoadOrStore(id, p)
 	if exist {
 		return cerrors.ErrActorDuplicate.FastGenByArgs()
@@ -317,13 +320,13 @@ func (r *Router) insert(id ID, p *proc) error {
 	return nil
 }
 
-func (r *Router) remove(id ID) bool {
+func (r *Router[T]) remove(id ID) bool {
 	_, present := r.procs.LoadAndDelete(id)
 	return present
 }
 
 // SystemBuilder is a builder of a system.
-type SystemBuilder struct {
+type SystemBuilder[T any] struct {
 	name                 string
 	numWorker            int
 	actorBatchSize       int
@@ -333,14 +336,14 @@ type SystemBuilder struct {
 }
 
 // NewSystemBuilder returns a new system builder.
-func NewSystemBuilder(name string) *SystemBuilder {
+func NewSystemBuilder[T any](name string) *SystemBuilder[T] {
 	defaultWorkerNum := maxWorkerNum
 	goMaxProcs := runtime.GOMAXPROCS(0)
 	if goMaxProcs*8 < defaultWorkerNum {
 		defaultWorkerNum = goMaxProcs * 8
 	}
 
-	return &SystemBuilder{
+	return &SystemBuilder[T]{
 		name:                 name,
 		numWorker:            defaultWorkerNum,
 		actorBatchSize:       DefaultActorBatchSize,
@@ -349,7 +352,7 @@ func NewSystemBuilder(name string) *SystemBuilder {
 }
 
 // WorkerNumber sets the number of workers of a system.
-func (b *SystemBuilder) WorkerNumber(numWorker int) *SystemBuilder {
+func (b *SystemBuilder[T]) WorkerNumber(numWorker int) *SystemBuilder[T] {
 	if numWorker <= 0 {
 		numWorker = 1
 	} else if numWorker > maxWorkerNum {
@@ -360,9 +363,9 @@ func (b *SystemBuilder) WorkerNumber(numWorker int) *SystemBuilder {
 }
 
 // Throughput sets the throughput per-poll of a system.
-func (b *SystemBuilder) Throughput(
+func (b *SystemBuilder[T]) Throughput(
 	actorBatchSize, msgBatchSizePerActor int,
-) *SystemBuilder {
+) *SystemBuilder[T] {
 	if actorBatchSize <= 0 {
 		actorBatchSize = 1
 	}
@@ -376,21 +379,21 @@ func (b *SystemBuilder) Throughput(
 }
 
 // handleFatal sets the fatal handler of a system.
-func (b *SystemBuilder) handleFatal(
+func (b *SystemBuilder[T]) handleFatal(
 	fatalHandler func(string, ID),
-) *SystemBuilder {
+) *SystemBuilder[T] {
 	b.fatalHandler = fatalHandler
 	return b
 }
 
 // Build builds a system and a router.
-func (b *SystemBuilder) Build() (*System, *Router) {
-	router := NewRouter(b.name)
+func (b *SystemBuilder[T]) Build() (*System[T], *Router[T]) {
+	router := NewRouter[T](b.name)
 	metricWorkingDurations := make([]prometheus.Counter, b.numWorker)
 	for i := range metricWorkingDurations {
 		metricWorkingDurations[i] = workingDuration.WithLabelValues(b.name, strconv.Itoa(i))
 	}
-	return &System{
+	return &System[T]{
 		name:                 b.name,
 		numWorker:            b.numWorker,
 		actorBatchSize:       b.actorBatchSize,
@@ -413,14 +416,14 @@ func (b *SystemBuilder) Build() (*System, *Router) {
 }
 
 // System is the runtime of Actors.
-type System struct {
+type System[T any] struct {
 	name                 string
 	numWorker            int
 	actorBatchSize       int
 	msgBatchSizePerActor int
 
-	rd     *ready
-	router *Router
+	rd     *ready[T]
+	router *Router[T]
 	wg     *errgroup.Group
 	cancel context.CancelFunc
 
@@ -438,8 +441,8 @@ type System struct {
 }
 
 // Start the system. Cancelling the context to stop the system.
-// Start is not threadsafe.
-func (s *System) Start(ctx context.Context) {
+// Start is not thread-safe.
+func (s *System[T]) Start(ctx context.Context) {
 	s.wg, ctx = errgroup.WithContext(ctx)
 	ctx, s.cancel = context.WithCancel(ctx)
 
@@ -447,7 +450,6 @@ func (s *System) Start(ctx context.Context) {
 	for i := 0; i < s.numWorker; i++ {
 		id := i
 		s.wg.Go(func() error {
-			defer pprof.SetGoroutineLabels(ctx)
 			pctx := pprof.WithLabels(ctx, pprof.Labels("actor", s.name))
 			pprof.SetGoroutineLabels(pctx)
 
@@ -458,9 +460,9 @@ func (s *System) Start(ctx context.Context) {
 }
 
 // Stop the system, cancels all actors. It should be called after Start.
-// Messages sent before this call will be receive by actors.
-// Stop is not threadsafe.
-func (s *System) Stop() {
+// Messages sent before this call will be received by actors.
+// Stop is not thread-safe.
+func (s *System[T]) Stop() {
 	// Cancel context-aware work currently being polled.
 	if s.cancel != nil {
 		s.cancel()
@@ -469,7 +471,7 @@ func (s *System) Stop() {
 	// any actor that is polled after this line will be closed by the system.
 	s.rd.prepareStop()
 	// Notify all actors in the system.
-	s.router.Broadcast(context.Background(), message.StopMessage())
+	s.router.Broadcast(context.Background(), message.StopMessage[T]())
 	// Wake workers to close ready actors.
 	s.rd.stop()
 	s.metricTotalWorkers.Add(-float64(s.numWorker))
@@ -478,17 +480,17 @@ func (s *System) Stop() {
 }
 
 // Spawn spawns an actor in the system.
-// Spawn is threadsafe.
-func (s *System) Spawn(mb Mailbox, actor Actor) error {
+// Spawn is thread-safe.
+func (s *System[T]) Spawn(mb Mailbox[T], actor Actor[T]) error {
 	id := mb.ID()
-	p := &proc{mb: mb, actor: actor}
+	p := &proc[T]{mb: mb, actor: actor}
 	return s.router.insert(id, p)
 }
 
 // The main poll of actor system.
-func (s *System) poll(ctx context.Context, id int) {
-	batchPBuf := make([]*proc, s.actorBatchSize)
-	batchMsgBuf := make([]message.Message, s.msgBatchSizePerActor)
+func (s *System[T]) poll(ctx context.Context, id int) {
+	batchPBuf := make([]*proc[T], s.actorBatchSize)
+	batchMsgBuf := make([]message.Message[T], s.msgBatchSizePerActor)
 	rd := s.rd
 	rd.Lock()
 
@@ -518,7 +520,7 @@ func (s *System) poll(ctx context.Context, id int) {
 			msgBatchCnt, actorPollLoopCnt = 0, 0
 		}
 
-		var batchP []*proc
+		var batchP []*proc[T]
 		for {
 			// Batch receive ready procs.
 			n := rd.batchReceiveProcs(batchPBuf)
@@ -616,14 +618,14 @@ func (s *System) poll(ctx context.Context, id int) {
 	}
 }
 
-func (s *System) handleFatal(msg string, id ID) {
-	handler := defaultFatalhandler
+func (s *System[T]) handleFatal(msg string, id ID) {
+	handler := defaultFatalHandler
 	if s.fatalHandler != nil {
 		handler = s.fatalHandler
 	}
 	handler(msg, id)
 }
 
-func defaultFatalhandler(msg string, id ID) {
+func defaultFatalHandler(msg string, id ID) {
 	log.Panic(msg, zap.Uint64("id", uint64(id)))
 }

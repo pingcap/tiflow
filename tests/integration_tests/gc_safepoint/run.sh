@@ -57,22 +57,10 @@ function check_safepoint_equal() {
 	done
 }
 
-function check_changefeed_state() {
-	pd_addr=$1
-	changefeed_id=$2
-	expected=$3
-	state=$(cdc cli --pd=$pd_addr changefeed query -s -c $changefeed_id | jq -r ".state")
-	if [[ "$state" != "$expected" ]]; then
-		echo "unexpected state $state, expected $expected"
-		exit 1
-	fi
-}
-
 export -f get_safepoint
 export -f check_safepoint_forward
 export -f check_safepoint_cleared
 export -f check_safepoint_equal
-export -f check_changefeed_state
 export -f clear_gc_worker_safepoint
 
 function run() {
@@ -106,21 +94,21 @@ function run() {
 
 	# after the changefeed is paused, the safe_point will be not updated
 	cdc cli changefeed pause --changefeed-id=$changefeed_id --pd=$pd_addr
-	ensure $MAX_RETRIES check_changefeed_state $pd_addr $changefeed_id "stopped"
+	ensure $MAX_RETRIES check_changefeed_state $pd_addr $changefeed_id "stopped" "null" ""
 	ensure $MAX_RETRIES check_safepoint_equal $pd_addr $pd_cluster_id
 
 	# resume changefeed will recover the safe_point forward
 	cdc cli changefeed resume --changefeed-id=$changefeed_id --pd=$pd_addr
-	ensure $MAX_RETRIES check_changefeed_state $pd_addr $changefeed_id "normal"
+	ensure $MAX_RETRIES check_changefeed_state $pd_addr $changefeed_id "normal" "null" ""
 	start_safepoint=$(get_safepoint $pd_addr $pd_cluster_id)
 	ensure $MAX_RETRIES check_safepoint_forward $pd_addr $pd_cluster_id $start_safepoint
 
 	cdc cli changefeed pause --changefeed-id=$changefeed_id --pd=$pd_addr
-	ensure $MAX_RETRIES check_changefeed_state $pd_addr $changefeed_id "stopped"
+	ensure $MAX_RETRIES check_changefeed_state $pd_addr $changefeed_id "stopped" "null" ""
 	# create another changefeed, because there exists a paused changefeed,
 	# the safe_point still does not forward
 	changefeed_id2=$(cdc cli changefeed create --pd=$pd_addr --sink-uri="$SINK_URI" 2>&1 | tail -n2 | head -n1 | awk '{print $2}')
-	ensure $MAX_RETRIES check_changefeed_state $pd_addr $changefeed_id2 "normal"
+	ensure $MAX_RETRIES check_changefeed_state $pd_addr $changefeed_id2 "normal" "null" ""
 	ensure $MAX_RETRIES check_safepoint_equal $pd_addr $pd_cluster_id
 
 	# remove paused changefeed, the safe_point forward will recover

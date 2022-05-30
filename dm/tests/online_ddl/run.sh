@@ -118,7 +118,7 @@ function run() {
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 
 	echo "start dm-worker3 and kill dm-worker2"
-	ps aux | grep dm-worker2 | awk '{print $2}' | xargs kill || true
+	kill_process dm-worker2
 	check_port_offline $WORKER2_PORT 20
 
 	run_dm_worker $WORK_DIR/worker3 $WORKER3_PORT $cur/conf/dm-worker3.toml

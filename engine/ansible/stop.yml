@@ -1,0 +1,15 @@
+- hosts: df_master_servers
+  tasks:
+  - include: roles/master/tasks/stop.yml
+- hosts: df_executor_servers
+  tasks:
+  - include: roles/executor/tasks/stop.yml
+- hosts: all
+  tasks:
+  - include: roles/metrics/tasks/stop.yml
+
+- hosts: df_demo_servers
+  tasks:
+  - name: stop demo
+    shell: "ps -ef | grep demoserver-{{ cluster_name }} | grep -v grep | awk '{print $2}' | xargs -r kill"
+

@@ -8,26 +8,6 @@ WORK_DIR=$OUT_DIR/$TEST_NAME
 CDC_BINARY=cdc.test
 SINK_TYPE=$1
 
-function check_changefeed_mark_normal() {
-	endpoints=$1
-	changefeedid=$2
-	error_msg=$3
-	info=$(cdc cli changefeed query --pd=$endpoints -c $changefeedid -s)
-	echo "$info"
-	state=$(echo $info | jq -r '.state')
-	if [[ ! "$state" == "normal" ]]; then
-		echo "changefeed state $state does not equal to normal"
-		exit 1
-	fi
-	message=$(echo $info | jq -r '.error.message')
-	if [[ ! "$message" =~ "$error_msg" ]]; then
-		echo "error message '$message' is not as expected '$error_msg'"
-		exit 1
-	fi
-}
-
-export -f check_changefeed_mark_normal
-
 function run() {
 	rm -rf $WORK_DIR && mkdir -p $WORK_DIR
 	start_tidb_cluster --workdir $WORK_DIR
@@ -56,7 +36,7 @@ function run() {
 	fi
 
 	retry_time=10
-	ensure $retry_time check_changefeed_mark_normal $pd_addr $changefeed_id "null"
+	ensure $retry_time check_changefeed_state $pd_addr $changefeed_id "normal" "null" ""
 
 	for i in $(seq 1 10); do
 		run_sql "INSERT INTO processor_err_chan.t$i values (),(),(),(),(),(),()" ${UP_TIDB_HOST} ${UP_TIDB_PORT}

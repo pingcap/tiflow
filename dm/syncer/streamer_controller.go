@@ -29,8 +29,6 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/binlog/common"
 	"github.com/pingcap/tiflow/dm/pkg/binlog/reader"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
-	"github.com/pingcap/tiflow/dm/pkg/log"
-	"github.com/pingcap/tiflow/dm/pkg/retry"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/relay"
@@ -42,7 +40,7 @@ var minErrorRetryInterval = 1 * time.Minute
 
 // StreamerProducer provides the ability to generate binlog streamer by StartSync()
 // but go-mysql StartSync() returns (struct, err) rather than (interface, err)
-// And we can't simplely use StartSync() method in SteamerProducer
+// And we can't simply use StartSync() method in SteamerProducer
 // so use generateStreamer to wrap StartSync() method to make *BinlogSyncer and *BinlogReader in same interface
 // For other implementations who implement StreamerProducer and Streamer can easily take place of Syncer.streamProducer
 // For test is easy to mock.
@@ -58,7 +56,7 @@ type localBinlogReader struct {
 
 func (l *localBinlogReader) generateStreamer(location binlog.Location) (reader.Streamer, error) {
 	if l.EnableGTID {
-		return l.reader.StartSyncByGTID(location.GetGTID().Origin().Clone())
+		return l.reader.StartSyncByGTID(location.GetGTID().Clone())
 	}
 	return l.reader.StartSyncByPos(location.Position)
 }
@@ -78,7 +76,7 @@ func (r *remoteBinlogReader) generateStreamer(location binlog.Location) (reader.
 	}()
 
 	if r.EnableGTID {
-		streamer, err := r.reader.StartSyncGTID(location.GetGTID().Origin().Clone())
+		streamer, err := r.reader.StartSyncGTID(location.GetGTID().Clone())
 		return streamer, terror.ErrSyncerUnitRemoteSteamerStartSync.Delegate(err)
 	}
 
@@ -89,9 +87,9 @@ func (r *remoteBinlogReader) generateStreamer(location binlog.Location) (reader.
 }
 
 // StreamerController controls the streamer for read binlog, include:
-// 1. reopen streamer
-// 2. redirect binlog position or gtid
-// 3. transfor from local streamer to remote streamer.
+// 1. reset streamer to a binlog position or GTID
+// 2. read next binlog event (TODO: and maintain the locations of the events)
+// 3. transfer from local streamer to remote streamer.
 type StreamerController struct {
 	sync.RWMutex
 
@@ -116,7 +114,7 @@ type StreamerController struct {
 
 	fromDB *dbconn.UpStreamConn
 
-	uuidSuffix string
+	relaySubDirSuffix string
 
 	closed bool
 
@@ -191,6 +189,7 @@ func (c *StreamerController) ResetReplicationSyncer(tctx *tcontext.Context, loca
 	c.Lock()
 	defer c.Unlock()
 
+	tctx.L().Info("reset replication syncer", zap.Stringer("location", location))
 	return c.resetReplicationSyncer(tctx, location)
 }
 
@@ -207,7 +206,7 @@ func (c *StreamerController) resetReplicationSyncer(tctx *tcontext.Context, loca
 			// check the uuid before close
 			ctx, cancel := context.WithTimeout(tctx.Ctx, utils.DefaultDBTimeout)
 			defer cancel()
-			uuidSameWithUpstream, err = c.checkUUIDSameWithUpstream(ctx, location.Position, t.reader.GetUUIDs())
+			uuidSameWithUpstream, err = c.checkUUIDSameWithUpstream(ctx, location.Position, t.reader.GetSubDirs())
 			if err != nil {
 				return err
 			}
@@ -239,15 +238,6 @@ func (c *StreamerController) resetReplicationSyncer(tctx *tcontext.Context, loca
 
 	c.streamer, err = c.streamerProducer.generateStreamer(location)
 	return err
-}
-
-// RedirectStreamer redirects the streamer's begin position or gtid.
-func (c *StreamerController) RedirectStreamer(tctx *tcontext.Context, location binlog.Location) error {
-	c.Lock()
-	defer c.Unlock()
-
-	tctx.L().Info("redirect streamer", zap.Stringer("location", location))
-	return c.resetReplicationSyncer(tctx, location)
 }
 
 var mockRestarted = false
@@ -294,48 +284,23 @@ func (c *StreamerController) GetEvent(tctx *tcontext.Context) (event *replicatio
 
 	switch ev := event.Event.(type) {
 	case *replication.RotateEvent:
-		// if is local binlog, binlog's name contain uuid information, need to save it
-		// if is remote binlog, need to add uuid information in binlog's name
-		c.Lock()
-		containUUID := c.setUUIDIfExists(string(ev.NextLogName))
-		uuidSuffix := c.uuidSuffix
-		c.Unlock()
-
-		if !containUUID {
-			if len(uuidSuffix) != 0 {
-				filename, err := binlog.ParseFilename(string(ev.NextLogName))
-				if err != nil {
-					return nil, terror.Annotate(err, "fail to parse binlog file name from rotate event")
-				}
-				ev.NextLogName = []byte(binlog.ConstructFilenameWithUUIDSuffix(filename, uuidSuffix))
-				event.Event = ev
+		// if is local binlog but switch to remote on error, need to add uuid information in binlog's name
+		// nolint:dogsled
+		_, relaySubDirSuffix, _, _ := binlog.SplitFilenameWithUUIDSuffix(string(ev.NextLogName))
+		if relaySubDirSuffix != "" {
+			c.relaySubDirSuffix = relaySubDirSuffix
+		} else if c.relaySubDirSuffix != "" {
+			filename, err := binlog.ParseFilename(string(ev.NextLogName))
+			if err != nil {
+				return nil, terror.Annotate(err, "fail to parse binlog file name from rotate event")
 			}
+			ev.NextLogName = []byte(binlog.ConstructFilenameWithUUIDSuffix(filename, c.relaySubDirSuffix))
+			event.Event = ev
 		}
 	default:
 	}
 
 	return event, nil
-}
-
-// ReopenWithRetry reopens streamer with retry.
-func (c *StreamerController) ReopenWithRetry(tctx *tcontext.Context, location binlog.Location) error {
-	c.Lock()
-	defer c.Unlock()
-
-	var err error
-	for i := 0; i < maxRetryCount; i++ {
-		err = c.resetReplicationSyncer(tctx, location)
-		if err == nil {
-			return nil
-		}
-		if retry.IsConnectionError(err) {
-			tctx.L().Info("fail to retry open binlog streamer", log.ShortError(err))
-			time.Sleep(retryTimeout)
-			continue
-		}
-		break
-	}
-	return err
 }
 
 // Close closes streamer.
@@ -371,17 +336,6 @@ func (c *StreamerController) IsClosed() bool {
 	defer c.RUnlock()
 
 	return c.closed
-}
-
-func (c *StreamerController) setUUIDIfExists(filename string) bool {
-	_, uuidSuffix, _, err := binlog.SplitFilenameWithUUIDSuffix(filename)
-	if err != nil {
-		// don't contain uuid in position's name
-		return false
-	}
-
-	c.uuidSuffix = uuidSuffix
-	return true
 }
 
 // UpdateSyncCfg updates sync config and fromDB.

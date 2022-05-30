@@ -16,14 +16,18 @@ package shardddl
 import (
 	"context"
 	"sync"
+	"time"
 
-	filter "github.com/pingcap/tidb-tools/pkg/table-filter"
 	"github.com/pingcap/tidb/parser/model"
+	filter "github.com/pingcap/tidb/util/table-filter"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/zap"
 
+	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
+	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/shardddl/optimism"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
 
 // Optimist used to coordinate the shard DDL migration in optimism mode.
@@ -41,6 +45,10 @@ type Optimist struct {
 	pendingInfo *optimism.Info
 	// the shard DDL lock operation which is pending to handle.
 	pendingOp *optimism.Operation
+	// the shard DDL lock redirect operations which are pending to handle.
+	// one target table -> one redirect operation
+	pendingRedirectOps        map[string]*optimism.Operation
+	pendingRedirectCancelFunc map[string]context.CancelFunc
 }
 
 // NewOptimist creates a new Optimist instance.
@@ -97,6 +105,8 @@ func (o *Optimist) Reset() {
 
 	o.pendingInfo = nil
 	o.pendingOp = nil
+	o.pendingRedirectOps = make(map[string]*optimism.Operation)
+	o.pendingRedirectCancelFunc = make(map[string]context.CancelFunc)
 }
 
 // ConstructInfo constructs a shard DDL info.
@@ -156,10 +166,62 @@ func (o *Optimist) GetOperation(ctx context.Context, info optimism.Info, rev int
 	}
 }
 
+func (o *Optimist) GetRedirectOperation(ctx context.Context, info optimism.Info, rev int64) {
+	ctx2, cancel2 := context.WithCancel(ctx)
+
+	ch := make(chan optimism.Operation, 1)
+	errCh := make(chan error, 1)
+	targetTableID := utils.GenTableID(&filter.Table{Schema: info.DownSchema, Name: info.DownTable})
+	o.mu.Lock()
+	o.pendingRedirectCancelFunc[targetTableID] = cancel2
+	o.mu.Unlock()
+
+	go func() {
+		o.logger.Info("start to wait redirect operation", zap.Stringer("info", info), zap.Int64("revision", rev))
+		for {
+			op, rev2, err := optimism.GetOperation(o.cli, o.task, o.source, info.UpSchema, info.UpTable)
+			if err != nil {
+				o.logger.Warn("fail to get redirect operation", zap.Error(err))
+				time.Sleep(time.Second)
+				continue
+			}
+			// check whether operation is valid
+			if op.Task == o.task && rev2 >= rev {
+				switch op.ConflictStage {
+				case optimism.ConflictResolved, optimism.ConflictNone:
+					o.saveRedirectOperation(targetTableID, &op)
+					return
+				}
+			}
+			ctx3, cancel3 := context.WithCancel(ctx2)
+			go optimism.WatchOperationPut(ctx3, o.cli, o.task, o.source, info.UpSchema, info.UpTable, rev2+1, ch, errCh)
+			select {
+			case op = <-ch:
+				cancel3()
+				switch op.ConflictStage {
+				case optimism.ConflictResolved, optimism.ConflictNone:
+					o.saveRedirectOperation(targetTableID, &op)
+					return
+				}
+			case err := <-errCh:
+				cancel3()
+				o.logger.Warn("fail to watch redirect operation", zap.Error(err))
+				time.Sleep(time.Second)
+			case <-ctx.Done():
+				cancel3()
+				return
+			}
+		}
+	}()
+}
+
 // DoneOperation marks the shard DDL lock operation as done.
 func (o *Optimist) DoneOperation(op optimism.Operation) error {
 	op.Done = true
-	_, _, err := optimism.PutOperation(o.cli, false, op, 0)
+	_, _, err := etcdutil.DoTxnWithRepeatable(o.cli, func(_ *tcontext.Context, cli *clientv3.Client) (interface{}, error) {
+		_, _, err := optimism.PutOperation(cli, false, op, 0)
+		return nil, err
+	})
 	if err != nil {
 		return err
 	}
@@ -194,6 +256,39 @@ func (o *Optimist) PendingOperation() *optimism.Operation {
 	}
 	op := *o.pendingOp
 	return &op
+}
+
+// PendingRedirectOperation returns the shard DDL lock redirect operation which is pending to handle.
+func (o *Optimist) PendingRedirectOperation() (*optimism.Operation, string) {
+	o.mu.RLock()
+	defer o.mu.RUnlock()
+
+	for targetTableID, op := range o.pendingRedirectOps {
+		return op, targetTableID
+	}
+	return nil, ""
+}
+
+// saveRedirectOperation saves the redirect shard DDL lock operation.
+func (o *Optimist) saveRedirectOperation(targetTableID string, op *optimism.Operation) {
+	o.logger.Info("receive redirection operation from master", zap.Stringer("op", op))
+	o.mu.Lock()
+	if _, ok := o.pendingRedirectCancelFunc[targetTableID]; ok {
+		o.pendingRedirectCancelFunc[targetTableID]()
+		o.pendingRedirectOps[targetTableID] = op
+	}
+	o.mu.Unlock()
+}
+
+// DoneRedirectOperation marks the redirect shard DDL lock operation as done.
+func (o *Optimist) DoneRedirectOperation(targetTableID string) {
+	o.mu.Lock()
+	if cancelFunc, ok := o.pendingRedirectCancelFunc[targetTableID]; ok {
+		cancelFunc()
+	}
+	delete(o.pendingRedirectCancelFunc, targetTableID)
+	delete(o.pendingRedirectOps, targetTableID)
+	o.mu.Unlock()
 }
 
 // CheckPersistentData check and fix the persistent data.

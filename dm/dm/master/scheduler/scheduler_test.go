@@ -20,6 +20,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -33,7 +34,6 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/ha"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
-	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
 
 const (
@@ -161,7 +161,7 @@ func (t *testSchedulerSuite) testSchedulerProgress(restart int) {
 	require.True(t.T(), terror.ErrSchedulerNotStarted.Equal(s.RemoveWorker(workerName1)))
 	require.True(t.T(), terror.ErrSchedulerNotStarted.Equal(s.UpdateExpectRelayStage(pb.Stage_Running, sourceID1)))
 	require.True(t.T(), terror.ErrSchedulerNotStarted.Equal(s.UpdateExpectSubTaskStage(pb.Stage_Running, taskName1, sourceID1)))
-	require.True(t.T(), terror.ErrSchedulerNotStarted.Equal(s.OperateValidationTask(pb.Stage_Running, map[string]map[string]config.SubTaskConfig{})))
+	require.True(t.T(), terror.ErrSchedulerNotStarted.Equal(s.OperateValidationTask(nil, nil)))
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -225,10 +225,10 @@ func (t *testSchedulerSuite) testSchedulerProgress(restart int) {
 		require.NoError(t.T(), ha.KeepAlive(ctx1, t.etcdTestCli, workerName1, keepAliveTTL))
 	}()
 	// wait for source1 bound to worker1.
-	require.True(t.T(), utils.WaitSomething(30, 100*time.Millisecond, func() bool {
+	require.Eventually(t.T(), func() bool {
 		bounds := s.BoundSources()
 		return len(bounds) == 1 && bounds[0] == sourceID1
-	}))
+	}, 3*time.Second, 100*time.Millisecond)
 	t.sourceBounds(s, []string{sourceID1}, []string{})
 	t.workerBound(s, ha.NewSourceBound(sourceID1, workerName1))
 	require.NoError(t.T(), s.StartRelay(sourceID1, []string{workerName1}))
@@ -259,10 +259,10 @@ func (t *testSchedulerSuite) testSchedulerProgress(restart int) {
 
 	// CASE 2.6: start a task with only one source.
 	// wait for source bound recovered
-	require.True(t.T(), utils.WaitSomething(30, 100*time.Millisecond, func() bool {
+	require.Eventually(t.T(), func() bool {
 		bounds := s.BoundSources()
 		return len(bounds) == 1 && bounds[0] == sourceID1
-	}))
+	}, 3*time.Second, 100*time.Millisecond)
 	// no subtask config exists before start.
 	require.NoError(t.T(), s.AddSubTasks(false, pb.Stage_Running)) // can call without configs, return without error, but take no effect.
 	t.subTaskCfgNotExist(s, taskName1, sourceID1)
@@ -308,10 +308,10 @@ func (t *testSchedulerSuite) testSchedulerProgress(restart int) {
 	cancel1()
 	wg.Wait()
 	// wait for source1 unbound from worker1.
-	require.True(t.T(), utils.WaitSomething(int(3*keepAliveTTL), time.Second, func() bool {
+	require.Eventually(t.T(), func() bool {
 		unbounds := getUnboundedSourcesWithLock(s)
 		return len(unbounds) == 1 && unbounds[0] == sourceID1
-	}))
+	}, 3*time.Duration(keepAliveTTL)*time.Second, time.Second)
 	t.sourceBounds(s, []string{}, []string{sourceID1})
 	// static information are still there.
 	t.sourceCfgExist(s, sourceCfg1)
@@ -348,10 +348,10 @@ func (t *testSchedulerSuite) testSchedulerProgress(restart int) {
 		require.NoError(t.T(), ha.KeepAlive(ctx1, t.etcdTestCli, workerName1, keepAliveTTL))
 	}()
 	// wait for source1 bound to worker1.
-	require.True(t.T(), utils.WaitSomething(30, 100*time.Millisecond, func() bool {
+	require.Eventually(t.T(), func() bool {
 		bounds := s.BoundSources()
 		return len(bounds) == 1 && bounds[0] == sourceID1
-	}))
+	}, 3*time.Second, 100*time.Millisecond)
 	// source1 bound to worker1.
 	t.sourceBounds(s, []string{sourceID1}, []string{})
 	t.workerBound(s, ha.NewSourceBound(sourceID1, workerName1))
@@ -393,19 +393,19 @@ func (t *testSchedulerSuite) testSchedulerProgress(restart int) {
 		require.NoError(t.T(), ha.KeepAlive(ctx2, t.etcdTestCli, workerName2, keepAliveTTL))
 	}()
 	// wait for worker2 become Free.
-	require.True(t.T(), utils.WaitSomething(30, 100*time.Millisecond, func() bool {
+	require.Eventually(t.T(), func() bool {
 		w := s.GetWorkerByName(workerName2)
 		return w.Stage() == WorkerFree
-	}))
+	}, 3*time.Second, 100*time.Millisecond)
 	t.workerFree(s, workerName2)
 	rebuildScheduler(ctx)
 
 	// CASE 4.4: add source config2.
 	// wait for source bound recovered
-	require.True(t.T(), utils.WaitSomething(30, 100*time.Millisecond, func() bool {
+	require.Eventually(t.T(), func() bool {
 		bounds := s.BoundSources()
 		return len(bounds) == 1 && bounds[0] == sourceID1
-	}))
+	}, 3*time.Second, 100*time.Millisecond)
 	// source2 not exists before.
 	t.sourceCfgNotExist(s, sourceID2)
 	// add source2.
@@ -462,10 +462,10 @@ func (t *testSchedulerSuite) testSchedulerProgress(restart int) {
 
 	// CASE 4.6: try remove source when subtasks exist.
 	// wait for source bound recovered
-	require.True(t.T(), utils.WaitSomething(30, 100*time.Millisecond, func() bool {
+	require.Eventually(t.T(), func() bool {
 		bounds := s.BoundSources()
 		return len(bounds) == 2 && bounds[0] == sourceID1 && bounds[1] == sourceID2
-	}))
+	}, 3*time.Second, 100*time.Millisecond)
 	require.True(t.T(), terror.ErrSchedulerSourceOpTaskExist.Equal(s.RemoveSourceCfg(sourceID2)))
 	// source2 keep there.
 	t.sourceCfgExist(s, &sourceCfg2)
@@ -526,11 +526,11 @@ func (t *testSchedulerSuite) testSchedulerProgress(restart int) {
 	// cancel keep-alive.
 	cancel1()
 	// wait for worker1 become offline.
-	require.True(t.T(), utils.WaitSomething(int(3*keepAliveTTL), time.Second, func() bool {
+	require.Eventually(t.T(), func() bool {
 		w := s.GetWorkerByName(workerName1)
 		require.NotNil(t.T(), w)
 		return w.Stage() == WorkerOffline
-	}))
+	}, 3*time.Duration(keepAliveTTL)*time.Second, time.Second)
 	t.workerOffline(s, workerName1)
 	// add source2 with specify worker1
 	// source2 not exist, worker1 is offline
@@ -556,11 +556,11 @@ func (t *testSchedulerSuite) testSchedulerProgress(restart int) {
 
 	// CASE 4.10: stop task1.
 	// wait for worker2 become bouned.
-	require.True(t.T(), utils.WaitSomething(int(3*keepAliveTTL), time.Second, func() bool {
+	require.Eventually(t.T(), func() bool {
 		w := s.GetWorkerByName(workerName2)
 		require.NotNil(t.T(), w)
 		return w.Stage() == WorkerBound
-	}))
+	}, 3*time.Duration(keepAliveTTL)*time.Second, time.Second)
 	require.NoError(t.T(), s.RemoveSubTasks(taskName1, sourceID1))
 	t.subTaskCfgNotExist(s, taskName1, sourceID1)
 	t.subTaskStageMatch(s, taskName1, sourceID1, pb.Stage_InvalidStage)
@@ -568,11 +568,11 @@ func (t *testSchedulerSuite) testSchedulerProgress(restart int) {
 
 	// CASE 4.11: remove worker not supported when the worker is online.
 	// wait for worker2 become bouned.
-	require.True(t.T(), utils.WaitSomething(int(3*keepAliveTTL), time.Second, func() bool {
+	require.Eventually(t.T(), func() bool {
 		w := s.GetWorkerByName(workerName2)
 		require.NotNil(t.T(), w)
 		return w.Stage() == WorkerBound
-	}))
+	}, 3*time.Duration(keepAliveTTL)*time.Second, time.Second)
 	require.True(t.T(), terror.ErrSchedulerWorkerOnline.Equal(s.RemoveWorker(workerName2)))
 	t.sourceBounds(s, []string{sourceID1}, []string{})
 	t.workerBound(s, ha.NewSourceBound(sourceID1, workerName2))
@@ -583,11 +583,11 @@ func (t *testSchedulerSuite) testSchedulerProgress(restart int) {
 	cancel2()
 	wg.Wait()
 	// wait for worker2 become offline.
-	require.True(t.T(), utils.WaitSomething(int(3*keepAliveTTL), time.Second, func() bool {
+	require.Eventually(t.T(), func() bool {
 		w := s.GetWorkerByName(workerName2)
 		require.NotNil(t.T(), w)
 		return w.Stage() == WorkerOffline
-	}))
+	}, 3*time.Duration(keepAliveTTL)*time.Second, time.Second)
 	t.workerOffline(s, workerName2)
 	// source1 should unbound
 	t.sourceBounds(s, []string{}, []string{sourceID1})
@@ -871,14 +871,14 @@ func (t *testSchedulerSuite) TestRestartScheduler() {
 	}()
 	// step 2.3: scheduler should bound source to worker
 	// wait for source1 bound to worker1.
-	require.True(t.T(), utils.WaitSomething(30, 100*time.Millisecond, func() bool {
+	require.Eventually(t.T(), func() bool {
 		bounds := s.BoundSources()
 		return len(bounds) == 1 && bounds[0] == sourceID1
-	}))
+	}, 3*time.Second, 100*time.Millisecond)
 	checkSourceBoundCh := func() {
-		require.True(t.T(), utils.WaitSomething(10, 500*time.Millisecond, func() bool {
+		require.Eventually(t.T(), func() bool {
 			return len(sourceBoundCh) == 1
-		}))
+		}, 5*time.Second, 500*time.Millisecond)
 		sourceBound := <-sourceBoundCh
 		sourceBound.Revision = 0
 		require.Equal(t.T(), sourceBound1, sourceBound)
@@ -918,10 +918,10 @@ func (t *testSchedulerSuite) TestRestartScheduler() {
 	wg.Wait()
 	// check whether keepalive lease is out of date
 	time.Sleep(time.Duration(keepAliveTTL) * time.Second)
-	require.True(t.T(), utils.WaitSomething(30, 100*time.Millisecond, func() bool {
+	require.Eventually(t.T(), func() bool {
 		kam, _, err := ha.GetKeepAliveWorkers(t.etcdTestCli)
 		return err == nil && len(kam) == 0
-	}))
+	}, 3*time.Second, 100*time.Millisecond)
 	require.Len(t.T(), sourceBoundCh, 0)
 	require.NoError(t.T(), s.Start(ctx, t.etcdTestCli)) // restart scheduler
 	require.Len(t.T(), s.BoundSources(), 0)
@@ -966,10 +966,10 @@ func (t *testSchedulerSuite) TestRestartScheduler() {
 	wg.Wait()
 	// check whether keepalive lease is out of date
 	time.Sleep(time.Duration(keepAliveTTL) * time.Second)
-	require.True(t.T(), utils.WaitSomething(30, 100*time.Millisecond, func() bool {
+	require.Eventually(t.T(), func() bool {
 		kam, _, err := ha.GetKeepAliveWorkers(t.etcdTestCli)
 		return err == nil && len(kam) == 1
-	}))
+	}, 3*time.Second, 100*time.Millisecond)
 	require.Len(t.T(), sourceBoundCh, 0)
 	require.NoError(t.T(), s.Start(ctx, t.etcdTestCli)) // restart scheduler
 	require.Len(t.T(), s.BoundSources(), 1)
@@ -1037,20 +1037,20 @@ func (t *testSchedulerSuite) TestWatchWorkerEventEtcdCompact() {
 		defer wg.Done()
 		require.NoError(t.T(), ha.KeepAlive(ctx1, t.etcdTestCli, workerName2, keepAliveTTL))
 	}()
-	require.True(t.T(), utils.WaitSomething(30, 100*time.Millisecond, func() bool {
+	require.Eventually(t.T(), func() bool {
 		kam, _, e := ha.GetKeepAliveWorkers(t.etcdTestCli)
 		return e == nil && len(kam) == 2
-	}))
+	}, 3*time.Second, 100*time.Millisecond)
 	cancel1()
 	wg.Wait()
 	// check whether keepalive lease is out of date
 	time.Sleep(time.Duration(keepAliveTTL) * time.Second)
 	var rev int64
-	require.True(t.T(), utils.WaitSomething(30, 100*time.Millisecond, func() bool {
+	require.Eventually(t.T(), func() bool {
 		kam, rev1, e := ha.GetKeepAliveWorkers(t.etcdTestCli)
 		rev = rev1
 		return e == nil && len(kam) == 0
-	}))
+	}, 3*time.Second, 100*time.Millisecond)
 
 	// step 4: trigger etcd compaction and check whether we can receive it through watcher
 	var startRev int64 = 1
@@ -1061,7 +1061,7 @@ func (t *testSchedulerSuite) TestWatchWorkerEventEtcdCompact() {
 	ha.WatchWorkerEvent(ctx, t.etcdTestCli, startRev, workerEvCh, workerErrCh)
 	select {
 	case err := <-workerErrCh:
-		require.Equal(t.T(), etcdErrCompacted, err)
+		require.Equal(t.T(), etcdErrCompacted, errors.Cause(err))
 	case <-time.After(time.Second):
 		t.T().Fatal("fail to get etcd error compacted")
 	}
@@ -1074,7 +1074,7 @@ func (t *testSchedulerSuite) TestWatchWorkerEventEtcdCompact() {
 		defer wg.Done()
 		require.NoError(t.T(), ha.KeepAlive(ctx2, t.etcdTestCli, workerName3, keepAliveTTL))
 	}()
-	require.True(t.T(), utils.WaitSomething(30, 100*time.Millisecond, func() bool {
+	require.Eventually(t.T(), func() bool {
 		kam, _, err := ha.GetKeepAliveWorkers(t.etcdTestCli)
 		if err == nil {
 			if _, ok := kam[workerName3]; ok {
@@ -1082,7 +1082,7 @@ func (t *testSchedulerSuite) TestWatchWorkerEventEtcdCompact() {
 			}
 		}
 		return false
-	}))
+	}, 3*time.Second, 100*time.Millisecond)
 	// step 5.2: scheduler start to handle workerEvent
 	wg.Add(1)
 	go func() {
@@ -1100,10 +1100,10 @@ func (t *testSchedulerSuite) TestWatchWorkerEventEtcdCompact() {
 		defer wg.Done()
 		require.NoError(t.T(), ha.KeepAlive(ctx2, t.etcdTestCli, workerName4, keepAliveTTL))
 	}()
-	require.True(t.T(), utils.WaitSomething(30, 100*time.Millisecond, func() bool {
+	require.Eventually(t.T(), func() bool {
 		unbounds := getUnboundedSourcesWithLock(s)
 		return len(unbounds) == 0
-	}))
+	}, 3*time.Second, 100*time.Millisecond)
 	require.Equal(t.T(), []string{sourceID1, sourceID2}, s.BoundSources())
 	cancel2()
 	wg.Wait()
@@ -1115,10 +1115,10 @@ func (t *testSchedulerSuite) TestWatchWorkerEventEtcdCompact() {
 		defer wg.Done()
 		require.NoError(t.T(), s.observeWorkerEvent(ctx3, startRev))
 	}()
-	require.True(t.T(), utils.WaitSomething(30, 100*time.Millisecond, func() bool {
+	require.Eventually(t.T(), func() bool {
 		bounds := s.BoundSources()
 		return len(bounds) == 0
-	}))
+	}, 3*time.Second, 100*time.Millisecond)
 	require.Equal(t.T(), []string{sourceID1, sourceID2}, getUnboundedSourcesWithLock(s))
 	cancel3()
 	wg.Wait()
@@ -1662,13 +1662,13 @@ func (t *testSchedulerSuite) TestStartSourcesWithoutSourceConfigsInEtcd() {
 	sbm, _, err := ha.GetSourceBound(t.etcdTestCli, "", "")
 	require.NoError(t.T(), err)
 	require.Len(t.T(), sbm, 2)
-	require.True(t.T(), utils.WaitSomething(30, 100*time.Millisecond, func() bool {
+	require.Eventually(t.T(), func() bool {
 		kam, _, err2 := ha.GetKeepAliveWorkers(t.etcdTestCli)
 		if err2 != nil {
 			return false
 		}
 		return len(kam) == 2
-	}))
+	}, 3*time.Second, 100*time.Millisecond)
 	// there isn't any source config in etcd
 	require.NoError(t.T(), s.Start(ctx, t.etcdTestCli))
 	require.Len(t.T(), s.bounds, 0)
@@ -1836,26 +1836,26 @@ func (t *testSchedulerSuite) TestWatchLoadTask() {
 	// put task2, source1, worker1
 	_, err = ha.PutLoadTask(t.etcdTestCli, task2, sourceID1, workerName1)
 	require.NoError(t.T(), err)
-	require.True(t.T(), utils.WaitSomething(30, 100*time.Millisecond, func() bool {
+	require.Eventually(t.T(), func() bool {
 		s.mu.Lock()
 		defer s.mu.Unlock()
 		return s.hasLoadTaskByWorkerAndSource(workerName1, sourceID1)
-	}))
+	}, 3*time.Second, 100*time.Millisecond)
 
 	// del task2, source1, worker1
 	_, _, err = ha.DelLoadTask(t.etcdTestCli, task2, sourceID1)
 	require.NoError(t.T(), err)
-	require.True(t.T(), utils.WaitSomething(30, 100*time.Millisecond, func() bool {
+	require.Eventually(t.T(), func() bool {
 		s.mu.Lock()
 		defer s.mu.Unlock()
 		return !s.hasLoadTaskByWorkerAndSource(workerName1, sourceID1)
-	}))
+	}, 3*time.Second, 100*time.Millisecond)
 
 	// source1 transfer to worker3
-	require.True(t.T(), utils.WaitSomething(30, 100*time.Millisecond, func() bool {
+	require.Eventually(t.T(), func() bool {
 		w, ok := s.bounds[sourceID1]
 		return ok && w.baseInfo.Name == workerName3
-	}))
+	}, 3*time.Second, 100*time.Millisecond)
 
 	require.Equal(t.T(), worker3, s.bounds[sourceID1])
 	require.Equal(t.T(), WorkerFree, worker1.stage)
@@ -1863,10 +1863,10 @@ func (t *testSchedulerSuite) TestWatchLoadTask() {
 	// worker4 online
 	// source2 transfer to worker4
 	require.NoError(t.T(), s.handleWorkerOnline(ha.WorkerEvent{WorkerName: workerName4}, true))
-	require.True(t.T(), utils.WaitSomething(30, 100*time.Millisecond, func() bool {
+	require.Eventually(t.T(), func() bool {
 		w, ok := s.bounds[sourceID2]
 		return ok && w.baseInfo.Name == workerName4
-	}))
+	}, 3*time.Second, 100*time.Millisecond)
 	require.Equal(t.T(), worker4, s.bounds[sourceID2])
 	require.Equal(t.T(), WorkerFree, worker2.stage)
 
@@ -2042,34 +2042,19 @@ func (t *testSchedulerSuite) TestOperateValidatorTask() {
 	require.NoError(t.T(), s.AddSubTasks(false, pb.Stage_Running, subtaskCfg)) // create new subtask without validation
 	t.subTaskCfgExist(s, subtaskCfg)
 	subtaskCfg.ValidatorCfg.Mode = config.ValidationFull // set mode
-	stCfgs := make(map[string]map[string]config.SubTaskConfig)
-	stCfgs[subtaskCfg.Name] = make(map[string]config.SubTaskConfig)
-	stCfgs[subtaskCfg.Name][subtaskCfg.SourceID] = subtaskCfg
-	require.NoError(t.T(), s.OperateValidationTask(pb.Stage_Running, stCfgs))            // create validator task
+	validatorStages := []ha.Stage{ha.NewValidatorStage(pb.Stage_Running, subtaskCfg.SourceID, subtaskCfg.Name)}
+	changedCfgs := []config.SubTaskConfig{subtaskCfg}
+	require.NoError(t.T(), s.OperateValidationTask(validatorStages, changedCfgs))        // create validator task
 	t.validatorStageMatch(s, subtaskCfg.Name, subtaskCfg.SourceID, pb.Stage_Running)     // task running
 	t.validatorModeMatch(s, subtaskCfg.Name, subtaskCfg.SourceID, config.ValidationFull) // succeed to change mode
-	require.NoError(t.T(), s.OperateValidationTask(pb.Stage_Running, stCfgs))            // start running validator task with no error
-	t.validatorStageMatch(s, subtaskCfg.Name, subtaskCfg.SourceID, pb.Stage_Running)     // stage not changed
 
 	// CASE 2: stop running subtask
-	require.NoError(t.T(), s.OperateValidationTask(pb.Stage_Stopped, stCfgs))
+	validatorStages = []ha.Stage{ha.NewValidatorStage(pb.Stage_Stopped, subtaskCfg.SourceID, subtaskCfg.Name)}
+	changedCfgs = []config.SubTaskConfig{}
+	require.NoError(t.T(), s.OperateValidationTask(validatorStages, changedCfgs))
 	t.validatorStageMatch(s, subtaskCfg.Name, subtaskCfg.SourceID, pb.Stage_Stopped) // task stopped
-	require.NoError(t.T(), s.OperateValidationTask(pb.Stage_Stopped, stCfgs))        // stop stopped validator task with no error
+	require.NoError(t.T(), s.OperateValidationTask(validatorStages, changedCfgs))    // stop stopped validator task with no error
 	t.validatorStageMatch(s, subtaskCfg.Name, subtaskCfg.SourceID, pb.Stage_Stopped) // stage not changed
-
-	// CASE 3: start subtask with fast mode
-	subtaskCfg.ValidatorCfg.Mode = config.ValidationFast
-	stCfgs[subtaskCfg.Name][subtaskCfg.SourceID] = subtaskCfg                            // set new mode
-	require.NoError(t.T(), s.OperateValidationTask(pb.Stage_Running, stCfgs))            // create validator task
-	t.validatorModeMatch(s, subtaskCfg.Name, subtaskCfg.SourceID, config.ValidationFast) // succeed to change mode
-	t.validatorStageMatch(s, subtaskCfg.Name, subtaskCfg.SourceID, pb.Stage_Running)     // task running
-
-	// CASE 4: set the mode of a running task, not succeed
-	subtaskCfg.ValidatorCfg.Mode = config.ValidationFull
-	stCfgs[subtaskCfg.Name][subtaskCfg.SourceID] = subtaskCfg                            // set new mode
-	require.NoError(t.T(), s.OperateValidationTask(pb.Stage_Running, stCfgs))            // create validator task
-	t.validatorModeMatch(s, subtaskCfg.Name, subtaskCfg.SourceID, config.ValidationFast) // fail to change mode, remain fast
-	t.validatorStageMatch(s, subtaskCfg.Name, subtaskCfg.SourceID, pb.Stage_Running)     // task running with no error
 }
 
 func (t *testSchedulerSuite) TestUpdateSubTasksAndSourceCfg() {
@@ -2168,4 +2153,25 @@ func (t *testSchedulerSuite) TestUpdateSubTasksAndSourceCfg() {
 	sourceCfg1.MetaDir = "new meta"
 	t.NoError(s.UpdateSourceCfg(sourceCfg1))
 	t.Equal(s.GetSourceCfgByID(sourceID1).MetaDir, sourceCfg1.MetaDir)
+}
+
+func (t *testSchedulerSuite) TestValidatorEnabledAndGetValidatorStage() {
+	logger := log.L()
+	s := NewScheduler(&logger, config.Security{})
+	task := "test"
+	source := "source"
+	m, _ := s.expectValidatorStages.LoadOrStore(task, map[string]ha.Stage{})
+	m.(map[string]ha.Stage)[source] = ha.Stage{Expect: pb.Stage_Running}
+
+	t.True(s.ValidatorEnabled(task, source))
+	t.False(s.ValidatorEnabled(task, "not-exist"))
+	t.False(s.ValidatorEnabled("not-exist", source))
+	t.False(s.ValidatorEnabled("not-exist", "not-exist"))
+
+	stage := s.GetValidatorStage(task, source)
+	t.NotNil(stage)
+	t.Equal(pb.Stage_Running, stage.Expect)
+	t.Nil(s.GetValidatorStage(task, "not-exist"))
+	t.Nil(s.GetValidatorStage("not-exist", source))
+	t.Nil(s.GetValidatorStage("not-exist", "not-exist"))
 }

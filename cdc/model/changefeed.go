@@ -31,6 +31,26 @@ import (
 	"go.uber.org/zap"
 )
 
+// DefaultNamespace is the default namespace value,
+// all the old changefeed will be put into default namespace
+const DefaultNamespace = "default"
+
+// ChangeFeedID is the type for change feed ID
+type ChangeFeedID struct {
+	// Namespace and ID pair is unique in one ticdc cluster
+	// the default value of Namespace is "default"
+	Namespace string
+	ID        string
+}
+
+// DefaultChangeFeedID returns `ChangeFeedID` with default namespace
+func DefaultChangeFeedID(id string) ChangeFeedID {
+	return ChangeFeedID{
+		Namespace: DefaultNamespace,
+		ID:        id,
+	}
+}
+
 // SortEngine is the sorter engine
 type SortEngine = string
 
@@ -94,6 +114,7 @@ func (s FeedState) IsNeeded(need string) bool {
 
 // ChangeFeedInfo describes the detail of a ChangeFeed
 type ChangeFeedInfo struct {
+	UpstreamID uint64            `json:"upstream-id"`
 	SinkURI    string            `json:"sink-uri"`
 	Opts       map[string]string `json:"opts"`
 	CreateTime time.Time         `json:"create-time"`
@@ -164,7 +185,8 @@ func (info *ChangeFeedInfo) String() (str string) {
 	return
 }
 
-// GetStartTs returns StartTs if it's  specified or using the CreateTime of changefeed.
+// GetStartTs returns StartTs if it's specified or using the
+// CreateTime of changefeed.
 func (info *ChangeFeedInfo) GetStartTs() uint64 {
 	if info.StartTs > 0 {
 		return info.StartTs
@@ -244,9 +266,6 @@ func (info *ChangeFeedInfo) VerifyAndComplete() error {
 	}
 	if info.Config.Cyclic == nil {
 		info.Config.Cyclic = defaultConfig.Cyclic
-	}
-	if info.Config.Scheduler == nil {
-		info.Config.Scheduler = defaultConfig.Scheduler
 	}
 	if info.Config.Consistent == nil {
 		info.Config.Consistent = defaultConfig.Consistent
@@ -346,8 +365,8 @@ func (info *ChangeFeedInfo) fixSinkProtocol() {
 			sinkURIParsed.RawQuery = newRawQuery
 			fixedSinkURI := sinkURIParsed.String()
 			log.Info("handle incompatible protocol from sink URI",
-				zap.String("old URI query", oldRawQuery),
-				zap.String("fixed URI query", newRawQuery))
+				zap.String("oldUriQuery", oldRawQuery),
+				zap.String("fixedUriQuery", newRawQuery))
 			info.SinkURI = fixedSinkURI
 		}
 	} else {

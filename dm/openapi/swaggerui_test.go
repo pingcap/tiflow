@@ -33,8 +33,3 @@ func (t *swaggerUISuite) TestGetSwaggerHTML(c *check.C) {
 	c.Assert(err, check.IsNil)
 	c.Assert(strings.Contains(html, "<title>API documentation</title>"), check.Equals, true)
 }
-
-func (t *swaggerUISuite) TestGetSwaggerJSON(c *check.C) {
-	_, err := GetSwaggerJSON()
-	c.Assert(err, check.IsNil)
-}

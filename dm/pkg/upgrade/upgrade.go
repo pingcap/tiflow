@@ -19,9 +19,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/pingcap/tidb-tools/pkg/dbutil"
+	"github.com/pingcap/errors"
+	"github.com/pingcap/tidb/util/dbutil"
 	"github.com/pingcap/tiflow/dm/pkg/ha"
-	"github.com/pkg/errors"
 	"go.etcd.io/etcd/api/v3/mvccpb"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/zap"
@@ -271,7 +271,7 @@ func upgradeToVer3(ctx context.Context, cli *clientv3.Client) error {
 		// delete old key to provide idempotence
 		ops = append(ops, clientv3.OpDelete(pair.old.Path(), clientv3.WithPrefix()))
 	}
-	_, _, err := etcdutil.DoOpsInOneTxnWithRetry(cli, ops...)
+	_, _, err := etcdutil.DoTxnWithRepeatable(cli, etcdutil.ThenOpFunc(ops...))
 	return err
 }
 
@@ -351,6 +351,6 @@ func upgradeToVer5(ctx context.Context, cli *clientv3.Client) error {
 		// delete old key to provide idempotence
 		ops = append(ops, clientv3.OpDelete(pair.old.Path(), clientv3.WithPrefix()))
 	}
-	_, _, err := etcdutil.DoOpsInOneTxnWithRetry(cli, ops...)
+	_, _, err := etcdutil.DoTxnWithRepeatable(cli, etcdutil.ThenOpFunc(ops...))
 	return err
 }

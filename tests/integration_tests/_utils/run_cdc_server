@@ -27,6 +27,7 @@ failpoint=$GO_FAILPOINTS
 config_path=
 data_dir=
 curl_status_cmd=
+supposed_to_fail="no"
 
 while [[ ${1} ]]; do
 	case "${1}" in
@@ -75,6 +76,10 @@ while [[ ${1} ]]; do
 		;;
 	--config)
 		config_path="--config ${2}"
+		shift
+		;;
+	--supposed-to-fail)
+		supposed_to_fail="${2}"
 		shift
 		;;
 	--data-dir)
@@ -132,7 +137,7 @@ else
 		$tls \
 		$certcn \
 		$addr \
-		$pd_addr &>>$workdir/stdout$log_suffix.log &
+		$pd_addr &>>$workdir/stdout$logsuffix.log &
 fi
 
 # Make sure cdc is ready to serve
@@ -146,9 +151,15 @@ etcd_info_msg="etcd info"
 # If tls is set, then we need to pass the certificate and use https.
 # Note that the certificate name may be specified.
 if [ -z "$tls_dir" ]; then
-	curl_status_cmd="curl -vsL http://$addr_url/debug/info"
+	curl_status_cmd="curl -vsL --max-time 20 http://$addr_url/debug/info"
 else
-	curl_status_cmd="curl --cacert $tls_dir/ca.pem --cert $tls_dir/$certcn_name.pem --key $tls_dir/$certcn_name-key.pem -vsL https://$addr_url/debug/info"
+	curl_status_cmd="curl --cacert $tls_dir/ca.pem --cert $tls_dir/$certcn_name.pem --key $tls_dir/$certcn_name-key.pem -vsL --max-time 20 https://$addr_url/debug/info"
+fi
+
+# If the command is supposed to fail (in check usage tips test), just exit without retry
+if [[ "$supposed_to_fail" != "no" ]]; then
+	set +x
+	exit 0
 fi
 
 for ((i = 0; i <= 50; i++)); do

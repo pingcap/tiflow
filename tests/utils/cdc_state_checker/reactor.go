@@ -53,7 +53,10 @@ func (r *cdcMonitReactor) verifyTs() error {
 	for changfeedID, positions := range r.state.TaskPositions {
 		status, ok := r.state.ChangefeedStatuses[changfeedID]
 		if !ok {
-			log.Warn("changefeed status not found", zap.String("cfid", changfeedID))
+			log.Warn("changefeed status not found",
+				zap.String("cfnamespace", changfeedID.Namespace),
+				zap.String("cfid", changfeedID.ID),
+			)
 			return nil
 		}
 
@@ -79,7 +82,10 @@ func (r *cdcMonitReactor) verifyStartTs() error {
 	for changfeedID, statuses := range r.state.TaskStatuses {
 		cStatus, ok := r.state.ChangefeedStatuses[changfeedID]
 		if !ok {
-			log.Warn("changefeed status not found", zap.String("cfid", changfeedID))
+			log.Warn("changefeed status not found",
+				zap.String("cfnamespace", changfeedID.Namespace),
+				zap.String("cfid", changfeedID.ID),
+			)
 			return nil
 		}
 

@@ -20,7 +20,7 @@ schema-pattern = "shardddl[1-2]"
 table-pattern = "tb*"
 target-schema = "shardddl"
 target-table = "tb"
-    
+
 [data-sources]
 [data-sources.mysql1]
 host = "127.0.0.1"

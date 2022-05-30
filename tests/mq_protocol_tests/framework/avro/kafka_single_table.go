@@ -41,9 +41,10 @@ func (a *SingleTableTask) Name() string {
 // GetCDCProfile implements Task
 func (a *SingleTableTask) GetCDCProfile() *framework.CDCProfile {
 	return &framework.CDCProfile{
-		PDUri:   framework.UpstreamPD,
-		SinkURI: "kafka://kafka:9092/testdb_" + a.TableName + "?kafka-version=2.6.0&protocol=avro",
-		Opts:    map[string]string{"registry": "http://schema-registry:8081"},
+		PDUri: framework.UpstreamPD,
+		SinkURI: "kafka://kafka:9092/testdb_" + a.TableName +
+			"?kafka-version=2.6.0&protocol=avro&avro-bigint-unsigned-handling-mode=string",
+		SchemaRegistry: "http://schema-registry:8081",
 	}
 }
 

@@ -61,6 +61,7 @@ type Server struct {
 	sync.Mutex
 	wg     sync.WaitGroup
 	kaWg   sync.WaitGroup
+	httpWg sync.WaitGroup
 	closed atomic.Bool
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -207,25 +208,11 @@ func (s *Server) Start() error {
 		}
 	}(s.ctx)
 
-	httpExitCh := make(chan struct{}, 1)
-	s.wg.Add(1)
+	s.httpWg.Add(1)
 	go func() {
+		s.httpWg.Done()
 		InitStatus(httpL) // serve status
-		httpExitCh <- struct{}{}
 	}()
-	go func(ctx context.Context) {
-		defer s.wg.Done()
-		select {
-		case <-ctx.Done():
-			if s.rootLis != nil {
-				err2 := s.rootLis.Close()
-				if err2 != nil && !common.IsErrNetClosing(err2) {
-					log.L().Error("fail to close net listener", log.ShortError(err2))
-				}
-			}
-		case <-httpExitCh:
-		}
-	}(s.ctx)
 
 	s.closed.Store(false)
 	log.L().Info("listening gRPC API and status request", zap.String("address", s.cfg.WorkerAddr))
@@ -450,10 +437,21 @@ func (s *Server) doClose() {
 	// stop server in advance, stop receiving source bound and relay bound
 	s.cancel()
 	s.wg.Wait()
+
 	// stop worker and wait for return(we already lock the whole Sever, so no need use lock to get source worker)
 	if w := s.getSourceWorker(false); w != nil {
 		w.Stop(true)
 	}
+
+	// close listener at last, so we can get status from it if worker failed to close in previous step
+	if s.rootLis != nil {
+		err2 := s.rootLis.Close()
+		if err2 != nil && !common.IsErrNetClosing(err2) {
+			log.L().Error("fail to close net listener", log.ShortError(err2))
+		}
+	}
+	s.httpWg.Wait()
+
 	s.closed.Store(true)
 }
 
@@ -790,11 +788,14 @@ func (s *Server) OperateSchema(ctx context.Context, req *pb.OperateWorkerSchemaR
 	log.L().Info("", zap.String("request", "OperateSchema"), zap.Stringer("payload", req))
 
 	w := s.getSourceWorker(true)
+	w.RLock()
+	sourceID := w.cfg.SourceID
+	w.RUnlock()
 	if w == nil {
 		log.L().Warn("fail to call OperateSchema, because no mysql source is being handled in the worker")
 		return makeCommonWorkerResponse(terror.ErrWorkerNoStart.Generate()), nil
-	} else if req.Source != w.cfg.SourceID {
-		log.L().Error("fail to call OperateSchema, because source mismatch", zap.String("request", req.Source), zap.String("current", w.cfg.SourceID))
+	} else if req.Source != sourceID {
+		log.L().Error("fail to call OperateSchema, because source mismatch", zap.String("request", req.Source), zap.String("current", sourceID))
 		return makeCommonWorkerResponse(terror.ErrWorkerSourceNotMatch.Generate()), nil
 	}
 
@@ -960,5 +961,76 @@ func (s *Server) CheckSubtasksCanUpdate(ctx context.Context, req *pb.CheckSubtas
 		return resp, nil
 	}
 	resp.Success = true
+	return resp, nil
+}
+
+func (s *Server) GetWorkerValidatorStatus(ctx context.Context, req *pb.GetValidationStatusRequest) (*pb.GetValidationStatusResponse, error) {
+	log.L().Info("", zap.String("request", "GetWorkerValidateStatus"), zap.Stringer("payload", req))
+
+	resp := &pb.GetValidationStatusResponse{
+		Result: true,
+	}
+	w := s.getSourceWorker(true)
+	if w == nil {
+		log.L().Warn("fail to call GetWorkerValidateStatus, because no mysql source is being handled in the worker")
+		resp.Result = false
+		resp.Msg = terror.ErrWorkerNoStart.Error()
+		return resp, nil
+	}
+	validatorStatus, err := w.GetValidatorStatus(req.TaskName)
+	if err != nil {
+		return resp, err
+	}
+	res, err := w.GetValidatorTableStatus(req.TaskName, req.FilterStatus)
+	if err != nil {
+		return resp, err
+	}
+
+	resp.Validators = []*pb.ValidationStatus{validatorStatus}
+	resp.TableStatuses = res
+	return resp, nil
+}
+
+func (s *Server) GetValidatorError(ctx context.Context, req *pb.GetValidationErrorRequest) (*pb.GetValidationErrorResponse, error) {
+	w := s.getSourceWorker(true)
+	resp := &pb.GetValidationErrorResponse{
+		Result: true,
+	}
+	if w == nil {
+		log.L().Warn("fail to get validator error, because no mysql source is being handled in the worker")
+		resp.Result = false
+		resp.Msg = terror.ErrWorkerNoStart.Error()
+		return resp, nil
+	}
+	validatorErrs, err := w.GetWorkerValidatorErr(req.TaskName, req.ErrState)
+	if err != nil {
+		resp.Msg = err.Error()
+		resp.Result = false
+	} else {
+		resp.Error = validatorErrs
+	}
+	return resp, nil
+}
+
+func (s *Server) OperateValidatorError(ctx context.Context, req *pb.OperateValidationErrorRequest) (*pb.OperateValidationErrorResponse, error) {
+	log.L().Info("operate validation error", zap.Stringer("payload", req))
+	w := s.getSourceWorker(true)
+	resp := &pb.OperateValidationErrorResponse{
+		Result: true,
+	}
+	if w == nil {
+		log.L().Warn("fail to operate validator error, because no mysql source is being handled in the worker")
+		resp.Result = false
+		resp.Msg = terror.ErrWorkerNoStart.Error()
+		return resp, nil
+	}
+	err := w.OperateWorkerValidatorErr(req.TaskName, req.Op, req.ErrId, req.IsAllError)
+	if err != nil {
+		resp.Result = false
+		resp.Msg = err.Error()
+		//nolint:nilerr
+		return resp, nil
+	}
+	//nolint:nilerr
 	return resp, nil
 }
