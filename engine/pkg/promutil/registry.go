@@ -114,36 +114,42 @@ func NewAutoRegisterFactory(f Factory, r *Registry, id libModel.WorkerID) Factor
 	}
 }
 
+// NewCounter implements Factory.NewCounter.
 func (f *AutoRegisterFactory) NewCounter(opts prometheus.CounterOpts) prometheus.Counter {
 	c := f.inner.NewCounter(opts)
 	f.r.MustRegister(f.id, c)
 	return c
 }
 
+// NewCounterVec implements Factory.NewCounterVec.
 func (f *AutoRegisterFactory) NewCounterVec(opts prometheus.CounterOpts, labelNames []string) *prometheus.CounterVec {
 	c := f.inner.NewCounterVec(opts, labelNames)
 	f.r.MustRegister(f.id, c)
 	return c
 }
 
+// NewGauge implements Factory.NewGauge.
 func (f *AutoRegisterFactory) NewGauge(opts prometheus.GaugeOpts) prometheus.Gauge {
 	c := f.inner.NewGauge(opts)
 	f.r.MustRegister(f.id, c)
 	return c
 }
 
+// NewGaugeVec implements Factory.NewGaugeVec.
 func (f *AutoRegisterFactory) NewGaugeVec(opts prometheus.GaugeOpts, labelNames []string) *prometheus.GaugeVec {
 	c := f.inner.NewGaugeVec(opts, labelNames)
 	f.r.MustRegister(f.id, c)
 	return c
 }
 
+// NewHistogram implements Factory.NewHistogram.
 func (f *AutoRegisterFactory) NewHistogram(opts prometheus.HistogramOpts) prometheus.Histogram {
 	c := f.inner.NewHistogram(opts)
 	f.r.MustRegister(f.id, c)
 	return c
 }
 
+// NewHistogramVec implements Factory.NewHistogramVec.
 func (f *AutoRegisterFactory) NewHistogramVec(opts prometheus.HistogramOpts, labelNames []string) *prometheus.HistogramVec {
 	c := f.inner.NewHistogramVec(opts, labelNames)
 	f.r.MustRegister(f.id, c)
