@@ -439,7 +439,18 @@ func TestReplicationSetRemoveTable(t *testing.T) {
 	require.Equal(t, ReplicationSetStateRemoving, r.State)
 	require.False(t, r.hasRemoved())
 
-	// Removed
+	// Removed if the table is absent.
+	rClone := clone(r)
+	msgs, err = rClone.handleTableStatus(from, &schedulepb.TableStatus{
+		TableID: tableID,
+		State:   schedulepb.TableStateStopped,
+	})
+	require.Nil(t, err)
+	require.Len(t, msgs, 0)
+	require.Equal(t, ReplicationSetStateRemoving, rClone.State)
+	require.True(t, rClone.hasRemoved())
+
+	// Removed if the table is stopped.
 	msgs, err = r.handleTableStatus(from, &schedulepb.TableStatus{
 		TableID: tableID,
 		State:   schedulepb.TableStateStopped,

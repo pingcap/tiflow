@@ -519,8 +519,7 @@ func (r *ReplicationSet) pollOnRemoving(
 	input *schedulepb.TableStatus, captureID model.CaptureID,
 ) (*schedulepb.Message, bool, error) {
 	switch input.State {
-	case schedulepb.TableStateAbsent,
-		schedulepb.TableStatePreparing,
+	case schedulepb.TableStatePreparing,
 		schedulepb.TableStatePrepared,
 		schedulepb.TableStateReplicating:
 		return &schedulepb.Message{
@@ -532,7 +531,7 @@ func (r *ReplicationSet) pollOnRemoving(
 				},
 			},
 		}, false, nil
-	case schedulepb.TableStateStopped:
+	case schedulepb.TableStateAbsent, schedulepb.TableStateStopped:
 		if r.Primary == captureID {
 			r.Primary = ""
 		} else if r.Secondary == captureID {
