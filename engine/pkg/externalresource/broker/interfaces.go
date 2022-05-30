@@ -16,8 +16,8 @@ package broker
 import (
 	"context"
 
+	pb "github.com/pingcap/tiflow/engine/enginepb"
 	libModel "github.com/pingcap/tiflow/engine/lib/model"
-	"github.com/pingcap/tiflow/engine/pb"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 )
 

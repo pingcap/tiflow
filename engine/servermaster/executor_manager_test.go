@@ -20,8 +20,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/model"
-	"github.com/pingcap/tiflow/engine/pb"
 )
 
 func TestExecutorManager(t *testing.T) {
