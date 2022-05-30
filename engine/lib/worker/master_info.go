@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package statusutil
+package worker
 
 import (
 	"context"
@@ -23,14 +23,18 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 )
 
-// MasterInfoProvider is an object that can provide necessary
-// information so that the Writer can contact the master.
+// MasterInfoProvider is an object that can provide the caller
+// information on the master.
 type MasterInfoProvider interface {
 	MasterID() libModel.MasterID
 	MasterNode() p2p.NodeID
 	Epoch() libModel.Epoch
 	SyncRefreshMasterInfo(ctx context.Context) error
+	IsMasterSideClosed() bool
 }
+
+// MasterClient must implement MasterInfoProvider.
+var _ MasterInfoProvider = (*MasterClient)(nil)
 
 // MockMasterInfoProvider defines a mock provider that implements MasterInfoProvider
 type MockMasterInfoProvider struct {
@@ -39,7 +43,21 @@ type MockMasterInfoProvider struct {
 	masterNode p2p.NodeID
 	epoch      libModel.Epoch
 
-	refreshCount atomic.Int64
+	refreshCount     atomic.Int64
+	masterSideClosed atomic.Bool
+}
+
+// NewMockMasterInfoProvider creates a new MockMasterInfoProvider
+func NewMockMasterInfoProvider(
+	masterID libModel.MasterID,
+	masterNode p2p.NodeID,
+	epoch libModel.Epoch,
+) *MockMasterInfoProvider {
+	return &MockMasterInfoProvider{
+		masterID:   masterID,
+		masterNode: masterNode,
+		epoch:      epoch,
+	}
 }
 
 // MasterID implements MasterInfoProvider.MasterID
@@ -82,7 +100,17 @@ func (p *MockMasterInfoProvider) Set(masterID libModel.MasterID, masterNode p2p.
 	p.epoch = epoch
 }
 
+// SetMasterClosed marks the mock master has having marked the current
+// worker closed.
+func (p *MockMasterInfoProvider) SetMasterClosed() {
+	p.masterSideClosed.Store(true)
+}
+
 // RefreshCount returns refresh time, it is used in unit test only
 func (p *MockMasterInfoProvider) RefreshCount() int {
 	return int(p.refreshCount.Load())
+}
+
+func (p *MockMasterInfoProvider) IsMasterSideClosed() bool {
+	return p.masterSideClosed.Load()
 }

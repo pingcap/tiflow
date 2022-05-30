@@ -20,6 +20,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	libModel "github.com/pingcap/tiflow/engine/lib/model"
+	"github.com/pingcap/tiflow/engine/lib/worker"
 	derror "github.com/pingcap/tiflow/engine/pkg/errors"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
@@ -29,7 +30,7 @@ type writerTestSuite struct {
 	writer        *Writer
 	cli           pkgOrm.Client
 	messageSender *p2p.MockMessageSender
-	masterInfo    *MockMasterInfoProvider
+	masterInfo    *worker.MockMasterInfoProvider
 }
 
 func newWriterTestSuite(
@@ -43,11 +44,7 @@ func newWriterTestSuite(
 	require.NoError(t, err)
 
 	messageSender := p2p.NewMockMessageSender()
-	masterInfo := &MockMasterInfoProvider{
-		masterID:   masterID,
-		masterNode: masterNode,
-		epoch:      masterEpoch,
-	}
+	masterInfo := worker.NewMockMasterInfoProvider(masterID, masterNode, masterEpoch)
 	return &writerTestSuite{
 		writer:        NewWriter(cli, messageSender, masterInfo, workerID),
 		cli:           cli,
