@@ -239,7 +239,8 @@ func TestUpdateResolvedTsWithDelayedTable(t *testing.T) {
 	require.Equal(t, startTs, logMgr.GetMinResolvedTs())
 
 	// table 57 moves forward, update table resolved ts and check again
-	logMgr.FlushLog(ctx, table57, table57Ts)
+	err = logMgr.FlushLog(ctx, table57, table57Ts)
+	require.Nil(t, err)
 	err = logMgr.updateTableResolvedTs(ctx)
 	require.Nil(t, err)
 	require.Equal(t, table57Ts, logMgr.GetMinResolvedTs())
