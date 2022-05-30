@@ -189,13 +189,9 @@ func (w *flushWorker) asyncSend(
 
 	// Wait for all messages to ack.
 	if w.needsFlush != nil {
-		start := time.Now()
-		err := w.producer.Flush(ctx)
-		if err != nil {
-			return err
+		if err := w.flushAndNotify(ctx); err != nil {
+			return errors.Trace(err)
 		}
-		w.notifyFlushed()
-		log.Debug("flush worker flushed", zap.Duration("duration", time.Since(start)))
 	}
 
 	return nil
@@ -220,7 +216,12 @@ func (w *flushWorker) run(ctx context.Context) (retErr error) {
 		}
 		if endIndex == 0 {
 			if w.needsFlush != nil {
-				w.notifyFlushed()
+				// NOTICE: We still need to do a flush here.
+				// This is because there may be some rows that
+				// were sent that have not been confirmed yet.
+				if err := w.flushAndNotify(ctx); err != nil {
+					return errors.Trace(err)
+				}
 			}
 			continue
 		}
@@ -249,10 +250,19 @@ func (w *flushWorker) addEvent(ctx context.Context, event mqEvent) error {
 	}
 }
 
-// notifyFlushed is used to notify the mqSink that all events has been flushed.
-func (w *flushWorker) notifyFlushed() {
+// flushAndNotify is used to flush all events
+// and notify the mqSink that all events has been flushed.
+func (w *flushWorker) flushAndNotify(ctx context.Context) error {
+	start := time.Now()
+	err := w.producer.Flush(ctx)
+	if err != nil {
+		return err
+	}
 	w.needsFlush <- struct{}{}
 	close(w.needsFlush)
 	// NOTICE: Do not forget to reset the needsFlush.
 	w.needsFlush = nil
+	log.Debug("flush worker flushed", zap.Duration("duration", time.Since(start)))
+
+	return nil
 }

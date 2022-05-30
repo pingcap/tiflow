@@ -29,8 +29,8 @@ import (
 )
 
 type mockProducer struct {
-	mqEvent map[topicPartitionKey][]*codec.MQMessage
-	flushed bool
+	mqEvent      map[topicPartitionKey][]*codec.MQMessage
+	flushedTimes int
 
 	mockErr chan error
 }
@@ -62,7 +62,7 @@ func (m *mockProducer) SyncBroadcastMessage(
 }
 
 func (m *mockProducer) Flush(ctx context.Context) error {
-	m.flushed = true
+	m.flushedTimes += 1
 	return nil
 }
 
@@ -436,7 +436,7 @@ func TestFlush(t *testing.T) {
 		paritionedRows := worker.group(msgs)
 		err = worker.asyncSend(ctx, paritionedRows)
 		require.NoError(t, err)
-		require.True(t, producer.flushed)
+		require.Equal(t, 1, producer.flushedTimes)
 		require.Nil(t, worker.needsFlush)
 	}()
 
@@ -524,7 +524,7 @@ func TestWorker(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	worker, prod := newTestWorker(ctx)
+	worker, producer := newTestWorker(ctx)
 	go func() {
 		_ = worker.run(ctx)
 	}()
@@ -590,7 +590,7 @@ func TestWorker(t *testing.T) {
 	wg.Wait()
 
 	// Make sure we don't get a block even if we flush multiple times.
-	require.True(t, prod.flushed)
+	require.Equal(t, 2, producer.flushedTimes)
 	require.True(t, flushed1.Load())
 	require.True(t, flushed2.Load())
 }
