@@ -11,12 +11,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package model
+package broker
 
 import (
 	"path/filepath"
 
 	libModel "github.com/pingcap/tiflow/engine/lib/model"
+	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 )
 
 // LocalFileResourceDescriptor contains necessary data
@@ -24,11 +25,12 @@ import (
 type LocalFileResourceDescriptor struct {
 	BasePath     string
 	Creator      libModel.WorkerID
-	ResourceName ResourceName
+	ResourceName resModel.ResourceName
 }
 
 // AbsolutePath returns the absolute path of the given resource
 // in the local file system.
 func (d *LocalFileResourceDescriptor) AbsolutePath() string {
-	return filepath.Join(d.BasePath, d.Creator, d.ResourceName)
+	encodedName := resourceNameToFilePathName(d.ResourceName)
+	return filepath.Join(d.BasePath, d.Creator, encodedName)
 }
