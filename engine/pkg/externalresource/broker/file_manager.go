@@ -159,10 +159,14 @@ func (m *LocalFileManager) RemoveResource(creator libModel.WorkerID, resName res
 			zap.String("resource-name", resName))
 	}
 
-	filePath := filepath.Join(
+	// filePath is the path for the resource directory on the local
+	// file system. Note that the dataflow engine only manages file
+	// resources on the directory level, so that business logic using
+	// brStorage.ExternalStorage can be compatible.
+	filePath := localPathWithEncoding(
 		m.config.BaseDir,
 		creator,
-		resourceNameToFilePathName(resName))
+		resName)
 	if _, err := os.Stat(filePath); err != nil {
 		if os.IsNotExist(err) {
 			log.L().Info("Trying to remove non-existing resource",
