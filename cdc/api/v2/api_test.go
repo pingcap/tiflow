@@ -18,17 +18,17 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/golang/mock/gomock"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/cdc/model"
-	mock_owner "github.com/pingcap/tiflow/cdc/owner/mock"
-	//cerror "github.com/pingcap/tiflow/pkg/errors"
-	//"github.com/pingcap/tiflow/pkg/upstream"
+	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"github.com/tikv/client-go/v2/oracle"
+	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
 )
 
@@ -40,6 +40,15 @@ var (
 
 type mockStatusProvider struct {
 	mock.Mock
+}
+
+// MockPDClient mocks pd.Client to facilitate unit testing.
+type MockPDClient struct {
+	pd.Client
+}
+
+func (m *MockPDClient) GetTS(ctx context.Context) (int64, int64, error) {
+	return oracle.GetPhysical(time.Now()), 0, nil
 }
 
 func (p *mockStatusProvider) GetAllChangeFeedStatuses(ctx context.Context) (map[model.ChangeFeedID]*model.ChangeFeedStatus, error) {
@@ -96,20 +105,18 @@ func newRouter(c *capture.Capture, p *mockStatusProvider) *gin.Engine {
 
 func newStatusProvider() *mockStatusProvider {
 	statusProvider := &mockStatusProvider{}
-
 	return statusProvider
 }
 
 func TestGetTso(t *testing.T) {
 	t.Parallel()
-	ctrl := gomock.NewController(t)
-	mo := mock_owner.NewMockOwner(ctrl)
-	cp := capture.NewCapture4Test(mo)
+	mockPDClient := &MockPDClient{}
+	mockManager := upstream.NewManager4Test(mockPDClient)
+	cp := capture.NewCaptureWithManager4Test(mockManager)
 	router := newRouter(cp, newStatusProvider())
-
-	// test get tso succeeded
-	api := testCase{url: "/api/v2/tso", method: "GET"}
 	w := httptest.NewRecorder()
+
+	api := testCase{url: "/api/v2/tso", method: "GET"}
 	req, err := http.NewRequestWithContext(context.Background(), api.method, api.url, nil)
 	require.Nil(t, err)
 	router.ServeHTTP(w, req)
