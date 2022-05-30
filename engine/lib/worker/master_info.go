@@ -111,6 +111,7 @@ func (p *MockMasterInfoProvider) RefreshCount() int {
 	return int(p.refreshCount.Load())
 }
 
+// IsMasterSideClosed implements MasterInfoProvider.IsMasterSideClosed
 func (p *MockMasterInfoProvider) IsMasterSideClosed() bool {
 	return p.masterSideClosed.Load()
 }
