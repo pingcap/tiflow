@@ -289,7 +289,7 @@ func (jm *JobMaster) preCheck(ctx context.Context) error {
 
 	msg, err := checker.CheckSyncConfigFunc(ctx, dmSubtaskCfgs, ctlcommon.DefaultErrorCnt, ctlcommon.DefaultWarnCnt)
 	if err != nil {
-		log.L().Info("error when pre-checking", zap.String("id", jm.workerID), zap.String("jobmaster_id", jm.JobMasterID()), log.ShortError(err))
+		log.L().Error("error when pre-checking", zap.String("id", jm.workerID), zap.String("jobmaster_id", jm.JobMasterID()), log.ShortError(err))
 		return err
 	}
 	log.L().Info("finish pre-checking job config", zap.String("id", jm.workerID), zap.String("jobmaster_id", jm.JobMasterID()), zap.String("result", msg))

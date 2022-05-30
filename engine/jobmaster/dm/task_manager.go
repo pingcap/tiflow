@@ -204,7 +204,8 @@ func (tm *TaskManager) GetTaskStatus(taskID string) (runtime.TaskStatus, bool) {
 func taskAsExpected(persistentTask *metadata.Task, taskStatus runtime.TaskStatus) bool {
 	// TODO: when running is expected but task is paused, we may still need return true,
 	// because worker will resume it automatically.
-	return persistentTask.Stage == taskStatus.Stage
+	// refactor when implement operate task
+	return taskStatus.Stage == metadata.StageFinished || taskStatus.Stage == metadata.StageUnscheduled || persistentTask.Stage == taskStatus.Stage
 }
 
 func (tm *TaskManager) operateTaskMessage(ctx context.Context, taskID string, stage metadata.TaskStage) error {

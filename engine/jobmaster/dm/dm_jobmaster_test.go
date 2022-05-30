@@ -194,10 +194,6 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	mockBaseJobmaster.On("MetaKVClient").Return(metaKVClient)
 	mockBaseJobmaster.On("GetWorkers").Return(map[string]lib.WorkerHandle{}).Once()
 	require.NoError(t.T(), jm.InitImpl(context.Background()))
-	// no error if init again
-	// though frame ensures that it will not init twice
-	mockBaseJobmaster.On("GetWorkers").Return(map[string]lib.WorkerHandle{}).Once()
-	require.NoError(t.T(), jm.InitImpl(context.Background()))
 
 	// recover
 	jm = &JobMaster{
