@@ -287,9 +287,6 @@ func (a *Agent) processOperations(ctx context.Context) (err error) {
 			} else {
 				// delete table
 				done = a.executor.RemoveTable(ctx, op.TableID)
-				if err != nil {
-					return errors.Trace(err)
-				}
 				if !done {
 					break
 				}

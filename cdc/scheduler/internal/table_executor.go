@@ -58,5 +58,5 @@ type TableExecutor interface {
 	GetCheckpoint() (checkpointTs, resolvedTs model.Ts)
 
 	// GetTableMeta return the checkpoint and resolved ts for the given table
-	GetTableMeta(tableID model.TableID) *pipeline.TableMeta
+	GetTableMeta(tableID model.TableID) pipeline.TableMeta
 }

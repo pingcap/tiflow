@@ -29,7 +29,7 @@ func benchmarkCollectTableStatus(b *testing.B, bench func(b *testing.B, a *agent
 			tableExec: tableExec,
 		}
 		for j := 0; j < size; j++ {
-			tableExec.tables[model.TableID(j)] = pipeline.TableStatusReplicating
+			tableExec.tables[model.TableID(10000+j)] = pipeline.TableStateReplicating
 		}
 
 		b.ResetTimer()
@@ -43,7 +43,7 @@ func BenchmarkCollectTableStatus(b *testing.B) {
 		total := len(a.tableExec.GetAllCurrentTables())
 		b.Run(fmt.Sprintf("%d tables", total), func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
-				a.collectTableStatus()
+				a.collectTableStatus([]model.TableID{})
 			}
 		})
 	})

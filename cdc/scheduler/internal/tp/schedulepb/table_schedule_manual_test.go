@@ -35,7 +35,7 @@ func benchmarkMessageHeartbeatResponse(b *testing.B, bench func(b *testing.B, m 
 		for i := 0; i < total; i++ {
 			msg.HeartbeatResponse.Tables = append(msg.HeartbeatResponse.Tables,
 				TableStatus{
-					TableID: model.TableID(i),
+					TableID: model.TableID(10000 + i),
 					State:   TableStateReplicating,
 					Checkpoint: Checkpoint{
 						CheckpointTs: 433331421532337260,

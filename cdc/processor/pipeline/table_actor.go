@@ -478,11 +478,11 @@ func (t *tableActor) Workload() model.WorkloadInfo {
 }
 
 // Status returns the status of this table pipeline
-func (t *tableActor) Status() TableStatus {
+func (t *tableActor) Status() TableState {
 	sortStatus := t.sortNode.Status()
 	// first resolved ts not received yet, still preparing...
-	if sortStatus == TableStatusPreparing {
-		return TableStatusPreparing
+	if sortStatus == TableStatePreparing {
+		return TableStatePreparing
 	}
 
 	// sinkNode is status indicator now.

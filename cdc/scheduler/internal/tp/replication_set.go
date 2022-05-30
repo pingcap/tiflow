@@ -74,11 +74,10 @@ func (r ReplicationSetState) String() string {
 
 // ReplicationSet is a state machine that manages replication states.
 type ReplicationSet struct {
-	TableID   model.TableID
-	State     ReplicationSetState
-	Primary   model.CaptureID
-	Secondary model.CaptureID
-	// todo: Why Captures here
+	TableID      model.TableID
+	State        ReplicationSetState
+	Primary      model.CaptureID
+	Secondary    model.CaptureID
 	Captures     map[model.CaptureID]struct{}
 	CheckpointTs model.Ts
 }
@@ -519,7 +518,6 @@ func (r *ReplicationSet) handleAddTable(
 			zap.Any("replicationSet", r), zap.Int64("tableID", r.TableID))
 		return nil, nil
 	}
-	// todo (Ling Jin): this looks unnecessary, must be `absent` here.
 	oldState := r.State
 	r.State = ReplicationSetStateAbsent
 	log.Info("tpscheduler: replication state transition, add table",
@@ -548,7 +546,6 @@ func (r *ReplicationSet) handleMoveTable(
 			zap.Any("replicationSet", r), zap.Int64("tableID", r.TableID))
 		return nil, nil
 	}
-	// todo: OldState must be `replicating`
 	oldState := r.State
 	r.State = ReplicationSetStatePrepare
 	log.Info("tpscheduler: replication state transition, move table",
@@ -576,7 +573,6 @@ func (r *ReplicationSet) handleRemoveTable() ([]*schedulepb.Message, error) {
 			zap.Any("replicationSet", r), zap.Int64("tableID", r.TableID))
 		return nil, nil
 	}
-	// todo: OldState must be `replicating` here
 	oldState := r.State
 	r.State = ReplicationSetStateRemoving
 	log.Info("tpscheduler: replication state transition, remove table",

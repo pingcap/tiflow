@@ -85,15 +85,15 @@ func TestAgentHandleDispatchTableTask(t *testing.T) {
 			t.Logf("test %v, %v", state, sequence)
 			switch state {
 			case schedulepb.TableStatePreparing:
-				mockTableExecutor.tables[tableID] = pipeline.TableStatusPreparing
+				mockTableExecutor.tables[tableID] = pipeline.TableStatePreparing
 			case schedulepb.TableStatePrepared:
-				mockTableExecutor.tables[tableID] = pipeline.TableStatusPrepared
+				mockTableExecutor.tables[tableID] = pipeline.TableStatePrepared
 			case schedulepb.TableStateReplicating:
-				mockTableExecutor.tables[tableID] = pipeline.TableStatusReplicating
+				mockTableExecutor.tables[tableID] = pipeline.TableStateReplicating
 			case schedulepb.TableStateStopping:
-				mockTableExecutor.tables[tableID] = pipeline.TableStatusStopping
+				mockTableExecutor.tables[tableID] = pipeline.TableStateStopping
 			case schedulepb.TableStateStopped:
-				mockTableExecutor.tables[tableID] = pipeline.TableStatusStopped
+				mockTableExecutor.tables[tableID] = pipeline.TableStateStopped
 			case schedulepb.TableStateAbsent:
 			default:
 			}
@@ -222,13 +222,13 @@ type MockTableExecutor struct {
 
 	t *testing.T
 	// it's preferred to use `pipeline.MockPipeline` here to make the test more vivid.
-	tables map[model.TableID]pipeline.TableStatus
+	tables map[model.TableID]pipeline.TableState
 }
 
 // NewMockTableExecutor creates a new mock table executor.
 func NewMockTableExecutor() *MockTableExecutor {
 	return &MockTableExecutor{
-		tables: map[model.TableID]pipeline.TableStatus{},
+		tables: map[model.TableID]pipeline.TableState{},
 	}
 }
 
@@ -244,16 +244,16 @@ func (e *MockTableExecutor) AddTable(
 	state, ok := e.tables[tableID]
 	if ok {
 		switch state {
-		case pipeline.TableStatusPreparing:
+		case pipeline.TableStatePreparing:
 			return true, nil
-		case pipeline.TableStatusPrepared:
+		case pipeline.TableStatePrepared:
 			if !isPrepare {
-				e.tables[tableID] = pipeline.TableStatusReplicating
+				e.tables[tableID] = pipeline.TableStateReplicating
 			}
 			return true, nil
-		case pipeline.TableStatusReplicating:
+		case pipeline.TableStateReplicating:
 			return true, nil
-		case pipeline.TableStatusStopped:
+		case pipeline.TableStateStopped:
 			delete(e.tables, tableID)
 		}
 
@@ -261,7 +261,7 @@ func (e *MockTableExecutor) AddTable(
 
 	args := e.Called(ctx, tableID, startTs, isPrepare)
 	if args.Bool(0) {
-		e.tables[tableID] = pipeline.TableStatusPreparing
+		e.tables[tableID] = pipeline.TableStatePreparing
 	}
 
 	return args.Bool(0), args.Error(1)
@@ -275,9 +275,9 @@ func (e *MockTableExecutor) RemoveTable(ctx context.Context, tableID model.Table
 		return true
 	}
 	switch state {
-	case pipeline.TableStatusStopping, pipeline.TableStatusStopped:
+	case pipeline.TableStateStopping, pipeline.TableStateStopped:
 		return true
-	case pipeline.TableStatusPreparing, pipeline.TableStatusPrepared, pipeline.TableStatusReplicating:
+	case pipeline.TableStatePreparing, pipeline.TableStatePrepared, pipeline.TableStateReplicating:
 	default:
 	}
 	// todo: how to handle table is already in `stopping` ? should return true directly ?
@@ -286,7 +286,7 @@ func (e *MockTableExecutor) RemoveTable(ctx context.Context, tableID model.Table
 
 	args := e.Called(ctx, tableID)
 	if args.Bool(0) {
-		e.tables[tableID] = pipeline.TableStatusStopping
+		e.tables[tableID] = pipeline.TableStateStopping
 	}
 	return args.Bool(0)
 }
@@ -302,9 +302,9 @@ func (e *MockTableExecutor) IsAddTableFinished(ctx context.Context, tableID mode
 
 	args := e.Called(ctx, tableID, isPrepare)
 	if args.Bool(0) {
-		e.tables[tableID] = pipeline.TableStatusPrepared
+		e.tables[tableID] = pipeline.TableStatePrepared
 		if !isPrepare {
-			e.tables[tableID] = pipeline.TableStatusReplicating
+			e.tables[tableID] = pipeline.TableStateReplicating
 		}
 	}
 	return args.Bool(0)
@@ -343,12 +343,12 @@ func (e *MockTableExecutor) GetCheckpoint() (checkpointTs, resolvedTs model.Ts) 
 }
 
 // GetTableMeta implements TableExecutor interface
-func (e *MockTableExecutor) GetTableMeta(tableID model.TableID) *pipeline.TableMeta {
+func (e *MockTableExecutor) GetTableMeta(tableID model.TableID) pipeline.TableMeta {
 	state, ok := e.tables[tableID]
 	if !ok {
-		state = pipeline.TableStatusAbsent
+		state = pipeline.TableStateAbsent
 	}
-	return &pipeline.TableMeta{
+	return pipeline.TableMeta{
 		TableID:      tableID,
 		CheckpointTs: 0,
 		ResolvedTs:   0,

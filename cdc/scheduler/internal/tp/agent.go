@@ -90,7 +90,7 @@ func NewAgent(ctx context.Context,
 	conf := config.GetGlobalServerConfig()
 	flushInterval := time.Duration(conf.ProcessorFlushInterval)
 
-	log.Debug("creating processor agent",
+	log.Debug("tpscheduler: creating processor agent",
 		zap.String("capture", captureID),
 		zap.String("namespace", changeFeedID.Namespace),
 		zap.String("changefeed", changeFeedID.ID),
@@ -107,7 +107,7 @@ func NewAgent(ctx context.Context,
 		// We tolerate the situation where there is no owner.
 		// If we are registered in Etcd, an elected Owner will have to
 		// contact us before it can schedule any table.
-		log.Info("no owner found. We will wait for an owner to contact us.",
+		log.Info("tpscheduler: no owner found. We will wait for an owner to contact us.",
 			zap.String("capture", captureID),
 			zap.String("namespace", changeFeedID.Namespace),
 			zap.String("changefeed", changeFeedID.ID),
@@ -115,7 +115,7 @@ func NewAgent(ctx context.Context,
 		return nil, nil
 	}
 
-	log.Debug("agent: owner found",
+	log.Debug("tpscheduler: owner found",
 		zap.String("capture", captureID),
 		zap.String("namespace", changeFeedID.Namespace),
 		zap.String("changefeed", changeFeedID.ID),
@@ -125,7 +125,7 @@ func NewAgent(ctx context.Context,
 	if err != nil {
 		if cerror.ErrOwnerNotFound.Equal(err) || cerror.ErrNotOwner.Equal(err) {
 			// These are expected errors when no owner has been elected
-			log.Info("no owner found when querying for the owner revision",
+			log.Info("tpscheduler: no owner found when querying for the owner revision",
 				zap.String("capture", captureID),
 				zap.String("namespace", changeFeedID.Namespace),
 				zap.String("changefeed", changeFeedID.ID),
@@ -190,32 +190,44 @@ func (a *agent) handleMessage(msg []*schedulepb.Message) []*schedulepb.Message {
 			result = append(result, response)
 		case schedulepb.MsgUnknown:
 		default:
-			log.Warn("unknown message received", zap.Any("message", message))
+			log.Warn("tpscheduler: unknown message received",
+				zap.String("capture", a.captureID),
+				zap.String("namespace", a.changeFeedID.Namespace),
+				zap.String("changefeed", a.changeFeedID.ID),
+				zap.Any("message", message))
 		}
 	}
 
 	return result
 }
 
-func tableStatus2PB(status pipeline.TableStatus) schedulepb.TableState {
+func (a *agent) tableStatus2PB(status pipeline.TableState) schedulepb.TableState {
 	switch status {
-	case pipeline.TableStatusPreparing:
+	case pipeline.TableStatePreparing:
 		return schedulepb.TableStatePreparing
-	case pipeline.TableStatusPrepared:
+	case pipeline.TableStatePrepared:
 		return schedulepb.TableStatePrepared
-	case pipeline.TableStatusReplicating:
+	case pipeline.TableStateReplicating:
 		return schedulepb.TableStateReplicating
-	case pipeline.TableStatusStopping:
+	case pipeline.TableStateStopping:
 		return schedulepb.TableStateStopping
-	case pipeline.TableStatusStopped:
+	case pipeline.TableStateStopped:
 		return schedulepb.TableStateStopped
+	case pipeline.TableStateAbsent:
+		return schedulepb.TableStateAbsent
+	default:
 	}
-	return schedulepb.TableStateAbsent
+	log.Warn("tpscheduler: table state unknown",
+		zap.String("capture", a.captureID),
+		zap.String("namespace", a.changeFeedID.Namespace),
+		zap.String("changefeed", a.changeFeedID.ID),
+	)
+	return schedulepb.TableStateUnknown
 }
 
 func (a *agent) newTableStatus(tableID model.TableID) schedulepb.TableStatus {
 	meta := a.tableExec.GetTableMeta(tableID)
-	state := tableStatus2PB(meta.Status)
+	state := a.tableStatus2PB(meta.Status)
 
 	if task, ok := a.runningTasks[tableID]; ok {
 		// remove table task is not processed, or failed,
@@ -293,7 +305,8 @@ func (a *agent) handleMessageDispatchTableRequest(
 	epoch schedulepb.ProcessorEpoch,
 ) {
 	if a.epoch != epoch {
-		log.Info("agent: dispatch table request epoch does not match, ignore it",
+		log.Info("tpscheduler: agent receive dispatch table request "+
+			"epoch does not match, ignore it",
 			zap.String("capture", a.captureID),
 			zap.String("namespace", a.changeFeedID.Namespace),
 			zap.String("changefeed", a.changeFeedID.ID),
@@ -305,7 +318,7 @@ func (a *agent) handleMessageDispatchTableRequest(
 	switch req := request.Request.(type) {
 	case *schedulepb.DispatchTableRequest_AddTable:
 		if a.stopping {
-			log.Info("agent: decline handle add table request",
+			log.Info("tpscheduler: agent decline handle add table request",
 				zap.String("capture", a.captureID),
 				zap.String("namespace", a.changeFeedID.Namespace),
 				zap.String("changefeed", a.changeFeedID.ID))
@@ -327,7 +340,7 @@ func (a *agent) handleMessageDispatchTableRequest(
 			status:   dispatchTableTaskReceived,
 		}
 	default:
-		log.Warn("agent: ignore unknown dispatch table request",
+		log.Warn("tpscheduler: agent ignore unknown dispatch table request",
 			zap.String("capture", a.captureID),
 			zap.String("namespace", a.changeFeedID.Namespace),
 			zap.String("changefeed", a.changeFeedID.ID),
@@ -336,7 +349,7 @@ func (a *agent) handleMessageDispatchTableRequest(
 	}
 
 	if _, ok := a.runningTasks[task.TableID]; ok {
-		log.Warn("duplicate dispatch table request",
+		log.Warn("tpscheduler: agent found duplicate dispatch table request",
 			zap.String("capture", a.captureID),
 			zap.String("namespace", a.changeFeedID.Namespace),
 			zap.String("changefeed", a.changeFeedID.ID),
@@ -411,7 +424,7 @@ func (a *agent) handleAddTableTask(
 		}
 		done, err := a.tableExec.AddTable(ctx, task.TableID, task.StartTs, task.IsPrepare)
 		if err != nil || !done {
-			log.Info("add table failed",
+			log.Info("tpscheduler: agent add table failed",
 				zap.String("capture", a.captureID),
 				zap.String("namespace", a.changeFeedID.Namespace),
 				zap.String("changefeed", a.changeFeedID.ID),
@@ -429,7 +442,7 @@ func (a *agent) handleAddTableTask(
 		// no need send a special message, table status will be reported by the heartbeat.
 		return nil, nil
 	}
-	log.Info("finish processing add table task",
+	log.Info("tpscheduler: agent finish processing add table task",
 		zap.String("capture", a.captureID),
 		zap.String("namespace", a.changeFeedID.Namespace),
 		zap.String("changefeed", a.changeFeedID.ID),
@@ -469,7 +482,7 @@ func (a *agent) fetchPendingTasks() {
 		for _, item := range batch {
 			task := item.(*dispatchTableTask)
 			if task.Epoch != a.epoch {
-				log.Info("dispatch request epoch does not match",
+				log.Info("tpscheduler: dispatch request epoch does not match",
 					zap.String("capture", a.captureID),
 					zap.String("namespace", a.changeFeedID.Namespace),
 					zap.String("changefeed", a.changeFeedID.ID),
@@ -478,11 +491,12 @@ func (a *agent) fetchPendingTasks() {
 				continue
 			}
 			if _, ok := a.runningTasks[task.TableID]; ok {
-				log.Panic("duplicate dispatch table request",
+				log.Warn("tpscheduler: duplicate dispatch table request",
 					zap.String("capture", a.captureID),
 					zap.String("namespace", a.changeFeedID.Namespace),
 					zap.String("changefeed", a.changeFeedID.ID),
 					zap.Any("task", task))
+				return
 			}
 			a.runningTasks[task.TableID] = task
 		}
@@ -519,7 +533,7 @@ func (a *agent) GetLastSentCheckpointTs() (checkpointTs model.Ts) {
 
 // Close implement agent interface
 func (a *agent) Close() error {
-	log.Debug("agent: closing",
+	log.Debug("tpscheduler: agent closed",
 		zap.String("capture", a.captureID),
 		zap.String("namespace", a.changeFeedID.Namespace),
 		zap.String("changefeed", a.changeFeedID.ID))
@@ -545,7 +559,7 @@ func (a *agent) handleOwnerInfo(id model.CaptureID, revision int64, version stri
 			// This panic will happen only if two messages have been received
 			// with the same ownerRev but with different ownerIDs.
 			// This should never happen unless the election via Etcd is buggy.
-			log.Panic("owner IDs do not match",
+			log.Panic("tpscheduler: owner IDs do not match",
 				zap.String("capture", a.captureID),
 				zap.String("namespace", a.changeFeedID.Namespace),
 				zap.String("changefeed", a.changeFeedID.ID),
@@ -563,7 +577,7 @@ func (a *agent) handleOwnerInfo(id model.CaptureID, revision int64, version stri
 
 		a.resetEpoch()
 
-		log.Info("new owner in power, drop pending dispatch table tasks",
+		log.Info("tpscheduler: new owner in power, drop pending dispatch table tasks",
 			zap.String("capture", a.captureID),
 			zap.String("namespace", a.changeFeedID.Namespace),
 			zap.String("changefeed", a.changeFeedID.ID),
@@ -578,7 +592,7 @@ func (a *agent) handleOwnerInfo(id model.CaptureID, revision int64, version stri
 	}
 
 	// staled owner heartbeat, just ignore it.
-	log.Info("agent: message from staled owner",
+	log.Info("tpscheduler: message from staled owner",
 		zap.String("capture", a.captureID),
 		zap.String("namespace", a.changeFeedID.Namespace),
 		zap.String("changefeed", a.changeFeedID.ID),
@@ -617,7 +631,7 @@ func (a *agent) sendMsgs(ctx context.Context, msgs []*schedulepb.Message) error 
 		m := msgs[i]
 		// Correctness check.
 		if len(m.To) == 0 || m.MsgType == schedulepb.MsgUnknown {
-			log.Panic("invalid message no destination or unknown message type",
+			log.Panic("tpscheduler: invalid message no destination or unknown message type",
 				zap.String("capture", a.captureID),
 				zap.String("namespace", a.changeFeedID.Namespace),
 				zap.String("changefeed", a.changeFeedID.ID),

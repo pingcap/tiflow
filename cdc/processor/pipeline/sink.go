@@ -36,7 +36,7 @@ const (
 
 type sinkNode struct {
 	sink    sink.Sink
-	status  TableStatus
+	status  TableState
 	tableID model.TableID
 
 	// atomic oprations for model.ResolvedTs
@@ -55,7 +55,7 @@ func newSinkNode(tableID model.TableID, sink sink.Sink, startTs model.Ts, target
 	sn := &sinkNode{
 		tableID:      tableID,
 		sink:         sink,
-		status:       TableStatusPrepared,
+		status:       TableStatePrepared,
 		targetTs:     targetTs,
 		checkpointTs: startTs,
 		barrierTs:    startTs,
@@ -69,7 +69,7 @@ func newSinkNode(tableID model.TableID, sink sink.Sink, startTs model.Ts, target
 func (n *sinkNode) ResolvedTs() model.ResolvedTs { return n.resolvedTs.Load().(model.ResolvedTs) }
 func (n *sinkNode) CheckpointTs() model.Ts       { return atomic.LoadUint64(&n.checkpointTs) }
 func (n *sinkNode) BarrierTs() model.Ts          { return atomic.LoadUint64(&n.barrierTs) }
-func (n *sinkNode) Status() TableStatus          { return n.status.Load() }
+func (n *sinkNode) Status() TableState           { return n.status.Load() }
 
 func (n *sinkNode) Init(ctx pipeline.NodeContext) error {
 	n.replicaConfig = ctx.ChangefeedVars().Info.Config
@@ -87,7 +87,7 @@ func (n *sinkNode) initWithReplicaConfig(isTableActorMode bool, replicaConfig *c
 // no more events can be sent to this sink node afterwards.
 func (n *sinkNode) stop(ctx context.Context) (err error) {
 	// table stopped status must be set after underlying sink is closed
-	defer n.status.Store(TableStatusStopped)
+	defer n.status.Store(TableStateStopped)
 	err = n.sink.Close(ctx)
 	if err != nil {
 		return
@@ -102,7 +102,7 @@ func (n *sinkNode) stop(ctx context.Context) (err error) {
 func (n *sinkNode) flushSink(ctx context.Context, resolved model.ResolvedTs) (err error) {
 	defer func() {
 		if err != nil {
-			n.status.Store(TableStatusStopped)
+			n.status.Store(TableStateStopped)
 			return
 		}
 		if atomic.LoadUint64(&n.checkpointTs) >= n.targetTs {
@@ -255,15 +255,15 @@ func (n *sinkNode) Receive(ctx pipeline.NodeContext) error {
 }
 
 func (n *sinkNode) HandleMessage(ctx context.Context, msg pmessage.Message) (bool, error) {
-	if n.status.Load() == TableStatusStopped {
+	if n.status.Load() == TableStateStopped {
 		return false, cerror.ErrTableProcessorStoppedSafely.GenWithStackByArgs()
 	}
 	switch msg.Tp {
 	case pmessage.MessageTypePolymorphicEvent:
 		event := msg.PolymorphicEvent
 		if event.IsResolved() {
-			if n.status.Load() == TableStatusPrepared {
-				n.status.Store(TableStatusReplicating)
+			if n.status.Load() == TableStatePrepared {
+				n.status.Store(TableStateReplicating)
 			}
 			failpoint.Inject("ProcessorSyncResolvedError", func() {
 				failpoint.Return(false, errors.New("processor sync resolved injected error"))
@@ -310,7 +310,7 @@ func (n *sinkNode) Destroy(ctx pipeline.NodeContext) error {
 }
 
 func (n *sinkNode) releaseResource(ctx context.Context) error {
-	n.status.Store(TableStatusStopped)
+	n.status.Store(TableStateStopped)
 	n.flowController.Abort()
 	return n.sink.Close(ctx)
 }

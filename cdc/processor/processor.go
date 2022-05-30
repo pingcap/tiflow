@@ -133,7 +133,7 @@ func (p *processor) AddTable(
 		switch table.Status() {
 		// table is still `preparing`, which means the table is `replicating` on other captures.
 		// no matter `isPrepare` or not, just ignore it should be ok.
-		case pipeline.TableStatusPreparing:
+		case pipeline.TableStatePreparing:
 			log.Warn("table is still preparing, ignore the request",
 				zap.String("captureID", p.captureInfo.ID),
 				zap.String("namespace", p.changefeedID.Namespace),
@@ -142,14 +142,14 @@ func (p *processor) AddTable(
 				zap.Uint64("checkpointTs", startTs),
 				zap.Bool("isPrepare", isPrepare))
 			return true, nil
-		case pipeline.TableStatusPrepared:
+		case pipeline.TableStatePrepared:
 			// table is `prepared`, and a `isPrepare = false` request indicate that old table should
 			// be stopped on original capture already, it's safe to start replicating data now.
 			if !isPrepare {
 				table.Start(startTs)
 			}
 			return true, nil
-		case pipeline.TableStatusReplicating:
+		case pipeline.TableStateReplicating:
 			log.Warn("Ignore existing table",
 				zap.String("captureID", p.captureInfo.ID),
 				zap.String("namespace", p.changefeedID.Namespace),
@@ -158,7 +158,7 @@ func (p *processor) AddTable(
 				zap.Uint64("checkpointTs", startTs),
 				zap.Bool("isPrepare", isPrepare))
 			return true, nil
-		case pipeline.TableStatusStopped:
+		case pipeline.TableStateStopped:
 			log.Warn("The same table exists but is stopped. Cancel it and continue.",
 				zap.String("captureID", p.captureInfo.ID),
 				zap.String("namespace", p.changefeedID.Namespace),
@@ -265,11 +265,11 @@ func (p *processor) IsAddTableFinished(ctx context.Context, tableID model.TableI
 	done := func() bool {
 		if isPrepare {
 			// todo: add ut to cover this, after 2ps supported.
-			return table.Status() == pipeline.TableStatusPrepared
+			return table.Status() == pipeline.TableStatePrepared
 		}
 
 		// todo: revise these 2 conditions, after 2ps supported.
-		// how about just check status is `TableStatusReplicating`.
+		// how about just check status is `TableStateReplicating`.
 		if table.CheckpointTs() < localCheckpointTs || localCheckpointTs < globalCheckpointTs {
 			return false
 		}
@@ -326,7 +326,7 @@ func (p *processor) IsRemoveTableFinished(ctx context.Context, tableID model.Tab
 		return 0, true
 	}
 	status := table.Status()
-	if status != pipeline.TableStatusStopped {
+	if status != pipeline.TableStateStopped {
 		log.Debug("table is still not stopped",
 			zap.String("captureID", p.captureInfo.ID),
 			zap.String("namespace", p.changefeedID.Namespace),
@@ -366,16 +366,16 @@ func (p *processor) GetCheckpoint() (checkpointTs, resolvedTs model.Ts) {
 }
 
 // GetTableMeta implements TableExecutor interface
-func (p *processor) GetTableMeta(tableID model.TableID) *pipeline.TableMeta {
+func (p *processor) GetTableMeta(tableID model.TableID) pipeline.TableMeta {
 	table, ok := p.tables[tableID]
 	if !ok {
-		return &pipeline.TableMeta{
+		return pipeline.TableMeta{
 			CheckpointTs: 0,
 			ResolvedTs:   0,
-			Status:       pipeline.TableStatusStopped,
+			Status:       pipeline.TableStateStopped,
 		}
 	}
-	return &pipeline.TableMeta{
+	return pipeline.TableMeta{
 		CheckpointTs: table.CheckpointTs(),
 		ResolvedTs:   table.ResolvedTs(),
 		Status:       table.Status(),
@@ -782,8 +782,8 @@ func (p *processor) handlePosition(currentTs int64) {
 	}
 	for _, table := range p.tables {
 		status := table.Status()
-		if status == pipeline.TableStatusPreparing ||
-			status == pipeline.TableStatusPrepared {
+		if status == pipeline.TableStatePreparing ||
+			status == pipeline.TableStatePrepared {
 			continue
 		}
 		ts := table.ResolvedTs()
@@ -797,8 +797,8 @@ func (p *processor) handlePosition(currentTs int64) {
 	minCheckpointTableID := int64(0)
 	for _, table := range p.tables {
 		status := table.Status()
-		if status == pipeline.TableStatusPreparing ||
-			status == pipeline.TableStatusPrepared {
+		if status == pipeline.TableStatePreparing ||
+			status == pipeline.TableStatePrepared {
 			continue
 		}
 		ts := table.CheckpointTs()
@@ -834,7 +834,7 @@ func (p *processor) pushResolvedTs2Table() {
 		resolvedTs = schemaResolvedTs
 	}
 	for _, table := range p.tables {
-		if table.Status() == pipeline.TableStatusReplicating {
+		if table.Status() == pipeline.TableStateReplicating {
 			table.UpdateBarrierTs(resolvedTs)
 		}
 	}

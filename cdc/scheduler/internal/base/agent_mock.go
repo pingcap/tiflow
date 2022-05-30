@@ -184,6 +184,6 @@ func (e *MockTableExecutor) GetCheckpoint() (checkpointTs, resolvedTs model.Ts) 
 }
 
 // GetTableMeta implements TableExecutor interface
-func (e *MockTableExecutor) GetTableMeta(tableID model.TableID) *pipeline.TableMeta {
-	return nil
+func (e *MockTableExecutor) GetTableMeta(tableID model.TableID) pipeline.TableMeta {
+	return pipeline.TableMeta{}
 }

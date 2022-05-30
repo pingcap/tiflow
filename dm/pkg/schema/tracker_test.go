@@ -662,7 +662,7 @@ func (s *trackerSuite) TestAllSchemas(c *C) {
 			table := schema.Tables[0]
 			c.Assert(table.Name.O, Equals, "a")
 			c.Assert(table.Columns, HasLen, 1)
-			// the table should be equivalent to the result of GetTableMeta.
+			// the table should be equivalent to the result of GetTable.
 			table2, err2 := tracker.GetTableInfo(&filter.Table{Schema: "testdb2", Name: "a"})
 			c.Assert(err2, IsNil)
 			c.Assert(table2, DeepEquals, table)
