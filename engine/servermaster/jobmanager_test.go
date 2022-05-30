@@ -448,5 +448,5 @@ func TestJobManagerMultiProjectMetric(t *testing.T) {
 	require.Equal(t, tenant.NewProjectInfo(
 		"tenant1",
 		"proj1",
-	), mgr.BaseMaster.(*lib.DefaultBaseMaster).WorkerProjectInfo())
+	), mgr.BaseMaster.(*lib.DefaultBaseMaster).GetProjectInfo("tenant1"))
 }

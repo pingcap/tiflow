@@ -260,15 +260,21 @@ func (jm *JobManagerImplV2) SubmitJob(ctx context.Context, req *pb.SubmitJobRequ
 		return resp
 	}
 
-	// Triky way here to set the worker(jobmaster)'s project info
-	defaultMaster, ok := jm.BaseMaster.(*lib.DefaultBaseMaster)
+	defaultMaster, ok := jm.BaseMaster.(interface {
+		SetProjectInfo(libModel.MasterID, tenant.ProjectInfo)
+	})
 	if ok {
-		defaultMaster.SetWorkerProjectInfo(tenant.NewProjectInfo(
+		defaultMaster.SetProjectInfo(meta.ID, tenant.NewProjectInfo(
 			req.GetProjectInfo().GetTenantId(),
 			req.GetProjectInfo().GetProjectId(),
 		))
 	} else {
-		log.L().Error("jobmanager's base master is not a DefaultBaseMaster")
+		log.L().Error("jobmanager don't have the 'SetProjectInfo' interface",
+			zap.String("masterID", meta.ID),
+			zap.Any("projectInfo", tenant.NewProjectInfo(
+				req.GetProjectInfo().GetTenantId(),
+				req.GetProjectInfo().GetProjectId(),
+			)))
 	}
 
 	// CreateWorker here is to create job master actually

@@ -158,15 +158,11 @@ type DefaultBaseMaster struct {
 	timeoutConfig config.TimeoutConfig
 	masterMeta    *libModel.MasterMetaKVData
 
-	// JobManager is a special master which has workers(jobMaster) with different project info,
-	// so projectMux is to protect the Read-Write of projectInfoWorker
-	projectMux sync.RWMutex
-	// projectInfoSelf is the project info for master itself
-	projectInfoSelf tenant.ProjectInfo
-	// projectInfoWorker is the project info for its worker
-	// When 'master' is the jobmaster, projectInfoWorker is the same as projectInfoSelf
-	// When 'master' is the jobmanager, projectInfoWorker is different from projectInfoSelf
-	projectInfoWorker tenant.ProjectInfo
+	// workerProjectMap keep the <WorkerID, ProjectInfo> map
+	// It's used by JobManager who has workers(jobmaster) with different project info
+	workerProjectMap sync.Map
+	// masterProjectInfo is the projectInfo of itself
+	masterProjectInfo tenant.ProjectInfo
 
 	// user metastore prefix kvclient
 	// Don't close it. It's just a prefix wrapper for underlying userRawKVClient
@@ -246,8 +242,7 @@ func NewBaseMaster(
 
 		nodeID:            nodeID,
 		advertiseAddr:     advertiseAddr,
-		projectInfoSelf:   ctx.ProjectInfo,
-		projectInfoWorker: ctx.ProjectInfo,
+		masterProjectInfo: ctx.ProjectInfo,
 
 		createWorkerQuota: quota.NewConcurrencyQuota(maxCreateWorkerConcurrency),
 		userMetaKVClient:  kvclient.NewPrefixKVClient(params.UserRawKVClient, ctx.ProjectInfo.UniqueID()),
@@ -573,6 +568,10 @@ func (m *DefaultBaseMaster) CreateWorker(
 	go func() {
 		defer func() {
 			m.createWorkerQuota.Release()
+			//[NOTICE]:
+			// For JobManager: It deletes the <JobID, ProjectInfo> pair
+			// For JobMaster: It takes no effect
+			m.DeleteProjectInfo(workerID)
 		}()
 
 		requestCtx, cancel := context.WithTimeout(ctx, createWorkerTimeout)
@@ -603,7 +602,10 @@ func (m *DefaultBaseMaster) CreateWorker(
 
 		executorClient := m.executorClientManager.ExecutorClient(executorID)
 		dispatchArgs := &client.DispatchTaskArgs{
-			ProjectInfo:  m.WorkerProjectInfo(),
+			// [NOTICE]:
+			// For JobManager, <JobID, ProjectInfo> pair is set in advance
+			// For JobMaster, we always get the 'masterProjectInfo'
+			ProjectInfo:  m.GetProjectInfo(workerID),
 			WorkerID:     workerID,
 			MasterID:     m.id,
 			WorkerType:   int64(workerType),
@@ -635,19 +637,29 @@ func (m *DefaultBaseMaster) IsMasterReady() bool {
 	return m.workerManager.IsInitialized()
 }
 
-// SetWorkerProjectInfo set the project info of master
-// Currently, it is used by JobManager only
-func (m *DefaultBaseMaster) SetWorkerProjectInfo(projectInfo tenant.ProjectInfo) {
-	m.projectMux.Lock()
-	defer m.projectMux.Unlock()
-
-	m.projectInfoWorker = projectInfo
+// SetProjectInfo set the project info of specific worker
+// [NOTICE]: Currently, it is only used by JobManager to set project for different job(worker for jobmanager)
+func (m *DefaultBaseMaster) SetProjectInfo(workerID libModel.WorkerID, projectInfo tenant.ProjectInfo) {
+	m.workerProjectMap.Store(workerID, projectInfo)
 }
 
-// WorkerProjectInfo get the project info of master
-func (m *DefaultBaseMaster) WorkerProjectInfo() tenant.ProjectInfo {
-	m.projectMux.RLock()
-	defer m.projectMux.RUnlock()
+// DeleteProjectInfo delete the project info of specific worker
+// [NOTICE]: For JobManager, call it after we call 'CreateWorker'
+//			 For JobMaster, it takes no effect actually.
+func (m *DefaultBaseMaster) DeleteProjectInfo(workerID libModel.WorkerID) {
+	m.workerProjectMap.Delete(workerID)
+}
 
-	return m.projectInfoWorker
+// GetProjectInfo get the project info of the worker
+// [WARN]: Once 'DeleteProjectInfo' is called, 'GetProjectInfo' may return unexpected project info
+// For JobManager: It will set the <jobID, projectInfo> pair in advance. So if we call 'GetProjectInfo' before
+// 'DeleteProjectInfo', we can expect a correct projectInfo.
+// For JobMaster: Master and worker always have the same projectInfo and workerProjectMap is empty
+func (m *DefaultBaseMaster) GetProjectInfo(masterID libModel.MasterID) tenant.ProjectInfo {
+	projectInfo, exists := m.workerProjectMap.Load(masterID)
+	if !exists {
+		return m.masterProjectInfo
+	}
+
+	return projectInfo.(tenant.ProjectInfo)
 }
