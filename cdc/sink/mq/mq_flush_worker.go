@@ -258,11 +258,15 @@ func (w *flushWorker) flushAndNotify(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	w.needsFlush <- struct{}{}
-	close(w.needsFlush)
-	// NOTICE: Do not forget to reset the needsFlush.
-	w.needsFlush = nil
-	log.Debug("flush worker flushed", zap.Duration("duration", time.Since(start)))
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case w.needsFlush <- struct{}{}:
+		close(w.needsFlush)
+		// NOTICE: Do not forget to reset the needsFlush.
+		w.needsFlush = nil
+		log.Debug("flush worker flushed", zap.Duration("duration", time.Since(start)))
+	}
 
 	return nil
 }
