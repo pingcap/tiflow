@@ -1,11 +1,11 @@
 FROM alpine:3.14
 
-ADD master /df-server-master
-ADD executor /df-executor
+ADD df-master /df-master
+ADD df-executor /df-executor
 ADD df-chaos-case /df-chaos-case
 ADD conf /conf
 
-RUN chmod a+x /df-server-master /df-executor /df-chaos-case
+RUN chmod a+x /df-master /df-executor /df-chaos-case
 
 WORKDIR /
 
