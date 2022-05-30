@@ -21,8 +21,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -167,8 +169,8 @@ func TestMemoryQuotaReleaseZero(t *testing.T) {
 }
 
 type mockedEvent struct {
-	resolvedTs uint64
-	size       uint64
+	resolved model.ResolvedTs
+	size     uint64
 }
 
 func TestFlowControlBasic(t *testing.T) {
@@ -226,7 +228,7 @@ func TestFlowControlBasic(t *testing.T) {
 				case <-ctx.Done():
 					return ctx.Err()
 				case eventCh <- &mockedEvent{
-					resolvedTs: resolvedTs,
+					resolved: model.NewResolvedTs(resolvedTs),
 				}:
 				}
 				resolvedTs = mockedRow.commitTs
@@ -252,7 +254,7 @@ func TestFlowControlBasic(t *testing.T) {
 		case <-ctx.Done():
 			return ctx.Err()
 		case eventCh <- &mockedEvent{
-			resolvedTs: resolvedTs,
+			resolved: model.NewResolvedTs(resolvedTs),
 		}:
 		}
 
@@ -275,7 +277,129 @@ func TestFlowControlBasic(t *testing.T) {
 			if event.size != 0 {
 				atomic.AddUint64(&consumedBytes, -event.size)
 			} else {
-				flowController.Release(model.NewResolvedTs(event.resolvedTs))
+				flowController.Release(event.resolved)
+			}
+		}
+
+		return nil
+	})
+
+	require.Nil(t, errg.Wait())
+	require.Equal(t, uint64(0), atomic.LoadUint64(&consumedBytes))
+	require.Equal(t, uint64(0), flowController.GetConsumption())
+}
+
+func TestFlowControlRleaseWithBatch(t *testing.T) {
+	t.Parallel()
+
+	var consumedBytes uint64
+	ctx, cancel := context.WithTimeout(context.TODO(), time.Second*10)
+	defer cancel()
+	errg, ctx := errgroup.WithContext(ctx)
+	mockedRowsCh := make(chan *txnSizeEntry, 1024)
+	flowController := NewTableFlowController(512)
+	maxBatch := uint64(3)
+
+	// simulate a big txn
+	errg.Go(func() error {
+		lastCommitTs := uint64(1)
+		for i := 0; i < int(maxBatch)*maxRowsPerTxn*batchSize; i++ {
+			size := uint64(128 + rand.Int()%64)
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case mockedRowsCh <- &txnSizeEntry{
+				commitTs: lastCommitTs,
+				size:     size,
+			}:
+			}
+		}
+
+		close(mockedRowsCh)
+		return nil
+	})
+
+	eventCh := make(chan *mockedEvent, 1024)
+	errg.Go(func() error {
+		defer close(eventCh)
+		lastCRTs := uint64(0)
+		maxBatchID := uint64(0)
+		for {
+			var mockedRow *txnSizeEntry
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case mockedRow = <-mockedRowsCh:
+			}
+
+			if mockedRow == nil {
+				break
+			}
+
+			atomic.AddUint64(&consumedBytes, mockedRow.size)
+			err := flowController.Consume(model.NewEmptyPolymorphicEvent(mockedRow.commitTs),
+				mockedRow.size, func(batchID uint64) error {
+					select {
+					case <-ctx.Done():
+						return ctx.Err()
+					case eventCh <- &mockedEvent{
+						resolved: model.ResolvedTs{
+							Mode:    model.BatchResolvedMode,
+							Ts:      lastCRTs,
+							BatchID: batchID,
+						},
+					}:
+					}
+					log.Warn("", zap.Any("batchID", batchID))
+					maxBatchID = batchID
+					return nil
+				})
+			require.Nil(t, err)
+			lastCRTs = mockedRow.commitTs
+
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case eventCh <- &mockedEvent{
+				size: mockedRow.size,
+			}:
+			}
+		}
+		require.Less(t, uint64(0), flowController.GetConsumption())
+		require.Equal(t, maxBatch, maxBatchID)
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case eventCh <- &mockedEvent{
+			resolved: model.ResolvedTs{
+				Mode:    model.BatchResolvedMode,
+				Ts:      lastCRTs,
+				BatchID: maxBatchID + 1,
+			},
+		}:
+		}
+		time.Sleep(time.Millisecond * 500)
+		require.Equal(t, uint64(0), flowController.GetConsumption())
+		return nil
+	})
+
+	errg.Go(func() error {
+		for {
+			var event *mockedEvent
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case event = <-eventCh:
+			}
+
+			if event == nil {
+				break
+			}
+
+			if event.size != 0 {
+				atomic.AddUint64(&consumedBytes, -event.size)
+			} else {
+				flowController.Release(event.resolved)
 			}
 		}
 
@@ -367,7 +491,7 @@ func TestFlowControlCallBack(t *testing.T) {
 					case <-ctx.Done():
 						return ctx.Err()
 					case eventCh <- &mockedEvent{
-						resolvedTs: lastCRTs,
+						resolved: model.NewResolvedTs(lastCRTs),
 					}:
 					}
 					return nil
@@ -387,7 +511,7 @@ func TestFlowControlCallBack(t *testing.T) {
 		case <-ctx.Done():
 			return ctx.Err()
 		case eventCh <- &mockedEvent{
-			resolvedTs: lastCRTs,
+			resolved: model.NewResolvedTs(lastCRTs),
 		}:
 		}
 
@@ -410,7 +534,7 @@ func TestFlowControlCallBack(t *testing.T) {
 			if event.size != 0 {
 				atomic.AddUint64(&consumedBytes, -event.size)
 			} else {
-				flowController.Release(model.NewResolvedTs(event.resolvedTs))
+				flowController.Release(event.resolved)
 			}
 		}
 
@@ -553,7 +677,7 @@ func BenchmarkTableFlowController(B *testing.B) {
 				case <-ctx.Done():
 					return ctx.Err()
 				case eventCh <- &mockedEvent{
-					resolvedTs: resolvedTs,
+					resolved: model.NewResolvedTs(resolvedTs),
 				}:
 				}
 				resolvedTs = mockedRow.commitTs
@@ -575,7 +699,7 @@ func BenchmarkTableFlowController(B *testing.B) {
 		case <-ctx.Done():
 			return ctx.Err()
 		case eventCh <- &mockedEvent{
-			resolvedTs: resolvedTs,
+			resolved: model.NewResolvedTs(resolvedTs),
 		}:
 		}
 
@@ -596,7 +720,7 @@ func BenchmarkTableFlowController(B *testing.B) {
 			}
 
 			if event.size == 0 {
-				flowController.Release(model.NewResolvedTs(event.resolvedTs))
+				flowController.Release(event.resolved)
 			}
 		}
 
