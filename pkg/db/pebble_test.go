@@ -16,7 +16,7 @@ package db
 import (
 	"context"
 	"fmt"
-	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/pingcap/tiflow/cdc/sorter/encoding"
@@ -25,15 +25,13 @@ import (
 )
 
 func TestIteratorWithTableFilter(t *testing.T) {
-	db, err := OpenPebble(context.Background(), 1, "./TestIteratorWithTableFilter", 16<<20, &config.DBConfig{Count: 1})
+	dbPath := filepath.Join(t.TempDir(), t.Name())
+	db, err := OpenPebble(context.Background(), 1, dbPath, 16<<20, &config.DBConfig{Count: 1})
 	if err != nil {
 		errmsg := fmt.Sprintf("OpenPebble fail: %v", err)
 		panic(errmsg)
 	}
-	defer func() {
-		db.Close()
-		os.RemoveAll("./TestIteratorWithTableFilter")
-	}()
+	defer func() { db.Close() }()
 
 	// Put 7 table keys with CRTS=1, and then flush it to L0. The flush is required for generating table properties.
 	for t := 1; t <= 7; t++ {
