@@ -18,13 +18,21 @@ import (
 )
 
 var (
-	// EventCount is the metric that counts events output by the sorter.
-	EventCount = prometheus.NewCounterVec(prometheus.CounterOpts{
+	// InputEventCount is the metric that counts events input to sorter.
+	InputEventCount = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Namespace: "ticdc",
 		Subsystem: "sorter",
-		Name:      "event_count",
+		Name:      "input_event_count",
+		Help:      "The number of events input to sorter",
+	}, []string{"namespace", "changefeed", "type"})
+
+	// OutputEventCount is the metric that counts events output by the sorter.
+	OutputEventCount = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Namespace: "ticdc",
+		Subsystem: "sorter",
+		Name:      "output_event_count",
 		Help:      "The number of events output by the sorter",
-	}, []string{"changefeed", "type"})
+	}, []string{"namespace", "changefeed", "type"})
 
 	// ResolvedTsGauge is the metric that records sorter resolved ts.
 	ResolvedTsGauge = prometheus.NewGaugeVec(prometheus.GaugeOpts{
@@ -32,7 +40,7 @@ var (
 		Subsystem: "sorter",
 		Name:      "resolved_ts_gauge",
 		Help:      "the resolved ts of the sorter",
-	}, []string{"changefeed"})
+	}, []string{"namespace", "changefeed"})
 
 	// InMemoryDataSizeGauge is the metric that records sorter memory usage.
 	InMemoryDataSizeGauge = prometheus.NewGaugeVec(prometheus.GaugeOpts{
@@ -61,7 +69,8 @@ var (
 
 // InitMetrics registers all metrics in this file
 func InitMetrics(registry *prometheus.Registry) {
-	registry.MustRegister(EventCount)
+	registry.MustRegister(InputEventCount)
+	registry.MustRegister(OutputEventCount)
 	registry.MustRegister(ResolvedTsGauge)
 	registry.MustRegister(InMemoryDataSizeGauge)
 	registry.MustRegister(OnDiskDataSizeGauge)

@@ -14,8 +14,8 @@
 package config
 
 import (
-	filter "github.com/pingcap/tidb-tools/pkg/table-filter"
 	"github.com/pingcap/tidb/parser/model"
+	filter "github.com/pingcap/tidb/util/table-filter"
 )
 
 // FilterConfig represents filter config for a changefeed

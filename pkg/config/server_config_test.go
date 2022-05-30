@@ -15,6 +15,7 @@ package config
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -29,7 +30,7 @@ func TestServerConfigMarshal(t *testing.T) {
 	b, err := conf.Marshal()
 	require.Nil(t, err)
 
-	require.Equal(t, rawConfig, mustIdentJSON(t, b))
+	require.Equal(t, rawConfig, mustIndentJSON(t, b))
 	conf2 := new(ServerConfig)
 	err = conf2.Unmarshal([]byte(rawConfig))
 	require.Nil(t, err)
@@ -89,5 +90,16 @@ func TestDBConfigValidateAndAdjust(t *testing.T) {
 	conf.Compression = "snappy"
 	require.Nil(t, conf.ValidateAndAdjust())
 	conf.Compression = "invalid"
+	require.Error(t, conf.ValidateAndAdjust())
+}
+
+func TestKVClientConfigValidateAndAdjust(t *testing.T) {
+	t.Parallel()
+	conf := GetDefaultServerConfig().Clone().KVClient
+
+	require.Nil(t, conf.ValidateAndAdjust())
+	conf.RegionRetryDuration = TomlDuration(time.Second)
+	require.Nil(t, conf.ValidateAndAdjust())
+	conf.RegionRetryDuration = -TomlDuration(time.Second)
 	require.Error(t, conf.ValidateAndAdjust())
 }

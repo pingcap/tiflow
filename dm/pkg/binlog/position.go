@@ -28,15 +28,16 @@ import (
 )
 
 const (
-	// in order to differ binlog pos from multi (switched) masters, we added a UUID-suffix field into binlogPos.Name
-	// and we also need support: with UUIDSuffix's pos should always > without UUIDSuffix's pos, so we can update from @without to @with automatically
-	// conversion: originalPos.NamePrefix + posUUIDSuffixSeparator + UUIDSuffix + binlogFilenameSep + originalPos.NameSuffix => convertedPos.Name
-	// UUIDSuffix is the suffix of sub relay directory name, and when new sub directory created, UUIDSuffix is incremented
-	// eg. mysql-bin.000003 in c6ae5afe-c7a3-11e8-a19d-0242ac130006.000002 => mysql-bin|000002.000003
-	// where `000002` in `c6ae5afe-c7a3-11e8-a19d-0242ac130006.000002` is the UUIDSuffix.
-	posUUIDSuffixSeparator = "|"
-	// MinUUIDSuffix is same as relay.MinUUIDSuffix.
-	MinUUIDSuffix = 1
+	// in order to differ binlog position from multiple (switched) masters, we added a suffix which comes from relay log
+	// subdirectory into binlogPos.Name. And we also need support position with RelaySubDirSuffix should always > position
+	// without RelaySubDirSuffix, so we can continue from latter to former automatically.
+	// convertedPos.BinlogName =
+	//   originalPos.BinlogBaseName + posRelaySubDirSuffixSeparator + RelaySubDirSuffix + binlogFilenameSep + originalPos.BinlogSeq
+	// eg. mysql-bin.000003 under folder c6ae5afe-c7a3-11e8-a19d-0242ac130006.000002 => mysql-bin|000002.000003
+	// when new relay log subdirectory is created, RelaySubDirSuffix should increase.
+	posRelaySubDirSuffixSeparator = "|"
+	// MinRelaySubDirSuffix is same as relay.MinRelaySubDirSuffix.
+	MinRelaySubDirSuffix = 1
 	// FileHeaderLen is the length of binlog file header.
 	FileHeaderLen = 4
 )
@@ -87,8 +88,8 @@ func PositionFromPosStr(str string) (gmysql.Position, error) {
 }
 
 // RealMySQLPos parses a relay position and returns a mysql position and whether error occurs
-// if parsed successfully and `UUIDSuffix` exists, sets position Name to
-// `originalPos.NamePrefix + binlogFilenameSep + originalPos.NameSuffix`.
+// if parsed successfully and `RelaySubDirSuffix` in binlog filename exists, sets position Name to
+// `originalPos.BinlogBaseName + binlogFilenameSep + originalPos.BinlogSeq`.
 // if parsed failed returns the given position and the traced error.
 func RealMySQLPos(pos gmysql.Position) (gmysql.Position, error) {
 	parsed, err := ParseFilename(pos.Name)
@@ -96,9 +97,9 @@ func RealMySQLPos(pos gmysql.Position) (gmysql.Position, error) {
 		return pos, err
 	}
 
-	sepIdx := strings.LastIndex(parsed.BaseName, posUUIDSuffixSeparator)
-	if sepIdx > 0 && sepIdx+len(posUUIDSuffixSeparator) < len(parsed.BaseName) {
-		if !verifyUUIDSuffix(parsed.BaseName[sepIdx+len(posUUIDSuffixSeparator):]) {
+	sepIdx := strings.LastIndex(parsed.BaseName, posRelaySubDirSuffixSeparator)
+	if sepIdx > 0 && sepIdx+len(posRelaySubDirSuffixSeparator) < len(parsed.BaseName) {
+		if !verifyRelaySubDirSuffix(parsed.BaseName[sepIdx+len(posRelaySubDirSuffixSeparator):]) {
 			// NOTE: still can't handle the case where `log-bin` has the format of `mysql-bin|666888`.
 			return pos, nil // pos is just the real pos
 		}
@@ -111,27 +112,27 @@ func RealMySQLPos(pos gmysql.Position) (gmysql.Position, error) {
 	return pos, nil
 }
 
-// ExtractSuffix extracts uuidSuffix from input name.
+// ExtractSuffix extracts RelaySubDirSuffix from input name.
 func ExtractSuffix(name string) (int, error) {
 	if len(name) == 0 {
-		return MinUUIDSuffix, nil
+		return MinRelaySubDirSuffix, nil
 	}
 	filename, err := ParseFilename(name)
 	if err != nil {
 		return 0, err
 	}
-	sepIdx := strings.LastIndex(filename.BaseName, posUUIDSuffixSeparator)
-	if sepIdx > 0 && sepIdx+len(posUUIDSuffixSeparator) < len(filename.BaseName) {
-		suffix := filename.BaseName[sepIdx+len(posUUIDSuffixSeparator):]
+	sepIdx := strings.LastIndex(filename.BaseName, posRelaySubDirSuffixSeparator)
+	if sepIdx > 0 && sepIdx+len(posRelaySubDirSuffixSeparator) < len(filename.BaseName) {
+		suffix := filename.BaseName[sepIdx+len(posRelaySubDirSuffixSeparator):]
 		v, err := strconv.ParseInt(suffix, 10, 64)
 		return int(v), err
 	}
-	return MinUUIDSuffix, nil
+	return MinRelaySubDirSuffix, nil
 }
 
-// ExtractPos extracts (uuidWithSuffix, uuidSuffix, originalPos) from input pos (originalPos or convertedPos).
+// ExtractPos extracts (uuidWithSuffix, RelaySubDirSuffix, originalPos) from input position (originalPos or convertedPos).
 // nolint:nakedret
-func ExtractPos(pos gmysql.Position, uuids []string) (uuidWithSuffix string, uuidSuffix string, realPos gmysql.Position, err error) {
+func ExtractPos(pos gmysql.Position, uuids []string) (uuidWithSuffix string, relaySubDirSuffix string, realPos gmysql.Position, err error) {
 	if len(uuids) == 0 {
 		err = terror.ErrBinlogExtractPosition.New("empty UUIDs not valid")
 		return
@@ -141,27 +142,27 @@ func ExtractPos(pos gmysql.Position, uuids []string) (uuidWithSuffix string, uui
 	if err != nil {
 		return
 	}
-	sepIdx := strings.LastIndex(parsed.BaseName, posUUIDSuffixSeparator)
-	if sepIdx > 0 && sepIdx+len(posUUIDSuffixSeparator) < len(parsed.BaseName) {
-		realBaseName, masterUUIDSuffix := parsed.BaseName[:sepIdx], parsed.BaseName[sepIdx+len(posUUIDSuffixSeparator):]
-		if !verifyUUIDSuffix(masterUUIDSuffix) {
-			err = terror.ErrBinlogExtractPosition.Generatef("invalid UUID suffix %s", masterUUIDSuffix)
+	sepIdx := strings.LastIndex(parsed.BaseName, posRelaySubDirSuffixSeparator)
+	if sepIdx > 0 && sepIdx+len(posRelaySubDirSuffixSeparator) < len(parsed.BaseName) {
+		realBaseName, masterRelaySubDirSuffix := parsed.BaseName[:sepIdx], parsed.BaseName[sepIdx+len(posRelaySubDirSuffixSeparator):]
+		if !verifyRelaySubDirSuffix(masterRelaySubDirSuffix) {
+			err = terror.ErrBinlogExtractPosition.Generatef("invalid UUID suffix %s", masterRelaySubDirSuffix)
 			return
 		}
 
 		// NOTE: still can't handle the case where `log-bin` has the format of `mysql-bin|666888` and UUID suffix `666888` exists.
-		uuid := utils.GetUUIDBySuffix(uuids, masterUUIDSuffix)
+		uuid := utils.GetUUIDBySuffix(uuids, masterRelaySubDirSuffix)
 
 		if len(uuid) > 0 {
 			// valid UUID found
 			uuidWithSuffix = uuid
-			uuidSuffix = masterUUIDSuffix
+			relaySubDirSuffix = masterRelaySubDirSuffix
 			realPos = gmysql.Position{
 				Name: ConstructFilename(realBaseName, parsed.Seq),
 				Pos:  pos.Pos,
 			}
 		} else {
-			err = terror.ErrBinlogExtractPosition.Generatef("UUID suffix %s with UUIDs %v not found", masterUUIDSuffix, uuids)
+			err = terror.ErrBinlogExtractPosition.Generatef("UUID suffix %s with UUIDs %v not found", masterRelaySubDirSuffix, uuids)
 		}
 		return
 	}
@@ -169,18 +170,18 @@ func ExtractPos(pos gmysql.Position, uuids []string) (uuidWithSuffix string, uui
 	// use the latest
 	var suffixInt int
 	uuid := uuids[len(uuids)-1]
-	_, suffixInt, err = utils.ParseSuffixForUUID(uuid)
+	_, suffixInt, err = utils.ParseRelaySubDir(uuid)
 	if err != nil {
 		return
 	}
 	uuidWithSuffix = uuid
-	uuidSuffix = utils.SuffixIntToStr(suffixInt)
+	relaySubDirSuffix = utils.SuffixIntToStr(suffixInt)
 	realPos = pos // pos is realPos
 	return
 }
 
-// verifyUUIDSuffix verifies suffix whether is a valid UUID suffix.
-func verifyUUIDSuffix(suffix string) bool {
+// verifyRelaySubDirSuffix verifies suffix whether is a valid relay log subdirectory suffix.
+func verifyRelaySubDirSuffix(suffix string) bool {
 	v, err := strconv.ParseInt(suffix, 10, 64)
 	if err != nil || v <= 0 {
 		return false
@@ -226,26 +227,39 @@ func ComparePosition(pos1, pos2 gmysql.Position) int {
 	return adjustedPos1.Compare(adjustedPos2)
 }
 
-// Location is used for save binlog's position and gtid
-// TODO: encapsulate all attributes in Location.
+// Location identifies the location of binlog events.
 type Location struct {
+	// a structure represents the file offset in binlog file
 	Position gmysql.Position
-
-	gtidSet gtid.Set
-
-	Suffix int // use for replace event
+	// executed GTID set at this location.
+	gtidSet gmysql.GTIDSet
+	// used to distinguish injected events by DM when it's not 0
+	Suffix int
 }
 
-// NewLocation returns a new Location.
-func NewLocation(flavor string) Location {
+// ZeroLocation returns a new Location. The flavor should not be empty.
+func ZeroLocation(flavor string) (Location, error) {
+	gset, err := gtid.ZeroGTIDSet(flavor)
+	if err != nil {
+		return Location{}, err
+	}
 	return Location{
 		Position: MinPosition,
-		gtidSet:  gtid.MinGTIDSet(flavor),
+		gtidSet:  gset,
+	}, nil
+}
+
+// MustZeroLocation returns a new Location. The flavor must not be empty.
+// in DM the flavor is adjusted before write to etcd.
+func MustZeroLocation(flavor string) Location {
+	return Location{
+		Position: MinPosition,
+		gtidSet:  gtid.MustZeroGTIDSet(flavor),
 	}
 }
 
-// InitLocation init a new Location.
-func InitLocation(pos gmysql.Position, gset gtid.Set) Location {
+// NewLocation creates a new Location from given binlog position and GTID.
+func NewLocation(pos gmysql.Position, gset gmysql.GTIDSet) Location {
 	return Location{
 		Position: pos,
 		gtidSet:  gset,
@@ -276,11 +290,11 @@ func (l Location) Clone() Location {
 
 // CloneWithFlavor clones the location, and if the GTIDSet is nil, will create a GTIDSet with specified flavor.
 func (l Location) CloneWithFlavor(flavor string) Location {
-	var newGTIDSet gtid.Set
+	var newGTIDSet gmysql.GTIDSet
 	if l.gtidSet != nil {
 		newGTIDSet = l.gtidSet.Clone()
 	} else if len(flavor) != 0 {
-		newGTIDSet = gtid.MinGTIDSet(flavor)
+		newGTIDSet = gtid.MustZeroGTIDSet(flavor)
 	}
 
 	return Location{
@@ -319,31 +333,31 @@ func CompareLocation(location1, location2 Location, cmpGTID bool) int {
 }
 
 // IsFreshPosition returns true when location1 is a fresh location without any info.
-func IsFreshPosition(location1 Location, flavor string, cmpGTID bool) bool {
-	location2 := NewLocation(flavor)
+func IsFreshPosition(location Location, flavor string, cmpGTID bool) bool {
+	zeroLocation := MustZeroLocation(flavor)
 	if cmpGTID {
-		cmp, canCmp := CompareGTID(location1.gtidSet, location2.gtidSet)
+		cmp, canCmp := CompareGTID(location.gtidSet, zeroLocation.gtidSet)
 		if canCmp {
-			if cmp != 0 {
-				return cmp <= 0
-			}
-			// not supposed to happen, for safety here.
-			if location1.gtidSet != nil && location1.gtidSet.String() != "" {
+			switch {
+			case cmp > 0:
 				return false
+			case cmp < 0:
+				// should not happen
+				return true
 			}
 			// empty GTIDSet, then compare by position
-			log.L().Warn("both gtidSets are empty, will compare by position", zap.Stringer("location1", location1), zap.Stringer("location2", location2))
+			log.L().Warn("given gtidSets is empty, will compare by position", zap.Stringer("location", location))
 		} else {
 			// if can't compare by GTIDSet, then compare by position
-			log.L().Warn("gtidSet can't be compared, will compare by position", zap.Stringer("location1", location1), zap.Stringer("location2", location2))
+			log.L().Warn("gtidSet can't be compared, will compare by position", zap.Stringer("location", location))
 		}
 	}
 
-	cmp := ComparePosition(location1.Position, location2.Position)
+	cmp := ComparePosition(location.Position, zeroLocation.Position)
 	if cmp != 0 {
 		return cmp <= 0
 	}
-	return compareIndex(location1.Suffix, location2.Suffix) <= 0
+	return compareIndex(location.Suffix, zeroLocation.Suffix) <= 0
 }
 
 // CompareGTID returns:
@@ -351,7 +365,7 @@ func IsFreshPosition(location1 Location, flavor string, cmpGTID bool) bool {
 //   0, true if gSet1 is equal to gSet2
 //   -1, true if gSet1 is less than gSet2
 // but if can't compare gSet1 and gSet2, will returns 0, false.
-func CompareGTID(gSet1, gSet2 gtid.Set) (int, bool) {
+func CompareGTID(gSet1, gSet2 gmysql.GTIDSet) (int, bool) {
 	gSetIsEmpty1 := gSet1 == nil || len(gSet1.String()) == 0
 	gSetIsEmpty2 := gSet2 == nil || len(gSet2.String()) == 0
 
@@ -398,37 +412,23 @@ func (l *Location) ResetSuffix() {
 	l.Suffix = 0
 }
 
-// SetGTID set new gtid for location
-// Use this func instead of GITSet.Set to avoid change other location.
+// SetGTID set new gtid for location.
+// TODO: don't change old Location and return a new one to copy-on-write.
 func (l *Location) SetGTID(gset gmysql.GTIDSet) error {
-	var flavor string
-
-	switch gset.(type) {
-	case *gmysql.MysqlGTIDSet:
-		flavor = gmysql.MySQLFlavor
-	case *gmysql.MariadbGTIDSet:
-		flavor = gmysql.MariaDBFlavor
-	case nil:
-		l.gtidSet = nil
-		return nil
-	default:
-		return fmt.Errorf("unknown GTIDSet type: %T", gset)
-	}
-
-	newGTID := gtid.MinGTIDSet(flavor)
-	if err := newGTID.Set(gset); err != nil {
-		return err
-	}
-
-	l.gtidSet = newGTID
+	l.gtidSet = gset
 	return nil
 }
 
 // GetGTID return gtidSet of Location.
-func (l *Location) GetGTID() gtid.Set {
+// NOTE: for most cases you should clone before call Update on the returned GTID
+// set, unless you know there's no other reference using the GTID set.
+func (l *Location) GetGTID() gmysql.GTIDSet {
 	return l.gtidSet
 }
 
+// Update will update GTIDSet of Location.
+// caller should be aware that this will change the GTID set of other copies.
+// TODO: don't change old Location and return a new one to copy-on-write.
 func (l *Location) Update(gtidStr string) error {
 	return l.gtidSet.Update(gtidStr)
 }

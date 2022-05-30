@@ -18,8 +18,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pingcap/tidb-tools/pkg/filter"
 	"github.com/pingcap/tidb/parser/ast"
+	"github.com/pingcap/tidb/util/filter"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/dm/dm/config"
@@ -282,14 +282,14 @@ func adjustColumnsCollation(tctx *tcontext.Context, createStmt *ast.CreateTableS
 		}
 		fieldType := col.Tp
 		// already have 'Collation'
-		if fieldType.Collate != "" {
+		if fieldType.GetCollate() != "" {
 			continue
 		}
-		if fieldType.Charset != "" {
+		if fieldType.GetCharset() != "" {
 			// just have charset
-			collation, ok := charsetAndDefaultCollationMap[strings.ToLower(fieldType.Charset)]
+			collation, ok := charsetAndDefaultCollationMap[strings.ToLower(fieldType.GetCharset())]
 			if !ok {
-				tctx.L().Warn("not found charset default collation for column.", zap.String("table", createStmt.Table.Name.String()), zap.String("column", col.Name.String()), zap.String("charset", strings.ToLower(fieldType.Charset)))
+				tctx.L().Warn("not found charset default collation for column.", zap.String("table", createStmt.Table.Name.String()), zap.String("column", col.Name.String()), zap.String("charset", strings.ToLower(fieldType.GetCharset())))
 				continue
 			}
 			col.Options = append(col.Options, &ast.ColumnOption{Tp: ast.ColumnOptionCollate, StrValue: collation})

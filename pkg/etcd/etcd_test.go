@@ -34,6 +34,7 @@ import (
 	"go.uber.org/zap/zapcore"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/util"
@@ -131,7 +132,9 @@ func TestGetChangeFeeds(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		for i := 0; i < len(tc.ids); i++ {
-			_, err := s.client.Client.Put(context.Background(), GetEtcdKeyChangeFeedInfo(tc.ids[i]), tc.details[i])
+			_, err := s.client.Client.Put(context.Background(),
+				GetEtcdKeyChangeFeedInfo(model.DefaultChangeFeedID(tc.ids[i])),
+				tc.details[i])
 			require.NoError(t, err)
 		}
 		_, result, err := s.client.GetChangeFeeds(context.Background())
@@ -139,7 +142,7 @@ func TestGetChangeFeeds(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, len(result), len(tc.ids))
 		for i := 0; i < len(tc.ids); i++ {
-			rawKv, ok := result[tc.ids[i]]
+			rawKv, ok := result[model.DefaultChangeFeedID(tc.ids[i])]
 			require.True(t, ok)
 			require.Equal(t, string(rawKv.Value), tc.details[i])
 		}
@@ -156,69 +159,6 @@ func TestGetChangeFeeds(t *testing.T) {
 	require.Equal(t, len(result), 0)
 }
 
-func TestGetPutTaskStatus(t *testing.T) {
-	s := &etcdTester{}
-	s.setUpTest(t)
-	defer s.tearDownTest(t)
-	ctx := context.Background()
-	info := &model.TaskStatus{
-		Tables: map[model.TableID]*model.TableReplicaInfo{
-			1: {StartTs: 100},
-		},
-	}
-
-	feedID := "feedid"
-	captureID := "captureid"
-
-	err := s.client.PutTaskStatus(ctx, feedID, captureID, info)
-	require.NoError(t, err)
-
-	_, getInfo, err := s.client.GetTaskStatus(ctx, feedID, captureID)
-	require.NoError(t, err)
-	require.Equal(t, getInfo, info)
-
-	err = s.client.ClearAllCDCInfo(context.Background())
-	require.NoError(t, err)
-	_, _, err = s.client.GetTaskStatus(ctx, feedID, captureID)
-	require.True(t, cerror.ErrTaskStatusNotExists.Equal(err))
-}
-
-func TestGetPutTaskPosition(t *testing.T) {
-	s := &etcdTester{}
-	s.setUpTest(t)
-	defer s.tearDownTest(t)
-	ctx := context.Background()
-	info := &model.TaskPosition{
-		ResolvedTs:   99,
-		CheckPointTs: 77,
-	}
-
-	feedID := "feedid"
-	captureID := "captureid"
-
-	updated, err := s.client.PutTaskPositionOnChange(ctx, feedID, captureID, info)
-	require.NoError(t, err)
-	require.True(t, updated)
-
-	updated, err = s.client.PutTaskPositionOnChange(ctx, feedID, captureID, info)
-	require.NoError(t, err)
-	require.False(t, updated)
-
-	info.CheckPointTs = 99
-	updated, err = s.client.PutTaskPositionOnChange(ctx, feedID, captureID, info)
-	require.NoError(t, err)
-	require.True(t, updated)
-
-	_, getInfo, err := s.client.GetTaskPosition(ctx, feedID, captureID)
-	require.NoError(t, err)
-	require.Equal(t, getInfo, info)
-
-	err = s.client.ClearAllCDCInfo(ctx)
-	require.NoError(t, err)
-	_, _, err = s.client.GetTaskStatus(ctx, feedID, captureID)
-	require.True(t, cerror.ErrTaskStatusNotExists.Equal(err))
-}
-
 func TestOpChangeFeedDetail(t *testing.T) {
 	s := &etcdTester{}
 	s.setUpTest(t)
@@ -228,7 +168,7 @@ func TestOpChangeFeedDetail(t *testing.T) {
 		SinkURI: "root@tcp(127.0.0.1:3306)/mysql",
 		SortDir: "/old-version/sorter",
 	}
-	cfID := "test-op-cf"
+	cfID := model.DefaultChangeFeedID("test-op-cf")
 
 	err := s.client.SaveChangeFeedInfo(ctx, detail, cfID)
 	require.NoError(t, err)
@@ -270,7 +210,9 @@ func TestGetAllChangeFeedInfo(t *testing.T) {
 	}
 
 	for _, item := range infos {
-		err := s.client.SaveChangeFeedInfo(ctx, item.info, item.id)
+		err := s.client.SaveChangeFeedInfo(ctx,
+			item.info,
+			model.DefaultChangeFeedID(item.id))
 		require.NoError(t, err)
 	}
 
@@ -278,11 +220,26 @@ func TestGetAllChangeFeedInfo(t *testing.T) {
 	require.NoError(t, err)
 
 	for _, item := range infos {
-		obtained, found := allChangFeedInfo[item.id]
+		obtained, found := allChangFeedInfo[model.DefaultChangeFeedID(item.id)]
 		require.True(t, found)
 		require.Equal(t, item.info.SinkURI, obtained.SinkURI)
 		require.Equal(t, item.info.SortDir, obtained.SortDir)
 	}
+}
+
+func putChangeFeedStatus(
+	ctx context.Context,
+	c CDCEtcdClient,
+	changefeedID model.ChangeFeedID,
+	status *model.ChangeFeedStatus,
+) error {
+	key := GetEtcdKeyJob(changefeedID)
+	value, err := status.Marshal()
+	if err != nil {
+		return errors.Trace(err)
+	}
+	_, err = c.Client.Put(ctx, key, value)
+	return cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
 }
 
 func TestGetAllChangeFeedStatus(t *testing.T) {
@@ -291,17 +248,17 @@ func TestGetAllChangeFeedStatus(t *testing.T) {
 	defer s.tearDownTest(t)
 
 	changefeeds := map[model.ChangeFeedID]*model.ChangeFeedStatus{
-		"cf1": {
+		model.DefaultChangeFeedID("cf1"): {
 			ResolvedTs:   100,
 			CheckpointTs: 90,
 		},
-		"cf2": {
+		model.DefaultChangeFeedID("cf2"): {
 			ResolvedTs:   100,
 			CheckpointTs: 70,
 		},
 	}
 	for id, cf := range changefeeds {
-		err := s.client.PutChangeFeedStatus(context.Background(), id, cf)
+		err := putChangeFeedStatus(context.Background(), s.client, id, cf)
 		require.NoError(t, err)
 	}
 	statuses, err := s.client.GetAllChangeFeedStatus(context.Background())
@@ -319,10 +276,10 @@ func TestCreateChangefeed(t *testing.T) {
 		SinkURI: "root@tcp(127.0.0.1:3306)/mysql",
 	}
 
-	err := s.client.CreateChangefeedInfo(ctx, detail, "test-id")
+	err := s.client.CreateChangefeedInfo(ctx, detail, model.DefaultChangeFeedID("test-id"))
 	require.NoError(t, err)
 
-	err = s.client.CreateChangefeedInfo(ctx, detail, "test-id")
+	err = s.client.CreateChangefeedInfo(ctx, detail, model.DefaultChangeFeedID("test-id"))
 	require.True(t, cerror.ErrChangeFeedAlreadyExists.Equal(err))
 }
 
@@ -446,4 +403,29 @@ func TestGetOwnerRevision(t *testing.T) {
 	}
 
 	wg.Wait()
+}
+
+func TestExtractKeySuffix(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		input  string
+		expect string
+		hasErr bool
+	}{
+		{"/tidb/cdc/capture/info/6a6c6dd290bc8732", "6a6c6dd290bc8732", false},
+		{"/tidb/cdc/capture/info/6a6c6dd290bc8732/", "", false},
+		{"/tidb/cdc", "cdc", false},
+		{"/tidb", "tidb", false},
+		{"", "", true},
+	}
+	for _, tc := range testCases {
+		key, err := extractKeySuffix(tc.input)
+		if tc.hasErr {
+			require.NotNil(t, err)
+		} else {
+			require.Nil(t, err)
+			require.Equal(t, tc.expect, key)
+		}
+	}
 }

@@ -18,7 +18,7 @@ import (
 
 	"github.com/pingcap/check"
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
-	"github.com/pingcap/tidb-tools/pkg/filter"
+	"github.com/pingcap/tidb/util/filter"
 	"github.com/stretchr/testify/require"
 
 	"github.com/pingcap/tiflow/dm/openapi"
@@ -115,6 +115,8 @@ func testNoShardTaskToSubTaskConfigs(c *check.C) {
 		DoTables: []*filter.Table{{Schema: sourceSchema, Name: sourceTable}},
 	}
 	c.Assert(subTaskConfig.BAList, check.DeepEquals, bAListFromOpenAPITask)
+	// check ignore check items
+	c.Assert(subTaskConfig.IgnoreCheckingItems, check.IsNil)
 }
 
 func testShardAndFilterTaskToSubTaskConfigs(c *check.C) {
@@ -202,6 +204,8 @@ func testShardAndFilterTaskToSubTaskConfigs(c *check.C) {
 		DoTables: []*filter.Table{{Schema: source1Schema, Name: source1Table}},
 	}
 	c.Assert(subTask1Config.BAList, check.DeepEquals, bAListFromOpenAPITask)
+	// check ignore check items
+	c.Assert(subTask1Config.IgnoreCheckingItems, check.IsNil)
 
 	// check sub task 2
 	subTask2Config := subTaskConfigList[1]
@@ -249,6 +253,8 @@ func testShardAndFilterTaskToSubTaskConfigs(c *check.C) {
 		DoTables: []*filter.Table{{Schema: source2Schema, Name: source2Table}},
 	}
 	c.Assert(subTask2Config.BAList, check.DeepEquals, bAListFromOpenAPITask)
+	// check ignore check items
+	c.Assert(subTask2Config.IgnoreCheckingItems, check.IsNil)
 }
 
 func (t *testConfig) TestSubTaskConfigsToOpenAPITask(c *check.C) {
@@ -338,6 +344,38 @@ func testShardAndFilterSubTaskConfigsToOpenAPITask(c *check.C) {
 	}
 
 	c.Assert(&task, check.DeepEquals, newTask)
+}
+
+func TestConvertWithIgnoreCheckItems(t *testing.T) {
+	task, err := fixtures.GenNoShardOpenAPITaskForTest()
+	require.NoError(t, err)
+	ignoreCheckingItems := []string{DumpPrivilegeChecking, VersionChecking}
+	task.IgnoreCheckingItems = &ignoreCheckingItems
+	sourceCfg1, err := ParseYamlAndVerify(SampleSourceConfig)
+	require.NoError(t, err)
+	source1Name := task.SourceConfig.SourceConf[0].SourceName
+	sourceCfg1.SourceID = task.SourceConfig.SourceConf[0].SourceName
+	sourceCfgMap := map[string]*SourceConfig{source1Name: sourceCfg1}
+	toDBCfg := &DBConfig{
+		Host:     task.TargetConfig.Host,
+		Port:     task.TargetConfig.Port,
+		User:     task.TargetConfig.User,
+		Password: task.TargetConfig.Password,
+	}
+	subTaskConfigList, err := OpenAPITaskToSubTaskConfigs(&task, toDBCfg, sourceCfgMap)
+	require.NoError(t, err)
+	require.Equal(t, 1, len(subTaskConfigList))
+
+	// prepare sub task config
+	subTaskConfigMap := make(map[string]map[string]*SubTaskConfig)
+	subTaskConfigMap[task.Name] = make(map[string]*SubTaskConfig)
+	subTaskConfigMap[task.Name][source1Name] = subTaskConfigList[0]
+
+	taskList := SubTaskConfigsToOpenAPITaskList(subTaskConfigMap)
+	require.Equal(t, 1, len(taskList))
+	newTask := taskList[0]
+	require.Equal(t, *newTask.IgnoreCheckingItems, ignoreCheckingItems)
+	require.Equal(t, *newTask, task)
 }
 
 func TestConvertBetweenOpenAPITaskAndTaskConfig(t *testing.T) {

@@ -36,11 +36,9 @@ func newMysqlErr(number uint16, message string) *mysql.MySQLError {
 
 func (s *testSyncerSuite) TestHandleSpecialDDLError(c *C) {
 	var (
-		syncer = NewSyncer(s.cfg, nil, nil)
-		tctx   = tcontext.Background()
-		conn2  = &dbconn.DBConn{Cfg: s.cfg, ResetBaseConnFn: func(*tcontext.Context, *conn.BaseConn) (*conn.BaseConn, error) {
-			return nil, nil
-		}}
+		syncer              = NewSyncer(s.cfg, nil, nil)
+		tctx                = tcontext.Background()
+		conn2               = dbconn.NewDBConn(s.cfg, nil)
 		customErr           = errors.New("custom error")
 		invalidDDL          = "SQL CAN NOT BE PARSED"
 		insertDML           = "INSERT INTO tbl VALUES (1)"
@@ -140,7 +138,9 @@ func (s *testSyncerSuite) TestHandleSpecialDDLError(c *C) {
 			},
 		}
 	)
-
+	conn2.ResetBaseConnFn = func(*tcontext.Context, *conn.BaseConn) (*conn.BaseConn, error) {
+		return nil, nil
+	}
 	for _, cs := range cases {
 		err2 := syncer.handleSpecialDDLError(tctx, cs.err, cs.ddls, cs.index, conn2)
 		if cs.handled {
@@ -159,7 +159,11 @@ func (s *testSyncerSuite) TestHandleSpecialDDLError(c *C) {
 	c.Assert(err, IsNil)
 	conn1, err := db.Conn(context.Background())
 	c.Assert(err, IsNil)
-	conn2.BaseConn = conn.NewBaseConn(conn1, nil)
+	conn2.ResetBaseConnFn = func(_ *tcontext.Context, _ *conn.BaseConn) (*conn.BaseConn, error) {
+		return conn.NewBaseConn(conn1, nil), nil
+	}
+	err = conn2.ResetConn(tctx)
+	c.Assert(err, IsNil)
 
 	// dropColumnF test successful
 	mock.ExpectQuery("SELECT INDEX_NAME FROM information_schema.statistics WHERE.*").WillReturnRows(

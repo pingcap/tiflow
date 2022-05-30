@@ -22,8 +22,8 @@ import (
 	"github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/pingcap/errors"
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
-	"github.com/pingcap/tidb-tools/pkg/filter"
-	router "github.com/pingcap/tidb-tools/pkg/table-router"
+	"github.com/pingcap/tidb/util/filter"
+	router "github.com/pingcap/tidb/util/table-router"
 
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -334,8 +334,6 @@ func (oc *syncerConfig) convertToNewFormat() (*config.SubTaskConfig, error) {
 		SyncerConfig: config.SyncerConfig{
 			WorkerCount: oc.WorkerCount,
 			Batch:       oc.Batch,
-			MaxRetry:    oc.MaxRetry,
-			AutoFixGTID: oc.AutoFixGTID,
 			EnableGTID:  oc.EnableGTID,
 			SafeMode:    oc.SafeMode,
 		},

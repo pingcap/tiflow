@@ -20,7 +20,6 @@ import (
 	gmysql "github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/go-mysql-org/go-mysql/replication"
 
-	"github.com/pingcap/tiflow/dm/pkg/gtid"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
@@ -29,7 +28,7 @@ type DDLDMLResult struct {
 	Events     []*replication.BinlogEvent
 	Data       []byte // data contain all events
 	LatestPos  uint32
-	LatestGTID gtid.Set
+	LatestGTID gmysql.GTIDSet
 }
 
 // GenCommonFileHeader generates a common binlog file header.
@@ -42,7 +41,7 @@ type DDLDMLResult struct {
 //   2. FormatDescriptionEvent
 //   3. MariadbGTIDListEvent, depends on genGTID
 //   -. MariadbBinlogCheckPointEvent, not added yet
-func GenCommonFileHeader(flavor string, serverID uint32, gSet gtid.Set, genGTID bool, ts int64) ([]*replication.BinlogEvent, []byte, error) {
+func GenCommonFileHeader(flavor string, serverID uint32, gSet gmysql.GTIDSet, genGTID bool, ts int64) ([]*replication.BinlogEvent, []byte, error) {
 	if ts == 0 {
 		ts = time.Now().Unix()
 	}
@@ -101,7 +100,7 @@ func GenCommonFileHeader(flavor string, serverID uint32, gSet gtid.Set, genGTID 
 }
 
 // GenCommonGTIDEvent generates a common GTID event.
-func GenCommonGTIDEvent(flavor string, serverID uint32, latestPos uint32, gSet gtid.Set, anonymous bool, ts int64) (*replication.BinlogEvent, error) {
+func GenCommonGTIDEvent(flavor string, serverID uint32, latestPos uint32, gSet gmysql.GTIDSet, anonymous bool, ts int64) (*replication.BinlogEvent, error) {
 	singleGTID, err := verifySingleGTID(flavor, gSet)
 	if err != nil {
 		return nil, terror.Annotate(err, "verify single GTID in set")
@@ -147,7 +146,7 @@ func GenCommonGTIDEvent(flavor string, serverID uint32, latestPos uint32, gSet g
 }
 
 // GTIDIncrease returns a new GTID with GNO/SequenceNumber +1.
-func GTIDIncrease(flavor string, gSet gtid.Set) (gtid.Set, error) {
+func GTIDIncrease(flavor string, gSet gmysql.GTIDSet) (gmysql.GTIDSet, error) {
 	singleGTID, err := verifySingleGTID(flavor, gSet)
 	if err != nil {
 		return nil, terror.Annotate(err, "verify single GTID in set")
@@ -161,13 +160,13 @@ func GTIDIncrease(flavor string, gSet gtid.Set) (gtid.Set, error) {
 		uuidSet.Intervals[0].Stop++
 		gtidSet := new(gmysql.MysqlGTIDSet)
 		gtidSet.Sets = map[string]*gmysql.UUIDSet{uuidSet.SID.String(): uuidSet}
-		err = clone.Set(gtidSet)
+		clone = gtidSet
 	case gmysql.MariaDBFlavor:
 		mariaGTID := singleGTID.(*gmysql.MariadbGTID)
 		mariaGTID.SequenceNumber++
 		gtidSet := new(gmysql.MariadbGTIDSet)
 		gtidSet.Sets = map[uint32]*gmysql.MariadbGTID{mariaGTID.DomainID: mariaGTID}
-		err = clone.Set(gtidSet)
+		clone = gtidSet
 	default:
 		err = terror.ErrBinlogGTIDSetNotValid.Generate(gSet, flavor)
 	}
@@ -175,18 +174,14 @@ func GTIDIncrease(flavor string, gSet gtid.Set) (gtid.Set, error) {
 }
 
 // verifySingleGTID verifies gSet whether only containing a single valid GTID.
-func verifySingleGTID(flavor string, gSet gtid.Set) (interface{}, error) {
+func verifySingleGTID(flavor string, gSet gmysql.GTIDSet) (interface{}, error) {
 	if gSet == nil || len(gSet.String()) == 0 {
 		return nil, terror.ErrBinlogEmptyGTID.Generate()
-	}
-	origin := gSet.Origin()
-	if origin == nil {
-		return nil, terror.ErrBinlogGTIDMySQLNotValid.Generate(gSet)
 	}
 
 	switch flavor {
 	case gmysql.MySQLFlavor:
-		mysqlGTIDs, ok := origin.(*gmysql.MysqlGTIDSet)
+		mysqlGTIDs, ok := gSet.(*gmysql.MysqlGTIDSet)
 		if !ok {
 			return nil, terror.ErrBinlogGTIDMySQLNotValid.Generate(gSet)
 		}
@@ -206,7 +201,7 @@ func verifySingleGTID(flavor string, gSet gtid.Set) (interface{}, error) {
 		}
 		return uuidSet, nil
 	case gmysql.MariaDBFlavor:
-		mariaGTIDs, ok := origin.(*gmysql.MariadbGTIDSet)
+		mariaGTIDs, ok := gSet.(*gmysql.MariadbGTIDSet)
 		if !ok {
 			return nil, terror.ErrBinlogGTIDMariaDBNotValid.Generate(gSet)
 		}

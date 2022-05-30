@@ -66,6 +66,18 @@ func (s *SchemaTestHelper) DDL2Job(ddl string) *timodel.Job {
 	return jobs[0]
 }
 
+// DDL2Jobs executes the DDL statement and return the corresponding DDL jobs.
+// It is mainly used for "DROP TABLE" and "DROP VIEW" statement because
+// multiple jobs will be generated after executing these two types of
+// DDL statements.
+func (s *SchemaTestHelper) DDL2Jobs(ddl string, jobCnt int) []*timodel.Job {
+	s.tk.MustExec(ddl)
+	jobs, err := s.GetCurrentMeta().GetLastNHistoryDDLJobs(jobCnt)
+	require.Nil(s.t, err)
+	require.Len(s.t, jobs, jobCnt)
+	return jobs
+}
+
 // Storage return the tikv storage
 func (s *SchemaTestHelper) Storage() kv.Storage {
 	return s.storage

@@ -19,7 +19,6 @@
 // Rectifier outputCh -> processor outputCh: missing
 //                    `-> mounter rawRowChangedChs
 //                             mounter unmarshal duration: ticdc_mounter_unmarshal_and_mount | duration
-//                             mounter rawRowCHangedChs size: ticdc_mounter_input_chan_size | gauge
 // processor outputCh -> sink.EmitRowChangedEvents:
 //     processor outputCh size: ticdc_processor_txn_output_chan_size | gague
 
@@ -134,18 +133,13 @@ digraph Dataflow {
         }
 
         sorter_run -> processor_sorter_consume [label = "S.Ouput"]
-        processor_sorter_consume -> mounter_run [label = "M.Input"]
-        mounter_run -> table_sink_run [
-            label = "wait unmarshal",
-            style = "dashed",
-            dir = back,
-        ]
+        processor_sorter_consume -> mounter_unmarshal [label = "unmarshal"]
 
         subgraph cluster_mounter {
             label = "Mounter";
             style = filled;
 
-            mounter_run [label = "Run"]
+            mounter_unmarshal [label = "Unmarshal"]
         }
 
         subgraph cluster_sink {

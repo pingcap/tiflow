@@ -1,0 +1,22 @@
+#!/bin/bash
+# parameter 1: name
+# parameter 2: retry count
+
+name=$1
+retry=$2
+
+i=0
+while [ $i -lt $retry ]; do
+	ret=$(ps aux | grep $name | sed '/.*grep.*/d' | sed '/.*check_process_exit.*/d' | wc -l)
+	if [ $ret -lt 1 ]; then
+		break
+	fi
+	((i++))
+	echo "wait for process $name exits the $i-th time"
+	sleep 1
+done
+
+if [ $i -ge $retry ]; then
+	echo "process $name exits timeout"
+	exit 1
+fi

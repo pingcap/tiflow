@@ -17,10 +17,15 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pingcap/tidb-tools/pkg/dbutil"
 	"github.com/pingcap/tidb/types"
+	"github.com/pingcap/tidb/util/dbutil"
 
 	"github.com/pingcap/tiflow/dm/pkg/terror"
+)
+
+const (
+	StartTimeFormat  = "2006-01-02 15:04:05"
+	StartTimeFormat2 = "2006-01-02T15:04:05"
 )
 
 // ParseTimeZone parse the time zone location by name or offset
@@ -62,4 +67,18 @@ func ParseTimeZone(s string) (*time.Location, error) {
 	}
 
 	return nil, terror.ErrConfigInvalidTimezone.Generate(s)
+}
+
+// ParseStartTime parses start-time of task-start and validation-start in local location.
+func ParseStartTime(timeStr string) (time.Time, error) {
+	return ParseStartTimeInLoc(timeStr, time.Local)
+}
+
+// ParseStartTimeInLoc parses start-time of task-start and validation-start.
+func ParseStartTimeInLoc(timeStr string, loc *time.Location) (time.Time, error) {
+	t, err := time.ParseInLocation(StartTimeFormat, timeStr, loc)
+	if err != nil {
+		return time.ParseInLocation(StartTimeFormat2, timeStr, loc)
+	}
+	return t, nil
 }

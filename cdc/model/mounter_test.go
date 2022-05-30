@@ -14,8 +14,6 @@
 package model
 
 import (
-	"context"
-	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -45,30 +43,4 @@ func TestPolymorphicEvent(t *testing.T) {
 	require.Equal(t, rawResolved, polyEvent.RawKV)
 	require.Equal(t, resolved.CRTs, polyEvent.CRTs)
 	require.Equal(t, uint64(0), polyEvent.StartTs)
-}
-
-func TestPolymorphicEventPrepare(t *testing.T) {
-	t.Parallel()
-	ctx := context.Background()
-	polyEvent := NewPolymorphicEvent(&RawKVEntry{OpType: OpTypeResolved})
-	require.Nil(t, polyEvent.WaitPrepare(ctx))
-
-	polyEvent = NewPolymorphicEvent(&RawKVEntry{OpType: OpTypePut})
-	polyEvent.SetUpFinishedChan()
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		err := polyEvent.WaitPrepare(ctx)
-		require.Nil(t, err)
-	}()
-	polyEvent.PrepareFinished()
-	wg.Wait()
-
-	cctx, cancel := context.WithCancel(ctx)
-	polyEvent = NewPolymorphicEvent(&RawKVEntry{OpType: OpTypePut})
-	polyEvent.SetUpFinishedChan()
-	cancel()
-	err := polyEvent.WaitPrepare(cctx)
-	require.Equal(t, context.Canceled, err)
 }

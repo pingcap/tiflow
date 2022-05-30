@@ -61,10 +61,10 @@ func (t *testForEtcd) TestPutOperationDeleteInfo(c *C) {
 	c.Assert(opm, HasKey, task)
 	c.Assert(opm[task][source], DeepEquals, op)
 
-	// try put operation & delete info again, failed.
+	// try to put operation & delete info again, succeed(to support reentrant).
 	done, _, err = PutOperationDeleteExistInfo(etcdTestCli, op, info)
 	c.Assert(err, IsNil)
-	c.Assert(done, IsFalse)
+	c.Assert(done, IsTrue)
 
 	// PUT info and operation.
 	_, err = PutInfo(etcdTestCli, info)
@@ -99,4 +99,19 @@ func (t *testForEtcd) TestPutOperationDeleteInfo(c *C) {
 	opm, _, err = GetAllOperations(etcdTestCli)
 	c.Assert(err, IsNil)
 	c.Assert(opm, HasLen, 0)
+
+	// put a done operation into etcd and try to delete operation again.
+	op.Done = true
+	_, _, err = PutOperations(etcdTestCli, true, op)
+	op.Done = false
+	c.Assert(err, IsNil)
+
+	// try to put operation & delete info again, fail(operation not equal).
+	done, _, err = PutOperationDeleteExistInfo(etcdTestCli, op, info)
+	c.Assert(err, IsNil)
+	c.Assert(done, IsFalse)
+
+	// DELETE info and operation.
+	_, err = DeleteInfosOperations(etcdTestCli, []Info{info}, []Operation{op})
+	c.Assert(err, IsNil)
 }

@@ -17,19 +17,21 @@ import (
 	"context"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tiflow/pkg/pipeline"
+	pmessage "github.com/pingcap/tiflow/pkg/pipeline/message"
 )
 
 // ActorNode is an async message process node, it fetches and handle table message non-blocking
 // if processing is blocked, the message will be cached and wait next run
 type ActorNode struct {
-	messageStash     *pipeline.Message
+	messageStash     *pmessage.Message
 	parentNode       AsyncMessageHolder
 	messageProcessor AsyncMessageProcessor
 }
 
 // NewActorNode create a new ActorNode
-func NewActorNode(parentNode AsyncMessageHolder, messageProcessor AsyncMessageProcessor) *ActorNode {
+func NewActorNode(
+	parentNode AsyncMessageHolder, messageProcessor AsyncMessageProcessor,
+) *ActorNode {
 	return &ActorNode{
 		parentNode:       parentNode,
 		messageProcessor: messageProcessor,
@@ -72,22 +74,24 @@ func (n *ActorNode) TryRun(ctx context.Context) error {
 
 // AsyncMessageProcessor is an interface to handle message non-blocking
 type AsyncMessageProcessor interface {
-	TryHandleDataMessage(ctx context.Context, msg pipeline.Message) (bool, error)
+	TryHandleDataMessage(ctx context.Context, msg pmessage.Message) (bool, error)
 }
 
 // AsyncMessageHolder is an interface to get message non-blocking
 type AsyncMessageHolder interface {
-	TryGetDataMessage() *pipeline.Message
+	TryGetDataMessage() *pmessage.Message
 }
 
-type asyncMessageProcessorFunc func(ctx context.Context, msg pipeline.Message) (bool, error)
+type asyncMessageProcessorFunc func(ctx context.Context, msg pmessage.Message) (bool, error)
 
-func (fn asyncMessageProcessorFunc) TryHandleDataMessage(ctx context.Context, msg pipeline.Message) (bool, error) {
+func (fn asyncMessageProcessorFunc) TryHandleDataMessage(
+	ctx context.Context, msg pmessage.Message,
+) (bool, error) {
 	return fn(ctx, msg)
 }
 
-type asyncMessageHolderFunc func() *pipeline.Message
+type asyncMessageHolderFunc func() *pmessage.Message
 
-func (fn asyncMessageHolderFunc) TryGetDataMessage() *pipeline.Message {
+func (fn asyncMessageHolderFunc) TryGetDataMessage() *pmessage.Message {
 	return fn()
 }

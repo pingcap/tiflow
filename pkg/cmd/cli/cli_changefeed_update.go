@@ -79,7 +79,9 @@ func (o *updateChangefeedOptions) complete(f factory.Factory) error {
 func (o *updateChangefeedOptions) run(cmd *cobra.Command) error {
 	ctx := cmdcontext.GetDefaultContext()
 
-	resp, err := sendOwnerChangefeedQuery(ctx, o.etcdClient, o.changefeedID, o.credential)
+	resp, err := sendOwnerChangefeedQuery(ctx, o.etcdClient,
+		model.DefaultChangeFeedID(o.changefeedID),
+		o.credential)
 	// if no cdc owner exists, allow user to update changefeed config
 	if err != nil && errors.Cause(err) != cerror.ErrOwnerNotFound {
 		return err
@@ -90,7 +92,8 @@ func (o *updateChangefeedOptions) run(cmd *cobra.Command) error {
 		return errors.Errorf("can only update changefeed config when it is stopped\nstatus: %s", resp)
 	}
 
-	old, err := o.etcdClient.GetChangeFeedInfo(ctx, o.changefeedID)
+	old, err := o.etcdClient.GetChangeFeedInfo(ctx,
+		model.DefaultChangeFeedID(o.changefeedID))
 	if err != nil {
 		return err
 	}
@@ -126,7 +129,8 @@ func (o *updateChangefeedOptions) run(cmd *cobra.Command) error {
 		}
 	}
 
-	err = o.etcdClient.SaveChangeFeedInfo(ctx, newInfo, o.changefeedID)
+	err = o.etcdClient.SaveChangeFeedInfo(ctx, newInfo,
+		model.DefaultChangeFeedID(o.changefeedID))
 	if err != nil {
 		return err
 	}
@@ -158,6 +162,8 @@ func (o *updateChangefeedOptions) applyChanges(oldInfo *model.ChangeFeedInfo, cm
 			if err = o.commonChangefeedOptions.strictDecodeConfig("TiCDC changefeed", cfg); err != nil {
 				log.Error("decode config file error", zap.Error(err))
 			}
+		case "schema-registry":
+			newInfo.Config.Sink.SchemaRegistry = o.commonChangefeedOptions.schemaRegistry
 		case "opts":
 			for _, opt := range o.commonChangefeedOptions.opts {
 				s := strings.SplitN(opt, "=", 2)

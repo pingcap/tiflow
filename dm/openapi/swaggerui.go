@@ -111,16 +111,3 @@ func GetSwaggerHTML(config *SwaggerConfig) (html string, err error) {
 	}
 	return buf.String(), nil
 }
-
-// GetSwaggerJSON returns the swagger json.
-func GetSwaggerJSON() ([]byte, error) {
-	swagger, err := GetSwagger()
-	if err != nil {
-		return nil, err
-	}
-	swaggerJSON, err := swagger.MarshalJSON()
-	if err != nil {
-		return nil, err
-	}
-	return swaggerJSON, nil
-}

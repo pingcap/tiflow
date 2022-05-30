@@ -14,6 +14,6 @@
 package actor
 
 // InsertMailbox4Test add a mailbox into router. Test only.
-func (r *Router) InsertMailbox4Test(id ID, mb Mailbox) {
-	r.procs.Store(id, &proc{mb: mb})
+func (r *Router[T]) InsertMailbox4Test(id ID, mb Mailbox[T]) {
+	r.procs.Store(id, &proc[T]{mb: mb})
 }

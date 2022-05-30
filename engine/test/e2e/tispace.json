@@ -1,0 +1,9 @@
+{
+    "demo_address": ["demo0:1234", "demo1:1234"],
+    "demo_host": ["demo0:1234", "demo1:1234"],
+    "master_address_list": ["cosm0:10240", "cosm1:10240", "cosm2:10240"],
+    "demo_record_num": 2000000,
+    "job_num": 300,
+    "file_num": 50,
+    "demo_data_dir": "/data"
+}

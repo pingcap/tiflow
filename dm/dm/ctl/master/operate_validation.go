@@ -17,6 +17,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"strconv"
 
 	"github.com/spf13/cobra"
 
@@ -28,7 +29,7 @@ func NewIgnoreValidationErrorCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "ignore-error <task-name> <error-id|--all>",
 		Short: "ignore validation error",
-		RunE:  operateValidationError(pb.ValidationErrOp_IgnoreValidationErrOp),
+		RunE:  operateValidationError(pb.ValidationErrOp_IgnoreErrOp),
 	}
 	cmd.Flags().Bool("all", false, "all task")
 	return cmd
@@ -38,7 +39,7 @@ func NewResolveValidationErrorCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "make-resolve <task-name> <error-id|--all>",
 		Short: "resolve validation error",
-		RunE:  operateValidationError(pb.ValidationErrOp_ResolveValidationErrOp),
+		RunE:  operateValidationError(pb.ValidationErrOp_ResolveErrOp),
 	}
 	cmd.Flags().Bool("all", false, "all task")
 	return cmd
@@ -48,7 +49,7 @@ func NewClearValidationErrorCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "clear <task-name> <error-id|--all>",
 		Short: "clear validation error",
-		RunE:  operateValidationError(pb.ValidationErrOp_ClearValidationErrOp),
+		RunE:  operateValidationError(pb.ValidationErrOp_ClearErrOp),
 	}
 	cmd.Flags().Bool("all", false, "all task")
 	return cmd
@@ -62,6 +63,7 @@ func operateValidationError(typ pb.ValidationErrOp) func(*cobra.Command, []strin
 			isAll    bool
 			errID    string
 			err      error
+			intErrID int
 		)
 		if len(cmd.Flags().Args()) < 1 {
 			cmd.SetOut(os.Stdout)
@@ -86,6 +88,14 @@ func operateValidationError(typ pb.ValidationErrOp) func(*cobra.Command, []strin
 			common.PrintCmdUsage(cmd)
 			return errors.New("either `--all` or `error-id` should be set")
 		}
+		if errID != "" {
+			intErrID, err = strconv.Atoi(errID)
+			if err != nil {
+				cmd.SetOut(os.Stdout)
+				common.PrintCmdUsage(cmd)
+				return errors.New("`error-id` should be integer when `--all` is not set")
+			}
+		}
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 		resp = &pb.OperateValidationErrorResponse{}
@@ -95,7 +105,7 @@ func operateValidationError(typ pb.ValidationErrOp) func(*cobra.Command, []strin
 			&pb.OperateValidationErrorRequest{
 				Op:         typ,
 				TaskName:   taskName,
-				ErrId:      errID,
+				ErrId:      uint64(intErrID),
 				IsAllError: isAll,
 			},
 			&resp,

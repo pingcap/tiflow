@@ -27,6 +27,14 @@ function check_task_not_pass() {
 		"\"result\": false" 1
 }
 
+function check_task_not_pass_with_message() {
+	task_conf=$1
+	error_message=$2
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"check-task $task_conf" \
+		"$error_message" 1
+}
+
 function check_task_error_database_config() {
 	task_conf=$1
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
@@ -78,4 +86,46 @@ function check_task_only_warning() {
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"check-task $task_conf" \
 		"\"state\": \"warn\"" 1
+}
+
+function check_task_empty_dump_config() {
+	sed "/threads/d" $1 >/tmp/empty-dump.yaml
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"check-task /tmp/empty-dump.yaml" \
+		"pre-check is passed" 1
+}
+
+function check_task_empty_load_config() {
+	sed "/pool-size/d" $1 >/tmp/empty-load.yaml
+	cat /tmp/empty-load.yaml
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"check-task /tmp/empty-load.yaml" \
+		"pre-check is passed" 1
+}
+
+function check_task_empty_sync_config() {
+	sed "/worker-count/d" $1 >/tmp/empty-sync.yaml
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"check-task /tmp/empty-sync.yaml" \
+		"pre-check is passed" 1
+}
+
+function check_task_empty_config() {
+	check_task_empty_dump_config $1
+	check_task_empty_load_config $1
+	check_task_empty_sync_config $1
+}
+
+function check_task_wrong_no_source_meta() {
+	task_conf=$1
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"check-task $task_conf" \
+		"must set meta for task-mode incremental" 1
+}
+
+function check_task_no_source_meta_but_start_time() {
+	task_conf=$1
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"check-task $task_conf --start-time '2006-01-02 15:04:05'" \
+		"pre-check is passed" 1
 }
