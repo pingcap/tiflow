@@ -23,6 +23,8 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/util/mock"
+	"github.com/pingcap/tiflow/dm/syncer/metrics"
+	"github.com/pingcap/tiflow/engine/pkg/promutil"
 
 	cdcmodel "github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/dm/dm/config"
@@ -279,7 +281,9 @@ func (s *testSyncerSuite) TestCompactorSafeMode(c *C) {
 				WorkerCount: 100,
 			},
 		},
+		metricsProxies: &metrics.Proxies{},
 	}
+	syncer.metricsProxies.Init(&promutil.PromFactory{})
 
 	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/syncer/SkipFlushCompactor", `return()`), IsNil)
 	//nolint:errcheck

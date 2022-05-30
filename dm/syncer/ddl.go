@@ -69,7 +69,7 @@ func (s *Syncer) processOneDDL(qec *queryEventContext, sql string) ([]string, er
 		return nil, err
 	}
 	if shouldSkip {
-		SkipBinlogDurationHistogram.WithLabelValues("query", s.cfg.Name, s.cfg.SourceID).Observe(time.Since(qec.startTime).Seconds())
+		s.metricsProxies.SkipBinlogDurationHistogram.WithLabelValues("query", s.cfg.Name, s.cfg.SourceID).Observe(time.Since(qec.startTime).Seconds())
 		qec.tctx.L().Warn("skip event", zap.String("event", "query"), zap.String("statement", sql), zap.Stringer("query event context", qec))
 		if s.onlineDDL == nil || len(ddlInfo.originDDL) != 0 {
 			return nil, nil

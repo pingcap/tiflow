@@ -130,18 +130,18 @@ func (s *Syncer) printStatus(sourceStatus *binlog.SourceStatus) {
 				zap.Int64("bytes/Second", bytesPerSec),
 				zap.Int64("unsynced binlog size", remainingSize),
 				zap.Int64("estimate time to catch up", remainingSeconds))
-			RemainingTimeGauge.WithLabelValues(s.cfg.Name, s.cfg.SourceID, s.cfg.WorkerName).Set(float64(remainingSeconds))
+			s.metricsProxies.Metrics.RemainingTimeGauge.Set(float64(remainingSeconds))
 		}
 	}
 
 	latestMasterPos := sourceStatus.Location.Position
 	latestMasterGTIDSet := sourceStatus.Location.GetGTID()
-	BinlogPosGauge.WithLabelValues("master", s.cfg.Name, s.cfg.SourceID).Set(float64(latestMasterPos.Pos))
+	s.metricsProxies.Metrics.BinlogMasterPosGauge.Set(float64(latestMasterPos.Pos))
 	index, err := binlog.GetFilenameIndex(latestMasterPos.Name)
 	if err != nil {
 		s.tctx.L().Error("fail to parse binlog file", log.ShortError(err))
 	} else {
-		BinlogFileGauge.WithLabelValues("master", s.cfg.Name, s.cfg.SourceID).Set(float64(index))
+		s.metricsProxies.Metrics.BinlogMasterFileGauge.Set(float64(index))
 	}
 
 	s.tctx.L().Info("binlog replication status",

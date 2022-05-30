@@ -20,6 +20,8 @@ import (
 
 	"github.com/go-mysql-org/go-mysql/mysql"
 	. "github.com/pingcap/check"
+	"github.com/pingcap/tiflow/dm/syncer/metrics"
+	"github.com/pingcap/tiflow/engine/pkg/promutil"
 	"github.com/stretchr/testify/require"
 
 	cdcmodel "github.com/pingcap/tiflow/cdc/model"
@@ -79,9 +81,12 @@ func TestCausality(t *testing.T) {
 			Name:     "task",
 			SourceID: "source",
 		},
-		tctx:    tcontext.Background().WithLogger(log.L()),
-		sessCtx: utils.NewSessionCtx(map[string]string{"time_zone": "UTC"}),
+		tctx:           tcontext.Background().WithLogger(log.L()),
+		sessCtx:        utils.NewSessionCtx(map[string]string{"time_zone": "UTC"}),
+		metricsProxies: &metrics.Proxies{},
 	}
+	syncer.metricsProxies.Init(&promutil.PromFactory{})
+	syncer.metricsProxies.CacheForOneTask("task", "worker", "source")
 	causalityCh := causalityWrap(jobCh, syncer)
 	testCases := []struct {
 		preVals  []interface{}
