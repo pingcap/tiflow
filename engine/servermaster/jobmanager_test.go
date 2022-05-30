@@ -33,12 +33,7 @@ import (
 	resManager "github.com/pingcap/tiflow/engine/pkg/externalresource/manager"
 	resourcemeta "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	"github.com/pingcap/tiflow/engine/pkg/notifier"
-<<<<<<< HEAD
 	"github.com/pingcap/tiflow/pkg/uuid"
-=======
-	"github.com/pingcap/tiflow/engine/pkg/tenant"
-	"github.com/pingcap/tiflow/engine/pkg/uuid"
->>>>>>> 6d214f177 (feat(project): framework support multi-projects)
 )
 
 func TestJobManagerSubmitJob(t *testing.T) {
@@ -415,38 +410,4 @@ func TestJobManagerWatchJobStatuses(t *testing.T) {
 		EventType: resManager.JobRemovedEvent,
 		JobID:     "job-to-be-canceled",
 	}, event)
-}
-
-func TestJobManagerMultiProjectMetric(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	mockMaster := lib.NewMockMasterImpl("", "multi-metric-test")
-	mockMaster.On("InitImpl", mock.Anything).Return(nil)
-	mockMaster.MasterClient().On(
-		"ScheduleTask", mock.Anything, mock.Anything, mock.Anything).Return(
-		&pb.ScheduleTaskResponse{}, nil)
-	mgr := &JobManagerImplV2{
-		BaseMaster:      mockMaster.DefaultBaseMaster,
-		JobFsm:          NewJobFsm(),
-		uuidGen:         uuid.NewGenerator(),
-		frameMetaClient: mockMaster.GetFrameMetaClient(),
-	}
-	// set master impl to JobManagerImplV2
-	mockMaster.Impl = mgr
-	err := mockMaster.Init(ctx)
-	require.Nil(t, err)
-	req := &pb.SubmitJobRequest{
-		Tp:     pb.JobType_CVSDemo,
-		Config: []byte("{\"srcHost\":\"0.0.0.0:1234\", \"dstHost\":\"0.0.0.0:1234\", \"srcDir\":\"data\", \"dstDir\":\"data1\"}"),
-		ProjectInfo: &pb.ProjectInfo{
-			TenantId:  "tenant1",
-			ProjectId: "proj1",
-		},
-	}
-	mgr.SubmitJob(ctx, req)
-	require.Equal(t, tenant.NewProjectInfo(
-		"tenant1",
-		"proj1",
-	), mgr.BaseMaster.(*lib.DefaultBaseMaster).GetProjectInfo("tenant1"))
 }

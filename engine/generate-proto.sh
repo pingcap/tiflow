@@ -7,19 +7,10 @@
 # Run "go env GOPATH" to see the current GOPATH.
 GOPATH=$(go env GOPATH)
 echo "using GOPATH=$GOPATH"
-<<<<<<< HEAD
-<<<<<<< HEAD
 
 CUR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 TOOLS_BIN_DIR=${CUR}/../tools/bin
-=======
-PWD_NOW=`pwd`
-=======
-PWD_NOW=$(pwd)
->>>>>>> 6d214f177 (feat(project): framework support multi-projects)
-TOOLS_BIN_DIR=${PWD_NOW}/tools/bin
->>>>>>> 067f67c6e (feat(proto): add project proto)
 
 case "$(uname)" in
 MINGW*)
@@ -65,11 +56,7 @@ fi
 #    exit 1
 #fi
 
-<<<<<<< HEAD
 cd ${CUR}/proto || exit 1
-=======
-cd ${PWD_NOW}/engine/proto || exit 1
->>>>>>> 067f67c6e (feat(proto): add project proto)
 
 echo "generate protobuf code..."
 
@@ -84,8 +71,4 @@ cd ${CUR}/enginepb || exit 1
 sed -i.bak -E 's/import _ \"gogoproto\"//g' *.pb.go
 sed -i.bak -E 's/import fmt \"fmt\"//g' *.pb.go
 rm -f *.bak
-<<<<<<< HEAD
 ${CUR}/../tools/bin/goimports -w *.pb.go
-=======
-${PWD_NOW}/tools/bin/goimports -w *.pb.go
->>>>>>> 067f67c6e (feat(proto): add project proto)

@@ -479,13 +479,8 @@ failpoint-disable: check_failpoint_ctl
 
 engine: df-master df-executor df-master-client df-demo
 
-<<<<<<< HEAD
 df-proto: tools/bin/protoc tools/bin/protoc-gen-gogofaster tools/bin/goimports
 	./engine/generate-proto.sh
-=======
-df-proto: tools/bin/protoc-gen-gogofaster tools/bin/goimports
-	 ./engine/generate-proto.sh
->>>>>>> 067f67c6e (feat(proto): add project proto)
 
 df-master:
 	$(GOBUILD) -o bin/df-master ./engine/cmd/master

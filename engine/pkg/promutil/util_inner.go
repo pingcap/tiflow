@@ -35,46 +35,32 @@ func HTTPHandlerForMetricImpl(gather prometheus.Gatherer) http.Handler {
 
 // NewFactory4MasterImpl return a Factory for jobmaster
 func NewFactory4MasterImpl(reg *Registry, info tenant.ProjectInfo, jobType libModel.JobType, jobID libModel.MasterID) Factory {
-<<<<<<< HEAD
 	return NewAutoRegisterFactory(
 		NewWrappingFactory(
 			NewPromFactory(),
 			jobType,
 			prometheus.Labels{
-				constLabelTenantKey:  info.TenantID,
-				constLabelProjectKey: info.ProjectID,
+				constLabelTenantKey:  info.TenantID(),
+				constLabelProjectKey: info.ProjectID(),
 				constLabelJobKey:     jobID,
 			},
 		),
 		reg,
 		jobID,
 	)
-=======
-	return &wrappingFactory{
-		r:      reg,
-		prefix: jobType,
-		id:     jobID,
-		constLabels: prometheus.Labels{
-			constLabelTenantKey:  info.TenantID(),
-			constLabelProjectKey: info.ProjectID(),
-			constLabelJobKey:     jobID,
-		},
-	}
->>>>>>> bf90cf7a1 (feat(project): refine tenant)
 }
 
 // NewFactory4WorkerImpl return a Factory for worker
 func NewFactory4WorkerImpl(reg *Registry, info tenant.ProjectInfo, jobType libModel.JobType, jobID libModel.MasterID,
 	workerID libModel.WorkerID,
 ) Factory {
-<<<<<<< HEAD
 	return NewAutoRegisterFactory(
 		NewWrappingFactory(
 			NewPromFactory(),
 			jobType,
 			prometheus.Labels{
-				constLabelTenantKey:  info.TenantID,
-				constLabelProjectKey: info.ProjectID,
+				constLabelTenantKey:  info.TenantID(),
+				constLabelProjectKey: info.ProjectID(),
 				constLabelJobKey:     jobID,
 				constLabelWorkerKey:  workerID,
 			},
@@ -82,19 +68,6 @@ func NewFactory4WorkerImpl(reg *Registry, info tenant.ProjectInfo, jobType libMo
 		reg,
 		workerID,
 	)
-=======
-	return &wrappingFactory{
-		r:      reg,
-		prefix: jobType,
-		id:     workerID,
-		constLabels: prometheus.Labels{
-			constLabelTenantKey:  info.TenantID(),
-			constLabelProjectKey: info.ProjectID(),
-			constLabelJobKey:     jobID,
-			constLabelWorkerKey:  workerID,
-		},
-	}
->>>>>>> bf90cf7a1 (feat(project): refine tenant)
 }
 
 // NewFactory4FrameworkImpl return a Factory for dataflow framework

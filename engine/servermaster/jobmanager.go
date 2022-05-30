@@ -35,12 +35,8 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/notifier"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
-<<<<<<< HEAD
-	"github.com/pingcap/tiflow/pkg/uuid"
-=======
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
-	"github.com/pingcap/tiflow/engine/pkg/uuid"
->>>>>>> 6d214f177 (feat(project): framework support multi-projects)
+	"github.com/pingcap/tiflow/pkg/uuid"
 )
 
 // JobManager defines manager of job master

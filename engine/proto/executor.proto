@@ -1,12 +1,8 @@
 
 syntax = "proto3";
 
-<<<<<<< HEAD
 package enginepb;
-=======
-package pb;
 import "projects.proto";
->>>>>>> 067f67c6e (feat(proto): add project proto)
 
 service Executor {
     rpc PreDispatchTask(PreDispatchTaskRequest) returns (PreDispatchTaskResponse) {}

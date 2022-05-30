@@ -36,6 +36,7 @@ var (
 	}
 )
 
+// NewProjectInfo return an immutable ProjectInfo
 func NewProjectInfo(tenant string, project string) ProjectInfo {
 	return ProjectInfo{
 		tenantID:  tenant,
@@ -49,7 +50,7 @@ type ProjectInfo struct {
 	projectID ProjectID
 }
 
-// ProjectID get the project id
+// UniqueID get the unique id for project
 // Theoretically, ProjectID is global uniqueness and can used as the identifier
 // We offer this method here to hide the implementation of getting a unique ID
 func (p ProjectInfo) UniqueID() string {
