@@ -221,13 +221,24 @@ func (k *mqSink) bgFlushTs(ctx context.Context) error {
 }
 
 func (k *mqSink) flushTsToWorker(ctx context.Context, resolved model.ResolvedTs) error {
-	if err := k.flushWorker.addEvent(ctx, mqEvent{resolved: resolved}); err != nil {
+	flushed := make(chan struct{})
+	flush := &flushEvent{
+		resolvedTs: resolved,
+		flushed:    flushed,
+	}
+	if err := k.flushWorker.addEvent(ctx, mqEvent{flush: flush}); err != nil {
 		if errors.Cause(err) != context.Canceled {
 			log.Warn("failed to flush TS to worker", zap.Error(err))
 		} else {
 			log.Debug("flushing TS to worker has been canceled", zap.Error(err))
 		}
 		return err
+	}
+	// We must wait until all messages have been acked before returning.
+	select {
+	case <-ctx.Done():
+		return errors.Trace(ctx.Err())
+	case <-flushed:
 	}
 	return nil
 }
