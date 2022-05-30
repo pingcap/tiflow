@@ -460,9 +460,6 @@ tools/bin/swag: tools/check/go.mod
 tools/bin/msgp: tools/check/go.mod
 	cd tools/check && $(GO) build -mod=mod -o ../bin/msgp github.com/tinylib/msgp
 
-tools/bin/goimports: tools/check/go.mod
-	cd tools/check && $(GO) build -mod=mod -o ../bin/goimports golang.org/x/tools/cmd/goimports
-
 tools/bin/protoc:
 	./scripts/download-protoc.sh
 
