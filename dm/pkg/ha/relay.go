@@ -96,7 +96,7 @@ func GetAllRelayConfig(cli *clientv3.Client) (map[string]map[string]struct{}, in
 }
 
 // GetRelayConfig returns the source config which the given worker need to pull relay log from etcd, with revision.
-func GetRelayConfig(cli *clientv3.Client, worker string) ([]*config.SourceConfig, int64, error) {
+func GetRelayConfig(cli *clientv3.Client, worker string) (map[string]*config.SourceConfig, int64, error) {
 	var (
 		sources    []string
 		newSources []string
@@ -149,7 +149,7 @@ func GetRelayConfig(cli *clientv3.Client, worker string) ([]*config.SourceConfig
 		if err != nil {
 			return nil, 0, err
 		}
-		// 1. newSources and souces are exactly the same, find source configs and return.
+		// 1. newSources and sources are exactly the same, find source configs and return.
 		// 2. newSources and sources only have part of them is consistent, retry, but the last retry will return the consistent part.
 		// 3. newSources and sources have no consistent part, retry, when last retry still have no consistent return error.
 		newSourcesLen := len(newSources)
@@ -157,18 +157,18 @@ func GetRelayConfig(cli *clientv3.Client, worker string) ([]*config.SourceConfig
 		if newSourcesLen == 0 && sourcesLen == 0 {
 			return nil, rev2, nil
 		}
-		consistents := make([]string, 0)
+		sameSources := make([]string, 0)
 		for _, newSource := range newSources {
 			for _, source := range sources {
 				if newSource == source {
-					consistents = append(consistents, newSource)
+					sameSources = append(sameSources, newSource)
 					continue
 				}
 			}
 		}
-		consistentsLen := len(consistents)
+		sameSourcesLen := len(sameSources)
 		// not exactly the same, will retry
-		if consistentsLen != newSourcesLen || consistentsLen != sourcesLen {
+		if sameSourcesLen != newSourcesLen || sameSourcesLen != sourcesLen {
 			log.L().Warn("relay config has been changed, will take a retry",
 				zap.Strings("old relay sources", sources),
 				zap.Strings("new relay sources", newSources),
@@ -191,8 +191,8 @@ func GetRelayConfig(cli *clientv3.Client, worker string) ([]*config.SourceConfig
 
 		// after retry or already the same
 		// 1. no consistent part, return error
-		// 2. consistent part( exactly the same or just a part), find source configs and retur
-		if consistentsLen == 0 {
+		// 2. consistent part( exactly the same or just a part), find source configs and return
+		if sameSourcesLen == 0 {
 			return nil, 0, terror.ErrWorkerRelayConfigChanging.Generate(worker, sources, newSources)
 		}
 		cfgResp := txnResp.Responses[1].GetResponseRange()
@@ -200,15 +200,15 @@ func GetRelayConfig(cli *clientv3.Client, worker string) ([]*config.SourceConfig
 		if err3 != nil {
 			return nil, 0, err3
 		}
-		configs := make([]*config.SourceConfig, 0, consistentsLen)
-		for _, consistentID := range consistents {
-			cfg, ok := scm[consistentID]
+		configs := make(map[string]*config.SourceConfig, 0)
+		for _, sourceID := range sameSources {
+			cfg, ok := scm[sourceID]
 			// ok == false means we have got relay source but there is no source config, this shouldn't happen
 			if !ok {
 				// this should not happen.
-				return nil, 0, terror.ErrConfigMissingForBound.Generate(consistentID)
+				return nil, 0, terror.ErrConfigMissingForBound.Generate(sourceID)
 			}
-			configs = append(configs, cfg)
+			configs[sourceID] = cfg
 		}
 
 		return configs, rev2, nil

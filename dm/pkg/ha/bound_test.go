@@ -166,8 +166,8 @@ func (t *testForEtcd) TestGetSourceBoundConfigEtcd(c *C) {
 	c.Assert(err, IsNil)
 	c.Assert(rev4, Equals, rev3)
 	bound.Revision = rev2
-	c.Assert(bounds2, DeepEquals, []SourceBound{bound})
-	c.Assert(cfgs2, DeepEquals, []*config.SourceConfig{cfg})
+	c.Assert(bounds2, DeepEquals, map[string]SourceBound{bound.Source: bound})
+	c.Assert(cfgs2, DeepEquals, map[string]*config.SourceConfig{cfg.SourceID: cfg})
 	// get source bound and config with a source
 	bounds3, cfgs3, rev5, err := GetSourceBoundConfig(etcdTestCli, worker, source1)
 	c.Assert(err, IsNil)
@@ -191,12 +191,8 @@ func (t *testForEtcd) TestGetSourceBoundConfigEtcd(c *C) {
 	c.Assert(err, IsNil)
 	c.Assert(rev8, Equals, rev7)
 	bound2.Revision = rev6
-	expectedBounds := []SourceBound{bound, bound2}
-	expectedCfgs := []*config.SourceConfig{cfg, cfg2}
-	if bounds4[0].Source != bound.Source {
-		expectedBounds[0], expectedBounds[1] = expectedBounds[1], expectedBounds[0]
-		expectedCfgs[0], expectedCfgs[1] = expectedCfgs[1], expectedCfgs[0]
-	}
+	expectedBounds := map[string]SourceBound{bound.Source: bound, bound2.Source: bound2}
+	expectedCfgs := map[string]*config.SourceConfig{cfg.SourceID: cfg, cfg2.SourceID: cfg2}
 	c.Assert(bounds4, DeepEquals, expectedBounds)
 	c.Assert(cfgs4, DeepEquals, expectedCfgs)
 }

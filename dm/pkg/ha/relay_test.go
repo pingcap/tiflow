@@ -30,7 +30,7 @@ func (t *testForEtcd) TestGetRelayConfigEtcd(c *C) {
 	cfg, err := config.LoadFromFile(sourceSampleFilePath)
 	c.Assert(err, IsNil)
 	cfg.SourceID = source
-	cfgs := []*config.SourceConfig{cfg}
+	cfgs := map[string]*config.SourceConfig{cfg.SourceID: cfg}
 	// no relay source and config
 	cfgs1, rev1, err := GetRelayConfig(etcdTestCli, worker)
 	c.Assert(err, IsNil)
@@ -67,7 +67,7 @@ func (t *testForEtcd) TestGetRelayConfigEtcd(c *C) {
 	cfgs3, rev7, err := GetRelayConfig(etcdTestCli, worker)
 	c.Assert(err, IsNil)
 	c.Assert(rev7, Equals, rev6)
-	cfgs = append(cfgs, cfg2)
+	cfgs[cfg2.SourceID] = cfg2
 	c.Assert(cfgs3, DeepEquals, cfgs)
 
 	rev8, err := DeleteRelayConfig(etcdTestCli, source, worker)

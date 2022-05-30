@@ -200,49 +200,35 @@ func GetLastSourceBounds(cli *clientv3.Client) (map[string]SourceBound, int64, e
 // if source bound is empty, will return an empty sourceBound and an empty source config
 // if source bound is not empty but sourceConfig is empty, will return an error
 // if the source bound is different for over retryNum times, will return an error.
-func GetSourceBoundConfig(cli *clientv3.Client, worker, source string) ([]SourceBound, []*config.SourceConfig, int64, error) {
+func GetSourceBoundConfig(cli *clientv3.Client, worker, source string) (map[string]SourceBound, map[string]*config.SourceConfig, int64, error) {
 	var (
-		bounds    []SourceBound
-		newBounds []SourceBound
-		cfgs      []*config.SourceConfig
+		bounds    map[string]SourceBound
+		newBounds map[string]SourceBound
+		configs   map[string]*config.SourceConfig
 		ok        bool
 		retryNum  = defaultGetSourceBoundConfigRetry
-		sbm       map[string]SourceBound
 	)
 	wbm, rev, err := GetSourceBound(cli, worker, source)
 	if err != nil {
-		return bounds, cfgs, 0, err
+		return nil, nil, 0, err
 	}
-	if sbm, ok = wbm[worker]; !ok {
-		return bounds, cfgs, rev, nil
+	if bounds, ok = wbm[worker]; !ok {
+		return nil, nil, rev, nil
 	}
-
-	GetSourceBoundFromMap := func(bondMap map[string]SourceBound) []SourceBound {
-		if bondMap == nil {
-			return nil
-		}
-		sourceBonds := make([]SourceBound, 0, len(bondMap))
-		for _, bound := range sbm {
-			sourceBonds = append(sourceBonds, bound)
-		}
-		return sourceBonds
-	}
-
-	bounds = GetSourceBoundFromMap(sbm)
 
 	for retryCnt := 1; retryCnt <= retryNum; retryCnt++ {
 		txnResp, rev2, err2 := etcdutil.DoOpsInOneTxnWithRetry(cli, clientv3.OpGet(common.UpstreamBoundWorkerKeyAdapter.Encode(worker), clientv3.WithPrefix()),
 			clientv3.OpGet(common.UpstreamConfigKeyAdapter.Path(), clientv3.WithPrefix()))
 		if err2 != nil {
-			return bounds, cfgs, 0, err2
+			return nil, nil, 0, err2
 		}
 
 		boundResp := txnResp.Responses[0].GetResponseRange()
 		sbm2, err2 := sourceBoundFromResp((*clientv3.GetResponse)(boundResp))
 		if err2 != nil {
-			return bounds, cfgs, 0, err2
+			return nil, nil, 0, err2
 		}
-		newBounds = GetSourceBoundFromMap(sbm2[worker])
+		newBounds = sbm2[worker]
 
 		// 1. newBounds and bounds are exactly the same, find source configs and return.
 		// 2. newBounds and bounds only have part of them is consistent, retry, but the last retry will return the consistent part.
@@ -252,18 +238,15 @@ func GetSourceBoundConfig(cli *clientv3.Client, worker, source string) ([]Source
 		if newBoundsLen == 0 && boundsLen == 0 {
 			return nil, nil, rev2, nil
 		}
-		consistents := make([]SourceBound, 0)
-		for _, newBound := range newBounds {
-			for _, bound := range bounds {
-				if newBound == bound {
-					consistents = append(consistents, newBound)
-					continue
-				}
+		sameSourceBounds := make(map[string]SourceBound, 0)
+		for sourceID := range newBounds {
+			if bound, ok := bounds[sourceID]; ok {
+				sameSourceBounds[sourceID] = bound
 			}
 		}
-		consistentsLen := len(consistents)
+		sameSourceBoundsLen := len(sameSourceBounds)
 		// not exactly the same, will retry
-		if consistentsLen != newBoundsLen || consistentsLen != boundsLen {
+		if sameSourceBoundsLen != newBoundsLen || sameSourceBoundsLen != boundsLen {
 			log.L().Warn("source bound has been changed, will take a retry", zap.String("oldBounds", fmt.Sprintf("%v", bounds)),
 				zap.String("newBounds", fmt.Sprintf("%v", newBounds)), zap.Int("retryTime", retryCnt))
 			// if we are about to fail, don't update bound to save the last bound to error
@@ -283,7 +266,7 @@ func GetSourceBoundConfig(cli *clientv3.Client, worker, source string) ([]Source
 		// after retry or already the same
 		// 1. no consistent part, return error
 		// 2. consistent part( exactly the same or just a part), find source configs and retur
-		if consistentsLen == 0 {
+		if sameSourceBoundsLen == 0 {
 			return nil, nil, 0, terror.ErrMasterBoundChanging.Generate(bounds, newBounds)
 		}
 		cfgResp := txnResp.Responses[1].GetResponseRange()
@@ -291,20 +274,20 @@ func GetSourceBoundConfig(cli *clientv3.Client, worker, source string) ([]Source
 		if err2 != nil {
 			return nil, nil, 0, err2
 		}
-		cfgs = make([]*config.SourceConfig, 0, consistentsLen)
-		for _, consistent := range consistents {
-			cfg, ok := scm[consistent.Source]
+		configs = make(map[string]*config.SourceConfig, 0)
+		for sourceID := range sameSourceBounds {
+			cfg, ok := scm[sourceID]
 			// ok == false means we have got source bound but there is no source config, this shouldn't happen
 			if !ok {
 				// this should not happen.
-				return nil, nil, 0, terror.ErrConfigMissingForBound.Generate(consistent.Source)
+				return nil, nil, 0, terror.ErrConfigMissingForBound.Generate(sourceID)
 			}
-			cfgs = append(cfgs, cfg)
+			configs[sourceID] = cfg
 		}
-		return consistents, cfgs, rev2, nil
+		return sameSourceBounds, configs, rev2, nil
 	}
 
-	return bounds, cfgs, 0, terror.ErrMasterBoundChanging.Generate(bounds, newBounds)
+	return nil, nil, 0, terror.ErrMasterBoundChanging.Generate(bounds, newBounds)
 }
 
 // WatchSourceBound watches PUT & DELETE operations for the bound relationship of the specified DM-worker.

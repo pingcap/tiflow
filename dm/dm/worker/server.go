@@ -152,13 +152,13 @@ func (s *Server) Start() error {
 	if err != nil {
 		return err
 	}
-	for i, bound := range bounds {
+	for sourceID, bound := range bounds {
 		if !bound.IsEmpty() {
 			log.L().Warn("worker has been assigned source before keepalive", zap.Stringer("bound", bound), zap.Bool("is deleted", bound.IsDeleted))
-			if err2 := s.enableHandleSubtasks(sourceCfgs[i], true); err2 != nil {
+			if err2 := s.enableHandleSubtasks(sourceCfgs[sourceID], true); err2 != nil {
 				return err2
 			}
-			log.L().Info("started to handle mysql source", zap.String("sourceCfg", sourceCfgs[i].String()))
+			log.L().Info("started to handle mysql source", zap.Stringer("sourceCfg", sourceCfgs[sourceID]))
 		}
 	}
 
@@ -306,21 +306,19 @@ func (s *Server) observeRelayConfig(ctx context.Context, rev int64) error {
 
 					// compare relaySources and source_workers
 					// 1. no relaySource but has source_worker, try to disableRelay
-					// 2. has relaySource but no source_worker, try to starworker
+					// 2. has relaySource but no source_worker, try to start worker
 					// 3. has relaySource and has source_worker, check and try to enableRelay
 					ws := s.getSourceWorkers(true)
-					consistents := make([]string, 0)
 					for _, relaySource := range relaySources {
 						// has relaySource but no worker
 						if w, ok := ws[relaySource.SourceID]; !ok {
-							log.L().Info(fmt.Sprintf("didn't find source_worker but found relay config %s after etcd retryable error. Will start source_worker", relaySource.SourceID))
+							log.L().Info("didn't find source_worker but found relay config after etcd retryable error. Will start source_worker", zap.String("relaySource", relaySource.SourceID))
 							if err2 := s.enableRelay(relaySource, true); err2 != nil {
 								return err2
 							}
 						} else {
 							// has relaySource and worker
-							log.L().Info(fmt.Sprintf("found source_worker and relay config %s after etcd retryable error. Will check and enable relay", relaySource.SourceID))
-							consistents = append(consistents, relaySource.SourceID)
+							log.L().Info("found source_worker and relay config after etcd retryable error. Will check and enable relay", zap.String("relaySource", relaySource.SourceID))
 							if !w.relayEnabled.Load() {
 								if err2 := w.EnableRelay(false); err2 != nil {
 									return err2
@@ -330,16 +328,9 @@ func (s *Server) observeRelayConfig(ctx context.Context, rev int64) error {
 					}
 					// has worker but no relaySource
 					for _, w := range ws {
-						needDisableRelay := true
-						for _, consistent := range consistents {
-							if w.cfg.SourceID == consistent {
-								needDisableRelay = false
-								break
-							}
-						}
-						if needDisableRelay {
+						if _, ok := relaySources[w.cfg.SourceID]; !ok {
 							if !w.startedRelayBySourceCfg {
-								log.L().Info(fmt.Sprintf("didn't find relay config about source_worker %s after etcd retryable error. Will stop relay now", w.cfg.SourceID))
+								log.L().Info("didn't find relay config about source_worker after etcd retryable error. Will stop relay now", zap.String("source_worker", w.cfg.SourceID))
 								err = s.disableRelay(w.cfg.SourceID)
 								if err != nil {
 									log.L().Error("fail to disableRelay after etcd retryable error", zap.Error(err))
@@ -392,7 +383,7 @@ func (s *Server) observeSourceBound(ctx context.Context, rev int64) error {
 				case <-ctx.Done():
 					return nil
 				case <-time.After(500 * time.Millisecond):
-					bounds, cfgs, rev1, err1 := ha.GetSourceBoundConfig(s.etcdClient, s.cfg.Name, "")
+					bounds, configs, rev1, err1 := ha.GetSourceBoundConfig(s.etcdClient, s.cfg.Name, "")
 					if err1 != nil {
 						log.L().Error("get source bound from etcd failed, will retry later", zap.Error(err1), zap.Int("retryNum", retryNum))
 						retryNum++
@@ -405,24 +396,22 @@ func (s *Server) observeSourceBound(ctx context.Context, rev int64) error {
 
 					// compare bounds and source_workers
 					// 1. no bound but has source_worker, try to disableHandleSubtasks
-					// 2. has bound but no source_worker, try to starworker
+					// 2. has bound but no source_worker, try to start worker
 					// 3. has bound and has source_worker, check and try to EnableHandleSubtasks
 					ws := s.getSourceWorkers(true)
-					consistents := make([]string, 0)
-					for i, bound := range bounds {
+					for sourceID, bound := range bounds {
 						if bound.IsEmpty() {
 							continue
 						}
 						// has bound but no worker
 						if w, ok := ws[bound.Source]; !ok {
-							log.L().Info(fmt.Sprintf("didn't find source_worker but found bound %v after etcd retryable error. Will start source_worker", bound))
-							if err2 := s.enableHandleSubtasks(cfgs[i], true); err2 != nil {
+							log.L().Info("didn't find source_worker but found bound after etcd retryable error. Will start source_worker", zap.Stringer("Bound", bound))
+							if err2 := s.enableHandleSubtasks(configs[sourceID], true); err2 != nil {
 								return err2
 							}
 						} else {
 							// has bound and worker
-							log.L().Info(fmt.Sprintf("found source_worker and bound %v after etcd retryable error. Will check and enable relay", bound))
-							consistents = append(consistents, bound.Source)
+							log.L().Info("found source_worker and bound after etcd retryable error. Will check and enable relay", zap.Stringer("Bound", bound))
 							if !w.subTaskEnabled.Load() {
 								if err2 := w.EnableHandleSubtasks(); err2 != nil {
 									return err2
@@ -431,16 +420,9 @@ func (s *Server) observeSourceBound(ctx context.Context, rev int64) error {
 						}
 					}
 					// has worker but no bound
-					for _, w := range ws {
-						needDisable := true
-						for _, consistent := range consistents {
-							if w.cfg.SourceID == consistent {
-								needDisable = false
-								break
-							}
-						}
-						if needDisable {
-							err = s.disableHandleSubtasks(w.cfg.SourceID)
+					for sourceID := range ws {
+						if _, ok := bounds[sourceID]; !ok {
+							err = s.disableHandleSubtasks(sourceID)
 							if err != nil {
 								log.L().Error("fail to disableHandleSubtasks after etcd retryable error", zap.Error(err))
 								return err // return if failed to stop the worker.
