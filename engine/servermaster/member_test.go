@@ -18,8 +18,8 @@ import (
 	"testing"
 
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/model"
-	"github.com/pingcap/tiflow/engine/pb"
 	"github.com/pingcap/tiflow/engine/pkg/adapter"
 	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
 	"github.com/pingcap/tiflow/engine/test"

@@ -11,24 +11,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package model
+package cli
 
 import (
-	"path/filepath"
+	"testing"
 
-	libModel "github.com/pingcap/tiflow/engine/lib/model"
+	"github.com/pingcap/tiflow/pkg/leakutil"
+	"go.uber.org/goleak"
 )
 
-// LocalFileResourceDescriptor contains necessary data
-// to access a local file resource.
-type LocalFileResourceDescriptor struct {
-	BasePath     string
-	Creator      libModel.WorkerID
-	ResourceName ResourceName
-}
-
-// AbsolutePath returns the absolute path of the given resource
-// in the local file system.
-func (d *LocalFileResourceDescriptor) AbsolutePath() string {
-	return filepath.Join(d.BasePath, d.Creator, d.ResourceName)
+func TestMain(m *testing.M) {
+	opts := []goleak.Option{
+		// library used by log
+		goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
+	}
+	leakutil.SetUpLeakTest(m, opts...)
 }

@@ -41,15 +41,18 @@ func TestNewFactory4JobMaster(t *testing.T) {
 			},
 			jobType: "DM",
 			jobID:   "job0",
-			output: &wrappingFactory{
-				r:      reg,
-				prefix: "DM",
-				id:     "job0",
-				constLabels: prometheus.Labels{
-					constLabelTenantKey:  "user0",
-					constLabelProjectKey: "project0",
-					constLabelJobKey:     "job0",
+			output: &AutoRegisterFactory{
+				inner: &WrappingFactory{
+					inner:  &PromFactory{},
+					prefix: "DM",
+					constLabels: prometheus.Labels{
+						constLabelTenantKey:  "user0",
+						constLabelProjectKey: "project0",
+						constLabelJobKey:     "job0",
+					},
 				},
+				r:  reg,
+				id: "job0",
 			},
 		},
 	}
@@ -80,16 +83,19 @@ func TestNewFactory4Worker(t *testing.T) {
 			jobType:  "DM",
 			jobID:    "job0",
 			workerID: "worker0",
-			output: &wrappingFactory{
-				r:      reg,
-				prefix: "DM",
-				id:     "worker0",
-				constLabels: prometheus.Labels{
-					constLabelTenantKey:  "user0",
-					constLabelProjectKey: "project0",
-					constLabelJobKey:     "job0",
-					constLabelWorkerKey:  "worker0",
+			output: &AutoRegisterFactory{
+				inner: &WrappingFactory{
+					inner:  &PromFactory{},
+					prefix: "DM",
+					constLabels: prometheus.Labels{
+						constLabelTenantKey:  "user0",
+						constLabelProjectKey: "project0",
+						constLabelJobKey:     "job0",
+						constLabelWorkerKey:  "worker0",
+					},
 				},
+				r:  reg,
+				id: "worker0",
 			},
 		},
 	}
@@ -109,13 +115,16 @@ func TestNewFactory4Framework(t *testing.T) {
 		output Factory
 	}{
 		{
-			output: &wrappingFactory{
-				r:      reg,
-				id:     frameworkID,
-				prefix: frameworkMetricPrefix,
-				constLabels: prometheus.Labels{
-					constLabelFrameworkKey: "true",
+			output: &AutoRegisterFactory{
+				inner: &WrappingFactory{
+					inner:  &PromFactory{},
+					prefix: frameworkMetricPrefix,
+					constLabels: prometheus.Labels{
+						constLabelFrameworkKey: "true",
+					},
 				},
+				r:  reg,
+				id: frameworkID,
 			},
 		},
 	}

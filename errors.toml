@@ -421,6 +421,11 @@ error = '''
 kafka async send message failed
 '''
 
+["CDC:ErrKafkaBrokerConfigNotFound"]
+error = '''
+kafka broker config item not found
+'''
+
 ["CDC:ErrKafkaCreateTopic"]
 error = '''
 kafka create topic failed
@@ -1249,6 +1254,11 @@ invalid metastore key %s
 ["DFLOW:ErrInvalidMetaStoreKeyTp"]
 error = '''
 invalid metastore key type %s
+'''
+
+["DFLOW:ErrInvalidResourceHandle"]
+error = '''
+using an invalid resource handle
 '''
 
 ["DFLOW:ErrInvalidServerMasterID"]
