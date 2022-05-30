@@ -20,6 +20,8 @@ import (
 
 	"github.com/pingcap/errors"
 	tidbkv "github.com/pingcap/tidb/kv"
+	apiv1client "github.com/pingcap/tiflow/pkg/api/v1"
+	apiv2client "github.com/pingcap/tiflow/pkg/api/v2"
 	pd "github.com/tikv/pd/client"
 	etcdlogutil "go.etcd.io/etcd/client/pkg/v3/logutil"
 	clientv3 "go.etcd.io/etcd/client/v3"
@@ -62,6 +64,11 @@ func (f *factoryImpl) ToGRPCDialOption() (grpc.DialOption, error) {
 
 // GetPdAddr returns pd address.
 func (f *factoryImpl) GetPdAddr() string {
+	return f.clientGetter.GetPdAddr()
+}
+
+// GetServerAddr returns CDC server address.
+func (f *factoryImpl) GetServerAddr() string {
 	return f.clientGetter.GetPdAddr()
 }
 
@@ -182,4 +189,16 @@ func (f factoryImpl) KvStorage() (tidbkv.Storage, error) {
 			"fail to open KV storage client, please check pd address \"%s\"", pdAddr)
 	}
 	return kvStore, nil
+}
+
+// APIV1Client returns cdc api v1 client.
+func (f *factoryImpl) APIV1Client() (*apiv1client.APIV1Client, error) {
+	return apiv1client.NewAPIClient(f.clientGetter.GetServerAddr(),
+		f.clientGetter.GetCredential())
+}
+
+// APIV2Client returns cdc api v2 client.
+func (f *factoryImpl) APIV2Client() (*apiv2client.APIV2Client, error) {
+	return apiv2client.NewAPIClient(f.clientGetter.GetServerAddr(),
+		f.clientGetter.GetCredential())
 }

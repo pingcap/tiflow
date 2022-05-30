@@ -18,6 +18,8 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/kv"
+	apiv1client "github.com/pingcap/tiflow/pkg/api/v1"
+	apiv2client "github.com/pingcap/tiflow/pkg/api/v2"
 	"github.com/pingcap/tiflow/pkg/cmd/util"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/security"
@@ -32,6 +34,8 @@ type Factory interface {
 	EtcdClient() (*etcd.CDCEtcdClient, error)
 	PdClient() (pd.Client, error)
 	KvStorage() (kv.Storage, error)
+	APIV1Client() (*apiv1client.APIV1Client, error)
+	APIV2Client() (*apiv2client.APIV2Client, error)
 }
 
 // ClientGetter defines the client getter.
@@ -39,17 +43,19 @@ type ClientGetter interface {
 	ToTLSConfig() (*tls.Config, error)
 	ToGRPCDialOption() (grpc.DialOption, error)
 	GetPdAddr() string
+	GetServerAddr() string
 	GetLogLevel() string
 	GetCredential() *security.Credential
 }
 
 // ClientFlags specifies the parameters needed to construct the client.
 type ClientFlags struct {
-	pdAddr   string
-	logLevel string
-	caPath   string
-	certPath string
-	keyPath  string
+	pdAddr     string
+	serverAddr string
+	logLevel   string
+	caPath     string
+	certPath   string
+	keyPath    string
 }
 
 var _ ClientGetter = &ClientFlags{}
@@ -80,6 +86,11 @@ func (c *ClientFlags) GetPdAddr() string {
 	return c.pdAddr
 }
 
+// GetServerAddr returns cdc server address.
+func (c *ClientFlags) GetServerAddr() string {
+	return c.serverAddr
+}
+
 // GetLogLevel returns log level.
 func (c *ClientFlags) GetLogLevel() string {
 	return c.logLevel
@@ -93,6 +104,7 @@ func NewClientFlags() *ClientFlags {
 // AddFlags receives a *cobra.Command reference and binds
 // flags related to template printing to it.
 func (c *ClientFlags) AddFlags(cmd *cobra.Command) {
+	cmd.PersistentFlags().StringVar(&c.pdAddr, "server-addr", "http://127.0.0.1:8300", "CDC server address")
 	cmd.PersistentFlags().StringVar(&c.pdAddr, "pd", "http://127.0.0.1:2379", "PD address, use ',' to separate multiple PDs")
 	cmd.PersistentFlags().StringVar(&c.caPath, "ca", "", "CA certificate path for TLS connection")
 	cmd.PersistentFlags().StringVar(&c.certPath, "cert", "", "Certificate path for TLS connection")
