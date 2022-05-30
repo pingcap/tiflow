@@ -52,6 +52,18 @@ func filePathNameToResourceName(filePath string) (model.ResourceName, error) {
 	return model.ResourceName(result), nil
 }
 
+func localPathWithEncoding(baseDir string,
+	creator libModel.WorkerID,
+	resName model.ResourceName,
+	suffixes ...string,
+) string {
+	joinSegments := []string{
+		baseDir, creator, resourceNameToFilePathName(resName),
+	}
+	joinSegments = append(joinSegments, suffixes...)
+	return filepath.Join(joinSegments...)
+}
+
 // AssertLocalFileExists is a test helper.
 func AssertLocalFileExists(
 	t *testing.T,
@@ -60,12 +72,8 @@ func AssertLocalFileExists(
 	resName model.ResourceName,
 	suffixes ...string,
 ) {
-	joinSegments := []string{
-		baseDir, creator, resourceNameToFilePathName(resName),
-	}
-	joinSegments = append(joinSegments, suffixes...)
-	path := filepath.Join(joinSegments...)
-	require.FileExistsf(t, path, "local file does not exist: baseDir %s, creator %s, resName %s",
+	require.FileExistsf(t, localPathWithEncoding(baseDir, creator, resName, suffixes...),
+		"local file does not exist: baseDir %s, creator %s, resName %s",
 		baseDir, creator, resName)
 }
 
@@ -77,11 +85,7 @@ func AssertNoLocalFileExists(
 	resName model.ResourceName,
 	suffixes ...string,
 ) {
-	joinSegments := []string{
-		baseDir, creator, resourceNameToFilePathName(resName),
-	}
-	joinSegments = append(joinSegments, suffixes...)
-	path := filepath.Join(joinSegments...)
-	require.NoFileExists(t, path, "local file does not exist: baseDir %s, creator %s, resName %s",
+	require.NoFileExists(t, localPathWithEncoding(baseDir, creator, resName, suffixes...),
+		"local file does not exist: baseDir %s, creator %s, resName %s",
 		baseDir, creator, resName)
 }
