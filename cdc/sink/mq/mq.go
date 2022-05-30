@@ -220,10 +220,10 @@ func (k *mqSink) bgFlushTs(ctx context.Context) error {
 	}
 }
 
-func (k *mqSink) flushTsToWorker(ctx context.Context, resolved model.ResolvedTs) error {
+func (k *mqSink) flushTsToWorker(ctx context.Context, resolvedTs model.ResolvedTs) error {
 	flushed := make(chan struct{})
 	flush := &flushEvent{
-		resolvedTs: resolved,
+		resolvedTs: resolvedTs,
 		flushed:    flushed,
 	}
 	if err := k.flushWorker.addEvent(ctx, mqEvent{flush: flush}); err != nil {
