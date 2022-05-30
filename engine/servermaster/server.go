@@ -17,8 +17,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
-	"github.com/pingcap/tiflow/engine/pkg/externalresource/resourcetypes"
 	"net"
 	"net/http"
 	"sync"
@@ -52,6 +50,8 @@ import (
 	derrors "github.com/pingcap/tiflow/engine/pkg/errors"
 	"github.com/pingcap/tiflow/engine/pkg/etcdutils"
 	externRescManager "github.com/pingcap/tiflow/engine/pkg/externalresource/manager"
+	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
+	"github.com/pingcap/tiflow/engine/pkg/externalresource/resourcetypes"
 	extkv "github.com/pingcap/tiflow/engine/pkg/meta/extension"
 	"github.com/pingcap/tiflow/engine/pkg/meta/kvclient"
 	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
@@ -693,24 +693,6 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 	}
 	dctx.Environ.MasterMetaBytes = masterMetaBytes
 
-	s.gcRunner = externRescManager.NewGCRunner(s.frameMetaClient, map[resModel.ResourceType]externRescManager.GCHandlerFunc{
-		"local": resourcetypes.NewLocalFileResourceType(clients).GCHandler(),
-	})
-	s.gcCoordinator = externRescManager.NewGCCoordinator(s.executorManager, s.jobManager, s.frameMetaClient, s.gcRunner)
-
-	errg, errgCtx := errgroup.WithContext(ctx)
-	defer func() {
-		err := errg.Wait()
-		log.L().Error("errgroup exited with error", zap.Error(err))
-	}()
-
-	errg.Go(func() error {
-		return s.gcRunner.Run(errgCtx)
-	})
-	errg.Go(func() error {
-		return s.gcCoordinator.Run(errgCtx)
-	})
-
 	dp := deps.NewDeps()
 	if err := dp.Provide(func() pkgOrm.Client {
 		return s.frameMetaClient
@@ -772,6 +754,24 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 		}
 	}()
 	s.leaderInitialized.Store(true)
+
+	s.gcRunner = externRescManager.NewGCRunner(s.frameMetaClient, map[resModel.ResourceType]externRescManager.GCHandlerFunc{
+		"local": resourcetypes.NewLocalFileResourceType(clients).GCHandler(),
+	})
+	s.gcCoordinator = externRescManager.NewGCCoordinator(s.executorManager, s.jobManager, s.frameMetaClient, s.gcRunner)
+
+	errg, errgCtx := errgroup.WithContext(ctx)
+	defer func() {
+		err := errg.Wait()
+		log.L().Error("errgroup exited with error", zap.Error(err))
+	}()
+
+	errg.Go(func() error {
+		return s.gcRunner.Run(errgCtx)
+	})
+	errg.Go(func() error {
+		return s.gcCoordinator.Run(errgCtx)
+	})
 
 	metricTicker := time.NewTicker(defaultMetricInterval)
 	defer metricTicker.Stop()
