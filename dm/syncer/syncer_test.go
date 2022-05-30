@@ -1740,7 +1740,7 @@ func (s *testSyncerSuite) TestExecuteSQLSWithIgnore(c *C) {
 	mock.ExpectCommit()
 
 	tctx := tcontext.Background().WithLogger(log.With(zap.String("test", "TestExecuteSQLSWithIgnore")))
-	n, err := conn.ExecuteSQLWithIgnore(tctx, errorutil.IsIgnorableMySQLDDLError, sqls)
+	n, err := conn.ExecuteSQLWithIgnore(tctx, nil, errorutil.IsIgnorableMySQLDDLError, sqls)
 	c.Assert(err, IsNil)
 	c.Assert(n, Equals, 2)
 
@@ -1749,7 +1749,7 @@ func (s *testSyncerSuite) TestExecuteSQLSWithIgnore(c *C) {
 	mock.ExpectExec(sqls[0]).WillReturnError(newMysqlErr(uint16(infoschema.ErrColumnExists.Code()), "column a already exists"))
 	mock.ExpectRollback()
 
-	n, err = conn.ExecuteSQL(tctx, sqls)
+	n, err = conn.ExecuteSQL(tctx, nil, sqls)
 	c.Assert(err, ErrorMatches, ".*column a already exists.*")
 	c.Assert(n, Equals, 0)
 

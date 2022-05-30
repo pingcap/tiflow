@@ -21,6 +21,7 @@ import (
 	"time"
 
 	cpu "github.com/pingcap/tidb-tools/pkg/utils"
+	"github.com/pingcap/tiflow/dm/syncer/metrics"
 	"github.com/pingcap/tiflow/engine/pkg/promutil"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -32,7 +33,6 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/metricsproxy"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/relay"
-	"github.com/pingcap/tiflow/dm/syncer"
 )
 
 const (
@@ -115,7 +115,7 @@ func RegistryMetrics() {
 	relay.RegisterMetrics(registry)
 	dumpling.RegisterMetrics(registry)
 	loader.RegisterMetrics(registry)
-	syncer.DefaultMetricsProxies.RegisterMetrics(registry)
+	metrics.DefaultMetricsProxies.RegisterMetrics(registry)
 	prometheus.DefaultGatherer = registry
 }
 

@@ -106,7 +106,7 @@ func (s *testCheckpointSuite) prepareCheckPointSQL() {
 func (s *testCheckpointSuite) TestCheckPoint(c *C) {
 	tctx := tcontext.Background()
 
-	cp := NewRemoteCheckPoint(tctx, s.cfg, cpid)
+	cp := NewRemoteCheckPoint(tctx, s.cfg, nil, cpid)
 	defer func() {
 		s.mock.ExpectClose()
 		cp.Close()
@@ -514,7 +514,7 @@ func TestRemoteCheckPointLoadIntoSchemaTracker(t *testing.T) {
 	_, err = schemaTracker.GetTableInfo(tbl2)
 	require.Error(t, err)
 
-	cp := NewRemoteCheckPoint(tcontext.Background(), cfg, "1")
+	cp := NewRemoteCheckPoint(tcontext.Background(), cfg, nil, "1")
 	checkpoint := cp.(*RemoteCheckPoint)
 
 	parser, err := utils.GetParserFromSQLModeStr("")
@@ -545,7 +545,7 @@ func TestLastFlushOutdated(t *testing.T) {
 	cfg.WorkerCount = 0
 	cfg.CheckpointFlushInterval = 1
 
-	cp := NewRemoteCheckPoint(tcontext.Background(), cfg, "1")
+	cp := NewRemoteCheckPoint(tcontext.Background(), cfg, nil, "1")
 	checkpoint := cp.(*RemoteCheckPoint)
 	checkpoint.globalPointSaveTime = time.Now().Add(-2 * time.Second)
 

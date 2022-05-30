@@ -19,6 +19,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
+	"github.com/pingcap/tiflow/dm/syncer/metrics"
 	"go.uber.org/zap"
 
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
@@ -31,13 +32,14 @@ import (
 
 // DMLWorker is used to sync dml.
 type DMLWorker struct {
-	batch        int
-	workerCount  int
-	chanSize     int
-	multipleRows bool
-	toDBConns    []*dbconn.DBConn
-	syncCtx      *tcontext.Context
-	logger       log.Logger
+	batch         int
+	workerCount   int
+	chanSize      int
+	multipleRows  bool
+	toDBConns     []*dbconn.DBConn
+	syncCtx       *tcontext.Context
+	logger        log.Logger
+	metricProxies *metrics.Proxies
 
 	// for MetricsProxies
 	task   string
@@ -76,6 +78,7 @@ func dmlWorkerWrap(inCh chan *job, syncer *Syncer) chan *job {
 		lagFunc:              syncer.updateReplicationJobTS,
 		updateJobMetricsFunc: syncer.updateJobMetrics,
 		syncCtx:              syncer.syncCtx, // this ctx can be used to cancel all the workers
+		metricProxies:        syncer.metricsProxies,
 		toDBConns:            syncer.toDBConns,
 		inCh:                 inCh,
 		flushCh:              make(chan *job),
@@ -113,7 +116,7 @@ func (w *DMLWorker) run() {
 		queueBucketMapping[i] = queueBucketName(i)
 	}
 	for j := range w.inCh {
-		QueueSizeGauge.WithLabelValues(w.task, "dml_worker_input", w.source).Set(float64(len(w.inCh)))
+		w.metricProxies.QueueSizeGauge.WithLabelValues(w.task, "dml_worker_input", w.source).Set(float64(len(w.inCh)))
 		switch j.tp {
 		case flush:
 			w.updateJobMetricsFunc(false, adminQueueName, j)
@@ -136,7 +139,7 @@ func (w *DMLWorker) run() {
 			startTime := time.Now()
 			w.logger.Debug("queue for key", zap.Int("queue", queueBucket), zap.String("key", j.dmlQueueKey))
 			jobChs[queueBucket] <- j
-			AddJobDurationHistogram.WithLabelValues(j.tp.String(), w.task, queueBucketMapping[queueBucket], w.source).Observe(time.Since(startTime).Seconds())
+			w.metricProxies.AddJobDurationHistogram.WithLabelValues(j.tp.String(), w.task, queueBucketMapping[queueBucket], w.source).Observe(time.Since(startTime).Seconds())
 		}
 	}
 }
@@ -146,7 +149,7 @@ func (w *DMLWorker) sendJobToAllDmlQueue(j *job, jobChs []chan *job, queueBucket
 	for i, jobCh := range jobChs {
 		startTime := time.Now()
 		jobCh <- j
-		AddJobDurationHistogram.WithLabelValues(j.tp.String(), w.task, queueBucketMapping[i], w.source).Observe(time.Since(startTime).Seconds())
+		w.metricProxies.AddJobDurationHistogram.WithLabelValues(j.tp.String(), w.task, queueBucketMapping[i], w.source).Observe(time.Since(startTime).Seconds())
 	}
 }
 
@@ -157,7 +160,7 @@ func (w *DMLWorker) executeJobs(queueID int, jobCh chan *job) {
 	workerJobIdx := dmlWorkerJobIdx(queueID)
 	queueBucket := queueBucketName(queueID)
 	for j := range jobCh {
-		QueueSizeGauge.WithLabelValues(w.task, queueBucket, w.source).Set(float64(len(jobCh)))
+		w.metricProxies.QueueSizeGauge.WithLabelValues(w.task, queueBucket, w.source).Set(float64(len(jobCh)))
 
 		if j.tp != flush && j.tp != asyncFlush && j.tp != conflict {
 			if len(jobs) == 0 {
@@ -252,7 +255,7 @@ func (w *DMLWorker) executeBatchJobs(queueID int, jobs []*job) {
 	// if users need to quit this asap, we can support pause-task/stop-task --force in the future
 	ctx, cancel := w.syncCtx.WithTimeout(maxDMLConnectionDuration)
 	defer cancel()
-	affect, err = db.ExecuteSQL(ctx, queries, args...)
+	affect, err = db.ExecuteSQL(ctx, w.metricProxies, queries, args...)
 	failpoint.Inject("SafeModeExit", func(val failpoint.Value) {
 		if intVal, ok := val.(int); ok && intVal == 4 && len(jobs) > 0 {
 			w.logger.Warn("fail to exec DML", zap.String("failpoint", "SafeModeExit"))
