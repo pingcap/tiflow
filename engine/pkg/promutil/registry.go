@@ -33,7 +33,8 @@ var (
 
 func init() {
 	globalMetricRegistry.MustRegister(systemID, collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
-	globalMetricRegistry.MustRegister(systemID, collectors.NewGoCollector())
+	globalMetricRegistry.MustRegister(systemID, collectors.NewGoCollector(
+		collectors.WithGoCollections(collectors.GoRuntimeMemStatsCollection|collectors.GoRuntimeMetricsCollection)))
 }
 
 // Registry is used for registering metric
