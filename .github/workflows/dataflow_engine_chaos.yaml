@@ -3,8 +3,6 @@ name: Dataflow Engine Chaos
 on:
   schedule:
     - cron: '0 17-23 * * *' # run at minute 0 every hour from 01:00 ~ 07:00 UTC+8
-  pull_request:
-    branches: [ master ]
 
 # See: https://docs.github.com/en/actions/reference/workflow-syntax-for-github-actions#concurrency.
 concurrency:
@@ -30,18 +28,6 @@ jobs:
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
       - uses: actions/checkout@v2
-
-      # Debug code
-      - name: Feishu notification
-        continue-on-error: true
-        uses: foxundermoon/feishu-action@v2
-        if: ${{ always() }}
-        with:
-          url: ${{ secrets.ENGINE_FEISHU_NOTIFY_URL }}
-          msg_type: text
-          content: |
-            text: |
-              dataflow engine chaos job runs, see https://github.com/pingcap/tiflow/actions/runs/${{ github.run_id }}
 
       - uses: actions/setup-go@v3
         with:
