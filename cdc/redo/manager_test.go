@@ -15,11 +15,8 @@ package redo
 
 import (
 	"context"
-<<<<<<< HEAD
-=======
 	"sync"
 	"sync/atomic"
->>>>>>> 9b29eef20 (redo(ticdc): fix a bug that flush log executed before writing logs (#5621))
 	"testing"
 	"time"
 
@@ -210,7 +207,7 @@ func TestWriteLogFlushLogSequence(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cfg := &config.ConsistentConfig{
-		Level:   string(ConsistentLevelEventual),
+		Level:   string(consistentLevelEventual),
 		Storage: "blackhole://",
 	}
 	errCh := make(chan error, 1)
