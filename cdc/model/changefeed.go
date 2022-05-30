@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/cyclic/mark"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
@@ -115,6 +116,8 @@ func (s FeedState) IsNeeded(need string) bool {
 // ChangeFeedInfo describes the detail of a ChangeFeed
 type ChangeFeedInfo struct {
 	UpstreamID uint64            `json:"upstream-id"`
+	Namespace  string            `json:"namespace"`
+	ID         string            `json:"changefeed-id"`
 	SinkURI    string            `json:"sink-uri"`
 	Opts       map[string]string `json:"opts"`
 	CreateTime time.Time         `json:"create-time"`
@@ -137,6 +140,9 @@ type ChangeFeedInfo struct {
 	SyncPointEnabled  bool          `json:"sync-point-enabled"`
 	SyncPointInterval time.Duration `json:"sync-point-interval"`
 	CreatorVersion    string        `json:"creator-version"`
+
+	PDAddrs          []string            `json:"pd-addr"`
+	CredentialConfig security.Credential `json: "credential-config"`
 }
 
 const changeFeedIDMaxLen = 128

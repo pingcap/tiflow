@@ -37,7 +37,8 @@ import (
 	"github.com/tikv/client-go/v2/oracle"
 )
 
-// VerifyCreateChangefeedConfig verify ChangefeedConfig for create a changefeed
+// VerifyCreateChangefeedConfig verifies ChangefeedConfig for create a changefeed
+// This method is used by open api v1 only.
 func VerifyCreateChangefeedConfig(
 	ctx context.Context,
 	changefeedConfig model.ChangefeedConfig,
@@ -249,4 +250,15 @@ func VerifyTables(replicaConfig *config.ReplicaConfig, storage tidbkv.Storage, s
 		}
 	})
 	return
+}
+
+// VerifyCreateChangefeedInfo verifies and fills changefeedInfo for create a changefeed,
+// This method is used by open api v2 only.
+func VerifyCreateChangefeedInfo(
+	ctx context.Context,
+	info model.ChangeFeedInfo,
+	capture *capture.Capture,
+) (*model.ChangeFeedInfo, error) {
+	res := &model.ChangeFeedInfo{}
+	return res, nil
 }

@@ -13,8 +13,15 @@
 
 package v2
 
+import "github.com/pingcap/tiflow/cdc/model"
+
 // Tso contains timestamp get from PD
 type Tso struct {
 	Timestamp int64 `json:"timestamp"`
 	LogicTime int64 `json:"logic-time"`
+}
+
+type Tables struct {
+	IneligibleTables []model.TableName `json:"ineligible-tables,omitempty"`
+	EligibleTables   []model.TableName `json:"eligible-tables,omitempty"`
 }
