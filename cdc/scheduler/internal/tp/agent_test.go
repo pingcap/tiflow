@@ -47,7 +47,7 @@ func TestAgentHandleDispatchTableTask(t *testing.T) {
 
 	a := newBaseAgent4Test()
 
-	mockTableExecutor := NewMockTableExecutor(t)
+	mockTableExecutor := NewMockTableExecutor()
 	a.tableExec = mockTableExecutor
 
 	tableID := model.TableID(1)
@@ -229,9 +229,8 @@ type MockTableExecutor struct {
 }
 
 // NewMockTableExecutor creates a new mock table executor.
-func NewMockTableExecutor(t *testing.T) *MockTableExecutor {
+func NewMockTableExecutor() *MockTableExecutor {
 	return &MockTableExecutor{
-		t:      t,
 		tables: map[model.TableID]pipeline.TableStatus{},
 	}
 }

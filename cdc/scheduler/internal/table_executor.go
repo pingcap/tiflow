@@ -36,8 +36,7 @@ type TableExecutor interface {
 	// IsAddTableFinished make sure the requested table is in the proper status
 	IsAddTableFinished(ctx context.Context, tableID model.TableID, isPrepare bool) (done bool)
 
-	// RemoveTable remove the table, return true if the table if already removed
-	// todo: revise the logic behind `remove table`, make sure comment is correct.
+	// RemoveTable remove the table, return true if the table is already removed
 	RemoveTable(ctx context.Context, tableID model.TableID) (done bool)
 	// IsRemoveTableFinished convince the table is fully stopped.
 	// return false if table is not stopped

@@ -29,6 +29,7 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/p2p"
+	"github.com/pingcap/tiflow/pkg/version"
 	"go.etcd.io/etcd/client/v3/concurrency"
 	"go.uber.org/zap"
 )
@@ -73,6 +74,7 @@ func NewAgent(ctx context.Context,
 	etcdClient *etcd.CDCEtcdClient,
 	tableExecutor internal.TableExecutor) (internal.Agent, error) {
 	result := &agent{
+		version:      version.ReleaseSemver(),
 		captureID:    captureID,
 		changeFeedID: changeFeedID,
 		tableExec:    tableExecutor,
@@ -81,7 +83,7 @@ func NewAgent(ctx context.Context,
 	}
 	trans, err := newTransport(ctx, changeFeedID, messageServer, messageRouter)
 	if err != nil {
-		return nil, err
+		return nil, errors.Trace(err)
 	}
 	result.trans = trans
 
@@ -89,6 +91,7 @@ func NewAgent(ctx context.Context,
 	flushInterval := time.Duration(conf.ProcessorFlushInterval)
 
 	log.Debug("creating processor agent",
+		zap.String("capture", captureID),
 		zap.String("namespace", changeFeedID.Namespace),
 		zap.String("changefeed", changeFeedID.ID),
 		zap.Duration("sendCheckpointTsInterval", flushInterval))
@@ -99,19 +102,21 @@ func NewAgent(ctx context.Context,
 	ownerCaptureID, err := etcdClient.GetOwnerID(etcdCliCtx, etcd.CaptureOwnerKey)
 	if err != nil {
 		if err != concurrency.ErrElectionNoLeader {
-			return nil, err
+			return nil, errors.Trace(err)
 		}
 		// We tolerate the situation where there is no owner.
 		// If we are registered in Etcd, an elected Owner will have to
 		// contact us before it can schedule any table.
 		log.Info("no owner found. We will wait for an owner to contact us.",
+			zap.String("capture", captureID),
 			zap.String("namespace", changeFeedID.Namespace),
 			zap.String("changefeed", changeFeedID.ID),
 			zap.Error(err))
-		return nil, err
+		return nil, nil
 	}
 
-	log.Debug("found owner",
+	log.Debug("agent: owner found",
+		zap.String("capture", captureID),
 		zap.String("namespace", changeFeedID.Namespace),
 		zap.String("changefeed", changeFeedID.ID),
 		zap.String("ownerID", captureID))
@@ -121,6 +126,7 @@ func NewAgent(ctx context.Context,
 		if cerror.ErrOwnerNotFound.Equal(err) || cerror.ErrNotOwner.Equal(err) {
 			// These are expected errors when no owner has been elected
 			log.Info("no owner found when querying for the owner revision",
+				zap.String("capture", captureID),
 				zap.String("namespace", changeFeedID.Namespace),
 				zap.String("changefeed", changeFeedID.ID),
 				zap.Error(err))
@@ -220,10 +226,8 @@ func (a *agent) newTableStatus(tableID model.TableID) schedulepb.TableStatus {
 	}
 }
 
-// benchmark: 1.6w tables 收集时间 / serialization
 func (a *agent) collectTableStatus() []schedulepb.TableStatus {
 	allTables := a.tableExec.GetAllCurrentTables()
-	// todo: make this a field of the agent if necessary, to prevent frequent memory allocation.
 	tables := make([]schedulepb.TableStatus, 0, len(allTables))
 	for _, tableID := range allTables {
 		status := a.newTableStatus(tableID)
@@ -269,6 +273,9 @@ func (a *agent) handleMessageDispatchTableRequest(
 ) {
 	if a.epoch != epoch {
 		log.Info("agent: dispatch table request epoch does not match, ignore it",
+			zap.String("capture", a.captureID),
+			zap.String("namespace", a.changeFeedID.Namespace),
+			zap.String("changefeed", a.changeFeedID.ID),
 			zap.Any("epoch", epoch),
 			zap.Any("expected", a.epoch))
 		return
@@ -279,7 +286,8 @@ func (a *agent) handleMessageDispatchTableRequest(
 		if a.stopping {
 			log.Info("agent: decline handle add table request",
 				zap.String("capture", a.captureID),
-				zap.Any("changefeed", a.changeFeedID))
+				zap.String("namespace", a.changeFeedID.Namespace),
+				zap.String("changefeed", a.changeFeedID.ID))
 			return
 		}
 		task = &dispatchTableTask{
@@ -299,17 +307,26 @@ func (a *agent) handleMessageDispatchTableRequest(
 		}
 	default:
 		log.Warn("agent: ignore unknown dispatch table request",
+			zap.String("capture", a.captureID),
+			zap.String("namespace", a.changeFeedID.Namespace),
+			zap.String("changefeed", a.changeFeedID.ID),
 			zap.Any("request", request))
 		return
 	}
 
 	if task == nil {
 		log.Panic("invalid dispatch table request",
+			zap.String("capture", a.captureID),
+			zap.String("namespace", a.changeFeedID.Namespace),
+			zap.String("changefeed", a.changeFeedID.ID),
 			zap.Any("request", request))
 	}
 
 	if _, ok := a.runningTasks[task.TableID]; ok {
 		log.Panic("duplicate dispatch table request",
+			zap.String("capture", a.captureID),
+			zap.String("namespace", a.changeFeedID.Namespace),
+			zap.String("changefeed", a.changeFeedID.ID),
 			zap.Any("request", request))
 	}
 
@@ -331,11 +348,8 @@ func (a *agent) handleRemoveTableTask(
 
 	checkpointTs, done := a.tableExec.IsRemoveTableFinished(ctx, task.TableID)
 	if !done {
-		// todo: table should be in `stopped` already, `stopping` is useless at the moment
-		// if we return a message here, owner can directly start the table on other capture, to save a few tick.
 		return nil
 	}
-	log.Info("finish processing add table task", zap.Any("task", task))
 	status := schedulepb.TableStatus{
 		TableID: task.TableID,
 		State:   schedulepb.TableStateStopped, // todo: if the table is `absent`, also return a stopped here, `stopped` is identical to `absent`.
@@ -382,10 +396,12 @@ func (a *agent) handleAddTableTask(
 		}
 		done, err := a.tableExec.AddTable(ctx, task.TableID, task.StartTs, task.IsPrepare)
 		if err != nil || !done {
-			// create table failed
 			log.Info("add table failed",
-				zap.Error(err),
-				zap.Any("task", task))
+				zap.String("capture", a.captureID),
+				zap.String("namespace", a.changeFeedID.Namespace),
+				zap.String("changefeed", a.changeFeedID.ID),
+				zap.Any("task", task),
+				zap.Error(err))
 			status := a.newTableStatus(task.TableID)
 			message := a.newAddTableResponseMessage(status, false)
 			return message, errors.Trace(err)
@@ -395,11 +411,14 @@ func (a *agent) handleAddTableTask(
 
 	done := a.tableExec.IsAddTableFinished(ctx, task.TableID, task.IsPrepare)
 	if !done {
-		// not finished yet, do not return any message since the state is not stable now.
 		return nil, nil
 	}
 	// must be finished here
-	log.Info("finish processing add table task", zap.Any("task", task))
+	log.Info("finish processing add table task",
+		zap.String("capture", a.captureID),
+		zap.String("namespace", a.changeFeedID.Namespace),
+		zap.String("changefeed", a.changeFeedID.ID),
+		zap.Any("task", task))
 
 	status := a.newTableStatus(task.TableID)
 	message := a.newAddTableResponseMessage(status, false)
@@ -436,12 +455,18 @@ func (a *agent) fetchPendingTasks() {
 			task := item.(*dispatchTableTask)
 			if task.Epoch != a.epoch {
 				log.Info("dispatch request epoch does not match",
+					zap.String("capture", a.captureID),
+					zap.String("namespace", a.changeFeedID.Namespace),
+					zap.String("changefeed", a.changeFeedID.ID),
 					zap.Any("epoch", task.Epoch),
 					zap.Any("expected", a.epoch))
 				continue
 			}
 			if _, ok := a.runningTasks[task.TableID]; ok {
 				log.Panic("duplicate dispatch table request",
+					zap.String("capture", a.captureID),
+					zap.String("namespace", a.changeFeedID.Namespace),
+					zap.String("changefeed", a.changeFeedID.ID),
 					zap.Any("task", task))
 			}
 			a.runningTasks[task.TableID] = task
@@ -503,6 +528,9 @@ func (a *agent) handleOwnerInfo(id model.CaptureID, revision int64, version stri
 			// with the same ownerRev but with different ownerIDs.
 			// This should never happen unless the election via Etcd is buggy.
 			log.Panic("owner IDs do not match",
+				zap.String("capture", a.captureID),
+				zap.String("namespace", a.changeFeedID.Namespace),
+				zap.String("changefeed", a.changeFeedID.ID),
 				zap.String("expected", a.ownerInfo.captureID),
 				zap.String("actual", id))
 		}
@@ -518,6 +546,9 @@ func (a *agent) handleOwnerInfo(id model.CaptureID, revision int64, version stri
 		a.resetEpoch()
 
 		log.Info("new owner in power, drop pending dispatch table tasks",
+			zap.String("capture", a.captureID),
+			zap.String("namespace", a.changeFeedID.Namespace),
+			zap.String("changefeed", a.changeFeedID.ID),
 			zap.Any("owner", a.ownerInfo),
 			zap.Int("droppedTaskCount", a.pendingTasks.Len()))
 		// Resets the deque so that pending operations from the previous owner
@@ -530,6 +561,9 @@ func (a *agent) handleOwnerInfo(id model.CaptureID, revision int64, version stri
 
 	// staled owner heartbeat, just ignore it.
 	log.Info("agent: message from staled owner",
+		zap.String("capture", a.captureID),
+		zap.String("namespace", a.changeFeedID.Namespace),
+		zap.String("changefeed", a.changeFeedID.ID),
 		zap.Any("staledOwner", ownerInfo{
 			captureID: id,
 			revision:  schedulepb.OwnerRevision{Revision: revision},

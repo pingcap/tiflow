@@ -219,6 +219,7 @@ func (p *processor) RemoveTable(ctx context.Context, tableID model.TableID) bool
 	table, ok := p.tables[tableID]
 	if !ok {
 		log.Warn("table which will be deleted is not found",
+			zap.String("capture", p.captureInfo.ID),
 			zap.String("namespace", p.changefeedID.Namespace),
 			zap.String("changefeed", p.changefeedID.ID),
 			zap.Int64("tableID", tableID))
@@ -230,6 +231,7 @@ func (p *processor) RemoveTable(ctx context.Context, tableID model.TableID) bool
 		// We use a Debug log because it is conceivable for the pipeline to block for a legitimate reason,
 		// and we do not want to alarm the user.
 		log.Debug("AsyncStop has failed, possible due to a full pipeline",
+			zap.String("capture", p.captureInfo.ID),
 			zap.String("namespace", p.changefeedID.Namespace),
 			zap.String("changefeed", p.changefeedID.ID),
 			zap.Uint64("checkpointTs", table.CheckpointTs()),
