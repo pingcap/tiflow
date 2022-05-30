@@ -8,7 +8,9 @@
 GOPATH=$(go env GOPATH)
 echo "using GOPATH=$GOPATH"
 
-TOOLS_BIN_DIR=$(pwd)/../tools/bin
+CUR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+
+TOOLS_BIN_DIR=${CUR}/../tools/bin
 
 case "$(uname)" in
 MINGW*)
@@ -54,21 +56,19 @@ fi
 #    exit 1
 #fi
 
-cd ./proto || exit 1
+cd ${CUR}/proto || exit 1
 
 echo "generate protobuf code..."
 
 #cp -r ${GAPI_PATH}/google ./
 
-protoc -I. -I"${GOGO_PATH}" -I"${GOGO_PATH}/protobuf" --plugin=protoc-gen-gogofaster=${GOGO_FASTER} --gogofaster_out=plugins=grpc:../pb/ *.proto
-
-#protoc -I. -I"${GOGO_PATH}" -I"${GOGO_PATH}/protobuf" --plugin=protoc-gen-grpc-gateway=${GRPC_GATEWAY} --grpc-gateway_out=logtostderr=true:../pb/ dmmaster.proto
+${CUR}/../tools/bin/protoc -I. -I"${GOGO_PATH}" -I"${GOGO_PATH}/protobuf" --plugin=protoc-gen-gogofaster=${GOGO_FASTER} --gogofaster_out=plugins=grpc:../enginepb/ *.proto
 
 #chmod -R +w ./google  # permission is `-r--r--r--`
 #rm -r ./google
 
-cd ../pb || exit 1
+cd ${CUR}/enginepb || exit 1
 sed -i.bak -E 's/import _ \"gogoproto\"//g' *.pb.go
 sed -i.bak -E 's/import fmt \"fmt\"//g' *.pb.go
 rm -f *.bak
-../tools/bin/goimports -w *.pb.go
+${CUR}/../tools/bin/goimports -w *.pb.go

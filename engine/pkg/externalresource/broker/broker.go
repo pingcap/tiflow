@@ -23,8 +23,8 @@ import (
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
 
+	pb "github.com/pingcap/tiflow/engine/enginepb"
 	libModel "github.com/pingcap/tiflow/engine/lib/model"
-	"github.com/pingcap/tiflow/engine/pb"
 	derrors "github.com/pingcap/tiflow/engine/pkg/errors"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/storagecfg"

@@ -28,8 +28,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/pingcap/tiflow/engine/client"
+	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm"
-	"github.com/pingcap/tiflow/engine/pb"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
 )
 

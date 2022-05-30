@@ -25,9 +25,9 @@ import (
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 
+	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/lib"
 	libModel "github.com/pingcap/tiflow/engine/lib/model"
-	"github.com/pingcap/tiflow/engine/pb"
 	"github.com/pingcap/tiflow/engine/pkg/errors"
 )
 

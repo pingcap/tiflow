@@ -24,8 +24,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
+	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/lib/fake"
-	"github.com/pingcap/tiflow/engine/pb"
 	"github.com/pingcap/tiflow/engine/test/e2e"
 )
 

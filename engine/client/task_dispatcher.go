@@ -24,7 +24,7 @@ import (
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
 
-	"github.com/pingcap/tiflow/engine/pb"
+	pb "github.com/pingcap/tiflow/engine/enginepb"
 	derrors "github.com/pingcap/tiflow/engine/pkg/errors"
 )
 
