@@ -17,7 +17,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/edwingeng/deque"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/pipeline"
@@ -37,7 +36,6 @@ func newBaseAgent4Test() *agent {
 		},
 		version:      "agent-version-1",
 		epoch:        schedulepb.ProcessorEpoch{Epoch: "agent-epoch-1"},
-		pendingTasks: deque.NewDeque(),
 		runningTasks: make(map[model.TableID]*dispatchTableTask),
 	}
 }
@@ -191,12 +189,11 @@ func TestAgentHandleMessage(t *testing.T) {
 	}
 	// add table request in pending
 	response = a.handleMessage([]*schedulepb.Message{addTableRequest})
-	require.Equal(t, a.pendingTasks.Len(), 1)
+	require.Equal(t, len(a.runningTasks), 1)
 
-	// a new owner in power, the pending task should be dropped.
 	heartbeat.Header.OwnerRevision.Revision = 2
 	response = a.handleMessage([]*schedulepb.Message{heartbeat})
-	require.Equal(t, a.pendingTasks.Len(), 0)
+	require.Equal(t, len(a.runningTasks), 1)
 	require.Len(t, response, 1)
 }
 

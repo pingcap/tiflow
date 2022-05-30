@@ -17,7 +17,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/edwingeng/deque"
 	"github.com/google/uuid"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -42,10 +41,6 @@ type agent struct {
 
 	// runningTasks track all in progress dispatch table task
 	runningTasks map[model.TableID]*dispatchTableTask
-
-	// pendingTasks is a queue of dispatch table task yet to be processed.
-	// the Deque stores *dispatchTableTask.
-	pendingTasks deque.Deque
 
 	// owner's information
 	ownerInfo ownerInfo
@@ -78,7 +73,6 @@ func NewAgent(ctx context.Context,
 		captureID:    captureID,
 		changeFeedID: changeFeedID,
 		tableExec:    tableExecutor,
-		pendingTasks: deque.NewDeque(),
 		runningTasks: make(map[model.TableID]*dispatchTableTask),
 	}
 	trans, err := newTransport(ctx, changeFeedID, messageServer, messageRouter)
@@ -357,7 +351,7 @@ func (a *agent) handleMessageDispatchTableRequest(
 		return
 	}
 
-	a.pendingTasks.PushBack(task)
+	a.runningTasks[task.TableID] = task
 }
 
 func (a *agent) handleRemoveTableTask(
@@ -476,37 +470,9 @@ func (a *agent) newAddTableResponseMessage(
 	}
 }
 
-func (a *agent) fetchPendingTasks() {
-	for !a.pendingTasks.Empty() {
-		batch := a.pendingTasks.PopManyFront(128 /* batch size */)
-		for _, item := range batch {
-			task := item.(*dispatchTableTask)
-			if task.Epoch != a.epoch {
-				log.Info("tpscheduler: dispatch request epoch does not match",
-					zap.String("capture", a.captureID),
-					zap.String("namespace", a.changeFeedID.Namespace),
-					zap.String("changefeed", a.changeFeedID.ID),
-					zap.Any("epoch", task.Epoch),
-					zap.Any("expected", a.epoch))
-				continue
-			}
-			if _, ok := a.runningTasks[task.TableID]; ok {
-				log.Warn("tpscheduler: duplicate dispatch table request",
-					zap.String("capture", a.captureID),
-					zap.String("namespace", a.changeFeedID.Namespace),
-					zap.String("changefeed", a.changeFeedID.ID),
-					zap.Any("task", task))
-				return
-			}
-			a.runningTasks[task.TableID] = task
-		}
-	}
-}
-
 func (a *agent) handleDispatchTableTasks(
 	ctx context.Context,
 ) (result []*schedulepb.Message, err error) {
-	a.fetchPendingTasks()
 	result = make([]*schedulepb.Message, 0)
 	for _, task := range a.runningTasks {
 		var response *schedulepb.Message
@@ -581,13 +547,7 @@ func (a *agent) handleOwnerInfo(id model.CaptureID, revision int64, version stri
 			zap.String("capture", a.captureID),
 			zap.String("namespace", a.changeFeedID.Namespace),
 			zap.String("changefeed", a.changeFeedID.ID),
-			zap.Any("owner", a.ownerInfo),
-			zap.Int("droppedTaskCount", a.pendingTasks.Len()))
-		// Resets the deque so that pending operations from the previous owner
-		// will not be processed.
-		// Note: these pending operations have not yet been processed by the agent,
-		// so it is okay to lose them.
-		a.pendingTasks = deque.NewDeque()
+			zap.Any("owner", a.ownerInfo))
 		return true
 	}
 
