@@ -30,8 +30,8 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/pingcap/tiflow/engine/client"
+	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/executor/worker"
-	"github.com/pingcap/tiflow/engine/pb"
 	"github.com/pingcap/tiflow/pkg/uuid"
 )
 
