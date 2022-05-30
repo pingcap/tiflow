@@ -105,7 +105,7 @@ type AutoRegisterFactory struct {
 	id libModel.WorkerID
 }
 
-// NewAutoRegisterFactory creates a AutoRegisterFactory.
+// NewAutoRegisterFactory creates an AutoRegisterFactory.
 func NewAutoRegisterFactory(f Factory, r *Registry, id libModel.WorkerID) Factory {
 	return &AutoRegisterFactory{
 		inner: f,
