@@ -52,8 +52,9 @@ func TestFactory(t *testing.T) {
 	dctx := dcontext.Background()
 	dp := deps.NewDeps()
 	dctx = dctx.WithDeps(dp)
+	messageHandlerManager := p2p.NewMockMessageHandlerManager()
 	depsForTest := workerParamListForTest{
-		MessageHandlerManager: p2p.NewMockMessageHandlerManager(),
+		MessageHandlerManager: messageHandlerManager,
 		MessageSender:         p2p.NewMockMessageSender(),
 		FrameMetaClient:       cli,
 		UserRawKVClient:       kvmock.NewMetaMock(),
@@ -84,6 +85,7 @@ func TestWorker(t *testing.T) {
 		return p2p.NewMockMessageHandlerManager()
 	}))
 	dmWorker := newDMWorker(dctx, "master-id", lib.WorkerDMDump, &dmconfig.SubTaskConfig{})
+	require.NotNil(t, dmWorker.messageAgent)
 	unitHolder := &mockUnitHolder{}
 	dmWorker.unitHolder = unitHolder
 	dmWorker.BaseWorker = lib.MockBaseWorker("worker-id", "master-id", dmWorker)

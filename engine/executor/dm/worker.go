@@ -110,7 +110,7 @@ func (w *dmWorker) InitImpl(ctx context.Context) error {
 	if err := w.messageAgent.UpdateSender(w.masterID, w); err != nil {
 		return err
 	}
-	if w.workerType != lib.WorkerDMSync || w.cfg.Mode != dmconfig.ModeIncrement {
+	if w.cfg.Mode != dmconfig.ModeIncrement {
 		if err := w.setupstorage(ctx); err != nil {
 			return err
 		}
