@@ -39,20 +39,25 @@ type topicPartitionKey struct {
 	partition int32
 }
 
+type flushEvent struct {
+	resolvedTs model.ResolvedTs
+	flushed    chan<- struct{}
+}
+
 // mqEvent is the event of the mq flush worker.
 // It carries the partition information of the message,
-// and it is also used as resolved ts messaging.
+// and it is also used to flush all events.
 type mqEvent struct {
-	key      topicPartitionKey
-	row      *model.RowChangedEvent
-	resolved model.ResolvedTs
+	key   topicPartitionKey
+	row   *model.RowChangedEvent
+	flush *flushEvent
 }
 
 // flushWorker is responsible for sending messages to the Kafka producer on a batch basis.
 type flushWorker struct {
-	msgChan       chan mqEvent
-	ticker        *time.Ticker
-	needSyncFlush bool
+	msgChan chan mqEvent
+	ticker  *time.Ticker
+	flushed chan<- struct{}
 
 	// errCh is used to store one error if `run` exits unexpectedly.
 	// After sending an error to errCh, errCh must be closed so that
@@ -96,10 +101,10 @@ func (w *flushWorker) batch(
 	case <-ctx.Done():
 		return index, ctx.Err()
 	case msg := <-w.msgChan:
-		// When the resolved ts is received,
+		// When the flush event is received,
 		// we need to write the previous data to the producer as soon as possible.
-		if msg.resolved.Ts != 0 {
-			w.needSyncFlush = true
+		if msg.flush != nil {
+			w.flushed = msg.flush.flushed
 			return index, nil
 		}
 
@@ -116,8 +121,10 @@ func (w *flushWorker) batch(
 		case <-ctx.Done():
 			return index, ctx.Err()
 		case msg := <-w.msgChan:
-			if msg.resolved.Ts != 0 {
-				w.needSyncFlush = true
+			// When the flush event is received,
+			// we need to write the previous data to the producer as soon as possible.
+			if msg.flush != nil {
+				w.flushed = msg.flush.flushed
 				return index, nil
 			}
 
@@ -178,13 +185,16 @@ func (w *flushWorker) asyncSend(
 		w.statistics.ObserveRows(events...)
 	}
 
-	if w.needSyncFlush {
+	// Wait for all messages to ack.
+	if w.flushed != nil {
 		start := time.Now()
 		err := w.producer.Flush(ctx)
 		if err != nil {
 			return err
 		}
-		w.needSyncFlush = false
+		w.flushed <- struct{}{}
+		close(w.flushed)
+		w.flushed = nil
 		log.Debug("flush worker flushed", zap.Duration("duration", time.Since(start)))
 	}
 

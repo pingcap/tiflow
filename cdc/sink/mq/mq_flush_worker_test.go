@@ -117,7 +117,7 @@ func TestBatch(t *testing.T) {
 			name: "Normal batching",
 			events: []mqEvent{
 				{
-					resolved: model.NewResolvedTs(0),
+					flush: nil,
 				},
 				{
 					row: &model.RowChangedEvent{
@@ -142,7 +142,10 @@ func TestBatch(t *testing.T) {
 			name: "No row change events",
 			events: []mqEvent{
 				{
-					resolved: model.NewResolvedTs(1),
+					flush: &flushEvent{
+						resolvedTs: model.NewResolvedTs(1),
+						flushed:    make(chan struct{}),
+					},
 				},
 			},
 			expectedN: 0,
@@ -159,7 +162,10 @@ func TestBatch(t *testing.T) {
 					key: key,
 				},
 				{
-					resolved: model.NewResolvedTs(1),
+					flush: &flushEvent{
+						resolvedTs: model.NewResolvedTs(1),
+						flushed:    make(chan struct{}),
+					},
 				},
 				{
 					row: &model.RowChangedEvent{
@@ -371,7 +377,7 @@ func TestFlush(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	worker, producer := newTestWorker(ctx)
-
+	flushed := make(chan struct{})
 	events := []mqEvent{
 		{
 			row: &model.RowChangedEvent{
@@ -398,7 +404,10 @@ func TestFlush(t *testing.T) {
 			key: key1,
 		},
 		{
-			resolved: model.NewResolvedTs(1),
+			flush: &flushEvent{
+				resolvedTs: model.NewResolvedTs(1),
+				flushed:    flushed,
+			},
 		},
 	}
 
@@ -411,13 +420,18 @@ func TestFlush(t *testing.T) {
 		endIndex, err := worker.batch(ctx, batchBuf)
 		require.NoError(t, err)
 		require.Equal(t, 3, endIndex)
-		require.True(t, worker.needSyncFlush)
+		require.NotNil(t, worker.flushed)
 		msgs := batchBuf[:endIndex]
 		paritionedRows := worker.group(msgs)
+		go func() {
+			select {
+			case <-flushed:
+			}
+		}()
 		err = worker.asyncSend(ctx, paritionedRows)
 		require.NoError(t, err)
 		require.True(t, producer.flushed)
-		require.False(t, worker.needSyncFlush)
+		require.Nil(t, worker.flushed)
 	}()
 
 	for _, event := range events {
@@ -475,15 +489,24 @@ func TestProducerError(t *testing.T) {
 		},
 	})
 	require.NoError(t, err)
-	err = worker.addEvent(ctx, mqEvent{resolved: model.NewResolvedTs(100)})
+	err = worker.addEvent(ctx, mqEvent{flush: &flushEvent{
+		resolvedTs: model.NewResolvedTs(100),
+		flushed:    make(chan struct{}),
+	}})
 	require.NoError(t, err)
 	wg.Wait()
 
-	err = worker.addEvent(ctx, mqEvent{resolved: model.NewResolvedTs(200)})
+	err = worker.addEvent(ctx, mqEvent{flush: &flushEvent{
+		resolvedTs: model.NewResolvedTs(200),
+		flushed:    make(chan struct{}),
+	}})
 	require.Error(t, err)
 	require.Regexp(t, ".*fake.*", err.Error())
 
-	err = worker.addEvent(ctx, mqEvent{resolved: model.NewResolvedTs(300)})
+	err = worker.addEvent(ctx, mqEvent{flush: &flushEvent{
+		resolvedTs: model.NewResolvedTs(300),
+		flushed:    make(chan struct{}),
+	}})
 	require.Error(t, err)
 	require.Regexp(t, ".*ErrMQWorkerClosed.*", err.Error())
 }
