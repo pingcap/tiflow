@@ -93,13 +93,13 @@ type DBActor struct {
 	metricWriteBytes    prometheus.Observer
 }
 
-var _ actor.Actor = (*DBActor)(nil)
+var _ actor.Actor[message.Task] = (*DBActor)(nil)
 
 // NewDBActor returns a db actor.
 func NewDBActor(
 	id int, db db.DB, cfg *config.DBConfig, compact *CompactScheduler,
 	wg *sync.WaitGroup,
-) (*DBActor, actor.Mailbox, error) {
+) (*DBActor, actor.Mailbox[message.Task], error) {
 	idTag := strconv.Itoa(id)
 	// Write batch size should be larger than block size to save CPU.
 	const writeBatchSizeFactor = 16
@@ -111,7 +111,7 @@ func NewDBActor(
 	// IterCount limits the total number of opened iterators to release db
 	// resources in time.
 	iterSema := semaphore.NewWeighted(int64(cfg.Concurrency))
-	mb := actor.NewMailbox(actor.ID(id), cfg.Concurrency)
+	mb := actor.NewMailbox[message.Task](actor.ID(id), cfg.Concurrency)
 	wg.Add(1)
 
 	return &DBActor{
@@ -188,7 +188,7 @@ func (ldb *DBActor) acquireIterators() {
 
 // Poll implements actor.Actor.
 // It handles tasks by writing kv, deleting kv and taking iterators.
-func (ldb *DBActor) Poll(ctx context.Context, tasks []actormsg.Message) bool {
+func (ldb *DBActor) Poll(ctx context.Context, tasks []actormsg.Message[message.Task]) bool {
 	select {
 	case <-ctx.Done():
 		return false
@@ -199,10 +199,8 @@ func (ldb *DBActor) Poll(ctx context.Context, tasks []actormsg.Message) bool {
 		var task message.Task
 		msg := tasks[i]
 		switch msg.Tp {
-		case actormsg.TypeTick:
-			continue
-		case actormsg.TypeSorterTask:
-			task = msg.SorterTask
+		case actormsg.TypeValue:
+			task = msg.Value
 		case actormsg.TypeStop:
 			return false
 		default:

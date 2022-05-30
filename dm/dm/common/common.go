@@ -29,6 +29,8 @@ var (
 	// ClusterIDKey is used to store the cluster id of the whole dm cluster. Cluster id is the unique identification of dm cluster
 	// After leader of dm master bootstraped, the leader will get the id from etcd or generate fresh one, and backfill to etcd.
 	ClusterIDKey = "/dm-cluster/id"
+	// ClusterTopologyKey is used to store the cluster topo info of the whole dm cluster, and this info is maintained by tiup.
+	ClusterTopologyKey = "/dm-cluster/topology"
 	// WorkerRegisterKeyAdapter is used to encode and decode register key.
 	// k/v: Encode(worker-name) -> the information of the DM-worker node.
 	WorkerRegisterKeyAdapter KeyAdapter = keyHexEncoderDecoder("/dm-worker/r/")
@@ -125,7 +127,8 @@ func keyAdapterKeysLen(s KeyAdapter) int {
 	case ShardDDLOptimismDroppedColumnsKeyAdapter:
 		return 5
 	// used in upgrading
-	case UpstreamConfigKeyAdapterV1, StageRelayKeyAdapterV1:
+	case UpstreamConfigKeyAdapterV1, StageRelayKeyAdapterV1, UpstreamBoundWorkerKeyAdapterV1,
+		UpstreamLastBoundWorkerKeyAdapterV1, UpstreamRelayWorkerKeyAdapterV1:
 		return 1
 	}
 	return -1

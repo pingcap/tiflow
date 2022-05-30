@@ -138,7 +138,7 @@ func DeleteOperations(cli *clientv3.Client, ops ...Operation) (int64, error) {
 	for _, op := range ops {
 		opsDel = append(opsDel, deleteOperationOp(op))
 	}
-	_, rev, err := etcdutil.DoOpsInOneTxnWithRetry(cli, opsDel...)
+	_, rev, err := etcdutil.DoTxnWithRepeatable(cli, etcdutil.ThenOpFunc(opsDel...))
 	return rev, err
 }
 
@@ -171,9 +171,9 @@ func GetAllOperations(cli *clientv3.Client) (map[string]map[string]Operation, in
 
 // GetInfosOperationsByTask gets all DDL lock infos and operations in etcd currently.
 func GetInfosOperationsByTask(cli *clientv3.Client, task string) ([]Info, []Operation, int64, error) {
-	respTxn, _, err := etcdutil.DoOpsInOneTxnWithRetry(cli,
+	respTxn, _, err := etcdutil.DoTxnWithRepeatable(cli, etcdutil.ThenOpFunc(
 		clientv3.OpGet(common.ShardDDLPessimismInfoKeyAdapter.Encode(task), clientv3.WithPrefix()),
-		clientv3.OpGet(common.ShardDDLPessimismOperationKeyAdapter.Encode(task), clientv3.WithPrefix()))
+		clientv3.OpGet(common.ShardDDLPessimismOperationKeyAdapter.Encode(task), clientv3.WithPrefix())))
 	if err != nil {
 		return nil, nil, 0, err
 	}
@@ -294,4 +294,8 @@ func putOperationOp(o Operation) (clientv3.Op, error) {
 // deleteOperationOp returns a DELETE etcd operation for Operation.
 func deleteOperationOp(op Operation) clientv3.Op {
 	return clientv3.OpDelete(common.ShardDDLPessimismOperationKeyAdapter.Encode(op.Task, op.Source))
+}
+
+func getOperationOp(op Operation) clientv3.Op {
+	return clientv3.OpGet(common.ShardDDLPessimismOperationKeyAdapter.Encode(op.Task, op.Source))
 }

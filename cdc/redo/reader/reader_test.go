@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/golang/mock/gomock"
+	"github.com/google/uuid"
 	"github.com/pingcap/errors"
 	mockstorage "github.com/pingcap/tidb/br/pkg/mock/storage"
 	"github.com/pingcap/tidb/br/pkg/storage"
@@ -84,7 +85,9 @@ func TestLogReaderResetReader(t *testing.T) {
 		MaxLogSize: 100000,
 		Dir:        dir,
 	}
-	fileName := fmt.Sprintf("%s_%s_%d_%s_%d%s", "cp", "test-cf100", time.Now().Unix(), common.DefaultDDLLogFileType, 100, common.LogEXT)
+	fileName := fmt.Sprintf(common.RedoLogFileFormatV2, "cp",
+		"default", "test-cf100",
+		common.DefaultDDLLogFileType, 100, uuid.NewString(), common.LogEXT)
 	w, err := writer.NewWriter(ctx, cfg, writer.WithLogFileName(func() string {
 		return fileName
 	}))
@@ -103,7 +106,9 @@ func TestLogReaderResetReader(t *testing.T) {
 	f, err := os.Open(path)
 	require.Nil(t, err)
 
-	fileName = fmt.Sprintf("%s_%s_%d_%s_%d%s", "cp", "test-cf10", time.Now().Unix(), common.DefaultRowLogFileType, 10, common.LogEXT)
+	fileName = fmt.Sprintf(common.RedoLogFileFormatV2, "cp",
+		"default", "test-cf10",
+		common.DefaultRowLogFileType, 10, uuid.NewString(), common.LogEXT)
 	w, err = writer.NewWriter(ctx, cfg, writer.WithLogFileName(func() string {
 		return fileName
 	}))
@@ -236,7 +241,9 @@ func TestLogReaderReadMeta(t *testing.T) {
 	require.Nil(t, err)
 	defer os.RemoveAll(dir)
 
-	fileName := fmt.Sprintf("%s_%s_%d_%s%s", "cp", "test-changefeed", time.Now().Unix(), common.DefaultMetaFileType, common.MetaEXT)
+	fileName := fmt.Sprintf("%s_%s_%d_%s%s", "cp",
+		"test-changefeed",
+		time.Now().Unix(), common.DefaultMetaFileType, common.MetaEXT)
 	path := filepath.Join(dir, fileName)
 	f, err := os.Create(path)
 	require.Nil(t, err)
@@ -249,7 +256,9 @@ func TestLogReaderReadMeta(t *testing.T) {
 	_, err = f.Write(data)
 	require.Nil(t, err)
 
-	fileName = fmt.Sprintf("%s_%s_%d_%s%s", "cp1", "test-changefeed", time.Now().Unix(), common.DefaultMetaFileType, common.MetaEXT)
+	fileName = fmt.Sprintf("%s_%s_%d_%s%s", "cp1",
+		"test-changefeed",
+		time.Now().Unix(), common.DefaultMetaFileType, common.MetaEXT)
 	path = filepath.Join(dir, fileName)
 	f, err = os.Create(path)
 	require.Nil(t, err)
@@ -389,7 +398,7 @@ func TestLogReaderReadNextLog(t *testing.T) {
 			readerRet: &model.RedoLog{
 				RedoRow: &model.RedoRowChangedEvent{
 					Row: &model.RowChangedEvent{
-						CommitTs: 1,
+						CommitTs: 2,
 						RowID:    1,
 					},
 				},
@@ -398,6 +407,31 @@ func TestLogReaderReadNextLog(t *testing.T) {
 				RedoRow: &model.RedoRowChangedEvent{
 					Row: &model.RowChangedEvent{
 						CommitTs: 6,
+						RowID:    2,
+					},
+				},
+			},
+		},
+		{
+			name: "sameCommitTs",
+			args: arg{
+				ctx:    context.Background(),
+				maxNum: 3,
+			},
+			readerRet: &model.RedoLog{
+				RedoRow: &model.RedoRowChangedEvent{
+					Row: &model.RowChangedEvent{
+						CommitTs: 2,
+						StartTs:  2,
+						RowID:    1,
+					},
+				},
+			},
+			readerRet1: &model.RedoLog{
+				RedoRow: &model.RedoRowChangedEvent{
+					Row: &model.RowChangedEvent{
+						CommitTs: 2,
+						StartTs:  1,
 						RowID:    2,
 					},
 				},
@@ -493,14 +527,17 @@ func TestLogReaderReadNextLog(t *testing.T) {
 			require.EqualValues(t, tt.args.maxNum, len(ret), tt.name)
 			for i := 0; i < int(tt.args.maxNum); i++ {
 				if tt.name == "io.EOF err" {
-					require.Equal(t, ret[i].Row.CommitTs, tt.readerRet1.RedoRow.Row.CommitTs, tt.name)
+					require.Equal(t, ret[i].Row.CommitTs,
+						tt.readerRet1.RedoRow.Row.CommitTs, tt.name)
 					continue
 				}
 				if tt.name == "happy1" {
-					require.Equal(t, ret[i].Row.CommitTs, tt.readerRet1.RedoRow.Row.CommitTs, tt.name)
+					require.Equal(t, ret[i].Row.CommitTs,
+						tt.readerRet.RedoRow.Row.CommitTs, tt.name)
 					continue
 				}
 				require.Equal(t, ret[i].Row.CommitTs, tt.readerRet1.RedoRow.Row.CommitTs, tt.name)
+				require.Equal(t, ret[i].Row.StartTs, tt.readerRet1.RedoRow.Row.StartTs, tt.name)
 			}
 		}
 	}

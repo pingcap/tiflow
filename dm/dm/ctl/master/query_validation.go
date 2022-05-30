@@ -30,7 +30,15 @@ const (
 	ValidationAllErr         = "all"
 	ValidationIgnoredErr     = "ignored"
 	ValidationUnprocessedErr = "unprocessed"
+	ValidationResolvedErr    = "resolved"
 )
+
+var mapStr2ErrState = map[string]pb.ValidateErrorState{
+	ValidationAllErr:         pb.ValidateErrorState_InvalidErr,
+	ValidationIgnoredErr:     pb.ValidateErrorState_IgnoredErr,
+	ValidationUnprocessedErr: pb.ValidateErrorState_NewErr,
+	ValidationResolvedErr:    pb.ValidateErrorState_ResolvedErr,
+}
 
 func NewQueryValidationErrorCmd() *cobra.Command {
 	cmd := &cobra.Command{
@@ -44,8 +52,10 @@ func NewQueryValidationErrorCmd() *cobra.Command {
 
 func queryValidationError(cmd *cobra.Command, _ []string) (err error) {
 	var (
-		errState string
-		taskName string
+		errState   string
+		taskName   string
+		pbErrState pb.ValidateErrorState
+		ok         bool
 	)
 	if len(cmd.Flags().Args()) != 1 {
 		return errors.New("task name should be specified")
@@ -55,7 +65,8 @@ func queryValidationError(cmd *cobra.Command, _ []string) (err error) {
 	if err != nil {
 		return err
 	}
-	if errState != ValidationAllErr && errState != ValidationIgnoredErr && errState != ValidationUnprocessedErr {
+	if pbErrState, ok = mapStr2ErrState[errState]; !ok || errState == ValidationResolvedErr {
+		// todo: support querying resolved error?
 		cmd.SetOut(os.Stdout)
 		common.PrintCmdUsage(cmd)
 		return errors.Errorf("error flag should be either `%s`, `%s`, or `%s`", ValidationAllErr, ValidationIgnoredErr, ValidationUnprocessedErr)
@@ -67,7 +78,7 @@ func queryValidationError(cmd *cobra.Command, _ []string) (err error) {
 		ctx,
 		"GetValidationError",
 		&pb.GetValidationErrorRequest{
-			ErrState: errState,
+			ErrState: pbErrState, // using InvalidValidateError to represent `all``
 			TaskName: taskName,
 		},
 		&resp,
@@ -81,11 +92,11 @@ func queryValidationError(cmd *cobra.Command, _ []string) (err error) {
 
 func NewQueryValidationStatusCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "status [--stage stage] <task-name>",
+		Use:   "status [--table-stage stage] <task-name>",
 		Short: "query validation status of a task",
 		RunE:  queryValidationStatus,
 	}
-	cmd.Flags().String("stage", "", "filter validation tasks status by stages: running/stopped")
+	cmd.Flags().String("table-stage", "", "filter validation tables by stage: running/stopped")
 	return cmd
 }
 
@@ -102,7 +113,7 @@ func queryValidationStatus(cmd *cobra.Command, _ []string) error {
 		return errors.New("task name should be specified")
 	}
 	taskName = cmd.Flags().Arg(0)
-	stage, err = cmd.Flags().GetString("stage")
+	stage, err = cmd.Flags().GetString("table-stage")
 	if err != nil {
 		return err
 	}
@@ -115,6 +126,16 @@ func queryValidationStatus(cmd *cobra.Command, _ []string) error {
 			strings.ToLower(pb.Stage_Stopped.String()),
 		)
 	}
+	var pbStage pb.Stage
+	switch stage {
+	case "":
+		// use invalid stage to represent `all` stages
+		pbStage = pb.Stage_InvalidStage
+	case strings.ToLower(pb.Stage_Running.String()):
+		pbStage = pb.Stage_Running
+	case strings.ToLower(pb.Stage_Stopped.String()):
+		pbStage = pb.Stage_Stopped
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -124,7 +145,7 @@ func queryValidationStatus(cmd *cobra.Command, _ []string) error {
 		"GetValidationStatus",
 		&pb.GetValidationStatusRequest{
 			TaskName:     taskName,
-			FilterStatus: stage,
+			FilterStatus: pbStage,
 		},
 		&resp,
 	)

@@ -21,6 +21,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sorter"
 	"github.com/pingcap/tiflow/cdc/sorter/encoding"
@@ -29,7 +30,6 @@ import (
 	actormsg "github.com/pingcap/tiflow/pkg/actor/message"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
@@ -49,7 +49,7 @@ func allocID() uint32 {
 
 type common struct {
 	dbActorID actor.ID
-	dbRouter  *actor.Router
+	dbRouter  *actor.Router[message.Task]
 
 	uid      uint32
 	tableID  uint64
@@ -75,10 +75,10 @@ func (c *common) reportError(msg string, err error) {
 type Sorter struct {
 	common
 
-	writerRouter  *actor.Router
+	writerRouter  *actor.Router[message.Task]
 	writerActorID actor.ID
 
-	readerRouter  *actor.Router
+	readerRouter  *actor.Router[message.Task]
 	ReaderActorID actor.ID
 
 	outputCh chan *model.PolymorphicEvent
@@ -89,16 +89,25 @@ type Sorter struct {
 // NewSorter creates a new Sorter
 func NewSorter(
 	ctx context.Context, tableID int64, startTs uint64,
-	dbRouter *actor.Router, dbActorID actor.ID,
-	writerSystem *actor.System, writerRouter *actor.Router,
-	readerSystem *actor.System, readerRouter *actor.Router,
+	dbRouter *actor.Router[message.Task], dbActorID actor.ID,
+	writerSystem *actor.System[message.Task], writerRouter *actor.Router[message.Task],
+	readerSystem *actor.System[message.Task], readerRouter *actor.Router[message.Task],
 	compact *CompactScheduler, cfg *config.DBConfig,
 ) (*Sorter, error) {
-	changefeedID := util.ChangefeedIDFromCtx(ctx)
+	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
 	metricIterDuration := sorterIterReadDurationHistogram.MustCurryWith(
-		prometheus.Labels{"id": changefeedID})
-	metricTotalEventsKV := sorter.EventCount.WithLabelValues(changefeedID, "kv")
-	metricTotalEventsResolvedTs := sorter.EventCount.WithLabelValues(changefeedID, "resolved")
+		prometheus.Labels{
+			"namespace": changefeedID.Namespace,
+			"id":        changefeedID.ID,
+		})
+	metricInputKV := sorter.InputEventCount.
+		WithLabelValues(changefeedID.Namespace, changefeedID.ID, "kv")
+	metricInputResolved := sorter.InputEventCount.
+		WithLabelValues(changefeedID.Namespace, changefeedID.ID, "resolved")
+	metricOutputKV := sorter.OutputEventCount.
+		WithLabelValues(changefeedID.Namespace, changefeedID.ID, "kv")
+	metricOutputResolved := sorter.InputEventCount.
+		WithLabelValues(changefeedID.Namespace, changefeedID.ID, "resolved")
 
 	// TODO: test capture the same table multiple times.
 	uid := allocID()
@@ -118,17 +127,15 @@ func NewSorter(
 		readerRouter:  readerRouter,
 		readerActorID: actorID,
 
-		metricTotalEventsKV:         metricTotalEventsKV,
-		metricTotalEventsResolvedTs: metricTotalEventsResolvedTs,
+		metricTotalEventsKV:       metricInputKV,
+		metricTotalEventsResolved: metricInputResolved,
 	}
-	wmb := actor.NewMailbox(actorID, sorterInputCap)
+	wmb := actor.NewMailbox[message.Task](actorID, sorterInputCap)
 	err := writerSystem.Spawn(wmb, w)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 	c.closedWg.Add(1)
-
-	outputCh := make(chan *model.PolymorphicEvent, sorterOutputCap)
 
 	r := &reader{
 		common: c,
@@ -157,12 +164,14 @@ func NewSorter(
 		},
 
 		lastSentResolvedTs: startTs,
-		outputCh:           outputCh,
+		outputCh:           make(chan *model.PolymorphicEvent, sorterOutputCap),
 
-		metricIterReadDuration: metricIterDuration.WithLabelValues("read"),
-		metricIterNextDuration: metricIterDuration.WithLabelValues("next"),
+		metricIterReadDuration:    metricIterDuration.WithLabelValues("read"),
+		metricIterNextDuration:    metricIterDuration.WithLabelValues("next"),
+		metricTotalEventsKV:       metricOutputKV,
+		metricTotalEventsResolved: metricOutputResolved,
 	}
-	rmb := actor.NewMailbox(actorID, sorterInputCap)
+	rmb := actor.NewMailbox[message.Task](actorID, sorterInputCap)
 	err = readerSystem.Spawn(rmb, r)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -175,7 +184,7 @@ func NewSorter(
 		writerActorID: actorID,
 		readerRouter:  readerRouter,
 		ReaderActorID: actorID,
-		outputCh:      outputCh,
+		outputCh:      r.outputCh,
 	}, nil
 }
 
@@ -193,9 +202,9 @@ func (ls *Sorter) Run(ctx context.Context) error {
 	// As the context can't be cancelled. SendB can only return an error
 	// ActorStopped or ActorNotFound, and they mean actors have closed.
 	_ = ls.writerRouter.SendB(
-		ctx1, ls.writerActorID, actormsg.StopMessage())
+		ctx1, ls.writerActorID, actormsg.StopMessage[message.Task]())
 	_ = ls.readerRouter.SendB(
-		ctx1, ls.ReaderActorID, actormsg.StopMessage())
+		ctx1, ls.ReaderActorID, actormsg.StopMessage[message.Task]())
 	ls.closedWg.Wait()
 
 	_ = ls.cleanup(ctx1)
@@ -207,7 +216,7 @@ func (ls *Sorter) AddEntry(ctx context.Context, event *model.PolymorphicEvent) {
 	if atomic.LoadInt32(&ls.closed) != 0 {
 		return
 	}
-	msg := actormsg.SorterMessage(message.Task{
+	msg := actormsg.ValueMessage(message.Task{
 		UID:        ls.uid,
 		TableID:    ls.tableID,
 		InputEvent: event,
@@ -222,7 +231,7 @@ func (ls *Sorter) TryAddEntry(
 	if atomic.LoadInt32(&ls.closed) != 0 {
 		return false, nil
 	}
-	msg := actormsg.SorterMessage(message.Task{
+	msg := actormsg.ValueMessage(message.Task{
 		UID:        ls.uid,
 		TableID:    ls.tableID,
 		InputEvent: event,
@@ -240,7 +249,7 @@ func (ls *Sorter) TryAddEntry(
 // Output returns the sorted raw kv output channel
 func (ls *Sorter) Output() <-chan *model.PolymorphicEvent {
 	// Notify reader to read sorted events
-	msg := actormsg.SorterMessage(message.Task{
+	msg := actormsg.ValueMessage(message.Task{
 		UID:     ls.uid,
 		TableID: ls.tableID,
 		ReadTs:  message.ReadTs{},
@@ -266,5 +275,5 @@ func (ls *Sorter) cleanup(ctx context.Context) error {
 			encoding.EncodeTsKey(ls.uid, ls.tableID+1, 0),
 		},
 	}
-	return ls.dbRouter.SendB(ctx, ls.dbActorID, actormsg.SorterMessage(task))
+	return ls.dbRouter.SendB(ctx, ls.dbActorID, actormsg.ValueMessage(task))
 }

@@ -26,6 +26,15 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 )
 
+const (
+	// RedoLogFileFormatV1 was used before v6.1.0, which doesn't contain namespace information
+	// layout: captureID_changefeedID_fileType_maxEventCommitTs_uuid.fileExtName
+	RedoLogFileFormatV1 = "%s_%s_%s_%d_%s%s"
+	// RedoLogFileFormatV2 is available since v6.1.0, which contains namespace information
+	// layout: captureID_namespace_changefeedID_fileType_maxEventCommitTs_uuid.fileExtName
+	RedoLogFileFormatV2 = "%s_%s_%s_%s_%d_%s%s"
+)
+
 // InitS3storage init a storage used for s3,
 // s3URI should be like s3URI="s3://logbucket/test-changefeed?endpoint=http://$S3_ENDPOINT/"
 var InitS3storage = func(ctx context.Context, uri url.URL) (storage.ExternalStorage, error) {
@@ -57,6 +66,13 @@ var InitS3storage = func(ctx context.Context, uri url.URL) (storage.ExternalStor
 	return s3storage, nil
 }
 
+// logFormat2ParseFormat converts redo log file name format to the space separated
+// format, which can be read and parsed by sscanf. Besides remove the suffix `%s`
+// which is used as file name extension, since we will parse extension first.
+func logFormat2ParseFormat(fmtStr string) string {
+	return strings.TrimSuffix(strings.ReplaceAll(fmtStr, "_", " "), "%s")
+}
+
 // ParseLogFileName extract the commitTs, fileType from log fileName
 func ParseLogFileName(name string) (uint64, string, error) {
 	ext := filepath.Ext(name)
@@ -65,7 +81,9 @@ func ParseLogFileName(name string) (uint64, string, error) {
 	}
 
 	// if .sort, the name should be like
-	// fmt.Sprintf("%s_%s_%d_%s_%d%s", w.cfg.captureID, w.cfg.changeFeedID, w.cfg.createTime.Unix(), w.cfg.fileType, w.commitTS.Load(), LogEXT)+SortLogEXT
+	// fmt.Sprintf("%s_%s_%s_%d_%s_%d%s", w.cfg.captureID,
+	// w.cfg.changeFeedID.Namespace,w.cfg.changeFeedID.ID,
+	// w.cfg.fileType, w.commitTS.Load(), uuid, LogEXT)+SortLogEXT
 	if ext == SortLogEXT {
 		name = strings.TrimSuffix(name, SortLogEXT)
 		ext = filepath.Ext(name)
@@ -74,18 +92,31 @@ func ParseLogFileName(name string) (uint64, string, error) {
 		return 0, "", nil
 	}
 
-	var commitTs, d1 uint64
-	var s1, s2, fileType string
-	// the log looks like: fmt.Sprintf("%s_%s_%d_%s_%d%s", w.cfg.captureID, w.cfg.changeFeedID, w.cfg.createTime.Unix(), w.cfg.fileType, w.commitTS.Load(), redo.LogEXT)
-	formatStr := "%s %s %d %s %d" + LogEXT
-	if ext == TmpEXT {
-		formatStr += TmpEXT
+	var commitTs uint64
+	var s1, namespace, s2, fileType, uid string
+	// if the namespace is not default, the log looks like:
+	// fmt.Sprintf("%s_%s_%s_%d_%s_%d%s", w.cfg.captureID,
+	// w.cfg.changeFeedID.Namespace,w.cfg.changeFeedID.ID,
+	// w.cfg.fileType, w.commitTS.Load(), uuid, redo.LogEXT)
+	// otherwise it looks like:
+	// fmt.Sprintf("%s_%s_%d_%s_%d%s", w.cfg.captureID,
+	// w.cfg.changeFeedID.ID,
+	// w.cfg.fileType, w.commitTS.Load(), uuid, redo.LogEXT)
+	var (
+		vars      []any
+		formatStr string
+	)
+	if len(strings.Split(name, "_")) == 6 {
+		formatStr = logFormat2ParseFormat(RedoLogFileFormatV2)
+		vars = []any{&s1, &namespace, &s2, &fileType, &commitTs, &uid}
+	} else {
+		formatStr = logFormat2ParseFormat(RedoLogFileFormatV1)
+		vars = []any{&s1, &s2, &fileType, &commitTs, &uid}
 	}
 	name = strings.ReplaceAll(name, "_", " ")
-	_, err := fmt.Sscanf(name, formatStr, &s1, &s2, &d1, &fileType, &commitTs)
+	_, err := fmt.Sscanf(name, formatStr, vars...)
 	if err != nil {
 		return 0, "", errors.Annotatef(err, "bad log name: %s", name)
 	}
-
 	return commitTs, fileType, nil
 }

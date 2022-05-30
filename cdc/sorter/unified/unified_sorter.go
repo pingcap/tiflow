@@ -20,6 +20,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -113,8 +114,8 @@ func (s *Sorter) Run(ctx context.Context) error {
 	defer finish()
 
 	ctx = context.WithValue(ctx, ctxKey{}, s)
-	ctx = util.PutChangefeedIDInCtx(ctx, s.metricsInfo.changeFeedID)
-	ctx = util.PutTableInfoInCtx(ctx, s.metricsInfo.tableID, s.metricsInfo.tableName)
+	ctx = contextutil.PutChangefeedIDInCtx(ctx, s.metricsInfo.changeFeedID)
+	ctx = contextutil.PutTableInfoInCtx(ctx, s.metricsInfo.tableID, s.metricsInfo.tableName)
 
 	sorterConfig := config.GetGlobalServerConfig().Sorter
 	numConcurrentHeaps := sorterConfig.NumConcurrentWorker
@@ -169,10 +170,11 @@ func (s *Sorter) Run(ctx context.Context) error {
 	})
 
 	errg.Go(func() error {
-		changefeedID := util.ChangefeedIDFromCtx(ctx)
+		changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
 
 		metricSorterConsumeCount := sorterConsumeCount.MustCurryWith(map[string]string{
-			"changefeed": changefeedID,
+			"namespace":  changefeedID.Namespace,
+			"changefeed": changefeedID.ID,
 		})
 
 		nextSorterID := 0
@@ -181,7 +183,7 @@ func (s *Sorter) Run(ctx context.Context) error {
 			case <-subctx.Done():
 				return subctx.Err()
 			case event := <-s.inputCh:
-				if event.RawKV != nil && event.RawKV.OpType == model.OpTypeResolved {
+				if event.RawKV != nil && event.IsResolved() {
 					// broadcast resolved events
 					for _, sorter := range heapSorters {
 						select {

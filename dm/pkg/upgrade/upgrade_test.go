@@ -15,10 +15,12 @@ package upgrade
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"testing"
 
 	. "github.com/pingcap/check"
+	"github.com/pingcap/tiflow/dm/pkg/ha"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.etcd.io/etcd/tests/v3/integration"
 
@@ -177,6 +179,69 @@ func (t *testForEtcd) TestUpgradeToVer3(c *C) {
 		c.Assert(err, IsNil)
 	}
 	c.Assert(upgradeToVer3(ctx, etcdTestCli), ErrorMatches, ".*too many operations in txn request.*")
+}
+
+func (t *testForEtcd) TestUpgradeToVer5(c *C) {
+	ctx := context.Background()
+	worker := "worker-1"
+	source1 := "source-1"
+	source2 := "source-2"
+
+	boundBytes, err := json.Marshal(ha.NewSourceBound(source1, worker))
+	c.Assert(err, IsNil)
+	boundBytes2, err := json.Marshal(ha.NewSourceBound(source2, worker))
+	c.Assert(err, IsNil)
+
+	upgrades := []struct {
+		oldKey  string
+		oldVal  string
+		newKey  string
+		newVal  string
+		newVal2 string
+	}{
+		{
+			common.UpstreamBoundWorkerKeyAdapterV1.Encode(worker),
+			string(boundBytes),
+			common.UpstreamBoundWorkerKeyAdapter.Encode(worker, source1),
+			string(boundBytes),
+			string(boundBytes2),
+		},
+		{
+			common.UpstreamLastBoundWorkerKeyAdapterV1.Encode(worker),
+			string(boundBytes),
+			common.UpstreamLastBoundWorkerKeyAdapter.Encode(source1),
+			string(boundBytes),
+			string(boundBytes2),
+		},
+		{
+			common.UpstreamRelayWorkerKeyAdapterV1.Encode(worker),
+			source1,
+			common.UpstreamRelayWorkerKeyAdapter.Encode(worker, source1),
+			string(boundBytes),
+			source2,
+		},
+	}
+
+	for _, upgrade := range upgrades {
+		_, err = etcdTestCli.Put(ctx, upgrade.oldKey, upgrade.oldVal)
+		c.Assert(err, IsNil)
+		c.Assert(upgradeToVer5(ctx, etcdTestCli), IsNil)
+
+		newKey := upgrade.newKey
+		resp, err := etcdTestCli.Get(ctx, newKey)
+		c.Assert(err, IsNil)
+		c.Assert(resp.Kvs, HasLen, 1)
+		c.Assert(string(resp.Kvs[0].Value), Equals, upgrade.oldVal)
+
+		newVal2 := upgrade.newVal2
+		_, err = etcdTestCli.Put(ctx, newKey, newVal2)
+		c.Assert(err, IsNil)
+		c.Assert(upgradeToVer5(ctx, etcdTestCli), IsNil)
+		resp, err = etcdTestCli.Get(ctx, newKey)
+		c.Assert(err, IsNil)
+		c.Assert(resp.Kvs, HasLen, 1)
+		c.Assert(string(resp.Kvs[0].Value), Equals, newVal2)
+	}
 }
 
 func (t *testForBigTxn) TestUpgradeToVer3(c *C) {

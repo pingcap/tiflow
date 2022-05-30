@@ -2674,48 +2674,21 @@ func (s *Scheduler) handleLoadTask(ctx context.Context, loadTaskCh <-chan ha.Loa
 	}
 }
 
-func (s *Scheduler) OperateValidationTask(expectStage pb.Stage, stCfgs map[string]map[string]config.SubTaskConfig) error {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+// OperateValidationTask operate validator of subtask.
+// 	tasks: tasks need to operate
+// 	validatorStages: stage info of subtask validators
+// 	changedSubtaskCfgs: changed subtask configs
+// see server.StartValidation/StopValidation for more detail.
+func (s *Scheduler) OperateValidationTask(validatorStages []ha.Stage, changedSubtaskCfgs []config.SubTaskConfig) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if !s.started.Load() {
 		return terror.ErrSchedulerNotStarted.Generate()
 	}
-	for taskName := range stCfgs {
-		release, err := s.subtaskLatch.tryAcquire(taskName)
-		if err != nil {
-			return terror.Annotatef(err, "fail to require lock for validation task")
-		}
-		defer release()
-	}
 
-	// 1. get stages of subtask's validator and update stage
-	newCfgs := make([]config.SubTaskConfig, 0)
-	validatorStages := make([]ha.Stage, 0)
-	for taskName := range stCfgs {
-		for _, cfg := range stCfgs[taskName] {
-			stageM, _, err := ha.GetValidatorStage(s.etcdCli, cfg.SourceID, cfg.Name, 0)
-			if err != nil {
-				return terror.Annotatef(err, "fail to get validator stage for task `%s` and source `%s`", cfg.Name, cfg.SourceID)
-			}
-			if v, ok := stageM[cfg.Name]; ok && v.Expect == expectStage {
-				s.logger.Info(
-					"validator stage is already in expected stage",
-					zap.String("expectStage", expectStage.String()),
-					zap.String("taskName", cfg.Name),
-					zap.String("source", cfg.SourceID),
-				)
-			} else {
-				if expectStage == pb.Stage_Running {
-					// don't need to update config if stopping the validator task
-					newCfgs = append(newCfgs, cfg)
-				}
-				validatorStages = append(validatorStages, ha.NewValidatorStage(expectStage, cfg.SourceID, cfg.Name))
-			}
-		}
-	}
 	// 2. setting subtask stage in etcd
-	if len(newCfgs) > 0 || len(validatorStages) > 0 {
-		_, err := ha.PutSubTaskCfgStage(s.etcdCli, newCfgs, []ha.Stage{}, validatorStages)
+	if len(changedSubtaskCfgs) > 0 || len(validatorStages) > 0 {
+		_, err := ha.PutSubTaskCfgStage(s.etcdCli, changedSubtaskCfgs, []ha.Stage{}, validatorStages)
 		if err != nil {
 			return terror.Annotate(err, "fail to set new validator stage")
 		}
@@ -2726,12 +2699,31 @@ func (s *Scheduler) OperateValidationTask(expectStage pb.Stage, stCfgs map[strin
 		m := v.(map[string]ha.Stage)
 		m[stage.Source] = stage
 	}
-	if expectStage == pb.Stage_Running {
-		for _, cfg := range newCfgs {
-			v, _ := s.subTaskCfgs.LoadOrStore(cfg.Name, map[string]config.SubTaskConfig{})
-			m := v.(map[string]config.SubTaskConfig)
-			m[cfg.SourceID] = cfg
-		}
+	for _, cfg := range changedSubtaskCfgs {
+		v, _ := s.subTaskCfgs.LoadOrStore(cfg.Name, map[string]config.SubTaskConfig{})
+		m := v.(map[string]config.SubTaskConfig)
+		m[cfg.SourceID] = cfg
+	}
+	return nil
+}
+
+// ValidatorEnabled returns true when validator of task-source pair has enabled, i.e. validation mode is not none.
+// enabled validator can be in running or stopped stage.
+func (s *Scheduler) ValidatorEnabled(task, source string) bool {
+	return s.GetValidatorStage(task, source) != nil
+}
+
+// GetValidatorStage get validator stage of task-source pair.
+func (s *Scheduler) GetValidatorStage(task, source string) *ha.Stage {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	v, ok := s.expectValidatorStages.Load(task)
+	if !ok {
+		return nil
+	}
+	m := v.(map[string]ha.Stage)
+	if stage, ok2 := m[source]; ok2 {
+		return &stage
 	}
 	return nil
 }

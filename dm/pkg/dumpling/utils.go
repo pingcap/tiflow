@@ -24,6 +24,7 @@ import (
 
 	"github.com/docker/go-units"
 	"github.com/go-mysql-org/go-mysql/mysql"
+	brstorage "github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tidb/dumpling/export"
 	"github.com/spf13/pflag"
 
@@ -35,13 +36,21 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
 
-var DumplingDefaultTableFilter = []string{"*.*", export.DefaultTableFilter}
+// DefaultTableFilter is the default table filter for dumpling.
+var DefaultTableFilter = []string{"*.*", export.DefaultTableFilter}
 
 // ParseMetaData parses mydumper's output meta file and returns binlog location.
 // since v2.0.0, dumpling maybe configured to output master status after connection pool is established,
 // we return this location as well.
-func ParseMetaData(ctx context.Context, dir, filename, flavor string) (*binlog.Location, *binlog.Location, error) {
-	fd, err := storage.OpenFile(ctx, dir, filename, nil)
+// If `extStorage` is nil, we will use `dir` to open a storage.
+func ParseMetaData(
+	ctx context.Context,
+	dir string,
+	filename string,
+	flavor string,
+	extStorage brstorage.ExternalStorage,
+) (*binlog.Location, *binlog.Location, error) {
+	fd, err := storage.OpenFile(ctx, dir, filename, extStorage)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -151,7 +160,7 @@ func parseMetaDataByReader(filename, flavor string, rd io.Reader) (*binlog.Locat
 	if err != nil {
 		return nil, nil, invalidErr
 	}
-	loc := binlog.InitLocation(pos, gset)
+	loc := binlog.NewLocation(pos, gset)
 	locPtr = &loc
 
 	if useLocation2 {
@@ -162,7 +171,7 @@ func parseMetaDataByReader(filename, flavor string, rd io.Reader) (*binlog.Locat
 		if err != nil {
 			return nil, nil, invalidErr
 		}
-		loc2 := binlog.InitLocation(pos2, gset2)
+		loc2 := binlog.NewLocation(pos2, gset2)
 		locPtr2 = &loc2
 	}
 
@@ -260,7 +269,7 @@ func ParseExtraArgs(logger *log.Logger, dumpCfg *export.Config, args []string) e
 	dumplingFlagSet.Uint64VarP(&dumpCfg.Rows, "rows", "r", dumpCfg.Rows, "Split table into chunks of this many rows, default unlimited")
 	dumplingFlagSet.StringVar(&dumpCfg.Where, "where", dumpCfg.Where, "Dump only selected records")
 	dumplingFlagSet.BoolVar(&dumpCfg.EscapeBackslash, "escape-backslash", dumpCfg.EscapeBackslash, "Use backslash to escape quotation marks")
-	dumplingFlagSet.StringArrayVarP(&filters, "filter", "f", DumplingDefaultTableFilter, "Filter to select which tables to dump")
+	dumplingFlagSet.StringArrayVarP(&filters, "filter", "f", DefaultTableFilter, "Filter to select which tables to dump")
 	dumplingFlagSet.StringVar(&dumpCfg.Security.CAPath, "ca", dumpCfg.Security.CAPath, "The path name to the certificate authority file for TLS connection")
 	dumplingFlagSet.StringVar(&dumpCfg.Security.CertPath, "cert", dumpCfg.Security.CertPath, "The path name to the client certificate file for TLS connection")
 	dumplingFlagSet.StringVar(&dumpCfg.Security.KeyPath, "key", dumpCfg.Security.KeyPath, "The path name to the client private key file for TLS connection")
@@ -290,7 +299,7 @@ func ParseExtraArgs(logger *log.Logger, dumpCfg *export.Config, args []string) e
 		}
 	}
 
-	if len(tablesList) > 0 || !utils.NonRepeatStringsEqual(DumplingDefaultTableFilter, filters) {
+	if len(tablesList) > 0 || !utils.NonRepeatStringsEqual(DefaultTableFilter, filters) {
 		ff, err2 := export.ParseTableFilter(tablesList, filters)
 		if err2 != nil {
 			return err2

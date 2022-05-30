@@ -21,7 +21,7 @@ import (
 	"time"
 
 	"github.com/pingcap/failpoint"
-	"github.com/pingcap/tidb-tools/pkg/dbutil"
+	"github.com/pingcap/tidb/util/dbutil"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/zap"
 
@@ -833,7 +833,7 @@ func (o *Optimist) removeLock(lock *optimism.Lock) (bool, error) {
 						}
 					}
 				}
-				resp, _, err := etcdutil.DoOpsInOneCmpsTxnWithRetry(o.cli, cmps, nil, nil)
+				resp, _, err := etcdutil.DoTxnWithRepeatable(o.cli, etcdutil.FullOpFunc(cmps, nil, nil))
 				if err == nil && !resp.Succeeded {
 					log.L().Info("found new DDL info")
 					break OUTER

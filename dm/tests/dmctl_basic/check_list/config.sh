@@ -118,15 +118,15 @@ function config_to_file() {
 		"\"result\": true" 3
 
 	# restart master with get config
-	ps aux | grep dm-master | awk '{print $2}' | xargs kill || true
+	kill_process dm-master
 	check_master_port_offline 1
 	run_dm_master $WORK_DIR/master $MASTER_PORT $dm_master_conf
 	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT
 
 	# restart worker with get config
-	ps aux | grep worker1 | awk '{print $2}' | xargs kill || true
+	kill_process worker1
 	check_port_offline $WORKER1_PORT 20
-	ps aux | grep worker2 | awk '{print $2}' | xargs kill || true
+	kill_process worker2
 	check_port_offline $WORKER2_PORT 20
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"list-member --worker" \

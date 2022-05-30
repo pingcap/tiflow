@@ -9,26 +9,6 @@ CDC_BINARY=cdc.test
 SINK_TYPE=$1
 MAX_RETRIES=10
 
-function check_changefeed_is_finished() {
-	pd=$1
-	changefeed=$2
-	query=$(cdc cli changefeed query -c=$changefeed)
-	echo "$query"
-	state=$(echo "$query" | jq ".state" | tr -d '"')
-	if [[ ! "$state" -eq "finished" ]]; then
-		echo "state $state is not finished"
-		exit 1
-	fi
-
-	status_length=$(echo "$query" | sed "/has been deleted/d" | jq '."task-status"|length')
-	if [[ ! "$status_length" -eq "0" ]]; then
-		echo "unexpected task status length $status_length, should be 0"
-		exit 1
-	fi
-}
-
-export -f check_changefeed_is_finished
-
 function run() {
 	rm -rf $WORK_DIR && mkdir -p $WORK_DIR
 	start_tidb_cluster --workdir $WORK_DIR
@@ -60,7 +40,7 @@ function run() {
 
 	sleep 90
 
-	ensure $MAX_RETRIES check_changefeed_is_finished $pd_addr $changefeed_id
+	ensure $MAX_RETRIES check_changefeed_state $pd_addr $changefeed_id "finished" "null" ""
 
 	cleanup_process $CDC_BINARY
 }

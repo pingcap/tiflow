@@ -71,7 +71,7 @@ type RedoLogWriter interface {
 var defaultGCIntervalInMs = 5000
 
 var (
-	logWriters = map[string]*LogWriter{}
+	logWriters = map[model.ChangeFeedID]*LogWriter{}
 	initLock   sync.Mutex
 )
 
@@ -84,7 +84,7 @@ var redoLogPool = sync.Pool{
 // LogWriterConfig is the configuration used by a Writer.
 type LogWriterConfig struct {
 	Dir          string
-	ChangeFeedID string
+	ChangeFeedID model.ChangeFeedID
 	CaptureID    string
 	CreateTime   time.Time
 	// MaxLogSize is the maximum size of log in megabyte, defaults to defaultMaxLogSize.
@@ -108,7 +108,9 @@ type LogWriter struct {
 }
 
 // NewLogWriter creates a LogWriter instance. It is guaranteed only one LogWriter per changefeed
-func NewLogWriter(ctx context.Context, cfg *LogWriterConfig) (*LogWriter, error) {
+func NewLogWriter(
+	ctx context.Context, cfg *LogWriterConfig, opts ...Option,
+) (*LogWriter, error) {
 	if cfg == nil {
 		return nil, cerror.WrapError(cerror.ErrRedoConfigInvalid, errors.New("LogWriterConfig can not be nil"))
 	}
@@ -150,11 +152,11 @@ func NewLogWriter(ctx context.Context, cfg *LogWriterConfig) (*LogWriter, error)
 	logWriter = &LogWriter{
 		cfg: cfg,
 	}
-	logWriter.rowWriter, err = NewWriter(ctx, rowCfg)
+	logWriter.rowWriter, err = NewWriter(ctx, rowCfg, opts...)
 	if err != nil {
 		return nil, err
 	}
-	logWriter.ddlWriter, err = NewWriter(ctx, ddlCfg)
+	logWriter.ddlWriter, err = NewWriter(ctx, ddlCfg, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -163,7 +165,8 @@ func NewLogWriter(ctx context.Context, cfg *LogWriterConfig) (*LogWriter, error)
 	err = logWriter.initMeta(ctx)
 	if err != nil {
 		log.Warn("init redo meta fail",
-			zap.String("changefeed", cfg.ChangeFeedID),
+			zap.String("namespace", cfg.ChangeFeedID.Namespace),
+			zap.String("changefeed", cfg.ChangeFeedID.ID),
 			zap.Error(err))
 	}
 	if cfg.S3Storage {
@@ -188,7 +191,8 @@ func NewLogWriter(ctx context.Context, cfg *LogWriterConfig) (*LogWriter, error)
 		}
 	}
 
-	logWriter.metricTotalRowsCount = redoTotalRowsCountGauge.WithLabelValues(cfg.ChangeFeedID)
+	logWriter.metricTotalRowsCount = redoTotalRowsCountGauge.
+		WithLabelValues(cfg.ChangeFeedID.Namespace, cfg.ChangeFeedID.ID)
 	logWriters[cfg.ChangeFeedID] = logWriter
 	go logWriter.runGC(ctx)
 	return logWriter, nil
@@ -274,12 +278,16 @@ func (l *LogWriter) runGC(ctx context.Context) {
 		case <-ctx.Done():
 			err := l.Close()
 			if err != nil {
-				log.Error("runGC close fail", zap.String("changefeed", l.cfg.ChangeFeedID), zap.Error(err))
+				log.Error("runGC close fail",
+					zap.String("namespace", l.cfg.ChangeFeedID.Namespace),
+					zap.String("changefeed", l.cfg.ChangeFeedID.ID), zap.Error(err))
 			}
 		case <-ticker.C:
 			err := l.gc()
 			if err != nil {
-				log.Error("redo log GC fail", zap.String("changefeed", l.cfg.ChangeFeedID), zap.Error(err))
+				log.Error("redo log GC fail",
+					zap.String("namespace", l.cfg.ChangeFeedID.Namespace),
+					zap.String("changefeed", l.cfg.ChangeFeedID.ID), zap.Error(err))
 			}
 		}
 	}
@@ -488,7 +496,10 @@ func (l *LogWriter) DeleteAllLogs(ctx context.Context) error {
 }
 
 func (l *LogWriter) getDeletedChangefeedMarker() string {
-	return fmt.Sprintf("delete_%s", l.cfg.ChangeFeedID)
+	if l.cfg.ChangeFeedID.Namespace == model.DefaultNamespace {
+		return fmt.Sprintf("delete_%s", l.cfg.ChangeFeedID.ID)
+	}
+	return fmt.Sprintf("delete_%s_%s", l.cfg.ChangeFeedID.Namespace, l.cfg.ChangeFeedID.ID)
 }
 
 func (l *LogWriter) writeDeletedMarkerToS3(ctx context.Context) error {
@@ -546,7 +557,8 @@ var getAllFilesInS3 = func(ctx context.Context, l *LogWriter) ([]string, error) 
 
 // Close implements RedoLogWriter.Close.
 func (l *LogWriter) Close() error {
-	redoTotalRowsCountGauge.DeleteLabelValues(l.cfg.ChangeFeedID)
+	redoTotalRowsCountGauge.
+		DeleteLabelValues(l.cfg.ChangeFeedID.Namespace, l.cfg.ChangeFeedID.ID)
 
 	var err error
 	err = multierr.Append(err, l.rowWriter.Close())
@@ -585,7 +597,13 @@ func (l *LogWriter) isStopped() bool {
 }
 
 func (l *LogWriter) getMetafileName() string {
-	return fmt.Sprintf("%s_%s_%s%s", l.cfg.CaptureID, l.cfg.ChangeFeedID, common.DefaultMetaFileType, common.MetaEXT)
+	if model.DefaultNamespace == l.cfg.ChangeFeedID.Namespace {
+		return fmt.Sprintf("%s_%s_%s%s", l.cfg.CaptureID, l.cfg.ChangeFeedID.ID,
+			common.DefaultMetaFileType, common.MetaEXT)
+	}
+	return fmt.Sprintf("%s_%s_%s_%s%s", l.cfg.CaptureID,
+		l.cfg.ChangeFeedID.Namespace, l.cfg.ChangeFeedID.ID,
+		common.DefaultMetaFileType, common.MetaEXT)
 }
 
 func (l *LogWriter) flushLogMeta(checkPointTs, resolvedTs uint64) error {
@@ -656,5 +674,8 @@ func (l *LogWriter) filePath() string {
 }
 
 func (cfg LogWriterConfig) String() string {
-	return fmt.Sprintf("%s:%s:%s:%d:%d:%s:%t", cfg.ChangeFeedID, cfg.CaptureID, cfg.Dir, cfg.MaxLogSize, cfg.FlushIntervalInMs, cfg.S3URI.String(), cfg.S3Storage)
+	return fmt.Sprintf("%s:%s:%s:%s:%d:%d:%s:%t",
+		cfg.ChangeFeedID.Namespace, cfg.ChangeFeedID.ID,
+		cfg.CaptureID, cfg.Dir, cfg.MaxLogSize,
+		cfg.FlushIntervalInMs, cfg.S3URI.String(), cfg.S3Storage)
 }

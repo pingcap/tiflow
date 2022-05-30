@@ -22,6 +22,8 @@ import (
 	"context"
 	"testing"
 
+	"github.com/pingcap/tiflow/dm/pkg/ha"
+
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tiflow/dm/checker"
 	"github.com/pingcap/tiflow/dm/dm/config"
@@ -50,7 +52,7 @@ func (s *OpenAPIControllerSuite) SetupSuite() {
 		Enable:     true,
 		EnableGtid: false,
 		Host:       dbCfg.Host,
-		Password:   dbCfg.Password,
+		Password:   &dbCfg.Password,
 		Port:       dbCfg.Port,
 		User:       dbCfg.User,
 	}
@@ -60,13 +62,13 @@ func (s *OpenAPIControllerSuite) SetupSuite() {
 	s.testTask = &task
 
 	checker.CheckSyncConfigFunc = mockCheckSyncConfig
-	checkAndAdjustSourceConfigFunc = checkAndNoAdjustSourceConfigMock
+	CheckAndAdjustSourceConfigFunc = checkAndNoAdjustSourceConfigMock
 	s.Nil(failpoint.Enable("github.com/pingcap/tiflow/dm/dm/master/MockSkipAdjustTargetDB", `return(true)`))
 	s.Nil(failpoint.Enable("github.com/pingcap/tiflow/dm/dm/master/MockSkipRemoveMetaData", `return(true)`))
 }
 
 func (s *OpenAPIControllerSuite) TearDownSuite() {
-	checkAndAdjustSourceConfigFunc = checkAndAdjustSourceConfig
+	CheckAndAdjustSourceConfigFunc = checkAndAdjustSourceConfig
 	checker.CheckSyncConfigFunc = checker.CheckSyncConfig
 	s.Nil(failpoint.Disable("github.com/pingcap/tiflow/dm/dm/master/MockSkipAdjustTargetDB"))
 	s.Nil(failpoint.Disable("github.com/pingcap/tiflow/dm/dm/master/MockSkipRemoveMetaData"))
@@ -221,6 +223,40 @@ func (s *OpenAPIControllerSuite) TestSourceController() {
 		s.Nil(err)
 		s.Len(sourceList, 0)
 	}
+
+	// create and update no password source
+	{
+		// no password will use "" as password
+		source := *s.testSource
+		source.Password = nil
+		createReq := openapi.CreateSourceRequest{Source: source}
+		resp, err := server.createSource(ctx, createReq)
+		s.NoError(err)
+		s.EqualValues(source, *resp)
+		config := server.scheduler.GetSourceCfgByID(source.SourceName)
+		s.NotNil(config)
+		s.Equal("", config.From.Password)
+
+		// update to have password
+		updateReq := openapi.UpdateSourceRequest{Source: *s.testSource}
+		sourceAfterUpdated, err := server.updateSource(ctx, source.SourceName, updateReq)
+		s.NoError(err)
+		s.EqualValues(s.testSource, sourceAfterUpdated)
+
+		// update without password will use old password
+		source = *s.testSource
+		source.Password = nil
+		updateReq = openapi.UpdateSourceRequest{Source: source}
+		sourceAfterUpdated, err = server.updateSource(ctx, source.SourceName, updateReq)
+		s.NoError(err)
+		s.Equal(source, *sourceAfterUpdated)
+		// password is old
+		config = server.scheduler.GetSourceCfgByID(source.SourceName)
+		s.NotNil(config)
+		s.Equal(*s.testSource.Password, config.From.Password)
+
+		s.Nil(server.deleteSource(ctx, s.testSource.SourceName, false))
+	}
 }
 
 func (s *OpenAPIControllerSuite) TestTaskController() {
@@ -251,9 +287,9 @@ func (s *OpenAPIControllerSuite) TestTaskController() {
 	// create
 	{
 		createTaskReq := openapi.CreateTaskRequest{Task: *s.testTask}
-		task, err := server.createTask(ctx, createTaskReq)
+		res, err := server.createTask(ctx, createTaskReq)
 		s.Nil(err)
-		s.EqualValues(s.testTask, task)
+		s.EqualValues(*s.testTask, res.Task)
 	}
 
 	// update
@@ -263,15 +299,15 @@ func (s *OpenAPIControllerSuite) TestTaskController() {
 		task.SourceConfig.IncrMigrateConf.ReplBatch = &batch
 		updateReq := openapi.UpdateTaskRequest{Task: task}
 		s.NoError(failpoint.Enable("github.com/pingcap/tiflow/dm/dm/master/scheduler/operateCheckSubtasksCanUpdate", `return("success")`))
-		taskAfterUpdated, err := server.updateTask(ctx, updateReq)
+		res, err := server.updateTask(ctx, updateReq)
 		s.NoError(err)
-		s.EqualValues(task.SourceConfig.IncrMigrateConf, taskAfterUpdated.SourceConfig.IncrMigrateConf)
+		s.EqualValues(task.SourceConfig.IncrMigrateConf, res.Task.SourceConfig.IncrMigrateConf)
 
 		// update back to continue next text
 		updateReq.Task = *s.testTask
-		taskAfterUpdated, err = server.updateTask(ctx, updateReq)
+		res, err = server.updateTask(ctx, updateReq)
 		s.NoError(err)
-		s.EqualValues(s.testTask, taskAfterUpdated)
+		s.EqualValues(*s.testTask, res.Task)
 		s.NoError(failpoint.Disable("github.com/pingcap/tiflow/dm/dm/master/scheduler/operateCheckSubtasksCanUpdate"))
 	}
 
@@ -338,6 +374,24 @@ func (s *OpenAPIControllerSuite) TestTaskController() {
 		// stop success
 		s.Nil(server.stopTask(ctx, s.testTask.Name, openapi.StopTaskRequest{}))
 		s.Equal(server.scheduler.GetExpectSubTaskStage(s.testTask.Name, s.testSource.SourceName).Expect, pb.Stage_Stopped)
+
+		// start with cli args
+		startTime := "2022-05-05 12:12:12"
+		safeModeTimeDuration := "10s"
+		req = openapi.StartTaskRequest{
+			StartTime:            &startTime,
+			SafeModeTimeDuration: &safeModeTimeDuration,
+		}
+		s.Nil(server.startTask(ctx, s.testTask.Name, req))
+		taskCliConf, err := ha.GetTaskCliArgs(server.etcdClient, s.testTask.Name, s.testSource.SourceName)
+		s.Nil(err)
+		s.NotNil(taskCliConf)
+		s.Equal(startTime, taskCliConf.StartTime)
+		s.Equal(safeModeTimeDuration, taskCliConf.SafeModeDuration)
+
+		// stop success
+		s.Nil(server.stopTask(ctx, s.testTask.Name, openapi.StopTaskRequest{}))
+		s.Equal(server.scheduler.GetExpectSubTaskStage(s.testTask.Name, s.testSource.SourceName).Expect, pb.Stage_Stopped)
 	}
 
 	// delete
@@ -368,6 +422,26 @@ func (s *OpenAPIControllerSuite) TestTaskController() {
 		s.NotNil(taskCfg2)
 		s.EqualValues(task2, task)
 		s.Equal(taskCfg2.String(), taskCfg.String())
+
+		// incremental task without source meta
+		taskTest := *s.testTask
+		taskTest.TaskMode = config.ModeIncrement
+		req = openapi.ConverterTaskRequest{Task: &taskTest}
+		task3, taskCfg3, err := server.convertTaskConfig(ctx, req)
+		s.NoError(err)
+		s.NotNil(task3)
+		s.NotNil(taskCfg3)
+		s.EqualValues(&taskTest, task3)
+
+		req.Task = nil
+		taskCfgStr = taskCfg3.String()
+		req.TaskConfigFile = &taskCfgStr
+		task4, taskCfg4, err := server.convertTaskConfig(ctx, req)
+		s.NoError(err)
+		s.NotNil(task4)
+		s.NotNil(taskCfg4)
+		s.EqualValues(task4, task3)
+		s.Equal(taskCfg4.String(), taskCfg3.String())
 	}
 }
 

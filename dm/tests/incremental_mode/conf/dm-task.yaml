@@ -1,6 +1,6 @@
 ---
 name: test
-task-mode: task-mode-placeholder
+task-mode: incremental
 is-sharding: false
 meta-schema: "dm_meta"
 # enable-heartbeat: true
@@ -17,23 +17,22 @@ target-database:
 mysql-instances:
   - source-id: "mysql-replica-01"
     meta:
-      binlog-name: binlog-name-placeholder-1
-      binlog-pos: binlog-pos-placeholder-1
       binlog-gtid: binlog-gtid-placeholder-1
     block-allow-list:  "instance"
     mydumper-config-name: "global"
     loader-config-name: "global"
     syncer-config-name: "global"
+    filter-rules: ["filter-01"]
 
   - source-id: "mysql-replica-02"
     meta:
       binlog-name: binlog-name-placeholder-2
       binlog-pos: binlog-pos-placeholder-2
-      binlog-gtid: binlog-gtid-placeholder-2
     block-allow-list:  "instance"
     mydumper-config-name: "global"
     loader-config-name: "global"
     syncer-config-name: "global"
+    filter-rules: ["filter-01"]
 
 block-allow-list:
   instance:
@@ -55,3 +54,11 @@ syncers:
   global:
     worker-count: 16
     batch: 100
+
+filters:
+  filter-01:
+    schema-pattern: "incremental_mode"
+    table-pattern: "*"
+    events: ["drop database"]
+    sql-pattern: []
+    action: Ignore

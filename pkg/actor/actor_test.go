@@ -19,24 +19,23 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/actor/message"
 	"github.com/stretchr/testify/require"
 )
 
 // Make sure mailbox implementation follows Mailbox definition.
-func testMailbox(t *testing.T, mb Mailbox) {
+func testMailbox(t *testing.T, mb Mailbox[int]) {
 	// Empty mailbox.
 	require.Equal(t, 0, mb.len())
 	_, ok := mb.Receive()
 	require.False(t, ok)
 
 	// Send and receive.
-	err := mb.Send(message.BarrierMessage(model.Ts(1)))
+	err := mb.Send(message.ValueMessage(1))
 	require.Nil(t, err)
 	require.Equal(t, 1, mb.len())
 	msg, ok := mb.Receive()
-	require.Equal(t, message.BarrierMessage(1), msg)
+	require.Equal(t, message.ValueMessage(1), msg)
 	require.True(t, ok)
 
 	// Empty mailbox.
@@ -45,7 +44,7 @@ func testMailbox(t *testing.T, mb Mailbox) {
 
 	// Mailbox has a bounded capacity.
 	for {
-		err = mb.Send(message.BarrierMessage(model.Ts(1)))
+		err = mb.Send(message.ValueMessage(1))
 		if err != nil {
 			break
 		}
@@ -55,7 +54,7 @@ func testMailbox(t *testing.T, mb Mailbox) {
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
 		ch <- nil
-		ch <- mb.SendB(ctx, message.BarrierMessage(2))
+		ch <- mb.SendB(ctx, message.ValueMessage(2))
 	}()
 	// Wait for goroutine start.
 	<-ch
@@ -66,7 +65,7 @@ func testMailbox(t *testing.T, mb Mailbox) {
 	}
 	// Receive unblocks SendB
 	msg, ok = mb.Receive()
-	require.Equal(t, message.BarrierMessage(1), msg)
+	require.Equal(t, message.ValueMessage(1), msg)
 	require.True(t, ok)
 	select {
 	case <-time.After(100 * time.Millisecond):
@@ -79,7 +78,7 @@ func testMailbox(t *testing.T, mb Mailbox) {
 	ch = make(chan error)
 	go func() {
 		ch <- nil
-		ch <- mb.SendB(ctx, message.BarrierMessage(2))
+		ch <- mb.SendB(ctx, message.ValueMessage(2))
 	}()
 	// Wait for goroutine start.
 	<-ch
@@ -98,6 +97,6 @@ func testMailbox(t *testing.T, mb Mailbox) {
 }
 
 func TestMailbox(t *testing.T) {
-	mb := NewMailbox(ID(1), 1)
+	mb := NewMailbox[int](ID(1), 1)
 	testMailbox(t, mb)
 }
