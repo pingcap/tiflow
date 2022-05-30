@@ -164,8 +164,7 @@ func TestAgentHandleMessage(t *testing.T) {
 		Heartbeat: &schedulepb.Heartbeat{},
 	}
 	// handle the first heartbeat, from the known owner.
-	response, err := a.handleMessage([]*schedulepb.Message{heartbeat})
-	require.NoError(t, err)
+	response := a.handleMessage([]*schedulepb.Message{heartbeat})
 	require.Len(t, response, 1)
 	require.NotNil(t, response[0].HeartbeatResponse)
 	require.Equal(t, response[0].Header.Version, a.version)
@@ -191,14 +190,12 @@ func TestAgentHandleMessage(t *testing.T) {
 		},
 	}
 	// add table request in pending
-	response, err = a.handleMessage([]*schedulepb.Message{addTableRequest})
-	require.NoError(t, err)
+	response = a.handleMessage([]*schedulepb.Message{addTableRequest})
 	require.Equal(t, a.pendingTasks.Len(), 1)
 
 	// a new owner in power, the pending task should be dropped.
 	heartbeat.Header.OwnerRevision.Revision = 2
-	response, err = a.handleMessage([]*schedulepb.Message{heartbeat})
-	require.NoError(t, err)
+	response = a.handleMessage([]*schedulepb.Message{heartbeat})
 	require.Equal(t, a.pendingTasks.Len(), 0)
 	require.Len(t, response, 1)
 }

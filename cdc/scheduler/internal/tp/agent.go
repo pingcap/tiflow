@@ -147,30 +147,29 @@ func NewAgent(ctx context.Context,
 
 // Tick implement agent interface
 func (a *agent) Tick(ctx context.Context) error {
-	inboundMessages, err := a.trans.Recv(ctx)
+	inboundMessages, err := a.recvMsgs(ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
 
-	outboundMessages, err := a.handleMessage(inboundMessages)
-	if err != nil {
-		return errors.Trace(err)
-	}
+	outboundMessages := a.handleMessage(inboundMessages)
 
 	responses, err := a.handleDispatchTableTasks(ctx)
+	outboundMessages = append(outboundMessages, responses...)
+
+	err2 := a.sendMsgs(ctx, outboundMessages)
+
 	if err != nil {
 		return errors.Trace(err)
 	}
-	outboundMessages = append(outboundMessages, responses...)
-
-	if err := a.trans.Send(ctx, outboundMessages); err != nil {
+	if err2 != nil {
 		return errors.Trace(err)
 	}
 
 	return nil
 }
 
-func (a *agent) handleMessage(msg []*schedulepb.Message) ([]*schedulepb.Message, error) {
+func (a *agent) handleMessage(msg []*schedulepb.Message) []*schedulepb.Message {
 	result := make([]*schedulepb.Message, 0)
 	for _, message := range msg {
 		ownerCaptureID := message.GetFrom()
@@ -187,7 +186,7 @@ func (a *agent) handleMessage(msg []*schedulepb.Message) ([]*schedulepb.Message,
 		case schedulepb.MsgDispatchTableRequest:
 			a.handleMessageDispatchTableRequest(message.DispatchTableRequest, processorEpoch)
 		case schedulepb.MsgHeartbeat:
-			response := a.handleMessageHeartbeat()
+			response := a.handleMessageHeartbeat(message.Heartbeat.GetTableIDs())
 			result = append(result, response)
 		case schedulepb.MsgUnknown:
 		default:
@@ -195,7 +194,7 @@ func (a *agent) handleMessage(msg []*schedulepb.Message) ([]*schedulepb.Message,
 		}
 	}
 
-	return result, nil
+	return result
 }
 
 func tableStatus2PB(status pipeline.TableStatus) schedulepb.TableState {
@@ -216,9 +215,20 @@ func tableStatus2PB(status pipeline.TableStatus) schedulepb.TableState {
 
 func (a *agent) newTableStatus(tableID model.TableID) schedulepb.TableStatus {
 	meta := a.tableExec.GetTableMeta(tableID)
+	state := tableStatus2PB(meta.Status)
+
+	if task, ok := a.runningTasks[tableID]; ok {
+		// remove table task is not processed, or failed,
+		// return `stopping` instead of the real table state,
+		// to indicate that the remove table request was received.
+		if task.IsRemove == true {
+			state = schedulepb.TableStateStopping
+		}
+	}
+
 	return schedulepb.TableStatus{
 		TableID: meta.TableID,
-		State:   tableStatus2PB(meta.Status),
+		State:   state,
 		Checkpoint: schedulepb.Checkpoint{
 			CheckpointTs: meta.CheckpointTs,
 			ResolvedTs:   meta.ResolvedTs,
@@ -226,18 +236,29 @@ func (a *agent) newTableStatus(tableID model.TableID) schedulepb.TableStatus {
 	}
 }
 
-func (a *agent) collectTableStatus() []schedulepb.TableStatus {
-	allTables := a.tableExec.GetAllCurrentTables()
-	tables := make([]schedulepb.TableStatus, 0, len(allTables))
-	for _, tableID := range allTables {
-		status := a.newTableStatus(tableID)
-		tables = append(tables, status)
+func (a *agent) collectTableStatus(expected []model.TableID) []schedulepb.TableStatus {
+	allTables := make(map[model.TableID]struct{})
+
+	currentTables := a.tableExec.GetAllCurrentTables()
+	for _, tableID := range currentTables {
+		allTables[tableID] = struct{}{}
 	}
-	return tables
+
+	for _, tableID := range expected {
+		allTables[tableID] = struct{}{}
+	}
+
+	result := make([]schedulepb.TableStatus, 0, len(allTables))
+	for tableID := range allTables {
+		status := a.newTableStatus(tableID)
+		result = append(result, status)
+	}
+
+	return result
 }
 
-func (a *agent) handleMessageHeartbeat() *schedulepb.Message {
-	tables := a.collectTableStatus()
+func (a *agent) handleMessageHeartbeat(expected []model.TableID) *schedulepb.Message {
+	tables := a.collectTableStatus(expected)
 	response := &schedulepb.HeartbeatResponse{
 		Tables:     tables,
 		IsStopping: a.stopping,
@@ -280,7 +301,7 @@ func (a *agent) handleMessageDispatchTableRequest(
 			zap.Any("expected", a.epoch))
 		return
 	}
-	var task *dispatchTableTask
+	task := new(dispatchTableTask)
 	switch req := request.Request.(type) {
 	case *schedulepb.DispatchTableRequest_AddTable:
 		if a.stopping {
@@ -314,20 +335,13 @@ func (a *agent) handleMessageDispatchTableRequest(
 		return
 	}
 
-	if task == nil {
-		log.Panic("invalid dispatch table request",
-			zap.String("capture", a.captureID),
-			zap.String("namespace", a.changeFeedID.Namespace),
-			zap.String("changefeed", a.changeFeedID.ID),
-			zap.Any("request", request))
-	}
-
 	if _, ok := a.runningTasks[task.TableID]; ok {
-		log.Panic("duplicate dispatch table request",
+		log.Warn("duplicate dispatch table request",
 			zap.String("capture", a.captureID),
 			zap.String("namespace", a.changeFeedID.Namespace),
 			zap.String("changefeed", a.changeFeedID.ID),
 			zap.Any("request", request))
+		return
 	}
 
 	a.pendingTasks.PushBack(task)
@@ -352,7 +366,8 @@ func (a *agent) handleRemoveTableTask(
 	}
 	status := schedulepb.TableStatus{
 		TableID: task.TableID,
-		State:   schedulepb.TableStateStopped, // todo: if the table is `absent`, also return a stopped here, `stopped` is identical to `absent`.
+		// todo: if the table is `absent`, also return a stopped here, `stopped` is identical to `absent`.
+		State: schedulepb.TableStateStopped,
 		Checkpoint: schedulepb.Checkpoint{
 			CheckpointTs: checkpointTs,
 		},
@@ -411,9 +426,9 @@ func (a *agent) handleAddTableTask(
 
 	done := a.tableExec.IsAddTableFinished(ctx, task.TableID, task.IsPrepare)
 	if !done {
+		// no need send a special message, table status will be reported by the heartbeat.
 		return nil, nil
 	}
-	// must be finished here
 	log.Info("finish processing add table task",
 		zap.String("capture", a.captureID),
 		zap.String("namespace", a.changeFeedID.Namespace),
@@ -487,7 +502,7 @@ func (a *agent) handleDispatchTableTasks(
 			response, err = a.handleAddTableTask(ctx, task)
 		}
 		if err != nil {
-			return nil, errors.Trace(err)
+			return result, errors.Trace(err)
 		}
 		if response != nil {
 			result = append(result, response)
@@ -504,7 +519,10 @@ func (a *agent) GetLastSentCheckpointTs() (checkpointTs model.Ts) {
 
 // Close implement agent interface
 func (a *agent) Close() error {
-	log.Debug("agent: closing")
+	log.Debug("agent: closing",
+		zap.String("capture", a.captureID),
+		zap.String("namespace", a.changeFeedID.Namespace),
+		zap.String("changefeed", a.changeFeedID.ID))
 	return a.trans.Close()
 }
 
@@ -575,4 +593,36 @@ func (a *agent) handleOwnerInfo(id model.CaptureID, revision int64, version stri
 
 func (a *agent) resetEpoch() {
 	a.epoch = schedulepb.ProcessorEpoch{Epoch: uuid.New().String()}
+}
+
+func (a *agent) recvMsgs(ctx context.Context) ([]*schedulepb.Message, error) {
+	messages, err := a.trans.Recv(ctx)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	n := 0
+	for _, val := range messages {
+		// Filter stale messages.
+		if val.Header.OwnerRevision == a.ownerInfo.revision {
+			messages[n] = val
+			n++
+		}
+	}
+	return messages[:n], nil
+}
+
+func (a *agent) sendMsgs(ctx context.Context, msgs []*schedulepb.Message) error {
+	for i := range msgs {
+		m := msgs[i]
+		// Correctness check.
+		if len(m.To) == 0 || m.MsgType == schedulepb.MsgUnknown {
+			log.Panic("invalid message no destination or unknown message type",
+				zap.String("capture", a.captureID),
+				zap.String("namespace", a.changeFeedID.Namespace),
+				zap.String("changefeed", a.changeFeedID.ID),
+				zap.Any("message", m))
+		}
+	}
+	return a.trans.Send(ctx, msgs)
 }

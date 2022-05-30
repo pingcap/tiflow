@@ -65,7 +65,12 @@ message DispatchTableResponse {
     }
 }
 
-message Heartbeat {}
+message Heartbeat {
+    repeated int64 table_ids = 1 [
+        (gogoproto.casttype) = "github.com/pingcap/tiflow/cdc/model.TableID",
+        (gogoproto.customname) = "TableIDs"
+    ];
+}
 
 // TableState is the state of table replication in processor.
 //
