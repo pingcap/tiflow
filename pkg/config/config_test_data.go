@@ -105,7 +105,6 @@ const (
     "region-retry-duration": 60000000000
   },
   "debug": {
-    "enable-table-actor": true,
     "table-actor": {
       "event-batch-size": 32
     },
