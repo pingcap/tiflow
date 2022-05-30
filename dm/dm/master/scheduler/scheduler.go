@@ -203,7 +203,7 @@ func NewScheduler(pLogger *log.Logger, securityCfg config.Security) *Scheduler {
 		loadTasks:         make(map[string]map[string]string),
 		securityCfg:       securityCfg,
 		balance:           newTableNumberBalancer(pLogger),
-		triggerRebalance:  make(chan struct{}, 0),
+		triggerRebalance:  make(chan struct{}),
 	}
 }
 

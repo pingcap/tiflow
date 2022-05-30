@@ -35,8 +35,10 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
 
+const sourceIDPrefix = "mysql-replica-"
+
 func genSourceID(i int) string {
-	return fmt.Sprintf("mysql-replica-%d", i)
+	return sourceIDPrefix + strconv.Itoa(i)
 }
 
 func genSourceCfg(t *testing.T, i int) *config.SourceConfig {
@@ -93,7 +95,8 @@ func (t *testBalancerSuite) TearDownTest() {
 
 func getSourceNumFromID(t *testing.T, sourceID string) int {
 	t.Helper()
-	sourceNumStr := strings.TrimLeft(sourceID, "mysql-replica-")
+	//nolint:staticcheck
+	sourceNumStr := strings.TrimLeft(sourceID, sourceIDPrefix)
 	sourceNum, err := strconv.Atoi(sourceNumStr)
 	require.NoError(t, err)
 	return sourceNum
