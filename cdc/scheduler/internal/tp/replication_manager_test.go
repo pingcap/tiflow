@@ -364,7 +364,7 @@ func TestReplicationManagerBurstBalance(t *testing.T) {
 	msgs, err := r.HandleTasks([]*scheduleTask{{
 		addTable: &addTable{TableID: 1, CaptureID: "0"},
 	}, {
-		burstBalance: &burstBalance{Tables: map[int64]string{
+		burstBalance: &burstBalance{AddTables: map[int64]string{
 			1: "1", 2: "2", 3: "3",
 		}},
 		accept: func() {
@@ -394,16 +394,25 @@ func TestReplicationManagerBurstBalance(t *testing.T) {
 		require.Contains(t, r.runningTasks, tableID)
 	}
 
+	// Add a new table.
+	r.tables[5], err = newReplicationSet(5, map[string]*schedulepb.TableStatus{
+		"5": {TableID: 5, State: schedulepb.TableStateReplicating},
+	})
+	require.Nil(t, err)
+
 	// More burst balance is still allowed.
 	msgs, err = r.HandleTasks([]*scheduleTask{{
-		burstBalance: &burstBalance{Tables: map[int64]string{4: "4", 1: "0"}},
+		burstBalance: &burstBalance{
+			AddTables:    map[int64]string{4: "4", 1: "0"},
+			RemoveTables: map[int64]string{5: "5", 1: "0"},
+		},
 		accept: func() {
 			balanceTableCh <- 1
 		},
 	}})
 	require.Nil(t, err)
 	require.Equal(t, 1, <-balanceTableCh)
-	require.Len(t, msgs, 1)
+	require.Len(t, msgs, 2)
 	require.Contains(t, msgs, &schedulepb.Message{
 		To:      "4",
 		MsgType: schedulepb.MsgDispatchTableRequest,
@@ -413,6 +422,17 @@ func TestReplicationManagerBurstBalance(t *testing.T) {
 					TableID:     4,
 					IsSecondary: true,
 					Checkpoint:  &schedulepb.Checkpoint{CheckpointTs: 0},
+				},
+			},
+		},
+	}, msgs)
+	require.Contains(t, msgs, &schedulepb.Message{
+		To:      "5",
+		MsgType: schedulepb.MsgDispatchTableRequest,
+		DispatchTableRequest: &schedulepb.DispatchTableRequest{
+			Request: &schedulepb.DispatchTableRequest_RemoveTable{
+				RemoveTable: &schedulepb.RemoveTableRequest{
+					TableID: 5,
 				},
 			},
 		},
