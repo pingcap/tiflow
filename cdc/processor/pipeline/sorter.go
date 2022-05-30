@@ -59,9 +59,6 @@ type sorterNode struct {
 	barrierTs model.Ts
 
 	replConfig *config.ReplicaConfig
-
-	// isTableActorMode identify if the sorter node is run is actor mode, todo: remove it after GA
-	isTableActorMode bool
 }
 
 func newSorterNode(
@@ -78,11 +75,6 @@ func newSorterNode(
 		barrierTs:      startTs,
 		replConfig:     replConfig,
 	}
-}
-
-func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
-	wg := errgroup.Group{}
-	return n.start(ctx, false, &wg, 0, nil)
 }
 
 func createSorter(ctx pipeline.NodeContext, tableName string, tableID model.TableID) (sorter.EventSorter, error) {
@@ -127,10 +119,9 @@ func createSorter(ctx pipeline.NodeContext, tableName string, tableID model.Tabl
 }
 
 func (n *sorterNode) start(
-	ctx pipeline.NodeContext, isTableActorMode bool, eg *errgroup.Group,
+	ctx pipeline.NodeContext, eg *errgroup.Group,
 	tableActorID actor.ID, tableActorRouter *actor.Router[pmessage.Message],
 ) error {
-	n.isTableActorMode = isTableActorMode
 	n.eg = eg
 	stdCtx, cancel := context.WithCancel(ctx)
 	n.cancel = cancel
@@ -224,10 +215,8 @@ func (n *sorterNode) start(
 					if msg.CRTs < lastSentResolvedTs {
 						continue
 					}
-					if isTableActorMode {
-						msg := message.ValueMessage(pmessage.TickMessage())
-						_ = tableActorRouter.Send(tableActorID, msg)
-					}
+					tickMsg := message.ValueMessage(pmessage.TickMessage())
+					_ = tableActorRouter.Send(tableActorID, tickMsg)
 					lastSentResolvedTs = msg.CRTs
 					lastSendResolvedTsTime = time.Now()
 				}
@@ -237,12 +226,6 @@ func (n *sorterNode) start(
 	})
 	n.sorter = eventSorter
 	return nil
-}
-
-// Receive receives the message from the previous node
-func (n *sorterNode) Receive(ctx pipeline.NodeContext) error {
-	_, err := n.TryHandleDataMessage(ctx, ctx.Message())
-	return err
 }
 
 // handleRawEvent process the raw kv event,send it to sorter
@@ -304,12 +287,6 @@ func (n *sorterNode) releaseResource(changefeedID model.ChangeFeedID) {
 	// the flowController will be blocked in a background goroutine,
 	// We need to abort the flowController manually in the nodeRunner
 	n.flowController.Abort()
-}
-
-func (n *sorterNode) Destroy(ctx pipeline.NodeContext) error {
-	n.cancel()
-	n.releaseResource(ctx.ChangefeedVars().ID)
-	return n.eg.Wait()
 }
 
 func (n *sorterNode) ResolvedTs() model.Ts {

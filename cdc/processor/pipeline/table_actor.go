@@ -318,7 +318,7 @@ func (t *tableActor) start(sdtTableContext context.Context) error {
 	actorSinkNode := newSinkNode(t.tableID, t.tableSink,
 		t.replicaInfo.StartTs,
 		t.targetTs, flowController)
-	actorSinkNode.initWithReplicaConfig(true, t.replicaConfig)
+	actorSinkNode.initWithReplicaConfig(t.replicaConfig)
 	t.sinkNode = actorSinkNode
 
 	// construct sink actor node, it gets message from sortNode or cyclicNode
@@ -352,7 +352,7 @@ func (t *tableActor) getSinkAsyncMessageHolder(
 				t.actorID, t.changefeedVars,
 				t.globalVars, t.reportErr))
 		if err := cyclicNode.InitTableActor(t.changefeedVars.Info.Config.Cyclic.ReplicaID,
-			t.changefeedVars.Info.Config.Cyclic.FilterReplicaID, true); err != nil {
+			t.changefeedVars.Info.Config.Cyclic.FilterReplicaID); err != nil {
 			log.Error("failed to start cyclic node",
 				zap.String("tableName", t.tableName),
 				zap.Int64("tableID", t.tableID),
@@ -523,9 +523,9 @@ func (t *tableActor) MemoryConsumption() uint64 {
 
 // for ut
 var startPuller = func(t *tableActor, ctx *actorNodeContext) error {
-	return t.pullerNode.start(ctx, t.upStream, t.wg, true, t.sortNode)
+	return t.pullerNode.start(ctx, t.upStream, t.wg, t.sortNode)
 }
 
 var startSorter = func(t *tableActor, ctx *actorNodeContext) error {
-	return t.sortNode.start(ctx, true, t.wg, t.actorID, t.router)
+	return t.sortNode.start(ctx, t.wg, t.actorID, t.router)
 }
