@@ -506,7 +506,7 @@ func (t *testServer) testOperateWorker(c *C, s *Server, dir string, start bool) 
 			w := s.getWorkerBySource(sourceCfg.SourceID, true)
 			return w != nil && !w.closed.Load()
 		}), IsTrue)
-		c.Assert(s.getSourceStatus(true).Result, IsNil)
+		c.Assert(s.getSourceStatus(sourceCfg.SourceID, true).Result, IsNil)
 	} else {
 		// worker should be started before stopped
 		w := s.getWorkerBySource(sourceCfg.SourceID, true)
@@ -521,7 +521,7 @@ func (t *testServer) testOperateWorker(c *C, s *Server, dir string, start bool) 
 			currentWorker := s.getWorkerBySource(sourceCfg.SourceID, true)
 			return currentWorker == nil && w.closed.Load()
 		}), IsTrue)
-		c.Assert(s.getSourceStatus(true).Result, IsNil)
+		c.Assert(s.getSourceStatus(sourceCfg.SourceID, true).Result, IsNil)
 	}
 }
 
@@ -530,7 +530,6 @@ func (t *testServer) testRetryConnectMaster(c *C, s *Server, etcd *embed.Etcd, d
 	time.Sleep(6 * time.Second)
 	// When worker server fail to keepalive with etcd, server should close its worker
 	c.Assert(s.getAllWorkers(true), HasLen, 0)
-	c.Assert(s.getSourceStatus(true).Result, IsNil)
 	ETCD, err := createMockETCD(dir, "http://"+hostName)
 	c.Assert(err, IsNil)
 	time.Sleep(3 * time.Second)

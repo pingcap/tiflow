@@ -62,6 +62,7 @@ type SourceWorker struct {
 	l log.Logger
 
 	sourceStatus atomic.Value // stores a pointer to SourceStatus
+	sourceError  atomic.Error // stores source worker's error
 
 	// subtask functionality
 	subTaskEnabled atomic.Bool

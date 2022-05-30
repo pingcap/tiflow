@@ -576,34 +576,37 @@ func (s *Server) delWorker(sourceID string, needLock bool) {
 }
 
 // nolint:unparam
-func (s *Server) getSourceStatus(needLock bool) pb.SourceStatus {
+func (s *Server) getSourceStatus(sourceID string, needLock bool) pb.SourceStatus {
 	if needLock {
 		s.Lock()
 		defer s.Unlock()
 	}
-	return s.sourceStatus
+	var processResult *pb.ProcessResult
+	if w := s.getWorkerBySource(sourceID, false); w != nil {
+		if err := w.sourceError.Load(); err != nil {
+			processResult = &pb.ProcessResult{
+				Errors: []*pb.ProcessError{
+					unit.NewProcessError(err),
+				},
+			}
+		}
+	}
+	return pb.SourceStatus{
+		Source: sourceID,
+		Worker: s.cfg.Name,
+		Result: processResult,
+	}
 }
 
 // TODO: move some call to addWorker/getOrStartWorker.
-func (s *Server) setSourceStatus(source string, err error, needLock bool) {
+func (s *Server) setSourceError(source string, err error, needLock bool) {
 	if needLock {
 		s.Lock()
 		defer s.Unlock()
 	}
-	// now setSourceStatus will be concurrently called. skip setting a source status if worker has been closed
-	if s.getWorkerBySource(source, false) == nil && source != "" {
-		return
-	}
-	s.sourceStatus = pb.SourceStatus{
-		Source: source,
-		Worker: s.cfg.Name,
-	}
-	if err != nil {
-		s.sourceStatus.Result = &pb.ProcessResult{
-			Errors: []*pb.ProcessError{
-				unit.NewProcessError(err),
-			},
-		}
+	// now setSourceError will be concurrently called. skip setting a source status if worker has been closed
+	if w := s.getWorkerBySource(source, false); w != nil {
+		w.sourceError.Store(err)
 	}
 }
 
@@ -637,7 +640,6 @@ func (s *Server) stopSourceWorker(sourceID string, needLock, graceful bool) erro
 	s.UpdateKeepAliveTTL(s.cfg.KeepAliveTTL)
 	// needLock is handled before
 	s.delWorker(sourceID, false)
-	s.setSourceStatus("", nil, false)
 	w.Stop(graceful)
 	return nil
 }
@@ -654,7 +656,7 @@ OUTER:
 			}
 			log.L().Info("receive source bound", zap.Stringer("bound", bound), zap.Bool("is deleted", bound.IsDeleted))
 			err := s.operateSourceBound(bound)
-			s.setSourceStatus(bound.Source, err, true)
+			s.setSourceError(bound.Source, err, true)
 			if err != nil {
 				opErrCounter.WithLabelValues(s.cfg.Name, opErrTypeSourceBound).Inc()
 				log.L().Error("fail to operate sourceBound on worker", zap.Stringer("bound", bound), zap.Bool("is deleted", bound.IsDeleted), zap.Error(err))
@@ -689,7 +691,7 @@ OUTER:
 			}
 			log.L().Info("receive relay source", zap.String("relay source", relaySource.Source), zap.Bool("is deleted", relaySource.IsDeleted))
 			err := s.operateRelaySource(relaySource)
-			s.setSourceStatus(relaySource.Source, err, true)
+			s.setSourceError(relaySource.Source, err, true)
 			if err != nil {
 				opErrCounter.WithLabelValues(s.cfg.Name, opErrTypeRelaySource).Inc()
 				log.L().Error("fail to operate relay source on worker",
@@ -739,7 +741,7 @@ func (s *Server) enableHandleSubtasks(sourceCfg *config.SourceConfig, needLock b
 	}
 
 	w, err := s.getOrStartWorker(sourceCfg, false)
-	s.setSourceStatus(sourceCfg.SourceID, err, false)
+	s.setSourceError(sourceCfg.SourceID, err, false)
 	if err != nil {
 		return err
 	}
@@ -757,7 +759,7 @@ func (s *Server) enableHandleSubtasks(sourceCfg *config.SourceConfig, needLock b
 	}
 
 	if err2 := w.EnableHandleSubtasks(); err2 != nil {
-		s.setSourceStatus(sourceCfg.SourceID, err2, false)
+		s.setSourceError(sourceCfg.SourceID, err2, false)
 		return err2
 	}
 	return nil
@@ -813,14 +815,14 @@ func (s *Server) enableRelay(sourceCfg *config.SourceConfig, needLock bool) erro
 	}
 
 	w, err2 := s.getOrStartWorker(sourceCfg, false)
-	s.setSourceStatus(sourceCfg.SourceID, err2, false)
+	s.setSourceError(sourceCfg.SourceID, err2, false)
 	if err2 != nil {
 		// if DM-worker can't handle pre-assigned source before keepalive, it simply exits with the error,
 		// because no re-assigned mechanism exists for keepalived DM-worker yet.
 		return err2
 	}
 	if err2 = w.EnableRelay(false); err2 != nil {
-		s.setSourceStatus(sourceCfg.SourceID, err2, false)
+		s.setSourceError(sourceCfg.SourceID, err2, false)
 		return err2
 	}
 	s.UpdateKeepAliveTTL(s.cfg.RelayKeepAliveTTL)
@@ -850,7 +852,8 @@ func (s *Server) disableRelay(source string) error {
 func (s *Server) QueryStatus(ctx context.Context, req *pb.QueryStatusRequest) (*pb.QueryStatusResponse, error) {
 	log.L().Info("", zap.String("request", "QueryStatus"), zap.Stringer("payload", req))
 
-	sourceStatus := s.getSourceStatus(true)
+	// FIXME: add source demands in purgeRelayRequest
+	sourceStatus := s.getSourceStatus("", true)
 	sourceStatus.Worker = s.cfg.Name
 	resp := &pb.QueryStatusResponse{
 		Result:       true,
