@@ -409,6 +409,7 @@ func (s *Server) startTCPService(ctx context.Context, wg *errgroup.Group) error 
 	}
 	s.tcpServer = tcpServer
 	pb.RegisterExecutorServer(s.grpcSrv, s)
+	pb.RegisterBrokerServiceServer(s.grpcSrv, s.resourceBroker)
 	log.L().Logger.Info("listen address", zap.String("addr", s.cfg.WorkerAddr))
 
 	wg.Go(func() error {

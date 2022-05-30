@@ -17,6 +17,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
+	"github.com/pingcap/tiflow/engine/pkg/externalresource/resourcetypes"
 	"net"
 	"net/http"
 	"sync"
@@ -92,7 +94,10 @@ type Server struct {
 	resourceManagerService *externRescManager.Service
 	scheduler              *scheduler.Scheduler
 
-	//
+	// file resource GC
+	gcRunner      externRescManager.GCRunner
+	gcCoordinator externRescManager.GCCoordinator
+
 	cfg     *Config
 	info    *model.NodeInfo
 	metrics *serverMasterMetric
@@ -665,6 +670,7 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 	defer func() {
 		s.resourceManagerService.Stop()
 	}()
+
 	clients := client.NewClientManager()
 	err = clients.AddMasterClient(ctx, []string{s.cfg.MasterAddr})
 	if err != nil {
@@ -686,6 +692,24 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 		return
 	}
 	dctx.Environ.MasterMetaBytes = masterMetaBytes
+
+	s.gcRunner = externRescManager.NewGCRunner(s.frameMetaClient, map[resModel.ResourceType]externRescManager.GCHandlerFunc{
+		"local": resourcetypes.NewLocalFileResourceType(clients).GCHandler(),
+	})
+	s.gcCoordinator = externRescManager.NewGCCoordinator(s.executorManager, s.jobManager, s.frameMetaClient, s.gcRunner)
+
+	errg, errgCtx := errgroup.WithContext(ctx)
+	defer func() {
+		err := errg.Wait()
+		log.L().Error("errgroup exited with error", zap.Error(err))
+	}()
+
+	errg.Go(func() error {
+		return s.gcRunner.Run(errgCtx)
+	})
+	errg.Go(func() error {
+		return s.gcCoordinator.Run(errgCtx)
+	})
 
 	dp := deps.NewDeps()
 	if err := dp.Provide(func() pkgOrm.Client {
