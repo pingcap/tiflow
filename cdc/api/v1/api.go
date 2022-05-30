@@ -30,7 +30,6 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/httputil"
 	"github.com/pingcap/tiflow/pkg/logutil"
-	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
@@ -82,7 +81,6 @@ func RegisterOpenAPIRoutes(router *gin.Engine, api openAPI) {
 	v1.GET("/status", api.ServerStatus)
 	v1.GET("/health", api.Health)
 	v1.POST("/log", SetLogLevel)
-	v1.GET("/tso", api.GetTso)
 
 	// changefeed API
 	changefeedGroup := v1.Group("/changefeeds")
@@ -888,23 +886,4 @@ func (h *openAPI) forwardToOwner(c *gin.Context) {
 		_ = c.Error(err)
 		return
 	}
-}
-
-type Tso struct {
-	Timestamp int64 `json:"timestamp"`
-	LogicTime int64 `json:"logic-time"`
-}
-
-func (h *openAPI) GetTso(c *gin.Context) {
-	ctx := c.Request.Context()
-	pdClient := h.capture.UpstreamManager.Get(upstream.DefaultUpstreamID).PDClient
-	timestamp, logictTime, err := pdClient.GetTS(ctx)
-	if err != nil {
-		_ = c.Error(err)
-		c.IndentedJSON(http.StatusInternalServerError, model.NewHTTPError(err))
-		return
-	}
-	resp := Tso{timestamp, logictTime}
-	//resp := Tso{0, 0}
-	c.IndentedJSON(http.StatusOK, resp)
 }

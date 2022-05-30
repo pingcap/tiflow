@@ -676,21 +676,6 @@ func TestSetLogLevel(t *testing.T) {
 	require.Contains(t, httpError.Error, "fail to change log level: foo")
 }
 
-func TestGetTso(t *testing.T) {
-	t.Parallel()
-	ctrl := gomock.NewController(t)
-	mo := mock_owner.NewMockOwner(ctrl)
-	cp := capture.NewCapture4Test(mo)
-	router := newRouter(cp, newStatusProvider())
-	// test get tso succeeded
-	api := testCase{url: "/api/v1/tso", method: "GET"}
-	w := httptest.NewRecorder()
-	req, err := http.NewRequestWithContext(context.Background(), api.method, api.url, nil)
-	require.Nil(t, err)
-	router.ServeHTTP(w, req)
-	require.Equal(t, 200, w.Code)
-}
-
 // TODO: finished these test cases after we decouple those APIs from etcdClient.
 func TestCreateChangefeed(t *testing.T) {}
 func TestUpdateChangefeed(t *testing.T) {}
