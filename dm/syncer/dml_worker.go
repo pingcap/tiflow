@@ -26,7 +26,6 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/syncer/dbconn"
-	"github.com/pingcap/tiflow/dm/syncer/metrics"
 	"github.com/pingcap/tiflow/pkg/sqlmodel"
 )
 
@@ -40,7 +39,7 @@ type DMLWorker struct {
 	syncCtx      *tcontext.Context
 	logger       log.Logger
 
-	// for metrics
+	// for MetricsProxies
 	task   string
 	source string
 	worker string
@@ -114,7 +113,7 @@ func (w *DMLWorker) run() {
 		queueBucketMapping[i] = queueBucketName(i)
 	}
 	for j := range w.inCh {
-		metrics.QueueSizeGauge.WithLabelValues(w.task, "dml_worker_input", w.source).Set(float64(len(w.inCh)))
+		QueueSizeGauge.WithLabelValues(w.task, "dml_worker_input", w.source).Set(float64(len(w.inCh)))
 		switch j.tp {
 		case flush:
 			w.updateJobMetricsFunc(false, adminQueueName, j)
@@ -137,7 +136,7 @@ func (w *DMLWorker) run() {
 			startTime := time.Now()
 			w.logger.Debug("queue for key", zap.Int("queue", queueBucket), zap.String("key", j.dmlQueueKey))
 			jobChs[queueBucket] <- j
-			metrics.AddJobDurationHistogram.WithLabelValues(j.tp.String(), w.task, queueBucketMapping[queueBucket], w.source).Observe(time.Since(startTime).Seconds())
+			AddJobDurationHistogram.WithLabelValues(j.tp.String(), w.task, queueBucketMapping[queueBucket], w.source).Observe(time.Since(startTime).Seconds())
 		}
 	}
 }
@@ -147,7 +146,7 @@ func (w *DMLWorker) sendJobToAllDmlQueue(j *job, jobChs []chan *job, queueBucket
 	for i, jobCh := range jobChs {
 		startTime := time.Now()
 		jobCh <- j
-		metrics.AddJobDurationHistogram.WithLabelValues(j.tp.String(), w.task, queueBucketMapping[i], w.source).Observe(time.Since(startTime).Seconds())
+		AddJobDurationHistogram.WithLabelValues(j.tp.String(), w.task, queueBucketMapping[i], w.source).Observe(time.Since(startTime).Seconds())
 	}
 }
 
@@ -158,7 +157,7 @@ func (w *DMLWorker) executeJobs(queueID int, jobCh chan *job) {
 	workerJobIdx := dmlWorkerJobIdx(queueID)
 	queueBucket := queueBucketName(queueID)
 	for j := range jobCh {
-		metrics.QueueSizeGauge.WithLabelValues(w.task, queueBucket, w.source).Set(float64(len(jobCh)))
+		QueueSizeGauge.WithLabelValues(w.task, queueBucket, w.source).Set(float64(len(jobCh)))
 
 		if j.tp != flush && j.tp != asyncFlush && j.tp != conflict {
 			if len(jobs) == 0 {
@@ -237,9 +236,9 @@ func (w *DMLWorker) executeBatchJobs(queueID int, jobs []*job) {
 		t := v.(int) // sleep time
 		w.logger.Info("BlockExecuteSQLs", zap.Any("job", jobs[0]), zap.Int("sleep time", t))
 		for _, query := range queries {
-			if strings.Contains(query, "UPDATE") && strings.Contains(query, "metrics") {
+			if strings.Contains(query, "UPDATE") && strings.Contains(query, "MetricsProxies") {
 				t = 10
-				w.logger.Info("BlockExecuteSQLs block for update sleep 10s for metrics it test", zap.Any("query", query))
+				w.logger.Info("BlockExecuteSQLs block for update sleep 10s for MetricsProxies it test", zap.Any("query", query))
 			}
 		}
 		time.Sleep(time.Second * time.Duration(t))

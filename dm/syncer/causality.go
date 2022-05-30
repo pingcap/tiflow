@@ -22,7 +22,6 @@ import (
 	"github.com/pingcap/tidb/sessionctx"
 
 	"github.com/pingcap/tiflow/dm/pkg/log"
-	"github.com/pingcap/tiflow/dm/syncer/metrics"
 )
 
 // causality provides a simple mechanism to improve the concurrency of SQLs execution under the premise of ensuring correctness.
@@ -38,7 +37,7 @@ type causality struct {
 	sessCtx     sessionctx.Context
 	workerCount int
 
-	// for metrics
+	// for MetricsProxies
 	task   string
 	source string
 }
@@ -68,7 +67,7 @@ func causalityWrap(inCh chan *job, syncer *Syncer) chan *job {
 // When meet conflict, sends a conflict job.
 func (c *causality) run() {
 	for j := range c.inCh {
-		metrics.QueueSizeGauge.WithLabelValues(c.task, "causality_input", c.source).Set(float64(len(c.inCh)))
+		QueueSizeGauge.WithLabelValues(c.task, "causality_input", c.source).Set(float64(len(c.inCh)))
 
 		startTime := time.Now()
 
@@ -91,7 +90,7 @@ func (c *causality) run() {
 			j.dmlQueueKey = c.add(keys)
 			c.logger.Debug("key for keys", zap.String("key", j.dmlQueueKey), zap.Strings("keys", keys))
 		}
-		metrics.ConflictDetectDurationHistogram.WithLabelValues(c.task, c.source).Observe(time.Since(startTime).Seconds())
+		ConflictDetectDurationHistogram.WithLabelValues(c.task, c.source).Observe(time.Since(startTime).Seconds())
 
 		c.outCh <- j
 	}

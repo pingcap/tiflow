@@ -22,7 +22,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/dm/pkg/log"
-	"github.com/pingcap/tiflow/dm/syncer/metrics"
 	"github.com/pingcap/tiflow/pkg/sqlmodel"
 )
 
@@ -37,7 +36,7 @@ type compactor struct {
 	keyMap map[string]map[string]int // table -> key(pk or (uk + not null)) -> index in buffer
 	buffer []*job
 
-	// for metrics
+	// for MetricsProxies
 	task               string
 	source             string
 	updateJobMetricsFn func(bool, string, *job)
@@ -74,7 +73,7 @@ func (c *compactor) run() {
 			if !ok {
 				return
 			}
-			metrics.QueueSizeGauge.WithLabelValues(c.task, "compactor_input", c.source).Set(float64(len(c.inCh)))
+			QueueSizeGauge.WithLabelValues(c.task, "compactor_input", c.source).Set(float64(len(c.inCh)))
 
 			if j.tp == flush || j.tp == asyncFlush {
 				c.flushBuffer()
