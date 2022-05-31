@@ -236,9 +236,11 @@ func (w *Worker) reportMetrics() {
 	metrics.ReportWorkerStage(w.baseInfo.Name, s)
 }
 
-func (w *Worker) queryStatus(ctx context.Context) (*workerrpc.Response, error) {
+func (w *Worker) queryStatus(ctx context.Context, source string) (*workerrpc.Response, error) {
 	rpcTimeOut := time.Second * 10 // we relay on ctx.Done() to cancel the rpc, so just set a very long timeout
-	req := &workerrpc.Request{Type: workerrpc.CmdQueryStatus, QueryStatus: &pb.QueryStatusRequest{}}
+	req := &workerrpc.Request{Type: workerrpc.CmdQueryStatus, QueryStatus: &pb.QueryStatusRequest{
+		Source: source,
+	}}
 	failpoint.Inject("operateWorkerQueryStatus", func(v failpoint.Value) {
 		resp := &workerrpc.Response{Type: workerrpc.CmdQueryStatus, QueryStatus: &pb.QueryStatusResponse{}}
 		switch v.(string) {

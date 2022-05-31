@@ -852,22 +852,27 @@ func (s *Server) disableRelay(source string) error {
 func (s *Server) QueryStatus(ctx context.Context, req *pb.QueryStatusRequest) (*pb.QueryStatusResponse, error) {
 	log.L().Info("", zap.String("request", "QueryStatus"), zap.Stringer("payload", req))
 
-	// FIXME: add source demands in purgeRelayRequest
-	sourceStatus := s.getSourceStatus("", true)
-	sourceStatus.Worker = s.cfg.Name
+	source := req.GetSource()
 	resp := &pb.QueryStatusResponse{
-		Result:       true,
-		SourceStatus: &sourceStatus,
+		Result: true,
+	}
+	if source == "" {
+		resp.Result = false
+		resp.Msg = "must specify a source when query status from worker"
+		return resp, nil
 	}
 
-	// FIXME: add source demands in purgeRelayRequest
-	w := s.getWorkerBySource("", true)
+	w := s.getWorkerBySource(source, true)
 	if w == nil {
-		log.L().Warn("fail to call QueryStatus, because no mysql source is being handled in the worker")
+		log.L().Warn("fail to call QueryStatus, because mysql source isn't being handled in this worker", zap.String("source", source))
 		resp.Result = false
 		resp.Msg = terror.ErrWorkerNoStart.Error()
 		return resp, nil
 	}
+
+	sourceStatus := s.getSourceStatus(source, true)
+	sourceStatus.Worker = s.cfg.Name
+	resp.SourceStatus = &sourceStatus
 
 	var err error
 	resp.SubTaskStatus, sourceStatus.RelayStatus, err = w.QueryStatus(ctx, req.Name)
@@ -883,10 +888,16 @@ func (s *Server) QueryStatus(ctx context.Context, req *pb.QueryStatusRequest) (*
 // PurgeRelay implements WorkerServer.PurgeRelay.
 func (s *Server) PurgeRelay(ctx context.Context, req *pb.PurgeRelayRequest) (*pb.CommonWorkerResponse, error) {
 	log.L().Info("", zap.String("request", "PurgeRelay"), zap.Stringer("payload", req))
-	// FIXME: add source demands in purgeRelayRequest
-	w := s.getWorkerBySource("", true)
+	source := req.GetSource()
+	if source == "" {
+		return &pb.CommonWorkerResponse{
+			Result: false,
+			Msg:    "must specify a source when purge relay",
+		}, nil
+	}
+	w := s.getWorkerBySource(req.GetSource(), true)
 	if w == nil {
-		log.L().Warn("fail to call StartSubTask, because no mysql source is being handled in the worker")
+		log.L().Warn("fail to call StartSubTask, because mysql source isn't being handled in this worker", zap.String("source", source))
 		return makeCommonWorkerResponse(terror.ErrWorkerNoStart.Generate()), nil
 	}
 
@@ -901,13 +912,17 @@ func (s *Server) PurgeRelay(ctx context.Context, req *pb.PurgeRelayRequest) (*pb
 func (s *Server) OperateSchema(ctx context.Context, req *pb.OperateWorkerSchemaRequest) (*pb.CommonWorkerResponse, error) {
 	log.L().Info("", zap.String("request", "OperateSchema"), zap.Stringer("payload", req))
 
-	w := s.getWorkerBySource(req.Source, true)
+	source := req.GetSource()
+	if source == "" {
+		return &pb.CommonWorkerResponse{
+			Result: false,
+			Msg:    "must specify a source when operate schema",
+		}, nil
+	}
+	w := s.getWorkerBySource(source, true)
 	if w == nil {
-		log.L().Warn("fail to call OperateSchema, because no mysql source is being handled in the worker")
+		log.L().Warn("fail to call OperateSchema, because mysql source isn't being handled in this worker", zap.String("source", source))
 		return makeCommonWorkerResponse(terror.ErrWorkerNoStart.Generate()), nil
-	} else if req.Source != w.cfg.SourceID {
-		log.L().Error("fail to call OperateSchema, because source mismatch", zap.String("request", req.Source), zap.String("current", w.cfg.SourceID))
-		return makeCommonWorkerResponse(terror.ErrWorkerSourceNotMatch.Generate()), nil
 	}
 
 	schema, err := w.OperateSchema(ctx, req)
@@ -1019,10 +1034,16 @@ func getMinLocForSubTask(ctx context.Context, subTaskCfg config.SubTaskConfig) (
 func (s *Server) HandleError(ctx context.Context, req *pb.HandleWorkerErrorRequest) (*pb.CommonWorkerResponse, error) {
 	log.L().Info("", zap.String("request", "HandleError"), zap.Stringer("payload", req))
 
-	// FIXME: add source demands in purgeRelayRequest
-	w := s.getWorkerBySource("", true)
+	source := req.GetSource()
+	if source == "" {
+		return &pb.CommonWorkerResponse{
+			Result: false,
+			Msg:    "must specify a source when handle error",
+		}, nil
+	}
+	w := s.getWorkerBySource(source, true)
 	if w == nil {
-		log.L().Warn("fail to call HandleError, because no mysql source is being handled in the worker")
+		log.L().Warn("fail to call HandleError, because mysql source isn't being handled in this worker", zap.String("source", source))
 		return makeCommonWorkerResponse(terror.ErrWorkerNoStart.Generate()), nil
 	}
 
@@ -1033,6 +1054,7 @@ func (s *Server) HandleError(ctx context.Context, req *pb.HandleWorkerErrorReque
 	return &pb.CommonWorkerResponse{
 		Result: true,
 		Worker: s.cfg.Name,
+		Source: req.GetSource(),
 		Msg:    msg,
 	}, nil
 }
@@ -1054,18 +1076,17 @@ func (s *Server) CheckSubtasksCanUpdate(ctx context.Context, req *pb.CheckSubtas
 	defer func() {
 		log.L().Info("", zap.String("request", "CheckSubtasksCanUpdate"), zap.Stringer("resp", resp))
 	}()
-	// FIXME: add source demands in purgeRelayRequest
-	w := s.getWorkerBySource("", true)
-	if w == nil {
-		msg := "fail to call CheckSubtasksCanUpdate, because no mysql source is being handled in the worker"
-		log.L().Warn(msg)
-		resp.Msg = msg
-		return resp, nil
-	}
 	cfg := config.NewSubTaskConfig()
 	if err := cfg.Decode(req.SubtaskCfgTomlString, false); err != nil {
 		resp.Msg = err.Error()
 		// nolint:nilerr
+		return resp, nil
+	}
+	w := s.getWorkerBySource(cfg.SourceID, true)
+	if w == nil {
+		msg := "fail to call CheckSubtasksCanUpdate, because no mysql source " + cfg.SourceID + " isn't being handled in the worker"
+		log.L().Warn(msg)
+		resp.Msg = msg
 		return resp, nil
 	}
 	if err := w.CheckCfgCanUpdated(cfg); err != nil {

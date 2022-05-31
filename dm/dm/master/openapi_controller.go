@@ -246,7 +246,7 @@ func (s *Server) disableRelay(ctx context.Context, sourceName string, req openap
 func (s *Server) purgeRelay(ctx context.Context, sourceName string, req openapi.PurgeRelayRequest) error {
 	purgeReq := &workerrpc.Request{
 		Type:       workerrpc.CmdPurgeRelay,
-		PurgeRelay: &pb.PurgeRelayRequest{Filename: req.RelayBinlogName},
+		PurgeRelay: &pb.PurgeRelayRequest{Filename: req.RelayBinlogName, Source: sourceName},
 	}
 	if req.RelayDir != nil {
 		purgeReq.PurgeRelay.SubDir = *req.RelayDir

@@ -37,6 +37,7 @@ enum TaskOp {
 
 message QueryStatusRequest {
     string name = 1; // sub task's name, empty for all sub tasks
+    string source = 2;
 }
 
 message CommonWorkerResponse {
@@ -320,6 +321,7 @@ message PurgeRelayRequest {
     int64 time = 2;
     string filename = 3;
     string subDir = 4;
+    string source = 5;
 }
 
 enum SchemaOp {
@@ -383,6 +385,7 @@ message HandleWorkerErrorRequest {
     string task = 2; // task name
     string binlogPos = 3; // binlog-pos (that's file:pos format)
     repeated string sqls = 4; // sqls (use for replace)
+    string source = 5;
 }
 
 message GetWorkerCfgRequest {

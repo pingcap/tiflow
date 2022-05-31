@@ -672,7 +672,7 @@ func (s *Scheduler) TransferSource(ctx context.Context, source, worker string) e
 	runningStage := pb.Stage_Running
 	if runningTasks := s.GetTaskNameListBySourceName(source, &runningStage); len(runningTasks) > 0 {
 		// we only allow automatically transfer-source if all subtasks are in the sync phase.
-		resp, err := oldWorker.queryStatus(ctx)
+		resp, err := oldWorker.queryStatus(ctx, source)
 		if err != nil {
 			return terror.Annotatef(err, "failed to query worker: %s status err", oldWorker.baseInfo.Name)
 		}
@@ -737,7 +737,7 @@ func (s *Scheduler) BatchOperateTaskOnWorker(
 	// wait all tasks are in expected stage before actually starting scheduling
 WaitLoop:
 	for retry := 0; retry < maxQueryWorkerRetryNum; retry++ {
-		resp, err := worker.queryStatus(ctx)
+		resp, err := worker.queryStatus(ctx, source)
 		if err != nil {
 			return terror.Annotatef(err, "failed to query worker: %s status", worker.baseInfo.Name)
 		}
