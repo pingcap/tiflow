@@ -508,7 +508,7 @@ ErrValidatorPersistData,[code=43002:class=validator:scope=internal:level=high], 
 ErrValidatorGetEvent,[code=43003:class=validator:scope=internal:level=high], "Message: failed to get event"
 ErrValidatorProcessRowEvent,[code=43004:class=validator:scope=internal:level=high], "Message: failed to process event"
 ErrValidatorValidateChange,[code=43005:class=validator:scope=internal:level=high], "Message: failed to validate row change"
-ErrValidatorNotFound,[code=43006:class=validator:scope=not-set:level=medium], "Message: validator not found for task %s"
+ErrValidatorNotFound,[code=43006:class=validator:scope=not-set:level=medium], "Message: validator not found for task %s with source %s"
 ErrValidatorPanic,[code=43007:class=validator:scope=internal:level=high], "Message: panic error: %v"
 ErrValidatorTooMuchPending,[code=43008:class=validator:scope=internal:level=medium], "Message: too much pending data, stop validator. row size(curr/max): %d/%d, row count(curr/max): %d/%d"
 ErrSchemaTrackerInvalidJSON,[code=44001:class=schema-tracker:scope=downstream:level=high], "Message: saved schema of `%s`.`%s` is not proper JSON"

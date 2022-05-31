@@ -18,6 +18,9 @@ import (
 	"strconv"
 	"strings"
 
+	"go.uber.org/zap"
+
+	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
@@ -94,12 +97,12 @@ func ConstructFilename(baseName, seq string) string {
 
 // ConstructFilenameWithUUIDSuffix constructs a binlog filename with UUID suffix.
 func ConstructFilenameWithUUIDSuffix(originalName Filename, uuidSuffix string) string {
-	return fmt.Sprintf("%s%s%s%s%s", originalName.BaseName, posUUIDSuffixSeparator, uuidSuffix, binlogFilenameSep, originalName.Seq)
+	return fmt.Sprintf("%s%s%s%s%s", originalName.BaseName, posRelaySubDirSuffixSeparator, uuidSuffix, binlogFilenameSep, originalName.Seq)
 }
 
 // SplitFilenameWithUUIDSuffix analyzes a binlog filename with UUID suffix.
 func SplitFilenameWithUUIDSuffix(filename string) (baseName, uuidSuffix, seq string, err error) {
-	items1 := strings.Split(filename, posUUIDSuffixSeparator)
+	items1 := strings.Split(filename, posRelaySubDirSuffixSeparator)
 	if len(items1) != 2 {
 		return "", "", "", terror.ErrBinlogInvalidFilenameWithUUIDSuffix.Generate(filename)
 	}
@@ -113,4 +116,18 @@ func SplitFilenameWithUUIDSuffix(filename string) (baseName, uuidSuffix, seq str
 	uuidSuffix = items2[0]
 	seq = items2[1]
 	return baseName, uuidSuffix, seq, nil
+}
+
+// ExtractRealName removes relay log uuid suffix if it exists and returns real binlog name.
+func ExtractRealName(name string) string {
+	if !strings.Contains(name, posRelaySubDirSuffixSeparator) {
+		return name
+	}
+	baseName, _, seq, err := SplitFilenameWithUUIDSuffix(name)
+	if err != nil {
+		log.L().Error("failed to split binlog name with uuid suffix", zap.String("name", name), zap.Error(err))
+		// nolint:nilerr
+		return name
+	}
+	return ConstructFilename(baseName, seq)
 }

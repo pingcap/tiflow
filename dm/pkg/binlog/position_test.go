@@ -227,7 +227,7 @@ func (t *testPositionSuite) TestVerifyUUIDSuffix(c *C) {
 	}
 
 	for _, cs := range cases {
-		c.Assert(verifyUUIDSuffix(cs.suffix), Equals, cs.valid)
+		c.Assert(verifyRelaySubDirSuffix(cs.suffix), Equals, cs.valid)
 	}
 }
 
@@ -793,11 +793,11 @@ func (t *testPositionSuite) TestExtractSuffix(c *C) {
 	}{
 		{
 			"",
-			MinUUIDSuffix,
+			MinRelaySubDirSuffix,
 		},
 		{
 			"mysql-bin.00005",
-			MinUUIDSuffix,
+			MinRelaySubDirSuffix,
 		},
 		{
 			"mysql-bin|000001.000001",

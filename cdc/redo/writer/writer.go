@@ -108,7 +108,9 @@ type LogWriter struct {
 }
 
 // NewLogWriter creates a LogWriter instance. It is guaranteed only one LogWriter per changefeed
-func NewLogWriter(ctx context.Context, cfg *LogWriterConfig) (*LogWriter, error) {
+func NewLogWriter(
+	ctx context.Context, cfg *LogWriterConfig, opts ...Option,
+) (*LogWriter, error) {
 	if cfg == nil {
 		return nil, cerror.WrapError(cerror.ErrRedoConfigInvalid, errors.New("LogWriterConfig can not be nil"))
 	}
@@ -150,11 +152,11 @@ func NewLogWriter(ctx context.Context, cfg *LogWriterConfig) (*LogWriter, error)
 	logWriter = &LogWriter{
 		cfg: cfg,
 	}
-	logWriter.rowWriter, err = NewWriter(ctx, rowCfg)
+	logWriter.rowWriter, err = NewWriter(ctx, rowCfg, opts...)
 	if err != nil {
 		return nil, err
 	}
-	logWriter.ddlWriter, err = NewWriter(ctx, ddlCfg)
+	logWriter.ddlWriter, err = NewWriter(ctx, ddlCfg, opts...)
 	if err != nil {
 		return nil, err
 	}

@@ -28,6 +28,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/pipeline"
 	pmessage "github.com/pingcap/tiflow/pkg/pipeline/message"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/sync/errgroup"
 )
 
 func TestUnifiedSorterFileLockConflict(t *testing.T) {
@@ -51,7 +52,8 @@ func TestUnifiedSorterFileLockConflict(t *testing.T) {
 	ctx.ChangefeedVars().Info.Engine = model.SortUnified
 	ctx.ChangefeedVars().Info.SortDir = dir
 	sorter := sorterNode{}
-	err = sorter.Init(pipeline.MockNodeContext4Test(ctx, pmessage.Message{}, nil))
+	nodeCtx := pipeline.MockNodeContext4Test(ctx, pmessage.Message{}, nil)
+	err = sorter.start(nodeCtx, &errgroup.Group{}, 0, nil)
 	require.True(t, strings.Contains(err.Error(), "file lock conflict"))
 }
 
@@ -62,12 +64,9 @@ func TestSorterResolvedTs(t *testing.T) {
 	})
 	sn.sorter = memory.NewEntrySorter()
 	require.EqualValues(t, 1, sn.ResolvedTs())
-	nctx := pipeline.NewNodeContext(
-		cdcContext.NewContext(context.Background(), nil),
-		pmessage.PolymorphicEventMessage(model.NewResolvedPolymorphicEvent(0, 2)),
-		nil,
-	)
-	err := sn.Receive(nctx)
+	msg := pmessage.PolymorphicEventMessage(model.NewResolvedPolymorphicEvent(0, 2))
+	ok, err := sn.TryHandleDataMessage(context.Background(), msg)
+	require.True(t, ok)
 	require.Nil(t, err)
 	require.EqualValues(t, 2, sn.ResolvedTs())
 }
@@ -119,43 +118,41 @@ func TestSorterResolvedTsLessEqualBarrierTs(t *testing.T) {
 
 	// Resolved ts must not regress even if there is no barrier ts message.
 	resolvedTs1 := pmessage.PolymorphicEventMessage(model.NewResolvedPolymorphicEvent(0, 1))
-	nctx := pipeline.NewNodeContext(
-		cdcContext.NewContext(context.Background(), nil), resolvedTs1, ch)
-	err := sn.Receive(nctx)
+	ok, err := sn.TryHandleDataMessage(context.Background(), resolvedTs1)
+	require.True(t, ok)
 	require.Nil(t, err)
 	require.EqualValues(t, model.NewResolvedPolymorphicEvent(0, 1), <-sch)
 
 	// Advance barrier ts.
-	nctx = pipeline.NewNodeContext(
+	nctx := pipeline.NewNodeContext(
 		cdcContext.NewContext(context.Background(), nil),
 		pmessage.BarrierMessage(2),
 		ch,
 	)
-	err = sn.Receive(nctx)
+	msg := nctx.Message()
+	ok, err = sn.TryHandleDataMessage(nctx, msg)
+	require.True(t, ok)
 	require.Nil(t, err)
 	require.EqualValues(t, 2, sn.BarrierTs())
 	// Barrier message must be passed to the next node.
 	require.EqualValues(t, pmessage.BarrierMessage(2), <-ch)
 
 	resolvedTs2 := pmessage.PolymorphicEventMessage(model.NewResolvedPolymorphicEvent(0, 2))
-	nctx = pipeline.NewNodeContext(
-		cdcContext.NewContext(context.Background(), nil), resolvedTs2, nil)
-	err = sn.Receive(nctx)
+	ok, err = sn.TryHandleDataMessage(context.Background(), resolvedTs2)
+	require.True(t, ok)
 	require.Nil(t, err)
 	require.EqualValues(t, resolvedTs2.PolymorphicEvent, <-s.Output())
 
 	resolvedTs3 := pmessage.PolymorphicEventMessage(model.NewResolvedPolymorphicEvent(0, 3))
-	nctx = pipeline.NewNodeContext(
-		cdcContext.NewContext(context.Background(), nil), resolvedTs3, nil)
-	err = sn.Receive(nctx)
+	ok, err = sn.TryHandleDataMessage(context.Background(), resolvedTs3)
+	require.True(t, ok)
 	require.Nil(t, err)
 	require.EqualValues(t, resolvedTs2.PolymorphicEvent, <-s.Output())
 
 	resolvedTs4 := pmessage.PolymorphicEventMessage(model.NewResolvedPolymorphicEvent(0, 4))
 	sn.replConfig.Consistent.Level = string(redo.ConsistentLevelEventual)
-	nctx = pipeline.NewNodeContext(
-		cdcContext.NewContext(context.Background(), nil), resolvedTs4, nil)
-	err = sn.Receive(nctx)
+	ok, err = sn.TryHandleDataMessage(context.Background(), resolvedTs4)
+	require.True(t, ok)
 	require.Nil(t, err)
 	resolvedTs4 = pmessage.PolymorphicEventMessage(model.NewResolvedPolymorphicEvent(0, 4))
 	require.EqualValues(t, resolvedTs4.PolymorphicEvent, <-s.Output())

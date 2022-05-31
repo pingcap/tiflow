@@ -359,6 +359,7 @@ type ValidatorConfig struct {
 	BatchQuerySize     int      `yaml:"batch-query-size" toml:"batch-query-size" json:"batch-query-size"`
 	MaxPendingRowSize  string   `yaml:"max-pending-row-size" toml:"max-pending-row-size" json:"max-pending-row-size"`
 	MaxPendingRowCount int      `yaml:"max-pending-row-count" toml:"max-pending-row-count" json:"max-pending-row-count"`
+	StartTime          string   `yaml:"-" toml:"start-time" json:"-"`
 }
 
 func (v *ValidatorConfig) Adjust() error {
@@ -680,11 +681,12 @@ func (c *TaskConfig) adjust() error {
 			}
 		case ModeIncrement:
 			if inst.Meta == nil {
-				return terror.ErrConfigMetadataNotSet.Generate(inst.SourceID, c.TaskMode)
-			}
-			err := inst.Meta.Verify()
-			if err != nil {
-				return terror.Annotatef(err, "mysql-instance: %d", i)
+				log.L().Warn("mysql-instance doesn't set meta for incremental mode, user should specify start_time to start task.", zap.String("sourceID", inst.SourceID))
+			} else {
+				err := inst.Meta.Verify()
+				if err != nil {
+					return terror.Annotatef(err, "mysql-instance: %d", i)
+				}
 			}
 		}
 
