@@ -316,7 +316,12 @@ func (c *Capture) run(stdCtx context.Context) error {
 func (c *Capture) Info() model.CaptureInfo {
 	c.captureMu.Lock()
 	defer c.captureMu.Unlock()
-	return *c.info
+	res := model.CaptureInfo{}
+	// when c.reset has not been called yet, c.info is nil.
+	if c.info != nil {
+		res = *c.info
+	}
+	return res
 }
 
 func (c *Capture) campaignOwner(ctx cdcContext.Context) error {
