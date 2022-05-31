@@ -62,11 +62,14 @@ type pullerImpl struct {
 	tsTracker    frontier.Frontier
 	resolvedTs   uint64
 	initialized  int64
+
+	changefeed model.ChangeFeedID
+	tableID    model.TableID
 }
 
-// NewPuller create a new Puller fetch event start from checkpointTs
+// New create a new Puller fetch event start from checkpointTs
 // and put into buf.
-func NewPuller(
+func New(
 	ctx context.Context,
 	pdCli pd.Client,
 	grpcPool kv.GrpcPool,
@@ -77,6 +80,7 @@ func NewPuller(
 	checkpointTs uint64,
 	spans []regionspan.Span,
 	cfg *config.KVClientConfig,
+	tableID model.TableID,
 ) Puller {
 	tikvStorage, ok := kvStorage.(tikv.Storage)
 	if !ok {
@@ -101,6 +105,8 @@ func NewPuller(
 		tsTracker:    tsTracker,
 		resolvedTs:   checkpointTs,
 		initialized:  0,
+		changefeed:   changefeed,
+		tableID:      tableID,
 	}
 	return p
 }
@@ -122,33 +128,44 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 		})
 	}
 
-	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
-	tableID, _ := contextutil.TableIDFromCtx(ctx)
 	metricOutputChanSize := outputChanSizeHistogram.
-		WithLabelValues(changefeedID.Namespace, changefeedID.ID)
+		WithLabelValues(p.changefeed.Namespace, p.changefeed.ID)
 	metricEventChanSize := eventChanSizeHistogram.
-		WithLabelValues(changefeedID.Namespace, changefeedID.ID)
+		WithLabelValues(p.changefeed.Namespace, p.changefeed.ID)
 	metricPullerResolvedTs := pullerResolvedTsGauge.
-		WithLabelValues(changefeedID.Namespace, changefeedID.ID)
+		WithLabelValues(p.changefeed.Namespace, p.changefeed.ID)
 	metricTxnCollectCounterKv := txnCollectCounter.
-		WithLabelValues(changefeedID.Namespace, changefeedID.ID, "kv")
+		WithLabelValues(p.changefeed.Namespace, p.changefeed.ID, "kv")
 	metricTxnCollectCounterResolved := txnCollectCounter.
-		WithLabelValues(changefeedID.Namespace, changefeedID.ID, "resolved")
+		WithLabelValues(p.changefeed.Namespace, p.changefeed.ID, "resolved")
 	defer func() {
-		outputChanSizeHistogram.DeleteLabelValues(changefeedID.Namespace, changefeedID.ID)
-		eventChanSizeHistogram.DeleteLabelValues(changefeedID.Namespace, changefeedID.ID)
-		memBufferSizeGauge.DeleteLabelValues(changefeedID.Namespace, changefeedID.ID)
-		pullerResolvedTsGauge.DeleteLabelValues(changefeedID.Namespace, changefeedID.ID)
-		kvEventCounter.DeleteLabelValues(changefeedID.Namespace, changefeedID.ID, "kv")
-		kvEventCounter.DeleteLabelValues(changefeedID.Namespace, changefeedID.ID, "resolved")
-		txnCollectCounter.DeleteLabelValues(changefeedID.Namespace, changefeedID.ID, "kv")
-		txnCollectCounter.DeleteLabelValues(changefeedID.Namespace, changefeedID.ID, "resolved")
+		outputChanSizeHistogram.DeleteLabelValues(p.changefeed.Namespace, p.changefeed.ID)
+		eventChanSizeHistogram.DeleteLabelValues(p.changefeed.Namespace, p.changefeed.ID)
+		memBufferSizeGauge.DeleteLabelValues(p.changefeed.Namespace, p.changefeed.ID)
+		pullerResolvedTsGauge.DeleteLabelValues(p.changefeed.Namespace, p.changefeed.ID)
+		kvEventCounter.DeleteLabelValues(p.changefeed.Namespace, p.changefeed.ID, "kv")
+		kvEventCounter.DeleteLabelValues(p.changefeed.Namespace, p.changefeed.ID, "resolved")
+		txnCollectCounter.DeleteLabelValues(p.changefeed.Namespace, p.changefeed.ID, "kv")
+		txnCollectCounter.DeleteLabelValues(p.changefeed.Namespace, p.changefeed.ID, "resolved")
 	}()
 
 	lastResolvedTs := p.checkpointTs
+	metricsTicker := time.NewTicker(15 * time.Second)
+	defer metricsTicker.Stop()
 	g.Go(func() error {
-		metricsTicker := time.NewTicker(15 * time.Second)
-		defer metricsTicker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return errors.Trace(ctx.Err())
+			case <-metricsTicker.C:
+				metricEventChanSize.Observe(float64(len(eventCh)))
+				metricOutputChanSize.Observe(float64(len(p.outputCh)))
+				metricPullerResolvedTs.Set(float64(oracle.ExtractPhysical(p.GetResolvedTs())))
+			}
+		}
+	})
+
+	g.Go(func() error {
 		output := func(raw *model.RawKVEntry) error {
 			// even after https://github.com/pingcap/tiflow/pull/2038, kv client
 			// could still miss region change notification, which leads to resolved
@@ -157,12 +174,12 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 			// resolved ts is not broken.
 			if raw.CRTs < p.resolvedTs || (raw.CRTs == p.resolvedTs && raw.OpType != model.OpTypeResolved) {
 				log.Warn("The CRTs is fallen back in puller",
-					zap.String("namespace", changefeedID.Namespace),
-					zap.String("changefeed", changefeedID.ID),
+					zap.String("namespace", p.changefeed.Namespace),
+					zap.String("changefeed", p.changefeed.ID),
 					zap.Reflect("row", raw),
 					zap.Uint64("CRTs", raw.CRTs),
 					zap.Uint64("resolvedTs", p.resolvedTs),
-					zap.Int64("tableID", tableID))
+					zap.Int64("tableID", p.tableID))
 				return nil
 			}
 			select {
@@ -180,11 +197,6 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 			select {
 			case <-ctx.Done():
 				return errors.Trace(ctx.Err())
-			case <-metricsTicker.C:
-				metricEventChanSize.Observe(float64(len(eventCh)))
-				metricOutputChanSize.Observe(float64(len(p.outputCh)))
-				metricPullerResolvedTs.Set(float64(oracle.ExtractPhysical(atomic.LoadUint64(&p.resolvedTs))))
-				continue
 			case e = <-eventCh:
 			}
 
@@ -200,10 +212,10 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 				metricTxnCollectCounterResolved.Inc()
 				if !regionspan.IsSubSpan(e.Resolved.Span, p.spans...) {
 					log.Panic("the resolved span is not in the total span",
-						zap.String("namespace", changefeedID.Namespace),
-						zap.String("changefeed", changefeedID.ID),
+						zap.String("namespace", p.changefeed.Namespace),
+						zap.String("changefeed", p.changefeed.ID),
 						zap.Reflect("resolved", e.Resolved),
-						zap.Int64("tableID", tableID),
+						zap.Int64("tableID", p.tableID),
 						zap.Reflect("spans", p.spans),
 					)
 				}
@@ -221,10 +233,10 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 						spans = append(spans, p.spans[i].String())
 					}
 					log.Info("puller is initialized",
-						zap.String("namespace", changefeedID.Namespace),
-						zap.String("changefeed", changefeedID.ID),
+						zap.String("namespace", p.changefeed.Namespace),
+						zap.String("changefeed", p.changefeed.ID),
 						zap.Duration("duration", time.Since(start)),
-						zap.Int64("tableID", tableID),
+						zap.Int64("tableID", p.tableID),
 						zap.Strings("spans", spans),
 						zap.Uint64("resolvedTs", resolvedTs))
 				}

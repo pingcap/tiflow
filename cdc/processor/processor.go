@@ -558,7 +558,7 @@ func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.S
 	stdCtx := contextutil.PutTableInfoInCtx(ctx, -1, puller.DDLPullerTableName)
 	stdCtx = contextutil.PutChangefeedIDInCtx(stdCtx, ctx.ChangefeedVars().ID)
 	stdCtx = contextutil.PutRoleInCtx(stdCtx, util.RoleProcessor)
-	ddlPuller := puller.NewPuller(
+	ddlPuller := puller.New(
 		stdCtx,
 		p.upstream.PDClient,
 		p.upstream.GrpcPool,
@@ -569,6 +569,9 @@ func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.S
 		checkpointTs,
 		ddlspans,
 		kvCfg,
+		// TableID = 0 used as a placeholder,
+		// since DDL Puller not belong to any particular table.
+		model.TableID(0),
 	)
 	meta, err := kv.GetSnapshotMeta(kvStorage, checkpointTs)
 	if err != nil {

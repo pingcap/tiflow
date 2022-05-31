@@ -78,7 +78,7 @@ func newDDLPuller(ctx cdcContext.Context, up *upstream.Upstream, startTs uint64)
 	kvStorage := up.KVStorage
 	// kvStorage can be nil only in the test
 	if kvStorage != nil {
-		plr = puller.NewPuller(
+		plr = puller.New(
 			ctx, up.PDClient,
 			up.GrpcPool,
 			up.RegionCache,
@@ -93,6 +93,9 @@ func newDDLPuller(ctx cdcContext.Context, up *upstream.Upstream, startTs uint64)
 			startTs,
 			[]regionspan.Span{regionspan.GetDDLSpan(), regionspan.GetAddIndexDDLSpan()},
 			kvCfg,
+			// TableID = 0 used as a placeholder,
+			// since DDL Puller not belong to any particular table.
+			model.TableID(0),
 		)
 	}
 
