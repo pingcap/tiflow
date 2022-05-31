@@ -337,8 +337,6 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 
 // Close the producer asynchronously, does not care closed successfully or not.
 func (k *mqSink) Close(ctx context.Context) error {
-	k.resolvedBuffer.Close()
-	k.flushWorker.closeMsgChan()
 	go k.mqProducer.Close()
 	return nil
 }
