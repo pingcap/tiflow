@@ -32,11 +32,10 @@ func TestSchedulerBalance(t *testing.T) {
 	b := newBalancer()
 	tasks := b.Schedule(0, currentTables, captures, replications)
 	require.Len(t, tasks, 1)
-	require.ElementsMatch(t, []*scheduleTask{
-		{burstBalance: &burstBalance{AddTables: map[int64]string{
-			1: "a", 2: "b", 3: "a", 4: "b",
-		}}},
-	}, tasks)
+	require.Contains(t, tasks[0].burstBalance.AddTables, model.TableID(1))
+	require.Contains(t, tasks[0].burstBalance.AddTables, model.TableID(2))
+	require.Contains(t, tasks[0].burstBalance.AddTables, model.TableID(3))
+	require.Contains(t, tasks[0].burstBalance.AddTables, model.TableID(4))
 
 	// AddTable ReplicationSetStateAbsent.
 	replications = map[model.TableID]*ReplicationSet{
