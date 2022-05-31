@@ -146,7 +146,6 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 	g, ctx := errgroup.WithContext(ctx)
 
 	checkpointTs := p.checkpointTs
-
 	lockResolver := txnutil.NewLockerResolver(p.kvStorage,
 		contextutil.ChangefeedIDFromCtx(ctx), contextutil.RoleFromCtx(ctx))
 	for _, span := range p.spans {
@@ -158,7 +157,6 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 	}
 
 	defer func() {
-
 		memBufferSizeGauge.DeleteLabelValues(p.changefeed.Namespace, p.changefeed.ID)
 		kvEventCounter.DeleteLabelValues(p.changefeed.Namespace, p.changefeed.ID, "kv")
 		kvEventCounter.DeleteLabelValues(p.changefeed.Namespace, p.changefeed.ID, "resolved")
