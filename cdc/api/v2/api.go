@@ -25,23 +25,23 @@ import (
 )
 
 // OpenAPIV2 provides CDC v2 APIs
-type openAPIV2 struct {
+type OpenAPIV2 struct {
 	capture *capture.Capture
 	// use for unit test only
 	testStatusProvider owner.StatusProvider
 }
 
-// NewOpenAPIV2 creates a new openAPIV2.
-func NewOpenAPIV2(c *capture.Capture) openAPIV2 {
-	return openAPIV2{capture: c}
+// NewOpenAPIV2 creates a new OpenAPIV2.
+func NewOpenAPIV2(c *capture.Capture) OpenAPIV2 {
+	return OpenAPIV2{capture: c}
 }
 
-// NewOpenAPIV2ForTest returns a openAPIV2 for test
-func NewOpenAPIV2ForTest(c *capture.Capture, p owner.StatusProvider) openAPIV2 {
-	return openAPIV2{capture: c, testStatusProvider: p}
+// NewOpenAPIV2ForTest returns a OpenAPIV2 for test
+func NewOpenAPIV2ForTest(c *capture.Capture, p owner.StatusProvider) OpenAPIV2 {
+	return OpenAPIV2{capture: c, testStatusProvider: p}
 }
 
-func (h *openAPIV2) statusProvider() owner.StatusProvider {
+func (h *OpenAPIV2) statusProvider() owner.StatusProvider {
 	if h.testStatusProvider != nil {
 		return h.testStatusProvider
 	}
@@ -49,7 +49,7 @@ func (h *openAPIV2) statusProvider() owner.StatusProvider {
 }
 
 // RegisterOpenAPIV2Routes registers routes for OpenAPI
-func RegisterOpenAPIV2Routes(router *gin.Engine, api openAPIV2) {
+func RegisterOpenAPIV2Routes(router *gin.Engine, api OpenAPIV2) {
 	v2 := router.Group("/api/v2")
 
 	v2.Use(middleware.LogMiddleware())
@@ -59,9 +59,19 @@ func RegisterOpenAPIV2Routes(router *gin.Engine, api openAPIV2) {
 	v2.GET("/tso", api.GetTso)
 }
 
-func (h *openAPIV2) GetTso(c *gin.Context) {
+// GetTso request and returns a TSO from PD
+func (h *OpenAPIV2) GetTso(c *gin.Context) {
 	ctx := c.Request.Context()
+	if h.capture.UpstreamManager == nil {
+		c.Status(http.StatusServiceUnavailable)
+		return
+	}
 	pdClient := h.capture.UpstreamManager.Get(upstream.DefaultUpstreamID).PDClient
+	if pdClient == nil {
+		c.Status(http.StatusServiceUnavailable)
+		return
+	}
+
 	timestamp, logicalTime, err := pdClient.GetTS(ctx)
 	if err != nil {
 		_ = c.Error(err)
