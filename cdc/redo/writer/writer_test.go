@@ -16,7 +16,6 @@ package writer
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"math"
 	"net/url"
 	"os"
@@ -303,9 +302,7 @@ func TestLogWriterFlushLog(t *testing.T) {
 		},
 	}
 
-	dir, err := ioutil.TempDir("", "redo-FlushLog")
-	require.Nil(t, err)
-	defer os.RemoveAll(dir)
+	dir := t.TempDir()
 
 	for _, tt := range tests {
 		controller := gomock.NewController(t)
@@ -394,9 +391,7 @@ func TestLogWriterEmitCheckpointTs(t *testing.T) {
 		},
 	}
 
-	dir, err := ioutil.TempDir("", "redo-EmitCheckpointTs")
-	require.Nil(t, err)
-	defer os.RemoveAll(dir)
+	dir := t.TempDir()
 
 	for _, tt := range tests {
 		controller := gomock.NewController(t)
@@ -486,9 +481,7 @@ func TestLogWriterEmitResolvedTs(t *testing.T) {
 		},
 	}
 
-	dir, err := ioutil.TempDir("", "redo-ResolvedTs")
-	require.Nil(t, err)
-	defer os.RemoveAll(dir)
+	dir := t.TempDir()
 
 	for _, tt := range tests {
 		controller := gomock.NewController(t)
@@ -568,9 +561,7 @@ func TestLogWriterGetCurrentResolvedTs(t *testing.T) {
 		},
 	}
 
-	dir, err := ioutil.TempDir("", "redo-GetCurrentResolvedTs")
-	require.Nil(t, err)
-	defer os.RemoveAll(dir)
+	dir := t.TempDir()
 
 	for _, tt := range tests {
 		mockWriter := &mockFileWriter{}
@@ -654,9 +645,7 @@ func TestNewLogWriter(t *testing.T) {
 	require.Nil(t, err)
 	require.NotSame(t, ll, ll2)
 
-	dir, err := ioutil.TempDir("", "redo-NewLogWriter")
-	require.Nil(t, err)
-	defer os.RemoveAll(dir)
+	dir := t.TempDir()
 	fileName := fmt.Sprintf("%s_%s_%d_%s%s", "cp", "test-changefeed", time.Now().Unix(), common.DefaultMetaFileType, common.MetaEXT)
 	path := filepath.Join(dir, fileName)
 	f, err := os.Create(path)
@@ -832,10 +821,9 @@ func TestDeleteAllLogs(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		dir, err := ioutil.TempDir("", "redo-DeleteAllLogs")
-		require.Nil(t, err)
+		dir := t.TempDir()
 		path := filepath.Join(dir, fileName)
-		_, err = os.Create(path)
+		_, err := os.Create(path)
 		require.Nil(t, err)
 		path = filepath.Join(dir, fileName1)
 		_, err = os.Create(path)
@@ -884,7 +872,6 @@ func TestDeleteAllLogs(t *testing.T) {
 				require.True(t, os.IsNotExist(err), tt.name)
 			}
 		}
-		os.RemoveAll(dir)
 		getAllFilesInS3 = origin
 	}
 }
