@@ -27,7 +27,7 @@ type callback func()
 // TiCDC needs to balance interrupted tables as soon as possible.
 type burstBalance struct {
 	// Add tables to captures
-	Tables map[model.TableID]model.CaptureID
+	AddTables, RemoveTables map[model.TableID]model.CaptureID
 }
 
 type moveTable struct {
@@ -228,7 +228,7 @@ func (r *replicationManager) HandleTasks(
 
 		// Check if accepting one more task exceeds maxTaskConcurrency.
 		if len(r.runningTasks)+1 > r.maxTaskConcurrency {
-			log.Debug("tpcheduler: too many running task")
+			log.Debug("tpscheduler: too many running task")
 			// Does not use break, in case there is burst balance task
 			// in the remaining tasks.
 			continue
@@ -315,23 +315,25 @@ func (r *replicationManager) handleBurstBalanceTasks(
 	task *burstBalance,
 ) ([]*schedulepb.Message, error) {
 	perCapture := make(map[model.CaptureID]int)
-	for _, captureID := range task.Tables {
+	for _, captureID := range task.AddTables {
+		perCapture[captureID]++
+	}
+	for _, captureID := range task.RemoveTables {
 		perCapture[captureID]++
 	}
 	fields := make([]zap.Field, 0, len(perCapture))
 	for captureID, count := range perCapture {
 		fields = append(fields, zap.Int(captureID, count))
 	}
-	fields = append(fields, zap.Int("total", len(task.Tables)))
+	fields = append(fields, zap.Int("total", len(task.AddTables)+len(task.RemoveTables)))
 	log.Info("tpscheduler: handle burst balance task", fields...)
 
-	sentMsgs := make([]*schedulepb.Message, 0, len(task.Tables))
-	for tableID := range task.Tables {
+	sentMsgs := make([]*schedulepb.Message, 0, len(task.AddTables))
+	for tableID, captureID := range task.AddTables {
 		if r.runningTasks[tableID] != nil {
 			// Skip add table if the table is already running a task.
 			continue
 		}
-		captureID := task.Tables[tableID]
 		msgs, err := r.handleAddTableTask(&addTable{
 			TableID: tableID, CaptureID: captureID,
 		})
@@ -342,5 +344,25 @@ func (r *replicationManager) handleBurstBalanceTasks(
 		// Just for place holding.
 		r.runningTasks[tableID] = &scheduleTask{}
 	}
+	for tableID, captureID := range task.RemoveTables {
+		if r.runningTasks[tableID] != nil {
+			// Skip add table if the table is already running a task.
+			continue
+		}
+		msgs, err := r.handleRemoveTableTask(&removeTable{
+			TableID: tableID, CaptureID: captureID,
+		})
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		sentMsgs = append(sentMsgs, msgs...)
+		// Just for place holding.
+		r.runningTasks[tableID] = &scheduleTask{}
+	}
 	return sentMsgs, nil
+}
+
+// Caller must not modify the return replication sets.
+func (r *replicationManager) ReplicationSets() map[model.TableID]*ReplicationSet {
+	return r.tables
 }

@@ -30,8 +30,11 @@ type DebugConfig struct {
 	EnableNewScheduler bool            `toml:"enable-new-scheduler" json:"enable-new-scheduler"`
 	Messages           *MessagesConfig `toml:"messages" json:"messages"`
 
-	EnableTwoPhaseScheduler bool
-	Scheduler               *SchedulerConfig
+	// EnableTwoPhaseScheduler enables the two-phase scheduler.
+	// The default value is false.
+	EnableTwoPhaseScheduler bool `toml:"enable-2phase-scheduler" json:"enable-2phase-scheduler"`
+	// Scheduler is the configuration of the two-phase scheduler.
+	Scheduler *SchedulerConfig `toml:"scheduler" json:"scheduler"`
 }
 
 // ValidateAndAdjust validates and adjusts the debug configuration

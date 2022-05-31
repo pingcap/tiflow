@@ -126,18 +126,31 @@ func (c *captureManager) checkAllCaptureInitialized() bool {
 	return true
 }
 
-func (c *captureManager) Tick() []*schedulepb.Message {
+func (c *captureManager) Tick(
+	reps map[model.TableID]*ReplicationSet,
+) []*schedulepb.Message {
 	c.tickCounter++
 	if c.tickCounter < c.heartbeatTick {
 		return nil
 	}
 	c.tickCounter = 0
+	tables := make(map[model.CaptureID][]model.TableID)
+	for tableID, rep := range reps {
+		if rep.Primary != "" {
+			tables[rep.Primary] = append(tables[rep.Primary], tableID)
+		}
+		if rep.Secondary != "" {
+			tables[rep.Secondary] = append(tables[rep.Secondary], tableID)
+		}
+	}
 	msgs := make([]*schedulepb.Message, 0, len(c.Captures))
 	for to := range c.Captures {
 		msgs = append(msgs, &schedulepb.Message{
-			To:        to,
-			MsgType:   schedulepb.MsgHeartbeat,
-			Heartbeat: &schedulepb.Heartbeat{},
+			To:      to,
+			MsgType: schedulepb.MsgHeartbeat,
+			Heartbeat: &schedulepb.Heartbeat{
+				TableIDs: tables[to],
+			},
 		})
 	}
 	return msgs
