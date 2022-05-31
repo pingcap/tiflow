@@ -31,12 +31,12 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/mq/producer"
 	"github.com/pingcap/tiflow/cdc/sink/mq/producer/kafka"
 	"github.com/pingcap/tiflow/cdc/sink/mq/producer/pulsar"
+	"github.com/pingcap/tiflow/pkg/chann"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
-	"golang.design/x/chann"
 	"golang.org/x/sync/errgroup"
 )
 
