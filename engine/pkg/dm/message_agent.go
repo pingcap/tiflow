@@ -111,7 +111,7 @@ func (m *messagePair) sendRequest(ctx context.Context, topic p2p.Topic, command 
 	m.pendings.Store(msg.ID, respCh)
 	defer m.pendings.Delete(msg.ID)
 
-	if err := sender.SendMessage(ctx, topic, msg, true /* block */); err != nil {
+	if err := sender.SendMessage(ctx, topic, msg, false /* nonblock */); err != nil {
 		return nil, err
 	}
 
@@ -251,6 +251,8 @@ func (agent *MessageAgentImpl) SendMessage(ctx context.Context, senderID string,
 }
 
 // SendRequest send request synchronously.
+// caller should add its own retry mechanism if needed.
+// caller should persistent the request itself if needed.
 func (agent *MessageAgentImpl) SendRequest(ctx context.Context, senderID string, command string, req interface{}) (interface{}, error) {
 	sender, err := agent.getSender(senderID)
 	if err != nil {

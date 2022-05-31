@@ -44,5 +44,5 @@ func (t *dmWorker) StopWorker(ctx context.Context, msg *dmpkg.StopWorkerMessage)
 		return errors.Errorf("task id mismatch, get %s, actually %s", msg.Task, t.taskID)
 	}
 	// Disscuss: is it correct?
-	return t.closeAndExit(ctx, t.workerStatus(), nil)
+	return t.closeAndExit(ctx, t.workerStatus())
 }
