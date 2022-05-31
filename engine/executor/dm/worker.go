@@ -149,7 +149,7 @@ func (w *dmWorker) OnMasterMessage(topic p2p.Topic, message p2p.MessageValue) er
 
 // CloseImpl implements lib.WorkerImpl.CloseImpl
 func (w *dmWorker) CloseImpl(ctx context.Context) error {
-	// unreigster jobmaster sender
+	// unregister jobmaster sender
 	if err := w.messageAgent.UpdateSender(w.masterID, nil); err != nil {
 		return err
 	}

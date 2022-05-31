@@ -232,7 +232,7 @@ outer:
 		}
 	}
 
-	// unreigster jobmanager sender
+	// unregister jobmanager sender
 	if err := jm.messageAgent.UpdateSender(libMetadata.JobManagerUUID, nil); err != nil {
 		return err
 	}

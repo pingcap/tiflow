@@ -38,8 +38,8 @@ var (
 )
 
 // generateTopic generate dm message topic.
-func generateTopic(sendID string, receiverID string) string {
-	return fmt.Sprintf("DM---%s---%s", sendID, receiverID)
+func generateTopic(senderID string, receiverID string) string {
+	return fmt.Sprintf("DM---%s---%s", senderID, receiverID)
 }
 
 // extractTopic extract dm message topic.
@@ -170,6 +170,10 @@ type MessageAgentImpl struct {
 }
 
 // NewMessageAgentImpl creates a new MessageAgent instance.
+// message agent will call the method of commandHandler by command name automatically.
+// MessageFuncType: func(ctx context.Context, msg *interface{}) error {}
+// RequestFuncType(1): func(ctx context.Context, req *interface{}) (resp *interface{}, err error) {}
+// RequestFuncType(2): func(ctx context.Context, req *interface{}) (resp *interface{}) {}
 func NewMessageAgentImpl(id string, commandHandler interface{}, messageHandlerManager p2p.MessageHandlerManager) *MessageAgentImpl {
 	agent := &MessageAgentImpl{
 		messagePair:           newMessagePair(),
@@ -217,7 +221,7 @@ func (agent *MessageAgentImpl) Close(ctx context.Context) error {
 	return nil
 }
 
-// UpdateSender adds or deletes the sender by sender-id and register/unreigster topic.
+// UpdateSender adds or deletes the sender by sender-id and register/unregister topic.
 func (agent *MessageAgentImpl) UpdateSender(senderID string, sender Sender) error {
 	if sender == nil {
 		if _, loaded := agent.senders.LoadAndDelete(senderID); loaded {
@@ -252,7 +256,7 @@ func (agent *MessageAgentImpl) SendMessage(ctx context.Context, senderID string,
 
 // SendRequest send request synchronously.
 // caller should add its own retry mechanism if needed.
-// caller should persistent the request itself if needed.
+// caller should persist the request itself if needed.
 func (agent *MessageAgentImpl) SendRequest(ctx context.Context, senderID string, command string, req interface{}) (interface{}, error) {
 	sender, err := agent.getSender(senderID)
 	if err != nil {
@@ -277,13 +281,9 @@ func (agent *MessageAgentImpl) sendResponse(ctx context.Context, senderID string
 }
 
 // onMessage receive message/request/response.
-// Forward the response to the corresponding request request.
-// According to the command, the corresponding message processing function of defaultHandler will be called.
-// According to the command, the corresponding request processing function of defaultHandler will be called, and send the response to caller.
-// NOTE: comand name should same as handler name.
-// MessageFuncType: func(ctx context.Context, msg *interface{}) error {}
-// RequestFuncType(1): func(ctx context.Context, req *interface{}) (resp *interface{}, err error) {}
-// RequestFuncType(2): func(ctx context.Context, req *interface{}) (resp *interface{}) {}
+// Forward the response to the corresponding request.
+// According to the command, the corresponding message processing function of commandHandler will be called.
+// According to the command, the corresponding request processing function of commandHandler will be called, and send the response to caller.
 func (agent *MessageAgentImpl) onMessage(topic string, msg interface{}) error {
 	log.L().Debug("on message", zap.String("topic", topic), zap.Any("msg", msg))
 	m, ok := msg.(*message)
@@ -295,8 +295,8 @@ func (agent *MessageAgentImpl) onMessage(topic string, msg interface{}) error {
 	case responseTp:
 		return agent.handleResponse(m.ID, m.Command, m.Payload)
 	case requestTp:
-		sendID, _ := extractTopic(topic)
-		return agent.handleRequest(sendID, m.ID, m.Command, m.Payload)
+		senderID, _ := extractTopic(topic)
+		return agent.handleRequest(senderID, m.ID, m.Command, m.Payload)
 	default:
 		return agent.handleMessage(m.Command, m.Payload)
 	}

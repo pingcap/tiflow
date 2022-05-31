@@ -93,7 +93,7 @@ func (u *unitHolderImpl) Init(ctx context.Context) error {
 		return err
 	}
 
-	u.unit.Process(u.ctx, u.resultCh)
+	go u.unit.Process(u.ctx, u.resultCh)
 	return nil
 }
 
