@@ -37,9 +37,7 @@ type MetaTestCase struct {
 }
 
 func (r *testMetaSuite) TestLocalMeta(c *C) {
-	dir, err := os.MkdirTemp("", "test_local_meta")
-	c.Assert(err, IsNil)
-	defer os.RemoveAll(dir)
+	dir := c.MkDir()
 
 	gset0, _ := gtid.ParserGTID("mysql", "")
 	gset1, _ := gtid.ParserGTID("mysql", "85ab69d1-b21f-11e6-9c5e-64006a8978d2:1-12")
@@ -77,7 +75,7 @@ func (r *testMetaSuite) TestLocalMeta(c *C) {
 
 	// load, but empty
 	lm := NewLocalMeta("mysql", dir)
-	err = lm.Load()
+	err := lm.Load()
 	c.Assert(err, IsNil)
 
 	uuid, pos := lm.Pos()
