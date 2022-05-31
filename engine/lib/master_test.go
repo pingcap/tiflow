@@ -28,7 +28,7 @@ import (
 	derror "github.com/pingcap/tiflow/engine/pkg/errors"
 	resourcemeta "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
-	"github.com/pingcap/tiflow/engine/pkg/uuid"
+	"github.com/pingcap/tiflow/pkg/uuid"
 )
 
 const (

@@ -40,7 +40,7 @@ var minErrorRetryInterval = 1 * time.Minute
 
 // StreamerProducer provides the ability to generate binlog streamer by StartSync()
 // but go-mysql StartSync() returns (struct, err) rather than (interface, err)
-// And we can't simplely use StartSync() method in SteamerProducer
+// And we can't simply use StartSync() method in SteamerProducer
 // so use generateStreamer to wrap StartSync() method to make *BinlogSyncer and *BinlogReader in same interface
 // For other implementations who implement StreamerProducer and Streamer can easily take place of Syncer.streamProducer
 // For test is easy to mock.
@@ -114,7 +114,7 @@ type StreamerController struct {
 
 	fromDB *dbconn.UpStreamConn
 
-	uuidSuffix string
+	relaySubDirSuffix string
 
 	closed bool
 
@@ -206,7 +206,7 @@ func (c *StreamerController) resetReplicationSyncer(tctx *tcontext.Context, loca
 			// check the uuid before close
 			ctx, cancel := context.WithTimeout(tctx.Ctx, utils.DefaultDBTimeout)
 			defer cancel()
-			uuidSameWithUpstream, err = c.checkUUIDSameWithUpstream(ctx, location.Position, t.reader.GetUUIDs())
+			uuidSameWithUpstream, err = c.checkUUIDSameWithUpstream(ctx, location.Position, t.reader.GetSubDirs())
 			if err != nil {
 				return err
 			}
@@ -284,22 +284,18 @@ func (c *StreamerController) GetEvent(tctx *tcontext.Context) (event *replicatio
 
 	switch ev := event.Event.(type) {
 	case *replication.RotateEvent:
-		// if is local binlog, binlog's name contain uuid information, need to save it
-		// if is remote binlog, need to add uuid information in binlog's name
-		c.Lock()
-		containUUID := c.setUUIDIfExists(string(ev.NextLogName))
-		uuidSuffix := c.uuidSuffix
-		c.Unlock()
-
-		if !containUUID {
-			if len(uuidSuffix) != 0 {
-				filename, err := binlog.ParseFilename(string(ev.NextLogName))
-				if err != nil {
-					return nil, terror.Annotate(err, "fail to parse binlog file name from rotate event")
-				}
-				ev.NextLogName = []byte(binlog.ConstructFilenameWithUUIDSuffix(filename, uuidSuffix))
-				event.Event = ev
+		// if is local binlog but switch to remote on error, need to add uuid information in binlog's name
+		// nolint:dogsled
+		_, relaySubDirSuffix, _, _ := binlog.SplitFilenameWithUUIDSuffix(string(ev.NextLogName))
+		if relaySubDirSuffix != "" {
+			c.relaySubDirSuffix = relaySubDirSuffix
+		} else if c.relaySubDirSuffix != "" {
+			filename, err := binlog.ParseFilename(string(ev.NextLogName))
+			if err != nil {
+				return nil, terror.Annotate(err, "fail to parse binlog file name from rotate event")
 			}
+			ev.NextLogName = []byte(binlog.ConstructFilenameWithUUIDSuffix(filename, c.relaySubDirSuffix))
+			event.Event = ev
 		}
 	default:
 	}
@@ -340,17 +336,6 @@ func (c *StreamerController) IsClosed() bool {
 	defer c.RUnlock()
 
 	return c.closed
-}
-
-func (c *StreamerController) setUUIDIfExists(filename string) bool {
-	_, uuidSuffix, _, err := binlog.SplitFilenameWithUUIDSuffix(filename)
-	if err != nil {
-		// don't contain uuid in position's name
-		return false
-	}
-
-	c.uuidSuffix = uuidSuffix
-	return true
 }
 
 // UpdateSyncCfg updates sync config and fromDB.

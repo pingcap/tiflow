@@ -21,7 +21,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/storagecfg"
 )
 
@@ -41,7 +40,7 @@ func TestFileManagerBasics(t *testing.T) {
 	// Creates resource-1
 	res1, err := fm.CreateResource("worker-1", "resource-1")
 	require.NoError(t, err)
-	require.Equal(t, &resModel.LocalFileResourceDescriptor{
+	require.Equal(t, &LocalFileResourceDescriptor{
 		BasePath:     dir,
 		Creator:      "worker-1",
 		ResourceName: "resource-1",
@@ -60,7 +59,7 @@ func TestFileManagerBasics(t *testing.T) {
 	// Creates resource-2
 	res2, err := fm.CreateResource("worker-1", "resource-2")
 	require.NoError(t, err)
-	require.Equal(t, &resModel.LocalFileResourceDescriptor{
+	require.Equal(t, &LocalFileResourceDescriptor{
 		BasePath:     dir,
 		Creator:      "worker-1",
 		ResourceName: "resource-2",
@@ -143,13 +142,13 @@ func TestFileManagerManyWorkers(t *testing.T) {
 	for i := 0; i < numWorkers; i++ {
 		workerID := fmt.Sprintf("worker-%d", i)
 		resourceID1 := fmt.Sprintf("resource-%d-1", i)
-		require.DirExists(t, filepath.Join(dir, workerID, resourceID1))
+		require.DirExists(t, filepath.Join(dir, workerID, resourceNameToFilePathName(resourceID1)))
 
 		resourceID2 := fmt.Sprintf("resource-%d-2", i)
 		if i < numWorkers/2 {
-			require.NoDirExists(t, filepath.Join(dir, workerID, resourceID2))
+			require.NoDirExists(t, filepath.Join(dir, workerID, resourceNameToFilePathName(resourceID2)))
 		} else {
-			require.DirExists(t, filepath.Join(dir, workerID, resourceID2))
+			require.DirExists(t, filepath.Join(dir, workerID, resourceNameToFilePathName(resourceID2)))
 		}
 	}
 }
@@ -193,4 +192,30 @@ func TestCreateAndGetResource(t *testing.T) {
 	_, err = fm.GetPersistedResource("worker-1", "resource-1")
 	require.Error(t, err)
 	require.Regexp(t, ".*ErrResourceDoesNotExist.*", err)
+}
+
+func TestResourceNamesWithSlash(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	fm := NewLocalFileManager(storagecfg.LocalFileConfig{BaseDir: dir})
+
+	_, err := fm.CreateResource("worker-1", "a")
+	require.NoError(t, err)
+
+	_, err = fm.CreateResource("worker-1", "a/b")
+	require.NoError(t, err)
+
+	_, err = fm.CreateResource("worker-1", "a/b/c")
+	require.NoError(t, err)
+
+	fm.SetPersisted("worker-1", "a/b/c")
+	_, err = fm.GetPersistedResource("worker-1", "a/b/c")
+	require.NoError(t, err)
+
+	err = fm.RemoveTemporaryFiles("worker-1")
+	require.NoError(t, err)
+
+	_, err = fm.GetPersistedResource("worker-1", "a/b/c")
+	require.NoError(t, err)
 }

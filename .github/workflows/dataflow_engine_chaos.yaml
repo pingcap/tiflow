@@ -3,8 +3,6 @@ name: Dataflow Engine Chaos
 on:
   schedule:
     - cron: '0 17-23 * * *' # run at minute 0 every hour from 01:00 ~ 07:00 UTC+8
-  pull_request:
-    branches: [ master ]
 
 # See: https://docs.github.com/en/actions/reference/workflow-syntax-for-github-actions#concurrency.
 concurrency:
@@ -23,8 +21,8 @@ jobs:
       matrix:
         chaos-obj:
           [
-            "pod-failure-dfe",
-            "pod-kill-dfe",
+            "pod-failure-dataflow",
+            "pod-kill-dataflow",
           ]
 
     # Steps represent a sequence of tasks that will be executed as part of the job
@@ -81,16 +79,16 @@ jobs:
 
       - name: Build Dataflow engine docker image
         run: |
-          cp -r $GITHUB_WORKSPACE/chaos/manifests/conf/ $GITHUB_WORKSPACE/bin/
-          docker build -f $GITHUB_WORKSPACE/chaos/manifests/Dockerfile -t dataflow:chaos $GITHUB_WORKSPACE/bin
+          cp -r $GITHUB_WORKSPACE/engine/chaos/manifests/conf/ $GITHUB_WORKSPACE/bin/
+          docker build -f $GITHUB_WORKSPACE/engine/chaos/manifests/Dockerfile -t dataflow:chaos $GITHUB_WORKSPACE/bin
           docker image list
 
       # Set up metastore and basic services
       - name: Set up metastore and basic services
         run: |
-          kubectl apply -f $GITHUB_WORKSPACE/chaos/manifests/metastore.yaml
-          kubectl get -f $GITHUB_WORKSPACE/chaos/manifests/metastore.yaml
-          kubectl describe -f $GITHUB_WORKSPACE/chaos/manifests/metastore.yaml
+          kubectl apply -f $GITHUB_WORKSPACE/engine/chaos/manifests/metastore.yaml
+          kubectl get -f $GITHUB_WORKSPACE/engine/chaos/manifests/metastore.yaml
+          kubectl describe -f $GITHUB_WORKSPACE/engine/chaos/manifests/metastore.yaml
       - name: Wait for metastore ready
         run: |
           kubectl wait --for=condition=Ready pod/metastore-framework-mysql-0 --timeout=60s || true
@@ -115,9 +113,9 @@ jobs:
 
       - name: Set up server-master
         run: |
-          kubectl apply -f $GITHUB_WORKSPACE/chaos/manifests/server-master.yaml
-          kubectl get -f $GITHUB_WORKSPACE/chaos/manifests/server-master.yaml
-          kubectl describe -f $GITHUB_WORKSPACE/chaos/manifests/server-master.yaml
+          kubectl apply -f $GITHUB_WORKSPACE/engine/chaos/manifests/server-master.yaml
+          kubectl get -f $GITHUB_WORKSPACE/engine/chaos/manifests/server-master.yaml
+          kubectl describe -f $GITHUB_WORKSPACE/engine/chaos/manifests/server-master.yaml
 
       - name: Wait for server-master ready
         run: |
@@ -151,9 +149,9 @@ jobs:
 
       - name: Set up executor
         run: |
-          kubectl apply -f $GITHUB_WORKSPACE/chaos/manifests/executor.yaml
-          kubectl get -f $GITHUB_WORKSPACE/chaos/manifests/executor.yaml
-          kubectl describe -f $GITHUB_WORKSPACE/chaos/manifests/executor.yaml
+          kubectl apply -f $GITHUB_WORKSPACE/engine/chaos/manifests/executor.yaml
+          kubectl get -f $GITHUB_WORKSPACE/engine/chaos/manifests/executor.yaml
+          kubectl describe -f $GITHUB_WORKSPACE/engine/chaos/manifests/executor.yaml
 
       - name: Wait for executor ready
         run: |
@@ -187,31 +185,31 @@ jobs:
 
       - name: Set up chaos test cases
         run: |
-          kubectl apply -f $GITHUB_WORKSPACE/chaos/manifests/cases.yaml
-          kubectl get -f $GITHUB_WORKSPACE/chaos/manifests/cases.yaml
-          kubectl describe -f $GITHUB_WORKSPACE/chaos/manifests/cases.yaml
+          kubectl apply -f $GITHUB_WORKSPACE/engine/chaos/manifests/cases.yaml
+          kubectl get -f $GITHUB_WORKSPACE/engine/chaos/manifests/cases.yaml
+          kubectl describe -f $GITHUB_WORKSPACE/engine/chaos/manifests/cases.yaml
 
-      # - name: Encode chaos-mesh action
-      #   run: |
-      #     echo CFG_BASE64=$(base64 -w 0 $GITHUB_WORKSPACE/chaos/manifests/${{ matrix.chaos-obj }}.yaml) >> $GITHUB_ENV
+      - name: Encode chaos-mesh action
+        run: |
+          echo CFG_BASE64=$(base64 -w 0 $GITHUB_WORKSPACE/engine/chaos/manifests/${{ matrix.chaos-obj }}.yaml) >> $GITHUB_ENV
 
-      # - name: Run chaos mesh action
-      #   uses: chaos-mesh/chaos-mesh-action@master
-      #   env:
-      #     CFG_BASE64: ${{ env.CFG_BASE64 }}
-      #     CHAOS_MESH_VERSION: v1.0.0
+      - name: Run chaos mesh action
+        uses: chaos-mesh/chaos-mesh-action@master
+        env:
+          CFG_BASE64: ${{ env.CFG_BASE64 }}
+          CHAOS_MESH_VERSION: v1.0.0
 
       # check whether complete with 1m * 20 times.
       - name: Wait for chaos test case complete
         run: |
-          $GITHUB_WORKSPACE/chaos/scripts/check-case.sh
+          $GITHUB_WORKSPACE/engine/chaos/scripts/check-case.sh
 
       - name: Copy logs to hack permission
         if: ${{ always() }}
         run: |
           mkdir ./logs
           sudo cp -r -L /var/log/containers/. ./logs
-          sudo find /var/ -type f -regex '.*/(server-master|executor).log$' | sudo xargs -i cp {} ./logs || true
+          sudo find /var/ -type f | grep -E '.*/(server-master|executor)-[^/]*.log$' | sudo xargs -i cp {} ./logs || true
           sudo chown -R runner ./logs
 
       # Upload logs as artifact seems not stable, so we set `continue-on-error: true` here.
@@ -225,3 +223,15 @@ jobs:
             ./logs
             !./logs/coredns-*
             !./logs/local-path-provisioner-*
+
+      # Send feishu notification if failed.
+      - name: Feishu notification
+        continue-on-error: true
+        uses: foxundermoon/feishu-action@v2
+        if: ${{ failure() }}
+        with:
+          url: ${{ secrets.ENGINE_FEISHU_NOTIFY_URL }}
+          msg_type: text
+          content: |
+            text: |
+              dataflow engine chaos job runs, see https://github.com/pingcap/tiflow/actions/runs/${{ github.run_id }}

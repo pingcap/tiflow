@@ -16,9 +16,7 @@ package etcd
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"net/url"
-	"os"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -58,8 +56,7 @@ type etcdTester struct {
 
 func (s *etcdTester) setUpTest(t *testing.T) {
 	var err error
-	s.dir, err = ioutil.TempDir("", "etcd-testing")
-	require.Nil(t, err)
+	s.dir = t.TempDir()
 	s.clientURL, s.etcd, err = SetupEmbedEtcd(s.dir)
 	require.Nil(t, err)
 	logConfig := logutil.DefaultZapLoggerConfig
@@ -92,7 +89,6 @@ logEtcdError:
 		}
 	}
 	s.client.Close() //nolint:errcheck
-	os.RemoveAll(s.dir)
 }
 
 func TestEmbedEtcd(t *testing.T) {

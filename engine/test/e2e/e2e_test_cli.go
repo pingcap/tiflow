@@ -27,8 +27,8 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/pingcap/tiflow/engine/client"
+	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/lib/fake"
-	"github.com/pingcap/tiflow/engine/pb"
 	"github.com/pingcap/tiflow/engine/pkg/meta/kvclient"
 	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
@@ -199,6 +199,15 @@ func (cli *ChaosCli) CheckFakeJobKey(
 	}
 
 	return nil
+}
+
+// GetRevision puts a key gets the latest revision of etcd cluster
+func (cli *ChaosCli) GetRevision(ctx context.Context) (int64, error) {
+	resp, err := cli.fakeJobCli.Put(ctx, "/chaos/gen_epoch/key", "/chaos/gen_epoch/value")
+	if err != nil {
+		return 0, errors.Trace(err)
+	}
+	return resp.Header.Revision, nil
 }
 
 func runCmdHandleError(cmd *exec.Cmd) []byte {

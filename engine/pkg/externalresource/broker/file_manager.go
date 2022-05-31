@@ -54,8 +54,8 @@ func NewLocalFileManager(config storagecfg.LocalFileConfig) *LocalFileManager {
 func (m *LocalFileManager) CreateResource(
 	creator libModel.WorkerID,
 	resName resModel.ResourceName,
-) (*resModel.LocalFileResourceDescriptor, error) {
-	res := &resModel.LocalFileResourceDescriptor{
+) (*LocalFileResourceDescriptor, error) {
+	res := &LocalFileResourceDescriptor{
 		BasePath:     m.config.BaseDir,
 		Creator:      creator,
 		ResourceName: resName,
@@ -72,8 +72,8 @@ func (m *LocalFileManager) CreateResource(
 func (m *LocalFileManager) GetPersistedResource(
 	creator libModel.WorkerID,
 	resName resModel.ResourceName,
-) (*resModel.LocalFileResourceDescriptor, error) {
-	res := &resModel.LocalFileResourceDescriptor{
+) (*LocalFileResourceDescriptor, error) {
+	res := &LocalFileResourceDescriptor{
 		BasePath:     m.config.BaseDir,
 		Creator:      creator,
 		ResourceName: resName,
@@ -121,19 +121,27 @@ func (m *LocalFileManager) RemoveTemporaryFiles(creator libModel.WorkerID) error
 	}
 
 	// Iterates over all resources created by `creator`.
-	err := iterOverResourceDirectories(creatorResourcePath, func(resourceID string) error {
-		if m.isPersisted(creator, resourceID) {
+	err := iterOverResourceDirectories(creatorResourcePath, func(filePath string) error {
+		resName, err := filePathNameToResourceName(filePath)
+		if err != nil {
+			return err
+		}
+
+		if m.isPersisted(creator, resName) {
 			// Persisted resources are skipped, as they are NOT temporary.
 			return nil
 		}
 
-		fullPath := filepath.Join(m.config.BaseDir, creator, resourceID)
+		fullPath := filepath.Join(
+			m.config.BaseDir,
+			creator,
+			resourceNameToFilePathName(resName))
 		if err := os.RemoveAll(fullPath); err != nil {
 			return derrors.ErrCleaningLocalTempFiles.Wrap(err)
 		}
 
 		log.L().Info("temporary resource is removed",
-			zap.String("resource-id", resourceID),
+			zap.String("resource-name", resName),
 			zap.String("full-path", fullPath))
 		return nil
 	})
@@ -151,8 +159,15 @@ func (m *LocalFileManager) RemoveResource(creator libModel.WorkerID, resName res
 			zap.String("resource-name", resName))
 	}
 
-	resourcePath := filepath.Join(m.config.BaseDir, creator, resName)
-	if _, err := os.Stat(resourcePath); err != nil {
+	// filePath is the path for the resource directory on the local
+	// file system. Note that the dataflow engine only manages file
+	// resources on the directory level, so that business logic using
+	// brStorage.ExternalStorage can be compatible.
+	filePath := localPathWithEncoding(
+		m.config.BaseDir,
+		creator,
+		resName)
+	if _, err := os.Stat(filePath); err != nil {
 		if os.IsNotExist(err) {
 			log.L().Info("Trying to remove non-existing resource",
 				zap.String("creator", creator),
@@ -163,7 +178,7 @@ func (m *LocalFileManager) RemoveResource(creator libModel.WorkerID, resName res
 	}
 
 	// Note that the resourcePath is actually a directory.
-	if err := os.RemoveAll(resourcePath); err != nil {
+	if err := os.RemoveAll(filePath); err != nil {
 		return derrors.ErrRemovingLocalResource.Wrap(err)
 	}
 
