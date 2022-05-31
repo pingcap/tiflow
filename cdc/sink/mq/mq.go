@@ -36,6 +36,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
+	"golang.design/x/chann"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -43,12 +44,6 @@ type resolvedTsEvent struct {
 	tableID  model.TableID
 	resolved model.ResolvedTs
 }
-
-const (
-	// Depend on this size, `resolvedBuffer` will take
-	// approximately 2 KiB memory.
-	defaultResolvedTsEventBufferSize = 128
-)
 
 type mqSink struct {
 	mqProducer     producer.Producer
@@ -60,7 +55,7 @@ type mqSink struct {
 	topicManager         manager.TopicManager
 	flushWorker          *flushWorker
 	tableCheckpointTsMap sync.Map
-	resolvedBuffer       chan resolvedTsEvent
+	resolvedBuffer       *chann.Chann[resolvedTsEvent]
 
 	statistics *metrics.Statistics
 
@@ -102,7 +97,7 @@ func newMqSink(
 		protocol:       encoderConfig.Protocol(),
 		topicManager:   topicManager,
 		flushWorker:    flushWorker,
-		resolvedBuffer: make(chan resolvedTsEvent, defaultResolvedTsEventBufferSize),
+		resolvedBuffer: chann.New[resolvedTsEvent](),
 		statistics:     statistics,
 		role:           role,
 		id:             changefeedID,
@@ -191,7 +186,7 @@ func (k *mqSink) FlushRowChangedEvents(
 	select {
 	case <-ctx.Done():
 		return 0, ctx.Err()
-	case k.resolvedBuffer <- resolvedTsEvent{
+	case k.resolvedBuffer.In() <- resolvedTsEvent{
 		tableID:  tableID,
 		resolved: model.NewResolvedTs(resolved.Ts),
 	}:
@@ -206,7 +201,7 @@ func (k *mqSink) bgFlushTs(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			return errors.Trace(ctx.Err())
-		case msg := <-k.resolvedBuffer:
+		case msg := <-k.resolvedBuffer.Out():
 			resolved := msg.resolved
 			err := k.flushTsToWorker(ctx, resolved)
 			if err != nil {
@@ -342,6 +337,7 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 
 // Close the producer asynchronously, does not care closed successfully or not.
 func (k *mqSink) Close(ctx context.Context) error {
+	k.resolvedBuffer.Close()
 	k.flushWorker.closeMsgChan()
 	go k.mqProducer.Close()
 	return nil

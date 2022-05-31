@@ -223,7 +223,6 @@ func (w *flushWorker) run(ctx context.Context) (retErr error) {
 }
 
 // addEvent is used to add one event to the flushWorker.
-// It will return an ErrMQWorkerClosed if the flushWorker has exited.
 func (w *flushWorker) addEvent(ctx context.Context, event mqEvent) error {
 	select {
 	case <-ctx.Done():
