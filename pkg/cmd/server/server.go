@@ -109,56 +109,6 @@ func (o *options) addFlags(cmd *cobra.Command) {
 	cmd.Flags().StringVar(&o.allowedCertCN, "cert-allowed-cn", "", "Verify caller's identity (cert Common Name). Use ',' to separate multiple CN")
 }
 
-// run runs the server cmd.
-func (o *options) run(cmd *cobra.Command) error {
-	cancel := util.InitCmd(cmd, &logutil.Config{
-		File:                 o.serverConfig.LogFile,
-		Level:                o.serverConfig.LogLevel,
-		FileMaxSize:          o.serverConfig.Log.File.MaxSize,
-		FileMaxDays:          o.serverConfig.Log.File.MaxDays,
-		FileMaxBackups:       o.serverConfig.Log.File.MaxBackups,
-		ZapInternalErrOutput: o.serverConfig.Log.InternalErrOutput,
-	})
-	defer cancel()
-
-	tz, err := ticdcutil.GetTimezone(o.serverConfig.TZ)
-	if err != nil {
-		return errors.Annotate(err, "can not load timezone, Please specify the time zone through environment variable `TZ` or command line parameters `--tz`")
-	}
-
-	config.StoreGlobalServerConfig(o.serverConfig)
-	ctx := contextutil.PutTimezoneInCtx(cmdcontext.GetDefaultContext(), tz)
-	ctx = contextutil.PutCaptureAddrInCtx(ctx, o.serverConfig.AdvertiseAddr)
-
-	version.LogVersionInfo()
-	if ticdcutil.FailpointBuild {
-		for _, path := range failpoint.List() {
-			status, err := failpoint.Status(path)
-			if err != nil {
-				log.Error("fail to get failpoint status", zap.Error(err))
-			}
-			log.Info("failpoint enabled", zap.String("path", path), zap.String("status", status))
-		}
-	}
-
-	util.LogHTTPProxies()
-	cdc.RecordGoRuntimeSettings()
-	server, err := cdc.NewServer(strings.Split(o.serverPdAddr, ","))
-	if err != nil {
-		return errors.Annotate(err, "new server")
-	}
-	err = server.Run(ctx)
-	if err != nil && errors.Cause(err) != context.Canceled {
-		log.Error("run server", zap.String("error", errors.ErrorStack(err)))
-		return errors.Annotate(err, "run server")
-	}
-	server.Close()
-	unified.CleanUp()
-	log.Info("cdc server exits successfully")
-
-	return nil
-}
-
 // complete adapts from the command line args and config file to the data required.
 func (o *options) complete(cmd *cobra.Command) error {
 	o.serverConfig.Security = o.getCredential()
@@ -295,9 +245,18 @@ func NewCmdServer() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			err = o.run(cmd)
-			cobra.CheckErr(err)
-			return nil
+			
+			cancel := util.InitCmd(cmd, &logutil.Config{
+				File:                 o.serverConfig.LogFile,
+				Level:                o.serverConfig.LogLevel,
+				FileMaxSize:          o.serverConfig.Log.File.MaxSize,
+				FileMaxDays:          o.serverConfig.Log.File.MaxDays,
+				FileMaxBackups:       o.serverConfig.Log.File.MaxBackups,
+				ZapInternalErrOutput: o.serverConfig.Log.InternalErrOutput,
+			})
+			defer cancel()
+
+			return runServer(o)
 		},
 	}
 
@@ -312,4 +271,44 @@ func patchTiDBConf() {
 		// Disable kv client batch send loop introduced by tidb library, which is not used in TiCDC server
 		conf.TiKVClient.MaxBatchSize = 0
 	})
+}
+
+// runServer runs the CDC server.
+func runServer(o *options) error {
+	tz, err := ticdcutil.GetTimezone(o.serverConfig.TZ)
+	if err != nil {
+		return errors.Annotate(err, "can not load timezone, Please specify the time zone through environment variable `TZ` or command line parameters `--tz`")
+	}
+
+	config.StoreGlobalServerConfig(o.serverConfig)
+	ctx := contextutil.PutTimezoneInCtx(cmdcontext.GetDefaultContext(), tz)
+	ctx = contextutil.PutCaptureAddrInCtx(ctx, o.serverConfig.AdvertiseAddr)
+
+	version.LogVersionInfo()
+	if ticdcutil.FailpointBuild {
+		for _, path := range failpoint.List() {
+			status, err := failpoint.Status(path)
+			if err != nil {
+				log.Error("fail to get failpoint status", zap.Error(err))
+			}
+			log.Info("failpoint enabled", zap.String("path", path), zap.String("status", status))
+		}
+	}
+
+	util.LogHTTPProxies()
+	cdc.RecordGoRuntimeSettings()
+	server, err := cdc.NewServer(strings.Split(o.serverPdAddr, ","))
+	if err != nil {
+		return errors.Annotate(err, "new server")
+	}
+	err = server.Run(ctx)
+	if err != nil && errors.Cause(err) != context.Canceled {
+		log.Error("run server", zap.String("error", errors.ErrorStack(err)))
+		return errors.Annotate(err, "run server")
+	}
+	server.Close()
+	unified.CleanUp()
+	log.Info("cdc server exits successfully")
+
+	return nil
 }
