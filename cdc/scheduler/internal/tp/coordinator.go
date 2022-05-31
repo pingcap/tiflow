@@ -15,9 +15,9 @@ package tp
 
 import (
 	"context"
-	"log"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/tp/schedulepb"
@@ -33,7 +33,7 @@ type scheduler interface {
 		checkpointTs model.Ts,
 		currentTables []model.TableID,
 		aliveCaptures map[model.CaptureID]*model.CaptureInfo,
-		captureTables map[model.CaptureID]*CaptureStatus,
+		replications map[model.TableID]*ReplicationSet,
 	) []*scheduleTask
 }
 
@@ -67,6 +67,7 @@ func NewCoordinator(
 		version:      version.ReleaseSemver(),
 		revision:     revision,
 		trans:        trans,
+		scheduler:    []scheduler{newBalancer()},
 		replicationM: newReplicationManager(cfg.MaxTaskConcurrency),
 		captureM:     newCaptureManager(revision, cfg.HeartbeatTick),
 	}, nil
@@ -107,14 +108,14 @@ func (c *coordinator) poll(
 
 	var msgBuf []*schedulepb.Message
 	c.captureM.HandleMessage(recvMsgs)
-	msgs := c.captureM.Tick()
+	msgs := c.captureM.Tick(c.replicationM.ReplicationSets())
 	msgBuf = append(msgBuf, msgs...)
 	msgs = c.captureM.HandleAliveCaptureUpdate(aliveCaptures)
 	msgBuf = append(msgBuf, msgs...)
 	if c.captureM.CheckAllCaptureInitialized() {
-		// Skip polling replication manager as not all capture are initialized.
-		err := c.sendMsgs(ctx, msgBuf)
-		return errors.Trace(err)
+		// Skip handling messages and tasks for replication manager,
+		// as not all capture are initialized.
+		return c.sendMsgs(ctx, msgBuf)
 	}
 
 	// Handle capture membership changes.
@@ -134,10 +135,15 @@ func (c *coordinator) poll(
 	msgBuf = append(msgBuf, msgs...)
 
 	// Generate schedule tasks based on the current status.
-	captureTables := c.captureM.CaptureTableSets()
+	replications := c.replicationM.ReplicationSets()
 	allTasks := make([]*scheduleTask, 0)
 	for _, sched := range c.scheduler {
-		tasks := sched.Schedule(checkpointTs, currentTables, aliveCaptures, captureTables)
+		tasks := sched.Schedule(checkpointTs, currentTables, aliveCaptures, replications)
+		if len(tasks) != 0 {
+			log.Info("tpscheduler: new schedule task",
+				zap.Int("task", len(tasks)),
+				zap.String("scheduler", sched.Name()))
+		}
 		allTasks = append(allTasks, tasks...)
 	}
 
