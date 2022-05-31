@@ -303,12 +303,7 @@ def set_log_level():
 def get_tso():
     # test state: all
     url = V2_BASE_URL0+"/tso"
-
-    for i in range(RETRY_TIME):
-        resp = rq.get(url, cert=CERT, verify=VERIFY)
-        if resp.status_code == rq.codes.ok:
-            break
-        time.sleep(1)
+    resp = rq.get(url, cert=CERT, verify=VERIFY)
     assert resp.status_code == rq.codes.ok
 
     print("pass test: get tso")
