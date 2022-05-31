@@ -159,7 +159,8 @@ type DefaultBaseMaster struct {
 	masterMeta    *libModel.MasterMetaKVData
 
 	// workerProjectMap keep the <WorkerID, ProjectInfo> map
-	// It's used by JobManager who has workers(jobmaster) with different project info
+	// It's only used by JobManager who has workers(jobmaster) with different project info
+	// [NOTICE]: When JobManager failover, we need to load all workers(jobmaster)'s project info
 	workerProjectMap sync.Map
 	// masterProjectInfo is the projectInfo of itself
 	masterProjectInfo tenant.ProjectInfo
@@ -568,10 +569,6 @@ func (m *DefaultBaseMaster) CreateWorker(
 	go func() {
 		defer func() {
 			m.createWorkerQuota.Release()
-			//[NOTICE]:
-			// For JobManager: It deletes the <JobID, ProjectInfo> pair
-			// For JobMaster: It takes no effect
-			m.DeleteProjectInfo(workerID)
 		}()
 
 		requestCtx, cancel := context.WithTimeout(ctx, createWorkerTimeout)
@@ -644,16 +641,14 @@ func (m *DefaultBaseMaster) SetProjectInfo(workerID libModel.WorkerID, projectIn
 }
 
 // DeleteProjectInfo delete the project info of specific worker
-// [NOTICE]: For JobManager, call it after we call 'CreateWorker'
-//			 For JobMaster, it takes no effect actually.
 func (m *DefaultBaseMaster) DeleteProjectInfo(workerID libModel.WorkerID) {
 	m.workerProjectMap.Delete(workerID)
 }
 
 // GetProjectInfo get the project info of the worker
 // [WARN]: Once 'DeleteProjectInfo' is called, 'GetProjectInfo' may return unexpected project info
-// For JobManager: It will set the <jobID, projectInfo> pair in advance. So if we call 'GetProjectInfo' before
-// 'DeleteProjectInfo', we can expect a correct projectInfo.
+// For JobManager: It will set the <jobID, projectInfo> pair in advance.
+// So if we call 'GetProjectInfo' before 'DeleteProjectInfo', we can expect a correct projectInfo.
 // For JobMaster: Master and worker always have the same projectInfo and workerProjectMap is empty
 func (m *DefaultBaseMaster) GetProjectInfo(masterID libModel.MasterID) tenant.ProjectInfo {
 	projectInfo, exists := m.workerProjectMap.Load(masterID)
@@ -662,4 +657,8 @@ func (m *DefaultBaseMaster) GetProjectInfo(masterID libModel.MasterID) tenant.Pr
 	}
 
 	return projectInfo.(tenant.ProjectInfo)
+}
+
+func (m *DefaultBaseMaster) InitialAllProjectInfos(jobs []*libModel.MasterMetaKVData) {
+
 }
