@@ -171,9 +171,9 @@ func TestCaptureManagerTick(t *testing.T) {
 	cm := newCaptureManager(rev, 2)
 
 	// No heartbeat if there is no capture.
-	msgs := cm.Tick()
+	msgs := cm.Tick(nil)
 	require.Empty(t, msgs)
-	msgs = cm.Tick()
+	msgs = cm.Tick(nil)
 	require.Empty(t, msgs)
 
 	ms := map[model.CaptureID]*model.CaptureInfo{
@@ -182,10 +182,10 @@ func TestCaptureManagerTick(t *testing.T) {
 	}
 	cm.HandleAliveCaptureUpdate(ms)
 
-	// Heartbeat even if capture is uninitialize.
-	msgs = cm.Tick()
+	// Heartbeat even if capture is uninitialized.
+	msgs = cm.Tick(nil)
 	require.Empty(t, msgs)
-	msgs = cm.Tick()
+	msgs = cm.Tick(nil)
 	require.ElementsMatch(t, []*schedulepb.Message{
 		{To: "1", MsgType: schedulepb.MsgHeartbeat, Heartbeat: &schedulepb.Heartbeat{}},
 		{To: "2", MsgType: schedulepb.MsgHeartbeat, Heartbeat: &schedulepb.Heartbeat{}},
@@ -195,12 +195,31 @@ func TestCaptureManagerTick(t *testing.T) {
 	for _, s := range []CaptureState{CaptureStateInitialized, CaptureStateStopping} {
 		cm.Captures["1"].State = s
 		cm.Captures["2"].State = s
-		msgs = cm.Tick()
+		msgs = cm.Tick(nil)
 		require.Empty(t, msgs)
-		msgs = cm.Tick()
+		msgs = cm.Tick(nil)
 		require.ElementsMatch(t, []*schedulepb.Message{
 			{To: "1", MsgType: schedulepb.MsgHeartbeat, Heartbeat: &schedulepb.Heartbeat{}},
 			{To: "2", MsgType: schedulepb.MsgHeartbeat, Heartbeat: &schedulepb.Heartbeat{}},
 		}, msgs)
+	}
+
+	// TableID in heartbeat.
+	msgs = cm.Tick(nil)
+	require.Empty(t, msgs)
+	tables := map[model.TableID]*ReplicationSet{
+		1: {Primary: "1"},
+		2: {Primary: "1", Secondary: "2"},
+		3: {Secondary: "2"},
+		4: {},
+	}
+	msgs = cm.Tick(tables)
+	require.Len(t, msgs, 2)
+	if msgs[0].To == "1" {
+		require.ElementsMatch(t, []model.TableID{1, 2}, msgs[0].Heartbeat.TableIDs)
+		require.ElementsMatch(t, []model.TableID{2, 3}, msgs[1].Heartbeat.TableIDs)
+	} else {
+		require.ElementsMatch(t, []model.TableID{2, 3}, msgs[0].Heartbeat.TableIDs)
+		require.ElementsMatch(t, []model.TableID{1, 2}, msgs[1].Heartbeat.TableIDs)
 	}
 }
