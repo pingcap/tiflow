@@ -30,7 +30,7 @@ type ChangefeedsGetter interface {
 // We can also mock the changefeed operations by implement this interface.
 type ChangefeedInterface interface {
 	Get(ctx context.Context, name string) (*model.ChangefeedDetail, error)
-	List(ctx context.Context) (*[]model.ChangeFeedInfo, error)
+	List(ctx context.Context) (*[]model.ChangefeedCommonInfo, error)
 }
 
 // changefeeds implements ChangefeedInterface
@@ -58,8 +58,8 @@ func (c *changefeeds) Get(ctx context.Context, name string) (*model.ChangefeedDe
 }
 
 // List returns the list of changefeeds
-func (c *changefeeds) List(ctx context.Context) (*[]model.ChangeFeedInfo, error) {
-	result := new([]model.ChangeFeedInfo)
+func (c *changefeeds) List(ctx context.Context) (*[]model.ChangefeedCommonInfo, error) {
+	result := new([]model.ChangefeedCommonInfo)
 	err := c.client.Get().
 		WithURI("changefeeds").
 		Do(ctx).
