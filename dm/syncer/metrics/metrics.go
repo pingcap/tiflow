@@ -308,6 +308,7 @@ func (m *Proxies) CacheForOneTask(taskName, workerName, sourceID string) *Proxie
 	ret.Metrics.BinlogSyncerFileGauge = m.BinlogFileGauge.WithLabelValues("syncer", taskName, sourceID)
 	ret.Metrics.BinlogEventRowHistogram = m.BinlogEventRowHistogram.WithLabelValues(workerName, taskName, sourceID)
 	ret.Metrics.TxnHistogram = m.TxnHistogram.WithLabelValues(taskName, workerName, sourceID)
+	ret.Metrics.QueryHistogram = m.QueryHistogram.WithLabelValues(taskName, workerName, sourceID)
 	ret.Metrics.SyncerExitWithErrorCounter = m.SyncerExitWithErrorCounter.WithLabelValues(taskName, sourceID)
 	ret.Metrics.ReplicationLagGauge = m.ReplicationLagGauge.WithLabelValues(taskName, sourceID, workerName)
 	ret.Metrics.ReplicationLagHistogram = m.ReplicationLagHistogram.WithLabelValues(taskName, sourceID, workerName)
