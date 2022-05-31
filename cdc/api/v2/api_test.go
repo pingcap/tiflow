@@ -116,8 +116,8 @@ func TestGetTso(t *testing.T) {
 	router := newRouter(cp, newStatusProvider())
 	w := httptest.NewRecorder()
 
-	api := testCase{url: "/api/v2/tso", method: "GET"}
-	req, err := http.NewRequestWithContext(context.Background(), api.method, api.url, nil)
+	tc := testCase{url: "/api/v2/tso", method: "GET"}
+	req, err := http.NewRequestWithContext(context.Background(), tc.method, tc.url, nil)
 	require.Nil(t, err)
 	router.ServeHTTP(w, req)
 	require.Equal(t, 200, w.Code)
