@@ -23,8 +23,8 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/metrics"
 	"github.com/pingcap/tiflow/cdc/sink/mq/codec"
 	"github.com/pingcap/tiflow/cdc/sink/mq/producer"
+	"github.com/pingcap/tiflow/pkg/chann"
 	"go.uber.org/zap"
-	"golang.design/x/chann"
 )
 
 const (
