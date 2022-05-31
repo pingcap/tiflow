@@ -24,7 +24,9 @@ type (
 	WorkerID = string
 	// Epoch is an increasing only value.
 	Epoch = int64
-	// JobType is the type for job.
+	// JobID is the alias of MasterID
+	JobID = MasterID
+	// JobType is the unique identifier for job
 	JobType = string
 	// JobID is the unique identifier for job.
 	JobID = string
