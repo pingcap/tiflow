@@ -15,7 +15,6 @@ package servermaster
 
 import (
 	"fmt"
-	"io/ioutil"
 	"testing"
 	"time"
 
@@ -44,14 +43,12 @@ func TestStartEtcdTimeout(t *testing.T) {
 
 	name1 := "test-start-etcd-timeout-1"
 	name2 := "test-start-etcd-timeout-2"
-	dir, err := ioutil.TempDir("", name1)
-	require.Nil(t, err)
 
 	masterAddr := allocTempURL(t)
 	advertiseAddr := masterAddr
 	cfgCluster := &etcdutils.ConfigParams{}
 	cfgCluster.Name = name1
-	cfgCluster.DataDir = dir
+	cfgCluster.DataDir = t.TempDir()
 	peer1 := allocTempURL(t)
 	peer2 := peer1
 	require.Eventually(t, func() bool {
@@ -63,7 +60,7 @@ func TestStartEtcdTimeout(t *testing.T) {
 	cfgCluster.Adjust("", embed.ClusterStateFlagNew)
 
 	cfgClusterEtcd := etcdutils.GenEmbedEtcdConfigWithLogger("info")
-	cfgClusterEtcd, err = etcdutils.GenEmbedEtcdConfig(cfgClusterEtcd, masterAddr, advertiseAddr, cfgCluster)
+	cfgClusterEtcd, err := etcdutils.GenEmbedEtcdConfig(cfgClusterEtcd, masterAddr, advertiseAddr, cfgCluster)
 	require.Nil(t, err)
 
 	_, err = etcdutils.StartEtcd(cfgClusterEtcd, nil, nil, time.Millisecond*100)
