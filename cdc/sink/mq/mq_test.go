@@ -241,6 +241,10 @@ func TestPulsarSinkEncoderConfig(t *testing.T) {
 	errCh := make(chan error, 1)
 
 	sink, err := NewPulsarSink(ctx, sinkURI, fr, replicaConfig, opts, errCh)
+	// FIXME: mock pulsar client doesn't support close,
+	// so we can't call sink.Close() to close it.
+	// We will leak goroutine if we don't close it.
+	defer sink.flushWorker.closeMsgChan()
 	require.Nil(t, err)
 
 	encoder := sink.encoderBuilder.Build()
