@@ -35,8 +35,4 @@ Go Version: None
 	require.Nil(t, err)
 	require.Equal(t, noneInfo, GetRawInfo())
 	LogVersionInfo()
-	// 	logOutput := capturer.CaptureOutput(func() {
-	// 		LogVersionInfo()
-	// 	})
-	// 	require.Equal(t, noneInfo, logOutput)
 }
