@@ -88,9 +88,7 @@ func TestZapInternalErrorOutput(t *testing.T) {
 		{"test invalid error output path", filepath.Join(t.TempDir(), "/not-there/foo.log"), true},
 	}
 
-	dir, err := ioutil.TempDir("", "zap-error-test")
-	require.NoError(t, err)
-	defer os.RemoveAll(dir)
+	dir := t.TempDir()
 	for idx, tc := range testCases {
 		f := filepath.Join(dir, fmt.Sprintf("test-file%d", idx))
 		cfg := &Config{
@@ -98,7 +96,7 @@ func TestZapInternalErrorOutput(t *testing.T) {
 			File:                 f,
 			ZapInternalErrOutput: tc.errOutput,
 		}
-		err = InitLogger(cfg)
+		err := InitLogger(cfg)
 		if tc.error {
 			require.NotNil(t, err)
 		} else {
