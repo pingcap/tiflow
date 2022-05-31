@@ -131,6 +131,7 @@ func (t *testDumplingSuite) TestDefaultConfig(c *C) {
 
 func (t *testDumplingSuite) TestCallStatus(c *C) {
 	m := NewDumpling(t.cfg)
+	m.metricProxies = defaultMetricProxies
 	ctx := context.Background()
 
 	dumpConf := export.DefaultConfig()
