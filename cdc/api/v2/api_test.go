@@ -46,38 +46,44 @@ func (m *MockPDClient) GetTS(ctx context.Context) (int64, int64, error) {
 }
 
 func (p *mockStatusProvider) GetAllChangeFeedStatuses(ctx context.Context) (
-	map[model.ChangeFeedID]*model.ChangeFeedStatus, error) {
+	map[model.ChangeFeedID]*model.ChangeFeedStatus, error,
+) {
 	args := p.Called(ctx)
 	return args.Get(0).(map[model.ChangeFeedID]*model.ChangeFeedStatus), args.Error(1)
 }
 
 func (p *mockStatusProvider) GetChangeFeedStatus(ctx context.Context,
-	changefeedID model.ChangeFeedID) (*model.ChangeFeedStatus, error) {
+	changefeedID model.ChangeFeedID,
+) (*model.ChangeFeedStatus, error) {
 	args := p.Called(ctx, changefeedID)
 	log.Info("err", zap.Error(args.Error(1)))
 	return args.Get(0).(*model.ChangeFeedStatus), args.Error(1)
 }
 
 func (p *mockStatusProvider) GetAllChangeFeedInfo(ctx context.Context) (
-	map[model.ChangeFeedID]*model.ChangeFeedInfo, error) {
+	map[model.ChangeFeedID]*model.ChangeFeedInfo, error,
+) {
 	args := p.Called(ctx)
 	return args.Get(0).(map[model.ChangeFeedID]*model.ChangeFeedInfo), args.Error(1)
 }
 
 func (p *mockStatusProvider) GetChangeFeedInfo(ctx context.Context,
-	changefeedID model.ChangeFeedID) (*model.ChangeFeedInfo, error) {
+	changefeedID model.ChangeFeedID,
+) (*model.ChangeFeedInfo, error) {
 	args := p.Called(ctx)
 	return args.Get(0).(*model.ChangeFeedInfo), args.Error(1)
 }
 
 func (p *mockStatusProvider) GetAllTaskStatuses(ctx context.Context,
-	changefeedID model.ChangeFeedID) (map[model.CaptureID]*model.TaskStatus, error) {
+	changefeedID model.ChangeFeedID,
+) (map[model.CaptureID]*model.TaskStatus, error) {
 	args := p.Called(ctx)
 	return args.Get(0).(map[model.CaptureID]*model.TaskStatus), args.Error(1)
 }
 
 func (p *mockStatusProvider) GetTaskPositions(ctx context.Context,
-	changefeedID model.ChangeFeedID) (map[model.CaptureID]*model.TaskPosition, error) {
+	changefeedID model.ChangeFeedID,
+) (map[model.CaptureID]*model.TaskPosition, error) {
 	args := p.Called(ctx)
 	return args.Get(0).(map[model.CaptureID]*model.TaskPosition), args.Error(1)
 }
