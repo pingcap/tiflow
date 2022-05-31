@@ -134,7 +134,7 @@ func (p *processor) AddTable(
 		switch table.Status() {
 		// table is still `preparing`, which means the table is `replicating` on other captures.
 		// no matter `isPrepare` or not, just ignore it should be ok.
-		case pipeline.TableStatusPreparing:
+		case pipeline.TableStatePreparing:
 			log.Warn("table is still preparing, ignore the request",
 				zap.String("captureID", p.captureInfo.ID),
 				zap.String("namespace", p.changefeedID.Namespace),
@@ -143,14 +143,14 @@ func (p *processor) AddTable(
 				zap.Uint64("checkpointTs", startTs),
 				zap.Bool("isPrepare", isPrepare))
 			return true, nil
-		case pipeline.TableStatusPrepared:
+		case pipeline.TableStatePrepared:
 			// table is `prepared`, and a `isPrepare = false` request indicate that old table should
 			// be stopped on original capture already, it's safe to start replicating data now.
 			if !isPrepare {
 				table.Start(startTs)
 			}
 			return true, nil
-		case pipeline.TableStatusReplicating:
+		case pipeline.TableStateReplicating:
 			log.Warn("Ignore existing table",
 				zap.String("captureID", p.captureInfo.ID),
 				zap.String("namespace", p.changefeedID.Namespace),
@@ -159,7 +159,7 @@ func (p *processor) AddTable(
 				zap.Uint64("checkpointTs", startTs),
 				zap.Bool("isPrepare", isPrepare))
 			return true, nil
-		case pipeline.TableStatusStopped:
+		case pipeline.TableStateStopped:
 			log.Warn("The same table exists but is stopped. Cancel it and continue.",
 				zap.String("captureID", p.captureInfo.ID),
 				zap.String("namespace", p.changefeedID.Namespace),
@@ -212,18 +212,19 @@ func (p *processor) AddTable(
 }
 
 // RemoveTable implements TableExecutor interface.
-func (p *processor) RemoveTable(ctx context.Context, tableID model.TableID) (bool, error) {
+func (p *processor) RemoveTable(ctx context.Context, tableID model.TableID) bool {
 	if !p.checkReadyForMessages() {
-		return false, nil
+		return false
 	}
 
 	table, ok := p.tables[tableID]
 	if !ok {
 		log.Warn("table which will be deleted is not found",
+			zap.String("capture", p.captureInfo.ID),
 			zap.String("namespace", p.changefeedID.Namespace),
 			zap.String("changefeed", p.changefeedID.ID),
 			zap.Int64("tableID", tableID))
-		return true, nil
+		return true
 	}
 
 	boundaryTs := p.changefeed.Status.CheckpointTs
@@ -231,13 +232,14 @@ func (p *processor) RemoveTable(ctx context.Context, tableID model.TableID) (boo
 		// We use a Debug log because it is conceivable for the pipeline to block for a legitimate reason,
 		// and we do not want to alarm the user.
 		log.Debug("AsyncStop has failed, possible due to a full pipeline",
+			zap.String("capture", p.captureInfo.ID),
 			zap.String("namespace", p.changefeedID.Namespace),
 			zap.String("changefeed", p.changefeedID.ID),
 			zap.Uint64("checkpointTs", table.CheckpointTs()),
 			zap.Int64("tableID", tableID))
-		return false, nil
+		return false
 	}
-	return true, nil
+	return true
 }
 
 // IsAddTableFinished implements TableExecutor interface.
@@ -264,11 +266,11 @@ func (p *processor) IsAddTableFinished(ctx context.Context, tableID model.TableI
 	done := func() bool {
 		if isPrepare {
 			// todo: add ut to cover this, after 2ps supported.
-			return table.Status() == pipeline.TableStatusPrepared
+			return table.Status() == pipeline.TableStatePrepared
 		}
 
 		// todo: revise these 2 conditions, after 2ps supported.
-		// how about just check status is `TableStatusReplicating`.
+		// how about just check status is `TableStateReplicating`.
 		if table.CheckpointTs() < localCheckpointTs || localCheckpointTs < globalCheckpointTs {
 			return false
 		}
@@ -325,7 +327,7 @@ func (p *processor) IsRemoveTableFinished(ctx context.Context, tableID model.Tab
 		return 0, true
 	}
 	status := table.Status()
-	if status != pipeline.TableStatusStopped {
+	if status != pipeline.TableStateStopped {
 		log.Debug("table is still not stopped",
 			zap.String("captureID", p.captureInfo.ID),
 			zap.String("namespace", p.changefeedID.Namespace),
@@ -362,6 +364,23 @@ func (p *processor) GetAllCurrentTables() []model.TableID {
 // GetCheckpoint implements TableExecutor interface.
 func (p *processor) GetCheckpoint() (checkpointTs, resolvedTs model.Ts) {
 	return p.checkpointTs, p.resolvedTs
+}
+
+// GetTableMeta implements TableExecutor interface
+func (p *processor) GetTableMeta(tableID model.TableID) pipeline.TableMeta {
+	table, ok := p.tables[tableID]
+	if !ok {
+		return pipeline.TableMeta{
+			CheckpointTs: 0,
+			ResolvedTs:   0,
+			Status:       pipeline.TableStateAbsent,
+		}
+	}
+	return pipeline.TableMeta{
+		CheckpointTs: table.CheckpointTs(),
+		ResolvedTs:   table.ResolvedTs(),
+		Status:       table.Status(),
+	}
 }
 
 // newProcessor creates a new processor
@@ -763,8 +782,8 @@ func (p *processor) handlePosition(currentTs int64) {
 	}
 	for _, table := range p.tables {
 		status := table.Status()
-		if status == pipeline.TableStatusPreparing ||
-			status == pipeline.TableStatusPrepared {
+		if status == pipeline.TableStatePreparing ||
+			status == pipeline.TableStatePrepared {
 			continue
 		}
 		ts := table.ResolvedTs()
@@ -778,8 +797,8 @@ func (p *processor) handlePosition(currentTs int64) {
 	minCheckpointTableID := int64(0)
 	for _, table := range p.tables {
 		status := table.Status()
-		if status == pipeline.TableStatusPreparing ||
-			status == pipeline.TableStatusPrepared {
+		if status == pipeline.TableStatePreparing ||
+			status == pipeline.TableStatePrepared {
 			continue
 		}
 		ts := table.CheckpointTs()
@@ -815,7 +834,7 @@ func (p *processor) pushResolvedTs2Table() {
 		resolvedTs = schemaResolvedTs
 	}
 	for _, table := range p.tables {
-		if table.Status() == pipeline.TableStatusReplicating {
+		if table.Status() == pipeline.TableStateReplicating {
 			table.UpdateBarrierTs(resolvedTs)
 		}
 	}

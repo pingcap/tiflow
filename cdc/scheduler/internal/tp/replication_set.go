@@ -287,7 +287,7 @@ func (r *ReplicationSet) pollOnAbsent(
 		schedulepb.TableStateStopping,
 		schedulepb.TableStateStopped:
 	}
-	log.Warn("tpscheduler: ingore input, unexpected replication set state",
+	log.Warn("tpscheduler: ignore input, unexpected replication set state",
 		zap.Stringer("tableState", input),
 		zap.String("captureID", captureID),
 		zap.Any("replicationSet", r))
@@ -332,7 +332,7 @@ func (r *ReplicationSet) pollOnPrepare(
 			return nil, false, nil
 		}
 	}
-	log.Warn("tpscheduler: ingore input, unexpected replication set state",
+	log.Warn("tpscheduler: ignore input, unexpected replication set state",
 		zap.Stringer("tableState", input),
 		zap.String("captureID", captureID),
 		zap.Any("replicationSet", r))
@@ -364,7 +364,7 @@ func (r *ReplicationSet) pollOnCommit(
 			r.Secondary = ""
 			log.Info("tpscheduler: replication state promote secondary",
 				zap.Stringer("tableState", input),
-				zap.String("orignial", original),
+				zap.String("original", original),
 				zap.String("captureID", captureID))
 			return &schedulepb.Message{
 				To:      captureID,
@@ -388,7 +388,7 @@ func (r *ReplicationSet) pollOnCommit(
 			r.Secondary = ""
 			log.Info("tpscheduler: replication state promote secondary",
 				zap.Stringer("tableState", input),
-				zap.String("orignial", original),
+				zap.String("original", original),
 				zap.String("captureID", captureID))
 			return &schedulepb.Message{
 				To:      r.Primary,
@@ -434,7 +434,7 @@ func (r *ReplicationSet) pollOnCommit(
 		}
 	case schedulepb.TableStatePreparing:
 	}
-	log.Warn("tpscheduler: ingore input, unexpected replication set state",
+	log.Warn("tpscheduler: ignore input, unexpected replication set state",
 		zap.Stringer("tableState", input),
 		zap.String("captureID", captureID),
 		zap.Any("replicationSet", r))
@@ -458,7 +458,7 @@ func (r *ReplicationSet) pollOnReplicating(
 	case schedulepb.TableStateStopping:
 	case schedulepb.TableStateStopped:
 	}
-	log.Warn("tpscheduler: ingore input, unexpected replication set state",
+	log.Warn("tpscheduler: ignore input, unexpected replication set state",
 		zap.Stringer("tableState", input),
 		zap.String("captureID", captureID),
 		zap.Any("replicationSet", r))
@@ -496,7 +496,7 @@ func (r *ReplicationSet) pollOnRemoving(
 	case schedulepb.TableStateStopping:
 		return nil, false, nil
 	}
-	log.Warn("tpscheduler: ingore input, unexpected replication set state",
+	log.Warn("tpscheduler: ignore input, unexpected replication set state",
 		zap.Stringer("tableState", input),
 		zap.String("captureID", captureID),
 		zap.Any("replicationSet", r))

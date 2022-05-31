@@ -26,40 +26,53 @@ const (
 	resolvedTsInterpolateInterval = 200 * time.Millisecond
 )
 
-// TableStatus is status of the table pipeline
-type TableStatus int32
+// TableState is status of the table pipeline
+type TableState int32
 
-// TableStatus for table pipeline
+// TableState for table pipeline
 const (
-	// TableStatusPreparing indicate that the table is preparing connecting to regions
-	TableStatusPreparing TableStatus = iota
-	// TableStatusPrepared means the first `Resolved Ts` is received.
-	TableStatusPrepared
-	// TableStatusReplicating means that sink is consuming data from the sorter, and replicating it to downstream
-	TableStatusReplicating
-	// TableStatusStopped means sink stop all works.
-	TableStatusStopped
+	// TableStatePreparing indicate that the table is preparing connecting to regions
+	TableStatePreparing TableState = iota
+	// TableStatePrepared means the first `Resolved Ts` is received.
+	TableStatePrepared
+	// TableStateReplicating means that sink is consuming data from the sorter, and replicating it to downstream
+	TableStateReplicating
+	// TableStateStopping means the table is stopping, but not guaranteed yet.
+	TableStateStopping
+	// TableStateStopped means sink stop all works.
+	TableStateStopped
+	// TableStateAbsent means the table not found
+	TableStateAbsent
 )
 
-var tableStatusStringMap = map[TableStatus]string{
-	TableStatusPreparing:   "Preparing",
-	TableStatusPrepared:    "Prepared",
-	TableStatusReplicating: "Replicating",
-	TableStatusStopped:     "Stopped",
+var tableStatusStringMap = map[TableState]string{
+	TableStatePreparing:   "Preparing",
+	TableStatePrepared:    "Prepared",
+	TableStateReplicating: "Replicating",
+	TableStateStopping:    "Stopping",
+	TableStateStopped:     "Stopped",
+	TableStateAbsent:      "Absent",
 }
 
-func (s TableStatus) String() string {
+func (s TableState) String() string {
 	return tableStatusStringMap[s]
 }
 
-// Load TableStatus with THREAD-SAFE
-func (s *TableStatus) Load() TableStatus {
-	return TableStatus(atomic.LoadInt32((*int32)(s)))
+// Load TableState with THREAD-SAFE
+func (s *TableState) Load() TableState {
+	return TableState(atomic.LoadInt32((*int32)(s)))
 }
 
-// Store TableStatus with THREAD-SAFE
-func (s *TableStatus) Store(new TableStatus) {
+// Store TableState with THREAD-SAFE
+func (s *TableState) Store(new TableState) {
 	atomic.StoreInt32((*int32)(s), int32(new))
+}
+
+type TableMeta struct {
+	TableID      model.TableID
+	CheckpointTs model.Ts
+	ResolvedTs   model.Ts
+	Status       TableState
 }
 
 // TablePipeline is a pipeline which capture the change log from tikv in a table
@@ -83,7 +96,7 @@ type TablePipeline interface {
 	// Workload returns the workload of this table
 	Workload() model.WorkloadInfo
 	// Status returns the status of this table pipeline
-	Status() TableStatus
+	Status() TableState
 	// Cancel stops this table pipeline immediately and destroy all resources created by this table pipeline
 	Cancel()
 	// Wait waits for table pipeline destroyed

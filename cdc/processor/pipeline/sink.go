@@ -32,7 +32,7 @@ import (
 
 type sinkNode struct {
 	sink    sink.Sink
-	status  TableStatus
+	status  TableState
 	tableID model.TableID
 
 	// atomic oprations for model.ResolvedTs
@@ -56,7 +56,7 @@ func newSinkNode(
 	sn := &sinkNode{
 		tableID:        tableID,
 		sink:           sink,
-		status:         TableStatusPrepared,
+		status:         TableStatePrepared,
 		targetTs:       targetTs,
 		barrierTs:      startTs,
 		flowController: flowController,
@@ -70,7 +70,7 @@ func newSinkNode(
 func (n *sinkNode) ResolvedTs() model.Ts   { return n.getResolvedTs().ResolvedMark() }
 func (n *sinkNode) CheckpointTs() model.Ts { return n.getCheckpointTs().ResolvedMark() }
 func (n *sinkNode) BarrierTs() model.Ts    { return atomic.LoadUint64(&n.barrierTs) }
-func (n *sinkNode) Status() TableStatus    { return n.status.Load() }
+func (n *sinkNode) Status() TableState     { return n.status.Load() }
 
 func (n *sinkNode) getResolvedTs() model.ResolvedTs {
 	return n.resolvedTs.Load().(model.ResolvedTs)
@@ -89,7 +89,7 @@ func (n *sinkNode) initWithReplicaConfig(replicaConfig *config.ReplicaConfig) {
 // no more events can be sent to this sink node afterwards.
 func (n *sinkNode) stop(ctx context.Context) (err error) {
 	// table stopped status must be set after underlying sink is closed
-	defer n.status.Store(TableStatusStopped)
+	defer n.status.Store(TableStateStopped)
 	err = n.sink.Close(ctx)
 	if err != nil {
 		return
@@ -104,7 +104,7 @@ func (n *sinkNode) stop(ctx context.Context) (err error) {
 func (n *sinkNode) flushSink(ctx context.Context, resolved model.ResolvedTs) (err error) {
 	defer func() {
 		if err != nil {
-			n.status.Store(TableStatusStopped)
+			n.status.Store(TableStateStopped)
 			return
 		}
 		if n.CheckpointTs() >= n.targetTs {
@@ -285,15 +285,15 @@ func splitUpdateEvent(updateEvent *model.PolymorphicEvent) (*model.PolymorphicEv
 }
 
 func (n *sinkNode) HandleMessage(ctx context.Context, msg pmessage.Message) (bool, error) {
-	if n.status.Load() == TableStatusStopped {
+	if n.status.Load() == TableStateStopped {
 		return false, cerror.ErrTableProcessorStoppedSafely.GenWithStackByArgs()
 	}
 	switch msg.Tp {
 	case pmessage.MessageTypePolymorphicEvent:
 		event := msg.PolymorphicEvent
 		if event.IsResolved() {
-			if n.status.Load() == TableStatusPrepared {
-				n.status.Store(TableStatusReplicating)
+			if n.status.Load() == TableStatePrepared {
+				n.status.Store(TableStateReplicating)
 			}
 			failpoint.Inject("ProcessorSyncResolvedError", func() {
 				failpoint.Return(false, errors.New("processor sync resolved injected error"))
@@ -340,7 +340,7 @@ func (n *sinkNode) updateBarrierTs(ctx context.Context, ts model.Ts) error {
 }
 
 func (n *sinkNode) releaseResource(ctx context.Context) error {
-	n.status.Store(TableStatusStopped)
+	n.status.Store(TableStateStopped)
 	n.flowController.Abort()
 	return n.sink.Close(ctx)
 }

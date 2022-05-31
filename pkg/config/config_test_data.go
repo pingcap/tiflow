@@ -128,6 +128,11 @@ const (
       "server-max-pending-message-count": 102400,
       "server-ack-interval": 100000000,
       "server-worker-pool-size": 4
+    },
+    "EnableTwoPhaseScheduler": false,
+    "Scheduler": {
+      "heartbeat-tick": 2,
+      "max-task-concurrency": 10
     }
   }
 }`
