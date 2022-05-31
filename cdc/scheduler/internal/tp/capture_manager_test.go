@@ -46,7 +46,73 @@ func TestCaptureStatusHandleHeartbeatResponse(t *testing.T) {
 	require.Equal(t, epoch, c.Epoch)
 }
 
-func TestCaptureManagerPoll(t *testing.T) {
+func TestCaptureManagerHandleAliveCaptureUpdate(t *testing.T) {
+	t.Parallel()
+
+	rev := schedulepb.OwnerRevision{}
+	cm := newCaptureManager(rev, 2)
+	ms := map[model.CaptureID]*model.CaptureInfo{
+		"1": {}, "2": {}, "3": {},
+	}
+
+	// Initial handle alive captures.
+	msgs := cm.HandleAliveCaptureUpdate(ms)
+	require.ElementsMatch(t, []*schedulepb.Message{
+		{To: "1", MsgType: schedulepb.MsgHeartbeat, Heartbeat: &schedulepb.Heartbeat{}},
+		{To: "2", MsgType: schedulepb.MsgHeartbeat, Heartbeat: &schedulepb.Heartbeat{}},
+		{To: "3", MsgType: schedulepb.MsgHeartbeat, Heartbeat: &schedulepb.Heartbeat{}},
+	}, msgs)
+	require.False(t, cm.CheckAllCaptureInitialized())
+	require.Nil(t, cm.TakeChanges())
+	require.Contains(t, cm.Captures, "1")
+	require.Contains(t, cm.Captures, "2")
+	require.Contains(t, cm.Captures, "3")
+
+	// Remove one capture before init.
+	delete(ms, "1")
+	msgs = cm.HandleAliveCaptureUpdate(ms)
+	require.Len(t, msgs, 0)
+	require.Nil(t, cm.TakeChanges())
+	require.NotContains(t, cm.Captures, "1")
+	require.Contains(t, cm.Captures, "2")
+	require.Contains(t, cm.Captures, "3")
+
+	// Init
+	cm.HandleMessage([]*schedulepb.Message{{
+		Header: &schedulepb.Message_Header{}, From: "2",
+		MsgType: schedulepb.MsgHeartbeatResponse,
+		HeartbeatResponse: &schedulepb.HeartbeatResponse{
+			Tables: []schedulepb.TableStatus{{TableID: 1}},
+		},
+	}, {
+		Header: &schedulepb.Message_Header{}, From: "3",
+		MsgType: schedulepb.MsgHeartbeatResponse,
+		HeartbeatResponse: &schedulepb.HeartbeatResponse{
+			Tables: []schedulepb.TableStatus{{TableID: 2}},
+		},
+	}})
+	require.False(t, cm.CheckAllCaptureInitialized())
+	msgs = cm.HandleAliveCaptureUpdate(ms)
+	require.Len(t, msgs, 0)
+	require.True(t, cm.CheckAllCaptureInitialized())
+	require.EqualValues(t, &captureChanges{
+		Init: map[string][]schedulepb.TableStatus{"2": {{TableID: 1}}, "3": {{TableID: 2}}},
+	}, cm.TakeChanges())
+
+	// Add a new node and remove an old node.
+	ms["4"] = &model.CaptureInfo{}
+	delete(ms, "2")
+	msgs = cm.HandleAliveCaptureUpdate(ms)
+	require.ElementsMatch(t, []*schedulepb.Message{
+		{To: "4", MsgType: schedulepb.MsgHeartbeat, Heartbeat: &schedulepb.Heartbeat{}},
+	}, msgs)
+	require.Equal(t, &captureChanges{
+		Removed: map[string][]schedulepb.TableStatus{"2": {{TableID: 1}}},
+	}, cm.TakeChanges())
+	require.False(t, cm.CheckAllCaptureInitialized())
+}
+
+func TestCaptureManagerHandleMessages(t *testing.T) {
 	t.Parallel()
 
 	rev := schedulepb.OwnerRevision{}
@@ -55,47 +121,47 @@ func TestCaptureManagerPoll(t *testing.T) {
 		"2": {},
 	}
 	cm := newCaptureManager(rev, 2)
+	require.False(t, cm.CheckAllCaptureInitialized())
 
-	// Initial poll for alive captures.
-	msgs := cm.Poll(ms, nil)
+	// Initial handle alive captures.
+	msgs := cm.HandleAliveCaptureUpdate(ms)
 	require.ElementsMatch(t, []*schedulepb.Message{
 		{To: "1", MsgType: schedulepb.MsgHeartbeat, Heartbeat: &schedulepb.Heartbeat{}},
 		{To: "2", MsgType: schedulepb.MsgHeartbeat, Heartbeat: &schedulepb.Heartbeat{}},
 	}, msgs)
 	require.False(t, cm.CheckAllCaptureInitialized())
+	require.Contains(t, cm.Captures, "1")
+	require.Contains(t, cm.Captures, "2")
 
-	// Poll one response
-	msgs = cm.Poll(ms, []*schedulepb.Message{
+	// Handle one response
+	cm.HandleMessage([]*schedulepb.Message{
 		{
 			Header: &schedulepb.Message_Header{}, From: "1",
 			MsgType:           schedulepb.MsgHeartbeatResponse,
 			HeartbeatResponse: &schedulepb.HeartbeatResponse{},
 		},
 	})
-	require.Empty(t, msgs)
 	require.False(t, cm.CheckAllCaptureInitialized())
 
-	// Poll another response
-	msgs = cm.Poll(ms, []*schedulepb.Message{
+	// Handle another response
+	cm.HandleMessage([]*schedulepb.Message{
 		{
 			Header: &schedulepb.Message_Header{}, From: "2",
 			MsgType:           schedulepb.MsgHeartbeatResponse,
 			HeartbeatResponse: &schedulepb.HeartbeatResponse{},
 		},
 	})
-	require.Empty(t, msgs)
-	require.True(t, cm.CheckAllCaptureInitialized(), "%v %v", cm.Captures["1"], cm.Captures["2"])
+	require.False(t, cm.CheckAllCaptureInitialized(), "%v %v", cm.Captures["1"], cm.Captures["2"])
 
-	// Poll unknown capture response
-	msgs = cm.Poll(ms, []*schedulepb.Message{
+	// Handle unknown capture response
+	cm.HandleMessage([]*schedulepb.Message{
 		{
 			Header: &schedulepb.Message_Header{}, From: "unknown",
 			MsgType:           schedulepb.MsgHeartbeatResponse,
 			HeartbeatResponse: &schedulepb.HeartbeatResponse{},
 		},
 	})
-	require.Empty(t, msgs)
-	require.True(t, cm.CheckAllCaptureInitialized())
+	require.False(t, cm.CheckAllCaptureInitialized())
 }
 
 func TestCaptureManagerTick(t *testing.T) {
@@ -114,8 +180,7 @@ func TestCaptureManagerTick(t *testing.T) {
 		"1": {},
 		"2": {},
 	}
-	cm.Poll(ms, nil)
-	require.False(t, cm.CheckAllCaptureInitialized())
+	cm.HandleAliveCaptureUpdate(ms)
 
 	// Heartbeat even if capture is uninitialize.
 	msgs = cm.Tick()
@@ -130,7 +195,6 @@ func TestCaptureManagerTick(t *testing.T) {
 	for _, s := range []CaptureState{CaptureStateInitialized, CaptureStateStopping} {
 		cm.Captures["1"].State = s
 		cm.Captures["2"].State = s
-		require.True(t, cm.CheckAllCaptureInitialized())
 		msgs = cm.Tick()
 		require.Empty(t, msgs)
 		msgs = cm.Tick()

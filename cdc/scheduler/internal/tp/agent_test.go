@@ -190,6 +190,7 @@ func TestAgentHandleMessage(t *testing.T) {
 	// add table request in pending
 	response = a.handleMessage([]*schedulepb.Message{addTableRequest})
 	require.Equal(t, len(a.runningTasks), 1)
+	require.Len(t, response, 0)
 
 	heartbeat.Header.OwnerRevision.Revision = 2
 	response = a.handleMessage([]*schedulepb.Message{heartbeat})
@@ -253,7 +254,6 @@ func (e *MockTableExecutor) AddTable(
 		case pipeline.TableStateStopped:
 			delete(e.tables, tableID)
 		}
-
 	}
 
 	args := e.Called(ctx, tableID, startTs, isPrepare)
