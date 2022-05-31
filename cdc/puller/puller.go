@@ -54,6 +54,7 @@ type Puller interface {
 }
 
 type pullerImpl struct {
+	inputCh      chan model.RegionFeedEvent
 	kvCli        kv.CDCKVClient
 	kvStorage    tikv.Storage
 	checkpointTs uint64
@@ -97,6 +98,7 @@ func New(
 	kvCli := kv.NewCDCKVClient(
 		ctx, pdCli, grpcPool, regionCache, pdClock, changefeed, cfg)
 	p := &pullerImpl{
+		inputCh:      make(chan model.RegionFeedEvent, defaultPullerEventChanSize),
 		kvCli:        kvCli,
 		kvStorage:    tikvStorage,
 		checkpointTs: checkpointTs,
@@ -111,22 +113,9 @@ func New(
 	return p
 }
 
-// Run the puller, continually fetch event from TiKV and add event into buffer
-func (p *pullerImpl) Run(ctx context.Context) error {
-	g, ctx := errgroup.WithContext(ctx)
-
-	checkpointTs := p.checkpointTs
-	eventCh := make(chan model.RegionFeedEvent, defaultPullerEventChanSize)
-
-	lockResolver := txnutil.NewLockerResolver(p.kvStorage,
-		contextutil.ChangefeedIDFromCtx(ctx), contextutil.RoleFromCtx(ctx))
-	for _, span := range p.spans {
-		span := span
-
-		g.Go(func() error {
-			return p.kvCli.EventFeed(ctx, span, checkpointTs, lockResolver, p, eventCh)
-		})
-	}
+func (p *pullerImpl) collectMetrics(ctx context.Context) error {
+	metricsTicker := time.NewTicker(15 * time.Second)
+	defer metricsTicker.Stop()
 
 	metricOutputChanSize := outputChanSizeHistogram.
 		WithLabelValues(p.changefeed.Namespace, p.changefeed.ID)
@@ -134,37 +123,58 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 		WithLabelValues(p.changefeed.Namespace, p.changefeed.ID)
 	metricPullerResolvedTs := pullerResolvedTsGauge.
 		WithLabelValues(p.changefeed.Namespace, p.changefeed.ID)
+	defer func() {
+		outputChanSizeHistogram.DeleteLabelValues(p.changefeed.Namespace, p.changefeed.ID)
+		eventChanSizeHistogram.DeleteLabelValues(p.changefeed.Namespace, p.changefeed.ID)
+		pullerResolvedTsGauge.DeleteLabelValues(p.changefeed.Namespace, p.changefeed.ID)
+	}()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return errors.Trace(ctx.Err())
+		case <-metricsTicker.C:
+			metricEventChanSize.Observe(float64(len(p.inputCh)))
+			metricOutputChanSize.Observe(float64(len(p.outputCh)))
+			metricPullerResolvedTs.Set(float64(oracle.ExtractPhysical(p.GetResolvedTs())))
+		}
+	}
+}
+
+// Run the puller, continually fetch event from TiKV and add event into buffer
+func (p *pullerImpl) Run(ctx context.Context) error {
+	g, ctx := errgroup.WithContext(ctx)
+
+	checkpointTs := p.checkpointTs
+
+	lockResolver := txnutil.NewLockerResolver(p.kvStorage,
+		contextutil.ChangefeedIDFromCtx(ctx), contextutil.RoleFromCtx(ctx))
+	for _, span := range p.spans {
+		span := span
+
+		g.Go(func() error {
+			return p.kvCli.EventFeed(ctx, span, checkpointTs, lockResolver, p, p.inputCh)
+		})
+	}
+
 	metricTxnCollectCounterKv := txnCollectCounter.
 		WithLabelValues(p.changefeed.Namespace, p.changefeed.ID, "kv")
 	metricTxnCollectCounterResolved := txnCollectCounter.
 		WithLabelValues(p.changefeed.Namespace, p.changefeed.ID, "resolved")
 	defer func() {
-		outputChanSizeHistogram.DeleteLabelValues(p.changefeed.Namespace, p.changefeed.ID)
-		eventChanSizeHistogram.DeleteLabelValues(p.changefeed.Namespace, p.changefeed.ID)
+
 		memBufferSizeGauge.DeleteLabelValues(p.changefeed.Namespace, p.changefeed.ID)
-		pullerResolvedTsGauge.DeleteLabelValues(p.changefeed.Namespace, p.changefeed.ID)
 		kvEventCounter.DeleteLabelValues(p.changefeed.Namespace, p.changefeed.ID, "kv")
 		kvEventCounter.DeleteLabelValues(p.changefeed.Namespace, p.changefeed.ID, "resolved")
 		txnCollectCounter.DeleteLabelValues(p.changefeed.Namespace, p.changefeed.ID, "kv")
 		txnCollectCounter.DeleteLabelValues(p.changefeed.Namespace, p.changefeed.ID, "resolved")
 	}()
 
-	lastResolvedTs := p.checkpointTs
-	metricsTicker := time.NewTicker(15 * time.Second)
-	defer metricsTicker.Stop()
 	g.Go(func() error {
-		for {
-			select {
-			case <-ctx.Done():
-				return errors.Trace(ctx.Err())
-			case <-metricsTicker.C:
-				metricEventChanSize.Observe(float64(len(eventCh)))
-				metricOutputChanSize.Observe(float64(len(p.outputCh)))
-				metricPullerResolvedTs.Set(float64(oracle.ExtractPhysical(p.GetResolvedTs())))
-			}
-		}
+		return p.collectMetrics(ctx)
 	})
 
+	lastResolvedTs := p.checkpointTs
 	g.Go(func() error {
 		output := func(raw *model.RawKVEntry) error {
 			// even after https://github.com/pingcap/tiflow/pull/2038, kv client
@@ -197,7 +207,7 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 			select {
 			case <-ctx.Done():
 				return errors.Trace(ctx.Err())
-			case e = <-eventCh:
+			case e = <-p.inputCh:
 			}
 
 			if e.Val != nil {
