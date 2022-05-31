@@ -45,9 +45,10 @@ func newTso(c *APIV2Client) *tso {
 // Get returns the pd tso
 func (c *tso) Get(ctx context.Context) (*v2.Tso, error) {
 	result := new(v2.Tso)
-	err := c.client.Get().
-		WithURI("tso").
-		Do(ctx).
-		Into(result)
-	return result, err
+	//todo: uncomment this line after tso api pr is merged
+	//err := c.client.Get().
+	//	WithURI("tso").
+	//	Do(ctx).
+	//	Into(result)
+	return result, nil
 }
