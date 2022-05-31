@@ -14,7 +14,7 @@
       "type": "grafana",
       "id": "grafana",
       "name": "Grafana",
-      "version": "7.5.7"
+      "version": "7.5.11"
     },
     {
       "type": "panel",
@@ -51,9 +51,168 @@
   "editable": true,
   "gnetId": null,
   "graphTooltip": 0,
-  "iteration": 1653380926384,
+  "id": null,
+  "iteration": 1653965508897,
   "links": [],
   "panels": [
+    {
+      "cacheTimeout": null,
+      "datasource": "${DS_TEST-CLUSTER}",
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 8,
+            "gradientMode": "none",
+            "hideFrom": {
+              "graph": false,
+              "legend": false,
+              "tooltip": false
+            },
+            "lineInterpolation": "stepBefore",
+            "lineStyle": {
+              "fill": "solid"
+            },
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false
+          },
+          "decimals": 0,
+          "mappings": [
+            {
+              "from": "",
+              "id": 1,
+              "text": "Invaild",
+              "to": "",
+              "type": 1,
+              "value": "0"
+            },
+            {
+              "from": "",
+              "id": 2,
+              "text": "New",
+              "to": "",
+              "type": 1,
+              "value": "1"
+            },
+            {
+              "from": "",
+              "id": 3,
+              "text": "Running",
+              "to": "",
+              "type": 1,
+              "value": "2"
+            },
+            {
+              "from": "",
+              "id": 4,
+              "text": "Paused",
+              "to": "",
+              "type": 1,
+              "value": "3"
+            },
+            {
+              "from": "",
+              "id": 5,
+              "text": "Stopped",
+              "to": "",
+              "type": 1,
+              "value": "4"
+            },
+            {
+              "from": "",
+              "id": 6,
+              "text": "Finished",
+              "to": "",
+              "type": 1,
+              "value": "5"
+            }
+          ],
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "#EAB839",
+                "value": 0
+              },
+              {
+                "color": "light-green",
+                "value": 1
+              },
+              {
+                "color": "super-light-green",
+                "value": 2
+              },
+              {
+                "color": "light-red",
+                "value": 3
+              },
+              {
+                "color": "semi-dark-red",
+                "value": 4
+              },
+              {
+                "color": "dark-red",
+                "value": 5
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 104,
+      "links": [],
+      "options": {
+        "graph": {},
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltipOptions": {
+          "mode": "single"
+        }
+      },
+      "pluginVersion": "7.5.7",
+      "targets": [
+        {
+          "exemplar": true,
+          "expr": "dm_worker_task_state{task=~\"$task\",source_id=~\"$source\"}",
+          "format": "time_series",
+          "interval": "$interval",
+          "intervalFactor": 1,
+          "legendFormat": "{{task}}-{{worker}}",
+          "refId": "A"
+        }
+      ],
+      "timeFrom": null,
+      "timeShift": null,
+      "title": "Task State",
+      "type": "timeseries"
+    },
     {
       "collapsed": true,
       "datasource": "${DS_TEST-CLUSTER}",
@@ -61,7 +220,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 0
+        "y": 7
       },
       "id": 56,
       "panels": [
@@ -84,7 +243,7 @@
             "h": 7,
             "w": 8,
             "x": 0,
-            "y": 9
+            "y": 8
           },
           "hiddenSeries": false,
           "id": 88,
@@ -107,7 +266,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.7",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -187,7 +346,7 @@
             "h": 7,
             "w": 8,
             "x": 8,
-            "y": 9
+            "y": 8
           },
           "hiddenSeries": false,
           "id": 87,
@@ -210,7 +369,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.7",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -291,7 +450,7 @@
             "h": 7,
             "w": 8,
             "x": 16,
-            "y": 9
+            "y": 8
           },
           "hiddenSeries": false,
           "id": 95,
@@ -316,7 +475,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.7",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -395,7 +554,7 @@
             "h": 7,
             "w": 8,
             "x": 0,
-            "y": 16
+            "y": 15
           },
           "hiddenSeries": false,
           "id": 32,
@@ -417,7 +576,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.7",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -494,7 +653,7 @@
             "h": 7,
             "w": 8,
             "x": 8,
-            "y": 16
+            "y": 15
           },
           "hiddenSeries": false,
           "id": 33,
@@ -516,7 +675,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.7",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -593,7 +752,7 @@
             "h": 7,
             "w": 8,
             "x": 16,
-            "y": 16
+            "y": 15
           },
           "hiddenSeries": false,
           "id": 34,
@@ -616,7 +775,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.7",
           "pointradius": 5,
           "points": false,
           "renderer": "flot",
@@ -714,7 +873,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 23
+            "y": 22
           },
           "hiddenSeries": false,
           "id": 18,
@@ -739,7 +898,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.7",
           "pointradius": 5,
           "points": false,
           "renderer": "flot",
@@ -817,7 +976,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 23
+            "y": 22
           },
           "hiddenSeries": false,
           "id": 96,
@@ -840,7 +999,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.7",
           "pointradius": 5,
           "points": false,
           "renderer": "flot",
@@ -933,7 +1092,7 @@
             "h": 7,
             "w": 8,
             "x": 0,
-            "y": 30
+            "y": 29
           },
           "hiddenSeries": false,
           "id": 89,
@@ -954,7 +1113,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.7",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -1032,7 +1191,7 @@
             "h": 7,
             "w": 8,
             "x": 8,
-            "y": 30
+            "y": 29
           },
           "hiddenSeries": false,
           "id": 17,
@@ -1053,7 +1212,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.7",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -1131,7 +1290,7 @@
             "h": 7,
             "w": 8,
             "x": 16,
-            "y": 30
+            "y": 29
           },
           "hiddenSeries": false,
           "id": 16,
@@ -1152,7 +1311,7 @@
             "alertThreshold": true
           },
           "percentage": false,
-          "pluginVersion": "7.5.11",
+          "pluginVersion": "7.5.7",
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
@@ -1223,7 +1382,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 1
+        "y": 8
       },
       "id": 57,
       "panels": [
@@ -4163,487 +4322,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 2
-      },
-      "id": 122,
-      "panels": [
-        {
-          "aliasColors": {},
-          "bars": false,
-          "dashLength": 10,
-          "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
-          "fieldConfig": {
-            "defaults": {},
-            "overrides": []
-          },
-          "fill": 1,
-          "fillGradient": 0,
-          "gridPos": {
-            "h": 6,
-            "w": 6,
-            "x": 0,
-            "y": 1
-          },
-          "hiddenSeries": false,
-          "id": 112,
-          "legend": {
-            "avg": false,
-            "current": false,
-            "max": false,
-            "min": false,
-            "show": true,
-            "total": false,
-            "values": false
-          },
-          "lines": true,
-          "linewidth": 1,
-          "nullPointMode": "null",
-          "options": {
-            "alertThreshold": true
-          },
-          "percentage": false,
-          "pluginVersion": "7.5.11",
-          "pointradius": 2,
-          "points": false,
-          "renderer": "flot",
-          "seriesOverrides": [],
-          "spaceLength": 10,
-          "stack": false,
-          "steppedLine": false,
-          "targets": [
-            {
-              "exemplar": true,
-              "expr": "dm_validator_validator_binlog_file",
-              "interval": "",
-              "legendFormat": "",
-              "queryType": "randomWalk",
-              "refId": "A"
-            }
-          ],
-          "thresholds": [],
-          "timeRegions": [],
-          "title": "validator binlog file",
-          "tooltip": {
-            "shared": true,
-            "sort": 0,
-            "value_type": "individual"
-          },
-          "type": "graph",
-          "xaxis": {
-            "buckets": null,
-            "mode": "time",
-            "name": null,
-            "show": true,
-            "values": []
-          },
-          "yaxes": [
-            {
-              "format": "short",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": null,
-              "show": true
-            },
-            {
-              "format": "short",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": null,
-              "show": true
-            }
-          ],
-          "yaxis": {
-            "align": false,
-            "alignLevel": null
-          }
-        },
-        {
-          "aliasColors": {},
-          "bars": false,
-          "dashLength": 10,
-          "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
-          "fieldConfig": {
-            "defaults": {},
-            "overrides": []
-          },
-          "fill": 1,
-          "fillGradient": 0,
-          "gridPos": {
-            "h": 6,
-            "w": 6,
-            "x": 6,
-            "y": 1
-          },
-          "hiddenSeries": false,
-          "id": 114,
-          "legend": {
-            "avg": false,
-            "current": false,
-            "max": false,
-            "min": false,
-            "show": true,
-            "total": false,
-            "values": false
-          },
-          "lines": true,
-          "linewidth": 1,
-          "nullPointMode": "null",
-          "options": {
-            "alertThreshold": true
-          },
-          "percentage": false,
-          "pluginVersion": "7.5.11",
-          "pointradius": 2,
-          "points": false,
-          "renderer": "flot",
-          "seriesOverrides": [],
-          "spaceLength": 10,
-          "stack": false,
-          "steppedLine": false,
-          "targets": [
-            {
-              "exemplar": true,
-              "expr": "dm_validator_validator_binlog_pos",
-              "interval": "",
-              "legendFormat": "",
-              "queryType": "randomWalk",
-              "refId": "A"
-            }
-          ],
-          "thresholds": [],
-          "timeRegions": [],
-          "title": "validator binlog position",
-          "tooltip": {
-            "shared": true,
-            "sort": 0,
-            "value_type": "individual"
-          },
-          "type": "graph",
-          "xaxis": {
-            "buckets": null,
-            "mode": "time",
-            "name": null,
-            "show": true,
-            "values": []
-          },
-          "yaxes": [
-            {
-              "format": "short",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": null,
-              "show": true
-            },
-            {
-              "format": "short",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": null,
-              "show": true
-            }
-          ],
-          "yaxis": {
-            "align": false,
-            "alignLevel": null
-          }
-        },
-        {
-          "aliasColors": {},
-          "bars": false,
-          "dashLength": 10,
-          "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
-          "fieldConfig": {
-            "defaults": {},
-            "overrides": []
-          },
-          "fill": 1,
-          "fillGradient": 0,
-          "gridPos": {
-            "h": 12,
-            "w": 12,
-            "x": 12,
-            "y": 1
-          },
-          "hiddenSeries": false,
-          "id": 116,
-          "legend": {
-            "avg": false,
-            "current": false,
-            "max": false,
-            "min": false,
-            "show": true,
-            "total": false,
-            "values": false
-          },
-          "lines": true,
-          "linewidth": 1,
-          "nullPointMode": "null",
-          "options": {
-            "alertThreshold": true
-          },
-          "percentage": false,
-          "pluginVersion": "7.5.11",
-          "pointradius": 2,
-          "points": false,
-          "renderer": "flot",
-          "seriesOverrides": [],
-          "spaceLength": 10,
-          "stack": false,
-          "steppedLine": false,
-          "targets": [
-            {
-              "exemplar": true,
-              "expr": "dm_validator_validator_error_count",
-              "interval": "",
-              "legendFormat": "",
-              "queryType": "randomWalk",
-              "refId": "A"
-            }
-          ],
-          "thresholds": [],
-          "timeRegions": [],
-          "title": "validation error count",
-          "tooltip": {
-            "shared": true,
-            "sort": 0,
-            "value_type": "individual"
-          },
-          "type": "graph",
-          "xaxis": {
-            "buckets": null,
-            "mode": "time",
-            "name": null,
-            "show": true,
-            "values": []
-          },
-          "yaxes": [
-            {
-              "format": "short",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": null,
-              "show": true
-            },
-            {
-              "format": "short",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": null,
-              "show": true
-            }
-          ],
-          "yaxis": {
-            "align": false,
-            "alignLevel": null
-          }
-        },
-        {
-          "aliasColors": {},
-          "bars": false,
-          "dashLength": 10,
-          "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
-          "fieldConfig": {
-            "defaults": {},
-            "overrides": []
-          },
-          "fill": 1,
-          "fillGradient": 0,
-          "gridPos": {
-            "h": 6,
-            "w": 6,
-            "x": 0,
-            "y": 7
-          },
-          "hiddenSeries": false,
-          "id": 120,
-          "legend": {
-            "avg": false,
-            "current": false,
-            "max": false,
-            "min": false,
-            "show": true,
-            "total": false,
-            "values": false
-          },
-          "lines": true,
-          "linewidth": 1,
-          "nullPointMode": "null",
-          "options": {
-            "alertThreshold": true
-          },
-          "percentage": false,
-          "pluginVersion": "7.5.11",
-          "pointradius": 2,
-          "points": false,
-          "renderer": "flot",
-          "seriesOverrides": [],
-          "spaceLength": 10,
-          "stack": false,
-          "steppedLine": false,
-          "targets": [
-            {
-              "exemplar": true,
-              "expr": "dm_validator_validator_logpos_latency",
-              "interval": "",
-              "legendFormat": "",
-              "queryType": "randomWalk",
-              "refId": "A"
-            }
-          ],
-          "thresholds": [],
-          "timeRegions": [],
-          "title": "validator binlog latency(in byte offset)",
-          "tooltip": {
-            "shared": true,
-            "sort": 0,
-            "value_type": "individual"
-          },
-          "type": "graph",
-          "xaxis": {
-            "buckets": null,
-            "mode": "time",
-            "name": null,
-            "show": true,
-            "values": []
-          },
-          "yaxes": [
-            {
-              "format": "short",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": null,
-              "show": true
-            },
-            {
-              "format": "short",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": null,
-              "show": true
-            }
-          ],
-          "yaxis": {
-            "align": false,
-            "alignLevel": null
-          }
-        },
-        {
-          "aliasColors": {},
-          "bars": false,
-          "dashLength": 10,
-          "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
-          "fieldConfig": {
-            "defaults": {},
-            "overrides": []
-          },
-          "fill": 1,
-          "fillGradient": 0,
-          "gridPos": {
-            "h": 6,
-            "w": 6,
-            "x": 6,
-            "y": 7
-          },
-          "hiddenSeries": false,
-          "id": 118,
-          "legend": {
-            "avg": false,
-            "current": false,
-            "max": false,
-            "min": false,
-            "show": true,
-            "total": false,
-            "values": false
-          },
-          "lines": true,
-          "linewidth": 1,
-          "nullPointMode": "null",
-          "options": {
-            "alertThreshold": true
-          },
-          "percentage": false,
-          "pluginVersion": "7.5.11",
-          "pointradius": 2,
-          "points": false,
-          "renderer": "flot",
-          "seriesOverrides": [],
-          "spaceLength": 10,
-          "stack": false,
-          "steppedLine": false,
-          "targets": [
-            {
-              "exemplar": true,
-              "expr": "dm_validator_validator_logfile_latency",
-              "interval": "",
-              "legendFormat": "",
-              "queryType": "randomWalk",
-              "refId": "A"
-            }
-          ],
-          "thresholds": [],
-          "timeRegions": [],
-          "title": "validator binlog latency (in file)",
-          "tooltip": {
-            "shared": true,
-            "sort": 0,
-            "value_type": "individual"
-          },
-          "type": "graph",
-          "xaxis": {
-            "buckets": null,
-            "mode": "time",
-            "name": null,
-            "show": true,
-            "values": []
-          },
-          "yaxes": [
-            {
-              "format": "short",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": null,
-              "show": true
-            },
-            {
-              "format": "short",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": null,
-              "show": true
-            }
-          ],
-          "yaxis": {
-            "align": false,
-            "alignLevel": null
-          }
-        }
-      ],
-      "title": "Incremental Validation",
-      "type": "row"
-    },
-    {
-      "collapsed": true,
-      "datasource": "${DS_TEST-CLUSTER}",
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 3
+        "y": 9
       },
       "id": 55,
       "panels": [
@@ -4666,7 +4345,7 @@
             "h": 7,
             "w": 6,
             "x": 0,
-            "y": 10
+            "y": 11
           },
           "hiddenSeries": false,
           "id": 20,
@@ -4767,7 +4446,7 @@
             "h": 7,
             "w": 6,
             "x": 6,
-            "y": 10
+            "y": 11
           },
           "hiddenSeries": false,
           "id": 21,
@@ -4868,7 +4547,7 @@
             "h": 7,
             "w": 6,
             "x": 12,
-            "y": 10
+            "y": 11
           },
           "hiddenSeries": false,
           "id": 30,
@@ -4970,7 +4649,7 @@
             "h": 7,
             "w": 6,
             "x": 18,
-            "y": 10
+            "y": 11
           },
           "hiddenSeries": false,
           "id": 31,
@@ -5069,7 +4748,7 @@
             "h": 7,
             "w": 6,
             "x": 0,
-            "y": 17
+            "y": 18
           },
           "hiddenSeries": false,
           "id": 28,
@@ -5169,7 +4848,7 @@
             "h": 7,
             "w": 6,
             "x": 6,
-            "y": 17
+            "y": 18
           },
           "hiddenSeries": false,
           "id": 29,
@@ -5267,7 +4946,7 @@
             "h": 7,
             "w": 6,
             "x": 12,
-            "y": 17
+            "y": 18
           },
           "hiddenSeries": false,
           "id": 7,
@@ -5375,7 +5054,7 @@
             "h": 7,
             "w": 6,
             "x": 18,
-            "y": 17
+            "y": 18
           },
           "hiddenSeries": false,
           "id": 42,
@@ -5474,7 +5153,7 @@
             "h": 7,
             "w": 6,
             "x": 0,
-            "y": 24
+            "y": 25
           },
           "hiddenSeries": false,
           "id": 6,
@@ -5582,7 +5261,7 @@
             "h": 7,
             "w": 6,
             "x": 6,
-            "y": 24
+            "y": 25
           },
           "hiddenSeries": false,
           "id": 9,
@@ -5696,7 +5375,7 @@
             "h": 7,
             "w": 6,
             "x": 12,
-            "y": 24
+            "y": 25
           },
           "hiddenSeries": false,
           "id": 12,
@@ -5809,7 +5488,7 @@
             "h": 7,
             "w": 6,
             "x": 18,
-            "y": 24
+            "y": 25
           },
           "hiddenSeries": false,
           "id": 25,
@@ -5917,7 +5596,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 4
+        "y": 10
       },
       "id": 80,
       "panels": [
@@ -5938,7 +5617,7 @@
             "h": 7,
             "w": 6,
             "x": 0,
-            "y": 11
+            "y": 12
           },
           "hiddenSeries": false,
           "id": 86,
@@ -6036,7 +5715,7 @@
             "h": 7,
             "w": 6,
             "x": 6,
-            "y": 11
+            "y": 12
           },
           "hiddenSeries": false,
           "id": 83,
@@ -6133,7 +5812,7 @@
             "h": 7,
             "w": 6,
             "x": 12,
-            "y": 11
+            "y": 12
           },
           "hiddenSeries": false,
           "id": 81,
@@ -6230,7 +5909,7 @@
             "h": 7,
             "w": 6,
             "x": 18,
-            "y": 11
+            "y": 12
           },
           "hiddenSeries": false,
           "id": 85,
@@ -6327,7 +6006,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 18
+            "y": 19
           },
           "hiddenSeries": false,
           "id": 82,
@@ -6424,7 +6103,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 18
+            "y": 19
           },
           "hiddenSeries": false,
           "id": 84,
@@ -6516,7 +6195,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 5
+        "y": 11
       },
       "id": 67,
       "panels": [
@@ -6537,7 +6216,7 @@
             "h": 7,
             "w": 6,
             "x": 0,
-            "y": 12
+            "y": 28
           },
           "hiddenSeries": false,
           "id": 71,
@@ -6631,7 +6310,7 @@
             "h": 7,
             "w": 6,
             "x": 6,
-            "y": 12
+            "y": 28
           },
           "hiddenSeries": false,
           "id": 72,
@@ -6725,7 +6404,7 @@
             "h": 7,
             "w": 6,
             "x": 12,
-            "y": 12
+            "y": 28
           },
           "hiddenSeries": false,
           "id": 76,
@@ -6819,7 +6498,7 @@
             "h": 7,
             "w": 6,
             "x": 18,
-            "y": 12
+            "y": 28
           },
           "hiddenSeries": false,
           "id": 74,
@@ -6913,7 +6592,7 @@
             "h": 7,
             "w": 6,
             "x": 0,
-            "y": 19
+            "y": 35
           },
           "hiddenSeries": false,
           "id": 78,
@@ -7007,7 +6686,7 @@
             "h": 7,
             "w": 6,
             "x": 6,
-            "y": 19
+            "y": 35
           },
           "hiddenSeries": false,
           "id": 69,
@@ -7101,7 +6780,7 @@
             "h": 7,
             "w": 6,
             "x": 12,
-            "y": 19
+            "y": 35
           },
           "hiddenSeries": false,
           "id": 77,
@@ -7195,7 +6874,7 @@
             "h": 7,
             "w": 6,
             "x": 18,
-            "y": 19
+            "y": 35
           },
           "hiddenSeries": false,
           "id": 75,
@@ -7275,6 +6954,496 @@
       ],
       "title": "operate error",
       "type": "row"
+    },
+    {
+      "collapsed": true,
+      "datasource": "${DS_TEST-CLUSTER}",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 12
+      },
+      "id": 122,
+      "panels": [
+        {
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "${DS_TEST-CLUSTER}",
+          "fieldConfig": {
+            "defaults": {},
+            "overrides": []
+          },
+          "fill": 1,
+          "fillGradient": 0,
+          "gridPos": {
+            "h": 8,
+            "w": 24,
+            "x": 0,
+            "y": 13
+          },
+          "hiddenSeries": false,
+          "id": 120,
+          "legend": {
+            "avg": false,
+            "current": false,
+            "max": false,
+            "min": false,
+            "show": true,
+            "total": false,
+            "values": false
+          },
+          "lines": true,
+          "linewidth": 1,
+          "nullPointMode": "null",
+          "options": {
+            "alertThreshold": true
+          },
+          "percentage": false,
+          "pluginVersion": "7.5.11",
+          "pointradius": 2,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": false,
+          "steppedLine": false,
+          "targets": [
+            {
+              "exemplar": true,
+              "expr": "dm_validator_validator_error_count",
+              "interval": "",
+              "legendFormat": "",
+              "queryType": "randomWalk",
+              "refId": "A"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeRegions": [],
+          "timeShift": null,
+          "title": "Validator Error Count",
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
+        },
+        {
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "${DS_TEST-CLUSTER}",
+          "fieldConfig": {
+            "defaults": {},
+            "overrides": []
+          },
+          "fill": 1,
+          "fillGradient": 0,
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 21
+          },
+          "hiddenSeries": false,
+          "id": 116,
+          "legend": {
+            "avg": false,
+            "current": false,
+            "max": false,
+            "min": false,
+            "show": true,
+            "total": false,
+            "values": false
+          },
+          "lines": true,
+          "linewidth": 1,
+          "nullPointMode": "null",
+          "options": {
+            "alertThreshold": true
+          },
+          "percentage": false,
+          "pluginVersion": "7.5.11",
+          "pointradius": 2,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": false,
+          "steppedLine": false,
+          "targets": [
+            {
+              "exemplar": true,
+              "expr": "dm_validator_validator_logpos_latency",
+              "interval": "",
+              "legendFormat": "",
+              "queryType": "randomWalk",
+              "refId": "A"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeRegions": [],
+          "timeShift": null,
+          "title": "Validator Binlog Latency (in byte)",
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
+        },
+        {
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "${DS_TEST-CLUSTER}",
+          "fieldConfig": {
+            "defaults": {},
+            "overrides": []
+          },
+          "fill": 1,
+          "fillGradient": 0,
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 21
+          },
+          "hiddenSeries": false,
+          "id": 114,
+          "legend": {
+            "avg": false,
+            "current": false,
+            "max": false,
+            "min": false,
+            "show": true,
+            "total": false,
+            "values": false
+          },
+          "lines": true,
+          "linewidth": 1,
+          "nullPointMode": "null",
+          "options": {
+            "alertThreshold": true
+          },
+          "percentage": false,
+          "pluginVersion": "7.5.11",
+          "pointradius": 2,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": false,
+          "steppedLine": false,
+          "targets": [
+            {
+              "exemplar": true,
+              "expr": "dm_validator_validator_binlog_file",
+              "interval": "",
+              "legendFormat": "",
+              "queryType": "randomWalk",
+              "refId": "A"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeRegions": [],
+          "timeShift": null,
+          "title": "Validator Binlog Position (in file)",
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
+        },
+        {
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "${DS_TEST-CLUSTER}",
+          "fieldConfig": {
+            "defaults": {},
+            "overrides": []
+          },
+          "fill": 1,
+          "fillGradient": 0,
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 29
+          },
+          "hiddenSeries": false,
+          "id": 118,
+          "legend": {
+            "avg": false,
+            "current": false,
+            "max": false,
+            "min": false,
+            "show": true,
+            "total": false,
+            "values": false
+          },
+          "lines": true,
+          "linewidth": 1,
+          "nullPointMode": "null",
+          "options": {
+            "alertThreshold": true
+          },
+          "percentage": false,
+          "pluginVersion": "7.5.11",
+          "pointradius": 2,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": false,
+          "steppedLine": false,
+          "targets": [
+            {
+              "exemplar": true,
+              "expr": "dm_validator_validator_logfile_latency",
+              "interval": "",
+              "legendFormat": "",
+              "queryType": "randomWalk",
+              "refId": "A"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeRegions": [],
+          "timeShift": null,
+          "title": "Validator Binlog Latency (in file)",
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
+        },
+        {
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "${DS_TEST-CLUSTER}",
+          "fieldConfig": {
+            "defaults": {},
+            "overrides": []
+          },
+          "fill": 1,
+          "fillGradient": 0,
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 29
+          },
+          "hiddenSeries": false,
+          "id": 112,
+          "legend": {
+            "avg": false,
+            "current": false,
+            "max": false,
+            "min": false,
+            "show": false,
+            "total": false,
+            "values": false
+          },
+          "lines": true,
+          "linewidth": 1,
+          "nullPointMode": "null",
+          "options": {
+            "alertThreshold": true
+          },
+          "percentage": false,
+          "pluginVersion": "7.5.11",
+          "pointradius": 2,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": false,
+          "steppedLine": false,
+          "targets": [
+            {
+              "exemplar": true,
+              "expr": "dm_validator_validator_binlog_pos",
+              "interval": "",
+              "legendFormat": "",
+              "queryType": "randomWalk",
+              "refId": "A"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeRegions": [],
+          "timeShift": null,
+          "title": "Validator Binlog Position (in byte)",
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
+        }
+      ],
+      "title": "Validator Statistics",
+      "type": "row"
     }
   ],
   "refresh": false,
@@ -7285,11 +7454,7 @@
     "list": [
       {
         "allValue": null,
-        "current": {
-          "selected": false,
-          "text": "All",
-          "value": "$__all"
-        },
+        "current": {},
         "datasource": "${DS_TEST-CLUSTER}",
         "definition": "label_values(dm_worker_task_state, task)",
         "description": null,
@@ -7316,11 +7481,7 @@
       },
       {
         "allValue": null,
-        "current": {
-          "selected": false,
-          "text": "All",
-          "value": "$__all"
-        },
+        "current": {},
         "datasource": "${DS_TEST-CLUSTER}",
         "definition": "label_values(dm_worker_task_state, source_id)",
         "description": null,
@@ -7347,11 +7508,7 @@
       },
       {
         "allValue": null,
-        "current": {
-          "selected": false,
-          "text": "All",
-          "value": "$__all"
-        },
+        "current": {},
         "datasource": "${DS_TEST-CLUSTER}",
         "definition": "label_values(dm_worker_task_state{task=~\"$task\"}, instance)",
         "description": null,
@@ -7378,11 +7535,7 @@
       },
       {
         "allValue": null,
-        "current": {
-          "selected": false,
-          "text": "All",
-          "value": "$__all"
-        },
+        "current": {},
         "datasource": "${DS_TEST-CLUSTER}",
         "definition": "label_values(dm_syncer_finished_jobs_total, queueNo)",
         "description": null,
@@ -7409,11 +7562,7 @@
       },
       {
         "allValue": null,
-        "current": {
-          "selected": false,
-          "text": "All",
-          "value": "$__all"
-        },
+        "current": {},
         "datasource": "${DS_TEST-CLUSTER}",
         "definition": "label_values(dm_syncer_finished_jobs_total,type)",
         "description": null,
@@ -7440,11 +7589,7 @@
       },
       {
         "allValue": null,
-        "current": {
-          "selected": false,
-          "text": "All",
-          "value": "$__all"
-        },
+        "current": {},
         "datasource": "${DS_TEST-CLUSTER}",
         "definition": "label_values(dm_syncer_binlog_transform_cost_count,stage)",
         "description": null,
@@ -7471,11 +7616,7 @@
       },
       {
         "allValue": null,
-        "current": {
-          "selected": false,
-          "text": "All",
-          "value": "$__all"
-        },
+        "current": {},
         "datasource": "${DS_TEST-CLUSTER}",
         "definition": "label_values(dm_syncer_finished_jobs_total, target_schema)",
         "description": null,
@@ -7502,11 +7643,7 @@
       },
       {
         "allValue": null,
-        "current": {
-          "selected": false,
-          "text": "All",
-          "value": "$__all"
-        },
+        "current": {},
         "datasource": "${DS_TEST-CLUSTER}",
         "definition": "label_values(dm_syncer_finished_jobs_total, target_table)",
         "description": null,
@@ -7614,11 +7751,7 @@
       },
       {
         "allValue": null,
-        "current": {
-          "selected": false,
-          "text": "All",
-          "value": "$__all"
-        },
+        "current": {},
         "datasource": "${DS_TEST-CLUSTER}",
         "definition": "label_values(dm_syncer_finished_jobs_total,worker)",
         "description": null,
@@ -7646,8 +7779,8 @@
     ]
   },
   "time": {
-    "from": "2022-05-24T06:39:33.372Z",
-    "to": "2022-05-24T10:39:33.372Z"
+    "from": "now-1h",
+    "to": "now"
   },
   "timepicker": {
     "refresh_intervals": [
@@ -7677,5 +7810,5 @@
   "timezone": "",
   "title": "DM-Monitor-Professional",
   "uid": "Ja68YqRnz",
-  "version": 1
+  "version": 12
 }
