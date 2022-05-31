@@ -106,7 +106,7 @@ func NewCapture4Test(o owner.Owner) *Capture {
 	return res
 }
 
-// NewCapture4Test returns a new Capture instance for test.
+// NewCaptureWithManager4Test returns a new Capture instance for test.
 func NewCaptureWithManager4Test(m *upstream.Manager) *Capture {
 	res := &Capture{
 		UpstreamManager: m,

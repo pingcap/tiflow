@@ -14,14 +14,14 @@
 package v2
 
 import (
-	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/upstream"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/tiflow/cdc/api/middleware"
 	"github.com/pingcap/tiflow/cdc/capture"
+	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/owner"
+	"github.com/pingcap/tiflow/pkg/upstream"
 )
 
 // OpenAPIV2 provides CDC v2 APIs
@@ -48,7 +48,7 @@ func (h *openAPIV2) statusProvider() owner.StatusProvider {
 	return h.capture.StatusProvider()
 }
 
-// RegisterOpenAPIRoutes registers routes for OpenAPI
+// RegisterOpenAPIV2Routes registers routes for OpenAPI
 func RegisterOpenAPIV2Routes(router *gin.Engine, api openAPIV2) {
 	v2 := router.Group("/api/v2")
 
@@ -62,14 +62,13 @@ func RegisterOpenAPIV2Routes(router *gin.Engine, api openAPIV2) {
 func (h *openAPIV2) GetTso(c *gin.Context) {
 	ctx := c.Request.Context()
 	pdClient := h.capture.UpstreamManager.Get(upstream.DefaultUpstreamID).PDClient
-	timestamp, logictTime, err := pdClient.GetTS(ctx)
+	timestamp, logicalTime, err := pdClient.GetTS(ctx)
 	if err != nil {
 		_ = c.Error(err)
 		c.IndentedJSON(http.StatusInternalServerError, model.NewHTTPError(err))
 		return
 	}
 
-	resp := Tso{timestamp, logictTime}
-	//resp := Tso{0, 0}
+	resp := Tso{timestamp, logicalTime}
 	c.IndentedJSON(http.StatusOK, resp)
 }

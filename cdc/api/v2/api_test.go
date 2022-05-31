@@ -32,12 +32,6 @@ import (
 	"go.uber.org/zap"
 )
 
-var (
-	changeFeedID         = model.DefaultChangeFeedID("test-changeFeed")
-	captureID            = "test-capture"
-	nonExistChangefeedID = model.DefaultChangeFeedID("non-exist-changefeed")
-)
-
 type mockStatusProvider struct {
 	mock.Mock
 }
