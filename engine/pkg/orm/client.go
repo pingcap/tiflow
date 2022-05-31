@@ -17,10 +17,8 @@ import (
 	"context"
 	"database/sql"
 	gerrors "errors"
-	"fmt"
 	"time"
 
-	dmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/log"
 	"go.uber.org/zap"
 	"gorm.io/driver/mysql"
@@ -32,10 +30,11 @@ import (
 	resourcemeta "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
 	"github.com/pingcap/tiflow/engine/pkg/orm/model"
+	"github.com/pingcap/tiflow/engine/pkg/sqlutil"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 )
 
-var globalModels = []interface{}{
+var frameMetaModels = []interface{}{
 	&model.ProjectInfo{},
 	&model.ProjectOperation{},
 	&libModel.MasterMetaKVData{},
@@ -129,14 +128,14 @@ type ResourceClient interface {
 }
 
 // NewClient return the client to operate framework metastore
-func NewClient(mc metaclient.StoreConfigParams, conf DBConfig) (Client, error) {
-	err := createDatabaseForProject(mc, tenant.FrameProjectInfo.UniqueID(), conf)
+func NewClient(mc metaclient.StoreConfigParams, conf sqlutil.DBConfig) (Client, error) {
+	err := sqlutil.CreateDatabaseForProject(mc, tenant.FrameProjectInfo.UniqueID(), conf)
 	if err != nil {
 		return nil, err
 	}
 
-	dsn := generateDSNByParams(mc, tenant.FrameProjectInfo.UniqueID(), conf, true)
-	sqlDB, err := newSQLDB("mysql", dsn, conf)
+	dsn := sqlutil.GenerateDSNByParams(mc, tenant.FrameProjectInfo.UniqueID(), conf, true)
+	sqlDB, err := sqlutil.NewSQLDB("mysql", dsn, conf)
 	if err != nil {
 		return nil, err
 	}
@@ -147,73 +146,6 @@ func NewClient(mc metaclient.StoreConfigParams, conf DBConfig) (Client, error) {
 	}
 
 	return cli, err
-}
-
-// TODO: check the projectID
-func createDatabaseForProject(mc metaclient.StoreConfigParams, projectID tenant.ProjectID, conf DBConfig) error {
-	dsn := generateDSNByParams(mc, projectID, conf, false)
-	log.L().Info("mysql connection", zap.String("dsn", dsn))
-
-	db, err := sql.Open("mysql", dsn)
-	if err != nil {
-		log.L().Error("open dsn fail", zap.String("dsn", dsn), zap.Error(err))
-		return cerrors.ErrMetaOpFail.Wrap(err)
-	}
-	defer db.Close()
-
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-	defer cancel()
-	query := fmt.Sprintf("CREATE DATABASE if not exists %s", projectID)
-	_, err = db.ExecContext(ctx, query)
-	if err != nil {
-		return cerrors.ErrMetaOpFail.Wrap(err)
-	}
-
-	return nil
-}
-
-// generateDSNByParams will use projectID as DBName to achieve isolation.
-// Besides, it will add some default mysql params to the dsn
-func generateDSNByParams(mc metaclient.StoreConfigParams, projectID tenant.ProjectID,
-	conf DBConfig, withDB bool,
-) string {
-	dsnCfg := dmysql.NewConfig()
-	if dsnCfg.Params == nil {
-		dsnCfg.Params = make(map[string]string, 1)
-	}
-	dsnCfg.User = mc.Auth.User
-	dsnCfg.Passwd = mc.Auth.Passwd
-	dsnCfg.Net = "tcp"
-	dsnCfg.Addr = mc.Endpoints[0]
-	if withDB {
-		dsnCfg.DBName = projectID
-	}
-	dsnCfg.InterpolateParams = true
-	// dsnCfg.MultiStatements = true
-	dsnCfg.Params["readTimeout"] = conf.ReadTimeout
-	dsnCfg.Params["writeTimeout"] = conf.WriteTimeout
-	dsnCfg.Params["timeout"] = conf.DialTimeout
-	dsnCfg.Params["parseTime"] = "true"
-	// TODO: check for timezone
-	dsnCfg.Params["loc"] = "Local"
-
-	// dsn format: [username[:password]@][protocol[(address)]]/
-	return dsnCfg.FormatDSN()
-}
-
-// newSqlDB return sql.DB for specified driver and dsn
-func newSQLDB(driver string, dsn string, conf DBConfig) (*sql.DB, error) {
-	db, err := sql.Open(driver, dsn)
-	if err != nil {
-		log.L().Error("open dsn fail", zap.String("dsn", dsn), zap.Any("config", conf), zap.Error(err))
-		return nil, cerrors.ErrMetaOpFail.Wrap(err)
-	}
-
-	db.SetConnMaxIdleTime(conf.ConnMaxIdleTime)
-	db.SetConnMaxLifetime(conf.ConnMaxLifeTime)
-	db.SetMaxIdleConns(conf.MaxIdleConns)
-	db.SetMaxOpenConns(conf.MaxOpenConns)
-	return db, nil
 }
 
 func newClient(sqlDB *sql.DB) (*metaOpsClient, error) {
@@ -241,12 +173,14 @@ type metaOpsClient struct {
 }
 
 func (c *metaOpsClient) Close() error {
-	impl, err := c.db.DB()
-	if err != nil {
-		return err
-	}
-	if impl != nil {
-		return cerrors.ErrMetaOpFail.Wrap(impl.Close())
+	if c.db != nil {
+		impl, err := c.db.DB()
+		if err != nil {
+			return err
+		}
+		if impl != nil {
+			return cerrors.ErrMetaOpFail.Wrap(impl.Close())
+		}
 	}
 
 	return nil
@@ -257,7 +191,7 @@ func (c *metaOpsClient) Close() error {
 // TODO: What happen if we upgrade the definition of model when rolling update?
 // TODO: need test: change column definition/add column/drop column?
 func (c *metaOpsClient) Initialize(ctx context.Context) error {
-	if err := c.db.AutoMigrate(globalModels...); err != nil {
+	if err := c.db.AutoMigrate(frameMetaModels...); err != nil {
 		return cerrors.ErrMetaOpFail.Wrap(err)
 	}
 

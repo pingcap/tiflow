@@ -40,7 +40,6 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/errors"
 	"github.com/pingcap/tiflow/engine/pkg/etcdutils"
 	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
-	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/version"
 	"go.etcd.io/etcd/server/v3/embed"
 	"go.uber.org/zap"
@@ -91,9 +90,9 @@ func NewConfig() *Config {
 	fs.StringVar(&cfg.Etcd.Name, "name", "", "human-readable name for this DF-master member")
 	fs.StringVar(&cfg.Etcd.DataDir, "data-dir", "", "data directory for etcd using")
 
-	fs.StringVar(&cfg.FrameMetaConf.Endpoints[0], "frame-meta-endpoints", pkgOrm.DefaultFrameMetaEndpoints, `framework metastore endpoint`)
-	fs.StringVar(&cfg.FrameMetaConf.Auth.User, "frame-meta-user", pkgOrm.DefaultFrameMetaUser, `framework metastore user`)
-	fs.StringVar(&cfg.FrameMetaConf.Auth.Passwd, "frame-meta-password", pkgOrm.DefaultFrameMetaPassword, `framework metastore password`)
+	fs.StringVar(&cfg.FrameMetaConf.Endpoints[0], "frame-meta-endpoints", metaclient.DefaultFrameMetaEndpoints, `framework metastore endpoint`)
+	fs.StringVar(&cfg.FrameMetaConf.Auth.User, "frame-meta-user", metaclient.DefaultFrameMetaUser, `framework metastore user`)
+	fs.StringVar(&cfg.FrameMetaConf.Auth.Passwd, "frame-meta-password", metaclient.DefaultFrameMetaPassword, `framework metastore password`)
 	fs.StringVar(&cfg.UserMetaConf.Endpoints[0], "user-meta-endpoints", metaclient.DefaultUserMetaEndpoints, `user metastore endpoint`)
 
 	fs.StringVar(&cfg.Etcd.InitialCluster, "initial-cluster", "", fmt.Sprintf("initial cluster configuration for bootstrapping, e.g. dm-master=%s", defaultPeerUrls))

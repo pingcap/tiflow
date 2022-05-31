@@ -23,6 +23,10 @@ const (
 	FrameMetaID       = "root"
 	DefaultUserMetaID = "default"
 
+	DefaultFrameMetaEndpoints = "127.0.0.1:3336"
+	DefaultFrameMetaUser      = "root"
+	DefaultFrameMetaPassword  = "123456"
+
 	DefaultUserMetaEndpoints = "127.0.0.1:12479"
 )
 

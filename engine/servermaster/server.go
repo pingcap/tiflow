@@ -58,6 +58,7 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/promutil"
 	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
 	"github.com/pingcap/tiflow/engine/pkg/serverutils"
+	"github.com/pingcap/tiflow/engine/pkg/sqlutil"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	"github.com/pingcap/tiflow/engine/servermaster/cluster"
 	"github.com/pingcap/tiflow/engine/servermaster/scheduler"
@@ -500,7 +501,7 @@ func (s *Server) registerMetaStore() error {
 	}
 	var err error
 	// TODO: replace default db config
-	if s.frameMetaClient, err = pkgOrm.NewClient(*cfg.FrameMetaConf, pkgOrm.NewDefaultDBConfig()); err != nil {
+	if s.frameMetaClient, err = pkgOrm.NewClient(*cfg.FrameMetaConf, sqlutil.NewDefaultDBConfig()); err != nil {
 		log.L().Error("connect to framework metastore fail", zap.Any("config", cfg.FrameMetaConf), zap.Error(err))
 		return err
 	}

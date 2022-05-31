@@ -55,6 +55,7 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
 	"github.com/pingcap/tiflow/engine/pkg/serverutils"
+	"github.com/pingcap/tiflow/engine/pkg/sqlutil"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	"github.com/pingcap/tiflow/engine/test"
 	"github.com/pingcap/tiflow/engine/test/mock"
@@ -482,7 +483,7 @@ func (s *Server) fetchMetaStore(ctx context.Context) error {
 		return err
 	}
 	// TODO: replace the default DB config
-	s.frameMetaClient, err = pkgOrm.NewClient(conf, pkgOrm.NewDefaultDBConfig())
+	s.frameMetaClient, err = pkgOrm.NewClient(conf, sqlutil.NewDefaultDBConfig())
 	if err != nil {
 		log.L().Error("connect to framework metastore fail", zap.Any("conf", conf), zap.Error(err))
 		return err

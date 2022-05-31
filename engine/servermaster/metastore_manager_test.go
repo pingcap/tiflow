@@ -17,7 +17,6 @@ import (
 	"testing"
 
 	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
-	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/stretchr/testify/require"
 )
 
@@ -55,7 +54,7 @@ func TestDefaultMetaStoreManager(t *testing.T) {
 
 	store := NewFrameMetaConfig()
 	require.Equal(t, metaclient.FrameMetaID, store.StoreID)
-	require.Equal(t, pkgOrm.DefaultFrameMetaEndpoints, store.Endpoints[0])
+	require.Equal(t, metaclient.DefaultFrameMetaEndpoints, store.Endpoints[0])
 
 	store = NewDefaultUserMetaConfig()
 	require.Equal(t, metaclient.DefaultUserMetaID, store.StoreID)

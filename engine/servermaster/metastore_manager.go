@@ -19,7 +19,6 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/engine/pkg/errors"
 	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
-	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"go.uber.org/zap"
 )
 
@@ -74,11 +73,11 @@ func NewFrameMetaConfig() *metaclient.StoreConfigParams {
 	return &metaclient.StoreConfigParams{
 		StoreID: metaclient.FrameMetaID,
 		Endpoints: []string{
-			pkgOrm.DefaultFrameMetaEndpoints,
+			metaclient.DefaultFrameMetaEndpoints,
 		},
 		Auth: metaclient.AuthConfParams{
-			User:   pkgOrm.DefaultFrameMetaUser,
-			Passwd: pkgOrm.DefaultFrameMetaPassword,
+			User:   metaclient.DefaultFrameMetaUser,
+			Passwd: metaclient.DefaultFrameMetaPassword,
 		},
 	}
 }
