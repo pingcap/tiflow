@@ -43,20 +43,20 @@ func NewLogger4Framework() log.Logger {
 }
 
 // NewLogger4Master return a new logger for master
-func NewLogger4Master(project tenant.ProjectInfo, jobID libModel.JobID) log.Logger {
+func NewLogger4Master(project tenant.ProjectInfo, masterID libModel.MasterID) log.Logger {
 	return log.L().WithFields(
 		zap.String(constFieldTenantKey, project.TenantID),
 		zap.String(constFieldProjectKey, project.ProjectID),
-		zap.String(constFieldJobKey, jobID),
+		zap.String(constFieldJobKey, masterID),
 	)
 }
 
 // NewLogger4Worker return a new logger for worker
-func NewLogger4Worker(project tenant.ProjectInfo, jobID libModel.JobID, workerID libModel.WorkerID) log.Logger {
+func NewLogger4Worker(project tenant.ProjectInfo, masterID libModel.MasterID, workerID libModel.WorkerID) log.Logger {
 	return log.L().WithFields(
 		zap.String(constFieldTenantKey, project.TenantID),
 		zap.String(constFieldProjectKey, project.ProjectID),
-		zap.String(constFieldJobKey, jobID),
+		zap.String(constFieldJobKey, masterID),
 		zap.String(constFieldWorkerKey, workerID),
 	)
 }
