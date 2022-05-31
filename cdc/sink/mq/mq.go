@@ -350,9 +350,11 @@ func (k *mqSink) RemoveTable(cxt context.Context, tableID model.TableID) error {
 func (k *mqSink) run(ctx context.Context) error {
 	wg, ctx := errgroup.WithContext(ctx)
 	wg.Go(func() error {
+		defer k.resolvedBuffer.Close()
 		return k.bgFlushTs(ctx)
 	})
 	wg.Go(func() error {
+		defer k.flushWorker.closeMsgChan()
 		return k.flushWorker.run(ctx)
 	})
 	return wg.Wait()
