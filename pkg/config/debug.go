@@ -17,9 +17,7 @@ import "github.com/pingcap/errors"
 
 // DebugConfig represents config for ticdc unexposed feature configurations
 type DebugConfig struct {
-	// identify if the table actor is enabled for table pipeline
-	EnableTableActor bool              `toml:"enable-table-actor" json:"enable-table-actor"`
-	TableActor       *TableActorConfig `toml:"table-actor" json:"table-actor"`
+	TableActor *TableActorConfig `toml:"table-actor" json:"table-actor"`
 
 	// EnableDBSorter enables db sorter.
 	//

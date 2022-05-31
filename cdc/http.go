@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/api/owner"
 	"github.com/pingcap/tiflow/cdc/api/status"
 	v1 "github.com/pingcap/tiflow/cdc/api/v1"
+	v2 "github.com/pingcap/tiflow/cdc/api/v2"
 	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
@@ -42,8 +43,10 @@ func RegisterRoutes(
 	// online docs
 	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
-	// Open API
+	// Open API V1
 	v1.RegisterOpenAPIRoutes(router, v1.NewOpenAPI(capture))
+	// Open API V2
+	v2.RegisterOpenAPIRoutes(router, v2.NewOpenAPI(capture))
 
 	// Owner API
 	owner.RegisterOwnerAPIRoutes(router, capture)

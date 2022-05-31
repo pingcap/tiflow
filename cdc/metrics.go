@@ -18,7 +18,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/owner"
 	"github.com/pingcap/tiflow/cdc/processor"
-	tablepipeline "github.com/pingcap/tiflow/cdc/processor/pipeline"
 	"github.com/pingcap/tiflow/cdc/puller"
 	redowriter "github.com/pingcap/tiflow/cdc/redo/writer"
 	sink "github.com/pingcap/tiflow/cdc/sink/metrics"
@@ -33,6 +32,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/p2p"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/collectors"
 	tikvmetrics "github.com/tikv/client-go/v2/metrics"
 )
 
@@ -40,14 +40,14 @@ var registry = prometheus.NewRegistry()
 
 func init() {
 	registry.MustRegister(prometheus.NewProcessCollector(prometheus.ProcessCollectorOpts{}))
-	registry.MustRegister(prometheus.NewGoCollector())
+	registry.MustRegister(prometheus.NewGoCollector(
+		collectors.WithGoCollections(collectors.GoRuntimeMemStatsCollection | collectors.GoRuntimeMetricsCollection)))
 
 	kv.InitMetrics(registry)
 	puller.InitMetrics(registry)
 	sink.InitMetrics(registry)
 	entry.InitMetrics(registry)
 	processor.InitMetrics(registry)
-	tablepipeline.InitMetrics(registry)
 	owner.InitMetrics(registry)
 	etcd.InitMetrics(registry)
 	initServerMetrics(registry)

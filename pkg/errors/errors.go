@@ -244,6 +244,10 @@ var (
 		"invalid topic expression",
 		errors.RFCCodeText("CDC:ErrKafkaTopicExprInvalid"),
 	)
+	ErrKafkaBrokerConfigNotFound = errors.Normalize(
+		"kafka broker config item not found",
+		errors.RFCCodeText("CDC:ErrKafkaBrokerConfigNotFound"),
+	)
 	ErrPulsarNewProducer = errors.Normalize(
 		"new pulsar producer",
 		errors.RFCCodeText("CDC:ErrPulsarNewProducer"),

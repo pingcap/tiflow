@@ -325,15 +325,12 @@ func (r *RowChangedEvent) HandleKeyColumns() []*Column {
 		}
 	}
 
-	if len(pkeyCols) == 0 {
-		log.Panic("Cannot find handle key columns.", zap.Any("event", r))
-	}
-
+	// It is okay not to have handle keys, so the empty array is an acceptable result
 	return pkeyCols
 }
 
-// PrimaryKeyColInfos returns the column(s) and colInfo(s) corresponding to the primary key(s)
-func (r *RowChangedEvent) PrimaryKeyColInfos() ([]*Column, []rowcodec.ColInfo) {
+// HandleKeyColInfos returns the column(s) and colInfo(s) corresponding to the handle key(s)
+func (r *RowChangedEvent) HandleKeyColInfos() ([]*Column, []rowcodec.ColInfo) {
 	pkeyCols := make([]*Column, 0)
 	pkeyColInfos := make([]rowcodec.ColInfo, 0)
 
@@ -345,13 +342,13 @@ func (r *RowChangedEvent) PrimaryKeyColInfos() ([]*Column, []rowcodec.ColInfo) {
 	}
 
 	for i, col := range cols {
-		if col != nil && col.Flag.IsPrimaryKey() {
+		if col != nil && col.Flag.IsHandleKey() {
 			pkeyCols = append(pkeyCols, col)
 			pkeyColInfos = append(pkeyColInfos, r.ColInfos[i])
 		}
 	}
 
-	// It is okay not to have primary keys, so the empty array is an acceptable result
+	// It is okay not to have handle keys, so the empty array is an acceptable result
 	return pkeyCols, pkeyColInfos
 }
 
@@ -471,7 +468,7 @@ type ColumnInfo struct {
 
 // FromTiColumnInfo populates cdc's ColumnInfo from TiDB's model.ColumnInfo
 func (c *ColumnInfo) FromTiColumnInfo(tiColumnInfo *model.ColumnInfo) {
-	c.Type = tiColumnInfo.Tp
+	c.Type = tiColumnInfo.GetType()
 	c.Name = tiColumnInfo.Name.O
 }
 

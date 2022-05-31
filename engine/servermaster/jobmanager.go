@@ -22,11 +22,11 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/dm/pkg/log"
-	cvs "github.com/pingcap/tiflow/engine/jobmaster/cvsJob"
+	pb "github.com/pingcap/tiflow/engine/enginepb"
+	cvs "github.com/pingcap/tiflow/engine/jobmaster/cvsjob"
 	"github.com/pingcap/tiflow/engine/lib"
 	"github.com/pingcap/tiflow/engine/lib/metadata"
 	libModel "github.com/pingcap/tiflow/engine/lib/model"
-	"github.com/pingcap/tiflow/engine/pb"
 	"github.com/pingcap/tiflow/engine/pkg/clock"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/ctxmu"
@@ -35,7 +35,7 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/notifier"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
-	"github.com/pingcap/tiflow/engine/pkg/uuid"
+	"github.com/pingcap/tiflow/pkg/uuid"
 )
 
 // JobManager defines manager of job master

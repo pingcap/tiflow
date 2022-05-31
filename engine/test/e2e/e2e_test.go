@@ -27,9 +27,9 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/pingcap/tiflow/engine/client"
-	cvs "github.com/pingcap/tiflow/engine/jobmaster/cvsJob"
+	pb "github.com/pingcap/tiflow/engine/enginepb"
+	cvs "github.com/pingcap/tiflow/engine/jobmaster/cvsjob"
 	"github.com/pingcap/tiflow/engine/lib"
-	"github.com/pingcap/tiflow/engine/pb"
 )
 
 type Config struct {

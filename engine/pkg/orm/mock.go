@@ -20,7 +20,7 @@ import (
 
 	"github.com/pingcap/log"
 	cerrors "github.com/pingcap/tiflow/engine/pkg/errors"
-	"github.com/pingcap/tiflow/engine/pkg/uuid"
+	"github.com/pingcap/tiflow/pkg/uuid"
 	"go.uber.org/zap"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
