@@ -16,7 +16,7 @@ package executor
 import (
 	cvstask "github.com/pingcap/tiflow/engine/executor/cvs"
 	dmtask "github.com/pingcap/tiflow/engine/executor/dm"
-	cvs "github.com/pingcap/tiflow/engine/jobmaster/cvsJob"
+	cvs "github.com/pingcap/tiflow/engine/jobmaster/cvsjob"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm"
 	"github.com/pingcap/tiflow/engine/lib/registry"
 )

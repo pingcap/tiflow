@@ -45,9 +45,7 @@ func TestMain(m *testing.M) {
 }
 
 func TestWriterWrite(t *testing.T) {
-	dir, err := ioutil.TempDir("", "redo-writer")
-	require.Nil(t, err)
-	defer os.RemoveAll(dir)
+	dir := t.TempDir()
 
 	cfs := []model.ChangeFeedID{
 		model.DefaultChangeFeedID("test-cf"),
@@ -88,7 +86,7 @@ func TestWriterWrite(t *testing.T) {
 		}
 
 		w.eventCommitTS.Store(1)
-		_, err = w.Write([]byte("tes1t11111"))
+		_, err := w.Write([]byte("tes1t11111"))
 		require.Nil(t, err)
 		var fileName string
 		// create a .tmp file
@@ -207,9 +205,7 @@ func TestWriterWrite(t *testing.T) {
 }
 
 func TestWriterGC(t *testing.T) {
-	dir, err := ioutil.TempDir("", "redo-GC")
-	require.Nil(t, err)
-	defer os.RemoveAll(dir)
+	dir := t.TempDir()
 
 	uuidGen := uuid.NewConstGenerator("const-uuid")
 	controller := gomock.NewController(t)
@@ -265,7 +261,7 @@ func TestWriterGC(t *testing.T) {
 	}
 	w.running.Store(true)
 	w.eventCommitTS.Store(1)
-	_, err = w.Write([]byte("t1111"))
+	_, err := w.Write([]byte("t1111"))
 	require.Nil(t, err)
 	w.eventCommitTS.Store(2)
 	_, err = w.Write([]byte("t2222"))
@@ -318,9 +314,7 @@ func TestNewWriter(t *testing.T) {
 	s3URI, err := url.Parse("s3://logbucket/test-changefeed?endpoint=http://111/")
 	require.Nil(t, err)
 
-	dir, err := ioutil.TempDir("", "redo-NewWriter")
-	require.Nil(t, err)
-	defer os.RemoveAll(dir)
+	dir := t.TempDir()
 
 	uuidGen := uuid.NewConstGenerator("const-uuid")
 	w, err := NewWriter(context.Background(), &FileWriterConfig{
