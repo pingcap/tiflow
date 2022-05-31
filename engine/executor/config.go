@@ -38,6 +38,7 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/engine/pkg/errors"
+	"github.com/pingcap/tiflow/engine/pkg/version"
 )
 
 // SampleConfigFile is sample config file of dm-worker.
@@ -60,7 +61,6 @@ func NewConfig() *Config {
 	fs := cfg.flagSet
 
 	fs.BoolVar(&cfg.printVersion, "V", false, "prints version and exit")
-	fs.BoolVar(&cfg.printSampleConfig, "print-sample-config", false, "print sample config file of dm-worker")
 	fs.StringVar(&cfg.ConfigFile, "config", "", "path to config file")
 	fs.StringVar(&cfg.WorkerAddr, "worker-addr", "", "listen address for client traffic")
 	fs.StringVar(&cfg.AdvertiseAddr, "advertise-addr", "", `advertise address for client traffic (default "${worker-addr}")`)
@@ -105,8 +105,7 @@ type Config struct {
 	KeepAliveInterval time.Duration `toml:"-" json:"-"`
 	RPCTimeout        time.Duration `toml:"-" json:"-"`
 
-	printVersion      bool
-	printSampleConfig bool
+	printVersion bool
 }
 
 // Clone clones a config.
@@ -144,8 +143,8 @@ func (c *Config) Parse(arguments []string) error {
 		return errors.Wrap(errors.ErrExecutorConfigParseFlagSet, err)
 	}
 
-	if c.printSampleConfig {
-		fmt.Println(SampleConfigFile)
+	if c.printVersion {
+		fmt.Print(version.GetRawInfo())
 		return flag.ErrHelp
 	}
 
