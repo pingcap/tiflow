@@ -52,7 +52,7 @@ type Capture struct {
 	info             *model.CaptureInfo
 	processorManager *processor.Manager
 
-	pdEnpoints      []string
+	pdEndpoints     []string
 	UpstreamManager *upstream.Manager
 	ownerMu         sync.Mutex
 	owner           owner.Owner
@@ -91,7 +91,7 @@ func NewCapture(pdEnpoints []string, etcdClient *etcd.CDCEtcdClient, grpcService
 		EtcdClient:          etcdClient,
 		grpcService:         grpcService,
 		cancel:              func() {},
-		pdEnpoints:          pdEnpoints,
+		pdEndpoints:         pdEnpoints,
 		newProcessorManager: processor.NewManager,
 		newOwner:            owner.NewOwner,
 	}
@@ -128,7 +128,7 @@ func (c *Capture) reset(ctx context.Context) error {
 		c.UpstreamManager.Close()
 	}
 	c.UpstreamManager = upstream.NewManager(ctx)
-	err = c.UpstreamManager.Add(upstream.DefaultUpstreamID, c.pdEnpoints, conf.Security)
+	err = c.UpstreamManager.Add(upstream.DefaultUpstreamID, c.pdEndpoints, conf.Security)
 	if err != nil {
 		return errors.Annotate(
 			cerror.WrapError(cerror.ErrNewCaptureFailed, err),
@@ -316,12 +316,11 @@ func (c *Capture) run(stdCtx context.Context) error {
 func (c *Capture) Info() model.CaptureInfo {
 	c.captureMu.Lock()
 	defer c.captureMu.Unlock()
-	res := model.CaptureInfo{}
 	// when c.reset has not been called yet, c.info is nil.
 	if c.info != nil {
-		res = *c.info
+		return *c.info
 	}
-	return res
+	return model.CaptureInfo{}
 }
 
 func (c *Capture) campaignOwner(ctx cdcContext.Context) error {
