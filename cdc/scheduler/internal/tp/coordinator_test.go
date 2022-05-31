@@ -33,6 +33,7 @@ func (m *mockTrans) Close() error {
 func (m *mockTrans) Send(ctx context.Context, msgs []*schedulepb.Message) error {
 	return m.send(ctx, msgs)
 }
+
 func (m *mockTrans) Recv(ctx context.Context) ([]*schedulepb.Message, error) {
 	return m.recv(ctx)
 }

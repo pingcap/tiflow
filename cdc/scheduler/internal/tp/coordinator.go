@@ -105,21 +105,33 @@ func (c *coordinator) poll(
 		return errors.Trace(err)
 	}
 
-	sentMsgs := c.captureM.Tick()
-	msgs := c.captureM.Poll(aliveCaptures, recvMsgs)
-	sentMsgs = append(sentMsgs, msgs...)
+	var msgBuf []*schedulepb.Message
+	c.captureM.HandleMessage(recvMsgs)
+	msgs := c.captureM.Tick()
+	msgBuf = append(msgBuf, msgs...)
+	msgs = c.captureM.HandleAliveCaptureUpdate(aliveCaptures)
+	msgBuf = append(msgBuf, msgs...)
 	if c.captureM.CheckAllCaptureInitialized() {
 		// Skip polling replication manager as not all capture are initialized.
-		err := c.sendMsgs(ctx, sentMsgs)
+		err := c.sendMsgs(ctx, msgBuf)
 		return errors.Trace(err)
 	}
 
-	// Handling received messages to advance replication set.
+	// Handle capture membership changes.
+	if changes := c.captureM.TakeChanges(); changes != nil {
+		msgs, err = c.replicationM.HandleCaptureChanges(changes)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		msgBuf = append(msgBuf, msgs...)
+	}
+
+	// Handle received messages to advance replication set.
 	msgs, err = c.replicationM.HandleMessage(recvMsgs)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	sentMsgs = append(sentMsgs, msgs...)
+	msgBuf = append(msgBuf, msgs...)
 
 	// Generate schedule tasks based on the current status.
 	captureTables := c.captureM.CaptureTableSets()
@@ -129,15 +141,15 @@ func (c *coordinator) poll(
 		allTasks = append(allTasks, tasks...)
 	}
 
-	// Handling generated schedule tasks.
+	// Handle generated schedule tasks.
 	msgs, err = c.replicationM.HandleTasks(allTasks)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	sentMsgs = append(sentMsgs, msgs...)
+	msgBuf = append(msgBuf, msgs...)
 
 	// Send new messages.
-	err = c.sendMsgs(ctx, sentMsgs)
+	err = c.sendMsgs(ctx, msgBuf)
 	if err != nil {
 		return errors.Trace(err)
 	}
