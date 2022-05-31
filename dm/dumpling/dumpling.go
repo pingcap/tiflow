@@ -71,16 +71,15 @@ func (m *Dumpling) Init(ctx context.Context) error {
 	}
 	if m.cfg.MetricsFactory != nil {
 		m.metricProxies = &metricProxies{}
-		m.metricProxies.dumplingExitWithErrorCounter =
-			metricsproxy.NewCounterVec(
-				m.cfg.MetricsFactory,
-				prometheus.CounterOpts{
-					Namespace: "dm",
-					Subsystem: "dumpling",
-					Name:      "exit_with_error_count",
-					Help:      "counter for dumpling exit with error",
-				}, []string{"task", "source_id"},
-			)
+		m.metricProxies.dumplingExitWithErrorCounter = metricsproxy.NewCounterVec(
+			m.cfg.MetricsFactory,
+			prometheus.CounterOpts{
+				Namespace: "dm",
+				Subsystem: "dumpling",
+				Name:      "exit_with_error_count",
+				Help:      "counter for dumpling exit with error",
+			}, []string{"task", "source_id"},
+		)
 	} else {
 		m.metricProxies = defaultMetricProxies
 	}
