@@ -263,9 +263,7 @@ func (s *testCheckpointSuite) testGlobalCheckPoint(c *C, cp CheckPoint) {
 	c.Assert(cp.FlushedGlobalPoint().Position, Equals, binlog.MinPosition)
 
 	// try load from mydumper's output
-	dir, err := os.MkdirTemp("", "test_global_checkpoint")
-	c.Assert(err, IsNil)
-	defer os.RemoveAll(dir)
+	dir := c.MkDir()
 
 	filename := filepath.Join(dir, "metadata")
 	err = os.WriteFile(filename, []byte(

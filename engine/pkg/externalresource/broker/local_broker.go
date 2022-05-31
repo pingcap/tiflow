@@ -16,7 +16,6 @@ package broker
 import (
 	"context"
 	"io/ioutil"
-	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -107,8 +106,7 @@ func (b *LocalBroker) AssertFileExists(
 	fileName string,
 ) {
 	suffix := strings.TrimPrefix(resourceID, "/local/")
-	filePath := filepath.Join(b.config.Local.BaseDir, workerID, suffix, fileName)
-	require.FileExists(t, filePath)
+	AssertLocalFileExists(t, b.config.Local.BaseDir, workerID, suffix, fileName)
 }
 
 type brExternalStorageHandleForTesting struct {

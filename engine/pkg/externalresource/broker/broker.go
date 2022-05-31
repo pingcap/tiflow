@@ -19,23 +19,26 @@ import (
 
 	"github.com/gogo/status"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
 
+	"github.com/pingcap/tiflow/dm/pkg/log"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
-	libModel "github.com/pingcap/tiflow/engine/lib/model"
 	derrors "github.com/pingcap/tiflow/engine/pkg/errors"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/storagecfg"
 	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
 )
 
+// ResourceManagerClient is a type alias for a client connecting to
+// the resource manager (which is part of the Servermaster).
+type ResourceManagerClient = *rpcutil.FailoverRPCClients[pb.ResourceManagerClient]
+
 // DefaultBroker implements the Broker interface
 type DefaultBroker struct {
 	config     *storagecfg.Config
 	executorID resModel.ExecutorID
-	client     *rpcutil.FailoverRPCClients[pb.ResourceManagerClient]
+	client     ResourceManagerClient
 
 	fileManager FileManager
 }
@@ -44,7 +47,7 @@ type DefaultBroker struct {
 func NewBroker(
 	config *storagecfg.Config,
 	executorID resModel.ExecutorID,
-	client *rpcutil.FailoverRPCClients[pb.ResourceManagerClient],
+	client ResourceManagerClient,
 ) *DefaultBroker {
 	fm := NewLocalFileManager(*config.Local)
 	return &DefaultBroker{
@@ -147,14 +150,10 @@ func (b *DefaultBroker) newHandleForLocalFile(
 		return nil, err
 	}
 
-	var (
-		res             *resModel.LocalFileResourceDescriptor
-		creatorWorkerID libModel.WorkerID
-	)
+	var desc *LocalFileResourceDescriptor
 
 	if !exists {
-		creatorWorkerID = workerID
-		res, err = b.fileManager.CreateResource(workerID, resName)
+		desc, err = b.fileManager.CreateResource(workerID, resName)
 		if err != nil {
 			return nil, err
 		}
@@ -165,32 +164,16 @@ func (b *DefaultBroker) newHandleForLocalFile(
 			}
 		}()
 	} else {
-		creatorWorkerID = record.Worker
-		res, err = b.fileManager.GetPersistedResource(record.Worker, resName)
+		desc, err = b.fileManager.GetPersistedResource(record.Worker, resName)
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	filePath := res.AbsolutePath()
+	filePath := desc.AbsolutePath()
 	log.L().Info("Using local storage with path", zap.String("path", filePath))
 
-	ls, err := newBrStorageForLocalFile(filePath)
-	if err != nil {
-		return nil, err
-	}
-
-	return &BrExternalStorageHandle{
-		inner:  ls,
-		client: b.client,
-
-		id:          resourceID,
-		name:        resName,
-		jobID:       jobID,
-		workerID:    creatorWorkerID,
-		executorID:  b.executorID,
-		fileManager: b.fileManager,
-	}, nil
+	return newLocalResourceHandle(resourceID, jobID, b.executorID, b.fileManager, desc, b.client)
 }
 
 func (b *DefaultBroker) checkForExistingResource(

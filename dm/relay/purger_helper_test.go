@@ -35,9 +35,7 @@ func (t *testPurgerSuite) TestPurgeRelayFilesBeforeFile(c *C) {
 	c.Assert(files, IsNil)
 
 	// create relay log dir
-	baseDir, err := os.MkdirTemp("", "test_get_relay_files_before_file")
-	c.Assert(err, IsNil)
-	defer os.RemoveAll(baseDir)
+	baseDir := c.MkDir()
 	// empty relay log dirs
 	safeRelay = &streamer.RelayLogInfo{
 		SubDir: t.uuids[len(t.uuids)-1],
@@ -120,9 +118,7 @@ func (t *testPurgerSuite) TestPurgeRelayFilesBeforeFile(c *C) {
 
 func (t *testPurgerSuite) TestPurgeRelayFilesBeforeFileAndTime(c *C) {
 	// create relay log dir
-	baseDir, err := os.MkdirTemp("", "test_get_relay_files_before_file_and_time")
-	c.Assert(err, IsNil)
-	defer os.RemoveAll(baseDir)
+	baseDir := c.MkDir()
 
 	// empty relay log dirs
 	safeRelay := &streamer.RelayLogInfo{

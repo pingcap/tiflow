@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/tiflow/dm/syncer/metrics"
 	"github.com/pingcap/tiflow/engine/pkg/promutil"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/pingcap/tiflow/dm/dm/common"
@@ -105,7 +106,8 @@ func (s *Server) runBackgroundJob(ctx context.Context) {
 func RegistryMetrics() {
 	registry := prometheus.NewRegistry()
 	registry.MustRegister(prometheus.NewProcessCollector(prometheus.ProcessCollectorOpts{}))
-	registry.MustRegister(prometheus.NewGoCollector())
+	registry.MustRegister(prometheus.NewGoCollector(
+		collectors.WithGoCollections(collectors.GoRuntimeMemStatsCollection | collectors.GoRuntimeMetricsCollection)))
 
 	registry.MustRegister(cpuUsageGauge)
 
