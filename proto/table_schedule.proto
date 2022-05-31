@@ -65,9 +65,14 @@ message DispatchTableResponse {
     }
 }
 
-message Heartbeat {}
+message Heartbeat {
+    repeated int64 table_ids = 1 [
+        (gogoproto.casttype) = "github.com/pingcap/tiflow/cdc/model.TableID",
+        (gogoproto.customname) = "TableIDs"
+    ];
+}
 
-// TableState is the state of table repliction in processor.
+// TableState is the state of table replication in processor.
 //
 //  ┌────────┐   ┌───────────┐   ┌──────────┐
 //  │ Absent ├─> │ Preparing ├─> │ Prepared │
@@ -102,11 +107,10 @@ message HeartbeatResponse {
 
 enum MessageType {
     MsgUnknown = 0 [(gogoproto.enumvalue_customname) = "MsgUnknown"];
-    MsgCheckpoint = 1 [(gogoproto.enumvalue_customname) = "MsgCheckpoint"];
-    MsgDispatchTableRequest = 2 [(gogoproto.enumvalue_customname) = "MsgDispatchTableRequest"];
-    MsgDispatchTableResponse = 3 [(gogoproto.enumvalue_customname) = "MsgDispatchTableResponse"];
-    MsgHeartbeat = 4 [(gogoproto.enumvalue_customname) = "MsgHeartbeat"];
-    MsgHeartbeatResponse = 5 [(gogoproto.enumvalue_customname) = "MsgHeartbeatResponse"];
+    MsgDispatchTableRequest = 1 [(gogoproto.enumvalue_customname) = "MsgDispatchTableRequest"];
+    MsgDispatchTableResponse = 2 [(gogoproto.enumvalue_customname) = "MsgDispatchTableResponse"];
+    MsgHeartbeat = 3 [(gogoproto.enumvalue_customname) = "MsgHeartbeat"];
+    MsgHeartbeatResponse = 4 [(gogoproto.enumvalue_customname) = "MsgHeartbeatResponse"];
 }
 
 message OwnerRevision { int64 revision = 1; }
@@ -128,8 +132,4 @@ message Message {
     DispatchTableResponse dispatch_table_response = 6;
     Heartbeat heartbeat = 7;
     HeartbeatResponse heartbeat_response = 8;
-    map<int64, Checkpoint> checkpoints = 9 [
-        (gogoproto.castkey) = "github.com/pingcap/tiflow/cdc/model.TableID",
-        (gogoproto.nullable) = false
-    ];
 }

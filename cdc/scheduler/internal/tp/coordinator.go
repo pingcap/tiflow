@@ -58,7 +58,7 @@ func NewCoordinator(
 	ownerRevision int64,
 	cfg *config.SchedulerConfig,
 ) (internal.Scheduler, error) {
-	trans, err := newTranport(ctx, changeFeedID, messageServer, messageRouter)
+	trans, err := newTransport(ctx, changeFeedID, messageServer, messageRouter)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -110,7 +110,7 @@ func (c *coordinator) poll(
 	sentMsgs = append(sentMsgs, msgs...)
 	if c.captureM.CheckAllCaptureInitialized() {
 		// Skip polling replication manager as not all capture are initialized.
-		err := c.trans.Send(ctx, sentMsgs)
+		err := c.sendMsgs(ctx, sentMsgs)
 		return errors.Trace(err)
 	}
 
@@ -142,7 +142,7 @@ func (c *coordinator) poll(
 		return errors.Trace(err)
 	}
 
-	// checkpoint calcuation
+	// checkpoint calculation
 	return nil
 }
 

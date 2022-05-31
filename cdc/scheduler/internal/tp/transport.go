@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -30,6 +31,7 @@ import (
 type transport interface {
 	Send(ctx context.Context, msgs []*schedulepb.Message) error
 	Recv(ctx context.Context) ([]*schedulepb.Message, error)
+	Close() error
 }
 
 func p2pTopic(changefeed model.ChangeFeedID) p2p.Topic {
@@ -52,7 +54,7 @@ type p2pTransport struct {
 	}
 }
 
-func newTranport(
+func newTransport(
 	ctx context.Context, changefeed model.ChangeFeedID,
 	server *p2p.MessageServer, router p2p.MessageRouter,
 ) (*p2pTransport, error) {
@@ -127,4 +129,15 @@ func (t *p2pTransport) Recv(ctx context.Context) ([]*schedulepb.Message, error) 
 	recvMsgs := t.mu.msgBuf
 	t.mu.msgBuf = make([]*schedulepb.Message, 0)
 	return recvMsgs, nil
+}
+
+func (t *p2pTransport) Close() error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	err := t.messageServer.SyncRemoveHandler(ctx, t.topic)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	return nil
 }

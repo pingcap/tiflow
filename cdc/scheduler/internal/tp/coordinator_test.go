@@ -26,6 +26,10 @@ type mockTrans struct {
 	recv func(ctx context.Context) ([]*schedulepb.Message, error)
 }
 
+func (m *mockTrans) Close() error {
+	return nil
+}
+
 func (m *mockTrans) Send(ctx context.Context, msgs []*schedulepb.Message) error {
 	return m.send(ctx, msgs)
 }
