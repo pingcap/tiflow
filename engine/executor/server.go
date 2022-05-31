@@ -351,7 +351,7 @@ func (s *Server) Run(ctx context.Context) error {
 
 	// TODO: make the prefix configurable later
 	s.resourceBroker = broker.NewBroker(
-		&storagecfg.Config{Local: &storagecfg.LocalFileConfig{BaseDir: "./"}},
+		&storagecfg.Config{Local: storagecfg.LocalFileConfig{BaseDir: "./"}},
 		s.info.ID,
 		s.resourceClient)
 
