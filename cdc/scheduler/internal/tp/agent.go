@@ -61,13 +61,15 @@ type ownerInfo struct {
 	captureID string
 }
 
+// NewAgent returns a new agent.
 func NewAgent(ctx context.Context,
 	captureID model.CaptureID,
 	changeFeedID model.ChangeFeedID,
 	messageServer *p2p.MessageServer,
 	messageRouter p2p.MessageRouter,
 	etcdClient *etcd.CDCEtcdClient,
-	tableExecutor internal.TableExecutor) (internal.Agent, error) {
+	tableExecutor internal.TableExecutor,
+) (internal.Agent, error) {
 	result := &agent{
 		version:      version.ReleaseSemver(),
 		captureID:    captureID,

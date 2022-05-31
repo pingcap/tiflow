@@ -80,12 +80,16 @@ func TestCaptureManagerHandleAliveCaptureUpdate(t *testing.T) {
 	// Init
 	cm.HandleMessage([]*schedulepb.Message{{
 		Header: &schedulepb.Message_Header{}, From: "2",
-		MsgType:           schedulepb.MsgHeartbeatResponse,
-		HeartbeatResponse: &schedulepb.HeartbeatResponse{Tables: []schedulepb.TableStatus{{TableID: 1}}},
+		MsgType: schedulepb.MsgHeartbeatResponse,
+		HeartbeatResponse: &schedulepb.HeartbeatResponse{
+			Tables: []schedulepb.TableStatus{{TableID: 1}},
+		},
 	}, {
 		Header: &schedulepb.Message_Header{}, From: "3",
-		MsgType:           schedulepb.MsgHeartbeatResponse,
-		HeartbeatResponse: &schedulepb.HeartbeatResponse{Tables: []schedulepb.TableStatus{{TableID: 2}}},
+		MsgType: schedulepb.MsgHeartbeatResponse,
+		HeartbeatResponse: &schedulepb.HeartbeatResponse{
+			Tables: []schedulepb.TableStatus{{TableID: 2}},
+		},
 	}})
 	require.False(t, cm.CheckAllCaptureInitialized())
 	msgs = cm.HandleAliveCaptureUpdate(ms)

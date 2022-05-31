@@ -21,7 +21,9 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 )
 
-func benchmarkMessageHeartbeatResponse(b *testing.B, bench func(b *testing.B, m *Message, total int)) {
+func benchmarkMessageHeartbeatResponse(
+	b *testing.B, bench func(b *testing.B, m *Message, total int),
+) {
 	size := 16384
 	for total := 1; total <= size; total *= 2 {
 		msg := Message{

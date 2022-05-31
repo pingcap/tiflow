@@ -136,6 +136,7 @@ func TestReplicationManagerRemoveTable(t *testing.T) {
 	tbl, err := newReplicationSet(1, map[string]*schedulepb.TableStatus{
 		"1": {TableID: 1, State: schedulepb.TableStateReplicating},
 	})
+	require.Nil(t, err)
 	require.Equal(t, ReplicationSetStateReplicating, tbl.State)
 	r.tables[1] = tbl
 
@@ -230,6 +231,7 @@ func TestReplicationManagerMoveTable(t *testing.T) {
 	tbl, err := newReplicationSet(1, map[string]*schedulepb.TableStatus{
 		source: {TableID: 1, State: schedulepb.TableStateReplicating},
 	})
+	require.Nil(t, err)
 	require.Equal(t, ReplicationSetStateReplicating, tbl.State)
 	r.tables[1] = tbl
 
