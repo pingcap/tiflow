@@ -121,7 +121,7 @@ func newMockTablePipeline(ctx cdcContext.Context, tableID model.TableID, replica
 	return &mockTablePipeline{
 		tableID:      tableID,
 		name:         fmt.Sprintf("`test`.`table%d`", tableID),
-		status:       pipeline.TableStatusPreparing,
+		status:       pipeline.TableStatePreparing,
 		resolvedTs:   replicaInfo.StartTs,
 		checkpointTs: replicaInfo.StartTs,
 	}, nil
@@ -134,7 +134,7 @@ type mockTablePipeline struct {
 	checkpointTs model.Ts
 	barrierTs    model.Ts
 	stopTs       model.Ts
-	status       pipeline.TableStatus
+	status       pipeline.TableState
 	canceled     bool
 
 	sinkStartTs model.Ts
@@ -169,7 +169,7 @@ func (m *mockTablePipeline) Workload() model.WorkloadInfo {
 	return model.WorkloadInfo{Workload: 1}
 }
 
-func (m *mockTablePipeline) Status() pipeline.TableStatus {
+func (m *mockTablePipeline) Status() pipeline.TableState {
 	return m.status
 }
 
@@ -186,7 +186,7 @@ func (m *mockTablePipeline) Wait() {
 
 func (m *mockTablePipeline) Start(ts model.Ts) bool {
 	m.sinkStartTs = ts
-	m.status = pipeline.TableStatusReplicating
+	m.status = pipeline.TableStateReplicating
 	return true
 }
 
@@ -262,28 +262,28 @@ func TestTableExecutorAddingTableDirectly(t *testing.T) {
 	require.True(t, ok)
 	table1 := p.tables[1].(*mockTablePipeline)
 	require.Equal(t, model.Ts(20), table1.sinkStartTs)
-	require.Equal(t, pipeline.TableStatusReplicating, table1.status)
+	require.Equal(t, pipeline.TableStateReplicating, table1.status)
 
 	ok, err = p.AddTable(ctx, 2, 20, false)
 	require.Nil(t, err)
 	require.True(t, ok)
 	table2 := p.tables[2].(*mockTablePipeline)
 	require.Equal(t, model.Ts(20), table2.sinkStartTs)
-	require.Equal(t, pipeline.TableStatusReplicating, table2.status)
+	require.Equal(t, pipeline.TableStateReplicating, table2.status)
 
 	ok, err = p.AddTable(ctx, 3, 20, false)
 	require.Nil(t, err)
 	require.True(t, ok)
 	table3 := p.tables[3].(*mockTablePipeline)
 	require.Equal(t, model.Ts(20), table3.sinkStartTs)
-	require.Equal(t, pipeline.TableStatusReplicating, table3.status)
+	require.Equal(t, pipeline.TableStateReplicating, table3.status)
 
 	ok, err = p.AddTable(ctx, 4, 20, false)
 	require.Nil(t, err)
 	require.True(t, ok)
 	table4 := p.tables[4].(*mockTablePipeline)
 	require.Equal(t, model.Ts(20), table4.sinkStartTs)
-	require.Equal(t, pipeline.TableStatusReplicating, table4.status)
+	require.Equal(t, pipeline.TableStateReplicating, table4.status)
 	require.Len(t, p.tables, 4)
 
 	checkpointTs := p.agent.GetLastSentCheckpointTs()
@@ -345,8 +345,7 @@ func TestTableExecutorAddingTableDirectly(t *testing.T) {
 	require.Nil(t, err)
 	tester.MustApplyPatches()
 
-	ok, err = p.RemoveTable(ctx, 3)
-	require.Nil(t, err)
+	ok = p.RemoveTable(ctx, 3)
 	require.True(t, ok)
 
 	_, err = p.Tick(ctx, p.changefeed)
@@ -370,7 +369,7 @@ func TestTableExecutorAddingTableDirectly(t *testing.T) {
 	require.Equal(t, model.Ts(60), checkpointTs)
 
 	// finish remove operations
-	table3.status = pipeline.TableStatusStopped
+	table3.status = pipeline.TableStateStopped
 	table3.checkpointTs = 65
 
 	_, err = p.Tick(ctx, p.changefeed)

@@ -62,7 +62,7 @@ type sorterNode struct {
 	// The latest barrier ts that sorter has received.
 	barrierTs model.Ts
 
-	status     TableStatus
+	status     TableState
 	preparedCh chan struct{}
 
 	// started indicate that the sink is really replicating, not idle.
@@ -88,7 +88,7 @@ func newSorterNode(
 		mounter:        mounter,
 		resolvedTs:     startTs,
 		barrierTs:      startTs,
-		status:         TableStatusPreparing,
+		status:         TableStatePreparing,
 		preparedCh:     make(chan struct{}, 1),
 		startTsCh:      make(chan model.Ts, 1),
 		replConfig:     replConfig,
@@ -186,7 +186,7 @@ func (n *sorterNode) start(
 		case <-n.preparedCh:
 		}
 
-		n.status.Store(TableStatusReplicating)
+		n.status.Store(TableStateReplicating)
 		eventSorter.EmitStartTs(stdCtx, startTs)
 
 		for {
@@ -323,9 +323,9 @@ func (n *sorterNode) handleRawEvent(ctx context.Context, event *model.Polymorphi
 		}
 		// sorterNode is preparing, this is must the first `Resolved event` received
 		// the indicator that all regions connected.
-		if n.status.Load() == TableStatusPreparing {
+		if n.status.Load() == TableStatePreparing {
 			log.Info("sorterNode, first resolved event received", zap.Any("event", event))
-			n.status.Store(TableStatusPrepared)
+			n.status.Store(TableStatePrepared)
 			close(n.preparedCh)
 		}
 	}
@@ -377,4 +377,4 @@ func (n *sorterNode) BarrierTs() model.Ts {
 	return atomic.LoadUint64(&n.barrierTs)
 }
 
-func (n *sorterNode) Status() TableStatus { return n.status.Load() }
+func (n *sorterNode) Status() TableState { return n.status.Load() }
