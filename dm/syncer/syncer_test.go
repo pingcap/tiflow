@@ -41,7 +41,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/syncer/dbconn"
-	"github.com/pingcap/tiflow/engine/pkg/promutil"
+	"github.com/pingcap/tiflow/dm/syncer/metrics"
 	"github.com/pingcap/tiflow/pkg/errorutil"
 	"github.com/pingcap/tiflow/pkg/sqlmodel"
 	"github.com/stretchr/testify/require"
@@ -786,6 +786,8 @@ func (s *testSyncerSuite) TestRun(c *C) {
 	syncer.schemaTracker, err = schema.NewTracker(context.Background(), s.cfg.Name, defaultTestSessionCfg, syncer.downstreamTrackConn)
 	c.Assert(err, IsNil)
 
+	syncer.metricsProxies = metrics.DefaultMetricsProxies.CacheForOneTask("task", "worker", "source")
+
 	mock.ExpectBegin()
 	mock.ExpectExec(fmt.Sprintf("SET SESSION SQL_MODE = '%s'", pmysql.DefaultSQLMode)).WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectCommit()
@@ -803,8 +805,7 @@ func (s *testSyncerSuite) TestRun(c *C) {
 	c.Assert(err, IsNil)
 	c.Assert(syncer.genRouter(), IsNil)
 
-	syncer.metricsProxies.Init(&promutil.PromFactory{})
-	syncer.metricsProxies.CacheForOneTask("task", "worker", "source")
+	syncer.metricsProxies = metrics.DefaultMetricsProxies.CacheForOneTask("task", "worker", "source")
 
 	syncer.setupMockCheckpoint(c, checkPointDBConn, checkPointMock)
 
@@ -1092,8 +1093,7 @@ func (s *testSyncerSuite) TestExitSafeModeByConfig(c *C) {
 	syncer.exprFilterGroup = NewExprFilterGroup(utils.NewSessionCtx(nil), nil)
 	c.Assert(syncer.genRouter(), IsNil)
 
-	syncer.metricsProxies.Init(&promutil.PromFactory{})
-	syncer.metricsProxies.CacheForOneTask("task", "worker", "source")
+	syncer.metricsProxies = metrics.DefaultMetricsProxies.CacheForOneTask("task", "worker", "source")
 
 	syncer.setupMockCheckpoint(c, checkPointDBConn, checkPointMock)
 

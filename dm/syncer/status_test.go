@@ -20,7 +20,7 @@ import (
 	. "github.com/pingcap/check"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/util/filter"
-	"github.com/pingcap/tiflow/engine/pkg/promutil"
+	"github.com/pingcap/tiflow/dm/syncer/metrics"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/dm/dm/config"
@@ -44,8 +44,7 @@ func (t *statusSuite) TestStatusRace(c *C) {
 	s.checkpoint = &mockCheckpoint{}
 	s.pessimist = shardddl.NewPessimist(&l, nil, "", "")
 	s.optimist = shardddl.NewOptimist(&l, nil, "", "")
-	s.metricsProxies.Init(&promutil.PromFactory{})
-	s.metricsProxies.CacheForOneTask("task", "worker", "source")
+	s.metricsProxies = metrics.DefaultMetricsProxies.CacheForOneTask("task", "worker", "source")
 
 	sourceStatus := &binlog.SourceStatus{
 		Location: binlog.Location{

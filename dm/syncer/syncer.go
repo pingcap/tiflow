@@ -273,13 +273,12 @@ func NewSyncer(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, relay rel
 	syncer.handleJobFunc = syncer.handleJob
 	syncer.cli = etcdClient
 
+	metricProxies := metrics.DefaultMetricsProxies
 	if syncer.cfg.MetricsFactory != nil {
-		syncer.metricsProxies = &metrics.Proxies{}
-		syncer.metricsProxies.Init(syncer.cfg.MetricsFactory)
-	} else {
-		syncer.metricsProxies = metrics.DefaultMetricsProxies
+		metricProxies = &metrics.Proxies{}
+		metricProxies.Init(syncer.cfg.MetricsFactory)
 	}
-	syncer.metricsProxies.CacheForOneTask(syncer.cfg.Name, syncer.cfg.WorkerName, syncer.cfg.SourceID)
+	syncer.metricsProxies = metricProxies.CacheForOneTask(syncer.cfg.Name, syncer.cfg.WorkerName, syncer.cfg.SourceID)
 
 	syncer.checkpoint = NewRemoteCheckPoint(syncer.tctx, cfg, syncer.metricsProxies, syncer.checkpointID())
 
