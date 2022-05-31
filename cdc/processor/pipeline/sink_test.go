@@ -336,7 +336,7 @@ func TestManyTs(t *testing.T) {
 			},
 		},
 	})
-	require.Equal(t, TableStatusInitializing, node.Status())
+	require.Equal(t, TableStatePrepared, node.Status())
 	ok, err := node.HandleMessage(ctx, msg)
 	require.Nil(t, err)
 	require.True(t, ok)
@@ -358,7 +358,7 @@ func TestManyTs(t *testing.T) {
 			},
 		},
 	})
-	require.Equal(t, TableStatusInitializing, node.Status())
+	require.Equal(t, TableStatePrepared, node.Status())
 	ok, err = node.HandleMessage(ctx, msg)
 	require.Nil(t, err)
 	require.True(t, ok)
