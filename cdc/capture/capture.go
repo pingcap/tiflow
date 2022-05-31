@@ -313,14 +313,14 @@ func (c *Capture) run(stdCtx context.Context) error {
 }
 
 // Info gets the capture info
-func (c *Capture) Info() model.CaptureInfo {
+func (c *Capture) Info() (model.CaptureInfo, error) {
 	c.captureMu.Lock()
 	defer c.captureMu.Unlock()
 	// when c.reset has not been called yet, c.info is nil.
 	if c.info != nil {
-		return *c.info
+		return *c.info, nil
 	}
-	return model.CaptureInfo{}
+	return model.CaptureInfo{}, cerror.ErrCaptureNotInitialized.GenWithStackByArgs()
 }
 
 func (c *Capture) campaignOwner(ctx cdcContext.Context) error {
@@ -484,7 +484,7 @@ func (c *Capture) register(ctx cdcContext.Context) error {
 	return nil
 }
 
-// AsyncClose closes the capture by unregistering it from etcd
+// AsyncClose closes the capture by deregister it from etcd
 // Note: this function should be reentrant
 func (c *Capture) AsyncClose() {
 	defer c.cancel()
