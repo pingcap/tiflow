@@ -231,7 +231,6 @@ func TestNonblockRecvRace(t *testing.T) {
 //	make c1 ready for receiving
 //	create second goroutine
 //	make c2 ready for receiving
-//	make c1 no longer ready for receiving (if possible)
 // The second goroutine does a non-blocking select receiving from c1 and c2.
 // From the time the second goroutine is created, at least one of c1 and c2
 // is always ready for receiving, so the select in the second goroutine must
@@ -246,6 +245,7 @@ func TestNonblockSelectRace(t *testing.T) {
 		c1 := New[int]()
 		c2 := New[int]()
 		c1.In() <- 1
+		time.Sleep(time.Millisecond)
 		go func() {
 			runtime.Gosched()
 			select {
@@ -259,7 +259,7 @@ func TestNonblockSelectRace(t *testing.T) {
 		}()
 		c2.In() <- 1
 		select {
-		case <-c1.Out():
+		case <-c2.Out():
 		default:
 		}
 		require.Truef(t, <-done.Out(), "no chan is ready")
