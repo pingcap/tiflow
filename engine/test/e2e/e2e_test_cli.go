@@ -201,6 +201,15 @@ func (cli *ChaosCli) CheckFakeJobKey(
 	return nil
 }
 
+// GetRevision puts a key gets the latest revision of etcd cluster
+func (cli *ChaosCli) GetRevision(ctx context.Context) (int64, error) {
+	resp, err := cli.fakeJobCli.Put(ctx, "/chaos/gen_epoch/key", "/chaos/gen_epoch/value")
+	if err != nil {
+		return 0, errors.Trace(err)
+	}
+	return resp.Header.Revision, nil
+}
+
 func runCmdHandleError(cmd *exec.Cmd) []byte {
 	log.L().Info("Start executing command", zap.String("cmd", cmd.String()))
 	bytes, err := cmd.Output()
