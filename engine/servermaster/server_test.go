@@ -18,17 +18,16 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
-	"os"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/lib"
 	libModel "github.com/pingcap/tiflow/engine/lib/model"
 	"github.com/pingcap/tiflow/engine/model"
-	"github.com/pingcap/tiflow/engine/pb"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/manager"
 	"github.com/pingcap/tiflow/engine/pkg/notifier"
 	"github.com/pingcap/tiflow/engine/servermaster/scheduler"
@@ -44,9 +43,8 @@ func init() {
 	}
 }
 
-func prepareServerEnv(t *testing.T, name string) (string, *Config, func()) {
-	dir, err := ioutil.TempDir("", name)
-	require.Nil(t, err)
+func prepareServerEnv(t *testing.T, name string) (string, *Config) {
+	dir := t.TempDir()
 
 	ports, err := freeport.GetFreePorts(2)
 	require.Nil(t, err)
@@ -73,19 +71,15 @@ initial-cluster = "%s=http://127.0.0.1:%d"`
 	err = cfg.adjust()
 	require.Nil(t, err)
 
-	cleanupFn := func() {
-		os.RemoveAll(dir)
-	}
 	masterAddr := fmt.Sprintf("127.0.0.1:%d", ports[0])
 
-	return masterAddr, cfg, cleanupFn
+	return masterAddr, cfg
 }
 
 // Disable parallel run for this case, because prometheus http handler will meet
 // data race if parallel run is enabled
 func TestStartGrpcSrv(t *testing.T) {
-	masterAddr, cfg, cleanup := prepareServerEnv(t, "test-start-grpc-srv")
-	defer cleanup()
+	masterAddr, cfg := prepareServerEnv(t, "test-start-grpc-srv")
 
 	s := &Server{cfg: cfg}
 	ctx := context.Background()
@@ -102,9 +96,7 @@ func TestStartGrpcSrv(t *testing.T) {
 func TestStartGrpcSrvCancelable(t *testing.T) {
 	t.Parallel()
 
-	dir, err := ioutil.TempDir("", "test-start-grpc-srv-cancelable")
-	require.Nil(t, err)
-	defer os.RemoveAll(dir)
+	dir := t.TempDir()
 	ports, err := freeport.GetFreePorts(3)
 	require.Nil(t, err)
 	cfgTpl := `
@@ -188,8 +180,7 @@ func testPrometheusMetrics(t *testing.T, addr string) {
 // FIXME: disable this test temporary for no proper mock of frame metastore
 // nolint: deadcode
 func testRunLeaderService(t *testing.T) {
-	_, cfg, cleanup := prepareServerEnv(t, "test-run-leader-service")
-	defer cleanup()
+	_, cfg := prepareServerEnv(t, "test-run-leader-service")
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -324,8 +315,7 @@ func (m *mockExecutorManager) ExecutorCount(status model.ExecutorStatus) int {
 }
 
 func TestCollectMetric(t *testing.T) {
-	masterAddr, cfg, cleanup := prepareServerEnv(t, "test-collect-metric")
-	defer cleanup()
+	masterAddr, cfg := prepareServerEnv(t, "test-collect-metric")
 
 	s := &Server{
 		cfg:     cfg,

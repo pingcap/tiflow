@@ -16,9 +16,9 @@ package servermaster
 import (
 	"sync"
 
+	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/lib"
 	libModel "github.com/pingcap/tiflow/engine/lib/model"
-	"github.com/pingcap/tiflow/engine/pb"
 	"github.com/pingcap/tiflow/engine/pkg/errors"
 
 	"github.com/pingcap/tiflow/dm/pkg/log"

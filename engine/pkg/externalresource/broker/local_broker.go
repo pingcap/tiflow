@@ -16,7 +16,6 @@ package broker
 import (
 	"context"
 	"io/ioutil"
-	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -27,7 +26,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 
-	"github.com/pingcap/tiflow/engine/pb"
+	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/manager"
 	resourcemeta "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/storagecfg"
@@ -107,8 +106,7 @@ func (b *LocalBroker) AssertFileExists(
 	fileName string,
 ) {
 	suffix := strings.TrimPrefix(resourceID, "/local/")
-	filePath := filepath.Join(b.config.Local.BaseDir, workerID, suffix, fileName)
-	require.FileExists(t, filePath)
+	AssertLocalFileExists(t, b.config.Local.BaseDir, workerID, suffix, fileName)
 }
 
 type brExternalStorageHandleForTesting struct {

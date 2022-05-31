@@ -27,8 +27,8 @@ import (
 	"github.com/go-mysql-org/go-mysql/replication"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
-	toolutils "github.com/pingcap/tidb-tools/pkg/utils"
 	"github.com/pingcap/tidb/parser"
+	"github.com/pingcap/tidb/util"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
@@ -201,7 +201,7 @@ func (r *Relay) process(ctx context.Context) error {
 		return err
 	}
 
-	isNew, err := isNewServer(ctx, r.meta.UUID(), r.db.DB, r.cfg.Flavor)
+	isNew, err := isNewServer(ctx, r.meta.SubDir(), r.db.DB, r.cfg.Flavor)
 	if err != nil {
 		return err
 	}
@@ -251,14 +251,14 @@ func (r *Relay) process(ctx context.Context) error {
 		}
 
 		if isRelayMetaOutdated {
-			uuidWithSuffix := r.meta.UUID() // only change after switch
+			uuidWithSuffix := r.meta.SubDir() // only change after switch
 			err2 = r.PurgeRelayDir()
 			if err2 != nil {
 				return err2
 			}
 			r.ResetMeta()
 
-			uuid, _, err3 := utils.ParseSuffixForUUID(uuidWithSuffix)
+			uuid, _, err3 := utils.ParseRelaySubDir(uuidWithSuffix)
 			if err3 != nil {
 				r.logger.Error("parse suffix for UUID when relay meta outdated", zap.String("UUID", uuidWithSuffix), zap.Error(err))
 				return err3
@@ -634,7 +634,7 @@ func (r *Relay) handleEvents(
 		}
 
 		if _, ok := e.Event.(*replication.RotateEvent); ok && utils.IsFakeRotateEvent(e.Header) {
-			isNew, err2 := isNewServer(ctx, r.meta.UUID(), r.db.DB, r.cfg.Flavor)
+			isNew, err2 := isNewServer(ctx, r.meta.SubDir(), r.db.DB, r.cfg.Flavor)
 			// should start from the transaction beginning when switch to a new server
 			if err2 != nil {
 				return err2
@@ -821,8 +821,8 @@ func (r *Relay) reSetupMeta(ctx context.Context) error {
 func (r *Relay) updateMetricsRelaySubDirIndex() {
 	// when switching master server, update sub dir index metrics
 	node := r.masterNode()
-	uuidWithSuffix := r.meta.UUID() // only change after switch
-	_, suffix, err := utils.ParseSuffixForUUID(uuidWithSuffix)
+	uuidWithSuffix := r.meta.SubDir() // only change after switch
+	_, suffix, err := utils.ParseRelaySubDir(uuidWithSuffix)
 	if err != nil {
 		r.logger.Error("parse suffix for UUID", zap.String("UUID", uuidWithSuffix), zap.Error(err))
 		return
@@ -884,7 +884,7 @@ func (r *Relay) doIntervalOps(ctx context.Context) {
 				r.RUnlock()
 				return
 			}
-			trimmed, err := r.meta.TrimUUIDs()
+			trimmed, err := r.meta.TrimUUIDIndexFile()
 			if err != nil {
 				r.logger.Error("trim UUIDs", zap.Error(err))
 			} else if len(trimmed) > 0 {
@@ -1096,13 +1096,13 @@ func (r *Relay) Reload(newCfg *Config) error {
 
 // setActiveRelayLog sets or updates the current active relay log to file.
 func (r *Relay) setActiveRelayLog(filename string) {
-	uuid := r.meta.UUID()
-	_, suffix, _ := utils.ParseSuffixForUUID(uuid)
+	uuid := r.meta.SubDir()
+	_, suffix, _ := utils.ParseRelaySubDir(uuid)
 	rli := &pkgstreamer.RelayLogInfo{
-		TaskName:   fakeRelayTaskName,
-		UUID:       uuid,
-		UUIDSuffix: suffix,
-		Filename:   filename,
+		TaskName:     fakeRelayTaskName,
+		SubDir:       uuid,
+		SubDirSuffix: suffix,
+		Filename:     filename,
 	}
 	r.activeRelayLog.Lock()
 	r.activeRelayLog.info = rli
@@ -1123,7 +1123,7 @@ func (r *Relay) setSyncConfig() error {
 		if loadErr := r.cfg.From.Security.LoadTLSContent(); loadErr != nil {
 			return terror.ErrCtlLoadTLSCfg.Delegate(loadErr)
 		}
-		tlsConfig, err = toolutils.ToTLSConfigWithVerifyByRawbytes(r.cfg.From.Security.SSLCABytes,
+		tlsConfig, err = util.ToTLSConfigWithVerifyByRawbytes(r.cfg.From.Security.SSLCABytes,
 			r.cfg.From.Security.SSLCertBytes, r.cfg.From.Security.SSLKEYBytes, r.cfg.From.Security.CertAllowedCN)
 		if err != nil {
 			return terror.ErrConnInvalidTLSConfig.Delegate(err)

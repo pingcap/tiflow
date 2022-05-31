@@ -22,14 +22,14 @@ import (
 	"golang.org/x/time/rate"
 
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/model"
-	"github.com/pingcap/tiflow/engine/pb"
 	"github.com/pingcap/tiflow/engine/pkg/errors"
 	"github.com/pingcap/tiflow/engine/pkg/notifier"
-	"github.com/pingcap/tiflow/engine/pkg/uuid"
 	"github.com/pingcap/tiflow/engine/servermaster/resource"
 	"github.com/pingcap/tiflow/engine/servermaster/scheduler"
 	"github.com/pingcap/tiflow/engine/test"
+	"github.com/pingcap/tiflow/pkg/uuid"
 )
 
 // ExecutorManager defines an interface to manager all executors
@@ -66,6 +66,8 @@ type ExecutorManagerImpl struct {
 
 	rescMgr resource.RescMgr
 	logRL   *rate.Limiter
+
+	notifier *notifier.Notifier[model.ExecutorStatusChange]
 }
 
 // NewExecutorManagerImpl creates a new ExecutorManagerImpl instance
@@ -78,6 +80,7 @@ func NewExecutorManagerImpl(initHeartbeatTTL, keepAliveInterval time.Duration, c
 		keepAliveInterval: keepAliveInterval,
 		rescMgr:           resource.NewCapRescMgr(),
 		logRL:             rate.NewLimiter(rate.Every(time.Second*5), 1 /*burst*/),
+		notifier:          notifier.NewNotifier[model.ExecutorStatusChange](),
 	}
 }
 
@@ -99,6 +102,11 @@ func (e *ExecutorManagerImpl) removeExecutorImpl(id model.ExecutorID) error {
 			Time: time.Now(),
 		})
 	}
+
+	e.notifier.Notify(model.ExecutorStatusChange{
+		ID: id,
+		Tp: model.EventExecutorOffline,
+	})
 	return nil
 }
 
@@ -150,6 +158,10 @@ func (e *ExecutorManagerImpl) RegisterExec(info *model.NodeInfo) {
 	}
 	e.mu.Lock()
 	e.executors[info.ID] = exec
+	e.notifier.Notify(model.ExecutorStatusChange{
+		ID: info.ID,
+		Tp: model.EventExecutorOnline,
+	})
 	e.mu.Unlock()
 	e.rescMgr.Register(exec.ID, exec.Addr, model.RescUnit(exec.Capability))
 }
@@ -293,7 +305,18 @@ func (e *ExecutorManagerImpl) GetAddr(executorID model.ExecutorID) (string, bool
 // WatchExecutors implements the ExecutorManager interface.
 func (e *ExecutorManagerImpl) WatchExecutors(
 	ctx context.Context,
-) ([]model.ExecutorID, *notifier.Receiver[model.ExecutorStatusChange], error) {
-	// TODO This method will be implemented before we enable local file GC.
-	panic("implement me")
+) (snap []model.ExecutorID, receiver *notifier.Receiver[model.ExecutorStatusChange], err error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	for executorID := range e.executors {
+		snap = append(snap, executorID)
+	}
+
+	if err := e.notifier.Flush(ctx); err != nil {
+		return nil, nil, err
+	}
+
+	receiver = e.notifier.NewReceiver()
+	return
 }

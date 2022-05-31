@@ -320,7 +320,7 @@ func (w *Worker) dispatchSQL(ctx context.Context, file string, offset int64, tab
 		})
 
 		if err2 != nil {
-			w.logger.Error("fail to initial checkpoint", zap.String("data file", file), zap.Int64("offset", offset), log.ShortError(err2))
+			w.logger.Error("fail to initialize checkpoint", zap.String("data file", file), zap.Int64("offset", offset), log.ShortError(err2))
 			return err2
 		}
 	}

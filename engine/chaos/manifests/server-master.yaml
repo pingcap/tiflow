@@ -57,7 +57,7 @@ spec:
             - containerPort: 10239
               name: port-mpeer
           command:
-            - "/df-server-master"
+            - "/df-master"
             - "--name=$(MY_POD_NAME)"
             - "--master-addr=0.0.0.0:10240"
             - "--advertise-addr=$(MY_POD_NAME).server-master.$(MY_POD_NAMESPACE):10240"
@@ -65,6 +65,7 @@ spec:
             - "--advertise-peer-urls=http://$(MY_POD_NAME).server-master.$(MY_POD_NAMESPACE):10239"
             - "--initial-cluster=server-master-0=http://server-master-0.server-master.$(MY_POD_NAMESPACE):10239,server-master-1=http://server-master-1.server-master.$(MY_POD_NAMESPACE):10239,server-master-2=http://server-master-2.server-master.$(MY_POD_NAMESPACE):10239"
             - "--config=/conf/server-master.toml"
+            - "--log-file=/log/$(MY_POD_NAME).log"
   volumeClaimTemplates:
     - metadata:
         name: server-master-data

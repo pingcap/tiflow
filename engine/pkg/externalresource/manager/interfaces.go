@@ -83,5 +83,5 @@ type GCCoordinator interface {
 // GCRunner perform the actual GC operations.
 type GCRunner interface {
 	Run(ctx context.Context) error
-	Notify()
+	GCNotify()
 }
