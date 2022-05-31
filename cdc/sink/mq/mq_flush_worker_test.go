@@ -104,6 +104,7 @@ func TestBatch(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	worker, _ := newTestWorker(ctx)
+	defer worker.closeMsgChan()
 	key := topicPartitionKey{
 		topic:     "test",
 		partition: 1,
@@ -194,16 +195,12 @@ func TestBatch(t *testing.T) {
 				require.NoError(t, err)
 				require.Equal(t, test.expectedN, endIndex)
 			}()
-
+			wg.Add(1)
 			go func() {
+				defer wg.Done()
 				for _, event := range test.events {
 					err := worker.addEvent(ctx, event)
-					if event.row != nil && event.row.CommitTs == math.MaxUint64 {
-						// For unprocessed events, addEvent returns after ctx has been cancelled.
-						require.Regexp(t, ".*context canceled.*", err)
-					} else {
-						require.NoError(t, err)
-					}
+					require.NoError(t, err)
 				}
 			}()
 			wg.Wait()
@@ -229,7 +226,7 @@ func TestGroup(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	worker, _ := newTestWorker(ctx)
-
+	defer worker.msgChan.Close()
 	events := []mqEvent{
 		{
 			row: &model.RowChangedEvent{
@@ -307,6 +304,7 @@ func TestAsyncSend(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	worker, producer := newTestWorker(ctx)
+	defer worker.msgChan.Close()
 	events := []mqEvent{
 		{
 			row: &model.RowChangedEvent{
@@ -378,6 +376,7 @@ func TestFlush(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	worker, producer := newTestWorker(ctx)
+	defer worker.msgChan.Close()
 	flushedChan := make(chan struct{})
 	flushed := atomic.NewBool(false)
 	events := []mqEvent{
@@ -455,6 +454,7 @@ func TestAbort(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	worker, _ := newTestWorker(ctx)
+	defer worker.msgChan.Close()
 
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -474,6 +474,7 @@ func TestProducerError(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	worker, prod := newTestWorker(ctx)
+	defer worker.msgChan.Close()
 
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -484,7 +485,6 @@ func TestProducerError(t *testing.T) {
 		require.Regexp(t, ".*fake.*", err.Error())
 	}()
 
-	prod.InjectError(errors.New("fake"))
 	err := worker.addEvent(ctx, mqEvent{
 		row: &model.RowChangedEvent{
 			CommitTs: 1,
@@ -502,21 +502,8 @@ func TestProducerError(t *testing.T) {
 		flushed:    make(chan struct{}),
 	}})
 	require.NoError(t, err)
+	prod.InjectError(errors.New("fake"))
 	wg.Wait()
-
-	err = worker.addEvent(ctx, mqEvent{flush: &flushEvent{
-		resolvedTs: model.NewResolvedTs(200),
-		flushed:    make(chan struct{}),
-	}})
-	require.Error(t, err)
-	require.Regexp(t, ".*fake.*", err.Error())
-
-	err = worker.addEvent(ctx, mqEvent{flush: &flushEvent{
-		resolvedTs: model.NewResolvedTs(300),
-		flushed:    make(chan struct{}),
-	}})
-	require.Error(t, err)
-	require.Regexp(t, ".*ErrMQWorkerClosed.*", err.Error())
 }
 
 func TestWorker(t *testing.T) {
@@ -525,6 +512,7 @@ func TestWorker(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	worker, producer := newTestWorker(ctx)
+	defer worker.msgChan.Close()
 	go func() {
 		_ = worker.run(ctx)
 	}()

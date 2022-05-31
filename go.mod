@@ -87,6 +87,7 @@ require (
 	go.uber.org/multierr v1.8.0
 	go.uber.org/ratelimit v0.2.0
 	go.uber.org/zap v1.21.0
+	golang.design/x/chann v0.1.2
 	golang.org/x/net v0.0.0-20220516155154-20f960328961
 	golang.org/x/sync v0.0.0-20220513210516-0976fa681c29
 	golang.org/x/sys v0.0.0-20220513210249-45d2b4557a2a
