@@ -46,6 +46,7 @@ type CaptureStatus struct {
 	OwnerRev schedulepb.OwnerRevision
 	Epoch    schedulepb.ProcessorEpoch
 	State    CaptureState
+	Tables   []schedulepb.TableStatus
 }
 
 func newCaptureStatus(rev schedulepb.OwnerRevision) *CaptureStatus {
@@ -71,11 +72,20 @@ func (c *CaptureStatus) handleHeartbeatResponse(
 	if resp.IsStopping {
 		c.State = CaptureStateStopping
 	}
+	c.Tables = resp.Tables
+}
+
+type captureChanges struct {
+	Init    map[model.CaptureID][]schedulepb.TableStatus
+	Removed map[model.CaptureID][]schedulepb.TableStatus
 }
 
 type captureManager struct {
 	OwnerRev schedulepb.OwnerRevision
 	Captures map[model.CaptureID]*CaptureStatus
+
+	initialized bool
+	changes     *captureChanges
 
 	// A logical clock counter, for heartbeat.
 	tickCounter   int
@@ -95,10 +105,23 @@ func (c *captureManager) CaptureTableSets() map[model.CaptureID]*CaptureStatus {
 }
 
 func (c *captureManager) CheckAllCaptureInitialized() bool {
+	if !c.checkAllCaptureInitialized() {
+		return false
+	}
+	if !c.initialized {
+		return false
+	}
+	return true
+}
+
+func (c *captureManager) checkAllCaptureInitialized() bool {
 	for _, captureStatus := range c.Captures {
 		if captureStatus.State == CaptureStateUninitialize {
 			return false
 		}
+	}
+	if len(c.Captures) == 0 {
+		return false
 	}
 	return true
 }
@@ -120,11 +143,9 @@ func (c *captureManager) Tick() []*schedulepb.Message {
 	return msgs
 }
 
-func (c *captureManager) Poll(
-	aliveCaptures map[model.CaptureID]*model.CaptureInfo,
+func (c *captureManager) HandleMessage(
 	msgs []*schedulepb.Message,
-) []*schedulepb.Message {
-	outMsgs := c.onAliveCaptureUpdate(aliveCaptures)
+) {
 	for _, msg := range msgs {
 		if msg.MsgType == schedulepb.MsgHeartbeatResponse {
 			captureStatus, ok := c.Captures[msg.From]
@@ -135,10 +156,9 @@ func (c *captureManager) Poll(
 				msg.GetHeartbeatResponse(), msg.Header.ProcessorEpoch)
 		}
 	}
-	return outMsgs
 }
 
-func (c *captureManager) onAliveCaptureUpdate(
+func (c *captureManager) HandleAliveCaptureUpdate(
 	aliveCaptures map[model.CaptureID]*model.CaptureInfo,
 ) []*schedulepb.Message {
 	msgs := make([]*schedulepb.Message, 0)
@@ -146,7 +166,7 @@ func (c *captureManager) onAliveCaptureUpdate(
 		if _, ok := c.Captures[id]; !ok {
 			// A new capture.
 			c.Captures[id] = newCaptureStatus(c.OwnerRev)
-			log.Info("tpscheduler: find a new capture", zap.String("newCapture", id))
+			log.Info("tpscheduler: find a new capture", zap.String("capture", id))
 			msgs = append(msgs, &schedulepb.Message{
 				To:        id,
 				MsgType:   schedulepb.MsgHeartbeat,
@@ -154,5 +174,45 @@ func (c *captureManager) onAliveCaptureUpdate(
 			})
 		}
 	}
+
+	// Find removed captures.
+	for id, capture := range c.Captures {
+		if _, ok := aliveCaptures[id]; !ok {
+			log.Info("tpscheduler: removed a capture", zap.String("capture", id))
+			delete(c.Captures, id)
+
+			// Only update changes after initializtion.
+			if !c.initialized {
+				continue
+			}
+			if c.changes == nil {
+				c.changes = &captureChanges{}
+			}
+			if c.changes.Removed == nil {
+				c.changes.Removed = make(map[string][]schedulepb.TableStatus)
+			}
+			c.changes.Removed[id] = capture.Tables
+		}
+	}
+
+	// Check if this is the first time all captures are initialized.
+	if !c.initialized && c.checkAllCaptureInitialized() {
+		c.changes = &captureChanges{Init: make(map[string][]schedulepb.TableStatus)}
+		for id, capture := range c.Captures {
+			c.changes.Init[id] = capture.Tables
+		}
+		c.initialized = true
+	}
+
 	return msgs
+}
+
+func (c *captureManager) TakeChanges() *captureChanges {
+	// Only return changes when it's initialized.
+	if !c.initialized {
+		return nil
+	}
+	changes := c.changes
+	c.changes = nil
+	return changes
 }

@@ -35,6 +35,8 @@ import (
 //  ┌────────┐   ┌──────┴──────┐ RemoveTable ┌──────────┐
 //  │ Commit ├──>│ Replicating │────────────>│ Removing │
 //  └────────┘   └─────────────┘             └──────────┘
+//
+// When a capture shutdown unexpectly, we transit the state to Absent immediately.
 type ReplicationSetState int
 
 const (
@@ -199,14 +201,6 @@ func (r *ReplicationSet) checkInvariant(
 	return nil
 }
 
-func (r *ReplicationSet) isUnknownCapture(captureID model.CaptureID) bool {
-	if r.State != ReplicationSetStateAbsent {
-		return false
-	}
-	_, ok := r.Captures[captureID]
-	return !ok
-}
-
 // poll transit replication state based on input and the current state.
 // See ReplicationSetState's comment for the state transition.
 func (r *ReplicationSet) poll(
@@ -215,20 +209,6 @@ func (r *ReplicationSet) poll(
 	err := r.checkInvariant(input, captureID)
 	if err != nil {
 		return nil, errors.Trace(err)
-	}
-
-	if r.isUnknownCapture(captureID) {
-		log.Warn("tpscheduler: unknown capture, ask for stopping",
-			zap.String("captureID", captureID), zap.Any("replicationSet", r))
-		return []*schedulepb.Message{{
-			To:      captureID,
-			MsgType: schedulepb.MsgDispatchTableRequest,
-			DispatchTableRequest: &schedulepb.DispatchTableRequest{
-				Request: &schedulepb.DispatchTableRequest_RemoveTable{
-					RemoveTable: &schedulepb.RemoveTableRequest{TableID: r.TableID},
-				},
-			},
-		}}, nil
 	}
 
 	msgBuf := make([]*schedulepb.Message, 0)
@@ -281,11 +261,13 @@ func (r *ReplicationSet) pollOnAbsent(
 		r.Secondary = captureID
 		return nil, true, nil
 
+	case schedulepb.TableStateStopped:
+		// Ignore stopped table state as a capture may shutdown unexpectedly.
+		return nil, false, nil
 	case schedulepb.TableStatePreparing,
 		schedulepb.TableStatePrepared,
 		schedulepb.TableStateReplicating,
-		schedulepb.TableStateStopping,
-		schedulepb.TableStateStopped:
+		schedulepb.TableStateStopping:
 	}
 	log.Warn("tpscheduler: ignore input, unexpected replication set state",
 		zap.Stringer("tableState", input),
@@ -298,9 +280,7 @@ func (r *ReplicationSet) pollOnPrepare(
 	input *schedulepb.TableStatus, captureID model.CaptureID,
 ) (*schedulepb.Message, bool, error) {
 	switch input.State {
-	case schedulepb.TableStateAbsent,
-		schedulepb.TableStateStopping,
-		schedulepb.TableStateStopped:
+	case schedulepb.TableStateAbsent:
 		if r.Secondary == captureID {
 			return &schedulepb.Message{
 				To:      captureID,
@@ -330,6 +310,35 @@ func (r *ReplicationSet) pollOnPrepare(
 	case schedulepb.TableStateReplicating:
 		if r.Primary == captureID {
 			return nil, false, nil
+		}
+	case schedulepb.TableStateStopping, schedulepb.TableStateStopped:
+		if r.Primary == captureID {
+			// Primary is stopped, but we may still has secondary.
+			// Clear primary and promote secondary when it's prepared.
+			log.Info("tpscheduler: primary is stopped during Prepare",
+				zap.Stringer("tableState", input),
+				zap.String("captureID", captureID),
+				zap.Any("replicationSet", r))
+			r.Primary = ""
+			delete(r.Captures, captureID)
+			return nil, false, nil
+		} else if r.Secondary == captureID {
+			log.Info("tpscheduler: capture is stopped during Prepare",
+				zap.Stringer("tableState", input),
+				zap.String("captureID", captureID),
+				zap.Any("replicationSet", r))
+			r.Secondary = ""
+			delete(r.Captures, captureID)
+			if r.Primary != "" {
+				// Secondary is stopped, and we still has primary.
+				// Transit to Replicating.
+				r.State = ReplicationSetStateReplicating
+			} else {
+				// Secondary is stopped, and we do not has primary.
+				// Transit to Absent.
+				r.State = ReplicationSetStateAbsent
+			}
+			return nil, true, nil
 		}
 	}
 	log.Warn("tpscheduler: ignore input, unexpected replication set state",
@@ -381,9 +390,20 @@ func (r *ReplicationSet) pollOnCommit(
 			}, false, nil
 		}
 	case schedulepb.TableStateStopped, schedulepb.TableStateAbsent:
-		if r.Primary == captureID && r.Secondary != "" {
-			// Primary is stopped, promote secondary to primary.
+		if r.Primary == captureID {
 			original := r.Primary
+			delete(r.Captures, r.Primary)
+			r.Primary = ""
+			if r.Secondary == "" {
+				// If there is no secondary, transit to Absent.
+				log.Info("tpscheduler: primary is stopped during Commit",
+					zap.Stringer("tableState", input),
+					zap.String("captureID", captureID),
+					zap.Any("replicationSet", r))
+				r.State = ReplicationSetStateAbsent
+				return nil, true, nil
+			}
+			// Primary is stopped, promote secondary to primary.
 			r.Primary = r.Secondary
 			r.Secondary = ""
 			log.Info("tpscheduler: replication state promote secondary",
@@ -403,6 +423,17 @@ func (r *ReplicationSet) pollOnCommit(
 					},
 				},
 			}, false, nil
+		} else if r.Secondary == captureID {
+			// As it sends RemoveTableRequest to the original primary
+			// upon entering Commit state. Do not change state and wait
+			// the original primary reports its table.
+			log.Info("tpscheduler: secondary is stopped during Commit",
+				zap.Stringer("tableState", input),
+				zap.String("captureID", captureID),
+				zap.Any("replicationSet", r))
+			delete(r.Captures, r.Secondary)
+			r.Secondary = ""
+			return nil, true, nil
 		}
 
 	case schedulepb.TableStateReplicating:
@@ -419,11 +450,18 @@ func (r *ReplicationSet) pollOnCommit(
 			}, false, nil
 		}
 		if r.Secondary == "" && r.Primary == captureID {
-			// New primary is replicating, transit to Replicating.
-			if r.State != ReplicationSetStateReplicating {
-				r.State = ReplicationSetStateReplicating
-				return nil, true, nil
-			}
+			// There are three cases,
+			// 1. Secondary has promoted to primary, and the new primary is
+			//    replicating, transit to Replicating.
+			// 2. Secondary has shutdown during Commit, the original primary
+			//    does not receives RemoveTable request and continues to
+			//    replicate, transit to Replicating.
+			// 3. Secondary has shutdown during Commit, we receives a message
+			//    before the original primary receives RemoveTable request.
+			//    Transit to Replicating, and wait for the next table state of
+			//    the primary, Stopping or Stopped.
+			r.State = ReplicationSetStateReplicating
+			return nil, true, nil
 		}
 		return nil, false, r.multiplePrimaryError(
 			input, captureID, "tpscheduler: multiple primary")
@@ -457,6 +495,18 @@ func (r *ReplicationSet) pollOnReplicating(
 	case schedulepb.TableStatePrepared:
 	case schedulepb.TableStateStopping:
 	case schedulepb.TableStateStopped:
+		if r.Primary == captureID {
+			// Primary is stopped, but we still has secondary.
+			// Clear primary and promote secondary when it's prepared.
+			log.Info("tpscheduler: primary is stopped during Replicating",
+				zap.Stringer("tableState", input),
+				zap.String("captureID", captureID),
+				zap.Any("replicationSet", r))
+			r.Primary = ""
+			delete(r.Captures, captureID)
+			r.State = ReplicationSetStateAbsent
+			return nil, true, nil
+		}
 	}
 	log.Warn("tpscheduler: ignore input, unexpected replication set state",
 		zap.Stringer("tableState", input),
@@ -469,8 +519,7 @@ func (r *ReplicationSet) pollOnRemoving(
 	input *schedulepb.TableStatus, captureID model.CaptureID,
 ) (*schedulepb.Message, bool, error) {
 	switch input.State {
-	case schedulepb.TableStateAbsent,
-		schedulepb.TableStatePreparing,
+	case schedulepb.TableStatePreparing,
 		schedulepb.TableStatePrepared,
 		schedulepb.TableStateReplicating:
 		return &schedulepb.Message{
@@ -482,7 +531,7 @@ func (r *ReplicationSet) pollOnRemoving(
 				},
 			},
 		}, false, nil
-	case schedulepb.TableStateStopped:
+	case schedulepb.TableStateAbsent, schedulepb.TableStateStopped:
 		if r.Primary == captureID {
 			r.Primary = ""
 		} else if r.Secondary == captureID {
@@ -589,4 +638,19 @@ func (r *ReplicationSet) hasRemoved() bool {
 	// It has been removed successfully if it's state is Removing,
 	// and there is no capture has it.
 	return r.State == ReplicationSetStateRemoving && len(r.Captures) == 0
+}
+
+func (r *ReplicationSet) handleCaptureShutdown(
+	captureID model.CaptureID,
+) ([]*schedulepb.Message, error) {
+	_, ok := r.Captures[captureID]
+	if !ok {
+		return nil, nil
+	}
+	// The capture has shutdown, the table has stopped.
+	status := schedulepb.TableStatus{
+		TableID: r.TableID,
+		State:   schedulepb.TableStateStopped,
+	}
+	return r.poll(&status, captureID)
 }
