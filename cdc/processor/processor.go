@@ -372,7 +372,7 @@ func (p *processor) GetTableMeta(tableID model.TableID) pipeline.TableMeta {
 		return pipeline.TableMeta{
 			CheckpointTs: 0,
 			ResolvedTs:   0,
-			Status:       pipeline.TableStateStopped,
+			Status:       pipeline.TableStateAbsent,
 		}
 	}
 	return pipeline.TableMeta{
