@@ -77,7 +77,6 @@ func TestAgentCollectTableStatus(t *testing.T) {
 	a.runningTasks[model.TableID(0)] = &dispatchTableTask{IsRemove: true}
 	status := a.newTableStatus(model.TableID(0))
 	require.Equal(t, schedulepb.TableStateStopping, status.State)
-
 }
 
 func TestAgentHandleDispatchTableTask(t *testing.T) {
@@ -221,13 +220,13 @@ func TestAgentHandleMessageStopping(t *testing.T) {
 				AddTable: &schedulepb.AddTableRequest{
 					TableID:     1,
 					IsSecondary: true,
-					Checkpoint:  &schedulepb.Checkpoint{},
 				},
 			},
 		},
 	}
 	// add table request should not be handled, so the running task count is 0.
 	response = a.handleMessage([]*schedulepb.Message{addTableRequest})
+	require.Len(t, response, 0)
 	require.Len(t, a.runningTasks, 0)
 
 	// mock agent have running task before stopping but processed yet.
@@ -288,7 +287,7 @@ func TestAgentHandleMessage(t *testing.T) {
 				AddTable: &schedulepb.AddTableRequest{
 					TableID:     1,
 					IsSecondary: true,
-					Checkpoint:  &schedulepb.Checkpoint{},
+					Checkpoint:  schedulepb.Checkpoint{},
 				},
 			},
 		},
@@ -392,7 +391,7 @@ func TestAgentTick(t *testing.T) {
 				AddTable: &schedulepb.AddTableRequest{
 					TableID:     1,
 					IsSecondary: true,
-					Checkpoint:  &schedulepb.Checkpoint{},
+					Checkpoint:  schedulepb.Checkpoint{},
 				},
 			},
 		},
