@@ -501,19 +501,9 @@ error = '''
 MQ Codec invalid config
 '''
 
-["CDC:ErrMQFlushBufferClosed"]
-error = '''
-MQ resolved ts flush buffer has closed
-'''
-
 ["CDC:ErrMQSinkUnknownProtocol"]
 error = '''
 unknown '%s' protocol for Message Queue sink
-'''
-
-["CDC:ErrMQWorkerClosed"]
-error = '''
-MQ worker has closed
 '''
 
 ["CDC:ErrMailboxFull"]
