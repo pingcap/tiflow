@@ -14,14 +14,10 @@
 package kvclient
 
 import (
-	"context"
-	"time"
-
 	"github.com/pingcap/tiflow/engine/pkg/meta/extension"
 	"github.com/pingcap/tiflow/engine/pkg/meta/kvclient/etcdkv"
 	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
 	"github.com/pingcap/tiflow/engine/pkg/meta/namespace"
-	"github.com/pingcap/tiflow/engine/pkg/tenant"
 )
 
 // etcdKVClient is the implement of kv interface based on etcd
@@ -46,23 +42,4 @@ func NewPrefixKVClient(cli extension.KVClientEx, tenantID string) metaclient.KVC
 // NewKVClient return a kvclient without namespace for inner use
 func NewKVClient(conf *metaclient.StoreConfigParams) (extension.KVClientEx, error) {
 	return etcdkv.NewEtcdImpl(conf)
-}
-
-// CheckAccessForMetaStore check the connectivity of the specify metastore
-func CheckAccessForMetaStore(conf *metaclient.StoreConfigParams) error {
-	cliEx, err := NewKVClient(conf)
-	if err != nil {
-		return err
-	}
-	defer cliEx.Close()
-
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
-	cli := NewPrefixKVClient(cliEx, tenant.TestTenantID)
-	_, err = cli.Put(ctx, "test_key", "test_value")
-	if err != nil {
-		return err
-	}
-
-	return nil
 }
