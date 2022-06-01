@@ -108,6 +108,7 @@ func (jm *JobManagerImplV2) PauseJob(ctx context.Context, req *pb.PauseJobReques
 }
 
 // CancelJob implements proto/Master.CancelJob
+// TODO: Add Project delete logic in 'stop job'
 func (jm *JobManagerImplV2) CancelJob(ctx context.Context, req *pb.CancelJobRequest) *pb.CancelJobResponse {
 	// This is a draft implementation.
 	// TODO:
