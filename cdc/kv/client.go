@@ -1286,12 +1286,11 @@ func (s *eventFeedSession) sendRegionChangeEvents(
 	}
 
 	for _, event := range events {
-		state, ok := worker.getRegionState(event.RegionId)
+		state, valid := worker.getRegionState(event.RegionId)
 		// Every region's range is locked before sending requests and unlocked after exiting, and the requestID
 		// is allocated while holding the range lock. Therefore the requestID is always incrementing. If a region
 		// is receiving messages with different requestID, only the messages with the larges requestID is valid.
-		isNewSubscription := !ok
-		if ok {
+		if valid {
 			if state.requestID < event.RequestId {
 				log.Debug("region state entry will be replaced because received message of newer requestID",
 					zap.String("namespace", s.client.changefeed.Namespace),
@@ -1300,7 +1299,7 @@ func (s *eventFeedSession) sendRegionChangeEvents(
 					zap.Uint64("oldRequestID", state.requestID),
 					zap.Uint64("requestID", event.RequestId),
 					zap.String("addr", addr))
-				isNewSubscription = true
+				valid = false
 			} else if state.requestID > event.RequestId {
 				log.Warn("drop event due to event belongs to a stale request",
 					zap.String("namespace", s.client.changefeed.Namespace),
@@ -1313,13 +1312,13 @@ func (s *eventFeedSession) sendRegionChangeEvents(
 			}
 		}
 
-		if isNewSubscription {
+		if !valid {
 			// It's the first response for this region. If the region is newly connected, the region info should
 			// have been put in `pendingRegions`. So here we load the region info from `pendingRegions` and start
 			// a new goroutine to handle messages from this region.
 			// Firstly load the region info.
-			state, ok = pendingRegions.take(event.RequestId)
-			if !ok {
+			state, valid = pendingRegions.take(event.RequestId)
+			if !valid {
 				log.Warn("drop event due to region feed is removed",
 					zap.String("namespace", s.client.changefeed.Namespace),
 					zap.String("changefeed", s.client.changefeed.ID),
