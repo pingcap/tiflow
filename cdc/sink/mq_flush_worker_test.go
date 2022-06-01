@@ -95,7 +95,19 @@ func newTestWorker() (*flushWorker, *mockProducer) {
 func TestBatch(t *testing.T) {
 	t.Parallel()
 
+<<<<<<< HEAD:cdc/sink/mq_flush_worker_test.go
 	worker, _ := newTestWorker()
+=======
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	worker, _ := newTestWorker(ctx)
+	defer worker.close()
+	key := topicPartitionKey{
+		topic:     "test",
+		partition: 1,
+	}
+
+>>>>>>> 2b758b1a3 (sink/mq(ticdc): make EmitCheckpointTs and FlushRowChangedEvents non-blocking (#5675)):cdc/sink/mq/mq_flush_worker_test.go
 	tests := []struct {
 		name      string
 		events    []mqEvent
@@ -174,10 +186,15 @@ func TestBatch(t *testing.T) {
 				require.NoError(t, err)
 				require.Equal(t, test.expectedN, endIndex)
 			}()
-
+			wg.Add(1)
 			go func() {
+				defer wg.Done()
 				for _, event := range test.events {
+<<<<<<< HEAD:cdc/sink/mq_flush_worker_test.go
 					err := worker.addEvent(context.Background(), event)
+=======
+					err := worker.addEvent(ctx, event)
+>>>>>>> 2b758b1a3 (sink/mq(ticdc): make EmitCheckpointTs and FlushRowChangedEvents non-blocking (#5675)):cdc/sink/mq/mq_flush_worker_test.go
 					require.NoError(t, err)
 				}
 			}()
@@ -189,7 +206,26 @@ func TestBatch(t *testing.T) {
 func TestGroup(t *testing.T) {
 	t.Parallel()
 
+<<<<<<< HEAD:cdc/sink/mq_flush_worker_test.go
 	worker, _ := newTestWorker()
+=======
+	key1 := topicPartitionKey{
+		topic:     "test",
+		partition: 1,
+	}
+	key2 := topicPartitionKey{
+		topic:     "test",
+		partition: 2,
+	}
+	key3 := topicPartitionKey{
+		topic:     "test1",
+		partition: 2,
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	worker, _ := newTestWorker(ctx)
+	defer worker.close()
+>>>>>>> 2b758b1a3 (sink/mq(ticdc): make EmitCheckpointTs and FlushRowChangedEvents non-blocking (#5675)):cdc/sink/mq/mq_flush_worker_test.go
 	events := []mqEvent{
 		{
 			row: &model.RowChangedEvent{
@@ -240,7 +276,29 @@ func TestGroup(t *testing.T) {
 func TestAsyncSend(t *testing.T) {
 	t.Parallel()
 
+<<<<<<< HEAD:cdc/sink/mq_flush_worker_test.go
 	worker, producer := newTestWorker()
+=======
+	key1 := topicPartitionKey{
+		topic:     "test",
+		partition: 1,
+	}
+
+	key2 := topicPartitionKey{
+		topic:     "test",
+		partition: 2,
+	}
+
+	key3 := topicPartitionKey{
+		topic:     "test",
+		partition: 3,
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	worker, producer := newTestWorker(ctx)
+	defer worker.close()
+>>>>>>> 2b758b1a3 (sink/mq(ticdc): make EmitCheckpointTs and FlushRowChangedEvents non-blocking (#5675)):cdc/sink/mq/mq_flush_worker_test.go
 	events := []mqEvent{
 		{
 			row: &model.RowChangedEvent{
@@ -304,7 +362,21 @@ func TestAsyncSend(t *testing.T) {
 func TestFlush(t *testing.T) {
 	t.Parallel()
 
+<<<<<<< HEAD:cdc/sink/mq_flush_worker_test.go
 	worker, producer := newTestWorker()
+=======
+	key1 := topicPartitionKey{
+		topic:     "test",
+		partition: 1,
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	worker, producer := newTestWorker(ctx)
+	defer worker.close()
+	flushedChan := make(chan struct{})
+	flushed := atomic.NewBool(false)
+>>>>>>> 2b758b1a3 (sink/mq(ticdc): make EmitCheckpointTs and FlushRowChangedEvents non-blocking (#5675)):cdc/sink/mq/mq_flush_worker_test.go
 	events := []mqEvent{
 		{
 			row: &model.RowChangedEvent{
@@ -366,6 +438,11 @@ func TestAbort(t *testing.T) {
 
 	worker, _ := newTestWorker()
 	ctx, cancel := context.WithCancel(context.Background())
+<<<<<<< HEAD:cdc/sink/mq_flush_worker_test.go
+=======
+	worker, _ := newTestWorker(ctx)
+	defer worker.close()
+>>>>>>> 2b758b1a3 (sink/mq(ticdc): make EmitCheckpointTs and FlushRowChangedEvents non-blocking (#5675)):cdc/sink/mq/mq_flush_worker_test.go
 
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -385,6 +462,11 @@ func TestProducerError(t *testing.T) {
 	worker, prod := newTestWorker()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+<<<<<<< HEAD:cdc/sink/mq_flush_worker_test.go
+=======
+	worker, prod := newTestWorker(ctx)
+	defer worker.close()
+>>>>>>> 2b758b1a3 (sink/mq(ticdc): make EmitCheckpointTs and FlushRowChangedEvents non-blocking (#5675)):cdc/sink/mq/mq_flush_worker_test.go
 
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -395,7 +477,6 @@ func TestProducerError(t *testing.T) {
 		require.Regexp(t, ".*fake.*", err.Error())
 	}()
 
-	prod.InjectError(errors.New("fake"))
 	err := worker.addEvent(ctx, mqEvent{
 		row: &model.RowChangedEvent{
 			CommitTs: 1,
@@ -407,7 +488,9 @@ func TestProducerError(t *testing.T) {
 	require.NoError(t, err)
 	err = worker.addEvent(ctx, mqEvent{resolvedTs: 100})
 	require.NoError(t, err)
+	prod.InjectError(errors.New("fake"))
 	wg.Wait()
+<<<<<<< HEAD:cdc/sink/mq_flush_worker_test.go
 
 	err = worker.addEvent(ctx, mqEvent{resolvedTs: 200})
 	require.Error(t, err)
@@ -417,3 +500,83 @@ func TestProducerError(t *testing.T) {
 	require.Error(t, err)
 	require.Regexp(t, ".*ErrMQWorkerClosed.*", err.Error())
 }
+=======
+}
+
+func TestWorker(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	worker, producer := newTestWorker(ctx)
+	defer worker.close()
+	go func() {
+		_ = worker.run(ctx)
+	}()
+
+	err := worker.addEvent(ctx, mqEvent{
+		row: &model.RowChangedEvent{
+			CommitTs: 1,
+			Table:    &model.TableName{Schema: "a", Table: "b"},
+			Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
+		},
+		key: topicPartitionKey{
+			topic:     "test",
+			partition: 1,
+		},
+	})
+	require.NoError(t, err)
+	err = worker.addEvent(ctx, mqEvent{
+		row: &model.RowChangedEvent{
+			CommitTs: 300,
+			Table:    &model.TableName{Schema: "a", Table: "b"},
+			Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
+		},
+		key: topicPartitionKey{
+			topic:     "test",
+			partition: 1,
+		},
+	})
+	require.NoError(t, err)
+	var wg sync.WaitGroup
+
+	flushedChan1 := make(chan struct{})
+	flushed1 := atomic.NewBool(false)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		select {
+		case <-flushedChan1:
+			flushed1.Store(true)
+		}
+	}()
+	err = worker.addEvent(ctx, mqEvent{flush: &flushEvent{
+		resolvedTs: model.NewResolvedTs(100),
+		flushed:    flushedChan1,
+	}})
+	require.NoError(t, err)
+
+	flushedChan2 := make(chan struct{})
+	flushed2 := atomic.NewBool(false)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		select {
+		case <-flushedChan2:
+			flushed2.Store(true)
+		}
+	}()
+	err = worker.addEvent(ctx, mqEvent{flush: &flushEvent{
+		resolvedTs: model.NewResolvedTs(200),
+		flushed:    flushedChan2,
+	}})
+	require.NoError(t, err)
+
+	wg.Wait()
+
+	// Make sure we don't get a block even if we flush multiple times.
+	require.Equal(t, 2, producer.flushedTimes)
+	require.True(t, flushed1.Load())
+	require.True(t, flushed2.Load())
+}
+>>>>>>> 2b758b1a3 (sink/mq(ticdc): make EmitCheckpointTs and FlushRowChangedEvents non-blocking (#5675)):cdc/sink/mq/mq_flush_worker_test.go

@@ -20,9 +20,16 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+<<<<<<< HEAD:cdc/sink/mq_flush_worker.go
 	"github.com/pingcap/tiflow/cdc/sink/codec"
 	"github.com/pingcap/tiflow/cdc/sink/producer"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+=======
+	"github.com/pingcap/tiflow/cdc/sink/metrics"
+	"github.com/pingcap/tiflow/cdc/sink/mq/codec"
+	"github.com/pingcap/tiflow/cdc/sink/mq/producer"
+	"github.com/pingcap/tiflow/pkg/chann"
+>>>>>>> 2b758b1a3 (sink/mq(ticdc): make EmitCheckpointTs and FlushRowChangedEvents non-blocking (#5675)):cdc/sink/mq/mq_flush_worker.go
 	"go.uber.org/zap"
 )
 
@@ -44,15 +51,17 @@ type mqEvent struct {
 
 // flushWorker is responsible for sending messages to the Kafka producer on a batch basis.
 type flushWorker struct {
+<<<<<<< HEAD:cdc/sink/mq_flush_worker.go
 	msgChan       chan mqEvent
 	ticker        *time.Ticker
 	needSyncFlush bool
-
-	// errCh is used to store one error if `run` exits unexpectedly.
-	// After sending an error to errCh, errCh must be closed so that
-	// subsequent callers to addEvent will always know that the flushWorker
-	// is NOT running normally.
-	errCh chan error
+=======
+	msgChan *chann.Chann[mqEvent]
+	ticker  *time.Ticker
+	// needsFlush is used to indicate whether the flush worker needs to flush the messages.
+	// It is also used to notify that the flush has completed.
+	needsFlush chan<- struct{}
+>>>>>>> 2b758b1a3 (sink/mq(ticdc): make EmitCheckpointTs and FlushRowChangedEvents non-blocking (#5675)):cdc/sink/mq/mq_flush_worker.go
 
 	encoder    codec.EventBatchEncoder
 	producer   producer.Producer
@@ -62,11 +71,8 @@ type flushWorker struct {
 // newFlushWorker creates a new flush worker.
 func newFlushWorker(encoder codec.EventBatchEncoder, producer producer.Producer, statistics *Statistics) *flushWorker {
 	w := &flushWorker{
-		msgChan: make(chan mqEvent),
-		ticker:  time.NewTicker(flushInterval),
-		// errCh must be a buffered channel, or otherwise sending error to it will
-		// almost certainly go to the default branch, making errCh useless.
-		errCh:      make(chan error, 1),
+		msgChan:    chann.New[mqEvent](),
+		ticker:     time.NewTicker(flushInterval),
 		encoder:    encoder,
 		producer:   producer,
 		statistics: statistics,
@@ -85,8 +91,17 @@ func (w *flushWorker) batch(
 	select {
 	case <-ctx.Done():
 		return index, ctx.Err()
+<<<<<<< HEAD:cdc/sink/mq_flush_worker.go
 	case msg := <-w.msgChan:
 		// When the resolved ts is received,
+=======
+	case msg, ok := <-w.msgChan.Out():
+		if !ok {
+			log.Warn("MQ sink flush worker channel closed")
+			return index, nil
+		}
+		// When the flush event is received,
+>>>>>>> 2b758b1a3 (sink/mq(ticdc): make EmitCheckpointTs and FlushRowChangedEvents non-blocking (#5675)):cdc/sink/mq/mq_flush_worker.go
 		// we need to write the previous data to the producer as soon as possible.
 		if msg.resolvedTs != 0 {
 			w.needSyncFlush = true
@@ -105,9 +120,21 @@ func (w *flushWorker) batch(
 		select {
 		case <-ctx.Done():
 			return index, ctx.Err()
+<<<<<<< HEAD:cdc/sink/mq_flush_worker.go
 		case msg := <-w.msgChan:
 			if msg.resolvedTs != 0 {
 				w.needSyncFlush = true
+=======
+		case msg, ok := <-w.msgChan.Out():
+			if !ok {
+				log.Warn("MQ sink flush worker channel closed")
+				return index, nil
+			}
+			// When the flush event is received,
+			// we need to write the previous data to the producer as soon as possible.
+			if msg.flush != nil {
+				w.needsFlush = msg.flush.flushed
+>>>>>>> 2b758b1a3 (sink/mq(ticdc): make EmitCheckpointTs and FlushRowChangedEvents non-blocking (#5675)):cdc/sink/mq/mq_flush_worker.go
 				return index, nil
 			}
 
@@ -184,9 +211,6 @@ func (w *flushWorker) asyncSend(
 // until it encounters an error or is interrupted.
 func (w *flushWorker) run(ctx context.Context) (retErr error) {
 	defer func() {
-		// Note that errCh is sent to exactly once.
-		w.errCh <- retErr
-		close(w.errCh)
 		// TODO: log changefeed ID here
 		log.Info("flushWorker exited", zap.Error(retErr))
 	}()
@@ -210,17 +234,39 @@ func (w *flushWorker) run(ctx context.Context) (retErr error) {
 }
 
 // addEvent is used to add one event to the flushWorker.
-// It will return an ErrMQWorkerClosed if the flushWorker has exited.
 func (w *flushWorker) addEvent(ctx context.Context, event mqEvent) error {
 	select {
 	case <-ctx.Done():
 		return errors.Trace(ctx.Err())
-	case err, ok := <-w.errCh:
-		if !ok {
-			return cerror.ErrMQWorkerClosed.GenWithStackByArgs()
-		}
-		return err
-	case w.msgChan <- event:
+	case w.msgChan.In() <- event:
 		return nil
 	}
 }
+<<<<<<< HEAD:cdc/sink/mq_flush_worker.go
+=======
+
+// flushAndNotify is used to flush all events
+// and notify the mqSink that all events has been flushed.
+func (w *flushWorker) flushAndNotify(ctx context.Context) error {
+	start := time.Now()
+	err := w.producer.Flush(ctx)
+	if err != nil {
+		return err
+	}
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case w.needsFlush <- struct{}{}:
+		close(w.needsFlush)
+		// NOTICE: Do not forget to reset the needsFlush.
+		w.needsFlush = nil
+		log.Debug("flush worker flushed", zap.Duration("duration", time.Since(start)))
+	}
+
+	return nil
+}
+
+func (w *flushWorker) close() {
+	w.msgChan.Close()
+}
+>>>>>>> 2b758b1a3 (sink/mq(ticdc): make EmitCheckpointTs and FlushRowChangedEvents non-blocking (#5675)):cdc/sink/mq/mq_flush_worker.go

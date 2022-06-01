@@ -102,10 +102,24 @@ func (s mqSinkSuite) TestKafkaSink(c *check.C) {
 	c.Assert(checkpointTs, check.Equals, uint64(120))
 
 	// mock kafka broker processes 1 checkpoint ts event
+<<<<<<< HEAD:cdc/sink/mq_test.go
 	leader.Returns(prodSuccess)
 	// TODO(hi-rustin): fix it after topic manager is ready.
 	err = sink.EmitCheckpointTs(ctx, uint64(120), nil)
 	c.Assert(err, check.IsNil)
+=======
+	err = sink.EmitCheckpointTs(ctx, uint64(120), []model.TableName{{
+		Schema: "test",
+		Table:  "t1",
+	}})
+	require.Nil(t, err)
+	defer func() {
+		err = sink.Close(ctx)
+		if err != nil {
+			require.Equal(t, context.Canceled, errors.Cause(err))
+		}
+	}()
+>>>>>>> 2b758b1a3 (sink/mq(ticdc): make EmitCheckpointTs and FlushRowChangedEvents non-blocking (#5675)):cdc/sink/mq/mq_test.go
 
 	// mock kafka broker processes 1 ddl event
 	leader.Returns(prodSuccess)
@@ -134,20 +148,27 @@ func (s mqSinkSuite) TestKafkaSink(c *check.C) {
 	if err != nil {
 		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 	}
+<<<<<<< HEAD:cdc/sink/mq_test.go
 
 	err = sink.Close(ctx)
 	if err != nil {
 		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 	}
+=======
+>>>>>>> 2b758b1a3 (sink/mq(ticdc): make EmitCheckpointTs and FlushRowChangedEvents non-blocking (#5675)):cdc/sink/mq/mq_test.go
 }
 
 func (s mqSinkSuite) TestKafkaSinkFilter(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx, cancel := context.WithCancel(context.Background())
+<<<<<<< HEAD:cdc/sink/mq_test.go
 	defer cancel()
 
 	topic := kafka.DefaultMockTopicName
 	leader := sarama.NewMockBroker(c, 1)
+=======
+	leader, topic := initBroker(t, kafka.DefaultMockPartitionNum)
+>>>>>>> 2b758b1a3 (sink/mq(ticdc): make EmitCheckpointTs and FlushRowChangedEvents non-blocking (#5675)):cdc/sink/mq/mq_test.go
 	defer leader.Close()
 	metadataResponse := new(sarama.MetadataResponse)
 	metadataResponse.AddBroker(leader.Addr(), leader.BrokerID())
@@ -203,6 +224,7 @@ func (s mqSinkSuite) TestKafkaSinkFilter(c *check.C) {
 	err = sink.EmitDDLEvent(ctx, ddl)
 	c.Assert(cerror.ErrDDLEventIgnored.Equal(err), check.IsTrue)
 
+	cancel()
 	err = sink.Close(ctx)
 	if err != nil {
 		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
@@ -212,7 +234,6 @@ func (s mqSinkSuite) TestKafkaSinkFilter(c *check.C) {
 func (s mqSinkSuite) TestPulsarSinkEncoderConfig(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	err := failpoint.Enable("github.com/pingcap/tiflow/cdc/sink/producer/pulsar/MockPulsar", "return(true)")
 	c.Assert(err, check.IsNil)
@@ -232,15 +253,27 @@ func (s mqSinkSuite) TestPulsarSinkEncoderConfig(c *check.C) {
 	c.Assert(err, check.IsNil)
 
 	encoder := sink.encoderBuilder.Build()
+<<<<<<< HEAD:cdc/sink/mq_test.go
 	c.Assert(encoder, check.FitsTypeOf, &codec.JSONEventBatchEncoder{})
 	c.Assert(encoder.(*codec.JSONEventBatchEncoder).GetMaxBatchSize(), check.Equals, 1)
 	c.Assert(encoder.(*codec.JSONEventBatchEncoder).GetMaxMessageBytes(), check.Equals, 4194304)
+=======
+	require.IsType(t, &codec.JSONEventBatchEncoder{}, encoder)
+	require.Equal(t, 1, encoder.(*codec.JSONEventBatchEncoder).GetMaxBatchSize())
+	require.Equal(t, 4194304, encoder.(*codec.JSONEventBatchEncoder).GetMaxMessageBytes())
+
+	// FIXME: mock pulsar client doesn't support close,
+	// so we can't call sink.Close() to close it.
+	// We will leak goroutine if we don't close it.
+	cancel()
+	sink.flushWorker.close()
+	sink.resolvedBuffer.Close()
+>>>>>>> 2b758b1a3 (sink/mq(ticdc): make EmitCheckpointTs and FlushRowChangedEvents non-blocking (#5675)):cdc/sink/mq/mq_test.go
 }
 
 func (s mqSinkSuite) TestFlushRowChangedEvents(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	topic := kafka.DefaultMockTopicName
 	leader := sarama.NewMockBroker(c, 1)
@@ -339,6 +372,7 @@ func (s mqSinkSuite) TestFlushRowChangedEvents(c *check.C) {
 	c.Assert(err, check.IsNil)
 	c.Assert(checkpointTsOld, check.Equals, row1.CommitTs)
 
+	cancel()
 	err = sink.Close(ctx)
 	if err != nil {
 		c.Assert(errors.Cause(err), check.Equals, context.Canceled)

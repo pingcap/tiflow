@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+<<<<<<< HEAD:cdc/sink/mq.go
 	"github.com/pingcap/tiflow/cdc/sink/codec"
 	"github.com/pingcap/tiflow/cdc/sink/dispatcher"
 	"github.com/pingcap/tiflow/cdc/sink/manager"
@@ -31,6 +32,16 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/producer"
 	"github.com/pingcap/tiflow/cdc/sink/producer/kafka"
 	"github.com/pingcap/tiflow/cdc/sink/producer/pulsar"
+=======
+	"github.com/pingcap/tiflow/cdc/sink/metrics"
+	"github.com/pingcap/tiflow/cdc/sink/mq/codec"
+	"github.com/pingcap/tiflow/cdc/sink/mq/dispatcher"
+	"github.com/pingcap/tiflow/cdc/sink/mq/manager"
+	"github.com/pingcap/tiflow/cdc/sink/mq/producer"
+	"github.com/pingcap/tiflow/cdc/sink/mq/producer/kafka"
+	"github.com/pingcap/tiflow/cdc/sink/mq/producer/pulsar"
+	"github.com/pingcap/tiflow/pkg/chann"
+>>>>>>> 2b758b1a3 (sink/mq(ticdc): make EmitCheckpointTs and FlushRowChangedEvents non-blocking (#5675)):cdc/sink/mq/mq.go
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
@@ -45,6 +56,7 @@ type resolvedTsEvent struct {
 	resolvedTs model.Ts
 }
 
+<<<<<<< HEAD:cdc/sink/mq.go
 const (
 	// Depend on this size, `resolvedBuffer` will take
 	// approximately 2 KiB memory.
@@ -53,6 +65,8 @@ const (
 	defaultDDLDispatchPartition = -1
 )
 
+=======
+>>>>>>> 2b758b1a3 (sink/mq(ticdc): make EmitCheckpointTs and FlushRowChangedEvents non-blocking (#5675)):cdc/sink/mq/mq.go
 type mqSink struct {
 	mqProducer     producer.Producer
 	eventRouter    *dispatcher.EventRouter
@@ -63,7 +77,7 @@ type mqSink struct {
 	topicManager         manager.TopicManager
 	flushWorker          *flushWorker
 	tableCheckpointTsMap sync.Map
-	resolvedBuffer       chan resolvedTsEvent
+	resolvedBuffer       *chann.Chann[resolvedTsEvent]
 
 	statistics *Statistics
 
@@ -109,7 +123,7 @@ func newMqSink(
 		protocol:       encoderConfig.Protocol(),
 		topicManager:   topicManager,
 		flushWorker:    flushWorker,
-		resolvedBuffer: make(chan resolvedTsEvent, defaultResolvedTsEventBufferSize),
+		resolvedBuffer: chann.New[resolvedTsEvent](),
 		statistics:     statistics,
 		role:           role,
 		id:             changefeedID,
@@ -180,9 +194,15 @@ func (k *mqSink) FlushRowChangedEvents(ctx context.Context, tableID model.TableI
 	select {
 	case <-ctx.Done():
 		return 0, ctx.Err()
+<<<<<<< HEAD:cdc/sink/mq.go
 	case k.resolvedBuffer <- resolvedTsEvent{
 		tableID:    tableID,
 		resolvedTs: resolvedTs,
+=======
+	case k.resolvedBuffer.In() <- resolvedTsEvent{
+		tableID:  tableID,
+		resolved: model.NewResolvedTs(resolved.Ts),
+>>>>>>> 2b758b1a3 (sink/mq(ticdc): make EmitCheckpointTs and FlushRowChangedEvents non-blocking (#5675)):cdc/sink/mq/mq.go
 	}:
 	}
 	k.statistics.PrintStatus(ctx)
@@ -195,9 +215,22 @@ func (k *mqSink) bgFlushTs(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			return errors.Trace(ctx.Err())
+<<<<<<< HEAD:cdc/sink/mq.go
 		case msg := <-k.resolvedBuffer:
 			resolvedTs := msg.resolvedTs
 			err := k.flushTsToWorker(ctx, resolvedTs)
+=======
+		case msg, ok := <-k.resolvedBuffer.Out():
+			if !ok {
+				log.Warn("resolved ts buffer is closed",
+					zap.String("namespace", k.id.Namespace),
+					zap.String("changefeed", k.id.ID),
+					zap.Any("role", k.role))
+				return nil
+			}
+			resolved := msg.resolved
+			err := k.flushTsToWorker(ctx, resolved)
+>>>>>>> 2b758b1a3 (sink/mq(ticdc): make EmitCheckpointTs and FlushRowChangedEvents non-blocking (#5675)):cdc/sink/mq/mq.go
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -276,9 +309,22 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 	return errors.Trace(err)
 }
 
+<<<<<<< HEAD:cdc/sink/mq.go
 func (k *mqSink) Close(ctx context.Context) error {
 	err := k.mqProducer.Close()
 	return errors.Trace(err)
+=======
+// Close closes the sink.
+// It is only called in the processor, and the processor destroys the
+// table sinks before closing it. So there is no writing after closing.
+func (k *mqSink) Close(ctx context.Context) error {
+	k.resolvedBuffer.Close()
+	k.flushWorker.close()
+	// We need to close it asynchronously.
+	// Otherwise, we might get stuck with it in an unhealthy state of kafka.
+	go k.mqProducer.Close()
+	return nil
+>>>>>>> 2b758b1a3 (sink/mq(ticdc): make EmitCheckpointTs and FlushRowChangedEvents non-blocking (#5675)):cdc/sink/mq/mq.go
 }
 
 func (k *mqSink) Barrier(cxt context.Context, tableID model.TableID) error {
