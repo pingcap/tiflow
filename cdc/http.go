@@ -46,7 +46,7 @@ func RegisterRoutes(
 	// Open API V1
 	v1.RegisterOpenAPIRoutes(router, v1.NewOpenAPI(capture))
 	// Open API V2
-	v2.RegisterOpenAPIRoutes(router, v2.NewOpenAPI(capture))
+	v2.RegisterOpenAPIV2Routes(router, v2.NewOpenAPIV2(capture))
 
 	// Owner API
 	owner.RegisterOwnerAPIRoutes(router, capture)

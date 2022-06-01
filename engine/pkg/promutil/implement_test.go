@@ -117,10 +117,12 @@ func TestNewCounter(t *testing.T) {
 	reg := NewRegistry()
 	require.NotNil(t, reg)
 
-	tenant := tenant.ProjectInfo{
-		TenantID:  "user0",
-		ProjectID: "project0",
-	}
+	tent := tenant.NewProjectInfo(
+		"user0",
+		"project0",
+	)
+	tenantID := tent.TenantID()
+	projectID := tent.ProjectID()
 	labelKey := "k0"
 	labelValue := "v0"
 	jobType := "DM"
@@ -131,7 +133,7 @@ func TestNewCounter(t *testing.T) {
 
 	factory := NewFactory4MasterImpl(
 		reg,
-		tenant,
+		tent,
 		jobType,
 		jobID,
 	)
@@ -164,11 +166,11 @@ func TestNewCounter(t *testing.T) {
 			},
 			{
 				Name:  &projectKey,
-				Value: &tenant.ProjectID,
+				Value: &projectID,
 			},
 			{
 				Name:  &tenantKey,
-				Value: &tenant.TenantID,
+				Value: &tenantID,
 			},
 		},
 		Counter: &dto.Counter{
@@ -182,7 +184,7 @@ func TestNewCounter(t *testing.T) {
 	jobID = "job1"
 	factory = NewFactory4MasterImpl(
 		reg,
-		tenant,
+		tent,
 		jobType,
 		jobID,
 	)
@@ -196,10 +198,10 @@ func TestNewCounter(t *testing.T) {
 	})
 
 	// different project but with same metric
-	tenant.ProjectID = "project1"
+	tent = tenant.NewProjectInfo(tent.TenantID(), "project1")
 	factory = NewFactory4MasterImpl(
 		reg,
-		tenant,
+		tent,
 		jobType,
 		jobID,
 	)
@@ -217,7 +219,7 @@ func TestNewCounter(t *testing.T) {
 	workerID := "worker0"
 	factory = NewFactory4WorkerImpl(
 		reg,
-		tenant,
+		tent,
 		jobType,
 		jobID,
 		workerID,
@@ -235,7 +237,7 @@ func TestNewCounter(t *testing.T) {
 	workerID = "worker1"
 	factory = NewFactory4WorkerImpl(
 		reg,
-		tenant,
+		tent,
 		jobType,
 		jobID,
 		workerID,
@@ -278,10 +280,10 @@ func TestNewCounterFailConstLabelConflict(t *testing.T) {
 
 	factory := NewFactory4MasterImpl(
 		reg,
-		tenant.ProjectInfo{
-			TenantID:  "user0",
-			ProjectID: "proj0",
-		},
+		tenant.NewProjectInfo(
+			"user0",
+			"proj0",
+		),
 		"DM",
 		"job0",
 	)
@@ -303,10 +305,10 @@ func TestNewCounterVec(t *testing.T) {
 
 	factory := NewFactory4MasterImpl(
 		reg,
-		tenant.ProjectInfo{
-			TenantID:  "user0",
-			ProjectID: "proj0",
-		},
+		tenant.NewProjectInfo(
+			"user0",
+			"proj0",
+		),
 		"DM",
 		"job0",
 	)

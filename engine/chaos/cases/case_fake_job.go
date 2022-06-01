@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/lib/fake"
+	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	"github.com/pingcap/tiflow/engine/test/e2e"
 	"github.com/pingcap/tiflow/pkg/util"
 )
@@ -47,7 +48,7 @@ func runFakeJobCase(ctx context.Context, cfg *config) error {
 		WorkerCount:   jobCfg.WorkerCount,
 		KeyPrefix:     jobCfg.EtcdWatchPrefix,
 	}
-	cli, err := e2e.NewUTCli(ctx, serverMasterEndpoints, etcdEndpoints, e2eCfg)
+	cli, err := e2e.NewUTCli(ctx, serverMasterEndpoints, etcdEndpoints, tenant.DefaultUserProjectInfo, e2eCfg)
 	if err != nil {
 		return err
 	}

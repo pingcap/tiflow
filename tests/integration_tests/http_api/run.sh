@@ -120,6 +120,7 @@ function run() {
 		"resign_owner"
 		# api v2
 		"verify_table"
+		"get_tso"
 	)
 
 	for case in ${sequential_cases[@]}; do

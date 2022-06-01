@@ -10,6 +10,7 @@ RETRY_TIME = 10
 BASE_URL0 = "https://127.0.0.1:8300/api/v1"
 BASE_URL1 = "https://127.0.0.1:8301/api/v1"
 
+
 BASE_URL0_V2 = "https://127.0.0.1:8300/api/v2"
 BASE_URL0_V2 = "https://127.0.0.1:8301/api/v2"
 
@@ -320,6 +321,14 @@ def verify_table():
     ineligible_table_name = resp.json()["ineligible-tables"][0]["tbl-name"]
     assert eligible_table_name == "verify_table_eligible"
     assert ineligible_table_name == "verify_table_ineligible"
+  
+def get_tso():
+    # test state: all
+    url = BASE_URL0_V2+"/tso"
+    resp = rq.get(url, cert=CERT, verify=VERIFY)
+    assert resp.status_code == rq.codes.ok
+
+    print("pass test: get tso")
 
 # arg1: test case name
 # arg2: cetificates dir
@@ -353,6 +362,7 @@ if __name__ == "__main__":
         "resign_owner": resign_owner,
         # api v2
         "verify_table": verify_table,
+        "get_tso": get_tso
     }
 
     func = FUNC_MAP[sys.argv[1]]
