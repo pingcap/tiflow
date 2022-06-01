@@ -160,7 +160,8 @@ func (m *kafkaTopicManager) getMetadataOfTopics() ([]*sarama.TopicMetadata, erro
 }
 
 // WaitUntilTopicCreationDone is called after CreateTopic to make sure the topic
-// can be safely writable.
+// can be safely written to. The reason is that it may take several seconds after
+// CreateTopic returns success for all the brokers to become aware that the topics have been created.
 // See https://kafka.apache.org/23/javadoc/org/apache/kafka/clients/admin/AdminClient.html
 func (m *kafkaTopicManager) WaitUntilTopicCreationDone(topicName string) error {
 	err := retry.Do(context.Background(), func() error {
@@ -195,7 +196,7 @@ func (m *kafkaTopicManager) WaitUntilTopicCreationDone(topicName string) error {
 			zap.Duration("duration", time.Since(start)))
 
 		return nil
-	}, retry.WithBackoffBaseDelay(500), // sleep 1s for one run
+	}, retry.WithBackoffBaseDelay(500), // sleep 500ms for one run
 		retry.WithMaxTries(6), // 3s in total
 	)
 
