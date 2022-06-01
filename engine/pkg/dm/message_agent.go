@@ -15,8 +15,9 @@ package dm
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
-	"fmt"
+	"path"
 	"reflect"
 	"strings"
 	"sync"
@@ -27,26 +28,35 @@ import (
 	"github.com/pingcap/tiflow/engine/lib"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/pingcap/tiflow/pkg/workerpool"
+	"go.uber.org/atomic"
 	"go.uber.org/zap"
 )
 
 var (
-	defaultMessageTimeOut  = time.Second * 2
+	defaultMessageTimeOut  = time.Second * 10
 	defaultRequestTimeOut  = time.Second * 30
-	defaultResponseTimeOut = time.Second * 2
+	defaultResponseTimeOut = time.Second * 10
 	defaultHandlerTimeOut  = time.Second * 30
 )
 
-// generateTopic generate dm message topic.
+// generateTopic generate dm message topic with hex encoding.
 func generateTopic(senderID string, receiverID string) string {
-	return fmt.Sprintf("DM---%s---%s", senderID, receiverID)
+	hexKeys := []string{"DM"}
+	hexKeys = append(hexKeys, hex.EncodeToString([]byte(senderID)))
+	hexKeys = append(hexKeys, hex.EncodeToString([]byte(receiverID)))
+	ret := path.Join(hexKeys...)
+	return ret
 }
 
-// extractTopic extract dm message topic.
-// TODO: handle special case.
+// extractTopic extract dm message topic with hex decoding.
+// TODO: handle error.
 func extractTopic(topic string) (string, string) {
-	parts := strings.Split(topic, "---")
-	return parts[1], parts[2]
+	v := strings.Split(strings.TrimPrefix(topic, "DM"), "/")
+	// nolint:errcheck
+	senderID, _ := hex.DecodeString(v[1])
+	// nolint:errcheck
+	receiverID, _ := hex.DecodeString(v[2])
+	return string(senderID), string(receiverID)
 }
 
 type messageID uint64
@@ -54,7 +64,7 @@ type messageID uint64
 type messageType int
 
 const (
-	messageTp messageType = iota
+	messageTp messageType = iota + 1
 	requestTp
 	responseTp
 )
@@ -67,22 +77,8 @@ type message struct {
 	Payload interface{}
 }
 
-// messageIDAllocator is an id allocator for p2p message system
-type messageIDAllocator struct {
-	mu sync.Mutex
-	id messageID
-}
-
-// alloc allocs a new message id
-func (a *messageIDAllocator) alloc() messageID {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-
-	a.id++
-	return a.id
-}
-
 // Sender defines an interface that supports send message
+// The caller should register the sender to the messageAgent before call SendMessage/SendRequest.
 type Sender interface {
 	SendMessage(ctx context.Context, topic p2p.Topic, message interface{}, nonblocking bool) error
 }
@@ -93,20 +89,22 @@ type Sender interface {
 type messagePair struct {
 	// messageID -> response channel
 	// TODO: limit the MaxPendingMessageCount if needed.
-	pendings    sync.Map
-	idAllocator *messageIDAllocator
+	pendings sync.Map
+	id       atomic.Uint64
 }
 
 // newMessagePair creates a new MessagePair instance
 func newMessagePair() *messagePair {
-	return &messagePair{
-		idAllocator: &messageIDAllocator{},
-	}
+	return &messagePair{}
+}
+
+func (m *messagePair) allocID() messageID {
+	return messageID(m.id.Add(1))
 }
 
 // sendRequest sends a request message and wait for response.
 func (m *messagePair) sendRequest(ctx context.Context, topic p2p.Topic, command string, req interface{}, sender Sender) (interface{}, error) {
-	msg := message{ID: m.idAllocator.alloc(), Type: requestTp, Command: command, Payload: req}
+	msg := message{ID: m.allocID(), Type: requestTp, Command: command, Payload: req}
 	respCh := make(chan interface{}, 1)
 	m.pendings.Store(msg.ID, respCh)
 	defer m.pendings.Delete(msg.ID)
@@ -149,6 +147,9 @@ type MessageAgent interface {
 	Init(ctx context.Context) error
 	Tick(ctx context.Context) error
 	Close(ctx context.Context) error
+	// update the sender to receive message/request.
+	// update the sender before call SendMessage/SendRequest.
+	// update the sender when the sender is close.
 	UpdateSender(senderID string, sender Sender) error
 	SendMessage(ctx context.Context, senderID string, command string, msg interface{}) error
 	SendRequest(ctx context.Context, senderID string, command string, req interface{}) (interface{}, error)
@@ -164,7 +165,9 @@ type MessageAgentImpl struct {
 	messageRouter         *lib.MessageRouter
 	wg                    sync.WaitGroup
 	// sender-id -> Sender
-	senders        sync.Map
+	senders sync.Map
+	// when receive message/request/response,
+	// the corresponding processing method of commandHandler will be called according to the command name.
 	commandHandler interface{}
 	id             string
 }

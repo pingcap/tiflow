@@ -65,7 +65,7 @@ func NewTaskManager(initTaskStatus []runtime.TaskStatus, jobStore *metadata.JobS
 	taskManager := &TaskManager{
 		DefaultTicker: ticker.NewDefaultTicker(taskNormalInterval, taskErrorInterval),
 		jobStore:      jobStore,
-		messageAgent: messageAgent,
+		messageAgent:  messageAgent,
 	}
 	taskManager.DefaultTicker.Ticker = taskManager
 

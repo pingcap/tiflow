@@ -29,13 +29,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestMessageIDAllocator(t *testing.T) {
+func TestAllocID(t *testing.T) {
 	t.Parallel()
 
-	allocator := &messageIDAllocator{}
-	require.Equal(t, messageID(1), allocator.alloc())
-	require.Equal(t, messageID(2), allocator.alloc())
-	require.Equal(t, messageID(3), allocator.alloc())
+	messagePair := newMessagePair()
+	require.Equal(t, messageID(1), messagePair.allocID())
+	require.Equal(t, messageID(2), messagePair.allocID())
+	require.Equal(t, messageID(3), messagePair.allocID())
 
 	var wg sync.WaitGroup
 	for i := 0; i < 10; i++ {
@@ -43,12 +43,12 @@ func TestMessageIDAllocator(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			for i := 0; i < 100; i++ {
-				allocator.alloc()
+				messagePair.allocID()
 			}
 		}()
 	}
 	wg.Wait()
-	require.Equal(t, messageID(1004), allocator.alloc())
+	require.Equal(t, messageID(1004), messagePair.allocID())
 }
 
 func TestMessagePair(t *testing.T) {
@@ -168,7 +168,7 @@ func TestMessageAgent(t *testing.T) {
 	// send response
 	mockSender.On("SendMessage").Return(nil).Once()
 	require.NoError(t, messageAgent.sendResponse(context.Background(), senderID, 2, "command", "response"))
-	messageAgent.onMessage("DM---Sender---Receiver", message{ID: 2, Type: responseTp, Payload: resp})
+	messageAgent.onMessage(generateTopic("Sender", "Receiver"), message{ID: 2, Type: responseTp, Payload: resp})
 }
 
 func TestMessageHandler(t *testing.T) {
