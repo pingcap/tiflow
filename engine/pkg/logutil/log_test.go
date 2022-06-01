@@ -47,7 +47,7 @@ func TestNewLogger(t *testing.T) {
 	logger.Logger.Warn("framework test", zap.String("type", "framework"))
 	logger.Logger.Sync()
 	line := <-tail.Lines
-	require.Regexp(t, regexp.MustCompile("\\[\"framework test\"\\] \\[framework\\=true\\] \\[type\\=framework\\]"), line.Text)
+	require.Regexp(t, regexp.QuoteMeta("[\"framework test\"] [framework=true] [type=framework]"), line.Text)
 
 	logger = NewLogger4Master(tenant.ProjectInfo{
 		TenantID:  "tenant1",
@@ -56,7 +56,7 @@ func TestNewLogger(t *testing.T) {
 	logger.Logger.Warn("master test", zap.String("type", "master"))
 	logger.Logger.Sync()
 	line = <-tail.Lines
-	require.Regexp(t, regexp.MustCompile("\\[\"master test\"\\] \\[tenant=tenant1\\] \\[project_id=proj1\\] \\[job_id=job1\\] \\[type=master\\]"), line.Text)
+	require.Regexp(t, regexp.QuoteMeta("[\"master test\"] [tenant=tenant1] [project_id=proj1] [job_id=job1] [type=master]"), line.Text)
 
 	logger = NewLogger4Worker(tenant.ProjectInfo{
 		TenantID:  "tenant1",
@@ -65,5 +65,5 @@ func TestNewLogger(t *testing.T) {
 	logger.Logger.Warn("worker test", zap.String("type", "worker"))
 	logger.Logger.Sync()
 	line = <-tail.Lines
-	require.Regexp(t, regexp.MustCompile("\\[\"worker test\"\\] \\[tenant=tenant1\\] \\[project_id=proj1\\] \\[job_id=job1\\] \\[worker_id=worker1\\] \\[type=worker\\]"), line.Text)
+	require.Regexp(t, regexp.QuoteMeta("[\"worker test\"] [tenant=tenant1] [project_id=proj1] [job_id=job1] [worker_id=worker1] [type=worker]"), line.Text)
 }
