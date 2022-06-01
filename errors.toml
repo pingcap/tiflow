@@ -1331,6 +1331,11 @@ error = '''
 master gen embed etcd config failed: %s
 '''
 
+["DFLOW:ErrMasterInterfaceNotFound"]
+error = '''
+basemaster interface not found
+'''
+
 ["DFLOW:ErrMasterInvalidMeta"]
 error = '''
 invalid master meta data: %s
