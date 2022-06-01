@@ -11,19 +11,28 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package executor
+package version
 
 import (
-	_ "github.com/pingcap/tiflow/engine/dm" // register dm
-	cvstask "github.com/pingcap/tiflow/engine/executor/cvsTask"
-	cvs "github.com/pingcap/tiflow/engine/jobmaster/cvsjob"
-	"github.com/pingcap/tiflow/engine/jobmaster/dm"
-	"github.com/pingcap/tiflow/engine/lib/registry"
+	"testing"
+
+	"github.com/stretchr/testify/require"
+
+	"github.com/pingcap/tiflow/dm/pkg/log"
 )
 
-func init() {
-	cvstask.RegisterWorker()
-	cvs.RegisterWorker()
-	dm.RegisterWorker()
-	registry.RegisterFake(registry.GlobalWorkerRegistry())
+func TestLogVersion(t *testing.T) {
+	t.Parallel()
+
+	noneInfo := `Release Version: None
+Git Commit Hash: None
+Git Branch: None
+UTC Build Time: None
+Go Version: None
+`
+
+	err := log.InitLogger(&log.Config{})
+	require.Nil(t, err)
+	require.Equal(t, noneInfo, GetRawInfo())
+	LogVersionInfo()
 }
