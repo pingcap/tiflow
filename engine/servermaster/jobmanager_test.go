@@ -15,7 +15,6 @@ package servermaster
 
 import (
 	"context"
-	"fmt"
 	"testing"
 	"time"
 
@@ -232,7 +231,7 @@ func TestJobManagerDebug(t *testing.T) {
 
 	go func() {
 		time.Sleep(time.Second)
-		manager.InvokeHandler(t, fmt.Sprintf("DM---%s---%s", debugJobID, jobmanagerID),
+		manager.InvokeHandler(t, dm.GenerateTopic(debugJobID, jobmanagerID),
 			"node-1", dm.GenerateResponse(1, "DebugJob", &pb.DebugJobResponse{}))
 	}()
 	resp := mgr.DebugJob(ctx, req)
