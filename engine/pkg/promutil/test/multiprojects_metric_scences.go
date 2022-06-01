@@ -213,7 +213,7 @@ func scenarios3_OneJobmasterOneWorker(wg *sync.WaitGroup) {
 		http.Handle("/metric5", promutil.HTTPHandlerForMetricImpl(reg))
 
 		// one jobmaster
-		factory := promutil.NewFactory4JobMasterImpl(reg, tenant, jobType, jobID)
+		factory := promutil.NewFactory4MasterImpl(reg, tenant, jobType, jobID)
 		counter0 := factory.NewCounter(prometheus.CounterOpts{
 			Namespace: "dm",
 			Subsystem: "jobmaster",
@@ -290,7 +290,7 @@ func scenarios4_OneJobmasterMultiWorker(wg *sync.WaitGroup) {
 		http.Handle("/metric6", promutil.HTTPHandlerForMetricImpl(reg))
 
 		// one jobmaster
-		factory := promutil.NewFactory4JobMasterImpl(reg, tenant, jobType, jobID)
+		factory := promutil.NewFactory4MasterImpl(reg, tenant, jobType, jobID)
 		counter0 := factory.NewCounter(prometheus.CounterOpts{
 			Namespace: "dm",
 			Subsystem: "jobmaster",
@@ -363,7 +363,7 @@ func scenarios5_MultiJobmasterMultiWorker(wg *sync.WaitGroup) {
 		http.Handle("/metric7", promutil.HTTPHandlerForMetricImpl(reg))
 
 		// DM-jobmaster0
-		factory := promutil.NewFactory4JobMasterImpl(reg, tenant, jobType0, jobID0)
+		factory := promutil.NewFactory4MasterImpl(reg, tenant, jobType0, jobID0)
 		counter0 := factory.NewCounter(prometheus.CounterOpts{
 			Subsystem: "jobmaster",
 			Name:      "counter",
@@ -375,7 +375,7 @@ func scenarios5_MultiJobmasterMultiWorker(wg *sync.WaitGroup) {
 		counter0.Add(7)
 
 		// DM-jobmaster1
-		factory = promutil.NewFactory4JobMasterImpl(reg, tenant, jobType0, jobID1)
+		factory = promutil.NewFactory4MasterImpl(reg, tenant, jobType0, jobID1)
 		counter1 := factory.NewCounter(prometheus.CounterOpts{
 			Subsystem: "jobmaster",
 			Name:      "counter",
@@ -411,7 +411,7 @@ func scenarios5_MultiJobmasterMultiWorker(wg *sync.WaitGroup) {
 		counter3.Add(7)
 
 		// CDC-jobmaster0
-		factory = promutil.NewFactory4JobMasterImpl(reg, tenant, jobType1, jobID0)
+		factory = promutil.NewFactory4MasterImpl(reg, tenant, jobType1, jobID0)
 		counter4 := factory.NewCounter(prometheus.CounterOpts{
 			Subsystem: "jobmaster",
 			Name:      "counter",
@@ -424,7 +424,7 @@ func scenarios5_MultiJobmasterMultiWorker(wg *sync.WaitGroup) {
 		counter4.Add(7)
 
 		// CDC-jobmaster1
-		factory = promutil.NewFactory4JobMasterImpl(reg, tenant, jobType1, jobID1)
+		factory = promutil.NewFactory4MasterImpl(reg, tenant, jobType1, jobID1)
 		counter5 := factory.NewCounter(prometheus.CounterOpts{
 			Subsystem: "jobmaster",
 			Name:      "counter",
@@ -494,7 +494,7 @@ func scenarios6_OneJobmasterOneExecutor(wg *sync.WaitGroup) {
 		http.Handle("/metric8", promutil.HTTPHandlerForMetricImpl(reg))
 
 		// one jobmaster
-		factory := promutil.NewFactory4JobMasterImpl(reg, tenant, jobType, jobID)
+		factory := promutil.NewFactory4MasterImpl(reg, tenant, jobType, jobID)
 		counter0 := factory.NewCounter(prometheus.CounterOpts{
 			Name: "counter",
 
@@ -545,7 +545,7 @@ func scenarios7_MultiJobmasterMultiProjects(wg *sync.WaitGroup) {
 		http.Handle("/metric9", promutil.HTTPHandlerForMetricImpl(reg))
 
 		// project0
-		factory := promutil.NewFactory4JobMasterImpl(reg, tenant0, jobType, jobID)
+		factory := promutil.NewFactory4MasterImpl(reg, tenant0, jobType, jobID)
 		counter0 := factory.NewCounter(prometheus.CounterOpts{
 			Name: "counter",
 
@@ -556,7 +556,7 @@ func scenarios7_MultiJobmasterMultiProjects(wg *sync.WaitGroup) {
 		counter0.Add(9)
 
 		// project1
-		factory = promutil.NewFactory4JobMasterImpl(reg, tenant1, jobType, jobID)
+		factory = promutil.NewFactory4MasterImpl(reg, tenant1, jobType, jobID)
 		counter1 := factory.NewCounter(prometheus.CounterOpts{
 			Name: "counter",
 
