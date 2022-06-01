@@ -287,6 +287,8 @@ func (m *Master) tickedCheckWorkers(ctx context.Context) error {
 					workerCkpt.Revision = etcdCkpt.Revision
 					workerCkpt.MvccCount = etcdCkpt.MvccCount
 					workerCkpt.Value = etcdCkpt.Value
+				} else {
+					workerCkpt.Revision = m.config.EtcdStartRevision
 				}
 				wcfg := m.genWorkerConfig(i, workerCkpt)
 				if err := m.createWorker(wcfg); err != nil {
@@ -419,6 +421,7 @@ func (m *Master) OnWorkerOffline(worker lib.WorkerHandle, reason error) error {
 	workerCkpt := zeroWorkerCheckpoint()
 	if ws, err := parseExtBytes(worker.Status().ExtBytes); err != nil {
 		log.L().Warn("failed to parse worker ext bytes", zap.Error(err))
+		workerCkpt.Revision = m.config.EtcdStartRevision
 	} else {
 		workerCkpt.Tick = ws.Tick
 		if ws.Checkpoint != nil {
