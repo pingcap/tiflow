@@ -1161,7 +1161,7 @@ func (s *Server) getStatusFromWorkers(
 				var workerStatus *pb.QueryStatusResponse
 				workerReq := &workerrpc.Request{
 					Type:        workerrpc.CmdQueryStatus,
-					QueryStatus: &pb.QueryStatusRequest{Name: taskName, Source: source},
+					QueryStatus: &pb.QueryStatusRequest{Name: taskName, Source: sourceID},
 				}
 				resp, err := w.SendRequest(ctx, workerReq, s.cfg.RPCTimeout)
 				if err != nil {

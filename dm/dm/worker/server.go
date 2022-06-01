@@ -81,15 +81,13 @@ type Server struct {
 	// - close worker Server
 	workers    map[string]*SourceWorker
 	etcdClient *clientv3.Client
-
-	// relay status will never be put in server.sourceStatus
-	sourceStatus pb.SourceStatus
 }
 
 // NewServer creates a new Server.
 func NewServer(cfg *Config) *Server {
 	s := Server{
-		cfg: cfg,
+		cfg:     cfg,
+		workers: make(map[string]*SourceWorker),
 	}
 	s.closed.Store(true) // not start yet
 	return &s
@@ -576,26 +574,21 @@ func (s *Server) delWorker(sourceID string, needLock bool) {
 }
 
 // nolint:unparam
-func (s *Server) getSourceStatus(sourceID string, needLock bool) pb.SourceStatus {
+func (s *Server) getSourceProcessResult(sourceID string, needLock bool) *pb.ProcessResult {
 	if needLock {
 		s.Lock()
 		defer s.Unlock()
 	}
-	var processResult *pb.ProcessResult
 	if w := s.getWorkerBySource(sourceID, false); w != nil {
 		if err := w.sourceError.Load(); err != nil {
-			processResult = &pb.ProcessResult{
+			return &pb.ProcessResult{
 				Errors: []*pb.ProcessError{
 					unit.NewProcessError(err),
 				},
 			}
 		}
 	}
-	return pb.SourceStatus{
-		Source: sourceID,
-		Worker: s.cfg.Name,
-		Result: processResult,
-	}
+	return nil
 }
 
 // TODO: move some call to addWorker/getOrStartWorker.
@@ -855,6 +848,10 @@ func (s *Server) QueryStatus(ctx context.Context, req *pb.QueryStatusRequest) (*
 	source := req.GetSource()
 	resp := &pb.QueryStatusResponse{
 		Result: true,
+		SourceStatus: &pb.SourceStatus{
+			Source: req.GetSource(),
+			Worker: s.cfg.Name,
+		},
 	}
 	if source == "" {
 		resp.Result = false
@@ -870,12 +867,10 @@ func (s *Server) QueryStatus(ctx context.Context, req *pb.QueryStatusRequest) (*
 		return resp, nil
 	}
 
-	sourceStatus := s.getSourceStatus(source, true)
-	sourceStatus.Worker = s.cfg.Name
-	resp.SourceStatus = &sourceStatus
+	resp.SourceStatus.Result = s.getSourceProcessResult(source, true)
 
 	var err error
-	resp.SubTaskStatus, sourceStatus.RelayStatus, err = w.QueryStatus(ctx, req.Name)
+	resp.SubTaskStatus, resp.SourceStatus.RelayStatus, err = w.QueryStatus(ctx, req.Name)
 
 	if err != nil {
 		resp.Msg = fmt.Sprintf("error when get master status: %v", err)

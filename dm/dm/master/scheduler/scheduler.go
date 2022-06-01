@@ -2083,8 +2083,8 @@ func (s *Scheduler) handleWorkerOnline(ev ha.WorkerEvent, toLock bool) error {
 		bounds = append(bounds, bound)
 		sourcesBound = append(sourcesBound, bound.Source)
 	}
-	s.logger.Warn("worker already bound", zap.Stringer("worker", w.BaseInfo()), zap.Strings("sources", sourcesBound))
 	if len(bounds) > 0 {
+		s.logger.Warn("worker already bound", zap.Stringer("worker", w.BaseInfo()), zap.Strings("sources", sourcesBound))
 		// TODO: make sure dm-worker can retry and re-trigger handleWorkerOnline when this fails
 		_, err := ha.PutSourceBound(s.etcdCli, bounds...)
 		return err
