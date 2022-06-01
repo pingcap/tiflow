@@ -55,9 +55,10 @@ type Config struct {
 	WorkerCount int    `json:"worker-count"`
 	TargetTick  int    `json:"target-tick"`
 
-	EtcdWatchEnable bool     `json:"etcd-watch-enable"`
-	EtcdEndpoints   []string `json:"etcd-endpoints"`
-	EtcdWatchPrefix string   `json:"etcd-watch-prefix"`
+	EtcdWatchEnable   bool     `json:"etcd-watch-enable"`
+	EtcdEndpoints     []string `json:"etcd-endpoints"`
+	EtcdWatchPrefix   string   `json:"etcd-watch-prefix"`
+	EtcdStartRevision int64    `json:"etcd-start-revision"`
 
 	InjectErrorInterval time.Duration `json:"inject-error-interval"`
 }
@@ -205,6 +206,8 @@ func (m *Master) createWorker(wcfg *WorkerConfig) error {
 func (m *Master) initWorkers() error {
 	m.workerListMu.Lock()
 	defer m.workerListMu.Unlock()
+	checkpoint := zeroWorkerCheckpoint()
+	checkpoint.Revision = m.config.EtcdStartRevision
 OUT:
 	for i, handle := range m.workerList {
 		if handle == nil {
@@ -213,7 +216,7 @@ OUT:
 					continue OUT
 				}
 			}
-			wcfg := m.genWorkerConfig(i, zeroWorkerCheckpoint())
+			wcfg := m.genWorkerConfig(i, checkpoint)
 			err := m.createWorker(wcfg)
 			if err != nil {
 				return err
@@ -281,6 +284,7 @@ func (m *Master) tickedCheckWorkers(ctx context.Context) error {
 				if etcdCkpt, ok := ckpt.Checkpoints[i]; ok {
 					workerCkpt.Revision = etcdCkpt.Revision
 					workerCkpt.MvccCount = etcdCkpt.MvccCount
+					workerCkpt.Value = etcdCkpt.Value
 				}
 				wcfg := m.genWorkerConfig(i, workerCkpt)
 				if err := m.createWorker(wcfg); err != nil {
@@ -390,21 +394,11 @@ func (m *Master) OnWorkerOnline(worker lib.WorkerHandle) error {
 
 // OnWorkerOffline implements MasterImpl.OnWorkerOffline
 func (m *Master) OnWorkerOffline(worker lib.WorkerHandle, reason error) error {
-	index := -1
 	m.workerListMu.Lock()
-	for i, handle := range m.workerList {
-		if handle == nil {
-			continue
-		}
-		if handle.ID() == worker.ID() {
-			index = i
-			m.workerList[i] = nil
-			break
-		}
-	}
+	businessID, ok := m.workerID2BusinessID[worker.ID()]
 	m.workerListMu.Unlock()
-	if index < 0 {
-		return errors.Errorf("worker(%s) is not found in worker list", worker.ID())
+	if !ok {
+		return errors.Errorf("worker(%s) is not found in business id map", worker.ID())
 	}
 
 	m.bStatus.Lock()
@@ -413,7 +407,7 @@ func (m *Master) OnWorkerOffline(worker lib.WorkerHandle, reason error) error {
 
 	if derrors.ErrWorkerFinish.Equal(reason) {
 		log.L().Info("FakeMaster: OnWorkerOffline: worker finished", zap.String("worker-id", worker.ID()))
-		m.finishedSet[worker.ID()] = index
+		m.finishedSet[worker.ID()] = businessID
 		return nil
 	}
 
@@ -427,9 +421,10 @@ func (m *Master) OnWorkerOffline(worker lib.WorkerHandle, reason error) error {
 		if ws.Checkpoint != nil {
 			workerCkpt.Revision = ws.Checkpoint.Revision
 			workerCkpt.MvccCount = ws.Checkpoint.MvccCount
+			workerCkpt.Value = ws.Checkpoint.Value
 		}
 	}
-	wcfg := m.genWorkerConfig(index, workerCkpt)
+	wcfg := m.genWorkerConfig(businessID, workerCkpt)
 	m.workerListMu.Lock()
 	defer m.workerListMu.Unlock()
 	return m.createWorker(wcfg)

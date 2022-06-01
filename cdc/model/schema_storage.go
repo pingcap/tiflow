@@ -241,15 +241,6 @@ func (ti *TableInfo) String() string {
 	return fmt.Sprintf("TableInfo, ID: %d, Name:%s, ColNum: %d, IdxNum: %d, PKIsHandle: %t", ti.ID, ti.TableName, len(ti.Columns), len(ti.Indices), ti.PKIsHandle)
 }
 
-// GetIndexInfo returns the index info by ID
-func (ti *TableInfo) GetIndexInfo(indexID int64) (info *model.IndexInfo, exist bool) {
-	indexOffset, exist := ti.indicesOffset[indexID]
-	if !exist {
-		return nil, false
-	}
-	return ti.Indices[indexOffset], true
-}
-
 // GetRowColInfos returns all column infos for rowcodec
 func (ti *TableInfo) GetRowColInfos() ([]int64, map[int64]*types.FieldType, []rowcodec.ColInfo) {
 	return ti.handleColID, ti.rowColFieldTps, ti.rowColInfos
@@ -262,40 +253,6 @@ func IsColCDCVisible(col *model.ColumnInfo) bool {
 		return false
 	}
 	return col.State == model.StatePublic
-}
-
-// GetUniqueKeys returns all unique keys of the table as a slice of column names
-func (ti *TableInfo) GetUniqueKeys() [][]string {
-	var uniqueKeys [][]string
-	if ti.PKIsHandle {
-		for _, col := range ti.Columns {
-			if mysql.HasPriKeyFlag(col.GetFlag()) {
-				// Prepend to make sure the primary key ends up at the front
-				uniqueKeys = [][]string{{col.Name.O}}
-				break
-			}
-		}
-	}
-	for _, idx := range ti.Indices {
-		if ti.IsIndexUnique(idx) {
-			colNames := make([]string, 0, len(idx.Columns))
-			for _, col := range idx.Columns {
-				colNames = append(colNames, col.Name.O)
-			}
-			if idx.Primary {
-				uniqueKeys = append([][]string{colNames}, uniqueKeys...)
-			} else {
-				uniqueKeys = append(uniqueKeys, colNames)
-			}
-		}
-	}
-	return uniqueKeys
-}
-
-// IsColumnUnique returns whether the column is unique
-func (ti *TableInfo) IsColumnUnique(colID int64) bool {
-	_, exist := ti.uniqueColumns[colID]
-	return exist
 }
 
 // ExistTableUniqueColumn returns whether the table has a unique column
