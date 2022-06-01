@@ -29,6 +29,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/scheduler"
+	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
@@ -43,17 +44,20 @@ import (
 // This function is factored out to facilitate unit testing.
 func newSchedulerV2FromCtx(
 	ctx cdcContext.Context, startTs uint64,
-) (scheduler.Scheduler, error) {
+) (ret scheduler.Scheduler, err error) {
 	changeFeedID := ctx.ChangefeedVars().ID
 	messageServer := ctx.GlobalVars().MessageServer
 	messageRouter := ctx.GlobalVars().MessageRouter
 	ownerRev := ctx.GlobalVars().OwnerRevision
-	ret, err := scheduler.NewScheduler(
-		ctx, changeFeedID, startTs, messageServer, messageRouter, ownerRev)
-	if err != nil {
-		return nil, errors.Trace(err)
+	cfg := config.GetGlobalServerConfig().Debug
+	if cfg.EnableTwoPhaseScheduler {
+		ret, err = scheduler.NewTpScheduler(
+			ctx, changeFeedID, startTs, messageServer, messageRouter, ownerRev, cfg.Scheduler)
+	} else {
+		ret, err = scheduler.NewScheduler(
+			ctx, changeFeedID, startTs, messageServer, messageRouter, ownerRev, cfg.Scheduler)
 	}
-	return ret, nil
+	return ret, errors.Trace(err)
 }
 
 func newScheduler(ctx cdcContext.Context, startTs uint64) (scheduler.Scheduler, error) {
