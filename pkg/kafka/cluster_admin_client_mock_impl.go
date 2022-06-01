@@ -123,7 +123,7 @@ func (c *ClusterAdminClientMockImpl) DescribeConfig(resource sarama.ConfigResour
 	return result, nil
 }
 
-// SetRemainingFetchesUntilTopicVisible is used to control the visibility of topic.
+// SetRemainingFetchesUntilTopicVisible is used to control the visibility of a specific topic.
 // It is used to mock the topic creation delay.
 func (c *ClusterAdminClientMockImpl) SetRemainingFetchesUntilTopicVisible(topicName string,
 	fetchesRemainingUntilVisible int,
