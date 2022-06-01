@@ -30,18 +30,25 @@ import (
 // @Tags changefeed
 // @Accept json
 // @Produce json
-// @Param changefeed body model.ChangeFeedInfo true "changefeed config"
+// @Param changefeed body model.ChangeFeedInfo true "changefeed info"
 // @Success 200 {object} model.ChangeFeedInfo
 // @Failure 500,400 {object} model.HTTPError
 // @Router	/api/v2/changefeeds [post]
 func (h *OpenAPIV2) CreateChangefeed(c *gin.Context) {
 	ctx := c.Request.Context()
-	var info model.ChangeFeedInfo
-	if err := c.BindJSON(&info); err != nil {
+
+	info, err := model.GetDeFaultChangefeedInfo()
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+
+	if err := c.BindJSON(info); err != nil {
 		_ = c.Error(cerror.ErrAPIInvalidParam.Wrap(err))
 		return
 	}
-	verifiedInfo, err := validator.VerifyCreateChangefeedInfo(ctx, info, h.capture)
+
+	err = validator.VerifyCreateChangefeedInfo(ctx, info, h.capture)
 	if err != nil {
 		_ = c.Error(err)
 		return
@@ -53,14 +60,14 @@ func (h *OpenAPIV2) CreateChangefeed(c *gin.Context) {
 		return
 	}
 
-	err = h.capture.EtcdClient.CreateChangefeedInfo(ctx, verifiedInfo,
-		model.DefaultChangeFeedID(verifiedInfo.ID))
+	err = h.capture.EtcdClient.CreateChangefeedInfo(ctx, info,
+		model.DefaultChangeFeedID(info.ID))
 	if err != nil {
 		_ = c.Error(err)
 		return
 	}
 
-	log.Info("Create changefeed successfully!", zap.String("id", verifiedInfo.ID), zap.String("changefeed", infoStr))
+	log.Info("Create changefeed successfully!", zap.String("id", info.ID), zap.String("changefeed", infoStr))
 	c.Status(http.StatusOK)
 }
 
@@ -75,5 +82,4 @@ func (h *OpenAPIV2) CreateChangefeed(c *gin.Context) {
 // @Failure 500,400 {object} model.HTTPError
 // @Router	/api/v2/verify-table [post]
 func (h *OpenAPIV2) VerifyTable(c *gin.Context) {
-
 }

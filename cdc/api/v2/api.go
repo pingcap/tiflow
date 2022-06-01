@@ -35,4 +35,7 @@ func RegisterOpenAPIRoutes(router *gin.Engine, api *OpenAPIV2) {
 
 	v2.Use(middleware.LogMiddleware())
 	v2.Use(middleware.ErrorHandleMiddleware())
+
+	changefeedGroup := v2.Group("/changefeeds")
+	changefeedGroup.POST("", api.CreateChangefeed)
 }

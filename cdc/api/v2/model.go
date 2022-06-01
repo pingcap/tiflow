@@ -21,6 +21,7 @@ type Tso struct {
 	LogicTime int64 `json:"logic-time"`
 }
 
+// Tables contains IneligibleTables and EligibleTables
 type Tables struct {
 	IneligibleTables []model.TableName `json:"ineligible-tables,omitempty"`
 	EligibleTables   []model.TableName `json:"eligible-tables,omitempty"`

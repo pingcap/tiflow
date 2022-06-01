@@ -15,6 +15,7 @@ package validator
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -35,6 +36,9 @@ import (
 	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/r3labs/diff"
 	"github.com/tikv/client-go/v2/oracle"
+	pd "github.com/tikv/pd/client"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/backoff"
 )
 
 // VerifyCreateChangefeedConfig verifies ChangefeedConfig for create a changefeed
@@ -252,13 +256,134 @@ func VerifyTables(replicaConfig *config.ReplicaConfig, storage tidbkv.Storage, s
 	return
 }
 
-// VerifyCreateChangefeedInfo verifies and fills changefeedInfo for create a changefeed,
+// VerifyCreateChangefeedInfo verifies and fills changefeedInfo for create a changefeed.
 // This method is used by open api v2 only.
 func VerifyCreateChangefeedInfo(
 	ctx context.Context,
-	info model.ChangeFeedInfo,
+	info *model.ChangeFeedInfo,
 	capture *capture.Capture,
-) (*model.ChangeFeedInfo, error) {
-	res := &model.ChangeFeedInfo{}
-	return res, nil
+) error {
+	// verify credential and pdAddrs
+	grpcTLSOption, err := info.CredentialConfig.ToGRPCDialOption()
+	if err != nil {
+		return errors.Trace(err)
+	}
+	if len(info.PDAddrs) == 0 {
+		return cerror.ErrAPIInvalidParam.GenWithStackByCause("can not create a changefeed with empty pdAddrs")
+	}
+	pdClient, err := pd.NewClientWithContext(
+		ctx, info.PDAddrs, info.CredentialConfig.PDSecurityOption(),
+		pd.WithGRPCDialOptions(
+			grpcTLSOption,
+			grpc.WithBlock(),
+			grpc.WithConnectParams(grpc.ConnectParams{
+				Backoff: backoff.Config{
+					BaseDelay:  time.Second,
+					Multiplier: 1.1,
+					Jitter:     0.1,
+					MaxDelay:   3 * time.Second,
+				},
+				MinConnectTimeout: 3 * time.Second,
+			}),
+		))
+	if err != nil {
+		return errors.Trace(err)
+	}
+	defer pdClient.Close()
+
+	// should we get cluster id here?
+	// info.UpstreamID = pdClient.GetClusterID(ctx)
+
+	// verify sinkURI
+	if info.SinkURI == "" {
+		return cerror.ErrSinkURIInvalid.GenWithStackByArgs("sink-uri is empty, can't not create a changefeed without sink-uri")
+	}
+
+	// verify changefeedID
+	if err := model.ValidateChangefeedID(info.ID); err != nil {
+		return cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed_id: %s", info.ID)
+	}
+	cfStatus, err := capture.StatusProvider().GetChangeFeedStatus(ctx,
+		model.DefaultChangeFeedID(info.ID))
+	if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
+		return err
+	}
+	if cfStatus != nil {
+		return cerror.ErrChangeFeedAlreadyExists.GenWithStackByArgs(info.ID)
+	}
+
+	// verify start-ts
+	if info.StartTs == 0 {
+		ts, logical, err := pdClient.GetTS(ctx)
+		if err != nil {
+			return cerror.ErrPDEtcdAPIError.GenWithStackByArgs("fail to get ts from pd client")
+		}
+		info.StartTs = oracle.ComposeTS(ts, logical)
+	}
+
+	// Ensure the start ts is valid in the next 1 hour.
+	const ensureTTL = 60 * 60
+	if err := gc.EnsureChangefeedStartTsSafety(
+		ctx,
+		pdClient,
+		model.DefaultChangeFeedID(info.ID),
+		ensureTTL, info.StartTs); err != nil {
+		if !cerror.ErrStartTsBeforeGC.Equal(err) {
+			return cerror.ErrPDEtcdAPIError.Wrap(err)
+		}
+		return err
+	}
+
+	// verify target-ts
+	if info.TargetTs > 0 && info.TargetTs <= info.StartTs {
+		return cerror.ErrTargetTsBeforeStartTs.GenWithStackByArgs(
+			info.TargetTs, info.StartTs)
+	}
+
+	captureInfos, err := capture.StatusProvider().GetCaptures(ctx)
+	if err != nil {
+		return err
+	}
+	cdcClusterVer, err := version.GetTiCDCClusterVersion(model.ListVersionsFromCaptureInfos(captureInfos))
+	if err != nil {
+		return err
+	}
+	// verify sortEngine and EnableOldValue
+	sortEngine := model.SortUnified
+	if !cdcClusterVer.ShouldEnableOldValueByDefault() {
+		info.Config.EnableOldValue = false
+		log.Warn("The TiCDC cluster is built from unknown branch or less than 5.0.0-rc, the old-value are disabled by default.")
+		if !cdcClusterVer.ShouldEnableUnifiedSorterByDefault() {
+			sortEngine = model.SortInMemory
+		}
+	}
+	info.Engine = sortEngine
+
+	// verify tables
+	kvStorage, err := kv.CreateTiStore(strings.Join(info.PDAddrs, ","), &info.CredentialConfig)
+	if err != nil {
+		return err
+	}
+	if !info.Config.ForceReplicate && !info.Config.IgnoreIneligibleTable {
+		ineligibleTables, _, err := VerifyTables(info.Config, kvStorage, info.StartTs)
+		if err != nil {
+			return err
+		}
+		if len(ineligibleTables) != 0 {
+			return cerror.ErrTableIneligible.GenWithStackByArgs(ineligibleTables)
+		}
+	}
+
+	// verify sink
+	tz, err := util.GetTimezone(info.Config.Sink.TimeZone)
+	if err != nil {
+		return cerror.ErrAPIInvalidParam.Wrap(errors.Annotatef(err, "invalid timezone:%s", info.Config.Sink.TimeZone))
+	}
+	ctx = contextutil.PutTimezoneInCtx(ctx, tz)
+	if err := sink.Validate(ctx, info.SinkURI, info.Config, info.Opts); err != nil {
+		return err
+	}
+
+	info.CreateTime = time.Now()
+	return nil
 }

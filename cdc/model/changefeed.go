@@ -18,6 +18,7 @@ import (
 	"math"
 	"net/url"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -32,9 +33,13 @@ import (
 	"go.uber.org/zap"
 )
 
-// DefaultNamespace is the default namespace value,
-// all the old changefeed will be put into default namespace
-const DefaultNamespace = "default"
+const (
+	// DefaultNamespace is the default namespace value,
+	// all the old changefeed will be put into default namespace
+	DefaultNamespace = "default"
+	// DefaultUpstreamID is the default upstream id
+	DefaultUpstreamID = 0
+)
 
 // ChangeFeedID is the type for change feed ID
 type ChangeFeedID struct {
@@ -141,8 +146,37 @@ type ChangeFeedInfo struct {
 	SyncPointInterval time.Duration `json:"sync-point-interval"`
 	CreatorVersion    string        `json:"creator-version"`
 
-	PDAddrs          []string            `json:"pd-addr"`
-	CredentialConfig security.Credential `json: "credential-config"`
+	PDAddrs          []string            `json:"pd-addrs"`
+	CredentialConfig security.Credential `json:"credential-config"`
+}
+
+var defaultChangefeedInfo = &ChangeFeedInfo{
+	UpstreamID:        DefaultUpstreamID,
+	Opts:              make(map[string]string),
+	State:             StateNormal,
+	Config:            config.GetDefaultReplicaConfig(),
+	SyncPointEnabled:  false,
+	SyncPointInterval: 10 * time.Minute,
+}
+
+type ChangefeedInfoForAPI ChangeFeedInfo
+
+func (c *ChangefeedInfoForAPI) Marshal() (string, error) {
+	info := ChangeFeedInfo(*c)
+	infoStr, err := info.Marshal()
+	if err != nil {
+		return "", cerror.WrapError(cerror.ErrMarshalFailed, err)
+	}
+	var v interface{}
+	json.Unmarshal([]byte(infoStr), &v)
+	data := v.(map[string]interface{})
+	newData := make(map[string]interface{}, len(data))
+	for k, v := range data {
+		newK := strings.Replace(k, "-", "_", -1)
+		newData[newK] = v
+	}
+	res, err := json.Marshal(newData)
+	return string(res), err
 }
 
 const changeFeedIDMaxLen = 128
@@ -391,4 +425,13 @@ func (info *ChangeFeedInfo) HasFastFailError() bool {
 		return false
 	}
 	return cerror.ChangefeedFastFailErrorCode(errors.RFCErrorCode(info.Error.Code))
+}
+
+// GetDeFaultChangefeedInfo returns deFaultChangefeedInfo.
+func GetDeFaultChangefeedInfo() (*ChangeFeedInfo, error) {
+	res, err := defaultChangefeedInfo.Clone()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	return res, nil
 }
