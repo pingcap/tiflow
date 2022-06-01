@@ -253,6 +253,6 @@ func (w *flushWorker) flushAndNotify(ctx context.Context) error {
 	return nil
 }
 
-func (w *flushWorker) closeMsgChan() {
+func (w *flushWorker) close() {
 	w.msgChan.Close()
 }

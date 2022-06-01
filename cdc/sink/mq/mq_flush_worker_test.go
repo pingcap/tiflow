@@ -104,7 +104,7 @@ func TestBatch(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	worker, _ := newTestWorker(ctx)
-	defer worker.closeMsgChan()
+	defer worker.close()
 	key := topicPartitionKey{
 		topic:     "test",
 		partition: 1,
@@ -226,7 +226,7 @@ func TestGroup(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	worker, _ := newTestWorker(ctx)
-	defer worker.closeMsgChan()
+	defer worker.close()
 	events := []mqEvent{
 		{
 			row: &model.RowChangedEvent{
@@ -304,7 +304,7 @@ func TestAsyncSend(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	worker, producer := newTestWorker(ctx)
-	defer worker.closeMsgChan()
+	defer worker.close()
 	events := []mqEvent{
 		{
 			row: &model.RowChangedEvent{
@@ -376,7 +376,7 @@ func TestFlush(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	worker, producer := newTestWorker(ctx)
-	defer worker.closeMsgChan()
+	defer worker.close()
 	flushedChan := make(chan struct{})
 	flushed := atomic.NewBool(false)
 	events := []mqEvent{
@@ -454,7 +454,7 @@ func TestAbort(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	worker, _ := newTestWorker(ctx)
-	defer worker.closeMsgChan()
+	defer worker.close()
 
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -474,7 +474,7 @@ func TestProducerError(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	worker, prod := newTestWorker(ctx)
-	defer worker.closeMsgChan()
+	defer worker.close()
 
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -512,7 +512,7 @@ func TestWorker(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	worker, producer := newTestWorker(ctx)
-	defer worker.closeMsgChan()
+	defer worker.close()
 	go func() {
 		_ = worker.run(ctx)
 	}()
