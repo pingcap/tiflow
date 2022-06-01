@@ -174,7 +174,7 @@ func (a *agent) handleMessage(msg []*schedulepb.Message) []*schedulepb.Message {
 		case schedulepb.MsgHeartbeat:
 			response := a.handleMessageHeartbeat(message.Heartbeat.GetTableIDs())
 			result = append(result, response)
-		case schedulepb.MsgUnknown:
+		default:
 			log.Warn("tpscheduler: unknown message received",
 				zap.String("capture", a.captureID),
 				zap.String("namespace", a.changeFeedID.Namespace),
