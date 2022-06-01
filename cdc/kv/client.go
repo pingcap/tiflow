@@ -84,9 +84,6 @@ const (
 	defaultCheckRegionRateLimitInterval = 50 * time.Millisecond
 	// Duration of warning region retry rate limited too long.
 	defaultLogRegionRateLimitDuration = 10 * time.Second
-
-	// The minimal batch size for regionStatefulEvent.
-	minBatchSize int = 64
 )
 
 // time interval to force kv client to terminate gRPC stream and reconnect
@@ -1192,7 +1189,7 @@ func (s *eventFeedSession) receiveFromStream(
 
 		failpoint.Inject("kvClientRegionReentrantError", func(op failpoint.Value) {
 			if op.(string) == "error" {
-				worker.inputCh <- nil
+				worker.retrieveEvents(ctx, []*regionStatefulEvent{nil})
 			}
 		})
 		failpoint.Inject("kvClientStreamRecvError", func(msg failpoint.Value) {
@@ -1282,21 +1279,19 @@ func (s *eventFeedSession) sendRegionChangeEvents(
 	pendingRegions *syncRegionFeedStateMap,
 	addr string,
 ) error {
-	buffSize := len(events)/worker.concurrent + 1
-	if buffSize < minBatchSize {
-		buffSize = minBatchSize
+	statefulEvents := make([][]*regionStatefulEvent, worker.concurrent)
+	for i := 0; i < worker.concurrent; i++ {
+		buffLen := len(events) / worker.concurrent * 3 / 2
+		statefulEvents[i] = make([]*regionStatefulEvent, 0, buffLen)
 	}
 
-	var statefulEvents []*regionStatefulEvent = nil
-	var buffCap int = 0
-	for i, event := range events {
-		ignore := false
+	for _, event := range events {
 		state, ok := worker.getRegionState(event.RegionId)
 		// Every region's range is locked before sending requests and unlocked after exiting, and the requestID
 		// is allocated while holding the range lock. Therefore the requestID is always incrementing. If a region
 		// is receiving messages with different requestID, only the messages with the larges requestID is valid.
 		isNewSubscription := !ok
-		if !isNewSubscription {
+		if ok {
 			if state.requestID < event.RequestId {
 				log.Debug("region state entry will be replaced because received message of newer requestID",
 					zap.String("namespace", s.client.changefeed.Namespace),
@@ -1314,7 +1309,7 @@ func (s *eventFeedSession) sendRegionChangeEvents(
 					zap.Uint64("requestID", event.RequestId),
 					zap.Uint64("currRequestID", state.requestID),
 					zap.String("addr", addr))
-				ignore = true
+				continue
 			}
 		}
 
@@ -1331,11 +1326,10 @@ func (s *eventFeedSession) sendRegionChangeEvents(
 					zap.Uint64("regionID", event.RegionId),
 					zap.Uint64("requestID", event.RequestId),
 					zap.String("addr", addr))
-				ignore = true
-			} else {
-				state.start()
-				worker.setRegionState(event.RegionId, state)
+				continue
 			}
+			state.start()
+			worker.setRegionState(event.RegionId, state)
 		} else if state.isStopped() {
 			log.Warn("drop event due to region feed stopped",
 				zap.String("namespace", s.client.changefeed.Namespace),
@@ -1343,31 +1337,22 @@ func (s *eventFeedSession) sendRegionChangeEvents(
 				zap.Uint64("regionID", event.RegionId),
 				zap.Uint64("requestID", event.RequestId),
 				zap.String("addr", addr))
-			ignore = true
+			continue
 		}
 
-		if !ignore {
-			if statefulEvents == nil {
-				if len(events)-i <= buffSize {
-					buffCap = len(events) - i
-				} else {
-					buffCap = buffSize
-				}
-				statefulEvents = make([]*regionStatefulEvent, 0, buffCap)
-			}
-			statefulEvents = append(statefulEvents, &regionStatefulEvent{
-				changeEvent: event,
-				regionID:    event.RegionId,
-				state:       state,
-			})
-		}
-		if buffCap > 0 && (len(statefulEvents) >= buffCap || i+1 == len(events)) {
-			err := worker.retrieveEvents(ctx, statefulEvents)
+		slot := int(event.RegionId) % worker.concurrent
+		statefulEvents[slot] = append(statefulEvents[slot], &regionStatefulEvent{
+			changeEvent: event,
+			regionID:    event.RegionId,
+			state:       state,
+		})
+	}
+	for _, events := range statefulEvents {
+		if len(events) > 0 {
+			err := worker.retrieveEvents(ctx, events)
 			if err != nil {
 				return err
 			}
-			statefulEvents = nil
-			buffCap = 0
 		}
 	}
 	return nil
@@ -1379,49 +1364,38 @@ func (s *eventFeedSession) sendResolvedTs(
 	worker *regionWorker,
 	addr string,
 ) error {
-	buffSize := len(resolvedTs.Regions)/worker.concurrent + 1
-	if buffSize < minBatchSize {
-		buffSize = minBatchSize
+	statefulEvents := make([][]*regionStatefulEvent, worker.concurrent)
+	for i := 0; i < worker.concurrent; i++ {
+		buffLen := len(resolvedTs.Regions) / worker.concurrent * 3 / 2
+		statefulEvents[i] = make([]*regionStatefulEvent, 0, buffLen)
 	}
 
-	var statefulEvents []*regionStatefulEvent = nil
-	var buffCap int = 0
-	for i, regionID := range resolvedTs.Regions {
-		ignore := false
+	for _, regionID := range resolvedTs.Regions {
 		state, ok := worker.getRegionState(regionID)
-		if !ok {
-			ignore = true
-		} else if state.isStopped() {
-			log.Debug("drop resolved ts due to region feed stopped",
-				zap.String("namespace", s.client.changefeed.Namespace),
-				zap.String("changefeed", s.client.changefeed.ID),
-				zap.Uint64("regionID", regionID),
-				zap.Uint64("requestID", state.requestID),
-				zap.String("addr", addr))
-			ignore = true
-		}
-		if !ignore {
-			if statefulEvents == nil {
-				if len(resolvedTs.Regions)-i <= buffSize {
-					buffCap = len(resolvedTs.Regions) - i
-				} else {
-					buffCap = buffSize
-				}
-				statefulEvents = make([]*regionStatefulEvent, 0, buffCap)
+		if ok {
+			if state.isStopped() {
+				log.Debug("drop resolved ts due to region feed stopped",
+					zap.String("namespace", s.client.changefeed.Namespace),
+					zap.String("changefeed", s.client.changefeed.ID),
+					zap.Uint64("regionID", regionID),
+					zap.Uint64("requestID", state.requestID),
+					zap.String("addr", addr))
+				continue
 			}
-			statefulEvents = append(statefulEvents, &regionStatefulEvent{
+			slot := int(regionID) % worker.concurrent
+			statefulEvents[slot] = append(statefulEvents[slot], &regionStatefulEvent{
 				resolvedTs: resolvedTs,
 				regionID:   regionID,
 				state:      state,
 			})
 		}
-		if buffCap > 0 && (len(statefulEvents) >= buffCap || i+1 == len(resolvedTs.Regions)) {
-			err := worker.retrieveEvents(ctx, statefulEvents)
+	}
+	for _, events := range statefulEvents {
+		if len(events) > 0 {
+			err := worker.retrieveEvents(ctx, events)
 			if err != nil {
 				return err
 			}
-			statefulEvents = nil
-			buffCap = 0
 		}
 	}
 	return nil

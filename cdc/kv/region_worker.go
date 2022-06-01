@@ -497,33 +497,17 @@ func (w *regionWorker) eventHandler(ctx context.Context) error {
 		}
 		atomic.AddInt32(&w.inputPending, -int32(len(events)))
 
-		for _, event := range events {
-			exitEventHandler, skipEvent := preprocess(event, ok)
-			if exitEventHandler {
-				return cerror.ErrRegionWorkerExit.GenWithStackByArgs()
-			}
-			if skipEvent {
-				continue
-			}
-			// We measure whether the current worker is busy based on the input
-			// channel size. If the buffered event count is larger than the high
-			// watermark, we send events to worker pool to increase processing
-			// throughput. Otherwise we process event in local region worker to
-			// ensure low processing latency.
-			if !highWatermarkMet {
-				err = w.processEvent(ctx, event)
-				if err != nil {
-					return err
-				}
-			} else {
-				err = w.handles[int(event.regionID)%w.concurrent].AddEvent(ctx, event)
-				if err != nil {
-					return err
-				}
-			}
-		}
-
 		if highWatermarkMet {
+			// All events in one batch can be hashed into one handle slot.
+			slot := int(events[0].regionID) % w.concurrent
+			eventsX := make([]interface{}, 0, len(events))
+			for _, event := range events {
+				eventsX = append(eventsX, event)
+			}
+			err = w.handles[slot].AddEvents(ctx, eventsX)
+			if err != nil {
+				return err
+			}
 			// Principle: events from the same region must be processed linearly.
 			//
 			// When buffered events exceed high watermark, we start to use worker
@@ -552,8 +536,25 @@ func (w *regionWorker) eventHandler(ctx context.Context) error {
 					counter--
 				}
 			}
+		} else {
+			// We measure whether the current worker is busy based on the input
+			// channel size. If the buffered event count is larger than the high
+			// watermark, we send events to worker pool to increase processing
+			// throughput. Otherwise we process event in local region worker to
+			// ensure low processing latency.
+			for _, event := range events {
+				exitEventHandler, skipEvent := preprocess(event, ok)
+				if exitEventHandler {
+					return cerror.ErrRegionWorkerExit.GenWithStackByArgs()
+				}
+				if !skipEvent {
+					err = w.processEvent(ctx, event)
+					if err != nil {
+						return err
+					}
+				}
+			}
 		}
-
 	}
 }
 
@@ -835,6 +836,7 @@ func (w *regionWorker) evictAllRegions() {
 }
 
 // retrieveEvents puts events into inputCh and updates some internal states.
+// Callers must ensure that all items in events can be hashed into one handle slot.
 func (w *regionWorker) retrieveEvents(ctx context.Context, events []*regionStatefulEvent) error {
 	atomic.AddInt32(&w.inputPending, int32(len(events)))
 	select {
