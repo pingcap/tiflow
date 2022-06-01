@@ -30,8 +30,8 @@ import (
 // @Tags changefeed
 // @Accept json
 // @Produce json
-// @Param changefeed body model.ChangeFeedInfo true "changefeed info"
-// @Success 200 {object} model.ChangeFeedInfo
+// @Param changefeed body map[string]interface{} true "changefeed info"
+// @Success 200 {object} map[string]interface{}
 // @Failure 500,400 {object} model.HTTPError
 // @Router	/api/v2/changefeeds [post]
 func (h *OpenAPIV2) CreateChangefeed(c *gin.Context) {
@@ -69,17 +69,4 @@ func (h *OpenAPIV2) CreateChangefeed(c *gin.Context) {
 
 	log.Info("Create changefeed successfully!", zap.String("id", info.ID), zap.String("changefeed", infoStr))
 	c.Status(http.StatusOK)
-}
-
-// VerifyTable verify tables of a changefeed
-// @Summary Verify tables
-// @Description Verify all tables of a changefeed, check if these tables are ineligible or eligible
-// @Tags changefeed
-// @Accept json
-// @Produce json
-// @Param replicaConfig body config.replicaConfig true "replicaConfig config"
-// @Success 200 {object} Tables
-// @Failure 500,400 {object} model.HTTPError
-// @Router	/api/v2/verify-table [post]
-func (h *OpenAPIV2) VerifyTable(c *gin.Context) {
 }
