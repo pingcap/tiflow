@@ -203,11 +203,11 @@ func (k *mqSink) bgFlushTs(ctx context.Context) error {
 			return errors.Trace(ctx.Err())
 		case msg, ok := <-k.resolvedBuffer.Out():
 			if !ok {
-				log.Error("resolved ts buffer is closed",
+				log.Warn("resolved ts buffer is closed",
 					zap.String("namespace", k.id.Namespace),
 					zap.String("changefeed", k.id.ID),
 					zap.Any("role", k.role))
-				return cerror.ErrMQFlushBufferClosed.GenWithStackByArgs()
+				return nil
 			}
 			resolved := msg.resolved
 			err := k.flushTsToWorker(ctx, resolved)
@@ -342,7 +342,9 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 	return errors.Trace(err)
 }
 
-// Close the producer asynchronously, does not care closed successfully or not.
+// Close closes the sink.
+// It is only called in the processor, and the processor destroys the
+// table sinks before closing it. So there is no writing after closing.
 func (k *mqSink) Close(ctx context.Context) error {
 	k.resolvedBuffer.Close()
 	k.flushWorker.close()
