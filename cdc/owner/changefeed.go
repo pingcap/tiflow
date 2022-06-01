@@ -49,13 +49,16 @@ func newSchedulerV2FromCtx(
 	messageServer := ctx.GlobalVars().MessageServer
 	messageRouter := ctx.GlobalVars().MessageRouter
 	ownerRev := ctx.GlobalVars().OwnerRevision
+	captureID := ctx.GlobalVars().CaptureInfo.ID
 	cfg := config.GetGlobalServerConfig().Debug
 	if cfg.EnableTwoPhaseScheduler {
 		ret, err = scheduler.NewTpScheduler(
-			ctx, changeFeedID, startTs, messageServer, messageRouter, ownerRev, cfg.Scheduler)
+			ctx, captureID, changeFeedID, startTs,
+			messageServer, messageRouter, ownerRev, cfg.Scheduler)
 	} else {
 		ret, err = scheduler.NewScheduler(
-			ctx, changeFeedID, startTs, messageServer, messageRouter, ownerRev, cfg.Scheduler)
+			ctx, captureID, changeFeedID, startTs,
+			messageServer, messageRouter, ownerRev, cfg.Scheduler)
 	}
 	return ret, errors.Trace(err)
 }

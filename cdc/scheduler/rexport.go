@@ -71,6 +71,7 @@ func NewAgent(
 // NewScheduler returns owner scheduler.
 func NewScheduler(
 	ctx context.Context,
+	captureID model.CaptureID,
 	changeFeedID model.ChangeFeedID,
 	checkpointTs model.Ts,
 	messageServer *p2p.MessageServer,
@@ -99,6 +100,7 @@ func NewTpAgent(
 // NewTpScheduler returns two-phase scheduler.
 func NewTpScheduler(
 	ctx context.Context,
+	captureID model.CaptureID,
 	changeFeedID model.ChangeFeedID,
 	checkpointTs model.Ts,
 	messageServer *p2p.MessageServer,
@@ -107,5 +109,6 @@ func NewTpScheduler(
 	cfg *config.SchedulerConfig,
 ) (Scheduler, error) {
 	return tp.NewCoordinator(
-		ctx, changeFeedID, checkpointTs, messageServer, messageRouter, ownerRevision, cfg)
+		ctx, captureID, changeFeedID, checkpointTs,
+		messageServer, messageRouter, ownerRevision, cfg)
 }

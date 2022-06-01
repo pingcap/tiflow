@@ -44,6 +44,7 @@ var _ internal.Scheduler = (*coordinator)(nil)
 type coordinator struct {
 	version      string
 	revision     schedulepb.OwnerRevision
+	captureID    model.CaptureID
 	trans        transport
 	scheduler    []scheduler
 	replicationM *replicationManager
@@ -53,6 +54,7 @@ type coordinator struct {
 // NewCoordinator returns a two phase scheduler.
 func NewCoordinator(
 	ctx context.Context,
+	captureID model.CaptureID,
 	changeFeedID model.ChangeFeedID,
 	checkpointTs model.Ts,
 	messageServer *p2p.MessageServer,
@@ -68,6 +70,7 @@ func NewCoordinator(
 	return &coordinator{
 		version:      version.ReleaseSemver(),
 		revision:     revision,
+		captureID:    captureID,
 		trans:        trans,
 		scheduler:    []scheduler{newBalancer()},
 		replicationM: newReplicationManager(cfg.MaxTaskConcurrency),
@@ -171,8 +174,8 @@ func (c *coordinator) recvMsgs(ctx context.Context) ([]*schedulepb.Message, erro
 
 	n := 0
 	for _, val := range recvMsgs {
-		// Filter stale messages.
-		if val.Header.OwnerRevision == c.revision {
+		// Filter stale messages and lost messages.
+		if val.Header.OwnerRevision == c.revision && val.To == c.captureID {
 			recvMsgs[n] = val
 			n++
 		}
@@ -187,6 +190,7 @@ func (c *coordinator) sendMsgs(ctx context.Context, msgs []*schedulepb.Message) 
 			Version:       c.version,
 			OwnerRevision: c.revision,
 		}
+		m.From = c.captureID
 		// Correctness check.
 		if len(m.To) == 0 || m.MsgType == schedulepb.MsgUnknown {
 			log.Panic("invalid message no destination or unknown message type",
