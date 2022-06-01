@@ -28,8 +28,10 @@ import (
 )
 
 const (
-	gcCheckInterval = 10 * time.Second
-	gcTimeout       = 10 * time.Second
+	gcCheckInterval          = 10 * time.Second
+	gcTimeout                = 10 * time.Second
+	gcOnceRetryMinIntervalMs = 100
+	gcOnceRetryMaxIntervalMs = 100
 )
 
 // GCHandlerFunc is the type for a function that actually removes a resource.
@@ -95,7 +97,10 @@ func (r *DefaultGCRunner) GCNotify() {
 func (r *DefaultGCRunner) gcOnceWithRetry(ctx context.Context) error {
 	return retry.Do(ctx, func() error {
 		return r.gcOnce(ctx)
-	}, retry.WithBackoffBaseDelay(100), retry.WithBackoffMaxDelay(1000))
+	},
+		retry.WithBackoffBaseDelay(gcOnceRetryMinIntervalMs),
+		retry.WithBackoffMaxDelay(gcOnceRetryMaxIntervalMs),
+	)
 }
 
 func (r *DefaultGCRunner) gcOnce(
