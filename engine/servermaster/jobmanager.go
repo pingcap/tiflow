@@ -35,6 +35,7 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/notifier"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
+	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	"github.com/pingcap/tiflow/pkg/uuid"
 )
 
@@ -107,6 +108,7 @@ func (jm *JobManagerImplV2) PauseJob(ctx context.Context, req *pb.PauseJobReques
 }
 
 // CancelJob implements proto/Master.CancelJob
+// TODO: Add Project delete logic in 'stop job'
 func (jm *JobManagerImplV2) CancelJob(ctx context.Context, req *pb.CancelJobRequest) *pb.CancelJobResponse {
 	// This is a draft implementation.
 	// TODO:
@@ -217,7 +219,10 @@ func (jm *JobManagerImplV2) SubmitJob(ctx context.Context, req *pb.SubmitJobRequ
 	)
 
 	meta := &libModel.MasterMetaKVData{
-		ProjectID: req.GetUser(),
+		ProjectID: tenant.NewProjectInfo(
+			req.GetProjectInfo().GetTenantId(),
+			req.GetProjectInfo().GetProjectId(),
+		).UniqueID(),
 		// TODO: we can use job name provided from user, but we must check the
 		// job name is unique before using it.
 		ID:         jm.uuidGen.NewString(),
@@ -250,6 +255,24 @@ func (jm *JobManagerImplV2) SubmitJob(ctx context.Context, req *pb.SubmitJobRequ
 	if err != nil {
 		resp.Err = derrors.ToPBError(err)
 		return resp
+	}
+
+	// TODO: Refine me. split the BaseMaster
+	defaultMaster, ok := jm.BaseMaster.(interface {
+		SetProjectInfo(libModel.MasterID, tenant.ProjectInfo)
+	})
+	if ok {
+		defaultMaster.SetProjectInfo(meta.ID, tenant.NewProjectInfo(
+			req.GetProjectInfo().GetTenantId(),
+			req.GetProjectInfo().GetProjectId(),
+		))
+	} else {
+		log.L().Error("jobmanager don't have the 'SetProjectInfo' interface",
+			zap.String("masterID", meta.ID),
+			zap.Any("projectInfo", tenant.NewProjectInfo(
+				req.GetProjectInfo().GetTenantId(),
+				req.GetProjectInfo().GetProjectId(),
+			)))
 	}
 
 	// CreateWorker here is to create job master actually
@@ -406,10 +429,22 @@ func (jm *JobManagerImplV2) OnMasterRecovered(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+
+	// TODO: refine me, split the BaseMaster interface
+	impl, ok := jm.BaseMaster.(interface {
+		InitProjectInfosAfterRecover([]*libModel.MasterMetaKVData)
+	})
+	if !ok {
+		log.L().Panic("unfound interface for BaseMaster", zap.String("interface", "InitProjectInfosAfterRecover"))
+		return derrors.ErrMasterInterfaceNotFound.GenWithStackByArgs()
+	}
+	impl.InitProjectInfosAfterRecover(jobs)
+
 	for _, job := range jobs {
 		if job.Tp == lib.JobManager {
 			continue
 		}
+		// TODO: filter the job in backend
 		if job.StatusCode == libModel.MasterStatusFinished || job.StatusCode == libModel.MasterStatusStopped {
 			log.L().Info("skip finished or stopped job", zap.Any("job", job))
 			continue
