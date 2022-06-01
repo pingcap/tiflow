@@ -587,7 +587,7 @@ func (v *DataValidator) doValidate() {
 			case err == context.DeadlineExceeded:
 				v.L.Info("deadline exceeded when fetching binlog event")
 				continue
-			case binlogstream.isDuplicateServerIDError(err):
+			case isDuplicateServerIDError(err):
 				// if the server id is already used, need to use a new server id
 				v.L.Info("server id is already used by another slave, will change to a new server id and get event again")
 				err1 := v.streamerController.UpdateServerIDAndResetReplication(v.tctx, locationForFlush)
@@ -598,7 +598,7 @@ func (v *DataValidator) doValidate() {
 				continue
 			case err == relay.ErrorMaybeDuplicateEvent:
 				continue
-			case binlogstream.isConnectionRefusedError(err):
+			case isConnectionRefusedError(err):
 				v.sendError(terror.ErrValidatorGetEvent.Delegate(err))
 				return
 			default:

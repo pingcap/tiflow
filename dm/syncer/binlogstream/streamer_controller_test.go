@@ -18,7 +18,6 @@ import (
 	"time"
 
 	"github.com/go-mysql-org/go-mysql/replication"
-	. "github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/relay"
 	"github.com/stretchr/testify/require"
