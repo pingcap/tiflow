@@ -1261,6 +1261,11 @@ error = '''
 invalid metastore key type %s
 '''
 
+["DFLOW:ErrInvalidResourceHandle"]
+error = '''
+using an invalid resource handle
+'''
+
 ["DFLOW:ErrInvalidServerMasterID"]
 error = '''
 invalid server master id: %s

@@ -16,8 +16,6 @@ package orchestrator
 import (
 	"context"
 	"encoding/json"
-	"io/ioutil"
-	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -197,9 +195,7 @@ func (s *simpleReactorState) GetPatches() [][]DataPatch {
 }
 
 func setUpTest(t *testing.T) (func() *etcd.Client, func()) {
-	dir, err := ioutil.TempDir("", "etcd-test")
-	require.Nil(t, err)
-	url, server, err := etcd.SetupEmbedEtcd(dir)
+	url, server, err := etcd.SetupEmbedEtcd(t.TempDir())
 	require.Nil(t, err)
 	endpoints := []string{url.String()}
 	return func() *etcd.Client {
@@ -208,7 +204,6 @@ func setUpTest(t *testing.T) (func() *etcd.Client, func()) {
 			return etcd.Wrap(rawCli, map[string]prometheus.Counter{})
 		}, func() {
 			server.Close()
-			os.RemoveAll(dir)
 		}
 }
 
