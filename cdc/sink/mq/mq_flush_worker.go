@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/mq/codec"
 	"github.com/pingcap/tiflow/cdc/sink/mq/producer"
 	"github.com/pingcap/tiflow/pkg/chann"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
 )
 
@@ -93,7 +94,11 @@ func (w *flushWorker) batch(
 	select {
 	case <-ctx.Done():
 		return index, ctx.Err()
-	case msg := <-w.msgChan.Out():
+	case msg, ok := <-w.msgChan.Out():
+		if !ok {
+			log.Error("MQ sink flush worker channel closed")
+			return index, cerror.ErrMQWorkerClosed.GenWithStackByArgs()
+		}
 		// When the flush event is received,
 		// we need to write the previous data to the producer as soon as possible.
 		if msg.flush != nil {
@@ -113,7 +118,11 @@ func (w *flushWorker) batch(
 		select {
 		case <-ctx.Done():
 			return index, ctx.Err()
-		case msg := <-w.msgChan.Out():
+		case msg, ok := <-w.msgChan.Out():
+			if !ok {
+				log.Error("MQ sink flush worker channel closed")
+				return index, cerror.ErrMQWorkerClosed.GenWithStackByArgs()
+			}
 			// When the flush event is received,
 			// we need to write the previous data to the producer as soon as possible.
 			if msg.flush != nil {
