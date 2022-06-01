@@ -91,12 +91,21 @@ function run() {
 		--ssl-ca=$TLS_DIR/ca.pem \
 		--ssl-cert=$TLS_DIR/server.pem \
 		--ssl-key=$TLS_DIR/server-key.pem
+	run_sql "CREATE table test.verify_table_eligible(id int primary key, val int);" ${TLS_TIDB_HOST} ${TLS_TIDB_PORT} \
+	--ssl-ca=$TLS_DIR/ca.pem \
+	--ssl-cert=$TLS_DIR/server.pem \
+	--ssl-key=$TLS_DIR/server-key.pem
+	run_sql "CREATE table test.verify_table_ineligible(id int, val int);" ${TLS_TIDB_HOST} ${TLS_TIDB_PORT} \
+	--ssl-ca=$TLS_DIR/ca.pem \
+	--ssl-cert=$TLS_DIR/server.pem \
+	--ssl-key=$TLS_DIR/server-key.pem
 	# wait for above sql done in the up source
 	sleep 2
 
 	check_table_exists test.simple1 ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 
 	sequential_cases=(
+		# api v1
 		"list_changefeed"
 		"get_changefeed"
 		"pause_changefeed"
@@ -109,6 +118,8 @@ function run() {
 		"set_log_level"
 		"remove_changefeed"
 		"resign_owner"
+		# api v2
+		"verify_table"
 	)
 
 	for case in ${sequential_cases[@]}; do

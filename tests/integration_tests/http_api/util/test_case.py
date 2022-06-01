@@ -10,6 +10,9 @@ RETRY_TIME = 10
 BASE_URL0 = "https://127.0.0.1:8300/api/v1"
 BASE_URL1 = "https://127.0.0.1:8301/api/v1"
 
+BASE_URL0_V2 = "https://127.0.0.1:8300/api/v2"
+BASE_URL0_V2 = "https://127.0.0.1:8301/api/v2"
+
 # we should write some SQLs in the run.sh after call create_changefeed
 def create_changefeed(sink_uri):
     url = BASE_URL1+"/changefeeds"
@@ -298,6 +301,26 @@ def set_log_level():
 
     print("pass test: set log level")
 
+def verify_table():
+    url = BASE_URL0+"/changefeeds/changefeed-test1"
+    resp = rq.get(url, cert=CERT, verify=VERIFY)
+    assert resp.status_code == rq.codes.ok
+    start_ts = resp.json()["checkpoint_tso"]
+
+    url = BASE_URL0_V2 + "/verify-table"
+    data = json.dumps({
+    "pd-addrs":["http://127.0.0.1:2379"],
+    "start-ts":start_ts,
+    "replica-config": {"filter":{"rules":["test.verify*"]}}})
+    headers = {"Content-Type": "application/json"}
+
+    resp = rq.post(url, data=data, headers=headers, cert=CERT, verify=VERIFY)
+    assert resp.status_code == rq.codes.ok
+    eligible_table_name = resp.json()["eligible-tables"][0]["tbl-name"]
+    ineligible_table_name = resp.json()["ineligible-tables"][0]["tbl-name"]
+    assert eligible_table_name == "verify_table_eligible"
+    assert ineligible_table_name == "verify_table_ineligible"
+
 # arg1: test case name
 # arg2: cetificates dir
 # arg3: sink uri
@@ -312,6 +335,7 @@ if __name__ == "__main__":
 
     # test all the case as the order list in this map
     FUNC_MAP = {
+        # api v1
         "check_health": check_health,
         "get_status": get_status,
         "create_changefeed": create_changefeed,
@@ -327,6 +351,8 @@ if __name__ == "__main__":
         "set_log_level": set_log_level,
         "remove_changefeed": remove_changefeed,
         "resign_owner": resign_owner,
+        # api v2
+        "verify_table": verify_table,
     }
 
     func = FUNC_MAP[sys.argv[1]]

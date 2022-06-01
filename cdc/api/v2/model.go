@@ -31,9 +31,18 @@ type Tables struct {
 	EligibleTables   []model.TableName `json:"eligible-tables,omitempty"`
 }
 
+// VerifyTableConfig use to verify tables.
+// Only use by Open API v2.
 type VerifyTableConfig struct {
 	PDAddrs       []string              `json:"pd-addrs"`
 	Credential    *security.Credential  `json:"credential"`
 	ReplicaConfig *config.ReplicaConfig `json:"replica-config"`
 	StartTs       uint64                `json:"start-ts"`
+}
+
+func defaultVerifyTableConfig() *VerifyTableConfig {
+	return &VerifyTableConfig{
+		Credential:    &security.Credential{},
+		ReplicaConfig: config.GetDefaultReplicaConfig(),
+	}
 }
