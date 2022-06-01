@@ -110,10 +110,6 @@ func newCaptureManager(rev schedulepb.OwnerRevision, heartbeatTick int) *capture
 	}
 }
 
-func (c *captureManager) CaptureTableSets() map[model.CaptureID]*CaptureStatus {
-	return c.Captures
-}
-
 func (c *captureManager) CheckAllCaptureInitialized() bool {
 	return c.initialized && c.checkAllCaptureInitialized()
 }

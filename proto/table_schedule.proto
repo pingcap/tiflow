@@ -30,7 +30,7 @@ message AddTableRequest {
         (gogoproto.customname) = "TableID"
     ];
     bool is_secondary = 2;
-    Checkpoint checkpoint = 3;
+    Checkpoint checkpoint = 3 [(gogoproto.nullable) = false];
 }
 
 message RemoveTableRequest {
@@ -49,13 +49,13 @@ message DispatchTableRequest {
 
 message AddTableResponse {
     TableStatus status = 1;
-    Checkpoint checkpoint = 2;
+    Checkpoint checkpoint = 2 [(gogoproto.nullable) = false];
     bool reject = 3;
 }
 
 message RemoveTableResponse {
     TableStatus status = 1;
-    Checkpoint checkpoint = 2;
+    Checkpoint checkpoint = 2 [(gogoproto.nullable) = false];
 }
 
 message DispatchTableResponse {

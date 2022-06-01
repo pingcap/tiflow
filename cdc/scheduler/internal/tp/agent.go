@@ -311,7 +311,7 @@ func (a *agent) handleMessageDispatchTableRequest(
 		}
 		task = &dispatchTableTask{
 			TableID:   req.AddTable.GetTableID(),
-			StartTs:   req.AddTable.GetCheckpoint().GetCheckpointTs(),
+			StartTs:   req.AddTable.GetCheckpoint().CheckpointTs,
 			IsRemove:  false,
 			IsPrepare: req.AddTable.GetIsSecondary(),
 			Epoch:     epoch,
@@ -387,7 +387,7 @@ func (a *agent) newRemoveTableResponseMessage(
 			Response: &schedulepb.DispatchTableResponse_RemoveTable{
 				RemoveTable: &schedulepb.RemoveTableResponse{
 					Status:     &status,
-					Checkpoint: &status.Checkpoint,
+					Checkpoint: status.Checkpoint,
 				},
 			},
 		},
@@ -453,7 +453,7 @@ func (a *agent) newAddTableResponseMessage(
 			Response: &schedulepb.DispatchTableResponse_AddTable{
 				AddTable: &schedulepb.AddTableResponse{
 					Status:     &status,
-					Checkpoint: &status.Checkpoint,
+					Checkpoint: status.Checkpoint,
 					Reject:     reject,
 				},
 			},

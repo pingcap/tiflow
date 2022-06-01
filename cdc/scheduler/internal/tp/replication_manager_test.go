@@ -44,7 +44,6 @@ func TestReplicationManagerHandleAddTableTask(t *testing.T) {
 				AddTable: &schedulepb.AddTableRequest{
 					TableID:     1,
 					IsSecondary: true,
-					Checkpoint:  &schedulepb.Checkpoint{CheckpointTs: 0},
 				},
 			},
 		},
@@ -85,7 +84,6 @@ func TestReplicationManagerHandleAddTableTask(t *testing.T) {
 				AddTable: &schedulepb.AddTableRequest{
 					TableID:     1,
 					IsSecondary: false,
-					Checkpoint:  &schedulepb.Checkpoint{CheckpointTs: 0},
 				},
 			},
 		},
@@ -127,13 +125,13 @@ func TestReplicationManagerRemoveTable(t *testing.T) {
 	// Ignore remove table if there is no such table.
 	msgs, err := r.HandleTasks([]*scheduleTask{{
 		removeTable: &removeTable{TableID: 1, CaptureID: "1"},
-		accept:      func() { t.Fatal("must not accpet") },
+		accept:      func() { t.Fatal("must not accept") },
 	}})
 	require.Nil(t, err)
 	require.Len(t, msgs, 0)
 
 	// Add the table.
-	tbl, err := newReplicationSet(1, map[string]*schedulepb.TableStatus{
+	tbl, err := newReplicationSet(1, 0, map[string]*schedulepb.TableStatus{
 		"1": {TableID: 1, State: schedulepb.TableStateReplicating},
 	})
 	require.Nil(t, err)
@@ -222,13 +220,13 @@ func TestReplicationManagerMoveTable(t *testing.T) {
 	// Ignore move table if it's not exist.
 	msgs, err := r.HandleTasks([]*scheduleTask{{
 		moveTable: &moveTable{TableID: 1, DestCapture: dest},
-		accept:    func() { t.Fatal("must not accpet") },
+		accept:    func() { t.Fatal("must not accept") },
 	}})
 	require.Nil(t, err)
 	require.Len(t, msgs, 0)
 
 	// Add the table.
-	tbl, err := newReplicationSet(1, map[string]*schedulepb.TableStatus{
+	tbl, err := newReplicationSet(1, 0, map[string]*schedulepb.TableStatus{
 		source: {TableID: 1, State: schedulepb.TableStateReplicating},
 	})
 	require.Nil(t, err)
@@ -253,7 +251,6 @@ func TestReplicationManagerMoveTable(t *testing.T) {
 				AddTable: &schedulepb.AddTableRequest{
 					TableID:     1,
 					IsSecondary: true,
-					Checkpoint:  &schedulepb.Checkpoint{CheckpointTs: 0},
 				},
 			},
 		},
@@ -321,7 +318,6 @@ func TestReplicationManagerMoveTable(t *testing.T) {
 				AddTable: &schedulepb.AddTableRequest{
 					TableID:     1,
 					IsSecondary: false,
-					Checkpoint:  &schedulepb.Checkpoint{CheckpointTs: 0},
 				},
 			},
 		},
@@ -385,7 +381,6 @@ func TestReplicationManagerBurstBalance(t *testing.T) {
 					AddTable: &schedulepb.AddTableRequest{
 						TableID:     tableID,
 						IsSecondary: true,
-						Checkpoint:  &schedulepb.Checkpoint{CheckpointTs: 0},
 					},
 				},
 			},
@@ -395,7 +390,7 @@ func TestReplicationManagerBurstBalance(t *testing.T) {
 	}
 
 	// Add a new table.
-	r.tables[5], err = newReplicationSet(5, map[string]*schedulepb.TableStatus{
+	r.tables[5], err = newReplicationSet(5, 0, map[string]*schedulepb.TableStatus{
 		"5": {TableID: 5, State: schedulepb.TableStateReplicating},
 	})
 	require.Nil(t, err)
@@ -421,7 +416,6 @@ func TestReplicationManagerBurstBalance(t *testing.T) {
 				AddTable: &schedulepb.AddTableRequest{
 					TableID:     4,
 					IsSecondary: true,
-					Checkpoint:  &schedulepb.Checkpoint{CheckpointTs: 0},
 				},
 			},
 		},
@@ -462,7 +456,6 @@ func TestReplicationManagerMaxTaskConcurrency(t *testing.T) {
 				AddTable: &schedulepb.AddTableRequest{
 					TableID:     1,
 					IsSecondary: true,
-					Checkpoint:  &schedulepb.Checkpoint{CheckpointTs: 0},
 				},
 			},
 		},
@@ -494,7 +487,7 @@ func TestReplicationManagerHandleCaptureChanges(t *testing.T) {
 		},
 		"4": {{TableID: 4, State: schedulepb.TableStateStopping}},
 	}}
-	msgs, err := r.HandleCaptureChanges(&changes)
+	msgs, err := r.HandleCaptureChanges(&changes, 0)
 	require.Nil(t, err)
 	require.Len(t, msgs, 0)
 	require.Len(t, r.tables, 4)
@@ -506,7 +499,7 @@ func TestReplicationManagerHandleCaptureChanges(t *testing.T) {
 	changes = captureChanges{Removed: map[string][]schedulepb.TableStatus{
 		"1": {{TableID: 1, State: schedulepb.TableStateReplicating}},
 	}}
-	msgs, err = r.HandleCaptureChanges(&changes)
+	msgs, err = r.HandleCaptureChanges(&changes, 0)
 	require.Nil(t, err)
 	require.Len(t, msgs, 0)
 	require.Len(t, r.tables, 4)

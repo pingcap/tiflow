@@ -14,6 +14,8 @@
 package tp
 
 import (
+	"math"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -28,6 +30,7 @@ type callback func()
 type burstBalance struct {
 	// Add tables to captures
 	AddTables, RemoveTables map[model.TableID]model.CaptureID
+	checkpointTs            model.Ts
 }
 
 type moveTable struct {
@@ -36,8 +39,9 @@ type moveTable struct {
 }
 
 type addTable struct {
-	TableID   model.TableID
-	CaptureID model.CaptureID
+	TableID      model.TableID
+	CaptureID    model.CaptureID
+	CheckpointTs model.Ts
 }
 
 type removeTable struct {
@@ -70,7 +74,7 @@ func newReplicationManager(maxTaskConcurrency int) *replicationManager {
 }
 
 func (r *replicationManager) HandleCaptureChanges(
-	changes *captureChanges,
+	changes *captureChanges, checkpointTs model.Ts,
 ) ([]*schedulepb.Message, error) {
 	if changes.Init != nil {
 		if len(r.tables) != 0 {
@@ -88,7 +92,7 @@ func (r *replicationManager) HandleCaptureChanges(
 			}
 		}
 		for tableID, status := range tableStatus {
-			table, err := newReplicationSet(tableID, status)
+			table, err := newReplicationSet(tableID, checkpointTs, status)
 			if err != nil {
 				return nil, errors.Trace(err)
 			}
@@ -141,8 +145,7 @@ func (r *replicationManager) handleMessageHeartbeatResponse(
 	from model.CaptureID, msg *schedulepb.HeartbeatResponse,
 ) ([]*schedulepb.Message, error) {
 	sentMsgs := make([]*schedulepb.Message, 0)
-	for i := range msg.Tables {
-		status := msg.Tables[i]
+	for _, status := range msg.Tables {
 		table, ok := r.tables[status.TableID]
 		if !ok {
 			log.Info("tpscheduler: ignore table status no table found",
@@ -283,7 +286,7 @@ func (r *replicationManager) handleAddTableTask(
 	var err error
 	table := r.tables[task.TableID]
 	if table == nil {
-		table, err = newReplicationSet(task.TableID, nil)
+		table, err = newReplicationSet(task.TableID, task.CheckpointTs, nil)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -366,4 +369,31 @@ func (r *replicationManager) handleBurstBalanceTasks(
 // Caller must not modify the return replication sets.
 func (r *replicationManager) ReplicationSets() map[model.TableID]*ReplicationSet {
 	return r.tables
+}
+
+func (r *replicationManager) AdvanceCheckpoint(
+	currentTables []model.TableID,
+) (newCheckpointTs, newResolvedTs model.Ts) {
+	newCheckpointTs, newResolvedTs = math.MaxUint64, math.MaxUint64
+	checkpointChanged := false
+	for _, tableID := range currentTables {
+		table, ok := r.tables[tableID]
+		if !ok {
+			// Can not advance checkpoint there is a table missing.
+			return checkpointCannotProceed, checkpointCannotProceed
+		}
+		// Find the minimum checkpoint ts and resolved ts.
+		if newCheckpointTs > table.Checkpoint.CheckpointTs {
+			newCheckpointTs = table.Checkpoint.CheckpointTs
+			checkpointChanged = true
+		}
+		if newResolvedTs > table.Checkpoint.ResolvedTs {
+			newResolvedTs = table.Checkpoint.ResolvedTs
+			checkpointChanged = true
+		}
+	}
+	if !checkpointChanged {
+		return checkpointCannotProceed, checkpointCannotProceed
+	}
+	return newCheckpointTs, newResolvedTs
 }
