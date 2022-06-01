@@ -189,13 +189,6 @@ func TestKafkaSinkFilter(t *testing.T) {
 
 	sink, err := NewKafkaSaramaSink(ctx, sinkURI, fr, replicaConfig, opts, errCh)
 	require.Nil(t, err)
-	defer func() {
-		cancel()
-		err = sink.Close(ctx)
-		if err != nil {
-			require.Equal(t, context.Canceled, errors.Cause(err))
-		}
-	}()
 
 	row := &model.RowChangedEvent{
 		Table: &model.TableName{
@@ -220,11 +213,16 @@ func TestKafkaSinkFilter(t *testing.T) {
 	}
 	err = sink.EmitDDLEvent(ctx, ddl)
 	require.True(t, cerror.ErrDDLEventIgnored.Equal(err))
+
+	cancel()
+	err = sink.Close(ctx)
+	if err != nil {
+		require.Equal(t, context.Canceled, errors.Cause(err))
+	}
 }
 
 func TestPulsarSinkEncoderConfig(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	err := failpoint.Enable("github.com/pingcap/tiflow/cdc/sink/mq/producer/pulsar/MockPulsar",
 		"return(true)")
@@ -242,17 +240,19 @@ func TestPulsarSinkEncoderConfig(t *testing.T) {
 	errCh := make(chan error, 1)
 
 	sink, err := NewPulsarSink(ctx, sinkURI, fr, replicaConfig, opts, errCh)
-	// FIXME: mock pulsar client doesn't support close,
-	// so we can't call sink.Close() to close it.
-	// We will leak goroutine if we don't close it.
-	defer sink.flushWorker.close()
-	defer sink.resolvedBuffer.Close()
 	require.Nil(t, err)
 
 	encoder := sink.encoderBuilder.Build()
 	require.IsType(t, &codec.JSONEventBatchEncoder{}, encoder)
 	require.Equal(t, 1, encoder.(*codec.JSONEventBatchEncoder).GetMaxBatchSize())
 	require.Equal(t, 4194304, encoder.(*codec.JSONEventBatchEncoder).GetMaxMessageBytes())
+
+	// FIXME: mock pulsar client doesn't support close,
+	// so we can't call sink.Close() to close it.
+	// We will leak goroutine if we don't close it.
+	cancel()
+	sink.flushWorker.close()
+	sink.resolvedBuffer.Close()
 }
 
 func TestFlushRowChangedEvents(t *testing.T) {
@@ -280,13 +280,6 @@ func TestFlushRowChangedEvents(t *testing.T) {
 
 	sink, err := NewKafkaSaramaSink(ctx, sinkURI, fr, replicaConfig, opts, errCh)
 	require.Nil(t, err)
-	defer func() {
-		cancel()
-		err = sink.Close(ctx)
-		if err != nil {
-			require.Equal(t, context.Canceled, errors.Cause(err))
-		}
-	}()
 
 	// mock kafka broker processes 1 row changed event
 	tableID1 := model.TableID(1)
@@ -353,4 +346,10 @@ func TestFlushRowChangedEvents(t *testing.T) {
 	require.Nil(t, err)
 	checkpointTsOld := waitCheckpointTs(t, sink, tableID1, row1.CommitTs)
 	require.Equal(t, row1.CommitTs, checkpointTsOld)
+
+	cancel()
+	err = sink.Close(ctx)
+	if err != nil {
+		require.Equal(t, context.Canceled, errors.Cause(err))
+	}
 }

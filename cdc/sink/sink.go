@@ -173,12 +173,17 @@ func Validate(ctx context.Context, sinkURI string, cfg *config.ReplicaConfig, op
 	errCh := make(chan error)
 	ctx = contextutil.PutRoleInCtx(ctx, util.RoleClient)
 	// TODO: find a better way to verify a sinkURI is valid
-	s, err := New(ctx, model.DefaultChangeFeedID("sink-verify"),
+	tempCtx, cancel := context.WithCancel(ctx)
+	s, err := New(tempCtx, model.DefaultChangeFeedID("sink-verify"),
 		sinkURI, sinkFilter, cfg, opts, errCh)
 	if err != nil {
+		cancel()
 		return err
 	}
-	err = s.Close(ctx)
+	// NOTICE: We have to cancel the context before we close it,
+	// otherwise we will be writing the closed chan after closing the sink.
+	cancel()
+	err = s.Close(tempCtx)
 	if err != nil {
 		return err
 	}
