@@ -36,7 +36,8 @@ func TestPartitions(t *testing.T) {
 		ReplicationFactor: 1,
 	}
 
-	manager := NewKafkaTopicManager(client, adminClient, cfg)
+	manager, err := NewKafkaTopicManager(client, adminClient, cfg)
+	require.Nil(t, err)
 	partitionsNum, err := manager.GetPartitionNum(
 		kafkamock.DefaultMockTopicName)
 	require.Nil(t, err)
@@ -57,7 +58,8 @@ func TestTryRefreshMeta(t *testing.T) {
 		ReplicationFactor: 1,
 	}
 
-	manager := NewKafkaTopicManager(client, adminClient, cfg)
+	manager, err := NewKafkaTopicManager(client, adminClient, cfg)
+	require.Nil(t, err)
 	partitionsNum, err := manager.GetPartitionNum(
 		kafkamock.DefaultMockTopicName)
 	require.Nil(t, err)
@@ -92,7 +94,8 @@ func TestCreateTopic(t *testing.T) {
 		ReplicationFactor: 1,
 	}
 
-	manager := NewKafkaTopicManager(client, adminClient, cfg)
+	manager, err := NewKafkaTopicManager(client, adminClient, cfg)
+	require.Nil(t, err)
 	partitionNum, err := manager.CreateTopic(kafkamock.DefaultMockTopicName)
 	require.Nil(t, err)
 	require.Equal(t, int32(3), partitionNum)
@@ -106,7 +109,8 @@ func TestCreateTopic(t *testing.T) {
 
 	// Try to create a topic without auto create.
 	cfg.AutoCreate = false
-	manager = NewKafkaTopicManager(client, adminClient, cfg)
+	manager, err = NewKafkaTopicManager(client, adminClient, cfg)
+	require.Nil(t, err)
 	_, err = manager.CreateTopic("new-topic2")
 	require.Regexp(
 		t,
@@ -129,12 +133,13 @@ func TestCreateTopicWithDelay(t *testing.T) {
 		ReplicationFactor: 1,
 	}
 
-	manager := NewKafkaTopicManager(client, adminClient, cfg)
-	partitionNum, err := manager.CreateTopic(kafkamock.DefaultMockTopicName)
+	manager, err := NewKafkaTopicManager(client, adminClient, cfg)
 	require.Nil(t, err)
-	err = adminClient.SetRemainingFetchesUntilTopicVisible(kafkamock.DefaultMockTopicName, 3)
+	partitionNum, err := manager.CreateTopic("new_topic")
 	require.Nil(t, err)
-	err = manager.WaitUntilTopicCreationDone(kafkamock.DefaultMockTopicName)
+	err = adminClient.SetRemainingFetchesUntilTopicVisible("new_topic", 3)
+	require.Nil(t, err)
+	err = manager.WaitUntilTopicCreationDone("new_topic")
 	require.Nil(t, err)
 	require.Equal(t, int32(2), partitionNum)
 }

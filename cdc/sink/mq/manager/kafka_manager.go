@@ -47,12 +47,20 @@ func NewKafkaTopicManager(
 	client kafka.Client,
 	admin kafka.ClusterAdminClient,
 	cfg *kafkaconfig.AutoCreateTopicConfig,
-) *kafkaTopicManager {
-	return &kafkaTopicManager{
+) (*kafkaTopicManager, error) {
+	mgr := &kafkaTopicManager{
 		client: client,
 		admin:  admin,
 		cfg:    cfg,
 	}
+
+	// do an initial metadata fetching using ListTopics
+	err := mgr.listTopics()
+	if err != nil {
+		return nil, err
+	}
+
+	return mgr, nil
 }
 
 // GetPartitionNum returns the number of partitions of the topic.
@@ -192,6 +200,33 @@ func (m *kafkaTopicManager) WaitUntilTopicCreationDone(topicName string) error {
 	)
 
 	return err
+}
+
+// listTopics is used to do a initial metadata fetching.
+func (m *kafkaTopicManager) listTopics() error {
+	start := time.Now()
+	topics, err := m.admin.ListTopics()
+	if err != nil {
+		log.Error(
+			"Kafka admin client list topics failed",
+			zap.Error(err),
+			zap.Duration("duration", time.Since(start)),
+		)
+		return errors.Trace(err)
+	}
+	log.Info(
+		"Kafka admin client list topics success",
+		zap.Duration("duration", time.Since(start)),
+	)
+
+	// Now that we have access to the latest topics' information,
+	// we need to update it here immediately.
+	for topic, detail := range topics {
+		m.tryUpdatePartitionsAndLogging(topic, detail.NumPartitions)
+	}
+	m.lastMetadataRefresh.Store(time.Now().Unix())
+
+	return nil
 }
 
 // CreateTopic creates a topic with the given name
