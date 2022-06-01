@@ -241,15 +241,17 @@ func (m *Master) tickedCheckWorkers(ctx context.Context) error {
 		m.initialized = true
 		for _, worker := range m.GetWorkers() {
 			if worker.GetTombstone() != nil {
+				if err := worker.GetTombstone().CleanTombstone(ctx); err != nil {
+					return errors.Trace(err)
+				}
 				continue
 			}
 			var businessID int
 			if _, ok := m.workerID2BusinessID[worker.ID()]; ok {
 				businessID = m.workerID2BusinessID[worker.ID()]
 			} else {
-				// worker status could have not been updated
 				if worker.Status().ExtBytes == nil {
-					continue
+					return errors.Errorf("worker %s status not updated", worker.ID())
 				}
 				ws, err := parseExtBytes(worker.Status().ExtBytes)
 				if err != nil {
@@ -404,6 +406,7 @@ func (m *Master) OnWorkerOffline(worker lib.WorkerHandle, reason error) error {
 	m.bStatus.Lock()
 	delete(m.bStatus.status, worker.ID())
 	m.bStatus.Unlock()
+	m.workerList[businessID] = nil
 
 	if derrors.ErrWorkerFinish.Equal(reason) {
 		log.L().Info("FakeMaster: OnWorkerOffline: worker finished", zap.String("worker-id", worker.ID()))
