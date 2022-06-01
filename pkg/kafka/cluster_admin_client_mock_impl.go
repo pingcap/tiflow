@@ -14,6 +14,7 @@
 package kafka
 
 import (
+	"fmt"
 	"strconv"
 
 	"github.com/Shopify/sarama"
@@ -50,9 +51,14 @@ var (
 	MinInSyncReplicas = defaultMinInsyncReplicas
 )
 
+type topicDetail struct {
+	sarama.TopicDetail
+	fetchesRemainingUntilVisible int
+}
+
 // ClusterAdminClientMockImpl mock implements the admin client interface.
 type ClusterAdminClientMockImpl struct {
-	topics map[string]sarama.TopicDetail
+	topics map[string]*topicDetail
 	// Cluster controller ID.
 	controllerID  int32
 	brokerConfigs []sarama.ConfigEntry
@@ -60,13 +66,16 @@ type ClusterAdminClientMockImpl struct {
 
 // NewClusterAdminClientMockImpl news a ClusterAdminClientMockImpl struct with default configurations.
 func NewClusterAdminClientMockImpl() *ClusterAdminClientMockImpl {
-	topics := make(map[string]sarama.TopicDetail)
+	topics := make(map[string]*topicDetail)
 	configEntries := make(map[string]*string)
 	configEntries[TopicMaxMessageBytesConfigName] = &TopicMaxMessageBytes
 	configEntries[MinInsyncReplicasConfigName] = &MinInSyncReplicas
-	topics[DefaultMockTopicName] = sarama.TopicDetail{
-		NumPartitions: 3,
-		ConfigEntries: configEntries,
+	topics[DefaultMockTopicName] = &topicDetail{
+		fetchesRemainingUntilVisible: 0,
+		TopicDetail: sarama.TopicDetail{
+			NumPartitions: 3,
+			ConfigEntries: configEntries,
+		},
 	}
 
 	brokerConfigs := []sarama.ConfigEntry{
@@ -89,7 +98,11 @@ func NewClusterAdminClientMockImpl() *ClusterAdminClientMockImpl {
 
 // ListTopics returns all topics directly.
 func (c *ClusterAdminClientMockImpl) ListTopics() (map[string]sarama.TopicDetail, error) {
-	return c.topics, nil
+	topicsDetailsMap := make(map[string]sarama.TopicDetail)
+	for topic, detail := range c.topics {
+		topicsDetailsMap[topic] = detail.TopicDetail
+	}
+	return topicsDetailsMap, nil
 }
 
 // DescribeCluster returns the controller ID.
@@ -110,6 +123,57 @@ func (c *ClusterAdminClientMockImpl) DescribeConfig(resource sarama.ConfigResour
 	return result, nil
 }
 
+// SetRemainingFetchesUntilTopicVisible is used to control the visibility of topic.
+// It is used to mock the topic creation delay.
+func (c *ClusterAdminClientMockImpl) SetRemainingFetchesUntilTopicVisible(topicName string,
+	fetchesRemainingUntilVisible int,
+) error {
+	topic, ok := c.topics[topicName]
+	if !ok {
+		return fmt.Errorf("No such topic as %s", topicName)
+	}
+
+	topic.fetchesRemainingUntilVisible = fetchesRemainingUntilVisible
+	return nil
+}
+
+// DescribeTopics fetches metadata from some topics.
+func (c *ClusterAdminClientMockImpl) DescribeTopics(topics []string) (
+	metadata []*sarama.TopicMetadata, err error,
+) {
+	topicDescriptions := make(map[string]*sarama.TopicMetadata)
+
+	for _, requestedTopic := range topics {
+		for topicName, topicDetail := range c.topics {
+			if topicName == requestedTopic {
+				if topicDetail.fetchesRemainingUntilVisible > 0 {
+					topicDetail.fetchesRemainingUntilVisible--
+				} else {
+					topicDescriptions[topicName] = &sarama.TopicMetadata{
+						Name:       topicName,
+						Partitions: make([]*sarama.PartitionMetadata, topicDetail.NumPartitions),
+					}
+					break
+				}
+			}
+		}
+
+		if _, ok := topicDescriptions[requestedTopic]; !ok {
+			topicDescriptions[requestedTopic] = &sarama.TopicMetadata{
+				Name: requestedTopic,
+				Err:  sarama.ErrUnknownTopicOrPartition,
+			}
+		}
+	}
+
+	metadataRes := make([]*sarama.TopicMetadata, 0)
+	for _, meta := range topicDescriptions {
+		metadataRes = append(metadataRes, meta)
+	}
+
+	return metadataRes, nil
+}
+
 // CreateTopic adds topic into map.
 func (c *ClusterAdminClientMockImpl) CreateTopic(topic string, detail *sarama.TopicDetail, _ bool) error {
 	minInsyncReplicaConfigFound := false
@@ -126,7 +190,9 @@ func (c *ClusterAdminClientMockImpl) CreateTopic(topic string, detail *sarama.To
 		return sarama.ErrPolicyViolation
 	}
 
-	c.topics[topic] = *detail
+	c.topics[topic] = &topicDetail{
+		TopicDetail: *detail,
+	}
 	return nil
 }
 

@@ -114,3 +114,27 @@ func TestCreateTopic(t *testing.T) {
 		err,
 	)
 }
+
+func TestCreateTopicWithDelay(t *testing.T) {
+	t.Parallel()
+
+	client := kafkamock.NewClientMockImpl()
+	adminClient := kafkamock.NewClusterAdminClientMockImpl()
+	defer func(adminClient *kafkamock.ClusterAdminClientMockImpl) {
+		_ = adminClient.Close()
+	}(adminClient)
+	cfg := &kafkaconfig.AutoCreateTopicConfig{
+		AutoCreate:        true,
+		PartitionNum:      2,
+		ReplicationFactor: 1,
+	}
+
+	manager := NewKafkaTopicManager(client, adminClient, cfg)
+	partitionNum, err := manager.CreateTopic(kafkamock.DefaultMockTopicName)
+	require.Nil(t, err)
+	err = adminClient.SetRemainingFetchesUntilTopicVisible(kafkamock.DefaultMockTopicName, 3)
+	require.Nil(t, err)
+	err = manager.WaitUntilTopicCreationDone(kafkamock.DefaultMockTopicName)
+	require.Nil(t, err)
+	require.Equal(t, int32(2), partitionNum)
+}
