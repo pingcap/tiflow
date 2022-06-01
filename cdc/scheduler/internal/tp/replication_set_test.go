@@ -51,6 +51,7 @@ func iterPermutation(sequence []int, fn func(sequence []int)) {
 func TestNewReplicationSet(t *testing.T) {
 	testcases := []struct {
 		set         *ReplicationSet
+		checkpoint  model.Ts
 		tableStatus map[model.CaptureID]*schedulepb.TableStatus
 	}{
 		{
@@ -65,11 +66,17 @@ func TestNewReplicationSet(t *testing.T) {
 				Primary:  "1",
 				State:    ReplicationSetStateReplicating,
 				Captures: map[string]struct{}{"1": {}},
+				Checkpoint: schedulepb.Checkpoint{
+					CheckpointTs: 2, ResolvedTs: 2,
+				},
 			},
+			checkpoint: 2,
 			tableStatus: map[model.CaptureID]*schedulepb.TableStatus{
 				"1": {
-					State:      schedulepb.TableStateReplicating,
-					Checkpoint: schedulepb.Checkpoint{},
+					State: schedulepb.TableStateReplicating,
+					Checkpoint: schedulepb.Checkpoint{
+						CheckpointTs: 1, ResolvedTs: 2,
+					},
 				},
 			},
 		},
@@ -90,19 +97,20 @@ func TestNewReplicationSet(t *testing.T) {
 		{
 			// Rebuild move table state, Prepare.
 			set: &ReplicationSet{
-				State:     ReplicationSetStatePrepare,
-				Primary:   "2",
-				Secondary: "1",
-				Captures:  map[string]struct{}{"1": {}, "2": {}},
+				State:      ReplicationSetStatePrepare,
+				Primary:    "2",
+				Secondary:  "1",
+				Captures:   map[string]struct{}{"1": {}, "2": {}},
+				Checkpoint: schedulepb.Checkpoint{CheckpointTs: 2},
 			},
 			tableStatus: map[model.CaptureID]*schedulepb.TableStatus{
 				"1": {
 					State:      schedulepb.TableStatePreparing,
-					Checkpoint: schedulepb.Checkpoint{},
+					Checkpoint: schedulepb.Checkpoint{CheckpointTs: 1},
 				},
 				"2": {
 					State:      schedulepb.TableStateReplicating,
-					Checkpoint: schedulepb.Checkpoint{},
+					Checkpoint: schedulepb.Checkpoint{CheckpointTs: 2},
 				},
 			},
 		},
@@ -196,8 +204,9 @@ func TestNewReplicationSet(t *testing.T) {
 	for id, tc := range testcases {
 		set := tc.set
 		status := tc.tableStatus
+		checkpoint := tc.checkpoint
 
-		output, err := newReplicationSet(0, status)
+		output, err := newReplicationSet(0, checkpoint, status)
 		if set == nil {
 			require.Error(t, err)
 		} else {
@@ -241,7 +250,7 @@ func TestReplicationSetPoll(t *testing.T) {
 				Checkpoint: schedulepb.Checkpoint{},
 			}
 		}
-		r, _ := newReplicationSet(1, status)
+		r, _ := newReplicationSet(1, 0, status)
 		var tableStates []int
 		for state := range schedulepb.TableState_name {
 			tableStates = append(tableStates, int(state))
@@ -272,7 +281,7 @@ func TestReplicationSetPollUnknownCapture(t *testing.T) {
 	t.Parallel()
 
 	tableID := model.TableID(1)
-	r, err := newReplicationSet(tableID, map[model.CaptureID]*schedulepb.TableStatus{
+	r, err := newReplicationSet(tableID, 0, map[model.CaptureID]*schedulepb.TableStatus{
 		"1": {
 			TableID:    tableID,
 			State:      schedulepb.TableStateReplicating,
@@ -294,7 +303,7 @@ func TestReplicationSetAddTable(t *testing.T) {
 
 	from := "1"
 	tableID := model.TableID(1)
-	r, err := newReplicationSet(tableID, nil)
+	r, err := newReplicationSet(tableID, 0, nil)
 	require.Nil(t, err)
 
 	// Absent -> Prepare
@@ -309,7 +318,7 @@ func TestReplicationSetAddTable(t *testing.T) {
 				AddTable: &schedulepb.AddTableRequest{
 					TableID:     r.TableID,
 					IsSecondary: true,
-					Checkpoint:  &schedulepb.Checkpoint{CheckpointTs: r.CheckpointTs},
+					Checkpoint:  r.Checkpoint,
 				},
 			},
 		},
@@ -337,7 +346,7 @@ func TestReplicationSetAddTable(t *testing.T) {
 				AddTable: &schedulepb.AddTableRequest{
 					TableID:     r.TableID,
 					IsSecondary: true,
-					Checkpoint:  &schedulepb.Checkpoint{CheckpointTs: r.CheckpointTs},
+					Checkpoint:  r.Checkpoint,
 				},
 			},
 		},
@@ -370,7 +379,7 @@ func TestReplicationSetAddTable(t *testing.T) {
 				AddTable: &schedulepb.AddTableRequest{
 					TableID:     r.TableID,
 					IsSecondary: false,
-					Checkpoint:  &schedulepb.Checkpoint{CheckpointTs: r.CheckpointTs},
+					Checkpoint:  r.Checkpoint,
 				},
 			},
 		},
@@ -389,6 +398,25 @@ func TestReplicationSetAddTable(t *testing.T) {
 	require.Equal(t, ReplicationSetStateReplicating, r.State)
 	require.Equal(t, from, r.Primary)
 	require.Equal(t, "", r.Secondary)
+
+	// Replicating -> Replicating
+	msgs, err = r.handleTableStatus(from, &schedulepb.TableStatus{
+		TableID: tableID,
+		State:   schedulepb.TableStateReplicating,
+		Checkpoint: schedulepb.Checkpoint{
+			CheckpointTs: 3,
+			ResolvedTs:   4,
+		},
+	})
+	require.Nil(t, err)
+	require.Len(t, msgs, 0)
+	require.Equal(t, ReplicationSetStateReplicating, r.State)
+	require.Equal(t, from, r.Primary)
+	require.Equal(t, "", r.Secondary)
+	require.Equal(t, schedulepb.Checkpoint{
+		CheckpointTs: 3,
+		ResolvedTs:   4,
+	}, r.Checkpoint)
 }
 
 func TestReplicationSetRemoveTable(t *testing.T) {
@@ -396,7 +424,7 @@ func TestReplicationSetRemoveTable(t *testing.T) {
 
 	from := "1"
 	tableID := model.TableID(1)
-	r, err := newReplicationSet(tableID, nil)
+	r, err := newReplicationSet(tableID, 0, nil)
 	require.Nil(t, err)
 
 	// Ignore removing table if it's not in replicating.
@@ -474,7 +502,7 @@ func TestReplicationSetMoveTable(t *testing.T) {
 	t.Parallel()
 
 	tableID := model.TableID(1)
-	r, err := newReplicationSet(tableID, nil)
+	r, err := newReplicationSet(tableID, 0, nil)
 	require.Nil(t, err)
 
 	source := "1"
@@ -504,7 +532,7 @@ func TestReplicationSetMoveTable(t *testing.T) {
 				AddTable: &schedulepb.AddTableRequest{
 					TableID:     r.TableID,
 					IsSecondary: true,
-					Checkpoint:  &schedulepb.Checkpoint{CheckpointTs: r.CheckpointTs},
+					Checkpoint:  r.Checkpoint,
 				},
 			},
 		},
@@ -517,6 +545,22 @@ func TestReplicationSetMoveTable(t *testing.T) {
 	msgs, err = r.handleAddTable(dest)
 	require.Nil(t, err)
 	require.Len(t, msgs, 0)
+
+	// Source primary sends heartbeat response
+	msgs, err = r.handleTableStatus(source, &schedulepb.TableStatus{
+		TableID: tableID,
+		State:   schedulepb.TableStateReplicating,
+		Checkpoint: schedulepb.Checkpoint{
+			CheckpointTs: 1,
+			ResolvedTs:   1,
+		},
+	})
+	require.Nil(t, err)
+	require.Len(t, msgs, 0)
+	require.Equal(t, schedulepb.Checkpoint{
+		CheckpointTs: 1,
+		ResolvedTs:   1,
+	}, r.Checkpoint)
 
 	// AddTableRequest is lost somehow, send AddTableRequest again.
 	msgs, err = r.handleTableStatus(dest, &schedulepb.TableStatus{
@@ -533,7 +577,7 @@ func TestReplicationSetMoveTable(t *testing.T) {
 				AddTable: &schedulepb.AddTableRequest{
 					TableID:     r.TableID,
 					IsSecondary: true,
-					Checkpoint:  &schedulepb.Checkpoint{CheckpointTs: r.CheckpointTs},
+					Checkpoint:  r.Checkpoint,
 				},
 			},
 		},
@@ -565,6 +609,10 @@ func TestReplicationSetMoveTable(t *testing.T) {
 	msgs, err = r.handleTableStatus(source, &schedulepb.TableStatus{
 		TableID: tableID,
 		State:   schedulepb.TableStateReplicating,
+		Checkpoint: schedulepb.Checkpoint{
+			CheckpointTs: 2,
+			ResolvedTs:   3,
+		},
 	})
 	require.Nil(t, err)
 	require.Len(t, msgs, 1, "%v", r)
@@ -580,23 +628,39 @@ func TestReplicationSetMoveTable(t *testing.T) {
 	require.Equal(t, ReplicationSetStateCommit, r.State)
 	require.Equal(t, source, r.Primary)
 	require.Equal(t, dest, r.Secondary)
+	require.Equal(t, schedulepb.Checkpoint{
+		CheckpointTs: 2,
+		ResolvedTs:   3,
+	}, r.Checkpoint)
 
 	// Removing source is in-progress.
 	msgs, err = r.handleTableStatus(source, &schedulepb.TableStatus{
 		TableID: tableID,
 		State:   schedulepb.TableStateStopping,
+		Checkpoint: schedulepb.Checkpoint{
+			CheckpointTs: 3,
+			ResolvedTs:   3,
+		},
 	})
 	require.Nil(t, err)
 	require.Len(t, msgs, 0)
 	require.Equal(t, ReplicationSetStateCommit, r.State)
 	require.Equal(t, source, r.Primary)
 	require.Equal(t, dest, r.Secondary)
+	require.Equal(t, schedulepb.Checkpoint{
+		CheckpointTs: 3,
+		ResolvedTs:   3,
+	}, r.Checkpoint)
 
 	// Source is removed.
 	rClone := clone(r)
 	msgs, err = r.handleTableStatus(source, &schedulepb.TableStatus{
 		TableID: tableID,
 		State:   schedulepb.TableStateStopped,
+		Checkpoint: schedulepb.Checkpoint{
+			CheckpointTs: 3,
+			ResolvedTs:   4,
+		},
 	})
 	require.Nil(t, err)
 	require.Len(t, msgs, 1)
@@ -608,7 +672,7 @@ func TestReplicationSetMoveTable(t *testing.T) {
 				AddTable: &schedulepb.AddTableRequest{
 					TableID:     r.TableID,
 					IsSecondary: false,
-					Checkpoint:  &schedulepb.Checkpoint{CheckpointTs: r.CheckpointTs},
+					Checkpoint:  r.Checkpoint,
 				},
 			},
 		},
@@ -616,8 +680,13 @@ func TestReplicationSetMoveTable(t *testing.T) {
 	require.Equal(t, ReplicationSetStateCommit, r.State)
 	require.Equal(t, dest, r.Primary)
 	require.Equal(t, "", r.Secondary)
+	require.Equal(t, schedulepb.Checkpoint{
+		CheckpointTs: 3,
+		ResolvedTs:   4,
+	}, r.Checkpoint)
 
 	// Source stopped message is lost somehow.
+	// rClone has checkpoint ts 3, resolved ts 3
 	msgs, err = rClone.handleTableStatus(source, &schedulepb.TableStatus{
 		TableID: tableID,
 		State:   schedulepb.TableStateAbsent,
@@ -632,14 +701,21 @@ func TestReplicationSetMoveTable(t *testing.T) {
 				AddTable: &schedulepb.AddTableRequest{
 					TableID:     r.TableID,
 					IsSecondary: false,
-					Checkpoint:  &schedulepb.Checkpoint{CheckpointTs: r.CheckpointTs},
+					Checkpoint: schedulepb.Checkpoint{
+						CheckpointTs: 3,
+						ResolvedTs:   3,
+					},
 				},
 			},
 		},
 	}, msgs[0])
-	require.Equal(t, ReplicationSetStateCommit, r.State)
-	require.Equal(t, dest, r.Primary)
-	require.Equal(t, "", r.Secondary)
+	require.Equal(t, ReplicationSetStateCommit, rClone.State)
+	require.Equal(t, dest, rClone.Primary)
+	require.Equal(t, "", rClone.Secondary)
+	require.Equal(t, schedulepb.Checkpoint{
+		CheckpointTs: 3,
+		ResolvedTs:   3,
+	}, rClone.Checkpoint)
 
 	// Commit -> Replicating
 	msgs, err = r.handleTableStatus(dest, &schedulepb.TableStatus{
@@ -658,7 +734,7 @@ func TestReplicationSetCaptureShutdown(t *testing.T) {
 
 	from := "1"
 	tableID := model.TableID(1)
-	r, err := newReplicationSet(tableID, nil)
+	r, err := newReplicationSet(tableID, 0, nil)
 	require.Nil(t, err)
 
 	// Add table, Absent -> Prepare
@@ -673,7 +749,7 @@ func TestReplicationSetCaptureShutdown(t *testing.T) {
 				AddTable: &schedulepb.AddTableRequest{
 					TableID:     r.TableID,
 					IsSecondary: true,
-					Checkpoint:  &schedulepb.Checkpoint{CheckpointTs: r.CheckpointTs},
+					Checkpoint:  r.Checkpoint,
 				},
 			},
 		},
@@ -803,7 +879,7 @@ func TestReplicationSetCaptureShutdown(t *testing.T) {
 					AddTable: &schedulepb.AddTableRequest{
 						TableID:     r.TableID,
 						IsSecondary: false,
-						Checkpoint:  &schedulepb.Checkpoint{CheckpointTs: r.CheckpointTs},
+						Checkpoint:  r.Checkpoint,
 					},
 				},
 			},
@@ -881,7 +957,7 @@ func TestReplicationSetCaptureShutdown(t *testing.T) {
 						AddTable: &schedulepb.AddTableRequest{
 							TableID:     r.TableID,
 							IsSecondary: true,
-							Checkpoint:  &schedulepb.Checkpoint{CheckpointTs: r.CheckpointTs},
+							Checkpoint:  r.Checkpoint,
 						},
 					},
 				},
