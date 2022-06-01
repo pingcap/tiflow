@@ -20,6 +20,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/processor"
 	tablepipeline "github.com/pingcap/tiflow/cdc/processor/pipeline"
 	"github.com/pingcap/tiflow/cdc/puller"
+	"github.com/pingcap/tiflow/cdc/puller/sorter"
 	"github.com/pingcap/tiflow/cdc/sink"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/prometheus/client_golang/prometheus"
@@ -32,6 +33,7 @@ func init() {
 	registry.MustRegister(prometheus.NewGoCollector())
 
 	kv.InitMetrics(registry)
+	sorter.InitMetrics(registry)
 	puller.InitMetrics(registry)
 	sink.InitMetrics(registry)
 	entry.InitMetrics(registry)
