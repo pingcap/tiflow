@@ -11,25 +11,28 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package main
+package version
 
 import (
-	"context"
+	"testing"
 
-	"golang.org/x/sync/errgroup"
+	"github.com/stretchr/testify/require"
+
+	"github.com/pingcap/tiflow/dm/pkg/log"
 )
 
-type caseFn func(context.Context, *config) error
+func TestLogVersion(t *testing.T) {
+	t.Parallel()
 
-var cases = []caseFn{runFakeJobCase}
+	noneInfo := `Release Version: None
+Git Commit Hash: None
+Git Branch: None
+UTC Build Time: None
+Go Version: None
+`
 
-func runCases(ctx context.Context, cfg *config) error {
-	errg, ctx := errgroup.WithContext(ctx)
-	for _, fn := range cases {
-		fn := fn
-		errg.Go(func() error {
-			return fn(ctx, cfg)
-		})
-	}
-	return errg.Wait()
+	err := log.InitLogger(&log.Config{})
+	require.Nil(t, err)
+	require.Equal(t, noneInfo, GetRawInfo())
+	LogVersionInfo()
 }
