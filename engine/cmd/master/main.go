@@ -23,9 +23,10 @@ import (
 	"syscall"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/zap"
 
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/engine/pkg/version"
 	"github.com/pingcap/tiflow/engine/servermaster"
 )
 
@@ -53,8 +54,10 @@ func main() {
 		Format: cfg.LogFormat,
 	})
 	if err != nil {
+		fmt.Printf("init logger failed: %s", err)
 		os.Exit(2)
 	}
+	version.LogVersionInfo()
 
 	// 3. start server
 	ctx, cancel := context.WithCancel(context.Background())

@@ -55,6 +55,7 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
 	"github.com/pingcap/tiflow/engine/pkg/serverutils"
+	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	"github.com/pingcap/tiflow/engine/test"
 	"github.com/pingcap/tiflow/engine/test/mock"
 )
@@ -156,6 +157,7 @@ func (s *Server) buildDeps() (*deps.Deps, error) {
 
 func (s *Server) makeTask(
 	ctx context.Context,
+	projectInfo *pb.ProjectInfo,
 	workerID libModel.WorkerID,
 	masterID libModel.MasterID,
 	workerType libModel.WorkerType,
@@ -169,13 +171,14 @@ func (s *Server) makeTask(
 	dctx = dctx.WithDeps(dp)
 	dctx.Environ.NodeID = p2p.NodeID(s.info.ID)
 	dctx.Environ.Addr = s.info.Addr
+	dctx.ProjectInfo = tenant.NewProjectInfo(projectInfo.GetTenantId(), projectInfo.GetProjectId())
 
 	// NOTICE: only take effect when job type is job master
 	masterMeta := &libModel.MasterMetaKVData{
-		// TODO: ProjectID
-		ID:     workerID,
-		Tp:     workerType,
-		Config: workerConfig,
+		ProjectID: dctx.ProjectInfo.UniqueID(),
+		ID:        workerID,
+		Tp:        workerType,
+		Config:    workerConfig,
 	}
 	metaBytes, err := masterMeta.Marshal()
 	if err != nil {
@@ -200,6 +203,7 @@ func (s *Server) makeTask(
 func (s *Server) PreDispatchTask(ctx context.Context, req *pb.PreDispatchTaskRequest) (*pb.PreDispatchTaskResponse, error) {
 	task, err := s.makeTask(
 		ctx,
+		req.GetProjectInfo(),
 		req.GetWorkerId(),
 		req.GetMasterId(),
 		libModel.WorkerType(req.GetTaskTypeId()),

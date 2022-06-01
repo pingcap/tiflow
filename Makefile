@@ -34,6 +34,7 @@ LINUX := "Linux"
 MAC   := "Darwin"
 CDC_PKG := github.com/pingcap/tiflow
 DM_PKG := github.com/pingcap/tiflow/dm
+ENGINE_PKG := github.com/pingcap/tiflow/engine
 PACKAGE_LIST := go list ./... | grep -vE 'vendor|proto|tiflow\/tests|integration|testing_utils|pb|pbmock|tiflow\/bin'
 PACKAGE_LIST_WITHOUT_DM_ENGINE := $(PACKAGE_LIST) | grep -vE 'github.com/pingcap/tiflow/dm|github.com/pingcap/tiflow/engine'
 DM_PACKAGE_LIST := go list github.com/pingcap/tiflow/dm/... | grep -vE 'pb|pbmock|dm/cmd'
@@ -85,6 +86,13 @@ LDFLAGS += -X "$(DM_PKG)/pkg/utils.BuildTS=$(BUILDTS)"
 LDFLAGS += -X "$(DM_PKG)/pkg/utils.GitHash=$(GITHASH)"
 LDFLAGS += -X "$(DM_PKG)/pkg/utils.GitBranch=$(GITBRANCH)"
 LDFLAGS += -X "$(DM_PKG)/pkg/utils.GoVersion=$(GOVERSION)"
+
+# Engine LDFLAGS.
+LDFLAGS += -X "$(ENGINE_PKG)/pkg/version.ReleaseVersion=$(RELEASE_VERSION)"
+LDFLAGS += -X "$(ENGINE_PKG)/pkg/version.BuildTS=$(BUILDTS)"
+LDFLAGS += -X "$(ENGINE_PKG)/pkg/version.GitHash=$(GITHASH)"
+LDFLAGS += -X "$(ENGINE_PKG)/pkg/version.GitBranch=$(GITBRANCH)"
+LDFLAGS += -X "$(ENGINE_PKG)/pkg/version.GoVersion=$(GOVERSION)"
 
 default: build buildsucc
 
@@ -480,22 +488,22 @@ df-proto: tools/bin/protoc tools/bin/protoc-gen-gogofaster tools/bin/goimports
 	./engine/generate-proto.sh
 
 df-master:
-	$(GOBUILD) -o bin/df-master ./engine/cmd/master
+	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/df-master ./engine/cmd/master
 	cp ./bin/df-master ./engine/ansible/roles/common/files/master.bin
 
 df-executor:
-	$(GOBUILD) -o bin/df-executor ./engine/cmd/executor
+	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/df-executor ./engine/cmd/executor
 	cp ./bin/df-executor ./engine/ansible/roles/common/files/executor.bin
 
 df-master-client:
-	$(GOBUILD) -o bin/df-master-client ./engine/cmd/master-client
+	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/df-master-client ./engine/cmd/master-client
 
 df-demo:
-	$(GOBUILD) -o bin/df-demoserver ./engine/cmd/demoserver
+	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/df-demoserver ./engine/cmd/demoserver
 	cp ./bin/df-demoserver ./engine/ansible/roles/common/files/demoserver.bin
 
 df-chaos-case:
-	$(GOBUILD) -o bin/df-chaos-case ./engine/chaos/cases
+	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/df-chaos-case ./engine/chaos/cases
 
 df-kvmock: tools/bin/mockgen tools/bin/protoc tools/bin/protoc-gen-gogofaster
 	tools/bin/mockgen -package mock github.com/pingcap/tiflow/engine/pkg/meta/metaclient KVClient \

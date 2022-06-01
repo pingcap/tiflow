@@ -73,6 +73,7 @@ var (
 	ErrInvalidMasterMessage           = errors.Normalize("invalid master message: %s", errors.RFCCodeText("DFLOW:ErrInvalidMasterMessage"))
 	ErrSendingMessageToTombstone      = errors.Normalize("trying to send message to a tombstone worker handle: %s", errors.RFCCodeText("DFLOW:ErrSendingMessageToTombstone"))
 	ErrMasterNotInitialized           = errors.Normalize("master is not initialized", errors.RFCCodeText("DFLOW:ErrMasterNotInitialized"))
+	ErrMasterInterfaceNotFound        = errors.Normalize("basemaster interface not found", errors.RFCCodeText("DFLOW:ErrMasterInterfaceNotFound"))
 
 	ErrWorkerTypeNotFound         = errors.Normalize("worker type is not found: type %d", errors.RFCCodeText("DFLOW:ErrWorkerTypeNotFound"))
 	ErrWorkerNotFound             = errors.Normalize("worker is not found: worker ID %s", errors.RFCCodeText("DFLOW:ErrWorkerNotFound"))
