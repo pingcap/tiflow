@@ -35,10 +35,10 @@ func TestNewFactory4JobMaster(t *testing.T) {
 		output  Factory
 	}{
 		{
-			info: tenant.ProjectInfo{
-				TenantID:  "user0",
-				ProjectID: "project0",
-			},
+			info: tenant.NewProjectInfo(
+				"user0",
+				"project0",
+			),
 			jobType: "DM",
 			jobID:   "job0",
 			output: &AutoRegisterFactory{
@@ -76,10 +76,10 @@ func TestNewFactory4Worker(t *testing.T) {
 		output   Factory
 	}{
 		{
-			info: tenant.ProjectInfo{
-				TenantID:  "user0",
-				ProjectID: "project0",
-			},
+			info: tenant.NewProjectInfo(
+				"user0",
+				"project0",
+			),
 			jobType:  "DM",
 			jobID:    "job0",
 			workerID: "worker0",

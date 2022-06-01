@@ -197,10 +197,10 @@ func scenarios3_OneJobmasterOneWorker(wg *sync.WaitGroup) {
 	log.L().Info("Start scenarios3_OneJobmasterOneWorker simulation...")
 	wg.Add(1)
 
-	tenant := tenant.ProjectInfo{
-		TenantID:  "user0",
-		ProjectID: "proj0",
-	}
+	tenant := tenant.NewProjectInfo(
+		"user0",
+		"proj0",
+	)
 	jobType := "DM"
 	jobID := "job0"
 	workerID := "worker0"
@@ -275,10 +275,10 @@ func scenarios4_OneJobmasterMultiWorker(wg *sync.WaitGroup) {
 	log.L().Info("Start scenarios4_OneJobmasterMultiWorker simulation...")
 	wg.Add(1)
 
-	tenant := tenant.ProjectInfo{
-		TenantID:  "user0",
-		ProjectID: "proj0",
-	}
+	tenant := tenant.NewProjectInfo(
+		"user0",
+		"proj0",
+	)
 	jobType := "DM"
 	jobID := "job0"
 
@@ -343,10 +343,10 @@ func scenarios5_MultiJobmasterMultiWorker(wg *sync.WaitGroup) {
 	log.L().Info("Start scenarios5_MultiJobmasterMultiWorker simulation...")
 	wg.Add(1)
 
-	tenant := tenant.ProjectInfo{
-		TenantID:  "user0",
-		ProjectID: "proj0",
-	}
+	tenant := tenant.NewProjectInfo(
+		"user0",
+		"proj0",
+	)
 	jobType0 := "DM"
 	jobType1 := "CDC"
 
@@ -480,10 +480,10 @@ func scenarios6_OneJobmasterOneExecutor(wg *sync.WaitGroup) {
 	log.L().Info("Start scenarios6_OneJobmasterOneExecutor simulation...")
 	wg.Add(1)
 
-	tenant := tenant.ProjectInfo{
-		TenantID:  "user0",
-		ProjectID: "proj0",
-	}
+	tenant := tenant.NewProjectInfo(
+		"user0",
+		"proj0",
+	)
 	jobType := "DM"
 	jobID := "job0"
 
@@ -527,14 +527,14 @@ func scenarios7_MultiJobmasterMultiProjects(wg *sync.WaitGroup) {
 	log.L().Info("Start scenarios7_MultiJobmasterMultiProjects simulation...")
 	wg.Add(1)
 
-	tenant0 := tenant.ProjectInfo{
-		TenantID:  "user0",
-		ProjectID: "proj0",
-	}
-	tenant1 := tenant.ProjectInfo{
-		TenantID:  "user1",
-		ProjectID: "proj1",
-	}
+	tenant0 := tenant.NewProjectInfo(
+		"user0",
+		"proj0",
+	)
+	tenant1 := tenant.NewProjectInfo(
+		"user1",
+		"proj1",
+	)
 	jobType := "DM"
 	jobID := "job0"
 
