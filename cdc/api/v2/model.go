@@ -18,3 +18,15 @@ type Tso struct {
 	Timestamp int64 `json:"timestamp"`
 	LogicTime int64 `json:"logic-time"`
 }
+
+// EtcdData contains key/value pair of etcd data
+type EtcdData struct {
+	Key   string `json:"key,omitempty"`
+	Value string `json:"value,omitempty"`
+}
+
+// ResolveLockReq contains request parameter to resolve lock
+type ResolveLockReq struct {
+	RegionID uint64 `json:"region-id,omitempty"`
+	Ts       uint64 `json:"ts,omitempty"`
+}

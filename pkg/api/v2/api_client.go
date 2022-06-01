@@ -47,6 +47,14 @@ func (c *APIV2Client) Tso() TsoInterface {
 	return newTso(c)
 }
 
+// Unsafe returns a UnsafeInterface to communicate with cdc api
+func (c *APIV2Client) Unsafe() UnsafeInterface {
+	if c == nil {
+		return nil
+	}
+	return newUnsafe(c)
+}
+
 // NewAPIClient creates a new APIV1Client.
 func NewAPIClient(serverAddr string, credential *security.Credential) (*APIV2Client, error) {
 	c := &rest.Config{}

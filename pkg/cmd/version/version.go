@@ -33,7 +33,8 @@ func NewCmdVersion() *cobra.Command {
 		Use:   "version",
 		Short: "Output version information",
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-			// Here we will initialize the logging configuration and set the current default context.
+			// Here we will initialize the logging configuration
+			// and set the current default context.
 			util.InitCmd(cmd, &logutil.Config{Level: cf.GetLogLevel()})
 			util.LogHTTPProxies()
 			return nil
@@ -52,9 +53,6 @@ func NewCmdVersion() *cobra.Command {
 				return err
 			}
 			cmd.Println("server version:")
-			var info string
-			info += fmt.Sprintf("Release Version: %s\n", status.Version)
-			info += fmt.Sprintf("Git Commit Hash: %s\n", status.GitHash)
 			cmd.Println(fmt.Sprintf(
 				"Release Version: %s\n"+
 					"Git Commit Hash: %s\n", status.Version, status.GitHash))
