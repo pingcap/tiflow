@@ -24,7 +24,7 @@ import (
 func benchmarkCollectTableStatus(b *testing.B, bench func(b *testing.B, a *agent)) {
 	upperBound := 16384
 	for size := 1; size <= upperBound; size *= 2 {
-		tableExec := NewMockTableExecutor()
+		tableExec := newMockTableExecutor()
 		a := &agent{
 			tableExec: tableExec,
 		}
