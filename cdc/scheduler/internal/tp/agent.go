@@ -24,7 +24,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/processor/pipeline"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/tp/schedulepb"
-	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/p2p"
@@ -82,15 +81,6 @@ func NewAgent(ctx context.Context,
 		return nil, errors.Trace(err)
 	}
 	result.trans = trans
-
-	conf := config.GetGlobalServerConfig()
-	flushInterval := time.Duration(conf.ProcessorFlushInterval)
-
-	log.Debug("tpscheduler: creating processor agent",
-		zap.String("capture", captureID),
-		zap.String("namespace", changeFeedID.Namespace),
-		zap.String("changefeed", changeFeedID.ID),
-		zap.Duration("sendCheckpointTsInterval", flushInterval))
 
 	etcdCliCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
@@ -185,7 +175,6 @@ func (a *agent) handleMessage(msg []*schedulepb.Message) []*schedulepb.Message {
 			response := a.handleMessageHeartbeat(message.Heartbeat.GetTableIDs())
 			result = append(result, response)
 		case schedulepb.MsgUnknown:
-		default:
 			log.Warn("tpscheduler: unknown message received",
 				zap.String("capture", a.captureID),
 				zap.String("namespace", a.changeFeedID.Namespace),
@@ -579,11 +568,12 @@ func (a *agent) recvMsgs(ctx context.Context) ([]*schedulepb.Message, error) {
 
 	n := 0
 	for _, val := range messages {
-		// Filter stale messages.
-		if val.Header.OwnerRevision == a.ownerInfo.revision {
-			messages[n] = val
-			n++
+		// only receive not staled messages
+		if !a.handleOwnerInfo(val.From, val.Header.OwnerRevision.Revision, val.Header.Version) {
+			continue
 		}
+		messages[n] = val
+		n++
 	}
 	return messages[:n], nil
 }
