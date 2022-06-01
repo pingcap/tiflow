@@ -25,14 +25,16 @@ import (
 )
 
 const (
-	maxRowsPerTxn = 1024
-	maxSizePerTxn = 1024 * 1024 /* 1MB */
-	batchSize     = 100
+	defaultRowsPerTxn = 1024
+	defaultSizePerTxn = 1024 * 1024 /* 1MB */
+	defaultBatchSize  = 100
 )
 
 // TableFlowController provides a convenient interface to control the memory consumption of a per table event stream
 type TableFlowController struct {
-	memoryQuota *tableMemoryQuota
+	memoryQuota    *tableMemoryQuota
+	redoLogEnabled bool
+	lastCommitTs   uint64
 
 	queueMu struct {
 		sync.Mutex
@@ -44,7 +46,9 @@ type TableFlowController struct {
 	batchGroupCount uint64
 	batchID         uint64
 
-	lastCommitTs uint64
+	batchSize     uint64
+	maxRowsPerTxn uint64
+	maxSizePerTxn uint64
 }
 
 type txnSizeEntry struct {
@@ -52,21 +56,30 @@ type txnSizeEntry struct {
 	startTs  uint64
 	commitTs uint64
 
-	batchID  uint64
 	size     uint64
 	rowCount uint64
+	batchID  uint64
 }
 
 // NewTableFlowController creates a new TableFlowController
-func NewTableFlowController(quota uint64) *TableFlowController {
+func NewTableFlowController(quota uint64, redoLogEnabled bool) *TableFlowController {
+	maxSizePerTxn := uint64(defaultSizePerTxn)
+	if maxSizePerTxn > quota && !redoLogEnabled {
+		maxSizePerTxn = quota
+	}
+
 	return &TableFlowController{
-		memoryQuota: newTableMemoryQuota(quota),
+		memoryQuota:    newTableMemoryQuota(quota),
+		redoLogEnabled: redoLogEnabled,
 		queueMu: struct {
 			sync.Mutex
 			queue deque.Deque
 		}{
 			queue: deque.NewDeque(),
 		},
+		batchSize:     defaultBatchSize,
+		maxRowsPerTxn: defaultRowsPerTxn,
+		maxSizePerTxn: maxSizePerTxn,
 	}
 }
 
@@ -95,19 +108,16 @@ func (c *TableFlowController) Consume(
 			zap.Uint64("lastCommitTs", c.lastCommitTs))
 	}
 
-	if commitTs > lastCommitTs {
-		err := c.memoryQuota.consumeWithBlocking(size, blockingCallBack)
-		if err != nil {
+	if commitTs == lastCommitTs && c.redoLogEnabled {
+		// Here commitTs == lastCommitTs, which means we are not crossing transaction
+		// boundaries, and redo log currently does not support split transactions, hence
+		// we use `forceConsume` to avoid deadlock.
+		// TODO: fix this after we figure out how to make redo log support split txn.
+		if err := c.memoryQuota.forceConsume(size); err != nil {
 			return errors.Trace(err)
 		}
 	} else {
-		// Here commitTs == lastCommitTs, which means that we are not crossing
-		// a transaction boundary. In this situation, we use `forceConsume` because
-		// blocking the event stream mid-transaction is highly likely to cause
-		// a deadlock.
-		// TODO fix this in the future, after we figure out how to elegantly support large txns.
-		err := c.memoryQuota.forceConsume(size)
-		if err != nil {
+		if err := c.memoryQuota.consumeWithBlocking(size, blockingCallBack); err != nil {
 			return errors.Trace(err)
 		}
 	}
@@ -150,7 +160,7 @@ func (c *TableFlowController) enqueueSingleMsg(
 	// 1. Processing a new txn with different commitTs.
 	if e = c.queueMu.queue.Back(); e == nil || lastCommitTs < commitTs {
 		atomic.StoreUint64(&c.lastCommitTs, commitTs)
-		c.resetBatch()
+		c.resetBatch(lastCommitTs, commitTs)
 		c.addEntry(msg, size)
 		return
 	}
@@ -158,21 +168,21 @@ func (c *TableFlowController) enqueueSingleMsg(
 	// Processing txns with the same commitTs.
 	txnEntry := e.(*txnSizeEntry)
 	if txnEntry.commitTs != lastCommitTs {
-		log.Panic("got wrong commitTs from deque, report a bug",
+		log.Panic("got wrong commitTs from deque in flow control, report a bug",
 			zap.Uint64("lastCommitTs", c.lastCommitTs),
 			zap.Uint64("commitTsInDeque", txnEntry.commitTs))
 	}
 
 	// 2. Append row to current txn entry.
 	if txnEntry.batchID == c.batchID && txnEntry.startTs == msg.Row.StartTs &&
-		txnEntry.rowCount < maxRowsPerTxn && txnEntry.size < maxSizePerTxn {
+		txnEntry.rowCount < c.maxRowsPerTxn && txnEntry.size < c.maxSizePerTxn {
 		txnEntry.size += size
 		txnEntry.rowCount++
 		return
 	}
 
 	// 3. Split the txn or handle a new txn with the same commitTs.
-	if c.batchGroupCount+1 >= batchSize {
+	if c.batchGroupCount >= c.batchSize {
 		_ = callback()
 	}
 	c.addEntry(msg, size)
@@ -191,9 +201,12 @@ func (c *TableFlowController) addEntry(msg *model.PolymorphicEvent, size uint64)
 	msg.Row.SplitTxn = true
 }
 
-func (c *TableFlowController) resetBatch() {
-	// At least one batch for each txn.
-	c.batchID = 1
+func (c *TableFlowController) resetBatch(lastCommitTs, commitTs uint64) {
+	if lastCommitTs < commitTs {
+		// First batch of a new txn.
+		// At least one batch for each txn.
+		c.batchID = 1
+	}
 	c.batchGroupCount = 0
 }
 

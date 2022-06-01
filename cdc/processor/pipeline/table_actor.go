@@ -57,7 +57,8 @@ type tableActor struct {
 	// backend mounter
 	mounter entry.Mounter
 	// backend tableSink
-	tableSink sink.Sink
+	tableSink      sink.Sink
+	redoLogEnabled bool
 
 	pullerNode *pullerNode
 	sortNode   *sorterNode
@@ -103,6 +104,7 @@ func NewTableActor(cdcCtx cdcContext.Context,
 	tableName string,
 	replicaInfo *model.TableReplicaInfo,
 	sink sink.Sink,
+	redoLogEnabled bool,
 	targetTs model.Ts,
 ) (TablePipeline, error) {
 	config := cdcCtx.ChangefeedVars().Info.Config
@@ -279,7 +281,7 @@ func (t *tableActor) start(sdtTableContext context.Context) error {
 		zap.String("tableName", t.tableName),
 		zap.Uint64("quota", t.memoryQuota))
 
-	flowController := flowcontrol.NewTableFlowController(t.memoryQuota)
+	flowController := flowcontrol.NewTableFlowController(t.memoryQuota, t.redoLogEnabled)
 	sorterNode := newSorterNode(t.tableName, t.tableID,
 		t.replicaInfo.StartTs, flowController,
 		t.mounter, t.replicaConfig,

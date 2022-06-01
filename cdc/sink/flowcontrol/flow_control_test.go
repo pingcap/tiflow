@@ -173,7 +173,7 @@ type mockedEvent struct {
 	size     uint64
 }
 
-func TestFlowControlBasic(t *testing.T) {
+func TestFlowControlWithForceConsume(t *testing.T) {
 	t.Parallel()
 
 	var consumedBytes uint64
@@ -181,7 +181,7 @@ func TestFlowControlBasic(t *testing.T) {
 	defer cancel()
 	errg, ctx := errgroup.WithContext(ctx)
 	mockedRowsCh := make(chan *txnSizeEntry, 1024)
-	flowController := NewTableFlowController(2048)
+	flowController := NewTableFlowController(2048, true)
 
 	errg.Go(func() error {
 		lastCommitTs := uint64(1)
@@ -289,21 +289,21 @@ func TestFlowControlBasic(t *testing.T) {
 	require.Equal(t, uint64(0), flowController.GetConsumption())
 }
 
-func TestFlowControlRleaseWithBatch(t *testing.T) {
+func TestFlowControlWithBatchAndForceConsume(t *testing.T) {
 	t.Parallel()
 
 	var consumedBytes uint64
-	ctx, cancel := context.WithTimeout(context.TODO(), time.Second*10)
+	ctx, cancel := context.WithTimeout(context.TODO(), time.Hour*10)
 	defer cancel()
 	errg, ctx := errgroup.WithContext(ctx)
 	mockedRowsCh := make(chan *txnSizeEntry, 1024)
-	flowController := NewTableFlowController(512)
+	flowController := NewTableFlowController(512, true)
 	maxBatch := uint64(3)
 
 	// simulate a big txn
 	errg.Go(func() error {
 		lastCommitTs := uint64(1)
-		for i := 0; i < int(maxBatch)*maxRowsPerTxn*batchSize; i++ {
+		for i := uint64(0); i <= maxBatch*defaultRowsPerTxn*defaultBatchSize; i++ {
 			size := uint64(128 + rand.Int()%64)
 			select {
 			case <-ctx.Done():
@@ -350,7 +350,7 @@ func TestFlowControlRleaseWithBatch(t *testing.T) {
 						},
 					}:
 					}
-					log.Warn("", zap.Any("batchID", batchID))
+					log.Debug("", zap.Any("batchID", batchID))
 					maxBatchID = batchID
 					return nil
 				})
@@ -410,11 +410,132 @@ func TestFlowControlRleaseWithBatch(t *testing.T) {
 	require.Equal(t, uint64(0), atomic.LoadUint64(&consumedBytes))
 }
 
+func TestFlowControlWithoutForceConsume(t *testing.T) {
+	t.Parallel()
+
+	var consumedBytes uint64
+	ctx, cancel := context.WithTimeout(context.TODO(), time.Hour*10)
+	defer cancel()
+	errg, ctx := errgroup.WithContext(ctx)
+	mockedRowsCh := make(chan *txnSizeEntry, 1024)
+	flowController := NewTableFlowController(512, false)
+	maxBatch := uint64(3)
+
+	// simulate a big txn
+	errg.Go(func() error {
+		lastCommitTs := uint64(1)
+		for i := uint64(0); i < maxBatch*defaultRowsPerTxn*defaultBatchSize; i++ {
+			size := uint64(128 + rand.Int()%64)
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case mockedRowsCh <- &txnSizeEntry{
+				commitTs: lastCommitTs,
+				size:     size,
+			}:
+			}
+		}
+
+		close(mockedRowsCh)
+		return nil
+	})
+
+	eventCh := make(chan *mockedEvent, 1024)
+	errg.Go(func() error {
+		defer close(eventCh)
+		lastCRTs := uint64(0)
+		maxBatchID := uint64(0)
+		for {
+			var mockedRow *txnSizeEntry
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case mockedRow = <-mockedRowsCh:
+			}
+
+			if mockedRow == nil {
+				break
+			}
+
+			atomic.AddUint64(&consumedBytes, mockedRow.size)
+			err := flowController.Consume(model.NewEmptyPolymorphicEvent(mockedRow.commitTs),
+				mockedRow.size, func(batchID uint64) error {
+					select {
+					case <-ctx.Done():
+						return ctx.Err()
+					case eventCh <- &mockedEvent{
+						resolved: model.ResolvedTs{
+							Mode:    model.BatchResolvedMode,
+							Ts:      lastCRTs,
+							BatchID: batchID,
+						},
+					}:
+					}
+					log.Debug("", zap.Any("batchID", batchID))
+					maxBatchID = batchID
+					return nil
+				})
+			require.Nil(t, err)
+			lastCRTs = mockedRow.commitTs
+
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case eventCh <- &mockedEvent{
+				size: mockedRow.size,
+			}:
+			}
+		}
+		require.Less(t, uint64(0), flowController.GetConsumption())
+		require.LessOrEqual(t, maxBatch, maxBatchID)
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case eventCh <- &mockedEvent{
+			resolved: model.ResolvedTs{
+				Mode:    model.BatchResolvedMode,
+				Ts:      lastCRTs,
+				BatchID: maxBatchID + 1,
+			},
+		}:
+		}
+		time.Sleep(time.Millisecond * 500)
+		require.Equal(t, uint64(0), flowController.GetConsumption())
+		return nil
+	})
+
+	errg.Go(func() error {
+		for {
+			var event *mockedEvent
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case event = <-eventCh:
+			}
+
+			if event == nil {
+				break
+			}
+
+			if event.size != 0 {
+				atomic.AddUint64(&consumedBytes, -event.size)
+			} else {
+				flowController.Release(event.resolved)
+			}
+		}
+
+		return nil
+	})
+
+	require.Nil(t, errg.Wait())
+	require.Equal(t, uint64(0), atomic.LoadUint64(&consumedBytes))
+}
+
 func TestFlowControlAbort(t *testing.T) {
 	t.Parallel()
 
 	callBacker := &mockCallBacker{}
-	controller := NewTableFlowController(1024)
+	controller := NewTableFlowController(1024, false)
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
@@ -445,7 +566,7 @@ func TestFlowControlCallBack(t *testing.T) {
 	defer cancel()
 	errg, ctx := errgroup.WithContext(ctx)
 	mockedRowsCh := make(chan *txnSizeEntry, 1024)
-	flowController := NewTableFlowController(512)
+	flowController := NewTableFlowController(512, false)
 
 	errg.Go(func() error {
 		lastCommitTs := uint64(1)
@@ -549,7 +670,7 @@ func TestFlowControlCallBackNotBlockingRelease(t *testing.T) {
 	t.Parallel()
 
 	var wg sync.WaitGroup
-	controller := NewTableFlowController(512)
+	controller := NewTableFlowController(512, false)
 	wg.Add(1)
 
 	ctx, cancel := context.WithCancel(context.TODO())
@@ -591,7 +712,7 @@ func TestFlowControlCallBackError(t *testing.T) {
 	t.Parallel()
 
 	var wg sync.WaitGroup
-	controller := NewTableFlowController(512)
+	controller := NewTableFlowController(512, false)
 	wg.Add(1)
 
 	ctx, cancel := context.WithCancel(context.TODO())
@@ -620,7 +741,7 @@ func TestFlowControlCallBackError(t *testing.T) {
 func TestFlowControlConsumeLargerThanQuota(t *testing.T) {
 	t.Parallel()
 
-	controller := NewTableFlowController(1024)
+	controller := NewTableFlowController(1024, false)
 	err := controller.Consume(model.NewEmptyPolymorphicEvent(1), 2048, func(uint64) error {
 		t.Error("unreachable")
 		return nil
@@ -633,7 +754,7 @@ func BenchmarkTableFlowController(B *testing.B) {
 	defer cancel()
 	errg, ctx := errgroup.WithContext(ctx)
 	mockedRowsCh := make(chan *txnSizeEntry, 102400)
-	flowController := NewTableFlowController(20 * 1024 * 1024) // 20M
+	flowController := NewTableFlowController(20*1024*1024, false) // 20M
 
 	errg.Go(func() error {
 		lastCommitTs := uint64(1)

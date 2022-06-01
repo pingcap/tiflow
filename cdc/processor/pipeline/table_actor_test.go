@@ -359,7 +359,7 @@ func TestNewTableActor(t *testing.T) {
 		&model.TableReplicaInfo{
 			StartTs:     0,
 			MarkTableID: 1,
-		}, &mockSink{}, 10)
+		}, &mockSink{}, false, 10)
 	require.NotNil(t, tbl)
 	require.Nil(t, err)
 	require.NotPanics(t, func() {
@@ -375,7 +375,7 @@ func TestNewTableActor(t *testing.T) {
 		&model.TableReplicaInfo{
 			StartTs:     0,
 			MarkTableID: 1,
-		}, &mockSink{}, 10)
+		}, &mockSink{}, false, 10)
 	require.Nil(t, tbl)
 	require.NotNil(t, err)
 
