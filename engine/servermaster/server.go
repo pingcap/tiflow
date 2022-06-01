@@ -760,10 +760,13 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 	})
 	s.gcCoordinator = externRescManager.NewGCCoordinator(s.executorManager, s.jobManager, s.frameMetaClient, s.gcRunner)
 
+	// TODO refactor this method to make it more readable and maintainable.
 	errg, errgCtx := errgroup.WithContext(ctx)
 	defer func() {
 		err := errg.Wait()
-		log.L().Error("errgroup exited with error", zap.Error(err))
+		if err != nil {
+			log.L().Error("resource GC exited with error", zap.Error(err))
+		}
 	}()
 
 	errg.Go(func() error {
