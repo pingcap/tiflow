@@ -60,7 +60,7 @@ func NewCoordinator(
 	ownerRevision int64,
 	cfg *config.SchedulerConfig,
 ) (internal.Scheduler, error) {
-	trans, err := newTransport(ctx, changeFeedID, messageServer, messageRouter)
+	trans, err := newTransport(ctx, changeFeedID, schedulerRole, messageServer, messageRouter)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
