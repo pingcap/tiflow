@@ -46,6 +46,7 @@ type BaseJobMaster interface {
 	JobMasterID() libModel.MasterID
 	UpdateJobStatus(ctx context.Context, status libModel.WorkerStatus) error
 	CurrentEpoch() libModel.Epoch
+	SendMessage(ctx context.Context, topic p2p.Topic, message interface{}, nonblocking bool) error
 
 	// Exit should be called when job master (in user logic) wants to exit
 	// - If err is nil, it means job master exits normally
@@ -242,11 +243,11 @@ func (d *DefaultBaseJobMaster) IsBaseJobMaster() {
 }
 
 // SendMessage delegates the SendMessage or inner worker
-func (d *DefaultBaseJobMaster) SendMessage(ctx context.Context, topic p2p.Topic, message interface{}) (bool, error) {
+func (d *DefaultBaseJobMaster) SendMessage(ctx context.Context, topic p2p.Topic, message interface{}, nonblocking bool) error {
 	ctx = d.errCenter.WithCancelOnFirstError(ctx)
 
 	// master will use WorkerHandle to send message
-	return d.worker.SendMessage(ctx, topic, message)
+	return d.worker.SendMessage(ctx, topic, message, nonblocking)
 }
 
 // IsMasterReady implements BaseJobMaster.IsMasterReady
