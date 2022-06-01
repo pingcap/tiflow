@@ -14,7 +14,9 @@
 package tp
 
 import (
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"go.uber.org/zap"
 )
 
 var _ scheduler = &moveTableScheduler{}
@@ -34,6 +36,7 @@ func (m *moveTableScheduler) Name() string {
 }
 
 func (m *moveTableScheduler) addTask(tableID model.TableID, target model.CaptureID) bool {
+	// previous triggered task not finished yet, decline the new manual move table request.
 	if _, ok := m.tasks[tableID]; ok {
 		return false
 	}
@@ -49,86 +52,65 @@ func (m *moveTableScheduler) addTask(tableID model.TableID, target model.Capture
 func (m *moveTableScheduler) Schedule(
 	checkpointTs model.Ts,
 	currentTables []model.TableID,
-	captures map[model.CaptureID]*model.CaptureInfo,
+	captures map[model.CaptureID]*CaptureStatus,
 	replications map[model.TableID]*ReplicationSet,
 ) []*scheduleTask {
-	newTables := make([]model.TableID, 0)
-	intersectionTable := make(map[model.TableID]struct{})
-	captureTables := make(map[model.CaptureID][]model.TableID)
+	allTables := make(map[model.TableID]struct{})
 	for _, tableID := range currentTables {
-		rep, ok := replications[tableID]
-		if !ok {
-			newTables = append(newTables, tableID)
+		allTables[tableID] = struct{}{}
+	}
+
+	for tableID, task := range m.tasks {
+		// table may not in the all current tables if it was removed after manual move table triggered.
+		if _, ok := allTables[tableID]; !ok {
+			log.Warn("tpscheduler: move table ignored, since the table cannot found",
+				zap.Int64("tableID", tableID),
+				zap.String("captureID", task.moveTable.DestCapture))
+			delete(m.tasks, tableID)
 			continue
 		}
-		if rep.State == ReplicationSetStateAbsent {
-			newTables = append(newTables, tableID)
-		}
-		intersectionTable[tableID] = struct{}{}
-		if rep.Primary != "" {
-			captureTables[rep.Primary] = append(captureTables[rep.Primary], tableID)
-		}
-		if rep.Secondary != "" {
-			captureTables[rep.Secondary] = append(captureTables[rep.Secondary], tableID)
-		}
-	}
-	rmTables := make([]model.TableID, 0)
-	for tableID := range replications {
-		_, ok := intersectionTable[tableID]
+		// the target capture may not in `initialize` state after manual move table triggered.
+		captureStatus, ok := captures[task.moveTable.DestCapture]
 		if !ok {
-			rmTables = append(rmTables, tableID)
+			log.Warn("tpscheduler: move table ignored, since the target capture cannot found",
+				zap.Int64("tableID", tableID),
+				zap.String("captureID", task.moveTable.DestCapture))
+			delete(m.tasks, tableID)
+			continue
+		}
+		if captureStatus.State != CaptureStateInitialized {
+			log.Warn("tpscheduler: move table ignored, "+
+				"since the target capture is not initialized",
+				zap.Int64("tableID", tableID),
+				zap.String("captureID", task.moveTable.DestCapture),
+				zap.Any("captureState", captureStatus.State))
+			delete(m.tasks, tableID)
+			continue
+		}
+		rep, ok := replications[tableID]
+		if !ok {
+			log.Warn("tpscheduler: move table ignored, "+
+				"since the table cannot found in the replication set",
+				zap.Int64("tableID", tableID),
+				zap.String("captureID", task.moveTable.DestCapture))
+			delete(m.tasks, tableID)
+			continue
+		}
+		// only move replicating table.
+		if rep.State != ReplicationSetStateReplicating {
+			log.Info("tpscheduler: move table ignored, since the table is not replicating now",
+				zap.Int64("tableID", tableID),
+				zap.String("captureID", task.moveTable.DestCapture),
+				zap.Any("replicationState", rep.State))
+			delete(m.tasks, tableID)
 		}
 	}
 
-	captureIDs := make([]model.CaptureID, 0, len(captures))
-	for captureID := range captures {
-		captureIDs = append(captureIDs, captureID)
-	}
-	// TODO support table re-balance when adding a new capture.
 	tasks := make([]*scheduleTask, 0)
-	if len(newTables) != 0 {
-		tasks = append(tasks, newBurstBalanceAddTables(newTables, captureIDs))
-		if len(newTables) == len(currentTables) {
-			return tasks
-		}
+	for _, task := range m.tasks {
+		tasks = append(tasks, task)
 	}
-	if len(rmTables) > 0 {
-		tasks = append(tasks, newBurstBalanceRemoveTables(rmTables, replications))
-	}
+	m.tasks = make(map[model.TableID]*scheduleTask)
 
 	return tasks
 }
-
-//func newBurstBalanceAddTables(
-//	newTables []model.TableID, captureIDs []model.CaptureID,
-//) *scheduleTask {
-//	idx := 0
-//	tables := make(map[model.TableID]model.CaptureID)
-//	for _, tableID := range newTables {
-//		tables[tableID] = captureIDs[idx]
-//		idx++
-//		if idx >= len(captureIDs) {
-//			idx = 0
-//		}
-//	}
-//	return &scheduleTask{burstBalance: &burstBalance{AddTables: tables}}
-//}
-//
-//func newBurstBalanceRemoveTables(
-//	rmTables []model.TableID, replications map[model.TableID]*ReplicationSet,
-//) *scheduleTask {
-//	tables := make(map[model.TableID]model.CaptureID)
-//	for _, tableID := range rmTables {
-//		rep := replications[tableID]
-//		if rep.Primary != "" {
-//			tables[tableID] = rep.Primary
-//		} else if rep.Secondary != "" {
-//			tables[tableID] = rep.Secondary
-//		} else {
-//			log.Warn("tpscheduler: primary or secondary not found for removed table",
-//				zap.Any("table", rep))
-//			continue
-//		}
-//	}
-//	return &scheduleTask{burstBalance: &burstBalance{RemoveTables: tables}}
-//}

@@ -35,7 +35,7 @@ type coordinator struct {
 	version      string
 	revision     schedulepb.OwnerRevision
 	trans        transport
-	scheduler    map[schedulerType]scheduler
+	schedulers   map[schedulerType]scheduler
 	replicationM *replicationManager
 	captureM     *captureManager
 }
@@ -65,7 +65,7 @@ func NewCoordinator(
 		version:      version.ReleaseSemver(),
 		revision:     revision,
 		trans:        trans,
-		scheduler:    schedulers,
+		schedulers:   schedulers,
 		replicationM: newReplicationManager(cfg.MaxTaskConcurrency),
 		captureM:     newCaptureManager(revision, cfg.HeartbeatTick),
 	}, nil
@@ -88,12 +88,14 @@ func (c *coordinator) MoveTable(tableID model.TableID, target model.CaptureID) {
 	if !ok {
 		log.Warn("tpscheduler: manual move table task ignored, "+
 			"since cannot found the target capture",
+			zap.Int64("tableID", tableID),
 			zap.String("targetCapture", target))
 		return
 	}
-	if captureStatus.State != CaptureStateInitialized {
+	if !c.captureM.CheckAllCaptureInitialized() {
 		log.Info("tpscheduler: manual move table task ignored, "+
-			"since the target capture is not initialized",
+			"since not all captures initialized",
+			zap.Int64("tableID", tableID),
 			zap.String("targetCapture", target),
 			zap.Any("state", captureStatus.State))
 		return
@@ -105,7 +107,7 @@ func (c *coordinator) MoveTable(tableID model.TableID, target model.CaptureID) {
 		return
 	}
 
-	scheduler, ok := c.scheduler[schedulerTypeMoveTable]
+	scheduler, ok := c.schedulers[schedulerTypeMoveTable]
 	if !ok {
 		log.Panic("tpscheduler: move table scheduler not found")
 	}
@@ -128,7 +130,7 @@ func (c *coordinator) Rebalance() {
 		return
 	}
 
-	scheduler, ok := c.scheduler[schedulerTypeRebalance]
+	scheduler, ok := c.schedulers[schedulerTypeRebalance]
 	if !ok {
 		log.Panic("tpscheduler: rebalance scheduler not found")
 	}
@@ -187,12 +189,12 @@ func (c *coordinator) poll(
 	// Generate schedule tasks based on the current status.
 	replications := c.replicationM.ReplicationSets()
 	allTasks := make([]*scheduleTask, 0)
-	for _, sched := range c.scheduler {
-		tasks := sched.Schedule(checkpointTs, currentTables, aliveCaptures, replications)
+	for _, scheduler := range c.schedulers {
+		tasks := scheduler.Schedule(checkpointTs, currentTables, c.captureM.Captures, replications)
 		if len(tasks) != 0 {
 			log.Info("tpscheduler: new schedule task",
 				zap.Int("task", len(tasks)),
-				zap.String("scheduler", sched.Name()))
+				zap.String("scheduler", scheduler.Name()))
 		}
 		allTasks = append(allTasks, tasks...)
 	}

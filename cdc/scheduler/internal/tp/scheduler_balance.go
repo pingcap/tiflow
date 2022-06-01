@@ -34,7 +34,7 @@ func (b *burstBalanceScheduler) Name() string {
 func (b *burstBalanceScheduler) Schedule(
 	checkpointTs model.Ts,
 	currentTables []model.TableID,
-	captures map[model.CaptureID]*model.CaptureInfo,
+	captures map[model.CaptureID]*CaptureStatus,
 	replications map[model.TableID]*ReplicationSet,
 ) []*scheduleTask {
 	newTables := make([]model.TableID, 0)
@@ -112,7 +112,6 @@ func newBurstBalanceRemoveTables(
 		} else {
 			log.Warn("tpscheduler: primary or secondary not found for removed table",
 				zap.Any("table", rep))
-			continue
 		}
 	}
 	return &scheduleTask{burstBalance: &burstBalance{RemoveTables: tables}}
