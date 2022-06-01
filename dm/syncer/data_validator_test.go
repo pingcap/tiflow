@@ -474,11 +474,10 @@ func TestValidatorDoValidate(t *testing.T) {
 	validator.validateInterval = 10 * time.Minute // we don't want worker start validate
 	validator.persistHelper.schemaInitialized.Store(true)
 	require.NoError(t, validator.initialize())
-	validator.streamerController = &binlogstream.StreamerController{
-		streamerProducer: mockStreamerProducer,
-		streamer:         mockStreamer,
-		closed:           false,
-	}
+	validator.streamerController = binlogstream.NewStreamerController4Test(
+		mockStreamerProducer,
+		mockStreamer,
+	)
 	validator.wg.Add(1) // wg.Done is run in doValidate
 	validator.doValidate()
 	validator.Stop()
