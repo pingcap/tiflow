@@ -259,11 +259,11 @@ func TestAgentHandleMessage(t *testing.T) {
 
 	heartbeat := &schedulepb.Message{
 		Header: &schedulepb.Message_Header{
-			Version:       "version-1",
-			OwnerRevision: schedulepb.OwnerRevision{Revision: 1},
+			Version:       a.ownerInfo.version,
+			OwnerRevision: a.ownerInfo.revision,
 		},
 		MsgType:   schedulepb.MsgHeartbeat,
-		From:      "owner-1",
+		From:      a.ownerInfo.captureID,
 		Heartbeat: &schedulepb.Heartbeat{},
 	}
 	// handle the first heartbeat, from the known owner.
@@ -276,12 +276,13 @@ func TestAgentHandleMessage(t *testing.T) {
 
 	addTableRequest := &schedulepb.Message{
 		Header: &schedulepb.Message_Header{
-			Version:        "version-1",
-			OwnerRevision:  schedulepb.OwnerRevision{Revision: 1},
-			ProcessorEpoch: schedulepb.ProcessorEpoch{Epoch: "agent-epoch-1"},
+			Version:       a.ownerInfo.version,
+			OwnerRevision: a.ownerInfo.revision,
+			// wrong epoch
+			ProcessorEpoch: schedulepb.ProcessorEpoch{Epoch: "wrong-agent-epoch-1"},
 		},
 		MsgType: schedulepb.MsgDispatchTableRequest,
-		From:    "owner-1",
+		From:    a.ownerInfo.captureID,
 		DispatchTableRequest: &schedulepb.DispatchTableRequest{
 			Request: &schedulepb.DispatchTableRequest_AddTable{
 				AddTable: &schedulepb.AddTableRequest{
@@ -292,9 +293,15 @@ func TestAgentHandleMessage(t *testing.T) {
 			},
 		},
 	}
-	// add table request in pending
+	// wrong epoch, ignored
 	response = a.handleMessage([]*schedulepb.Message{addTableRequest})
-	require.Equal(t, len(a.runningTasks), 1)
+	require.Len(t, a.runningTasks, 0)
+	require.Len(t, response, 0)
+
+	// correct epoch, processing.
+	addTableRequest.Header.ProcessorEpoch = a.epoch
+	response = a.handleMessage([]*schedulepb.Message{addTableRequest})
+	require.Len(t, a.runningTasks, 1)
 	require.Len(t, response, 0)
 
 	heartbeat.Header.OwnerRevision.Revision = 2
@@ -305,12 +312,12 @@ func TestAgentHandleMessage(t *testing.T) {
 	// this should never happen in real world
 	unknownMessage := &schedulepb.Message{
 		Header: &schedulepb.Message_Header{
-			Version:        "version-1",
+			Version:        a.ownerInfo.version,
 			OwnerRevision:  schedulepb.OwnerRevision{Revision: 2},
-			ProcessorEpoch: schedulepb.ProcessorEpoch{Epoch: "agent-epoch-1"},
+			ProcessorEpoch: a.epoch,
 		},
 		MsgType: schedulepb.MsgUnknown,
-		From:    "owner-1",
+		From:    a.ownerInfo.captureID,
 	}
 
 	response = a.handleMessage([]*schedulepb.Message{unknownMessage})
@@ -437,6 +444,8 @@ func TestAgentTick(t *testing.T) {
 		Response.(*schedulepb.DispatchTableResponse_AddTable)
 	require.True(t, ok)
 	require.Equal(t, schedulepb.TableStatePrepared, resp.AddTable.Status.State)
+
+	require.NoError(t, a.Close())
 }
 
 // MockTableExecutor is a mock implementation of TableExecutor.
