@@ -245,7 +245,7 @@ func NewCmdServer() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			
+
 			cancel := util.InitCmd(cmd, &logutil.Config{
 				File:                 o.serverConfig.LogFile,
 				Level:                o.serverConfig.LogLevel,
