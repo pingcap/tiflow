@@ -195,7 +195,8 @@ func (tm *TaskManager) removeTaskStatus(job *metadata.Job) {
 func taskAsExpected(persistentTask *metadata.Task, taskStatus runtime.TaskStatus) bool {
 	// TODO: when running is expected but task is paused, we may still need return true,
 	// because worker will resume it automatically.
-	return persistentTask.Stage == taskStatus.GetStage() || taskStatus.GetStage() == metadata.StageUnscheduled
+	// refactor when implements OperateTask
+	return persistentTask.Stage == taskStatus.GetStage() || taskStatus.GetStage() == metadata.StageUnscheduled || taskStatus.GetStage() == metadata.StageFinished
 }
 
 func (tm *TaskManager) operateTaskMessage(ctx context.Context, taskID string, stage metadata.TaskStage) error {

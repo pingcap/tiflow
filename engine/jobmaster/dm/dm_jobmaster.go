@@ -15,7 +15,6 @@ package dm
 
 import (
 	"context"
-	"sync"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -46,15 +45,13 @@ type JobMaster struct {
 
 	workerID libModel.WorkerID
 	jobCfg   *config.JobCfg
-	wg       sync.WaitGroup
 	closeCh  chan struct{}
 
-	metadata              *metadata.MetaData
-	workerManager         *WorkerManager
-	taskManager           *TaskManager
-	messageAgent          dmpkg.MessageAgent
-	messageHandlerManager p2p.MessageHandlerManager
-	checkpointAgent       checkpoint.Agent
+	metadata        *metadata.MetaData
+	workerManager   *WorkerManager
+	taskManager     *TaskManager
+	messageAgent    dmpkg.MessageAgent
+	checkpointAgent checkpoint.Agent
 }
 
 type dmJobMasterFactory struct{}
