@@ -40,8 +40,8 @@ func NewFactory4MasterImpl(reg *Registry, info tenant.ProjectInfo, jobType libMo
 			NewPromFactory(),
 			jobType,
 			prometheus.Labels{
-				constLabelTenantKey:  info.TenantID,
-				constLabelProjectKey: info.ProjectID,
+				constLabelTenantKey:  info.TenantID(),
+				constLabelProjectKey: info.ProjectID(),
 				constLabelJobKey:     jobID,
 			},
 		),
@@ -59,8 +59,8 @@ func NewFactory4WorkerImpl(reg *Registry, info tenant.ProjectInfo, jobType libMo
 			NewPromFactory(),
 			jobType,
 			prometheus.Labels{
-				constLabelTenantKey:  info.TenantID,
-				constLabelProjectKey: info.ProjectID,
+				constLabelTenantKey:  info.TenantID(),
+				constLabelProjectKey: info.ProjectID(),
 				constLabelJobKey:     jobID,
 				constLabelWorkerKey:  workerID,
 			},
