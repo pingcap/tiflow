@@ -197,7 +197,6 @@ func (k *mqSink) FlushRowChangedEvents(
 
 // bgFlushTs flush resolvedTs to workers and flush the mqProducer
 func (k *mqSink) bgFlushTs(ctx context.Context) error {
-	defer k.resolvedBuffer.Close()
 	for {
 		select {
 		case <-ctx.Done():
@@ -338,6 +337,7 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 
 // Close the producer asynchronously, does not care closed successfully or not.
 func (k *mqSink) Close(ctx context.Context) error {
+	k.resolvedBuffer.Close()
 	k.flushWorker.close()
 	// We need to close it asynchronously.
 	// Otherwise, we might get stuck with it in an unhealthy state of kafka.
