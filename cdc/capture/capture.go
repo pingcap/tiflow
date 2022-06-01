@@ -106,6 +106,15 @@ func NewCapture4Test(o owner.Owner) *Capture {
 	return res
 }
 
+// NewCaptureWithManager4Test returns a new Capture instance for test.
+func NewCaptureWithManager4Test(o owner.Owner, m *upstream.Manager) *Capture {
+	res := &Capture{
+		UpstreamManager: m,
+	}
+	res.owner = o
+	return res
+}
+
 func (c *Capture) reset(ctx context.Context) error {
 	conf := config.GetGlobalServerConfig()
 	sess, err := concurrency.NewSession(c.EtcdClient.Client.Unwrap(),
