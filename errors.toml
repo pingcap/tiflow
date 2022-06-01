@@ -511,11 +511,6 @@ error = '''
 unknown '%s' protocol for Message Queue sink
 '''
 
-["CDC:ErrMQWorkerClosed"]
-error = '''
-MQ worker has closed
-'''
-
 ["CDC:ErrMailboxFull"]
 error = '''
 mailbox is full, please try again. Internal use only, report a bug if seen externally
