@@ -487,6 +487,8 @@ func (w *regionWorker) eventHandler(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
+		regionEventsBatchSize.Observe(float64(len(events)))
+
 		intputPending := atomic.LoadInt32(&w.inputPending)
 		if highWatermarkMet {
 			highWatermarkMet = int(intputPending) >= regionWorkerLowWatermark
@@ -520,34 +522,38 @@ func (w *regionWorker) eventHandler(ctx context.Context) error {
 				}
 			}
 		}
-		// Principle: events from the same region must be processed linearly.
-		//
-		// When buffered events exceed high watermark, we start to use worker
-		// pool to improve throughput, and we need a mechanism to quit worker
-		// pool when buffered events are less than low watermark, which means
-		// we should have a way to know whether events sent to the worker pool
-		// are all processed.
-		// Send a dummy event to each worker pool handler, after each of these
-		// events are processed, we can ensure all events sent to worker pool
-		// from this region worker are processed.
-		finishedCallbackCh := make(chan struct{}, len(w.handles))
-		for _, handle := range w.handles {
-			err = handle.AddEvent(ctx, &regionStatefulEvent{finishedCallbackCh: finishedCallbackCh})
-			if err != nil {
-				return err
+
+		if highWatermarkMet {
+			// Principle: events from the same region must be processed linearly.
+			//
+			// When buffered events exceed high watermark, we start to use worker
+			// pool to improve throughput, and we need a mechanism to quit worker
+			// pool when buffered events are less than low watermark, which means
+			// we should have a way to know whether events sent to the worker pool
+			// are all processed.
+			// Send a dummy event to each worker pool handler, after each of these
+			// events are processed, we can ensure all events sent to worker pool
+			// from this region worker are processed.
+			finishedCallbackCh := make(chan struct{}, len(w.handles))
+			for _, handle := range w.handles {
+				err = handle.AddEvent(ctx, &regionStatefulEvent{finishedCallbackCh: finishedCallbackCh})
+				if err != nil {
+					return err
+				}
+			}
+			counter := len(w.handles)
+			for counter > 0 {
+				select {
+				case <-ctx.Done():
+					return errors.Trace(ctx.Err())
+				case err = <-w.errorCh:
+					return err
+				case <-finishedCallbackCh:
+					counter--
+				}
 			}
 		}
-		counter := len(w.handles)
-		for counter > 0 {
-			select {
-			case <-ctx.Done():
-				return errors.Trace(ctx.Err())
-			case err = <-w.errorCh:
-				return err
-			case <-finishedCallbackCh:
-				counter--
-			}
-		}
+
 	}
 }
 
