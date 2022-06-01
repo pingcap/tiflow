@@ -14,28 +14,31 @@
 package v2
 
 import (
+	"context"
+	"time"
+
 	"github.com/gin-gonic/gin"
-	"github.com/pingcap/tiflow/cdc/api/middleware"
 	"github.com/pingcap/tiflow/cdc/capture"
+	"github.com/tikv/client-go/v2/oracle"
+	pd "github.com/tikv/pd/client"
 )
 
-// OpenAPIV2 provides CDC v2 APIs
-type OpenAPIV2 struct {
-	capture *capture.Capture
+// MockPDClient mocks pd.Client to facilitate unit testing.
+type MockPDClient struct {
+	pd.Client
 }
 
-// NewOpenAPIV2 creates a new OpenAPIV2.
-func NewOpenAPIV2(c *capture.Capture) OpenAPIV2 {
-	return OpenAPIV2{capture: c}
+func (m *MockPDClient) GetTS(ctx context.Context) (int64, int64, error) {
+	return oracle.GetPhysical(time.Now()), 0, nil
 }
 
-// RegisterOpenAPIV2Routes registers routes for OpenAPI
-func RegisterOpenAPIV2Routes(router *gin.Engine, api OpenAPIV2) {
-	v2 := router.Group("/api/v2")
+type testCase struct {
+	url    string
+	method string
+}
 
-	v2.Use(middleware.LogMiddleware())
-	v2.Use(middleware.ErrorHandleMiddleware())
-
-	// common APIs
-	v2.GET("/tso", api.GetTso)
+func newRouter(c *capture.Capture) *gin.Engine {
+	router := gin.New()
+	RegisterOpenAPIV2Routes(router, NewOpenAPIV2(c))
+	return router
 }

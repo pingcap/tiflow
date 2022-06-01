@@ -4,6 +4,7 @@ package enginepb;
 
 import "error.proto";
 import "metastore.proto";
+import "projects.proto";
 
 // I'm trying to phase out the communication protocal.
 // - system level
@@ -82,13 +83,13 @@ enum JobType {
 message SubmitJobRequest {
     JobType tp = 1;
     bytes config = 2;
-    // User name, token, etc...
-    string user = 3;
+    ProjectInfo project_info = 3;
     // TODO: Resource Limit
 }
 
 message QueryJobRequest {
     string job_id = 1;
+    ProjectInfo project_info = 2;
 }
 
 message WorkerInfo {
@@ -120,11 +121,13 @@ message QueryJobResponse {
 message CancelJobRequest {
     int32 job_id = 1 [deprecated=true];
     string job_id_str = 2;
+    ProjectInfo project_info = 3;
 }
 
 message PauseJobRequest {
     int32 job_id = 1 [deprecated=true];
     string job_id_str = 2;
+    ProjectInfo project_info = 3;
 }
 
 message SubmitJobResponse {

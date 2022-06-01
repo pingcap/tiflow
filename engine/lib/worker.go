@@ -135,6 +135,9 @@ type DefaultBaseWorker struct {
 	// Don't close it. It's just a prefix wrapper for underlying userRawKVClient
 	userMetaKVClient metaclient.KVClient
 	metricFactory    promutil.Factory
+
+	// tenant/project information
+	projectInfo tenant.ProjectInfo
 }
 
 type workerParams struct {
@@ -169,27 +172,23 @@ func NewBaseWorker(
 		userRawKVClient:       params.UserRawKVClient,
 		resourceBroker:        params.ResourceBroker,
 
-		masterID: masterID,
-		id:       workerID,
+		masterID:    masterID,
+		id:          workerID,
+		projectInfo: ctx.ProjectInfo,
 		workerStatus: &libModel.WorkerStatus{
-			// TODO ProjectID
-			JobID: masterID,
-			ID:    workerID,
-			// TODO: worker_type
+			ProjectID: ctx.ProjectInfo.UniqueID(),
+			JobID:     masterID,
+			ID:        workerID,
+			Type:      int(tp),
 		},
 		timeoutConfig: config.DefaultTimeoutConfig(),
 
 		pool: workerpool.NewDefaultAsyncPool(1),
 
-		errCenter: errctx.NewErrCenter(),
-		clock:     clock.New(),
-		// [TODO] use tenantID if support multi-tenant
-		userMetaKVClient: kvclient.NewPrefixKVClient(params.UserRawKVClient, tenant.DefaultUserTenantID),
-		// TODO: tenant info and job type
-		metricFactory: promutil.NewFactory4Worker(tenant.ProjectInfo{
-			TenantID:  tenant.DefaultUserTenantID,
-			ProjectID: "TODO",
-		}, WorkerTypeForMetric(tp), masterID, workerID),
+		errCenter:        errctx.NewErrCenter(),
+		clock:            clock.New(),
+		userMetaKVClient: kvclient.NewPrefixKVClient(params.UserRawKVClient, ctx.ProjectInfo.UniqueID()),
+		metricFactory:    promutil.NewFactory4Worker(ctx.ProjectInfo, WorkerTypeForMetric(tp), masterID, workerID),
 	}
 }
 
