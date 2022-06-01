@@ -129,6 +129,12 @@ func TestKafkaSink(t *testing.T) {
 		Table:  "t1",
 	}})
 	require.Nil(t, err)
+	defer func() {
+		err = sink.Close(ctx)
+		if err != nil {
+			require.Equal(t, context.Canceled, errors.Cause(err))
+		}
+	}()
 
 	// mock kafka broker processes 1 ddl event
 	ddl := &model.DDLEvent{
@@ -156,17 +162,10 @@ func TestKafkaSink(t *testing.T) {
 	if err != nil {
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}
-
-	err = sink.Close(ctx)
-	if err != nil {
-		require.Equal(t, context.Canceled, errors.Cause(err))
-	}
 }
 
 func TestKafkaSinkFilter(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
 	leader, topic := initBroker(t, kafka.DefaultMockPartitionNum)
 	defer leader.Close()
 
@@ -190,6 +189,13 @@ func TestKafkaSinkFilter(t *testing.T) {
 
 	sink, err := NewKafkaSaramaSink(ctx, sinkURI, fr, replicaConfig, opts, errCh)
 	require.Nil(t, err)
+	defer func() {
+		cancel()
+		err = sink.Close(ctx)
+		if err != nil {
+			require.Equal(t, context.Canceled, errors.Cause(err))
+		}
+	}()
 
 	row := &model.RowChangedEvent{
 		Table: &model.TableName{
@@ -214,11 +220,6 @@ func TestKafkaSinkFilter(t *testing.T) {
 	}
 	err = sink.EmitDDLEvent(ctx, ddl)
 	require.True(t, cerror.ErrDDLEventIgnored.Equal(err))
-
-	err = sink.Close(ctx)
-	if err != nil {
-		require.Equal(t, context.Canceled, errors.Cause(err))
-	}
 }
 
 func TestPulsarSinkEncoderConfig(t *testing.T) {
@@ -245,6 +246,7 @@ func TestPulsarSinkEncoderConfig(t *testing.T) {
 	// so we can't call sink.Close() to close it.
 	// We will leak goroutine if we don't close it.
 	defer sink.flushWorker.close()
+	defer sink.resolvedBuffer.Close()
 	require.Nil(t, err)
 
 	encoder := sink.encoderBuilder.Build()
@@ -255,7 +257,6 @@ func TestPulsarSinkEncoderConfig(t *testing.T) {
 
 func TestFlushRowChangedEvents(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	leader, topic := initBroker(t, kafka.DefaultMockPartitionNum)
 	defer leader.Close()
@@ -279,6 +280,13 @@ func TestFlushRowChangedEvents(t *testing.T) {
 
 	sink, err := NewKafkaSaramaSink(ctx, sinkURI, fr, replicaConfig, opts, errCh)
 	require.Nil(t, err)
+	defer func() {
+		cancel()
+		err = sink.Close(ctx)
+		if err != nil {
+			require.Equal(t, context.Canceled, errors.Cause(err))
+		}
+	}()
 
 	// mock kafka broker processes 1 row changed event
 	tableID1 := model.TableID(1)
@@ -345,9 +353,4 @@ func TestFlushRowChangedEvents(t *testing.T) {
 	require.Nil(t, err)
 	checkpointTsOld := waitCheckpointTs(t, sink, tableID1, row1.CommitTs)
 	require.Equal(t, row1.CommitTs, checkpointTsOld)
-
-	err = sink.Close(ctx)
-	if err != nil {
-		require.Equal(t, context.Canceled, errors.Cause(err))
-	}
 }
