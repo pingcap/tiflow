@@ -15,7 +15,6 @@
 // All information related to upstream binlog stream should be kept in this package,
 // such as reset binlog to a location, maintain properties of the binlog event
 // and stream, inject or delete binlog events with binlog stream, etc.
-
 package binlogstream
 
 import (

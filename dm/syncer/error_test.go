@@ -191,7 +191,7 @@ func TestHandleSpecialDDLError(t *testing.T) {
 
 	handledErr = syncer.handleSpecialDDLError(tctx, execErr, ddls, 0, conn2)
 	require.NoError(t, mock.ExpectationsWereMet())
-	require.NoError(t, handledErr)
+	require.Error(t, execErr, handledErr)
 }
 
 func TestIsConnectionRefusedError(t *testing.T) {
