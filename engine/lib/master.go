@@ -635,12 +635,13 @@ func (m *DefaultBaseMaster) IsMasterReady() bool {
 }
 
 // SetProjectInfo set the project info of specific worker
-// [NOTICE]: Currently, it is only used by JobManager to set project for different job(worker for jobmanager)
+// [NOTICE]: Only used by JobManager to set project for different job(worker for jobmanager)
 func (m *DefaultBaseMaster) SetProjectInfo(workerID libModel.WorkerID, projectInfo tenant.ProjectInfo) {
 	m.workerProjectMap.Store(workerID, projectInfo)
 }
 
 // DeleteProjectInfo delete the project info of specific worker
+// NOTICEL Only used by JobMananger when stop job
 func (m *DefaultBaseMaster) DeleteProjectInfo(workerID libModel.WorkerID) {
 	m.workerProjectMap.Delete(workerID)
 }
@@ -659,6 +660,11 @@ func (m *DefaultBaseMaster) GetProjectInfo(masterID libModel.MasterID) tenant.Pr
 	return projectInfo.(tenant.ProjectInfo)
 }
 
-func (m *DefaultBaseMaster) InitialAllProjectInfos(jobs []*libModel.MasterMetaKVData) {
-
+// InitProjectInfosAfterRecover set project infos for all worker after master recover
+// NOTICE: Only used by JobMananger when failover
+func (m *DefaultBaseMaster) InitProjectInfosAfterRecover(jobs []*libModel.MasterMetaKVData) {
+	for _, meta := range jobs {
+		// TODO: fix the TenantID
+		m.workerProjectMap.Store(meta.ID, tenant.NewProjectInfo("", meta.ProjectID))
+	}
 }

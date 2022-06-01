@@ -256,6 +256,7 @@ func (jm *JobManagerImplV2) SubmitJob(ctx context.Context, req *pb.SubmitJobRequ
 		return resp
 	}
 
+	// TODO: Refine me. split the BaseMaster
 	defaultMaster, ok := jm.BaseMaster.(interface {
 		SetProjectInfo(libModel.MasterID, tenant.ProjectInfo)
 	})
@@ -427,10 +428,22 @@ func (jm *JobManagerImplV2) OnMasterRecovered(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+
+	// TODO: refine me, split the BaseMaster interface
+	impl, ok := jm.BaseMaster.(interface {
+		InitProjectInfosAfterRecover([]*libModel.MasterMetaKVData)
+	})
+	if !ok {
+		log.L().Panic("unfound interface for BaseMaster", zap.String("interface", "InitProjectInfosAfterRecover"))
+		return derrors.ErrMasterInterfaceNotFound.GenWithStackByArgs()
+	}
+	impl.InitProjectInfosAfterRecover(jobs)
+
 	for _, job := range jobs {
 		if job.Tp == lib.JobManager {
 			continue
 		}
+		// TODO: filter the job in backend
 		if job.StatusCode == libModel.MasterStatusFinished || job.StatusCode == libModel.MasterStatusStopped {
 			log.L().Info("skip finished or stopped job", zap.Any("job", job))
 			continue
