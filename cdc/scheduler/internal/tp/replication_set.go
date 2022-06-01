@@ -36,7 +36,8 @@ import (
 //  │ Commit ├──>│ Replicating │────────────>│ Removing │
 //  └────────┘   └─────────────┘             └──────────┘
 //
-// When a capture shutdown unexpectly, we transit the state to Absent immediately.
+// When a capture shutdown unexpectedly, we may need to transit the state to
+// Absent or Replicating immediately.
 type ReplicationSetState int
 
 const (
@@ -76,23 +77,27 @@ func (r ReplicationSetState) String() string {
 
 // ReplicationSet is a state machine that manages replication states.
 type ReplicationSet struct {
-	TableID      model.TableID
-	State        ReplicationSetState
-	Primary      model.CaptureID
-	Secondary    model.CaptureID
-	Captures     map[model.CaptureID]struct{}
-	CheckpointTs model.Ts
+	TableID    model.TableID
+	State      ReplicationSetState
+	Primary    model.CaptureID
+	Secondary  model.CaptureID
+	Captures   map[model.CaptureID]struct{}
+	Checkpoint schedulepb.Checkpoint
 }
 
 func newReplicationSet(
-	tableID model.TableID, tableStatus map[model.CaptureID]*schedulepb.TableStatus,
+	tableID model.TableID,
+	checkpoint model.Ts,
+	tableStatus map[model.CaptureID]*schedulepb.TableStatus,
 ) (*ReplicationSet, error) {
-	r := &ReplicationSet{TableID: tableID, Captures: make(map[string]struct{})}
+	r := &ReplicationSet{
+		TableID:    tableID,
+		Captures:   make(map[string]struct{}),
+		Checkpoint: schedulepb.Checkpoint{CheckpointTs: checkpoint},
+	}
 	committed := false
 	for captureID, table := range tableStatus {
-		if r.CheckpointTs <= table.Checkpoint.CheckpointTs {
-			r.CheckpointTs = table.Checkpoint.CheckpointTs
-		}
+		r.updateCheckpoint(table.Checkpoint)
 		if r.TableID != table.TableID {
 			return nil, r.inconsistentError(table, captureID,
 				"tpscheduler: table id inconsistent")
@@ -290,7 +295,7 @@ func (r *ReplicationSet) pollOnPrepare(
 						AddTable: &schedulepb.AddTableRequest{
 							TableID:     r.TableID,
 							IsSecondary: true,
-							Checkpoint:  &schedulepb.Checkpoint{CheckpointTs: r.CheckpointTs},
+							Checkpoint:  r.Checkpoint,
 						},
 					},
 				},
@@ -309,6 +314,7 @@ func (r *ReplicationSet) pollOnPrepare(
 		}
 	case schedulepb.TableStateReplicating:
 		if r.Primary == captureID {
+			r.updateCheckpoint(input.Checkpoint)
 			return nil, false, nil
 		}
 	case schedulepb.TableStateStopping, schedulepb.TableStateStopped:
@@ -383,7 +389,7 @@ func (r *ReplicationSet) pollOnCommit(
 						AddTable: &schedulepb.AddTableRequest{
 							TableID:     r.TableID,
 							IsSecondary: false,
-							Checkpoint:  &schedulepb.Checkpoint{CheckpointTs: r.CheckpointTs},
+							Checkpoint:  r.Checkpoint,
 						},
 					},
 				},
@@ -391,6 +397,7 @@ func (r *ReplicationSet) pollOnCommit(
 		}
 	case schedulepb.TableStateStopped, schedulepb.TableStateAbsent:
 		if r.Primary == captureID {
+			r.updateCheckpoint(input.Checkpoint)
 			original := r.Primary
 			delete(r.Captures, r.Primary)
 			r.Primary = ""
@@ -418,7 +425,7 @@ func (r *ReplicationSet) pollOnCommit(
 						AddTable: &schedulepb.AddTableRequest{
 							TableID:     r.TableID,
 							IsSecondary: false,
-							Checkpoint:  &schedulepb.Checkpoint{CheckpointTs: r.CheckpointTs},
+							Checkpoint:  r.Checkpoint,
 						},
 					},
 				},
@@ -437,20 +444,23 @@ func (r *ReplicationSet) pollOnCommit(
 		}
 
 	case schedulepb.TableStateReplicating:
-		if r.Secondary != "" && r.Primary == captureID {
-			// Original primary is not stopped, ask for stopping.
-			return &schedulepb.Message{
-				To:      captureID,
-				MsgType: schedulepb.MsgDispatchTableRequest,
-				DispatchTableRequest: &schedulepb.DispatchTableRequest{
-					Request: &schedulepb.DispatchTableRequest_RemoveTable{
-						RemoveTable: &schedulepb.RemoveTableRequest{TableID: r.TableID},
+		if r.Primary == captureID {
+			r.updateCheckpoint(input.Checkpoint)
+			if r.Secondary != "" {
+				// Original primary is not stopped, ask for stopping.
+				return &schedulepb.Message{
+					To:      captureID,
+					MsgType: schedulepb.MsgDispatchTableRequest,
+					DispatchTableRequest: &schedulepb.DispatchTableRequest{
+						Request: &schedulepb.DispatchTableRequest_RemoveTable{
+							RemoveTable: &schedulepb.RemoveTableRequest{TableID: r.TableID},
+						},
 					},
-				},
-			}, false, nil
-		}
-		if r.Secondary == "" && r.Primary == captureID {
-			// There are three cases,
+				}, false, nil
+			}
+
+			// There are three cases for empty secondary.
+			//
 			// 1. Secondary has promoted to primary, and the new primary is
 			//    replicating, transit to Replicating.
 			// 2. Secondary has shutdown during Commit, the original primary
@@ -468,6 +478,7 @@ func (r *ReplicationSet) pollOnCommit(
 
 	case schedulepb.TableStateStopping:
 		if r.Primary == captureID && r.Secondary != "" {
+			r.updateCheckpoint(input.Checkpoint)
 			return nil, false, nil
 		}
 	case schedulepb.TableStatePreparing:
@@ -485,6 +496,7 @@ func (r *ReplicationSet) pollOnReplicating(
 	switch input.State {
 	case schedulepb.TableStateReplicating:
 		if r.Primary == captureID {
+			r.updateCheckpoint(input.Checkpoint)
 			return nil, false, nil
 		}
 		return nil, false, r.multiplePrimaryError(
@@ -496,6 +508,8 @@ func (r *ReplicationSet) pollOnReplicating(
 	case schedulepb.TableStateStopping:
 	case schedulepb.TableStateStopped:
 		if r.Primary == captureID {
+			r.updateCheckpoint(input.Checkpoint)
+
 			// Primary is stopped, but we still has secondary.
 			// Clear primary and promote secondary when it's prepared.
 			log.Info("tpscheduler: primary is stopped during Replicating",
@@ -572,12 +586,12 @@ func (r *ReplicationSet) handleAddTable(
 	log.Info("tpscheduler: replication state transition, add table",
 		zap.Stringer("old", oldState), zap.Stringer("new", r.State))
 	r.Captures[captureID] = struct{}{}
-	status := &schedulepb.TableStatus{
+	status := schedulepb.TableStatus{
 		TableID:    r.TableID,
 		State:      schedulepb.TableStateAbsent,
 		Checkpoint: schedulepb.Checkpoint{},
 	}
-	return r.poll(status, captureID)
+	return r.poll(&status, captureID)
 }
 
 func (r *ReplicationSet) handleMoveTable(
@@ -601,12 +615,12 @@ func (r *ReplicationSet) handleMoveTable(
 		zap.Stringer("old", oldState), zap.Stringer("new", r.State))
 	r.Secondary = dest
 	r.Captures[dest] = struct{}{}
-	status := &schedulepb.TableStatus{
+	status := schedulepb.TableStatus{
 		TableID:    r.TableID,
 		State:      schedulepb.TableStateAbsent,
 		Checkpoint: schedulepb.Checkpoint{},
 	}
-	return r.poll(status, r.Secondary)
+	return r.poll(&status, r.Secondary)
 }
 
 func (r *ReplicationSet) handleRemoveTable() ([]*schedulepb.Message, error) {
@@ -626,12 +640,15 @@ func (r *ReplicationSet) handleRemoveTable() ([]*schedulepb.Message, error) {
 	r.State = ReplicationSetStateRemoving
 	log.Info("tpscheduler: replication state transition, remove table",
 		zap.Stringer("old", oldState), zap.Stringer("new", r.State))
-	status := &schedulepb.TableStatus{
-		TableID:    r.TableID,
-		State:      schedulepb.TableStateReplicating,
-		Checkpoint: schedulepb.Checkpoint{CheckpointTs: r.CheckpointTs},
+	status := schedulepb.TableStatus{
+		TableID: r.TableID,
+		State:   schedulepb.TableStateReplicating,
+		Checkpoint: schedulepb.Checkpoint{
+			CheckpointTs: r.Checkpoint.CheckpointTs,
+			ResolvedTs:   r.Checkpoint.ResolvedTs,
+		},
 	}
-	return r.poll(status, r.Primary)
+	return r.poll(&status, r.Primary)
 }
 
 func (r *ReplicationSet) hasRemoved() bool {
@@ -653,4 +670,13 @@ func (r *ReplicationSet) handleCaptureShutdown(
 		State:   schedulepb.TableStateStopped,
 	}
 	return r.poll(&status, captureID)
+}
+
+func (r *ReplicationSet) updateCheckpoint(checkpoint schedulepb.Checkpoint) {
+	if r.Checkpoint.CheckpointTs < checkpoint.CheckpointTs {
+		r.Checkpoint.CheckpointTs = checkpoint.CheckpointTs
+	}
+	if r.Checkpoint.ResolvedTs < checkpoint.ResolvedTs {
+		r.Checkpoint.ResolvedTs = checkpoint.ResolvedTs
+	}
 }

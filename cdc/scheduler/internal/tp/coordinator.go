@@ -27,6 +27,8 @@ import (
 	"go.uber.org/zap"
 )
 
+const checkpointCannotProceed = internal.CheckpointCannotProceed
+
 type scheduler interface {
 	Name() string
 	Schedule(
@@ -82,11 +84,7 @@ func (c *coordinator) Tick(
 	// All captures that are alive according to the latest Etcd states.
 	aliveCaptures map[model.CaptureID]*model.CaptureInfo,
 ) (newCheckpointTs, newResolvedTs model.Ts, err error) {
-	err = c.poll(ctx, checkpointTs, currentTables, aliveCaptures)
-	if err != nil {
-		return internal.CheckpointCannotProceed, internal.CheckpointCannotProceed, errors.Trace(err)
-	}
-	return internal.CheckpointCannotProceed, internal.CheckpointCannotProceed, nil
+	return c.poll(ctx, checkpointTs, currentTables, aliveCaptures)
 }
 
 func (c *coordinator) MoveTable(tableID model.TableID, target model.CaptureID) {}
@@ -100,10 +98,10 @@ func (c *coordinator) Close(ctx context.Context) {}
 func (c *coordinator) poll(
 	ctx context.Context, checkpointTs model.Ts, currentTables []model.TableID,
 	aliveCaptures map[model.CaptureID]*model.CaptureInfo,
-) error {
+) (newCheckpointTs, newResolvedTs model.Ts, err error) {
 	recvMsgs, err := c.recvMsgs(ctx)
 	if err != nil {
-		return errors.Trace(err)
+		return checkpointCannotProceed, checkpointCannotProceed, errors.Trace(err)
 	}
 
 	var msgBuf []*schedulepb.Message
@@ -112,17 +110,17 @@ func (c *coordinator) poll(
 	msgBuf = append(msgBuf, msgs...)
 	msgs = c.captureM.HandleAliveCaptureUpdate(aliveCaptures)
 	msgBuf = append(msgBuf, msgs...)
-	if c.captureM.CheckAllCaptureInitialized() {
+	if !c.captureM.CheckAllCaptureInitialized() {
 		// Skip handling messages and tasks for replication manager,
 		// as not all capture are initialized.
-		return c.sendMsgs(ctx, msgBuf)
+		return checkpointCannotProceed, checkpointCannotProceed, c.sendMsgs(ctx, msgBuf)
 	}
 
 	// Handle capture membership changes.
 	if changes := c.captureM.TakeChanges(); changes != nil {
-		msgs, err = c.replicationM.HandleCaptureChanges(changes)
+		msgs, err = c.replicationM.HandleCaptureChanges(changes, checkpointTs)
 		if err != nil {
-			return errors.Trace(err)
+			return checkpointCannotProceed, checkpointCannotProceed, errors.Trace(err)
 		}
 		msgBuf = append(msgBuf, msgs...)
 	}
@@ -130,7 +128,7 @@ func (c *coordinator) poll(
 	// Handle received messages to advance replication set.
 	msgs, err = c.replicationM.HandleMessage(recvMsgs)
 	if err != nil {
-		return errors.Trace(err)
+		return checkpointCannotProceed, checkpointCannotProceed, errors.Trace(err)
 	}
 	msgBuf = append(msgBuf, msgs...)
 
@@ -150,18 +148,19 @@ func (c *coordinator) poll(
 	// Handle generated schedule tasks.
 	msgs, err = c.replicationM.HandleTasks(allTasks)
 	if err != nil {
-		return errors.Trace(err)
+		return checkpointCannotProceed, checkpointCannotProceed, errors.Trace(err)
 	}
 	msgBuf = append(msgBuf, msgs...)
 
 	// Send new messages.
 	err = c.sendMsgs(ctx, msgBuf)
 	if err != nil {
-		return errors.Trace(err)
+		return checkpointCannotProceed, checkpointCannotProceed, errors.Trace(err)
 	}
 
-	// checkpoint calculation
-	return nil
+	// Checkpoint calculation
+	newCheckpointTs, newResolvedTs = c.replicationM.AdvanceCheckpoint(currentTables)
+	return newCheckpointTs, newResolvedTs, nil
 }
 
 func (c *coordinator) recvMsgs(ctx context.Context) ([]*schedulepb.Message, error) {
