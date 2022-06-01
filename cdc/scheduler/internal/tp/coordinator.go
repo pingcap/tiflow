@@ -124,6 +124,12 @@ func (c *coordinator) MoveTable(tableID model.TableID, target model.CaptureID) {
 }
 
 func (c *coordinator) Rebalance() {
+	if !c.captureM.CheckAllCaptureInitialized() {
+		log.Warn("tpscheduler: manual rebalance tables task ignored," +
+			" since not all captures initialized")
+		return
+	}
+
 	scheduler, ok := c.scheduler[schedulerTypeRebalance]
 	if !ok {
 		log.Panic("tpscheduler: rebalance scheduler not found")
