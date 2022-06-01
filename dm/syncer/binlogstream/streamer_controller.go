@@ -11,12 +11,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package syncer
+// Package binlogstream is used by syncer to read binlog.
+// All information related to upstream binlog stream should be kept in this package,
+// such as reset binlog to a location, maintain properties of the binlog event
+// and stream, inject or delete binlog events with binlog stream, etc.
+
+package binlogstream
 
 import (
 	"context"
 	"errors"
-	"strings"
 	"sync"
 	"time"
 
@@ -38,14 +42,44 @@ import (
 // the minimal interval to retry reset binlog streamer.
 var minErrorRetryInterval = 1 * time.Minute
 
+// BinlogType represents binlog type from syncer's view.
+type BinlogType uint8
+
+const (
+	// RemoteBinlog means syncer is connected to MySQL and reading binlog.
+	RemoteBinlog BinlogType = iota + 1
+	// LocalBinlog means syncer is reading binlog from relay log.
+	LocalBinlog
+)
+
+// RelayToBinlogType converts relay.Process to BinlogType.
+func RelayToBinlogType(relay relay.Process) BinlogType {
+	if relay != nil {
+		return LocalBinlog
+	}
+
+	return RemoteBinlog
+}
+
+func (t BinlogType) String() string {
+	switch t {
+	case RemoteBinlog:
+		return "remote"
+	case LocalBinlog:
+		return "local"
+	default:
+		return "unknown"
+	}
+}
+
 // StreamerProducer provides the ability to generate binlog streamer by StartSync()
 // but go-mysql StartSync() returns (struct, err) rather than (interface, err)
 // And we can't simply use StartSync() method in SteamerProducer
-// so use generateStreamer to wrap StartSync() method to make *BinlogSyncer and *BinlogReader in same interface
+// so use GenerateStreamer to wrap StartSync() method to make *BinlogSyncer and *BinlogReader in same interface
 // For other implementations who implement StreamerProducer and Streamer can easily take place of Syncer.streamProducer
 // For test is easy to mock.
 type StreamerProducer interface {
-	generateStreamer(location binlog.Location) (reader.Streamer, error)
+	GenerateStreamer(location binlog.Location) (reader.Streamer, error)
 }
 
 // Read local relay log.
@@ -54,7 +88,7 @@ type localBinlogReader struct {
 	EnableGTID bool
 }
 
-func (l *localBinlogReader) generateStreamer(location binlog.Location) (reader.Streamer, error) {
+func (l *localBinlogReader) GenerateStreamer(location binlog.Location) (reader.Streamer, error) {
 	if l.EnableGTID {
 		return l.reader.StartSyncByGTID(location.GetGTID().Clone())
 	}
@@ -69,7 +103,7 @@ type remoteBinlogReader struct {
 	EnableGTID bool
 }
 
-func (r *remoteBinlogReader) generateStreamer(location binlog.Location) (reader.Streamer, error) {
+func (r *remoteBinlogReader) GenerateStreamer(location binlog.Location) (reader.Streamer, error) {
 	defer func() {
 		lastSlaveConnectionID := r.reader.LastConnectionID()
 		r.tctx.L().Info("last slave connection", zap.Uint32("connection ID", lastSlaveConnectionID))
@@ -90,10 +124,11 @@ func (r *remoteBinlogReader) generateStreamer(location binlog.Location) (reader.
 // 1. reset streamer to a binlog position or GTID
 // 2. read next binlog event (TODO: and maintain the locations of the events)
 // 3. transfer from local streamer to remote streamer.
+// TODO: 4. inject or delete events from original binlog stream.
 type StreamerController struct {
 	sync.RWMutex
 
-	// the initital binlog type
+	// the initial binlog type
 	initBinlogType BinlogType
 
 	// the current binlog type
@@ -133,7 +168,7 @@ func NewStreamerController(
 	relay relay.Process,
 ) *StreamerController {
 	var strategy retryStrategy = alwaysRetryStrategy{}
-	binlogType := toBinlogType(relay)
+	binlogType := RelayToBinlogType(relay)
 	if binlogType != LocalBinlog {
 		strategy = &maxIntervalRetryStrategy{
 			interval: minErrorRetryInterval,
@@ -193,6 +228,13 @@ func (c *StreamerController) ResetReplicationSyncer(tctx *tcontext.Context, loca
 	return c.resetReplicationSyncer(tctx, location)
 }
 
+func (c *StreamerController) GetStreamer() reader.Streamer {
+	c.Lock()
+	defer c.Unlock()
+
+	return c.streamer
+}
+
 func (c *StreamerController) resetReplicationSyncer(tctx *tcontext.Context, location binlog.Location) (err error) {
 	uuidSameWithUpstream := true
 
@@ -213,7 +255,7 @@ func (c *StreamerController) resetReplicationSyncer(tctx *tcontext.Context, loca
 			t.reader.Close()
 		default:
 			// some other producers such as mockStreamerProducer, should not re-create
-			c.streamer, err = c.streamerProducer.generateStreamer(location)
+			c.streamer, err = c.streamerProducer.GenerateStreamer(location)
 			return err
 		}
 	}
@@ -236,7 +278,7 @@ func (c *StreamerController) resetReplicationSyncer(tctx *tcontext.Context, loca
 		c.streamerProducer = &localBinlogReader{c.relay.NewReader(tctx.L(), &relay.BinlogReaderConfig{RelayDir: c.localBinlogDir, Timezone: c.timezone, Flavor: c.syncCfg.Flavor}), c.enableGTID}
 	}
 
-	c.streamer, err = c.streamerProducer.generateStreamer(location)
+	c.streamer, err = c.streamerProducer.GenerateStreamer(location)
 	return err
 }
 
@@ -413,20 +455,16 @@ func (c *StreamerController) updateServerIDAndResetReplication(tctx *tcontext.Co
 	return nil
 }
 
-func isDuplicateServerIDError(err error) bool {
-	if err == nil {
-		return false
+// NewStreamerController4Test is used in tests.
+func NewStreamerController4Test(
+	streamerProducer StreamerProducer,
+	streamer reader.Streamer,
+) *StreamerController {
+	return &StreamerController{
+		streamerProducer: streamerProducer,
+		streamer:         streamer,
+		closed:           false,
 	}
-
-	return strings.Contains(err.Error(), "A slave with the same server_uuid/server_id as this slave has connected to the master")
-}
-
-func isConnectionRefusedError(err error) bool {
-	if err == nil {
-		return false
-	}
-
-	return strings.Contains(err.Error(), "connect: connection refused")
 }
 
 // retryStrategy.

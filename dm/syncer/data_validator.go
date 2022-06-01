@@ -27,6 +27,7 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/util/filter"
+	"github.com/pingcap/tiflow/dm/syncer/binlogstream"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
@@ -168,7 +169,7 @@ type DataValidator struct {
 	upstreamTZ         *time.Location
 	timezone           *time.Location
 	syncCfg            replication.BinlogSyncerConfig
-	streamerController *StreamerController
+	streamerController *binlogstream.StreamerController
 	persistHelper      *validatorPersistHelper
 
 	validateInterval time.Duration
@@ -291,7 +292,7 @@ func (v *DataValidator) initialize() error {
 		return err
 	}
 
-	v.streamerController = NewStreamerController(v.syncCfg, v.cfg.EnableGTID, &dbconn.UpStreamConn{BaseDB: v.fromDB}, v.cfg.RelayDir, v.timezone, nil)
+	v.streamerController = binlogstream.NewStreamerController(v.syncCfg, v.cfg.EnableGTID, &dbconn.UpStreamConn{BaseDB: v.fromDB}, v.cfg.RelayDir, v.timezone, nil)
 	return nil
 }
 
@@ -586,7 +587,7 @@ func (v *DataValidator) doValidate() {
 			case err == context.DeadlineExceeded:
 				v.L.Info("deadline exceeded when fetching binlog event")
 				continue
-			case isDuplicateServerIDError(err):
+			case binlogstream.isDuplicateServerIDError(err):
 				// if the server id is already used, need to use a new server id
 				v.L.Info("server id is already used by another slave, will change to a new server id and get event again")
 				err1 := v.streamerController.UpdateServerIDAndResetReplication(v.tctx, locationForFlush)
@@ -597,7 +598,7 @@ func (v *DataValidator) doValidate() {
 				continue
 			case err == relay.ErrorMaybeDuplicateEvent:
 				continue
-			case isConnectionRefusedError(err):
+			case binlogstream.isConnectionRefusedError(err):
 				v.sendError(terror.ErrValidatorGetEvent.Delegate(err))
 				return
 			default:
