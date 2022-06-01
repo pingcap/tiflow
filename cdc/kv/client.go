@@ -84,6 +84,9 @@ const (
 	defaultCheckRegionRateLimitInterval = 50 * time.Millisecond
 	// Duration of warning region retry rate limited too long.
 	defaultLogRegionRateLimitDuration = 10 * time.Second
+
+	// The minimal batch size for regionStatefulEvent.
+	minBatchSize int = 64
 )
 
 // time interval to force kv client to terminate gRPC stream and reconnect
@@ -1235,10 +1238,9 @@ func (s *eventFeedSession) receiveFromStream(
 			s.deleteStream(addr)
 
 			// send nil regionStatefulEvent to signal worker exit
-			select {
-			case worker.inputCh <- nil:
-			case <-ctx.Done():
-				return ctx.Err()
+			err = worker.retrieveEvents(ctx, []*regionStatefulEvent{nil})
+			if err != nil {
+				return err
 			}
 
 			// Do no return error but gracefully stop the goroutine here. Then the whole job will not be canceled and
@@ -1281,6 +1283,10 @@ func (s *eventFeedSession) sendRegionChangeEvents(
 	addr string,
 ) error {
 	buffSize := len(events)/worker.concurrent + 1
+	if buffSize < minBatchSize {
+		buffSize = minBatchSize
+	}
+
 	var statefulEvents []*regionStatefulEvent = nil
 	var buffCap int = 0
 	for i, event := range events {
@@ -1356,13 +1362,12 @@ func (s *eventFeedSession) sendRegionChangeEvents(
 			})
 		}
 		if buffCap > 0 && (len(statefulEvents) >= buffCap || i+1 == len(events)) {
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case worker.inputCh <- statefulEvents:
-				statefulEvents = nil
-				buffCap = 0
+			err := worker.retrieveEvents(ctx, statefulEvents)
+			if err != nil {
+				return err
 			}
+			statefulEvents = nil
+			buffCap = 0
 		}
 	}
 	return nil
@@ -1375,6 +1380,10 @@ func (s *eventFeedSession) sendResolvedTs(
 	addr string,
 ) error {
 	buffSize := len(resolvedTs.Regions)/worker.concurrent + 1
+	if buffSize < minBatchSize {
+		buffSize = minBatchSize
+	}
+
 	var statefulEvents []*regionStatefulEvent = nil
 	var buffCap int = 0
 	for i, regionID := range resolvedTs.Regions {
@@ -1407,13 +1416,12 @@ func (s *eventFeedSession) sendResolvedTs(
 			})
 		}
 		if buffCap > 0 && (len(statefulEvents) >= buffCap || i+1 == len(resolvedTs.Regions)) {
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case worker.inputCh <- statefulEvents:
-				statefulEvents = nil
-				buffCap = 0
+			err := worker.retrieveEvents(ctx, statefulEvents)
+			if err != nil {
+				return err
 			}
+			statefulEvents = nil
+			buffCap = 0
 		}
 	}
 	return nil
