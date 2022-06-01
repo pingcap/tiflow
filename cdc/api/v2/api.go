@@ -35,4 +35,6 @@ func RegisterOpenAPIRoutes(router *gin.Engine, api *OpenAPIV2) {
 
 	v2.Use(middleware.LogMiddleware())
 	v2.Use(middleware.ErrorHandleMiddleware())
+
+	v2.POST("/verify-table", api.VerifyTable)
 }

@@ -97,7 +97,7 @@ func (o *changefeedCommonOptions) strictDecodeConfig(component string, cfg *conf
 		return err
 	}
 
-	_, err = filter.VerifyRules(cfg)
+	_, err = filter.VerifyRules(cfg.Filter)
 
 	return err
 }

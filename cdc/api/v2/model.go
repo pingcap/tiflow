@@ -13,8 +13,27 @@
 
 package v2
 
+import (
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/security"
+)
+
 // Tso contains timestamp get from PD
 type Tso struct {
 	Timestamp int64 `json:"timestamp"`
 	LogicTime int64 `json:"logic-time"`
+}
+
+// Tables contains IneligibleTables and EligibleTables
+type Tables struct {
+	IneligibleTables []model.TableName `json:"ineligible-tables,omitempty"`
+	EligibleTables   []model.TableName `json:"eligible-tables,omitempty"`
+}
+
+type VerifyTableConfig struct {
+	PDAddrs       []string              `json:"pd-addrs"`
+	Credential    *security.Credential  `json:"credential"`
+	ReplicaConfig *config.ReplicaConfig `json:"replica-config"`
+	StartTs       uint64                `json:"start-ts"`
 }
