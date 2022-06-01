@@ -35,8 +35,8 @@ func RegisterOpenAPIV2Routes(router *gin.Engine, api OpenAPIV2) {
 
 	v2.Use(middleware.LogMiddleware())
 	v2.Use(middleware.ErrorHandleMiddleware())
-  
+
 	// common APIs
 	v2.GET("/tso", api.GetTso)
-  v2.POST("/verify-table", api.VerifyTable)
+	v2.POST("/verify-table", api.VerifyTable)
 }
