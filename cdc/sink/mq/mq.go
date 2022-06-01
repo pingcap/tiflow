@@ -201,7 +201,14 @@ func (k *mqSink) bgFlushTs(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			return errors.Trace(ctx.Err())
-		case msg := <-k.resolvedBuffer.Out():
+		case msg, ok := <-k.resolvedBuffer.Out():
+			if !ok {
+				log.Info("resolved ts buffer is closed",
+					zap.String("namespace", k.id.Namespace),
+					zap.String("changefeed", k.id.ID),
+					zap.Any("role", k.role))
+				return nil
+			}
 			resolved := msg.resolved
 			err := k.flushTsToWorker(ctx, resolved)
 			if err != nil {
