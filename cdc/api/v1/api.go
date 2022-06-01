@@ -59,7 +59,7 @@ func NewOpenAPI(c *capture.Capture) OpenAPI {
 	return OpenAPI{capture: c}
 }
 
-// NewOpenAPI4Test returns a OpenAPI for test
+// NewOpenAPI4Test return a OpenAPI for test
 func NewOpenAPI4Test(c *capture.Capture, p owner.StatusProvider) OpenAPI {
 	return OpenAPI{capture: c, testStatusProvider: p}
 }
