@@ -295,8 +295,8 @@ func (a *agent) handleMessageDispatchTableRequest(
 			zap.String("capture", a.captureID),
 			zap.String("namespace", a.changeFeedID.Namespace),
 			zap.String("changefeed", a.changeFeedID.ID),
-			zap.Any("epoch", epoch),
-			zap.Any("expected", a.epoch))
+			zap.String("epoch", epoch.Epoch),
+			zap.String("expected", a.epoch.Epoch))
 		return
 	}
 	task := new(dispatchTableTask)

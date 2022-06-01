@@ -27,23 +27,13 @@ import (
 	"go.uber.org/zap"
 )
 
-type scheduler interface {
-	Name() string
-	Schedule(
-		checkpointTs model.Ts,
-		currentTables []model.TableID,
-		aliveCaptures map[model.CaptureID]*model.CaptureInfo,
-		replications map[model.TableID]*ReplicationSet,
-	) []*scheduleTask
-}
-
 var _ internal.Scheduler = (*coordinator)(nil)
 
 type coordinator struct {
 	version      string
 	revision     schedulepb.OwnerRevision
 	trans        transport
-	scheduler    []scheduler
+	scheduler    map[schedulerType]scheduler
 	replicationM *replicationManager
 	captureM     *captureManager
 }
@@ -63,11 +53,17 @@ func NewCoordinator(
 		return nil, errors.Trace(err)
 	}
 	revision := schedulepb.OwnerRevision{Revision: ownerRevision}
+
+	schedulers := make(map[schedulerType]scheduler)
+	schedulers[schedulerTypeBurstBalance] = newBurstBalanceScheduler()
+	schedulers[schedulerTypeMoveTable] = newMoveTableScheduler()
+	schedulers[schedulerTypeRebalance] = newRebalanceScheduler()
+
 	return &coordinator{
 		version:      version.ReleaseSemver(),
 		revision:     revision,
 		trans:        trans,
-		scheduler:    []scheduler{newBalancer()},
+		scheduler:    schedulers,
 		replicationM: newReplicationManager(cfg.MaxTaskConcurrency),
 		captureM:     newCaptureManager(revision, cfg.HeartbeatTick),
 	}, nil
@@ -89,11 +85,61 @@ func (c *coordinator) Tick(
 	return internal.CheckpointCannotProceed, internal.CheckpointCannotProceed, nil
 }
 
-func (c *coordinator) MoveTable(tableID model.TableID, target model.CaptureID) {}
+func (c *coordinator) MoveTable(tableID model.TableID, target model.CaptureID) {
+	captureStatus, ok := c.captureM.Captures[target]
+	if !ok {
+		log.Warn("tpscheduler: manual move table task ignored, "+
+			"since cannot found the target capture",
+			zap.String("targetCapture", target))
+		return
+	}
+	if captureStatus.State != CaptureStateInitialized {
+		log.Info("tpscheduler: manual move table task ignored, "+
+			"since the target capture is not initialized",
+			zap.String("targetCapture", target),
+			zap.Any("state", captureStatus.State))
+		return
+	}
+	_, ok = c.replicationM.tables[tableID]
+	if !ok {
+		log.Warn("tpscheduler: manual move table task ignored, since cannot found the table",
+			zap.Int64("tableID", tableID))
+		return
+	}
 
-func (c *coordinator) Rebalance() {}
+	scheduler, ok := c.scheduler[schedulerTypeMoveTable]
+	if !ok {
+		log.Panic("tpscheduler: move table scheduler not found")
+	}
+	moveTableScheduler, ok := scheduler.(*moveTableScheduler)
+	if !ok {
+		log.Panic("tpscheduler: invalid move table scheduler found")
+	}
+	if !moveTableScheduler.addTask(tableID, target) {
+		log.Info("tpscheduler: manual move Table task ignored, "+
+			"since the last user triggered move has not finished",
+			zap.Int64("tableID", tableID),
+			zap.String("targetCapture", target))
+	}
+}
 
-func (c *coordinator) Close(ctx context.Context) {}
+func (c *coordinator) Rebalance() {
+	scheduler, ok := c.scheduler[schedulerTypeRebalance]
+	if !ok {
+		log.Panic("tpscheduler: rebalance scheduler not found")
+	}
+	rebalanceScheduler, ok := scheduler.(*rebalanceScheduler)
+	if !ok {
+		log.Panic("tpscheduler: invalid rebalance scheduler found")
+	}
+	// todo (Ling Jin): shall we also check other scheduler's status
+	// for example, if there is any move table task, rebalance should not ignored.
+	rebalanceScheduler.trigger()
+}
+
+func (c *coordinator) Close(ctx context.Context) {
+	_ = c.trans.Close()
+}
 
 // ===========
 
@@ -112,7 +158,7 @@ func (c *coordinator) poll(
 	msgBuf = append(msgBuf, msgs...)
 	msgs = c.captureM.HandleAliveCaptureUpdate(aliveCaptures)
 	msgBuf = append(msgBuf, msgs...)
-	if c.captureM.CheckAllCaptureInitialized() {
+	if !c.captureM.CheckAllCaptureInitialized() {
 		// Skip handling messages and tasks for replication manager,
 		// as not all capture are initialized.
 		return c.sendMsgs(ctx, msgBuf)

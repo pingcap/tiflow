@@ -14,24 +14,39 @@
 package tp
 
 import (
-	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
-	"go.uber.org/zap"
 )
 
-var _ scheduler = &burstBalanceScheduler{}
+var _ scheduler = &moveTableScheduler{}
 
-type burstBalanceScheduler struct{}
-
-func newBurstBalanceScheduler() *burstBalanceScheduler {
-	return &burstBalanceScheduler{}
+type moveTableScheduler struct {
+	tasks map[model.TableID]*scheduleTask
 }
 
-func (b *burstBalanceScheduler) Name() string {
-	return string(schedulerTypeBurstBalance)
+func newMoveTableScheduler() *moveTableScheduler {
+	return &moveTableScheduler{
+		tasks: make(map[model.TableID]*scheduleTask),
+	}
 }
 
-func (b *burstBalanceScheduler) Schedule(
+func (m *moveTableScheduler) Name() string {
+	return string(schedulerTypeMoveTable)
+}
+
+func (m *moveTableScheduler) addTask(tableID model.TableID, target model.CaptureID) bool {
+	if _, ok := m.tasks[tableID]; ok {
+		return false
+	}
+	m.tasks[tableID] = &scheduleTask{
+		moveTable: &moveTable{
+			TableID:     tableID,
+			DestCapture: target,
+		},
+	}
+	return true
+}
+
+func (m *moveTableScheduler) Schedule(
 	checkpointTs model.Ts,
 	currentTables []model.TableID,
 	captures map[model.CaptureID]*model.CaptureInfo,
@@ -84,36 +99,36 @@ func (b *burstBalanceScheduler) Schedule(
 	return tasks
 }
 
-func newBurstBalanceAddTables(
-	newTables []model.TableID, captureIDs []model.CaptureID,
-) *scheduleTask {
-	idx := 0
-	tables := make(map[model.TableID]model.CaptureID)
-	for _, tableID := range newTables {
-		tables[tableID] = captureIDs[idx]
-		idx++
-		if idx >= len(captureIDs) {
-			idx = 0
-		}
-	}
-	return &scheduleTask{burstBalance: &burstBalance{AddTables: tables}}
-}
-
-func newBurstBalanceRemoveTables(
-	rmTables []model.TableID, replications map[model.TableID]*ReplicationSet,
-) *scheduleTask {
-	tables := make(map[model.TableID]model.CaptureID)
-	for _, tableID := range rmTables {
-		rep := replications[tableID]
-		if rep.Primary != "" {
-			tables[tableID] = rep.Primary
-		} else if rep.Secondary != "" {
-			tables[tableID] = rep.Secondary
-		} else {
-			log.Warn("tpscheduler: primary or secondary not found for removed table",
-				zap.Any("table", rep))
-			continue
-		}
-	}
-	return &scheduleTask{burstBalance: &burstBalance{RemoveTables: tables}}
-}
+//func newBurstBalanceAddTables(
+//	newTables []model.TableID, captureIDs []model.CaptureID,
+//) *scheduleTask {
+//	idx := 0
+//	tables := make(map[model.TableID]model.CaptureID)
+//	for _, tableID := range newTables {
+//		tables[tableID] = captureIDs[idx]
+//		idx++
+//		if idx >= len(captureIDs) {
+//			idx = 0
+//		}
+//	}
+//	return &scheduleTask{burstBalance: &burstBalance{AddTables: tables}}
+//}
+//
+//func newBurstBalanceRemoveTables(
+//	rmTables []model.TableID, replications map[model.TableID]*ReplicationSet,
+//) *scheduleTask {
+//	tables := make(map[model.TableID]model.CaptureID)
+//	for _, tableID := range rmTables {
+//		rep := replications[tableID]
+//		if rep.Primary != "" {
+//			tables[tableID] = rep.Primary
+//		} else if rep.Secondary != "" {
+//			tables[tableID] = rep.Secondary
+//		} else {
+//			log.Warn("tpscheduler: primary or secondary not found for removed table",
+//				zap.Any("table", rep))
+//			continue
+//		}
+//	}
+//	return &scheduleTask{burstBalance: &burstBalance{RemoveTables: tables}}
+//}

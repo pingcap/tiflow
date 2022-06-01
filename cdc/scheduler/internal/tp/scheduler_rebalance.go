@@ -14,24 +14,30 @@
 package tp
 
 import (
-	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
-	"go.uber.org/zap"
 )
 
-var _ scheduler = &burstBalanceScheduler{}
+var _ scheduler = &rebalanceScheduler{}
 
-type burstBalanceScheduler struct{}
-
-func newBurstBalanceScheduler() *burstBalanceScheduler {
-	return &burstBalanceScheduler{}
+type rebalanceScheduler struct {
+	rebalance bool
 }
 
-func (b *burstBalanceScheduler) Name() string {
-	return string(schedulerTypeBurstBalance)
+func newRebalanceScheduler() *rebalanceScheduler {
+	return &rebalanceScheduler{
+		rebalance: false,
+	}
 }
 
-func (b *burstBalanceScheduler) Schedule(
+func (b *rebalanceScheduler) Name() string {
+	return string(schedulerTypeRebalance)
+}
+
+func (b *rebalanceScheduler) trigger() {
+	b.rebalance = true
+}
+
+func (b *rebalanceScheduler) Schedule(
 	checkpointTs model.Ts,
 	currentTables []model.TableID,
 	captures map[model.CaptureID]*model.CaptureInfo,
@@ -82,38 +88,4 @@ func (b *burstBalanceScheduler) Schedule(
 	}
 
 	return tasks
-}
-
-func newBurstBalanceAddTables(
-	newTables []model.TableID, captureIDs []model.CaptureID,
-) *scheduleTask {
-	idx := 0
-	tables := make(map[model.TableID]model.CaptureID)
-	for _, tableID := range newTables {
-		tables[tableID] = captureIDs[idx]
-		idx++
-		if idx >= len(captureIDs) {
-			idx = 0
-		}
-	}
-	return &scheduleTask{burstBalance: &burstBalance{AddTables: tables}}
-}
-
-func newBurstBalanceRemoveTables(
-	rmTables []model.TableID, replications map[model.TableID]*ReplicationSet,
-) *scheduleTask {
-	tables := make(map[model.TableID]model.CaptureID)
-	for _, tableID := range rmTables {
-		rep := replications[tableID]
-		if rep.Primary != "" {
-			tables[tableID] = rep.Primary
-		} else if rep.Secondary != "" {
-			tables[tableID] = rep.Secondary
-		} else {
-			log.Warn("tpscheduler: primary or secondary not found for removed table",
-				zap.Any("table", rep))
-			continue
-		}
-	}
-	return &scheduleTask{burstBalance: &burstBalance{RemoveTables: tables}}
 }

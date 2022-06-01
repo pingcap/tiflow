@@ -41,6 +41,16 @@ const (
 	CaptureStateStopping CaptureState = 3
 )
 
+var captureStateMap = map[CaptureState]string{
+	CaptureStateUninitialize: "CaptureStateUninitialize",
+	CaptureStateInitialized:  "CaptureStateInitialized",
+	CaptureStateStopping:     "CaptureStateStopping",
+}
+
+func (s CaptureState) String() string {
+	return captureStateMap[s]
+}
+
 // CaptureStatus represent capture's status.
 type CaptureStatus struct {
 	OwnerRev schedulepb.OwnerRevision
@@ -105,13 +115,7 @@ func (c *captureManager) CaptureTableSets() map[model.CaptureID]*CaptureStatus {
 }
 
 func (c *captureManager) CheckAllCaptureInitialized() bool {
-	if !c.checkAllCaptureInitialized() {
-		return false
-	}
-	if !c.initialized {
-		return false
-	}
-	return true
+	return c.initialized && c.checkAllCaptureInitialized()
 }
 
 func (c *captureManager) checkAllCaptureInitialized() bool {
@@ -194,7 +198,7 @@ func (c *captureManager) HandleAliveCaptureUpdate(
 			log.Info("tpscheduler: removed a capture", zap.String("capture", id))
 			delete(c.Captures, id)
 
-			// Only update changes after initializtion.
+			// Only update changes after initialization.
 			if !c.initialized {
 				continue
 			}
