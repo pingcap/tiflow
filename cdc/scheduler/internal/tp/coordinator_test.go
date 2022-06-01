@@ -22,8 +22,15 @@ import (
 )
 
 type mockTrans struct {
-	send func(ctx context.Context, msgs []*schedulepb.Message) error
-	recv func(ctx context.Context) ([]*schedulepb.Message, error)
+	sendBuffer []*schedulepb.Message
+	recvBuffer []*schedulepb.Message
+}
+
+func newMockTrans() *mockTrans {
+	return &mockTrans{
+		sendBuffer: make([]*schedulepb.Message, 0),
+		recvBuffer: make([]*schedulepb.Message, 0),
+	}
 }
 
 func (m *mockTrans) Close() error {
@@ -31,34 +38,35 @@ func (m *mockTrans) Close() error {
 }
 
 func (m *mockTrans) Send(ctx context.Context, msgs []*schedulepb.Message) error {
-	return m.send(ctx, msgs)
+	m.sendBuffer = append(m.sendBuffer, msgs...)
+	return nil
 }
 
 func (m *mockTrans) Recv(ctx context.Context) ([]*schedulepb.Message, error) {
-	return m.recv(ctx)
+	messages := m.recvBuffer[:len(m.recvBuffer)]
+	m.recvBuffer = make([]*schedulepb.Message, 0)
+	return messages, nil
 }
 
 func TestCoordinatorSendMsgs(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	trans := &mockTrans{}
+	trans := newMockTrans()
 	cood := coordinator{
 		version:  "6.2.0",
 		revision: schedulepb.OwnerRevision{Revision: 3},
 		trans:    trans,
 	}
-	trans.send = func(ctx context.Context, msgs []*schedulepb.Message) error {
-		require.EqualValues(t, []*schedulepb.Message{{
-			Header: &schedulepb.Message_Header{
-				Version:       cood.version,
-				OwnerRevision: cood.revision,
-			},
-			To: "1", MsgType: schedulepb.MsgDispatchTableRequest,
-		}}, msgs)
-		return nil
-	}
 	cood.sendMsgs(
 		ctx, []*schedulepb.Message{{To: "1", MsgType: schedulepb.MsgDispatchTableRequest}})
+
+	require.EqualValues(t, []*schedulepb.Message{{
+		Header: &schedulepb.Message_Header{
+			Version:       cood.version,
+			OwnerRevision: cood.revision,
+		},
+		To: "1", MsgType: schedulepb.MsgDispatchTableRequest,
+	}}, trans.sendBuffer)
 }
 
 func TestCoordinatorRecvMsgs(t *testing.T) {
@@ -71,21 +79,25 @@ func TestCoordinatorRecvMsgs(t *testing.T) {
 		revision: schedulepb.OwnerRevision{Revision: 3},
 		trans:    trans,
 	}
-	trans.recv = func(ctx context.Context) ([]*schedulepb.Message, error) {
-		return []*schedulepb.Message{{
+
+	trans.recvBuffer = append(trans.recvBuffer,
+		&schedulepb.Message{
 			Header: &schedulepb.Message_Header{
 				OwnerRevision: cood.revision,
 			},
 			From: "1", MsgType: schedulepb.MsgDispatchTableResponse,
-		}, {
+		})
+	trans.recvBuffer = append(trans.recvBuffer,
+		&schedulepb.Message{
 			Header: &schedulepb.Message_Header{
 				OwnerRevision: schedulepb.OwnerRevision{Revision: 4},
 			},
 			From: "2", MsgType: schedulepb.MsgDispatchTableResponse,
-		}}, nil
-	}
+		})
+
 	msgs, err := cood.recvMsgs(ctx)
-	require.Nil(t, err)
+	require.NoError(t, err)
+
 	require.EqualValues(t, []*schedulepb.Message{{
 		Header: &schedulepb.Message_Header{
 			OwnerRevision: cood.revision,
