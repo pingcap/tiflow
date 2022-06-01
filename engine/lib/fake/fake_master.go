@@ -226,7 +226,7 @@ OUT:
 	return nil
 }
 
-func (m *Master) tickedCheckWorkers(ctx context.Context) error {
+func (m *Master) failover(ctx context.Context) error {
 	m.workerListMu.Lock()
 	defer m.workerListMu.Unlock()
 
@@ -239,6 +239,8 @@ func (m *Master) tickedCheckWorkers(ctx context.Context) error {
 			return nil
 		}
 		m.initialized = true
+
+		// clean tombstone workers, add active workers
 		for _, worker := range m.GetWorkers() {
 			if worker.GetTombstone() != nil {
 				if err := worker.GetTombstone().CleanTombstone(ctx); err != nil {
@@ -264,6 +266,7 @@ func (m *Master) tickedCheckWorkers(ctx context.Context) error {
 				m.workerList[businessID] = worker
 			}
 		}
+
 		// load checkpoint if it exists
 		ckpt := &Checkpoint{}
 		resp, metaErr := m.MetaKVClient().Get(ctx, CheckpointKey(m.workerID))
@@ -276,6 +279,7 @@ func (m *Master) tickedCheckWorkers(ctx context.Context) error {
 				}
 			}
 		}
+
 		for i, worker := range m.workerList {
 			// create new worker for non-active worker
 			if worker == nil {
@@ -297,6 +301,18 @@ func (m *Master) tickedCheckWorkers(ctx context.Context) error {
 			}
 		}
 	}
+
+	return nil
+}
+
+func (m *Master) tickedCheckWorkers(ctx context.Context) error {
+	err := m.failover(ctx)
+	if err != nil {
+		return err
+	}
+
+	m.workerListMu.Lock()
+	defer m.workerListMu.Unlock()
 
 	// load worker status from Status API
 	for _, worker := range m.workerList {
@@ -398,8 +414,12 @@ func (m *Master) OnWorkerOnline(worker lib.WorkerHandle) error {
 
 // OnWorkerOffline implements MasterImpl.OnWorkerOffline
 func (m *Master) OnWorkerOffline(worker lib.WorkerHandle, reason error) error {
+	log.L().Info("FakeMaster: OnWorkerOffline",
+		zap.String("worker-id", worker.ID()), zap.Error(reason))
+
 	m.workerListMu.Lock()
 	businessID, ok := m.workerID2BusinessID[worker.ID()]
+	m.workerList[businessID] = nil
 	m.workerListMu.Unlock()
 	if !ok {
 		return errors.Errorf("worker(%s) is not found in business id map", worker.ID())
@@ -408,7 +428,6 @@ func (m *Master) OnWorkerOffline(worker lib.WorkerHandle, reason error) error {
 	m.bStatus.Lock()
 	delete(m.bStatus.status, worker.ID())
 	m.bStatus.Unlock()
-	m.workerList[businessID] = nil
 
 	if derrors.ErrWorkerFinish.Equal(reason) {
 		log.L().Info("FakeMaster: OnWorkerOffline: worker finished", zap.String("worker-id", worker.ID()))
@@ -416,8 +435,6 @@ func (m *Master) OnWorkerOffline(worker lib.WorkerHandle, reason error) error {
 		return nil
 	}
 
-	log.L().Info("FakeMaster: OnWorkerOffline",
-		zap.String("worker-id", worker.ID()), zap.Error(reason))
 	workerCkpt := zeroWorkerCheckpoint()
 	if ws, err := parseExtBytes(worker.Status().ExtBytes); err != nil {
 		log.L().Warn("failed to parse worker ext bytes", zap.Error(err))
