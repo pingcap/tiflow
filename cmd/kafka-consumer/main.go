@@ -30,7 +30,6 @@ import (
 	"time"
 
 	"github.com/Shopify/sarama"
-	"github.com/google/uuid"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/contextutil"
@@ -53,8 +52,8 @@ import (
 var (
 	kafkaAddrs           []string
 	kafkaTopic           string
+	kafkaGroupID         string
 	kafkaPartitionNum    int32
-	kafkaGroupID         = fmt.Sprintf("ticdc_kafka_consumer_%s", uuid.New().String())
 	kafkaVersion         = "2.4.0"
 	kafkaMaxMessageBytes = math.MaxInt64
 	kafkaMaxBatchSize    = math.MaxInt64
@@ -112,13 +111,12 @@ func init() {
 	if s != "" {
 		kafkaVersion = s
 	}
-	s = upstreamURI.Query().Get("consumer-group-id")
-	if s != "" {
-		kafkaGroupID = s
-	}
+
 	kafkaTopic = strings.TrimFunc(upstreamURI.Path, func(r rune) bool {
 		return r == '/'
 	})
+	kafkaGroupID = fmt.Sprintf("ticdc_kafka_consumer_%s", kafkaTopic)
+
 	kafkaAddrs = strings.Split(upstreamURI.Host, ",")
 
 	saramaConfig, err := newSaramaConfig()
@@ -250,7 +248,7 @@ func newSaramaConfig() (*sarama.Config, error) {
 		return nil, errors.Trace(err)
 	}
 
-	config.ClientID = "ticdc_kafka_sarama_consumer"
+	config.ClientID = kafkaGroupID
 	config.Version = version
 
 	config.Metadata.Retry.Max = 10000
