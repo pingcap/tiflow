@@ -14,6 +14,7 @@
 package tp
 
 import (
+	"sync/atomic"
 	"testing"
 
 	"github.com/pingcap/tiflow/cdc/model"
@@ -40,7 +41,7 @@ func TestSchedulerRebalance(t *testing.T) {
 	tasks := scheduler.Schedule(checkpointTs, currentTables, captures, replications)
 	require.Len(t, tasks, 0)
 
-	scheduler.rebalance = true
+	atomic.StoreInt32(&scheduler.rebalance, 1)
 	// no captures
 	tasks = scheduler.Schedule(checkpointTs, currentTables, map[model.CaptureID]*model.CaptureInfo{}, replications)
 	require.Len(t, tasks, 0)
@@ -63,6 +64,7 @@ func TestSchedulerRebalance(t *testing.T) {
 	tasks = scheduler.Schedule(checkpointTs, currentTables, captures, replications)
 	require.Len(t, tasks, 0)
 
+	// Imbalance.
 	replications[5] = &ReplicationSet{
 		State:   ReplicationSetStateReplicating,
 		Primary: "a",
@@ -75,8 +77,13 @@ func TestSchedulerRebalance(t *testing.T) {
 	scheduler.random = nil // disable random to make test easier.
 	tasks = scheduler.Schedule(checkpointTs, currentTables, captures, replications)
 	require.Len(t, tasks, 1)
-	require.Equal(t, model.TableID(1), tasks[0].moveTable.TableID)
-	require.Equal(t, "b", tasks[0].moveTable.DestCapture)
+	require.Contains(t, tasks[0].burstBalance.MoveTables, moveTable{
+		TableID: 1, DestCapture: "b",
+	})
+	require.EqualValues(t, 1, atomic.LoadInt32(&scheduler.rebalance))
+
+	tasks[0].accept()
+	require.EqualValues(t, 0, atomic.LoadInt32(&scheduler.rebalance))
 
 	// pending task is not consumed yet, this turn should have no tasks.
 	tasks = scheduler.Schedule(checkpointTs, currentTables, captures, replications)

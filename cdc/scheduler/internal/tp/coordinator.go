@@ -15,6 +15,7 @@ package tp
 
 import (
 	"context"
+	"sync/atomic"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -124,7 +125,7 @@ func (c *coordinator) Rebalance() {
 	if !ok {
 		log.Panic("tpscheduler: invalid rebalance scheduler found")
 	}
-	rebalanceScheduler.rebalance = true
+	atomic.StoreInt32(&rebalanceScheduler.rebalance, 1)
 }
 
 func (c *coordinator) Close(ctx context.Context) {

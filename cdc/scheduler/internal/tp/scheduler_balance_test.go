@@ -32,10 +32,11 @@ func TestSchedulerBalance(t *testing.T) {
 	b := newBurstBalanceScheduler()
 	tasks := b.Schedule(0, currentTables, captures, replications)
 	require.Len(t, tasks, 1)
-	require.Contains(t, tasks[0].burstBalance.AddTables, model.TableID(1))
-	require.Contains(t, tasks[0].burstBalance.AddTables, model.TableID(2))
-	require.Contains(t, tasks[0].burstBalance.AddTables, model.TableID(3))
-	require.Contains(t, tasks[0].burstBalance.AddTables, model.TableID(4))
+	require.Len(t, tasks[0].burstBalance.AddTables, 4)
+	require.Equal(t, tasks[0].burstBalance.AddTables[0].TableID, model.TableID(1))
+	require.Equal(t, tasks[0].burstBalance.AddTables[1].TableID, model.TableID(2))
+	require.Equal(t, tasks[0].burstBalance.AddTables[2].TableID, model.TableID(3))
+	require.Equal(t, tasks[0].burstBalance.AddTables[3].TableID, model.TableID(4))
 
 	// AddTable ReplicationSetStateAbsent.
 	replications = map[model.TableID]*ReplicationSet{
@@ -46,8 +47,8 @@ func TestSchedulerBalance(t *testing.T) {
 	}
 	tasks = b.Schedule(1, currentTables, captures, replications)
 	require.Len(t, tasks, 1)
-	require.Contains(t, tasks[0].burstBalance.AddTables, model.TableID(4))
-	require.Equal(t, tasks[0].burstBalance.CheckpointTs, model.Ts(1))
+	require.Equal(t, tasks[0].burstBalance.AddTables[0].TableID, model.TableID(4))
+	require.Equal(t, tasks[0].burstBalance.AddTables[0].CheckpointTs, model.Ts(1))
 
 	// AddTable 4, and RemoveTable 5.
 	replications = map[model.TableID]*ReplicationSet{
@@ -59,15 +60,13 @@ func TestSchedulerBalance(t *testing.T) {
 	tasks = b.Schedule(2, currentTables, captures, replications)
 	require.Len(t, tasks, 2)
 	if tasks[0].burstBalance.AddTables != nil {
-		require.Contains(t, tasks[0].burstBalance.AddTables, model.TableID(4))
-		require.Equal(t, tasks[0].burstBalance.CheckpointTs, model.Ts(2))
-		require.Contains(t, tasks[1].burstBalance.RemoveTables, model.TableID(5))
-		require.Equal(t, tasks[1].burstBalance.CheckpointTs, model.Ts(2))
+		require.Equal(t, tasks[0].burstBalance.AddTables[0].TableID, model.TableID(4))
+		require.Equal(t, tasks[0].burstBalance.AddTables[0].CheckpointTs, model.Ts(2))
+		require.Equal(t, tasks[1].burstBalance.RemoveTables[0].TableID, model.TableID(5))
 	} else {
-		require.Contains(t, tasks[1].burstBalance.AddTables, model.TableID(4))
-		require.Equal(t, tasks[0].burstBalance.CheckpointTs, model.Ts(2))
-		require.Contains(t, tasks[0].burstBalance.RemoveTables, model.TableID(5))
-		require.Equal(t, tasks[1].burstBalance.CheckpointTs, model.Ts(2))
+		require.Equal(t, tasks[1].burstBalance.AddTables[0].TableID, model.TableID(4))
+		require.Equal(t, tasks[0].burstBalance.AddTables[0].CheckpointTs, model.Ts(2))
+		require.Equal(t, tasks[0].burstBalance.RemoveTables[0].TableID, model.TableID(5))
 	}
 
 	// RemoveTable only.
@@ -80,8 +79,53 @@ func TestSchedulerBalance(t *testing.T) {
 	}
 	tasks = b.Schedule(3, currentTables, captures, replications)
 	require.Len(t, tasks, 1)
-	require.Contains(t, tasks[0].burstBalance.RemoveTables, model.TableID(5))
-	require.Equal(t, tasks[0].burstBalance.CheckpointTs, model.Ts(3))
+	require.Equal(t, tasks[0].burstBalance.RemoveTables[0].TableID, model.TableID(5))
+}
+
+func TestSchedulerBalanceCaptureChange(t *testing.T) {
+	t.Parallel()
+
+	b := newBurstBalanceScheduler()
+
+	// Capture "b" offline
+	captures := map[model.CaptureID]*model.CaptureInfo{"a": {}}
+	currentTables := []model.TableID{1, 2, 3}
+	replications := map[model.TableID]*ReplicationSet{
+		1: {State: ReplicationSetStateReplicating, Primary: "a"},
+		2: {State: ReplicationSetStateCommit, Secondary: "b"},
+		3: {State: ReplicationSetStatePrepare, Primary: "a", Secondary: "b"},
+	}
+	tasks := b.Schedule(0, currentTables, captures, replications)
+	require.Len(t, tasks, 0)
+
+	// Capture "b" online
+	b.random = nil
+	captures = map[model.CaptureID]*model.CaptureInfo{"a": {}, "b": {}}
+	currentTables = []model.TableID{1, 2}
+	replications = map[model.TableID]*ReplicationSet{
+		1: {State: ReplicationSetStateReplicating, Primary: "a"},
+		2: {State: ReplicationSetStateReplicating, Primary: "a"},
+	}
+	tasks = b.Schedule(0, currentTables, captures, replications)
+	require.Len(t, tasks, 1)
+	require.Len(t, tasks[0].burstBalance.MoveTables, 1)
+	require.Equal(t, tasks[0].burstBalance.MoveTables[0].TableID, model.TableID(1))
+
+	// TODO revise balance algorithm and enable the test case.
+	//
+	// Capture "c" online, and more tables
+	// captures = map[model.CaptureID]*model.CaptureInfo{"a": {}, "b": {}, "c": {}}
+	// currentTables = []model.TableID{1, 2, 3, 4}
+	// replications = map[model.TableID]*ReplicationSet{
+	// 	1: {State: ReplicationSetStateReplicating, Primary: "a"},
+	// 	2: {State: ReplicationSetStateReplicating, Primary: "b"},
+	// 	3: {State: ReplicationSetStateReplicating, Primary: "a"},
+	// 	4: {State: ReplicationSetStateReplicating, Primary: "b"},
+	// }
+	// tasks = b.Schedule(0, currentTables, captures, replications)
+	// require.Len(t, tasks, 1)
+	// require.Len(t, tasks[0].burstBalance.MoveTables, 1)
+	// require.Equal(t, tasks[0].burstBalance.MoveTables[0].TableID, model.TableID(1))
 }
 
 func benchmarkSchedulerBalance(
