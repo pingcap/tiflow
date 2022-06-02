@@ -16,15 +16,17 @@ package fake
 import (
 	"context"
 	"encoding/json"
+	"net/http"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
 
+	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/engine/executor/worker"
 	"github.com/pingcap/tiflow/engine/lib"
 	libModel "github.com/pingcap/tiflow/engine/lib/model"
@@ -90,7 +92,7 @@ func zeroWorkerCheckpoint() workerCheckpoint {
 	return workerCheckpoint{}
 }
 
-var _ lib.BaseJobMaster = (*Master)(nil)
+var _ lib.JobMasterImpl = (*Master)(nil)
 
 // Master defines the job master implementation of fake job.
 type Master struct {
@@ -166,6 +168,13 @@ func (m *Master) OnJobManagerMessage(topic p2p.Topic, message p2p.MessageValue) 
 		log.L().Info("unsupported message", zap.Any("message", message))
 	}
 	return nil
+}
+
+// OnOpenAPIInitialized implements JobMasterImpl.OnOpenAPIInitialized.
+func (m *Master) OnOpenAPIInitialized(apiGroup *gin.RouterGroup) {
+	apiGroup.Any("/*any", func(c *gin.Context) {
+		c.String(http.StatusOK, "FakeMaster: Success")
+	})
 }
 
 // IsJobMasterImpl implements JobMasterImpl.IsJobMasterImpl
