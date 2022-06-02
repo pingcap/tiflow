@@ -234,4 +234,4 @@ jobs:
           msg_type: text
           content: |
             text: |
-              dataflow engine chaos job runs, see https://github.com/pingcap/tiflow/actions/runs/${{ github.run_id }}
+              dataflow engine chaos job failed, see https://github.com/pingcap/tiflow/actions/runs/${{ github.run_id }}
