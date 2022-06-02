@@ -172,12 +172,38 @@ func GetRelayConfig(cli *clientv3.Client, worker string) (map[string]*config.Sou
 		return nil, rev, err
 	}
 
+	appendGetUpstreamCfgOps := func(sources []string, ops []clientv3.Op) []clientv3.Op {
+		for _, source := range sources {
+			ops = append(ops, clientv3.OpGet(common.UpstreamConfigKeyAdapter.Encode(source)))
+		}
+		return ops
+	}
+
+	getSourceCfgFromResp := func(txnResp *clientv3.TxnResponse) (map[string]*config.SourceConfig, error) {
+		if txnResp == nil || len(txnResp.Responses) < 2 {
+			return nil, nil
+		}
+		scm := make(map[string]*config.SourceConfig, 0)
+		for i := 1; i < len(txnResp.Responses); i++ {
+			cfgResp := txnResp.Responses[i].GetResponseRange()
+			scs, err1 := sourceCfgFromResp("", (*clientv3.GetResponse)(cfgResp))
+			if err1 != nil {
+				return nil, err1
+			}
+			for src, conf := range scs {
+				scm[src] = conf
+			}
+		}
+		return scm, nil
+	}
+
 	for retryCnt := 1; retryCnt <= retryNum; retryCnt++ {
-		txnResp, _, err2 := etcdutil.DoTxnWithRepeatable(cli, etcdutil.ThenOpFunc(
-			clientv3.OpGet(common.UpstreamRelayWorkerKeyAdapter.Encode(worker), clientv3.WithPrefix()),
-			clientv3.OpGet(common.UpstreamConfigKeyAdapter.Path(), clientv3.WithPrefix())))
+		ops := make([]clientv3.Op, 1, len(sources)+1)
+		ops[0] = clientv3.OpGet(common.UpstreamRelayWorkerKeyAdapter.Encode(worker), clientv3.WithPrefix())
+		ops = appendGetUpstreamCfgOps(sources, ops)
+		txnResp, _, err2 := etcdutil.DoTxnWithRepeatable(cli, etcdutil.ThenOpFunc(ops...))
 		if err2 != nil {
-			return nil, 0, err
+			return nil, 0, err2
 		}
 
 		var rev2 int64
@@ -230,8 +256,7 @@ func GetRelayConfig(cli *clientv3.Client, worker string) (map[string]*config.Sou
 		}
 
 		// after retry and already the same, find source configs and return
-		cfgResp := txnResp.Responses[1].GetResponseRange()
-		scm, err3 := sourceCfgFromResp("", (*clientv3.GetResponse)(cfgResp))
+		scm, err3 := getSourceCfgFromResp(txnResp)
 		if err3 != nil {
 			return nil, 0, err3
 		}
