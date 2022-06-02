@@ -130,12 +130,12 @@ type ResourceClient interface {
 
 // NewClient return the client to operate framework metastore
 func NewClient(mc metaclient.StoreConfigParams, conf DBConfig) (Client, error) {
-	err := createDatabaseForProject(mc, tenant.FrameTenantID, conf)
+	err := createDatabaseForProject(mc, tenant.FrameProjectInfo.UniqueID(), conf)
 	if err != nil {
 		return nil, err
 	}
 
-	dsn := generateDSNByParams(mc, tenant.FrameTenantID, conf, true)
+	dsn := generateDSNByParams(mc, tenant.FrameProjectInfo.UniqueID(), conf, true)
 	sqlDB, err := newSQLDB("mysql", dsn, conf)
 	if err != nil {
 		return nil, err

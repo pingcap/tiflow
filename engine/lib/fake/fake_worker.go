@@ -252,10 +252,14 @@ watchLoop:
 		default:
 		}
 		opts := make([]clientv3.OpOption, 0)
-		if d.status.getEtcdCheckpoint().Revision > 0 {
-			opts = append(opts, clientv3.WithRev(d.status.getEtcdCheckpoint().Revision+1))
+		revision := d.status.getEtcdCheckpoint().Revision
+		if revision > 0 {
+			opts = append(opts, clientv3.WithRev(revision+1))
 		}
 		ch := cli.Watch(ctx, key, opts...)
+		log.L().Info("start to watch etcd", zap.String("key", key),
+			zap.Int64("revision", revision),
+			zap.Strings("endpoints", d.config.EtcdEndpoints))
 		for resp := range ch {
 			if resp.Err() != nil {
 				log.L().Warn("watch met error", zap.Error(resp.Err()))
@@ -292,6 +296,7 @@ func NewDummyWorker(
 		Checkpoint: &workerCheckpoint{
 			Revision:  wcfg.Checkpoint.Revision,
 			MvccCount: wcfg.Checkpoint.MvccCount,
+			Value:     wcfg.Checkpoint.Value,
 		},
 	}
 	return &dummyWorker{

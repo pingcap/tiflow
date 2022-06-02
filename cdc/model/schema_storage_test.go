@@ -22,172 +22,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestPKShouldBeInTheFirstPlaceWhenPKIsNotHandle(t *testing.T) {
-	t.Parallel()
-	ft := parser_types.NewFieldType(mysql.TypeUnspecified)
-	ft.SetFlag(mysql.NotNullFlag)
-
-	tbl := timodel.TableInfo{
-		Columns: []*timodel.ColumnInfo{
-			{
-				Name:      timodel.CIStr{O: "group"},
-				FieldType: *ft,
-				State:     timodel.StatePublic,
-			},
-			{
-				Name:      timodel.CIStr{O: "name"},
-				FieldType: *ft,
-				State:     timodel.StatePublic,
-			},
-			{
-				Name:  timodel.CIStr{O: "id"},
-				State: timodel.StatePublic,
-			},
-		},
-		Indices: []*timodel.IndexInfo{
-			{
-				Name: timodel.CIStr{
-					O: "group",
-				},
-				Columns: []*timodel.IndexColumn{
-					{
-						Name:   timodel.CIStr{O: "group"},
-						Offset: 0,
-					},
-				},
-				Unique: false,
-			},
-			{
-				Name: timodel.CIStr{
-					O: "name",
-				},
-				Columns: []*timodel.IndexColumn{
-					{
-						Name:   timodel.CIStr{O: "name"},
-						Offset: 0,
-					},
-				},
-				Unique: true,
-			},
-			{
-				Name: timodel.CIStr{
-					O: "PRIMARY",
-				},
-				Columns: []*timodel.IndexColumn{
-					{
-						Name:   timodel.CIStr{O: "id"},
-						Offset: 1,
-					},
-				},
-				Primary: true,
-			},
-		},
-		IsCommonHandle: true,
-		PKIsHandle:     false,
-	}
-	info := WrapTableInfo(1, "", 0, &tbl)
-	cols := info.GetUniqueKeys()
-	require.Equal(t, [][]string{
-		{"id"}, {"name"},
-	}, cols)
-}
-
-func TestPKShouldBeInTheFirstPlaceWhenPKIsHandle(t *testing.T) {
-	t.Parallel()
-	jobft := parser_types.NewFieldType(mysql.TypeUnspecified)
-	jobft.SetFlag(mysql.NotNullFlag)
-
-	uidft := jobft.Clone()
-	uidft.SetFlag(mysql.PriKeyFlag)
-
-	tbl := timodel.TableInfo{
-		Indices: []*timodel.IndexInfo{
-			{
-				Name: timodel.CIStr{
-					O: "uniq_job",
-				},
-				Columns: []*timodel.IndexColumn{
-					{Name: timodel.CIStr{O: "job"}},
-				},
-				Unique: true,
-			},
-		},
-		Columns: []*timodel.ColumnInfo{
-			{
-				Name: timodel.CIStr{
-					O: "job",
-				},
-				FieldType: *jobft,
-				State:     timodel.StatePublic,
-			},
-			{
-				Name: timodel.CIStr{
-					O: "uid",
-				},
-				FieldType: *uidft,
-				State:     timodel.StatePublic,
-			},
-		},
-		PKIsHandle: true,
-	}
-	info := WrapTableInfo(1, "", 0, &tbl)
-	cols := info.GetUniqueKeys()
-	require.Equal(t, [][]string{
-		{"uid"}, {"job"},
-	}, cols)
-}
-
-func TestUniqueKeyIsHandle(t *testing.T) {
-	t.Parallel()
-	ft := parser_types.NewFieldType(mysql.TypeUnspecified)
-	ft.SetFlag(mysql.NotNullFlag)
-	tbl := timodel.TableInfo{
-		Columns: []*timodel.ColumnInfo{
-			{
-				Name:      timodel.CIStr{O: "group"},
-				FieldType: *ft,
-				State:     timodel.StatePublic,
-			},
-			{
-				Name:      timodel.CIStr{O: "name"},
-				FieldType: *ft,
-				State:     timodel.StatePublic,
-			},
-		},
-		Indices: []*timodel.IndexInfo{
-			{
-				Name: timodel.CIStr{
-					O: "group",
-				},
-				Columns: []*timodel.IndexColumn{
-					{
-						Name:   timodel.CIStr{O: "group"},
-						Offset: 0,
-					},
-				},
-				Unique: false,
-			},
-			{
-				Name: timodel.CIStr{
-					O: "name",
-				},
-				Columns: []*timodel.IndexColumn{
-					{
-						Name:   timodel.CIStr{O: "name"},
-						Offset: 0,
-					},
-				},
-				Unique: true,
-			},
-		},
-		IsCommonHandle: false,
-		PKIsHandle:     false,
-	}
-	info := WrapTableInfo(1, "", 0, &tbl)
-	cols := info.GetUniqueKeys()
-	require.Equal(t, [][]string{{"name"}}, cols)
-}
-
 func TestHandleKeyPriority(t *testing.T) {
 	t.Parallel()
 	ftNull := parser_types.NewFieldType(mysql.TypeUnspecified)
@@ -287,9 +121,7 @@ func TestHandleKeyPriority(t *testing.T) {
 		PKIsHandle:     false,
 	}
 	info := WrapTableInfo(1, "", 0, &tbl)
-	cols := info.GetUniqueKeys()
 	require.Equal(t, int64(8), info.HandleIndexID)
-	require.Equal(t, [][]string{{"a", "b"}, {"c"}, {"b"}}, cols)
 }
 
 func TestTableInfoGetterFuncs(t *testing.T) {
@@ -353,19 +185,11 @@ func TestTableInfoGetterFuncs(t *testing.T) {
 
 	require.Equal(t, "TableInfo, ID: 1071, Name:test.t1, ColNum: 3, IdxNum: 1, PKIsHandle: false", info.String())
 
-	idx, exists := info.GetIndexInfo(0)
-	require.True(t, exists)
-	require.Equal(t, "c", idx.Name.O)
-	_, exists = info.GetIndexInfo(1)
-	require.False(t, exists)
-
 	handleColIDs, fts, colInfos := info.GetRowColInfos()
 	require.Equal(t, []int64{-1}, handleColIDs)
 	require.Equal(t, 3, len(fts))
 	require.Equal(t, 3, len(colInfos))
 
-	require.False(t, info.IsColumnUnique(0))
-	require.True(t, info.IsColumnUnique(2))
 	require.True(t, info.ExistTableUniqueColumn())
 
 	// check IsEligible

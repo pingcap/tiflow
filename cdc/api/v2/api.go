@@ -24,15 +24,18 @@ type OpenAPIV2 struct {
 	capture *capture.Capture
 }
 
-// NewOpenAPI creates a new openAPIs.
-func NewOpenAPI(c *capture.Capture) *OpenAPIV2 {
-	return &OpenAPIV2{capture: c}
+// NewOpenAPIV2 creates a new OpenAPIV2.
+func NewOpenAPIV2(c *capture.Capture) OpenAPIV2 {
+	return OpenAPIV2{capture: c}
 }
 
-// RegisterOpenAPIRoutes registers routes for OpenAPI
-func RegisterOpenAPIRoutes(router *gin.Engine, api *OpenAPIV2) {
+// RegisterOpenAPIV2Routes registers routes for OpenAPI
+func RegisterOpenAPIV2Routes(router *gin.Engine, api OpenAPIV2) {
 	v2 := router.Group("/api/v2")
 
 	v2.Use(middleware.LogMiddleware())
 	v2.Use(middleware.ErrorHandleMiddleware())
+
+	// common APIs
+	v2.GET("/tso", api.GetTso)
 }
