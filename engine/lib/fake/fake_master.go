@@ -226,7 +226,7 @@ OUT:
 	return nil
 }
 
-func (m *Master) failover(ctx context.Context) error {
+func (m *Master) failoverOnMasterRecover(ctx context.Context) error {
 	m.workerListMu.Lock()
 	defer m.workerListMu.Unlock()
 
@@ -306,7 +306,7 @@ func (m *Master) failover(ctx context.Context) error {
 }
 
 func (m *Master) tickedCheckWorkers(ctx context.Context) error {
-	err := m.failover(ctx)
+	err := m.failoverOnMasterRecover(ctx)
 	if err != nil {
 		return err
 	}
@@ -380,6 +380,7 @@ func (m *Master) Tick(ctx context.Context) error {
 // OnMasterRecovered implements MasterImpl.OnMasterRecovered
 func (m *Master) OnMasterRecovered(ctx context.Context) error {
 	log.L().Info("FakeMaster: OnMasterRecovered")
+	// all failover tasks will be executed in failoverOnMasterRecover in Tick
 	return nil
 }
 
