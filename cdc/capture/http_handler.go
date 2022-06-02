@@ -603,6 +603,15 @@ func (h *HTTPHandler) ListCapture(c *gin.Context) {
 		_ = c.Error(err)
 		return
 	}
+<<<<<<< HEAD:cdc/capture/http_handler.go
+=======
+	info, err := h.capture.Info()
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+	ownerID := info.ID
+>>>>>>> c4a5146fa (capture (ticdc): fix http status panic (#5666)):cdc/api/v1/api.go
 
 	captures := make([]*model.Capture, 0, len(captureInfos))
 	for _, c := range captureInfos {
@@ -629,7 +638,12 @@ func (h *HTTPHandler) ServerStatus(c *gin.Context) {
 		GitHash: version.GitHash,
 		Pid:     os.Getpid(),
 	}
-	status.ID = h.capture.Info().ID
+	info, err := h.capture.Info()
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+	status.ID = info.ID
 	status.IsOwner = h.capture.IsOwner()
 	c.IndentedJSON(http.StatusOK, status)
 }
@@ -691,11 +705,22 @@ func (h *HTTPHandler) forwardToOwner(c *gin.Context) {
 		_ = c.Error(cerror.ErrRequestForwardErr.FastGenByArgs())
 		return
 	}
-	c.Header(forWardFromCapture, h.capture.Info().ID)
+
+	info, err := h.capture.Info()
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+
+	c.Header(forWardFromCapture, info.ID)
 
 	var owner *model.CaptureInfo
 	// get owner
+<<<<<<< HEAD:cdc/capture/http_handler.go
 	owner, err := h.capture.GetOwner(ctx)
+=======
+	owner, err = h.capture.GetOwnerCaptureInfo(ctx)
+>>>>>>> c4a5146fa (capture (ticdc): fix http status panic (#5666)):cdc/api/v1/api.go
 	if err != nil {
 		log.Info("get owner failed", zap.Error(err))
 		_ = c.Error(err)
