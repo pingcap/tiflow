@@ -732,8 +732,12 @@ func (h *OpenAPI) ListCapture(c *gin.Context) {
 		_ = c.Error(err)
 		return
 	}
-
-	ownerID := h.capture.Info().ID
+	info, err := h.capture.Info()
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+	ownerID := info.ID
 
 	captures := make([]*model.Capture, 0, len(captureInfos))
 	for _, c := range captureInfos {
@@ -760,7 +764,12 @@ func (h *OpenAPI) ServerStatus(c *gin.Context) {
 		GitHash: version.GitHash,
 		Pid:     os.Getpid(),
 	}
-	status.ID = h.capture.Info().ID
+	info, err := h.capture.Info()
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+	status.ID = info.ID
 	status.IsOwner = h.capture.IsOwner()
 	c.IndentedJSON(http.StatusOK, status)
 }
@@ -822,11 +831,18 @@ func (h *OpenAPI) forwardToOwner(c *gin.Context) {
 		_ = c.Error(cerror.ErrRequestForwardErr.FastGenByArgs())
 		return
 	}
-	c.Header(forWardFromCapture, h.capture.Info().ID)
+
+	info, err := h.capture.Info()
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+
+	c.Header(forWardFromCapture, info.ID)
 
 	var owner *model.CaptureInfo
 	// get owner
-	owner, err := h.capture.GetOwnerCaptureInfo(ctx)
+	owner, err = h.capture.GetOwnerCaptureInfo(ctx)
 	if err != nil {
 		log.Info("get owner failed", zap.Error(err))
 		_ = c.Error(err)
