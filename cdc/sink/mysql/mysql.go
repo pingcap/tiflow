@@ -43,6 +43,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/quotes"
 	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/prometheus/client_golang/prometheus"
+	"go.uber.org/atomic"
 	"go.uber.org/zap"
 )
 
@@ -77,6 +78,8 @@ type mysqlSink struct {
 
 	forceReplicate bool
 	cancel         func()
+
+	error atomic.Error
 }
 
 // NewMySQLSink creates a new MySQL sink using schema storage
@@ -228,6 +231,10 @@ func (s *mysqlSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.Row
 func (s *mysqlSink) FlushRowChangedEvents(
 	ctx context.Context, tableID model.TableID, resolved model.ResolvedTs,
 ) (model.ResolvedTs, error) {
+	if err := s.error.Load(); err != nil {
+		return model.NewResolvedTs(0), err
+	}
+
 	v, ok := s.getTableResolvedTs(tableID)
 	if !ok || v.Less(resolved) {
 		s.tableMaxResolvedTs.Store(tableID, resolved)
@@ -237,8 +244,6 @@ func (s *mysqlSink) FlushRowChangedEvents(
 	select {
 	case <-ctx.Done():
 		return model.NewResolvedTs(0), ctx.Err()
-	case err := <-s.errCh:
-		return model.NewResolvedTs(0), err
 	case s.resolvedCh <- struct{}{}:
 		// Notify `flushRowChangedEvents` to asynchronously write data.
 	default:
@@ -255,9 +260,17 @@ func (s *mysqlSink) flushRowChangedEvents(ctx context.Context) {
 			worker.close()
 		}
 	}()
+outer:
 	for {
 		select {
 		case <-ctx.Done():
+			return
+		case err := <-s.errCh:
+			log.Error("mysqlSink encountered error",
+				zap.Error(err),
+				zap.String("namespace", s.params.changefeedID.Namespace),
+				zap.String("changefeed", s.params.changefeedID.ID))
+			s.error.Store(err)
 			return
 		case <-s.resolvedCh:
 		}
@@ -272,6 +285,11 @@ func (s *mysqlSink) flushRowChangedEvents(ctx context.Context) {
 
 		if len(resolvedTxnsMap) != 0 {
 			s.dispatchAndExecTxns(ctx, resolvedTxnsMap)
+		}
+		for _, worker := range s.workers {
+			if !worker.isNormal() {
+				continue outer
+			}
 		}
 		for tableID, resolved := range checkpointTsMap {
 			s.tableCheckpointTs.Store(tableID, resolved)
@@ -431,6 +449,9 @@ func (s *mysqlSink) createSinkWorkers(ctx context.Context) error {
 }
 
 func (s *mysqlSink) notifyAndWaitExec(ctx context.Context) {
+	defer func() {
+		log.Info("notifyAndWaitExec finished")
+	}()
 	// notifyAndWaitExec may return because of context cancellation,
 	// and s.flushSyncWg.Wait() goroutine is still running, check context first to
 	// avoid data race
@@ -453,7 +474,9 @@ func (s *mysqlSink) notifyAndWaitExec(ctx context.Context) {
 	// scenario happens, the blocked goroutine will be leak.
 	select {
 	case <-ctx.Done():
+		return
 	case <-done:
+		return
 	}
 }
 
@@ -547,6 +570,9 @@ func (s *mysqlSink) RemoveTable(ctx context.Context, tableID model.TableID) erro
 				zap.Any("resolvedTs", maxResolved.Ts),
 				zap.Uint64("checkpointTs", s.getTableCheckpointTs(tableID).Ts))
 		default:
+			if err := s.error.Load(); err != nil {
+				return err
+			}
 			maxResolved, ok := s.getTableResolvedTs(tableID)
 			if !ok {
 				log.Info("No table resolvedTs is found", zap.Int64("tableID", tableID))
