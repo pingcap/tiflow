@@ -88,7 +88,7 @@ func (o *statisticsChangefeedOptions) runCliWithAPIClient(ctx context.Context, c
 		count += processor.Count
 	}
 
-	ts, err := o.apiV2Client.Tso().Get(ctx) // TODO pdclinet -> tso
+	ts, err := o.apiV2Client.Tso().Get(ctx)
 	if err != nil {
 		return err
 	}
