@@ -169,7 +169,7 @@ func (m *mockTablePipeline) Workload() model.WorkloadInfo {
 	return model.WorkloadInfo{Workload: 1}
 }
 
-func (m *mockTablePipeline) Status() pipeline.TableState {
+func (m *mockTablePipeline) State() pipeline.TableState {
 	return m.status
 }
 
