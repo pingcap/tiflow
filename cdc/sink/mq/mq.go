@@ -197,15 +197,6 @@ func (k *mqSink) FlushRowChangedEvents(
 
 // bgFlushTs flush resolvedTs to workers and flush the mqProducer
 func (k *mqSink) bgFlushTs(ctx context.Context) error {
-	defer func() {
-		go func() {
-			// We must finish consuming the data here,
-			// otherwise it will cause the channel to not close properly.
-			for range k.resolvedBuffer.Out() {
-				// Do nothing. We do not care about the data.
-			}
-		}()
-	}()
 	for {
 		select {
 		case <-ctx.Done():
@@ -356,6 +347,11 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 // table sinks before closing it. So there is no writing after closing.
 func (k *mqSink) Close(ctx context.Context) error {
 	k.resolvedBuffer.Close()
+	// We must finish consuming the data here,
+	// otherwise it will cause the channel to not close properly.
+	for range k.resolvedBuffer.Out() {
+		// Do nothing. We do not care about the data.
+	}
 	k.flushWorker.close()
 	// We need to close it asynchronously.
 	// Otherwise, we might get stuck with it in an unhealthy state of kafka.
