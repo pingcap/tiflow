@@ -37,14 +37,11 @@ type status struct {
 
 // statisticsChangefeedOptions defines flags for the `cli changefeed statistics` command.
 type statisticsChangefeedOptions struct {
-	// etcdClient *etcd.CDCEtcdClient
-	// pdClient   pd.Client
 	apiV1Client apiv1client.APIV1Interface
 	apiV2Client apiv2client.APIV2Interface
 
 	changefeedID string
 	interval     uint
-	// runWithAPIClient bool
 }
 
 // newStatisticsChangefeedOptions creates new options for the `cli changefeed statistics` command.
