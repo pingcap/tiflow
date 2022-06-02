@@ -23,7 +23,7 @@ import (
 const (
 	/// framework const lable
 	constFieldFrameworkKey   = "framework"
-	constFieldFrameworkValue = "true"
+	constFieldFrameworkValue = true
 
 	/// app const label
 	// constFieldTenantKey and constFieldProjectKey is used to recognize metric for tenant/project
@@ -38,7 +38,7 @@ const (
 // NewLogger4Framework return a new logger for framework
 func NewLogger4Framework() *zap.Logger {
 	return log.L().With(
-		zap.String(constFieldFrameworkKey, constFieldFrameworkValue),
+		zap.Bool(constFieldFrameworkKey, constFieldFrameworkValue),
 	)
 }
 
