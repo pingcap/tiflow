@@ -1105,3 +1105,19 @@ wrong table info in unflatten, table id %d, index table id: %d
 error = '''
 0-length response with status code: %d
 '''
+
+["ErrConflictingFileLocks"]
+error = '''
+file lock conflict: %s
+'''
+
+["ErrRequestForwardErr"]
+error = '''
+request forward error, an request can only forward to owner one time
+'''
+
+["ErrSortDirLockError"]
+error = '''
+error encountered when locking sort-dir
+'''
+
