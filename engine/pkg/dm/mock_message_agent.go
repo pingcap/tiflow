@@ -47,18 +47,18 @@ func (m *MockMessageAgent) Tick(ctx context.Context) error { return nil }
 // Close implement MessageAgent.Close
 func (m *MockMessageAgent) Close(ctx context.Context) error { return nil }
 
-// UpdateSender implement MessageAgent.UpdateSender
-func (m *MockMessageAgent) UpdateSender(senderID string, sender Sender) error { return nil }
+// UpdateClient implement MessageAgent.UpdateClient
+func (m *MockMessageAgent) UpdateClient(clientID string, client Client) error { return nil }
 
 // SendMessage implement MessageAgent.SendMessage
-func (m *MockMessageAgent) SendMessage(ctx context.Context, senderID string, command string, msg interface{}) error {
+func (m *MockMessageAgent) SendMessage(ctx context.Context, clientID string, command string, msg interface{}) error {
 	m.Lock()
 	defer m.Unlock()
 	return m.Called().Error(0)
 }
 
 // SendRequest implement MessageAgent.SendRequest
-func (m *MockMessageAgent) SendRequest(ctx context.Context, senderID string, command string, req interface{}) (interface{}, error) {
+func (m *MockMessageAgent) SendRequest(ctx context.Context, clientID string, command string, req interface{}) (interface{}, error) {
 	m.Lock()
 	defer m.Unlock()
 	args := m.Called()
