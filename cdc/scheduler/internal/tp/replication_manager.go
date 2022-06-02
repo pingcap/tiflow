@@ -117,7 +117,7 @@ func (r *replicationManager) HandleCaptureChanges(
 func (r *replicationManager) HandleMessage(
 	msgs []*schedulepb.Message,
 ) ([]*schedulepb.Message, error) {
-	sentMsgs := make([]*schedulepb.Message, 0)
+	sentMsgs := make([]*schedulepb.Message, 0, len(msgs))
 	for i := range msgs {
 		msg := msgs[i]
 		switch msg.MsgType {
@@ -230,7 +230,7 @@ func (r *replicationManager) HandleTasks(
 		}
 
 		// Check if accepting one more task exceeds maxTaskConcurrency.
-		if len(r.runningTasks)+1 > r.maxTaskConcurrency {
+		if len(r.runningTasks) == r.maxTaskConcurrency {
 			log.Debug("tpscheduler: too many running task")
 			// Does not use break, in case there is burst balance task
 			// in the remaining tasks.
@@ -366,6 +366,7 @@ func (r *replicationManager) handleBurstBalanceTasks(
 	return sentMsgs, nil
 }
 
+// ReplicationSets return all tracking replication set
 // Caller must not modify the return replication sets.
 func (r *replicationManager) ReplicationSets() map[model.TableID]*ReplicationSet {
 	return r.tables

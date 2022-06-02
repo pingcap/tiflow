@@ -196,9 +196,11 @@ func BenchmarkCoordinatorInit(b *testing.B) {
 		for i := 0; i < total; i++ {
 			currentTables = append(currentTables, int64(10000+i))
 		}
+		schedulers := make(map[schedulerType]scheduler)
+		schedulers[schedulerTypeBurstBalance] = newBurstBalanceScheduler()
 		coord = &coordinator{
 			trans:        &mockTrans{},
-			scheduler:    []scheduler{newBalancer()},
+			schedulers:   schedulers,
 			replicationM: newReplicationManager(10),
 			// Disable heartbeat.
 			captureM: newCaptureManager(schedulepb.OwnerRevision{}, math.MaxInt),
@@ -228,9 +230,11 @@ func BenchmarkCoordinatorHeartbeat(b *testing.B) {
 		for i := 0; i < total; i++ {
 			currentTables = append(currentTables, int64(10000+i))
 		}
+		schedulers := make(map[schedulerType]scheduler)
+		schedulers[schedulerTypeBurstBalance] = newBurstBalanceScheduler()
 		coord = &coordinator{
 			trans:        &mockTrans{},
-			scheduler:    []scheduler{},
+			schedulers:   schedulers,
 			replicationM: newReplicationManager(10),
 			captureM:     captureM,
 		}
@@ -296,9 +300,11 @@ func BenchmarkCoordinatorHeartbeatResponse(b *testing.B) {
 			recvBuffer:     recvMsgs,
 			keepRecvBuffer: true,
 		}
+		schedulers := make(map[schedulerType]scheduler)
+		schedulers[schedulerTypeBurstBalance] = newBurstBalanceScheduler()
 		coord = &coordinator{
 			trans:        trans,
-			scheduler:    []scheduler{},
+			schedulers:   schedulers,
 			replicationM: replicationM,
 			captureM:     captureM,
 		}

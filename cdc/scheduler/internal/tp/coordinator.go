@@ -29,16 +29,6 @@ import (
 
 const checkpointCannotProceed = internal.CheckpointCannotProceed
 
-type scheduler interface {
-	Name() string
-	Schedule(
-		checkpointTs model.Ts,
-		currentTables []model.TableID,
-		aliveCaptures map[model.CaptureID]*model.CaptureInfo,
-		replications map[model.TableID]*ReplicationSet,
-	) []*scheduleTask
-}
-
 var _ internal.Scheduler = (*coordinator)(nil)
 
 type coordinator struct {
@@ -46,7 +36,7 @@ type coordinator struct {
 	revision     schedulepb.OwnerRevision
 	captureID    model.CaptureID
 	trans        transport
-	scheduler    []scheduler
+	schedulers   map[schedulerType]scheduler
 	replicationM *replicationManager
 	captureM     *captureManager
 }
@@ -67,12 +57,18 @@ func NewCoordinator(
 		return nil, errors.Trace(err)
 	}
 	revision := schedulepb.OwnerRevision{Revision: ownerRevision}
+
+	schedulers := make(map[schedulerType]scheduler)
+	schedulers[schedulerTypeBurstBalance] = newBurstBalanceScheduler()
+	schedulers[schedulerTypeMoveTable] = newMoveTableScheduler()
+	schedulers[schedulerTypeRebalance] = newRebalanceScheduler()
+
 	return &coordinator{
 		version:      version.ReleaseSemver(),
 		revision:     revision,
 		captureID:    captureID,
 		trans:        trans,
-		scheduler:    []scheduler{newBalancer()},
+		schedulers:   schedulers,
 		replicationM: newReplicationManager(cfg.MaxTaskConcurrency),
 		captureM:     newCaptureManager(revision, cfg.HeartbeatTick),
 	}, nil
@@ -90,11 +86,50 @@ func (c *coordinator) Tick(
 	return c.poll(ctx, checkpointTs, currentTables, aliveCaptures)
 }
 
-func (c *coordinator) MoveTable(tableID model.TableID, target model.CaptureID) {}
+func (c *coordinator) MoveTable(tableID model.TableID, target model.CaptureID) {
+	if !c.captureM.CheckAllCaptureInitialized() {
+		log.Info("tpscheduler: manual move table task ignored, "+
+			"since not all captures initialized",
+			zap.Int64("tableID", tableID),
+			zap.String("targetCapture", target))
+		return
+	}
+	scheduler, ok := c.schedulers[schedulerTypeMoveTable]
+	if !ok {
+		log.Panic("tpscheduler: move table scheduler not found")
+	}
+	moveTableScheduler, ok := scheduler.(*moveTableScheduler)
+	if !ok {
+		log.Panic("tpscheduler: invalid move table scheduler found")
+	}
+	if !moveTableScheduler.addTask(tableID, target) {
+		log.Info("tpscheduler: manual move Table task ignored, "+
+			"since the last triggered task not finished",
+			zap.Int64("tableID", tableID),
+			zap.String("targetCapture", target))
+	}
+}
 
-func (c *coordinator) Rebalance() {}
+func (c *coordinator) Rebalance() {
+	if !c.captureM.CheckAllCaptureInitialized() {
+		log.Info("tpscheduler: manual rebalance task ignored, " +
+			"since not all captures initialized")
+		return
+	}
+	scheduler, ok := c.schedulers[schedulerTypeRebalance]
+	if !ok {
+		log.Panic("tpscheduler: rebalance scheduler not found")
+	}
+	rebalanceScheduler, ok := scheduler.(*rebalanceScheduler)
+	if !ok {
+		log.Panic("tpscheduler: invalid rebalance scheduler found")
+	}
+	rebalanceScheduler.rebalance = true
+}
 
-func (c *coordinator) Close(ctx context.Context) {}
+func (c *coordinator) Close(ctx context.Context) {
+	_ = c.trans.Close()
+}
 
 // ===========
 
@@ -138,12 +173,12 @@ func (c *coordinator) poll(
 	// Generate schedule tasks based on the current status.
 	replications := c.replicationM.ReplicationSets()
 	allTasks := make([]*scheduleTask, 0)
-	for _, sched := range c.scheduler {
-		tasks := sched.Schedule(checkpointTs, currentTables, aliveCaptures, replications)
+	for _, scheduler := range c.schedulers {
+		tasks := scheduler.Schedule(checkpointTs, currentTables, aliveCaptures, replications)
 		if len(tasks) != 0 {
 			log.Info("tpscheduler: new schedule task",
 				zap.Int("task", len(tasks)),
-				zap.String("scheduler", sched.Name()))
+				zap.String("scheduler", scheduler.Name()))
 		}
 		allTasks = append(allTasks, tasks...)
 	}
