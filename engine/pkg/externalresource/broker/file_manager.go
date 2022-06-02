@@ -20,8 +20,6 @@ import (
 	"sync"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tiflow/pkg/fsutil"
-
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -29,6 +27,7 @@ import (
 	derrors "github.com/pingcap/tiflow/engine/pkg/errors"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/storagecfg"
+	"github.com/pingcap/tiflow/pkg/fsutil"
 )
 
 // LocalFileManager manages the local files resources stored in
