@@ -47,9 +47,16 @@ type Capture struct {
 	captureMu sync.Mutex
 	info      *model.CaptureInfo
 
+<<<<<<< HEAD
 	ownerMu          sync.Mutex
 	owner            *owner.Owner
 	processorManager *processor.Manager
+=======
+	pdEndpoints     []string
+	UpstreamManager *upstream.Manager
+	ownerMu         sync.Mutex
+	owner           owner.Owner
+>>>>>>> c4a5146fa (capture (ticdc): fix http status panic (#5666))
 
 	// session keeps alive between the capture and etcd
 	session  *concurrency.Session
@@ -70,11 +77,18 @@ type Capture struct {
 // NewCapture returns a new Capture instance
 func NewCapture(pdClient pd.Client, kvStorage tidbkv.Storage, etcdClient *kv.CDCEtcdClient) *Capture {
 	return &Capture{
+<<<<<<< HEAD
 		pdClient:   pdClient,
 		kvStorage:  kvStorage,
 		etcdClient: etcdClient,
 		cancel:     func() {},
 
+=======
+		EtcdClient:          etcdClient,
+		grpcService:         grpcService,
+		cancel:              func() {},
+		pdEndpoints:         pdEnpoints,
+>>>>>>> c4a5146fa (capture (ticdc): fix http status panic (#5666))
 		newProcessorManager: processor.NewManager,
 		newOwner:            owner.NewOwner,
 	}
@@ -93,8 +107,13 @@ func (c *Capture) reset(ctx context.Context) error {
 	if c.session != nil {
 		c.session.Close() //nolint:errcheck
 	}
+<<<<<<< HEAD
 	sess, err := concurrency.NewSession(c.etcdClient.Client.Unwrap(),
 		concurrency.WithTTL(conf.CaptureSessionTTL))
+=======
+	c.UpstreamManager = upstream.NewManager(ctx)
+	err = c.UpstreamManager.Add(upstream.DefaultUpstreamID, c.pdEndpoints, conf.Security)
+>>>>>>> c4a5146fa (capture (ticdc): fix http status panic (#5666))
 	if err != nil {
 		return errors.Annotate(cerror.WrapError(cerror.ErrNewCaptureFailed, err), "create capture session")
 	}
@@ -214,10 +233,14 @@ func (c *Capture) run(stdCtx context.Context) error {
 }
 
 // Info gets the capture info
-func (c *Capture) Info() model.CaptureInfo {
+func (c *Capture) Info() (model.CaptureInfo, error) {
 	c.captureMu.Lock()
 	defer c.captureMu.Unlock()
-	return *c.info
+	// when c.reset has not been called yet, c.info is nil.
+	if c.info != nil {
+		return *c.info, nil
+	}
+	return model.CaptureInfo{}, cerror.ErrCaptureNotInitialized.GenWithStackByArgs()
 }
 
 func (c *Capture) campaignOwner(ctx cdcContext.Context) error {
@@ -354,7 +377,12 @@ func (c *Capture) register(ctx cdcContext.Context) error {
 	return nil
 }
 
+<<<<<<< HEAD
 // AsyncClose closes the capture by unregistering it from etcd
+=======
+// AsyncClose closes the capture by deregister it from etcd
+// Note: this function should be reentrant
+>>>>>>> c4a5146fa (capture (ticdc): fix http status panic (#5666))
 func (c *Capture) AsyncClose() {
 	defer c.cancel()
 	c.OperateOwnerUnderLock(func(o *owner.Owner) error { //nolint:errcheck

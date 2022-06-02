@@ -150,9 +150,43 @@ func (s *Server) Run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+<<<<<<< HEAD
 	err = s.startStatusHTTP()
 	if err != nil {
 		return err
+=======
+
+	return s.run(ctx)
+}
+
+// startStatusHTTP starts the HTTP server.
+// `lis` is a listener that gives us plain-text HTTP requests.
+// TODO: can we decouple the HTTP server from the capture server?
+func (s *Server) startStatusHTTP(lis net.Listener) error {
+	// LimitListener returns a Listener that accepts at most n simultaneous
+	// connections from the provided Listener. Connections that exceed the
+	// limit will wait in a queue and no new goroutines will be created until
+	// a connection is processed.
+	// We use it here to limit the max concurrent conections of statusServer.
+	lis = netutil.LimitListener(lis, maxHTTPConnection)
+	conf := config.GetGlobalServerConfig()
+
+	// discard gin log output
+	gin.DefaultWriter = io.Discard
+	router := gin.New()
+	// add gin.Recovery() to handle unexpected panic
+	router.Use(gin.Recovery())
+	// router.
+	// Register APIs.
+	RegisterRoutes(router, s.capture, registry)
+
+	// No need to configure TLS because it is already handled by `s.tcpServer`.
+	// Add ReadTimeout and WriteTimeout to avoid some abnormal connections never close.
+	s.statusServer = &http.Server{
+		Handler:      router,
+		ReadTimeout:  httpConnectionTimeout,
+		WriteTimeout: httpConnectionTimeout,
+>>>>>>> c4a5146fa (capture (ticdc): fix http status panic (#5666))
 	}
 
 	kv.InitWorkerPool()
