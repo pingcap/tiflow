@@ -48,7 +48,7 @@ func (m *MockMessageAgent) Tick(ctx context.Context) error { return nil }
 func (m *MockMessageAgent) Close(ctx context.Context) error { return nil }
 
 // UpdateClient implement MessageAgent.UpdateClient
-func (m *MockMessageAgent) UpdateClient(clientID string, client Client) error { return nil }
+func (m *MockMessageAgent) UpdateClient(clientID string, client client) error { return nil }
 
 // SendMessage implement MessageAgent.SendMessage
 func (m *MockMessageAgent) SendMessage(ctx context.Context, clientID string, command string, msg interface{}) error {
