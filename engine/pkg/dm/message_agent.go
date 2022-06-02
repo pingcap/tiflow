@@ -77,8 +77,8 @@ type message struct {
 	Payload interface{}
 }
 
-// Client defines an interface that supports send message
-type Client interface {
+// client defines an interface that supports send message
+type client interface {
 	SendMessage(ctx context.Context, topic p2p.Topic, message interface{}, nonblocking bool) error
 }
 
@@ -100,7 +100,7 @@ func (m *messageMatcher) allocID() messageID {
 }
 
 // sendRequest sends a request message and wait for response.
-func (m *messageMatcher) sendRequest(ctx context.Context, topic p2p.Topic, command string, req interface{}, client Client) (interface{}, error) {
+func (m *messageMatcher) sendRequest(ctx context.Context, topic p2p.Topic, command string, req interface{}, client client) (interface{}, error) {
 	msg := message{ID: m.allocID(), Type: requestTp, Command: command, Payload: req}
 	respCh := make(chan interface{}, 1)
 	m.pendings.Store(msg.ID, respCh)
@@ -119,7 +119,7 @@ func (m *messageMatcher) sendRequest(ctx context.Context, topic p2p.Topic, comma
 }
 
 // sendResponse sends a response with message ID.
-func (m *messageMatcher) sendResponse(ctx context.Context, topic p2p.Topic, id messageID, command string, resp interface{}, client Client) error {
+func (m *messageMatcher) sendResponse(ctx context.Context, topic p2p.Topic, id messageID, command string, resp interface{}, client client) error {
 	msg := message{ID: id, Type: responseTp, Command: command, Payload: resp}
 	return client.SendMessage(ctx, topic, msg, false /* nonblock */)
 }
@@ -146,7 +146,7 @@ type MessageAgent interface {
 	Close(ctx context.Context) error
 	// update the client to register the request/response topic when client online.
 	// update the client to nil to ungister the request/response when the client offline.
-	UpdateClient(clientID string, client Client) error
+	UpdateClient(clientID string, client client) error
 	SendMessage(ctx context.Context, clientID string, command string, msg interface{}) error
 	SendRequest(ctx context.Context, clientID string, command string, req interface{}) (interface{}, error)
 }
@@ -162,7 +162,7 @@ type MessageAgentImpl struct {
 	wg                    sync.WaitGroup
 	mu                    sync.RWMutex
 	// client-id -> Client
-	clients map[string]Client
+	clients map[string]client
 	// when receive message/request/response,
 	// the corresponding processing method of commandHandler will be called according to the command name.
 	commandHandler interface{}
@@ -178,7 +178,7 @@ type MessageAgentImpl struct {
 func NewMessageAgentImpl(id string, commandHandler interface{}, messageHandlerManager p2p.MessageHandlerManager) *MessageAgentImpl {
 	agent := &MessageAgentImpl{
 		messageMatcher:        newMessageMatcher(),
-		clients:               make(map[string]Client),
+		clients:               make(map[string]client),
 		commandHandler:        commandHandler,
 		messageHandlerManager: messageHandlerManager,
 		pool:                  workerpool.NewDefaultAsyncPool(10),
@@ -224,7 +224,7 @@ func (agent *MessageAgentImpl) Close(ctx context.Context) error {
 }
 
 // UpdateClient adds or deletes the client by client-id and register/unregister topic.
-func (agent *MessageAgentImpl) UpdateClient(clientID string, client Client) error {
+func (agent *MessageAgentImpl) UpdateClient(clientID string, client client) error {
 	agent.mu.Lock()
 	defer agent.mu.Unlock()
 	_, ok := agent.clients[clientID]
@@ -245,7 +245,7 @@ func (agent *MessageAgentImpl) UpdateClient(clientID string, client Client) erro
 }
 
 // getClient gets client by client.
-func (agent *MessageAgentImpl) getClient(clientID string) (Client, error) {
+func (agent *MessageAgentImpl) getClient(clientID string) (client, error) {
 	agent.mu.RLock()
 	defer agent.mu.RUnlock()
 	client, ok := agent.clients[clientID]
