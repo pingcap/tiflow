@@ -381,6 +381,9 @@ func (r *ReplicationSet) pollOnCommit(
 				zap.Stringer("tableState", input),
 				zap.String("original", original),
 				zap.String("captureID", captureID))
+		}
+		// Secondary has been promoted, retry AddTableRequest.
+		if r.Primary == captureID && r.Secondary == "" {
 			return &schedulepb.Message{
 				To:      captureID,
 				MsgType: schedulepb.MsgDispatchTableRequest,
@@ -395,6 +398,7 @@ func (r *ReplicationSet) pollOnCommit(
 				},
 			}, false, nil
 		}
+
 	case schedulepb.TableStateStopped, schedulepb.TableStateAbsent:
 		if r.Primary == captureID {
 			r.updateCheckpoint(input.Checkpoint)

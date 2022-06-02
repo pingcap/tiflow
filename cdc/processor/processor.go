@@ -371,12 +371,14 @@ func (p *processor) GetTableMeta(tableID model.TableID) pipeline.TableMeta {
 	table, ok := p.tables[tableID]
 	if !ok {
 		return pipeline.TableMeta{
+			TableID:      tableID,
 			CheckpointTs: 0,
 			ResolvedTs:   0,
 			Status:       pipeline.TableStateAbsent,
 		}
 	}
 	return pipeline.TableMeta{
+		TableID:      tableID,
 		CheckpointTs: table.CheckpointTs(),
 		ResolvedTs:   table.ResolvedTs(),
 		Status:       table.Status(),
@@ -661,15 +663,20 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 	return nil
 }
 
-func (p *processor) newAgentImpl(ctx cdcContext.Context) (scheduler.Agent, error) {
+func (p *processor) newAgentImpl(ctx cdcContext.Context) (ret scheduler.Agent, err error) {
 	messageServer := ctx.GlobalVars().MessageServer
 	messageRouter := ctx.GlobalVars().MessageRouter
 	etcdClient := ctx.GlobalVars().EtcdClient
-	ret, err := scheduler.NewAgent(ctx, messageServer, messageRouter, etcdClient, p, p.changefeedID)
-	if err != nil {
-		return nil, errors.Trace(err)
+	captureID := ctx.GlobalVars().CaptureInfo.ID
+	cfg := config.GetGlobalServerConfig().Debug
+	if cfg.EnableTwoPhaseScheduler {
+		ret, err = scheduler.NewTpAgent(
+			ctx, captureID, messageServer, messageRouter, etcdClient, p, p.changefeedID)
+	} else {
+		ret, err = scheduler.NewAgent(
+			ctx, captureID, messageServer, messageRouter, etcdClient, p, p.changefeedID)
 	}
-	return ret, nil
+	return ret, errors.Trace(err)
 }
 
 // handleErrorCh listen the error channel and throw the error if it is not expected.

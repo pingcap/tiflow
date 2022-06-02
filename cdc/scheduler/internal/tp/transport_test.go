@@ -35,24 +35,48 @@ func TestTransSendRecv(t *testing.T) {
 	changefeedID := model.ChangeFeedID{Namespace: "test", ID: "test"}
 
 	var err error
-	transMap := make(map[string]transport)
+	var schedulerAddr string
+	var schedulerTrans transport
+	agentTransMap := make(map[string]transport)
 	for addr, node := range cluster.Nodes {
-		transMap[addr], err = newTransport(ctx, changefeedID, node.Server, node.Router)
+		if schedulerAddr == "" {
+			schedulerTrans, err = newTransport(
+				ctx, changefeedID, schedulerRole, node.Server, node.Router)
+		} else {
+			agentTransMap[addr], err = newTransport(
+				ctx, changefeedID, agentRole, node.Server, node.Router)
+		}
 		require.Nil(t, err)
 	}
 
-	// Send messages
-	for _, trans := range transMap {
-		for addr := range transMap {
-			err := trans.Send(ctx, []*schedulepb.Message{{To: addr}})
-			require.Nil(t, err)
-		}
+	// Send messages, scheduler -> agent.
+	for addr := range agentTransMap {
+		err := schedulerTrans.Send(ctx, []*schedulepb.Message{{To: addr}})
+		require.Nil(t, err)
 	}
 
-	// Recv messages
-	total := len(transMap)
+	// Recv messages from scheduler.
+	total := len(agentTransMap)
 	recvMegs := make([]*schedulepb.Message, 0, total)
-	for _, trans := range transMap {
+	for _, trans := range agentTransMap {
+		require.Eventually(t, func() bool {
+			msgs, err := trans.Recv(ctx)
+			require.Nil(t, err)
+			recvMegs = append(recvMegs, msgs...)
+			return len(recvMegs) == total
+		}, 200*time.Millisecond, 25)
+		recvMegs = recvMegs[:0]
+	}
+
+	// Send messages, agent -> scheduler.
+	for _, trans := range agentTransMap {
+		err := trans.Send(ctx, []*schedulepb.Message{{To: schedulerAddr}})
+		require.Nil(t, err)
+	}
+	// Recv messages from agent.
+	total = len(agentTransMap)
+	recvMegs = make([]*schedulepb.Message, 0, total)
+	for _, trans := range agentTransMap {
 		require.Eventually(t, func() bool {
 			msgs, err := trans.Recv(ctx)
 			require.Nil(t, err)
@@ -76,7 +100,7 @@ func TestTransUnknownAddr(t *testing.T) {
 	var err error
 	transMap := make(map[string]transport)
 	for addr, node := range cluster.Nodes {
-		transMap[addr], err = newTransport(ctx, changefeedID, node.Server, node.Router)
+		transMap[addr], err = newTransport(ctx, changefeedID, agentRole, node.Server, node.Router)
 		require.Nil(t, err)
 	}
 
@@ -101,7 +125,7 @@ func TestTransEmptyRecv(t *testing.T) {
 	var err error
 	transMap := make(map[string]transport)
 	for addr, node := range cluster.Nodes {
-		transMap[addr], err = newTransport(ctx, changefeedID, node.Server, node.Router)
+		transMap[addr], err = newTransport(ctx, changefeedID, agentRole, node.Server, node.Router)
 		require.Nil(t, err)
 	}
 
@@ -109,5 +133,24 @@ func TestTransEmptyRecv(t *testing.T) {
 		msgs, err := trans.Recv(ctx)
 		require.Nil(t, err)
 		require.Empty(t, msgs)
+	}
+}
+
+// P2P does not allow registering the same topic more than once.
+func TestTransTwoRolesInOneNode(t *testing.T) {
+	t.Parallel()
+
+	cluster := p2p.NewMockCluster(t, 1)
+	defer cluster.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	changefeedID := model.ChangeFeedID{Namespace: "test", ID: "test"}
+
+	for _, node := range cluster.Nodes {
+		_, err := newTransport(ctx, changefeedID, agentRole, node.Server, node.Router)
+		require.Nil(t, err)
+		_, err = newTransport(ctx, changefeedID, schedulerRole, node.Server, node.Router)
+		require.Nil(t, err)
 	}
 }
