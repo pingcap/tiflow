@@ -236,6 +236,8 @@ func NewCmdServer() *cobra.Command {
 		Use:   "server",
 		Short: "Start a TiCDC capture server",
 		Args:  cobra.NoArgs,
+		// fix: https://github.com/pingcap/tiflow/issues/5519
+		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			err := o.complete(cmd)
 			if err != nil {
