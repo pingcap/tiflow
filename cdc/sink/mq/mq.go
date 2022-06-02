@@ -352,6 +352,8 @@ func (k *mqSink) Close(ctx context.Context) error {
 	for range k.resolvedBuffer.Out() {
 		// Do nothing. We do not care about the data.
 	}
+	// NOTICE: We must close the resolved buffer before closing the flush worker.
+	// Otherwise, bgFlushTs method will panic.
 	k.flushWorker.close()
 	// We need to close it asynchronously.
 	// Otherwise, we might get stuck with it in an unhealthy state of kafka.
