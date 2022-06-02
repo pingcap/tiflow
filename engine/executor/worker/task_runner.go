@@ -19,15 +19,16 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 	"golang.org/x/sync/semaphore"
 
+	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/engine/executor/worker/internal"
 	"github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/clock"
 	derror "github.com/pingcap/tiflow/engine/pkg/errors"
+	"github.com/pingcap/tiflow/engine/pkg/notifier"
 )
 
 // Re-export types for public use
@@ -56,6 +57,8 @@ type TaskRunner struct {
 	taskCount atomic.Int64
 
 	clock clock.Clock
+
+	taskStopNotifier *notifier.Notifier[RunnableID]
 }
 
 const (
@@ -88,9 +91,10 @@ func (e *taskEntry) EventLoop(ctx context.Context) error {
 // NewTaskRunner creates a new TaskRunner instance
 func NewTaskRunner(inQueueSize int, initConcurrency int) *TaskRunner {
 	return &TaskRunner{
-		inQueue:       make(chan *internal.RunnableContainer, inQueueSize),
-		initQuotaSema: semaphore.NewWeighted(int64(initConcurrency)),
-		clock:         clock.New(),
+		inQueue:          make(chan *internal.RunnableContainer, inQueueSize),
+		initQuotaSema:    semaphore.NewWeighted(int64(initConcurrency)),
+		clock:            clock.New(),
+		taskStopNotifier: notifier.NewNotifier[RunnableID](),
 	}
 }
 
@@ -176,6 +180,7 @@ func (r *TaskRunner) cancelAll() {
 	})
 	r.cancelMu.Unlock()
 
+	r.taskStopNotifier.Close()
 	r.wg.Wait()
 }
 
@@ -246,7 +251,7 @@ func (r *TaskRunner) onNewTask(ctx context.Context, task *internal.RunnableConta
 				zap.Error(err),
 				zap.Int64("runtime-task-count", r.taskCount.Load()))
 			t.OnStopped()
-
+			r.taskStopNotifier.Notify(t.ID())
 			if _, ok := r.tasks.LoadAndDelete(t.ID()); !ok {
 				log.L().Panic("Task does not exist", zap.String("id", t.ID()))
 			}
@@ -271,4 +276,9 @@ func (r *TaskRunner) onNewTask(ctx context.Context, task *internal.RunnableConta
 // TaskCount returns current task count
 func (r *TaskRunner) TaskCount() int64 {
 	return r.taskCount.Load()
+}
+
+// TaskStopReceiver returns a *notifier.Notifier to notify when task is stopped.
+func (r *TaskRunner) TaskStopReceiver() *notifier.Receiver[RunnableID] {
+	return r.taskStopNotifier.NewReceiver()
 }
