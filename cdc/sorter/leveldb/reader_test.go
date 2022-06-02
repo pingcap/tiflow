@@ -315,7 +315,7 @@ func prepareTxnData(
 ) db.DB {
 	cfg := config.GetDefaultServerConfig().Clone().Debug.DB
 	db, err := db.OpenPebble(context.Background(), 1, t.TempDir(), cfg,
-		db.WithTablePropertyCollectors())
+		db.WithTableCRTsCollectors())
 	require.Nil(t, err)
 	wb := db.Batch(0)
 	for i := 1; i < txnCount+1; i++ { // txns.

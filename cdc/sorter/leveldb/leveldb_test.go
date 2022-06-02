@@ -46,7 +46,7 @@ func TestMaybeWrite(t *testing.T) {
 	cfg := config.GetDefaultServerConfig().Clone().Debug.DB
 	cfg.Count = 1
 
-	db, err := db.OpenPebble(ctx, 1, t.TempDir(), cfg, db.WithTablePropertyCollectors())
+	db, err := db.OpenPebble(ctx, 1, t.TempDir(), cfg, db.WithTableCRTsCollectors())
 	require.Nil(t, err)
 	closedWg := new(sync.WaitGroup)
 	compact := NewCompactScheduler(actor.NewRouter[message.Task](t.Name()))
@@ -93,7 +93,7 @@ func TestCompact(t *testing.T) {
 	cfg.Count = 1
 
 	id := 1
-	db, err := db.OpenPebble(ctx, id, t.TempDir(), cfg, db.WithTablePropertyCollectors())
+	db, err := db.OpenPebble(ctx, id, t.TempDir(), cfg, db.WithTableCRTsCollectors())
 	require.Nil(t, err)
 	closedWg := new(sync.WaitGroup)
 	compactRouter := actor.NewRouter[message.Task](t.Name())
@@ -170,7 +170,7 @@ func TestPutReadDelete(t *testing.T) {
 	cfg := config.GetDefaultServerConfig().Clone().Debug.DB
 	cfg.Count = 1
 
-	db, err := db.OpenPebble(ctx, 1, t.TempDir(), cfg, db.WithTablePropertyCollectors())
+	db, err := db.OpenPebble(ctx, 1, t.TempDir(), cfg, db.WithTableCRTsCollectors())
 	require.Nil(t, err)
 	closedWg := new(sync.WaitGroup)
 	compact := NewCompactScheduler(actor.NewRouter[message.Task](t.Name()))
@@ -238,7 +238,7 @@ func TestAcquireIterators(t *testing.T) {
 	cfg := config.GetDefaultServerConfig().Clone().Debug.DB
 	cfg.Count = 1
 
-	db, err := db.OpenPebble(ctx, 1, t.TempDir(), cfg, db.WithTablePropertyCollectors())
+	db, err := db.OpenPebble(ctx, 1, t.TempDir(), cfg, db.WithTableCRTsCollectors())
 	require.Nil(t, err)
 	closedWg := new(sync.WaitGroup)
 
@@ -327,7 +327,7 @@ func TestModelChecking(t *testing.T) {
 	cfg := config.GetDefaultServerConfig().Clone().Debug.DB
 	cfg.Count = 1
 
-	db, err := db.OpenPebble(ctx, 1, t.TempDir(), cfg, db.WithTablePropertyCollectors())
+	db, err := db.OpenPebble(ctx, 1, t.TempDir(), cfg, db.WithTableCRTsCollectors())
 	require.Nil(t, err)
 	closedWg := new(sync.WaitGroup)
 	compact := NewCompactScheduler(actor.NewRouter[message.Task](t.Name()))
@@ -415,7 +415,7 @@ func TestContextCancel(t *testing.T) {
 	cfg := config.GetDefaultServerConfig().Clone().Debug.DB
 	cfg.Count = 1
 
-	db, err := db.OpenPebble(ctx, 1, t.TempDir(), cfg, db.WithTablePropertyCollectors())
+	db, err := db.OpenPebble(ctx, 1, t.TempDir(), cfg, db.WithTableCRTsCollectors())
 	require.Nil(t, err)
 	closedWg := new(sync.WaitGroup)
 	compact := NewCompactScheduler(actor.NewRouter[message.Task](t.Name()))

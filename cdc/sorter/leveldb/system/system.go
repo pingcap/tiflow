@@ -140,7 +140,7 @@ func (s *System) Start(ctx context.Context) error {
 		// Open db.
 		db, err := db.OpenPebble(ctx, id, s.dir, s.cfg,
 			db.WithCache(int(memInBytePerDB)),
-			db.WithTablePropertyCollectors())
+			db.WithTableCRTsCollectors())
 		if err != nil {
 			return errors.Trace(err)
 		}

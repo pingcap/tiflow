@@ -57,9 +57,9 @@ func WithCache(memInByte int) Option {
 	}
 }
 
-// WithTablePropertyCollectors can be used to filter out useless SSTables when
+// WithTableCRTsCollectors can be used to filter out useless SSTables when
 // iterating with a given timestamp range.
-func WithTablePropertyCollectors() Option {
+func WithTableCRTsCollectors() Option {
 	return func(o *pebble.Options) {
 		o.TablePropertyCollectors = append(o.TablePropertyCollectors,
 			func() pebble.TablePropertyCollector {
@@ -71,9 +71,7 @@ func WithTablePropertyCollectors() Option {
 // TODO: Update DB config once we switch to pebble,
 //       as some configs are not applicable to pebble.
 func buildPebbleOption(
-	id int,
-	cfg *config.DBConfig,
-	opts ...Option,
+	id int, cfg *config.DBConfig, opts ...Option,
 ) (pebble.Options, *writeStall) {
 	var option pebble.Options
 	for _, opt := range opts {

@@ -43,7 +43,7 @@ func TestCompactorPoll(t *testing.T) {
 	cfg := config.GetDefaultServerConfig().Clone().Debug.DB
 	cfg.Count = 1
 
-	db, err := db.OpenPebble(ctx, 1, t.TempDir(), cfg, db.WithTablePropertyCollectors())
+	db, err := db.OpenPebble(ctx, 1, t.TempDir(), cfg, db.WithTableCRTsCollectors())
 	require.Nil(t, err)
 	mockDB := mockCompactDB{DB: db, compact: make(chan struct{}, 1)}
 	closedWg := new(sync.WaitGroup)
@@ -99,7 +99,7 @@ func TestComactorContextCancel(t *testing.T) {
 	cfg := config.GetDefaultServerConfig().Clone().Debug.DB
 	cfg.Count = 1
 
-	db, err := db.OpenPebble(ctx, 1, t.TempDir(), cfg, db.WithTablePropertyCollectors())
+	db, err := db.OpenPebble(ctx, 1, t.TempDir(), cfg, db.WithTableCRTsCollectors())
 	require.Nil(t, err)
 	closedWg := new(sync.WaitGroup)
 	ldb, _, err := NewCompactActor(0, db, closedWg, cfg)
