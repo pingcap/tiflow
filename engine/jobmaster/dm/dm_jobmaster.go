@@ -96,8 +96,8 @@ func (jm *JobMaster) initComponents(ctx context.Context) error {
 	jm.metadata = metadata.NewMetaData(jm.ID(), jm.MetaKVClient())
 	jm.taskManager = NewTaskManager(taskStatus, jm.metadata.JobStore(), jm.messageAgent)
 	jm.workerManager = NewWorkerManager(workerStatus, jm.metadata.JobStore(), jm, jm.messageAgent, jm.checkpointAgent)
-	// register jobmanager sender
-	return jm.messageAgent.UpdateSender(libMetadata.JobManagerUUID, jm)
+	// register jobmanager client
+	return jm.messageAgent.UpdateClient(libMetadata.JobManagerUUID, jm)
 }
 
 // InitImpl implements JobMasterImpl.InitImpl
@@ -149,7 +149,7 @@ func (jm *JobMaster) OnWorkerOnline(worker lib.WorkerHandle) error {
 
 	jm.taskManager.UpdateTaskStatus(taskStatus)
 	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus(taskStatus.Task, taskStatus.Unit, worker.ID(), runtime.WorkerOnline))
-	return jm.messageAgent.UpdateSender(taskStatus.Task, worker.Unwrap())
+	return jm.messageAgent.UpdateClient(taskStatus.Task, worker.Unwrap())
 }
 
 // OnWorkerOffline implements JobMasterImpl.OnWorkerOffline
@@ -165,7 +165,7 @@ func (jm *JobMaster) OnWorkerOffline(worker lib.WorkerHandle, reason error) erro
 	}
 	jm.taskManager.UpdateTaskStatus(runtime.NewOfflineStatus(taskStatus.Task))
 	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus(taskStatus.Task, taskStatus.Unit, worker.ID(), runtime.WorkerOffline))
-	if err := jm.messageAgent.UpdateSender(taskStatus.Task, nil); err != nil {
+	if err := jm.messageAgent.UpdateClient(taskStatus.Task, nil); err != nil {
 		return err
 	}
 	jm.workerManager.SetNextCheckTime(time.Now())
@@ -176,7 +176,7 @@ func (jm *JobMaster) onWorkerFinished(taskStatus runtime.TaskStatus, worker lib.
 	log.L().Info("on worker finished", zap.String("id", jm.workerID), zap.String("worker_id", worker.ID()))
 	jm.taskManager.UpdateTaskStatus(taskStatus)
 	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus(taskStatus.Task, taskStatus.Unit, worker.ID(), runtime.WorkerFinished))
-	if err := jm.messageAgent.UpdateSender(taskStatus.Task, nil); err != nil {
+	if err := jm.messageAgent.UpdateClient(taskStatus.Task, nil); err != nil {
 		return err
 	}
 	jm.workerManager.SetNextCheckTime(time.Now())
@@ -232,8 +232,8 @@ outer:
 		}
 	}
 
-	// unregister jobmanager sender
-	if err := jm.messageAgent.UpdateSender(libMetadata.JobManagerUUID, nil); err != nil {
+	// unregister jobmanager client
+	if err := jm.messageAgent.UpdateClient(libMetadata.JobManagerUUID, nil); err != nil {
 		return err
 	}
 	return jm.messageAgent.Close(ctx)
