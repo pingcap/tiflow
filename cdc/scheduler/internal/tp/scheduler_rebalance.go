@@ -29,6 +29,8 @@ var _ scheduler = &rebalanceScheduler{}
 type rebalanceScheduler struct {
 	rebalance bool
 	random    *rand.Rand
+
+	tasks map[model.TableID]*scheduleTask
 }
 
 func newRebalanceScheduler() *rebalanceScheduler {
@@ -49,6 +51,13 @@ func (r *rebalanceScheduler) Schedule(
 	replications map[model.TableID]*ReplicationSet,
 ) []*scheduleTask {
 	result := make([]*scheduleTask, 0)
+
+	// rebalance is not triggered, or there is still some pending task,
+	// do not generate new tasks.
+	if !r.rebalance || len(r.tasks) != 0 {
+		return result
+	}
+
 	captureNum := len(captures)
 	if captureNum == 0 {
 		return result
@@ -140,12 +149,21 @@ func (r *rebalanceScheduler) Schedule(
 			log.Panic("tpscheduler: rebalance meet unexpected min workload " +
 				"when try to the the target capture")
 		}
+
 		task := &scheduleTask{
 			moveTable: &moveTable{
 				TableID:     tableID,
 				DestCapture: target,
 			},
+			accept: func() {
+				delete(r.tasks, tableID)
+				if len(r.tasks) == 0 {
+					r.rebalance = false
+				}
+			},
 		}
+		r.tasks[tableID] = task
+
 		result = append(result, task)
 
 		tablesPerCapture[target].add(tableID)
