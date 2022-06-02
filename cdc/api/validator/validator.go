@@ -264,7 +264,7 @@ func VerifyCreateChangefeedInfo(
 	capture *capture.Capture,
 ) error {
 	// verify credential and pdAddrs
-	grpcTLSOption, err := info.CredentialConfig.ToGRPCDialOption()
+	grpcTLSOption, err := info.Credential.ToGRPCDialOption()
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -272,7 +272,7 @@ func VerifyCreateChangefeedInfo(
 		return cerror.ErrAPIInvalidParam.GenWithStackByCause("can not create a changefeed with empty pdAddrs")
 	}
 	pdClient, err := pd.NewClientWithContext(
-		ctx, info.PDAddrs, info.CredentialConfig.PDSecurityOption(),
+		ctx, info.PDAddrs, info.Credential.PDSecurityOption(),
 		pd.WithGRPCDialOptions(
 			grpcTLSOption,
 			grpc.WithBlock(),
@@ -360,7 +360,7 @@ func VerifyCreateChangefeedInfo(
 	info.Engine = sortEngine
 
 	// verify tables
-	kvStorage, err := kv.CreateTiStore(strings.Join(info.PDAddrs, ","), &info.CredentialConfig)
+	kvStorage, err := kv.CreateTiStore(strings.Join(info.PDAddrs, ","), &info.Credential)
 	if err != nil {
 		return err
 	}

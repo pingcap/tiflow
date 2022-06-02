@@ -146,8 +146,12 @@ type ChangeFeedInfo struct {
 	SyncPointInterval time.Duration `json:"sync-point-interval"`
 	CreatorVersion    string        `json:"creator-version"`
 
-	PDAddrs          []string            `json:"pd-addrs"`
-	CredentialConfig security.Credential `json:"credential-config"`
+	PDConfig PDConfig `json:"pd-config"`
+}
+
+type PDConfig struct {
+	PDAddrs    []string            `json:"pd-addrs"`
+	Credential security.Credential `json:"credential-config"`
 }
 
 var defaultChangefeedInfo = &ChangeFeedInfo{
@@ -157,6 +161,7 @@ var defaultChangefeedInfo = &ChangeFeedInfo{
 	Config:            config.GetDefaultReplicaConfig(),
 	SyncPointEnabled:  false,
 	SyncPointInterval: 10 * time.Minute,
+	PDConfig:          PDConfig{},
 }
 
 type ChangefeedInfoForAPI ChangeFeedInfo
