@@ -1189,7 +1189,7 @@ func (s *eventFeedSession) receiveFromStream(
 
 		failpoint.Inject("kvClientRegionReentrantError", func(op failpoint.Value) {
 			if op.(string) == "error" {
-                _ = worker.retrieveEvents(ctx, []*regionStatefulEvent{nil})
+				_ = worker.retrieveEvents(ctx, []*regionStatefulEvent{nil})
 			}
 		})
 		failpoint.Inject("kvClientStreamRecvError", func(msg failpoint.Value) {
