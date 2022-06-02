@@ -167,9 +167,27 @@ func (s *Server) Run(ctx context.Context) error {
 
 	s.capture = capture.NewCapture(s.pdClient, s.kvStorage, s.etcdClient)
 
+<<<<<<< HEAD
 	err = s.startStatusHTTP()
 	if err != nil {
 		return err
+=======
+	// discard gin log output
+	gin.DefaultWriter = io.Discard
+	router := gin.New()
+	// add gin.Recovery() to handle unexpected panic
+	router.Use(gin.Recovery())
+	// router.
+	// Register APIs.
+	RegisterRoutes(router, s.capture, registry)
+
+	// No need to configure TLS because it is already handled by `s.tcpServer`.
+	// Add ReadTimeout and WriteTimeout to avoid some abnormal connections never close.
+	s.statusServer = &http.Server{
+		Handler:      router,
+		ReadTimeout:  httpConnectionTimeout,
+		WriteTimeout: httpConnectionTimeout,
+>>>>>>> c4a5146fa (capture (ticdc): fix http status panic (#5666))
 	}
 
 	return s.run(ctx)
