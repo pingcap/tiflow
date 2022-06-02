@@ -106,8 +106,8 @@ func (w *dmWorker) InitImpl(ctx context.Context) error {
 	if err := w.messageAgent.Init(ctx); err != nil {
 		return err
 	}
-	// register jobmaster sender
-	if err := w.messageAgent.UpdateSender(w.masterID, w); err != nil {
+	// register jobmaster client
+	if err := w.messageAgent.UpdateClient(w.masterID, w); err != nil {
 		return err
 	}
 	if w.cfg.Mode != dmconfig.ModeIncrement {
@@ -149,8 +149,8 @@ func (w *dmWorker) OnMasterMessage(topic p2p.Topic, message p2p.MessageValue) er
 
 // CloseImpl implements lib.WorkerImpl.CloseImpl
 func (w *dmWorker) CloseImpl(ctx context.Context) error {
-	// unregister jobmaster sender
-	if err := w.messageAgent.UpdateSender(w.masterID, nil); err != nil {
+	// unregister jobmaster client
+	if err := w.messageAgent.UpdateClient(w.masterID, nil); err != nil {
 		return err
 	}
 	w.unitHolder.Close(ctx)

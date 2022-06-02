@@ -144,14 +144,14 @@ func (jm *JobManagerImplV2) DebugJob(ctx context.Context, req *pb.DebugJobReques
 			}}
 		}
 	}()
-	if err := messageAgent.UpdateSender(req.JobIdStr, handle); err != nil {
+	if err := messageAgent.UpdateClient(req.JobIdStr, handle); err != nil {
 		return &pb.DebugJobResponse{Err: &pb.Error{
 			Code:    pb.ErrorCode_UnknownError,
 			Message: err.Error(),
 		}}
 	}
 	defer func() {
-		if err := messageAgent.UpdateSender(req.JobIdStr, nil); err != nil {
+		if err := messageAgent.UpdateClient(req.JobIdStr, nil); err != nil {
 			resp = &pb.DebugJobResponse{Err: &pb.Error{
 				Code:    pb.ErrorCode_UnknownError,
 				Message: err.Error(),
