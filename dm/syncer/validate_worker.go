@@ -24,6 +24,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/docker/go-units"
 	"github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
@@ -47,8 +48,8 @@ import (
 const (
 	workerChannelSize = 1000
 
-	MaxAccumulatedRowBeforeValidate = 1000 // todo: make it configurable
-	queryTimeout                    = time.Minute
+	maxAccumulatedRow = config.ValidatorMaxAccumulatedRow
+	queryTimeout      = time.Minute
 )
 
 type validateFailedType int
@@ -77,9 +78,12 @@ type validateWorker struct {
 	rowChangeCh        chan *rowValidationJob
 	batchSize          int
 	rowErrorDelayInSec int64
+	maxPendingRowSize  int64
+	maxPendingRowCount int64
 
 	pendingChangesMap map[string]*tableChangeJob
 	pendingRowCounts  []int64
+	pendingRowSize    int64
 	accuRowCount      atomic.Int64 // accumulated row count from channel
 	errorRows         []*validateFailedRow
 }
@@ -87,6 +91,8 @@ type validateWorker struct {
 func newValidateWorker(v *DataValidator, id int) *validateWorker {
 	workerLog := v.L.WithFields(zap.Int("id", id))
 	rowErrorDelayInSec := int64(v.cfg.ValidatorCfg.RowErrorDelay.Duration.Seconds())
+	// skip error, already check it in cfg.Adjust
+	maxPendingRowSize, _ := units.RAMInBytes(v.cfg.ValidatorCfg.MaxPendingRowSize)
 	return &validateWorker{
 		cfg:                v.cfg.ValidatorCfg,
 		ctx:                v.ctx,
@@ -97,6 +103,8 @@ func newValidateWorker(v *DataValidator, id int) *validateWorker {
 		rowChangeCh:        make(chan *rowValidationJob, workerChannelSize),
 		batchSize:          v.cfg.ValidatorCfg.BatchQuerySize,
 		rowErrorDelayInSec: rowErrorDelayInSec,
+		maxPendingRowSize:  maxPendingRowSize,
+		maxPendingRowCount: int64(v.cfg.ValidatorCfg.MaxPendingRowCount),
 
 		pendingChangesMap: make(map[string]*tableChangeJob),
 		pendingRowCounts:  make([]int64, rowChangeTypeCount),
@@ -123,7 +131,7 @@ outer:
 			vw.updateRowChange(change)
 			vw.accuRowCount.Add(1)
 			// reduce number of pending rows
-			if vw.accuRowCount.Load() >= MaxAccumulatedRowBeforeValidate {
+			if vw.accuRowCount.Load() >= maxAccumulatedRow {
 				vw.validateTableChange()
 				validatedBeforeTimer = true
 			}
@@ -152,7 +160,7 @@ func (vw *validateWorker) updateRowChange(job *rowValidationJob) {
 		vw.pendingChangesMap[fullTableName] = change
 	}
 	if change.addOrUpdate(job) {
-		vw.incrPendingRowCount(job.Tp)
+		vw.newJobAdded(job)
 	}
 }
 
@@ -207,6 +215,16 @@ func (vw *validateWorker) validateTableChange() {
 	}
 
 	vw.updatePendingAndErrorRows(failedChanges)
+
+	// check whether we need to stop validation
+	pendingRowSize := vw.validator.getPendingRowSize()
+	allPendingRowCount := vw.validator.getAllPendingRowCount()
+	if pendingRowSize > vw.maxPendingRowSize || allPendingRowCount > vw.maxPendingRowCount {
+		vw.validator.sendError(terror.ErrValidatorTooMuchPending.Generate(
+			pendingRowSize, vw.maxPendingRowSize,
+			allPendingRowCount, vw.maxPendingRowCount),
+		)
+	}
 }
 
 func (vw *validateWorker) updatePendingAndErrorRows(failedChanges map[string]map[string]*validateFailedRow) {
@@ -214,6 +232,7 @@ func (vw *validateWorker) updatePendingAndErrorRows(failedChanges map[string]map
 	defer vw.Unlock()
 
 	newPendingCnt := make([]int64, rowChangeTypeCount)
+	newPendingRowSize := int64(0)
 	allErrorRows := make([]*validateFailedRow, 0)
 	newPendingChanges := make(map[string]*tableChangeJob)
 	validateTS := time.Now().Unix()
@@ -222,7 +241,7 @@ func (vw *validateWorker) updatePendingAndErrorRows(failedChanges map[string]map
 		newPendingRows := make(map[string]*rowValidationJob)
 		for pk, row := range rows {
 			job := tblChange.jobs[pk]
-			if vw.validator.hasReachedSyncer() {
+			if vw.validator.isMarkErrorStarted() {
 				job.FailedCnt++
 				if job.FirstValidateTS == 0 {
 					job.FirstValidateTS = validateTS
@@ -234,10 +253,12 @@ func (vw *validateWorker) updatePendingAndErrorRows(failedChanges map[string]map
 				} else {
 					newPendingRows[pk] = job
 					newPendingCnt[job.Tp]++
+					newPendingRowSize += int64(job.size)
 				}
 			} else {
 				newPendingRows[pk] = job
 				newPendingCnt[job.Tp]++
+				newPendingRowSize += int64(job.size)
 			}
 		}
 		if len(newPendingRows) > 0 {
@@ -249,7 +270,7 @@ func (vw *validateWorker) updatePendingAndErrorRows(failedChanges map[string]map
 
 	vw.L.Debug("pending row count (insert, update, delete)", zap.Int64s("before", vw.pendingRowCounts),
 		zap.Int64s("after", newPendingCnt))
-	vw.setPendingRowCounts(newPendingCnt)
+	vw.setPendingRowCountsAndSize(newPendingCnt, newPendingRowSize)
 	vw.pendingChangesMap = newPendingChanges
 	vw.errorRows = append(vw.errorRows, allErrorRows...)
 	vw.validator.incrErrorRowCount(len(allErrorRows))
@@ -420,17 +441,25 @@ func (vw *validateWorker) resetErrorRows() {
 	vw.errorRows = make([]*validateFailedRow, 0)
 }
 
-func (vw *validateWorker) incrPendingRowCount(tp rowChangeJobType) {
+func (vw *validateWorker) newJobAdded(job *rowValidationJob) {
+	tp := job.Tp
 	vw.pendingRowCounts[tp]++
 	vw.validator.addPendingRowCount(tp, 1)
+
+	vw.pendingRowSize += int64(job.size)
+	vw.validator.addPendingRowSize(int64(job.size))
 }
 
-func (vw *validateWorker) setPendingRowCounts(newCounts []int64) {
+func (vw *validateWorker) setPendingRowCountsAndSize(newCounts []int64, newSize int64) {
 	for tp, val := range newCounts {
 		diff := val - vw.pendingRowCounts[tp]
 		vw.pendingRowCounts[tp] = val
 		vw.validator.addPendingRowCount(rowChangeJobType(tp), diff)
 	}
+
+	diff := newSize - vw.pendingRowSize
+	vw.pendingRowSize = newSize
+	vw.validator.addPendingRowSize(diff)
 }
 
 type validateCompareContext struct {
@@ -450,7 +479,7 @@ func (c *validateCompareContext) compareData(key string, sourceData, targetData 
 		str1, str2 := data1.String, data2.String
 		if str1 == str2 {
 			continue
-		} else if column.FieldType.Tp == tidbmysql.TypeFloat || column.FieldType.Tp == tidbmysql.TypeDouble {
+		} else if column.FieldType.GetType() == tidbmysql.TypeFloat || column.FieldType.GetType() == tidbmysql.TypeDouble {
 			// source and target data have different precision?
 			num1, err1 := strconv.ParseFloat(str1, 64)
 			num2, err2 := strconv.ParseFloat(str2, 64)

@@ -336,7 +336,7 @@ func (t *testRelaySuite) TestListener(c *C) {
 
 // genBinlogEventsWithGTIDs generates some binlog events used by testFileUtilSuite and testFileWriterSuite.
 // now, its generated events including 3 DDL and 10 DML.
-func genBinlogEventsWithGTIDs(c *C, flavor string, previousGTIDSet, latestGTID1, latestGTID2 gtid.Set) (*event.Generator, []*replication.BinlogEvent, []byte) {
+func genBinlogEventsWithGTIDs(c *C, flavor string, previousGTIDSet, latestGTID1, latestGTID2 gmysql.GTIDSet) (*event.Generator, []*replication.BinlogEvent, []byte) {
 	var (
 		serverID  uint32 = 11
 		latestPos uint32
@@ -459,7 +459,7 @@ func (t *testRelaySuite) TestHandleEvent(c *C) {
 		lm := r.meta.(*LocalMeta)
 		c.Assert(lm.BinLogName, Equals, "mysql-bin.666888")
 		c.Assert(lm.BinLogPos, Equals, uint32(1234))
-		filename := filepath.Join(lm.baseDir, lm.currentUUID, utils.MetaFilename)
+		filename := filepath.Join(lm.baseDir, lm.currentSubDir, utils.MetaFilename)
 		lm2 := &LocalMeta{}
 		_, err2 := toml.DecodeFile(filename, lm2)
 		c.Assert(err2, IsNil)
@@ -468,11 +468,11 @@ func (t *testRelaySuite) TestHandleEvent(c *C) {
 	}
 	{
 		lm := r.meta.(*LocalMeta)
-		backupUUID := lm.currentUUID
-		lm.currentUUID = "not exist"
+		backupUUID := lm.currentSubDir
+		lm.currentSubDir = "not exist"
 		err = r.handleEvents(context.Background(), reader2, parser2)
 		c.Assert(os.IsNotExist(errors.Cause(err)), Equals, true)
-		lm.currentUUID = backupUUID
+		lm.currentSubDir = backupUUID
 	}
 
 	// reader return valid event
@@ -514,7 +514,7 @@ func (t *testRelaySuite) TestHandleEvent(c *C) {
 	_, gs = r.meta.GTID()
 	c.Assert(pos.Name, Equals, binlogPos.Name)
 	c.Assert(pos.Pos, Equals, queryEv.Header.LogPos)
-	c.Assert(gs.Origin(), DeepEquals, queryEv2.GSet) // got GTID sets
+	c.Assert(gs, DeepEquals, queryEv2.GSet) // got GTID sets
 
 	// transformer return ignorable for the event
 	reader2.err = nil
@@ -702,12 +702,12 @@ func (t *testRelaySuite) TestPreprocessEvent(c *C) {
 	query := []byte("CREATE TABLE test_tbl (c1 INT)")
 	ev, err = event.GenQueryEvent(header, latestPos, 0, 0, 0, nil, schema, query)
 	c.Assert(err, IsNil)
-	ev.Event.(*replication.QueryEvent).GSet = gtidSet.Origin() // set GTIDs manually
+	ev.Event.(*replication.QueryEvent).GSet = gtidSet // set GTIDs manually
 	cases = append(cases, Case{
 		event: ev,
 		result: preprocessResult{
 			LogPos:      ev.Header.LogPos,
-			GTIDSet:     gtidSet.Origin(),
+			GTIDSet:     gtidSet,
 			CanSaveGTID: true,
 		},
 	})
@@ -727,12 +727,12 @@ func (t *testRelaySuite) TestPreprocessEvent(c *C) {
 	xid := uint64(135)
 	ev, err = event.GenXIDEvent(header, latestPos, xid)
 	c.Assert(err, IsNil)
-	ev.Event.(*replication.XIDEvent).GSet = gtidSet.Origin() // set GTIDs manually
+	ev.Event.(*replication.XIDEvent).GSet = gtidSet // set GTIDs manually
 	cases = append(cases, Case{
 		event: ev,
 		result: preprocessResult{
 			LogPos:      ev.Header.LogPos,
-			GTIDSet:     gtidSet.Origin(),
+			GTIDSet:     gtidSet,
 			CanSaveGTID: true,
 		},
 	})

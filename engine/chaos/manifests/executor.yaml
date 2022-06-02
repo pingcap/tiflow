@@ -1,0 +1,76 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: executor
+  labels:
+    app: executor
+spec:
+  ports:
+    - name: executor
+      port: 10241
+      targetPort: 10241
+  selector:
+    app: executor
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: executor
+  labels:
+    app: executor
+spec:
+  selector:
+    matchLabels:
+      app: executor
+  serviceName: executor
+  replicas: 4
+  podManagementPolicy: Parallel
+  template:
+    metadata:
+      labels:
+        app: executor
+    spec:
+      containers:
+        - name: executor
+          image: dataflow:chaos # build this image in GitHub action workflow
+          imagePullPolicy: IfNotPresent
+          volumeMounts:
+            - mountPath: /log
+              name: executor-log
+          env:
+            - name: MY_POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: MY_POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          ports:
+            - containerPort: 10241
+              name: executor
+          command:
+            - "/df-executor"
+            - "--name=$(MY_POD_NAME)"
+            - "--worker-addr=0.0.0.0:10241"
+            - "--advertise-addr=$(MY_POD_NAME).executor.$(MY_POD_NAMESPACE):10241"
+            - "--join=server-master-0.server-master.$(MY_POD_NAMESPACE):10240,server-master-1.server-master.$(MY_POD_NAMESPACE):10240,server-master-2.server-master.$(MY_POD_NAMESPACE):10240"
+            - "--config=/conf/executor.toml"
+            - "--log-file=/log/$(MY_POD_NAME).log"
+          readinessProbe:
+            httpGet:
+              port: 10241
+              path: /metrics # TODO: use a real probe url
+              scheme: HTTP
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 5
+  volumeClaimTemplates:
+    - metadata:
+        name: executor-log
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 1Gi

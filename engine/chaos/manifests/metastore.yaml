@@ -1,0 +1,106 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: metastore
+  labels:
+    app: metastore
+spec:
+  ports:
+    - name: port-mysql # note the name is no more than 15 characters
+      port: 3306
+      targetPort: 3306
+    - name: port-etcd # note the name is no more than 15 characters
+      port: 12479
+      targetPort: 2479
+  selector:
+    app: metastore
+
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: metastore-framework-mysql
+  labels:
+    app: metastore
+spec:
+  selector:
+    matchLabels:
+      app: metastore
+  serviceName: metastore
+  replicas: 1
+  podManagementPolicy: Parallel
+  template:
+    metadata:
+      labels:
+        app: metastore
+    spec:
+      containers:
+        - name: metastore-framework-mysql
+          image: mysql:5.7
+          imagePullPolicy: IfNotPresent
+          volumeMounts:
+            - mountPath: "/var/lib/mysql"
+              name: metastore-framework-mysql
+          env:
+            - name: MYSQL_ALLOW_EMPTY_PASSWORD
+              value: "true"
+          ports:
+            - containerPort: 3306
+              name: port-mysql
+          args:
+            - "--server-id=1"
+  volumeClaimTemplates:
+    - metadata:
+        name: metastore-framework-mysql
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 5Gi
+
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: metastore-user-etcd
+  labels:
+    app: metastore
+spec:
+  selector:
+    matchLabels:
+      app: metastore
+  serviceName: metastore
+  replicas: 1
+  podManagementPolicy: Parallel
+  template:
+    metadata:
+      labels:
+        app: metastore
+    spec:
+      containers:
+        - name: metastore-user-etcd
+          image: quay.io/coreos/etcd:v3.5.4
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 2479
+              name: port-etcd
+          command:
+            - "etcd"
+          args:
+            - "--name=metastore-user-etcd"
+            - "--advertise-client-urls=http://0.0.0.0:2479"
+            - "--listen-client-urls=http://0.0.0.0:2479"
+            - "--listen-peer-urls=http://127.0.0.1:2480"
+            - "--initial-advertise-peer-urls=http://127.0.0.1:2480"
+            - "--initial-cluster=metastore-user-etcd=http://127.0.0.1:2480"
+            - "--initial-cluster-state=new"
+  volumeClaimTemplates:
+    - metadata:
+        name: metastore-user-etcd
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 5Gi

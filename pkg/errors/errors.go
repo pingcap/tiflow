@@ -244,6 +244,10 @@ var (
 		"invalid topic expression",
 		errors.RFCCodeText("CDC:ErrKafkaTopicExprInvalid"),
 	)
+	ErrKafkaBrokerConfigNotFound = errors.Normalize(
+		"kafka broker config item not found",
+		errors.RFCCodeText("CDC:ErrKafkaBrokerConfigNotFound"),
+	)
 	ErrPulsarNewProducer = errors.Normalize(
 		"new pulsar producer",
 		errors.RFCCodeText("CDC:ErrPulsarNewProducer"),
@@ -324,8 +328,6 @@ var (
 		"MySQL worker panic",
 		errors.RFCCodeText("CDC:ErrMySQLWorkerPanic"),
 	)
-	ErrMQWorkerClosed = errors.Normalize("MQ worker has closed",
-		errors.RFCCodeText("CDC:ErrMQWorkerClosed"))
 	ErrAvroToEnvelopeError = errors.Normalize(
 		"to envelope failed",
 		errors.RFCCodeText("CDC:ErrAvroToEnvelopeError"),

@@ -49,7 +49,7 @@ var _ = Suite(&testReaderSuite{})
 
 type testReaderSuite struct {
 	lastPos  uint32
-	lastGTID gtid.Set
+	lastGTID gmysql.GTIDSet
 }
 
 func (t *testReaderSuite) SetUpSuite(c *C) {
@@ -70,7 +70,7 @@ func newBinlogReaderForTest(logger log.Logger, cfg *BinlogReaderConfig, notify b
 	if notify {
 		r.notifyCh <- struct{}{}
 	}
-	r.currentUUID = uuid
+	r.currentSubDir = uuid
 	return r
 }
 
@@ -123,7 +123,7 @@ func (t *testReaderSuite) TestParseFileBase(c *C) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// change to valid currentUUID
+	// change to valid currentSubDir
 	currentUUID := "b60868af-5a6f-11e9-9ea3-0242ac160006.000001"
 	relayDir := filepath.Join(baseDir, currentUUID)
 	fullPath := filepath.Join(relayDir, filename)
@@ -327,8 +327,8 @@ func (t *testReaderSuite) TestParseFileRelayNeedSwitchSubDir(c *C) {
 	c.Assert(err, IsNil)
 	t.createMetaFile(c, relayDir, filename, uint32(offset), notUsedGTIDSetStr)
 
-	r.uuids = []string{currentUUID, switchedUUID}
-	t.writeUUIDs(c, baseDir, r.uuids)
+	r.subDirs = []string{currentUUID, switchedUUID}
+	t.writeUUIDs(c, baseDir, r.subDirs)
 	err = os.MkdirAll(nextRelayDir, 0o700)
 	c.Assert(err, IsNil)
 	err = os.WriteFile(nextFullPath, replication.BinLogFileHeader, 0o600)
@@ -403,12 +403,12 @@ func (t *testReaderSuite) TestUpdateUUIDs(c *C) {
 		cfg     = &BinlogReaderConfig{RelayDir: baseDir, Flavor: gmysql.MySQLFlavor}
 		r       = newBinlogReaderForTest(log.L(), cfg, true, "")
 	)
-	c.Assert(r.uuids, HasLen, 0)
+	c.Assert(r.subDirs, HasLen, 0)
 
 	// index file not exists, got nothing
-	err := r.updateUUIDs()
+	err := r.updateSubDirs()
 	c.Assert(err, IsNil)
-	c.Assert(r.uuids, HasLen, 0)
+	c.Assert(r.subDirs, HasLen, 0)
 
 	// valid UUIDs in the index file, got them back
 	UUIDs := []string{
@@ -419,9 +419,9 @@ func (t *testReaderSuite) TestUpdateUUIDs(c *C) {
 	err = os.WriteFile(r.indexPath, uuidBytes, 0o600)
 	c.Assert(err, IsNil)
 
-	err = r.updateUUIDs()
+	err = r.updateSubDirs()
 	c.Assert(err, IsNil)
-	c.Assert(r.uuids, DeepEquals, UUIDs)
+	c.Assert(r.subDirs, DeepEquals, UUIDs)
 }
 
 func (t *testReaderSuite) TestStartSyncByPos(c *C) {
@@ -590,7 +590,7 @@ func (t *testReaderSuite) TestStartSyncByGTID(c *C) {
 		cfg             = &BinlogReaderConfig{RelayDir: baseDir, Flavor: gmysql.MySQLFlavor}
 		r               = newBinlogReaderForTest(log.L(), cfg, false, "")
 		lastPos         uint32
-		lastGTID        gtid.Set
+		lastGTID        gmysql.GTIDSet
 		previousGset, _ = gtid.ParserGTID(gmysql.MySQLFlavor, "")
 	)
 
@@ -702,11 +702,11 @@ func (t *testReaderSuite) TestStartSyncByGTID(c *C) {
 	}
 
 	for _, subDir := range testCase {
-		r.uuids = append(r.uuids, subDir.uuid)
+		r.subDirs = append(r.subDirs, subDir.uuid)
 	}
 
 	// write index file
-	uuidBytes := t.uuidListToBytes(c, r.uuids)
+	uuidBytes := t.uuidListToBytes(c, r.subDirs)
 	err := os.WriteFile(r.indexPath, uuidBytes, 0o600)
 	c.Assert(err, IsNil)
 
@@ -755,7 +755,7 @@ func (t *testReaderSuite) TestStartSyncByGTID(c *C) {
 
 	startGTID, err := gtid.ParserGTID(gmysql.MySQLFlavor, "")
 	c.Assert(err, IsNil)
-	s, err := r.StartSyncByGTID(startGTID.Origin().Clone())
+	s, err := r.StartSyncByGTID(startGTID.Clone())
 	c.Assert(err, IsNil)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -877,7 +877,7 @@ func (t *testReaderSuite) TestStartSyncError(c *C) {
 	c.Assert(err, ErrorMatches, ".*empty UUIDs not valid.*")
 	c.Assert(s, IsNil)
 
-	s, err = r.StartSyncByGTID(t.lastGTID.Origin().Clone())
+	s, err = r.StartSyncByGTID(t.lastGTID.Clone())
 	c.Assert(err, ErrorMatches, ".*no relay pos match gtid.*")
 	c.Assert(s, IsNil)
 
@@ -892,7 +892,7 @@ func (t *testReaderSuite) TestStartSyncError(c *C) {
 	c.Assert(err, ErrorMatches, fmt.Sprintf(".*%s.*not found.*", startPos.Name))
 	c.Assert(s, IsNil)
 
-	s, err = r.StartSyncByGTID(t.lastGTID.Origin().Clone())
+	s, err = r.StartSyncByGTID(t.lastGTID.Clone())
 	c.Assert(err, ErrorMatches, ".*no such file or directory.*")
 	c.Assert(s, IsNil)
 
@@ -904,7 +904,7 @@ func (t *testReaderSuite) TestStartSyncError(c *C) {
 	r.Close()
 
 	r.running = true
-	s, err = r.StartSyncByGTID(t.lastGTID.Origin().Clone())
+	s, err = r.StartSyncByGTID(t.lastGTID.Clone())
 	c.Assert(terror.ErrReaderAlreadyRunning.Equal(err), IsTrue)
 	c.Assert(s, IsNil)
 	r.Close()
@@ -1006,7 +1006,7 @@ func (t *testReaderSuite) TestReParseUsingGTID(c *C) {
 	c.Assert(err, IsNil)
 
 	// we use latestGTIDSet to start sync, which means we already received all binlog events, so expect no DML/DDL
-	s, err := r.StartSyncByGTID(latestGTIDSet.Origin())
+	s, err := r.StartSyncByGTID(latestGTIDSet)
 	c.Assert(err, IsNil)
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -1052,7 +1052,7 @@ func (t *testReaderSuite) TestReParseUsingGTID(c *C) {
 	wg.Wait()
 }
 
-func (t *testReaderSuite) genBinlogEvents(c *C, latestPos uint32, latestGTID gtid.Set) ([]*replication.BinlogEvent, uint32, gtid.Set) {
+func (t *testReaderSuite) genBinlogEvents(c *C, latestPos uint32, latestGTID gmysql.GTIDSet) ([]*replication.BinlogEvent, uint32, gmysql.GTIDSet) {
 	var (
 		header = &replication.EventHeader{
 			Timestamp: uint32(time.Now().Unix()),
@@ -1081,7 +1081,13 @@ func (t *testReaderSuite) genBinlogEvents(c *C, latestPos uint32, latestGTID gti
 	return events, latestPos, latestGTID
 }
 
-func (t *testReaderSuite) genEvents(c *C, eventTypes []replication.EventType, latestPos uint32, latestGTID gtid.Set, previousGset gtid.Set) ([]*replication.BinlogEvent, uint32, gtid.Set, gtid.Set) {
+func (t *testReaderSuite) genEvents(
+	c *C,
+	eventTypes []replication.EventType,
+	latestPos uint32,
+	latestGTID gmysql.GTIDSet,
+	previousGset gmysql.GTIDSet,
+) ([]*replication.BinlogEvent, uint32, gmysql.GTIDSet, gmysql.GTIDSet) {
 	var (
 		header = &replication.EventHeader{
 			Timestamp: uint32(time.Now().Unix()),
@@ -1089,7 +1095,7 @@ func (t *testReaderSuite) genEvents(c *C, eventTypes []replication.EventType, la
 		}
 		events    = make([]*replication.BinlogEvent, 0, 10)
 		pGset     = previousGset.Clone()
-		originSet = pGset.Origin()
+		originSet = pGset
 	)
 
 	if latestPos <= 4 { // generate a FormatDescriptionEvent if needed
@@ -1144,9 +1150,7 @@ func (t *testReaderSuite) genEvents(c *C, eventTypes []replication.EventType, la
 			latestPos = ev.Header.LogPos
 		}
 	}
-	err := pGset.Set(originSet)
-	c.Assert(err, IsNil)
-	return events, latestPos, latestGTID, pGset
+	return events, latestPos, latestGTID, originSet
 }
 
 func (t *testReaderSuite) purgeStreamer(c *C, s reader.Streamer) {
@@ -1441,7 +1445,7 @@ func (t *testReaderSuite) TestwaitBinlogChanged(c *C) {
 	{
 		cfg := &BinlogReaderConfig{RelayDir: relayDir, Flavor: gmysql.MySQLFlavor}
 		r := newBinlogReaderForTest(log.L(), cfg, true, "xxx.000001")
-		t.setActiveRelayLog(r.relay, r.currentUUID, relayFiles[1], size)
+		t.setActiveRelayLog(r.relay, r.currentSubDir, relayFiles[1], size)
 		state := t.createBinlogFileParseState(c, subDir, relayFiles[1], 0, true)
 		needSwitch, reParse, err := r.waitBinlogChanged(context.Background(), state)
 		c.Assert(needSwitch, IsFalse)

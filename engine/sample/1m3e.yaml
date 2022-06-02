@@ -1,0 +1,118 @@
+version: "2.3"
+services:
+        server-master:
+                image: dataflow:test
+                volumes:
+                        - ./config/master.toml:/config.toml
+                        - /tmp/df:/tmp/df
+                command:
+                        - "./bin/df-master"
+                        - "--config"
+                        - "/config.toml"
+                        - "--master-addr"
+                        - "0.0.0.0:10240"
+                        - "--advertise-addr"
+                        - "server-master:10240"
+                        - "--peer-urls"
+                        - "http://127.0.0.1:8291"
+                        - "--advertise-peer-urls"
+                        - "http://server-master:8291"
+                        - "--frame-meta-endpoints"
+                        - "frame-mysql-standalone:3306"
+                        - "--user-meta-endpoints"
+                        - "user-etcd-standalone:2379"
+                ports:
+                        - "10240:10240"
+                depends_on:
+                  "user-etcd-standalone":
+                    condition: service_started
+                  "frame-mysql-standalone":
+                    condition: service_healthy
+        server-executor-0:
+                image: dataflow:test
+                volumes:
+                        - ./config/executor.toml:/config.toml
+                        - /tmp/dataflow:/tmp/dataflow
+                command:
+                        - "./bin/df-executor"
+                        - "--config"
+                        - "/config.toml"
+                        - "--join"
+                        - "server-master:10240"
+                        - "--worker-addr"
+                        - "0.0.0.0:10241"
+                        - "--advertise-addr"
+                        - "server-executor-0:10241"
+                depends_on:
+                        - "server-master"
+                restart: "on-failure"
+                extra_hosts:
+                        - "host.docker.internal:host-gateway"
+        server-executor-1:
+                image: dataflow:test
+                volumes:
+                        - ./config/executor.toml:/config.toml
+                        - /tmp/dataflow:/tmp/dataflow
+                command:
+                        - "./bin/df-executor"
+                        - "--config"
+                        - "/config.toml"
+                        - "--join"
+                        - "server-master:10240"
+                        - "--worker-addr"
+                        - "0.0.0.0:10241"
+                        - "--advertise-addr"
+                        - "server-executor-1:10241"
+                depends_on:
+                        - "server-master"
+                restart: "on-failure"
+                extra_hosts:
+                        - "host.docker.internal:host-gateway"
+        server-executor-2:
+                image: dataflow:test
+                volumes:
+                        - ./config/executor.toml:/config.toml
+                        - /tmp/dataflow:/tmp/dataflow
+                command:
+                        - "./bin/df-executor"
+                        - "--config"
+                        - "/config.toml"
+                        - "--join"
+                        - "server-master:10240"
+                        - "--worker-addr"
+                        - "0.0.0.0:10241"
+                        - "--advertise-addr"
+                        - "server-executor-2:10241"
+                depends_on:
+                        - "server-master"
+                restart: "on-failure"
+                extra_hosts:
+                        - "host.docker.internal:host-gateway"
+        frame-mysql-standalone:
+                image: mysql:5.7
+                platform: linux/amd64
+                container_name: frame-mysql-standalone
+                environment:
+                        MYSQL_ROOT_PASSWORD: 123456
+                volumes:
+                        - '/tmp/dataflow/mysql:/var/lib/mysql'
+                        - './config/mysql_meta.cnf:/etc/my.cnf'
+                ports:
+                        - "3336:3306"
+                healthcheck:
+                        test: "mysqladmin ping -h127.0.0.1 -P3306 -uroot -p123456"
+                        interval: 10s
+                        timeout: 600s
+                        retries: 60
+        user-etcd-standalone:
+                image: quay.io/coreos/etcd
+                container_name: user-etcd-standalone
+                volumes:
+                        - ./config/etcd.yml:/etcd.yml
+                command:
+                        - "etcd"
+                        - "--config-file"
+                        - "/etcd.yml"
+                ports:
+                        - "12479:2379"
+                        - "12480:2380"

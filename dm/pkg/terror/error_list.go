@@ -629,6 +629,7 @@ const (
 	codeValidatorValidateChange
 	codeValidatorNotFound
 	codeValidatorPanic
+	codeValidatorTooMuchPending
 )
 
 // Schema-tracker error code.
@@ -1305,8 +1306,9 @@ var (
 	ErrValidatorGetEvent          = New(codeValidatorGetEvent, ClassValidator, ScopeInternal, LevelHigh, "failed to get event", "")
 	ErrValidatorProcessRowEvent   = New(codeValidatorProcessRowEvent, ClassValidator, ScopeInternal, LevelHigh, "failed to process event", "")
 	ErrValidatorValidateChange    = New(codeValidatorValidateChange, ClassValidator, ScopeInternal, LevelHigh, "failed to validate row change", "")
-	ErrValidatorNotFound          = New(codeValidatorNotFound, ClassValidator, ScopeNotSet, LevelMedium, "validator not found for task %s", "")
+	ErrValidatorNotFound          = New(codeValidatorNotFound, ClassValidator, ScopeNotSet, LevelMedium, "validator not found for task %s with source %s", "")
 	ErrValidatorPanic             = New(codeValidatorPanic, ClassValidator, ScopeInternal, LevelHigh, "panic error: %v", "")
+	ErrValidatorTooMuchPending    = New(codeValidatorTooMuchPending, ClassValidator, ScopeInternal, LevelMedium, "too much pending data, stop validator. row size(curr/max): %d/%d, row count(curr/max): %d/%d", "")
 
 	// Schema-tracker error.
 	ErrSchemaTrackerInvalidJSON        = New(codeSchemaTrackerInvalidJSON, ClassSchemaTracker, ScopeDownstream, LevelHigh, "saved schema of `%s`.`%s` is not proper JSON", "")

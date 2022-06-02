@@ -33,7 +33,6 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/binlog/event"
 	"github.com/pingcap/tiflow/dm/pkg/binlog/reader"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
-	"github.com/pingcap/tiflow/dm/pkg/gtid"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
@@ -55,8 +54,8 @@ type BinlogReader struct {
 	cfg    *BinlogReaderConfig
 	parser *replication.BinlogParser
 
-	indexPath string   // relay server-uuid index file path
-	uuids     []string // master UUIDs (relay sub dir)
+	indexPath string // relay server-uuid index file path
+	subDirs   []string
 
 	latestServerID uint32 // latest server ID, got from relay log
 
@@ -72,7 +71,7 @@ type BinlogReader struct {
 	notifyCh chan interface{}
 	relay    Process
 
-	currentUUID string // current UUID(with suffix)
+	currentSubDir string // current UUID(with suffix)
 
 	lastFileGracefulEnd bool
 }
@@ -106,12 +105,12 @@ func newBinlogReader(logger log.Logger, cfg *BinlogReaderConfig, relay Process) 
 
 // checkRelayPos will check whether the given relay pos is too big.
 func (r *BinlogReader) checkRelayPos(pos mysql.Position) error {
-	currentUUID, _, realPos, err := binlog.ExtractPos(pos, r.uuids)
+	currentSubDir, _, realPos, err := binlog.ExtractPos(pos, r.subDirs)
 	if err != nil {
 		return terror.Annotatef(err, "parse relay dir with pos %s", pos)
 	}
 	pos = realPos
-	relayFilepath := path.Join(r.cfg.RelayDir, currentUUID, pos.Name)
+	relayFilepath := path.Join(r.cfg.RelayDir, currentSubDir, pos.Name)
 	r.tctx.L().Info("start to check relay log file", zap.String("path", relayFilepath), zap.Stringer("position", pos))
 	fi, err := os.Stat(relayFilepath)
 	if err != nil {
@@ -132,7 +131,7 @@ func (r *BinlogReader) IsGTIDCoverPreviousFiles(ctx context.Context, filePath st
 		return false, err
 	}
 
-	var gs gtid.Set
+	var gs mysql.GTIDSet
 
 	for {
 		select {
@@ -165,22 +164,22 @@ func (r *BinlogReader) IsGTIDCoverPreviousFiles(ctx context.Context, filePath st
 		if err != nil {
 			return false, err
 		}
-		return gset.Contain(gs.Origin()), nil
+		return gset.Contain(gs), nil
 	}
 }
 
 // getPosByGTID gets file position by gtid, result should be (filename, 4).
 func (r *BinlogReader) getPosByGTID(gset mysql.GTIDSet) (*mysql.Position, error) {
 	// start from newest uuid dir
-	for i := len(r.uuids) - 1; i >= 0; i-- {
-		uuid := r.uuids[i]
-		_, suffix, err := utils.ParseSuffixForUUID(uuid)
+	for i := len(r.subDirs) - 1; i >= 0; i-- {
+		subDir := r.subDirs[i]
+		_, suffix, err := utils.ParseRelaySubDir(subDir)
 		if err != nil {
 			return nil, err
 		}
 
-		uuidDir := path.Join(r.cfg.RelayDir, uuid)
-		allFiles, err := CollectAllBinlogFiles(uuidDir)
+		dir := path.Join(r.cfg.RelayDir, subDir)
+		allFiles, err := CollectAllBinlogFiles(dir)
 		if err != nil {
 			return nil, err
 		}
@@ -188,7 +187,7 @@ func (r *BinlogReader) getPosByGTID(gset mysql.GTIDSet) (*mysql.Position, error)
 		// iterate files from the newest one
 		for i := len(allFiles) - 1; i >= 0; i-- {
 			file := allFiles[i]
-			filePath := path.Join(uuidDir, file)
+			filePath := path.Join(dir, file)
 			// if input `gset` not contain previous_gtids_event's gset (complementary set of `gset` overlap with
 			// previous_gtids_event), that means there're some needed events in previous files.
 			// so we go to previous one
@@ -224,7 +223,7 @@ func (r *BinlogReader) StartSyncByPos(pos mysql.Position) (reader.Streamer, erro
 
 	// load and update UUID list
 	// NOTE: if want to support auto master-slave switching, then needing to re-load UUIDs when parsing.
-	err := r.updateUUIDs()
+	err := r.updateSubDirs()
 	if err != nil {
 		return nil, err
 	}
@@ -262,7 +261,7 @@ func (r *BinlogReader) StartSyncByGTID(gset mysql.GTIDSet) (reader.Streamer, err
 		return nil, terror.ErrReaderAlreadyRunning.Generate()
 	}
 
-	if err := r.updateUUIDs(); err != nil {
+	if err := r.updateSubDirs(); err != nil {
 		return nil, err
 	}
 
@@ -303,11 +302,11 @@ type SwitchPath struct {
 
 // parseRelay parses relay root directory, it supports master-slave switch (switching to next sub directory).
 func (r *BinlogReader) parseRelay(ctx context.Context, s *LocalStreamer, pos mysql.Position) error {
-	currentUUID, _, realPos, err := binlog.ExtractPos(pos, r.uuids)
+	currentSubDir, _, realPos, err := binlog.ExtractPos(pos, r.subDirs)
 	if err != nil {
 		return terror.Annotatef(err, "parse relay dir with pos %v", pos)
 	}
-	r.currentUUID = currentUUID
+	r.currentSubDir = currentSubDir
 	for {
 		select {
 		case <-ctx.Done():
@@ -322,7 +321,7 @@ func (r *BinlogReader) parseRelay(ctx context.Context, s *LocalStreamer, pos mys
 			return terror.ErrNoSubdirToSwitch.Generate()
 		}
 		// update new uuid
-		if err = r.updateUUIDs(); err != nil {
+		if err = r.updateSubDirs(); err != nil {
 			return err
 		}
 		switchPath, err := r.getSwitchPath()
@@ -334,11 +333,11 @@ func (r *BinlogReader) parseRelay(ctx context.Context, s *LocalStreamer, pos mys
 			return errors.New("failed to get switch path")
 		}
 
-		r.currentUUID = switchPath.nextUUID
+		r.currentSubDir = switchPath.nextUUID
 		// update pos, so can switch to next sub directory
 		realPos.Name = switchPath.nextBinlogName
 		realPos.Pos = binlog.FileHeaderLen // start from pos 4 for next sub directory / file
-		r.tctx.L().Info("switching to next ready sub directory", zap.String("next uuid", r.currentUUID), zap.Stringer("position", pos))
+		r.tctx.L().Info("switching to next ready sub directory", zap.String("next uuid", r.currentSubDir), zap.Stringer("position", pos))
 
 		// when switching subdirectory, last binlog file may contain unfinished transaction, so we send a notification.
 		if !r.lastFileGracefulEnd {
@@ -354,20 +353,20 @@ func (r *BinlogReader) parseRelay(ctx context.Context, s *LocalStreamer, pos mys
 
 func (r *BinlogReader) getSwitchPath() (*SwitchPath, error) {
 	// reload uuid
-	uuids, err := utils.ParseUUIDIndex(r.indexPath)
+	subDirs, err := utils.ParseUUIDIndex(r.indexPath)
 	if err != nil {
 		return nil, err
 	}
-	nextUUID, _, err := getNextUUID(r.currentUUID, uuids)
+	nextSubDir, _, err := getNextRelaySubDir(r.currentSubDir, subDirs)
 	if err != nil {
 		return nil, err
 	}
-	if len(nextUUID) == 0 {
+	if len(nextSubDir) == 0 {
 		return nil, nil
 	}
 
 	// try to get the first binlog file in next subdirectory
-	nextBinlogName, err := getFirstBinlogName(r.cfg.RelayDir, nextUUID)
+	nextBinlogName, err := getFirstBinlogName(r.cfg.RelayDir, nextSubDir)
 	if err != nil {
 		// because creating subdirectory and writing relay log file are not atomic
 		if terror.ErrBinlogFilesNotFound.Equal(err) {
@@ -376,13 +375,13 @@ func (r *BinlogReader) getSwitchPath() (*SwitchPath, error) {
 		return nil, err
 	}
 
-	return &SwitchPath{nextUUID, nextBinlogName}, nil
+	return &SwitchPath{nextSubDir, nextBinlogName}, nil
 }
 
-// parseDirAsPossible parses relay sub directory as far as possible.
+// parseDirAsPossible parses relay subdirectory as far as possible.
 func (r *BinlogReader) parseDirAsPossible(ctx context.Context, s *LocalStreamer, pos mysql.Position) (needSwitch bool, err error) {
 	firstParse := true // the first parse time for the relay log file
-	dir := path.Join(r.cfg.RelayDir, r.currentUUID)
+	dir := path.Join(r.cfg.RelayDir, r.currentSubDir)
 	r.tctx.L().Info("start to parse relay log files in sub directory", zap.String("directory", dir), zap.Stringer("position", pos))
 
 	for {
@@ -504,7 +503,7 @@ func (r *BinlogReader) parseFile(
 	firstParse bool,
 	state *binlogFileParseState,
 ) (needSwitch, needReParse bool, err error) {
-	_, suffixInt, err := utils.ParseSuffixForUUID(r.currentUUID)
+	_, suffixInt, err := utils.ParseRelaySubDir(r.currentSubDir)
 	if err != nil {
 		return false, false, err
 	}
@@ -661,7 +660,7 @@ func (r *BinlogReader) parseFile(
 }
 
 func (r *BinlogReader) waitBinlogChanged(ctx context.Context, state *binlogFileParseState) (needSwitch, needReParse bool, err error) {
-	active, relayOffset := r.relay.IsActive(r.currentUUID, state.relayLogFile)
+	active, relayOffset := r.relay.IsActive(r.currentSubDir, state.relayLogFile)
 	if active && relayOffset > state.latestPos {
 		return false, true, nil
 	}
@@ -726,7 +725,7 @@ func (r *BinlogReader) waitBinlogChanged(ctx context.Context, state *binlogFileP
 		case <-ctx.Done():
 			return false, false, nil
 		case <-r.Notified():
-			active, relayOffset = r.relay.IsActive(r.currentUUID, state.relayLogFile)
+			active, relayOffset = r.relay.IsActive(r.currentSubDir, state.relayLogFile)
 			if active {
 				if relayOffset > state.latestPos {
 					return false, true, nil
@@ -765,15 +764,15 @@ func (r *BinlogReader) parseFormatDescEvent(state *binlogFileParseState) error {
 	return nil
 }
 
-// updateUUIDs re-parses UUID index file and updates UUID list.
-func (r *BinlogReader) updateUUIDs() error {
-	uuids, err := utils.ParseUUIDIndex(r.indexPath)
+// updateSubDirs re-parses UUID index file and updates subdirectory list.
+func (r *BinlogReader) updateSubDirs() error {
+	subDirs, err := utils.ParseUUIDIndex(r.indexPath)
 	if err != nil {
 		return terror.Annotatef(err, "index file path %s", r.indexPath)
 	}
-	oldUUIDs := r.uuids
-	r.uuids = uuids
-	r.tctx.L().Info("update relay UUIDs", zap.Strings("old uuids", oldUUIDs), zap.Strings("uuids", uuids))
+	oldSubDirs := r.subDirs
+	r.subDirs = subDirs
+	r.tctx.L().Info("update relay UUIDs", zap.Strings("old subDirs", oldSubDirs), zap.Strings("subDirs", subDirs))
 	return nil
 }
 
@@ -788,11 +787,11 @@ func (r *BinlogReader) Close() {
 	r.tctx.L().Info("binlog reader closed")
 }
 
-// GetUUIDs returns binlog reader's uuids.
-func (r *BinlogReader) GetUUIDs() []string {
-	uuids := make([]string, 0, len(r.uuids))
-	uuids = append(uuids, r.uuids...)
-	return uuids
+// GetSubDirs returns binlog reader's subDirs.
+func (r *BinlogReader) GetSubDirs() []string {
+	ret := make([]string, 0, len(r.subDirs))
+	ret = append(ret, r.subDirs...)
+	return ret
 }
 
 func (r *BinlogReader) getCurrentGtidSet() mysql.GTIDSet {

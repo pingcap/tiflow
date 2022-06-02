@@ -102,10 +102,9 @@ const (
     "worker-concurrent": 8,
     "worker-pool-size": 0,
     "region-scan-limit": 40,
-    "region-retry-duration": 25000000000
+    "region-retry-duration": 60000000000
   },
   "debug": {
-    "enable-table-actor": true,
     "table-actor": {
       "event-batch-size": 32
     },

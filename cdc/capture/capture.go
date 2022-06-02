@@ -106,6 +106,15 @@ func NewCapture4Test(o owner.Owner) *Capture {
 	return res
 }
 
+// NewCaptureWithManager4Test returns a new Capture instance for test.
+func NewCaptureWithManager4Test(o owner.Owner, m *upstream.Manager) *Capture {
+	res := &Capture{
+		UpstreamManager: m,
+	}
+	res.owner = o
+	return res
+}
+
 func (c *Capture) reset(ctx context.Context) error {
 	conf := config.GetGlobalServerConfig()
 	sess, err := concurrency.NewSession(c.EtcdClient.Client.Unwrap(),
@@ -146,14 +155,12 @@ func (c *Capture) reset(ctx context.Context) error {
 	if c.tableActorSystem != nil {
 		c.tableActorSystem.Stop()
 	}
-	if conf.Debug.EnableTableActor {
-		c.tableActorSystem = system.NewSystem()
-		err = c.tableActorSystem.Start(ctx)
-		if err != nil {
-			return errors.Annotate(
-				cerror.WrapError(cerror.ErrNewCaptureFailed, err),
-				"create table actor system")
-		}
+	c.tableActorSystem = system.NewSystem()
+	err = c.tableActorSystem.Start(ctx)
+	if err != nil {
+		return errors.Annotate(
+			cerror.WrapError(cerror.ErrNewCaptureFailed, err),
+			"create table actor system")
 	}
 	if conf.Debug.EnableDBSorter {
 		if c.sorterSystem != nil {
