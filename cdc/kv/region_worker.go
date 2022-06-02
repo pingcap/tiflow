@@ -507,7 +507,7 @@ func (w *regionWorker) eventHandler(ctx context.Context) error {
 
 		if highWatermarkMet {
 			// All events in one batch can be hashed into one handle slot.
-			slot := int(events[0].regionID) % w.concurrent
+			slot := w.inputCalcSlot(events[0].regionID)
 			eventsX := make([]interface{}, 0, len(events))
 			for _, event := range events {
 				eventsX = append(eventsX, event)
