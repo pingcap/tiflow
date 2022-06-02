@@ -242,12 +242,12 @@ func (r *ReplicationSet) poll(
 		if msg != nil {
 			msgBuf = append(msgBuf, msg)
 		}
-		if stateChanged {
-			log.Info("tpscheduler: replication state transition, poll",
-				zap.Stringer("tableState", input),
-				zap.String("captureID", captureID),
-				zap.Stringer("old", oldState), zap.Stringer("new", r.State))
-		}
+		//		if stateChanged {
+		log.Info("tpscheduler: replication state transition, poll",
+			zap.Stringer("tableState", input),
+			zap.String("captureID", captureID),
+			zap.Stringer("old", oldState), zap.Stringer("new", r.State))
+		//		}
 	}
 
 	return msgBuf, nil

@@ -271,19 +271,21 @@ func (p *processor) IsAddTableFinished(ctx context.Context, tableID model.TableI
 			return table.Status() == pipeline.TableStatePrepared
 		}
 
-		// todo: revise these 2 conditions, after 2ps supported.
-		// how about just check status is `TableStateReplicating`.
-		if table.CheckpointTs() < localCheckpointTs || localCheckpointTs < globalCheckpointTs {
-			return false
-		}
-		if table.ResolvedTs() < localResolvedTs ||
-			localResolvedTs < globalResolvedTs {
-			return false
-		}
-		return true
+		return table.Status() == pipeline.TableStateReplicating
+
+		//// todo: revise these 2 conditions, after 2ps supported.
+		//// how about just check status is `TableStateReplicating`.
+		//if table.CheckpointTs() < localCheckpointTs || localCheckpointTs < globalCheckpointTs {
+		//	return false
+		//}
+		//if table.ResolvedTs() < localResolvedTs ||
+		//	localResolvedTs < globalResolvedTs {
+		//	return false
+		//}
+		//return true
 	}
 	if !done() {
-		log.Debug("Add Table not finished",
+		log.Info("Add Table not finished",
 			zap.String("captureID", p.captureInfo.ID),
 			zap.String("namespace", p.changefeedID.Namespace),
 			zap.String("changefeed", p.changefeedID.ID),
