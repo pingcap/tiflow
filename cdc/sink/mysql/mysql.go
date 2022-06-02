@@ -431,6 +431,9 @@ func (s *mysqlSink) createSinkWorkers(ctx context.Context) error {
 }
 
 func (s *mysqlSink) notifyAndWaitExec(ctx context.Context) {
+	defer func() {
+		log.Info("notifyAndWaitExec finished")
+	}()
 	// notifyAndWaitExec may return because of context cancellation,
 	// and s.flushSyncWg.Wait() goroutine is still running, check context first to
 	// avoid data race
@@ -453,7 +456,9 @@ func (s *mysqlSink) notifyAndWaitExec(ctx context.Context) {
 	// scenario happens, the blocked goroutine will be leak.
 	select {
 	case <-ctx.Done():
+		return
 	case <-done:
+		return
 	}
 }
 
@@ -552,7 +557,8 @@ func (s *mysqlSink) RemoveTable(ctx context.Context, tableID model.TableID) erro
 				log.Info("No table resolvedTs is found", zap.Int64("tableID", tableID))
 				return nil
 			}
-			if s.getTableCheckpointTs(tableID) >= maxResolved.Ts {
+			tableCkpt := s.getTableCheckpointTs(tableID)
+			if tableCkpt >= maxResolved.Ts {
 				return nil
 			}
 			checkpointTs, err := s.FlushRowChangedEvents(ctx, tableID, maxResolved)
