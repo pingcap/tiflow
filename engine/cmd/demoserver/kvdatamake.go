@@ -130,7 +130,9 @@ func (s *DataRWServer) GenerateData(ctx context.Context, req *pb.GenerateDataReq
 	batches := make([]db.Batch, 0, fileNum)
 	bucket := make(dbBuckets)
 	for i := 0; i < fileNum; i++ {
-		fileDB, err := db.OpenPebble(s.ctx, i, demoDir, 256<<10, config.GetDefaultServerConfig().Debug.DB)
+		fileDB, err := db.OpenPebble(s.ctx, i, demoDir,
+			config.GetDefaultServerConfig().Debug.DB,
+			db.WithCache(256<<10))
 		if err != nil {
 			return &pb.GenerateDataResponse{ErrMsg: err.Error()}, nil
 		}
@@ -368,7 +370,9 @@ func (s *DataRWServer) WriteLines(stream pb.DataRWService_WriteLinesServer) erro
 					}
 					peddleDB, ok = bucket[idx]
 					if !ok {
-						peddleDB, err = db.OpenPebble(s.ctx, idx, dir, 256<<10, config.GetDefaultServerConfig().Debug.DB)
+						peddleDB, err = db.OpenPebble(s.ctx, idx, dir,
+							config.GetDefaultServerConfig().Debug.DB,
+							db.WithCache(256<<10))
 						if err != nil {
 							s.mu.Unlock()
 							log.L().Error("write line meet error", zap.String("request", res.String()), zap.Error(err))
