@@ -19,19 +19,19 @@ import (
 	"go.uber.org/zap"
 )
 
-var _ scheduler = &balancer{}
+var _ scheduler = &burstBalanceScheduler{}
 
-type balancer struct{}
+type burstBalanceScheduler struct{}
 
-func newBalancer() *balancer {
-	return &balancer{}
+func newBurstBalanceScheduler() *burstBalanceScheduler {
+	return &burstBalanceScheduler{}
 }
 
-func (b *balancer) Name() string {
-	return "balancer"
+func (b *burstBalanceScheduler) Name() string {
+	return string(schedulerTypeBurstBalance)
 }
 
-func (b *balancer) Schedule(
+func (b *burstBalanceScheduler) Schedule(
 	checkpointTs model.Ts,
 	currentTables []model.TableID,
 	captures map[model.CaptureID]*model.CaptureInfo,
@@ -117,7 +117,6 @@ func newBurstBalanceRemoveTables(
 		} else {
 			log.Warn("tpscheduler: primary or secondary not found for removed table",
 				zap.Any("table", rep))
-			continue
 		}
 	}
 	return &scheduleTask{burstBalance: &burstBalance{

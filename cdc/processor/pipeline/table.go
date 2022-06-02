@@ -73,7 +73,7 @@ type TableMeta struct {
 	TableID      model.TableID
 	CheckpointTs model.Ts
 	ResolvedTs   model.Ts
-	Status       TableState
+	State        TableState
 }
 
 // TablePipeline is a pipeline which capture the change log from tikv in a table

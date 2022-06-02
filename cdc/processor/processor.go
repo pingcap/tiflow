@@ -376,14 +376,14 @@ func (p *processor) GetTableMeta(tableID model.TableID) pipeline.TableMeta {
 			TableID:      tableID,
 			CheckpointTs: 0,
 			ResolvedTs:   0,
-			Status:       pipeline.TableStateAbsent,
+			State:        pipeline.TableStateAbsent,
 		}
 	}
 	return pipeline.TableMeta{
 		TableID:      tableID,
 		CheckpointTs: table.CheckpointTs(),
 		ResolvedTs:   table.ResolvedTs(),
-		Status:       table.Status(),
+		State:        table.Status(),
 	}
 }
 
