@@ -173,6 +173,11 @@ func (a *agent) handleMessage(msg []*schedulepb.Message) []*schedulepb.Message {
 			a.handleMessageDispatchTableRequest(message.DispatchTableRequest, processorEpoch)
 		case schedulepb.MsgHeartbeat:
 			response := a.handleMessageHeartbeat(message.Heartbeat.GetTableIDs())
+			log.Debug("tpscheduler: agent send heartbeat response",
+				zap.String("capture", a.captureID),
+				zap.String("namespace", a.changeFeedID.Namespace),
+				zap.String("changefeed", a.changeFeedID.ID),
+				zap.Any("message", response))
 			result = append(result, response)
 		default:
 			log.Warn("tpscheduler: unknown message received",
@@ -341,7 +346,11 @@ func (a *agent) handleMessageDispatchTableRequest(
 			zap.Any("request", request))
 		return
 	}
-
+	log.Debug("tpscheduler: agent add dispatch table task",
+		zap.String("capture", a.captureID),
+		zap.String("namespace", a.changeFeedID.Namespace),
+		zap.String("changefeed", a.changeFeedID.ID),
+		zap.Any("task", task))
 	a.runningTasks[task.TableID] = task
 }
 
