@@ -14,6 +14,8 @@
 package tp
 
 import (
+	"sync"
+
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"go.uber.org/zap"
@@ -22,6 +24,7 @@ import (
 var _ scheduler = &moveTableScheduler{}
 
 type moveTableScheduler struct {
+	mu    sync.Mutex
 	tasks map[model.TableID]*scheduleTask
 }
 
@@ -37,6 +40,8 @@ func (m *moveTableScheduler) Name() string {
 
 func (m *moveTableScheduler) addTask(tableID model.TableID, target model.CaptureID) bool {
 	// previous triggered task not accepted yet, decline the new manual move table request.
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	if _, ok := m.tasks[tableID]; ok {
 		return false
 	}
@@ -46,6 +51,8 @@ func (m *moveTableScheduler) addTask(tableID model.TableID, target model.Capture
 			DestCapture: target,
 		},
 		accept: func() {
+			m.mu.Lock()
+			defer m.mu.Unlock()
 			delete(m.tasks, tableID)
 		},
 	}
@@ -58,6 +65,9 @@ func (m *moveTableScheduler) Schedule(
 	captures map[model.CaptureID]*model.CaptureInfo,
 	replications map[model.TableID]*ReplicationSet,
 ) []*scheduleTask {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	result := make([]*scheduleTask, 0)
 
 	if len(m.tasks) == 0 {

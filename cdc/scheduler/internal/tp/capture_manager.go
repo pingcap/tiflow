@@ -42,9 +42,9 @@ const (
 )
 
 var captureStateMap = map[CaptureState]string{
-	CaptureStateUninitialize: "CaptureStateUninitialize",
-	CaptureStateInitialized:  "CaptureStateInitialized",
-	CaptureStateStopping:     "CaptureStateStopping",
+	CaptureStateUninitialized: "CaptureStateUninitialized",
+	CaptureStateInitialized:   "CaptureStateInitialized",
+	CaptureStateStopping:      "CaptureStateStopping",
 }
 
 func (s CaptureState) String() string {
