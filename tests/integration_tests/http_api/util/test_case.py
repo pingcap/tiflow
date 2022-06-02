@@ -305,7 +305,15 @@ def set_log_level():
 
 def verify_table():
     url = BASE_URL0+"/changefeeds/changefeed-test1"
-    resp = rq.get(url, cert=CERT, verify=VERIFY)
+    # we need to retry since owner resign before this func call 
+    i = 0 
+    while i < 10:
+        try: 
+            resp = rq.get(url, cert=CERT, verify=VERIFY, timeout=5)
+            break 
+        except rq.exceptions.RequestException:
+            i += 1
+            
     assert resp.status_code == rq.codes.ok
     start_ts = resp.json()["checkpoint_tso"]
 
