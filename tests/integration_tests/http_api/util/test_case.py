@@ -12,7 +12,7 @@ BASE_URL1 = "https://127.0.0.1:8301/api/v1"
 
 
 BASE_URL0_V2 = "https://127.0.0.1:8300/api/v2"
-BASE_URL0_V2 = "https://127.0.0.1:8301/api/v2"
+BASE_URL1_V2 = "https://127.0.0.1:8301/api/v2"
 
 TLS_PD_ADDR = "https://127.0.0.1:2379"
 # we should write some SQLs in the run.sh after call create_changefeed
@@ -315,7 +315,7 @@ def verify_table():
     "start-ts": start_ts,
     "replica-config": {"filter":{"rules":["test.verify*"]}}})
     headers = {"Content-Type": "application/json"}
-
+    print(data)
     resp = rq.post(url, data=data, headers=headers, cert=CERT, verify=VERIFY)
     assert resp.status_code == rq.codes.ok
     eligible_table_name = resp.json()["eligible-tables"][0]["tbl-name"]
