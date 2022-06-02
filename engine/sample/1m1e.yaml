@@ -6,7 +6,7 @@ services:
                         - ./config/master.toml:/config.toml
                         - /tmp/df:/tmp/df
                 command:
-                        - "./bin/df-master"
+                        - "/df-master"
                         - "--config"
                         - "/config.toml"
                         - "-L=debug"
@@ -35,7 +35,7 @@ services:
                         - ./config/executor.toml:/config.toml
                         - /tmp/dataflow:/tmp/dataflow
                 command:
-                        - "./bin/df-executor"
+                        - "/df-executor"
                         - "--config"
                         - "/config.toml"
                         - "-L=debug"

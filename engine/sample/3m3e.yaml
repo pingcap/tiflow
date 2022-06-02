@@ -7,7 +7,7 @@ services:
                 volumes:
                         - ./config/master.toml:/config.toml
                 command:
-                        - "./bin/df-master"
+                        - "/df-master"
                         - "--name"
                         - "master0"
                         - "--config"
@@ -39,7 +39,7 @@ services:
                 volumes:
                         - ./config/master.toml:/config.toml
                 command:
-                        - "./bin/df-master"
+                        - "/df-master"
                         - "--name"
                         - "master1"
                         - "--config"
@@ -71,7 +71,7 @@ services:
                 volumes:
                         - ./config/master.toml:/config.toml
                 command:
-                        - "./bin/df-master"
+                        - "/df-master"
                         - "--name"
                         - "master2"
                         - "--config"
@@ -102,7 +102,7 @@ services:
                         - ./config/executor.toml:/config.toml
                         - /tmp/dataflow:/tmp/dataflow
                 command:
-                        - "./bin/df-executor"
+                        - "/df-executor"
                         - "--config"
                         - "/config.toml"
                         - "-L=debug"
@@ -124,7 +124,7 @@ services:
                         - ./config/executor.toml:/config.toml
                         - /tmp/dataflow:/tmp/dataflow
                 command:
-                        - "./bin/df-executor"
+                        - "/df-executor"
                         - "--config"
                         - "/config.toml"
                         - "-L=debug"
@@ -146,7 +146,7 @@ services:
                         - ./config/executor.toml:/config.toml
                         - /tmp/dataflow:/tmp/dataflow
                 command:
-                        - "./bin/df-executor"
+                        - "/df-executor"
                         - "--config"
                         - "/config.toml"
                         - "-L=debug"

@@ -11,14 +11,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package storagecfg
+package chann
 
-// Config defines configurations for an external storage resource
-type Config struct {
-	Local LocalFileConfig `json:"local" toml:"local"`
-}
+import (
+	"testing"
 
-// LocalFileConfig defines configurations for a local file based resource
-type LocalFileConfig struct {
-	BaseDir string `json:"base-dir" toml:"base-dir"`
+	"github.com/pingcap/tiflow/pkg/leakutil"
+)
+
+func TestMain(m *testing.M) {
+	leakutil.SetUpLeakTest(m)
 }
