@@ -260,6 +260,7 @@ func (s *mysqlSink) flushRowChangedEvents(ctx context.Context) {
 			worker.close()
 		}
 	}()
+outer:
 	for {
 		select {
 		case <-ctx.Done():
@@ -284,6 +285,11 @@ func (s *mysqlSink) flushRowChangedEvents(ctx context.Context) {
 
 		if len(resolvedTxnsMap) != 0 {
 			s.dispatchAndExecTxns(ctx, resolvedTxnsMap)
+		}
+		for _, worker := range s.workers {
+			if !worker.isNormal() {
+				continue outer
+			}
 		}
 		for tableID, resolvedTs := range checkpointTsMap {
 			s.tableCheckpointTs.Store(tableID, resolvedTs)

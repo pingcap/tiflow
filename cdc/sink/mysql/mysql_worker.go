@@ -18,6 +18,8 @@ import (
 	"runtime"
 	"sync"
 
+	"go.uber.org/atomic"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -35,6 +37,7 @@ type mysqlSinkWorker struct {
 	metricBucketSize prometheus.Counter
 	receiver         *notify.Receiver
 	closedCh         chan struct{}
+	hasError         atomic.Bool
 }
 
 func newMySQLSinkWorker(
@@ -72,6 +75,10 @@ func (w *mysqlSinkWorker) appendFinishTxn(wg *sync.WaitGroup) {
 	w.txnCh <- &model.SingleTableTxn{
 		FinishWg: wg,
 	}
+}
+
+func (w *mysqlSinkWorker) isNormal() bool {
+	return !w.hasError.Load()
 }
 
 func (w *mysqlSinkWorker) run(ctx context.Context) (err error) {
@@ -130,6 +137,7 @@ func (w *mysqlSinkWorker) run(ctx context.Context) (err error) {
 			}
 			if txn.FinishWg != nil {
 				if err := flushRows(); err != nil {
+					w.hasError.Store(true)
 					txn.FinishWg.Done()
 					return errors.Trace(err)
 				}
@@ -138,6 +146,7 @@ func (w *mysqlSinkWorker) run(ctx context.Context) (err error) {
 			}
 			if txn.ReplicaID != replicaID || len(toExecRows)+len(txn.Rows) > w.maxTxnRow {
 				if err := flushRows(); err != nil {
+					w.hasError.Store(true)
 					txnNum++
 					return errors.Trace(err)
 				}
@@ -147,6 +156,7 @@ func (w *mysqlSinkWorker) run(ctx context.Context) (err error) {
 			txnNum++
 		case <-w.receiver.C:
 			if err := flushRows(); err != nil {
+				w.hasError.Store(true)
 				return errors.Trace(err)
 			}
 		}

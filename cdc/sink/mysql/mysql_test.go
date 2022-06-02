@@ -2085,14 +2085,15 @@ func TestMySQLSinkExecDMLError(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	for i := 0; i < 2000; i++ {
+	i := 0
+	for {
 		// Keep flushing so that appendFinishTxn is called enough times.
 		ts, err := sink.FlushRowChangedEvents(ctx, 1, model.NewResolvedTs(uint64(i)))
 		if err != nil {
 			break
 		}
 		require.Less(t, ts, uint64(2))
-		time.Sleep(1 * time.Millisecond)
+		i++
 	}
 
 	err = sink.RemoveTable(ctx, 1)
