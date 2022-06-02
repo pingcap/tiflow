@@ -76,7 +76,7 @@ func NewAgent(ctx context.Context,
 		tableExec:    tableExecutor,
 		runningTasks: make(map[model.TableID]*dispatchTableTask),
 	}
-	trans, err := newTransport(ctx, changeFeedID, messageServer, messageRouter)
+	trans, err := newTransport(ctx, changeFeedID, agentRole, messageServer, messageRouter)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

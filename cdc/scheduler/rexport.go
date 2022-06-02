@@ -19,6 +19,8 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/base"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/tp"
+	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/p2p"
 )
@@ -55,6 +57,7 @@ const CheckpointCannotProceed = internal.CheckpointCannotProceed
 // NewAgent returns processor agent.
 func NewAgent(
 	ctx context.Context,
+	captureID model.CaptureID,
 	messageServer *p2p.MessageServer,
 	messageRouter p2p.MessageRouter,
 	etcdClient *etcd.CDCEtcdClient,
@@ -68,12 +71,44 @@ func NewAgent(
 // NewScheduler returns owner scheduler.
 func NewScheduler(
 	ctx context.Context,
+	captureID model.CaptureID,
 	changeFeedID model.ChangeFeedID,
 	checkpointTs model.Ts,
 	messageServer *p2p.MessageServer,
 	messageRouter p2p.MessageRouter,
 	ownerRevision int64,
+	cfg *config.SchedulerConfig,
 ) (Scheduler, error) {
 	return base.NewSchedulerV2(
 		ctx, changeFeedID, checkpointTs, messageServer, messageRouter, ownerRevision)
+}
+
+// NewTpAgent returns two-phase agent.
+func NewTpAgent(
+	ctx context.Context,
+	captureID model.CaptureID,
+	messageServer *p2p.MessageServer,
+	messageRouter p2p.MessageRouter,
+	etcdClient *etcd.CDCEtcdClient,
+	executor TableExecutor,
+	changefeedID model.ChangeFeedID,
+) (Agent, error) {
+	return tp.NewAgent(
+		ctx, captureID, changefeedID, messageServer, messageRouter, etcdClient, executor)
+}
+
+// NewTpScheduler returns two-phase scheduler.
+func NewTpScheduler(
+	ctx context.Context,
+	captureID model.CaptureID,
+	changeFeedID model.ChangeFeedID,
+	checkpointTs model.Ts,
+	messageServer *p2p.MessageServer,
+	messageRouter p2p.MessageRouter,
+	ownerRevision int64,
+	cfg *config.SchedulerConfig,
+) (Scheduler, error) {
+	return tp.NewCoordinator(
+		ctx, captureID, changeFeedID, checkpointTs,
+		messageServer, messageRouter, ownerRevision, cfg)
 }

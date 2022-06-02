@@ -67,20 +67,33 @@ func TestCoordinatorSendMsgs(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	trans := newMockTrans()
-	cood := coordinator{
-		version:  "6.2.0",
-		revision: schedulepb.OwnerRevision{Revision: 3},
-		trans:    trans,
+	coord := coordinator{
+		version:   "6.2.0",
+		revision:  schedulepb.OwnerRevision{Revision: 3},
+		captureID: "0",
+		trans:     trans,
 	}
-	cood.sendMsgs(
+	coord.captureM = newCaptureManager(coord.revision, 0)
+	coord.sendMsgs(
+		ctx, []*schedulepb.Message{{To: "1", MsgType: schedulepb.MsgDispatchTableRequest}})
+
+	coord.captureM.Captures["1"] = &CaptureStatus{Epoch: schedulepb.ProcessorEpoch{Epoch: "epoch"}}
+	coord.sendMsgs(
 		ctx, []*schedulepb.Message{{To: "1", MsgType: schedulepb.MsgDispatchTableRequest}})
 
 	require.EqualValues(t, []*schedulepb.Message{{
 		Header: &schedulepb.Message_Header{
-			Version:       cood.version,
-			OwnerRevision: cood.revision,
+			Version:       coord.version,
+			OwnerRevision: coord.revision,
 		},
-		To: "1", MsgType: schedulepb.MsgDispatchTableRequest,
+		From: "0", To: "1", MsgType: schedulepb.MsgDispatchTableRequest,
+	}, {
+		Header: &schedulepb.Message_Header{
+			Version:        coord.version,
+			OwnerRevision:  coord.revision,
+			ProcessorEpoch: schedulepb.ProcessorEpoch{Epoch: "epoch"},
+		},
+		From: "0", To: "1", MsgType: schedulepb.MsgDispatchTableRequest,
 	}}, trans.sendBuffer)
 }
 
@@ -90,9 +103,10 @@ func TestCoordinatorRecvMsgs(t *testing.T) {
 	ctx := context.Background()
 	trans := &mockTrans{}
 	coord := coordinator{
-		version:  "6.2.0",
-		revision: schedulepb.OwnerRevision{Revision: 3},
-		trans:    trans,
+		version:   "6.2.0",
+		revision:  schedulepb.OwnerRevision{Revision: 3},
+		captureID: "0",
+		trans:     trans,
 	}
 
 	trans.recvBuffer = append(trans.recvBuffer,
@@ -100,14 +114,21 @@ func TestCoordinatorRecvMsgs(t *testing.T) {
 			Header: &schedulepb.Message_Header{
 				OwnerRevision: coord.revision,
 			},
-			From: "1", MsgType: schedulepb.MsgDispatchTableResponse,
+			From: "1", To: coord.captureID, MsgType: schedulepb.MsgDispatchTableResponse,
 		})
 	trans.recvBuffer = append(trans.recvBuffer,
 		&schedulepb.Message{
 			Header: &schedulepb.Message_Header{
 				OwnerRevision: schedulepb.OwnerRevision{Revision: 4},
 			},
-			From: "2", MsgType: schedulepb.MsgDispatchTableResponse,
+			From: "2", To: coord.captureID, MsgType: schedulepb.MsgDispatchTableResponse,
+		})
+	trans.recvBuffer = append(trans.recvBuffer,
+		&schedulepb.Message{
+			Header: &schedulepb.Message_Header{
+				OwnerRevision: coord.revision,
+			},
+			From: "3", To: "lost", MsgType: schedulepb.MsgDispatchTableResponse,
 		})
 
 	msgs, err := coord.recvMsgs(ctx)
@@ -116,7 +137,7 @@ func TestCoordinatorRecvMsgs(t *testing.T) {
 		Header: &schedulepb.Message_Header{
 			OwnerRevision: coord.revision,
 		},
-		From: "1", MsgType: schedulepb.MsgDispatchTableResponse,
+		From: "1", To: "0", MsgType: schedulepb.MsgDispatchTableResponse,
 	}}, msgs)
 }
 
