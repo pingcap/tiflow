@@ -166,3 +166,162 @@ func TestCheckDir(t *testing.T) {
 	_, err = checkDir(file)
 	require.Error(t, err)
 }
+<<<<<<< HEAD
+=======
+
+const retryTime = 20
+
+func TestServerTLSWithoutCommonName(t *testing.T) {
+	addr := tempurl.Alloc()[len("http://"):]
+	// Do not specify common name
+	security, err := security2.NewCredential4Test("")
+	require.Nil(t, err)
+	conf := config.GetDefaultServerConfig()
+	conf.Addr = addr
+	conf.AdvertiseAddr = addr
+	conf.Security = &security
+	config.StoreGlobalServerConfig(conf)
+
+	server, err := NewServer([]string{"https://127.0.0.1:2379"})
+	server.capture = capture.NewCapture4Test(nil)
+	require.Nil(t, err)
+	err = server.startStatusHTTP(server.tcpServer.HTTP1Listener())
+	require.Nil(t, err)
+	defer func() {
+		require.Nil(t, server.statusServer.Close())
+	}()
+
+	statusURL := fmt.Sprintf("https://%s/api/v1/status", addr)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := server.tcpServer.Run(ctx)
+		require.Contains(t, err.Error(), "ErrTCPServerClosed")
+	}()
+
+	// test cli sends request without a cert will success
+	err = retry.Do(ctx, func() error {
+		tr := &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		}
+		cli := httputil.NewTestClient(tr)
+		resp, err := cli.Get(ctx, statusURL)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		decoder := json.NewDecoder(resp.Body)
+		captureInfo := &model.CaptureInfo{}
+		err = decoder.Decode(captureInfo)
+		require.Nil(t, err)
+		info, err := server.capture.Info()
+		require.Nil(t, err)
+		require.Equal(t, info.ID, captureInfo.ID)
+		return nil
+	}, retry.WithMaxTries(retryTime), retry.WithBackoffBaseDelay(50), retry.WithIsRetryableErr(cerrors.IsRetryableError))
+	require.Nil(t, err)
+
+	// test cli sends request with a cert will success
+	err = retry.Do(ctx, func() error {
+		cli, err := httputil.NewClient(&security)
+		require.Nil(t, err)
+		resp, err := cli.Get(ctx, statusURL)
+		if err != nil {
+			return err
+		}
+		decoder := json.NewDecoder(resp.Body)
+		captureInfo := &model.CaptureInfo{}
+		err = decoder.Decode(captureInfo)
+		require.Nil(t, err)
+		info, err := server.capture.Info()
+		require.Nil(t, err)
+		require.Equal(t, info.ID, captureInfo.ID)
+		resp.Body.Close()
+		return nil
+	}, retry.WithMaxTries(retryTime), retry.WithBackoffBaseDelay(50), retry.WithIsRetryableErr(cerrors.IsRetryableError))
+	require.Nil(t, err)
+
+	cancel()
+	wg.Wait()
+}
+
+func TestServerTLSWithCommonName(t *testing.T) {
+	addr := tempurl.Alloc()[len("http://"):]
+	// specify a common name
+	security, err := security2.NewCredential4Test("test")
+	require.Nil(t, err)
+	conf := config.GetDefaultServerConfig()
+	conf.Addr = addr
+	conf.AdvertiseAddr = addr
+	conf.Security = &security
+	config.StoreGlobalServerConfig(conf)
+
+	server, err := NewServer([]string{"https://127.0.0.1:2379"})
+	server.capture = capture.NewCapture4Test(nil)
+	require.Nil(t, err)
+	err = server.startStatusHTTP(server.tcpServer.HTTP1Listener())
+	require.Nil(t, err)
+	defer func() {
+		require.Nil(t, server.statusServer.Close())
+	}()
+
+	statusURL := fmt.Sprintf("https://%s/api/v1/status", addr)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := server.tcpServer.Run(ctx)
+		require.Contains(t, err.Error(), "ErrTCPServerClosed")
+	}()
+
+	// test cli sends request without a cert will fail
+	err = retry.Do(ctx, func() error {
+		tr := &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		}
+		cli := httputil.NewTestClient(tr)
+		require.Nil(t, err)
+		resp, err := cli.Get(ctx, statusURL)
+		if err != nil {
+			return err
+		}
+		decoder := json.NewDecoder(resp.Body)
+		captureInfo := &model.CaptureInfo{}
+		err = decoder.Decode(captureInfo)
+		require.Nil(t, err)
+		info, err := server.capture.Info()
+		require.Nil(t, err)
+		require.Equal(t, info.ID, captureInfo.ID)
+		resp.Body.Close()
+		return nil
+	}, retry.WithMaxTries(retryTime), retry.WithBackoffBaseDelay(50), retry.WithIsRetryableErr(cerrors.IsRetryableError))
+	require.Contains(t, err.Error(), "remote error: tls: bad certificate")
+
+	// test cli sends request with a cert will success
+	err = retry.Do(ctx, func() error {
+		cli, err := httputil.NewClient(&security)
+		require.Nil(t, err)
+		resp, err := cli.Get(ctx, statusURL)
+		if err != nil {
+			return err
+		}
+		decoder := json.NewDecoder(resp.Body)
+		captureInfo := &model.CaptureInfo{}
+		err = decoder.Decode(captureInfo)
+		require.Nil(t, err)
+		info, err := server.capture.Info()
+		require.Nil(t, err)
+		require.Equal(t, info.ID, captureInfo.ID)
+		resp.Body.Close()
+		return nil
+	}, retry.WithMaxTries(retryTime), retry.WithBackoffBaseDelay(50), retry.WithIsRetryableErr(cerrors.IsRetryableError))
+	require.Nil(t, err)
+}
+>>>>>>> c4a5146fa (capture (ticdc): fix http status panic (#5666))
