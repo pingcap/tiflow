@@ -75,7 +75,8 @@ func (n *pullerNode) Init(ctx pipeline.NodeContext) error {
 }
 
 func (n *pullerNode) start(ctx pipeline.NodeContext,
-	wg *errgroup.Group, isActorMode bool, sorter *sorterNode) error {
+	wg *errgroup.Group, isActorMode bool, sorter *sorterNode,
+) error {
 	n.wg = wg
 	ctxC, cancel := context.WithCancel(ctx)
 	ctxC = contextutil.PutTableInfoInCtx(ctxC, n.tableID, n.tableName)
