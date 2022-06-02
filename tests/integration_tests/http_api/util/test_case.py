@@ -320,11 +320,14 @@ def verify_table():
     url = BASE_URL0_V2 + "/verify-table"
     data = json.dumps({
     "pd-addrs": [TLS_PD_ADDR],
+    "credential": {"ca-path":CA_PEM_PATH, "cert-path":CLIENT_PEM_PATH, "key-path":CLIENT_KEY_PEM_PATH},
     "start-ts": start_ts,
     "replica-config": {"filter":{"rules":["test.verify*"]}}})
     headers = {"Content-Type": "application/json"}
+    print(url)
     print(data)
     resp = rq.post(url, data=data, headers=headers, cert=CERT, verify=VERIFY)
+    print(resp)
     assert resp.status_code == rq.codes.ok
     eligible_table_name = resp.json()["eligible-tables"][0]["tbl-name"]
     ineligible_table_name = resp.json()["ineligible-tables"][0]["tbl-name"]

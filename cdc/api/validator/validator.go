@@ -219,8 +219,8 @@ func VerifyUpdateChangefeedConfig(ctx context.Context,
 
 // VerifyTables catalog tables specified by ReplicaConfig into
 // eligible (has an unique index or primary key) and ineligible tables.
-func VerifyTables(filterConfig *config.ReplicaConfig, storage tidbkv.Storage, startTs uint64) (ineligibleTables, eligibleTables []model.TableName, err error) {
-	filter, err := filter.NewFilter(filterConfig)
+func VerifyTables(replicaConfig *config.ReplicaConfig, storage tidbkv.Storage, startTs uint64) (ineligibleTables, eligibleTables []model.TableName, err error) {
+	filter, err := filter.NewFilter(replicaConfig)
 	if err != nil {
 		return nil, nil, errors.Trace(err)
 	}
