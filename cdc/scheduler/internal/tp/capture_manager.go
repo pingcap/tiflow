@@ -22,19 +22,19 @@ import (
 
 // CaptureState is the state of a capture.
 //
-//      ┌──────────────┐ Heartbeat Resp ┌─────────────┐
-//      │ Uninitialize ├───────────────>│ Initialized │
-//      └──────┬───────┘                └──────┬──────┘
-//             │                               │
-//  IsStopping │          ┌──────────┐         │ IsStopping
-//             └────────> │ Stopping │ <───────┘
+//      ┌───────────────┐ Heartbeat Resp ┌─────────────┐
+//      │ Uninitialized ├───────────────>│ Initialized │
+//      └──────┬────────┘                └──────┬──────┘
+//             │                                │
+//  IsStopping │          ┌──────────┐          │ IsStopping
+//             └────────> │ Stopping │ <────────┘
 //                        └──────────┘
 type CaptureState int
 
 const (
-	// CaptureStateUninitialize means the capture status is unknown,
+	// CaptureStateUninitialized means the capture status is unknown,
 	// no heartbeat response received yet.
-	CaptureStateUninitialize CaptureState = 1
+	CaptureStateUninitialized CaptureState = 1
 	// CaptureStateInitialized means owner has received heartbeat response.
 	CaptureStateInitialized CaptureState = 2
 	// CaptureStateStopping means the capture is removing, e.g., shutdown.
@@ -60,14 +60,14 @@ type CaptureStatus struct {
 }
 
 func newCaptureStatus(rev schedulepb.OwnerRevision) *CaptureStatus {
-	return &CaptureStatus{OwnerRev: rev, State: CaptureStateUninitialize}
+	return &CaptureStatus{OwnerRev: rev, State: CaptureStateUninitialized}
 }
 
 func (c *CaptureStatus) handleHeartbeatResponse(
 	resp *schedulepb.HeartbeatResponse, epoch schedulepb.ProcessorEpoch,
 ) {
 	// Check epoch for initialized captures.
-	if c.State != CaptureStateUninitialize && c.Epoch.Epoch != epoch.Epoch {
+	if c.State != CaptureStateUninitialized && c.Epoch.Epoch != epoch.Epoch {
 		log.Warn("tpscheduler: ignore heartbeat response",
 			zap.String("epoch", c.Epoch.Epoch),
 			zap.String("respEpoch", epoch.Epoch),
@@ -75,7 +75,7 @@ func (c *CaptureStatus) handleHeartbeatResponse(
 		return
 	}
 
-	if c.State == CaptureStateUninitialize {
+	if c.State == CaptureStateUninitialized {
 		c.Epoch = epoch
 		c.State = CaptureStateInitialized
 	}
@@ -116,7 +116,10 @@ func (c *captureManager) CheckAllCaptureInitialized() bool {
 
 func (c *captureManager) checkAllCaptureInitialized() bool {
 	for _, captureStatus := range c.Captures {
-		if captureStatus.State == CaptureStateUninitialize {
+		// CaptureStateStopping is also considered initialized, because when
+		// a capture shutdown, it becomes stopping, we need to move its tables
+		// to other captures.
+		if captureStatus.State == CaptureStateUninitialized {
 			return false
 		}
 	}

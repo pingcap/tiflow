@@ -685,3 +685,6 @@ func TestUpdateBarrierTs(t *testing.T) {
 	tb = p.tables[model.TableID(1)].(*mockTablePipeline)
 	require.Equal(t, tb.barrierTs, uint64(15))
 }
+
+func TestGetTableMeta(t *testing.T) {
+}

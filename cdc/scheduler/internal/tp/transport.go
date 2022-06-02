@@ -34,40 +34,62 @@ type transport interface {
 	Close() error
 }
 
-func p2pTopic(changefeed model.ChangeFeedID) p2p.Topic {
-	return fmt.Sprintf("changefeed/%s/%s", changefeed.Namespace, changefeed.ID)
+func p2pTopic(changefeed model.ChangeFeedID, role Role) (selfTopic, peerTopic p2p.Topic) {
+	if role == agentRole {
+		selfTopic = fmt.Sprintf(
+			"changefeed/%s/%s/%s", changefeed.Namespace, changefeed.ID, agentRole)
+		peerTopic = fmt.Sprintf(
+			"changefeed/%s/%s/%s", changefeed.Namespace, changefeed.ID, schedulerRole)
+	} else {
+		selfTopic = fmt.Sprintf(
+			"changefeed/%s/%s/%s", changefeed.Namespace, changefeed.ID, schedulerRole)
+		peerTopic = fmt.Sprintf(
+			"changefeed/%s/%s/%s", changefeed.Namespace, changefeed.ID, agentRole)
+	}
+	return
 }
 
 var _ transport = (*p2pTransport)(nil)
 
 type p2pTransport struct {
 	changefeed    model.ChangeFeedID
-	topic         p2p.Topic
+	selfTopic     p2p.Topic
+	peerTopic     p2p.Topic
 	messageServer *p2p.MessageServer
 	messageRouter p2p.MessageRouter
 	errCh         <-chan error
 
 	mu struct {
 		sync.Mutex
-		// FIXME it's an unbounded buffer, and may cuase OOM!
+		// FIXME it's an unbounded buffer, and may cause OOM!
 		msgBuf []*schedulepb.Message
 	}
 }
 
+// Role of the transport user.
+type Role string
+
+const (
+	agentRole     Role = "agent"
+	schedulerRole Role = "scheduler"
+)
+
 func newTransport(
-	ctx context.Context, changefeed model.ChangeFeedID,
+	ctx context.Context, changefeed model.ChangeFeedID, role Role,
 	server *p2p.MessageServer, router p2p.MessageRouter,
 ) (*p2pTransport, error) {
+	selfTopic, peerTopic := p2pTopic(changefeed, role)
 	trans := &p2pTransport{
 		changefeed:    changefeed,
-		topic:         p2pTopic(changefeed),
+		selfTopic:     selfTopic,
+		peerTopic:     peerTopic,
 		messageServer: server,
 		messageRouter: router,
 	}
 	var err error
 	trans.errCh, err = trans.messageServer.SyncAddHandler(
 		ctx,
-		trans.topic,
+		trans.selfTopic,
 		&schedulepb.Message{},
 		func(sender string, messageI interface{}) error {
 			message := messageI.(*schedulepb.Message)
@@ -98,7 +120,7 @@ func (t *p2pTransport) Send(
 			continue
 		}
 
-		_, err := client.TrySendMessage(ctx, t.topic, value)
+		_, err := client.TrySendMessage(ctx, t.peerTopic, value)
 		if err != nil {
 			if cerror.ErrPeerMessageSendTryAgain.Equal(err) {
 				return nil
@@ -135,7 +157,7 @@ func (t *p2pTransport) Close() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	err := t.messageServer.SyncRemoveHandler(ctx, t.topic)
+	err := t.messageServer.SyncRemoveHandler(ctx, t.selfTopic)
 	if err != nil {
 		return errors.Trace(err)
 	}

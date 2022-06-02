@@ -44,9 +44,10 @@ func TestSchedulerBalance(t *testing.T) {
 		3: {State: ReplicationSetStatePrepare, Primary: "a", Secondary: "b"},
 		4: {State: ReplicationSetStateAbsent},
 	}
-	tasks = b.Schedule(0, currentTables, captures, replications)
+	tasks = b.Schedule(1, currentTables, captures, replications)
 	require.Len(t, tasks, 1)
 	require.Contains(t, tasks[0].burstBalance.AddTables, model.TableID(4))
+	require.Equal(t, tasks[0].burstBalance.CheckpointTs, model.Ts(1))
 
 	// AddTable 4, and RemoveTable 5.
 	replications = map[model.TableID]*ReplicationSet{
@@ -55,14 +56,18 @@ func TestSchedulerBalance(t *testing.T) {
 		3: {State: ReplicationSetStatePrepare, Primary: "a", Secondary: "b"},
 		5: {State: ReplicationSetStateCommit, Primary: "a", Secondary: "b"},
 	}
-	tasks = b.Schedule(0, currentTables, captures, replications)
+	tasks = b.Schedule(2, currentTables, captures, replications)
 	require.Len(t, tasks, 2)
 	if tasks[0].burstBalance.AddTables != nil {
 		require.Contains(t, tasks[0].burstBalance.AddTables, model.TableID(4))
+		require.Equal(t, tasks[0].burstBalance.CheckpointTs, model.Ts(2))
 		require.Contains(t, tasks[1].burstBalance.RemoveTables, model.TableID(5))
+		require.Equal(t, tasks[1].burstBalance.CheckpointTs, model.Ts(2))
 	} else {
 		require.Contains(t, tasks[1].burstBalance.AddTables, model.TableID(4))
+		require.Equal(t, tasks[0].burstBalance.CheckpointTs, model.Ts(2))
 		require.Contains(t, tasks[0].burstBalance.RemoveTables, model.TableID(5))
+		require.Equal(t, tasks[1].burstBalance.CheckpointTs, model.Ts(2))
 	}
 
 	// RemoveTable only.
@@ -73,9 +78,10 @@ func TestSchedulerBalance(t *testing.T) {
 		4: {State: ReplicationSetStatePrepare, Primary: "a", Secondary: "b"},
 		5: {State: ReplicationSetStatePrepare, Secondary: "b"},
 	}
-	tasks = b.Schedule(0, currentTables, captures, replications)
+	tasks = b.Schedule(3, currentTables, captures, replications)
 	require.Len(t, tasks, 1)
 	require.Contains(t, tasks[0].burstBalance.RemoveTables, model.TableID(5))
+	require.Equal(t, tasks[0].burstBalance.CheckpointTs, model.Ts(3))
 }
 
 func benchmarkSchedulerBalance(
