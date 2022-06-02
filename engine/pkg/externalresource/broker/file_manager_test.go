@@ -16,6 +16,7 @@ package broker
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -218,4 +219,25 @@ func TestResourceNamesWithSlash(t *testing.T) {
 
 	_, err = fm.GetPersistedResource("worker-1", "a/b/c")
 	require.NoError(t, err)
+}
+
+func TestPreCheckConfig(t *testing.T) {
+	t.Parallel()
+
+	// Happy path
+	dir := t.TempDir()
+	err := PreCheckConfig(storagecfg.Config{Local: storagecfg.LocalFileConfig{BaseDir: dir}})
+	require.NoError(t, err)
+
+	// Directory does not exist but can be created.
+	baseDir := filepath.Join(dir, "not-exist")
+	err = PreCheckConfig(storagecfg.Config{Local: storagecfg.LocalFileConfig{BaseDir: baseDir}})
+	require.NoError(t, err)
+
+	// Directory exists but not writable
+	baseDir = filepath.Join(dir, "not-writable")
+	require.NoError(t, os.MkdirAll(baseDir, 0o400))
+	err = PreCheckConfig(storagecfg.Config{Local: storagecfg.LocalFileConfig{BaseDir: baseDir}})
+	require.Error(t, err)
+	require.Regexp(t, ".*ErrLocalFileDirNotWritable.*", err)
 }

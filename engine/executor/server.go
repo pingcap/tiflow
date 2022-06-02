@@ -366,9 +366,13 @@ func (s *Server) Run(ctx context.Context) error {
 		return err
 	}
 
+	if err := broker.PreCheckConfig(s.cfg.Storage); err != nil {
+		return err
+	}
+
 	// TODO: make the prefix configurable later
 	s.resourceBroker = broker.NewBroker(
-		&storagecfg.Config{Local: &storagecfg.LocalFileConfig{BaseDir: "./"}},
+		&storagecfg.Config{Local: storagecfg.LocalFileConfig{BaseDir: "./"}},
 		s.info.ID,
 		s.resourceClient)
 
@@ -426,6 +430,7 @@ func (s *Server) startTCPService(ctx context.Context, wg *errgroup.Group) error 
 	}
 	s.tcpServer = tcpServer
 	pb.RegisterExecutorServer(s.grpcSrv, s)
+	pb.RegisterBrokerServiceServer(s.grpcSrv, s.resourceBroker)
 	log.L().Logger.Info("listen address", zap.String("addr", s.cfg.WorkerAddr))
 
 	wg.Go(func() error {
