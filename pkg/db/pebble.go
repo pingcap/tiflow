@@ -47,7 +47,7 @@ func (logger *pebbleLogger) Fatalf(format string, args ...interface{}) {
 	log.Panic(fmt.Sprintf(format, args...), zap.Int("db", logger.id))
 }
 
-// Option ...
+// Option is a function that can be used to customize pebble.Options.
 type Option func(*pebble.Options)
 
 // WithCache can be used to set cache size.
@@ -68,8 +68,6 @@ func WithTableCRTsCollectors() Option {
 	}
 }
 
-// TODO: Update DB config once we switch to pebble,
-//       as some configs are not applicable to pebble.
 func buildPebbleOption(
 	id int, cfg *config.DBConfig, opts ...Option,
 ) (pebble.Options, *writeStall) {
