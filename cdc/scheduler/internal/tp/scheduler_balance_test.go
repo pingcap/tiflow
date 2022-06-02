@@ -29,7 +29,7 @@ func TestSchedulerBalance(t *testing.T) {
 
 	// AddTable only
 	replications := map[model.TableID]*ReplicationSet{}
-	b := newBalancer()
+	b := newBurstBalanceScheduler()
 	tasks := b.Schedule(0, currentTables, captures, replications)
 	require.Len(t, tasks, 1)
 	require.Contains(t, tasks[0].burstBalance.AddTables, model.TableID(1))
@@ -96,7 +96,7 @@ func benchmarkSchedulerBalance(
 	size := 16384
 	for total := 1; total <= size; total *= 2 {
 		name, currentTables, captures, replications := factory(total)
-		bal := newBalancer()
+		bal := newBurstBalanceScheduler()
 		b.ResetTimer()
 		b.Run(name, func(b *testing.B) {
 			for i := 0; i < b.N; i++ {

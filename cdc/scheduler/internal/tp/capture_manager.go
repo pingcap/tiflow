@@ -41,6 +41,16 @@ const (
 	CaptureStateStopping CaptureState = 3
 )
 
+var captureStateMap = map[CaptureState]string{
+	CaptureStateUninitialized: "CaptureStateUninitialized",
+	CaptureStateInitialized:   "CaptureStateInitialized",
+	CaptureStateStopping:      "CaptureStateStopping",
+}
+
+func (s CaptureState) String() string {
+	return captureStateMap[s]
+}
+
 // CaptureStatus represent capture's status.
 type CaptureStatus struct {
 	OwnerRev schedulepb.OwnerRevision
@@ -101,13 +111,7 @@ func newCaptureManager(rev schedulepb.OwnerRevision, heartbeatTick int) *capture
 }
 
 func (c *captureManager) CheckAllCaptureInitialized() bool {
-	if !c.checkAllCaptureInitialized() {
-		return false
-	}
-	if !c.initialized {
-		return false
-	}
-	return true
+	return c.initialized && c.checkAllCaptureInitialized()
 }
 
 func (c *captureManager) checkAllCaptureInitialized() bool {
