@@ -67,9 +67,9 @@ type BaseJobMaster interface {
 // BaseJobMasterExt extends BaseJobMaster with some extra methods.
 // These methods are used by framework and is not visible to JobMasterImpl.
 type BaseJobMasterExt interface {
-	// OnOpenAPIInitialized is used to initialize the openapi handler.
-	// It just delegates to the JobMasterImpl.
-	OnOpenAPIInitialized(apiGroup *gin.RouterGroup)
+	// TriggerOpenAPIInitialize is used to trigger the initialization of openapi handler.
+	// It just delegates to the JobMasterImpl.OnOpenAPIInitialized.
+	TriggerOpenAPIInitialize(apiGroup *gin.RouterGroup)
 
 	// IsBaseJobMasterExt is an empty function used to prevent accidental implementation
 	// of this interface.
@@ -296,8 +296,8 @@ func (d *DefaultBaseJobMaster) Exit(ctx context.Context, status libModel.WorkerS
 	return d.worker.Exit(ctx, status, err)
 }
 
-// OnOpenAPIInitialized implements BaseJobMasterExt.OnOpenAPIInitialized.
-func (d *DefaultBaseJobMaster) OnOpenAPIInitialized(apiGroup *gin.RouterGroup) {
+// TriggerOpenAPIInitialize implements BaseJobMasterExt.TriggerOpenAPIInitialize.
+func (d *DefaultBaseJobMaster) TriggerOpenAPIInitialize(apiGroup *gin.RouterGroup) {
 	d.impl.OnOpenAPIInitialized(apiGroup)
 }
 

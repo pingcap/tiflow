@@ -205,7 +205,7 @@ func (s *Server) makeTask(
 	}
 	if jm, ok := newWorker.(lib.BaseJobMasterExt); ok {
 		jobID := newWorker.ID()
-		s.jobAPISrv.initialize(jobID, jm.OnOpenAPIInitialized)
+		s.jobAPISrv.initialize(jobID, jm.TriggerOpenAPIInitialize)
 	}
 	return newWorker, nil
 }

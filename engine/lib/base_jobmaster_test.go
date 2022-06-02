@@ -240,7 +240,7 @@ func TestOnOpenAPIInitialized(t *testing.T) {
 
 	engine := gin.New()
 	apiGroup := engine.Group("/api/v1/jobs/test")
-	base.OnOpenAPIInitialized(apiGroup)
+	base.TriggerOpenAPIInitialize(apiGroup)
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/jobs/test/status", nil)
