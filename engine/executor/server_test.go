@@ -22,6 +22,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pingcap/tiflow/engine/executor/server"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
 	"github.com/phayes/freeport"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -199,4 +203,18 @@ func TestSelfRegister(t *testing.T) {
 	err = s.selfRegister(ctx)
 	require.NoError(t, err)
 	require.Equal(t, executorID, string(s.info.ID))
+}
+
+func TestRPCCallBeforeInitialized(t *testing.T) {
+	svr := &Server{
+		metastores: server.NewMetastoreManager(),
+	}
+
+	_, err := svr.PreDispatchTask(context.Background(), &pb.PreDispatchTaskRequest{})
+	require.Error(t, err)
+	require.Equal(t, codes.Unavailable, status.Convert(err).Code())
+
+	_, err = svr.ConfirmDispatchTask(context.Background(), &pb.ConfirmDispatchTaskRequest{})
+	require.Error(t, err)
+	require.Equal(t, codes.Unavailable, status.Convert(err).Code())
 }

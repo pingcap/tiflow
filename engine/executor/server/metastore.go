@@ -64,7 +64,9 @@ type MetastoreManager interface {
 // NewMetastoreManager returns a new MetastoreManager.
 // Note that Init() should be called first before using it.
 func NewMetastoreManager() MetastoreManager {
-	return &metastoreManagerImpl{}
+	return &metastoreManagerImpl{
+		creator: metastoreCreatorImpl{},
+	}
 }
 
 // metastoreManagerImpl implements MetastoreManager.
@@ -76,12 +78,91 @@ type metastoreManagerImpl struct {
 	serviceDiscoveryStore *clientv3.Client
 	frameworkStore        pkgOrm.Client
 	businessStore         extkv.KVClientEx
+
+	creator MetastoreCreator
 }
 
-func (m *metastoreManagerImpl) Init(ctx context.Context, servermasterClient client.MasterClient) error {
+// MetastoreCreator abstracts creation behavior of the various
+// metastore clients.
+type MetastoreCreator interface {
+	CreateEtcdCliForServiceDiscovery(
+		ctx context.Context, addresses string,
+	) (*clientv3.Client, error)
+
+	CreateMetaKVClientForBusiness(
+		ctx context.Context, params metaclient.StoreConfigParams,
+	) (extkv.KVClientEx, error)
+
+	CreateDBClientForFramework(
+		ctx context.Context, params metaclient.StoreConfigParams,
+	) (pkgOrm.Client, error)
+}
+
+type metastoreCreatorImpl struct{}
+
+func (c metastoreCreatorImpl) CreateEtcdCliForServiceDiscovery(
+	ctx context.Context, addresses string,
+) (*clientv3.Client, error) {
+	logConfig := logutil.DefaultZapLoggerConfig
+	logConfig.Level = zap.NewAtomicLevelAt(zapcore.ErrorLevel)
+	etcdCli, err := clientv3.New(clientv3.Config{
+		Endpoints:        strings.Split(addresses, ","),
+		Context:          ctx,
+		LogConfig:        &logConfig,
+		DialTimeout:      config.ServerMasterEtcdDialTimeout,
+		AutoSyncInterval: config.ServerMasterEtcdSyncInterval,
+		DialOptions: []grpc.DialOption{
+			grpc.WithInsecure(),
+			grpc.WithBlock(),
+			grpc.WithConnectParams(grpc.ConnectParams{
+				Backoff: backoff.Config{
+					BaseDelay:  time.Second,
+					Multiplier: 1.1,
+					Jitter:     0.1,
+					MaxDelay:   3 * time.Second,
+				},
+				MinConnectTimeout: 3 * time.Second,
+			}),
+		},
+	})
+	if err != nil {
+		return nil, derrors.ErrExecutorEtcdConnFail.Wrap(err)
+	}
+	return etcdCli, nil
+}
+
+func (c metastoreCreatorImpl) CreateMetaKVClientForBusiness(
+	_ context.Context, params metaclient.StoreConfigParams,
+) (extkv.KVClientEx, error) {
+	metaKVClient, err := kvclient.NewKVClient(&params)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	return metaKVClient, nil
+}
+
+func (c metastoreCreatorImpl) CreateDBClientForFramework(
+	_ context.Context, params metaclient.StoreConfigParams,
+) (pkgOrm.Client, error) {
+	frameMetaClient, err := pkgOrm.NewClient(params, pkgOrm.NewDefaultDBConfig())
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	return frameMetaClient, err
+}
+
+func (m *metastoreManagerImpl) Init(ctx context.Context, servermasterClient client.MasterClient) (retErr error) {
 	if m.initialized.Load() {
 		log.L().Panic("MetastoreManager: double Init")
 	}
+
+	defer func() {
+		// Close all store clients in case the final return value
+		// is not nil.
+		if retErr != nil {
+			m.Close()
+		}
+	}()
 
 	if err := m.initServerDiscoveryStore(ctx, servermasterClient); err != nil {
 		return err
@@ -115,7 +196,7 @@ func (m *metastoreManagerImpl) initServerDiscoveryStore(ctx context.Context, ser
 	}
 	log.L().Info("Obtained discovery metastore endpoint", zap.String("addr", resp.Address))
 
-	etcdCli, err := createEtcdCliForServiceDiscovery(ctx, resp.Address)
+	etcdCli, err := m.creator.CreateEtcdCliForServiceDiscovery(ctx, resp.Address)
 	if err != nil {
 		return err
 	}
@@ -142,7 +223,7 @@ func (m *metastoreManagerImpl) initFrameworkStore(ctx context.Context, servermas
 		return err
 	}
 
-	dbCli, err := createDBClientForFramework(ctx, conf)
+	dbCli, err := m.creator.CreateDBClientForFramework(ctx, conf)
 	if err != nil {
 		return err
 	}
@@ -162,64 +243,19 @@ func (m *metastoreManagerImpl) initBusinessStore(ctx context.Context, servermast
 	}
 	log.L().Info("Obtained business metastore endpoint", zap.String("addr", resp.Address))
 
-	conf := metaclient.StoreConfigParams{
-		Endpoints: []string{resp.Address},
+	var conf metaclient.StoreConfigParams
+	err = json.Unmarshal([]byte(resp.Address), &conf)
+	if err != nil {
+		log.L().Error("unmarshal framework metastore config fail", zap.String("conf", resp.Address), zap.Error(err))
+		return err
 	}
-	metaKVClient, err := createMetaKVClientForBusiness(ctx, conf)
+
+	metaKVClient, err := m.creator.CreateMetaKVClientForBusiness(ctx, conf)
 	if err != nil {
 		return err
 	}
 	m.businessStore = metaKVClient
 	return nil
-}
-
-func createEtcdCliForServiceDiscovery(ctx context.Context, addresses string) (*clientv3.Client, error) {
-	logConfig := logutil.DefaultZapLoggerConfig
-	logConfig.Level = zap.NewAtomicLevelAt(zapcore.ErrorLevel)
-	etcdCli, err := clientv3.New(clientv3.Config{
-		Endpoints:        strings.Split(addresses, ","),
-		Context:          ctx,
-		LogConfig:        &logConfig,
-		DialTimeout:      config.ServerMasterEtcdDialTimeout,
-		AutoSyncInterval: config.ServerMasterEtcdSyncInterval,
-		DialOptions: []grpc.DialOption{
-			grpc.WithInsecure(),
-			grpc.WithBlock(),
-			grpc.WithConnectParams(grpc.ConnectParams{
-				Backoff: backoff.Config{
-					BaseDelay:  time.Second,
-					Multiplier: 1.1,
-					Jitter:     0.1,
-					MaxDelay:   3 * time.Second,
-				},
-				MinConnectTimeout: 3 * time.Second,
-			}),
-		},
-	})
-	if err != nil {
-		return nil, derrors.ErrExecutorEtcdConnFail.Wrap(err)
-	}
-	return etcdCli, nil
-}
-
-func createDBClientForFramework(
-	_ context.Context, params metaclient.StoreConfigParams,
-) (pkgOrm.Client, error) {
-	frameMetaClient, err := pkgOrm.NewClient(params, pkgOrm.NewDefaultDBConfig())
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	return frameMetaClient, err
-}
-
-func createMetaKVClientForBusiness(
-	_ context.Context, params metaclient.StoreConfigParams,
-) (extkv.KVClientEx, error) {
-	metaKVClient, err := kvclient.NewKVClient(&params)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	return metaKVClient, nil
 }
 
 func (m *metastoreManagerImpl) ServiceDiscoveryStore() *clientv3.Client {
@@ -244,11 +280,9 @@ func (m *metastoreManagerImpl) BusinessStore() extkv.KVClientEx {
 }
 
 func (m *metastoreManagerImpl) Close() {
-	m.initialized.Store(false)
-
 	if m.serviceDiscoveryStore != nil {
 		_ = m.serviceDiscoveryStore.Close()
-		m.frameworkStore = nil
+		m.serviceDiscoveryStore = nil
 	}
 
 	if m.frameworkStore != nil {

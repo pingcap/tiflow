@@ -201,6 +201,10 @@ func (s *Server) makeTask(
 
 // PreDispatchTask implements Executor.PreDispatchTask
 func (s *Server) PreDispatchTask(ctx context.Context, req *pb.PreDispatchTaskRequest) (*pb.PreDispatchTaskResponse, error) {
+	if !s.isReadyToServe() {
+		return nil, status.Error(codes.Unavailable, "executor server is not ready")
+	}
+
 	task, err := s.makeTask(
 		ctx,
 		req.GetProjectInfo(),
@@ -227,6 +231,10 @@ func (s *Server) PreDispatchTask(ctx context.Context, req *pb.PreDispatchTaskReq
 
 // ConfirmDispatchTask implements Executor.ConfirmDispatchTask
 func (s *Server) ConfirmDispatchTask(ctx context.Context, req *pb.ConfirmDispatchTaskRequest) (*pb.ConfirmDispatchTaskResponse, error) {
+	if !s.isReadyToServe() {
+		return nil, status.Error(codes.Unavailable, "executor server is not ready")
+	}
+
 	ok, err := s.taskCommitter.ConfirmDispatchTask(req.GetRequestId(), req.GetWorkerId())
 	if err != nil {
 		return nil, status.Error(codes.Aborted, err.Error())
@@ -298,6 +306,10 @@ func (s *Server) startMsgService(ctx context.Context, wg *errgroup.Group) (err e
 		return s.msgServer.Serve(ctx, nil)
 	})
 	return nil
+}
+
+func (s *Server) isReadyToServe() bool {
+	return s.metastores.IsInitialized()
 }
 
 const (
