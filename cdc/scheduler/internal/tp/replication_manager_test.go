@@ -28,7 +28,7 @@ func TestReplicationManagerHandleAddTableTask(t *testing.T) {
 	addTableCh := make(chan int, 1)
 	// Absent -> Prepare
 	msgs, err := r.HandleTasks([]*scheduleTask{{
-		addTable: &addTable{TableID: 1, CaptureID: "1"},
+		addTable: &addTable{TableID: 1, CaptureID: "1", CheckpointTs: 1},
 		accept: func() {
 			addTableCh <- 1
 			close(addTableCh)
@@ -44,6 +44,7 @@ func TestReplicationManagerHandleAddTableTask(t *testing.T) {
 				AddTable: &schedulepb.AddTableRequest{
 					TableID:     1,
 					IsSecondary: true,
+					Checkpoint:  schedulepb.Checkpoint{CheckpointTs: 1},
 				},
 			},
 		},
@@ -84,6 +85,7 @@ func TestReplicationManagerHandleAddTableTask(t *testing.T) {
 				AddTable: &schedulepb.AddTableRequest{
 					TableID:     1,
 					IsSecondary: false,
+					Checkpoint:  schedulepb.Checkpoint{CheckpointTs: 1},
 				},
 			},
 		},
@@ -358,11 +360,14 @@ func TestReplicationManagerBurstBalance(t *testing.T) {
 
 	// Burst balance is not limited by maxTaskConcurrency.
 	msgs, err := r.HandleTasks([]*scheduleTask{{
-		addTable: &addTable{TableID: 1, CaptureID: "0"},
+		addTable: &addTable{TableID: 1, CaptureID: "0", CheckpointTs: 1},
 	}, {
-		burstBalance: &burstBalance{AddTables: map[int64]string{
-			1: "1", 2: "2", 3: "3",
-		}},
+		burstBalance: &burstBalance{
+			AddTables: map[int64]string{
+				1: "1", 2: "2", 3: "3",
+			},
+			CheckpointTs: 1,
+		},
 		accept: func() {
 			balanceTableCh <- 1
 		},
@@ -381,6 +386,7 @@ func TestReplicationManagerBurstBalance(t *testing.T) {
 					AddTable: &schedulepb.AddTableRequest{
 						TableID:     tableID,
 						IsSecondary: true,
+						Checkpoint:  schedulepb.Checkpoint{CheckpointTs: 1},
 					},
 				},
 			},
@@ -400,6 +406,7 @@ func TestReplicationManagerBurstBalance(t *testing.T) {
 		burstBalance: &burstBalance{
 			AddTables:    map[int64]string{4: "4", 1: "0"},
 			RemoveTables: map[int64]string{5: "5", 1: "0"},
+			CheckpointTs: 2,
 		},
 		accept: func() {
 			balanceTableCh <- 1
@@ -416,6 +423,7 @@ func TestReplicationManagerBurstBalance(t *testing.T) {
 				AddTable: &schedulepb.AddTableRequest{
 					TableID:     4,
 					IsSecondary: true,
+					Checkpoint:  schedulepb.Checkpoint{CheckpointTs: 2},
 				},
 			},
 		},

@@ -72,20 +72,22 @@ func (b *balancer) Schedule(
 	// TODO support table re-balance when adding a new capture.
 	tasks := make([]*scheduleTask, 0)
 	if len(newTables) != 0 {
-		tasks = append(tasks, newBurstBalanceAddTables(newTables, captureIDs))
+		tasks = append(
+			tasks, newBurstBalanceAddTables(checkpointTs, newTables, captureIDs))
 		if len(newTables) == len(currentTables) {
 			return tasks
 		}
 	}
 	if len(rmTables) > 0 {
-		tasks = append(tasks, newBurstBalanceRemoveTables(rmTables, replications))
+		tasks = append(
+			tasks, newBurstBalanceRemoveTables(checkpointTs, rmTables, replications))
 	}
 
 	return tasks
 }
 
 func newBurstBalanceAddTables(
-	newTables []model.TableID, captureIDs []model.CaptureID,
+	checkpointTs model.Ts, newTables []model.TableID, captureIDs []model.CaptureID,
 ) *scheduleTask {
 	idx := 0
 	tables := make(map[model.TableID]model.CaptureID)
@@ -96,11 +98,14 @@ func newBurstBalanceAddTables(
 			idx = 0
 		}
 	}
-	return &scheduleTask{burstBalance: &burstBalance{AddTables: tables}}
+	return &scheduleTask{burstBalance: &burstBalance{
+		AddTables:    tables,
+		CheckpointTs: checkpointTs,
+	}}
 }
 
 func newBurstBalanceRemoveTables(
-	rmTables []model.TableID, replications map[model.TableID]*ReplicationSet,
+	checkpointTs model.Ts, rmTables []model.TableID, replications map[model.TableID]*ReplicationSet,
 ) *scheduleTask {
 	tables := make(map[model.TableID]model.CaptureID)
 	for _, tableID := range rmTables {
@@ -115,5 +120,8 @@ func newBurstBalanceRemoveTables(
 			continue
 		}
 	}
-	return &scheduleTask{burstBalance: &burstBalance{RemoveTables: tables}}
+	return &scheduleTask{burstBalance: &burstBalance{
+		RemoveTables: tables,
+		CheckpointTs: checkpointTs,
+	}}
 }

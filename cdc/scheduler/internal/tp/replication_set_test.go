@@ -387,6 +387,29 @@ func TestReplicationSetAddTable(t *testing.T) {
 	require.Equal(t, ReplicationSetStateCommit, r.State)
 	require.Equal(t, from, r.Primary)
 	require.Equal(t, "", r.Secondary)
+	// The secondary AddTable request may be lost.
+	msgs, err = r.handleTableStatus(from, &schedulepb.TableStatus{
+		TableID: tableID,
+		State:   schedulepb.TableStatePrepared,
+	})
+	require.Nil(t, err)
+	require.Len(t, msgs, 1)
+	require.EqualValues(t, &schedulepb.Message{
+		To:      from,
+		MsgType: schedulepb.MsgDispatchTableRequest,
+		DispatchTableRequest: &schedulepb.DispatchTableRequest{
+			Request: &schedulepb.DispatchTableRequest_AddTable{
+				AddTable: &schedulepb.AddTableRequest{
+					TableID:     r.TableID,
+					IsSecondary: false,
+					Checkpoint:  r.Checkpoint,
+				},
+			},
+		},
+	}, msgs[0])
+	require.Equal(t, ReplicationSetStateCommit, r.State)
+	require.Equal(t, from, r.Primary)
+	require.Equal(t, "", r.Secondary)
 
 	// Commit -> Replicating
 	msgs, err = r.handleTableStatus(from, &schedulepb.TableStatus{

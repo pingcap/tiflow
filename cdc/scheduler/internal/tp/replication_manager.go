@@ -30,7 +30,7 @@ type callback func()
 type burstBalance struct {
 	// Add tables to captures
 	AddTables, RemoveTables map[model.TableID]model.CaptureID
-	checkpointTs            model.Ts
+	CheckpointTs            model.Ts
 }
 
 type moveTable struct {
@@ -331,6 +331,7 @@ func (r *replicationManager) handleBurstBalanceTasks(
 	fields = append(fields, zap.Int("total", len(task.AddTables)+len(task.RemoveTables)))
 	log.Info("tpscheduler: handle burst balance task", fields...)
 
+	checkpointTs := task.CheckpointTs
 	sentMsgs := make([]*schedulepb.Message, 0, len(task.AddTables))
 	for tableID, captureID := range task.AddTables {
 		if r.runningTasks[tableID] != nil {
@@ -338,7 +339,7 @@ func (r *replicationManager) handleBurstBalanceTasks(
 			continue
 		}
 		msgs, err := r.handleAddTableTask(&addTable{
-			TableID: tableID, CaptureID: captureID,
+			TableID: tableID, CaptureID: captureID, CheckpointTs: checkpointTs,
 		})
 		if err != nil {
 			return nil, errors.Trace(err)

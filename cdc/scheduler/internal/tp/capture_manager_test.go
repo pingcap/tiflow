@@ -27,7 +27,7 @@ func TestCaptureStatusHandleHeartbeatResponse(t *testing.T) {
 	rev := schedulepb.OwnerRevision{Revision: 1}
 	epoch := schedulepb.ProcessorEpoch{Epoch: "test"}
 	c := newCaptureStatus(rev)
-	require.Equal(t, CaptureStateUninitialize, c.State)
+	require.Equal(t, CaptureStateUninitialized, c.State)
 
 	// Uninitialize -> Initialized
 	c.handleHeartbeatResponse(&schedulepb.HeartbeatResponse{}, epoch)
