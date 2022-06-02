@@ -583,6 +583,6 @@ func (e *MockTableExecutor) GetTableMeta(tableID model.TableID) pipeline.TableMe
 		TableID:      tableID,
 		CheckpointTs: 0,
 		ResolvedTs:   0,
-		Status:       state,
+		State:        state,
 	}
 }

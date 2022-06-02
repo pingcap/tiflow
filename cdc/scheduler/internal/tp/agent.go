@@ -116,7 +116,7 @@ func NewAgent(ctx context.Context,
 				zap.String("namespace", changeFeedID.Namespace),
 				zap.String("changefeed", changeFeedID.ID),
 				zap.Error(err))
-			return nil, nil
+			return result, nil
 		}
 		return nil, err
 	}
@@ -212,7 +212,7 @@ func (a *agent) tableStatus2PB(status pipeline.TableState) schedulepb.TableState
 
 func (a *agent) newTableStatus(tableID model.TableID) schedulepb.TableStatus {
 	meta := a.tableExec.GetTableMeta(tableID)
-	state := a.tableStatus2PB(meta.Status)
+	state := a.tableStatus2PB(meta.State)
 
 	if task, ok := a.runningTasks[tableID]; ok {
 		// remove table task is not processed, or failed,

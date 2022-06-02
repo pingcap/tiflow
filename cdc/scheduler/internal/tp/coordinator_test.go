@@ -179,7 +179,7 @@ func BenchmarkCoordinatorInit(b *testing.B) {
 		schedulers[schedulerTypeBurstBalance] = newBurstBalanceScheduler()
 		coord = &coordinator{
 			trans:        &mockTrans{},
-			scheduler:    schedulers,
+			schedulers:   schedulers,
 			replicationM: newReplicationManager(10),
 			// Disable heartbeat.
 			captureM: newCaptureManager(schedulepb.OwnerRevision{}, math.MaxInt),
@@ -213,7 +213,7 @@ func BenchmarkCoordinatorHeartbeat(b *testing.B) {
 		schedulers[schedulerTypeBurstBalance] = newBurstBalanceScheduler()
 		coord = &coordinator{
 			trans:        &mockTrans{},
-			scheduler:    schedulers,
+			schedulers:   schedulers,
 			replicationM: newReplicationManager(10),
 			captureM:     captureM,
 		}
@@ -283,7 +283,7 @@ func BenchmarkCoordinatorHeartbeatResponse(b *testing.B) {
 		schedulers[schedulerTypeBurstBalance] = newBurstBalanceScheduler()
 		coord = &coordinator{
 			trans:        trans,
-			scheduler:    schedulers,
+			schedulers:   schedulers,
 			replicationM: replicationM,
 			captureM:     captureM,
 		}

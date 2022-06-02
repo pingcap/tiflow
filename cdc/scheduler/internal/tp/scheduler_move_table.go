@@ -36,7 +36,7 @@ func (m *moveTableScheduler) Name() string {
 }
 
 func (m *moveTableScheduler) addTask(tableID model.TableID, target model.CaptureID) bool {
-	// previous triggered task not received yet, decline the new manual move table request.
+	// previous triggered task not accepted yet, decline the new manual move table request.
 	if _, ok := m.tasks[tableID]; ok {
 		return false
 	}
@@ -59,6 +59,11 @@ func (m *moveTableScheduler) Schedule(
 	replications map[model.TableID]*ReplicationSet,
 ) []*scheduleTask {
 	result := make([]*scheduleTask, 0)
+
+	if len(m.tasks) == 0 {
+		return result
+	}
+
 	if len(captures) == 0 {
 		return result
 	}
@@ -69,7 +74,8 @@ func (m *moveTableScheduler) Schedule(
 	}
 
 	for tableID, task := range m.tasks {
-		// table may not in the all current tables if it was removed after manual move table triggered.
+		// table may not in the all current tables
+		// if it was removed after manual move table triggered.
 		if _, ok := allTables[tableID]; !ok {
 			log.Warn("tpscheduler: move table ignored, since the table cannot found",
 				zap.Int64("tableID", tableID),
@@ -77,10 +83,10 @@ func (m *moveTableScheduler) Schedule(
 			delete(m.tasks, tableID)
 			continue
 		}
-		// the target capture may not in `initialize` state after manual move table triggered.
+		// the target capture may offline after manual move table triggered.
 		_, ok := captures[task.moveTable.DestCapture]
 		if !ok {
-			log.Warn("tpscheduler: move table ignored, since the target capture cannot found",
+			log.Info("tpscheduler: move table ignored, since the target capture cannot found",
 				zap.Int64("tableID", tableID),
 				zap.String("captureID", task.moveTable.DestCapture))
 			delete(m.tasks, tableID)

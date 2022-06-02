@@ -268,6 +268,9 @@ func TestTableExecutorAddingTableDirectly(t *testing.T) {
 	table1 := p.tables[1].(*mockTablePipeline)
 	require.Equal(t, model.Ts(20), table1.sinkStartTs)
 	require.Equal(t, pipeline.TableStateReplicating, table1.status)
+	meta := p.GetTableMeta(model.TableID(1))
+	require.Equal(t, model.TableID(1), meta.TableID)
+	require.Equal(t, pipeline.TableStateReplicating, meta.State)
 
 	ok, err = p.AddTable(ctx, 2, 20, false)
 	require.Nil(t, err)
@@ -388,6 +391,9 @@ func TestTableExecutorAddingTableDirectly(t *testing.T) {
 	checkpointTs, done = p.IsRemoveTableFinished(ctx, 3)
 	require.True(t, done)
 	require.Equal(t, model.Ts(65), checkpointTs)
+	meta = p.GetTableMeta(model.TableID(3))
+	require.Equal(t, model.TableID(3), meta.TableID)
+	require.Equal(t, pipeline.TableStateAbsent, meta.State)
 
 	require.Len(t, p.tables, 3)
 	require.True(t, table3.canceled)

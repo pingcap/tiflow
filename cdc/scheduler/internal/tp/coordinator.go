@@ -101,7 +101,7 @@ func (c *coordinator) MoveTable(tableID model.TableID, target model.CaptureID) {
 	}
 	if !moveTableScheduler.addTask(tableID, target) {
 		log.Info("tpscheduler: manual move Table task ignored, "+
-			"since the last user triggered move has not finished",
+			"since the last triggered task not finished",
 			zap.Int64("tableID", tableID),
 			zap.String("targetCapture", target))
 	}
@@ -171,7 +171,7 @@ func (c *coordinator) poll(
 	replications := c.replicationM.ReplicationSets()
 	allTasks := make([]*scheduleTask, 0)
 	for _, scheduler := range c.schedulers {
-		tasks := scheduler.Schedule(checkpointTs, currentTables, c.captureM.Captures, replications)
+		tasks := scheduler.Schedule(checkpointTs, currentTables, aliveCaptures, replications)
 		if len(tasks) != 0 {
 			log.Info("tpscheduler: new schedule task",
 				zap.Int("task", len(tasks)),

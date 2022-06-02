@@ -37,6 +37,7 @@ func newRebalanceScheduler() *rebalanceScheduler {
 	return &rebalanceScheduler{
 		rebalance: false,
 		random:    rand.New(rand.NewSource(time.Now().UnixNano())),
+		tasks:     make(map[model.TableID]*scheduleTask),
 	}
 }
 
@@ -58,8 +59,7 @@ func (r *rebalanceScheduler) Schedule(
 		return result
 	}
 
-	captureNum := len(captures)
-	if captureNum == 0 {
+	if len(captures) == 0 {
 		return result
 	}
 
@@ -88,9 +88,8 @@ func (r *rebalanceScheduler) Schedule(
 		tablesPerCapture[rep.Primary].add(tableID)
 	}
 
-	// findVictim return tables which need to be moved, to make rebalance come true.
-	totalTableCount := len(replications)
-	upperLimitPerCapture := int(math.Ceil(float64(totalTableCount) / float64(captureNum)))
+	// findVictim return tables which need to be moved
+	upperLimitPerCapture := int(math.Ceil(float64(len(replications)) / float64(len(captures))))
 
 	victims := make([]model.TableID, 0)
 	for _, ts := range tablesPerCapture {
@@ -99,8 +98,8 @@ func (r *rebalanceScheduler) Schedule(
 			// Complexity note: Shuffle has O(n), where `n` is the number of tables.
 			// Also, during a single call of `Schedule`, Shuffle can be called at most
 			// `c` times, where `c` is the number of captures (TiCDC nodes).
-			// Since FindVictims is called only when a rebalance is triggered, which happens
-			// only rarely, we do not expect a performance degradation as a result of adding
+			// Only called when a rebalance is triggered, which happens rarely,
+			// we do not expect a performance degradation as a result of adding
 			// the randomness.
 			r.random.Shuffle(len(tables), func(i, j int) {
 				tables[i], tables[j] = tables[j], tables[i]
@@ -118,7 +117,6 @@ func (r *rebalanceScheduler) Schedule(
 			continue
 		}
 
-		// here we pick `tableNum2Remove` table to delete
 		for _, table := range tables {
 			if tableNum2Remove <= 0 {
 				break
