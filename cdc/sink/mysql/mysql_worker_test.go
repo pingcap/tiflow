@@ -287,7 +287,7 @@ func TestMySQLSinkWorkerExitWithError(t *testing.T) {
 	notifier.Notify()
 
 	// simulate sink shutdown and send closed singal to sink worker
-	w.closedCh <- struct{}{}
+	close(w.closedCh)
 	w.cleanup()
 
 	// the flush notification wait group should be done
@@ -360,8 +360,8 @@ func TestMySQLSinkWorkerExitCleanup(t *testing.T) {
 	w.appendFinishTxn(&wg)
 	notifier.Notify()
 
-	// simulate sink shutdown and send closed singal to sink worker
-	w.closedCh <- struct{}{}
+	// simulate sink shutdown and send closed signal to sink worker
+	close(w.closedCh)
 	w.cleanup()
 
 	// the flush notification wait group should be done

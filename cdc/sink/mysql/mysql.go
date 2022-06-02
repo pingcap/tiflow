@@ -17,6 +17,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"go.uber.org/atomic"
 	"net/url"
 	"strconv"
 	"strings"
@@ -77,6 +78,8 @@ type mysqlSink struct {
 
 	forceReplicate bool
 	cancel         func()
+
+	error atomic.Error
 }
 
 // NewMySQLSink creates a new MySQL sink using schema storage
@@ -228,6 +231,10 @@ func (s *mysqlSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.Row
 func (s *mysqlSink) FlushRowChangedEvents(
 	ctx context.Context, tableID model.TableID, resolved model.ResolvedTs,
 ) (uint64, error) {
+	if err := s.error.Load(); err != nil {
+		return 0, err
+	}
+
 	v, ok := s.getTableResolvedTs(tableID)
 	if !ok || v.Ts < resolved.Ts {
 		s.tableMaxResolvedTs.Store(tableID, resolved)
@@ -237,8 +244,6 @@ func (s *mysqlSink) FlushRowChangedEvents(
 	select {
 	case <-ctx.Done():
 		return 0, ctx.Err()
-	case err := <-s.errCh:
-		return 0, err
 	case s.resolvedCh <- struct{}{}:
 		// Notify `flushRowChangedEvents` to asynchronously write data.
 	default:
@@ -258,6 +263,13 @@ func (s *mysqlSink) flushRowChangedEvents(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
+			return
+		case err := <-s.errCh:
+			log.Error("mysqlSink encountered error",
+				zap.Error(err),
+				zap.String("namespace", s.params.changefeedID.Namespace),
+				zap.String("changefeed", s.params.changefeedID.ID))
+			s.error.Store(err)
 			return
 		case <-s.resolvedCh:
 		}
@@ -552,6 +564,9 @@ func (s *mysqlSink) RemoveTable(ctx context.Context, tableID model.TableID) erro
 				zap.Any("resolvedTs", maxResolved.Ts),
 				zap.Uint64("checkpointTs", s.getTableCheckpointTs(tableID)))
 		default:
+			if err := s.error.Load(); err != nil {
+				return err
+			}
 			maxResolved, ok := s.getTableResolvedTs(tableID)
 			if !ok {
 				log.Info("No table resolvedTs is found", zap.Int64("tableID", tableID))

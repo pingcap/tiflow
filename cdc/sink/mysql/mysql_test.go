@@ -2082,13 +2082,17 @@ func TestMySQLSinkExecDMLError(t *testing.T) {
 	}
 
 	for i := 0; i < 2000; i++ {
-		_, err = sink.FlushRowChangedEvents(ctx, 1, model.NewResolvedTs(uint64(i)))
+		ts, err := sink.FlushRowChangedEvents(ctx, 1, model.NewResolvedTs(uint64(i)))
 		if err != nil {
 			break
 		}
+		require.Less(t, ts, uint64(2))
 		time.Sleep(1 * time.Millisecond)
 	}
 
 	err = sink.RemoveTable(ctx, 1)
-	require.Nil(t, err)
+	require.Error(t, err)
+	require.Regexp(t, ".*ErrMySQLTxnError.*", err)
+
+	_ = sink.Close(ctx)
 }

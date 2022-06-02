@@ -51,7 +51,7 @@ func newMySQLSinkWorker(
 		metricBucketSize: metricBucketSize,
 		execDMLs:         execDMLs,
 		receiver:         receiver,
-		closedCh:         make(chan struct{}, 1),
+		closedCh:         make(chan struct{}),
 	}
 }
 
@@ -130,6 +130,7 @@ func (w *mysqlSinkWorker) run(ctx context.Context) (err error) {
 			}
 			if txn.FinishWg != nil {
 				if err := flushRows(); err != nil {
+					txn.FinishWg.Done()
 					return errors.Trace(err)
 				}
 				txn.FinishWg.Done()
@@ -158,19 +159,22 @@ func (w *mysqlSinkWorker) run(ctx context.Context) (err error) {
 // 2. goroutine in 1 sends notification to closedCh of each sink worker
 // 3. each sink worker receives the notification from closedCh and mark FinishWg as Done
 func (w *mysqlSinkWorker) cleanup() {
-	<-w.closedCh
 	for {
 		select {
 		case txn := <-w.txnCh:
 			if txn.FinishWg != nil {
 				txn.FinishWg.Done()
 			}
-		default:
+		case <-w.closedCh:
+			// We are the consumer.
+			// By returning here, it means we return only if
+			// the producer has returned.
 			return
 		}
 	}
 }
 
 func (w *mysqlSinkWorker) close() {
-	w.closedCh <- struct{}{}
+	// Close the channel to provide idempotent reads.
+	close(w.closedCh)
 }
