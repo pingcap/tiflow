@@ -200,10 +200,17 @@ func (w *flushWorker) asyncSend(
 // until it encounters an error or is interrupted.
 func (w *flushWorker) run(ctx context.Context) (retErr error) {
 	defer func() {
+		go func() {
+			// We must finish consuming the data here,
+			// otherwise it will cause the channel to not close properly.
+			for range w.msgChan.Out() {
+				// Do nothing. We do not care about the data.
+			}
+		}()
 		// TODO: log changefeed ID here
 		log.Info("flushWorker exited", zap.Error(retErr))
+		w.ticker.Stop()
 	}()
-	defer w.ticker.Stop()
 	eventsBuf := make([]mqEvent, flushBatchSize)
 	for {
 		endIndex, err := w.batch(ctx, eventsBuf)
