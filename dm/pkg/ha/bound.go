@@ -212,43 +212,44 @@ func GetSourceBoundConfig(cli *clientv3.Client, worker, source string) (map[stri
 	)
 	wbm, rev, err := GetSourceBound(cli, worker, source)
 	if err != nil {
-		return nil, nil, 0, err
+		return bounds, configs, 0, err
 	}
 	if bounds, ok = wbm[worker]; !ok {
-		return nil, nil, rev, nil
+		return bounds, configs, rev, nil
 	}
 
 	for retryCnt := 1; retryCnt <= retryNum; retryCnt++ {
 		txnResp, rev2, err2 := etcdutil.DoTxnWithRepeatable(cli, etcdutil.ThenOpFunc(clientv3.OpGet(common.UpstreamBoundWorkerKeyAdapter.Encode(worker), clientv3.WithPrefix()),
 			clientv3.OpGet(common.UpstreamConfigKeyAdapter.Path(), clientv3.WithPrefix())))
 		if err2 != nil {
-			return nil, nil, 0, err2
+			return bounds, configs, 0, err2
 		}
 
 		boundResp := txnResp.Responses[0].GetResponseRange()
 		sbm2, err2 := sourceBoundFromResp((*clientv3.GetResponse)(boundResp))
 		if err2 != nil {
-			return nil, nil, 0, err2
+			return bounds, configs, 0, err2
 		}
 		newBounds = sbm2[worker]
 
 		// 1. newBounds and bounds are exactly the same, find source configs and return.
-		// 2. newBounds and bounds only have part of them is consistent, retry, but the last retry will return the consistent part.
-		// 3. newBounds and bounds have no consistent part, retry, when last retry still have no consistent return error.
+		// 2. newBounds and bounds are not the same, retry, when last retry is still not the same, for loop end and return error.
 		newBoundsLen := len(newBounds)
 		boundsLen := len(bounds)
 		if newBoundsLen == 0 && boundsLen == 0 {
-			return nil, nil, rev2, nil
+			return bounds, configs, rev2, nil
 		}
-		sameSourceBounds := make(map[string]SourceBound, 0)
-		for sourceID := range newBounds {
-			if bound, ok := bounds[sourceID]; ok {
-				sameSourceBounds[sourceID] = bound
+		hasDiff := false
+		if newBoundsLen == boundsLen {
+			for sourceID := range newBounds {
+				if _, ok := bounds[sourceID]; !ok {
+					hasDiff = true
+					break
+				}
 			}
 		}
-		sameSourceBoundsLen := len(sameSourceBounds)
 		// not exactly the same, will retry
-		if sameSourceBoundsLen != newBoundsLen || sameSourceBoundsLen != boundsLen {
+		if newBoundsLen != boundsLen || hasDiff {
 			log.L().Warn("source bound has been changed, will take a retry", zap.String("oldBounds", fmt.Sprintf("%v", bounds)),
 				zap.String("newBounds", fmt.Sprintf("%v", newBounds)), zap.Int("retryTime", retryCnt))
 			// if we are about to fail, don't update bound to save the last bound to error
@@ -265,31 +266,26 @@ func GetSourceBoundConfig(cli *clientv3.Client, worker, source string) (map[stri
 			continue
 		}
 
-		// after retry or already the same
-		// 1. no consistent part, return error
-		// 2. consistent part( exactly the same or just a part), find source configs and retur
-		if sameSourceBoundsLen == 0 {
-			return nil, nil, 0, terror.ErrMasterBoundChanging.Generate(bounds, newBounds)
-		}
+		// after retry and already the same, find source configs and return
 		cfgResp := txnResp.Responses[1].GetResponseRange()
 		scm, err2 := sourceCfgFromResp("", (*clientv3.GetResponse)(cfgResp))
 		if err2 != nil {
 			return nil, nil, 0, err2
 		}
 		configs = make(map[string]*config.SourceConfig, 0)
-		for sourceID := range sameSourceBounds {
+		for sourceID := range bounds {
 			cfg, ok := scm[sourceID]
 			// ok == false means we have got source bound but there is no source config, this shouldn't happen
 			if !ok {
 				// this should not happen.
-				return nil, nil, 0, terror.ErrConfigMissingForBound.Generate(sourceID)
+				return bounds, configs, 0, terror.ErrConfigMissingForBound.Generate(sourceID)
 			}
 			configs[sourceID] = cfg
 		}
-		return sameSourceBounds, configs, rev2, nil
+		return bounds, configs, rev2, nil
 	}
 
-	return nil, nil, 0, terror.ErrMasterBoundChanging.Generate(bounds, newBounds)
+	return bounds, configs, 0, terror.ErrMasterBoundChanging.Generate(bounds, newBounds)
 }
 
 // WatchSourceBound watches PUT & DELETE operations for the bound relationship of the specified DM-worker.

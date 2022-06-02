@@ -187,25 +187,28 @@ func GetRelayConfig(cli *clientv3.Client, worker string) (map[string]*config.Sou
 			return nil, 0, err
 		}
 		// 1. newSources and sources are exactly the same, find source configs and return.
-		// 2. newSources and sources only have part of them is consistent, retry, but the last retry will return the consistent part.
-		// 3. newSources and sources have no consistent part, retry, when last retry still have no consistent return error.
+		// 2. newSources and sources are not the same, retry, when last retry is still not the same, for loop end and return error.
 		newSourcesLen := len(newSources)
 		sourcesLen := len(sources)
 		if newSourcesLen == 0 && sourcesLen == 0 {
 			return nil, rev2, nil
 		}
-		sameSources := make([]string, 0)
-		for _, newSource := range newSources {
-			for _, source := range sources {
-				if newSource == source {
-					sameSources = append(sameSources, newSource)
-					continue
+		hasDiff := false
+		if newSourcesLen == sourcesLen {
+			for _, newSource := range newSources {
+				for _, source := range sources {
+					if newSource != source {
+						hasDiff = false
+						break
+					}
+				}
+				if hasDiff {
+					break
 				}
 			}
 		}
-		sameSourcesLen := len(sameSources)
 		// not exactly the same, will retry
-		if sameSourcesLen != newSourcesLen || sameSourcesLen != sourcesLen {
+		if newSourcesLen != sourcesLen || hasDiff {
 			log.L().Warn("relay config has been changed, will take a retry",
 				zap.Strings("old relay sources", sources),
 				zap.Strings("new relay sources", newSources),
@@ -226,19 +229,14 @@ func GetRelayConfig(cli *clientv3.Client, worker string) (map[string]*config.Sou
 			}
 		}
 
-		// after retry or already the same
-		// 1. no consistent part, return error
-		// 2. consistent part( exactly the same or just a part), find source configs and return
-		if sameSourcesLen == 0 {
-			return nil, 0, terror.ErrWorkerRelayConfigChanging.Generate(worker, sources, newSources)
-		}
+		// after retry and already the same, find source configs and return
 		cfgResp := txnResp.Responses[1].GetResponseRange()
 		scm, err3 := sourceCfgFromResp("", (*clientv3.GetResponse)(cfgResp))
 		if err3 != nil {
 			return nil, 0, err3
 		}
 		configs := make(map[string]*config.SourceConfig, 0)
-		for _, sourceID := range sameSources {
+		for _, sourceID := range sources {
 			cfg, ok := scm[sourceID]
 			// ok == false means we have got relay source but there is no source config, this shouldn't happen
 			if !ok {
