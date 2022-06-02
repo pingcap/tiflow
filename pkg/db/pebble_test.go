@@ -26,7 +26,8 @@ import (
 
 func TestIteratorWithTableFilter(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), t.Name())
-	db, err := OpenPebble(context.Background(), 1, dbPath, 16<<20, &config.DBConfig{Count: 1})
+	db, err := OpenPebble(context.Background(), 1, dbPath, &config.DBConfig{Count: 1},
+		WithCache(16<<20), WithTablePropertyCollectors())
 	if err != nil {
 		errmsg := fmt.Sprintf("OpenPebble fail: %v", err)
 		panic(errmsg)
