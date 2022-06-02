@@ -1940,6 +1940,10 @@ func TestHolderString(t *testing.T) {
 }
 
 func TestMySQLSinkExecDMLError(t *testing.T) {
+	// The purpose of this test is to make sure
+	// that error during executing DML does not block
+	// RemoveTable.
+
 	dbIndex := 0
 	mockGetDBConn := func(ctx context.Context, dsnStr string) (*sql.DB, error) {
 		defer func() {
@@ -2082,6 +2086,7 @@ func TestMySQLSinkExecDMLError(t *testing.T) {
 	}
 
 	for i := 0; i < 2000; i++ {
+		// Keep flushing so that appendFinishTxn is called enough times.
 		ts, err := sink.FlushRowChangedEvents(ctx, 1, model.NewResolvedTs(uint64(i)))
 		if err != nil {
 			break

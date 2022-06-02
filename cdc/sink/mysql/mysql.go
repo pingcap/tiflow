@@ -17,7 +17,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"go.uber.org/atomic"
 	"net/url"
 	"strconv"
 	"strings"
@@ -44,6 +43,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/quotes"
 	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/prometheus/client_golang/prometheus"
+	"go.uber.org/atomic"
 	"go.uber.org/zap"
 )
 
@@ -443,9 +443,6 @@ func (s *mysqlSink) createSinkWorkers(ctx context.Context) error {
 }
 
 func (s *mysqlSink) notifyAndWaitExec(ctx context.Context) {
-	defer func() {
-		log.Info("notifyAndWaitExec finished")
-	}()
 	// notifyAndWaitExec may return because of context cancellation,
 	// and s.flushSyncWg.Wait() goroutine is still running, check context first to
 	// avoid data race
@@ -468,9 +465,7 @@ func (s *mysqlSink) notifyAndWaitExec(ctx context.Context) {
 	// scenario happens, the blocked goroutine will be leak.
 	select {
 	case <-ctx.Done():
-		return
 	case <-done:
-		return
 	}
 }
 
