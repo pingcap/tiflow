@@ -16,6 +16,7 @@ package db
 import (
 	"context"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -27,6 +28,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/sorter"
+	"github.com/pingcap/tiflow/cdc/sorter/encoding"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/retry"
 	"go.uber.org/zap"
@@ -94,6 +96,7 @@ func buildPebbleOption(id int, memInByte int, cfg *config.DBConfig) (pebble.Opti
 		atomic.StoreInt64(&stallTimeStamp, 0)
 		ws.duration.Store(time.Since(time.Unix(0, start)))
 	}
+
 	return option, ws
 }
 
@@ -101,7 +104,24 @@ func buildPebbleOption(id int, memInByte int, cfg *config.DBConfig) (pebble.Opti
 func OpenPebble(
 	ctx context.Context, id int, path string, memInByte int, cfg *config.DBConfig,
 ) (DB, error) {
+	return doOpenPebble(ctx, id, path, memInByte, true, cfg)
+}
+
+func doOpenPebble(
+	ctx context.Context,
+	id int, path string, memInByte int,
+	withTablePropertyCollectors bool,
+	cfg *config.DBConfig,
+) (DB, error) {
 	option, ws := buildPebbleOption(id, memInByte, cfg)
+	if withTablePropertyCollectors {
+		// tableCRTsCollector can be used to filter out useless SSTables when iterating
+		// with a given timestamp range.
+		option.TablePropertyCollectors = append(option.TablePropertyCollectors, func() pebble.TablePropertyCollector {
+			return &tableCRTsCollector{minTs: math.MaxUint64, maxTs: 0}
+		})
+	}
+
 	dbDir := filepath.Join(path, fmt.Sprintf("%04d", id))
 	err := retry.Do(ctx, func() error {
 		err1 := os.RemoveAll(dbDir)
@@ -140,10 +160,15 @@ type pebbleDB struct {
 
 var _ DB = (*pebbleDB)(nil)
 
-func (p *pebbleDB) Iterator(lowerBound, upperBound []byte) Iterator {
+func (p *pebbleDB) Iterator(lowerBound, upperBound []byte, lowerTs, upperTs uint64) Iterator {
 	return pebbleIter{Iterator: p.db.NewIter(&pebble.IterOptions{
 		LowerBound: lowerBound,
 		UpperBound: upperBound,
+		TableFilter: func(userProps map[string]string) bool {
+			tableMinCRTs, _ := strconv.Atoi(userProps[minTableCRTsLabel])
+			tableMaxCRTs, _ := strconv.Atoi(userProps[maxTableCRTsLabel])
+			return uint64(tableMaxCRTs) >= lowerTs && uint64(tableMinCRTs) <= upperTs
+		},
 	})}
 }
 
@@ -264,4 +289,36 @@ func (i pebbleIter) Error() error {
 
 func (i pebbleIter) Release() error {
 	return i.Iterator.Close()
+}
+
+const (
+	minTableCRTsLabel      string = "minCRTs"
+	maxTableCRTsLabel      string = "maxCRTs"
+	tableCRTsCollectorName string = "table-crts-collector"
+)
+
+type tableCRTsCollector struct {
+	minTs uint64
+	maxTs uint64
+}
+
+func (t *tableCRTsCollector) Add(key pebble.InternalKey, value []byte) error {
+	crts := encoding.DecodeCRTs(key.UserKey)
+	if crts > t.maxTs {
+		t.maxTs = crts
+	}
+	if crts < t.minTs {
+		t.minTs = crts
+	}
+	return nil
+}
+
+func (t *tableCRTsCollector) Finish(userProps map[string]string) error {
+	userProps[minTableCRTsLabel] = fmt.Sprintf("%d", t.minTs)
+	userProps[maxTableCRTsLabel] = fmt.Sprintf("%d", t.maxTs)
+	return nil
+}
+
+func (t *tableCRTsCollector) Name() string {
+	return tableCRTsCollectorName
 }

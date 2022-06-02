@@ -13,9 +13,15 @@
 
 package db
 
-// DB is an interface of a leveldb-like database.
+// DB is an interface of a leveldb-like database. It's only used to store and sort CDC events
+// so that users must ensure keys can be handled by `DecodeKey` in package `cdc/sorter`.
 type DB interface {
-	Iterator(lowerBound, upperBound []byte) Iterator
+	// Iterator creates an iterator. lowerTs and upperTs can specified a timestamp range, both boundaries
+	// are included.
+	//
+	// For all items in [lowerBound, upperBound), if their decoded CRTS is not in the range [lowerTs, upperTs],
+	// they may (but not must) be skipped when fetching from the iterator.
+	Iterator(lowerBound, upperBound []byte, lowerTs, upperTs uint64) Iterator
 	Batch(cap int) Batch
 	DeleteRange(start, end []byte) error
 	Compact(start, end []byte) error

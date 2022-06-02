@@ -71,6 +71,11 @@ type IterRequest struct {
 	ResolvedTs uint64
 	// Range of a requested iterator.
 	Range [2][]byte
+
+	// Lower bound and upper bound for CRTs, both are included.
+	// They can be used to filter out some table files when fetching entries from DB.
+	CRTsFilter [2]uint64
+
 	// IterCallback is callback to send iterator back.
 	// It must be buffered channel to avoid blocking.
 	IterCallback func(*LimitedIterator) `json:"-"` // Make Task JSON printable.
