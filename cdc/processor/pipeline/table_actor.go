@@ -519,7 +519,7 @@ func (t *tableActor) Wait() {
 
 // for ut
 var startPuller = func(t *tableActor, ctx *actorNodeContext) error {
-	return t.pullerNode.start(ctx, t.upStream, t.wg, true, t.sortNode)
+	return t.pullerNode.start(ctx, t.wg, true, t.sortNode)
 }
 
 var startSorter = func(t *tableActor, ctx *actorNodeContext) error {
