@@ -36,7 +36,7 @@ func RegisterOpenAPIV2Routes(router *gin.Engine, api OpenAPIV2) {
 	v2.Use(middleware.LogMiddleware())
 	v2.Use(middleware.ErrorHandleMiddleware())
 
-	//unsafe apis
+	// unsafe apis
 	v2.GET("/unsafe/metadata", api.CDCMetaData)
 	v2.POST("/unsafe/resolve-lock", api.ResolveLock)
 	v2.DELETE("/unsafe/service-gc-safepoint", api.DeleteServiceGcSafePoint)
