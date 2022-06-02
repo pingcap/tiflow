@@ -360,12 +360,14 @@ func TestMySQLSinkWorkerExitCleanup(t *testing.T) {
 	w.appendFinishTxn(&wg)
 	notifier.Notify()
 
-	// simulate sink shutdown and send closed signal to sink worker
-	close(w.closedCh)
-	w.cleanup()
+	errg.Go(func() error {
+		w.cleanup()
+		return nil
+	})
 
 	// the flush notification wait group should be done
 	wg.Wait()
+	w.close()
 
 	cancel()
 	require.Equal(t, errExecFailed, errg.Wait())
