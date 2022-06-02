@@ -186,16 +186,23 @@ func (c *coordinator) recvMsgs(ctx context.Context) ([]*schedulepb.Message, erro
 func (c *coordinator) sendMsgs(ctx context.Context, msgs []*schedulepb.Message) error {
 	for i := range msgs {
 		m := msgs[i]
-		m.Header = &schedulepb.Message_Header{
-			Version:       c.version,
-			OwnerRevision: c.revision,
-		}
-		m.From = c.captureID
 		// Correctness check.
 		if len(m.To) == 0 || m.MsgType == schedulepb.MsgUnknown {
 			log.Panic("invalid message no destination or unknown message type",
 				zap.Any("message", m))
 		}
+
+		epoch := schedulepb.ProcessorEpoch{}
+		if capture := c.captureM.Captures[m.To]; capture != nil {
+			epoch = capture.Epoch
+		}
+		m.Header = &schedulepb.Message_Header{
+			Version:        c.version,
+			OwnerRevision:  c.revision,
+			ProcessorEpoch: epoch,
+		}
+		m.From = c.captureID
+
 	}
 	return c.trans.Send(ctx, msgs)
 }

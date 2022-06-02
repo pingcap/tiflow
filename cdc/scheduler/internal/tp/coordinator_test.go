@@ -73,6 +73,11 @@ func TestCoordinatorSendMsgs(t *testing.T) {
 		captureID: "0",
 		trans:     trans,
 	}
+	coord.captureM = newCaptureManager(coord.revision, 0)
+	coord.sendMsgs(
+		ctx, []*schedulepb.Message{{To: "1", MsgType: schedulepb.MsgDispatchTableRequest}})
+
+	coord.captureM.Captures["1"] = &CaptureStatus{Epoch: schedulepb.ProcessorEpoch{Epoch: "epoch"}}
 	coord.sendMsgs(
 		ctx, []*schedulepb.Message{{To: "1", MsgType: schedulepb.MsgDispatchTableRequest}})
 
@@ -80,6 +85,13 @@ func TestCoordinatorSendMsgs(t *testing.T) {
 		Header: &schedulepb.Message_Header{
 			Version:       coord.version,
 			OwnerRevision: coord.revision,
+		},
+		From: "0", To: "1", MsgType: schedulepb.MsgDispatchTableRequest,
+	}, {
+		Header: &schedulepb.Message_Header{
+			Version:        coord.version,
+			OwnerRevision:  coord.revision,
+			ProcessorEpoch: schedulepb.ProcessorEpoch{Epoch: "epoch"},
 		},
 		From: "0", To: "1", MsgType: schedulepb.MsgDispatchTableRequest,
 	}}, trans.sendBuffer)
