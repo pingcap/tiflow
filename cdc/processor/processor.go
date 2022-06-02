@@ -826,6 +826,7 @@ func (p *processor) createTablePipelineImpl(
 			replicaInfo,
 			s,
 			p.changefeed.Info.GetTargetTs(),
+			p.upStream,
 		)
 	}
 

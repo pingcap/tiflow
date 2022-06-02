@@ -28,6 +28,7 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/pipeline"
 	pmessage "github.com/pingcap/tiflow/pkg/pipeline/message"
+	"github.com/pingcap/tiflow/pkg/upstream"
 	"go.uber.org/zap"
 )
 
@@ -178,6 +179,7 @@ func NewTablePipeline(ctx cdcContext.Context,
 	replicaInfo *model.TableReplicaInfo,
 	sink sink.Sink,
 	targetTs model.Ts,
+	upstream *upstream.Upstream,
 ) TablePipeline {
 	ctx, cancel := cdcContext.WithCancel(ctx)
 	changefeed := ctx.ChangefeedVars().ID
@@ -210,7 +212,8 @@ func NewTablePipeline(ctx cdcContext.Context,
 		flowController, mounter, replConfig)
 	sinkNode := newSinkNode(tableID, sink, replicaInfo.StartTs, targetTs, flowController)
 
-	p.AppendNode(ctx, "puller", newPullerNode(tableID, replicaInfo, tableName, changefeed))
+	p.AppendNode(ctx, "puller", newPullerNode(tableID, replicaInfo, tableName,
+		changefeed, upstream))
 	p.AppendNode(ctx, "sorter", sorterNode)
 	if cyclicEnabled {
 		p.AppendNode(ctx, "cyclic", newCyclicMarkNode(replicaInfo.MarkTableID))

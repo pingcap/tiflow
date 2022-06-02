@@ -38,18 +38,22 @@ type pullerNode struct {
 	changefeed  model.ChangeFeedID
 	cancel      context.CancelFunc
 	wg          *errgroup.Group
+
+	upstream *upstream.Upstream
 }
 
 func newPullerNode(
 	tableID model.TableID, replicaInfo *model.TableReplicaInfo,
 	tableName string,
 	changefeed model.ChangeFeedID,
+	upstream *upstream.Upstream,
 ) *pullerNode {
 	return &pullerNode{
 		tableID:     tableID,
 		replicaInfo: replicaInfo,
 		tableName:   tableName,
 		changefeed:  changefeed,
+		upstream:    upstream,
 	}
 }
 
@@ -66,7 +70,8 @@ func (n *pullerNode) tableSpan(ctx cdcContext.Context) []regionspan.Span {
 }
 
 func (n *pullerNode) Init(ctx pipeline.NodeContext) error {
-	return n.start(ctx, nil, new(errgroup.Group), false, nil)
+	return n.start(ctx, n.upstream,
+		new(errgroup.Group), false, nil)
 }
 
 func (n *pullerNode) start(ctx pipeline.NodeContext, upStream *upstream.Upstream, wg *errgroup.Group, isActorMode bool, sorter *sorterNode) error {
