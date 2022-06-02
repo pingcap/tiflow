@@ -1036,13 +1036,15 @@ func (p *processor) Close() error {
 	p.wg.Wait()
 	p.upStream.Release()
 
-	if p.agent == nil {
-		return nil
-	}
-	if err := p.agent.Close(); err != nil {
-		return errors.Trace(err)
-	}
-	p.agent = nil
+	// TODO nil agent will cause panic in processor.tick().
+	//
+	// if p.agent == nil {
+	// 	return nil
+	// }
+	// if err := p.agent.Close(); err != nil {
+	// 	return errors.Trace(err)
+	// }
+	// p.agent = nil
 
 	// sink close might be time-consuming, do it the last.
 	if p.sink != nil {
