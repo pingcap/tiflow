@@ -19,9 +19,12 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/errors"
+	"github.com/pingcap/tiflow/pkg/fsutil"
+
 	"go.uber.org/zap"
 
+	"github.com/pingcap/tiflow/dm/pkg/log"
 	libModel "github.com/pingcap/tiflow/engine/lib/model"
 	derrors "github.com/pingcap/tiflow/engine/pkg/errors"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
@@ -254,5 +257,31 @@ func iterOverResourceDirectories(path string, fn func(relPath string) error) err
 			return err
 		}
 	}
+	return nil
+}
+
+// PreCheckConfig does a preflight check on the executor's storage configurations.
+func PreCheckConfig(config storagecfg.Config) error {
+	baseDir := config.Local.BaseDir
+
+	if _, err := os.Stat(baseDir); os.IsNotExist(err) {
+		log.L().Info("Configured local file directory does not existing, try to create one",
+			zap.String("dir", baseDir))
+		if err := os.MkdirAll(baseDir, 0o700); err != nil {
+			return errors.Annotate(err, "engine: failed to create local file directory")
+		}
+	}
+
+	if err := fsutil.IsDirReadWritable(baseDir); err != nil {
+		return derrors.ErrLocalFileDirNotWritable.GenWithStackByArgs()
+	}
+
+	diskInfo, err := fsutil.GetDiskInfo(baseDir)
+	if err != nil {
+		return errors.Annotate(err, "engine: check local file directory failed")
+	}
+	log.L().Info("Local file directory disk info", zap.Any("disk-info", diskInfo))
+
+	// TODO implement a minimum disk space threshold.
 	return nil
 }

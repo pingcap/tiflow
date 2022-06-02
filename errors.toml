@@ -1266,6 +1266,11 @@ error = '''
 leader context is canceled
 '''
 
+["DFLOW:ErrLocalFileDirNotWritable"]
+error = '''
+local resource directory not writable
+'''
+
 ["DFLOW:ErrMasterCampaignLeader"]
 error = '''
 master campaign to be leader failed
