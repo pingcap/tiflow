@@ -550,6 +550,10 @@ var (
 		"capture register to etcd failed",
 		errors.RFCCodeText("CDC:ErrCaptureRegister"),
 	)
+	ErrCaptureNotInitialized = errors.Normalize(
+		"capture has not been initialized yet",
+		errors.RFCCodeText("CDC:ErrCaptureNotInitialized"),
+	)
 	ErrNewProcessorFailed = errors.Normalize(
 		"new processor failed",
 		errors.RFCCodeText("CDC:ErrNewProcessorFailed"),
