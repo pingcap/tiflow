@@ -34,7 +34,7 @@ func (b *burstBalanceScheduler) Name() string {
 func (b *burstBalanceScheduler) Schedule(
 	checkpointTs model.Ts,
 	currentTables []model.TableID,
-	captures map[model.CaptureID]*CaptureStatus,
+	captures map[model.CaptureID]*model.CaptureInfo,
 	replications map[model.TableID]*ReplicationSet,
 ) []*scheduleTask {
 	newTables := make([]model.TableID, 0)

@@ -36,7 +36,7 @@ func (m *moveTableScheduler) Name() string {
 }
 
 func (m *moveTableScheduler) addTask(tableID model.TableID, target model.CaptureID) bool {
-	// previous triggered task not finished yet, decline the new manual move table request.
+	// previous triggered task not received yet, decline the new manual move table request.
 	if _, ok := m.tasks[tableID]; ok {
 		return false
 	}
@@ -45,6 +45,9 @@ func (m *moveTableScheduler) addTask(tableID model.TableID, target model.Capture
 			TableID:     tableID,
 			DestCapture: target,
 		},
+		accept: func() {
+			delete(m.tasks, tableID)
+		},
 	}
 	return true
 }
@@ -52,9 +55,14 @@ func (m *moveTableScheduler) addTask(tableID model.TableID, target model.Capture
 func (m *moveTableScheduler) Schedule(
 	checkpointTs model.Ts,
 	currentTables []model.TableID,
-	captures map[model.CaptureID]*CaptureStatus,
+	captures map[model.CaptureID]*model.CaptureInfo,
 	replications map[model.TableID]*ReplicationSet,
 ) []*scheduleTask {
+	result := make([]*scheduleTask, 0)
+	if len(captures) == 0 {
+		return result
+	}
+
 	allTables := make(map[model.TableID]struct{})
 	for _, tableID := range currentTables {
 		allTables[tableID] = struct{}{}
@@ -70,20 +78,11 @@ func (m *moveTableScheduler) Schedule(
 			continue
 		}
 		// the target capture may not in `initialize` state after manual move table triggered.
-		captureStatus, ok := captures[task.moveTable.DestCapture]
+		_, ok := captures[task.moveTable.DestCapture]
 		if !ok {
 			log.Warn("tpscheduler: move table ignored, since the target capture cannot found",
 				zap.Int64("tableID", tableID),
 				zap.String("captureID", task.moveTable.DestCapture))
-			delete(m.tasks, tableID)
-			continue
-		}
-		if captureStatus.State != CaptureStateInitialized {
-			log.Warn("tpscheduler: move table ignored, "+
-				"since the target capture is not initialized",
-				zap.Int64("tableID", tableID),
-				zap.String("captureID", task.moveTable.DestCapture),
-				zap.Any("captureState", captureStatus.State))
 			delete(m.tasks, tableID)
 			continue
 		}
@@ -106,11 +105,9 @@ func (m *moveTableScheduler) Schedule(
 		}
 	}
 
-	tasks := make([]*scheduleTask, 0)
 	for _, task := range m.tasks {
-		tasks = append(tasks, task)
+		result = append(result, task)
 	}
-	m.tasks = make(map[model.TableID]*scheduleTask)
 
-	return tasks
+	return result
 }

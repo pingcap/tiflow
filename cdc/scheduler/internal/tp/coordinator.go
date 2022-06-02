@@ -84,29 +84,13 @@ func (c *coordinator) Tick(
 }
 
 func (c *coordinator) MoveTable(tableID model.TableID, target model.CaptureID) {
-	captureStatus, ok := c.captureM.Captures[target]
-	if !ok {
-		log.Warn("tpscheduler: manual move table task ignored, "+
-			"since cannot found the target capture",
-			zap.Int64("tableID", tableID),
-			zap.String("targetCapture", target))
-		return
-	}
 	if !c.captureM.CheckAllCaptureInitialized() {
 		log.Info("tpscheduler: manual move table task ignored, "+
 			"since not all captures initialized",
 			zap.Int64("tableID", tableID),
-			zap.String("targetCapture", target),
-			zap.Any("state", captureStatus.State))
+			zap.String("targetCapture", target))
 		return
 	}
-	_, ok = c.replicationM.tables[tableID]
-	if !ok {
-		log.Warn("tpscheduler: manual move table task ignored, since cannot found the table",
-			zap.Int64("tableID", tableID))
-		return
-	}
-
 	scheduler, ok := c.schedulers[schedulerTypeMoveTable]
 	if !ok {
 		log.Panic("tpscheduler: move table scheduler not found")
@@ -125,11 +109,10 @@ func (c *coordinator) MoveTable(tableID model.TableID, target model.CaptureID) {
 
 func (c *coordinator) Rebalance() {
 	if !c.captureM.CheckAllCaptureInitialized() {
-		log.Warn("tpscheduler: manual rebalance tables task ignored," +
-			" since not all captures initialized")
+		log.Info("tpscheduler: manual rebalance task ignored, " +
+			"since not all captures initialized")
 		return
 	}
-
 	scheduler, ok := c.schedulers[schedulerTypeRebalance]
 	if !ok {
 		log.Panic("tpscheduler: rebalance scheduler not found")
@@ -138,9 +121,7 @@ func (c *coordinator) Rebalance() {
 	if !ok {
 		log.Panic("tpscheduler: invalid rebalance scheduler found")
 	}
-	// todo (Ling Jin): shall we also check other scheduler's status
-	// for example, if there is any move table task, rebalance should not ignored.
-	rebalanceScheduler.trigger()
+	rebalanceScheduler.rebalance = true
 }
 
 func (c *coordinator) Close(ctx context.Context) {
