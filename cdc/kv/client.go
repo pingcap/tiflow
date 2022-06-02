@@ -1279,9 +1279,9 @@ func (s *eventFeedSession) sendRegionChangeEvents(
 	pendingRegions *syncRegionFeedStateMap,
 	addr string,
 ) error {
-	statefulEvents := make([][]*regionStatefulEvent, worker.concurrent)
-	for i := 0; i < worker.concurrent; i++ {
-		buffLen := len(events) / worker.concurrent * 3 / 2
+	statefulEvents := make([][]*regionStatefulEvent, worker.inputSlots)
+	for i := 0; i < worker.inputSlots; i++ {
+		buffLen := len(events) / worker.inputSlots * 3 / 2
 		statefulEvents[i] = make([]*regionStatefulEvent, 0, buffLen)
 	}
 
@@ -1339,7 +1339,7 @@ func (s *eventFeedSession) sendRegionChangeEvents(
 			continue
 		}
 
-		slot := int(event.RegionId) % worker.concurrent
+		slot := worker.inputCalcSlot(event.RegionId)
 		statefulEvents[slot] = append(statefulEvents[slot], &regionStatefulEvent{
 			changeEvent: event,
 			regionID:    event.RegionId,
@@ -1363,9 +1363,9 @@ func (s *eventFeedSession) sendResolvedTs(
 	worker *regionWorker,
 	addr string,
 ) error {
-	statefulEvents := make([][]*regionStatefulEvent, worker.concurrent)
-	for i := 0; i < worker.concurrent; i++ {
-		buffLen := len(resolvedTs.Regions) / worker.concurrent * 3 / 2
+	statefulEvents := make([][]*regionStatefulEvent, worker.inputSlots)
+	for i := 0; i < worker.inputSlots; i++ {
+		buffLen := len(resolvedTs.Regions) / worker.inputSlots * 3 / 2
 		statefulEvents[i] = make([]*regionStatefulEvent, 0, buffLen)
 	}
 
@@ -1381,7 +1381,7 @@ func (s *eventFeedSession) sendResolvedTs(
 					zap.String("addr", addr))
 				continue
 			}
-			slot := int(regionID) % worker.concurrent
+			slot := worker.inputCalcSlot(regionID)
 			statefulEvents[slot] = append(statefulEvents[slot], &regionStatefulEvent{
 				resolvedTs: resolvedTs,
 				regionID:   regionID,
