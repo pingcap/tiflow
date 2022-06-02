@@ -19,7 +19,7 @@ import (
 	"testing"
 
 	"github.com/hpcloud/tail"
-	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -28,13 +28,16 @@ import (
 var testFile = "test.log"
 
 func init() {
-	err := log.InitLogger(&log.Config{
+	logger, prop, err := log.InitLogger(&log.Config{
 		Level: "warn",
-		File:  testFile,
+		File: log.FileLogConfig{
+			Filename: testFile,
+		},
 	})
 	if err != nil {
 		panic(err)
 	}
+	log.ReplaceGlobals(logger, prop)
 }
 
 func TestNewLogger(t *testing.T) {
@@ -44,8 +47,8 @@ func TestNewLogger(t *testing.T) {
 	defer tail.Stop()
 
 	logger := NewLogger4Framework()
-	logger.Logger.Warn("framework test", zap.String("type", "framework"))
-	logger.Logger.Sync()
+	logger.Warn("framework test", zap.String("type", "framework"))
+	logger.Sync()
 	line := <-tail.Lines
 	require.Regexp(t, regexp.QuoteMeta("[\"framework test\"] [framework=true] [type=framework]"), line.Text)
 
@@ -53,8 +56,8 @@ func TestNewLogger(t *testing.T) {
 		TenantID:  "tenant1",
 		ProjectID: "proj1",
 	}, "job1")
-	logger.Logger.Warn("master test", zap.String("type", "master"))
-	logger.Logger.Sync()
+	logger.Warn("master test", zap.String("type", "master"))
+	logger.Sync()
 	line = <-tail.Lines
 	require.Regexp(t, regexp.QuoteMeta("[\"master test\"] [tenant=tenant1] [project_id=proj1] [job_id=job1] [type=master]"), line.Text)
 
@@ -62,8 +65,8 @@ func TestNewLogger(t *testing.T) {
 		TenantID:  "tenant1",
 		ProjectID: "proj1",
 	}, "job1", "worker1")
-	logger.Logger.Warn("worker test", zap.String("type", "worker"))
-	logger.Logger.Sync()
+	logger.Warn("worker test", zap.String("type", "worker"))
+	logger.Sync()
 	line = <-tail.Lines
 	require.Regexp(t, regexp.QuoteMeta("[\"worker test\"] [tenant=tenant1] [project_id=proj1] [job_id=job1] [worker_id=worker1] [type=worker]"), line.Text)
 }
