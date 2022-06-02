@@ -518,23 +518,14 @@ func (w *regionWorker) eventHandler(ctx context.Context) error {
 			// Send a dummy event to each worker pool handler, after each of these
 			// events are processed, we can ensure all events sent to worker pool
 			// from this region worker are processed.
-			finishedCallbackCh := make(chan struct{}, len(w.handles))
-			for _, handle := range w.handles {
-				err = handle.AddEvent(ctx, &regionStatefulEvent{finishedCallbackCh: finishedCallbackCh})
-				if err != nil {
-					return err
-				}
-			}
-			counter := len(w.handles)
-			for counter > 0 {
-				select {
-				case <-ctx.Done():
-					return errors.Trace(ctx.Err())
-				case err = <-w.errorCh:
-					return err
-				case <-finishedCallbackCh:
-					counter--
-				}
+			finishedCallbackCh := make(chan struct{}, 1)
+			w.handles[slot].AddEvent(ctx, &regionStatefulEvent{finishedCallbackCh: finishedCallbackCh})
+			select {
+			case <-ctx.Done():
+				return errors.Trace(ctx.Err())
+			case err = <-w.errorCh:
+				return err
+			case <-finishedCallbackCh:
 			}
 		} else {
 			// We measure whether the current worker is busy based on the input
