@@ -1959,7 +1959,8 @@ func TestMySQLSinkExecDMLError(t *testing.T) {
 		db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
 		require.Nil(t, err)
 		mock.ExpectBegin()
-		mock.ExpectExec("REPLACE INTO `s1`.`t1`(`a`,`b`) VALUES (?,?)").WillDelayFor(1 * time.Second).
+		mock.ExpectExec("REPLACE INTO `s1`.`t1`(`a`,`b`) VALUES (?,?)").
+			WillDelayFor(1 * time.Second).
 			WillReturnError(&dmysql.MySQLError{Number: mysql.ErrNoSuchTable})
 		return db, nil
 	}
@@ -1972,7 +1973,8 @@ func TestMySQLSinkExecDMLError(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	changefeed := "test-changefeed"
-	sinkURI, err := url.Parse("mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=1&batch-replace-size=1")
+	sinkURI, err := url.Parse(
+		"mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=1&batch-replace-size=1")
 	require.Nil(t, err)
 	rc := config.GetDefaultReplicaConfig()
 	f, err := filter.NewFilter(rc)
