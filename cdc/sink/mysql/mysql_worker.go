@@ -19,7 +19,6 @@ import (
 	"sync"
 
 	"go.uber.org/atomic"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
