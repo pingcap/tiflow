@@ -63,6 +63,10 @@ jobs:
           docker build -f $GITHUB_WORKSPACE/engine/chaos/manifests/Dockerfile -t dataflow:chaos $GITHUB_WORKSPACE/bin
           docker image list
 
+      - name: Load docker image to kind cluster
+        run: |
+          kind load docker-image dataflow:chaos --name kind-chart-testing
+
       # Set up metastore and basic services
       - name: Set up metastore and basic services
         run: |
