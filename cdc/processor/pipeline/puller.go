@@ -38,18 +38,22 @@ type pullerNode struct {
 	changefeed  model.ChangeFeedID
 	cancel      context.CancelFunc
 	wg          *errgroup.Group
+
+	upstream *upstream.Upstream
 }
 
 func newPullerNode(
 	tableID model.TableID, replicaInfo *model.TableReplicaInfo,
 	tableName string,
 	changefeed model.ChangeFeedID,
+	upstream *upstream.Upstream,
 ) *pullerNode {
 	return &pullerNode{
 		tableID:     tableID,
 		replicaInfo: replicaInfo,
 		tableName:   tableName,
 		changefeed:  changefeed,
+		upstream:    upstream,
 	}
 }
 
@@ -66,10 +70,13 @@ func (n *pullerNode) tableSpan(ctx cdcContext.Context) []regionspan.Span {
 }
 
 func (n *pullerNode) Init(ctx pipeline.NodeContext) error {
-	return n.start(ctx, nil, new(errgroup.Group), false, nil)
+	return n.start(ctx,
+		new(errgroup.Group), false, nil)
 }
 
-func (n *pullerNode) start(ctx pipeline.NodeContext, upStream *upstream.Upstream, wg *errgroup.Group, isActorMode bool, sorter *sorterNode) error {
+func (n *pullerNode) start(ctx pipeline.NodeContext,
+	wg *errgroup.Group, isActorMode bool, sorter *sorterNode,
+) error {
 	n.wg = wg
 	ctxC, cancel := context.WithCancel(ctx)
 	ctxC = contextutil.PutTableInfoInCtx(ctxC, n.tableID, n.tableName)
@@ -81,11 +88,11 @@ func (n *pullerNode) start(ctx pipeline.NodeContext, upStream *upstream.Upstream
 	// See also: https://github.com/pingcap/tiflow/issues/2301.
 	plr := puller.NewPuller(
 		ctxC,
-		upStream.PDClient,
-		upStream.GrpcPool,
-		upStream.RegionCache,
-		upStream.KVStorage,
-		upStream.PDClock,
+		n.upstream.PDClient,
+		n.upstream.GrpcPool,
+		n.upstream.RegionCache,
+		n.upstream.KVStorage,
+		n.upstream.PDClock,
 		n.changefeed,
 		n.replicaInfo.StartTs,
 		n.tableSpan(ctx),

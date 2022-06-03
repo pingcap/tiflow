@@ -101,7 +101,7 @@ var defaultServerConfig = &ServerConfig{
 		RegionRetryDuration: TomlDuration(time.Minute),
 	},
 	Debug: &DebugConfig{
-		EnableTableActor: true,
+		EnableTableActor: false,
 		TableActor: &TableActorConfig{
 			EventBatchSize: 32,
 		},

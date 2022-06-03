@@ -24,6 +24,7 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/notify"
 	"github.com/prometheus/client_golang/prometheus"
+	"go.uber.org/atomic"
 	"go.uber.org/zap"
 )
 
@@ -35,6 +36,7 @@ type mysqlSinkWorker struct {
 	metricBucketSize prometheus.Counter
 	receiver         *notify.Receiver
 	closedCh         chan struct{}
+	hasError         atomic.Bool
 }
 
 func newMySQLSinkWorker(
@@ -51,7 +53,7 @@ func newMySQLSinkWorker(
 		metricBucketSize: metricBucketSize,
 		execDMLs:         execDMLs,
 		receiver:         receiver,
-		closedCh:         make(chan struct{}, 1),
+		closedCh:         make(chan struct{}),
 	}
 }
 
@@ -72,6 +74,10 @@ func (w *mysqlSinkWorker) appendFinishTxn(wg *sync.WaitGroup) {
 	w.txnCh <- &model.SingleTableTxn{
 		FinishWg: wg,
 	}
+}
+
+func (w *mysqlSinkWorker) isNormal() bool {
+	return !w.hasError.Load()
 }
 
 func (w *mysqlSinkWorker) run(ctx context.Context) (err error) {
@@ -130,6 +136,8 @@ func (w *mysqlSinkWorker) run(ctx context.Context) (err error) {
 			}
 			if txn.FinishWg != nil {
 				if err := flushRows(); err != nil {
+					w.hasError.Store(true)
+					txn.FinishWg.Done()
 					return errors.Trace(err)
 				}
 				txn.FinishWg.Done()
@@ -137,6 +145,7 @@ func (w *mysqlSinkWorker) run(ctx context.Context) (err error) {
 			}
 			if txn.ReplicaID != replicaID || len(toExecRows)+len(txn.Rows) > w.maxTxnRow {
 				if err := flushRows(); err != nil {
+					w.hasError.Store(true)
 					txnNum++
 					return errors.Trace(err)
 				}
@@ -146,6 +155,7 @@ func (w *mysqlSinkWorker) run(ctx context.Context) (err error) {
 			txnNum++
 		case <-w.receiver.C:
 			if err := flushRows(); err != nil {
+				w.hasError.Store(true)
 				return errors.Trace(err)
 			}
 		}
@@ -158,19 +168,22 @@ func (w *mysqlSinkWorker) run(ctx context.Context) (err error) {
 // 2. goroutine in 1 sends notification to closedCh of each sink worker
 // 3. each sink worker receives the notification from closedCh and mark FinishWg as Done
 func (w *mysqlSinkWorker) cleanup() {
-	<-w.closedCh
 	for {
 		select {
 		case txn := <-w.txnCh:
 			if txn.FinishWg != nil {
 				txn.FinishWg.Done()
 			}
-		default:
+		case <-w.closedCh:
+			// We are the consumer.
+			// By returning here, it means we return only if
+			// the producer has returned.
 			return
 		}
 	}
 }
 
 func (w *mysqlSinkWorker) close() {
-	w.closedCh <- struct{}{}
+	// Close the channel to provide idempotent reads.
+	close(w.closedCh)
 }

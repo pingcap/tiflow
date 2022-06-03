@@ -296,7 +296,8 @@ func (t *tableActor) start(sdtTableContext context.Context) error {
 		return err
 	}
 
-	pullerNode := newPullerNode(t.tableID, t.replicaInfo, t.tableName, t.changefeedVars.ID)
+	pullerNode := newPullerNode(t.tableID, t.replicaInfo, t.tableName,
+		t.changefeedVars.ID, t.upStream)
 	pullerActorNodeContext := newContext(sdtTableContext,
 		t.tableName,
 		t.globalVars.TableActorSystem.Router(),
@@ -518,7 +519,7 @@ func (t *tableActor) Wait() {
 
 // for ut
 var startPuller = func(t *tableActor, ctx *actorNodeContext) error {
-	return t.pullerNode.start(ctx, t.upStream, t.wg, true, t.sortNode)
+	return t.pullerNode.start(ctx, t.wg, true, t.sortNode)
 }
 
 var startSorter = func(t *tableActor, ctx *actorNodeContext) error {
