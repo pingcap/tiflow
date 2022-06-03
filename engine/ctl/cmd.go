@@ -21,10 +21,10 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 
+	"github.com/pingcap/tiflow/dm/pkg/log"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/lib"
 	libModel "github.com/pingcap/tiflow/engine/lib/model"
@@ -217,7 +217,7 @@ func runPauseJob(cmd *cobra.Command, _ []string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), rpcTimeout)
 	defer cancel()
 	resp, err := cltManager.MasterClient().PauseJob(ctx, &pb.PauseJobRequest{
-		JobIdStr: id,
+		JobId: id,
 		ProjectInfo: &pb.ProjectInfo{
 			TenantId:  project.TenantID(),
 			ProjectId: project.ProjectID(),

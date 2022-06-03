@@ -53,6 +53,11 @@ function migrate_in_previous_v2() {
 
 	exec_incremental_stage1
 
+	# drop table will be skipped
+	if [[ "$PRE_VER" != "v2.0.0" ]]; then
+		run_sql_tidb_with_retry "select count(*) from opt_db_target.t_target where c1=1000;" "1"
+		exec_sql tidb 4000 "delete from opt_db_target.t_target where c1=1000;"
+	fi
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
 
 	tiup dmctl:$PRE_VER --master-addr=master1:8261 pause-task $TASK_NAME

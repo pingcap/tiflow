@@ -108,13 +108,13 @@ func (cli *ChaosCli) CreateJob(ctx context.Context, tp pb.JobType, config []byte
 	if resp.Err != nil {
 		return "", errors.New(resp.Err.String())
 	}
-	return resp.JobIdStr, nil
+	return resp.JobId, nil
 }
 
 // PauseJob sends PauseJob command to servermaster
 func (cli *ChaosCli) PauseJob(ctx context.Context, jobID string) error {
 	req := &pb.PauseJobRequest{
-		JobIdStr: jobID,
+		JobId: jobID,
 		ProjectInfo: &pb.ProjectInfo{
 			TenantId:  cli.project.TenantID(),
 			ProjectId: cli.project.ProjectID(),

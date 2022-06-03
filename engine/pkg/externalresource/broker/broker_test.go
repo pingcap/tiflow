@@ -36,7 +36,7 @@ var _ Broker = (*DefaultBroker)(nil)
 func newBroker(t *testing.T) (*DefaultBroker, *rpcutil.FailoverRPCClients[pb.ResourceManagerClient], string) {
 	tmpDir := t.TempDir()
 	client := manager.NewWrappedMockClient()
-	broker := NewBroker(&storagecfg.Config{Local: &storagecfg.LocalFileConfig{BaseDir: tmpDir}},
+	broker := NewBroker(&storagecfg.Config{Local: storagecfg.LocalFileConfig{BaseDir: tmpDir}},
 		"executor-1",
 		client)
 	return broker, client, tmpDir
