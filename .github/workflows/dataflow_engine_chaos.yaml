@@ -48,7 +48,6 @@ jobs:
             --write-kubeconfig-mode=644 \
             "${k3s_disable_command:---disable}" metrics-server \
             "${k3s_disable_command:---disable}" traefik \
-            --flannel-backend=none \
             --docker
         shell: bash
 
