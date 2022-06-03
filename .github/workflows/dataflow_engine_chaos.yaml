@@ -192,8 +192,8 @@ jobs:
         if: ${{ always() }}
         run: |
           mkdir ./logs
-          sudo cp -r -L /var/log/containers/. ./logs
-          sudo find /var/ -type f | grep -E '.*/(server-master|executor)-[^/]*.log$' | sudo xargs -i cp {} ./logs || true
+          kubectl get pods --no-headers -o custom-columns=":metadata.name"|grep -E "server-master|executor"|xargs -I{} sudo kubectl cp {}:/log/{}.log ./logs/{}.log
+          kind export logs ./logs/kind --name chart-testing
           sudo chown -R runner ./logs
 
       # Upload logs as artifact seems not stable, so we set `continue-on-error: true` here.
@@ -205,8 +205,6 @@ jobs:
           name: chaos-base-logs.${{ matrix.chaos-obj }}
           path: |
             ./logs
-            !./logs/coredns-*
-            !./logs/local-path-provisioner-*
 
       # Send feishu notification if failed.
       - name: Feishu notification
