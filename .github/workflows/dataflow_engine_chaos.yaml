@@ -41,30 +41,8 @@ jobs:
           path: ~/go/pkg/mod
           key: ${{ runner.os }}-dataflow-${{ hashFiles('go.sum') }}
 
-      # Set up Kubernetes with K3s
-      - name: Set up K3s cluster
-        run: |
-          curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION=v1.23.6+k3s1 sh -s - \
-            --write-kubeconfig-mode=644 \
-            "${k3s_disable_command:---disable}" metrics-server \
-            "${k3s_disable_command:---disable}" traefik \
-            --docker
-        shell: bash
-
-      # this may be failed sometimes, and I want to exit the workflow directly if failed,
-      # but GitHub Actions doesnt' support early-exit yet, see https://github.com/actions/runner/issues/662.
-      # so, simply wait for a long time.
-      - name: Wait for coredns
-        run: |
-          kubectl rollout status --watch --timeout 120s deployment/coredns -n kube-system
-        shell: bash
-        env:
-          KUBECONFIG: /etc/rancher/k3s/k3s.yaml
-
-      - name: Export KUBECONFIG environment variable
-        run: |
-          echo 'KUBECONFIG=/etc/rancher/k3s/k3s.yaml' >> $GITHUB_ENV
-        shell: bash
+      - name: Create k8s Kind Cluster
+        uses: helm/kind-action@v1.2.0
 
       - name: Print cluster information
         run: |
@@ -74,6 +52,7 @@ jobs:
           kubectl get pods -n kube-system
           kubectl get sc
           kubectl version
+          helm version
 
       - name: Build dataflow engine binary
         run: make df-master df-executor df-chaos-case
