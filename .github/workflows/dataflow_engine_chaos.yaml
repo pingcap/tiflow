@@ -65,7 +65,7 @@ jobs:
 
       - name: Load docker image to kind cluster
         run: |
-          kind load docker-image dataflow:chaos --name kind-chart-testing
+          kind load docker-image dataflow:chaos --name chart-testing
 
       # Set up metastore and basic services
       - name: Set up metastore and basic services
