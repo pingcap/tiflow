@@ -3,6 +3,8 @@ name: Dataflow Engine Chaos
 on:
   schedule:
     - cron: '0 17-23 * * *' # run at minute 0 every hour from 01:00 ~ 07:00 UTC+8
+  pull_request:
+    - master
 
 # See: https://docs.github.com/en/actions/reference/workflow-syntax-for-github-actions#concurrency.
 concurrency:
@@ -42,7 +44,7 @@ jobs:
       # Set up Kubernetes with K3s
       - name: Set up K3s cluster
         run: |
-          curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION=v1.18.9+k3s1 sh -s - \
+          curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION=v1.23.6+k3s1 sh -s - \
             --write-kubeconfig-mode=644 \
             "${k3s_disable_command:---disable}" metrics-server \
             "${k3s_disable_command:---disable}" traefik \
@@ -55,7 +57,7 @@ jobs:
       # so, simply wait for a long time.
       - name: Wait for coredns
         run: |
-          kubectl rollout status --watch --timeout 600s deployment/coredns -n kube-system
+          kubectl rollout status --watch --timeout 120s deployment/coredns -n kube-system
         shell: bash
         env:
           KUBECONFIG: /etc/rancher/k3s/k3s.yaml
