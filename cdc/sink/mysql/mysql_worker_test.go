@@ -286,12 +286,16 @@ func TestMySQLSinkWorkerExitWithError(t *testing.T) {
 	}
 	notifier.Notify()
 
-	// simulate sink shutdown and send closed singal to sink worker
-	close(w.closedCh)
-	w.cleanup()
+	errg.Go(func() error {
+		w.cleanup()
+		return nil
+	})
 
 	// the flush notification wait group should be done
 	wg.Wait()
+
+	// simulate sink shutdown and send closed singal to sink worker
+	close(w.closedCh)
 
 	cancel()
 	require.Equal(t, errExecFailed, errg.Wait())
