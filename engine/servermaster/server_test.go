@@ -300,7 +300,7 @@ func (m *mockExecutorManager) Start(ctx context.Context) {
 	panic("not implemented")
 }
 
-func (m *mockExecutorManager) Stop(ctx context.Context) {
+func (m *mockExecutorManager) Stop() {
 	panic("not implemented")
 }
 
