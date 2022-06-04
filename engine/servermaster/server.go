@@ -666,10 +666,9 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 
 	// start background managers
 	s.executorManager.Start(ctx)
+	defer s.executorManager.Stop()
 	s.resourceManagerService.StartBackgroundWorker()
-	defer func() {
-		s.resourceManagerService.Stop()
-	}()
+	defer s.resourceManagerService.Stop()
 
 	clients := client.NewClientManager()
 	err = clients.AddMasterClient(ctx, []string{s.cfg.MasterAddr})
