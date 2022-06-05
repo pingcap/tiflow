@@ -47,6 +47,9 @@ func TestMetastoreManagerBasics(t *testing.T) {
 	manager, mockCreator := newMetastoreManagerForTesting(ctrl)
 	ctx := context.Background()
 
+	var discoveryStoreParams metaclient.StoreConfigParams
+	discoveryStoreParams.SetEndpoints("embedded-etcd:1234")
+
 	mockServerMasterClient.On(
 		"QueryMetaStore",
 		mock.Anything,
@@ -94,7 +97,7 @@ func TestMetastoreManagerBasics(t *testing.T) {
 
 	mockCreator.
 		EXPECT().
-		CreateEtcdCliForServiceDiscovery(gomock.Any(), gomock.Eq("embedded-etcd:1234")).
+		CreateEtcdCliForServiceDiscovery(gomock.Any(), gomock.Eq(discoveryStoreParams)).
 		Return(fakeEtcdCli, nil)
 	mockCreator.
 		EXPECT().

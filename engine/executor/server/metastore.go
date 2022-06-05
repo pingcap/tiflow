@@ -16,7 +16,6 @@ package server
 import (
 	"context"
 	"encoding/json"
-	"strings"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -46,6 +45,9 @@ const (
 // MetastoreManager maintains all metastore clients we need.
 // Except for ServiceDiscoveryStore, FrameworkStore and BusinessStore,
 // a MetastoreManager is not thread-safe.
+//
+// TODO refactor some code repetition together with servermaster.MetaStoreManager,
+// and add integration tests between MetastoreManager in this file and servermaster.MetaStoreManager.
 type MetastoreManager interface {
 	// Init fetches metastore configurations from Servermaster and
 	// creates the necessary client.
@@ -86,7 +88,7 @@ type metastoreManagerImpl struct {
 // metastore clients.
 type MetastoreCreator interface {
 	CreateEtcdCliForServiceDiscovery(
-		ctx context.Context, addresses string,
+		ctx context.Context, params metaclient.StoreConfigParams,
 	) (*clientv3.Client, error)
 
 	CreateMetaKVClientForBusiness(
@@ -101,12 +103,12 @@ type MetastoreCreator interface {
 type metastoreCreatorImpl struct{}
 
 func (c metastoreCreatorImpl) CreateEtcdCliForServiceDiscovery(
-	ctx context.Context, addresses string,
+	ctx context.Context, params metaclient.StoreConfigParams,
 ) (*clientv3.Client, error) {
 	logConfig := logutil.DefaultZapLoggerConfig
 	logConfig.Level = zap.NewAtomicLevelAt(zapcore.ErrorLevel)
 	etcdCli, err := clientv3.New(clientv3.Config{
-		Endpoints:        strings.Split(addresses, ","),
+		Endpoints:        params.Endpoints,
 		Context:          ctx,
 		LogConfig:        &logConfig,
 		DialTimeout:      config.ServerMasterEtcdDialTimeout,
@@ -164,6 +166,7 @@ func (m *metastoreManagerImpl) Init(ctx context.Context, servermasterClient clie
 		}
 	}()
 
+	// TODO We will refactor similar code segments together with servermaster.MetaStoreManager.
 	if err := m.initServerDiscoveryStore(ctx, servermasterClient); err != nil {
 		return err
 	}
@@ -196,7 +199,8 @@ func (m *metastoreManagerImpl) initServerDiscoveryStore(ctx context.Context, ser
 	}
 	log.L().Info("Obtained discovery metastore endpoint", zap.String("addr", resp.Address))
 
-	etcdCli, err := m.creator.CreateEtcdCliForServiceDiscovery(ctx, resp.Address)
+	conf := parseStoreConfigParams([]byte(resp.Address))
+	etcdCli, err := m.creator.CreateEtcdCliForServiceDiscovery(ctx, conf)
 	if err != nil {
 		return err
 	}
@@ -216,13 +220,7 @@ func (m *metastoreManagerImpl) initFrameworkStore(ctx context.Context, servermas
 	}
 	log.L().Info("Obtained framework metastore endpoint", zap.String("addr", resp.Address))
 
-	var conf metaclient.StoreConfigParams
-	err = json.Unmarshal([]byte(resp.Address), &conf)
-	if err != nil {
-		log.L().Error("unmarshal framework metastore config fail", zap.String("conf", resp.Address), zap.Error(err))
-		return err
-	}
-
+	conf := parseStoreConfigParams([]byte(resp.Address))
 	dbCli, err := m.creator.CreateDBClientForFramework(ctx, conf)
 	if err != nil {
 		return err
@@ -243,13 +241,7 @@ func (m *metastoreManagerImpl) initBusinessStore(ctx context.Context, servermast
 	}
 	log.L().Info("Obtained business metastore endpoint", zap.String("addr", resp.Address))
 
-	var conf metaclient.StoreConfigParams
-	err = json.Unmarshal([]byte(resp.Address), &conf)
-	if err != nil {
-		log.L().Error("unmarshal framework metastore config fail", zap.String("conf", resp.Address), zap.Error(err))
-		return err
-	}
-
+	conf := parseStoreConfigParams([]byte(resp.Address))
 	metaKVClient, err := m.creator.CreateMetaKVClientForBusiness(ctx, conf)
 	if err != nil {
 		return err
@@ -296,4 +288,20 @@ func (m *metastoreManagerImpl) Close() {
 	}
 
 	log.L().Info("MetastoreManager: Closed all metastores")
+}
+
+func parseStoreConfigParams(rawBytes []byte) metaclient.StoreConfigParams {
+	var conf metaclient.StoreConfigParams
+
+	// Try unmarshal as json first.
+	err := json.Unmarshal(rawBytes, &conf)
+	if err == nil {
+		return conf
+	}
+
+	log.L().Info("Could not unmarshal metastore config, fallback to treating it as an endpoint list",
+		zap.ByteString("raw-bytes", rawBytes))
+
+	conf.SetEndpoints(string(rawBytes))
+	return conf
 }

@@ -54,7 +54,7 @@ func (mr *MockMetastoreCreatorMockRecorder) CreateDBClientForFramework(arg0, arg
 }
 
 // CreateEtcdCliForServiceDiscovery mocks base method.
-func (m *MockMetastoreCreator) CreateEtcdCliForServiceDiscovery(arg0 context.Context, arg1 string) (*clientv3.Client, error) {
+func (m *MockMetastoreCreator) CreateEtcdCliForServiceDiscovery(arg0 context.Context, arg1 metaclient.StoreConfigParams) (*clientv3.Client, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CreateEtcdCliForServiceDiscovery", arg0, arg1)
 	ret0, _ := ret[0].(*clientv3.Client)
