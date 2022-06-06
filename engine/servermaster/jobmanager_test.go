@@ -224,9 +224,9 @@ func TestJobManagerDebug(t *testing.T) {
 	require.Nil(t, err)
 
 	req := &pb.DebugJobRequest{
-		JobIdStr: debugJobID,
-		Command:  "Debug",
-		JsonArg:  "",
+		JobId:   debugJobID,
+		Command: "Debug",
+		JsonArg: "",
 	}
 
 	go func() {
@@ -237,7 +237,7 @@ func TestJobManagerDebug(t *testing.T) {
 	resp := mgr.DebugJob(ctx, req)
 	require.Nil(t, resp.Err)
 
-	req.JobIdStr = debugJobID + "-unknown"
+	req.JobId = debugJobID + "-unknown"
 	resp = mgr.DebugJob(ctx, req)
 	require.NotNil(t, resp.Err)
 	require.Equal(t, pb.ErrorCode_UnKnownJob, resp.Err.Code)

@@ -116,7 +116,7 @@ func (jm *JobManagerImplV2) PauseJob(ctx context.Context, req *pb.PauseJobReques
 // DebugJob implements proto/Master.DebugJob
 // Used for request/response with jobmaster
 func (jm *JobManagerImplV2) DebugJob(ctx context.Context, req *pb.DebugJobRequest) (resp *pb.DebugJobResponse) {
-	job := jm.JobFsm.QueryOnlineJob(req.JobIdStr)
+	job := jm.JobFsm.QueryOnlineJob(req.JobId)
 	if job == nil {
 		return &pb.DebugJobResponse{Err: &pb.Error{
 			Code: pb.ErrorCode_UnKnownJob,
@@ -144,14 +144,14 @@ func (jm *JobManagerImplV2) DebugJob(ctx context.Context, req *pb.DebugJobReques
 			}}
 		}
 	}()
-	if err := messageAgent.UpdateClient(req.JobIdStr, handle); err != nil {
+	if err := messageAgent.UpdateClient(req.JobId, handle); err != nil {
 		return &pb.DebugJobResponse{Err: &pb.Error{
 			Code:    pb.ErrorCode_UnknownError,
 			Message: err.Error(),
 		}}
 	}
 	defer func() {
-		if err := messageAgent.UpdateClient(req.JobIdStr, nil); err != nil {
+		if err := messageAgent.UpdateClient(req.JobId, nil); err != nil {
 			resp = &pb.DebugJobResponse{Err: &pb.Error{
 				Code:    pb.ErrorCode_UnknownError,
 				Message: err.Error(),
@@ -178,7 +178,7 @@ func (jm *JobManagerImplV2) DebugJob(ctx context.Context, req *pb.DebugJobReques
 		}
 	}()
 
-	resp2, err := messageAgent.SendRequest(ctx, req.JobIdStr, "DebugJob", req)
+	resp2, err := messageAgent.SendRequest(ctx, req.JobId, "DebugJob", req)
 	if err != nil {
 		return &pb.DebugJobResponse{Err: &pb.Error{
 			Code:    pb.ErrorCode_UnknownError,

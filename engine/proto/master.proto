@@ -190,7 +190,7 @@ message PersistResourceResponse {
 }
 
 message DebugJobRequest {
-    string job_id_str = 1;
+    string job_id = 1;
     string command = 2;
     string json_arg = 3;
 }

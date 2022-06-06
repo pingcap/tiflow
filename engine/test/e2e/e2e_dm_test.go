@@ -158,7 +158,7 @@ func testSimpleAllModeTask(
 	require.NoError(t, err)
 	ctx2, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	resp2, err := client.DebugJob(ctx2, &pb.DebugJobRequest{JobIdStr: resp.JobId, Command: dmpkg.QueryStatus, JsonArg: string(jsonArg)})
+	resp2, err := client.DebugJob(ctx2, &pb.DebugJobRequest{JobId: resp.JobId, Command: dmpkg.QueryStatus, JsonArg: string(jsonArg)})
 	require.NoError(t, err)
 	require.Nil(t, resp2.Err)
 	var jobStatus dm.JobStatus
