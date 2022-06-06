@@ -68,7 +68,7 @@ func (s *TableState) Store(new TableState) {
 	atomic.StoreInt32((*int32)(s), int32(new))
 }
 
-// TableMeta is the meta data of a table.
+// TableMeta is the metadata of a table.
 type TableMeta struct {
 	TableID      model.TableID
 	CheckpointTs model.Ts

@@ -264,14 +264,10 @@ func (n *sinkNode) HandleMessage(ctx context.Context, msg pmessage.Message) (boo
 	switch msg.Tp {
 	case pmessage.MessageTypePolymorphicEvent:
 		event := msg.PolymorphicEvent
-		if n.state.Load() != TableStateReplicating {
-			log.Panic("table not in replicating state",
-				zap.Int64("tableID", n.tableID),
-				zap.String("namespace", n.changefeed.Namespace),
-				zap.String("changefeed", n.changefeed.ID),
-				zap.Any("state", n.state.Load()))
-		}
 		if event.IsResolved() {
+			if n.state.Load() == TableStatePrepared {
+				n.state.Store(TableStateReplicating)
+			}
 			failpoint.Inject("ProcessorSyncResolvedError", func() {
 				failpoint.Return(false, errors.New("processor sync resolved injected error"))
 			})
