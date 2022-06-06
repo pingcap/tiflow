@@ -3,6 +3,8 @@ name: DM Chaos
 on:
   schedule:
     - cron: '0 17-23 * * *' # run at minute 0 every hour from 01:00 ~ 07:00 UTC+8
+  pull_request:
+    branches: [ master ]
   workflow_dispatch:
     inputs:
       pr:
