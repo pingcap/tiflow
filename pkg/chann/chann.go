@@ -93,10 +93,10 @@ func Cap(n int) Opt {
 // unbuffered, or unbounded. To create a new channel, use New to allocate
 // one, and use Cap to configure the capacity of the channel.
 type Chann[T any] struct {
+	q       []T
 	in, out chan T
 	close   chan struct{}
 	cfg     *config
-	q       []T
 }
 
 // New returns a Chann that may represent a buffered, an unbuffered or
@@ -210,7 +210,7 @@ func (ch *Chann[T]) unboundedProcessing() {
 // and make sure all unprocessed elements either be consumed if there is
 // a pending receiver.
 func (ch *Chann[T]) unboundedTerminate() {
-	var nilT T
+	var zeroT T
 
 	close(ch.in)
 	for e := range ch.in {
@@ -218,13 +218,11 @@ func (ch *Chann[T]) unboundedTerminate() {
 	}
 	for len(ch.q) > 0 {
 		select {
+		// NOTICE: If no receiver is receiving the element, it will be blocked.
+		// So the consumer have to deal with all the elements in the queue.
 		case ch.out <- ch.q[0]:
-		// The default branch exists because we need guarantee
-		// the loop can terminate. If there is a receiver, the
-		// first case will ways be selected. See https://github.com/golang-design/chann/issues/3.
-		default:
 		}
-		ch.q[0] = nilT // de-reference earlier to help GC
+		ch.q[0] = zeroT // de-reference earlier to help GC
 		ch.q = ch.q[1:]
 	}
 	close(ch.out)

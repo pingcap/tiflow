@@ -415,6 +415,10 @@ func TestUnboundedChannClose(t *testing.T) {
 			ch.In() <- 0
 		}
 		ch.Close()
+		go func() {
+			for range ch.Out() {
+			}
+		}()
 
 		// Theoretically, this is not a dead loop. If the channel
 		// is closed, then this loop must terminate at somepoint.
