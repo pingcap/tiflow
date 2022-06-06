@@ -68,12 +68,14 @@ type sorterNode struct {
 	startTsCh chan model.Ts
 
 	replConfig *config.ReplicaConfig
+
+	changefeed model.ChangeFeedID
 }
 
 func newSorterNode(
 	tableName string, tableID model.TableID, startTs model.Ts,
 	flowController tableFlowController, mounter entry.Mounter,
-	replConfig *config.ReplicaConfig, state *TableState,
+	replConfig *config.ReplicaConfig, state *TableState, changefeed model.ChangeFeedID,
 ) *sorterNode {
 	return &sorterNode{
 		tableName:      tableName,
@@ -86,6 +88,8 @@ func newSorterNode(
 		preparedCh:     make(chan struct{}, 1),
 		startTsCh:      make(chan model.Ts, 1),
 		replConfig:     replConfig,
+
+		changefeed: changefeed,
 	}
 }
 
@@ -345,4 +349,4 @@ func (n *sorterNode) BarrierTs() model.Ts {
 	return atomic.LoadUint64(&n.barrierTs)
 }
 
-func (n *sorterNode) Status() TableState { return n.state.Load() }
+func (n *sorterNode) State() TableState { return n.state.Load() }

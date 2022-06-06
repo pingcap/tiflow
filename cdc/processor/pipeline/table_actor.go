@@ -285,7 +285,7 @@ func (t *tableActor) start(sdtTableContext context.Context) error {
 
 	flowController := flowcontrol.NewTableFlowController(t.memoryQuota)
 	sorterNode := newSorterNode(t.tableName, t.tableID, t.replicaInfo.StartTs,
-		flowController, t.mounter, t.replicaConfig, &t.state)
+		flowController, t.mounter, t.replicaConfig, &t.state, t.changefeedID)
 	t.sortNode = sorterNode
 	sortActorNodeContext := newContext(sdtTableContext, t.tableName,
 		t.globalVars.TableActorSystem.Router(),
@@ -422,7 +422,7 @@ func (t *tableActor) handleError(err error) {
 	}
 }
 
-// ============ Implement TablePipline, must be threadsafe ============
+// ============ Implement TablePipeline, must be thread-safe ============
 
 // ResolvedTs returns the resolved ts in this table pipeline
 func (t *tableActor) ResolvedTs() model.Ts {

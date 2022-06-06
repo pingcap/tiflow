@@ -44,13 +44,15 @@ func TestAsyncStopFailed(t *testing.T) {
 		tableActorSystem.Stop()
 	}()
 
+	state := TableStatePreparing
 	tbl := &tableActor{
 		stopped:   0,
 		tableID:   1,
 		router:    tableActorRouter,
 		cancel:    func() {},
 		reportErr: func(err error) {},
-		sinkNode:  newSinkNode(1, &mockSink{}, 0, 0, &mockFlowController{}),
+		sinkNode: newSinkNode(1, &mockSink{}, 0, 0, &mockFlowController{},
+			&state, model.DefaultChangeFeedID("changefeed-test")),
 	}
 	require.True(t, tbl.AsyncStop(1))
 
@@ -63,7 +65,8 @@ func TestAsyncStopFailed(t *testing.T) {
 }
 
 func TestTableActorInterface(t *testing.T) {
-	sink := &sinkNode{state: TableStatePrepared}
+	state := TableStatePrepared
+	sink := &sinkNode{state: &state}
 	sorter := &sorterNode{resolvedTs: 5}
 	tbl := &tableActor{
 		markTableID: 2,
@@ -142,6 +145,7 @@ func TestTableActorWait(t *testing.T) {
 func TestHandleError(t *testing.T) {
 	canceled := false
 	reporterErr := false
+	state := TableStatePreparing
 	tbl := &tableActor{
 		cancel: func() {
 			canceled = true
@@ -151,7 +155,7 @@ func TestHandleError(t *testing.T) {
 		},
 		sinkNode: &sinkNode{
 			sink:           &errorCloseSink{},
-			state:          TableStatePreparing,
+			state:          &state,
 			flowController: &mockFlowController{},
 		},
 		sortNode: &sorterNode{
@@ -186,9 +190,9 @@ func TestPollStoppedActor(t *testing.T) {
 
 func TestPollTickMessage(t *testing.T) {
 	startTime := time.Now().Add(-sinkFlushInterval)
-
+	state := TableStatePreparing
 	sn := &sinkNode{
-		state:          TableStatePreparing,
+		state:          &state,
 		sink:           &mockSink{},
 		flowController: &mockFlowController{},
 		checkpointTs:   10,
@@ -212,7 +216,7 @@ func TestPollTickMessage(t *testing.T) {
 	}))
 	require.True(t, tbl.lastFlushSinkTime.Equal(startTime))
 	tbl.lastFlushSinkTime = time.Now().Add(-2 * sinkFlushInterval)
-	tbl.sinkNode.state = TableStateStopped
+	state = TableStateStopped
 	require.False(t, tbl.Poll(context.TODO(), []message.Message[pmessage.Message]{
 		message.ValueMessage[pmessage.Message](pmessage.TickMessage()),
 	}))
@@ -221,9 +225,10 @@ func TestPollTickMessage(t *testing.T) {
 func TestPollStopMessage(t *testing.T) {
 	wg := sync.WaitGroup{}
 	wg.Add(1)
+	state := TableStateStopped
 	tbl := tableActor{
 		sinkNode: &sinkNode{
-			state:          TableStateStopped,
+			state:          &state,
 			sink:           &mockSink{},
 			flowController: &mockFlowController{},
 		},
