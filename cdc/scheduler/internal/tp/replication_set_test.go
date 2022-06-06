@@ -1024,3 +1024,83 @@ func TestReplicationSetCaptureShutdown(t *testing.T) {
 	require.Equal(t, dest, r.Primary)
 	require.Equal(t, "", r.Secondary)
 }
+
+func TestReplicationSetMoveTableWithHeartbeatResponse(t *testing.T) {
+	t.Parallel()
+
+	tableID := model.TableID(1)
+	r, err := newReplicationSet(tableID, 0, nil)
+	require.Nil(t, err)
+
+	source := "1"
+	dest := "2"
+	r.Captures[source] = struct{}{}
+	r.State = ReplicationSetStateReplicating
+	r.Primary = source
+	r.Secondary = ""
+
+	// Replicating -> Prepare
+	msgs, err := r.handleMoveTable(dest)
+	require.Nil(t, err)
+	require.Len(t, msgs, 1)
+	require.Equal(t, ReplicationSetStatePrepare, r.State)
+	require.Equal(t, dest, r.Secondary)
+	require.Equal(t, source, r.Primary)
+
+	// Prepare -> Commit.
+	msgs, err = r.handleTableStatus(dest, &schedulepb.TableStatus{
+		TableID: tableID,
+		State:   schedulepb.TableStatePrepared,
+	})
+	require.Nil(t, err)
+	require.Len(t, msgs, 1)
+	require.Equal(t, ReplicationSetStateCommit, r.State)
+	require.Equal(t, source, r.Primary)
+	require.Equal(t, dest, r.Secondary)
+
+	// Source updates it's table status
+	// Source is removed.
+	msgs, err = r.handleTableStatus(source, &schedulepb.TableStatus{
+		TableID: tableID,
+		State:   schedulepb.TableStateStopped,
+		Checkpoint: schedulepb.Checkpoint{
+			CheckpointTs: 3,
+			ResolvedTs:   4,
+		},
+	})
+	require.Nil(t, err)
+	require.Len(t, msgs, 1)
+	require.Equal(t, ReplicationSetStateCommit, r.State)
+	require.Equal(t, dest, r.Primary)
+	require.Equal(t, "", r.Secondary)
+	require.Equal(t, schedulepb.Checkpoint{
+		CheckpointTs: 3,
+		ResolvedTs:   4,
+	}, r.Checkpoint)
+
+	// Source sends a heartbeat response.
+	msgs, err = r.handleTableStatus(source, &schedulepb.TableStatus{
+		TableID: tableID,
+		State:   schedulepb.TableStateAbsent,
+	})
+	require.Nil(t, err)
+	require.Len(t, msgs, 0)
+	require.Equal(t, ReplicationSetStateCommit, r.State)
+	require.Equal(t, dest, r.Primary)
+	require.Equal(t, "", r.Secondary)
+	require.Equal(t, schedulepb.Checkpoint{
+		CheckpointTs: 3,
+		ResolvedTs:   4,
+	}, r.Checkpoint)
+
+	// Commit -> Replicating
+	msgs, err = r.handleTableStatus(dest, &schedulepb.TableStatus{
+		TableID: tableID,
+		State:   schedulepb.TableStateReplicating,
+	})
+	require.Nil(t, err)
+	require.Len(t, msgs, 0)
+	require.Equal(t, ReplicationSetStateReplicating, r.State)
+	require.Equal(t, dest, r.Primary)
+	require.Equal(t, "", r.Secondary)
+}
