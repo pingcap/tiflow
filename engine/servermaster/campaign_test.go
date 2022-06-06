@@ -67,6 +67,7 @@ func TestLeaderLoopSuccess(t *testing.T) {
 		etcdClient:      client,
 		leaderServiceFn: mockLeaderService,
 		info:            &model.NodeInfo{ID: model.DeployNodeID(name)},
+		membership:      &EtcdMembership{etcdCli: client},
 	}
 	preRPCHook := rpcutil.NewPreRPCHook[pb.MasterClient](
 		s.id,
@@ -76,7 +77,9 @@ func TestLeaderLoopSuccess(t *testing.T) {
 		s.rpcLogRL,
 	)
 	s.masterRPCHook = preRPCHook
-	session, err := cluster.NewEtcdSession(ctx, client, s.member(), s.info, s.cfg.RPCTimeout, s.cfg.KeepAliveTTL)
+	sessionCfg, err := s.generateSessionConfig()
+	require.Nil(t, err)
+	session, err := cluster.NewEtcdSession(ctx, client, sessionCfg)
 	require.Nil(t, err)
 	err = session.Reset(ctx)
 	require.Nil(t, err)
@@ -124,6 +127,7 @@ func TestLeaderLoopMeetStaleData(t *testing.T) {
 		etcdClient:      client,
 		leaderServiceFn: mockLeaderService,
 		info:            &model.NodeInfo{ID: model.DeployNodeID(name)},
+		membership:      &EtcdMembership{etcdCli: client},
 	}
 	preRPCHook := rpcutil.NewPreRPCHook[pb.MasterClient](
 		s.id,
@@ -146,7 +150,9 @@ func TestLeaderLoopMeetStaleData(t *testing.T) {
 	_, _, err = election.Campaign(ctx, s.member(), time.Second*3)
 	require.Nil(t, err)
 
-	session, err := cluster.NewEtcdSession(ctx, client, s.member(), s.info, s.cfg.RPCTimeout, s.cfg.KeepAliveTTL)
+	sessionCfg, err := s.generateSessionConfig()
+	require.Nil(t, err)
+	session, err := cluster.NewEtcdSession(ctx, client, sessionCfg)
 	require.Nil(t, err)
 	err = session.Reset(ctx)
 	require.Nil(t, err)
@@ -198,6 +204,7 @@ func TestLeaderLoopWatchLeader(t *testing.T) {
 			info:        &model.NodeInfo{ID: model.DeployNodeID(names[i])},
 			masterCli:   &rpcutil.LeaderClientWithLock[pb.MasterClient]{},
 			resourceCli: &rpcutil.LeaderClientWithLock[pb.ResourceManagerClient]{},
+			membership:  &EtcdMembership{etcdCli: client},
 		}
 		preRPCHook := rpcutil.NewPreRPCHook[pb.MasterClient](
 			s.id,
@@ -210,8 +217,9 @@ func TestLeaderLoopWatchLeader(t *testing.T) {
 		s.leaderServiceFn = mockLeaderServiceFn
 		servers = append(servers, s)
 
-		session, err := cluster.NewEtcdSession(ctx, client, s.member(), s.info,
-			s.cfg.RPCTimeout, s.cfg.KeepAliveTTL)
+		sessionCfg, err := s.generateSessionConfig()
+		require.Nil(t, err)
+		session, err := cluster.NewEtcdSession(ctx, client, sessionCfg)
 		require.Nil(t, err)
 		sessions = append(sessions, session)
 	}
@@ -309,7 +317,9 @@ func TestCampaignMeetLeaseExpire(t *testing.T) {
 	)
 	s.masterRPCHook = preRPCHook
 
-	session, err := cluster.NewEtcdSession(ctx, client, s.member(), s.info, s.cfg.RPCTimeout, s.cfg.KeepAliveTTL)
+	sessionCfg, err := s.generateSessionConfig()
+	require.Nil(t, err)
+	session, err := cluster.NewEtcdSession(ctx, client, sessionCfg)
 	require.Nil(t, err)
 	err = session.Reset(ctx)
 	require.Nil(t, err)

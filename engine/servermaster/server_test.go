@@ -197,8 +197,9 @@ func testRunLeaderService(t *testing.T) {
 	err = s.startGrpcSrv(ctx)
 	require.Nil(t, err)
 
-	session, err := cluster.NewEtcdSession(ctx, s.etcdClient, s.member(), s.info,
-		s.cfg.RPCTimeout, s.cfg.KeepAliveTTL)
+	sessionCfg, err := s.generateSessionConfig()
+	require.Nil(t, err)
+	session, err := cluster.NewEtcdSession(ctx, s.etcdClient, sessionCfg)
 	require.Nil(t, err)
 
 	var wg sync.WaitGroup

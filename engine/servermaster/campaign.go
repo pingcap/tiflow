@@ -32,6 +32,21 @@ import (
 	"github.com/pingcap/tiflow/engine/servermaster/cluster"
 )
 
+func (s *Server) generateSessionConfig() (*cluster.EtcdSessionConfig, error) {
+	value, err := s.info.ToJSON()
+	if err != nil {
+		return nil, errors.Wrap(errors.ErrMasterNewServer, err)
+	}
+
+	return &cluster.EtcdSessionConfig{
+		Member:       s.member(),
+		Key:          s.info.EtcdKey(),
+		Value:        value,
+		RPCTimeout:   s.cfg.RPCTimeout,
+		KeepaliveTTL: s.cfg.KeepAliveTTL,
+	}, nil
+}
+
 func (s *Server) leaderLoop(ctx context.Context) error {
 	var (
 		leaderCtx      context.Context
@@ -46,8 +61,11 @@ func (s *Server) leaderLoop(ctx context.Context) error {
 		}
 	}()
 
-	session, err := cluster.NewEtcdSession(ctx, s.etcdClient, s.member(),
-		s.info, s.cfg.RPCTimeout, s.cfg.KeepAliveTTL)
+	sessionCfg, err := s.generateSessionConfig()
+	if err != nil {
+		return err
+	}
+	session, err := cluster.NewEtcdSession(ctx, s.etcdClient, sessionCfg)
 	if err != nil {
 		return err
 	}

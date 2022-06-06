@@ -25,7 +25,6 @@ import (
 	"google.golang.org/grpc/codes"
 
 	"github.com/pingcap/tiflow/dm/pkg/log"
-	"github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/adapter"
 	derrors "github.com/pingcap/tiflow/engine/pkg/errors"
 )
@@ -36,7 +35,9 @@ const (
 
 // Session is recognized as lease and election manager of a server master node.
 type Session interface {
-	Campaign(ctx context.Context, timeout time.Duration) (context.Context, context.CancelFunc, error)
+	Campaign(
+		ctx context.Context, timeout time.Duration,
+	) (context.Context, context.CancelFunc, error)
 	Reset(ctx context.Context) error
 	CheckNeedReset(err error) bool
 }
@@ -46,34 +47,28 @@ type EtcdSession struct {
 	etcdClient *clientv3.Client
 	session    *concurrency.Session
 	election   Election
+	config     *EtcdSessionConfig
+}
 
-	member       string
-	key          string
-	value        string
-	rpcTimeout   time.Duration
-	keepaliveTTL time.Duration
+// EtcdSessionConfig defines basic config used to create an EtcdSession
+type EtcdSessionConfig struct {
+	// member is json encoded string of rpcutil.Member
+	Member       string
+	Key          string
+	Value        string
+	RPCTimeout   time.Duration
+	KeepaliveTTL time.Duration
 }
 
 // NewEtcdSession creates a new EtcdSession instance
 func NewEtcdSession(
-	ctx context.Context, etcdClient *clientv3.Client,
-	member string, info *model.NodeInfo, rpcTimeout, keepaliveTTL time.Duration,
+	ctx context.Context, etcdClient *clientv3.Client, config *EtcdSessionConfig,
 ) (*EtcdSession, error) {
-	// note this key-value pair will be used in service discovery
-	value, err := info.ToJSON()
-	if err != nil {
-		return nil, derrors.Wrap(derrors.ErrMasterNewServer, err)
-	}
-
 	s := &EtcdSession{
-		etcdClient:   etcdClient,
-		member:       member,
-		key:          info.EtcdKey(),
-		value:        value,
-		rpcTimeout:   rpcTimeout,
-		keepaliveTTL: keepaliveTTL,
+		etcdClient: etcdClient,
+		config:     config,
 	}
-	err = s.Reset(ctx)
+	err := s.Reset(ctx)
 	return s, err
 }
 
@@ -85,14 +80,15 @@ func (s *EtcdSession) Reset(ctx context.Context) error {
 		return derrors.Wrap(derrors.ErrMasterNewServer, err)
 	}
 
-	_, err = s.etcdClient.Put(ctx, s.key, s.value, clientv3.WithLease(session.Lease()))
+	_, err = s.etcdClient.Put(ctx, s.config.Key, s.config.Value,
+		clientv3.WithLease(session.Lease()))
 	if err != nil {
 		return derrors.Wrap(derrors.ErrEtcdAPIError, err)
 	}
 
 	election, err := NewEtcdElection(ctx, s.etcdClient, session, EtcdElectionConfig{
-		CreateSessionTimeout: s.rpcTimeout,
-		TTL:                  s.keepaliveTTL,
+		CreateSessionTimeout: s.config.RPCTimeout,
+		TTL:                  s.config.KeepaliveTTL,
 		Prefix:               adapter.MasterCampaignKey.Path(),
 	})
 	if err != nil {
@@ -108,8 +104,9 @@ func (s *EtcdSession) Reset(ctx context.Context) error {
 func (s *EtcdSession) Campaign(ctx context.Context, timeout time.Duration) (
 	context.Context, context.CancelFunc, error,
 ) {
-	log.L().Info("start to campaign server master leader", zap.String("name", s.member))
-	leaderCtx, resignFn, err := s.election.Campaign(ctx, s.member, timeout)
+	log.L().Info("start to campaign server master leader",
+		zap.String("name", s.config.Member))
+	leaderCtx, resignFn, err := s.election.Campaign(ctx, s.config.Member, timeout)
 	switch perrors.Cause(err) {
 	case nil:
 	case context.Canceled:
@@ -118,7 +115,8 @@ func (s *EtcdSession) Campaign(ctx context.Context, timeout time.Duration) (
 		log.L().Warn("campaign leader failed", zap.Error(err))
 		return nil, nil, derrors.Wrap(derrors.ErrMasterEtcdElectionCampaignFail, err)
 	}
-	log.L().Info("campaign leader successfully", zap.String("name", s.member))
+	log.L().Info("campaign leader successfully",
+		zap.String("name", s.config.Member))
 	return leaderCtx, resignFn, nil
 }
 
