@@ -292,10 +292,17 @@ func TestReplicationSetPollUnknownCapture(t *testing.T) {
 
 	msgs, err := r.poll(&schedulepb.TableStatus{
 		TableID: tableID,
-		State:   schedulepb.TableStateAbsent,
+		State:   schedulepb.TableStateReplicating,
 	}, "unknown")
 	require.Nil(t, msgs)
 	require.Error(t, err)
+
+	msgs, err = r.poll(&schedulepb.TableStatus{
+		TableID: tableID,
+		State:   schedulepb.TableStateAbsent,
+	}, "unknown")
+	require.Len(t, msgs, 0)
+	require.Nil(t, err)
 }
 
 func TestReplicationSetAddTable(t *testing.T) {
