@@ -15,7 +15,6 @@ package etcdutils
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"sort"
@@ -40,28 +39,21 @@ func TestPrepareJoinEtcd(t *testing.T) {
 	// initialized the logger to make genEmbedEtcdConfig working.
 	require.Nil(t, log.InitLogger(&log.Config{}))
 
-	dir, err := ioutil.TempDir("", "test1")
-	require.Nil(t, err)
-	defer os.RemoveAll(dir)
-
 	masterAddr := allocTempURL(t)
 	advertiseAddr := allocTempURL(t)
 
 	cfgCluster := &ConfigParams{} // used to start an etcd cluster
 	cfgCluster.Name = "dataflow-master-1"
-	cfgCluster.DataDir = dir
+	cfgCluster.DataDir = t.TempDir()
 	cfgCluster.PeerUrls = "http://" + allocTempURL(t)
 	cfgCluster.Adjust("", embed.ClusterStateFlagNew)
 
 	cfgClusterEtcd := GenEmbedEtcdConfigWithLogger("info")
-	cfgClusterEtcd, err = GenEmbedEtcdConfig(cfgClusterEtcd, masterAddr, advertiseAddr, cfgCluster)
+	cfgClusterEtcd, err := GenEmbedEtcdConfig(cfgClusterEtcd, masterAddr, advertiseAddr, cfgCluster)
 	require.Nil(t, err)
 
 	cfgBefore := cloneConfig(cfgCluster) // before `prepareJoinEtcd` applied
-	dir2, err := ioutil.TempDir("", "test2")
-	require.Nil(t, err)
-	defer os.RemoveAll(dir2)
-	cfgBefore.DataDir = dir2 // overwrite some config items
+	cfgBefore.DataDir = t.TempDir()      // overwrite some config items
 	beforeMasterAddr := allocTempURL(t)
 	cfgBefore.PeerUrls = "http://" + allocTempURL(t)
 	cfgBefore.AdvertisePeerUrls = cfgBefore.PeerUrls
@@ -154,10 +146,7 @@ func TestPrepareJoinEtcd(t *testing.T) {
 	// prepare join done, but has not start the etcd to complete the join, can not join anymore.
 	cfgAfter2 := cloneConfig(cfgBefore)
 	cfgAfter2.Name = "dataflow-master-3" // overwrite some items
-	dir3, err := ioutil.TempDir("", "test3")
-	require.Nil(t, err)
-	defer os.RemoveAll(dir3)
-	cfgAfter2.DataDir = dir3
+	cfgAfter2.DataDir = t.TempDir()
 	after2MasterAddr := allocTempURL(t)
 	cfgAfter2.PeerUrls = "http://" + allocTempURL(t)
 	cfgAfter2.AdvertisePeerUrls = cfgAfter2.PeerUrls
@@ -197,10 +186,7 @@ func TestIsDirExist(t *testing.T) {
 	d := "./directory-not-exists"
 	require.False(t, isDirExist(d))
 
-	var err error
-	d, err = ioutil.TempDir("", "test-dir")
-	require.Nil(t, err)
-	defer os.RemoveAll(d)
+	d = t.TempDir()
 
 	// empty directory
 	require.True(t, isDirExist(d))

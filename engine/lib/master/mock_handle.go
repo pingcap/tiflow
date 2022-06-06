@@ -20,9 +20,9 @@ import (
 
 	"go.uber.org/atomic"
 
+	pb "github.com/pingcap/tiflow/engine/enginepb"
 	libModel "github.com/pingcap/tiflow/engine/lib/model"
 	"github.com/pingcap/tiflow/engine/model"
-	"github.com/pingcap/tiflow/engine/pb"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 )
 

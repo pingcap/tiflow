@@ -16,6 +16,7 @@ require (
 	github.com/swaggo/swag v1.7.8
 	github.com/tinylib/msgp v1.1.6
 	github.com/zhouqiang-cl/gocovmerge v0.0.0-20190125174600-5256314471af
+	golang.org/x/tools v0.1.10
 	mvdan.cc/gofumpt v0.3.1
 	mvdan.cc/sh/v3 v3.3.1
 )
@@ -183,7 +184,6 @@ require (
 	golang.org/x/sys v0.0.0-20220319134239-a9b59b0215f8 // indirect
 	golang.org/x/term v0.0.0-20210615171337-6886f2dfbf5b // indirect
 	golang.org/x/text v0.3.7 // indirect
-	golang.org/x/tools v0.1.10 // indirect
 	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
 	google.golang.org/genproto v0.0.0-20211208223120-3a66f561d7aa // indirect
 	google.golang.org/protobuf v1.27.1 // indirect
