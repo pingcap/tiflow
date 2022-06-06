@@ -101,7 +101,7 @@ var (
 	builtInSkipDDLPatterns *regexp.Regexp
 
 	passwordPatterns = `(password: (\\")?)(.*?)((\\")?\\n)`
-	sslPatterns      = `(s*sl-(ca|key|cert)-bytes:)([\s\\\nn]+)(-\s\d+[\s\\\nn]+)+?([a-zA-Z])`
+	sslPatterns      = `(ssl-(ca|key|cert)-bytes:)((\\n\s{4}-\s\d+)+)`
 
 	passwordRegexp *regexp.Regexp
 	sslRegexp      *regexp.Regexp
@@ -179,7 +179,7 @@ func IsBuildInSkipDDL(sql string) bool {
 // HideSensitive replace password with ******.
 func HideSensitive(input string) string {
 	output := passwordRegexp.ReplaceAllString(input, "$1******$4")
-	output = sslRegexp.ReplaceAllString(output, "$1 \"******\"\\\\\\\\n    $5")
+	output = sslRegexp.ReplaceAllString(output, "$1 \"******\"")
 	return output
 }
 
