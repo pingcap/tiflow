@@ -16,6 +16,7 @@ package dm
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"testing"
 
 	"github.com/pingcap/tiflow/dm/dm/config"
@@ -91,6 +92,9 @@ func TestQueryStatusAPI(t *testing.T) {
 	dmWorker := newDMWorker(dctx, "", lib.WorkerDMDump, &config.SubTaskConfig{SourceID: "task-id"})
 	unitHolder := &mockUnitHolder{}
 	dmWorker.unitHolder = unitHolder
+
+	require.Equal(t, dmWorker.QueryStatus(context.Background(), &dmpkg.QueryStatusRequest{Task: "wrong-task-id"}).ErrorMsg,
+		fmt.Sprintf("task id mismatch, get %s, actually %s", "wrong-task-id", "task-id"))
 
 	unitHolder.On("Status").Return(dumpStatus).Once()
 	dmWorker.setStage(metadata.StageRunning)

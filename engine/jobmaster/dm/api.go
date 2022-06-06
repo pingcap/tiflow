@@ -111,7 +111,6 @@ func (jm *JobMaster) QueryJobStatus(ctx context.Context, tasks []string) (*JobSt
 }
 
 // QueryStatus query status for a task
-// Command: QueryStatus
 func (jm *JobMaster) QueryStatus(ctx context.Context, taskID string) *dmpkg.QueryStatusResponse {
 	req := &dmpkg.QueryStatusRequest{
 		Task: taskID,

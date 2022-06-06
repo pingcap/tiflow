@@ -150,21 +150,13 @@ func (w *dmWorker) OnMasterMessage(topic p2p.Topic, message p2p.MessageValue) er
 // CloseImpl implements lib.WorkerImpl.CloseImpl
 func (w *dmWorker) CloseImpl(ctx context.Context) error {
 	// unregister jobmaster client
-	if err := w.messageAgent.UpdateClient(w.masterID, nil); err != nil {
-		return err
+	err := w.messageAgent.UpdateClient(w.masterID, nil)
+	if err != nil {
+		log.L().Error("failed to update message client", log.ShortError(err))
 	}
 	w.unitHolder.Close(ctx)
 	w.messageAgent.Close(ctx)
-	return nil
-}
-
-// closeAndExit closes the task and exits.
-func (w *dmWorker) closeAndExit(ctx context.Context, status libModel.WorkerStatus) error {
-	err := w.CloseImpl(ctx)
-	if err != nil {
-		log.L().Warn("fail to close task", log.ShortError(err))
-	}
-	return w.Exit(ctx, status, nil)
+	return err
 }
 
 // setupstorage opens and configs external storage
@@ -209,7 +201,7 @@ func (w *dmWorker) tryUpdateStatus(ctx context.Context) error {
 			return nil
 		}
 	}
-	return w.closeAndExit(ctx, status)
+	return w.Exit(ctx, status, nil)
 }
 
 // workerStatus gets worker status.

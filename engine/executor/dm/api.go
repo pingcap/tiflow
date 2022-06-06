@@ -16,6 +16,7 @@ package dm
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 
 	"github.com/pingcap/errors"
 
@@ -23,26 +24,30 @@ import (
 )
 
 // QueryStatus implements the api of query status request.
-func (t *dmWorker) QueryStatus(ctx context.Context, req *dmpkg.QueryStatusRequest) *dmpkg.QueryStatusResponse {
+// QueryStatus is called by refection of commandHandler.
+func (w *dmWorker) QueryStatus(ctx context.Context, req *dmpkg.QueryStatusRequest) *dmpkg.QueryStatusResponse {
+	if w.taskID != req.Task {
+		return &dmpkg.QueryStatusResponse{ErrorMsg: fmt.Sprintf("task id mismatch, get %s, actually %s", req.Task, w.taskID)}
+	}
 	// get status from unit
-	status := t.unitHolder.Status(ctx)
+	status := w.unitHolder.Status(ctx)
 	// copy status via json
 	statusBytes, err := json.Marshal(status)
 	if err != nil {
 		return &dmpkg.QueryStatusResponse{ErrorMsg: err.Error()}
 	}
 	return &dmpkg.QueryStatusResponse{
-		Unit:   t.workerType,
-		Stage:  t.getStage(),
+		Unit:   w.workerType,
+		Stage:  w.getStage(),
 		Status: statusBytes,
 	}
 }
 
 // StopWorker implements the api of stop worker message which kill itself.
-func (t *dmWorker) StopWorker(ctx context.Context, msg *dmpkg.StopWorkerMessage) error {
-	if t.taskID != msg.Task {
-		return errors.Errorf("task id mismatch, get %s, actually %s", msg.Task, t.taskID)
+// StopWorker is called by refection of commandHandler.
+func (w *dmWorker) StopWorker(ctx context.Context, msg *dmpkg.StopWorkerMessage) error {
+	if w.taskID != msg.Task {
+		return errors.Errorf("task id mismatch, get %s, actually %s", msg.Task, w.taskID)
 	}
-	// Disscuss: is it correct?
-	return t.closeAndExit(ctx, t.workerStatus())
+	return w.Exit(ctx, w.workerStatus(), nil)
 }
