@@ -18,10 +18,8 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/api/validator"
 	"github.com/pingcap/tiflow/cdc/kv"
-	"go.uber.org/zap"
 )
 
 // VerifyTable verify table, return ineligibleTables and EligibleTables.
@@ -32,8 +30,6 @@ func (h *OpenAPIV2) VerifyTable(c *gin.Context) {
 		_ = c.Error(err)
 		return
 	}
-	log.Info("config", zap.Any("fizz", cfg))
-	log.Info("credential", zap.Any("fizz", cfg.Credential))
 	kvStore, err := kv.CreateTiStore(strings.Join(cfg.PDAddrs, ","), cfg.Credential)
 	if err != nil {
 		_ = c.Error(err)

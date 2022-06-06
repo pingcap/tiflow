@@ -17,7 +17,6 @@ import (
 	"fmt"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/log"
 	tidbconfig "github.com/pingcap/tidb/config"
 	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/meta"
@@ -26,7 +25,6 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/flags"
 	"github.com/pingcap/tiflow/pkg/security"
-	"go.uber.org/zap"
 )
 
 // GetSnapshotMeta returns tidb meta information
@@ -45,9 +43,7 @@ func CreateTiStore(urls string, credential *security.Credential) (tidbkv.Storage
 
 	// Ignore error if it is already registered.
 	_ = store.Register("tikv", driver.TiKVDriver{})
-
 	if credential.CAPath != "" {
-		log.Info("credential", zap.Any("fizz", credential))
 		conf := tidbconfig.GetGlobalConfig()
 		conf.Security.ClusterSSLCA = credential.CAPath
 		conf.Security.ClusterSSLCert = credential.CertPath
@@ -58,7 +54,6 @@ func CreateTiStore(urls string, credential *security.Credential) (tidbkv.Storage
 	tiPath := fmt.Sprintf("tikv://%s?disableGC=true", urlv.HostString())
 	tiStore, err := store.New(tiPath)
 	if err != nil {
-		log.Error("fizz", zap.Error(err))
 		return nil, cerror.WrapError(cerror.ErrNewStore, err)
 	}
 	return tiStore, nil

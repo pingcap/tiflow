@@ -14,7 +14,9 @@ BASE_URL1 = "https://127.0.0.1:8301/api/v1"
 BASE_URL0_V2 = "https://127.0.0.1:8300/api/v2"
 BASE_URL1_V2 = "https://127.0.0.1:8301/api/v2"
 
-TLS_PD_ADDR = "https://127.0.0.1:2379"
+TLS_PD_ADDR = "https://127.0.0.1:2579"
+
+physicalShiftBits = 18 
 # we should write some SQLs in the run.sh after call create_changefeed
 def create_changefeed(sink_uri):
     url = BASE_URL1+"/changefeeds"
@@ -304,36 +306,41 @@ def set_log_level():
     print("pass test: set log level")
 
 def verify_table():
-    url = BASE_URL0+"/changefeeds/changefeed-test1"
+    url = BASE_URL0_V2+"/tso"
     # we need to retry since owner resign before this func call 
     i = 0 
     while i < 10:
         try: 
             resp = rq.get(url, cert=CERT, verify=VERIFY, timeout=5)
-            break 
+            if resp.status_code == rq.codes.ok:
+              break 
+            else:
+                 continue
         except rq.exceptions.RequestException:
             i += 1
-            
     assert resp.status_code == rq.codes.ok
-    start_ts = resp.json()["checkpoint_tso"]
+
+    ps = resp.json()["timestamp"]
+    ls = resp.json()["logic-time"]
+    tso = compose_tso(ps,ls)
 
     url = BASE_URL0_V2 + "/verify-table"
     data = json.dumps({
     "pd-addrs": [TLS_PD_ADDR],
     "credential": {"ca-path":CA_PEM_PATH, "cert-path":CLIENT_PEM_PATH, 
-    "key-path":CLIENT_KEY_PEM_PATH, "cert-allowed-cn":"client"},
-    "start-ts": start_ts,
+    "key-path":CLIENT_KEY_PEM_PATH, "cert-allowed-cn":["client"]},
+    "start-ts": tso,
     "replica-config": {"filter":{"rules":["test.verify*"]}}})
     headers = {"Content-Type": "application/json"}
-    print(url)
-    print(data)
     resp = rq.post(url, data=data, headers=headers, cert=CERT, verify=VERIFY)
-    print(resp)
     assert resp.status_code == rq.codes.ok
     eligible_table_name = resp.json()["eligible-tables"][0]["tbl-name"]
     ineligible_table_name = resp.json()["ineligible-tables"][0]["tbl-name"]
     assert eligible_table_name == "verify_table_eligible"
     assert ineligible_table_name == "verify_table_ineligible"
+
+    print("pass test: verify table")
+
   
 def get_tso():
     # test state: all
@@ -342,6 +349,10 @@ def get_tso():
     assert resp.status_code == rq.codes.ok
 
     print("pass test: get tso")
+
+# compose physical time and logical time into tso
+def compose_tso(ps, ls):
+    return (ps << physicalShiftBits) + ls 
 
 # arg1: test case name
 # arg2: cetificates dir
