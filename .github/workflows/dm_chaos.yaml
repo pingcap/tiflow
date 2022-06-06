@@ -102,7 +102,7 @@ jobs:
       # Load DM docker image into KIND, see https://kind.sigs.k8s.io/docs/user/quick-start/#loading-an-image-into-your-cluster
       - name: Load DM docker image into KIND
         run: |
-          kind load docker-image dm:chaos --name dm-chaos
+          kind load docker-image dm:chaos
 
       # Set up upstream instances
       - name: Set up sources
@@ -261,7 +261,7 @@ jobs:
         run: |
           mkdir ./logs
           kubectl get pods --no-headers -o custom-columns=":metadata.name"|grep -E "dm-"|xargs -I{} sudo kubectl cp {}:/log/{}.log ./logs/{}.log
-          kind export logs ./logs/kind --name dm-chaos
+          kind export logs ./logs/kind
           sudo chown -R runner ./logs
       # Update logs as artifact seems not stable, so we set `continue-on-error: true` here.
       - name: Upload logs
