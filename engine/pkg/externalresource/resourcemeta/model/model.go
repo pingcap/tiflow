@@ -17,8 +17,8 @@ import (
 	"path"
 	"strings"
 
+	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/model"
-	"github.com/pingcap/tiflow/engine/pb"
 	derror "github.com/pingcap/tiflow/engine/pkg/errors"
 	ormModel "github.com/pingcap/tiflow/engine/pkg/orm/model"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
