@@ -100,13 +100,14 @@ func (s *Server) leaderLoop(ctx context.Context) error {
 // checkLeaderExists is the entrance of server master leader loop. It works as follows
 // 1. Try to query leader node from etcd
 // 2. If leader node exists, decode the leader information
-//    - If decode fails, return retry=true to retry the leader loop
-//    - If leader information is stale, try to delete it and retry the leader loop
-//    - Otherwise watch the leader until it is evicted.
+//    a. If decode fails, return retry=true to retry the leader loop
+//    b. If leader information is stale, try to delete it and retry the leader loop
+//    c. Otherwise watch the leader until it is evicted.
 // 3. If the leader doesn't exist, check whether current node is etcd leader
 //    - If it is not, return retry=true to retry the leader loop
 //    - If it is, return retry=false and continue the leader campaign.
 func (s *Server) checkLeaderExists(ctx context.Context) (retry bool, err error) {
+	// step-1
 	key, data, rev, err := etcdutils.GetLeader(ctx, s.etcdClient, adapter.MasterCampaignKey.Path())
 	if err != nil {
 		if perrors.Cause(err) == context.Canceled {
@@ -117,14 +118,19 @@ func (s *Server) checkLeaderExists(ctx context.Context) (retry bool, err error) 
 			return true, nil
 		}
 	}
+
+	// step-2
 	var leader *Member
 	if len(data) > 0 {
 		leader = &Member{}
 		err = leader.Unmarshal(data)
+		// step-2, case-a
 		if err != nil {
 			log.L().Warn("unexpected leader data", zap.Error(err))
 			return true, nil
 		}
+
+		// step-2, case-b
 		if leader.Name == s.name() || leader.AdvertiseAddr == s.cfg.AdvertiseAddr {
 			// - leader.Name == s.name() means this server should be leader
 			// - leader.AdvertiseAddr == s.cfg.AdvertiseAddr means the old leader
@@ -140,15 +146,17 @@ func (s *Server) checkLeaderExists(ctx context.Context) (retry bool, err error) 
 			}
 			return true, nil
 		}
+
+		// step-3, case-c
 		leader.IsServLeader = true
 		leader.IsEtcdLeader = true
-	}
-	if leader != nil {
 		log.L().Info("start to watch server master leader",
 			zap.String("leader-name", leader.Name), zap.String("addr", leader.AdvertiseAddr))
 		s.watchLeader(ctx, leader, rev)
 		log.L().Info("server master leader changed")
 	}
+
+	// step-3
 	if !s.isEtcdLeader() {
 		log.L().Info("skip campaigning leader", zap.String("name", s.name()))
 		return true, nil
