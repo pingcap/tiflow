@@ -77,7 +77,7 @@ func (t *testUtilsSuite) TestWaitSomething(c *C) {
 	c.Assert(count, Equals, 5)
 }
 
-func TestName(t *testing.T) {
+func TestHideSensitive(t *testing.T) {
 	strs := []struct {
 		old string
 		new string
