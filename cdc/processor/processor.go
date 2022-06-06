@@ -283,7 +283,7 @@ func (p *processor) IsAddTableFinished(ctx context.Context, tableID model.TableI
 			zap.Uint64("globalResolvedTs", globalResolvedTs),
 			zap.Uint64("tableCheckpointTs", table.CheckpointTs()),
 			zap.Uint64("globalCheckpointTs", globalCheckpointTs),
-			zap.Any("status", table.State()), zap.Bool("isPrepare", isPrepare))
+			zap.Any("state", table.State()), zap.Bool("isPrepare", isPrepare))
 		return false
 	}
 
@@ -297,7 +297,7 @@ func (p *processor) IsAddTableFinished(ctx context.Context, tableID model.TableI
 		zap.Uint64("globalResolvedTs", globalResolvedTs),
 		zap.Uint64("tableCheckpointTs", table.CheckpointTs()),
 		zap.Uint64("globalCheckpointTs", globalCheckpointTs),
-		zap.Any("status", table.State()), zap.Bool("isPrepare", isPrepare))
+		zap.Any("state", table.State()), zap.Bool("isPrepare", isPrepare))
 	return true
 }
 
@@ -1072,7 +1072,7 @@ func (p *processor) Close() error {
 func (p *processor) WriteDebugInfo(w io.Writer) {
 	fmt.Fprintf(w, "%+v\n", *p.changefeed)
 	for tableID, tablePipeline := range p.tables {
-		fmt.Fprintf(w, "tableID: %d, tableName: %s, resolvedTs: %d, checkpointTs: %d, status: %s\n",
+		fmt.Fprintf(w, "tableID: %d, tableName: %s, resolvedTs: %d, checkpointTs: %d, state: %s\n",
 			tableID, tablePipeline.Name(), tablePipeline.ResolvedTs(), tablePipeline.CheckpointTs(), tablePipeline.State())
 	}
 }

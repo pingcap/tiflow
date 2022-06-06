@@ -121,7 +121,7 @@ func newMockTablePipeline(ctx cdcContext.Context, tableID model.TableID, replica
 	return &mockTablePipeline{
 		tableID:      tableID,
 		name:         fmt.Sprintf("`test`.`table%d`", tableID),
-		status:       pipeline.TableStatePreparing,
+		state:        pipeline.TableStatePreparing,
 		resolvedTs:   replicaInfo.StartTs,
 		checkpointTs: replicaInfo.StartTs,
 	}, nil
@@ -134,7 +134,7 @@ type mockTablePipeline struct {
 	checkpointTs model.Ts
 	barrierTs    model.Ts
 	stopTs       model.Ts
-	status       pipeline.TableState
+	state        pipeline.TableState
 	canceled     bool
 
 	sinkStartTs model.Ts
@@ -170,7 +170,7 @@ func (m *mockTablePipeline) Workload() model.WorkloadInfo {
 }
 
 func (m *mockTablePipeline) State() pipeline.TableState {
-	return m.status
+	return m.state
 }
 
 func (m *mockTablePipeline) Cancel() {
@@ -186,7 +186,7 @@ func (m *mockTablePipeline) Wait() {
 
 func (m *mockTablePipeline) Start(ts model.Ts) bool {
 	m.sinkStartTs = ts
-	m.status = pipeline.TableStateReplicating
+	m.state = pipeline.TableStateReplicating
 	return true
 }
 
@@ -267,7 +267,7 @@ func TestTableExecutorAddingTableDirectly(t *testing.T) {
 	require.True(t, ok)
 	table1 := p.tables[1].(*mockTablePipeline)
 	require.Equal(t, model.Ts(20), table1.sinkStartTs)
-	require.Equal(t, pipeline.TableStateReplicating, table1.status)
+	require.Equal(t, pipeline.TableStateReplicating, table1.state)
 	meta := p.GetTableMeta(model.TableID(1))
 	require.Equal(t, model.TableID(1), meta.TableID)
 	require.Equal(t, pipeline.TableStateReplicating, meta.State)
@@ -277,26 +277,30 @@ func TestTableExecutorAddingTableDirectly(t *testing.T) {
 	require.True(t, ok)
 	table2 := p.tables[2].(*mockTablePipeline)
 	require.Equal(t, model.Ts(20), table2.sinkStartTs)
-	require.Equal(t, pipeline.TableStateReplicating, table2.status)
+	require.Equal(t, pipeline.TableStateReplicating, table2.state)
 
 	ok, err = p.AddTable(ctx, 3, 20, false)
 	require.Nil(t, err)
 	require.True(t, ok)
 	table3 := p.tables[3].(*mockTablePipeline)
 	require.Equal(t, model.Ts(20), table3.sinkStartTs)
-	require.Equal(t, pipeline.TableStateReplicating, table3.status)
+	require.Equal(t, pipeline.TableStateReplicating, table3.state)
 
 	ok, err = p.AddTable(ctx, 4, 20, false)
 	require.Nil(t, err)
 	require.True(t, ok)
 	table4 := p.tables[4].(*mockTablePipeline)
 	require.Equal(t, model.Ts(20), table4.sinkStartTs)
-	require.Equal(t, pipeline.TableStateReplicating, table4.status)
+	require.Equal(t, pipeline.TableStateReplicating, table4.state)
 	require.Len(t, p.tables, 4)
 
 	checkpointTs := p.agent.GetLastSentCheckpointTs()
 	require.Equal(t, checkpointTs, model.Ts(0))
 
+	// todo: in the real scenario, `preparing` -> `prepared` -> `replicating`
+	// in the mock, `preparing` -> `replicating`, since the `first resolved ts`
+	// is ignored in the mock process.
+	// refactor the mock processor and table pipeline to make it more vivid.
 	done := p.IsAddTableFinished(ctx, 1, false)
 	require.False(t, done)
 	done = p.IsAddTableFinished(ctx, 2, false)
@@ -377,7 +381,7 @@ func TestTableExecutorAddingTableDirectly(t *testing.T) {
 	require.Equal(t, model.Ts(60), checkpointTs)
 
 	// finish remove operations
-	table3.status = pipeline.TableStateStopped
+	table3.state = pipeline.TableStateStopped
 	table3.checkpointTs = 65
 
 	_, err = p.Tick(ctx, p.changefeed)
