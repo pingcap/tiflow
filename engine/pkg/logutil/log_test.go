@@ -55,7 +55,7 @@ func TestNewLogger(t *testing.T) {
 	logger = NewLogger4Master(tenant.ProjectInfo{
 		TenantID:  "tenant1",
 		ProjectID: "proj1",
-	}, "job1")
+	}, "job1", "type1")
 	logger.Warn("master test", zap.String("type", "master"))
 	logger.Sync()
 	line = <-tail.Lines
@@ -64,7 +64,7 @@ func TestNewLogger(t *testing.T) {
 	logger = NewLogger4Worker(tenant.ProjectInfo{
 		TenantID:  "tenant1",
 		ProjectID: "proj1",
-	}, "job1", "worker1")
+	}, "job1", "type1", worker1)
 	logger.Warn("worker test", zap.String("type", "worker"))
 	logger.Sync()
 	line = <-tail.Lines
