@@ -26,7 +26,7 @@ const (
 	resolvedTsInterpolateInterval = 200 * time.Millisecond
 )
 
-// TableState is status of the table pipeline
+// TableState is state of the table pipeline
 type TableState int32
 
 // TableState for table pipeline
@@ -68,7 +68,7 @@ func (s *TableState) Store(new TableState) {
 	atomic.StoreInt32((*int32)(s), int32(new))
 }
 
-// TableMeta is the meta data of a table.
+// TableMeta is the metadata of a table.
 type TableMeta struct {
 	TableID      model.TableID
 	CheckpointTs model.Ts
@@ -96,8 +96,8 @@ type TablePipeline interface {
 
 	// Workload returns the workload of this table
 	Workload() model.WorkloadInfo
-	// Status returns the status of this table pipeline
-	Status() TableState
+	// State returns the state of this table pipeline
+	State() TableState
 	// Cancel stops this table pipeline immediately and destroy all resources created by this table pipeline
 	Cancel()
 	// Wait waits for table pipeline destroyed
