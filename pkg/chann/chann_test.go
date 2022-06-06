@@ -409,6 +409,20 @@ func TestUnboundedChann(t *testing.T) {
 }
 
 func TestUnboundedChannClose(t *testing.T) {
+	t.Run("close-status", func(t *testing.T) {
+		ch := New[any]()
+		for i := 0; i < 100; i++ {
+			ch.In() <- 0
+		}
+		ch.Close()
+
+		// Theoretically, this is not a dead loop. If the channel
+		// is closed, then this loop must terminate at somepoint.
+		// If not, we will meet timeout in the test.
+		for !ch.isClosed() {
+			t.Log("unbounded channel is still not entirely closed")
+		}
+	})
 	t.Run("struct{}", func(t *testing.T) {
 		grs := runtime.NumGoroutine()
 		N := 10
