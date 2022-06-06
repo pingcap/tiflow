@@ -168,15 +168,15 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	metaKVClient := kvmock.NewMetaMock()
 	mockBaseJobmaster := &MockBaseJobmaster{}
 	mockCheckpointAgent := &MockCheckpointAgent{}
+	mockMessageAgent := &dmpkg.MockMessageAgent{}
 	jobCfg := &config.JobCfg{}
 	require.NoError(t.T(), jobCfg.DecodeFile(jobTemplatePath))
 	jm := &JobMaster{
-		workerID:              "jobmaster-id",
-		jobCfg:                jobCfg,
-		closeCh:               make(chan struct{}),
-		messageHandlerManager: p2p.NewMockMessageHandlerManager(),
-		BaseJobMaster:         mockBaseJobmaster,
-		checkpointAgent:       mockCheckpointAgent,
+		workerID:        "jobmaster-id",
+		jobCfg:          jobCfg,
+		BaseJobMaster:   mockBaseJobmaster,
+		checkpointAgent: mockCheckpointAgent,
+		messageAgent:    mockMessageAgent,
 	}
 
 	// init
@@ -201,12 +201,11 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 
 	// recover
 	jm = &JobMaster{
-		workerID:              "jobmaster-id",
-		jobCfg:                jobCfg,
-		closeCh:               make(chan struct{}),
-		messageHandlerManager: p2p.NewMockMessageHandlerManager(),
-		BaseJobMaster:         mockBaseJobmaster,
-		checkpointAgent:       mockCheckpointAgent,
+		workerID:        "jobmaster-id",
+		jobCfg:          jobCfg,
+		BaseJobMaster:   mockBaseJobmaster,
+		checkpointAgent: mockCheckpointAgent,
+		messageAgent:    mockMessageAgent,
 	}
 	mockBaseJobmaster.On("GetWorkers").Return(map[string]lib.WorkerHandle{}).Once()
 	jm.OnMasterRecovered(context.Background())
@@ -299,31 +298,30 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 
 	// master failover
 	jm = &JobMaster{
-		workerID:              "jobmaster-id",
-		jobCfg:                jobCfg,
-		closeCh:               make(chan struct{}),
-		messageHandlerManager: p2p.NewMockMessageHandlerManager(),
-		BaseJobMaster:         mockBaseJobmaster,
-		checkpointAgent:       mockCheckpointAgent,
+		workerID:        "jobmaster-id",
+		jobCfg:          jobCfg,
+		BaseJobMaster:   mockBaseJobmaster,
+		checkpointAgent: mockCheckpointAgent,
+		messageAgent:    mockMessageAgent,
 	}
 	mockBaseJobmaster.On("GetWorkers").Return(map[string]lib.WorkerHandle{worker4: workerHandle1, worker3: workerHandle2}).Once()
 	workerHandle1.On("Status").Return(&libModel.WorkerStatus{ExtBytes: bytes1}).Once()
 	workerHandle2.On("Status").Return(&libModel.WorkerStatus{ExtBytes: bytes2}).Once()
-	workerHandle1.On("IsTombStone").Return(false).Twice()
-	workerHandle2.On("IsTombStone").Return(false).Twice()
+	workerHandle1.On("IsTombStone").Return(false).Once()
+	workerHandle2.On("IsTombStone").Return(false).Once()
 	jm.OnMasterRecovered(context.Background())
 	require.NoError(t.T(), jm.Tick(context.Background()))
 	// placeholder
 	require.NoError(t.T(), jm.OnWorkerStatusUpdated(workerHandle1, &libModel.WorkerStatus{ExtBytes: bytes1}))
 	require.NoError(t.T(), jm.OnJobManagerMessage("", ""))
 	require.NoError(t.T(), jm.OnMasterMessage("", ""))
+	require.NoError(t.T(), jm.OnWorkerMessage(&lib.MockWorkerHandler{}, "", ""))
 	require.Equal(t.T(), jm.Workload(), model.RescUnit(2))
 	require.NoError(t.T(), jm.OnWorkerStatusUpdated(workerHandle1, &libModel.WorkerStatus{ExtBytes: bytes1}))
-	require.EqualError(t.T(), jm.OnWorkerMessage(workerHandle1, "", dmpkg.MessageWithID{}), "request 0 not found")
 
 	// Close
-	workerHandle1.On("SendMessage", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
-	workerHandle2.On("SendMessage", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
+	mockMessageAgent.On("SendMessage").Return(nil).Once()
+	mockMessageAgent.On("SendMessage").Return(nil).Once()
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
@@ -352,7 +350,7 @@ type MockBaseJobmaster struct {
 }
 
 func (m *MockBaseJobmaster) JobMasterID() libModel.MasterID {
-	return libMetadata.JobManagerUUID
+	return "dm-jobmaster-id"
 }
 
 func (m *MockBaseJobmaster) GetWorkers() map[string]lib.WorkerHandle {
