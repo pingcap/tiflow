@@ -509,9 +509,8 @@ df-demo:
 df-chaos-case:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/df-chaos-case ./engine/chaos/cases
 
-df-kvmock: tools/bin/mockgen tools/bin/protoc tools/bin/protoc-gen-gogofaster
-	tools/bin/mockgen -package mock github.com/pingcap/tiflow/engine/pkg/meta/metaclient KVClient \
-	> engine/pkg/meta/kvclient/mock/mockclient.go
+df-mock: tools/bin/mockgen
+	scripts/generate-engine-mock.sh
 
 engine_unit_test: check_failpoint_ctl
 	$(call run_engine_unit_test,$(ENGINE_PACKAGES))
