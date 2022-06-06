@@ -22,9 +22,10 @@ import (
 type workerState string
 
 const (
-	workerStateSorting  = workerState("sorting")
-	workerStateCopying  = workerState("copying")
-	workerStateFinished = workerState("finished")
+	workerStateGenerating = workerState("generating")
+	workerStateSorting    = workerState("sorting")
+	workerStateCommitting = workerState("committing")
+	workerStateFinished   = workerState("finished")
 )
 
 type workerStatus struct {

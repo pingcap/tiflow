@@ -43,6 +43,9 @@ func (dao *masterDAO) PutMasterMeta(ctx context.Context, status *masterStatus) e
 	}
 
 	_, err = dao.client.Put(ctx, masterMetaKey(dao.masterID), string(statusBytes))
+	if err != nil {
+		return err
+	}
 	return nil
 }
 

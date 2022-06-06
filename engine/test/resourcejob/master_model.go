@@ -32,9 +32,10 @@ const (
 type resourceState string
 
 const (
-	resourceStateUnsorted = resourceState("unsorted")
-	resourceStateCopying  = resourceState("copying")
-	resourceStateSorted   = resourceState("sorted")
+	resourceStateUninit     = resourceState("uninit")
+	resourceStateUnsorted   = resourceState("unsorted")
+	resourceStateCommitting = resourceState("committing")
+	resourceStateSorted     = resourceState("sorted")
 )
 
 type masterStatus struct {
@@ -71,6 +72,31 @@ func (s *masterStatus) OnResourceCreated(resourceID resModel.ResourceID) {
 	_, exists := s.Resources[resourceID]
 	if exists {
 		log.L().Panic("duplicate resource", zap.String("resource-id", resourceID))
+	}
+
+	s.Resources[resourceID] = resourceStateUninit
+}
+
+func (s *masterStatus) OnResourceInitialized(resourceID resModel.ResourceID, workerID libModel.WorkerID) {
+	log.L().Info("OnResourceInitialized",
+		zap.String("resource-id", resourceID))
+
+	resourceID, ok := s.Bindings[workerID]
+	if !ok {
+		log.L().Panic("worker not found", zap.String("worker-id", workerID))
+	}
+
+	oldState, exists := s.Resources[resourceID]
+	if !exists {
+		log.L().Panic("resource state not found",
+			zap.String("worker-id", workerID),
+			zap.String("resource-id", resourceID))
+	}
+	if oldState != resourceStateUninit {
+		log.L().Panic("resource state unexpected",
+			zap.String("worker-id", workerID),
+			zap.String("resource-id", resourceID),
+			zap.String("unexpected state", string(oldState)))
 	}
 
 	s.Resources[resourceID] = resourceStateUnsorted
@@ -134,7 +160,7 @@ func (s *masterStatus) OnWorkerStartedCopying(workerID libModel.WorkerID) {
 			zap.String("unexpected state", string(oldState)))
 	}
 
-	s.Resources[resourceID] = resourceStateCopying
+	s.Resources[resourceID] = resourceStateCommitting
 }
 
 func (s *masterStatus) GetResourceStateForWorker(workerID libModel.WorkerID) (resourceState, bool) {
@@ -168,7 +194,7 @@ func (s *masterStatus) OnWorkerFinishedCopying(workerID libModel.WorkerID) {
 			zap.String("worker-id", workerID),
 			zap.String("resource-id", resourceID))
 	}
-	if oldState != resourceStateCopying {
+	if oldState != resourceStateCommitting {
 		log.L().Panic("resource state unexpected",
 			zap.String("worker-id", workerID),
 			zap.String("resource-id", resourceID),

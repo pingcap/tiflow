@@ -17,6 +17,8 @@ import (
 	"context"
 	"fmt"
 
+	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
+
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -39,7 +41,20 @@ type JobMaster struct {
 	lib.BaseJobMaster
 
 	status *masterStatus
-	config jobConfig
+	config *jobConfig
+}
+
+// NewMaster creates a new JobMaster
+func NewMaster(
+	ctx *dcontext.Context,
+	workerID libModel.WorkerID,
+	masterID libModel.MasterID,
+	config lib.WorkerConfig,
+) lib.WorkerImpl {
+	return &JobMaster{
+		status: initialMasterStatus(),
+		config: config.(*jobConfig),
+	}
 }
 
 type jobConfig struct {
@@ -181,7 +196,7 @@ func (m *JobMaster) OnWorkerStatusUpdated(worker lib.WorkerHandle, newStatus *li
 	switch workerStatus.State {
 	case workerStateSorting:
 		return nil
-	case workerStateCopying:
+	case workerStateCommitting:
 		if prevResState == resourceStateUnsorted {
 			m.status.OnWorkerStartedCopying(worker.ID())
 		} else if prevResState == resourceStateSorted {
@@ -190,7 +205,7 @@ func (m *JobMaster) OnWorkerStatusUpdated(worker lib.WorkerHandle, newStatus *li
 				zap.String("prev-state", string(prevResState)))
 		}
 	case workerStateFinished:
-		if prevResState == resourceStateCopying {
+		if prevResState == resourceStateCommitting {
 			m.status.OnWorkerFinishedCopying(worker.ID())
 		}
 	default:
@@ -217,4 +232,10 @@ func (m *JobMaster) OnJobManagerMessage(topic p2p.Topic, message interface{}) er
 // IsJobMasterImpl implements JobMasterImpl.
 func (m *JobMaster) IsJobMasterImpl() {
 	panic("unreachable")
+}
+
+// OnMasterMessage implements WorkerImpl.
+// TODO fix this. We shouldn't have to implement this.
+func (m *JobMaster) OnMasterMessage(topic p2p.Topic, message p2p.MessageValue) error {
+	return nil
 }
