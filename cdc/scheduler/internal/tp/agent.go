@@ -275,7 +275,7 @@ func (a *agent) handleMessageHeartbeat(expected []model.TableID) *schedulepb.Mes
 		zap.String("capture", a.captureID),
 		zap.String("namespace", a.changeFeedID.Namespace),
 		zap.String("changefeed", a.changeFeedID.ID),
-		zap.Any("message", response))
+		zap.Any("message", message))
 
 	return message
 }
