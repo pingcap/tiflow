@@ -291,9 +291,9 @@ func TestPollDataFailed(t *testing.T) {
 		return false, errors.New("error")
 	}
 	tbl := tableActor{
+		state:             TableStatePreparing,
 		cancel:            func() {},
 		reportErr:         func(err error) {},
-		sinkNode:          &sinkNode{sink: &mockSink{}, flowController: &mockFlowController{}},
 		lastFlushSinkTime: time.Now(),
 		nodes: []*ActorNode{
 			{
@@ -301,6 +301,11 @@ func TestPollDataFailed(t *testing.T) {
 				messageProcessor: dp,
 			},
 		},
+	}
+	tbl.sinkNode = &sinkNode{
+		sink:           &mockSink{},
+		flowController: &mockFlowController{},
+		state:          &tbl.state,
 	}
 	require.False(t, tbl.Poll(context.TODO(), []message.Message[pmessage.Message]{
 		message.ValueMessage[pmessage.Message](pmessage.TickMessage()),

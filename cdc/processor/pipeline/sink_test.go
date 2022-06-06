@@ -124,7 +124,7 @@ func (s *mockCloseControlSink) Close(ctx context.Context) error {
 	}
 }
 
-func TestStatus(t *testing.T) {
+func TestState(t *testing.T) {
 	ctx := cdcContext.NewContext(context.Background(), &cdcContext.GlobalVars{})
 	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
 		ID: model.DefaultChangeFeedID("changefeed-id-test-status"),
@@ -134,7 +134,7 @@ func TestStatus(t *testing.T) {
 		},
 	})
 
-	state := TableStatePreparing
+	state := TableStatePrepared
 	// test stop at targetTs
 	node := newSinkNode(1, &mockSink{}, 0, 10, &mockFlowController{}, &state,
 		ctx.ChangefeedVars().ID)
@@ -186,6 +186,7 @@ func TestStatus(t *testing.T) {
 	require.Equal(t, model.Ts(10), node.CheckpointTs())
 
 	// test the stop at ts command
+	state = TableStatePrepared
 	node = newSinkNode(1, &mockSink{}, 0, 10, &mockFlowController{}, &state,
 		ctx.ChangefeedVars().ID)
 	node.initWithReplicaConfig(pipeline.MockNodeContext4Test(ctx,
@@ -225,6 +226,7 @@ func TestStatus(t *testing.T) {
 	require.Equal(t, uint64(2), node.CheckpointTs())
 
 	// test the stop at ts command is after then resolvedTs and checkpointTs is greater than stop ts
+	state = TableStatePrepared
 	node = newSinkNode(1, &mockSink{}, 0, 10, &mockFlowController{}, &state,
 		ctx.ChangefeedVars().ID)
 	node.initWithReplicaConfig(pipeline.MockNodeContext4Test(ctx,
@@ -275,7 +277,7 @@ func TestStopStatus(t *testing.T) {
 		},
 	})
 
-	state := TableStatePreparing
+	state := TableStatePrepared
 	closeCh := make(chan interface{}, 1)
 	node := newSinkNode(1, &mockCloseControlSink{mockSink: mockSink{}, closeCh: closeCh},
 		0, 100, &mockFlowController{}, &state, ctx.ChangefeedVars().ID)
@@ -319,7 +321,7 @@ func TestManyTs(t *testing.T) {
 			Config:  config.GetDefaultReplicaConfig(),
 		},
 	})
-	state := TableStatePreparing
+	state := TableStatePrepared
 	sink := &mockSink{}
 	node := newSinkNode(1, sink, 0, 10, &mockFlowController{}, &state,
 		ctx.ChangefeedVars().ID)
