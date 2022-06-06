@@ -18,6 +18,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"math/rand"
 	"net"
 	"os"
@@ -129,7 +130,9 @@ func (s *DataRWServer) GenerateData(ctx context.Context, req *pb.GenerateDataReq
 	batches := make([]db.Batch, 0, fileNum)
 	bucket := make(dbBuckets)
 	for i := 0; i < fileNum; i++ {
-		fileDB, err := db.OpenPebble(s.ctx, i, demoDir, 256<<10, config.GetDefaultServerConfig().Debug.DB)
+		fileDB, err := db.OpenPebble(s.ctx, i, demoDir,
+			config.GetDefaultServerConfig().Debug.DB,
+			db.WithCache(256<<10))
 		if err != nil {
 			return &pb.GenerateDataResponse{ErrMsg: err.Error()}, nil
 		}
@@ -248,8 +251,8 @@ func (s *DataRWServer) IsReady(ctx context.Context, req *pb.IsReadyRequest) (*pb
 }
 
 func (s *DataRWServer) compareDBs(db1, db2 db.DB) error {
-	iter1 := db1.Iterator([]byte{}, []byte{0xff})
-	iter2 := db2.Iterator([]byte{}, []byte{0xff})
+	iter1 := db1.Iterator([]byte{}, []byte{0xff}, 0, math.MaxUint64)
+	iter2 := db2.Iterator([]byte{}, []byte{0xff}, 0, math.MaxUint64)
 	iter1.Seek([]byte{})
 	iter2.Seek([]byte{})
 	var lastBytes string
@@ -317,7 +320,7 @@ func (s *DataRWServer) ReadLines(req *pb.ReadLinesRequest, stream pb.DataRWServi
 	if !ok {
 		return stream.Send(&pb.ReadLinesResponse{ErrMsg: fmt.Sprintf("file idx %d is out of range %d", req.FileIdx, len(s.dbMap[demoAddress])), IsEof: true})
 	}
-	iter := db.Iterator([]byte{}, []byte{0xff})
+	iter := db.Iterator([]byte{}, []byte{0xff}, 0, math.MaxUint64)
 	if !iter.Seek(req.LineNo) {
 		return stream.Send(&pb.ReadLinesResponse{ErrMsg: "Cannot find key " + string(req.LineNo)})
 	}
@@ -367,7 +370,9 @@ func (s *DataRWServer) WriteLines(stream pb.DataRWService_WriteLinesServer) erro
 					}
 					peddleDB, ok = bucket[idx]
 					if !ok {
-						peddleDB, err = db.OpenPebble(s.ctx, idx, dir, 256<<10, config.GetDefaultServerConfig().Debug.DB)
+						peddleDB, err = db.OpenPebble(s.ctx, idx, dir,
+							config.GetDefaultServerConfig().Debug.DB,
+							db.WithCache(256<<10))
 						if err != nil {
 							s.mu.Unlock()
 							log.L().Error("write line meet error", zap.String("request", res.String()), zap.Error(err))
