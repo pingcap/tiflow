@@ -58,53 +58,12 @@ func (s *Server) leaderLoop(ctx context.Context) error {
 			return perrors.Trace(ctx.Err())
 		default:
 		}
-		key, data, rev, err := etcdutils.GetLeader(ctx, s.etcdClient, adapter.MasterCampaignKey.Path())
+
+		retryLeaderLoop, err := s.checkLeaderExists(ctx)
 		if err != nil {
-			if perrors.Cause(err) == context.Canceled {
-				return nil
-			}
-			if !errors.ErrMasterNoLeader.Equal(err) {
-				log.L().Warn("get leader failed", zap.Error(err))
-				time.Sleep(retryInterval)
-				continue
-			}
+			return err
 		}
-		var leader *Member
-		if len(data) > 0 {
-			leader = &Member{}
-			err = leader.Unmarshal(data)
-			if err != nil {
-				log.L().Warn("unexpected leader data", zap.Error(err))
-				time.Sleep(retryInterval)
-				continue
-			}
-			if leader.Name == s.name() || leader.AdvertiseAddr == s.cfg.AdvertiseAddr {
-				// - leader.Name == s.name() means this server should be leader
-				// - leader.AdvertiseAddr == s.cfg.AdvertiseAddr means the old leader
-				//   has the same advertise addr as current server
-				// Both of these two conditions indicate the existing information
-				// of leader campaign is stale, just delete it and campaign again.
-				log.L().Warn("found stale leader key, delete it and campaign later",
-					zap.ByteString("key", key), zap.ByteString("val", data))
-				_, err := s.etcdClient.Delete(ctx, string(key))
-				if err != nil {
-					log.L().Error("failed to delete leader key",
-						zap.ByteString("key", key), zap.ByteString("val", data))
-				}
-				time.Sleep(retryInterval)
-				continue
-			}
-			leader.IsServLeader = true
-			leader.IsEtcdLeader = true
-		}
-		if leader != nil {
-			log.L().Info("start to watch server master leader",
-				zap.String("leader-name", leader.Name), zap.String("addr", leader.AdvertiseAddr))
-			s.watchLeader(ctx, leader, rev)
-			log.L().Info("server master leader changed")
-		}
-		if !s.isEtcdLeader() {
-			log.L().Info("skip campaigning leader", zap.String("name", s.name()))
+		if retryLeaderLoop {
 			time.Sleep(retryInterval)
 			continue
 		}
@@ -136,6 +95,65 @@ func (s *Server) leaderLoop(ctx context.Context) error {
 			}
 		}
 	}
+}
+
+// checkLeaderExists is the entrance of server master leader loop. It works as follows
+// 1. Try to query leader node from etcd
+// 2. If leader node exists, decode the leader information
+//    - If decode fails, return retry=true to retry the leader loop
+//    - If leader information is stale, try to delete it and retry the leader loop
+//    - Otherwise watch the leader until it is evicted.
+// 3. If the leader doesn't exist, check whether current node is etcd leader
+//    - If it is not, return retry=true to retry the leader loop
+//    - If it is, return retry=false and continue the leader campaign.
+func (s *Server) checkLeaderExists(ctx context.Context) (retry bool, err error) {
+	key, data, rev, err := etcdutils.GetLeader(ctx, s.etcdClient, adapter.MasterCampaignKey.Path())
+	if err != nil {
+		if perrors.Cause(err) == context.Canceled {
+			return false, perrors.Trace(err)
+		}
+		if !errors.ErrMasterNoLeader.Equal(err) {
+			log.L().Warn("get leader failed", zap.Error(err))
+			return true, nil
+		}
+	}
+	var leader *Member
+	if len(data) > 0 {
+		leader = &Member{}
+		err = leader.Unmarshal(data)
+		if err != nil {
+			log.L().Warn("unexpected leader data", zap.Error(err))
+			return true, nil
+		}
+		if leader.Name == s.name() || leader.AdvertiseAddr == s.cfg.AdvertiseAddr {
+			// - leader.Name == s.name() means this server should be leader
+			// - leader.AdvertiseAddr == s.cfg.AdvertiseAddr means the old leader
+			//   has the same advertise addr as current server
+			// Both of these two conditions indicate the existing information
+			// of leader campaign is stale, just delete it and campaign again.
+			log.L().Warn("found stale leader key, delete it and campaign later",
+				zap.ByteString("key", key), zap.ByteString("val", data))
+			_, err := s.etcdClient.Delete(ctx, string(key))
+			if err != nil {
+				log.L().Error("failed to delete leader key",
+					zap.ByteString("key", key), zap.ByteString("val", data))
+			}
+			return true, nil
+		}
+		leader.IsServLeader = true
+		leader.IsEtcdLeader = true
+	}
+	if leader != nil {
+		log.L().Info("start to watch server master leader",
+			zap.String("leader-name", leader.Name), zap.String("addr", leader.AdvertiseAddr))
+		s.watchLeader(ctx, leader, rev)
+		log.L().Info("server master leader changed")
+	}
+	if !s.isEtcdLeader() {
+		log.L().Info("skip campaigning leader", zap.String("name", s.name()))
+		return true, nil
+	}
+	return false, nil
 }
 
 // TODO: we can use UpdateClients, don't need to close and re-create it.
