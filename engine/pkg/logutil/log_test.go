@@ -52,19 +52,13 @@ func TestNewLogger(t *testing.T) {
 	line := <-tail.Lines
 	require.Regexp(t, regexp.QuoteMeta("[\"framework test\"] [framework=true] [type=framework]"), line.Text)
 
-	logger = NewLogger4Master(tenant.ProjectInfo{
-		TenantID:  "tenant1",
-		ProjectID: "proj1",
-	}, "job1", "type1")
+	logger = NewLogger4Master(tenant.NewProjectInfo("tenant1", "proj1"), "job1")
 	logger.Warn("master test", zap.String("type", "master"))
 	logger.Sync()
 	line = <-tail.Lines
 	require.Regexp(t, regexp.QuoteMeta("[\"master test\"] [tenant=tenant1] [project_id=proj1] [job_id=job1] [type=master]"), line.Text)
 
-	logger = NewLogger4Worker(tenant.ProjectInfo{
-		TenantID:  "tenant1",
-		ProjectID: "proj1",
-	}, "job1", "type1", worker1)
+	logger = NewLogger4Worker(tenant.NewProjectInfo("tenant1", "proj1"), "job1", "worker1")
 	logger.Warn("worker test", zap.String("type", "worker"))
 	logger.Sync()
 	line = <-tail.Lines
