@@ -122,7 +122,7 @@ func (c *mockCluster) Stop() {
 }
 
 func (c *mockCluster) AddBroker(id model.ExecutorID, baseDir string) {
-	config := &storagecfg.Config{Local: &storagecfg.LocalFileConfig{BaseDir: baseDir}}
+	config := &storagecfg.Config{Local: storagecfg.LocalFileConfig{BaseDir: baseDir}}
 	cli := rpcutil.NewFailoverRPCClientsForTest[pb.ResourceManagerClient](&resourceClientStub{service: c.service})
 	brk := broker.NewBroker(config, id, cli)
 

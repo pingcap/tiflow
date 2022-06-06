@@ -347,6 +347,13 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 // table sinks before closing it. So there is no writing after closing.
 func (k *mqSink) Close(ctx context.Context) error {
 	k.resolvedBuffer.Close()
+	// We must finish consuming the data here,
+	// otherwise it will cause the channel to not close properly.
+	for range k.resolvedBuffer.Out() {
+		// Do nothing. We do not care about the data.
+	}
+	// NOTICE: We must close the resolved buffer before closing the flush worker.
+	// Otherwise, bgFlushTs method will panic.
 	k.flushWorker.close()
 	// We need to close it asynchronously.
 	// Otherwise, we might get stuck with it in an unhealthy state of kafka.

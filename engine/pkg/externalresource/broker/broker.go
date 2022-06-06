@@ -49,7 +49,7 @@ func NewBroker(
 	executorID resModel.ExecutorID,
 	client ResourceManagerClient,
 ) *DefaultBroker {
-	fm := NewLocalFileManager(*config.Local)
+	fm := NewLocalFileManager(config.Local)
 	return &DefaultBroker{
 		config:      config,
 		executorID:  executorID,
