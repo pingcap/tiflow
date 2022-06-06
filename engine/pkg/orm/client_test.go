@@ -26,6 +26,7 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/go-sql-driver/mysql"
 	perrors "github.com/pingcap/errors"
+	"github.com/pingcap/failpoint"
 	"github.com/stretchr/testify/require"
 
 	libModel "github.com/pingcap/tiflow/engine/lib/model"
@@ -1268,6 +1269,31 @@ func TestLogicEpoch(t *testing.T) {
 	for _, tc := range testCases {
 		testInner(t, mock, cli, tc)
 	}
+}
+
+func TestContext(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.TODO(), 1*time.Second)
+	defer cancel()
+
+	cli, err := NewMockClient()
+	require.NoError(t, err)
+	defer cli.Close()
+
+	// test normal function
+	err = failpoint.Enable("github.com/pingcap/tiflow/engine/pkg/orm/initializedDelay", "sleep(2000)")
+	require.NoError(t, err)
+	err = cli.Initialize(ctx)
+	require.Error(t, err)
+	require.Regexp(t, "context deadline exceed", err.Error())
+
+	// test transaction
+	err = failpoint.Enable("github.com/pingcap/tiflow/engine/pkg/orm/model/genEpochDelay", "sleep(2000)")
+	require.NoError(t, err)
+	ctx, cancel = context.WithTimeout(context.TODO(), 1*time.Second)
+	defer cancel()
+	_, err = cli.GenEpoch(ctx)
+	require.Error(t, err)
+	require.Regexp(t, "context deadline exceed", err.Error())
 }
 
 func testInner(t *testing.T, m sqlmock.Sqlmock, cli Client, c tCase) {
