@@ -75,7 +75,7 @@ func (t *testUtilsSuite) TestWaitSomething(c *C) {
 	c.Assert(count, Equals, 5)
 }
 
-func (t *testUtilsSuite) TestHidePassword(c *C) {
+func (t *testUtilsSuite) TestHideSensitive(c *C) {
 	strs := []struct {
 		old string
 		new string
@@ -92,10 +92,16 @@ func (t *testUtilsSuite) TestHidePassword(c *C) {
 		}, { // start task empty passowrd
 			`\n\ntarget-database:\n  host: \"127.0.0.1\"\n  port: 4000\n  user: \"test\"\n  password: \"\"\n\nmysql-instances:\n  - source-id: \"mysql-replica-01\"\n`,
 			`\n\ntarget-database:\n  host: \"127.0.0.1\"\n  port: 4000\n  user: \"test\"\n  password: \"******\"\n\nmysql-instances:\n  - source-id: \"mysql-replica-01\"\n`,
+		}, { // operate source
+			`user: root\n  password: /Q7B9DizNLLTTfiZHv9WoEAKamfpIUs=\n  port: 3306 security:\n ssl-ca-bytes:\n    - 45\n    ssl-key-bytes:\n    - 45\n    ssl-cert-bytes:\n    - 45\npurge:`,
+			`user: root\n  password: ******\n  port: 3306 security:\n ssl-ca-bytes: "******"\\\\n    ssl-key-bytes: "******"\\\\n    ssl-cert-bytes: "******"\\\\n    purge:`,
+		}, { // start task with ssl
+			`\n\ntarget-database:\n  host: \"127.0.0.1\"\n  port: 4000\n  user: \"test\"\n  password: \"\"\n security:\n ssl-ca-bytes:\n    - 45\n    ssl-key-bytes:\n    - 45\n    ssl-cert-bytes:\n    - 45\nmysql-instances:\n  - source-id: \"mysql-replica-01\"\n`,
+			`\n\ntarget-database:\n  host: \"127.0.0.1\"\n  port: 4000\n  user: \"test\"\n  password: \"******\"\n security:\n ssl-ca-bytes: "******"\\\\n    ssl-key-bytes: "******"\\\\n    ssl-cert-bytes: "******"\\\\n    mysql-instances:\n  - source-id: \"mysql-replica-01\"\n`,
 		},
 	}
 	for _, str := range strs {
-		c.Assert(HidePassword(str.old), Equals, str.new)
+		c.Assert(HideSensitive(str.old), Equals, str.new)
 	}
 }
 
