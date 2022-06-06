@@ -314,7 +314,8 @@ func prepareTxnData(
 	t *testing.T, r *reader, txnCount, txnSize int,
 ) db.DB {
 	cfg := config.GetDefaultServerConfig().Clone().Debug.DB
-	db, err := db.OpenPebble(context.Background(), 1, t.TempDir(), 0, cfg)
+	db, err := db.OpenPebble(
+		context.Background(), 1, t.TempDir(), cfg, db.WithTableCRTsCollectors())
 	require.Nil(t, err)
 	wb := db.Batch(0)
 	for i := 1; i < txnCount+1; i++ { // txns.
