@@ -260,7 +260,7 @@ jobs:
         if: ${{ always() }}
         run: |
           mkdir ./logs
-          kubectl get pods --no-headers -o custom-columns=":metadata.name"|grep -E "dm-"|xargs -I{} sudo kubectl cp {}:/log/{}.log ./logs/{}.log
+          kubectl get pods --no-headers -o custom-columns=":metadata.name"|grep -E "dm-"|xargs -I{} sudo kubectl cp {}:/log/{}.log ./logs/{}.log || true
           kind export logs ./logs/kind --name chart-testing
           sudo chown -R runner ./logs
       # Update logs as artifact seems not stable, so we set `continue-on-error: true` here.
