@@ -210,7 +210,7 @@ func (w *dmWorker) tryUpdateStatus(ctx context.Context) error {
 			return nil
 		}
 	}
-	return w.closeAndExit(ctx, status, nil)
+	return w.closeAndExit(ctx, status)
 }
 
 // workerStatus gets worker status.
