@@ -262,7 +262,6 @@ func (p *processor) IsAddTableFinished(ctx context.Context, tableID model.TableI
 
 	localResolvedTs := p.resolvedTs
 	globalResolvedTs := p.changefeed.Status.ResolvedTs
-	localCheckpointTs := p.agent.GetLastSentCheckpointTs()
 	globalCheckpointTs := p.changefeed.Status.CheckpointTs
 
 	done := func() bool {
@@ -270,6 +269,7 @@ func (p *processor) IsAddTableFinished(ctx context.Context, tableID model.TableI
 			// todo: add ut to cover this, after 2ps supported.
 			return table.State() == pipeline.TableStatePrepared
 		}
+		// The table is `replicating`, it's indicating that the `add table` must be finished.
 		return table.State() == pipeline.TableStateReplicating
 	}
 	if !done() {
@@ -282,7 +282,6 @@ func (p *processor) IsAddTableFinished(ctx context.Context, tableID model.TableI
 			zap.Uint64("localResolvedTs", localResolvedTs),
 			zap.Uint64("globalResolvedTs", globalResolvedTs),
 			zap.Uint64("tableCheckpointTs", table.CheckpointTs()),
-			zap.Uint64("localCheckpointTs", localCheckpointTs),
 			zap.Uint64("globalCheckpointTs", globalCheckpointTs),
 			zap.Any("status", table.State()), zap.Bool("isPrepare", isPrepare))
 		return false
@@ -297,7 +296,6 @@ func (p *processor) IsAddTableFinished(ctx context.Context, tableID model.TableI
 		zap.Uint64("localResolvedTs", localResolvedTs),
 		zap.Uint64("globalResolvedTs", globalResolvedTs),
 		zap.Uint64("tableCheckpointTs", table.CheckpointTs()),
-		zap.Uint64("localCheckpointTs", localCheckpointTs),
 		zap.Uint64("globalCheckpointTs", globalCheckpointTs),
 		zap.Any("status", table.State()), zap.Bool("isPrepare", isPrepare))
 	return true

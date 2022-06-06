@@ -239,6 +239,5 @@ func (c *coordinator) sendMsgs(ctx context.Context, msgs []*schedulepb.Message) 
 		m.From = c.captureID
 
 	}
-	log.Debug("tpscheduler: coordinator sent messages", zap.Any("messages", msgs))
 	return c.trans.Send(ctx, msgs)
 }

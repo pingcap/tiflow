@@ -127,7 +127,7 @@ func (s *mockCloseControlSink) Close(ctx context.Context) error {
 func TestStatus(t *testing.T) {
 	ctx := cdcContext.NewContext(context.Background(), &cdcContext.GlobalVars{})
 	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
-		ID: model.DefaultChangeFeedID("changefeed-id-test-state"),
+		ID: model.DefaultChangeFeedID("changefeed-id-test-status"),
 		Info: &model.ChangeFeedInfo{
 			StartTs: oracle.GoTimeToTS(time.Now()),
 			Config:  config.GetDefaultReplicaConfig(),
@@ -136,7 +136,8 @@ func TestStatus(t *testing.T) {
 
 	state := TableStatePreparing
 	// test stop at targetTs
-	node := newSinkNode(1, &mockSink{}, 0, 10, &mockFlowController{}, &state)
+	node := newSinkNode(1, &mockSink{}, 0, 10, &mockFlowController{}, &state,
+		ctx.ChangefeedVars().ID)
 	node.initWithReplicaConfig(pipeline.MockNodeContext4Test(ctx, pmessage.Message{}, nil).
 		ChangefeedVars().Info.Config)
 	require.Equal(t, TableStatePrepared, node.State())
@@ -185,7 +186,8 @@ func TestStatus(t *testing.T) {
 	require.Equal(t, model.Ts(10), node.CheckpointTs())
 
 	// test the stop at ts command
-	node = newSinkNode(1, &mockSink{}, 0, 10, &mockFlowController{}, &state)
+	node = newSinkNode(1, &mockSink{}, 0, 10, &mockFlowController{}, &state,
+		ctx.ChangefeedVars().ID)
 	node.initWithReplicaConfig(pipeline.MockNodeContext4Test(ctx,
 		pmessage.Message{}, nil).ChangefeedVars().Info.Config)
 	require.Equal(t, TableStatePrepared, node.State())
@@ -223,7 +225,8 @@ func TestStatus(t *testing.T) {
 	require.Equal(t, uint64(2), node.CheckpointTs())
 
 	// test the stop at ts command is after then resolvedTs and checkpointTs is greater than stop ts
-	node = newSinkNode(1, &mockSink{}, 0, 10, &mockFlowController{}, &state)
+	node = newSinkNode(1, &mockSink{}, 0, 10, &mockFlowController{}, &state,
+		ctx.ChangefeedVars().ID)
 	node.initWithReplicaConfig(pipeline.MockNodeContext4Test(ctx,
 		pmessage.Message{}, nil).ChangefeedVars().Info.Config)
 	require.Equal(t, TableStatePrepared, node.State())
@@ -275,7 +278,7 @@ func TestStopStatus(t *testing.T) {
 	state := TableStatePreparing
 	closeCh := make(chan interface{}, 1)
 	node := newSinkNode(1, &mockCloseControlSink{mockSink: mockSink{}, closeCh: closeCh},
-		0, 100, &mockFlowController{}, &state)
+		0, 100, &mockFlowController{}, &state, ctx.ChangefeedVars().ID)
 	node.initWithReplicaConfig(pipeline.MockNodeContext4Test(ctx,
 		pmessage.Message{}, nil).ChangefeedVars().Info.Config)
 	require.Equal(t, TableStatePrepared, node.State())
@@ -318,7 +321,8 @@ func TestManyTs(t *testing.T) {
 	})
 	state := TableStatePreparing
 	sink := &mockSink{}
-	node := newSinkNode(1, sink, 0, 10, &mockFlowController{}, &state)
+	node := newSinkNode(1, sink, 0, 10, &mockFlowController{}, &state,
+		ctx.ChangefeedVars().ID)
 	node.initWithReplicaConfig(pipeline.MockNodeContext4Test(ctx,
 		pmessage.Message{}, nil).ChangefeedVars().Info.Config)
 	require.Equal(t, TableStatePrepared, node.State())
@@ -492,7 +496,8 @@ func TestIgnoreEmptyRowChangeEvent(t *testing.T) {
 	})
 	state := TableStatePreparing
 	sink := &mockSink{}
-	node := newSinkNode(1, sink, 0, 10, &mockFlowController{}, &state)
+	node := newSinkNode(1, sink, 0, 10, &mockFlowController{}, &state,
+		ctx.ChangefeedVars().ID)
 	node.initWithReplicaConfig(pipeline.MockNodeContext4Test(ctx,
 		pmessage.Message{}, nil).ChangefeedVars().Info.Config)
 
@@ -518,7 +523,8 @@ func TestSplitUpdateEventWhenEnableOldValue(t *testing.T) {
 	})
 	state := TableStatePreparing
 	sink := &mockSink{}
-	node := newSinkNode(1, sink, 0, 10, &mockFlowController{}, &state)
+	node := newSinkNode(1, sink, 0, 10, &mockFlowController{}, &state,
+		ctx.ChangefeedVars().ID)
 	node.initWithReplicaConfig(pipeline.MockNodeContext4Test(ctx,
 		pmessage.Message{}, nil).ChangefeedVars().Info.Config)
 
@@ -581,7 +587,8 @@ func TestSplitUpdateEventWhenDisableOldValue(t *testing.T) {
 	})
 	state := TableStatePreparing
 	sink := &mockSink{}
-	node := newSinkNode(1, sink, 0, 10, &mockFlowController{}, &state)
+	node := newSinkNode(1, sink, 0, 10, &mockFlowController{}, &state,
+		ctx.ChangefeedVars().ID)
 	node.initWithReplicaConfig(pipeline.MockNodeContext4Test(ctx,
 		pmessage.Message{}, nil).ChangefeedVars().Info.Config)
 
@@ -732,7 +739,8 @@ func TestFlushSinkReleaseFlowController(t *testing.T) {
 	flowController := &flushFlowController{}
 	sink := &flushSink{}
 	// sNode is a sinkNode
-	sNode := newSinkNode(1, sink, 0, 10, flowController, &state)
+	sNode := newSinkNode(1, sink, 0, 10, flowController, &state,
+		ctx.ChangefeedVars().ID)
 	sNode.initWithReplicaConfig(pipeline.MockNodeContext4Test(ctx,
 		pmessage.Message{}, nil).ChangefeedVars().Info.Config)
 	sNode.barrierTs = 10

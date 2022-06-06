@@ -318,7 +318,7 @@ func (t *tableActor) start(sdtTableContext context.Context) error {
 	}
 
 	actorSinkNode := newSinkNode(t.tableID, t.tableSink,
-		t.replicaInfo.StartTs, t.targetTs, flowController, &t.state)
+		t.replicaInfo.StartTs, t.targetTs, flowController, &t.state, t.changefeedID)
 	actorSinkNode.initWithReplicaConfig(t.replicaConfig)
 	t.sinkNode = actorSinkNode
 

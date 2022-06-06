@@ -44,13 +44,17 @@ type sinkNode struct {
 	targetTs     model.Ts
 	barrierTs    model.Ts
 
+	changefeed model.ChangeFeedID
+
 	flowController tableFlowController
 
 	replicaConfig *config.ReplicaConfig
 }
 
 func newSinkNode(tableID model.TableID, sink sink.Sink, startTs model.Ts,
-	targetTs model.Ts, flowController tableFlowController, state *TableState) *sinkNode {
+	targetTs model.Ts, flowController tableFlowController, state *TableState,
+	changefeed model.ChangeFeedID,
+) *sinkNode {
 	sn := &sinkNode{
 		tableID:      tableID,
 		sink:         sink,
@@ -58,6 +62,8 @@ func newSinkNode(tableID model.TableID, sink sink.Sink, startTs model.Ts,
 		targetTs:     targetTs,
 		checkpointTs: startTs,
 		barrierTs:    startTs,
+
+		changefeed: changefeed,
 
 		flowController: flowController,
 	}
@@ -84,7 +90,10 @@ func (n *sinkNode) stop(ctx context.Context) (err error) {
 	if err != nil {
 		return
 	}
-	log.Info("sink is closed", zap.Int64("tableID", n.tableID))
+	log.Info("sink is closed",
+		zap.Int64("tableID", n.tableID),
+		zap.String("namespace", n.changefeed.Namespace),
+		zap.String("changefeed", n.changefeed.ID))
 	err = cerror.ErrTableProcessorStoppedSafely.GenWithStackByArgs()
 	return
 }
@@ -143,7 +152,11 @@ func (n *sinkNode) emitRowToSink(ctx context.Context, event *model.PolymorphicEv
 	})
 
 	if event == nil || event.Row == nil {
-		log.Warn("skip emit nil event", zap.Any("event", event))
+		log.Warn("skip emit nil event",
+			zap.Int64("tableID", n.tableID),
+			zap.String("namespace", n.changefeed.Namespace),
+			zap.String("changefeed", n.changefeed.ID),
+			zap.Any("event", event))
 		return nil
 	}
 
@@ -153,7 +166,11 @@ func (n *sinkNode) emitRowToSink(ctx context.Context, event *model.PolymorphicEv
 	// begin; insert into t (id) values (1); delete from t where id=1; commit;
 	// Just ignore these row changed events.
 	if colLen == 0 && preColLen == 0 {
-		log.Warn("skip emit empty row event", zap.Any("event", event))
+		log.Warn("skip emit empty row event",
+			zap.Int64("tableID", n.tableID),
+			zap.String("namespace", n.changefeed.Namespace),
+			zap.String("changefeed", n.changefeed.ID),
+			zap.Any("event", event))
 		return nil
 	}
 
@@ -250,6 +267,8 @@ func (n *sinkNode) HandleMessage(ctx context.Context, msg pmessage.Message) (boo
 		if n.state.Load() != TableStateReplicating {
 			log.Panic("table not in replicating state",
 				zap.Int64("tableID", n.tableID),
+				zap.String("namespace", n.changefeed.Namespace),
+				zap.String("changefeed", n.changefeed.ID),
 				zap.Any("state", n.state.Load()))
 		}
 		if event.IsResolved() {
