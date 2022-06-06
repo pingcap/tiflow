@@ -11,16 +11,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package dm
+package chann
 
 import (
 	"testing"
 
-	"github.com/stretchr/testify/require"
+	"github.com/pingcap/tiflow/pkg/leakutil"
 )
 
-func TestTopic(t *testing.T) {
-	t.Parallel()
-
-	require.Equal(t, "operate-task-message-master-id-task-id", OperateTaskMessageTopic("master-id", "task-id"))
+func TestMain(m *testing.M) {
+	leakutil.SetUpLeakTest(m)
 }

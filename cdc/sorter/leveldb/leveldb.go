@@ -177,7 +177,7 @@ func (ldb *DBActor) acquireIterators() {
 		}
 
 		iterRange := req.Range
-		iter := ldb.db.Iterator(iterRange[0], iterRange[1])
+		iter := ldb.db.Iterator(iterRange[0], iterRange[1], req.CRTsFilter[0], req.CRTsFilter[1])
 		req.IterCallback(&message.LimitedIterator{
 			Iterator:   iter,
 			Sema:       ldb.iterSem,
