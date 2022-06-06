@@ -170,6 +170,24 @@ func (m *mockTablePipeline) Workload() model.WorkloadInfo {
 }
 
 func (m *mockTablePipeline) State() pipeline.TableState {
+	if m.state == pipeline.TableStateStopped {
+		return m.state
+	}
+
+	if m.state == pipeline.TableStatePreparing {
+		// `resolvedTs` and `checkpointTs` is initialized by the same `start-ts`
+		// once `resolvedTs` > `checkpointTs`, is means the sorter received the first
+		// resolved event, let it become prepared.
+		if m.resolvedTs > m.checkpointTs {
+			m.state = pipeline.TableStatePrepared
+		}
+	}
+
+	if m.sinkStartTs != model.Ts(0) {
+		if m.checkpointTs > m.sinkStartTs {
+			m.state = pipeline.TableStateReplicating
+		}
+	}
 	return m.state
 }
 
@@ -186,7 +204,6 @@ func (m *mockTablePipeline) Wait() {
 
 func (m *mockTablePipeline) Start(ts model.Ts) bool {
 	m.sinkStartTs = ts
-	m.state = pipeline.TableStateReplicating
 	return true
 }
 
@@ -265,61 +282,76 @@ func TestTableExecutorAddingTableDirectly(t *testing.T) {
 	ok, err := p.AddTable(ctx, 1, 20, false)
 	require.Nil(t, err)
 	require.True(t, ok)
+
 	table1 := p.tables[1].(*mockTablePipeline)
 	require.Equal(t, model.Ts(20), table1.sinkStartTs)
-	require.Equal(t, pipeline.TableStateReplicating, table1.state)
+	require.Equal(t, pipeline.TableStatePreparing, table1.state)
 	meta := p.GetTableMeta(model.TableID(1))
 	require.Equal(t, model.TableID(1), meta.TableID)
-	require.Equal(t, pipeline.TableStateReplicating, meta.State)
+	require.Equal(t, pipeline.TableStatePreparing, meta.State)
 
 	ok, err = p.AddTable(ctx, 2, 20, false)
 	require.Nil(t, err)
 	require.True(t, ok)
 	table2 := p.tables[2].(*mockTablePipeline)
 	require.Equal(t, model.Ts(20), table2.sinkStartTs)
-	require.Equal(t, pipeline.TableStateReplicating, table2.state)
+	require.Equal(t, pipeline.TableStatePreparing, table2.state)
 
 	ok, err = p.AddTable(ctx, 3, 20, false)
 	require.Nil(t, err)
 	require.True(t, ok)
 	table3 := p.tables[3].(*mockTablePipeline)
 	require.Equal(t, model.Ts(20), table3.sinkStartTs)
-	require.Equal(t, pipeline.TableStateReplicating, table3.state)
+	require.Equal(t, pipeline.TableStatePreparing, table3.state)
 
 	ok, err = p.AddTable(ctx, 4, 20, false)
 	require.Nil(t, err)
 	require.True(t, ok)
 	table4 := p.tables[4].(*mockTablePipeline)
 	require.Equal(t, model.Ts(20), table4.sinkStartTs)
-	require.Equal(t, pipeline.TableStateReplicating, table4.state)
+	require.Equal(t, pipeline.TableStatePreparing, table4.state)
+
 	require.Len(t, p.tables, 4)
 
 	checkpointTs := p.agent.GetLastSentCheckpointTs()
 	require.Equal(t, checkpointTs, model.Ts(0))
 
-	// todo: in the real scenario, `preparing` -> `prepared` -> `replicating`
-	// in the mock, `preparing` -> `replicating`, since the `first resolved ts`
-	// is ignored in the mock process.
-	// refactor the mock processor and table pipeline to make it more vivid.
 	done := p.IsAddTableFinished(ctx, 1, false)
 	require.False(t, done)
+	require.Equal(t, pipeline.TableStatePreparing, table1.State())
 	done = p.IsAddTableFinished(ctx, 2, false)
 	require.False(t, done)
+	require.Equal(t, pipeline.TableStatePreparing, table2.State())
 	done = p.IsAddTableFinished(ctx, 3, false)
 	require.False(t, done)
+	require.Equal(t, pipeline.TableStatePreparing, table3.State())
 	done = p.IsAddTableFinished(ctx, 4, false)
 	require.False(t, done)
+	require.Equal(t, pipeline.TableStatePreparing, table4.State())
 	require.Len(t, p.tables, 4)
 
 	_, err = p.Tick(ctx, p.changefeed)
 	require.Nil(t, err)
 	tester.MustApplyPatches()
 
-	// add table, push the resolvedTs, finished add table
+	// push the resolved ts, mock that sorterNode receive first resolved event
 	table1.resolvedTs = 101
 	table2.resolvedTs = 101
 	table3.resolvedTs = 102
 	table4.resolvedTs = 103
+
+	done = p.IsAddTableFinished(ctx, 1, false)
+	require.False(t, done)
+	require.Equal(t, pipeline.TableStatePrepared, table1.State())
+	done = p.IsAddTableFinished(ctx, 2, false)
+	require.False(t, done)
+	require.Equal(t, pipeline.TableStatePrepared, table2.State())
+	done = p.IsAddTableFinished(ctx, 3, false)
+	require.False(t, done)
+	require.Equal(t, pipeline.TableStatePrepared, table3.State())
+	done = p.IsAddTableFinished(ctx, 4, false)
+	require.False(t, done)
+	require.Equal(t, pipeline.TableStatePrepared, table4.State())
 
 	table1.checkpointTs = 30
 	table2.checkpointTs = 30
@@ -328,12 +360,16 @@ func TestTableExecutorAddingTableDirectly(t *testing.T) {
 
 	done = p.IsAddTableFinished(ctx, 1, false)
 	require.True(t, done)
+	require.Equal(t, pipeline.TableStateReplicating, table1.State())
 	done = p.IsAddTableFinished(ctx, 2, false)
 	require.True(t, done)
+	require.Equal(t, pipeline.TableStateReplicating, table2.State())
 	done = p.IsAddTableFinished(ctx, 3, false)
 	require.True(t, done)
+	require.Equal(t, pipeline.TableStateReplicating, table3.State())
 	done = p.IsAddTableFinished(ctx, 4, false)
 	require.True(t, done)
+	require.Equal(t, pipeline.TableStateReplicating, table4.State())
 
 	_, err = p.Tick(ctx, p.changefeed)
 	require.Nil(t, err)
@@ -349,7 +385,7 @@ func TestTableExecutorAddingTableDirectly(t *testing.T) {
 	tester.MustApplyPatches()
 
 	checkpointTs = p.agent.GetLastSentCheckpointTs()
-	require.Equal(t, model.Ts(60), checkpointTs)
+	require.Equal(t, table3.CheckpointTs(), checkpointTs)
 
 	updateChangeFeedPosition(t, tester, ctx.ChangefeedVars().ID, 103, 60)
 
