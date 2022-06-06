@@ -786,6 +786,7 @@ func (p *processor) handlePosition(currentTs int64) {
 	}
 	for _, table := range p.tables {
 		status := table.State()
+		// todo: add ut to cover this.
 		if status == pipeline.TableStatePreparing ||
 			status == pipeline.TableStatePrepared {
 			continue
@@ -801,6 +802,7 @@ func (p *processor) handlePosition(currentTs int64) {
 	minCheckpointTableID := int64(0)
 	for _, table := range p.tables {
 		status := table.State()
+		// todo: add ut to cover this
 		if status == pipeline.TableStatePreparing ||
 			status == pipeline.TableStatePrepared {
 			continue
@@ -838,6 +840,7 @@ func (p *processor) pushResolvedTs2Table() {
 		resolvedTs = schemaResolvedTs
 	}
 	for _, table := range p.tables {
+		// todo: add ut to cover this
 		if table.State() == pipeline.TableStateReplicating {
 			table.UpdateBarrierTs(resolvedTs)
 		}

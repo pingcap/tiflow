@@ -710,15 +710,25 @@ func TestPositionDeleted(t *testing.T) {
 	require.Nil(t, err)
 	tester.MustApplyPatches()
 
+	table1 := p.tables[1].(*mockTablePipeline)
+	table2 := p.tables[2].(*mockTablePipeline)
+
+	table1.resolvedTs += 1
+	table2.resolvedTs += 1
+
+	table1.checkpointTs += 1
+	table2.checkpointTs += 1
+
 	// cal position
 	_, err = p.Tick(ctx, p.changefeed)
 	require.Nil(t, err)
 	tester.MustApplyPatches()
-	require.EqualValues(t, 30, p.checkpointTs)
-	require.EqualValues(t, 30, p.resolvedTs)
+
+	require.Equal(t, model.Ts(31), p.checkpointTs)
+	require.Equal(t, model.Ts(31), p.resolvedTs)
 	require.Contains(t, p.changefeed.TaskPositions, p.captureInfo.ID)
 
-	// some other delete the task position
+	// some others delete the task position
 	p.changefeed.PatchTaskPosition(p.captureInfo.ID, func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
 		return nil, true, nil
 	})
@@ -733,8 +743,8 @@ func TestPositionDeleted(t *testing.T) {
 	_, err = p.Tick(ctx, p.changefeed)
 	require.Nil(t, err)
 	tester.MustApplyPatches()
-	require.EqualValues(t, 30, p.checkpointTs)
-	require.EqualValues(t, 30, p.resolvedTs)
+	require.Equal(t, model.Ts(31), p.checkpointTs)
+	require.Equal(t, model.Ts(31), p.resolvedTs)
 	require.Contains(t, p.changefeed.TaskPositions, p.captureInfo.ID)
 }
 
@@ -803,14 +813,25 @@ func TestUpdateBarrierTs(t *testing.T) {
 		status.ResolvedTs = 10
 		return status, true, nil
 	})
-	p.schemaStorage.(*mockSchemaStorage).resolvedTs = 10
 
 	done, err := p.AddTable(ctx, model.TableID(1), 5, false)
 	require.Nil(t, err)
 	require.True(t, done)
+
+	table1 := p.tables[1].(*mockTablePipeline)
+	require.Equal(t, pipeline.TableStatePreparing, table1.State())
 	_, err = p.Tick(ctx, p.changefeed)
 	require.Nil(t, err)
 	tester.MustApplyPatches()
+
+	table1.resolvedTs += 1
+	table1.checkpointTs += 1
+
+	done = p.IsAddTableFinished(ctx, model.TableID(1), false)
+	require.True(t, done)
+	require.Equal(t, pipeline.TableStateReplicating, table1.State())
+
+	p.schemaStorage.(*mockSchemaStorage).resolvedTs = 11
 
 	// Global resolved ts has advanced while schema storage stalls.
 	p.changefeed.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
@@ -820,14 +841,18 @@ func TestUpdateBarrierTs(t *testing.T) {
 	_, err = p.Tick(ctx, p.changefeed)
 	require.Nil(t, err)
 	tester.MustApplyPatches()
-	tb := p.tables[model.TableID(1)].(*mockTablePipeline)
-	require.Equal(t, tb.barrierTs, uint64(10))
+
+	_, err = p.Tick(ctx, p.changefeed)
+	require.NoError(t, err)
+	tester.MustApplyPatches()
+
+	require.Equal(t, model.Ts(11), table1.barrierTs)
 
 	// Schema storage has advanced too.
 	p.schemaStorage.(*mockSchemaStorage).resolvedTs = 15
 	_, err = p.Tick(ctx, p.changefeed)
 	require.Nil(t, err)
 	tester.MustApplyPatches()
-	tb = p.tables[model.TableID(1)].(*mockTablePipeline)
-	require.Equal(t, tb.barrierTs, uint64(15))
+
+	require.Equal(t, model.Ts(15), table1.barrierTs)
 }
