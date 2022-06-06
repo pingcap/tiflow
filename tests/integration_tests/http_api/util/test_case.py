@@ -320,7 +320,8 @@ def verify_table():
     url = BASE_URL0_V2 + "/verify-table"
     data = json.dumps({
     "pd-addrs": [TLS_PD_ADDR],
-    "credential": {"ca-path":CA_PEM_PATH, "cert-path":CLIENT_PEM_PATH, "key-path":CLIENT_KEY_PEM_PATH},
+    "credential": {"ca-path":CA_PEM_PATH, "cert-path":CLIENT_PEM_PATH, 
+    "key-path":CLIENT_KEY_PEM_PATH, "cert-allowed-cn":"client"},
     "start-ts": start_ts,
     "replica-config": {"filter":{"rules":["test.verify*"]}}})
     headers = {"Content-Type": "application/json"}
