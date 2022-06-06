@@ -119,21 +119,18 @@ message QueryJobResponse {
 }
 
 message CancelJobRequest {
-    int32 job_id = 1 [deprecated=true];
-    string job_id_str = 2;
-    ProjectInfo project_info = 3;
+    string job_id = 1;
+    ProjectInfo project_info = 2;
 }
 
 message PauseJobRequest {
-    int32 job_id = 1 [deprecated=true];
-    string job_id_str = 2;
-    ProjectInfo project_info = 3;
+    string job_id = 1 ;
+    ProjectInfo project_info = 2;
 }
 
 message SubmitJobResponse {
     Error err = 1;
-    int32 job_id = 2 [deprecated=true];
-    string job_id_str = 3;
+    string  job_id = 2;
 }
 
 message PauseJobResponse {

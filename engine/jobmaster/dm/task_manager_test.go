@@ -206,10 +206,10 @@ func (t *testDMJobmasterSuite) TestTaskAsExpected() {
 	require.True(t.T(), taskAsExpected(&metadata.Task{Stage: metadata.StagePaused}, runtime.TaskStatus{Stage: metadata.StagePaused}))
 	require.True(t.T(), taskAsExpected(&metadata.Task{Stage: metadata.StageRunning}, runtime.TaskStatus{Stage: metadata.StageRunning}))
 	require.False(t.T(), taskAsExpected(&metadata.Task{Stage: metadata.StagePaused}, runtime.TaskStatus{Stage: metadata.StageRunning}))
+	require.True(t.T(), taskAsExpected(&metadata.Task{Stage: metadata.StageRunning}, runtime.TaskStatus{Stage: metadata.StageFinished}))
 
 	// TODO: change below results if needed.
 	require.False(t.T(), taskAsExpected(&metadata.Task{Stage: metadata.StageRunning}, runtime.TaskStatus{Stage: metadata.StagePaused}))
-	require.True(t.T(), taskAsExpected(&metadata.Task{Stage: metadata.StageRunning}, runtime.TaskStatus{Stage: metadata.StageFinished}))
 }
 
 func (t *testDMJobmasterSuite) TestCheckAndOperateTasks() {

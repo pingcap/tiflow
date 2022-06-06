@@ -78,7 +78,7 @@ func TestJobManagerSubmitJob(t *testing.T) {
 			mgr.JobFsm.JobCount(pb.QueryJobResponse_dispatched) == 1 &&
 			mgr.JobFsm.JobCount(pb.QueryJobResponse_pending) == 0
 	}, time.Second*2, time.Millisecond*20)
-	queryResp := mgr.QueryJob(ctx, &pb.QueryJobRequest{JobId: resp.JobIdStr})
+	queryResp := mgr.QueryJob(ctx, &pb.QueryJobRequest{JobId: resp.JobId})
 	require.Nil(t, queryResp.Err)
 	require.Equal(t, pb.QueryJobResponse_dispatched, queryResp.Status)
 }
@@ -149,14 +149,14 @@ func TestJobManagerPauseJob(t *testing.T) {
 	require.Nil(t, err)
 
 	req := &pb.PauseJobRequest{
-		JobIdStr: pauseWorkerID,
+		JobId: pauseWorkerID,
 	}
 	resp := mgr.PauseJob(ctx, req)
 	require.Nil(t, resp.Err)
 
 	require.Equal(t, 1, mockWorkerHandle.SendMessageCount())
 
-	req.JobIdStr = pauseWorkerID + "-unknown"
+	req.JobId = pauseWorkerID + "-unknown"
 	resp = mgr.PauseJob(ctx, req)
 	require.NotNil(t, resp.Err)
 	require.Equal(t, pb.ErrorCode_UnKnownJob, resp.Err.Code)
@@ -191,7 +191,7 @@ func TestJobManagerCancelJob(t *testing.T) {
 	require.NoError(t, err)
 
 	resp := mgr.CancelJob(ctx, &pb.CancelJobRequest{
-		JobIdStr: "job-to-be-canceled",
+		JobId: "job-to-be-canceled",
 	})
 	require.Equal(t, &pb.CancelJobResponse{}, resp)
 }
@@ -334,14 +334,14 @@ func TestJobManagerOnlineJob(t *testing.T) {
 	require.Nil(t, resp.Err)
 
 	err = mgr.JobFsm.JobOnline(&master.MockHandle{
-		WorkerID:   resp.JobIdStr,
+		WorkerID:   resp.JobId,
 		ExecutorID: "executor-1",
 	})
 	require.Nil(t, err)
-	queryResp := mgr.QueryJob(ctx, &pb.QueryJobRequest{JobId: resp.JobIdStr})
+	queryResp := mgr.QueryJob(ctx, &pb.QueryJobRequest{JobId: resp.JobId})
 	require.Nil(t, queryResp.Err)
 	require.Equal(t, pb.QueryJobResponse_online, queryResp.Status)
-	require.Equal(t, queryResp.JobMasterInfo.Id, resp.JobIdStr)
+	require.Equal(t, queryResp.JobMasterInfo.Id, resp.JobId)
 }
 
 func TestJobManagerRecover(t *testing.T) {
@@ -450,7 +450,7 @@ func TestJobManagerWatchJobStatuses(t *testing.T) {
 	}, snap)
 
 	resp := mgr.CancelJob(ctx, &pb.CancelJobRequest{
-		JobIdStr: "job-to-be-canceled",
+		JobId: "job-to-be-canceled",
 	})
 	require.Equal(t, &pb.CancelJobResponse{}, resp)
 

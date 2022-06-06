@@ -1,5 +1,5 @@
 #!/bin/bash
-# Copyright 2020 PingCAP, Inc.
+# Copyright 2022 PingCAP, Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,8 +14,9 @@
 
 set -euo pipefail
 
-cd -P .
+CUR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+ENGINE_BASE_DIR=$CUR/..
 
-cp errors.toml /tmp/errors.toml.before
-./tools/bin/errdoc-gen --source . --module github.com/pingcap/tiflow --output errors.toml --ignore proto,dm,deployments,engine
-diff -q errors.toml /tmp/errors.toml.before
+cp $ENGINE_BASE_DIR/errors.toml /tmp/errors.toml.before
+$ENGINE_BASE_DIR/../tools/bin/errdoc-gen --source . --module github.com/pingcap/tiflow --output $ENGINE_BASE_DIR/errors.toml --ignore proto,dm,deployments,cdc,pkg,engine/enginepb
+diff -q $ENGINE_BASE_DIR/errors.toml /tmp/errors.toml.before
