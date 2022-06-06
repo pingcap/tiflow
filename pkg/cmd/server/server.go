@@ -236,8 +236,6 @@ func NewCmdServer() *cobra.Command {
 		Use:   "server",
 		Short: "Start a TiCDC capture server",
 		Args:  cobra.NoArgs,
-		// fix: https://github.com/pingcap/tiflow/issues/5519
-		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			err := o.complete(cmd)
 			if err != nil {
@@ -257,8 +255,9 @@ func NewCmdServer() *cobra.Command {
 				ZapInternalErrOutput: o.serverConfig.Log.InternalErrOutput,
 			})
 			defer cancel()
-
-			return runServer(o)
+			// Ref: https://github.com/pingcap/tiflow/pull/5686#discussion_r886330956
+			cobra.CheckErr(runServer(o))
+			return nil
 		},
 	}
 
