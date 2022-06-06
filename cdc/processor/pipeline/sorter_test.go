@@ -59,16 +59,20 @@ func TestUnifiedSorterFileLockConflict(t *testing.T) {
 
 func TestSorterResolvedTs(t *testing.T) {
 	t.Parallel()
-	sn := newSorterNode("tableName", 1, 1, nil, nil, &config.ReplicaConfig{
-		Consistent: &config.ConsistentConfig{},
-	})
+	state := TableStatePreparing
+	sn := newSorterNode("tableName", 1, 1, nil, nil,
+		&config.ReplicaConfig{Consistent: &config.ConsistentConfig{}}, &state,
+		model.DefaultChangeFeedID("changefeed-id-test"))
 	sn.sorter = memory.NewEntrySorter()
-	require.EqualValues(t, 1, sn.ResolvedTs())
+	require.Equal(t, model.Ts(1), sn.ResolvedTs())
+	require.Equal(t, TableStatePreparing, sn.State())
+
 	msg := pmessage.PolymorphicEventMessage(model.NewResolvedPolymorphicEvent(0, 2))
 	ok, err := sn.TryHandleDataMessage(context.Background(), msg)
 	require.True(t, ok)
 	require.Nil(t, err)
-	require.EqualValues(t, 2, sn.ResolvedTs())
+	require.EqualValues(t, model.Ts(2), sn.ResolvedTs())
+	require.Equal(t, TableStatePrepared, sn.State())
 }
 
 type checkSorter struct {
@@ -108,13 +112,14 @@ func TestSorterResolvedTsLessEqualBarrierTs(t *testing.T) {
 	t.Parallel()
 	sch := make(chan *model.PolymorphicEvent, 1)
 	s := &checkSorter{ch: sch}
-	sn := newSorterNode("tableName", 1, 1, nil, nil, &config.ReplicaConfig{
-		Consistent: &config.ConsistentConfig{},
-	})
+	state := TableStatePreparing
+	sn := newSorterNode("tableName", 1, 1, nil, nil,
+		&config.ReplicaConfig{Consistent: &config.ConsistentConfig{}}, &state,
+		model.DefaultChangeFeedID("changefeed-id-test"))
 	sn.sorter = s
 
 	ch := make(chan pmessage.Message, 1)
-	require.EqualValues(t, 1, sn.ResolvedTs())
+	require.Equal(t, model.Ts(1), sn.ResolvedTs())
 
 	// Resolved ts must not regress even if there is no barrier ts message.
 	resolvedTs1 := pmessage.PolymorphicEventMessage(model.NewResolvedPolymorphicEvent(0, 1))
@@ -122,6 +127,7 @@ func TestSorterResolvedTsLessEqualBarrierTs(t *testing.T) {
 	require.True(t, ok)
 	require.Nil(t, err)
 	require.EqualValues(t, model.NewResolvedPolymorphicEvent(0, 1), <-sch)
+	require.Equal(t, TableStatePrepared, sn.State())
 
 	// Advance barrier ts.
 	nctx := pipeline.NewNodeContext(
