@@ -16,12 +16,14 @@ package version
 import (
 	"fmt"
 
+	"github.com/pingcap/log"
 	cmdcontext "github.com/pingcap/tiflow/pkg/cmd/context"
 	"github.com/pingcap/tiflow/pkg/cmd/factory"
 	"github.com/pingcap/tiflow/pkg/cmd/util"
 	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/spf13/cobra"
+	"go.uber.org/zap"
 )
 
 // NewCmdVersion creates the `version` command.
@@ -50,7 +52,8 @@ func NewCmdVersion() *cobra.Command {
 			ctx := cmdcontext.GetDefaultContext()
 			status, err := apiClient.Status().Get(ctx)
 			if err != nil {
-				return err
+				log.Warn("get server version failed", zap.Error(err))
+				return nil
 			}
 			cmd.Println("server version:")
 			cmd.Println(fmt.Sprintf(
