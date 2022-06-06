@@ -1,0 +1,237 @@
+name: Dataflow Engine Chaos
+
+on:
+  schedule:
+    - cron: '0 17-23 * * *' # run at minute 0 every hour from 01:00 ~ 07:00 UTC+8
+
+# See: https://docs.github.com/en/actions/reference/workflow-syntax-for-github-actions#concurrency.
+concurrency:
+  group: ${{ github.ref }}-${{ github.workflow }}
+  cancel-in-progress: true
+
+# A workflow run is made up of one or more jobs that can run sequentially or in parallel
+jobs:
+  # This workflow contains a single job called "base"
+  base:
+    # The type of runner that the job will run on
+    runs-on: ubuntu-18.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        chaos-obj:
+          [
+            "pod-failure-dataflow",
+            "pod-kill-dataflow",
+          ]
+
+    # Steps represent a sequence of tasks that will be executed as part of the job
+    steps:
+      - uses: actions/checkout@v2
+
+      - uses: actions/setup-go@v3
+        with:
+          go-version: 1.18
+
+      - name: Cache go modules
+        uses: actions/cache@v2
+        with:
+          path: ~/go/pkg/mod
+          key: ${{ runner.os }}-dataflow-${{ hashFiles('go.sum') }}
+
+      # Set up Kubernetes with K3s
+      - name: Set up K3s cluster
+        run: |
+          curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION=v1.18.9+k3s1 sh -s - \
+            --write-kubeconfig-mode=644 \
+            "${k3s_disable_command:---disable}" metrics-server \
+            "${k3s_disable_command:---disable}" traefik \
+            --flannel-backend=none \
+            --docker
+        shell: bash
+
+      # this may be failed sometimes, and I want to exit the workflow directly if failed,
+      # but GitHub Actions doesnt' support early-exit yet, see https://github.com/actions/runner/issues/662.
+      # so, simply wait for a long time.
+      - name: Wait for coredns
+        run: |
+          kubectl rollout status --watch --timeout 600s deployment/coredns -n kube-system
+        shell: bash
+        env:
+          KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+
+      - name: Export KUBECONFIG environment variable
+        run: |
+          echo 'KUBECONFIG=/etc/rancher/k3s/k3s.yaml' >> $GITHUB_ENV
+        shell: bash
+
+      - name: Print cluster information
+        run: |
+          kubectl config view
+          kubectl cluster-info
+          kubectl get nodes
+          kubectl get pods -n kube-system
+          kubectl get sc
+          kubectl version
+
+      - name: Build dataflow engine binary
+        run: make df-master df-executor df-chaos-case
+
+      - name: Build Dataflow engine docker image
+        run: |
+          cp -r $GITHUB_WORKSPACE/engine/chaos/manifests/conf/ $GITHUB_WORKSPACE/bin/
+          docker build -f $GITHUB_WORKSPACE/engine/chaos/manifests/Dockerfile -t dataflow:chaos $GITHUB_WORKSPACE/bin
+          docker image list
+
+      # Set up metastore and basic services
+      - name: Set up metastore and basic services
+        run: |
+          kubectl apply -f $GITHUB_WORKSPACE/engine/chaos/manifests/metastore.yaml
+          kubectl get -f $GITHUB_WORKSPACE/engine/chaos/manifests/metastore.yaml
+          kubectl describe -f $GITHUB_WORKSPACE/engine/chaos/manifests/metastore.yaml
+      - name: Wait for metastore ready
+        run: |
+          kubectl wait --for=condition=Ready pod/metastore-framework-mysql-0 --timeout=60s || true
+          kubectl wait --for=condition=Ready pod/metastore-user-etcd-0 --timeout=60s || true
+
+          echo show pvc
+          kubectl get pvc -l app=metastore -o wide
+          echo show pv
+          kubectl get pv -o wide
+          echo show svc
+          kubectl get svc -l app=metastore -o wide
+          echo show sts
+          kubectl get sts -l app=metastore -o wide
+          echo show po
+          kubectl get po -l app=metastore -o wide
+          echo describe po
+          kubectl describe po -l app=metastore
+          echo describe pvc
+          kubectl describe pvc -l app=metastore
+          kubectl wait --for=condition=Ready pod/metastore-framework-mysql-0 --timeout=0s
+          kubectl wait --for=condition=Ready pod/metastore-user-etcd-0 --timeout=0s
+
+      - name: Set up server-master
+        run: |
+          kubectl apply -f $GITHUB_WORKSPACE/engine/chaos/manifests/server-master.yaml
+          kubectl get -f $GITHUB_WORKSPACE/engine/chaos/manifests/server-master.yaml
+          kubectl describe -f $GITHUB_WORKSPACE/engine/chaos/manifests/server-master.yaml
+
+      - name: Wait for server-master ready
+        run: |
+          kubectl wait --for=condition=Ready pod -l app=server-master --all --timeout=60s|| true
+          echo "<<<<< show pvc >>>>>"
+          kubectl get pvc -l app=server-master -o wide
+          echo "<<<<< show pv >>>>>"
+          kubectl get pv -o wide
+          echo "<<<<< show svc >>>>>"
+          kubectl get svc -l app=server-master -o wide
+          echo "<<<<< show sts >>>>>"
+          kubectl get sts -l app=server-master -o wide
+          echo "<<<<< show po >>>>>"
+          kubectl get po -l app=server-master -o wide
+          echo "<<<<< describe po >>>>>"
+          kubectl describe po -l app=server-master
+          echo "<<<<< describe pvc >>>>>"
+          kubectl describe pvc -l app=server-master
+          echo "<<<<< show current log for server-master-0 >>>>>"
+          kubectl logs server-master-0 || true
+          echo "<<<<< show previous log for server-master-0 >>>>>"
+          kubectl logs server-master-0 -p || true
+          echo "<<<<< show current log for server-master-1 >>>>>"
+          kubectl logs server-master-1 || true
+          echo "<<<<< show previous log for server-master-1 >>>>>"
+          kubectl logs server-master-1 -p || true
+          echo "<<<<< show current log for server-master-2 >>>>>"
+          kubectl logs server-master-2 || true
+          echo "<<<<< show previous log for server-master-2 >>>>>"
+          kubectl logs server-master-2 -p || true
+
+      - name: Set up executor
+        run: |
+          kubectl apply -f $GITHUB_WORKSPACE/engine/chaos/manifests/executor.yaml
+          kubectl get -f $GITHUB_WORKSPACE/engine/chaos/manifests/executor.yaml
+          kubectl describe -f $GITHUB_WORKSPACE/engine/chaos/manifests/executor.yaml
+
+      - name: Wait for executor ready
+        run: |
+          kubectl wait --for=condition=Ready pod -l app=executor --all --timeout=60s|| true
+          echo "<<<<< show pvc >>>>>"
+          kubectl get pvc -l app=executor -o wide
+          echo "<<<<< show pv >>>>>"
+          kubectl get pv -o wide
+          echo "<<<<< show svc >>>>>"
+          kubectl get svc -l app=executor -o wide
+          echo "<<<<< show sts >>>>>"
+          kubectl get sts -l app=executor -o wide
+          echo "<<<<< show po >>>>>"
+          kubectl get po -l app=executor -o wide
+          echo "<<<<< describe po >>>>>"
+          kubectl describe po -l app=executor
+          echo "<<<<< describe pvc >>>>>"
+          kubectl describe pvc -l app=executor
+          echo "<<<<< show current log for executor-0 >>>>>"
+          kubectl logs executor-0 || true
+          echo "<<<<< show previous log for executor-0 >>>>>"
+          kubectl logs executor-0 -p || true
+          echo "<<<<< show current log for executor-1 >>>>>"
+          kubectl logs executor-1 || true
+          echo "<<<<< show previous log for worker-master-1 >>>>>"
+          kubectl logs executor-1 -p || true
+          echo "<<<<< show current log for executor-2 >>>>>"
+          kubectl logs executor-2 || true
+          echo "<<<<< show previous log for executor-2 >>>>>"
+          kubectl logs executor-2 -p || true
+
+      - name: Set up chaos test cases
+        run: |
+          kubectl apply -f $GITHUB_WORKSPACE/engine/chaos/manifests/cases.yaml
+          kubectl get -f $GITHUB_WORKSPACE/engine/chaos/manifests/cases.yaml
+          kubectl describe -f $GITHUB_WORKSPACE/engine/chaos/manifests/cases.yaml
+
+      - name: Encode chaos-mesh action
+        run: |
+          echo CFG_BASE64=$(base64 -w 0 $GITHUB_WORKSPACE/engine/chaos/manifests/${{ matrix.chaos-obj }}.yaml) >> $GITHUB_ENV
+
+      - name: Run chaos mesh action
+        uses: chaos-mesh/chaos-mesh-action@master
+        env:
+          CFG_BASE64: ${{ env.CFG_BASE64 }}
+          CHAOS_MESH_VERSION: v1.0.0
+
+      # check whether complete with 1m * 20 times.
+      - name: Wait for chaos test case complete
+        run: |
+          $GITHUB_WORKSPACE/engine/chaos/scripts/check-case.sh
+
+      - name: Copy logs to hack permission
+        if: ${{ always() }}
+        run: |
+          mkdir ./logs
+          sudo cp -r -L /var/log/containers/. ./logs
+          sudo find /var/ -type f | grep -E '.*/(server-master|executor)-[^/]*.log$' | sudo xargs -i cp {} ./logs || true
+          sudo chown -R runner ./logs
+
+      # Upload logs as artifact seems not stable, so we set `continue-on-error: true` here.
+      - name: Upload logs
+        continue-on-error: true
+        uses: actions/upload-artifact@v2
+        if: ${{ always() }}
+        with:
+          name: chaos-base-logs.${{ matrix.chaos-obj }}
+          path: |
+            ./logs
+            !./logs/coredns-*
+            !./logs/local-path-provisioner-*
+
+      # Send feishu notification if failed.
+      - name: Feishu notification
+        continue-on-error: true
+        uses: foxundermoon/feishu-action@v2
+        if: ${{ failure() }}
+        with:
+          url: ${{ secrets.ENGINE_FEISHU_NOTIFY_URL }}
+          msg_type: text
+          content: |
+            text: |
+              dataflow engine chaos job failed, see https://github.com/pingcap/tiflow/actions/runs/${{ github.run_id }}

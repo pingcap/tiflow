@@ -25,11 +25,11 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/pingcap/tiflow/engine/client"
+	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/lib/metadata"
 	libModel "github.com/pingcap/tiflow/engine/lib/model"
 	"github.com/pingcap/tiflow/engine/lib/statusutil"
 	"github.com/pingcap/tiflow/engine/model"
-	"github.com/pingcap/tiflow/engine/pb"
 	"github.com/pingcap/tiflow/engine/pkg/clock"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/deps"
@@ -38,7 +38,7 @@ import (
 	mockkv "github.com/pingcap/tiflow/engine/pkg/meta/kvclient/mock"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
-	"github.com/pingcap/tiflow/engine/pkg/uuid"
+	"github.com/pingcap/tiflow/pkg/uuid"
 )
 
 // MockBaseMaster returns a mock DefaultBaseMaster
@@ -68,7 +68,9 @@ func MockBaseMaster(id libModel.MasterID, masterImpl MasterImpl) *DefaultBaseMas
 	ret := NewBaseMaster(
 		ctx,
 		masterImpl,
-		id)
+		id,
+		FakeTask,
+	)
 
 	return ret.(*DefaultBaseMaster)
 }

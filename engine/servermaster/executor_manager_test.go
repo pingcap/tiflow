@@ -20,8 +20,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/model"
-	"github.com/pingcap/tiflow/engine/pb"
 )
 
 func TestExecutorManager(t *testing.T) {
@@ -77,4 +77,72 @@ func TestExecutorManager(t *testing.T) {
 	require.Nil(t, err)
 	require.NotNil(t, resp.Err)
 	require.Equal(t, pb.ErrorCode_UnknownExecutor, resp.Err.GetCode())
+}
+
+func TestExecutorManagerWatch(t *testing.T) {
+	t.Parallel()
+
+	heartbeatTTL := time.Millisecond * 400
+	checkInterval := time.Millisecond * 10
+	mgr := NewExecutorManagerImpl(heartbeatTTL, checkInterval, nil)
+	mgr.Start(context.Background())
+
+	// register an executor server
+	executorAddr := "127.0.0.1:10001"
+	registerReq := &pb.RegisterExecutorRequest{
+		Address:    executorAddr,
+		Capability: 2,
+	}
+	info, err := mgr.AllocateNewExec(registerReq)
+	require.Nil(t, err)
+
+	executorID1 := info.ID
+	snap, stream, err := mgr.WatchExecutors(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, []model.ExecutorID{executorID1}, snap)
+
+	// register another executor server
+	executorAddr = "127.0.0.1:10002"
+	registerReq = &pb.RegisterExecutorRequest{
+		Address:    executorAddr,
+		Capability: 2,
+	}
+	info, err = mgr.AllocateNewExec(registerReq)
+	require.Nil(t, err)
+
+	executorID2 := info.ID
+	event := <-stream.C
+	require.Equal(t, model.ExecutorStatusChange{
+		ID: executorID2,
+		Tp: model.EventExecutorOnline,
+	}, event)
+
+	newHeartbeatReq := func(executorID model.ExecutorID) *pb.HeartbeatRequest {
+		return &pb.HeartbeatRequest{
+			ExecutorId: string(executorID),
+			Status:     int32(model.Running),
+			Timestamp:  uint64(time.Now().Unix()),
+			Ttl:        uint64(10), // 10ms ttl
+		}
+	}
+
+	_, err = mgr.HandleHeartbeat(newHeartbeatReq(executorID1))
+	require.NoError(t, err)
+	_, err = mgr.HandleHeartbeat(newHeartbeatReq(executorID2))
+	require.NoError(t, err)
+
+	require.Equal(t, 2, mgr.ExecutorCount(model.Running))
+
+	require.Eventually(t, func() bool {
+		resp, err := mgr.HandleHeartbeat(newHeartbeatReq(executorID2))
+		require.NoError(t, err)
+		require.Nil(t, resp.Err)
+		return mgr.ExecutorCount(model.Running) == 1
+	}, time.Second*2, time.Millisecond*5)
+
+	event = <-stream.C
+	require.Equal(t, model.ExecutorStatusChange{
+		ID: executorID1,
+		Tp: model.EventExecutorOffline,
+	}, event)
 }

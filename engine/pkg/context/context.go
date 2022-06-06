@@ -31,11 +31,9 @@ import (
 	"time"
 
 	"github.com/pingcap/tiflow/dm/pkg/log"
-	"github.com/pingcap/tiflow/engine/client"
 	"github.com/pingcap/tiflow/engine/pkg/deps"
-	extKV "github.com/pingcap/tiflow/engine/pkg/meta/extension"
-	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
+	"github.com/pingcap/tiflow/engine/pkg/tenant"
 )
 
 // Context is used to in dm to record some context field like
@@ -43,9 +41,9 @@ import (
 // * logger.
 type Context struct {
 	context.Context
-	Logger       log.Logger
-	Dependencies RuntimeDependencies // Deprecated
-	Environ      Environment
+	Logger      log.Logger
+	Environ     Environment
+	ProjectInfo tenant.ProjectInfo
 
 	deps *deps.Deps
 }
@@ -94,11 +92,12 @@ func (c *Context) WithLogger(logger log.Logger) *Context {
 // WithDeps puts a built dependency container into the context.
 func (c *Context) WithDeps(deps *deps.Deps) *Context {
 	return &Context{
-		Context:      c.Context,
-		Logger:       c.Logger,
-		Dependencies: c.Dependencies,
-		Environ:      c.Environ,
-		deps:         deps,
+		Context:     c.Context,
+		Logger:      c.Logger,
+		Environ:     c.Environ,
+		ProjectInfo: c.ProjectInfo,
+
+		deps: deps,
 	}
 }
 
@@ -110,16 +109,6 @@ func (c *Context) Deps() *deps.Deps {
 // L returns real logger.
 func (c *Context) L() log.Logger {
 	return c.Logger
-}
-
-// RuntimeDependencies contains useful clients or management tools
-type RuntimeDependencies struct {
-	MessageHandlerManager p2p.MessageHandlerManager
-	MessageRouter         p2p.MessageSender
-	MetaKVClient          metaclient.KVClient
-	UserRawKVClient       extKV.KVClientEx
-	ExecutorClientManager *client.Manager
-	ServerMasterClient    client.MasterClient
 }
 
 // Environment contains some configuration related environ values

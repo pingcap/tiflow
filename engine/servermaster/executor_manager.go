@@ -18,17 +18,18 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
 
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/model"
-	"github.com/pingcap/tiflow/engine/pb"
 	"github.com/pingcap/tiflow/engine/pkg/errors"
-	"github.com/pingcap/tiflow/engine/pkg/uuid"
+	"github.com/pingcap/tiflow/engine/pkg/notifier"
 	"github.com/pingcap/tiflow/engine/servermaster/resource"
 	"github.com/pingcap/tiflow/engine/servermaster/scheduler"
 	"github.com/pingcap/tiflow/engine/test"
+	"github.com/pingcap/tiflow/pkg/uuid"
 )
 
 // ExecutorManager defines an interface to manager all executors
@@ -37,12 +38,19 @@ type ExecutorManager interface {
 	AllocateNewExec(req *pb.RegisterExecutorRequest) (*model.NodeInfo, error)
 	RegisterExec(info *model.NodeInfo)
 	Start(ctx context.Context)
-	// Count returns executor count with given status
+	// ExecutorCount returns executor count with given status
 	ExecutorCount(status model.ExecutorStatus) int
 	HasExecutor(executorID string) bool
 	ListExecutors() []string
 	CapacityProvider() scheduler.CapacityProvider
 	GetAddr(executorID model.ExecutorID) (string, bool)
+
+	// WatchExecutors returns a snapshot of all online executors plus
+	// a stream of events describing changes that happen to the executors
+	// after the snapshot is taken.
+	WatchExecutors(ctx context.Context) (
+		snap []model.ExecutorID, stream *notifier.Receiver[model.ExecutorStatusChange], err error,
+	)
 }
 
 // ExecutorManagerImpl holds all the executors info, including liveness, status, resource usage.
@@ -58,6 +66,8 @@ type ExecutorManagerImpl struct {
 
 	rescMgr resource.RescMgr
 	logRL   *rate.Limiter
+
+	notifier *notifier.Notifier[model.ExecutorStatusChange]
 }
 
 // NewExecutorManagerImpl creates a new ExecutorManagerImpl instance
@@ -70,6 +80,7 @@ func NewExecutorManagerImpl(initHeartbeatTTL, keepAliveInterval time.Duration, c
 		keepAliveInterval: keepAliveInterval,
 		rescMgr:           resource.NewCapRescMgr(),
 		logRL:             rate.NewLimiter(rate.Every(time.Second*5), 1 /*burst*/),
+		notifier:          notifier.NewNotifier[model.ExecutorStatusChange](),
 	}
 }
 
@@ -91,6 +102,11 @@ func (e *ExecutorManagerImpl) removeExecutorImpl(id model.ExecutorID) error {
 			Time: time.Now(),
 		})
 	}
+
+	e.notifier.Notify(model.ExecutorStatusChange{
+		ID: id,
+		Tp: model.EventExecutorOffline,
+	})
 	return nil
 }
 
@@ -142,6 +158,10 @@ func (e *ExecutorManagerImpl) RegisterExec(info *model.NodeInfo) {
 	}
 	e.mu.Lock()
 	e.executors[info.ID] = exec
+	e.notifier.Notify(model.ExecutorStatusChange{
+		ID: info.ID,
+		Tp: model.EventExecutorOnline,
+	})
 	e.mu.Unlock()
 	e.rescMgr.Register(exec.ID, exec.Addr, model.RescUnit(exec.Capability))
 }
@@ -280,4 +300,23 @@ func (e *ExecutorManagerImpl) GetAddr(executorID model.ExecutorID) (string, bool
 	}
 
 	return executor.Addr, true
+}
+
+// WatchExecutors implements the ExecutorManager interface.
+func (e *ExecutorManagerImpl) WatchExecutors(
+	ctx context.Context,
+) (snap []model.ExecutorID, receiver *notifier.Receiver[model.ExecutorStatusChange], err error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	for executorID := range e.executors {
+		snap = append(snap, executorID)
+	}
+
+	if err := e.notifier.Flush(ctx); err != nil {
+		return nil, nil, err
+	}
+
+	receiver = e.notifier.NewReceiver()
+	return
 }

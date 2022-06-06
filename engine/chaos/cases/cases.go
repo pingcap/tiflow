@@ -11,33 +11,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Copyright 2022 PingCAP, Inc.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 package main
 
 import (
 	"context"
 
-	"github.com/pingcap/tiflow/dm/pkg/log"
-	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
 )
 
-var cases = []string{"fake-job-normal", "fake-job-fast-finish"}
+type caseFn func(context.Context, *config) error
 
-func runCases(ctx context.Context) error {
-	for _, c := range cases {
-		log.L().Info("run case successfully", zap.String("case", c))
+var cases = []caseFn{runFakeJobCase}
+
+func runCases(ctx context.Context, cfg *config) error {
+	errg, ctx := errgroup.WithContext(ctx)
+	for _, fn := range cases {
+		fn := fn
+		errg.Go(func() error {
+			return fn(ctx, cfg)
+		})
 	}
-	return nil
+	return errg.Wait()
 }

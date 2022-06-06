@@ -24,8 +24,9 @@ import (
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
 
-	"github.com/pingcap/tiflow/engine/pb"
+	pb "github.com/pingcap/tiflow/engine/enginepb"
 	derrors "github.com/pingcap/tiflow/engine/pkg/errors"
+	"github.com/pingcap/tiflow/engine/pkg/tenant"
 )
 
 const preDispatchTaskRetryInterval = 1 * time.Second
@@ -51,6 +52,7 @@ func newTaskDispatcher(client baseExecutorClient) *TaskDispatcher {
 
 // DispatchTaskArgs contains the required parameters for creating a worker.
 type DispatchTaskArgs struct {
+	ProjectInfo  tenant.ProjectInfo
 	WorkerID     string
 	MasterID     string
 	WorkerType   int64
@@ -85,6 +87,7 @@ func (d *TaskDispatcher) DispatchTask(
 ) error {
 	requestID, err := d.preDispatchTaskWithRetry(ctx, args)
 	if err != nil {
+		abortWorker(err)
 		return derrors.ErrExecutorPreDispatchFailed.Wrap(err)
 	}
 
@@ -163,6 +166,10 @@ func (d *TaskDispatcher) preDispatchTaskOnce(
 	_, err := d.client.Send(ctx, &ExecutorRequest{
 		Cmd: CmdPreDispatchTask,
 		Req: &pb.PreDispatchTaskRequest{
+			ProjectInfo: &pb.ProjectInfo{
+				TenantId:  args.ProjectInfo.TenantID(),
+				ProjectId: args.ProjectInfo.ProjectID(),
+			},
 			TaskTypeId: args.WorkerType,
 			TaskConfig: args.WorkerConfig,
 			MasterId:   args.MasterID,

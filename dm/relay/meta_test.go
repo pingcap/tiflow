@@ -33,13 +33,11 @@ type MetaTestCase struct {
 	uuid           string
 	uuidWithSuffix string
 	pos            mysql.Position
-	gset           gtid.Set
+	gset           mysql.GTIDSet
 }
 
 func (r *testMetaSuite) TestLocalMeta(c *C) {
-	dir, err := os.MkdirTemp("", "test_local_meta")
-	c.Assert(err, IsNil)
-	defer os.RemoveAll(dir)
+	dir := c.MkDir()
 
 	gset0, _ := gtid.ParserGTID("mysql", "")
 	gset1, _ := gtid.ParserGTID("mysql", "85ab69d1-b21f-11e6-9c5e-64006a8978d2:1-12")
@@ -77,7 +75,7 @@ func (r *testMetaSuite) TestLocalMeta(c *C) {
 
 	// load, but empty
 	lm := NewLocalMeta("mysql", dir)
-	err = lm.Load()
+	err := lm.Load()
 	c.Assert(err, IsNil)
 
 	uuid, pos := lm.Pos()
@@ -96,12 +94,12 @@ func (r *testMetaSuite) TestLocalMeta(c *C) {
 	dirty := lm.Dirty()
 	c.Assert(dirty, IsFalse)
 
-	// set currentUUID because lm.doFlush need it
+	// set currentSubDir because lm.doFlush need it
 	currentUUID := "uuid.000001"
 	c.Assert(os.MkdirAll(path.Join(dir, currentUUID), 0o777), IsNil)
 	setLocalMetaWithCurrentUUID := func() {
 		lm = NewLocalMeta("mysql", dir)
-		lm.(*LocalMeta).currentUUID = currentUUID
+		lm.(*LocalMeta).currentSubDir = currentUUID
 	}
 
 	// adjust to start pos
@@ -155,7 +153,7 @@ func (r *testMetaSuite) TestLocalMeta(c *C) {
 	c.Assert(gset.String(), Equals, latestGTIDStr)
 
 	// reset
-	lm.(*LocalMeta).currentUUID = ""
+	lm.(*LocalMeta).currentSubDir = ""
 
 	for _, cs := range cases {
 		err = lm.AddDir(cs.uuid, nil, nil, 0)
@@ -241,7 +239,7 @@ func (r *testMetaSuite) TestLocalMetaPotentialDataRace(c *C) {
 	lm := NewLocalMeta("mysql", "/FAKE_DIR")
 	uuidStr := "85ab69d1-b21f-11e6-9c5e-64006a8978d2"
 	initGSet, _ := gtid.ParserGTID("mysql", fmt.Sprintf("%s:1", uuidStr))
-	lm.(*LocalMeta).currentUUID = uuidStr
+	lm.(*LocalMeta).currentSubDir = uuidStr
 	err = lm.Save(
 		mysql.Position{Name: "mysql-bin.000001", Pos: 234},
 		initGSet,
@@ -257,7 +255,6 @@ func (r *testMetaSuite) TestLocalMetaPotentialDataRace(c *C) {
 		defer func() {
 			ch1 <- err
 		}()
-		_, lastGTID := lm.GTID()
 		var theMGSet mysql.GTIDSet
 		for i := 2; i < 100; i++ {
 			theMGSet, err = mysql.ParseGTIDSet("mysql", fmt.Sprintf("%s:1-%d", uuidStr, i*10))
@@ -265,7 +262,7 @@ func (r *testMetaSuite) TestLocalMetaPotentialDataRace(c *C) {
 				return
 			}
 
-			err = lastGTID.Set(theMGSet)
+			lastGTID := theMGSet
 			if err != nil {
 				return
 			}

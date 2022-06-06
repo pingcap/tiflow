@@ -27,7 +27,7 @@ import (
 	"github.com/go-sql-driver/mysql"
 	perrors "github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
-	toolutils "github.com/pingcap/tidb-tools/pkg/utils"
+	"github.com/pingcap/tidb/util"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/dm/dm/config"
@@ -70,14 +70,14 @@ func (d *DefaultDBProviderImpl) Apply(config *config.DBConfig) (*BaseDB, error) 
 		if loadErr := config.Security.LoadTLSContent(); loadErr != nil {
 			return nil, terror.ErrCtlLoadTLSCfg.Delegate(loadErr)
 		}
-		tlsConfig, err := toolutils.ToTLSConfigWithVerifyByRawbytes(config.Security.SSLCABytes,
+		tlsConfig, err := util.ToTLSConfigWithVerifyByRawbytes(config.Security.SSLCABytes,
 			config.Security.SSLCertBytes, config.Security.SSLKEYBytes, config.Security.CertAllowedCN)
 		if err != nil {
 			return nil, terror.ErrConnInvalidTLSConfig.Delegate(err)
 		}
 		// NOTE for local test(use a self-signed or invalid certificate), we don't need to check CA file.
 		// see more here https://github.com/go-sql-driver/mysql#tls
-		if config.Host == "127.0.0.1" {
+		if config.Host == "127.0.0.1" || len(config.Security.SSLCertBytes) == 0 || len(config.Security.SSLKEYBytes) == 0 {
 			tlsConfig.InsecureSkipVerify = true
 		}
 

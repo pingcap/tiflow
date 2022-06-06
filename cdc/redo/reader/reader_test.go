@@ -17,7 +17,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -25,6 +24,7 @@ import (
 	"time"
 
 	"github.com/golang/mock/gomock"
+	"github.com/google/uuid"
 	"github.com/pingcap/errors"
 	mockstorage "github.com/pingcap/tidb/br/pkg/mock/storage"
 	"github.com/pingcap/tidb/br/pkg/storage"
@@ -43,9 +43,7 @@ func TestNewLogReader(t *testing.T) {
 	_, err = NewLogReader(context.Background(), &LogReaderConfig{})
 	require.Nil(t, err)
 
-	dir, err := ioutil.TempDir("", "redo-NewLogReader")
-	require.Nil(t, err)
-	defer os.RemoveAll(dir)
+	dir := t.TempDir()
 
 	s3URI, err := url.Parse("s3://logbucket/test-changefeed?endpoint=http://111/")
 	require.Nil(t, err)
@@ -74,9 +72,7 @@ func TestNewLogReader(t *testing.T) {
 }
 
 func TestLogReaderResetReader(t *testing.T) {
-	dir, err := ioutil.TempDir("", "redo-ResetReader")
-	require.Nil(t, err)
-	defer os.RemoveAll(dir)
+	dir := t.TempDir()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -84,9 +80,9 @@ func TestLogReaderResetReader(t *testing.T) {
 		MaxLogSize: 100000,
 		Dir:        dir,
 	}
-	fileName := fmt.Sprintf("%s_%s_%s_%d_%s_%d%s", "cp",
+	fileName := fmt.Sprintf(common.RedoLogFileFormatV2, "cp",
 		"default", "test-cf100",
-		time.Now().Unix(), common.DefaultDDLLogFileType, 100, common.LogEXT)
+		common.DefaultDDLLogFileType, 100, uuid.NewString(), common.LogEXT)
 	w, err := writer.NewWriter(ctx, cfg, writer.WithLogFileName(func() string {
 		return fileName
 	}))
@@ -105,9 +101,9 @@ func TestLogReaderResetReader(t *testing.T) {
 	f, err := os.Open(path)
 	require.Nil(t, err)
 
-	fileName = fmt.Sprintf("%s_%s_%s_%d_%s_%d%s", "cp",
+	fileName = fmt.Sprintf(common.RedoLogFileFormatV2, "cp",
 		"default", "test-cf10",
-		time.Now().Unix(), common.DefaultRowLogFileType, 10, common.LogEXT)
+		common.DefaultRowLogFileType, 10, uuid.NewString(), common.LogEXT)
 	w, err = writer.NewWriter(ctx, cfg, writer.WithLogFileName(func() string {
 		return fileName
 	}))
@@ -236,9 +232,7 @@ func TestLogReaderResetReader(t *testing.T) {
 }
 
 func TestLogReaderReadMeta(t *testing.T) {
-	dir, err := ioutil.TempDir("", "redo-ReadMeta")
-	require.Nil(t, err)
-	defer os.RemoveAll(dir)
+	dir := t.TempDir()
 
 	fileName := fmt.Sprintf("%s_%s_%d_%s%s", "cp",
 		"test-changefeed",
@@ -270,9 +264,7 @@ func TestLogReaderReadMeta(t *testing.T) {
 	_, err = f.Write(data)
 	require.Nil(t, err)
 
-	dir1, err := ioutil.TempDir("", "redo-NoReadMeta")
-	require.Nil(t, err)
-	defer os.RemoveAll(dir1)
+	dir1 := t.TempDir()
 
 	tests := []struct {
 		name                             string

@@ -28,6 +28,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/engine/client"
+	pb "github.com/pingcap/tiflow/engine/enginepb"
 	runtime "github.com/pingcap/tiflow/engine/executor/worker"
 	"github.com/pingcap/tiflow/engine/lib/config"
 	"github.com/pingcap/tiflow/engine/lib/master"
@@ -35,7 +36,6 @@ import (
 	libModel "github.com/pingcap/tiflow/engine/lib/model"
 	"github.com/pingcap/tiflow/engine/lib/statusutil"
 	"github.com/pingcap/tiflow/engine/model"
-	"github.com/pingcap/tiflow/engine/pb"
 	"github.com/pingcap/tiflow/engine/pkg/clock"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/deps"
@@ -47,9 +47,10 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
+	"github.com/pingcap/tiflow/engine/pkg/promutil"
 	"github.com/pingcap/tiflow/engine/pkg/quota"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
-	"github.com/pingcap/tiflow/engine/pkg/uuid"
+	"github.com/pingcap/tiflow/pkg/uuid"
 )
 
 // Master defines a basic interface that can run in dataflow engine runtime
@@ -106,6 +107,7 @@ type BaseMaster interface {
 
 	// MetaKVClient return user metastore kv client
 	MetaKVClient() metaclient.KVClient
+	MetricFactory() promutil.Factory
 	MasterMeta() *libModel.MasterMetaKVData
 	GetWorkers() map[libModel.WorkerID]WorkerHandle
 	IsMasterReady() bool
@@ -156,9 +158,17 @@ type DefaultBaseMaster struct {
 	timeoutConfig config.TimeoutConfig
 	masterMeta    *libModel.MasterMetaKVData
 
+	// workerProjectMap keep the <WorkerID, ProjectInfo> map
+	// It's only used by JobManager who has workers(jobmaster) with different project info
+	// [NOTICE]: When JobManager failover, we need to load all workers(jobmaster)'s project info
+	workerProjectMap sync.Map
+	// masterProjectInfo is the projectInfo of itself
+	masterProjectInfo tenant.ProjectInfo
+
 	// user metastore prefix kvclient
 	// Don't close it. It's just a prefix wrapper for underlying userRawKVClient
 	userMetaKVClient metaclient.KVClient
+	metricFactory    promutil.Factory
 
 	// components for easier unit testing
 	uuidGen uuid.Generator
@@ -188,6 +198,7 @@ func NewBaseMaster(
 	ctx *dcontext.Context,
 	impl MasterImpl,
 	id libModel.MasterID,
+	tp libModel.WorkerType,
 ) BaseMaster {
 	var (
 		nodeID        p2p.NodeID
@@ -230,19 +241,26 @@ func NewBaseMaster(
 
 		uuidGen: uuid.NewGenerator(),
 
-		nodeID:        nodeID,
-		advertiseAddr: advertiseAddr,
+		nodeID:            nodeID,
+		advertiseAddr:     advertiseAddr,
+		masterProjectInfo: ctx.ProjectInfo,
 
 		createWorkerQuota: quota.NewConcurrencyQuota(maxCreateWorkerConcurrency),
-		// [TODO] use tenantID if support muliti-tenant
-		userMetaKVClient: kvclient.NewPrefixKVClient(params.UserRawKVClient, tenant.DefaultUserTenantID),
-		deps:             ctx.Deps(),
+		userMetaKVClient:  kvclient.NewPrefixKVClient(params.UserRawKVClient, ctx.ProjectInfo.UniqueID()),
+		metricFactory:     promutil.NewFactory4Master(ctx.ProjectInfo, WorkerTypeForMetric(tp), id),
+
+		deps: ctx.Deps(),
 	}
 }
 
 // MetaKVClient returns the user space metaclient
 func (m *DefaultBaseMaster) MetaKVClient() metaclient.KVClient {
 	return m.userMetaKVClient
+}
+
+// MetricFactory implements BaseMaster.MetricFactory
+func (m *DefaultBaseMaster) MetricFactory() promutil.Factory {
+	return m.metricFactory
 }
 
 // Init implements BaseMaster.Init
@@ -421,16 +439,20 @@ func (m *DefaultBaseMaster) doClose() {
 		log.L().Warn("Failed to clean up message handlers",
 			zap.String("master-id", m.id))
 	}
+	promutil.UnregisterWorkerMetrics(m.id)
 }
 
 // Close implements BaseMaster.Close
 func (m *DefaultBaseMaster) Close(ctx context.Context) error {
-	if err := m.Impl.CloseImpl(ctx); err != nil {
-		return errors.Trace(err)
+	err := m.Impl.CloseImpl(ctx)
+	// We don't return here if CloseImpl return error to ensure
+	// that we can close inner resources of the framework
+	if err != nil {
+		log.L().Error("Failed to close MasterImpl", zap.Error(err))
 	}
 
 	m.doClose()
-	return nil
+	return errors.Trace(err)
 }
 
 // OnError implements BaseMaster.OnError
@@ -577,6 +599,10 @@ func (m *DefaultBaseMaster) CreateWorker(
 
 		executorClient := m.executorClientManager.ExecutorClient(executorID)
 		dispatchArgs := &client.DispatchTaskArgs{
+			// [NOTICE]:
+			// For JobManager, <JobID, ProjectInfo> pair is set in advance
+			// For JobMaster, we always get the 'masterProjectInfo'
+			ProjectInfo:  m.GetProjectInfo(workerID),
 			WorkerID:     workerID,
 			MasterID:     m.id,
 			WorkerType:   int64(workerType),
@@ -606,4 +632,39 @@ func (m *DefaultBaseMaster) CreateWorker(
 // IsMasterReady implements BaseMaster.IsMasterReady
 func (m *DefaultBaseMaster) IsMasterReady() bool {
 	return m.workerManager.IsInitialized()
+}
+
+// SetProjectInfo set the project info of specific worker
+// [NOTICE]: Only used by JobManager to set project for different job(worker for jobmanager)
+func (m *DefaultBaseMaster) SetProjectInfo(workerID libModel.WorkerID, projectInfo tenant.ProjectInfo) {
+	m.workerProjectMap.Store(workerID, projectInfo)
+}
+
+// DeleteProjectInfo delete the project info of specific worker
+// NOTICEL Only used by JobMananger when stop job
+func (m *DefaultBaseMaster) DeleteProjectInfo(workerID libModel.WorkerID) {
+	m.workerProjectMap.Delete(workerID)
+}
+
+// GetProjectInfo get the project info of the worker
+// [WARN]: Once 'DeleteProjectInfo' is called, 'GetProjectInfo' may return unexpected project info
+// For JobManager: It will set the <jobID, projectInfo> pair in advance.
+// So if we call 'GetProjectInfo' before 'DeleteProjectInfo', we can expect a correct projectInfo.
+// For JobMaster: Master and worker always have the same projectInfo and workerProjectMap is empty
+func (m *DefaultBaseMaster) GetProjectInfo(masterID libModel.MasterID) tenant.ProjectInfo {
+	projectInfo, exists := m.workerProjectMap.Load(masterID)
+	if !exists {
+		return m.masterProjectInfo
+	}
+
+	return projectInfo.(tenant.ProjectInfo)
+}
+
+// InitProjectInfosAfterRecover set project infos for all worker after master recover
+// NOTICE: Only used by JobMananger when failover
+func (m *DefaultBaseMaster) InitProjectInfosAfterRecover(jobs []*libModel.MasterMetaKVData) {
+	for _, meta := range jobs {
+		// TODO: fix the TenantID
+		m.workerProjectMap.Store(meta.ID, tenant.NewProjectInfo("", meta.ProjectID))
+	}
 }

@@ -18,13 +18,14 @@ import (
 	"sync"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/dm/checker"
 	dmconfig "github.com/pingcap/tiflow/dm/dm/config"
 	ctlcommon "github.com/pingcap/tiflow/dm/dm/ctl/common"
+	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/engine/executor/worker"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/checkpoint"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
@@ -55,6 +56,8 @@ type JobMaster struct {
 	messageHandlerManager p2p.MessageHandlerManager
 	checkpointAgent       checkpoint.Agent
 }
+
+var _ lib.JobMasterImpl = (*JobMaster)(nil)
 
 type dmJobMasterFactory struct{}
 
@@ -197,6 +200,11 @@ func (jm *JobMaster) OnJobManagerMessage(topic p2p.Topic, message interface{}) e
 	return nil
 }
 
+// OnOpenAPIInitialized implements JobMasterImpl.OnOpenAPIInitialized.
+func (jm *JobMaster) OnOpenAPIInitialized(apiGroup *gin.RouterGroup) {
+	// TODO: register openapi handlers to apiGroup.
+}
+
 // OnWorkerMessage implements JobMasterImpl.OnWorkerMessage
 func (jm *JobMaster) OnWorkerMessage(worker lib.WorkerHandle, topic p2p.Topic, message interface{}) error {
 	log.L().Debug("on worker message", zap.String("id", jm.workerID), zap.String("worker_id", worker.ID()))
@@ -256,18 +264,6 @@ func (jm *JobMaster) Workload() model.RescUnit {
 	return 2
 }
 
-// OnMasterFailover implements JobMasterImpl.OnMasterFailover
-func (jm *JobMaster) OnMasterFailover(reason lib.MasterFailoverReason) error {
-	// No need to do anything here
-	return nil
-}
-
-// OnJobManagerFailover implements JobMasterImpl.OnJobManagerFailover
-func (jm *JobMaster) OnJobManagerFailover(reason lib.MasterFailoverReason) error {
-	// No need to do anything here
-	return nil
-}
-
 // IsJobMasterImpl implements JobMasterImpl.IsJobMasterImpl
 func (jm *JobMaster) IsJobMasterImpl() {
 	panic("unreachable")
@@ -314,7 +310,7 @@ func (jm *JobMaster) getInitStatus() ([]runtime.TaskStatus, []runtime.WorkerStat
 func (jm *JobMaster) preCheck(ctx context.Context) error {
 	log.L().Info("start pre-checking job config", zap.String("id", jm.workerID), zap.String("jobmaster_id", jm.JobMasterID()))
 
-	taskCfgs := jm.jobCfg.ToTaskConfigs()
+	taskCfgs := jm.jobCfg.ToTaskCfgs()
 	dmSubtaskCfgs := make([]*dmconfig.SubTaskConfig, 0, len(taskCfgs))
 	for _, taskCfg := range taskCfgs {
 		dmSubtaskCfgs = append(dmSubtaskCfgs, taskCfg.ToDMSubTaskCfg())

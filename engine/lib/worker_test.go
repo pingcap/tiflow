@@ -36,14 +36,7 @@ var (
 )
 
 func putMasterMeta(ctx context.Context, t *testing.T, metaclient pkgOrm.Client, metaData *libModel.MasterMetaKVData) {
-	// FIXME: current backend mock db is not support unique index
-	if _, err := metaclient.GetJobByID(ctx, metaData.ID); err != nil {
-		err := metaclient.UpsertJob(ctx, metaData)
-		require.NoError(t, err)
-		return
-	}
-
-	err := metaclient.UpdateJob(ctx, metaData)
+	err := metaclient.UpsertJob(ctx, metaData)
 	require.NoError(t, err)
 }
 
@@ -233,12 +226,11 @@ func TestWorkerMasterFailover(t *testing.T) {
 		StatusCode: libModel.MasterStatusInit,
 	})
 
-	worker.On("OnMasterFailover", mock.Anything).Return(nil)
 	// Trigger a pull from Meta for the latest master's info.
 	worker.clock.(*clock.Mock).Add(3 * config.DefaultTimeoutConfig().WorkerHeartbeatInterval)
 
 	require.Eventually(t, func() bool {
-		return worker.failoverCount.Load() == 1
+		return worker.masterClient.MasterNode() == executorNodeID3
 	}, time.Second*3, time.Millisecond*10)
 }
 
@@ -498,6 +490,8 @@ func TestWorkerGracefulExitWhileTimeout(t *testing.T) {
 }
 
 func TestCloseBeforeInit(t *testing.T) {
+	t.Parallel()
+
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -506,6 +500,73 @@ func TestCloseBeforeInit(t *testing.T) {
 	worker.On("CloseImpl").Return(nil)
 	err := worker.Close(ctx)
 	require.NoError(t, err)
+}
+
+func TestExitWithoutReturn(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	worker := newMockWorkerImpl(workerID1, masterName)
+	worker.clock = clock.NewMock()
+	worker.clock.(*clock.Mock).Set(time.Now())
+	putMasterMeta(ctx, t, worker.metaClient, &libModel.MasterMetaKVData{
+		ID:         masterName,
+		NodeID:     masterNodeName,
+		Epoch:      1,
+		StatusCode: libModel.MasterStatusInit,
+	})
+
+	worker.On("InitImpl", mock.Anything).Return(nil)
+	worker.On("Status").Return(libModel.WorkerStatus{
+		Code: libModel.WorkerStatusNormal,
+	}, nil)
+
+	err := worker.Init(ctx)
+	require.NoError(t, err)
+
+	worker.On("Tick", mock.Anything).Return(nil)
+
+	worker.DefaultBaseWorker.Exit(ctx, libModel.WorkerStatus{
+		Code: libModel.WorkerStatusFinished,
+	}, errors.New("Exit error"))
+
+	for {
+		err := worker.Poll(ctx)
+		require.NoError(t, err)
+
+		// Make the heartbeat worker tick.
+		worker.clock.(*clock.Mock).Add(time.Second)
+
+		rawMsg, ok := worker.messageSender.TryPop(masterNodeName, libModel.HeartbeatPingTopic(masterName))
+		if !ok {
+			continue
+		}
+		msg := rawMsg.(*libModel.HeartbeatPingMessage)
+		if msg.IsFinished {
+			pongMsg := &libModel.HeartbeatPongMessage{
+				SendTime:   msg.SendTime,
+				ReplyTime:  time.Now(),
+				ToWorkerID: workerID1,
+				Epoch:      1,
+				IsFinished: true,
+			}
+
+			err := worker.messageHandlerManager.InvokeHandler(
+				t,
+				libModel.HeartbeatPongTopic(masterName, workerID1),
+				masterNodeName,
+				pongMsg,
+			)
+			require.NoError(t, err)
+			break
+		}
+	}
+
+	err = worker.Poll(ctx)
+	require.Error(t, err)
+	require.Regexp(t, ".*worker finished.*", err)
 }
 
 func checkWorkerStatusMsg(t *testing.T, expect, msg *statusutil.WorkerStatusMessage) {

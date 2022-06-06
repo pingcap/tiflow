@@ -27,8 +27,8 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/engine/client"
+	pb "github.com/pingcap/tiflow/engine/enginepb"
 	libModel "github.com/pingcap/tiflow/engine/lib/model"
-	"github.com/pingcap/tiflow/engine/pb"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/deps"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/broker"
@@ -46,6 +46,7 @@ type MockMasterImpl struct {
 	*DefaultBaseMaster
 	masterID libModel.MasterID
 	id       libModel.MasterID
+	tp       libModel.WorkerType
 
 	tickCount         atomic.Int64
 	onlineWorkerCount atomic.Int64
@@ -128,7 +129,9 @@ func (m *MockMasterImpl) Reset() {
 	m.DefaultBaseMaster = NewBaseMaster(
 		ctx,
 		m,
-		m.id).(*DefaultBaseMaster)
+		m.id,
+		m.tp,
+	).(*DefaultBaseMaster)
 }
 
 // TickCount returns tick invoke time

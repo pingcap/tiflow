@@ -19,13 +19,15 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/errors"
 	"go.uber.org/zap"
 
+	"github.com/pingcap/tiflow/dm/pkg/log"
 	libModel "github.com/pingcap/tiflow/engine/lib/model"
 	derrors "github.com/pingcap/tiflow/engine/pkg/errors"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/storagecfg"
+	"github.com/pingcap/tiflow/pkg/fsutil"
 )
 
 // LocalFileManager manages the local files resources stored in
@@ -54,8 +56,8 @@ func NewLocalFileManager(config storagecfg.LocalFileConfig) *LocalFileManager {
 func (m *LocalFileManager) CreateResource(
 	creator libModel.WorkerID,
 	resName resModel.ResourceName,
-) (*resModel.LocalFileResourceDescriptor, error) {
-	res := &resModel.LocalFileResourceDescriptor{
+) (*LocalFileResourceDescriptor, error) {
+	res := &LocalFileResourceDescriptor{
 		BasePath:     m.config.BaseDir,
 		Creator:      creator,
 		ResourceName: resName,
@@ -72,8 +74,8 @@ func (m *LocalFileManager) CreateResource(
 func (m *LocalFileManager) GetPersistedResource(
 	creator libModel.WorkerID,
 	resName resModel.ResourceName,
-) (*resModel.LocalFileResourceDescriptor, error) {
-	res := &resModel.LocalFileResourceDescriptor{
+) (*LocalFileResourceDescriptor, error) {
+	res := &LocalFileResourceDescriptor{
 		BasePath:     m.config.BaseDir,
 		Creator:      creator,
 		ResourceName: resName,
@@ -121,19 +123,27 @@ func (m *LocalFileManager) RemoveTemporaryFiles(creator libModel.WorkerID) error
 	}
 
 	// Iterates over all resources created by `creator`.
-	err := iterOverResourceDirectories(creatorResourcePath, func(resourceID string) error {
-		if m.isPersisted(creator, resourceID) {
+	err := iterOverResourceDirectories(creatorResourcePath, func(filePath string) error {
+		resName, err := filePathNameToResourceName(filePath)
+		if err != nil {
+			return err
+		}
+
+		if m.isPersisted(creator, resName) {
 			// Persisted resources are skipped, as they are NOT temporary.
 			return nil
 		}
 
-		fullPath := filepath.Join(m.config.BaseDir, creator, resourceID)
+		fullPath := filepath.Join(
+			m.config.BaseDir,
+			creator,
+			resourceNameToFilePathName(resName))
 		if err := os.RemoveAll(fullPath); err != nil {
 			return derrors.ErrCleaningLocalTempFiles.Wrap(err)
 		}
 
 		log.L().Info("temporary resource is removed",
-			zap.String("resource-id", resourceID),
+			zap.String("resource-name", resName),
 			zap.String("full-path", fullPath))
 		return nil
 	})
@@ -151,8 +161,15 @@ func (m *LocalFileManager) RemoveResource(creator libModel.WorkerID, resName res
 			zap.String("resource-name", resName))
 	}
 
-	resourcePath := filepath.Join(m.config.BaseDir, creator, resName)
-	if _, err := os.Stat(resourcePath); err != nil {
+	// filePath is the path for the resource directory on the local
+	// file system. Note that the dataflow engine only manages file
+	// resources on the directory level, so that business logic using
+	// brStorage.ExternalStorage can be compatible.
+	filePath := localPathWithEncoding(
+		m.config.BaseDir,
+		creator,
+		resName)
+	if _, err := os.Stat(filePath); err != nil {
 		if os.IsNotExist(err) {
 			log.L().Info("Trying to remove non-existing resource",
 				zap.String("creator", creator),
@@ -163,7 +180,7 @@ func (m *LocalFileManager) RemoveResource(creator libModel.WorkerID, resName res
 	}
 
 	// Note that the resourcePath is actually a directory.
-	if err := os.RemoveAll(resourcePath); err != nil {
+	if err := os.RemoveAll(filePath); err != nil {
 		return derrors.ErrRemovingLocalResource.Wrap(err)
 	}
 
@@ -239,5 +256,31 @@ func iterOverResourceDirectories(path string, fn func(relPath string) error) err
 			return err
 		}
 	}
+	return nil
+}
+
+// PreCheckConfig does a preflight check on the executor's storage configurations.
+func PreCheckConfig(config storagecfg.Config) error {
+	baseDir := config.Local.BaseDir
+
+	if _, err := os.Stat(baseDir); os.IsNotExist(err) {
+		log.L().Info("Configured local file directory does not existing, try to create one",
+			zap.String("dir", baseDir))
+		if err := os.MkdirAll(baseDir, 0o700); err != nil {
+			return errors.Annotate(err, "engine: failed to create local file directory")
+		}
+	}
+
+	if err := fsutil.IsDirReadWritable(baseDir); err != nil {
+		return derrors.ErrLocalFileDirNotWritable.GenWithStackByArgs()
+	}
+
+	diskInfo, err := fsutil.GetDiskInfo(baseDir)
+	if err != nil {
+		return errors.Annotate(err, "engine: check local file directory failed")
+	}
+	log.L().Info("Local file directory disk info", zap.Any("disk-info", diskInfo))
+
+	// TODO implement a minimum disk space threshold.
 	return nil
 }

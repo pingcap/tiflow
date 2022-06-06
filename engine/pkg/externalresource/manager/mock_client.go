@@ -19,9 +19,8 @@ import (
 	"github.com/stretchr/testify/mock"
 	"google.golang.org/grpc"
 
+	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
-
-	"github.com/pingcap/tiflow/engine/pb"
 )
 
 var _ pb.ResourceManagerClient = &MockClient{}

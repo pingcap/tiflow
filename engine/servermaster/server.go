@@ -27,7 +27,6 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	p2pProtocol "github.com/pingcap/tiflow/proto/p2p"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.etcd.io/etcd/client/v3/concurrency"
 	"go.etcd.io/etcd/server/v3/embed"
@@ -40,22 +39,25 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/pingcap/tiflow/engine/client"
+	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/lib"
 	"github.com/pingcap/tiflow/engine/lib/metadata"
 	libModel "github.com/pingcap/tiflow/engine/lib/model"
 	"github.com/pingcap/tiflow/engine/model"
-	"github.com/pingcap/tiflow/engine/pb"
 	"github.com/pingcap/tiflow/engine/pkg/adapter"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/deps"
 	derrors "github.com/pingcap/tiflow/engine/pkg/errors"
 	"github.com/pingcap/tiflow/engine/pkg/etcdutils"
 	externRescManager "github.com/pingcap/tiflow/engine/pkg/externalresource/manager"
+	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
+	"github.com/pingcap/tiflow/engine/pkg/externalresource/resourcetypes"
 	extkv "github.com/pingcap/tiflow/engine/pkg/meta/extension"
 	"github.com/pingcap/tiflow/engine/pkg/meta/kvclient"
 	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
+	"github.com/pingcap/tiflow/engine/pkg/promutil"
 	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
 	"github.com/pingcap/tiflow/engine/pkg/serverutils"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
@@ -92,7 +94,10 @@ type Server struct {
 	resourceManagerService *externRescManager.Service
 	scheduler              *scheduler.Scheduler
 
-	//
+	// file resource GC
+	gcRunner      externRescManager.GCRunner
+	gcCoordinator externRescManager.GCCoordinator
+
 	cfg     *Config
 	info    *model.NodeInfo
 	metrics *serverMasterMetric
@@ -447,8 +452,6 @@ func (s *Server) Run(ctx context.Context) (err error) {
 		return s.startForTest(ctx)
 	}
 
-	registerMetrics()
-
 	err = s.registerMetaStore()
 	if err != nil {
 		return err
@@ -570,7 +573,7 @@ func (s *Server) startGrpcSrv(ctx context.Context) (err error) {
 
 	httpHandlers := map[string]http.Handler{
 		"/debug/":  getDebugHandler(),
-		"/metrics": promhttp.Handler(),
+		"/metrics": promutil.HTTPHandlerForMetric(),
 	}
 
 	// generate grpcServer
@@ -667,6 +670,7 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 	defer func() {
 		s.resourceManagerService.Stop()
 	}()
+
 	clients := client.NewClientManager()
 	err = clients.AddMasterClient(ctx, []string{s.cfg.MasterAddr})
 	if err != nil {
@@ -675,9 +679,10 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 	dctx := dcontext.NewContext(ctx, log.L())
 	dctx.Environ.Addr = s.cfg.AdvertiseAddr
 	dctx.Environ.NodeID = s.name()
+	dctx.ProjectInfo = tenant.FrameProjectInfo
 
 	masterMeta := &libModel.MasterMetaKVData{
-		ProjectID: tenant.FrameTenantID,
+		ProjectID: tenant.FrameProjectInfo.UniqueID(),
 		ID:        metadata.JobManagerUUID,
 		Tp:        lib.JobManager,
 		// TODO: add other infos
@@ -749,6 +754,27 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 		}
 	}()
 	s.leaderInitialized.Store(true)
+
+	s.gcRunner = externRescManager.NewGCRunner(s.frameMetaClient, map[resModel.ResourceType]externRescManager.GCHandlerFunc{
+		"local": resourcetypes.NewLocalFileResourceType(clients).GCHandler(),
+	})
+	s.gcCoordinator = externRescManager.NewGCCoordinator(s.executorManager, s.jobManager, s.frameMetaClient, s.gcRunner)
+
+	// TODO refactor this method to make it more readable and maintainable.
+	errg, errgCtx := errgroup.WithContext(ctx)
+	defer func() {
+		err := errg.Wait()
+		if err != nil {
+			log.L().Error("resource GC exited with error", zap.Error(err))
+		}
+	}()
+
+	errg.Go(func() error {
+		return s.gcRunner.Run(errgCtx)
+	})
+	errg.Go(func() error {
+		return s.gcCoordinator.Run(errgCtx)
+	})
 
 	metricTicker := time.NewTicker(defaultMetricInterval)
 	defer metricTicker.Stop()

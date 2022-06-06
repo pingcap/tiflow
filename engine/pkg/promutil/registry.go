@@ -16,10 +16,11 @@ package promutil
 import (
 	"sync"
 
-	libModel "github.com/pingcap/tiflow/engine/lib/model"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
 	dto "github.com/prometheus/client_model/go"
+
+	libModel "github.com/pingcap/tiflow/engine/lib/model"
 )
 
 var _ prometheus.Gatherer = globalMetricGatherer
@@ -33,13 +34,14 @@ var (
 
 func init() {
 	globalMetricRegistry.MustRegister(systemID, collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
-	globalMetricRegistry.MustRegister(systemID, collectors.NewGoCollector())
+	globalMetricRegistry.MustRegister(systemID, collectors.NewGoCollector(
+		collectors.WithGoCollections(collectors.GoRuntimeMemStatsCollection|collectors.GoRuntimeMetricsCollection)))
 }
 
 // Registry is used for registering metric
 type Registry struct {
-	sync.Mutex
-	*prometheus.Registry
+	mu       sync.Mutex
+	registry *prometheus.Registry
 
 	// collectorByWorker is for cleaning all collectors for specific worker(jobmaster/worker)
 	collectorByWorker map[libModel.WorkerID][]prometheus.Collector
@@ -48,7 +50,7 @@ type Registry struct {
 // NewRegistry return a new Registry
 func NewRegistry() *Registry {
 	return &Registry{
-		Registry:          prometheus.NewRegistry(),
+		registry:          prometheus.NewRegistry(),
 		collectorByWorker: make(map[libModel.WorkerID][]prometheus.Collector),
 	}
 }
@@ -58,10 +60,10 @@ func (r *Registry) MustRegister(workerID libModel.WorkerID, c prometheus.Collect
 	if c == nil {
 		return
 	}
-	r.Lock()
-	defer r.Unlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
 
-	r.Registry.MustRegister(c)
+	r.registry.MustRegister(c)
 
 	var (
 		cls    []prometheus.Collector
@@ -77,13 +79,13 @@ func (r *Registry) MustRegister(workerID libModel.WorkerID, c prometheus.Collect
 
 // Unregister unregisters all Collectors of the specified worker
 func (r *Registry) Unregister(workerID libModel.WorkerID) {
-	r.Lock()
-	defer r.Unlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
 
 	cls, exists := r.collectorByWorker[workerID]
 	if exists {
 		for _, collector := range cls {
-			r.Registry.Unregister(collector)
+			r.registry.Unregister(collector)
 		}
 		delete(r.collectorByWorker, workerID)
 	}
@@ -92,5 +94,66 @@ func (r *Registry) Unregister(workerID libModel.WorkerID) {
 // Gather implements Gatherer interface
 func (r *Registry) Gather() ([]*dto.MetricFamily, error) {
 	// NOT NEED lock here. prometheus.Registry has thread-safe methods
-	return r.Registry.Gather()
+	return r.registry.Gather()
+}
+
+// AutoRegisterFactory uses inner Factory to create metrics and register metrics
+// to Registry with id. Panic if it can't register successfully.
+type AutoRegisterFactory struct {
+	inner Factory
+	r     *Registry
+	// ID identify the worker(jobmaster/worker) the factory owns
+	// It's used to unregister all collectors when worker exits normally or commits suicide
+	id libModel.WorkerID
+}
+
+// NewAutoRegisterFactory creates an AutoRegisterFactory.
+func NewAutoRegisterFactory(f Factory, r *Registry, id libModel.WorkerID) Factory {
+	return &AutoRegisterFactory{
+		inner: f,
+		r:     r,
+		id:    id,
+	}
+}
+
+// NewCounter implements Factory.NewCounter.
+func (f *AutoRegisterFactory) NewCounter(opts prometheus.CounterOpts) prometheus.Counter {
+	c := f.inner.NewCounter(opts)
+	f.r.MustRegister(f.id, c)
+	return c
+}
+
+// NewCounterVec implements Factory.NewCounterVec.
+func (f *AutoRegisterFactory) NewCounterVec(opts prometheus.CounterOpts, labelNames []string) *prometheus.CounterVec {
+	c := f.inner.NewCounterVec(opts, labelNames)
+	f.r.MustRegister(f.id, c)
+	return c
+}
+
+// NewGauge implements Factory.NewGauge.
+func (f *AutoRegisterFactory) NewGauge(opts prometheus.GaugeOpts) prometheus.Gauge {
+	c := f.inner.NewGauge(opts)
+	f.r.MustRegister(f.id, c)
+	return c
+}
+
+// NewGaugeVec implements Factory.NewGaugeVec.
+func (f *AutoRegisterFactory) NewGaugeVec(opts prometheus.GaugeOpts, labelNames []string) *prometheus.GaugeVec {
+	c := f.inner.NewGaugeVec(opts, labelNames)
+	f.r.MustRegister(f.id, c)
+	return c
+}
+
+// NewHistogram implements Factory.NewHistogram.
+func (f *AutoRegisterFactory) NewHistogram(opts prometheus.HistogramOpts) prometheus.Histogram {
+	c := f.inner.NewHistogram(opts)
+	f.r.MustRegister(f.id, c)
+	return c
+}
+
+// NewHistogramVec implements Factory.NewHistogramVec.
+func (f *AutoRegisterFactory) NewHistogramVec(opts prometheus.HistogramOpts, labelNames []string) *prometheus.HistogramVec {
+	c := f.inner.NewHistogramVec(opts, labelNames)
+	f.r.MustRegister(f.id, c)
+	return c
 }

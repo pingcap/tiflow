@@ -16,15 +16,17 @@ package fake
 import (
 	"context"
 	"encoding/json"
+	"net/http"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
 
+	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/engine/executor/worker"
 	"github.com/pingcap/tiflow/engine/lib"
 	libModel "github.com/pingcap/tiflow/engine/lib/model"
@@ -55,9 +57,10 @@ type Config struct {
 	WorkerCount int    `json:"worker-count"`
 	TargetTick  int    `json:"target-tick"`
 
-	EtcdWatchEnable bool     `json:"etcd-watch-enable"`
-	EtcdEndpoints   []string `json:"etcd-endpoints"`
-	EtcdWatchPrefix string   `json:"etcd-watch-prefix"`
+	EtcdWatchEnable   bool     `json:"etcd-watch-enable"`
+	EtcdEndpoints     []string `json:"etcd-endpoints"`
+	EtcdWatchPrefix   string   `json:"etcd-watch-prefix"`
+	EtcdStartRevision int64    `json:"etcd-start-revision"`
 
 	InjectErrorInterval time.Duration `json:"inject-error-interval"`
 }
@@ -89,7 +92,7 @@ func zeroWorkerCheckpoint() workerCheckpoint {
 	return workerCheckpoint{}
 }
 
-var _ lib.BaseJobMaster = (*Master)(nil)
+var _ lib.JobMasterImpl = (*Master)(nil)
 
 // Master defines the job master implementation of fake job.
 type Master struct {
@@ -122,12 +125,6 @@ type Master struct {
 type businessStatus struct {
 	sync.RWMutex
 	status map[libModel.WorkerID]*dummyWorkerStatus
-}
-
-// OnJobManagerFailover implements JobMasterImpl.OnJobManagerFailover
-func (m *Master) OnJobManagerFailover(reason lib.MasterFailoverReason) error {
-	log.L().Info("FakeMaster: OnJobManagerFailover", zap.Any("reason", reason))
-	return nil
 }
 
 // OnJobManagerMessage implements JobMasterImpl.OnJobManagerMessage
@@ -173,6 +170,13 @@ func (m *Master) OnJobManagerMessage(topic p2p.Topic, message p2p.MessageValue) 
 	return nil
 }
 
+// OnOpenAPIInitialized implements JobMasterImpl.OnOpenAPIInitialized.
+func (m *Master) OnOpenAPIInitialized(apiGroup *gin.RouterGroup) {
+	apiGroup.Any("/*any", func(c *gin.Context) {
+		c.String(http.StatusOK, "FakeMaster: Success")
+	})
+}
+
 // IsJobMasterImpl implements JobMasterImpl.IsJobMasterImpl
 func (m *Master) IsJobMasterImpl() {
 	panic("unreachable")
@@ -211,6 +215,8 @@ func (m *Master) createWorker(wcfg *WorkerConfig) error {
 func (m *Master) initWorkers() error {
 	m.workerListMu.Lock()
 	defer m.workerListMu.Unlock()
+	checkpoint := zeroWorkerCheckpoint()
+	checkpoint.Revision = m.config.EtcdStartRevision
 OUT:
 	for i, handle := range m.workerList {
 		if handle == nil {
@@ -219,7 +225,7 @@ OUT:
 					continue OUT
 				}
 			}
-			wcfg := m.genWorkerConfig(i, zeroWorkerCheckpoint())
+			wcfg := m.genWorkerConfig(i, checkpoint)
 			err := m.createWorker(wcfg)
 			if err != nil {
 				return err
@@ -229,7 +235,7 @@ OUT:
 	return nil
 }
 
-func (m *Master) tickedCheckWorkers(ctx context.Context) error {
+func (m *Master) failoverOnMasterRecover(ctx context.Context) error {
 	m.workerListMu.Lock()
 	defer m.workerListMu.Unlock()
 
@@ -242,17 +248,21 @@ func (m *Master) tickedCheckWorkers(ctx context.Context) error {
 			return nil
 		}
 		m.initialized = true
+
+		// clean tombstone workers, add active workers
 		for _, worker := range m.GetWorkers() {
 			if worker.GetTombstone() != nil {
+				if err := worker.GetTombstone().CleanTombstone(ctx); err != nil {
+					return errors.Trace(err)
+				}
 				continue
 			}
 			var businessID int
 			if _, ok := m.workerID2BusinessID[worker.ID()]; ok {
 				businessID = m.workerID2BusinessID[worker.ID()]
 			} else {
-				// worker status could have not been updated
 				if worker.Status().ExtBytes == nil {
-					continue
+					return errors.Errorf("worker %s status not updated", worker.ID())
 				}
 				ws, err := parseExtBytes(worker.Status().ExtBytes)
 				if err != nil {
@@ -265,6 +275,7 @@ func (m *Master) tickedCheckWorkers(ctx context.Context) error {
 				m.workerList[businessID] = worker
 			}
 		}
+
 		// load checkpoint if it exists
 		ckpt := &Checkpoint{}
 		resp, metaErr := m.MetaKVClient().Get(ctx, CheckpointKey(m.workerID))
@@ -277,6 +288,7 @@ func (m *Master) tickedCheckWorkers(ctx context.Context) error {
 				}
 			}
 		}
+
 		for i, worker := range m.workerList {
 			// create new worker for non-active worker
 			if worker == nil {
@@ -287,6 +299,9 @@ func (m *Master) tickedCheckWorkers(ctx context.Context) error {
 				if etcdCkpt, ok := ckpt.Checkpoints[i]; ok {
 					workerCkpt.Revision = etcdCkpt.Revision
 					workerCkpt.MvccCount = etcdCkpt.MvccCount
+					workerCkpt.Value = etcdCkpt.Value
+				} else {
+					workerCkpt.Revision = m.config.EtcdStartRevision
 				}
 				wcfg := m.genWorkerConfig(i, workerCkpt)
 				if err := m.createWorker(wcfg); err != nil {
@@ -295,6 +310,18 @@ func (m *Master) tickedCheckWorkers(ctx context.Context) error {
 			}
 		}
 	}
+
+	return nil
+}
+
+func (m *Master) tickedCheckWorkers(ctx context.Context) error {
+	err := m.failoverOnMasterRecover(ctx)
+	if err != nil {
+		return err
+	}
+
+	m.workerListMu.Lock()
+	defer m.workerListMu.Unlock()
 
 	// load worker status from Status API
 	for _, worker := range m.workerList {
@@ -362,6 +389,7 @@ func (m *Master) Tick(ctx context.Context) error {
 // OnMasterRecovered implements MasterImpl.OnMasterRecovered
 func (m *Master) OnMasterRecovered(ctx context.Context) error {
 	log.L().Info("FakeMaster: OnMasterRecovered")
+	// all failover tasks will be executed in failoverOnMasterRecover in Tick
 	return nil
 }
 
@@ -396,21 +424,15 @@ func (m *Master) OnWorkerOnline(worker lib.WorkerHandle) error {
 
 // OnWorkerOffline implements MasterImpl.OnWorkerOffline
 func (m *Master) OnWorkerOffline(worker lib.WorkerHandle, reason error) error {
-	index := -1
+	log.L().Info("FakeMaster: OnWorkerOffline",
+		zap.String("worker-id", worker.ID()), zap.Error(reason))
+
 	m.workerListMu.Lock()
-	for i, handle := range m.workerList {
-		if handle == nil {
-			continue
-		}
-		if handle.ID() == worker.ID() {
-			index = i
-			m.workerList[i] = nil
-			break
-		}
-	}
+	businessID, ok := m.workerID2BusinessID[worker.ID()]
+	m.workerList[businessID] = nil
 	m.workerListMu.Unlock()
-	if index < 0 {
-		return errors.Errorf("worker(%s) is not found in worker list", worker.ID())
+	if !ok {
+		return errors.Errorf("worker(%s) is not found in business id map", worker.ID())
 	}
 
 	m.bStatus.Lock()
@@ -419,23 +441,23 @@ func (m *Master) OnWorkerOffline(worker lib.WorkerHandle, reason error) error {
 
 	if derrors.ErrWorkerFinish.Equal(reason) {
 		log.L().Info("FakeMaster: OnWorkerOffline: worker finished", zap.String("worker-id", worker.ID()))
-		m.finishedSet[worker.ID()] = index
+		m.finishedSet[worker.ID()] = businessID
 		return nil
 	}
 
-	log.L().Info("FakeMaster: OnWorkerOffline",
-		zap.String("worker-id", worker.ID()), zap.Error(reason))
 	workerCkpt := zeroWorkerCheckpoint()
 	if ws, err := parseExtBytes(worker.Status().ExtBytes); err != nil {
 		log.L().Warn("failed to parse worker ext bytes", zap.Error(err))
+		workerCkpt.Revision = m.config.EtcdStartRevision
 	} else {
 		workerCkpt.Tick = ws.Tick
 		if ws.Checkpoint != nil {
 			workerCkpt.Revision = ws.Checkpoint.Revision
 			workerCkpt.MvccCount = ws.Checkpoint.MvccCount
+			workerCkpt.Value = ws.Checkpoint.Value
 		}
 	}
-	wcfg := m.genWorkerConfig(index, workerCkpt)
+	wcfg := m.genWorkerConfig(businessID, workerCkpt)
 	m.workerListMu.Lock()
 	defer m.workerListMu.Unlock()
 	return m.createWorker(wcfg)
@@ -460,12 +482,6 @@ func (m *Master) OnWorkerStatusUpdated(worker lib.WorkerHandle, newStatus *libMo
 // CloseImpl implements MasterImpl.CloseImpl
 func (m *Master) CloseImpl(ctx context.Context) error {
 	log.L().Info("FakeMaster: Close", zap.Stack("stack"))
-	return nil
-}
-
-// OnMasterFailover implements MasterImpl.OnMasterFailover
-func (m *Master) OnMasterFailover(reason lib.MasterFailoverReason) error {
-	log.L().Info("FakeMaster: OnMasterFailover", zap.Stack("stack"))
 	return nil
 }
 

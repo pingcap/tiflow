@@ -16,15 +16,12 @@ package executor
 import (
 	"context"
 	"encoding/json"
+	"net/http"
+	"net/http/pprof"
 	"strings"
 	"time"
 
 	pcErrors "github.com/pingcap/errors"
-	"github.com/pingcap/tiflow/dm/pkg/log"
-	p2pImpl "github.com/pingcap/tiflow/pkg/p2p"
-	"github.com/pingcap/tiflow/pkg/retry"
-	"github.com/pingcap/tiflow/pkg/security"
-	"github.com/pingcap/tiflow/pkg/tcpserver"
 	"go.etcd.io/etcd/client/pkg/v3/logutil"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/zap"
@@ -36,12 +33,15 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/pingcap/tiflow/dm/dm/common"
+	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/engine/client"
+	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/executor/worker"
+	"github.com/pingcap/tiflow/engine/lib"
 	libModel "github.com/pingcap/tiflow/engine/lib/model"
 	"github.com/pingcap/tiflow/engine/lib/registry"
 	"github.com/pingcap/tiflow/engine/model"
-	"github.com/pingcap/tiflow/engine/pb"
 	"github.com/pingcap/tiflow/engine/pkg/config"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/deps"
@@ -53,10 +53,16 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
+	"github.com/pingcap/tiflow/engine/pkg/promutil"
 	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
 	"github.com/pingcap/tiflow/engine/pkg/serverutils"
+	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	"github.com/pingcap/tiflow/engine/test"
 	"github.com/pingcap/tiflow/engine/test/mock"
+	p2pImpl "github.com/pingcap/tiflow/pkg/p2p"
+	"github.com/pingcap/tiflow/pkg/retry"
+	"github.com/pingcap/tiflow/pkg/security"
+	"github.com/pingcap/tiflow/pkg/tcpserver"
 )
 
 // Server is a executor server abstraction
@@ -88,6 +94,7 @@ type Server struct {
 	p2pMsgRouter    p2pImpl.MessageRouter
 	discoveryKeeper *serverutils.DiscoveryKeepaliver
 	resourceBroker  broker.Broker
+	jobAPISrv       *jobAPIServer
 }
 
 // NewServer creates a new executor server instance
@@ -96,6 +103,7 @@ func NewServer(cfg *Config, ctx *test.Context) *Server {
 		cfg:         cfg,
 		testCtx:     ctx,
 		cliUpdateCh: make(chan cliUpdateInfo),
+		jobAPISrv:   newJobAPIServer(),
 	}
 	return &s
 }
@@ -156,6 +164,7 @@ func (s *Server) buildDeps() (*deps.Deps, error) {
 
 func (s *Server) makeTask(
 	ctx context.Context,
+	projectInfo *pb.ProjectInfo,
 	workerID libModel.WorkerID,
 	masterID libModel.MasterID,
 	workerType libModel.WorkerType,
@@ -169,13 +178,14 @@ func (s *Server) makeTask(
 	dctx = dctx.WithDeps(dp)
 	dctx.Environ.NodeID = p2p.NodeID(s.info.ID)
 	dctx.Environ.Addr = s.info.Addr
+	dctx.ProjectInfo = tenant.NewProjectInfo(projectInfo.GetTenantId(), projectInfo.GetProjectId())
 
 	// NOTICE: only take effect when job type is job master
 	masterMeta := &libModel.MasterMetaKVData{
-		// TODO: ProjectID
-		ID:     workerID,
-		Tp:     workerType,
-		Config: workerConfig,
+		ProjectID: dctx.ProjectInfo.UniqueID(),
+		ID:        workerID,
+		Tp:        workerType,
+		Config:    workerConfig,
 	}
 	metaBytes, err := masterMeta.Marshal()
 	if err != nil {
@@ -193,6 +203,10 @@ func (s *Server) makeTask(
 		log.L().Error("Failed to create worker", zap.Error(err))
 		return nil, err
 	}
+	if jm, ok := newWorker.(lib.BaseJobMasterExt); ok {
+		jobID := newWorker.ID()
+		s.jobAPISrv.initialize(jobID, jm.TriggerOpenAPIInitialize)
+	}
 	return newWorker, nil
 }
 
@@ -200,6 +214,7 @@ func (s *Server) makeTask(
 func (s *Server) PreDispatchTask(ctx context.Context, req *pb.PreDispatchTaskRequest) (*pb.PreDispatchTaskResponse, error) {
 	task, err := s.makeTask(
 		ctx,
+		req.GetProjectInfo(),
 		req.GetWorkerId(),
 		req.GetMasterId(),
 		libModel.WorkerType(req.GetTaskTypeId()),
@@ -325,8 +340,6 @@ func (s *Server) Run(ctx context.Context) error {
 		return s.startForTest(ctx)
 	}
 
-	registerMetrics()
-
 	wg, ctx := errgroup.WithContext(ctx)
 	s.taskRunner = worker.NewTaskRunner(defaultRuntimeIncomingQueueLen, defaultRuntimeInitConcurrency)
 	s.taskCommitter = worker.NewTaskCommitter(s.taskRunner, defaultTaskPreDispatchRequestTTL)
@@ -338,6 +351,12 @@ func (s *Server) Run(ctx context.Context) error {
 		return s.taskRunner.Run(ctx)
 	})
 
+	wg.Go(func() error {
+		taskStopReceiver := s.taskRunner.TaskStopReceiver()
+		defer taskStopReceiver.Close()
+		return s.jobAPISrv.listenStoppedJobs(ctx, taskStopReceiver.C)
+	})
+
 	err := s.initClients(ctx)
 	if err != nil {
 		return err
@@ -347,9 +366,13 @@ func (s *Server) Run(ctx context.Context) error {
 		return err
 	}
 
+	if err := broker.PreCheckConfig(s.cfg.Storage); err != nil {
+		return err
+	}
+
 	// TODO: make the prefix configurable later
 	s.resourceBroker = broker.NewBroker(
-		&storagecfg.Config{Local: &storagecfg.LocalFileConfig{BaseDir: "./"}},
+		&storagecfg.Config{Local: storagecfg.LocalFileConfig{BaseDir: "./"}},
 		s.info.ID,
 		s.resourceClient)
 
@@ -407,6 +430,7 @@ func (s *Server) startTCPService(ctx context.Context, wg *errgroup.Group) error 
 	}
 	s.tcpServer = tcpServer
 	pb.RegisterExecutorServer(s.grpcSrv, s)
+	pb.RegisterBrokerServiceServer(s.grpcSrv, s.resourceBroker)
 	log.L().Logger.Info("listen address", zap.String("addr", s.cfg.WorkerAddr))
 
 	wg.Go(func() error {
@@ -418,7 +442,24 @@ func (s *Server) startTCPService(ctx context.Context, wg *errgroup.Group) error 
 	})
 
 	wg.Go(func() error {
-		return httpHandler(s.tcpServer.HTTP1Listener())
+		mux := http.NewServeMux()
+
+		mux.HandleFunc("/debug/pprof/", pprof.Index)
+		mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
+		mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
+		mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+		mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
+		mux.Handle("/metrics", promutil.HTTPHandlerForMetric())
+		mux.Handle(jobAPIPrefix, s.jobAPISrv)
+
+		httpSrv := &http.Server{
+			Handler: mux,
+		}
+		err := httpSrv.Serve(s.tcpServer.HTTP1Listener())
+		if err != nil && !common.IsErrNetClosing(err) && err != http.ErrServerClosed {
+			log.L().Error("http server returned", log.ShortError(err))
+		}
+		return err
 	})
 	return nil
 }

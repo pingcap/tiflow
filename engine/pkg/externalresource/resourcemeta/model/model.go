@@ -16,10 +16,9 @@ package model
 import (
 	"path"
 	"strings"
-	"time"
 
+	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/model"
-	"github.com/pingcap/tiflow/engine/pb"
 	derror "github.com/pingcap/tiflow/engine/pkg/errors"
 	ormModel "github.com/pingcap/tiflow/engine/pkg/orm/model"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
@@ -56,7 +55,11 @@ type ResourceMeta struct {
 	Job       JobID            `json:"job" gorm:"column:job_id;type:varchar(64) not null;index:idx_rji,priority:1"`
 	Worker    WorkerID         `json:"worker" gorm:"column:worker_id;type:varchar(64) not null"`
 	Executor  ExecutorID       `json:"executor" gorm:"column:executor_id;type:varchar(64) not null;index:idx_rei,priority:1"`
-	Deleted   bool             `json:"deleted" gorm:"column:deleted;type:BOOLEAN"`
+	GCPending bool             `json:"gc-pending" gorm:"column:gc_pending;type:BOOLEAN"`
+
+	// TODO soft delete has not be implemented, because it requires modifying too many
+	// unit tests in engine/pkg/orm
+	Deleted bool `json:"deleted" gorm:"column:deleted;type:BOOLEAN"`
 }
 
 // GetID implements dataset.DataEntry
@@ -83,13 +86,6 @@ func (m *ResourceMeta) Map() map[string]interface{} {
 		"executor_id": m.Executor,
 		"deleted":     m.Deleted,
 	}
-}
-
-// GCTodoEntry records a future need for GC'ing a resource.
-type GCTodoEntry struct {
-	ID           ResourceID `json:"id"`
-	Job          JobID      `json:"job"`
-	TargetGCTime time.Time  `json:"target_gc_time"`
 }
 
 // ResourceType represents the type of the resource

@@ -16,6 +16,7 @@ package orm
 import (
 	"context"
 	"database/sql"
+	gerrors "errors"
 	"fmt"
 	"time"
 
@@ -121,16 +122,20 @@ type ResourceClient interface {
 	QueryResources(ctx context.Context) ([]*resourcemeta.ResourceMeta, error)
 	QueryResourcesByJobID(ctx context.Context, jobID string) ([]*resourcemeta.ResourceMeta, error)
 	QueryResourcesByExecutorID(ctx context.Context, executorID string) ([]*resourcemeta.ResourceMeta, error)
+	SetGCPending(ctx context.Context, ids []resourcemeta.ResourceID) error
+	DeleteResourcesByExecutorID(ctx context.Context, executorID string) error
+	DeleteResources(ctx context.Context, resourceIDs []string) (Result, error)
+	GetOneResourceForGC(ctx context.Context) (*resourcemeta.ResourceMeta, error)
 }
 
 // NewClient return the client to operate framework metastore
 func NewClient(mc metaclient.StoreConfigParams, conf DBConfig) (Client, error) {
-	err := createDatabaseForProject(mc, tenant.FrameTenantID, conf)
+	err := createDatabaseForProject(mc, tenant.FrameProjectInfo.UniqueID(), conf)
 	if err != nil {
 		return nil, err
 	}
 
-	dsn := generateDSNByParams(mc, tenant.FrameTenantID, conf, true)
+	dsn := generateDSNByParams(mc, tenant.FrameProjectInfo.UniqueID(), conf, true)
 	sqlDB, err := newSQLDB("mysql", dsn, conf)
 	if err != nil {
 		return nil, err
@@ -578,6 +583,16 @@ func (c *metaOpsClient) DeleteResource(ctx context.Context, resourceID string) (
 	return &ormResult{rowsAffected: result.RowsAffected}, nil
 }
 
+// DeleteResources delete the specified resources
+func (c *metaOpsClient) DeleteResources(ctx context.Context, resourceIDs []string) (Result, error) {
+	result := c.db.Where("id in ?", resourceIDs).Delete(&resourcemeta.ResourceMeta{})
+	if result.Error != nil {
+		return nil, cerrors.ErrMetaOpFail.Wrap(result.Error)
+	}
+
+	return &ormResult{rowsAffected: result.RowsAffected}, nil
+}
+
 // GetResourceByID query resource of the resource_id
 func (c *metaOpsClient) GetResourceByID(ctx context.Context, resourceID string) (*resourcemeta.ResourceMeta, error) {
 	var resource resourcemeta.ResourceMeta
@@ -619,6 +634,41 @@ func (c *metaOpsClient) QueryResourcesByExecutorID(ctx context.Context, executor
 	}
 
 	return resources, nil
+}
+
+func (c *metaOpsClient) DeleteResourcesByExecutorID(ctx context.Context, executorID string) error {
+	tx := c.db.WithContext(ctx).Where("executor_id = ?", executorID).
+		Delete(&resourcemeta.ResourceMeta{})
+	if tx.Error != nil {
+		return cerrors.ErrMetaOpFail.Wrap(tx.Error)
+	}
+	return nil
+}
+
+func (c *metaOpsClient) SetGCPending(ctx context.Context, ids []resourcemeta.ResourceID) error {
+	result := c.db.WithContext(ctx).
+		Model(&resourcemeta.ResourceMeta{}).
+		Where("id in ?", ids).
+		Update("gc_pending", true)
+	if result.Error == nil {
+		return nil
+	}
+	return cerrors.ErrMetaOpFail.Wrap(result.Error)
+}
+
+func (c *metaOpsClient) GetOneResourceForGC(ctx context.Context) (*resourcemeta.ResourceMeta, error) {
+	var ret resourcemeta.ResourceMeta
+	result := c.db.WithContext(ctx).
+		Order("updated_at asc").
+		Where("gc_pending = true").
+		First(&ret)
+	if result.Error != nil {
+		if gerrors.Is(result.Error, gorm.ErrRecordNotFound) {
+			return nil, cerrors.ErrMetaEntryNotFound.Wrap(result.Error)
+		}
+		return nil, cerrors.ErrMetaOpFail.Wrap(result.Error)
+	}
+	return &ret, nil
 }
 
 // Result defines a query result interface

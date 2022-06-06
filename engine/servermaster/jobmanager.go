@@ -18,20 +18,25 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/errors"
 	"go.uber.org/zap"
 
-	cvs "github.com/pingcap/tiflow/engine/jobmaster/cvsJob"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	pb "github.com/pingcap/tiflow/engine/enginepb"
+	cvs "github.com/pingcap/tiflow/engine/jobmaster/cvsjob"
 	"github.com/pingcap/tiflow/engine/lib"
 	"github.com/pingcap/tiflow/engine/lib/metadata"
 	libModel "github.com/pingcap/tiflow/engine/lib/model"
-	"github.com/pingcap/tiflow/engine/pb"
 	"github.com/pingcap/tiflow/engine/pkg/clock"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
+	"github.com/pingcap/tiflow/engine/pkg/ctxmu"
 	derrors "github.com/pingcap/tiflow/engine/pkg/errors"
+	resManager "github.com/pingcap/tiflow/engine/pkg/externalresource/manager"
+	"github.com/pingcap/tiflow/engine/pkg/notifier"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
-	"github.com/pingcap/tiflow/engine/pkg/uuid"
+	"github.com/pingcap/tiflow/engine/pkg/tenant"
+	"github.com/pingcap/tiflow/pkg/uuid"
 )
 
 // JobManager defines manager of job master
@@ -45,6 +50,9 @@ type JobManager interface {
 	PauseJob(ctx context.Context, req *pb.PauseJobRequest) *pb.PauseJobResponse
 
 	GetJobStatuses(ctx context.Context) (map[libModel.MasterID]libModel.MasterStatusCode, error)
+	WatchJobStatuses(
+		ctx context.Context,
+	) (resManager.JobStatusesSnapshot, *notifier.Receiver[resManager.JobStatusChangeEvent], error)
 }
 
 const defaultJobMasterCost = 1
@@ -64,11 +72,19 @@ type JobManagerImplV2 struct {
 	clocker          clock.Clock
 	frameMetaClient  pkgOrm.Client
 	tombstoneCleaned bool
+
+	// jobStatusChangeMu must be taken when we try to create, delete,
+	// pause or resume a job.
+	// NOTE The concurrency management for the JobManager is not complete
+	// yet. We are prioritizing implementing all features.
+	// TODO We might add a pending operation queue in the future.
+	jobStatusChangeMu *ctxmu.CtxMutex
+	notifier          *notifier.Notifier[resManager.JobStatusChangeEvent]
 }
 
 // PauseJob implements proto/Master.PauseJob
 func (jm *JobManagerImplV2) PauseJob(ctx context.Context, req *pb.PauseJobRequest) *pb.PauseJobResponse {
-	job := jm.JobFsm.QueryOnlineJob(req.JobIdStr)
+	job := jm.JobFsm.QueryOnlineJob(req.JobId)
 	if job == nil {
 		return &pb.PauseJobResponse{Err: &pb.Error{
 			Code: pb.ErrorCode_UnKnownJob,
@@ -92,13 +108,14 @@ func (jm *JobManagerImplV2) PauseJob(ctx context.Context, req *pb.PauseJobReques
 }
 
 // CancelJob implements proto/Master.CancelJob
+// TODO: Add Project delete logic in 'stop job'
 func (jm *JobManagerImplV2) CancelJob(ctx context.Context, req *pb.CancelJobRequest) *pb.CancelJobResponse {
 	// This is a draft implementation.
 	// TODO:
 	// (1) Handle potential race conditions.
 	// (2) Refine error handling.
 
-	job, err := jm.frameMetaClient.GetJobByID(ctx, req.GetJobIdStr())
+	job, err := jm.frameMetaClient.GetJobByID(ctx, req.GetJobId())
 	if pkgOrm.IsNotFoundError(err) {
 		return &pb.CancelJobResponse{Err: &pb.Error{
 			Code: pb.ErrorCode_UnKnownJob,
@@ -118,19 +135,40 @@ func (jm *JobManagerImplV2) CancelJob(ctx context.Context, req *pb.CancelJobRequ
 		}}
 	}
 
-	// Note that DeleteJob is a soft delete.
-	res, err := jm.frameMetaClient.DeleteJob(ctx, req.JobIdStr)
-	if err != nil {
+	if err := jm.deleteJobMeta(ctx, req.JobId); err != nil {
 		return &pb.CancelJobResponse{Err: &pb.Error{
 			Code:    pb.ErrorCode_UnknownError,
 			Message: err.Error(),
 		}}
 	}
+
+	return &pb.CancelJobResponse{}
+}
+
+func (jm *JobManagerImplV2) deleteJobMeta(ctx context.Context, jobID string) error {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	if ok := jm.jobStatusChangeMu.Lock(ctx); !ok {
+		return errors.Trace(ctx.Err())
+	}
+	defer jm.jobStatusChangeMu.Unlock()
+
+	// Note that DeleteJob is a soft delete.
+	res, err := jm.frameMetaClient.DeleteJob(ctx, jobID)
+	if err != nil {
+		return err
+	}
 	if res.RowsAffected() == 0 {
 		log.L().Warn("Job not found in meta (or already deleted)",
-			zap.Any("req", req))
+			zap.Any("job-id", jobID))
 	}
-	return &pb.CancelJobResponse{}
+
+	jm.notifier.Notify(resManager.JobStatusChangeEvent{
+		EventType: resManager.JobRemovedEvent,
+		JobID:     jobID,
+	})
+	return nil
 }
 
 // QueryJob implements proto/Master.QueryJob
@@ -172,6 +210,7 @@ func (jm *JobManagerImplV2) QueryJob(ctx context.Context, req *pb.QueryJobReques
 
 // SubmitJob processes "SubmitJobRequest".
 func (jm *JobManagerImplV2) SubmitJob(ctx context.Context, req *pb.SubmitJobRequest) *pb.SubmitJobResponse {
+	// TODO call jm.notifier.Notify when we want to support "add job" event.
 	log.L().Logger.Info("submit job", zap.String("config", string(req.Config)))
 	resp := &pb.SubmitJobResponse{}
 	var (
@@ -180,7 +219,10 @@ func (jm *JobManagerImplV2) SubmitJob(ctx context.Context, req *pb.SubmitJobRequ
 	)
 
 	meta := &libModel.MasterMetaKVData{
-		ProjectID: req.GetUser(),
+		ProjectID: tenant.NewProjectInfo(
+			req.GetProjectInfo().GetTenantId(),
+			req.GetProjectInfo().GetProjectId(),
+		).UniqueID(),
 		// TODO: we can use job name provided from user, but we must check the
 		// job name is unique before using it.
 		ID:         jm.uuidGen.NewString(),
@@ -215,6 +257,24 @@ func (jm *JobManagerImplV2) SubmitJob(ctx context.Context, req *pb.SubmitJobRequ
 		return resp
 	}
 
+	// TODO: Refine me. split the BaseMaster
+	defaultMaster, ok := jm.BaseMaster.(interface {
+		SetProjectInfo(libModel.MasterID, tenant.ProjectInfo)
+	})
+	if ok {
+		defaultMaster.SetProjectInfo(meta.ID, tenant.NewProjectInfo(
+			req.GetProjectInfo().GetTenantId(),
+			req.GetProjectInfo().GetProjectId(),
+		))
+	} else {
+		log.L().Error("jobmanager don't have the 'SetProjectInfo' interface",
+			zap.String("masterID", meta.ID),
+			zap.Any("projectInfo", tenant.NewProjectInfo(
+				req.GetProjectInfo().GetTenantId(),
+				req.GetProjectInfo().GetProjectId(),
+			)))
+	}
+
 	// CreateWorker here is to create job master actually
 	// TODO: use correct worker cost
 	id, err = jm.BaseMaster.CreateWorker(
@@ -232,7 +292,7 @@ func (jm *JobManagerImplV2) SubmitJob(ctx context.Context, req *pb.SubmitJobRequ
 	}
 
 	jm.JobFsm.JobDispatched(meta, false /*addFromFailover*/)
-	resp.JobIdStr = id
+	resp.JobId = id
 	return resp
 }
 
@@ -267,16 +327,19 @@ func NewJobManagerImplV2(
 	metaClient := metaCli.(pkgOrm.Client)
 	cli := metadata.NewMasterMetadataClient(id, metaClient)
 	impl := &JobManagerImplV2{
-		JobFsm:           NewJobFsm(),
-		uuidGen:          uuid.NewGenerator(),
-		masterMetaClient: cli,
-		clocker:          clock.New(),
-		frameMetaClient:  metaClient,
+		JobFsm:            NewJobFsm(),
+		uuidGen:           uuid.NewGenerator(),
+		masterMetaClient:  cli,
+		clocker:           clock.New(),
+		frameMetaClient:   metaClient,
+		jobStatusChangeMu: ctxmu.New(),
+		notifier:          notifier.NewNotifier[resManager.JobStatusChangeEvent](),
 	}
 	impl.BaseMaster = lib.NewBaseMaster(
 		dctx,
 		impl,
 		id,
+		lib.JobManager,
 	)
 
 	// Note the meta data of job manager is not used, it is safe to overwrite it
@@ -366,10 +429,22 @@ func (jm *JobManagerImplV2) OnMasterRecovered(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+
+	// TODO: refine me, split the BaseMaster interface
+	impl, ok := jm.BaseMaster.(interface {
+		InitProjectInfosAfterRecover([]*libModel.MasterMetaKVData)
+	})
+	if !ok {
+		log.L().Panic("unfound interface for BaseMaster", zap.String("interface", "InitProjectInfosAfterRecover"))
+		return derrors.ErrMasterInterfaceNotFound.GenWithStackByArgs()
+	}
+	impl.InitProjectInfosAfterRecover(jobs)
+
 	for _, job := range jobs {
 		if job.Tp == lib.JobManager {
 			continue
 		}
+		// TODO: filter the job in backend
 		if job.StatusCode == libModel.MasterStatusFinished || job.StatusCode == libModel.MasterStatusStopped {
 			log.L().Info("skip finished or stopped job", zap.Any("job", job))
 			continue
@@ -430,5 +505,38 @@ func (jm *JobManagerImplV2) OnWorkerStatusUpdated(worker lib.WorkerHandle, newSt
 
 // CloseImpl implements lib.MasterImpl.CloseImpl
 func (jm *JobManagerImplV2) CloseImpl(ctx context.Context) error {
+	jm.notifier.Close()
 	return nil
+}
+
+// WatchJobStatuses returns a snapshot of job statuses followed by a stream
+// of job status changes.
+func (jm *JobManagerImplV2) WatchJobStatuses(
+	ctx context.Context,
+) (resManager.JobStatusesSnapshot, *notifier.Receiver[resManager.JobStatusChangeEvent], error) {
+	// We add an explicit deadline to make sure that
+	// any potential problem will not block the JobManager forever.
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	// Note that the lock is cancellable by the context.
+	if ok := jm.jobStatusChangeMu.Lock(ctx); !ok {
+		return nil, nil, errors.Trace(ctx.Err())
+	}
+	defer jm.jobStatusChangeMu.Unlock()
+
+	snapshot, err := jm.GetJobStatuses(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// Waits for pending JobStatusChangeEvents to be flushed,
+	// so that the new receiver does not receive any stale data.
+	err = jm.notifier.Flush(ctx)
+	if err != nil {
+		return nil, nil, errors.Trace(err)
+	}
+
+	receiver := jm.notifier.NewReceiver()
+	return snapshot, receiver, nil
 }

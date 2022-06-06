@@ -26,11 +26,11 @@ import (
 	"golang.org/x/time/rate"
 	"google.golang.org/grpc"
 
+	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/lib"
 	libModel "github.com/pingcap/tiflow/engine/lib/model"
 	"github.com/pingcap/tiflow/engine/lib/registry"
 	"github.com/pingcap/tiflow/engine/model"
-	"github.com/pingcap/tiflow/engine/pb"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/errors"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
@@ -197,11 +197,6 @@ func (task *cvsTask) Status() libModel.WorkerStatus {
 // Workload returns the current workload of the worker.
 func (task *cvsTask) Workload() model.RescUnit {
 	return 1
-}
-
-// OnMasterFailover is called when the master is failed over.
-func (task *cvsTask) OnMasterFailover(reason lib.MasterFailoverReason) error {
-	return nil
 }
 
 func (task *cvsTask) OnMasterMessage(topic p2p.Topic, message p2p.MessageValue) error {

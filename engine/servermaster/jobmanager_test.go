@@ -21,16 +21,19 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/lib"
 	"github.com/pingcap/tiflow/engine/lib/master"
 	"github.com/pingcap/tiflow/engine/lib/metadata"
 	libModel "github.com/pingcap/tiflow/engine/lib/model"
 	"github.com/pingcap/tiflow/engine/model"
-	"github.com/pingcap/tiflow/engine/pb"
 	"github.com/pingcap/tiflow/engine/pkg/clock"
+	"github.com/pingcap/tiflow/engine/pkg/ctxmu"
 	"github.com/pingcap/tiflow/engine/pkg/errors"
+	resManager "github.com/pingcap/tiflow/engine/pkg/externalresource/manager"
 	resourcemeta "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
-	"github.com/pingcap/tiflow/engine/pkg/uuid"
+	"github.com/pingcap/tiflow/engine/pkg/notifier"
+	"github.com/pingcap/tiflow/pkg/uuid"
 )
 
 func TestJobManagerSubmitJob(t *testing.T) {
@@ -46,10 +49,14 @@ func TestJobManagerSubmitJob(t *testing.T) {
 		&pb.ScheduleTaskResponse{}, errors.ErrClusterResourceNotEnough.FastGenByArgs(),
 	)
 	mgr := &JobManagerImplV2{
-		BaseMaster:      mockMaster.DefaultBaseMaster,
-		JobFsm:          NewJobFsm(),
-		uuidGen:         uuid.NewGenerator(),
-		frameMetaClient: mockMaster.GetFrameMetaClient(),
+		BaseMaster:        mockMaster.DefaultBaseMaster,
+		JobFsm:            NewJobFsm(),
+		clocker:           clock.New(),
+		uuidGen:           uuid.NewGenerator(),
+		frameMetaClient:   mockMaster.GetFrameMetaClient(),
+		masterMetaClient:  metadata.NewMasterMetadataClient(metadata.JobManagerUUID, mockMaster.GetFrameMetaClient()),
+		jobStatusChangeMu: ctxmu.New(),
+		notifier:          notifier.NewNotifier[resManager.JobStatusChangeEvent](),
 	}
 	// set master impl to JobManagerImplV2
 	mockMaster.Impl = mgr
@@ -69,7 +76,7 @@ func TestJobManagerSubmitJob(t *testing.T) {
 			mgr.JobFsm.JobCount(pb.QueryJobResponse_dispatched) == 1 &&
 			mgr.JobFsm.JobCount(pb.QueryJobResponse_pending) == 0
 	}, time.Second*2, time.Millisecond*20)
-	queryResp := mgr.QueryJob(ctx, &pb.QueryJobRequest{JobId: resp.JobIdStr})
+	queryResp := mgr.QueryJob(ctx, &pb.QueryJobRequest{JobId: resp.JobId})
 	require.Nil(t, queryResp.Err)
 	require.Equal(t, pb.QueryJobResponse_dispatched, queryResp.Status)
 }
@@ -124,10 +131,11 @@ func TestJobManagerPauseJob(t *testing.T) {
 	mockMaster := lib.NewMockMasterImpl("", "pause-job-test")
 	mockMaster.On("InitImpl", mock.Anything).Return(nil)
 	mgr := &JobManagerImplV2{
-		BaseMaster:      mockMaster.DefaultBaseMaster,
-		JobFsm:          NewJobFsm(),
-		clocker:         clock.New(),
-		frameMetaClient: mockMaster.GetFrameMetaClient(),
+		BaseMaster:        mockMaster.DefaultBaseMaster,
+		JobFsm:            NewJobFsm(),
+		clocker:           clock.New(),
+		frameMetaClient:   mockMaster.GetFrameMetaClient(),
+		jobStatusChangeMu: ctxmu.New(),
 	}
 
 	pauseWorkerID := "pause-worker-id"
@@ -139,14 +147,14 @@ func TestJobManagerPauseJob(t *testing.T) {
 	require.Nil(t, err)
 
 	req := &pb.PauseJobRequest{
-		JobIdStr: pauseWorkerID,
+		JobId: pauseWorkerID,
 	}
 	resp := mgr.PauseJob(ctx, req)
 	require.Nil(t, resp.Err)
 
 	require.Equal(t, 1, mockWorkerHandle.SendMessageCount())
 
-	req.JobIdStr = pauseWorkerID + "-unknown"
+	req.JobId = pauseWorkerID + "-unknown"
 	resp = mgr.PauseJob(ctx, req)
 	require.NotNil(t, resp.Err)
 	require.Equal(t, pb.ErrorCode_UnKnownJob, resp.Err.Code)
@@ -161,11 +169,13 @@ func TestJobManagerCancelJob(t *testing.T) {
 	mockMaster := lib.NewMockMasterImpl("", "cancel-job-test")
 	mockMaster.On("InitImpl", mock.Anything).Return(nil)
 	mgr := &JobManagerImplV2{
-		BaseMaster:       mockMaster.DefaultBaseMaster,
-		JobFsm:           NewJobFsm(),
-		clocker:          clock.New(),
-		frameMetaClient:  mockMaster.GetFrameMetaClient(),
-		masterMetaClient: metadata.NewMasterMetadataClient(metadata.JobManagerUUID, mockMaster.GetFrameMetaClient()),
+		BaseMaster:        mockMaster.DefaultBaseMaster,
+		JobFsm:            NewJobFsm(),
+		clocker:           clock.New(),
+		frameMetaClient:   mockMaster.GetFrameMetaClient(),
+		masterMetaClient:  metadata.NewMasterMetadataClient(metadata.JobManagerUUID, mockMaster.GetFrameMetaClient()),
+		jobStatusChangeMu: ctxmu.New(),
+		notifier:          notifier.NewNotifier[resManager.JobStatusChangeEvent](),
 	}
 
 	err := mgr.frameMetaClient.UpsertJob(ctx, &libModel.MasterMetaKVData{
@@ -179,7 +189,7 @@ func TestJobManagerCancelJob(t *testing.T) {
 	require.NoError(t, err)
 
 	resp := mgr.CancelJob(ctx, &pb.CancelJobRequest{
-		JobIdStr: "job-to-be-canceled",
+		JobId: "job-to-be-canceled",
 	})
 	require.Equal(t, &pb.CancelJobResponse{}, resp)
 }
@@ -257,10 +267,11 @@ func TestJobManagerOnlineJob(t *testing.T) {
 		&pb.ScheduleTaskResponse{}, errors.ErrClusterResourceNotEnough.FastGenByArgs(),
 	)
 	mgr := &JobManagerImplV2{
-		BaseMaster:      mockMaster.DefaultBaseMaster,
-		JobFsm:          NewJobFsm(),
-		uuidGen:         uuid.NewGenerator(),
-		frameMetaClient: mockMaster.GetFrameMetaClient(),
+		BaseMaster:        mockMaster.DefaultBaseMaster,
+		JobFsm:            NewJobFsm(),
+		uuidGen:           uuid.NewGenerator(),
+		frameMetaClient:   mockMaster.GetFrameMetaClient(),
+		jobStatusChangeMu: ctxmu.New(),
 	}
 	// set master impl to JobManagerImplV2
 	mockMaster.Impl = mgr
@@ -274,14 +285,14 @@ func TestJobManagerOnlineJob(t *testing.T) {
 	require.Nil(t, resp.Err)
 
 	err = mgr.JobFsm.JobOnline(&master.MockHandle{
-		WorkerID:   resp.JobIdStr,
+		WorkerID:   resp.JobId,
 		ExecutorID: "executor-1",
 	})
 	require.Nil(t, err)
-	queryResp := mgr.QueryJob(ctx, &pb.QueryJobRequest{JobId: resp.JobIdStr})
+	queryResp := mgr.QueryJob(ctx, &pb.QueryJobRequest{JobId: resp.JobId})
 	require.Nil(t, queryResp.Err)
 	require.Equal(t, pb.QueryJobResponse_online, queryResp.Status)
-	require.Equal(t, queryResp.JobMasterInfo.Id, resp.JobIdStr)
+	require.Equal(t, queryResp.JobMasterInfo.Id, resp.JobId)
 }
 
 func TestJobManagerRecover(t *testing.T) {
@@ -353,4 +364,50 @@ func TestJobManagerTickExceedQuota(t *testing.T) {
 	err = mgr.Tick(ctx)
 	require.NoError(t, err)
 	require.Equal(t, 1, mgr.JobFsm.JobCount(pb.QueryJobResponse_dispatched))
+}
+
+func TestJobManagerWatchJobStatuses(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	mockMaster := lib.NewMockMasterImpl("", "cancel-job-test")
+	mockMaster.On("InitImpl", mock.Anything).Return(nil)
+	mgr := &JobManagerImplV2{
+		BaseMaster:        mockMaster.DefaultBaseMaster,
+		JobFsm:            NewJobFsm(),
+		clocker:           clock.New(),
+		frameMetaClient:   mockMaster.GetFrameMetaClient(),
+		masterMetaClient:  metadata.NewMasterMetadataClient(metadata.JobManagerUUID, mockMaster.GetFrameMetaClient()),
+		jobStatusChangeMu: ctxmu.New(),
+		notifier:          notifier.NewNotifier[resManager.JobStatusChangeEvent](),
+	}
+
+	err := mgr.frameMetaClient.UpsertJob(ctx, &libModel.MasterMetaKVData{
+		ID:         "job-to-be-canceled",
+		Tp:         lib.FakeJobMaster,
+		StatusCode: libModel.MasterStatusStopped,
+	})
+	require.NoError(t, err)
+
+	err = mgr.OnMasterRecovered(ctx)
+	require.NoError(t, err)
+
+	snap, stream, err := mgr.WatchJobStatuses(ctx)
+	require.NoError(t, err)
+	require.Equal(t, map[libModel.MasterID]libModel.MasterStatusCode{
+		"job-to-be-canceled": libModel.MasterStatusStopped,
+	}, snap)
+
+	resp := mgr.CancelJob(ctx, &pb.CancelJobRequest{
+		JobId: "job-to-be-canceled",
+	})
+	require.Equal(t, &pb.CancelJobResponse{}, resp)
+
+	event := <-stream.C
+	require.Equal(t, resManager.JobStatusChangeEvent{
+		EventType: resManager.JobRemovedEvent,
+		JobID:     "job-to-be-canceled",
+	}, event)
 }

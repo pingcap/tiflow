@@ -28,19 +28,17 @@ import (
 func (t *testPurgerSuite) TestPurgeRelayFilesBeforeFile(c *C) {
 	// UUID mismatch
 	safeRelay := &streamer.RelayLogInfo{
-		UUID: "not-found-uuid",
+		SubDir: "not-found-uuid",
 	}
 	files, err := getRelayFilesBeforeFile(log.L(), "", t.uuids, safeRelay)
 	c.Assert(err, NotNil)
 	c.Assert(files, IsNil)
 
 	// create relay log dir
-	baseDir, err := os.MkdirTemp("", "test_get_relay_files_before_file")
-	c.Assert(err, IsNil)
-	defer os.RemoveAll(baseDir)
+	baseDir := c.MkDir()
 	// empty relay log dirs
 	safeRelay = &streamer.RelayLogInfo{
-		UUID: t.uuids[len(t.uuids)-1],
+		SubDir: t.uuids[len(t.uuids)-1],
 	}
 	files, err = getRelayFilesBeforeFile(log.L(), baseDir, t.uuids, safeRelay)
 	c.Assert(err, NotNil)
@@ -51,7 +49,7 @@ func (t *testPurgerSuite) TestPurgeRelayFilesBeforeFile(c *C) {
 
 	// no older
 	safeRelay = &streamer.RelayLogInfo{
-		UUID:     t.uuids[0],
+		SubDir:   t.uuids[0],
 		Filename: t.relayFiles[0][0],
 	}
 	files, err = getRelayFilesBeforeFile(log.L(), baseDir, t.uuids, safeRelay)
@@ -60,7 +58,7 @@ func (t *testPurgerSuite) TestPurgeRelayFilesBeforeFile(c *C) {
 
 	// only relay files in first sub dir
 	safeRelay = &streamer.RelayLogInfo{
-		UUID:     t.uuids[1],
+		SubDir:   t.uuids[1],
 		Filename: t.relayFiles[1][0],
 	}
 	files, err = getRelayFilesBeforeFile(log.L(), baseDir, t.uuids, safeRelay)
@@ -72,7 +70,7 @@ func (t *testPurgerSuite) TestPurgeRelayFilesBeforeFile(c *C) {
 
 	// relay files in first sub dir, and some in second sub dir
 	safeRelay = &streamer.RelayLogInfo{
-		UUID:     t.uuids[1],
+		SubDir:   t.uuids[1],
 		Filename: t.relayFiles[1][len(t.relayFiles[1])-1],
 	}
 	files, err = getRelayFilesBeforeFile(log.L(), baseDir, t.uuids, safeRelay)
@@ -87,7 +85,7 @@ func (t *testPurgerSuite) TestPurgeRelayFilesBeforeFile(c *C) {
 
 	// relay files in first and second sub dir, and some in third sub dir
 	safeRelay = &streamer.RelayLogInfo{
-		UUID:     t.uuids[2],
+		SubDir:   t.uuids[2],
 		Filename: t.relayFiles[2][1],
 	}
 	files, err = getRelayFilesBeforeFile(log.L(), baseDir, t.uuids, safeRelay)
@@ -120,13 +118,11 @@ func (t *testPurgerSuite) TestPurgeRelayFilesBeforeFile(c *C) {
 
 func (t *testPurgerSuite) TestPurgeRelayFilesBeforeFileAndTime(c *C) {
 	// create relay log dir
-	baseDir, err := os.MkdirTemp("", "test_get_relay_files_before_file_and_time")
-	c.Assert(err, IsNil)
-	defer os.RemoveAll(baseDir)
+	baseDir := c.MkDir()
 
 	// empty relay log dirs
 	safeRelay := &streamer.RelayLogInfo{
-		UUID: t.uuids[len(t.uuids)-1],
+		SubDir: t.uuids[len(t.uuids)-1],
 	}
 	files, err := getRelayFilesBeforeFileAndTime(log.L(), baseDir, t.uuids, safeRelay, time.Now())
 	c.Assert(err, NotNil)
@@ -137,7 +133,7 @@ func (t *testPurgerSuite) TestPurgeRelayFilesBeforeFileAndTime(c *C) {
 
 	// safeRelay older than safeTime
 	safeRelay = &streamer.RelayLogInfo{
-		UUID:     t.uuids[1],
+		SubDir:   t.uuids[1],
 		Filename: t.relayFiles[1][0],
 	}
 	files, err = getRelayFilesBeforeFileAndTime(log.L(), baseDir, t.uuids, safeRelay, safeTime)
@@ -149,7 +145,7 @@ func (t *testPurgerSuite) TestPurgeRelayFilesBeforeFileAndTime(c *C) {
 
 	// safeRelay newer than safeTime
 	safeRelay = &streamer.RelayLogInfo{
-		UUID:     t.uuids[2],
+		SubDir:   t.uuids[2],
 		Filename: t.relayFiles[2][0],
 	}
 	files, err = getRelayFilesBeforeFileAndTime(log.L(), baseDir, t.uuids, safeRelay, safeTime)

@@ -16,9 +16,11 @@ package lib
 import (
 	"context"
 
+	"github.com/gin-gonic/gin"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tiflow/dm/pkg/log"
+	"go.uber.org/zap"
 
+	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/engine/executor/worker"
 	libModel "github.com/pingcap/tiflow/engine/lib/model"
 	"github.com/pingcap/tiflow/engine/model"
@@ -28,16 +30,18 @@ import (
 	resourcemeta "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
+	"github.com/pingcap/tiflow/engine/pkg/promutil"
 )
 
-// BaseJobMaster defines an interface that can workr as a job master, it embeds
-// a Worker interface which can run on dateflow engine runtime, and also provides
+// BaseJobMaster defines an interface that can work as a job master, it embeds
+// a Worker interface which can run on dataflow engine runtime, and also provides
 // some utility methods.
 type BaseJobMaster interface {
 	Worker
 
 	OnError(err error)
 	MetaKVClient() metaclient.KVClient
+	MetricFactory() promutil.Factory
 	GetWorkers() map[libModel.WorkerID]WorkerHandle
 	CreateWorker(workerType WorkerType, config WorkerConfig, cost model.RescUnit, resources ...resourcemeta.ResourceID) (libModel.WorkerID, error)
 	JobMasterID() libModel.MasterID
@@ -60,6 +64,23 @@ type BaseJobMaster interface {
 	IsBaseJobMaster()
 }
 
+// BaseJobMasterExt extends BaseJobMaster with some extra methods.
+// These methods are used by framework and is not visible to JobMasterImpl.
+type BaseJobMasterExt interface {
+	// TriggerOpenAPIInitialize is used to trigger the initialization of openapi handler.
+	// It just delegates to the JobMasterImpl.OnOpenAPIInitialized.
+	TriggerOpenAPIInitialize(apiGroup *gin.RouterGroup)
+
+	// IsBaseJobMasterExt is an empty function used to prevent accidental implementation
+	// of this interface.
+	IsBaseJobMasterExt()
+}
+
+var (
+	_ BaseJobMaster    = (*DefaultBaseJobMaster)(nil)
+	_ BaseJobMasterExt = (*DefaultBaseJobMaster)(nil)
+)
+
 // DefaultBaseJobMaster implements BaseJobMaster interface
 type DefaultBaseJobMaster struct {
 	master    *DefaultBaseMaster
@@ -75,8 +96,13 @@ type JobMasterImpl interface {
 	MasterImpl
 
 	Workload() model.RescUnit
-	OnJobManagerFailover(reason MasterFailoverReason) error
 	OnJobManagerMessage(topic p2p.Topic, message interface{}) error
+	// OnOpenAPIInitialized is called when the OpenAPI is initialized.
+	// This is used to for JobMaster to register its OpenAPI handler.
+	// The implementation must not retain the apiGroup. It must register
+	// its OpenAPI handler before this function returns.
+	// Note: this function is called before Init().
+	OnOpenAPIInitialized(apiGroup *gin.RouterGroup)
 	// IsJobMasterImpl is an empty function used to prevent accidental implementation
 	// of this interface.
 	IsJobMasterImpl()
@@ -88,16 +114,16 @@ func NewBaseJobMaster(
 	jobMasterImpl JobMasterImpl,
 	masterID libModel.MasterID,
 	workerID libModel.WorkerID,
+	tp libModel.WorkerType,
 ) BaseJobMaster {
 	// master-worker pair: job manager <-> job master(`baseWorker` following)
 	// master-worker pair: job master(`baseMaster` following) <-> real workers
 	// `masterID` is always the ID of master role, against current object
 	// `workerID` is the ID of current object
 	baseMaster := NewBaseMaster(
-		ctx, &jobMasterImplAsMasterImpl{jobMasterImpl}, workerID)
+		ctx, &jobMasterImplAsMasterImpl{jobMasterImpl}, workerID, tp)
 	baseWorker := NewBaseWorker(
-		// TODO: need worker_type
-		ctx, &jobMasterImplAsWorkerImpl{jobMasterImpl}, workerID, masterID)
+		ctx, &jobMasterImplAsWorkerImpl{jobMasterImpl}, workerID, masterID, tp)
 	errCenter := errctx.NewErrCenter()
 	baseMaster.(*DefaultBaseMaster).errCenter = errCenter
 	baseWorker.(*DefaultBaseWorker).errCenter = errCenter
@@ -112,6 +138,11 @@ func NewBaseJobMaster(
 // MetaKVClient implements BaseJobMaster.MetaKVClient
 func (d *DefaultBaseJobMaster) MetaKVClient() metaclient.KVClient {
 	return d.master.MetaKVClient()
+}
+
+// MetricFactory implements BaseJobMaster.MetricFactory
+func (d *DefaultBaseJobMaster) MetricFactory() promutil.Factory {
+	return d.master.MetricFactory()
 }
 
 // Init implements BaseJobMaster.Init
@@ -173,13 +204,16 @@ func (d *DefaultBaseJobMaster) GetWorkers() map[libModel.WorkerID]WorkerHandle {
 
 // Close implements BaseJobMaster.Close
 func (d *DefaultBaseJobMaster) Close(ctx context.Context) error {
-	if err := d.impl.CloseImpl(ctx); err != nil {
-		return errors.Trace(err)
+	err := d.impl.CloseImpl(ctx)
+	// We don't return here if CloseImpl return error to ensure
+	// that we can close inner resources of the framework
+	if err != nil {
+		log.L().Error("Failed to close JobMasterImpl", zap.Error(err))
 	}
 
 	d.master.doClose()
 	d.worker.doClose()
-	return nil
+	return errors.Trace(err)
 }
 
 // OnError implements BaseJobMaster.OnError
@@ -262,6 +296,14 @@ func (d *DefaultBaseJobMaster) Exit(ctx context.Context, status libModel.WorkerS
 	return d.worker.Exit(ctx, status, err)
 }
 
+// TriggerOpenAPIInitialize implements BaseJobMasterExt.TriggerOpenAPIInitialize.
+func (d *DefaultBaseJobMaster) TriggerOpenAPIInitialize(apiGroup *gin.RouterGroup) {
+	d.impl.OnOpenAPIInitialized(apiGroup)
+}
+
+// IsBaseJobMasterExt implements BaseJobMaster.IsBaseJobMasterExt.
+func (d *DefaultBaseJobMaster) IsBaseJobMasterExt() {}
+
 type jobMasterImplAsWorkerImpl struct {
 	inner JobMasterImpl
 }
@@ -278,10 +320,6 @@ func (j *jobMasterImplAsWorkerImpl) Tick(ctx context.Context) error {
 
 func (j *jobMasterImplAsWorkerImpl) Workload() model.RescUnit {
 	return j.inner.Workload()
-}
-
-func (j *jobMasterImplAsWorkerImpl) OnMasterFailover(reason MasterFailoverReason) error {
-	return j.inner.OnJobManagerFailover(reason)
 }
 
 func (j *jobMasterImplAsWorkerImpl) OnMasterMessage(topic p2p.Topic, message interface{}) error {

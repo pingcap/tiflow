@@ -15,10 +15,13 @@ package lib
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
@@ -39,8 +42,10 @@ type testJobMasterImpl struct {
 	mu sync.Mutex
 	mock.Mock
 
-	*DefaultBaseJobMaster
+	base *DefaultBaseJobMaster
 }
+
+var _ JobMasterImpl = (*testJobMasterImpl)(nil)
 
 func (m *testJobMasterImpl) InitImpl(ctx context.Context) error {
 	m.mu.Lock()
@@ -122,20 +127,18 @@ func (m *testJobMasterImpl) Workload() model.RescUnit {
 	return args.Get(0).(model.RescUnit)
 }
 
-func (m *testJobMasterImpl) OnJobManagerFailover(reason MasterFailoverReason) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	args := m.Called(reason)
-	return args.Error(0)
-}
-
 func (m *testJobMasterImpl) OnJobManagerMessage(topic p2p.Topic, message p2p.MessageValue) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	args := m.Called(topic, message)
 	return args.Error(0)
+}
+
+func (m *testJobMasterImpl) OnOpenAPIInitialized(apiGroup *gin.RouterGroup) {
+	apiGroup.GET("/status", func(c *gin.Context) {
+		c.String(http.StatusOK, "success")
+	})
 }
 
 func (m *testJobMasterImpl) IsJobMasterImpl() {
@@ -177,13 +180,14 @@ func newBaseJobMasterForTests(impl JobMasterImpl) *DefaultBaseJobMaster {
 		impl,
 		masterName,
 		workerID1,
+		FakeTask,
 	).(*DefaultBaseJobMaster)
 }
 
 func TestBaseJobMasterBasics(t *testing.T) {
 	jobMaster := &testJobMasterImpl{}
 	base := newBaseJobMasterForTests(jobMaster)
-	jobMaster.DefaultBaseJobMaster = base
+	jobMaster.base = base
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -192,7 +196,7 @@ func TestBaseJobMasterBasics(t *testing.T) {
 	jobMaster.On("InitImpl", mock.Anything).Return(nil)
 	jobMaster.mu.Unlock()
 
-	err := jobMaster.Init(ctx)
+	err := jobMaster.base.Init(ctx)
 	require.NoError(t, err)
 
 	jobMaster.mu.Lock()
@@ -205,7 +209,7 @@ func TestBaseJobMasterBasics(t *testing.T) {
 	jobMaster.On("Tick", mock.Anything).Return(nil)
 	jobMaster.mu.Unlock()
 
-	err = jobMaster.Poll(ctx)
+	err = jobMaster.base.Poll(ctx)
 	require.NoError(t, err)
 
 	jobMaster.mu.Lock()
@@ -218,13 +222,29 @@ func TestBaseJobMasterBasics(t *testing.T) {
 	jobMaster.On("CloseImpl", mock.Anything).Return(nil)
 	jobMaster.mu.Unlock()
 
-	err = jobMaster.Exit(ctx, jobMaster.Status(), nil)
+	err = jobMaster.base.Exit(ctx, jobMaster.Status(), nil)
 	require.Regexp(t, ".*DFLOW:ErrWorkerFinish.*", err)
 
-	err = jobMaster.Close(ctx)
+	err = jobMaster.base.Close(ctx)
 	require.NoError(t, err)
 
 	jobMaster.mu.Lock()
 	jobMaster.AssertNumberOfCalls(t, "CloseImpl", 1)
 	jobMaster.mu.Unlock()
+}
+
+func TestOnOpenAPIInitialized(t *testing.T) {
+	jobMaster := &testJobMasterImpl{}
+	base := newBaseJobMasterForTests(jobMaster)
+	jobMaster.base = base
+
+	engine := gin.New()
+	apiGroup := engine.Group("/api/v1/jobs/test")
+	base.TriggerOpenAPIInitialize(apiGroup)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/jobs/test/status", nil)
+	engine.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code)
+	require.Equal(t, "success", w.Body.String())
 }
