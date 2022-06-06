@@ -23,9 +23,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
-	"github.com/pingcap/tiflow/dm/pkg/log"
-	p2pProtocol "github.com/pingcap/tiflow/proto/p2p"
+	perrors "github.com/pingcap/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.etcd.io/etcd/server/v3/embed"
@@ -37,6 +35,8 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
+	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/engine/client"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/lib"
@@ -45,6 +45,7 @@ import (
 	"github.com/pingcap/tiflow/engine/model"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/deps"
+	"github.com/pingcap/tiflow/engine/pkg/errors"
 	derrors "github.com/pingcap/tiflow/engine/pkg/errors"
 	"github.com/pingcap/tiflow/engine/pkg/etcdutils"
 	externRescManager "github.com/pingcap/tiflow/engine/pkg/externalresource/manager"
@@ -63,6 +64,7 @@ import (
 	schedModel "github.com/pingcap/tiflow/engine/servermaster/scheduler/model"
 	"github.com/pingcap/tiflow/engine/test"
 	"github.com/pingcap/tiflow/engine/test/mock"
+	p2pProtocol "github.com/pingcap/tiflow/proto/p2p"
 )
 
 // Server handles PRC requests for df master.
@@ -554,11 +556,13 @@ func (s *Server) startGrpcSrv(ctx context.Context) (err error) {
 		return
 	}
 
+	registerDone := make(chan struct{})
 	gRPCSvr := func(gs *grpc.Server) {
 		pb.RegisterMasterServer(gs, s)
 		pb.RegisterResourceManagerServer(gs, s.resourceManagerService)
 		s.msgService = p2p.NewMessageRPCServiceWithRPCServer(s.name(), nil, gs)
 		p2pProtocol.RegisterCDCPeerToPeerServer(gs, s.msgService.GetMessageServer())
+		close(registerDone)
 	}
 
 	httpHandlers := map[string]http.Handler{
@@ -579,6 +583,17 @@ func (s *Server) startGrpcSrv(ctx context.Context) (err error) {
 		return
 	}
 	s.membership = &EtcdMembership{etcdCli: s.etcdClient}
+
+	// etcd server.ReadyNotify() only ensures server is ready to serve client
+	// requests, the service register could have not been called.
+	select {
+	case <-ctx.Done():
+		return perrors.Trace(ctx.Err())
+	case <-time.After(etcdStartTimeout):
+		return errors.ErrMasterStartEmbedEtcdFail.GenWithStack("register grpc service timeout")
+	case <-registerDone:
+	}
+
 	return
 }
 
