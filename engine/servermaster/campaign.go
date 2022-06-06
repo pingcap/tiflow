@@ -51,6 +51,10 @@ func (s *Server) leaderLoop(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	err = s.updateServerMasterMembers(ctx)
+	if err != nil {
+		return err
+	}
 
 	for {
 		select {
