@@ -57,7 +57,8 @@ func (c *unsafe) Metadata(ctx context.Context) (*[]v2.EtcdData, error) {
 // ResolveLock resolves lock in region
 func (c *unsafe) ResolveLock(ctx context.Context,
 	regionID uint64,
-	ts uint64) error {
+	ts uint64,
+) error {
 	return c.client.Post().
 		WithURI("unsafe/resolve-lock").
 		WithBody(&v2.ResolveLockReq{
