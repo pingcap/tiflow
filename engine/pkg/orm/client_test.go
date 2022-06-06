@@ -82,8 +82,6 @@ func TestNewMetaOpsClient(t *testing.T) {
 
 // nolint: deadcode
 func testInitialize(t *testing.T) {
-	t.Parallel()
-
 	sqlDB, mock, err := mockGetDBConn(t, "test")
 	defer sqlDB.Close()
 	defer mock.ExpectClose()
@@ -1244,8 +1242,6 @@ func TestError(t *testing.T) {
 }
 
 func TestLogicEpoch(t *testing.T) {
-	t.Parallel()
-
 	sqlDB, mock, err := mockGetDBConn(t, "test")
 	defer sqlDB.Close()
 	defer mock.ExpectClose()
@@ -1285,6 +1281,7 @@ func TestContext(t *testing.T) {
 	err = cli.Initialize(ctx)
 	require.Error(t, err)
 	require.Regexp(t, "context deadline exceed", err.Error())
+	failpoint.Disable("github.com/pingcap/tiflow/engine/pkg/orm/initializedDelay")
 
 	// test transaction
 	err = failpoint.Enable("github.com/pingcap/tiflow/engine/pkg/orm/model/genEpochDelay", "sleep(2000)")
@@ -1294,6 +1291,7 @@ func TestContext(t *testing.T) {
 	_, err = cli.GenEpoch(ctx)
 	require.Error(t, err)
 	require.Regexp(t, "context deadline exceed", err.Error())
+	failpoint.Disable("github.com/pingcap/tiflow/engine/pkg/orm/model/genEpochDelay")
 }
 
 func testInner(t *testing.T, m sqlmock.Sqlmock, cli Client, c tCase) {
