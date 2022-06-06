@@ -358,7 +358,7 @@ func TestTableExecutorAddingTableIndirectly(t *testing.T) {
 
 	checkpointTs = p.agent.GetLastSentCheckpointTs()
 	require.Equal(t, table1.CheckpointTs(), checkpointTs)
-	
+
 	err = p.Close()
 	require.Nil(t, err)
 	require.Nil(t, p.agent)
