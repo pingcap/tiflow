@@ -19,19 +19,39 @@ import (
 	"time"
 
 	perrors "github.com/pingcap/errors"
+	"go.etcd.io/etcd/api/v3/mvccpb"
+	clientv3 "go.etcd.io/etcd/client/v3"
+	"go.uber.org/zap"
+
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/engine/client"
 	"github.com/pingcap/tiflow/engine/pkg/adapter"
 	"github.com/pingcap/tiflow/engine/pkg/errors"
 	"github.com/pingcap/tiflow/engine/pkg/etcdutils"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/manager"
-	"go.etcd.io/etcd/api/v3/mvccpb"
-	clientv3 "go.etcd.io/etcd/client/v3"
-	"go.uber.org/zap"
+	"github.com/pingcap/tiflow/engine/servermaster/cluster"
 )
 
 func (s *Server) leaderLoop(ctx context.Context) error {
-	retryInterval := time.Millisecond * 200
+	var (
+		leaderCtx      context.Context
+		leaderResignFn context.CancelFunc
+
+		retryInterval    = time.Millisecond * 200
+		needResetSession = false
+	)
+	defer func() {
+		if leaderResignFn != nil {
+			leaderResignFn()
+		}
+	}()
+
+	session, err := cluster.NewEtcdSession(ctx, s.etcdClient, s.member(),
+		s.info, s.cfg.RPCTimeout, s.cfg.KeepAliveTTL)
+	if err != nil {
+		return err
+	}
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -88,48 +108,34 @@ func (s *Server) leaderLoop(ctx context.Context) error {
 			time.Sleep(retryInterval)
 			continue
 		}
-		err = s.campaign(ctx, defaultCampaignTimeout)
+
+		if needResetSession {
+			if err := session.Reset(ctx); err != nil {
+				return err
+			}
+			needResetSession = false
+		}
+		newCtx, newResignFn, err := session.Campaign(ctx, defaultCampaignTimeout)
 		if err != nil {
+			needResetSession = session.CheckNeedReset(err)
 			continue
 		}
+		leaderCtx = newCtx
+		leaderResignFn = newResignFn
 
-		err = s.leaderServiceFn(s.leaderCtx)
+		err = s.leaderServiceFn(leaderCtx)
 		if err != nil {
 			if perrors.Cause(err) == context.Canceled ||
 				errors.ErrEtcdLeaderChanged.Equal(err) {
 				log.L().Info("leader service exits", zap.Error(err))
 			} else if errors.ErrMasterSessionDone.Equal(err) {
 				log.L().Info("server master session done, reset session now", zap.Error(err))
-				err2 := s.reset(ctx)
-				if err2 != nil {
-					return err2
-				}
+				needResetSession = true
 			} else {
 				log.L().Error("run leader service failed", zap.Error(err))
 			}
 		}
 	}
-}
-
-func (s *Server) resign() {
-	s.resignFn()
-}
-
-func (s *Server) campaign(ctx context.Context, timeout time.Duration) error {
-	log.L().Info("start to campaign server master leader", zap.String("name", s.name()))
-	leaderCtx, resignFn, err := s.election.Campaign(ctx, s.member(), timeout)
-	switch perrors.Cause(err) {
-	case nil:
-	case context.Canceled:
-		return ctx.Err()
-	default:
-		log.L().Warn("campaign leader failed", zap.Error(err))
-		return errors.Wrap(errors.ErrMasterCampaignLeader, err)
-	}
-	s.leaderCtx = leaderCtx
-	s.resignFn = resignFn
-	log.L().Info("campaign leader successfully", zap.String("name", s.name()))
-	return nil
 }
 
 // TODO: we can use UpdateClients, don't need to close and re-create it.

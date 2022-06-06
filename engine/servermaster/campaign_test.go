@@ -76,7 +76,9 @@ func TestLeaderLoopSuccess(t *testing.T) {
 		s.rpcLogRL,
 	)
 	s.masterRPCHook = preRPCHook
-	err := s.reset(ctx)
+	session, err := cluster.NewEtcdSession(ctx, client, s.member(), s.info, s.cfg.RPCTimeout, s.cfg.KeepAliveTTL)
+	require.Nil(t, err)
+	err = session.Reset(ctx)
 	require.Nil(t, err)
 
 	// start to run leader loop
@@ -144,7 +146,9 @@ func TestLeaderLoopMeetStaleData(t *testing.T) {
 	_, _, err = election.Campaign(ctx, s.member(), time.Second*3)
 	require.Nil(t, err)
 
-	err = s.reset(ctx)
+	session, err := cluster.NewEtcdSession(ctx, client, s.member(), s.info, s.cfg.RPCTimeout, s.cfg.KeepAliveTTL)
+	require.Nil(t, err)
+	err = session.Reset(ctx)
 	require.Nil(t, err)
 
 	var wg sync.WaitGroup
@@ -181,6 +185,7 @@ func TestLeaderLoopWatchLeader(t *testing.T) {
 	}
 
 	servers := make([]*Server, 0, serverCount)
+	sessions := make([]cluster.Session, 0, serverCount)
 	for i := range names {
 		cfg := NewConfig()
 		cfg.Etcd.Name = names[i]
@@ -204,6 +209,11 @@ func TestLeaderLoopWatchLeader(t *testing.T) {
 		s.masterRPCHook = preRPCHook
 		s.leaderServiceFn = mockLeaderServiceFn
 		servers = append(servers, s)
+
+		session, err := cluster.NewEtcdSession(ctx, client, s.member(), s.info,
+			s.cfg.RPCTimeout, s.cfg.KeepAliveTTL)
+		require.Nil(t, err)
+		sessions = append(sessions, session)
 	}
 
 	leaderIndex := -1
@@ -220,9 +230,10 @@ func TestLeaderLoopWatchLeader(t *testing.T) {
 	wg.Add(serverCount)
 	go func() {
 		defer wg.Done()
-		leaderServer := servers[leaderIndex]
-		err := leaderServer.reset(ctx)
+		session := sessions[leaderIndex]
+		err := session.Reset(ctx)
 		require.Nil(t, err)
+		leaderServer := servers[leaderIndex]
 		err = leaderServer.leaderLoop(ctx)
 		require.EqualError(t, err, context.Canceled.Error())
 	}()
@@ -231,9 +242,10 @@ func TestLeaderLoopWatchLeader(t *testing.T) {
 			continue
 		}
 		s := servers[i]
+		session := sessions[i]
 		go func() {
 			defer wg.Done()
-			err := s.reset(ctx)
+			err := session.Reset(ctx)
 			require.Nil(t, err)
 
 			// check masterCli is not set
@@ -266,4 +278,53 @@ func TestLeaderLoopWatchLeader(t *testing.T) {
 
 	cancel()
 	wg.Wait()
+}
+
+func TestCampaignMeetLeaseExpire(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	name := "server-master-campaign-meet-lease-expire"
+	addr, etcd, client, cleanFn := test.PrepareEtcd(t, name)
+	defer cleanFn()
+
+	cfg := NewConfig()
+	cfg.Etcd.Name = name
+	cfg.AdvertiseAddr = addr
+	id := genServerMasterUUID(name)
+	s := &Server{
+		id:         id,
+		cfg:        cfg,
+		etcd:       etcd,
+		etcdClient: client,
+		info:       &model.NodeInfo{ID: model.DeployNodeID(name)},
+	}
+	preRPCHook := rpcutil.NewPreRPCHook[pb.MasterClient](
+		s.id,
+		&s.leader,
+		s.masterCli,
+		&s.leaderInitialized,
+		s.rpcLogRL,
+	)
+	s.masterRPCHook = preRPCHook
+
+	session, err := cluster.NewEtcdSession(ctx, client, s.member(), s.info, s.cfg.RPCTimeout, s.cfg.KeepAliveTTL)
+	require.Nil(t, err)
+	err = session.Reset(ctx)
+	require.Nil(t, err)
+	_, _, err = session.Campaign(ctx, time.Second)
+	require.Nil(t, err)
+
+	// simulate server lease expire, campaign will fail
+	// _, err = client.Revoke(ctx, session.(*cluster.EtcdSession).session.Lease())
+	// require.Nil(t, err)
+	// err = s.campaign(ctx, time.Second)
+	// require.Regexp(t, ".*etcdserver: requested lease not found", err)
+
+	// after handle campaign error, another try of campaign will success
+	// err = s.handleCampaignError(ctx, err)
+	// require.Nil(t, err)
+	// err = s.campaign(ctx, time.Second)
+	// require.Nil(t, err)
 }

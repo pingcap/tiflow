@@ -98,7 +98,7 @@ func (e *EtcdElection) Campaign(ctx context.Context, selfID NodeID, timeout time
 	for {
 		select {
 		case <-ctx.Done():
-			return nil, nil, derror.ErrMasterEtcdElectionCampaignFail.Wrap(ctx.Err())
+			return nil, nil, derror.Wrap(derror.ErrMasterEtcdElectionCampaignFail, ctx.Err())
 		default:
 		}
 
@@ -106,13 +106,13 @@ func (e *EtcdElection) Campaign(ctx context.Context, selfID NodeID, timeout time
 		if err != nil {
 			// rl.Wait() can return an unnamed error `rate: Wait(n=%d) exceeds limiter's burst %d` if
 			// ctx is canceled. This can be very confusing, so we must wrap it here.
-			return nil, nil, derror.ErrMasterEtcdElectionCampaignFail.Wrap(err)
+			return nil, nil, derror.Wrap(derror.ErrMasterEtcdElectionCampaignFail, err)
 		}
 
 		retCtx, resign, err := e.doCampaign(ctx, selfID, timeout)
 		if err != nil {
 			if errors.Cause(err) != mvcc.ErrCompacted {
-				return nil, nil, derror.ErrMasterEtcdElectionCampaignFail.Wrap(err)
+				return nil, nil, err
 			}
 			log.L().Warn("campaign for leader failed", zap.Error(err))
 			continue
@@ -126,7 +126,7 @@ func (e *EtcdElection) doCampaign(ctx context.Context, selfID NodeID, timeout ti
 	defer cancel()
 	err := e.election.Campaign(cctx, selfID)
 	if err != nil {
-		return nil, nil, derror.ErrMasterEtcdElectionCampaignFail.Wrap(err)
+		return nil, nil, derror.Wrap(derror.ErrMasterEtcdElectionCampaignFail, err)
 	}
 	retCtx := newLeaderCtx(ctx, e.session)
 	resignFn := func() {
