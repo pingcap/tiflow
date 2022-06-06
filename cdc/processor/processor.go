@@ -133,7 +133,7 @@ func (p *processor) AddTable(
 
 	table, ok := p.tables[tableID]
 	if ok {
-		switch table.Status() {
+		switch table.State() {
 		// table is still `preparing`, which means the table is `replicating` on other captures.
 		// no matter `isPrepare` or not, just ignore it should be ok.
 		case pipeline.TableStatePreparing:
@@ -262,25 +262,15 @@ func (p *processor) IsAddTableFinished(ctx context.Context, tableID model.TableI
 
 	localResolvedTs := p.resolvedTs
 	globalResolvedTs := p.changefeed.Status.ResolvedTs
-	localCheckpointTs := p.agent.GetLastSentCheckpointTs()
 	globalCheckpointTs := p.changefeed.Status.CheckpointTs
 
 	done := func() bool {
 		if isPrepare {
 			// todo: add ut to cover this, after 2ps supported.
-			return table.Status() == pipeline.TableStatePrepared
+			return table.State() == pipeline.TableStatePrepared
 		}
-
-		// todo: revise these 2 conditions, after 2ps supported.
-		// how about just check status is `TableStateReplicating`.
-		if table.CheckpointTs() < localCheckpointTs || localCheckpointTs < globalCheckpointTs {
-			return false
-		}
-		if table.ResolvedTs() < localResolvedTs ||
-			localResolvedTs < globalResolvedTs {
-			return false
-		}
-		return true
+		// The table is `replicating`, it's indicating that the `add table` must be finished.
+		return table.State() == pipeline.TableStateReplicating
 	}
 	if !done() {
 		log.Debug("Add Table not finished",
@@ -292,9 +282,8 @@ func (p *processor) IsAddTableFinished(ctx context.Context, tableID model.TableI
 			zap.Uint64("localResolvedTs", localResolvedTs),
 			zap.Uint64("globalResolvedTs", globalResolvedTs),
 			zap.Uint64("tableCheckpointTs", table.CheckpointTs()),
-			zap.Uint64("localCheckpointTs", localCheckpointTs),
 			zap.Uint64("globalCheckpointTs", globalCheckpointTs),
-			zap.Any("status", table.Status()), zap.Bool("isPrepare", isPrepare))
+			zap.Any("state", table.State()), zap.Bool("isPrepare", isPrepare))
 		return false
 	}
 
@@ -307,9 +296,8 @@ func (p *processor) IsAddTableFinished(ctx context.Context, tableID model.TableI
 		zap.Uint64("localResolvedTs", localResolvedTs),
 		zap.Uint64("globalResolvedTs", globalResolvedTs),
 		zap.Uint64("tableCheckpointTs", table.CheckpointTs()),
-		zap.Uint64("localCheckpointTs", localCheckpointTs),
 		zap.Uint64("globalCheckpointTs", globalCheckpointTs),
-		zap.Any("status", table.Status()), zap.Bool("isPrepare", isPrepare))
+		zap.Any("state", table.State()), zap.Bool("isPrepare", isPrepare))
 	return true
 }
 
@@ -328,7 +316,7 @@ func (p *processor) IsRemoveTableFinished(ctx context.Context, tableID model.Tab
 			zap.Int64("tableID", tableID))
 		return 0, true
 	}
-	status := table.Status()
+	status := table.State()
 	if status != pipeline.TableStateStopped {
 		log.Debug("table is still not stopped",
 			zap.String("captureID", p.captureInfo.ID),
@@ -383,7 +371,7 @@ func (p *processor) GetTableMeta(tableID model.TableID) pipeline.TableMeta {
 		TableID:      tableID,
 		CheckpointTs: table.CheckpointTs(),
 		ResolvedTs:   table.ResolvedTs(),
-		State:        table.Status(),
+		State:        table.State(),
 	}
 }
 
@@ -797,7 +785,8 @@ func (p *processor) handlePosition(currentTs int64) {
 		minResolvedTs = p.schemaStorage.ResolvedTs()
 	}
 	for _, table := range p.tables {
-		status := table.Status()
+		status := table.State()
+		// todo: add ut to cover this.
 		if status == pipeline.TableStatePreparing ||
 			status == pipeline.TableStatePrepared {
 			continue
@@ -812,7 +801,8 @@ func (p *processor) handlePosition(currentTs int64) {
 	minCheckpointTs := minResolvedTs
 	minCheckpointTableID := int64(0)
 	for _, table := range p.tables {
-		status := table.Status()
+		status := table.State()
+		// todo: add ut to cover this
 		if status == pipeline.TableStatePreparing ||
 			status == pipeline.TableStatePrepared {
 			continue
@@ -850,7 +840,8 @@ func (p *processor) pushResolvedTs2Table() {
 		resolvedTs = schemaResolvedTs
 	}
 	for _, table := range p.tables {
-		if table.Status() == pipeline.TableStateReplicating {
+		// todo: add ut to cover this
+		if table.State() == pipeline.TableStateReplicating {
 			table.UpdateBarrierTs(resolvedTs)
 		}
 	}
@@ -1084,7 +1075,7 @@ func (p *processor) Close() error {
 func (p *processor) WriteDebugInfo(w io.Writer) {
 	fmt.Fprintf(w, "%+v\n", *p.changefeed)
 	for tableID, tablePipeline := range p.tables {
-		fmt.Fprintf(w, "tableID: %d, tableName: %s, resolvedTs: %d, checkpointTs: %d, status: %s\n",
-			tableID, tablePipeline.Name(), tablePipeline.ResolvedTs(), tablePipeline.CheckpointTs(), tablePipeline.Status())
+		fmt.Fprintf(w, "tableID: %d, tableName: %s, resolvedTs: %d, checkpointTs: %d, state: %s\n",
+			tableID, tablePipeline.Name(), tablePipeline.ResolvedTs(), tablePipeline.CheckpointTs(), tablePipeline.State())
 	}
 }

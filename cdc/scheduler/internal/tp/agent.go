@@ -94,25 +94,26 @@ func NewAgent(ctx context.Context,
 		// If we are registered in Etcd, an elected Owner will have to
 		// contact us before it can schedule any table.
 		log.Info("tpscheduler: no owner found. We will wait for an owner to contact us.",
-			zap.String("capture", captureID),
+			zap.String("ownerCaptureID", ownerCaptureID),
 			zap.String("namespace", changeFeedID.Namespace),
 			zap.String("changefeed", changeFeedID.ID),
 			zap.Error(err))
-		return nil, nil
+		return result, nil
 	}
 
-	log.Debug("tpscheduler: owner found",
-		zap.String("capture", captureID),
+	log.Info("tpscheduler: owner found",
+		zap.String("ownerCaptureID", ownerCaptureID),
+		zap.String("captureID", captureID),
 		zap.String("namespace", changeFeedID.Namespace),
-		zap.String("changefeed", changeFeedID.ID),
-		zap.String("ownerID", captureID))
+		zap.String("changefeed", changeFeedID.ID))
 
-	revision, err := etcdClient.GetOwnerRevision(etcdCliCtx, captureID)
+	revision, err := etcdClient.GetOwnerRevision(etcdCliCtx, ownerCaptureID)
 	if err != nil {
 		if cerror.ErrOwnerNotFound.Equal(err) || cerror.ErrNotOwner.Equal(err) {
 			// These are expected errors when no owner has been elected
 			log.Info("tpscheduler: no owner found when querying for the owner revision",
-				zap.String("capture", captureID),
+				zap.String("ownerCaptureID", ownerCaptureID),
+				zap.String("captureID", captureID),
 				zap.String("namespace", changeFeedID.Namespace),
 				zap.String("changefeed", changeFeedID.ID),
 				zap.Error(err))
@@ -186,8 +187,8 @@ func (a *agent) handleMessage(msg []*schedulepb.Message) []*schedulepb.Message {
 	return result
 }
 
-func (a *agent) tableStatus2PB(status pipeline.TableState) schedulepb.TableState {
-	switch status {
+func (a *agent) tableStatus2PB(state pipeline.TableState) schedulepb.TableState {
+	switch state {
 	case pipeline.TableStatePreparing:
 		return schedulepb.TableStatePreparing
 	case pipeline.TableStatePrepared:
@@ -203,6 +204,7 @@ func (a *agent) tableStatus2PB(status pipeline.TableState) schedulepb.TableState
 	default:
 	}
 	log.Warn("tpscheduler: table state unknown",
+		zap.Any("state", state),
 		zap.String("capture", a.captureID),
 		zap.String("namespace", a.changeFeedID.Namespace),
 		zap.String("changefeed", a.changeFeedID.ID),
@@ -215,7 +217,7 @@ func (a *agent) newTableStatus(tableID model.TableID) schedulepb.TableStatus {
 	state := a.tableStatus2PB(meta.State)
 
 	if task, ok := a.runningTasks[tableID]; ok {
-		// remove table task is not processed, or failed,
+		// there is task that try to remove the table,
 		// return `stopping` instead of the real table state,
 		// to indicate that the remove table request was received.
 		if task.IsRemove == true {
@@ -260,13 +262,22 @@ func (a *agent) handleMessageHeartbeat(expected []model.TableID) *schedulepb.Mes
 		Tables:     tables,
 		IsStopping: a.stopping,
 	}
-	return &schedulepb.Message{
+
+	message := &schedulepb.Message{
 		Header:            a.newMessageHeader(),
 		MsgType:           schedulepb.MsgHeartbeatResponse,
 		From:              a.captureID,
 		To:                a.ownerInfo.captureID,
 		HeartbeatResponse: response,
 	}
+
+	log.Debug("tpscheduler: agent generate heartbeat response",
+		zap.String("capture", a.captureID),
+		zap.String("namespace", a.changeFeedID.Namespace),
+		zap.String("changefeed", a.changeFeedID.ID),
+		zap.Any("message", message))
+
+	return message
 }
 
 type dispatchTableTaskStatus int32
@@ -303,7 +314,7 @@ func (a *agent) handleMessageDispatchTableRequest(
 	switch req := request.Request.(type) {
 	case *schedulepb.DispatchTableRequest_AddTable:
 		if a.stopping {
-			log.Info("tpscheduler: agent decline handle add table request",
+			log.Info("tpscheduler: agent is stopping, and decline handle add table request",
 				zap.String("capture", a.captureID),
 				zap.String("namespace", a.changeFeedID.Namespace),
 				zap.String("changefeed", a.changeFeedID.ID))
@@ -333,15 +344,20 @@ func (a *agent) handleMessageDispatchTableRequest(
 		return
 	}
 
-	if _, ok := a.runningTasks[task.TableID]; ok {
-		log.Warn("tpscheduler: agent found duplicate dispatch table request",
+	if task, ok := a.runningTasks[task.TableID]; ok {
+		log.Warn("tpscheduler: agent found duplicate task, ignore the current request",
 			zap.String("capture", a.captureID),
 			zap.String("namespace", a.changeFeedID.Namespace),
 			zap.String("changefeed", a.changeFeedID.ID),
+			zap.Any("task", task),
 			zap.Any("request", request))
 		return
 	}
-
+	log.Debug("tpscheduler: agent found dispatch table task",
+		zap.String("capture", a.captureID),
+		zap.String("namespace", a.changeFeedID.Namespace),
+		zap.String("changefeed", a.changeFeedID.ID),
+		zap.Any("task", task))
 	a.runningTasks[task.TableID] = task
 }
 
@@ -364,7 +380,9 @@ func (a *agent) handleRemoveTableTask(
 	}
 	status := schedulepb.TableStatus{
 		TableID: task.TableID,
-		// todo: if the table is `absent`, also return a stopped here, `stopped` is identical to `absent`.
+		// after `IsRemoveTableFinished` return true, the table is removed,
+		// and `absent` will be return, we still return `stopped` here for the design purpose.
+		// but the `absent` is identical to `stopped`. we should only keep one.
 		State: schedulepb.TableStateStopped,
 		Checkpoint: schedulepb.Checkpoint{
 			CheckpointTs: checkpointTs,

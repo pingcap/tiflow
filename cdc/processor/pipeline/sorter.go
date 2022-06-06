@@ -53,12 +53,13 @@ type sorterNode struct {
 	cancel context.CancelFunc
 
 	// The latest resolved ts that sorter has received.
+	// once the resolvedTs advanced, the sorter is fully prepared.
 	resolvedTs model.Ts
 
 	// The latest barrier ts that sorter has received.
 	barrierTs model.Ts
 
-	status     TableState
+	state      *TableState
 	preparedCh chan struct{}
 
 	// started indicate that the sink is really replicating, not idle.
@@ -67,12 +68,14 @@ type sorterNode struct {
 	startTsCh chan model.Ts
 
 	replConfig *config.ReplicaConfig
+
+	changefeed model.ChangeFeedID
 }
 
 func newSorterNode(
 	tableName string, tableID model.TableID, startTs model.Ts,
 	flowController tableFlowController, mounter entry.Mounter,
-	replConfig *config.ReplicaConfig,
+	replConfig *config.ReplicaConfig, state *TableState, changefeed model.ChangeFeedID,
 ) *sorterNode {
 	return &sorterNode{
 		tableName:      tableName,
@@ -81,10 +84,12 @@ func newSorterNode(
 		mounter:        mounter,
 		resolvedTs:     startTs,
 		barrierTs:      startTs,
-		status:         TableStatePreparing,
+		state:          state,
 		preparedCh:     make(chan struct{}, 1),
 		startTsCh:      make(chan model.Ts, 1),
 		replConfig:     replConfig,
+
+		changefeed: changefeed,
 	}
 }
 
@@ -168,7 +173,7 @@ func (n *sorterNode) start(
 		case <-n.preparedCh:
 		}
 
-		n.status.Store(TableStateReplicating)
+		n.state.Store(TableStateReplicating)
 		eventSorter.EmitStartTs(stdCtx, startTs)
 
 		for {
@@ -293,11 +298,13 @@ func (n *sorterNode) handleRawEvent(ctx context.Context, event *model.Polymorphi
 			//       resolved ts.
 			event = model.NewResolvedPolymorphicEvent(0, n.BarrierTs())
 		}
-		// sorterNode is preparing, this is must the first `Resolved event` received
-		// the indicator that all regions connected.
-		if n.status.Load() == TableStatePreparing {
+		// sorterNode is preparing, and a resolved ts greater than the `sorterNode`
+		// startTs (which is used to initialize the `sorterNode.resolvedTs`) received,
+		// this indicates that all regions connected,
+		// and sorter have data can be consumed by downstream.
+		if n.state.Load() == TableStatePreparing {
 			log.Info("sorterNode, first resolved event received", zap.Any("event", event))
-			n.status.Store(TableStatePrepared)
+			n.state.Store(TableStatePrepared)
 			close(n.preparedCh)
 		}
 	}
@@ -342,4 +349,4 @@ func (n *sorterNode) BarrierTs() model.Ts {
 	return atomic.LoadUint64(&n.barrierTs)
 }
 
-func (n *sorterNode) Status() TableState { return n.status.Load() }
+func (n *sorterNode) State() TableState { return n.state.Load() }
