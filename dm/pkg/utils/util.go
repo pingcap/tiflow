@@ -101,7 +101,7 @@ var (
 	builtInSkipDDLPatterns *regexp.Regexp
 
 	passwordPatterns = `(password: (\\")?)(.*?)((\\")?\\n)`
-	sslPatterns      = `(s*sl-(.*?)-bytes:)([\s\\\nn]+)(-\W[0-9]+[\s\\\nn]+)+?([a-zA-Z])`
+	sslPatterns      = `(s*sl-(ca|key|cert)-bytes:)([\s\\\nn]+)(-\s\d+[\s\\\nn]+)+?([a-zA-Z])`
 
 	passwordRegexp *regexp.Regexp
 	sslRegexp      *regexp.Regexp
