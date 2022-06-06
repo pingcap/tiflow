@@ -483,7 +483,7 @@ func (w *regionWorker) eventHandler(ctx context.Context) error {
 		case err = <-w.errorCh:
 		case events, ok = <-w.inputCh:
 			if ok && len(events) == 0 {
-				panic("regionWorker.inputCh doesn't accept empty slice")
+				log.Panic("regionWorker.inputCh doesn't accept empty slice")
 			}
 		}
 		return
@@ -527,7 +527,10 @@ func (w *regionWorker) eventHandler(ctx context.Context) error {
 			// events are processed, we can ensure all events sent to worker pool
 			// from this region worker are processed.
 			finishedCallbackCh := make(chan struct{}, 1)
-			w.handles[slot].AddEvent(ctx, &regionStatefulEvent{finishedCallbackCh: finishedCallbackCh})
+			err = w.handles[slot].AddEvent(ctx, &regionStatefulEvent{finishedCallbackCh: finishedCallbackCh})
+			if err != nil {
+				return err
+			}
 			select {
 			case <-ctx.Done():
 				return errors.Trace(ctx.Err())
