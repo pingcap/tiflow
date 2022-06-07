@@ -99,8 +99,7 @@ func listCaptures(ctx context.Context, etcdClient *etcd.CDCEtcdClient) ([]*captu
 		return nil, err
 	}
 
-	ownerID, err := etcdClient.GetOwnerID(ctx,
-		etcd.CaptureOwnerKey(etcdClient.ClusterID))
+	ownerID, err := etcdClient.GetOwnerID(ctx)
 	if err != nil && errors.Cause(err) != concurrency.ErrElectionNoLeader {
 		return nil, err
 	}

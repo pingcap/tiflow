@@ -594,8 +594,7 @@ func (c *Capture) GetOwnerCaptureInfo(ctx context.Context) (*model.CaptureInfo, 
 		return nil, err
 	}
 
-	ownerID, err := c.EtcdClient.GetOwnerID(ctx,
-		etcd.CaptureOwnerKey(c.EtcdClient.ClusterID))
+	ownerID, err := c.EtcdClient.GetOwnerID(ctx)
 	if err != nil {
 		return nil, err
 	}

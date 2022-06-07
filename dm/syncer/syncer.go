@@ -42,6 +42,7 @@ import (
 	regexprrouter "github.com/pingcap/tidb/util/regexpr-router"
 	router "github.com/pingcap/tidb/util/table-router"
 	"github.com/pingcap/tiflow/dm/pkg/shardddl/optimism"
+	"github.com/pingcap/tiflow/dm/syncer/binlogstream"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
@@ -93,15 +94,6 @@ var (
 	defaultBucketCount = 8
 )
 
-// BinlogType represents binlog sync type.
-type BinlogType uint8
-
-// binlog sync type.
-const (
-	RemoteBinlog BinlogType = iota + 1
-	LocalBinlog
-)
-
 const (
 	skipJobIdx = iota
 	ddlJobIdx
@@ -144,8 +136,8 @@ type Syncer struct {
 	optimist  *shardddl.Optimist  // shard DDL optimist
 	cli       *clientv3.Client
 
-	binlogType         BinlogType
-	streamerController *StreamerController
+	binlogType         binlogstream.BinlogType
+	streamerController *binlogstream.StreamerController
 
 	jobWg sync.WaitGroup // counts ddl/flush/asyncFlush job in-flight in s.dmlJobCh and s.ddlJobCh
 
@@ -274,7 +266,7 @@ func NewSyncer(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, relay rel
 
 	syncer.checkpoint = NewRemoteCheckPoint(syncer.tctx, cfg, syncer.checkpointID())
 
-	syncer.binlogType = toBinlogType(relay)
+	syncer.binlogType = binlogstream.RelayToBinlogType(relay)
 	syncer.errOperatorHolder = operator.NewHolder(&logger)
 	syncer.readerHub = streamer.GetReaderHub()
 
@@ -371,7 +363,7 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 		}
 	}
 
-	s.streamerController = NewStreamerController(s.syncCfg, s.cfg.EnableGTID, s.fromDB, s.cfg.RelayDir, s.timezone, s.relay)
+	s.streamerController = binlogstream.NewStreamerController(s.syncCfg, s.cfg.EnableGTID, s.fromDB, s.cfg.RelayDir, s.timezone, s.relay)
 
 	s.baList, err = filter.New(s.cfg.CaseSensitive, s.cfg.BAList)
 	if err != nil {
@@ -3996,7 +3988,7 @@ func (s *Syncer) adjustGlobalPointGTID(tctx *tcontext.Context) (bool, error) {
 		return false, nil
 	}
 	// set enableGTID to false for new streamerController
-	streamerController := NewStreamerController(s.syncCfg, false, s.fromDB, s.cfg.RelayDir, s.timezone, s.relay)
+	streamerController := binlogstream.NewStreamerController(s.syncCfg, false, s.fromDB, s.cfg.RelayDir, s.timezone, s.relay)
 
 	endPos := binlog.AdjustPosition(location.Position)
 	startPos := mysql.Position{
@@ -4012,7 +4004,7 @@ func (s *Syncer) adjustGlobalPointGTID(tctx *tcontext.Context) (bool, error) {
 	}
 	defer streamerController.Close()
 
-	gs, err := reader.GetGTIDsForPosFromStreamer(tctx.Context(), streamerController.streamer, endPos)
+	gs, err := reader.GetGTIDsForPosFromStreamer(tctx.Context(), streamerController.GetStreamer(), endPos)
 	if err != nil {
 		s.tctx.L().Warn("fail to get gtids for global location", zap.Stringer("pos", location), zap.Error(err))
 		return false, err
