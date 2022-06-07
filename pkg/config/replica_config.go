@@ -52,15 +52,16 @@ var defaultReplicaConfig = &ReplicaConfig{
 type ReplicaConfig replicaConfig
 
 type replicaConfig struct {
-	CaseSensitive    bool              `toml:"case-sensitive" json:"case-sensitive"`
-	EnableOldValue   bool              `toml:"enable-old-value" json:"enable-old-value"`
-	ForceReplicate   bool              `toml:"force-replicate" json:"force-replicate"`
-	CheckGCSafePoint bool              `toml:"check-gc-safe-point" json:"check-gc-safe-point"`
-	Filter           *FilterConfig     `toml:"filter" json:"filter"`
-	Mounter          *MounterConfig    `toml:"mounter" json:"mounter"`
-	Sink             *SinkConfig       `toml:"sink" json:"sink"`
-	Cyclic           *CyclicConfig     `toml:"cyclic-replication" json:"cyclic-replication"`
-	Consistent       *ConsistentConfig `toml:"consistent" json:"consistent"`
+	CaseSensitive         bool              `toml:"case-sensitive" json:"case-sensitive"`
+	EnableOldValue        bool              `toml:"enable-old-value" json:"enable-old-value"`
+	ForceReplicate        bool              `toml:"force-replicate" json:"force-replicate"`
+	IgnoreIneligibleTable bool              `toml:"ignore-ineligible-table" json:"ignore-ineligible-table"`
+	CheckGCSafePoint      bool              `toml:"check-gc-safe-point" json:"check-gc-safe-point"`
+	Filter                *FilterConfig     `toml:"filter" json:"filter"`
+	Mounter               *MounterConfig    `toml:"mounter" json:"mounter"`
+	Sink                  *SinkConfig       `toml:"sink" json:"sink"`
+	Cyclic                *CyclicConfig     `toml:"cyclic-replication" json:"cyclic-replication"`
+	Consistent            *ConsistentConfig `toml:"consistent" json:"consistent"`
 }
 
 // Marshal returns the json marshal format of a ReplicationConfig

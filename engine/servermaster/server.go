@@ -50,6 +50,8 @@ import (
 	derrors "github.com/pingcap/tiflow/engine/pkg/errors"
 	"github.com/pingcap/tiflow/engine/pkg/etcdutils"
 	externRescManager "github.com/pingcap/tiflow/engine/pkg/externalresource/manager"
+	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
+	"github.com/pingcap/tiflow/engine/pkg/externalresource/resourcetypes"
 	extkv "github.com/pingcap/tiflow/engine/pkg/meta/extension"
 	"github.com/pingcap/tiflow/engine/pkg/meta/kvclient"
 	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
@@ -92,7 +94,10 @@ type Server struct {
 	resourceManagerService *externRescManager.Service
 	scheduler              *scheduler.Scheduler
 
-	//
+	// file resource GC
+	gcRunner      externRescManager.GCRunner
+	gcCoordinator externRescManager.GCCoordinator
+
 	cfg     *Config
 	info    *model.NodeInfo
 	metrics *serverMasterMetric
@@ -665,6 +670,7 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 	defer func() {
 		s.resourceManagerService.Stop()
 	}()
+
 	clients := client.NewClientManager()
 	err = clients.AddMasterClient(ctx, []string{s.cfg.MasterAddr})
 	if err != nil {
@@ -673,9 +679,10 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 	dctx := dcontext.NewContext(ctx, log.L())
 	dctx.Environ.Addr = s.cfg.AdvertiseAddr
 	dctx.Environ.NodeID = s.name()
+	dctx.ProjectInfo = tenant.FrameProjectInfo
 
 	masterMeta := &libModel.MasterMetaKVData{
-		ProjectID: tenant.FrameTenantID,
+		ProjectID: tenant.FrameProjectInfo.UniqueID(),
 		ID:        metadata.JobManagerUUID,
 		Tp:        lib.JobManager,
 		// TODO: add other infos
@@ -747,6 +754,27 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 		}
 	}()
 	s.leaderInitialized.Store(true)
+
+	s.gcRunner = externRescManager.NewGCRunner(s.frameMetaClient, map[resModel.ResourceType]externRescManager.GCHandlerFunc{
+		"local": resourcetypes.NewLocalFileResourceType(clients).GCHandler(),
+	})
+	s.gcCoordinator = externRescManager.NewGCCoordinator(s.executorManager, s.jobManager, s.frameMetaClient, s.gcRunner)
+
+	// TODO refactor this method to make it more readable and maintainable.
+	errg, errgCtx := errgroup.WithContext(ctx)
+	defer func() {
+		err := errg.Wait()
+		if err != nil {
+			log.L().Error("resource GC exited with error", zap.Error(err))
+		}
+	}()
+
+	errg.Go(func() error {
+		return s.gcRunner.Run(errgCtx)
+	})
+	errg.Go(func() error {
+		return s.gcCoordinator.Run(errgCtx)
+	})
 
 	metricTicker := time.NewTicker(defaultMetricInterval)
 	defer metricTicker.Stop()

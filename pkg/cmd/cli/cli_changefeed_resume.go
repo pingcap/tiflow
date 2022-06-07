@@ -15,24 +15,18 @@ package cli
 
 import (
 	"context"
-	"encoding/json"
 
-	"github.com/pingcap/tiflow/cdc/api/owner"
-	"github.com/pingcap/tiflow/cdc/model"
+	apiv1client "github.com/pingcap/tiflow/pkg/api/v1"
+	apiv2client "github.com/pingcap/tiflow/pkg/api/v2"
 	cmdcontext "github.com/pingcap/tiflow/pkg/cmd/context"
 	"github.com/pingcap/tiflow/pkg/cmd/factory"
-	"github.com/pingcap/tiflow/pkg/etcd"
-	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/spf13/cobra"
-	pd "github.com/tikv/pd/client"
 )
 
 // resumeChangefeedOptions defines flags for the `cli changefeed resume` command.
 type resumeChangefeedOptions struct {
-	etcdClient *etcd.CDCEtcdClient
-	pdClient   pd.Client
-
-	credential *security.Credential
+	apiV1Client *apiv1client.APIV1Client
+	apiV2Client *apiv2client.APIV2Client
 
 	changefeedID string
 	noConfirm    bool
@@ -53,49 +47,33 @@ func (o *resumeChangefeedOptions) addFlags(cmd *cobra.Command) {
 
 // complete adapts from the command line args to the data and client required.
 func (o *resumeChangefeedOptions) complete(f factory.Factory) error {
-	etcdClient, err := f.EtcdClient()
+	apiClient, err := f.APIV1Client()
 	if err != nil {
 		return err
 	}
-
-	o.etcdClient = etcdClient
-
-	pdClient, err := f.PdClient()
+	o.apiV1Client = apiClient
+	apiClient2, err := f.APIV2Client()
 	if err != nil {
 		return err
 	}
-
-	o.pdClient = pdClient
-
-	o.credential = f.GetCredential()
-
+	o.apiV2Client = apiClient2
 	return nil
 }
 
 // confirmResumeChangefeedCheck prompts the user to confirm the use of a large data gap when noConfirm is turned off.
 func (o *resumeChangefeedOptions) confirmResumeChangefeedCheck(ctx context.Context, cmd *cobra.Command) error {
-	resp, err := sendOwnerChangefeedQuery(ctx, o.etcdClient,
-		model.DefaultChangeFeedID(o.changefeedID),
-		o.credential)
-	if err != nil {
-		return err
-	}
-
-	info := &owner.ChangefeedResp{}
-	err = json.Unmarshal([]byte(resp), info)
-	if err != nil {
-		return err
-	}
-
-	currentPhysical, _, err := o.pdClient.GetTS(ctx)
-	if err != nil {
-		return err
-	}
-
 	if !o.noConfirm {
-		return confirmLargeDataGap(cmd, currentPhysical, info.TSO)
-	}
+		cf, err := o.apiV1Client.Changefeeds().Get(ctx, o.changefeedID)
+		if err != nil {
+			return err
+		}
 
+		tso, err := o.apiV2Client.Tso().Get(ctx)
+		if err != nil {
+			return err
+		}
+		return confirmLargeDataGap(cmd, tso.Timestamp, cf.CheckpointTSO)
+	}
 	return nil
 }
 
@@ -106,13 +84,7 @@ func (o *resumeChangefeedOptions) run(cmd *cobra.Command) error {
 	if err := o.confirmResumeChangefeedCheck(ctx, cmd); err != nil {
 		return err
 	}
-
-	job := model.AdminJob{
-		CfID: model.DefaultChangeFeedID(o.changefeedID),
-		Type: model.AdminResume,
-	}
-
-	return sendOwnerAdminChangeQuery(ctx, o.etcdClient, job, o.credential)
+	return o.apiV1Client.Changefeeds().Resume(ctx, o.changefeedID)
 }
 
 // newCmdResumeChangefeed creates the `cli changefeed resume` command.

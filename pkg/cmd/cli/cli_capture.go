@@ -14,9 +14,7 @@
 package cli
 
 import (
-	cmdcontext "github.com/pingcap/tiflow/pkg/cmd/context"
 	"github.com/pingcap/tiflow/pkg/cmd/factory"
-	"github.com/pingcap/tiflow/pkg/cmd/util"
 	"github.com/spf13/cobra"
 )
 
@@ -45,16 +43,6 @@ func (o *captureOptions) addFlags(cmd *cobra.Command) {
 func (o *captureOptions) run(f factory.Factory) error {
 	if o.disableVersionCheck {
 		return nil
-	}
-	ctx := cmdcontext.GetDefaultContext()
-	etcdClient, err := f.EtcdClient()
-	if err != nil {
-		return err
-	}
-
-	_, err = util.VerifyAndGetTiCDCClusterVersion(ctx, etcdClient)
-	if err != nil {
-		return err
 	}
 	return nil
 }

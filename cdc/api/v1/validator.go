@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package validator
+package v1
 
 import (
 	"context"
@@ -19,11 +19,9 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/cdc/contextutil"
-	"github.com/pingcap/tiflow/cdc/entry/schema"
-	"github.com/pingcap/tiflow/cdc/kv"
+	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -37,7 +35,8 @@ import (
 	"github.com/tikv/client-go/v2/oracle"
 )
 
-// VerifyCreateChangefeedConfig verify ChangefeedConfig for create a changefeed
+// VerifyCreateChangefeedConfig verifies ChangefeedConfig for create a changefeed
+// This method is used by open api v1 only.
 func VerifyCreateChangefeedConfig(
 	ctx context.Context,
 	changefeedConfig model.ChangefeedConfig,
@@ -144,7 +143,7 @@ func VerifyCreateChangefeedConfig(
 	}
 
 	if !replicaConfig.ForceReplicate && !changefeedConfig.IgnoreIneligibleTable {
-		ineligibleTables, _, err := VerifyTables(replicaConfig, upStream.KVStorage, changefeedConfig.StartTS)
+		ineligibleTables, _, err := entry.VerifyTables(replicaConfig, upStream.KVStorage, changefeedConfig.StartTS)
 		if err != nil {
 			return nil, err
 		}
@@ -216,38 +215,4 @@ func VerifyUpdateChangefeedConfig(ctx context.Context,
 	}
 
 	return newInfo, nil
-}
-
-// VerifyTables catalog tables specified by ReplicaConfig into
-// eligible (has an unique index or primary key) and ineligible tables.
-func VerifyTables(replicaConfig *config.ReplicaConfig, storage tidbkv.Storage, startTs uint64) (ineligibleTables, eligibleTables []model.TableName, err error) {
-	filter, err := filter.NewFilter(replicaConfig)
-	if err != nil {
-		return nil, nil, errors.Trace(err)
-	}
-	meta, err := kv.GetSnapshotMeta(storage, startTs)
-	if err != nil {
-		return nil, nil, errors.Trace(err)
-	}
-	snap, err := schema.NewSingleSnapshotFromMeta(meta, startTs, false /* explicitTables */)
-	if err != nil {
-		return nil, nil, errors.Trace(err)
-	}
-
-	snap.IterTables(true, func(tableInfo *model.TableInfo) {
-		if filter.ShouldIgnoreTable(tableInfo.TableName.Schema, tableInfo.TableName.Table) {
-			return
-		}
-		// Sequence is not supported yet, TiCDC needs to filter all sequence tables.
-		// See https://github.com/pingcap/tiflow/issues/4559
-		if tableInfo.IsSequence() {
-			return
-		}
-		if !tableInfo.IsEligible(false /* forceReplicate */) {
-			ineligibleTables = append(ineligibleTables, tableInfo.TableName)
-		} else {
-			eligibleTables = append(eligibleTables, tableInfo.TableName)
-		}
-	})
-	return
 }

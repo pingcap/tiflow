@@ -15,19 +15,16 @@ package cli
 
 import (
 	"github.com/pingcap/errors"
+	apiv2client "github.com/pingcap/tiflow/pkg/api/v2"
 	"github.com/pingcap/tiflow/pkg/cmd/context"
 	"github.com/pingcap/tiflow/pkg/cmd/factory"
-	"github.com/pingcap/tiflow/pkg/etcd"
-	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	"github.com/spf13/cobra"
-	pd "github.com/tikv/pd/client"
 )
 
 // unsafeDeleteServiceGcSafepointOptions defines flags
 // for the `cli unsafe delete-service-gc-safepoint` command.
 type unsafeDeleteServiceGcSafepointOptions struct {
-	pdClient   pd.Client
-	etcdClient *etcd.CDCEtcdClient
+	apiClient *apiv2client.APIV2Client
 }
 
 // newUnsafeDeleteServiceGcSafepointOptions creates new unsafeDeleteServiceGcSafepointOptions
@@ -38,14 +35,11 @@ func newUnsafeDeleteServiceGcSafepointOptions() *unsafeDeleteServiceGcSafepointO
 
 // complete adapts from the command line args to the data and client required.
 func (o *unsafeDeleteServiceGcSafepointOptions) complete(f factory.Factory) error {
-	pdClient, err := f.PdClient()
+	apiClient, err := f.APIV2Client()
 	if err != nil {
 		return err
 	}
-
-	o.pdClient = pdClient
-
-	o.etcdClient, err = f.EtcdClient()
+	o.apiClient = apiClient
 	return err
 }
 
@@ -53,8 +47,7 @@ func (o *unsafeDeleteServiceGcSafepointOptions) complete(f factory.Factory) erro
 func (o *unsafeDeleteServiceGcSafepointOptions) run(cmd *cobra.Command) error {
 	ctx := context.GetDefaultContext()
 
-	err := gc.RemoveServiceGCSafepoint(ctx, o.pdClient,
-		o.etcdClient.GetGCServiceID())
+	err := o.apiClient.Unsafe().DeleteServiceGcSafePoint(ctx)
 	if err == nil {
 		cmd.Println("CDC service GC safepoint truncated in PD!")
 	}

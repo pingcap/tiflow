@@ -186,6 +186,9 @@ func (s *Server) startStatusHTTP(lis net.Listener) error {
 	// discard gin log output
 	gin.DefaultWriter = io.Discard
 	router := gin.New()
+	// add gin.Recovery() to handle unexpected panic
+	router.Use(gin.Recovery())
+	// router.
 	// Register APIs.
 	RegisterRoutes(router, s.capture, registry)
 

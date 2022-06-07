@@ -109,6 +109,15 @@ func NewCapture4Test(o owner.Owner) *Capture {
 	return res
 }
 
+// NewCaptureWithManager4Test returns a new Capture instance for test.
+func NewCaptureWithManager4Test(o owner.Owner, m *upstream.Manager) *Capture {
+	res := &Capture{
+		UpstreamManager: m,
+	}
+	res.owner = o
+	return res
+}
+
 func (c *Capture) reset(ctx context.Context) error {
 	conf := config.GetGlobalServerConfig()
 	sess, err := concurrency.NewSession(c.EtcdClient.Client.Unwrap(),
@@ -316,10 +325,14 @@ func (c *Capture) run(stdCtx context.Context) error {
 }
 
 // Info gets the capture info
-func (c *Capture) Info() model.CaptureInfo {
+func (c *Capture) Info() (model.CaptureInfo, error) {
 	c.captureMu.Lock()
 	defer c.captureMu.Unlock()
-	return *c.info
+	// when c.reset has not been called yet, c.info is nil.
+	if c.info != nil {
+		return *c.info, nil
+	}
+	return model.CaptureInfo{}, cerror.ErrCaptureNotInitialized.GenWithStackByArgs()
 }
 
 func (c *Capture) campaignOwner(ctx cdcContext.Context) error {

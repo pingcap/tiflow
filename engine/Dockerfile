@@ -15,7 +15,9 @@ WORKDIR /dataflow-engine
 COPY . .
 RUN make engine
 
-RUN wget -O /usr/local/bin/dumb-init https://github.com/Yelp/dumb-init/releases/download/v1.2.2/dumb-init_1.2.2_amd64 && \
-    chmod +x /usr/local/bin/dumb-init
+FROM alpine:3.16
 
-ENTRYPOINT ["/usr/local/bin/dumb-init"]
+COPY --from=builder /dataflow-engine/bin/df-master /df-master
+COPY --from=builder /dataflow-engine/bin/df-executor /df-executor
+COPY --from=builder /dataflow-engine/bin/df-master-client /df-master-client
+COPY --from=builder /dataflow-engine/bin/df-demoserver /df-demoserver

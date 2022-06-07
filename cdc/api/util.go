@@ -14,16 +14,20 @@
 package api
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"net/http"
 	"strings"
 
+	"github.com/gin-gonic/gin"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/httputil"
 	"go.uber.org/zap"
 )
 
@@ -137,5 +141,90 @@ func HandleOwnerScheduleTable(
 		return errors.Trace(ctx.Err())
 	case err := <-done:
 		return errors.Trace(err)
+	}
+}
+
+// forWardFromCapture is a header to be set when
+// a request is forwarded from another capture
+const forWardFromCapture = "TiCDC-ForwardFromCapture"
+
+// ForwardToOwner forwards an request to owner
+func ForwardToOwner(c *gin.Context, capture *capture.Capture) {
+	ctx := c.Request.Context()
+	// every request can only forward to owner one time
+	if len(c.GetHeader(forWardFromCapture)) != 0 {
+		_ = c.Error(cerror.ErrRequestForwardErr.FastGenByArgs())
+		return
+	}
+
+	info, err := capture.Info()
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+
+	c.Header(forWardFromCapture, info.ID)
+
+	var owner *model.CaptureInfo
+	// get owner
+	owner, err = capture.GetOwnerCaptureInfo(ctx)
+	if err != nil {
+		log.Info("get owner failed", zap.Error(err))
+		_ = c.Error(err)
+		return
+	}
+
+	security := config.GetGlobalServerConfig().Security
+
+	// init a request
+	req, err := http.NewRequestWithContext(
+		ctx, c.Request.Method, c.Request.RequestURI, c.Request.Body)
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+
+	req.URL.Host = owner.AdvertiseAddr
+	// we should check tls config instead of security here because
+	// security will never be nil
+	if tls, _ := security.ToTLSConfigWithVerify(); tls != nil {
+		req.URL.Scheme = "https"
+	} else {
+		req.URL.Scheme = "http"
+	}
+	for k, v := range c.Request.Header {
+		for _, vv := range v {
+			req.Header.Add(k, vv)
+		}
+	}
+
+	// forward to owner
+	cli, err := httputil.NewClient(security)
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+	resp, err := cli.Do(req)
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+
+	// write header
+	for k, values := range resp.Header {
+		for _, v := range values {
+			c.Header(k, v)
+		}
+	}
+
+	// write status code
+	c.Status(resp.StatusCode)
+
+	// write response body
+	defer resp.Body.Close()
+	_, err = bufio.NewReader(resp.Body).WriteTo(c.Writer)
+	if err != nil {
+		_ = c.Error(err)
+		return
 	}
 }
