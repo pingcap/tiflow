@@ -85,7 +85,6 @@ func (f *factoryImpl) GetCredential() *security.Credential {
 // EtcdClient creates new cdc etcd client.
 func (f *factoryImpl) EtcdClient() (*etcd.CDCEtcdClient, error) {
 	ctx := cmdconetxt.GetDefaultContext()
-
 	tlsConfig, err := f.ToTLSConfig()
 	if err != nil {
 		return nil, err
@@ -133,8 +132,8 @@ func (f *factoryImpl) EtcdClient() (*etcd.CDCEtcdClient, error) {
 			"fail to open PD client, please check pd address \"%s\"", pdAddr)
 	}
 
-	client := etcd.NewCDCEtcdClient(ctx, etcdClient)
-	return &client, nil
+	client, err := etcd.NewCDCEtcdClient(ctx, etcdClient, "default")
+	return &client, err
 }
 
 // PdClient creates new pd client.

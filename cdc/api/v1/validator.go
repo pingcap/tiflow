@@ -79,6 +79,7 @@ func VerifyCreateChangefeedConfig(
 	if err := gc.EnsureChangefeedStartTsSafety(
 		ctx,
 		upStream.PDClient,
+		capture.EtcdClient.GetEnsureGCServiceID(),
 		model.DefaultChangeFeedID(changefeedConfig.ID),
 		ensureTTL, changefeedConfig.StartTS); err != nil {
 		if !cerror.ErrStartTsBeforeGC.Equal(err) {

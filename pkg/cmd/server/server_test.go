@@ -209,6 +209,7 @@ func TestParseCfg(t *testing.T) {
 				ServerWorkerPoolSize:         4,
 			},
 		},
+		ClusterID: "default",
 	}, o.serverConfig)
 }
 
@@ -354,6 +355,7 @@ server-worker-pool-size = 16
 				ServerWorkerPoolSize:         16,
 			},
 		},
+		ClusterID: "default",
 	}, o.serverConfig)
 }
 
@@ -496,6 +498,7 @@ cert-allowed-cn = ["dd","ee"]
 				ServerWorkerPoolSize:         4,
 			},
 		},
+		ClusterID: "default",
 	}, o.serverConfig)
 }
 
