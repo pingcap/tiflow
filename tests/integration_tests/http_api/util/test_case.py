@@ -365,7 +365,7 @@ def create_changefeed_v2():
         "changefeed-id": "changefeed-test-v2-black-hole",
         "sink-uri": "blackhole://",
         "replica-config":{
-            "ignore-ineligible-table":"true"
+            "ignore-ineligible-table": True
             },
         "pd-addrs": [TLS_PD_ADDR],
         "ca-path":CA_PEM_PATH, 
@@ -383,7 +383,7 @@ def create_changefeed_v2():
         "changefeed_id": "changefeed-test-v2-black-hole",
         "sink-uri": SINK_URI,
         "replica-config":{
-            "ignore-ineligible-table":"true",
+            "ignore-ineligible-table": True,
             "filter": {
             "rules": ["test.verify*"]
             }
@@ -404,7 +404,7 @@ def create_changefeed_v2():
         "changefeed_id": "changefeed-test",
         "sink-uri": "mysql://127.0.0.1:1111",
         "replica-config":{
-            "ignore-ineligible-table":"true"
+            "ignore-ineligible-table": True
             },
         "pd-addrs": [TLS_PD_ADDR],
         "ca-path":CA_PEM_PATH, 
