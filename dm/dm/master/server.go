@@ -15,11 +15,7 @@ package master
 
 import (
 	"context"
-<<<<<<< HEAD
-=======
 	"database/sql"
-	"encoding/binary"
->>>>>>> 1e4814e3f (master, config(dm): fix case-sensitive compatibility for dmctl (#5307))
 	"fmt"
 	"net"
 	"net/http"
