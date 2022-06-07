@@ -570,13 +570,19 @@ function run_validator_cmd {
 	run_sql_source1 "create table dmctl_command.t_trigger_flush110(id int primary key)" # trigger flush
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
-		"\"synced\": true" 2
+		"\"synced\": true" 2 \
+		"\"stage\": \"Stopped\"" 2
 	run_sql_tidb "select * from dmctl_command.t1"
 	check_not_contains "id: -10" # sync failed due to GO_FAILPOINTS
 	sleep 5                      # wait validator
 	# no validation error, because validator has been stopped
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation status test" \
+		"new\/ignored\/resolved: 0\/0\/0" 2
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		"insert\/update\/delete: 4\/1\/1\"" 1 \
+		"insert\/update\/delete: 0\/0\/1\"" 1 \
 		"new\/ignored\/resolved: 0\/0\/0" 2
 
 	dmctl_stop_task "test"
