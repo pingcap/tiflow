@@ -44,7 +44,6 @@ func TestEtcdSession(t *testing.T) {
 		Member:       "member",
 		Key:          "session-key",
 		Value:        "session-value",
-		RPCTimeout:   time.Second,
 		KeepaliveTTL: 5 * time.Second,
 	}
 	session, err := NewEtcdSession(ctx, client, cfg)
