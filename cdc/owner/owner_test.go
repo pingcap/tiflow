@@ -62,11 +62,12 @@ func createOwner4Test(ctx cdcContext.Context, t *testing.T) (*ownerImpl, *orches
 	o := owner.(*ownerImpl)
 	o.upstreamManager = upstream.NewManager4Test(pdClient)
 
-	state := orchestrator.NewGlobalState()
+	state := orchestrator.NewGlobalState(etcd.DefaultCDCClusterID)
 	tester := orchestrator.NewReactorStateTester(t, state, nil)
 
 	// set captures
 	cdcKey := etcd.CDCKey{
+		ClusterID: state.ClusterID,
 		Tp:        etcd.CDCKeyTypeCapture,
 		CaptureID: ctx.GlobalVars().CaptureInfo.ID,
 	}
@@ -91,6 +92,7 @@ func TestCreateRemoveChangefeed(t *testing.T) {
 	changefeedStr, err := changefeedInfo.Marshal()
 	require.Nil(t, err)
 	cdcKey := etcd.CDCKey{
+		ClusterID:    state.ClusterID,
 		Tp:           etcd.CDCKeyTypeChangefeedInfo,
 		ChangefeedID: changefeedID,
 	}
@@ -160,6 +162,7 @@ func TestStopChangefeed(t *testing.T) {
 	changefeedStr, err := changefeedInfo.Marshal()
 	require.Nil(t, err)
 	cdcKey := etcd.CDCKey{
+		ClusterID:    state.ClusterID,
 		Tp:           etcd.CDCKeyTypeChangefeedInfo,
 		ChangefeedID: changefeedID,
 	}
@@ -209,6 +212,7 @@ func TestFixChangefeedState(t *testing.T) {
 	changefeedStr, err := changefeedInfo.Marshal()
 	require.Nil(t, err)
 	cdcKey := etcd.CDCKey{
+		ClusterID:    state.ClusterID,
 		Tp:           etcd.CDCKeyTypeChangefeedInfo,
 		ChangefeedID: changefeedID,
 	}
@@ -248,6 +252,7 @@ func TestFixChangefeedSinkProtocol(t *testing.T) {
 	changefeedStr, err := changefeedInfo.Marshal()
 	require.Nil(t, err)
 	cdcKey := etcd.CDCKey{
+		ClusterID:    state.ClusterID,
 		Tp:           etcd.CDCKeyTypeChangefeedInfo,
 		ChangefeedID: changefeedID,
 	}
@@ -275,7 +280,10 @@ func TestCheckClusterVersion(t *testing.T) {
 	ctx, cancel := cdcContext.WithCancel(ctx)
 	defer cancel()
 
-	tester.MustUpdate("/tidb/cdc/capture/6bbc01c8-0605-4f86-a0f9-b3119109b225", []byte(`{"id":"6bbc01c8-0605-4f86-a0f9-b3119109b225","address":"127.0.0.1:8300","version":"v6.0.0"}`))
+	tester.MustUpdate(fmt.Sprintf("%s/capture/6bbc01c8-0605-4f86-a0f9-b3119109b225",
+		etcd.DefaultClusterAndMetaPrefix),
+		[]byte(`{"id":"6bbc01c8-0605-4f86-a0f9-b3119109b225",
+"address":"127.0.0.1:8300","version":"v6.0.0"}`))
 
 	changefeedID := model.DefaultChangeFeedID("test-changefeed")
 	changefeedInfo := &model.ChangeFeedInfo{
@@ -285,6 +293,7 @@ func TestCheckClusterVersion(t *testing.T) {
 	changefeedStr, err := changefeedInfo.Marshal()
 	require.Nil(t, err)
 	cdcKey := etcd.CDCKey{
+		ClusterID:    state.ClusterID,
 		Tp:           etcd.CDCKeyTypeChangefeedInfo,
 		ChangefeedID: changefeedID,
 	}
@@ -296,7 +305,9 @@ func TestCheckClusterVersion(t *testing.T) {
 	require.Nil(t, err)
 	require.NotContains(t, owner.changefeeds, changefeedID)
 
-	tester.MustUpdate("/tidb/cdc/capture/6bbc01c8-0605-4f86-a0f9-b3119109b225",
+	tester.MustUpdate(fmt.Sprintf("%s/capture/6bbc01c8-0605-4f86-a0f9-b3119109b225",
+		etcd.DefaultClusterAndMetaPrefix,
+	),
 		[]byte(`{"id":"6bbc01c8-0605-4f86-a0f9-b3119109b225","address":"127.0.0.1:8300","version":"`+ctx.GlobalVars().CaptureInfo.Version+`"}`))
 
 	// check the tick is not skipped and the changefeed will be handled normally
@@ -364,7 +375,7 @@ func TestUpdateGCSafePoint(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(true)
 	ctx, cancel := cdcContext.WithCancel(ctx)
 	defer cancel()
-	state := orchestrator.NewGlobalState()
+	state := orchestrator.NewGlobalState(etcd.DefaultCDCClusterID)
 	tester := orchestrator.NewReactorStateTester(t, state, nil)
 
 	// no changefeed, the gc safe point should be max uint64
@@ -388,7 +399,9 @@ func TestUpdateGCSafePoint(t *testing.T) {
 	}
 	changefeedID1 := model.DefaultChangeFeedID("test-changefeed1")
 	tester.MustUpdate(
-		fmt.Sprintf("/tidb/cdc/changefeed/info/%s", changefeedID1.ID),
+		fmt.Sprintf("%s/changefeed/info/%s",
+			etcd.DefaultClusterAndNamespacePrefix,
+			changefeedID1.ID),
 		[]byte(`{"config":{"cyclic-replication":{}},"state":"failed"}`))
 	tester.MustApplyPatches()
 	state.Changefeeds[changefeedID1].PatchStatus(
@@ -408,7 +421,7 @@ func TestUpdateGCSafePoint(t *testing.T) {
 		// Owner will do a snapshot read at (checkpointTs - 1) from TiKV,
 		// set GC safepoint to (checkpointTs - 1)
 		require.Equal(t, safePoint, uint64(1))
-		require.Equal(t, serviceID, gc.CDCServiceSafePointID)
+		require.Equal(t, serviceID, etcd.GcServiceIDForTest())
 		ch <- struct{}{}
 		return 0, nil
 	}
@@ -429,7 +442,9 @@ func TestUpdateGCSafePoint(t *testing.T) {
 	// add another changefeed, it must update GC safepoint.
 	changefeedID2 := model.DefaultChangeFeedID("test-changefeed2")
 	tester.MustUpdate(
-		fmt.Sprintf("/tidb/cdc/changefeed/info/%s", changefeedID2.ID),
+		fmt.Sprintf("%s/changefeed/info/%s",
+			etcd.DefaultClusterAndNamespacePrefix,
+			changefeedID2.ID),
 		[]byte(`{"config":{"cyclic-replication":{}},"state":"normal"}`))
 	tester.MustApplyPatches()
 	state.Changefeeds[changefeedID1].PatchStatus(
@@ -447,7 +462,7 @@ func TestUpdateGCSafePoint(t *testing.T) {
 		// Owner will do a snapshot read at (checkpointTs - 1) from TiKV,
 		// set GC safepoint to (checkpointTs - 1)
 		require.Equal(t, safePoint, uint64(19))
-		require.Equal(t, serviceID, gc.CDCServiceSafePointID)
+		require.Equal(t, serviceID, etcd.GcServiceIDForTest())
 		ch <- struct{}{}
 		return 0, nil
 	}
@@ -479,6 +494,7 @@ func TestHandleJobsDontBlock(t *testing.T) {
 	changefeedStr, err := cfInfo1.Marshal()
 	require.Nil(t, err)
 	cdcKey := etcd.CDCKey{
+		ClusterID:    state.ClusterID,
 		Tp:           etcd.CDCKeyTypeChangefeedInfo,
 		ChangefeedID: cf1,
 	}
@@ -496,6 +512,7 @@ func TestHandleJobsDontBlock(t *testing.T) {
 		Version:       " v0.0.1-test-only",
 	}
 	cdcKey = etcd.CDCKey{
+		ClusterID: state.ClusterID,
 		Tp:        etcd.CDCKeyTypeCapture,
 		CaptureID: captureInfo.ID,
 	}
@@ -513,6 +530,7 @@ func TestHandleJobsDontBlock(t *testing.T) {
 	changefeedStr1, err := cfInfo2.Marshal()
 	require.Nil(t, err)
 	cdcKey = etcd.CDCKey{
+		ClusterID:    state.ClusterID,
 		Tp:           etcd.CDCKeyTypeChangefeedInfo,
 		ChangefeedID: cf2,
 	}
@@ -556,7 +574,7 @@ WorkLoop:
 }
 
 func TestCalculateGCSafepointTs(t *testing.T) {
-	state := orchestrator.NewGlobalState()
+	state := orchestrator.NewGlobalState(etcd.DefaultCDCClusterID)
 	expectMinTsMap := make(map[uint64]uint64)
 	expectForceUpdateMap := make(map[uint64]interface{})
 	o := ownerImpl{changefeeds: make(map[model.ChangeFeedID]*changefeed)}

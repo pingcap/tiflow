@@ -136,7 +136,8 @@ const (
       "server-ack-interval": 100000000,
       "server-worker-pool-size": 4
     }
-  }
+  },
+  "cluster-id": "default"
 }`
 
 	testCfgTestReplicaConfigMarshal1 = `{

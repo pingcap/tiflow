@@ -27,6 +27,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/stretchr/testify/require"
@@ -60,11 +61,13 @@ func (s *managerTester) resetSuit(ctx cdcContext.Context, t *testing.T) {
 			checkpointTs: replicaInfo.StartTs,
 		}, nil
 	})
-	s.state = orchestrator.NewGlobalState()
+	s.state = orchestrator.NewGlobalState(etcd.DefaultCDCClusterID)
 	captureInfoBytes, err := ctx.GlobalVars().CaptureInfo.Marshal()
 	require.Nil(t, err)
 	s.tester = orchestrator.NewReactorStateTester(t, s.state, map[string]string{
-		fmt.Sprintf("/tidb/cdc/capture/%s", ctx.GlobalVars().CaptureInfo.ID): string(captureInfoBytes),
+		fmt.Sprintf("%s/capture/%s",
+			etcd.DefaultClusterAndMetaPrefix,
+			ctx.GlobalVars().CaptureInfo.ID): string(captureInfoBytes),
 	})
 }
 
@@ -80,7 +83,8 @@ func TestChangefeed(t *testing.T) {
 
 	changefeedID := model.DefaultChangeFeedID("test-changefeed")
 	// an inactive changefeed
-	s.state.Changefeeds[changefeedID] = orchestrator.NewChangefeedReactorState(changefeedID)
+	s.state.Changefeeds[changefeedID] = orchestrator.NewChangefeedReactorState(
+		etcd.DefaultCDCClusterID, changefeedID)
 	_, err = s.manager.Tick(ctx, s.state)
 	s.tester.MustApplyPatches()
 	require.Nil(t, err)
@@ -132,7 +136,8 @@ func TestDebugInfo(t *testing.T) {
 
 	changefeedID := model.DefaultChangeFeedID("test-changefeed")
 	// an active changefeed
-	s.state.Changefeeds[changefeedID] = orchestrator.NewChangefeedReactorState(changefeedID)
+	s.state.Changefeeds[changefeedID] = orchestrator.NewChangefeedReactorState(
+		etcd.DefaultCDCClusterID, changefeedID)
 	s.state.Changefeeds[changefeedID].PatchInfo(
 		func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 			return &model.ChangeFeedInfo{
@@ -186,7 +191,8 @@ func TestClose(t *testing.T) {
 
 	changefeedID := model.DefaultChangeFeedID("test-changefeed")
 	// an active changefeed
-	s.state.Changefeeds[changefeedID] = orchestrator.NewChangefeedReactorState(changefeedID)
+	s.state.Changefeeds[changefeedID] = orchestrator.NewChangefeedReactorState(
+		etcd.DefaultCDCClusterID, changefeedID)
 	s.state.Changefeeds[changefeedID].PatchInfo(
 		func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 			return &model.ChangeFeedInfo{

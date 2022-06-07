@@ -136,7 +136,7 @@ func (c *Capture) reset(ctx context.Context) error {
 	if c.UpstreamManager != nil {
 		c.UpstreamManager.Close()
 	}
-	c.UpstreamManager = upstream.NewManager(ctx)
+	c.UpstreamManager = upstream.NewManager(ctx, c.EtcdClient.GetGCServiceID())
 	err = c.UpstreamManager.Add(upstream.DefaultUpstreamID, c.pdEndpoints, conf.Security)
 	if err != nil {
 		return errors.Annotate(
@@ -150,7 +150,7 @@ func (c *Capture) reset(ctx context.Context) error {
 		_ = c.session.Close()
 	}
 	c.session = sess
-	c.election = concurrency.NewElection(sess, etcd.CaptureOwnerKey)
+	c.election = concurrency.NewElection(sess, etcd.CaptureOwnerKey(c.EtcdClient.ClusterID))
 
 	if c.tableActorSystem != nil {
 		c.tableActorSystem.Stop()
@@ -286,7 +286,7 @@ func (c *Capture) run(stdCtx context.Context) error {
 		conf := config.GetGlobalServerConfig()
 		processorFlushInterval := time.Duration(conf.ProcessorFlushInterval)
 
-		globalState := orchestrator.NewGlobalState()
+		globalState := orchestrator.NewGlobalState(c.EtcdClient.ClusterID)
 
 		globalState.SetOnCaptureAdded(func(captureID model.CaptureID, addr string) {
 			c.MessageRouter.AddPeer(captureID, addr)
@@ -391,7 +391,7 @@ func (c *Capture) campaignOwner(ctx cdcContext.Context) error {
 		owner := c.newOwner(c.UpstreamManager)
 		c.setOwner(owner)
 
-		globalState := orchestrator.NewGlobalState()
+		globalState := orchestrator.NewGlobalState(c.EtcdClient.ClusterID)
 
 		globalState.SetOnCaptureAdded(func(captureID model.CaptureID, addr string) {
 			c.MessageRouter.AddPeer(captureID, addr)
@@ -400,7 +400,9 @@ func (c *Capture) campaignOwner(ctx cdcContext.Context) error {
 			c.MessageRouter.RemovePeer(captureID)
 		})
 
-		err = c.runEtcdWorker(ownerCtx, owner, orchestrator.NewGlobalState(), ownerFlushInterval, util.RoleOwner.String())
+		err = c.runEtcdWorker(ownerCtx, owner,
+			orchestrator.NewGlobalState(c.EtcdClient.ClusterID),
+			ownerFlushInterval, util.RoleOwner.String())
 		c.setOwner(nil)
 		log.Info("run owner exited", zap.Error(err))
 		// if owner exits, resign the owner key
@@ -423,7 +425,8 @@ func (c *Capture) runEtcdWorker(
 	timerInterval time.Duration,
 	role string,
 ) error {
-	etcdWorker, err := orchestrator.NewEtcdWorker(ctx.GlobalVars().EtcdClient.Client, etcd.EtcdKeyBase, reactor, reactorState)
+	etcdWorker, err := orchestrator.NewEtcdWorker(ctx.GlobalVars().EtcdClient.Client,
+		etcd.BaseKey(c.EtcdClient.ClusterID), reactor, reactorState)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -588,7 +591,8 @@ func (c *Capture) GetOwnerCaptureInfo(ctx context.Context) (*model.CaptureInfo, 
 		return nil, err
 	}
 
-	ownerID, err := c.EtcdClient.GetOwnerID(ctx, etcd.CaptureOwnerKey)
+	ownerID, err := c.EtcdClient.GetOwnerID(ctx,
+		etcd.CaptureOwnerKey(c.EtcdClient.ClusterID))
 	if err != nil {
 		return nil, err
 	}

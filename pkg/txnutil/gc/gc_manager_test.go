@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/pingcap/tiflow/pkg/util/testleak"
 	"github.com/tikv/client-go/v2/oracle"
@@ -40,14 +41,15 @@ func (s *gcManagerSuite) TestUpdateGCSafePoint(c *check.C) {
 	defer testleak.AfterTest(c)()
 	mockPDClient := &MockPDClient{}
 	pdClock := pdutil.NewClock4Test()
-	gcManager := NewManager(mockPDClient, pdClock).(*gcManager)
+	gcManager := NewManager(etcd.GcServiceIDForTest(),
+		mockPDClient, pdClock).(*gcManager)
 	ctx := cdcContext.NewBackendContext4Test(true)
 
 	startTs := oracle.GoTimeToTS(time.Now())
 	mockPDClient.UpdateServiceGCSafePointFunc = func(ctx context.Context, serviceID string, ttl int64, safePoint uint64) (uint64, error) {
 		c.Assert(safePoint, check.Equals, startTs)
 		c.Assert(ttl, check.Equals, gcManager.gcTTL)
-		c.Assert(serviceID, check.Equals, CDCServiceSafePointID)
+		c.Assert(serviceID, check.Equals, etcd.GcServiceIDForTest())
 		return 0, nil
 	}
 	err := gcManager.TryUpdateGCSafePoint(ctx, startTs, false /* forceUpdate */)
@@ -65,7 +67,7 @@ func (s *gcManagerSuite) TestUpdateGCSafePoint(c *check.C) {
 	mockPDClient.UpdateServiceGCSafePointFunc = func(ctx context.Context, serviceID string, ttl int64, safePoint uint64) (uint64, error) {
 		c.Assert(safePoint, check.Equals, startTs)
 		c.Assert(ttl, check.Equals, gcManager.gcTTL)
-		c.Assert(serviceID, check.Equals, CDCServiceSafePointID)
+		c.Assert(serviceID, check.Equals, etcd.GcServiceIDForTest())
 		return 0, nil
 	}
 	err = gcManager.TryUpdateGCSafePoint(ctx, startTs, false /* forceUpdate */)
@@ -77,7 +79,7 @@ func (s *gcManagerSuite) TestUpdateGCSafePoint(c *check.C) {
 	mockPDClient.UpdateServiceGCSafePointFunc = func(ctx context.Context, serviceID string, ttl int64, safePoint uint64) (uint64, error) {
 		c.Assert(safePoint, check.Equals, startTs)
 		c.Assert(ttl, check.Equals, gcManager.gcTTL)
-		c.Assert(serviceID, check.Equals, CDCServiceSafePointID)
+		c.Assert(serviceID, check.Equals, etcd.GcServiceIDForTest())
 		ch <- struct{}{}
 		return 0, nil
 	}
@@ -94,7 +96,8 @@ func (s *gcManagerSuite) TestCheckStaleCheckpointTs(c *check.C) {
 	defer testleak.AfterTest(c)()
 	mockPDClient := &MockPDClient{}
 	pdClock := pdutil.NewClock4Test()
-	gcManager := NewManager(mockPDClient, pdClock).(*gcManager)
+	gcManager := NewManager(etcd.GcServiceIDForTest(),
+		mockPDClient, pdClock).(*gcManager)
 	gcManager.isTiCDCBlockGC = true
 	ctx := context.Background()
 
