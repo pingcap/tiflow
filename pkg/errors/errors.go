@@ -988,7 +988,7 @@ var (
 
 	// UpStream error
 	ErrUpStreamNotFound = errors.Normalize(
-		"upStram not found, cluster-id: %d",
+		"upStream not found, cluster-id: %d",
 		errors.RFCCodeText("CDC:ErrUpStreamNotFound"),
 	)
 )

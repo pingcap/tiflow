@@ -1063,7 +1063,7 @@ unmarshal failed
 
 ["CDC:ErrUpStreamNotFound"]
 error = '''
-upStram not found, cluster-id: %d
+upStream not found, cluster-id: %d
 '''
 
 ["CDC:ErrUpdateServiceSafepointFailed"]
