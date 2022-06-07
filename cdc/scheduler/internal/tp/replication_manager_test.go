@@ -482,6 +482,40 @@ func TestReplicationManagerMaxTaskConcurrency(t *testing.T) {
 	require.Len(t, msgs, 0)
 }
 
+func TestReplicationManagerAdvanceCheckpoint(t *testing.T) {
+	t.Parallel()
+
+	r := newReplicationManager(1)
+	rs, err := newReplicationSet(1, 10, map[model.CaptureID]*schedulepb.TableStatus{
+		"1": {1, schedulepb.TableStateReplicating, schedulepb.Checkpoint{
+			CheckpointTs: 10,
+			ResolvedTs:   20,
+		}},
+	})
+	require.NoError(t, err)
+	r.tables[model.TableID(1)] = rs
+
+	rs, err = newReplicationSet(2, 15, map[model.CaptureID]*schedulepb.TableStatus{
+		"2": {2, schedulepb.TableStateReplicating, schedulepb.Checkpoint{
+			CheckpointTs: 15,
+			ResolvedTs:   30,
+		}},
+	})
+	require.NoError(t, err)
+	r.tables[model.TableID(2)] = rs
+
+	// all table is replicating
+	currentTables := []model.TableID{1, 2}
+	checkpoint, resolved := r.AdvanceCheckpoint(currentTables)
+	require.Equal(t, model.Ts(15), checkpoint)
+	require.Equal(t, model.Ts(20), resolved)
+
+	// some table not replicating
+	currentTables = append(currentTables, 3)
+	checkpoint, resolved = r.AdvanceCheckpoint(currentTables)
+	require.Equal(t, checkpointCannotProceed, checkpointCannotProceed)
+}
+
 func TestReplicationManagerHandleCaptureChanges(t *testing.T) {
 	t.Parallel()
 
