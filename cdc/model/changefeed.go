@@ -18,7 +18,6 @@ import (
 	"math"
 	"net/url"
 	"regexp"
-	"strings"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -27,7 +26,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/cyclic/mark"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
@@ -145,43 +143,6 @@ type ChangeFeedInfo struct {
 	SyncPointEnabled  bool          `json:"sync-point-enabled"`
 	SyncPointInterval time.Duration `json:"sync-point-interval"`
 	CreatorVersion    string        `json:"creator-version"`
-
-	PDConfig PDConfig `json:"pd-config"`
-}
-
-type PDConfig struct {
-	PDAddrs    []string            `json:"pd-addrs"`
-	Credential security.Credential `json:"credential-config"`
-}
-
-var defaultChangefeedInfo = &ChangeFeedInfo{
-	UpstreamID:        DefaultUpstreamID,
-	Opts:              make(map[string]string),
-	State:             StateNormal,
-	Config:            config.GetDefaultReplicaConfig(),
-	SyncPointEnabled:  false,
-	SyncPointInterval: 10 * time.Minute,
-	PDConfig:          PDConfig{},
-}
-
-type ChangefeedInfoForAPI ChangeFeedInfo
-
-func (c *ChangefeedInfoForAPI) Marshal() (string, error) {
-	info := ChangeFeedInfo(*c)
-	infoStr, err := info.Marshal()
-	if err != nil {
-		return "", cerror.WrapError(cerror.ErrMarshalFailed, err)
-	}
-	var v interface{}
-	json.Unmarshal([]byte(infoStr), &v)
-	data := v.(map[string]interface{})
-	newData := make(map[string]interface{}, len(data))
-	for k, v := range data {
-		newK := strings.Replace(k, "-", "_", -1)
-		newData[newK] = v
-	}
-	res, err := json.Marshal(newData)
-	return string(res), err
 }
 
 const changeFeedIDMaxLen = 128
@@ -430,13 +391,4 @@ func (info *ChangeFeedInfo) HasFastFailError() bool {
 		return false
 	}
 	return cerror.ChangefeedFastFailErrorCode(errors.RFCErrorCode(info.Error.Code))
-}
-
-// GetDeFaultChangefeedInfo returns deFaultChangefeedInfo.
-func GetDeFaultChangefeedInfo() (*ChangeFeedInfo, error) {
-	res, err := defaultChangefeedInfo.Clone()
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	return res, nil
 }

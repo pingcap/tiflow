@@ -18,7 +18,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/ngaut/log"
-	"github.com/pingcap/tiflow/cdc/api/validator"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
@@ -30,25 +29,21 @@ import (
 // @Tags changefeed
 // @Accept json
 // @Produce json
-// @Param changefeed body map[string]interface{} true "changefeed info"
+// @Param changefeed body ChangefeedConfig true "changefeed config"
 // @Success 200 {object} map[string]interface{}
 // @Failure 500,400 {object} model.HTTPError
 // @Router	/api/v2/changefeeds [post]
 func (h *OpenAPIV2) CreateChangefeed(c *gin.Context) {
 	ctx := c.Request.Context()
 
-	info, err := model.GetDeFaultChangefeedInfo()
-	if err != nil {
-		_ = c.Error(err)
-		return
-	}
+	config := &ChangefeedConfig{ReplicaConfig: GetDefaultReplicaConfig()}
 
-	if err := c.BindJSON(info); err != nil {
+	if err := c.BindJSON(&config); err != nil {
 		_ = c.Error(cerror.ErrAPIInvalidParam.Wrap(err))
 		return
 	}
 
-	err = validator.VerifyCreateChangefeedInfo(ctx, info, h.capture)
+	info, err := VerifyCreateChangefeedConfig(ctx, config, h.capture)
 	if err != nil {
 		_ = c.Error(err)
 		return
@@ -68,5 +63,5 @@ func (h *OpenAPIV2) CreateChangefeed(c *gin.Context) {
 	}
 
 	log.Info("Create changefeed successfully!", zap.String("id", info.ID), zap.String("changefeed", infoStr))
-	c.Status(http.StatusOK)
+	c.JSON(http.StatusOK, info)
 }

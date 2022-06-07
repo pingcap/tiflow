@@ -22,7 +22,6 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/api"
 	"github.com/pingcap/tiflow/cdc/api/middleware"
-	"github.com/pingcap/tiflow/cdc/api/validator"
 	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/owner"
@@ -269,7 +268,7 @@ func (h *openAPI) CreateChangefeed(c *gin.Context) {
 		return
 	}
 
-	info, err := validator.VerifyCreateChangefeedConfig(ctx, changefeedConfig, h.capture)
+	info, err := VerifyCreateChangefeedConfig(ctx, changefeedConfig, h.capture)
 	if err != nil {
 		_ = c.Error(err)
 		return
@@ -425,7 +424,7 @@ func (h *openAPI) UpdateChangefeed(c *gin.Context) {
 		return
 	}
 
-	newInfo, err := validator.VerifyUpdateChangefeedConfig(ctx, changefeedConfig, info)
+	newInfo, err := VerifyUpdateChangefeedConfig(ctx, changefeedConfig, info)
 	if err != nil {
 		_ = c.Error(err)
 		return
