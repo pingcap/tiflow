@@ -144,7 +144,6 @@ const (
   "case-sensitive": false,
   "enable-old-value": true,
   "force-replicate": true,
-  "ignore-ineligible-table": false,
   "check-gc-safe-point": true,
   "filter": {
     "rules": [

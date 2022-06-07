@@ -16,6 +16,8 @@ package v2
 import (
 	"time"
 
+	tidbModel "github.com/pingcap/tidb/parser/model"
+	filter "github.com/pingcap/tidb/util/table-filter"
 	"github.com/pingcap/tiflow/cdc/model"
 )
 
@@ -104,19 +106,20 @@ func getDefaultReplicaConfig() *ReplicaConfig {
 // FilterConfig represents filter config for a changefeed
 // This is a duplicate of config.FilterConfig
 type FilterConfig struct {
-	Rules            []string `toml:"rules" json:"rules"`
-	IgnoreTxnStartTs []uint64 `toml:"ignore-txn-start-ts" json:"ignore-txn-start-ts"`
-	DDLAllowlist     []byte   `toml:"ddl-allow-list" json:"ddl-allow-list,omitempty"`
+	*filter.MySQLReplicationRules
+	Rules            []string               `json:"rules"`
+	IgnoreTxnStartTs []uint64               `json:"ignore-txn-start-ts"`
+	DDLAllowlist     []tidbModel.ActionType `json:"ddl-allow-list,omitempty"`
 }
 
 // SinkConfig represents sink config for a changefeed
 // This is a duplicate of config.SinkConfig
 type SinkConfig struct {
-	Protocol        string            `toml:"protocol" json:"protocol"`
-	SchemaRegistry  string            `toml:"schema-registry" json:"schema-registry"`
-	TimeZone        string            `toml:"time-zone" json:"time-zone"`
-	DispatchRules   []*DispatchRule   `toml:"dispatchers" json:"dispatchers"`
-	ColumnSelectors []*ColumnSelector `toml:"column-selectors" json:"column-selectors"`
+	Protocol        string            `json:"protocol"`
+	SchemaRegistry  string            `json:"schema-registry"`
+	TimeZone        string            `json:"time-zone"`
+	DispatchRules   []*DispatchRule   `json:"dispatchers"`
+	ColumnSelectors []*ColumnSelector `json:"column-selectors"`
 }
 
 // DispatchRule represents partition rule for a table
