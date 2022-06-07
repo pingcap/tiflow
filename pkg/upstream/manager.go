@@ -65,6 +65,7 @@ func NewManager4Test(pdClient pd.Client) *Manager {
 		defaultUpstream: up,
 	}
 	up.isDefaultUpstream = true
+	up.hold()
 	res.ups.Store(DefaultUpstreamID, up)
 	return res
 }
@@ -86,12 +87,14 @@ func (m *Manager) AddDefaultUpstream(pdEndpoint []string,
 	up.ID = up.PDClient.GetClusterID(m.ctx)
 	up.isDefaultUpstream = true
 	m.defaultUpstream = up
+	up.hold()
 	m.ups.Store(up.ID, up)
 	return up, nil
 }
 
 // GetDefaultUpstream returns the default upstream
 func (m *Manager) GetDefaultUpstream() *Upstream {
+	m.defaultUpstream.hold()
 	return m.defaultUpstream
 }
 

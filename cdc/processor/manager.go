@@ -74,6 +74,9 @@ func NewManager(upstreamManager *upstream.Manager) *Manager {
 func (m *Manager) Tick(stdCtx context.Context, state orchestrator.ReactorState) (nextState orchestrator.ReactorState, err error) {
 	ctx := stdCtx.(cdcContext.Context)
 	globalState := state.(*orchestrator.GlobalReactorState)
+	if err := m.upstreamManager.Tick(stdCtx); err != nil {
+		return state, errors.Trace(err)
+	}
 	if err := m.handleCommand(); err != nil {
 		return state, err
 	}

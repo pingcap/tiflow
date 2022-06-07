@@ -149,9 +149,6 @@ func (o *ownerImpl) Tick(stdCtx context.Context, rawState orchestrator.ReactorSt
 		o.bootstrapped = true
 		return state, nil
 	}
-	if err := o.upstreamManager.Tick(stdCtx); err != nil {
-		return state, errors.Trace(err)
-	}
 
 	o.captures = state.Captures
 	o.updateMetrics(state)
@@ -541,7 +538,13 @@ func (o *ownerImpl) updateGCSafepoint(
 ) error {
 	minChekpoinTsMap, forceUpdateMap := o.calculateGCSagepoint(state)
 	for upstreamID, minCheckpointTs := range minChekpoinTsMap {
-		upStream := o.upstreamManager.Get(upstreamID)
+		up := o.upstreamManager.Get(upstreamID)
+		if !up.IsNormal() {
+			log.Warn("upstream is not ready, skip",
+				zap.Uint64("id", up.ID),
+				zap.Strings("pd", up.PdEndpoints))
+			continue
+		}
 
 		// When the changefeed starts up, CDC will do a snapshot read at
 		// (checkpointTs - 1) from TiKV, so (checkpointTs - 1) should be an upper
@@ -553,7 +556,7 @@ func (o *ownerImpl) updateGCSafepoint(
 			forceUpdate = true
 		}
 
-		err := upStream.GCManager.TryUpdateGCSafePoint(ctx, gcSafepointUpperBound, forceUpdate)
+		err := up.GCManager.TryUpdateGCSafePoint(ctx, gcSafepointUpperBound, forceUpdate)
 		if err != nil {
 			return errors.Trace(err)
 		}
