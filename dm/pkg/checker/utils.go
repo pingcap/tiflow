@@ -125,7 +125,13 @@ func IsTiDBFromVersion(version string) bool {
 	return strings.Contains(strings.ToUpper(version), "TIDB")
 }
 
+var processedError = errors.New("error has been processed, can skip it")
+
 func markCheckError(result *Result, err error) {
+	if err == nil || err == processedError {
+		return
+	}
+
 	if err != nil {
 		var state State
 		if utils.OriginError(err) == context.Canceled {
