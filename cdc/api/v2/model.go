@@ -13,12 +13,41 @@
 
 package v2
 
-import "time"
+import (
+	"time"
+
+	"github.com/pingcap/tiflow/cdc/model"
+)
 
 // Tso contains timestamp get from PD
 type Tso struct {
 	Timestamp int64 `json:"timestamp"`
 	LogicTime int64 `json:"logic-time"`
+}
+
+// Tables contains IneligibleTables and EligibleTables
+type Tables struct {
+	IneligibleTables []model.TableName `json:"ineligible-tables,omitempty"`
+	EligibleTables   []model.TableName `json:"eligible-tables,omitempty"`
+}
+
+// VerifyTableConfig use to verify tables.
+// Only use by Open API v2.
+type VerifyTableConfig struct {
+	PDAddrs       []string `json:"pd-addrs"`
+	CAPath        string   `toml:"ca-path" json:"ca-path"`
+	CertPath      string   `toml:"cert-path" json:"cert-path"`
+	KeyPath       string   `toml:"key-path" json:"key-path"`
+	CertAllowedCN []string `toml:"cert-allowed-cn" json:"cert-allowed-cn"`
+
+	ReplicaConfig *ReplicaConfig `json:"replica-config"`
+	StartTs       uint64         `json:"start-ts"`
+}
+
+func getDefaultVerifyTableConfig() *VerifyTableConfig {
+	return &VerifyTableConfig{
+		ReplicaConfig: getDefaultReplicaConfig(),
+	}
 }
 
 // ChangefeedConfig use by create changefeed api
@@ -53,8 +82,8 @@ type ReplicaConfig struct {
 	Consistent            *ConsistentConfig `json:"consistent"`
 }
 
-// GetDefaultReplicaConfig returns a default ReplicaConfig
-func GetDefaultReplicaConfig() *ReplicaConfig {
+// getDefaultReplicaConfig returns a default ReplicaConfig
+func getDefaultReplicaConfig() *ReplicaConfig {
 	return &ReplicaConfig{
 		CaseSensitive:    true,
 		EnableOldValue:   true,

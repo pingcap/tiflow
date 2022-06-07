@@ -148,7 +148,8 @@ func VerifyCreateChangefeedConfig(
 	if err != nil {
 		return nil, err
 	}
-	defer kvStorage.Close()
+	// We should not close kvStorage since all kvStorage in cdc is the same one.
+	// defer kvStorage.Close()
 
 	if !replicaCfg.ForceReplicate && !replicaCfg.IgnoreIneligibleTable {
 		ineligibleTables, _, err := entry.VerifyTables(replicaCfg, kvStorage, cfg.StartTs)
