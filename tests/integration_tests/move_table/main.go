@@ -208,7 +208,7 @@ func (c *cluster) moveAllTables(ctx context.Context, sourceCapture, targetCaptur
 }
 
 func (c *cluster) refreshInfo(ctx context.Context) error {
-	ownerID, err := c.cdcEtcdCli.GetOwnerID(ctx, etcd.CaptureOwnerKey)
+	ownerID, err := c.cdcEtcdCli.GetOwnerID(ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
