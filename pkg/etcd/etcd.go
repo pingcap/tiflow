@@ -485,8 +485,9 @@ func (c CDCEtcdClient) DeleteCaptureInfo(ctx context.Context, id string) error {
 }
 
 // GetOwnerID returns the owner id by querying etcd
-func (c CDCEtcdClient) GetOwnerID(ctx context.Context, key string) (string, error) {
-	resp, err := c.Client.Get(ctx, key, clientv3.WithFirstCreate()...)
+func (c CDCEtcdClient) GetOwnerID(ctx context.Context) (string, error) {
+	resp, err := c.Client.Get(ctx, CaptureOwnerKey(c.ClusterID),
+		clientv3.WithFirstCreate()...)
 	if err != nil {
 		return "", cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
 	}
