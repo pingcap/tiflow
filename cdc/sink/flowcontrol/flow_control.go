@@ -97,7 +97,7 @@ func (c *TableFlowController) Consume(
 
 		if commitTs == lastCommitTs {
 			c.batchID++
-			c.batchGroupCount = 0
+			c.resetBatch(lastCommitTs, commitTs)
 		}
 		return err
 	}
@@ -201,9 +201,10 @@ func (c *TableFlowController) addEntry(msg *model.PolymorphicEvent, size uint64)
 	msg.Row.SplitTxn = true
 }
 
+// resetBatch reset batchID and batchGroupCount if handling a new txn, Otherwise,
+// just reset batchGroupCount.
 func (c *TableFlowController) resetBatch(lastCommitTs, commitTs uint64) {
 	if lastCommitTs < commitTs {
-		// First batch of a new txn.
 		// At least one batch for each txn.
 		c.batchID = 1
 	}

@@ -13,7 +13,12 @@
 
 package model
 
-import "math"
+import (
+	"math"
+
+	"github.com/pingcap/log"
+	"go.uber.org/zap"
+)
 
 // PolymorphicEvent describes an event can be in multiple states.
 type PolymorphicEvent struct {
@@ -118,14 +123,20 @@ func (r ResolvedTs) IsBatchMode() bool {
 	return r.Mode == BatchResolvedMode
 }
 
-// ParseTs parses a timestamp based on the r.mode.
+// ParseTs returns a timestamp `ts` based on the r.mode, which means that all events
+// whose commitTs is less than or equal to `ts` are sent to Sink.
 func (r ResolvedTs) ParseTs() uint64 {
 	switch r.Mode {
 	case NormalResolvedMode:
+		// with NormalResolvedMode, cdc guarantees all events whose commitTs is
+		// less than or equal to `resolved.Ts` are sent to Sink.
 		return r.Ts
 	case BatchResolvedMode:
+		// with BatchResolvedMode, cdc guarantees all events whose commitTs is
+		// less than `resolved.Ts` are sent to Sink.
 		return r.Ts - 1
 	default:
+		log.Error("unknown resolved mode", zap.Any("resolved", r))
 		return 0
 	}
 }
