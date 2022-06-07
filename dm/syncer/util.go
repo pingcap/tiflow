@@ -33,27 +33,7 @@ import (
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
-	"github.com/pingcap/tiflow/dm/relay"
 )
-
-func toBinlogType(relay relay.Process) BinlogType {
-	if relay != nil {
-		return LocalBinlog
-	}
-
-	return RemoteBinlog
-}
-
-func binlogTypeToString(binlogType BinlogType) string {
-	switch binlogType {
-	case RemoteBinlog:
-		return "remote"
-	case LocalBinlog:
-		return "local"
-	default:
-		return "unknown"
-	}
-}
 
 // getTableByDML gets table from INSERT/UPDATE/DELETE statement.
 func getTableByDML(dml ast.DMLNode) (*filter.Table, error) {
