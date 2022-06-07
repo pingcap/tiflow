@@ -42,7 +42,6 @@ func (s *Server) generateSessionConfig() (*cluster.EtcdSessionConfig, error) {
 		Member:       s.member(),
 		Key:          s.info.EtcdKey(),
 		Value:        value,
-		RPCTimeout:   s.cfg.RPCTimeout,
 		KeepaliveTTL: s.cfg.KeepAliveTTL,
 	}, nil
 }

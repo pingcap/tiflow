@@ -59,9 +59,6 @@ type EtcdSessionConfig struct {
 	Key   string
 	Value string
 
-	// FIXME: this config is removed in another PR
-	RPCTimeout time.Duration
-
 	// etcd session ttl
 	KeepaliveTTL time.Duration
 }
@@ -93,9 +90,8 @@ func (s *EtcdSession) Reset(ctx context.Context) error {
 	}
 
 	election, err := NewEtcdElection(ctx, s.etcdClient, session, EtcdElectionConfig{
-		CreateSessionTimeout: s.config.RPCTimeout,
-		TTL:                  s.config.KeepaliveTTL,
-		Prefix:               adapter.MasterCampaignKey.Path(),
+		TTL:    s.config.KeepaliveTTL,
+		Prefix: adapter.MasterCampaignKey.Path(),
 	})
 	if err != nil {
 		return err

@@ -142,9 +142,8 @@ func TestLeaderLoopMeetStaleData(t *testing.T) {
 	sess, err := concurrency.NewSession(client, concurrency.WithTTL(10))
 	require.Nil(t, err)
 	election, err := cluster.NewEtcdElection(ctx, client, sess, cluster.EtcdElectionConfig{
-		CreateSessionTimeout: time.Second * 3,
-		TTL:                  time.Second * 10,
-		Prefix:               adapter.MasterCampaignKey.Path(),
+		TTL:    time.Second * 10,
+		Prefix: adapter.MasterCampaignKey.Path(),
 	})
 	require.Nil(t, err)
 	_, _, err = election.Campaign(ctx, s.member(), time.Second*3)
