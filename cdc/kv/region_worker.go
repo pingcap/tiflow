@@ -837,9 +837,9 @@ func (w *regionWorker) evictAllRegions() {
 	}
 }
 
-// retrieveEvents puts events into inputCh and updates some internal states.
+// sendEvents puts events into inputCh and updates some internal states.
 // Callers must ensure that all items in events can be hashed into one handle slot.
-func (w *regionWorker) retrieveEvents(ctx context.Context, events []*regionStatefulEvent) error {
+func (w *regionWorker) sendEvents(ctx context.Context, events []*regionStatefulEvent) error {
 	atomic.AddInt32(&w.inputPending, int32(len(events)))
 	select {
 	case <-ctx.Done():
