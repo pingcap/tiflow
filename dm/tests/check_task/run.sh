@@ -10,8 +10,14 @@ function prepare_incompatible_tables() {
     run_sql_both_source "drop database if exists checktask"
     run_sql_both_source "create database if not exists checktask"
     for i in $(seq $TABLE_NUM); do
-        run_sql_both_source "create table checktask.test${i}(id int, b varchar(10))"
+        run_sql_both_source "create table checktask.test${i}(id int, b varchar(10))" # no primary key
     done
+}
+
+function prepare_many_tables() {
+    run_sql_both_source "drop database if exists checktask"
+    run_sql_both_source "create database if not exists checktask"
+    run_sql_file $cur/data/db1.prepare.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
 }
 
 function prepare() {
@@ -23,16 +29,28 @@ function prepare() {
 	dmctl_operate_source create $cur/conf/source2.yaml $SOURCE_ID2
 }
 
-function test_check_task_fail_but_no_block() {
-    prepare
+function test_check_task_fail_no_block() {
     prepare_incompatible_tables
     run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
         "check-task $cur/conf/task-noshard.yaml" \
         "\"state\": \"fail\"" 1
 }
 
+function test_check_task_fail_no_block_forsharding() {
+    prepare_many_tables
+    run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+        "check-task $cur/conf/task-noshard.yaml" \
+        "pre-check is passed" 1
+}
+
+function run() {
+    prepare
+    test_check_task_fail_no_block
+    test_check_task_fail_no_block_forsharding
+}
+
 cleanup_data checktask
 cleanup_process $*
-test_check_task_fail_but_no_block $*
+run $*
 cleanup_process $*
 cleanup_data checktask
