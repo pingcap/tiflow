@@ -365,7 +365,7 @@ def create_changefeed_v2():
         "changefeed-id": "changefeed-test-v2-black-hole",
         "sink-uri": "blackhole://",
         "replica-config":{
-            "ignore-ineligible-table":true
+            "ignore-ineligible-table":"true"
             }
     }
     data = json.dumps(data)
@@ -378,7 +378,7 @@ def create_changefeed_v2():
         "changefeed_id": "changefeed-test-v2-black-hole",
         "sink_uri": SINK_URI,
         "replica-config":{
-            "ignore-ineligible-table":true,
+            "ignore-ineligible-table":"true",
             "filter": {
             "rules": ["test.verify*"]
             }
@@ -394,7 +394,7 @@ def create_changefeed_v2():
         "changefeed_id": "changefeed-test",
         "sink_uri": "mysql://127.0.0.1:1111",
         "replica-config":{
-            "ignore-ineligible-table":true
+            "ignore-ineligible-table":"true"
             }
     })
     headers = {"Content-Type": "application/json"}
