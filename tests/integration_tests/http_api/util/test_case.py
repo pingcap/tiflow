@@ -374,16 +374,14 @@ def create_changefeed_v2():
         "cert-allowed-cn":["client"],
     }
     data = json.dumps(data)
-    print(data)
     headers = {"Content-Type": "application/json"}
     resp = rq.post(url, data=data, headers=headers, cert=CERT, verify=VERIFY)
-    print(resp)
     assert resp.status_code == rq.codes.ok
 
     # create changefeed 2
     data = {
         "changefeed_id": "changefeed-test-v2-black-hole",
-        "sink_uri": SINK_URI,
+        "sink-uri": SINK_URI,
         "replica-config":{
             "ignore-ineligible-table":"true",
             "filter": {
@@ -397,16 +395,14 @@ def create_changefeed_v2():
         "cert-allowed-cn":["client"],
     }
     data = json.dumps(data)
-    print(data)
     headers = {"Content-Type": "application/json"}
     resp = rq.post(url, data=data, headers=headers, cert=CERT, verify=VERIFY)
-    print(resp)
     assert resp.status_code == rq.codes.ok
 
     # create changefeed fail because sink_uri is invalid
     data = json.dumps({
         "changefeed_id": "changefeed-test",
-        "sink_uri": "mysql://127.0.0.1:1111",
+        "sink-uri": "mysql://127.0.0.1:1111",
         "replica-config":{
             "ignore-ineligible-table":"true"
             },
@@ -416,10 +412,8 @@ def create_changefeed_v2():
         "key-path":CLIENT_KEY_PEM_PATH, 
         "cert-allowed-cn":["client"],
     })
-    print(data)
     headers = {"Content-Type": "application/json"}
     resp = rq.post(url, data=data, headers=headers, cert=CERT, verify=VERIFY)
-    print(resp)
     assert resp.status_code == rq.codes.bad_request
 
     print("pass test: create changefeed v2")
