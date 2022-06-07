@@ -698,6 +698,17 @@ function run_validator_cmd_error() {
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation clear-error" \
 		"Error: task name should be specified" 1
+
+	# operate error: invalid task name
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation ignore-error non-exist-task-name 1" \
+		"cannot get subtask by task name" 1
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation resolve-error non-exist-task-name 1" \
+		"cannot get subtask by task name" 1
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation clear-error non-exist-task-name 1" \
+		"cannot get subtask by task name" 1
 }
 
 cleanup_data dmctl_command
