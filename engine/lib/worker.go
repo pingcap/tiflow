@@ -232,8 +232,6 @@ func (w *DefaultBaseWorker) doPreInit(ctx context.Context) error {
 			zap.Error(err))
 	}()
 
-	w.startBackgroundTasks()
-
 	initTime := w.clock.Mono()
 	rctx, ok := runtime.ToRuntimeCtx(ctx)
 	if ok {
@@ -265,6 +263,8 @@ func (w *DefaultBaseWorker) doPreInit(ctx context.Context) error {
 	if err := w.masterClient.InitMasterInfoFromMeta(ctx); err != nil {
 		return errors.Trace(err)
 	}
+
+	w.startBackgroundTasks()
 
 	return nil
 }

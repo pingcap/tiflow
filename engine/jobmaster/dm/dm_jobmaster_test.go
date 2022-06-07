@@ -303,13 +303,16 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	workerHandle2.On("IsTombStone").Return(false).Once()
 	jm.OnMasterRecovered(context.Background())
 	require.NoError(t.T(), jm.Tick(context.Background()))
-	// placeholder
+
+	workerHandle1.On("Status").Return(&libModel.WorkerStatus{ExtBytes: bytes1}).Once()
+	workerHandle1.On("IsTombStone").Return(false).Once()
 	require.NoError(t.T(), jm.OnWorkerStatusUpdated(workerHandle1, &libModel.WorkerStatus{ExtBytes: bytes1}))
+
+	// placeholder
 	require.NoError(t.T(), jm.OnJobManagerMessage("", ""))
 	require.NoError(t.T(), jm.OnMasterMessage("", ""))
 	require.NoError(t.T(), jm.OnWorkerMessage(&lib.MockWorkerHandler{}, "", ""))
 	require.Equal(t.T(), jm.Workload(), model.RescUnit(2))
-	require.NoError(t.T(), jm.OnWorkerStatusUpdated(workerHandle1, &libModel.WorkerStatus{ExtBytes: bytes1}))
 
 	// Close
 	mockMessageAgent.On("SendMessage").Return(nil).Once()

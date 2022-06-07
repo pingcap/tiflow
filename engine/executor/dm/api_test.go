@@ -62,6 +62,15 @@ func TestQueryStatusAPI(t *testing.T) {
 			BlockDDLOwner:       "",
 			ConflictMsg:         "",
 		}
+		processError = &pb.ProcessError{
+			ErrCode:    1,
+			ErrClass:   "class",
+			ErrScope:   "scope",
+			ErrLevel:   "low",
+			Message:    "msg",
+			RawCause:   "raw cause",
+			Workaround: "workaround",
+		}
 		dumpStatusBytes, _ = json.Marshal(dumpStatus)
 		loadStatusBytes, _ = json.Marshal(loadStatus)
 		syncStatusBytes, _ = json.Marshal(syncStatus)
@@ -73,11 +82,13 @@ func TestQueryStatusAPI(t *testing.T) {
 		loadStatusResp = &dmpkg.QueryStatusResponse{
 			Unit:   lib.WorkerDMLoad,
 			Stage:  metadata.StageFinished,
+			Result: &pb.ProcessResult{IsCanceled: false},
 			Status: loadStatusBytes,
 		}
 		syncStatusResp = &dmpkg.QueryStatusResponse{
 			Unit:   lib.WorkerDMSync,
 			Stage:  metadata.StagePaused,
+			Result: &pb.ProcessResult{Errors: []*pb.ProcessError{processError}},
 			Status: syncStatusBytes,
 		}
 	)
@@ -97,21 +108,21 @@ func TestQueryStatusAPI(t *testing.T) {
 		fmt.Sprintf("task id mismatch, get %s, actually %s", "wrong-task-id", "task-id"))
 
 	unitHolder.On("Status").Return(dumpStatus).Once()
-	dmWorker.setStage(metadata.StageRunning)
+	unitHolder.On("Stage").Return(metadata.StageRunning, nil).Once()
 	resp := dmWorker.QueryStatus(context.Background(), &dmpkg.QueryStatusRequest{Task: "task-id"})
 	require.Equal(t, "", resp.ErrorMsg)
 	require.Equal(t, dumpStatusResp, resp)
 
 	unitHolder.On("Status").Return(loadStatus).Once()
+	unitHolder.On("Stage").Return(metadata.StageFinished, &pb.ProcessResult{IsCanceled: false}).Once()
 	dmWorker.workerType = lib.WorkerDMLoad
-	dmWorker.setStage(metadata.StageFinished)
 	resp = dmWorker.QueryStatus(context.Background(), &dmpkg.QueryStatusRequest{Task: "task-id"})
 	require.Equal(t, "", resp.ErrorMsg)
 	require.Equal(t, loadStatusResp, resp)
 
 	unitHolder.On("Status").Return(syncStatus).Once()
+	unitHolder.On("Stage").Return(metadata.StagePaused, &pb.ProcessResult{Errors: []*pb.ProcessError{processError}}).Once()
 	dmWorker.workerType = lib.WorkerDMSync
-	dmWorker.setStage(metadata.StagePaused)
 	resp = dmWorker.QueryStatus(context.Background(), &dmpkg.QueryStatusRequest{Task: "task-id"})
 	require.Equal(t, "", resp.ErrorMsg)
 	require.Equal(t, syncStatusResp, resp)
@@ -133,4 +144,27 @@ func TestStopWorker(t *testing.T) {
 	require.EqualError(t, dmWorker.StopWorker(context.Background(), &dmpkg.StopWorkerMessage{Task: "wrong-task-id"}), "task id mismatch, get wrong-task-id, actually task-id")
 	err := dmWorker.StopWorker(context.Background(), &dmpkg.StopWorkerMessage{Task: "task-id"})
 	require.True(t, errors.ErrWorkerFinish.Equal(err))
+}
+
+func TestOperateTask(t *testing.T) {
+	dctx := dcontext.Background()
+	dp := deps.NewDeps()
+	require.NoError(t, dp.Provide(func() p2p.MessageHandlerManager {
+		return p2p.NewMockMessageHandlerManager()
+	}))
+	dctx = dctx.WithDeps(dp)
+
+	dmWorker := newDMWorker(dctx, "master-id", lib.WorkerDMDump, &config.SubTaskConfig{SourceID: "task-id"})
+	dmWorker.BaseWorker = lib.MockBaseWorker("worker-id", "master-id", dmWorker)
+	dmWorker.BaseWorker.Init(context.Background())
+	mockUnitHolder := &mockUnitHolder{}
+	dmWorker.unitHolder = mockUnitHolder
+
+	require.EqualError(t, dmWorker.OperateTask(context.Background(), &dmpkg.OperateTaskMessage{Task: "wrong-task-id"}), "task id mismatch, get wrong-task-id, actually task-id")
+	mockUnitHolder.On("Pause").Return(nil).Once()
+	require.Nil(t, dmWorker.OperateTask(context.Background(), &dmpkg.OperateTaskMessage{Task: "task-id", Op: dmpkg.Pause}))
+	mockUnitHolder.On("Resume").Return(nil).Once()
+	require.Nil(t, dmWorker.OperateTask(context.Background(), &dmpkg.OperateTaskMessage{Task: "task-id", Op: dmpkg.Resume}))
+	require.EqualError(t, dmWorker.OperateTask(context.Background(), &dmpkg.OperateTaskMessage{Task: "task-id", Op: dmpkg.Update}),
+		fmt.Sprintf("unsupported op type %d for task %s", dmpkg.Update, "task-id"))
 }

@@ -115,7 +115,7 @@ func (jm *JobMaster) InitImpl(ctx context.Context) error {
 	if err := jm.checkpointAgent.Init(ctx); err != nil {
 		return err
 	}
-	return jm.taskManager.OperateTask(ctx, Create, jm.jobCfg, nil)
+	return jm.taskManager.OperateTask(ctx, dmpkg.Create, jm.jobCfg, nil)
 }
 
 // Tick implements JobMasterImpl.Tick
@@ -188,8 +188,12 @@ func (jm *JobMaster) onWorkerFinished(taskStatus runtime.TaskStatus, worker lib.
 
 // OnWorkerStatusUpdated implements JobMasterImpl.OnWorkerStatusUpdated
 func (jm *JobMaster) OnWorkerStatusUpdated(worker lib.WorkerHandle, newStatus *libModel.WorkerStatus) error {
-	// No need to do anything here, because we update it in OnWorkerOnline
-	return nil
+	// we alreay update finished status in OnWorkerOffline
+	if newStatus.Code == libModel.WorkerStatusFinished || len(newStatus.ExtBytes) == 0 {
+		return nil
+	}
+	log.L().Debug("on worker status updated", zap.String("extra bytes", string(newStatus.ExtBytes)), zap.String("id", jm.workerID), zap.String("worker_id", worker.ID()))
+	return jm.OnWorkerOnline(worker)
 }
 
 // OnJobManagerMessage implements JobMasterImpl.OnJobManagerMessage
@@ -217,7 +221,7 @@ func (jm *JobMaster) OnMasterMessage(topic p2p.Topic, message interface{}) error
 // CloseImpl implements JobMasterImpl.CloseImpl
 func (jm *JobMaster) CloseImpl(ctx context.Context) error {
 	log.L().Info("close the dm jobmaster", zap.String("id", jm.workerID))
-	if err := jm.taskManager.OperateTask(ctx, Delete, nil, nil); err != nil {
+	if err := jm.taskManager.OperateTask(ctx, dmpkg.Delete, nil, nil); err != nil {
 		return err
 	}
 

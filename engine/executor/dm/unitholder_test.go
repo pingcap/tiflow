@@ -47,34 +47,80 @@ func TestUnitHolder(t *testing.T) {
 	require.Error(t, unitHolder.Init(context.Background()))
 	u.On("Init").Return(nil).Once()
 	require.NoError(t, unitHolder.Init(context.Background()))
-	require.Equal(t, metadata.StageRunning, unitHolder.Stage())
+	stage, result := unitHolder.Stage()
+	require.Nil(t, result)
+	require.Equal(t, metadata.StageRunning, stage)
 
-	require.NoError(t, unitHolder.Tick(context.Background()))
-	unitHolder.resultCh <- pb.ProcessResult{Errors: []*pb.ProcessError{{
-		ErrCode: 0,
-	}}}
-	require.NoError(t, unitHolder.Tick(context.Background()))
-	require.Equal(t, metadata.StagePaused, unitHolder.Stage())
+	// mock error
 	time.Sleep(time.Second)
-	require.NoError(t, unitHolder.Tick(context.Background()))
-	require.Equal(t, metadata.StageRunning, unitHolder.Stage())
+	u.setResult(pb.ProcessResult{Errors: []*pb.ProcessError{{
+		ErrCode: 0,
+	}}})
+	unitHolder.processWg.Wait()
+	stage, result = unitHolder.Stage()
+	require.Equal(t, 0, int(result.Errors[0].ErrCode))
+	require.Equal(t, metadata.StageError, stage)
+
+	// mock auto resume
+	require.NoError(t, unitHolder.Resume(context.Background()))
+	stage, result = unitHolder.Stage()
+	require.Nil(t, result)
+	require.Equal(t, metadata.StageRunning, stage)
+
+	// mock paused
+	go func() {
+		time.Sleep(time.Second)
+		u.setResult(pb.ProcessResult{Errors: []*pb.ProcessError{{
+			Message: "context canceled",
+		}}})
+	}()
+	// mock pausing
+	go func() {
+		require.Eventually(t, func() bool {
+			stage, _ := unitHolder.Stage()
+			return stage == metadata.StagePausing
+		}, 5*time.Second, 100*time.Millisecond)
+	}()
+	require.NoError(t, unitHolder.Pause(context.Background()))
+	stage, result = unitHolder.Stage()
+	require.Len(t, result.Errors, 0)
+	require.Equal(t, metadata.StagePaused, stage)
+	// pause again
+	require.Error(t, unitHolder.Pause(context.Background()))
+	stage, result = unitHolder.Stage()
+	require.Len(t, result.Errors, 0)
+	require.Equal(t, metadata.StagePaused, stage)
+
+	// mock manually resume
+	require.NoError(t, unitHolder.Resume(context.Background()))
+	stage, result = unitHolder.Stage()
+	require.Nil(t, result)
+	require.Equal(t, metadata.StageRunning, stage)
+	// resume again
+	require.Error(t, unitHolder.Resume(context.Background()))
+
+	// mock finished
+	time.Sleep(time.Second)
+	u.setResult(pb.ProcessResult{Errors: []*pb.ProcessError{{
+		Message: "context canceled",
+	}}})
+	unitHolder.processWg.Wait()
+	stage, result = unitHolder.Stage()
+	require.Len(t, result.Errors, 0)
+	require.Equal(t, metadata.StageFinished, stage)
 
 	u.On("Status").Return(&pb.DumpStatus{})
 	status := unitHolder.Status(context.Background())
 	require.Equal(t, &pb.DumpStatus{}, status)
 
-	unitHolder.resultCh <- pb.ProcessResult{Errors: []*pb.ProcessError{{
-		ErrCode: 0,
-		Message: "context canceled",
-	}}}
-	require.NoError(t, unitHolder.Tick(context.Background()))
-	require.Equal(t, metadata.StageFinished, unitHolder.Stage())
+	// mock close
 	require.NoError(t, unitHolder.Close(context.Background()))
 }
 
 type mockUnit struct {
 	sync.Mutex
 	mock.Mock
+	resultCh chan pb.ProcessResult
 }
 
 // mockUnitHolder implement Holder
@@ -89,7 +135,17 @@ func (u *mockUnit) Init(ctx context.Context) error {
 	return u.Called().Error(0)
 }
 
-func (u *mockUnit) Process(ctx context.Context, pr chan pb.ProcessResult) {}
+func (u *mockUnit) Process(ctx context.Context, pr chan pb.ProcessResult) {
+	u.Lock()
+	defer u.Unlock()
+	u.resultCh = pr
+}
+
+func (u *mockUnit) setResult(r pb.ProcessResult) {
+	u.Lock()
+	defer u.Unlock()
+	u.resultCh <- r
+}
 
 func (u *mockUnit) Close() {}
 
@@ -97,7 +153,11 @@ func (u *mockUnit) Kill() {}
 
 func (u *mockUnit) Pause() {}
 
-func (u *mockUnit) Resume(ctx context.Context, pr chan pb.ProcessResult) {}
+func (u *mockUnit) Resume(ctx context.Context, pr chan pb.ProcessResult) {
+	u.Lock()
+	defer u.Unlock()
+	u.resultCh = pr
+}
 
 func (u *mockUnit) Update(ctx context.Context, cfg *config.SubTaskConfig) error {
 	return nil
@@ -124,17 +184,34 @@ func (m *mockUnitHolder) Init(ctx context.Context) error {
 	return nil
 }
 
-// Tick implement Holder.Tick
-func (m *mockUnitHolder) Tick(ctx context.Context) error {
+// Close implement Holder.Close
+func (m *mockUnitHolder) Close(ctx context.Context) error {
 	return nil
 }
 
+// Pause implement Holder.Pause
+func (m *mockUnitHolder) Pause(ctx context.Context) error {
+	m.Lock()
+	defer m.Unlock()
+	return m.Called().Error(0)
+}
+
+// Resume implement Holder.Resume
+func (m *mockUnitHolder) Resume(ctx context.Context) error {
+	m.Lock()
+	defer m.Unlock()
+	return m.Called().Error(0)
+}
+
 // Stage implement Holder.Stage
-func (m *mockUnitHolder) Stage() metadata.TaskStage {
+func (m *mockUnitHolder) Stage() (metadata.TaskStage, *pb.ProcessResult) {
 	m.Lock()
 	defer m.Unlock()
 	args := m.Called()
-	return args.Get(0).(metadata.TaskStage)
+	if result := args.Get(1); result != nil {
+		return args.Get(0).(metadata.TaskStage), result.(*pb.ProcessResult)
+	}
+	return args.Get(0).(metadata.TaskStage), nil
 }
 
 // Status implement Holder.Status
@@ -143,9 +220,4 @@ func (m *mockUnitHolder) Status(ctx context.Context) interface{} {
 	defer m.Unlock()
 	args := m.Called()
 	return args.Get(0)
-}
-
-// Close implement Holder.Close
-func (m *mockUnitHolder) Close(ctx context.Context) error {
-	return nil
 }

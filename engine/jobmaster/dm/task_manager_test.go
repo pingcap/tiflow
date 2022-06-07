@@ -124,28 +124,28 @@ func (t *testDMJobmasterSuite) TestOperateTask() {
 	require.EqualError(t.T(), err, "state not found")
 	require.Nil(t.T(), state)
 
-	require.NoError(t.T(), taskManager.OperateTask(context.Background(), Create, jobCfg, nil))
+	require.NoError(t.T(), taskManager.OperateTask(context.Background(), dmpkg.Create, jobCfg, nil))
 	state, err = jobStore.Get(context.Background())
 	require.NoError(t.T(), err)
 	job := state.(*metadata.Job)
 	require.Equal(t.T(), job.Tasks[source1].Stage, metadata.StageRunning)
 	require.Equal(t.T(), job.Tasks[source2].Stage, metadata.StageRunning)
 
-	require.NoError(t.T(), taskManager.OperateTask(context.Background(), Pause, nil, []string{source1, source2}))
+	require.NoError(t.T(), taskManager.OperateTask(context.Background(), dmpkg.Pause, nil, []string{source1, source2}))
 	state, err = jobStore.Get(context.Background())
 	require.NoError(t.T(), err)
 	job = state.(*metadata.Job)
 	require.Equal(t.T(), job.Tasks[source1].Stage, metadata.StagePaused)
 	require.Equal(t.T(), job.Tasks[source2].Stage, metadata.StagePaused)
 
-	require.NoError(t.T(), taskManager.OperateTask(context.Background(), Resume, nil, []string{source1}))
+	require.NoError(t.T(), taskManager.OperateTask(context.Background(), dmpkg.Resume, nil, []string{source1}))
 	state, err = jobStore.Get(context.Background())
 	require.NoError(t.T(), err)
 	job = state.(*metadata.Job)
 	require.Equal(t.T(), job.Tasks[source1].Stage, metadata.StageRunning)
 	require.Equal(t.T(), job.Tasks[source2].Stage, metadata.StagePaused)
 
-	require.NoError(t.T(), taskManager.OperateTask(context.Background(), Update, jobCfg, nil))
+	require.NoError(t.T(), taskManager.OperateTask(context.Background(), dmpkg.Update, jobCfg, nil))
 	state, err = jobStore.Get(context.Background())
 	require.NoError(t.T(), err)
 	job = state.(*metadata.Job)
@@ -153,7 +153,7 @@ func (t *testDMJobmasterSuite) TestOperateTask() {
 	// TODO: should it be paused?
 	require.Equal(t.T(), job.Tasks[source2].Stage, metadata.StageRunning)
 
-	require.NoError(t.T(), taskManager.OperateTask(context.Background(), Delete, nil, []string{source1, source2}))
+	require.NoError(t.T(), taskManager.OperateTask(context.Background(), dmpkg.Delete, nil, []string{source1, source2}))
 	state, err = jobStore.Get(context.Background())
 	require.EqualError(t.T(), err, "state not found")
 	require.Nil(t.T(), state)
@@ -202,14 +202,14 @@ func (t *testDMJobmasterSuite) TestClearTaskStatus() {
 	require.Len(t.T(), taskManager.TaskStatus(), 0)
 }
 
-func (t *testDMJobmasterSuite) TestTaskAsExpected() {
-	require.True(t.T(), taskAsExpected(&metadata.Task{Stage: metadata.StagePaused}, runtime.TaskStatus{Stage: metadata.StagePaused}))
-	require.True(t.T(), taskAsExpected(&metadata.Task{Stage: metadata.StageRunning}, runtime.TaskStatus{Stage: metadata.StageRunning}))
-	require.False(t.T(), taskAsExpected(&metadata.Task{Stage: metadata.StagePaused}, runtime.TaskStatus{Stage: metadata.StageRunning}))
-	require.True(t.T(), taskAsExpected(&metadata.Task{Stage: metadata.StageRunning}, runtime.TaskStatus{Stage: metadata.StageFinished}))
+func (t *testDMJobmasterSuite) TestGenOp() {
+	require.Equal(t.T(), genOp(metadata.StagePaused, metadata.StagePaused), dmpkg.None)
+	require.Equal(t.T(), genOp(metadata.StageRunning, metadata.StageRunning), dmpkg.None)
+	require.Equal(t.T(), genOp(metadata.StageRunning, metadata.StagePaused), dmpkg.Pause)
+	require.Equal(t.T(), genOp(metadata.StageFinished, metadata.StageRunning), dmpkg.None)
 
 	// TODO: change below results if needed.
-	require.False(t.T(), taskAsExpected(&metadata.Task{Stage: metadata.StageRunning}, runtime.TaskStatus{Stage: metadata.StagePaused}))
+	require.Equal(t.T(), genOp(metadata.StagePaused, metadata.StageRunning), dmpkg.Resume)
 }
 
 func (t *testDMJobmasterSuite) TestCheckAndOperateTasks() {
@@ -306,7 +306,7 @@ func (t *testDMJobmasterSuite) TestTaskManager() {
 	taskManager.UpdateTaskStatus(syncStatus1)
 
 	// manually pause task2
-	taskManager.OperateTask(ctx, Pause, nil, []string{source2})
+	taskManager.OperateTask(ctx, dmpkg.Pause, nil, []string{source2})
 	mockAgent.On("SendMessage").Return(agentError).Times(3)
 	mockAgent.On("SendMessage").Return(nil).Once().Run(func(args mock.Arguments) { meetExpected.Store(true) })
 	require.Eventually(t.T(), func() bool {
@@ -328,13 +328,13 @@ func (t *testDMJobmasterSuite) TestTaskManager() {
 
 	// mock remove task2 by update-job
 	jobCfg.Upstreams = jobCfg.Upstreams[:1]
-	taskManager.OperateTask(ctx, Update, jobCfg, nil)
+	taskManager.OperateTask(ctx, dmpkg.Update, jobCfg, nil)
 	require.Eventually(t.T(), func() bool {
 		return len(taskManager.TaskStatus()) == 1
 	}, 5*time.Second, 100*time.Millisecond)
 
 	// mock delete job
-	taskManager.OperateTask(ctx, Delete, nil, nil)
+	taskManager.OperateTask(ctx, dmpkg.Delete, nil, nil)
 	require.Eventually(t.T(), func() bool {
 		return len(taskManager.TaskStatus()) == 0
 	}, 5*time.Second, 100*time.Millisecond)
