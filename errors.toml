@@ -1061,9 +1061,9 @@ error = '''
 unmarshal failed
 '''
 
-["CDC:ErrUpStreamNotFound"]
+["CDC:ErrUpstreamNotFound"]
 error = '''
-upStream not found, cluster-id: %d
+upstream not found, cluster-id: %d
 '''
 
 ["CDC:ErrUpdateServiceSafepointFailed"]
