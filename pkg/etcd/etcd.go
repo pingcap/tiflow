@@ -334,23 +334,57 @@ func (c CDCEtcdClient) RevokeAllLeases(ctx context.Context, leases map[string]in
 
 // CreateChangefeedInfo creates a change feed info into etcd and fails if it is already exists.
 func (c CDCEtcdClient) CreateChangefeedInfo(ctx context.Context,
+	upstreamInfo *model.UpstreamInfo,
 	info *model.ChangeFeedInfo,
 	changeFeedID model.ChangeFeedID,
 ) error {
 	infoKey := GetEtcdKeyChangeFeedInfo(c.ClusterID, changeFeedID)
 	jobKey := GetEtcdKeyJob(c.ClusterID, changeFeedID)
+	upstreamInfoKey := CDCKey{
+		Tp:         CDCKeyTypeUpStream,
+		ClusterID:  c.ClusterID,
+		UpstreamID: upstreamInfo.ID,
+		Namespace:  changeFeedID.Namespace,
+	}
+	upstreamEtcdKeyStr := upstreamInfoKey.String()
 	value, err := info.Marshal()
 	if err != nil {
 		return errors.Trace(err)
 	}
+	upstreamResp, err := c.Client.Get(ctx, upstreamEtcdKeyStr)
+	if err != nil {
+		return errors.Trace(err)
+	}
 
-	cmps := []clientv3.Cmp{
-		clientv3.Compare(clientv3.ModRevision(infoKey), "=", 0),
-		clientv3.Compare(clientv3.ModRevision(jobKey), "=", 0),
+	var cmps []clientv3.Cmp
+	var opsThen []clientv3.Op
+	if len(upstreamResp.Kvs) == 0 {
+		cmps = []clientv3.Cmp{
+			clientv3.Compare(clientv3.ModRevision(infoKey), "=", 0),
+			clientv3.Compare(clientv3.ModRevision(jobKey), "=", 0),
+			clientv3.Compare(clientv3.ModRevision(upstreamEtcdKeyStr),
+				"=", 0),
+		}
+		upstreamData, err := upstreamInfo.Marshal()
+		if err != nil {
+			return errors.Trace(err)
+		}
+		opsThen = []clientv3.Op{
+			clientv3.OpPut(infoKey, value),
+			clientv3.OpPut(upstreamEtcdKeyStr, string(upstreamData)),
+		}
+	} else {
+		cmps = []clientv3.Cmp{
+			clientv3.Compare(clientv3.ModRevision(infoKey), "=", 0),
+			clientv3.Compare(clientv3.ModRevision(jobKey), "=", 0),
+			clientv3.Compare(clientv3.ModRevision(upstreamInfoKey.String()),
+				"=", upstreamResp.Kvs[0].ModRevision),
+		}
+		opsThen = []clientv3.Op{
+			clientv3.OpPut(infoKey, value),
+		}
 	}
-	opsThen := []clientv3.Op{
-		clientv3.OpPut(infoKey, value),
-	}
+
 	resp, err := c.Client.Txn(ctx, cmps, opsThen, TxnEmptyOpsElse)
 	if err != nil {
 		return cerror.WrapError(cerror.ErrPDEtcdAPIError, err)

@@ -172,6 +172,7 @@ func VerifyCreateChangefeedConfig(
 	}
 
 	return &model.ChangeFeedInfo{
+		UpstreamID:        pdClient.GetClusterID(ctx),
 		Namespace:         cfg.Namespace,
 		ID:                cfg.ID,
 		SinkURI:           cfg.SinkURI,

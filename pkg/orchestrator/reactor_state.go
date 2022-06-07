@@ -31,6 +31,7 @@ type GlobalReactorState struct {
 	ClusterID      string
 	Owner          map[string]struct{}
 	Captures       map[model.CaptureID]*model.CaptureInfo
+	Upstreams      map[model.UpstreamID]*model.UpstreamInfo
 	Changefeeds    map[model.ChangeFeedID]*ChangefeedReactorState
 	pendingPatches [][]DataPatch
 
@@ -46,6 +47,7 @@ func NewGlobalState(clusterID string) *GlobalReactorState {
 		ClusterID:   clusterID,
 		Owner:       map[string]struct{}{},
 		Captures:    make(map[model.CaptureID]*model.CaptureInfo),
+		Upstreams:   make(map[model.UpstreamID]*model.UpstreamInfo),
 		Changefeeds: make(map[model.ChangeFeedID]*ChangefeedReactorState),
 	}
 }
@@ -107,6 +109,22 @@ func (s *GlobalReactorState) Update(key util.EtcdKey, value []byte, _ bool) erro
 			s.pendingPatches = append(s.pendingPatches, changefeedState.getPatches())
 			delete(s.Changefeeds, k.ChangefeedID)
 		}
+	case etcd.CDCKeyTypeUpStream:
+		if value == nil {
+			log.Info("upstream is removed",
+				zap.Uint64("upstreamID", k.UpstreamID),
+				zap.Any("info", s.Upstreams[k.UpstreamID]))
+			delete(s.Upstreams, k.UpstreamID)
+			return nil
+		}
+		var newUpstreamInfo model.UpstreamInfo
+		err := newUpstreamInfo.Unmarshal(value)
+		if err != nil {
+			return cerrors.ErrUnmarshalFailed.Wrap(err).GenWithStackByArgs()
+		}
+		log.Info("new upstream is add",
+			zap.String("captureID", k.CaptureID), zap.Any("info", newUpstreamInfo))
+		s.Upstreams[k.UpstreamID] = &newUpstreamInfo
 	default:
 		log.Warn("receive an unexpected etcd event", zap.String("key", key.String()), zap.ByteString("value", value))
 	}

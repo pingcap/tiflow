@@ -448,12 +448,23 @@ func (o *createChangefeedOptions) run(ctx context.Context, cmd *cobra.Command) e
 		return err
 	}
 
+	info.UpstreamID = o.pdClient.GetClusterID(ctx)
 	infoStr, err := info.Marshal()
 	if err != nil {
 		return err
 	}
 
-	err = o.etcdClient.CreateChangefeedInfo(ctx, info,
+	upstreamInfo := &model.UpstreamInfo{
+		ID:            info.UpstreamID,
+		PDEndpoints:   o.pdAddr,
+		KeyPath:       o.credential.KeyPath,
+		CertPath:      o.credential.CertPath,
+		CAPath:        o.credential.CAPath,
+		CertAllowedCN: o.credential.CertAllowedCN,
+	}
+	err = o.etcdClient.CreateChangefeedInfo(ctx,
+		upstreamInfo,
+		info,
 		model.DefaultChangeFeedID(id))
 	if err != nil {
 		return err
