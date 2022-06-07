@@ -39,8 +39,8 @@ function test_check_task_fail_no_block() {
 function test_check_task_fail_no_block_forsharding() {
     prepare_many_tables
     run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-        "check-task $cur/conf/task-noshard.yaml" \
-        "pre-check is passed" 1
+        "check-task $cur/conf/task-sharding.yaml" \
+        "\"state\": \"fail\"" 1
 }
 
 function run() {
