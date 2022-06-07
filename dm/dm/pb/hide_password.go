@@ -17,7 +17,7 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
-// HideSensitiveFunc should be overwrite by utils.HidePassword, this variable is for avoiding cycle import.
+// HideSensitiveFunc should be overwrite by utils.HideSensitive, this variable is for avoiding cycle import.
 var HideSensitiveFunc = func(s string) string {
 	return s
 }
