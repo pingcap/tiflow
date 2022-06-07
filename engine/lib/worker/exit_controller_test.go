@@ -17,10 +17,9 @@ import (
 	"testing"
 	"time"
 
-	"go.uber.org/atomic"
-
 	"github.com/pingcap/errors"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/atomic"
 
 	"github.com/pingcap/tiflow/engine/pkg/clock"
 	"github.com/pingcap/tiflow/engine/pkg/errctx"
