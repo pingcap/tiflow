@@ -1061,14 +1061,14 @@ error = '''
 unmarshal failed
 '''
 
-["CDC:ErrUpstreamNotFound"]
-error = '''
-upstream not found, cluster-id: %d
-'''
-
 ["CDC:ErrUpdateServiceSafepointFailed"]
 error = '''
 updating service safepoint failed
+'''
+
+["CDC:ErrUpstreamNotFound"]
+error = '''
+upstream not found, cluster-id: %d
 '''
 
 ["CDC:ErrVersionIncompatible"]
