@@ -403,6 +403,12 @@ def create_changefeed_v2():
 
     print("pass test: create changefeed v2")
 
+# util functions define belows
+
+# compose physical time and logical time into tso
+def compose_tso(ps, ls):
+    return (ps << physicalShiftBits) + ls 
+
 # arg1: test case name
 # arg2: certificates dir
 # arg3: sink uri
@@ -445,8 +451,3 @@ if __name__ == "__main__":
     else:
         func()
 
-# util functions define belows
-
-# compose physical time and logical time into tso
-def compose_tso(ps, ls):
-    return (ps << physicalShiftBits) + ls 
