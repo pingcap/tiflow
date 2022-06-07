@@ -36,6 +36,15 @@ func RegisterOpenAPIV2Routes(router *gin.Engine, api OpenAPIV2) {
 	v2.Use(middleware.LogMiddleware())
 	v2.Use(middleware.ErrorHandleMiddleware())
 
+	// changefeed apis
+	changefeedGroup := v2.Group("/changefeeds")
+	changefeedGroup.POST("", api.CreateChangefeed)
+
+	// unsafe apis
+	v2.GET("/unsafe/metadata", api.CDCMetaData)
+	v2.POST("/unsafe/resolve-lock", api.ResolveLock)
+	v2.DELETE("/unsafe/service-gc-safepoint", api.DeleteServiceGcSafePoint)
+
 	// common APIs
 	v2.GET("/tso", api.GetTso)
 	v2.POST("/verify-table", api.VerifyTable)

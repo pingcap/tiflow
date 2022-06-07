@@ -31,9 +31,13 @@ import (
 	"go.uber.org/zap"
 )
 
-// DefaultNamespace is the default namespace value,
-// all the old changefeed will be put into default namespace
-const DefaultNamespace = "default"
+const (
+	// DefaultNamespace is the default namespace value,
+	// all the old changefeed will be put into default namespace
+	DefaultNamespace = "default"
+	// DefaultUpstreamID is the default upstream id
+	DefaultUpstreamID = 0
+)
 
 // ChangeFeedID is the type for change feed ID
 type ChangeFeedID struct {
@@ -115,6 +119,8 @@ func (s FeedState) IsNeeded(need string) bool {
 // ChangeFeedInfo describes the detail of a ChangeFeed
 type ChangeFeedInfo struct {
 	UpstreamID uint64            `json:"upstream-id"`
+	Namespace  string            `json:"namespace"`
+	ID         string            `json:"changefeed-id"`
 	SinkURI    string            `json:"sink-uri"`
 	Opts       map[string]string `json:"opts"`
 	CreateTime time.Time         `json:"create-time"`

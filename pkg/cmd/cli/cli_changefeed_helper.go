@@ -22,7 +22,7 @@ import (
 
 	"github.com/pingcap/errors"
 	ownerAPI "github.com/pingcap/tiflow/cdc/api/owner"
-	"github.com/pingcap/tiflow/cdc/api/validator"
+	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/cmd/util"
@@ -85,7 +85,7 @@ func getTables(cliPdAddr string, credential *security.Credential, cfg *config.Re
 		return nil, nil, err
 	}
 
-	return validator.VerifyTables(cfg, kvStore, startTs)
+	return entry.VerifyTables(cfg, kvStore, startTs)
 }
 
 // sendOwnerChangefeedQuery sends owner changefeed query request.
@@ -125,47 +125,4 @@ func sendOwnerChangefeedQuery(ctx context.Context, etcdClient *etcd.CDCEtcdClien
 	}
 
 	return string(body), nil
-}
-
-// sendOwnerAdminChangeQuery sends owner admin query request.
-func sendOwnerAdminChangeQuery(ctx context.Context, etcdClient *etcd.CDCEtcdClient, job model.AdminJob, credential *security.Credential) error {
-	owner, err := getOwnerCapture(ctx, etcdClient)
-	if err != nil {
-		return err
-	}
-
-	scheme := util.HTTP
-	if credential.IsTLSEnabled() {
-		scheme = util.HTTPS
-	}
-
-	url := fmt.Sprintf("%s://%s/capture/owner/admin", scheme, owner.AdvertiseAddr)
-	httpClient, err := httputil.NewClient(credential)
-	if err != nil {
-		return err
-	}
-
-	forceRemoveOpt := "false"
-	if job.Opts != nil && job.Opts.ForceRemove {
-		forceRemoveOpt = "true"
-	}
-
-	resp, err := httpClient.PostForm(ctx, url, map[string][]string{
-		ownerAPI.OpVarAdminJob:           {fmt.Sprint(int(job.Type))},
-		ownerAPI.OpVarChangefeedID:       {job.CfID.ID},
-		ownerAPI.OpForceRemoveChangefeed: {forceRemoveOpt},
-	})
-	if err != nil {
-		return err
-	}
-
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return errors.BadRequestf("admin changefeed failed")
-		}
-		return errors.BadRequestf("%s", string(body))
-	}
-
-	return nil
 }
