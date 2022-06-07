@@ -14,16 +14,16 @@
 package cli
 
 import (
-	apiv2client "github.com/pingcap/tiflow/pkg/api/v2"
 	"github.com/pingcap/tiflow/pkg/cmd/context"
 	"github.com/pingcap/tiflow/pkg/cmd/factory"
 	"github.com/spf13/cobra"
 	"github.com/tikv/client-go/v2/oracle"
+	pd "github.com/tikv/pd/client"
 )
 
 // queryTsoOptions defines flags for the `cli tso query` command.
 type queryTsoOptions struct {
-	apiClient apiv2client.APIV2Interface
+	pdClient pd.Client
 }
 
 // newQueryTsoOptions creates new queryTsoOptions for the `cli tso query` command.
@@ -33,11 +33,11 @@ func newQueryTsoOptions() *queryTsoOptions {
 
 // complete adapts from the command line args to the data and client required.
 func (o *queryTsoOptions) complete(f factory.Factory) error {
-	apiClient, err := f.APIV2Client()
+	pdClient, err := f.PdClient()
 	if err != nil {
 		return err
 	}
-	o.apiClient = apiClient
+	o.pdClient = pdClient
 
 	return nil
 }
@@ -46,12 +46,12 @@ func (o *queryTsoOptions) complete(f factory.Factory) error {
 func (o *queryTsoOptions) run(cmd *cobra.Command) error {
 	ctx := context.GetDefaultContext()
 
-	tso, err := o.apiClient.Tso().Get(ctx)
+	ts, logic, err := o.pdClient.GetTS(ctx)
 	if err != nil {
 		return err
 	}
 
-	cmd.Println(oracle.ComposeTS(tso.Timestamp, tso.LogicTime))
+	cmd.Println(oracle.ComposeTS(ts, logic))
 
 	return nil
 }
