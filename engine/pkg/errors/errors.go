@@ -152,4 +152,5 @@ var (
 	ErrRemovingLocalResource          = errors.Normalize("removing a local resource file directory has failed", errors.RFCCodeText("DFLOW:ErrRemovingLocalResource"))
 	ErrFailToCreateExternalStorage    = errors.Normalize("failed to create external storage", errors.RFCCodeText("DFLOW:ErrFailToCreateExternalStorage"))
 	ErrInvalidResourceHandle          = errors.Normalize("using an invalid resource handle", errors.RFCCodeText("DFLOW:ErrInvalidResourceHandle"))
+	ErrLocalFileDirNotWritable        = errors.Normalize("local resource directory not writable", errors.RFCCodeText("DFLOW:ErrLocalFileDirNotWritable"))
 )

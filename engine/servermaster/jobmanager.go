@@ -84,7 +84,7 @@ type JobManagerImplV2 struct {
 
 // PauseJob implements proto/Master.PauseJob
 func (jm *JobManagerImplV2) PauseJob(ctx context.Context, req *pb.PauseJobRequest) *pb.PauseJobResponse {
-	job := jm.JobFsm.QueryOnlineJob(req.JobIdStr)
+	job := jm.JobFsm.QueryOnlineJob(req.JobId)
 	if job == nil {
 		return &pb.PauseJobResponse{Err: &pb.Error{
 			Code: pb.ErrorCode_UnKnownJob,
@@ -115,7 +115,7 @@ func (jm *JobManagerImplV2) CancelJob(ctx context.Context, req *pb.CancelJobRequ
 	// (1) Handle potential race conditions.
 	// (2) Refine error handling.
 
-	job, err := jm.frameMetaClient.GetJobByID(ctx, req.GetJobIdStr())
+	job, err := jm.frameMetaClient.GetJobByID(ctx, req.GetJobId())
 	if pkgOrm.IsNotFoundError(err) {
 		return &pb.CancelJobResponse{Err: &pb.Error{
 			Code: pb.ErrorCode_UnKnownJob,
@@ -135,7 +135,7 @@ func (jm *JobManagerImplV2) CancelJob(ctx context.Context, req *pb.CancelJobRequ
 		}}
 	}
 
-	if err := jm.deleteJobMeta(ctx, req.JobIdStr); err != nil {
+	if err := jm.deleteJobMeta(ctx, req.JobId); err != nil {
 		return &pb.CancelJobResponse{Err: &pb.Error{
 			Code:    pb.ErrorCode_UnknownError,
 			Message: err.Error(),
@@ -292,7 +292,7 @@ func (jm *JobManagerImplV2) SubmitJob(ctx context.Context, req *pb.SubmitJobRequ
 	}
 
 	jm.JobFsm.JobDispatched(meta, false /*addFromFailover*/)
-	resp.JobIdStr = id
+	resp.JobId = id
 	return resp
 }
 
