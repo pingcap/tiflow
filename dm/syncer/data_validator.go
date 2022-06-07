@@ -391,11 +391,11 @@ func (v *DataValidator) printStatusRoutine() {
 			speed := float64((currProcessedBinlogSize-prevProcessedBinlogSize)>>20) / interval.Seconds()
 			prevProcessedBinlogSize = currProcessedBinlogSize
 			prevTime = currTime
-			counts, err := v.getAllErrorCount(validatorStatusInterval)
+			counts, err := v.getAllErrorCount(validatorDmctlOpTimeout)
 			if err == nil {
 				v.vmetric.ErrorCount.Set(float64(counts[pb.ValidateErrorState_NewErr]))
 			} else {
-				v.L.Warn("validator status", zap.Error(err))
+				v.L.Warn("failed to get error row count", zap.Error(err))
 			}
 			v.L.Info("validator status",
 				zap.Int64s("processed(i, u, d)", processed),
