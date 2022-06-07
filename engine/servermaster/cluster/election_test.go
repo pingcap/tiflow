@@ -136,7 +136,7 @@ func TestSessionDone(t *testing.T) {
 
 	require.NoError(t, election.session.Close())
 	<-sessCtx.Done()
-	require.Regexp(t, ".*ErrMasterSessionDone.*", sessCtx.Err())
+	require.Regexp(t, "ErrMasterSessionDone", sessCtx.Err())
 
 	// It should be okay to call resignFn even after the session is done.
 	resignFn()
