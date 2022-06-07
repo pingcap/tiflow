@@ -61,8 +61,10 @@ func NewManager4Test(pdClient pd.Client) *Manager {
 	up := NewUpstream4Test(pdClient)
 	res := &Manager{
 		ups: new(sync.Map), ctx: context.Background(),
-		gcServiceID: etcd.GcServiceIDForTest(),
+		gcServiceID:     etcd.GcServiceIDForTest(),
+		defaultUpstream: up,
 	}
+	up.isDefaultUpstream = true
 	res.ups.Store(DefaultUpstreamID, up)
 	return res
 }

@@ -148,7 +148,7 @@ func (k *CDCKey) Parse(clusterID, key string) error {
 		case strings.HasPrefix(key, upstreamKey):
 			k.Tp = CDCKeyTypeUpStream
 			k.CaptureID = ""
-			id, err := strconv.ParseUint(key[len(changefeedInfoKey)+1:], 10, 64)
+			id, err := strconv.ParseUint(key[len(upstreamKey)+1:], 10, 64)
 			if err != nil {
 				return err
 			}
