@@ -11,20 +11,20 @@ target-database:       # 下游数据库实例配置
 ## ******** 功能配置集 **********
 block-allow-list:        # 上游数据库实例匹配的表的 block-allow-list 过滤规则集，如果 DM 版本 <= v2.0.0-beta.2 则使用 black-white-list
   bw-rule-1:             # 黑白名单配置的名称
-    do-dbs: ["tug"] # 迁移哪些库
+    do-dbs: ["checktask"] # 迁移哪些库
 
 # ----------- 实例配置 -----------
 mysql-instances:
-  - source-id: "mysql-01"  # 上游实例或者复制组 ID，参考  的  配置
+  - source-id: "mysql-replica-01"  # 上游实例或者复制组 ID，参考  的  配置
     block-allow-list:  "bw-rule-1" # 黑白名单配置名称，如果 DM 版本 <= v2.0.0-beta.2 则使用 black-white-list
     route-rules: ["rule1"]
     mydumper-config-name: "global"
 
 routes:
   rule1:
-    schema-pattern: "tug"
+    schema-pattern: "checktask"
     table-pattern: "t*"
-    target-schema: "tug"
+    target-schema: "checktask"
     target-table: "t"
 
 mydumpers:

@@ -132,7 +132,7 @@ func (t *testCheckSuite) TestShardingTablesChecker(c *tc.C) {
 	// in tiflow#5759, this function will enter deadlock
 	result = checker.Check(ctx)
 	c.Assert(result.State, tc.Equals, StateFailure)
-	c.Assert(result.Errors, tc.HasLen, 1)
+	c.Assert(result.Errors, tc.HasLen, 3)
 }
 
 func (t *testCheckSuite) TestTablesChecker(c *tc.C) {
@@ -246,7 +246,6 @@ func (t *testCheckSuite) TestTablesChecker(c *tc.C) {
 		}},
 		1)
 	result = checker.Check(ctx)
-	fmt.Printf("%v\n", result.Errors[0])
 	c.Assert(result.State, tc.Equals, StateFailure)
 	c.Assert(result.Errors, tc.HasLen, 3)
 }
