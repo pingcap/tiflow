@@ -17,6 +17,8 @@ import (
 	"testing"
 	"time"
 
+	"go.uber.org/atomic"
+
 	"github.com/pingcap/errors"
 	"github.com/stretchr/testify/require"
 
@@ -32,7 +34,14 @@ func TestExitControllerHappyPath(t *testing.T) {
 	errc := errctx.NewErrCenter()
 	clk := clock.NewMock()
 
-	ec := NewExitController(masterCli, errc, clk)
+	var cbCalled atomic.Bool
+	ec := NewExitController(
+		masterCli,
+		errc,
+		WithClock(clk),
+		WithPrepareExitFunc(func() {
+			require.False(t, cbCalled.Swap(true))
+		}))
 
 	err := ec.PollExit()
 	require.NoError(t, err)
@@ -55,6 +64,8 @@ func TestExitControllerHappyPath(t *testing.T) {
 	err = ec.PollExit()
 	require.Error(t, err)
 	require.Regexp(t, ".*injected error.*", err)
+
+	require.True(t, cbCalled.Load())
 }
 
 func TestExitControllerMasterTimesOut(t *testing.T) {
@@ -64,7 +75,7 @@ func TestExitControllerMasterTimesOut(t *testing.T) {
 	errc := errctx.NewErrCenter()
 	clk := clock.NewMock()
 
-	ec := NewExitController(masterCli, errc, clk)
+	ec := NewExitController(masterCli, errc, WithClock(clk))
 
 	// Sets an error with the ErrCenter.
 	errc.OnError(errors.New("injected error"))
@@ -93,7 +104,7 @@ func TestExitControllerForceExit(t *testing.T) {
 	errc := errctx.NewErrCenter()
 	clk := clock.NewMock()
 
-	ec := NewExitController(masterCli, errc, clk)
+	ec := NewExitController(masterCli, errc, WithClock(clk))
 
 	// Sets an error with the ErrCenter.
 	errc.OnError(errors.New("injected error"))

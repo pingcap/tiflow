@@ -232,8 +232,6 @@ func (w *DefaultBaseWorker) doPreInit(ctx context.Context) error {
 			zap.Error(err))
 	}()
 
-	w.startBackgroundTasks()
-
 	initTime := w.clock.Mono()
 	rctx, ok := runtime.ToRuntimeCtx(ctx)
 	if ok {
@@ -247,7 +245,18 @@ func (w *DefaultBaseWorker) doPreInit(ctx context.Context) error {
 		w.frameMetaClient,
 		initTime)
 
-	w.exitController = worker.NewExitController(w.masterClient, w.errCenter, w.clock)
+	w.exitController = worker.NewExitController(
+		w.masterClient,
+		w.errCenter,
+		worker.WithClock(w.clock),
+		// TODO use a logger passed down from the caller.
+		worker.WithLogger(log.L().WithFields(
+			zap.String("worker-id", w.id),
+			zap.String("master-id", w.masterID))),
+		worker.WithPrepareExitFunc(func() {
+			_ = w.Impl.CloseImpl(context.Background())
+		}))
+
 	w.workerMetaClient = metadata.NewWorkerMetadataClient(w.masterID, w.frameMetaClient)
 
 	w.statusSender = statusutil.NewWriter(
@@ -257,6 +266,8 @@ func (w *DefaultBaseWorker) doPreInit(ctx context.Context) error {
 			return w.Impl.OnMasterMessage(topic, msg)
 		},
 	)
+
+	w.startBackgroundTasks()
 
 	if err := w.initMessageHandlers(ctx); err != nil {
 		return errors.Trace(err)
@@ -345,15 +356,8 @@ func (w *DefaultBaseWorker) doClose() {
 
 // Close implements BaseWorker.Close
 func (w *DefaultBaseWorker) Close(ctx context.Context) error {
-	err := w.Impl.CloseImpl(ctx)
-	// We don't return here if CloseImpl return error to ensure
-	// that we can close inner resources of the framework
-	if err != nil {
-		log.L().Error("Failed to close WorkerImpl", zap.Error(err))
-	}
-
 	w.doClose()
-	return errors.Trace(err)
+	return nil
 }
 
 // ID implements BaseWorker.ID
