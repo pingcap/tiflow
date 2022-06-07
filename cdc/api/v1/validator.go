@@ -128,6 +128,7 @@ func VerifyCreateChangefeedConfig(
 
 	// init ChangefeedInfo
 	info := &model.ChangeFeedInfo{
+		UpstreamID:        upStream.PDClient.GetClusterID(ctx),
 		SinkURI:           changefeedConfig.SinkURI,
 		Opts:              make(map[string]string),
 		CreateTime:        time.Now(),

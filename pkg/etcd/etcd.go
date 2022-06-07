@@ -347,6 +347,7 @@ func (c CDCEtcdClient) CreateChangefeedInfo(ctx context.Context,
 		Namespace:  changeFeedID.Namespace,
 	}
 	upstreamEtcdKeyStr := upstreamInfoKey.String()
+	info.UpstreamID = upstreamInfo.ID
 	value, err := info.Marshal()
 	if err != nil {
 		return errors.Trace(err)

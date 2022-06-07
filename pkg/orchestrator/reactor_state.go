@@ -123,7 +123,8 @@ func (s *GlobalReactorState) Update(key util.EtcdKey, value []byte, _ bool) erro
 			return cerrors.ErrUnmarshalFailed.Wrap(err).GenWithStackByArgs()
 		}
 		log.Info("new upstream is add",
-			zap.String("captureID", k.CaptureID), zap.Any("info", newUpstreamInfo))
+			zap.Uint64("upstream", k.UpstreamID),
+			zap.Any("info", newUpstreamInfo))
 		s.Upstreams[k.UpstreamID] = &newUpstreamInfo
 	case etcd.CDCKeyTypeMetaVersion:
 	default:
