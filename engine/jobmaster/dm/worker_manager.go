@@ -21,7 +21,6 @@ import (
 	dmconfig "github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/engine/model"
-	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
 	resourcemeta "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	"go.uber.org/zap"
 
@@ -31,6 +30,7 @@ import (
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/ticker"
 	"github.com/pingcap/tiflow/engine/lib"
 	libModel "github.com/pingcap/tiflow/engine/lib/model"
+	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
 )
 
 var (
@@ -40,7 +40,7 @@ var (
 	WorkerErrorInterval = time.Second * 10
 )
 
-// WorkerAgent manages worker
+// WorkerAgent defines an interface for create worker.
 type WorkerAgent interface {
 	// for create worker
 	CreateWorker(
@@ -51,7 +51,7 @@ type WorkerAgent interface {
 	) (libModel.WorkerID, error)
 }
 
-// CheckpointAgent manages checkpoint
+// CheckpointAgent defines an interface for checkpoint.
 type CheckpointAgent interface {
 	IsFresh(ctx context.Context, workerType libModel.WorkerType, taskCfg *metadata.Task) (bool, error)
 }

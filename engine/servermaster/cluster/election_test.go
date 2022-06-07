@@ -21,6 +21,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pingcap/errors"
+
 	"github.com/pingcap/tiflow/engine/pkg/etcdutils"
 	"github.com/stretchr/testify/require"
 	clientv3 "go.etcd.io/etcd/client/v3"
@@ -76,9 +78,8 @@ func TestEtcdElectionCampaign(t *testing.T) {
 			defer wg.Done()
 			client := newClient()
 			election, err := NewEtcdElection(ctx, client, nil, EtcdElectionConfig{
-				CreateSessionTimeout: 1 * time.Second,
-				TTL:                  5,
-				Prefix:               "/test-election",
+				TTL:    5,
+				Prefix: "/test-election",
 			})
 			require.NoError(t, err)
 
@@ -97,7 +98,7 @@ func TestEtcdElectionCampaign(t *testing.T) {
 
 			select {
 			case <-sessCtx.Done():
-				t.Logf("session done with error: %v", sessCtx.Err())
+				require.FailNow(t, "session done unexpectedly")
 			default:
 			}
 
@@ -111,6 +112,56 @@ func TestEtcdElectionCampaign(t *testing.T) {
 	require.Equal(t, int32(numMockNodesForCampaignTest), accumulatedLeaderCount.Load())
 }
 
+func TestSessionDone(t *testing.T) {
+	newClient, closeFn := setUpTest(t)
+	defer closeFn()
+
+	ctx := context.Background()
+	client := newClient()
+	election, err := NewEtcdElection(ctx, client, nil, EtcdElectionConfig{
+		TTL:    5,
+		Prefix: "/test-election",
+	})
+	require.NoError(t, err)
+
+	nodeID := "node-session-done"
+	sessCtx, resignFn, err := election.Campaign(ctx, nodeID, time.Second*5)
+	require.NoError(t, err)
+
+	select {
+	case <-sessCtx.Done():
+		require.FailNow(t, "sessCtx is not expected to be done by now.")
+	default:
+	}
+
+	require.NoError(t, election.session.Close())
+	<-sessCtx.Done()
+	require.Regexp(t, "ErrMasterSessionDone", sessCtx.Err())
+
+	// It should be okay to call resignFn even after the session is done.
+	resignFn()
+}
+
+type failLease struct {
+	clientv3.Lease
+}
+
+func (l *failLease) Grant(_ context.Context, _ int64) (*clientv3.LeaseGrantResponse, error) {
+	return nil, errors.New("injected Grant fail")
+}
+
+func TestCreateSessionFail(t *testing.T) {
+	ctx := context.Background()
+	clientStub := clientv3.NewCtxClient(ctx)
+	clientStub.Lease = &failLease{}
+	_, err := NewEtcdElection(ctx, clientStub, nil, EtcdElectionConfig{
+		TTL:    5,
+		Prefix: "/test-election",
+	})
+	require.Error(t, err)
+	require.Regexp(t, "ErrMasterEtcdCreateSessionFail", err)
+}
+
 // TODO (zixiong) add tests for failure cases
 // We need a mock Etcd client.
 
@@ -121,9 +172,8 @@ func TestLeaderCtxCancelPropagate(t *testing.T) {
 	ctx := context.Background()
 	client := newClient()
 	election, err := NewEtcdElection(ctx, client, nil, EtcdElectionConfig{
-		CreateSessionTimeout: 1 * time.Second,
-		TTL:                  5,
-		Prefix:               "/test-election",
+		TTL:    5,
+		Prefix: "/test-election",
 	})
 	require.NoError(t, err)
 
@@ -133,5 +183,46 @@ func TestLeaderCtxCancelPropagate(t *testing.T) {
 	_, cancel := context.WithCancel(sessCtx)
 	defer cancel()
 	resignFn()
-	require.EqualError(t, sessCtx.Err(), "[DFLOW:ErrMasterSessionDone]master session is done")
+
+	<-sessCtx.Done()
+	require.EqualError(t, sessCtx.Err(), "[DFLOW:ErrLeaderCtxCanceled]leader context is canceled")
+}
+
+func TestLeaderCtxDoneChCreatedOnce(t *testing.T) {
+	newClient, closeFn := setUpTest(t)
+	defer closeFn()
+
+	ctx := context.Background()
+	client := newClient()
+	election, err := NewEtcdElection(ctx, client, nil, EtcdElectionConfig{
+		TTL:    5,
+		Prefix: "/test-election",
+	})
+	require.NoError(t, err)
+
+	nodeID := "node-1"
+	sessCtx, resignFn, err := election.Campaign(ctx, nodeID, time.Second*10)
+	require.NoError(t, err)
+
+	select {
+	case <-sessCtx.Done():
+		require.FailNow(t, "unreachable")
+	default:
+	}
+
+	for i := 0; i < 10000; i++ {
+		select {
+		case <-sessCtx.Done():
+		default:
+		}
+	}
+
+	require.Eventually(t, func() bool {
+		return sessCtx.(*leaderCtx).goroutineCount.Load() == 1
+	}, 1*time.Second, 10*time.Millisecond)
+	resignFn()
+
+	require.Eventually(t, func() bool {
+		return sessCtx.(*leaderCtx).goroutineCount.Load() == 0
+	}, 1*time.Second, 10*time.Millisecond)
 }
