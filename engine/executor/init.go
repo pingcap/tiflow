@@ -19,6 +19,7 @@ import (
 	cvs "github.com/pingcap/tiflow/engine/jobmaster/cvsjob"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm"
 	"github.com/pingcap/tiflow/engine/lib/registry"
+	_ "github.com/pingcap/tiflow/engine/test/resourcejob"
 )
 
 func init() {

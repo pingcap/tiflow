@@ -41,7 +41,7 @@ type JobMaster struct {
 	lib.BaseJobMaster
 
 	status *masterStatus
-	config *jobConfig
+	config *JobConfig
 }
 
 // NewMaster creates a new JobMaster
@@ -53,11 +53,11 @@ func NewMaster(
 ) lib.WorkerImpl {
 	return &JobMaster{
 		status: initialMasterStatus(),
-		config: config.(*jobConfig),
+		config: config.(*JobConfig),
 	}
 }
 
-type jobConfig struct {
+type JobConfig struct {
 	ResourceCount int `json:"resource_count"`
 	ResourceLen   int `json:"resource_len"`
 }
@@ -125,7 +125,7 @@ func (m *JobMaster) createWorkerIfNecessary() error {
 	unboundResourceSet := m.status.UnboundResources()
 	for unboundRes := range unboundResourceSet {
 		workerID, err := m.CreateWorker(
-			resourceTestWorkerType,
+			ResourceTestWorkerType,
 			&workerConfig{ResourceID: unboundRes},
 			10,
 			unboundRes)

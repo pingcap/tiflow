@@ -14,8 +14,11 @@ import (
 
 // Reference imports to suppress errors if they are not otherwise used.
 var _ = proto.Marshal
-var _ = fmt.Errorf
-var _ = math.Inf
+
+var (
+	_ = fmt.Errorf
+	_ = math.Inf
+)
 
 // This is a compile-time assertion to ensure that this generated file
 // is compatible with the proto package it is being compiled against.
@@ -112,9 +115,11 @@ func (*NotLeader) ProtoMessage()    {}
 func (*NotLeader) Descriptor() ([]byte, []int) {
 	return fileDescriptor_0579b252106fcf4a, []int{0}
 }
+
 func (m *NotLeader) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
+
 func (m *NotLeader) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
 		return xxx_messageInfo_NotLeader.Marshal(b, m, deterministic)
@@ -127,12 +132,15 @@ func (m *NotLeader) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 		return b[:n], nil
 	}
 }
+
 func (m *NotLeader) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_NotLeader.Merge(m, src)
 }
+
 func (m *NotLeader) XXX_Size() int {
 	return m.Size()
 }
+
 func (m *NotLeader) XXX_DiscardUnknown() {
 	xxx_messageInfo_NotLeader.DiscardUnknown(m)
 }
@@ -165,9 +173,11 @@ func (*Error) ProtoMessage()    {}
 func (*Error) Descriptor() ([]byte, []int) {
 	return fileDescriptor_0579b252106fcf4a, []int{1}
 }
+
 func (m *Error) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
+
 func (m *Error) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
 		return xxx_messageInfo_Error.Marshal(b, m, deterministic)
@@ -180,12 +190,15 @@ func (m *Error) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 		return b[:n], nil
 	}
 }
+
 func (m *Error) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_Error.Merge(m, src)
 }
+
 func (m *Error) XXX_Size() int {
 	return m.Size()
 }
+
 func (m *Error) XXX_DiscardUnknown() {
 	xxx_messageInfo_Error.DiscardUnknown(m)
 }
@@ -346,6 +359,7 @@ func encodeVarintError(dAtA []byte, offset int, v uint64) int {
 	dAtA[offset] = uint8(v)
 	return base
 }
+
 func (m *NotLeader) Size() (n int) {
 	if m == nil {
 		return 0
@@ -386,9 +400,11 @@ func (m *Error) Size() (n int) {
 func sovError(x uint64) (n int) {
 	return (math_bits.Len64(x|1) + 6) / 7
 }
+
 func sozError(x uint64) (n int) {
 	return sovError(uint64((x << 1) ^ uint64((int64(x) >> 63))))
 }
+
 func (m *NotLeader) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -503,6 +519,7 @@ func (m *NotLeader) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *Error) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -640,6 +657,7 @@ func (m *Error) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
+
 func skipError(dAtA []byte) (n int, err error) {
 	l := len(dAtA)
 	iNdEx := 0

@@ -18,8 +18,11 @@ import (
 
 // Reference imports to suppress errors if they are not otherwise used.
 var _ = proto.Marshal
-var _ = fmt.Errorf
-var _ = math.Inf
+
+var (
+	_ = fmt.Errorf
+	_ = math.Inf
+)
 
 // This is a compile-time assertion to ensure that this generated file
 // is compatible with the proto package it is being compiled against.
@@ -43,9 +46,11 @@ func (*PreDispatchTaskRequest) ProtoMessage()    {}
 func (*PreDispatchTaskRequest) Descriptor() ([]byte, []int) {
 	return fileDescriptor_12d1cdcda51e000f, []int{0}
 }
+
 func (m *PreDispatchTaskRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
+
 func (m *PreDispatchTaskRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
 		return xxx_messageInfo_PreDispatchTaskRequest.Marshal(b, m, deterministic)
@@ -58,12 +63,15 @@ func (m *PreDispatchTaskRequest) XXX_Marshal(b []byte, deterministic bool) ([]by
 		return b[:n], nil
 	}
 }
+
 func (m *PreDispatchTaskRequest) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_PreDispatchTaskRequest.Merge(m, src)
 }
+
 func (m *PreDispatchTaskRequest) XXX_Size() int {
 	return m.Size()
 }
+
 func (m *PreDispatchTaskRequest) XXX_DiscardUnknown() {
 	xxx_messageInfo_PreDispatchTaskRequest.DiscardUnknown(m)
 }
@@ -112,8 +120,7 @@ func (m *PreDispatchTaskRequest) GetRequestId() string {
 	return ""
 }
 
-type PreDispatchTaskResponse struct {
-}
+type PreDispatchTaskResponse struct{}
 
 func (m *PreDispatchTaskResponse) Reset()         { *m = PreDispatchTaskResponse{} }
 func (m *PreDispatchTaskResponse) String() string { return proto.CompactTextString(m) }
@@ -121,9 +128,11 @@ func (*PreDispatchTaskResponse) ProtoMessage()    {}
 func (*PreDispatchTaskResponse) Descriptor() ([]byte, []int) {
 	return fileDescriptor_12d1cdcda51e000f, []int{1}
 }
+
 func (m *PreDispatchTaskResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
+
 func (m *PreDispatchTaskResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
 		return xxx_messageInfo_PreDispatchTaskResponse.Marshal(b, m, deterministic)
@@ -136,12 +145,15 @@ func (m *PreDispatchTaskResponse) XXX_Marshal(b []byte, deterministic bool) ([]b
 		return b[:n], nil
 	}
 }
+
 func (m *PreDispatchTaskResponse) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_PreDispatchTaskResponse.Merge(m, src)
 }
+
 func (m *PreDispatchTaskResponse) XXX_Size() int {
 	return m.Size()
 }
+
 func (m *PreDispatchTaskResponse) XXX_DiscardUnknown() {
 	xxx_messageInfo_PreDispatchTaskResponse.DiscardUnknown(m)
 }
@@ -159,9 +171,11 @@ func (*ConfirmDispatchTaskRequest) ProtoMessage()    {}
 func (*ConfirmDispatchTaskRequest) Descriptor() ([]byte, []int) {
 	return fileDescriptor_12d1cdcda51e000f, []int{2}
 }
+
 func (m *ConfirmDispatchTaskRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
+
 func (m *ConfirmDispatchTaskRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
 		return xxx_messageInfo_ConfirmDispatchTaskRequest.Marshal(b, m, deterministic)
@@ -174,12 +188,15 @@ func (m *ConfirmDispatchTaskRequest) XXX_Marshal(b []byte, deterministic bool) (
 		return b[:n], nil
 	}
 }
+
 func (m *ConfirmDispatchTaskRequest) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_ConfirmDispatchTaskRequest.Merge(m, src)
 }
+
 func (m *ConfirmDispatchTaskRequest) XXX_Size() int {
 	return m.Size()
 }
+
 func (m *ConfirmDispatchTaskRequest) XXX_DiscardUnknown() {
 	xxx_messageInfo_ConfirmDispatchTaskRequest.DiscardUnknown(m)
 }
@@ -200,8 +217,7 @@ func (m *ConfirmDispatchTaskRequest) GetRequestId() string {
 	return ""
 }
 
-type ConfirmDispatchTaskResponse struct {
-}
+type ConfirmDispatchTaskResponse struct{}
 
 func (m *ConfirmDispatchTaskResponse) Reset()         { *m = ConfirmDispatchTaskResponse{} }
 func (m *ConfirmDispatchTaskResponse) String() string { return proto.CompactTextString(m) }
@@ -209,9 +225,11 @@ func (*ConfirmDispatchTaskResponse) ProtoMessage()    {}
 func (*ConfirmDispatchTaskResponse) Descriptor() ([]byte, []int) {
 	return fileDescriptor_12d1cdcda51e000f, []int{3}
 }
+
 func (m *ConfirmDispatchTaskResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
+
 func (m *ConfirmDispatchTaskResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
 		return xxx_messageInfo_ConfirmDispatchTaskResponse.Marshal(b, m, deterministic)
@@ -224,12 +242,15 @@ func (m *ConfirmDispatchTaskResponse) XXX_Marshal(b []byte, deterministic bool) 
 		return b[:n], nil
 	}
 }
+
 func (m *ConfirmDispatchTaskResponse) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_ConfirmDispatchTaskResponse.Merge(m, src)
 }
+
 func (m *ConfirmDispatchTaskResponse) XXX_Size() int {
 	return m.Size()
 }
+
 func (m *ConfirmDispatchTaskResponse) XXX_DiscardUnknown() {
 	xxx_messageInfo_ConfirmDispatchTaskResponse.DiscardUnknown(m)
 }
@@ -247,9 +268,11 @@ func (*RemoveLocalResourceRequest) ProtoMessage()    {}
 func (*RemoveLocalResourceRequest) Descriptor() ([]byte, []int) {
 	return fileDescriptor_12d1cdcda51e000f, []int{4}
 }
+
 func (m *RemoveLocalResourceRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
+
 func (m *RemoveLocalResourceRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
 		return xxx_messageInfo_RemoveLocalResourceRequest.Marshal(b, m, deterministic)
@@ -262,12 +285,15 @@ func (m *RemoveLocalResourceRequest) XXX_Marshal(b []byte, deterministic bool) (
 		return b[:n], nil
 	}
 }
+
 func (m *RemoveLocalResourceRequest) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_RemoveLocalResourceRequest.Merge(m, src)
 }
+
 func (m *RemoveLocalResourceRequest) XXX_Size() int {
 	return m.Size()
 }
+
 func (m *RemoveLocalResourceRequest) XXX_DiscardUnknown() {
 	xxx_messageInfo_RemoveLocalResourceRequest.DiscardUnknown(m)
 }
@@ -288,8 +314,7 @@ func (m *RemoveLocalResourceRequest) GetCreatorId() string {
 	return ""
 }
 
-type RemoveLocalResourceResponse struct {
-}
+type RemoveLocalResourceResponse struct{}
 
 func (m *RemoveLocalResourceResponse) Reset()         { *m = RemoveLocalResourceResponse{} }
 func (m *RemoveLocalResourceResponse) String() string { return proto.CompactTextString(m) }
@@ -297,9 +322,11 @@ func (*RemoveLocalResourceResponse) ProtoMessage()    {}
 func (*RemoveLocalResourceResponse) Descriptor() ([]byte, []int) {
 	return fileDescriptor_12d1cdcda51e000f, []int{5}
 }
+
 func (m *RemoveLocalResourceResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
+
 func (m *RemoveLocalResourceResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
 		return xxx_messageInfo_RemoveLocalResourceResponse.Marshal(b, m, deterministic)
@@ -312,12 +339,15 @@ func (m *RemoveLocalResourceResponse) XXX_Marshal(b []byte, deterministic bool) 
 		return b[:n], nil
 	}
 }
+
 func (m *RemoveLocalResourceResponse) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_RemoveLocalResourceResponse.Merge(m, src)
 }
+
 func (m *RemoveLocalResourceResponse) XXX_Size() int {
 	return m.Size()
 }
+
 func (m *RemoveLocalResourceResponse) XXX_DiscardUnknown() {
 	xxx_messageInfo_RemoveLocalResourceResponse.DiscardUnknown(m)
 }
@@ -415,12 +445,12 @@ type ExecutorServer interface {
 }
 
 // UnimplementedExecutorServer can be embedded to have forward compatible implementations.
-type UnimplementedExecutorServer struct {
-}
+type UnimplementedExecutorServer struct{}
 
 func (*UnimplementedExecutorServer) PreDispatchTask(ctx context.Context, req *PreDispatchTaskRequest) (*PreDispatchTaskResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method PreDispatchTask not implemented")
 }
+
 func (*UnimplementedExecutorServer) ConfirmDispatchTask(ctx context.Context, req *ConfirmDispatchTaskRequest) (*ConfirmDispatchTaskResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ConfirmDispatchTask not implemented")
 }
@@ -512,8 +542,7 @@ type BrokerServiceServer interface {
 }
 
 // UnimplementedBrokerServiceServer can be embedded to have forward compatible implementations.
-type UnimplementedBrokerServiceServer struct {
-}
+type UnimplementedBrokerServiceServer struct{}
 
 func (*UnimplementedBrokerServiceServer) RemoveResource(ctx context.Context, req *RemoveLocalResourceRequest) (*RemoveLocalResourceResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RemoveResource not implemented")
@@ -776,6 +805,7 @@ func encodeVarintExecutor(dAtA []byte, offset int, v uint64) int {
 	dAtA[offset] = uint8(v)
 	return base
 }
+
 func (m *PreDispatchTaskRequest) Size() (n int) {
 	if m == nil {
 		return 0
@@ -872,9 +902,11 @@ func (m *RemoveLocalResourceResponse) Size() (n int) {
 func sovExecutor(x uint64) (n int) {
 	return (math_bits.Len64(x|1) + 6) / 7
 }
+
 func sozExecutor(x uint64) (n int) {
 	return sovExecutor(uint64((x << 1) ^ uint64((int64(x) >> 63))))
 }
+
 func (m *PreDispatchTaskRequest) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -1110,6 +1142,7 @@ func (m *PreDispatchTaskRequest) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *PreDispatchTaskResponse) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -1160,6 +1193,7 @@ func (m *PreDispatchTaskResponse) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *ConfirmDispatchTaskRequest) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -1274,6 +1308,7 @@ func (m *ConfirmDispatchTaskRequest) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *ConfirmDispatchTaskResponse) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -1324,6 +1359,7 @@ func (m *ConfirmDispatchTaskResponse) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *RemoveLocalResourceRequest) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -1438,6 +1474,7 @@ func (m *RemoveLocalResourceRequest) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *RemoveLocalResourceResponse) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -1488,6 +1525,7 @@ func (m *RemoveLocalResourceResponse) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
+
 func skipExecutor(dAtA []byte) (n int, err error) {
 	l := len(dAtA)
 	iNdEx := 0

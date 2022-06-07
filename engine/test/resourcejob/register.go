@@ -14,20 +14,25 @@
 package resourcejob
 
 import (
-	"github.com/pingcap/tiflow/engine/lib"
 	libModel "github.com/pingcap/tiflow/engine/lib/model"
 	"github.com/pingcap/tiflow/engine/lib/registry"
 )
 
 const (
-	resourceTestWorkerType = libModel.WorkerType(10001)
-	resourceTestMasterType = libModel.WorkerType(10002)
+	ResourceTestWorkerType = libModel.WorkerType(10001)
+	ResourceTestMasterType = libModel.WorkerType(10002)
 )
 
+func init() {
+	r := registry.GlobalWorkerRegistry()
+	Register(r)
+}
+
+// Register registers the resource jobMaster and worker.
 func Register(reg registry.Registry) {
-	fakeMasterFactory := registry.NewSimpleWorkerFactory(NewWorker, &jobConfig{})
-	reg.MustRegisterWorkerType(lib.FakeJobMaster, fakeMasterFactory)
+	fakeMasterFactory := registry.NewSimpleWorkerFactory(NewWorker, &JobConfig{})
+	reg.MustRegisterWorkerType(ResourceTestMasterType, fakeMasterFactory)
 
 	fakeWorkerFactory := registry.NewSimpleWorkerFactory(NewMaster, &workerConfig{})
-	reg.MustRegisterWorkerType(lib.FakeTask, fakeWorkerFactory)
+	reg.MustRegisterWorkerType(ResourceTestWorkerType, fakeWorkerFactory)
 }

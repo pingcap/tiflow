@@ -71,11 +71,13 @@ message HeartbeatResponse {
     repeated string addrs = 3;
 }
 
+// TODO remove this. Not good for extensibility.
 enum JobType {
     CVSDemo = 0;
     DM = 1;
     CDC = 2;
     FakeJob = 3;
+    ResourceTestJob = 4;
 }
 
 message SubmitJobRequest {
