@@ -18,22 +18,19 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/ngaut/log"
+	"github.com/pingcap/tiflow/cdc/api"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
 )
 
-// CreateChangefeed creates a changefeed
-// @Summary Create changefeed
-// @Description create a new changefeed
-// @Tags changefeed
-// @Accept json
-// @Produce json
-// @Param changefeed body ChangefeedConfig true "changefeed config"
-// @Success 200 {object} map[string]interface{}
-// @Failure 500,400 {object} model.HTTPError
-// @Router	/api/v2/changefeeds [post]
+// CreateChangefeed handles create changefeed request
 func (h *OpenAPIV2) CreateChangefeed(c *gin.Context) {
+	if !h.capture.IsOwner() {
+		api.ForwardToOwner(c, h.capture)
+		return
+	}
+
 	ctx := c.Request.Context()
 
 	config := &ChangefeedConfig{ReplicaConfig: GetDefaultReplicaConfig()}

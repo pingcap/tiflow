@@ -19,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/cdc/contextutil"
@@ -88,6 +89,9 @@ func VerifyCreateChangefeedConfig(
 	}
 
 	// verify changefeedID
+	if cfg.ID == "" {
+		cfg.ID = uuid.New().String()
+	}
 	if err := model.ValidateChangefeedID(cfg.ID); err != nil {
 		return nil, cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed_id: %s", cfg.ID)
 	}
@@ -139,6 +143,8 @@ func VerifyCreateChangefeedConfig(
 	if err != nil {
 		return nil, err
 	}
+	defer kvStorage.Close()
+
 	if !replicaCfg.ForceReplicate && !replicaCfg.IgnoreIneligibleTable {
 		ineligibleTables, _, err := entry.VerifyTables(replicaCfg, kvStorage, cfg.StartTs)
 		if err != nil {
