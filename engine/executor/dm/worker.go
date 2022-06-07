@@ -149,14 +149,18 @@ func (w *dmWorker) OnMasterMessage(topic p2p.Topic, message p2p.MessageValue) er
 
 // CloseImpl implements lib.WorkerImpl.CloseImpl
 func (w *dmWorker) CloseImpl(ctx context.Context) error {
+	var recordErr error
 	// unregister jobmaster client
-	err := w.messageAgent.UpdateClient(w.masterID, nil)
-	if err != nil {
+	if err := w.messageAgent.UpdateClient(w.masterID, nil); err != nil {
 		log.L().Error("failed to update message client", log.ShortError(err))
+		recordErr = err
 	}
 	w.unitHolder.Close(ctx)
-	w.messageAgent.Close(ctx)
-	return err
+	if err := w.messageAgent.Close(ctx); err != nil {
+		log.L().Error("failed to close message client", log.ShortError(err))
+		recordErr = err
+	}
+	return recordErr
 }
 
 // closeAndExit closes the task and exits.
@@ -207,6 +211,7 @@ func (w *dmWorker) tryUpdateStatus(ctx context.Context) error {
 	if w.workerType == lib.WorkerDMDump {
 		if err := w.persistStorage(ctx); err != nil {
 			log.L().Error("failed to persist storage", zap.Error(err))
+			// persist in next tick
 			return nil
 		}
 	}
