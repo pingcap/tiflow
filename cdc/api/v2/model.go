@@ -43,14 +43,14 @@ type ChangefeedConfig struct {
 
 // ReplicaConfig is a duplicate of  config.ReplicaConfig
 type ReplicaConfig struct {
-	CaseSensitive         bool              `toml:"case-sensitive" json:"case-sensitive"`
-	EnableOldValue        bool              `toml:"enable-old-value" json:"enable-old-value"`
-	ForceReplicate        bool              `toml:"force-replicate" json:"force-replicate"`
-	IgnoreIneligibleTable bool              `toml:"ignore-ineligible-table" json:"ignore-ineligible-table"`
-	CheckGCSafePoint      bool              `toml:"check-gc-safe-point" json:"check-gc-safe-point"`
-	Filter                *FilterConfig     `toml:"filter" json:"filter"`
-	Sink                  *SinkConfig       `toml:"sink" json:"sink"`
-	Consistent            *ConsistentConfig `toml:"consistent" json:"consistent"`
+	CaseSensitive         bool              `json:"case-sensitive"`
+	EnableOldValue        bool              `json:"enable-old-value"`
+	ForceReplicate        bool              `json:"force-replicate"`
+	IgnoreIneligibleTable bool              `json:"ignore-ineligible-table"`
+	CheckGCSafePoint      bool              `json:"check-gc-safe-point"`
+	Filter                *FilterConfig     `json:"filter"`
+	Sink                  *SinkConfig       `json:"sink"`
+	Consistent            *ConsistentConfig `json:"consistent"`
 }
 
 // GetDefaultReplicaConfig returns a default ReplicaConfig

@@ -143,7 +143,8 @@ func VerifyCreateChangefeedConfig(
 	}
 
 	if !replicaConfig.ForceReplicate && !changefeedConfig.IgnoreIneligibleTable {
-		ineligibleTables, _, err := entry.VerifyTables(replicaConfig, upStream.KVStorage, changefeedConfig.StartTS)
+		ineligibleTables, _, err := entry.VerifyTables(replicaConfig,
+			upStream.KVStorage, changefeedConfig.StartTS)
 		if err != nil {
 			return nil, err
 		}

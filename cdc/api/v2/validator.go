@@ -48,7 +48,8 @@ func VerifyCreateChangefeedConfig(
 ) (*model.ChangeFeedInfo, error) {
 	// verify credential and pdAddrs
 	if len(cfg.PDAddrs) == 0 {
-		return nil, cerror.ErrAPIInvalidParam.GenWithStackByCause("can not create a changefeed with empty pdAddrs")
+		return nil, cerror.ErrAPIInvalidParam.GenWithStackByCause(
+			"can not create a changefeed with empty pdAddrs")
 	}
 	credential := security.Credential{
 		CAPath:   cfg.CAPath,
@@ -85,7 +86,8 @@ func VerifyCreateChangefeedConfig(
 
 	// verify sinkURI
 	if cfg.SinkURI == "" {
-		return nil, cerror.ErrSinkURIInvalid.GenWithStackByArgs("sink-uri is empty, can't not create a changefeed without sink-uri")
+		return nil, cerror.ErrSinkURIInvalid.GenWithStackByArgs(
+			"sink-uri is empty, can't not create a changefeed without sink-uri")
 	}
 
 	// verify changefeedID
@@ -93,7 +95,8 @@ func VerifyCreateChangefeedConfig(
 		cfg.ID = uuid.New().String()
 	}
 	if err := model.ValidateChangefeedID(cfg.ID); err != nil {
-		return nil, cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed_id: %s", cfg.ID)
+		return nil, cerror.ErrAPIInvalidParam.GenWithStack(
+			"invalid changefeed_id: %s", cfg.ID)
 	}
 	cfStatus, err := capture.StatusProvider().GetChangeFeedStatus(ctx,
 		model.DefaultChangeFeedID(cfg.ID))
@@ -108,7 +111,8 @@ func VerifyCreateChangefeedConfig(
 	if cfg.StartTs == 0 {
 		ts, logical, err := pdClient.GetTS(ctx)
 		if err != nil {
-			return nil, cerror.ErrPDEtcdAPIError.GenWithStackByArgs("fail to get ts from pd client")
+			return nil, cerror.ErrPDEtcdAPIError.GenWithStackByArgs(
+				"fail to get ts from pd client")
 		}
 		cfg.StartTs = oracle.ComposeTS(ts, logical)
 	}
@@ -159,7 +163,8 @@ func VerifyCreateChangefeedConfig(
 	// verify sink
 	tz, err := util.GetTimezone(replicaCfg.Sink.TimeZone)
 	if err != nil {
-		return nil, cerror.ErrAPIInvalidParam.Wrap(errors.Annotatef(err, "invalid timezone:%s", replicaCfg.Sink.TimeZone))
+		return nil, cerror.ErrAPIInvalidParam.Wrap(errors.Annotatef(err,
+			"invalid timezone:%s", replicaCfg.Sink.TimeZone))
 	}
 	ctx = contextutil.PutTimezoneInCtx(ctx, tz)
 	if err := sink.Validate(ctx, cfg.SinkURI, replicaCfg, map[string]string{}); err != nil {

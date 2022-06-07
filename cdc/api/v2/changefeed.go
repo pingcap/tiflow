@@ -17,7 +17,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/ngaut/log"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/api"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -59,6 +59,8 @@ func (h *OpenAPIV2) CreateChangefeed(c *gin.Context) {
 		return
 	}
 
-	log.Info("Create changefeed successfully!", zap.String("id", info.ID), zap.String("changefeed", infoStr))
+	log.Info("Create changefeed successfully!",
+		zap.String("id", info.ID),
+		zap.String("changefeed", infoStr))
 	c.JSON(http.StatusOK, info)
 }
