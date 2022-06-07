@@ -144,7 +144,7 @@ func VerifyCreateChangefeedConfig(
 	if err != nil {
 		return nil, err
 	}
-	defer kvStorage.Close()
+	// defer kvStorage.Close()
 
 	if !replicaCfg.ForceReplicate && !replicaCfg.IgnoreIneligibleTable {
 		ineligibleTables, _, err := entry.VerifyTables(replicaCfg, kvStorage, cfg.StartTs)
