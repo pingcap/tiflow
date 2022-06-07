@@ -1,3 +1,9 @@
+<<<<<<< HEAD
+=======
+check_task
+validator_basic
+validator_checkpoint
+>>>>>>> 56ff15480 (checker(dm): fix deadlock when check-task/start-task (#5772))
 drop_column_with_index
 downstream_diff_index
 full_mode
