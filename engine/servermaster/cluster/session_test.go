@@ -56,7 +56,7 @@ func TestEtcdSession(t *testing.T) {
 	_, err = client.Revoke(ctx, session.session.Lease())
 	require.Nil(t, err)
 	_, _, err = session.Campaign(ctx, time.Second)
-	require.Regexp(t, ".*etcdserver: requested lease not found", err)
+	require.Regexp(t, "etcdserver: requested lease not found$", err)
 
 	// check whether need to reset session, reset session and campaign again
 	needReset := session.CheckNeedReset(err)
