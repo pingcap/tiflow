@@ -11,33 +11,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Copyright 2019 PingCAP, Inc.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 package executor
 
 import (
 	"bytes"
+	"encoding/hex"
 	"encoding/json"
 	"flag"
 	"fmt"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
 
 	"github.com/BurntSushi/toml"
+
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/engine/pkg/errors"
+	"github.com/pingcap/tiflow/engine/pkg/externalresource/storagecfg"
 	"github.com/pingcap/tiflow/engine/pkg/version"
 )
 
@@ -51,7 +42,8 @@ var (
 	defaultDiscoverTicker    = 3 * time.Second
 	defaultMetricInterval    = 15 * time.Second
 
-	defaultCapability int64 = 100 // TODO: make this configurable
+	defaultCapability            int64 = 100 // TODO: make this configurable
+	defaultLocalStorageDirPrefix       = "/tmp/dfe-storage/"
 )
 
 // NewConfig creates a new base config for worker.
@@ -99,7 +91,8 @@ type Config struct {
 	KeepAliveIntervalStr string `toml:"keepalive-interval" json:"keepalive-interval"`
 	RPCTimeoutStr        string `toml:"rpc-timeout" json:"rpc-timeout"`
 
-	PollConcurrency int `toml:"poll-concurrency" json:"poll-concurrency"`
+	PollConcurrency int               `toml:"poll-concurrency" json:"poll-concurrency"`
+	Storage         storagecfg.Config `toml:"storage" json:"storage"`
 
 	KeepAliveTTL      time.Duration `toml:"-" json:"-"`
 	KeepAliveInterval time.Duration `toml:"-" json:"-"`
@@ -197,6 +190,13 @@ func (c *Config) Parse(arguments []string) error {
 		c.AdvertiseAddr = c.WorkerAddr
 	}
 
+	if c.Name == "" {
+		c.Name = fmt.Sprintf("executor-%s", c.AdvertiseAddr)
+	}
+
+	if c.Storage.Local.BaseDir == "" {
+		c.Storage.Local.BaseDir = getDefaultLocalStorageDir(c.Name)
+	}
 	return nil
 }
 
@@ -215,4 +215,11 @@ func (c *Config) configFromFile(path string) error {
 		return errors.ErrExecutorConfigUnknownItem.GenWithStackByArgs(strings.Join(undecodedItems, ","))
 	}
 	return nil
+}
+
+func getDefaultLocalStorageDir(executorName string) string {
+	// Use hex encoding in case there are special characters in the
+	// executor name.
+	encodedExecutorName := hex.EncodeToString([]byte(executorName))
+	return filepath.Join(defaultLocalStorageDirPrefix, encodedExecutorName)
 }

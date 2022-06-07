@@ -65,7 +65,7 @@ func (h *OpenAPIV2) ResolveLock(c *gin.Context) {
 // DeleteServiceGcSafePoint Delete CDC service GC safepoint in PD
 func (h *OpenAPIV2) DeleteServiceGcSafePoint(c *gin.Context) {
 	up := h.capture.UpstreamManager.Get(upstream.DefaultUpstreamID)
-	err := gc.RemoveServiceGCSafepoint(c, up.PDClient, gc.CDCServiceSafePointID)
+	err := gc.RemoveServiceGCSafepoint(c, up.PDClient, h.capture.EtcdClient.GetGCServiceID())
 	if err != nil {
 		_ = c.Error(err)
 		return

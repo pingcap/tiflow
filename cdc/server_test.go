@@ -77,7 +77,8 @@ func newServer(t *testing.T) *testServer {
 		DialTimeout: 5 * time.Second,
 	})
 	require.Nil(t, err)
-	etcdClient := etcd.NewCDCEtcdClient(s.ctx, client)
+	etcdClient, err := etcd.NewCDCEtcdClient(s.ctx, client, etcd.DefaultCDCClusterID)
+	require.Nil(t, err)
 	s.server.etcdClient = &etcdClient
 
 	s.errg = util.HandleErrWithErrGroup(s.ctx, s.e.Err(), func(e error) { t.Log(e) })
@@ -226,7 +227,9 @@ func TestServerTLSWithoutCommonName(t *testing.T) {
 		captureInfo := &model.CaptureInfo{}
 		err = decoder.Decode(captureInfo)
 		require.Nil(t, err)
-		require.Equal(t, server.capture.Info().ID, captureInfo.ID)
+		info, err := server.capture.Info()
+		require.Nil(t, err)
+		require.Equal(t, info.ID, captureInfo.ID)
 		return nil
 	}, retry.WithMaxTries(retryTime), retry.WithBackoffBaseDelay(50), retry.WithIsRetryableErr(cerrors.IsRetryableError))
 	require.Nil(t, err)
@@ -243,7 +246,9 @@ func TestServerTLSWithoutCommonName(t *testing.T) {
 		captureInfo := &model.CaptureInfo{}
 		err = decoder.Decode(captureInfo)
 		require.Nil(t, err)
-		require.Equal(t, server.capture.Info().ID, captureInfo.ID)
+		info, err := server.capture.Info()
+		require.Nil(t, err)
+		require.Equal(t, info.ID, captureInfo.ID)
 		resp.Body.Close()
 		return nil
 	}, retry.WithMaxTries(retryTime), retry.WithBackoffBaseDelay(50), retry.WithIsRetryableErr(cerrors.IsRetryableError))
@@ -300,7 +305,9 @@ func TestServerTLSWithCommonName(t *testing.T) {
 		captureInfo := &model.CaptureInfo{}
 		err = decoder.Decode(captureInfo)
 		require.Nil(t, err)
-		require.Equal(t, server.capture.Info().ID, captureInfo.ID)
+		info, err := server.capture.Info()
+		require.Nil(t, err)
+		require.Equal(t, info.ID, captureInfo.ID)
 		resp.Body.Close()
 		return nil
 	}, retry.WithMaxTries(retryTime), retry.WithBackoffBaseDelay(50), retry.WithIsRetryableErr(cerrors.IsRetryableError))
@@ -318,7 +325,9 @@ func TestServerTLSWithCommonName(t *testing.T) {
 		captureInfo := &model.CaptureInfo{}
 		err = decoder.Decode(captureInfo)
 		require.Nil(t, err)
-		require.Equal(t, server.capture.Info().ID, captureInfo.ID)
+		info, err := server.capture.Info()
+		require.Nil(t, err)
+		require.Equal(t, info.ID, captureInfo.ID)
 		resp.Body.Close()
 		return nil
 	}, retry.WithMaxTries(retryTime), retry.WithBackoffBaseDelay(50), retry.WithIsRetryableErr(cerrors.IsRetryableError))

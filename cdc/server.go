@@ -149,9 +149,12 @@ func (s *Server) Run(ctx context.Context) error {
 		return errors.Annotate(cerror.WrapError(cerror.ErrNewCaptureFailed, err), "new etcd client")
 	}
 
-	cdcEtcdClient := etcd.NewCDCEtcdClient(ctx, etcdCli)
+	cdcEtcdClient, err := etcd.NewCDCEtcdClient(ctx, etcdCli, conf.ClusterID)
+	if err != nil {
+		return errors.Annotate(cerror.WrapError(cerror.ErrNewCaptureFailed, err),
+			"wrapper etcd client")
+	}
 	s.etcdClient = &cdcEtcdClient
-
 	err = s.initDir(ctx)
 	if err != nil {
 		return errors.Trace(err)
@@ -184,6 +187,9 @@ func (s *Server) startStatusHTTP(lis net.Listener) error {
 	// discard gin log output
 	gin.DefaultWriter = io.Discard
 	router := gin.New()
+	// add gin.Recovery() to handle unexpected panic
+	router.Use(gin.Recovery())
+	// router.
 	// Register APIs.
 	RegisterRoutes(router, s.capture, registry)
 

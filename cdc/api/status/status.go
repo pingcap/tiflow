@@ -49,7 +49,8 @@ func RegisterStatusAPIRoutes(router *gin.Engine, capture *capture.Capture) {
 }
 
 func (h *statusAPI) writeEtcdInfo(ctx context.Context, cli *etcd.CDCEtcdClient, w io.Writer) {
-	resp, err := cli.Client.Get(ctx, etcd.EtcdKeyBase, clientv3.WithPrefix())
+	resp, err := cli.Client.Get(ctx,
+		etcd.BaseKey(cli.ClusterID), clientv3.WithPrefix())
 	if err != nil {
 		fmt.Fprintf(w, "failed to get info: %s\n\n", err.Error())
 		return
@@ -75,7 +76,13 @@ func (h *statusAPI) handleStatus(w http.ResponseWriter, req *http.Request) {
 	}
 
 	if h.capture != nil {
-		st.ID = h.capture.Info().ID
+		info, err := h.capture.Info()
+		if err != nil {
+			api.WriteError(w, http.StatusInternalServerError, err)
+			return
+		}
+
+		st.ID = info.ID
 		st.IsOwner = h.capture.IsOwner()
 	}
 	api.WriteData(w, st)

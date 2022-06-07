@@ -50,7 +50,7 @@ func NewBrokerForTesting(executorID resourcemeta.ExecutorID) *LocalBroker {
 	if err != nil {
 		log.L().Panic("failed to make tempdir")
 	}
-	cfg := &storagecfg.Config{Local: &storagecfg.LocalFileConfig{BaseDir: dir}}
+	cfg := &storagecfg.Config{Local: storagecfg.LocalFileConfig{BaseDir: dir}}
 	client := manager.NewWrappedMockClient()
 	return &LocalBroker{
 		DefaultBroker: NewBroker(cfg, executorID, client),

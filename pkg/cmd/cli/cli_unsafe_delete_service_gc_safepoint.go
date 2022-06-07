@@ -40,7 +40,7 @@ func (o *unsafeDeleteServiceGcSafepointOptions) complete(f factory.Factory) erro
 		return err
 	}
 	o.apiClient = apiClient
-	return nil
+	return err
 }
 
 // run runs the `cli unsafe delete-service-gc-safepoint` command.

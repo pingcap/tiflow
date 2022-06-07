@@ -28,9 +28,12 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/pingcap/tiflow/engine/client"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
+	"github.com/pingcap/tiflow/engine/executor/server"
 	"github.com/pingcap/tiflow/engine/executor/worker"
 	"github.com/pingcap/tiflow/pkg/uuid"
 )
@@ -199,4 +202,18 @@ func TestSelfRegister(t *testing.T) {
 	err = s.selfRegister(ctx)
 	require.NoError(t, err)
 	require.Equal(t, executorID, string(s.info.ID))
+}
+
+func TestRPCCallBeforeInitialized(t *testing.T) {
+	svr := &Server{
+		metastores: server.NewMetastoreManager(),
+	}
+
+	_, err := svr.PreDispatchTask(context.Background(), &pb.PreDispatchTaskRequest{})
+	require.Error(t, err)
+	require.Equal(t, codes.Unavailable, status.Convert(err).Code())
+
+	_, err = svr.ConfirmDispatchTask(context.Background(), &pb.ConfirmDispatchTaskRequest{})
+	require.Error(t, err)
+	require.Equal(t, codes.Unavailable, status.Convert(err).Code())
 }
