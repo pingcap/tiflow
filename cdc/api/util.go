@@ -156,11 +156,16 @@ func ForwardToOwner(c *gin.Context, capture *capture.Capture) {
 		_ = c.Error(cerror.ErrRequestForwardErr.FastGenByArgs())
 		return
 	}
-	c.Header(forWardFromCapture, capture.Info().ID)
+	info, err := capture.Info()
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+	c.Header(forWardFromCapture, info.ID)
 
 	var owner *model.CaptureInfo
 	// get owner
-	owner, err := capture.GetOwnerCaptureInfo(ctx)
+	owner, err = capture.GetOwnerCaptureInfo(ctx)
 	if err != nil {
 		log.Info("get owner failed", zap.Error(err))
 		_ = c.Error(err)
