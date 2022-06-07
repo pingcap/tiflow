@@ -118,9 +118,9 @@ function run() {
 		"remove_changefeed"
 		"resign_owner"
 		# api v2
+		"get_tso"
 		"verify_table"
 		"create_changefeed_v2"
-		"get_tso"
 	)
 
 	for case in ${sequential_cases[@]}; do

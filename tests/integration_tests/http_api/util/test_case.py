@@ -366,12 +366,19 @@ def create_changefeed_v2():
         "sink-uri": "blackhole://",
         "replica-config":{
             "ignore-ineligible-table":"true"
-            }
+            },
+        "pd-addrs": [TLS_PD_ADDR],
+        "ca-path":CA_PEM_PATH, 
+        "cert-path":CLIENT_PEM_PATH, 
+        "key-path":CLIENT_KEY_PEM_PATH, 
+        "cert-allowed-cn":["client"],
     }
     data = json.dumps(data)
+    print(data)
     headers = {"Content-Type": "application/json"}
     resp = rq.post(url, data=data, headers=headers, cert=CERT, verify=VERIFY)
-    assert resp.status_code == rq.codes.accepted
+    print(resp)
+    assert resp.status_code == rq.codes.ok
 
     # create changefeed 2
     data = {
@@ -382,12 +389,19 @@ def create_changefeed_v2():
             "filter": {
             "rules": ["test.verify*"]
             }
-        }
+        },
+        "pd-addrs": [TLS_PD_ADDR],
+        "ca-path":CA_PEM_PATH, 
+        "cert-path":CLIENT_PEM_PATH, 
+        "key-path":CLIENT_KEY_PEM_PATH, 
+        "cert-allowed-cn":["client"],
     }
     data = json.dumps(data)
+    print(data)
     headers = {"Content-Type": "application/json"}
     resp = rq.post(url, data=data, headers=headers, cert=CERT, verify=VERIFY)
-    assert resp.status_code == rq.codes.accepted
+    print(resp)
+    assert resp.status_code == rq.codes.ok
 
     # create changefeed fail because sink_uri is invalid
     data = json.dumps({
@@ -395,10 +409,17 @@ def create_changefeed_v2():
         "sink_uri": "mysql://127.0.0.1:1111",
         "replica-config":{
             "ignore-ineligible-table":"true"
-            }
+            },
+        "pd-addrs": [TLS_PD_ADDR],
+        "ca-path":CA_PEM_PATH, 
+        "cert-path":CLIENT_PEM_PATH, 
+        "key-path":CLIENT_KEY_PEM_PATH, 
+        "cert-allowed-cn":["client"],
     })
+    print(data)
     headers = {"Content-Type": "application/json"}
     resp = rq.post(url, data=data, headers=headers, cert=CERT, verify=VERIFY)
+    print(resp)
     assert resp.status_code == rq.codes.bad_request
 
     print("pass test: create changefeed v2")
