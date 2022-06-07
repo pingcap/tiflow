@@ -57,6 +57,7 @@ func NewMaster(
 	}
 }
 
+// JobConfig is the config for a resource test job.
 type JobConfig struct {
 	ResourceCount int `json:"resource_count"`
 	ResourceLen   int `json:"resource_len"`

@@ -16,26 +16,19 @@ package e2e_test
 import (
 	"context"
 	"encoding/json"
-	"github.com/pingcap/tiflow/engine/client"
-	"github.com/pingcap/tiflow/engine/test/resourcejob"
 	"testing"
 	"time"
 
-	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/engine/client"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
+	"github.com/pingcap/tiflow/engine/test/resourcejob"
 )
 
 func TestResourceJob(t *testing.T) {
-	// TODO: make the following variables configurable
-	var (
-		masterAddrs              = []string{"127.0.0.1:10245", "127.0.0.1:10246", "127.0.0.1:10247"}
-		userMetaAddrs            = []string{"127.0.0.1:12479"}
-		userMetaAddrsInContainer = []string{"user-etcd-standalone:2379"}
-	)
-
 	ctx := context.Background()
 	cfg := &resourcejob.JobConfig{
 		ResourceCount: 10,
@@ -47,26 +40,37 @@ func TestResourceJob(t *testing.T) {
 	masterClient, err := client.NewMasterClient(ctx, []string{"127.0.0.1:10245"})
 	require.NoError(t, err)
 
-	masterClient.SubmitJob(ctx, &pb.SubmitJobRequest{
-		Tp:          pb.JobType(resourcejob.ResourceTestMasterType),
-		Config:      nil,
-		ProjectInfo: nil,
+	resp, err := masterClient.SubmitJob(ctx, &pb.SubmitJobRequest{
+		Tp:     pb.JobType_ResourceTestJob,
+		Config: cfgBytes,
 	})
+	require.NoError(t, err)
+	require.Nilf(t, resp.Err, "%s", resp.Err.String())
+
+	jobID := resp.JobId
 
 	require.Eventually(t, func() bool {
-		// check tick increases to ensure all workers are online
-		// TODO modify the test case to use a "restart-count" as a terminating condition.
-		targetTick := int64(1000)
-		for jobIdx := 0; jobIdx < cfg.WorkerCount; jobIdx++ {
-			err := cli.CheckFakeJobTick(ctx, jobID, jobIdx, targetTick)
-			if err != nil {
-				log.L().Warn("check fake job tick failed", zap.Error(err))
-				return false
-			}
+		resp, err := masterClient.QueryJob(ctx, &pb.QueryJobRequest{
+			JobId: jobID,
+		})
+		if err != nil {
+			log.L().Info("QueryJob met error", log.ShortError(err))
+			return false
 		}
-		return true
+		if resp.Err != nil {
+			log.L().Info("QueryJob responded with error", zap.Any("err", resp.Err))
+			return false
+		}
+
+		if resp.Status == pb.QueryJobResponse_finished {
+			return true
+		}
+		log.L().Info("QueryJob",
+			zap.String("job-id", jobID),
+			zap.Any("resp", resp))
+		return false
 	}, time.Second*300, time.Second*2)
 
-	err = cli.PauseJob(ctx, jobID)
+	_, err = masterClient.PauseJob(ctx, &pb.PauseJobRequest{JobId: jobID})
 	require.NoError(t, err)
 }

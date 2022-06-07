@@ -19,7 +19,9 @@ import (
 )
 
 const (
+	// ResourceTestWorkerType is the type for a resource test worker.
 	ResourceTestWorkerType = libModel.WorkerType(10001)
+	// ResourceTestMasterType is the type for a resource test master.
 	ResourceTestMasterType = libModel.WorkerType(10002)
 )
 

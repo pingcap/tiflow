@@ -18,6 +18,8 @@ import (
 	"encoding/json"
 	"time"
 
+	"github.com/pingcap/tiflow/engine/test/resourcejob"
+
 	"github.com/pingcap/errors"
 	"go.uber.org/zap"
 
@@ -229,6 +231,8 @@ func (jm *JobManagerImplV2) SubmitJob(ctx context.Context, req *pb.SubmitJobRequ
 		Config:     req.GetConfig(),
 		StatusCode: libModel.MasterStatusUninit,
 	}
+
+	// TODO refactor and remove the switch.
 	switch req.Tp {
 	case pb.JobType_CVSDemo:
 		// TODO: check config is valid, refine it later
@@ -244,6 +248,8 @@ func (jm *JobManagerImplV2) SubmitJob(ctx context.Context, req *pb.SubmitJobRequ
 		meta.Tp = lib.DMJobMaster
 	case pb.JobType_FakeJob:
 		meta.Tp = lib.FakeJobMaster
+	case pb.JobType_ResourceTestJob:
+		meta.Tp = resourcejob.ResourceTestMasterType
 	default:
 		err := derrors.ErrBuildJobFailed.GenWithStack("unknown job type: %s", req.Tp)
 		resp.Err = derrors.ToPBError(err)
