@@ -38,9 +38,7 @@ const (
 	apiOpVarChangefeedID = "changefeed_id"
 	// apiOpVarCaptureID is the key of capture ID in HTTP API
 	apiOpVarCaptureID = "capture_id"
-	// forWardFromCapture is a header to be set when a request is forwarded from another capture
-	forWardFromCapture = "TiCDC-ForwardFromCapture"
-	force              = "force"
+	force             = "force"
 )
 
 // OpenAPI provides capture APIs.
