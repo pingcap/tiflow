@@ -159,7 +159,7 @@ func TestCreateSessionFail(t *testing.T) {
 		Prefix: "/test-election",
 	})
 	require.Error(t, err)
-	require.Regexp(t, ".*ErrMasterEtcdCreateSessionFail.*", err)
+	require.Regexp(t, "ErrMasterEtcdCreateSessionFail", err)
 }
 
 // TODO (zixiong) add tests for failure cases
