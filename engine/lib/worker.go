@@ -128,6 +128,7 @@ type DefaultBaseWorker struct {
 	cancelPool    context.CancelFunc
 
 	exitController *worker.ExitController
+	closeImplOnce  sync.Once
 
 	clock clock.Clock
 
@@ -254,7 +255,9 @@ func (w *DefaultBaseWorker) doPreInit(ctx context.Context) error {
 			zap.String("worker-id", w.id),
 			zap.String("master-id", w.masterID))),
 		worker.WithPrepareExitFunc(func() {
-			_ = w.Impl.CloseImpl(context.Background())
+			w.closeImplOnce.Do(func() {
+				w.callCloseImpl()
+			})
 		}))
 
 	w.workerMetaClient = metadata.NewWorkerMetadataClient(w.masterID, w.frameMetaClient)
@@ -355,9 +358,26 @@ func (w *DefaultBaseWorker) doClose() {
 }
 
 // Close implements BaseWorker.Close
+// TODO remove the return value from the signature.
 func (w *DefaultBaseWorker) Close(ctx context.Context) error {
+	w.closeImplOnce.Do(func() {
+		w.callCloseImpl()
+	})
+
 	w.doClose()
 	return nil
+}
+
+func (w *DefaultBaseWorker) callCloseImpl() {
+	closeCtx, cancel := context.WithTimeout(
+		context.Background(), w.timeoutConfig.CloseWorkerTimeout)
+	defer cancel()
+
+	err := w.Impl.CloseImpl(closeCtx)
+	if err != nil {
+		log.L().Warn("Failed to close worker",
+			zap.String("worker-id", w.id))
+	}
 }
 
 // ID implements BaseWorker.ID

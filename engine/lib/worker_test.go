@@ -106,7 +106,7 @@ func TestWorkerInitAndClose(t *testing.T) {
 		Status:      &libModel.WorkerStatus{Code: libModel.WorkerStatusNormal},
 	}, statusMsg)
 
-	worker.On("CloseImpl").Return(nil)
+	worker.On("CloseImpl").Return(nil).Once()
 	err = worker.Close(ctx)
 	require.NoError(t, err)
 }
