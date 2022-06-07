@@ -456,7 +456,8 @@ func (c *ShardingTablesChecker) checkShardingTable(ctx context.Context, r *Resul
 				r.Extra = fmt.Sprintf("error on sharding %s", c.targetTableID)
 				r.Instruction = "please set same table structure for sharding tables"
 				c.reMu.Unlock()
-				return nil
+				// return an error to notify errgroup
+				return processedError
 			}
 		}
 	}
