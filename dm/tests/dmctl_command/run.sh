@@ -568,7 +568,9 @@ function run_validator_cmd {
 		"new\/ignored\/resolved: 0\/0\/0" 2
 	run_sql_source1 "insert into dmctl_command.t1 values(-10,'ignore-row')"
 	run_sql_source1 "create table dmctl_command.t_trigger_flush110(id int primary key)" # trigger flush
-	sleep 1                                                                             # wait sync
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		"\"synced\": true" 2
 	run_sql_tidb "select * from dmctl_command.t1"
 	check_not_contains "id: -10" # sync failed due to GO_FAILPOINTS
 	sleep 5                      # wait validator

@@ -77,19 +77,19 @@ func RemoveValidatorLabelValuesWithTask(task string) {
 }
 
 type ValidatorMetrics struct {
-	ValidatorErrorCount     prometheus.Gauge
-	ValidatorLogPosLatency  prometheus.Gauge
-	ValidatorLogFileLatency prometheus.Gauge
-	ValidatorBinlogFile     prometheus.Gauge
-	ValidatorBinlogPos      prometheus.Gauge
+	ErrorCount     prometheus.Gauge
+	LogPosLatency  prometheus.Gauge
+	LogFileLatency prometheus.Gauge
+	BinlogFile     prometheus.Gauge
+	BinlogPos      prometheus.Gauge
 }
 
 func NewValidatorMetrics(taskName, sourceID string) *ValidatorMetrics {
 	return &ValidatorMetrics{
-		ValidatorBinlogPos:      validatorBinlogPos.WithLabelValues(taskName, sourceID),
-		ValidatorBinlogFile:     validatorBinlogFile.WithLabelValues(taskName, sourceID),
-		ValidatorLogPosLatency:  validatorLogPosLatency.WithLabelValues(taskName, sourceID),
-		ValidatorLogFileLatency: validatorLogFileLatency.WithLabelValues(taskName, sourceID),
-		ValidatorErrorCount:     validatorErrorCount.WithLabelValues(taskName, sourceID),
+		BinlogPos:      validatorBinlogPos.WithLabelValues(taskName, sourceID),
+		BinlogFile:     validatorBinlogFile.WithLabelValues(taskName, sourceID),
+		LogPosLatency:  validatorLogPosLatency.WithLabelValues(taskName, sourceID),
+		LogFileLatency: validatorLogFileLatency.WithLabelValues(taskName, sourceID),
+		ErrorCount:     validatorErrorCount.WithLabelValues(taskName, sourceID),
 	}
 }
