@@ -10,8 +10,8 @@ function run() {
 	run_sql_file $cur/data/db1.prepare.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
 	# need to return error three times, first for switch to remote binlog, second for auto retry
 	inject_points=(
-		"github.com/pingcap/tiflow/dm/syncer/SyncerGetEventError=return"
-		"github.com/pingcap/tiflow/dm/syncer/GetEventError=3*return"
+		"github.com/pingcap/tiflow/dm/syncer/binlogstream/SyncerGetEventError=return"
+		"github.com/pingcap/tiflow/dm/syncer/binlogstream/GetEventError=3*return"
 	)
 	export GO_FAILPOINTS="$(join_string \; ${inject_points[@]})"
 
