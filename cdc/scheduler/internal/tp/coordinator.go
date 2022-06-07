@@ -57,8 +57,17 @@ func NewCoordinator(
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	revision := schedulepb.OwnerRevision{Revision: ownerRevision}
+	coord := newCoordinator(captureID, ownerRevision, cfg)
+	coord.trans = trans
+	return coord, nil
+}
 
+func newCoordinator(
+	captureID model.CaptureID,
+	ownerRevision int64,
+	cfg *config.SchedulerConfig,
+) *coordinator {
+	revision := schedulepb.OwnerRevision{Revision: ownerRevision}
 	schedulers := make(map[schedulerType]scheduler)
 	schedulers[schedulerTypeBurstBalance] = newBurstBalanceScheduler()
 	schedulers[schedulerTypeMoveTable] = newMoveTableScheduler()
@@ -68,11 +77,10 @@ func NewCoordinator(
 		version:      version.ReleaseSemver(),
 		revision:     revision,
 		captureID:    captureID,
-		trans:        trans,
 		schedulers:   schedulers,
 		replicationM: newReplicationManager(cfg.MaxTaskConcurrency),
 		captureM:     newCaptureManager(revision, cfg.HeartbeatTick),
-	}, nil
+	}
 }
 
 func (c *coordinator) Tick(
