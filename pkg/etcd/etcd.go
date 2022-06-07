@@ -54,9 +54,9 @@ func TaskPositionKeyPrefix(clusterID, namespace string) string {
 	return NamespacedPrefix(clusterID, namespace) + taskPositionKey
 }
 
-// JobKeyPrefix is the prefix of job keys
-func JobKeyPrefix(clusterID, namespace string) string {
-	return NamespacedPrefix(clusterID, namespace) + jobKey
+// ChangefeedStatusKeyPrefix is the prefix of changefeed status keys
+func ChangefeedStatusKeyPrefix(clusterID, namespace string) string {
+	return NamespacedPrefix(clusterID, namespace) + changefeedStatusKey
 }
 
 // GetEtcdKeyChangeFeedList returns the prefix key of all changefeed config
@@ -86,7 +86,7 @@ func GetEtcdKeyCaptureInfo(clusterID, id string) string {
 
 // GetEtcdKeyJob returns the key for a job status
 func GetEtcdKeyJob(clusterID string, changeFeedID model.ChangeFeedID) string {
-	return JobKeyPrefix(clusterID, changeFeedID.Namespace) + "/" + changeFeedID.ID
+	return ChangefeedStatusKeyPrefix(clusterID, changeFeedID.Namespace) + "/" + changeFeedID.ID
 }
 
 // CDCEtcdClient is a wrap of etcd client
@@ -215,7 +215,8 @@ func (c CDCEtcdClient) GetAllChangeFeedStatus(ctx context.Context) (
 	map[model.ChangeFeedID]*model.ChangeFeedStatus, error,
 ) {
 	// todo: support namespace
-	key := JobKeyPrefix(c.ClusterID, model.DefaultNamespace)
+	key := ChangefeedStatusKeyPrefix(c.ClusterID, model.DefaultNamespace)
+
 	resp, err := c.Client.Get(ctx, key, clientv3.WithPrefix())
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrPDEtcdAPIError, err)

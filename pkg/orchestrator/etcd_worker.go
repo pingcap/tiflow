@@ -46,9 +46,10 @@ const (
 
 // EtcdWorker handles all interactions with Etcd
 type EtcdWorker struct {
-	client  *etcd.Client
-	reactor Reactor
-	state   ReactorState
+	clusterID string
+	client    *etcd.Client
+	reactor   Reactor
+	state     ReactorState
 	// rawState is the local cache of the latest Etcd state.
 	rawState map[util.EtcdKey]rawStateEntry
 	// pendingUpdates stores Etcd updates that the Reactor has not been notified of.
@@ -70,8 +71,7 @@ type EtcdWorker struct {
 	// a `compare-and-swap` semantics, which is essential for implementing
 	// snapshot isolation for Reactor ticks.
 	deleteCounter int64
-
-	metrics *etcdWorkerMetrics
+	metrics       *etcdWorkerMetrics
 }
 
 type etcdWorkerMetrics struct {
@@ -95,9 +95,14 @@ type rawStateEntry struct {
 }
 
 // NewEtcdWorker returns a new EtcdWorker
-func NewEtcdWorker(client *etcd.Client, prefix string, reactor Reactor, initState ReactorState) (*EtcdWorker, error) {
+func NewEtcdWorker(client *etcd.CDCEtcdClient,
+	prefix string,
+	reactor Reactor,
+	initState ReactorState,
+) (*EtcdWorker, error) {
 	return &EtcdWorker{
-		client:     client,
+		clusterID:  client.ClusterID,
+		client:     client.Client,
 		reactor:    reactor,
 		state:      initState,
 		rawState:   make(map[util.EtcdKey]rawStateEntry),
@@ -120,9 +125,16 @@ func (worker *EtcdWorker) initMetrics() {
 // And the specified etcd session is nil-safety.
 func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session, timerInterval time.Duration, role string) error {
 	defer worker.cleanUp()
+
+	// migrate data here
+	err := worker.checkAndMigrateMetaData(ctx, worker.clusterID, role)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
 	worker.initMetrics()
 
-	err := worker.syncRawState(ctx)
+	err = worker.syncRawState(ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -511,4 +523,26 @@ func (worker *EtcdWorker) handleDeleteCounter(value []byte) {
 	if worker.deleteCounter <= 0 {
 		log.Panic("unexpected delete counter", zap.Int64("value", worker.deleteCounter))
 	}
+}
+
+// checkAndMigrateMetaData check if should migrate meta, if we should, it will block
+// until migrate done
+func (worker *EtcdWorker) checkAndMigrateMetaData(ctx context.Context,
+	clusterID, role string,
+) error {
+	shouldMigrate, err := etcd.ShouldMigrate(ctx, worker.client, clusterID)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	if !shouldMigrate {
+		return nil
+	}
+
+	if role != pkgutil.RoleOwner.String() {
+		err := etcd.WaitMetaVersionMatched(ctx, worker.client, clusterID)
+		return errors.Trace(err)
+	}
+
+	err = etcd.MigrateData(ctx, worker.client, clusterID)
+	return err
 }

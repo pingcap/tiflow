@@ -105,7 +105,7 @@ func TestChangefeedStateUpdate(t *testing.T) {
 				fmt.Sprintf("%s", etcd.DefaultClusterAndNamespacePrefix) +
 					"/changefeed/info/test1",
 				fmt.Sprintf("%s", etcd.DefaultClusterAndNamespacePrefix) +
-					"/job/test1",
+					"/changefeed/status/test1",
 				fmt.Sprintf("%s", etcd.DefaultClusterAndNamespacePrefix) +
 					"/task/position/6bbc01c8-0605-4f86-a0f9-b3119109b225/test1",
 				fmt.Sprintf("%s", etcd.DefaultClusterAndMetaPrefix) +
@@ -150,7 +150,7 @@ func TestChangefeedStateUpdate(t *testing.T) {
 				fmt.Sprintf("%s", etcd.DefaultClusterAndNamespacePrefix) +
 					"/changefeed/info/test1",
 				fmt.Sprintf("%s", etcd.DefaultClusterAndNamespacePrefix) +
-					"/job/test1",
+					"/changefeed/status/test1",
 				fmt.Sprintf("%s", etcd.DefaultClusterAndNamespacePrefix) +
 					"/task/position/6bbc01c8-0605-4f86-a0f9-b3119109b225/test1",
 				fmt.Sprintf("%s", etcd.DefaultClusterAndMetaPrefix) +
@@ -202,7 +202,8 @@ func TestChangefeedStateUpdate(t *testing.T) {
 				fmt.Sprintf("%s", etcd.DefaultClusterAndNamespacePrefix) +
 					"/changefeed/info/test1",
 				fmt.Sprintf("%s", etcd.DefaultClusterAndNamespacePrefix) +
-					"/job/test1",
+					"/changefeed/status/test1",
+
 				fmt.Sprintf("%s", etcd.DefaultClusterAndNamespacePrefix) +
 					"/task/position/6bbc01c8-0605-4f86-a0f9-b3119109b225/test1",
 				fmt.Sprintf("%s", etcd.DefaultClusterAndMetaPrefix) +
@@ -210,7 +211,8 @@ func TestChangefeedStateUpdate(t *testing.T) {
 				fmt.Sprintf("%s", etcd.DefaultClusterAndNamespacePrefix) +
 					"/changefeed/info/test-fake",
 				fmt.Sprintf("%s", etcd.DefaultClusterAndNamespacePrefix) +
-					"/job/test-fake",
+					"/changefeed/status/test-fake",
+
 				fmt.Sprintf("%s", etcd.DefaultClusterAndNamespacePrefix) +
 					"/task/position/6bbc01c8-0605-4f86-a0f9-b3119109b225/test-fake",
 			},
@@ -256,7 +258,8 @@ func TestChangefeedStateUpdate(t *testing.T) {
 				fmt.Sprintf("%s", etcd.DefaultClusterAndNamespacePrefix) +
 					"/changefeed/info/test1",
 				fmt.Sprintf("%s", etcd.DefaultClusterAndNamespacePrefix) +
-					"/job/test1",
+					"/changefeed/status/test1",
+
 				fmt.Sprintf("%s", etcd.DefaultClusterAndNamespacePrefix) +
 					"/task/position/6bbc01c8-0605-4f86-a0f9-b3119109b225/test1",
 				fmt.Sprintf("%s", etcd.DefaultClusterAndMetaPrefix) +
@@ -266,7 +269,7 @@ func TestChangefeedStateUpdate(t *testing.T) {
 				fmt.Sprintf("%s", etcd.DefaultClusterAndNamespacePrefix) +
 					"/changefeed/info/test1",
 				fmt.Sprintf("%s", etcd.DefaultClusterAndNamespacePrefix) +
-					"/job/test1",
+					"/changefeed/status/test1",
 				fmt.Sprintf("%s", etcd.DefaultClusterAndNamespacePrefix) +
 					"/task/position/6bbc01c8-0605-4f86-a0f9-b3119109b225/test1",
 				fmt.Sprintf("%s", etcd.DefaultClusterAndMetaPrefix) +

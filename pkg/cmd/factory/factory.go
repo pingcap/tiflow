@@ -86,14 +86,14 @@ func (c *ClientFlags) GetPdAddr() string {
 	return c.pdAddr
 }
 
-// GetServerAddr returns cdc server address.
-func (c *ClientFlags) GetServerAddr() string {
-	return c.serverAddr
-}
-
 // GetLogLevel returns log level.
 func (c *ClientFlags) GetLogLevel() string {
 	return c.logLevel
+}
+
+// GetServerAddr returns cdc cluster id.
+func (c *ClientFlags) GetServerAddr() string {
+	return c.serverAddr
 }
 
 // NewClientFlags creates new client flags.

@@ -86,12 +86,15 @@ type Capture struct {
 }
 
 // NewCapture returns a new Capture instance
-func NewCapture(pdEnpoints []string, etcdClient *etcd.CDCEtcdClient, grpcService *p2p.ServerWrapper) *Capture {
+func NewCapture(pdEndpoints []string,
+	etcdClient *etcd.CDCEtcdClient,
+	grpcService *p2p.ServerWrapper,
+) *Capture {
 	return &Capture{
 		EtcdClient:          etcdClient,
 		grpcService:         grpcService,
 		cancel:              func() {},
-		pdEndpoints:         pdEnpoints,
+		pdEndpoints:         pdEndpoints,
 		newProcessorManager: processor.NewManager,
 		newOwner:            owner.NewOwner,
 	}
@@ -425,7 +428,7 @@ func (c *Capture) runEtcdWorker(
 	timerInterval time.Duration,
 	role string,
 ) error {
-	etcdWorker, err := orchestrator.NewEtcdWorker(ctx.GlobalVars().EtcdClient.Client,
+	etcdWorker, err := orchestrator.NewEtcdWorker(ctx.GlobalVars().EtcdClient,
 		etcd.BaseKey(c.EtcdClient.ClusterID), reactor, reactorState)
 	if err != nil {
 		return errors.Trace(err)

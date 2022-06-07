@@ -38,7 +38,7 @@ var (
 	captureRegex = regexp.MustCompile(regexp.QuoteMeta(
 		etcd.CaptureInfoKeyPrefix(etcd.DefaultCDCClusterID)) + "/(.+)")
 	changefeedRegex = regexp.MustCompile(regexp.
-			QuoteMeta(etcd.JobKeyPrefix(etcd.DefaultCDCClusterID,
+			QuoteMeta(etcd.ChangefeedStatusKeyPrefix(etcd.DefaultCDCClusterID,
 			model.DefaultNamespace)) + "/(.+)")
 	positionRegex = regexp.MustCompile(regexp.
 			QuoteMeta(etcd.TaskPositionKeyPrefix(etcd.DefaultCDCClusterID,

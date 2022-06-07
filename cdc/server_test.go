@@ -77,6 +77,7 @@ func newServer(t *testing.T) *testServer {
 		DialTimeout: 5 * time.Second,
 	})
 	require.Nil(t, err)
+
 	etcdClient, err := etcd.NewCDCEtcdClient(s.ctx, client, etcd.DefaultCDCClusterID)
 	require.Nil(t, err)
 	s.server.etcdClient = &etcdClient

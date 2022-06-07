@@ -42,6 +42,7 @@ func TestReset(t *testing.T) {
 		DialTimeout: 3 * time.Second,
 	})
 	require.NoError(t, err)
+
 	client, err := etcd.NewCDCEtcdClient(ctx, etcdCli, etcd.DefaultCDCClusterID)
 	require.Nil(t, err)
 	// Close the client before the test function exits to prevent possible

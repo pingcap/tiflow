@@ -121,7 +121,7 @@ func initProcessor4Test(ctx cdcContext.Context, t *testing.T) (*processor, *orch
 		fmt.Sprintf("%s/changefeed/info/%s",
 			etcd.DefaultClusterAndNamespacePrefix,
 			changefeedID.ID): changefeedInfo,
-		fmt.Sprintf("%s/job/%s",
+		fmt.Sprintf("%s/changefeed/status/%s",
 			etcd.DefaultClusterAndNamespacePrefix,
 			ctx.ChangefeedVars().ID.ID): `{"resolved-ts":0,"checkpoint-ts":0,"admin-job-type":0}`,
 	})
