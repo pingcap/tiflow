@@ -1189,7 +1189,7 @@ func (s *eventFeedSession) receiveFromStream(
 
 		failpoint.Inject("kvClientRegionReentrantError", func(op failpoint.Value) {
 			if op.(string) == "error" {
-				_ = worker.retrieveEvents(ctx, []*regionStatefulEvent{nil})
+				_ = worker.sendEvents(ctx, []*regionStatefulEvent{nil})
 			}
 		})
 		failpoint.Inject("kvClientStreamRecvError", func(msg failpoint.Value) {
@@ -1235,7 +1235,7 @@ func (s *eventFeedSession) receiveFromStream(
 			s.deleteStream(addr)
 
 			// send nil regionStatefulEvent to signal worker exit
-			err = worker.retrieveEvents(ctx, []*regionStatefulEvent{nil})
+			err = worker.sendEvents(ctx, []*regionStatefulEvent{nil})
 			if err != nil {
 				return err
 			}
@@ -1281,6 +1281,7 @@ func (s *eventFeedSession) sendRegionChangeEvents(
 ) error {
 	statefulEvents := make([][]*regionStatefulEvent, worker.inputSlots)
 	for i := 0; i < worker.inputSlots; i++ {
+		// Allocate a buffer with 1.5x length than average to reduce reallocate.
 		buffLen := len(events) / worker.inputSlots * 3 / 2
 		statefulEvents[i] = make([]*regionStatefulEvent, 0, buffLen)
 	}
@@ -1348,7 +1349,7 @@ func (s *eventFeedSession) sendRegionChangeEvents(
 	}
 	for _, events := range statefulEvents {
 		if len(events) > 0 {
-			err := worker.retrieveEvents(ctx, events)
+			err := worker.sendEvents(ctx, events)
 			if err != nil {
 				return err
 			}
@@ -1365,6 +1366,7 @@ func (s *eventFeedSession) sendResolvedTs(
 ) error {
 	statefulEvents := make([][]*regionStatefulEvent, worker.inputSlots)
 	for i := 0; i < worker.inputSlots; i++ {
+		// Allocate a buffer with 1.5x length than average to reduce reallocate.
 		buffLen := len(resolvedTs.Regions) / worker.inputSlots * 3 / 2
 		statefulEvents[i] = make([]*regionStatefulEvent, 0, buffLen)
 	}
@@ -1391,7 +1393,7 @@ func (s *eventFeedSession) sendResolvedTs(
 	}
 	for _, events := range statefulEvents {
 		if len(events) > 0 {
-			err := worker.retrieveEvents(ctx, events)
+			err := worker.sendEvents(ctx, events)
 			if err != nil {
 				return err
 			}
