@@ -224,7 +224,7 @@ func GetRelayConfig(cli *clientv3.Client, worker string) (map[string]*config.Sou
 			for _, newSource := range newSources {
 				for _, source := range sources {
 					if newSource != source {
-						hasDiff = false
+						hasDiff = true
 						break
 					}
 				}
