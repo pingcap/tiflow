@@ -43,6 +43,7 @@ func main() {
 	case flag.ErrHelp:
 		os.Exit(0)
 	default:
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(2)
 	}
 

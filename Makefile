@@ -198,6 +198,10 @@ terror_check:
 	@echo "check terror conflict"
 	@cd dm && _utils/terror_gen/check.sh
 
+check-engine-errdoc: tools/bin/errdoc-gen
+	@echo "generate engine errors.toml"
+	./engine/tools/check-errdoc.sh
+
 check-copyright:
 	@echo "check-copyright"
 	@./scripts/check-copyright.sh
@@ -242,7 +246,7 @@ check-static: tools/bin/golangci-lint
 	tools/bin/golangci-lint run --timeout 10m0s --skip-files kv_gen --skip-dirs dm,tests
 	cd dm && ../tools/bin/golangci-lint run --timeout 10m0s
 
-check: check-copyright fmt check-static tidy terror_check errdoc check-leaktest-added check-merge-conflicts check-ticdc-dashboard check-diff-line-width swagger-spec
+check: check-copyright fmt check-static tidy terror_check errdoc check-engine-errdoc check-leaktest-added check-merge-conflicts check-ticdc-dashboard check-diff-line-width swagger-spec
 	@git --no-pager diff --exit-code || echo "Please add changed files!"
 
 integration_test_coverage: tools/bin/gocovmerge tools/bin/goveralls
@@ -505,9 +509,8 @@ df-demo:
 df-chaos-case:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/df-chaos-case ./engine/chaos/cases
 
-df-kvmock: tools/bin/mockgen tools/bin/protoc tools/bin/protoc-gen-gogofaster
-	tools/bin/mockgen -package mock github.com/pingcap/tiflow/engine/pkg/meta/metaclient KVClient \
-	> engine/pkg/meta/kvclient/mock/mockclient.go
+df-mock: tools/bin/mockgen
+	scripts/generate-engine-mock.sh
 
 engine_unit_test: check_failpoint_ctl
 	$(call run_engine_unit_test,$(ENGINE_PACKAGES))
