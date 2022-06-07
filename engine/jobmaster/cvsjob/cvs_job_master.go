@@ -27,7 +27,7 @@ import (
 	"golang.org/x/time/rate"
 
 	"github.com/pingcap/tiflow/dm/pkg/log"
-	cvsTask "github.com/pingcap/tiflow/engine/executor/cvsTask"
+	cvsTask "github.com/pingcap/tiflow/engine/executor/cvs"
 	"github.com/pingcap/tiflow/engine/executor/worker"
 	"github.com/pingcap/tiflow/engine/lib"
 	libModel "github.com/pingcap/tiflow/engine/lib/model"
