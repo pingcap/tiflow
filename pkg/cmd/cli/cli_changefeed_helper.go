@@ -22,7 +22,7 @@ import (
 
 	"github.com/pingcap/errors"
 	ownerAPI "github.com/pingcap/tiflow/cdc/api/owner"
-	"github.com/pingcap/tiflow/cdc/api/validator"
+	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/cmd/util"
@@ -85,7 +85,7 @@ func getTables(cliPdAddr string, credential *security.Credential, cfg *config.Re
 		return nil, nil, err
 	}
 
-	return validator.VerifyTables(cfg, kvStore, startTs)
+	return entry.VerifyTables(cfg, kvStore, startTs)
 }
 
 // sendOwnerChangefeedQuery sends owner changefeed query request.
