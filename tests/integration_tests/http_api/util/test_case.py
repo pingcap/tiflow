@@ -15,6 +15,7 @@ BASE_URL0_V2 = "https://127.0.0.1:8300/api/v2"
 BASE_URL1_V2 = "https://127.0.0.1:8301/api/v2"
 
 TLS_PD_ADDR = "https://127.0.0.1:2579"
+SINK_URI="mysql://normal:123456@127.0.0.1:3306/"
 
 physicalShiftBits = 18 
 # we should write some SQLs in the run.sh after call create_changefeed
@@ -327,10 +328,17 @@ def verify_table():
     url = BASE_URL0_V2 + "/verify-table"
     data = json.dumps({
     "pd-addrs": [TLS_PD_ADDR],
-    "credential": {"ca-path":CA_PEM_PATH, "cert-path":CLIENT_PEM_PATH, 
-    "key-path":CLIENT_KEY_PEM_PATH, "cert-allowed-cn":["client"]},
+    "ca-path":CA_PEM_PATH, 
+    "cert-path":CLIENT_PEM_PATH, 
+    "key-path":CLIENT_KEY_PEM_PATH, 
+    "cert-allowed-cn":["client"],
     "start-ts": tso,
-    "replica-config": {"filter":{"rules":["test.verify*"]}}})
+    "replica-config": {
+        "filter": {
+            "rules": ["test.verify*"]
+            }
+        }
+    })
     headers = {"Content-Type": "application/json"}
     resp = rq.post(url, data=data, headers=headers, cert=CERT, verify=VERIFY)
     assert resp.status_code == rq.codes.ok
@@ -350,9 +358,50 @@ def get_tso():
 
     print("pass test: get tso")
 
-# compose physical time and logical time into tso
-def compose_tso(ps, ls):
-    return (ps << physicalShiftBits) + ls 
+def create_changefeed_v2():
+    url = BASE_URL1_V2+"/changefeeds"
+    # create changefeed 1
+    data = {
+        "changefeed-id": "changefeed-test-v2-black-hole",
+        "sink-uri": "blackhole://",
+        "replica-config":{
+            "ignore-ineligible-table":true
+            }
+    }
+    data = json.dumps(data)
+    headers = {"Content-Type": "application/json"}
+    resp = rq.post(url, data=data, headers=headers, cert=CERT, verify=VERIFY)
+    assert resp.status_code == rq.codes.accepted
+
+    # create changefeed 2
+    data = {
+        "changefeed_id": "changefeed-test-v2-black-hole",
+        "sink_uri": SINK_URI,
+        "replica-config":{
+            "ignore-ineligible-table":true,
+            "filter": {
+            "rules": ["test.verify*"]
+            }
+        }
+    }
+    data = json.dumps(data)
+    headers = {"Content-Type": "application/json"}
+    resp = rq.post(url, data=data, headers=headers, cert=CERT, verify=VERIFY)
+    assert resp.status_code == rq.codes.accepted
+
+    # create changefeed fail because sink_uri is invalid
+    data = json.dumps({
+        "changefeed_id": "changefeed-test",
+        "sink_uri": "mysql://127.0.0.1:1111",
+        "replica-config":{
+            "ignore-ineligible-table":true
+            }
+    })
+    headers = {"Content-Type": "application/json"}
+    resp = rq.post(url, data=data, headers=headers, cert=CERT, verify=VERIFY)
+    assert resp.status_code == rq.codes.bad_request
+
+    print("pass test: create changefeed v2")
 
 # arg1: test case name
 # arg2: cetificates dir
@@ -394,3 +443,9 @@ if __name__ == "__main__":
         func(*sys.argv[3:])
     else:
         func()
+
+# util functions define belows
+
+# compose physical time and logical time into tso
+def compose_tso(ps, ls):
+    return (ps << physicalShiftBits) + ls 
