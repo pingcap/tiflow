@@ -52,11 +52,17 @@ type EtcdSession struct {
 
 // EtcdSessionConfig defines basic config used to create an EtcdSession
 type EtcdSessionConfig struct {
-	// member is json encoded string of rpcutil.Member
-	Member       string
-	Key          string
-	Value        string
-	RPCTimeout   time.Duration
+	// Member is json encoded string of rpcutil.Member
+	Member string
+
+	// Key and Value pair are used in service discovery, and they are stored in etcd
+	Key   string
+	Value string
+
+	// FIXME: this config is removed in another PR
+	RPCTimeout time.Duration
+
+	// etcd session ttl
 	KeepaliveTTL time.Duration
 }
 
