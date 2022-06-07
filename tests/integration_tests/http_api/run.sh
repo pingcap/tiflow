@@ -109,6 +109,7 @@ function run() {
 		"set_log_level"
 		"remove_changefeed"
 		"resign_owner"
+		"get_tso"
 	)
 
 	for case in ${sequential_cases[@]}; do

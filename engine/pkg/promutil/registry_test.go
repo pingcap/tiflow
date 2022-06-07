@@ -24,7 +24,7 @@ func TestNewRegistry(t *testing.T) {
 	t.Parallel()
 
 	reg := NewRegistry()
-	require.NotNil(t, reg.Registry)
+	require.NotNil(t, reg.registry)
 	require.Len(t, reg.collectorByWorker, 0)
 }
 
@@ -42,7 +42,7 @@ func TestMustRegister(t *testing.T) {
 	t.Parallel()
 
 	reg := NewRegistry()
-	require.NotNil(t, reg.Registry)
+	require.NotNil(t, reg.registry)
 
 	// normal case, register successfully
 	reg.MustRegister("worker0", prometheus.NewCounter(prometheus.CounterOpts{
@@ -112,7 +112,7 @@ func TestMustRegisterNotValidName(t *testing.T) {
 	}()
 
 	reg := NewRegistry()
-	require.NotNil(t, reg.Registry)
+	require.NotNil(t, reg.registry)
 
 	// not a valid metric name
 	reg.MustRegister("worker", prometheus.NewCounter(prometheus.CounterOpts{
@@ -130,7 +130,7 @@ func TestMustRegisterNotValidLableName(t *testing.T) {
 	}()
 
 	reg := NewRegistry()
-	require.NotNil(t, reg.Registry)
+	require.NotNil(t, reg.registry)
 
 	// not a valid metric name
 	reg.MustRegister("worker", prometheus.NewCounter(prometheus.CounterOpts{
@@ -152,7 +152,7 @@ func TestMustRegisterFailDuplicateNameLabels(t *testing.T) {
 	}()
 
 	reg := NewRegistry()
-	require.NotNil(t, reg.Registry)
+	require.NotNil(t, reg.registry)
 
 	reg.MustRegister("worker", prometheus.NewCounter(prometheus.CounterOpts{
 		Name: "counter5",
@@ -179,7 +179,7 @@ func TestMustRegisterFailInconsistent(t *testing.T) {
 	}()
 
 	reg := NewRegistry()
-	require.NotNil(t, reg.Registry)
+	require.NotNil(t, reg.registry)
 
 	reg.MustRegister("worker", prometheus.NewCounter(prometheus.CounterOpts{
 		Name: "counter5",
@@ -199,7 +199,7 @@ func TestUnregister(t *testing.T) {
 	t.Parallel()
 
 	reg := NewRegistry()
-	require.NotNil(t, reg.Registry)
+	require.NotNil(t, reg.registry)
 	reg.MustRegister("worker0", prometheus.NewCounter(prometheus.CounterOpts{
 		Name: "counter5",
 		ConstLabels: prometheus.Labels{

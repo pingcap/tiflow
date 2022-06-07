@@ -11,24 +11,28 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package model
+package version
 
 import (
-	"path/filepath"
+	"testing"
 
-	libModel "github.com/pingcap/tiflow/engine/lib/model"
+	"github.com/stretchr/testify/require"
+
+	"github.com/pingcap/tiflow/dm/pkg/log"
 )
 
-// LocalFileResourceDescriptor contains necessary data
-// to access a local file resource.
-type LocalFileResourceDescriptor struct {
-	BasePath     string
-	Creator      libModel.WorkerID
-	ResourceName ResourceName
-}
+func TestLogVersion(t *testing.T) {
+	t.Parallel()
 
-// AbsolutePath returns the absolute path of the given resource
-// in the local file system.
-func (d *LocalFileResourceDescriptor) AbsolutePath() string {
-	return filepath.Join(d.BasePath, d.Creator, d.ResourceName)
+	noneInfo := `Release Version: None
+Git Commit Hash: None
+Git Branch: None
+UTC Build Time: None
+Go Version: None
+`
+
+	err := log.InitLogger(&log.Config{})
+	require.Nil(t, err)
+	require.Equal(t, noneInfo, GetRawInfo())
+	LogVersionInfo()
 }

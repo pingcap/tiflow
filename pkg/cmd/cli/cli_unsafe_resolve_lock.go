@@ -16,21 +16,16 @@ package cli
 import (
 	"time"
 
-	"github.com/pingcap/log"
-	"github.com/pingcap/tidb/kv"
-	"github.com/pingcap/tiflow/cdc/model"
+	apiv2client "github.com/pingcap/tiflow/pkg/api/v2"
 	"github.com/pingcap/tiflow/pkg/cmd/context"
 	"github.com/pingcap/tiflow/pkg/cmd/factory"
-	"github.com/pingcap/tiflow/pkg/txnutil"
-	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/spf13/cobra"
 	"github.com/tikv/client-go/v2/oracle"
-	"github.com/tikv/client-go/v2/tikv"
 )
 
 // unsafeResolveLockOptions defines flags for the `cli unsafe show-metadata` command.
 type unsafeResolveLockOptions struct {
-	kvStorage kv.Storage
+	apiClient *apiv2client.APIV2Client
 
 	regionID uint64
 	ts       uint64
@@ -46,38 +41,27 @@ func newUnsafeResolveLockOptions() *unsafeResolveLockOptions {
 func (o *unsafeResolveLockOptions) complete(f factory.Factory) error {
 	ctx := context.GetDefaultContext()
 
-	pdClient, err := f.PdClient()
+	apiClient, err := f.APIV2Client()
 	if err != nil {
 		return err
 	}
+	o.apiClient = apiClient
 	if o.ts == 0 {
-		ts, logic, err := pdClient.GetTS(ctx)
+		tso, err := apiClient.Tso().Get(ctx)
 		if err != nil {
 			return err
 		}
-		now := oracle.GetTimeFromTS(oracle.ComposeTS(ts, logic))
+		now := oracle.GetTimeFromTS(oracle.ComposeTS(tso.Timestamp, tso.LogicTime))
 		// Try not kill active transaction, we only resolves lock 1 minute ago.
 		o.ts = oracle.GoTimeToTS(now.Add(-time.Minute))
 	}
-
-	o.kvStorage, err = f.KvStorage()
 	return err
 }
 
 // run runs the `cli unsafe show-metadata` command.
 func (o *unsafeResolveLockOptions) run() error {
 	ctx := context.GetDefaultContext()
-
-	conf := &log.Config{Level: "info", File: log.FileLogConfig{}}
-	lg, p, e := log.InitLogger(conf)
-	if e != nil {
-		return e
-	}
-	log.ReplaceGlobals(lg, p)
-	txnResolver := txnutil.NewLockerResolver(o.kvStorage.(tikv.Storage),
-		model.DefaultChangeFeedID("changefeed-client"),
-		util.RoleClient)
-	return txnResolver.Resolve(ctx, o.regionID, o.ts)
+	return o.apiClient.Unsafe().ResolveLock(ctx, o.regionID, o.ts)
 }
 
 // addFlags receives a *cobra.Command reference and binds

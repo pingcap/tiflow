@@ -112,4 +112,15 @@ type ConsistentConfig struct {
 	MaxLogSize        int64  `toml:"max-log-size" json:"max-log-size"`
 	FlushIntervalInMs int64  `toml:"flush-interval" json:"flush-interval"`
 	Storage           string `toml:"storage" json:"storage"`
+  
+// EtcdData contains key/value pair of etcd data
+type EtcdData struct {
+	Key   string `json:"key,omitempty"`
+	Value string `json:"value,omitempty"`
+}
+
+// ResolveLockReq contains request parameter to resolve lock
+type ResolveLockReq struct {
+	RegionID uint64 `json:"region-id,omitempty"`
+	Ts       uint64 `json:"ts,omitempty"`
 }

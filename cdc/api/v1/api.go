@@ -43,26 +43,27 @@ const (
 	apiOpVarCaptureID = "capture_id"
 	// forWardFromCapture is a header to be set when a request is forwarded from another capture
 	forWardFromCapture = "TiCDC-ForwardFromCapture"
+	force              = "force"
 )
 
-// openAPI provides capture APIs.
-type openAPI struct {
+// OpenAPI provides capture APIs.
+type OpenAPI struct {
 	capture *capture.Capture
 	// use for unit test only
 	testStatusProvider owner.StatusProvider
 }
 
-// NewOpenAPI creates a new openAPI.
-func NewOpenAPI(c *capture.Capture) openAPI {
-	return openAPI{capture: c}
+// NewOpenAPI creates a new OpenAPI.
+func NewOpenAPI(c *capture.Capture) OpenAPI {
+	return OpenAPI{capture: c}
 }
 
-// NewOpenAPI4Test return a openAPI for test
-func NewOpenAPI4Test(c *capture.Capture, p owner.StatusProvider) openAPI {
-	return openAPI{capture: c, testStatusProvider: p}
+// NewOpenAPI4Test return a OpenAPI for test
+func NewOpenAPI4Test(c *capture.Capture, p owner.StatusProvider) OpenAPI {
+	return OpenAPI{capture: c, testStatusProvider: p}
 }
 
-func (h *openAPI) statusProvider() owner.StatusProvider {
+func (h *OpenAPI) statusProvider() owner.StatusProvider {
 	if h.testStatusProvider != nil {
 		return h.testStatusProvider
 	}
@@ -70,7 +71,7 @@ func (h *openAPI) statusProvider() owner.StatusProvider {
 }
 
 // RegisterOpenAPIRoutes registers routes for OpenAPI
-func RegisterOpenAPIRoutes(router *gin.Engine, api openAPI) {
+func RegisterOpenAPIRoutes(router *gin.Engine, api OpenAPI) {
 	v1 := router.Group("/api/v1")
 
 	v1.Use(middleware.LogMiddleware())
@@ -117,7 +118,7 @@ func RegisterOpenAPIRoutes(router *gin.Engine, api openAPI) {
 // @Success 200 {array} model.ChangefeedCommonInfo
 // @Failure 500 {object} model.HTTPError
 // @Router /api/v1/changefeeds [get]
-func (h *openAPI) ListChangefeed(c *gin.Context) {
+func (h *OpenAPI) ListChangefeed(c *gin.Context) {
 	if !h.capture.IsOwner() {
 		h.forwardToOwner(c)
 		return
@@ -183,7 +184,7 @@ func (h *openAPI) ListChangefeed(c *gin.Context) {
 // @Success 200 {object} model.ChangefeedDetail
 // @Failure 500,400 {object} model.HTTPError
 // @Router /api/v1/changefeeds/{changefeed_id} [get]
-func (h *openAPI) GetChangefeed(c *gin.Context) {
+func (h *OpenAPI) GetChangefeed(c *gin.Context) {
 	if !h.capture.IsOwner() {
 		h.forwardToOwner(c)
 		return
@@ -252,7 +253,7 @@ func (h *openAPI) GetChangefeed(c *gin.Context) {
 // @Success 202
 // @Failure 500,400 {object} model.HTTPError
 // @Router	/api/v1/changefeeds [post]
-func (h *openAPI) CreateChangefeed(c *gin.Context) {
+func (h *OpenAPI) CreateChangefeed(c *gin.Context) {
 	if !h.capture.IsOwner() {
 		h.forwardToOwner(c)
 		return
@@ -301,7 +302,7 @@ func (h *openAPI) CreateChangefeed(c *gin.Context) {
 // @Success 202
 // @Failure 500,400 {object} model.HTTPError
 // @Router /api/v1/changefeeds/{changefeed_id}/pause [post]
-func (h *openAPI) PauseChangefeed(c *gin.Context) {
+func (h *OpenAPI) PauseChangefeed(c *gin.Context) {
 	if !h.capture.IsOwner() {
 		h.forwardToOwner(c)
 		return
@@ -344,7 +345,7 @@ func (h *openAPI) PauseChangefeed(c *gin.Context) {
 // @Success 202
 // @Failure 500,400 {object} model.HTTPError
 // @Router	/api/v1/changefeeds/{changefeed_id}/resume [post]
-func (h *openAPI) ResumeChangefeed(c *gin.Context) {
+func (h *OpenAPI) ResumeChangefeed(c *gin.Context) {
 	if !h.capture.IsOwner() {
 		h.forwardToOwner(c)
 		return
@@ -392,7 +393,7 @@ func (h *openAPI) ResumeChangefeed(c *gin.Context) {
 // @Success 202
 // @Failure 500,400 {object} model.HTTPError
 // @Router /api/v1/changefeeds/{changefeed_id} [put]
-func (h *openAPI) UpdateChangefeed(c *gin.Context) {
+func (h *OpenAPI) UpdateChangefeed(c *gin.Context) {
 	if !h.capture.IsOwner() {
 		h.forwardToOwner(c)
 		return
@@ -449,7 +450,7 @@ func (h *openAPI) UpdateChangefeed(c *gin.Context) {
 // @Success 202
 // @Failure 500,400 {object} model.HTTPError
 // @Router	/api/v1/changefeeds/{changefeed_id} [delete]
-func (h *openAPI) RemoveChangefeed(c *gin.Context) {
+func (h *OpenAPI) RemoveChangefeed(c *gin.Context) {
 	if !h.capture.IsOwner() {
 		h.forwardToOwner(c)
 		return
@@ -462,6 +463,11 @@ func (h *openAPI) RemoveChangefeed(c *gin.Context) {
 			changefeedID.ID))
 		return
 	}
+	var optForceRemove bool
+	forceRemoveStr, ok := c.GetQuery(force)
+	if ok && (forceRemoveStr == "true" || forceRemoveStr == "y") {
+		optForceRemove = true
+	}
 	// check if the changefeed exists
 	_, err := h.statusProvider().GetChangeFeedStatus(ctx, changefeedID)
 	if err != nil {
@@ -472,6 +478,9 @@ func (h *openAPI) RemoveChangefeed(c *gin.Context) {
 	job := model.AdminJob{
 		CfID: changefeedID,
 		Type: model.AdminRemove,
+		Opts: &model.AdminJobOption{
+			ForceRemove: optForceRemove,
+		},
 	}
 
 	if err := api.HandleOwnerJob(ctx, h.capture, job); err != nil {
@@ -491,7 +500,7 @@ func (h *openAPI) RemoveChangefeed(c *gin.Context) {
 // @Success 202
 // @Failure 500,400 {object} model.HTTPError
 // @Router /api/v1/changefeeds/{changefeed_id}/tables/rebalance_table [post]
-func (h *openAPI) RebalanceTables(c *gin.Context) {
+func (h *OpenAPI) RebalanceTables(c *gin.Context) {
 	if !h.capture.IsOwner() {
 		h.forwardToOwner(c)
 		return
@@ -531,7 +540,7 @@ func (h *openAPI) RebalanceTables(c *gin.Context) {
 // @Success 202
 // @Failure 500,400 {object} model.HTTPError
 // @Router /api/v1/changefeeds/{changefeed_id}/tables/move_table [post]
-func (h *openAPI) MoveTable(c *gin.Context) {
+func (h *OpenAPI) MoveTable(c *gin.Context) {
 	if !h.capture.IsOwner() {
 		h.forwardToOwner(c)
 		return
@@ -584,7 +593,7 @@ func (h *openAPI) MoveTable(c *gin.Context) {
 // @Success 202
 // @Failure 500,400 {object} model.HTTPError
 // @Router	/api/v1/owner/resign [post]
-func (h *openAPI) ResignOwner(c *gin.Context) {
+func (h *OpenAPI) ResignOwner(c *gin.Context) {
 	if !h.capture.IsOwner() {
 		h.forwardToOwner(c)
 		return
@@ -607,7 +616,7 @@ func (h *openAPI) ResignOwner(c *gin.Context) {
 // @Success 200 {object} model.ProcessorDetail
 // @Failure 500,400 {object} model.HTTPError
 // @Router	/api/v1/processors/{changefeed_id}/{capture_id} [get]
-func (h *openAPI) GetProcessor(c *gin.Context) {
+func (h *OpenAPI) GetProcessor(c *gin.Context) {
 	if !h.capture.IsOwner() {
 		h.forwardToOwner(c)
 		return
@@ -687,7 +696,7 @@ func (h *openAPI) GetProcessor(c *gin.Context) {
 // @Success 200 {array} model.ProcessorCommonInfo
 // @Failure 500,400 {object} model.HTTPError
 // @Router	/api/v1/processors [get]
-func (h *openAPI) ListProcessor(c *gin.Context) {
+func (h *OpenAPI) ListProcessor(c *gin.Context) {
 	if !h.capture.IsOwner() {
 		h.forwardToOwner(c)
 		return
@@ -719,7 +728,7 @@ func (h *openAPI) ListProcessor(c *gin.Context) {
 // @Success 200 {array} model.Capture
 // @Failure 500,400 {object} model.HTTPError
 // @Router	/api/v1/captures [get]
-func (h *openAPI) ListCapture(c *gin.Context) {
+func (h *OpenAPI) ListCapture(c *gin.Context) {
 	if !h.capture.IsOwner() {
 		h.forwardToOwner(c)
 		return
@@ -753,7 +762,7 @@ func (h *openAPI) ListCapture(c *gin.Context) {
 // @Success 200 {object} model.ServerStatus
 // @Failure 500,400 {object} model.HTTPError
 // @Router	/api/v1/status [get]
-func (h *openAPI) ServerStatus(c *gin.Context) {
+func (h *OpenAPI) ServerStatus(c *gin.Context) {
 	status := model.ServerStatus{
 		Version: version.ReleaseVersion,
 		GitHash: version.GitHash,
@@ -773,7 +782,7 @@ func (h *openAPI) ServerStatus(c *gin.Context) {
 // @Success 200
 // @Failure 500 {object} model.HTTPError
 // @Router	/api/v1/health [get]
-func (h *openAPI) Health(c *gin.Context) {
+func (h *OpenAPI) Health(c *gin.Context) {
 	ctx := c.Request.Context()
 
 	if _, err := h.capture.GetOwnerCaptureInfo(ctx); err != nil {
@@ -814,7 +823,7 @@ func SetLogLevel(c *gin.Context) {
 }
 
 // forwardToOwner forward an request to owner
-func (h *openAPI) forwardToOwner(c *gin.Context) {
+func (h *OpenAPI) forwardToOwner(c *gin.Context) {
 	ctx := c.Request.Context()
 	// every request can only forward to owner one time
 	if len(c.GetHeader(forWardFromCapture)) != 0 {

@@ -137,7 +137,7 @@ else
 		$tls \
 		$certcn \
 		$addr \
-		$pd_addr &>>$workdir/stdout$log_suffix.log &
+		$pd_addr &>>$workdir/stdout$logsuffix.log &
 fi
 
 # Make sure cdc is ready to serve

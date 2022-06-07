@@ -14,19 +14,15 @@
 package cli
 
 import (
-	"github.com/pingcap/tiflow/cdc/model"
+	apiv1client "github.com/pingcap/tiflow/pkg/api/v1"
 	"github.com/pingcap/tiflow/pkg/cmd/context"
 	"github.com/pingcap/tiflow/pkg/cmd/factory"
-	"github.com/pingcap/tiflow/pkg/etcd"
-	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/spf13/cobra"
 )
 
 // removeChangefeedOptions defines flags for the `cli changefeed remove` command.
 type removeChangefeedOptions struct {
-	etcdClient *etcd.CDCEtcdClient
-
-	credential *security.Credential
+	apiClient *apiv1client.APIV1Client
 
 	changefeedID   string
 	optForceRemove bool
@@ -47,31 +43,18 @@ func (o *removeChangefeedOptions) addFlags(cmd *cobra.Command) {
 
 // complete adapts from the command line args to the data and client required.
 func (o *removeChangefeedOptions) complete(f factory.Factory) error {
-	etcdClient, err := f.EtcdClient()
+	apiClient, err := f.APIV1Client()
 	if err != nil {
 		return err
 	}
-
-	o.etcdClient = etcdClient
-
-	o.credential = f.GetCredential()
-
+	o.apiClient = apiClient
 	return nil
 }
 
 // run the `cli changefeed remove` command.
 func (o *removeChangefeedOptions) run() error {
-	job := model.AdminJob{
-		CfID: model.DefaultChangeFeedID(o.changefeedID),
-		Type: model.AdminRemove,
-		Opts: &model.AdminJobOption{
-			ForceRemove: o.optForceRemove,
-		},
-	}
-
 	ctx := context.GetDefaultContext()
-
-	return sendOwnerAdminChangeQuery(ctx, o.etcdClient, job, o.credential)
+	return o.apiClient.Changefeeds().Delete(ctx, o.changefeedID, o.optForceRemove)
 }
 
 // newCmdRemoveChangefeed creates the `cli changefeed remove` command.

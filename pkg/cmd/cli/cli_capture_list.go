@@ -17,14 +17,14 @@ import (
 	"context"
 
 	"github.com/pingcap/errors"
-	"github.com/spf13/cobra"
-	"go.etcd.io/etcd/client/v3/concurrency"
-
+	apiv1client "github.com/pingcap/tiflow/pkg/api/v1"
 	cmdcontext "github.com/pingcap/tiflow/pkg/cmd/context"
 	"github.com/pingcap/tiflow/pkg/cmd/factory"
 	"github.com/pingcap/tiflow/pkg/cmd/util"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
+	"github.com/spf13/cobra"
+	"go.etcd.io/etcd/client/v3/concurrency"
 )
 
 // capture holds capture information.
@@ -36,7 +36,7 @@ type capture struct {
 
 // listCaptureOptions defines flags for the `cli capture list` command.
 type listCaptureOptions struct {
-	etcdClient *etcd.CDCEtcdClient
+	apiv1Client *apiv1client.APIV1Client
 }
 
 // newListCaptureOptions creates new listCaptureOptions for the `cli capture list` command.
@@ -46,13 +46,11 @@ func newListCaptureOptions() *listCaptureOptions {
 
 // complete adapts from the command line args to the data and client required.
 func (o *listCaptureOptions) complete(f factory.Factory) error {
-	etcdClient, err := f.EtcdClient()
+	apiv1Client, err := f.APIV1Client()
 	if err != nil {
 		return err
 	}
-
-	o.etcdClient = etcdClient
-
+	o.apiv1Client = apiv1Client
 	return nil
 }
 
@@ -60,9 +58,14 @@ func (o *listCaptureOptions) complete(f factory.Factory) error {
 func (o *listCaptureOptions) run(cmd *cobra.Command) error {
 	ctx := cmdcontext.GetDefaultContext()
 
-	captures, err := listCaptures(ctx, o.etcdClient)
+	raw, err := o.apiv1Client.Captures().List(ctx)
 	if err != nil {
 		return err
+	}
+	captures := make([]*capture, 0, len(*raw))
+	for _, c := range *raw {
+		captures = append(captures,
+			&capture{ID: c.ID, IsOwner: c.IsOwner, AdvertiseAddr: c.AdvertiseAddr})
 	}
 
 	return util.JSONPrint(cmd, captures)
