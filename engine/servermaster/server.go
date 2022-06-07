@@ -625,9 +625,8 @@ func (s *Server) reset(ctx context.Context) error {
 
 	s.session = sess
 	s.election, err = cluster.NewEtcdElection(ctx, s.etcdClient, sess, cluster.EtcdElectionConfig{
-		CreateSessionTimeout: s.cfg.RPCTimeout, // FIXME (zixiong): use a separate timeout here
-		TTL:                  s.cfg.KeepAliveTTL,
-		Prefix:               adapter.MasterCampaignKey.Path(),
+		TTL:    s.cfg.KeepAliveTTL,
+		Prefix: adapter.MasterCampaignKey.Path(),
 	})
 	if err != nil {
 		return err
