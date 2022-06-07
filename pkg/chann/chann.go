@@ -48,6 +48,12 @@
 // Furthermore, all channels provides methods to send (In()),
 // receive (Out()), and close (Close()).
 //
+// An unbounded channel is not a buffered channel with infinite capacity,
+// and they have different memory model semantics in terms of receiving
+// a value: The recipient of a buffered channel is immediately available
+// after a send is complete. However, the recipient of an unbounded channel
+// may be available within a bounded time frame after a send is complete.
+//
 // Note that to close a channel, must use Close() method instead of the
 // language built-in method
 // Two additional methods: ApproxLen and Cap returns the current status
