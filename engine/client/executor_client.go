@@ -20,7 +20,7 @@ import (
 	"github.com/pingcap/errors"
 	"google.golang.org/grpc/codes"
 
-	"github.com/pingcap/tiflow/engine/pb"
+	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/pkg/retry"
 )
 

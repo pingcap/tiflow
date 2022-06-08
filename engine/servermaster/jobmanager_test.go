@@ -21,18 +21,20 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/lib"
 	"github.com/pingcap/tiflow/engine/lib/master"
 	"github.com/pingcap/tiflow/engine/lib/metadata"
 	libModel "github.com/pingcap/tiflow/engine/lib/model"
 	"github.com/pingcap/tiflow/engine/model"
-	"github.com/pingcap/tiflow/engine/pb"
 	"github.com/pingcap/tiflow/engine/pkg/clock"
 	"github.com/pingcap/tiflow/engine/pkg/ctxmu"
+	"github.com/pingcap/tiflow/engine/pkg/dm"
 	"github.com/pingcap/tiflow/engine/pkg/errors"
 	resManager "github.com/pingcap/tiflow/engine/pkg/externalresource/manager"
 	resourcemeta "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	"github.com/pingcap/tiflow/engine/pkg/notifier"
+	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/pingcap/tiflow/pkg/uuid"
 )
 
@@ -76,7 +78,7 @@ func TestJobManagerSubmitJob(t *testing.T) {
 			mgr.JobFsm.JobCount(pb.QueryJobResponse_dispatched) == 1 &&
 			mgr.JobFsm.JobCount(pb.QueryJobResponse_pending) == 0
 	}, time.Second*2, time.Millisecond*20)
-	queryResp := mgr.QueryJob(ctx, &pb.QueryJobRequest{JobId: resp.JobIdStr})
+	queryResp := mgr.QueryJob(ctx, &pb.QueryJobRequest{JobId: resp.JobId})
 	require.Nil(t, queryResp.Err)
 	require.Equal(t, pb.QueryJobResponse_dispatched, queryResp.Status)
 }
@@ -147,14 +149,14 @@ func TestJobManagerPauseJob(t *testing.T) {
 	require.Nil(t, err)
 
 	req := &pb.PauseJobRequest{
-		JobIdStr: pauseWorkerID,
+		JobId: pauseWorkerID,
 	}
 	resp := mgr.PauseJob(ctx, req)
 	require.Nil(t, resp.Err)
 
 	require.Equal(t, 1, mockWorkerHandle.SendMessageCount())
 
-	req.JobIdStr = pauseWorkerID + "-unknown"
+	req.JobId = pauseWorkerID + "-unknown"
 	resp = mgr.PauseJob(ctx, req)
 	require.NotNil(t, resp.Err)
 	require.Equal(t, pb.ErrorCode_UnKnownJob, resp.Err.Code)
@@ -189,9 +191,56 @@ func TestJobManagerCancelJob(t *testing.T) {
 	require.NoError(t, err)
 
 	resp := mgr.CancelJob(ctx, &pb.CancelJobRequest{
-		JobIdStr: "job-to-be-canceled",
+		JobId: "job-to-be-canceled",
 	})
 	require.Equal(t, &pb.CancelJobResponse{}, resp)
+}
+
+func TestJobManagerDebug(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	jobmanagerID := "debug-job-test"
+	mockMaster := lib.NewMockMasterImpl("", jobmanagerID)
+	mockMaster.On("InitImpl", mock.Anything).Return(nil)
+	manager := p2p.NewMockMessageHandlerManager()
+	mgr := &JobManagerImplV2{
+		BaseMaster:            mockMaster.DefaultBaseMaster,
+		JobFsm:                NewJobFsm(),
+		clocker:               clock.New(),
+		frameMetaClient:       mockMaster.GetFrameMetaClient(),
+		jobStatusChangeMu:     ctxmu.New(),
+		messageHandlerManager: manager,
+	}
+
+	debugJobID := "Debug-Job-id"
+	meta := &libModel.MasterMetaKVData{ID: debugJobID}
+	mgr.JobFsm.JobDispatched(meta, false)
+
+	mockWorkerHandle := &master.MockHandle{WorkerID: debugJobID, ExecutorID: "executor-1"}
+	err := mgr.JobFsm.JobOnline(mockWorkerHandle)
+	require.Nil(t, err)
+
+	req := &pb.DebugJobRequest{
+		JobId:   debugJobID,
+		Command: "Debug",
+		JsonArg: "",
+	}
+
+	go func() {
+		time.Sleep(time.Second)
+		manager.InvokeHandler(t, dm.GenerateTopic(debugJobID, jobmanagerID),
+			"node-1", dm.GenerateResponse(1, "DebugJob", &pb.DebugJobResponse{}))
+	}()
+	resp := mgr.DebugJob(ctx, req)
+	require.Nil(t, resp.Err)
+
+	req.JobId = debugJobID + "-unknown"
+	resp = mgr.DebugJob(ctx, req)
+	require.NotNil(t, resp.Err)
+	require.Equal(t, pb.ErrorCode_UnKnownJob, resp.Err.Code)
 }
 
 func TestJobManagerQueryJob(t *testing.T) {
@@ -285,14 +334,14 @@ func TestJobManagerOnlineJob(t *testing.T) {
 	require.Nil(t, resp.Err)
 
 	err = mgr.JobFsm.JobOnline(&master.MockHandle{
-		WorkerID:   resp.JobIdStr,
+		WorkerID:   resp.JobId,
 		ExecutorID: "executor-1",
 	})
 	require.Nil(t, err)
-	queryResp := mgr.QueryJob(ctx, &pb.QueryJobRequest{JobId: resp.JobIdStr})
+	queryResp := mgr.QueryJob(ctx, &pb.QueryJobRequest{JobId: resp.JobId})
 	require.Nil(t, queryResp.Err)
 	require.Equal(t, pb.QueryJobResponse_online, queryResp.Status)
-	require.Equal(t, queryResp.JobMasterInfo.Id, resp.JobIdStr)
+	require.Equal(t, queryResp.JobMasterInfo.Id, resp.JobId)
 }
 
 func TestJobManagerRecover(t *testing.T) {
@@ -401,7 +450,7 @@ func TestJobManagerWatchJobStatuses(t *testing.T) {
 	}, snap)
 
 	resp := mgr.CancelJob(ctx, &pb.CancelJobRequest{
-		JobIdStr: "job-to-be-canceled",
+		JobId: "job-to-be-canceled",
 	})
 	require.Equal(t, &pb.CancelJobResponse{}, resp)
 

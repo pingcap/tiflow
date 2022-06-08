@@ -22,7 +22,7 @@ import (
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 
-	"github.com/pingcap/tiflow/engine/pb"
+	pb "github.com/pingcap/tiflow/engine/enginepb"
 )
 
 var container *grpcContainer
@@ -71,6 +71,8 @@ func (s *masterServerConn) sendRequest(ctx context.Context, req interface{}) (in
 		return s.server.Heartbeat(ctx, x)
 	case *pb.CancelJobRequest:
 		return s.server.CancelJob(ctx, x)
+	case *pb.DebugJobRequest:
+		return s.server.DebugJob(ctx, x)
 	}
 	return nil, errors.New("unknown request")
 }
@@ -102,6 +104,11 @@ func (c *masterServerClient) SubmitJob(ctx context.Context, req *pb.SubmitJobReq
 func (c *masterServerClient) CancelJob(ctx context.Context, req *pb.CancelJobRequest, opts ...grpc.CallOption) (*pb.CancelJobResponse, error) {
 	resp, err := c.conn.sendRequest(ctx, req)
 	return resp.(*pb.CancelJobResponse), err
+}
+
+func (c *masterServerClient) DebugJob(ctx context.Context, req *pb.DebugJobRequest, opts ...grpc.CallOption) (*pb.DebugJobResponse, error) {
+	resp, err := c.conn.sendRequest(ctx, req)
+	return resp.(*pb.DebugJobResponse), err
 }
 
 func (c *masterServerClient) Heartbeat(ctx context.Context, req *pb.HeartbeatRequest, opts ...grpc.CallOption) (*pb.HeartbeatResponse, error) {

@@ -27,6 +27,7 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/util/filter"
+	"github.com/pingcap/tiflow/dm/syncer/binlogstream"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
@@ -183,7 +184,7 @@ type DataValidator struct {
 	upstreamTZ         *time.Location
 	timezone           *time.Location
 	syncCfg            replication.BinlogSyncerConfig
-	streamerController *StreamerController
+	streamerController *binlogstream.StreamerController
 	persistHelper      *validatorPersistHelper
 
 	validateInterval time.Duration
@@ -306,7 +307,7 @@ func (v *DataValidator) initialize() error {
 		return err
 	}
 
-	v.streamerController = NewStreamerController(v.syncCfg, v.cfg.EnableGTID, &dbconn.UpStreamConn{BaseDB: v.fromDB}, v.cfg.RelayDir, v.timezone, nil)
+	v.streamerController = binlogstream.NewStreamerController(v.syncCfg, v.cfg.EnableGTID, &dbconn.UpStreamConn{BaseDB: v.fromDB}, v.cfg.RelayDir, v.timezone, nil)
 	return nil
 }
 

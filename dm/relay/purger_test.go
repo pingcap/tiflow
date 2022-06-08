@@ -60,9 +60,7 @@ func (t *testPurgerSuite) EarliestActiveRelayLog() *streamer.RelayLogInfo {
 
 func (t *testPurgerSuite) TestPurgeManuallyInactive(c *C) {
 	// create relay log dir
-	baseDir, err := os.MkdirTemp("", "test_purge_manually_inactive")
-	c.Assert(err, IsNil)
-	defer os.RemoveAll(baseDir)
+	baseDir := c.MkDir()
 
 	// prepare files and directories
 	relayDirsPath, relayFilesPath, _ := t.genRelayLogFiles(c, baseDir, -1, -1)
@@ -70,7 +68,7 @@ func (t *testPurgerSuite) TestPurgeManuallyInactive(c *C) {
 	c.Assert(len(relayFilesPath), Equals, 3)
 	c.Assert(len(relayFilesPath[2]), Equals, 3)
 
-	err = t.genUUIDIndexFile(baseDir)
+	err := t.genUUIDIndexFile(baseDir)
 	c.Assert(err, IsNil)
 
 	cfg := config.PurgeConfig{
@@ -99,9 +97,7 @@ func (t *testPurgerSuite) TestPurgeManuallyInactive(c *C) {
 
 func (t *testPurgerSuite) TestPurgeManuallyTime(c *C) {
 	// create relay log dir
-	baseDir, err := os.MkdirTemp("", "test_purge_manually_time")
-	c.Assert(err, IsNil)
-	defer os.RemoveAll(baseDir)
+	baseDir := c.MkDir()
 
 	// prepare files and directories
 	relayDirsPath, relayFilesPath, safeTime := t.genRelayLogFiles(c, baseDir, 1, 0)
@@ -109,7 +105,7 @@ func (t *testPurgerSuite) TestPurgeManuallyTime(c *C) {
 	c.Assert(len(relayFilesPath), Equals, 3)
 	c.Assert(len(relayFilesPath[2]), Equals, 3)
 
-	err = t.genUUIDIndexFile(baseDir)
+	err := t.genUUIDIndexFile(baseDir)
 	c.Assert(err, IsNil)
 
 	cfg := config.PurgeConfig{
@@ -138,9 +134,7 @@ func (t *testPurgerSuite) TestPurgeManuallyTime(c *C) {
 
 func (t *testPurgerSuite) TestPurgeManuallyFilename(c *C) {
 	// create relay log dir
-	baseDir, err := os.MkdirTemp("", "test_purge_manually_filename")
-	c.Assert(err, IsNil)
-	defer os.RemoveAll(baseDir)
+	baseDir := c.MkDir()
 
 	// prepare files and directories
 	relayDirsPath, relayFilesPath, _ := t.genRelayLogFiles(c, baseDir, -1, -1)
@@ -148,7 +142,7 @@ func (t *testPurgerSuite) TestPurgeManuallyFilename(c *C) {
 	c.Assert(len(relayFilesPath), Equals, 3)
 	c.Assert(len(relayFilesPath[2]), Equals, 3)
 
-	err = t.genUUIDIndexFile(baseDir)
+	err := t.genUUIDIndexFile(baseDir)
 	c.Assert(err, IsNil)
 
 	cfg := config.PurgeConfig{
@@ -181,9 +175,7 @@ func (t *testPurgerSuite) TestPurgeManuallyFilename(c *C) {
 
 func (t *testPurgerSuite) TestPurgeAutomaticallyTime(c *C) {
 	// create relay log dir
-	baseDir, err := os.MkdirTemp("", "test_purge_automatically_time")
-	c.Assert(err, IsNil)
-	defer os.RemoveAll(baseDir)
+	baseDir := c.MkDir()
 
 	// prepare files and directories
 	relayDirsPath, relayFilesPath, _ := t.genRelayLogFiles(c, baseDir, -1, -1)
@@ -191,7 +183,7 @@ func (t *testPurgerSuite) TestPurgeAutomaticallyTime(c *C) {
 	c.Assert(len(relayFilesPath), Equals, 3)
 	c.Assert(len(relayFilesPath[2]), Equals, 3)
 
-	err = t.genUUIDIndexFile(baseDir)
+	err := t.genUUIDIndexFile(baseDir)
 	c.Assert(err, IsNil)
 
 	cfg := config.PurgeConfig{
@@ -228,9 +220,7 @@ func (t *testPurgerSuite) TestPurgeAutomaticallyTime(c *C) {
 
 func (t *testPurgerSuite) TestPurgeAutomaticallySpace(c *C) {
 	// create relay log dir
-	baseDir, err := os.MkdirTemp("", "test_purge_automatically_space")
-	c.Assert(err, IsNil)
-	defer os.RemoveAll(baseDir)
+	baseDir := c.MkDir()
 
 	// prepare files and directories
 	relayDirsPath, relayFilesPath, _ := t.genRelayLogFiles(c, baseDir, -1, -1)
@@ -238,7 +228,7 @@ func (t *testPurgerSuite) TestPurgeAutomaticallySpace(c *C) {
 	c.Assert(len(relayFilesPath), Equals, 3)
 	c.Assert(len(relayFilesPath[2]), Equals, 3)
 
-	err = t.genUUIDIndexFile(baseDir)
+	err := t.genUUIDIndexFile(baseDir)
 	c.Assert(err, IsNil)
 
 	storageSize, err := utils.GetStorageSize(baseDir)
