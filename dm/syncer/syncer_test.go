@@ -1804,6 +1804,7 @@ func TestWaitBeforeRunExit(t *testing.T) {
 		"tidb_skip_utf8_check": "0",
 	}
 	syncer := NewSyncer(cfg, nil, nil)
+	syncer.metricsProxies = metrics.DefaultMetricsProxies
 
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
