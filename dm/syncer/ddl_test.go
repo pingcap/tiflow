@@ -222,7 +222,7 @@ func (s *testDDLSuite) TestResolveDDLSQL(c *C) {
 	syncer := NewSyncer(cfg, nil, nil)
 	syncer.tctx = tctx
 	syncer.baList, err = filter.New(syncer.cfg.CaseSensitive, syncer.cfg.BAList)
-	syncer.metricsProxies = metrics.DefaultMetricsProxies
+	syncer.metricsProxies = metrics.DefaultMetricsProxies.CacheForOneTask("task", "worker", "source")
 	c.Assert(err, IsNil)
 
 	syncer.tableRouter, err = regexprrouter.NewRegExprRouter(false, []*router.TableRule{
