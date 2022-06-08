@@ -156,9 +156,9 @@ func (c *TableFlowController) enqueueSingleMsg(
 	c.queueMu.Lock()
 	defer c.queueMu.Unlock()
 
-	var e deque.Elem
+	e := c.queueMu.queue.Back()
 	// 1. Processing a new txn with different commitTs.
-	if e = c.queueMu.queue.Back(); e == nil || lastCommitTs < commitTs {
+	if e == nil || lastCommitTs < commitTs {
 		atomic.StoreUint64(&c.lastCommitTs, commitTs)
 		c.resetBatch(lastCommitTs, commitTs)
 		c.addEntry(msg, size)
@@ -183,7 +183,7 @@ func (c *TableFlowController) enqueueSingleMsg(
 
 	// 3. Split the txn or handle a new txn with the same commitTs.
 	if c.batchGroupCount >= c.batchSize {
-		_ = callback()
+		callback()
 	}
 	c.addEntry(msg, size)
 }
