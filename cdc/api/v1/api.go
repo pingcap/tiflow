@@ -16,6 +16,7 @@ package v1
 import (
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/log"
@@ -264,6 +265,7 @@ func (h *OpenAPI) CreateChangefeed(c *gin.Context) {
 		return
 	}
 
+	up := h.capture.UpstreamManager.GetDefaultUpstream()
 	info, err := VerifyCreateChangefeedConfig(ctx, changefeedConfig, h.capture)
 	if err != nil {
 		_ = c.Error(err)
@@ -275,8 +277,16 @@ func (h *OpenAPI) CreateChangefeed(c *gin.Context) {
 		_ = c.Error(err)
 		return
 	}
-
-	err = h.capture.EtcdClient.CreateChangefeedInfo(ctx, info,
+	upstreamInfo := &model.UpstreamInfo{
+		ID:            info.UpstreamID,
+		PDEndpoints:   strings.Join(up.PdEndpoints, ","),
+		KeyPath:       up.SecurityConfig.KeyPath,
+		CertPath:      up.SecurityConfig.CertPath,
+		CAPath:        up.SecurityConfig.CAPath,
+		CertAllowedCN: up.SecurityConfig.CertAllowedCN,
+	}
+	err = h.capture.EtcdClient.CreateChangefeedInfo(ctx, upstreamInfo,
+		info,
 		model.DefaultChangeFeedID(changefeedConfig.ID))
 	if err != nil {
 		_ = c.Error(err)

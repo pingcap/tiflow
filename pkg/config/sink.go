@@ -38,7 +38,6 @@ type SinkConfig struct {
 	Protocol        string            `toml:"protocol" json:"protocol"`
 	ColumnSelectors []*ColumnSelector `toml:"column-selectors" json:"column-selectors"`
 	SchemaRegistry  string            `toml:"schema-registry" json:"schema-registry"`
-	TimeZone        string            `toml:"time-zone" json:"time-zone"`
 }
 
 // DispatchRule represents partition rule for a table

@@ -52,12 +52,9 @@ var defaultReplicaConfig = &ReplicaConfig{
 type ReplicaConfig replicaConfig
 
 type replicaConfig struct {
-	CaseSensitive  bool `toml:"case-sensitive" json:"case-sensitive"`
-	EnableOldValue bool `toml:"enable-old-value" json:"enable-old-value"`
-	ForceReplicate bool `toml:"force-replicate" json:"force-replicate"`
-
-	IgnoreIneligibleTable bool `toml:"ignore-ineligible-table" json:"ignore-ineligible-table"`
-
+	CaseSensitive    bool              `toml:"case-sensitive" json:"case-sensitive"`
+	EnableOldValue   bool              `toml:"enable-old-value" json:"enable-old-value"`
+	ForceReplicate   bool              `toml:"force-replicate" json:"force-replicate"`
 	CheckGCSafePoint bool              `toml:"check-gc-safe-point" json:"check-gc-safe-point"`
 	Filter           *FilterConfig     `toml:"filter" json:"filter"`
 	Mounter          *MounterConfig    `toml:"mounter" json:"mounter"`

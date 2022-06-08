@@ -18,7 +18,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/upstream"
 )
 
 // GetTso request and returns a TSO from PD
@@ -28,7 +27,7 @@ func (h *OpenAPIV2) GetTso(c *gin.Context) {
 		c.Status(http.StatusServiceUnavailable)
 		return
 	}
-	pdClient := h.capture.UpstreamManager.Get(upstream.DefaultUpstreamID).PDClient
+	pdClient := h.capture.UpstreamManager.GetDefaultUpstream().PDClient
 	if pdClient == nil {
 		c.Status(http.StatusServiceUnavailable)
 		return

@@ -31,6 +31,7 @@ type GlobalReactorState struct {
 	ClusterID      string
 	Owner          map[string]struct{}
 	Captures       map[model.CaptureID]*model.CaptureInfo
+	Upstreams      map[model.UpstreamID]*model.UpstreamInfo
 	Changefeeds    map[model.ChangeFeedID]*ChangefeedReactorState
 	pendingPatches [][]DataPatch
 
@@ -38,6 +39,10 @@ type GlobalReactorState struct {
 	// to be called when captures are added and removed.
 	onCaptureAdded   func(captureID model.CaptureID, addr string)
 	onCaptureRemoved func(captureID model.CaptureID)
+	// onCaptureAdded and onCaptureRemoved are hook functions
+	// to be called when captures are added and removed.
+	onUpstreamAdded   func(captureID model.UpstreamID, info *model.UpstreamInfo)
+	onUpstreamRemoved func(captureID model.UpstreamID)
 }
 
 // NewGlobalState creates a new global state
@@ -46,6 +51,7 @@ func NewGlobalState(clusterID string) *GlobalReactorState {
 		ClusterID:   clusterID,
 		Owner:       map[string]struct{}{},
 		Captures:    make(map[model.CaptureID]*model.CaptureInfo),
+		Upstreams:   make(map[model.UpstreamID]*model.UpstreamInfo),
 		Changefeeds: make(map[model.ChangeFeedID]*ChangefeedReactorState),
 	}
 }
@@ -107,6 +113,24 @@ func (s *GlobalReactorState) Update(key util.EtcdKey, value []byte, _ bool) erro
 			s.pendingPatches = append(s.pendingPatches, changefeedState.getPatches())
 			delete(s.Changefeeds, k.ChangefeedID)
 		}
+	case etcd.CDCKeyTypeUpStream:
+		if value == nil {
+			log.Info("upstream is removed",
+				zap.Uint64("upstreamID", k.UpstreamID),
+				zap.Any("info", s.Upstreams[k.UpstreamID]))
+			delete(s.Upstreams, k.UpstreamID)
+			return nil
+		}
+		var newUpstreamInfo model.UpstreamInfo
+		err := newUpstreamInfo.Unmarshal(value)
+		if err != nil {
+			return cerrors.ErrUnmarshalFailed.Wrap(err).GenWithStackByArgs()
+		}
+		log.Info("new upstream is add",
+			zap.Uint64("upstream", k.UpstreamID),
+			zap.Any("info", newUpstreamInfo))
+		s.Upstreams[k.UpstreamID] = &newUpstreamInfo
+	case etcd.CDCKeyTypeMetaVersion:
 	default:
 		log.Warn("receive an unexpected etcd event", zap.String("key", key.String()), zap.ByteString("value", value))
 	}
@@ -132,6 +156,18 @@ func (s *GlobalReactorState) SetOnCaptureAdded(f func(captureID model.CaptureID,
 // SetOnCaptureRemoved registers a function that is called when a capture goes offline.
 func (s *GlobalReactorState) SetOnCaptureRemoved(f func(captureID model.CaptureID)) {
 	s.onCaptureRemoved = f
+}
+
+// SetOnUpstreamAdded registers a function that is called when an upstream is added.
+func (s *GlobalReactorState) SetOnUpstreamAdded(
+	f func(upstreamID model.UpstreamID, info *model.UpstreamInfo),
+) {
+	s.onUpstreamAdded = f
+}
+
+// SetOnUpstreamRemoved registers a function that is called when an upstream is removed
+func (s *GlobalReactorState) SetOnUpstreamRemoved(f func(upstreamID model.UpstreamID)) {
+	s.onUpstreamRemoved = f
 }
 
 // ChangefeedReactorState represents a changefeed state which stores all key-value pairs of a changefeed in ETCD

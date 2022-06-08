@@ -21,7 +21,6 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/txnutil"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
-	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/tikv/client-go/v2/tikv"
 )
@@ -50,7 +49,7 @@ func (h *OpenAPIV2) ResolveLock(c *gin.Context) {
 		_ = c.Error(cerror.ErrAPIInvalidParam.Wrap(err))
 		return
 	}
-	up := h.capture.UpstreamManager.Get(upstream.DefaultUpstreamID)
+	up := h.capture.UpstreamManager.GetDefaultUpstream()
 	txnResolver := txnutil.NewLockerResolver(up.KVStorage.(tikv.Storage),
 		model.DefaultChangeFeedID("changefeed-client"),
 		util.RoleClient)
@@ -64,7 +63,7 @@ func (h *OpenAPIV2) ResolveLock(c *gin.Context) {
 
 // DeleteServiceGcSafePoint Delete CDC service GC safepoint in PD
 func (h *OpenAPIV2) DeleteServiceGcSafePoint(c *gin.Context) {
-	up := h.capture.UpstreamManager.Get(upstream.DefaultUpstreamID)
+	up := h.capture.UpstreamManager.GetDefaultUpstream()
 	err := gc.RemoveServiceGCSafepoint(c, up.PDClient, h.capture.EtcdClient.GetGCServiceID())
 	if err != nil {
 		_ = c.Error(err)

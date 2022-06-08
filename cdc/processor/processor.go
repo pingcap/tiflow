@@ -62,7 +62,7 @@ type processor struct {
 	captureInfo  *model.CaptureInfo
 	changefeed   *orchestrator.ChangefeedReactorState
 
-	upStream *upstream.Upstream
+	upstream *upstream.Upstream
 
 	tables map[model.TableID]tablepipeline.TablePipeline
 
@@ -248,7 +248,7 @@ func (p *processor) GetCheckpoint() (checkpointTs, resolvedTs model.Ts) {
 func newProcessor(ctx cdcContext.Context, upStream *upstream.Upstream) *processor {
 	changefeedID := ctx.ChangefeedVars().ID
 	p := &processor{
-		upStream:      upStream,
+		upstream:      upStream,
 		tables:        make(map[model.TableID]tablepipeline.TablePipeline),
 		errCh:         make(chan error, 1),
 		changefeedID:  changefeedID,
@@ -317,7 +317,14 @@ func isProcessorIgnorableError(err error) bool {
 // The main logic of processor is in this function, including the calculation of many kinds of ts, maintain table pipeline, error handling, etc.
 func (p *processor) Tick(ctx cdcContext.Context, state *orchestrator.ChangefeedReactorState) (orchestrator.ReactorState, error) {
 	// skip this tick
-	if !p.upStream.IsNormal() {
+	if err := p.upstream.Error(); err != nil {
+		return p.handleErr(ctx, state, err)
+	}
+	// skip this tick
+	if !p.upstream.IsNormal() {
+		log.Warn("upstream is not ready, skip",
+			zap.Uint64("id", p.upstream.ID),
+			zap.Strings("pd", p.upstream.PdEndpoints))
 		return state, nil
 	}
 	startTime := time.Now()
@@ -341,6 +348,13 @@ func (p *processor) Tick(ctx cdcContext.Context, state *orchestrator.ChangefeedR
 	if err == nil {
 		return state, nil
 	}
+	return p.handleErr(ctx, state, err)
+}
+
+func (p *processor) handleErr(ctx cdcContext.Context,
+	state *orchestrator.ChangefeedReactorState,
+	err error,
+) (orchestrator.ReactorState, error) {
 	if isProcessorIgnorableError(err) {
 		log.Info("processor exited", cdcContext.ZapFieldCapture(ctx), cdcContext.ZapFieldChangefeed(ctx))
 		return state, cerror.ErrReactorFinished.GenWithStackByArgs()
@@ -391,7 +405,7 @@ func (p *processor) tick(ctx cdcContext.Context, state *orchestrator.ChangefeedR
 	}
 	// it is no need to check the error here, because we will use
 	// local time when an error return, which is acceptable
-	pdTime, _ := p.upStream.PDClock.CurrentTime()
+	pdTime, _ := p.upstream.PDClock.CurrentTime()
 
 	p.handlePosition(oracle.GetPhysical(pdTime))
 	p.pushResolvedTs2Table()
@@ -560,7 +574,7 @@ func (p *processor) handleErrorCh(ctx cdcContext.Context) error {
 }
 
 func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.SchemaStorage, error) {
-	kvStorage := p.upStream.KVStorage
+	kvStorage := p.upstream.KVStorage
 	ddlspans := []regionspan.Span{regionspan.GetDDLSpan(), regionspan.GetAddIndexDDLSpan()}
 	checkpointTs := p.changefeed.Info.GetCheckpointTs(p.changefeed.Status)
 	kvCfg := config.GetGlobalServerConfig().KVClient
@@ -569,11 +583,11 @@ func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.S
 	stdCtx = contextutil.PutRoleInCtx(stdCtx, util.RoleProcessor)
 	ddlPuller := puller.NewPuller(
 		stdCtx,
-		p.upStream.PDClient,
-		p.upStream.GrpcPool,
-		p.upStream.RegionCache,
-		p.upStream.KVStorage,
-		p.upStream.PDClock,
+		p.upstream.PDClient,
+		p.upstream.GrpcPool,
+		p.upstream.RegionCache,
+		p.upstream.KVStorage,
+		p.upstream.PDClock,
 		ctx.ChangefeedVars().ID,
 		checkpointTs,
 		ddlspans,
@@ -813,7 +827,7 @@ func (p *processor) createTablePipelineImpl(
 	}
 	table, err := tablepipeline.NewTableActor(
 		ctx,
-		p.upStream,
+		p.upstream,
 		p.mounter,
 		tableID,
 		tableName,
@@ -910,7 +924,7 @@ func (p *processor) Close() error {
 	}
 	p.cancel()
 	p.wg.Wait()
-	p.upStream.Release()
+	p.upstream.Release()
 
 	if p.agent == nil {
 		return nil

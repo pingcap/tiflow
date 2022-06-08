@@ -54,6 +54,7 @@ func TestEtcdKey(t *testing.T) {
 			Tp:           CDCKeyTypeChangefeedInfo,
 			ChangefeedID: model.DefaultChangeFeedID("test-_@#$%changefeed"),
 			ClusterID:    DefaultCDCClusterID,
+			Namespace:    model.DefaultNamespace,
 		},
 	}, {
 		key: fmt.Sprintf("%s", DefaultClusterAndNamespacePrefix) +
@@ -62,6 +63,7 @@ func TestEtcdKey(t *testing.T) {
 			Tp:           CDCKeyTypeChangefeedInfo,
 			ChangefeedID: model.DefaultChangeFeedID("test/changefeed"),
 			ClusterID:    DefaultCDCClusterID,
+			Namespace:    model.DefaultNamespace,
 		},
 	}, {
 		key: fmt.Sprintf("%s", DefaultClusterAndNamespacePrefix) +
@@ -70,6 +72,7 @@ func TestEtcdKey(t *testing.T) {
 			Tp:           CDCKeyTypeChangeFeedStatus,
 			ChangefeedID: model.DefaultChangeFeedID("test-changefeed"),
 			ClusterID:    DefaultCDCClusterID,
+			Namespace:    model.DefaultNamespace,
 		},
 	}, {
 		key: "/tidb/cdc/default/name/task" +
@@ -82,6 +85,7 @@ func TestEtcdKey(t *testing.T) {
 			},
 			CaptureID: "6bbc01c8-0605-4f86-a0f9-b3119109b225",
 			ClusterID: DefaultCDCClusterID,
+			Namespace: "name",
 		},
 	}, {
 		key: fmt.Sprintf("%s", DefaultClusterAndNamespacePrefix) +
@@ -91,6 +95,15 @@ func TestEtcdKey(t *testing.T) {
 			ChangefeedID: model.DefaultChangeFeedID("test/changefeed"),
 			CaptureID:    "6bbc01c8-0605-4f86-a0f9-b3119109b225",
 			ClusterID:    DefaultCDCClusterID,
+			Namespace:    model.DefaultNamespace,
+		},
+	}, {
+		key: DefaultClusterAndNamespacePrefix + "/upstream/12345",
+		expected: &CDCKey{
+			Tp:         CDCKeyTypeUpStream,
+			ClusterID:  DefaultCDCClusterID,
+			Namespace:  model.DefaultNamespace,
+			UpstreamID: 12345,
 		},
 	}}
 	for _, tc := range testcases {

@@ -465,6 +465,8 @@ func TestGlobalStateUpdate(t *testing.T) {
 					"/task/position/6bbc01c8-0605-4f86-a0f9-b3119109b225/test1",
 				fmt.Sprintf("%s", etcd.DefaultClusterAndNamespacePrefix) +
 					"/task/position/6bbc01c8-0605-4f86-a0f9-b3119109b225/test2",
+				fmt.Sprintf("%s", etcd.DefaultClusterAndNamespacePrefix) +
+					"/upstream/12345",
 			},
 			updateValue: []string{
 				`6bbc01c8-0605-4f86-a0f9-b3119109b225`,
@@ -474,6 +476,7 @@ func TestGlobalStateUpdate(t *testing.T) {
 "admin-job-type":0}`,
 				`{"resolved-ts":421980720003809281,"checkpoint-ts":421980719742451713,
 "admin-job-type":0}`,
+				`{}`,
 			},
 			expected: GlobalReactorState{
 				ClusterID: etcd.DefaultCDCClusterID,
@@ -482,6 +485,9 @@ func TestGlobalStateUpdate(t *testing.T) {
 					ID:            "6bbc01c8-0605-4f86-a0f9-b3119109b225",
 					AdvertiseAddr: "127.0.0.1:8300",
 				}},
+				Upstreams: map[model.UpstreamID]*model.UpstreamInfo{
+					model.UpstreamID(12345): {},
+				},
 				Changefeeds: map[model.ChangeFeedID]*ChangefeedReactorState{
 					model.DefaultChangeFeedID("test1"): {
 						ClusterID: etcd.DefaultCDCClusterID,
@@ -538,6 +544,7 @@ func TestGlobalStateUpdate(t *testing.T) {
 				ClusterID: etcd.DefaultCDCClusterID,
 				Owner:     map[string]struct{}{"22317526c4fc9a38": {}},
 				Captures:  map[model.CaptureID]*model.CaptureInfo{},
+				Upstreams: map[model.UpstreamID]*model.UpstreamInfo{},
 				Changefeeds: map[model.ChangeFeedID]*ChangefeedReactorState{
 					model.DefaultChangeFeedID("test2"): {
 						ClusterID: etcd.DefaultCDCClusterID,

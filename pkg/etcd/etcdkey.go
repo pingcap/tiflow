@@ -15,6 +15,7 @@ package etcd
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/pingcap/log"
@@ -32,6 +33,7 @@ const (
 	changefeedInfoKey   = "/changefeed/info"
 	changefeedStatusKey = "/changefeed/status"
 	metaVersionKey      = "/meta/meta-version"
+	upstreamKey         = "/upstream"
 
 	// DeletionCounterKey is the key path for the counter of deleted keys
 	DeletionCounterKey = metaPrefix + "/meta/ticdc-delete-etcd-key-count"
@@ -54,6 +56,7 @@ const (
 	CDCKeyTypeChangeFeedStatus
 	CDCKeyTypeTaskPosition
 	CDCKeyTypeMetaVersion
+	CDCKeyTypeUpStream
 )
 
 // CDCKey represents an etcd key which is defined by TiCDC
@@ -86,6 +89,8 @@ type CDCKey struct {
 	CaptureID    string
 	OwnerLeaseID string
 	ClusterID    string
+	UpstreamID   model.UpstreamID
+	Namespace    string
 }
 
 // BaseKey is the common prefix of the keys with cluster id in CDC
@@ -130,6 +135,7 @@ func (k *CDCKey) Parse(clusterID, key string) error {
 	} else {
 		namespace := parts[2]
 		key = key[len(namespace)+1:]
+		k.Namespace = namespace
 		switch {
 		case strings.HasPrefix(key, changefeedInfoKey):
 			k.Tp = CDCKeyTypeChangefeedInfo
@@ -139,8 +145,15 @@ func (k *CDCKey) Parse(clusterID, key string) error {
 				ID:        key[len(changefeedInfoKey)+1:],
 			}
 			k.OwnerLeaseID = ""
+		case strings.HasPrefix(key, upstreamKey):
+			k.Tp = CDCKeyTypeUpStream
+			k.CaptureID = ""
+			id, err := strconv.ParseUint(key[len(upstreamKey)+1:], 10, 64)
+			if err != nil {
+				return err
+			}
+			k.UpstreamID = id
 		case strings.HasPrefix(key, changefeedStatusKey):
-
 			k.Tp = CDCKeyTypeChangeFeedStatus
 			k.CaptureID = ""
 			k.ChangefeedID = model.ChangeFeedID{
@@ -181,13 +194,16 @@ func (k *CDCKey) String() string {
 			"/" + k.ChangefeedID.ID
 	case CDCKeyTypeChangeFeedStatus:
 		return NamespacedPrefix(k.ClusterID, k.ChangefeedID.Namespace) + changefeedStatusKey +
-
 			"/" + k.ChangefeedID.ID
 	case CDCKeyTypeTaskPosition:
 		return NamespacedPrefix(k.ClusterID, k.ChangefeedID.Namespace) + taskPositionKey +
 			"/" + k.CaptureID + "/" + k.ChangefeedID.ID
 	case CDCKeyTypeMetaVersion:
 		return BaseKey(k.ClusterID) + metaPrefix + metaVersionKey
+	case CDCKeyTypeUpStream:
+		return fmt.Sprintf("%s%s/%d",
+			NamespacedPrefix(k.ClusterID, k.Namespace),
+			upstreamKey, k.UpstreamID)
 	}
 	log.Panic("unreachable")
 	return ""

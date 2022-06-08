@@ -141,6 +141,10 @@ func newChangefeed4Test(
 
 func (c *changefeed) Tick(ctx cdcContext.Context, state *orchestrator.ChangefeedReactorState, captures map[model.CaptureID]*model.CaptureInfo) {
 	startTime := time.Now()
+	if err := c.upStream.Error(); err != nil {
+		c.handleErr(ctx, err)
+		return
+	}
 	// skip this tick
 	if !c.upStream.IsNormal() {
 		return
@@ -165,22 +169,26 @@ func (c *changefeed) Tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 	}
 
 	if err != nil {
-		log.Error("an error occurred in Owner",
-			zap.String("namespace", c.id.Namespace),
-			zap.String("changefeed", c.id.ID), zap.Error(err))
-		var code string
-		if rfcCode, ok := cerror.RFCCode(err); ok {
-			code = string(rfcCode)
-		} else {
-			code = string(cerror.ErrOwnerUnknown.RFCCode())
-		}
-		c.feedStateManager.handleError(&model.RunningError{
-			Addr:    contextutil.CaptureAddrFromCtx(ctx),
-			Code:    code,
-			Message: err.Error(),
-		})
-		c.releaseResources(ctx)
+		c.handleErr(ctx, err)
 	}
+}
+
+func (c *changefeed) handleErr(ctx cdcContext.Context, err error) {
+	log.Error("an error occurred in Owner",
+		zap.String("namespace", c.id.Namespace),
+		zap.String("changefeed", c.id.ID), zap.Error(err))
+	var code string
+	if rfcCode, ok := cerror.RFCCode(err); ok {
+		code = string(rfcCode)
+	} else {
+		code = string(cerror.ErrOwnerUnknown.RFCCode())
+	}
+	c.feedStateManager.handleError(&model.RunningError{
+		Addr:    contextutil.CaptureAddrFromCtx(ctx),
+		Code:    code,
+		Message: err.Error(),
+	})
+	c.releaseResources(ctx)
 }
 
 func (c *changefeed) checkStaleCheckpointTs(ctx cdcContext.Context, checkpointTs uint64) error {

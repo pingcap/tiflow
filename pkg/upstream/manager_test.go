@@ -31,7 +31,7 @@ func TestUpstream(t *testing.T) {
 	require.NotNil(t, up1)
 
 	// test Add
-	manager.Add(DefaultUpstreamID, []string{}, config.GetGlobalServerConfig().Security)
+	manager.add(DefaultUpstreamID, []string{}, config.GetGlobalServerConfig().Security)
 
 	// test Get
 	testID := uint64(1)

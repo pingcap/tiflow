@@ -15,14 +15,12 @@ package v2
 
 import (
 	"context"
-	"encoding/json"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/capture"
-	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -31,7 +29,6 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
-	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/tikv/client-go/v2/oracle"
 	pd "github.com/tikv/pd/client"
@@ -151,7 +148,7 @@ func VerifyCreateChangefeedConfig(
 	// We should not close kvStorage since all kvStorage in cdc is the same one.
 	// defer kvStorage.Close()
 
-	if !replicaCfg.ForceReplicate && !replicaCfg.IgnoreIneligibleTable {
+	if !replicaCfg.ForceReplicate && !cfg.ReplicaConfig.IgnoreIneligibleTable {
 		ineligibleTables, _, err := entry.VerifyTables(replicaCfg, kvStorage, cfg.StartTs)
 		if err != nil {
 			return nil, err
@@ -162,17 +159,12 @@ func VerifyCreateChangefeedConfig(
 	}
 
 	// verify sink
-	tz, err := util.GetTimezone(replicaCfg.Sink.TimeZone)
-	if err != nil {
-		return nil, cerror.ErrAPIInvalidParam.Wrap(errors.Annotatef(err,
-			"invalid timezone:%s", replicaCfg.Sink.TimeZone))
-	}
-	ctx = contextutil.PutTimezoneInCtx(ctx, tz)
 	if err := sink.Validate(ctx, cfg.SinkURI, replicaCfg, map[string]string{}); err != nil {
 		return nil, err
 	}
 
 	return &model.ChangeFeedInfo{
+		UpstreamID:        pdClient.GetClusterID(ctx),
 		Namespace:         cfg.Namespace,
 		ID:                cfg.ID,
 		SinkURI:           cfg.SinkURI,
@@ -191,13 +183,49 @@ func VerifyCreateChangefeedConfig(
 
 func fillReplicaConfig(cfg *ReplicaConfig) (*config.ReplicaConfig, error) {
 	res := config.GetDefaultReplicaConfig()
-	data, err := json.Marshal(cfg)
-	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrAPIInvalidParam, err)
+	res.CaseSensitive = cfg.CaseSensitive
+	res.EnableOldValue = cfg.EnableOldValue
+	res.ForceReplicate = cfg.ForceReplicate
+	res.CheckGCSafePoint = cfg.CheckGCSafePoint
+	if cfg.Filter != nil {
+		res.Filter = &config.FilterConfig{
+			Rules:                 cfg.Filter.Rules,
+			MySQLReplicationRules: cfg.Filter.MySQLReplicationRules,
+			IgnoreTxnStartTs:      cfg.Filter.IgnoreTxnStartTs,
+			DDLAllowlist:          cfg.Filter.DDLAllowlist,
+		}
 	}
-	err = json.Unmarshal(data, res)
-	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrAPIInvalidParam, err)
+	if cfg.Consistent != nil {
+		res.Consistent = &config.ConsistentConfig{
+			Level:             cfg.Consistent.Level,
+			MaxLogSize:        cfg.Consistent.MaxLogSize,
+			FlushIntervalInMs: cfg.Consistent.FlushIntervalInMs,
+			Storage:           cfg.Consistent.Storage,
+		}
+	}
+	if cfg.Sink != nil {
+		var dispatchRules []*config.DispatchRule
+		for _, rule := range cfg.Sink.DispatchRules {
+			dispatchRules = append(dispatchRules, &config.DispatchRule{
+				Matcher:        rule.Matcher,
+				DispatcherRule: "",
+				PartitionRule:  rule.PartitionRule,
+				TopicRule:      rule.TopicRule,
+			})
+		}
+		var columnSelectors []*config.ColumnSelector
+		for _, selector := range cfg.Sink.ColumnSelectors {
+			columnSelectors = append(columnSelectors, &config.ColumnSelector{
+				Matcher: selector.Matcher,
+				Columns: selector.Columns,
+			})
+		}
+		res.Sink = &config.SinkConfig{
+			DispatchRules:   dispatchRules,
+			Protocol:        cfg.Sink.Protocol,
+			ColumnSelectors: columnSelectors,
+			SchemaRegistry:  cfg.Sink.SchemaRegistry,
+		}
 	}
 	return res, nil
 }

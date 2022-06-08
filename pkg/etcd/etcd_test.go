@@ -275,10 +275,13 @@ func TestCreateChangefeed(t *testing.T) {
 		SinkURI: "root@tcp(127.0.0.1:3306)/mysql",
 	}
 
-	err := s.client.CreateChangefeedInfo(ctx, detail, model.DefaultChangeFeedID("test-id"))
+	upstreamInfo := &model.UpstreamInfo{ID: 1}
+	err := s.client.CreateChangefeedInfo(ctx,
+		upstreamInfo, detail, model.DefaultChangeFeedID("test-id"))
 	require.NoError(t, err)
 
-	err = s.client.CreateChangefeedInfo(ctx, detail, model.DefaultChangeFeedID("test-id"))
+	err = s.client.CreateChangefeedInfo(ctx,
+		upstreamInfo, detail, model.DefaultChangeFeedID("test-id"))
 	require.True(t, cerror.ErrChangeFeedAlreadyExists.Equal(err))
 }
 
