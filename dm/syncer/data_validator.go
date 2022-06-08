@@ -27,9 +27,10 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/util/filter"
-	"github.com/pingcap/tiflow/dm/syncer/binlogstream"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
+
+	"github.com/pingcap/tiflow/dm/syncer/binlogstream"
 
 	cdcmodel "github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/dm/dm/config"
@@ -45,6 +46,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/relay"
 	"github.com/pingcap/tiflow/dm/syncer/dbconn"
+	"github.com/pingcap/tiflow/dm/syncer/metrics"
 	"github.com/pingcap/tiflow/pkg/sqlmodel"
 )
 
@@ -212,6 +214,8 @@ type DataValidator struct {
 	lastFlushTime        time.Time
 	location             *binlog.Location
 	loadedPendingChanges map[string]*tableChangeJob
+
+	vmetric *metrics.ValidatorMetrics
 }
 
 func NewContinuousDataValidator(cfg *config.SubTaskConfig, syncerObj *Syncer, startWithSubtask bool) *DataValidator {
@@ -219,6 +223,7 @@ func NewContinuousDataValidator(cfg *config.SubTaskConfig, syncerObj *Syncer, st
 		cfg:              cfg,
 		syncer:           syncerObj,
 		startWithSubtask: startWithSubtask,
+		vmetric:          metrics.NewValidatorMetrics(cfg.Name, cfg.SourceID),
 	}
 	v.L = log.With(zap.String("task", cfg.Name), zap.String("unit", "continuous validator"))
 
@@ -399,7 +404,12 @@ func (v *DataValidator) printStatusRoutine() {
 			speed := float64((currProcessedBinlogSize-prevProcessedBinlogSize)>>20) / interval.Seconds()
 			prevProcessedBinlogSize = currProcessedBinlogSize
 			prevTime = currTime
-
+			counts, err := v.getErrorRowCount(validatorDmctlOpTimeout)
+			if err == nil {
+				v.vmetric.ErrorCount.Set(float64(counts[pb.ValidateErrorState_NewErr]))
+			} else {
+				v.L.Warn("failed to get error row count", zap.Error(err))
+			}
 			v.L.Info("validator status",
 				zap.Int64s("processed(i, u, d)", processed),
 				zap.Int64s("pending(i, u, d)", pending),
@@ -470,6 +480,39 @@ func (v *DataValidator) waitSyncerSynced(currLoc binlog.Location) error {
 				return nil
 			}
 			v.L.Debug("wait syncer synced", zap.Reflect("loc", currLoc))
+		}
+	}
+}
+
+func (v *DataValidator) updateValidatorBinlogMetric(currLoc binlog.Location) {
+	v.vmetric.BinlogPos.Set(float64(currLoc.Position.Pos))
+	index, err := binlog.GetFilenameIndex(currLoc.Position.Name)
+	if err != nil {
+		v.L.Warn("fail to record validator binlog file index")
+	} else {
+		v.vmetric.BinlogFile.Set(float64(index))
+	}
+}
+
+func (v *DataValidator) updateValidatorBinlogLag(currLoc binlog.Location) {
+	syncerLoc := v.syncer.getFlushedGlobalPoint()
+	index, err := binlog.GetFilenameIndex(currLoc.Position.Name)
+	if err != nil {
+		v.L.Warn("fail to record validator binlog file index")
+	}
+	if syncerLoc.Position.Name == currLoc.Position.Name {
+		// same file: record the log pos latency
+		v.vmetric.LogPosLatency.Set(float64(syncerLoc.Position.Pos - currLoc.Position.Pos))
+		v.vmetric.LogFileLatency.Set(float64(0))
+	} else {
+		var syncerLogIdx int64
+		v.vmetric.LogPosLatency.Set(float64(0))
+		syncerLogIdx, err = binlog.GetFilenameIndex(syncerLoc.Position.Name)
+		if err != nil {
+			v.vmetric.LogFileLatency.Set(float64(syncerLogIdx - index))
+		} else {
+			v.vmetric.LogFileLatency.Set(float64(0))
+			v.L.Warn("fail to get syncer's log file index")
 		}
 	}
 }
@@ -640,7 +683,6 @@ func (v *DataValidator) doValidate() {
 		default:
 			currLoc.Position.Pos = e.Header.LogPos
 		}
-
 		// wait until syncer synced current event
 		err = v.waitSyncerSynced(currLoc)
 		if err != nil {
@@ -648,7 +690,9 @@ func (v *DataValidator) doValidate() {
 			v.sendError(err)
 			return
 		}
-
+		// update validator metric
+		v.updateValidatorBinlogMetric(currLoc)
+		v.updateValidatorBinlogLag(currLoc)
 		v.processedBinlogSize.Add(int64(e.Header.EventSize))
 
 		switch ev := e.Event.(type) {
@@ -702,6 +746,7 @@ func (v *DataValidator) doValidate() {
 func (v *DataValidator) Stop() {
 	v.stopInner()
 	v.errProcessWg.Wait()
+	metrics.RemoveValidatorLabelValuesWithTask(v.cfg.Name)
 }
 
 func (v *DataValidator) stopInner() {

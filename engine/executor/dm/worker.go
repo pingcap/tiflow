@@ -163,15 +163,6 @@ func (w *dmWorker) CloseImpl(ctx context.Context) error {
 	return recordErr
 }
 
-// closeAndExit closes the task and exits.
-func (w *dmWorker) closeAndExit(ctx context.Context, status libModel.WorkerStatus) error {
-	err := w.CloseImpl(ctx)
-	if err != nil {
-		log.L().Warn("fail to close task", log.ShortError(err))
-	}
-	return w.Exit(ctx, status, nil)
-}
-
 // setupstorage opens and configs external storage
 func (w *dmWorker) setupstorage(ctx context.Context) error {
 	rid := dm.NewDMResourceID(w.cfg.Name, w.cfg.SourceID)
@@ -215,7 +206,7 @@ func (w *dmWorker) tryUpdateStatus(ctx context.Context) error {
 			return nil
 		}
 	}
-	return w.closeAndExit(ctx, status)
+	return w.Exit(ctx, status, nil)
 }
 
 // workerStatus gets worker status.

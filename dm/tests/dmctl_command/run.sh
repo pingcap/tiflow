@@ -432,6 +432,13 @@ function run_validation_start_stop_cmd {
 		"\"stage\": \"Running\"" 0 \
 		"\"stage\": \"Stopped\"" 1
 }
+function query_status_disable_validator() {
+	dmctl_start_task $cur/conf/dm-task2.yaml --remove-meta
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test2" \
+		"\"validation\": null"
+	dmctl_stop_task "test2"
+}
 
 function trigger_checkpoint_flush() {
 	sleep 1.5
@@ -458,6 +465,9 @@ function prepare_for_validator_cmd {
 	cp $cur/conf/source2.yaml $WORK_DIR/source2.yaml
 	dmctl_operate_source create $WORK_DIR/source1.yaml $SOURCE_ID1
 	dmctl_operate_source create $WORK_DIR/source2.yaml $SOURCE_ID2
+
+	query_status_disable_validator
+
 	dmctl_start_task $cur/conf/dm-task.yaml --remove-meta
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 
@@ -559,6 +569,13 @@ function run_validator_cmd {
 		"new\/ignored\/resolved: 2\/0\/0" 1 \
 		"\"stage\": \"Running\"" 2 \
 		"\"stage\": \"Stopped\"" 3
+	# check the validator is stopped but syncer remains active
+	curl 127.0.0.1:$WORKER1_PORT/debug/pprof/goroutine?debug=2 >$WORK_DIR/goroutine.worker1
+	check_log_not_contains $WORK_DIR/goroutine.worker1 "validator"
+	check_log_contains $WORK_DIR/goroutine.worker1 "syncer"
+	curl 127.0.0.1:$WORKER2_PORT/debug/pprof/goroutine?debug=2 >$WORK_DIR/goroutine.worker2
+	check_log_not_contains $WORK_DIR/goroutine.worker2 "validator"
+	check_log_contains $WORK_DIR/goroutine.worker2 "syncer"
 	# still able to query validation error
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation show-error --error all test" \
@@ -578,6 +595,23 @@ function run_validator_cmd {
 		"validation clear-error test --all"
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation status test" \
+		"new\/ignored\/resolved: 0\/0\/0" 2
+	run_sql_source1 "insert into dmctl_command.t1 values(-10,'ignore-row')"
+	run_sql_source1 "create table dmctl_command.t_trigger_flush110(id int primary key)" # trigger flush
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		"\"synced\": true" 2 \
+		"\"stage\": \"Stopped\"" 2
+	run_sql_tidb "select * from dmctl_command.t1"
+	check_not_contains "id: -10" # sync failed due to GO_FAILPOINTS
+	# no validation error, because validator has been stopped
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation status test" \
+		"new\/ignored\/resolved: 0\/0\/0" 2
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		"insert\/update\/delete: 4\/1\/1\"" 1 \
+		"insert\/update\/delete: 0\/0\/1\"" 1 \
 		"new\/ignored\/resolved: 0\/0\/0" 2
 
 	dmctl_stop_task "test"
