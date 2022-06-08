@@ -90,6 +90,7 @@ func (m *JobMaster) Tick(ctx context.Context) error {
 	switch m.status.State {
 	case masterStateUninit:
 		m.createResources(m.config.ResourceCount)
+		m.status.OnFinishedCreatingResources()
 		return m.persistMasterStatus(ctx)
 	case masterStateInProgress:
 		if err := m.createWorkerIfNecessary(); err != nil {
