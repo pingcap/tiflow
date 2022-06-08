@@ -343,6 +343,7 @@ func (state *pollState) tryGetIterator(uid uint32, tableID uint64) (*message.Ite
 				encoding.EncodeTsKey(uid, tableID, state.maxResolvedTs+1),
 			},
 			ResolvedTs: state.maxResolvedTs,
+			CRTsFilter: [2]uint64{state.exhaustedResolvedTs + 1, state.maxResolvedTs},
 			IterCallback: func(iter *message.LimitedIterator) {
 				iterCh <- iter
 				close(iterCh)

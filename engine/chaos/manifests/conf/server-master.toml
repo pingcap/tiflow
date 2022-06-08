@@ -7,4 +7,4 @@ auth.user = "root"
 auth.passwd = ""
 
 [user-metastore-conf]
-endpoints = ["metastore-user-etcd-0.metastore:12479"]
+endpoints = ["metastore:12479"]

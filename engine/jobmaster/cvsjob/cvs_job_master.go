@@ -21,12 +21,13 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/gin-gonic/gin"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
 
-	cvsTask "github.com/pingcap/tiflow/engine/executor/cvsTask"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	cvsTask "github.com/pingcap/tiflow/engine/executor/cvs"
 	"github.com/pingcap/tiflow/engine/executor/worker"
 	"github.com/pingcap/tiflow/engine/lib"
 	libModel "github.com/pingcap/tiflow/engine/lib/model"
@@ -85,6 +86,8 @@ type JobMaster struct {
 	ctx     context.Context
 	clocker clock.Clock
 }
+
+var _ lib.JobMasterImpl = (*JobMaster)(nil)
 
 // RegisterWorker is used to register cvs job master into global registry
 func RegisterWorker() {
@@ -399,6 +402,9 @@ func (jm *JobMaster) OnJobManagerMessage(topic p2p.Topic, message p2p.MessageVal
 
 	return nil
 }
+
+// OnOpenAPIInitialized implements JobMasterImpl.OnOpenAPIInitialized.
+func (jm *JobMaster) OnOpenAPIInitialized(apiGroup *gin.RouterGroup) {}
 
 // Status implements JobMasterImpl.Status
 func (jm *JobMaster) Status() libModel.WorkerStatus {

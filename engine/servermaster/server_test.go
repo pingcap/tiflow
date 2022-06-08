@@ -30,6 +30,7 @@ import (
 	"github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/manager"
 	"github.com/pingcap/tiflow/engine/pkg/notifier"
+	"github.com/pingcap/tiflow/engine/servermaster/cluster"
 	"github.com/pingcap/tiflow/engine/servermaster/scheduler"
 
 	"github.com/phayes/freeport"
@@ -196,7 +197,9 @@ func testRunLeaderService(t *testing.T) {
 	err = s.startGrpcSrv(ctx)
 	require.Nil(t, err)
 
-	err = s.reset(ctx)
+	sessionCfg, err := s.generateSessionConfig()
+	require.Nil(t, err)
+	session, err := cluster.NewEtcdSession(ctx, s.etcdClient, sessionCfg)
 	require.Nil(t, err)
 
 	var wg sync.WaitGroup
@@ -206,7 +209,7 @@ func testRunLeaderService(t *testing.T) {
 		s.msgService.GetMessageServer().Run(ctx)
 	}()
 
-	err = s.campaign(ctx, time.Second)
+	_, _, err = session.Campaign(ctx, time.Second)
 	require.Nil(t, err)
 
 	ctx1, cancel1 := context.WithTimeout(ctx, time.Second)
@@ -215,7 +218,7 @@ func testRunLeaderService(t *testing.T) {
 	require.EqualError(t, err, context.DeadlineExceeded.Error())
 
 	// runLeaderService exits, try to campaign to be leader and run leader servcie again
-	err = s.campaign(ctx, time.Second)
+	_, _, err = session.Campaign(ctx, time.Second)
 	require.Nil(t, err)
 	ctx2, cancel2 := context.WithTimeout(ctx, time.Second)
 	defer cancel2()
@@ -251,6 +254,10 @@ func (m *mockJobManager) CancelJob(ctx context.Context, req *pb.CancelJobRequest
 }
 
 func (m *mockJobManager) PauseJob(ctx context.Context, req *pb.PauseJobRequest) *pb.PauseJobResponse {
+	panic("not implemented")
+}
+
+func (m *mockJobManager) DebugJob(ctx context.Context, req *pb.DebugJobRequest) *pb.DebugJobResponse {
 	panic("not implemented")
 }
 

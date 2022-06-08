@@ -21,14 +21,15 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 
+	"github.com/pingcap/tiflow/dm/pkg/log"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/lib"
 	libModel "github.com/pingcap/tiflow/engine/lib/model"
 	"github.com/pingcap/tiflow/engine/pkg/errors"
+	"github.com/pingcap/tiflow/engine/pkg/tenant"
 )
 
 func newQueryJob() *cobra.Command {
@@ -38,7 +39,31 @@ func newQueryJob() *cobra.Command {
 		RunE:  runQueryJob,
 	}
 	cmd.Flags().String("job-id", "", "the targeted job id")
+	cmd.Flags().String("tenant-id", "", "the tenant id")
+	cmd.Flags().String("project-id", "", "the project id")
 	return cmd
+}
+
+func getProjectInfo(cmd *cobra.Command) tenant.ProjectInfo {
+	tenantID, err := cmd.Flags().GetString("tenant-id")
+	if err != nil {
+		log.L().Error("error in parse `--tenant-id`, use default tenant id", zap.Error(err))
+		tenantID = tenant.DefaultUserProjectInfo.TenantID()
+	} else if tenantID == "" {
+		log.L().Warn("tenant-id is empty, use default tenant id")
+		tenantID = tenant.DefaultUserProjectInfo.TenantID()
+	}
+
+	projectID, err := cmd.Flags().GetString("project-id")
+	if err != nil {
+		log.L().Error("error in parse `--project-id`, use default project id", zap.Error(err))
+		projectID = tenant.DefaultUserProjectInfo.ProjectID()
+	} else if projectID == "" {
+		log.L().Warn("project-id is empty, use default project id")
+		projectID = tenant.DefaultUserProjectInfo.ProjectID()
+	}
+
+	return tenant.NewProjectInfo(tenantID, projectID)
 }
 
 func runQueryJob(cmd *cobra.Command, _ []string) error {
@@ -51,10 +76,17 @@ func runQueryJob(cmd *cobra.Command, _ []string) error {
 		log.L().Error("job-id should not be empty")
 		return err
 	}
+
+	project := getProjectInfo(cmd)
+
 	ctx, cancel := context.WithTimeout(context.Background(), rpcTimeout)
 	defer cancel()
 	resp, err := cltManager.MasterClient().QueryJob(ctx, &pb.QueryJobRequest{
 		JobId: id,
+		ProjectInfo: &pb.ProjectInfo{
+			TenantId:  project.TenantID(),
+			ProjectId: project.ProjectID(),
+		},
 	})
 	if err != nil {
 		log.L().Error("failed to query job", zap.Error(err))
@@ -93,6 +125,8 @@ func newSubmitJob() *cobra.Command {
 	cmd.Flags().String("executor-id", "", "the targeted executor id")
 	cmd.Flags().String("job-type", "", "job type")
 	cmd.Flags().String("job-config", "", "config file for the demo job")
+	cmd.Flags().String("tenant-id", "", "the tenant id")
+	cmd.Flags().String("project-id", "", "the project id")
 	return cmd
 }
 
@@ -134,13 +168,19 @@ func runSubmitJob(cmd *cobra.Command, _ []string) error {
 		fmt.Print("error in parse job-config")
 		return err
 	}
+
+	project := getProjectInfo(cmd)
+
 	ctx, cancel := context.WithTimeout(context.Background(), rpcTimeout)
 	defer cancel()
 
 	resp, err := cltManager.MasterClient().SubmitJob(ctx, &pb.SubmitJobRequest{
 		Tp:     jobType,
 		Config: jobConfig,
-		User:   "hanfei",
+		ProjectInfo: &pb.ProjectInfo{
+			TenantId:  project.TenantID(),
+			ProjectId: project.ProjectID(),
+		},
 	})
 	if err != nil {
 		log.L().Error("failed to submit job", zap.Error(err))
@@ -157,6 +197,8 @@ func newPauseJob() *cobra.Command {
 		RunE:  runPauseJob,
 	}
 	cmd.Flags().String("job-id", "", "the targeted job id")
+	cmd.Flags().String("tenant-id", "", "the tenant id")
+	cmd.Flags().String("project-id", "", "the project id")
 	return cmd
 }
 
@@ -170,10 +212,16 @@ func runPauseJob(cmd *cobra.Command, _ []string) error {
 		log.L().Error("job-id should not be empty")
 		return err
 	}
+	project := getProjectInfo(cmd)
+
 	ctx, cancel := context.WithTimeout(context.Background(), rpcTimeout)
 	defer cancel()
 	resp, err := cltManager.MasterClient().PauseJob(ctx, &pb.PauseJobRequest{
-		JobIdStr: id,
+		JobId: id,
+		ProjectInfo: &pb.ProjectInfo{
+			TenantId:  project.TenantID(),
+			ProjectId: project.ProjectID(),
+		},
 	})
 	if err != nil {
 		log.L().Error("failed to query job", zap.Error(err))

@@ -252,7 +252,7 @@ func (c CDCEtcdClient) GetCaptures(ctx context.Context) (int64, []*model.Capture
 }
 
 // GetCaptureInfo get capture info from etcd.
-// return errCaptureNotExist if the capture not exists.
+// return ErrCaptureNotExist if the capture not exists.
 func (c CDCEtcdClient) GetCaptureInfo(ctx context.Context, id string) (info *model.CaptureInfo, err error) {
 	key := GetEtcdKeyCaptureInfo(id)
 
@@ -510,8 +510,8 @@ func (c CDCEtcdClient) DeleteCaptureInfo(ctx context.Context, id string) error {
 }
 
 // GetOwnerID returns the owner id by querying etcd
-func (c CDCEtcdClient) GetOwnerID(ctx context.Context, key string) (string, error) {
-	resp, err := c.Client.Get(ctx, key, clientv3.WithFirstCreate()...)
+func (c CDCEtcdClient) GetOwnerID(ctx context.Context) (string, error) {
+	resp, err := c.Client.Get(ctx, CaptureOwnerKey, clientv3.WithFirstCreate()...)
 	if err != nil {
 		return "", cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
 	}

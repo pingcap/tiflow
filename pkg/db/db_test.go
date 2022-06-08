@@ -43,7 +43,9 @@ func TestDB(t *testing.T) {
 	require.Nil(t, err)
 	testDB(t, db)
 
-	db, err = OpenPebble(ctx, 1, filepath.Join(t.TempDir(), "2"), 0, cfg)
+	// Create a pebble instance without table property collectors as keys in the case
+	// are not constructed with CRTs.
+	db, err = OpenPebble(ctx, 1, filepath.Join(t.TempDir(), "2"), cfg)
 	require.Nil(t, err)
 	testDB(t, db)
 }
@@ -80,7 +82,7 @@ func testDB(t *testing.T, db DB) {
 		Start: []byte(""),
 		Limit: []byte("k4"),
 	}, nil)
-	iter := db.Iterator([]byte(""), []byte("k4"))
+	iter := db.Iterator([]byte(""), []byte("k4"), 0, math.MaxUint64)
 	// Seek
 	require.True(t, liter.Seek([]byte{}))
 	require.True(t, iter.Seek([]byte{}))
@@ -125,7 +127,7 @@ func TestPebbleMetrics(t *testing.T) {
 	cfg.Count = 1
 
 	id := 1
-	option, ws := buildPebbleOption(id, 0, cfg)
+	option, ws := buildPebbleOption(id, cfg)
 	db, err := pebble.Open(t.TempDir(), &option)
 	require.Nil(t, err)
 	pdb := &pebbleDB{
@@ -205,7 +207,7 @@ func BenchmarkNext(b *testing.B) {
 		name: "pebble",
 		dbfn: func(name string) DB {
 			gb := 1024 * 1024 * 1024
-			db, err := OpenPebble(ctx, 1, filepath.Join(b.TempDir(), name), gb, cfg)
+			db, err := OpenPebble(ctx, 1, filepath.Join(b.TempDir(), name), cfg, WithCache(gb))
 			require.Nil(b, err)
 			return db
 		},
@@ -241,7 +243,7 @@ func BenchmarkNext(b *testing.B) {
 				b.ResetTimer()
 
 				b.Run(fmt.Sprintf("next %d event(s)", count), func(b *testing.B) {
-					iter := db.Iterator([]byte{}, bytes.Repeat([]byte{0xff}, len(key)))
+					iter := db.Iterator([]byte{}, bytes.Repeat([]byte{0xff}, len(key)), 0, math.MaxUint64)
 					require.Nil(b, iter.Error())
 					for i := 0; i < b.N; i++ {
 						for ok := iter.Seek([]byte{}); ok; ok = iter.Next() {

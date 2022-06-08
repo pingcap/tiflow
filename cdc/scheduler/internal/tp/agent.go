@@ -85,7 +85,7 @@ func NewAgent(ctx context.Context,
 	etcdCliCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	ownerCaptureID, err := etcdClient.GetOwnerID(etcdCliCtx, etcd.CaptureOwnerKey)
+	ownerCaptureID, err := etcdClient.GetOwnerID(etcdCliCtx)
 	if err != nil {
 		if err != concurrency.ErrElectionNoLeader {
 			return nil, errors.Trace(err)
