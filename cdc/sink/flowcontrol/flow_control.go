@@ -183,7 +183,7 @@ func (c *TableFlowController) enqueueSingleMsg(
 
 	// 3. Split the txn or handle a new txn with the same commitTs.
 	if c.batchGroupCount >= c.batchSize {
-		callback()
+		_ = callback()
 	}
 	c.addEntry(msg, size)
 }
