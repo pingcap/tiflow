@@ -83,6 +83,10 @@ func (m *JobMaster) OnMasterRecovered(ctx context.Context) error {
 
 // Tick implements JobMasterImpl.
 func (m *JobMaster) Tick(ctx context.Context) error {
+	log.L().Info("ResourceJobMaster: Tick",
+		zap.String("job-id", m.JobMasterID()),
+		zap.Any("status", m.status))
+
 	switch m.status.State {
 	case masterStateUninit:
 		m.createResources(m.config.ResourceCount)
