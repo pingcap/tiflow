@@ -20,7 +20,7 @@ import (
 
 	"github.com/stretchr/testify/mock"
 
-	"github.com/pingcap/tiflow/engine/pb"
+	pb "github.com/pingcap/tiflow/engine/enginepb"
 )
 
 // MockExecutorClient is a mock implement of ExecutorClient interface
@@ -146,6 +146,15 @@ func (c *MockServerMasterClient) CancelJob(ctx context.Context, req *pb.CancelJo
 
 	args := c.Mock.Called(ctx, req)
 	return args.Get(0).(*pb.CancelJobResponse), args.Error(1)
+}
+
+// DebugJob implements MasterClient.DebugJob
+func (c *MockServerMasterClient) DebugJob(ctx context.Context, req *pb.DebugJobRequest) (resp *pb.DebugJobResponse, err error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	args := c.Mock.Called(ctx, req)
+	return args.Get(0).(*pb.DebugJobResponse), args.Error(1)
 }
 
 // QueryMetaStore implements MasterClient.QueryMetaStore

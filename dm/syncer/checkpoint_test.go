@@ -106,7 +106,7 @@ func (s *testCheckpointSuite) prepareCheckPointSQL() {
 func (s *testCheckpointSuite) TestCheckPoint(c *C) {
 	tctx := tcontext.Background()
 
-	cp := NewRemoteCheckPoint(tctx, s.cfg, cpid)
+	cp := NewRemoteCheckPoint(tctx, s.cfg, nil, cpid)
 	defer func() {
 		s.mock.ExpectClose()
 		cp.Close()
@@ -263,9 +263,7 @@ func (s *testCheckpointSuite) testGlobalCheckPoint(c *C, cp CheckPoint) {
 	c.Assert(cp.FlushedGlobalPoint().Position, Equals, binlog.MinPosition)
 
 	// try load from mydumper's output
-	dir, err := os.MkdirTemp("", "test_global_checkpoint")
-	c.Assert(err, IsNil)
-	defer os.RemoveAll(dir)
+	dir := c.MkDir()
 
 	filename := filepath.Join(dir, "metadata")
 	err = os.WriteFile(filename, []byte(
@@ -514,7 +512,7 @@ func TestRemoteCheckPointLoadIntoSchemaTracker(t *testing.T) {
 	_, err = schemaTracker.GetTableInfo(tbl2)
 	require.Error(t, err)
 
-	cp := NewRemoteCheckPoint(tcontext.Background(), cfg, "1")
+	cp := NewRemoteCheckPoint(tcontext.Background(), cfg, nil, "1")
 	checkpoint := cp.(*RemoteCheckPoint)
 
 	parser, err := utils.GetParserFromSQLModeStr("")
@@ -545,7 +543,7 @@ func TestLastFlushOutdated(t *testing.T) {
 	cfg.WorkerCount = 0
 	cfg.CheckpointFlushInterval = 1
 
-	cp := NewRemoteCheckPoint(tcontext.Background(), cfg, "1")
+	cp := NewRemoteCheckPoint(tcontext.Background(), cfg, nil, "1")
 	checkpoint := cp.(*RemoteCheckPoint)
 	checkpoint.globalPointSaveTime = time.Now().Add(-2 * time.Second)
 

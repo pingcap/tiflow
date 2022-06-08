@@ -71,7 +71,7 @@ func (conn *UpStreamConn) GetServerUnixTS(ctx context.Context) (int64, error) {
 	return utils.GetServerUnixTS(ctx, conn.BaseDB.DB)
 }
 
-// GetCharsetAndDefaultCollation returns charset and collation info.
+// GetCharsetAndCollationInfo returns charset and collation info.
 func GetCharsetAndCollationInfo(tctx *tcontext.Context, conn *DBConn) (map[string]string, map[int]string, error) {
 	charsetAndDefaultCollation := make(map[string]string)
 	idAndCollationMap := make(map[int]string)
@@ -92,7 +92,7 @@ func GetCharsetAndCollationInfo(tctx *tcontext.Context, conn *DBConn) (map[strin
 		+----------------------------+--------------------+-----+------------+
 	*/
 
-	rows, err := conn.QuerySQL(tctx, "SELECT COLLATION_NAME,CHARACTER_SET_NAME,ID,IS_DEFAULT from INFORMATION_SCHEMA.COLLATIONS")
+	rows, err := conn.QuerySQL(tctx, nil, "SELECT COLLATION_NAME,CHARACTER_SET_NAME,ID,IS_DEFAULT from INFORMATION_SCHEMA.COLLATIONS")
 	if err != nil {
 		return nil, nil, terror.DBErrorAdapt(err, terror.ErrDBDriverError)
 	}

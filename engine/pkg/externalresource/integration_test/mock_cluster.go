@@ -24,8 +24,8 @@ import (
 	"golang.org/x/time/rate"
 
 	"github.com/pingcap/tiflow/engine/client"
+	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/model"
-	"github.com/pingcap/tiflow/engine/pb"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/broker"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/manager"
 	resourcemeta "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
@@ -122,7 +122,7 @@ func (c *mockCluster) Stop() {
 }
 
 func (c *mockCluster) AddBroker(id model.ExecutorID, baseDir string) {
-	config := &storagecfg.Config{Local: &storagecfg.LocalFileConfig{BaseDir: baseDir}}
+	config := &storagecfg.Config{Local: storagecfg.LocalFileConfig{BaseDir: baseDir}}
 	cli := rpcutil.NewFailoverRPCClientsForTest[pb.ResourceManagerClient](&resourceClientStub{service: c.service})
 	brk := broker.NewBroker(config, id, cli)
 

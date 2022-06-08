@@ -16,10 +16,11 @@ package lib
 import (
 	"context"
 
+	"github.com/gin-gonic/gin"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/zap"
 
+	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/engine/executor/worker"
 	libModel "github.com/pingcap/tiflow/engine/lib/model"
 	"github.com/pingcap/tiflow/engine/model"
@@ -32,8 +33,8 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/promutil"
 )
 
-// BaseJobMaster defines an interface that can workr as a job master, it embeds
-// a Worker interface which can run on dateflow engine runtime, and also provides
+// BaseJobMaster defines an interface that can work as a job master, it embeds
+// a Worker interface which can run on dataflow engine runtime, and also provides
 // some utility methods.
 type BaseJobMaster interface {
 	Worker
@@ -46,6 +47,7 @@ type BaseJobMaster interface {
 	JobMasterID() libModel.MasterID
 	UpdateJobStatus(ctx context.Context, status libModel.WorkerStatus) error
 	CurrentEpoch() libModel.Epoch
+	SendMessage(ctx context.Context, topic p2p.Topic, message interface{}, nonblocking bool) error
 
 	// Exit should be called when job master (in user logic) wants to exit
 	// - If err is nil, it means job master exits normally
@@ -63,6 +65,23 @@ type BaseJobMaster interface {
 	IsBaseJobMaster()
 }
 
+// BaseJobMasterExt extends BaseJobMaster with some extra methods.
+// These methods are used by framework and is not visible to JobMasterImpl.
+type BaseJobMasterExt interface {
+	// TriggerOpenAPIInitialize is used to trigger the initialization of openapi handler.
+	// It just delegates to the JobMasterImpl.OnOpenAPIInitialized.
+	TriggerOpenAPIInitialize(apiGroup *gin.RouterGroup)
+
+	// IsBaseJobMasterExt is an empty function used to prevent accidental implementation
+	// of this interface.
+	IsBaseJobMasterExt()
+}
+
+var (
+	_ BaseJobMaster    = (*DefaultBaseJobMaster)(nil)
+	_ BaseJobMasterExt = (*DefaultBaseJobMaster)(nil)
+)
+
 // DefaultBaseJobMaster implements BaseJobMaster interface
 type DefaultBaseJobMaster struct {
 	master    *DefaultBaseMaster
@@ -79,6 +98,12 @@ type JobMasterImpl interface {
 
 	Workload() model.RescUnit
 	OnJobManagerMessage(topic p2p.Topic, message interface{}) error
+	// OnOpenAPIInitialized is called when the OpenAPI is initialized.
+	// This is used to for JobMaster to register its OpenAPI handler.
+	// The implementation must not retain the apiGroup. It must register
+	// its OpenAPI handler before this function returns.
+	// Note: this function is called before Init().
+	OnOpenAPIInitialized(apiGroup *gin.RouterGroup)
 	// IsJobMasterImpl is an empty function used to prevent accidental implementation
 	// of this interface.
 	IsJobMasterImpl()
@@ -242,11 +267,11 @@ func (d *DefaultBaseJobMaster) IsBaseJobMaster() {
 }
 
 // SendMessage delegates the SendMessage or inner worker
-func (d *DefaultBaseJobMaster) SendMessage(ctx context.Context, topic p2p.Topic, message interface{}) (bool, error) {
+func (d *DefaultBaseJobMaster) SendMessage(ctx context.Context, topic p2p.Topic, message interface{}, nonblocking bool) error {
 	ctx = d.errCenter.WithCancelOnFirstError(ctx)
 
 	// master will use WorkerHandle to send message
-	return d.worker.SendMessage(ctx, topic, message)
+	return d.worker.SendMessage(ctx, topic, message, nonblocking)
 }
 
 // IsMasterReady implements BaseJobMaster.IsMasterReady
@@ -271,6 +296,14 @@ func (d *DefaultBaseJobMaster) Exit(ctx context.Context, status libModel.WorkerS
 
 	return d.worker.Exit(ctx, status, err)
 }
+
+// TriggerOpenAPIInitialize implements BaseJobMasterExt.TriggerOpenAPIInitialize.
+func (d *DefaultBaseJobMaster) TriggerOpenAPIInitialize(apiGroup *gin.RouterGroup) {
+	d.impl.OnOpenAPIInitialized(apiGroup)
+}
+
+// IsBaseJobMasterExt implements BaseJobMaster.IsBaseJobMasterExt.
+func (d *DefaultBaseJobMaster) IsBaseJobMasterExt() {}
 
 type jobMasterImplAsWorkerImpl struct {
 	inner JobMasterImpl

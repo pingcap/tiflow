@@ -23,12 +23,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
-	"github.com/pingcap/tiflow/dm/pkg/log"
-	p2pProtocol "github.com/pingcap/tiflow/proto/p2p"
+	perrors "github.com/pingcap/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	clientv3 "go.etcd.io/etcd/client/v3"
-	"go.etcd.io/etcd/client/v3/concurrency"
 	"go.etcd.io/etcd/server/v3/embed"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
@@ -38,18 +35,22 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
+	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/engine/client"
+	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/lib"
 	"github.com/pingcap/tiflow/engine/lib/metadata"
 	libModel "github.com/pingcap/tiflow/engine/lib/model"
 	"github.com/pingcap/tiflow/engine/model"
-	"github.com/pingcap/tiflow/engine/pb"
-	"github.com/pingcap/tiflow/engine/pkg/adapter"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/deps"
+	"github.com/pingcap/tiflow/engine/pkg/errors"
 	derrors "github.com/pingcap/tiflow/engine/pkg/errors"
 	"github.com/pingcap/tiflow/engine/pkg/etcdutils"
 	externRescManager "github.com/pingcap/tiflow/engine/pkg/externalresource/manager"
+	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
+	"github.com/pingcap/tiflow/engine/pkg/externalresource/resourcetypes"
 	extkv "github.com/pingcap/tiflow/engine/pkg/meta/extension"
 	"github.com/pingcap/tiflow/engine/pkg/meta/kvclient"
 	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
@@ -59,11 +60,11 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
 	"github.com/pingcap/tiflow/engine/pkg/serverutils"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
-	"github.com/pingcap/tiflow/engine/servermaster/cluster"
 	"github.com/pingcap/tiflow/engine/servermaster/scheduler"
 	schedModel "github.com/pingcap/tiflow/engine/servermaster/scheduler/model"
 	"github.com/pingcap/tiflow/engine/test"
 	"github.com/pingcap/tiflow/engine/test/mock"
+	p2pProtocol "github.com/pingcap/tiflow/proto/p2p"
 )
 
 // Server handles PRC requests for df master.
@@ -71,12 +72,9 @@ type Server struct {
 	etcd *embed.Etcd
 
 	etcdClient *clientv3.Client
-	session    *concurrency.Session
-	election   cluster.Election
-	leaderCtx  context.Context
-	resignFn   context.CancelFunc
-	leader     atomic.Value
-	members    struct {
+
+	leader  atomic.Value
+	members struct {
 		sync.RWMutex
 		m []*Member
 	}
@@ -92,7 +90,10 @@ type Server struct {
 	resourceManagerService *externRescManager.Service
 	scheduler              *scheduler.Scheduler
 
-	//
+	// file resource GC
+	gcRunner      externRescManager.GCRunner
+	gcCoordinator externRescManager.GCCoordinator
+
 	cfg     *Config
 	info    *model.NodeInfo
 	metrics *serverMasterMetric
@@ -266,6 +267,16 @@ func (s *Server) PauseJob(ctx context.Context, req *pb.PauseJobRequest) (*pb.Pau
 		return resp2, err
 	}
 	return s.jobManager.PauseJob(ctx, req), nil
+}
+
+// DebugJob implements pb.MasterServer.DebugJob
+func (s *Server) DebugJob(ctx context.Context, req *pb.DebugJobRequest) (*pb.DebugJobResponse, error) {
+	resp2 := &pb.DebugJobResponse{}
+	shouldRet, err := s.masterRPCHook.PreRPC(ctx, req, &resp2)
+	if shouldRet {
+		return resp2, err
+	}
+	return s.jobManager.DebugJob(ctx, req), nil
 }
 
 // RegisterExecutor implements grpc interface, and passes request onto executor manager.
@@ -462,10 +473,6 @@ func (s *Server) Run(ctx context.Context) (err error) {
 	if err != nil {
 		return
 	}
-	err = s.reset(ctx)
-	if err != nil {
-		return
-	}
 
 	wg, ctx := errgroup.WithContext(ctx)
 
@@ -559,11 +566,13 @@ func (s *Server) startGrpcSrv(ctx context.Context) (err error) {
 		return
 	}
 
+	registerDone := make(chan struct{})
 	gRPCSvr := func(gs *grpc.Server) {
 		pb.RegisterMasterServer(gs, s)
 		pb.RegisterResourceManagerServer(gs, s.resourceManagerService)
 		s.msgService = p2p.NewMessageRPCServiceWithRPCServer(s.name(), nil, gs)
 		p2pProtocol.RegisterCDCPeerToPeerServer(gs, s.msgService.GetMessageServer())
+		close(registerDone)
 	}
 
 	httpHandlers := map[string]http.Handler{
@@ -580,6 +589,21 @@ func (s *Server) startGrpcSrv(ctx context.Context) (err error) {
 
 	// start grpc server
 	s.etcdClient, err = etcdutil.CreateClient([]string{withHost(s.cfg.MasterAddr)}, nil)
+	if err != nil {
+		return
+	}
+	s.membership = &EtcdMembership{etcdCli: s.etcdClient}
+
+	// etcd server.ReadyNotify() only ensures server is ready to serve client
+	// requests, the service register could have not been called.
+	select {
+	case <-ctx.Done():
+		return perrors.Trace(ctx.Err())
+	case <-time.After(etcdStartTimeout):
+		return errors.ErrMasterStartEmbedEtcdFail.GenWithStack("register grpc service timeout")
+	case <-registerDone:
+	}
+
 	return
 }
 
@@ -599,40 +623,6 @@ func (s *Server) member() string {
 // name is a shortcut to etcd name
 func (s *Server) name() string {
 	return s.id
-}
-
-func (s *Server) reset(ctx context.Context) error {
-	sess, err := concurrency.NewSession(
-		s.etcdClient, concurrency.WithTTL(int(defaultSessionTTL.Seconds())))
-	if err != nil {
-		return derrors.Wrap(derrors.ErrMasterNewServer, err)
-	}
-
-	// register NodeInfo key used in service discovery
-	value, err := s.info.ToJSON()
-	if err != nil {
-		return derrors.Wrap(derrors.ErrMasterNewServer, err)
-	}
-	_, err = s.etcdClient.Put(ctx, s.info.EtcdKey(), value, clientv3.WithLease(sess.Lease()))
-	if err != nil {
-		return derrors.Wrap(derrors.ErrEtcdAPIError, err)
-	}
-
-	s.session = sess
-	s.election, err = cluster.NewEtcdElection(ctx, s.etcdClient, sess, cluster.EtcdElectionConfig{
-		CreateSessionTimeout: s.cfg.RPCTimeout, // FIXME (zixiong): use a separate timeout here
-		TTL:                  s.cfg.KeepAliveTTL,
-		Prefix:               adapter.MasterCampaignKey.Path(),
-	})
-	if err != nil {
-		return err
-	}
-	s.membership = &EtcdMembership{etcdCli: s.etcdClient}
-	err = s.updateServerMasterMembers(ctx)
-	if err != nil {
-		log.L().Warn("failed to update server master members", zap.Error(err))
-	}
-	return nil
 }
 
 func (s *Server) initializedBackendMeta(ctx context.Context) error {
@@ -665,6 +655,7 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 	defer func() {
 		s.resourceManagerService.Stop()
 	}()
+
 	clients := client.NewClientManager()
 	err = clients.AddMasterClient(ctx, []string{s.cfg.MasterAddr})
 	if err != nil {
@@ -673,9 +664,10 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 	dctx := dcontext.NewContext(ctx, log.L())
 	dctx.Environ.Addr = s.cfg.AdvertiseAddr
 	dctx.Environ.NodeID = s.name()
+	dctx.ProjectInfo = tenant.FrameProjectInfo
 
 	masterMeta := &libModel.MasterMetaKVData{
-		ProjectID: tenant.FrameTenantID,
+		ProjectID: tenant.FrameProjectInfo.UniqueID(),
 		ID:        metadata.JobManagerUUID,
 		Tp:        lib.JobManager,
 		// TODO: add other infos
@@ -732,7 +724,6 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 	defer func() {
 		s.leaderInitialized.Store(false)
 		s.leader.Store(&Member{})
-		s.resign()
 	}()
 
 	dctx = dctx.WithDeps(dp)
@@ -747,6 +738,27 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 		}
 	}()
 	s.leaderInitialized.Store(true)
+
+	s.gcRunner = externRescManager.NewGCRunner(s.frameMetaClient, map[resModel.ResourceType]externRescManager.GCHandlerFunc{
+		"local": resourcetypes.NewLocalFileResourceType(clients).GCHandler(),
+	})
+	s.gcCoordinator = externRescManager.NewGCCoordinator(s.executorManager, s.jobManager, s.frameMetaClient, s.gcRunner)
+
+	// TODO refactor this method to make it more readable and maintainable.
+	errg, errgCtx := errgroup.WithContext(ctx)
+	defer func() {
+		err := errg.Wait()
+		if err != nil {
+			log.L().Error("resource GC exited with error", zap.Error(err))
+		}
+	}()
+
+	errg.Go(func() error {
+		return s.gcRunner.Run(errgCtx)
+	})
+	errg.Go(func() error {
+		return s.gcCoordinator.Run(errgCtx)
+	})
 
 	metricTicker := time.NewTicker(defaultMetricInterval)
 	defer metricTicker.Stop()
