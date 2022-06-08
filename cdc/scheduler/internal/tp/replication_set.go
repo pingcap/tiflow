@@ -91,9 +91,12 @@ func newReplicationSet(
 	tableStatus map[model.CaptureID]*schedulepb.TableStatus,
 ) (*ReplicationSet, error) {
 	r := &ReplicationSet{
-		TableID:    tableID,
-		Captures:   make(map[string]struct{}),
-		Checkpoint: schedulepb.Checkpoint{CheckpointTs: checkpoint},
+		TableID:  tableID,
+		Captures: make(map[string]struct{}),
+		Checkpoint: schedulepb.Checkpoint{
+			CheckpointTs: checkpoint,
+			ResolvedTs:   checkpoint,
+		},
 	}
 	committed := false
 	for captureID, table := range tableStatus {

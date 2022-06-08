@@ -75,7 +75,7 @@ func TestNewReplicationSet(t *testing.T) {
 				"1": {
 					State: schedulepb.TableStateReplicating,
 					Checkpoint: schedulepb.Checkpoint{
-						CheckpointTs: 1, ResolvedTs: 2,
+						CheckpointTs: 1, ResolvedTs: 1,
 					},
 				},
 			},

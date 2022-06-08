@@ -44,7 +44,10 @@ func TestReplicationManagerHandleAddTableTask(t *testing.T) {
 				AddTable: &schedulepb.AddTableRequest{
 					TableID:     1,
 					IsSecondary: true,
-					Checkpoint:  schedulepb.Checkpoint{CheckpointTs: 1},
+					Checkpoint: schedulepb.Checkpoint{
+						CheckpointTs: 1,
+						ResolvedTs:   1,
+					},
 				},
 			},
 		},
@@ -85,7 +88,10 @@ func TestReplicationManagerHandleAddTableTask(t *testing.T) {
 				AddTable: &schedulepb.AddTableRequest{
 					TableID:     1,
 					IsSecondary: false,
-					Checkpoint:  schedulepb.Checkpoint{CheckpointTs: 1},
+					Checkpoint: schedulepb.Checkpoint{
+						CheckpointTs: 1,
+						ResolvedTs:   1,
+					},
 				},
 			},
 		},
@@ -389,7 +395,10 @@ func TestReplicationManagerBurstBalance(t *testing.T) {
 					AddTable: &schedulepb.AddTableRequest{
 						TableID:     tableID,
 						IsSecondary: true,
-						Checkpoint:  schedulepb.Checkpoint{CheckpointTs: 1},
+						Checkpoint: schedulepb.Checkpoint{
+							CheckpointTs: 1,
+							ResolvedTs:   1,
+						},
 					},
 				},
 			},
@@ -433,7 +442,10 @@ func TestReplicationManagerBurstBalance(t *testing.T) {
 				AddTable: &schedulepb.AddTableRequest{
 					TableID:     4,
 					IsSecondary: true,
-					Checkpoint:  schedulepb.Checkpoint{CheckpointTs: 2},
+					Checkpoint: schedulepb.Checkpoint{
+						CheckpointTs: 2,
+						ResolvedTs:   2,
+					},
 				},
 			},
 		},
