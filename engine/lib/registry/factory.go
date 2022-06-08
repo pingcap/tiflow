@@ -15,9 +15,9 @@ package registry
 
 import (
 	"encoding/json"
-	"reflect"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/tiflow/dm/pkg/log"
 
 	"github.com/pingcap/tiflow/engine/lib"
 	libModel "github.com/pingcap/tiflow/engine/lib/model"
@@ -27,48 +27,57 @@ import (
 // WorkerFactory is an interface that should be implemented by the author of
 // WorkerImpl or JobMasterImpl (JobMaster is the worker of JobManager).
 // It represents a constructor for a given type of worker.
-type WorkerFactory interface {
+type WorkerFactory[T lib.WorkerImpl, C any] interface {
 	// NewWorkerImpl return an implementation of the worker. its BaseWorker
 	// or BaseJobMaster field can be left nil, framework will fill it in.
 	NewWorkerImpl(
 		ctx *dcontext.Context, // We require a `dcontext` here to provide dependencies.
 		workerID libModel.WorkerID, // the globally unique workerID for this worker to be created.
 		masterID libModel.MasterID, // the masterID that this worker will report to.
-		config WorkerConfig, // the config used to initialize the worker.
-	) (lib.WorkerImpl, error)
-	DeserializeConfig(configBytes []byte) (WorkerConfig, error)
+		config C, // the config used to initialize the worker.
+	) (T, error)
+	DeserializeConfig(configBytes []byte) (C, error)
 }
 
 // WorkerConstructor alias to the function that can construct a WorkerImpl
-type WorkerConstructor func(ctx *dcontext.Context, id libModel.WorkerID, masterID libModel.MasterID, config WorkerConfig) lib.WorkerImpl
+type WorkerConstructor[T lib.WorkerImpl, C any] = func(
+	ctx *dcontext.Context, id libModel.WorkerID, masterID libModel.MasterID, config C,
+) T
 
 // SimpleWorkerFactory is a WorkerFactory with built-in JSON codec for WorkerConfig.
-type SimpleWorkerFactory struct {
-	constructor WorkerConstructor
-	configTpi   interface{}
+type SimpleWorkerFactory[T lib.WorkerImpl, C any] struct {
+	constructor WorkerConstructor[T, C]
 }
 
 // NewSimpleWorkerFactory creates a new WorkerFactory.
-func NewSimpleWorkerFactory(constructor WorkerConstructor, configType interface{}) *SimpleWorkerFactory {
-	return &SimpleWorkerFactory{
+func NewSimpleWorkerFactory[T lib.WorkerImpl, Config any](
+	constructor WorkerConstructor[T, Config],
+) *SimpleWorkerFactory[T, Config] {
+	// Config must be a pointer
+	if !isPtr[Config]() {
+		// It's okay to panic here.
+		// The developer who used this function mistakenly should
+		// be able to figure out what happened.
+		log.L().Panic("expect worker's config type to be a pointer")
+	}
+	return &SimpleWorkerFactory[T, Config]{
 		constructor: constructor,
-		configTpi:   configType,
 	}
 }
 
 // NewWorkerImpl implements WorkerFactory.NewWorkerImpl
-func (f *SimpleWorkerFactory) NewWorkerImpl(
+func (f *SimpleWorkerFactory[T, C]) NewWorkerImpl(
 	ctx *dcontext.Context,
 	workerID libModel.WorkerID,
 	masterID libModel.MasterID,
-	config WorkerConfig,
-) (lib.WorkerImpl, error) {
+	config C,
+) (T, error) {
 	return f.constructor(ctx, workerID, masterID, config), nil
 }
 
 // DeserializeConfig implements WorkerFactory.DeserializeConfig
-func (f *SimpleWorkerFactory) DeserializeConfig(configBytes []byte) (WorkerConfig, error) {
-	config := reflect.New(reflect.TypeOf(f.configTpi).Elem()).Interface()
+func (f *SimpleWorkerFactory[T, C]) DeserializeConfig(configBytes []byte) (C, error) {
+	var config C
 	if err := json.Unmarshal(configBytes, config); err != nil {
 		return nil, errors.Trace(err)
 	}
