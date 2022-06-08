@@ -572,14 +572,14 @@ func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.S
 		p.upStream.PDClient,
 		p.upStream.GrpcPool,
 		p.upStream.RegionCache,
-		p.upStream.KVStorage.UnWrap(),
+		p.upStream.KVStorage,
 		p.upStream.PDClock,
 		ctx.ChangefeedVars().ID,
 		checkpointTs,
 		ddlspans,
 		kvCfg,
 	)
-	meta, err := kv.GetSnapshotMeta(kvStorage.UnWrap(), checkpointTs)
+	meta, err := kv.GetSnapshotMeta(kvStorage, checkpointTs)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

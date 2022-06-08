@@ -84,7 +84,7 @@ func getTables(cliPdAddr string, credential *security.Credential, cfg *config.Re
 	if err != nil {
 		return nil, nil, err
 	}
-	return validator.VerifyTables(cfg, kvStore.UnWrap(), startTs)
+	return validator.VerifyTables(cfg, kvStore, startTs)
 }
 
 // sendOwnerChangefeedQuery sends owner changefeed query request.

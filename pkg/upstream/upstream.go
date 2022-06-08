@@ -23,6 +23,7 @@ import (
 	"github.com/benbjohnson/clock"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/pdutil"
@@ -55,7 +56,7 @@ type Upstream struct {
 	securityConfig *config.SecurityConfig
 
 	PDClient    pd.Client
-	KVStorage   *kv.Storage
+	KVStorage   tidbkv.Storage
 	GrpcPool    kv.GrpcPool
 	RegionCache *tikv.RegionCache
 	PDClock     pdutil.Clock

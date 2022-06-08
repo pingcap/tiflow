@@ -181,5 +181,5 @@ func (f factoryImpl) KvStorage() (tidbkv.Storage, error) {
 		return nil, errors.Annotatef(err,
 			"fail to open KV storage client, please check pd address \"%s\"", pdAddr)
 	}
-	return kvStore.UnWrap(), nil
+	return kvStore, nil
 }

@@ -75,7 +75,7 @@ func newDDLPuller(ctx cdcContext.Context, upStream *upstream.Upstream, startTs u
 	}
 	kvCfg := config.GetGlobalServerConfig().KVClient
 	var plr puller.Puller
-	kvStorage := upStream.KVStorage.UnWrap()
+	kvStorage := upStream.KVStorage
 	// kvStorage can be nil only in the test
 	if kvStorage != nil {
 		plr = puller.NewPuller(
