@@ -115,6 +115,7 @@ func (w *dmWorker) InitImpl(ctx context.Context) error {
 			return err
 		}
 	}
+	w.cfg.MetricsFactory = w.MetricFactory()
 	return w.unitHolder.Init(ctx)
 }
 
