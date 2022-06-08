@@ -353,7 +353,7 @@ func (a *agent) handleMessageDispatchTableRequest(
 			zap.Any("request", request))
 		return
 	}
-	log.Info("tpscheduler: agent found dispatch table task",
+	log.Debug("tpscheduler: agent found dispatch table task",
 		zap.String("capture", a.captureID),
 		zap.String("namespace", a.changeFeedID.Namespace),
 		zap.String("changefeed", a.changeFeedID.ID),
