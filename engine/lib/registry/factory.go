@@ -15,10 +15,11 @@ package registry
 
 import (
 	"encoding/json"
+	"reflect"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tiflow/dm/pkg/log"
 
+	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/engine/lib"
 	libModel "github.com/pingcap/tiflow/engine/lib/model"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
@@ -27,20 +28,20 @@ import (
 // WorkerFactory is an interface that should be implemented by the author of
 // WorkerImpl or JobMasterImpl (JobMaster is the worker of JobManager).
 // It represents a constructor for a given type of worker.
-type WorkerFactory[T lib.WorkerImpl, C any] interface {
+type WorkerFactory interface {
 	// NewWorkerImpl return an implementation of the worker. its BaseWorker
 	// or BaseJobMaster field can be left nil, framework will fill it in.
 	NewWorkerImpl(
-		ctx *dcontext.Context, // We require a `dcontext` here to provide dependencies.
+		ctx *dcontext.Context,      // We require a `dcontext` here to provide dependencies.
 		workerID libModel.WorkerID, // the globally unique workerID for this worker to be created.
 		masterID libModel.MasterID, // the masterID that this worker will report to.
-		config C, // the config used to initialize the worker.
-	) (T, error)
-	DeserializeConfig(configBytes []byte) (C, error)
+		config WorkerConfig,        // the config used to initialize the worker.
+	) (lib.WorkerImpl, error)
+	DeserializeConfig(configBytes []byte) (WorkerConfig, error)
 }
 
 // WorkerConstructor alias to the function that can construct a WorkerImpl
-type WorkerConstructor[T lib.WorkerImpl, C any] = func(
+type WorkerConstructor[T lib.WorkerImpl, C any] func(
 	ctx *dcontext.Context, id libModel.WorkerID, masterID libModel.MasterID, config C,
 ) T
 
@@ -70,14 +71,15 @@ func (f *SimpleWorkerFactory[T, C]) NewWorkerImpl(
 	ctx *dcontext.Context,
 	workerID libModel.WorkerID,
 	masterID libModel.MasterID,
-	config C,
-) (T, error) {
-	return f.constructor(ctx, workerID, masterID, config), nil
+	config WorkerConfig,
+) (lib.WorkerImpl, error) {
+	return f.constructor(ctx, workerID, masterID, config.(C)), nil
 }
 
 // DeserializeConfig implements WorkerFactory.DeserializeConfig
-func (f *SimpleWorkerFactory[T, C]) DeserializeConfig(configBytes []byte) (C, error) {
+func (f *SimpleWorkerFactory[T, C]) DeserializeConfig(configBytes []byte) (WorkerConfig, error) {
 	var config C
+	config = reflect.New(reflect.TypeOf(config).Elem()).Interface().(C)
 	if err := json.Unmarshal(configBytes, config); err != nil {
 		return nil, errors.Trace(err)
 	}

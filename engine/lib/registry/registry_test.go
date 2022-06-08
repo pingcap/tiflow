@@ -25,8 +25,7 @@ import (
 )
 
 var (
-	_                 WorkerFactory = (*SimpleWorkerFactory)(nil)
-	fakeWorkerFactory WorkerFactory = NewSimpleWorkerFactory(fake.NewDummyWorker, &fake.WorkerConfig{})
+	fakeWorkerFactory WorkerFactory = NewSimpleWorkerFactory(fake.NewDummyWorker)
 )
 
 const (
