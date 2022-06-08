@@ -485,6 +485,12 @@ function prepare_for_validator_cmd {
 		"new\/ignored\/resolved: 4\/0\/0" 1 \
 		"\"stage\": \"Running\"" 4 \
 		"\"stage\": \"Stopped\"" 1
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		"insert\/update\/delete: 4\/1\/1\"" 1 \
+		"insert\/update\/delete: 0\/0\/1\"" 1 \
+		"new\/ignored\/resolved: 0\/0\/0" 1 \
+		"new\/ignored\/resolved: 4\/0\/0" 1
 	trigger_checkpoint_flush
 }
 
