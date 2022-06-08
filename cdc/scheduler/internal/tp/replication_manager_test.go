@@ -363,10 +363,13 @@ func TestReplicationManagerBurstBalance(t *testing.T) {
 		addTable: &addTable{TableID: 1, CaptureID: "0", CheckpointTs: 1},
 	}, {
 		burstBalance: &burstBalance{
-			AddTables: map[int64]string{
-				1: "1", 2: "2", 3: "3",
-			},
-			CheckpointTs: 1,
+			AddTables: []addTable{{
+				TableID: 1, CaptureID: "1", CheckpointTs: 1,
+			}, {
+				TableID: 2, CaptureID: "2", CheckpointTs: 1,
+			}, {
+				TableID: 3, CaptureID: "3", CheckpointTs: 1,
+			}},
 		},
 		accept: func() {
 			balanceTableCh <- 1
@@ -404,9 +407,16 @@ func TestReplicationManagerBurstBalance(t *testing.T) {
 	// More burst balance is still allowed.
 	msgs, err = r.HandleTasks([]*scheduleTask{{
 		burstBalance: &burstBalance{
-			AddTables:    map[int64]string{4: "4", 1: "0"},
-			RemoveTables: map[int64]string{5: "5", 1: "0"},
-			CheckpointTs: 2,
+			AddTables: []addTable{{
+				TableID: 4, CaptureID: "4", CheckpointTs: 2,
+			}, {
+				TableID: 1, CaptureID: "0", CheckpointTs: 2,
+			}},
+			RemoveTables: []removeTable{{
+				TableID: 5, CaptureID: "5",
+			}, {
+				TableID: 1, CaptureID: "0",
+			}},
 		},
 		accept: func() {
 			balanceTableCh <- 1
@@ -439,6 +449,56 @@ func TestReplicationManagerBurstBalance(t *testing.T) {
 			},
 		},
 	}, msgs)
+}
+
+func TestReplicationManagerBurstBalanceMoveTables(t *testing.T) {
+	t.Parallel()
+
+	r := newReplicationManager(1)
+	balanceTableCh := make(chan int, 1)
+
+	var err error
+	// Two tables in "1".
+	r.tables[1], err = newReplicationSet(1, 0, map[string]*schedulepb.TableStatus{
+		"1": {TableID: 1, State: schedulepb.TableStateReplicating},
+	})
+	require.Nil(t, err)
+	r.tables[2], err = newReplicationSet(2, 0, map[string]*schedulepb.TableStatus{
+		"1": {
+			TableID: 2, State: schedulepb.TableStateReplicating,
+			Checkpoint: schedulepb.Checkpoint{CheckpointTs: 1},
+		},
+	})
+	require.Nil(t, err)
+
+	msgs, err := r.HandleTasks([]*scheduleTask{{
+		burstBalance: &burstBalance{
+			MoveTables: []moveTable{{
+				TableID: 2, DestCapture: "2",
+			}},
+		},
+		accept: func() {
+			balanceTableCh <- 1
+		},
+	}})
+	require.Nil(t, err)
+	require.Equal(t, 1, <-balanceTableCh)
+	require.Len(t, msgs, 1)
+	require.Contains(t, msgs, &schedulepb.Message{
+		To:      "2",
+		MsgType: schedulepb.MsgDispatchTableRequest,
+		DispatchTableRequest: &schedulepb.DispatchTableRequest{
+			Request: &schedulepb.DispatchTableRequest_AddTable{
+				AddTable: &schedulepb.AddTableRequest{
+					TableID:     2,
+					IsSecondary: true,
+					Checkpoint:  schedulepb.Checkpoint{CheckpointTs: 1},
+				},
+			},
+		},
+	}, msgs)
+	require.Contains(t, r.tables, model.TableID(2))
+	require.Contains(t, r.runningTasks, model.TableID(2))
 }
 
 func TestReplicationManagerMaxTaskConcurrency(t *testing.T) {

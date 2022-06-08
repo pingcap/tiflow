@@ -14,6 +14,9 @@
 package tp
 
 import (
+	"math/rand"
+	"time"
+
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"go.uber.org/zap"
@@ -21,10 +24,14 @@ import (
 
 var _ scheduler = &burstBalanceScheduler{}
 
-type burstBalanceScheduler struct{}
+type burstBalanceScheduler struct {
+	random *rand.Rand
+}
 
 func newBurstBalanceScheduler() *burstBalanceScheduler {
-	return &burstBalanceScheduler{}
+	return &burstBalanceScheduler{
+		random: rand.New(rand.NewSource(time.Now().UnixNano())),
+	}
 }
 
 func (b *burstBalanceScheduler) Name() string {
@@ -80,7 +87,17 @@ func (b *burstBalanceScheduler) Schedule(
 	}
 	if len(rmTables) > 0 {
 		tasks = append(
-			tasks, newBurstBalanceRemoveTables(checkpointTs, rmTables, replications))
+			tasks, newBurstBalanceRemoveTables(rmTables, replications))
+	}
+
+	// Skip rebalance if there are some table added or removed.
+	if len(tasks) == 0 {
+		// We does not need accept callback here.
+		accept := (callback)(nil)
+		task := newBurstBalanceMoveTables(accept, b.random, currentTables, captures, replications)
+		if task != nil {
+			tasks = append(tasks, task)
+		}
 	}
 
 	return tasks
@@ -90,37 +107,45 @@ func newBurstBalanceAddTables(
 	checkpointTs model.Ts, newTables []model.TableID, captureIDs []model.CaptureID,
 ) *scheduleTask {
 	idx := 0
-	tables := make(map[model.TableID]model.CaptureID)
+	tables := make([]addTable, 0, len(newTables))
 	for _, tableID := range newTables {
-		tables[tableID] = captureIDs[idx]
+		tables = append(tables, addTable{
+			TableID:      tableID,
+			CaptureID:    captureIDs[idx],
+			CheckpointTs: checkpointTs,
+		})
 		idx++
 		if idx >= len(captureIDs) {
 			idx = 0
 		}
 	}
 	return &scheduleTask{burstBalance: &burstBalance{
-		AddTables:    tables,
-		CheckpointTs: checkpointTs,
+		AddTables: tables,
 	}}
 }
 
 func newBurstBalanceRemoveTables(
-	checkpointTs model.Ts, rmTables []model.TableID, replications map[model.TableID]*ReplicationSet,
+	rmTables []model.TableID, replications map[model.TableID]*ReplicationSet,
 ) *scheduleTask {
-	tables := make(map[model.TableID]model.CaptureID)
+	tables := make([]removeTable, 0, len(rmTables))
 	for _, tableID := range rmTables {
 		rep := replications[tableID]
+		var captureID model.CaptureID
 		if rep.Primary != "" {
-			tables[tableID] = rep.Primary
+			captureID = rep.Primary
 		} else if rep.Secondary != "" {
-			tables[tableID] = rep.Secondary
+			captureID = rep.Secondary
 		} else {
 			log.Warn("tpscheduler: primary or secondary not found for removed table",
 				zap.Any("table", rep))
+			continue
 		}
+		tables = append(tables, removeTable{
+			TableID:   tableID,
+			CaptureID: captureID,
+		})
 	}
 	return &scheduleTask{burstBalance: &burstBalance{
 		RemoveTables: tables,
-		CheckpointTs: checkpointTs,
 	}}
 }
