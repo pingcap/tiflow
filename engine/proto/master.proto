@@ -28,6 +28,8 @@ service Master {
 
     rpc CancelJob(CancelJobRequest) returns(CancelJobResponse) {}
 
+    rpc DebugJob(DebugJobRequest) returns(DebugJobResponse) {}
+
     //GetMembers returns the available master members
     //rpc GetMembers(GetMembersRequest) {}
 
@@ -185,4 +187,15 @@ message PersistResourceRequest {
 
 message PersistResourceResponse {
     Error err = 1;
+}
+
+message DebugJobRequest {
+    string job_id = 1;
+    string command = 2;
+    string json_arg = 3;
+}
+
+message DebugJobResponse {
+    Error err = 1;
+    string json_ret = 2;
 }

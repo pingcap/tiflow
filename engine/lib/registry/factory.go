@@ -17,7 +17,6 @@ import (
 	"encoding/json"
 	"reflect"
 
-	"github.com/BurntSushi/toml"
 	"github.com/pingcap/errors"
 
 	"github.com/pingcap/tiflow/engine/lib"
@@ -71,39 +70,6 @@ func (f *SimpleWorkerFactory) NewWorkerImpl(
 func (f *SimpleWorkerFactory) DeserializeConfig(configBytes []byte) (WorkerConfig, error) {
 	config := reflect.New(reflect.TypeOf(f.configTpi).Elem()).Interface()
 	if err := json.Unmarshal(configBytes, config); err != nil {
-		return nil, errors.Trace(err)
-	}
-	return config, nil
-}
-
-// NewTomlWorkerFactory creates a WorkerFactory with built-in toml codec for WorkerConfig.
-func NewTomlWorkerFactory(constructor WorkerConstructor, configType interface{}) *TomlWorkerFactory {
-	return &TomlWorkerFactory{
-		constructor: constructor,
-		configTpi:   configType,
-	}
-}
-
-// TomlWorkerFactory is a WorkerFactory with built-in TOML codec for WorkerConfig
-type TomlWorkerFactory struct {
-	constructor WorkerConstructor
-	configTpi   interface{}
-}
-
-// NewWorkerImpl implements WorkerFactory.NewWorkerImpl
-func (f *TomlWorkerFactory) NewWorkerImpl(
-	ctx *dcontext.Context,
-	workerID libModel.WorkerID,
-	masterID libModel.MasterID,
-	config WorkerConfig,
-) (lib.WorkerImpl, error) {
-	return f.constructor(ctx, workerID, masterID, config), nil
-}
-
-// DeserializeConfig implements WorkerFactory.DeserializeConfig
-func (f *TomlWorkerFactory) DeserializeConfig(configBytes []byte) (WorkerConfig, error) {
-	config := reflect.New(reflect.TypeOf(f.configTpi).Elem()).Interface()
-	if _, err := toml.Decode(string(configBytes), config); err != nil {
 		return nil, errors.Trace(err)
 	}
 	return config, nil
