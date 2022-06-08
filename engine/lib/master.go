@@ -42,6 +42,7 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/errctx"
 	derror "github.com/pingcap/tiflow/engine/pkg/errors"
 	resourcemeta "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
+	"github.com/pingcap/tiflow/engine/pkg/logutil"
 	extkv "github.com/pingcap/tiflow/engine/pkg/meta/extension"
 	"github.com/pingcap/tiflow/engine/pkg/meta/kvclient"
 	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
@@ -108,6 +109,7 @@ type BaseMaster interface {
 	// MetaKVClient return user metastore kv client
 	MetaKVClient() metaclient.KVClient
 	MetricFactory() promutil.Factory
+	Log() *zap.Logger
 	MasterMeta() *libModel.MasterMetaKVData
 	GetWorkers() map[libModel.WorkerID]WorkerHandle
 	IsMasterReady() bool
@@ -168,7 +170,12 @@ type DefaultBaseMaster struct {
 	// user metastore prefix kvclient
 	// Don't close it. It's just a prefix wrapper for underlying userRawKVClient
 	userMetaKVClient metaclient.KVClient
-	metricFactory    promutil.Factory
+
+	// metricFactory can produce metric with underlying project info and job info
+	metricFactory promutil.Factory
+
+	// logger is the zap logger with underlying project info and job info
+	logger *zap.Logger
 
 	// components for easier unit testing
 	uuidGen uuid.Generator
@@ -248,6 +255,7 @@ func NewBaseMaster(
 		createWorkerQuota: quota.NewConcurrencyQuota(maxCreateWorkerConcurrency),
 		userMetaKVClient:  kvclient.NewPrefixKVClient(params.UserRawKVClient, ctx.ProjectInfo.UniqueID()),
 		metricFactory:     promutil.NewFactory4Master(ctx.ProjectInfo, WorkerTypeForMetric(tp), id),
+		logger:            logutil.NewLogger4Master(ctx.ProjectInfo, id),
 
 		deps: ctx.Deps(),
 	}
@@ -261,6 +269,11 @@ func (m *DefaultBaseMaster) MetaKVClient() metaclient.KVClient {
 // MetricFactory implements BaseMaster.MetricFactory
 func (m *DefaultBaseMaster) MetricFactory() promutil.Factory {
 	return m.metricFactory
+}
+
+// Logger implements BaseMaster.Logger
+func (m *DefaultBaseMaster) Logger() *zap.Logger {
+	return m.logger
 }
 
 // Init implements BaseMaster.Init
