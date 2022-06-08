@@ -20,5 +20,5 @@ type TopicManager interface {
 	// GetPartitionNum returns the number of partitions of the topic.
 	GetPartitionNum(topic string) (int32, error)
 	// CreateTopic creates the topic.
-	CreateTopic(topicName string) (int32, error)
+	CreateTopicWithRetry(topicName string) (int32, error)
 }
