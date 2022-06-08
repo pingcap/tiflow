@@ -410,7 +410,7 @@ function validate_table_with_different_pk() {
 	run_sql_source1 "insert into $db_name.t2 values('2012-12-01 00:00:00', '2022-01-01 00:00:00', 1, 'a', 4)"
 	run_sql_source1 "update $db_name.t2 set c5=11 where c1='2022-01-01 00:00:00'" # update 3 rows
 	run_sql_source1 "update $db_name.t2 set c5=22 where c2='2012-12-01 00:00:00'" # update 1 row
-	run_sql_source1 "delete from $db_name.t2 where c4='a'" # delete 3 row
+	run_sql_source1 "delete from $db_name.t2 where c4='a'"                        # delete 3 row
 	trigger_checkpoint_flush
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation status test" \
