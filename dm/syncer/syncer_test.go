@@ -373,6 +373,7 @@ func (s *testSyncerSuite) TestSelectTable(c *C) {
 	c.Assert(err, IsNil)
 	syncer := NewSyncer(cfg, nil, nil)
 	syncer.baList, err = filter.New(syncer.cfg.CaseSensitive, syncer.cfg.BAList)
+	syncer.metricsProxies = metrics.DefaultMetricsProxies
 	c.Assert(err, IsNil)
 	c.Assert(syncer.genRouter(), IsNil)
 
@@ -509,6 +510,7 @@ func (s *testSyncerSuite) TestIgnoreTable(c *C) {
 	c.Assert(err, IsNil)
 	syncer := NewSyncer(cfg, nil, nil)
 	syncer.baList, err = filter.New(syncer.cfg.CaseSensitive, syncer.cfg.BAList)
+	syncer.metricsProxies = metrics.DefaultMetricsProxies
 	c.Assert(err, IsNil)
 	c.Assert(syncer.genRouter(), IsNil)
 

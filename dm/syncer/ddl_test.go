@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/util/filter"
+	"github.com/pingcap/tiflow/dm/syncer/metrics"
 	"go.uber.org/zap"
 
 	regexprrouter "github.com/pingcap/tidb/util/regexpr-router"
@@ -221,6 +222,7 @@ func (s *testDDLSuite) TestResolveDDLSQL(c *C) {
 	syncer := NewSyncer(cfg, nil, nil)
 	syncer.tctx = tctx
 	syncer.baList, err = filter.New(syncer.cfg.CaseSensitive, syncer.cfg.BAList)
+	syncer.metricsProxies = metrics.DefaultMetricsProxies
 	c.Assert(err, IsNil)
 
 	syncer.tableRouter, err = regexprrouter.NewRegExprRouter(false, []*router.TableRule{
