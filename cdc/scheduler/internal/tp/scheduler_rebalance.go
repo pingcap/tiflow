@@ -17,6 +17,7 @@ import (
 	"math"
 	"math/rand"
 	"sort"
+	"sync/atomic"
 	"time"
 
 	"github.com/pingcap/log"
@@ -27,17 +28,14 @@ import (
 var _ scheduler = &rebalanceScheduler{}
 
 type rebalanceScheduler struct {
-	rebalance bool
+	rebalance int32
 	random    *rand.Rand
-
-	tasks map[model.TableID]*scheduleTask
 }
 
 func newRebalanceScheduler() *rebalanceScheduler {
 	return &rebalanceScheduler{
-		rebalance: false,
+		rebalance: 0,
 		random:    rand.New(rand.NewSource(time.Now().UnixNano())),
-		tasks:     make(map[model.TableID]*scheduleTask),
 	}
 }
 
@@ -51,29 +49,44 @@ func (r *rebalanceScheduler) Schedule(
 	captures map[model.CaptureID]*model.CaptureInfo,
 	replications map[model.TableID]*ReplicationSet,
 ) []*scheduleTask {
-	result := make([]*scheduleTask, 0)
-
 	// rebalance is not triggered, or there is still some pending task,
 	// do not generate new tasks.
-	if !r.rebalance || len(r.tasks) != 0 {
-		return result
+	if atomic.LoadInt32(&r.rebalance) == 0 {
+		return nil
 	}
 
 	if len(captures) == 0 {
-		return result
+		return nil
 	}
 
 	// only rebalance when all tables are replicating
 	for _, tableID := range currentTables {
 		rep, ok := replications[tableID]
 		if !ok {
-			return result
+			return nil
 		}
 		if rep.State != ReplicationSetStateReplicating {
-			return result
+			return nil
 		}
 	}
 
+	accept := func() {
+		atomic.StoreInt32(&r.rebalance, 0)
+	}
+	task := newBurstBalanceMoveTables(accept, r.random, currentTables, captures, replications)
+	if task == nil {
+		return nil
+	}
+	return []*scheduleTask{task}
+}
+
+func newBurstBalanceMoveTables(
+	accept callback,
+	random *rand.Rand,
+	currentTables []model.TableID,
+	captures map[model.CaptureID]*model.CaptureInfo,
+	replications map[model.TableID]*ReplicationSet,
+) *scheduleTask {
 	tablesPerCapture := make(map[model.CaptureID]*tableSet)
 	for captureID := range captures {
 		tablesPerCapture[captureID] = newTableSet()
@@ -81,9 +94,10 @@ func (r *rebalanceScheduler) Schedule(
 
 	for tableID, rep := range replications {
 		if rep.Primary == "" {
-			log.Panic("tpscheduler: rebalance found table no primary",
+			log.Info("tpscheduler: rebalance found table no primary, skip",
 				zap.Int64("tableID", tableID),
 				zap.Any("replication", rep))
+			continue
 		}
 		tablesPerCapture[rep.Primary].add(tableID)
 	}
@@ -94,14 +108,14 @@ func (r *rebalanceScheduler) Schedule(
 	victims := make([]model.TableID, 0)
 	for _, ts := range tablesPerCapture {
 		tables := ts.keys()
-		if r.random != nil {
+		if random != nil {
 			// Complexity note: Shuffle has O(n), where `n` is the number of tables.
 			// Also, during a single call of `Schedule`, Shuffle can be called at most
 			// `c` times, where `c` is the number of captures (TiCDC nodes).
 			// Only called when a rebalance is triggered, which happens rarely,
 			// we do not expect a performance degradation as a result of adding
 			// the randomness.
-			r.random.Shuffle(len(tables), func(i, j int) {
+			random.Shuffle(len(tables), func(i, j int) {
 				tables[i], tables[j] = tables[j], tables[i]
 			})
 		} else {
@@ -126,12 +140,16 @@ func (r *rebalanceScheduler) Schedule(
 			tableNum2Remove--
 		}
 	}
+	if len(victims) == 0 {
+		return nil
+	}
 
 	captureWorkload := make(map[model.CaptureID]int)
 	for captureID, ts := range tablesPerCapture {
-		captureWorkload[captureID] = r.randomizeWorkload(ts.size())
+		captureWorkload[captureID] = randomizeWorkload(random, ts.size())
 	}
 	// for each victim table, find the target for it
+	moveTables := make([]moveTable, 0, len(victims))
 	for _, tableID := range victims {
 		target := ""
 		minWorkload := math.MaxInt64
@@ -148,27 +166,18 @@ func (r *rebalanceScheduler) Schedule(
 				"when try to the the target capture")
 		}
 
-		task := &scheduleTask{
-			moveTable: &moveTable{
-				TableID:     tableID,
-				DestCapture: target,
-			},
-			accept: func() {
-				delete(r.tasks, tableID)
-				if len(r.tasks) == 0 {
-					r.rebalance = false
-				}
-			},
-		}
-		r.tasks[tableID] = task
-
-		result = append(result, task)
-
+		moveTables = append(moveTables, moveTable{
+			TableID:     tableID,
+			DestCapture: target,
+		})
 		tablesPerCapture[target].add(tableID)
-		captureWorkload[target] = r.randomizeWorkload(tablesPerCapture[target].size())
+		captureWorkload[target] = randomizeWorkload(random, tablesPerCapture[target].size())
 	}
 
-	return result
+	return &scheduleTask{
+		burstBalance: &burstBalance{MoveTables: moveTables},
+		accept:       accept,
+	}
 }
 
 const (
@@ -182,10 +191,10 @@ const (
 // The bitwise layout of the return value is:
 // 63                8                0
 // |----- input -----|-- random val --|
-func (r *rebalanceScheduler) randomizeWorkload(input int) int {
+func randomizeWorkload(random *rand.Rand, input int) int {
 	var randomPart int
-	if r.random != nil {
-		randomPart = int(r.random.Uint32() & randomPartMask)
+	if random != nil {
+		randomPart = int(random.Uint32() & randomPartMask)
 	}
 	// randomPart is a small random value that only affects the
 	// result of comparison of workloads when two workloads are equal.

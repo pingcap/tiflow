@@ -28,9 +28,9 @@ type callback func()
 // burstBalance for changefeed set up or unplanned TiCDC node failure.
 // TiCDC needs to balance interrupted tables as soon as possible.
 type burstBalance struct {
-	// Add tables to captures
-	AddTables, RemoveTables map[model.TableID]model.CaptureID
-	CheckpointTs            model.Ts
+	AddTables    []addTable
+	RemoveTables []removeTable
+	MoveTables   []moveTable
 }
 
 type moveTable struct {
@@ -318,11 +318,11 @@ func (r *replicationManager) handleBurstBalanceTasks(
 	task *burstBalance,
 ) ([]*schedulepb.Message, error) {
 	perCapture := make(map[model.CaptureID]int)
-	for _, captureID := range task.AddTables {
-		perCapture[captureID]++
+	for _, task := range task.AddTables {
+		perCapture[task.CaptureID]++
 	}
-	for _, captureID := range task.RemoveTables {
-		perCapture[captureID]++
+	for _, task := range task.RemoveTables {
+		perCapture[task.CaptureID]++
 	}
 	fields := make([]zap.Field, 0, len(perCapture))
 	for captureID, count := range perCapture {
@@ -331,37 +331,48 @@ func (r *replicationManager) handleBurstBalanceTasks(
 	fields = append(fields, zap.Int("total", len(task.AddTables)+len(task.RemoveTables)))
 	log.Info("tpscheduler: handle burst balance task", fields...)
 
-	checkpointTs := task.CheckpointTs
 	sentMsgs := make([]*schedulepb.Message, 0, len(task.AddTables))
-	for tableID, captureID := range task.AddTables {
-		if r.runningTasks[tableID] != nil {
+	for i := range task.AddTables {
+		addTable := task.AddTables[i]
+		if r.runningTasks[addTable.TableID] != nil {
 			// Skip add table if the table is already running a task.
 			continue
 		}
-		msgs, err := r.handleAddTableTask(&addTable{
-			TableID: tableID, CaptureID: captureID, CheckpointTs: checkpointTs,
-		})
+		msgs, err := r.handleAddTableTask(&addTable)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
 		sentMsgs = append(sentMsgs, msgs...)
 		// Just for place holding.
-		r.runningTasks[tableID] = &scheduleTask{}
+		r.runningTasks[addTable.TableID] = &scheduleTask{}
 	}
-	for tableID, captureID := range task.RemoveTables {
-		if r.runningTasks[tableID] != nil {
+	for i := range task.RemoveTables {
+		removeTable := task.RemoveTables[i]
+		if r.runningTasks[removeTable.TableID] != nil {
 			// Skip add table if the table is already running a task.
 			continue
 		}
-		msgs, err := r.handleRemoveTableTask(&removeTable{
-			TableID: tableID, CaptureID: captureID,
-		})
+		msgs, err := r.handleRemoveTableTask(&removeTable)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
 		sentMsgs = append(sentMsgs, msgs...)
 		// Just for place holding.
-		r.runningTasks[tableID] = &scheduleTask{}
+		r.runningTasks[removeTable.TableID] = &scheduleTask{}
+	}
+	for i := range task.MoveTables {
+		moveTable := task.MoveTables[i]
+		if r.runningTasks[moveTable.TableID] != nil {
+			// Skip add table if the table is already running a task.
+			continue
+		}
+		msgs, err := r.handleMoveTableTask(&moveTable)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		sentMsgs = append(sentMsgs, msgs...)
+		// Just for place holding.
+		r.runningTasks[moveTable.TableID] = &scheduleTask{}
 	}
 	return sentMsgs, nil
 }

@@ -29,7 +29,7 @@ func TestCaptureStatusHandleHeartbeatResponse(t *testing.T) {
 	c := newCaptureStatus(rev)
 	require.Equal(t, CaptureStateUninitialized, c.State)
 
-	// Uninitialize -> Initialized
+	// Uninitialized -> Initialized
 	c.handleHeartbeatResponse(&schedulepb.HeartbeatResponse{}, epoch)
 	require.Equal(t, CaptureStateInitialized, c.State)
 	require.Equal(t, epoch, c.Epoch)
