@@ -21,9 +21,19 @@ function test_owner_ha() {
 # we expect the live capture will be elected as the new
 # owner
 function test_kill_owner() {
+  # record tso before we create tables to skip the system table DDLs
+  start_ts=$(run_cdc_cli_tso_query ${UP_PD_HOST_1} ${UP_PD_PORT_1})
+
+  run_sql "CREATE table test.availability1(id int primary key, val int);"
+  run_sql "CREATE table test.availability2(id int primary key, val int);"
+  run_sql "CREATE table test.availability3(id int primary key, val int);"
 	echo "run test case test_kill_owner"
 	# start a capture server
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --logsuffix test_kill_owner.server1
+	# create changefeed after cdc is started
+	run_cdc_cli changefeed create --start-ts=$start_ts \
+    		--sink-uri="mysql://normal:123456@127.0.0.1:3306/" \
+    		--disable-version-check
 	# ensure the server become the owner
 	ensure $MAX_RETRIES "$CDC_BINARY cli capture list --disable-version-check 2>&1 | grep '\"is-owner\": true'"
 	owner_pid=$(ps -C $CDC_BINARY -o pid= | awk '{print $1}')
