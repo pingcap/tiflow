@@ -313,7 +313,6 @@ type CDCClient struct {
 	grpcPool GrpcPool
 
 	regionCache *tikv.RegionCache
-	kvStorage   tikv.Storage
 	pdClock     pdutil.Clock
 	changefeed  model.ChangeFeedID
 
@@ -324,7 +323,6 @@ type CDCClient struct {
 func NewCDCClient(
 	ctx context.Context,
 	pd pd.Client,
-	kvStorage tikv.Storage,
 	grpcPool GrpcPool,
 	regionCache *tikv.RegionCache,
 	pdClock pdutil.Clock,
@@ -337,7 +335,6 @@ func NewCDCClient(
 		clusterID:      clusterID,
 		config:         cfg,
 		pd:             pd,
-		kvStorage:      kvStorage,
 		grpcPool:       grpcPool,
 		regionCache:    regionCache,
 		pdClock:        pdClock,
