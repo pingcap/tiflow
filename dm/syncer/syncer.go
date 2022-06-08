@@ -43,6 +43,7 @@ import (
 	router "github.com/pingcap/tidb/util/table-router"
 	"github.com/pingcap/tiflow/dm/pkg/shardddl/optimism"
 	"github.com/pingcap/tiflow/dm/syncer/binlogstream"
+	"github.com/pingcap/tiflow/dm/syncer/metrics"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
@@ -69,7 +70,6 @@ import (
 	"github.com/pingcap/tiflow/dm/relay"
 	"github.com/pingcap/tiflow/dm/syncer/dbconn"
 	operator "github.com/pingcap/tiflow/dm/syncer/err-operator"
-	"github.com/pingcap/tiflow/dm/syncer/metrics"
 	onlineddl "github.com/pingcap/tiflow/dm/syncer/online-ddl-tools"
 	sm "github.com/pingcap/tiflow/dm/syncer/safe-mode"
 	"github.com/pingcap/tiflow/dm/syncer/shardddl"
@@ -125,9 +125,10 @@ type Syncer struct {
 	// control all goroutines that started in S.Run
 	runWg sync.WaitGroup
 
-	cfg     *config.SubTaskConfig
-	syncCfg replication.BinlogSyncerConfig
-	cliArgs *config.TaskCliArgs
+	cfg            *config.SubTaskConfig
+	syncCfg        replication.BinlogSyncerConfig
+	cliArgs        *config.TaskCliArgs
+	metricsProxies *metrics.Proxies
 
 	sgk  *ShardingGroupKeeper    // keeper to keep all sharding (sub) group in this syncer
 	osgk *OptShardingGroupKeeper // optimistic ddl's keeper to keep all sharding (sub) group in this syncer
@@ -264,7 +265,14 @@ func NewSyncer(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, relay rel
 	syncer.handleJobFunc = syncer.handleJob
 	syncer.cli = etcdClient
 
-	syncer.checkpoint = NewRemoteCheckPoint(syncer.tctx, cfg, syncer.checkpointID())
+	metricProxies := metrics.DefaultMetricsProxies
+	if syncer.cfg.MetricsFactory != nil {
+		metricProxies = &metrics.Proxies{}
+		metricProxies.Init(syncer.cfg.MetricsFactory)
+	}
+	syncer.metricsProxies = metricProxies.CacheForOneTask(syncer.cfg.Name, syncer.cfg.WorkerName, syncer.cfg.SourceID)
+
+	syncer.checkpoint = NewRemoteCheckPoint(syncer.tctx, cfg, syncer.metricsProxies, syncer.checkpointID())
 
 	syncer.binlogType = binlogstream.RelayToBinlogType(relay)
 	syncer.errOperatorHolder = operator.NewHolder(&logger)
@@ -272,7 +280,7 @@ func NewSyncer(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, relay rel
 
 	if cfg.ShardMode == config.ShardPessimistic {
 		// only need to sync DDL in sharding mode
-		syncer.sgk = NewShardingGroupKeeper(syncer.tctx, cfg)
+		syncer.sgk = NewShardingGroupKeeper(syncer.tctx, cfg, syncer.metricsProxies)
 	} else if cfg.ShardMode == config.ShardOptimistic {
 		syncer.osgk = NewOptShardingGroupKeeper(syncer.tctx, cfg)
 	}
@@ -389,7 +397,7 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 	}
 
 	if s.cfg.OnlineDDL {
-		s.onlineDDL, err = onlineddl.NewRealOnlinePlugin(tctx, s.cfg)
+		s.onlineDDL, err = onlineddl.NewRealOnlinePlugin(tctx, s.cfg, s.metricsProxies)
 		if err != nil {
 			return err
 		}
@@ -647,7 +655,7 @@ func (s *Syncer) resetDBs(tctx *tcontext.Context) error {
 
 // Process implements the dm.Unit interface.
 func (s *Syncer) Process(ctx context.Context, pr chan pb.ProcessResult) {
-	metrics.SyncerExitWithErrorCounter.WithLabelValues(s.cfg.Name, s.cfg.SourceID).Add(0)
+	s.metricsProxies.Metrics.SyncerExitWithErrorCounter.Add(0)
 
 	newCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -678,7 +686,7 @@ func (s *Syncer) Process(ctx context.Context, pr chan pb.ProcessResult) {
 				return
 			}
 			cancel() // cancel s.Run
-			metrics.SyncerExitWithErrorCounter.WithLabelValues(s.cfg.Name, s.cfg.SourceID).Inc()
+			s.metricsProxies.Metrics.SyncerExitWithErrorCounter.Inc()
 			errsMu.Lock()
 			errs = append(errs, err)
 			errsMu.Unlock()
@@ -705,7 +713,7 @@ func (s *Syncer) Process(ctx context.Context, pr chan pb.ProcessResult) {
 			s.tctx.L().Info("filter out error caused by user cancel", log.ShortError(err))
 		} else {
 			s.tctx.L().Debug("unit syncer quits with error", zap.Error(err))
-			metrics.SyncerExitWithErrorCounter.WithLabelValues(s.cfg.Name, s.cfg.SourceID).Inc()
+			s.metricsProxies.Metrics.SyncerExitWithErrorCounter.Inc()
 			errsMu.Lock()
 			errs = append(errs, unit.NewProcessError(err))
 			errsMu.Unlock()
@@ -822,10 +830,10 @@ func (s *Syncer) updateJobMetrics(isFinished bool, queueBucket string, j *job) {
 		count = len(j.ddls)
 	}
 
-	m := metrics.AddedJobsTotal
+	m := s.metricsProxies.AddedJobsTotal
 	if isFinished {
 		s.count.Add(int64(count))
-		m = metrics.FinishedJobsTotal
+		m = s.metricsProxies.FinishedJobsTotal
 	}
 	switch tp {
 	case dml:
@@ -868,8 +876,8 @@ func (s *Syncer) updateReplicationLagMetric() {
 		lag = s.calcReplicationLag(minTS)
 	}
 
-	metrics.ReplicationLagHistogram.WithLabelValues(s.cfg.Name, s.cfg.SourceID, s.cfg.WorkerName).Observe(float64(lag))
-	metrics.ReplicationLagGauge.WithLabelValues(s.cfg.Name, s.cfg.SourceID, s.cfg.WorkerName).Set(float64(lag))
+	s.metricsProxies.Metrics.ReplicationLagHistogram.Observe(float64(lag))
+	s.metricsProxies.Metrics.ReplicationLagGauge.Set(float64(lag))
 	s.secondsBehindMaster.Store(lag)
 
 	failpoint.Inject("ShowLagInLog", func(v failpoint.Value) {
@@ -969,7 +977,7 @@ func (s *Syncer) addJob(job *job) {
 		s.jobWg.Add(1)
 		startTime := time.Now()
 		s.ddlJobCh <- job
-		metrics.AddJobDurationHistogram.WithLabelValues("ddl", s.cfg.Name, adminQueueName, s.cfg.SourceID).Observe(time.Since(startTime).Seconds())
+		s.metricsProxies.AddJobDurationHistogram.WithLabelValues("ddl", s.cfg.Name, adminQueueName, s.cfg.SourceID).Observe(time.Since(startTime).Seconds())
 	case dml:
 		failpoint.Inject("SkipDML", func(val failpoint.Value) {
 			// first col should be an int and primary key, every row with pk <= val will be skipped
@@ -1257,7 +1265,7 @@ func (s *Syncer) afterFlushCheckpoint(task *checkpointFlushTask) error {
 	now := time.Now()
 	if !s.lastCheckpointFlushedTime.IsZero() {
 		duration := now.Sub(s.lastCheckpointFlushedTime).Seconds()
-		metrics.FlushCheckPointsTimeInterval.WithLabelValues(s.cfg.WorkerName, s.cfg.Name, s.cfg.SourceID).Observe(duration)
+		s.metricsProxies.Metrics.FlushCheckPointsTimeInterval.Observe(duration)
 	}
 	s.lastCheckpointFlushedTime = now
 
@@ -1335,7 +1343,7 @@ func (s *Syncer) syncDDL(queueBucket string, db *dbconn.DBConn, ddlJobChan chan 
 
 		if !ignore {
 			var affected int
-			affected, err = db.ExecuteSQLWithIgnore(s.syncCtx, errorutil.IsIgnorableMySQLDDLError, ddlJob.ddls)
+			affected, err = db.ExecuteSQLWithIgnore(s.syncCtx, s.metricsProxies, errorutil.IsIgnorableMySQLDDLError, ddlJob.ddls)
 			if err != nil {
 				err = s.handleSpecialDDLError(s.syncCtx, err, ddlJob.ddls, affected, db)
 				err = terror.WithScope(err, terror.ScopeDownstream)
@@ -1417,11 +1425,11 @@ func (s *Syncer) successFunc(queueID int, statementsCnt int, jobs []*job) {
 		j := jobs[0]
 		switch j.tp {
 		case ddl:
-			metrics.BinlogEventCost.WithLabelValues(metrics.BinlogEventCostStageDDLExec, s.cfg.Name, s.cfg.WorkerName, s.cfg.SourceID).Observe(time.Since(j.jobAddTime).Seconds())
+			s.metricsProxies.BinlogEventCost.WithLabelValues(metrics.BinlogEventCostStageDDLExec, s.cfg.Name, s.cfg.WorkerName, s.cfg.SourceID).Observe(time.Since(j.jobAddTime).Seconds())
 		case dml:
-			metrics.BinlogEventCost.WithLabelValues(metrics.BinlogEventCostStageDMLExec, s.cfg.Name, s.cfg.WorkerName, s.cfg.SourceID).Observe(time.Since(j.jobAddTime).Seconds())
+			s.metricsProxies.BinlogEventCost.WithLabelValues(metrics.BinlogEventCostStageDMLExec, s.cfg.Name, s.cfg.WorkerName, s.cfg.SourceID).Observe(time.Since(j.jobAddTime).Seconds())
 			// metric only increases by 1 because dm batches sql jobs in a single transaction.
-			metrics.FinishedTransactionTotal.WithLabelValues(s.cfg.Name, s.cfg.WorkerName, s.cfg.SourceID).Inc()
+			s.metricsProxies.Metrics.FinishedTransactionTotal.Inc()
 		}
 	}
 
@@ -1429,8 +1437,8 @@ func (s *Syncer) successFunc(queueID int, statementsCnt int, jobs []*job) {
 		s.updateJobMetrics(true, queueBucket, sqlJob)
 	}
 	s.updateReplicationJobTS(nil, dmlWorkerJobIdx(queueID))
-	metrics.ReplicationTransactionBatch.WithLabelValues(s.cfg.WorkerName, s.cfg.Name, s.cfg.SourceID, queueBucket, "statements").Observe(float64(statementsCnt))
-	metrics.ReplicationTransactionBatch.WithLabelValues(s.cfg.WorkerName, s.cfg.Name, s.cfg.SourceID, queueBucket, "rows").Observe(float64(len(jobs)))
+	s.metricsProxies.ReplicationTransactionBatch.WithLabelValues(s.cfg.WorkerName, s.cfg.Name, s.cfg.SourceID, queueBucket, "statements").Observe(float64(statementsCnt))
+	s.metricsProxies.ReplicationTransactionBatch.WithLabelValues(s.cfg.WorkerName, s.cfg.Name, s.cfg.SourceID, queueBucket, "rows").Observe(float64(len(jobs)))
 }
 
 func (s *Syncer) fatalFunc(job *job, err error) {
@@ -1526,7 +1534,7 @@ func (s *Syncer) waitBeforeRunExit(ctx context.Context) {
 
 func (s *Syncer) updateTSOffsetCronJob(ctx context.Context) {
 	defer s.runWg.Done()
-	// temporarily hard code there. if this metrics works well add this to config file.
+	// temporarily hard code there. if this Proxies works well add this to config file.
 	ticker := time.NewTicker(time.Minute * 10)
 	defer ticker.Stop()
 	for {
@@ -1543,7 +1551,7 @@ func (s *Syncer) updateTSOffsetCronJob(ctx context.Context) {
 
 func (s *Syncer) updateLagCronJob(ctx context.Context) {
 	defer s.runWg.Done()
-	// temporarily hard code there. if this metrics works well add this to config file.
+	// temporarily hard code there. if this Proxies works well add this to config file.
 	ticker := time.NewTicker(time.Millisecond * 100)
 	defer ticker.Stop()
 	for {
@@ -2093,18 +2101,18 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		})
 
 		// time duration for reading an event from relay log or upstream master.
-		metrics.BinlogReadDurationHistogram.WithLabelValues(s.cfg.Name, s.cfg.SourceID).Observe(time.Since(startTime).Seconds())
+		s.metricsProxies.Metrics.BinlogReadDurationHistogram.Observe(time.Since(startTime).Seconds())
 		startTime = time.Now() // reset start time for the next metric.
 
-		metrics.BinlogPosGauge.WithLabelValues("syncer", s.cfg.Name, s.cfg.SourceID).Set(float64(e.Header.LogPos))
+		s.metricsProxies.Metrics.BinlogSyncerPosGauge.Set(float64(e.Header.LogPos))
 		index, err := binlog.GetFilenameIndex(lastLocation.Position.Name)
 		if err != nil {
 			s.tctx.L().Warn("fail to get index number of binlog file, may because only specify GTID and hasn't saved according binlog position", log.ShortError(err))
 		} else {
-			metrics.BinlogFileGauge.WithLabelValues("syncer", s.cfg.Name, s.cfg.SourceID).Set(float64(index))
+			s.metricsProxies.Metrics.BinlogSyncerFileGauge.Set(float64(index))
 		}
 		s.binlogSizeCount.Add(int64(e.Header.EventSize))
-		metrics.BinlogEventSizeHistogram.WithLabelValues(s.cfg.Name, s.cfg.WorkerName, s.cfg.SourceID).Observe(float64(e.Header.EventSize))
+		s.metricsProxies.Metrics.BinlogEventSizeHistogram.Observe(float64(e.Header.EventSize))
 
 		failpoint.Inject("ProcessBinlogSlowDown", nil)
 
@@ -2261,7 +2269,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			err2 = s.handleRotateEvent(ev, ec)
 		case *replication.RowsEvent:
 			eventIndex++
-			metrics.BinlogEventRowHistogram.WithLabelValues(s.cfg.WorkerName, s.cfg.Name, s.cfg.SourceID).Observe(float64(len(ev.Rows)))
+			s.metricsProxies.Metrics.BinlogEventRowHistogram.Observe(float64(len(ev.Rows)))
 			sourceTable, err2 = s.handleRowsEvent(ev, ec)
 			if sourceTable != nil && err2 == nil && s.cfg.EnableGTID {
 				if _, ok := affectedSourceTables[sourceTable.Schema]; !ok {
@@ -2520,7 +2528,7 @@ func (s *Syncer) handleRowsEvent(ev *replication.RowsEvent, ec eventContext) (*f
 		return nil, err
 	}
 	if needSkip {
-		metrics.SkipBinlogDurationHistogram.WithLabelValues("rows", s.cfg.Name, s.cfg.SourceID).Observe(time.Since(ec.startTime).Seconds())
+		s.metricsProxies.SkipBinlogDurationHistogram.WithLabelValues("rows", s.cfg.Name, s.cfg.SourceID).Observe(time.Since(ec.startTime).Seconds())
 		// for RowsEvent, we should record lastLocation rather than currentLocation
 		return nil, s.recordSkipSQLsLocation(&ec)
 	}
@@ -2573,7 +2581,7 @@ func (s *Syncer) handleRowsEvent(ev *replication.RowsEvent, ec eventContext) (*f
 		if err != nil {
 			return nil, terror.Annotatef(err, "gen insert sqls failed, sourceTable: %v, targetTable: %v", sourceTable, targetTable)
 		}
-		metrics.BinlogEventCost.WithLabelValues(metrics.BinlogEventCostStageGenWriteRows, s.cfg.Name, s.cfg.WorkerName, s.cfg.SourceID).Observe(time.Since(ec.startTime).Seconds())
+		s.metricsProxies.BinlogEventCost.WithLabelValues(metrics.BinlogEventCostStageGenWriteRows, s.cfg.Name, s.cfg.WorkerName, s.cfg.SourceID).Observe(time.Since(ec.startTime).Seconds())
 
 	case replication.UPDATE_ROWS_EVENTv0, replication.UPDATE_ROWS_EVENTv1, replication.UPDATE_ROWS_EVENTv2:
 		oldExprFilter, newExprFilter, err2 := s.exprFilterGroup.GetUpdateExprs(sourceTable, tableInfo)
@@ -2586,7 +2594,7 @@ func (s *Syncer) handleRowsEvent(ev *replication.RowsEvent, ec eventContext) (*f
 		if err != nil {
 			return nil, terror.Annotatef(err, "gen update sqls failed, sourceTable: %v, targetTable: %v", sourceTable, targetTable)
 		}
-		metrics.BinlogEventCost.WithLabelValues(metrics.BinlogEventCostStageGenUpdateRows, s.cfg.Name, s.cfg.WorkerName, s.cfg.SourceID).Observe(time.Since(ec.startTime).Seconds())
+		s.metricsProxies.BinlogEventCost.WithLabelValues(metrics.BinlogEventCostStageGenUpdateRows, s.cfg.Name, s.cfg.WorkerName, s.cfg.SourceID).Observe(time.Since(ec.startTime).Seconds())
 
 	case replication.DELETE_ROWS_EVENTv0, replication.DELETE_ROWS_EVENTv1, replication.DELETE_ROWS_EVENTv2:
 		exprFilter, err2 := s.exprFilterGroup.GetDeleteExprs(sourceTable, tableInfo)
@@ -2598,7 +2606,7 @@ func (s *Syncer) handleRowsEvent(ev *replication.RowsEvent, ec eventContext) (*f
 		if err != nil {
 			return nil, terror.Annotatef(err, "gen delete sqls failed, sourceTable: %v, targetTable: %v", sourceTable, targetTable)
 		}
-		metrics.BinlogEventCost.WithLabelValues(metrics.BinlogEventCostStageGenDeleteRows, s.cfg.Name, s.cfg.WorkerName, s.cfg.SourceID).Observe(time.Since(ec.startTime).Seconds())
+		s.metricsProxies.BinlogEventCost.WithLabelValues(metrics.BinlogEventCostStageGenDeleteRows, s.cfg.Name, s.cfg.WorkerName, s.cfg.SourceID).Observe(time.Since(ec.startTime).Seconds())
 
 	default:
 		ec.tctx.L().Debug("ignoring unrecognized event", zap.String("event", "row"), zap.Stringer("type", ec.header.EventType))
@@ -2616,7 +2624,7 @@ func (s *Syncer) handleRowsEvent(ev *replication.RowsEvent, ec eventContext) (*f
 			return nil, err2
 		}
 	}
-	metrics.DispatchBinlogDurationHistogram.WithLabelValues(metricTp, s.cfg.Name, s.cfg.SourceID).Observe(time.Since(startTime).Seconds())
+	s.metricsProxies.DispatchBinlogDurationHistogram.WithLabelValues(metricTp, s.cfg.Name, s.cfg.SourceID).Observe(time.Since(startTime).Seconds())
 
 	if len(sourceTable.Schema) != 0 && !s.cfg.EnableGTID {
 		// when in position-based replication, now events before table checkpoint is sent to queue. But in GTID-based
@@ -2757,7 +2765,7 @@ func (s *Syncer) handleQueryEvent(ev *replication.QueryEvent, ec eventContext, o
 			return
 		}
 		// don't return error if filter success
-		metrics.SkipBinlogDurationHistogram.WithLabelValues("query", s.cfg.Name, s.cfg.SourceID).Observe(time.Since(ec.startTime).Seconds())
+		s.metricsProxies.SkipBinlogDurationHistogram.WithLabelValues("query", s.cfg.Name, s.cfg.SourceID).Observe(time.Since(ec.startTime).Seconds())
 		ec.tctx.L().Warn("skip event", zap.String("event", "query"), zap.Stringer("query event context", qec))
 		*ec.lastLocation = *ec.currentLocation // before record skip location, update lastLocation
 		err = s.recordSkipSQLsLocation(&ec)
@@ -2833,7 +2841,7 @@ func (s *Syncer) handleQueryEvent(ev *replication.QueryEvent, ec eventContext, o
 	}
 	qec.tctx.L().Info("resolve sql", zap.String("event", "query"), zap.Strings("appliedDDLs", qec.appliedDDLs), zap.Stringer("queryEventContext", qec))
 
-	metrics.BinlogEventCost.WithLabelValues(metrics.BinlogEventCostStageGenQuery, s.cfg.Name, s.cfg.WorkerName, s.cfg.SourceID).Observe(time.Since(qec.startTime).Seconds())
+	s.metricsProxies.BinlogEventCost.WithLabelValues(metrics.BinlogEventCostStageGenQuery, s.cfg.Name, s.cfg.WorkerName, s.cfg.SourceID).Observe(time.Since(qec.startTime).Seconds())
 
 	/*
 		we construct a application transaction for ddl. we save checkpoint after we execute all ddls
@@ -2864,7 +2872,7 @@ func (s *Syncer) handleQueryEvent(ev *replication.QueryEvent, ec eventContext, o
 		sourceTable := ddlInfo.sourceTables[0]
 		targetTable := ddlInfo.targetTables[0]
 		if len(ddlInfo.routedDDL) == 0 {
-			metrics.SkipBinlogDurationHistogram.WithLabelValues("query", s.cfg.Name, s.cfg.SourceID).Observe(time.Since(qec.startTime).Seconds())
+			s.metricsProxies.SkipBinlogDurationHistogram.WithLabelValues("query", s.cfg.Name, s.cfg.SourceID).Observe(time.Since(qec.startTime).Seconds())
 			qec.tctx.L().Warn("skip event", zap.String("event", "query"), zap.String("statement", sql), zap.String("schema", qec.ddlSchema))
 			continue
 		}
@@ -3100,7 +3108,7 @@ func (s *Syncer) handleQueryEventPessimistic(qec *queryEventContext) error {
 	}
 
 	if needShardingHandle {
-		metrics.UnsyncedTableGauge.WithLabelValues(s.cfg.Name, ddlInfo.targetTables[0].String(), s.cfg.SourceID).Set(float64(remain))
+		s.metricsProxies.UnsyncedTableGauge.WithLabelValues(s.cfg.Name, ddlInfo.targetTables[0].String(), s.cfg.SourceID).Set(float64(remain))
 		err = s.safeMode.IncrForTable(qec.tctx, ddlInfo.targetTables[0]) // try enable safe-mode when starting syncing for sharding group
 		if err != nil {
 			return err
@@ -3165,11 +3173,11 @@ func (s *Syncer) handleQueryEventPessimistic(qec *queryEventContext) error {
 		if err2 != nil {
 			return err2
 		}
-		metrics.ShardLockResolving.WithLabelValues(s.cfg.Name, s.cfg.SourceID).Set(1) // block and wait DDL lock to be synced
+		s.metricsProxies.Metrics.ShardLockResolving.Set(1) // block and wait DDL lock to be synced
 		qec.tctx.L().Info("putted shard DDL info", zap.Stringer("info", shardInfo), zap.Int64("revision", rev))
 
 		shardOp, err2 := s.pessimist.GetOperation(qec.tctx.Ctx, shardInfo, rev+1)
-		metrics.ShardLockResolving.WithLabelValues(s.cfg.Name, s.cfg.SourceID).Set(0)
+		s.metricsProxies.Metrics.ShardLockResolving.Set(0)
 		if err2 != nil {
 			return err2
 		}
@@ -3660,7 +3668,7 @@ func (s *Syncer) Close() {
 	s.closeOnlineDDL()
 	// when closing syncer by `stop-task`, remove active relay log from hub
 	s.removeActiveRelayLog()
-	metrics.RemoveLabelValuesWithTaskInMetrics(s.cfg.Name)
+	s.metricsProxies.RemoveLabelValuesWithTaskInMetrics(s.cfg.Name)
 
 	s.runWg.Wait()
 	s.closed.Store(true)

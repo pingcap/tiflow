@@ -888,7 +888,7 @@ func getMinLocForSubTask(ctx context.Context, subTaskCfg config.SubTaskConfig) (
 	}
 
 	tctx := tcontext.NewContext(ctx, log.L())
-	checkpoint := syncer.NewRemoteCheckPoint(tctx, subTaskCfg2, subTaskCfg2.SourceID)
+	checkpoint := syncer.NewRemoteCheckPoint(tctx, subTaskCfg2, nil, subTaskCfg2.SourceID)
 	err = checkpoint.Init(tctx)
 	if err != nil {
 		return nil, errors.Annotate(err, "get min position from checkpoint")

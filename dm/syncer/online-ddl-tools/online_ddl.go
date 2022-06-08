@@ -27,6 +27,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/syncer/dbconn"
+	"github.com/pingcap/tiflow/dm/syncer/metrics"
 
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/parser"
@@ -97,7 +98,8 @@ type GhostDDLInfo struct {
 type Storage struct {
 	sync.RWMutex
 
-	cfg *config.SubTaskConfig
+	cfg           *config.SubTaskConfig
+	metricProxies *metrics.Proxies
 
 	db        *conn.BaseDB
 	dbConn    *dbconn.DBConn
@@ -112,14 +114,19 @@ type Storage struct {
 }
 
 // NewOnlineDDLStorage creates a new online ddl storager.
-func NewOnlineDDLStorage(logCtx *tcontext.Context, cfg *config.SubTaskConfig) *Storage {
+func NewOnlineDDLStorage(
+	logCtx *tcontext.Context,
+	cfg *config.SubTaskConfig,
+	metricProxies *metrics.Proxies,
+) *Storage {
 	s := &Storage{
-		cfg:       cfg,
-		schema:    dbutil.ColumnName(cfg.MetaSchema),
-		tableName: dbutil.TableName(cfg.MetaSchema, cputil.SyncerOnlineDDL(cfg.Name)),
-		id:        cfg.SourceID,
-		ddls:      make(map[string]map[string]*GhostDDLInfo),
-		logCtx:    logCtx,
+		cfg:           cfg,
+		metricProxies: metricProxies,
+		schema:        dbutil.ColumnName(cfg.MetaSchema),
+		tableName:     dbutil.TableName(cfg.MetaSchema, cputil.SyncerOnlineDDL(cfg.Name)),
+		id:            cfg.SourceID,
+		ddls:          make(map[string]map[string]*GhostDDLInfo),
+		logCtx:        logCtx,
 	}
 
 	return s
@@ -155,7 +162,7 @@ func (s *Storage) Load(tctx *tcontext.Context) error {
 	defer s.Unlock()
 
 	query := fmt.Sprintf("SELECT `ghost_schema`, `ghost_table`, `ddls` FROM %s WHERE `id`= ?", s.tableName)
-	rows, err := s.dbConn.QuerySQL(tctx, query, s.id)
+	rows, err := s.dbConn.QuerySQL(tctx, s.metricProxies, query, s.id)
 	if err != nil {
 		return terror.WithScope(err, terror.ScopeDownstream)
 	}
@@ -249,7 +256,7 @@ func (s *Storage) saveToDB(tctx *tcontext.Context, ghostSchema, ghostTable strin
 	}
 
 	query := fmt.Sprintf("REPLACE INTO %s(`id`,`ghost_schema`, `ghost_table`, `ddls`) VALUES (?, ?, ?, ?)", s.tableName)
-	_, err = s.dbConn.ExecuteSQL(tctx, []string{query}, []interface{}{s.id, ghostSchema, ghostTable, string(ddlsBytes)})
+	_, err = s.dbConn.ExecuteSQL(tctx, s.metricProxies, []string{query}, []interface{}{s.id, ghostSchema, ghostTable, string(ddlsBytes)})
 	failpoint.Inject("ExitAfterSaveOnlineDDL", func() {
 		tctx.L().Info("failpoint ExitAfterSaveOnlineDDL")
 		panic("ExitAfterSaveOnlineDDL")
@@ -272,7 +279,7 @@ func (s *Storage) delete(tctx *tcontext.Context, ghostSchema, ghostTable string)
 
 	// delete all checkpoints
 	sql := fmt.Sprintf("DELETE FROM %s WHERE `id` = ? and `ghost_schema` = ? and `ghost_table` = ?", s.tableName)
-	_, err := s.dbConn.ExecuteSQL(tctx, []string{sql}, []interface{}{s.id, ghostSchema, ghostTable})
+	_, err := s.dbConn.ExecuteSQL(tctx, s.metricProxies, []string{sql}, []interface{}{s.id, ghostSchema, ghostTable})
 	if err != nil {
 		return terror.WithScope(err, terror.ScopeDownstream)
 	}
@@ -288,7 +295,7 @@ func (s *Storage) Clear(tctx *tcontext.Context) error {
 
 	// delete all checkpoints
 	sql := fmt.Sprintf("DELETE FROM %s WHERE `id` = ?", s.tableName)
-	_, err := s.dbConn.ExecuteSQL(tctx, []string{sql}, []interface{}{s.id})
+	_, err := s.dbConn.ExecuteSQL(tctx, s.metricProxies, []string{sql}, []interface{}{s.id})
 	if err != nil {
 		return terror.WithScope(err, terror.ScopeDownstream)
 	}
@@ -320,7 +327,7 @@ func (s *Storage) prepare(tctx *tcontext.Context) error {
 
 func (s *Storage) createSchema(tctx *tcontext.Context) error {
 	sql := fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s", s.schema)
-	_, err := s.dbConn.ExecuteSQL(tctx, []string{sql})
+	_, err := s.dbConn.ExecuteSQL(tctx, s.metricProxies, []string{sql})
 	return terror.WithScope(err, terror.ScopeDownstream)
 }
 
@@ -333,7 +340,7 @@ func (s *Storage) createTable(tctx *tcontext.Context) error {
 			update_time timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 			UNIQUE KEY uk_id_schema_table (id, ghost_schema, ghost_table)
 		)`, s.tableName)
-	_, err := s.dbConn.ExecuteSQL(tctx, []string{sql})
+	_, err := s.dbConn.ExecuteSQL(tctx, s.metricProxies, []string{sql})
 	return terror.WithScope(err, terror.ScopeDownstream)
 }
 
@@ -400,7 +407,11 @@ type RealOnlinePlugin struct {
 }
 
 // NewRealOnlinePlugin returns real online plugin.
-func NewRealOnlinePlugin(tctx *tcontext.Context, cfg *config.SubTaskConfig) (OnlinePlugin, error) {
+func NewRealOnlinePlugin(
+	tctx *tcontext.Context,
+	cfg *config.SubTaskConfig,
+	metricProxies *metrics.Proxies,
+) (OnlinePlugin, error) {
 	shadowRegs := make([]*regexp.Regexp, 0, len(cfg.ShadowTableRules))
 	trashRegs := make([]*regexp.Regexp, 0, len(cfg.TrashTableRules))
 	for _, sg := range cfg.ShadowTableRules {
@@ -418,7 +429,11 @@ func NewRealOnlinePlugin(tctx *tcontext.Context, cfg *config.SubTaskConfig) (Onl
 		trashRegs = append(trashRegs, trashReg)
 	}
 	r := &RealOnlinePlugin{
-		storage:    NewOnlineDDLStorage(tcontext.Background().WithLogger(tctx.L().WithFields(zap.String("online ddl", ""))), cfg), // create a context for logger
+		storage: NewOnlineDDLStorage(
+			tcontext.Background().WithLogger(tctx.L().WithFields(zap.String("online ddl", ""))),
+			cfg,
+			metricProxies,
+		), // create a context for logger
 		shadowRegs: shadowRegs,
 		trashRegs:  trashRegs,
 	}

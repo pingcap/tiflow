@@ -45,19 +45,15 @@ func (t *testDMJobmasterSuite) TestUpdateTaskStatus() {
 
 	require.Len(t.T(), taskManager.TaskStatus(), 0)
 
-	dumpStatus1 := &runtime.DumpStatus{
-		DefaultTaskStatus: runtime.DefaultTaskStatus{
-			Unit:  lib.WorkerDMDump,
-			Task:  jobCfg.Upstreams[0].SourceID,
-			Stage: metadata.StageRunning,
-		},
+	dumpStatus1 := runtime.TaskStatus{
+		Unit:  lib.WorkerDMDump,
+		Task:  jobCfg.Upstreams[0].SourceID,
+		Stage: metadata.StageRunning,
 	}
-	dumpStatus2 := &runtime.DumpStatus{
-		DefaultTaskStatus: runtime.DefaultTaskStatus{
-			Unit:  lib.WorkerDMDump,
-			Task:  jobCfg.Upstreams[1].SourceID,
-			Stage: metadata.StageRunning,
-		},
+	dumpStatus2 := runtime.TaskStatus{
+		Unit:  lib.WorkerDMDump,
+		Task:  jobCfg.Upstreams[1].SourceID,
+		Stage: metadata.StageRunning,
 	}
 
 	taskManager.UpdateTaskStatus(dumpStatus1)
@@ -69,12 +65,10 @@ func (t *testDMJobmasterSuite) TestUpdateTaskStatus() {
 	require.Equal(t.T(), taskStatusMap[jobCfg.Upstreams[0].SourceID], dumpStatus1)
 	require.Equal(t.T(), taskStatusMap[jobCfg.Upstreams[1].SourceID], dumpStatus2)
 
-	loadStatus1 := &runtime.LoadStatus{
-		DefaultTaskStatus: runtime.DefaultTaskStatus{
-			Unit:  lib.WorkerDMDump,
-			Task:  jobCfg.Upstreams[0].SourceID,
-			Stage: metadata.StageRunning,
-		},
+	loadStatus1 := runtime.TaskStatus{
+		Unit:  lib.WorkerDMDump,
+		Task:  jobCfg.Upstreams[0].SourceID,
+		Stage: metadata.StageRunning,
 	}
 	taskManager.UpdateTaskStatus(loadStatus1)
 	taskStatusMap = taskManager.TaskStatus()
@@ -169,19 +163,15 @@ func (t *testDMJobmasterSuite) TestOperateTask() {
 
 func (t *testDMJobmasterSuite) TestClearTaskStatus() {
 	taskManager := NewTaskManager(nil, nil, nil)
-	syncStatus1 := &runtime.DumpStatus{
-		DefaultTaskStatus: runtime.DefaultTaskStatus{
-			Unit:  lib.WorkerDMSync,
-			Task:  "source1",
-			Stage: metadata.StageRunning,
-		},
+	syncStatus1 := runtime.TaskStatus{
+		Unit:  lib.WorkerDMSync,
+		Task:  "source1",
+		Stage: metadata.StageRunning,
 	}
-	syncStatus2 := &runtime.DumpStatus{
-		DefaultTaskStatus: runtime.DefaultTaskStatus{
-			Unit:  lib.WorkerDMSync,
-			Task:  "source2",
-			Stage: metadata.StageRunning,
-		},
+	syncStatus2 := runtime.TaskStatus{
+		Unit:  lib.WorkerDMSync,
+		Task:  "source2",
+		Stage: metadata.StageRunning,
 	}
 
 	taskManager.UpdateTaskStatus(syncStatus1)
@@ -198,6 +188,13 @@ func (t *testDMJobmasterSuite) TestClearTaskStatus() {
 	taskManager.removeTaskStatus(job)
 	require.Len(t.T(), taskManager.TaskStatus(), 1)
 
+	taskStatus, ok := taskManager.GetTaskStatus("source2")
+	require.False(t.T(), ok)
+	require.Equal(t.T(), runtime.NewOfflineStatus("source2"), taskStatus)
+	taskStatus, ok = taskManager.GetTaskStatus("source1")
+	require.True(t.T(), ok)
+	require.Equal(t.T(), syncStatus1, taskStatus)
+
 	taskManager.onJobNotExist(context.Background())
 	require.Len(t.T(), taskManager.TaskStatus(), 0)
 
@@ -206,18 +203,13 @@ func (t *testDMJobmasterSuite) TestClearTaskStatus() {
 }
 
 func (t *testDMJobmasterSuite) TestTaskAsExpected() {
-	require.True(t.T(), taskAsExpected(&metadata.Task{Stage: metadata.StagePaused},
-		&runtime.DumpStatus{DefaultTaskStatus: runtime.DefaultTaskStatus{Stage: metadata.StagePaused}}))
-	require.True(t.T(), taskAsExpected(&metadata.Task{Stage: metadata.StageRunning},
-		&runtime.DumpStatus{DefaultTaskStatus: runtime.DefaultTaskStatus{Stage: metadata.StageRunning}}))
-	require.False(t.T(), taskAsExpected(&metadata.Task{Stage: metadata.StagePaused},
-		&runtime.DumpStatus{DefaultTaskStatus: runtime.DefaultTaskStatus{Stage: metadata.StageRunning}}))
-	require.True(t.T(), taskAsExpected(&metadata.Task{Stage: metadata.StageRunning},
-		&runtime.DumpStatus{DefaultTaskStatus: runtime.DefaultTaskStatus{Stage: metadata.StageFinished}}))
+	require.True(t.T(), taskAsExpected(&metadata.Task{Stage: metadata.StagePaused}, runtime.TaskStatus{Stage: metadata.StagePaused}))
+	require.True(t.T(), taskAsExpected(&metadata.Task{Stage: metadata.StageRunning}, runtime.TaskStatus{Stage: metadata.StageRunning}))
+	require.False(t.T(), taskAsExpected(&metadata.Task{Stage: metadata.StagePaused}, runtime.TaskStatus{Stage: metadata.StageRunning}))
+	require.True(t.T(), taskAsExpected(&metadata.Task{Stage: metadata.StageRunning}, runtime.TaskStatus{Stage: metadata.StageFinished}))
 
 	// TODO: change below results if needed.
-	require.False(t.T(), taskAsExpected(&metadata.Task{Stage: metadata.StageRunning},
-		&runtime.DumpStatus{DefaultTaskStatus: runtime.DefaultTaskStatus{Stage: metadata.StagePaused}}))
+	require.False(t.T(), taskAsExpected(&metadata.Task{Stage: metadata.StageRunning}, runtime.TaskStatus{Stage: metadata.StagePaused}))
 }
 
 func (t *testDMJobmasterSuite) TestCheckAndOperateTasks() {
@@ -229,19 +221,15 @@ func (t *testDMJobmasterSuite) TestCheckAndOperateTasks() {
 
 	require.EqualError(t.T(), taskManager.checkAndOperateTasks(context.Background(), job), "get task running status failed")
 
-	dumpStatus1 := &runtime.DumpStatus{
-		DefaultTaskStatus: runtime.DefaultTaskStatus{
-			Unit:  lib.WorkerDMDump,
-			Task:  jobCfg.Upstreams[0].SourceID,
-			Stage: metadata.StageRunning,
-		},
+	dumpStatus1 := runtime.TaskStatus{
+		Unit:  lib.WorkerDMDump,
+		Task:  jobCfg.Upstreams[0].SourceID,
+		Stage: metadata.StageRunning,
 	}
-	dumpStatus2 := &runtime.DumpStatus{
-		DefaultTaskStatus: runtime.DefaultTaskStatus{
-			Unit:  lib.WorkerDMDump,
-			Task:  jobCfg.Upstreams[1].SourceID,
-			Stage: metadata.StageRunning,
-		},
+	dumpStatus2 := runtime.TaskStatus{
+		Unit:  lib.WorkerDMDump,
+		Task:  jobCfg.Upstreams[1].SourceID,
+		Stage: metadata.StageRunning,
 	}
 	taskManager.UpdateTaskStatus(dumpStatus1)
 	taskManager.UpdateTaskStatus(dumpStatus2)
@@ -286,19 +274,15 @@ func (t *testDMJobmasterSuite) TestTaskManager() {
 		}
 	}()
 
-	syncStatus1 := &runtime.DumpStatus{
-		DefaultTaskStatus: runtime.DefaultTaskStatus{
-			Unit:  lib.WorkerDMSync,
-			Task:  source1,
-			Stage: metadata.StageRunning,
-		},
+	syncStatus1 := runtime.TaskStatus{
+		Unit:  lib.WorkerDMSync,
+		Task:  source1,
+		Stage: metadata.StageRunning,
 	}
-	syncStatus2 := &runtime.DumpStatus{
-		DefaultTaskStatus: runtime.DefaultTaskStatus{
-			Unit:  lib.WorkerDMSync,
-			Task:  source2,
-			Stage: metadata.StageRunning,
-		},
+	syncStatus2 := runtime.TaskStatus{
+		Unit:  lib.WorkerDMSync,
+		Task:  source2,
+		Stage: metadata.StageRunning,
 	}
 
 	// receive worker online
@@ -325,7 +309,6 @@ func (t *testDMJobmasterSuite) TestTaskManager() {
 	taskManager.OperateTask(ctx, Pause, nil, []string{source2})
 	mockAgent.On("SendMessage").Return(agentError).Times(3)
 	mockAgent.On("SendMessage").Return(nil).Once().Run(func(args mock.Arguments) { meetExpected.Store(true) })
-	// paused eventually
 	require.Eventually(t.T(), func() bool {
 		return meetExpected.CAS(true, false)
 	}, 5*time.Second, 100*time.Millisecond)
