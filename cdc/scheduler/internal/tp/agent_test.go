@@ -77,6 +77,10 @@ func TestAgentCollectTableStatus(t *testing.T) {
 	a.runningTasks[model.TableID(0)] = &dispatchTableTask{IsRemove: true}
 	status := a.newTableStatus(model.TableID(0))
 	require.Equal(t, schedulepb.TableStateStopping, status.State)
+
+	a.runningTasks[model.TableID(10)] = &dispatchTableTask{IsRemove: true}
+	status = a.newTableStatus(model.TableID(10))
+	require.Equal(t, schedulepb.TableStateAbsent, status.State)
 }
 
 func TestAgentHandleDispatchTableTask(t *testing.T) {
@@ -248,6 +252,25 @@ func TestAgentHandleMessageStopping(t *testing.T) {
 		Response.(*schedulepb.DispatchTableResponse_AddTable)
 	require.True(t, ok)
 	require.True(t, addTableResponse.AddTable.Reject)
+}
+
+func TestAgentHandleRemoveTableRequest(t *testing.T) {
+	t.Parallel()
+
+	a := newBaseAgent4Test()
+	a.tableExec = newMockTableExecutor()
+
+	// remove a table not exist, should not generate the task.
+	removeTableRequest := &schedulepb.DispatchTableRequest{
+		Request: &schedulepb.DispatchTableRequest_RemoveTable{
+			RemoveTable: &schedulepb.RemoveTableRequest{
+				TableID: 2,
+			},
+		},
+	}
+
+	a.handleMessageDispatchTableRequest(removeTableRequest, a.epoch)
+	require.Len(t, a.runningTasks, 0)
 }
 
 func TestAgentHandleMessage(t *testing.T) {
