@@ -67,7 +67,8 @@ type JobConfig struct {
 // InitImpl implements JobMasterImpl.
 func (m *JobMaster) InitImpl(ctx context.Context) error {
 	log.L().Info("ResourceJobMaster: InitImpl",
-		zap.String("job-id", m.JobMasterID()))
+		zap.String("job-id", m.JobMasterID()),
+		zap.Any("config", m.config))
 
 	return m.persistMasterStatus(ctx)
 }
