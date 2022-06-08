@@ -280,8 +280,6 @@ func (w *DefaultBaseWorker) doPreInit(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
-	w.startBackgroundTasks()
-
 	return nil
 }
 
