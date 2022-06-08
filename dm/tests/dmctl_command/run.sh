@@ -546,6 +546,13 @@ function run_validator_cmd {
 		"new\/ignored\/resolved: 2\/0\/0" 1 \
 		"\"stage\": \"Running\"" 2 \
 		"\"stage\": \"Stopped\"" 3
+	# check the validator is stopped but syncer remains active
+	curl 127.0.0.1:$WORKER1_PORT/debug/pprof/goroutine?debug=2 >$WORK_DIR/goroutine.worker1
+	check_log_not_contains $WORK_DIR/goroutine.worker1 "validator"
+	check_log_contains $WORK_DIR/goroutine.worker1 "syncer"
+	curl 127.0.0.1:$WORKER2_PORT/debug/pprof/goroutine?debug=2 >$WORK_DIR/goroutine.worker2
+	check_log_not_contains $WORK_DIR/goroutine.worker2 "validator"
+	check_log_contains $WORK_DIR/goroutine.worker2 "syncer"
 	# still able to query validation error
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation show-errors --error all test" \
@@ -574,7 +581,6 @@ function run_validator_cmd {
 		"\"stage\": \"Stopped\"" 2
 	run_sql_tidb "select * from dmctl_command.t1"
 	check_not_contains "id: -10" # sync failed due to GO_FAILPOINTS
-	sleep 5                      # wait validator
 	# no validation error, because validator has been stopped
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation status test" \
