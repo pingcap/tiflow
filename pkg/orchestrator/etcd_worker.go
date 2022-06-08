@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/chdelay"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
+	"github.com/pingcap/tiflow/pkg/migrate"
 	"github.com/pingcap/tiflow/pkg/orchestrator/util"
 	pkgutil "github.com/pingcap/tiflow/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
@@ -72,6 +73,8 @@ type EtcdWorker struct {
 	// snapshot isolation for Reactor ticks.
 	deleteCounter int64
 	metrics       *etcdWorkerMetrics
+
+	migrator migrate.Migrator
 }
 
 type etcdWorkerMetrics struct {
@@ -99,6 +102,7 @@ func NewEtcdWorker(client *etcd.CDCEtcdClient,
 	prefix string,
 	reactor Reactor,
 	initState ReactorState,
+	migrator migrate.Migrator,
 ) (*EtcdWorker, error) {
 	return &EtcdWorker{
 		clusterID:  client.ClusterID,
@@ -108,6 +112,7 @@ func NewEtcdWorker(client *etcd.CDCEtcdClient,
 		rawState:   make(map[util.EtcdKey]rawStateEntry),
 		prefix:     util.NormalizePrefix(prefix),
 		barrierRev: -1, // -1 indicates no barrier
+		migrator:   migrator,
 	}, nil
 }
 
@@ -127,10 +132,12 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 	defer worker.cleanUp()
 
 	// migrate data here
-	err := worker.checkAndMigrateMetaData(ctx, worker.clusterID, role)
+	err := worker.checkAndMigrateMetaData(ctx, role)
 	if err != nil {
 		return errors.Trace(err)
 	}
+	// migration is done, cdc server can serve http now
+	worker.migrator.MarkMigrateDone()
 
 	worker.initMetrics()
 
@@ -527,10 +534,10 @@ func (worker *EtcdWorker) handleDeleteCounter(value []byte) {
 
 // checkAndMigrateMetaData check if should migrate meta, if we should, it will block
 // until migrate done
-func (worker *EtcdWorker) checkAndMigrateMetaData(ctx context.Context,
-	clusterID, role string,
+func (worker *EtcdWorker) checkAndMigrateMetaData(
+	ctx context.Context, role string,
 ) error {
-	shouldMigrate, err := etcd.ShouldMigrate(ctx, worker.client, clusterID)
+	shouldMigrate, err := worker.migrator.ShouldMigrate(ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -539,10 +546,14 @@ func (worker *EtcdWorker) checkAndMigrateMetaData(ctx context.Context,
 	}
 
 	if role != pkgutil.RoleOwner.String() {
-		err := etcd.WaitMetaVersionMatched(ctx, worker.client, clusterID)
+		err := worker.migrator.WaitMetaVersionMatched(ctx)
+		if err != nil {
+			// processor
+			worker.migrator.MarkMigrateDone()
+		}
 		return errors.Trace(err)
 	}
 
-	err = etcd.MigrateData(ctx, worker.client, clusterID)
+	err = worker.migrator.Migrate(ctx)
 	return err
 }

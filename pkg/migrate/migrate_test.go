@@ -11,31 +11,91 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package etcd
+package migrate
 
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/etcd"
+	"github.com/pingcap/tiflow/pkg/security"
+	"github.com/pingcap/tiflow/pkg/txnutil/gc"
+	"github.com/pingcap/tiflow/pkg/util"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
+	pd "github.com/tikv/pd/client"
+	"go.etcd.io/etcd/client/pkg/v3/logutil"
 	clientv3 "go.etcd.io/etcd/client/v3"
+	"go.etcd.io/etcd/server/v3/embed"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"golang.org/x/sync/errgroup"
 )
 
-// 1. create a etcd server
-// 2. put some old meta data to etcd cluster
+type etcdTester struct {
+	dir       string
+	etcd      *embed.Etcd
+	clientURL *url.URL
+	client    etcd.CDCEtcdClient
+	ctx       context.Context
+	cancel    context.CancelFunc
+	errg      *errgroup.Group
+}
+
+func (s *etcdTester) setUpTest(t *testing.T) {
+	var err error
+	s.dir = t.TempDir()
+	s.clientURL, s.etcd, err = etcd.SetupEmbedEtcd(s.dir)
+	require.Nil(t, err)
+	logConfig := logutil.DefaultZapLoggerConfig
+	logConfig.Level = zap.NewAtomicLevelAt(zapcore.ErrorLevel)
+	client, err := clientv3.New(clientv3.Config{
+		Endpoints:   []string{s.clientURL.String()},
+		DialTimeout: 3 * time.Second,
+		LogConfig:   &logConfig,
+	})
+	require.NoError(t, err)
+
+	s.client, err = etcd.NewCDCEtcdClient(context.TODO(), client, etcd.DefaultCDCClusterID)
+	require.Nil(t, err)
+	s.ctx, s.cancel = context.WithCancel(context.Background())
+	s.errg = util.HandleErrWithErrGroup(s.ctx, s.etcd.Err(), func(e error) { t.Log(e) })
+}
+
+func (s *etcdTester) tearDownTest(t *testing.T) {
+	s.etcd.Close()
+	s.cancel()
+logEtcdError:
+	for {
+		select {
+		case err, ok := <-s.etcd.Err():
+			if !ok {
+				break logEtcdError
+			}
+			t.Logf("etcd server error: %v", err)
+		default:
+			break logEtcdError
+		}
+	}
+	s.client.Close() //nolint:errcheck
+}
+
+// 1. create an etcd server
+// 2. put some old metadata to etcd cluster
 // 3. use 3 goroutine to mock cdc nodes, one is owner, which will migrate data,
 // the other two are non-owner nodes, which will wait for migrating done
 // 3. migrate the data to new meta version
 // 4. check the data is migrated correctly
 func TestMigration(t *testing.T) {
-	s := &etcdTester{}
-	s.setUpTest(t)
-	defer s.tearDownTest(t)
-	curl := s.clientURL.String()
+	s := &etcd.Tester{}
+	s.SetUpTest(t)
+	defer s.TearDownTest(t)
+	curl := s.ClientURL.String()
 	cli, err := clientv3.New(clientv3.Config{
 		Endpoints:   []string{curl},
 		DialTimeout: 3 * time.Second,
@@ -99,23 +159,40 @@ func TestMigration(t *testing.T) {
 		require.Equal(t, tc.status, status)
 	}
 
-	cdcCli := &Client{cli: cli}
+	cdcCli := etcd.Wrap(cli, map[string]prometheus.Counter{})
 	// set timeout to make sure this test will finished
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
+
+	m := NewMigrator("default", cdcCli, []string{}, nil)
+	migrator := m.(*migrator)
+	migrator.createPDClientFunc = func(ctx context.Context,
+		pdEndpoints []string, conf *security.Credential,
+	) (pd.Client, error) {
+		mock := gc.MockPDClient{
+			ClusterID: 1,
+			UpdateServiceGCSafePointFunc: func(ctx context.Context,
+				serviceID string, ttl int64,
+				safePoint uint64,
+			) (uint64, error) {
+				return 1, nil
+			},
+		}
+		return &mock, nil
+	}
 
 	// 3. tow non-owner node wait for meta migrating done
 	wg := new(sync.WaitGroup)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		err := WaitMetaVersionMatched(ctx, cdcCli, "default")
+		err := migrator.WaitMetaVersionMatched(ctx)
 		require.NoError(t, err)
 	}()
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		err := WaitMetaVersionMatched(ctx, cdcCli, "default")
+		err := migrator.WaitMetaVersionMatched(ctx)
 		require.NoError(t, err)
 	}()
 
@@ -124,11 +201,11 @@ func TestMigration(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		// 5. test ShouldMigrate works as expected
-		should, err := ShouldMigrate(ctx, cdcCli, "default")
+		should, err := migrator.ShouldMigrate(ctx)
 		require.NoError(t, err)
 		if should {
 			// migrate
-			err = MigrateData(ctx, cdcCli, "default")
+			err = migrator.Migrate(ctx)
 			require.NoError(t, err)
 		}
 	}()
@@ -139,16 +216,18 @@ func TestMigration(t *testing.T) {
 	// 7. check new version data in etcd is expected
 	for _, tc := range testCases {
 		infoResp, err := cli.Get(context.Background(),
-			fmt.Sprintf("%s%s/%s", DefaultClusterAndNamespacePrefix,
-				changefeedInfoKey, tc.id))
+			fmt.Sprintf("%s%s/%s", etcd.DefaultClusterAndNamespacePrefix,
+				etcd.ChangefeedInfoKey, tc.id))
 		require.NoError(t, err)
 		info := model.ChangeFeedInfo{}
 		err = info.Unmarshal(infoResp.Kvs[0].Value)
 		require.NoError(t, err)
+		require.Equal(t, uint64(1), info.UpstreamID)
+		tc.info.UpstreamID = info.UpstreamID
 		require.Equal(t, tc.info, info)
 		statusResp, err := cli.Get(context.Background(),
-			fmt.Sprintf("%s%s/%s", DefaultClusterAndNamespacePrefix,
-				changefeedStatusKey, tc.id))
+			fmt.Sprintf("%s%s/%s", etcd.DefaultClusterAndNamespacePrefix,
+				etcd.ChangefeedStatusKey, tc.id))
 		require.NoError(t, err)
 		status := model.ChangeFeedStatus{}
 		err = status.Unmarshal(statusResp.Kvs[0].Value)
