@@ -486,21 +486,31 @@ func TestReplicationManagerAdvanceCheckpoint(t *testing.T) {
 	t.Parallel()
 
 	r := newReplicationManager(1)
-	rs, err := newReplicationSet(1, model.Ts(10), map[model.CaptureID]*schedulepb.TableStatus{
-		"1": {1, schedulepb.TableStateReplicating, schedulepb.Checkpoint{
-			CheckpointTs: model.Ts(10),
-			ResolvedTs:   model.Ts(20),
-		}},
-	})
+	rs, err := newReplicationSet(model.TableID(1), model.Ts(10),
+		map[model.CaptureID]*schedulepb.TableStatus{
+			"1": {
+				TableID: model.TableID(1),
+				State:   schedulepb.TableStateReplicating,
+				Checkpoint: schedulepb.Checkpoint{
+					CheckpointTs: model.Ts(10),
+					ResolvedTs:   model.Ts(20),
+				},
+			},
+		})
 	require.NoError(t, err)
 	r.tables[model.TableID(1)] = rs
 
-	rs, err = newReplicationSet(2, model.Ts(15), map[model.CaptureID]*schedulepb.TableStatus{
-		"2": {2, schedulepb.TableStateReplicating, schedulepb.Checkpoint{
-			CheckpointTs: model.Ts(15),
-			ResolvedTs:   model.Ts(30),
-		}},
-	})
+	rs, err = newReplicationSet(model.TableID(2), model.Ts(15),
+		map[model.CaptureID]*schedulepb.TableStatus{
+			"2": {
+				TableID: model.TableID(2),
+				State:   schedulepb.TableStateReplicating,
+				Checkpoint: schedulepb.Checkpoint{
+					CheckpointTs: model.Ts(15),
+					ResolvedTs:   model.Ts(30),
+				},
+			},
+		})
 	require.NoError(t, err)
 	r.tables[model.TableID(2)] = rs
 
@@ -516,16 +526,25 @@ func TestReplicationManagerAdvanceCheckpoint(t *testing.T) {
 	require.Equal(t, checkpointCannotProceed, checkpoint)
 	require.Equal(t, checkpointCannotProceed, resolved)
 
-	rs, err = newReplicationSet(3, model.Ts(5), map[model.CaptureID]*schedulepb.TableStatus{
-		"1": {3, schedulepb.TableStateReplicating, schedulepb.Checkpoint{
-			CheckpointTs: model.Ts(5),
-			ResolvedTs:   model.Ts(40),
-		}},
-		"2": {3, schedulepb.TableStatePreparing, schedulepb.Checkpoint{
-			CheckpointTs: model.Ts(5),
-			ResolvedTs:   model.Ts(40),
-		}},
-	})
+	rs, err = newReplicationSet(model.TableID(3), model.Ts(5),
+		map[model.CaptureID]*schedulepb.TableStatus{
+			"1": {
+				TableID: model.TableID(3),
+				State:   schedulepb.TableStateReplicating,
+				Checkpoint: schedulepb.Checkpoint{
+					CheckpointTs: model.Ts(5),
+					ResolvedTs:   model.Ts(40),
+				},
+			},
+			"2": {
+				TableID: model.TableID(3),
+				State:   schedulepb.TableStatePreparing,
+				Checkpoint: schedulepb.Checkpoint{
+					CheckpointTs: model.Ts(5),
+					ResolvedTs:   model.Ts(40),
+				},
+			},
+		})
 	require.NoError(t, err)
 	r.tables[model.TableID(3)] = rs
 	checkpoint, resolved = r.AdvanceCheckpoint(currentTables)
@@ -533,12 +552,17 @@ func TestReplicationManagerAdvanceCheckpoint(t *testing.T) {
 	require.Equal(t, model.Ts(20), resolved)
 
 	currentTables = append(currentTables, 4)
-	rs, err = newReplicationSet(4, model.Ts(3), map[model.CaptureID]*schedulepb.TableStatus{
-		"1": {4, schedulepb.TableStatePrepared, schedulepb.Checkpoint{
-			CheckpointTs: model.Ts(3),
-			ResolvedTs:   model.Ts(10),
-		}},
-	})
+	rs, err = newReplicationSet(model.TableID(4), model.Ts(3),
+		map[model.CaptureID]*schedulepb.TableStatus{
+			"1": {
+				TableID: model.TableID(4),
+				State:   schedulepb.TableStatePrepared,
+				Checkpoint: schedulepb.Checkpoint{
+					CheckpointTs: model.Ts(3),
+					ResolvedTs:   model.Ts(10),
+				},
+			},
+		})
 	require.NoError(t, err)
 	r.tables[model.TableID(4)] = rs
 	checkpoint, resolved = r.AdvanceCheckpoint(currentTables)
