@@ -17,6 +17,8 @@ import (
 	"context"
 	"time"
 
+	"github.com/pingcap/tiflow/engine/lib/worker"
+
 	"github.com/modern-go/reflect2"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -38,14 +40,14 @@ type Writer struct {
 	lastStatus    *libModel.WorkerStatus
 
 	workerID   libModel.WorkerID
-	masterInfo MasterInfoProvider
+	masterInfo worker.MasterInfoProvider
 }
 
 // NewWriter creates a new Writer.
 func NewWriter(
 	metaclient pkgOrm.Client,
 	messageSender p2p.MessageSender,
-	masterInfo MasterInfoProvider,
+	masterInfo worker.MasterInfoProvider,
 	workerID libModel.WorkerID,
 ) *Writer {
 	return &Writer{
@@ -93,7 +95,7 @@ func (w *Writer) sendStatusMessageWithRetry(
 	retryCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	rl := rate.NewLimiter(rate.Limit(100*time.Millisecond), 1)
+	rl := rate.NewLimiter(rate.Every(100*time.Millisecond), 1)
 	for {
 		select {
 		case <-retryCtx.Done():

@@ -16,25 +16,28 @@ package servermaster
 import (
 	"context"
 	"encoding/json"
+	"sync"
 	"time"
 
 	"github.com/pingcap/errors"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/dm/pkg/log"
-	cvs "github.com/pingcap/tiflow/engine/jobmaster/cvsJob"
+	pb "github.com/pingcap/tiflow/engine/enginepb"
+	cvs "github.com/pingcap/tiflow/engine/jobmaster/cvsjob"
 	"github.com/pingcap/tiflow/engine/lib"
 	"github.com/pingcap/tiflow/engine/lib/metadata"
 	libModel "github.com/pingcap/tiflow/engine/lib/model"
-	"github.com/pingcap/tiflow/engine/pb"
 	"github.com/pingcap/tiflow/engine/pkg/clock"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/ctxmu"
+	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
 	derrors "github.com/pingcap/tiflow/engine/pkg/errors"
 	resManager "github.com/pingcap/tiflow/engine/pkg/externalresource/manager"
 	"github.com/pingcap/tiflow/engine/pkg/notifier"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
+	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	"github.com/pingcap/tiflow/pkg/uuid"
 )
 
@@ -47,6 +50,7 @@ type JobManager interface {
 	QueryJob(ctx context.Context, req *pb.QueryJobRequest) *pb.QueryJobResponse
 	CancelJob(ctx context.Context, req *pb.CancelJobRequest) *pb.CancelJobResponse
 	PauseJob(ctx context.Context, req *pb.PauseJobRequest) *pb.PauseJobResponse
+	DebugJob(ctx context.Context, req *pb.DebugJobRequest) *pb.DebugJobResponse
 
 	GetJobStatuses(ctx context.Context) (map[libModel.MasterID]libModel.MasterStatusCode, error)
 	WatchJobStatuses(
@@ -79,11 +83,14 @@ type JobManagerImplV2 struct {
 	// TODO We might add a pending operation queue in the future.
 	jobStatusChangeMu *ctxmu.CtxMutex
 	notifier          *notifier.Notifier[resManager.JobStatusChangeEvent]
+
+	// only use for DebugJob
+	messageHandlerManager p2p.MessageHandlerManager
 }
 
 // PauseJob implements proto/Master.PauseJob
 func (jm *JobManagerImplV2) PauseJob(ctx context.Context, req *pb.PauseJobRequest) *pb.PauseJobResponse {
-	job := jm.JobFsm.QueryOnlineJob(req.JobIdStr)
+	job := jm.JobFsm.QueryOnlineJob(req.JobId)
 	if job == nil {
 		return &pb.PauseJobResponse{Err: &pb.Error{
 			Code: pb.ErrorCode_UnKnownJob,
@@ -106,14 +113,92 @@ func (jm *JobManagerImplV2) PauseJob(ctx context.Context, req *pb.PauseJobReques
 	}}
 }
 
+// DebugJob implements proto/Master.DebugJob
+// Used for request/response with jobmaster
+func (jm *JobManagerImplV2) DebugJob(ctx context.Context, req *pb.DebugJobRequest) (resp *pb.DebugJobResponse) {
+	job := jm.JobFsm.QueryOnlineJob(req.JobId)
+	if job == nil {
+		return &pb.DebugJobResponse{Err: &pb.Error{
+			Code: pb.ErrorCode_UnKnownJob,
+		}}
+	}
+	handle := job.WorkerHandle.Unwrap()
+	if handle == nil {
+		return &pb.DebugJobResponse{Err: &pb.Error{
+			Code: pb.ErrorCode_UnKnownJob,
+		}}
+	}
+
+	messageAgent := dmpkg.NewMessageAgentImpl(jm.MasterID(), jm, jm.messageHandlerManager)
+	if err := messageAgent.Init(ctx); err != nil {
+		return &pb.DebugJobResponse{Err: &pb.Error{
+			Code:    pb.ErrorCode_UnknownError,
+			Message: err.Error(),
+		}}
+	}
+	defer func() {
+		if err := messageAgent.Close(ctx); err != nil {
+			resp = &pb.DebugJobResponse{Err: &pb.Error{
+				Code:    pb.ErrorCode_UnknownError,
+				Message: err.Error(),
+			}}
+		}
+	}()
+	if err := messageAgent.UpdateClient(req.JobId, handle); err != nil {
+		return &pb.DebugJobResponse{Err: &pb.Error{
+			Code:    pb.ErrorCode_UnknownError,
+			Message: err.Error(),
+		}}
+	}
+	defer func() {
+		if err := messageAgent.UpdateClient(req.JobId, nil); err != nil {
+			resp = &pb.DebugJobResponse{Err: &pb.Error{
+				Code:    pb.ErrorCode_UnknownError,
+				Message: err.Error(),
+			}}
+		}
+	}()
+
+	runCtx, runCancel := context.WithCancel(ctx)
+	defer runCancel()
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for {
+			select {
+			case <-runCtx.Done():
+				return
+			case <-time.After(100 * time.Millisecond):
+			}
+			if err := messageAgent.Tick(runCtx); err != nil {
+				log.L().Error("failed to run message agent tick", log.ShortError(err))
+				return
+			}
+		}
+	}()
+
+	resp2, err := messageAgent.SendRequest(ctx, req.JobId, "DebugJob", req)
+	if err != nil {
+		return &pb.DebugJobResponse{Err: &pb.Error{
+			Code:    pb.ErrorCode_UnknownError,
+			Message: err.Error(),
+		}}
+	}
+	runCancel()
+	wg.Wait()
+	return resp2.(*pb.DebugJobResponse)
+}
+
 // CancelJob implements proto/Master.CancelJob
+// TODO: Add Project delete logic in 'stop job'
 func (jm *JobManagerImplV2) CancelJob(ctx context.Context, req *pb.CancelJobRequest) *pb.CancelJobResponse {
 	// This is a draft implementation.
 	// TODO:
 	// (1) Handle potential race conditions.
 	// (2) Refine error handling.
 
-	job, err := jm.frameMetaClient.GetJobByID(ctx, req.GetJobIdStr())
+	job, err := jm.frameMetaClient.GetJobByID(ctx, req.GetJobId())
 	if pkgOrm.IsNotFoundError(err) {
 		return &pb.CancelJobResponse{Err: &pb.Error{
 			Code: pb.ErrorCode_UnKnownJob,
@@ -133,7 +218,7 @@ func (jm *JobManagerImplV2) CancelJob(ctx context.Context, req *pb.CancelJobRequ
 		}}
 	}
 
-	if err := jm.deleteJobMeta(ctx, req.JobIdStr); err != nil {
+	if err := jm.deleteJobMeta(ctx, req.JobId); err != nil {
 		return &pb.CancelJobResponse{Err: &pb.Error{
 			Code:    pb.ErrorCode_UnknownError,
 			Message: err.Error(),
@@ -217,7 +302,10 @@ func (jm *JobManagerImplV2) SubmitJob(ctx context.Context, req *pb.SubmitJobRequ
 	)
 
 	meta := &libModel.MasterMetaKVData{
-		ProjectID: req.GetUser(),
+		ProjectID: tenant.NewProjectInfo(
+			req.GetProjectInfo().GetTenantId(),
+			req.GetProjectInfo().GetProjectId(),
+		).UniqueID(),
 		// TODO: we can use job name provided from user, but we must check the
 		// job name is unique before using it.
 		ID:         jm.uuidGen.NewString(),
@@ -252,6 +340,24 @@ func (jm *JobManagerImplV2) SubmitJob(ctx context.Context, req *pb.SubmitJobRequ
 		return resp
 	}
 
+	// TODO: Refine me. split the BaseMaster
+	defaultMaster, ok := jm.BaseMaster.(interface {
+		SetProjectInfo(libModel.MasterID, tenant.ProjectInfo)
+	})
+	if ok {
+		defaultMaster.SetProjectInfo(meta.ID, tenant.NewProjectInfo(
+			req.GetProjectInfo().GetTenantId(),
+			req.GetProjectInfo().GetProjectId(),
+		))
+	} else {
+		log.L().Error("jobmanager don't have the 'SetProjectInfo' interface",
+			zap.String("masterID", meta.ID),
+			zap.Any("projectInfo", tenant.NewProjectInfo(
+				req.GetProjectInfo().GetTenantId(),
+				req.GetProjectInfo().GetProjectId(),
+			)))
+	}
+
 	// CreateWorker here is to create job master actually
 	// TODO: use correct worker cost
 	id, err = jm.BaseMaster.CreateWorker(
@@ -269,7 +375,7 @@ func (jm *JobManagerImplV2) SubmitJob(ctx context.Context, req *pb.SubmitJobRequ
 	}
 
 	jm.JobFsm.JobDispatched(meta, false /*addFromFailover*/)
-	resp.JobIdStr = id
+	resp.JobId = id
 	return resp
 }
 
@@ -333,7 +439,13 @@ func NewJobManagerImplV2(
 		_ = impl.BaseMaster.Close(dctx)
 		return nil, err
 	}
-	return impl, nil
+
+	// nolint:errcheck
+	_, err = dctx.Deps().Construct(func(m p2p.MessageHandlerManager) (p2p.MessageHandlerManager, error) {
+		impl.messageHandlerManager = m
+		return m, nil
+	})
+	return impl, err
 }
 
 // InitImpl implements lib.MasterImpl.InitImpl
@@ -406,10 +518,22 @@ func (jm *JobManagerImplV2) OnMasterRecovered(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+
+	// TODO: refine me, split the BaseMaster interface
+	impl, ok := jm.BaseMaster.(interface {
+		InitProjectInfosAfterRecover([]*libModel.MasterMetaKVData)
+	})
+	if !ok {
+		log.L().Panic("unfound interface for BaseMaster", zap.String("interface", "InitProjectInfosAfterRecover"))
+		return derrors.ErrMasterInterfaceNotFound.GenWithStackByArgs()
+	}
+	impl.InitProjectInfosAfterRecover(jobs)
+
 	for _, job := range jobs {
 		if job.Tp == lib.JobManager {
 			continue
 		}
+		// TODO: filter the job in backend
 		if job.StatusCode == libModel.MasterStatusFinished || job.StatusCode == libModel.MasterStatusStopped {
 			log.L().Info("skip finished or stopped job", zap.Any("job", job))
 			continue

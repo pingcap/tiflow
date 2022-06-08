@@ -16,6 +16,7 @@ package db
 import (
 	"context"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -27,6 +28,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/sorter"
+	"github.com/pingcap/tiflow/cdc/sorter/encoding"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/retry"
 	"go.uber.org/zap"
@@ -45,14 +47,38 @@ func (logger *pebbleLogger) Fatalf(format string, args ...interface{}) {
 	log.Panic(fmt.Sprintf(format, args...), zap.Int("db", logger.id))
 }
 
-// TODO: Update DB config once we switch to pebble,
-//       as some configs are not applicable to pebble.
-func buildPebbleOption(id int, memInByte int, cfg *config.DBConfig) (pebble.Options, *writeStall) {
+// Option is a function that can be used to customize pebble.Options.
+type Option func(*pebble.Options)
+
+// WithCache can be used to set cache size.
+func WithCache(memInByte int) Option {
+	return func(o *pebble.Options) {
+		o.Cache = pebble.NewCache(int64(memInByte))
+	}
+}
+
+// WithTableCRTsCollectors can be used to filter out useless SSTables when
+// iterating with a given timestamp range.
+func WithTableCRTsCollectors() Option {
+	return func(o *pebble.Options) {
+		o.TablePropertyCollectors = append(o.TablePropertyCollectors,
+			func() pebble.TablePropertyCollector {
+				return &tableCRTsCollector{minTs: math.MaxUint64, maxTs: 0}
+			})
+	}
+}
+
+func buildPebbleOption(
+	id int, cfg *config.DBConfig, opts ...Option,
+) (pebble.Options, *writeStall) {
 	var option pebble.Options
+	for _, opt := range opts {
+		opt(&option)
+	}
+
 	option.ErrorIfExists = true
 	option.DisableWAL = false // Delete range requires WAL.
 	option.MaxOpenFiles = cfg.MaxOpenFiles / cfg.Count
-	option.Cache = pebble.NewCache(int64(memInByte))
 	option.MaxConcurrentCompactions = 6
 	option.L0CompactionThreshold = cfg.CompactionL0Trigger
 	option.L0StopWritesThreshold = cfg.WriteL0PauseTrigger
@@ -94,14 +120,15 @@ func buildPebbleOption(id int, memInByte int, cfg *config.DBConfig) (pebble.Opti
 		atomic.StoreInt64(&stallTimeStamp, 0)
 		ws.duration.Store(time.Since(time.Unix(0, start)))
 	}
+
 	return option, ws
 }
 
 // OpenPebble opens a pebble.
 func OpenPebble(
-	ctx context.Context, id int, path string, memInByte int, cfg *config.DBConfig,
+	ctx context.Context, id int, path string, cfg *config.DBConfig, opts ...Option,
 ) (DB, error) {
-	option, ws := buildPebbleOption(id, memInByte, cfg)
+	option, ws := buildPebbleOption(id, cfg, opts...)
 	dbDir := filepath.Join(path, fmt.Sprintf("%04d", id))
 	err := retry.Do(ctx, func() error {
 		err1 := os.RemoveAll(dbDir)
@@ -140,10 +167,15 @@ type pebbleDB struct {
 
 var _ DB = (*pebbleDB)(nil)
 
-func (p *pebbleDB) Iterator(lowerBound, upperBound []byte) Iterator {
+func (p *pebbleDB) Iterator(lowerBound, upperBound []byte, lowerTs, upperTs uint64) Iterator {
 	return pebbleIter{Iterator: p.db.NewIter(&pebble.IterOptions{
 		LowerBound: lowerBound,
 		UpperBound: upperBound,
+		TableFilter: func(userProps map[string]string) bool {
+			tableMinCRTs, _ := strconv.Atoi(userProps[minTableCRTsLabel])
+			tableMaxCRTs, _ := strconv.Atoi(userProps[maxTableCRTsLabel])
+			return uint64(tableMaxCRTs) >= lowerTs && uint64(tableMinCRTs) <= upperTs
+		},
 	})}
 }
 
@@ -264,4 +296,36 @@ func (i pebbleIter) Error() error {
 
 func (i pebbleIter) Release() error {
 	return i.Iterator.Close()
+}
+
+const (
+	minTableCRTsLabel      string = "minCRTs"
+	maxTableCRTsLabel      string = "maxCRTs"
+	tableCRTsCollectorName string = "table-crts-collector"
+)
+
+type tableCRTsCollector struct {
+	minTs uint64
+	maxTs uint64
+}
+
+func (t *tableCRTsCollector) Add(key pebble.InternalKey, value []byte) error {
+	crts := encoding.DecodeCRTs(key.UserKey)
+	if crts > t.maxTs {
+		t.maxTs = crts
+	}
+	if crts < t.minTs {
+		t.minTs = crts
+	}
+	return nil
+}
+
+func (t *tableCRTsCollector) Finish(userProps map[string]string) error {
+	userProps[minTableCRTsLabel] = fmt.Sprintf("%d", t.minTs)
+	userProps[maxTableCRTsLabel] = fmt.Sprintf("%d", t.maxTs)
+	return nil
+}
+
+func (t *tableCRTsCollector) Name() string {
+	return tableCRTsCollectorName
 }

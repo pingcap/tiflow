@@ -21,7 +21,10 @@ import (
 	"time"
 
 	cpu "github.com/pingcap/tidb-tools/pkg/utils"
+	"github.com/pingcap/tiflow/dm/syncer/metrics"
+	"github.com/pingcap/tiflow/engine/pkg/promutil"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/pingcap/tiflow/dm/dm/common"
@@ -31,7 +34,6 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/metricsproxy"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/relay"
-	syncer "github.com/pingcap/tiflow/dm/syncer/metrics"
 )
 
 const (
@@ -41,7 +43,7 @@ const (
 )
 
 var (
-	taskState = metricsproxy.NewGaugeVec(
+	taskState = metricsproxy.NewGaugeVec(&promutil.PromFactory{},
 		prometheus.GaugeOpts{
 			Namespace: "dm",
 			Subsystem: "worker",
@@ -50,7 +52,7 @@ var (
 		}, []string{"task", "source_id", "worker"})
 
 	// opErrCounter cleans on worker close, which is the same time dm-worker exits, so no explicit clean.
-	opErrCounter = metricsproxy.NewCounterVec(
+	opErrCounter = metricsproxy.NewCounterVec(&promutil.PromFactory{},
 		prometheus.CounterOpts{
 			Namespace: "dm",
 			Subsystem: "worker",
@@ -104,7 +106,8 @@ func (s *Server) runBackgroundJob(ctx context.Context) {
 func RegistryMetrics() {
 	registry := prometheus.NewRegistry()
 	registry.MustRegister(prometheus.NewProcessCollector(prometheus.ProcessCollectorOpts{}))
-	registry.MustRegister(prometheus.NewGoCollector())
+	registry.MustRegister(prometheus.NewGoCollector(
+		collectors.WithGoCollections(collectors.GoRuntimeMemStatsCollection | collectors.GoRuntimeMetricsCollection)))
 
 	registry.MustRegister(cpuUsageGauge)
 
@@ -114,7 +117,7 @@ func RegistryMetrics() {
 	relay.RegisterMetrics(registry)
 	dumpling.RegisterMetrics(registry)
 	loader.RegisterMetrics(registry)
-	syncer.RegisterMetrics(registry)
+	metrics.DefaultMetricsProxies.RegisterMetrics(registry)
 	prometheus.DefaultGatherer = registry
 }
 

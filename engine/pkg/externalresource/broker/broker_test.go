@@ -24,7 +24,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 
-	"github.com/pingcap/tiflow/engine/pb"
+	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/manager"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/storagecfg"
 	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
@@ -36,7 +36,7 @@ var _ Broker = (*DefaultBroker)(nil)
 func newBroker(t *testing.T) (*DefaultBroker, *rpcutil.FailoverRPCClients[pb.ResourceManagerClient], string) {
 	tmpDir := t.TempDir()
 	client := manager.NewWrappedMockClient()
-	broker := NewBroker(&storagecfg.Config{Local: &storagecfg.LocalFileConfig{BaseDir: tmpDir}},
+	broker := NewBroker(&storagecfg.Config{Local: storagecfg.LocalFileConfig{BaseDir: tmpDir}},
 		"executor-1",
 		client)
 	return broker, client, tmpDir
@@ -73,8 +73,7 @@ func TestBrokerOpenNewStorage(t *testing.T) {
 
 	innerClient.AssertExpectations(t)
 
-	fileName := filepath.Join(dir, "worker-1", "test-1", "1.txt")
-	require.FileExists(t, fileName)
+	AssertLocalFileExists(t, dir, "worker-1", "test-1", "1.txt")
 }
 
 func TestBrokerOpenExistingStorage(t *testing.T) {
@@ -120,14 +119,13 @@ func TestBrokerOpenExistingStorage(t *testing.T) {
 	err = f.Close(context.Background())
 	require.NoError(t, err)
 
-	fileName := filepath.Join(dir, "worker-2", "test-2", "1.txt")
-	require.FileExists(t, fileName)
+	AssertLocalFileExists(t, dir, "worker-2", "test-2", "1.txt")
 }
 
 func TestBrokerRemoveResource(t *testing.T) {
 	brk, _, dir := newBroker(t)
 
-	resPath := filepath.Join(dir, "worker-1", "resource-1")
+	resPath := filepath.Join(dir, "worker-1", resourceNameToFilePathName("resource-1"))
 	err := os.MkdirAll(resPath, 0o700)
 	require.NoError(t, err)
 

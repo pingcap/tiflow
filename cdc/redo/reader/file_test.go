@@ -17,7 +17,6 @@ import (
 	"bufio"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"testing"
@@ -40,17 +39,13 @@ func TestReaderNewReader(t *testing.T) {
 	_, err := newReader(context.Background(), nil)
 	require.NotNil(t, err)
 
-	dir, err := ioutil.TempDir("", "redo-newReader")
-	require.Nil(t, err)
-	defer os.RemoveAll(dir)
+	dir := t.TempDir()
 	_, err = newReader(context.Background(), &readerConfig{dir: dir})
 	require.Nil(t, err)
 }
 
 func TestReaderRead(t *testing.T) {
-	dir, err := ioutil.TempDir("", "redo-reader")
-	require.Nil(t, err)
-	defer os.RemoveAll(dir)
+	dir := t.TempDir()
 
 	cfg := &writer.FileWriterConfig{
 		MaxLogSize:   100000,
@@ -104,9 +99,7 @@ func TestReaderRead(t *testing.T) {
 }
 
 func TestReaderOpenSelectedFiles(t *testing.T) {
-	dir, err := ioutil.TempDir("", "redo-openSelectedFiles")
-	require.Nil(t, err)
-	defer os.RemoveAll(dir)
+	dir := t.TempDir()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -158,9 +151,7 @@ func TestReaderOpenSelectedFiles(t *testing.T) {
 	f1, err := os.Create(path)
 	require.Nil(t, err)
 
-	dir1, err := ioutil.TempDir("", "redo-openSelectedFiles1")
-	require.Nil(t, err)
-	defer os.RemoveAll(dir1) //nolint:errcheck
+	dir1 := t.TempDir()
 	fileName = fmt.Sprintf(common.RedoLogFileFormatV2, "cp", "default", "test-cf",
 		common.DefaultDDLLogFileType, 11, uuidGen.NewString(), common.LogEXT+"test")
 	path = filepath.Join(dir1, fileName)
