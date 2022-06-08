@@ -73,6 +73,7 @@ var (
 	ErrInvalidMasterMessage           = errors.Normalize("invalid master message: %s", errors.RFCCodeText("DFLOW:ErrInvalidMasterMessage"))
 	ErrSendingMessageToTombstone      = errors.Normalize("trying to send message to a tombstone worker handle: %s", errors.RFCCodeText("DFLOW:ErrSendingMessageToTombstone"))
 	ErrMasterNotInitialized           = errors.Normalize("master is not initialized", errors.RFCCodeText("DFLOW:ErrMasterNotInitialized"))
+	ErrMasterInterfaceNotFound        = errors.Normalize("basemaster interface not found", errors.RFCCodeText("DFLOW:ErrMasterInterfaceNotFound"))
 
 	ErrWorkerTypeNotFound         = errors.Normalize("worker type is not found: type %d", errors.RFCCodeText("DFLOW:ErrWorkerTypeNotFound"))
 	ErrWorkerNotFound             = errors.Normalize("worker is not found: worker ID %s", errors.RFCCodeText("DFLOW:ErrWorkerNotFound"))
@@ -151,4 +152,5 @@ var (
 	ErrRemovingLocalResource          = errors.Normalize("removing a local resource file directory has failed", errors.RFCCodeText("DFLOW:ErrRemovingLocalResource"))
 	ErrFailToCreateExternalStorage    = errors.Normalize("failed to create external storage", errors.RFCCodeText("DFLOW:ErrFailToCreateExternalStorage"))
 	ErrInvalidResourceHandle          = errors.Normalize("using an invalid resource handle", errors.RFCCodeText("DFLOW:ErrInvalidResourceHandle"))
+	ErrLocalFileDirNotWritable        = errors.Normalize("local resource directory not writable", errors.RFCCodeText("DFLOW:ErrLocalFileDirNotWritable"))
 )

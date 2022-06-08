@@ -40,6 +40,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/schema"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
+	"github.com/pingcap/tiflow/dm/syncer/binlogstream"
 	"github.com/pingcap/tiflow/dm/syncer/dbconn"
 	"github.com/pingcap/tiflow/dm/syncer/metrics"
 	"github.com/pingcap/tiflow/pkg/errorutil"
@@ -127,7 +128,7 @@ type MockStreamProducer struct {
 	events []*replication.BinlogEvent
 }
 
-func (mp *MockStreamProducer) generateStreamer(location binlog.Location) (reader.Streamer, error) {
+func (mp *MockStreamProducer) GenerateStreamer(location binlog.Location) (reader.Streamer, error) {
 	if location.Position.Pos == 4 {
 		return &MockStreamer{mp.events, 0, false}, nil
 	}
@@ -827,12 +828,12 @@ func (s *testSyncerSuite) TestRun(c *C) {
 	}
 
 	mockStreamerProducer := &MockStreamProducer{s.generateEvents(events1, c)}
-	mockStreamer, err := mockStreamerProducer.generateStreamer(binlog.MustZeroLocation(mysql.MySQLFlavor))
+	mockStreamer, err := mockStreamerProducer.GenerateStreamer(binlog.MustZeroLocation(mysql.MySQLFlavor))
 	c.Assert(err, IsNil)
-	syncer.streamerController = &StreamerController{
-		streamerProducer: mockStreamerProducer,
-		streamer:         mockStreamer,
-	}
+	syncer.streamerController = binlogstream.NewStreamerController4Test(
+		mockStreamerProducer,
+		mockStreamer,
+	)
 	syncer.checkpointFlushWorker = &checkpointFlushWorker{
 		input:              make(chan *checkpointFlushTask, 16),
 		cp:                 syncer.checkpoint,
@@ -983,12 +984,12 @@ func (s *testSyncerSuite) TestRun(c *C) {
 	// simulate `syncer.Resume` here, but doesn't reset database conns
 	syncer.reset()
 	mockStreamerProducer = &MockStreamProducer{s.generateEvents(events2, c)}
-	mockStreamer, err = mockStreamerProducer.generateStreamer(binlog.MustZeroLocation(mysql.MySQLFlavor))
+	mockStreamer, err = mockStreamerProducer.GenerateStreamer(binlog.MustZeroLocation(mysql.MySQLFlavor))
 	c.Assert(err, IsNil)
-	syncer.streamerController = &StreamerController{
-		streamerProducer: mockStreamerProducer,
-		streamer:         mockStreamer,
-	}
+	syncer.streamerController = binlogstream.NewStreamerController4Test(
+		mockStreamerProducer,
+		mockStreamer,
+	)
 	syncer.checkpointFlushWorker = &checkpointFlushWorker{
 		input:              make(chan *checkpointFlushTask, 16),
 		cp:                 syncer.checkpoint,
@@ -1127,12 +1128,12 @@ func (s *testSyncerSuite) TestExitSafeModeByConfig(c *C) {
 	generatedEvents = append(generatedEvents, generatedEvents2...)
 
 	mockStreamerProducer := &MockStreamProducer{generatedEvents}
-	mockStreamer, err := mockStreamerProducer.generateStreamer(binlog.MustZeroLocation(mysql.MySQLFlavor))
+	mockStreamer, err := mockStreamerProducer.GenerateStreamer(binlog.MustZeroLocation(mysql.MySQLFlavor))
 	c.Assert(err, IsNil)
-	syncer.streamerController = &StreamerController{
-		streamerProducer: mockStreamerProducer,
-		streamer:         mockStreamer,
-	}
+	syncer.streamerController = binlogstream.NewStreamerController4Test(
+		mockStreamerProducer,
+		mockStreamer,
+	)
 	syncer.checkpointFlushWorker = &checkpointFlushWorker{
 		input:              make(chan *checkpointFlushTask, 16),
 		cp:                 syncer.checkpoint,
@@ -1811,13 +1812,14 @@ func TestWaitBeforeRunExit(t *testing.T) {
 	require.NoError(t, syncer.genRouter())
 
 	mockStreamerProducer := &MockStreamProducer{}
-	mockStreamer, err := mockStreamerProducer.generateStreamer(binlog.MustZeroLocation(mysql.MySQLFlavor))
+	mockStreamer, err := mockStreamerProducer.GenerateStreamer(binlog.MustZeroLocation(mysql.MySQLFlavor))
 	require.NoError(t, err)
 	// let getEvent pending until ctx.Done()
 	mockStreamer.(*MockStreamer).pending = true
-	syncer.streamerController = &StreamerController{
-		streamerProducer: mockStreamerProducer, streamer: mockStreamer, closed: false,
-	}
+	syncer.streamerController = binlogstream.NewStreamerController4Test(
+		mockStreamerProducer,
+		mockStreamer,
+	)
 
 	wg := &sync.WaitGroup{}
 	errCh := make(chan error, 1)

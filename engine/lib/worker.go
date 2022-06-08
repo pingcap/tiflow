@@ -19,7 +19,6 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
-	"go.uber.org/atomic"
 	"go.uber.org/dig"
 	"go.uber.org/zap"
 
@@ -87,21 +86,13 @@ type BaseWorker interface {
 	MetaKVClient() metaclient.KVClient
 	MetricFactory() promutil.Factory
 	UpdateStatus(ctx context.Context, status libModel.WorkerStatus) error
-	SendMessage(ctx context.Context, topic p2p.Topic, message interface{}) (bool, error)
+	SendMessage(ctx context.Context, topic p2p.Topic, message interface{}, nonblocking bool) error
 	OpenStorage(ctx context.Context, resourcePath resourcemeta.ResourceID) (broker.Handle, error)
 	// Exit should be called when worker (in user logic) wants to exit.
 	// When `err` is not nil, the status code is assigned WorkerStatusError.
 	// Otherwise worker should set its status code to a meaningful value.
 	Exit(ctx context.Context, status libModel.WorkerStatus, err error) error
 }
-
-type workerExitFsmState = int32
-
-const (
-	workerNormal = workerExitFsmState(iota + 1)
-	workerHalfExit
-	workerExited
-)
 
 // DefaultBaseWorker implements BaseWorker interface, it also embeds an Impl
 // which implements the WorkerImpl interface and passed from business logic.
@@ -136,7 +127,7 @@ type DefaultBaseWorker struct {
 	cancelBgTasks context.CancelFunc
 	cancelPool    context.CancelFunc
 
-	exitController *workerExitController
+	exitController *worker.ExitController
 
 	clock clock.Clock
 
@@ -144,6 +135,9 @@ type DefaultBaseWorker struct {
 	// Don't close it. It's just a prefix wrapper for underlying userRawKVClient
 	userMetaKVClient metaclient.KVClient
 	metricFactory    promutil.Factory
+
+	// tenant/project information
+	projectInfo tenant.ProjectInfo
 }
 
 type workerParams struct {
@@ -178,27 +172,23 @@ func NewBaseWorker(
 		userRawKVClient:       params.UserRawKVClient,
 		resourceBroker:        params.ResourceBroker,
 
-		masterID: masterID,
-		id:       workerID,
+		masterID:    masterID,
+		id:          workerID,
+		projectInfo: ctx.ProjectInfo,
 		workerStatus: &libModel.WorkerStatus{
-			// TODO ProjectID
-			JobID: masterID,
-			ID:    workerID,
-			// TODO: worker_type
+			ProjectID: ctx.ProjectInfo.UniqueID(),
+			JobID:     masterID,
+			ID:        workerID,
+			Type:      int(tp),
 		},
 		timeoutConfig: config.DefaultTimeoutConfig(),
 
 		pool: workerpool.NewDefaultAsyncPool(1),
 
-		errCenter: errctx.NewErrCenter(),
-		clock:     clock.New(),
-		// [TODO] use tenantID if support multi-tenant
-		userMetaKVClient: kvclient.NewPrefixKVClient(params.UserRawKVClient, tenant.DefaultUserTenantID),
-		// TODO: tenant info and job type
-		metricFactory: promutil.NewFactory4Worker(tenant.ProjectInfo{
-			TenantID:  tenant.DefaultUserTenantID,
-			ProjectID: "TODO",
-		}, WorkerTypeForMetric(tp), masterID, workerID),
+		errCenter:        errctx.NewErrCenter(),
+		clock:            clock.New(),
+		userMetaKVClient: kvclient.NewPrefixKVClient(params.UserRawKVClient, ctx.ProjectInfo.UniqueID()),
+		metricFactory:    promutil.NewFactory4Worker(ctx.ProjectInfo, WorkerTypeForMetric(tp), masterID, workerID),
 	}
 }
 
@@ -257,7 +247,7 @@ func (w *DefaultBaseWorker) doPreInit(ctx context.Context) error {
 		w.frameMetaClient,
 		initTime)
 
-	w.exitController = newWorkerExitController(w.masterClient, w.errCenter, w.clock)
+	w.exitController = worker.NewExitController(w.masterClient, w.errCenter, w.clock)
 	w.workerMetaClient = metadata.NewWorkerMetadataClient(w.masterID, w.frameMetaClient)
 
 	w.statusSender = statusutil.NewWriter(
@@ -406,9 +396,16 @@ func (w *DefaultBaseWorker) SendMessage(
 	ctx context.Context,
 	topic p2p.Topic,
 	message interface{},
-) (bool, error) {
+	nonblocking bool,
+) error {
+	var err error
 	ctx = w.errCenter.WithCancelOnFirstError(ctx)
-	return w.messageSender.SendToNode(ctx, w.masterClient.MasterNode(), topic, message)
+	if nonblocking {
+		_, err = w.messageSender.SendToNode(ctx, w.masterClient.MasterNode(), topic, message)
+	} else {
+		err = w.messageSender.SendToNodeB(ctx, w.masterClient.MasterNode(), topic, message)
+	}
+	return err
 }
 
 // OpenStorage implements BaseWorker.OpenStorage
@@ -563,86 +560,4 @@ func (w *DefaultBaseWorker) initMessageHandlers(ctx context.Context) (retErr err
 
 func (w *DefaultBaseWorker) onError(err error) {
 	w.errCenter.OnError(err)
-}
-
-const (
-	workerExitWaitForMasterTimeout = time.Second * 15
-)
-
-// workerExitController implements the exit sequence of
-// a worker. This object is thread-safe.
-// TODO move this to a separate file or package.
-type workerExitController struct {
-	workerExitFsm atomic.Int32
-	halfExitTime  atomic.Time
-	errCenter     *errctx.ErrCenter
-	masterClient  *worker.MasterClient
-
-	// clock is to facilitate unit testing.
-	clock clock.Clock
-}
-
-func newWorkerExitController(
-	masterClient *worker.MasterClient,
-	errCenter *errctx.ErrCenter,
-	clock clock.Clock,
-) *workerExitController {
-	return &workerExitController{
-		workerExitFsm: *atomic.NewInt32(workerNormal),
-		errCenter:     errCenter,
-		masterClient:  masterClient,
-		clock:         clock,
-	}
-}
-
-// PollExit is called in each tick of the worker.
-// Returning an error other than ErrWorkerHalfExit
-// means that the worker is ready to exit.
-func (c *workerExitController) PollExit() error {
-	err := c.errCenter.CheckError()
-	if err == nil {
-		return nil
-	}
-
-	switch c.workerExitFsm.Load() {
-	case workerNormal:
-		c.workerExitFsm.CAS(workerNormal, workerHalfExit)
-		c.halfExitTime.Store(c.clock.Now())
-		return derror.ErrWorkerHalfExit.FastGenByArgs()
-	case workerHalfExit:
-		if c.masterClient.IsMasterSideClosed() {
-			c.workerExitFsm.Store(workerExited)
-			return err
-		}
-		// workerExitWaitForMasterTimeout is used for the case that
-		// 'master is busy to reply or ignore reply for some bugs when heartbeat is ok'.
-		// Master need wait (WorkerTimeoutDuration + WorkerTimeoutGracefulDuration) to know worker had already exited without halfExit,
-		// so workerExitWaitForMasterTimeout < (WorkerTimeoutDuration + WorkerTimeoutGracefulDuration) is reasonable.
-		sinceStartExiting := c.clock.Since(c.halfExitTime.Load())
-		if sinceStartExiting > workerExitWaitForMasterTimeout {
-			// TODO log worker ID and master ID.
-			log.L().Warn("Exiting worker cannot get acknowledgement from master")
-			return err
-		}
-		return derror.ErrWorkerHalfExit.FastGenByArgs()
-	case workerExited:
-		return err
-	default:
-		log.L().Panic("unreachable")
-	}
-	return nil
-}
-
-// ForceExit forces a quick exit without notifying the
-// master. It should be used when suicide is required when
-// we have lost contact with the master.
-func (c *workerExitController) ForceExit(errIn error) {
-	c.errCenter.OnError(errIn)
-	c.workerExitFsm.Store(workerExited)
-}
-
-// IsExiting indicates whether the worker is performing
-// an exit sequence.
-func (c *workerExitController) IsExiting() bool {
-	return c.workerExitFsm.Load() == workerHalfExit
 }

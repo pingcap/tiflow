@@ -63,7 +63,7 @@ func (s *Syncer) Status(sourceStatus *binlog.SourceStatus) interface{} {
 
 	st.BinlogType = "unknown"
 	if s.streamerController != nil {
-		st.BinlogType = binlogTypeToString(s.streamerController.GetBinlogType())
+		st.BinlogType = s.streamerController.GetBinlogType().String()
 	}
 
 	// only support to show `UnresolvedGroups` in pessimistic mode now.

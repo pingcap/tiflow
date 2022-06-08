@@ -20,6 +20,7 @@ import (
 
 	dmconfig "github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/engine/model"
 	resourcemeta "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	"go.uber.org/zap"
 
@@ -29,6 +30,7 @@ import (
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/ticker"
 	"github.com/pingcap/tiflow/engine/lib"
 	libModel "github.com/pingcap/tiflow/engine/lib/model"
+	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
 )
 
 var (
@@ -38,13 +40,18 @@ var (
 	WorkerErrorInterval = time.Second * 10
 )
 
-// WorkerAgent manages worker
+// WorkerAgent defines an interface for create worker.
 type WorkerAgent interface {
-	CreateWorker(ctx context.Context, taskID string, workerType libModel.WorkerType, taskCfg *config.TaskCfg, resources ...resourcemeta.ResourceID) (libModel.WorkerID, error)
-	StopWorker(ctx context.Context, taskID string, workerID libModel.WorkerID) error
+	// for create worker
+	CreateWorker(
+		workerType lib.WorkerType,
+		config lib.WorkerConfig,
+		cost model.RescUnit,
+		resources ...resourcemeta.ResourceID,
+	) (libModel.WorkerID, error)
 }
 
-// CheckpointAgent manages checkpoint
+// CheckpointAgent defines an interface for checkpoint.
 type CheckpointAgent interface {
 	IsFresh(ctx context.Context, workerType libModel.WorkerType, taskCfg *metadata.Task) (bool, error)
 }
@@ -55,6 +62,7 @@ type WorkerManager struct {
 
 	jobStore        *metadata.JobStore
 	workerAgent     WorkerAgent
+	messageAgent    dmpkg.MessageAgent
 	checkpointAgent CheckpointAgent
 
 	// workerStatusMap record the runtime worker status
@@ -63,11 +71,12 @@ type WorkerManager struct {
 }
 
 // NewWorkerManager creates a new WorkerManager instance
-func NewWorkerManager(initWorkerStatus []runtime.WorkerStatus, jobStore *metadata.JobStore, workerAgent WorkerAgent, checkpointAgent CheckpointAgent) *WorkerManager {
+func NewWorkerManager(initWorkerStatus []runtime.WorkerStatus, jobStore *metadata.JobStore, workerAgent WorkerAgent, messageAgent dmpkg.MessageAgent, checkpointAgent CheckpointAgent) *WorkerManager {
 	workerManager := &WorkerManager{
 		DefaultTicker:   ticker.NewDefaultTicker(WorkerNormalInterval, WorkerErrorInterval),
 		jobStore:        jobStore,
 		workerAgent:     workerAgent,
+		messageAgent:    messageAgent,
 		checkpointAgent: checkpointAgent,
 	}
 	workerManager.DefaultTicker.Ticker = workerManager
@@ -299,7 +308,7 @@ func (wm *WorkerManager) createWorker(
 	resources ...resourcemeta.ResourceID,
 ) error {
 	log.L().Info("start to create worker", zap.String("task_id", taskID), zap.Int64("unit", int64(unit)))
-	workerID, err := wm.workerAgent.CreateWorker(ctx, taskID, unit, taskCfg, resources...)
+	workerID, err := wm.workerAgent.CreateWorker(unit, taskCfg.ToDMSubTaskCfg(), 1, resources...)
 	if err != nil {
 		log.L().Error("failed to create workers", zap.String("task_id", taskID), zap.Int64("unit", int64(unit)), zap.Error(err))
 	}
@@ -319,7 +328,11 @@ func (wm *WorkerManager) createWorker(
 
 func (wm *WorkerManager) stopWorker(ctx context.Context, taskID string, workerID libModel.WorkerID) error {
 	log.L().Info("start to stop worker", zap.String("task_id", taskID), zap.String("worker_id", workerID))
-	if err := wm.workerAgent.StopWorker(ctx, taskID, workerID); err != nil {
+
+	msg := &dmpkg.StopWorkerMessage{
+		Task: taskID,
+	}
+	if err := wm.messageAgent.SendMessage(ctx, taskID, dmpkg.StopWorker, msg); err != nil {
 		log.L().Error("failed to stop worker", zap.String("task_id", taskID), zap.String("worker_id", workerID), zap.Error(err))
 		return err
 	}
