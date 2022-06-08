@@ -69,7 +69,7 @@ func (f *factoryImpl) GetPdAddr() string {
 
 // GetServerAddr returns CDC server address.
 func (f *factoryImpl) GetServerAddr() string {
-	return f.clientGetter.GetPdAddr()
+	return f.clientGetter.GetServerAddr()
 }
 
 // GetLogLevel returns log level.

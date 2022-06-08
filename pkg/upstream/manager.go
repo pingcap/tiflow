@@ -15,9 +15,11 @@ package upstream
 
 import (
 	"context"
+	"strings"
 	"sync"
 
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/security"
@@ -98,8 +100,7 @@ func (m *Manager) GetDefaultUpstream() *Upstream {
 	return m.defaultUpstream
 }
 
-// Add adds an upstream and init it.
-func (m *Manager) Add(upstreamID uint64,
+func (m *Manager) add(upstreamID uint64,
 	pdEndpoints []string, conf *config.SecurityConfig,
 ) *Upstream {
 	m.mu.Lock()
@@ -123,6 +124,29 @@ func (m *Manager) Add(upstreamID uint64,
 	}()
 	up.hold()
 	return up
+}
+
+// AddUpstream adds an upstream and init it.
+func (m *Manager) AddUpstream(upstreamID model.UpstreamID,
+	info *model.UpstreamInfo,
+) *Upstream {
+	return m.add(upstreamID,
+		strings.Split(info.PDEndpoints, ","),
+		&security.Credential{
+			CAPath:        info.CAPath,
+			CertPath:      info.CertPath,
+			KeyPath:       info.KeyPath,
+			CertAllowedCN: info.CertAllowedCN,
+		})
+}
+
+// RemoveUpstream remove upstream from the manager
+func (m *Manager) RemoveUpstream(upstreamID model.UpstreamID) {
+	v, ok := m.ups.Load(upstreamID)
+	if ok {
+		up := v.(*Upstream)
+		up.unhold()
+	}
 }
 
 // Get gets a upstream by upstreamID.
