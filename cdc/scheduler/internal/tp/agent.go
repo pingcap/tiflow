@@ -41,6 +41,8 @@ type agent struct {
 	// runningTasks track all in progress dispatch table task
 	runningTasks map[model.TableID]*dispatchTableTask
 
+	// tables map[model.TableID]*tableImpl
+
 	// owner's information
 	ownerInfo ownerInfo
 
@@ -618,4 +620,64 @@ func (a *agent) sendMsgs(ctx context.Context, msgs []*schedulepb.Message) error 
 		}
 	}
 	return a.trans.Send(ctx, msgs)
+}
+
+type table struct {
+	ID    model.TableID
+	State schedulepb.TableState
+
+	Executor internal.TableExecutor
+}
+
+func newTable(tableID model.TableID, executor internal.TableExecutor) *table {
+	return &table{
+		ID:       tableID,
+		State:    schedulepb.TableStateAbsent,
+		Executor: executor,
+	}
+}
+
+//type tableExecutorFactory struct{}
+//
+//func (tableExecutorFactory) NewTableExecutor(tableID model.TableID) internal.TableExecutor {
+//	return nil
+//}
+
+func (t *table) TableStatus() schedulepb.TableStatus {
+	checkpointTs, resolvedTs := t.Executor.GetCheckpoint()
+	return schedulepb.TableStatus{
+		TableID: t.ID,
+		State:   t.State,
+		Checkpoint: schedulepb.Checkpoint{
+			CheckpointTs: checkpointTs,
+			ResolvedTs:   resolvedTs,
+		},
+	}
+}
+
+func (t *table) poll(input dispatchTableTask) {
+	switch t.State {
+	case schedulepb.TableStateAbsent:
+	case schedulepb.TableStatePreparing:
+	case schedulepb.TableStatePrepared:
+	case schedulepb.TableStateReplicating:
+	case schedulepb.TableStateStopping:
+	case schedulepb.TableStateStopped:
+	}
+}
+
+func (t *table) handleAddTableRequest(
+	req *schedulepb.AddTableRequest,
+) *schedulepb.AddTableResponse {
+	return nil
+}
+
+func (t *table) handleRemoveTableRequest(
+	req *schedulepb.RemoveTableRequest,
+) *schedulepb.RemoveTableResponse {
+	return nil
+}
+
+func (t *table) handleHeartbeat() *schedulepb.RemoveTableResponse {
+	return nil
 }
