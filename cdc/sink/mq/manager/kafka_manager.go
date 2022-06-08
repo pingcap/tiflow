@@ -155,7 +155,7 @@ func (m *kafkaTopicManager) getMetadataOfTopics() ([]*sarama.TopicMetadata, erro
 	return topicMetaList, nil
 }
 
-// WaitUntilTopicCreationDone is called after CreateTopic to make sure the topic
+// waitUntilTopicCreationDone is called after CreateTopic to make sure the topic
 // can be safely written to. The reason is that it may take several seconds after
 // CreateTopic returns success for all the brokers to become aware that the
 // topics have been created.
@@ -229,7 +229,7 @@ func (m *kafkaTopicManager) listTopics() error {
 	return nil
 }
 
-// CreateTopic creates a topic with the given name
+// createTopic creates a topic with the given name
 // and returns the number of partitions.
 func (m *kafkaTopicManager) createTopic(topicName string) (int32, error) {
 	topicMetaList, err := m.getMetadataOfTopics()
@@ -301,6 +301,7 @@ func (m *kafkaTopicManager) createTopic(topicName string) (int32, error) {
 	return m.cfg.PartitionNum, nil
 }
 
+// CreateTopicWithRetry wraps createTopic and waitUntilTopicCreationDone together.
 func (m *kafkaTopicManager) CreateTopicWithRetry(topicName string) (int32, error) {
 	partitionNum, err := m.createTopic(topicName)
 	if err != nil {
