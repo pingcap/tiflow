@@ -17,10 +17,13 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/pingcap/tiflow/dm/pkg/metricsproxy"
+	"github.com/pingcap/tiflow/engine/pkg/promutil"
 )
 
+var defaultFactory = &promutil.PromFactory{}
+
 var (
-	validatorErrorCount = metricsproxy.NewGaugeVec(
+	validatorErrorCount = metricsproxy.NewGaugeVec(defaultFactory,
 		prometheus.GaugeOpts{
 			Namespace: "dm",
 			Subsystem: "validator",
@@ -28,14 +31,14 @@ var (
 			Help:      "total number of validator errors",
 		}, []string{"task", "source_id"})
 
-	validatorLogPosLatency = metricsproxy.NewGaugeVec(
+	validatorLogPosLatency = metricsproxy.NewGaugeVec(defaultFactory,
 		prometheus.GaugeOpts{
 			Namespace: "dm",
 			Subsystem: "validator",
 			Name:      "validator_logpos_latency",
 			Help:      "the log pos latency between validator and syncer",
 		}, []string{"task", "source_id"})
-	validatorLogFileLatency = metricsproxy.NewGaugeVec(
+	validatorLogFileLatency = metricsproxy.NewGaugeVec(defaultFactory,
 		prometheus.GaugeOpts{
 			Namespace: "dm",
 			Subsystem: "validator",
@@ -43,7 +46,7 @@ var (
 			Help:      "the log file latency between validator and syncer",
 		}, []string{"task", "source_id"})
 
-	validatorBinlogPos = metricsproxy.NewGaugeVec(
+	validatorBinlogPos = metricsproxy.NewGaugeVec(defaultFactory,
 		prometheus.GaugeOpts{
 			Namespace: "dm",
 			Subsystem: "validator",
@@ -51,7 +54,7 @@ var (
 			Help:      "binlog position of the validator",
 		}, []string{"task", "source_id"})
 
-	validatorBinlogFile = metricsproxy.NewGaugeVec(
+	validatorBinlogFile = metricsproxy.NewGaugeVec(defaultFactory,
 		prometheus.GaugeOpts{
 			Namespace: "dm",
 			Subsystem: "validator",
