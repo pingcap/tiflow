@@ -220,7 +220,7 @@ func (a *agent) newTableStatus(tableID model.TableID) schedulepb.TableStatus {
 		// there is task that try to remove the table,
 		// return `stopping` instead of the real table state,
 		// to indicate that the remove table request was received.
-		if task.IsRemove == true && state != schedulepb.TableStateAbsent {
+		if task.IsRemove == true {
 			state = schedulepb.TableStateStopping
 		}
 	}
