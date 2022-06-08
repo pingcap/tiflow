@@ -86,6 +86,7 @@ type BaseWorker interface {
 
 	MetaKVClient() metaclient.KVClient
 	MetricFactory() promutil.Factory
+	Logger() *zap.Logger
 	UpdateStatus(ctx context.Context, status libModel.WorkerStatus) error
 	SendMessage(ctx context.Context, topic p2p.Topic, message interface{}, nonblocking bool) error
 	OpenStorage(ctx context.Context, resourcePath resourcemeta.ResourceID) (broker.Handle, error)

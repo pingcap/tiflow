@@ -109,7 +109,7 @@ type BaseMaster interface {
 	// MetaKVClient return user metastore kv client
 	MetaKVClient() metaclient.KVClient
 	MetricFactory() promutil.Factory
-	Log() *zap.Logger
+	Logger() *zap.Logger
 	MasterMeta() *libModel.MasterMetaKVData
 	GetWorkers() map[libModel.WorkerID]WorkerHandle
 	IsMasterReady() bool

@@ -42,7 +42,7 @@ type BaseJobMaster interface {
 	OnError(err error)
 	MetaKVClient() metaclient.KVClient
 	MetricFactory() promutil.Factory
-	Log() *zap.Logger
+	Logger() *zap.Logger
 	GetWorkers() map[libModel.WorkerID]WorkerHandle
 	CreateWorker(workerType WorkerType, config WorkerConfig, cost model.RescUnit, resources ...resourcemeta.ResourceID) (libModel.WorkerID, error)
 	JobMasterID() libModel.MasterID
