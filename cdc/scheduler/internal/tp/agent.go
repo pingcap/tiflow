@@ -220,7 +220,7 @@ func (a *agent) newTableStatus(tableID model.TableID) schedulepb.TableStatus {
 		// there is task that try to remove the table,
 		// return `stopping` instead of the real table state,
 		// to indicate that the remove table request was received.
-		if task.IsRemove == true {
+		if task.IsRemove == true && state != schedulepb.TableStateAbsent {
 			state = schedulepb.TableStateStopping
 		}
 	}
@@ -334,6 +334,15 @@ func (a *agent) handleMessageDispatchTableRequest(
 			IsRemove: true,
 			Epoch:    epoch,
 			status:   dispatchTableTaskReceived,
+		}
+		if a.tableExec.GetTableMeta(task.TableID).State == pipeline.TableStateAbsent {
+			log.Warn("tpscheduler: agent ignore remove table request, "+
+				"since the table is absent",
+				zap.Any("tableID", task.TableID),
+				zap.String("capture", a.captureID),
+				zap.String("namespace", a.changeFeedID.Namespace),
+				zap.String("changefeed", a.changeFeedID.ID))
+			return
 		}
 	default:
 		log.Warn("tpscheduler: agent ignore unknown dispatch table request",

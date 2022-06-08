@@ -309,7 +309,7 @@ func (p *processor) IsRemoveTableFinished(ctx context.Context, tableID model.Tab
 
 	table, exist := p.tables[tableID]
 	if !exist {
-		log.Panic("table should be removing but not found",
+		log.Warn("table should be removing but not found",
 			zap.String("captureID", p.captureInfo.ID),
 			zap.String("namespace", p.changefeedID.Namespace),
 			zap.String("changefeed", p.changefeedID.ID),
