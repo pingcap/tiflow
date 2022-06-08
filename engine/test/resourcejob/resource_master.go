@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/gin-gonic/gin"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 
 	"go.uber.org/zap"
@@ -239,4 +240,10 @@ func (m *JobMaster) IsJobMasterImpl() {
 // TODO fix this. We shouldn't have to implement this.
 func (m *JobMaster) OnMasterMessage(topic p2p.Topic, message p2p.MessageValue) error {
 	return nil
+}
+
+// OnOpenAPIInitialized implements JobMaster
+func (m *JobMaster) OnOpenAPIInitialized(apiGroup *gin.RouterGroup) {
+	// No-op
+	return
 }
