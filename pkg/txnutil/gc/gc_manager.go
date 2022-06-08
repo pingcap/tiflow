@@ -51,6 +51,8 @@ type gcManager struct {
 	lastSucceededTime time.Time
 	lastSafePointTs   uint64
 	isTiCDCBlockGC    bool
+
+	isOldGCServicePointIsRemoved bool
 }
 
 // NewManager creates a new Manager.
@@ -102,6 +104,15 @@ func (m *gcManager) TryUpdateGCSafePoint(
 	m.isTiCDCBlockGC = actual == checkpointTs
 	m.lastSafePointTs = actual
 	m.lastSucceededTime = time.Now()
+	if !m.isOldGCServicePointIsRemoved {
+		err = RemoveServiceGCSafepoint(ctx, m.pdClient, "ticdc")
+		if err == nil {
+			m.isOldGCServicePointIsRemoved = true
+		} else {
+			log.Warn("remove old gc service safepoint failed",
+				zap.Error(err))
+		}
+	}
 	return nil
 }
 

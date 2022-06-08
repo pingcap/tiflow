@@ -26,7 +26,6 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/security"
-	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	pd "github.com/tikv/pd/client"
 	clientV3 "go.etcd.io/etcd/client/v3"
 	"go.etcd.io/etcd/client/v3/concurrency"
@@ -249,12 +248,6 @@ func (m *migrator) migrate(ctx context.Context, etcdNoMetaVersion bool, oldVersi
 	if err != nil {
 		log.Error("update meta version failed, etcd meta data migration failed", zap.Error(err))
 		return cerror.WrapError(cerror.ErrEtcdMigrateFailed, err)
-	}
-	err = gc.RemoveServiceGCSafepoint(ctx, pdClient, "ticdc")
-	if err != nil {
-		log.Warn("remove old ticdc gc service failed", zap.Error(err))
-	} else {
-		log.Info("remove gc service safe point successful")
 	}
 	log.Info("etcd data migration successful")
 	return nil
