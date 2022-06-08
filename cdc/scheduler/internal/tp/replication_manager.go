@@ -387,25 +387,21 @@ func (r *replicationManager) AdvanceCheckpoint(
 	currentTables []model.TableID,
 ) (newCheckpointTs, newResolvedTs model.Ts) {
 	newCheckpointTs, newResolvedTs = math.MaxUint64, math.MaxUint64
-	checkpointChanged := false
 	for _, tableID := range currentTables {
 		table, ok := r.tables[tableID]
 		if !ok {
 			// Can not advance checkpoint there is a table missing.
+			log.Warn("tpscheduler: cannot advance checkpoint since missing table",
+				zap.Int64("tableID", tableID))
 			return checkpointCannotProceed, checkpointCannotProceed
 		}
 		// Find the minimum checkpoint ts and resolved ts.
 		if newCheckpointTs > table.Checkpoint.CheckpointTs {
 			newCheckpointTs = table.Checkpoint.CheckpointTs
-			checkpointChanged = true
 		}
 		if newResolvedTs > table.Checkpoint.ResolvedTs {
 			newResolvedTs = table.Checkpoint.ResolvedTs
-			checkpointChanged = true
 		}
-	}
-	if !checkpointChanged {
-		return checkpointCannotProceed, checkpointCannotProceed
 	}
 	return newCheckpointTs, newResolvedTs
 }
