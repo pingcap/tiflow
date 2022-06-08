@@ -139,7 +139,7 @@ func NewTracker(ctx context.Context, task string, sessionCfg map[string]string, 
 	for _, k := range downstreamVars {
 		if _, ok := sessionCfg[k]; !ok {
 			var ignoredColumn interface{}
-			rows, err2 := downstreamConn.QuerySQL(tctx, fmt.Sprintf("SHOW VARIABLES LIKE '%s'", k))
+			rows, err2 := downstreamConn.QuerySQL(tctx, nil, fmt.Sprintf("SHOW VARIABLES LIKE '%s'", k))
 			if err2 != nil {
 				return nil, err2
 			}
@@ -565,7 +565,7 @@ func (dt *downstreamTracker) getTableInfoByCreateStmt(tctx *tcontext.Context, ta
 // initDownStreamTrackerParser init downstream tracker parser by default sql_mode.
 func (dt *downstreamTracker) initDownStreamSQLModeAndParser(tctx *tcontext.Context) error {
 	setSQLMode := fmt.Sprintf("SET SESSION SQL_MODE = '%s'", mysql.DefaultSQLMode)
-	_, err := dt.downstreamConn.ExecuteSQL(tctx, []string{setSQLMode})
+	_, err := dt.downstreamConn.ExecuteSQL(tctx, nil, []string{setSQLMode})
 	if err != nil {
 		return dmterror.ErrSchemaTrackerCannotSetDownstreamSQLMode.Delegate(err, mysql.DefaultSQLMode)
 	}
