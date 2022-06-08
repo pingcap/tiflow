@@ -20,9 +20,9 @@ import (
 
 const (
 	// ResourceTestWorkerType is the type for a resource test worker.
-	ResourceTestWorkerType = libModel.WorkerType(10001)
+	ResourceTestWorkerType = libModel.WorkerType(201)
 	// ResourceTestMasterType is the type for a resource test master.
-	ResourceTestMasterType = libModel.WorkerType(10002)
+	ResourceTestMasterType = libModel.WorkerType(202)
 )
 
 func init() {
