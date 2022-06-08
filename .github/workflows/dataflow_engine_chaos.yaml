@@ -192,8 +192,7 @@ jobs:
 
       - name: Pause all chaos
         run: |
-          kubectl annotate podchaos default experiment.chaos-mesh.org/pause=true
-          kubectl annotate networkchaos default experiment.chaos-mesh.org/pause=true
+          kubectl delete -f $GITHUB_WORKSPACE/engine/chaos/manifests/${{ matrix.chaos-obj }}.yaml
 
       - name: Copy logs to hack permission
         if: ${{ always() }}
