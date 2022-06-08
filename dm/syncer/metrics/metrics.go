@@ -14,6 +14,7 @@
 package metrics
 
 import (
+	"github.com/pingcap/tiflow/engine/pkg/promutil"
 	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/pingcap/tiflow/dm/pkg/metricsproxy"
@@ -30,9 +31,72 @@ const (
 	BinlogEventCostStageGenQuery      = "gen-query"
 )
 
-// below variables are exported to syncer package.
-var (
-	BinlogReadDurationHistogram = metricsproxy.NewHistogramVec(
+// Metrics groups syncer's metric variables.
+type Metrics struct {
+	BinlogReadDurationHistogram     prometheus.Observer
+	BinlogEventSizeHistogram        prometheus.Observer
+	ConflictDetectDurationHistogram prometheus.Observer
+	IdealQPS                        prometheus.Gauge
+	BinlogMasterPosGauge            prometheus.Gauge
+	BinlogSyncerPosGauge            prometheus.Gauge
+	BinlogMasterFileGauge           prometheus.Gauge
+	BinlogSyncerFileGauge           prometheus.Gauge
+	BinlogEventRowHistogram         prometheus.Observer
+	TxnHistogram                    prometheus.Observer
+	QueryHistogram                  prometheus.Observer
+	SyncerExitWithErrorCounter      prometheus.Counter
+	ReplicationLagGauge             prometheus.Gauge
+	ReplicationLagHistogram         prometheus.Observer
+	RemainingTimeGauge              prometheus.Gauge
+	ShardLockResolving              prometheus.Gauge
+	FinishedTransactionTotal        prometheus.Counter
+	FlushCheckPointsTimeInterval    prometheus.Observer
+}
+
+// Proxies provides the ability to clean Metrics values when syncer is closed.
+// private members have a corresponding cached variable in Metrics.
+type Proxies struct {
+	Metrics                         *Metrics
+	binlogReadDurationHistogram     *metricsproxy.HistogramVecProxy
+	binlogEventSizeHistogram        *metricsproxy.HistogramVecProxy
+	BinlogEventCost                 *metricsproxy.HistogramVecProxy
+	conflictDetectDurationHistogram *metricsproxy.HistogramVecProxy
+	AddJobDurationHistogram         *metricsproxy.HistogramVecProxy
+	// dispatch/add multiple jobs for one binlog event.
+	// NOTE: only observe for DML now.
+	DispatchBinlogDurationHistogram *metricsproxy.HistogramVecProxy
+	SkipBinlogDurationHistogram     *metricsproxy.HistogramVecProxy
+	AddedJobsTotal                  *metricsproxy.CounterVecProxy
+	FinishedJobsTotal               *metricsproxy.CounterVecProxy
+	idealQPS                        *metricsproxy.GaugeVecProxy
+	QueueSizeGauge                  *metricsproxy.GaugeVecProxy
+	binlogPosGauge                  *metricsproxy.GaugeVecProxy
+	binlogFileGauge                 *metricsproxy.GaugeVecProxy
+	binlogEventRowHistogram         *metricsproxy.HistogramVecProxy
+	txnHistogram                    *metricsproxy.HistogramVecProxy
+	queryHistogram                  *metricsproxy.HistogramVecProxy
+	StmtHistogram                   *metricsproxy.HistogramVecProxy
+	syncerExitWithErrorCounter      *metricsproxy.CounterVecProxy
+	replicationLagGauge             *metricsproxy.GaugeVecProxy
+	replicationLagHistogram         *metricsproxy.HistogramVecProxy
+	remainingTimeGauge              *metricsproxy.GaugeVecProxy
+	UnsyncedTableGauge              *metricsproxy.GaugeVecProxy
+	shardLockResolving              *metricsproxy.GaugeVecProxy
+	finishedTransactionTotal        *metricsproxy.CounterVecProxy
+	ReplicationTransactionBatch     *metricsproxy.HistogramVecProxy
+	flushCheckPointsTimeInterval    *metricsproxy.HistogramVecProxy
+}
+
+var DefaultMetricsProxies *Proxies
+
+func init() {
+	DefaultMetricsProxies = &Proxies{}
+	DefaultMetricsProxies.Init(&promutil.PromFactory{})
+}
+
+// Init creates Metrics proxy variables from Factory.
+func (m *Proxies) Init(f promutil.Factory) {
+	m.binlogReadDurationHistogram = metricsproxy.NewHistogramVec(f,
 		prometheus.HistogramOpts{
 			Namespace: "dm",
 			Subsystem: "syncer",
@@ -40,8 +104,7 @@ var (
 			Help:      "bucketed histogram of read time (s) for single binlog event from the relay log or master.",
 			Buckets:   prometheus.ExponentialBuckets(0.000005, 2, 25),
 		}, []string{"task", "source_id"})
-
-	BinlogEventSizeHistogram = metricsproxy.NewHistogramVec(
+	m.binlogEventSizeHistogram = metricsproxy.NewHistogramVec(f,
 		prometheus.HistogramOpts{
 			Namespace: "dm",
 			Subsystem: "syncer",
@@ -49,8 +112,7 @@ var (
 			Help:      "size of a binlog event",
 			Buckets:   prometheus.ExponentialBuckets(16, 2, 20),
 		}, []string{"task", "worker", "source_id"})
-
-	BinlogEventCost = metricsproxy.NewHistogramVec(
+	m.BinlogEventCost = metricsproxy.NewHistogramVec(f,
 		prometheus.HistogramOpts{
 			Namespace: "dm",
 			Subsystem: "syncer",
@@ -58,8 +120,7 @@ var (
 			Help:      "cost of binlog event transform",
 			Buckets:   prometheus.ExponentialBuckets(0.000005, 2, 25),
 		}, []string{"stage", "task", "worker", "source_id"})
-
-	ConflictDetectDurationHistogram = metricsproxy.NewHistogramVec(
+	m.conflictDetectDurationHistogram = metricsproxy.NewHistogramVec(f,
 		prometheus.HistogramOpts{
 			Namespace: "dm",
 			Subsystem: "syncer",
@@ -67,8 +128,7 @@ var (
 			Help:      "bucketed histogram of conflict detect time (s) for single DML statement",
 			Buckets:   prometheus.ExponentialBuckets(0.000005, 2, 25),
 		}, []string{"task", "source_id"})
-
-	AddJobDurationHistogram = metricsproxy.NewHistogramVec(
+	m.AddJobDurationHistogram = metricsproxy.NewHistogramVec(f,
 		prometheus.HistogramOpts{
 			Namespace: "dm",
 			Subsystem: "syncer",
@@ -76,10 +136,7 @@ var (
 			Help:      "bucketed histogram of add a job to the queue time (s)",
 			Buckets:   prometheus.ExponentialBuckets(0.000005, 2, 25),
 		}, []string{"type", "task", "queueNo", "source_id"})
-
-	// dispatch/add multiple jobs for one binlog event.
-	// NOTE: only observe for DML now.
-	DispatchBinlogDurationHistogram = metricsproxy.NewHistogramVec(
+	m.DispatchBinlogDurationHistogram = metricsproxy.NewHistogramVec(f,
 		prometheus.HistogramOpts{
 			Namespace: "dm",
 			Subsystem: "syncer",
@@ -87,8 +144,7 @@ var (
 			Help:      "bucketed histogram of dispatch a binlog event time (s)",
 			Buckets:   prometheus.ExponentialBuckets(0.000005, 2, 25),
 		}, []string{"type", "task", "source_id"})
-
-	SkipBinlogDurationHistogram = metricsproxy.NewHistogramVec(
+	m.SkipBinlogDurationHistogram = metricsproxy.NewHistogramVec(f,
 		prometheus.HistogramOpts{
 			Namespace: "dm",
 			Subsystem: "syncer",
@@ -96,56 +152,49 @@ var (
 			Help:      "bucketed histogram of skip a binlog event time (s)",
 			Buckets:   prometheus.ExponentialBuckets(0.0000005, 2, 25), // this should be very fast.
 		}, []string{"type", "task", "source_id"})
-
-	AddedJobsTotal = metricsproxy.NewCounterVec(
+	m.AddedJobsTotal = metricsproxy.NewCounterVec(f,
 		prometheus.CounterOpts{
 			Namespace: "dm",
 			Subsystem: "syncer",
 			Name:      "added_jobs_total",
 			Help:      "total number of added jobs",
 		}, []string{"type", "task", "queueNo", "source_id", "worker", "target_schema", "target_table"})
-
-	FinishedJobsTotal = metricsproxy.NewCounterVec(
+	m.FinishedJobsTotal = metricsproxy.NewCounterVec(f,
 		prometheus.CounterOpts{
 			Namespace: "dm",
 			Subsystem: "syncer",
 			Name:      "finished_jobs_total",
 			Help:      "total number of finished jobs",
 		}, []string{"type", "task", "queueNo", "source_id", "worker", "target_schema", "target_table"})
-
-	IdealQPS = metricsproxy.NewGaugeVec(
+	m.idealQPS = metricsproxy.NewGaugeVec(f,
 		prometheus.GaugeOpts{
 			Namespace: "dm",
 			Subsystem: "syncer",
 			Name:      "ideal_qps",
 			Help:      "the highest QPS that can be achieved ideally",
 		}, []string{"task", "worker", "source_id"})
-
-	QueueSizeGauge = metricsproxy.NewGaugeVec(
+	m.QueueSizeGauge = metricsproxy.NewGaugeVec(f,
 		prometheus.GaugeOpts{
 			Namespace: "dm",
 			Subsystem: "syncer",
 			Name:      "queue_size",
 			Help:      "remain size of the DML queue",
 		}, []string{"task", "queue_id", "source_id"})
-
-	BinlogPosGauge = metricsproxy.NewGaugeVec(
+	m.binlogPosGauge = metricsproxy.NewGaugeVec(f,
 		prometheus.GaugeOpts{
 			Namespace: "dm",
 			Subsystem: "syncer",
 			Name:      "binlog_pos",
 			Help:      "current binlog pos",
 		}, []string{"node", "task", "source_id"})
-
-	BinlogFileGauge = metricsproxy.NewGaugeVec(
+	m.binlogFileGauge = metricsproxy.NewGaugeVec(f,
 		prometheus.GaugeOpts{
 			Namespace: "dm",
 			Subsystem: "syncer",
 			Name:      "binlog_file",
 			Help:      "current binlog file index",
 		}, []string{"node", "task", "source_id"})
-
-	BinlogEventRowHistogram = metricsproxy.NewHistogramVec(
+	m.binlogEventRowHistogram = metricsproxy.NewHistogramVec(f,
 		prometheus.HistogramOpts{
 			Namespace: "dm",
 			Subsystem: "syncer",
@@ -153,16 +202,7 @@ var (
 			Help:      "number of rows in a binlog event",
 			Buckets:   prometheus.LinearBuckets(0, 100, 101), // linear from 0 to 10000, i think this is enough
 		}, []string{"worker", "task", "source_id"})
-
-	SQLRetriesTotal = metricsproxy.NewCounterVec(
-		prometheus.CounterOpts{
-			Namespace: "dm",
-			Subsystem: "syncer",
-			Name:      "sql_retries_total",
-			Help:      "total number of sql retries",
-		}, []string{"type", "task"})
-
-	TxnHistogram = metricsproxy.NewHistogramVec(
+	m.txnHistogram = metricsproxy.NewHistogramVec(f,
 		prometheus.HistogramOpts{
 			Namespace: "dm",
 			Subsystem: "syncer",
@@ -170,8 +210,7 @@ var (
 			Help:      "Bucketed histogram of processing time (s) of a txn.",
 			Buckets:   prometheus.ExponentialBuckets(0.000005, 2, 25),
 		}, []string{"task", "worker", "source_id"})
-
-	QueryHistogram = metricsproxy.NewHistogramVec(
+	m.queryHistogram = metricsproxy.NewHistogramVec(f,
 		prometheus.HistogramOpts{
 			Namespace: "dm",
 			Subsystem: "syncer",
@@ -179,8 +218,7 @@ var (
 			Help:      "Bucketed histogram of query time (s).",
 			Buckets:   prometheus.ExponentialBuckets(0.000005, 2, 25),
 		}, []string{"task", "worker", "source_id"})
-
-	StmtHistogram = metricsproxy.NewHistogramVec(
+	m.StmtHistogram = metricsproxy.NewHistogramVec(f,
 		prometheus.HistogramOpts{
 			Namespace: "dm",
 			Subsystem: "syncer",
@@ -188,25 +226,21 @@ var (
 			Help:      "Bucketed histogram of every statement query time (s).",
 			Buckets:   prometheus.ExponentialBuckets(0.000005, 2, 25),
 		}, []string{"type", "task"})
-
-	// should alert.
-	SyncerExitWithErrorCounter = metricsproxy.NewCounterVec(
+	m.syncerExitWithErrorCounter = metricsproxy.NewCounterVec(f,
 		prometheus.CounterOpts{
 			Namespace: "dm",
 			Subsystem: "syncer",
 			Name:      "exit_with_error_count",
 			Help:      "counter for syncer exits with error",
 		}, []string{"task", "source_id"})
-
-	ReplicationLagGauge = metricsproxy.NewGaugeVec(
+	m.replicationLagGauge = metricsproxy.NewGaugeVec(f,
 		prometheus.GaugeOpts{
 			Namespace: "dm",
 			Subsystem: "syncer",
 			Name:      "replication_lag_gauge",
 			Help:      "replication lag gauge in second between mysql and syncer",
 		}, []string{"task", "source_id", "worker"})
-
-	ReplicationLagHistogram = metricsproxy.NewHistogramVec(
+	m.replicationLagHistogram = metricsproxy.NewHistogramVec(f,
 		prometheus.HistogramOpts{
 			Namespace: "dm",
 			Subsystem: "syncer",
@@ -214,40 +248,35 @@ var (
 			Help:      "replication lag histogram in second between mysql and syncer",
 			Buckets:   prometheus.ExponentialBuckets(0.5, 2, 12), // exponential from 0.5s to 1024s
 		}, []string{"task", "source_id", "worker"})
-
-	RemainingTimeGauge = metricsproxy.NewGaugeVec(
+	m.remainingTimeGauge = metricsproxy.NewGaugeVec(f,
 		prometheus.GaugeOpts{
 			Namespace: "dm",
 			Subsystem: "syncer",
 			Name:      "remaining_time",
 			Help:      "the remaining time in second to catch up master",
 		}, []string{"task", "source_id", "worker"})
-
-	UnsyncedTableGauge = metricsproxy.NewGaugeVec(
+	m.UnsyncedTableGauge = metricsproxy.NewGaugeVec(f,
 		prometheus.GaugeOpts{
 			Namespace: "dm",
 			Subsystem: "syncer",
 			Name:      "unsynced_table_number",
 			Help:      "number of unsynced tables in the subtask",
 		}, []string{"task", "table", "source_id"})
-
-	ShardLockResolving = metricsproxy.NewGaugeVec(
+	m.shardLockResolving = metricsproxy.NewGaugeVec(f,
 		prometheus.GaugeOpts{
 			Namespace: "dm",
 			Subsystem: "syncer",
 			Name:      "shard_lock_resolving",
 			Help:      "waiting shard DDL lock to be resolved",
 		}, []string{"task", "source_id"})
-
-	FinishedTransactionTotal = metricsproxy.NewCounterVec(
+	m.finishedTransactionTotal = metricsproxy.NewCounterVec(f,
 		prometheus.CounterOpts{
 			Namespace: "dm",
 			Subsystem: "syncer",
 			Name:      "finished_transaction_total",
 			Help:      "total number of finished transaction",
 		}, []string{"task", "worker", "source_id"})
-
-	ReplicationTransactionBatch = metricsproxy.NewHistogramVec(
+	m.ReplicationTransactionBatch = metricsproxy.NewHistogramVec(f,
 		prometheus.HistogramOpts{
 			Namespace: "dm",
 			Subsystem: "syncer",
@@ -255,8 +284,7 @@ var (
 			Help:      "number of sql's contained in a transaction that executed to downstream",
 			Buckets:   prometheus.LinearBuckets(1, 50, 21), // linear from 1 to 1001
 		}, []string{"worker", "task", "source_id", "queueNo", "type"})
-
-	FlushCheckPointsTimeInterval = metricsproxy.NewHistogramVec(
+	m.flushCheckPointsTimeInterval = metricsproxy.NewHistogramVec(f,
 		prometheus.HistogramOpts{
 			Namespace: "dm",
 			Subsystem: "syncer",
@@ -264,68 +292,90 @@ var (
 			Help:      "checkpoint flushed time interval in seconds",
 			Buckets:   prometheus.LinearBuckets(1, 50, 21), // linear from 1 to 1001, i think this is enough
 		}, []string{"worker", "task", "source_id"})
-)
-
-// RegisterMetrics registers metrics.
-func RegisterMetrics(registry *prometheus.Registry) {
-	registry.MustRegister(BinlogReadDurationHistogram)
-	registry.MustRegister(BinlogEventSizeHistogram)
-	registry.MustRegister(BinlogEventCost)
-	registry.MustRegister(BinlogEventRowHistogram)
-	registry.MustRegister(ConflictDetectDurationHistogram)
-	registry.MustRegister(AddJobDurationHistogram)
-	registry.MustRegister(DispatchBinlogDurationHistogram)
-	registry.MustRegister(SkipBinlogDurationHistogram)
-	registry.MustRegister(AddedJobsTotal)
-	registry.MustRegister(FinishedJobsTotal)
-	registry.MustRegister(QueueSizeGauge)
-	registry.MustRegister(SQLRetriesTotal)
-	registry.MustRegister(BinlogPosGauge)
-	registry.MustRegister(BinlogFileGauge)
-	registry.MustRegister(TxnHistogram)
-	registry.MustRegister(StmtHistogram)
-	registry.MustRegister(QueryHistogram)
-	registry.MustRegister(SyncerExitWithErrorCounter)
-	registry.MustRegister(ReplicationLagGauge)
-	registry.MustRegister(ReplicationLagHistogram)
-	registry.MustRegister(RemainingTimeGauge)
-	registry.MustRegister(UnsyncedTableGauge)
-	registry.MustRegister(ShardLockResolving)
-
-	registry.MustRegister(IdealQPS)
-	registry.MustRegister(FinishedTransactionTotal)
-	registry.MustRegister(ReplicationTransactionBatch)
-	registry.MustRegister(FlushCheckPointsTimeInterval)
 }
 
-// RemoveLabelValuesWithTaskInMetrics cleans metrics.
-func RemoveLabelValuesWithTaskInMetrics(task string) {
-	BinlogReadDurationHistogram.DeleteAllAboutLabels(prometheus.Labels{"task": task})
-	BinlogEventSizeHistogram.DeleteAllAboutLabels(prometheus.Labels{"task": task})
-	BinlogEventCost.DeleteAllAboutLabels(prometheus.Labels{"task": task})
-	BinlogEventRowHistogram.DeleteAllAboutLabels(prometheus.Labels{"task": task})
-	ConflictDetectDurationHistogram.DeleteAllAboutLabels(prometheus.Labels{"task": task})
-	AddJobDurationHistogram.DeleteAllAboutLabels(prometheus.Labels{"task": task})
-	DispatchBinlogDurationHistogram.DeleteAllAboutLabels(prometheus.Labels{"task": task})
-	SkipBinlogDurationHistogram.DeleteAllAboutLabels(prometheus.Labels{"task": task})
-	AddedJobsTotal.DeleteAllAboutLabels(prometheus.Labels{"task": task})
-	FinishedJobsTotal.DeleteAllAboutLabels(prometheus.Labels{"task": task})
-	QueueSizeGauge.DeleteAllAboutLabels(prometheus.Labels{"task": task})
-	SQLRetriesTotal.DeleteAllAboutLabels(prometheus.Labels{"task": task})
-	BinlogPosGauge.DeleteAllAboutLabels(prometheus.Labels{"task": task})
-	BinlogFileGauge.DeleteAllAboutLabels(prometheus.Labels{"task": task})
-	TxnHistogram.DeleteAllAboutLabels(prometheus.Labels{"task": task})
-	StmtHistogram.DeleteAllAboutLabels(prometheus.Labels{"task": task})
-	QueryHistogram.DeleteAllAboutLabels(prometheus.Labels{"task": task})
-	SyncerExitWithErrorCounter.DeleteAllAboutLabels(prometheus.Labels{"task": task})
-	ReplicationLagGauge.DeleteAllAboutLabels(prometheus.Labels{"task": task})
-	ReplicationLagHistogram.DeleteAllAboutLabels(prometheus.Labels{"task": task})
-	RemainingTimeGauge.DeleteAllAboutLabels(prometheus.Labels{"task": task})
-	UnsyncedTableGauge.DeleteAllAboutLabels(prometheus.Labels{"task": task})
-	ShardLockResolving.DeleteAllAboutLabels(prometheus.Labels{"task": task})
+// CacheForOneTask returns a new Proxies with m.Metrics filled. It is used
+// to avoid calling WithLabelValues in hot path.
+func (m *Proxies) CacheForOneTask(taskName, workerName, sourceID string) *Proxies {
+	ret := *m
+	ret.Metrics = &Metrics{}
+	ret.Metrics.BinlogReadDurationHistogram = m.binlogReadDurationHistogram.WithLabelValues(taskName, sourceID)
+	ret.Metrics.BinlogEventSizeHistogram = m.binlogEventSizeHistogram.WithLabelValues(taskName, workerName, sourceID)
+	ret.Metrics.ConflictDetectDurationHistogram = m.conflictDetectDurationHistogram.WithLabelValues(taskName, sourceID)
+	ret.Metrics.IdealQPS = m.idealQPS.WithLabelValues(taskName, workerName, sourceID)
+	ret.Metrics.BinlogMasterPosGauge = m.binlogPosGauge.WithLabelValues("master", taskName, sourceID)
+	ret.Metrics.BinlogSyncerPosGauge = m.binlogPosGauge.WithLabelValues("syncer", taskName, sourceID)
+	ret.Metrics.BinlogMasterFileGauge = m.binlogFileGauge.WithLabelValues("master", taskName, sourceID)
+	ret.Metrics.BinlogSyncerFileGauge = m.binlogFileGauge.WithLabelValues("syncer", taskName, sourceID)
+	ret.Metrics.BinlogEventRowHistogram = m.binlogEventRowHistogram.WithLabelValues(workerName, taskName, sourceID)
+	ret.Metrics.TxnHistogram = m.txnHistogram.WithLabelValues(taskName, workerName, sourceID)
+	ret.Metrics.QueryHistogram = m.queryHistogram.WithLabelValues(taskName, workerName, sourceID)
+	ret.Metrics.SyncerExitWithErrorCounter = m.syncerExitWithErrorCounter.WithLabelValues(taskName, sourceID)
+	ret.Metrics.ReplicationLagGauge = m.replicationLagGauge.WithLabelValues(taskName, sourceID, workerName)
+	ret.Metrics.ReplicationLagHistogram = m.replicationLagHistogram.WithLabelValues(taskName, sourceID, workerName)
+	ret.Metrics.RemainingTimeGauge = m.remainingTimeGauge.WithLabelValues(taskName, sourceID, workerName)
+	ret.Metrics.ShardLockResolving = m.shardLockResolving.WithLabelValues(taskName, sourceID)
+	ret.Metrics.FinishedTransactionTotal = m.finishedTransactionTotal.WithLabelValues(taskName, workerName, sourceID)
+	ret.Metrics.FlushCheckPointsTimeInterval = m.flushCheckPointsTimeInterval.WithLabelValues(workerName, taskName, sourceID)
+	return &ret
+}
 
-	IdealQPS.DeleteAllAboutLabels(prometheus.Labels{"task": task})
-	FinishedTransactionTotal.DeleteAllAboutLabels(prometheus.Labels{"task": task})
-	ReplicationTransactionBatch.DeleteAllAboutLabels(prometheus.Labels{"task": task})
-	FlushCheckPointsTimeInterval.DeleteAllAboutLabels(prometheus.Labels{"task": task})
+// RegisterMetrics registers Proxies.
+func (m *Proxies) RegisterMetrics(registry *prometheus.Registry) {
+	registry.MustRegister(m.binlogReadDurationHistogram)
+	registry.MustRegister(m.binlogEventSizeHistogram)
+	registry.MustRegister(m.BinlogEventCost)
+	registry.MustRegister(m.binlogEventRowHistogram)
+	registry.MustRegister(m.conflictDetectDurationHistogram)
+	registry.MustRegister(m.AddJobDurationHistogram)
+	registry.MustRegister(m.DispatchBinlogDurationHistogram)
+	registry.MustRegister(m.SkipBinlogDurationHistogram)
+	registry.MustRegister(m.AddedJobsTotal)
+	registry.MustRegister(m.FinishedJobsTotal)
+	registry.MustRegister(m.QueueSizeGauge)
+	registry.MustRegister(m.binlogPosGauge)
+	registry.MustRegister(m.binlogFileGauge)
+	registry.MustRegister(m.txnHistogram)
+	registry.MustRegister(m.StmtHistogram)
+	registry.MustRegister(m.queryHistogram)
+	registry.MustRegister(m.syncerExitWithErrorCounter)
+	registry.MustRegister(m.replicationLagGauge)
+	registry.MustRegister(m.replicationLagHistogram)
+	registry.MustRegister(m.remainingTimeGauge)
+	registry.MustRegister(m.UnsyncedTableGauge)
+	registry.MustRegister(m.shardLockResolving)
+	registry.MustRegister(m.idealQPS)
+	registry.MustRegister(m.finishedTransactionTotal)
+	registry.MustRegister(m.ReplicationTransactionBatch)
+	registry.MustRegister(m.flushCheckPointsTimeInterval)
+}
+
+// RemoveLabelValuesWithTaskInMetrics cleans all Metrics related to the task.
+func (m *Proxies) RemoveLabelValuesWithTaskInMetrics(task string) {
+	m.binlogReadDurationHistogram.DeleteAllAboutLabels(prometheus.Labels{"task": task})
+	m.binlogEventSizeHistogram.DeleteAllAboutLabels(prometheus.Labels{"task": task})
+	m.BinlogEventCost.DeleteAllAboutLabels(prometheus.Labels{"task": task})
+	m.binlogEventRowHistogram.DeleteAllAboutLabels(prometheus.Labels{"task": task})
+	m.conflictDetectDurationHistogram.DeleteAllAboutLabels(prometheus.Labels{"task": task})
+	m.AddJobDurationHistogram.DeleteAllAboutLabels(prometheus.Labels{"task": task})
+	m.DispatchBinlogDurationHistogram.DeleteAllAboutLabels(prometheus.Labels{"task": task})
+	m.SkipBinlogDurationHistogram.DeleteAllAboutLabels(prometheus.Labels{"task": task})
+	m.AddedJobsTotal.DeleteAllAboutLabels(prometheus.Labels{"task": task})
+	m.FinishedJobsTotal.DeleteAllAboutLabels(prometheus.Labels{"task": task})
+	m.QueueSizeGauge.DeleteAllAboutLabels(prometheus.Labels{"task": task})
+	m.binlogPosGauge.DeleteAllAboutLabels(prometheus.Labels{"task": task})
+	m.binlogFileGauge.DeleteAllAboutLabels(prometheus.Labels{"task": task})
+	m.txnHistogram.DeleteAllAboutLabels(prometheus.Labels{"task": task})
+	m.StmtHistogram.DeleteAllAboutLabels(prometheus.Labels{"task": task})
+	m.queryHistogram.DeleteAllAboutLabels(prometheus.Labels{"task": task})
+	m.syncerExitWithErrorCounter.DeleteAllAboutLabels(prometheus.Labels{"task": task})
+	m.replicationLagGauge.DeleteAllAboutLabels(prometheus.Labels{"task": task})
+	m.replicationLagHistogram.DeleteAllAboutLabels(prometheus.Labels{"task": task})
+	m.remainingTimeGauge.DeleteAllAboutLabels(prometheus.Labels{"task": task})
+	m.UnsyncedTableGauge.DeleteAllAboutLabels(prometheus.Labels{"task": task})
+	m.shardLockResolving.DeleteAllAboutLabels(prometheus.Labels{"task": task})
+	m.idealQPS.DeleteAllAboutLabels(prometheus.Labels{"task": task})
+	m.finishedTransactionTotal.DeleteAllAboutLabels(prometheus.Labels{"task": task})
+	m.ReplicationTransactionBatch.DeleteAllAboutLabels(prometheus.Labels{"task": task})
+	m.flushCheckPointsTimeInterval.DeleteAllAboutLabels(prometheus.Labels{"task": task})
 }
