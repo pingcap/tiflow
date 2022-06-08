@@ -134,7 +134,6 @@ func (m *kafkaTopicManager) tryUpdatePartitionsAndLogging(topic string, partitio
 func (m *kafkaTopicManager) getMetadataOfTopics() ([]*sarama.TopicMetadata, error) {
 	var topicList []string
 
-	start := time.Now()
 	m.topics.Range(func(key, value any) bool {
 		topic := key.(string)
 		topicList = append(topicList, topic)
@@ -142,6 +141,7 @@ func (m *kafkaTopicManager) getMetadataOfTopics() ([]*sarama.TopicMetadata, erro
 		return true
 	})
 
+	start := time.Now()
 	topicMetaList, err := m.admin.DescribeTopics(topicList)
 	if err != nil {
 		log.Error(
@@ -161,7 +161,8 @@ func (m *kafkaTopicManager) getMetadataOfTopics() ([]*sarama.TopicMetadata, erro
 
 // WaitUntilTopicCreationDone is called after CreateTopic to make sure the topic
 // can be safely written to. The reason is that it may take several seconds after
-// CreateTopic returns success for all the brokers to become aware that the topics have been created.
+// CreateTopic returns success for all the brokers to become aware that the
+// topics have been created.
 // See https://kafka.apache.org/23/javadoc/org/apache/kafka/clients/admin/AdminClient.html
 func (m *kafkaTopicManager) WaitUntilTopicCreationDone(topicName string) error {
 	err := retry.Do(context.Background(), func() error {
