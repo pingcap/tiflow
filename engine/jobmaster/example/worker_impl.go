@@ -62,7 +62,7 @@ func (w *exampleWorker) run() {
 	w.work.mu.Unlock()
 
 	// nolint:errcheck
-	_, _ = w.BaseWorker.SendMessage(context.TODO(), testTopic, testMsg)
+	_ = w.BaseWorker.SendMessage(context.TODO(), testTopic, testMsg, true)
 }
 
 func (w *exampleWorker) InitImpl(ctx context.Context) error {

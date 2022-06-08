@@ -28,6 +28,7 @@ import (
 	"github.com/pingcap/tidb/util/filter"
 	regexprrouter "github.com/pingcap/tidb/util/regexpr-router"
 	router "github.com/pingcap/tidb/util/table-router"
+	"github.com/pingcap/tiflow/dm/syncer/binlogstream"
 	"github.com/stretchr/testify/require"
 
 	"github.com/pingcap/tiflow/dm/dm/config"
@@ -462,7 +463,7 @@ func TestValidatorDoValidate(t *testing.T) {
 	allEvents = append(allEvents, updateEvents...)
 	allEvents = append(allEvents, deleteEvents...)
 	mockStreamerProducer := &MockStreamProducer{events: allEvents}
-	mockStreamer, err := mockStreamerProducer.generateStreamer(binlog.MustZeroLocation(mysql.MySQLFlavor))
+	mockStreamer, err := mockStreamerProducer.GenerateStreamer(binlog.MustZeroLocation(mysql.MySQLFlavor))
 	require.NoError(t, err)
 
 	require.Nil(t, failpoint.Enable("github.com/pingcap/tiflow/dm/syncer/ValidatorMockUpstreamTZ", `return()`))
@@ -473,11 +474,10 @@ func TestValidatorDoValidate(t *testing.T) {
 	validator.validateInterval = 10 * time.Minute // we don't want worker start validate
 	validator.persistHelper.schemaInitialized.Store(true)
 	require.NoError(t, validator.initialize())
-	validator.streamerController = &StreamerController{
-		streamerProducer: mockStreamerProducer,
-		streamer:         mockStreamer,
-		closed:           false,
-	}
+	validator.streamerController = binlogstream.NewStreamerController4Test(
+		mockStreamerProducer,
+		mockStreamer,
+	)
 	validator.wg.Add(1) // wg.Done is run in doValidate
 	validator.doValidate()
 	validator.Stop()

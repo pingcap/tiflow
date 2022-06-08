@@ -331,8 +331,6 @@ var (
 		"MySQL worker panic",
 		errors.RFCCodeText("CDC:ErrMySQLWorkerPanic"),
 	)
-	ErrMQWorkerClosed = errors.Normalize("MQ worker has closed",
-		errors.RFCCodeText("CDC:ErrMQWorkerClosed"))
 	ErrAvroToEnvelopeError = errors.Normalize(
 		"to envelope failed",
 		errors.RFCCodeText("CDC:ErrAvroToEnvelopeError"),
@@ -554,6 +552,10 @@ var (
 	ErrCaptureRegister = errors.Normalize(
 		"capture register to etcd failed",
 		errors.RFCCodeText("CDC:ErrCaptureRegister"),
+	)
+	ErrCaptureNotInitialized = errors.Normalize(
+		"capture has not been initialized yet",
+		errors.RFCCodeText("CDC:ErrCaptureNotInitialized"),
 	)
 	ErrNewProcessorFailed = errors.Normalize(
 		"new processor failed",

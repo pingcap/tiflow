@@ -10,6 +10,8 @@ RETRY_TIME = 10
 BASE_URL0 = "https://127.0.0.1:8300/api/v1"
 BASE_URL1 = "https://127.0.0.1:8301/api/v1"
 
+V2_BASE_URL0 = "https://127.0.0.1:8300/api/v2"
+
 # we should write some SQLs in the run.sh after call create_changefeed
 def create_changefeed(sink_uri):
     url = BASE_URL1+"/changefeeds"
@@ -298,6 +300,14 @@ def set_log_level():
 
     print("pass test: set log level")
 
+def get_tso():
+    # test state: all
+    url = V2_BASE_URL0+"/tso"
+    resp = rq.get(url, cert=CERT, verify=VERIFY)
+    assert resp.status_code == rq.codes.ok
+
+    print("pass test: get tso")
+
 # arg1: test case name
 # arg2: cetificates dir
 # arg3: sink uri
@@ -327,6 +337,7 @@ if __name__ == "__main__":
         "set_log_level": set_log_level,
         "remove_changefeed": remove_changefeed,
         "resign_owner": resign_owner,
+        "get_tso": get_tso
     }
 
     func = FUNC_MAP[sys.argv[1]]

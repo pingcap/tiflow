@@ -16,10 +16,11 @@ package promutil
 import (
 	"net/http"
 
-	libModel "github.com/pingcap/tiflow/engine/lib/model"
-	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+
+	libModel "github.com/pingcap/tiflow/engine/lib/model"
+	"github.com/pingcap/tiflow/engine/pkg/tenant"
 )
 
 // [NOTICE]: SHOULD NOT use following functions. USE functions in 'util.go' INSTEAD.
@@ -34,14 +35,14 @@ func HTTPHandlerForMetricImpl(gather prometheus.Gatherer) http.Handler {
 }
 
 // NewFactory4MasterImpl return a Factory for jobmaster
-func NewFactory4MasterImpl(reg *Registry, info tenant.ProjectInfo, jobType libModel.JobType, jobID libModel.MasterID) Factory {
+func NewFactory4MasterImpl(reg *Registry, info tenant.ProjectInfo, jobType libModel.JobType, jobID libModel.JobID) Factory {
 	return NewAutoRegisterFactory(
 		NewWrappingFactory(
 			NewPromFactory(),
 			jobType,
 			prometheus.Labels{
-				constLabelTenantKey:  info.TenantID,
-				constLabelProjectKey: info.ProjectID,
+				constLabelTenantKey:  info.TenantID(),
+				constLabelProjectKey: info.ProjectID(),
 				constLabelJobKey:     jobID,
 			},
 		),
@@ -51,7 +52,7 @@ func NewFactory4MasterImpl(reg *Registry, info tenant.ProjectInfo, jobType libMo
 }
 
 // NewFactory4WorkerImpl return a Factory for worker
-func NewFactory4WorkerImpl(reg *Registry, info tenant.ProjectInfo, jobType libModel.JobType, jobID libModel.MasterID,
+func NewFactory4WorkerImpl(reg *Registry, info tenant.ProjectInfo, jobType libModel.JobType, jobID libModel.JobID,
 	workerID libModel.WorkerID,
 ) Factory {
 	return NewAutoRegisterFactory(
@@ -59,8 +60,8 @@ func NewFactory4WorkerImpl(reg *Registry, info tenant.ProjectInfo, jobType libMo
 			NewPromFactory(),
 			jobType,
 			prometheus.Labels{
-				constLabelTenantKey:  info.TenantID,
-				constLabelProjectKey: info.ProjectID,
+				constLabelTenantKey:  info.TenantID(),
+				constLabelProjectKey: info.ProjectID(),
 				constLabelJobKey:     jobID,
 				constLabelWorkerKey:  workerID,
 			},

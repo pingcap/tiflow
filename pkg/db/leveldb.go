@@ -87,7 +87,7 @@ type levelDB struct {
 
 var _ DB = (*levelDB)(nil)
 
-func (p *levelDB) Iterator(lowerBound, upperBound []byte) Iterator {
+func (p *levelDB) Iterator(lowerBound, upperBound []byte, _, _ uint64) Iterator {
 	return leveldbIter{Iterator: p.db.NewIterator(&util.Range{
 		Start: lowerBound,
 		Limit: upperBound,
