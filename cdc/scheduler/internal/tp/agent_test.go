@@ -77,6 +77,10 @@ func TestAgentCollectTableStatus(t *testing.T) {
 	a.runningTasks[model.TableID(0)] = &dispatchTableTask{IsRemove: true}
 	status := a.newTableStatus(model.TableID(0))
 	require.Equal(t, schedulepb.TableStateStopping, status.State)
+
+	a.runningTasks[model.TableID(10)] = &dispatchTableTask{IsRemove: true}
+	status = a.newTableStatus(model.TableID(10))
+	require.Equal(t, schedulepb.TableStateAbsent, status.State)
 }
 
 func TestAgentHandleDispatchTableTask(t *testing.T) {
