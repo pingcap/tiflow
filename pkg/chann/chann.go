@@ -213,7 +213,7 @@ func (ch *Chann[T]) unboundedProcessing() {
 }
 
 // unboundedTerminate terminates the unbounde channel's processing loop
-// and make sure all unprocessed elements either be consumed if there is
+// and make sure all unprocessed elements be consumed if there is
 // a pending receiver.
 func (ch *Chann[T]) unboundedTerminate() {
 	var zeroT T
