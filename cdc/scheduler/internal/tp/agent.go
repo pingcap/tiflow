@@ -335,6 +335,14 @@ func (a *agent) handleMessageDispatchTableRequest(
 			Epoch:    epoch,
 			status:   dispatchTableTaskReceived,
 		}
+		if a.tableExec.GetTableMeta(task.TableID).State == pipeline.TableStateAbsent {
+			log.Warn("tpscheduler: agent ignore remove table request, since the table is absent",
+				zap.Any("tableID", task.TableID),
+				zap.String("capture", a.captureID),
+				zap.String("namespace", a.changeFeedID.Namespace),
+				zap.String("changefeed", a.changeFeedID.ID))
+			return
+		}
 	default:
 		log.Warn("tpscheduler: agent ignore unknown dispatch table request",
 			zap.String("capture", a.captureID),

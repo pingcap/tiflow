@@ -254,6 +254,25 @@ func TestAgentHandleMessageStopping(t *testing.T) {
 	require.True(t, addTableResponse.AddTable.Reject)
 }
 
+func TestAgentHandleRemoveTableRequest(t *testing.T) {
+	t.Parallel()
+
+	a := newBaseAgent4Test()
+	a.tableExec = newMockTableExecutor()
+
+	// remove a table not exist, should not generate the task.
+	removeTableRequest := &schedulepb.DispatchTableRequest{
+		Request: &schedulepb.DispatchTableRequest_RemoveTable{
+			RemoveTable: &schedulepb.RemoveTableRequest{
+				TableID: 2,
+			},
+		},
+	}
+
+	a.handleMessageDispatchTableRequest(removeTableRequest, a.epoch)
+	require.Len(t, a.runningTasks, 0)
+}
+
 func TestAgentHandleMessage(t *testing.T) {
 	t.Parallel()
 
