@@ -275,7 +275,7 @@ func (m *Master) failoverOnMasterRecover(ctx context.Context) error {
 				m.workerID2BusinessID[worker.ID()] = businessID
 				m.workerList[businessID] = worker
 				log.L().Info("found active worker during failover",
-					zap.String("worker-id", worker.ID()), zap.Int("buisness-id", businessID))
+					zap.String("worker-id", worker.ID()), zap.Int("business-id", businessID))
 			}
 		}
 
