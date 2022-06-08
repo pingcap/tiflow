@@ -139,7 +139,7 @@ func TestCreateTopicWithDelay(t *testing.T) {
 	require.Nil(t, err)
 	err = adminClient.SetRemainingFetchesUntilTopicVisible("new_topic", 3)
 	require.Nil(t, err)
-	err = manager.waitUntilTopicCreationDone("new_topic")
+	err = manager.waitUntilTopicVisible("new_topic")
 	require.Nil(t, err)
 	require.Equal(t, int32(2), partitionNum)
 }

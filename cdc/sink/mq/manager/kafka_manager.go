@@ -75,7 +75,7 @@ func (m *kafkaTopicManager) GetPartitionNum(topic string) (int32, error) {
 		return partitions.(int32), nil
 	}
 
-	partitionNum, err := m.CreateTopicWithRetry(topic)
+	partitionNum, err := m.CreateTopicAndWaitUntilVisible(topic)
 	if err != nil {
 		return 0, errors.Trace(err)
 	}
@@ -155,12 +155,12 @@ func (m *kafkaTopicManager) getMetadataOfTopics() ([]*sarama.TopicMetadata, erro
 	return topicMetaList, nil
 }
 
-// waitUntilTopicCreationDone is called after CreateTopic to make sure the topic
+// waitUntilTopicVisible is called after CreateTopic to make sure the topic
 // can be safely written to. The reason is that it may take several seconds after
 // CreateTopic returns success for all the brokers to become aware that the
 // topics have been created.
 // See https://kafka.apache.org/23/javadoc/org/apache/kafka/clients/admin/AdminClient.html
-func (m *kafkaTopicManager) waitUntilTopicCreationDone(topicName string) error {
+func (m *kafkaTopicManager) waitUntilTopicVisible(topicName string) error {
 	err := retry.Do(context.Background(), func() error {
 		start := time.Now()
 		topicMetaList, err := m.admin.DescribeTopics([]string{topicName})
@@ -301,14 +301,14 @@ func (m *kafkaTopicManager) createTopic(topicName string) (int32, error) {
 	return m.cfg.PartitionNum, nil
 }
 
-// CreateTopicWithRetry wraps createTopic and waitUntilTopicCreationDone together.
-func (m *kafkaTopicManager) CreateTopicWithRetry(topicName string) (int32, error) {
+// CreateTopicAndWaitUntilVisible wraps createTopic and waitUntilTopicVisible together.
+func (m *kafkaTopicManager) CreateTopicAndWaitUntilVisible(topicName string) (int32, error) {
 	partitionNum, err := m.createTopic(topicName)
 	if err != nil {
 		return 0, errors.Trace(err)
 	}
 
-	err = m.waitUntilTopicCreationDone(topicName)
+	err = m.waitUntilTopicVisible(topicName)
 	if err != nil {
 		return 0, errors.Trace(err)
 	}
