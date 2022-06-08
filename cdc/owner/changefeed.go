@@ -346,7 +346,7 @@ LOOP:
 	// So we need to process all DDLs from the range [checkpointTs, ...), but since the semantics of start-ts requires
 	// the lower bound of an open interval, i.e. (startTs, ...), we pass checkpointTs-1 as the start-ts to initialize
 	// the schema cache.
-	c.schema, err = newSchemaWrap4Owner(c.upStream.KVStorage,
+	c.schema, err = newSchemaWrap4Owner(c.upStream.KVStorage.UnWrap(),
 		checkpointTs-1, c.state.Info.Config, ctx.ChangefeedVars().ID)
 	if err != nil {
 		return errors.Trace(err)

@@ -15,17 +15,68 @@ package kv
 
 import (
 	"fmt"
+	"sync"
+	"sync/atomic"
 
 	"github.com/pingcap/errors"
-	tidbconfig "github.com/pingcap/tidb/config"
+	"github.com/pingcap/log"
 	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/meta"
-	"github.com/pingcap/tidb/store"
 	"github.com/pingcap/tidb/store/driver"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/flags"
 	"github.com/pingcap/tiflow/pkg/security"
+	tikvconfig "github.com/tikv/client-go/v2/config"
+	"go.uber.org/zap"
 )
+
+type storeCache struct {
+	sync.Mutex
+	cache map[string]*Storage
+}
+
+var mc storeCache
+
+func init() {
+	mc.cache = make(map[string]*Storage)
+}
+
+const (
+	closed = 1
+)
+
+// Storage wrap a tidbkv.Storage in it for reuse and maintain its status to
+// avoid inappropriate call of tidbkv.Storage.Close()
+type Storage struct {
+	tiStore tidbkv.Storage
+	uuid    string
+	count   int32
+	status  int32
+}
+
+// UnWrap return a tidbkv.Storage
+func (s *Storage) UnWrap() tidbkv.Storage {
+	return s.tiStore
+}
+
+// Close and unregister the store.
+func (s *Storage) Close() error {
+	if atomic.LoadInt32(&s.status) == closed {
+		return nil
+	}
+	atomic.AddInt32(&s.count, -1)
+	if s.count == 0 {
+		atomic.StoreInt32(&s.status, closed)
+		// if s.hc.count == 0
+		// we need to unlock here to avoid dead lock
+		mc.Lock()
+		delete(mc.cache, s.uuid)
+		defer mc.Unlock()
+		log.Info("fizz delete", zap.String("id", s.uuid))
+		return s.tiStore.Close()
+	}
+	return nil
+}
 
 // GetSnapshotMeta returns tidb meta information
 // TODO: Simplify the signature of this function
@@ -34,28 +85,45 @@ func GetSnapshotMeta(tiStore tidbkv.Storage, ts uint64) (*meta.Meta, error) {
 	return meta.NewSnapshotMeta(snapshot), nil
 }
 
-// CreateTiStore creates a new tikv storage client
-func CreateTiStore(urls string, credential *security.Credential) (tidbkv.Storage, error) {
+// CreateTiStore returns a Storage
+func CreateTiStore(urls string, credential *security.Credential) (*Storage, error) {
 	urlv, err := flags.NewURLsValue(urls)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
-	// Ignore error if it is already registered.
-	_ = store.Register("tikv", driver.TiKVDriver{})
-
-	if credential.CAPath != "" {
-		conf := tidbconfig.GetGlobalConfig()
-		conf.Security.ClusterSSLCA = credential.CAPath
-		conf.Security.ClusterSSLCert = credential.CertPath
-		conf.Security.ClusterSSLKey = credential.KeyPath
-		tidbconfig.StoreGlobalConfig(conf)
-	}
-
 	tiPath := fmt.Sprintf("tikv://%s?disableGC=true", urlv.HostString())
-	tiStore, err := store.New(tiPath)
+	securityCfg := tikvconfig.Security{
+		ClusterSSLCA:    credential.CAPath,
+		ClusterSSLCert:  credential.CertPath,
+		ClusterSSLKey:   credential.KeyPath,
+		ClusterVerifyCN: credential.CertAllowedCN,
+	}
+	d := driver.TiKVDriver{}
+	// Note: It will return a same storage if the the tiPath connect to a same pd cluster
+	tiStore, err := d.OpenWithOptions(tiPath, driver.WithSecurity(securityCfg))
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrNewStore, err)
 	}
-	return tiStore, nil
+	return wrapStore(tiStore), nil
+}
+
+// wrapStore wraps a tidbkv.Storage into Storage and return it
+func wrapStore(tiStore tidbkv.Storage) *Storage {
+	mc.Lock()
+	defer mc.Unlock()
+	uuid := tiStore.UUID()
+	if s, ok := mc.cache[uuid]; ok {
+		if atomic.LoadInt32(&s.status) == closed {
+			goto outSide
+		}
+		atomic.AddInt32(&s.count, 1)
+		return s
+	}
+outSide:
+	res := &Storage{tiStore: tiStore, uuid: uuid}
+	atomic.AddInt32(&res.count, 1)
+	log.Info("fizz add", zap.String("id", res.uuid))
+	mc.cache[uuid] = res
+	return res
 }
