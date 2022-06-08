@@ -84,6 +84,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/syncer/dbconn"
+	"github.com/pingcap/tiflow/dm/syncer/metrics"
 	shardmeta "github.com/pingcap/tiflow/dm/syncer/sharding-meta"
 
 	"github.com/pingcap/tidb/util/dbutil"
@@ -372,8 +373,9 @@ func (sg *ShardingGroup) FlushData(targetTableID string) ([]string, [][]interfac
 // ShardingGroupKeeper used to keep ShardingGroup.
 type ShardingGroupKeeper struct {
 	sync.RWMutex
-	groups map[string]*ShardingGroup // target table ID -> ShardingGroup
-	cfg    *config.SubTaskConfig
+	groups        map[string]*ShardingGroup // target table ID -> ShardingGroup
+	cfg           *config.SubTaskConfig
+	metricProxies *metrics.Proxies
 
 	shardMetaSchema    string
 	shardMetaTable     string
@@ -386,11 +388,16 @@ type ShardingGroupKeeper struct {
 }
 
 // NewShardingGroupKeeper creates a new ShardingGroupKeeper.
-func NewShardingGroupKeeper(tctx *tcontext.Context, cfg *config.SubTaskConfig) *ShardingGroupKeeper {
+func NewShardingGroupKeeper(
+	tctx *tcontext.Context,
+	cfg *config.SubTaskConfig,
+	metricProxies *metrics.Proxies,
+) *ShardingGroupKeeper {
 	k := &ShardingGroupKeeper{
-		groups: make(map[string]*ShardingGroup),
-		cfg:    cfg,
-		tctx:   tctx.WithLogger(tctx.L().WithFields(zap.String("component", "shard group keeper"))),
+		groups:        make(map[string]*ShardingGroup),
+		cfg:           cfg,
+		metricProxies: metricProxies,
+		tctx:          tctx.WithLogger(tctx.L().WithFields(zap.String("component", "shard group keeper"))),
 	}
 	k.shardMetaSchema = cfg.MetaSchema
 	k.shardMetaTable = cputil.SyncerShardMeta(cfg.Name)
@@ -689,7 +696,7 @@ func (k *ShardingGroupKeeper) Close() {
 
 func (k *ShardingGroupKeeper) createSchema() error {
 	stmt := fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS `%s`", k.shardMetaSchema)
-	_, err := k.dbConn.ExecuteSQL(k.tctx, []string{stmt})
+	_, err := k.dbConn.ExecuteSQL(k.tctx, k.metricProxies, []string{stmt})
 	k.tctx.L().Info("execute sql", zap.String("statement", stmt))
 	return terror.WithScope(err, terror.ScopeDownstream)
 }
@@ -706,7 +713,7 @@ func (k *ShardingGroupKeeper) createTable() error {
 		update_time timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 		UNIQUE KEY uk_source_id_table_id_source (source_id, target_table_id, source_table_id)
 	)`, k.shardMetaTableName)
-	_, err := k.dbConn.ExecuteSQL(k.tctx, []string{stmt})
+	_, err := k.dbConn.ExecuteSQL(k.tctx, k.metricProxies, []string{stmt})
 	k.tctx.L().Info("execute sql", zap.String("statement", stmt))
 	return terror.WithScope(err, terror.ScopeDownstream)
 }
@@ -714,7 +721,7 @@ func (k *ShardingGroupKeeper) createTable() error {
 // LoadShardMeta implements CheckPoint.LoadShardMeta.
 func (k *ShardingGroupKeeper) LoadShardMeta(flavor string, enableGTID bool) (map[string]*shardmeta.ShardingMeta, error) {
 	query := fmt.Sprintf("SELECT `target_table_id`, `source_table_id`, `active_index`, `is_global`, `data` FROM %s WHERE `source_id`='%s'", k.shardMetaTableName, k.cfg.SourceID)
-	rows, err := k.dbConn.QuerySQL(k.tctx, query)
+	rows, err := k.dbConn.QuerySQL(k.tctx, k.metricProxies, query)
 	if err != nil {
 		return nil, terror.WithScope(err, terror.ScopeDownstream)
 	}
@@ -755,7 +762,7 @@ func (k *ShardingGroupKeeper) CheckAndFix(metas map[string]*shardmeta.ShardingMe
 		if err != nil {
 			return err
 		}
-		_, err = k.dbConn.ExecuteSQL(k.tctx, sqls, args...)
+		_, err = k.dbConn.ExecuteSQL(k.tctx, k.metricProxies, sqls, args...)
 		if err != nil {
 			return err
 		}

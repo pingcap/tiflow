@@ -40,6 +40,7 @@ type mockWorkerImpl struct {
 	metaClient            pkgOrm.Client
 
 	failoverCount atomic.Int64
+	closed        atomic.Bool
 }
 
 type workerParamListForTest struct {
@@ -74,6 +75,10 @@ func (w *mockWorkerImpl) InitImpl(ctx context.Context) error {
 }
 
 func (w *mockWorkerImpl) Tick(ctx context.Context) error {
+	if w.closed.Load() {
+		panic("Tick called after CloseImpl is called")
+	}
+
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
@@ -98,6 +103,10 @@ func (w *mockWorkerImpl) OnMasterMessage(topic p2p.Topic, message p2p.MessageVal
 }
 
 func (w *mockWorkerImpl) CloseImpl(ctx context.Context) error {
+	if w.closed.Swap(true) {
+		panic("CloseImpl called twice")
+	}
+
 	w.mu.Lock()
 	defer w.mu.Unlock()
 

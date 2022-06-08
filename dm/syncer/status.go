@@ -26,7 +26,6 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/shardddl/optimism"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
-	"github.com/pingcap/tiflow/dm/syncer/metrics"
 )
 
 // Status implements Unit.Status.
@@ -64,7 +63,7 @@ func (s *Syncer) Status(sourceStatus *binlog.SourceStatus) interface{} {
 
 	st.BinlogType = "unknown"
 	if s.streamerController != nil {
-		st.BinlogType = binlogTypeToString(s.streamerController.GetBinlogType())
+		st.BinlogType = s.streamerController.GetBinlogType().String()
 	}
 
 	// only support to show `UnresolvedGroups` in pessimistic mode now.
@@ -131,18 +130,18 @@ func (s *Syncer) printStatus(sourceStatus *binlog.SourceStatus) {
 				zap.Int64("bytes/Second", bytesPerSec),
 				zap.Int64("unsynced binlog size", remainingSize),
 				zap.Int64("estimate time to catch up", remainingSeconds))
-			metrics.RemainingTimeGauge.WithLabelValues(s.cfg.Name, s.cfg.SourceID, s.cfg.WorkerName).Set(float64(remainingSeconds))
+			s.metricsProxies.Metrics.RemainingTimeGauge.Set(float64(remainingSeconds))
 		}
 	}
 
 	latestMasterPos := sourceStatus.Location.Position
 	latestMasterGTIDSet := sourceStatus.Location.GetGTID()
-	metrics.BinlogPosGauge.WithLabelValues("master", s.cfg.Name, s.cfg.SourceID).Set(float64(latestMasterPos.Pos))
+	s.metricsProxies.Metrics.BinlogMasterPosGauge.Set(float64(latestMasterPos.Pos))
 	index, err := binlog.GetFilenameIndex(latestMasterPos.Name)
 	if err != nil {
 		s.tctx.L().Error("fail to parse binlog file", log.ShortError(err))
 	} else {
-		metrics.BinlogFileGauge.WithLabelValues("master", s.cfg.Name, s.cfg.SourceID).Set(float64(index))
+		s.metricsProxies.Metrics.BinlogMasterFileGauge.Set(float64(index))
 	}
 
 	s.tctx.L().Info("binlog replication status",
