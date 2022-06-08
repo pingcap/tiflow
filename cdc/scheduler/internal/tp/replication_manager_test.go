@@ -542,6 +542,94 @@ func TestReplicationManagerMaxTaskConcurrency(t *testing.T) {
 	require.Len(t, msgs, 0)
 }
 
+func TestReplicationManagerAdvanceCheckpoint(t *testing.T) {
+	t.Parallel()
+
+	r := newReplicationManager(1)
+	rs, err := newReplicationSet(model.TableID(1), model.Ts(10),
+		map[model.CaptureID]*schedulepb.TableStatus{
+			"1": {
+				TableID: model.TableID(1),
+				State:   schedulepb.TableStateReplicating,
+				Checkpoint: schedulepb.Checkpoint{
+					CheckpointTs: model.Ts(10),
+					ResolvedTs:   model.Ts(20),
+				},
+			},
+		})
+	require.NoError(t, err)
+	r.tables[model.TableID(1)] = rs
+
+	rs, err = newReplicationSet(model.TableID(2), model.Ts(15),
+		map[model.CaptureID]*schedulepb.TableStatus{
+			"2": {
+				TableID: model.TableID(2),
+				State:   schedulepb.TableStateReplicating,
+				Checkpoint: schedulepb.Checkpoint{
+					CheckpointTs: model.Ts(15),
+					ResolvedTs:   model.Ts(30),
+				},
+			},
+		})
+	require.NoError(t, err)
+	r.tables[model.TableID(2)] = rs
+
+	// all table is replicating
+	currentTables := []model.TableID{1, 2}
+	checkpoint, resolved := r.AdvanceCheckpoint(currentTables)
+	require.Equal(t, model.Ts(10), checkpoint)
+	require.Equal(t, model.Ts(20), resolved)
+
+	// some table not exist yet.
+	currentTables = append(currentTables, 3)
+	checkpoint, resolved = r.AdvanceCheckpoint(currentTables)
+	require.Equal(t, checkpointCannotProceed, checkpoint)
+	require.Equal(t, checkpointCannotProceed, resolved)
+
+	rs, err = newReplicationSet(model.TableID(3), model.Ts(5),
+		map[model.CaptureID]*schedulepb.TableStatus{
+			"1": {
+				TableID: model.TableID(3),
+				State:   schedulepb.TableStateReplicating,
+				Checkpoint: schedulepb.Checkpoint{
+					CheckpointTs: model.Ts(5),
+					ResolvedTs:   model.Ts(40),
+				},
+			},
+			"2": {
+				TableID: model.TableID(3),
+				State:   schedulepb.TableStatePreparing,
+				Checkpoint: schedulepb.Checkpoint{
+					CheckpointTs: model.Ts(5),
+					ResolvedTs:   model.Ts(40),
+				},
+			},
+		})
+	require.NoError(t, err)
+	r.tables[model.TableID(3)] = rs
+	checkpoint, resolved = r.AdvanceCheckpoint(currentTables)
+	require.Equal(t, model.Ts(5), checkpoint)
+	require.Equal(t, model.Ts(20), resolved)
+
+	currentTables = append(currentTables, 4)
+	rs, err = newReplicationSet(model.TableID(4), model.Ts(3),
+		map[model.CaptureID]*schedulepb.TableStatus{
+			"1": {
+				TableID: model.TableID(4),
+				State:   schedulepb.TableStatePrepared,
+				Checkpoint: schedulepb.Checkpoint{
+					CheckpointTs: model.Ts(3),
+					ResolvedTs:   model.Ts(10),
+				},
+			},
+		})
+	require.NoError(t, err)
+	r.tables[model.TableID(4)] = rs
+	checkpoint, resolved = r.AdvanceCheckpoint(currentTables)
+	require.Equal(t, model.Ts(3), checkpoint)
+	require.Equal(t, model.Ts(10), resolved)
+}
+
 func TestReplicationManagerHandleCaptureChanges(t *testing.T) {
 	t.Parallel()
 
