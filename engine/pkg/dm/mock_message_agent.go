@@ -27,6 +27,11 @@ type MockMessageAgent struct {
 	mock.Mock
 }
 
+// GenerateTopic generate mock message topic.
+func GenerateTopic(senderID, receiverID string) string {
+	return generateTopic(senderID, receiverID)
+}
+
 // GenerateResponse generate mock response message.
 func GenerateResponse(id messageID, command string, msg interface{}) interface{} {
 	resp := message{ID: id, Type: responseTp, Command: command, Payload: msg}
