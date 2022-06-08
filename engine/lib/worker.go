@@ -197,7 +197,7 @@ func NewBaseWorker(
 		clock:            clock.New(),
 		userMetaKVClient: kvclient.NewPrefixKVClient(params.UserRawKVClient, ctx.ProjectInfo.UniqueID()),
 		metricFactory:    promutil.NewFactory4Worker(ctx.ProjectInfo, WorkerTypeForMetric(tp), masterID, workerID),
-		logger:           logutil.NewLogger4Worker(ctx.ProjectInfo, masterID, WorkerID),
+		logger:           logutil.NewLogger4Worker(ctx.ProjectInfo, masterID, workerID),
 	}
 }
 
