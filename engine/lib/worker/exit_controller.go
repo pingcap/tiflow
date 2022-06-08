@@ -14,6 +14,7 @@
 package worker
 
 import (
+	"sync"
 	"time"
 
 	"go.uber.org/atomic"
@@ -24,7 +25,12 @@ import (
 	derror "github.com/pingcap/tiflow/engine/pkg/errors"
 )
 
-type workerExitFsmState = int32
+type (
+	workerExitFsmState = int32
+	// PrepareExitFuncType is the type of the callback called
+	// before the framework initiates the worker exiting process.
+	PrepareExitFuncType = func()
+)
 
 const (
 	workerNormal = workerExitFsmState(iota + 1)
@@ -44,21 +50,71 @@ type ExitController struct {
 	errCenter     *errctx.ErrCenter
 	masterClient  MasterInfoProvider
 
+	prepareExitFunc PrepareExitFuncType
+	callPrepareOnce sync.Once
+
+	logger *log.Logger
+
 	// clock is to facilitate unit testing.
 	clock clock.Clock
+}
+
+type exitControllerOptions struct {
+	clock           clock.Clock         // can be used to pass a mock clock
+	prepareExitFunc PrepareExitFuncType // will be invoked before notifying the master
+	logger          *log.Logger
+}
+
+// ExitControllerOption describes an option used to create an ExitController.
+type ExitControllerOption func(*exitControllerOptions)
+
+// WithClock injects a clock.Clock, which can be used for mocking.
+func WithClock(clk clock.Clock) ExitControllerOption {
+	return func(ops *exitControllerOptions) {
+		ops.clock = clk
+	}
+}
+
+// WithPrepareExitFunc provides a PrepareExitFuncType, which will be
+// called before the worker exits.
+func WithPrepareExitFunc(fn PrepareExitFuncType) ExitControllerOption {
+	return func(ops *exitControllerOptions) {
+		ops.prepareExitFunc = fn
+	}
+}
+
+// WithLogger sets the logger used by an ExitController.
+func WithLogger(lg log.Logger) ExitControllerOption {
+	return func(ops *exitControllerOptions) {
+		ops.logger = &lg
+	}
 }
 
 // NewExitController returns a new ExitController.
 func NewExitController(
 	masterClient MasterInfoProvider,
 	errCenter *errctx.ErrCenter,
-	clock clock.Clock,
+	opts ...ExitControllerOption,
 ) *ExitController {
+	options := &exitControllerOptions{
+		clock: clock.New(),
+	}
+	for _, opt := range opts {
+		opt(options)
+	}
+
+	if options.logger == nil {
+		lg := log.L()
+		options.logger = &lg
+	}
+
 	return &ExitController{
-		workerExitFsm: *atomic.NewInt32(workerNormal),
-		errCenter:     errCenter,
-		masterClient:  masterClient,
-		clock:         clock,
+		workerExitFsm:   *atomic.NewInt32(workerNormal),
+		errCenter:       errCenter,
+		masterClient:    masterClient,
+		clock:           options.clock,
+		prepareExitFunc: options.prepareExitFunc,
+		logger:          options.logger,
 	}
 }
 
@@ -70,6 +126,14 @@ func (c *ExitController) PollExit() error {
 	if err == nil {
 		return nil
 	}
+
+	c.callPrepareOnce.Do(func() {
+		c.logger.Info("Worker prepare to exit", log.ShortError(err))
+		if c.prepareExitFunc == nil {
+			return
+		}
+		c.prepareExitFunc()
+	})
 
 	switch c.workerExitFsm.Load() {
 	case workerNormal:
@@ -87,15 +151,14 @@ func (c *ExitController) PollExit() error {
 		// so workerExitWaitForMasterTimeout < (WorkerTimeoutDuration + WorkerTimeoutGracefulDuration) is reasonable.
 		sinceStartExiting := c.clock.Since(c.halfExitTime.Load())
 		if sinceStartExiting > workerExitWaitForMasterTimeout {
-			// TODO log worker ID and master ID.
-			log.L().Warn("Exiting worker cannot get acknowledgement from master")
+			c.logger.Warn("Exiting worker cannot get acknowledgement from master")
 			return err
 		}
 		return derror.ErrWorkerHalfExit.FastGenByArgs()
 	case workerExited:
 		return err
 	default:
-		log.L().Panic("unreachable")
+		c.logger.Panic("unreachable")
 	}
 	return nil
 }

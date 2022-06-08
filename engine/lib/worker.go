@@ -86,7 +86,7 @@ type BaseWorker interface {
 	MetaKVClient() metaclient.KVClient
 	MetricFactory() promutil.Factory
 	UpdateStatus(ctx context.Context, status libModel.WorkerStatus) error
-	SendMessage(ctx context.Context, topic p2p.Topic, message interface{}) (bool, error)
+	SendMessage(ctx context.Context, topic p2p.Topic, message interface{}, nonblocking bool) error
 	OpenStorage(ctx context.Context, resourcePath resourcemeta.ResourceID) (broker.Handle, error)
 	// Exit should be called when worker (in user logic) wants to exit.
 	// When `err` is not nil, the status code is assigned WorkerStatusError.
@@ -128,6 +128,7 @@ type DefaultBaseWorker struct {
 	cancelPool    context.CancelFunc
 
 	exitController *worker.ExitController
+	closeImplOnce  sync.Once
 
 	clock clock.Clock
 
@@ -232,8 +233,6 @@ func (w *DefaultBaseWorker) doPreInit(ctx context.Context) error {
 			zap.Error(err))
 	}()
 
-	w.startBackgroundTasks()
-
 	initTime := w.clock.Mono()
 	rctx, ok := runtime.ToRuntimeCtx(ctx)
 	if ok {
@@ -247,7 +246,20 @@ func (w *DefaultBaseWorker) doPreInit(ctx context.Context) error {
 		w.frameMetaClient,
 		initTime)
 
-	w.exitController = worker.NewExitController(w.masterClient, w.errCenter, w.clock)
+	w.exitController = worker.NewExitController(
+		w.masterClient,
+		w.errCenter,
+		worker.WithClock(w.clock),
+		// TODO use a logger passed down from the caller.
+		worker.WithLogger(log.L().WithFields(
+			zap.String("worker-id", w.id),
+			zap.String("master-id", w.masterID))),
+		worker.WithPrepareExitFunc(func() {
+			w.closeImplOnce.Do(func() {
+				w.callCloseImpl()
+			})
+		}))
+
 	w.workerMetaClient = metadata.NewWorkerMetadataClient(w.masterID, w.frameMetaClient)
 
 	w.statusSender = statusutil.NewWriter(
@@ -257,6 +269,8 @@ func (w *DefaultBaseWorker) doPreInit(ctx context.Context) error {
 			return w.Impl.OnMasterMessage(topic, msg)
 		},
 	)
+
+	w.startBackgroundTasks()
 
 	if err := w.initMessageHandlers(ctx); err != nil {
 		return errors.Trace(err)
@@ -344,16 +358,26 @@ func (w *DefaultBaseWorker) doClose() {
 }
 
 // Close implements BaseWorker.Close
+// TODO remove the return value from the signature.
 func (w *DefaultBaseWorker) Close(ctx context.Context) error {
-	err := w.Impl.CloseImpl(ctx)
-	// We don't return here if CloseImpl return error to ensure
-	// that we can close inner resources of the framework
-	if err != nil {
-		log.L().Error("Failed to close WorkerImpl", zap.Error(err))
-	}
+	w.closeImplOnce.Do(func() {
+		w.callCloseImpl()
+	})
 
 	w.doClose()
-	return errors.Trace(err)
+	return nil
+}
+
+func (w *DefaultBaseWorker) callCloseImpl() {
+	closeCtx, cancel := context.WithTimeout(
+		context.Background(), w.timeoutConfig.CloseWorkerTimeout)
+	defer cancel()
+
+	err := w.Impl.CloseImpl(closeCtx)
+	if err != nil {
+		log.L().Warn("Failed to close worker",
+			zap.String("worker-id", w.id))
+	}
 }
 
 // ID implements BaseWorker.ID
@@ -396,9 +420,16 @@ func (w *DefaultBaseWorker) SendMessage(
 	ctx context.Context,
 	topic p2p.Topic,
 	message interface{},
-) (bool, error) {
+	nonblocking bool,
+) error {
+	var err error
 	ctx = w.errCenter.WithCancelOnFirstError(ctx)
-	return w.messageSender.SendToNode(ctx, w.masterClient.MasterNode(), topic, message)
+	if nonblocking {
+		_, err = w.messageSender.SendToNode(ctx, w.masterClient.MasterNode(), topic, message)
+	} else {
+		err = w.messageSender.SendToNodeB(ctx, w.masterClient.MasterNode(), topic, message)
+	}
+	return err
 }
 
 // OpenStorage implements BaseWorker.OpenStorage

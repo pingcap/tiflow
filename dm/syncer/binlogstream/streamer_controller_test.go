@@ -11,30 +11,39 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package syncer
+package binlogstream
 
 import (
+	"testing"
 	"time"
 
 	"github.com/go-mysql-org/go-mysql/replication"
-	. "github.com/pingcap/check"
 	"github.com/pingcap/errors"
-
 	"github.com/pingcap/tiflow/dm/relay"
+	"github.com/stretchr/testify/require"
 )
 
-func (s *testSyncerSuite) TestIsConnectionRefusedError(c *C) {
-	isConnRefusedErr := isConnectionRefusedError(nil)
-	c.Assert(isConnRefusedErr, Equals, false)
+func TestToBinlogType(t *testing.T) {
+	testCases := []struct {
+		relay relay.Process
+		tp    BinlogType
+	}{
+		{
+			&relay.Relay{},
+			LocalBinlog,
+		}, {
+			nil,
+			RemoteBinlog,
+		},
+	}
 
-	isConnRefusedErr = isConnectionRefusedError(errors.New("timeout"))
-	c.Assert(isConnRefusedErr, Equals, false)
-
-	isConnRefusedErr = isConnectionRefusedError(errors.New("connect: connection refused"))
-	c.Assert(isConnRefusedErr, Equals, true)
+	for _, testCase := range testCases {
+		tp := RelayToBinlogType(testCase.relay)
+		require.Equal(t, testCase.tp, tp)
+	}
 }
 
-func (s *testSyncerSuite) TestCanErrorRetry(c *C) {
+func TestCanErrorRetry(t *testing.T) {
 	relay2 := &relay.Relay{}
 	controller := NewStreamerController(replication.BinlogSyncerConfig{}, true, nil, "", nil, relay2)
 
@@ -42,7 +51,7 @@ func (s *testSyncerSuite) TestCanErrorRetry(c *C) {
 
 	// local binlog puller can always retry
 	for i := 0; i < 5; i++ {
-		c.Assert(controller.CanRetry(mockErr), IsTrue)
+		require.True(t, controller.CanRetry(mockErr))
 	}
 
 	origCfg := minErrorRetryInterval
@@ -54,8 +63,8 @@ func (s *testSyncerSuite) TestCanErrorRetry(c *C) {
 	// test with remote binlog
 	controller = NewStreamerController(replication.BinlogSyncerConfig{}, true, nil, "", nil, nil)
 
-	c.Assert(controller.CanRetry(mockErr), IsTrue)
-	c.Assert(controller.CanRetry(mockErr), IsFalse)
+	require.True(t, controller.CanRetry(mockErr))
+	require.False(t, controller.CanRetry(mockErr))
 	time.Sleep(100 * time.Millisecond)
-	c.Assert(controller.CanRetry(mockErr), IsTrue)
+	require.True(t, controller.CanRetry(mockErr))
 }
