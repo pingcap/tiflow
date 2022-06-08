@@ -45,5 +45,12 @@ validators:
     worker-count: 4
     validate-interval: 1s
     check-interval: 1s
+<<<<<<< HEAD
     row-error-delay: 1ms
     meta-flush-interval: 1ns
+=======
+    row-error-delay: 1s
+    meta-flush-interval: 1s
+    max-pending-row-size: 500m
+    max-pending-row-count: 1000
+>>>>>>> 8a1862057 (test(dm): fix unstable validator case (#5773))
