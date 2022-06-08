@@ -1122,7 +1122,7 @@ func (s *eventFeedSession) receiveFromStream(
 
 		failpoint.Inject("kvClientRegionReentrantError", func(op failpoint.Value) {
 			if op.(string) == "error" {
-				worker.inputCh <- nil
+				_ = worker.sendEvents(ctx, []*regionStatefulEvent{nil})
 			}
 		})
 		failpoint.Inject("kvClientStreamRecvError", func(msg failpoint.Value) {
@@ -1164,10 +1164,9 @@ func (s *eventFeedSession) receiveFromStream(
 			s.deleteStream(addr)
 
 			// send nil regionStatefulEvent to signal worker exit
-			select {
-			case worker.inputCh <- nil:
-			case <-ctx.Done():
-				return ctx.Err()
+			err = worker.sendEvents(ctx, []*regionStatefulEvent{nil})
+			if err != nil {
+				return err
 			}
 
 			// Do no return error but gracefully stop the goroutine here. Then the whole job will not be canceled and
@@ -1186,11 +1185,9 @@ func (s *eventFeedSession) receiveFromStream(
 				zap.Int("resolved region count", regionCount))
 		}
 
-		for _, event := range cevent.Events {
-			err = s.sendRegionChangeEvent(ctx, event, worker, pendingRegions, addr)
-			if err != nil {
-				return err
-			}
+		err = s.sendRegionChangeEvents(ctx, cevent.Events, worker, pendingRegions, addr)
+		if err != nil {
+			return err
 		}
 		if cevent.ResolvedTs != nil {
 			metricSendEventBatchResolvedSize.Observe(float64(len(cevent.ResolvedTs.Regions)))
@@ -1202,13 +1199,14 @@ func (s *eventFeedSession) receiveFromStream(
 	}
 }
 
-func (s *eventFeedSession) sendRegionChangeEvent(
+func (s *eventFeedSession) sendRegionChangeEvents(
 	ctx context.Context,
-	event *cdcpb.Event,
+	events []*cdcpb.Event,
 	worker *regionWorker,
 	pendingRegions *syncRegionFeedStateMap,
 	addr string,
 ) error {
+<<<<<<< HEAD
 	state, ok := worker.getRegionState(event.RegionId)
 	// Every region's range is locked before sending requests and unlocked after exiting, and the requestID
 	// is allocated while holding the range lock. Therefore the requestID is always incrementing. If a region
@@ -1240,12 +1238,70 @@ func (s *eventFeedSession) sendRegionChangeEvent(
 		state, ok = pendingRegions.take(event.RequestId)
 		if !ok {
 			log.Warn("drop event due to region feed is removed",
+=======
+	statefulEvents := make([][]*regionStatefulEvent, worker.inputSlots)
+	for i := 0; i < worker.inputSlots; i++ {
+		// Allocate a buffer with 1.5x length than average to reduce reallocate.
+		buffLen := len(events) / worker.inputSlots * 3 / 2
+		statefulEvents[i] = make([]*regionStatefulEvent, 0, buffLen)
+	}
+
+	for _, event := range events {
+		state, valid := worker.getRegionState(event.RegionId)
+		// Every region's range is locked before sending requests and unlocked after exiting, and the requestID
+		// is allocated while holding the range lock. Therefore the requestID is always incrementing. If a region
+		// is receiving messages with different requestID, only the messages with the larges requestID is valid.
+		if valid {
+			if state.requestID < event.RequestId {
+				log.Debug("region state entry will be replaced because received message of newer requestID",
+					zap.String("namespace", s.client.changefeed.Namespace),
+					zap.String("changefeed", s.client.changefeed.ID),
+					zap.Uint64("regionID", event.RegionId),
+					zap.Uint64("oldRequestID", state.requestID),
+					zap.Uint64("requestID", event.RequestId),
+					zap.String("addr", addr))
+				valid = false
+			} else if state.requestID > event.RequestId {
+				log.Warn("drop event due to event belongs to a stale request",
+					zap.String("namespace", s.client.changefeed.Namespace),
+					zap.String("changefeed", s.client.changefeed.ID),
+					zap.Uint64("regionID", event.RegionId),
+					zap.Uint64("requestID", event.RequestId),
+					zap.Uint64("currRequestID", state.requestID),
+					zap.String("addr", addr))
+				continue
+			}
+		}
+
+		if !valid {
+			// It's the first response for this region. If the region is newly connected, the region info should
+			// have been put in `pendingRegions`. So here we load the region info from `pendingRegions` and start
+			// a new goroutine to handle messages from this region.
+			// Firstly load the region info.
+			state, valid = pendingRegions.take(event.RequestId)
+			if !valid {
+				log.Warn("drop event due to region feed is removed",
+					zap.String("namespace", s.client.changefeed.Namespace),
+					zap.String("changefeed", s.client.changefeed.ID),
+					zap.Uint64("regionID", event.RegionId),
+					zap.Uint64("requestID", event.RequestId),
+					zap.String("addr", addr))
+				continue
+			}
+			state.start()
+			worker.setRegionState(event.RegionId, state)
+		} else if state.isStopped() {
+			log.Warn("drop event due to region feed stopped",
+				zap.String("namespace", s.client.changefeed.Namespace),
+				zap.String("changefeed", s.client.changefeed.ID),
+>>>>>>> 680740c7e (cdc: reduce context switch for stateful events (#5658))
 				zap.Uint64("regionID", event.RegionId),
 				zap.Uint64("requestID", event.RequestId),
 				zap.String("addr", addr))
-			return nil
+			continue
 		}
 
+<<<<<<< HEAD
 		state.start()
 		worker.setRegionState(event.RegionId, state)
 	} else if state.isStopped() {
@@ -1254,16 +1310,22 @@ func (s *eventFeedSession) sendRegionChangeEvent(
 			zap.Uint64("requestID", event.RequestId),
 			zap.String("addr", addr))
 		return nil
+=======
+		slot := worker.inputCalcSlot(event.RegionId)
+		statefulEvents[slot] = append(statefulEvents[slot], &regionStatefulEvent{
+			changeEvent: event,
+			regionID:    event.RegionId,
+			state:       state,
+		})
+>>>>>>> 680740c7e (cdc: reduce context switch for stateful events (#5658))
 	}
-
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case worker.inputCh <- &regionStatefulEvent{
-		changeEvent: event,
-		regionID:    event.RegionId,
-		state:       state,
-	}:
+	for _, events := range statefulEvents {
+		if len(events) > 0 {
+			err := worker.sendEvents(ctx, events)
+			if err != nil {
+				return err
+			}
+		}
 	}
 	return nil
 }
@@ -1274,6 +1336,13 @@ func (s *eventFeedSession) sendResolvedTs(
 	worker *regionWorker,
 	addr string,
 ) error {
+	statefulEvents := make([][]*regionStatefulEvent, worker.inputSlots)
+	for i := 0; i < worker.inputSlots; i++ {
+		// Allocate a buffer with 1.5x length than average to reduce reallocate.
+		buffLen := len(resolvedTs.Regions) / worker.inputSlots * 3 / 2
+		statefulEvents[i] = make([]*regionStatefulEvent, 0, buffLen)
+	}
+
 	for _, regionID := range resolvedTs.Regions {
 		state, ok := worker.getRegionState(regionID)
 		if ok {
@@ -1284,14 +1353,19 @@ func (s *eventFeedSession) sendResolvedTs(
 					zap.String("addr", addr))
 				continue
 			}
-			select {
-			case worker.inputCh <- &regionStatefulEvent{
+			slot := worker.inputCalcSlot(regionID)
+			statefulEvents[slot] = append(statefulEvents[slot], &regionStatefulEvent{
 				resolvedTs: resolvedTs,
 				regionID:   regionID,
 				state:      state,
-			}:
-			case <-ctx.Done():
-				return ctx.Err()
+			})
+		}
+	}
+	for _, events := range statefulEvents {
+		if len(events) > 0 {
+			err := worker.sendEvents(ctx, events)
+			if err != nil {
+				return err
 			}
 		}
 	}

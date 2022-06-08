@@ -101,6 +101,15 @@ var (
 			Name:      "grpc_stream_count",
 			Help:      "active stream count of each gRPC connection",
 		}, []string{"store"})
+
+	regionEventsBatchSize = prometheus.NewHistogram(
+		prometheus.HistogramOpts{
+			Namespace: "ticdc",
+			Subsystem: "kvclient",
+			Name:      "region_events_batch_size",
+			Help:      "region events batch size",
+			Buckets:   prometheus.ExponentialBuckets(1, 2, 20),
+		})
 )
 
 // InitMetrics registers all metrics in the kv package
@@ -116,6 +125,7 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(cachedRegionSize)
 	registry.MustRegister(batchResolvedEventSize)
 	registry.MustRegister(grpcPoolStreamGauge)
+	registry.MustRegister(regionEventsBatchSize)
 
 	// Register client metrics to registry.
 	registry.MustRegister(grpcMetrics)
