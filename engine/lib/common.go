@@ -44,6 +44,9 @@ const (
 	WorkerDMDump
 	WorkerDMLoad
 	WorkerDMSync
+
+	ResourceTestWorker
+	ResourceTestJobMaster
 )
 
 // MasterFailoverReasonCode is used as reason code

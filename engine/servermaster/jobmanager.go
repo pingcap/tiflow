@@ -19,8 +19,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pingcap/tiflow/engine/test/resourcejob"
-
 	"github.com/pingcap/errors"
 	"go.uber.org/zap"
 
@@ -332,7 +330,7 @@ func (jm *JobManagerImplV2) SubmitJob(ctx context.Context, req *pb.SubmitJobRequ
 	case pb.JobType_FakeJob:
 		meta.Tp = lib.FakeJobMaster
 	case pb.JobType_ResourceTestJob:
-		meta.Tp = resourcejob.ResourceTestMasterType
+		meta.Tp = lib.ResourceTestJobMaster
 	default:
 		err := derrors.ErrBuildJobFailed.GenWithStack("unknown job type: %s", req.Tp)
 		resp.Err = derrors.ToPBError(err)

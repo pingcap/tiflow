@@ -18,14 +18,13 @@ import (
 	"fmt"
 
 	"github.com/gin-gonic/gin"
-	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
-
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/engine/lib"
 	libModel "github.com/pingcap/tiflow/engine/lib/model"
 	"github.com/pingcap/tiflow/engine/model"
+	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 )
 
@@ -132,7 +131,7 @@ func (m *JobMaster) createWorkerIfNecessary() error {
 	unboundResourceSet := m.status.UnboundResources()
 	for unboundRes := range unboundResourceSet {
 		workerID, err := m.CreateWorker(
-			ResourceTestWorkerType,
+			lib.ResourceTestWorker,
 			&workerConfig{ResourceID: unboundRes},
 			10,
 			unboundRes)

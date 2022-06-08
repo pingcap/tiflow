@@ -514,7 +514,7 @@ func (m *DefaultBaseMaster) prepareWorkerConfig(
 	workerType libModel.WorkerType, config WorkerConfig,
 ) (rawConfig []byte, workerID libModel.WorkerID, err error) {
 	switch workerType {
-	case CvsJobMaster, FakeJobMaster, DMJobMaster:
+	case CvsJobMaster, FakeJobMaster, DMJobMaster, ResourceTestJobMaster:
 		masterMeta, ok := config.(*libModel.MasterMetaKVData)
 		if !ok {
 			err = derror.ErrMasterInvalidMeta.GenWithStackByArgs(config)
