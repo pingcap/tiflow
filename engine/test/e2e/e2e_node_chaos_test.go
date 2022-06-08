@@ -26,6 +26,7 @@ import (
 
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/framework/fake"
+	engineModel "github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	"github.com/pingcap/tiflow/engine/test/e2e"
 )
@@ -83,7 +84,7 @@ func TestNodeFailure(t *testing.T) {
 	cli, err := e2e.NewUTCli(ctx, masterAddrs, userMetaAddrs, tenant.DefaultUserProjectInfo, fakeJobCfg)
 	require.NoError(t, err)
 
-	jobID, err := cli.CreateJob(ctx, pb.JobType_FakeJob, cfgBytes)
+	jobID, err := cli.CreateJob(ctx, engineModel.JobTypeFakeJob, cfgBytes)
 	require.NoError(t, err)
 
 	require.Eventually(t, func() bool {

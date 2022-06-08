@@ -96,29 +96,29 @@ func testInitialize(t *testing.T) {
 			inputs: []interface{}{},
 			// TODO: Why index sequence is not stable ??
 			mockExpectResFn: func(mock sqlmock.Sqlmock) {
-				mock.ExpectExec("CREATE TABLE `project_infos` [(]`seq_id` bigint unsigned AUTO_INCREMENT," +
-					"`created_at` datetime[(]3[)] NULL,`updated_at` datetime[(]3[)] NULL," +
-					"`id` varchar[(]64[)] not null,`name` varchar[(]64[)] not null,PRIMARY KEY [(]`seq_id`[)]," +
-					"UNIQUE INDEX uidx_id [(]`id`[))]").WillReturnResult(sqlmock.NewResult(1, 1))
-				mock.ExpectExec("CREATE TABLE `project_operations` [(]`seq_id` bigint unsigned AUTO_INCREMENT," +
-					"`project_id` varchar[(]64[)] not null,`operation` varchar[(]16[)] not null,`job_id` varchar[(]64[)] not null," +
-					"`created_at` datetime[(]3[)] NULL,PRIMARY KEY [(]`seq_id`[)],INDEX idx_op [(]`project_id`,`created_at`[))]").WillReturnResult(sqlmock.NewResult(1, 1))
-				mock.ExpectExec("CREATE TABLE `master_meta_kv_data` [(]`seq_id` bigint unsigned AUTO_INCREMENT,`created_at` datetime[(]3[)] NULL," +
-					"`updated_at` datetime[(]3[)] NULL,`project_id` varchar[(]64[)] not null,`id` varchar[(]64[)] not null,`type` tinyint not null," +
-					"`status` tinyint not null,`node_id` varchar[(]64[)] not null,`address` varchar[(]64[)] not null,`epoch` bigint not null," +
-					"`config` blob,PRIMARY KEY [(]`seq_id`[)],INDEX idx_st [(]`project_id`,`status`[)],UNIQUE INDEX uidx_id [(`id`))]").WillReturnResult(sqlmock.NewResult(1, 1))
-				mock.ExpectExec("CREATE TABLE `worker_statuses` [(]`seq_id` bigint unsigned AUTO_INCREMENT," +
-					"`created_at` datetime[(]3[)] NULL,`updated_at` datetime[(]3[)] NULL," +
-					"`project_id` varchar[(]64[)] not null,`job_id` varchar[(]64[)] not null,`id` varchar[(]64[)] not null," +
-					"`type` tinyint not null,`status` tinyint not null,`errmsg` varchar[(]128[)]," +
-					"`ext_bytes` blob,PRIMARY KEY [(]`seq_id`[)],UNIQUE INDEX uidx_id [(]`job_id`,`id`[)]," +
-					"INDEX idx_st [(]`job_id`,`status`[))]").WillReturnResult(sqlmock.NewResult(1, 1))
-				mock.ExpectExec("CREATE TABLE `resource_meta` [(]`seq_id` bigint unsigned AUTO_INCREMENT,`created_at` datetime[(]3[)] NULL," +
-					"`updated_at` datetime[(]3[)] NULL,`project_id` varchar[(]64[)] not null," +
-					"`id` varchar[(]64[)] not null,`job_id` varchar[(]64[)] not null,`worker_id` varchar[(]64[)] not null," +
-					"`executor_id` varchar[(]64[)] not null,`deleted` BOOLEAN,PRIMARY KEY [(]`seq_id`[)]," +
-					"UNIQUE INDEX uidx_id [(]`id`[)]," +
-					"INDEX idx_ji [(]`job_id`,`id`[)],INDEX idx_ei [(]`executor_id`,`id`[))]").WillReturnResult(sqlmock.NewResult(1, 1))
+				mock.ExpectExec(regexp.QuoteMeta("CREATE TABLE `project_infos` (`seq_id` bigint unsigned AUTO_INCREMENT," +
+					"`created_at` datetime(3) NULL,`updated_at` datetime(3) NULL," +
+					"`id` varchar(64) not null,`name` varchar(64) not null,PRIMARY KEY (`seq_id`)," +
+					"UNIQUE INDEX uidx_id (`id`))")).WillReturnResult(sqlmock.NewResult(1, 1))
+				mock.ExpectExec(regexp.QuoteMeta("CREATE TABLE `project_operations` (`seq_id` bigint unsigned AUTO_INCREMENT," +
+					"`project_id` varchar(64) not null,`operation` varchar(16) not null,`job_id` varchar(64) not null," +
+					"`created_at` datetime(3) NULL,PRIMARY KEY (`seq_id`),INDEX idx_op (`project_id`,`created_at`))")).WillReturnResult(sqlmock.NewResult(1, 1))
+				mock.ExpectExec(regexp.QuoteMeta("CREATE TABLE `master_meta_kv_data` (`seq_id` bigint unsigned AUTO_INCREMENT,`created_at` datetime(3) NULL," +
+					"`updated_at` datetime(3) NULL,`project_id` varchar(64) not null,`id` varchar(64) not null,`type` smallint not null," +
+					"`status` tinyint not null,`node_id` varchar(64) not null,`address` varchar(64) not null,`epoch` bigint not null," +
+					"`config` blob,PRIMARY KEY (`seq_id`),INDEX idx_st (`project_id`,`status`),UNIQUE INDEX uidx_id (`id`))")).WillReturnResult(sqlmock.NewResult(1, 1))
+				mock.ExpectExec(regexp.QuoteMeta("CREATE TABLE `worker_statuses` (`seq_id` bigint unsigned AUTO_INCREMENT," +
+					"`created_at` datetime(3) NULL,`updated_at` datetime(3) NULL," +
+					"`project_id` varchar(64) not null,`job_id` varchar(64) not null,`id` varchar(64) not null," +
+					"`type` smallint not null,`status` tinyint not null,`errmsg` varchar(1024)," +
+					"`ext_bytes` blob,PRIMARY KEY (`seq_id`),UNIQUE INDEX uidx_id (`job_id`,`id`)," +
+					"INDEX idx_st (`job_id`,`status`))")).WillReturnResult(sqlmock.NewResult(1, 1))
+				mock.ExpectExec(regexp.QuoteMeta("CREATE TABLE `resource_meta` (`seq_id` bigint unsigned AUTO_INCREMENT,`created_at` datetime(3) NULL," +
+					"`updated_at` datetime(3) NULL,`project_id` varchar(64) not null," +
+					"`id` varchar(64) not null,`job_id` varchar(64) not null,`worker_id` varchar(64) not null," +
+					"`executor_id` varchar(64) not null,`deleted` BOOLEAN,PRIMARY KEY (`seq_id`)," +
+					"UNIQUE INDEX uidx_id (`id`)," +
+					"INDEX idx_ji (`job_id`,`id`),INDEX idx_ei (`executor_id`,`id`))")).WillReturnResult(sqlmock.NewResult(1, 1))
 			},
 		},
 	}

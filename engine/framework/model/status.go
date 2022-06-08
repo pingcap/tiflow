@@ -19,11 +19,12 @@ import (
 	"github.com/pingcap/errors"
 
 	ormModel "github.com/pingcap/tiflow/engine/pkg/orm/model"
+	"github.com/pingcap/tiflow/engine/pkg/tenant"
 )
 
 // WorkerStatusCode represents worker running status in master worker framework
 // TODO: add fsm of WorkerStatusCode
-type WorkerStatusCode int32
+type WorkerStatusCode int8
 
 // Among these statuses, only WorkerStatusCreated is used by the framework
 // for now. The rest are for the business logic to use.
@@ -58,12 +59,12 @@ var WorkerUpdateColumns = []string{
 // TODO: refine me, merge orm model to WorkerStatus will cause some confuse
 type WorkerStatus struct {
 	ormModel.Model
-	ProjectID    string           `json:"project-id" gorm:"column:project_id;type:varchar(64) not null"`
-	JobID        string           `json:"job-id" gorm:"column:job_id;type:varchar(64) not null;uniqueIndex:uidx_wid,priority:1;index:idx_wst,priority:1"`
-	ID           string           `json:"id" gorm:"column:id;type:varchar(64) not null;uniqueIndex:uidx_wid,priority:2"`
-	Type         int              `json:"type" gorm:"column:type;type:tinyint not null"`
+	ProjectID    tenant.ProjectID `json:"project-id" gorm:"column:project_id;type:varchar(64) not null"`
+	JobID        MasterID         `json:"job-id" gorm:"column:job_id;type:varchar(64) not null;uniqueIndex:uidx_wid,priority:1;index:idx_wst,priority:1"`
+	ID           WorkerID         `json:"id" gorm:"column:id;type:varchar(64) not null;uniqueIndex:uidx_wid,priority:2"`
+	Type         WorkerType       `json:"type" gorm:"column:type;type:smallint not null"`
 	Code         WorkerStatusCode `json:"code" gorm:"column:status;type:tinyint not null;index:idx_wst,priority:2"`
-	ErrorMessage string           `json:"error-message" gorm:"column:errmsg;type:varchar(128)"`
+	ErrorMessage string           `json:"error-message" gorm:"column:errmsg;type:varchar(1024)"`
 
 	// ExtBytes carries the serialized form of the Ext field, which is used in
 	// business logic only.
