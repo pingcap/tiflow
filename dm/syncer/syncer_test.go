@@ -42,6 +42,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/syncer/binlogstream"
 	"github.com/pingcap/tiflow/dm/syncer/dbconn"
+	"github.com/pingcap/tiflow/dm/syncer/metrics"
 	"github.com/pingcap/tiflow/pkg/errorutil"
 	"github.com/pingcap/tiflow/pkg/sqlmodel"
 	"github.com/stretchr/testify/require"
@@ -784,6 +785,10 @@ func (s *testSyncerSuite) TestRun(c *C) {
 	syncer.ddlDBConn = dbconn.NewDBConn(s.cfg, conn.NewBaseConn(dbConn, &retry.FiniteRetryStrategy{}))
 	syncer.downstreamTrackConn = dbconn.NewDBConn(s.cfg, conn.NewBaseConn(dbConn, &retry.FiniteRetryStrategy{}))
 	syncer.schemaTracker, err = schema.NewTracker(context.Background(), s.cfg.Name, defaultTestSessionCfg, syncer.downstreamTrackConn)
+	c.Assert(err, IsNil)
+
+	syncer.metricsProxies = metrics.DefaultMetricsProxies.CacheForOneTask("task", "worker", "source")
+
 	mock.ExpectBegin()
 	mock.ExpectExec(fmt.Sprintf("SET SESSION SQL_MODE = '%s'", pmysql.DefaultSQLMode)).WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectCommit()
@@ -795,12 +800,13 @@ func (s *testSyncerSuite) TestRun(c *C) {
 			AddRow("t_1", "create table t_1(id int primary key, name varchar(24), KEY `index1` (`name`))"))
 
 	syncer.exprFilterGroup = NewExprFilterGroup(utils.NewSessionCtx(nil), nil)
-	c.Assert(err, IsNil)
 	c.Assert(syncer.Type(), Equals, pb.UnitType_Sync)
 
 	syncer.columnMapping, err = cm.NewMapping(s.cfg.CaseSensitive, s.cfg.ColumnMappingRules)
 	c.Assert(err, IsNil)
 	c.Assert(syncer.genRouter(), IsNil)
+
+	syncer.metricsProxies = metrics.DefaultMetricsProxies.CacheForOneTask("task", "worker", "source")
 
 	syncer.setupMockCheckpoint(c, checkPointDBConn, checkPointMock)
 
@@ -1082,11 +1088,13 @@ func (s *testSyncerSuite) TestExitSafeModeByConfig(c *C) {
 			AddRow("t_1", "create table t_1(id int primary key, name varchar(24))"))
 
 	syncer.schemaTracker, err = schema.NewTracker(context.Background(), s.cfg.Name, defaultTestSessionCfg, syncer.ddlDBConn)
-	syncer.exprFilterGroup = NewExprFilterGroup(utils.NewSessionCtx(nil), nil)
 	c.Assert(err, IsNil)
 	c.Assert(syncer.Type(), Equals, pb.UnitType_Sync)
 
+	syncer.exprFilterGroup = NewExprFilterGroup(utils.NewSessionCtx(nil), nil)
 	c.Assert(syncer.genRouter(), IsNil)
+
+	syncer.metricsProxies = metrics.DefaultMetricsProxies.CacheForOneTask("task", "worker", "source")
 
 	syncer.setupMockCheckpoint(c, checkPointDBConn, checkPointMock)
 
@@ -1741,7 +1749,7 @@ func (s *testSyncerSuite) TestExecuteSQLSWithIgnore(c *C) {
 	mock.ExpectCommit()
 
 	tctx := tcontext.Background().WithLogger(log.With(zap.String("test", "TestExecuteSQLSWithIgnore")))
-	n, err := conn.ExecuteSQLWithIgnore(tctx, errorutil.IsIgnorableMySQLDDLError, sqls)
+	n, err := conn.ExecuteSQLWithIgnore(tctx, nil, errorutil.IsIgnorableMySQLDDLError, sqls)
 	c.Assert(err, IsNil)
 	c.Assert(n, Equals, 2)
 
@@ -1750,7 +1758,7 @@ func (s *testSyncerSuite) TestExecuteSQLSWithIgnore(c *C) {
 	mock.ExpectExec(sqls[0]).WillReturnError(newMysqlErr(uint16(infoschema.ErrColumnExists.Code()), "column a already exists"))
 	mock.ExpectRollback()
 
-	n, err = conn.ExecuteSQL(tctx, sqls)
+	n, err = conn.ExecuteSQL(tctx, nil, sqls)
 	c.Assert(err, ErrorMatches, ".*column a already exists.*")
 	c.Assert(n, Equals, 0)
 
