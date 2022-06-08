@@ -144,7 +144,7 @@ func (m *kafkaTopicManager) getMetadataOfTopics() ([]*sarama.TopicMetadata, erro
 	start := time.Now()
 	topicMetaList, err := m.admin.DescribeTopics(topicList)
 	if err != nil {
-		log.Error(
+		log.Warn(
 			"Kafka admin client describe topics failed",
 			zap.Error(err),
 			zap.Duration("duration", time.Since(start)),
@@ -171,7 +171,8 @@ func (m *kafkaTopicManager) WaitUntilTopicCreationDone(topicName string) error {
 		if err != nil {
 			log.Error("Kafka admin client describe topic failed",
 				zap.String("topic", topicName),
-				zap.Error(err))
+				zap.Error(err),
+				zap.Duration("duration", time.Since(start)))
 			return err
 		}
 
@@ -192,7 +193,8 @@ func (m *kafkaTopicManager) WaitUntilTopicCreationDone(topicName string) error {
 			return meta.Err
 		}
 
-		log.Info("Kafka admin client describe topic success", zap.String("topic", topicName),
+		log.Info("Kafka admin client describe topic success",
+			zap.String("topic", topicName),
 			zap.Int("partitionNumber", len(meta.Partitions)),
 			zap.Duration("duration", time.Since(start)))
 
@@ -204,7 +206,7 @@ func (m *kafkaTopicManager) WaitUntilTopicCreationDone(topicName string) error {
 	return err
 }
 
-// listTopics is used to do a initial metadata fetching.
+// listTopics is used to do an initial metadata fetching.
 func (m *kafkaTopicManager) listTopics() error {
 	start := time.Now()
 	topics, err := m.admin.ListTopics()
