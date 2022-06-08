@@ -33,7 +33,9 @@ func GetSnapshotMeta(tiStore tidbkv.Storage, ts uint64) (*meta.Meta, error) {
 	return meta.NewSnapshotMeta(snapshot), nil
 }
 
-// CreateTiStore returns a Storage
+// CreateTiStore creates a tikv storage client
+// Note: It will return a same storage if the urls connect to a same pd cluster,
+// so must be careful when you call storage.Close().
 func CreateTiStore(urls string, credential *security.Credential) (tidbkv.Storage, error) {
 	urlv, err := flags.NewURLsValue(urls)
 	if err != nil {
@@ -48,7 +50,6 @@ func CreateTiStore(urls string, credential *security.Credential) (tidbkv.Storage
 		ClusterVerifyCN: credential.CertAllowedCN,
 	}
 	d := driver.TiKVDriver{}
-	// Note: It will return a same storage if the the tiPath connect to a same pd cluster
 	tiStore, err := d.OpenWithOptions(tiPath, driver.WithSecurity(securityCfg))
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrNewStore, err)
