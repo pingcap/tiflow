@@ -161,7 +161,7 @@ func (m *migrator) migrate(ctx context.Context, etcdNoMetaVersion bool, oldVersi
 
 	upstreamID := pdClient.GetClusterID(ctx)
 	// 1.1 check metaVersion, if the metaVersion in etcd does not match
-	// m.oldMetaVersion, it means that someone has migrated the meta data
+	// m.oldMetaVersion, it means that someone has migrated the metadata
 	metaVersion, err := getMetaVersion(ctx, m.cli, m.clusterID)
 	if err != nil {
 		log.Error("get meta version failed, etcd meta data migration failed", zap.Error(err))
@@ -253,8 +253,9 @@ func (m *migrator) migrate(ctx context.Context, etcdNoMetaVersion bool, oldVersi
 	err = gc.RemoveServiceGCSafepoint(ctx, pdClient, "ticdc")
 	if err != nil {
 		log.Warn("remove old ticdc gc service failed", zap.Error(err))
+	} else {
+		log.Info("remove gc service safe point successful")
 	}
-	log.Info("remove gc service safe point successful")
 	log.Info("etcd data migration successful")
 	return nil
 }
