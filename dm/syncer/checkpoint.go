@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/tiflow/dm/syncer/metrics"
 
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
@@ -339,7 +340,8 @@ type remoteCheckpointSnapshot struct {
 type RemoteCheckPoint struct {
 	sync.RWMutex
 
-	cfg *config.SubTaskConfig
+	cfg           *config.SubTaskConfig
+	metricProxies *metrics.Proxies
 
 	db        *conn.BaseDB
 	dbConn    *dbconn.DBConn
@@ -376,16 +378,22 @@ type RemoteCheckPoint struct {
 }
 
 // NewRemoteCheckPoint creates a new RemoteCheckPoint.
-func NewRemoteCheckPoint(tctx *tcontext.Context, cfg *config.SubTaskConfig, id string) CheckPoint {
+func NewRemoteCheckPoint(
+	tctx *tcontext.Context,
+	cfg *config.SubTaskConfig,
+	metricProxies *metrics.Proxies,
+	id string,
+) CheckPoint {
 	cp := &RemoteCheckPoint{
-		cfg:         cfg,
-		tableName:   dbutil.TableName(cfg.MetaSchema, cputil.SyncerCheckpoint(cfg.Name)),
-		id:          id,
-		points:      make(map[string]map[string]*binlogPoint),
-		globalPoint: newBinlogPoint(binlog.MustZeroLocation(cfg.Flavor), binlog.MustZeroLocation(cfg.Flavor), nil, nil, cfg.EnableGTID),
-		logCtx:      tcontext.Background().WithLogger(tctx.L().WithFields(zap.String("component", "remote checkpoint"))),
-		snapshots:   make([]*remoteCheckpointSnapshot, 0),
-		snapshotSeq: 0,
+		cfg:           cfg,
+		metricProxies: metricProxies,
+		tableName:     dbutil.TableName(cfg.MetaSchema, cputil.SyncerCheckpoint(cfg.Name)),
+		id:            id,
+		points:        make(map[string]map[string]*binlogPoint),
+		globalPoint:   newBinlogPoint(binlog.MustZeroLocation(cfg.Flavor), binlog.MustZeroLocation(cfg.Flavor), nil, nil, cfg.EnableGTID),
+		logCtx:        tcontext.Background().WithLogger(tctx.L().WithFields(zap.String("component", "remote checkpoint"))),
+		snapshots:     make([]*remoteCheckpointSnapshot, 0),
+		snapshotSeq:   0,
 	}
 
 	return cp
@@ -490,6 +498,7 @@ func (cp *RemoteCheckPoint) Clear(tctx *tcontext.Context) error {
 	defer cancel()
 	_, err := cp.dbConn.ExecuteSQL(
 		tctx2,
+		cp.metricProxies,
 		[]string{`DELETE FROM ` + cp.tableName + ` WHERE id = ?`},
 		[]interface{}{cp.id},
 	)
@@ -570,6 +579,7 @@ func (cp *RemoteCheckPoint) DeleteTablePoint(tctx *tcontext.Context, table *filt
 	cp.logCtx.L().Info("delete table checkpoint", zap.String("schema", sourceSchema), zap.String("table", sourceTable))
 	_, err := cp.dbConn.ExecuteSQL(
 		tctx2,
+		cp.metricProxies,
 		[]string{`DELETE FROM ` + cp.tableName + ` WHERE id = ? AND cp_schema = ? AND cp_table = ?`},
 		[]interface{}{cp.id, sourceSchema, sourceTable},
 	)
@@ -590,6 +600,7 @@ func (cp *RemoteCheckPoint) DeleteAllTablePoint(tctx *tcontext.Context) error {
 	cp.logCtx.L().Info("delete all table checkpoint")
 	_, err := cp.dbConn.ExecuteSQL(
 		tctx2,
+		cp.metricProxies,
 		[]string{`DELETE FROM ` + cp.tableName + ` WHERE id = ? AND is_global = ?`},
 		[]interface{}{cp.id, false},
 	)
@@ -614,6 +625,7 @@ func (cp *RemoteCheckPoint) DeleteSchemaPoint(tctx *tcontext.Context, sourceSche
 	cp.logCtx.L().Info("delete schema checkpoint", zap.String("schema", sourceSchema))
 	_, err := cp.dbConn.ExecuteSQL(
 		tctx2,
+		cp.metricProxies,
 		[]string{`DELETE FROM ` + cp.tableName + ` WHERE id = ? AND cp_schema = ?`},
 		[]interface{}{cp.id, sourceSchema},
 	)
@@ -752,7 +764,7 @@ func (cp *RemoteCheckPoint) FlushPointsExcept(
 	// use a new context apart from syncer, to make sure when syncer call `cancel` checkpoint could update
 	tctx2, cancel := tctx.WithContext(context.Background()).WithTimeout(maxDMLConnectionDuration)
 	defer cancel()
-	_, err := cp.dbConn.ExecuteSQL(tctx2, sqls, args...)
+	_, err := cp.dbConn.ExecuteSQL(tctx2, cp.metricProxies, sqls, args...)
 	if err != nil {
 		return err
 	}
@@ -822,7 +834,7 @@ func (cp *RemoteCheckPoint) FlushPointsWithTableInfos(tctx *tcontext.Context, ta
 		// use a new context apart from syncer, to make sure when syncer call `cancel` checkpoint could update
 		tctx2, cancel := tctx.WithContext(context.Background()).WithTimeout(utils.DefaultDBTimeout)
 		defer cancel()
-		_, err := cp.dbConn.ExecuteSQL(tctx2, sqls, args...)
+		_, err := cp.dbConn.ExecuteSQL(tctx2, cp.metricProxies, sqls, args...)
 		if err != nil {
 			return err
 		}
@@ -849,7 +861,7 @@ func (cp *RemoteCheckPoint) FlushSafeModeExitPoint(tctx *tcontext.Context) error
 	// use a new context apart from syncer, to make sure when syncer call `cancel` checkpoint could update
 	tctx2, cancel := tctx.WithContext(context.Background()).WithTimeout(maxDMLConnectionDuration)
 	defer cancel()
-	_, err := cp.dbConn.ExecuteSQL(tctx2, sqls, args...)
+	_, err := cp.dbConn.ExecuteSQL(tctx2, cp.metricProxies, sqls, args...)
 	if err != nil {
 		return err
 	}
@@ -964,7 +976,7 @@ func (cp *RemoteCheckPoint) createSchema(tctx *tcontext.Context) error {
 	// TODO(lance6716): change ColumnName to IdentName or something
 	sql2 := fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s", dbutil.ColumnName(cp.cfg.MetaSchema))
 	args := make([]interface{}, 0)
-	_, err := cp.dbConn.ExecuteSQL(tctx, []string{sql2}, [][]interface{}{args}...)
+	_, err := cp.dbConn.ExecuteSQL(tctx, cp.metricProxies, []string{sql2}, [][]interface{}{args}...)
 	cp.logCtx.L().Info("create checkpoint schema", zap.String("statement", sql2))
 	return err
 }
@@ -988,7 +1000,7 @@ func (cp *RemoteCheckPoint) createTable(tctx *tcontext.Context) error {
 			UNIQUE KEY uk_id_schema_table (id, cp_schema, cp_table)
 		)`,
 	}
-	_, err := cp.dbConn.ExecuteSQL(tctx, sqls)
+	_, err := cp.dbConn.ExecuteSQL(tctx, cp.metricProxies, sqls)
 	cp.logCtx.L().Info("create checkpoint table", zap.Strings("statements", sqls))
 	return err
 }
@@ -999,7 +1011,7 @@ func (cp *RemoteCheckPoint) Load(tctx *tcontext.Context) error {
 	defer cp.Unlock()
 
 	query := `SELECT cp_schema, cp_table, binlog_name, binlog_pos, binlog_gtid, exit_safe_binlog_name, exit_safe_binlog_pos, exit_safe_binlog_gtid, table_info, is_global FROM ` + cp.tableName + ` WHERE id = ?`
-	rows, err := cp.dbConn.QuerySQL(tctx, query, cp.id)
+	rows, err := cp.dbConn.QuerySQL(tctx, cp.metricProxies, query, cp.id)
 	defer func() {
 		if rows != nil {
 			rows.Close()

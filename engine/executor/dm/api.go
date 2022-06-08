@@ -51,7 +51,7 @@ func (w *dmWorker) StopWorker(ctx context.Context, msg *dmpkg.StopWorkerMessage)
 	if w.taskID != msg.Task {
 		return errors.Errorf("task id mismatch, get %s, actually %s", msg.Task, w.taskID)
 	}
-	return w.closeAndExit(ctx, w.workerStatus())
+	return w.Exit(ctx, w.workerStatus(), nil)
 }
 
 // OperateTask implements the api of operate task message.

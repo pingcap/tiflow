@@ -458,7 +458,7 @@ func (s *testDDLSuite) TestResolveOnlineDDL(c *C) {
 
 	var qec *queryEventContext
 	for _, ca := range cases {
-		plugin, err := onlineddl.NewRealOnlinePlugin(tctx, cfg)
+		plugin, err := onlineddl.NewRealOnlinePlugin(tctx, cfg, nil)
 		c.Assert(err, IsNil)
 		syncer := NewSyncer(cfg, nil, nil)
 		syncer.tctx = tctx
@@ -537,7 +537,7 @@ func (s *testDDLSuite) TestMistakeOnlineDDLRegex(c *C) {
 	dbCfg.Password = ""
 	cfg := s.newSubTaskCfg(dbCfg)
 	for _, ca := range cases {
-		plugin, err := onlineddl.NewRealOnlinePlugin(tctx, cfg)
+		plugin, err := onlineddl.NewRealOnlinePlugin(tctx, cfg, nil)
 		c.Assert(err, IsNil)
 		syncer := NewSyncer(cfg, nil, nil)
 		c.Assert(syncer.genRouter(), IsNil)
