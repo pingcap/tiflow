@@ -190,6 +190,11 @@ jobs:
         run: |
           $GITHUB_WORKSPACE/engine/chaos/scripts/check-case.sh
 
+      - name: Pause all chaos
+        run: |
+          kubectl annotate podchaos default experiment.chaos-mesh.org/pause=true
+          kubectl annotate networkchaos default experiment.chaos-mesh.org/pause=true
+
       - name: Copy logs to hack permission
         if: ${{ always() }}
         run: |
