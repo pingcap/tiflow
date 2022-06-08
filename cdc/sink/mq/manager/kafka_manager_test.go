@@ -96,11 +96,11 @@ func TestCreateTopic(t *testing.T) {
 
 	manager, err := NewKafkaTopicManager(client, adminClient, cfg)
 	require.Nil(t, err)
-	partitionNum, err := manager.CreateTopic(kafkamock.DefaultMockTopicName)
+	partitionNum, err := manager.createTopic(kafkamock.DefaultMockTopicName)
 	require.Nil(t, err)
 	require.Equal(t, int32(3), partitionNum)
 
-	partitionNum, err = manager.CreateTopic("new-topic")
+	partitionNum, err = manager.createTopic("new-topic")
 	require.Nil(t, err)
 	require.Equal(t, int32(2), partitionNum)
 	partitionsNum, err := manager.GetPartitionNum("new-topic")
@@ -111,7 +111,7 @@ func TestCreateTopic(t *testing.T) {
 	cfg.AutoCreate = false
 	manager, err = NewKafkaTopicManager(client, adminClient, cfg)
 	require.Nil(t, err)
-	_, err = manager.CreateTopic("new-topic2")
+	_, err = manager.createTopic("new-topic2")
 	require.Regexp(
 		t,
 		"`auto-create-topic` is false, and new-topic2 not found",
@@ -135,11 +135,11 @@ func TestCreateTopicWithDelay(t *testing.T) {
 
 	manager, err := NewKafkaTopicManager(client, adminClient, cfg)
 	require.Nil(t, err)
-	partitionNum, err := manager.CreateTopic("new_topic")
+	partitionNum, err := manager.createTopic("new_topic")
 	require.Nil(t, err)
 	err = adminClient.SetRemainingFetchesUntilTopicVisible("new_topic", 3)
 	require.Nil(t, err)
-	err = manager.WaitUntilTopicCreationDone("new_topic")
+	err = manager.waitUntilTopicCreationDone("new_topic")
 	require.Nil(t, err)
 	require.Equal(t, int32(2), partitionNum)
 }

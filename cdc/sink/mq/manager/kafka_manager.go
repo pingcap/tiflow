@@ -75,11 +75,7 @@ func (m *kafkaTopicManager) GetPartitionNum(topic string) (int32, error) {
 		return partitions.(int32), nil
 	}
 
-	partitionNum, err := m.CreateTopic(topic)
-	if err != nil {
-		return 0, errors.Trace(err)
-	}
-	err = m.WaitUntilTopicCreationDone(topic)
+	partitionNum, err := m.CreateTopicWithRetry(topic)
 	if err != nil {
 		return 0, errors.Trace(err)
 	}
@@ -164,7 +160,7 @@ func (m *kafkaTopicManager) getMetadataOfTopics() ([]*sarama.TopicMetadata, erro
 // CreateTopic returns success for all the brokers to become aware that the
 // topics have been created.
 // See https://kafka.apache.org/23/javadoc/org/apache/kafka/clients/admin/AdminClient.html
-func (m *kafkaTopicManager) WaitUntilTopicCreationDone(topicName string) error {
+func (m *kafkaTopicManager) waitUntilTopicCreationDone(topicName string) error {
 	err := retry.Do(context.Background(), func() error {
 		start := time.Now()
 		topicMetaList, err := m.admin.DescribeTopics([]string{topicName})
@@ -235,7 +231,7 @@ func (m *kafkaTopicManager) listTopics() error {
 
 // CreateTopic creates a topic with the given name
 // and returns the number of partitions.
-func (m *kafkaTopicManager) CreateTopic(topicName string) (int32, error) {
+func (m *kafkaTopicManager) createTopic(topicName string) (int32, error) {
 	topicMetaList, err := m.getMetadataOfTopics()
 	if err != nil {
 		return 0, errors.Trace(err)
@@ -303,4 +299,18 @@ func (m *kafkaTopicManager) CreateTopic(topicName string) (int32, error) {
 	m.tryUpdatePartitionsAndLogging(topicName, m.cfg.PartitionNum)
 
 	return m.cfg.PartitionNum, nil
+}
+
+func (m *kafkaTopicManager) CreateTopicWithRetry(topicName string) (int32, error) {
+	partitionNum, err := m.createTopic(topicName)
+	if err != nil {
+		return 0, errors.Trace(err)
+	}
+
+	err = m.waitUntilTopicCreationDone(topicName)
+	if err != nil {
+		return 0, errors.Trace(err)
+	}
+
+	return partitionNum, nil
 }

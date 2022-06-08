@@ -35,6 +35,6 @@ func (m *pulsarTopicManager) GetPartitionNum(_ string) (int32, error) {
 }
 
 // CreateTopic do nothing.
-func (m *pulsarTopicManager) CreateTopic(_ string) (int32, error) {
+func (m *pulsarTopicManager) CreateTopicWithRetry(_ string) (int32, error) {
 	return m.partitionNum, nil
 }
