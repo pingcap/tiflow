@@ -93,7 +93,7 @@ func (m *JobMaster) Tick(ctx context.Context) error {
 		m.status.OnFinishedCreatingResources()
 		return m.persistMasterStatus(ctx)
 	case masterStateInProgress:
-		if err := m.createWorkerIfNecessary(); err != nil {
+		if err := m.createWorkerIfNecessary(ctx); err != nil {
 			return err
 		}
 
@@ -128,16 +128,33 @@ func (m *JobMaster) persistMasterStatus(ctx context.Context) error {
 	return dao.PutMasterMeta(ctx, m.status)
 }
 
-func (m *JobMaster) createWorkerIfNecessary() error {
+func (m *JobMaster) createWorkerIfNecessary(ctx context.Context) error {
 	unboundResourceSet := m.status.UnboundResources()
 	for unboundRes := range unboundResourceSet {
-		workerID, err := m.CreateWorker(
-			lib.ResourceTestWorker,
-			&workerConfig{ResourceID: unboundRes},
-			10,
-			unboundRes)
+		resExists, err := m.CheckResourceExists(ctx, unboundRes)
 		if err != nil {
 			return err
+		}
+
+		var workerID libModel.WorkerID
+		if resExists {
+			workerID, err = m.CreateWorker(
+				lib.ResourceTestWorker,
+				&workerConfig{ResourceID: unboundRes},
+				10,
+				unboundRes)
+			if err != nil {
+				return err
+			}
+		} else {
+			// Resource does not exist yet.
+			workerID, err = m.CreateWorker(
+				lib.ResourceTestWorker,
+				&workerConfig{ResourceID: unboundRes},
+				10)
+			if err != nil {
+				return err
+			}
 		}
 
 		m.status.OnBindResourceToWorker(unboundRes, workerID)
