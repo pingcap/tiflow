@@ -88,6 +88,7 @@ type BaseWorker interface {
 	UpdateStatus(ctx context.Context, status libModel.WorkerStatus) error
 	SendMessage(ctx context.Context, topic p2p.Topic, message interface{}, nonblocking bool) error
 	OpenStorage(ctx context.Context, resourcePath resourcemeta.ResourceID) (broker.Handle, error)
+	CheckResourceExists(ctx context.Context, resourcePath resourcemeta.ResourceID) (bool, error)
 	// Exit should be called when worker (in user logic) wants to exit.
 	// When `err` is not nil, the status code is assigned WorkerStatusError.
 	// Otherwise worker should set its status code to a meaningful value.
@@ -436,6 +437,12 @@ func (w *DefaultBaseWorker) SendMessage(
 func (w *DefaultBaseWorker) OpenStorage(ctx context.Context, resourcePath resourcemeta.ResourceID) (broker.Handle, error) {
 	ctx = w.errCenter.WithCancelOnFirstError(ctx)
 	return w.resourceBroker.OpenStorage(ctx, w.id, w.masterID, resourcePath)
+}
+
+// CheckResourceExists implements BaseWorker.CheckResourceExists
+func (w *DefaultBaseWorker) CheckResourceExists(ctx context.Context, resourcePath resourcemeta.ResourceID) (bool, error) {
+	ctx = w.errCenter.WithCancelOnFirstError(ctx)
+	return w.resourceBroker.CheckResourceExists(ctx, w.masterID, resourcePath)
 }
 
 // Exit implements BaseWorker.Exit

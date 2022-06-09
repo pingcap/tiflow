@@ -16,6 +16,8 @@ package lib
 import (
 	"context"
 
+	"github.com/pingcap/tiflow/engine/pkg/externalresource/broker"
+
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/errors"
 	"go.uber.org/zap"
@@ -48,6 +50,8 @@ type BaseJobMaster interface {
 	UpdateJobStatus(ctx context.Context, status libModel.WorkerStatus) error
 	CurrentEpoch() libModel.Epoch
 	SendMessage(ctx context.Context, topic p2p.Topic, message interface{}, nonblocking bool) error
+	OpenStorage(ctx context.Context, resourcePath resourcemeta.ResourceID) (broker.Handle, error)
+	CheckResourceExists(ctx context.Context, resourcePath resourcemeta.ResourceID) (bool, error)
 
 	// Exit should be called when job master (in user logic) wants to exit
 	// - If err is nil, it means job master exits normally
@@ -295,6 +299,16 @@ func (d *DefaultBaseJobMaster) Exit(ctx context.Context, status libModel.WorkerS
 	}
 
 	return d.worker.Exit(ctx, status, err)
+}
+
+// OpenStorage implements BaseJobMaster.OpenStorage
+func (d *DefaultBaseJobMaster) OpenStorage(ctx context.Context, resourcePath resourcemeta.ResourceID) (broker.Handle, error) {
+	return d.worker.resourceBroker.OpenStorage(ctx, d.worker.ID(), d.JobMasterID(), resourcePath)
+}
+
+// CheckResourceExists implements BaseJobMaster.CheckResourceExists
+func (d *DefaultBaseJobMaster) CheckResourceExists(ctx context.Context, resourcePath resourcemeta.ResourceID) (bool, error) {
+	return d.worker.resourceBroker.CheckResourceExists(ctx, d.JobMasterID(), resourcePath)
 }
 
 // TriggerOpenAPIInitialize implements BaseJobMasterExt.TriggerOpenAPIInitialize.

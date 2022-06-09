@@ -128,6 +128,30 @@ func (b *DefaultBroker) RemoveResource(
 	return &pb.RemoveLocalResourceResponse{}, nil
 }
 
+// CheckResourceExists can be called by any worker or master to check
+// whether a given resource exists.
+func (b *DefaultBroker) CheckResourceExists(
+	ctx context.Context,
+	jobID resModel.JobID,
+	resourceID resModel.ResourceID,
+) (bool, error) {
+	record, exists, err := b.queryResource(ctx, resourceID)
+	if err != nil {
+		return false, err
+	}
+
+	if !exists {
+		return false, nil
+	}
+
+	if record.Job != jobID {
+		// JobID does not match.
+		return false, nil
+	}
+
+	return true, nil
+}
+
 func (b *DefaultBroker) newHandleForLocalFile(
 	ctx context.Context,
 	jobID resModel.JobID,
@@ -145,7 +169,7 @@ func (b *DefaultBroker) newHandleForLocalFile(
 		log.L().Panic("unexpected resource type", zap.String("type", string(tp)))
 	}
 
-	record, exists, err := b.checkForExistingResource(ctx, resourceID)
+	record, exists, err := b.queryResource(ctx, resourceID)
 	if err != nil {
 		return nil, err
 	}
@@ -176,7 +200,7 @@ func (b *DefaultBroker) newHandleForLocalFile(
 	return newLocalResourceHandle(resourceID, jobID, b.executorID, b.fileManager, desc, b.client)
 }
 
-func (b *DefaultBroker) checkForExistingResource(
+func (b *DefaultBroker) queryResource(
 	ctx context.Context,
 	resourceID resModel.ResourceID,
 ) (*resModel.ResourceMeta, bool, error) {

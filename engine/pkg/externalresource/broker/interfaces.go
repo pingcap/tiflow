@@ -34,6 +34,13 @@ type Broker interface {
 		resourcePath resModel.ResourceID,
 	) (Handle, error)
 
+	// CheckResourceExists returns whether a given resource exists.
+	CheckResourceExists(
+		ctx context.Context,
+		jobID resModel.JobID,
+		resourceID resModel.ResourceID,
+	) (bool, error)
+
 	// OnWorkerClosed in called when a worker is closing.
 	// The implementation should do necessary garbage collection
 	// for the worker, especially local temporary files.
