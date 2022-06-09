@@ -257,7 +257,7 @@ func (c *metaOpsClient) Close() error {
 // TODO: What happen if we upgrade the definition of model when rolling update?
 // TODO: need test: change column definition/add column/drop column?
 func (c *metaOpsClient) Initialize(ctx context.Context) error {
-	failpoint.Inject("initializedDelay", nil)
+	failpoint.InjectContext(ctx, "initializedDelay", nil)
 	if err := c.db.WithContext(ctx).
 		AutoMigrate(globalModels...); err != nil {
 		return cerrors.ErrMetaOpFail.Wrap(err)
@@ -269,6 +269,7 @@ func (c *metaOpsClient) Initialize(ctx context.Context) error {
 
 /////////////////////////////// Logic Epoch
 func (c *metaOpsClient) GenEpoch(ctx context.Context) (libModel.Epoch, error) {
+	failpoint.InjectContext(ctx, "genEpochDelay", nil)
 	return model.GenEpoch(ctx, c.db)
 }
 
@@ -686,6 +687,7 @@ func (c *metaOpsClient) QueryResourcesByExecutorID(ctx context.Context, executor
 	return resources, nil
 }
 
+// DeleteResourcesByExecutorID delete all the resources of executorID
 func (c *metaOpsClient) DeleteResourcesByExecutorID(ctx context.Context, executorID string) error {
 	err := c.db.WithContext(ctx).
 		Where("executor_id = ?", executorID).
@@ -696,6 +698,7 @@ func (c *metaOpsClient) DeleteResourcesByExecutorID(ctx context.Context, executo
 	return nil
 }
 
+// SetGCPending set the resourceIDs to the state `waiting to gc`
 func (c *metaOpsClient) SetGCPending(ctx context.Context, ids []resourcemeta.ResourceID) error {
 	err := c.db.WithContext(ctx).
 		Model(&resourcemeta.ResourceMeta{}).
@@ -707,6 +710,7 @@ func (c *metaOpsClient) SetGCPending(ctx context.Context, ids []resourcemeta.Res
 	return cerrors.ErrMetaOpFail.Wrap(err)
 }
 
+// GetOneResourceForGC get one resource ready for gc
 func (c *metaOpsClient) GetOneResourceForGC(ctx context.Context) (*resourcemeta.ResourceMeta, error) {
 	var ret resourcemeta.ResourceMeta
 	err := c.db.WithContext(ctx).
@@ -722,7 +726,7 @@ func (c *metaOpsClient) GetOneResourceForGC(ctx context.Context) (*resourcemeta.
 	return &ret, nil
 }
 
-// Result defines a query err interface
+// Result defines a query result interface
 type Result interface {
 	RowsAffected() int64
 }
@@ -731,6 +735,7 @@ type ormResult struct {
 	rowsAffected int64
 }
 
+// RowsAffected return the affected rows of an execution
 func (r ormResult) RowsAffected() int64 {
 	return r.rowsAffected
 }

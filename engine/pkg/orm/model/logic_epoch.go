@@ -16,7 +16,6 @@ package model
 import (
 	"context"
 
-	"github.com/pingcap/failpoint"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -49,8 +48,6 @@ func InitializeEpoch(ctx context.Context, db *gorm.DB) error {
 
 // GenEpoch will increasing the backend epoch by 1 and return the new epoch
 func GenEpoch(ctx context.Context, db *gorm.DB) (int64, error) {
-	failpoint.Inject("genEpochDelay", nil)
-
 	var epoch int64
 	err := db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		//(1)update epoch = epoch + 1

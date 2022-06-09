@@ -1242,6 +1242,8 @@ func TestError(t *testing.T) {
 }
 
 func TestLogicEpoch(t *testing.T) {
+	t.Parallel()
+
 	sqlDB, mock, err := mockGetDBConn(t, "test")
 	defer sqlDB.Close()
 	defer mock.ExpectClose()
@@ -1268,6 +1270,8 @@ func TestLogicEpoch(t *testing.T) {
 }
 
 func TestContext(t *testing.T) {
+	t.Parallel()
+
 	ctx, cancel := context.WithTimeout(context.TODO(), 1*time.Second)
 	defer cancel()
 
@@ -1278,17 +1282,28 @@ func TestContext(t *testing.T) {
 	// test normal function
 	err = failpoint.Enable("github.com/pingcap/tiflow/engine/pkg/orm/initializedDelay", "sleep(2000)")
 	require.NoError(t, err)
-	err = cli.Initialize(ctx)
+	ctx = failpoint.WithHook(ctx, func(ctx context.Context, fpname string) bool {
+		return ctx.Value(fpname) != nil
+	})
+	tx := context.WithValue(ctx, "github.com/pingcap/tiflow/engine/pkg/orm/initializedDelay", struct{}{})
+
+	err = cli.Initialize(tx)
 	require.Error(t, err)
 	require.Regexp(t, "context deadline exceed", err.Error())
 	failpoint.Disable("github.com/pingcap/tiflow/engine/pkg/orm/initializedDelay")
 
 	// test transaction
-	err = failpoint.Enable("github.com/pingcap/tiflow/engine/pkg/orm/model/genEpochDelay", "sleep(2000)")
-	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.TODO(), 1*time.Second)
 	defer cancel()
-	_, err = cli.GenEpoch(ctx)
+
+	err = failpoint.Enable("github.com/pingcap/tiflow/engine/pkg/orm/genEpochDelay", "sleep(2000)")
+	require.NoError(t, err)
+	ctx = failpoint.WithHook(ctx, func(ctx context.Context, fpname string) bool {
+		return ctx.Value(fpname) != nil
+	})
+	tx = context.WithValue(ctx, "github.com/pingcap/tiflow/engine/pkg/orm/genEpochDelay", struct{}{})
+
+	_, err = cli.GenEpoch(tx)
 	require.Error(t, err)
 	require.Regexp(t, "context deadline exceed", err.Error())
 	failpoint.Disable("github.com/pingcap/tiflow/engine/pkg/orm/model/genEpochDelay")
