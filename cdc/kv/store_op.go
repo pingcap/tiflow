@@ -50,6 +50,8 @@ func CreateTiStore(urls string, credential *security.Credential) (tidbkv.Storage
 		ClusterVerifyCN: credential.CertAllowedCN,
 	}
 	d := driver.TiKVDriver{}
+	// we should use OpenWithOptions to open a storage to avoid modifying tidb's GlobalConfig
+	// so that we can create different storage in TiCDC by different urls and credential
 	tiStore, err := d.OpenWithOptions(tiPath, driver.WithSecurity(securityCfg))
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrNewStore, err)
