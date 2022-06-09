@@ -1285,9 +1285,9 @@ func TestContext(t *testing.T) {
 	ctx = failpoint.WithHook(ctx, func(ctx context.Context, fpname string) bool {
 		return ctx.Value(fpname) != nil
 	})
-	tx := context.WithValue(ctx, "github.com/pingcap/tiflow/engine/pkg/orm/initializedDelay", struct{}{})
+	ctx2 := context.WithValue(ctx, "github.com/pingcap/tiflow/engine/pkg/orm/initializedDelay", struct{}{})
 
-	err = cli.Initialize(tx)
+	err = cli.Initialize(ctx2)
 	require.Error(t, err)
 	require.Regexp(t, "context deadline exceed", err.Error())
 	failpoint.Disable("github.com/pingcap/tiflow/engine/pkg/orm/initializedDelay")
@@ -1301,9 +1301,9 @@ func TestContext(t *testing.T) {
 	ctx = failpoint.WithHook(ctx, func(ctx context.Context, fpname string) bool {
 		return ctx.Value(fpname) != nil
 	})
-	tx = context.WithValue(ctx, "github.com/pingcap/tiflow/engine/pkg/orm/genEpochDelay", struct{}{})
+	ctx2 = context.WithValue(ctx, "github.com/pingcap/tiflow/engine/pkg/orm/genEpochDelay", struct{}{})
 
-	_, err = cli.GenEpoch(tx)
+	_, err = cli.GenEpoch(ctx2)
 	require.Error(t, err)
 	require.Regexp(t, "context deadline exceed", err.Error())
 	failpoint.Disable("github.com/pingcap/tiflow/engine/pkg/orm/model/genEpochDelay")
