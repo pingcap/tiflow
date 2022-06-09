@@ -1,0 +1,113 @@
+---
+# A Network Loss action causes network packets to drop randomly
+apiVersion: chaos-mesh.org/v1alpha1
+kind: NetworkChaos
+metadata:
+  name: network-loss-dataflow
+  labels:
+    app: network-loss-dataflow
+spec:
+  action: loss
+  mode: one
+  selector:
+    pods:
+      default: # default namespace
+        - server-master-0
+        - server-master-1
+        - server-master-2
+        - executor-0
+        - executor-1
+        - executor-2
+        - executor-3
+  loss:
+    loss: "25"
+    correlation: "25"
+  duration: "30s"
+  scheduler:
+    cron: "2-59/5 * * * *" # At every 5th minute from 2 through 59, (2, 7, 12, ...)
+
+
+# A Network Delay action causes delays in message sending
+---
+apiVersion: chaos-mesh.org/v1alpha1
+kind: NetworkChaos
+metadata:
+  name: network-delay-dataflow
+  labels:
+    app: network-delay-dataflow
+spec:
+  action: delay
+  mode: one
+  selector:
+    pods:
+      default: # default namespace
+        - server-master-0
+        - server-master-1
+        - server-master-2
+        - executor-0
+        - executor-1
+        - executor-2
+        - executor-3
+  delay:
+    latency: "150ms"
+    correlation: "25"
+    jitter: "150ms"
+  duration: "30s"
+  scheduler:
+    cron: "3-59/5 * * * *" # At every 5th minute from 3 through 59, (3, 8, 13, ...)
+
+---
+# A Network Duplicate action causes packet duplication
+apiVersion: chaos-mesh.org/v1alpha1
+kind: NetworkChaos
+metadata:
+  name: network-duplicate-dataflow
+  labels:
+    app: network-duplicate-dataflow
+spec:
+  action: duplicate
+  mode: one
+  selector:
+    pods:
+      default: # default namespace
+        - server-master-0
+        - server-master-1
+        - server-master-2
+        - executor-0
+        - executor-1
+        - executor-2
+        - executor-3
+  duplicate:
+    duplicate: "40"
+    correlation: "25"
+  duration: "30s"
+  scheduler:
+    cron: "4-59/5 * * * *" # At every 5th minute from 4 through 59, (4, 9, 14, ...)
+
+---
+# A Network Corrupt action causes packet corruption
+apiVersion: chaos-mesh.org/v1alpha1
+kind: NetworkChaos
+metadata:
+  name: network-corrupt-dataflow
+  labels:
+    app: network-corrupt-dataflow
+spec:
+  action: corrupt
+  mode: one
+  selector:
+    pods:
+      default: # default namespace
+        - server-master-0
+        - server-master-1
+        - server-master-2
+        - executor-0
+        - executor-1
+        - executor-2
+        - executor-3
+  corrupt:
+    corrupt: "40"
+    correlation: "25"
+  duration: "30s"
+  scheduler:
+    cron: "5-59/5 * * * *" # At every 5th minute from 5 through 59, (5, 10, 15, ...)
