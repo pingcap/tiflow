@@ -6,6 +6,8 @@ cur=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 source $cur/../_utils/test_prepare
 WORK_DIR=$TEST_DIR/$TEST_NAME
 
+db_name=$TEST_NAME
+
 help_cnt=45
 
 function run() {
@@ -438,7 +440,15 @@ function query_status_disable_validator() {
 	dmctl_stop_task "test2"
 }
 
-function run_validator_cmd {
+function trigger_checkpoint_flush() {
+	sleep 1.5
+	run_sql_source1 "alter table $db_name.t1 comment 'a';" # force flush checkpoint
+}
+
+function prepare_for_validator_cmd {
+	cleanup_process $*
+	cleanup_data $db_name
+	cleanup_data_upstream $db_name
 	run_dm_master $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master.toml
 	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT
 	# skip incremental rows with id <= 2
@@ -455,10 +465,10 @@ function run_validator_cmd {
 	cp $cur/conf/source2.yaml $WORK_DIR/source2.yaml
 	dmctl_operate_source create $WORK_DIR/source1.yaml $SOURCE_ID1
 	dmctl_operate_source create $WORK_DIR/source2.yaml $SOURCE_ID2
+
 	query_status_disable_validator
-	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"start-task $cur/conf/dm-task.yaml" \
-		"\`remove-meta\` in task config is deprecated, please use \`start-task ... --remove-meta\` instead" 1
+
+	dmctl_start_task $cur/conf/dm-task.yaml --remove-meta
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 
 	run_sql_source1 "insert into dmctl_command.t1 values(0,'ignore-row')"
@@ -481,8 +491,15 @@ function run_validator_cmd {
 		"insert\/update\/delete: 0\/0\/1\"" 1 \
 		"new\/ignored\/resolved: 0\/0\/0" 1 \
 		"new\/ignored\/resolved: 4\/0\/0" 1
-	run_sql_source1 "create table dmctl_command.t_trigger_flush101(id int primary key)" # trigger flush
+	trigger_checkpoint_flush
+}
 
+function run_validator_cmd {
+	prepare_for_validator_cmd
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation status test" \
+		"\"stage\": \"Running\"" 4 \
+		"\"stage\": \"Stopped\"" 1
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation status --table-stage running test" \
 		"\"stage\": \"Running\"" 4 \
@@ -493,7 +510,7 @@ function run_validator_cmd {
 		"\"stage\": \"Stopped\"" 1 \
 		"no primary key" 1
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"validation show-errors --error all test" \
+		"validation show-error --error all test" \
 		"\"id\": \"1\"" 1 \
 		"\"id\": \"2\"" 1 \
 		"\"id\": \"3\"" 1 \
@@ -501,12 +518,24 @@ function run_validator_cmd {
 	run_validator_cmd_error
 	# resolve error 1
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"validation make-resolve test 1"
+		"validation resolve-error test 1"
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation status test" \
 		"new\/ignored\/resolved: 3\/0\/1" 1
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"validation show-errors --error unprocessed test" \
+		"validation show-error --error unprocessed test" \
+		"\"id\": \"2\"" 1 \
+		"\"id\": \"3\"" 1 \
+		"\"id\": \"4\"" 1
+	# default we show unprocessed
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation show-error test" \
+		"\"id\": \"2\"" 1 \
+		"\"id\": \"3\"" 1 \
+		"\"id\": \"4\"" 1
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation show-error --error all test" \
+		"\"id\": \"1\"" 1 \
 		"\"id\": \"2\"" 1 \
 		"\"id\": \"3\"" 1 \
 		"\"id\": \"4\"" 1
@@ -517,19 +546,19 @@ function run_validator_cmd {
 		"validation status test" \
 		"new\/ignored\/resolved: 2\/1\/1" 1
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"validation show-errors --error ignored test" \
+		"validation show-error --error ignored test" \
 		"\"id\": \"2\"" 1
 	# clear error 1
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"validation clear test 1"
+		"validation clear-error test 1"
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation status test" \
 		"new\/ignored\/resolved: 2\/1\/0" 1
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"validation show-errors --error ignored test" \
+		"validation show-error --error ignored test" \
 		"\"id\": \"2\"" 1
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"validation clear test 2"
+		"validation clear-error test 2"
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation status test" \
 		"new\/ignored\/resolved: 2\/0\/0" 1
@@ -555,7 +584,7 @@ function run_validator_cmd {
 	check_log_contains $WORK_DIR/goroutine.worker2 "syncer"
 	# still able to query validation error
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"validation show-errors --error all test" \
+		"validation show-error --error all test" \
 		"\"id\": \"3\"" 1 \
 		"\"id\": \"4\"" 1
 	# still able to operate validation error
@@ -564,12 +593,12 @@ function run_validator_cmd {
 		"validation ignore-error test 3"
 	# resolve error 4
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"validation make-resolve test 4"
+		"validation resolve-error test 4"
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation status test" \
 		"new\/ignored\/resolved: 0\/1\/1" 1
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"validation clear test --all"
+		"validation clear-error test --all"
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation status test" \
 		"new\/ignored\/resolved: 0\/0\/0" 2
@@ -600,6 +629,40 @@ function run_validator_cmd {
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation status test" \
 		"validator not found for task" 2
+
+	echo "--> validation resolve-error --all"
+	prepare_for_validator_cmd
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation show-error test" \
+		"\"id\": \"1\"" 1 \
+		"\"id\": \"2\"" 1 \
+		"\"id\": \"3\"" 1 \
+		"\"id\": \"4\"" 1
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation resolve-error test --all"
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation show-error test" \
+		"\"id\": " 0
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation status test" \
+		"new\/ignored\/resolved: 0\/0\/4" 1
+
+	echo "--> validation ignore-error --all"
+	prepare_for_validator_cmd
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation show-error test" \
+		"\"id\": \"1\"" 1 \
+		"\"id\": \"2\"" 1 \
+		"\"id\": \"3\"" 1 \
+		"\"id\": \"4\"" 1
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation ignore-error test --all"
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation show-error test" \
+		"\"id\": " 0
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation status test" \
+		"new\/ignored\/resolved: 0\/4\/0" 1
 }
 
 function run_validator_cmd_error() {
@@ -614,11 +677,11 @@ function run_validator_cmd_error() {
 
 	# show errors: resolved error is illegal
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"validation show-errors --error resolved test" \
+		"validation show-error --error resolved test" \
 		"Error: error flag should be either" 1
 	# show errors: no task name
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"validation show-errors --error all" \
+		"validation show-error --error all" \
 		"Error: task name should be specified" 1
 
 	# operate error: conflict id and --all flag
@@ -626,10 +689,10 @@ function run_validator_cmd_error() {
 		"validation ignore-error test 100 --all" \
 		"Error: either \`--all\` or \`error-id\` should be set" 1
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"validation make-resolve test 100 --all" \
+		"validation resolve-error test 100 --all" \
 		"Error: either \`--all\` or \`error-id\` should be set" 1
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"validation clear test 100 --all" \
+		"validation clear-error test 100 --all" \
 		"Error: either \`--all\` or \`error-id\` should be set" 1
 
 	# operate error: more than one arguments
@@ -637,10 +700,10 @@ function run_validator_cmd_error() {
 		"validation ignore-error test 100 101" \
 		"Error: too many arguments are specified" 1
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"validation make-resolve test 100 101" \
+		"validation resolve-error test 100 101" \
 		"Error: too many arguments are specified" 1
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"validation clear test 100 101" \
+		"validation clear-error test 100 101" \
 		"Error: too many arguments are specified" 1
 
 	# operate error: NaN id
@@ -648,10 +711,10 @@ function run_validator_cmd_error() {
 		"validation ignore-error test error-id" \
 		"Error: \`error-id\` should be integer when \`--all\` is not set" 1
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"validation make-resolve test error-id" \
+		"validation resolve-error test error-id" \
 		"Error: \`error-id\` should be integer when \`--all\` is not set" 1
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"validation clear test error-id" \
+		"validation clear-error test error-id" \
 		"Error: \`error-id\` should be integer when \`--all\` is not set" 1
 
 	# operate error: neither all nor id
@@ -659,10 +722,10 @@ function run_validator_cmd_error() {
 		"validation ignore-error test" \
 		"Error: either \`--all\` or \`error-id\` should be set" 1
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"validation make-resolve test" \
+		"validation resolve-error test" \
 		"Error: either \`--all\` or \`error-id\` should be set" 1
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"validation clear test" \
+		"validation clear-error test" \
 		"Error: either \`--all\` or \`error-id\` should be set" 1
 
 	# operate error: no task name
@@ -670,11 +733,22 @@ function run_validator_cmd_error() {
 		"validation ignore-error" \
 		"Error: task name should be specified" 1
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"validation make-resolve" \
+		"validation resolve-error" \
 		"Error: task name should be specified" 1
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"validation clear" \
+		"validation clear-error" \
 		"Error: task name should be specified" 1
+
+	# operate error: invalid task name
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation ignore-error non-exist-task-name 1" \
+		"cannot get subtask by task name" 1
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation resolve-error non-exist-task-name 1" \
+		"cannot get subtask by task name" 1
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation clear-error non-exist-task-name 1" \
+		"cannot get subtask by task name" 1
 }
 
 cleanup_data dmctl_command
