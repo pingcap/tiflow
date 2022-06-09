@@ -122,7 +122,7 @@ func (w *dmWorker) InitImpl(ctx context.Context) error {
 		return err
 	}
 	if w.cfg.Mode != dmconfig.ModeIncrement {
-		if err := w.setupstorage(ctx); err != nil {
+		if err := w.setupStorage(ctx); err != nil {
 			return err
 		}
 	}
@@ -175,8 +175,8 @@ func (w *dmWorker) CloseImpl(ctx context.Context) error {
 	return recordErr
 }
 
-// setupstorage opens and configs external storage
-func (w *dmWorker) setupstorage(ctx context.Context) error {
+// setupStorage opens and configs external storage
+func (w *dmWorker) setupStorage(ctx context.Context) error {
 	rid := dm.NewDMResourceID(w.cfg.Name, w.cfg.SourceID)
 	h, err := w.OpenStorage(ctx, rid)
 	for status.Code(err) == codes.Unavailable {
@@ -199,16 +199,16 @@ func (w *dmWorker) persistStorage(ctx context.Context) error {
 
 // tryUpdateStatus updates status when task stage changed.
 func (w *dmWorker) tryUpdateStatus(ctx context.Context) error {
-	stage, _ := w.unitHolder.Stage()
-	currentStage := w.getStage()
-	if stage == currentStage {
+	currentStage, _ := w.unitHolder.Stage()
+	previousStage := w.getStage()
+	if currentStage == previousStage {
 		return nil
 	}
-	log.L().Info("task stage changed", zap.String("task-id", w.taskID), zap.Int("from", int(currentStage)), zap.Int("to", int(stage)))
-	w.setStage(stage)
+	log.L().Info("task stage changed", zap.String("task-id", w.taskID), zap.Int("from", int(previousStage)), zap.Int("to", int(currentStage)))
+	w.setStage(currentStage)
 
 	status := w.workerStatus()
-	if stage != metadata.StageFinished {
+	if currentStage != metadata.StageFinished {
 		log.L().Info("update status", zap.String("task-id", w.taskID), zap.String("status", string(status.ExtBytes)))
 		return w.UpdateStatus(ctx, status)
 	}
