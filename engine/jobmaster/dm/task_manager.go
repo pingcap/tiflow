@@ -189,7 +189,7 @@ func (tm *TaskManager) GetTaskStatus(taskID string) (runtime.TaskStatus, bool) {
 
 func genOp(runtimeStage, expectedStage metadata.TaskStage) dmpkg.OperateType {
 	switch {
-	case runtimeStage == metadata.StageRunning && expectedStage == metadata.StagePaused:
+	case (runtimeStage == metadata.StageRunning || runtimeStage == metadata.StageError) && expectedStage == metadata.StagePaused:
 		return dmpkg.Pause
 	case runtimeStage == metadata.StagePaused && expectedStage == metadata.StageRunning:
 		return dmpkg.Resume

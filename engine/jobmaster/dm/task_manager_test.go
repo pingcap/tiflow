@@ -206,9 +206,8 @@ func (t *testDMJobmasterSuite) TestGenOp() {
 	require.Equal(t.T(), genOp(metadata.StagePaused, metadata.StagePaused), dmpkg.None)
 	require.Equal(t.T(), genOp(metadata.StageRunning, metadata.StageRunning), dmpkg.None)
 	require.Equal(t.T(), genOp(metadata.StageRunning, metadata.StagePaused), dmpkg.Pause)
+	require.Equal(t.T(), genOp(metadata.StageError, metadata.StagePaused), dmpkg.Pause)
 	require.Equal(t.T(), genOp(metadata.StageFinished, metadata.StageRunning), dmpkg.None)
-
-	// TODO: change below results if needed.
 	require.Equal(t.T(), genOp(metadata.StagePaused, metadata.StageRunning), dmpkg.Resume)
 }
 
