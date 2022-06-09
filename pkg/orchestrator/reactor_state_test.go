@@ -29,7 +29,7 @@ import (
 )
 
 func TestCheckCaptureAlive(t *testing.T) {
-	state := NewChangefeedReactorState("test")
+	state := NewChangefeedReactorState(model.DefaultChangeFeedID("test"))
 	stateTester := NewReactorStateTester(t, state, nil)
 	state.CheckCaptureAlive("6bbc01c8-0605-4f86-a0f9-b3119109b225")
 	require.Contains(t, stateTester.ApplyPatches().Error(), "[CDC:ErrLeaseExpired]")
@@ -40,6 +40,54 @@ func TestCheckCaptureAlive(t *testing.T) {
 }
 
 func TestChangefeedStateUpdate(t *testing.T) {
+	changefeedInfo := `
+{
+    "sink-uri": "blackhole://",
+    "opts": {},
+    "create-time": "2020-02-02T00:00:00.000000+00:00",
+    "start-ts": 421980685886554116,
+    "target-ts": 0,
+    "admin-job-type": 0,
+    "sort-engine": "memory",
+    "sort-dir": "",
+    "config": {
+        "case-sensitive": true,
+        "enable-old-value": false,
+        "force-replicate": false,
+        "check-gc-safe-point": true,
+        "filter": {
+            "rules": [
+                "*.*"
+            ],
+            "ignore-txn-start-ts": null,
+            "ddl-allow-list": null
+        },
+        "mounter": {
+            "worker-num": 16
+        },
+        "sink": {
+            "dispatchers": null,
+            "protocol": "open-protocol"
+        },
+        "cyclic-replication": {
+            "enable": false,
+            "replica-id": 0,
+            "filter-replica-ids": null,
+            "id-buckets": 0,
+            "sync-ddl": false
+        },
+        "consistent": {
+            "level": "normal",
+            "storage": "local"
+        }
+    },
+    "state": "normal",
+    "history": null,
+    "error": null,
+    "sync-point-enabled": false,
+    "sync-point-interval": 600000000000
+}
+`
 	createTime, err := time.Parse("2006-01-02", "2020-02-02")
 	require.Nil(t, err)
 	testCases := []struct {
@@ -59,7 +107,7 @@ func TestChangefeedStateUpdate(t *testing.T) {
 				"/tidb/cdc/capture/6bbc01c8-0605-4f86-a0f9-b3119109b225",
 			},
 			updateValue: []string{
-				`{"sink-uri":"blackhole://","opts":{},"create-time":"2020-02-02T00:00:00.000000+00:00","start-ts":421980685886554116,"target-ts":0,"admin-job-type":0,"sort-engine":"memory","sort-dir":"","config":{"case-sensitive":true,"enable-old-value":false,"force-replicate":false,"check-gc-safe-point":true,"filter":{"rules":["*.*"],"ignore-txn-start-ts":null,"ddl-allow-list":null},"mounter":{"worker-num":16},"sink":{"dispatchers":null,"protocol":"open-protocol"},"cyclic-replication":{"enable":false,"replica-id":0,"filter-replica-ids":null,"id-buckets":0,"sync-ddl":false},"scheduler":{"type":"table-number","polling-time":-1},"consistent":{"level":"normal","storage":"local"}},"state":"normal","history":null,"error":null,"sync-point-enabled":false,"sync-point-interval":600000000000}`,
+				changefeedInfo,
 				`{"resolved-ts":421980720003809281,"checkpoint-ts":421980719742451713,"admin-job-type":0}`,
 				`{"checkpoint-ts":421980720003809281,"resolved-ts":421980720003809281,"count":0,"error":null}`,
 				`{"tables":{"45":{"start-ts":421980685886554116,"mark-table-id":0}},"operation":null,"admin-job-type":0}`,
@@ -67,7 +115,7 @@ func TestChangefeedStateUpdate(t *testing.T) {
 				`{"id":"6bbc01c8-0605-4f86-a0f9-b3119109b225","address":"127.0.0.1:8300"}`,
 			},
 			expected: ChangefeedReactorState{
-				ID: "test1",
+				ID: model.DefaultChangeFeedID("test1"),
 				Info: &model.ChangeFeedInfo{
 					SinkURI:           "blackhole://",
 					Opts:              map[string]string{},
@@ -83,7 +131,6 @@ func TestChangefeedStateUpdate(t *testing.T) {
 						Mounter:          &config.MounterConfig{WorkerNum: 16},
 						Sink:             &config.SinkConfig{Protocol: "open-protocol"},
 						Cyclic:           &config.CyclicConfig{},
-						Scheduler:        &config.SchedulerConfig{Tp: "table-number", PollingTime: -1},
 						Consistent:       &config.ConsistentConfig{Level: "normal", Storage: "local"},
 					},
 				},
@@ -116,7 +163,7 @@ func TestChangefeedStateUpdate(t *testing.T) {
 				"/tidb/cdc/capture/666777888",
 			},
 			updateValue: []string{
-				`{"sink-uri":"blackhole://","opts":{},"create-time":"2020-02-02T00:00:00.000000+00:00","start-ts":421980685886554116,"target-ts":0,"admin-job-type":0,"sort-engine":"memory","sort-dir":"","config":{"case-sensitive":true,"enable-old-value":false,"force-replicate":false,"check-gc-safe-point":true,"filter":{"rules":["*.*"],"ignore-txn-start-ts":null,"ddl-allow-list":null},"mounter":{"worker-num":16},"sink":{"dispatchers":null,"protocol":"open-protocol"},"cyclic-replication":{"enable":false,"replica-id":0,"filter-replica-ids":null,"id-buckets":0,"sync-ddl":false},"scheduler":{"type":"table-number","polling-time":-1},"consistent":{"level":"normal","storage":"local"}},"state":"normal","history":null,"error":null,"sync-point-enabled":false,"sync-point-interval":600000000000}`,
+				changefeedInfo,
 				`{"resolved-ts":421980720003809281,"checkpoint-ts":421980719742451713,"admin-job-type":0}`,
 				`{"checkpoint-ts":421980720003809281,"resolved-ts":421980720003809281,"count":0,"error":null}`,
 				`{"tables":{"45":{"start-ts":421980685886554116,"mark-table-id":0}},"operation":null,"admin-job-type":0}`,
@@ -128,7 +175,7 @@ func TestChangefeedStateUpdate(t *testing.T) {
 				`{"id":"666777888","address":"127.0.0.1:8300"}`,
 			},
 			expected: ChangefeedReactorState{
-				ID: "test1",
+				ID: model.DefaultChangeFeedID("test1"),
 				Info: &model.ChangeFeedInfo{
 					SinkURI:           "blackhole://",
 					Opts:              map[string]string{},
@@ -144,7 +191,6 @@ func TestChangefeedStateUpdate(t *testing.T) {
 						Mounter:          &config.MounterConfig{WorkerNum: 16},
 						Sink:             &config.SinkConfig{Protocol: "open-protocol"},
 						Cyclic:           &config.CyclicConfig{},
-						Scheduler:        &config.SchedulerConfig{Tp: "table-number", PollingTime: -1},
 						Consistent:       &config.ConsistentConfig{Level: "normal", Storage: "local"},
 					},
 				},
@@ -183,7 +229,7 @@ func TestChangefeedStateUpdate(t *testing.T) {
 				"/tidb/cdc/task/workload/6bbc01c8-0605-4f86-a0f9-b3119109b225/test-fake",
 			},
 			updateValue: []string{
-				`{"sink-uri":"blackhole://","opts":{},"create-time":"2020-02-02T00:00:00.000000+00:00","start-ts":421980685886554116,"target-ts":0,"admin-job-type":0,"sort-engine":"memory","sort-dir":"","config":{"case-sensitive":true,"enable-old-value":false,"force-replicate":false,"check-gc-safe-point":true,"filter":{"rules":["*.*"],"ignore-txn-start-ts":null,"ddl-allow-list":null},"mounter":{"worker-num":16},"sink":{"dispatchers":null,"protocol":"open-protocol"},"cyclic-replication":{"enable":false,"replica-id":0,"filter-replica-ids":null,"id-buckets":0,"sync-ddl":false},"scheduler":{"type":"table-number","polling-time":-1},"consistent":{"level":"normal","storage":"local"}},"state":"normal","history":null,"error":null,"sync-point-enabled":false,"sync-point-interval":600000000000}`,
+				changefeedInfo,
 				`{"resolved-ts":421980720003809281,"checkpoint-ts":421980719742451713,"admin-job-type":0}`,
 				`{"checkpoint-ts":421980720003809281,"resolved-ts":421980720003809281,"count":0,"error":null}`,
 				`{"tables":{"45":{"start-ts":421980685886554116,"mark-table-id":0}},"operation":null,"admin-job-type":0}`,
@@ -196,7 +242,7 @@ func TestChangefeedStateUpdate(t *testing.T) {
 				`fake value`,
 			},
 			expected: ChangefeedReactorState{
-				ID: "test1",
+				ID: model.DefaultChangeFeedID("test1"),
 				Info: &model.ChangeFeedInfo{
 					SinkURI:           "blackhole://",
 					Opts:              map[string]string{},
@@ -212,7 +258,6 @@ func TestChangefeedStateUpdate(t *testing.T) {
 						Mounter:          &config.MounterConfig{WorkerNum: 16},
 						Sink:             &config.SinkConfig{Protocol: "open-protocol"},
 						Cyclic:           &config.CyclicConfig{},
-						Scheduler:        &config.SchedulerConfig{Tp: "table-number", PollingTime: -1},
 						Consistent:       &config.ConsistentConfig{Level: "normal", Storage: "local"},
 					},
 				},
@@ -252,7 +297,7 @@ func TestChangefeedStateUpdate(t *testing.T) {
 				"/tidb/cdc/task/status/666777888/test1",
 			},
 			updateValue: []string{
-				`{"sink-uri":"blackhole://","opts":{},"create-time":"2020-02-02T00:00:00.000000+00:00","start-ts":421980685886554116,"target-ts":0,"admin-job-type":0,"sort-engine":"memory","sort-dir":"","config":{"case-sensitive":true,"enable-old-value":false,"force-replicate":false,"check-gc-safe-point":true,"filter":{"rules":["*.*"],"ignore-txn-start-ts":null,"ddl-allow-list":null},"mounter":{"worker-num":16},"sink":{"dispatchers":null,"protocol":"open-protocol"},"cyclic-replication":{"enable":false,"replica-id":0,"filter-replica-ids":null,"id-buckets":0,"sync-ddl":false},"scheduler":{"type":"table-number","polling-time":-1},"consistent":{"level":"normal","storage":"local"}},"state":"normal","history":null,"error":null,"sync-point-enabled":false,"sync-point-interval":600000000000}`,
+				changefeedInfo,
 				`{"resolved-ts":421980720003809281,"checkpoint-ts":421980719742451713,"admin-job-type":0}`,
 				`{"checkpoint-ts":421980720003809281,"resolved-ts":421980720003809281,"count":0,"error":null}`,
 				`{"tables":{"45":{"start-ts":421980685886554116,"mark-table-id":0}},"operation":null,"admin-job-type":0}`,
@@ -271,7 +316,7 @@ func TestChangefeedStateUpdate(t *testing.T) {
 				``,
 			},
 			expected: ChangefeedReactorState{
-				ID:           "test1",
+				ID:           model.DefaultChangeFeedID("test1"),
 				Info:         nil,
 				Status:       nil,
 				TaskStatuses: map[model.CaptureID]*model.TaskStatus{},
@@ -296,7 +341,7 @@ func TestChangefeedStateUpdate(t *testing.T) {
 				`{"tables":{"47":{"start-ts":421980685886554116,"mark-table-id":0}},"operation":null,"admin-job-type":0}`,
 			},
 			expected: ChangefeedReactorState{
-				ID: "test1",
+				ID: model.DefaultChangeFeedID("test1"),
 				TaskStatuses: map[model.CaptureID]*model.TaskStatus{
 					"6bbc01c8-0605-4f86-a0f9-b3119109b225": {
 						Tables: map[int64]*model.TableReplicaInfo{47: {StartTs: 421980685886554116}},
@@ -308,7 +353,7 @@ func TestChangefeedStateUpdate(t *testing.T) {
 		},
 	}
 	for i, tc := range testCases {
-		state := NewChangefeedReactorState(tc.changefeedID)
+		state := NewChangefeedReactorState(model.DefaultChangeFeedID(tc.changefeedID))
 		for i, k := range tc.updateKey {
 			value := []byte(tc.updateValue[i])
 			if len(value) == 0 {
@@ -323,7 +368,7 @@ func TestChangefeedStateUpdate(t *testing.T) {
 }
 
 func TestPatchInfo(t *testing.T) {
-	state := NewChangefeedReactorState("test1")
+	state := NewChangefeedReactorState(model.DefaultChangeFeedID("test1"))
 	stateTester := NewReactorStateTester(t, state, nil)
 	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 		require.Nil(t, info)
@@ -339,7 +384,6 @@ func TestPatchInfo(t *testing.T) {
 			Mounter:    defaultConfig.Mounter,
 			Sink:       defaultConfig.Sink,
 			Cyclic:     defaultConfig.Cyclic,
-			Scheduler:  defaultConfig.Scheduler,
 			Consistent: defaultConfig.Consistent,
 		},
 	})
@@ -357,7 +401,6 @@ func TestPatchInfo(t *testing.T) {
 			Mounter:    defaultConfig.Mounter,
 			Sink:       defaultConfig.Sink,
 			Cyclic:     defaultConfig.Cyclic,
-			Scheduler:  defaultConfig.Scheduler,
 			Consistent: defaultConfig.Consistent,
 		},
 	})
@@ -369,7 +412,7 @@ func TestPatchInfo(t *testing.T) {
 }
 
 func TestPatchStatus(t *testing.T) {
-	state := NewChangefeedReactorState("test1")
+	state := NewChangefeedReactorState(model.DefaultChangeFeedID("test1"))
 	stateTester := NewReactorStateTester(t, state, nil)
 	state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
 		require.Nil(t, status)
@@ -391,7 +434,7 @@ func TestPatchStatus(t *testing.T) {
 }
 
 func TestPatchTaskPosition(t *testing.T) {
-	state := NewChangefeedReactorState("test1")
+	state := NewChangefeedReactorState(model.DefaultChangeFeedID("test1"))
 	stateTester := NewReactorStateTester(t, state, nil)
 	captureID1 := "capture1"
 	captureID2 := "capture2"
@@ -453,90 +496,6 @@ func TestPatchTaskPosition(t *testing.T) {
 	})
 }
 
-func TestPatchTaskStatus(t *testing.T) {
-	state := NewChangefeedReactorState("test1")
-	stateTester := NewReactorStateTester(t, state, nil)
-	captureID1 := "capture1"
-	captureID2 := "capture2"
-	state.PatchTaskStatus(captureID1, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
-		require.Nil(t, status)
-		return &model.TaskStatus{
-			Tables: map[model.TableID]*model.TableReplicaInfo{45: {StartTs: 1}},
-		}, true, nil
-	})
-	state.PatchTaskStatus(captureID2, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
-		require.Nil(t, status)
-		return &model.TaskStatus{
-			Tables: map[model.TableID]*model.TableReplicaInfo{46: {StartTs: 1}},
-		}, true, nil
-	})
-	stateTester.MustApplyPatches()
-	require.Equal(t, state.TaskStatuses, map[model.CaptureID]*model.TaskStatus{
-		captureID1: {Tables: map[model.TableID]*model.TableReplicaInfo{45: {StartTs: 1}}},
-		captureID2: {Tables: map[model.TableID]*model.TableReplicaInfo{46: {StartTs: 1}}},
-	})
-	state.PatchTaskStatus(captureID1, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
-		status.Tables[46] = &model.TableReplicaInfo{StartTs: 2}
-		return status, true, nil
-	})
-	state.PatchTaskStatus(captureID2, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
-		status.Tables[46].StartTs++
-		return status, true, nil
-	})
-	stateTester.MustApplyPatches()
-	require.Equal(t, state.TaskStatuses, map[model.CaptureID]*model.TaskStatus{
-		captureID1: {Tables: map[model.TableID]*model.TableReplicaInfo{45: {StartTs: 1}, 46: {StartTs: 2}}},
-		captureID2: {Tables: map[model.TableID]*model.TableReplicaInfo{46: {StartTs: 2}}},
-	})
-	state.PatchTaskStatus(captureID2, func(status *model.TaskStatus) (*model.TaskStatus, bool, error) {
-		return nil, true, nil
-	})
-	stateTester.MustApplyPatches()
-	require.Equal(t, state.TaskStatuses, map[model.CaptureID]*model.TaskStatus{
-		captureID1: {Tables: map[model.TableID]*model.TableReplicaInfo{45: {StartTs: 1}, 46: {StartTs: 2}}},
-	})
-}
-
-func TestPatchTaskWorkload(t *testing.T) {
-	state := NewChangefeedReactorState("test1")
-	stateTester := NewReactorStateTester(t, state, nil)
-	captureID1 := "capture1"
-	captureID2 := "capture2"
-	state.PatchTaskWorkload(captureID1, func(workload model.TaskWorkload) (model.TaskWorkload, bool, error) {
-		require.Nil(t, workload)
-		return model.TaskWorkload{45: {Workload: 1}}, true, nil
-	})
-	state.PatchTaskWorkload(captureID2, func(workload model.TaskWorkload) (model.TaskWorkload, bool, error) {
-		require.Nil(t, workload)
-		return model.TaskWorkload{46: {Workload: 1}}, true, nil
-	})
-	stateTester.MustApplyPatches()
-	require.Equal(t, state.Workloads, map[model.CaptureID]model.TaskWorkload{
-		captureID1: {45: {Workload: 1}},
-		captureID2: {46: {Workload: 1}},
-	})
-	state.PatchTaskWorkload(captureID1, func(workload model.TaskWorkload) (model.TaskWorkload, bool, error) {
-		workload[46] = model.WorkloadInfo{Workload: 2}
-		return workload, true, nil
-	})
-	state.PatchTaskWorkload(captureID2, func(workload model.TaskWorkload) (model.TaskWorkload, bool, error) {
-		workload[45] = model.WorkloadInfo{Workload: 3}
-		return workload, true, nil
-	})
-	stateTester.MustApplyPatches()
-	require.Equal(t, state.Workloads, map[model.CaptureID]model.TaskWorkload{
-		captureID1: {45: {Workload: 1}, 46: {Workload: 2}},
-		captureID2: {45: {Workload: 3}, 46: {Workload: 1}},
-	})
-	state.PatchTaskWorkload(captureID2, func(workload model.TaskWorkload) (model.TaskWorkload, bool, error) {
-		return nil, true, nil
-	})
-	stateTester.MustApplyPatches()
-	require.Equal(t, state.Workloads, map[model.CaptureID]model.TaskWorkload{
-		captureID1: {45: {Workload: 1}, 46: {Workload: 2}},
-	})
-}
-
 func TestGlobalStateUpdate(t *testing.T) {
 	testCases := []struct {
 		updateKey   []string
@@ -567,16 +526,16 @@ func TestGlobalStateUpdate(t *testing.T) {
 					AdvertiseAddr: "127.0.0.1:8300",
 				}},
 				Changefeeds: map[model.ChangeFeedID]*ChangefeedReactorState{
-					"test1": {
-						ID:           "test1",
+					model.DefaultChangeFeedID("test1"): {
+						ID:           model.DefaultChangeFeedID("test1"),
 						TaskStatuses: map[string]*model.TaskStatus{},
 						TaskPositions: map[model.CaptureID]*model.TaskPosition{
 							"6bbc01c8-0605-4f86-a0f9-b3119109b225": {CheckPointTs: 421980719742451713, ResolvedTs: 421980720003809281},
 						},
 						Workloads: map[string]model.TaskWorkload{},
 					},
-					"test2": {
-						ID:            "test2",
+					model.DefaultChangeFeedID("test2"): {
+						ID:            model.DefaultChangeFeedID("test2"),
 						TaskStatuses:  map[string]*model.TaskStatus{},
 						TaskPositions: map[model.CaptureID]*model.TaskPosition{},
 						Workloads: map[model.CaptureID]model.TaskWorkload{
@@ -616,8 +575,8 @@ func TestGlobalStateUpdate(t *testing.T) {
 				Owner:    map[string]struct{}{"22317526c4fc9a38": {}},
 				Captures: map[model.CaptureID]*model.CaptureInfo{},
 				Changefeeds: map[model.ChangeFeedID]*ChangefeedReactorState{
-					"test2": {
-						ID:            "test2",
+					model.DefaultChangeFeedID("test2"): {
+						ID:            model.DefaultChangeFeedID("test2"),
 						TaskStatuses:  map[string]*model.TaskStatus{},
 						TaskPositions: map[model.CaptureID]*model.TaskPosition{},
 						Workloads: map[model.CaptureID]model.TaskWorkload{
@@ -674,7 +633,7 @@ func TestCaptureChangeHooks(t *testing.T) {
 }
 
 func TestCheckChangefeedNormal(t *testing.T) {
-	state := NewChangefeedReactorState("test1")
+	state := NewChangefeedReactorState(model.DefaultChangeFeedID("test1"))
 	stateTester := NewReactorStateTester(t, state, nil)
 	state.CheckChangefeedNormal()
 	stateTester.MustApplyPatches()

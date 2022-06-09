@@ -15,11 +15,14 @@ package syncer
 
 import (
 	"strings"
+
+	"github.com/pingcap/tidb/parser/model"
 )
 
 type Cond struct {
-	Table     *validateTableInfo
-	ColumnCnt int
+	TargetTbl string
+	Columns   []*model.ColumnInfo
+	PK        *model.IndexInfo
 	PkValues  [][]string
 }
 
@@ -35,17 +38,16 @@ func (c *Cond) GetArgs() []interface{} {
 
 func (c *Cond) GetWhere() string {
 	var b strings.Builder
-	pk := c.Table.PrimaryKey
-	isOneKey := len(pk.Columns) == 1
+	isOneKey := len(c.PK.Columns) == 1
 	if isOneKey {
-		b.WriteString(pk.Columns[0].Name.O)
+		b.WriteString(c.PK.Columns[0].Name.O)
 	} else {
 		b.WriteString("(")
-		for i := 0; i < len(pk.Columns); i++ {
+		for i := 0; i < len(c.PK.Columns); i++ {
 			if i != 0 {
 				b.WriteString(",")
 			}
-			b.WriteString(pk.Columns[i].Name.O)
+			b.WriteString(c.PK.Columns[i].Name.O)
 		}
 		b.WriteString(")")
 	}
@@ -56,7 +58,7 @@ func (c *Cond) GetWhere() string {
 		}
 		if !isOneKey {
 			b.WriteString("(")
-			for j := 0; j < len(pk.Columns); j++ {
+			for j := 0; j < len(c.PK.Columns); j++ {
 				if j != 0 {
 					b.WriteString(",")
 				}

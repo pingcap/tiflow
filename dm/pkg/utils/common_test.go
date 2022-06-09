@@ -17,13 +17,18 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"sync"
+	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	. "github.com/pingcap/check"
-	"github.com/pingcap/tidb-tools/pkg/filter"
-	regexprrouter "github.com/pingcap/tidb-tools/pkg/regexpr-router"
-	router "github.com/pingcap/tidb-tools/pkg/table-router"
 	"github.com/pingcap/tidb/parser"
+	"github.com/pingcap/tidb/util/filter"
+	regexprrouter "github.com/pingcap/tidb/util/regexpr-router"
+	router "github.com/pingcap/tidb/util/table-router"
+	"go.uber.org/zap"
+
+	"github.com/pingcap/tiflow/dm/pkg/log"
 )
 
 var _ = Suite(&testCommonSuite{})
@@ -256,4 +261,17 @@ func (s *testCommonSuite) TestNonRepeatStringsEqual(c *C) {
 	c.Assert(NonRepeatStringsEqual([]string{"1", "2"}, []string{"2", "1"}), IsTrue)
 	c.Assert(NonRepeatStringsEqual([]string{}, []string{"1"}), IsFalse)
 	c.Assert(NonRepeatStringsEqual([]string{"1", "2"}, []string{"2", "3"}), IsFalse)
+}
+
+func TestGoLogWrapper(t *testing.T) {
+	var wg sync.WaitGroup
+	wg.Add(1)
+	// to avoid data race since there's concurrent test case writing log.L()
+	l := log.Logger{Logger: zap.NewNop()}
+	go GoLogWrapper(l, func() {
+		defer wg.Done()
+		panic("should be captured")
+	})
+	wg.Wait()
+	// if GoLogWrapper didn't catch it, this case will fail.
 }

@@ -1,0 +1,39 @@
+@startuml
+autonumber
+
+hnote over Owner_A
+owner-rev = 1
+endhnote
+Owner_A -> Processor: DispatchTable(Table 1)
+hnote over Processor: starts Table 1
+Owner_A -> Processor: DispatchTable(Table 2)
+hnote over Processor: starts Table 2
+
+hnote over Owner_A
+abnormal delay
+causes Etcd session loss
+endhnote
+
+hnote over Owner_B
+owner-rev = 2
+endhnote
+Owner_B -> Processor: Announce(owner-rev = 2)
+
+hnote over Processor
+recognizes Owner_B now
+endhnote
+Processor --> Owner_B: Sync(Tables 1 and 2 are being added)
+
+note left Owner_A
+thinking it
+was still owner
+endnote
+Owner_A ->x Processor: DispatchTable(Table 3)
+note right Processor: rejects stale owner
+
+hnote over Processor: Table 1 ready
+Processor --> Owner_B: DispatchTableResponse(Table 1)
+hnote over Processor: Table 2 ready
+Processor --> Owner_B: DispatchTableResponse(Table 2)
+
+@enduml

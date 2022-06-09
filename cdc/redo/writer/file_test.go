@@ -26,8 +26,10 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/pingcap/errors"
 	mockstorage "github.com/pingcap/tidb/br/pkg/mock/storage"
+	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo/common"
 	"github.com/pingcap/tiflow/pkg/leakutil"
+	"github.com/pingcap/tiflow/pkg/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/uber-go/atomic"
 )
@@ -47,93 +49,161 @@ func TestWriterWrite(t *testing.T) {
 	require.Nil(t, err)
 	defer os.RemoveAll(dir)
 
-	w := &Writer{
-		cfg: &FileWriterConfig{
-			MaxLogSize:   10,
-			Dir:          dir,
-			ChangeFeedID: "test-cf",
-			CaptureID:    "cp",
-			FileType:     common.DefaultRowLogFileType,
-			CreateTime:   time.Date(2000, 1, 1, 1, 1, 1, 1, &time.Location{}),
+	cfs := []model.ChangeFeedID{
+		model.DefaultChangeFeedID("test-cf"),
+		{
+			Namespace: "abcd",
+			ID:        "test-cf",
 		},
-		uint64buf:              make([]byte, 8),
-		running:                *atomic.NewBool(true),
-		metricWriteBytes:       redoWriteBytesGauge.WithLabelValues("test-cf"),
-		metricFsyncDuration:    redoFsyncDurationHistogram.WithLabelValues("test-cf"),
-		metricFlushAllDuration: redoFlushAllDurationHistogram.WithLabelValues("test-cf"),
 	}
 
-	w.eventCommitTS.Store(1)
-	_, err = w.Write([]byte("tes1t11111"))
-	require.Nil(t, err)
-	// create a .tmp file
-	fileName := fmt.Sprintf("%s_%s_%d_%s_%d%s", w.cfg.CaptureID, w.cfg.ChangeFeedID, w.cfg.CreateTime.Unix(), w.cfg.FileType, 1, common.LogEXT) + common.TmpEXT
-	path := filepath.Join(w.cfg.Dir, fileName)
-	info, err := os.Stat(path)
-	require.Nil(t, err)
-	require.Equal(t, fileName, info.Name())
-
-	w.eventCommitTS.Store(12)
-	_, err = w.Write([]byte("tt"))
-	require.Nil(t, err)
-	w.eventCommitTS.Store(22)
-	_, err = w.Write([]byte("t"))
-	require.Nil(t, err)
-
-	// after rotate, rename to .log
-	fileName = fmt.Sprintf("%s_%s_%d_%s_%d%s", w.cfg.CaptureID, w.cfg.ChangeFeedID, w.cfg.CreateTime.Unix(), w.cfg.FileType, 1, common.LogEXT)
-	path = filepath.Join(w.cfg.Dir, fileName)
-	info, err = os.Stat(path)
-	require.Nil(t, err)
-	require.Equal(t, fileName, info.Name())
-	// create a .tmp file with first eventCommitTS as name
-	fileName = fmt.Sprintf("%s_%s_%d_%s_%d%s", w.cfg.CaptureID, w.cfg.ChangeFeedID, w.cfg.CreateTime.Unix(), w.cfg.FileType, 12, common.LogEXT) + common.TmpEXT
-	path = filepath.Join(w.cfg.Dir, fileName)
-	info, err = os.Stat(path)
-	require.Nil(t, err)
-	require.Equal(t, fileName, info.Name())
-	err = w.Close()
-	require.Nil(t, err)
-	require.False(t, w.IsRunning())
-	// safe close, rename to .log with max eventCommitTS as name
-	fileName = fmt.Sprintf("%s_%s_%d_%s_%d%s", w.cfg.CaptureID, w.cfg.ChangeFeedID, w.cfg.CreateTime.Unix(), w.cfg.FileType, 22, common.LogEXT)
-	path = filepath.Join(w.cfg.Dir, fileName)
-	info, err = os.Stat(path)
-	require.Nil(t, err)
-	require.Equal(t, fileName, info.Name())
-
-	w1 := &Writer{
-		cfg: &FileWriterConfig{
-			MaxLogSize:   10,
-			Dir:          dir,
-			ChangeFeedID: "test-cf11",
-			CaptureID:    "cp",
-			FileType:     common.DefaultRowLogFileType,
-			CreateTime:   time.Date(2000, 1, 1, 1, 1, 1, 1, &time.Location{}),
+	cf11s := []model.ChangeFeedID{
+		model.DefaultChangeFeedID("test-cf11"),
+		{
+			Namespace: "abcd",
+			ID:        "test-cf11",
 		},
-		uint64buf:              make([]byte, 8),
-		running:                *atomic.NewBool(true),
-		metricWriteBytes:       redoWriteBytesGauge.WithLabelValues("test-cf11"),
-		metricFsyncDuration:    redoFsyncDurationHistogram.WithLabelValues("test-cf11"),
-		metricFlushAllDuration: redoFlushAllDurationHistogram.WithLabelValues("test-cf11"),
 	}
 
-	w1.eventCommitTS.Store(1)
-	_, err = w1.Write([]byte("tes1t11111"))
-	require.Nil(t, err)
-	// create a .tmp file
-	fileName = fmt.Sprintf("%s_%s_%d_%s_%d%s", w1.cfg.CaptureID, w1.cfg.ChangeFeedID, w1.cfg.CreateTime.Unix(), w1.cfg.FileType, 1, common.LogEXT) + common.TmpEXT
-	path = filepath.Join(w1.cfg.Dir, fileName)
-	info, err = os.Stat(path)
-	require.Nil(t, err)
-	require.Equal(t, fileName, info.Name())
-	// change the file name, should cause CLose err
-	err = os.Rename(path, path+"new")
-	require.Nil(t, err)
-	err = w1.Close()
-	require.NotNil(t, err)
-	// closed anyway
-	require.False(t, w1.IsRunning())
+	for idx, cf := range cfs {
+		uuidGen := uuid.NewConstGenerator("const-uuid")
+		w := &Writer{
+			cfg: &FileWriterConfig{
+				MaxLogSize:   10,
+				Dir:          dir,
+				ChangeFeedID: cf,
+				CaptureID:    "cp",
+				FileType:     common.DefaultRowLogFileType,
+				CreateTime:   time.Date(2000, 1, 1, 1, 1, 1, 1, &time.Location{}),
+			},
+			uint64buf: make([]byte, 8),
+			running:   *atomic.NewBool(true),
+			metricWriteBytes: redoWriteBytesGauge.
+				WithLabelValues("default", "test-cf"),
+			metricFsyncDuration: redoFsyncDurationHistogram.
+				WithLabelValues("default", "test-cf"),
+			metricFlushAllDuration: redoFlushAllDurationHistogram.
+				WithLabelValues("default", "test-cf"),
+			uuidGenerator: uuidGen,
+		}
+
+		w.eventCommitTS.Store(1)
+		_, err = w.Write([]byte("tes1t11111"))
+		require.Nil(t, err)
+		var fileName string
+		// create a .tmp file
+		if w.cfg.ChangeFeedID.Namespace == model.DefaultNamespace {
+			fileName = fmt.Sprintf(common.RedoLogFileFormatV1, w.cfg.CaptureID,
+				w.cfg.ChangeFeedID.ID,
+				w.cfg.FileType, 1, uuidGen.NewString(), common.LogEXT) + common.TmpEXT
+		} else {
+			fileName = fmt.Sprintf(common.RedoLogFileFormatV2, w.cfg.CaptureID,
+				w.cfg.ChangeFeedID.Namespace, w.cfg.ChangeFeedID.ID,
+				w.cfg.FileType, 1, uuidGen.NewString(), common.LogEXT) + common.TmpEXT
+		}
+		path := filepath.Join(w.cfg.Dir, fileName)
+		info, err := os.Stat(path)
+		require.Nil(t, err)
+		require.Equal(t, fileName, info.Name())
+
+		w.eventCommitTS.Store(12)
+		_, err = w.Write([]byte("tt"))
+		require.Nil(t, err)
+		w.eventCommitTS.Store(22)
+		_, err = w.Write([]byte("t"))
+		require.Nil(t, err)
+
+		// after rotate, rename to .log
+		if w.cfg.ChangeFeedID.Namespace == model.DefaultNamespace {
+			fileName = fmt.Sprintf(common.RedoLogFileFormatV1, w.cfg.CaptureID,
+				w.cfg.ChangeFeedID.ID,
+				w.cfg.FileType, 1, uuidGen.NewString(), common.LogEXT)
+		} else {
+			fileName = fmt.Sprintf(common.RedoLogFileFormatV2, w.cfg.CaptureID,
+				w.cfg.ChangeFeedID.Namespace, w.cfg.ChangeFeedID.ID,
+				w.cfg.FileType, 1, uuidGen.NewString(), common.LogEXT)
+		}
+		path = filepath.Join(w.cfg.Dir, fileName)
+		info, err = os.Stat(path)
+		require.Nil(t, err)
+		require.Equal(t, fileName, info.Name())
+		// create a .tmp file with first eventCommitTS as name
+		if w.cfg.ChangeFeedID.Namespace == model.DefaultNamespace {
+			fileName = fmt.Sprintf(common.RedoLogFileFormatV1, w.cfg.CaptureID,
+				w.cfg.ChangeFeedID.ID,
+				w.cfg.FileType, 12, uuidGen.NewString(), common.LogEXT) + common.TmpEXT
+		} else {
+			fileName = fmt.Sprintf(common.RedoLogFileFormatV2, w.cfg.CaptureID,
+				w.cfg.ChangeFeedID.Namespace, w.cfg.ChangeFeedID.ID,
+				w.cfg.FileType, 12, uuidGen.NewString(), common.LogEXT) + common.TmpEXT
+		}
+		path = filepath.Join(w.cfg.Dir, fileName)
+		info, err = os.Stat(path)
+		require.Nil(t, err)
+		require.Equal(t, fileName, info.Name())
+		err = w.Close()
+		require.Nil(t, err)
+		require.False(t, w.IsRunning())
+		// safe close, rename to .log with max eventCommitTS as name
+		if w.cfg.ChangeFeedID.Namespace == model.DefaultNamespace {
+			fileName = fmt.Sprintf(common.RedoLogFileFormatV1, w.cfg.CaptureID,
+				w.cfg.ChangeFeedID.ID,
+				w.cfg.FileType, 22, uuidGen.NewString(), common.LogEXT)
+		} else {
+			fileName = fmt.Sprintf(common.RedoLogFileFormatV2, w.cfg.CaptureID,
+				w.cfg.ChangeFeedID.Namespace, w.cfg.ChangeFeedID.ID,
+				w.cfg.FileType, 22, uuidGen.NewString(), common.LogEXT)
+		}
+		path = filepath.Join(w.cfg.Dir, fileName)
+		info, err = os.Stat(path)
+		require.Nil(t, err)
+		require.Equal(t, fileName, info.Name())
+
+		w1 := &Writer{
+			cfg: &FileWriterConfig{
+				MaxLogSize:   10,
+				Dir:          dir,
+				ChangeFeedID: cf11s[idx],
+				CaptureID:    "cp",
+				FileType:     common.DefaultRowLogFileType,
+				CreateTime:   time.Date(2000, 1, 1, 1, 1, 1, 1, &time.Location{}),
+			},
+			uint64buf: make([]byte, 8),
+			running:   *atomic.NewBool(true),
+			metricWriteBytes: redoWriteBytesGauge.
+				WithLabelValues("default", "test-cf11"),
+			metricFsyncDuration: redoFsyncDurationHistogram.
+				WithLabelValues("default", "test-cf11"),
+			metricFlushAllDuration: redoFlushAllDurationHistogram.
+				WithLabelValues("default", "test-cf11"),
+			uuidGenerator: uuidGen,
+		}
+
+		w1.eventCommitTS.Store(1)
+		_, err = w1.Write([]byte("tes1t11111"))
+		require.Nil(t, err)
+		// create a .tmp file
+		if w1.cfg.ChangeFeedID.Namespace == model.DefaultNamespace {
+			fileName = fmt.Sprintf(common.RedoLogFileFormatV1, w1.cfg.CaptureID,
+				w1.cfg.ChangeFeedID.ID,
+				w1.cfg.FileType, 1, uuidGen.NewString(), common.LogEXT) + common.TmpEXT
+		} else {
+			fileName = fmt.Sprintf(common.RedoLogFileFormatV2, w1.cfg.CaptureID,
+				w1.cfg.ChangeFeedID.Namespace, w1.cfg.ChangeFeedID.ID,
+				w1.cfg.FileType, 1, uuidGen.NewString(), common.LogEXT) + common.TmpEXT
+		}
+		path = filepath.Join(w1.cfg.Dir, fileName)
+		info, err = os.Stat(path)
+		require.Nil(t, err)
+		require.Equal(t, fileName, info.Name())
+		// change the file name, should cause CLose err
+		err = os.Rename(path, path+"new")
+		require.Nil(t, err)
+		err = w1.Close()
+		require.NotNil(t, err)
+		// closed anyway
+		require.False(t, w1.IsRunning())
+	}
 }
 
 func TestWriterGC(t *testing.T) {
@@ -141,27 +211,39 @@ func TestWriterGC(t *testing.T) {
 	require.Nil(t, err)
 	defer os.RemoveAll(dir)
 
+	uuidGen := uuid.NewConstGenerator("const-uuid")
 	controller := gomock.NewController(t)
 	mockStorage := mockstorage.NewMockExternalStorage(controller)
-	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_test_946688461_row_1.log.tmp", gomock.Any()).Return(nil).Times(1)
-	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_test_946688461_row_1.log", gomock.Any()).Return(nil).Times(1)
-	mockStorage.EXPECT().DeleteFile(gomock.Any(), "cp_test_946688461_row_1.log.tmp").Return(nil).Times(1)
+	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_test_row_1_const-uuid.log.tmp",
+		gomock.Any()).Return(nil).Times(1)
+	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_test_row_1_const-uuid.log",
+		gomock.Any()).Return(nil).Times(1)
+	mockStorage.EXPECT().DeleteFile(gomock.Any(), "cp_test_row_1_const-uuid.log.tmp").
+		Return(nil).Times(1)
 
-	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_test_946688461_row_2.log.tmp", gomock.Any()).Return(nil).Times(1)
-	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_test_946688461_row_2.log", gomock.Any()).Return(nil).Times(1)
-	mockStorage.EXPECT().DeleteFile(gomock.Any(), "cp_test_946688461_row_2.log.tmp").Return(nil).Times(1)
+	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_test_row_2_const-uuid.log.tmp",
+		gomock.Any()).Return(nil).Times(1)
+	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_test_row_2_const-uuid.log",
+		gomock.Any()).Return(nil).Times(1)
+	mockStorage.EXPECT().DeleteFile(gomock.Any(), "cp_test_row_2_const-uuid.log.tmp").
+		Return(nil).Times(1)
 
-	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_test_946688461_row_3.log.tmp", gomock.Any()).Return(nil).Times(1)
-	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_test_946688461_row_3.log", gomock.Any()).Return(nil).Times(1)
-	mockStorage.EXPECT().DeleteFile(gomock.Any(), "cp_test_946688461_row_3.log.tmp").Return(nil).Times(1)
+	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_test_row_3_const-uuid.log.tmp",
+		gomock.Any()).Return(nil).Times(1)
+	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_test_row_3_const-uuid.log",
+		gomock.Any()).Return(nil).Times(1)
+	mockStorage.EXPECT().DeleteFile(gomock.Any(), "cp_test_row_3_const-uuid.log.tmp").
+		Return(nil).Times(1)
 
-	mockStorage.EXPECT().DeleteFile(gomock.Any(), "cp_test_946688461_row_1.log").Return(errors.New("ignore err")).Times(1)
-	mockStorage.EXPECT().DeleteFile(gomock.Any(), "cp_test_946688461_row_2.log").Return(errors.New("ignore err")).Times(1)
+	mockStorage.EXPECT().DeleteFile(gomock.Any(), "cp_test_row_1_const-uuid.log").
+		Return(errors.New("ignore err")).Times(1)
+	mockStorage.EXPECT().DeleteFile(gomock.Any(), "cp_test_row_2_const-uuid.log").
+		Return(errors.New("ignore err")).Times(1)
 
 	megabyte = 1
 	cfg := &FileWriterConfig{
 		Dir:               dir,
-		ChangeFeedID:      "test",
+		ChangeFeedID:      model.DefaultChangeFeedID("test"),
 		CaptureID:         "cp",
 		MaxLogSize:        10,
 		FileType:          common.DefaultRowLogFileType,
@@ -170,12 +252,16 @@ func TestWriterGC(t *testing.T) {
 		S3Storage:         true,
 	}
 	w := &Writer{
-		cfg:                    cfg,
-		uint64buf:              make([]byte, 8),
-		storage:                mockStorage,
-		metricWriteBytes:       redoWriteBytesGauge.WithLabelValues(cfg.ChangeFeedID),
-		metricFsyncDuration:    redoFsyncDurationHistogram.WithLabelValues(cfg.ChangeFeedID),
-		metricFlushAllDuration: redoFlushAllDurationHistogram.WithLabelValues(cfg.ChangeFeedID),
+		cfg:       cfg,
+		uint64buf: make([]byte, 8),
+		storage:   mockStorage,
+		metricWriteBytes: redoWriteBytesGauge.
+			WithLabelValues(cfg.ChangeFeedID.Namespace, cfg.ChangeFeedID.ID),
+		metricFsyncDuration: redoFsyncDurationHistogram.
+			WithLabelValues(cfg.ChangeFeedID.Namespace, cfg.ChangeFeedID.ID),
+		metricFlushAllDuration: redoFlushAllDurationHistogram.
+			WithLabelValues(cfg.ChangeFeedID.Namespace, cfg.ChangeFeedID.ID),
+		uuidGenerator: uuidGen,
 	}
 	w.running.Store(true)
 	w.eventCommitTS.Store(1)
@@ -236,11 +322,14 @@ func TestNewWriter(t *testing.T) {
 	require.Nil(t, err)
 	defer os.RemoveAll(dir)
 
+	uuidGen := uuid.NewConstGenerator("const-uuid")
 	w, err := NewWriter(context.Background(), &FileWriterConfig{
 		Dir:       "sdfsf",
 		S3Storage: true,
 		S3URI:     *s3URI,
-	})
+	},
+		WithUUIDGenerator(func() uuid.Generator { return uuidGen }),
+	)
 	require.Nil(t, err)
 	time.Sleep(time.Duration(defaultFlushIntervalInMs+1) * time.Millisecond)
 	err = w.Close()
@@ -249,25 +338,36 @@ func TestNewWriter(t *testing.T) {
 
 	controller := gomock.NewController(t)
 	mockStorage := mockstorage.NewMockExternalStorage(controller)
-	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_test_946688461_ddl_0.log.tmp", gomock.Any()).Return(nil).Times(2)
-	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_test_946688461_ddl_0.log", gomock.Any()).Return(nil).Times(1)
-	mockStorage.EXPECT().DeleteFile(gomock.Any(), "cp_test_946688461_ddl_0.log.tmp").Return(nil).Times(1)
+	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_abcd_test_ddl_0_const-uuid.log.tmp",
+		gomock.Any()).Return(nil).Times(2)
+	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_abcd_test_ddl_0_const-uuid.log",
+		gomock.Any()).Return(nil).Times(1)
+	mockStorage.EXPECT().DeleteFile(gomock.Any(), "cp_abcd_test_ddl_0_const-uuid.log.tmp").
+		Return(nil).Times(1)
 
+	changefeed := model.ChangeFeedID{
+		Namespace: "abcd",
+		ID:        "test",
+	}
 	w = &Writer{
 		cfg: &FileWriterConfig{
 			Dir:          dir,
 			CaptureID:    "cp",
-			ChangeFeedID: "test",
+			ChangeFeedID: changefeed,
 			FileType:     common.DefaultDDLLogFileType,
 			CreateTime:   time.Date(2000, 1, 1, 1, 1, 1, 1, &time.Location{}),
 			S3Storage:    true,
 			MaxLogSize:   defaultMaxLogSize,
 		},
-		uint64buf:              make([]byte, 8),
-		storage:                mockStorage,
-		metricWriteBytes:       redoWriteBytesGauge.WithLabelValues("test"),
-		metricFsyncDuration:    redoFsyncDurationHistogram.WithLabelValues("test"),
-		metricFlushAllDuration: redoFlushAllDurationHistogram.WithLabelValues("test"),
+		uint64buf: make([]byte, 8),
+		storage:   mockStorage,
+		metricWriteBytes: redoWriteBytesGauge.
+			WithLabelValues("default", "test"),
+		metricFsyncDuration: redoFsyncDurationHistogram.
+			WithLabelValues("default", "test"),
+		metricFlushAllDuration: redoFlushAllDurationHistogram.
+			WithLabelValues("default", "test"),
+		uuidGenerator: uuidGen,
 	}
 	w.running.Store(true)
 	_, err = w.Write([]byte("test"))
@@ -280,4 +380,73 @@ func TestNewWriter(t *testing.T) {
 	require.Nil(t, err)
 	require.Equal(t, w.running.Load(), false)
 	time.Sleep(time.Duration(defaultFlushIntervalInMs+1) * time.Millisecond)
+}
+
+func TestRotateFile(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	_, err := NewWriter(ctx, nil)
+	require.NotNil(t, err)
+
+	controller := gomock.NewController(t)
+	mockStorage := mockstorage.NewMockExternalStorage(controller)
+
+	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_abcd_test_row_0_uuid-1.log.tmp",
+		gomock.Any()).Return(nil).Times(1)
+	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_abcd_test_row_0_uuid-2.log",
+		gomock.Any()).Return(nil).Times(1)
+	mockStorage.EXPECT().DeleteFile(gomock.Any(), "cp_abcd_test_row_0_uuid-1.log.tmp").
+		Return(nil).Times(1)
+
+	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_abcd_test_row_0_uuid-3.log.tmp",
+		gomock.Any()).Return(nil).Times(1)
+	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_abcd_test_row_100_uuid-4.log",
+		gomock.Any()).Return(nil).Times(1)
+	mockStorage.EXPECT().DeleteFile(gomock.Any(), "cp_abcd_test_row_0_uuid-3.log.tmp").
+		Return(nil).Times(1)
+
+	dir := t.TempDir()
+	uuidGen := uuid.NewMock()
+	uuidGen.Push("uuid-1")
+	uuidGen.Push("uuid-2")
+	uuidGen.Push("uuid-3")
+	uuidGen.Push("uuid-4")
+	uuidGen.Push("uuid-5")
+	changefeed := model.ChangeFeedID{
+		Namespace: "abcd",
+		ID:        "test",
+	}
+	w := &Writer{
+		cfg: &FileWriterConfig{
+			Dir:          dir,
+			CaptureID:    "cp",
+			ChangeFeedID: changefeed,
+			FileType:     common.DefaultRowLogFileType,
+			CreateTime:   time.Date(2000, 1, 1, 1, 1, 1, 1, &time.Location{}),
+			S3Storage:    true,
+			MaxLogSize:   defaultMaxLogSize,
+		},
+		uint64buf: make([]byte, 8),
+		metricWriteBytes: redoWriteBytesGauge.
+			WithLabelValues("default", "test"),
+		metricFsyncDuration: redoFsyncDurationHistogram.
+			WithLabelValues("default", "test"),
+		metricFlushAllDuration: redoFlushAllDurationHistogram.
+			WithLabelValues("default", "test"),
+		storage:       mockStorage,
+		uuidGenerator: uuidGen,
+	}
+
+	w.running.Store(true)
+	_, err = w.Write([]byte("test"))
+	require.Nil(t, err)
+
+	err = w.rotate()
+	require.Nil(t, err)
+
+	w.AdvanceTs(100)
+	_, err = w.Write([]byte("test"))
+	require.Nil(t, err)
+	err = w.rotate()
+	require.Nil(t, err)
 }

@@ -16,9 +16,13 @@
 package master
 
 import (
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/http/httputil"
+
+	"github.com/pingcap/failpoint"
 
 	ginmiddleware "github.com/deepmap/oapi-codegen/pkg/gin-middleware"
 	"github.com/gin-gonic/gin"
@@ -39,9 +43,8 @@ const (
 	docJSONBasePath = "/api/v1/dm.json"
 )
 
-// redirectRequestToLeaderMW a middleware auto redirect request to leader.
-// because the leader has some data in memory, only the leader can process the request.
-func (s *Server) redirectRequestToLeaderMW() gin.HandlerFunc {
+// reverseRequestToLeaderMW reverses request to leader.
+func (s *Server) reverseRequestToLeaderMW(tlsCfg *tls.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ctx2 := c.Request.Context()
 		isLeader, _ := s.isLeaderAndNeedForward(ctx2)
@@ -54,14 +57,36 @@ func (s *Server) redirectRequestToLeaderMW() gin.HandlerFunc {
 				_ = c.AbortWithError(http.StatusBadRequest, err)
 				return
 			}
-			c.Redirect(http.StatusTemporaryRedirect, fmt.Sprintf("http://%s%s", leaderOpenAPIAddr, c.Request.RequestURI))
-			c.AbortWithStatus(http.StatusTemporaryRedirect)
+
+			failpoint.Inject("MockNotSetTls", func() {
+				tlsCfg = nil
+			})
+			// simpleProxy just reverses to leader host
+			simpleProxy := httputil.ReverseProxy{
+				Director: func(req *http.Request) {
+					if tlsCfg != nil {
+						req.URL.Scheme = "https"
+					} else {
+						req.URL.Scheme = "http"
+					}
+					req.URL.Host = leaderOpenAPIAddr
+					req.Host = leaderOpenAPIAddr
+				},
+			}
+			if tlsCfg != nil {
+				transport := http.DefaultTransport.(*http.Transport).Clone()
+				transport.TLSClientConfig = tlsCfg
+				simpleProxy.Transport = transport
+			}
+			log.L().Info("reverse request to leader", zap.String("Request URL", c.Request.URL.String()), zap.String("leader", leaderOpenAPIAddr), zap.Bool("hasTLS", tlsCfg != nil))
+			simpleProxy.ServeHTTP(c.Writer, c.Request)
+			c.Abort()
 		}
 	}
 }
 
 // InitOpenAPIHandles init openapi handlers.
-func (s *Server) InitOpenAPIHandles() error {
+func (s *Server) InitOpenAPIHandles(tlsCfg *tls.Config) error {
 	swagger, err := openapi.GetSwagger()
 	if err != nil {
 		return err
@@ -73,7 +98,7 @@ func (s *Server) InitOpenAPIHandles() error {
 	// middlewares
 	r.Use(gin.Recovery())
 	r.Use(openapi.ZapLogger(log.L().WithFields(zap.String("component", "openapi")).Logger))
-	r.Use(s.redirectRequestToLeaderMW())
+	r.Use(s.reverseRequestToLeaderMW(tlsCfg))
 	r.Use(terrorHTTPErrorHandler())
 	// use validation middleware to check all requests against the OpenAPI schema.
 	r.Use(ginmiddleware.OapiRequestValidator(swagger))
@@ -85,10 +110,26 @@ func (s *Server) InitOpenAPIHandles() error {
 
 // GetDocJSON url is:(GET /api/v1/dm.json).
 func (s *Server) GetDocJSON(c *gin.Context) {
+	var masterURL string
+	if info, err := s.getClusterInfo(c.Request.Context()); err != nil {
+		_ = c.Error(err)
+		return
+	} else if info.Topology.MasterTopologyList != nil && len(*info.Topology.MasterTopologyList) > 0 {
+		masterTopos := *info.Topology.MasterTopologyList
+		protocol := "http"
+		if useTLS.Load() {
+			protocol = "https"
+		}
+		masterURL = fmt.Sprintf("%s://%s:%d", protocol, masterTopos[0].Host, masterTopos[0].Port)
+	}
 	swagger, err := openapi.GetSwagger()
 	if err != nil {
 		_ = c.Error(err)
 		return
+	} else if masterURL != "" {
+		for idx := range swagger.Servers {
+			swagger.Servers[idx].URL = masterURL
+		}
 	}
 	c.JSON(http.StatusOK, swagger)
 }
@@ -163,6 +204,31 @@ func (s *Server) DMAPIOfflineWorkerNode(c *gin.Context, workerName string) {
 		return
 	}
 	c.Status(http.StatusNoContent)
+}
+
+// DMAPIGetClusterInfo return cluster id of dm cluster url is: (GET /api/v1/cluster/info).
+func (s *Server) DMAPIGetClusterInfo(c *gin.Context) {
+	info, err := s.getClusterInfo(c.Request.Context())
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+	c.IndentedJSON(http.StatusOK, info)
+}
+
+// DMAPIGetClusterInfo return cluster id of dm cluster url is: (PUT /api/v1/cluster/info).
+func (s *Server) DMAPIUpdateClusterInfo(c *gin.Context) {
+	var req openapi.ClusterTopology
+	if err := c.Bind(&req); err != nil {
+		_ = c.Error(err)
+		return
+	}
+	info, err := s.updateClusterInfo(c.Request.Context(), &req)
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+	c.IndentedJSON(http.StatusOK, info)
 }
 
 // DMAPICreateSource url is:(POST /api/v1/sources).
@@ -388,12 +454,12 @@ func (s *Server) DMAPICreateTask(c *gin.Context) {
 		_ = c.Error(err)
 		return
 	}
-	task, err := s.createTask(c.Request.Context(), req)
+	res, err := s.createTask(c.Request.Context(), req)
 	if err != nil {
 		_ = c.Error(err)
 		return
 	}
-	c.IndentedJSON(http.StatusCreated, task)
+	c.IndentedJSON(http.StatusCreated, res)
 }
 
 // DMAPIUpdateTask url is: (PUT /api/v1/tasks/{task-name}).
@@ -403,12 +469,12 @@ func (s *Server) DMAPIUpdateTask(c *gin.Context, taskName string) {
 		_ = c.Error(err)
 		return
 	}
-	task, err := s.updateTask(c.Request.Context(), req)
+	res, err := s.updateTask(c.Request.Context(), req)
 	if err != nil {
 		_ = c.Error(err)
 		return
 	}
-	c.IndentedJSON(http.StatusOK, task)
+	c.IndentedJSON(http.StatusOK, res)
 }
 
 // DMAPIDeleteTask url is:(DELETE /api/v1/tasks).
@@ -842,13 +908,6 @@ func (s *Server) DMAPUpdateTaskTemplate(c *gin.Context, taskName string) {
 		return
 	}
 	c.IndentedJSON(http.StatusOK, task)
-}
-
-// DMAPIGetClusterInfo return cluster id of dm cluster.
-func (s *Server) DMAPIGetClusterInfo(c *gin.Context) {
-	r := &openapi.GetClusterInfoResponse{}
-	r.ClusterId = s.ClusterID()
-	c.IndentedJSON(http.StatusOK, r)
 }
 
 func terrorHTTPErrorHandler() gin.HandlerFunc {

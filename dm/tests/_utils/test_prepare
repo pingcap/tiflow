@@ -35,6 +35,28 @@ function cleanup_process() {
     wait_process_exit dm-syncer.test
 }
 
+function cleanup_tidb_server(){
+    tidb_server_num=$(ps aux >temp && grep "tidb-server" temp | wc -l && rm temp)
+    echo "tidb_server_num tidb-server alive"
+    pkill -hup tidb-server 2>/dev/null || true
+
+    wait_process_exit tidb-server
+}
+
+function kill_process() {
+    keyword=$1
+    ps aux | grep $keyword | grep -v 'grep' | awk '{print $2}' | xargs kill || true
+    wait_process_exit $keyword
+}
+
+function kill_dm_master() {
+    kill_process dm-master.test
+}
+
+function kill_dm_worker() {
+    kill_process dm-worker.test
+}
+
 function wait_pattern_exit() {
     pattern=$1
     while true
@@ -191,8 +213,15 @@ function run_case() {
     done
     DM_${case}_CASE $args
 
-    run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-            "stop-task test"
+    if [[ "$task_conf" == *"single"* ]]; then
+        run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+            "stop-task test" \
+            "\"result\": true" 2
+    elif [[ "$task_conf" == *"double"* ]]; then
+        run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+            "stop-task test" \
+            "\"result\": true" 3
+    fi
 
     eval ${clean_table_cmd}
 
@@ -266,6 +295,27 @@ function run_sql_tidb_with_retry_times() {
     fi
 }
 
+# shortcut for run tidb sql and check result with retry
+# $1: table
+# $2: fields numbers
+# $3: value starts range(closed interval)
+# $4: value ends range(closed interval)
+# $5: database host
+# $6: database port
+# $7: database password
+function run_sql_with_txn() {
+    template="(?"
+    for _ in {2..$2..1}
+    do
+        template+=",?"
+    done
+    template+=")"
+    echo "begin;" | tee $WORK_DIR/tmp.sql
+    seq $3 $4 | xargs -I\? echo "insert into $1 values $template;" | tee -a $WORK_DIR/tmp.sql
+    echo "commit;" | tee -a $WORK_DIR/tmp.sql
+    run_sql_file $WORK_DIR/tmp.sql $5 $6 $7
+}
+
 # shortcut for check log contain with retry
 function check_log_contain_with_retry() {
     text=$1
@@ -275,7 +325,7 @@ function check_log_contain_with_retry() {
         log2=$3
     fi
     rc=0
-    for ((k=1;k<31;k++)); do
+    for ((k=1;k<61;k++)); do
         if [[ ! -f $log1 ]]; then
             sleep 2
             echo "check log contain failed $k-th time (file not exist), retry later"
@@ -311,15 +361,18 @@ function check_log_contain_with_retry() {
 function init_cluster(){
     run_dm_master $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master.toml
     check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT
-    run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
-    check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
-    run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
-    check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
+
     cp $cur/conf/source1.yaml $WORK_DIR/source1.yaml
     cp $cur/conf/source2.yaml $WORK_DIR/source2.yaml
     sed -i "/relay-binlog-name/i\relay-dir: $WORK_DIR/worker1/relay_log" $WORK_DIR/source1.yaml
     sed -i "/relay-binlog-name/i\relay-dir: $WORK_DIR/worker2/relay_log" $WORK_DIR/source2.yaml
+
+    run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
+    check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
     dmctl_operate_source create $WORK_DIR/source1.yaml $SOURCE_ID1
+
+    run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
+    check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
     dmctl_operate_source create $WORK_DIR/source2.yaml $SOURCE_ID2
 }
 

@@ -72,7 +72,7 @@ function test_join_masters_and_worker {
 	run_dm_ctl_with_retry $WORK_DIR 127.0.0.1:$MASTER_PORT2 "list-member --worker --name=worker2" '"stage": "free",' 1
 
 	echo "kill dm-master-join1"
-	ps aux | grep dm-master-join1 | awk '{print $2}' | xargs kill || true
+	kill_process dm-master-join1
 	check_master_port_offline 1
 	rm -rf $WORK_DIR/master1/default.master1
 
@@ -131,7 +131,7 @@ function test_standalone_running() {
 		"\"taskStatus\": \"Running\"" 2
 
 	echo "kill $worker_name"
-	ps aux | grep dm-worker${worker_idx} | awk '{print $2}' | xargs kill || true
+	kill_process dm-worker${worker_idx}
 	check_port_offline ${worker_ports[$worker_idx]} 20
 	rm -rf $WORK_DIR/worker${worker_idx}/relay-dir
 
@@ -340,7 +340,7 @@ function test_exclusive_relay_2() {
 
 	# kill worker1, source1 should be bound to worker3
 	echo "kill dm-worker1"
-	ps aux | grep dm-worker1 | awk '{print $2}' | xargs kill || true
+	kill_process dm-worker1
 	check_port_offline $WORKER1_PORT 20
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT1" \
 		"list-member --name worker3" \
@@ -358,7 +358,7 @@ function test_exclusive_relay_2() {
 
 	# kill worker2, source2 should not be bound
 	echo "kill dm-worker2"
-	ps aux | grep dm-worker2 | awk '{print $2}' | xargs kill || true
+	kill_process dm-worker2
 	check_port_offline $WORKER2_PORT 20
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \

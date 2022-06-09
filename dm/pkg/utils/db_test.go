@@ -421,7 +421,7 @@ func (t *testDBSuite) TestTiDBVersion(c *C) {
 	}
 }
 
-func getGSetFromString(c *C, s string) gtid.Set {
+func getGSetFromString(c *C, s string) gmysql.GTIDSet {
 	gSet, err := gtid.ParserGTID("mysql", s)
 	c.Assert(err, IsNil)
 	return gSet
@@ -438,9 +438,9 @@ func (t *testDBSuite) TestAddGSetWithPurged(c *C) {
 	c.Assert(err, IsNil)
 
 	testCases := []struct {
-		originGSet  gtid.Set
-		purgedSet   gtid.Set
-		expectedSet gtid.Set
+		originGSet  gmysql.GTIDSet
+		purgedSet   gmysql.GTIDSet
+		expectedSet gmysql.GTIDSet
 		err         error
 	}{
 		{
@@ -496,4 +496,10 @@ func (t *testDBSuite) TestGetMaxConnections(c *C) {
 func TestIsMariaDB(t *testing.T) {
 	require.True(t, IsMariaDB("5.5.50-MariaDB-1~wheezy"))
 	require.False(t, IsMariaDB("5.7.19-17-log"))
+}
+
+func TestCreateTableSQLToOneRow(t *testing.T) {
+	input := "CREATE TABLE `t1` (\n  `id` bigint(20) NOT NULL,\n  `c1` varchar(20) DEFAULT NULL,\n  `c2` varchar(20) DEFAULT NULL,\n  PRIMARY KEY (`id`) /*T![clustered_index] NONCLUSTERED */\n) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_bin"
+	expected := "CREATE TABLE `t1` ( `id` bigint(20) NOT NULL, `c1` varchar(20) DEFAULT NULL, `c2` varchar(20) DEFAULT NULL, PRIMARY KEY (`id`) /*T![clustered_index] NONCLUSTERED */) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_bin"
+	require.Equal(t, expected, CreateTableSQLToOneRow(input))
 }

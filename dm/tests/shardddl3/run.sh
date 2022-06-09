@@ -448,7 +448,7 @@ function DM_097_CASE() {
 	run_sql_source1 "alter table ${shardddl1}.${tb1} add column new_col1 int;"
 	run_sql_source2 "alter table ${shardddl1}.${tb1} add column new_col1 int;"
 
-	ps aux | grep dm-master | awk '{print $2}' | xargs kill || true
+	kill_process dm-master
 	check_master_port_offline 1
 
 	run_sql_source1 "alter table ${shardddl1}.${tb2} add column new_col1 int;"
@@ -458,6 +458,9 @@ function DM_097_CASE() {
 	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT
 
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		"\"stage\": \"Running\"" 3
 }
 
 function DM_097() {
@@ -481,7 +484,7 @@ function DM_098_CASE() {
 
 	run_sql_source1 "alter table ${shardddl1}.${tb1} add column new_col1 int;"
 
-	ps aux | grep dm-worker1 | awk '{print $2}' | xargs kill || true
+	kill_process dm-worker1
 	check_port_offline $WORKER1_PORT 20
 
 	run_sql_source2 "alter table ${shardddl1}.${tb1} add column new_col1 int;"

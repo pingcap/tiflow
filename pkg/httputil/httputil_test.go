@@ -27,7 +27,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/stretchr/testify/require"
 
-	"github.com/pingcap/tidb-tools/pkg/utils"
+	"github.com/pingcap/tidb/util"
 )
 
 var httputilServerMsg = "this is httputil test server"
@@ -41,7 +41,7 @@ func TestHttputilNewClient(t *testing.T) {
 	dir, err := os.Getwd()
 	require.Nil(t, err)
 	certDir := "_certificates"
-	serverTLS, err := utils.ToTLSConfigWithVerify(
+	serverTLS, err := util.ToTLSConfigWithVerify(
 		filepath.Join(dir, certDir, "ca.pem"),
 		filepath.Join(dir, certDir, "server.pem"),
 		filepath.Join(dir, certDir, "server-key.pem"),
@@ -62,7 +62,7 @@ func TestHttputilNewClient(t *testing.T) {
 	cli, err := NewClient(credential)
 	require.Nil(t, err)
 	url := fmt.Sprintf("https://127.0.0.1:%d/", port)
-	resp, err := cli.Get(url)
+	resp, err := cli.Get(context.Background(), url)
 	require.Nil(t, err)
 	defer resp.Body.Close()
 	body, err := io.ReadAll(resp.Body)

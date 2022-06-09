@@ -13,41 +13,45 @@
 
 package model
 
-import (
-	"context"
-)
-
-// PolymorphicEvent describes an event can be in multiple states
+// PolymorphicEvent describes an event can be in multiple states.
 type PolymorphicEvent struct {
 	StartTs uint64
 	// Commit or resolved TS
 	CRTs uint64
+	// Identify whether the resolved event is in batch mode.
+	Mode ResolvedMode
 
-	RawKV    *RawKVEntry
-	Row      *RowChangedEvent
-	finished chan struct{}
+	RawKV *RawKVEntry
+	Row   *RowChangedEvent
 }
 
-// NewPolymorphicEvent creates a new PolymorphicEvent with a raw KV
+// NewEmptyPolymorphicEvent creates a new empty PolymorphicEvent.
+func NewEmptyPolymorphicEvent(ts uint64) *PolymorphicEvent {
+	return &PolymorphicEvent{
+		CRTs:  ts,
+		RawKV: &RawKVEntry{},
+		Row:   &RowChangedEvent{},
+	}
+}
+
+// NewPolymorphicEvent creates a new PolymorphicEvent with a raw KV.
 func NewPolymorphicEvent(rawKV *RawKVEntry) *PolymorphicEvent {
 	if rawKV.OpType == OpTypeResolved {
 		return NewResolvedPolymorphicEvent(rawKV.RegionID, rawKV.CRTs)
 	}
 	return &PolymorphicEvent{
-		StartTs:  rawKV.StartTs,
-		CRTs:     rawKV.CRTs,
-		RawKV:    rawKV,
-		finished: nil,
+		StartTs: rawKV.StartTs,
+		CRTs:    rawKV.CRTs,
+		RawKV:   rawKV,
 	}
 }
 
-// NewResolvedPolymorphicEvent creates a new PolymorphicEvent with the resolved ts
+// NewResolvedPolymorphicEvent creates a new PolymorphicEvent with the resolved ts.
 func NewResolvedPolymorphicEvent(regionID uint64, resolvedTs uint64) *PolymorphicEvent {
 	return &PolymorphicEvent{
-		CRTs:     resolvedTs,
-		RawKV:    &RawKVEntry{CRTs: resolvedTs, OpType: OpTypeResolved, RegionID: regionID},
-		Row:      nil,
-		finished: nil,
+		CRTs:  resolvedTs,
+		RawKV: &RawKVEntry{CRTs: resolvedTs, OpType: OpTypeResolved, RegionID: regionID},
+		Row:   nil,
 	}
 }
 
@@ -56,29 +60,64 @@ func (e *PolymorphicEvent) RegionID() uint64 {
 	return e.RawKV.RegionID
 }
 
-// SetUpFinishedChan creates an internal channel to support PrepareFinished and WaitPrepare
-func (e *PolymorphicEvent) SetUpFinishedChan() {
-	if e.finished == nil {
-		e.finished = make(chan struct{})
-	}
+// IsResolved returns true if the event is resolved. Note that this function can
+// only be called when `RawKV != nil`.
+func (e *PolymorphicEvent) IsResolved() bool {
+	return e.RawKV.OpType == OpTypeResolved
 }
 
-// PrepareFinished marks the prepare process is finished
-// In prepare process, Mounter will translate raw KV to row data
-func (e *PolymorphicEvent) PrepareFinished() {
-	if e.finished != nil {
-		close(e.finished)
-	}
+// IsBatchResolved returns true if the event is batch resolved event.
+func (e *PolymorphicEvent) IsBatchResolved() bool {
+	return e.IsResolved() && e.Mode == BatchResolvedMode
 }
 
-// WaitPrepare waits for prepare process finished
-func (e *PolymorphicEvent) WaitPrepare(ctx context.Context) error {
-	if e.finished != nil {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-e.finished:
+// ComparePolymorphicEvents compares two events by CRTs, Resolved, StartTs, Delete/Put order.
+// It returns true if and only if i should precede j.
+func ComparePolymorphicEvents(i, j *PolymorphicEvent) bool {
+	if i.CRTs == j.CRTs {
+		if i.IsResolved() {
+			return false
+		} else if j.IsResolved() {
+			return true
+		}
+
+		if i.StartTs > j.StartTs {
+			return false
+		} else if i.StartTs < j.StartTs {
+			return true
+		}
+
+		if i.RawKV.OpType == OpTypeDelete && j.RawKV.OpType != OpTypeDelete {
+			return true
 		}
 	}
-	return nil
+	return i.CRTs < j.CRTs
+}
+
+// ResolvedMode describes the batch type of a resolved event.
+type ResolvedMode int
+
+const (
+	// NormalResolvedMode means that all events whose commitTs is less than or equal to
+	// `resolved.Ts` are sent to Sink.
+	NormalResolvedMode ResolvedMode = iota
+	// BatchResolvedMode means that all events whose commitTs is less than
+	// 'resolved.Ts' are sent to Sink.
+	BatchResolvedMode
+)
+
+// ResolvedTs is the resolved timestamp of sink module.
+type ResolvedTs struct {
+	Ts   uint64
+	Mode ResolvedMode
+}
+
+// NewResolvedTs creates a new ResolvedTs.
+func NewResolvedTs(t uint64) ResolvedTs {
+	return ResolvedTs{Ts: t, Mode: NormalResolvedMode}
+}
+
+// NewResolvedTsWithMode creates a ResolvedTs with a given batch type.
+func NewResolvedTsWithMode(t uint64, m ResolvedMode) ResolvedTs {
+	return ResolvedTs{Ts: t, Mode: m}
 }

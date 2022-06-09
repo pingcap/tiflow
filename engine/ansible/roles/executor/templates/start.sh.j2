@@ -1,0 +1,13 @@
+#!/bin/bash
+
+{% set cluster = [] %}
+{% for host in groups['df_master_servers'] %}
+{% set _ = cluster.append(host ~ ':' ~ master_port)  %}
+{% endfor %}
+
+{{ df_bin_dir }}/executor-{{ cluster_name }} \
+    --log-file={{ df_data_prefix }}/executor.log \
+    -L={{ log_level }} \
+    --worker-addr 0.0.0.0:{{ executor_port }} \
+    --advertise-addr {{ inventory_hostname }}:{{ executor_port }} \
+    --join {{ cluster|join(',') }}

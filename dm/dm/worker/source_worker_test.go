@@ -18,11 +18,14 @@ import (
 	"fmt"
 	"sync"
 	"sync/atomic"
+	"testing"
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	. "github.com/pingcap/check"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
+	"github.com/stretchr/testify/require"
 	"github.com/tikv/pd/pkg/tempurl"
 	clientv3 "go.etcd.io/etcd/client/v3"
 
@@ -32,6 +35,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	"github.com/pingcap/tiflow/dm/pkg/ha"
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/relay"
 	"github.com/pingcap/tiflow/dm/syncer"
@@ -43,6 +47,11 @@ func mockShowMasterStatus(mockDB sqlmock.Sqlmock) {
 	rows := mockDB.NewRows([]string{"File", "Position", "Binlog_Do_DB", "Binlog_Ignore_DB", "Executed_Gtid_Set"}).AddRow(
 		"mysql-bin.000009", 11232, nil, nil, "074be7f4-f0f1-11ea-95bd-0242ac120002:1-699",
 	)
+	mockDB.ExpectQuery(`SHOW MASTER STATUS`).WillReturnRows(rows)
+}
+
+func mockShowMasterStatusNoRows(mockDB sqlmock.Sqlmock) {
+	rows := mockDB.NewRows([]string{"File", "Position", "Binlog_Do_DB", "Binlog_Ignore_DB", "Executed_Gtid_Set"})
 	mockDB.ExpectQuery(`SHOW MASTER STATUS`).WillReturnRows(rows)
 }
 
@@ -431,7 +440,7 @@ func (t *testWorkerEtcdCompact) TestWatchSubtaskStageEtcdCompact(c *C) {
 	ha.WatchSubTaskStage(ctx, etcdCli, sourceCfg.SourceID, startRev, subTaskStageCh, subTaskErrCh)
 	select {
 	case err = <-subTaskErrCh:
-		c.Assert(err, Equals, etcdErrCompacted)
+		c.Assert(errors.Cause(err), Equals, etcdErrCompacted)
 	case <-time.After(300 * time.Millisecond):
 		c.Fatal("fail to get etcd error compacted")
 	}
@@ -557,7 +566,7 @@ func (t *testWorkerEtcdCompact) TestWatchValidatorStageEtcdCompact(c *C) {
 	ha.WatchValidatorStage(ctxForWatch, etcdCli, sourceCfg.SourceID, startRev, subTaskStageCh, subTaskErrCh)
 	select {
 	case err = <-subTaskErrCh:
-		c.Assert(err, Equals, etcdErrCompacted)
+		c.Assert(errors.Cause(err), Equals, etcdErrCompacted)
 	case <-time.After(300 * time.Millisecond):
 		c.Fatal("fail to get etcd error compacted")
 	}
@@ -672,7 +681,7 @@ func (t *testWorkerEtcdCompact) TestWatchRelayStageEtcdCompact(c *C) {
 	ha.WatchRelayStage(ctx, etcdCli, cfg.Name, startRev, relayStageCh, relayErrCh)
 	select {
 	case err := <-relayErrCh:
-		c.Assert(err, Equals, etcdErrCompacted)
+		c.Assert(errors.Cause(err), Equals, etcdErrCompacted)
 	case <-time.After(300 * time.Millisecond):
 		c.Fatal("fail to get etcd error compacted")
 	}
@@ -758,4 +767,90 @@ func (t *testServer) testSourceWorker(c *C) {
 
 	err = w.OperateSubTask("testSubTask", pb.TaskOp_Delete)
 	c.Assert(err, ErrorMatches, ".*worker already closed.*")
+}
+
+func (t *testServer) TestQueryValidator(c *C) {
+	cfg := loadSourceConfigWithoutPassword(c)
+
+	dir := c.MkDir()
+	cfg.EnableRelay = true
+	cfg.RelayDir = dir
+	cfg.MetaDir = dir
+
+	w, err := NewSourceWorker(cfg, nil, "", "")
+	w.closed.Store(false)
+	c.Assert(err, IsNil)
+	st := NewSubTaskWithStage(&config.SubTaskConfig{
+		Name: "testQueryValidator",
+		ValidatorCfg: config.ValidatorConfig{
+			Mode: config.ValidationFull,
+		},
+	}, pb.Stage_Running, nil, "")
+	w.subTaskHolder.recordSubTask(st)
+	var ret *pb.ValidationStatus
+	ret, err = w.GetValidatorStatus("invalidTaskName")
+	c.Assert(ret, IsNil)
+	c.Assert(terror.ErrWorkerSubTaskNotFound.Equal(err), IsTrue)
+}
+
+func (t *testServer) setupValidator(c *C) *SourceWorker {
+	cfg := loadSourceConfigWithoutPassword(c)
+
+	dir := c.MkDir()
+	cfg.EnableRelay = true
+	cfg.RelayDir = dir
+	cfg.MetaDir = dir
+	st := NewSubTaskWithStage(&config.SubTaskConfig{
+		Name: "testQueryValidator",
+		ValidatorCfg: config.ValidatorConfig{
+			Mode: config.ValidationFull,
+		},
+	}, pb.Stage_Running, nil, "")
+	w, err := NewSourceWorker(cfg, nil, "", "")
+	st.StartValidator(pb.Stage_Running, false)
+	w.subTaskHolder.recordSubTask(st)
+	w.closed.Store(false)
+	c.Assert(err, IsNil)
+	return w
+}
+
+func (t *testServer) TestGetWorkerValidatorErr(c *C) {
+	w := t.setupValidator(c)
+	// when subtask name not exists
+	// return empty array
+	errs, err := w.GetWorkerValidatorErr("invalidTask", pb.ValidateErrorState_InvalidErr)
+	c.Assert(terror.ErrWorkerSubTaskNotFound.Equal(err), IsTrue)
+	c.Assert(errs, IsNil)
+}
+
+func (t *testServer) TestOperateWorkerValidatorErr(c *C) {
+	w := t.setupValidator(c)
+	// when subtask name not exists
+	// return empty array
+	taskNotFound := terror.ErrWorkerSubTaskNotFound.Generate("invalidTask")
+	c.Assert(w.OperateWorkerValidatorErr("invalidTask", pb.ValidationErrOp_ClearErrOp, 0, true).Error(), Equals, taskNotFound.Error())
+}
+
+func TestMasterBinlogOff(t *testing.T) {
+	ctx := context.Background()
+	cfg, err := config.ParseYamlAndVerify(config.SampleSourceConfig)
+	require.NoError(t, err)
+	cfg.From.Password = "no need to connect"
+
+	w, err := NewSourceWorker(cfg, nil, "", "")
+	require.NoError(t, err)
+	w.closed.Store(false)
+
+	// start task
+	var subtaskCfg config.SubTaskConfig
+	require.NoError(t, subtaskCfg.Decode(config.SampleSubtaskConfig, true))
+	require.NoError(t, w.StartSubTask(&subtaskCfg, pb.Stage_Running, pb.Stage_Stopped, true))
+
+	_, mockDB, err := conn.InitMockDBFull()
+	require.NoError(t, err)
+	mockShowMasterStatusNoRows(mockDB)
+	status, _, err := w.QueryStatus(ctx, subtaskCfg.Name)
+	require.NoError(t, err)
+	require.Len(t, status, 1)
+	require.Equal(t, subtaskCfg.Name, status[0].Name)
 }

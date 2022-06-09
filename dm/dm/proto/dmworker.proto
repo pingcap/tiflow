@@ -22,6 +22,12 @@ service Worker {
 
     // only some fields of the configuration of the subtask in the sync phase can be updated
     rpc CheckSubtasksCanUpdate(CheckSubtasksCanUpdateRequest) returns (CheckSubtasksCanUpdateResponse) {}
+
+    rpc GetWorkerValidatorStatus(GetValidationStatusRequest) returns (GetValidationStatusResponse) {}
+
+    rpc GetValidatorError(GetValidationErrorRequest) returns(GetValidationErrorResponse) {}
+
+    rpc OperateValidatorError(OperateValidationErrorRequest) returns(OperateValidationErrorResponse) {}
 }
 
 enum TaskOp {
@@ -406,4 +412,86 @@ message CheckSubtasksCanUpdateRequest { string subtaskCfgTomlString = 1; }
 message CheckSubtasksCanUpdateResponse {
   bool success = 1;
   string msg = 2; // message when error occurred
+}
+
+message GetValidationStatusRequest {
+    string taskName = 1;
+    Stage filterStatus = 2;
+}
+
+message ValidationStatus {
+    string task = 1;
+    string source = 2;
+    string mode = 3;
+    Stage stage = 4;
+    string validatorBinlog = 5;
+    string validatorBinlogGtid = 6;
+    ProcessResult result = 7;
+    string processedRowsStatus = 8;
+    string pendingRowsStatus = 9;
+    string allErrorRowsStatus = 10;
+}
+
+message ValidationTableStatus {
+    string source = 1;
+    string srcTable = 2;
+    string dstTable = 3;
+    Stage stage = 4;
+    string message = 5;
+}
+
+message GetValidationStatusResponse {
+    bool result = 1;
+    string msg = 2;
+    repeated ValidationStatus validators = 3;
+    repeated ValidationTableStatus tableStatuses = 4;
+}
+message GetValidationErrorRequest {
+    ValidateErrorState errState = 1;
+    string taskName = 2;
+}
+
+message ValidationError {
+    string id = 1; // error-id
+    string source = 2;
+    string srcTable = 3;
+    string srcData = 4;
+    string dstTable = 5;
+    string dstData = 6;
+    string errorType = 7;
+    ValidateErrorState status = 8;
+    string time = 9;
+    string message = 10;
+}
+
+message GetValidationErrorResponse {
+    bool result = 1;
+    string msg = 2;
+    repeated ValidationError error = 3;
+}
+
+enum ValidateErrorState {
+    InvalidErr = 0;
+    NewErr = 1;
+    IgnoredErr = 2;
+    ResolvedErr = 3;
+}
+
+message OperateValidationErrorRequest {
+    ValidationErrOp op = 1;
+    bool isAllError = 2;
+    string taskName = 3;
+    uint64 errId = 4; // error-id
+}
+
+message OperateValidationErrorResponse {
+    bool result = 1;
+    string msg = 2;
+}
+
+enum ValidationErrOp {
+  InvalidErrOp = 0;
+  IgnoreErrOp = 1;
+  ResolveErrOp = 2;
+  ClearErrOp = 3;
 }

@@ -9,78 +9,6 @@ CDC_BINARY=cdc.test
 SINK_TYPE=$1
 MAX_RETRIES=20
 
-function check_changefeed_mark_error() {
-	endpoints=$1
-	changefeedid=$2
-	error_msg=$3
-	info=$(cdc cli changefeed query --pd=$endpoints -c $changefeedid -s)
-	echo "$info"
-	state=$(echo $info | jq -r '.state')
-	if [[ ! "$state" == "error" ]]; then
-		echo "changefeed state $state does not equal to error"
-		exit 1
-	fi
-	message=$(echo $info | jq -r '.error.message')
-	if [[ ! "$message" =~ "$error_msg" ]]; then
-		echo "error message '$message' is not as expected '$error_msg'"
-		exit 1
-	fi
-}
-
-function check_changefeed_mark_failed_regex() {
-	endpoints=$1
-	changefeedid=$2
-	error_msg=$3
-	info=$(cdc cli changefeed query --pd=$endpoints -c $changefeedid -s)
-	echo "$info"
-	state=$(echo $info | jq -r '.state')
-	if [[ ! "$state" == "failed" ]]; then
-		echo "changefeed state $state does not equal to failed"
-		exit 1
-	fi
-	message=$(echo $info | jq -r '.error.message')
-	if [[ ! "$message" =~ $error_msg ]]; then
-		echo "error message '$message' does not match '$error_msg'"
-		exit 1
-	fi
-}
-
-function check_changefeed_mark_stopped_regex() {
-	endpoints=$1
-	changefeedid=$2
-	error_msg=$3
-	info=$(cdc cli changefeed query --pd=$endpoints -c $changefeedid -s)
-	echo "$info"
-	state=$(echo $info | jq -r '.state')
-	if [[ ! "$state" == "stopped" ]]; then
-		echo "changefeed state $state does not equal to stopped"
-		exit 1
-	fi
-	message=$(echo $info | jq -r '.error.message')
-	if [[ ! "$message" =~ $error_msg ]]; then
-		echo "error message '$message' does not match '$error_msg'"
-		exit 1
-	fi
-}
-
-function check_changefeed_mark_stopped() {
-	endpoints=$1
-	changefeedid=$2
-	error_msg=$3
-	info=$(cdc cli changefeed query --pd=$endpoints -c $changefeedid -s)
-	echo "$info"
-	state=$(echo $info | jq -r '.state')
-	if [[ ! "$state" == "stopped" ]]; then
-		echo "changefeed state $state does not equal to stopped"
-		exit 1
-	fi
-	message=$(echo $info | jq -r '.error.message')
-	if [[ ! "$message" =~ "$error_msg" ]]; then
-		echo "error message '$message' is not as expected '$error_msg'"
-		exit 1
-	fi
-}
-
 function check_no_changefeed() {
 	pd=$1
 	count=$(cdc cli changefeed list --pd=$pd 2>&1 | jq '.|length')
@@ -97,10 +25,6 @@ function check_no_capture() {
 	fi
 }
 
-export -f check_changefeed_mark_error
-export -f check_changefeed_mark_failed_regex
-export -f check_changefeed_mark_stopped_regex
-export -f check_changefeed_mark_stopped
 export -f check_no_changefeed
 export -f check_no_capture
 
@@ -129,7 +53,7 @@ function run() {
 		run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=open-protocol&partition-num=4&version=${KAFKA_VERSION}&max-message-bytes=10485760"
 	fi
 
-	ensure $MAX_RETRIES check_changefeed_mark_failed_regex http://${UP_PD_HOST_1}:${UP_PD_PORT_1} ${changefeedid} ".*CDC:ErrStartTsBeforeGC.*"
+	ensure $MAX_RETRIES check_changefeed_state http://${UP_PD_HOST_1}:${UP_PD_PORT_1} ${changefeedid} "failed" "[CDC:ErrStartTsBeforeGC]" ""
 	run_cdc_cli changefeed resume -c $changefeedid
 
 	check_table_exists "changefeed_error.USERTABLE" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
@@ -142,7 +66,7 @@ function run() {
 	kill $capture_pid
 	ensure $MAX_RETRIES check_no_capture http://${UP_PD_HOST_1}:${UP_PD_PORT_1}
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
-	ensure $MAX_RETRIES check_changefeed_mark_error http://${UP_PD_HOST_1}:${UP_PD_PORT_1} ${changefeedid} "failpoint injected retriable error"
+	ensure $MAX_RETRIES check_changefeed_state http://${UP_PD_HOST_1}:${UP_PD_PORT_1} ${changefeedid} "error" "failpoint injected retriable error" ""
 
 	run_cdc_cli changefeed remove -c $changefeedid
 	ensure $MAX_RETRIES check_no_changefeed ${UP_PD_HOST_1}:${UP_PD_PORT_1}
@@ -157,7 +81,7 @@ function run() {
 	run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" -c $changefeedid_1
 
 	run_sql "CREATE table changefeed_error.DDLERROR(id int primary key, val int);"
-	ensure $MAX_RETRIES check_changefeed_mark_error http://${UP_PD_HOST_1}:${UP_PD_PORT_1} ${changefeedid_1} "[CDC:ErrExecDDLFailed]exec DDL failed"
+	ensure $MAX_RETRIES check_changefeed_state http://${UP_PD_HOST_1}:${UP_PD_PORT_1} ${changefeedid_1} "error" "[CDC:ErrExecDDLFailed]exec DDL failed" ""
 
 	run_cdc_cli changefeed remove -c $changefeedid_1
 	cleanup_process $CDC_BINARY
@@ -168,7 +92,7 @@ function run() {
 
 	changefeedid_2="changefeed-error-2"
 	run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" -c $changefeedid_2
-	ensure $MAX_RETRIES check_changefeed_mark_failed_regex http://${UP_PD_HOST_1}:${UP_PD_PORT_1} ${changefeedid_2} "[CDC:ErrStartTsBeforeGC]"
+	ensure $MAX_RETRIES check_changefeed_state http://${UP_PD_HOST_1}:${UP_PD_PORT_1} ${changefeedid_2} "failed" "[CDC:ErrSnapshotLostByGC]" ""
 
 	run_cdc_cli changefeed remove -c $changefeedid_2
 	export GO_FAILPOINTS=''

@@ -19,7 +19,8 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tiflow/pkg/util"
+	"github.com/pingcap/tiflow/cdc/contextutil"
+	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -47,7 +48,7 @@ type LimitRegionRouter interface {
 
 // srrMetrics keeps metrics of a Sized Region Router
 type srrMetrics struct {
-	changefeed string
+	changefeed model.ChangeFeedID
 	// mapping from id(TiKV store address) to token used
 	tokens map[string]prometheus.Gauge
 	// mapping from id(TiKV store address) to cached regions
@@ -55,7 +56,7 @@ type srrMetrics struct {
 }
 
 func newSrrMetrics(ctx context.Context) *srrMetrics {
-	changefeed := util.ChangefeedIDFromCtx(ctx)
+	changefeed := contextutil.ChangefeedIDFromCtx(ctx)
 	return &srrMetrics{
 		changefeed:    changefeed,
 		tokens:        make(map[string]prometheus.Gauge),
@@ -100,7 +101,8 @@ func (r *sizedRegionRouter) AddRegion(sri singleRegionInfo) {
 	} else {
 		r.buffer[id] = append(r.buffer[id], sri)
 		if _, ok := r.metrics.cachedRegions[id]; !ok {
-			r.metrics.cachedRegions[id] = cachedRegionSize.WithLabelValues(id, r.metrics.changefeed)
+			r.metrics.cachedRegions[id] = cachedRegionSize.
+				WithLabelValues(id, r.metrics.changefeed.Namespace, r.metrics.changefeed.ID)
 		}
 		r.metrics.cachedRegions[id].Inc()
 	}
@@ -114,7 +116,8 @@ func (r *sizedRegionRouter) Acquire(id string) {
 	defer r.lock.Unlock()
 	r.tokens[id]++
 	if _, ok := r.metrics.tokens[id]; !ok {
-		r.metrics.tokens[id] = clientRegionTokenSize.WithLabelValues(id, r.metrics.changefeed)
+		r.metrics.tokens[id] = clientRegionTokenSize.
+			WithLabelValues(id, r.metrics.changefeed.Namespace, r.metrics.changefeed.ID)
 	}
 	r.metrics.tokens[id].Inc()
 }
@@ -126,7 +129,8 @@ func (r *sizedRegionRouter) Release(id string) {
 	defer r.lock.Unlock()
 	r.tokens[id]--
 	if _, ok := r.metrics.tokens[id]; !ok {
-		r.metrics.tokens[id] = clientRegionTokenSize.WithLabelValues(id, r.metrics.changefeed)
+		r.metrics.tokens[id] = clientRegionTokenSize.
+			WithLabelValues(id, r.metrics.changefeed.Namespace, r.metrics.changefeed.ID)
 	}
 	r.metrics.tokens[id].Dec()
 }

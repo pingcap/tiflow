@@ -16,12 +16,12 @@ package syncer
 import (
 	"encoding/binary"
 
-	"github.com/pingcap/tidb-tools/pkg/filter"
 	"github.com/pingcap/tidb/expression"
 	"github.com/pingcap/tidb/parser/charset"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/parser/types"
+	"github.com/pingcap/tidb/util/filter"
 	"github.com/shopspring/decimal"
 	"go.uber.org/zap"
 
@@ -71,9 +71,9 @@ func extractValueFromData(data []interface{}, columns []*model.ColumnInfo, sourc
 			d = v.String()
 		case string:
 			// convert string to []byte so that go-sql-driver/mysql can use _binary'value' for DML
-			if columns[i].Charset == charset.CharsetGBK {
+			if columns[i].GetCharset() == charset.CharsetGBK {
 				d = []byte(v)
-			} else if columns[i].Charset == "" && sourceTI.Charset == charset.CharsetGBK {
+			} else if columns[i].GetCharset() == "" && sourceTI.Charset == charset.CharsetGBK {
 				d = []byte(v)
 			}
 		}
@@ -265,7 +265,7 @@ RowLoop:
 }
 
 func castUnsigned(data interface{}, ft *types.FieldType) interface{} {
-	if !mysql.HasUnsignedFlag(ft.Flag) {
+	if !mysql.HasUnsignedFlag(ft.GetFlag()) {
 		return data
 	}
 
@@ -277,7 +277,7 @@ func castUnsigned(data interface{}, ft *types.FieldType) interface{} {
 	case int16:
 		return uint16(v)
 	case int32:
-		if ft.Tp == mysql.TypeInt24 {
+		if ft.GetType() == mysql.TypeInt24 {
 			// we use int32 to store MEDIUMINT, if the value is signed, it's fine
 			// but if the value is un-signed, simply convert it use `uint32` may out of the range
 			// like -4692783 converted to 4290274513 (2^32 - 4692783), but we expect 12084433 (2^24 - 4692783)
