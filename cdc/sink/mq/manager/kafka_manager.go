@@ -15,6 +15,7 @@ package manager
 
 import (
 	"context"
+	gerrors "errors"
 	"fmt"
 	"sync"
 	"time"
@@ -277,7 +278,7 @@ func (m *kafkaTopicManager) createTopic(topicName string) (int32, error) {
 		NumPartitions:     m.cfg.PartitionNum,
 		ReplicationFactor: m.cfg.ReplicationFactor,
 	}, false)
-	if err != nil && errors.Cause(err) != sarama.ErrTopicAlreadyExists {
+	if err != nil && gerrors.Is(err, sarama.ErrTopicAlreadyExists) {
 		log.Error(
 			"Kafka admin client create the topic failed",
 			zap.String("topic", topicName),
