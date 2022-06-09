@@ -75,6 +75,12 @@ func (r ReplicationSetState) String() string {
 	}
 }
 
+// MarshalJSON returns r as the JSON encoding of ReplicationSetState.
+// Only used for pretty print in zap log.
+func (r ReplicationSetState) MarshalJSON() ([]byte, error) {
+	return []byte(r.String()), nil
+}
+
 // ReplicationSet is a state machine that manages replication states.
 type ReplicationSet struct {
 	TableID    model.TableID
@@ -203,11 +209,6 @@ func (r *ReplicationSet) checkInvariant(
 		return r.inconsistentError(input, captureID,
 			"tpscheduler: capture inconsistent")
 	}
-	if _, ok := r.Captures[captureID]; !ok &&
-		input.State != schedulepb.TableStateAbsent {
-		return r.inconsistentError(input, captureID, fmt.Sprintf(
-			"tpscheduler: unknown capture: \"%s\", input: \"%s\"", captureID, input))
-	}
 	return nil
 }
 
@@ -219,6 +220,9 @@ func (r *ReplicationSet) poll(
 	err := r.checkInvariant(input, captureID)
 	if err != nil {
 		return nil, errors.Trace(err)
+	}
+	if _, ok := r.Captures[captureID]; !ok {
+		return nil, nil
 	}
 
 	msgBuf := make([]*schedulepb.Message, 0)
