@@ -30,10 +30,13 @@ const (
 	captureKey      = "/capture"
 	taskPositionKey = "/task/position"
 
-	changefeedInfoKey   = "/changefeed/info"
-	changefeedStatusKey = "/changefeed/status"
-	metaVersionKey      = "/meta/meta-version"
-	upstreamKey         = "/upstream"
+	// ChangefeedInfoKey is the key path for changefeed info
+	ChangefeedInfoKey = "/changefeed/info"
+	// ChangefeedStatusKey is the key path for changefeed status
+	ChangefeedStatusKey = "/changefeed/status"
+	// MetaVersionKey is the key path for metadata version
+	MetaVersionKey = "/meta/meta-version"
+	upstreamKey    = "/upstream"
 
 	// DeletionCounterKey is the key path for the counter of deleted keys
 	DeletionCounterKey = metaPrefix + "/meta/ticdc-delete-etcd-key-count"
@@ -127,7 +130,7 @@ func (k *CDCKey) Parse(clusterID, key string) error {
 			k.Tp = CDCKeyTypeCapture
 			k.CaptureID = key[len(captureKey)+1:]
 			k.OwnerLeaseID = ""
-		case strings.HasPrefix(key, metaVersionKey):
+		case strings.HasPrefix(key, MetaVersionKey):
 			k.Tp = CDCKeyTypeMetaVersion
 		default:
 			return cerror.ErrInvalidEtcdKey.GenWithStackByArgs(key)
@@ -137,12 +140,12 @@ func (k *CDCKey) Parse(clusterID, key string) error {
 		key = key[len(namespace)+1:]
 		k.Namespace = namespace
 		switch {
-		case strings.HasPrefix(key, changefeedInfoKey):
+		case strings.HasPrefix(key, ChangefeedInfoKey):
 			k.Tp = CDCKeyTypeChangefeedInfo
 			k.CaptureID = ""
 			k.ChangefeedID = model.ChangeFeedID{
 				Namespace: namespace,
-				ID:        key[len(changefeedInfoKey)+1:],
+				ID:        key[len(ChangefeedInfoKey)+1:],
 			}
 			k.OwnerLeaseID = ""
 		case strings.HasPrefix(key, upstreamKey):
@@ -153,12 +156,12 @@ func (k *CDCKey) Parse(clusterID, key string) error {
 				return err
 			}
 			k.UpstreamID = id
-		case strings.HasPrefix(key, changefeedStatusKey):
+		case strings.HasPrefix(key, ChangefeedStatusKey):
 			k.Tp = CDCKeyTypeChangeFeedStatus
 			k.CaptureID = ""
 			k.ChangefeedID = model.ChangeFeedID{
 				Namespace: namespace,
-				ID:        key[len(changefeedStatusKey)+1:],
+				ID:        key[len(ChangefeedStatusKey)+1:],
 			}
 			k.OwnerLeaseID = ""
 		case strings.HasPrefix(key, taskPositionKey):
@@ -190,16 +193,16 @@ func (k *CDCKey) String() string {
 	case CDCKeyTypeCapture:
 		return BaseKey(k.ClusterID) + metaPrefix + captureKey + "/" + k.CaptureID
 	case CDCKeyTypeChangefeedInfo:
-		return NamespacedPrefix(k.ClusterID, k.ChangefeedID.Namespace) + changefeedInfoKey +
+		return NamespacedPrefix(k.ClusterID, k.ChangefeedID.Namespace) + ChangefeedInfoKey +
 			"/" + k.ChangefeedID.ID
 	case CDCKeyTypeChangeFeedStatus:
-		return NamespacedPrefix(k.ClusterID, k.ChangefeedID.Namespace) + changefeedStatusKey +
+		return NamespacedPrefix(k.ClusterID, k.ChangefeedID.Namespace) + ChangefeedStatusKey +
 			"/" + k.ChangefeedID.ID
 	case CDCKeyTypeTaskPosition:
 		return NamespacedPrefix(k.ClusterID, k.ChangefeedID.Namespace) + taskPositionKey +
 			"/" + k.CaptureID + "/" + k.ChangefeedID.ID
 	case CDCKeyTypeMetaVersion:
-		return BaseKey(k.ClusterID) + metaPrefix + metaVersionKey
+		return BaseKey(k.ClusterID) + metaPrefix + MetaVersionKey
 	case CDCKeyTypeUpStream:
 		return fmt.Sprintf("%s%s/%d",
 			NamespacedPrefix(k.ClusterID, k.Namespace),

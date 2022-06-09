@@ -76,7 +76,7 @@ func (m *gcManager) TryUpdateGCSafePoint(
 	}
 	m.lastUpdatedTime = time.Now()
 
-	actual, err := setServiceGCSafepoint(
+	actual, err := SetServiceGCSafepoint(
 		ctx, m.pdClient, m.gcServiceID, m.gcTTL, checkpointTs)
 	if err != nil {
 		log.Warn("updateGCSafePoint failed",

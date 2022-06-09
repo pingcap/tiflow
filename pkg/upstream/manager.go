@@ -111,13 +111,16 @@ func (m *Manager) add(upstreamID uint64,
 		up.hold()
 		return up
 	}
-	up := newUpstream(pdEndpoints,
-		&security.Credential{
+	securityConf := &security.Credential{}
+	if conf != nil {
+		securityConf = &security.Credential{
 			CAPath:        conf.CAPath,
 			CertPath:      conf.CertPath,
 			KeyPath:       conf.KeyPath,
 			CertAllowedCN: conf.CertAllowedCN,
-		})
+		}
+	}
+	up := newUpstream(pdEndpoints, securityConf)
 	m.ups.Store(upstreamID, up)
 	go func() {
 		up.err = up.init(m.ctx, m.gcServiceID)

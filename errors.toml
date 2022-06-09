@@ -906,6 +906,11 @@ error = '''
 serve http error
 '''
 
+["CDC:ErrServerIsNotReady"]
+error = '''
+cdc server is not ready
+'''
+
 ["CDC:ErrServerNewPDClient"]
 error = '''
 server creates pd client failed

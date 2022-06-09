@@ -44,14 +44,14 @@ function test_kill_owner() {
 	# run another server
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --addr "127.0.0.1:8301" --logsuffix test_kill_owner.server2
 	ensure $MAX_RETRIES "$CDC_BINARY cli capture list --disable-version-check 2>&1 | grep -v \"$owner_id\" | grep id"
-	capture_id=$($CDC_BINARY cli capture list --disable-version-check 2>&1 | awk -F '"' '/id/{print $4}' | grep -v "$owner_id")
+	capture_id=$($CDC_BINARY cli capture list --server-addr --server-addr 'http://127.0.0.1:8301' --disable-version-check 2>&1 | awk -F '"' '/id/{print $4}' | grep -v "$owner_id")
 	echo "capture_id:" $capture_id
 
 	# kill the server
 	kill $owner_pid
 
 	# check that the new owner is elected
-	ensure $MAX_RETRIES "$CDC_BINARY cli capture list --disable-version-check 2>&1 |grep $capture_id -A1 | grep '\"is-owner\": true'"
+	ensure $MAX_RETRIES "$CDC_BINARY cli capture list --server-addr 'http://127.0.0.1:8301' --disable-version-check 2>&1 |grep $capture_id -A1 | grep '\"is-owner\": true'"
 	echo "test_kill_owner: pass"
 
 	cleanup_process $CDC_BINARY
@@ -74,7 +74,7 @@ function test_hang_up_owner() {
 
 	# run another server
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --addr "127.0.0.1:8301" --logsuffix test_hang_up_owner.server2
-	ensure $MAX_RETRIES "$CDC_BINARY cli capture list --disable-version-check 2>&1 | grep -v \"$owner_id\" | grep id"
+	ensure $MAX_RETRIES "$CDC_BINARY cli capture list --server-addr 'http://127.0.0.1:8301'  --disable-version-check 2>&1 | grep -v \"$owner_id\" | grep id"
 	capture_id=$($CDC_BINARY cli capture list --disable-version-check 2>&1 | awk -F '"' '/id/{print $4}' | grep -v "$owner_id")
 	echo "capture_id:" $capture_id
 
@@ -82,7 +82,7 @@ function test_hang_up_owner() {
 	kill -SIGSTOP $owner_pid
 
 	# check that the new owner is elected
-	ensure $MAX_RETRIES "$CDC_BINARY cli capture list --disable-version-check 2>&1 |grep $capture_id -A1 | grep '\"is-owner\": true'"
+	ensure $MAX_RETRIES "$CDC_BINARY cli capture list --server-addr 'http://127.0.0.1:8301'  --disable-version-check 2>&1 |grep $capture_id -A1 | grep '\"is-owner\": true'"
 	# resume the original process
 	kill -SIGCONT $owner_pid
 
@@ -139,9 +139,9 @@ function test_owner_cleanup_stale_tasks() {
 
 	# run another server
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --addr "127.0.0.1:8301" --logsuffix test_owner_cleanup_stale_tasks.server2
-	ensure $MAX_RETRIES "$CDC_BINARY cli capture list --disable-version-check 2>&1 | grep -v \"$owner_id\" | grep id"
+	ensure $MAX_RETRIES "$CDC_BINARY cli capture list --server-addr 'http://127.0.0.1:8301' --disable-version-check 2>&1 | grep -v \"$owner_id\" | grep id"
 	capture_pid=$(ps -C $CDC_BINARY -o pid= | awk '{print $1}' | grep -v "$owner_pid")
-	capture_id=$($CDC_BINARY cli capture list --disable-version-check 2>&1 | awk -F '"' '/id/{print $4}' | grep -v "$owner_id")
+	capture_id=$($CDC_BINARY cli capture list --server-addr 'http://127.0.0.1:8301' --disable-version-check 2>&1 | awk -F '"' '/id/{print $4}' | grep -v "$owner_id")
 	echo "capture_id:" $capture_id
 
 	kill -SIGKILL $owner_pid

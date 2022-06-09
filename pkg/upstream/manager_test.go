@@ -18,7 +18,6 @@ import (
 	"testing"
 
 	"github.com/benbjohnson/clock"
-	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	"github.com/stretchr/testify/require"
 )
@@ -31,7 +30,7 @@ func TestUpstream(t *testing.T) {
 	require.NotNil(t, up1)
 
 	// test Add
-	manager.add(DefaultUpstreamID, []string{}, config.GetGlobalServerConfig().Security)
+	manager.add(DefaultUpstreamID, []string{}, nil)
 
 	// test Get
 	testID := uint64(1)

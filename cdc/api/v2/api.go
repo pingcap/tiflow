@@ -33,6 +33,7 @@ func NewOpenAPIV2(c *capture.Capture) OpenAPIV2 {
 func RegisterOpenAPIV2Routes(router *gin.Engine, api OpenAPIV2) {
 	v2 := router.Group("/api/v2")
 
+	v2.Use(middleware.CheckServerReadyMiddleware(api.capture))
 	v2.Use(middleware.LogMiddleware())
 	v2.Use(middleware.ErrorHandleMiddleware())
 

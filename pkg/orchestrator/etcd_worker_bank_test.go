@@ -27,6 +27,7 @@ import (
 	"github.com/pingcap/log"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
+	"github.com/pingcap/tiflow/pkg/migrate"
 	"github.com/pingcap/tiflow/pkg/orchestrator/util"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -157,7 +158,8 @@ func TestEtcdBank(t *testing.T) {
 			for {
 				worker, err := NewEtcdWorker(&cdcCli, bankTestPrefix, &bankReactor{
 					accountNumber: totalAccountNumber,
-				}, &bankReactorState{t: t, index: i, account: make([]int, totalAccountNumber)})
+				}, &bankReactorState{t: t, index: i, account: make([]int, totalAccountNumber)},
+					&migrate.NoOpMigrator{})
 				require.Nil(t, err)
 				err = worker.Run(ctx, nil, 100*time.Millisecond, "owner")
 				if err == nil || err.Error() == "etcdserver: request timed out" {
