@@ -4,6 +4,7 @@ set -eu
 
 cur=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 source $cur/../_utils/test_prepare
+source $cur/../_utils/shardddl_lib.sh
 WORK_DIR=$TEST_DIR/$TEST_NAME
 
 db_name=$TEST_NAME
@@ -44,9 +45,10 @@ function run() {
 	# wait until task is in sync unit
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"\"unit\": \"Sync\"" 2
-	run_sql_source1 "insert into $db_name.t1_1 values(1)"
-	run_sql_source1 "insert into $db_name.t1_1 values(2)"
-	run_sql_source1 "insert into $db_name.t1_1 values(6)"
+	run_sql_source1 "insert into $db_name.t1_1 values(1, 1)"
+	run_sql_source1 "insert into $db_name.t1_1 values(2, 2)"
+	run_sql_source1 "insert into $db_name.t1_1 values(6, 6)"
+	run_sql_source1 "update $db_name.t1_1 set value=22 where id=2"
 	run_sql_source1 "insert into $db_name.t1_2 values(6)"
 	run_sql_source1 "insert into $db_name.t1_3 values(6)"
 	run_sql_source2 "insert into $db_name.t2_1 values(1)"
@@ -54,9 +56,9 @@ function run() {
 	trigger_validator_flush
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation status test" \
-		"processedRowsStatus\": \"insert\/update\/delete: 3\/0\/0\"" 1 \
+		"processedRowsStatus\": \"insert\/update\/delete: 3\/1\/0\"" 1 \
 		"processedRowsStatus\": \"insert\/update\/delete: 1\/0\/0\"" 1 \
-		"pendingRowsStatus\": \"insert\/update\/delete: 2\/0\/0" 1 \
+		"pendingRowsStatus\": \"insert\/update\/delete: 1\/1\/0" 1 \
 		"pendingRowsStatus\": \"insert\/update\/delete: 1\/0\/0" 1 \
 		"new\/ignored\/resolved: 0\/0\/0" 2
 	run_sql_tidb_with_retry "select count(*) from dm_meta.test_validator_pending_change where source='mysql-replica-01'" \
@@ -90,22 +92,24 @@ function run() {
                                and a.binlog_gtid=b.binlog_gtid;" \
 		"count(*): 2"
 
-	echo "--> check validator can restart from previous position"
-	dmctl_stop_task $cur/conf/dm-task.yaml
-	dmctl_start_task $cur/conf/dm-task.yaml
+	echo "--> check validator can restart from previous position on fail over"
+	restart_worker1
+	restart_worker2
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation status test" \
-		"processedRowsStatus\": \"insert\/update\/delete: 0\/0\/0\"" 2 \
-		"pendingRowsStatus\": \"insert\/update\/delete: 2\/0\/0" 1 \
+		"processedRowsStatus\": \"insert\/update\/delete: 3\/1\/0\"" 1 \
+		"processedRowsStatus\": \"insert\/update\/delete: 1\/0\/0\"" 1 \
+		"pendingRowsStatus\": \"insert\/update\/delete: 1\/1\/0" 1 \
 		"pendingRowsStatus\": \"insert\/update\/delete: 1\/0\/0" 1 \
 		"new\/ignored\/resolved: 0\/0\/0" 2
 	# insert missed data manually
-	run_sql_tidb "insert into $db_name.t1_1 values(1)"
-	run_sql_tidb "insert into $db_name.t1_1 values(2)"
+	run_sql_tidb "insert into $db_name.t1_1 values(1, 1)"
+	run_sql_tidb "insert into $db_name.t1_1 values(2, 22)"
 	run_sql_tidb "insert into $db_name.t2_1 values(1)"
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation status test" \
-		"processedRowsStatus\": \"insert\/update\/delete: 0\/0\/0\"" 2 \
+		"processedRowsStatus\": \"insert\/update\/delete: 3\/1\/0\"" 1 \
+		"processedRowsStatus\": \"insert\/update\/delete: 1\/0\/0\"" 1 \
 		"pendingRowsStatus\": \"insert\/update\/delete: 0\/0\/0" 2 \
 		"new\/ignored\/resolved: 0\/0\/0" 2
 	trigger_validator_flush
@@ -137,12 +141,12 @@ function run() {
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"\"unit\": \"Sync\"" 2
 	for id in $(seq 4); do
-		run_sql_source1 "insert into $db_name.t1_1 values($id)"
+		run_sql_source1 "insert into $db_name.t1_1 values($id, $id)"
 		run_sql_source2 "insert into $db_name.t2_1 values($id)"
 	done
 	# trigger a success persist with 4 pending rows
 	trigger_validator_flush
-	run_sql_source1 "insert into $db_name.t1_1 values(5)"
+	run_sql_source1 "insert into $db_name.t1_1 values(5, 5)"
 	run_sql_source2 "insert into $db_name.t2_1 values(5)"
 	# this persist fails
 	trigger_validator_flush
@@ -154,7 +158,14 @@ function run() {
 		"processedRowsStatus\": \"insert\/update\/delete: 5\/0\/0\"" 2 \
 		"pendingRowsStatus\": \"insert\/update\/delete: 5\/0\/0" 2 \
 		"new\/ignored\/resolved: 0\/0\/0" 2
-	# 4 of valid persist, 2 of incomplete persist
+	#  processed ins/upd/del should be 4/0/0 in both source
+	run_sql_tidb_with_retry "select concat_ws('/', procd_ins, procd_upd, procd_del) processed
+													 from dm_meta.test_validator_checkpoint where source='mysql-replica-01'" \
+		"processed: 4/0/0"
+	run_sql_tidb_with_retry "select concat_ws('/', procd_ins, procd_upd, procd_del) processed
+													 from dm_meta.test_validator_checkpoint where source='mysql-replica-02'" \
+		"processed: 4/0/0"
+	# 4 of valid persist, 2 of incomplete persist in source 01
 	run_sql_tidb_with_retry "select count(*) from dm_meta.test_validator_pending_change where source='mysql-replica-01'" \
 		"count(*): 6"
 	run_sql_tidb_with_retry "select count(*)
@@ -163,7 +174,7 @@ function run() {
                            		 and a.source='mysql-replica-01'
                                and a.revision=b.revision" \
 		"count(*): 4"
-	# 4 of valid persist, 3 of incomplete persist
+	# 4 of valid persist, 3 of incomplete persist in source 02
 	run_sql_tidb_with_retry "select count(*) from dm_meta.test_validator_pending_change where source='mysql-replica-02'" \
 		"count(*): 7"
 	run_sql_tidb_with_retry "select count(*)
@@ -172,6 +183,7 @@ function run() {
                            		 and a.source='mysql-replica-02'
                                and a.revision=b.revision" \
 		"count(*): 4"
+	# 1 table for each source, 0 error
 	run_sql_tidb_with_retry "select count(*) from dm_meta.test_validator_table_status where source='mysql-replica-01'" \
 		"count(*): 1"
 	run_sql_tidb_with_retry "select count(*) from dm_meta.test_validator_table_status where source='mysql-replica-02'" \
@@ -193,9 +205,17 @@ function run() {
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation status test" \
 		"\"stage\": \"Running\"" 4 \
-		"processedRowsStatus\": \"insert\/update\/delete: 1\/0\/0\"" 2 \
+		"processedRowsStatus\": \"insert\/update\/delete: 5\/0\/0\"" 2 \
 		"pendingRowsStatus\": \"insert\/update\/delete: 5\/0\/0" 2 \
 		"new\/ignored\/resolved: 0\/0\/0" 2
+	#  processed ins/upd/del should be 5/0/0 in both source
+	run_sql_tidb_with_retry "select concat_ws('/', procd_ins, procd_upd, procd_del) processed
+													 from dm_meta.test_validator_checkpoint where source='mysql-replica-01'" \
+		"processed: 5/0/0"
+	run_sql_tidb_with_retry "select concat_ws('/', procd_ins, procd_upd, procd_del) processed
+													 from dm_meta.test_validator_checkpoint where source='mysql-replica-02'" \
+		"processed: 5/0/0"
+	# 5 pending row for source 01
 	run_sql_tidb_with_retry "select count(*) from dm_meta.test_validator_pending_change where source='mysql-replica-01'" \
 		"count(*): 5"
 	run_sql_tidb_with_retry "select count(*)
@@ -204,6 +224,7 @@ function run() {
                            		 and a.source='mysql-replica-01'
                                and a.revision=b.revision" \
 		"count(*): 5"
+	# 5 pending row for source 02
 	run_sql_tidb_with_retry "select count(*) from dm_meta.test_validator_pending_change where source='mysql-replica-02'" \
 		"count(*): 5"
 	run_sql_tidb_with_retry "select count(*)
@@ -212,6 +233,7 @@ function run() {
                            		 and a.source='mysql-replica-02'
                                and a.revision=b.revision" \
 		"count(*): 5"
+	# 1 table for each source, 0 error
 	run_sql_tidb_with_retry "select count(*) from dm_meta.test_validator_table_status where source='mysql-replica-01'" \
 		"count(*): 1"
 	run_sql_tidb_with_retry "select count(*) from dm_meta.test_validator_table_status where source='mysql-replica-02'" \
@@ -229,16 +251,23 @@ function run() {
 
 	echo "--> check validate success after insert data manually"
 	for id in $(seq 5); do
-		run_sql_tidb "insert into $db_name.t1_1 values($id)"
+		run_sql_tidb "insert into $db_name.t1_1 values($id, $id)"
 		run_sql_tidb "insert into $db_name.t2_1 values($id)"
 	done
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation status test" \
 		"\"stage\": \"Running\"" 4 \
-		"processedRowsStatus\": \"insert\/update\/delete: 1\/0\/0\"" 2 \
+		"processedRowsStatus\": \"insert\/update\/delete: 5\/0\/0\"" 2 \
 		"pendingRowsStatus\": \"insert\/update\/delete: 0\/0\/0" 2 \
 		"new\/ignored\/resolved: 0\/0\/0" 2
 	trigger_validator_flush
+	#  processed ins/upd/del should be 5/0/0 in both source
+	run_sql_tidb_with_retry "select concat_ws('/', procd_ins, procd_upd, procd_del) processed
+													 from dm_meta.test_validator_checkpoint where source='mysql-replica-01'" \
+		"processed: 5/0/0"
+	run_sql_tidb_with_retry "select concat_ws('/', procd_ins, procd_upd, procd_del) processed
+													 from dm_meta.test_validator_checkpoint where source='mysql-replica-02'" \
+		"processed: 5/0/0"
 	run_sql_tidb_with_retry "select count(*) from dm_meta.test_validator_pending_change" \
 		"count(*): 0"
 	run_sql_tidb_with_retry "select count(*) from dm_meta.test_validator_table_status where source='mysql-replica-01'" \
