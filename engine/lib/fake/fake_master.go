@@ -572,9 +572,8 @@ func (m *Master) genWorkerConfig(index int, checkpoint workerCheckpoint) *Worker
 }
 
 // NewFakeMaster creates a new fake master instance
-func NewFakeMaster(ctx *dcontext.Context, workerID libModel.WorkerID, masterID libModel.MasterID, config lib.WorkerConfig) *Master {
-	log.L().Info("new fake master", zap.Any("config", config))
-	masterConfig := config.(*Config)
+func NewFakeMaster(ctx *dcontext.Context, workerID libModel.WorkerID, masterID libModel.MasterID, masterConfig *Config) *Master {
+	log.L().Info("new fake master", zap.Any("config", masterConfig))
 	ret := &Master{
 		workerID:            workerID,
 		pendingWorkerSet:    make(map[libModel.WorkerID]int),
