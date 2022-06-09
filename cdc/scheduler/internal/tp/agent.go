@@ -41,7 +41,7 @@ type agent struct {
 	// runningTasks track all in progress dispatch table task
 	runningTasks map[model.TableID]*dispatchTableTask
 
-	// tables map[model.TableID]*tableImpl
+	tables map[model.TableID]*table
 
 	// owner's information
 	ownerInfo ownerInfo
@@ -172,11 +172,11 @@ func (a *agent) handleMessage(msg []*schedulepb.Message) []*schedulepb.Message {
 		}
 
 		switch message.GetMsgType() {
-		case schedulepb.MsgDispatchTableRequest:
-			a.handleMessageDispatchTableRequest(message.DispatchTableRequest, processorEpoch)
 		case schedulepb.MsgHeartbeat:
 			response := a.handleMessageHeartbeat(message.Heartbeat.GetTableIDs())
 			result = append(result, response)
+		case schedulepb.MsgDispatchTableRequest:
+			a.handleMessageDispatchTableRequest(message.DispatchTableRequest, processorEpoch)
 		default:
 			log.Warn("tpscheduler: unknown message received",
 				zap.String("capture", a.captureID),
@@ -301,7 +301,7 @@ type dispatchTableTask struct {
 func (a *agent) handleMessageDispatchTableRequest(
 	request *schedulepb.DispatchTableRequest,
 	epoch schedulepb.ProcessorEpoch,
-) {
+) (*schedulepb.Message, error) {
 	if a.epoch != epoch {
 		log.Info("tpscheduler: agent receive dispatch table request "+
 			"epoch does not match, ignore it",
@@ -310,9 +310,9 @@ func (a *agent) handleMessageDispatchTableRequest(
 			zap.String("changefeed", a.changeFeedID.ID),
 			zap.String("epoch", epoch.Epoch),
 			zap.String("expected", a.epoch.Epoch))
-		return
+		return nil, nil
 	}
-	task := new(dispatchTableTask)
+	//task := new(dispatchTableTask)
 	switch req := request.Request.(type) {
 	case *schedulepb.DispatchTableRequest_AddTable:
 		if a.stopping {
@@ -320,56 +320,58 @@ func (a *agent) handleMessageDispatchTableRequest(
 				zap.String("capture", a.captureID),
 				zap.String("namespace", a.changeFeedID.Namespace),
 				zap.String("changefeed", a.changeFeedID.ID))
-			return
+			return nil, nil
 		}
-		task = &dispatchTableTask{
-			TableID:   req.AddTable.GetTableID(),
+		tableID := req.AddTable.GetTableID()
+		task := &dispatchTableTask{
+			TableID:   tableID,
 			StartTs:   req.AddTable.GetCheckpoint().CheckpointTs,
 			IsRemove:  false,
 			IsPrepare: req.AddTable.GetIsSecondary(),
 			Epoch:     epoch,
 			status:    dispatchTableTaskReceived,
 		}
+		table, ok := a.tables[tableID]
+		if !ok {
+			table = newTable(tableID, a.tableExec)
+		}
+		message, err := table.poll(task)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		return message, nil
 	case *schedulepb.DispatchTableRequest_RemoveTable:
-		task = &dispatchTableTask{
-			TableID:  req.RemoveTable.GetTableID(),
+		tableID := req.RemoveTable.GetTableID()
+		table, ok := a.tables[tableID]
+		if !ok {
+			log.Warn("tpscheduler: agent ignore remove table request,"+
+				"since the table not found",
+				zap.Any("tableID", tableID),
+				zap.String("capture", a.captureID),
+				zap.String("namespace", a.changeFeedID.Namespace),
+				zap.String("changefeed", a.changeFeedID.ID))
+			return nil, nil
+		}
+		task := &dispatchTableTask{
+			TableID:  tableID,
 			IsRemove: true,
 			Epoch:    epoch,
 			status:   dispatchTableTaskReceived,
 		}
-		if a.tableExec.GetTableMeta(task.TableID).State == pipeline.TableStateAbsent {
-			log.Warn("tpscheduler: agent ignore remove table request, "+
-				"since the table is absent",
-				zap.Any("tableID", task.TableID),
-				zap.String("capture", a.captureID),
-				zap.String("namespace", a.changeFeedID.Namespace),
-				zap.String("changefeed", a.changeFeedID.ID))
-			return
+		message, err := table.poll(task)
+		if err != nil {
+			return nil, errors.Trace(err)
 		}
+		return message, nil
+
 	default:
 		log.Warn("tpscheduler: agent ignore unknown dispatch table request",
 			zap.String("capture", a.captureID),
 			zap.String("namespace", a.changeFeedID.Namespace),
 			zap.String("changefeed", a.changeFeedID.ID),
 			zap.Any("request", request))
-		return
+		return nil, nil
 	}
-
-	if task, ok := a.runningTasks[task.TableID]; ok {
-		log.Warn("tpscheduler: agent found duplicate task, ignore the current request",
-			zap.String("capture", a.captureID),
-			zap.String("namespace", a.changeFeedID.Namespace),
-			zap.String("changefeed", a.changeFeedID.ID),
-			zap.Any("task", task),
-			zap.Any("request", request))
-		return
-	}
-	log.Debug("tpscheduler: agent found dispatch table task",
-		zap.String("capture", a.captureID),
-		zap.String("namespace", a.changeFeedID.Namespace),
-		zap.String("changefeed", a.changeFeedID.ID),
-		zap.Any("task", task))
-	a.runningTasks[task.TableID] = task
 }
 
 func (a *agent) handleRemoveTableTask(
@@ -622,6 +624,8 @@ func (a *agent) sendMsgs(ctx context.Context, msgs []*schedulepb.Message) error 
 	return a.trans.Send(ctx, msgs)
 }
 
+// table is a state machine that manage the table's state,
+// also tracking its progress by utilize the `TableExecutor`
 type table struct {
 	ID    model.TableID
 	State schedulepb.TableState
@@ -632,16 +636,9 @@ type table struct {
 func newTable(tableID model.TableID, executor internal.TableExecutor) *table {
 	return &table{
 		ID:       tableID,
-		State:    schedulepb.TableStateAbsent,
 		Executor: executor,
 	}
 }
-
-//type tableExecutorFactory struct{}
-//
-//func (tableExecutorFactory) NewTableExecutor(tableID model.TableID) internal.TableExecutor {
-//	return nil
-//}
 
 func (t *table) TableStatus() schedulepb.TableStatus {
 	checkpointTs, resolvedTs := t.Executor.GetCheckpoint()
@@ -655,7 +652,7 @@ func (t *table) TableStatus() schedulepb.TableStatus {
 	}
 }
 
-func (t *table) poll(input dispatchTableTask) {
+func (t *table) poll(task *dispatchTableTask) (*schedulepb.Message, error) {
 	switch t.State {
 	case schedulepb.TableStateAbsent:
 	case schedulepb.TableStatePreparing:
@@ -664,6 +661,8 @@ func (t *table) poll(input dispatchTableTask) {
 	case schedulepb.TableStateStopping:
 	case schedulepb.TableStateStopped:
 	}
+
+	return nil, nil
 }
 
 func (t *table) handleAddTableRequest(
@@ -681,3 +680,9 @@ func (t *table) handleRemoveTableRequest(
 func (t *table) handleHeartbeat() *schedulepb.RemoveTableResponse {
 	return nil
 }
+
+//type tableExecutorFactory struct{}
+//
+//func (tableExecutorFactory) NewTableExecutor(tableID model.TableID) internal.TableExecutor {
+//	return nil
+//}
