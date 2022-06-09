@@ -607,7 +607,15 @@ func (t *table) handleRemoveTableTask(ctx context.Context) *schedulepb.Message {
 		schedulepb.TableStateStopping, // stopping now is useless
 		schedulepb.TableStateStopped:
 		log.Warn("tpscheduler: table is stopped now", zap.Any("table", t))
+		checkpointTs, done := t.executor.IsRemoveTableFinished(ctx, t.id)
+		if !done {
+			// actually, this should never be triggered
+			return nil
+		}
+		// todo: remove the table from `agent.Tables`, it should not in the next heartbeat response.
 		t.task = nil
+		t.status.Checkpoint.CheckpointTs = checkpointTs
+		t.status.State = schedulepb.TableStateStopped
 		message := newRemoveTableResponseMessage(t.status)
 		return message
 	case schedulepb.TableStatePreparing,
