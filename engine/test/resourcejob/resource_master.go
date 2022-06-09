@@ -49,11 +49,11 @@ func NewMaster(
 	ctx *dcontext.Context,
 	workerID libModel.WorkerID,
 	masterID libModel.MasterID,
-	config lib.WorkerConfig,
+	config *JobConfig,
 ) lib.WorkerImpl {
 	return &JobMaster{
 		status: initialMasterStatus(),
-		config: config.(*JobConfig),
+		config: config,
 	}
 }
 

@@ -25,9 +25,9 @@ func init() {
 
 // Register registers the resource jobMaster and worker.
 func Register(reg registry.Registry) {
-	fakeMasterFactory := registry.NewSimpleWorkerFactory(NewMaster, &JobConfig{})
+	fakeMasterFactory := registry.NewSimpleWorkerFactory(NewMaster)
 	reg.MustRegisterWorkerType(lib.ResourceTestJobMaster, fakeMasterFactory)
 
-	fakeWorkerFactory := registry.NewSimpleWorkerFactory(NewWorker, &workerConfig{})
+	fakeWorkerFactory := registry.NewSimpleWorkerFactory(NewWorker)
 	reg.MustRegisterWorkerType(lib.ResourceTestWorker, fakeWorkerFactory)
 }

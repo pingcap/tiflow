@@ -55,9 +55,8 @@ type Worker struct {
 func NewWorker(
 	ctx *dcontext.Context,
 	workerID libModel.WorkerID, masterID libModel.MasterID,
-	cfg lib.WorkerConfig,
+	config *workerConfig,
 ) lib.WorkerImpl {
-	config := cfg.(*workerConfig)
 	status := &workerStatus{}
 
 	logger := log.L().WithFields(
