@@ -16,7 +16,6 @@ package pipeline
 import (
 	"context"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -86,7 +85,7 @@ func TestTableActorInterface(t *testing.T) {
 	require.Equal(t, TableStatusStopped, tbl.Status())
 	require.Equal(t, uint64(1), tbl.Workload().Workload)
 
-	atomic.StoreUint64(&sink.checkpointTs, 3)
+	sink.checkpointTs.Store(model.NewResolvedTs(3))
 	require.Equal(t, model.Ts(3), tbl.CheckpointTs())
 
 	require.Equal(t, model.Ts(5), tbl.ResolvedTs())
@@ -189,10 +188,10 @@ func TestPollTickMessage(t *testing.T) {
 		status:         TableStatusInitializing,
 		sink:           &mockSink{},
 		flowController: &mockFlowController{},
-		checkpointTs:   10,
 		targetTs:       11,
 	}
 	sn.resolvedTs.Store(model.NewResolvedTs(10))
+	sn.checkpointTs.Store(model.NewResolvedTs(10))
 
 	tbl := tableActor{
 		sinkNode:          sn,
@@ -239,11 +238,11 @@ func TestPollStopMessage(t *testing.T) {
 
 func TestPollBarrierTsMessage(t *testing.T) {
 	sn := &sinkNode{
-		targetTs:     10,
-		checkpointTs: 5,
-		barrierTs:    8,
+		targetTs:  10,
+		barrierTs: 8,
 	}
 	sn.resolvedTs.Store(model.NewResolvedTs(5))
+	sn.checkpointTs.Store(model.NewResolvedTs(5))
 
 	tbl := tableActor{
 		sinkNode: sn,
@@ -359,7 +358,7 @@ func TestNewTableActor(t *testing.T) {
 		&model.TableReplicaInfo{
 			StartTs:     0,
 			MarkTableID: 1,
-		}, &mockSink{}, 10)
+		}, &mockSink{}, false, 10)
 	require.NotNil(t, tbl)
 	require.Nil(t, err)
 	require.NotPanics(t, func() {
@@ -375,7 +374,7 @@ func TestNewTableActor(t *testing.T) {
 		&model.TableReplicaInfo{
 			StartTs:     0,
 			MarkTableID: 1,
-		}, &mockSink{}, 10)
+		}, &mockSink{}, false, 10)
 	require.Nil(t, tbl)
 	require.NotNil(t, err)
 
