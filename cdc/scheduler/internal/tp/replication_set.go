@@ -14,6 +14,7 @@
 package tp
 
 import (
+	"encoding/json"
 	"fmt"
 
 	"github.com/pingcap/errors"
@@ -78,7 +79,7 @@ func (r ReplicationSetState) String() string {
 // MarshalJSON returns r as the JSON encoding of ReplicationSetState.
 // Only used for pretty print in zap log.
 func (r ReplicationSetState) MarshalJSON() ([]byte, error) {
-	return []byte(r.String()), nil
+	return json.Marshal(r.String())
 }
 
 // ReplicationSet is a state machine that manages replication states.

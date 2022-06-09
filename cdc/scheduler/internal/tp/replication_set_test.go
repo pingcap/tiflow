@@ -14,6 +14,7 @@
 package tp
 
 import (
+	"encoding/json"
 	"math/rand"
 	"testing"
 	"time"
@@ -1117,4 +1118,12 @@ func TestReplicationSetMoveTableWithHeartbeatResponse(t *testing.T) {
 	require.Equal(t, ReplicationSetStateReplicating, r.State)
 	require.Equal(t, dest, r.Primary)
 	require.Equal(t, "", r.Secondary)
+}
+
+func TestReplicationSetMarshalJSON(t *testing.T) {
+	t.Parallel()
+
+	b, err := json.Marshal(ReplicationSet{State: ReplicationSetStateReplicating})
+	require.Nil(t, err)
+	require.Contains(t, string(b), "Replicating", string(b))
 }
