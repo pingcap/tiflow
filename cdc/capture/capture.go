@@ -111,8 +111,10 @@ func NewCapture(pdEndpoints []string,
 // NewCapture4Test returns a new Capture instance for test.
 func NewCapture4Test(o owner.Owner) *Capture {
 	res := &Capture{
-		info: &model.CaptureInfo{ID: "capture-for-test",
-			AdvertiseAddr: "127.0.0.1", Version: "test"},
+		info: &model.CaptureInfo{
+			ID:            "capture-for-test",
+			AdvertiseAddr: "127.0.0.1", Version: "test",
+		},
 		migrator: &migrate.NoOpMigrator{},
 	}
 	res.owner = o
