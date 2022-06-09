@@ -20,7 +20,6 @@ import (
 	"github.com/pingcap/tidb/kv"
 	apiv1client "github.com/pingcap/tiflow/pkg/api/v1"
 	apiv2client "github.com/pingcap/tiflow/pkg/api/v2"
-	"github.com/pingcap/tiflow/pkg/cmd/util"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/spf13/cobra"
@@ -107,25 +106,25 @@ func (c *ClientFlags) AddFlags(cmd *cobra.Command) {
 	cmd.PersistentFlags().StringVar(&c.serverAddr, "server-addr",
 		"http://127.0.0.1:8300", "CDC server address")
 	cmd.PersistentFlags().StringVar(&c.pdAddr, "pd", "http://127.0.0.1:2379", "PD address, use ',' to separate multiple PDs")
-	cmd.PersistentFlags().StringVar(&c.caPath, "ca", "", "CA certificate path for TLS connection")
-	cmd.PersistentFlags().StringVar(&c.certPath, "cert", "", "Certificate path for TLS connection")
-	cmd.PersistentFlags().StringVar(&c.keyPath, "key", "", "Private key path for TLS connection")
+	cmd.PersistentFlags().StringVar(&c.caPath, "ca", "", "CA certificate path for TLS connection to CDC server")
+	cmd.PersistentFlags().StringVar(&c.certPath, "cert", "", "Certificate path for TLS connection to CDC server")
+	cmd.PersistentFlags().StringVar(&c.keyPath, "key", "", "Private key path for TLS connection to CDC server")
 	cmd.PersistentFlags().StringVar(&c.logLevel, "log-level", "warn", "log level (etc: debug|info|warn|error)")
 }
 
-// Validate makes sure provided values for ClientFlags are valid.
-func (c *ClientFlags) Validate() error {
-	tlsConfig, err := c.ToTLSConfig()
-	if err != nil {
-		return errors.Annotate(err, "fail to validate TLS settings")
-	}
+// // Validate makes sure provided values for ClientFlags are valid.
+// func (c *ClientFlags) Validate() error {
+// 	tlsConfig, err := c.ToTLSConfig()
+// 	if err != nil {
+// 		return errors.Annotate(err, "fail to validate TLS settings")
+// 	}
 
-	if err := util.VerifyPdEndpoint(c.pdAddr, tlsConfig != nil); err != nil {
-		return errors.Annotate(err, "fail to validate PD endpoint")
-	}
+// 	if err := util.VerifyPdEndpoint(c.pdAddr, tlsConfig != nil); err != nil {
+// 		return errors.Annotate(err, "fail to validate PD endpoint")
+// 	}
 
-	return nil
-}
+// 	return nil
+// }
 
 // GetCredential returns credential.
 func (c *ClientFlags) GetCredential() *security.Credential {

@@ -37,7 +37,7 @@ func (h *OpenAPIV2) CreateChangefeed(c *gin.Context) {
 
 	ctx := c.Request.Context()
 
-	config := &ChangefeedConfig{ReplicaConfig: getDefaultReplicaConfig()}
+	config := &ChangefeedConfig{ReplicaConfig: GetDefaultReplicaConfig()}
 
 	if err := c.BindJSON(&config); err != nil {
 		_ = c.Error(cerror.ErrAPIInvalidParam.Wrap(err))
@@ -99,11 +99,7 @@ func (h *OpenAPIV2) VerifyTable(c *gin.Context) {
 		_ = c.Error(err)
 		return
 	}
-	replicaCfg, err := fillReplicaConfig(cfg.ReplicaConfig)
-	if err != nil {
-		_ = c.Error(err)
-		return
-	}
+	replicaCfg := cfg.ReplicaConfig.ToInternalReplicaConfig()
 	ineligibleTables, eligibleTables, err := entry.VerifyTables(replicaCfg, kvStore, cfg.StartTs)
 	if err != nil {
 		_ = c.Error(err)

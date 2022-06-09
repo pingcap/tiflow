@@ -19,6 +19,7 @@ import (
 	tidbModel "github.com/pingcap/tidb/parser/model"
 	filter "github.com/pingcap/tidb/util/table-filter"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
 )
 
 // Tso contains timestamp get from PD
@@ -48,7 +49,7 @@ type VerifyTableConfig struct {
 
 func getDefaultVerifyTableConfig() *VerifyTableConfig {
 	return &VerifyTableConfig{
-		ReplicaConfig: getDefaultReplicaConfig(),
+		ReplicaConfig: GetDefaultReplicaConfig(),
 	}
 }
 
@@ -84,8 +85,112 @@ type ReplicaConfig struct {
 	Consistent            *ConsistentConfig `json:"consistent"`
 }
 
-// getDefaultReplicaConfig returns a default ReplicaConfig
-func getDefaultReplicaConfig() *ReplicaConfig {
+// ToInternalReplicaConfig coverts *v2.ReplicaConfig into *config.ReplicaConfig
+func (c *ReplicaConfig) ToInternalReplicaConfig() *config.ReplicaConfig {
+	res := config.GetDefaultReplicaConfig()
+	res.CaseSensitive = c.CaseSensitive
+	res.EnableOldValue = c.EnableOldValue
+	res.ForceReplicate = c.ForceReplicate
+	res.CheckGCSafePoint = c.CheckGCSafePoint
+
+	if c.Filter != nil {
+		res.Filter = &config.FilterConfig{
+			Rules:                 c.Filter.Rules,
+			MySQLReplicationRules: c.Filter.MySQLReplicationRules,
+			IgnoreTxnStartTs:      c.Filter.IgnoreTxnStartTs,
+			DDLAllowlist:          c.Filter.DDLAllowlist,
+		}
+	}
+
+	if c.Consistent != nil {
+		res.Consistent = &config.ConsistentConfig{
+			Level:             c.Consistent.Level,
+			MaxLogSize:        c.Consistent.MaxLogSize,
+			FlushIntervalInMs: c.Consistent.FlushIntervalInMs,
+			Storage:           c.Consistent.Storage,
+		}
+	}
+	if c.Sink != nil {
+		var dispatchRules []*config.DispatchRule
+		for _, rule := range c.Sink.DispatchRules {
+			dispatchRules = append(dispatchRules, &config.DispatchRule{
+				Matcher:        rule.Matcher,
+				DispatcherRule: "",
+				PartitionRule:  rule.PartitionRule,
+				TopicRule:      rule.TopicRule,
+			})
+		}
+		var columnSelectors []*config.ColumnSelector
+		for _, selector := range c.Sink.ColumnSelectors {
+			columnSelectors = append(columnSelectors, &config.ColumnSelector{
+				Matcher: selector.Matcher,
+				Columns: selector.Columns,
+			})
+		}
+		res.Sink = &config.SinkConfig{
+			DispatchRules:   dispatchRules,
+			Protocol:        c.Sink.Protocol,
+			ColumnSelectors: columnSelectors,
+			SchemaRegistry:  c.Sink.SchemaRegistry,
+		}
+	}
+	return res
+}
+
+// ToInternalReplicaConfig coverts *config.ReplicaConfig into *v2.ReplicaConfig
+func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
+	res := &ReplicaConfig{
+		CaseSensitive:         c.CaseSensitive,
+		EnableOldValue:        c.EnableOldValue,
+		ForceReplicate:        c.ForceReplicate,
+		IgnoreIneligibleTable: false,
+		CheckGCSafePoint:      c.CheckGCSafePoint,
+	}
+
+	if c.Filter != nil {
+		res.Filter = &FilterConfig{
+			MySQLReplicationRules: c.Filter.MySQLReplicationRules,
+			Rules:                 c.Filter.Rules,
+			IgnoreTxnStartTs:      c.Filter.IgnoreTxnStartTs,
+			DDLAllowlist:          c.Filter.DDLAllowlist,
+		}
+	}
+	if c.Sink != nil {
+		var dispatchRules []*DispatchRule
+		for _, rule := range c.Sink.DispatchRules {
+			dispatchRules = append(dispatchRules, &DispatchRule{
+				Matcher:       rule.Matcher,
+				PartitionRule: rule.PartitionRule,
+				TopicRule:     rule.TopicRule,
+			})
+		}
+		var columnSelectors []*ColumnSelector
+		for _, selector := range c.Sink.ColumnSelectors {
+			columnSelectors = append(columnSelectors, &ColumnSelector{
+				Matcher: selector.Matcher,
+				Columns: selector.Columns,
+			})
+		}
+		res.Sink = &SinkConfig{
+			Protocol:        c.Sink.Protocol,
+			SchemaRegistry:  c.Sink.SchemaRegistry,
+			DispatchRules:   dispatchRules,
+			ColumnSelectors: columnSelectors,
+		}
+	}
+	if c.Consistent != nil {
+		res.Consistent = &ConsistentConfig{
+			Level:             c.Consistent.Level,
+			MaxLogSize:        c.Consistent.MaxLogSize,
+			FlushIntervalInMs: c.Consistent.FlushIntervalInMs,
+			Storage:           c.Consistent.Storage,
+		}
+	}
+	return res
+}
+
+// GetDefaultReplicaConfig returns a default ReplicaConfig
+func GetDefaultReplicaConfig() *ReplicaConfig {
 	return &ReplicaConfig{
 		CaseSensitive:    true,
 		EnableOldValue:   true,
@@ -117,7 +222,6 @@ type FilterConfig struct {
 type SinkConfig struct {
 	Protocol        string            `json:"protocol"`
 	SchemaRegistry  string            `json:"schema-registry"`
-	TimeZone        string            `json:"time-zone"`
 	DispatchRules   []*DispatchRule   `json:"dispatchers"`
 	ColumnSelectors []*ColumnSelector `json:"column-selectors"`
 }

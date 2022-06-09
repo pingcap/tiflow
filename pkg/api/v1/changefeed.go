@@ -48,7 +48,7 @@ func newChangefeeds(c *APIV1Client) *changefeeds {
 	}
 }
 
-// Get takes name of the changfeed, and returns the corresponding changfeed object,
+// Get takes name of the changefeed, and returns the corresponding changefeed object,
 // and an error if there is any.
 func (c *changefeeds) Get(ctx context.Context, name string) (*model.ChangefeedDetail, error) {
 	result := new(model.ChangefeedDetail)
@@ -70,7 +70,7 @@ func (c *changefeeds) List(ctx context.Context) (*[]model.ChangefeedCommonInfo, 
 	return result, err
 }
 
-// Pause the changefeeds
+// Pause the changefeed
 func (c *changefeeds) Pause(ctx context.Context, name string) error {
 	u := fmt.Sprintf("changefeeds/%s/pause", name)
 	return c.client.Post().
