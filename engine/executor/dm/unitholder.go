@@ -143,11 +143,15 @@ func (u *unitHolderImpl) Close(ctx context.Context) error {
 
 	u.fieldMu.Lock()
 	// cancel process
-	u.runCancel()
+	if u.runCancel != nil {
+		u.runCancel()
+	}
 	u.fieldMu.Unlock()
 
 	u.processWg.Wait()
-	u.unit.Close()
+	if u.unit != nil {
+		u.unit.Close()
+	}
 	return nil
 }
 
