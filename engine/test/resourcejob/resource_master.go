@@ -104,9 +104,9 @@ func (m *JobMaster) Tick(ctx context.Context) error {
 		}
 		return nil
 	case masterStateFinished:
-		return m.UpdateJobStatus(ctx, libModel.WorkerStatus{
+		return m.Exit(ctx, libModel.WorkerStatus{
 			Code: libModel.WorkerStatusFinished,
-		})
+		}, nil)
 	default:
 		log.L().Panic("Unexpected state", zap.String("state", string(m.status.State)))
 	}
