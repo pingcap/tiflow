@@ -145,6 +145,10 @@ func (jm *JobMaster) OnWorkerDispatched(worker lib.WorkerHandle, result error) e
 // OnWorkerOnline implements JobMasterImpl.OnWorkerOnline
 func (jm *JobMaster) OnWorkerOnline(worker lib.WorkerHandle) error {
 	log.L().Debug("on worker online", zap.String("id", jm.workerID), zap.String("worker_id", worker.ID()))
+	return jm.handleOnlineStatus(worker)
+}
+
+func (jm *JobMaster) handleOnlineStatus(worker lib.WorkerHandle) error {
 	var taskStatus runtime.TaskStatus
 	if err := json.Unmarshal(worker.Status().ExtBytes, &taskStatus); err != nil {
 		return err
@@ -193,9 +197,7 @@ func (jm *JobMaster) OnWorkerStatusUpdated(worker lib.WorkerHandle, newStatus *l
 		return nil
 	}
 	log.L().Debug("on worker status updated", zap.String("extra bytes", string(newStatus.ExtBytes)), zap.String("id", jm.workerID), zap.String("worker_id", worker.ID()))
-	// directly call OnWorkerOnline because we do not relay on worker status.Code, status.ID, etc.
-	// we only relay on status.ExtBytes, which is the task status and will be triggered by worker online.
-	return jm.OnWorkerOnline(worker)
+	return jm.handleOnlineStatus(worker)
 }
 
 // OnJobManagerMessage implements JobMasterImpl.OnJobManagerMessage
