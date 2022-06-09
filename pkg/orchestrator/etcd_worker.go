@@ -547,10 +547,6 @@ func (worker *EtcdWorker) checkAndMigrateMetaData(
 
 	if role != pkgutil.RoleOwner.String() {
 		err := worker.migrator.WaitMetaVersionMatched(ctx)
-		if err != nil {
-			// processor
-			worker.migrator.MarkMigrateDone()
-		}
 		return errors.Trace(err)
 	}
 
