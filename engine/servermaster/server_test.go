@@ -257,6 +257,10 @@ func (m *mockJobManager) PauseJob(ctx context.Context, req *pb.PauseJobRequest) 
 	panic("not implemented")
 }
 
+func (m *mockJobManager) DebugJob(ctx context.Context, req *pb.DebugJobRequest) *pb.DebugJobResponse {
+	panic("not implemented")
+}
+
 func (m *mockJobManager) GetJobStatuses(ctx context.Context) (map[libModel.MasterID]libModel.MasterStatusCode, error) {
 	panic("not implemented")
 }

@@ -20,13 +20,13 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/runtime"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/ticker"
-	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
 )
 
 // OperateType represents internal operate type in DM
@@ -104,8 +104,8 @@ func (tm *TaskManager) OperateTask(ctx context.Context, op OperateType, jobCfg *
 
 // UpdateTaskStatus is called when receive task status from worker.
 func (tm *TaskManager) UpdateTaskStatus(taskStatus runtime.TaskStatus) {
-	log.L().Debug("update task status", zap.String("task_id", taskStatus.GetTask()), zap.Int("stage", int(taskStatus.GetStage())), zap.Int("unit", int(taskStatus.GetUnit())))
-	tm.tasks.Store(taskStatus.GetTask(), taskStatus)
+	log.L().Debug("update task status", zap.String("task_id", taskStatus.Task), zap.Int("stage", int(taskStatus.Stage)), zap.Int("unit", int(taskStatus.Unit)))
+	tm.tasks.Store(taskStatus.Task, taskStatus)
 }
 
 // TaskStatus return the task status.
@@ -148,19 +148,19 @@ func (tm *TaskManager) checkAndOperateTasks(ctx context.Context, job *metadata.J
 		}
 
 		// task unbounded or worker offline
-		if !ok || runningTask.GetStage() == metadata.StageUnscheduled {
+		if !ok || runningTask.Stage == metadata.StageUnscheduled {
 			recordError = errors.New("get task running status failed")
 			log.L().Error("failed to schedule task", zap.String("task_id", taskID), zap.Error(recordError))
 			continue
 		}
 
 		if taskAsExpected(persistentTask, runningTask) {
-			log.L().Debug("task status as expected", zap.String("task_id", taskID), zap.Int("stage", int(runningTask.GetStage())))
+			log.L().Debug("task status as expected", zap.String("task_id", taskID), zap.Int("stage", int(runningTask.Stage)))
 			continue
 		}
 
-		log.L().Info("unexpected task status", zap.String("task_id", taskID), zap.Int("expected_stage", int(persistentTask.Stage)), zap.Int("stage", int(runningTask.GetStage())))
-		// OperateTask should be a asynchronous request
+		log.L().Info("unexpected task status", zap.String("task_id", taskID), zap.Int("expected_stage", int(persistentTask.Stage)), zap.Int("stage", int(runningTask.Stage)))
+		// operateTaskMessage should be a asynchronous request
 		if err := tm.operateTaskMessage(ctx, taskID, persistentTask.Stage); err != nil {
 			recordError = err
 			log.L().Error("operate task failed", zap.Error(recordError))
@@ -191,12 +191,21 @@ func (tm *TaskManager) removeTaskStatus(job *metadata.Job) {
 	})
 }
 
+// GetTaskStatus gets task status by taskID
+func (tm *TaskManager) GetTaskStatus(taskID string) (runtime.TaskStatus, bool) {
+	value, ok := tm.tasks.Load(taskID)
+	if !ok {
+		return runtime.NewOfflineStatus(taskID), false
+	}
+	return value.(runtime.TaskStatus), true
+}
+
 // check a task runs as expected.
 func taskAsExpected(persistentTask *metadata.Task, taskStatus runtime.TaskStatus) bool {
 	// TODO: when running is expected but task is paused, we may still need return true,
 	// because worker will resume it automatically.
-	// refactor when implements OperateTask
-	return persistentTask.Stage == taskStatus.GetStage() || taskStatus.GetStage() == metadata.StageUnscheduled || taskStatus.GetStage() == metadata.StageFinished
+	// refactor when implement operate task
+	return taskStatus.Stage == metadata.StageFinished || taskStatus.Stage == metadata.StageUnscheduled || persistentTask.Stage == taskStatus.Stage
 }
 
 func (tm *TaskManager) operateTaskMessage(ctx context.Context, taskID string, stage metadata.TaskStage) error {

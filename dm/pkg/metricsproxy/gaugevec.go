@@ -16,6 +16,7 @@ package metricsproxy // nolint:dupl
 import (
 	"sync"
 
+	"github.com/pingcap/tiflow/engine/pkg/promutil"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -30,11 +31,11 @@ type GaugeVecProxy struct {
 
 // NewGaugeVec creates a new GaugeVec based on the provided GaugeOpts and
 // partitioned by the given label names.
-func NewGaugeVec(opts prometheus.GaugeOpts, labelNames []string) *GaugeVecProxy {
+func NewGaugeVec(f promutil.Factory, opts prometheus.GaugeOpts, labelNames []string) *GaugeVecProxy {
 	gaugeVecProxy := &GaugeVecProxy{
 		LabelNamesIndex: make(map[string]int, len(labelNames)),
 		Labels:          make(map[string][]string),
-		GaugeVec:        prometheus.NewGaugeVec(opts, labelNames),
+		GaugeVec:        f.NewGaugeVec(opts, labelNames),
 	}
 	for idx, v := range labelNames {
 		gaugeVecProxy.LabelNamesIndex[v] = idx

@@ -18,6 +18,7 @@ import (
 	"time"
 
 	. "github.com/pingcap/check"
+	"github.com/pingcap/tiflow/engine/pkg/promutil"
 
 	"github.com/prometheus/client_golang/prometheus"
 )
@@ -25,13 +26,14 @@ import (
 func (t *testMetricsProxySuite) TestGaugeVecProxy(c *C) {
 	rand.Seed(time.Now().UnixNano())
 	for _, oneCase := range testCases {
-		gauge := NewGaugeVec(prometheus.GaugeOpts{
-			Namespace:   "dm",
-			Subsystem:   "metricsProxy",
-			Name:        "Test_Gauge",
-			Help:        "dm gauge metrics proxy test",
-			ConstLabels: nil,
-		}, oneCase.LabelsNames)
+		gauge := NewGaugeVec(&promutil.PromFactory{},
+			prometheus.GaugeOpts{
+				Namespace:   "dm",
+				Subsystem:   "metricsProxy",
+				Name:        "Test_Gauge",
+				Help:        "dm gauge metrics proxy test",
+				ConstLabels: nil,
+			}, oneCase.LabelsNames)
 		for _, aArgs := range oneCase.AddArgs {
 			if rand.Intn(199)%2 == 0 {
 				gauge.WithLabelValues(aArgs...).Add(float64(rand.Intn(199)))

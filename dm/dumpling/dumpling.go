@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/dumpling/export"
 	filter "github.com/pingcap/tidb/util/table-filter"
+	"github.com/pingcap/tiflow/dm/pkg/metricsproxy"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
@@ -42,7 +43,8 @@ import (
 
 // Dumpling dumps full data from a MySQL-compatible database.
 type Dumpling struct {
-	cfg *config.SubTaskConfig
+	cfg           *config.SubTaskConfig
+	metricProxies *metricProxies
 
 	logger log.Logger
 
@@ -67,13 +69,27 @@ func (m *Dumpling) Init(ctx context.Context) error {
 	if m.dumpConfig, err = m.constructArgs(ctx); err != nil {
 		return err
 	}
+	if m.cfg.MetricsFactory != nil {
+		m.metricProxies = &metricProxies{}
+		m.metricProxies.dumplingExitWithErrorCounter = metricsproxy.NewCounterVec(
+			m.cfg.MetricsFactory,
+			prometheus.CounterOpts{
+				Namespace: "dm",
+				Subsystem: "dumpling",
+				Name:      "exit_with_error_count",
+				Help:      "counter for dumpling exit with error",
+			}, []string{"task", "source_id"},
+		)
+	} else {
+		m.metricProxies = defaultMetricProxies
+	}
 	m.logger.Info("create dumpling", zap.Stringer("config", m.dumpConfig))
 	return nil
 }
 
 // Process implements Unit.Process.
 func (m *Dumpling) Process(ctx context.Context, pr chan pb.ProcessResult) {
-	dumplingExitWithErrorCounter.WithLabelValues(m.cfg.Name, m.cfg.SourceID).Add(0)
+	m.metricProxies.dumplingExitWithErrorCounter.WithLabelValues(m.cfg.Name, m.cfg.SourceID).Add(0)
 
 	failpoint.Inject("dumpUnitProcessWithError", func(val failpoint.Value) {
 		m.logger.Info("dump unit runs with injected error", zap.String("failpoint", "dumpUnitProcessWithError"), zap.Reflect("error", val))
@@ -135,7 +151,7 @@ func (m *Dumpling) Process(ctx context.Context, pr chan pb.ProcessResult) {
 		if utils.IsContextCanceledError(err) {
 			m.logger.Info("filter out error caused by user cancel")
 		} else {
-			dumplingExitWithErrorCounter.WithLabelValues(m.cfg.Name, m.cfg.SourceID).Inc()
+			m.metricProxies.dumplingExitWithErrorCounter.WithLabelValues(m.cfg.Name, m.cfg.SourceID).Inc()
 			errs = append(errs, unit.NewProcessError(terror.ErrDumpUnitRuntime.Delegate(err, "")))
 		}
 	}
