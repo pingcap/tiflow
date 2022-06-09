@@ -212,6 +212,18 @@ func (m *JobMaster) OnWorkerStatusUpdated(worker lib.WorkerHandle, newStatus *li
 		zap.String("worker-id", worker.ID()),
 		zap.Any("new-status", newStatus))
 
+	if newStatus.Code == libModel.WorkerStatusFinished {
+		log.L().Info("ResourceJobMaster: worker finished",
+			zap.String("job-id", m.JobMasterID()),
+			zap.String("worker-id", worker.ID()),
+			zap.Any("new-status", newStatus))
+		return nil
+	}
+
+	if newStatus.ExtBytes == nil {
+		return nil
+	}
+
 	workerStatus, err := newWorkerStatusFromBytes(newStatus.ExtBytes)
 	if err != nil {
 		return err

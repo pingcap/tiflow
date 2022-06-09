@@ -87,7 +87,7 @@ func NewWorker(
 
 // InitImpl implements WorkerImpl.
 func (w *Worker) InitImpl(ctx context.Context) error {
-	return w.persistStatus(ctx)
+	return w.persistWorkerStatus(ctx)
 }
 
 // Tick implements WorkerImpl.
@@ -300,21 +300,5 @@ func (w *Worker) OnMasterMessage(topic p2p.Topic, message p2p.MessageValue) erro
 
 // CloseImpl implements WorkerImpl.
 func (w *Worker) CloseImpl(ctx context.Context) error {
-	return nil
-}
-
-func (w *Worker) persistStatus(ctx context.Context) error {
-	byteData, err := json.Marshal(w.status)
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	err = w.UpdateStatus(ctx, libModel.WorkerStatus{
-		Code:     libModel.WorkerStatusNormal,
-		ExtBytes: byteData,
-	})
-	if err != nil {
-		return errors.Trace(err)
-	}
 	return nil
 }
