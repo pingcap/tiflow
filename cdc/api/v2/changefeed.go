@@ -40,7 +40,7 @@ func (h *OpenAPIV2) CreateChangefeed(c *gin.Context) {
 	config := &ChangefeedConfig{ReplicaConfig: GetDefaultReplicaConfig()}
 
 	if err := c.BindJSON(&config); err != nil {
-		_ = c.Error(cerror.ErrAPIInvalidParam.Wrap(err))
+		_ = c.Error(cerror.WrapError(cerror.ErrAPIInvalidParam, err))
 		return
 	}
 
@@ -82,7 +82,7 @@ func (h *OpenAPIV2) CreateChangefeed(c *gin.Context) {
 func (h *OpenAPIV2) VerifyTable(c *gin.Context) {
 	cfg := getDefaultVerifyTableConfig()
 	if err := c.BindJSON(cfg); err != nil {
-		_ = c.Error(cerror.ErrAPIInvalidParam.Wrap(err))
+		_ = c.Error(cerror.WrapError(cerror.ErrAPIInvalidParam, err))
 		return
 	}
 	credential := &security.Credential{
@@ -94,6 +94,7 @@ func (h *OpenAPIV2) VerifyTable(c *gin.Context) {
 	if len(cfg.CertAllowedCN) != 0 {
 		credential.CertAllowedCN = cfg.CertAllowedCN
 	}
+
 	kvStore, err := kv.CreateTiStore(strings.Join(cfg.PDAddrs, ","), credential)
 	if err != nil {
 		_ = c.Error(err)
@@ -107,4 +108,8 @@ func (h *OpenAPIV2) VerifyTable(c *gin.Context) {
 	}
 	tables := &Tables{IneligibleTables: ineligibleTables, EligibleTables: eligibleTables}
 	c.JSON(http.StatusOK, tables)
+}
+
+func (h *OpenAPIV2) UpdateChangefeed(c *gin.Context) {
+
 }

@@ -33,6 +33,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/spf13/cobra"
+	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
 )
 
@@ -275,11 +276,16 @@ func (o *createChangefeedOptions) getChangefeedConfig(cmd *cobra.Command) *v2.Ch
 
 // run the `cli changefeed create` command.
 func (o *createChangefeedOptions) run(ctx context.Context, cmd *cobra.Command) error {
+	tso, err := o.apiClient.Tso().Get(ctx)
+	if err != nil {
+		return err
+	}
+
+	if o.startTs == 0 {
+		o.startTs = oracle.ComposeTS(tso.Timestamp, tso.LogicTime)
+	}
+
 	if !o.commonChangefeedOptions.noConfirm {
-		tso, err := o.apiClient.Tso().Get(ctx)
-		if err != nil {
-			return err
-		}
 
 		if err := confirmLargeDataGap(cmd, tso.Timestamp, o.startTs); err != nil {
 			return err
@@ -303,18 +309,26 @@ func (o *createChangefeedOptions) run(ctx context.Context, cmd *cobra.Command) e
 		return err
 	}
 
+	ignoreIneligibleTables := false
 	if len(tables.IneligibleTables) != 0 {
 		if o.cfg.ForceReplicate {
 			cmd.Printf("[WARN] force to replicate some ineligible tables, %#v\n", tables.IneligibleTables)
 		} else {
 			cmd.Printf("[WARN] some tables are not eligible to replicate, %#v\n", tables.IneligibleTables)
 			if !o.commonChangefeedOptions.noConfirm {
-				if err := confirmIgnoreIneligibleTables(cmd); err != nil {
+				ignoreIneligibleTables, err = confirmIgnoreIneligibleTables(cmd)
+				if err != nil {
 					return err
 				}
 			}
 		}
 	}
+
+	if o.commonChangefeedOptions.noConfirm {
+		ignoreIneligibleTables = true
+	}
+
+	createChangefeedCfg.ReplicaConfig.IgnoreIneligibleTable = ignoreIneligibleTables
 
 	info, err := o.apiClient.Changefeeds().Create(ctx, createChangefeedCfg)
 	if err != nil {

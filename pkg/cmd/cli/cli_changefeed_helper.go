@@ -63,19 +63,20 @@ func confirmLargeDataGap(cmd *cobra.Command, currentPhysical int64, startTs uint
 }
 
 // confirmIgnoreIneligibleTables confirm if user need to ignore ineligible tables.
-func confirmIgnoreIneligibleTables(cmd *cobra.Command) error {
+// If ignore it will return true.
+func confirmIgnoreIneligibleTables(cmd *cobra.Command) (bool, error) {
 	cmd.Printf("Could you agree to ignore those tables, and continue to replicate [Y/N]\n")
 	var yOrN string
 	_, err := fmt.Scan(&yOrN)
 	if err != nil {
-		return err
+		return false, err
 	}
 	if strings.ToLower(strings.TrimSpace(yOrN)) != "y" {
 		cmd.Printf("No changefeed is created because you don't want to ignore some tables.\n")
-		return errors.NewNoStackError("abort changefeed create or resume")
+		return false, errors.NewNoStackError("abort changefeed create or resume")
 	}
 
-	return nil
+	return true, nil
 }
 
 // getTables returns ineligibleTables and eligibleTables by filter.

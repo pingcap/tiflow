@@ -49,6 +49,7 @@ func (c *changefeeds) Create(ctx context.Context, cfg *v2.ChangefeedConfig) (*mo
 	result := &model.ChangeFeedInfo{}
 	err := c.client.Post().
 		WithURI("changefeeds").
+		WithBody(cfg).
 		Do(ctx).Into(result)
 	return result, err
 }

@@ -14,13 +14,14 @@
 package cli
 
 import (
+	"context"
+
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/cmd/context"
+	apiv1client "github.com/pingcap/tiflow/pkg/api/v1"
 	"github.com/pingcap/tiflow/pkg/cmd/factory"
 	"github.com/pingcap/tiflow/pkg/cmd/util"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
@@ -42,10 +43,9 @@ type cfMeta struct {
 
 // queryChangefeedOptions defines flags for the `cli changefeed query` command.
 type queryChangefeedOptions struct {
-	etcdClient *etcd.CDCEtcdClient
+	apiClient *apiv1client.APIV1Client
 
-	credential *security.Credential
-
+	credential   *security.Credential
 	changefeedID string
 	simplified   bool
 }
@@ -65,70 +65,38 @@ func (o *queryChangefeedOptions) addFlags(cmd *cobra.Command) {
 
 // complete adapts from the command line args to the data and client required.
 func (o *queryChangefeedOptions) complete(f factory.Factory) error {
-	etcdClient, err := f.EtcdClient()
+	o.credential = f.GetCredential()
+	client, err := f.APIV1Client()
 	if err != nil {
 		return err
 	}
-
-	o.etcdClient = etcdClient
-
-	o.credential = f.GetCredential()
-
+	o.apiClient = client
 	return nil
 }
 
 // run the `cli changefeed query` command.
 func (o *queryChangefeedOptions) run(cmd *cobra.Command) error {
-	ctx := context.GetDefaultContext()
-
+	ctx := context.Background()
 	if o.simplified {
-		resp, err := sendOwnerChangefeedQuery(ctx, o.etcdClient,
-			model.DefaultChangeFeedID(o.changefeedID),
-			o.credential)
+		infos, err := o.apiClient.Changefeeds().List(ctx)
 		if err != nil {
-			return err
+			return nil
 		}
-
-		cmd.Println(resp)
-
-		return nil
+		for _, info := range *infos {
+			if info.ID == o.changefeedID {
+				return util.JSONPrint(cmd, info)
+			}
+		}
+		return cerror.ErrChangeFeedNotExists.GenWithStackByArgs(o.changefeedID)
 	}
-
-	info, err := o.etcdClient.GetChangeFeedInfo(ctx,
-		model.DefaultChangeFeedID(o.changefeedID))
+	info, err := o.apiClient.Changefeeds().Get(ctx, o.changefeedID)
 	if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
 		return err
 	}
 	if info == nil {
 		log.Warn("This changefeed has been deleted, the residual meta data will be completely deleted within 24 hours.", zap.String("changgefeed", o.changefeedID))
 	}
-
-	status, _, err := o.etcdClient.GetChangeFeedStatus(ctx,
-		model.DefaultChangeFeedID(o.changefeedID))
-	if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
-		return err
-	}
-
-	if err != nil && cerror.ErrChangeFeedNotExists.Equal(err) {
-		log.Error("This changefeed does not exist", zap.String("changefeed", o.changefeedID))
-		return err
-	}
-
-	taskPositions, err := o.etcdClient.GetAllTaskPositions(ctx,
-		model.DefaultChangeFeedID(o.changefeedID))
-	if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
-		return err
-	}
-
-	var count uint64
-	for _, pinfo := range taskPositions {
-		count += pinfo.Count
-	}
-
-	taskStatus := make([]captureTaskStatus, 0)
-
-	meta := &cfMeta{Info: info, Status: status, Count: count, TaskStatus: taskStatus}
-	return util.JSONPrint(cmd, meta)
+	return util.JSONPrint(cmd, info)
 }
 
 // newCmdQueryChangefeed creates the `cli changefeed query` command.

@@ -112,20 +112,6 @@ func (c *ClientFlags) AddFlags(cmd *cobra.Command) {
 	cmd.PersistentFlags().StringVar(&c.logLevel, "log-level", "warn", "log level (etc: debug|info|warn|error)")
 }
 
-// // Validate makes sure provided values for ClientFlags are valid.
-// func (c *ClientFlags) Validate() error {
-// 	tlsConfig, err := c.ToTLSConfig()
-// 	if err != nil {
-// 		return errors.Annotate(err, "fail to validate TLS settings")
-// 	}
-
-// 	if err := util.VerifyPdEndpoint(c.pdAddr, tlsConfig != nil); err != nil {
-// 		return errors.Annotate(err, "fail to validate PD endpoint")
-// 	}
-
-// 	return nil
-// }
-
 // GetCredential returns credential.
 func (c *ClientFlags) GetCredential() *security.Credential {
 	var certAllowedCN []string
