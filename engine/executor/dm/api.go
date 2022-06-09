@@ -31,6 +31,7 @@ func (w *dmWorker) QueryStatus(ctx context.Context, req *dmpkg.QueryStatusReques
 	}
 	// get status from unit
 	status := w.unitHolder.Status(ctx)
+	stage, result := w.unitHolder.Stage()
 	// copy status via json
 	statusBytes, err := json.Marshal(status)
 	if err != nil {
@@ -38,7 +39,8 @@ func (w *dmWorker) QueryStatus(ctx context.Context, req *dmpkg.QueryStatusReques
 	}
 	return &dmpkg.QueryStatusResponse{
 		Unit:   w.workerType,
-		Stage:  w.getStage(),
+		Stage:  stage,
+		Result: result,
 		Status: statusBytes,
 	}
 }
@@ -50,4 +52,43 @@ func (w *dmWorker) StopWorker(ctx context.Context, msg *dmpkg.StopWorkerMessage)
 		return errors.Errorf("task id mismatch, get %s, actually %s", msg.Task, w.taskID)
 	}
 	return w.Exit(ctx, w.workerStatus(), nil)
+}
+
+// OperateTask implements the api of operate task message.
+// OperateTask is called by refection of commandHandler.
+func (w *dmWorker) OperateTask(ctx context.Context, msg *dmpkg.OperateTaskMessage) error {
+	if w.taskID != msg.Task {
+		return errors.Errorf("task id mismatch, get %s, actually %s", msg.Task, w.taskID)
+	}
+	switch msg.Op {
+	case dmpkg.Pause:
+		return w.unitHolder.Pause(ctx)
+	case dmpkg.Resume:
+		return w.unitHolder.Resume(ctx)
+	default:
+		return errors.Errorf("unsupported op type %d for task %s", msg.Op, w.taskID)
+	}
+}
+
+// BinlogTask implements the api of binlog task request.
+// BinlogTask is called by refection of commandHandler.
+func (w *dmWorker) BinlogTask(ctx context.Context, req *dmpkg.BinlogTaskRequest) *dmpkg.CommonTaskResponse {
+	msg, err := w.unitHolder.Binlog(ctx, req)
+	if err != nil {
+		return &dmpkg.CommonTaskResponse{ErrorMsg: err.Error()}
+	}
+	return &dmpkg.CommonTaskResponse{Msg: msg}
+}
+
+// BinlogSchemaTask implements the api of binlog schema request.
+// BinlogSchemaTask is called by refection of commandHandler.
+func (w *dmWorker) BinlogSchemaTask(ctx context.Context, req *dmpkg.BinlogSchemaTaskRequest) *dmpkg.CommonTaskResponse {
+	if w.taskID != req.Source {
+		return &dmpkg.CommonTaskResponse{ErrorMsg: fmt.Sprintf("task id mismatch, get %s, actually %s", req.Source, w.taskID)}
+	}
+	msg, err := w.unitHolder.BinlogSchema(ctx, req)
+	if err != nil {
+		return &dmpkg.CommonTaskResponse{ErrorMsg: err.Error()}
+	}
+	return &dmpkg.CommonTaskResponse{Msg: msg}
 }

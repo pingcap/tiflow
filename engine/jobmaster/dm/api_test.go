@@ -16,13 +16,17 @@ package dm
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"sort"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/pingcap/errors"
+	dmconfig "github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/dm/pb"
 	"github.com/pingcap/tiflow/engine/enginepb"
+	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/runtime"
 	"github.com/pingcap/tiflow/engine/lib"
@@ -84,12 +88,21 @@ func TestQueryStatusAPI(t *testing.T) {
 			BlockDDLOwner:       "",
 			ConflictMsg:         "",
 		}
+		processError = &pb.ProcessError{
+			ErrCode:    1,
+			ErrClass:   "class",
+			ErrScope:   "scope",
+			ErrLevel:   "low",
+			Message:    "msg",
+			RawCause:   "raw cause",
+			Workaround: "workaround",
+		}
 		dumpStatusBytes, _ = json.Marshal(dumpStatus)
 		loadStatusBytes, _ = json.Marshal(loadStatus)
 		syncStatusBytes, _ = json.Marshal(syncStatus)
-		dumpStatusResp     = &dmpkg.QueryStatusResponse{Unit: lib.WorkerDMDump, Status: dumpStatusBytes}
-		loadStatusResp     = &dmpkg.QueryStatusResponse{Unit: lib.WorkerDMLoad, Status: loadStatusBytes}
-		syncStatusResp     = &dmpkg.QueryStatusResponse{Unit: lib.WorkerDMSync, Status: syncStatusBytes}
+		dumpStatusResp     = &dmpkg.QueryStatusResponse{Unit: lib.WorkerDMDump, Stage: metadata.StageRunning, Status: dumpStatusBytes}
+		loadStatusResp     = &dmpkg.QueryStatusResponse{Unit: lib.WorkerDMLoad, Stage: metadata.StagePaused, Result: &pb.ProcessResult{IsCanceled: true}, Status: loadStatusBytes}
+		syncStatusResp     = &dmpkg.QueryStatusResponse{Unit: lib.WorkerDMSync, Stage: metadata.StageError, Result: &pb.ProcessResult{Errors: []*pb.ProcessError{processError}}, Status: syncStatusBytes}
 	)
 	messageAgent := &dmpkg.MockMessageAgent{}
 	jm.messageAgent = messageAgent
@@ -137,6 +150,7 @@ func TestQueryStatusAPI(t *testing.T) {
 				"ErrorMsg": "worker for task task1 not found",
 				"Unit": 0,
 				"Stage": 0,
+				"Result": null,
 				"Status": null
 			}
 		},
@@ -147,6 +161,7 @@ func TestQueryStatusAPI(t *testing.T) {
 				"ErrorMsg": "",
 				"Unit": 11,
 				"Stage": 4,
+				"Result": null,
 				"Status": null
 			}
 		},
@@ -157,6 +172,7 @@ func TestQueryStatusAPI(t *testing.T) {
 				"ErrorMsg": "context deadline exceeded",
 				"Unit": 0,
 				"Stage": 0,
+				"Result": null,
 				"Status": null
 			}
 		},
@@ -166,7 +182,8 @@ func TestQueryStatusAPI(t *testing.T) {
 			"Status": {
 				"ErrorMsg": "",
 				"Unit": 10,
-				"Stage": 0,
+				"Stage": 2,
+				"Result": null,
 				"Status": {
 					"totalTables": 10,
 					"completedTables": 1,
@@ -182,7 +199,10 @@ func TestQueryStatusAPI(t *testing.T) {
 			"Status": {
 				"ErrorMsg": "",
 				"Unit": 11,
-				"Stage": 0,
+				"Stage": 3,
+				"Result": {
+					"isCanceled": true
+				},
 				"Status": {
 					"finishedBytes": 4,
 					"totalBytes": 100,
@@ -198,7 +218,20 @@ func TestQueryStatusAPI(t *testing.T) {
 			"Status": {
 				"ErrorMsg": "",
 				"Unit": 12,
-				"Stage": 0,
+				"Stage": 5,
+				"Result": {
+					"errors": [
+						{
+							"ErrCode": 1,
+							"ErrClass": "class",
+							"ErrScope": "scope",
+							"ErrLevel": "low",
+							"Message": "msg",
+							"RawCause": "raw cause",
+							"Workaround": "workaround"
+						}
+					]
+				},
 				"Status": {
 					"totalEvents": 10,
 					"totalTps": 10,
@@ -238,6 +271,122 @@ func TestQueryStatusAPI(t *testing.T) {
 	status2, err := json.MarshalIndent(jobStatus, "", "\t")
 	require.NoError(t, err)
 	require.Equal(t, sortString(string(status)), sortString(string(status2)))
+}
+
+func TestOperateTask(t *testing.T) {
+	jm := &JobMaster{
+		taskManager: NewTaskManager(nil, metadata.NewJobStore("master-id", kvmock.NewMetaMock()), nil),
+	}
+	require.EqualError(t, jm.OperateTask(context.Background(), dmpkg.Delete, nil, nil), fmt.Sprintf("unsupport op type %d for operate task", dmpkg.Delete))
+	require.EqualError(t, jm.OperateTask(context.Background(), dmpkg.Pause, nil, nil), "state not found")
+
+	// test with DebugJob
+	var args struct {
+		Tasks []string
+		Op    dmpkg.OperateType
+	}
+	args.Tasks = []string{"task1"}
+	args.Op = dmpkg.Pause
+	jsonArg, err := json.Marshal(args)
+	require.NoError(t, err)
+	resp := jm.DebugJob(context.Background(), &enginepb.DebugJobRequest{Command: dmpkg.OperateTask, JsonArg: string(jsonArg)})
+	require.Equal(t, resp.Err.Message, "state not found")
+}
+
+func TestGetJobCfg(t *testing.T) {
+	kvClient := kvmock.NewMetaMock()
+	jm := &JobMaster{
+		metadata: metadata.NewMetaData("master-id", kvClient),
+	}
+	jobCfg, err := jm.GetJobCfg(context.Background())
+	require.EqualError(t, err, "state not found")
+	require.Nil(t, jobCfg)
+
+	jobCfg = &config.JobCfg{Name: "job-id", Upstreams: []*config.UpstreamCfg{{}}}
+	job := metadata.NewJob(jobCfg)
+	jm.metadata.JobStore().Put(context.Background(), job)
+
+	jobCfg, err = jm.GetJobCfg(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, "job-id", jobCfg.Name)
+
+	// test with DebugJob
+	resp := jm.DebugJob(context.Background(), &enginepb.DebugJobRequest{Command: dmpkg.GetJobCfg})
+	require.NoError(t, err)
+	require.Contains(t, resp.JsonRet, jobCfg.Name)
+}
+
+func TestBinlog(t *testing.T) {
+	kvClient := kvmock.NewMetaMock()
+	messageAgent := &dmpkg.MockMessageAgent{}
+	jm := &JobMaster{
+		metadata:     metadata.NewMetaData("master-id", kvClient),
+		messageAgent: messageAgent,
+	}
+	resp, err := jm.Binlog(context.Background(), &dmpkg.BinlogRequest{})
+	require.EqualError(t, err, "state not found")
+	require.Nil(t, resp)
+
+	messageAgent.On("SendRequest").Return(&dmpkg.CommonTaskResponse{Msg: "msg"}, nil).Once()
+	messageAgent.On("SendRequest").Return(nil, errors.New("error")).Once()
+	job := metadata.NewJob(&config.JobCfg{Upstreams: []*config.UpstreamCfg{
+		{MySQLInstance: dmconfig.MySQLInstance{SourceID: "task1"}},
+		{MySQLInstance: dmconfig.MySQLInstance{SourceID: "task2"}},
+	}})
+	jm.metadata.JobStore().Put(context.Background(), job)
+	resp, err = jm.Binlog(context.Background(), &dmpkg.BinlogRequest{})
+	require.Nil(t, err)
+	require.Equal(t, "", resp.ErrorMsg)
+	errMsg := resp.Results["task1"].ErrorMsg + resp.Results["task2"].ErrorMsg
+	msg := resp.Results["task1"].Msg + resp.Results["task2"].Msg
+	require.Equal(t, "error", errMsg)
+	require.Equal(t, "msg", msg)
+
+	// test with DebugJob
+	req := dmpkg.BinlogRequest{Sources: []string{"task1"}}
+	jsonArg, err := json.Marshal(req)
+	require.NoError(t, err)
+	messageAgent.On("SendRequest").Return(&dmpkg.CommonTaskResponse{Msg: "msg"}, nil).Once()
+	resp2 := jm.DebugJob(context.Background(), &enginepb.DebugJobRequest{Command: dmpkg.Binlog, JsonArg: string(jsonArg)})
+	require.NoError(t, err)
+	var binlogResp dmpkg.BinlogResponse
+	require.NoError(t, json.Unmarshal([]byte(resp2.JsonRet), &binlogResp))
+	require.Equal(t, "", binlogResp.ErrorMsg)
+	require.Len(t, binlogResp.Results, 1)
+	require.Equal(t, "", binlogResp.Results["task1"].ErrorMsg)
+	require.Equal(t, "msg", binlogResp.Results["task1"].Msg)
+}
+
+func TestBinlogSchema(t *testing.T) {
+	messageAgent := &dmpkg.MockMessageAgent{}
+	jm := &JobMaster{
+		messageAgent: messageAgent,
+	}
+	resp := jm.BinlogSchema(context.Background(), &dmpkg.BinlogSchemaRequest{})
+	require.Equal(t, "must specify at least one source", resp.ErrorMsg)
+
+	messageAgent.On("SendRequest").Return(&dmpkg.CommonTaskResponse{Msg: "msg"}, nil).Once()
+	messageAgent.On("SendRequest").Return(nil, errors.New("error")).Once()
+	resp = jm.BinlogSchema(context.Background(), &dmpkg.BinlogSchemaRequest{Sources: []string{"task1", "task2"}})
+	require.Equal(t, "", resp.ErrorMsg)
+	errMsg := resp.Results["task1"].ErrorMsg + resp.Results["task2"].ErrorMsg
+	msg := resp.Results["task1"].Msg + resp.Results["task2"].Msg
+	require.Equal(t, "error", errMsg)
+	require.Equal(t, "msg", msg)
+
+	// test with DebugJob
+	req := dmpkg.BinlogSchemaRequest{Sources: []string{"task1"}}
+	jsonArg, err := json.Marshal(req)
+	require.NoError(t, err)
+	messageAgent.On("SendRequest").Return(&dmpkg.CommonTaskResponse{Msg: "msg"}, nil).Once()
+	resp2 := jm.DebugJob(context.Background(), &enginepb.DebugJobRequest{Command: dmpkg.BinlogSchema, JsonArg: string(jsonArg)})
+	require.NoError(t, err)
+	var binlogSchemaResp dmpkg.BinlogSchemaResponse
+	require.NoError(t, json.Unmarshal([]byte(resp2.JsonRet), &binlogSchemaResp))
+	require.Equal(t, "", binlogSchemaResp.ErrorMsg)
+	require.Len(t, binlogSchemaResp.Results, 1)
+	require.Equal(t, "", binlogSchemaResp.Results["task1"].ErrorMsg)
+	require.Equal(t, "msg", binlogSchemaResp.Results["task1"].Msg)
 }
 
 func sortString(w string) string {

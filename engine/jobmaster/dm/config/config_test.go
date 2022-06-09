@@ -76,6 +76,14 @@ func TestTaskCfg(t *testing.T) {
 	require.NoError(t, jobCfg.DecodeFile(jobTemplatePath))
 
 	taskCfgs := jobCfg.ToTaskCfgs()
+
+	taskCfgList := make([]*TaskCfg, 0, len(taskCfgs))
+	for _, taskCfg := range taskCfgs {
+		taskCfgList = append(taskCfgList, taskCfg)
+	}
+	jobCfg2 := FromTaskCfgs(taskCfgList)
+	taskCfgs = jobCfg2.ToTaskCfgs()
+
 	for _, taskCfg := range taskCfgs {
 		subTaskCfg := taskCfg.ToDMSubTaskCfg()
 		expectCfg := &dmconfig.SubTaskConfig{}
