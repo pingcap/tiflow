@@ -99,7 +99,7 @@ func (w *Worker) Tick(ctx context.Context) error {
 		}
 		w.status.State = workerStateSorting
 	case workerStateSorting:
-		if err := w.generateFile(ctx); err != nil {
+		if err := w.sortFile(ctx); err != nil {
 			return err
 		}
 		w.status.State = workerStateCommitting
