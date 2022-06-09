@@ -27,7 +27,6 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/util/filter"
-	"github.com/pingcap/tiflow/dm/syncer/binlogstream"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
@@ -44,6 +43,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/relay"
+	"github.com/pingcap/tiflow/dm/syncer/binlogstream"
 	"github.com/pingcap/tiflow/dm/syncer/dbconn"
 	"github.com/pingcap/tiflow/dm/syncer/metrics"
 	"github.com/pingcap/tiflow/pkg/sqlmodel"
@@ -67,6 +67,21 @@ type validateTableInfo struct {
 }
 
 type rowChangeJobType int
+
+func (r rowChangeJobType) String() string {
+	switch r {
+	case rowInsert:
+		return "row-insert"
+	case rowUpdated:
+		return "row-update"
+	case rowDeleted:
+		return "row-delete"
+	case flushCheckpoint:
+		return "flush"
+	default:
+		return "unknown"
+	}
+}
 
 const (
 	rowInsert rowChangeJobType = iota
@@ -190,7 +205,7 @@ type DataValidator struct {
 	result      pb.ProcessResult
 	tableStatus map[string]*tableValidateStatus
 
-	processedRowCounts   []atomic.Int64
+	processedRowCounts   []atomic.Int64 // all processed row count since the beginning of validator
 	pendingRowCounts     []atomic.Int64
 	newErrorRowCount     atomic.Int64
 	processedBinlogSize  atomic.Int64
@@ -376,11 +391,7 @@ func (v *DataValidator) printStatusRoutine() {
 		case <-v.ctx.Done():
 			return
 		case <-time.After(validatorStatusInterval):
-			processed := []int64{
-				v.processedRowCounts[rowInsert].Load(),
-				v.processedRowCounts[rowUpdated].Load(),
-				v.processedRowCounts[rowDeleted].Load(),
-			}
+			processed := v.getProcessedRowCounts()
 			pending := []int64{
 				v.pendingRowCounts[rowInsert].Load(),
 				v.pendingRowCounts[rowUpdated].Load(),
@@ -392,7 +403,7 @@ func (v *DataValidator) printStatusRoutine() {
 			speed := float64((currProcessedBinlogSize-prevProcessedBinlogSize)>>20) / interval.Seconds()
 			prevProcessedBinlogSize = currProcessedBinlogSize
 			prevTime = currTime
-			counts, err := v.getAllErrorCount(validatorDmctlOpTimeout)
+			counts, err := v.getErrorRowCount(validatorDmctlOpTimeout)
 			if err == nil {
 				v.vmetric.ErrorCount.Set(float64(counts[pb.ValidateErrorState_NewErr]))
 			} else {
@@ -782,6 +793,9 @@ func (v *DataValidator) startValidateWorkers() {
 func (v *DataValidator) dispatchRowChange(key string, row *rowValidationJob) {
 	hashVal := int(utils.GenHashKey(key)) % v.workerCnt
 	v.workers[hashVal].rowChangeCh <- row
+
+	v.L.Debug("dispatch row change job", zap.Any("table", row.row.GetSourceTable()),
+		zap.Stringer("type", row.Tp), zap.String("key", key), zap.Int("worker id", hashVal))
 }
 
 func (v *DataValidator) genValidateTableInfo(sourceTable *filter.Table, columnCount int) (*validateTableInfo, error) {
@@ -954,7 +968,8 @@ func (v *DataValidator) persistCheckpointAndData(loc binlog.Location) error {
 		Tp: flushCheckpoint,
 		wg: &wg,
 	}
-	for _, worker := range v.workers {
+	for i, worker := range v.workers {
+		v.L.Debug("dispatch flush job", zap.Int("worker id", i))
 		worker.rowChangeCh <- flushJob
 	}
 	wg.Wait()
@@ -1028,6 +1043,7 @@ func (v *DataValidator) loadPersistedData() error {
 	}
 
 	v.location = data.checkpoint
+	v.setProcessedRowCounts(data.processedRowCounts)
 	v.loadedPendingChanges = pendingChanges
 	v.persistHelper.setRevision(data.rev)
 	v.initTableStatus(data.tableStatus)
@@ -1133,6 +1149,20 @@ func (v *DataValidator) putTableStatus(name string, status *tableValidateStatus)
 
 func (v *DataValidator) isMarkErrorStarted() bool {
 	return v.markErrorStarted.Load()
+}
+
+func (v *DataValidator) getProcessedRowCounts() []int64 {
+	return []int64{
+		v.processedRowCounts[rowInsert].Load(),
+		v.processedRowCounts[rowUpdated].Load(),
+		v.processedRowCounts[rowDeleted].Load(),
+	}
+}
+
+func (v *DataValidator) setProcessedRowCounts(counts []int64) {
+	v.processedRowCounts[rowInsert].Store(counts[rowInsert])
+	v.processedRowCounts[rowUpdated].Store(counts[rowUpdated])
+	v.processedRowCounts[rowDeleted].Store(counts[rowDeleted])
 }
 
 func (v *DataValidator) addPendingRowCount(tp rowChangeJobType, cnt int64) {
@@ -1267,7 +1297,7 @@ func (v *DataValidator) OperateValidatorError(validateOp pb.ValidationErrOp, err
 	return v.persistHelper.operateError(tctx, toDB, validateOp, errID, isAll)
 }
 
-func (v *DataValidator) getAllErrorCount(timeout time.Duration) ([errorStateTypeCount]int64, error) {
+func (v *DataValidator) getErrorRowCount(timeout time.Duration) ([errorStateTypeCount]int64, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	tctx := tcontext.NewContext(ctx, v.L)
@@ -1286,19 +1316,19 @@ func (v *DataValidator) getAllErrorCount(timeout time.Duration) ([errorStateType
 			v.L.Warn("failed to load error count", zap.Error(err))
 		}
 	}
-	var allErrorCount [errorStateTypeCount]int64
-	allErrorCount[pb.ValidateErrorState_NewErr] = countMap[pb.ValidateErrorState_NewErr]
-	allErrorCount[pb.ValidateErrorState_IgnoredErr] = countMap[pb.ValidateErrorState_IgnoredErr]
-	allErrorCount[pb.ValidateErrorState_ResolvedErr] = countMap[pb.ValidateErrorState_ResolvedErr]
+	var errorRowCount [errorStateTypeCount]int64
+	errorRowCount[pb.ValidateErrorState_NewErr] = countMap[pb.ValidateErrorState_NewErr]
+	errorRowCount[pb.ValidateErrorState_IgnoredErr] = countMap[pb.ValidateErrorState_IgnoredErr]
+	errorRowCount[pb.ValidateErrorState_ResolvedErr] = countMap[pb.ValidateErrorState_ResolvedErr]
 
-	allErrorCount[pb.ValidateErrorState_NewErr] += v.newErrorRowCount.Load()
+	errorRowCount[pb.ValidateErrorState_NewErr] += v.newErrorRowCount.Load()
 
-	return allErrorCount, err
+	return errorRowCount, err
 }
 
 func (v *DataValidator) GetValidatorStatus() *pb.ValidationStatus {
 	var extraMsg string
-	allErrorCount, err := v.getAllErrorCount(validatorDmctlOpTimeout)
+	errorRowCount, err := v.getErrorRowCount(validatorDmctlOpTimeout)
 	if err != nil {
 		// nolint:nilerr
 		extraMsg = fmt.Sprintf(" (failed to load error count from meta db: %s)", err.Error())
@@ -1306,13 +1336,14 @@ func (v *DataValidator) GetValidatorStatus() *pb.ValidationStatus {
 	// if we print those state in a structured way, there would be at least 9 lines for each subtask,
 	// which is hard to read, so print them into one line.
 	template := "insert/update/delete: %d/%d/%d"
-	processedRows := fmt.Sprintf(template, v.processedRowCounts[rowInsert].Load(),
-		v.processedRowCounts[rowUpdated].Load(), v.processedRowCounts[rowDeleted].Load())
+	processedRowCounts := v.getProcessedRowCounts()
+	processedRows := fmt.Sprintf(template, processedRowCounts[rowInsert],
+		processedRowCounts[rowUpdated], processedRowCounts[rowDeleted])
 	pendingRows := fmt.Sprintf(template, v.pendingRowCounts[rowInsert].Load(),
 		v.pendingRowCounts[rowUpdated].Load(), v.pendingRowCounts[rowDeleted].Load())
-	allErrorRows := fmt.Sprintf("new/ignored/resolved: %d/%d/%d%s",
-		allErrorCount[pb.ValidateErrorState_NewErr], allErrorCount[pb.ValidateErrorState_IgnoredErr],
-		allErrorCount[pb.ValidateErrorState_ResolvedErr], extraMsg)
+	errorRows := fmt.Sprintf("new/ignored/resolved: %d/%d/%d%s",
+		errorRowCount[pb.ValidateErrorState_NewErr], errorRowCount[pb.ValidateErrorState_IgnoredErr],
+		errorRowCount[pb.ValidateErrorState_ResolvedErr], extraMsg)
 
 	result := v.getResult()
 	returnedResult := &result
@@ -1340,6 +1371,6 @@ func (v *DataValidator) GetValidatorStatus() *pb.ValidationStatus {
 		ValidatorBinlogGtid: validatorBinlogGtid,
 		ProcessedRowsStatus: processedRows,
 		PendingRowsStatus:   pendingRows,
-		AllErrorRowsStatus:  allErrorRows,
+		ErrorRowsStatus:     errorRows,
 	}
 }
