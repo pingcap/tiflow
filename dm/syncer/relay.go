@@ -19,6 +19,7 @@ import (
 	"strings"
 
 	"github.com/go-mysql-org/go-mysql/mysql"
+	"github.com/pingcap/tiflow/dm/syncer/binlogstream"
 
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
@@ -28,7 +29,7 @@ import (
 )
 
 func (s *Syncer) setInitActiveRelayLog(ctx context.Context) error {
-	if s.binlogType != LocalBinlog {
+	if s.binlogType != binlogstream.LocalBinlog {
 		return nil
 	}
 
@@ -98,7 +99,7 @@ func (s *Syncer) setInitActiveRelayLog(ctx context.Context) error {
 }
 
 func (s *Syncer) updateActiveRelayLog(pos mysql.Position) error {
-	if s.binlogType != LocalBinlog {
+	if s.binlogType != binlogstream.LocalBinlog {
 		return nil
 	}
 
@@ -127,7 +128,7 @@ func (s *Syncer) updateActiveRelayLog(pos mysql.Position) error {
 }
 
 func (s *Syncer) removeActiveRelayLog() {
-	if s.binlogType != LocalBinlog {
+	if s.binlogType != binlogstream.LocalBinlog {
 		return
 	}
 

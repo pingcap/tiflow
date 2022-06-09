@@ -18,12 +18,14 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	derror "github.com/pingcap/tiflow/engine/pkg/errors"
+
+	"github.com/pingcap/errors"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.etcd.io/etcd/client/v3/concurrency"
 	"go.etcd.io/etcd/server/v3/mvcc"
+	"go.uber.org/atomic"
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
 )
@@ -40,9 +42,8 @@ type Election interface {
 
 // EtcdElectionConfig defines configurations used in etcd election
 type EtcdElectionConfig struct {
-	CreateSessionTimeout time.Duration
-	TTL                  time.Duration
-	Prefix               EtcdKeyPrefix
+	TTL    time.Duration
+	Prefix EtcdKeyPrefix
 }
 
 type (
@@ -60,16 +61,17 @@ type EtcdElection struct {
 	rl         *rate.Limiter
 }
 
-// NewEtcdElection creates a new EtcdElection instance
+// NewEtcdElection creates a new EtcdElection instance.
+// `ctx` should not be canceled until the EtcdElection is no longer
+// needed, resigned from or aborted.
+// It is difficult to bind a context to the execution of creating lease
+// alone, so the lifetime of `ctx` is expected to last for the whole session.
 func NewEtcdElection(
 	ctx context.Context,
 	etcdClient *clientv3.Client,
 	session *concurrency.Session,
 	config EtcdElectionConfig,
 ) (*EtcdElection, error) {
-	ctx, cancel := context.WithTimeout(ctx, config.CreateSessionTimeout)
-	defer cancel()
-
 	var sess *concurrency.Session
 	if session == nil {
 		var err error
@@ -98,7 +100,7 @@ func (e *EtcdElection) Campaign(ctx context.Context, selfID NodeID, timeout time
 	for {
 		select {
 		case <-ctx.Done():
-			return nil, nil, derror.ErrMasterEtcdElectionCampaignFail.Wrap(ctx.Err())
+			return nil, nil, derror.Wrap(derror.ErrMasterEtcdElectionCampaignFail, ctx.Err())
 		default:
 		}
 
@@ -106,13 +108,13 @@ func (e *EtcdElection) Campaign(ctx context.Context, selfID NodeID, timeout time
 		if err != nil {
 			// rl.Wait() can return an unnamed error `rate: Wait(n=%d) exceeds limiter's burst %d` if
 			// ctx is canceled. This can be very confusing, so we must wrap it here.
-			return nil, nil, derror.ErrMasterEtcdElectionCampaignFail.Wrap(err)
+			return nil, nil, derror.Wrap(derror.ErrMasterEtcdElectionCampaignFail, err)
 		}
 
 		retCtx, resign, err := e.doCampaign(ctx, selfID, timeout)
 		if err != nil {
 			if errors.Cause(err) != mvcc.ErrCompacted {
-				return nil, nil, derror.ErrMasterEtcdElectionCampaignFail.Wrap(err)
+				return nil, nil, err
 			}
 			log.L().Warn("campaign for leader failed", zap.Error(err))
 			continue
@@ -126,7 +128,7 @@ func (e *EtcdElection) doCampaign(ctx context.Context, selfID NodeID, timeout ti
 	defer cancel()
 	err := e.election.Campaign(cctx, selfID)
 	if err != nil {
-		return nil, nil, derror.ErrMasterEtcdElectionCampaignFail.Wrap(err)
+		return nil, nil, derror.Wrap(derror.ErrMasterEtcdElectionCampaignFail, err)
 	}
 	retCtx := newLeaderCtx(ctx, e.session)
 	resignFn := func() {
@@ -149,6 +151,10 @@ type leaderCtx struct {
 		sync.RWMutex
 		err error
 	}
+
+	createDoneChOnce sync.Once
+	doneCh           chan struct{}
+	goroutineCount   atomic.Int64 // for testing only
 }
 
 func newLeaderCtx(parent context.Context, session *concurrency.Session) *leaderCtx {
@@ -164,8 +170,16 @@ func (c *leaderCtx) OnResigned() {
 }
 
 func (c *leaderCtx) Done() <-chan struct{} {
+	c.createDoneChOnce.Do(c.createDoneCh)
+	return c.doneCh
+}
+
+func (c *leaderCtx) createDoneCh() {
 	doneCh := make(chan struct{})
 	go func() {
+		c.goroutineCount.Add(1)
+		defer c.goroutineCount.Sub(1)
+
 		// Handles the three situations where the context needs to be canceled.
 		select {
 		case <-c.Context.Done():
@@ -179,7 +193,7 @@ func (c *leaderCtx) Done() <-chan struct{} {
 		}
 		close(doneCh)
 	}()
-	return doneCh
+	c.doneCh = doneCh
 }
 
 func (c *leaderCtx) Err() error {
