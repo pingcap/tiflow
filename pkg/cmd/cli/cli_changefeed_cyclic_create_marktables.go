@@ -17,7 +17,6 @@ import (
 	"strings"
 
 	v2 "github.com/pingcap/tiflow/cdc/api/v2"
-	apiv1client "github.com/pingcap/tiflow/pkg/api/v1"
 	apiv2client "github.com/pingcap/tiflow/pkg/api/v2"
 	"github.com/pingcap/tiflow/pkg/cmd/context"
 	"github.com/pingcap/tiflow/pkg/cmd/factory"
@@ -30,8 +29,7 @@ import (
 
 // cyclicCreateMarktablesOptions defines flags for the `cli changefeed cyclic create-marktables` command.
 type cyclicCreateMarktablesOptions struct {
-	apiV1Client *apiv1client.APIV1Client
-	apiV2Client *apiv2client.APIV2Client
+	apiClient *apiv2client.APIV2Client
 
 	createCommonOptions changefeedCommonOptions
 
@@ -84,11 +82,7 @@ func (o *cyclicCreateMarktablesOptions) complete(f factory.Factory) error {
 	o.pdAddrs = strings.Split(o.pdAddr, ",")
 	o.credential = f.GetCredential()
 
-	o.apiV1Client, err = f.APIV1Client()
-	if err != nil {
-		return err
-	}
-	o.apiV2Client, err = f.APIV2Client()
+	o.apiClient, err = f.APIV2Client()
 	if err != nil {
 		return err
 	}
@@ -122,7 +116,7 @@ func (o *cyclicCreateMarktablesOptions) run(cmd *cobra.Command) error {
 		ReplicaConfig: replicaConfig,
 		StartTs:       o.startTs,
 	}
-	tables, err := o.apiV2Client.VerifyTable().Verify(ctx, &verifyTableConfig)
+	tables, err := o.apiClient.VerifyTable().Verify(ctx, &verifyTableConfig)
 	if err != nil {
 		return err
 	}
