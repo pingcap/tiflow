@@ -193,6 +193,8 @@ func (jm *JobMaster) OnWorkerStatusUpdated(worker lib.WorkerHandle, newStatus *l
 		return nil
 	}
 	log.L().Debug("on worker status updated", zap.String("extra bytes", string(newStatus.ExtBytes)), zap.String("id", jm.workerID), zap.String("worker_id", worker.ID()))
+	// directly call OnWorkerOnline because we do not relay on worker status.Code, status.ID, etc.
+	// we only relay on status.ExtBytes, which is the task status and will be triggered by worker online.
 	return jm.OnWorkerOnline(worker)
 }
 
