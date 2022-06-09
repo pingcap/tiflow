@@ -128,7 +128,7 @@ func (s *masterStatus) OnBindResourceToWorker(resourceID resModel.ResourceID, wo
 	}
 
 	// Everything is okay
-	s.Bindings[resourceID] = workerID
+	s.Bindings[workerID] = resourceID
 }
 
 func (s *masterStatus) OnUnbindWorker(workerID libModel.WorkerID) {
