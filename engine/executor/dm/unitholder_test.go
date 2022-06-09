@@ -16,6 +16,7 @@ package dm
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -115,6 +116,12 @@ func TestUnitHolder(t *testing.T) {
 
 	// mock close
 	require.NoError(t, unitHolder.Close(context.Background()))
+
+	// mock pause after close
+	require.EqualError(t, unitHolder.Pause(context.Background()), fmt.Sprintf("failed to pause unit with stage %d", metadata.StagePaused))
+	// mock resume after close
+	// depend on unit.Resume
+	require.NoError(t, unitHolder.Resume(context.Background()))
 }
 
 type mockUnit struct {

@@ -307,6 +307,7 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	workerHandle1.On("Status").Return(&libModel.WorkerStatus{ExtBytes: bytes1}).Once()
 	workerHandle1.On("IsTombStone").Return(false).Once()
 	require.NoError(t.T(), jm.OnWorkerStatusUpdated(workerHandle1, &libModel.WorkerStatus{ExtBytes: bytes1}))
+	require.NoError(t.T(), jm.OnWorkerStatusUpdated(workerHandle1, &libModel.WorkerStatus{}))
 
 	// placeholder
 	require.NoError(t.T(), jm.OnJobManagerMessage("", ""))
