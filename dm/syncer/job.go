@@ -233,7 +233,7 @@ func newConflictJob(workerCount int) *job {
 	}
 }
 
-// newCompactJob is only used for metrics.
+// newCompactJob is only used for MetricsProxies.
 func newCompactJob(targetTable *filter.Table) *job {
 	return &job{
 		tp:          compact,
