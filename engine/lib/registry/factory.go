@@ -32,10 +32,10 @@ type WorkerFactory interface {
 	// NewWorkerImpl return an implementation of the worker. its BaseWorker
 	// or BaseJobMaster field can be left nil, framework will fill it in.
 	NewWorkerImpl(
-		ctx *dcontext.Context,      // We require a `dcontext` here to provide dependencies.
+		ctx *dcontext.Context, // We require a `dcontext` here to provide dependencies.
 		workerID libModel.WorkerID, // the globally unique workerID for this worker to be created.
 		masterID libModel.MasterID, // the masterID that this worker will report to.
-		config WorkerConfig,        // the config used to initialize the worker.
+		config WorkerConfig, // the config used to initialize the worker.
 	) (lib.WorkerImpl, error)
 	DeserializeConfig(configBytes []byte) (WorkerConfig, error)
 }

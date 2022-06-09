@@ -24,9 +24,7 @@ import (
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 )
 
-var (
-	fakeWorkerFactory WorkerFactory = NewSimpleWorkerFactory(fake.NewDummyWorker)
-)
+var fakeWorkerFactory WorkerFactory = NewSimpleWorkerFactory(fake.NewDummyWorker)
 
 const (
 	fakeWorkerType = libModel.WorkerType(100)
