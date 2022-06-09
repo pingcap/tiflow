@@ -150,7 +150,7 @@ func (s *Syncer) handleSpecialDDLError(tctx *tcontext.Context, err error, ddls [
 		// check if dependent index is single-column index on this column
 		sql2 := "SELECT INDEX_NAME FROM information_schema.statistics WHERE TABLE_SCHEMA = ? and TABLE_NAME = ? and COLUMN_NAME = ?"
 		var rows *sql.Rows
-		rows, err2 = conn.QuerySQL(tctx, sql2, schema, table, col)
+		rows, err2 = conn.QuerySQL(tctx, s.metricsProxies, sql2, schema, table, col)
 		if err2 != nil {
 			return originErr
 		}
@@ -176,7 +176,7 @@ func (s *Syncer) handleSpecialDDLError(tctx *tcontext.Context, err error, ddls [
 
 		sql2 = "SELECT count(*) FROM information_schema.statistics WHERE TABLE_SCHEMA = ? and TABLE_NAME = ? and INDEX_NAME = ?"
 		for _, idx := range idx2Check {
-			rows, err2 = conn.QuerySQL(tctx, sql2, schema, table, idx)
+			rows, err2 = conn.QuerySQL(tctx, s.metricsProxies, sql2, schema, table, idx)
 			if err2 != nil || !rows.Next() || rows.Scan(&count) != nil || count != 1 {
 				tctx.L().Warn("can't auto drop index", zap.String("index", idx))
 				if rows != nil {
@@ -196,13 +196,13 @@ func (s *Syncer) handleSpecialDDLError(tctx *tcontext.Context, err error, ddls [
 		for i, idx := range idx2Drop {
 			sqls[i] = fmt.Sprintf("ALTER TABLE %s DROP INDEX %s", dbutil.TableName(schema, table), dbutil.ColumnName(idx))
 		}
-		if _, err2 = conn.ExecuteSQL(tctx, sqls); err2 != nil {
+		if _, err2 = conn.ExecuteSQL(tctx, s.metricsProxies, sqls); err2 != nil {
 			tctx.L().Warn("auto drop index failed", log.ShortError(err2))
 			return originErr
 		}
 
 		tctx.L().Info("drop index success, now try to drop column", zap.Strings("index", idx2Drop))
-		if _, err2 = conn.ExecuteSQLWithIgnore(tctx, errorutil.IsIgnorableMySQLDDLError, ddls[index:]); err2 != nil {
+		if _, err2 = conn.ExecuteSQLWithIgnore(tctx, s.metricsProxies, errorutil.IsIgnorableMySQLDDLError, ddls[index:]); err2 != nil {
 			return err2
 		}
 

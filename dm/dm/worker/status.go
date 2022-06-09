@@ -102,6 +102,9 @@ func (w *SourceWorker) Status(stName string, sourceStatus *binlog.SourceStatus) 
 					stStatus.Status = &pb.SubTaskStatus_Load{Load: us.(*pb.LoadStatus)}
 				case pb.UnitType_Sync:
 					stStatus.Status = &pb.SubTaskStatus_Sync{Sync: us.(*pb.SyncStatus)}
+					if v := st.getValidator(); v != nil {
+						stStatus.Validation = v.GetValidatorStatus()
+					}
 				}
 			}
 		}
