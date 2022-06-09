@@ -26,7 +26,7 @@ import (
 
 const (
 	rebalanceInterval = 5 * time.Minute
-	hasLoadTaskWeight = 1e6
+	scoreINF          = 1e6
 )
 
 type balancer interface {
@@ -41,8 +41,10 @@ type balancer interface {
 	) (sourcesToBalance []string)
 	// CanBalance returns true if the worker is balanced.
 	CanBalance(totalWeight int, workers map[string]*Worker, workerWeight int) bool
-	// GetWorkerBoundsByWeight returns the weight of the worker.
-	GetWorkerBoundsByWeight(w *Worker, relayWorkers map[string]map[string]struct{}, hasLoadTaskByWorkerAndSource func(string, string) bool) sourceHelper
+	// GetWorkerBoundsByWeightAscending returns the weight of the worker.
+	// Weight is the point we get when we try to bound a source to a specified worker.
+	// The larger Weight is, we are more likely to bound this source to this worker.
+	GetWorkerBoundsByWeightAscending(w *Worker, relayWorkers map[string]map[string]struct{}, hasLoadTaskByWorkerAndSource func(string, string) bool) sourceHelper
 }
 
 func newTableNumberBalancer(pLogger *log.Logger) *tableNumberBalancer {
@@ -85,11 +87,11 @@ func (r *tableNumberBalancer) FindVictims(
 			continue
 		}
 
-		sourceList := r.GetWorkerBoundsByWeight(w, relayWorkers, hasLoadTaskByWorkerAndSource)
+		sourceList := r.GetWorkerBoundsByWeightAscending(w, relayWorkers, hasLoadTaskByWorkerAndSource)
 
 		// here we pick `sourceNum2Remove` tables to delete,
 		for _, record := range sourceList {
-			if sourceNum2Remove <= 0 || record.score >= hasLoadTaskWeight {
+			if sourceNum2Remove <= 0 || record.score >= scoreINF {
 				break
 			}
 
@@ -107,7 +109,14 @@ func (r *tableNumberBalancer) FindVictims(
 	return victimSources
 }
 
-func (r *tableNumberBalancer) GetWorkerBoundsByWeight(w *Worker, relayWorkers map[string]map[string]struct{}, hasLoadTaskByWorkerAndSource func(string, string) bool) sourceHelper {
+// GetWorkerBoundsByWeightAscending will compute scores for every source which is bound to this worker
+// tableNumberBalancer computes the score through the following principles:
+//  1. source with unfinished load task on this worker before, has the highest score(INF), we will never rebalance for weight higher than this
+//  2. source is enabled with relay on this worker before, has negative score. If this source is enabled with relay on several workers, it will
+//    have less score because they have more option workers than other workers.
+//  3. source without relay on this worker has the lowest score(-INF).
+//  For 2,3 we add a random float on scores to make sure they can be sorted in order.
+func (r *tableNumberBalancer) GetWorkerBoundsByWeightAscending(w *Worker, relayWorkers map[string]map[string]struct{}, hasLoadTaskByWorkerAndSource func(string, string) bool) sourceHelper {
 	relaySources := w.RelaySources()
 	bounds := w.Bounds()
 
@@ -118,11 +127,11 @@ func (r *tableNumberBalancer) GetWorkerBoundsByWeight(w *Worker, relayWorkers ma
 		switch {
 		// don't rebalance the source that has load task
 		case hasLoadTaskByWorkerAndSource(w.BaseInfo().Name, source):
-			score = hasLoadTaskWeight
+			score = scoreINF
 		case hasRelay:
-			score = 100 - float32(len(relayWorkers[source])) + rand.Float32()
+			score = -float32(len(relayWorkers[source])) + rand.Float32()
 		default:
-			score = rand.Float32()
+			score = -scoreINF + rand.Float32()
 		}
 		sourceList = append(sourceList, sourceScore{score: score, source: source})
 	}

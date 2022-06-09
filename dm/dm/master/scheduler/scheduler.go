@@ -2158,7 +2158,7 @@ func (s *Scheduler) handleWorkerOffline(ev ha.WorkerEvent, toLock bool) error {
 	}
 
 	// 4. unbound for the source.
-	boundSourcesByWeight := s.balance.GetWorkerBoundsByWeight(w, s.relayWorkers, s.hasLoadTaskByWorkerAndSource)
+	boundSourcesByWeight := s.balance.GetWorkerBoundsByWeightAscending(w, s.relayWorkers, s.hasLoadTaskByWorkerAndSource)
 	unbounds := make([]string, 0, len(boundSourcesByWeight))
 	for _, bound := range boundSourcesByWeight {
 		s.logger.Debug("unbound the worker for source", zap.String("source", bound.source), zap.Stringer("event", ev))
@@ -2230,7 +2230,6 @@ func (s *Scheduler) tryBoundForWorker(w *Worker) (bounded bool, err error) {
 // caller should update the s.unbounds.
 // caller should make sure this source has source config.
 func (s *Scheduler) tryBoundForSource(source string) (bool, error) {
-	// TODO: change this to pick a worker which has the least load.
 	// pick a worker which has subtask in load stage.
 	workerName, sourceID := s.getNextLoadTaskTransfer("", source)
 	if workerName != "" {
@@ -2264,6 +2263,8 @@ func (s *Scheduler) pickBestWorkerForSource(source string) *Worker {
 	sourceNum := len(s.sourceCfgs) + 1
 	// try to find a history worker in relay workers...
 	relayWorkers := s.relayWorkers[source]
+	boundSourcesNum := sourceNum
+
 	// TODO: use source number to pick a worker now. We may use task numbers/source workload as a factor to pick a worker in the future.
 	if len(relayWorkers) > 0 {
 		if bound, ok := s.lastBound[source]; ok {
@@ -2281,7 +2282,6 @@ func (s *Scheduler) pickBestWorkerForSource(source string) *Worker {
 		}
 	}
 	if worker == nil {
-		boundSourcesNum := sourceNum
 		// then a relay worker for this source...
 		for workerName := range relayWorkers {
 			w, ok := s.workers[workerName]
@@ -2325,7 +2325,6 @@ func (s *Scheduler) pickBestWorkerForSource(source string) *Worker {
 	}
 
 	if worker == nil {
-		boundSourcesNum := sourceNum
 		// and then an online worker with lease sources.
 		for _, w := range s.workers {
 			if w.Stage() != WorkerOffline && len(w.Bounds()) < boundSourcesNum {
