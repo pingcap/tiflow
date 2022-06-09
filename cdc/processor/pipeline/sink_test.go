@@ -458,7 +458,7 @@ func TestManyTs(t *testing.T) {
 		{resolvedTs: 1},
 	})
 	sink.Reset()
-	require.Equal(t, model.NewResolvedTs(uint64(2)), node.ResolvedTs())
+	require.Equal(t, model.NewResolvedTs(uint64(2)), node.getResolvedTs())
 	require.Equal(t, uint64(1), node.CheckpointTs())
 
 	msg = pmessage.BarrierMessage(5)
@@ -473,7 +473,7 @@ func TestManyTs(t *testing.T) {
 		{resolvedTs: 2},
 	})
 	sink.Reset()
-	require.Equal(t, model.NewResolvedTs(uint64(2)), node.ResolvedTs())
+	require.Equal(t, model.NewResolvedTs(uint64(2)), node.getResolvedTs())
 	require.Equal(t, uint64(2), node.CheckpointTs())
 }
 
@@ -731,11 +731,11 @@ func TestFlushSinkReleaseFlowController(t *testing.T) {
 
 	err := sNode.flushSink(context.Background(), model.NewResolvedTs(uint64(8)))
 	require.Nil(t, err)
-	require.Equal(t, uint64(8), sNode.checkpointTs)
+	require.Equal(t, uint64(8), sNode.CheckpointTs())
 	require.Equal(t, 1, flowController.releaseCounter)
 	// resolvedTs will fall back in this call
 	err = sNode.flushSink(context.Background(), model.NewResolvedTs(uint64(10)))
 	require.Nil(t, err)
-	require.Equal(t, uint64(8), sNode.checkpointTs)
+	require.Equal(t, uint64(8), sNode.CheckpointTs())
 	require.Equal(t, 2, flowController.releaseCounter)
 }

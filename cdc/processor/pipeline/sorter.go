@@ -145,10 +145,10 @@ func (n *sorterNode) start(
 
 		resolvedTsInterpolateFunc := func(commitTs uint64) {
 			// checks the condition: cur_event_commit_ts > prev_event_commit_ts > last_resolved_ts
-			// If this is true, it implies that (1) the last transaction has finished, and we are processing
-			// the first event in a new transaction, (2) a resolved-ts is safe to be sent, but it has not yet.
-			// This means that we can interpolate prev_event_commit_ts as a resolved-ts, improving the frequency
-			// at which the sink flushes.
+			// If this is true, it implies that (1) the last transaction has finished, and we are
+			// processing the first event in a new transaction, (2) a resolved-ts is safe to be
+			// sent, but it has not yet. This means that we can interpolate prev_event_commit_ts
+			// as a resolved-ts, improving the frequency at which the sink flushes.
 			if lastCRTs > lastSentResolvedTs && commitTs > lastCRTs {
 				lastSentResolvedTs = lastCRTs
 				lastSendResolvedTsTime = time.Now()

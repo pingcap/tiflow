@@ -433,7 +433,7 @@ func (t *tableActor) ResolvedTs() model.Ts {
 	// another replication barrier for consistent replication instead of reusing
 	// the global resolved-ts.
 	if redo.IsConsistentEnabled(t.replicaConfig.Consistent.Level) {
-		return t.sinkNode.ResolvedTs().ParseTs()
+		return t.sinkNode.ResolvedTs()
 	}
 	return t.sortNode.ResolvedTs()
 }

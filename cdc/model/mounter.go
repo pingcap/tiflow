@@ -123,9 +123,9 @@ func (r ResolvedTs) IsBatchMode() bool {
 	return r.Mode == BatchResolvedMode
 }
 
-// ParseTs returns a timestamp `ts` based on the r.mode, which means that all events
+// ResolvedMark returns a timestamp `ts` based on the r.mode, which marks that all events
 // whose commitTs is less than or equal to `ts` are sent to Sink.
-func (r ResolvedTs) ParseTs() uint64 {
+func (r ResolvedTs) ResolvedMark() uint64 {
 	switch r.Mode {
 	case NormalResolvedMode:
 		// with NormalResolvedMode, cdc guarantees all events whose commitTs is
