@@ -102,9 +102,9 @@ func NewCapture(pdEndpoints []string,
 		newProcessorManager: processor.NewManager,
 		newOwner:            owner.NewOwner,
 
-		migrator: migrate.NewMigrator(etcdClient.ClusterID,
-			etcdClient.Client,
-			pdEndpoints, conf.Security),
+		migrator: migrate.NewMigrator(
+			etcdClient,
+			pdEndpoints, conf),
 	}
 }
 

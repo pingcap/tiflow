@@ -22,11 +22,11 @@ import (
 	"time"
 
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	"github.com/pingcap/tiflow/pkg/util"
-	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
 	pd "github.com/tikv/pd/client"
 	"go.etcd.io/etcd/client/pkg/v3/logutil"
@@ -159,13 +159,20 @@ func TestMigration(t *testing.T) {
 		require.Equal(t, tc.status, status)
 	}
 
-	cdcCli := etcd.Wrap(cli, map[string]prometheus.Counter{})
 	// set timeout to make sure this test will finished
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
+	cdcCli, err := etcd.NewCDCEtcdClient(ctx, cli, "default")
+	require.Nil(t, err)
 
-	m := NewMigrator("default", cdcCli, []string{}, nil)
+	m := NewMigrator(&cdcCli, []string{}, config.GetGlobalServerConfig())
 	migrator := m.(*migrator)
+	migrator.migrateGcServiceSafePointFunc = func(ctx context.Context,
+		pdClient pd.Client, config *security.Credential,
+		gcServiceID string, ttl int64,
+	) error {
+		return nil
+	}
 	migrator.createPDClientFunc = func(ctx context.Context,
 		pdEndpoints []string, conf *security.Credential,
 	) (pd.Client, error) {

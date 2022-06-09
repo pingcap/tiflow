@@ -23,9 +23,12 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
+	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/pingcap/tiflow/pkg/security"
+	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	pd "github.com/tikv/pd/client"
 	clientV3 "go.etcd.io/etcd/client/v3"
 	"go.etcd.io/etcd/client/v3/concurrency"
@@ -44,6 +47,7 @@ const (
 	migrateLogsWarnDuration = 5 * time.Second
 	migrationCampaignKey    = "ticdc-migration"
 	oldChangefeedPrefix     = "/tidb/cdc/changefeed/info"
+	oldGcServiceID          = "ticdc"
 )
 
 type keys map[string]string
@@ -67,14 +71,13 @@ type Migrator interface {
 }
 
 type migrator struct {
-	clusterID string
 	// oldMetaVersion int
 	newMetaVersion int
 	metaVersionKey string
 	// cdc old owner key
 	oldOwnerKey string
 	// etcd client
-	cli *etcd.Client
+	cli *etcd.CDCEtcdClient
 	// all keyPrefixes needed to be migrated or update
 	// map from oldKeyPrefix to newKeyPrefix
 	keyPrefixes keys
@@ -82,29 +85,34 @@ type migrator struct {
 	done atomic.Bool
 
 	pdEndpoints []string
-	config      *security.Credential
+	config      *config.ServerConfig
 
 	createPDClientFunc func(ctx context.Context,
 		pdEndpoints []string,
 		conf *security.Credential) (pd.Client, error)
+
+	migrateGcServiceSafePointFunc func(ctx context.Context,
+		pdClient pd.Client,
+		config *security.Credential,
+		gcServiceID string,
+		ttl int64) error
 }
 
 // NewMigrator returns a cdc metadata
-func NewMigrator(clusterID string,
-	cli *etcd.Client,
+func NewMigrator(cli *etcd.CDCEtcdClient,
 	pdEndpoints []string,
-	securityConf *security.Credential,
+	serverConfig *config.ServerConfig,
 ) Migrator {
 	return &migrator{
-		clusterID:          clusterID,
-		newMetaVersion:     cdcMetaVersion,
-		metaVersionKey:     etcd.DefaultClusterAndMetaPrefix + etcd.MetaVersionKey,
-		oldOwnerKey:        "/ticdc/cdc/owner",
-		cli:                cli,
-		keyPrefixes:        make(keys),
-		pdEndpoints:        pdEndpoints,
-		config:             securityConf,
-		createPDClientFunc: createPDClient,
+		newMetaVersion:                cdcMetaVersion,
+		metaVersionKey:                etcd.DefaultClusterAndMetaPrefix + etcd.MetaVersionKey,
+		oldOwnerKey:                   "/ticdc/cdc/owner",
+		cli:                           cli,
+		keyPrefixes:                   make(keys),
+		pdEndpoints:                   pdEndpoints,
+		config:                        serverConfig,
+		createPDClientFunc:            createPDClient,
+		migrateGcServiceSafePointFunc: migrateGcServiceSafePoint,
 	}
 }
 
@@ -152,7 +160,8 @@ func createPDClient(ctx context.Context,
 // 4. check meta data consistency
 // 5. update metaVersion
 func (m *migrator) migrate(ctx context.Context, etcdNoMetaVersion bool, oldVersion int) error {
-	pdClient, err := m.createPDClientFunc(ctx, m.pdEndpoints, m.config)
+	pdClient, err := m.createPDClientFunc(ctx,
+		m.pdEndpoints, m.config.Security)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -161,7 +170,7 @@ func (m *migrator) migrate(ctx context.Context, etcdNoMetaVersion bool, oldVersi
 	upstreamID := pdClient.GetClusterID(ctx)
 	// 1.1 check metaVersion, if the metaVersion in etcd does not match
 	// m.oldMetaVersion, it means that someone has migrated the metadata
-	metaVersion, err := getMetaVersion(ctx, m.cli, m.clusterID)
+	metaVersion, err := getMetaVersion(ctx, m.cli.Client, m.cli.ClusterID)
 	if err != nil {
 		log.Error("get meta version failed, etcd meta data migration failed", zap.Error(err))
 		return cerror.WrapError(cerror.ErrEtcdMigrateFailed, err)
@@ -181,7 +190,7 @@ func (m *migrator) migrate(ctx context.Context, etcdNoMetaVersion bool, oldVersi
 
 	// 1.2 put metaVersionKey to etcd to panic old version cdc server
 	if etcdNoMetaVersion {
-		_, err := m.cli.Put(ctx, m.metaVersionKey, fmt.Sprintf("%d", oldVersion))
+		_, err := m.cli.Client.Put(ctx, m.metaVersionKey, fmt.Sprintf("%d", oldVersion))
 		if err != nil {
 			log.Error("put meta version failed, etcd meta data migration failed", zap.Error(err))
 			return cerror.WrapError(cerror.ErrEtcdMigrateFailed, err)
@@ -204,7 +213,7 @@ func (m *migrator) migrate(ctx context.Context, etcdNoMetaVersion bool, oldVersi
 	beforeKV := make(map[string][]byte)
 	// 4.campaign owner successfully, begin to migrate data
 	for oldPrefix, newPrefix := range m.keyPrefixes {
-		resp, err := m.cli.Get(ctx, oldPrefix, clientV3.WithPrefix())
+		resp, err := m.cli.Client.Get(ctx, oldPrefix, clientV3.WithPrefix())
 		if err != nil {
 			log.Error("get old meta data failed, etcd meta data migration failed",
 				zap.Error(err))
@@ -231,9 +240,9 @@ func (m *migrator) migrate(ctx context.Context, etcdNoMetaVersion bool, oldVersi
 						zap.Error(err))
 					return cerror.WrapError(cerror.ErrEtcdMigrateFailed, err)
 				}
-				_, err = m.cli.Put(ctx, newKey, str)
+				_, err = m.cli.Client.Put(ctx, newKey, str)
 			} else {
-				_, err = m.cli.Put(ctx, newKey, string(v.Value))
+				_, err = m.cli.Client.Put(ctx, newKey, string(v.Value))
 			}
 			if err != nil {
 				log.Error("put new meta data failed, etcd meta data migration failed",
@@ -243,8 +252,15 @@ func (m *migrator) migrate(ctx context.Context, etcdNoMetaVersion bool, oldVersi
 		}
 	}
 
+	err = m.migrateGcServiceSafePointFunc(ctx, pdClient,
+		m.config.Security, m.cli.GetGCServiceID(), m.config.GcTTL)
+	if err != nil {
+		log.Error("update meta version failed, etcd meta data migration failed", zap.Error(err))
+		return cerror.WrapError(cerror.ErrEtcdMigrateFailed, err)
+	}
+
 	// 5. update metaVersion
-	_, err = m.cli.Put(ctx, m.metaVersionKey, fmt.Sprintf("%d", m.newMetaVersion))
+	_, err = m.cli.Client.Put(ctx, m.metaVersionKey, fmt.Sprintf("%d", m.newMetaVersion))
 	if err != nil {
 		log.Error("update meta version failed, etcd meta data migration failed", zap.Error(err))
 		return cerror.WrapError(cerror.ErrEtcdMigrateFailed, err)
@@ -253,8 +269,44 @@ func (m *migrator) migrate(ctx context.Context, etcdNoMetaVersion bool, oldVersi
 	return nil
 }
 
+func migrateGcServiceSafePoint(ctx context.Context,
+	pdClient pd.Client,
+	config *security.Credential,
+	newGcServiceID string,
+	ttl int64,
+) error {
+	gcServiceSafePoins, err := pdutil.ListGcServiceSafePoint(ctx, pdClient,
+		config)
+	if err != nil {
+		log.Error("list gc service safepoint failed",
+			zap.Error(err))
+		return errors.Trace(err)
+	}
+	var cdcGcSafePoint *pdutil.ServiceSafePoint
+	for _, item := range gcServiceSafePoins.ServiceGCSafepoints {
+		if item.ServiceID == oldGcServiceID {
+			cdcGcSafePoint = item
+		}
+	}
+	if cdcGcSafePoint != nil {
+		_, err := gc.SetServiceGCSafepoint(ctx, pdClient, newGcServiceID,
+			ttl,
+			cdcGcSafePoint.SafePoint)
+		if err != nil {
+			log.Error("set gc service safepoint failed",
+				zap.Error(err))
+			return errors.Trace(err)
+		}
+		err = gc.RemoveServiceGCSafepoint(ctx, pdClient, oldGcServiceID)
+		if err != nil {
+			log.Warn("remove old gc safepoint failed", zap.Error(err))
+		}
+	}
+	return nil
+}
+
 func (m *migrator) campaignOldOwner(ctx context.Context) error {
-	sess, err := concurrency.NewSession(m.cli.Unwrap(),
+	sess, err := concurrency.NewSession(m.cli.Client.Unwrap(),
 		concurrency.WithTTL(etcdSessionTTL))
 	if err != nil {
 		return errors.Trace(err)
@@ -272,7 +324,7 @@ func (m *migrator) campaignOldOwner(ctx context.Context) error {
 
 // Migrate migrate etcd meta data
 func (m *migrator) Migrate(ctx context.Context) error {
-	version, err := getMetaVersion(ctx, m.cli, m.clusterID)
+	version, err := getMetaVersion(ctx, m.cli.Client, m.cli.ClusterID)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -301,7 +353,7 @@ func (m *migrator) Migrate(ctx context.Context) error {
 
 // ShouldMigrate checks if we should migrate etcd meta data
 func (m *migrator) ShouldMigrate(ctx context.Context) (bool, error) {
-	version, err := getMetaVersion(ctx, m.cli, m.clusterID)
+	version, err := getMetaVersion(ctx, m.cli.Client, m.cli.ClusterID)
 	if err != nil {
 		return false, errors.Trace(err)
 	}
@@ -311,7 +363,7 @@ func (m *migrator) ShouldMigrate(ctx context.Context) (bool, error) {
 // WaitMetaVersionMatched checks and waits until the metaVersion in etcd
 // matched to lock cdcMetaVersion
 func (m *migrator) WaitMetaVersionMatched(ctx context.Context) error {
-	version, err := getMetaVersion(ctx, m.cli, m.clusterID)
+	version, err := getMetaVersion(ctx, m.cli.Client, m.cli.ClusterID)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -329,7 +381,7 @@ func (m *migrator) WaitMetaVersionMatched(ctx context.Context) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-ticker.C:
-			version, err := getMetaVersion(ctx, m.cli, m.clusterID)
+			version, err := getMetaVersion(ctx, m.cli.Client, m.cli.ClusterID)
 			if err != nil {
 				return errors.Trace(err)
 			}
