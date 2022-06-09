@@ -97,23 +97,23 @@ func newReplicationSet(
 	}
 	committed := false
 	for captureID, table := range tableStatus {
-		r.updateCheckpoint(table.Checkpoint)
 		if r.TableID != table.TableID {
 			return nil, r.inconsistentError(table, captureID,
 				"tpscheduler: table id inconsistent")
 		}
+		r.updateCheckpoint(table.Checkpoint)
 
 		switch table.State {
 		case schedulepb.TableStateReplicating:
-			// Recognize primary if it's table is in replicating state.
-			if len(r.Primary) == 0 {
-				r.Primary = captureID
-				r.Captures[captureID] = struct{}{}
-			} else {
+			if len(r.Primary) != 0 {
 				return nil, r.multiplePrimaryError(
 					table, captureID, "tpscheduler: multiple primary",
+					zap.Any("primary", r.Primary),
 					zap.Any("status", tableStatus))
 			}
+			// Recognize primary if it's table is in replicating state.
+			r.Primary = captureID
+			r.Captures[captureID] = struct{}{}
 		case schedulepb.TableStatePreparing:
 			// Recognize secondary if it's table is in preparing state.
 			r.Secondary = captureID

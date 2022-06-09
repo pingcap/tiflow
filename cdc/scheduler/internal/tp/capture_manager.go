@@ -166,6 +166,8 @@ func (c *captureManager) HandleMessage(
 		if msg.MsgType == schedulepb.MsgHeartbeatResponse {
 			captureStatus, ok := c.Captures[msg.From]
 			if !ok {
+				log.Warn("tpscheduler: heartbeat response from untracked capture",
+					zap.String("capture", msg.From))
 				continue
 			}
 			captureStatus.handleHeartbeatResponse(
