@@ -60,6 +60,10 @@ func NewWorker(
 	config := cfg.(*workerConfig)
 	status := &workerStatus{}
 
+	logger := log.L().WithFields(
+		zap.String("job-id", masterID),
+		zap.String("worker-id", workerID))
+
 	switch config.ResourceState {
 	case resourceStateUninit:
 		status.State = workerStateGenerating
@@ -69,11 +73,11 @@ func NewWorker(
 		status.State = workerStateCommitting
 	case resourceStateSorted:
 		status.State = workerStateFinished
+	default:
+		logger.Warn("Unexpected worker config",
+			zap.Any("config", config))
+		panic("unreachable")
 	}
-
-	logger := log.L().WithFields(
-		zap.String("job-id", masterID),
-		zap.String("worker-id", workerID))
 
 	return &Worker{
 		status: status,

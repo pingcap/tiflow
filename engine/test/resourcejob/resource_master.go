@@ -136,11 +136,17 @@ func (m *JobMaster) createWorkerIfNecessary(ctx context.Context) error {
 			return err
 		}
 
+		conf := &workerConfig{
+			ResourceID:    unboundRes,
+			ResourceState: m.status.Resources[unboundRes],
+			ResourceLen:   m.config.ResourceLen,
+		}
+
 		var workerID libModel.WorkerID
 		if resExists {
 			workerID, err = m.CreateWorker(
 				lib.ResourceTestWorker,
-				&workerConfig{ResourceID: unboundRes},
+				conf,
 				10,
 				unboundRes)
 			if err != nil {
@@ -150,7 +156,7 @@ func (m *JobMaster) createWorkerIfNecessary(ctx context.Context) error {
 			// Resource does not exist yet.
 			workerID, err = m.CreateWorker(
 				lib.ResourceTestWorker,
-				&workerConfig{ResourceID: unboundRes},
+				conf,
 				10)
 			if err != nil {
 				return err

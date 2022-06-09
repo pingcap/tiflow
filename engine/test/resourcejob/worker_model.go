@@ -29,7 +29,7 @@ const (
 )
 
 type workerStatus struct {
-	State workerState
+	State workerState `json:"state"`
 }
 
 func newWorkerStatusFromBytes(bytesData []byte) (*workerStatus, error) {
