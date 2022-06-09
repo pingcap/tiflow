@@ -218,8 +218,18 @@ func (m *JobMaster) OnWorkerStatusUpdated(worker lib.WorkerHandle, newStatus *li
 	}
 
 	switch workerStatus.State {
-	case workerStateSorting:
+	case workerStateGenerating:
 		return nil
+	case workerStateSorting:
+		if prevResState == resourceStateUninit {
+			m.status.OnWorkerFinishedGenerating(worker.ID())
+		} else if prevResState == resourceStateUnsorted {
+			break
+		} else {
+			log.L().Panic("OnWorkerStatusUpdated: unexpected worker status",
+				zap.String("worker-id", worker.ID()),
+				zap.String("prev-state", string(prevResState)))
+		}
 	case workerStateCommitting:
 		if prevResState == resourceStateUnsorted {
 			m.status.OnWorkerStartedCopying(worker.ID())

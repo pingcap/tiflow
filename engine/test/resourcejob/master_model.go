@@ -77,9 +77,9 @@ func (s *masterStatus) OnResourceCreated(resourceID resModel.ResourceID) {
 	s.Resources[resourceID] = resourceStateUninit
 }
 
-func (s *masterStatus) OnResourceInitialized(resourceID resModel.ResourceID, workerID libModel.WorkerID) {
-	log.L().Info("OnResourceInitialized",
-		zap.String("resource-id", resourceID))
+func (s *masterStatus) OnWorkerFinishedGenerating(workerID libModel.WorkerID) {
+	log.L().Info("OnWorkerFinishedGenerating",
+		zap.String("worker-id", workerID))
 
 	resourceID, ok := s.Bindings[workerID]
 	if !ok {
