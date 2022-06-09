@@ -14,9 +14,13 @@
 package cli
 
 import (
+	"strings"
+
+	v2 "github.com/pingcap/tiflow/cdc/api/v2"
+	apiv1client "github.com/pingcap/tiflow/pkg/api/v1"
+	apiv2client "github.com/pingcap/tiflow/pkg/api/v2"
 	"github.com/pingcap/tiflow/pkg/cmd/context"
 	"github.com/pingcap/tiflow/pkg/cmd/factory"
-	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/cyclic/mark"
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/spf13/cobra"
@@ -26,11 +30,15 @@ import (
 
 // cyclicCreateMarktablesOptions defines flags for the `cli changefeed cyclic create-marktables` command.
 type cyclicCreateMarktablesOptions struct {
+	apiV1Client *apiv1client.APIV1Client
+	apiV2Client *apiv2client.APIV2Client
+
 	createCommonOptions changefeedCommonOptions
 
 	pdClient pd.Client
 
 	pdAddr     string
+	pdAddrs    []string
 	credential *security.Credential
 
 	startTs             uint64
@@ -73,7 +81,17 @@ func (o *cyclicCreateMarktablesOptions) complete(f factory.Factory) error {
 	o.pdClient = pdClient
 
 	o.pdAddr = f.GetPdAddr()
+	o.pdAddrs = strings.Split(o.pdAddr, ",")
 	o.credential = f.GetCredential()
+
+	o.apiV1Client, err = f.APIV1Client()
+	if err != nil {
+		return err
+	}
+	o.apiV2Client, err = f.APIV2Client()
+	if err != nil {
+		return err
+	}
 
 	return nil
 }
@@ -82,9 +100,9 @@ func (o *cyclicCreateMarktablesOptions) complete(f factory.Factory) error {
 func (o *cyclicCreateMarktablesOptions) run(cmd *cobra.Command) error {
 	ctx := context.GetDefaultContext()
 
-	cfg := config.GetDefaultReplicaConfig()
+	replicaConfig := v2.GetDefaultReplicaConfig()
 	if len(o.createCommonOptions.configFile) > 0 {
-		if err := o.createCommonOptions.strictDecodeConfig("TiCDC changefeed", cfg); err != nil {
+		if err := o.createCommonOptions.strictDecodeConfig("TiCDC changefeed", replicaConfig); err != nil {
 			return err
 		}
 	}
@@ -95,22 +113,30 @@ func (o *cyclicCreateMarktablesOptions) run(cmd *cobra.Command) error {
 	}
 	o.startTs = oracle.ComposeTS(ts, logical)
 
-	_, eligibleTables, err := getTables(o.pdAddr, o.credential, cfg, o.startTs)
+	verifyTableConfig := v2.VerifyTableConfig{
+		PDAddrs:       o.pdAddrs,
+		CAPath:        o.credential.CAPath,
+		CertPath:      o.credential.CertPath,
+		KeyPath:       o.credential.KeyPath,
+		CertAllowedCN: o.credential.CertAllowedCN,
+		ReplicaConfig: replicaConfig,
+		StartTs:       o.startTs,
+	}
+	tables, err := o.apiV2Client.VerifyTable().Verify(ctx, &verifyTableConfig)
 	if err != nil {
 		return err
 	}
 
-	tables := make([]mark.TableName, len(eligibleTables))
-	for i := range eligibleTables {
-		tables[i] = &eligibleTables[i]
+	markTables := make([]mark.TableName, len(tables.EligibleTables))
+	for i := range tables.EligibleTables {
+		markTables[i] = &tables.EligibleTables[i]
 	}
-
-	err = mark.CreateMarkTables(ctx, o.cyclicUpstreamDSN, o.getUpstreamCredential(), tables...)
+	err = mark.CreateMarkTables(ctx, o.cyclicUpstreamDSN, o.getUpstreamCredential(), markTables...)
 	if err != nil {
 		return err
 	}
 
-	cmd.Printf("Create cyclic replication mark tables successfully! Total tables: %d\n", len(eligibleTables))
+	cmd.Printf("Create cyclic replication mark tables successfully! Total tables: %d\n", len(tables.EligibleTables))
 
 	return nil
 }

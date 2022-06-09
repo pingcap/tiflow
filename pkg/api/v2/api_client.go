@@ -55,6 +55,13 @@ func (c *APIV2Client) Unsafe() UnsafeInterface {
 	return newUnsafe(c)
 }
 
+func (c *APIV2Client) VerifyTable() VerifyTableInterface {
+	if c == nil {
+		return nil
+	}
+	return newVerifyTable(c)
+}
+
 // NewAPIClient creates a new APIV1Client.
 func NewAPIClient(serverAddr string, credential *security.Credential) (*APIV2Client, error) {
 	c := &rest.Config{}

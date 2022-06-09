@@ -48,7 +48,7 @@ type VerifyTableConfig struct {
 
 func getDefaultVerifyTableConfig() *VerifyTableConfig {
 	return &VerifyTableConfig{
-		ReplicaConfig: getDefaultReplicaConfig(),
+		ReplicaConfig: GetDefaultReplicaConfig(),
 	}
 }
 
@@ -84,8 +84,8 @@ type ReplicaConfig struct {
 	Consistent            *ConsistentConfig `json:"consistent"`
 }
 
-// getDefaultReplicaConfig returns a default ReplicaConfig
-func getDefaultReplicaConfig() *ReplicaConfig {
+// GetDefaultReplicaConfig returns a default ReplicaConfig
+func GetDefaultReplicaConfig() *ReplicaConfig {
 	return &ReplicaConfig{
 		CaseSensitive:    true,
 		EnableOldValue:   true,

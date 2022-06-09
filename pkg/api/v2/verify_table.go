@@ -20,33 +20,36 @@ import (
 	"github.com/pingcap/tiflow/pkg/api/internal/rest"
 )
 
-// TsoGetter has a method to return a TsoInterface.
-type TsoGetter interface {
-	Tso() TsoInterface
+// VerifyTableGetter has a method to return a VerifyTableInterface.
+type VerifyTableGetter interface {
+	VerifyTable() VerifyTableInterface
 }
 
-// TsoInterface has methods to work with status api
-type TsoInterface interface {
-	Get(ctx context.Context) (*v2.Tso, error)
+// VerifyTableInterface has methods to work with verifyTable api
+type VerifyTableInterface interface {
+	Verify(ctx context.Context, verifyTableConfig *v2.VerifyTableConfig) (*v2.Tables, error)
 }
 
-// tso implements StatusGetter
-type tso struct {
+// verifyTable implements VerifyTableInterface
+type verifyTable struct {
 	client rest.CDCRESTInterface
 }
 
-// newTso returns tso
-func newTso(c *APIV2Client) *tso {
-	return &tso{
+// newUnsafe returns unsafe
+func newVerifyTable(c *APIV2Client) *verifyTable {
+	return &verifyTable{
 		client: c.RESTClient(),
 	}
 }
 
-// Get returns the pd tso
-func (c *tso) Get(ctx context.Context) (*v2.Tso, error) {
-	result := new(v2.Tso)
-	err := c.client.Get().
-		WithURI("tso").
+// VerifyTable returns ...
+func (c *verifyTable) Verify(ctx context.Context,
+	verifyTableConfig *v2.VerifyTableConfig,
+) (*v2.Tables, error) {
+	result := new(v2.Tables)
+	err := c.client.Post().
+		WithURI("verify-table").
+		WithBody(verifyTableConfig).
 		Do(ctx).
 		Into(result)
 	return result, err
