@@ -307,7 +307,7 @@ func benchmarkCoordinator(
 ) {
 	log.SetLevel(zapcore.DPanicLevel)
 	ctx := context.Background()
-	size := 16384
+	size := 131072 // 2^17
 	for total := 1; total <= size; total *= 2 {
 		name, coord, currentTables, captures := factory(total)
 		b.ResetTimer()
@@ -337,7 +337,7 @@ func BenchmarkCoordinatorInit(b *testing.B) {
 			currentTables = append(currentTables, int64(10000+i))
 		}
 		schedulers := make(map[schedulerType]scheduler)
-		schedulers[schedulerTypeBurstBalance] = newBurstBalanceScheduler()
+		schedulers[schedulerTypeBasic] = newBasicScheduler()
 		coord = &coordinator{
 			trans:        &mockTrans{},
 			schedulers:   schedulers,
@@ -377,7 +377,7 @@ func BenchmarkCoordinatorHeartbeat(b *testing.B) {
 			currentTables = append(currentTables, int64(10000+i))
 		}
 		schedulers := make(map[schedulerType]scheduler)
-		schedulers[schedulerTypeBurstBalance] = newBurstBalanceScheduler()
+		schedulers[schedulerTypeBasic] = newBasicScheduler()
 		coord = &coordinator{
 			trans:        &mockTrans{},
 			schedulers:   schedulers,
@@ -452,7 +452,7 @@ func BenchmarkCoordinatorHeartbeatResponse(b *testing.B) {
 			keepRecvBuffer: true,
 		}
 		schedulers := make(map[schedulerType]scheduler)
-		schedulers[schedulerTypeBurstBalance] = newBurstBalanceScheduler()
+		schedulers[schedulerTypeBasic] = newBasicScheduler()
 		coord = &coordinator{
 			trans:        trans,
 			schedulers:   schedulers,

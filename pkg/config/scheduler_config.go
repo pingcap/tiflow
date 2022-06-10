@@ -14,13 +14,16 @@
 package config
 
 import (
+	"time"
+
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 )
 
 // SchedulerConfig configs TiCDC scheduler.
 type SchedulerConfig struct {
-	HeartbeatTick      int `toml:"heartbeat-tick" json:"heartbeat-tick"`
-	MaxTaskConcurrency int `toml:"max-task-concurrency" json:"max-task-concurrency"`
+	HeartbeatTick        int          `toml:"heartbeat-tick" json:"heartbeat-tick"`
+	MaxTaskConcurrency   int          `toml:"max-task-concurrency" json:"max-task-concurrency"`
+	CheckBalanceInterval TomlDuration `toml:"check-balance-interval" json:"check-balance-interval"`
 }
 
 // ValidateAndAdjust verifies that each parameter is valid.
@@ -30,6 +33,9 @@ func (c *SchedulerConfig) ValidateAndAdjust() error {
 	}
 	if c.MaxTaskConcurrency <= 0 {
 		return cerrors.ErrInvalidServerOption.GenWithStackByArgs("max-task-concurrency must be larger than 0")
+	}
+	if time.Duration(c.CheckBalanceInterval) <= time.Second {
+		return cerrors.ErrInvalidServerOption.GenWithStackByArgs("check-balance-interval must be larger than 1s")
 	}
 	return nil
 }

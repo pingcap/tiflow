@@ -78,7 +78,8 @@ func newCoordinator(
 ) *coordinator {
 	revision := schedulepb.OwnerRevision{Revision: ownerRevision}
 	schedulers := make(map[schedulerType]scheduler)
-	schedulers[schedulerTypeBurstBalance] = newBurstBalanceScheduler()
+	schedulers[schedulerTypeBasic] = newBasicScheduler()
+	schedulers[schedulerTypeBalance] = newBalanceScheduler(cfg)
 	schedulers[schedulerTypeMoveTable] = newMoveTableScheduler()
 	schedulers[schedulerTypeRebalance] = newRebalanceScheduler()
 

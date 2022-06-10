@@ -139,7 +139,8 @@ const (
     "enable-2phase-scheduler": false,
     "scheduler": {
       "heartbeat-tick": 2,
-      "max-task-concurrency": 10
+      "max-task-concurrency": 10,
+      "check-balance-interval": 60000000000
     }
   }
 }`

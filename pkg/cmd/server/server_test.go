@@ -210,8 +210,9 @@ func TestParseCfg(t *testing.T) {
 			},
 			EnableTwoPhaseScheduler: false,
 			Scheduler: &config.SchedulerConfig{
-				HeartbeatTick:      2,
-				MaxTaskConcurrency: 10,
+				HeartbeatTick:        2,
+				MaxTaskConcurrency:   10,
+				CheckBalanceInterval: 60000000000,
 			},
 		},
 	}, o.serverConfig)
@@ -281,6 +282,7 @@ server-worker-pool-size = 16
 [debug.scheduler]
 heartbeat-tick = 3
 max-task-concurrency = 11
+check-balance-interval = "10s"
 `, dataDir)
 	err := os.WriteFile(configPath, []byte(configContent), 0o644)
 	require.Nil(t, err)
@@ -364,8 +366,9 @@ max-task-concurrency = 11
 			},
 			EnableTwoPhaseScheduler: true,
 			Scheduler: &config.SchedulerConfig{
-				HeartbeatTick:      3,
-				MaxTaskConcurrency: 11,
+				HeartbeatTick:        3,
+				MaxTaskConcurrency:   11,
+				CheckBalanceInterval: config.TomlDuration(10 * time.Second),
 			},
 		},
 	}, o.serverConfig)
@@ -511,8 +514,9 @@ cert-allowed-cn = ["dd","ee"]
 			},
 			EnableTwoPhaseScheduler: false,
 			Scheduler: &config.SchedulerConfig{
-				HeartbeatTick:      2,
-				MaxTaskConcurrency: 10,
+				HeartbeatTick:        2,
+				MaxTaskConcurrency:   10,
+				CheckBalanceInterval: 60000000000,
 			},
 		},
 	}, o.serverConfig)
@@ -575,8 +579,9 @@ unknown3 = 3
 		},
 		EnableTwoPhaseScheduler: false,
 		Scheduler: &config.SchedulerConfig{
-			HeartbeatTick:      2,
-			MaxTaskConcurrency: 10,
+			HeartbeatTick:        2,
+			MaxTaskConcurrency:   10,
+			CheckBalanceInterval: 60000000000,
 		},
 	}, o.serverConfig.Debug)
 }

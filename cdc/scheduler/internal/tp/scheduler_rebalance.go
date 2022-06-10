@@ -93,8 +93,8 @@ func newBurstBalanceMoveTables(
 	}
 
 	for tableID, rep := range replications {
-		if rep.Primary == "" {
-			log.Info("tpscheduler: rebalance found table no primary, skip",
+		if rep.State != ReplicationSetStateReplicating {
+			log.Info("tpscheduler: rebalance skip tables that are not in Replicating",
 				zap.Int64("tableID", tableID),
 				zap.Any("replication", rep))
 			continue

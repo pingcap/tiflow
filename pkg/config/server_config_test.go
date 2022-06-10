@@ -119,4 +119,9 @@ func TestSchedulerConfigValidateAndAdjust(t *testing.T) {
 	require.Error(t, conf.ValidateAndAdjust())
 	conf.MaxTaskConcurrency = 0
 	require.Error(t, conf.ValidateAndAdjust())
+
+	conf.CheckBalanceInterval = -1
+	require.Error(t, conf.ValidateAndAdjust())
+	conf.CheckBalanceInterval = TomlDuration(time.Second)
+	require.Error(t, conf.ValidateAndAdjust())
 }
