@@ -70,6 +70,7 @@ func (h *OpenAPI) statusProvider() owner.StatusProvider {
 func RegisterOpenAPIRoutes(router *gin.Engine, api OpenAPI) {
 	v1 := router.Group("/api/v1")
 
+	v1.Use(middleware.CheckServerReadyMiddleware(api.capture))
 	v1.Use(middleware.LogMiddleware())
 	v1.Use(middleware.ErrorHandleMiddleware())
 

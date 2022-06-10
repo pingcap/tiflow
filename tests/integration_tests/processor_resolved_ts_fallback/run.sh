@@ -34,7 +34,7 @@ function run() {
 	run_sql "CREATE database processor_resolved_ts_fallback;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	run_sql "CREATE table processor_resolved_ts_fallback.t1(id int primary key auto_increment, val int);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	# wait table t1 is processed by cdc server
-	ensure 10 "cdc cli processor list|jq '.|length'|grep -E '^1$'"
+	ensure 10 "cdc cli processor list --server-addr http://127.0.0.1:8301 |jq '.|length'|grep -E '^1$'"
 	# check the t1 is replicated to downstream to make sure the t1 is dispatched to cdc1
 	check_table_exists "processor_resolved_ts_fallback.t1" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 
@@ -44,11 +44,11 @@ function run() {
 	run_sql "CREATE table processor_resolved_ts_fallback.t3(id int primary key auto_increment, val int);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	check_table_exists "processor_resolved_ts_fallback.t2" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 	check_table_exists "processor_resolved_ts_fallback.t3" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
-	ensure 10 "cdc cli processor list|jq '.|length'|grep -E '^2$'"
+	ensure 10 "cdc cli processor list --server-addr http://127.0.0.1:8301 |jq '.|length'|grep -E '^2$'"
 
 	run_sql "INSERT INTO processor_resolved_ts_fallback.t1 values (),(),();" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	# wait cdc server 1 is panic
-	ensure 10 "cdc cli capture list|jq '.|length'|grep -E '^1$'"
+	ensure 10 "cdc cli capture list --server-addr http://127.0.0.1:8302 |jq '.|length'|grep -E '^1$'"
 	run_sql "INSERT INTO processor_resolved_ts_fallback.t1 values (),(),();" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	run_sql "INSERT INTO processor_resolved_ts_fallback.t2 values (),(),();" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 

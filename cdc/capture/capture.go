@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/pkg/migrate"
 	"github.com/pingcap/tiflow/pkg/util"
 	"go.etcd.io/etcd/client/v3/concurrency"
 	"go.etcd.io/etcd/server/v3/mvcc"
@@ -81,6 +82,8 @@ type Capture struct {
 
 	cancel context.CancelFunc
 
+	migrator migrate.Migrator
+
 	newProcessorManager func(upstreamManager *upstream.Manager) *processor.Manager
 	newOwner            func(upstreamManager *upstream.Manager) owner.Owner
 }
@@ -90,6 +93,7 @@ func NewCapture(pdEndpoints []string,
 	etcdClient *etcd.CDCEtcdClient,
 	grpcService *p2p.ServerWrapper,
 ) *Capture {
+	conf := config.GetGlobalServerConfig()
 	return &Capture{
 		EtcdClient:          etcdClient,
 		grpcService:         grpcService,
@@ -97,13 +101,21 @@ func NewCapture(pdEndpoints []string,
 		pdEndpoints:         pdEndpoints,
 		newProcessorManager: processor.NewManager,
 		newOwner:            owner.NewOwner,
+
+		migrator: migrate.NewMigrator(
+			etcdClient,
+			pdEndpoints, conf),
 	}
 }
 
 // NewCapture4Test returns a new Capture instance for test.
 func NewCapture4Test(o owner.Owner) *Capture {
 	res := &Capture{
-		info: &model.CaptureInfo{ID: "capture-for-test", AdvertiseAddr: "127.0.0.1", Version: "test"},
+		info: &model.CaptureInfo{
+			ID:            "capture-for-test",
+			AdvertiseAddr: "127.0.0.1", Version: "test",
+		},
+		migrator: &migrate.NoOpMigrator{},
 	}
 	res.owner = o
 	return res
@@ -113,6 +125,7 @@ func NewCapture4Test(o owner.Owner) *Capture {
 func NewCaptureWithManager4Test(o owner.Owner, m *upstream.Manager) *Capture {
 	res := &Capture{
 		UpstreamManager: m,
+		migrator:        &migrate.NoOpMigrator{},
 	}
 	res.owner = o
 	return res
@@ -441,7 +454,7 @@ func (c *Capture) runEtcdWorker(
 	role string,
 ) error {
 	etcdWorker, err := orchestrator.NewEtcdWorker(ctx.GlobalVars().EtcdClient,
-		etcd.BaseKey(c.EtcdClient.ClusterID), reactor, reactorState)
+		etcd.BaseKey(c.EtcdClient.ClusterID), reactor, reactorState, c.migrator)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -627,4 +640,9 @@ func (c *Capture) StatusProvider() owner.StatusProvider {
 		return nil
 	}
 	return owner.NewStatusProvider(c.owner)
+}
+
+// IsReady returns if the cdc server is ready
+func (c *Capture) IsReady() bool {
+	return c.migrator.IsMigrateDone()
 }

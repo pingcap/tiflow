@@ -43,6 +43,7 @@ func newMockPDClient(ctx context.Context, normal bool) *mockPDClient {
 	mock.testServer = httptest.NewServer(http.HandlerFunc(
 		func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(status)
+			_, _ = w.Write([]byte("{}"))
 		},
 	))
 	mock.url = mock.testServer.URL
@@ -56,7 +57,7 @@ func TestMetaLabelNormal(t *testing.T) {
 	defer cancel()
 	mockClient := newMockPDClient(ctx, true)
 
-	err := UpdateMetaLabel(ctx, mockClient)
+	err := UpdateMetaLabel(ctx, mockClient, nil)
 	require.Nil(t, err)
 	mockClient.testServer.Close()
 }
@@ -66,7 +67,7 @@ func TestMetaLabelFail(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	mockClient := newMockPDClient(ctx, false)
-	pc, err := newPDApiClient(ctx, mockClient)
+	pc, err := newPDApiClient(mockClient, nil)
 	require.Nil(t, err)
 	mockClient.url = "http://127.0.1.1:2345"
 
@@ -79,7 +80,18 @@ func TestMetaLabelFail(t *testing.T) {
 	err = pc.patchMetaLabel(ctx)
 	require.Regexp(t, ".*404.*", err)
 
-	err = UpdateMetaLabel(ctx, mockClient)
+	err = UpdateMetaLabel(ctx, mockClient, nil)
 	require.ErrorIs(t, err, cerror.ErrReachMaxTry)
+	mockClient.testServer.Close()
+}
+
+func TestListGcServiceSafePoint(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	mockClient := newMockPDClient(ctx, true)
+
+	_, err := ListGcServiceSafePoint(ctx, mockClient, nil)
+	require.Nil(t, err)
 	mockClient.testServer.Close()
 }

@@ -995,4 +995,9 @@ var (
 		"upStram not found, cluster-id: %d",
 		errors.RFCCodeText("CDC:ErrUpStreamNotFound"),
 	)
+
+	ErrServerIsNotReady = errors.Normalize(
+		"cdc server is not ready",
+		errors.RFCCodeText("CDC:ErrServerIsNotReady"),
+	)
 )

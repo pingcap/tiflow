@@ -16,26 +16,18 @@ package etcd
 import (
 	"context"
 	"fmt"
-	"net/url"
 	"sort"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/require"
-	"go.etcd.io/etcd/client/pkg/v3/logutil"
-	clientv3 "go.etcd.io/etcd/client/v3"
-	"go.etcd.io/etcd/client/v3/concurrency"
-	"go.etcd.io/etcd/server/v3/embed"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
-	"golang.org/x/sync/errgroup"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/util"
+	"github.com/stretchr/testify/require"
+	clientv3 "go.etcd.io/etcd/client/v3"
+	"go.etcd.io/etcd/client/v3/concurrency"
 )
 
 type Captures []*model.CaptureInfo
@@ -44,59 +36,11 @@ func (c Captures) Len() int           { return len(c) }
 func (c Captures) Less(i, j int) bool { return c[i].ID < c[j].ID }
 func (c Captures) Swap(i, j int)      { c[i], c[j] = c[j], c[i] }
 
-type etcdTester struct {
-	dir       string
-	etcd      *embed.Etcd
-	clientURL *url.URL
-	client    CDCEtcdClient
-	ctx       context.Context
-	cancel    context.CancelFunc
-	errg      *errgroup.Group
-}
-
-func (s *etcdTester) setUpTest(t *testing.T) {
-	var err error
-	s.dir = t.TempDir()
-	s.clientURL, s.etcd, err = SetupEmbedEtcd(s.dir)
-	require.Nil(t, err)
-	logConfig := logutil.DefaultZapLoggerConfig
-	logConfig.Level = zap.NewAtomicLevelAt(zapcore.ErrorLevel)
-	client, err := clientv3.New(clientv3.Config{
-		Endpoints:   []string{s.clientURL.String()},
-		DialTimeout: 3 * time.Second,
-		LogConfig:   &logConfig,
-	})
-	require.NoError(t, err)
-
-	s.client, err = NewCDCEtcdClient(context.TODO(), client, DefaultCDCClusterID)
-	require.Nil(t, err)
-	s.ctx, s.cancel = context.WithCancel(context.Background())
-	s.errg = util.HandleErrWithErrGroup(s.ctx, s.etcd.Err(), func(e error) { t.Log(e) })
-}
-
-func (s *etcdTester) tearDownTest(t *testing.T) {
-	s.etcd.Close()
-	s.cancel()
-logEtcdError:
-	for {
-		select {
-		case err, ok := <-s.etcd.Err():
-			if !ok {
-				break logEtcdError
-			}
-			t.Logf("etcd server error: %v", err)
-		default:
-			break logEtcdError
-		}
-	}
-	s.client.Close() //nolint:errcheck
-}
-
 func TestEmbedEtcd(t *testing.T) {
-	s := &etcdTester{}
-	s.setUpTest(t)
-	defer s.tearDownTest(t)
-	curl := s.clientURL.String()
+	s := &Tester{}
+	s.SetUpTest(t)
+	defer s.TearDownTest(t)
+	curl := s.ClientURL.String()
 	cli, err := clientv3.New(clientv3.Config{
 		Endpoints:   []string{curl},
 		DialTimeout: 3 * time.Second,
@@ -117,9 +61,9 @@ func TestEmbedEtcd(t *testing.T) {
 }
 
 func TestGetChangeFeeds(t *testing.T) {
-	s := &etcdTester{}
-	s.setUpTest(t)
-	defer s.tearDownTest(t)
+	s := &Tester{}
+	s.SetUpTest(t)
+	defer s.TearDownTest(t)
 	testCases := []struct {
 		ids     []string
 		details []string
@@ -159,9 +103,9 @@ func TestGetChangeFeeds(t *testing.T) {
 }
 
 func TestOpChangeFeedDetail(t *testing.T) {
-	s := &etcdTester{}
-	s.setUpTest(t)
-	defer s.tearDownTest(t)
+	s := &Tester{}
+	s.SetUpTest(t)
+	defer s.TearDownTest(t)
 	ctx := context.Background()
 	detail := &model.ChangeFeedInfo{
 		SinkURI: "root@tcp(127.0.0.1:3306)/mysql",
@@ -185,9 +129,9 @@ func TestOpChangeFeedDetail(t *testing.T) {
 }
 
 func TestGetAllChangeFeedInfo(t *testing.T) {
-	s := &etcdTester{}
-	s.setUpTest(t)
-	defer s.tearDownTest(t)
+	s := &Tester{}
+	s.SetUpTest(t)
+	defer s.TearDownTest(t)
 	ctx := context.Background()
 	infos := []struct {
 		id   string
@@ -242,9 +186,9 @@ func putChangeFeedStatus(
 }
 
 func TestGetAllChangeFeedStatus(t *testing.T) {
-	s := &etcdTester{}
-	s.setUpTest(t)
-	defer s.tearDownTest(t)
+	s := &Tester{}
+	s.SetUpTest(t)
+	defer s.TearDownTest(t)
 
 	changefeeds := map[model.ChangeFeedID]*model.ChangeFeedStatus{
 		model.DefaultChangeFeedID("cf1"): {
@@ -266,9 +210,9 @@ func TestGetAllChangeFeedStatus(t *testing.T) {
 }
 
 func TestCreateChangefeed(t *testing.T) {
-	s := &etcdTester{}
-	s.setUpTest(t)
-	defer s.tearDownTest(t)
+	s := &Tester{}
+	s.SetUpTest(t)
+	defer s.TearDownTest(t)
 
 	ctx := context.Background()
 	detail := &model.ChangeFeedInfo{
@@ -286,9 +230,9 @@ func TestCreateChangefeed(t *testing.T) {
 }
 
 func TestGetAllCaptureLeases(t *testing.T) {
-	s := &etcdTester{}
-	s.setUpTest(t)
-	defer s.tearDownTest(t)
+	s := &Tester{}
+	s.SetUpTest(t)
+	defer s.TearDownTest(t)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -341,9 +285,9 @@ const (
 )
 
 func TestGetOwnerRevision(t *testing.T) {
-	s := &etcdTester{}
-	s.setUpTest(t)
-	defer s.tearDownTest(t)
+	s := &Tester{}
+	s.SetUpTest(t)
+	defer s.TearDownTest(t)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
