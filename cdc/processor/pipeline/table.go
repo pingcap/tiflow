@@ -94,7 +94,7 @@ type TablePipeline interface {
 	AsyncStop(targetTs model.Ts) bool
 
 	// Start the sink consume data from the given `ts`
-	Start(ts model.Ts) bool
+	Start(ts model.Ts)
 
 	// Workload returns the workload of this table
 	Workload() model.WorkloadInfo

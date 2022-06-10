@@ -517,13 +517,11 @@ func (t *tableActor) Wait() {
 	_ = t.wg.Wait()
 }
 
-func (t *tableActor) Start(ts model.Ts) bool {
+func (t *tableActor) Start(ts model.Ts) {
 	if atomic.CompareAndSwapInt32(&t.sortNode.started, 0, 1) {
 		t.sortNode.startTsCh <- ts
 		close(t.sortNode.startTsCh)
-		return true
 	}
-	return false
 }
 
 // MemoryConsumption return the memory consumption in bytes
