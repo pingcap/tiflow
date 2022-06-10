@@ -252,7 +252,6 @@ func (r *replicationManager) HandleTasks(
 			if task.accept != nil {
 				task.accept()
 			}
-			r.acceptBurstBalanceTask++
 			continue
 		}
 
@@ -267,13 +266,10 @@ func (r *replicationManager) HandleTasks(
 		var tableID model.TableID
 		if task.addTable != nil {
 			tableID = task.addTable.TableID
-			r.acceptAddTableTask++
 		} else if task.removeTable != nil {
 			tableID = task.removeTable.TableID
-			r.acceptRemoveTableTask++
 		} else if task.moveTable != nil {
 			tableID = task.moveTable.TableID
-			r.acceptMoveTableTask++
 		}
 
 		// Skip task if the table is already running a task,
@@ -313,6 +309,7 @@ func (r *replicationManager) HandleTasks(
 func (r *replicationManager) handleAddTableTask(
 	task *addTable,
 ) ([]*schedulepb.Message, error) {
+	r.acceptAddTableTask++
 	var err error
 	table := r.tables[task.TableID]
 	if table == nil {
@@ -328,6 +325,7 @@ func (r *replicationManager) handleAddTableTask(
 func (r *replicationManager) handleRemoveTableTask(
 	task *removeTable,
 ) ([]*schedulepb.Message, error) {
+	r.acceptRemoveTableTask++
 	table := r.tables[task.TableID]
 	if table.hasRemoved() {
 		log.Info("tpscheduler: table has removed", zap.Int64("tableID", task.TableID))
@@ -340,6 +338,7 @@ func (r *replicationManager) handleRemoveTableTask(
 func (r *replicationManager) handleMoveTableTask(
 	task *moveTable,
 ) ([]*schedulepb.Message, error) {
+	r.acceptMoveTableTask++
 	table := r.tables[task.TableID]
 	return table.handleMoveTable(task.DestCapture)
 }
@@ -347,6 +346,7 @@ func (r *replicationManager) handleMoveTableTask(
 func (r *replicationManager) handleBurstBalanceTasks(
 	task *burstBalance,
 ) ([]*schedulepb.Message, error) {
+	r.acceptBurstBalanceTask++
 	perCapture := make(map[model.CaptureID]int)
 	for _, task := range task.AddTables {
 		perCapture[task.CaptureID]++
