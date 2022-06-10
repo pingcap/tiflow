@@ -72,10 +72,10 @@ func TestInvalidSortEngine(t *testing.T) {
 		expect: model.SortUnified,
 	}, {
 		input:  "memory",
-		expect: model.SortInMemory,
+		expect: model.SortUnified,
 	}, {
 		input:  "file",
-		expect: model.SortInFile,
+		expect: model.SortUnified,
 	}, {
 		input:  "unified",
 		expect: model.SortUnified,
@@ -86,7 +86,7 @@ func TestInvalidSortEngine(t *testing.T) {
 		o.addFlags(cmd)
 		require.Nil(t, cmd.ParseFlags([]string{"--sort-engine=" + cs.input}))
 		opt := newCreateChangefeedOptions(o)
-		err := opt.completeReplicaCfg(cmd)
+		err := opt.validate(cmd)
 		require.Nil(t, err)
 		require.Equal(t, cs.expect, opt.commonChangefeedOptions.sortEngine)
 	}

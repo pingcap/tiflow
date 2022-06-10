@@ -225,14 +225,13 @@ func (o *createChangefeedOptions) completeReplicaCfg(
 }
 
 // validate checks that the provided attach options are specified.
-func (o *createChangefeedOptions) validate(ctx context.Context, cmd *cobra.Command) error {
-	if o.cfg.Cyclic.IsEnabled() {
+func (o *createChangefeedOptions) validate(cmd *cobra.Command) error {
+	if o.cfg != nil && o.cfg.Cyclic.IsEnabled() {
 		return errors.New("cdc no longer support cyclic replication")
 	}
 
 	if o.timezone != "SYSTEM" {
 		cmd.Printf(color.HiYellowString("[WARN] --tz is deprecated in changefeed settings.\n"))
-		return errors.New("Creating changefeed with `--tz`, it's invalid")
 	}
 
 	if len(o.commonChangefeedOptions.opts) != 0 {
@@ -249,12 +248,10 @@ func (o *createChangefeedOptions) validate(ctx context.Context, cmd *cobra.Comma
 
 	switch o.commonChangefeedOptions.sortEngine {
 	case model.SortUnified:
-	case model.SortInFile, model.SortInMemory:
-		// obsolete. But we keep silent here. We create a Unified Sorter when the owner/processor sees this option
-		// for backward-compatibility.
 	default:
-		return errors.Errorf("Creating changefeed with an invalid sort engine(%s), "+
-			"`%s` are the only valid options.", o.commonChangefeedOptions.sortEngine, model.SortUnified)
+		log.Warn("invalid sort-engine, use Unified Sorter by default",
+			zap.String("invalidSortEngine", o.commonChangefeedOptions.sortEngine))
+		o.commonChangefeedOptions.sortEngine = model.SortUnified
 	}
 
 	return nil
@@ -362,7 +359,7 @@ func newCmdCreateChangefeed(f factory.Factory) *cobra.Command {
 				return err
 			}
 
-			err = o.validate(ctx, cmd)
+			err = o.validate(cmd)
 			if err != nil {
 				return err
 			}
