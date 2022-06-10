@@ -57,10 +57,11 @@ type CaptureStatus struct {
 	Epoch    schedulepb.ProcessorEpoch
 	State    CaptureState
 	Tables   []schedulepb.TableStatus
+	Addr     string
 }
 
-func newCaptureStatus(rev schedulepb.OwnerRevision) *CaptureStatus {
-	return &CaptureStatus{OwnerRev: rev, State: CaptureStateUninitialized}
+func newCaptureStatus(rev schedulepb.OwnerRevision, addr string) *CaptureStatus {
+	return &CaptureStatus{OwnerRev: rev, State: CaptureStateUninitialized, Addr: addr}
 }
 
 func (c *CaptureStatus) handleHeartbeatResponse(
@@ -100,13 +101,19 @@ type captureManager struct {
 	// A logical clock counter, for heartbeat.
 	tickCounter   int
 	heartbeatTick int
+
+	changefeedID model.ChangeFeedID
 }
 
-func newCaptureManager(rev schedulepb.OwnerRevision, heartbeatTick int) *captureManager {
+func newCaptureManager(
+	changefeedID model.ChangeFeedID, rev schedulepb.OwnerRevision, heartbeatTick int,
+) *captureManager {
 	return &captureManager{
 		OwnerRev:      rev,
 		Captures:      make(map[model.CaptureID]*CaptureStatus),
 		heartbeatTick: heartbeatTick,
+
+		changefeedID: changefeedID,
 	}
 }
 
@@ -178,10 +185,10 @@ func (c *captureManager) HandleAliveCaptureUpdate(
 	aliveCaptures map[model.CaptureID]*model.CaptureInfo,
 ) []*schedulepb.Message {
 	msgs := make([]*schedulepb.Message, 0)
-	for id := range aliveCaptures {
+	for id, info := range aliveCaptures {
 		if _, ok := c.Captures[id]; !ok {
 			// A new capture.
-			c.Captures[id] = newCaptureStatus(c.OwnerRev)
+			c.Captures[id] = newCaptureStatus(c.OwnerRev, info.AdvertiseAddr)
 			log.Info("tpscheduler: find a new capture", zap.String("capture", id))
 			msgs = append(msgs, &schedulepb.Message{
 				To:        id,
@@ -231,4 +238,13 @@ func (c *captureManager) TakeChanges() *captureChanges {
 	changes := c.changes
 	c.changes = nil
 	return changes
+}
+
+func (c *captureManager) CollectMetrics() {
+	cf := c.changefeedID
+	for _, capture := range c.Captures {
+		captureTableGauge.
+			WithLabelValues(cf.Namespace, cf.ID, capture.Addr).
+			Set(float64(len(capture.Tables)))
+	}
 }

@@ -26,7 +26,7 @@ func TestCaptureStatusHandleHeartbeatResponse(t *testing.T) {
 
 	rev := schedulepb.OwnerRevision{Revision: 1}
 	epoch := schedulepb.ProcessorEpoch{Epoch: "test"}
-	c := newCaptureStatus(rev)
+	c := newCaptureStatus(rev, "")
 	require.Equal(t, CaptureStateUninitialized, c.State)
 
 	// Uninitialized -> Initialized
@@ -50,7 +50,7 @@ func TestCaptureManagerHandleAliveCaptureUpdate(t *testing.T) {
 	t.Parallel()
 
 	rev := schedulepb.OwnerRevision{}
-	cm := newCaptureManager(rev, 2)
+	cm := newCaptureManager(model.ChangeFeedID{}, rev, 2)
 	ms := map[model.CaptureID]*model.CaptureInfo{
 		"1": {}, "2": {}, "3": {},
 	}
@@ -120,7 +120,7 @@ func TestCaptureManagerHandleMessages(t *testing.T) {
 		"1": {},
 		"2": {},
 	}
-	cm := newCaptureManager(rev, 2)
+	cm := newCaptureManager(model.ChangeFeedID{}, rev, 2)
 	require.False(t, cm.CheckAllCaptureInitialized())
 
 	// Initial handle alive captures.
@@ -168,7 +168,7 @@ func TestCaptureManagerTick(t *testing.T) {
 	t.Parallel()
 
 	rev := schedulepb.OwnerRevision{}
-	cm := newCaptureManager(rev, 2)
+	cm := newCaptureManager(model.ChangeFeedID{}, rev, 2)
 
 	// No heartbeat if there is no capture.
 	msgs := cm.Tick(nil)

@@ -24,7 +24,7 @@ import (
 func TestReplicationManagerHandleAddTableTask(t *testing.T) {
 	t.Parallel()
 
-	r := newReplicationManager(10)
+	r := newReplicationManager(10, model.ChangeFeedID{})
 	addTableCh := make(chan int, 1)
 	// Absent -> Prepare
 	msgs, err := r.HandleTasks([]*scheduleTask{{
@@ -44,7 +44,10 @@ func TestReplicationManagerHandleAddTableTask(t *testing.T) {
 				AddTable: &schedulepb.AddTableRequest{
 					TableID:     1,
 					IsSecondary: true,
-					Checkpoint:  schedulepb.Checkpoint{CheckpointTs: 1},
+					Checkpoint: schedulepb.Checkpoint{
+						CheckpointTs: 1,
+						ResolvedTs:   1,
+					},
 				},
 			},
 		},
@@ -85,7 +88,10 @@ func TestReplicationManagerHandleAddTableTask(t *testing.T) {
 				AddTable: &schedulepb.AddTableRequest{
 					TableID:     1,
 					IsSecondary: false,
-					Checkpoint:  schedulepb.Checkpoint{CheckpointTs: 1},
+					Checkpoint: schedulepb.Checkpoint{
+						CheckpointTs: 1,
+						ResolvedTs:   1,
+					},
 				},
 			},
 		},
@@ -121,7 +127,7 @@ func TestReplicationManagerHandleAddTableTask(t *testing.T) {
 func TestReplicationManagerRemoveTable(t *testing.T) {
 	t.Parallel()
 
-	r := newReplicationManager(10)
+	r := newReplicationManager(10, model.ChangeFeedID{})
 	removeTableCh := make(chan int, 1)
 
 	// Ignore remove table if there is no such table.
@@ -213,7 +219,7 @@ func TestReplicationManagerRemoveTable(t *testing.T) {
 func TestReplicationManagerMoveTable(t *testing.T) {
 	t.Parallel()
 
-	r := newReplicationManager(10)
+	r := newReplicationManager(10, model.ChangeFeedID{})
 	moveTableCh := make(chan int, 1)
 
 	source := "1"
@@ -355,7 +361,7 @@ func TestReplicationManagerMoveTable(t *testing.T) {
 func TestReplicationManagerBurstBalance(t *testing.T) {
 	t.Parallel()
 
-	r := newReplicationManager(1)
+	r := newReplicationManager(1, model.ChangeFeedID{})
 	balanceTableCh := make(chan int, 1)
 
 	// Burst balance is not limited by maxTaskConcurrency.
@@ -389,7 +395,10 @@ func TestReplicationManagerBurstBalance(t *testing.T) {
 					AddTable: &schedulepb.AddTableRequest{
 						TableID:     tableID,
 						IsSecondary: true,
-						Checkpoint:  schedulepb.Checkpoint{CheckpointTs: 1},
+						Checkpoint: schedulepb.Checkpoint{
+							CheckpointTs: 1,
+							ResolvedTs:   1,
+						},
 					},
 				},
 			},
@@ -433,7 +442,10 @@ func TestReplicationManagerBurstBalance(t *testing.T) {
 				AddTable: &schedulepb.AddTableRequest{
 					TableID:     4,
 					IsSecondary: true,
-					Checkpoint:  schedulepb.Checkpoint{CheckpointTs: 2},
+					Checkpoint: schedulepb.Checkpoint{
+						CheckpointTs: 2,
+						ResolvedTs:   2,
+					},
 				},
 			},
 		},
@@ -454,7 +466,7 @@ func TestReplicationManagerBurstBalance(t *testing.T) {
 func TestReplicationManagerBurstBalanceMoveTables(t *testing.T) {
 	t.Parallel()
 
-	r := newReplicationManager(1)
+	r := newReplicationManager(1, model.ChangeFeedID{})
 	balanceTableCh := make(chan int, 1)
 
 	var err error
@@ -504,7 +516,7 @@ func TestReplicationManagerBurstBalanceMoveTables(t *testing.T) {
 func TestReplicationManagerMaxTaskConcurrency(t *testing.T) {
 	t.Parallel()
 
-	r := newReplicationManager(1)
+	r := newReplicationManager(1, model.ChangeFeedID{})
 	addTableCh := make(chan int, 1)
 
 	msgs, err := r.HandleTasks([]*scheduleTask{{
@@ -545,7 +557,7 @@ func TestReplicationManagerMaxTaskConcurrency(t *testing.T) {
 func TestReplicationManagerAdvanceCheckpoint(t *testing.T) {
 	t.Parallel()
 
-	r := newReplicationManager(1)
+	r := newReplicationManager(1, model.ChangeFeedID{})
 	rs, err := newReplicationSet(model.TableID(1), model.Ts(10),
 		map[model.CaptureID]*schedulepb.TableStatus{
 			"1": {
@@ -633,7 +645,7 @@ func TestReplicationManagerAdvanceCheckpoint(t *testing.T) {
 func TestReplicationManagerHandleCaptureChanges(t *testing.T) {
 	t.Parallel()
 
-	r := newReplicationManager(1)
+	r := newReplicationManager(1, model.ChangeFeedID{})
 	changes := captureChanges{Init: map[model.CaptureID][]schedulepb.TableStatus{
 		"1": {{TableID: 1, State: schedulepb.TableStateReplicating}},
 		"2": {{TableID: 2, State: schedulepb.TableStateReplicating}},
