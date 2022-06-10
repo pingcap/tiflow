@@ -784,18 +784,18 @@ func syncFlushRowChangedEvents(ctx context.Context, sink *partitionSink, resolve
 		}
 		// tables are flushed
 		var (
-			err          error
-			checkpointTs uint64
+			err        error
+			checkpoint model.ResolvedTs
 		)
 		flushedResolvedTs := true
 		sink.tablesMap.Range(func(key, value interface{}) bool {
 			tableID := key.(int64)
-			checkpointTs, err = sink.FlushRowChangedEvents(ctx,
+			checkpoint, err = sink.FlushRowChangedEvents(ctx,
 				tableID, model.NewResolvedTs(resolvedTs))
 			if err != nil {
 				return false
 			}
-			if checkpointTs < resolvedTs {
+			if checkpoint.Ts < resolvedTs {
 				flushedResolvedTs = false
 			}
 			return true

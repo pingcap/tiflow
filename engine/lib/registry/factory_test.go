@@ -19,9 +19,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/dig"
 
-	"github.com/pingcap/tiflow/engine/lib"
 	"github.com/pingcap/tiflow/engine/lib/fake"
-	libModel "github.com/pingcap/tiflow/engine/lib/model"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/deps"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/broker"
@@ -59,10 +57,7 @@ func makeCtxWithMockDeps(t *testing.T) *dcontext.Context {
 }
 
 func TestNewSimpleWorkerFactory(t *testing.T) {
-	dummyConstructor := func(ctx *dcontext.Context, id libModel.WorkerID, masterID libModel.MasterID, config WorkerConfig) lib.WorkerImpl {
-		return fake.NewDummyWorker(ctx, id, masterID, config)
-	}
-	fac := NewSimpleWorkerFactory(dummyConstructor, &fake.WorkerConfig{})
+	fac := NewSimpleWorkerFactory(fake.NewDummyWorker)
 	config, err := fac.DeserializeConfig([]byte(`{"target-tick":100}`))
 	require.NoError(t, err)
 	require.Equal(t, &fake.WorkerConfig{TargetTick: 100}, config)

@@ -117,6 +117,7 @@ func RegistryMetrics() {
 	relay.RegisterMetrics(registry)
 	dumpling.RegisterMetrics(registry)
 	loader.RegisterMetrics(registry)
+	metrics.RegisterValidatorMetrics(registry)
 	metrics.DefaultMetricsProxies.RegisterMetrics(registry)
 	prometheus.DefaultGatherer = registry
 }

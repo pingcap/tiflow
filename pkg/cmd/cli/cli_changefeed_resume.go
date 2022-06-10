@@ -20,6 +20,7 @@ import (
 	apiv2client "github.com/pingcap/tiflow/pkg/api/v2"
 	cmdcontext "github.com/pingcap/tiflow/pkg/cmd/context"
 	"github.com/pingcap/tiflow/pkg/cmd/factory"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/spf13/cobra"
 )
 
@@ -63,16 +64,26 @@ func (o *resumeChangefeedOptions) complete(f factory.Factory) error {
 // confirmResumeChangefeedCheck prompts the user to confirm the use of a large data gap when noConfirm is turned off.
 func (o *resumeChangefeedOptions) confirmResumeChangefeedCheck(ctx context.Context, cmd *cobra.Command) error {
 	if !o.noConfirm {
-		cf, err := o.apiV1Client.Changefeeds().Get(ctx, o.changefeedID)
+		cfs, err := o.apiV1Client.Changefeeds().List(ctx)
 		if err != nil {
 			return err
+		}
+		var checkpointTs uint64 = 0
+
+		for _, cf := range *cfs {
+			if cf.ID == o.changefeedID {
+				checkpointTs = cf.CheckpointTSO
+			}
+		}
+		if checkpointTs == 0 {
+			return errors.ErrChangeFeedNotExists
 		}
 
 		tso, err := o.apiV2Client.Tso().Get(ctx)
 		if err != nil {
 			return err
 		}
-		return confirmLargeDataGap(cmd, tso.Timestamp, cf.CheckpointTSO)
+		return confirmLargeDataGap(cmd, tso.Timestamp, checkpointTs)
 	}
 	return nil
 }
