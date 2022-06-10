@@ -58,6 +58,7 @@ import (
 	"github.com/pingcap/tidb/parser/ast"
 	pmysql "github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/util/filter"
+	regexprrouter "github.com/pingcap/tidb/util/regexpr-router"
 	router "github.com/pingcap/tidb/util/table-router"
 	"go.uber.org/zap"
 )
@@ -1025,6 +1026,35 @@ func (s *testSyncerSuite) TestRun(c *C) {
 
 	cancel()
 	<-resultCh // wait for the process to finish
+
+	// test OperateSchema starts
+	ctx, cancel = context.WithCancel(context.Background())
+
+	syncer.sessCtx = utils.NewSessionCtx(map[string]string{"time_zone": "UTC"})
+	sourceSchemaFromCheckPoint, err := syncer.OperateSchema(ctx, &pb.OperateWorkerSchemaRequest{Op: pb.SchemaOp_GetSchema, Database: "test_1", Table: "t_1"})
+	c.Assert(err, IsNil)
+
+	syncer.tableRouter = &regexprrouter.RouteTable{}
+	c.Assert(syncer.tableRouter.AddRule(&router.TableRule{
+		SchemaPattern: "test_1",
+		TablePattern:  "t_1",
+		TargetSchema:  "test_1",
+		TargetTable:   "t_2",
+	}), IsNil)
+
+	syncer.checkpoint.(*RemoteCheckPoint).points = make(map[string]map[string]*binlogPoint)
+
+	mock.ExpectQuery("SHOW CREATE TABLE " + "`test_1`.`t_2`").WillReturnRows(
+		sqlmock.NewRows([]string{"Table", "Create Table"}).
+			AddRow("t_2", "CREATE TABLE `t_2` ( `id` int(11) NOT NULL, `name` varchar(24) DEFAULT NULL, PRIMARY KEY (`id`) /*T![clustered_index] NONCLUSTERED */, KEY `index1` (`name`)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin"))
+
+	sourceSchemaFromDownstream, err := syncer.OperateSchema(ctx, &pb.OperateWorkerSchemaRequest{Op: pb.SchemaOp_GetSchema, Database: "test_1", Table: "t_1"})
+	c.Assert(err, IsNil)
+	c.Assert(sourceSchemaFromCheckPoint, Equals, sourceSchemaFromDownstream)
+
+	cancel()
+	// test OperateSchema ends
+
 	syncer.Close()
 	c.Assert(syncer.isClosed(), IsTrue)
 
