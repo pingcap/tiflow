@@ -130,7 +130,6 @@ func (b *binlogPoint) rollback() {
 	if b.ti != b.flushedTI {
 		b.ti = b.flushedTI
 	}
-	return
 }
 
 func (b *binlogPoint) outOfDate() bool {
