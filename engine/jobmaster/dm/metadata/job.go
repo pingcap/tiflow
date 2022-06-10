@@ -30,10 +30,12 @@ type TaskStage int
 
 // These stages may updated in later pr.
 const (
-	StageInit TaskStage = iota
+	StageInit TaskStage = iota + 1
 	StageRunning
 	StagePaused
 	StageFinished
+	StageError
+	StagePausing
 	// UnScheduled means the task is not scheduled.
 	// This usually happens when the worker is offline.
 	StageUnscheduled
@@ -110,6 +112,11 @@ func (jobStore *JobStore) UpdateStages(ctx context.Context, taskIDs []string, st
 	}
 
 	job := state.(*Job)
+	if len(taskIDs) == 0 {
+		for task := range job.Tasks {
+			taskIDs = append(taskIDs, task)
+		}
+	}
 	for _, taskID := range taskIDs {
 		if _, ok := job.Tasks[taskID]; !ok {
 			return errors.Errorf("task %s not found", taskID)

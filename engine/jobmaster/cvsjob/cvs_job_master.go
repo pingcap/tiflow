@@ -27,7 +27,7 @@ import (
 	"golang.org/x/time/rate"
 
 	"github.com/pingcap/tiflow/dm/pkg/log"
-	cvsTask "github.com/pingcap/tiflow/engine/executor/cvsTask"
+	cvsTask "github.com/pingcap/tiflow/engine/executor/cvs"
 	"github.com/pingcap/tiflow/engine/executor/worker"
 	"github.com/pingcap/tiflow/engine/lib"
 	libModel "github.com/pingcap/tiflow/engine/lib/model"
@@ -91,21 +91,18 @@ var _ lib.JobMasterImpl = (*JobMaster)(nil)
 
 // RegisterWorker is used to register cvs job master into global registry
 func RegisterWorker() {
-	constructor := func(ctx *dcontext.Context, id libModel.WorkerID, masterID libModel.MasterID, config lib.WorkerConfig) lib.WorkerImpl {
-		return NewCVSJobMaster(ctx, id, masterID, config)
-	}
-	factory := registry.NewSimpleWorkerFactory(constructor, &Config{})
+	factory := registry.NewSimpleWorkerFactory(NewCVSJobMaster)
 	registry.GlobalWorkerRegistry().MustRegisterWorkerType(lib.CvsJobMaster, factory)
 }
 
 // NewCVSJobMaster creates a new cvs job master
-func NewCVSJobMaster(ctx *dcontext.Context, workerID libModel.WorkerID, masterID libModel.MasterID, conf lib.WorkerConfig) *JobMaster {
+func NewCVSJobMaster(ctx *dcontext.Context, workerID libModel.WorkerID, masterID libModel.MasterID, conf *Config) *JobMaster {
 	jm := &JobMaster{}
 	jm.workerID = workerID
 	jm.jobStatus = &Status{
 		FileInfos: make(map[int]*SyncFileInfo),
 	}
-	jm.jobStatus.Config = conf.(*Config)
+	jm.jobStatus.Config = conf
 	jm.syncFilesInfo = make(map[int]*WorkerInfo)
 	jm.statusRateLimiter = rate.NewLimiter(rate.Every(time.Second*2), 1)
 	jm.ctx = ctx.Context

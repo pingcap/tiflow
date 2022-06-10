@@ -16,6 +16,7 @@ package dm
 import (
 	"encoding/json"
 
+	"github.com/pingcap/tiflow/dm/dm/pb"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
 	libModel "github.com/pingcap/tiflow/engine/lib/model"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
@@ -28,10 +29,26 @@ const (
 	StopWorker  p2p.Topic = "StopWorker"
 )
 
+// OperateType represents internal operate type in DM
+// TODO: use OperateType in lib or move OperateType to lib.
+type OperateType int
+
+// These op may updated in later pr.
+// NOTICE: consider to only use Update cmd to add/remove task.
+// e.g. start-task/stop-task -s source in origin DM will be replaced by update-job now.
+const (
+	None OperateType = iota
+	Create
+	Pause
+	Resume
+	Update
+	Delete
+)
+
 // OperateTaskMessage is operate task message
 type OperateTaskMessage struct {
-	TaskID string
-	Stage  metadata.TaskStage
+	Task string
+	Op   OperateType
 }
 
 // StopWorkerMessage is stop worker message
@@ -49,5 +66,6 @@ type QueryStatusResponse struct {
 	ErrorMsg string
 	Unit     libModel.WorkerType
 	Stage    metadata.TaskStage
+	Result   *pb.ProcessResult
 	Status   json.RawMessage
 }

@@ -14,6 +14,7 @@
 package loader
 
 import (
+	"github.com/pingcap/tiflow/engine/pkg/promutil"
 	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/pingcap/tiflow/dm/pkg/metricsproxy"
@@ -21,7 +22,7 @@ import (
 
 var (
 	// should error.
-	tidbExecutionErrorCounter = metricsproxy.NewCounterVec(
+	tidbExecutionErrorCounter = metricsproxy.NewCounterVec(&promutil.PromFactory{},
 		prometheus.CounterOpts{
 			Namespace: "dm",
 			Subsystem: "loader",
@@ -29,7 +30,7 @@ var (
 			Help:      "Total count of tidb execution errors",
 		}, []string{"task", "source_id"})
 
-	queryHistogram = metricsproxy.NewHistogramVec(
+	queryHistogram = metricsproxy.NewHistogramVec(&promutil.PromFactory{},
 		prometheus.HistogramOpts{
 			Namespace: "dm",
 			Subsystem: "loader",
@@ -38,7 +39,7 @@ var (
 			Buckets:   prometheus.ExponentialBuckets(0.000005, 2, 25),
 		}, []string{"task", "source_id"})
 
-	txnHistogram = metricsproxy.NewHistogramVec(
+	txnHistogram = metricsproxy.NewHistogramVec(&promutil.PromFactory{},
 		prometheus.HistogramOpts{
 			Namespace: "dm",
 			Subsystem: "loader",
@@ -47,7 +48,7 @@ var (
 			Buckets:   prometheus.ExponentialBuckets(0.000005, 2, 25),
 		}, []string{"task", "worker", "source_id", "target_schema", "target_table"})
 
-	stmtHistogram = metricsproxy.NewHistogramVec(
+	stmtHistogram = metricsproxy.NewHistogramVec(&promutil.PromFactory{},
 		prometheus.HistogramOpts{
 			Namespace: "dm",
 			Subsystem: "loader",
@@ -56,7 +57,7 @@ var (
 			Buckets:   prometheus.ExponentialBuckets(0.000005, 2, 25),
 		}, []string{"type", "task"})
 
-	dataFileGauge = metricsproxy.NewGaugeVec(
+	dataFileGauge = metricsproxy.NewGaugeVec(&promutil.PromFactory{},
 		prometheus.GaugeOpts{
 			Namespace: "dm",
 			Subsystem: "loader",
@@ -64,7 +65,7 @@ var (
 			Help:      "data files in total",
 		}, []string{"task", "source_id"})
 
-	tableGauge = metricsproxy.NewGaugeVec(
+	tableGauge = metricsproxy.NewGaugeVec(&promutil.PromFactory{},
 		prometheus.GaugeOpts{
 			Namespace: "dm",
 			Subsystem: "loader",
@@ -72,7 +73,7 @@ var (
 			Help:      "tables in total",
 		}, []string{"task", "source_id"})
 
-	dataSizeGauge = metricsproxy.NewGaugeVec(
+	dataSizeGauge = metricsproxy.NewGaugeVec(&promutil.PromFactory{},
 		prometheus.GaugeOpts{
 			Namespace: "dm",
 			Subsystem: "loader",
@@ -80,7 +81,7 @@ var (
 			Help:      "data size in total",
 		}, []string{"task", "source_id"})
 
-	progressGauge = metricsproxy.NewGaugeVec(
+	progressGauge = metricsproxy.NewGaugeVec(&promutil.PromFactory{},
 		prometheus.GaugeOpts{
 			Namespace: "dm",
 			Subsystem: "loader",
@@ -89,7 +90,7 @@ var (
 		}, []string{"task", "source_id"})
 
 	// should alert.
-	loaderExitWithErrorCounter = metricsproxy.NewCounterVec(
+	loaderExitWithErrorCounter = metricsproxy.NewCounterVec(&promutil.PromFactory{},
 		prometheus.CounterOpts{
 			Namespace: "dm",
 			Subsystem: "loader",
@@ -97,7 +98,7 @@ var (
 			Help:      "counter for loader exits with error",
 		}, []string{"task", "source_id"})
 
-	remainingTimeGauge = metricsproxy.NewGaugeVec(
+	remainingTimeGauge = metricsproxy.NewGaugeVec(&promutil.PromFactory{},
 		prometheus.GaugeOpts{
 			Namespace: "dm",
 			Subsystem: "loader",

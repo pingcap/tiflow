@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package cvstask
+package cvs
 
 import (
 	"context"
@@ -112,18 +112,14 @@ type cvsTask struct {
 
 // RegisterWorker is used to register cvs task worker into global registry
 func RegisterWorker() {
-	constructor := func(ctx *dcontext.Context, id libModel.WorkerID, masterID libModel.MasterID, config lib.WorkerConfig) lib.WorkerImpl {
-		return newCvsTask(ctx, id, masterID, config)
-	}
-	factory := registry.NewSimpleWorkerFactory(constructor, &Config{})
+	factory := registry.NewSimpleWorkerFactory(newCvsTask)
 	registry.GlobalWorkerRegistry().MustRegisterWorkerType(lib.CvsTask, factory)
 }
 
-func newCvsTask(ctx *dcontext.Context, _workerID libModel.WorkerID, masterID libModel.MasterID, conf lib.WorkerConfig) *cvsTask {
-	cfg := conf.(*Config)
+func newCvsTask(ctx *dcontext.Context, _workerID libModel.WorkerID, masterID libModel.MasterID, conf *Config) *cvsTask {
 	task := &cvsTask{
-		Config:            *cfg,
-		curLoc:            cfg.StartLoc,
+		Config:            *conf,
+		curLoc:            conf.StartLoc,
 		buffer:            make(chan strPair, bufferSize),
 		statusRateLimiter: rate.NewLimiter(rate.Every(time.Second), 1),
 		counter:           atomic.NewInt64(0),

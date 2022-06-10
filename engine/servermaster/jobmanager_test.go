@@ -29,10 +29,12 @@ import (
 	"github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/clock"
 	"github.com/pingcap/tiflow/engine/pkg/ctxmu"
+	"github.com/pingcap/tiflow/engine/pkg/dm"
 	"github.com/pingcap/tiflow/engine/pkg/errors"
 	resManager "github.com/pingcap/tiflow/engine/pkg/externalresource/manager"
 	resourcemeta "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	"github.com/pingcap/tiflow/engine/pkg/notifier"
+	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/pingcap/tiflow/pkg/uuid"
 )
 
@@ -192,6 +194,53 @@ func TestJobManagerCancelJob(t *testing.T) {
 		JobId: "job-to-be-canceled",
 	})
 	require.Equal(t, &pb.CancelJobResponse{}, resp)
+}
+
+func TestJobManagerDebug(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	jobmanagerID := "debug-job-test"
+	mockMaster := lib.NewMockMasterImpl("", jobmanagerID)
+	mockMaster.On("InitImpl", mock.Anything).Return(nil)
+	manager := p2p.NewMockMessageHandlerManager()
+	mgr := &JobManagerImplV2{
+		BaseMaster:            mockMaster.DefaultBaseMaster,
+		JobFsm:                NewJobFsm(),
+		clocker:               clock.New(),
+		frameMetaClient:       mockMaster.GetFrameMetaClient(),
+		jobStatusChangeMu:     ctxmu.New(),
+		messageHandlerManager: manager,
+	}
+
+	debugJobID := "Debug-Job-id"
+	meta := &libModel.MasterMetaKVData{ID: debugJobID}
+	mgr.JobFsm.JobDispatched(meta, false)
+
+	mockWorkerHandle := &master.MockHandle{WorkerID: debugJobID, ExecutorID: "executor-1"}
+	err := mgr.JobFsm.JobOnline(mockWorkerHandle)
+	require.Nil(t, err)
+
+	req := &pb.DebugJobRequest{
+		JobId:   debugJobID,
+		Command: "Debug",
+		JsonArg: "",
+	}
+
+	go func() {
+		time.Sleep(time.Second)
+		manager.InvokeHandler(t, dm.GenerateTopic(debugJobID, jobmanagerID),
+			"node-1", dm.GenerateResponse(1, "DebugJob", &pb.DebugJobResponse{}))
+	}()
+	resp := mgr.DebugJob(ctx, req)
+	require.Nil(t, resp.Err)
+
+	req.JobId = debugJobID + "-unknown"
+	resp = mgr.DebugJob(ctx, req)
+	require.NotNil(t, resp.Err)
+	require.Equal(t, pb.ErrorCode_UnKnownJob, resp.Err.Code)
 }
 
 func TestJobManagerQueryJob(t *testing.T) {

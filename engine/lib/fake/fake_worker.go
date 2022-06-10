@@ -287,9 +287,8 @@ watchLoop:
 func NewDummyWorker(
 	ctx *dcontext.Context,
 	id libModel.WorkerID, masterID libModel.MasterID,
-	cfg lib.WorkerConfig,
+	wcfg *WorkerConfig,
 ) lib.WorkerImpl {
-	wcfg := cfg.(*WorkerConfig)
 	status := &dummyWorkerStatus{
 		BusinessID: wcfg.ID,
 		Tick:       wcfg.Checkpoint.Tick,

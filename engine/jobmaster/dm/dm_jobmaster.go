@@ -15,6 +15,7 @@ package dm
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -46,7 +47,6 @@ type JobMaster struct {
 
 	workerID libModel.WorkerID
 	jobCfg   *config.JobCfg
-	closeCh  chan struct{}
 
 	metadata        *metadata.MetaData
 	workerManager   *WorkerManager
@@ -72,17 +72,15 @@ func (j dmJobMasterFactory) DeserializeConfig(configBytes []byte) (registry.Work
 }
 
 // NewWorkerImpl implements WorkerFactory.NewWorkerImpl
-func (j dmJobMasterFactory) NewWorkerImpl(ctx *dcontext.Context, workerID libModel.WorkerID, masterID libModel.MasterID, conf lib.WorkerConfig) (lib.WorkerImpl, error) {
+func (j dmJobMasterFactory) NewWorkerImpl(dCtx *dcontext.Context, workerID libModel.WorkerID, masterID libModel.MasterID, conf lib.WorkerConfig) (lib.WorkerImpl, error) {
 	log.L().Info("new dm jobmaster", zap.String("id", workerID))
 	jm := &JobMaster{
 		workerID:        workerID,
 		jobCfg:          conf.(*config.JobCfg),
-		closeCh:         make(chan struct{}),
 		checkpointAgent: checkpoint.NewAgentImpl(conf.(*config.JobCfg)),
 	}
-
 	// nolint:errcheck
-	ctx.Deps().Construct(func(m p2p.MessageHandlerManager) (p2p.MessageHandlerManager, error) {
+	dCtx.Deps().Construct(func(m p2p.MessageHandlerManager) (p2p.MessageHandlerManager, error) {
 		jm.messageAgent = dmpkg.NewMessageAgentImpl(workerID, jm, m)
 		return m, nil
 	})
@@ -117,7 +115,7 @@ func (jm *JobMaster) InitImpl(ctx context.Context) error {
 	if err := jm.checkpointAgent.Init(ctx); err != nil {
 		return err
 	}
-	return jm.taskManager.OperateTask(ctx, Create, jm.jobCfg, nil)
+	return jm.taskManager.OperateTask(ctx, dmpkg.Create, jm.jobCfg, nil)
 }
 
 // Tick implements JobMasterImpl.Tick
@@ -147,30 +145,34 @@ func (jm *JobMaster) OnWorkerDispatched(worker lib.WorkerHandle, result error) e
 // OnWorkerOnline implements JobMasterImpl.OnWorkerOnline
 func (jm *JobMaster) OnWorkerOnline(worker lib.WorkerHandle) error {
 	log.L().Debug("on worker online", zap.String("id", jm.workerID), zap.String("worker_id", worker.ID()))
-	taskStatus, err := runtime.UnmarshalTaskStatus(worker.Status().ExtBytes)
-	if err != nil {
+	return jm.handleOnlineStatus(worker)
+}
+
+func (jm *JobMaster) handleOnlineStatus(worker lib.WorkerHandle) error {
+	var taskStatus runtime.TaskStatus
+	if err := json.Unmarshal(worker.Status().ExtBytes, &taskStatus); err != nil {
 		return err
 	}
 
 	jm.taskManager.UpdateTaskStatus(taskStatus)
-	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus(taskStatus.GetTask(), taskStatus.GetUnit(), worker.ID(), runtime.WorkerOnline))
-	return jm.messageAgent.UpdateClient(taskStatus.GetTask(), worker.Unwrap())
+	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus(taskStatus.Task, taskStatus.Unit, worker.ID(), runtime.WorkerOnline))
+	return jm.messageAgent.UpdateClient(taskStatus.Task, worker.Unwrap())
 }
 
 // OnWorkerOffline implements JobMasterImpl.OnWorkerOffline
 func (jm *JobMaster) OnWorkerOffline(worker lib.WorkerHandle, reason error) error {
 	log.L().Info("on worker offline", zap.String("id", jm.workerID), zap.String("worker_id", worker.ID()))
-	taskStatus, err := runtime.UnmarshalTaskStatus(worker.Status().ExtBytes)
-	if err != nil {
+	var taskStatus runtime.TaskStatus
+	if err := json.Unmarshal(worker.Status().ExtBytes, &taskStatus); err != nil {
 		return err
 	}
 
-	if taskStatus.GetStage() == metadata.StageFinished {
+	if taskStatus.Stage == metadata.StageFinished {
 		return jm.onWorkerFinished(taskStatus, worker)
 	}
-	jm.taskManager.UpdateTaskStatus(runtime.NewOfflineStatus(taskStatus.GetTask()))
-	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus(taskStatus.GetTask(), taskStatus.GetUnit(), worker.ID(), runtime.WorkerOffline))
-	if err := jm.messageAgent.UpdateClient(taskStatus.GetTask(), nil); err != nil {
+	jm.taskManager.UpdateTaskStatus(runtime.NewOfflineStatus(taskStatus.Task))
+	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus(taskStatus.Task, taskStatus.Unit, worker.ID(), runtime.WorkerOffline))
+	if err := jm.messageAgent.UpdateClient(taskStatus.Task, nil); err != nil {
 		return err
 	}
 	jm.workerManager.SetNextCheckTime(time.Now())
@@ -180,8 +182,8 @@ func (jm *JobMaster) OnWorkerOffline(worker lib.WorkerHandle, reason error) erro
 func (jm *JobMaster) onWorkerFinished(taskStatus runtime.TaskStatus, worker lib.WorkerHandle) error {
 	log.L().Info("on worker finished", zap.String("id", jm.workerID), zap.String("worker_id", worker.ID()))
 	jm.taskManager.UpdateTaskStatus(taskStatus)
-	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus(taskStatus.GetTask(), taskStatus.GetUnit(), worker.ID(), runtime.WorkerFinished))
-	if err := jm.messageAgent.UpdateClient(taskStatus.GetTask(), nil); err != nil {
+	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus(taskStatus.Task, taskStatus.Unit, worker.ID(), runtime.WorkerFinished))
+	if err := jm.messageAgent.UpdateClient(taskStatus.Task, nil); err != nil {
 		return err
 	}
 	jm.workerManager.SetNextCheckTime(time.Now())
@@ -190,8 +192,12 @@ func (jm *JobMaster) onWorkerFinished(taskStatus runtime.TaskStatus, worker lib.
 
 // OnWorkerStatusUpdated implements JobMasterImpl.OnWorkerStatusUpdated
 func (jm *JobMaster) OnWorkerStatusUpdated(worker lib.WorkerHandle, newStatus *libModel.WorkerStatus) error {
-	// No need to do anything here, because we update it in OnWorkerOnline
-	return nil
+	// we alreay update finished status in OnWorkerOffline
+	if newStatus.Code == libModel.WorkerStatusFinished || len(newStatus.ExtBytes) == 0 {
+		return nil
+	}
+	log.L().Debug("on worker status updated", zap.String("extra bytes", string(newStatus.ExtBytes)), zap.String("id", jm.workerID), zap.String("worker_id", worker.ID()))
+	return jm.handleOnlineStatus(worker)
 }
 
 // OnJobManagerMessage implements JobMasterImpl.OnJobManagerMessage
@@ -219,7 +225,7 @@ func (jm *JobMaster) OnMasterMessage(topic p2p.Topic, message interface{}) error
 // CloseImpl implements JobMasterImpl.CloseImpl
 func (jm *JobMaster) CloseImpl(ctx context.Context) error {
 	log.L().Info("close the dm jobmaster", zap.String("id", jm.workerID))
-	if err := jm.taskManager.OperateTask(ctx, Delete, nil, nil); err != nil {
+	if err := jm.taskManager.OperateTask(ctx, dmpkg.Delete, nil, nil); err != nil {
 		return err
 	}
 
@@ -276,12 +282,13 @@ func (jm *JobMaster) getInitStatus() ([]runtime.TaskStatus, []runtime.WorkerStat
 		if workerHandle.GetTombstone() != nil {
 			continue
 		}
-		taskStatus, err := runtime.UnmarshalTaskStatus(workerHandle.Status().ExtBytes)
+		var taskStatus runtime.TaskStatus
+		err := json.Unmarshal(workerHandle.Status().ExtBytes, &taskStatus)
 		if err != nil {
 			return nil, nil, errors.Trace(err)
 		}
 		taskStatusList = append(taskStatusList, taskStatus)
-		workerStatusList = append(workerStatusList, runtime.NewWorkerStatus(taskStatus.GetTask(), taskStatus.GetUnit(), workerHandle.ID(), runtime.WorkerOnline))
+		workerStatusList = append(workerStatusList, runtime.NewWorkerStatus(taskStatus.Task, taskStatus.Unit, workerHandle.ID(), runtime.WorkerOnline))
 	}
 
 	return taskStatusList, workerStatusList, nil

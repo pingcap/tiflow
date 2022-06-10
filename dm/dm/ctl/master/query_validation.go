@@ -42,8 +42,8 @@ var mapStr2ErrState = map[string]pb.ValidateErrorState{
 
 func NewQueryValidationErrorCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "show-errors [--error error-state] <task-name>",
-		Short: "show error of the validation task",
+		Use:   "show-error [--error error-state] <task-name>",
+		Short: "show validation error row change",
 		RunE:  queryValidationError,
 	}
 	cmd.Flags().String("error", ValidationUnprocessedErr, "filtering type of error: all, ignored, or unprocessed")

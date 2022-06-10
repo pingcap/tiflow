@@ -63,7 +63,7 @@ func RetryMockBackendEtcd() (s *embed.Etcd, addr string, err error) {
 	return
 }
 
-// mockBackendEtcd mock the etcd using embedded etcd as backend storge
+// mockBackendEtcd mock the etcd using embedded etcd as backend storage
 func mockBackendEtcd() (*embed.Etcd, string, error) {
 	failpoint.Inject("MockEtcdAddressAlreadyUse", func() {
 		failpoint.Return(nil, "", errors.New("address already in use"))

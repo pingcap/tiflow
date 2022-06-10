@@ -23,6 +23,8 @@ jobs:
           [
             "pod-failure-dataflow",
             "pod-kill-dataflow",
+            "network-partition-dataflow",
+            "network-emulation-dataflow",
           ]
 
     # Steps represent a sequence of tasks that will be executed as part of the job
@@ -185,6 +187,10 @@ jobs:
       - name: Wait for chaos test case complete
         run: |
           $GITHUB_WORKSPACE/engine/chaos/scripts/check-case.sh
+
+      - name: Pause all chaos
+        run: |
+          kubectl delete -f $GITHUB_WORKSPACE/engine/chaos/manifests/${{ matrix.chaos-obj }}.yaml
 
       - name: Copy logs to hack permission
         if: ${{ always() }}
