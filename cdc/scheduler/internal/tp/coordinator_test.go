@@ -74,7 +74,7 @@ func TestCoordinatorSendMsgs(t *testing.T) {
 		captureID: "0",
 		trans:     trans,
 	}
-	coord.captureM = newCaptureManager(coord.revision, 0)
+	coord.captureM = newCaptureManager(model.ChangeFeedID{}, coord.revision, 0)
 	coord.sendMsgs(
 		ctx, []*schedulepb.Message{{To: "1", MsgType: schedulepb.MsgDispatchTableRequest}})
 
@@ -145,7 +145,7 @@ func TestCoordinatorRecvMsgs(t *testing.T) {
 func TestCoordinatorHeartbeat(t *testing.T) {
 	t.Parallel()
 
-	coord := newCoordinator("a", 1, &config.SchedulerConfig{
+	coord := newCoordinator("a", model.ChangeFeedID{}, 1, &config.SchedulerConfig{
 		HeartbeatTick:      math.MaxInt,
 		MaxTaskConcurrency: 1,
 	})
@@ -201,7 +201,7 @@ func TestCoordinatorHeartbeat(t *testing.T) {
 
 func TestCoordinatorAddCapture(t *testing.T) {
 	t.Parallel()
-	coord := newCoordinator("a", 1, &config.SchedulerConfig{
+	coord := newCoordinator("a", model.ChangeFeedID{}, 1, &config.SchedulerConfig{
 		HeartbeatTick:      math.MaxInt,
 		MaxTaskConcurrency: 1,
 	})
@@ -258,7 +258,7 @@ func TestCoordinatorAddCapture(t *testing.T) {
 func TestCoordinatorRemoveCapture(t *testing.T) {
 	t.Parallel()
 
-	coord := newCoordinator("a", 1, &config.SchedulerConfig{
+	coord := newCoordinator("a", model.ChangeFeedID{}, 1, &config.SchedulerConfig{
 		HeartbeatTick:      math.MaxInt,
 		MaxTaskConcurrency: 1,
 	})
@@ -341,9 +341,14 @@ func BenchmarkCoordinatorInit(b *testing.B) {
 		coord = &coordinator{
 			trans:        &mockTrans{},
 			schedulers:   schedulers,
-			replicationM: newReplicationManager(10),
+			replicationM: newReplicationManager(10, model.ChangeFeedID{}),
 			// Disable heartbeat.
-			captureM: newCaptureManager(schedulepb.OwnerRevision{}, math.MaxInt),
+			captureM: newCaptureManager(
+				model.ChangeFeedID{}, schedulepb.OwnerRevision{}, math.MaxInt),
+			tasksCounter: make(map[struct {
+				scheduler string
+				task      string
+			}]int),
 		}
 		name = fmt.Sprintf("InitTable %d", total)
 		return name, coord, currentTables, captures
@@ -360,7 +365,8 @@ func BenchmarkCoordinatorHeartbeat(b *testing.B) {
 		const captureCount = 8
 		captures = map[model.CaptureID]*model.CaptureInfo{}
 		// Always heartbeat.
-		captureM := newCaptureManager(schedulepb.OwnerRevision{}, 0)
+		captureM := newCaptureManager(
+			model.ChangeFeedID{}, schedulepb.OwnerRevision{}, 0)
 		captureM.initialized = true
 		for i := 0; i < captureCount; i++ {
 			captures[fmt.Sprint(i)] = &model.CaptureInfo{}
@@ -375,8 +381,12 @@ func BenchmarkCoordinatorHeartbeat(b *testing.B) {
 		coord = &coordinator{
 			trans:        &mockTrans{},
 			schedulers:   schedulers,
-			replicationM: newReplicationManager(10),
+			replicationM: newReplicationManager(10, model.ChangeFeedID{}),
 			captureM:     captureM,
+			tasksCounter: make(map[struct {
+				scheduler string
+				task      string
+			}]int),
 		}
 		name = fmt.Sprintf("Heartbeat %d", total)
 		return name, coord, currentTables, captures
@@ -393,13 +403,14 @@ func BenchmarkCoordinatorHeartbeatResponse(b *testing.B) {
 		const captureCount = 8
 		captures = map[model.CaptureID]*model.CaptureInfo{}
 		// Disable heartbeat.
-		captureM := newCaptureManager(schedulepb.OwnerRevision{}, math.MaxInt)
+		captureM := newCaptureManager(
+			model.ChangeFeedID{}, schedulepb.OwnerRevision{}, math.MaxInt)
 		captureM.initialized = true
 		for i := 0; i < captureCount; i++ {
 			captures[fmt.Sprint(i)] = &model.CaptureInfo{}
 			captureM.Captures[fmt.Sprint(i)] = &CaptureStatus{State: CaptureStateInitialized}
 		}
-		replicationM := newReplicationManager(10)
+		replicationM := newReplicationManager(10, model.ChangeFeedID{})
 		currentTables = make([]model.TableID, 0, total)
 		heartbeatResp := make(map[model.CaptureID]*schedulepb.Message)
 		for i := 0; i < total; i++ {
@@ -447,6 +458,10 @@ func BenchmarkCoordinatorHeartbeatResponse(b *testing.B) {
 			schedulers:   schedulers,
 			replicationM: replicationM,
 			captureM:     captureM,
+			tasksCounter: make(map[struct {
+				scheduler string
+				task      string
+			}]int),
 		}
 		name = fmt.Sprintf("HeartbeatResponse %d", total)
 		return name, coord, currentTables, captures

@@ -14,6 +14,7 @@
 package tp
 
 import (
+	"encoding/json"
 	"math/rand"
 	"testing"
 	"time"
@@ -75,7 +76,7 @@ func TestNewReplicationSet(t *testing.T) {
 				"1": {
 					State: schedulepb.TableStateReplicating,
 					Checkpoint: schedulepb.Checkpoint{
-						CheckpointTs: 1, ResolvedTs: 2,
+						CheckpointTs: 1, ResolvedTs: 1,
 					},
 				},
 			},
@@ -295,11 +296,18 @@ func TestReplicationSetPollUnknownCapture(t *testing.T) {
 		State:   schedulepb.TableStateReplicating,
 	}, "unknown")
 	require.Nil(t, msgs)
-	require.Error(t, err)
+	require.Nil(t, err)
 
 	msgs, err = r.poll(&schedulepb.TableStatus{
 		TableID: tableID,
 		State:   schedulepb.TableStateAbsent,
+	}, "unknown")
+	require.Len(t, msgs, 0)
+	require.Nil(t, err)
+
+	msgs, err = r.poll(&schedulepb.TableStatus{
+		TableID: tableID,
+		State:   schedulepb.TableStateReplicating,
 	}, "unknown")
 	require.Len(t, msgs, 0)
 	require.Nil(t, err)
@@ -1110,4 +1118,12 @@ func TestReplicationSetMoveTableWithHeartbeatResponse(t *testing.T) {
 	require.Equal(t, ReplicationSetStateReplicating, r.State)
 	require.Equal(t, dest, r.Primary)
 	require.Equal(t, "", r.Secondary)
+}
+
+func TestReplicationSetMarshalJSON(t *testing.T) {
+	t.Parallel()
+
+	b, err := json.Marshal(ReplicationSet{State: ReplicationSetStateReplicating})
+	require.Nil(t, err)
+	require.Contains(t, string(b), "Replicating", string(b))
 }
