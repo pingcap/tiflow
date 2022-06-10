@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/p2p"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 // TableExecutor is an abstraction for "Processor".
@@ -111,4 +112,9 @@ func NewTpScheduler(
 	return tp.NewCoordinator(
 		ctx, captureID, changeFeedID, checkpointTs,
 		messageServer, messageRouter, ownerRevision, cfg)
+}
+
+// InitMetrics registers all metrics used in scheduler
+func InitMetrics(registry *prometheus.Registry) {
+	tp.InitMetrics(registry)
 }

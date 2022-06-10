@@ -16,6 +16,7 @@ package tp
 import (
 	"context"
 	"sync/atomic"
+	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -28,7 +29,10 @@ import (
 	"go.uber.org/zap"
 )
 
-const checkpointCannotProceed = internal.CheckpointCannotProceed
+const (
+	checkpointCannotProceed = internal.CheckpointCannotProceed
+	metricsInterval         = 10 * time.Second
+)
 
 var _ internal.Scheduler = (*coordinator)(nil)
 
@@ -40,30 +44,35 @@ type coordinator struct {
 	schedulers   map[schedulerType]scheduler
 	replicationM *replicationManager
 	captureM     *captureManager
+
+	lastCollectTime time.Time
+	changefeedID    model.ChangeFeedID
+	tasksCounter    map[struct{ scheduler, task string }]int
 }
 
 // NewCoordinator returns a two phase scheduler.
 func NewCoordinator(
 	ctx context.Context,
 	captureID model.CaptureID,
-	changeFeedID model.ChangeFeedID,
+	changefeedID model.ChangeFeedID,
 	checkpointTs model.Ts,
 	messageServer *p2p.MessageServer,
 	messageRouter p2p.MessageRouter,
 	ownerRevision int64,
 	cfg *config.SchedulerConfig,
 ) (internal.Scheduler, error) {
-	trans, err := newTransport(ctx, changeFeedID, schedulerRole, messageServer, messageRouter)
+	trans, err := newTransport(ctx, changefeedID, schedulerRole, messageServer, messageRouter)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	coord := newCoordinator(captureID, ownerRevision, cfg)
+	coord := newCoordinator(captureID, changefeedID, ownerRevision, cfg)
 	coord.trans = trans
 	return coord, nil
 }
 
 func newCoordinator(
 	captureID model.CaptureID,
+	changefeedID model.ChangeFeedID,
 	ownerRevision int64,
 	cfg *config.SchedulerConfig,
 ) *coordinator {
@@ -78,8 +87,12 @@ func newCoordinator(
 		revision:     revision,
 		captureID:    captureID,
 		schedulers:   schedulers,
-		replicationM: newReplicationManager(cfg.MaxTaskConcurrency),
-		captureM:     newCaptureManager(revision, cfg.HeartbeatTick),
+		replicationM: newReplicationManager(cfg.MaxTaskConcurrency, changefeedID),
+		captureM:     newCaptureManager(changefeedID, revision, cfg.HeartbeatTick),
+		tasksCounter: make(map[struct {
+			scheduler string
+			task      string
+		}]int),
 	}
 }
 
@@ -190,6 +203,12 @@ func (c *coordinator) poll(
 				zap.String("scheduler", scheduler.Name()))
 		}
 		allTasks = append(allTasks, tasks...)
+		for _, t := range tasks {
+			name := struct {
+				scheduler, task string
+			}{scheduler: scheduler.Name(), task: t.Name()}
+			c.tasksCounter[name]++
+		}
 	}
 
 	// Handle generated schedule tasks.
@@ -204,6 +223,8 @@ func (c *coordinator) poll(
 	if err != nil {
 		return checkpointCannotProceed, checkpointCannotProceed, errors.Trace(err)
 	}
+
+	c.maybeCollectMetrics()
 
 	// Checkpoint calculation
 	newCheckpointTs, newResolvedTs = c.replicationM.AdvanceCheckpoint(currentTables)
@@ -249,4 +270,22 @@ func (c *coordinator) sendMsgs(ctx context.Context, msgs []*schedulepb.Message) 
 
 	}
 	return c.trans.Send(ctx, msgs)
+}
+
+func (c *coordinator) maybeCollectMetrics() {
+	now := time.Now()
+	if now.Sub(c.lastCollectTime) < metricsInterval {
+		return
+	}
+	c.lastCollectTime = now
+
+	cf := c.replicationM.changefeedID
+	for name, counter := range c.tasksCounter {
+		scheduleTaskCounter.
+			WithLabelValues(cf.Namespace, cf.ID, name.scheduler, name.task).
+			Add(float64(counter))
+		c.tasksCounter[name] = 0
+	}
+	c.replicationM.CollectMetrics()
+	c.captureM.CollectMetrics()
 }
