@@ -39,7 +39,7 @@ const (
 	TableStateReplicating
 	// TableStateStopping means the table is stopping, but not guaranteed yet.
 	TableStateStopping
-	// TableStateStopped means sink stop all works.
+	// TableStateStopped means sink stop all works, but the table resource not released yet.
 	TableStateStopped
 	// TableStateAbsent means the table not found
 	TableStateAbsent

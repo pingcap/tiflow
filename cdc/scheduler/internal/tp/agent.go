@@ -99,7 +99,7 @@ func NewAgent(ctx context.Context,
 		return result, nil
 	}
 
-	log.Info("tpscheduler: owner found",
+	log.Info("tpscheduler: agent owner found",
 		zap.String("ownerCaptureID", ownerCaptureID),
 		zap.String("captureID", captureID),
 		zap.String("namespace", changeFeedID.Namespace),
@@ -265,7 +265,6 @@ func (a *agent) refreshAllTables() {
 }
 
 func (a *agent) collectAllTables(expected []model.TableID) []schedulepb.TableStatus {
-	a.refreshAllTables()
 	result := make([]schedulepb.TableStatus, 0, len(expected))
 	for _, tableID := range expected {
 		table, ok := a.tables[tableID]
@@ -282,6 +281,7 @@ func (a *agent) collectAllTables(expected []model.TableID) []schedulepb.TableSta
 func (a *agent) handleMessageHeartbeat(expected []model.TableID) *schedulepb.Message {
 	// `heartbeat` would always be the first message received by the agent,
 	// it's a good chance for the agent to warm up by collect all tables status.
+	a.refreshAllTables()
 	tables := a.collectAllTables(expected)
 	response := &schedulepb.HeartbeatResponse{
 		Tables:     tables,
@@ -339,7 +339,8 @@ func (a *agent) handleMessageDispatchTableRequest(
 			log.Info("tpscheduler: agent is stopping, and decline handle add table request",
 				zap.String("capture", a.captureID),
 				zap.String("namespace", a.changeFeedID.Namespace),
-				zap.String("changefeed", a.changeFeedID.ID))
+				zap.String("changefeed", a.changeFeedID.ID),
+				zap.Any("request", request))
 			return nil, nil
 		}
 		tableID := req.AddTable.GetTableID()
@@ -364,7 +365,8 @@ func (a *agent) handleMessageDispatchTableRequest(
 				zap.Any("tableID", tableID),
 				zap.String("capture", a.captureID),
 				zap.String("namespace", a.changeFeedID.Namespace),
-				zap.String("changefeed", a.changeFeedID.ID))
+				zap.String("changefeed", a.changeFeedID.ID),
+				zap.Any("request", request))
 			return nil, nil
 		}
 		task = &dispatchTableTask{
@@ -701,7 +703,8 @@ func (t *table) injectDispatchTableTask(task *dispatchTableTask) {
 		t.task = task
 		return
 	}
-	log.Warn("tpscheduler: table inject dispatch table task ignored",
+	log.Warn("tpscheduler: table inject dispatch table task ignored,"+
+		"since there is one not finished yet",
 		zap.Any("table", t),
 		zap.Any("nowTask", t.task),
 		zap.Any("ignoredTask", task))
