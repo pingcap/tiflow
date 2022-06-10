@@ -171,7 +171,7 @@ func (h *OpenAPIV2) UpdateChangefeed(c *gin.Context) {
 	}
 
 	if newUpInfo != nil {
-		err = h.capture.EtcdClient.SaveChangeFeedInfo(ctx, newCfInfo, changefeedID)
+		err = h.capture.EtcdClient.SaveUpstreamInfo(ctx, upInfo, changefeedID.Namespace)
 		if err != nil {
 			_ = c.Error(err)
 			return
