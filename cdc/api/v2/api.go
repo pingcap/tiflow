@@ -40,6 +40,8 @@ func RegisterOpenAPIV2Routes(router *gin.Engine, api OpenAPIV2) {
 	// changefeed apis
 	changefeedGroup := v2.Group("/changefeeds")
 	changefeedGroup.POST("", api.CreateChangefeed)
+	changefeedGroup.PUT("/:changefeed-id", api.UpdateChangefeed)
+	changefeedGroup.GET("/:changefeed-id/meta-info", api.GetChangeFeedMetaInfo)
 	v2.POST("/verify-table", api.VerifyTable)
 
 	// unsafe apis

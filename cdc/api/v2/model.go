@@ -137,27 +137,28 @@ func (c *ReplicaConfig) ToInternalReplicaConfig() *config.ReplicaConfig {
 	return res
 }
 
-// ToInternalReplicaConfig coverts *config.ReplicaConfig into *v2.ReplicaConfig
+// ToAPIReplicaConfig coverts *config.ReplicaConfig into *v2.ReplicaConfig
 func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
+	cloned := c.Clone()
 	res := &ReplicaConfig{
-		CaseSensitive:         c.CaseSensitive,
-		EnableOldValue:        c.EnableOldValue,
-		ForceReplicate:        c.ForceReplicate,
+		CaseSensitive:         cloned.CaseSensitive,
+		EnableOldValue:        cloned.EnableOldValue,
+		ForceReplicate:        cloned.ForceReplicate,
 		IgnoreIneligibleTable: false,
-		CheckGCSafePoint:      c.CheckGCSafePoint,
+		CheckGCSafePoint:      cloned.CheckGCSafePoint,
 	}
 
-	if c.Filter != nil {
+	if cloned.Filter != nil {
 		res.Filter = &FilterConfig{
-			MySQLReplicationRules: c.Filter.MySQLReplicationRules,
-			Rules:                 c.Filter.Rules,
-			IgnoreTxnStartTs:      c.Filter.IgnoreTxnStartTs,
-			DDLAllowlist:          c.Filter.DDLAllowlist,
+			MySQLReplicationRules: cloned.Filter.MySQLReplicationRules,
+			Rules:                 cloned.Filter.Rules,
+			IgnoreTxnStartTs:      cloned.Filter.IgnoreTxnStartTs,
+			DDLAllowlist:          cloned.Filter.DDLAllowlist,
 		}
 	}
-	if c.Sink != nil {
+	if cloned.Sink != nil {
 		var dispatchRules []*DispatchRule
-		for _, rule := range c.Sink.DispatchRules {
+		for _, rule := range cloned.Sink.DispatchRules {
 			dispatchRules = append(dispatchRules, &DispatchRule{
 				Matcher:       rule.Matcher,
 				PartitionRule: rule.PartitionRule,
@@ -165,25 +166,25 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 			})
 		}
 		var columnSelectors []*ColumnSelector
-		for _, selector := range c.Sink.ColumnSelectors {
+		for _, selector := range cloned.Sink.ColumnSelectors {
 			columnSelectors = append(columnSelectors, &ColumnSelector{
 				Matcher: selector.Matcher,
 				Columns: selector.Columns,
 			})
 		}
 		res.Sink = &SinkConfig{
-			Protocol:        c.Sink.Protocol,
-			SchemaRegistry:  c.Sink.SchemaRegistry,
+			Protocol:        cloned.Sink.Protocol,
+			SchemaRegistry:  cloned.Sink.SchemaRegistry,
 			DispatchRules:   dispatchRules,
 			ColumnSelectors: columnSelectors,
 		}
 	}
-	if c.Consistent != nil {
+	if cloned.Consistent != nil {
 		res.Consistent = &ConsistentConfig{
-			Level:             c.Consistent.Level,
-			MaxLogSize:        c.Consistent.MaxLogSize,
-			FlushIntervalInMs: c.Consistent.FlushIntervalInMs,
-			Storage:           c.Consistent.Storage,
+			Level:             cloned.Consistent.Level,
+			MaxLogSize:        cloned.Consistent.MaxLogSize,
+			FlushIntervalInMs: cloned.Consistent.FlushIntervalInMs,
+			Storage:           cloned.Consistent.Storage,
 		}
 	}
 	return res

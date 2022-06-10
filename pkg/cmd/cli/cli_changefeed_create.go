@@ -53,6 +53,7 @@ type changefeedCommonOptions struct {
 	syncPointEnabled       bool
 	syncPointInterval      time.Duration
 
+	upstreamPDAddrs  string
 	upstreamCaPath   string
 	upstreamCertPath string
 	upstreamKeyPath  string
@@ -83,6 +84,7 @@ func (o *changefeedCommonOptions) addFlags(cmd *cobra.Command) {
 	cmd.PersistentFlags().BoolVar(&o.syncPointEnabled, "sync-point", false, "(Experimental) Set and Record syncpoint in replication(default off)")
 	cmd.PersistentFlags().DurationVar(&o.syncPointInterval, "sync-interval", 10*time.Minute, "(Experimental) Set the interval for syncpoint in replication(default 10min)")
 	cmd.PersistentFlags().StringVar(&o.schemaRegistry, "schema-registry", "", "Avro Schema Registry URI")
+	cmd.PersistentFlags().StringVar(&o.upstreamPDAddrs, "upstream-pd", "", "upstream PD address, use ',' to separate multiple PDs")
 	cmd.PersistentFlags().StringVar(&o.upstreamCaPath, "upstream-ca", "", "CA certificate path for TLS connection to upstream")
 	cmd.PersistentFlags().StringVar(&o.upstreamCertPath, "upstream-cert", "", "Certificate path for TLS connection to upstream")
 	cmd.PersistentFlags().StringVar(&o.upstreamKeyPath, "upstream-key", "", "Private key path for TLS connection to upstream")
@@ -94,6 +96,7 @@ func (o *changefeedCommonOptions) addFlags(cmd *cobra.Command) {
 	_ = cmd.PersistentFlags().MarkHidden("cyclic-filter-replica-ids")
 	_ = cmd.PersistentFlags().MarkHidden("cyclic-sync-ddl")
 	// we don't support specify there flags below when cdc version <= 6.3.0
+	_ = cmd.PersistentFlags().MarkHidden("upstream-pd")
 	_ = cmd.PersistentFlags().MarkHidden("upstream-ca")
 	_ = cmd.PersistentFlags().MarkHidden("upstream-cert")
 	_ = cmd.PersistentFlags().MarkHidden("upstream-key")
@@ -286,7 +289,6 @@ func (o *createChangefeedOptions) run(ctx context.Context, cmd *cobra.Command) e
 	}
 
 	if !o.commonChangefeedOptions.noConfirm {
-
 		if err := confirmLargeDataGap(cmd, tso.Timestamp, o.startTs); err != nil {
 			return err
 		}

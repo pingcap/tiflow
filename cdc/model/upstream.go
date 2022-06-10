@@ -49,3 +49,14 @@ func (c *UpstreamInfo) Unmarshal(data []byte) error {
 	return errors.Annotatef(cerror.WrapError(cerror.ErrUnmarshalFailed, err),
 		"unmarshal data: %v", data)
 }
+
+// Clone returns a cloned upstreamInfo
+func (c *UpstreamInfo) Clone() (*UpstreamInfo, error) {
+	s, err := c.Marshal()
+	if err != nil {
+		return nil, err
+	}
+	cloned := new(UpstreamInfo)
+	err = cloned.Unmarshal(s)
+	return cloned, err
+}

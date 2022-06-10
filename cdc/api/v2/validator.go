@@ -33,6 +33,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	"github.com/pingcap/tiflow/pkg/version"
+	"github.com/r3labs/diff"
 	"github.com/tikv/client-go/v2/oracle"
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
@@ -40,9 +41,9 @@ import (
 	"google.golang.org/grpc/backoff"
 )
 
-// VerifyCreateChangefeedConfig verifies ChangefeedConfig and
+// verifyCreateChangefeedConfig verifies ChangefeedConfig and
 // returns a  changefeedInfo for create a changefeed.
-func VerifyCreateChangefeedConfig(
+func verifyCreateChangefeedConfig(
 	ctx context.Context,
 	cfg *ChangefeedConfig,
 	capture *capture.Capture,
@@ -76,6 +77,10 @@ func VerifyCreateChangefeedConfig(
 		return nil, cerror.ErrAPIInvalidParam.GenWithStack(
 			"invalid changefeed_id: %s", cfg.ID)
 	}
+	if cfg.Namespace == "" {
+		cfg.Namespace = model.DefaultNamespace
+	}
+
 	cfStatus, err := capture.StatusProvider().GetChangeFeedStatus(ctx,
 		model.DefaultChangeFeedID(cfg.ID))
 	if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
@@ -227,4 +232,81 @@ func getPDClient(ctx context.Context,
 		return nil, errors.Trace(err)
 	}
 	return pdClient, nil
+}
+
+// verifyUpdateChangefeedConfig verifies config to update a changefeed and returns a changefeedInfo
+func verifyUpdateChangefeedConfig(ctx context.Context, cfg *ChangefeedConfig, oldInfo *model.ChangeFeedInfo, oldUpInfo *model.UpstreamInfo) (*model.ChangeFeedInfo, *model.UpstreamInfo, error) {
+	newInfo, err := oldInfo.Clone()
+	if err != nil {
+		return nil, nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByArgs(err.Error())
+	}
+
+	// verify TargetTs
+	if cfg.TargetTs != 0 {
+		if cfg.TargetTs <= newInfo.StartTs {
+			return nil, nil, cerror.ErrChangefeedUpdateRefused.GenWithStack(
+				"can not update target-ts:%d less than start-ts:%d", cfg.TargetTs, newInfo.StartTs)
+		}
+		newInfo.TargetTs = cfg.TargetTs
+	}
+
+	// verify syncPoint
+	newInfo.SyncPointEnabled = cfg.SyncPointEnabled
+	if cfg.SyncPointInterval != 0 {
+		newInfo.SyncPointInterval = cfg.SyncPointInterval
+	}
+
+	if cfg.ReplicaConfig != nil {
+		newInfo.Config = cfg.ReplicaConfig.ToInternalReplicaConfig()
+	}
+
+	// verify SinkURI
+	if cfg.SinkURI != "" {
+		newInfo.SinkURI = cfg.SinkURI
+		if err := sink.Validate(ctx, newInfo.SinkURI, newInfo.Config, newInfo.Opts); err != nil {
+			return nil, nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByCause(err)
+		}
+	}
+
+	if cfg.ReplicaConfig != nil {
+		newInfo.Config = cfg.ReplicaConfig.ToInternalReplicaConfig()
+	}
+
+	newUpInfo, err := oldUpInfo.Clone()
+	if err != nil {
+		return nil, nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByArgs(err.Error())
+	}
+
+	if cfg.PDAddrs != nil {
+		newUpInfo.PDEndpoints = strings.Join(cfg.PDAddrs, ",")
+	}
+	if cfg.CAPath != "" {
+		newUpInfo.CAPath = cfg.CAPath
+	}
+	if cfg.CertPath != "" {
+		newUpInfo.CertPath = cfg.CertPath
+	}
+	if cfg.KeyPath != "" {
+		newUpInfo.KeyPath = cfg.KeyPath
+	}
+	if cfg.CertAllowedCN != nil {
+		newUpInfo.CertAllowedCN = cfg.CertAllowedCN
+	}
+
+	changefeedInfoChanged := diff.Changed(oldInfo, newInfo)
+	upstreamInfoChanged := diff.Changed(oldUpInfo, newUpInfo)
+
+	if !changefeedInfoChanged && !upstreamInfoChanged {
+		return nil, nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByArgs("changefeed config is the same with the old one, do nothing")
+	}
+
+	if !changefeedInfoChanged {
+		newInfo = nil
+	}
+
+	if !upstreamInfoChanged {
+		newUpInfo = nil
+	}
+
+	return newInfo, newUpInfo, nil
 }

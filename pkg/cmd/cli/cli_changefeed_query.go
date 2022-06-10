@@ -16,30 +16,13 @@ package cli
 import (
 	"context"
 
-	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/cdc/model"
 	apiv1client "github.com/pingcap/tiflow/pkg/api/v1"
 	"github.com/pingcap/tiflow/pkg/cmd/factory"
 	"github.com/pingcap/tiflow/pkg/cmd/util"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/spf13/cobra"
-	"go.uber.org/zap"
 )
-
-// captureTaskStatus holds capture task status.
-type captureTaskStatus struct {
-	CaptureID  string            `json:"capture-id"`
-	TaskStatus *model.TaskStatus `json:"status"`
-}
-
-// cfMeta holds changefeed info and changefeed status.
-type cfMeta struct {
-	Info       *model.ChangeFeedInfo   `json:"info"`
-	Status     *model.ChangeFeedStatus `json:"status"`
-	Count      uint64                  `json:"count"`
-	TaskStatus []captureTaskStatus     `json:"task-status"`
-}
 
 // queryChangefeedOptions defines flags for the `cli changefeed query` command.
 type queryChangefeedOptions struct {
@@ -89,14 +72,13 @@ func (o *queryChangefeedOptions) run(cmd *cobra.Command) error {
 		}
 		return cerror.ErrChangeFeedNotExists.GenWithStackByArgs(o.changefeedID)
 	}
-	info, err := o.apiClient.Changefeeds().Get(ctx, o.changefeedID)
+	detail, err := o.apiClient.Changefeeds().Get(ctx, o.changefeedID)
 	if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
 		return err
 	}
-	if info == nil {
-		log.Warn("This changefeed has been deleted, the residual meta data will be completely deleted within 24 hours.", zap.String("changgefeed", o.changefeedID))
-	}
-	return util.JSONPrint(cmd, info)
+	detail.TaskStatus = nil
+	detail.Engine = ""
+	return util.JSONPrint(cmd, detail)
 }
 
 // newCmdQueryChangefeed creates the `cli changefeed query` command.

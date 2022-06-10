@@ -15,6 +15,7 @@ package v2
 
 import (
 	"context"
+	"fmt"
 
 	v2 "github.com/pingcap/tiflow/cdc/api/v2"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -26,11 +27,17 @@ type ChangefeedsGetter interface {
 	Changefeeds() ChangefeedInterface
 }
 
-// ChangefeedInterface has methods to work with Changfeed items.
+// ChangefeedInterface has methods to work with Changefeed items.
 // We can also mock the changefeed operations by implement this interface.
 type ChangefeedInterface interface {
+	// Create creates a changefeed
 	Create(ctx context.Context, cfg *v2.ChangefeedConfig) (*model.ChangeFeedInfo, error)
+	// GetInfo gets a changefeed's info
+	GetInfo(ctx context.Context, name string) (*model.ChangeFeedInfo, error)
+	// VerifyTable verifies table for a changefeed
 	VerifyTable(ctx context.Context, cfg *v2.VerifyTableConfig) (*v2.Tables, error)
+	// Update updates a changefeed
+	Update(ctx context.Context, cfg *v2.ChangefeedConfig, name string) (*model.ChangeFeedInfo, error)
 }
 
 // changefeeds implements ChangefeedInterface
@@ -58,6 +65,27 @@ func (c *changefeeds) VerifyTable(ctx context.Context, cfg *v2.VerifyTableConfig
 	result := &v2.Tables{}
 	err := c.client.Post().
 		WithURI("verify-table").
+		WithBody(cfg).
+		Do(ctx).
+		Into(result)
+	return result, err
+}
+
+func (c *changefeeds) GetInfo(ctx context.Context, name string) (*model.ChangeFeedInfo, error) {
+	result := &model.ChangeFeedInfo{}
+	u := fmt.Sprintf("changefeeds/%s/meta-info", name)
+	err := c.client.Get().
+		WithURI(u).
+		Do(ctx).
+		Into(result)
+	return result, err
+}
+
+func (c *changefeeds) Update(ctx context.Context, cfg *v2.ChangefeedConfig, name string) (*model.ChangeFeedInfo, error) {
+	result := &model.ChangeFeedInfo{}
+	u := fmt.Sprintf("changefeeds/%s", name)
+	err := c.client.Put().
+		WithURI(u).
 		WithBody(cfg).
 		Do(ctx).
 		Into(result)

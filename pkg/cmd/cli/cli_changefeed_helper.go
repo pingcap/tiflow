@@ -14,21 +14,15 @@
 package cli
 
 import (
-	"context"
 	"fmt"
-	"io"
 	"strings"
 	"time"
 
 	"github.com/pingcap/errors"
-	ownerAPI "github.com/pingcap/tiflow/cdc/api/owner"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/cmd/util"
 	"github.com/pingcap/tiflow/pkg/config"
-	"github.com/pingcap/tiflow/pkg/etcd"
-	"github.com/pingcap/tiflow/pkg/httputil"
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/spf13/cobra"
 	"github.com/tikv/client-go/v2/oracle"
@@ -87,43 +81,4 @@ func getTables(cliPdAddr string, credential *security.Credential, cfg *config.Re
 	}
 
 	return entry.VerifyTables(cfg, kvStore, startTs)
-}
-
-// sendOwnerChangefeedQuery sends owner changefeed query request.
-func sendOwnerChangefeedQuery(ctx context.Context, etcdClient *etcd.CDCEtcdClient,
-	id model.ChangeFeedID, credential *security.Credential,
-) (string, error) {
-	owner, err := getOwnerCapture(ctx, etcdClient)
-	if err != nil {
-		return "", err
-	}
-
-	scheme := util.HTTP
-	if credential.IsTLSEnabled() {
-		scheme = util.HTTPS
-	}
-
-	url := fmt.Sprintf("%s://%s/capture/owner/changefeed/query", scheme, owner.AdvertiseAddr)
-	httpClient, err := httputil.NewClient(credential)
-	if err != nil {
-		return "", err
-	}
-
-	resp, err := httpClient.PostForm(ctx, url, map[string][]string{
-		ownerAPI.OpVarChangefeedID: {id.ID},
-	})
-	if err != nil {
-		return "", err
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", errors.BadRequestf("query changefeed simplified status")
-	}
-
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return "", errors.BadRequestf("%s", string(body))
-	}
-
-	return string(body), nil
 }
