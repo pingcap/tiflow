@@ -210,19 +210,20 @@ func (h *OpenAPI) GetChangefeed(c *gin.Context) {
 		return
 	}
 
-	processorInfos, err := h.statusProvider().GetAllTaskStatuses(ctx, changefeedID)
-	if err != nil {
-		_ = c.Error(err)
-		return
-	}
-
-	taskStatus := make([]model.CaptureTaskStatus, 0, len(processorInfos))
-	for captureID, status := range processorInfos {
-		tables := make([]int64, 0)
-		for tableID := range status.Tables {
-			tables = append(tables, tableID)
+	taskStatus := make([]model.CaptureTaskStatus, 0)
+	if info.State == model.StateNormal {
+		processorInfos, err := h.statusProvider().GetAllTaskStatuses(ctx, changefeedID)
+		if err != nil {
+			_ = c.Error(err)
+			return
 		}
-		taskStatus = append(taskStatus, model.CaptureTaskStatus{CaptureID: captureID, Tables: tables, Operation: status.Operation})
+		for captureID, status := range processorInfos {
+			tables := make([]int64, 0)
+			for tableID := range status.Tables {
+				tables = append(tables, tableID)
+			}
+			taskStatus = append(taskStatus, model.CaptureTaskStatus{CaptureID: captureID, Tables: tables, Operation: status.Operation})
+		}
 	}
 
 	changefeedDetail := &model.ChangefeedDetail{
