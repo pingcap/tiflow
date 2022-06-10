@@ -537,6 +537,9 @@ func (a *agent) sendMsgs(ctx context.Context, msgs []*schedulepb.Message) error 
 				zap.String("changefeed", a.changeFeedID.ID),
 				zap.Any("message", m))
 		}
+		m.Header = a.newMessageHeader()
+		m.From = a.captureID
+		m.To = a.ownerInfo.captureID
 	}
 	return a.trans.Send(ctx, msgs)
 }
@@ -565,7 +568,6 @@ func (t *table) TableStatus() schedulepb.TableStatus {
 	return t.status
 }
 
-// todo: attach header / from / to to the message before send it out.
 func newAddTableResponseMessage(status schedulepb.TableStatus, reject bool) *schedulepb.Message {
 	return &schedulepb.Message{
 		MsgType: schedulepb.MsgDispatchTableResponse,
