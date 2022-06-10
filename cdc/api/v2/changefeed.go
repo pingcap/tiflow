@@ -28,7 +28,10 @@ import (
 	"go.uber.org/zap"
 )
 
-// CreateChangefeed handles create changefeed request
+const apiOpVarChangefeedID = "changefeed-id"
+
+// CreateChangefeed handles create changefeed request,
+// it returns the changefeed's changefeedInfo that it just created
 func (h *OpenAPIV2) CreateChangefeed(c *gin.Context) {
 	if !h.capture.IsOwner() {
 		api.ForwardToOwner(c, h.capture)
@@ -37,14 +40,14 @@ func (h *OpenAPIV2) CreateChangefeed(c *gin.Context) {
 
 	ctx := c.Request.Context()
 
-	config := &ChangefeedConfig{ReplicaConfig: getDefaultReplicaConfig()}
+	config := &ChangefeedConfig{ReplicaConfig: GetDefaultReplicaConfig()}
 
 	if err := c.BindJSON(&config); err != nil {
-		_ = c.Error(cerror.ErrAPIInvalidParam.Wrap(err))
+		_ = c.Error(cerror.WrapError(cerror.ErrAPIInvalidParam, err))
 		return
 	}
 
-	info, err := VerifyCreateChangefeedConfig(ctx, config, h.capture)
+	info, err := verifyCreateChangefeedConfig(ctx, config, h.capture)
 	if err != nil {
 		_ = c.Error(err)
 		return
@@ -82,7 +85,7 @@ func (h *OpenAPIV2) CreateChangefeed(c *gin.Context) {
 func (h *OpenAPIV2) VerifyTable(c *gin.Context) {
 	cfg := getDefaultVerifyTableConfig()
 	if err := c.BindJSON(cfg); err != nil {
-		_ = c.Error(cerror.ErrAPIInvalidParam.Wrap(err))
+		_ = c.Error(cerror.WrapError(cerror.ErrAPIInvalidParam, err))
 		return
 	}
 	credential := &security.Credential{
@@ -94,16 +97,13 @@ func (h *OpenAPIV2) VerifyTable(c *gin.Context) {
 	if len(cfg.CertAllowedCN) != 0 {
 		credential.CertAllowedCN = cfg.CertAllowedCN
 	}
+
 	kvStore, err := kv.CreateTiStore(strings.Join(cfg.PDAddrs, ","), credential)
 	if err != nil {
 		_ = c.Error(err)
 		return
 	}
-	replicaCfg, err := fillReplicaConfig(cfg.ReplicaConfig)
-	if err != nil {
-		_ = c.Error(err)
-		return
-	}
+	replicaCfg := cfg.ReplicaConfig.ToInternalReplicaConfig()
 	ineligibleTables, eligibleTables, err := entry.VerifyTables(replicaCfg, kvStore, cfg.StartTs)
 	if err != nil {
 		_ = c.Error(err)
@@ -111,4 +111,95 @@ func (h *OpenAPIV2) VerifyTable(c *gin.Context) {
 	}
 	tables := &Tables{IneligibleTables: ineligibleTables, EligibleTables: eligibleTables}
 	c.JSON(http.StatusOK, tables)
+}
+
+// UpdateChangefeed handles update changefeed request,
+// it returns the updated changefeedInfo
+// Can only update a changefeed's: TargetTs, SinkURI,
+// ReplicaConfig, PDAddrs, CAPath, CertPath, KeyPath,
+// SyncPointEnabled, SyncPointInterval
+func (h *OpenAPIV2) UpdateChangefeed(c *gin.Context) {
+	if !h.capture.IsOwner() {
+		api.ForwardToOwner(c, h.capture)
+		return
+	}
+
+	ctx := c.Request.Context()
+
+	changefeedID := model.DefaultChangeFeedID(c.Param(apiOpVarChangefeedID))
+	if err := model.ValidateChangefeedID(changefeedID.ID); err != nil {
+		_ = c.Error(cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed_id: %s",
+			changefeedID.ID))
+		return
+	}
+
+	cfInfo, err := h.capture.StatusProvider().GetChangeFeedInfo(ctx, changefeedID)
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+	if cfInfo.State != model.StateStopped {
+		_ = c.Error(cerror.ErrChangefeedUpdateRefused.GenWithStackByArgs("can only update changefeed config when it is stopped"))
+		return
+	}
+
+	upInfo, err := h.capture.EtcdClient.GetUpstreamInfo(ctx, cfInfo.UpstreamID, cfInfo.Namespace)
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+
+	changefeedConfig := new(ChangefeedConfig)
+	changefeedConfig.SyncPointEnabled = cfInfo.SyncPointEnabled
+	changefeedConfig.ReplicaConfig = ToAPIReplicaConfig(cfInfo.Config)
+	if err = c.BindJSON(&changefeedConfig); err != nil {
+		_ = c.Error(cerror.WrapError(cerror.ErrAPIInvalidParam, err))
+		return
+	}
+	newCfInfo, newUpInfo, err := verifyUpdateChangefeedConfig(ctx, changefeedConfig, cfInfo, upInfo)
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+
+	if newCfInfo != nil {
+		err = h.capture.EtcdClient.SaveChangeFeedInfo(ctx, newCfInfo, changefeedID)
+		if err != nil {
+			_ = c.Error(err)
+			return
+		}
+	}
+
+	if newUpInfo != nil {
+		err = h.capture.EtcdClient.SaveUpstreamInfo(ctx, upInfo, changefeedID.Namespace)
+		if err != nil {
+			_ = c.Error(err)
+			return
+		}
+	}
+
+	c.JSON(http.StatusOK, newCfInfo)
+}
+
+// GetChangeFeedMetaInfo handles get changefeed's meta info request
+// This API for cdc cli use only.
+func (h *OpenAPIV2) GetChangeFeedMetaInfo(c *gin.Context) {
+	if !h.capture.IsOwner() {
+		api.ForwardToOwner(c, h.capture)
+		return
+	}
+	ctx := c.Request.Context()
+
+	changefeedID := model.DefaultChangeFeedID(c.Param(apiOpVarChangefeedID))
+	if err := model.ValidateChangefeedID(changefeedID.ID); err != nil {
+		_ = c.Error(cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed_id: %s",
+			changefeedID.ID))
+		return
+	}
+	info, err := h.capture.StatusProvider().GetChangeFeedInfo(ctx, changefeedID)
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+	c.JSON(http.StatusOK, info)
 }

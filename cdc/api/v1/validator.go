@@ -185,7 +185,7 @@ func VerifyUpdateChangefeedConfig(ctx context.Context,
 	// verify rules
 	if len(changefeedConfig.FilterRules) != 0 {
 		newInfo.Config.Filter.Rules = changefeedConfig.FilterRules
-		_, err = filter.VerifyRules(newInfo.Config)
+		_, err = filter.VerifyRules(newInfo.Config.Filter)
 		if err != nil {
 			return nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByArgs(err.Error())
 		}

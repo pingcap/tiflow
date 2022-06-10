@@ -558,6 +558,44 @@ func (c CDCEtcdClient) GetEnsureGCServiceID() string {
 	return c.GetGCServiceID() + "-creating-"
 }
 
+// SaveUpstreamInfo save a upstreamInfo to etcd server
+func (c CDCEtcdClient) SaveUpstreamInfo(ctx context.Context, upstreamInfo *model.UpstreamInfo, namespace string) error {
+	Key := CDCKey{
+		Tp:         CDCKeyTypeUpStream,
+		ClusterID:  c.ClusterID,
+		UpstreamID: upstreamInfo.ID,
+		Namespace:  namespace,
+	}
+	KeyStr := Key.String()
+	value, err := upstreamInfo.Marshal()
+	if err != nil {
+		return errors.Trace(err)
+	}
+	_, err = c.Client.Put(ctx, KeyStr, string(value))
+	return cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
+}
+
+// GetUpstreamInfo get a upstreamInfo from etcd server
+func (c CDCEtcdClient) GetUpstreamInfo(ctx context.Context, upstreamID model.UpstreamID, namespace string) (*model.UpstreamInfo, error) {
+	Key := CDCKey{
+		Tp:         CDCKeyTypeUpStream,
+		ClusterID:  c.ClusterID,
+		UpstreamID: upstreamID,
+		Namespace:  namespace,
+	}
+	KeyStr := Key.String()
+	resp, err := c.Client.Get(ctx, KeyStr)
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
+	}
+	if resp.Count == 0 {
+		return nil, cerror.ErrUpStreamNotFound.GenWithStackByArgs(KeyStr)
+	}
+	info := &model.UpstreamInfo{}
+	err = info.Unmarshal(resp.Kvs[0].Value)
+	return info, errors.Trace(err)
+}
+
 // GcServiceIDForTest returns the gc service ID for tests
 func GcServiceIDForTest() string {
 	return fmt.Sprintf("ticdc-%s-%d", "default", 0)

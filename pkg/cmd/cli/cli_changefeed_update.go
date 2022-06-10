@@ -17,14 +17,12 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/pingcap/tiflow/pkg/etcd"
-
-	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	v2 "github.com/pingcap/tiflow/cdc/api/v2"
 	"github.com/pingcap/tiflow/cdc/model"
+	apiv2client "github.com/pingcap/tiflow/pkg/api/v2"
 	cmdcontext "github.com/pingcap/tiflow/pkg/cmd/context"
 	"github.com/pingcap/tiflow/pkg/cmd/factory"
-	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/r3labs/diff"
 	"github.com/spf13/cobra"
@@ -34,7 +32,7 @@ import (
 
 // updateChangefeedOptions defines common flags for the `cli changefeed update` command.
 type updateChangefeedOptions struct {
-	etcdClient *etcd.CDCEtcdClient
+	apiV2Client *apiv2client.APIV2Client
 
 	credential *security.Credential
 
@@ -61,17 +59,38 @@ func (o *updateChangefeedOptions) addFlags(cmd *cobra.Command) {
 	_ = cmd.MarkPersistentFlagRequired("changefeed-id")
 }
 
+func (o *updateChangefeedOptions) getChangefeedConfig(cmd *cobra.Command, info *model.ChangeFeedInfo) *v2.ChangefeedConfig {
+	replicaConfig := v2.ToAPIReplicaConfig(info.Config)
+	res := &v2.ChangefeedConfig{
+		TargetTs:          info.TargetTs,
+		SinkURI:           info.SinkURI,
+		SyncPointEnabled:  info.SyncPointEnabled,
+		SyncPointInterval: info.SyncPointInterval,
+		ReplicaConfig:     replicaConfig,
+	}
+	cmd.Flags().Visit(func(flag *pflag.Flag) {
+		switch flag.Name {
+		case "upstream-pd":
+			res.PDAddrs = strings.Split(o.commonChangefeedOptions.upstreamPDAddrs, ",")
+		case "upstream-ca":
+			res.CAPath = o.commonChangefeedOptions.upstreamCaPath
+		case "upstream-cert":
+			res.CertPath = o.commonChangefeedOptions.upstreamCertPath
+		case "upstream-key":
+			res.KeyPath = o.commonChangefeedOptions.upstreamKeyPath
+		}
+	})
+	return res
+}
+
 // complete adapts from the command line args to the data and client required.
 func (o *updateChangefeedOptions) complete(f factory.Factory) error {
-	etcdClient, err := f.EtcdClient()
+	apiClient, err := f.APIV2Client()
 	if err != nil {
 		return err
 	}
-
-	o.etcdClient = etcdClient
-
+	o.apiV2Client = apiClient
 	o.credential = f.GetCredential()
-
 	return nil
 }
 
@@ -79,21 +98,7 @@ func (o *updateChangefeedOptions) complete(f factory.Factory) error {
 func (o *updateChangefeedOptions) run(cmd *cobra.Command) error {
 	ctx := cmdcontext.GetDefaultContext()
 
-	resp, err := sendOwnerChangefeedQuery(ctx, o.etcdClient,
-		model.DefaultChangeFeedID(o.changefeedID),
-		o.credential)
-	// if no cdc owner exists, allow user to update changefeed config
-	if err != nil && errors.Cause(err) != cerror.ErrOwnerNotFound {
-		return err
-	}
-	// Note that the correctness of the logic here depends on the return value of `/capture/owner/changefeed/query` interface.
-	// TODO: Using error codes instead of string containing judgments
-	if err == nil && !strings.Contains(resp, `"state": "stopped"`) {
-		return errors.Errorf("can only update changefeed config when it is stopped\nstatus: %s", resp)
-	}
-
-	old, err := o.etcdClient.GetChangeFeedInfo(ctx,
-		model.DefaultChangeFeedID(o.changefeedID))
+	old, err := o.apiV2Client.Changefeeds().GetInfo(ctx, o.changefeedID)
 	if err != nil {
 		return err
 	}
@@ -129,12 +134,12 @@ func (o *updateChangefeedOptions) run(cmd *cobra.Command) error {
 		}
 	}
 
-	err = o.etcdClient.SaveChangeFeedInfo(ctx, newInfo,
-		model.DefaultChangeFeedID(o.changefeedID))
+	changefeedConfig := o.getChangefeedConfig(cmd, newInfo)
+	info, err := o.apiV2Client.Changefeeds().Update(ctx, changefeedConfig, newInfo.ID)
 	if err != nil {
 		return err
 	}
-	infoStr, err := newInfo.Marshal()
+	infoStr, err := info.Marshal()
 	if err != nil {
 		return err
 	}
@@ -180,7 +185,6 @@ func (o *updateChangefeedOptions) applyChanges(oldInfo *model.ChangeFeedInfo, cm
 				}
 				newInfo.Opts[key] = value
 			}
-
 		case "sort-engine":
 			newInfo.Engine = o.commonChangefeedOptions.sortEngine
 		case "cyclic-replica-id":

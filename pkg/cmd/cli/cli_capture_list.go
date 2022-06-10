@@ -14,17 +14,11 @@
 package cli
 
 import (
-	"context"
-
-	"github.com/pingcap/errors"
 	apiv1client "github.com/pingcap/tiflow/pkg/api/v1"
 	cmdcontext "github.com/pingcap/tiflow/pkg/cmd/context"
 	"github.com/pingcap/tiflow/pkg/cmd/factory"
 	"github.com/pingcap/tiflow/pkg/cmd/util"
-	cerror "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/spf13/cobra"
-	"go.etcd.io/etcd/client/v3/concurrency"
 )
 
 // capture holds capture information.
@@ -90,42 +84,4 @@ func newCmdListCapture(f factory.Factory) *cobra.Command {
 	}
 
 	return command
-}
-
-// listCaptures list all the captures from the etcd.
-func listCaptures(ctx context.Context, etcdClient *etcd.CDCEtcdClient) ([]*capture, error) {
-	_, raw, err := etcdClient.GetCaptures(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	ownerID, err := etcdClient.GetOwnerID(ctx)
-	if err != nil && errors.Cause(err) != concurrency.ErrElectionNoLeader {
-		return nil, err
-	}
-
-	captures := make([]*capture, 0, len(raw))
-	for _, c := range raw {
-		isOwner := c.ID == ownerID
-		captures = append(captures,
-			&capture{ID: c.ID, IsOwner: isOwner, AdvertiseAddr: c.AdvertiseAddr})
-	}
-
-	return captures, nil
-}
-
-// getOwnerCapture returns the owner capture.
-func getOwnerCapture(ctx context.Context, etcdClient *etcd.CDCEtcdClient) (*capture, error) {
-	captures, err := listCaptures(ctx, etcdClient)
-	if err != nil {
-		return nil, err
-	}
-
-	for _, c := range captures {
-		if c.IsOwner {
-			return c, nil
-		}
-	}
-
-	return nil, errors.Trace(cerror.ErrOwnerNotFound)
 }

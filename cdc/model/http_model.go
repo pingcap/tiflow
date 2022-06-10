@@ -103,12 +103,12 @@ type ChangefeedDetail struct {
 	TargetTs       uint64              `json:"target_ts"`
 	CheckpointTSO  uint64              `json:"checkpoint_tso"`
 	CheckpointTime JSONTime            `json:"checkpoint_time"`
-	Engine         SortEngine          `json:"sort_engine"`
+	Engine         SortEngine          `json:"sort_engine,omitempty"`
 	FeedState      FeedState           `json:"state"`
 	RunningError   *RunningError       `json:"error"`
 	ErrorHis       []int64             `json:"error_history"`
 	CreatorVersion string              `json:"creator_version"`
-	TaskStatus     []CaptureTaskStatus `json:"task_status"`
+	TaskStatus     []CaptureTaskStatus `json:"task_status,omitempty"`
 }
 
 // MarshalJSON use to marshal ChangefeedDetail

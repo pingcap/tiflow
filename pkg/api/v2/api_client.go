@@ -55,6 +55,14 @@ func (c *APIV2Client) Unsafe() UnsafeInterface {
 	return newUnsafe(c)
 }
 
+// Changefeeds returns a ChangefeedInterface with cdc api
+func (c *APIV2Client) Changefeeds() ChangefeedInterface {
+	if c == nil {
+		return nil
+	}
+	return newChangefeeds(c)
+}
+
 // NewAPIClient creates a new APIV1Client.
 func NewAPIClient(serverAddr string, credential *security.Credential) (*APIV2Client, error) {
 	c := &rest.Config{}

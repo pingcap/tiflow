@@ -21,7 +21,6 @@ import (
 
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
-	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"
 )
@@ -73,10 +72,10 @@ func TestInvalidSortEngine(t *testing.T) {
 		expect: model.SortUnified,
 	}, {
 		input:  "memory",
-		expect: model.SortInMemory,
+		expect: model.SortUnified,
 	}, {
 		input:  "file",
-		expect: model.SortInFile,
+		expect: model.SortUnified,
 	}, {
 		input:  "unified",
 		expect: model.SortUnified,
@@ -87,8 +86,7 @@ func TestInvalidSortEngine(t *testing.T) {
 		o.addFlags(cmd)
 		require.Nil(t, cmd.ParseFlags([]string{"--sort-engine=" + cs.input}))
 		opt := newCreateChangefeedOptions(o)
-		err := opt.completeCfg(cmd,
-			[]*model.CaptureInfo{{Version: version.MinTiCDCVersion.String()}})
+		err := opt.validate(cmd)
 		require.Nil(t, err)
 		require.Equal(t, cs.expect, opt.commonChangefeedOptions.sortEngine)
 	}

@@ -32,13 +32,13 @@ type Filter struct {
 
 // VerifyRules checks the filter rules in the configuration
 // and returns an invalid rule error if the verification fails, otherwise it will return the parsed filter.
-func VerifyRules(cfg *config.ReplicaConfig) (filterV2.Filter, error) {
+func VerifyRules(cfg *config.FilterConfig) (filterV2.Filter, error) {
 	var f filterV2.Filter
 	var err error
-	if len(cfg.Filter.Rules) == 0 && cfg.Filter.MySQLReplicationRules != nil {
-		f, err = filterV2.ParseMySQLReplicationRules(cfg.Filter.MySQLReplicationRules)
+	if len(cfg.Rules) == 0 && cfg.MySQLReplicationRules != nil {
+		f, err = filterV2.ParseMySQLReplicationRules(cfg.MySQLReplicationRules)
 	} else {
-		rules := cfg.Filter.Rules
+		rules := cfg.Rules
 		if len(rules) == 0 {
 			rules = []string{"*.*"}
 		}
@@ -53,7 +53,7 @@ func VerifyRules(cfg *config.ReplicaConfig) (filterV2.Filter, error) {
 
 // NewFilter creates a filter.
 func NewFilter(cfg *config.ReplicaConfig) (*Filter, error) {
-	f, err := VerifyRules(cfg)
+	f, err := VerifyRules(cfg.Filter)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrFilterRuleInvalid, err)
 	}
