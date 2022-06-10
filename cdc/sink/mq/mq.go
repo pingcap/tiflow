@@ -125,10 +125,10 @@ func (k *mqSink) AddTable(tableID model.TableID) error {
 	// otherwise when the table is dispatched back again,
 	// it may read the old values.
 	// See: https://github.com/pingcap/tiflow/issues/4464#issuecomment-1085385382.
-	if checkpointTs, loaded := k.tableCheckpointTsMap.LoadAndDelete(tableID); loaded {
+	if checkpoint, loaded := k.tableCheckpointTsMap.LoadAndDelete(tableID); loaded {
 		log.Info("clean up table checkpoint ts in MQ sink",
 			zap.Int64("tableID", tableID),
-			zap.Uint64("checkpointTs", checkpointTs.(uint64)))
+			zap.Uint64("checkpointTs", checkpoint.(model.ResolvedTs).Ts))
 	}
 
 	return nil
@@ -174,25 +174,21 @@ func (k *mqSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowCha
 // FlushRowChangedEvents is thread-safe.
 func (k *mqSink) FlushRowChangedEvents(
 	ctx context.Context, tableID model.TableID, resolved model.ResolvedTs,
-) (uint64, error) {
-	var checkpointTs uint64
-	v, ok := k.tableCheckpointTsMap.Load(tableID)
-	if ok {
-		checkpointTs = v.(uint64)
-	}
-	if resolved.Ts <= checkpointTs {
-		return checkpointTs, nil
+) (model.ResolvedTs, error) {
+	checkpoint := k.getTableCheckpointTs(tableID)
+	if checkpoint.EqualOrGreater(resolved) {
+		return checkpoint, nil
 	}
 	select {
 	case <-ctx.Done():
-		return 0, ctx.Err()
+		return model.NewResolvedTs(0), ctx.Err()
 	case k.resolvedBuffer.In() <- resolvedTsEvent{
 		tableID:  tableID,
-		resolved: model.NewResolvedTs(resolved.Ts),
+		resolved: resolved,
 	}:
 	}
 	k.statistics.PrintStatus(ctx)
-	return checkpointTs, nil
+	return checkpoint, nil
 }
 
 // bgFlushTs flush resolvedTs to workers and flush the mqProducer
@@ -217,7 +213,7 @@ func (k *mqSink) bgFlushTs(ctx context.Context) error {
 			// Since CDC does not guarantee exactly once semantic, it won't cause any problem
 			// here even if the table was moved or removed.
 			// ref: https://github.com/pingcap/tiflow/pull/4356#discussion_r787405134
-			k.tableCheckpointTsMap.Store(msg.tableID, resolved.Ts)
+			k.tableCheckpointTsMap.Store(msg.tableID, resolved)
 		}
 	}
 }
@@ -367,6 +363,14 @@ func (k *mqSink) RemoveTable(cxt context.Context, tableID model.TableID) error {
 	return nil
 }
 
+func (k *mqSink) getTableCheckpointTs(tableID model.TableID) model.ResolvedTs {
+	v, ok := k.tableCheckpointTsMap.Load(tableID)
+	if ok {
+		return v.(model.ResolvedTs)
+	}
+	return model.NewResolvedTs(0)
+}
+
 func (k *mqSink) run(ctx context.Context) error {
 	wg, ctx := errgroup.WithContext(ctx)
 	wg.Go(func() error {
@@ -455,12 +459,16 @@ func NewKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
 
-	topicManager := manager.NewKafkaTopicManager(
+	topicManager, err := manager.NewKafkaTopicManager(
 		client,
 		adminClient,
 		baseConfig.DeriveTopicConfig(),
 	)
-	if _, err := topicManager.CreateTopic(topic); err != nil {
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+	}
+
+	if _, err := topicManager.CreateTopicAndWaitUntilVisible(topic); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaCreateTopic, err)
 	}
 

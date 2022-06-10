@@ -13,16 +13,11 @@
 
 package registry
 
-import (
-	"github.com/pingcap/tiflow/engine/lib"
-	"github.com/pingcap/tiflow/engine/lib/fake"
-)
+import "reflect"
 
-// RegisterFake registers fake job master and fake worker to global registry
-func RegisterFake(registry Registry) {
-	fakeMasterFactory := NewSimpleWorkerFactory(fake.NewFakeMaster)
-	registry.MustRegisterWorkerType(lib.FakeJobMaster, fakeMasterFactory)
-
-	fakeWorkerFactory := NewSimpleWorkerFactory(fake.NewDummyWorker)
-	registry.MustRegisterWorkerType(lib.FakeTask, fakeWorkerFactory)
+// isPtr checks whether the type parameter C is a pointer.
+func isPtr[C any]() bool {
+	var c C
+	tp := reflect.TypeOf(c)
+	return tp.Kind() == reflect.Pointer
 }
