@@ -35,9 +35,11 @@ const (
 	TableStatePreparing TableState = iota
 	// TableStatePrepared means the first `Resolved Ts` is received.
 	TableStatePrepared
-	// TableStateReplicating means that sink is consuming data from the sorter, and replicating it to downstream
+	// TableStateReplicating means that sink is consuming data from the sorter,
+	// and replicating it to downstream
 	TableStateReplicating
 	// TableStateStopping means the table is stopping, but not guaranteed yet.
+	// at the moment, this state is not used, only keep aligned with `schedulepb.TableStateStopping`
 	TableStateStopping
 	// TableStateStopped means sink stop all works, but the table resource not released yet.
 	TableStateStopped
