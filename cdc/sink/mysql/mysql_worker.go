@@ -15,9 +15,10 @@ package mysql
 
 import (
 	"context"
-	"go.uber.org/atomic"
 	"runtime"
 	"sync"
+
+	"go.uber.org/atomic"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
