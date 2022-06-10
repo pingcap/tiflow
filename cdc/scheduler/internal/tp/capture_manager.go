@@ -215,6 +215,9 @@ func (c *captureManager) HandleAliveCaptureUpdate(
 				c.changes.Removed = make(map[string][]schedulepb.TableStatus)
 			}
 			c.changes.Removed[id] = capture.Tables
+
+			cf := c.changefeedID
+			captureTableGauge.DeleteLabelValues(cf.Namespace, cf.ID, capture.Addr)
 		}
 	}
 
