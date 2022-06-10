@@ -19,7 +19,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/pingcap/tiflow/engine/lib"
+	"github.com/pingcap/tiflow/engine/framework"
 )
 
 func TestWorkerStatus(t *testing.T) {
@@ -27,33 +27,33 @@ func TestWorkerStatus(t *testing.T) {
 
 	task := "worker_status_test"
 	workerID := "worker-id"
-	workerStatus := NewWorkerStatus(task, lib.WorkerDMDump, workerID, WorkerOffline)
+	workerStatus := NewWorkerStatus(task, framework.WorkerDMDump, workerID, WorkerOffline)
 	require.Equal(t, workerStatus.TaskID, task)
 	require.Equal(t, workerStatus.ID, workerID)
-	require.Equal(t, workerStatus.Unit, lib.WorkerDMDump)
+	require.Equal(t, workerStatus.Unit, framework.WorkerDMDump)
 	require.Equal(t, workerStatus.Stage, WorkerOffline)
 	require.True(t, workerStatus.IsOffline())
 	require.False(t, workerStatus.RunAsExpected())
 
-	workerStatus = InitWorkerStatus(task, lib.WorkerDMLoad, workerID)
-	require.Equal(t, workerStatus.Unit, lib.WorkerDMLoad)
+	workerStatus = InitWorkerStatus(task, framework.WorkerDMLoad, workerID)
+	require.Equal(t, workerStatus.Unit, framework.WorkerDMLoad)
 	require.Equal(t, workerStatus.Stage, WorkerCreating)
 	require.False(t, workerStatus.IsOffline())
 	require.True(t, workerStatus.RunAsExpected())
 
-	workerStatus = NewWorkerStatus(task, lib.WorkerDMSync, workerID, WorkerOnline)
-	require.Equal(t, workerStatus.Unit, lib.WorkerDMSync)
+	workerStatus = NewWorkerStatus(task, framework.WorkerDMSync, workerID, WorkerOnline)
+	require.Equal(t, workerStatus.Unit, framework.WorkerDMSync)
 	require.Equal(t, workerStatus.Stage, WorkerOnline)
 	require.False(t, workerStatus.IsOffline())
 	require.True(t, workerStatus.RunAsExpected())
 
-	workerStatus = NewWorkerStatus(task, lib.WorkerDMLoad, workerID, WorkerFinished)
-	require.Equal(t, workerStatus.Unit, lib.WorkerDMLoad)
+	workerStatus = NewWorkerStatus(task, framework.WorkerDMLoad, workerID, WorkerFinished)
+	require.Equal(t, workerStatus.Unit, framework.WorkerDMLoad)
 	require.Equal(t, workerStatus.Stage, WorkerFinished)
 	require.False(t, workerStatus.IsOffline())
 	require.True(t, workerStatus.RunAsExpected())
 
-	workerStatus = InitWorkerStatus(task, lib.WorkerDMLoad, workerID)
+	workerStatus = InitWorkerStatus(task, framework.WorkerDMLoad, workerID)
 	require.False(t, workerStatus.CreateFailed())
 	workerStatus.createdTime = time.Now().Add(-2*HeartbeatInterval - 1)
 	require.True(t, workerStatus.CreateFailed())

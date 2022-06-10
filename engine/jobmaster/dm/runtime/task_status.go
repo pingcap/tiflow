@@ -14,13 +14,13 @@
 package runtime
 
 import (
+	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
-	libModel "github.com/pingcap/tiflow/engine/lib/model"
 )
 
 // TaskStatus defines the running task status.
 type TaskStatus struct {
-	Unit  libModel.WorkerType
+	Unit  frameModel.WorkerType
 	Task  string
 	Stage metadata.TaskStage
 }

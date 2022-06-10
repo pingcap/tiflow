@@ -20,8 +20,8 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/tiflow/engine/lib"
-	libModel "github.com/pingcap/tiflow/engine/lib/model"
+	"github.com/pingcap/tiflow/engine/framework"
+	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 )
 
@@ -31,18 +31,18 @@ const (
 	exampleWorkerCost = 100
 )
 
-var _ lib.Master = &exampleMaster{}
+var _ framework.Master = &exampleMaster{}
 
 type exampleMaster struct {
-	*lib.DefaultBaseMaster
+	*framework.DefaultBaseMaster
 
 	worker struct {
 		mu sync.Mutex
 
-		id          libModel.WorkerID
-		handle      lib.WorkerHandle
+		id          frameModel.WorkerID
+		handle      framework.WorkerHandle
 		online      bool
-		statusCode  libModel.WorkerStatusCode
+		statusCode  frameModel.WorkerStatusCode
 		receivedErr error
 	}
 
@@ -77,7 +77,7 @@ func (e *exampleMaster) OnMasterRecovered(ctx context.Context) error {
 	return nil
 }
 
-func (e *exampleMaster) OnWorkerDispatched(worker lib.WorkerHandle, result error) error {
+func (e *exampleMaster) OnWorkerDispatched(worker framework.WorkerHandle, result error) error {
 	log.L().Info("OnWorkerDispatched")
 	e.worker.mu.Lock()
 	e.worker.handle = worker
@@ -86,7 +86,7 @@ func (e *exampleMaster) OnWorkerDispatched(worker lib.WorkerHandle, result error
 	return nil
 }
 
-func (e *exampleMaster) OnWorkerOnline(worker lib.WorkerHandle) error {
+func (e *exampleMaster) OnWorkerOnline(worker framework.WorkerHandle) error {
 	log.L().Info("OnWorkerOnline")
 	e.worker.mu.Lock()
 	e.worker.handle = worker
@@ -95,12 +95,12 @@ func (e *exampleMaster) OnWorkerOnline(worker lib.WorkerHandle) error {
 	return nil
 }
 
-func (e *exampleMaster) OnWorkerOffline(worker lib.WorkerHandle, reason error) error {
+func (e *exampleMaster) OnWorkerOffline(worker framework.WorkerHandle, reason error) error {
 	log.L().Info("OnWorkerOffline")
 	return nil
 }
 
-func (e *exampleMaster) OnWorkerMessage(worker lib.WorkerHandle, topic p2p.Topic, message interface{}) error {
+func (e *exampleMaster) OnWorkerMessage(worker framework.WorkerHandle, topic p2p.Topic, message interface{}) error {
 	log.L().Info("OnWorkerMessage")
 	return nil
 }
@@ -110,7 +110,7 @@ func (e *exampleMaster) CloseImpl(ctx context.Context) error {
 	return nil
 }
 
-func (e *exampleMaster) OnWorkerStatusUpdated(worker lib.WorkerHandle, newStatus *libModel.WorkerStatus) error {
+func (e *exampleMaster) OnWorkerStatusUpdated(worker framework.WorkerHandle, newStatus *frameModel.WorkerStatus) error {
 	log.L().Info("OnWorkerStatusUpdated")
 	return nil
 }
