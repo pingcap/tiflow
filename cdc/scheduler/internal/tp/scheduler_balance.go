@@ -25,7 +25,8 @@ import (
 var _ scheduler = &burstBalanceScheduler{}
 
 type burstBalanceScheduler struct {
-	random *rand.Rand
+	random       *rand.Rand
+	lastCaptures map[model.CaptureID]struct{}
 }
 
 func newBurstBalanceScheduler() *burstBalanceScheduler {
@@ -44,63 +45,87 @@ func (b *burstBalanceScheduler) Schedule(
 	captures map[model.CaptureID]*model.CaptureInfo,
 	replications map[model.TableID]*ReplicationSet,
 ) []*scheduleTask {
+	tasks := make([]*scheduleTask, 0)
+	tablesLenEqual := len(currentTables) == len(replications)
+	tablesAllFind := true
 	newTables := make([]model.TableID, 0)
-	intersectionTable := make(map[model.TableID]struct{})
-	captureTables := make(map[model.CaptureID][]model.TableID)
 	for _, tableID := range currentTables {
 		rep, ok := replications[tableID]
 		if !ok {
 			newTables = append(newTables, tableID)
+			// The table ID is not in the replication means the two sets are
+			// not identical.
+			tablesAllFind = false
 			continue
 		}
 		if rep.State == ReplicationSetStateAbsent {
 			newTables = append(newTables, tableID)
 		}
-		intersectionTable[tableID] = struct{}{}
-		if rep.Primary != "" {
-			captureTables[rep.Primary] = append(captureTables[rep.Primary], tableID)
-		}
-		if rep.Secondary != "" {
-			captureTables[rep.Secondary] = append(captureTables[rep.Secondary], tableID)
-		}
-	}
-	rmTables := make([]model.TableID, 0)
-	for tableID := range replications {
-		_, ok := intersectionTable[tableID]
-		if !ok {
-			rmTables = append(rmTables, tableID)
-		}
 	}
 
-	captureIDs := make([]model.CaptureID, 0, len(captures))
-	for captureID := range captures {
-		captureIDs = append(captureIDs, captureID)
-	}
-	// TODO support table re-balance when adding a new capture.
-	tasks := make([]*scheduleTask, 0)
-	if len(newTables) != 0 {
+	// Build add table tasks.
+	if len(newTables) > 0 {
+		captureIDs := make([]model.CaptureID, 0, len(captures))
+		for captureID := range captures {
+			captureIDs = append(captureIDs, captureID)
+		}
 		tasks = append(
 			tasks, newBurstBalanceAddTables(checkpointTs, newTables, captureIDs))
 		if len(newTables) == len(currentTables) {
+			// The initial balance, if new tables and current tables are equal.
+			// Update last captures
+			b.updateCaptures(captures)
 			return tasks
 		}
 	}
-	if len(rmTables) > 0 {
-		tasks = append(
-			tasks, newBurstBalanceRemoveTables(rmTables, replications))
-	}
 
-	// Skip rebalance if there are some table added or removed.
-	if len(tasks) == 0 {
-		// We does not need accept callback here.
-		accept := (callback)(nil)
-		task := newBurstBalanceMoveTables(accept, b.random, currentTables, captures, replications)
+	// Build remove table tasks.
+	// For most of the time, remove tables are unlikely to happen.
+	//
+	// Fast path for check whether two sets are identical:
+	// If the length of currentTables and replications are equal,
+	// and for all tables in currentTables have a record in replications.
+	if !tablesLenEqual || !tablesAllFind {
+		// The two sets are not identical. We need to find removed tables.
+		task := buildBurstBalanceRemoveTables(currentTables, replications)
 		if task != nil {
 			tasks = append(tasks, task)
 		}
 	}
 
+	// Skip rebalance:
+	//  1. There are some table added or removed.
+	//  2. There is no new capture added.
+	if len(tasks) != 0 {
+		return tasks
+	}
+	capturesLenEqual := len(captures) == len(b.lastCaptures)
+	capturesAllFind := true
+	for captureID := range b.lastCaptures {
+		_, ok := captures[captureID]
+		if !ok {
+			capturesAllFind = false
+		}
+	}
+	if !capturesLenEqual || !capturesAllFind {
+		// The two sets are not identical. We need to rebalance tables.
+		task := buildBurstBalanceMoveTables(b.random, currentTables, captures, replications)
+		if task != nil {
+			tasks = append(tasks, task)
+		}
+		// Update last captures
+		b.updateCaptures(captures)
+	}
 	return tasks
+}
+
+func (b *burstBalanceScheduler) updateCaptures(
+	captures map[model.CaptureID]*model.CaptureInfo,
+) {
+	b.lastCaptures = make(map[model.CaptureID]struct{}, len(captures))
+	for captureID := range captures {
+		b.lastCaptures[captureID] = struct{}{}
+	}
 }
 
 func newBurstBalanceAddTables(
@@ -148,4 +173,55 @@ func newBurstBalanceRemoveTables(
 	return &scheduleTask{burstBalance: &burstBalance{
 		RemoveTables: tables,
 	}}
+}
+
+func buildBurstBalanceMoveTables(
+	random *rand.Rand,
+	currentTables []model.TableID,
+	captures map[model.CaptureID]*model.CaptureInfo,
+	replications map[model.TableID]*ReplicationSet,
+) *scheduleTask {
+	captureTables := make(map[model.CaptureID][]model.TableID)
+	for _, tableID := range currentTables {
+		rep, ok := replications[tableID]
+		if !ok {
+			continue
+		}
+		if rep.Primary != "" {
+			captureTables[rep.Primary] = append(captureTables[rep.Primary], tableID)
+		}
+		if rep.Secondary != "" {
+			captureTables[rep.Secondary] = append(captureTables[rep.Secondary], tableID)
+		}
+	}
+
+	// We does not need accept callback here.
+	accept := (callback)(nil)
+	return newBurstBalanceMoveTables(accept, random, currentTables, captures, replications)
+}
+
+func buildBurstBalanceRemoveTables(
+	currentTables []model.TableID,
+	replications map[model.TableID]*ReplicationSet,
+) *scheduleTask {
+	// The two sets are not identical. We need to find removed tables.
+	intersectionTable := make(map[model.TableID]struct{}, len(currentTables))
+	for _, tableID := range currentTables {
+		_, ok := replications[tableID]
+		if !ok {
+			continue
+		}
+		intersectionTable[tableID] = struct{}{}
+	}
+	rmTables := make([]model.TableID, 0)
+	for tableID := range replications {
+		_, ok := intersectionTable[tableID]
+		if !ok {
+			rmTables = append(rmTables, tableID)
+		}
+	}
+	if len(rmTables) > 0 {
+		return newBurstBalanceRemoveTables(rmTables, replications)
+	}
+	return nil
 }
