@@ -244,6 +244,9 @@ func (a *agent) newTableStatus(tableID model.TableID) schedulepb.TableStatus {
 func (t *table) refresh() {
 	meta := t.executor.GetTableMeta(t.id)
 	state := tableStatus2PB(meta.State)
+	if t.task != nil && t.task.IsRemove {
+		state = schedulepb.TableStateStopping
+	}
 	t.status = schedulepb.TableStatus{
 		TableID: meta.TableID,
 		State:   state,
@@ -260,7 +263,7 @@ func (a *agent) refreshAllTables() {
 	for _, tableID := range currentTables {
 		table, ok := a.tables[tableID]
 		if !ok {
-			table := newTable(tableID, a.tableExec)
+			table = newTable(tableID, a.tableExec)
 			a.tables[tableID] = table
 		}
 		table.refresh()
@@ -274,8 +277,8 @@ func (a *agent) collectAllTables(expected []model.TableID) []schedulepb.TableSta
 		if ok {
 			result = append(result, table.status)
 		} else {
-			stats := a.newTableStatus(tableID)
-			result = append(result, stats)
+			status := a.newTableStatus(tableID)
+			result = append(result, status)
 		}
 	}
 	return result
@@ -630,13 +633,8 @@ func (t *table) handleRemoveTableTask(ctx context.Context) *schedulepb.Message {
 	case schedulepb.TableStatePreparing,
 		schedulepb.TableStatePrepared,
 		schedulepb.TableStateReplicating:
-		done := t.executor.RemoveTable(ctx, t.task.TableID)
+		_ = t.executor.RemoveTable(ctx, t.task.TableID)
 		status := t.TableStatus()
-		if !done {
-			// set table state be `stopping` to let the
-			// coordinator know that the request was received.
-			status.State = schedulepb.TableStateStopping
-		}
 		message := newRemoveTableResponseMessage(status)
 		return message
 	default:

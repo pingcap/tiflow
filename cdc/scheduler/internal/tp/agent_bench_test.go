@@ -38,12 +38,12 @@ func benchmarkCollectTableStatus(b *testing.B, bench func(b *testing.B, a *agent
 	}
 }
 
-func BenchmarkCollectTableStatus(b *testing.B) {
+func BenchmarkRefreshAllTables(b *testing.B) {
 	benchmarkCollectTableStatus(b, func(b *testing.B, a *agent) {
 		total := len(a.tableExec.GetAllCurrentTables())
 		b.Run(fmt.Sprintf("%d tables", total), func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
-				a.collectTableStatus([]model.TableID{})
+				a.refreshAllTables()
 			}
 		})
 	})

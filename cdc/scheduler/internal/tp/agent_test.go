@@ -34,14 +34,14 @@ func newBaseAgent4Test() *agent {
 			captureID: "owner-1",
 			revision:  schedulepb.OwnerRevision{Revision: 1},
 		},
-		version:      "agent-version-1",
-		epoch:        schedulepb.ProcessorEpoch{Epoch: "agent-epoch-1"},
-		captureID:    "agent-1",
-		runningTasks: make(map[model.TableID]*dispatchTableTask),
+		version:   "agent-version-1",
+		epoch:     schedulepb.ProcessorEpoch{Epoch: "agent-epoch-1"},
+		captureID: "agent-1",
+		tables:    make(map[model.TableID]*table),
 	}
 }
 
-func TestAgentCollectTableStatus(t *testing.T) {
+func TestAgentHandleMessageHeartbeat(t *testing.T) {
 	t.Parallel()
 
 	a := newBaseAgent4Test()
@@ -55,16 +55,29 @@ func TestAgentCollectTableStatus(t *testing.T) {
 	mockTableExecutor.tables[model.TableID(3)] = pipeline.TableStateStopping
 	mockTableExecutor.tables[model.TableID(4)] = pipeline.TableStateStopped
 
-	expected := make([]model.TableID, 0, 10)
-	for i := 0; i < 10; i++ {
-		expected = append(expected, model.TableID(i))
+	heartbeat := &schedulepb.Message{
+		Header: &schedulepb.Message_Header{
+			Version:       "version-1",
+			OwnerRevision: schedulepb.OwnerRevision{Revision: 1},
+		},
+		MsgType: schedulepb.MsgHeartbeat,
+		From:    "owner-1",
+		Heartbeat: &schedulepb.Heartbeat{
+			TableIDs: []model.TableID{0, 1, 2, 3, 4, 5, 6, 7, 8, 9},
+		},
 	}
 
-	result := a.collectTableStatus(expected)
+	response, err := a.handleMessage(context.Background(), []*schedulepb.Message{heartbeat})
+	require.NoError(t, err)
+	require.Len(t, response, 1)
+	require.False(t, response[0].GetHeartbeatResponse().IsStopping)
+
+	result := response[0].GetHeartbeatResponse().Tables
 	require.Len(t, result, 10)
 	sort.Slice(result, func(i, j int) bool {
 		return result[i].TableID < result[j].TableID
 	})
+
 	require.Equal(t, schedulepb.TableStatePreparing, result[0].State)
 	require.Equal(t, schedulepb.TableStatePrepared, result[1].State)
 	require.Equal(t, schedulepb.TableStateReplicating, result[2].State)
@@ -74,282 +87,303 @@ func TestAgentCollectTableStatus(t *testing.T) {
 		require.Equal(t, schedulepb.TableStateAbsent, result[i].State)
 	}
 
-	a.runningTasks[model.TableID(0)] = &dispatchTableTask{IsRemove: true}
-	status := a.newTableStatus(model.TableID(0))
-	require.Equal(t, schedulepb.TableStateStopping, status.State)
-
-	a.runningTasks[model.TableID(10)] = &dispatchTableTask{IsRemove: true}
-	status = a.newTableStatus(model.TableID(10))
-	require.Equal(t, schedulepb.TableStateAbsent, status.State)
-}
-
-func TestAgentHandleDispatchTableTask(t *testing.T) {
-	t.Parallel()
-
-	a := newBaseAgent4Test()
-
-	mockTableExecutor := newMockTableExecutor()
-	a.tableExec = mockTableExecutor
-
-	tableID := model.TableID(1)
-	epoch := schedulepb.ProcessorEpoch{}
-	// all possible tasks can be received, and should be correctly handled no matter table's status
-	var tasks []*dispatchTableTask
-	for _, isRemove := range []bool{true, false} {
-		for _, isPrepare := range []bool{true, false} {
-			if isPrepare && isRemove {
-				continue
-			}
-			task := &dispatchTableTask{
-				TableID:   tableID,
-				StartTs:   0,
-				IsRemove:  isRemove,
-				IsPrepare: isPrepare,
-				Epoch:     epoch,
-				status:    dispatchTableTaskReceived,
-			}
-			tasks = append(tasks, task)
-		}
-	}
-
-	states := []schedulepb.TableState{
-		schedulepb.TableStateAbsent,
-		schedulepb.TableStatePreparing,
-		schedulepb.TableStatePrepared,
-		schedulepb.TableStateReplicating,
-		schedulepb.TableStateStopping,
-		schedulepb.TableStateStopped,
-	}
-	ctx := context.Background()
-	for _, state := range states {
-		iterPermutation([]int{0, 1, 2}, func(sequence []int) {
-			t.Logf("test %v, %v", state, sequence)
-			switch state {
-			case schedulepb.TableStatePreparing:
-				mockTableExecutor.tables[tableID] = pipeline.TableStatePreparing
-			case schedulepb.TableStatePrepared:
-				mockTableExecutor.tables[tableID] = pipeline.TableStatePrepared
-			case schedulepb.TableStateReplicating:
-				mockTableExecutor.tables[tableID] = pipeline.TableStateReplicating
-			case schedulepb.TableStateStopping:
-				mockTableExecutor.tables[tableID] = pipeline.TableStateStopping
-			case schedulepb.TableStateStopped:
-				mockTableExecutor.tables[tableID] = pipeline.TableStateStopped
-			case schedulepb.TableStateAbsent:
-			default:
-			}
-			for _, idx := range sequence {
-				task := tasks[idx]
-				task.status = dispatchTableTaskReceived
-				a.runningTasks[task.TableID] = task
-
-				if task.IsRemove {
-					for _, ok := range []bool{false, true} {
-						mockTableExecutor.On("RemoveTable", mock.Anything, mock.Anything).Return(ok)
-						for _, ok1 := range []bool{false, true} {
-							mockTableExecutor.On("IsRemoveTableFinished", mock.Anything, mock.Anything).Return(0, ok1)
-
-							response, err := a.handleDispatchTableTasks(ctx)
-							require.NoError(t, err)
-							require.NotNil(t, response)
-							if ok && ok1 && len(response) != 0 {
-								resp, ok := response[0].DispatchTableResponse.Response.(*schedulepb.DispatchTableResponse_RemoveTable)
-								require.True(t, ok)
-								require.Equal(t, schedulepb.TableStateStopped, resp.RemoveTable.Status.State)
-							}
-							mockTableExecutor.ExpectedCalls = mockTableExecutor.ExpectedCalls[:1]
-						}
-						mockTableExecutor.ExpectedCalls = nil
-					}
-				} else {
-					for _, ok := range []bool{false, true} {
-						mockTableExecutor.On("AddTable", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(ok, nil)
-						for _, ok1 := range []bool{false, true} {
-							mockTableExecutor.On("IsAddTableFinished", mock.Anything, mock.Anything, mock.Anything).Return(ok1, nil)
-
-							response, err := a.handleDispatchTableTasks(ctx)
-							require.NoError(t, err)
-							require.NotNil(t, response)
-							if ok && ok1 && len(response) != 0 {
-								resp, ok := response[0].DispatchTableResponse.Response.(*schedulepb.DispatchTableResponse_AddTable)
-								require.True(t, ok)
-								if task.IsPrepare {
-									require.Equal(t, schedulepb.TableStatePrepared, resp.AddTable.Status.State)
-								} else {
-									require.Equal(t, schedulepb.TableStateReplicating, resp.AddTable.Status.State)
-								}
-							}
-							mockTableExecutor.ExpectedCalls = mockTableExecutor.ExpectedCalls[:1]
-						}
-						mockTableExecutor.ExpectedCalls = nil
-					}
-				}
-			}
-		})
-	}
-}
-
-func TestAgentHandleMessageStopping(t *testing.T) {
-	t.Parallel()
-
-	a := newBaseAgent4Test()
-	a.tableExec = newMockTableExecutor()
-	a.stopping = true
-
-	heartbeat := &schedulepb.Message{
-		Header: &schedulepb.Message_Header{
-			Version:       "version-1",
-			OwnerRevision: schedulepb.OwnerRevision{Revision: 1},
-		},
-		MsgType:   schedulepb.MsgHeartbeat,
-		From:      "owner-1",
-		Heartbeat: &schedulepb.Heartbeat{},
-	}
-	response := a.handleMessage([]*schedulepb.Message{heartbeat})
-	require.Len(t, response, 1)
-	require.NotNil(t, response[0].HeartbeatResponse)
-	// agent is stopping, let coordinator know this.
-	require.True(t, response[0].HeartbeatResponse.IsStopping)
-
-	addTableRequest := &schedulepb.Message{
-		Header: &schedulepb.Message_Header{
-			Version:        "version-1",
-			OwnerRevision:  schedulepb.OwnerRevision{Revision: 1},
-			ProcessorEpoch: schedulepb.ProcessorEpoch{Epoch: "agent-epoch-1"},
-		},
-		MsgType: schedulepb.MsgDispatchTableRequest,
-		From:    "owner-1",
-		DispatchTableRequest: &schedulepb.DispatchTableRequest{
-			Request: &schedulepb.DispatchTableRequest_AddTable{
-				AddTable: &schedulepb.AddTableRequest{
-					TableID:     1,
-					IsSecondary: true,
-				},
-			},
-		},
-	}
-	// add table request should not be handled, so the running task count is 0.
-	response = a.handleMessage([]*schedulepb.Message{addTableRequest})
-	require.Len(t, response, 0)
-	require.Len(t, a.runningTasks, 0)
-
-	// mock agent have running task before stopping but processed yet.
-	a.runningTasks[model.TableID(1)] = &dispatchTableTask{
-		TableID:   model.TableID(1),
-		StartTs:   0,
-		IsRemove:  false,
-		IsPrepare: false,
-		Epoch:     schedulepb.ProcessorEpoch{},
-		status:    dispatchTableTaskReceived,
-	}
-
-	result, err := a.handleDispatchTableTasks(context.Background())
+	a.tables[model.TableID(1)].task = &dispatchTableTask{IsRemove: true}
+	response, err = a.handleMessage(context.Background(), []*schedulepb.Message{heartbeat})
 	require.NoError(t, err)
-	require.Len(t, a.runningTasks, 0)
-	require.Len(t, result, 1)
+	result = response[0].GetHeartbeatResponse().Tables
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].TableID < result[j].TableID
+	})
+	require.Equal(t, schedulepb.TableStateStopping, result[1].State)
 
-	addTableResponse, ok := result[0].DispatchTableResponse.
-		Response.(*schedulepb.DispatchTableResponse_AddTable)
-	require.True(t, ok)
-	require.True(t, addTableResponse.AddTable.Reject)
-}
-
-func TestAgentHandleRemoveTableRequest(t *testing.T) {
-	t.Parallel()
-
-	a := newBaseAgent4Test()
-	a.tableExec = newMockTableExecutor()
-
-	// remove a table not exist, should not generate the task.
-	removeTableRequest := &schedulepb.DispatchTableRequest{
-		Request: &schedulepb.DispatchTableRequest_RemoveTable{
-			RemoveTable: &schedulepb.RemoveTableRequest{
-				TableID: 2,
-			},
-		},
-	}
-
-	a.handleMessageDispatchTableRequest(removeTableRequest, a.epoch)
-	require.Len(t, a.runningTasks, 0)
-}
-
-func TestAgentHandleMessage(t *testing.T) {
-	t.Parallel()
-
-	a := newBaseAgent4Test()
-	a.tableExec = newMockTableExecutor()
-
-	heartbeat := &schedulepb.Message{
-		Header: &schedulepb.Message_Header{
-			Version:       a.ownerInfo.version,
-			OwnerRevision: a.ownerInfo.revision,
-		},
-		MsgType:   schedulepb.MsgHeartbeat,
-		From:      a.ownerInfo.captureID,
-		Heartbeat: &schedulepb.Heartbeat{},
-	}
-	// handle the first heartbeat, from the known owner.
-	response := a.handleMessage([]*schedulepb.Message{heartbeat})
+	a.stopping = true
+	response, err = a.handleMessage(context.Background(), []*schedulepb.Message{heartbeat})
+	require.NoError(t, err)
 	require.Len(t, response, 1)
-	require.NotNil(t, response[0].HeartbeatResponse)
-	require.Equal(t, response[0].Header.Version, a.version)
-	require.Equal(t, response[0].Header.OwnerRevision, a.ownerInfo.revision)
-	require.Equal(t, response[0].Header.ProcessorEpoch, a.epoch)
-
-	addTableRequest := &schedulepb.Message{
-		Header: &schedulepb.Message_Header{
-			Version:       a.ownerInfo.version,
-			OwnerRevision: a.ownerInfo.revision,
-			// wrong epoch
-			ProcessorEpoch: schedulepb.ProcessorEpoch{Epoch: "wrong-agent-epoch-1"},
-		},
-		MsgType: schedulepb.MsgDispatchTableRequest,
-		From:    a.ownerInfo.captureID,
-		DispatchTableRequest: &schedulepb.DispatchTableRequest{
-			Request: &schedulepb.DispatchTableRequest_AddTable{
-				AddTable: &schedulepb.AddTableRequest{
-					TableID:     1,
-					IsSecondary: true,
-					Checkpoint:  schedulepb.Checkpoint{},
-				},
-			},
-		},
-	}
-	// wrong epoch, ignored
-	response = a.handleMessage([]*schedulepb.Message{addTableRequest})
-	require.Len(t, a.runningTasks, 0)
-	require.Len(t, response, 0)
-
-	// correct epoch, processing.
-	addTableRequest.Header.ProcessorEpoch = a.epoch
-	response = a.handleMessage([]*schedulepb.Message{addTableRequest})
-	require.Len(t, a.runningTasks, 1)
-	require.Len(t, response, 0)
-
-	heartbeat.Header.OwnerRevision.Revision = 2
-	response = a.handleMessage([]*schedulepb.Message{heartbeat})
-	require.Equal(t, len(a.runningTasks), 1)
-	require.Len(t, response, 1)
-
-	// this should never happen in real world
-	unknownMessage := &schedulepb.Message{
-		Header: &schedulepb.Message_Header{
-			Version:        a.ownerInfo.version,
-			OwnerRevision:  schedulepb.OwnerRevision{Revision: 2},
-			ProcessorEpoch: a.epoch,
-		},
-		MsgType: schedulepb.MsgUnknown,
-		From:    a.ownerInfo.captureID,
-	}
-
-	response = a.handleMessage([]*schedulepb.Message{unknownMessage})
-	require.Len(t, response, 0)
-
-	// staled message
-	heartbeat.Header.OwnerRevision.Revision = 1
-	response = a.handleMessage([]*schedulepb.Message{heartbeat})
-	require.Len(t, response, 0)
+	require.True(t, response[0].GetHeartbeatResponse().IsStopping)
 }
+
+//func TestAgentCollectAllTables(t *testing.T) {
+//	t.Parallel()
+//
+//
+//	expected := make([]model.TableID, 0, 10)
+//	for i := 0; i < 10; i++ {
+//		expected = append(expected, model.TableID(i))
+//	}
+//
+//	result := a.collectAllTables(expected)
+//
+//	require.Len(t, result, 10)
+
+//}
+
+//func TestAgentHandleDispatchTableTask(t *testing.T) {
+//	t.Parallel()
+//
+//	a := newBaseAgent4Test()
+//
+//	mockTableExecutor := newMockTableExecutor()
+//	a.tableExec = mockTableExecutor
+//
+//	tableID := model.TableID(1)
+//	epoch := schedulepb.ProcessorEpoch{}
+//	// all possible tasks can be received, and should be correctly handled no matter table's status
+//	var tasks []*dispatchTableTask
+//	for _, isRemove := range []bool{true, false} {
+//		for _, isPrepare := range []bool{true, false} {
+//			if isPrepare && isRemove {
+//				continue
+//			}
+//			task := &dispatchTableTask{
+//				TableID:   tableID,
+//				StartTs:   0,
+//				IsRemove:  isRemove,
+//				IsPrepare: isPrepare,
+//				Epoch:     epoch,
+//			}
+//			tasks = append(tasks, task)
+//		}
+//	}
+//
+//	states := []schedulepb.TableState{
+//		schedulepb.TableStateAbsent,
+//		schedulepb.TableStatePreparing,
+//		schedulepb.TableStatePrepared,
+//		schedulepb.TableStateReplicating,
+//		schedulepb.TableStateStopping,
+//		schedulepb.TableStateStopped,
+//	}
+//	ctx := context.Background()
+//	for _, state := range states {
+//		iterPermutation([]int{0, 1, 2}, func(sequence []int) {
+//			t.Logf("test %v, %v", state, sequence)
+//			switch state {
+//			case schedulepb.TableStatePreparing:
+//				mockTableExecutor.tables[tableID] = pipeline.TableStatePreparing
+//			case schedulepb.TableStatePrepared:
+//				mockTableExecutor.tables[tableID] = pipeline.TableStatePrepared
+//			case schedulepb.TableStateReplicating:
+//				mockTableExecutor.tables[tableID] = pipeline.TableStateReplicating
+//			case schedulepb.TableStateStopping:
+//				mockTableExecutor.tables[tableID] = pipeline.TableStateStopping
+//			case schedulepb.TableStateStopped:
+//				mockTableExecutor.tables[tableID] = pipeline.TableStateStopped
+//			case schedulepb.TableStateAbsent:
+//			default:
+//			}
+//			for _, idx := range sequence {
+//				task := tasks[idx]
+//				task.status = dispatchTableTaskReceived
+//				a.runningTasks[task.TableID] = task
+//
+//				if task.IsRemove {
+//					for _, ok := range []bool{false, true} {
+//						mockTableExecutor.On("RemoveTable", mock.Anything, mock.Anything).Return(ok)
+//						for _, ok1 := range []bool{false, true} {
+//							mockTableExecutor.On("IsRemoveTableFinished", mock.Anything, mock.Anything).Return(0, ok1)
+//
+//							response, err := a.handleDispatchTableTasks(ctx)
+//							require.NoError(t, err)
+//							require.NotNil(t, response)
+//							if ok && ok1 && len(response) != 0 {
+//								resp, ok := response[0].DispatchTableResponse.Response.(*schedulepb.DispatchTableResponse_RemoveTable)
+//								require.True(t, ok)
+//								require.Equal(t, schedulepb.TableStateStopped, resp.RemoveTable.Status.State)
+//							}
+//							mockTableExecutor.ExpectedCalls = mockTableExecutor.ExpectedCalls[:1]
+//						}
+//						mockTableExecutor.ExpectedCalls = nil
+//					}
+//				} else {
+//					for _, ok := range []bool{false, true} {
+//						mockTableExecutor.On("AddTable", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(ok, nil)
+//						for _, ok1 := range []bool{false, true} {
+//							mockTableExecutor.On("IsAddTableFinished", mock.Anything, mock.Anything, mock.Anything).Return(ok1, nil)
+//
+//							response, err := a.handleDispatchTableTasks(ctx)
+//							require.NoError(t, err)
+//							require.NotNil(t, response)
+//							if ok && ok1 && len(response) != 0 {
+//								resp, ok := response[0].DispatchTableResponse.Response.(*schedulepb.DispatchTableResponse_AddTable)
+//								require.True(t, ok)
+//								if task.IsPrepare {
+//									require.Equal(t, schedulepb.TableStatePrepared, resp.AddTable.Status.State)
+//								} else {
+//									require.Equal(t, schedulepb.TableStateReplicating, resp.AddTable.Status.State)
+//								}
+//							}
+//							mockTableExecutor.ExpectedCalls = mockTableExecutor.ExpectedCalls[:1]
+//						}
+//						mockTableExecutor.ExpectedCalls = nil
+//					}
+//				}
+//			}
+//		})
+//	}
+//}
+
+//func TestAgentHandleMessagStopping(t *testing.T) {
+//	t.Parallel()
+//
+//	a := newBaseAgent4Test()
+//	a.tableExec = newMockTableExecutor()
+//	a.stopping = true
+//
+//	heartbeat := &schedulepb.Message{
+//		Header: &schedulepb.Message_Header{
+//			Version:       "version-1",
+//			OwnerRevision: schedulepb.OwnerRevision{Revision: 1},
+//		},
+//		MsgType:   schedulepb.MsgHeartbeat,
+//		From:      "owner-1",
+//		Heartbeat: &schedulepb.Heartbeat{},
+//	}
+//	response := a.handleMessage([]*schedulepb.Message{heartbeat})
+//	require.Len(t, response, 1)
+//	require.NotNil(t, response[0].HeartbeatResponse)
+//	// agent is stopping, let coordinator know this.
+//	require.True(t, response[0].HeartbeatResponse.IsStopping)
+//
+//	addTableRequest := &schedulepb.Message{
+//		Header: &schedulepb.Message_Header{
+//			Version:        "version-1",
+//			OwnerRevision:  schedulepb.OwnerRevision{Revision: 1},
+//			ProcessorEpoch: schedulepb.ProcessorEpoch{Epoch: "agent-epoch-1"},
+//		},
+//		MsgType: schedulepb.MsgDispatchTableRequest,
+//		From:    "owner-1",
+//		DispatchTableRequest: &schedulepb.DispatchTableRequest{
+//			Request: &schedulepb.DispatchTableRequest_AddTable{
+//				AddTable: &schedulepb.AddTableRequest{
+//					TableID:     1,
+//					IsSecondary: true,
+//				},
+//			},
+//		},
+//	}
+//	// add table request should not be handled, so the running task count is 0.
+//	response = a.handleMessage([]*schedulepb.Message{addTableRequest})
+//	require.Len(t, response, 0)
+//	require.Len(t, a.runningTasks, 0)
+//
+//	// mock agent have running task before stopping but processed yet.
+//	a.runningTasks[model.TableID(1)] = &dispatchTableTask{
+//		TableID:   model.TableID(1),
+//		StartTs:   0,
+//		IsRemove:  false,
+//		IsPrepare: false,
+//		Epoch:     schedulepb.ProcessorEpoch{},
+//		status:    dispatchTableTaskReceived,
+//	}
+//
+//	result, err := a.handleDispatchTableTasks(context.Background())
+//	require.NoError(t, err)
+//	require.Len(t, a.runningTasks, 0)
+//	require.Len(t, result, 1)
+//
+//	addTableResponse, ok := result[0].DispatchTableResponse.
+//		Response.(*schedulepb.DispatchTableResponse_AddTable)
+//	require.True(t, ok)
+//	require.True(t, addTableResponse.AddTable.Reject)
+//}
+
+//func TestAgentHandleRemoveTableRequest(t *testing.T) {
+//	t.Parallel()
+//
+//	a := newBaseAgent4Test()
+//	a.tableExec = newMockTableExecutor()
+//
+//	// remove a table not exist, should not generate the task.
+//	removeTableRequest := &schedulepb.DispatchTableRequest{
+//		Request: &schedulepb.DispatchTableRequest_RemoveTable{
+//			RemoveTable: &schedulepb.RemoveTableRequest{
+//				TableID: 2,
+//			},
+//		},
+//	}
+//
+//	a.handleMessageDispatchTableRequest(removeTableRequest, a.epoch)
+//	require.Len(t, a.runningTasks, 0)
+//}
+
+//func TestAgentHandleMessage(t *testing.T) {
+//	t.Parallel()
+//
+//	a := newBaseAgent4Test()
+//	a.tableExec = newMockTableExecutor()
+//
+//	heartbeat := &schedulepb.Message{
+//		Header: &schedulepb.Message_Header{
+//			Version:       a.ownerInfo.version,
+//			OwnerRevision: a.ownerInfo.revision,
+//		},
+//		MsgType:   schedulepb.MsgHeartbeat,
+//		From:      a.ownerInfo.captureID,
+//		Heartbeat: &schedulepb.Heartbeat{},
+//	}
+//	// handle the first heartbeat, from the known owner.
+//	response := a.handleMessage([]*schedulepb.Message{heartbeat})
+//	require.Len(t, response, 1)
+//	require.NotNil(t, response[0].HeartbeatResponse)
+//	require.Equal(t, response[0].Header.Version, a.version)
+//	require.Equal(t, response[0].Header.OwnerRevision, a.ownerInfo.revision)
+//	require.Equal(t, response[0].Header.ProcessorEpoch, a.epoch)
+//
+//	addTableRequest := &schedulepb.Message{
+//		Header: &schedulepb.Message_Header{
+//			Version:       a.ownerInfo.version,
+//			OwnerRevision: a.ownerInfo.revision,
+//			// wrong epoch
+//			ProcessorEpoch: schedulepb.ProcessorEpoch{Epoch: "wrong-agent-epoch-1"},
+//		},
+//		MsgType: schedulepb.MsgDispatchTableRequest,
+//		From:    a.ownerInfo.captureID,
+//		DispatchTableRequest: &schedulepb.DispatchTableRequest{
+//			Request: &schedulepb.DispatchTableRequest_AddTable{
+//				AddTable: &schedulepb.AddTableRequest{
+//					TableID:     1,
+//					IsSecondary: true,
+//					Checkpoint:  schedulepb.Checkpoint{},
+//				},
+//			},
+//		},
+//	}
+//	// wrong epoch, ignored
+//	response = a.handleMessage([]*schedulepb.Message{addTableRequest})
+//	require.Len(t, a.runningTasks, 0)
+//	require.Len(t, response, 0)
+//
+//	// correct epoch, processing.
+//	addTableRequest.Header.ProcessorEpoch = a.epoch
+//	response = a.handleMessage([]*schedulepb.Message{addTableRequest})
+//	require.Len(t, a.runningTasks, 1)
+//	require.Len(t, response, 0)
+//
+//	heartbeat.Header.OwnerRevision.Revision = 2
+//	response = a.handleMessage([]*schedulepb.Message{heartbeat})
+//	require.Equal(t, len(a.runningTasks), 1)
+//	require.Len(t, response, 1)
+//
+//	// this should never happen in real world
+//	unknownMessage := &schedulepb.Message{
+//		Header: &schedulepb.Message_Header{
+//			Version:        a.ownerInfo.version,
+//			OwnerRevision:  schedulepb.OwnerRevision{Revision: 2},
+//			ProcessorEpoch: a.epoch,
+//		},
+//		MsgType: schedulepb.MsgUnknown,
+//		From:    a.ownerInfo.captureID,
+//	}
+//
+//	response = a.handleMessage([]*schedulepb.Message{unknownMessage})
+//	require.Len(t, response, 0)
+//
+//	// staled message
+//	heartbeat.Header.OwnerRevision.Revision = 1
+//	response = a.handleMessage([]*schedulepb.Message{heartbeat})
+//	require.Len(t, response, 0)
+//}
 
 func TestAgentUpdateOwnerInfo(t *testing.T) {
 	t.Parallel()
