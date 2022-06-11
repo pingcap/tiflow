@@ -200,7 +200,9 @@ func (a *agent) poll(ctx context.Context) ([]*schedulepb.Message, error) {
 		if err != nil {
 			return result, errors.Trace(err)
 		}
-		result = append(result, message)
+		if message != nil {
+			result = append(result, message)
+		}
 		if table.status.State == schedulepb.TableStateAbsent {
 			delete(a.tables, tableID)
 		}
@@ -281,10 +283,7 @@ func (a *agent) handleMessageHeartbeat(expected []model.TableID) *schedulepb.Mes
 	}
 
 	message := &schedulepb.Message{
-		Header:            a.newMessageHeader(),
 		MsgType:           schedulepb.MsgHeartbeatResponse,
-		From:              a.captureID,
-		To:                a.ownerInfo.captureID,
 		HeartbeatResponse: response,
 	}
 
@@ -496,8 +495,7 @@ func (a *agent) recvMsgs(ctx context.Context) ([]*schedulepb.Message, error) {
 func (a *agent) sendMsgs(ctx context.Context, msgs []*schedulepb.Message) error {
 	for i := range msgs {
 		m := msgs[i]
-		// Correctness check.
-		if len(m.To) == 0 || m.MsgType == schedulepb.MsgUnknown {
+		if m.MsgType == schedulepb.MsgUnknown {
 			log.Panic("tpscheduler: invalid message no destination or unknown message type",
 				zap.String("capture", a.captureID),
 				zap.String("namespace", a.changeFeedID.Namespace),

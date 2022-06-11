@@ -383,83 +383,89 @@ func TestAgentHandleMessageHeartbeat(t *testing.T) {
 //	}
 //}
 
-//func TestAgentHandleMessage(t *testing.T) {
-//	t.Parallel()
-//
-//	a := newBaseAgent4Test()
-//	a.tableExec = newMockTableExecutor()
-//
-//	heartbeat := &schedulepb.Message{
-//		Header: &schedulepb.Message_Header{
-//			Version:       a.ownerInfo.version,
-//			OwnerRevision: a.ownerInfo.revision,
-//		},
-//		MsgType:   schedulepb.MsgHeartbeat,
-//		From:      a.ownerInfo.captureID,
-//		Heartbeat: &schedulepb.Heartbeat{},
-//	}
-//	// handle the first heartbeat, from the known owner.
-//	response := a.handleMessage([]*schedulepb.Message{heartbeat})
-//	require.Len(t, response, 1)
-//	require.NotNil(t, response[0].HeartbeatResponse)
-//	require.Equal(t, response[0].Header.Version, a.version)
-//	require.Equal(t, response[0].Header.OwnerRevision, a.ownerInfo.revision)
-//	require.Equal(t, response[0].Header.ProcessorEpoch, a.epoch)
-//
-//	addTableRequest := &schedulepb.Message{
-//		Header: &schedulepb.Message_Header{
-//			Version:       a.ownerInfo.version,
-//			OwnerRevision: a.ownerInfo.revision,
-//			// wrong epoch
-//			ProcessorEpoch: schedulepb.ProcessorEpoch{Epoch: "wrong-agent-epoch-1"},
-//		},
-//		MsgType: schedulepb.MsgDispatchTableRequest,
-//		From:    a.ownerInfo.captureID,
-//		DispatchTableRequest: &schedulepb.DispatchTableRequest{
-//			Request: &schedulepb.DispatchTableRequest_AddTable{
-//				AddTable: &schedulepb.AddTableRequest{
-//					TableID:     1,
-//					IsSecondary: true,
-//					Checkpoint:  schedulepb.Checkpoint{},
-//				},
-//			},
-//		},
-//	}
-//	// wrong epoch, ignored
-//	response = a.handleMessage([]*schedulepb.Message{addTableRequest})
-//	require.Len(t, a.runningTasks, 0)
-//	require.Len(t, response, 0)
-//
-//	// correct epoch, processing.
-//	addTableRequest.Header.ProcessorEpoch = a.epoch
-//	response = a.handleMessage([]*schedulepb.Message{addTableRequest})
-//	require.Len(t, a.runningTasks, 1)
-//	require.Len(t, response, 0)
-//
-//	heartbeat.Header.OwnerRevision.Revision = 2
-//	response = a.handleMessage([]*schedulepb.Message{heartbeat})
-//	require.Equal(t, len(a.runningTasks), 1)
-//	require.Len(t, response, 1)
-//
-//	// this should never happen in real world
-//	unknownMessage := &schedulepb.Message{
-//		Header: &schedulepb.Message_Header{
-//			Version:        a.ownerInfo.version,
-//			OwnerRevision:  schedulepb.OwnerRevision{Revision: 2},
-//			ProcessorEpoch: a.epoch,
-//		},
-//		MsgType: schedulepb.MsgUnknown,
-//		From:    a.ownerInfo.captureID,
-//	}
-//
-//	response = a.handleMessage([]*schedulepb.Message{unknownMessage})
-//	require.Len(t, response, 0)
-//
-//	// staled message
-//	heartbeat.Header.OwnerRevision.Revision = 1
-//	response = a.handleMessage([]*schedulepb.Message{heartbeat})
-//	require.Len(t, response, 0)
-//}
+func TestAgentHandleMessage(t *testing.T) {
+	t.Parallel()
+
+	mockTableExecutor := newMockTableExecutor()
+	a := newBaseAgent4Test()
+	a.tableExec = mockTableExecutor
+
+	heartbeat := &schedulepb.Message{
+		Header: &schedulepb.Message_Header{
+			Version:       a.ownerInfo.version,
+			OwnerRevision: a.ownerInfo.revision,
+		},
+		MsgType:   schedulepb.MsgHeartbeat,
+		From:      a.ownerInfo.captureID,
+		Heartbeat: &schedulepb.Heartbeat{},
+	}
+	ctx := context.Background()
+	// handle the first heartbeat, from the known owner.
+	response, err := a.handleMessage(ctx, []*schedulepb.Message{heartbeat})
+	require.NoError(t, err)
+	require.Len(t, response, 1)
+
+	addTableRequest := &schedulepb.Message{
+		Header: &schedulepb.Message_Header{
+			Version:       a.ownerInfo.version,
+			OwnerRevision: a.ownerInfo.revision,
+			// wrong epoch
+			ProcessorEpoch: schedulepb.ProcessorEpoch{Epoch: "wrong-agent-epoch-1"},
+		},
+		MsgType: schedulepb.MsgDispatchTableRequest,
+		From:    a.ownerInfo.captureID,
+		DispatchTableRequest: &schedulepb.DispatchTableRequest{
+			Request: &schedulepb.DispatchTableRequest_AddTable{
+				AddTable: &schedulepb.AddTableRequest{
+					TableID:     1,
+					IsSecondary: true,
+					Checkpoint:  schedulepb.Checkpoint{},
+				},
+			},
+		},
+	}
+	// wrong epoch, ignored
+	response, err = a.handleMessage(ctx, []*schedulepb.Message{addTableRequest})
+	require.NoError(t, err)
+	require.Len(t, response, 0)
+
+	mockTableExecutor.On("AddTable", mock.Anything, mock.Anything,
+		mock.Anything, mock.Anything).Return(true, nil)
+	mockTableExecutor.On("IsAddTableFinished", mock.Anything,
+		mock.Anything, mock.Anything).Return(true, nil)
+
+	// correct epoch, processing.
+	addTableRequest.Header.ProcessorEpoch = a.epoch
+	response, err = a.handleMessage(ctx, []*schedulepb.Message{addTableRequest})
+	require.NoError(t, err)
+	require.Len(t, response, 1)
+
+	heartbeat.Header.OwnerRevision.Revision = 2
+	response, err = a.handleMessage(ctx, []*schedulepb.Message{heartbeat})
+	require.NoError(t, err)
+	require.Len(t, response, 1)
+
+	// this should never happen in real world
+	unknownMessage := &schedulepb.Message{
+		Header: &schedulepb.Message_Header{
+			Version:        a.ownerInfo.version,
+			OwnerRevision:  schedulepb.OwnerRevision{Revision: 2},
+			ProcessorEpoch: a.epoch,
+		},
+		MsgType: schedulepb.MsgUnknown,
+		From:    a.ownerInfo.captureID,
+	}
+
+	response, err = a.handleMessage(ctx, []*schedulepb.Message{unknownMessage})
+	require.NoError(t, err)
+	require.Len(t, response, 0)
+
+	// staled message
+	heartbeat.Header.OwnerRevision.Revision = 1
+	response, err = a.handleMessage(ctx, []*schedulepb.Message{heartbeat})
+	require.NoError(t, err)
+	require.Len(t, response, 0)
+}
 
 func TestAgentUpdateOwnerInfo(t *testing.T) {
 	t.Parallel()
@@ -502,7 +508,8 @@ func TestAgentTick(t *testing.T) {
 	messages := []*schedulepb.Message{heartbeat}
 	trans.recvBuffer = append(trans.recvBuffer, messages...)
 
-	require.NoError(t, a.Tick(context.Background()))
+	ctx := context.Background()
+	require.NoError(t, a.Tick(ctx))
 	require.Len(t, trans.sendBuffer, 1)
 	heartbeatResponse := trans.sendBuffer[0]
 	trans.sendBuffer = trans.sendBuffer[:0]
@@ -554,20 +561,19 @@ func TestAgentTick(t *testing.T) {
 		mock.Anything, mock.Anything, mock.Anything).Return(true, nil)
 	mockTableExecutor.On("IsAddTableFinished", mock.Anything,
 		mock.Anything, mock.Anything).Return(false, nil)
-	require.NoError(t, a.Tick(context.Background()))
+	require.NoError(t, a.Tick(ctx))
 	responses := trans.sendBuffer[:len(trans.sendBuffer)]
 	trans.sendBuffer = trans.sendBuffer[:0]
 	require.Equal(t, schedulepb.MsgHeartbeatResponse, responses[0].MsgType)
 
 	messages = messages[:0]
-	// this one should be ignored, since the previous one with the same tableID is not finished yet.
 	messages = append(messages, addTableRequest)
 	trans.recvBuffer = append(trans.recvBuffer, messages...)
 
 	mockTableExecutor.ExpectedCalls = mockTableExecutor.ExpectedCalls[:1]
 	mockTableExecutor.On("IsAddTableFinished", mock.Anything,
 		mock.Anything, mock.Anything).Return(true, nil)
-	require.NoError(t, a.Tick(context.Background()))
+	require.NoError(t, a.Tick(ctx))
 	responses = trans.sendBuffer[:len(trans.sendBuffer)]
 	trans.sendBuffer = trans.sendBuffer[:0]
 	require.Len(t, responses, 1)
