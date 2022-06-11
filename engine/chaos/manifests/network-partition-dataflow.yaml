@@ -1,0 +1,71 @@
+---
+# network partition between server-master and executor
+apiVersion: chaos-mesh.org/v1alpha1
+kind: NetworkChaos
+metadata:
+  name: network-partition-dataflow-master-executor
+  labels:
+    app: network-partition-dataflow-master-executor
+spec:
+  action: partition
+  mode: one
+  selector:
+    labelSelectors:
+      "app": "server-master"
+  direction: both
+  target:
+    selector:
+      labelSelectors:
+        "app": "executor"
+    mode: one
+  duration: "30s"
+  scheduler:
+    cron: "2-59/3 * * * *" # At every 3rd minute from 2 through 59, (2, 5, 8, ...)
+
+---
+# network partition between dataflow server-master members
+apiVersion: chaos-mesh.org/v1alpha1
+kind: NetworkChaos
+metadata:
+  name: network-partition-dataflow-master-master
+  labels:
+    app: network-partition-dataflow-master-master
+spec:
+  action: partition
+  mode: one
+  selector:
+    labelSelectors:
+      "app": "server-master"
+  direction: both
+  target:
+    selector:
+      labelSelectors:
+        "app": "server-master"
+    mode: one
+  duration: "30s"
+  scheduler:
+    cron: "3-59/3 * * * *" # At every 3rd minute from 3 through 59, (3, 6, 9, ...)
+
+---
+# network partition between dataflow executor members
+apiVersion: chaos-mesh.org/v1alpha1
+kind: NetworkChaos
+metadata:
+  name: network-partition-dataflow-executor-executor
+  labels:
+    app: network-partition-dataflow-executor-executor
+spec:
+  action: partition
+  mode: one
+  selector:
+    labelSelectors:
+      "app": "executor"
+  direction: both
+  target:
+    selector:
+      labelSelectors:
+        "app": "executor"
+    mode: one
+  duration: "30s"
+  scheduler:
+    cron: "1-59/3 * * * *" # At every 3rd minute from 1 through 59, (1, 4, 7, ...)
