@@ -15,6 +15,7 @@ package tp
 
 import (
 	"context"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -37,6 +38,10 @@ const (
 var _ internal.Scheduler = (*coordinator)(nil)
 
 type coordinator struct {
+	// A mutex for concurrent access of coordinator in
+	// internal.Scheduler and internal.InfoProvider API.
+	mu sync.Mutex
+
 	version      string
 	revision     schedulepb.OwnerRevision
 	captureID    model.CaptureID
@@ -105,10 +110,16 @@ func (c *coordinator) Tick(
 	// All captures that are alive according to the latest Etcd states.
 	aliveCaptures map[model.CaptureID]*model.CaptureInfo,
 ) (newCheckpointTs, newResolvedTs model.Ts, err error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	return c.poll(ctx, checkpointTs, currentTables, aliveCaptures)
 }
 
 func (c *coordinator) MoveTable(tableID model.TableID, target model.CaptureID) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	if !c.captureM.CheckAllCaptureInitialized() {
 		log.Info("tpscheduler: manual move table task ignored, "+
 			"since not all captures initialized",
@@ -133,6 +144,9 @@ func (c *coordinator) MoveTable(tableID model.TableID, target model.CaptureID) {
 }
 
 func (c *coordinator) Rebalance() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	if !c.captureM.CheckAllCaptureInitialized() {
 		log.Info("tpscheduler: manual rebalance task ignored, " +
 			"since not all captures initialized")
@@ -150,6 +164,9 @@ func (c *coordinator) Rebalance() {
 }
 
 func (c *coordinator) Close(ctx context.Context) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	_ = c.trans.Close()
 }
 
