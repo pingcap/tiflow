@@ -137,11 +137,7 @@ func (a *agent) Tick(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
-	outboundMessages, err := a.handleMessage(ctx, inboundMessages)
-	if err != nil {
-		return errors.Trace(err)
-	}
-
+	outboundMessages := a.handleMessage(inboundMessages)
 	responses, err := a.poll(ctx)
 	if err != nil {
 		return errors.Trace(err)
@@ -156,7 +152,7 @@ func (a *agent) Tick(ctx context.Context) error {
 	return nil
 }
 
-func (a *agent) handleMessage(ctx context.Context, msg []*schedulepb.Message) ([]*schedulepb.Message, error) {
+func (a *agent) handleMessage(msg []*schedulepb.Message) []*schedulepb.Message {
 	result := make([]*schedulepb.Message, 0)
 	for _, message := range msg {
 		ownerCaptureID := message.GetFrom()
@@ -174,14 +170,7 @@ func (a *agent) handleMessage(ctx context.Context, msg []*schedulepb.Message) ([
 			response := a.handleMessageHeartbeat(message.Heartbeat.GetTableIDs())
 			result = append(result, response)
 		case schedulepb.MsgDispatchTableRequest:
-			response, err := a.handleMessageDispatchTableRequest(
-				ctx, message.DispatchTableRequest, processorEpoch)
-			if err != nil {
-				return result, errors.Trace(err)
-			}
-			if response != nil {
-				result = append(result, response)
-			}
+			a.handleMessageDispatchTableRequest(message.DispatchTableRequest, processorEpoch)
 		default:
 			log.Warn("tpscheduler: unknown message received",
 				zap.String("capture", a.captureID),
@@ -190,7 +179,7 @@ func (a *agent) handleMessage(ctx context.Context, msg []*schedulepb.Message) ([
 				zap.Any("message", message))
 		}
 	}
-	return result, nil
+	return result
 }
 
 func (a *agent) poll(ctx context.Context) ([]*schedulepb.Message, error) {
@@ -313,10 +302,9 @@ type dispatchTableTask struct {
 }
 
 func (a *agent) handleMessageDispatchTableRequest(
-	ctx context.Context,
 	request *schedulepb.DispatchTableRequest,
 	epoch schedulepb.ProcessorEpoch,
-) (*schedulepb.Message, error) {
+) {
 	if a.epoch != epoch {
 		log.Info("tpscheduler: agent receive dispatch table request "+
 			"epoch does not match, ignore it",
@@ -325,7 +313,7 @@ func (a *agent) handleMessageDispatchTableRequest(
 			zap.String("changefeed", a.changeFeedID.ID),
 			zap.String("epoch", epoch.Epoch),
 			zap.String("expected", a.epoch.Epoch))
-		return nil, nil
+		return
 	}
 	var (
 		table *table
@@ -342,7 +330,7 @@ func (a *agent) handleMessageDispatchTableRequest(
 				zap.String("namespace", a.changeFeedID.Namespace),
 				zap.String("changefeed", a.changeFeedID.ID),
 				zap.Any("request", request))
-			return nil, nil
+			return
 		}
 		tableID := req.AddTable.GetTableID()
 		task = &dispatchTableTask{
@@ -369,7 +357,7 @@ func (a *agent) handleMessageDispatchTableRequest(
 				zap.String("namespace", a.changeFeedID.Namespace),
 				zap.String("changefeed", a.changeFeedID.ID),
 				zap.Any("request", request))
-			return nil, nil
+			return
 		}
 		task = &dispatchTableTask{
 			TableID:  tableID,
@@ -383,17 +371,9 @@ func (a *agent) handleMessageDispatchTableRequest(
 			zap.String("namespace", a.changeFeedID.Namespace),
 			zap.String("changefeed", a.changeFeedID.ID),
 			zap.Any("request", request))
-		return nil, nil
+		return
 	}
 	table.injectDispatchTableTask(task)
-	message, err := table.poll(ctx)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	if table.status.State == schedulepb.TableStateAbsent {
-		delete(a.tables, table.id)
-	}
-	return message, nil
 }
 
 // GetLastSentCheckpointTs implement agent interface
@@ -630,8 +610,7 @@ func (t *table) handleAddTableTask(ctx context.Context) (result *schedulepb.Mess
 					zap.Any("task", t.task),
 					zap.Error(err))
 				status := t.status
-				message := newAddTableResponseMessage(status, false)
-				return message, errors.Trace(err)
+				return newAddTableResponseMessage(status, false), errors.Trace(err)
 			}
 			stateChanged = t.refresh()
 			status = t.status
@@ -656,8 +635,7 @@ func (t *table) handleAddTableTask(ctx context.Context) (result *schedulepb.Mess
 						zap.Any("task", t.task),
 						zap.Error(err))
 					status := t.status
-					message := newAddTableResponseMessage(status, false)
-					return message, errors.Trace(err)
+					return newAddTableResponseMessage(status, false), errors.Trace(err)
 				}
 				t.task.status = dispatchTableTaskProcessed
 			}
@@ -669,9 +647,11 @@ func (t *table) handleAddTableTask(ctx context.Context) (result *schedulepb.Mess
 				return newAddTableResponseMessage(status, false), nil
 			}
 		case schedulepb.TableStatePreparing:
+			// `preparing` is not stable state, it's no need to
+			// return such a state, to make the coordinator become burdensome.
 			done := t.executor.IsAddTableFinished(ctx, t.task.TableID, t.task.IsPrepare)
 			if !done {
-				return newAddTableResponseMessage(status, false), nil
+				return nil, nil
 			}
 			log.Info("tpscheduler: add table finished", zap.Any("table", t))
 			stateChanged = t.refresh()
@@ -680,7 +660,7 @@ func (t *table) handleAddTableTask(ctx context.Context) (result *schedulepb.Mess
 			schedulepb.TableStateStopped:
 			log.Warn("tpscheduler: ignore add table", zap.Any("table", t))
 			t.task = nil
-			return nil, nil
+			return newAddTableResponseMessage(status, false), nil
 		default:
 			log.Panic("tpscheduler: unknown table state", zap.Any("table", t))
 		}
