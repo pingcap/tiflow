@@ -248,6 +248,11 @@ jobs:
         run: |
           cd $GITHUB_WORKSPACE/tests/mq_protocol_tests
           go build
+      
+      - name: Set Swap Space
+        uses: pierotofy/set-swap-space@master
+        with:
+          swap-size-gb: 10
 
       - name: Run Integration Framework
         timeout-minutes: 45
