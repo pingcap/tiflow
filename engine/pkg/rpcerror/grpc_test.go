@@ -16,7 +16,11 @@ package rpcerror
 import (
 	"testing"
 
+	"github.com/gogo/status"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
+
+	pb "github.com/pingcap/tiflow/engine/enginepb"
 )
 
 func TestTryUnwrapNormalizedError(t *testing.T) {
@@ -31,5 +35,31 @@ func TestTryUnwrapNormalizedError(t *testing.T) {
 }
 
 func TestToGRPCError(t *testing.T) {
-	
+	t.Parallel()
+
+	testErrorPrototype := Normalize[testError](WithName("ErrTestError"), WithMessage("test message"))
+	err := testErrorPrototype.GenWithStack(&testError{Val: "first test error"})
+
+	grpcErr := ToGRPCError(err)
+	st := status.Convert(grpcErr)
+	require.Equal(t, codes.Unavailable, st.Code())
+	require.Len(t, st.Details(), 1)
+
+	pbErr := st.Details()[0].(*pb.ErrorV2)
+	require.Equal(t, &pb.ErrorV2{
+		Name:    "ErrTestError",
+		Details: []byte(`{"val":"first test error"}`),
+	}, pbErr)
+}
+
+func TestFromGRPCError(t *testing.T) {
+	t.Parallel()
+
+	testErrorPrototype := Normalize[testError](WithName("ErrTestError"), WithMessage("test message"))
+	err := testErrorPrototype.GenWithStack(&testError{Val: "first test error"})
+
+	grpcErr := ToGRPCError(err)
+
+	errOut := FromGRPCError(grpcErr)
+	require.True(t, testErrorPrototype.Is(errOut))
 }

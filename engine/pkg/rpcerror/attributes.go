@@ -19,12 +19,16 @@ type retryablity interface {
 	isRetryable() bool
 }
 
+// Retryable can be passed as a parameter to Error to
+// mark the error as retryable.
 type Retryable struct{}
 
 func (r Retryable) isRetryable() bool {
 	return true
 }
 
+// NotRetryable can be passed as a parameter to Error to
+// mark the error as not retryable.
 type NotRetryable struct{}
 
 func (n NotRetryable) isRetryable() bool {
@@ -35,17 +39,21 @@ type grpcStatusCoder interface {
 	grpcStatusCode() codes.Code
 }
 
-type Unavailable struct {
-}
+// Unavailable can be passed as a parameter to Error to
+// mark the grpc error code of this error as Unavailable.
+type Unavailable struct{}
 
 func (u Unavailable) grpcStatusCode() codes.Code {
 	return codes.Unavailable
 }
 
+// TODO support all error codes.
+
 type errorInfo interface {
 	isErrorInfo()
 }
 
+// Error should be embedded into any struct that is used with Normalize.
 type Error[R retryablity, E grpcStatusCoder] struct {
 	retryable R
 	code      E

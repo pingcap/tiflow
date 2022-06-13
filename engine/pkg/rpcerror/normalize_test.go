@@ -16,8 +16,7 @@ package rpcerror
 import (
 	"testing"
 
-	"github.com/pingcap/log"
-	"go.uber.org/zap"
+	"github.com/stretchr/testify/require"
 )
 
 type testError struct {
@@ -27,7 +26,12 @@ type testError struct {
 }
 
 func TestNormalize(t *testing.T) {
+	t.Parallel()
+
 	testErrorPrototype := Normalize[testError](WithName("ErrTestError"), WithMessage("test message"))
 	err := testErrorPrototype.GenWithStack(&testError{Val: "first test error"})
-	log.Info("error", zap.Error(err))
+
+	info, ok := testErrorPrototype.Convert(err)
+	require.True(t, ok)
+	require.Equal(t, &testError{Val: "first test error"}, info)
 }

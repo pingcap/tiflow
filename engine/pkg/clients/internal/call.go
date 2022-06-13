@@ -17,12 +17,21 @@ import (
 	"context"
 
 	"google.golang.org/grpc"
+
+	"github.com/pingcap/tiflow/engine/pkg/rpcerror"
 )
 
+// Call calls a grpc client function.
 func Call[ReqT any, RespT any, F func(context.Context, ReqT, ...grpc.CallOption) (RespT, error)](
 	ctx context.Context,
 	f F,
 	req ReqT,
 ) (RespT, error) {
-	return f(ctx, req)
+	var zeroResp RespT
+	resp, err := f(ctx, req)
+	if err != nil {
+		return zeroResp, rpcerror.FromGRPCError(err)
+	}
+
+	return resp, nil
 }

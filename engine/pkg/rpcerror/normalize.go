@@ -17,11 +17,14 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+	"sync"
 
 	"github.com/bytedance/sonic"
 	"github.com/pingcap/errors"
+	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
 
+	"github.com/pingcap/tiflow/dm/pkg/log"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 )
 
@@ -30,25 +33,35 @@ type normalizeOpts struct {
 	msg  string
 }
 
+// NormalizeOpt is an option to Normalize.
 type NormalizeOpt func(opts *normalizeOpts)
 
+// WithMessage provides a custom error message.
 func WithMessage(msg string) NormalizeOpt {
 	return func(opts *normalizeOpts) {
 		opts.msg = msg
 	}
 }
 
+// WithName overrides the default error name, which
+// is the type name of the type argument to Normalize.
 func WithName(name string) NormalizeOpt {
 	return func(opts *normalizeOpts) {
 		opts.name = name
 	}
 }
 
+var prototypeRegistry = &sync.Map{}
+
+// Prototype is a generator for all instances
+// of a given kind of errors.
 type Prototype[E errorInfo] struct {
 	msg  string
 	name string
 }
 
+// Normalize registers E as the information struct for an error,
+// and returns a Prototype for this kind of error.
 func Normalize[E errorInfo](ops ...NormalizeOpt) *Prototype[E] {
 	var opts normalizeOpts
 	for _, op := range ops {
@@ -60,12 +73,20 @@ func Normalize[E errorInfo](ops ...NormalizeOpt) *Prototype[E] {
 		opts.name = reflect.TypeOf(e).Name()
 	}
 
-	return &Prototype[E]{
+	ret := &Prototype[E]{
 		msg:  opts.msg,
 		name: opts.name,
 	}
+
+	_, exists := prototypeRegistry.LoadOrStore(opts.name, ret)
+	if exists {
+		log.L().Warn("duplicate error type", zap.String("name", opts.name))
+	}
+
+	return ret
 }
 
+// Gen generates a stackless instance of the given error.
 func (p *Prototype[E]) Gen(e *E) error {
 	return &normalizedError[E]{
 		prototype: p,
@@ -73,8 +94,47 @@ func (p *Prototype[E]) Gen(e *E) error {
 	}
 }
 
+// GenWithStack is similar to Gen but attaches the call stack to it.
 func (p *Prototype[E]) GenWithStack(e *E) error {
 	return errors.WithStack(p.Gen(e))
+}
+
+// Is returns whether errIn is an instance of the prototype.
+func (p *Prototype[E]) Is(errIn error) bool {
+	normalized, ok := tryUnwrapNormalizedError(errIn)
+	if !ok {
+		return false
+	}
+
+	_, ok = normalized.(*normalizedError[E])
+	return ok
+}
+
+// Convert converts errIn to the type argument provided to Normalize.
+func (p *Prototype[E]) Convert(errIn error) (*E, bool) {
+	normalized, ok := tryUnwrapNormalizedError(errIn)
+	if !ok {
+		return nil, false
+	}
+
+	typedNormalized, ok := normalized.(*normalizedError[E])
+	if !ok {
+		return nil, false
+	}
+
+	return &typedNormalized.inner, true
+}
+
+func (p *Prototype[E]) fromJSONBytes(jsonBytes []byte) (typeErasedNormalizedError, error) {
+	var e E
+	if err := sonic.Unmarshal(jsonBytes, &e); err != nil {
+		return nil, errors.Annotate(err, "failed to unmarshal error info")
+	}
+
+	return &normalizedError[E]{
+		prototype: p,
+		inner:     e,
+	}, nil
 }
 
 type normalizedError[E errorInfo] struct {
@@ -130,4 +190,15 @@ func (e *normalizedError[E]) statusCode() codes.Code {
 	}
 
 	return codes.Unknown
+}
+
+type typeErasedNormalizedError interface {
+	toPB() *pb.ErrorV2
+	statusCode() codes.Code
+	message() string
+	Error() string
+}
+
+type jsonDeserializer interface {
+	fromJSONBytes(jsonBytes []byte) (typeErasedNormalizedError, error)
 }
