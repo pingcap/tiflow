@@ -25,14 +25,17 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/cyclic/mark"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/security"
 	"go.uber.org/zap"
 )
 
-// SyncpointTableName is the name of table where all syncpoint maps sit
-const syncpointTableName string = "syncpoint_v1"
+const (
+	// syncpointTableName is the name of table where all syncpoint maps sit
+	syncpointTableName string = "syncpoint_v1"
+	// schemaName is the name of database where syncpoint maps sit
+	schemaName = "ticdc"
+)
 
 type mysqlSyncpointStore struct {
 	db *sql.DB
@@ -137,7 +140,7 @@ func newMySQLSyncpointStore(ctx context.Context,
 }
 
 func (s *mysqlSyncpointStore) CreateSynctable(ctx context.Context) error {
-	database := mark.SchemaName
+	database := schemaName
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		log.Error("create sync table: begin Tx fail", zap.Error(err))
@@ -191,7 +194,7 @@ func (s *mysqlSyncpointStore) SinkSyncpoint(ctx context.Context,
 		}
 		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
 	}
-	query := "insert ignore into " + mark.SchemaName + "." + syncpointTableName +
+	query := "insert ignore into " + schemaName + "." + syncpointTableName +
 		"(cf, primary_ts, secondary_ts) VALUES (?,?,?)"
 	_, err = tx.Exec(query, id.Namespace+"_"+id.ID, checkpointTs, secondaryTs)
 	if err != nil {

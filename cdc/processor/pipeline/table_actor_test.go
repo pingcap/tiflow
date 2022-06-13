@@ -432,7 +432,6 @@ func TestTableActorStart(t *testing.T) {
 			MarkTableID: 1,
 		},
 	}
-	tbl.cyclicEnabled = true
 	require.Nil(t, tbl.start(ctx))
 	require.Equal(t, 2, len(tbl.nodes))
 	require.True(t, tbl.started)

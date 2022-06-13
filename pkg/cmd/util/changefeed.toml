@@ -42,20 +42,6 @@ column-selectors = [
 # Currently the protocol support open-protocol, canal, canal-json, avro and maxwell.
 protocol = "open-protocol"
 
-[cyclic-replication]
-# 是否开启环形复制
-# Whether to enable cyclic replication
-enable = false
-# 当前 CDC 的复制 ID
-# The replica ID of this capture
-replica-id = 1
-# 需要过滤掉的复制 ID
-# The replica ID should be ignored
-filter-replica-ids = [2, 3]
-# 是否同步 DDL
-# Whether to replicate DDL
-sync-ddl = true
-
 [consistent]
 # 一致性级别，none 为默认，非灾难场景，提供 finished-ts 情况下的最终一致性；eventual 使用 redo log，提供上游灾难情况下的最终一致性
 # consistent level, none is the default value.
