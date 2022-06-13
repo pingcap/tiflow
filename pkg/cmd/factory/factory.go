@@ -17,7 +17,6 @@ import (
 	"crypto/tls"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tidb/kv"
 	apiv1client "github.com/pingcap/tiflow/pkg/api/v1"
 	apiv2client "github.com/pingcap/tiflow/pkg/api/v2"
 	"github.com/pingcap/tiflow/pkg/etcd"
@@ -32,7 +31,6 @@ type Factory interface {
 	ClientGetter
 	EtcdClient() (*etcd.CDCEtcdClient, error)
 	PdClient() (pd.Client, error)
-	KvStorage() (kv.Storage, error)
 	APIV1Client() (*apiv1client.APIV1Client, error)
 	APIV2Client() (*apiv2client.APIV2Client, error)
 }
@@ -104,8 +102,10 @@ func NewClientFlags() *ClientFlags {
 // flags related to template printing to it.
 func (c *ClientFlags) AddFlags(cmd *cobra.Command) {
 	cmd.PersistentFlags().StringVar(&c.serverAddr, "server-addr",
-		"http://127.0.0.1:8300", "CDC server address")
-	cmd.PersistentFlags().StringVar(&c.pdAddr, "pd", "http://127.0.0.1:2379", "PD address, use ',' to separate multiple PDs")
+		"", "CDC server address")
+	cmd.PersistentFlags().StringVar(&c.pdAddr, "pd", "",
+		"PD address, use ',' to separate multiple PDs, "+
+			"Parameter --pd is deprecated, please use parameter --server instead.")
 	cmd.PersistentFlags().StringVar(&c.caPath, "ca", "", "CA certificate path for TLS connection to CDC server")
 	cmd.PersistentFlags().StringVar(&c.certPath, "cert", "", "Certificate path for TLS connection to CDC server")
 	cmd.PersistentFlags().StringVar(&c.keyPath, "key", "", "Private key path for TLS connection to CDC server")
