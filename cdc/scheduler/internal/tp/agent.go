@@ -36,9 +36,7 @@ var _ internal.Agent = (*agent)(nil)
 type agent struct {
 	trans transport
 
-	tm *tableManager
-
-	tables map[model.TableID]*table
+	tableM *tableManager
 
 	// owner's information
 	ownerInfo ownerInfo
@@ -72,7 +70,7 @@ func NewAgent(ctx context.Context,
 		version:      version.ReleaseSemver(),
 		captureID:    captureID,
 		changeFeedID: changeFeedID,
-		tm:           newTableManager(tableExecutor),
+		tableM:       newTableManager(tableExecutor),
 	}
 	trans, err := newTransport(ctx, changeFeedID, agentRole, messageServer, messageRouter)
 	if err != nil {
@@ -138,7 +136,8 @@ func (a *agent) Tick(ctx context.Context) error {
 	}
 
 	outboundMessages := a.handleMessage(inboundMessages)
-	responses, err := a.poll(ctx)
+
+	responses, err := a.tableM.poll(ctx, a.stopping)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -182,32 +181,8 @@ func (a *agent) handleMessage(msg []*schedulepb.Message) []*schedulepb.Message {
 	return result
 }
 
-func (a *agent) poll(ctx context.Context) ([]*schedulepb.Message, error) {
-	result := make([]*schedulepb.Message, 0)
-	for tableID, table := range a.tables {
-		message, err := table.poll(ctx)
-		if err != nil {
-			return result, errors.Trace(err)
-		}
-
-		if table.status.State == schedulepb.TableStateAbsent {
-			a.tm.dropTable(tableID)
-		}
-
-		if message == nil {
-			continue
-		}
-		if resp, ok := message.DispatchTableResponse.
-			Response.(*schedulepb.DispatchTableResponse_AddTable); ok {
-			resp.AddTable.Reject = a.stopping
-		}
-		result = append(result, message)
-	}
-	return result, nil
-}
-
 func (a *agent) handleMessageHeartbeat(expected []model.TableID) *schedulepb.Message {
-	allTables := a.tm.getAllTables()
+	allTables := a.tableM.getAllTables()
 
 	result := make([]schedulepb.TableStatus, 0, len(allTables))
 	for _, table := range allTables {
@@ -219,7 +194,7 @@ func (a *agent) handleMessageHeartbeat(expected []model.TableID) *schedulepb.Mes
 	}
 	for _, tableID := range expected {
 		if _, ok := allTables[tableID]; !ok {
-			status := a.tm.newTableStatus(tableID)
+			status := a.tableM.newTableStatus(tableID)
 			result = append(result, status)
 		}
 	}
@@ -299,10 +274,10 @@ func (a *agent) handleMessageDispatchTableRequest(
 			Epoch:     epoch,
 			status:    dispatchTableTaskReceived,
 		}
-		table = a.tm.register(tableID)
+		table = a.tableM.register(tableID)
 	case *schedulepb.DispatchTableRequest_RemoveTable:
 		tableID := req.RemoveTable.GetTableID()
-		table, ok = a.tm.getTable(tableID)
+		table, ok = a.tableM.getTable(tableID)
 		if !ok {
 			log.Warn("tpscheduler: agent ignore remove table request,"+
 				"since the table not found",

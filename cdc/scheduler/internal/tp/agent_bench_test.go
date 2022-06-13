@@ -21,29 +21,27 @@ import (
 	"github.com/pingcap/tiflow/cdc/processor/pipeline"
 )
 
-func benchmarkCollectTableStatus(b *testing.B, bench func(b *testing.B, a *agent)) {
+func benchmarkCollectTableStatus(b *testing.B, bench func(b *testing.B, tm *tableManager)) {
 	upperBound := 16384
 	for size := 1; size <= upperBound; size *= 2 {
 		tableExec := newMockTableExecutor()
-		a := &agent{
-			tableExec: tableExec,
-		}
+		tm := newTableManager(tableExec)
 		for j := 0; j < size; j++ {
 			tableExec.tables[model.TableID(10000+j)] = pipeline.TableStateReplicating
 		}
 
 		b.ResetTimer()
-		bench(b, a)
+		bench(b, tm)
 		b.StopTimer()
 	}
 }
 
 func BenchmarkRefreshAllTables(b *testing.B) {
-	benchmarkCollectTableStatus(b, func(b *testing.B, a *agent) {
-		total := len(a.tableExec.GetAllCurrentTables())
+	benchmarkCollectTableStatus(b, func(b *testing.B, tm *tableManager) {
+		total := len(tm.executor.GetAllCurrentTables())
 		b.Run(fmt.Sprintf("%d tables", total), func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
-				a.refreshAllTables()
+				tm.collectAllTables()
 			}
 		})
 	})

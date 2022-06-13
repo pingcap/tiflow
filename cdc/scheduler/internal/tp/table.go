@@ -242,6 +242,30 @@ func newTableManager(executor internal.TableExecutor) *tableManager {
 	return tm
 }
 
+func (tm *tableManager) poll(ctx context.Context, stopping bool) ([]*schedulepb.Message, error) {
+	result := make([]*schedulepb.Message, 0)
+	for tableID, table := range tm.tables {
+		message, err := table.poll(ctx)
+		if err != nil {
+			return result, errors.Trace(err)
+		}
+
+		if table.status.State == schedulepb.TableStateAbsent {
+			tm.dropTable(tableID)
+		}
+
+		if message == nil {
+			continue
+		}
+		if resp, ok := message.DispatchTableResponse.
+			Response.(*schedulepb.DispatchTableResponse_AddTable); ok {
+			resp.AddTable.Reject = stopping
+		}
+		result = append(result, message)
+	}
+	return result, nil
+}
+
 func (tm *tableManager) getAllTables() map[model.TableID]*table {
 	tm.collectAllTables()
 	return tm.tables

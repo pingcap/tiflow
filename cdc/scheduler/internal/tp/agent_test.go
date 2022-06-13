@@ -37,7 +37,6 @@ func newBaseAgent4Test() *agent {
 		version:   "agent-version-1",
 		epoch:     schedulepb.ProcessorEpoch{Epoch: "agent-epoch-1"},
 		captureID: "agent-1",
-		tables:    make(map[model.TableID]*table),
 	}
 }
 
@@ -46,7 +45,7 @@ func TestAgentHandleMessageDispatchTable(t *testing.T) {
 
 	a := newBaseAgent4Test()
 	mockTableExecutor := newMockTableExecutor()
-	a.tableExec = mockTableExecutor
+	a.tableM = newTableManager(mockTableExecutor)
 
 	removeTableRequest := &schedulepb.DispatchTableRequest{
 		Request: &schedulepb.DispatchTableRequest_RemoveTable{
@@ -60,7 +59,7 @@ func TestAgentHandleMessageDispatchTable(t *testing.T) {
 	// remove table not exist
 	ctx := context.Background()
 	a.handleMessageDispatchTableRequest(removeTableRequest, processorEpoch)
-	responses, err := a.poll(ctx)
+	responses, err := a.tableM.poll(ctx, a.stopping)
 	require.NoError(t, err)
 	require.Len(t, responses, 0)
 
@@ -76,7 +75,7 @@ func TestAgentHandleMessageDispatchTable(t *testing.T) {
 	// stopping, addTableRequest should be ignored.
 	a.stopping = true
 	a.handleMessageDispatchTableRequest(addTableRequest, processorEpoch)
-	responses, err = a.poll(ctx)
+	responses, err = a.tableM.poll(ctx, a.stopping)
 	require.NoError(t, err)
 	require.Len(t, responses, 0)
 
@@ -85,7 +84,7 @@ func TestAgentHandleMessageDispatchTable(t *testing.T) {
 	mockTableExecutor.On("AddTable", mock.Anything, mock.Anything,
 		mock.Anything, mock.Anything).Return(false, nil)
 	a.handleMessageDispatchTableRequest(addTableRequest, processorEpoch)
-	responses, err = a.poll(ctx)
+	responses, err = a.tableM.poll(ctx, a.stopping)
 	require.NoError(t, err)
 	require.Len(t, responses, 1)
 
@@ -94,7 +93,7 @@ func TestAgentHandleMessageDispatchTable(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, model.TableID(1), addTableResponse.AddTable.Status.TableID)
 	require.Equal(t, schedulepb.TableStateAbsent, addTableResponse.AddTable.Status.State)
-	require.NotContains(t, a.tables, model.TableID(1))
+	require.NotContains(t, a.tableM.tables, model.TableID(1))
 
 	mockTableExecutor.ExpectedCalls = nil
 	mockTableExecutor.On("AddTable", mock.Anything, mock.Anything,
@@ -102,14 +101,14 @@ func TestAgentHandleMessageDispatchTable(t *testing.T) {
 	mockTableExecutor.On("IsAddTableFinished", mock.Anything,
 		mock.Anything, mock.Anything).Return(false, nil)
 	a.handleMessageDispatchTableRequest(addTableRequest, processorEpoch)
-	responses, err = a.poll(ctx)
+	responses, err = a.tableM.poll(ctx, a.stopping)
 	require.NoError(t, err)
 
 	mockTableExecutor.ExpectedCalls = mockTableExecutor.ExpectedCalls[:1]
 	mockTableExecutor.On("IsAddTableFinished", mock.Anything,
 		mock.Anything, mock.Anything).Return(true, nil)
 	a.handleMessageDispatchTableRequest(addTableRequest, processorEpoch)
-	responses, err = a.poll(ctx)
+	responses, err = a.tableM.poll(ctx, a.stopping)
 	require.NoError(t, err)
 	require.Len(t, responses, 1)
 
@@ -118,7 +117,7 @@ func TestAgentHandleMessageDispatchTable(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, model.TableID(1), addTableResponse.AddTable.Status.TableID)
 	require.Equal(t, schedulepb.TableStatePrepared, addTableResponse.AddTable.Status.State)
-	require.Contains(t, a.tables, model.TableID(1))
+	require.Contains(t, a.tableM.tables, model.TableID(1))
 
 	// let the prepared table become replicating, by set `IsSecondary` to false.
 	addTableRequest.Request.(*schedulepb.DispatchTableRequest_AddTable).
@@ -130,7 +129,7 @@ func TestAgentHandleMessageDispatchTable(t *testing.T) {
 		mock.Anything, mock.Anything).Return(false, nil)
 
 	a.handleMessageDispatchTableRequest(addTableRequest, processorEpoch)
-	responses, err = a.poll(ctx)
+	responses, err = a.tableM.poll(ctx, a.stopping)
 	require.NoError(t, err)
 	require.Len(t, responses, 1)
 
@@ -139,13 +138,13 @@ func TestAgentHandleMessageDispatchTable(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, model.TableID(1), addTableResponse.AddTable.Status.TableID)
 	require.Equal(t, schedulepb.TableStatePrepared, addTableResponse.AddTable.Status.State)
-	require.Contains(t, a.tables, model.TableID(1))
+	require.Contains(t, a.tableM.tables, model.TableID(1))
 
 	mockTableExecutor.ExpectedCalls = nil
 	mockTableExecutor.On("IsAddTableFinished", mock.Anything,
 		mock.Anything, mock.Anything).Return(true, nil)
 	a.handleMessageDispatchTableRequest(addTableRequest, processorEpoch)
-	responses, err = a.poll(ctx)
+	responses, err = a.tableM.poll(ctx, a.stopping)
 	require.NoError(t, err)
 	require.Len(t, responses, 1)
 
@@ -154,12 +153,12 @@ func TestAgentHandleMessageDispatchTable(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, model.TableID(1), addTableResponse.AddTable.Status.TableID)
 	require.Equal(t, schedulepb.TableStateReplicating, addTableResponse.AddTable.Status.State)
-	require.Contains(t, a.tables, model.TableID(1))
+	require.Contains(t, a.tableM.tables, model.TableID(1))
 
 	mockTableExecutor.On("RemoveTable", mock.Anything, mock.Anything).Return(false)
 	// remove table in the replicating state failed, should still in replicating.
 	a.handleMessageDispatchTableRequest(removeTableRequest, processorEpoch)
-	responses, err = a.poll(ctx)
+	responses, err = a.tableM.poll(ctx, a.stopping)
 	require.NoError(t, err)
 	require.Len(t, responses, 1)
 	removeTableResponse, ok := responses[0].DispatchTableResponse.
@@ -167,7 +166,7 @@ func TestAgentHandleMessageDispatchTable(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, model.TableID(1), removeTableResponse.RemoveTable.Status.TableID)
 	require.Equal(t, schedulepb.TableStateStopping, removeTableResponse.RemoveTable.Status.State)
-	require.Contains(t, a.tables, model.TableID(1))
+	require.Contains(t, a.tableM.tables, model.TableID(1))
 
 	mockTableExecutor.ExpectedCalls = nil
 	mockTableExecutor.On("RemoveTable", mock.Anything, mock.Anything).Return(true)
@@ -175,7 +174,7 @@ func TestAgentHandleMessageDispatchTable(t *testing.T) {
 		Return(3, false)
 	// remove table in the replicating state failed, should still in replicating.
 	a.handleMessageDispatchTableRequest(removeTableRequest, processorEpoch)
-	responses, err = a.poll(ctx)
+	responses, err = a.tableM.poll(ctx, a.stopping)
 	require.NoError(t, err)
 	require.Len(t, responses, 1)
 	removeTableResponse, ok = responses[0].DispatchTableResponse.
@@ -189,7 +188,7 @@ func TestAgentHandleMessageDispatchTable(t *testing.T) {
 		Return(3, true)
 	// remove table in the replicating state success, should in stopped
 	a.handleMessageDispatchTableRequest(removeTableRequest, processorEpoch)
-	responses, err = a.poll(ctx)
+	responses, err = a.tableM.poll(ctx, a.stopping)
 	require.NoError(t, err)
 	require.Len(t, responses, 1)
 	removeTableResponse, ok = responses[0].DispatchTableResponse.
@@ -198,16 +197,15 @@ func TestAgentHandleMessageDispatchTable(t *testing.T) {
 	require.Equal(t, model.TableID(1), removeTableResponse.RemoveTable.Status.TableID)
 	require.Equal(t, schedulepb.TableStateStopped, removeTableResponse.RemoveTable.Status.State)
 	require.Equal(t, model.Ts(3), removeTableResponse.RemoveTable.Checkpoint.CheckpointTs)
-	require.NotContains(t, a.tables, model.TableID(1))
+	require.NotContains(t, a.tableM.tables, model.TableID(1))
 }
 
 func TestAgentHandleMessageHeartbeat(t *testing.T) {
 	t.Parallel()
 
 	a := newBaseAgent4Test()
-
 	mockTableExecutor := newMockTableExecutor()
-	a.tableExec = mockTableExecutor
+	a.tableM = newTableManager(mockTableExecutor)
 
 	mockTableExecutor.tables[model.TableID(0)] = pipeline.TableStatePreparing
 	mockTableExecutor.tables[model.TableID(1)] = pipeline.TableStatePrepared
@@ -246,7 +244,7 @@ func TestAgentHandleMessageHeartbeat(t *testing.T) {
 		require.Equal(t, schedulepb.TableStateAbsent, result[i].State)
 	}
 
-	a.tables[model.TableID(1)].task = &dispatchTableTask{IsRemove: true}
+	a.tableM.tables[model.TableID(1)].task = &dispatchTableTask{IsRemove: true}
 	response = a.handleMessage([]*schedulepb.Message{heartbeat})
 	result = response[0].GetHeartbeatResponse().Tables
 	sort.Slice(result, func(i, j int) bool {
@@ -265,7 +263,8 @@ func TestAgentPermuteMessages(t *testing.T) {
 
 	a := newBaseAgent4Test()
 	mockTableExecutor := newMockTableExecutor()
-	a.tableExec = mockTableExecutor
+	a.tableM = newTableManager(mockTableExecutor)
+
 	trans := newMockTrans()
 	a.trans = trans
 
@@ -413,8 +412,9 @@ func TestAgentHandleMessage(t *testing.T) {
 	t.Parallel()
 
 	mockTableExecutor := newMockTableExecutor()
+	tableM := newTableManager(mockTableExecutor)
 	a := newBaseAgent4Test()
-	a.tableExec = mockTableExecutor
+	a.tableM = tableM
 
 	heartbeat := &schedulepb.Message{
 		Header: &schedulepb.Message_Header{
@@ -451,12 +451,12 @@ func TestAgentHandleMessage(t *testing.T) {
 	}
 	// wrong epoch, ignored
 	response = a.handleMessage([]*schedulepb.Message{addTableRequest})
-	require.NotContains(t, a.tables, model.TableID(1))
+	require.NotContains(t, tableM.tables, model.TableID(1))
 
 	// correct epoch, processing.
 	addTableRequest.Header.ProcessorEpoch = a.epoch
 	response = a.handleMessage([]*schedulepb.Message{addTableRequest})
-	require.Contains(t, a.tables, model.TableID(1))
+	require.Contains(t, tableM.tables, model.TableID(1))
 
 	heartbeat.Header.OwnerRevision.Revision = 2
 	response = a.handleMessage([]*schedulepb.Message{heartbeat})
@@ -505,7 +505,7 @@ func TestAgentTick(t *testing.T) {
 	trans := newMockTrans()
 	mockTableExecutor := newMockTableExecutor()
 	a.trans = trans
-	a.tableExec = mockTableExecutor
+	a.tableM = newTableManager(mockTableExecutor)
 
 	heartbeat := &schedulepb.Message{
 		Header: &schedulepb.Message_Header{
