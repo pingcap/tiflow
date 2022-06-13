@@ -104,14 +104,6 @@ func TestAgentHandleMessageDispatchTable(t *testing.T) {
 	a.handleMessageDispatchTableRequest(addTableRequest, processorEpoch)
 	responses, err = a.poll(ctx)
 	require.NoError(t, err)
-	require.Len(t, responses, 1)
-
-	addTableResponse, ok = responses[0].DispatchTableResponse.
-		Response.(*schedulepb.DispatchTableResponse_AddTable)
-	require.True(t, ok)
-	require.Equal(t, model.TableID(1), addTableResponse.AddTable.Status.TableID)
-	require.Equal(t, schedulepb.TableStatePreparing, addTableResponse.AddTable.Status.State)
-	require.Contains(t, a.tables, model.TableID(1))
 
 	mockTableExecutor.ExpectedCalls = mockTableExecutor.ExpectedCalls[:1]
 	mockTableExecutor.On("IsAddTableFinished", mock.Anything,
@@ -587,7 +579,6 @@ func TestAgentTick(t *testing.T) {
 	require.NoError(t, a.Tick(ctx))
 	responses := trans.sendBuffer[:len(trans.sendBuffer)]
 	trans.sendBuffer = trans.sendBuffer[:0]
-	require.Equal(t, schedulepb.MsgHeartbeatResponse, responses[0].MsgType)
 
 	messages = messages[:0]
 	messages = append(messages, addTableRequest)
