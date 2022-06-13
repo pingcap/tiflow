@@ -16,7 +16,7 @@ package broker
 import (
 	"path/filepath"
 
-	libModel "github.com/pingcap/tiflow/engine/lib/model"
+	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 )
 
@@ -24,7 +24,7 @@ import (
 // to access a local file resource.
 type LocalFileResourceDescriptor struct {
 	BasePath     string
-	Creator      libModel.WorkerID
+	Creator      frameModel.WorkerID
 	ResourceName resModel.ResourceName
 }
 

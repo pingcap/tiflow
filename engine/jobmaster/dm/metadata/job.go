@@ -18,8 +18,8 @@ import (
 
 	"github.com/pingcap/errors"
 
+	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
-	libModel "github.com/pingcap/tiflow/engine/lib/model"
 	"github.com/pingcap/tiflow/engine/pkg/adapter"
 	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
 )
@@ -81,11 +81,11 @@ func NewTask(taskCfg *config.TaskCfg) *Task {
 type JobStore struct {
 	*TomlStore
 
-	id libModel.MasterID
+	id frameModel.MasterID
 }
 
 // NewJobStore creates a new JobStore instance
-func NewJobStore(id libModel.MasterID, kvClient metaclient.KVClient) *JobStore {
+func NewJobStore(id frameModel.MasterID, kvClient metaclient.KVClient) *JobStore {
 	jobStore := &JobStore{
 		TomlStore: NewTomlStore(kvClient),
 		id:        id,
