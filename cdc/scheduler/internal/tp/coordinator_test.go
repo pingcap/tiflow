@@ -194,7 +194,8 @@ func TestCoordinatorHeartbeat(t *testing.T) {
 	require.Nil(t, err)
 	require.True(t, coord.captureM.CheckAllCaptureInitialized())
 	msgs = trans.sendBuffer
-	require.Len(t, msgs, 1)
+	require.Len(t, msgs, 2)
+	// Basic scheduler, make sure all tables get replicated.
 	require.EqualValues(t, 3, msgs[0].DispatchTableRequest.GetAddTable().TableID)
 	require.Len(t, coord.replicationM.tables, 3)
 }
