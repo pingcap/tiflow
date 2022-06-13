@@ -22,6 +22,7 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/gin-gonic/gin"
 	"github.com/pingcap/errors"
 	"go.uber.org/zap"
 
@@ -58,6 +59,7 @@ func main() {
 		os.Exit(2)
 	}
 	version.LogVersionInfo()
+	gin.SetMode(gin.ReleaseMode)
 
 	// 3. start server
 	ctx, cancel := context.WithCancel(context.Background())

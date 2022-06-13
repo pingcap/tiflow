@@ -22,6 +22,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	perrors "github.com/pingcap/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -56,7 +57,6 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
-	"github.com/pingcap/tiflow/engine/pkg/promutil"
 	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
 	"github.com/pingcap/tiflow/engine/pkg/serverutils"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
@@ -575,11 +575,15 @@ func (s *Server) startGrpcSrv(ctx context.Context) (err error) {
 		close(registerDone)
 	}
 
+	router := gin.New()
+	openapi := NewOpenAPI(s.jobManager, s.executorManager)
+	RegisterRoutes(router, openapi)
 	httpHandlers := map[string]http.Handler{
-		"/debug/":  getDebugHandler(),
-		"/metrics": promutil.HTTPHandlerForMetric(),
+		"/debug/":   router,
+		"/swagger/": router,
+		"/api/v1/":  router,
+		"/metrics":  router,
 	}
-
 	// generate grpcServer
 	s.etcd, err = startEtcd(ctx, etcdCfg, gRPCSvr, httpHandlers, etcdStartTimeout)
 	if err != nil {

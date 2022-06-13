@@ -267,7 +267,7 @@ data-flow-diagram: docs/data-flow.dot
 	dot -Tsvg docs/data-flow.dot > docs/data-flow.svg
 
 swagger-spec: tools/bin/swag
-	tools/bin/swag init --parseVendor -generalInfo cdc/api/v1/api.go --output docs/swagger
+	tools/bin/swag init --exclude dm,engine --parseVendor -generalInfo cdc/api/v1/api.go --output docs/swagger
 
 generate_mock: tools/bin/mockgen
 	tools/bin/mockgen -source cdc/owner/owner.go -destination cdc/owner/mock/owner_mock.go
@@ -514,6 +514,9 @@ df-mock: tools/bin/mockgen
 
 engine_unit_test: check_failpoint_ctl
 	$(call run_engine_unit_test,$(ENGINE_PACKAGES))
+
+df-swagger-spec: tools/bin/swag
+	tools/bin/swag init --exclude cdc,dm  --parseVendor -generalInfo engine/servermaster/openapi.go --output engine/docs/swagger
 
 define run_engine_unit_test
 	@echo "running unit test for packages:" $(1)
