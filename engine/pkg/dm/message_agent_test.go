@@ -22,8 +22,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pingcap/tiflow/engine/lib"
-	"github.com/pingcap/tiflow/engine/lib/master"
+	"github.com/pingcap/tiflow/engine/framework"
+	"github.com/pingcap/tiflow/engine/framework/master"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -234,7 +234,7 @@ func TestMessageHandlerLifeCycle(t *testing.T) {
 	messageAgent := NewMessageAgentImpl("id", nil, p2p.NewMockMessageHandlerManager())
 	messageAgent.Init(context.Background())
 	messageAgent.Tick(context.Background())
-	messageAgent.UpdateClient("client-id", &lib.MockWorkerHandler{})
+	messageAgent.UpdateClient("client-id", &framework.MockWorkerHandler{})
 	messageAgent.UpdateClient("client-id", nil)
 	messageAgent.Close(context.Background())
 }

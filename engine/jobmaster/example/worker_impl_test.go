@@ -18,8 +18,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pingcap/tiflow/engine/lib"
-	libModel "github.com/pingcap/tiflow/engine/lib/model"
+	"github.com/pingcap/tiflow/engine/framework"
+	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/stretchr/testify/require"
@@ -27,7 +27,7 @@ import (
 
 func newExampleWorker() *exampleWorker {
 	self := &exampleWorker{}
-	self.BaseWorker = lib.MockBaseWorker(workerID, masterID, self)
+	self.BaseWorker = framework.MockBaseWorker(workerID, masterID, self)
 	return self
 }
 
@@ -51,14 +51,14 @@ func TestExampleWorker(t *testing.T) {
 	err = worker.Tick(ctx)
 	require.NoError(t, err)
 
-	broker := worker.BaseWorker.(*lib.BaseWorkerForTesting).Broker
+	broker := worker.BaseWorker.(*framework.BaseWorkerForTesting).Broker
 	broker.AssertPersisted(t, "/local/example")
 	broker.AssertFileExists(t, workerID, "/local/example", "1.txt")
 	broker.AssertFileExists(t, workerID, "/local/example", "2.txt")
 
 	time.Sleep(time.Second)
 	require.Eventually(t, func() bool {
-		return worker.Status().Code == libModel.WorkerStatusFinished
+		return worker.Status().Code == frameModel.WorkerStatusFinished
 	}, time.Second, time.Millisecond*100)
 
 	resp, err := worker.BaseWorker.MetaKVClient().Get(ctx, tickKey)
@@ -66,7 +66,7 @@ func TestExampleWorker(t *testing.T) {
 	require.Len(t, resp.Kvs, 1)
 	require.Equal(t, "2", string(resp.Kvs[0].Value))
 
-	lib.MockBaseWorkerCheckSendMessage(t, worker.BaseWorker.(*lib.BaseWorkerForTesting).DefaultBaseWorker, testTopic, testMsg)
+	framework.MockBaseWorkerCheckSendMessage(t, worker.BaseWorker.(*framework.BaseWorkerForTesting).DefaultBaseWorker, testTopic, testMsg)
 	err = worker.Close(ctx)
 	require.NoError(t, err)
 }

@@ -14,7 +14,7 @@
 package metadata
 
 import (
-	libModel "github.com/pingcap/tiflow/engine/lib/model"
+	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
 )
 
@@ -29,11 +29,11 @@ type DDL struct {
 type DDLStore struct {
 	*TomlStore
 
-	id libModel.MasterID
+	id frameModel.MasterID
 }
 
 // NewDDLStore returns a new DDLStore instance
-func NewDDLStore(id libModel.MasterID, kvClient metaclient.KVClient) *DDLStore {
+func NewDDLStore(id frameModel.MasterID, kvClient metaclient.KVClient) *DDLStore {
 	ddlStore := &DDLStore{
 		TomlStore: NewTomlStore(kvClient),
 		id:        id,

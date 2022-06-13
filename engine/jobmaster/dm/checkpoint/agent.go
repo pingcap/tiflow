@@ -24,9 +24,9 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	"github.com/pingcap/tiflow/dm/pkg/cputil"
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/engine/framework"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
-	"github.com/pingcap/tiflow/engine/lib"
 	"go.uber.org/zap"
 )
 
@@ -59,7 +59,7 @@ const (
 type Agent interface {
 	Init(ctx context.Context) error
 	Remove(ctx context.Context) error
-	IsFresh(ctx context.Context, workerType lib.WorkerType, task *metadata.Task) (bool, error)
+	IsFresh(ctx context.Context, workerType framework.WorkerType, task *metadata.Task) (bool, error)
 }
 
 // AgentImpl implements Agent
@@ -136,8 +136,8 @@ func (c *AgentImpl) Remove(ctx context.Context) error {
 }
 
 // IsFresh implements Agent.IsFresh
-func (c *AgentImpl) IsFresh(ctx context.Context, workerType lib.WorkerType, task *metadata.Task) (bool, error) {
-	if workerType == lib.WorkerDMDump {
+func (c *AgentImpl) IsFresh(ctx context.Context, workerType framework.WorkerType, task *metadata.Task) (bool, error) {
+	if workerType == framework.WorkerDMDump {
 		return true, nil
 	}
 
@@ -147,7 +147,7 @@ func (c *AgentImpl) IsFresh(ctx context.Context, workerType lib.WorkerType, task
 	}
 	defer db.Close()
 
-	if workerType == lib.WorkerDMLoad {
+	if workerType == framework.WorkerDMLoad {
 		return isLoadFresh(ctx, task.Cfg, db)
 	}
 	return isSyncFresh(ctx, task.Cfg, db)

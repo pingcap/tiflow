@@ -28,8 +28,8 @@ import (
 
 	"github.com/pingcap/tiflow/engine/client"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
+	"github.com/pingcap/tiflow/engine/framework"
 	cvs "github.com/pingcap/tiflow/engine/jobmaster/cvsjob"
-	"github.com/pingcap/tiflow/engine/lib"
 )
 
 type Config struct {
@@ -166,7 +166,7 @@ func testSubmitTest(t *testing.T, cfg *cvs.Config, config *Config, demoAddr stri
 		queryResp, err := masterclient.QueryJob(ctx1, queryReq)
 		require.NoError(t, err)
 		require.Nil(t, queryResp.Err)
-		require.Equal(t, queryResp.Tp, int64(lib.CvsJobMaster))
+		require.Equal(t, queryResp.Tp, int64(framework.CvsJobMaster))
 		cancel()
 		fmt.Printf("query id %s, status %d, time %s\n", resp.JobId, int(queryResp.Status), time.Now().Format("2006-01-02 15:04:05"))
 		if queryResp.Status == pb.QueryJobResponse_finished {
