@@ -27,8 +27,8 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/dm/pkg/log"
-	"github.com/pingcap/tiflow/engine/lib"
-	libModel "github.com/pingcap/tiflow/engine/lib/model"
+	"github.com/pingcap/tiflow/engine/framework"
+	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/broker"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
@@ -43,7 +43,7 @@ type workerConfig struct {
 
 // Worker is the worker for Resource-Job.
 type Worker struct {
-	lib.BaseWorker
+	framework.BaseWorker
 
 	status *workerStatus
 	config *workerConfig
@@ -54,9 +54,9 @@ type Worker struct {
 // NewWorker creates a new Worker.
 func NewWorker(
 	ctx *dcontext.Context,
-	workerID libModel.WorkerID, masterID libModel.MasterID,
+	workerID frameModel.WorkerID, masterID frameModel.MasterID,
 	config *workerConfig,
-) lib.WorkerImpl {
+) framework.WorkerImpl {
 	status := &workerStatus{}
 
 	logger := log.L().WithFields(
@@ -109,8 +109,8 @@ func (w *Worker) Tick(ctx context.Context) error {
 		}
 		w.status.State = workerStateFinished
 	case workerStateFinished:
-		return w.Exit(ctx, libModel.WorkerStatus{
-			Code: libModel.WorkerStatusFinished,
+		return w.Exit(ctx, frameModel.WorkerStatus{
+			Code: frameModel.WorkerStatusFinished,
 		}, nil)
 	}
 
@@ -285,8 +285,8 @@ func (w *Worker) persistWorkerStatus(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
-	status := libModel.WorkerStatus{
-		Code:     libModel.WorkerStatusNormal,
+	status := frameModel.WorkerStatus{
+		Code:     frameModel.WorkerStatusNormal,
 		ExtBytes: rawBytes,
 	}
 

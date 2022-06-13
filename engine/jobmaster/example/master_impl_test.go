@@ -22,8 +22,8 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/stretchr/testify/require"
 
-	"github.com/pingcap/tiflow/engine/lib"
-	libModel "github.com/pingcap/tiflow/engine/lib/model"
+	"github.com/pingcap/tiflow/engine/framework"
+	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 )
 
 const (
@@ -38,7 +38,7 @@ var initLogger sync.Once
 
 func newExampleMaster() *exampleMaster {
 	self := &exampleMaster{}
-	self.DefaultBaseMaster = lib.MockBaseMaster(masterID, self)
+	self.DefaultBaseMaster = framework.MockBaseMaster(masterID, self)
 	return self
 }
 
@@ -53,7 +53,7 @@ func TestExampleMaster(t *testing.T) {
 
 	master := newExampleMaster()
 	// master.Init will call CreateWorker, so we mock it first
-	lib.MockBaseMasterCreateWorker(
+	framework.MockBaseMasterCreateWorker(
 		t,
 		master.DefaultBaseMaster,
 		exampleWorkerType,
@@ -74,7 +74,7 @@ func TestExampleMaster(t *testing.T) {
 		err = master.Poll(ctx)
 		require.NoError(t, err)
 
-		lib.MockBaseMasterWorkerHeartbeat(t, master.DefaultBaseMaster, masterID, workerID, executorNodeID)
+		framework.MockBaseMasterWorkerHeartbeat(t, master.DefaultBaseMaster, masterID, workerID, executorNodeID)
 
 		master.worker.mu.Lock()
 		online := master.worker.online
@@ -89,8 +89,8 @@ func TestExampleMaster(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, master.worker.handle, handle)
 
-	lib.MockBaseMasterWorkerUpdateStatus(ctx, t, master.DefaultBaseMaster, masterID, workerID, executorNodeID, &libModel.WorkerStatus{
-		Code: libModel.WorkerStatusInit,
+	framework.MockBaseMasterWorkerUpdateStatus(ctx, t, master.DefaultBaseMaster, masterID, workerID, executorNodeID, &frameModel.WorkerStatus{
+		Code: frameModel.WorkerStatusInit,
 	})
 
 	require.Eventually(t, func() bool {
@@ -101,7 +101,7 @@ func TestExampleMaster(t *testing.T) {
 		code := master.worker.statusCode
 		master.worker.mu.Unlock()
 
-		return code == libModel.WorkerStatusInit
+		return code == frameModel.WorkerStatusInit
 	}, time.Second, time.Millisecond*10)
 
 	err = master.Close(ctx)

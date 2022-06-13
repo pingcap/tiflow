@@ -17,7 +17,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/dm/pkg/log"
-	libModel "github.com/pingcap/tiflow/engine/lib/model"
+	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 )
 
@@ -41,14 +41,14 @@ const (
 type masterStatus struct {
 	State     masterState `json:"state"`
 	Resources map[resModel.ResourceID]resourceState
-	Bindings  map[libModel.WorkerID]resModel.ResourceID
+	Bindings  map[frameModel.WorkerID]resModel.ResourceID
 }
 
 func initialMasterStatus() *masterStatus {
 	return &masterStatus{
 		State:     masterStateUninit,
 		Resources: make(map[resModel.ResourceID]resourceState),
-		Bindings:  make(map[libModel.WorkerID]resModel.ResourceID),
+		Bindings:  make(map[frameModel.WorkerID]resModel.ResourceID),
 	}
 }
 
@@ -77,7 +77,7 @@ func (s *masterStatus) OnResourceCreated(resourceID resModel.ResourceID) {
 	s.Resources[resourceID] = resourceStateUninit
 }
 
-func (s *masterStatus) OnWorkerFinishedGenerating(workerID libModel.WorkerID) {
+func (s *masterStatus) OnWorkerFinishedGenerating(workerID frameModel.WorkerID) {
 	log.L().Info("OnWorkerFinishedGenerating",
 		zap.String("worker-id", workerID))
 
@@ -102,7 +102,7 @@ func (s *masterStatus) OnWorkerFinishedGenerating(workerID libModel.WorkerID) {
 	s.Resources[resourceID] = resourceStateUnsorted
 }
 
-func (s *masterStatus) OnBindResourceToWorker(resourceID resModel.ResourceID, workerID libModel.WorkerID) {
+func (s *masterStatus) OnBindResourceToWorker(resourceID resModel.ResourceID, workerID frameModel.WorkerID) {
 	log.L().Info("OnBindResourceToWorker",
 		zap.String("resource-id", resourceID),
 		zap.String("worker-id", workerID))
@@ -131,14 +131,14 @@ func (s *masterStatus) OnBindResourceToWorker(resourceID resModel.ResourceID, wo
 	s.Bindings[workerID] = resourceID
 }
 
-func (s *masterStatus) OnUnbindWorker(workerID libModel.WorkerID) {
+func (s *masterStatus) OnUnbindWorker(workerID frameModel.WorkerID) {
 	log.L().Info("OnUnbindWorker",
 		zap.String("worker-id", workerID))
 
 	delete(s.Bindings, workerID)
 }
 
-func (s *masterStatus) OnWorkerStartedCopying(workerID libModel.WorkerID) {
+func (s *masterStatus) OnWorkerStartedCopying(workerID frameModel.WorkerID) {
 	log.L().Info("OnWorkerStartedCopying",
 		zap.String("worker-id", workerID))
 
@@ -163,7 +163,7 @@ func (s *masterStatus) OnWorkerStartedCopying(workerID libModel.WorkerID) {
 	s.Resources[resourceID] = resourceStateCommitting
 }
 
-func (s *masterStatus) GetResourceStateForWorker(workerID libModel.WorkerID) (resourceState, bool) {
+func (s *masterStatus) GetResourceStateForWorker(workerID frameModel.WorkerID) (resourceState, bool) {
 	resID, ok := s.Bindings[workerID]
 	if !ok {
 		return "", false
@@ -179,7 +179,7 @@ func (s *masterStatus) GetResourceStateForWorker(workerID libModel.WorkerID) (re
 	return resState, true
 }
 
-func (s *masterStatus) OnWorkerFinishedCopying(workerID libModel.WorkerID) {
+func (s *masterStatus) OnWorkerFinishedCopying(workerID frameModel.WorkerID) {
 	log.L().Info("OnWorkerFinishedCopying",
 		zap.String("worker-id", workerID))
 

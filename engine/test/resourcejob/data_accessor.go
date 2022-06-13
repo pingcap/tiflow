@@ -20,16 +20,16 @@ import (
 
 	"github.com/pingcap/errors"
 
-	libModel "github.com/pingcap/tiflow/engine/lib/model"
+	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
 )
 
 type masterDAO struct {
 	client   metaclient.KVClient
-	masterID libModel.MasterID
+	masterID frameModel.MasterID
 }
 
-func newMasterDAO(innerClient metaclient.KVClient, masterID libModel.MasterID) *masterDAO {
+func newMasterDAO(innerClient metaclient.KVClient, masterID frameModel.MasterID) *masterDAO {
 	return &masterDAO{
 		client:   innerClient,
 		masterID: masterID,
@@ -66,6 +66,6 @@ func (dao *masterDAO) GetMasterMeta(ctx context.Context, statusOut *masterStatus
 	return nil
 }
 
-func masterMetaKey(masterID libModel.MasterID) string {
+func masterMetaKey(masterID frameModel.MasterID) string {
 	return fmt.Sprintf("/resource-job/master/%s", masterID)
 }

@@ -21,8 +21,8 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/dm/pkg/log"
-	"github.com/pingcap/tiflow/engine/lib"
-	libModel "github.com/pingcap/tiflow/engine/lib/model"
+	"github.com/pingcap/tiflow/engine/framework"
+	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/model"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
@@ -38,7 +38,7 @@ import (
 // file is copied to overwrite the original file. Finally, the master verifies
 // the result.
 type JobMaster struct {
-	lib.BaseJobMaster
+	framework.BaseJobMaster
 
 	status *masterStatus
 	config *JobConfig
@@ -47,10 +47,10 @@ type JobMaster struct {
 // NewMaster creates a new JobMaster
 func NewMaster(
 	ctx *dcontext.Context,
-	workerID libModel.WorkerID,
-	masterID libModel.MasterID,
+	workerID frameModel.WorkerID,
+	masterID frameModel.MasterID,
 	config *JobConfig,
-) lib.WorkerImpl {
+) framework.WorkerImpl {
 	return &JobMaster{
 		status: initialMasterStatus(),
 		config: config,
@@ -104,8 +104,8 @@ func (m *JobMaster) Tick(ctx context.Context) error {
 		}
 		return nil
 	case masterStateFinished:
-		return m.Exit(ctx, libModel.WorkerStatus{
-			Code: libModel.WorkerStatusFinished,
+		return m.Exit(ctx, frameModel.WorkerStatus{
+			Code: frameModel.WorkerStatusFinished,
 		}, nil)
 	default:
 		log.L().Panic("Unexpected state", zap.String("state", string(m.status.State)))
@@ -142,10 +142,10 @@ func (m *JobMaster) createWorkerIfNecessary(ctx context.Context) error {
 			ResourceLen:   m.config.ResourceLen,
 		}
 
-		var workerID libModel.WorkerID
+		var workerID frameModel.WorkerID
 		if resExists {
 			workerID, err = m.CreateWorker(
-				lib.ResourceTestWorker,
+				framework.ResourceTestWorker,
 				conf,
 				10,
 				unboundRes)
@@ -155,7 +155,7 @@ func (m *JobMaster) createWorkerIfNecessary(ctx context.Context) error {
 		} else {
 			// Resource does not exist yet.
 			workerID, err = m.CreateWorker(
-				lib.ResourceTestWorker,
+				framework.ResourceTestWorker,
 				conf,
 				10)
 			if err != nil {
@@ -169,7 +169,7 @@ func (m *JobMaster) createWorkerIfNecessary(ctx context.Context) error {
 }
 
 // OnWorkerDispatched implements JobMasterImpl.
-func (m *JobMaster) OnWorkerDispatched(worker lib.WorkerHandle, result error) error {
+func (m *JobMaster) OnWorkerDispatched(worker framework.WorkerHandle, result error) error {
 	log.L().Info("ResourceJobMaster: OnWorkerDispatched",
 		zap.String("job-id", m.JobMasterID()),
 		zap.String("worker-id", worker.ID()))
@@ -182,7 +182,7 @@ func (m *JobMaster) OnWorkerDispatched(worker lib.WorkerHandle, result error) er
 }
 
 // OnWorkerOnline implements JobMasterImpl.
-func (m *JobMaster) OnWorkerOnline(worker lib.WorkerHandle) error {
+func (m *JobMaster) OnWorkerOnline(worker framework.WorkerHandle) error {
 	log.L().Info("ResourceJobMaster: OnWorkerOnline",
 		zap.String("job-id", m.JobMasterID()),
 		zap.String("worker-id", worker.ID()))
@@ -190,7 +190,7 @@ func (m *JobMaster) OnWorkerOnline(worker lib.WorkerHandle) error {
 }
 
 // OnWorkerOffline implements JobMasterImpl.
-func (m *JobMaster) OnWorkerOffline(worker lib.WorkerHandle, reason error) error {
+func (m *JobMaster) OnWorkerOffline(worker framework.WorkerHandle, reason error) error {
 	log.L().Info("ResourceJobMaster: OnWorkerOffline",
 		zap.String("job-id", m.JobMasterID()),
 		zap.String("worker-id", worker.ID()),
@@ -201,18 +201,18 @@ func (m *JobMaster) OnWorkerOffline(worker lib.WorkerHandle, reason error) error
 }
 
 // OnWorkerMessage implements JobMasterImpl.
-func (m *JobMaster) OnWorkerMessage(worker lib.WorkerHandle, topic p2p.Topic, message interface{}) error {
+func (m *JobMaster) OnWorkerMessage(worker framework.WorkerHandle, topic p2p.Topic, message interface{}) error {
 	return nil
 }
 
 // OnWorkerStatusUpdated implements JobMasterImpl.
-func (m *JobMaster) OnWorkerStatusUpdated(worker lib.WorkerHandle, newStatus *libModel.WorkerStatus) error {
+func (m *JobMaster) OnWorkerStatusUpdated(worker framework.WorkerHandle, newStatus *frameModel.WorkerStatus) error {
 	log.L().Info("ResourceJobMaster: OnWorkerStatusUpdated",
 		zap.String("job-id", m.JobMasterID()),
 		zap.String("worker-id", worker.ID()),
 		zap.Any("new-status", newStatus))
 
-	if newStatus.Code == libModel.WorkerStatusFinished {
+	if newStatus.Code == frameModel.WorkerStatusFinished {
 		log.L().Info("ResourceJobMaster: worker finished",
 			zap.String("job-id", m.JobMasterID()),
 			zap.String("worker-id", worker.ID()),

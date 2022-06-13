@@ -14,8 +14,8 @@
 package resourcejob
 
 import (
-	"github.com/pingcap/tiflow/engine/lib"
-	"github.com/pingcap/tiflow/engine/lib/registry"
+	"github.com/pingcap/tiflow/engine/framework"
+	"github.com/pingcap/tiflow/engine/framework/registry"
 )
 
 func init() {
@@ -26,8 +26,8 @@ func init() {
 // Register registers the resource jobMaster and worker.
 func Register(reg registry.Registry) {
 	fakeMasterFactory := registry.NewSimpleWorkerFactory(NewMaster)
-	reg.MustRegisterWorkerType(lib.ResourceTestJobMaster, fakeMasterFactory)
+	reg.MustRegisterWorkerType(framework.ResourceTestJobMaster, fakeMasterFactory)
 
 	fakeWorkerFactory := registry.NewSimpleWorkerFactory(NewWorker)
-	reg.MustRegisterWorkerType(lib.ResourceTestWorker, fakeWorkerFactory)
+	reg.MustRegisterWorkerType(framework.ResourceTestWorker, fakeWorkerFactory)
 }
