@@ -37,7 +37,8 @@ type ChangefeedInterface interface {
 	// VerifyTable verifies table for a changefeed
 	VerifyTable(ctx context.Context, cfg *v2.VerifyTableConfig) (*v2.Tables, error)
 	// Update updates a changefeed
-	Update(ctx context.Context, cfg *v2.ChangefeedConfig, name string) (*model.ChangeFeedInfo, error)
+	Update(ctx context.Context, cfg *v2.ChangefeedConfig,
+		name string) (*model.ChangeFeedInfo, error)
 }
 
 // changefeeds implements ChangefeedInterface
@@ -52,7 +53,9 @@ func newChangefeeds(c *APIV2Client) *changefeeds {
 	}
 }
 
-func (c *changefeeds) Create(ctx context.Context, cfg *v2.ChangefeedConfig) (*model.ChangeFeedInfo, error) {
+func (c *changefeeds) Create(ctx context.Context,
+	cfg *v2.ChangefeedConfig,
+) (*model.ChangeFeedInfo, error) {
 	result := &model.ChangeFeedInfo{}
 	err := c.client.Post().
 		WithURI("changefeeds").
@@ -61,7 +64,9 @@ func (c *changefeeds) Create(ctx context.Context, cfg *v2.ChangefeedConfig) (*mo
 	return result, err
 }
 
-func (c *changefeeds) VerifyTable(ctx context.Context, cfg *v2.VerifyTableConfig) (*v2.Tables, error) {
+func (c *changefeeds) VerifyTable(ctx context.Context,
+	cfg *v2.VerifyTableConfig,
+) (*v2.Tables, error) {
 	result := &v2.Tables{}
 	err := c.client.Post().
 		WithURI("verify-table").
@@ -81,7 +86,9 @@ func (c *changefeeds) GetInfo(ctx context.Context, name string) (*model.ChangeFe
 	return result, err
 }
 
-func (c *changefeeds) Update(ctx context.Context, cfg *v2.ChangefeedConfig, name string) (*model.ChangeFeedInfo, error) {
+func (c *changefeeds) Update(ctx context.Context,
+	cfg *v2.ChangefeedConfig, name string,
+) (*model.ChangeFeedInfo, error) {
 	result := &model.ChangeFeedInfo{}
 	u := fmt.Sprintf("changefeeds/%s", name)
 	err := c.client.Put().

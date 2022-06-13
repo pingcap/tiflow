@@ -231,6 +231,8 @@ func TestMigration(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, uint64(1), info.UpstreamID)
 		tc.info.UpstreamID = info.UpstreamID
+		require.Equal(t, model.DefaultNamespace, info.Namespace)
+		tc.info.Namespace = info.Namespace
 		require.Equal(t, tc.info, info)
 		statusResp, err := cli.Get(context.Background(),
 			fmt.Sprintf("%s%s/%s", etcd.DefaultClusterAndNamespacePrefix,

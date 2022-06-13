@@ -106,10 +106,14 @@ func (c *ClientFlags) AddFlags(cmd *cobra.Command) {
 	cmd.PersistentFlags().StringVar(&c.pdAddr, "pd", "",
 		"PD address, use ',' to separate multiple PDs, "+
 			"Parameter --pd is deprecated, please use parameter --server instead.")
-	cmd.PersistentFlags().StringVar(&c.caPath, "ca", "", "CA certificate path for TLS connection to CDC server")
-	cmd.PersistentFlags().StringVar(&c.certPath, "cert", "", "Certificate path for TLS connection to CDC server")
-	cmd.PersistentFlags().StringVar(&c.keyPath, "key", "", "Private key path for TLS connection to CDC server")
-	cmd.PersistentFlags().StringVar(&c.logLevel, "log-level", "warn", "log level (etc: debug|info|warn|error)")
+	cmd.PersistentFlags().StringVar(&c.caPath, "ca", "",
+		"CA certificate path for TLS connection to CDC server")
+	cmd.PersistentFlags().StringVar(&c.certPath, "cert", "",
+		"Certificate path for TLS connection to CDC server")
+	cmd.PersistentFlags().StringVar(&c.keyPath, "key", "",
+		"Private key path for TLS connection to CDC server")
+	cmd.PersistentFlags().StringVar(&c.logLevel, "log-level", "warn",
+		"log level (etc: debug|info|warn|error)")
 }
 
 // GetCredential returns credential.

@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	apiv1client "github.com/pingcap/tiflow/pkg/api/v1"
 	apiv2client "github.com/pingcap/tiflow/pkg/api/v2"
 	pd "github.com/tikv/pd/client"
@@ -180,14 +181,22 @@ func (f factoryImpl) PdClient() (pd.Client, error) {
 
 // APIV1Client returns cdc api v1 client.
 func (f *factoryImpl) APIV1Client() (*apiv1client.APIV1Client, error) {
-	return apiv1client.NewAPIClient(f.clientGetter.GetServerAddr(),
-		f.clientGetter.GetCredential())
+	serverAddr, err := f.findServerAddr()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	log.Info(serverAddr)
+	return apiv1client.NewAPIClient(serverAddr, f.clientGetter.GetCredential())
 }
 
 // APIV2Client returns cdc api v2 client.
 func (f *factoryImpl) APIV2Client() (*apiv2client.APIV2Client, error) {
-	return apiv2client.NewAPIClient(f.clientGetter.GetServerAddr(),
-		f.clientGetter.GetCredential())
+	serverAddr, err := f.findServerAddr()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	log.Info(serverAddr)
+	return apiv2client.NewAPIClient(serverAddr, f.clientGetter.GetCredential())
 }
 
 func (f *factoryImpl) findServerAddr() (string, error) {
@@ -198,7 +207,7 @@ func (f *factoryImpl) findServerAddr() (string, error) {
 	pdAddr := f.clientGetter.GetPdAddr()
 	serverAddr := f.clientGetter.GetServerAddr()
 	if pdAddr == "" && serverAddr == "" {
-		return "http://127.0.0.1", nil
+		return "http://127.0.0.1:8300", nil
 	}
 	if pdAddr != "" && serverAddr != "" {
 		return "", errors.New("Parameter --pd is deprecated, " +
