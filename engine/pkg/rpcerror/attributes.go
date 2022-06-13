@@ -31,7 +31,7 @@ func (n NotRetryable) isRetryable() bool {
 	return false
 }
 
-type errorCode interface {
+type grpcStatusCoder interface {
 	grpcStatusCode() codes.Code
 }
 
@@ -42,11 +42,22 @@ func (u Unavailable) grpcStatusCode() codes.Code {
 	return codes.Unavailable
 }
 
-type Error[R retryablity, E errorCode] struct {
-	R
-	E
+type errorInfo interface {
+	isErrorInfo()
 }
 
-type errorIface interface {
-	isError()
+type Error[R retryablity, E grpcStatusCoder] struct {
+	retryable R
+	code      E
+}
+
+func (e Error[R, E]) isRetryable() bool {
+	return e.retryable.isRetryable()
+}
+
+func (e Error[R, E]) grpcStatusCode() codes.Code {
+	return e.code.grpcStatusCode()
+}
+
+func (e Error[R, E]) isErrorInfo() {
 }
