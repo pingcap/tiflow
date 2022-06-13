@@ -133,8 +133,9 @@ var defaultServerConfig = &ServerConfig{
 
 		EnableTwoPhaseScheduler: false,
 		Scheduler: &SchedulerConfig{
-			HeartbeatTick:      2,
-			MaxTaskConcurrency: 10,
+			HeartbeatTick:        2,
+			MaxTaskConcurrency:   10,
+			CheckBalanceInterval: TomlDuration(time.Minute),
 		},
 	},
 }

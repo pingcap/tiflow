@@ -30,7 +30,8 @@ type scheduler interface {
 type schedulerType string
 
 const (
-	schedulerTypeBurstBalance schedulerType = "burst-balance-scheduler"
-	schedulerTypeMoveTable    schedulerType = "move-table-scheduler"
-	schedulerTypeRebalance    schedulerType = "rebalance-scheduler"
+	schedulerTypeBasic     schedulerType = "basic-scheduler"
+	schedulerTypeBalance   schedulerType = "balance-scheduler"
+	schedulerTypeMoveTable schedulerType = "move-table-scheduler"
+	schedulerTypeRebalance schedulerType = "rebalance-scheduler"
 )
