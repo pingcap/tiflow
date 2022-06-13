@@ -50,7 +50,7 @@ type tableActor struct {
 	mb      actor.Mailbox[pmessage.Message]
 	router  *actor.Router[pmessage.Message]
 
-	upStream *upstream.Upstream
+	upstream *upstream.Upstream
 
 	// all goroutines in tableActor should be spawned from this wg
 	wg *errgroup.Group
@@ -98,7 +98,7 @@ type tableActor struct {
 
 // NewTableActor creates a table actor and starts it.
 func NewTableActor(cdcCtx cdcContext.Context,
-	upStream *upstream.Upstream,
+	up *upstream.Upstream,
 	mounter entry.Mounter,
 	tableID model.TableID,
 	tableName string,
@@ -131,7 +131,7 @@ func NewTableActor(cdcCtx cdcContext.Context,
 		tableName:      tableName,
 		cyclicEnabled:  cyclicEnabled,
 		memoryQuota:    serverConfig.GetGlobalServerConfig().PerTableMemoryQuota,
-		upStream:       upStream,
+		upstream:       up,
 		mounter:        mounter,
 		replicaInfo:    replicaInfo,
 		replicaConfig:  config,
@@ -526,7 +526,7 @@ func (t *tableActor) MemoryConsumption() uint64 {
 
 // for ut
 var startPuller = func(t *tableActor, ctx *actorNodeContext) error {
-	return t.pullerNode.start(ctx, t.upStream, t.wg, t.sortNode)
+	return t.pullerNode.start(ctx, t.upstream, t.wg, t.sortNode)
 }
 
 var startSorter = func(t *tableActor, ctx *actorNodeContext) error {
