@@ -23,6 +23,7 @@ type matcher struct {
 	// TODO : clear the single prewrite
 	unmatchedValue map[matchKey]*cdcpb.Event_Row
 	cachedCommit   []*cdcpb.Event_Row
+	cachedRollback []*cdcpb.Event_Row
 }
 
 type matchKey struct {
@@ -58,8 +59,15 @@ func (m *matcher) putPrewriteRow(row *cdcpb.Event_Row) {
 
 // matchRow matches the commit event with the cached prewrite event
 // the Value and OldValue will be assigned if a matched prewrite event exists.
-func (m *matcher) matchRow(row *cdcpb.Event_Row) bool {
+func (m *matcher) matchRow(row *cdcpb.Event_Row, initialized bool) bool {
 	if value, exist := m.unmatchedValue[newMatchKey(row)]; exist {
+		// TiKV may send a fake prewrite event with empty value caused by txn heartbeat.
+		//
+		// We need to skip match if the region is not initialized,
+		// as prewrite events may be sent out of order.
+		if !initialized && len(value.GetValue()) == 0 {
+			return false
+		}
 		row.Value = value.GetValue()
 		row.OldValue = value.GetOldValue()
 		delete(m.unmatchedValue, newMatchKey(row))
@@ -72,13 +80,16 @@ func (m *matcher) cacheCommitRow(row *cdcpb.Event_Row) {
 	m.cachedCommit = append(m.cachedCommit, row)
 }
 
-func (m *matcher) matchCachedRow() []*cdcpb.Event_Row {
+func (m *matcher) matchCachedRow(initialized bool) []*cdcpb.Event_Row {
+	if !initialized {
+		log.Panic("must be initialized before match cahced rows")
+	}
 	cachedCommit := m.cachedCommit
 	m.cachedCommit = nil
 	top := 0
 	for i := 0; i < len(cachedCommit); i++ {
 		cacheEntry := cachedCommit[i]
-		ok := m.matchRow(cacheEntry)
+		ok := m.matchRow(cacheEntry, true)
 		if !ok {
 			// when cdc receives a commit log without a corresponding
 			// prewrite log before initialized, a committed log  with
@@ -96,4 +107,20 @@ func (m *matcher) matchCachedRow() []*cdcpb.Event_Row {
 
 func (m *matcher) rollbackRow(row *cdcpb.Event_Row) {
 	delete(m.unmatchedValue, newMatchKey(row))
+}
+
+func (m *matcher) cacheRollbackRow(row *cdcpb.Event_Row) {
+	m.cachedRollback = append(m.cachedRollback, row)
+}
+
+func (m *matcher) matchCachedRollbackRow(initialized bool) {
+	if !initialized {
+		log.Panic("must be initialized before match cahced rollback rows")
+	}
+	rollback := m.cachedRollback
+	m.cachedRollback = nil
+	for i := 0; i < len(rollback); i++ {
+		cacheEntry := rollback[i]
+		m.rollbackRow(cacheEntry)
+	}
 }
