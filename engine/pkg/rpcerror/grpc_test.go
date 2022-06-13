@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/gogo/status"
+	"github.com/pingcap/errors"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 
@@ -62,4 +63,25 @@ func TestFromGRPCError(t *testing.T) {
 
 	errOut := FromGRPCError(grpcErr)
 	require.True(t, testErrorPrototype.Is(errOut))
+}
+
+type unretryableErr struct {
+	Error[NotRetryable, Unauthenticated]
+
+	Val int `json:"val"`
+}
+
+func TestIsRetryable(t *testing.T) {
+	t.Parallel()
+
+	testErrorPrototype := Normalize[testError](WithName("ErrTestError"), WithMessage("test message"))
+	err := testErrorPrototype.GenWithStack(&testError{Val: "first test error"})
+	require.True(t, IsRetryable(err))
+
+	unretryableErrorPrototype := Normalize[unretryableErr](WithName("ErrUnretryable"), WithMessage("not retryable"))
+	err = unretryableErrorPrototype.GenWithStack(&unretryableErr{Val: 1})
+	require.False(t, IsRetryable(err))
+
+	otherError := errors.New("test")
+	require.False(t, IsRetryable(otherError))
 }

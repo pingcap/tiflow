@@ -90,3 +90,14 @@ func FromGRPCError(errIn error) error {
 
 	return errors.Trace(errOut)
 }
+
+// IsRetryable returns whether the error is retryable when encountered by a grpc client.
+func IsRetryable(errIn error) bool {
+	normalized, ok := tryUnwrapNormalizedError(errIn)
+	if !ok {
+		// By default, unknown errors are NOT retryable.
+		return false
+	}
+
+	return normalized.isRetryable()
+}

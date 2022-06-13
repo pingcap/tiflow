@@ -28,6 +28,7 @@ func Call[ReqT any, RespT any, F func(context.Context, ReqT, ...grpc.CallOption)
 	req ReqT,
 ) (RespT, error) {
 	var zeroResp RespT
+
 	resp, err := f(ctx, req)
 	if err != nil {
 		return zeroResp, rpcerror.FromGRPCError(err)

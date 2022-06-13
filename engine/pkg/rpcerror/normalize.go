@@ -142,6 +142,15 @@ type normalizedError[E errorInfo] struct {
 	inner     E
 }
 
+func (e *normalizedError[E]) isRetryable() bool {
+	if r, ok := any(e.inner).(retryablity); ok {
+		return r.isRetryable()
+	}
+
+	// Not retryable by default.
+	return false
+}
+
 func (e *normalizedError[E]) name() string {
 	return e.prototype.name
 }
@@ -196,6 +205,7 @@ type typeErasedNormalizedError interface {
 	toPB() *pb.ErrorV2
 	statusCode() codes.Code
 	message() string
+	isRetryable() bool
 	Error() string
 }
 
