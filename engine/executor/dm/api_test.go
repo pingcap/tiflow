@@ -22,8 +22,8 @@ import (
 
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/dm/pb"
+	"github.com/pingcap/tiflow/engine/framework"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
-	"github.com/pingcap/tiflow/engine/lib"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/deps"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
@@ -76,18 +76,18 @@ func TestQueryStatusAPI(t *testing.T) {
 		loadStatusBytes, _ = json.Marshal(loadStatus)
 		syncStatusBytes, _ = json.Marshal(syncStatus)
 		dumpStatusResp     = &dmpkg.QueryStatusResponse{
-			Unit:   lib.WorkerDMDump,
+			Unit:   framework.WorkerDMDump,
 			Stage:  metadata.StageRunning,
 			Status: dumpStatusBytes,
 		}
 		loadStatusResp = &dmpkg.QueryStatusResponse{
-			Unit:   lib.WorkerDMLoad,
+			Unit:   framework.WorkerDMLoad,
 			Stage:  metadata.StageFinished,
 			Result: &pb.ProcessResult{IsCanceled: false},
 			Status: loadStatusBytes,
 		}
 		syncStatusResp = &dmpkg.QueryStatusResponse{
-			Unit:   lib.WorkerDMSync,
+			Unit:   framework.WorkerDMSync,
 			Stage:  metadata.StagePaused,
 			Result: &pb.ProcessResult{Errors: []*pb.ProcessError{processError}},
 			Status: syncStatusBytes,
@@ -101,7 +101,7 @@ func TestQueryStatusAPI(t *testing.T) {
 	}))
 	dctx = dctx.WithDeps(dp)
 
-	dmWorker := newDMWorker(dctx, "", lib.WorkerDMDump, &config.SubTaskConfig{SourceID: "task-id"})
+	dmWorker := newDMWorker(dctx, "", framework.WorkerDMDump, &config.SubTaskConfig{SourceID: "task-id"})
 	unitHolder := &mockUnitHolder{}
 	dmWorker.unitHolder = unitHolder
 
@@ -116,14 +116,14 @@ func TestQueryStatusAPI(t *testing.T) {
 
 	unitHolder.On("Status").Return(loadStatus).Once()
 	unitHolder.On("Stage").Return(metadata.StageFinished, &pb.ProcessResult{IsCanceled: false}).Once()
-	dmWorker.workerType = lib.WorkerDMLoad
+	dmWorker.workerType = framework.WorkerDMLoad
 	resp = dmWorker.QueryStatus(context.Background(), &dmpkg.QueryStatusRequest{Task: "task-id"})
 	require.Equal(t, "", resp.ErrorMsg)
 	require.Equal(t, loadStatusResp, resp)
 
 	unitHolder.On("Status").Return(syncStatus).Once()
 	unitHolder.On("Stage").Return(metadata.StagePaused, &pb.ProcessResult{Errors: []*pb.ProcessError{processError}}).Once()
-	dmWorker.workerType = lib.WorkerDMSync
+	dmWorker.workerType = framework.WorkerDMSync
 	resp = dmWorker.QueryStatus(context.Background(), &dmpkg.QueryStatusRequest{Task: "task-id"})
 	require.Equal(t, "", resp.ErrorMsg)
 	require.Equal(t, syncStatusResp, resp)
@@ -137,8 +137,8 @@ func TestStopWorker(t *testing.T) {
 	}))
 	dctx = dctx.WithDeps(dp)
 
-	dmWorker := newDMWorker(dctx, "master-id", lib.WorkerDMDump, &config.SubTaskConfig{SourceID: "task-id"})
-	dmWorker.BaseWorker = lib.MockBaseWorker("worker-id", "master-id", dmWorker)
+	dmWorker := newDMWorker(dctx, "master-id", framework.WorkerDMDump, &config.SubTaskConfig{SourceID: "task-id"})
+	dmWorker.BaseWorker = framework.MockBaseWorker("worker-id", "master-id", dmWorker)
 	dmWorker.BaseWorker.Init(context.Background())
 	dmWorker.unitHolder = &mockUnitHolder{}
 
@@ -158,8 +158,8 @@ func TestOperateTask(t *testing.T) {
 	}))
 	dctx = dctx.WithDeps(dp)
 
-	dmWorker := newDMWorker(dctx, "master-id", lib.WorkerDMDump, &config.SubTaskConfig{SourceID: "task-id"})
-	dmWorker.BaseWorker = lib.MockBaseWorker("worker-id", "master-id", dmWorker)
+	dmWorker := newDMWorker(dctx, "master-id", framework.WorkerDMDump, &config.SubTaskConfig{SourceID: "task-id"})
+	dmWorker.BaseWorker = framework.MockBaseWorker("worker-id", "master-id", dmWorker)
 	dmWorker.BaseWorker.Init(context.Background())
 	mockUnitHolder := &mockUnitHolder{}
 	dmWorker.unitHolder = mockUnitHolder

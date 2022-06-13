@@ -26,10 +26,10 @@ import (
 	dmconfig "github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/dm/pb"
 	"github.com/pingcap/tiflow/engine/enginepb"
+	"github.com/pingcap/tiflow/engine/framework"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/runtime"
-	"github.com/pingcap/tiflow/engine/lib"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
 	kvmock "github.com/pingcap/tiflow/engine/pkg/meta/kvclient/mock"
 	"github.com/stretchr/testify/require"
@@ -55,7 +55,7 @@ func TestQueryStatusAPI(t *testing.T) {
 			},
 		}
 		finishedTaskStatus = runtime.TaskStatus{
-			Unit:  lib.WorkerDMLoad,
+			Unit:  framework.WorkerDMLoad,
 			Task:  "task2",
 			Stage: metadata.StageFinished,
 		}
@@ -100,19 +100,19 @@ func TestQueryStatusAPI(t *testing.T) {
 		dumpStatusBytes, _ = json.Marshal(dumpStatus)
 		loadStatusBytes, _ = json.Marshal(loadStatus)
 		syncStatusBytes, _ = json.Marshal(syncStatus)
-		dumpStatusResp     = &dmpkg.QueryStatusResponse{Unit: lib.WorkerDMDump, Stage: metadata.StageRunning, Status: dumpStatusBytes}
-		loadStatusResp     = &dmpkg.QueryStatusResponse{Unit: lib.WorkerDMLoad, Stage: metadata.StagePaused, Result: &pb.ProcessResult{IsCanceled: true}, Status: loadStatusBytes}
-		syncStatusResp     = &dmpkg.QueryStatusResponse{Unit: lib.WorkerDMSync, Stage: metadata.StageError, Result: &pb.ProcessResult{Errors: []*pb.ProcessError{processError}}, Status: syncStatusBytes}
+		dumpStatusResp     = &dmpkg.QueryStatusResponse{Unit: framework.WorkerDMDump, Stage: metadata.StageRunning, Status: dumpStatusBytes}
+		loadStatusResp     = &dmpkg.QueryStatusResponse{Unit: framework.WorkerDMLoad, Stage: metadata.StagePaused, Result: &pb.ProcessResult{IsCanceled: true}, Status: loadStatusBytes}
+		syncStatusResp     = &dmpkg.QueryStatusResponse{Unit: framework.WorkerDMSync, Stage: metadata.StageError, Result: &pb.ProcessResult{Errors: []*pb.ProcessError{processError}}, Status: syncStatusBytes}
 	)
 	messageAgent := &dmpkg.MockMessageAgent{}
 	jm.messageAgent = messageAgent
 	jm.workerManager = NewWorkerManager(nil, jm.metadata.JobStore(), nil, nil, nil)
 	jm.taskManager = NewTaskManager(nil, nil, nil)
-	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus("task2", lib.WorkerDMLoad, "worker2", runtime.WorkerFinished))
-	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus("task3", lib.WorkerDMDump, "worker3", runtime.WorkerOnline))
-	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus("task4", lib.WorkerDMDump, "worker4", runtime.WorkerOnline))
-	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus("task5", lib.WorkerDMLoad, "worker5", runtime.WorkerOnline))
-	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus("task6", lib.WorkerDMSync, "worker6", runtime.WorkerOnline))
+	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus("task2", framework.WorkerDMLoad, "worker2", runtime.WorkerFinished))
+	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus("task3", framework.WorkerDMDump, "worker3", runtime.WorkerOnline))
+	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus("task4", framework.WorkerDMDump, "worker4", runtime.WorkerOnline))
+	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus("task5", framework.WorkerDMLoad, "worker5", runtime.WorkerOnline))
+	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus("task6", framework.WorkerDMSync, "worker6", runtime.WorkerOnline))
 	jm.taskManager.UpdateTaskStatus(finishedTaskStatus)
 
 	// no job

@@ -20,7 +20,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	libModel "github.com/pingcap/tiflow/engine/lib/model"
+	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/broker"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
@@ -37,7 +37,7 @@ func TestLocalFileTriggeredByJobRemoval(t *testing.T) {
 	cluster.AddBroker("executor-1", baseDir)
 	brk := cluster.MustGetBroker(t, "executor-1")
 
-	cluster.jobInfo.SetJobStatus("job-1", libModel.MasterStatusInit)
+	cluster.jobInfo.SetJobStatus("job-1", frameModel.MasterStatusInit)
 
 	handle, err := brk.OpenStorage(
 		context.Background(),
@@ -78,7 +78,7 @@ func TestLocalFileRecordRemovedTriggeredByExecutorOffline(t *testing.T) {
 	cluster.AddBroker("executor-1", baseDir)
 	brk := cluster.MustGetBroker(t, "executor-1")
 
-	cluster.jobInfo.SetJobStatus("job-1", libModel.MasterStatusInit)
+	cluster.jobInfo.SetJobStatus("job-1", frameModel.MasterStatusInit)
 
 	handle, err := brk.OpenStorage(
 		context.Background(),
@@ -128,7 +128,7 @@ func TestCleanUpStaleResourcesOnStartUp(t *testing.T) {
 	_, err = cluster.meta.GetResourceByID(ctx, "/local/resource-1")
 	require.NoError(t, err)
 
-	cluster.jobInfo.SetJobStatus("job-1", libModel.MasterStatusInit)
+	cluster.jobInfo.SetJobStatus("job-1", frameModel.MasterStatusInit)
 	err = cluster.meta.CreateResource(ctx, &resModel.ResourceMeta{
 		ID:        "/local/resource-2",
 		Job:       "job-1",

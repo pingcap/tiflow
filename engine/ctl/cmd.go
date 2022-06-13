@@ -26,8 +26,8 @@ import (
 
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
-	"github.com/pingcap/tiflow/engine/lib"
-	libModel "github.com/pingcap/tiflow/engine/lib/model"
+	"github.com/pingcap/tiflow/engine/framework"
+	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/pkg/errors"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 )
@@ -93,10 +93,10 @@ func runQueryJob(cmd *cobra.Command, _ []string) error {
 		os.Exit(1)
 	}
 	switch resp.Tp {
-	case int64(lib.CvsJobMaster):
+	case int64(framework.CvsJobMaster):
 		if resp.Status == pb.QueryJobResponse_online && resp.JobMasterInfo != nil {
 			statusBytes := resp.JobMasterInfo.Status
-			status := &libModel.WorkerStatus{}
+			status := &frameModel.WorkerStatus{}
 			err = json.Unmarshal(statusBytes, status)
 			if err != nil {
 				log.L().Error("failed to query job", zap.Error(err))

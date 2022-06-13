@@ -17,8 +17,8 @@ import (
 	"encoding/json"
 
 	"github.com/pingcap/tiflow/dm/dm/pb"
+	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
-	libModel "github.com/pingcap/tiflow/engine/lib/model"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 )
 
@@ -71,7 +71,7 @@ type QueryStatusRequest struct {
 // QueryStatusResponse is query status response
 type QueryStatusResponse struct {
 	ErrorMsg string
-	Unit     libModel.WorkerType
+	Unit     frameModel.WorkerType
 	Stage    metadata.TaskStage
 	Result   *pb.ProcessResult
 	Status   json.RawMessage
