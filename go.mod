@@ -103,8 +103,6 @@ require (
 	upper.io/db.v3 v3.7.1+incompatible
 )
 
-require github.com/bytedance/sonic v1.3.1
-
 require (
 	cloud.google.com/go v0.100.2 // indirect
 	cloud.google.com/go/compute v1.2.0 // indirect
@@ -130,7 +128,6 @@ require (
 	github.com/carlmjohnson/flagext v0.21.0 // indirect
 	github.com/cespare/xxhash/v2 v2.1.2 // indirect
 	github.com/cheggaaa/pb/v3 v3.0.8 // indirect
-	github.com/chenzhuoyu/base64x v0.0.0-20211019084208-fb5309c8db06 // indirect
 	github.com/cockroachdb/errors v1.8.1 // indirect
 	github.com/cockroachdb/logtags v0.0.0-20190617123548-eb05cc24525f // indirect
 	github.com/cockroachdb/redact v1.0.8 // indirect
@@ -194,7 +191,6 @@ require (
 	github.com/keybase/go-keychain v0.0.0-20190712205309-48d3d31d256d // indirect
 	github.com/klauspost/compress v1.15.1 // indirect
 	github.com/klauspost/cpuid v1.3.1 // indirect
-	github.com/klauspost/cpuid/v2 v2.0.9 // indirect
 	github.com/kr/pretty v0.3.0 // indirect
 	github.com/kr/text v0.2.0 // indirect
 	github.com/labstack/echo/v4 v4.2.1 // indirect
@@ -247,7 +243,6 @@ require (
 	github.com/tklauser/go-sysconf v0.3.10 // indirect
 	github.com/tklauser/numcpus v0.4.0 // indirect
 	github.com/tmc/grpc-websocket-proxy v0.0.0-20201229170055-e5319fda7802 // indirect
-	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/twmb/murmur3 v1.1.3 // indirect
 	github.com/uber/jaeger-client-go v2.30.0+incompatible // indirect
 	github.com/uber/jaeger-lib v2.4.1+incompatible // indirect
@@ -274,7 +269,6 @@ require (
 	go.opentelemetry.io/otel/sdk/metric v0.20.0 // indirect
 	go.opentelemetry.io/otel/trace v0.20.0 // indirect
 	go.opentelemetry.io/proto/otlp v0.7.0 // indirect
-	golang.org/x/arch v0.0.0-20210923205945-b76863e36670 // indirect
 	golang.org/x/crypto v0.0.0-20220214200702-86341886e292 // indirect
 	golang.org/x/exp v0.0.0-20220516143420-24438e51023a // indirect
 	golang.org/x/oauth2 v0.0.0-20220223155221-ee480838109b // indirect

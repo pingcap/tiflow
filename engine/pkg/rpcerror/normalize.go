@@ -14,12 +14,12 @@
 package rpcerror
 
 import (
+	"encoding/json"
 	"fmt"
 	"reflect"
 	"strings"
 	"sync"
 
-	"github.com/bytedance/sonic"
 	"github.com/pingcap/errors"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
@@ -127,7 +127,7 @@ func (p *Prototype[E]) Convert(errIn error) (*E, bool) {
 
 func (p *Prototype[E]) fromJSONBytes(jsonBytes []byte) (typeErasedNormalizedError, error) {
 	var e E
-	if err := sonic.Unmarshal(jsonBytes, &e); err != nil {
+	if err := json.Unmarshal(jsonBytes, &e); err != nil {
 		return nil, errors.Annotate(err, "failed to unmarshal error info")
 	}
 
@@ -176,9 +176,7 @@ func (e *normalizedError[E]) Error() string {
 }
 
 func (e *normalizedError[E]) mustMarshalJSON() []byte {
-	// Sonic is used for better performance,
-	// in case Error() is called on some critical path.
-	jsonBytes, err := sonic.Marshal(e.inner)
+	jsonBytes, err := json.Marshal(e.inner)
 	if err != nil {
 		panic(fmt.Sprintf("marshaling json for %s failed: %s", e.name(), err.Error()))
 	}
