@@ -16,8 +16,8 @@ package runtime
 import (
 	"time"
 
-	"github.com/pingcap/tiflow/engine/lib"
-	libModel "github.com/pingcap/tiflow/engine/lib/model"
+	"github.com/pingcap/tiflow/engine/framework"
+	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 )
 
 // HeartbeatInterval is heartbeat interval for checking worker stage
@@ -64,8 +64,8 @@ const (
 // WorkerStatus manages worker state machine
 type WorkerStatus struct {
 	TaskID string
-	ID     libModel.WorkerID
-	Unit   lib.WorkerType
+	ID     frameModel.WorkerID
+	Unit   framework.WorkerType
 	Stage  WorkerStage
 	// only use when creating, change to updatedTime if needed.
 	createdTime time.Time
@@ -88,14 +88,14 @@ func (w *WorkerStatus) RunAsExpected() bool {
 }
 
 // InitWorkerStatus creates a new worker status and initializes it
-func InitWorkerStatus(taskID string, unit lib.WorkerType, id libModel.WorkerID) WorkerStatus {
+func InitWorkerStatus(taskID string, unit framework.WorkerType, id frameModel.WorkerID) WorkerStatus {
 	workerStatus := NewWorkerStatus(taskID, unit, id, WorkerCreating)
 	workerStatus.createdTime = time.Now()
 	return workerStatus
 }
 
 // NewWorkerStatus creates a new WorkerStatus instance
-func NewWorkerStatus(taskID string, unit lib.WorkerType, id libModel.WorkerID, stage WorkerStage) WorkerStatus {
+func NewWorkerStatus(taskID string, unit framework.WorkerType, id frameModel.WorkerID, stage WorkerStage) WorkerStatus {
 	return WorkerStatus{
 		TaskID: taskID,
 		ID:     id,

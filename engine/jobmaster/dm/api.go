@@ -21,24 +21,24 @@ import (
 
 	"github.com/pingcap/errors"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
+	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/runtime"
-	libModel "github.com/pingcap/tiflow/engine/lib/model"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
 )
 
 // TaskStatus represents status of a task
 type TaskStatus struct {
 	ExpectedStage metadata.TaskStage
-	WorkerID      libModel.WorkerID
+	WorkerID      frameModel.WorkerID
 	Status        *dmpkg.QueryStatusResponse
 }
 
 // JobStatus represents status of a job
 type JobStatus struct {
-	JobMasterID libModel.MasterID
-	WorkerID    libModel.WorkerID
+	JobMasterID frameModel.MasterID
+	WorkerID    frameModel.WorkerID
 	// taskID -> Status
 	TaskStatus map[string]TaskStatus
 }

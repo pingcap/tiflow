@@ -24,8 +24,8 @@ import (
 	"github.com/pingcap/tiflow/dm/dumpling"
 	"github.com/pingcap/tiflow/dm/loader"
 	"github.com/pingcap/tiflow/dm/syncer"
+	"github.com/pingcap/tiflow/engine/framework"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
-	"github.com/pingcap/tiflow/engine/lib"
 )
 
 // unitHolder hold a unit of DM
@@ -53,14 +53,14 @@ type unitHolderImpl struct {
 }
 
 // newUnitHolderImpl creates a UnitHolderImpl
-func newUnitHolderImpl(workerType lib.WorkerType, cfg *dmconfig.SubTaskConfig) *unitHolderImpl {
+func newUnitHolderImpl(workerType framework.WorkerType, cfg *dmconfig.SubTaskConfig) *unitHolderImpl {
 	unitHolder := &unitHolderImpl{}
 	switch workerType {
-	case lib.WorkerDMDump:
+	case framework.WorkerDMDump:
 		unitHolder.unit = dumpling.NewDumpling(cfg)
-	case lib.WorkerDMLoad:
+	case framework.WorkerDMLoad:
 		unitHolder.unit = loader.NewLightning(cfg, nil, "dataflow-worker")
-	case lib.WorkerDMSync:
+	case framework.WorkerDMSync:
 		unitHolder.unit = syncer.NewSyncer(cfg, nil, nil)
 	}
 	return unitHolder

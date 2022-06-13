@@ -16,7 +16,7 @@ package manager
 import (
 	"context"
 
-	libModel "github.com/pingcap/tiflow/engine/lib/model"
+	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/model"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	"github.com/pingcap/tiflow/engine/pkg/notifier"
@@ -37,11 +37,11 @@ type ExecutorInfoProvider interface {
 }
 
 // JobStatus describes the a Job's status.
-type JobStatus = libModel.MasterStatusCode
+type JobStatus = frameModel.MasterStatusCode
 
 // JobStatusesSnapshot describes the statuses of all jobs
 // at some time point.
-type JobStatusesSnapshot = map[libModel.MasterID]JobStatus
+type JobStatusesSnapshot = map[frameModel.MasterID]JobStatus
 
 // JobStatusChangeType describes the type of job status changes.
 type JobStatusChangeType int32
@@ -56,7 +56,7 @@ const (
 // has changed.
 type JobStatusChangeEvent struct {
 	EventType JobStatusChangeType
-	JobID     libModel.MasterID
+	JobID     frameModel.MasterID
 }
 
 // JobStatusProvider describes an object that can be queried
@@ -77,7 +77,7 @@ type JobStatusProvider interface {
 // file resource garbage collection.
 type GCCoordinator interface {
 	Run(ctx context.Context) error
-	OnKeepAlive(resourceID resModel.ResourceID, workerID libModel.WorkerID)
+	OnKeepAlive(resourceID resModel.ResourceID, workerID frameModel.WorkerID)
 }
 
 // GCRunner perform the actual GC operations.

@@ -20,7 +20,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/collectors"
 	dto "github.com/prometheus/client_model/go"
 
-	libModel "github.com/pingcap/tiflow/engine/lib/model"
+	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 )
 
 var _ prometheus.Gatherer = globalMetricGatherer
@@ -44,19 +44,19 @@ type Registry struct {
 	registry *prometheus.Registry
 
 	// collectorByWorker is for cleaning all collectors for specific worker(jobmaster/worker)
-	collectorByWorker map[libModel.WorkerID][]prometheus.Collector
+	collectorByWorker map[frameModel.WorkerID][]prometheus.Collector
 }
 
 // NewRegistry return a new Registry
 func NewRegistry() *Registry {
 	return &Registry{
 		registry:          prometheus.NewRegistry(),
-		collectorByWorker: make(map[libModel.WorkerID][]prometheus.Collector),
+		collectorByWorker: make(map[frameModel.WorkerID][]prometheus.Collector),
 	}
 }
 
 // MustRegister registers the provided Collector of the specified worker
-func (r *Registry) MustRegister(workerID libModel.WorkerID, c prometheus.Collector) {
+func (r *Registry) MustRegister(workerID frameModel.WorkerID, c prometheus.Collector) {
 	if c == nil {
 		return
 	}
@@ -78,7 +78,7 @@ func (r *Registry) MustRegister(workerID libModel.WorkerID, c prometheus.Collect
 }
 
 // Unregister unregisters all Collectors of the specified worker
-func (r *Registry) Unregister(workerID libModel.WorkerID) {
+func (r *Registry) Unregister(workerID frameModel.WorkerID) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -104,11 +104,11 @@ type AutoRegisterFactory struct {
 	r     *Registry
 	// ID identify the worker(jobmaster/worker) the factory owns
 	// It's used to unregister all collectors when worker exits normally or commits suicide
-	id libModel.WorkerID
+	id frameModel.WorkerID
 }
 
 // NewAutoRegisterFactory creates an AutoRegisterFactory.
-func NewAutoRegisterFactory(f Factory, r *Registry, id libModel.WorkerID) Factory {
+func NewAutoRegisterFactory(f Factory, r *Registry, id frameModel.WorkerID) Factory {
 	return &AutoRegisterFactory{
 		inner: f,
 		r:     r,
