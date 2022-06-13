@@ -21,7 +21,6 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/processor/pipeline"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/tp/schedulepb"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -35,8 +34,9 @@ import (
 var _ internal.Agent = (*agent)(nil)
 
 type agent struct {
-	trans     transport
-	tableExec internal.TableExecutor
+	trans transport
+
+	tm *tableManager
 
 	tables map[model.TableID]*table
 
@@ -72,7 +72,7 @@ func NewAgent(ctx context.Context,
 		version:      version.ReleaseSemver(),
 		captureID:    captureID,
 		changeFeedID: changeFeedID,
-		tableExec:    tableExecutor,
+		tm:           newTableManager(tableExecutor),
 	}
 	trans, err := newTransport(ctx, changeFeedID, agentRole, messageServer, messageRouter)
 	if err != nil {
@@ -189,8 +189,9 @@ func (a *agent) poll(ctx context.Context) ([]*schedulepb.Message, error) {
 		if err != nil {
 			return result, errors.Trace(err)
 		}
+
 		if table.status.State == schedulepb.TableStateAbsent {
-			delete(a.tables, tableID)
+			a.tm.dropTable(tableID)
 		}
 
 		if message == nil {
@@ -205,101 +206,26 @@ func (a *agent) poll(ctx context.Context) ([]*schedulepb.Message, error) {
 	return result, nil
 }
 
-func tableStatus2PB(state pipeline.TableState) schedulepb.TableState {
-	switch state {
-	case pipeline.TableStatePreparing:
-		return schedulepb.TableStatePreparing
-	case pipeline.TableStatePrepared:
-		return schedulepb.TableStatePrepared
-	case pipeline.TableStateReplicating:
-		return schedulepb.TableStateReplicating
-	case pipeline.TableStateStopping:
-		return schedulepb.TableStateStopping
-	case pipeline.TableStateStopped:
-		return schedulepb.TableStateStopped
-	case pipeline.TableStateAbsent:
-		return schedulepb.TableStateAbsent
-	default:
-	}
-	return schedulepb.TableStateUnknown
-}
+func (a *agent) handleMessageHeartbeat(expected []model.TableID) *schedulepb.Message {
+	allTables := a.tm.getAllTables()
 
-func (a *agent) newTableStatus(tableID model.TableID) schedulepb.TableStatus {
-	meta := a.tableExec.GetTableMeta(tableID)
-	state := tableStatus2PB(meta.State)
-	return schedulepb.TableStatus{
-		TableID: meta.TableID,
-		State:   state,
-		Checkpoint: schedulepb.Checkpoint{
-			CheckpointTs: meta.CheckpointTs,
-			ResolvedTs:   meta.ResolvedTs,
-		},
-	}
-}
-
-func (a *agent) registerTable(tableID model.TableID) *table {
-	table, ok := a.tables[tableID]
-	if !ok {
-		table = newTable(tableID, a.tableExec)
-		a.tables[tableID] = table
-	}
-	_ = table.refresh()
-	return table
-}
-
-func (a *agent) getTable(tableID model.TableID) (*table, bool) {
-	table, ok := a.tables[tableID]
-	if ok {
-		_ = table.refresh()
-		return table, true
-	}
-
-	meta := a.tableExec.GetTableMeta(tableID)
-	state := tableStatus2PB(meta.State)
-	if state == schedulepb.TableStateAbsent {
-		return nil, false
-	}
-
-	log.Warn("tpscheduler: agent found table not tracked",
-		zap.Int64("tableID", tableID), zap.Any("meta", meta))
-	table = newTable(tableID, a.tableExec)
-	_ = table.refresh()
-	a.tables[tableID] = table
-
-	return table, true
-}
-
-func (a *agent) collectAllTables(expected []model.TableID) []schedulepb.TableStatus {
-	currentTables := a.tableExec.GetAllCurrentTables()
-	result := make([]schedulepb.TableStatus, 0, len(currentTables))
-	for _, tableID := range currentTables {
-		table, ok := a.tables[tableID]
-		if !ok {
-			table = newTable(tableID, a.tableExec)
-			a.tables[tableID] = table
-		}
-		_ = table.refresh()
-
+	result := make([]schedulepb.TableStatus, 0, len(allTables))
+	for _, table := range allTables {
 		status := table.status
 		if table.task != nil && table.task.IsRemove {
 			status.State = schedulepb.TableStateStopping
 		}
 		result = append(result, status)
 	}
-
 	for _, tableID := range expected {
-		if _, ok := a.tables[tableID]; !ok {
-			status := a.newTableStatus(tableID)
+		if _, ok := allTables[tableID]; !ok {
+			status := a.tm.newTableStatus(tableID)
 			result = append(result, status)
 		}
 	}
-	return result
-}
 
-func (a *agent) handleMessageHeartbeat(expected []model.TableID) *schedulepb.Message {
-	tables := a.collectAllTables(expected)
 	response := &schedulepb.HeartbeatResponse{
-		Tables:     tables,
+		Tables:     result,
 		IsStopping: a.stopping,
 	}
 
@@ -373,10 +299,10 @@ func (a *agent) handleMessageDispatchTableRequest(
 			Epoch:     epoch,
 			status:    dispatchTableTaskReceived,
 		}
-		table = a.registerTable(tableID)
+		table = a.tm.register(tableID)
 	case *schedulepb.DispatchTableRequest_RemoveTable:
 		tableID := req.RemoveTable.GetTableID()
-		table, ok = a.getTable(tableID)
+		table, ok = a.tm.getTable(tableID)
 		if !ok {
 			log.Warn("tpscheduler: agent ignore remove table request,"+
 				"since the table not found",
@@ -515,207 +441,4 @@ func (a *agent) sendMsgs(ctx context.Context, msgs []*schedulepb.Message) error 
 		m.To = a.ownerInfo.captureID
 	}
 	return a.trans.Send(ctx, msgs)
-}
-
-// table is a state machine that manage the table's state,
-// also tracking its progress by utilize the `TableExecutor`
-type table struct {
-	id model.TableID
-
-	status   schedulepb.TableStatus
-	executor internal.TableExecutor
-
-	task *dispatchTableTask
-}
-
-func newTable(tableID model.TableID, executor internal.TableExecutor) *table {
-	return &table{
-		id:       tableID,
-		executor: executor,
-		status:   schedulepb.TableStatus{TableID: tableID},
-		task:     nil,
-	}
-}
-
-// refresh the table' status, return true if the table state changed,
-// should be called before any table operations.
-func (t *table) refresh() bool {
-	oldState := t.status.State
-
-	meta := t.executor.GetTableMeta(t.id)
-	newState := tableStatus2PB(meta.State)
-
-	t.status.State = newState
-	t.status.Checkpoint.CheckpointTs = meta.CheckpointTs
-	t.status.Checkpoint.ResolvedTs = meta.ResolvedTs
-
-	return oldState != newState
-}
-
-func newAddTableResponseMessage(status schedulepb.TableStatus) *schedulepb.Message {
-	return &schedulepb.Message{
-		MsgType: schedulepb.MsgDispatchTableResponse,
-		DispatchTableResponse: &schedulepb.DispatchTableResponse{
-			Response: &schedulepb.DispatchTableResponse_AddTable{
-				AddTable: &schedulepb.AddTableResponse{
-					Status:     &status,
-					Checkpoint: status.Checkpoint,
-				},
-			},
-		},
-	}
-}
-
-func newRemoveTableResponseMessage(status schedulepb.TableStatus) *schedulepb.Message {
-	message := &schedulepb.Message{
-		MsgType: schedulepb.MsgDispatchTableResponse,
-		DispatchTableResponse: &schedulepb.DispatchTableResponse{
-			Response: &schedulepb.DispatchTableResponse_RemoveTable{
-				RemoveTable: &schedulepb.RemoveTableResponse{
-					Status:     &status,
-					Checkpoint: status.Checkpoint,
-				},
-			},
-		},
-	}
-
-	return message
-}
-
-func (t *table) handleRemoveTableTask(ctx context.Context) *schedulepb.Message {
-	status := t.status
-	stateChanged := true
-	for stateChanged {
-		switch status.State {
-		case schedulepb.TableStateAbsent:
-			log.Warn("tpscheduler: remove table, but table is absent", zap.Any("table", t))
-			t.task = nil
-			return newRemoveTableResponseMessage(status)
-		case schedulepb.TableStateStopping, // stopping now is useless
-			schedulepb.TableStateStopped:
-			// release table resource, and get the latest checkpoint
-			// this will let the table become `absent`
-			checkpointTs, done := t.executor.IsRemoveTableFinished(ctx, t.id)
-			_ = t.refresh()
-			if !done {
-				// actually, this should never be hit, since we know that table is stopped.
-				status.State = schedulepb.TableStateStopping
-				return newRemoveTableResponseMessage(status)
-			}
-			t.task = nil
-			status.State = schedulepb.TableStateStopped
-			status.Checkpoint.CheckpointTs = checkpointTs
-			return newRemoveTableResponseMessage(status)
-		case schedulepb.TableStatePreparing,
-			schedulepb.TableStatePrepared,
-			schedulepb.TableStateReplicating:
-			done := t.executor.RemoveTable(ctx, t.task.TableID)
-			stateChanged = t.refresh()
-			status = t.status
-			if !done {
-				status.State = schedulepb.TableStateStopping
-				return newRemoveTableResponseMessage(status)
-			}
-		default:
-			log.Panic("tpscheduler: unknown table state", zap.Any("table", t))
-		}
-	}
-	return nil
-}
-
-func (t *table) handleAddTableTask(ctx context.Context) (result *schedulepb.Message, err error) {
-	status := t.status
-	stateChanged := true
-	for stateChanged {
-		switch status.State {
-		case schedulepb.TableStateAbsent:
-			done, err := t.executor.AddTable(ctx, t.task.TableID, t.task.StartTs, t.task.IsPrepare)
-			if err != nil || !done {
-				log.Info("tpscheduler: agent add table failed",
-					zap.Any("task", t.task),
-					zap.Error(err))
-				return newAddTableResponseMessage(status), errors.Trace(err)
-			}
-			stateChanged = t.refresh()
-			status = t.status
-		case schedulepb.TableStateReplicating:
-			log.Info("tpscheduler: table is replicating", zap.Any("table", t))
-			t.task = nil
-			return newAddTableResponseMessage(t.status), nil
-		case schedulepb.TableStatePrepared:
-			if t.task.IsPrepare {
-				// `prepared` is a stable state, if the task was to prepare the table.
-				log.Info("tpscheduler: table is prepared", zap.Any("table", t))
-				t.task = nil
-				return newAddTableResponseMessage(t.status), nil
-			}
-
-			if t.task.status == dispatchTableTaskReceived {
-				done, err := t.executor.AddTable(ctx, t.task.TableID, t.task.StartTs, false)
-				if err != nil || !done {
-					log.Info("tpscheduler: agent add table failed",
-						zap.Any("task", t.task),
-						zap.Error(err))
-					return newAddTableResponseMessage(status), errors.Trace(err)
-				}
-				t.task.status = dispatchTableTaskProcessed
-			}
-
-			done := t.executor.IsAddTableFinished(ctx, t.task.TableID, false)
-			stateChanged = t.refresh()
-			status = t.status
-			if !done {
-				return newAddTableResponseMessage(status), nil
-			}
-		case schedulepb.TableStatePreparing:
-			// `preparing` is not stable state and would last a long time,
-			// it's no need to return such a state, to make the coordinator become burdensome.
-			done := t.executor.IsAddTableFinished(ctx, t.task.TableID, t.task.IsPrepare)
-			if !done {
-				return nil, nil
-			}
-			log.Info("tpscheduler: add table finished", zap.Any("table", t))
-			stateChanged = t.refresh()
-			status = t.status
-		case schedulepb.TableStateStopping,
-			schedulepb.TableStateStopped:
-			log.Warn("tpscheduler: ignore add table", zap.Any("table", t))
-			t.task = nil
-			return newAddTableResponseMessage(status), nil
-		default:
-			log.Panic("tpscheduler: unknown table state", zap.Any("table", t))
-		}
-	}
-
-	return nil, nil
-}
-
-func (t *table) injectDispatchTableTask(task *dispatchTableTask) {
-	if t.id != task.TableID {
-		log.Panic("tpscheduler: tableID not match",
-			zap.Int64("tableID", t.id),
-			zap.Int64("task.TableID", task.TableID))
-	}
-	if t.task == nil {
-		log.Info("tpscheduler: table found new task",
-			zap.Any("table", t), zap.Any("task", task))
-		t.task = task
-		return
-	}
-	log.Warn("tpscheduler: table inject dispatch table task ignored,"+
-		"since there is one not finished yet",
-		zap.Any("table", t),
-		zap.Any("nowTask", t.task),
-		zap.Any("ignoredTask", task))
-}
-
-func (t *table) poll(ctx context.Context) (*schedulepb.Message, error) {
-	if t.task == nil {
-		return nil, nil
-	}
-	_ = t.refresh()
-	if t.task.IsRemove {
-		return t.handleRemoveTableTask(ctx), nil
-	}
-	return t.handleAddTableTask(ctx)
 }
