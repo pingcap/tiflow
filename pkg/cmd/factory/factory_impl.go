@@ -198,7 +198,7 @@ func (f *factoryImpl) findServerAddr() (string, error) {
 	pdAddr := f.clientGetter.GetPdAddr()
 	serverAddr := f.clientGetter.GetServerAddr()
 	if pdAddr == "" && serverAddr == "" {
-		return "", errors.New("Parameter --server is required")
+		return "http://127.0.0.1", nil
 	}
 	if pdAddr != "" && serverAddr != "" {
 		return "", errors.New("Parameter --pd is deprecated, " +
