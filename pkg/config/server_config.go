@@ -128,7 +128,7 @@ var defaultServerConfig = &ServerConfig{
 		},
 		Messages: defaultMessageConfig.Clone(),
 
-		EnableTwoPhaseScheduler: false,
+		EnableTwoPhaseScheduler: true,
 		Scheduler: &SchedulerConfig{
 			HeartbeatTick:      2,
 			MaxTaskConcurrency: 10,
