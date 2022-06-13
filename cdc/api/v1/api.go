@@ -15,6 +15,7 @@ package v1
 
 import (
 	"bufio"
+	"fmt"
 	"net/http"
 	"os"
 
@@ -630,6 +631,16 @@ func (h *OpenAPI) GetProcessor(c *gin.Context) {
 		return
 	}
 
+	info, err := h.statusProvider().GetChangeFeedInfo(ctx, changefeedID)
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+	if info.State != model.StateNormal {
+		_ = c.Error(cerror.WrapError(cerror.ErrAPIInvalidParam,
+			fmt.Errorf("changefeed in abnormal state: %s, can't get processors of an abnormal changefeed",
+				string(info.State))))
+	}
 	// check if this captureID exist
 	procInfos, err := h.statusProvider().GetProcessors(ctx)
 	if err != nil {
