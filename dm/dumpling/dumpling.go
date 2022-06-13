@@ -379,7 +379,6 @@ func (m *Dumpling) constructArgs(ctx context.Context) (*export.Config, error) {
 		dumpConfig.TableFilter = filter.CaseInsensitive(dumpConfig.TableFilter)
 	}
 
-	dumpConfig.Labels = prometheus.Labels{"task": m.cfg.Name, "source_id": m.cfg.SourceID}
 	// update sql_mode if needed
 	m.detectSQLMode(ctx, dumpConfig)
 	dumpConfig.ExtStorage = cfg.ExtStorage
