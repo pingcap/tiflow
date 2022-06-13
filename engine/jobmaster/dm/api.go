@@ -19,7 +19,9 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/pingcap/errors"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
+	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/runtime"
 	libModel "github.com/pingcap/tiflow/engine/lib/model"
@@ -122,6 +124,16 @@ func (jm *JobMaster) QueryStatus(ctx context.Context, taskID string) *dmpkg.Quer
 	return resp.(*dmpkg.QueryStatusResponse)
 }
 
+// OperateTask operate task.
+func (jm *JobMaster) OperateTask(ctx context.Context, op dmpkg.OperateType, cfg *config.JobCfg, tasks []string) error {
+	switch op {
+	case dmpkg.Resume, dmpkg.Pause:
+		return jm.taskManager.OperateTask(ctx, op, cfg, tasks)
+	default:
+		return errors.Errorf("unsupport op type %d for operate task", op)
+	}
+}
+
 // DebugJob debugs job.
 func (jm *JobMaster) DebugJob(ctx context.Context, req *pb.DebugJobRequest) *pb.DebugJobResponse {
 	var (
@@ -140,6 +152,18 @@ func (jm *JobMaster) DebugJob(ctx context.Context, req *pb.DebugJobRequest) *pb.
 			}}
 		}
 		resp, err = jm.QueryJobStatus(ctx, jsonArg.Tasks)
+	case dmpkg.OperateTask:
+		var jsonArg struct {
+			Tasks []string
+			Op    dmpkg.OperateType
+		}
+		if err := json.Unmarshal([]byte(req.JsonArg), &jsonArg); err != nil {
+			return &pb.DebugJobResponse{Err: &pb.Error{
+				Code:    pb.ErrorCode_UnknownError,
+				Message: err.Error(),
+			}}
+		}
+		err = jm.OperateTask(ctx, jsonArg.Op, nil, jsonArg.Tasks)
 	default:
 	}
 

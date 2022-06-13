@@ -36,7 +36,8 @@ func TestPartitions(t *testing.T) {
 		ReplicationFactor: 1,
 	}
 
-	manager := NewKafkaTopicManager(client, adminClient, cfg)
+	manager, err := NewKafkaTopicManager(client, adminClient, cfg)
+	require.Nil(t, err)
 	partitionsNum, err := manager.GetPartitionNum(
 		kafkamock.DefaultMockTopicName)
 	require.Nil(t, err)
@@ -57,7 +58,8 @@ func TestTryRefreshMeta(t *testing.T) {
 		ReplicationFactor: 1,
 	}
 
-	manager := NewKafkaTopicManager(client, adminClient, cfg)
+	manager, err := NewKafkaTopicManager(client, adminClient, cfg)
+	require.Nil(t, err)
 	partitionsNum, err := manager.GetPartitionNum(
 		kafkamock.DefaultMockTopicName)
 	require.Nil(t, err)
@@ -92,12 +94,13 @@ func TestCreateTopic(t *testing.T) {
 		ReplicationFactor: 1,
 	}
 
-	manager := NewKafkaTopicManager(client, adminClient, cfg)
-	partitionNum, err := manager.CreateTopic(kafkamock.DefaultMockTopicName)
+	manager, err := NewKafkaTopicManager(client, adminClient, cfg)
+	require.Nil(t, err)
+	partitionNum, err := manager.createTopic(kafkamock.DefaultMockTopicName)
 	require.Nil(t, err)
 	require.Equal(t, int32(3), partitionNum)
 
-	partitionNum, err = manager.CreateTopic("new-topic")
+	partitionNum, err = manager.createTopic("new-topic")
 	require.Nil(t, err)
 	require.Equal(t, int32(2), partitionNum)
 	partitionsNum, err := manager.GetPartitionNum("new-topic")
@@ -106,11 +109,37 @@ func TestCreateTopic(t *testing.T) {
 
 	// Try to create a topic without auto create.
 	cfg.AutoCreate = false
-	manager = NewKafkaTopicManager(client, adminClient, cfg)
-	_, err = manager.CreateTopic("new-topic2")
+	manager, err = NewKafkaTopicManager(client, adminClient, cfg)
+	require.Nil(t, err)
+	_, err = manager.createTopic("new-topic2")
 	require.Regexp(
 		t,
 		"`auto-create-topic` is false, and new-topic2 not found",
 		err,
 	)
+}
+
+func TestCreateTopicWithDelay(t *testing.T) {
+	t.Parallel()
+
+	client := kafkamock.NewClientMockImpl()
+	adminClient := kafkamock.NewClusterAdminClientMockImpl()
+	defer func(adminClient *kafkamock.ClusterAdminClientMockImpl) {
+		_ = adminClient.Close()
+	}(adminClient)
+	cfg := &kafkaconfig.AutoCreateTopicConfig{
+		AutoCreate:        true,
+		PartitionNum:      2,
+		ReplicationFactor: 1,
+	}
+
+	manager, err := NewKafkaTopicManager(client, adminClient, cfg)
+	require.Nil(t, err)
+	partitionNum, err := manager.createTopic("new_topic")
+	require.Nil(t, err)
+	err = adminClient.SetRemainingFetchesUntilTopicVisible("new_topic", 3)
+	require.Nil(t, err)
+	err = manager.waitUntilTopicVisible("new_topic")
+	require.Nil(t, err)
+	require.Equal(t, int32(2), partitionNum)
 }

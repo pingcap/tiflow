@@ -55,7 +55,7 @@ func (b *blackHoleSink) EmitRowChangedEvents(ctx context.Context, rows ...*model
 
 func (b *blackHoleSink) FlushRowChangedEvents(
 	ctx context.Context, _ model.TableID, resolved model.ResolvedTs,
-) (uint64, error) {
+) (model.ResolvedTs, error) {
 	log.Debug("BlockHoleSink: FlushRowChangedEvents", zap.Uint64("resolvedTs", resolved.Ts))
 	err := b.statistics.RecordBatchExecution(func() (int, error) {
 		// TODO: add some random replication latency
@@ -65,7 +65,7 @@ func (b *blackHoleSink) FlushRowChangedEvents(
 		return int(batchSize), nil
 	})
 	b.statistics.PrintStatus(ctx)
-	return resolved.Ts, err
+	return resolved, err
 }
 
 func (b *blackHoleSink) EmitCheckpointTs(ctx context.Context, ts uint64, tables []model.TableName) error {

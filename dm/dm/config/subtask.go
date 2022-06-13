@@ -27,15 +27,16 @@ import (
 	"github.com/pingcap/tidb-tools/pkg/column-mapping"
 	extstorage "github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tidb/util/filter"
-	"go.uber.org/zap"
-
 	regexprrouter "github.com/pingcap/tidb/util/regexpr-router"
 	router "github.com/pingcap/tidb/util/table-router"
+	"go.uber.org/zap"
+
 	"github.com/pingcap/tiflow/dm/pkg/dumpling"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/storage"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
+	"github.com/pingcap/tiflow/engine/pkg/promutil"
 )
 
 // task modes.
@@ -272,8 +273,9 @@ type SubTaskConfig struct {
 		AsyncCheckpointFlush bool `yaml:"async-checkpoint-flush" toml:"async-checkpoint-flush" json:"async-checkpoint-flush"`
 	} `yaml:"experimental" toml:"experimental" json:"experimental"`
 
-	// dataflow engine can inject an ExternalStorage to units
-	ExtStorage extstorage.ExternalStorage `toml:"-" json:"-"`
+	// below member are injected by dataflow engine
+	ExtStorage     extstorage.ExternalStorage `toml:"-" json:"-"`
+	MetricsFactory promutil.Factory           `toml:"-" json:"-"`
 }
 
 // SampleSubtaskConfig is the content of subtask.toml in current folder.

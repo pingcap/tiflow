@@ -14,6 +14,7 @@
 package model
 
 import (
+	"math/rand"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -43,4 +44,40 @@ func TestPolymorphicEvent(t *testing.T) {
 	require.Equal(t, rawResolved, polyEvent.RawKV)
 	require.Equal(t, resolved.CRTs, polyEvent.CRTs)
 	require.Equal(t, uint64(0), polyEvent.StartTs)
+}
+
+func TestResolvedTs(t *testing.T) {
+	t.Parallel()
+
+	invalidResolvedTs := ResolvedTs{Mode: -1, Ts: 1}
+	require.Equal(t, uint64(0), invalidResolvedTs.ResolvedMark())
+
+	ts := rand.Uint64()
+	batchID := rand.Uint64()
+	normalResolvedTs := NewResolvedTs(ts)
+	batchResolvedTs1 := ResolvedTs{Mode: BatchResolvedMode, Ts: ts, BatchID: batchID}
+	require.True(t, normalResolvedTs.EqualOrGreater(batchResolvedTs1))
+	require.False(t, batchResolvedTs1.EqualOrGreater(normalResolvedTs))
+	require.False(t, normalResolvedTs.Less(batchResolvedTs1))
+	require.True(t, batchResolvedTs1.Less(normalResolvedTs))
+
+	batchResolvedTs2 := ResolvedTs{Mode: BatchResolvedMode, Ts: ts, BatchID: batchID + 1}
+	require.True(t, normalResolvedTs.EqualOrGreater(batchResolvedTs2))
+	require.True(t, batchResolvedTs2.EqualOrGreater(batchResolvedTs1))
+	require.True(t, batchResolvedTs2.Less(normalResolvedTs))
+	require.True(t, batchResolvedTs1.Less(batchResolvedTs2))
+
+	largerResolvedTs := NewResolvedTs(ts + rand.Uint64()%10)
+	require.True(t, largerResolvedTs.EqualOrGreater(normalResolvedTs))
+	largerBatchResolvedTs := ResolvedTs{
+		Mode:    BatchResolvedMode,
+		Ts:      ts + rand.Uint64()%10,
+		BatchID: batchID,
+	}
+	require.True(t, largerBatchResolvedTs.EqualOrGreater(normalResolvedTs))
+
+	smallerResolvedTs := NewResolvedTs(0)
+	require.True(t, normalResolvedTs.EqualOrGreater(smallerResolvedTs))
+	smallerBatchResolvedTs := ResolvedTs{Mode: BatchResolvedMode, Ts: 0, BatchID: batchID}
+	require.True(t, batchResolvedTs1.EqualOrGreater(smallerBatchResolvedTs))
 }

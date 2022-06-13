@@ -73,7 +73,7 @@ func (t *tableSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error
 // redo log watermarkTs.
 func (t *tableSink) FlushRowChangedEvents(
 	ctx context.Context, tableID model.TableID, resolved model.ResolvedTs,
-) (uint64, error) {
+) (model.ResolvedTs, error) {
 	resolvedTs := resolved.Ts
 	if tableID != t.tableID {
 		log.Panic("inconsistent table sink",
@@ -90,40 +90,33 @@ func (t *tableSink) FlushRowChangedEvents(
 
 	err := t.backendSink.EmitRowChangedEvents(ctx, resolvedRows...)
 	if err != nil {
-		return 0, errors.Trace(err)
+		return model.NewResolvedTs(0), errors.Trace(err)
 	}
 	return t.flushResolvedTs(ctx, resolved)
 }
 
 func (t *tableSink) flushResolvedTs(
 	ctx context.Context, resolved model.ResolvedTs,
-) (uint64, error) {
-	redoTs, err := t.flushRedoLogs(ctx, resolved.Ts)
-	if err != nil {
-		return 0, errors.Trace(err)
-	}
-	if redoTs < resolved.Ts {
-		resolved.Ts = redoTs
+) (model.ResolvedTs, error) {
+	if t.redoManager.Enabled() {
+		if resolved.IsBatchMode() {
+			return model.NewResolvedTs(0), nil
+		}
+		err := t.redoManager.FlushLog(ctx, t.tableID, resolved.Ts)
+		if err != nil {
+			return model.NewResolvedTs(0), errors.Trace(err)
+		}
+		redoTs := t.redoManager.GetMinResolvedTs()
+		if redoTs < resolved.Ts {
+			resolved.Ts = redoTs
+		}
 	}
 
 	checkpointTs, err := t.backendSink.FlushRowChangedEvents(ctx, t.tableID, resolved)
 	if err != nil {
-		return 0, errors.Trace(err)
+		return model.NewResolvedTs(0), errors.Trace(err)
 	}
 	return checkpointTs, nil
-}
-
-// flushRedoLogs flush redo logs and returns redo log resolved ts which means
-// all events before the ts have been persisted to redo log storage.
-func (t *tableSink) flushRedoLogs(ctx context.Context, resolvedTs uint64) (uint64, error) {
-	if t.redoManager.Enabled() {
-		err := t.redoManager.FlushLog(ctx, t.tableID, resolvedTs)
-		if err != nil {
-			return 0, err
-		}
-		return t.redoManager.GetMinResolvedTs(), nil
-	}
-	return resolvedTs, nil
 }
 
 func (t *tableSink) EmitCheckpointTs(_ context.Context, _ uint64, _ []model.TableName) error {
