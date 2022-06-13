@@ -1,15 +1,16 @@
 #!/bin/bash
 
-set -e
+set -eu
 
 CUR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 source $CUR/../_utils/test_prepare
 WORK_DIR=$OUT_DIR/$TEST_NAME
 CDC_BINARY=cdc.test
 SINK_TYPE=$1
+MAX_RETRIES=50
 
 function run() {
-	sudo pip install -U requests==2.26.0
+	sudo python3 -m pip install -U requests==2.26.0
 
 	rm -rf $WORK_DIR && mkdir -p $WORK_DIR
 
@@ -36,10 +37,10 @@ function run() {
 	*) SINK_URI="mysql://normal:123456@127.0.0.1:3306/" ;;
 	esac
 
-	python $CUR/util/test_case.py check_health
-	python $CUR/util/test_case.py get_status
+	python3 $CUR/util/test_case.py check_health
+	python3 $CUR/util/test_case.py get_status
 
-	python $CUR/util/test_case.py create_changefeed "$SINK_URI"
+	python3 $CUR/util/test_case.py create_changefeed "$SINK_URI"
 
 	run_sql "CREATE table test.simple(id int primary key, val int);"
 	run_sql "CREATE table test.\`simple-dash\`(id int primary key, val int);"
@@ -61,13 +62,16 @@ function run() {
 	)
 
 	for case in ${sequential_cases1[@]}; do
-		python $CUR/util/test_case.py "$case"
+		python3 $CUR/util/test_case.py "$case"
 	done
 
 	# kill the cdc owner server
 	kill $owner_pid
 	# check that the new owner is elected
 	ensure $MAX_RETRIES "$CDC_BINARY cli capture list --disable-version-check 2>&1 |grep $capture_id -A1 | grep '\"is-owner\": true'"
+	# restart the old owner capture
+	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
+	ensure $MAX_RETRIES "$CDC_BINARY cli capture list --disable-version-check 2>&1 | grep '\"address\": \"127.0.0.1:8300\"'"
 
 	# make sure api works well after one owner was killed and another owner was elected
 	sequential_cases2=(
@@ -86,7 +90,7 @@ function run() {
 	)
 
 	for case in ${sequential_cases2[@]}; do
-		python $CUR/util/test_case.py "$case"
+		python3 $CUR/util/test_case.py "$case"
 	done
 	cleanup_process $CDC_BINARY
 }

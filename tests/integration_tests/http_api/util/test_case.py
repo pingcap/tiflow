@@ -7,10 +7,10 @@ import json
 # the max retry time
 RETRY_TIME = 10
 
-BASE_URL0 = "https://127.0.0.1:8300/api/v1"
-BASE_URL1 = "https://127.0.0.1:8301/api/v1"
+BASE_URL0 = "http://127.0.0.1:8300/api/v1"
+BASE_URL1 = "http://127.0.0.1:8301/api/v1"
 
-V2_BASE_URL0 = "https://127.0.0.1:8300/api/v2"
+V2_BASE_URL0 = "http://127.0.0.1:8300/api/v2"
 
 # we should write some SQLs in the run.sh after call create_changefeed
 def create_changefeed(sink_uri):
