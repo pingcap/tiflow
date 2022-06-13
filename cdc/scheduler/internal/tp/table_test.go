@@ -34,5 +34,4 @@ func TestTableManager(t *testing.T) {
 
 	tableM.dropTable(model.TableID(1))
 	require.NotContains(t, tableM.tables, model.TableID(1))
-
 }
