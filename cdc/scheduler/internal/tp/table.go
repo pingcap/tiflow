@@ -278,6 +278,9 @@ func (tm *tableManager) poll(ctx context.Context, stopping bool) ([]*schedulepb.
 }
 
 func (tm *tableManager) getAllTables() map[model.TableID]*table {
+	for _, table := range tm.tables {
+		_ = table.refresh()
+	}
 	return tm.tables
 }
 

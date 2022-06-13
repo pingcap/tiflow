@@ -15,6 +15,7 @@ package tp
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 
 	"github.com/google/uuid"
@@ -55,6 +56,11 @@ type ownerInfo struct {
 	revision  schedulepb.OwnerRevision
 	version   string
 	captureID string
+}
+
+func (o ownerInfo) String() string {
+	bytes, _ := json.Marshal(o)
+	return string(bytes)
 }
 
 // NewAgent returns a new agent.
@@ -348,7 +354,7 @@ func (a *agent) handleOwnerInfo(id model.CaptureID, revision int64, version stri
 
 		a.resetEpoch()
 
-		log.Info("tpscheduler: new owner in power, drop pending dispatch table tasks",
+		log.Info("tpscheduler: new owner in power",
 			zap.String("capture", a.captureID),
 			zap.String("namespace", a.changeFeedID.Namespace),
 			zap.String("changefeed", a.changeFeedID.ID),
