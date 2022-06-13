@@ -79,6 +79,5 @@ func getTables(cliPdAddr string, credential *security.Credential, cfg *config.Re
 	if err != nil {
 		return nil, nil, err
 	}
-
 	return entry.VerifyTables(cfg, kvStore, startTs)
 }
