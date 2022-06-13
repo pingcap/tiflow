@@ -34,7 +34,7 @@ const (
 	// syncpointTableName is the name of table where all syncpoint maps sit
 	syncpointTableName string = "syncpoint_v1"
 	// schemaName is the name of database where syncpoint maps sit
-	schemaName = "ticdc"
+	schemaName = "tidb_cdc"
 )
 
 type mysqlSyncpointStore struct {
