@@ -35,6 +35,11 @@ const (
 	constFieldWorkerKey = "worker_id"
 )
 
+// L is the alias of NewLogger4Framework for easy use
+func L() *zap.Logger {
+	return NewLogger4Framework()
+}
+
 // NewLogger4Framework return a new logger for framework
 func NewLogger4Framework() *zap.Logger {
 	return log.L().With(
