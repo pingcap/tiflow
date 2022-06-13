@@ -25,15 +25,14 @@ import (
 func TestTableManager(t *testing.T) {
 	t.Parallel()
 
+	// pretend there are 4 tables
 	mockTableExecutor := newMockTableExecutor()
-
 	mockTableExecutor.tables[model.TableID(1)] = pipeline.TableStatePreparing
 	mockTableExecutor.tables[model.TableID(2)] = pipeline.TableStatePrepared
 	mockTableExecutor.tables[model.TableID(3)] = pipeline.TableStateReplicating
 	mockTableExecutor.tables[model.TableID(4)] = pipeline.TableStateStopped
 
 	tableM := newTableManager(mockTableExecutor)
-	tableM.collectAllTables()
 	require.Equal(t, schedulepb.TableStatePreparing, tableM.tables[model.TableID(1)].status.State)
 	require.Equal(t, schedulepb.TableStatePrepared, tableM.tables[model.TableID(2)].status.State)
 	require.Equal(t, schedulepb.TableStateReplicating, tableM.tables[model.TableID(3)].status.State)

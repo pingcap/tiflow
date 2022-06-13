@@ -278,25 +278,10 @@ func (tm *tableManager) poll(ctx context.Context, stopping bool) ([]*schedulepb.
 }
 
 func (tm *tableManager) getAllTables() map[model.TableID]*table {
-	tm.collectAllTables()
 	return tm.tables
 }
 
-// collectAllTables fetch table meta from the `table executor` to let the
-// tableManager keep each table's latest progress.
-func (tm *tableManager) collectAllTables() {
-	allTables := tm.executor.GetAllCurrentTables()
-	for _, tableID := range allTables {
-		table, ok := tm.tables[tableID]
-		if !ok {
-			table = newTable(tableID, tm.executor)
-			tm.tables[tableID] = table
-		}
-		_ = table.refresh()
-	}
-}
-
-// addTable the target table, and return it.
+// addTable add the target table, and return it.
 func (tm *tableManager) addTable(tableID model.TableID) *table {
 	table, ok := tm.tables[tableID]
 	if !ok {
@@ -312,14 +297,6 @@ func (tm *tableManager) getTable(tableID model.TableID) (*table, bool) {
 	if ok {
 		_ = table.refresh()
 		return table, true
-	}
-
-	meta := tm.executor.GetTableMeta(tableID)
-	state := tableStatus2PB(meta.State)
-
-	if state != schedulepb.TableStateAbsent {
-		log.Panic("tpscheduler: tableManager found table not tracked",
-			zap.Int64("tableID", tableID), zap.Any("meta", meta))
 	}
 	return nil, false
 }
