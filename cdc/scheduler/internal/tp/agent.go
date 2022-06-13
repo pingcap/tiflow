@@ -237,9 +237,41 @@ func (a *agent) newTableStatus(tableID model.TableID) schedulepb.TableStatus {
 	}
 }
 
-// refreshAllTables make the agent track all table's latest status
-func (a *agent) refreshAllTables() {
+func (a *agent) registerTable(tableID model.TableID) *table {
+	table, ok := a.tables[tableID]
+	if !ok {
+		table = newTable(tableID, a.tableExec)
+		a.tables[tableID] = table
+	}
+	_ = table.refresh()
+	return table
+}
+
+func (a *agent) getTable(tableID model.TableID) (*table, bool) {
+	table, ok := a.tables[tableID]
+	if ok {
+		_ = table.refresh()
+		return table, true
+	}
+
+	meta := a.tableExec.GetTableMeta(tableID)
+	state := tableStatus2PB(meta.State)
+	if state == schedulepb.TableStateAbsent {
+		return nil, false
+	}
+
+	log.Warn("tpscheduler: agent found table not tracked",
+		zap.Int64("tableID", tableID), zap.Any("meta", meta))
+	table = newTable(tableID, a.tableExec)
+	_ = table.refresh()
+	a.tables[tableID] = table
+
+	return table, true
+}
+
+func (a *agent) collectAllTables(expected []model.TableID) []schedulepb.TableStatus {
 	currentTables := a.tableExec.GetAllCurrentTables()
+	result := make([]schedulepb.TableStatus, 0, len(currentTables))
 	for _, tableID := range currentTables {
 		table, ok := a.tables[tableID]
 		if !ok {
@@ -247,19 +279,16 @@ func (a *agent) refreshAllTables() {
 			a.tables[tableID] = table
 		}
 		_ = table.refresh()
-	}
-}
 
-func (a *agent) collectAllTables(expected []model.TableID) []schedulepb.TableStatus {
-	result := make([]schedulepb.TableStatus, 0, len(expected))
+		status := table.status
+		if table.task != nil && table.task.IsRemove {
+			status.State = schedulepb.TableStateStopping
+		}
+		result = append(result, status)
+	}
+
 	for _, tableID := range expected {
-		table, ok := a.tables[tableID]
-		if ok {
-			if table.task != nil && table.task.IsRemove {
-				table.status.State = schedulepb.TableStateStopping
-			}
-			result = append(result, table.status)
-		} else {
+		if _, ok := a.tables[tableID]; !ok {
 			status := a.newTableStatus(tableID)
 			result = append(result, status)
 		}
@@ -268,9 +297,6 @@ func (a *agent) collectAllTables(expected []model.TableID) []schedulepb.TableSta
 }
 
 func (a *agent) handleMessageHeartbeat(expected []model.TableID) *schedulepb.Message {
-	// `heartbeat` would always be the first message received by the agent,
-	// it's a good chance for the agent to warm up by collect all tables status.
-	a.refreshAllTables()
 	tables := a.collectAllTables(expected)
 	response := &schedulepb.HeartbeatResponse{
 		Tables:     tables,
@@ -347,14 +373,10 @@ func (a *agent) handleMessageDispatchTableRequest(
 			Epoch:     epoch,
 			status:    dispatchTableTaskReceived,
 		}
-		table, ok = a.tables[tableID]
-		if !ok {
-			table = newTable(tableID, a.tableExec)
-			a.tables[tableID] = table
-		}
+		table = a.registerTable(tableID)
 	case *schedulepb.DispatchTableRequest_RemoveTable:
 		tableID := req.RemoveTable.GetTableID()
-		table, ok = a.tables[tableID]
+		table, ok = a.getTable(tableID)
 		if !ok {
 			log.Warn("tpscheduler: agent ignore remove table request,"+
 				"since the table not found",
