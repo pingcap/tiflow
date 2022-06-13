@@ -36,6 +36,7 @@ import (
 	derror "github.com/pingcap/tiflow/engine/pkg/errors"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/broker"
 	resourcemeta "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
+	"github.com/pingcap/tiflow/engine/pkg/logutil"
 	extkv "github.com/pingcap/tiflow/engine/pkg/meta/extension"
 	"github.com/pingcap/tiflow/engine/pkg/meta/kvclient"
 	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
@@ -85,6 +86,7 @@ type BaseWorker interface {
 
 	MetaKVClient() metaclient.KVClient
 	MetricFactory() promutil.Factory
+	Logger() *zap.Logger
 	UpdateStatus(ctx context.Context, status frameModel.WorkerStatus) error
 	SendMessage(ctx context.Context, topic p2p.Topic, message interface{}, nonblocking bool) error
 	OpenStorage(ctx context.Context, resourcePath resourcemeta.ResourceID) (broker.Handle, error)
@@ -135,7 +137,12 @@ type DefaultBaseWorker struct {
 	// user metastore prefix kvclient
 	// Don't close it. It's just a prefix wrapper for underlying userRawKVClient
 	userMetaKVClient metaclient.KVClient
-	metricFactory    promutil.Factory
+
+	// metricFactory can produce metric with underlying project info and job info
+	metricFactory promutil.Factory
+
+	// logger is the zap logger with underlying project info and job info
+	logger *zap.Logger
 
 	// tenant/project information
 	projectInfo tenant.ProjectInfo
@@ -190,6 +197,7 @@ func NewBaseWorker(
 		clock:            clock.New(),
 		userMetaKVClient: kvclient.NewPrefixKVClient(params.UserRawKVClient, ctx.ProjectInfo.UniqueID()),
 		metricFactory:    promutil.NewFactory4Worker(ctx.ProjectInfo, WorkerTypeForMetric(tp), masterID, workerID),
+		logger:           logutil.NewLogger4Worker(ctx.ProjectInfo, masterID, workerID),
 	}
 }
 
@@ -393,6 +401,11 @@ func (w *DefaultBaseWorker) MetaKVClient() metaclient.KVClient {
 // MetricFactory implements BaseWorker.MetricFactory
 func (w *DefaultBaseWorker) MetricFactory() promutil.Factory {
 	return w.metricFactory
+}
+
+// Logger implements BaseMaster.Logger
+func (m *DefaultBaseWorker) Logger() *zap.Logger {
+	return m.logger
 }
 
 // UpdateStatus updates the worker's status and tries to notify the master.

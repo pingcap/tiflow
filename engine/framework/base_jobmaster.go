@@ -42,6 +42,7 @@ type BaseJobMaster interface {
 	OnError(err error)
 	MetaKVClient() metaclient.KVClient
 	MetricFactory() promutil.Factory
+	Logger() *zap.Logger
 	GetWorkers() map[frameModel.WorkerID]WorkerHandle
 	CreateWorker(workerType WorkerType, config WorkerConfig, cost model.RescUnit, resources ...resourcemeta.ResourceID) (frameModel.WorkerID, error)
 	JobMasterID() frameModel.MasterID
@@ -144,6 +145,11 @@ func (d *DefaultBaseJobMaster) MetaKVClient() metaclient.KVClient {
 // MetricFactory implements BaseJobMaster.MetricFactory
 func (d *DefaultBaseJobMaster) MetricFactory() promutil.Factory {
 	return d.master.MetricFactory()
+}
+
+// Logger implements BaseJobMaster.Logger
+func (d *DefaultBaseJobMaster) Logger() *zap.Logger {
+	return d.master.logger
 }
 
 // Init implements BaseJobMaster.Init
