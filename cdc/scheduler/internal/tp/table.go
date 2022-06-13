@@ -102,7 +102,8 @@ func (t *table) handleRemoveTableTask(ctx context.Context) *schedulepb.Message {
 	for stateChanged {
 		switch status.State {
 		case schedulepb.TableStateAbsent:
-			log.Warn("tpscheduler: remove table, but table is absent", zap.Int64("tableID", t.id))
+			log.Warn("tpscheduler: remove table, but table is absent",
+				zap.Int64("tableID", t.id))
 			t.task = nil
 			return newRemoveTableResponseMessage(status)
 		case schedulepb.TableStateStopping, // stopping now is useless
@@ -281,6 +282,8 @@ func (tm *tableManager) getAllTables() map[model.TableID]*table {
 	return tm.tables
 }
 
+// collectAllTables fetch table meta from the `table executor` to let the
+// tableManager keep each table's latest progress.
 func (tm *tableManager) collectAllTables() {
 	allTables := tm.executor.GetAllCurrentTables()
 	for _, tableID := range allTables {
@@ -293,8 +296,8 @@ func (tm *tableManager) collectAllTables() {
 	}
 }
 
-// register the target table, and return it.
-func (tm *tableManager) register(tableID model.TableID) *table {
+// addTable the target table, and return it.
+func (tm *tableManager) addTable(tableID model.TableID) *table {
 	table, ok := tm.tables[tableID]
 	if !ok {
 		table = newTable(tableID, tm.executor)

@@ -273,7 +273,7 @@ func (a *agent) handleMessageDispatchTableRequest(
 			Epoch:     epoch,
 			status:    dispatchTableTaskReceived,
 		}
-		table = a.tableM.register(tableID)
+		table = a.tableM.addTable(tableID)
 	case *schedulepb.DispatchTableRequest_RemoveTable:
 		tableID := req.RemoveTable.GetTableID()
 		table, ok = a.tableM.getTable(tableID)

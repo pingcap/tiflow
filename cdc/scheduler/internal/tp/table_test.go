@@ -43,10 +43,10 @@ func TestTableManager(t *testing.T) {
 	require.False(t, ok)
 	require.Nil(t, table)
 
-	table = tableM.register(model.TableID(1))
+	table = tableM.addTable(model.TableID(1))
 	require.Equal(t, schedulepb.TableStatePreparing, table.status.State)
 
-	table = tableM.register(model.TableID(5))
+	table = tableM.addTable(model.TableID(5))
 	require.Equal(t, schedulepb.TableStateAbsent, table.status.State)
 
 	tableM.dropTable(model.TableID(5))
