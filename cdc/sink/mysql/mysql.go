@@ -30,6 +30,10 @@ import (
 	"github.com/pingcap/tidb/parser/charset"
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
+	"github.com/prometheus/client_golang/prometheus"
+	"go.uber.org/atomic"
+	"go.uber.org/zap"
+
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/metrics"
 	dmutils "github.com/pingcap/tiflow/dm/pkg/utils"
@@ -42,9 +46,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/notify"
 	"github.com/pingcap/tiflow/pkg/quotes"
 	"github.com/pingcap/tiflow/pkg/retry"
-	"github.com/prometheus/client_golang/prometheus"
-	"go.uber.org/atomic"
-	"go.uber.org/zap"
 )
 
 const (
@@ -79,6 +80,8 @@ type mysqlSink struct {
 	forceReplicate bool
 	cancel         func()
 
+	// error is set when the sink has encountered an
+	// error and cannot work anymore.
 	error atomic.Error
 }
 
@@ -286,6 +289,9 @@ outer:
 		if len(resolvedTxnsMap) != 0 {
 			s.dispatchAndExecTxns(ctx, resolvedTxnsMap)
 		}
+
+		// This is an ad-hoc fix to prevent the checkpoint
+		// from being updated after a DML has failed to execute.
 		for _, worker := range s.workers {
 			if !worker.isNormal() {
 				continue outer
@@ -449,9 +455,6 @@ func (s *mysqlSink) createSinkWorkers(ctx context.Context) error {
 }
 
 func (s *mysqlSink) notifyAndWaitExec(ctx context.Context) {
-	defer func() {
-		log.Info("notifyAndWaitExec finished")
-	}()
 	// notifyAndWaitExec may return because of context cancellation,
 	// and s.flushSyncWg.Wait() goroutine is still running, check context first to
 	// avoid data race
