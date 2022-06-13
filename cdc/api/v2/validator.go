@@ -20,8 +20,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/kv"
@@ -140,7 +140,8 @@ func verifyCreateChangefeedConfig(
 		for _, fp := range config.ForceEnableOldValueProtocols {
 			if replicaCfg.Sink.Protocol == fp {
 				log.Warn(
-					"Attempting to replicate without old value enabled. CDC will enable old value and continue.",
+					"Attempting to replicate without old value enabled. "+
+						"CDC will enable old value and continue.",
 					zap.String("protocol", replicaCfg.Sink.Protocol))
 				replicaCfg.EnableOldValue = true
 				break
@@ -234,8 +235,12 @@ func getPDClient(ctx context.Context,
 	return pdClient, nil
 }
 
-// verifyUpdateChangefeedConfig verifies config to update a changefeed and returns a changefeedInfo
-func verifyUpdateChangefeedConfig(ctx context.Context, cfg *ChangefeedConfig, oldInfo *model.ChangeFeedInfo, oldUpInfo *model.UpstreamInfo) (*model.ChangeFeedInfo, *model.UpstreamInfo, error) {
+// verifyUpdateChangefeedConfig verifies config to update
+// a changefeed and returns a changefeedInfo
+func verifyUpdateChangefeedConfig(ctx context.Context,
+	cfg *ChangefeedConfig, oldInfo *model.ChangeFeedInfo,
+	oldUpInfo *model.UpstreamInfo,
+) (*model.ChangeFeedInfo, *model.UpstreamInfo, error) {
 	newInfo, err := oldInfo.Clone()
 	if err != nil {
 		return nil, nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByArgs(err.Error())
@@ -297,7 +302,8 @@ func verifyUpdateChangefeedConfig(ctx context.Context, cfg *ChangefeedConfig, ol
 	upstreamInfoChanged := diff.Changed(oldUpInfo, newUpInfo)
 
 	if !changefeedInfoChanged && !upstreamInfoChanged {
-		return nil, nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByArgs("changefeed config is the same with the old one, do nothing")
+		return nil, nil, cerror.ErrChangefeedUpdateRefused.
+			GenWithStackByArgs("changefeed config is the same with the old one, do nothing")
 	}
 
 	if !changefeedInfoChanged {

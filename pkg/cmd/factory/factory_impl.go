@@ -19,7 +19,7 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
-	tidbkv "github.com/pingcap/tidb/kv"
+	"github.com/pingcap/log"
 	apiv1client "github.com/pingcap/tiflow/pkg/api/v1"
 	apiv2client "github.com/pingcap/tiflow/pkg/api/v2"
 	pd "github.com/tikv/pd/client"
@@ -29,7 +29,6 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
 
-	"github.com/pingcap/tiflow/cdc/kv"
 	cmdconetxt "github.com/pingcap/tiflow/pkg/cmd/context"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/security"
@@ -37,7 +36,8 @@ import (
 )
 
 type factoryImpl struct {
-	clientGetter ClientGetter
+	clientGetter      ClientGetter
+	fetchedServerAddr string
 }
 
 // NewFactory creates a client build factory.
@@ -179,25 +179,63 @@ func (f factoryImpl) PdClient() (pd.Client, error) {
 	return pdClient, nil
 }
 
-func (f factoryImpl) KvStorage() (tidbkv.Storage, error) {
-	pdAddr := f.GetPdAddr()
-	credential := f.GetCredential()
-	kvStore, err := kv.CreateTiStore(pdAddr, credential)
-	if err != nil {
-		return nil, errors.Annotatef(err,
-			"fail to open KV storage client, please check pd address \"%s\"", pdAddr)
-	}
-	return kvStore, nil
-}
-
 // APIV1Client returns cdc api v1 client.
 func (f *factoryImpl) APIV1Client() (*apiv1client.APIV1Client, error) {
-	return apiv1client.NewAPIClient(f.clientGetter.GetServerAddr(),
-		f.clientGetter.GetCredential())
+	serverAddr, err := f.findServerAddr()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	log.Info(serverAddr)
+	return apiv1client.NewAPIClient(serverAddr, f.clientGetter.GetCredential())
 }
 
 // APIV2Client returns cdc api v2 client.
 func (f *factoryImpl) APIV2Client() (*apiv2client.APIV2Client, error) {
-	return apiv2client.NewAPIClient(f.clientGetter.GetServerAddr(),
-		f.clientGetter.GetCredential())
+	serverAddr, err := f.findServerAddr()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	log.Info(serverAddr)
+	return apiv2client.NewAPIClient(serverAddr, f.clientGetter.GetCredential())
+}
+
+func (f *factoryImpl) findServerAddr() (string, error) {
+	if f.fetchedServerAddr != "" {
+		return f.fetchedServerAddr, nil
+	}
+
+	pdAddr := f.clientGetter.GetPdAddr()
+	serverAddr := f.clientGetter.GetServerAddr()
+	if pdAddr == "" && serverAddr == "" {
+		return "http://127.0.0.1:8300", nil
+	}
+	if pdAddr != "" && serverAddr != "" {
+		return "", errors.New("Parameter --pd is deprecated, " +
+			"please use parameter --server instead. " +
+			"These two parameters cannot be specified at the same time.")
+	}
+	if f.clientGetter.GetServerAddr() != "" {
+		return f.clientGetter.GetServerAddr(), nil
+	}
+	etcdClient, err := f.EtcdClient()
+	if err != nil {
+		return "", errors.Trace(err)
+	}
+
+	ctx := cmdconetxt.GetDefaultContext()
+	ownerID, err := etcdClient.GetOwnerID(ctx)
+	if err != nil {
+		return "", err
+	}
+	_, captures, err := etcdClient.GetCaptures(ctx)
+	if err != nil {
+		return "", errors.Trace(err)
+	}
+	for _, capture := range captures {
+		if capture.ID == ownerID {
+			f.fetchedServerAddr = capture.AdvertiseAddr
+			return capture.AdvertiseAddr, nil
+		}
+	}
+	return "", errors.New("no capture is found")
 }

@@ -233,6 +233,7 @@ func (m *migrator) migrate(ctx context.Context, etcdNoMetaVersion bool, oldVersi
 					return cerror.WrapError(cerror.ErrEtcdMigrateFailed, err)
 				}
 				info.UpstreamID = upstreamID
+				info.Namespace = model.DefaultNamespace
 				var str string
 				str, err = info.Marshal()
 				if err != nil {

@@ -51,6 +51,7 @@ function run() {
 	check_table_exists test.simple ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 	check_table_exists test."\`simple-dash\`" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 
+
 	check_changefeed_state "http://${UP_PD_HOST_1}:${UP_PD_PORT_1}" $uuid "normal" "null" ""
 
 	check_changefeed_count http://${UP_PD_HOST_1}:${UP_PD_PORT_1} 1
