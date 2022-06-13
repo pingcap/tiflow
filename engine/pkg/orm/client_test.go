@@ -26,6 +26,7 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/go-sql-driver/mysql"
 	perrors "github.com/pingcap/errors"
+	"github.com/pingcap/failpoint"
 	"github.com/stretchr/testify/require"
 
 	libModel "github.com/pingcap/tiflow/engine/lib/model"
@@ -81,8 +82,6 @@ func TestNewMetaOpsClient(t *testing.T) {
 
 // nolint: deadcode
 func testInitialize(t *testing.T) {
-	t.Parallel()
-
 	sqlDB, mock, err := mockGetDBConn(t, "test")
 	defer sqlDB.Close()
 	defer mock.ExpectClose()
@@ -1268,6 +1267,46 @@ func TestLogicEpoch(t *testing.T) {
 	for _, tc := range testCases {
 		testInner(t, mock, cli, tc)
 	}
+}
+
+func TestContext(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(context.TODO(), 1*time.Second)
+	defer cancel()
+
+	cli, err := NewMockClient()
+	require.NoError(t, err)
+	defer cli.Close()
+
+	// test normal function
+	err = failpoint.Enable("github.com/pingcap/tiflow/engine/pkg/orm/initializedDelay", "sleep(2000)")
+	require.NoError(t, err)
+	ctx = failpoint.WithHook(ctx, func(ctx context.Context, fpname string) bool {
+		return ctx.Value(fpname) != nil
+	})
+	ctx2 := context.WithValue(ctx, "github.com/pingcap/tiflow/engine/pkg/orm/initializedDelay", struct{}{})
+
+	err = cli.Initialize(ctx2)
+	require.Error(t, err)
+	require.Regexp(t, "context deadline exceed", err.Error())
+	failpoint.Disable("github.com/pingcap/tiflow/engine/pkg/orm/initializedDelay")
+
+	// test transaction
+	ctx, cancel = context.WithTimeout(context.TODO(), 1*time.Second)
+	defer cancel()
+
+	err = failpoint.Enable("github.com/pingcap/tiflow/engine/pkg/orm/genEpochDelay", "sleep(2000)")
+	require.NoError(t, err)
+	ctx = failpoint.WithHook(ctx, func(ctx context.Context, fpname string) bool {
+		return ctx.Value(fpname) != nil
+	})
+	ctx2 = context.WithValue(ctx, "github.com/pingcap/tiflow/engine/pkg/orm/genEpochDelay", struct{}{})
+
+	_, err = cli.GenEpoch(ctx2)
+	require.Error(t, err)
+	require.Regexp(t, "context deadline exceed", err.Error())
+	failpoint.Disable("github.com/pingcap/tiflow/engine/pkg/orm/model/genEpochDelay")
 }
 
 func testInner(t *testing.T, m sqlmock.Sqlmock, cli Client, c tCase) {

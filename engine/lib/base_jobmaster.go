@@ -42,11 +42,13 @@ type BaseJobMaster interface {
 	OnError(err error)
 	MetaKVClient() metaclient.KVClient
 	MetricFactory() promutil.Factory
+	Logger() *zap.Logger
 	GetWorkers() map[libModel.WorkerID]WorkerHandle
 	CreateWorker(workerType WorkerType, config WorkerConfig, cost model.RescUnit, resources ...resourcemeta.ResourceID) (libModel.WorkerID, error)
 	JobMasterID() libModel.MasterID
 	UpdateJobStatus(ctx context.Context, status libModel.WorkerStatus) error
 	CurrentEpoch() libModel.Epoch
+	SendMessage(ctx context.Context, topic p2p.Topic, message interface{}, nonblocking bool) error
 
 	// Exit should be called when job master (in user logic) wants to exit
 	// - If err is nil, it means job master exits normally
@@ -143,6 +145,11 @@ func (d *DefaultBaseJobMaster) MetaKVClient() metaclient.KVClient {
 // MetricFactory implements BaseJobMaster.MetricFactory
 func (d *DefaultBaseJobMaster) MetricFactory() promutil.Factory {
 	return d.master.MetricFactory()
+}
+
+// Logger implements BaseJobMaster.Logger
+func (m *DefaultBaseJobMaster) Logger() *zap.Logger {
+	return m.master.logger
 }
 
 // Init implements BaseJobMaster.Init
@@ -266,11 +273,11 @@ func (d *DefaultBaseJobMaster) IsBaseJobMaster() {
 }
 
 // SendMessage delegates the SendMessage or inner worker
-func (d *DefaultBaseJobMaster) SendMessage(ctx context.Context, topic p2p.Topic, message interface{}) (bool, error) {
+func (d *DefaultBaseJobMaster) SendMessage(ctx context.Context, topic p2p.Topic, message interface{}, nonblocking bool) error {
 	ctx = d.errCenter.WithCancelOnFirstError(ctx)
 
 	// master will use WorkerHandle to send message
-	return d.worker.SendMessage(ctx, topic, message)
+	return d.worker.SendMessage(ctx, topic, message, nonblocking)
 }
 
 // IsMasterReady implements BaseJobMaster.IsMasterReady

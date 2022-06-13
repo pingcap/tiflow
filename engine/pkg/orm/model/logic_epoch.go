@@ -36,18 +36,20 @@ func InitializeEpoch(ctx context.Context, db *gorm.DB) error {
 	// Do nothing on conflict
 	// INSERT INTO `logic_epoches` (`created_at`,`updated_at`,`epoch`,`seq_id`) VALUES
 	// ('2022-05-04 14:02:08.624','2022-05-04 14:02:08.624',1,1) ON DUPLICATE KEY UPDATE `seq_id`=`seq_id`
-	return db.Clauses(clause.OnConflict{DoNothing: true}).Create(&LogicEpoch{
-		Model: Model{
-			SeqID: defaultEpochPK,
-		},
-		Epoch: defaultMinEpoch,
-	}).Error
+	return db.WithContext(ctx).
+		Clauses(clause.OnConflict{DoNothing: true}).
+		Create(&LogicEpoch{
+			Model: Model{
+				SeqID: defaultEpochPK,
+			},
+			Epoch: defaultMinEpoch,
+		}).Error
 }
 
 // GenEpoch will increasing the backend epoch by 1 and return the new epoch
 func GenEpoch(ctx context.Context, db *gorm.DB) (int64, error) {
 	var epoch int64
-	err := db.Transaction(func(tx *gorm.DB) error {
+	err := db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		//(1)update epoch = epoch + 1
 		if err := tx.Model(&LogicEpoch{
 			Model: Model{

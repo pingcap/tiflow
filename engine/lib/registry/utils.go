@@ -11,16 +11,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package dm
+package registry
 
-import (
-	"testing"
+import "reflect"
 
-	"github.com/stretchr/testify/require"
-)
-
-func TestTopic(t *testing.T) {
-	t.Parallel()
-
-	require.Equal(t, "operate-task-message-master-id-task-id", OperateTaskMessageTopic("master-id", "task-id"))
+// isPtr checks whether the type parameter C is a pointer.
+func isPtr[C any]() bool {
+	var c C
+	tp := reflect.TypeOf(c)
+	return tp.Kind() == reflect.Pointer
 }

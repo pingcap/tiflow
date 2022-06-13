@@ -36,6 +36,7 @@ import (
 	derror "github.com/pingcap/tiflow/engine/pkg/errors"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/broker"
 	resourcemeta "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
+	"github.com/pingcap/tiflow/engine/pkg/logutil"
 	extkv "github.com/pingcap/tiflow/engine/pkg/meta/extension"
 	"github.com/pingcap/tiflow/engine/pkg/meta/kvclient"
 	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
@@ -85,8 +86,9 @@ type BaseWorker interface {
 
 	MetaKVClient() metaclient.KVClient
 	MetricFactory() promutil.Factory
+	Logger() *zap.Logger
 	UpdateStatus(ctx context.Context, status libModel.WorkerStatus) error
-	SendMessage(ctx context.Context, topic p2p.Topic, message interface{}) (bool, error)
+	SendMessage(ctx context.Context, topic p2p.Topic, message interface{}, nonblocking bool) error
 	OpenStorage(ctx context.Context, resourcePath resourcemeta.ResourceID) (broker.Handle, error)
 	// Exit should be called when worker (in user logic) wants to exit.
 	// When `err` is not nil, the status code is assigned WorkerStatusError.
@@ -128,13 +130,19 @@ type DefaultBaseWorker struct {
 	cancelPool    context.CancelFunc
 
 	exitController *worker.ExitController
+	closeImplOnce  sync.Once
 
 	clock clock.Clock
 
 	// user metastore prefix kvclient
 	// Don't close it. It's just a prefix wrapper for underlying userRawKVClient
 	userMetaKVClient metaclient.KVClient
-	metricFactory    promutil.Factory
+
+	// metricFactory can produce metric with underlying project info and job info
+	metricFactory promutil.Factory
+
+	// logger is the zap logger with underlying project info and job info
+	logger *zap.Logger
 
 	// tenant/project information
 	projectInfo tenant.ProjectInfo
@@ -189,6 +197,7 @@ func NewBaseWorker(
 		clock:            clock.New(),
 		userMetaKVClient: kvclient.NewPrefixKVClient(params.UserRawKVClient, ctx.ProjectInfo.UniqueID()),
 		metricFactory:    promutil.NewFactory4Worker(ctx.ProjectInfo, WorkerTypeForMetric(tp), masterID, workerID),
+		logger:           logutil.NewLogger4Worker(ctx.ProjectInfo, masterID, workerID),
 	}
 }
 
@@ -232,8 +241,6 @@ func (w *DefaultBaseWorker) doPreInit(ctx context.Context) error {
 			zap.Error(err))
 	}()
 
-	w.startBackgroundTasks()
-
 	initTime := w.clock.Mono()
 	rctx, ok := runtime.ToRuntimeCtx(ctx)
 	if ok {
@@ -247,7 +254,20 @@ func (w *DefaultBaseWorker) doPreInit(ctx context.Context) error {
 		w.frameMetaClient,
 		initTime)
 
-	w.exitController = worker.NewExitController(w.masterClient, w.errCenter, w.clock)
+	w.exitController = worker.NewExitController(
+		w.masterClient,
+		w.errCenter,
+		worker.WithClock(w.clock),
+		// TODO use a logger passed down from the caller.
+		worker.WithLogger(log.L().WithFields(
+			zap.String("worker-id", w.id),
+			zap.String("master-id", w.masterID))),
+		worker.WithPrepareExitFunc(func() {
+			w.closeImplOnce.Do(func() {
+				w.callCloseImpl()
+			})
+		}))
+
 	w.workerMetaClient = metadata.NewWorkerMetadataClient(w.masterID, w.frameMetaClient)
 
 	w.statusSender = statusutil.NewWriter(
@@ -257,6 +277,8 @@ func (w *DefaultBaseWorker) doPreInit(ctx context.Context) error {
 			return w.Impl.OnMasterMessage(topic, msg)
 		},
 	)
+
+	w.startBackgroundTasks()
 
 	if err := w.initMessageHandlers(ctx); err != nil {
 		return errors.Trace(err)
@@ -344,16 +366,26 @@ func (w *DefaultBaseWorker) doClose() {
 }
 
 // Close implements BaseWorker.Close
+// TODO remove the return value from the signature.
 func (w *DefaultBaseWorker) Close(ctx context.Context) error {
-	err := w.Impl.CloseImpl(ctx)
-	// We don't return here if CloseImpl return error to ensure
-	// that we can close inner resources of the framework
-	if err != nil {
-		log.L().Error("Failed to close WorkerImpl", zap.Error(err))
-	}
+	w.closeImplOnce.Do(func() {
+		w.callCloseImpl()
+	})
 
 	w.doClose()
-	return errors.Trace(err)
+	return nil
+}
+
+func (w *DefaultBaseWorker) callCloseImpl() {
+	closeCtx, cancel := context.WithTimeout(
+		context.Background(), w.timeoutConfig.CloseWorkerTimeout)
+	defer cancel()
+
+	err := w.Impl.CloseImpl(closeCtx)
+	if err != nil {
+		log.L().Warn("Failed to close worker",
+			zap.String("worker-id", w.id))
+	}
 }
 
 // ID implements BaseWorker.ID
@@ -369,6 +401,11 @@ func (w *DefaultBaseWorker) MetaKVClient() metaclient.KVClient {
 // MetricFactory implements BaseWorker.MetricFactory
 func (w *DefaultBaseWorker) MetricFactory() promutil.Factory {
 	return w.metricFactory
+}
+
+// Logger implements BaseMaster.Logger
+func (m *DefaultBaseWorker) Logger() *zap.Logger {
+	return m.logger
 }
 
 // UpdateStatus updates the worker's status and tries to notify the master.
@@ -396,9 +433,16 @@ func (w *DefaultBaseWorker) SendMessage(
 	ctx context.Context,
 	topic p2p.Topic,
 	message interface{},
-) (bool, error) {
+	nonblocking bool,
+) error {
+	var err error
 	ctx = w.errCenter.WithCancelOnFirstError(ctx)
-	return w.messageSender.SendToNode(ctx, w.masterClient.MasterNode(), topic, message)
+	if nonblocking {
+		_, err = w.messageSender.SendToNode(ctx, w.masterClient.MasterNode(), topic, message)
+	} else {
+		err = w.messageSender.SendToNodeB(ctx, w.masterClient.MasterNode(), topic, message)
+	}
+	return err
 }
 
 // OpenStorage implements BaseWorker.OpenStorage

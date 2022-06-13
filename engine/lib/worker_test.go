@@ -106,7 +106,7 @@ func TestWorkerInitAndClose(t *testing.T) {
 		Status:      &libModel.WorkerStatus{Code: libModel.WorkerStatusNormal},
 	}, statusMsg)
 
-	worker.On("CloseImpl").Return(nil)
+	worker.On("CloseImpl").Return(nil).Once()
 	err = worker.Close(ctx)
 	require.NoError(t, err)
 }
@@ -310,6 +310,7 @@ func TestWorkerSuicide(t *testing.T) {
 	worker.On("Status").Return(libModel.WorkerStatus{
 		Code: libModel.WorkerStatusNormal,
 	}, nil)
+	worker.On("CloseImpl", mock.Anything).Return(nil)
 
 	err := worker.Init(ctx)
 	require.NoError(t, err)
@@ -351,6 +352,7 @@ func TestWorkerSuicideAfterRuntimeDelay(t *testing.T) {
 		Code: libModel.WorkerStatusNormal,
 	}, nil)
 	worker.On("Tick", mock.Anything).Return(nil)
+	worker.On("CloseImpl", mock.Anything).Return(nil)
 
 	ctx = runtime.NewRuntimeCtxWithSubmitTime(ctx, submitTime)
 	err := worker.Init(ctx)
@@ -395,6 +397,7 @@ func TestWorkerGracefulExit(t *testing.T) {
 
 	worker.On("Tick", mock.Anything).
 		Return(errors.New("fake error")).Once()
+	worker.On("CloseImpl", mock.Anything).Return(nil).Once()
 
 	for {
 		err := worker.Poll(ctx)
@@ -459,6 +462,7 @@ func TestWorkerGracefulExitWhileTimeout(t *testing.T) {
 
 	worker.On("Tick", mock.Anything).
 		Return(errors.New("fake error")).Once()
+	worker.On("CloseImpl", mock.Anything).Return(nil).Once()
 
 	for {
 		err := worker.Poll(ctx)
@@ -527,6 +531,7 @@ func TestExitWithoutReturn(t *testing.T) {
 	require.NoError(t, err)
 
 	worker.On("Tick", mock.Anything).Return(nil)
+	worker.On("CloseImpl", mock.Anything).Return(nil).Once()
 
 	worker.DefaultBaseWorker.Exit(ctx, libModel.WorkerStatus{
 		Code: libModel.WorkerStatusFinished,

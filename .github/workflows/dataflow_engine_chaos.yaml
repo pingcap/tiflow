@@ -23,6 +23,8 @@ jobs:
           [
             "pod-failure-dataflow",
             "pod-kill-dataflow",
+            "network-partition-dataflow",
+            "network-emulation-dataflow",
           ]
 
     # Steps represent a sequence of tasks that will be executed as part of the job
@@ -39,31 +41,8 @@ jobs:
           path: ~/go/pkg/mod
           key: ${{ runner.os }}-dataflow-${{ hashFiles('go.sum') }}
 
-      # Set up Kubernetes with K3s
-      - name: Set up K3s cluster
-        run: |
-          curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION=v1.18.9+k3s1 sh -s - \
-            --write-kubeconfig-mode=644 \
-            "${k3s_disable_command:---disable}" metrics-server \
-            "${k3s_disable_command:---disable}" traefik \
-            --flannel-backend=none \
-            --docker
-        shell: bash
-
-      # this may be failed sometimes, and I want to exit the workflow directly if failed,
-      # but GitHub Actions doesnt' support early-exit yet, see https://github.com/actions/runner/issues/662.
-      # so, simply wait for a long time.
-      - name: Wait for coredns
-        run: |
-          kubectl rollout status --watch --timeout 600s deployment/coredns -n kube-system
-        shell: bash
-        env:
-          KUBECONFIG: /etc/rancher/k3s/k3s.yaml
-
-      - name: Export KUBECONFIG environment variable
-        run: |
-          echo 'KUBECONFIG=/etc/rancher/k3s/k3s.yaml' >> $GITHUB_ENV
-        shell: bash
+      - name: Create k8s Kind Cluster
+        uses: helm/kind-action@v1.2.0
 
       - name: Print cluster information
         run: |
@@ -73,6 +52,7 @@ jobs:
           kubectl get pods -n kube-system
           kubectl get sc
           kubectl version
+          helm version
 
       - name: Build dataflow engine binary
         run: make df-master df-executor df-chaos-case
@@ -82,6 +62,10 @@ jobs:
           cp -r $GITHUB_WORKSPACE/engine/chaos/manifests/conf/ $GITHUB_WORKSPACE/bin/
           docker build -f $GITHUB_WORKSPACE/engine/chaos/manifests/Dockerfile -t dataflow:chaos $GITHUB_WORKSPACE/bin
           docker image list
+
+      - name: Load docker image to kind cluster
+        run: |
+          kind load docker-image dataflow:chaos --name chart-testing
 
       # Set up metastore and basic services
       - name: Set up metastore and basic services
@@ -204,12 +188,16 @@ jobs:
         run: |
           $GITHUB_WORKSPACE/engine/chaos/scripts/check-case.sh
 
+      - name: Pause all chaos
+        run: |
+          kubectl delete -f $GITHUB_WORKSPACE/engine/chaos/manifests/${{ matrix.chaos-obj }}.yaml
+
       - name: Copy logs to hack permission
         if: ${{ always() }}
         run: |
           mkdir ./logs
-          sudo cp -r -L /var/log/containers/. ./logs
-          sudo find /var/ -type f | grep -E '.*/(server-master|executor)-[^/]*.log$' | sudo xargs -i cp {} ./logs || true
+          kubectl get pods --no-headers -o custom-columns=":metadata.name"|grep -E "server-master|executor"|xargs -I{} sudo kubectl cp {}:/log/{}.log ./logs/{}.log || true
+          kind export logs ./logs/kind --name chart-testing
           sudo chown -R runner ./logs
 
       # Upload logs as artifact seems not stable, so we set `continue-on-error: true` here.
@@ -221,8 +209,6 @@ jobs:
           name: chaos-base-logs.${{ matrix.chaos-obj }}
           path: |
             ./logs
-            !./logs/coredns-*
-            !./logs/local-path-provisioner-*
 
       # Send feishu notification if failed.
       - name: Feishu notification
