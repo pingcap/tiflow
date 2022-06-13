@@ -319,14 +319,6 @@ func (a *agent) Close() error {
 	return a.trans.Close()
 }
 
-func (a *agent) newMessageHeader() *schedulepb.Message_Header {
-	return &schedulepb.Message_Header{
-		Version:        a.version,
-		OwnerRevision:  a.ownerInfo.revision,
-		ProcessorEpoch: a.epoch,
-	}
-}
-
 // handleOwnerInfo return false, if the given owner's info is staled.
 // update owner's info to the latest otherwise.
 // id: the incoming owner's capture ID
@@ -410,7 +402,11 @@ func (a *agent) sendMsgs(ctx context.Context, msgs []*schedulepb.Message) error 
 				zap.String("changefeed", a.changeFeedID.ID),
 				zap.Any("message", m))
 		}
-		m.Header = a.newMessageHeader()
+		m.Header = &schedulepb.Message_Header{
+			Version:        a.version,
+			OwnerRevision:  a.ownerInfo.revision,
+			ProcessorEpoch: a.epoch,
+		}
 		m.From = a.captureID
 		m.To = a.ownerInfo.captureID
 	}

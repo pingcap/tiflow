@@ -101,7 +101,7 @@ func TestAgentHandleMessageDispatchTable(t *testing.T) {
 	mockTableExecutor.On("IsAddTableFinished", mock.Anything,
 		mock.Anything, mock.Anything).Return(false, nil)
 	a.handleMessageDispatchTableRequest(addTableRequest, processorEpoch)
-	responses, err = a.tableM.poll(ctx, a.stopping)
+	_, err = a.tableM.poll(ctx, a.stopping)
 	require.NoError(t, err)
 
 	mockTableExecutor.ExpectedCalls = mockTableExecutor.ExpectedCalls[:1]
@@ -155,7 +155,8 @@ func TestAgentHandleMessageDispatchTable(t *testing.T) {
 	require.Equal(t, schedulepb.TableStateReplicating, addTableResponse.AddTable.Status.State)
 	require.Contains(t, a.tableM.tables, model.TableID(1))
 
-	mockTableExecutor.On("RemoveTable", mock.Anything, mock.Anything).Return(false)
+	mockTableExecutor.On("RemoveTable", mock.Anything, mock.Anything).
+		Return(false)
 	// remove table in the replicating state failed, should still in replicating.
 	a.handleMessageDispatchTableRequest(removeTableRequest, processorEpoch)
 	responses, err = a.tableM.poll(ctx, a.stopping)
@@ -169,7 +170,8 @@ func TestAgentHandleMessageDispatchTable(t *testing.T) {
 	require.Contains(t, a.tableM.tables, model.TableID(1))
 
 	mockTableExecutor.ExpectedCalls = nil
-	mockTableExecutor.On("RemoveTable", mock.Anything, mock.Anything).Return(true)
+	mockTableExecutor.On("RemoveTable", mock.Anything, mock.Anything).
+		Return(true)
 	mockTableExecutor.On("IsRemoveTableFinished", mock.Anything, mock.Anything).
 		Return(3, false)
 	// remove table in the replicating state failed, should still in replicating.
@@ -285,7 +287,8 @@ func TestAgentPermuteMessages(t *testing.T) {
 					TableID: 1,
 				},
 			},
-		}})
+		},
+	})
 	for _, isSecondary := range []bool{true, false} {
 		inboundMessages = append(inboundMessages, &schedulepb.Message{
 			Header: &schedulepb.Message_Header{
@@ -303,7 +306,8 @@ func TestAgentPermuteMessages(t *testing.T) {
 						IsSecondary: isSecondary,
 					},
 				},
-			}})
+			},
+		})
 	}
 
 	inboundMessages = append(inboundMessages, &schedulepb.Message{
@@ -364,9 +368,11 @@ func TestAgentPermuteMessages(t *testing.T) {
 				switch message.DispatchTableRequest.Request.(type) {
 				case *schedulepb.DispatchTableRequest_AddTable:
 					for _, ok := range []bool{false, true} {
-						mockTableExecutor.On("AddTable", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(ok, nil)
+						mockTableExecutor.On("AddTable", mock.Anything, mock.Anything,
+							mock.Anything, mock.Anything).Return(ok, nil)
 						for _, ok1 := range []bool{false, true} {
-							mockTableExecutor.On("IsAddTableFinished", mock.Anything, mock.Anything, mock.Anything).Return(ok1, nil)
+							mockTableExecutor.On("IsAddTableFinished", mock.Anything,
+								mock.Anything, mock.Anything).Return(ok1, nil)
 
 							trans.recvBuffer = append(trans.recvBuffer, message)
 							err := a.Tick(ctx)
@@ -379,15 +385,18 @@ func TestAgentPermuteMessages(t *testing.T) {
 					}
 				case *schedulepb.DispatchTableRequest_RemoveTable:
 					for _, ok := range []bool{false, true} {
-						mockTableExecutor.On("RemoveTable", mock.Anything, mock.Anything).Return(ok)
+						mockTableExecutor.On("RemoveTable", mock.Anything,
+							mock.Anything).Return(ok)
 						for _, ok1 := range []bool{false, true} {
 							trans.recvBuffer = append(trans.recvBuffer, message)
-							mockTableExecutor.On("IsRemoveTableFinished", mock.Anything, mock.Anything).Return(0, ok1)
+							mockTableExecutor.On("IsRemoveTableFinished",
+								mock.Anything, mock.Anything).Return(0, ok1)
 							err := a.Tick(ctx)
 							require.NoError(t, err)
 							if len(trans.sendBuffer) != 0 {
 								require.Len(t, trans.sendBuffer, 1)
-								response, yes := trans.sendBuffer[0].DispatchTableResponse.Response.(*schedulepb.DispatchTableResponse_RemoveTable)
+								response, yes := trans.sendBuffer[0].DispatchTableResponse.
+									Response.(*schedulepb.DispatchTableResponse_RemoveTable)
 								trans.sendBuffer = trans.sendBuffer[:0]
 								require.True(t, yes)
 								expected := schedulepb.TableStateStopping
@@ -395,7 +404,8 @@ func TestAgentPermuteMessages(t *testing.T) {
 									expected = schedulepb.TableStateStopped
 								}
 								require.Equal(t, expected, response.RemoveTable.Status.State)
-								mockTableExecutor.ExpectedCalls = mockTableExecutor.ExpectedCalls[:1]
+								mockTableExecutor.ExpectedCalls = mockTableExecutor.
+									ExpectedCalls[:1]
 							}
 						}
 						mockTableExecutor.ExpectedCalls = nil
@@ -450,12 +460,13 @@ func TestAgentHandleMessage(t *testing.T) {
 		},
 	}
 	// wrong epoch, ignored
-	response = a.handleMessage([]*schedulepb.Message{addTableRequest})
+	responses := a.handleMessage([]*schedulepb.Message{addTableRequest})
 	require.NotContains(t, tableM.tables, model.TableID(1))
+	require.Len(t, responses, 0)
 
 	// correct epoch, processing.
 	addTableRequest.Header.ProcessorEpoch = a.epoch
-	response = a.handleMessage([]*schedulepb.Message{addTableRequest})
+	_ = a.handleMessage([]*schedulepb.Message{addTableRequest})
 	require.Contains(t, tableM.tables, model.TableID(1))
 
 	heartbeat.Header.OwnerRevision.Revision = 2
@@ -577,18 +588,15 @@ func TestAgentTick(t *testing.T) {
 	mockTableExecutor.On("IsAddTableFinished", mock.Anything,
 		mock.Anything, mock.Anything).Return(false, nil)
 	require.NoError(t, a.Tick(ctx))
-	responses := trans.sendBuffer[:len(trans.sendBuffer)]
 	trans.sendBuffer = trans.sendBuffer[:0]
 
-	messages = messages[:0]
-	messages = append(messages, addTableRequest)
-	trans.recvBuffer = append(trans.recvBuffer, messages...)
+	trans.recvBuffer = append(trans.recvBuffer, addTableRequest)
 
 	mockTableExecutor.ExpectedCalls = mockTableExecutor.ExpectedCalls[:1]
 	mockTableExecutor.On("IsAddTableFinished", mock.Anything,
 		mock.Anything, mock.Anything).Return(true, nil)
 	require.NoError(t, a.Tick(ctx))
-	responses = trans.sendBuffer[:len(trans.sendBuffer)]
+	responses := trans.sendBuffer[:len(trans.sendBuffer)]
 	trans.sendBuffer = trans.sendBuffer[:0]
 	require.Len(t, responses, 1)
 	require.Equal(t, schedulepb.MsgDispatchTableResponse, responses[0].MsgType)
@@ -649,7 +657,9 @@ func (e *MockTableExecutor) AddTable(
 }
 
 // IsAddTableFinished determines if the table has been added.
-func (e *MockTableExecutor) IsAddTableFinished(ctx context.Context, tableID model.TableID, isPrepare bool) bool {
+func (e *MockTableExecutor) IsAddTableFinished(ctx context.Context,
+	tableID model.TableID, isPrepare bool,
+) bool {
 	_, ok := e.tables[tableID]
 	if !ok {
 		log.Panic("table which was added is not found",
@@ -698,7 +708,9 @@ func (e *MockTableExecutor) RemoveTable(ctx context.Context, tableID model.Table
 }
 
 // IsRemoveTableFinished determines if the table has been removed.
-func (e *MockTableExecutor) IsRemoveTableFinished(ctx context.Context, tableID model.TableID) (model.Ts, bool) {
+func (e *MockTableExecutor) IsRemoveTableFinished(ctx context.Context,
+	tableID model.TableID,
+) (model.Ts, bool) {
 	state, ok := e.tables[tableID]
 	if !ok {
 		// the real `table executor` processor, would panic in such case.

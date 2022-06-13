@@ -51,13 +51,19 @@ func (t *table) refresh() bool {
 	oldState := t.status.State
 
 	meta := t.executor.GetTableMeta(t.id)
-	newState := tableStatus2PB(meta.State)
+	state := tableStatus2PB(meta.State)
 
-	t.status.State = newState
+	t.status.State = state
 	t.status.Checkpoint.CheckpointTs = meta.CheckpointTs
 	t.status.Checkpoint.ResolvedTs = meta.ResolvedTs
 
-	return oldState != newState
+	if oldState != state {
+		log.Info("tpscheduler: table state changed",
+			zap.Any("oldState", oldState), zap.Any("state", state))
+		return true
+	}
+
+	return false
 }
 
 func newAddTableResponseMessage(status schedulepb.TableStatus) *schedulepb.Message {
@@ -311,7 +317,6 @@ func (tm *tableManager) getTable(tableID model.TableID) (*table, bool) {
 	if state != schedulepb.TableStateAbsent {
 		log.Panic("tpscheduler: tableManager found table not tracked",
 			zap.Int64("tableID", tableID), zap.Any("meta", meta))
-
 	}
 	return nil, false
 }
