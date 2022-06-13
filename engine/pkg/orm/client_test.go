@@ -29,7 +29,7 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/stretchr/testify/require"
 
-	libModel "github.com/pingcap/tiflow/engine/lib/model"
+	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	derror "github.com/pingcap/tiflow/engine/pkg/errors"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
@@ -406,7 +406,7 @@ func TestJob(t *testing.T) {
 		{
 			fn: "UpsertJob",
 			inputs: []interface{}{
-				&libModel.MasterMetaKVData{
+				&frameModel.MasterMetaKVData{
 					ProjectID:  "p111",
 					ID:         "j111",
 					Tp:         1,
@@ -452,7 +452,7 @@ func TestJob(t *testing.T) {
 			// "UPDATE `master_meta_kv_data` SET `addr`=?,`config`=?,`epoch`=?,`id`=?,`node_id`=?,`project-id`=?,`status`=?,`type`=?,`updated_at`=? WHERE id = ?"
 			fn: "UpdateJob",
 			inputs: []interface{}{
-				&libModel.MasterMetaKVData{
+				&frameModel.MasterMetaKVData{
 					ProjectID:  "p111",
 					ID:         "j111",
 					Tp:         1,
@@ -473,7 +473,7 @@ func TestJob(t *testing.T) {
 			inputs: []interface{}{
 				"j111",
 			},
-			output: &libModel.MasterMetaKVData{
+			output: &frameModel.MasterMetaKVData{
 				Model: model.Model{
 					SeqID:     1,
 					CreatedAt: createdAt,
@@ -515,7 +515,7 @@ func TestJob(t *testing.T) {
 			inputs: []interface{}{
 				"p111",
 			},
-			output: []*libModel.MasterMetaKVData{
+			output: []*frameModel.MasterMetaKVData{
 				{
 					Model: model.Model{
 						SeqID:     1,
@@ -559,7 +559,7 @@ func TestJob(t *testing.T) {
 				"j111",
 				1,
 			},
-			output: []*libModel.MasterMetaKVData{
+			output: []*frameModel.MasterMetaKVData{
 				{
 					Model: model.Model{
 						SeqID:     1,
@@ -629,7 +629,7 @@ func TestWorker(t *testing.T) {
 			// `type`=VALUES(`type`),`status`=VALUES(`status`),`errmsg`=VALUES(`errmsg`),`ext_bytes`=VALUES(`ext_bytes`)
 			fn: "UpsertWorker",
 			inputs: []interface{}{
-				&libModel.WorkerStatus{
+				&frameModel.WorkerStatus{
 					Model: model.Model{
 						CreatedAt: createdAt,
 						UpdatedAt: updatedAt,
@@ -650,7 +650,7 @@ func TestWorker(t *testing.T) {
 		{
 			fn: "UpsertWorker",
 			inputs: []interface{}{
-				&libModel.WorkerStatus{
+				&frameModel.WorkerStatus{
 					Model: model.Model{
 						SeqID:     1,
 						CreatedAt: createdAt,
@@ -702,7 +702,7 @@ func TestWorker(t *testing.T) {
 			// 'UPDATE `worker_statuses` SET `error-message`=?,`ext-bytes`=?,`id`=?,`job_id`=?,`project_id`=?,`status`=?,`type`=?,`updated_at`=? WHERE job_id = ? && id = ?'
 			fn: "UpdateWorker",
 			inputs: []interface{}{
-				&libModel.WorkerStatus{
+				&frameModel.WorkerStatus{
 					ProjectID:    "p111",
 					JobID:        "j111",
 					ID:           "w111",
@@ -724,7 +724,7 @@ func TestWorker(t *testing.T) {
 				"j111",
 				"w222",
 			},
-			output: &libModel.WorkerStatus{
+			output: &frameModel.WorkerStatus{
 				Model: model.Model{
 					SeqID:     1,
 					CreatedAt: createdAt,
@@ -765,7 +765,7 @@ func TestWorker(t *testing.T) {
 			inputs: []interface{}{
 				"j111",
 			},
-			output: []*libModel.WorkerStatus{
+			output: []*frameModel.WorkerStatus{
 				{
 					Model: model.Model{
 						SeqID:     1,
@@ -808,7 +808,7 @@ func TestWorker(t *testing.T) {
 				"j111",
 				1,
 			},
-			output: []*libModel.WorkerStatus{
+			output: []*frameModel.WorkerStatus{
 				{
 					Model: model.Model{
 						SeqID:     1,

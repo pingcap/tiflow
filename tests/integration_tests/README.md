@@ -67,25 +67,6 @@ We recommend that you provide docker with at least 6+ cores and 8G+ memory. Of c
 
 ### Integration Test
 
-#### Run integration tests locally
-
-1. Run `make integration_test_build` to generate TiCDC related binaries for integration test
-
-2. Run `make integration_test` to execute the integration tests. This command will
-
-   1. Check that all required executables exist.
-   2. Execute `tests/integration_tests/run.sh`
-
-   > If want to run one integration test case only, just pass the CASE parameter, such as `make integration_test CASE=simple`.
-   
-   > If want to run integration test cases from the specified one, just pass the START_AT parameter, such as `make integration_test START_AT=simple` .
-
-   > There exists some environment variables that you can set by yourself, variable details can be found in [test_prepare](_utils/test_prepare).
-
-   > `MySQL sink` will be used by default, if you want to test `Kafka sink`, please run with `make integration_test_kafka CASE=simple`.
-
-3. After executing the tests, run `make coverage` to get a coverage report at `/tmp/tidb_cdc_test/all_cov.html`.
-
 #### Run integration tests in docker
 
 > **Warning:**
@@ -113,9 +94,29 @@ Some useful tips:
 
 3. You can specify in the [integration-test.Dockerfile](../../deployments/ticdc/docker/integration-test.Dockerfile)
    the version of other dependencies that you want to download, such as tidb, tikv, pd, etc.
-   > For example, you can change `RUN ./download-integration-test-binaries.sh master` to `RUN ./download-integration-test-binaries.sh release-5.2`
+   > For example, you can change `RUN ./download-integration-test-binaries.sh master`
+   to `RUN ./download-integration-test-binaries.sh release-5.2`
    > to use the release-5.2 dependency.
    > Then rebuild the image with the [--no-cache](https://docs.docker.com/compose/reference/build/) flag.
+
+#### Run integration tests locally
+
+1. Run `make integration_test_build` to generate TiCDC related binaries for integration test
+
+2. Run `make integration_test` to execute the integration tests. This command will
+
+   1. Check that all required executables exist.
+   2. Execute `tests/integration_tests/run.sh`
+
+   > If want to run one integration test case only, just pass the CASE parameter, such as `make integration_test CASE=simple`.
+   
+   > If want to run integration test cases from the specified one, just pass the START_AT parameter, such as `make integration_test START_AT=simple` .
+
+   > There exists some environment variables that you can set by yourself, variable details can be found in [test_prepare](_utils/test_prepare).
+
+   > `MySQL sink` will be used by default, if you want to test `Kafka sink`, please run with `make integration_test_kafka CASE=simple`.
+
+3. After executing the tests, run `make coverage` to get a coverage report at `/tmp/tidb_cdc_test/all_cov.html`.
 
 ## Writing new tests
 

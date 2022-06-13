@@ -21,23 +21,23 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	libModel "github.com/pingcap/tiflow/engine/lib/model"
+	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 )
 
 const jobAPIPrefix = "/api/v1/jobs/"
 
-func jobAPIBasePath(jobID libModel.JobID) string {
+func jobAPIBasePath(jobID frameModel.JobID) string {
 	return jobAPIPrefix + jobID + "/"
 }
 
 type jobAPIServer struct {
 	rwm      sync.RWMutex
-	handlers map[libModel.JobID]http.Handler
+	handlers map[frameModel.JobID]http.Handler
 }
 
 func newJobAPIServer() *jobAPIServer {
 	return &jobAPIServer{
-		handlers: make(map[libModel.JobID]http.Handler),
+		handlers: make(map[frameModel.JobID]http.Handler),
 	}
 }
 
@@ -65,7 +65,7 @@ func (s *jobAPIServer) match(path string) (http.Handler, bool) {
 	return h, ok
 }
 
-func (s *jobAPIServer) initialize(jobID libModel.JobID, f func(apiGroup *gin.RouterGroup)) {
+func (s *jobAPIServer) initialize(jobID frameModel.JobID, f func(apiGroup *gin.RouterGroup)) {
 	engine := gin.New()
 	apiGroup := engine.Group(jobAPIBasePath(jobID))
 	f(apiGroup)
@@ -75,7 +75,7 @@ func (s *jobAPIServer) initialize(jobID libModel.JobID, f func(apiGroup *gin.Rou
 	s.rwm.Unlock()
 }
 
-func (s *jobAPIServer) listenStoppedJobs(ctx context.Context, stoppedJobs <-chan libModel.JobID) error {
+func (s *jobAPIServer) listenStoppedJobs(ctx context.Context, stoppedJobs <-chan frameModel.JobID) error {
 	for {
 		select {
 		case jobID, ok := <-stoppedJobs:
