@@ -31,8 +31,11 @@ type TableState int32
 
 // TableState for table pipeline
 const (
+	TableStateUnknown TableState = iota
+	// TableStateAbsent means the table not found
+	TableStateAbsent
 	// TableStatePreparing indicate that the table is preparing connecting to regions
-	TableStatePreparing TableState = iota
+	TableStatePreparing
 	// TableStatePrepared means the first `Resolved Ts` is received.
 	TableStatePrepared
 	// TableStateReplicating means that sink is consuming data from the sorter,
@@ -43,17 +46,16 @@ const (
 	TableStateStopping
 	// TableStateStopped means sink stop all works, but the table resource not released yet.
 	TableStateStopped
-	// TableStateAbsent means the table not found
-	TableStateAbsent
 )
 
 var tableStatusStringMap = map[TableState]string{
+	TableStateUnknown:     "Unknown",
+	TableStateAbsent:      "Absent",
 	TableStatePreparing:   "Preparing",
 	TableStatePrepared:    "Prepared",
 	TableStateReplicating: "Replicating",
 	TableStateStopping:    "Stopping",
 	TableStateStopped:     "Stopped",
-	TableStateAbsent:      "Absent",
 }
 
 func (s TableState) String() string {
