@@ -10,6 +10,11 @@ SINK_TYPE=$1
 MAX_RETRIES=50
 
 function run() {
+	# mysql and kafka are the same
+	if [ "$SINK_TYPE" == "kafka" ]; then
+		return
+	fi
+
 	sudo python3 -m pip install -U requests==2.26.0
 
 	rm -rf $WORK_DIR && mkdir -p $WORK_DIR
@@ -30,12 +35,6 @@ function run() {
 	ensure $MAX_RETRIES "$CDC_BINARY cli capture list --disable-version-check 2>&1 | grep -v \"$owner_id\" | grep id"
 	capture_id=$($CDC_BINARY cli capture list --disable-version-check 2>&1 | awk -F '"' '/id/{print $4}' | grep -v "$owner_id")
 	echo "capture_id:" $capture_id
-
-	TOPIC_NAME="ticdc-http-api-test-$RANDOM"
-	case $SINK_TYPE in
-	kafka) SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4&kafka-version=${KAFKA_VERSION}" ;;
-	*) SINK_URI="mysql://normal:123456@127.0.0.1:3306/" ;;
-	esac
 
 	python3 $CUR/util/test_case.py check_health
 	python3 $CUR/util/test_case.py get_status
