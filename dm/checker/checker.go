@@ -153,7 +153,7 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 	for _, instance := range c.instances {
 		// init online ddl for checker
 		if instance.cfg.OnlineDDL && c.onlineDDL == nil {
-			c.onlineDDL, err = onlineddl.NewRealOnlinePlugin(c.tctx, instance.cfg)
+			c.onlineDDL, err = onlineddl.NewRealOnlinePlugin(c.tctx, instance.cfg, nil)
 			if err != nil {
 				return err
 			}

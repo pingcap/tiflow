@@ -28,6 +28,7 @@ import (
 	"github.com/pingcap/tiflow/dm/dm/master"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
 	resourcemeta "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 
 	"github.com/pingcap/tiflow/engine/client"
@@ -42,7 +43,6 @@ import (
 	"github.com/pingcap/tiflow/engine/model"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/deps"
-	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/broker"
 	extkv "github.com/pingcap/tiflow/engine/pkg/meta/extension"
 	kvmock "github.com/pingcap/tiflow/engine/pkg/meta/kvclient/mock"
@@ -194,10 +194,6 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	mockBaseJobmaster.On("MetaKVClient").Return(metaKVClient)
 	mockBaseJobmaster.On("GetWorkers").Return(map[string]lib.WorkerHandle{}).Once()
 	require.NoError(t.T(), jm.InitImpl(context.Background()))
-	// no error if init again
-	// though frame ensures that it will not init twice
-	mockBaseJobmaster.On("GetWorkers").Return(map[string]lib.WorkerHandle{}).Once()
-	require.NoError(t.T(), jm.InitImpl(context.Background()))
 
 	// recover
 	jm = &JobMaster{
@@ -220,17 +216,13 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	require.NoError(t.T(), jm.Tick(context.Background()))
 	require.NoError(t.T(), jm.Tick(context.Background()))
 	// make sure workerHandle1 bound to task status1, workerHandle2 bound to task status2.
-	taskStatus1 := runtime.DumpStatus{
-		DefaultTaskStatus: runtime.DefaultTaskStatus{
-			Unit:  lib.WorkerDMDump,
-			Stage: metadata.StageRunning,
-		},
+	taskStatus1 := runtime.TaskStatus{
+		Unit:  lib.WorkerDMDump,
+		Stage: metadata.StageRunning,
 	}
-	taskStatus2 := runtime.DumpStatus{
-		DefaultTaskStatus: runtime.DefaultTaskStatus{
-			Unit:  lib.WorkerDMDump,
-			Stage: metadata.StageRunning,
-		},
+	taskStatus2 := runtime.TaskStatus{
+		Unit:  lib.WorkerDMDump,
+		Stage: metadata.StageRunning,
 	}
 	jm.workerManager.workerStatusMap.Range(func(key, val interface{}) bool {
 		if val.(runtime.WorkerStatus).ID == worker1 {
@@ -311,13 +303,17 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	workerHandle2.On("IsTombStone").Return(false).Once()
 	jm.OnMasterRecovered(context.Background())
 	require.NoError(t.T(), jm.Tick(context.Background()))
-	// placeholder
+
+	workerHandle1.On("Status").Return(&libModel.WorkerStatus{ExtBytes: bytes1}).Once()
+	workerHandle1.On("IsTombStone").Return(false).Once()
 	require.NoError(t.T(), jm.OnWorkerStatusUpdated(workerHandle1, &libModel.WorkerStatus{ExtBytes: bytes1}))
+	require.NoError(t.T(), jm.OnWorkerStatusUpdated(workerHandle1, &libModel.WorkerStatus{}))
+
+	// placeholder
 	require.NoError(t.T(), jm.OnJobManagerMessage("", ""))
 	require.NoError(t.T(), jm.OnMasterMessage("", ""))
 	require.NoError(t.T(), jm.OnWorkerMessage(&lib.MockWorkerHandler{}, "", ""))
 	require.Equal(t.T(), jm.Workload(), model.RescUnit(2))
-	require.NoError(t.T(), jm.OnWorkerStatusUpdated(workerHandle1, &libModel.WorkerStatus{ExtBytes: bytes1}))
 
 	// Close
 	mockMessageAgent.On("SendMessage").Return(nil).Once()

@@ -16,6 +16,7 @@ package metricsproxy // nolint:dupl
 import (
 	"sync"
 
+	"github.com/pingcap/tiflow/engine/pkg/promutil"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -30,11 +31,11 @@ type CounterVecProxy struct {
 
 // NewCounterVec creates a new CounterVec based on the provided CounterOpts and
 // partitioned by the given label names.
-func NewCounterVec(opts prometheus.CounterOpts, labelNames []string) *CounterVecProxy {
+func NewCounterVec(f promutil.Factory, opts prometheus.CounterOpts, labelNames []string) *CounterVecProxy {
 	counterVecProxy := &CounterVecProxy{
 		LabelNamesIndex: make(map[string]int, len(labelNames)),
 		Labels:          make(map[string][]string),
-		CounterVec:      prometheus.NewCounterVec(opts, labelNames),
+		CounterVec:      f.NewCounterVec(opts, labelNames),
 	}
 	for idx, v := range labelNames {
 		counterVecProxy.LabelNamesIndex[v] = idx

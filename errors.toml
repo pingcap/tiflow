@@ -476,6 +476,11 @@ error = '''
 invalid topic expression
 '''
 
+["CDC:ErrKafkaTopicNotExists"]
+error = '''
+kafka topic not exists after creation
+'''
+
 ["CDC:ErrLeaseExpired"]
 error = '''
 owner lease expired 

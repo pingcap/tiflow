@@ -16,17 +16,13 @@ package registry
 import (
 	"github.com/pingcap/tiflow/engine/lib"
 	"github.com/pingcap/tiflow/engine/lib/fake"
-	libModel "github.com/pingcap/tiflow/engine/lib/model"
-	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 )
 
 // RegisterFake registers fake job master and fake worker to global registry
 func RegisterFake(registry Registry) {
-	fakeMasterFactory := NewSimpleWorkerFactory(func(ctx *dcontext.Context, id libModel.WorkerID, masterID libModel.MasterID, config WorkerConfig) lib.WorkerImpl {
-		return fake.NewFakeMaster(ctx, id, masterID, config)
-	}, &fake.Config{})
+	fakeMasterFactory := NewSimpleWorkerFactory(fake.NewFakeMaster)
 	registry.MustRegisterWorkerType(lib.FakeJobMaster, fakeMasterFactory)
 
-	fakeWorkerFactory := NewSimpleWorkerFactory(fake.NewDummyWorker, &fake.WorkerConfig{})
+	fakeWorkerFactory := NewSimpleWorkerFactory(fake.NewDummyWorker)
 	registry.MustRegisterWorkerType(lib.FakeTask, fakeWorkerFactory)
 }

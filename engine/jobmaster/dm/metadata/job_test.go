@@ -86,7 +86,7 @@ func TestJobStore(t *testing.T) {
 	require.Equal(t, job.Tasks[source1].Stage, StageRunning)
 	require.Equal(t, job.Tasks[source2].Stage, StageRunning)
 
-	require.NoError(t, jobStore.UpdateStages(context.Background(), []string{source1, source2}, StagePaused))
+	require.NoError(t, jobStore.UpdateStages(context.Background(), nil, StagePaused))
 	require.Equal(t, job.Tasks[source1].Stage, StageRunning)
 	require.Equal(t, job.Tasks[source2].Stage, StageRunning)
 	state, _ = jobStore.Get(context.Background())

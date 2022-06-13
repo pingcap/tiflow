@@ -22,6 +22,7 @@ type TimeoutConfig struct {
 	WorkerHeartbeatInterval          time.Duration
 	WorkerReportStatusInterval       time.Duration
 	MasterHeartbeatCheckLoopInterval time.Duration
+	CloseWorkerTimeout               time.Duration
 }
 
 var defaultTimeoutConfig = TimeoutConfig{
@@ -30,6 +31,7 @@ var defaultTimeoutConfig = TimeoutConfig{
 	WorkerHeartbeatInterval:          time.Second * 3,
 	WorkerReportStatusInterval:       time.Second * 3,
 	MasterHeartbeatCheckLoopInterval: time.Second * 1,
+	CloseWorkerTimeout:               time.Second * 3,
 }.Adjust()
 
 // Adjust validates the TimeoutConfig and adjusts it

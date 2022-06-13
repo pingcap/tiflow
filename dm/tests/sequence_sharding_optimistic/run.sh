@@ -48,9 +48,7 @@ run() {
 	run_sql_file $cur/data/db2.increment0.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
 
 	# check database `sharding_seq_tmp` exists
-	sleep 2
-	run_sql "select count(*) from sharding_seq_tmp.t1;" $TIDB_PORT $TIDB_PASSWORD
-	check_contains "count(*): 1"
+	run_sql_tidb_with_retry "select count(*) from sharding_seq_tmp.t1;" "count(*): 1"
 
 	# try to get schema for the table, but the stage is not paused.
 	curl -X PUT ${API_URL} -d '{"op":1, "task":"sequence_sharding_optimistic", "sources": ["mysql-replica-01"], "database":"sharding_seq_opt", "table":"t1"}' >${WORK_DIR}/get_schema.log
