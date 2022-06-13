@@ -27,9 +27,9 @@ import (
 	"google.golang.org/grpc"
 
 	pb "github.com/pingcap/tiflow/engine/enginepb"
-	"github.com/pingcap/tiflow/engine/lib"
-	libModel "github.com/pingcap/tiflow/engine/lib/model"
-	"github.com/pingcap/tiflow/engine/lib/registry"
+	"github.com/pingcap/tiflow/engine/framework"
+	frameModel "github.com/pingcap/tiflow/engine/framework/model"
+	"github.com/pingcap/tiflow/engine/framework/registry"
 	"github.com/pingcap/tiflow/engine/model"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/errors"
@@ -90,7 +90,7 @@ func (c *connPool) getConn(addr string) (*grpc.ClientConn, error) {
 type connArray []*grpc.ClientConn
 
 type cvsTask struct {
-	lib.BaseWorker
+	framework.BaseWorker
 	Config
 	counter  *atomic.Int64
 	curLoc   string
@@ -100,7 +100,7 @@ type cvsTask struct {
 
 	statusCode struct {
 		sync.RWMutex
-		code libModel.WorkerStatusCode
+		code frameModel.WorkerStatusCode
 	}
 	runError struct {
 		sync.RWMutex
@@ -113,10 +113,10 @@ type cvsTask struct {
 // RegisterWorker is used to register cvs task worker into global registry
 func RegisterWorker() {
 	factory := registry.NewSimpleWorkerFactory(newCvsTask)
-	registry.GlobalWorkerRegistry().MustRegisterWorkerType(lib.CvsTask, factory)
+	registry.GlobalWorkerRegistry().MustRegisterWorkerType(framework.CvsTask, factory)
 }
 
-func newCvsTask(ctx *dcontext.Context, _workerID libModel.WorkerID, masterID libModel.MasterID, conf *Config) *cvsTask {
+func newCvsTask(ctx *dcontext.Context, _workerID frameModel.WorkerID, masterID frameModel.MasterID, conf *Config) *cvsTask {
 	task := &cvsTask{
 		Config:            *conf,
 		curLoc:            conf.StartLoc,
@@ -130,14 +130,14 @@ func newCvsTask(ctx *dcontext.Context, _workerID libModel.WorkerID, masterID lib
 // InitImpl implements WorkerImpl.InitImpl
 func (task *cvsTask) InitImpl(ctx context.Context) error {
 	log.L().Info("init the task  ", zap.Any("task id :", task.ID()))
-	task.setStatusCode(libModel.WorkerStatusNormal)
+	task.setStatusCode(frameModel.WorkerStatusNormal)
 	ctx, task.cancelFn = context.WithCancel(ctx)
 	go func() {
 		err := task.Receive(ctx)
 		if err != nil {
 			log.L().Error("error happened when reading data from the upstream ", zap.String("id", task.ID()), zap.Any("message", err.Error()))
 			task.setRunError(err)
-			task.setStatusCode(libModel.WorkerStatusError)
+			task.setStatusCode(frameModel.WorkerStatusError)
 		}
 	}()
 	go func() {
@@ -145,9 +145,9 @@ func (task *cvsTask) InitImpl(ctx context.Context) error {
 		if err != nil {
 			log.L().Error("error happened when writing data to the downstream ", zap.String("id", task.ID()), zap.Any("message", err.Error()))
 			task.setRunError(err)
-			task.setStatusCode(libModel.WorkerStatusError)
+			task.setStatusCode(frameModel.WorkerStatusError)
 		} else {
-			task.setStatusCode(libModel.WorkerStatusFinished)
+			task.setStatusCode(frameModel.WorkerStatusFinished)
 		}
 	}()
 
@@ -166,7 +166,7 @@ func (task *cvsTask) Tick(ctx context.Context) error {
 		return err
 	}
 	switch task.getStatusCode() {
-	case libModel.WorkerStatusFinished, libModel.WorkerStatusError, libModel.WorkerStatusStopped:
+	case frameModel.WorkerStatusFinished, frameModel.WorkerStatusError, frameModel.WorkerStatusStopped:
 		return task.BaseWorker.Exit(ctx, task.Status(), task.getRunError())
 	default:
 	}
@@ -174,7 +174,7 @@ func (task *cvsTask) Tick(ctx context.Context) error {
 }
 
 // Status returns a short worker status to be periodically sent to the master.
-func (task *cvsTask) Status() libModel.WorkerStatus {
+func (task *cvsTask) Status() frameModel.WorkerStatus {
 	stats := &Status{
 		TaskConfig: task.Config,
 		CurrentLoc: task.curLoc,
@@ -184,7 +184,7 @@ func (task *cvsTask) Status() libModel.WorkerStatus {
 	if err != nil {
 		log.L().Panic("get stats error", zap.String("id", task.ID()), zap.Error(err))
 	}
-	return libModel.WorkerStatus{
+	return frameModel.WorkerStatus{
 		Code: task.getStatusCode(), ErrorMessage: "",
 		ExtBytes: statsBytes,
 	}
@@ -197,10 +197,10 @@ func (task *cvsTask) Workload() model.RescUnit {
 
 func (task *cvsTask) OnMasterMessage(topic p2p.Topic, message p2p.MessageValue) error {
 	switch msg := message.(type) {
-	case *libModel.StatusChangeRequest:
+	case *frameModel.StatusChangeRequest:
 		switch msg.ExpectState {
-		case libModel.WorkerStatusStopped:
-			task.setStatusCode(libModel.WorkerStatusStopped)
+		case frameModel.WorkerStatusStopped:
+			task.setStatusCode(frameModel.WorkerStatusStopped)
 		default:
 			log.L().Info("FakeWorker: ignore status change state", zap.Int32("state", int32(msg.ExpectState)))
 		}
@@ -296,13 +296,13 @@ func (task *cvsTask) send(ctx context.Context) error {
 	}
 }
 
-func (task *cvsTask) getStatusCode() libModel.WorkerStatusCode {
+func (task *cvsTask) getStatusCode() frameModel.WorkerStatusCode {
 	task.statusCode.RLock()
 	defer task.statusCode.RUnlock()
 	return task.statusCode.code
 }
 
-func (task *cvsTask) setStatusCode(status libModel.WorkerStatusCode) {
+func (task *cvsTask) setStatusCode(status frameModel.WorkerStatusCode) {
 	task.statusCode.Lock()
 	defer task.statusCode.Unlock()
 	task.statusCode.code = status

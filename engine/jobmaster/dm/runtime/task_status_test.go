@@ -18,15 +18,15 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
-	libModel "github.com/pingcap/tiflow/engine/lib/model"
 )
 
 func TestTaskStatus(t *testing.T) {
 	t.Parallel()
 
 	offlineStatus := NewOfflineStatus("task_status_test")
-	require.Equal(t, offlineStatus.Unit, libModel.WorkerType(0))
+	require.Equal(t, offlineStatus.Unit, frameModel.WorkerType(0))
 	require.Equal(t, offlineStatus.Task, "task_status_test")
 	require.Equal(t, offlineStatus.Stage, metadata.StageUnscheduled)
 }

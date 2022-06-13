@@ -24,7 +24,7 @@ import (
 
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
-	"github.com/pingcap/tiflow/engine/lib/fake"
+	"github.com/pingcap/tiflow/engine/framework/fake"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	"github.com/pingcap/tiflow/engine/test/e2e"
 	"github.com/pingcap/tiflow/pkg/retry"

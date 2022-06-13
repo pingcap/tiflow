@@ -28,18 +28,18 @@ import (
 	"github.com/pingcap/tiflow/dm/loader"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	"github.com/pingcap/tiflow/dm/syncer"
+	"github.com/pingcap/tiflow/engine/framework"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
-	"github.com/pingcap/tiflow/engine/lib"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
 func TestUnitHolder(t *testing.T) {
-	unitHolder := newUnitHolderImpl(lib.WorkerDMDump, &config.SubTaskConfig{Name: "job-id", SourceID: "task-id", Flavor: mysql.MySQLFlavor})
+	unitHolder := newUnitHolderImpl(framework.WorkerDMDump, &config.SubTaskConfig{Name: "job-id", SourceID: "task-id", Flavor: mysql.MySQLFlavor})
 	require.IsType(t, &dumpling.Dumpling{}, unitHolder.unit)
-	unitHolder = newUnitHolderImpl(lib.WorkerDMLoad, &config.SubTaskConfig{Name: "job-id", SourceID: "task-id", Flavor: mysql.MySQLFlavor})
+	unitHolder = newUnitHolderImpl(framework.WorkerDMLoad, &config.SubTaskConfig{Name: "job-id", SourceID: "task-id", Flavor: mysql.MySQLFlavor})
 	require.IsType(t, &loader.LightningLoader{}, unitHolder.unit)
-	unitHolder = newUnitHolderImpl(lib.WorkerDMSync, &config.SubTaskConfig{Name: "job-id", SourceID: "task-id", Flavor: mysql.MySQLFlavor})
+	unitHolder = newUnitHolderImpl(framework.WorkerDMSync, &config.SubTaskConfig{Name: "job-id", SourceID: "task-id", Flavor: mysql.MySQLFlavor})
 	require.IsType(t, &syncer.Syncer{}, unitHolder.unit)
 
 	u := &mockUnit{}

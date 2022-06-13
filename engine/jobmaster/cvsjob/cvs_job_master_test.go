@@ -13,8 +13,8 @@
 
 package cvs
 
-import "github.com/pingcap/tiflow/engine/lib"
+import "github.com/pingcap/tiflow/engine/framework"
 
 // TODO more unit test cases
 
-var _ lib.JobMasterImpl = &JobMaster{}
+var _ framework.JobMasterImpl = &JobMaster{}
