@@ -23,10 +23,10 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/atomic"
 
+	"github.com/pingcap/tiflow/engine/framework"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/runtime"
-	"github.com/pingcap/tiflow/engine/lib"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
 	kvmock "github.com/pingcap/tiflow/engine/pkg/meta/kvclient/mock"
 )
@@ -46,12 +46,12 @@ func (t *testDMJobmasterSuite) TestUpdateTaskStatus() {
 	require.Len(t.T(), taskManager.TaskStatus(), 0)
 
 	dumpStatus1 := runtime.TaskStatus{
-		Unit:  lib.WorkerDMDump,
+		Unit:  framework.WorkerDMDump,
 		Task:  jobCfg.Upstreams[0].SourceID,
 		Stage: metadata.StageRunning,
 	}
 	dumpStatus2 := runtime.TaskStatus{
-		Unit:  lib.WorkerDMDump,
+		Unit:  framework.WorkerDMDump,
 		Task:  jobCfg.Upstreams[1].SourceID,
 		Stage: metadata.StageRunning,
 	}
@@ -66,7 +66,7 @@ func (t *testDMJobmasterSuite) TestUpdateTaskStatus() {
 	require.Equal(t.T(), taskStatusMap[jobCfg.Upstreams[1].SourceID], dumpStatus2)
 
 	loadStatus1 := runtime.TaskStatus{
-		Unit:  lib.WorkerDMDump,
+		Unit:  framework.WorkerDMDump,
 		Task:  jobCfg.Upstreams[0].SourceID,
 		Stage: metadata.StageRunning,
 	}
@@ -164,12 +164,12 @@ func (t *testDMJobmasterSuite) TestOperateTask() {
 func (t *testDMJobmasterSuite) TestClearTaskStatus() {
 	taskManager := NewTaskManager(nil, nil, nil)
 	syncStatus1 := runtime.TaskStatus{
-		Unit:  lib.WorkerDMSync,
+		Unit:  framework.WorkerDMSync,
 		Task:  "source1",
 		Stage: metadata.StageRunning,
 	}
 	syncStatus2 := runtime.TaskStatus{
-		Unit:  lib.WorkerDMSync,
+		Unit:  framework.WorkerDMSync,
 		Task:  "source2",
 		Stage: metadata.StageRunning,
 	}
@@ -221,12 +221,12 @@ func (t *testDMJobmasterSuite) TestCheckAndOperateTasks() {
 	require.EqualError(t.T(), taskManager.checkAndOperateTasks(context.Background(), job), "get task running status failed")
 
 	dumpStatus1 := runtime.TaskStatus{
-		Unit:  lib.WorkerDMDump,
+		Unit:  framework.WorkerDMDump,
 		Task:  jobCfg.Upstreams[0].SourceID,
 		Stage: metadata.StageRunning,
 	}
 	dumpStatus2 := runtime.TaskStatus{
-		Unit:  lib.WorkerDMDump,
+		Unit:  framework.WorkerDMDump,
 		Task:  jobCfg.Upstreams[1].SourceID,
 		Stage: metadata.StageRunning,
 	}
@@ -274,12 +274,12 @@ func (t *testDMJobmasterSuite) TestTaskManager() {
 	}()
 
 	syncStatus1 := runtime.TaskStatus{
-		Unit:  lib.WorkerDMSync,
+		Unit:  framework.WorkerDMSync,
 		Task:  source1,
 		Stage: metadata.StageRunning,
 	}
 	syncStatus2 := runtime.TaskStatus{
-		Unit:  lib.WorkerDMSync,
+		Unit:  framework.WorkerDMSync,
 		Task:  source2,
 		Stage: metadata.StageRunning,
 	}

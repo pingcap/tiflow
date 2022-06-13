@@ -25,7 +25,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
-	"github.com/pingcap/tiflow/engine/lib"
+	"github.com/pingcap/tiflow/engine/framework"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/pingcap/tiflow/pkg/workerpool"
 	"go.uber.org/atomic"
@@ -158,7 +158,7 @@ type MessageAgentImpl struct {
 	messageMatcher        *messageMatcher
 	messageHandlerManager p2p.MessageHandlerManager
 	pool                  workerpool.AsyncPool
-	messageRouter         *lib.MessageRouter
+	messageRouter         *framework.MessageRouter
 	wg                    sync.WaitGroup
 	mu                    sync.RWMutex
 	// client-id -> Client
@@ -184,7 +184,7 @@ func NewMessageAgentImpl(id string, commandHandler interface{}, messageHandlerMa
 		pool:                  workerpool.NewDefaultAsyncPool(10),
 		id:                    id,
 	}
-	agent.messageRouter = lib.NewMessageRouter(agent.id, agent.pool, 100,
+	agent.messageRouter = framework.NewMessageRouter(agent.id, agent.pool, 100,
 		func(topic p2p.Topic, msg p2p.MessageValue) error {
 			err := agent.onMessage(topic, msg)
 			if err != nil {
