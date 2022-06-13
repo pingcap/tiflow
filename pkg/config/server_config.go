@@ -91,7 +91,7 @@ var defaultServerConfig = &ServerConfig{
 		SortDir:                DefaultSortDir,
 	},
 	Security:            &SecurityConfig{},
-	PerTableMemoryQuota: 10 * 1024 * 1024, // 10MB
+	PerTableMemoryQuota: 35 * 1024 * 1024, // 10MB
 	KVClient: &KVClientConfig{
 		WorkerConcurrent: 8,
 		WorkerPoolSize:   0, // 0 will use NumCPU() * 2
