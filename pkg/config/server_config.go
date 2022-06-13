@@ -37,6 +37,9 @@ const (
 
 	// DebugConfigurationItem is the name of debug configurations
 	DebugConfigurationItem = "debug"
+
+	// DefaultTableMemoryQuota is the default memory quota for each table.
+	DefaultTableMemoryQuota = 35 * 1024 * 1024 // 35 MB
 )
 
 func init() {
@@ -91,7 +94,7 @@ var defaultServerConfig = &ServerConfig{
 		SortDir:                DefaultSortDir,
 	},
 	Security:            &SecurityConfig{},
-	PerTableMemoryQuota: 35 * 1024 * 1024, // 10MB
+	PerTableMemoryQuota: DefaultTableMemoryQuota,
 	KVClient: &KVClientConfig{
 		WorkerConcurrent: 8,
 		WorkerPoolSize:   0, // 0 will use NumCPU() * 2
