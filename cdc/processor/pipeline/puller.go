@@ -60,7 +60,7 @@ func (n *pullerNode) tableSpan(ctx cdcContext.Context) []regionspan.Span {
 }
 
 func (n *pullerNode) start(ctx pipeline.NodeContext,
-	upStream *upstream.Upstream, wg *errgroup.Group,
+	up *upstream.Upstream, wg *errgroup.Group,
 	sorter *sorterNode,
 ) error {
 	n.wg = wg
@@ -74,11 +74,11 @@ func (n *pullerNode) start(ctx pipeline.NodeContext,
 	// See also: https://github.com/pingcap/tiflow/issues/2301.
 	plr := puller.NewPuller(
 		ctxC,
-		upStream.PDClient,
-		upStream.GrpcPool,
-		upStream.RegionCache,
-		upStream.KVStorage,
-		upStream.PDClock,
+		up.PDClient,
+		up.GrpcPool,
+		up.RegionCache,
+		up.KVStorage,
+		up.PDClock,
 		n.changefeed,
 		n.replicaInfo.StartTs,
 		n.tableSpan(ctx),

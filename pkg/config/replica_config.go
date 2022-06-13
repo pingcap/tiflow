@@ -68,11 +68,6 @@ func (c *ReplicaConfig) Marshal() (string, error) {
 	return string(cfg), nil
 }
 
-// Unmarshal unmarshals into *ReplicationConfig from json marshal byte slice
-func (c *ReplicaConfig) Unmarshal(data []byte) error {
-	return c.UnmarshalJSON(data)
-}
-
 // UnmarshalJSON unmarshals into *ReplicationConfig from json marshal byte slice
 func (c *ReplicaConfig) UnmarshalJSON(data []byte) error {
 	// The purpose of casting ReplicaConfig to replicaConfig is to avoid recursive calls UnmarshalJSON,
@@ -99,7 +94,7 @@ func (c *ReplicaConfig) Clone() *ReplicaConfig {
 			zap.Error(cerror.WrapError(cerror.ErrDecodeFailed, err)))
 	}
 	clone := new(ReplicaConfig)
-	err = clone.Unmarshal([]byte(str))
+	err = clone.UnmarshalJSON([]byte(str))
 	if err != nil {
 		log.Panic("failed to unmarshal replica config",
 			zap.Error(cerror.WrapError(cerror.ErrDecodeFailed, err)))

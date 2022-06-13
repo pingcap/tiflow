@@ -44,8 +44,8 @@ func newProcessor4Test(
 	t *testing.T,
 	createTablePipeline func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error),
 ) *processor {
-	upStream := upstream.NewUpstream4Test(nil)
-	p := newProcessor(ctx, upStream)
+	up := upstream.NewUpstream4Test(nil)
+	p := newProcessor(ctx, up)
 	p.lazyInit = func(ctx cdcContext.Context) error {
 		p.agent = &mockAgent{executor: p}
 		return nil
