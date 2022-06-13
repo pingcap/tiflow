@@ -46,6 +46,13 @@ func (h *OpenAPIV2) CreateChangefeed(c *gin.Context) {
 		_ = c.Error(cerror.WrapError(cerror.ErrAPIInvalidParam, err))
 		return
 	}
+	if len(config.PDAddrs) == 0 {
+		up := h.capture.UpstreamManager.GetDefaultUpstream()
+		config.PDAddrs = up.PdEndpoints
+		config.KeyPath = up.SecurityConfig.KeyPath
+		config.CAPath = up.SecurityConfig.CAPath
+		config.CertPath = up.SecurityConfig.CertPath
+	}
 
 	info, err := verifyCreateChangefeedConfig(ctx, config, h.capture)
 	if err != nil {
@@ -87,6 +94,13 @@ func (h *OpenAPIV2) VerifyTable(c *gin.Context) {
 	if err := c.BindJSON(cfg); err != nil {
 		_ = c.Error(cerror.WrapError(cerror.ErrAPIInvalidParam, err))
 		return
+	}
+	if len(cfg.PDAddrs) == 0 {
+		up := h.capture.UpstreamManager.GetDefaultUpstream()
+		cfg.PDAddrs = up.PdEndpoints
+		cfg.KeyPath = up.SecurityConfig.KeyPath
+		cfg.CAPath = up.SecurityConfig.CAPath
+		cfg.CertPath = up.SecurityConfig.CertPath
 	}
 	credential := &security.Credential{
 		CAPath:        cfg.CAPath,
@@ -139,10 +153,18 @@ func (h *OpenAPIV2) UpdateChangefeed(c *gin.Context) {
 		return
 	}
 	if cfInfo.State != model.StateStopped {
-		_ = c.Error(cerror.ErrChangefeedUpdateRefused.GenWithStackByArgs("can only update changefeed config when it is stopped"))
+		_ = c.Error(cerror.ErrChangefeedUpdateRefused.
+			GenWithStackByArgs("can only update changefeed config when it is stopped"))
 		return
 	}
 
+	if cfInfo.Namespace == "" {
+		cfInfo.Namespace = model.DefaultNamespace
+	}
+	if cfInfo.UpstreamID == 0 {
+		up := h.capture.UpstreamManager.GetDefaultUpstream()
+		cfInfo.UpstreamID = up.ID
+	}
 	upInfo, err := h.capture.EtcdClient.GetUpstreamInfo(ctx, cfInfo.UpstreamID, cfInfo.Namespace)
 	if err != nil {
 		_ = c.Error(err)

@@ -83,11 +83,16 @@ func (o *changefeedCommonOptions) addFlags(cmd *cobra.Command) {
 	cmd.PersistentFlags().BoolVar(&o.cyclicSyncDDL, "cyclic-sync-ddl", true, "(Experimental) Cyclic replication sync DDL of changefeed")
 	cmd.PersistentFlags().BoolVar(&o.syncPointEnabled, "sync-point", false, "(Experimental) Set and Record syncpoint in replication(default off)")
 	cmd.PersistentFlags().DurationVar(&o.syncPointInterval, "sync-interval", 10*time.Minute, "(Experimental) Set the interval for syncpoint in replication(default 10min)")
-	cmd.PersistentFlags().StringVar(&o.schemaRegistry, "schema-registry", "", "Avro Schema Registry URI")
-	cmd.PersistentFlags().StringVar(&o.upstreamPDAddrs, "upstream-pd", "", "upstream PD address, use ',' to separate multiple PDs")
-	cmd.PersistentFlags().StringVar(&o.upstreamCaPath, "upstream-ca", "", "CA certificate path for TLS connection to upstream")
-	cmd.PersistentFlags().StringVar(&o.upstreamCertPath, "upstream-cert", "", "Certificate path for TLS connection to upstream")
-	cmd.PersistentFlags().StringVar(&o.upstreamKeyPath, "upstream-key", "", "Private key path for TLS connection to upstream")
+	cmd.PersistentFlags().StringVar(&o.schemaRegistry, "schema-registry", "",
+		"Avro Schema Registry URI")
+	cmd.PersistentFlags().StringVar(&o.upstreamPDAddrs, "upstream-pd", "",
+		"upstream PD address, use ',' to separate multiple PDs")
+	cmd.PersistentFlags().StringVar(&o.upstreamCaPath, "upstream-ca", "",
+		"CA certificate path for TLS connection to upstream")
+	cmd.PersistentFlags().StringVar(&o.upstreamCertPath, "upstream-cert", "",
+		"Certificate path for TLS connection to upstream")
+	cmd.PersistentFlags().StringVar(&o.upstreamKeyPath, "upstream-key", "",
+		"Private key path for TLS connection to upstream")
 	_ = cmd.PersistentFlags().MarkHidden("sort-dir")
 	// we don't support specify these flags below when cdc version >= 6.2.0
 	_ = cmd.PersistentFlags().MarkHidden("sort-engine")
@@ -259,6 +264,10 @@ func (o *createChangefeedOptions) validate(cmd *cobra.Command) error {
 
 func (o *createChangefeedOptions) getChangefeedConfig(cmd *cobra.Command) *v2.ChangefeedConfig {
 	replicaConfig := v2.ToAPIReplicaConfig(o.cfg)
+	var pdAddrs []string
+	if o.pdAddr != "" {
+		pdAddrs = strings.Split(o.pdAddr, ",")
+	}
 	return &v2.ChangefeedConfig{
 		ID:                o.changefeedID,
 		StartTs:           o.startTs,
@@ -267,7 +276,7 @@ func (o *createChangefeedOptions) getChangefeedConfig(cmd *cobra.Command) *v2.Ch
 		ReplicaConfig:     replicaConfig,
 		SyncPointEnabled:  o.commonChangefeedOptions.syncPointEnabled,
 		SyncPointInterval: o.commonChangefeedOptions.syncPointInterval,
-		PDAddrs:           strings.Split(o.pdAddr, ","),
+		PDAddrs:           pdAddrs,
 		CAPath:            o.commonChangefeedOptions.upstreamCaPath,
 		CertPath:          o.commonChangefeedOptions.upstreamCertPath,
 		KeyPath:           o.commonChangefeedOptions.upstreamKeyPath,
@@ -311,9 +320,11 @@ func (o *createChangefeedOptions) run(ctx context.Context, cmd *cobra.Command) e
 	ignoreIneligibleTables := false
 	if len(tables.IneligibleTables) != 0 {
 		if o.cfg.ForceReplicate {
-			cmd.Printf("[WARN] force to replicate some ineligible tables, %#v\n", tables.IneligibleTables)
+			cmd.Printf("[WARN] force to replicate some ineligible tables, %#v\n",
+				tables.IneligibleTables)
 		} else {
-			cmd.Printf("[WARN] some tables are not eligible to replicate, %#v\n", tables.IneligibleTables)
+			cmd.Printf("[WARN] some tables are not eligible to replicate, %#v\n",
+				tables.IneligibleTables)
 			if !o.commonChangefeedOptions.noConfirm {
 				ignoreIneligibleTables, err = confirmIgnoreIneligibleTables(cmd)
 				if err != nil {
