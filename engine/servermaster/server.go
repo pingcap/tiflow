@@ -39,9 +39,9 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/engine/client"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
-	"github.com/pingcap/tiflow/engine/lib"
-	"github.com/pingcap/tiflow/engine/lib/metadata"
-	libModel "github.com/pingcap/tiflow/engine/lib/model"
+	"github.com/pingcap/tiflow/engine/framework"
+	"github.com/pingcap/tiflow/engine/framework/metadata"
+	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/model"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/deps"
@@ -666,10 +666,10 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 	dctx.Environ.NodeID = s.name()
 	dctx.ProjectInfo = tenant.FrameProjectInfo
 
-	masterMeta := &libModel.MasterMetaKVData{
+	masterMeta := &frameModel.MasterMetaKVData{
 		ProjectID: tenant.FrameProjectInfo.UniqueID(),
 		ID:        metadata.JobManagerUUID,
-		Tp:        lib.JobManager,
+		Tp:        framework.JobManager,
 		// TODO: add other infos
 	}
 	masterMetaBytes, err := masterMeta.Marshal()

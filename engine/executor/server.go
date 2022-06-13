@@ -34,9 +34,9 @@ import (
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/executor/server"
 	"github.com/pingcap/tiflow/engine/executor/worker"
-	"github.com/pingcap/tiflow/engine/lib"
-	libModel "github.com/pingcap/tiflow/engine/lib/model"
-	"github.com/pingcap/tiflow/engine/lib/registry"
+	"github.com/pingcap/tiflow/engine/framework"
+	frameModel "github.com/pingcap/tiflow/engine/framework/model"
+	"github.com/pingcap/tiflow/engine/framework/registry"
 	"github.com/pingcap/tiflow/engine/model"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/deps"
@@ -154,9 +154,9 @@ func (s *Server) buildDeps() (*deps.Deps, error) {
 func (s *Server) makeTask(
 	ctx context.Context,
 	projectInfo *pb.ProjectInfo,
-	workerID libModel.WorkerID,
-	masterID libModel.MasterID,
-	workerType libModel.WorkerType,
+	workerID frameModel.WorkerID,
+	masterID frameModel.MasterID,
+	workerType frameModel.WorkerType,
 	workerConfig []byte,
 ) (worker.Runnable, error) {
 	dctx := dcontext.NewContext(ctx, log.L())
@@ -170,7 +170,7 @@ func (s *Server) makeTask(
 	dctx.ProjectInfo = tenant.NewProjectInfo(projectInfo.GetTenantId(), projectInfo.GetProjectId())
 
 	// NOTICE: only take effect when job type is job master
-	masterMeta := &libModel.MasterMetaKVData{
+	masterMeta := &frameModel.MasterMetaKVData{
 		ProjectID: dctx.ProjectInfo.UniqueID(),
 		ID:        workerID,
 		Tp:        workerType,
@@ -192,7 +192,7 @@ func (s *Server) makeTask(
 		log.L().Error("Failed to create worker", zap.Error(err))
 		return nil, err
 	}
-	if jm, ok := newWorker.(lib.BaseJobMasterExt); ok {
+	if jm, ok := newWorker.(framework.BaseJobMasterExt); ok {
 		jobID := newWorker.ID()
 		s.jobAPISrv.initialize(jobID, jm.TriggerOpenAPIInitialize)
 	}
@@ -210,7 +210,7 @@ func (s *Server) PreDispatchTask(ctx context.Context, req *pb.PreDispatchTaskReq
 		req.GetProjectInfo(),
 		req.GetWorkerId(),
 		req.GetMasterId(),
-		libModel.WorkerType(req.GetTaskTypeId()),
+		frameModel.WorkerType(req.GetTaskTypeId()),
 		req.GetTaskConfig())
 	if err != nil {
 		// We use the code Aborted here per the suggestion in gRPC's documentation

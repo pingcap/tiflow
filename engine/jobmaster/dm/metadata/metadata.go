@@ -14,7 +14,7 @@
 package metadata
 
 import (
-	libModel "github.com/pingcap/tiflow/engine/lib/model"
+	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
 )
 
@@ -25,7 +25,7 @@ type MetaData struct {
 }
 
 // NewMetaData creates a new MetaData instance
-func NewMetaData(id libModel.WorkerID, kvClient metaclient.KVClient) *MetaData {
+func NewMetaData(id frameModel.WorkerID, kvClient metaclient.KVClient) *MetaData {
 	return &MetaData{
 		jobStore: NewJobStore(id, kvClient),
 		ddlStore: NewDDLStore(id, kvClient),
