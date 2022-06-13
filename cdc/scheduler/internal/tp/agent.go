@@ -183,7 +183,6 @@ func (a *agent) handleMessage(msg []*schedulepb.Message) []*schedulepb.Message {
 
 func (a *agent) handleMessageHeartbeat(expected []model.TableID) *schedulepb.Message {
 	allTables := a.tableM.getAllTables()
-
 	result := make([]schedulepb.TableStatus, 0, len(allTables))
 	for _, table := range allTables {
 		status := table.status

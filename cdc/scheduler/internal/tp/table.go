@@ -234,12 +234,10 @@ type tableManager struct {
 }
 
 func newTableManager(executor internal.TableExecutor) *tableManager {
-	tm := &tableManager{
+	return &tableManager{
 		tables:   make(map[model.TableID]*table),
 		executor: executor,
 	}
-	tm.collectAllTables()
-	return tm
 }
 
 func (tm *tableManager) poll(ctx context.Context, stopping bool) ([]*schedulepb.Message, error) {
