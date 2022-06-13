@@ -73,7 +73,7 @@ func (r *rebalanceScheduler) Schedule(
 	accept := func() {
 		atomic.StoreInt32(&r.rebalance, 0)
 	}
-	task := newBurstBalanceMoveTables(accept, r.random, currentTables, captures, replications)
+	task := newBurstBalanceMoveTables(accept, r.random, captures, replications)
 	if task == nil {
 		return nil
 	}
@@ -83,7 +83,6 @@ func (r *rebalanceScheduler) Schedule(
 func newBurstBalanceMoveTables(
 	accept callback,
 	random *rand.Rand,
-	currentTables []model.TableID,
 	captures map[model.CaptureID]*model.CaptureInfo,
 	replications map[model.TableID]*ReplicationSet,
 ) *scheduleTask {
@@ -93,8 +92,8 @@ func newBurstBalanceMoveTables(
 	}
 
 	for tableID, rep := range replications {
-		if rep.Primary == "" {
-			log.Info("tpscheduler: rebalance found table no primary, skip",
+		if rep.State != ReplicationSetStateReplicating {
+			log.Info("tpscheduler: rebalance skip tables that are not in Replicating",
 				zap.Int64("tableID", tableID),
 				zap.Any("replication", rep))
 			continue

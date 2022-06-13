@@ -194,7 +194,8 @@ func TestCoordinatorHeartbeat(t *testing.T) {
 	require.Nil(t, err)
 	require.True(t, coord.captureM.CheckAllCaptureInitialized())
 	msgs = trans.sendBuffer
-	require.Len(t, msgs, 1)
+	require.Len(t, msgs, 2)
+	// Basic scheduler, make sure all tables get replicated.
 	require.EqualValues(t, 3, msgs[0].DispatchTableRequest.GetAddTable().TableID)
 	require.Len(t, coord.replicationM.tables, 3)
 }
@@ -307,7 +308,7 @@ func benchmarkCoordinator(
 ) {
 	log.SetLevel(zapcore.DPanicLevel)
 	ctx := context.Background()
-	size := 16384
+	size := 131072 // 2^17
 	for total := 1; total <= size; total *= 2 {
 		name, coord, currentTables, captures := factory(total)
 		b.ResetTimer()
@@ -337,7 +338,7 @@ func BenchmarkCoordinatorInit(b *testing.B) {
 			currentTables = append(currentTables, int64(10000+i))
 		}
 		schedulers := make(map[schedulerType]scheduler)
-		schedulers[schedulerTypeBurstBalance] = newBurstBalanceScheduler()
+		schedulers[schedulerTypeBasic] = newBasicScheduler()
 		coord = &coordinator{
 			trans:        &mockTrans{},
 			schedulers:   schedulers,
@@ -377,7 +378,7 @@ func BenchmarkCoordinatorHeartbeat(b *testing.B) {
 			currentTables = append(currentTables, int64(10000+i))
 		}
 		schedulers := make(map[schedulerType]scheduler)
-		schedulers[schedulerTypeBurstBalance] = newBurstBalanceScheduler()
+		schedulers[schedulerTypeBasic] = newBasicScheduler()
 		coord = &coordinator{
 			trans:        &mockTrans{},
 			schedulers:   schedulers,
@@ -452,7 +453,7 @@ func BenchmarkCoordinatorHeartbeatResponse(b *testing.B) {
 			keepRecvBuffer: true,
 		}
 		schedulers := make(map[schedulerType]scheduler)
-		schedulers[schedulerTypeBurstBalance] = newBurstBalanceScheduler()
+		schedulers[schedulerTypeBasic] = newBasicScheduler()
 		coord = &coordinator{
 			trans:        trans,
 			schedulers:   schedulers,
