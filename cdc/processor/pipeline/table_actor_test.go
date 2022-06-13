@@ -419,23 +419,6 @@ func TestTableActorStart(t *testing.T) {
 	require.Equal(t, 1, len(tbl.nodes))
 	require.True(t, tbl.started)
 
-	tbl = &tableActor{
-		globalVars: globalVars,
-		changefeedVars: &cdcContext.ChangefeedVars{
-			ID: model.DefaultChangeFeedID("changefeed-id-test"),
-			Info: &model.ChangeFeedInfo{
-				Config: config.GetDefaultReplicaConfig(),
-			},
-		},
-		replicaInfo: &model.TableReplicaInfo{
-			StartTs:     0,
-			MarkTableID: 1,
-		},
-	}
-	require.Nil(t, tbl.start(ctx))
-	require.Equal(t, 2, len(tbl.nodes))
-	require.True(t, tbl.started)
-
 	// already started
 	tbl.started = true
 	require.Panics(t, func() {
