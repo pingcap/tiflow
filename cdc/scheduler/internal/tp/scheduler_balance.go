@@ -83,5 +83,5 @@ func buildBurstBalanceMoveTables(
 
 	// We does not need accept callback here.
 	accept := (callback)(nil)
-	return newBurstBalanceMoveTables(accept, random, currentTables, captures, replications)
+	return newBurstBalanceMoveTables(accept, random, captures, replications)
 }

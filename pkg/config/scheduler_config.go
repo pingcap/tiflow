@@ -29,13 +29,16 @@ type SchedulerConfig struct {
 // ValidateAndAdjust verifies that each parameter is valid.
 func (c *SchedulerConfig) ValidateAndAdjust() error {
 	if c.HeartbeatTick <= 0 {
-		return cerrors.ErrInvalidServerOption.GenWithStackByArgs("heartbeat-tick must be larger than 0")
+		return cerrors.ErrInvalidServerOption.GenWithStackByArgs(
+			"heartbeat-tick must be larger than 0")
 	}
 	if c.MaxTaskConcurrency <= 0 {
-		return cerrors.ErrInvalidServerOption.GenWithStackByArgs("max-task-concurrency must be larger than 0")
+		return cerrors.ErrInvalidServerOption.GenWithStackByArgs(
+			"max-task-concurrency must be larger than 0")
 	}
 	if time.Duration(c.CheckBalanceInterval) <= time.Second {
-		return cerrors.ErrInvalidServerOption.GenWithStackByArgs("check-balance-interval must be larger than 1s")
+		return cerrors.ErrInvalidServerOption.GenWithStackByArgs(
+			"check-balance-interval must be larger than 1s")
 	}
 	return nil
 }
