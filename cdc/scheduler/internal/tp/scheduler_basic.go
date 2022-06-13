@@ -24,8 +24,8 @@ import (
 
 var _ scheduler = &basicScheduler{}
 
-// The basic scheduler for adding and removing tables, it try to keep
-// every tables get replicated.
+// The basic scheduler for adding and removing tables, it tries to keep
+// every table get replicated.
 //
 // It handles the following scenario:
 // 1. Initial table dispatch.
