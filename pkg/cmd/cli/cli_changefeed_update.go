@@ -59,7 +59,9 @@ func (o *updateChangefeedOptions) addFlags(cmd *cobra.Command) {
 	_ = cmd.MarkPersistentFlagRequired("changefeed-id")
 }
 
-func (o *updateChangefeedOptions) getChangefeedConfig(cmd *cobra.Command, info *model.ChangeFeedInfo) *v2.ChangefeedConfig {
+func (o *updateChangefeedOptions) getChangefeedConfig(cmd *cobra.Command,
+	info *model.ChangeFeedInfo,
+) *v2.ChangefeedConfig {
 	replicaConfig := v2.ToAPIReplicaConfig(info.Config)
 	res := &v2.ChangefeedConfig{
 		TargetTs:          info.TargetTs,

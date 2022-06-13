@@ -559,7 +559,10 @@ func (c CDCEtcdClient) GetEnsureGCServiceID() string {
 }
 
 // SaveUpstreamInfo save a upstreamInfo to etcd server
-func (c CDCEtcdClient) SaveUpstreamInfo(ctx context.Context, upstreamInfo *model.UpstreamInfo, namespace string) error {
+func (c CDCEtcdClient) SaveUpstreamInfo(ctx context.Context,
+	upstreamInfo *model.UpstreamInfo,
+	namespace string,
+) error {
 	Key := CDCKey{
 		Tp:         CDCKeyTypeUpStream,
 		ClusterID:  c.ClusterID,
@@ -576,7 +579,10 @@ func (c CDCEtcdClient) SaveUpstreamInfo(ctx context.Context, upstreamInfo *model
 }
 
 // GetUpstreamInfo get a upstreamInfo from etcd server
-func (c CDCEtcdClient) GetUpstreamInfo(ctx context.Context, upstreamID model.UpstreamID, namespace string) (*model.UpstreamInfo, error) {
+func (c CDCEtcdClient) GetUpstreamInfo(ctx context.Context,
+	upstreamID model.UpstreamID,
+	namespace string,
+) (*model.UpstreamInfo, error) {
 	Key := CDCKey{
 		Tp:         CDCKeyTypeUpStream,
 		ClusterID:  c.ClusterID,

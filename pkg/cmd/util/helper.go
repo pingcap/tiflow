@@ -25,11 +25,8 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/cdc/model"
 	cmdconetxt "github.com/pingcap/tiflow/pkg/cmd/context"
-	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/logutil"
-	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 	"golang.org/x/net/http/httpproxy"
@@ -164,32 +161,4 @@ func JSONPrint(cmd *cobra.Command, v interface{}) error {
 	}
 	cmd.Printf("%s\n", data)
 	return nil
-}
-
-// VerifyAndGetTiCDCClusterVersion verifies and gets the version of ticdc.
-// If it is an incompatible version, an error is returned.
-func VerifyAndGetTiCDCClusterVersion(
-	ctx context.Context, cdcEtcdCli *etcd.CDCEtcdClient,
-) (version.TiCDCClusterVersion, error) {
-	_, captureInfos, err := cdcEtcdCli.GetCaptures(ctx)
-	if err != nil {
-		return version.TiCDCClusterVersion{}, err
-	}
-
-	cdcClusterVer, err := version.GetTiCDCClusterVersion(model.ListVersionsFromCaptureInfos(captureInfos))
-	if err != nil {
-		return version.TiCDCClusterVersion{}, err
-	}
-
-	// Check TiCDC cluster version.
-	isUnknownVersion, err := version.CheckTiCDCClusterVersion(cdcClusterVer)
-	if err != nil {
-		return version.TiCDCClusterVersion{}, err
-	}
-
-	if isUnknownVersion {
-		return version.TiCDCClusterVersion{}, errors.NewNoStackError("TiCDC cluster is unknown, please start TiCDC cluster")
-	}
-
-	return cdcClusterVer, nil
 }
