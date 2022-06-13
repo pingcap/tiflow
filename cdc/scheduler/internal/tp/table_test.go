@@ -17,7 +17,6 @@ import (
 	"testing"
 
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/processor/pipeline"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/tp/schedulepb"
 	"github.com/stretchr/testify/require"
 )
@@ -27,27 +26,13 @@ func TestTableManager(t *testing.T) {
 
 	// pretend there are 4 tables
 	mockTableExecutor := newMockTableExecutor()
-	mockTableExecutor.tables[model.TableID(1)] = pipeline.TableStatePreparing
-	mockTableExecutor.tables[model.TableID(2)] = pipeline.TableStatePrepared
-	mockTableExecutor.tables[model.TableID(3)] = pipeline.TableStateReplicating
-	mockTableExecutor.tables[model.TableID(4)] = pipeline.TableStateStopped
 
 	tableM := newTableManager(mockTableExecutor)
-	require.Equal(t, schedulepb.TableStatePreparing, tableM.tables[model.TableID(1)].status.State)
-	require.Equal(t, schedulepb.TableStatePrepared, tableM.tables[model.TableID(2)].status.State)
-	require.Equal(t, schedulepb.TableStateReplicating, tableM.tables[model.TableID(3)].status.State)
-	require.Equal(t, schedulepb.TableStateStopped, tableM.tables[model.TableID(4)].status.State)
 
-	table, ok := tableM.getTable(model.TableID(5))
-	require.False(t, ok)
-	require.Nil(t, table)
+	tableM.addTable(model.TableID(1))
+	require.Equal(t, schedulepb.TableStateAbsent, tableM.tables[model.TableID(1)].status.State)
 
-	table = tableM.addTable(model.TableID(1))
-	require.Equal(t, schedulepb.TableStatePreparing, table.status.State)
+	tableM.dropTable(model.TableID(1))
+	require.NotContains(t, tableM.tables, model.TableID(1))
 
-	table = tableM.addTable(model.TableID(5))
-	require.Equal(t, schedulepb.TableStateAbsent, table.status.State)
-
-	tableM.dropTable(model.TableID(5))
-	require.NotContains(t, tableM.tables, model.TableID(5))
 }

@@ -209,11 +209,15 @@ func TestAgentHandleMessageHeartbeat(t *testing.T) {
 	mockTableExecutor := newMockTableExecutor()
 	a.tableM = newTableManager(mockTableExecutor)
 
-	mockTableExecutor.tables[model.TableID(0)] = pipeline.TableStatePreparing
-	mockTableExecutor.tables[model.TableID(1)] = pipeline.TableStatePrepared
-	mockTableExecutor.tables[model.TableID(2)] = pipeline.TableStateReplicating
-	mockTableExecutor.tables[model.TableID(3)] = pipeline.TableStateStopping
-	mockTableExecutor.tables[model.TableID(4)] = pipeline.TableStateStopped
+	for i := 0; i < 5; i++ {
+		a.tableM.addTable(model.TableID(i))
+	}
+
+	a.tableM.tables[model.TableID(0)].status.State = schedulepb.TableStatePreparing
+	a.tableM.tables[model.TableID(1)].status.State = schedulepb.TableStatePrepared
+	a.tableM.tables[model.TableID(2)].status.State = schedulepb.TableStateReplicating
+	a.tableM.tables[model.TableID(3)].status.State = schedulepb.TableStateStopping
+	a.tableM.tables[model.TableID(4)].status.State = schedulepb.TableStateStopped
 
 	heartbeat := &schedulepb.Message{
 		Header: &schedulepb.Message_Header{
