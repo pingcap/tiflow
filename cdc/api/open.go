@@ -15,6 +15,7 @@ package api
 
 import (
 	"bufio"
+	"fmt"
 	"net/http"
 	"os"
 
@@ -207,19 +208,20 @@ func (h *openAPI) GetChangefeed(c *gin.Context) {
 		return
 	}
 
-	processorInfos, err := h.statusProvider().GetAllTaskStatuses(ctx, changefeedID)
-	if err != nil {
-		_ = c.Error(err)
-		return
-	}
-
-	taskStatus := make([]model.CaptureTaskStatus, 0, len(processorInfos))
-	for captureID, status := range processorInfos {
-		tables := make([]int64, 0)
-		for tableID := range status.Tables {
-			tables = append(tables, tableID)
+	taskStatus := make([]model.CaptureTaskStatus, 0)
+	if info.State == model.StateNormal {
+		processorInfos, err := h.statusProvider().GetAllTaskStatuses(ctx, changefeedID)
+		if err != nil {
+			_ = c.Error(err)
+			return
 		}
-		taskStatus = append(taskStatus, model.CaptureTaskStatus{CaptureID: captureID, Tables: tables, Operation: status.Operation})
+		for captureID, status := range processorInfos {
+			tables := make([]int64, 0)
+			for tableID := range status.Tables {
+				tables = append(tables, tableID)
+			}
+			taskStatus = append(taskStatus, model.CaptureTaskStatus{CaptureID: captureID, Tables: tables, Operation: status.Operation})
+		}
 	}
 
 	changefeedDetail := &model.ChangefeedDetail{
@@ -626,6 +628,16 @@ func (h *openAPI) GetProcessor(c *gin.Context) {
 		return
 	}
 
+	info, err := h.statusProvider().GetChangeFeedInfo(ctx, changefeedID)
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+	if info.State != model.StateNormal {
+		_ = c.Error(cerror.WrapError(cerror.ErrAPIInvalidParam,
+			fmt.Errorf("changefeed in abnormal state: %s, can't get processors of an abnormal changefeed",
+				string(info.State))))
+	}
 	// check if this captureID exist
 	procInfos, err := h.statusProvider().GetProcessors(ctx)
 	if err != nil {
