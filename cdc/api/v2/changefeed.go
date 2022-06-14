@@ -238,5 +238,31 @@ func (h *OpenAPIV2) GetChangeFeedMetaInfo(c *gin.Context) {
 		_ = c.Error(err)
 		return
 	}
-	c.JSON(http.StatusOK, info)
+	var runningError *RunningError
+	if info.Error != nil {
+		runningError = &RunningError{
+			Addr:    info.Error.Addr,
+			Code:    info.Error.Code,
+			Message: info.Error.Message,
+		}
+	}
+	apiInfoModel := &ChangeFeedInfo{
+		UpstreamID:        info.UpstreamID,
+		Namespace:         info.Namespace,
+		ID:                info.ID,
+		SinkURI:           info.SinkURI,
+		Opts:              info.Opts,
+		CreateTime:        info.CreateTime,
+		StartTs:           info.StartTs,
+		TargetTs:          info.TargetTs,
+		AdminJobType:      info.AdminJobType,
+		Engine:            info.Engine,
+		Config:            ToAPIReplicaConfig(info.Config),
+		State:             info.State,
+		Error:             runningError,
+		SyncPointEnabled:  info.SyncPointEnabled,
+		SyncPointInterval: info.SyncPointInterval,
+		CreatorVersion:    info.CreatorVersion,
+	}
+	c.JSON(http.StatusOK, apiInfoModel)
 }
