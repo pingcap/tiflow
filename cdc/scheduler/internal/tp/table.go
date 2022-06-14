@@ -122,6 +122,7 @@ func (t *table) handleRemoveTableTask(ctx context.Context) *schedulepb.Message {
 			// release table resource, and get the latest checkpoint
 			// this will let the table become `absent`
 			checkpointTs, done := t.executor.IsRemoveTableFinished(ctx, t.id)
+			_, _ = t.getTableState()
 			if !done {
 				// actually, this should never be hit, since we know that table is stopped.
 				status := t.getTableStatus()
