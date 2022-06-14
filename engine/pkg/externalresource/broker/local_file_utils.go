@@ -23,7 +23,7 @@ import (
 	brStorage "github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/stretchr/testify/require"
 
-	libModel "github.com/pingcap/tiflow/engine/lib/model"
+	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	derrors "github.com/pingcap/tiflow/engine/pkg/errors"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 )
@@ -53,7 +53,7 @@ func filePathNameToResourceName(filePath string) (model.ResourceName, error) {
 }
 
 func localPathWithEncoding(baseDir string,
-	creator libModel.WorkerID,
+	creator frameModel.WorkerID,
 	resName model.ResourceName,
 	suffixes ...string,
 ) string {
@@ -68,7 +68,7 @@ func localPathWithEncoding(baseDir string,
 func AssertLocalFileExists(
 	t *testing.T,
 	baseDir string,
-	creator libModel.WorkerID,
+	creator frameModel.WorkerID,
 	resName model.ResourceName,
 	suffixes ...string,
 ) {
@@ -81,7 +81,7 @@ func AssertLocalFileExists(
 func AssertNoLocalFileExists(
 	t *testing.T,
 	baseDir string,
-	creator libModel.WorkerID,
+	creator frameModel.WorkerID,
 	resName model.ResourceName,
 	suffixes ...string,
 ) {

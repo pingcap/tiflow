@@ -21,13 +21,16 @@ import (
 
 	"github.com/pingcap/errors"
 	dmconfig "github.com/pingcap/tiflow/dm/dm/config"
+	"github.com/pingcap/tiflow/dm/dm/pb"
+	"github.com/pingcap/tiflow/dm/dm/worker"
+	"github.com/pingcap/tiflow/dm/pkg/backoff"
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/engine/framework"
+	frameModel "github.com/pingcap/tiflow/engine/framework/model"
+	"github.com/pingcap/tiflow/engine/framework/registry"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/runtime"
-	"github.com/pingcap/tiflow/engine/lib"
-	libModel "github.com/pingcap/tiflow/engine/lib/model"
-	"github.com/pingcap/tiflow/engine/lib/registry"
 	"github.com/pingcap/tiflow/engine/model"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
@@ -40,18 +43,18 @@ import (
 
 // RegisterWorker is used to register dm task to global registry
 func RegisterWorker() {
-	registry.GlobalWorkerRegistry().MustRegisterWorkerType(lib.WorkerDMDump, newWorkerFactory(lib.WorkerDMDump))
-	registry.GlobalWorkerRegistry().MustRegisterWorkerType(lib.WorkerDMLoad, newWorkerFactory(lib.WorkerDMLoad))
-	registry.GlobalWorkerRegistry().MustRegisterWorkerType(lib.WorkerDMSync, newWorkerFactory(lib.WorkerDMSync))
+	registry.GlobalWorkerRegistry().MustRegisterWorkerType(framework.WorkerDMDump, newWorkerFactory(framework.WorkerDMDump))
+	registry.GlobalWorkerRegistry().MustRegisterWorkerType(framework.WorkerDMLoad, newWorkerFactory(framework.WorkerDMLoad))
+	registry.GlobalWorkerRegistry().MustRegisterWorkerType(framework.WorkerDMSync, newWorkerFactory(framework.WorkerDMSync))
 }
 
 // workerFactory create dm task
 type workerFactory struct {
-	workerType libModel.WorkerType
+	workerType frameModel.WorkerType
 }
 
 // newWorkerFactory creates abstractFactory
-func newWorkerFactory(workerType libModel.WorkerType) *workerFactory {
+func newWorkerFactory(workerType frameModel.WorkerType) *workerFactory {
 	return &workerFactory{workerType: workerType}
 }
 
@@ -63,27 +66,33 @@ func (f workerFactory) DeserializeConfig(configBytes []byte) (registry.WorkerCon
 }
 
 // NewWorkerImpl implements WorkerFactory.NewWorkerImpl
-func (f workerFactory) NewWorkerImpl(ctx *dcontext.Context, workerID libModel.WorkerID, masterID libModel.MasterID, conf lib.WorkerConfig) (lib.WorkerImpl, error) {
+func (f workerFactory) NewWorkerImpl(ctx *dcontext.Context, workerID frameModel.WorkerID, masterID frameModel.MasterID, conf framework.WorkerConfig) (framework.WorkerImpl, error) {
+	log.L().Info("new dm worker", zap.String("id", workerID), zap.String("master-id", masterID))
 	return newDMWorker(ctx, masterID, f.workerType, conf.(*dmconfig.SubTaskConfig)), nil
 }
 
-// dmWorker implements methods for lib.WorkerImpl
+// dmWorker implements methods for framework.WorkerImpl
 type dmWorker struct {
-	lib.BaseWorker
+	framework.BaseWorker
 
 	unitHolder   unitHolder
 	messageAgent dmpkg.MessageAgent
+	autoResume   *worker.AutoResumeInfo
 
 	mu                 sync.RWMutex
 	cfg                *dmconfig.SubTaskConfig
 	storageWriteHandle broker.Handle
 	stage              metadata.TaskStage
-	workerType         libModel.WorkerType
+	workerType         frameModel.WorkerType
 	taskID             string
-	masterID           libModel.MasterID
+	masterID           frameModel.MasterID
 }
 
-func newDMWorker(ctx *dcontext.Context, masterID libModel.MasterID, workerType lib.WorkerType, cfg *dmconfig.SubTaskConfig) *dmWorker {
+func newDMWorker(ctx *dcontext.Context, masterID frameModel.MasterID, workerType framework.WorkerType, cfg *dmconfig.SubTaskConfig) *dmWorker {
+	// TODO: support config later
+	// nolint:errcheck
+	bf, _ := backoff.NewBackoff(dmconfig.DefaultBackoffFactor, dmconfig.DefaultBackoffJitter, dmconfig.DefaultBackoffMin, dmconfig.DefaultBackoffMax)
+	autoResume := &worker.AutoResumeInfo{Backoff: bf, LatestPausedTime: time.Now(), LatestResumeTime: time.Now()}
 	w := &dmWorker{
 		cfg:        cfg,
 		stage:      metadata.StageInit,
@@ -91,6 +100,7 @@ func newDMWorker(ctx *dcontext.Context, masterID libModel.MasterID, workerType l
 		taskID:     cfg.SourceID,
 		masterID:   masterID,
 		unitHolder: newUnitHolderImpl(workerType, cfg),
+		autoResume: autoResume,
 	}
 
 	// nolint:errcheck
@@ -103,6 +113,7 @@ func newDMWorker(ctx *dcontext.Context, masterID libModel.MasterID, workerType l
 
 // InitImpl implements lib.WorkerImpl.InitImpl
 func (w *dmWorker) InitImpl(ctx context.Context) error {
+	log.L().Info("initializing the dm worker", zap.String("task-id", w.taskID))
 	if err := w.messageAgent.Init(ctx); err != nil {
 		return err
 	}
@@ -111,7 +122,7 @@ func (w *dmWorker) InitImpl(ctx context.Context) error {
 		return err
 	}
 	if w.cfg.Mode != dmconfig.ModeIncrement {
-		if err := w.setupstorage(ctx); err != nil {
+		if err := w.setupStorage(ctx); err != nil {
 			return err
 		}
 	}
@@ -120,7 +131,7 @@ func (w *dmWorker) InitImpl(ctx context.Context) error {
 
 // Tick implements lib.WorkerImpl.Tick
 func (w *dmWorker) Tick(ctx context.Context) error {
-	if err := w.unitHolder.Tick(ctx); err != nil {
+	if err := w.checkAndAutoResume(ctx); err != nil {
 		return err
 	}
 	if err := w.tryUpdateStatus(ctx); err != nil {
@@ -136,7 +147,7 @@ func (w *dmWorker) Workload() model.RescUnit {
 }
 
 // OnMasterFailover implements lib.WorkerImpl.OnMasterFailover
-func (w *dmWorker) OnMasterFailover(reason lib.MasterFailoverReason) error {
+func (w *dmWorker) OnMasterFailover(reason framework.MasterFailoverReason) error {
 	log.L().Info("dmworker.OnMasterFailover")
 	return nil
 }
@@ -149,6 +160,7 @@ func (w *dmWorker) OnMasterMessage(topic p2p.Topic, message p2p.MessageValue) er
 
 // CloseImpl implements lib.WorkerImpl.CloseImpl
 func (w *dmWorker) CloseImpl(ctx context.Context) error {
+	log.L().Info("close the dm worker", zap.String("task-id", w.taskID))
 	var recordErr error
 	// unregister jobmaster client
 	if err := w.messageAgent.UpdateClient(w.masterID, nil); err != nil {
@@ -163,8 +175,8 @@ func (w *dmWorker) CloseImpl(ctx context.Context) error {
 	return recordErr
 }
 
-// setupstorage opens and configs external storage
-func (w *dmWorker) setupstorage(ctx context.Context) error {
+// setupStorage opens and configs external storage
+func (w *dmWorker) setupStorage(ctx context.Context) error {
 	rid := dm.NewDMResourceID(w.cfg.Name, w.cfg.SourceID)
 	h, err := w.OpenStorage(ctx, rid)
 	for status.Code(err) == codes.Unavailable {
@@ -187,19 +199,21 @@ func (w *dmWorker) persistStorage(ctx context.Context) error {
 
 // tryUpdateStatus updates status when task stage changed.
 func (w *dmWorker) tryUpdateStatus(ctx context.Context) error {
-	stage := w.unitHolder.Stage()
-	if stage == w.getStage() {
+	currentStage, _ := w.unitHolder.Stage()
+	previousStage := w.getStage()
+	if currentStage == previousStage {
 		return nil
 	}
-	log.L().Info("task stage changed", zap.Int("from", int(stage)), zap.Int("to", int(w.stage)))
-	w.setStage(stage)
+	log.L().Info("task stage changed", zap.String("task-id", w.taskID), zap.Int("from", int(previousStage)), zap.Int("to", int(currentStage)))
+	w.setStage(currentStage)
 
 	status := w.workerStatus()
-	if stage != metadata.StageFinished {
+	if currentStage != metadata.StageFinished {
+		log.L().Info("update status", zap.String("task-id", w.taskID), zap.String("status", string(status.ExtBytes)))
 		return w.UpdateStatus(ctx, status)
 	}
 
-	if w.workerType == lib.WorkerDMDump {
+	if w.workerType == framework.WorkerDMDump {
 		if err := w.persistStorage(ctx); err != nil {
 			log.L().Error("failed to persist storage", zap.Error(err))
 			// persist in next tick
@@ -210,16 +224,16 @@ func (w *dmWorker) tryUpdateStatus(ctx context.Context) error {
 }
 
 // workerStatus gets worker status.
-func (w *dmWorker) workerStatus() libModel.WorkerStatus {
+func (w *dmWorker) workerStatus() frameModel.WorkerStatus {
 	stage := w.getStage()
-	code := libModel.WorkerStatusNormal
+	code := frameModel.WorkerStatusNormal
 	if stage == metadata.StageFinished {
-		code = libModel.WorkerStatusFinished
+		code = frameModel.WorkerStatusFinished
 	}
-	status := runtime.TaskStatus{Unit: w.workerType, Task: w.taskID, Stage: stage}
+	status := &runtime.TaskStatus{Unit: w.workerType, Task: w.taskID, Stage: stage}
 	// nolint:errcheck
 	statusBytes, _ := json.Marshal(status)
-	return libModel.WorkerStatus{
+	return frameModel.WorkerStatus{
 		Code:     code,
 		ExtBytes: statusBytes,
 	}
@@ -236,4 +250,25 @@ func (w *dmWorker) setStage(stage metadata.TaskStage) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.stage = stage
+}
+
+func (w *dmWorker) checkAndAutoResume(ctx context.Context) error {
+	stage, result := w.unitHolder.Stage()
+	if stage != metadata.StageError {
+		return nil
+	}
+
+	log.L().Error("task runs with error", zap.String("task-id", w.taskID), zap.Any("error msg", result.Errors))
+	subtaskStage := &pb.SubTaskStatus{
+		Stage:  pb.Stage_Paused,
+		Result: result,
+	}
+	strategy := w.autoResume.CheckResumeSubtask(subtaskStage, dmconfig.DefaultBackoffRollback)
+	log.L().Info("got auto resume strategy", zap.String("task-id", w.taskID), zap.Stringer("strategy", strategy))
+
+	if strategy == worker.ResumeDispatch {
+		log.L().Info("dispatch auto resume task", zap.String("task-id", w.taskID))
+		return w.unitHolder.Resume(ctx)
+	}
+	return nil
 }

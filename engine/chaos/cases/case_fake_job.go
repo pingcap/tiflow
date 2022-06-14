@@ -24,9 +24,10 @@ import (
 
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
-	"github.com/pingcap/tiflow/engine/lib/fake"
+	"github.com/pingcap/tiflow/engine/framework/fake"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	"github.com/pingcap/tiflow/engine/test/e2e"
+	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/pingcap/tiflow/pkg/util"
 )
 
@@ -62,8 +63,18 @@ func runFakeJobCase(ctx context.Context, cfg *config) error {
 		return err
 	}
 
-	// create a fake job
-	jobID, err := cli.CreateJob(ctx, pb.JobType_FakeJob, cfgBytes)
+	// retry to create a fake job, since chaos exists, the server master may be
+	// unavailable for sometime.
+	var jobID string
+	err = retry.Do(ctx, func() error {
+		var inErr error
+		jobID, err = cli.CreateJob(ctx, pb.JobType_FakeJob, cfgBytes)
+		return inErr
+	},
+		retry.WithBackoffBaseDelay(1000 /* 1 second */),
+		retry.WithBackoffMaxDelay(8000 /* 8 seconds */),
+		retry.WithMaxTries(15 /* fail after 103 seconds */),
+	)
 	if err != nil {
 		return err
 	}

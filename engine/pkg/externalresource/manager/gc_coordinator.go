@@ -23,7 +23,7 @@ import (
 	"go.uber.org/ratelimit"
 	"go.uber.org/zap"
 
-	libModel "github.com/pingcap/tiflow/engine/lib/model"
+	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/model"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	"github.com/pingcap/tiflow/engine/pkg/notifier"
@@ -94,7 +94,7 @@ func (c *DefaultGCCoordinator) Run(ctx context.Context) error {
 }
 
 // OnKeepAlive is not implemented for now.
-func (c *DefaultGCCoordinator) OnKeepAlive(resourceID resModel.ResourceID, workerID libModel.WorkerID) {
+func (c *DefaultGCCoordinator) OnKeepAlive(resourceID resModel.ResourceID, workerID frameModel.WorkerID) {
 	// TODO implement me
 	panic("implement me")
 }

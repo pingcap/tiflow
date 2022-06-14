@@ -15,7 +15,7 @@ package logutil
 
 import (
 	"github.com/pingcap/log"
-	libModel "github.com/pingcap/tiflow/engine/lib/model"
+	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	"go.uber.org/zap"
 )
@@ -35,6 +35,11 @@ const (
 	constFieldWorkerKey = "worker_id"
 )
 
+// L is the alias of NewLogger4Framework for easy use
+func L() *zap.Logger {
+	return NewLogger4Framework()
+}
+
 // NewLogger4Framework return a new logger for framework
 func NewLogger4Framework() *zap.Logger {
 	return log.L().With(
@@ -43,7 +48,7 @@ func NewLogger4Framework() *zap.Logger {
 }
 
 // NewLogger4Master return a new logger for master
-func NewLogger4Master(project tenant.ProjectInfo, masterID libModel.MasterID) *zap.Logger {
+func NewLogger4Master(project tenant.ProjectInfo, masterID frameModel.MasterID) *zap.Logger {
 	return log.L().With(
 		zap.String(constFieldTenantKey, project.TenantID()),
 		zap.String(constFieldProjectKey, project.ProjectID()),
@@ -52,7 +57,7 @@ func NewLogger4Master(project tenant.ProjectInfo, masterID libModel.MasterID) *z
 }
 
 // NewLogger4Worker return a new logger for worker
-func NewLogger4Worker(project tenant.ProjectInfo, masterID libModel.MasterID, workerID libModel.WorkerID) *zap.Logger {
+func NewLogger4Worker(project tenant.ProjectInfo, masterID frameModel.MasterID, workerID frameModel.WorkerID) *zap.Logger {
 	return log.L().With(
 		zap.String(constFieldTenantKey, project.TenantID()),
 		zap.String(constFieldProjectKey, project.ProjectID()),
