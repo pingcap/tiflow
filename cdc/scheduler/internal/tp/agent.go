@@ -191,7 +191,7 @@ func (a *agent) handleMessageHeartbeat(expected []model.TableID) *schedulepb.Mes
 	allTables := a.tableM.getAllTables()
 	result := make([]schedulepb.TableStatus, 0, len(allTables))
 	for _, table := range allTables {
-		status := table.status
+		status := table.getTableStatus()
 		if table.task != nil && table.task.IsRemove {
 			status.State = schedulepb.TableStateStopping
 		}
@@ -199,7 +199,7 @@ func (a *agent) handleMessageHeartbeat(expected []model.TableID) *schedulepb.Mes
 	}
 	for _, tableID := range expected {
 		if _, ok := allTables[tableID]; !ok {
-			status := a.tableM.newTableStatus(tableID)
+			status := a.tableM.getTableStatus(tableID)
 			result = append(result, status)
 		}
 	}

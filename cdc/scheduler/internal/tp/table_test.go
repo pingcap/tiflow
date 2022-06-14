@@ -30,7 +30,7 @@ func TestTableManager(t *testing.T) {
 	tableM := newTableManager(mockTableExecutor)
 
 	tableM.addTable(model.TableID(1))
-	require.Equal(t, schedulepb.TableStateAbsent, tableM.tables[model.TableID(1)].status.State)
+	require.Equal(t, schedulepb.TableStateAbsent, tableM.tables[model.TableID(1)].state)
 
 	tableM.dropTable(model.TableID(1))
 	require.NotContains(t, tableM.tables, model.TableID(1))
