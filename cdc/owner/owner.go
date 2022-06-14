@@ -566,7 +566,7 @@ func (o *ownerImpl) updateGCSafepoint(
 }
 
 // calculateGCSagepoint calculates GCSafepoint for different upstream.
-func (o *ownerImpl) calculateGCSagepoint(state *orchestrator.GlobalReactorState) (
+func (o *ownerImpl) calculateGCSafepoint(state *orchestrator.GlobalReactorState) (
 	map[uint64]uint64, map[uint64]interface{},
 ) {
 	minCheckpointTsMap := make(map[uint64]uint64)
