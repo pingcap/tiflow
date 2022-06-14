@@ -38,7 +38,7 @@ function run() {
 
 	python3 $CUR/util/test_case.py check_health
 	python3 $CUR/util/test_case.py get_status
-	
+
 	SINK_URI="mysql://normal:123456@127.0.0.1:3306/"
 	python3 $CUR/util/test_case.py create_changefeed "$SINK_URI"
 
