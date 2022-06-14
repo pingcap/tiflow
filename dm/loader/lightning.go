@@ -207,7 +207,12 @@ func (l *LightningLoader) runLightning(ctx context.Context, cfg *lcfg.Config) er
 	var opts []lightning.Option
 	if l.cfg.MetricsFactory != nil {
 		opts = append(opts,
-			lightning.WithPromFactory(l.cfg.MetricsFactory),
+			lightning.WithPromFactory(
+				promutil.NewWrappingFactory(
+					l.cfg.MetricsFactory,
+					"",
+					prometheus.Labels{"task": l.cfg.Name, "source_id": l.cfg.SourceID},
+				)),
 			lightning.WithPromRegistry(promutil2.NewNoopRegistry()))
 	} else {
 		registry := prometheus.DefaultGatherer.(prometheus.Registerer)
