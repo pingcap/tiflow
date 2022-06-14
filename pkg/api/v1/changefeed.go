@@ -61,7 +61,9 @@ func (c *changefeeds) Get(ctx context.Context, name string) (*model.ChangefeedDe
 }
 
 // List returns the list of changefeeds
-func (c *changefeeds) List(ctx context.Context, state string) (*[]model.ChangefeedCommonInfo, error) {
+func (c *changefeeds) List(ctx context.Context,
+	state string,
+) (*[]model.ChangefeedCommonInfo, error) {
 	result := new([]model.ChangefeedCommonInfo)
 	err := c.client.Get().
 		WithURI("changefeeds").
