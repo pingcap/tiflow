@@ -26,9 +26,10 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/go-sql-driver/mysql"
 	perrors "github.com/pingcap/errors"
+	"github.com/pingcap/failpoint"
 	"github.com/stretchr/testify/require"
 
-	libModel "github.com/pingcap/tiflow/engine/lib/model"
+	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	derror "github.com/pingcap/tiflow/engine/pkg/errors"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
@@ -81,8 +82,6 @@ func TestNewMetaOpsClient(t *testing.T) {
 
 // nolint: deadcode
 func testInitialize(t *testing.T) {
-	t.Parallel()
-
 	sqlDB, mock, err := mockGetDBConn(t, "test")
 	defer sqlDB.Close()
 	defer mock.ExpectClose()
@@ -407,7 +406,7 @@ func TestJob(t *testing.T) {
 		{
 			fn: "UpsertJob",
 			inputs: []interface{}{
-				&libModel.MasterMetaKVData{
+				&frameModel.MasterMetaKVData{
 					ProjectID:  "p111",
 					ID:         "j111",
 					Tp:         1,
@@ -453,7 +452,7 @@ func TestJob(t *testing.T) {
 			// "UPDATE `master_meta_kv_data` SET `addr`=?,`config`=?,`epoch`=?,`id`=?,`node_id`=?,`project-id`=?,`status`=?,`type`=?,`updated_at`=? WHERE id = ?"
 			fn: "UpdateJob",
 			inputs: []interface{}{
-				&libModel.MasterMetaKVData{
+				&frameModel.MasterMetaKVData{
 					ProjectID:  "p111",
 					ID:         "j111",
 					Tp:         1,
@@ -474,7 +473,7 @@ func TestJob(t *testing.T) {
 			inputs: []interface{}{
 				"j111",
 			},
-			output: &libModel.MasterMetaKVData{
+			output: &frameModel.MasterMetaKVData{
 				Model: model.Model{
 					SeqID:     1,
 					CreatedAt: createdAt,
@@ -516,7 +515,7 @@ func TestJob(t *testing.T) {
 			inputs: []interface{}{
 				"p111",
 			},
-			output: []*libModel.MasterMetaKVData{
+			output: []*frameModel.MasterMetaKVData{
 				{
 					Model: model.Model{
 						SeqID:     1,
@@ -560,7 +559,7 @@ func TestJob(t *testing.T) {
 				"j111",
 				1,
 			},
-			output: []*libModel.MasterMetaKVData{
+			output: []*frameModel.MasterMetaKVData{
 				{
 					Model: model.Model{
 						SeqID:     1,
@@ -630,7 +629,7 @@ func TestWorker(t *testing.T) {
 			// `type`=VALUES(`type`),`status`=VALUES(`status`),`errmsg`=VALUES(`errmsg`),`ext_bytes`=VALUES(`ext_bytes`)
 			fn: "UpsertWorker",
 			inputs: []interface{}{
-				&libModel.WorkerStatus{
+				&frameModel.WorkerStatus{
 					Model: model.Model{
 						CreatedAt: createdAt,
 						UpdatedAt: updatedAt,
@@ -651,7 +650,7 @@ func TestWorker(t *testing.T) {
 		{
 			fn: "UpsertWorker",
 			inputs: []interface{}{
-				&libModel.WorkerStatus{
+				&frameModel.WorkerStatus{
 					Model: model.Model{
 						SeqID:     1,
 						CreatedAt: createdAt,
@@ -703,7 +702,7 @@ func TestWorker(t *testing.T) {
 			// 'UPDATE `worker_statuses` SET `error-message`=?,`ext-bytes`=?,`id`=?,`job_id`=?,`project_id`=?,`status`=?,`type`=?,`updated_at`=? WHERE job_id = ? && id = ?'
 			fn: "UpdateWorker",
 			inputs: []interface{}{
-				&libModel.WorkerStatus{
+				&frameModel.WorkerStatus{
 					ProjectID:    "p111",
 					JobID:        "j111",
 					ID:           "w111",
@@ -725,7 +724,7 @@ func TestWorker(t *testing.T) {
 				"j111",
 				"w222",
 			},
-			output: &libModel.WorkerStatus{
+			output: &frameModel.WorkerStatus{
 				Model: model.Model{
 					SeqID:     1,
 					CreatedAt: createdAt,
@@ -766,7 +765,7 @@ func TestWorker(t *testing.T) {
 			inputs: []interface{}{
 				"j111",
 			},
-			output: []*libModel.WorkerStatus{
+			output: []*frameModel.WorkerStatus{
 				{
 					Model: model.Model{
 						SeqID:     1,
@@ -809,7 +808,7 @@ func TestWorker(t *testing.T) {
 				"j111",
 				1,
 			},
-			output: []*libModel.WorkerStatus{
+			output: []*frameModel.WorkerStatus{
 				{
 					Model: model.Model{
 						SeqID:     1,
@@ -1268,6 +1267,46 @@ func TestLogicEpoch(t *testing.T) {
 	for _, tc := range testCases {
 		testInner(t, mock, cli, tc)
 	}
+}
+
+func TestContext(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(context.TODO(), 1*time.Second)
+	defer cancel()
+
+	cli, err := NewMockClient()
+	require.NoError(t, err)
+	defer cli.Close()
+
+	// test normal function
+	err = failpoint.Enable("github.com/pingcap/tiflow/engine/pkg/orm/initializedDelay", "sleep(2000)")
+	require.NoError(t, err)
+	ctx = failpoint.WithHook(ctx, func(ctx context.Context, fpname string) bool {
+		return ctx.Value(fpname) != nil
+	})
+	ctx2 := context.WithValue(ctx, "github.com/pingcap/tiflow/engine/pkg/orm/initializedDelay", struct{}{})
+
+	err = cli.Initialize(ctx2)
+	require.Error(t, err)
+	require.Regexp(t, "context deadline exceed", err.Error())
+	failpoint.Disable("github.com/pingcap/tiflow/engine/pkg/orm/initializedDelay")
+
+	// test transaction
+	ctx, cancel = context.WithTimeout(context.TODO(), 1*time.Second)
+	defer cancel()
+
+	err = failpoint.Enable("github.com/pingcap/tiflow/engine/pkg/orm/genEpochDelay", "sleep(2000)")
+	require.NoError(t, err)
+	ctx = failpoint.WithHook(ctx, func(ctx context.Context, fpname string) bool {
+		return ctx.Value(fpname) != nil
+	})
+	ctx2 = context.WithValue(ctx, "github.com/pingcap/tiflow/engine/pkg/orm/genEpochDelay", struct{}{})
+
+	_, err = cli.GenEpoch(ctx2)
+	require.Error(t, err)
+	require.Regexp(t, "context deadline exceed", err.Error())
+	failpoint.Disable("github.com/pingcap/tiflow/engine/pkg/orm/model/genEpochDelay")
 }
 
 func testInner(t *testing.T, m sqlmock.Sqlmock, cli Client, c tCase) {

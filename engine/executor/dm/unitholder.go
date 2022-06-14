@@ -16,72 +16,51 @@ package dm
 import (
 	"context"
 	"sync"
-	"time"
 
-	"github.com/pingcap/tiflow/dm/dm/config"
+	"github.com/pingcap/errors"
 	dmconfig "github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/dm/pb"
 	"github.com/pingcap/tiflow/dm/dm/unit"
-	"github.com/pingcap/tiflow/dm/dm/worker"
 	"github.com/pingcap/tiflow/dm/dumpling"
 	"github.com/pingcap/tiflow/dm/loader"
-	"github.com/pingcap/tiflow/dm/pkg/backoff"
-	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/syncer"
+	"github.com/pingcap/tiflow/engine/framework"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
-	"github.com/pingcap/tiflow/engine/lib"
-	"go.uber.org/zap"
 )
 
 // unitHolder hold a unit of DM
 type unitHolder interface {
 	Init(ctx context.Context) error
-	Tick(ctx context.Context) error
-	Stage() metadata.TaskStage
-	Status(ctx context.Context) interface{}
 	Close(ctx context.Context) error
+	Pause(ctx context.Context) error
+	Resume(ctx context.Context) error
+	Stage() (metadata.TaskStage, *pb.ProcessResult)
+	Status(ctx context.Context) interface{}
 }
 
 // unitHolderImpl wrap the dm-worker unit.
 type unitHolderImpl struct {
-	autoResume *worker.AutoResumeInfo
+	unit unit.Unit
 
-	ctx        context.Context
-	cancel     context.CancelFunc
-	mu         sync.RWMutex
-	unit       unit.Unit
-	resultCh   chan pb.ProcessResult
-	lastResult *pb.ProcessResult // TODO: check if framework can persist result
+	// use to access process(init/close/pause/resume)
+	processMu sync.RWMutex
+	processWg sync.WaitGroup
+	// use to access field(ctx/result)
+	fieldMu   sync.RWMutex
+	runCtx    context.Context
+	runCancel context.CancelFunc
+	result    *pb.ProcessResult // TODO: check if framework can persist result
 }
 
 // newUnitHolderImpl creates a UnitHolderImpl
-func newUnitHolderImpl(workerType lib.WorkerType, cfg *dmconfig.SubTaskConfig) *unitHolderImpl {
-	// TODO: support config later
-	// nolint:errcheck
-	bf, _ := backoff.NewBackoff(
-		config.DefaultBackoffFactor,
-		config.DefaultBackoffJitter,
-		config.DefaultBackoffMin,
-		config.DefaultBackoffMax)
-	autoResume := &worker.AutoResumeInfo{
-		Backoff:          bf,
-		LatestPausedTime: time.Now(),
-		LatestResumeTime: time.Now(),
-	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	unitHolder := &unitHolderImpl{
-		ctx:        ctx,
-		cancel:     cancel,
-		autoResume: autoResume,
-		resultCh:   make(chan pb.ProcessResult, 1),
-	}
+func newUnitHolderImpl(workerType framework.WorkerType, cfg *dmconfig.SubTaskConfig) *unitHolderImpl {
+	unitHolder := &unitHolderImpl{}
 	switch workerType {
-	case lib.WorkerDMDump:
+	case framework.WorkerDMDump:
 		unitHolder.unit = dumpling.NewDumpling(cfg)
-	case lib.WorkerDMLoad:
+	case framework.WorkerDMLoad:
 		unitHolder.unit = loader.NewLightning(cfg, nil, "dataflow-worker")
-	case lib.WorkerDMSync:
+	case framework.WorkerDMSync:
 		unitHolder.unit = syncer.NewSyncer(cfg, nil, nil)
 	}
 	return unitHolder
@@ -89,12 +68,125 @@ func newUnitHolderImpl(workerType lib.WorkerType, cfg *dmconfig.SubTaskConfig) *
 
 // Init implement UnitHolder.Init
 func (u *unitHolderImpl) Init(ctx context.Context) error {
+	u.processMu.Lock()
+	defer u.processMu.Unlock()
+
 	if err := u.unit.Init(ctx); err != nil {
 		return err
 	}
 
-	go u.unit.Process(u.ctx, u.resultCh)
+	runCtx, runCancel := context.WithCancel(context.Background())
+	u.fieldMu.Lock()
+	u.runCtx, u.runCancel = runCtx, runCancel
+	u.fieldMu.Unlock()
+
+	resultCh := make(chan pb.ProcessResult, 1)
+	u.processWg.Add(1)
+	go func() {
+		defer u.processWg.Done()
+		u.unit.Process(runCtx, resultCh)
+		u.fetchAndHandleResult(resultCh)
+	}()
 	return nil
+}
+
+func (u *unitHolderImpl) Pause(ctx context.Context) error {
+	u.processMu.Lock()
+	defer u.processMu.Unlock()
+
+	stage, _ := u.Stage()
+	if stage != metadata.StageRunning && stage != metadata.StageError {
+		return errors.Errorf("failed to pause unit with stage %d", stage)
+	}
+
+	// cancel process
+	u.fieldMu.Lock()
+	u.runCancel()
+	u.fieldMu.Unlock()
+	u.processWg.Wait()
+	// TODO: refactor unit.Syncer
+	// unit needs to manage its own life cycle
+	u.unit.Pause()
+	return nil
+}
+
+func (u *unitHolderImpl) Resume(ctx context.Context) error {
+	u.processMu.Lock()
+	defer u.processMu.Unlock()
+
+	stage, _ := u.Stage()
+	if stage != metadata.StagePaused && stage != metadata.StageError {
+		return errors.Errorf("failed to resume unit with stage %d", stage)
+	}
+
+	runCtx, runCancel := context.WithCancel(context.Background())
+	// run new process
+	u.fieldMu.Lock()
+	u.runCtx, u.runCancel = runCtx, runCancel
+	u.result = nil
+	u.fieldMu.Unlock()
+
+	resultCh := make(chan pb.ProcessResult, 1)
+	u.processWg.Add(1)
+	go func() {
+		defer u.processWg.Done()
+		u.unit.Resume(runCtx, resultCh)
+		u.fetchAndHandleResult(resultCh)
+	}()
+	return nil
+}
+
+// Close implement UnitHolder.Close
+func (u *unitHolderImpl) Close(ctx context.Context) error {
+	u.processMu.Lock()
+	defer u.processMu.Unlock()
+
+	u.fieldMu.Lock()
+	// cancel process
+	if u.runCancel != nil {
+		u.runCancel()
+	}
+	u.fieldMu.Unlock()
+
+	u.processWg.Wait()
+	if u.unit != nil {
+		u.unit.Close()
+	}
+	return nil
+}
+
+// Stage implement UnitHolder.Stage
+func (u *unitHolderImpl) Stage() (metadata.TaskStage, *pb.ProcessResult) {
+	u.fieldMu.RLock()
+	ctx := u.runCtx
+	result := u.result
+	u.fieldMu.RUnlock()
+
+	var canceled bool
+	select {
+	case <-ctx.Done():
+		canceled = true
+	default:
+	}
+
+	switch {
+	case canceled && result == nil:
+		return metadata.StagePausing, nil
+	case canceled && result != nil:
+		return metadata.StagePaused, result
+	case !canceled && result == nil:
+		return metadata.StageRunning, nil
+	// !canceled && result != nil
+	case len(result.Errors) == 0:
+		return metadata.StageFinished, result
+	default:
+		return metadata.StageError, result
+	}
+}
+
+// Status implement UnitHolder.Status
+func (u *unitHolderImpl) Status(ctx context.Context) interface{} {
+	return u.unit.Status(nil)
 }
 
 func filterErrors(r *pb.ProcessResult) {
@@ -107,87 +199,15 @@ func filterErrors(r *pb.ProcessResult) {
 	r.Errors = errs
 }
 
-func (u *unitHolderImpl) fetchAndHandleResult() {
-	if r := u.getResult(); r != nil {
-		return
+func (u *unitHolderImpl) fetchAndHandleResult(resultCh chan pb.ProcessResult) {
+	r := <-resultCh
+	filterErrors(&r)
+	if len(r.Errors) > 0 {
+		// TODO: refactor unit.Syncer
+		// unit needs to manage its own life cycle
+		u.unit.Pause()
 	}
-
-	select {
-	case r := <-u.resultCh:
-		filterErrors(&r)
-		if len(r.Errors) > 0 {
-			// TODO: refactor unit.Syncer
-			// unit needs to manage its own life cycle
-			u.unit.Pause()
-		}
-		u.setResult(&r)
-	default:
-	}
-}
-
-func (u *unitHolderImpl) setResult(r *pb.ProcessResult) {
-	u.mu.Lock()
-	defer u.mu.Unlock()
-	u.lastResult = r
-}
-
-func (u *unitHolderImpl) getResult() *pb.ProcessResult {
-	u.mu.RLock()
-	defer u.mu.RUnlock()
-	return u.lastResult
-}
-
-func (u *unitHolderImpl) checkAndAutoResume() {
-	result := u.getResult()
-	if result == nil || len(result.Errors) == 0 {
-		return
-	}
-
-	log.L().Error("task runs with error", zap.Any("error msg", result.Errors))
-	subtaskStage := &pb.SubTaskStatus{
-		Stage:  pb.Stage_Paused,
-		Result: result,
-	}
-	strategy := u.autoResume.CheckResumeSubtask(subtaskStage, config.DefaultBackoffRollback)
-	log.L().Info("got auto resume strategy", zap.Stringer("strategy", strategy))
-
-	if strategy == worker.ResumeDispatch {
-		log.L().Info("dispatch auto resume task")
-		u.setResult(nil)
-		// TODO: manage goroutines
-		go u.unit.Resume(u.ctx, u.resultCh)
-	}
-}
-
-// Tick implement UnitHolder.Tick
-func (u *unitHolderImpl) Tick(ctx context.Context) error {
-	u.fetchAndHandleResult()
-	u.checkAndAutoResume()
-	return nil
-}
-
-// Close implement UnitHolder.Close
-func (u *unitHolderImpl) Close(ctx context.Context) error {
-	u.cancel()
-	u.unit.Close()
-	return nil
-}
-
-// Stage implement UnitHolder.Stage
-func (u *unitHolderImpl) Stage() metadata.TaskStage {
-	result := u.getResult()
-	switch {
-	case result == nil:
-		return metadata.StageRunning
-	// TODO: support OperateTask
-	case len(result.Errors) == 0:
-		return metadata.StageFinished
-	default:
-		return metadata.StagePaused
-	}
-}
-
-// Status implement UnitHolder.Status
-func (u *unitHolderImpl) Status(ctx context.Context) interface{} {
-	return u.unit.Status(nil)
+	u.fieldMu.Lock()
+	u.result = &r
+	u.fieldMu.Unlock()
 }

@@ -23,7 +23,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/dm/pkg/log"
-	libModel "github.com/pingcap/tiflow/engine/lib/model"
+	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	derrors "github.com/pingcap/tiflow/engine/pkg/errors"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/storagecfg"
@@ -36,7 +36,7 @@ type LocalFileManager struct {
 	config storagecfg.LocalFileConfig
 
 	mu                          sync.Mutex
-	persistedResourcesByCreator map[libModel.WorkerID]map[resModel.ResourceName]struct{}
+	persistedResourcesByCreator map[frameModel.WorkerID]map[resModel.ResourceName]struct{}
 }
 
 // NewLocalFileManager returns a new NewLocalFileManager.
@@ -45,7 +45,7 @@ type LocalFileManager struct {
 func NewLocalFileManager(config storagecfg.LocalFileConfig) *LocalFileManager {
 	return &LocalFileManager{
 		config:                      config,
-		persistedResourcesByCreator: make(map[libModel.WorkerID]map[resModel.ResourceName]struct{}),
+		persistedResourcesByCreator: make(map[frameModel.WorkerID]map[resModel.ResourceName]struct{}),
 	}
 }
 
@@ -54,7 +54,7 @@ func NewLocalFileManager(config storagecfg.LocalFileConfig) *LocalFileManager {
 // The resource is NOT marked as persisted by this method.
 // Only use it when we are sure it is a NEW resource.
 func (m *LocalFileManager) CreateResource(
-	creator libModel.WorkerID,
+	creator frameModel.WorkerID,
 	resName resModel.ResourceName,
 ) (*LocalFileResourceDescriptor, error) {
 	res := &LocalFileResourceDescriptor{
@@ -72,7 +72,7 @@ func (m *LocalFileManager) CreateResource(
 // GetPersistedResource checks the given resource exists in the local
 // file system and returns a LocalFileResourceDescriptor.
 func (m *LocalFileManager) GetPersistedResource(
-	creator libModel.WorkerID,
+	creator frameModel.WorkerID,
 	resName resModel.ResourceName,
 ) (*LocalFileResourceDescriptor, error) {
 	res := &LocalFileResourceDescriptor{
@@ -103,7 +103,7 @@ func (m *LocalFileManager) GetPersistedResource(
 
 // RemoveTemporaryFiles cleans up all temporary files (i.e., unpersisted file resources),
 // created by `creator`.
-func (m *LocalFileManager) RemoveTemporaryFiles(creator libModel.WorkerID) error {
+func (m *LocalFileManager) RemoveTemporaryFiles(creator frameModel.WorkerID) error {
 	log.L().Info("Start cleaning temporary files",
 		zap.String("worker-id", creator))
 
@@ -155,7 +155,7 @@ func (m *LocalFileManager) RemoveTemporaryFiles(creator libModel.WorkerID) error
 
 // RemoveResource removes a single resource from the local file system.
 // NOTE the caller should handle ErrResourceDoesNotExist appropriately.
-func (m *LocalFileManager) RemoveResource(creator libModel.WorkerID, resName resModel.ResourceName) error {
+func (m *LocalFileManager) RemoveResource(creator frameModel.WorkerID, resName resModel.ResourceName) error {
 	if creator == "" {
 		log.L().Panic("Empty creator ID is unexpected",
 			zap.String("resource-name", resName))
@@ -203,7 +203,7 @@ func (m *LocalFileManager) RemoveResource(creator libModel.WorkerID, resName res
 // we assume that if the executor process crashes, the
 // file resources are lost.
 func (m *LocalFileManager) SetPersisted(
-	creator libModel.WorkerID,
+	creator frameModel.WorkerID,
 	resName resModel.ResourceName,
 ) {
 	m.mu.Lock()
@@ -222,7 +222,7 @@ func (m *LocalFileManager) SetPersisted(
 // isPersisted returns whether a resource has been persisted.
 // DO NOT hold the mu when calling this method.
 func (m *LocalFileManager) isPersisted(
-	creator libModel.WorkerID,
+	creator frameModel.WorkerID,
 	resName resModel.ResourceName,
 ) bool {
 	m.mu.Lock()

@@ -21,7 +21,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	libModel "github.com/pingcap/tiflow/engine/lib/model"
+	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 )
@@ -106,9 +106,9 @@ func (h *gcTestHelper) LoadDefaultMockData(t *testing.T) {
 	h.ExecInfo.AddExecutor("executor-2")
 	h.ExecInfo.AddExecutor("executor-3")
 
-	h.JobInfo.SetJobStatus("job-1", libModel.MasterStatusInit)
-	h.JobInfo.SetJobStatus("job-2", libModel.MasterStatusInit)
-	h.JobInfo.SetJobStatus("job-3", libModel.MasterStatusInit)
+	h.JobInfo.SetJobStatus("job-1", frameModel.MasterStatusInit)
+	h.JobInfo.SetJobStatus("job-2", frameModel.MasterStatusInit)
+	h.JobInfo.SetJobStatus("job-3", frameModel.MasterStatusInit)
 
 	err := h.Meta.CreateResource(context.Background(), &resModel.ResourceMeta{
 		ID:       "resource-1",

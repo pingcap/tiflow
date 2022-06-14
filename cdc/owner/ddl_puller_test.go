@@ -107,8 +107,8 @@ func TestPuller(t *testing.T) {
 	startTs := uint64(10)
 	mockPuller := newMockPuller(t, startTs)
 	ctx := cdcContext.NewBackendContext4Test(true)
-	upStream := upstream.NewUpstream4Test(nil)
-	p, err := newDDLPuller(ctx, upStream, startTs)
+	up := upstream.NewUpstream4Test(nil)
+	p, err := newDDLPuller(ctx, up, startTs)
 	require.Nil(t, err)
 	p.(*ddlPullerImpl).puller = mockPuller
 	var wg sync.WaitGroup
@@ -234,8 +234,8 @@ func TestResolvedTsStuck(t *testing.T) {
 	startTs := uint64(10)
 	mockPuller := newMockPuller(t, startTs)
 	ctx := cdcContext.NewBackendContext4Test(true)
-	upStream := upstream.NewUpstream4Test(nil)
-	p, err := newDDLPuller(ctx, upStream, startTs)
+	up := upstream.NewUpstream4Test(nil)
+	p, err := newDDLPuller(ctx, up, startTs)
 	require.Nil(t, err)
 
 	mockClock := clock.NewMock()

@@ -50,14 +50,15 @@ type tableActor struct {
 	mb      actor.Mailbox[pmessage.Message]
 	router  *actor.Router[pmessage.Message]
 
-	upStream *upstream.Upstream
+	upstream *upstream.Upstream
 
 	// all goroutines in tableActor should be spawned from this wg
 	wg *errgroup.Group
 	// backend mounter
 	mounter entry.Mounter
 	// backend tableSink
-	tableSink sink.Sink
+	tableSink      sink.Sink
+	redoLogEnabled bool
 
 	pullerNode *pullerNode
 	sortNode   *sorterNode
@@ -97,12 +98,13 @@ type tableActor struct {
 
 // NewTableActor creates a table actor and starts it.
 func NewTableActor(cdcCtx cdcContext.Context,
-	upStream *upstream.Upstream,
+	up *upstream.Upstream,
 	mounter entry.Mounter,
 	tableID model.TableID,
 	tableName string,
 	replicaInfo *model.TableReplicaInfo,
 	sink sink.Sink,
+	redoLogEnabled bool,
 	targetTs model.Ts,
 ) (TablePipeline, error) {
 	config := cdcCtx.ChangefeedVars().Info.Config
@@ -124,18 +126,19 @@ func NewTableActor(cdcCtx cdcContext.Context,
 		wg:        wg,
 		cancel:    cancel,
 
-		tableID:       tableID,
-		markTableID:   replicaInfo.MarkTableID,
-		tableName:     tableName,
-		cyclicEnabled: cyclicEnabled,
-		memoryQuota:   serverConfig.GetGlobalServerConfig().PerTableMemoryQuota,
-		upStream:      upStream,
-		mounter:       mounter,
-		replicaInfo:   replicaInfo,
-		replicaConfig: config,
-		tableSink:     sink,
-		targetTs:      targetTs,
-		started:       false,
+		tableID:        tableID,
+		markTableID:    replicaInfo.MarkTableID,
+		tableName:      tableName,
+		cyclicEnabled:  cyclicEnabled,
+		memoryQuota:    serverConfig.GetGlobalServerConfig().PerTableMemoryQuota,
+		upstream:       up,
+		mounter:        mounter,
+		replicaInfo:    replicaInfo,
+		replicaConfig:  config,
+		tableSink:      sink,
+		redoLogEnabled: redoLogEnabled,
+		targetTs:       targetTs,
+		started:        false,
 
 		changefeedID:   changefeedVars.ID,
 		changefeedVars: changefeedVars,
@@ -279,7 +282,7 @@ func (t *tableActor) start(sdtTableContext context.Context) error {
 		zap.String("tableName", t.tableName),
 		zap.Uint64("quota", t.memoryQuota))
 
-	flowController := flowcontrol.NewTableFlowController(t.memoryQuota)
+	flowController := flowcontrol.NewTableFlowController(t.memoryQuota, t.redoLogEnabled)
 	sorterNode := newSorterNode(t.tableName, t.tableID,
 		t.replicaInfo.StartTs, flowController,
 		t.mounter, t.replicaConfig,
@@ -430,7 +433,7 @@ func (t *tableActor) ResolvedTs() model.Ts {
 	// another replication barrier for consistent replication instead of reusing
 	// the global resolved-ts.
 	if redo.IsConsistentEnabled(t.replicaConfig.Consistent.Level) {
-		return t.sinkNode.ResolvedTs().Ts
+		return t.sinkNode.ResolvedTs()
 	}
 	return t.sortNode.ResolvedTs()
 }
@@ -523,7 +526,7 @@ func (t *tableActor) MemoryConsumption() uint64 {
 
 // for ut
 var startPuller = func(t *tableActor, ctx *actorNodeContext) error {
-	return t.pullerNode.start(ctx, t.upStream, t.wg, t.sortNode)
+	return t.pullerNode.start(ctx, t.upstream, t.wg, t.sortNode)
 }
 
 var startSorter = func(t *tableActor, ctx *actorNodeContext) error {

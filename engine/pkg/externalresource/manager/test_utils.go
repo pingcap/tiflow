@@ -21,7 +21,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	libModel "github.com/pingcap/tiflow/engine/lib/model"
+	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/model"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	"github.com/pingcap/tiflow/engine/pkg/notifier"
@@ -117,7 +117,7 @@ func NewMockJobStatusProvider() *MockJobStatusProvider {
 }
 
 // SetJobStatus upserts the status of a given job.
-func (jp *MockJobStatusProvider) SetJobStatus(jobID libModel.MasterID, status JobStatus) {
+func (jp *MockJobStatusProvider) SetJobStatus(jobID frameModel.MasterID, status JobStatus) {
 	jp.mu.Lock()
 	defer jp.mu.Unlock()
 
@@ -125,7 +125,7 @@ func (jp *MockJobStatusProvider) SetJobStatus(jobID libModel.MasterID, status Jo
 }
 
 // RemoveJob removes a job from the mock.
-func (jp *MockJobStatusProvider) RemoveJob(jobID libModel.MasterID) {
+func (jp *MockJobStatusProvider) RemoveJob(jobID frameModel.MasterID) {
 	jp.mu.Lock()
 	defer jp.mu.Unlock()
 
