@@ -30,13 +30,16 @@ type WorkerStatusCode int8
 // for now. The rest are for the business logic to use.
 // TODO think about whether to manage the transition of the statuses.
 // TODO: need a FSM graph
+// NOTICE: DO NOT CHANGE the previous status code
+// Modify the WorkerStatus.Code comment IF you add some new status code
 const (
-	WorkerStatusNormal = WorkerStatusCode(iota + 1)
-	WorkerStatusCreated
-	WorkerStatusInit
-	WorkerStatusError
-	WorkerStatusFinished
-	WorkerStatusStopped
+	WorkerStatusNormal   = 1
+	WorkerStatusCreated  = 2
+	WorkerStatusInit     = 3
+	WorkerStatusError    = 4
+	WorkerStatusFinished = 5
+	WorkerStatusStopped  = 6
+	// extend the status code here
 )
 
 // WorkerUpdateColumns is used in gorm update.
@@ -62,9 +65,9 @@ type WorkerStatus struct {
 	ProjectID    tenant.ProjectID `json:"project-id" gorm:"column:project_id;type:varchar(64) not null"`
 	JobID        MasterID         `json:"job-id" gorm:"column:job_id;type:varchar(64) not null;uniqueIndex:uidx_wid,priority:1;index:idx_wst,priority:1"`
 	ID           WorkerID         `json:"id" gorm:"column:id;type:varchar(64) not null;uniqueIndex:uidx_wid,priority:2"`
-	Type         WorkerType       `json:"type" gorm:"column:type;type:smallint not null"`
-	Code         WorkerStatusCode `json:"code" gorm:"column:status;type:tinyint not null;index:idx_wst,priority:2"`
-	ErrorMessage string           `json:"error-message" gorm:"column:errmsg;type:varchar(1024)"`
+	Type         WorkerType       `json:"type" gorm:"column:type;type:smallint not null;comment:JobManager(1),CvsJobMaster(2),FakeJobMaster(3),DMJobMaster(4),CDCJobMaster(5),CvsTask(6),FakeTask(7),DMTask(8),CDCTask(9),WorkerDMDump(10),WorkerDMLoad(11),WorkerDMSync(12)"`
+	Code         WorkerStatusCode `json:"code" gorm:"column:status;type:tinyint not null;index:idx_wst,priority:2;comment:Normal(1),Created(2),Init(3),Error(4),Finished(5),Stopped(6)"`
+	ErrorMessage string           `json:"error-message" gorm:"column:errmsg;type:text"`
 
 	// ExtBytes carries the serialized form of the Ext field, which is used in
 	// business logic only.

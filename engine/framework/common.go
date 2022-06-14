@@ -31,27 +31,26 @@ type (
 )
 
 // Defines all task type
-// TODO: Refine me.
-// Currently, when adding a new worker type or job type, we need to modify many code places,
-// engine/model/job.go
-// engine/lib/common.go
-// engine/servermaster/jobmananger.go/SubmitJob
+// TODO: Refine me.Currently, when adding a new worker type or job type, we need to modify many code places,
+// NOTICE: DO NOT CHANGE the previous worker type
+// Modify the comment in model IF you add some new worker type
 const (
-	JobManager = model.WorkerType(iota + 1)
+	JobManager = 1
 	// job master
-	CvsJobMaster
-	FakeJobMaster
-	DMJobMaster
-	CdcJobMaster
+	CvsJobMaster  = 2
+	FakeJobMaster = 3
+	DMJobMaster   = 4
+	CdcJobMaster  = 5
 	// task
-	CvsTask
-	FakeTask
-	DmTask
-	CdcTask
+	CvsTask  = 6
+	FakeTask = 7
+	DmTask   = 8
+	CdcTask  = 9
 	// worker
-	WorkerDMDump
-	WorkerDMLoad
-	WorkerDMSync
+	WorkerDMDump = 10
+	WorkerDMLoad = 11
+	WorkerDMSync = 12
+	// extend the worker type here
 )
 
 // MasterFailoverReasonCode is used as reason code
