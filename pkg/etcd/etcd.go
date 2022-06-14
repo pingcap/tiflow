@@ -595,7 +595,7 @@ func (c CDCEtcdClient) GetUpstreamInfo(ctx context.Context,
 		return nil, cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
 	}
 	if resp.Count == 0 {
-		return nil, cerror.ErrUpStreamNotFound.GenWithStackByArgs(KeyStr)
+		return nil, cerror.ErrUpstreamNotFound.GenWithStackByArgs(KeyStr)
 	}
 	info := &model.UpstreamInfo{}
 	err = info.Unmarshal(resp.Kvs[0].Value)

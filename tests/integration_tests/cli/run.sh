@@ -51,7 +51,6 @@ function run() {
 	check_table_exists test.simple ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 	check_table_exists test."\`simple-dash\`" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 
-
 	check_changefeed_state "http://${UP_PD_HOST_1}:${UP_PD_PORT_1}" $uuid "normal" "null" ""
 
 	check_changefeed_count http://${UP_PD_HOST_1}:${UP_PD_PORT_1} 1
@@ -85,7 +84,7 @@ EOF
 
 	# Update changefeed
 	run_cdc_cli changefeed update --pd=$pd_addr --config="$WORK_DIR/changefeed.toml" --no-confirm --changefeed-id $uuid
-	changefeed_info=$(curl -X GET "http://127.0.0.1:8300/api/v2/changefeeds/$uuid/meta-info"  2>&1)
+	changefeed_info=$(curl -X GET "http://127.0.0.1:8300/api/v2/changefeeds/$uuid/meta-info" 2>&1)
 	if [[ ! $changefeed_info == *"\"case-sensitive\":false"* ]]; then
 		echo "[$(date)] <<<<< changefeed info is not updated as expected ${changefeed_info} >>>>>"
 		exit 1
@@ -94,7 +93,7 @@ EOF
 		echo "[$(date)] <<<<< changefeed info is not updated as expected ${changefeed_info} >>>>>"
 		exit 1
 	fi
-	
+
 	# Resume changefeed
 	run_cdc_cli changefeed --changefeed-id $uuid resume && sleep 3
 	check_changefeed_state "http://${UP_PD_HOST_1}:${UP_PD_PORT_1}" $uuid "normal" "null" ""

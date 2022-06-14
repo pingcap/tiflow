@@ -17,7 +17,7 @@ import (
 	"context"
 
 	pb "github.com/pingcap/tiflow/engine/enginepb"
-	libModel "github.com/pingcap/tiflow/engine/lib/model"
+	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 )
 
@@ -48,24 +48,24 @@ type Broker interface {
 // a Broker needs to perform.
 type FileManager interface {
 	CreateResource(
-		creator libModel.WorkerID,
+		creator frameModel.WorkerID,
 		resName resModel.ResourceName,
 	) (*LocalFileResourceDescriptor, error)
 
 	GetPersistedResource(
-		creator libModel.WorkerID,
+		creator frameModel.WorkerID,
 		resName resModel.ResourceName,
 	) (*LocalFileResourceDescriptor, error)
 
-	RemoveTemporaryFiles(creator libModel.WorkerID) error
+	RemoveTemporaryFiles(creator frameModel.WorkerID) error
 
 	RemoveResource(
-		creator libModel.WorkerID,
+		creator frameModel.WorkerID,
 		resName resModel.ResourceName,
 	) error
 
 	SetPersisted(
-		creator libModel.WorkerID,
+		creator frameModel.WorkerID,
 		resName resModel.ResourceName,
 	)
 }

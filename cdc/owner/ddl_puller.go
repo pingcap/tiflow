@@ -68,22 +68,24 @@ type ddlPullerImpl struct {
 	changefeedID model.ChangeFeedID
 }
 
-func newDDLPuller(ctx cdcContext.Context, upStream *upstream.Upstream, startTs uint64) (DDLPuller, error) {
+func newDDLPuller(ctx cdcContext.Context,
+	up *upstream.Upstream, startTs uint64,
+) (DDLPuller, error) {
 	f, err := filter.NewFilter(ctx.ChangefeedVars().Info.Config)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 	kvCfg := config.GetGlobalServerConfig().KVClient
 	var plr puller.Puller
-	kvStorage := upStream.KVStorage
+	kvStorage := up.KVStorage
 	// kvStorage can be nil only in the test
 	if kvStorage != nil {
 		plr = puller.NewPuller(
-			ctx, upStream.PDClient,
-			upStream.GrpcPool,
-			upStream.RegionCache,
+			ctx, up.PDClient,
+			up.GrpcPool,
+			up.RegionCache,
 			kvStorage,
-			upStream.PDClock,
+			up.PDClock,
 			// Add "_ddl_puller" to make it different from table pullers.
 			model.ChangeFeedID{
 				Namespace: ctx.ChangefeedVars().ID.Namespace,

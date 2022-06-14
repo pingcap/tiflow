@@ -42,8 +42,8 @@ func VerifyCreateChangefeedConfig(
 	capture *capture.Capture,
 ) (*model.ChangeFeedInfo, error) {
 	// TODO(dongmen): we should pass ClusterID in ChangefeedConfig in the upcoming future
-	upStream := capture.UpstreamManager.GetDefaultUpstream()
-	defer upStream.Release()
+	up := capture.UpstreamManager.GetDefaultUpstream()
+	defer up.Release()
 
 	// verify sinkURI
 	if changefeedConfig.SinkURI == "" {
@@ -66,7 +66,7 @@ func VerifyCreateChangefeedConfig(
 
 	// verify start-ts
 	if changefeedConfig.StartTS == 0 {
-		ts, logical, err := upStream.PDClient.GetTS(ctx)
+		ts, logical, err := up.PDClient.GetTS(ctx)
 		if err != nil {
 			return nil, cerror.ErrPDEtcdAPIError.GenWithStackByArgs("fail to get ts from pd client")
 		}
@@ -77,7 +77,7 @@ func VerifyCreateChangefeedConfig(
 	const ensureTTL = 60 * 60
 	if err := gc.EnsureChangefeedStartTsSafety(
 		ctx,
-		upStream.PDClient,
+		up.PDClient,
 		capture.EtcdClient.GetEnsureGCServiceID(),
 		model.DefaultChangeFeedID(changefeedConfig.ID),
 		ensureTTL, changefeedConfig.StartTS); err != nil {
@@ -128,7 +128,7 @@ func VerifyCreateChangefeedConfig(
 
 	// init ChangefeedInfo
 	info := &model.ChangeFeedInfo{
-		UpstreamID:        upStream.PDClient.GetClusterID(ctx),
+		UpstreamID:        up.PDClient.GetClusterID(ctx),
 		SinkURI:           changefeedConfig.SinkURI,
 		Opts:              make(map[string]string),
 		CreateTime:        time.Now(),
@@ -144,7 +144,7 @@ func VerifyCreateChangefeedConfig(
 
 	if !replicaConfig.ForceReplicate && !changefeedConfig.IgnoreIneligibleTable {
 		ineligibleTables, _, err := entry.VerifyTables(replicaConfig,
-			upStream.KVStorage, changefeedConfig.StartTS)
+			up.KVStorage, changefeedConfig.StartTS)
 		if err != nil {
 			return nil, err
 		}

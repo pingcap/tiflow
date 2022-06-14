@@ -993,10 +993,10 @@ var (
 		errors.RFCCodeText("CDC:ErrInvalidHost"),
 	)
 
-	// UpStream error
-	ErrUpStreamNotFound = errors.Normalize(
-		"upStram not found, cluster-id: %d",
-		errors.RFCCodeText("CDC:ErrUpStreamNotFound"),
+	// Upstream error
+	ErrUpstreamNotFound = errors.Normalize(
+		"upstream not found, cluster-id: %d",
+		errors.RFCCodeText("CDC:ErrUpstreamNotFound"),
 	)
 
 	ErrServerIsNotReady = errors.Normalize(

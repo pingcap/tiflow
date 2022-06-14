@@ -52,7 +52,9 @@ func createOwner4Test(ctx cdcContext.Context, t *testing.T) (*ownerImpl, *orches
 		},
 	}
 
-	owner := NewOwner4Test(func(ctx cdcContext.Context, upStream *upstream.Upstream, startTs uint64) (DDLPuller, error) {
+	owner := NewOwner4Test(func(ctx cdcContext.Context,
+		up *upstream.Upstream, startTs uint64,
+	) (DDLPuller, error) {
 		return &mockDDLPuller{resolvedTs: startTs - 1}, nil
 	}, func() DDLSink {
 		return &mockDDLSink{}

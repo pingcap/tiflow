@@ -16,15 +16,13 @@ package parser
 import (
 	"testing"
 
-	. "github.com/pingcap/check"
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/util/filter"
+	"github.com/stretchr/testify/require"
 
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
-
-var _ = Suite(&testParserSuite{})
 
 type testCase struct {
 	sql                string
@@ -97,6 +95,13 @@ var testCases = []testCase{
 		[][]*filter.Table{{genTableName("test", "t1")}},
 		[][]*filter.Table{{genTableName("xtest", "xt1")}},
 		[]string{"CREATE TABLE IF NOT EXISTS `xtest`.`xt1` (`id` INT)"},
+	},
+	{
+		"create table `s1` (c int default '0')",
+		[]string{"CREATE TABLE IF NOT EXISTS `test`.`s1` (`c` INT DEFAULT '0')"},
+		[][]*filter.Table{{genTableName("test", "s1")}},
+		[][]*filter.Table{{genTableName("xtest", "xs1")}},
+		[]string{"CREATE TABLE IF NOT EXISTS `xtest`.`xs1` (`c` INT DEFAULT '0')"},
 	},
 	{
 		"create table `t1` like `t2`",
@@ -335,26 +340,21 @@ var nonDDLs = []string{
 	"GRANT CREATE TABLESPACE ON *.* TO `root`@`%` WITH GRANT OPTION",
 }
 
-func TestSuite(t *testing.T) {
-	TestingT(t)
-}
-
-type testParserSuite struct{}
-
-func (t *testParserSuite) TestParser(c *C) {
+func TestParser(t *testing.T) {
+	t.Parallel()
 	p := parser.New()
 
 	for _, ca := range testCases {
 		sql := ca.sql
 		stmts, err := Parse(p, sql, "", "")
-		c.Assert(err, IsNil)
-		c.Assert(stmts, HasLen, 1)
+		require.NoError(t, err)
+		require.Len(t, stmts, 1)
 	}
 
 	for _, sql := range nonDDLs {
 		stmts, err := Parse(p, sql, "", "")
-		c.Assert(err, IsNil)
-		c.Assert(stmts, HasLen, 1)
+		require.NoError(t, err)
+		require.Len(t, stmts, 1)
 	}
 
 	unsupportedSQLs := []string{
@@ -363,62 +363,65 @@ func (t *testParserSuite) TestParser(c *C) {
 
 	for _, sql := range unsupportedSQLs {
 		_, err := Parse(p, sql, "", "")
-		c.Assert(err, NotNil)
+		require.NotNil(t, err)
 	}
 }
 
-func (t *testParserSuite) TestError(c *C) {
+func TestError(t *testing.T) {
+	t.Parallel()
 	p := parser.New()
 
 	// DML will report ErrUnknownTypeDDL
 	dml := "INSERT INTO `t1` VALUES (1)"
 
 	stmts, err := Parse(p, dml, "", "")
-	c.Assert(err, IsNil)
+	require.NoError(t, err)
 	_, err = FetchDDLTables("test", stmts[0], utils.LCTableNamesInsensitive)
-	c.Assert(terror.ErrUnknownTypeDDL.Equal(err), IsTrue)
+	require.True(t, terror.ErrUnknownTypeDDL.Equal(err))
 
 	_, err = RenameDDLTable(stmts[0], nil)
-	c.Assert(terror.ErrUnknownTypeDDL.Equal(err), IsTrue)
+	require.True(t, terror.ErrUnknownTypeDDL.Equal(err))
 
 	// tableRenameVisitor with less `targetNames` won't panic
 	ddl := "create table `s1`.`t1` (id int)"
 	stmts, err = Parse(p, ddl, "", "")
-	c.Assert(err, IsNil)
+	require.NoError(t, err)
 	_, err = RenameDDLTable(stmts[0], nil)
-	c.Assert(terror.ErrRewriteSQL.Equal(err), IsTrue)
+	require.True(t, terror.ErrRewriteSQL.Equal(err))
 }
 
-func (t *testParserSuite) TestResolveDDL(c *C) {
+func TestResolveDDL(t *testing.T) {
+	t.Parallel()
 	p := parser.New()
 
 	for _, ca := range testCases {
 		stmts, err := Parse(p, ca.sql, "", "")
-		c.Assert(err, IsNil)
-		c.Assert(stmts, HasLen, 1)
+		require.NoError(t, err)
+		require.Len(t, stmts, 1)
 
 		statements, err := SplitDDL(stmts[0], "test")
-		c.Assert(err, IsNil)
-		c.Assert(statements, DeepEquals, ca.expectedSQLs)
+		require.NoError(t, err)
+		require.Equal(t, ca.expectedSQLs, statements)
 
 		tbs := ca.expectedTableNames
 		for j, statement := range statements {
 			s, err := Parse(p, statement, "", "")
-			c.Assert(err, IsNil)
-			c.Assert(s, HasLen, 1)
+			require.NoError(t, err)
+			require.Len(t, s, 1)
 
 			tableNames, err := FetchDDLTables("test", s[0], utils.LCTableNamesSensitive)
-			c.Assert(err, IsNil)
-			c.Assert(tableNames, DeepEquals, tbs[j])
+			require.NoError(t, err)
+			require.Equal(t, tbs[j], tableNames)
 
 			targetSQL, err := RenameDDLTable(s[0], ca.targetTableNames[j])
-			c.Assert(err, IsNil)
-			c.Assert(targetSQL, Equals, ca.targetSQLs[j])
+			require.NoError(t, err)
+			require.Equal(t, ca.targetSQLs[j], targetSQL)
 		}
 	}
 }
 
-func (t *testParserSuite) TestCheckIsDDL(c *C) {
+func TestCheckIsDDL(t *testing.T) {
+	t.Parallel()
 	var (
 		cases = []struct {
 			sql   string
@@ -445,6 +448,6 @@ func (t *testParserSuite) TestCheckIsDDL(c *C) {
 	)
 
 	for _, cs := range cases {
-		c.Assert(CheckIsDDL(cs.sql, parser2), Equals, cs.isDDL)
+		require.Equal(t, cs.isDDL, CheckIsDDL(cs.sql, parser2))
 	}
 }

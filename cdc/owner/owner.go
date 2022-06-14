@@ -105,7 +105,7 @@ type ownerImpl struct {
 	//         as it is not a thread-safe value.
 	bootstrapped bool
 
-	newChangefeed func(id model.ChangeFeedID, upStream *upstream.Upstream) *changefeed
+	newChangefeed func(id model.ChangeFeedID, up *upstream.Upstream) *changefeed
 }
 
 // NewOwner creates a new Owner
@@ -121,7 +121,8 @@ func NewOwner(upstreamManager *upstream.Manager) Owner {
 
 // NewOwner4Test creates a new Owner for test
 func NewOwner4Test(
-	newDDLPuller func(ctx cdcContext.Context, upStream *upstream.Upstream, startTs uint64) (DDLPuller, error),
+	newDDLPuller func(ctx cdcContext.Context,
+		up *upstream.Upstream, startTs uint64) (DDLPuller, error),
 	newSink func() DDLSink,
 	pdClient pd.Client,
 ) Owner {
@@ -129,8 +130,8 @@ func NewOwner4Test(
 	o := NewOwner(m).(*ownerImpl)
 	// Most tests do not need to test bootstrap.
 	o.bootstrapped = true
-	o.newChangefeed = func(id model.ChangeFeedID, upStream *upstream.Upstream) *changefeed {
-		return newChangefeed4Test(id, upStream, newDDLPuller, newSink)
+	o.newChangefeed = func(id model.ChangeFeedID, up *upstream.Upstream) *changefeed {
+		return newChangefeed4Test(id, up, newDDLPuller, newSink)
 	}
 	return o
 }
@@ -187,8 +188,8 @@ func (o *ownerImpl) Tick(stdCtx context.Context, rawState orchestrator.ReactorSt
 		})
 		cfReactor, exist := o.changefeeds[changefeedID]
 		if !exist {
-			upStream := o.upstreamManager.Get(changefeedState.Info.UpstreamID)
-			cfReactor = o.newChangefeed(changefeedID, upStream)
+			up := o.upstreamManager.Get(changefeedState.Info.UpstreamID)
+			cfReactor = o.newChangefeed(changefeedID, up)
 			o.changefeeds[changefeedID] = cfReactor
 		}
 		cfReactor.Tick(ctx, changefeedState, state.Captures)
