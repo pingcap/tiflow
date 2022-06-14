@@ -1,5 +1,5 @@
-threadcount=32
-recordcount=5000
+threadcount=1
+recordcount=10000
 operationcount=0
 workload=core
 fieldcount=100

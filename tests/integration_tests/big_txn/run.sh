@@ -36,6 +36,7 @@ function run() {
 
 	check_table_exists "big_txn.usertable" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 	run_sql_file $CUR/data/test.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+	sleep 60
 	check_table_exists "big_txn.usertable1" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 	run_sql "CREATE TABLE big_txn.finish_mark_1 (a int primary key);"
 
