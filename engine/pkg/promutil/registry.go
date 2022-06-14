@@ -163,6 +163,7 @@ type OnlyRegRegister struct {
 	r prometheus.Registerer
 }
 
+// NewOnlyRegRegister creates an OnlyRegRegister.
 func NewOnlyRegRegister(r prometheus.Registerer) prometheus.Registerer {
 	return &OnlyRegRegister{r}
 }
