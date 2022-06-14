@@ -40,7 +40,6 @@ func TestNewLogger(t *testing.T) {
 	require.NoError(t, err)
 	log.ReplaceGlobals(lg, prop)
 
-	defer os.Remove(testFile)
 	var wg sync.WaitGroup
 	defer wg.Wait()
 
