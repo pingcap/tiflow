@@ -487,7 +487,7 @@ func (v *DataValidator) updateValidatorBinlogMetric(currLoc binlog.Location) {
 	v.vmetric.BinlogPos.Set(float64(currLoc.Position.Pos))
 	index, err := binlog.GetFilenameIndex(currLoc.Position.Name)
 	if err != nil {
-		v.L.Warn("fail to record validator binlog file index")
+		v.L.Warn("fail to record validator binlog file index", zap.Error(err))
 	} else {
 		v.vmetric.BinlogFile.Set(float64(index))
 	}
@@ -497,7 +497,7 @@ func (v *DataValidator) updateValidatorBinlogLag(currLoc binlog.Location) {
 	syncerLoc := v.syncer.getFlushedGlobalPoint()
 	index, err := binlog.GetFilenameIndex(currLoc.Position.Name)
 	if err != nil {
-		v.L.Warn("fail to record validator binlog file index")
+		v.L.Warn("fail to record validator binlog file index", zap.Error(err))
 	}
 	if syncerLoc.Position.Name == currLoc.Position.Name {
 		// same file: record the log pos latency
@@ -507,11 +507,11 @@ func (v *DataValidator) updateValidatorBinlogLag(currLoc binlog.Location) {
 		var syncerLogIdx int64
 		v.vmetric.LogPosLatency.Set(float64(0))
 		syncerLogIdx, err = binlog.GetFilenameIndex(syncerLoc.Position.Name)
-		if err != nil {
+		if err == nil {
 			v.vmetric.LogFileLatency.Set(float64(syncerLogIdx - index))
 		} else {
 			v.vmetric.LogFileLatency.Set(float64(0))
-			v.L.Warn("fail to get syncer's log file index")
+			v.L.Warn("fail to get syncer's log file index", zap.Error(err))
 		}
 	}
 }
@@ -802,12 +802,23 @@ func (v *DataValidator) genValidateTableInfo(sourceTable *filter.Table, columnCo
 	targetTable := v.syncer.route(sourceTable)
 	// there are 2 cases tracker may drop table:
 	// 1. checkpoint rollback, tracker may recreate tables and drop non-needed tables
-	// 2. when operate-schema
+	// 2. when operate-schema set/remove
 	// in case 1, we add another layer synchronization to make sure we don't get a dropped table when recreation.
 	// 	for non-needed tables, we will not validate them.
 	// in case 2, validator should be paused
 	res := &validateTableInfo{targetTable: targetTable}
-	tableInfo, err := v.syncer.getTrackedTableInfo(sourceTable)
+	isTrackerStopped := v.syncer.IsRunning()
+	var (
+		tableInfo *model.TableInfo
+		err       error
+	)
+	if isTrackerStopped {
+		// if syncer is not running, the schemaTracker is stopped
+		// we should get tableInfo from checkpoint
+		tableInfo = v.syncer.getTableInfoFromCheckpoint(sourceTable)
+	} else {
+		tableInfo, err = v.syncer.getTrackedTableInfo(sourceTable)
+	}
 	if err != nil {
 		if schema.IsTableNotExists(err) {
 			// not a table need to sync
@@ -1354,13 +1365,15 @@ func (v *DataValidator) GetValidatorStatus() *pb.ValidationStatus {
 
 	flushedLoc := v.getFlushedLoc()
 	var validatorBinlog, validatorBinlogGtid string
+	reachSyncer := false
 	if flushedLoc != nil {
 		validatorBinlog = flushedLoc.Position.String()
 		if flushedLoc.GetGTID() != nil {
 			validatorBinlogGtid = flushedLoc.GetGTID().String()
 		}
+		syncerLoc := v.syncer.getFlushedGlobalPoint()
+		reachSyncer = binlog.CompareLocation(*flushedLoc, syncerLoc, v.cfg.EnableGTID) >= 0
 	}
-
 	return &pb.ValidationStatus{
 		Task:                v.cfg.Name,
 		Source:              v.cfg.SourceID,
@@ -1372,5 +1385,6 @@ func (v *DataValidator) GetValidatorStatus() *pb.ValidationStatus {
 		ProcessedRowsStatus: processedRows,
 		PendingRowsStatus:   pendingRows,
 		ErrorRowsStatus:     errorRows,
+		ReachSyncer:         reachSyncer,
 	}
 }

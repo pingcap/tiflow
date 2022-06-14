@@ -132,6 +132,12 @@ function run() {
 
 	# use sync_diff_inspector to check incremental dump loader
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
+	run_sql_both_source "create table adjust_gtid.flush_validator_checkpoint(a int)"
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation status test" \
+		"\"reachSyncer\": true" 2 \ 
+		"\"pendingRowsStatus\": \"insert\/update\/delete: 0\/0\/0\"" 2 \
+		"new\/ignored\/resolved: 0\/0\/0" 2
 
 	run_sql_both_source "SET @@GLOBAL.SQL_MODE='ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION'"
 	run_sql_both_source "SET @@global.time_zone = 'SYSTEM';"

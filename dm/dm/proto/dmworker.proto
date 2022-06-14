@@ -428,6 +428,7 @@ message ValidationStatus {
     string processedRowsStatus = 8;
     string pendingRowsStatus = 9;
     string errorRowsStatus = 10;
+    bool reachSyncer = 11;
 }
 
 message ValidationTableStatus {

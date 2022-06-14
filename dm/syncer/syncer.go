@@ -4165,3 +4165,7 @@ func (s *Syncer) getTrackedTableInfo(table *filter.Table) (*model.TableInfo, err
 func (s *Syncer) getDownStreamTableInfo(tctx *tcontext.Context, tableID string, originTI *model.TableInfo) (*schema.DownstreamTableInfo, error) {
 	return s.schemaTracker.GetDownStreamTableInfo(tctx, tableID, originTI)
 }
+
+func (s *Syncer) getTableInfoFromCheckpoint(table *filter.Table) *model.TableInfo {
+	return s.checkpoint.GetTableInfo(table.Schema, table.Name)
+}
