@@ -34,18 +34,17 @@ function run() {
 		run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=open-protocol&partition-num=4&version=${KAFKA_VERSION}&max-message-bytes=10485760"
 	fi
 
-	check_table_exists "big_txn.usertable" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
-	run_sql_file $CUR/data/test.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+	check_table_exists "big_txn.USERTABLE" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	run_sql "CREATE TABLE big_txn.USERTABLE1 LIKE big_txn.USERTABLE" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+	run_sql "INSERT INTO big_txn.USERTABLE1 SELECT * FROM big_txn.USERTABLE" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	sleep 60
-	check_table_exists "big_txn.usertable1" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
-	run_sql "CREATE TABLE big_txn.finish_mark_1 (a int primary key);"
+	check_table_exists "big_txn.USERTABLE1" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 
+	run_sql "CREATE TABLE big_txn.finish_mark_1 (a int primary key);"
 	sleep 120
 	check_table_exists "big_txn.finish_mark_1" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 60
-	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
 
-	# go-ycsb load mysql -P $CUR/conf/workload -p mysql.host=${UP_TIDB_HOST} -p mysql.port=${UP_TIDB_PORT} -p mysql.user=root -p mysql.db=big_txn
-	# check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
+	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
 
 	cleanup_process $CDC_BINARY
 }
