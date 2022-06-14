@@ -81,7 +81,7 @@ func RegisterOpenAPIRoutes(router *gin.Engine, api OpenAPI) {
 
 	// changefeed API
 	changefeedGroup := v1.Group("/changefeeds")
-	changefeedGroup.Use(api.forwardToOwnerMiddleware)
+	changefeedGroup.Use(middleware.ForwardToOwnerMiddleware(api.capture))
 	changefeedGroup.GET("", api.ListChangefeed)
 	changefeedGroup.GET("/:changefeed_id", api.GetChangefeed)
 	changefeedGroup.POST("", api.CreateChangefeed)
@@ -94,18 +94,18 @@ func RegisterOpenAPIRoutes(router *gin.Engine, api OpenAPI) {
 
 	// owner API
 	ownerGroup := v1.Group("/owner")
-	ownerGroup.Use(api.forwardToOwnerMiddleware)
+	ownerGroup.Use(middleware.ForwardToOwnerMiddleware(api.capture))
 	ownerGroup.POST("/resign", api.ResignOwner)
 
 	// processor API
 	processorGroup := v1.Group("/processors")
-	processorGroup.Use(api.forwardToOwnerMiddleware)
+	processorGroup.Use(middleware.ForwardToOwnerMiddleware(api.capture))
 	processorGroup.GET("", api.ListProcessor)
 	processorGroup.GET("/:changefeed_id/:capture_id", api.GetProcessor)
 
 	// capture API
 	captureGroup := v1.Group("/captures")
-	captureGroup.Use(api.forwardToOwnerMiddleware)
+	captureGroup.Use(middleware.ForwardToOwnerMiddleware(api.capture))
 	captureGroup.GET("", api.ListCapture)
 }
 
@@ -774,14 +774,4 @@ func SetLogLevel(c *gin.Context) {
 	}
 	log.Warn("log level changed", zap.String("level", data.Level))
 	c.Status(http.StatusOK)
-}
-
-// forwardToOwnerMiddleware forward an request to owner if current server
-// is not owner, or handle it locally.
-func (h *OpenAPI) forwardToOwnerMiddleware(c *gin.Context) {
-	if !h.capture.IsOwner() {
-		api.ForwardToOwner(c, h.capture)
-		return
-	}
-	c.Next()
 }

@@ -26,6 +26,9 @@ import (
 	"go.uber.org/zap"
 )
 
+// ClientVersionHeader is the header name of client version
+const ClientVersionHeader = "X-client-version"
+
 // LogMiddleware logs the api requests
 func LogMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -41,14 +44,14 @@ func LogMiddleware() gin.HandlerFunc {
 		if err != nil {
 			stdErr = err.Err
 		}
-
+		version := c.Request.Header.Get(ClientVersionHeader)
 		log.Info(path,
 			zap.Int("status", c.Writer.Status()),
 			zap.String("method", c.Request.Method),
 			zap.String("path", path),
 			zap.String("query", query),
 			zap.String("ip", c.ClientIP()),
-			zap.String("user-agent", c.Request.UserAgent()),
+			zap.String("user-agent", c.Request.UserAgent()), zap.String("client-version", version),
 			zap.Error(stdErr),
 			zap.Duration("duration", cost),
 		)
@@ -87,5 +90,17 @@ func CheckServerReadyMiddleware(capture *capture.Capture) gin.HandlerFunc {
 			c.Abort()
 			return
 		}
+	}
+}
+
+// ForwardToOwnerMiddleware forward an request to owner if current server
+// is not owner, or handle it locally.
+func ForwardToOwnerMiddleware(c *capture.Capture) gin.HandlerFunc {
+	return func(ctx *gin.Context) {
+		if !c.IsOwner() {
+			api.ForwardToOwner(ctx, c)
+			return
+		}
+		ctx.Next()
 	}
 }
