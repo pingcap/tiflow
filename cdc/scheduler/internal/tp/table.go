@@ -45,8 +45,8 @@ func newTable(tableID model.TableID, executor internal.TableExecutor) *table {
 	}
 }
 
-// getTableState get the table' state, return true if the table state changed
-func (t *table) getTableState() (schedulepb.TableState, bool) {
+// getAndUpdateTableState get the table' state, return true if the table state changed
+func (t *table) getAndUpdateTableState() (schedulepb.TableState, bool) {
 	oldState := t.state
 
 	meta := t.executor.GetTableMeta(t.id)
@@ -108,7 +108,7 @@ func newRemoveTableResponseMessage(status schedulepb.TableStatus) *schedulepb.Me
 }
 
 func (t *table) handleRemoveTableTask(ctx context.Context) *schedulepb.Message {
-	state, changed := t.getTableState()
+	state, changed := t.getAndUpdateTableState()
 	changed = true
 	for changed {
 		switch state {
@@ -122,7 +122,6 @@ func (t *table) handleRemoveTableTask(ctx context.Context) *schedulepb.Message {
 			// release table resource, and get the latest checkpoint
 			// this will let the table become `absent`
 			checkpointTs, done := t.executor.IsRemoveTableFinished(ctx, t.id)
-			_, _ = t.getTableState()
 			if !done {
 				// actually, this should never be hit, since we know that table is stopped.
 				status := t.getTableStatus()
@@ -143,7 +142,7 @@ func (t *table) handleRemoveTableTask(ctx context.Context) *schedulepb.Message {
 				status.State = schedulepb.TableStateStopping
 				return newRemoveTableResponseMessage(status)
 			}
-			state, changed = t.getTableState()
+			state, changed = t.getAndUpdateTableState()
 		default:
 			log.Panic("tpscheduler: unknown table state",
 				zap.Int64("tableID", t.id), zap.Any("state", state))
@@ -160,7 +159,7 @@ func (t *table) handleAddTableTask(ctx context.Context, stopping bool) (result *
 		return newAddTableResponseMessage(t.getTableStatus(), true), nil
 	}
 
-	state, changed := t.getTableState()
+	state, changed := t.getAndUpdateTableState()
 	changed = true
 	for changed {
 		switch state {
@@ -174,10 +173,10 @@ func (t *table) handleAddTableTask(ctx context.Context, stopping bool) (result *
 				status := t.getTableStatus()
 				return newAddTableResponseMessage(status, false), errors.Trace(err)
 			}
-			state, changed = t.getTableState()
+			state, changed = t.getAndUpdateTableState()
 		case schedulepb.TableStateReplicating:
 			log.Info("tpscheduler: table is replicating",
-				zap.Int64("tableID", t.id), zap.Any("state", t.state))
+				zap.Int64("tableID", t.id), zap.Any("state", state))
 			t.task = nil
 			status := t.getTableStatus()
 			return newAddTableResponseMessage(status, false), nil
@@ -185,7 +184,7 @@ func (t *table) handleAddTableTask(ctx context.Context, stopping bool) (result *
 			if t.task.IsPrepare {
 				// `prepared` is a stable state, if the task was to prepare the table.
 				log.Info("tpscheduler: table is prepared",
-					zap.Int64("tableID", t.id), zap.Any("state", t.state))
+					zap.Int64("tableID", t.id), zap.Any("state", state))
 				t.task = nil
 				return newAddTableResponseMessage(t.getTableStatus(), false), nil
 			}
@@ -194,7 +193,7 @@ func (t *table) handleAddTableTask(ctx context.Context, stopping bool) (result *
 				done, err := t.executor.AddTable(ctx, t.task.TableID, t.task.StartTs, false)
 				if err != nil || !done {
 					log.Info("tpscheduler: agent add table failed",
-						zap.Int64("tableID", t.id), zap.Any("state", t.state),
+						zap.Int64("tableID", t.id), zap.Any("state", state),
 						zap.Error(err))
 					status := t.getTableStatus()
 					return newAddTableResponseMessage(status, false), errors.Trace(err)
@@ -206,7 +205,7 @@ func (t *table) handleAddTableTask(ctx context.Context, stopping bool) (result *
 			if !done {
 				return newAddTableResponseMessage(t.getTableStatus(), false), nil
 			}
-			state, changed = t.getTableState()
+			state, changed = t.getAndUpdateTableState()
 		case schedulepb.TableStatePreparing:
 			// `preparing` is not stable state and would last a long time,
 			// it's no need to return such a state, to make the coordinator become burdensome.
@@ -214,7 +213,7 @@ func (t *table) handleAddTableTask(ctx context.Context, stopping bool) (result *
 			if !done {
 				return nil, nil
 			}
-			state, changed = t.getTableState()
+			state, changed = t.getAndUpdateTableState()
 			log.Info("tpscheduler: add table finished",
 				zap.Int64("tableID", t.id), zap.Any("state", state))
 		case schedulepb.TableStateStopping,
@@ -280,7 +279,8 @@ func (tm *tableManager) poll(ctx context.Context, stopping bool) ([]*schedulepb.
 			return result, errors.Trace(err)
 		}
 
-		if table.state == schedulepb.TableStateAbsent {
+		state, _ := table.getAndUpdateTableState()
+		if state == schedulepb.TableStateAbsent {
 			tm.dropTable(tableID)
 		}
 
@@ -321,8 +321,8 @@ func (tm *tableManager) dropTable(tableID model.TableID) {
 			zap.Int64("tableID", tableID))
 		return
 	}
-	_, _ = table.getTableState()
-	if table.state != schedulepb.TableStateAbsent {
+	state, _ := table.getAndUpdateTableState()
+	if state != schedulepb.TableStateAbsent {
 		log.Panic("tpscheduler: tableManager drop table undesired",
 			zap.Int64("tableID", tableID),
 			zap.Any("state", table.state))
