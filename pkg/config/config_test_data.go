@@ -49,13 +49,6 @@ const (
     ],
     "protocol": "open-protocol"
   },
-  "cyclic-replication": {
-    "enable": false,
-    "replica-id": 0,
-    "filter-replica-ids": null,
-    "id-buckets": 0,
-    "sync-ddl": false
-  },
   "consistent": {
     "level": "none",
     "max-log-size": 64,
@@ -170,13 +163,6 @@ const (
     ],
     "schema-registry": ""
   },
-  "cyclic-replication": {
-    "enable": false,
-    "replica-id": 0,
-    "filter-replica-ids": null,
-    "id-buckets": 0,
-    "sync-ddl": false
-  },
   "consistent": {
     "level": "none",
     "max-log-size": 64,
@@ -213,13 +199,6 @@ const (
         ]
       }
     ]
-  },
-  "cyclic-replication": {
-    "enable": false,
-    "replica-id": 0,
-    "filter-replica-ids": null,
-    "id-buckets": 0,
-    "sync-ddl": false
   },
   "consistent": {
     "level": "none",

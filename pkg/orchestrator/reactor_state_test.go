@@ -72,13 +72,6 @@ func TestChangefeedStateUpdate(t *testing.T) {
             "dispatchers": null,
             "protocol": "open-protocol"
         },
-        "cyclic-replication": {
-            "enable": false,
-            "replica-id": 0,
-            "filter-replica-ids": null,
-            "id-buckets": 0,
-            "sync-ddl": false
-        },
         "consistent": {
             "level": "normal",
             "storage": "local"
@@ -134,7 +127,6 @@ func TestChangefeedStateUpdate(t *testing.T) {
 						Filter:           &config.FilterConfig{Rules: []string{"*.*"}},
 						Mounter:          &config.MounterConfig{WorkerNum: 16},
 						Sink:             &config.SinkConfig{Protocol: "open-protocol"},
-						Cyclic:           &config.CyclicConfig{},
 						Consistent:       &config.ConsistentConfig{Level: "normal", Storage: "local"},
 					},
 				},
@@ -185,7 +177,6 @@ func TestChangefeedStateUpdate(t *testing.T) {
 						Filter:           &config.FilterConfig{Rules: []string{"*.*"}},
 						Mounter:          &config.MounterConfig{WorkerNum: 16},
 						Sink:             &config.SinkConfig{Protocol: "open-protocol"},
-						Cyclic:           &config.CyclicConfig{},
 						Consistent:       &config.ConsistentConfig{Level: "normal", Storage: "local"},
 					},
 				},
@@ -242,7 +233,6 @@ func TestChangefeedStateUpdate(t *testing.T) {
 						Filter:           &config.FilterConfig{Rules: []string{"*.*"}},
 						Mounter:          &config.MounterConfig{WorkerNum: 16},
 						Sink:             &config.SinkConfig{Protocol: "open-protocol"},
-						Cyclic:           &config.CyclicConfig{},
 						Consistent:       &config.ConsistentConfig{Level: "normal", Storage: "local"},
 					},
 				},
@@ -332,7 +322,6 @@ func TestPatchInfo(t *testing.T) {
 			Filter:     defaultConfig.Filter,
 			Mounter:    defaultConfig.Mounter,
 			Sink:       defaultConfig.Sink,
-			Cyclic:     defaultConfig.Cyclic,
 			Consistent: defaultConfig.Consistent,
 		},
 	})
@@ -349,7 +338,6 @@ func TestPatchInfo(t *testing.T) {
 			Filter:     defaultConfig.Filter,
 			Mounter:    defaultConfig.Mounter,
 			Sink:       defaultConfig.Sink,
-			Cyclic:     defaultConfig.Cyclic,
 			Consistent: defaultConfig.Consistent,
 		},
 	})

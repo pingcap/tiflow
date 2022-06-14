@@ -85,13 +85,6 @@ func initProcessor4Test(ctx cdcContext.Context, t *testing.T) (*processor, *orch
         "sink": {
             "dispatchers": null,
             "protocol": "open-protocol"
-        },
-        "cyclic-replication": {
-            "enable": false,
-            "replica-id": 0,
-            "filter-replica-ids": null,
-            "id-buckets": 0,
-            "sync-ddl": false
         }
     },
     "state": "normal",

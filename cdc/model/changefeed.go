@@ -23,7 +23,6 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/pkg/config"
-	"github.com/pingcap/tiflow/pkg/cyclic/mark"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/version"
@@ -230,15 +229,6 @@ func (info *ChangeFeedInfo) Unmarshal(data []byte) error {
 		return errors.Annotatef(
 			cerror.WrapError(cerror.ErrUnmarshalFailed, err), "Unmarshal data: %v", data)
 	}
-	// TODO(neil) find a better way to let sink know cyclic is enabled.
-	if info.Config != nil && info.Config.Cyclic.IsEnabled() {
-		cyclicCfg, err := info.Config.Cyclic.Marshal()
-		if err != nil {
-			return errors.Annotatef(
-				cerror.WrapError(cerror.ErrMarshalFailed, err), "Marshal data: %v", data)
-		}
-		info.Opts[mark.OptCyclicConfig] = cyclicCfg
-	}
 	return nil
 }
 
@@ -269,9 +259,6 @@ func (info *ChangeFeedInfo) VerifyAndComplete() error {
 	}
 	if info.Config.Sink == nil {
 		info.Config.Sink = defaultConfig.Sink
-	}
-	if info.Config.Cyclic == nil {
-		info.Config.Cyclic = defaultConfig.Cyclic
 	}
 	if info.Config.Consistent == nil {
 		info.Config.Consistent = defaultConfig.Consistent

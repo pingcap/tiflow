@@ -39,19 +39,16 @@ import (
 
 // changefeedCommonOptions defines common changefeed flags.
 type changefeedCommonOptions struct {
-	noConfirm              bool
-	targetTs               uint64
-	sinkURI                string
-	schemaRegistry         string
-	configFile             string
-	opts                   []string
-	sortEngine             string
-	sortDir                string
-	cyclicReplicaID        uint64
-	cyclicFilterReplicaIDs []uint
-	cyclicSyncDDL          bool
-	syncPointEnabled       bool
-	syncPointInterval      time.Duration
+	noConfirm         bool
+	targetTs          uint64
+	sinkURI           string
+	schemaRegistry    string
+	configFile        string
+	opts              []string
+	sortEngine        string
+	sortDir           string
+	syncPointEnabled  bool
+	syncPointInterval time.Duration
 
 	upstreamPDAddrs  string
 	upstreamCaPath   string
@@ -78,9 +75,6 @@ func (o *changefeedCommonOptions) addFlags(cmd *cobra.Command) {
 	cmd.PersistentFlags().StringSliceVar(&o.opts, "opts", nil, "Extra options, in the `key=value` format")
 	cmd.PersistentFlags().StringVar(&o.sortEngine, "sort-engine", model.SortUnified, "sort engine used for data sort")
 	cmd.PersistentFlags().StringVar(&o.sortDir, "sort-dir", "", "directory used for data sort")
-	cmd.PersistentFlags().Uint64Var(&o.cyclicReplicaID, "cyclic-replica-id", 0, "(Experimental) Cyclic replication replica ID of changefeed")
-	cmd.PersistentFlags().UintSliceVar(&o.cyclicFilterReplicaIDs, "cyclic-filter-replica-ids", []uint{}, "(Experimental) Cyclic replication filter replica ID of changefeed")
-	cmd.PersistentFlags().BoolVar(&o.cyclicSyncDDL, "cyclic-sync-ddl", true, "(Experimental) Cyclic replication sync DDL of changefeed")
 	cmd.PersistentFlags().BoolVar(&o.syncPointEnabled, "sync-point", false, "(Experimental) Set and Record syncpoint in replication(default off)")
 	cmd.PersistentFlags().DurationVar(&o.syncPointInterval, "sync-interval", 10*time.Minute, "(Experimental) Set the interval for syncpoint in replication(default 10min)")
 	cmd.PersistentFlags().StringVar(&o.schemaRegistry, "schema-registry", "",
@@ -222,7 +216,6 @@ func (o *createChangefeedOptions) completeReplicaCfg(
 	if o.disableGCSafePointCheck {
 		cfg.CheckGCSafePoint = false
 	}
-
 	// Complete cfg.
 	o.cfg = cfg
 
@@ -231,10 +224,6 @@ func (o *createChangefeedOptions) completeReplicaCfg(
 
 // validate checks that the provided attach options are specified.
 func (o *createChangefeedOptions) validate(cmd *cobra.Command) error {
-	if o.cfg != nil && o.cfg.Cyclic.IsEnabled() {
-		return errors.New("cdc no longer support cyclic replication")
-	}
-
 	if o.timezone != "SYSTEM" {
 		cmd.Printf(color.HiYellowString("[WARN] --tz is deprecated in changefeed settings.\n"))
 	}

@@ -578,13 +578,6 @@ func (c *changefeed) asyncExecDDLJob(ctx cdcContext.Context,
 		return true, nil
 	}
 
-	cyclicConfig := c.state.Info.Config.Cyclic
-	if cyclicConfig.IsEnabled() && !cyclicConfig.SyncDDL {
-		log.Info("ignore the DDL job because cyclic config is enabled and syncDDL is false",
-			zap.String("changefeed", c.id.ID), zap.Reflect("job", job))
-		return true, nil
-	}
-
 	if c.ddlEventCache == nil {
 		ddlEvents, err := c.schema.BuildDDLEvents(job)
 		if err != nil {

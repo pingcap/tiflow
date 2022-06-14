@@ -404,7 +404,7 @@ func TestUpdateGCSafePoint(t *testing.T) {
 		fmt.Sprintf("%s/changefeed/info/%s",
 			etcd.DefaultClusterAndNamespacePrefix,
 			changefeedID1.ID),
-		[]byte(`{"config":{"cyclic-replication":{}},"state":"failed"}`))
+		[]byte(`{"config":{},"state":"failed"}`))
 	tester.MustApplyPatches()
 	state.Changefeeds[changefeedID1].PatchStatus(
 		func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
@@ -447,7 +447,7 @@ func TestUpdateGCSafePoint(t *testing.T) {
 		fmt.Sprintf("%s/changefeed/info/%s",
 			etcd.DefaultClusterAndNamespacePrefix,
 			changefeedID2.ID),
-		[]byte(`{"config":{"cyclic-replication":{}},"state":"normal"}`))
+		[]byte(`{"config":{},"state":"normal"}`))
 	tester.MustApplyPatches()
 	state.Changefeeds[changefeedID1].PatchStatus(
 		func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
