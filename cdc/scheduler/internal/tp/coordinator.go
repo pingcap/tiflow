@@ -165,6 +165,11 @@ func (c *coordinator) Rebalance() {
 	atomic.StoreInt32(&rebalanceScheduler.rebalance, 1)
 }
 
+// DrainCapture implement the scheduler interface
+func (c *coordinator) DrainCapture(target model.CaptureID) (int, error) {
+	return 0, nil
+}
+
 func (c *coordinator) Close(ctx context.Context) {
 	c.mu.Lock()
 	defer c.mu.Unlock()

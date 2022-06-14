@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/scheduler"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
@@ -40,6 +41,7 @@ type ownerJobType int
 const (
 	ownerJobTypeRebalance ownerJobType = iota
 	ownerJobTypeScheduleTable
+	ownerJobTypeDrainCapture
 	ownerJobTypeAdminJob
 	ownerJobTypeDebugInfo
 	ownerJobTypeQuery
@@ -68,6 +70,9 @@ type ownerJob struct {
 	// for status provider
 	query *Query
 
+	// for scheduler related jobs
+	scheduleQuery *scheduler.Query
+
 	done chan<- error
 }
 
@@ -82,6 +87,7 @@ type Owner interface {
 		cfID model.ChangeFeedID, toCapture model.CaptureID,
 		tableID model.TableID, done chan<- error,
 	)
+	DrainCapture(query *scheduler.Query, done chan<- error)
 	WriteDebugInfo(w io.Writer, done chan<- error)
 	Query(query *Query, done chan<- error)
 	AsyncStop()
@@ -262,6 +268,16 @@ func (o *ownerImpl) ScheduleTable(
 	})
 }
 
+// DrainCapture removes all tables at the target capture
+// `done` must be buffered to prevent blocking owner.
+func (o *ownerImpl) DrainCapture(query *SchedulerQuery, done chan<- error) {
+	o.pushOwnerJob(&ownerJob{
+		Tp:             ownerJobTypeDrainCapture,
+		schedulerQuery: query,
+		done:           done,
+	})
+}
+
 // WriteDebugInfo writes debug info into the specified http writer
 func (o *ownerImpl) WriteDebugInfo(w io.Writer, done chan<- error) {
 	o.pushOwnerJob(&ownerJob{
@@ -386,12 +402,32 @@ func (o *ownerImpl) clusterVersionConsistent(captures map[model.CaptureID]*model
 	return true
 }
 
+func (o *ownerImpl) handleDrainCaptures(query *SchedulerQuery, done chan<- error) {
+	var (
+		totalTableCount int
+		err             error
+	)
+
+	// todo: think about how to handle errors.
+	target := query.CaptureID
+	for _, changefeed := range o.changefeeds {
+		count, e := changefeed.scheduler.DrainCapture(target)
+		if e != nil && err == nil {
+			err = e
+		}
+		totalTableCount += count
+	}
+	query.Resp = &model.DrainCaptureResp{TotalTableCount: totalTableCount}
+	done <- err
+	close(done)
+}
+
 func (o *ownerImpl) handleJobs() {
 	jobs := o.takeOwnerJobs()
 	for _, job := range jobs {
 		changefeedID := job.ChangefeedID
 		cfReactor, exist := o.changefeeds[changefeedID]
-		if !exist && job.Tp != ownerJobTypeQuery {
+		if !exist && (job.Tp != ownerJobTypeQuery && job.Tp != ownerJobTypeDrainCapture) {
 			log.Warn("changefeed not found when handle a job", zap.Reflect("job", job))
 			job.done <- cerror.ErrChangeFeedNotExists.FastGenByArgs(job.ChangefeedID)
 			close(job.done)

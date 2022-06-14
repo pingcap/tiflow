@@ -162,6 +162,11 @@ func (m *mockScheduler) MoveTable(tableID model.TableID, target model.CaptureID)
 // Rebalance is used to trigger manual workload rebalances.
 func (m *mockScheduler) Rebalance() {}
 
+// DrainCapture implement scheduler interface
+func (m *mockScheduler) DrainCapture(target model.CaptureID) (int, error) {
+	return 0, nil
+}
+
 // Close closes the scheduler and releases resources.
 func (m *mockScheduler) Close(ctx context.Context) {}
 
