@@ -35,7 +35,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/metrics"
 	"github.com/pingcap/tiflow/pkg/config"
-	"github.com/pingcap/tiflow/pkg/cyclic/mark"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/retry"
@@ -1011,18 +1010,10 @@ func TestAdjustSQLMode(t *testing.T) {
 	require.Nil(t, err)
 	require.Nil(t, err)
 	rc := config.GetDefaultReplicaConfig()
-	rc.Cyclic = &config.CyclicConfig{
-		Enable:          true,
-		ReplicaID:       1,
-		FilterReplicaID: []uint64{2},
-	}
 	f, err := filter.NewFilter(rc)
 	require.Nil(t, err)
-	cyclicConfig, err := rc.Cyclic.Marshal()
 	require.Nil(t, err)
-	opts := map[string]string{
-		mark.OptCyclicConfig: cyclicConfig,
-	}
+	opts := map[string]string{}
 	sink, err := NewMySQLSink(ctx,
 		model.DefaultChangeFeedID(changefeed),
 		sinkURI, f, rc, opts)

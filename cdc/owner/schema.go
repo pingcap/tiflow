@@ -23,7 +23,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
-	"github.com/pingcap/tiflow/pkg/cyclic/mark"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/util"
@@ -222,10 +221,6 @@ func (s *schemaWrap4Owner) shouldIgnoreTable(t *model.TableInfo) bool {
 	schemaName := t.TableName.Schema
 	tableName := t.TableName.Table
 	if s.filter.ShouldIgnoreTable(schemaName, tableName) {
-		return true
-	}
-	if s.config.Cyclic.IsEnabled() && mark.IsMarkTable(schemaName, tableName) {
-		// skip the mark table if cyclic is enabled
 		return true
 	}
 	if !t.IsEligible(s.config.ForceReplicate) {
