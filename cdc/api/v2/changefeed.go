@@ -85,7 +85,7 @@ func (h *OpenAPIV2) CreateChangefeed(c *gin.Context) {
 	log.Info("Create changefeed successfully!",
 		zap.String("id", info.ID),
 		zap.String("changefeed", infoStr))
-	c.JSON(http.StatusCreated, info)
+	c.JSON(http.StatusCreated, toAPIModel(info))
 }
 
 // VerifyTable verify table, return ineligibleTables and EligibleTables.
@@ -238,6 +238,10 @@ func (h *OpenAPIV2) GetChangeFeedMetaInfo(c *gin.Context) {
 		_ = c.Error(err)
 		return
 	}
+	c.JSON(http.StatusOK, toAPIModel(info))
+}
+
+func toAPIModel(info *model.ChangeFeedInfo) *ChangeFeedInfo {
 	var runningError *RunningError
 	if info.Error != nil {
 		runningError = &RunningError{
@@ -264,5 +268,5 @@ func (h *OpenAPIV2) GetChangeFeedMetaInfo(c *gin.Context) {
 		SyncPointInterval: info.SyncPointInterval,
 		CreatorVersion:    info.CreatorVersion,
 	}
-	c.JSON(http.StatusOK, apiInfoModel)
+	return apiInfoModel
 }
