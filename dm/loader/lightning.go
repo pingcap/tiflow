@@ -210,6 +210,11 @@ func (l *LightningLoader) runLightning(ctx context.Context, cfg *lcfg.Config) er
 			lightning.WithPromFactory(l.cfg.MetricsFactory),
 			lightning.WithPromRegistry(promutil2.NewNoopRegistry()))
 	} else {
+		registry := prometheus.DefaultGatherer.(prometheus.Registerer)
+		failpoint.Inject("DontUnregister", func() {
+			registry = promutil.NewOnlyRegRegister(registry)
+		})
+
 		opts = append(opts,
 			lightning.WithPromFactory(
 				promutil.NewWrappingFactory(
@@ -218,7 +223,7 @@ func (l *LightningLoader) runLightning(ctx context.Context, cfg *lcfg.Config) er
 					prometheus.Labels{"task": l.cfg.Name, "source_id": l.cfg.SourceID},
 				),
 			),
-			lightning.WithPromRegistry(prometheus.DefaultGatherer.(prometheus.Registerer)))
+			lightning.WithPromRegistry(registry))
 	}
 	if l.cfg.ExtStorage != nil {
 		opts = append(opts,
