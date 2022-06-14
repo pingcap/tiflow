@@ -33,12 +33,12 @@ type WorkerStatusCode int8
 // NOTICE: DO NOT CHANGE the previous status code
 // Modify the WorkerStatus.Code comment IF you add some new status code
 const (
-	WorkerStatusNormal   = 1
-	WorkerStatusCreated  = 2
-	WorkerStatusInit     = 3
-	WorkerStatusError    = 4
-	WorkerStatusFinished = 5
-	WorkerStatusStopped  = 6
+	WorkerStatusNormal   = WorkerStatusCode(1)
+	WorkerStatusCreated  = WorkerStatusCode(2)
+	WorkerStatusInit     = WorkerStatusCode(3)
+	WorkerStatusError    = WorkerStatusCode(4)
+	WorkerStatusFinished = WorkerStatusCode(5)
+	WorkerStatusStopped  = WorkerStatusCode(6)
 	// extend the status code here
 )
 

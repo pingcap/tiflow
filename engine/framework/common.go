@@ -35,21 +35,21 @@ type (
 // NOTICE: DO NOT CHANGE the previous worker type
 // Modify the comment in model IF you add some new worker type
 const (
-	JobManager = 1
+	JobManager = WorkerType(iota + 1)
 	// job master
-	CvsJobMaster  = 2
-	FakeJobMaster = 3
-	DMJobMaster   = 4
-	CdcJobMaster  = 5
+	CvsJobMaster
+	FakeJobMaster
+	DMJobMaster
+	CdcJobMaster
 	// task
-	CvsTask  = 6
-	FakeTask = 7
-	DmTask   = 8
-	CdcTask  = 9
+	CvsTask
+	FakeTask
+	DmTask
+	CdcTask
 	// worker
-	WorkerDMDump = 10
-	WorkerDMLoad = 11
-	WorkerDMSync = 12
+	WorkerDMDump
+	WorkerDMLoad
+	WorkerDMSync
 	// extend the worker type here
 )
 

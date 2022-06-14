@@ -32,10 +32,10 @@ type (
 // NOTICE: DO NOT CHANGE the previous status code
 // Modify the MasterMetaKVData.StatusCode comment IF you add some new status code
 const (
-	MasterStatusUninit   = 1
-	MasterStatusInit     = 2
-	MasterStatusFinished = 3
-	MasterStatusStopped  = 4
+	MasterStatusUninit   = MasterStatusCode(1)
+	MasterStatusInit     = MasterStatusCode(2)
+	MasterStatusFinished = MasterStatusCode(3)
+	MasterStatusStopped  = MasterStatusCode(4)
 	// extend the status code here
 )
 
