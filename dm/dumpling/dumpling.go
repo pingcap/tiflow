@@ -23,8 +23,10 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/dumpling/export"
+	promutil2 "github.com/pingcap/tidb/util/promutil"
 	filter "github.com/pingcap/tidb/util/table-filter"
 	"github.com/pingcap/tiflow/dm/pkg/metricsproxy"
+	"github.com/pingcap/tiflow/engine/pkg/promutil"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
@@ -80,9 +82,26 @@ func (m *Dumpling) Init(ctx context.Context) error {
 				Help:      "counter for dumpling exit with error",
 			}, []string{"task", "source_id"},
 		)
+		m.dumpConfig.PromFactory = promutil.NewWrappingFactory(
+			m.cfg.MetricsFactory,
+			"",
+			prometheus.Labels{
+				"task": m.cfg.Name, "source_id": m.cfg.SourceID,
+			},
+		)
+		m.dumpConfig.PromRegistry = promutil2.NewNoopRegistry()
 	} else {
 		m.metricProxies = defaultMetricProxies
+		m.dumpConfig.PromFactory = promutil.NewWrappingFactory(
+			promutil.NewPromFactory(),
+			"",
+			prometheus.Labels{
+				"task": m.cfg.Name, "source_id": m.cfg.SourceID,
+			},
+		)
+		m.dumpConfig.PromRegistry = prometheus.DefaultGatherer.(prometheus.Registerer)
 	}
+
 	m.logger.Info("create dumpling", zap.Stringer("config", m.dumpConfig))
 	return nil
 }
@@ -143,6 +162,11 @@ func (m *Dumpling) Process(ctx context.Context, pr chan pb.ProcessResult) {
 		m.core = dumpling
 		m.mu.Unlock()
 		err = dumpling.Dump()
+		failpoint.Inject("SleepBeforeDumplingClose", func(val failpoint.Value) {
+			t := val.(int)
+			time.Sleep(time.Second * time.Duration(t))
+			m.logger.Info("", zap.String("failpoint", "SleepBeforeDumplingClose"))
+		})
 		dumpling.Close()
 	}
 	cancel()
@@ -360,7 +384,6 @@ func (m *Dumpling) constructArgs(ctx context.Context) (*export.Config, error) {
 		dumpConfig.TableFilter = filter.CaseInsensitive(dumpConfig.TableFilter)
 	}
 
-	dumpConfig.Labels = prometheus.Labels{"task": m.cfg.Name, "source_id": m.cfg.SourceID}
 	// update sql_mode if needed
 	m.detectSQLMode(ctx, dumpConfig)
 	dumpConfig.ExtStorage = cfg.ExtStorage
