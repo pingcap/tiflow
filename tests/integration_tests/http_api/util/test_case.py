@@ -342,8 +342,8 @@ def verify_table():
     headers = {"Content-Type": "application/json"}
     resp = rq.post(url, data=data, headers=headers, cert=CERT, verify=VERIFY)
     assert resp.status_code == rq.codes.ok
-    eligible_table_name = resp.json()["eligible_tables"][0]["tbl_name"]
-    ineligible_table_name = resp.json()["ineligible_tables"][0]["tbl_name"]
+    eligible_table_name = resp.json()["eligible_tables"][0]["table_name"]
+    ineligible_table_name = resp.json()["ineligible_tables"][0]["table_name"]
     assert eligible_table_name == "verify_table_eligible"
     assert ineligible_table_name == "verify_table_ineligible"
 
