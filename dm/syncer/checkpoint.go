@@ -113,6 +113,8 @@ func (b *binlogPoint) rollback(schemaTracker *schema.Tracker, schema string) (is
 	b.flushedLocation.ResetSuffix()
 	b.location = b.flushedLocation
 	if b.ti == nil {
+		// TODO: if we forget to save table info for table checkpoint, this is also nil!
+		// And table checkpoint rollback to flushed point may also be nil!
 		return // for global checkpoint, no need to rollback the schema.
 	}
 

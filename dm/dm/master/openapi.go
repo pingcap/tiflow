@@ -17,9 +17,12 @@ package master
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
-	"fmt"
 	"net/http"
+	"net/http/httputil"
+
+	"github.com/pingcap/failpoint"
 
 	"github.com/deepmap/oapi-codegen/pkg/middleware"
 	"github.com/labstack/echo/v4"
@@ -45,7 +48,7 @@ const (
 
 // redirectRequestToLeaderMW a middleware auto redirect request to leader.
 // because the leader has some data in memory, only the leader can process the request.
-func (s *Server) redirectRequestToLeaderMW() echo.MiddlewareFunc {
+func (s *Server) reverseRequestToLeaderMW(tlsCfg *tls.Config) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(ctx echo.Context) error {
 			ctx2 := ctx.Request().Context()
@@ -58,13 +61,36 @@ func (s *Server) redirectRequestToLeaderMW() echo.MiddlewareFunc {
 			if err != nil {
 				return err
 			}
-			return ctx.Redirect(http.StatusTemporaryRedirect, fmt.Sprintf("http://%s%s", leaderOpenAPIAddr, ctx.Request().RequestURI))
+
+			failpoint.Inject("MockNotSetTls", func() {
+				tlsCfg = nil
+			})
+			// simpleProxy just reverses to leader host
+			simpleProxy := httputil.ReverseProxy{
+				Director: func(req *http.Request) {
+					if tlsCfg != nil {
+						req.URL.Scheme = "https"
+					} else {
+						req.URL.Scheme = "http"
+					}
+					req.URL.Host = leaderOpenAPIAddr
+					req.Host = leaderOpenAPIAddr
+				},
+			}
+			if tlsCfg != nil {
+				transport := http.DefaultTransport.(*http.Transport).Clone()
+				transport.TLSClientConfig = tlsCfg
+				simpleProxy.Transport = transport
+			}
+			log.L().Info("reverse request to leader", zap.String("Request URL", ctx.Request().URL.String()), zap.String("leader", leaderOpenAPIAddr), zap.Bool("hasTLS", tlsCfg != nil))
+			simpleProxy.ServeHTTP(ctx.Response(), ctx.Request())
+			return nil
 		}
 	}
 }
 
 // InitOpenAPIHandles init openapi handlers.
-func (s *Server) InitOpenAPIHandles() error {
+func (s *Server) InitOpenAPIHandles(tlsCfg *tls.Config) error {
 	swagger, err := openapi.GetSwagger()
 	if err != nil {
 		return err
@@ -77,7 +103,7 @@ func (s *Server) InitOpenAPIHandles() error {
 	// set logger
 	e.Use(openapi.ZapLogger(logger))
 	e.Use(echomiddleware.Recover())
-	e.Use(s.redirectRequestToLeaderMW())
+	e.Use(s.reverseRequestToLeaderMW(tlsCfg))
 	// disables swagger server name validation. it seems to work poorly
 	swagger.Servers = nil
 	// use our validation middleware to check all requests against the OpenAPI schema.
