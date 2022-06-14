@@ -64,7 +64,7 @@ func (o *resumeChangefeedOptions) complete(f factory.Factory) error {
 // confirmResumeChangefeedCheck prompts the user to confirm the use of a large data gap when noConfirm is turned off.
 func (o *resumeChangefeedOptions) confirmResumeChangefeedCheck(ctx context.Context, cmd *cobra.Command) error {
 	if !o.noConfirm {
-		cfs, err := o.apiV1Client.Changefeeds().List(ctx)
+		cfs, err := o.apiV1Client.Changefeeds().List(ctx, "all")
 		if err != nil {
 			return err
 		}
