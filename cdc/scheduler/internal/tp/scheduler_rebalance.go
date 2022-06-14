@@ -22,7 +22,6 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
-	"go.uber.org/zap"
 )
 
 var _ scheduler = &rebalanceScheduler{}
@@ -93,10 +92,7 @@ func newBurstBalanceMoveTables(
 	}
 
 	for tableID, rep := range replications {
-		if rep.Primary == "" {
-			log.Info("tpscheduler: rebalance found table no primary, skip",
-				zap.Int64("tableID", tableID),
-				zap.Any("replication", rep))
+		if rep.State != ReplicationSetStateReplicating {
 			continue
 		}
 		tablesPerCapture[rep.Primary].add(tableID)
