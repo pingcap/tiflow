@@ -20,6 +20,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/tp/schedulepb"
+	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
 )
 
@@ -58,18 +59,42 @@ type scheduleTask struct {
 	accept callback
 }
 
+func (s *scheduleTask) Name() string {
+	if s.moveTable != nil {
+		return "moveTable"
+	} else if s.addTable != nil {
+		return "addTable"
+	} else if s.removeTable != nil {
+		return "removeTable"
+	} else if s.burstBalance != nil {
+		return "burstBalance"
+	}
+	return "unknown"
+}
+
 type replicationManager struct {
 	tables map[model.TableID]*ReplicationSet
 
 	runningTasks       map[model.TableID]*scheduleTask
 	maxTaskConcurrency int
+
+	changefeedID           model.ChangeFeedID
+	acceptScheduleTask     int
+	slowestTableID         model.TableID
+	acceptAddTableTask     int
+	acceptRemoveTableTask  int
+	acceptMoveTableTask    int
+	acceptBurstBalanceTask int
 }
 
-func newReplicationManager(maxTaskConcurrency int) *replicationManager {
+func newReplicationManager(
+	maxTaskConcurrency int, changefeedID model.ChangeFeedID,
+) *replicationManager {
 	return &replicationManager{
 		tables:             make(map[int64]*ReplicationSet),
 		runningTasks:       make(map[int64]*scheduleTask),
 		maxTaskConcurrency: maxTaskConcurrency,
+		changefeedID:       changefeedID,
 	}
 }
 
@@ -218,6 +243,7 @@ func (r *replicationManager) HandleTasks(
 	for _, task := range tasks {
 		// Burst balance does not affect by maxTaskConcurrency.
 		if task.burstBalance != nil {
+			// TODO should also count add/remove/move task in burstBalance.
 			msgs, err := r.handleBurstBalanceTasks(task.burstBalance)
 			if err != nil {
 				return nil, errors.Trace(err)
@@ -283,6 +309,7 @@ func (r *replicationManager) HandleTasks(
 func (r *replicationManager) handleAddTableTask(
 	task *addTable,
 ) ([]*schedulepb.Message, error) {
+	r.acceptAddTableTask++
 	var err error
 	table := r.tables[task.TableID]
 	if table == nil {
@@ -298,6 +325,7 @@ func (r *replicationManager) handleAddTableTask(
 func (r *replicationManager) handleRemoveTableTask(
 	task *removeTable,
 ) ([]*schedulepb.Message, error) {
+	r.acceptRemoveTableTask++
 	table := r.tables[task.TableID]
 	if table.hasRemoved() {
 		log.Info("tpscheduler: table has removed", zap.Int64("tableID", task.TableID))
@@ -310,6 +338,7 @@ func (r *replicationManager) handleRemoveTableTask(
 func (r *replicationManager) handleMoveTableTask(
 	task *moveTable,
 ) ([]*schedulepb.Message, error) {
+	r.acceptMoveTableTask++
 	table := r.tables[task.TableID]
 	return table.handleMoveTable(task.DestCapture)
 }
@@ -317,6 +346,7 @@ func (r *replicationManager) handleMoveTableTask(
 func (r *replicationManager) handleBurstBalanceTasks(
 	task *burstBalance,
 ) ([]*schedulepb.Message, error) {
+	r.acceptBurstBalanceTask++
 	perCapture := make(map[model.CaptureID]int)
 	for _, task := range task.AddTables {
 		perCapture[task.CaptureID]++
@@ -387,6 +417,7 @@ func (r *replicationManager) AdvanceCheckpoint(
 	currentTables []model.TableID,
 ) (newCheckpointTs, newResolvedTs model.Ts) {
 	newCheckpointTs, newResolvedTs = math.MaxUint64, math.MaxUint64
+	slowestTableID := int64(0)
 	for _, tableID := range currentTables {
 		table, ok := r.tables[tableID]
 		if !ok {
@@ -398,10 +429,65 @@ func (r *replicationManager) AdvanceCheckpoint(
 		// Find the minimum checkpoint ts and resolved ts.
 		if newCheckpointTs > table.Checkpoint.CheckpointTs {
 			newCheckpointTs = table.Checkpoint.CheckpointTs
+			slowestTableID = tableID
 		}
 		if newResolvedTs > table.Checkpoint.ResolvedTs {
 			newResolvedTs = table.Checkpoint.ResolvedTs
 		}
 	}
+	if slowestTableID != 0 {
+		r.slowestTableID = slowestTableID
+	}
 	return newCheckpointTs, newResolvedTs
+}
+
+func (r *replicationManager) CollectMetrics() {
+	cf := r.changefeedID
+	tableGauge.
+		WithLabelValues(cf.Namespace, cf.ID).Set(float64(len(r.tables)))
+	if table, ok := r.tables[r.slowestTableID]; ok {
+		slowestTableIDGauge.
+			WithLabelValues(cf.Namespace, cf.ID).Set(float64(r.slowestTableID))
+		slowestTableStateGauge.
+			WithLabelValues(cf.Namespace, cf.ID).Set(float64(table.State))
+		phyCkpTs := oracle.ExtractPhysical(table.Checkpoint.CheckpointTs)
+		slowestTableCheckpointTsGauge.
+			WithLabelValues(cf.Namespace, cf.ID).Set(float64(phyCkpTs))
+		phyRTs := oracle.ExtractPhysical(table.Checkpoint.ResolvedTs)
+		slowestTableResolvedTsGauge.
+			WithLabelValues(cf.Namespace, cf.ID).Set(float64(phyRTs))
+	}
+	metricAcceptScheduleTask := acceptScheduleTaskCounter.MustCurryWith(map[string]string{
+		"namespace": cf.Namespace, "changefeed": cf.ID,
+	})
+	metricAcceptScheduleTask.WithLabelValues("addTable").Add(float64(r.acceptAddTableTask))
+	r.acceptAddTableTask = 0
+	metricAcceptScheduleTask.WithLabelValues("removeTable").Add(float64(r.acceptRemoveTableTask))
+	r.acceptRemoveTableTask = 0
+	metricAcceptScheduleTask.WithLabelValues("moveTable").Add(float64(r.acceptMoveTableTask))
+	r.acceptMoveTableTask = 0
+	metricAcceptScheduleTask.WithLabelValues("burstBalance").Add(float64(r.acceptBurstBalanceTask))
+	r.acceptBurstBalanceTask = 0
+	var stateCounters [6]int
+	for _, table := range r.tables {
+		switch table.State {
+		case ReplicationSetStateUnknown:
+			stateCounters[ReplicationSetStateUnknown]++
+		case ReplicationSetStateAbsent:
+			stateCounters[ReplicationSetStateAbsent]++
+		case ReplicationSetStatePrepare:
+			stateCounters[ReplicationSetStatePrepare]++
+		case ReplicationSetStateCommit:
+			stateCounters[ReplicationSetStateCommit]++
+		case ReplicationSetStateReplicating:
+			stateCounters[ReplicationSetStateReplicating]++
+		case ReplicationSetStateRemoving:
+			stateCounters[ReplicationSetStateRemoving]++
+		}
+	}
+	for s, counter := range stateCounters {
+		tableStateGauge.
+			WithLabelValues(cf.Namespace, cf.ID, ReplicationSetState(s).String()).
+			Set(float64(counter))
+	}
 }

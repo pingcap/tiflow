@@ -15,7 +15,9 @@ package tp
 
 import (
 	"context"
+	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -28,11 +30,18 @@ import (
 	"go.uber.org/zap"
 )
 
-const checkpointCannotProceed = internal.CheckpointCannotProceed
+const (
+	checkpointCannotProceed = internal.CheckpointCannotProceed
+	metricsInterval         = 10 * time.Second
+)
 
 var _ internal.Scheduler = (*coordinator)(nil)
 
 type coordinator struct {
+	// A mutex for concurrent access of coordinator in
+	// internal.Scheduler and internal.InfoProvider API.
+	mu sync.Mutex
+
 	version      string
 	revision     schedulepb.OwnerRevision
 	captureID    model.CaptureID
@@ -40,36 +49,42 @@ type coordinator struct {
 	schedulers   map[schedulerType]scheduler
 	replicationM *replicationManager
 	captureM     *captureManager
+
+	lastCollectTime time.Time
+	changefeedID    model.ChangeFeedID
+	tasksCounter    map[struct{ scheduler, task string }]int
 }
 
 // NewCoordinator returns a two phase scheduler.
 func NewCoordinator(
 	ctx context.Context,
 	captureID model.CaptureID,
-	changeFeedID model.ChangeFeedID,
+	changefeedID model.ChangeFeedID,
 	checkpointTs model.Ts,
 	messageServer *p2p.MessageServer,
 	messageRouter p2p.MessageRouter,
 	ownerRevision int64,
 	cfg *config.SchedulerConfig,
 ) (internal.Scheduler, error) {
-	trans, err := newTransport(ctx, changeFeedID, schedulerRole, messageServer, messageRouter)
+	trans, err := newTransport(ctx, changefeedID, schedulerRole, messageServer, messageRouter)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	coord := newCoordinator(captureID, ownerRevision, cfg)
+	coord := newCoordinator(captureID, changefeedID, ownerRevision, cfg)
 	coord.trans = trans
 	return coord, nil
 }
 
 func newCoordinator(
 	captureID model.CaptureID,
+	changefeedID model.ChangeFeedID,
 	ownerRevision int64,
 	cfg *config.SchedulerConfig,
 ) *coordinator {
 	revision := schedulepb.OwnerRevision{Revision: ownerRevision}
 	schedulers := make(map[schedulerType]scheduler)
-	schedulers[schedulerTypeBurstBalance] = newBurstBalanceScheduler()
+	schedulers[schedulerTypeBasic] = newBasicScheduler()
+	schedulers[schedulerTypeBalance] = newBalanceScheduler(cfg)
 	schedulers[schedulerTypeMoveTable] = newMoveTableScheduler()
 	schedulers[schedulerTypeRebalance] = newRebalanceScheduler()
 
@@ -78,8 +93,12 @@ func newCoordinator(
 		revision:     revision,
 		captureID:    captureID,
 		schedulers:   schedulers,
-		replicationM: newReplicationManager(cfg.MaxTaskConcurrency),
-		captureM:     newCaptureManager(revision, cfg.HeartbeatTick),
+		replicationM: newReplicationManager(cfg.MaxTaskConcurrency, changefeedID),
+		captureM:     newCaptureManager(changefeedID, revision, cfg.HeartbeatTick),
+		tasksCounter: make(map[struct {
+			scheduler string
+			task      string
+		}]int),
 	}
 }
 
@@ -92,10 +111,16 @@ func (c *coordinator) Tick(
 	// All captures that are alive according to the latest Etcd states.
 	aliveCaptures map[model.CaptureID]*model.CaptureInfo,
 ) (newCheckpointTs, newResolvedTs model.Ts, err error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	return c.poll(ctx, checkpointTs, currentTables, aliveCaptures)
 }
 
 func (c *coordinator) MoveTable(tableID model.TableID, target model.CaptureID) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	if !c.captureM.CheckAllCaptureInitialized() {
 		log.Info("tpscheduler: manual move table task ignored, "+
 			"since not all captures initialized",
@@ -120,6 +145,9 @@ func (c *coordinator) MoveTable(tableID model.TableID, target model.CaptureID) {
 }
 
 func (c *coordinator) Rebalance() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	if !c.captureM.CheckAllCaptureInitialized() {
 		log.Info("tpscheduler: manual rebalance task ignored, " +
 			"since not all captures initialized")
@@ -137,6 +165,9 @@ func (c *coordinator) Rebalance() {
 }
 
 func (c *coordinator) Close(ctx context.Context) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	_ = c.trans.Close()
 }
 
@@ -190,6 +221,12 @@ func (c *coordinator) poll(
 				zap.String("scheduler", scheduler.Name()))
 		}
 		allTasks = append(allTasks, tasks...)
+		for _, t := range tasks {
+			name := struct {
+				scheduler, task string
+			}{scheduler: scheduler.Name(), task: t.Name()}
+			c.tasksCounter[name]++
+		}
 	}
 
 	// Handle generated schedule tasks.
@@ -204,6 +241,8 @@ func (c *coordinator) poll(
 	if err != nil {
 		return checkpointCannotProceed, checkpointCannotProceed, errors.Trace(err)
 	}
+
+	c.maybeCollectMetrics()
 
 	// Checkpoint calculation
 	newCheckpointTs, newResolvedTs = c.replicationM.AdvanceCheckpoint(currentTables)
@@ -249,4 +288,22 @@ func (c *coordinator) sendMsgs(ctx context.Context, msgs []*schedulepb.Message) 
 
 	}
 	return c.trans.Send(ctx, msgs)
+}
+
+func (c *coordinator) maybeCollectMetrics() {
+	now := time.Now()
+	if now.Sub(c.lastCollectTime) < metricsInterval {
+		return
+	}
+	c.lastCollectTime = now
+
+	cf := c.replicationM.changefeedID
+	for name, counter := range c.tasksCounter {
+		scheduleTaskCounter.
+			WithLabelValues(cf.Namespace, cf.ID, name.scheduler, name.task).
+			Add(float64(counter))
+		c.tasksCounter[name] = 0
+	}
+	c.replicationM.CollectMetrics()
+	c.captureM.CollectMetrics()
 }
