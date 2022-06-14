@@ -61,7 +61,7 @@ func (o *queryChangefeedOptions) complete(f factory.Factory) error {
 func (o *queryChangefeedOptions) run(cmd *cobra.Command) error {
 	ctx := context.Background()
 	if o.simplified {
-		infos, err := o.apiClient.Changefeeds().List(ctx)
+		infos, err := o.apiClient.Changefeeds().List(ctx, "all")
 		if err != nil {
 			return nil
 		}

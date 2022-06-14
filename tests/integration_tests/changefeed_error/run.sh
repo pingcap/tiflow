@@ -63,8 +63,12 @@ function run() {
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
 
 	export GO_FAILPOINTS='github.com/pingcap/tiflow/cdc/owner/NewChangefeedRetryError=return(true)'
-	kill $capture_pid
-	ensure $MAX_RETRIES "ETCDCTL_API=3 etcdctl get /tidb/cdc/default/__cdc_meta__/capture --prefix | grep -v 'capture'"
+	kill -9 $capture_pid
+	# make sure old cpature key and old owner key expire in etcd
+	ETCDCTL_API=3 etcdctl get /tidb/cdc/default/__cdc_meta__/capture --prefix | grep -v "capture"
+	ensure $MAX_RETRIES "check_etcd_meta_not_exist '/tidb/cdc/default/__cdc_meta__/capture' 'capture'"
+	ensure $MAX_RETRIES "check_etcd_meta_not_exist '/tidb/cdc/default/__cdc_meta__/owner' 'owner'"
+
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
 	ensure $MAX_RETRIES check_changefeed_state http://${UP_PD_HOST_1}:${UP_PD_PORT_1} ${changefeedid} "error" "failpoint injected retriable error" ""
 
@@ -73,6 +77,7 @@ function run() {
 
 	export GO_FAILPOINTS=''
 	cleanup_process $CDC_BINARY
+	ensure $MAX_RETRIES "check_etcd_meta_not_exist '/tidb/cdc/default/__cdc_meta__/owner' 'owner'"
 
 	# owner DDL error case
 	export GO_FAILPOINTS='github.com/pingcap/tiflow/cdc/owner/InjectChangefeedDDLError=return(true)'
@@ -85,7 +90,7 @@ function run() {
 
 	run_cdc_cli changefeed remove -c $changefeedid_1
 	cleanup_process $CDC_BINARY
-
+	ensure $MAX_RETRIES "check_etcd_meta_not_exist '/tidb/cdc/default/__cdc_meta__/owner' 'owner'"
 	# updating GC safepoint failure case
 	export GO_FAILPOINTS='github.com/pingcap/tiflow/pkg/txnutil/gc/InjectActualGCSafePoint=return(9223372036854775807)'
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY

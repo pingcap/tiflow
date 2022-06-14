@@ -537,7 +537,7 @@ func (o *ownerImpl) pushOwnerJob(job *ownerJob) {
 func (o *ownerImpl) updateGCSafepoint(
 	ctx context.Context, state *orchestrator.GlobalReactorState,
 ) error {
-	minChekpoinTsMap, forceUpdateMap := o.calculateGCSagepoint(state)
+	minChekpoinTsMap, forceUpdateMap := o.calculateGCSafepoint(state)
 	for upstreamID, minCheckpointTs := range minChekpoinTsMap {
 		up := o.upstreamManager.Get(upstreamID)
 		if !up.IsNormal() {
@@ -565,8 +565,8 @@ func (o *ownerImpl) updateGCSafepoint(
 	return nil
 }
 
-// calculateGCSagepoint calculates GCSafepoint for different upstream.
-func (o *ownerImpl) calculateGCSagepoint(state *orchestrator.GlobalReactorState) (
+// calculateGCSafepoint calculates GCSafepoint for different upstream.
+func (o *ownerImpl) calculateGCSafepoint(state *orchestrator.GlobalReactorState) (
 	map[uint64]uint64, map[uint64]interface{},
 ) {
 	minCheckpointTsMap := make(map[uint64]uint64)

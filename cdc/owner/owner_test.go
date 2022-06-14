@@ -607,7 +607,7 @@ func TestCalculateGCSafepointTs(t *testing.T) {
 		}
 	}
 
-	minCheckpoinTsMap, forceUpdateMap := o.calculateGCSagepoint(state)
+	minCheckpoinTsMap, forceUpdateMap := o.calculateGCSafepoint(state)
 
 	require.Equal(t, expectMinTsMap, minCheckpoinTsMap)
 	require.Equal(t, expectForceUpdateMap, forceUpdateMap)
