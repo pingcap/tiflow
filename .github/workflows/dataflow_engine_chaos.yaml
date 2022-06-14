@@ -3,6 +3,8 @@ name: Dataflow Engine Chaos
 on:
   schedule:
     - cron: '0 17-23 * * *' # run at minute 0 every hour from 01:00 ~ 07:00 UTC+8
+  pull_request:
+    branches: [ master ]
 
 # See: https://docs.github.com/en/actions/reference/workflow-syntax-for-github-actions#concurrency.
 concurrency:
@@ -188,10 +190,11 @@ jobs:
         run: |
           $GITHUB_WORKSPACE/engine/chaos/scripts/check-case.sh
 
-      - name: Pause all chaos
+      - name: Pause all chaos and wait executor online
         if: ${{ always() }}
         run: |
           kubectl delete -f $GITHUB_WORKSPACE/engine/chaos/manifests/${{ matrix.chaos-obj }}.yaml
+          kubectl wait --for=condition=Ready pod -l app=executor --all --timeout=60s|| true
 
       - name: Dump goroutines
         if: ${{ failure() }}
