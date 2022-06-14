@@ -20,6 +20,7 @@ import (
 
 	"github.com/gogo/status"
 	"github.com/pingcap/errors"
+	"google.golang.org/grpc/codes"
 
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 )
@@ -100,4 +101,11 @@ func IsRetryable(errIn error) bool {
 	}
 
 	return normalized.isRetryable()
+}
+
+func GRPCStatusCode(errIn error) (codes.Code, bool) {
+	if err, ok := tryUnwrapNormalizedError(errIn); ok {
+		return err.statusCode(), true
+	}
+	return codes.Unknown, false
 }
