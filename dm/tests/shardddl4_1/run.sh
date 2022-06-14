@@ -974,6 +974,11 @@ function DM_155_CASE {
 	run_sql_source2 "insert into ${shardddl1}.${tb1} values(26,26,26,26,26);"
 	run_sql_source2 "insert into ${shardddl1}.${tb2} values(27,27,27);"
 
+	# make sure source1 has received conflict ddl and handled
+	source1worker=$($PWD/bin/dmctl.test DEVEL --master-addr "127.0.0.1:$MASTER_PORT" query-status test -s mysql-replica-01 |
+		grep 'worker' | awk -F: '{print $2}')
+	check_log_contain_with_retry "finish to handle ddls in optimistic shard mode.*alter table ${shardddl1}.${tb1} change c b int" \
+		$WORK_DIR/$source1worker/log/dm-worker.log
 	run_sql_source2 "alter table ${shardddl1}.${tb2} change c b int;"
 	run_sql_source1 "insert into ${shardddl1}.${tb1} values(28,28,28,28,28);"
 	run_sql_source2 "insert into ${shardddl1}.${tb1} values(29,29,29,29,29);" # source2 won't redirect until it receives new event
@@ -989,6 +994,11 @@ function DM_155_CASE {
 	run_sql_source2 "insert into ${shardddl1}.${tb1} values(32,32,32,32,32);"
 	run_sql_source2 "insert into ${shardddl1}.${tb2} values(33,33,33);"
 
+	# make sure source1 has received conflict ddl and handled
+	source1worker=$($PWD/bin/dmctl.test DEVEL --master-addr "127.0.0.1:$MASTER_PORT" query-status test -s mysql-replica-01 |
+		grep 'worker' | awk -F: '{print $2}')
+	check_log_contain_with_retry "finish to handle ddls in optimistic shard mode.*alter table ${shardddl1}.${tb1} change d f int" \
+		$WORK_DIR/$source1worker/log/dm-worker.log
 	run_sql_source2 "alter table ${shardddl1}.${tb2} change d f int;"
 	run_sql_source1 "insert into ${shardddl1}.${tb1} values(34,34,34,34,34);"
 	run_sql_source2 "insert into ${shardddl1}.${tb1} values(35,35,35,35,35);"
@@ -1004,6 +1014,11 @@ function DM_155_CASE {
 	run_sql_source2 "insert into ${shardddl1}.${tb1} values(38,38,38,38,38);"
 	run_sql_source2 "insert into ${shardddl1}.${tb2} values(39,39,39);"
 
+	# make sure source1 has received conflict ddl and handled
+	source1worker=$($PWD/bin/dmctl.test DEVEL --master-addr "127.0.0.1:$MASTER_PORT" query-status test -s mysql-replica-01 |
+		grep 'worker' | awk -F: '{print $2}')
+	check_log_contain_with_retry "finish to handle ddls in optimistic shard mode.*alter table ${shardddl1}.${tb1} add column e int not null after f" \
+		$WORK_DIR/$source1worker/log/dm-worker.log
 	run_sql_source2 "alter table ${shardddl1}.${tb2} add column e int not null after f;"
 	run_sql_source1 "insert into ${shardddl1}.${tb1} values(40,40,40,40,40);"
 	run_sql_source2 "insert into ${shardddl1}.${tb1} values(41,41,41,41,41);"
