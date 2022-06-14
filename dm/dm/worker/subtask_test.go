@@ -572,3 +572,37 @@ func TestValidatorStatus(t *testing.T) {
 	require.True(t, terror.ErrValidatorNotFound.Equal(err))
 	// validator != nil: will be tested in IT
 }
+
+func TestSubtaskRace(t *testing.T) {
+	// to test data race of Marshal() and markResultCanceled()
+	Errors := []*pb.ProcessError{}
+	Detail := []byte{}
+	tempProcessResult := pb.ProcessResult{
+		IsCanceled: false,
+		Errors:     Errors,
+		Detail:     Detail,
+	}
+	cfg := &config.SubTaskConfig{
+		Name: "test-subtask-race",
+		ValidatorCfg: config.ValidatorConfig{
+			Mode: config.ValidationFast,
+		},
+	}
+	st := NewSubTaskWithStage(cfg, pb.Stage_Paused, nil, "worker")
+	st.result = &tempProcessResult
+	tempQueryStatusResponse := pb.QueryStatusResponse{}
+	tempQueryStatusResponse.SubTaskStatus = make([]*pb.SubTaskStatus, 1)
+	tempSubTaskStatus := pb.SubTaskStatus{}
+	tempSubTaskStatus.Result = st.Result()
+	tempQueryStatusResponse.SubTaskStatus[0] = &tempSubTaskStatus
+	for i := 0; i < 10; i++ {
+		st.result.IsCanceled = false
+		go func() {
+			for i := 0; i < 10; i++ {
+				_, _ = tempQueryStatusResponse.Marshal()
+			}
+		}()
+		_ = st.markResultCanceled()
+	}
+	// this test is to test data race, so don't need assert here
+}
