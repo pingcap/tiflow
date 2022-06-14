@@ -108,8 +108,8 @@ func newRemoveTableResponseMessage(status schedulepb.TableStatus) *schedulepb.Me
 }
 
 func (t *table) handleRemoveTableTask(ctx context.Context) *schedulepb.Message {
-	state, changed := t.getAndUpdateTableState()
-	changed = true
+	state, _ := t.getAndUpdateTableState()
+	changed := true
 	for changed {
 		switch state {
 		case schedulepb.TableStateAbsent:
@@ -151,7 +151,9 @@ func (t *table) handleRemoveTableTask(ctx context.Context) *schedulepb.Message {
 	return nil
 }
 
-func (t *table) handleAddTableTask(ctx context.Context, stopping bool) (result *schedulepb.Message, err error) {
+func (t *table) handleAddTableTask(ctx context.Context,
+	stopping bool,
+) (result *schedulepb.Message, err error) {
 	if stopping {
 		log.Info("tpscheduler: reject add table, since agent stopping",
 			zap.Int64("tableID", t.id), zap.Any("task", t.task))
@@ -159,8 +161,8 @@ func (t *table) handleAddTableTask(ctx context.Context, stopping bool) (result *
 		return newAddTableResponseMessage(t.getTableStatus(), true), nil
 	}
 
-	state, changed := t.getAndUpdateTableState()
-	changed = true
+	state, _ := t.getAndUpdateTableState()
+	changed := true
 	for changed {
 		switch state {
 		case schedulepb.TableStateAbsent:
