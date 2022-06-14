@@ -23,6 +23,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/errors"
+	"go.uber.org/atomic"
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
 
@@ -119,7 +120,7 @@ type Master struct {
 
 	ctx         context.Context
 	clocker     clock.Clock
-	initialized bool
+	initialized *atomic.Bool
 }
 
 type businessStatus struct {
@@ -195,6 +196,7 @@ func (m *Master) Workload() model.RescUnit {
 // InitImpl implements BaseJobMaster.InitImpl
 func (m *Master) InitImpl(ctx context.Context) error {
 	log.L().Info("FakeMaster: Init", zap.Any("config", m.config))
+	defer m.initialized.Store(true)
 	return m.initWorkers()
 }
 
@@ -240,14 +242,14 @@ func (m *Master) failoverOnMasterRecover(ctx context.Context) error {
 	defer m.workerListMu.Unlock()
 
 	// handle failover if needed
-	if !m.initialized {
+	if !m.initialized.Load() {
 		if !m.IsMasterReady() {
 			if m.statusRateLimiter.Allow() {
 				log.L().Info("master is not ready, wait")
 			}
 			return nil
 		}
-		m.initialized = true
+		m.initialized.Store(true)
 
 		// clean tombstone workers, add active workers
 		for _, worker := range m.GetWorkers() {
@@ -589,7 +591,7 @@ func NewFakeMaster(ctx *dcontext.Context, workerID frameModel.WorkerID, masterID
 		finishedSet:         make(map[frameModel.WorkerID]int),
 		ctx:                 ctx.Context,
 		clocker:             clock.New(),
-		initialized:         false,
+		initialized:         atomic.NewBool(false),
 	}
 	ret.setStatusCode(frameModel.WorkerStatusNormal)
 	return ret
