@@ -44,37 +44,37 @@ func NewWrappingFactory(f Factory, prefix string, labels prometheus.Labels) Fact
 // NewCounter works like the function of the same name in the prometheus package
 // except for it will wrap prefix and constLabels. Thread-safe.
 func (f *WrappingFactory) NewCounter(opts prometheus.CounterOpts) prometheus.Counter {
-	return prometheus.NewCounter(*wrapCounterOpts(f.prefix, f.constLabels, &opts))
+	return f.inner.NewCounter(*wrapCounterOpts(f.prefix, f.constLabels, &opts))
 }
 
 // NewCounterVec works like the function of the same name in the prometheus package
 // except for it will wrap prefix and constLabels. Thread-safe.
 func (f *WrappingFactory) NewCounterVec(opts prometheus.CounterOpts, labelNames []string) *prometheus.CounterVec {
-	return prometheus.NewCounterVec(*wrapCounterOpts(f.prefix, f.constLabels, &opts), labelNames)
+	return f.inner.NewCounterVec(*wrapCounterOpts(f.prefix, f.constLabels, &opts), labelNames)
 }
 
 // NewGauge works like the function of the same name in the prometheus package
 // except for it will wrap prefix and constLabels. Thread-safe.
 func (f *WrappingFactory) NewGauge(opts prometheus.GaugeOpts) prometheus.Gauge {
-	return prometheus.NewGauge(*wrapGaugeOpts(f.prefix, f.constLabels, &opts))
+	return f.inner.NewGauge(*wrapGaugeOpts(f.prefix, f.constLabels, &opts))
 }
 
 // NewGaugeVec works like the function of the same name in the prometheus package
 // except for it will wrap prefix and constLabels. Thread-safe.
 func (f *WrappingFactory) NewGaugeVec(opts prometheus.GaugeOpts, labelNames []string) *prometheus.GaugeVec {
-	return prometheus.NewGaugeVec(*wrapGaugeOpts(f.prefix, f.constLabels, &opts), labelNames)
+	return f.inner.NewGaugeVec(*wrapGaugeOpts(f.prefix, f.constLabels, &opts), labelNames)
 }
 
 // NewHistogram works like the function of the same name in the prometheus package
 // except for it will wrap prefix and constLabels. Thread-safe.
 func (f *WrappingFactory) NewHistogram(opts prometheus.HistogramOpts) prometheus.Histogram {
-	return prometheus.NewHistogram(*wrapHistogramOpts(f.prefix, f.constLabels, &opts))
+	return f.inner.NewHistogram(*wrapHistogramOpts(f.prefix, f.constLabels, &opts))
 }
 
 // NewHistogramVec works like the function of the same name in the prometheus package
 // except for it will wrap prefix and constLabels. Thread-safe.
 func (f *WrappingFactory) NewHistogramVec(opts prometheus.HistogramOpts, labelNames []string) *prometheus.HistogramVec {
-	return prometheus.NewHistogramVec(*wrapHistogramOpts(f.prefix, f.constLabels, &opts), labelNames)
+	return f.inner.NewHistogramVec(*wrapHistogramOpts(f.prefix, f.constLabels, &opts), labelNames)
 }
 
 func wrapCounterOpts(prefix string, constLabels prometheus.Labels, opts *prometheus.CounterOpts) *prometheus.CounterOpts {
