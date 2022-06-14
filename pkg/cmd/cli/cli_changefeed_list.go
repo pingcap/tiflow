@@ -64,8 +64,11 @@ func (o *listChangefeedOptions) complete(f factory.Factory) error {
 // run the `cli changefeed list` command.
 func (o *listChangefeedOptions) run(cmd *cobra.Command) error {
 	ctx := context.GetDefaultContext()
-
-	raw, err := o.apiClient.Changefeeds().List(ctx)
+	state := ""
+	if o.listAll {
+		state = "all"
+	}
+	raw, err := o.apiClient.Changefeeds().List(ctx, state)
 	if err != nil {
 		return err
 	}
