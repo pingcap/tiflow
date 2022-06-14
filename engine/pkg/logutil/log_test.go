@@ -31,7 +31,6 @@ import (
 
 func TestNewLogger(t *testing.T) {
 	testFile := filepath.Join(t.TempDir(), "test.log")
-	os.Remove(testFile)
 	lg, prop, err := log.InitLogger(&log.Config{
 		Level: "warn",
 		File: log.FileLogConfig{
