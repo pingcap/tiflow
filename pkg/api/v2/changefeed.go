@@ -69,7 +69,7 @@ func (c *changefeeds) VerifyTable(ctx context.Context,
 ) (*v2.Tables, error) {
 	result := &v2.Tables{}
 	err := c.client.Post().
-		WithURI("verify-table").
+		WithURI("verify_table").
 		WithBody(cfg).
 		Do(ctx).
 		Into(result)
@@ -78,7 +78,7 @@ func (c *changefeeds) VerifyTable(ctx context.Context,
 
 func (c *changefeeds) GetInfo(ctx context.Context, name string) (*model.ChangeFeedInfo, error) {
 	result := &model.ChangeFeedInfo{}
-	u := fmt.Sprintf("changefeeds/%s/meta-info", name)
+	u := fmt.Sprintf("changefeeds/%s/meta_info", name)
 	err := c.client.Get().
 		WithURI(u).
 		Do(ctx).

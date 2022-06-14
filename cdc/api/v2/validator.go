@@ -66,7 +66,7 @@ func verifyCreateChangefeedConfig(
 	// verify sinkURI
 	if cfg.SinkURI == "" {
 		return nil, cerror.ErrSinkURIInvalid.GenWithStackByArgs(
-			"sink-uri is empty, can't not create a changefeed without sink-uri")
+			"sink_uri is empty, can't not create a changefeed without sink_uri")
 	}
 
 	// verify changefeedID
@@ -90,7 +90,7 @@ func verifyCreateChangefeedConfig(
 		return nil, cerror.ErrChangeFeedAlreadyExists.GenWithStackByArgs(cfg.ID)
 	}
 
-	// verify start-ts
+	// verify start ts
 	if cfg.StartTs == 0 {
 		ts, logical, err := pdClient.GetTS(ctx)
 		if err != nil {
@@ -114,7 +114,7 @@ func verifyCreateChangefeedConfig(
 		return nil, err
 	}
 
-	// verify target-ts
+	// verify target ts
 	if cfg.TargetTs > 0 && cfg.TargetTs <= cfg.StartTs {
 		return nil, cerror.ErrTargetTsBeforeStartTs.GenWithStackByArgs(
 			cfg.TargetTs, cfg.StartTs)
@@ -250,7 +250,8 @@ func verifyUpdateChangefeedConfig(ctx context.Context,
 	if cfg.TargetTs != 0 {
 		if cfg.TargetTs <= newInfo.StartTs {
 			return nil, nil, cerror.ErrChangefeedUpdateRefused.GenWithStack(
-				"can not update target-ts:%d less than start-ts:%d", cfg.TargetTs, newInfo.StartTs)
+				"can not update target_ts:%d less than start_ts:%d",
+				cfg.TargetTs, newInfo.StartTs)
 		}
 		newInfo.TargetTs = cfg.TargetTs
 	}

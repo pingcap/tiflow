@@ -18,33 +18,40 @@ import (
 
 	tidbModel "github.com/pingcap/tidb/parser/model"
 	filter "github.com/pingcap/tidb/util/table-filter"
-	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 )
 
 // Tso contains timestamp get from PD
 type Tso struct {
 	Timestamp int64 `json:"timestamp"`
-	LogicTime int64 `json:"logic-time"`
+	LogicTime int64 `json:"logic_time"`
 }
 
 // Tables contains IneligibleTables and EligibleTables
 type Tables struct {
-	IneligibleTables []model.TableName `json:"ineligible-tables,omitempty"`
-	EligibleTables   []model.TableName `json:"eligible-tables,omitempty"`
+	IneligibleTables []TableName `json:"ineligible_tables,omitempty"`
+	EligibleTables   []TableName `json:"eligible_tables,omitempty"`
+}
+
+// TableName contains table information
+type TableName struct {
+	Schema      string `json:"database_name"`
+	Table       string `json:"table_name"`
+	TableID     int64  `json:"table_idid" `
+	IsPartition bool   `json:"is_partition"`
 }
 
 // VerifyTableConfig use to verify tables.
 // Only use by Open API v2.
 type VerifyTableConfig struct {
-	PDAddrs       []string `json:"pd-addrs"`
-	CAPath        string   `toml:"ca-path" json:"ca-path"`
-	CertPath      string   `toml:"cert-path" json:"cert-path"`
-	KeyPath       string   `toml:"key-path" json:"key-path"`
-	CertAllowedCN []string `toml:"cert-allowed-cn" json:"cert-allowed-cn"`
+	PDAddrs       []string `json:"pd_addrs"`
+	CAPath        string   `json:"ca_path"`
+	CertPath      string   `json:"cert_path"`
+	KeyPath       string   `json:"key_path"`
+	CertAllowedCN []string `json:"cert_allowed_cn"`
 
-	ReplicaConfig *ReplicaConfig `json:"replica-config"`
-	StartTs       uint64         `json:"start-ts"`
+	ReplicaConfig *ReplicaConfig `json:"replica_config"`
+	StartTs       uint64         `json:"start_ts"`
 }
 
 func getDefaultVerifyTableConfig() *VerifyTableConfig {
@@ -56,30 +63,30 @@ func getDefaultVerifyTableConfig() *VerifyTableConfig {
 // ChangefeedConfig use by create changefeed api
 type ChangefeedConfig struct {
 	Namespace string `json:"namespace"`
-	ID        string `json:"changefeed-id"`
-	StartTs   uint64 `json:"start-ts"`
-	TargetTs  uint64 `json:"target-ts"`
-	SinkURI   string `json:"sink-uri"`
+	ID        string `json:"changefeed_id"`
+	StartTs   uint64 `json:"start_ts"`
+	TargetTs  uint64 `json:"target_ts"`
+	SinkURI   string `json:"sink_uri"`
 
-	ReplicaConfig *ReplicaConfig `json:"replica-config"`
+	ReplicaConfig *ReplicaConfig `json:"replica_config"`
 
-	SyncPointEnabled  bool          `json:"sync-point-enabled"`
-	SyncPointInterval time.Duration `json:"sync-point-interval"`
+	SyncPointEnabled  bool          `json:"sync_point_enabled"`
+	SyncPointInterval time.Duration `json:"sync_point_interval"`
 
-	PDAddrs       []string `json:"pd-addrs"`
-	CAPath        string   `toml:"ca-path" json:"ca-path"`
-	CertPath      string   `toml:"cert-path" json:"cert-path"`
-	KeyPath       string   `toml:"key-path" json:"key-path"`
-	CertAllowedCN []string `toml:"cert-allowed-cn" json:"cert-allowed-cn"`
+	PDAddrs       []string `json:"pd_addrs"`
+	CAPath        string   `json:"ca_path"`
+	CertPath      string   `json:"cert_path"`
+	KeyPath       string   `json:"key_path"`
+	CertAllowedCN []string `json:"cert_allowed_cn"`
 }
 
 // ReplicaConfig is a duplicate of  config.ReplicaConfig
 type ReplicaConfig struct {
-	CaseSensitive         bool              `json:"case-sensitive"`
-	EnableOldValue        bool              `json:"enable-old-value"`
-	ForceReplicate        bool              `json:"force-replicate"`
-	IgnoreIneligibleTable bool              `json:"ignore-ineligible-table"`
-	CheckGCSafePoint      bool              `json:"check-gc-safe-point"`
+	CaseSensitive         bool              `json:"case_sensitive"`
+	EnableOldValue        bool              `json:"enable_old_value"`
+	ForceReplicate        bool              `json:"force_replicate"`
+	IgnoreIneligibleTable bool              `json:"ignore_ineligible_table"`
+	CheckGCSafePoint      bool              `json:"check_gc_safe_point"`
 	Filter                *FilterConfig     `json:"filter"`
 	Sink                  *SinkConfig       `json:"sink"`
 	Consistent            *ConsistentConfig `json:"consistent"`
@@ -214,41 +221,41 @@ func GetDefaultReplicaConfig() *ReplicaConfig {
 type FilterConfig struct {
 	*filter.MySQLReplicationRules
 	Rules            []string               `json:"rules"`
-	IgnoreTxnStartTs []uint64               `json:"ignore-txn-start-ts"`
-	DDLAllowlist     []tidbModel.ActionType `json:"ddl-allow-list,omitempty"`
+	IgnoreTxnStartTs []uint64               `json:"ignore_txn_start_ts"`
+	DDLAllowlist     []tidbModel.ActionType `json:"ddl_allow_list,omitempty"`
 }
 
 // SinkConfig represents sink config for a changefeed
 // This is a duplicate of config.SinkConfig
 type SinkConfig struct {
 	Protocol        string            `json:"protocol"`
-	SchemaRegistry  string            `json:"schema-registry"`
+	SchemaRegistry  string            `json:"schema_registry"`
 	DispatchRules   []*DispatchRule   `json:"dispatchers"`
-	ColumnSelectors []*ColumnSelector `json:"column-selectors"`
+	ColumnSelectors []*ColumnSelector `json:"column_selectors"`
 }
 
 // DispatchRule represents partition rule for a table
 // This is a duplicate of config.DispatchRule
 type DispatchRule struct {
-	Matcher       []string `toml:"matcher" json:"matcher"`
-	PartitionRule string   `toml:"partition" json:"partition"`
-	TopicRule     string   `toml:"topic" json:"topic"`
+	Matcher       []string `json:"matcher"`
+	PartitionRule string   `json:"partition"`
+	TopicRule     string   `json:"topic"`
 }
 
 // ColumnSelector represents a column selector for a table.
 // This is a duplicate of config.ColumnSelector
 type ColumnSelector struct {
-	Matcher []string `toml:"matcher" json:"matcher"`
-	Columns []string `toml:"columns" json:"columns"`
+	Matcher []string `json:"matcher"`
+	Columns []string `json:"columns"`
 }
 
 // ConsistentConfig represents replication consistency config for a changefeed
 // This is a duplicate of config.ConsistentConfig
 type ConsistentConfig struct {
-	Level             string `toml:"level" json:"level"`
-	MaxLogSize        int64  `toml:"max-log-size" json:"max-log-size"`
-	FlushIntervalInMs int64  `toml:"flush-interval" json:"flush-interval"`
-	Storage           string `toml:"storage" json:"storage"`
+	Level             string `json:"level"`
+	MaxLogSize        int64  `json:"max_log_size"`
+	FlushIntervalInMs int64  `json:"flush_interval"`
+	Storage           string `json:"storage"`
 }
 
 // EtcdData contains key/value pair of etcd data
@@ -259,6 +266,6 @@ type EtcdData struct {
 
 // ResolveLockReq contains request parameter to resolve lock
 type ResolveLockReq struct {
-	RegionID uint64 `json:"region-id,omitempty"`
+	RegionID uint64 `json:"region_id,omitempty"`
 	Ts       uint64 `json:"ts,omitempty"`
 }

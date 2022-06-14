@@ -322,18 +322,18 @@ def verify_table():
     assert resp.status_code == rq.codes.ok
 
     ps = resp.json()["timestamp"]
-    ls = resp.json()["logic-time"]
+    ls = resp.json()["logic_time"]
     tso = compose_tso(ps,ls)
 
-    url = BASE_URL0_V2 + "/verify-table"
+    url = BASE_URL0_V2 + "/verify_table"
     data = json.dumps({
-    "pd-addrs": [TLS_PD_ADDR],
-    "ca-path":CA_PEM_PATH, 
-    "cert-path":CLIENT_PEM_PATH, 
-    "key-path":CLIENT_KEY_PEM_PATH, 
-    "cert-allowed-cn":["client"],
-    "start-ts": tso,
-    "replica-config": {
+    "pd_addrs": [TLS_PD_ADDR],
+    "ca_path":CA_PEM_PATH,
+    "cert_path":CLIENT_PEM_PATH,
+    "key_path":CLIENT_KEY_PEM_PATH,
+    "cert_allowed_cn":["client"],
+    "start_ts": tso,
+    "replica_config": {
         "filter": {
             "rules": ["test.verify*"]
             }
@@ -342,8 +342,8 @@ def verify_table():
     headers = {"Content-Type": "application/json"}
     resp = rq.post(url, data=data, headers=headers, cert=CERT, verify=VERIFY)
     assert resp.status_code == rq.codes.ok
-    eligible_table_name = resp.json()["eligible-tables"][0]["tbl-name"]
-    ineligible_table_name = resp.json()["ineligible-tables"][0]["tbl-name"]
+    eligible_table_name = resp.json()["eligible_tables"][0]["table_name"]
+    ineligible_table_name = resp.json()["ineligible_tables"][0]["table_name"]
     assert eligible_table_name == "verify_table_eligible"
     assert ineligible_table_name == "verify_table_ineligible"
 
@@ -362,55 +362,55 @@ def create_changefeed_v2():
     url = BASE_URL1_V2+"/changefeeds"
     # create changefeed 1
     data = {
-        "changefeed-id": "changefeed-test-v2-black-hole",
-        "sink-uri": "blackhole://",
-        "replica-config":{
-            "ignore-ineligible-table": True
+        "changefeed_id": "changefeed-test-v2-black-hole-1",
+        "sink_uri": "blackhole://",
+        "replica_config":{
+            "ignore_ineligible_table": True
             },
-        "pd-addrs": [TLS_PD_ADDR],
-        "ca-path":CA_PEM_PATH, 
-        "cert-path":CLIENT_PEM_PATH, 
-        "key-path":CLIENT_KEY_PEM_PATH, 
-        "cert-allowed-cn":["client"],
+        "pd_addrs": [TLS_PD_ADDR],
+        "ca_path":CA_PEM_PATH,
+        "cert_path":CLIENT_PEM_PATH,
+        "key_path":CLIENT_KEY_PEM_PATH,
+        "cert_allowed_cn":["client"],
     }
     data = json.dumps(data)
     headers = {"Content-Type": "application/json"}
     resp = rq.post(url, data=data, headers=headers, cert=CERT, verify=VERIFY)
-    assert resp.status_code == rq.codes.ok
+    assert resp.status_code == rq.codes.created
 
     # create changefeed 2
     data = {
-        "changefeed_id": "changefeed-test-v2-black-hole",
-        "sink-uri": SINK_URI,
-        "replica-config":{
-            "ignore-ineligible-table": True,
+        "changefeed_id": "changefeed-test-v2-black-hole-2",
+        "sink_uri": SINK_URI,
+        "replica_config":{
+            "ignore_ineligible_table": True,
             "filter": {
             "rules": ["test.verify*"]
             }
         },
-        "pd-addrs": [TLS_PD_ADDR],
-        "ca-path":CA_PEM_PATH, 
-        "cert-path":CLIENT_PEM_PATH, 
-        "key-path":CLIENT_KEY_PEM_PATH, 
-        "cert-allowed-cn":["client"],
+        "pd_addrs": [TLS_PD_ADDR],
+        "ca_path":CA_PEM_PATH,
+        "cert_path":CLIENT_PEM_PATH,
+        "key_path":CLIENT_KEY_PEM_PATH,
+        "cert_allowed_cn":["client"],
     }
     data = json.dumps(data)
     headers = {"Content-Type": "application/json"}
     resp = rq.post(url, data=data, headers=headers, cert=CERT, verify=VERIFY)
-    assert resp.status_code == rq.codes.ok
+    assert resp.status_code == rq.codes.created
 
     # create changefeed fail because sink_uri is invalid
     data = json.dumps({
         "changefeed_id": "changefeed-test",
-        "sink-uri": "mysql://127.0.0.1:1111",
-        "replica-config":{
-            "ignore-ineligible-table": True
+        "sink_uri": "mysql://127.0.0.1:1111",
+        "replica_config":{
+            "ignore_ineligible_table": True
             },
-        "pd-addrs": [TLS_PD_ADDR],
-        "ca-path":CA_PEM_PATH, 
-        "cert-path":CLIENT_PEM_PATH, 
-        "key-path":CLIENT_KEY_PEM_PATH, 
-        "cert-allowed-cn":["client"],
+        "pd_addrs": [TLS_PD_ADDR],
+        "ca_path":CA_PEM_PATH,
+        "cert_path":CLIENT_PEM_PATH,
+        "key_path":CLIENT_KEY_PEM_PATH,
+        "cert_allowed_cn":["client"],
     })
     headers = {"Content-Type": "application/json"}
     resp = rq.post(url, data=data, headers=headers, cert=CERT, verify=VERIFY)

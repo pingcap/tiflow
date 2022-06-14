@@ -40,14 +40,14 @@ func RegisterOpenAPIV2Routes(router *gin.Engine, api OpenAPIV2) {
 	// changefeed apis
 	changefeedGroup := v2.Group("/changefeeds")
 	changefeedGroup.POST("", api.CreateChangefeed)
-	changefeedGroup.PUT("/:changefeed-id", api.UpdateChangefeed)
-	changefeedGroup.GET("/:changefeed-id/meta-info", api.GetChangeFeedMetaInfo)
-	v2.POST("/verify-table", api.VerifyTable)
+	changefeedGroup.PUT("/:changefeed_id", api.UpdateChangefeed)
+	changefeedGroup.GET("/:changefeed_id/meta_info", api.GetChangeFeedMetaInfo)
+	v2.POST("/verify_table", api.VerifyTable)
 
 	// unsafe apis
 	v2.GET("/unsafe/metadata", api.CDCMetaData)
-	v2.POST("/unsafe/resolve-lock", api.ResolveLock)
-	v2.DELETE("/unsafe/service-gc-safepoint", api.DeleteServiceGcSafePoint)
+	v2.POST("/unsafe/resolve_lock", api.ResolveLock)
+	v2.DELETE("/unsafe/service_gc_safepoint", api.DeleteServiceGcSafePoint)
 
 	// common APIs
 	v2.GET("/tso", api.GetTso)

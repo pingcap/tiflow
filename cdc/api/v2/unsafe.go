@@ -58,7 +58,7 @@ func (h *OpenAPIV2) ResolveLock(c *gin.Context) {
 		_ = c.Error(err)
 		return
 	}
-	c.Status(http.StatusOK)
+	c.Status(http.StatusNoContent)
 }
 
 // DeleteServiceGcSafePoint Delete CDC service GC safepoint in PD
@@ -69,5 +69,5 @@ func (h *OpenAPIV2) DeleteServiceGcSafePoint(c *gin.Context) {
 		_ = c.Error(err)
 		return
 	}
-	c.Status(http.StatusOK)
+	c.Status(http.StatusNoContent)
 }

@@ -60,7 +60,7 @@ func (c *unsafe) ResolveLock(ctx context.Context,
 	ts uint64,
 ) error {
 	return c.client.Post().
-		WithURI("unsafe/resolve-lock").
+		WithURI("unsafe/resolve_lock").
 		WithBody(&v2.ResolveLockReq{
 			RegionID: regionID,
 			Ts:       ts,
@@ -71,6 +71,6 @@ func (c *unsafe) ResolveLock(ctx context.Context,
 // DeleteServiceGcSafePoint delete service gc safe point in pd
 func (c *unsafe) DeleteServiceGcSafePoint(ctx context.Context) error {
 	return c.client.Delete().
-		WithURI("unsafe/service-gc-safepoint").
+		WithURI("unsafe/service_gc_safepoint").
 		Do(ctx).Error()
 }

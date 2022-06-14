@@ -28,7 +28,7 @@ import (
 	"go.uber.org/zap"
 )
 
-const apiOpVarChangefeedID = "changefeed-id"
+const apiOpVarChangefeedID = "changefeed_id"
 
 // CreateChangefeed handles create changefeed request,
 // it returns the changefeed's changefeedInfo that it just created
@@ -85,7 +85,7 @@ func (h *OpenAPIV2) CreateChangefeed(c *gin.Context) {
 	log.Info("Create changefeed successfully!",
 		zap.String("id", info.ID),
 		zap.String("changefeed", infoStr))
-	c.JSON(http.StatusOK, info)
+	c.JSON(http.StatusCreated, info)
 }
 
 // VerifyTable verify table, return ineligibleTables and EligibleTables.
@@ -123,7 +123,22 @@ func (h *OpenAPIV2) VerifyTable(c *gin.Context) {
 		_ = c.Error(err)
 		return
 	}
-	tables := &Tables{IneligibleTables: ineligibleTables, EligibleTables: eligibleTables}
+	toAPIModelFunc := func(tbls []model.TableName) []TableName {
+		var apiModles []TableName
+		for _, tbl := range tbls {
+			apiModles = append(apiModles, TableName{
+				Schema:      tbl.Schema,
+				Table:       tbl.Table,
+				TableID:     tbl.TableID,
+				IsPartition: tbl.IsPartition,
+			})
+		}
+		return apiModles
+	}
+	tables := &Tables{
+		IneligibleTables: toAPIModelFunc(ineligibleTables),
+		EligibleTables:   toAPIModelFunc(eligibleTables),
+	}
 	c.JSON(http.StatusOK, tables)
 }
 
