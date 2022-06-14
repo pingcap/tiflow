@@ -36,6 +36,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/uuid"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"github.com/uber-go/atomic"
 	"go.uber.org/multierr"
 )
 
@@ -741,8 +742,11 @@ func TestWriterRedoGC(t *testing.T) {
 		mockWriter.On("Close").Return(nil)
 		mockWriter.On("IsRunning").Return(false)
 
+		gcRunCounter := atomic.NewUint32(0)
 		if tt.args.isRunning {
-			mockWriter.On("GC", mock.Anything).Return(nil)
+			mockWriter.On("GC", mock.Anything).Return(nil).Run(func(args mock.Arguments) {
+				gcRunCounter.Inc()
+			})
 		}
 		writer := LogWriter{
 			rowWriter: mockWriter,
@@ -751,7 +755,15 @@ func TestWriterRedoGC(t *testing.T) {
 			cfg:       cfg,
 		}
 		go writer.runGC(context.Background())
-		time.Sleep(time.Duration(defaultGCIntervalInMs+1) * time.Millisecond)
+		if tt.args.isRunning {
+			require.Eventually(t, func() bool {
+				if gcRunCounter.Load() < uint32(2) {
+					return false
+				}
+				return true
+			}, time.Second*1, time.Millisecond,
+				"gc should be called twice, but actual gcRunCounter is: %d", gcRunCounter.Load())
+		}
 
 		writer.Close()
 		mockWriter.AssertNumberOfCalls(t, "Close", 2)
