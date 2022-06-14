@@ -1044,9 +1044,16 @@ func (s *testSyncerSuite) TestRun(c *C) {
 
 	syncer.checkpoint.(*RemoteCheckPoint).points = make(map[string]map[string]*binlogPoint)
 
+	showTableResultString := "CREATE TABLE `t_2` (\n" +
+		"  `id` int(11) NOT NULL,\n" +
+		"  `name` varchar(24) DEFAULT NULL,\n" +
+		"  PRIMARY KEY (`id`) /*T![clustered_index] NONCLUSTERED */,\n" +
+		"  KEY `index1` (`name`)\n" +
+		") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin"
+
 	mock.ExpectQuery("SHOW CREATE TABLE " + "`test_1`.`t_2`").WillReturnRows(
 		sqlmock.NewRows([]string{"Table", "Create Table"}).
-			AddRow("t_2", "CREATE TABLE `t_2` (\n `id` int(11) NOT NULL,\n `name` varchar(24) DEFAULT NULL,\n PRIMARY KEY (`id`) /*T![clustered_index] NONCLUSTERED */,\n KEY `index1` (`name`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin"))
+			AddRow("t_2", showTableResultString))
 
 	sourceSchemaFromDownstream, err := syncer.OperateSchema(ctx, &pb.OperateWorkerSchemaRequest{Op: pb.SchemaOp_GetSchema, Database: "test_1", Table: "t_1"})
 	c.Assert(err, IsNil)
