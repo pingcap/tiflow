@@ -19,7 +19,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
-	libModel "github.com/pingcap/tiflow/engine/lib/model"
+	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 )
 
@@ -35,7 +35,7 @@ func HTTPHandlerForMetricImpl(gather prometheus.Gatherer) http.Handler {
 }
 
 // NewFactory4MasterImpl return a Factory for jobmaster
-func NewFactory4MasterImpl(reg *Registry, info tenant.ProjectInfo, jobType libModel.JobType, jobID libModel.JobID) Factory {
+func NewFactory4MasterImpl(reg *Registry, info tenant.ProjectInfo, jobType frameModel.JobType, jobID frameModel.JobID) Factory {
 	return NewAutoRegisterFactory(
 		NewWrappingFactory(
 			NewPromFactory(),
@@ -52,8 +52,8 @@ func NewFactory4MasterImpl(reg *Registry, info tenant.ProjectInfo, jobType libMo
 }
 
 // NewFactory4WorkerImpl return a Factory for worker
-func NewFactory4WorkerImpl(reg *Registry, info tenant.ProjectInfo, jobType libModel.JobType, jobID libModel.JobID,
-	workerID libModel.WorkerID,
+func NewFactory4WorkerImpl(reg *Registry, info tenant.ProjectInfo, jobType frameModel.JobType, jobID frameModel.JobID,
+	workerID frameModel.WorkerID,
 ) Factory {
 	return NewAutoRegisterFactory(
 		NewWrappingFactory(

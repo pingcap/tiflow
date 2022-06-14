@@ -24,12 +24,12 @@ import (
 	resourcemeta "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	"go.uber.org/zap"
 
+	"github.com/pingcap/tiflow/engine/framework"
+	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/runtime"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/ticker"
-	"github.com/pingcap/tiflow/engine/lib"
-	libModel "github.com/pingcap/tiflow/engine/lib/model"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
 )
 
@@ -44,16 +44,16 @@ var (
 type WorkerAgent interface {
 	// for create worker
 	CreateWorker(
-		workerType lib.WorkerType,
-		config lib.WorkerConfig,
+		workerType framework.WorkerType,
+		config framework.WorkerConfig,
 		cost model.RescUnit,
 		resources ...resourcemeta.ResourceID,
-	) (libModel.WorkerID, error)
+	) (frameModel.WorkerID, error)
 }
 
 // CheckpointAgent defines an interface for checkpoint.
 type CheckpointAgent interface {
-	IsFresh(ctx context.Context, workerType libModel.WorkerType, taskCfg *metadata.Task) (bool, error)
+	IsFresh(ctx context.Context, workerType frameModel.WorkerType, taskCfg *metadata.Task) (bool, error)
 }
 
 // WorkerManager checks and schedules workers.
@@ -182,7 +182,7 @@ func (wm *WorkerManager) stopUnneededWorkers(ctx context.Context, job *metadata.
 func (wm *WorkerManager) checkAndScheduleWorkers(ctx context.Context, job *metadata.Job) error {
 	var (
 		runningWorker runtime.WorkerStatus
-		nextUnit      libModel.WorkerType
+		nextUnit      frameModel.WorkerType
 		err           error
 		recordError   error
 	)
@@ -225,22 +225,22 @@ func (wm *WorkerManager) checkAndScheduleWorkers(ctx context.Context, job *metad
 	return recordError
 }
 
-var workerSeqMap = map[string][]libModel.WorkerType{
+var workerSeqMap = map[string][]frameModel.WorkerType{
 	dmconfig.ModeAll: {
-		lib.WorkerDMDump,
-		lib.WorkerDMLoad,
-		lib.WorkerDMSync,
+		framework.WorkerDMDump,
+		framework.WorkerDMLoad,
+		framework.WorkerDMSync,
 	},
 	dmconfig.ModeFull: {
-		lib.WorkerDMDump,
-		lib.WorkerDMLoad,
+		framework.WorkerDMDump,
+		framework.WorkerDMLoad,
 	},
 	dmconfig.ModeIncrement: {
-		lib.WorkerDMSync,
+		framework.WorkerDMSync,
 	},
 }
 
-func (wm *WorkerManager) getCurrentUnit(ctx context.Context, task *metadata.Task) (libModel.WorkerType, error) {
+func (wm *WorkerManager) getCurrentUnit(ctx context.Context, task *metadata.Task) (frameModel.WorkerType, error) {
 	workerSeq, ok := workerSeqMap[task.Cfg.TaskMode]
 	if !ok {
 		log.L().Panic("Unexpected TaskMode", zap.String("TaskMode", task.Cfg.TaskMode))
@@ -259,7 +259,7 @@ func (wm *WorkerManager) getCurrentUnit(ctx context.Context, task *metadata.Task
 	return workerSeq[0], nil
 }
 
-func workerIdxInSeq(taskMode string, worker libModel.WorkerType) int {
+func workerIdxInSeq(taskMode string, worker frameModel.WorkerType) int {
 	workerSeq, ok := workerSeqMap[taskMode]
 	if !ok {
 		log.L().Panic("Unexpected TaskMode", zap.String("TaskMode", taskMode))
@@ -275,7 +275,7 @@ func workerIdxInSeq(taskMode string, worker libModel.WorkerType) int {
 	return -1
 }
 
-func nextWorkerIdxAndType(taskMode string, currWorker libModel.WorkerType) (int, libModel.WorkerType) {
+func nextWorkerIdxAndType(taskMode string, currWorker frameModel.WorkerType) (int, frameModel.WorkerType) {
 	workerSeq, ok := workerSeqMap[taskMode]
 	if !ok {
 		log.L().Panic("Unexpected TaskMode", zap.String("TaskMode", taskMode))
@@ -291,7 +291,7 @@ func nextWorkerIdxAndType(taskMode string, currWorker libModel.WorkerType) (int,
 	return idx + 1, workerSeq[idx+1]
 }
 
-func getNextUnit(task *metadata.Task, worker runtime.WorkerStatus) libModel.WorkerType {
+func getNextUnit(task *metadata.Task, worker runtime.WorkerStatus) frameModel.WorkerType {
 	if worker.Stage != runtime.WorkerFinished {
 		return worker.Unit
 	}
@@ -303,7 +303,7 @@ func getNextUnit(task *metadata.Task, worker runtime.WorkerStatus) libModel.Work
 func (wm *WorkerManager) createWorker(
 	ctx context.Context,
 	taskID string,
-	unit libModel.WorkerType,
+	unit frameModel.WorkerType,
 	taskCfg *config.TaskCfg,
 	resources ...resourcemeta.ResourceID,
 ) error {
@@ -326,7 +326,7 @@ func (wm *WorkerManager) createWorker(
 	return err
 }
 
-func (wm *WorkerManager) stopWorker(ctx context.Context, taskID string, workerID libModel.WorkerID) error {
+func (wm *WorkerManager) stopWorker(ctx context.Context, taskID string, workerID frameModel.WorkerID) error {
 	log.L().Info("start to stop worker", zap.String("task_id", taskID), zap.String("worker_id", workerID))
 
 	msg := &dmpkg.StopWorkerMessage{
@@ -346,7 +346,7 @@ func (wm *WorkerManager) stopWorker(ctx context.Context, taskID string, workerID
 	return nil
 }
 
-func (wm *WorkerManager) removeWorkerStatusByWorkerID(workerID libModel.WorkerID) {
+func (wm *WorkerManager) removeWorkerStatusByWorkerID(workerID frameModel.WorkerID) {
 	wm.workerStatusMap.Range(func(key, value interface{}) bool {
 		if value.(runtime.WorkerStatus).ID == workerID {
 			wm.workerStatusMap.Delete(key)

@@ -46,7 +46,7 @@ func TestReplicaConfigMarshal(t *testing.T) {
 	require.Nil(t, err)
 	require.Equal(t, testCfgTestReplicaConfigMarshal1, mustIndentJSON(t, b))
 	conf2 := new(ReplicaConfig)
-	err = conf2.Unmarshal([]byte(testCfgTestReplicaConfigMarshal2))
+	err = conf2.UnmarshalJSON([]byte(testCfgTestReplicaConfigMarshal2))
 	require.Nil(t, err)
 	require.Equal(t, conf, conf2)
 }
@@ -67,7 +67,7 @@ func TestReplicaConfigClone(t *testing.T) {
 func TestReplicaConfigOutDated(t *testing.T) {
 	t.Parallel()
 	conf2 := new(ReplicaConfig)
-	err := conf2.Unmarshal([]byte(testCfgTestReplicaConfigOutDated))
+	err := conf2.UnmarshalJSON([]byte(testCfgTestReplicaConfigOutDated))
 	require.Nil(t, err)
 
 	conf := GetDefaultReplicaConfig()
