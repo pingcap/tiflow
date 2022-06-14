@@ -751,7 +751,7 @@ func TestWriterRedoGC(t *testing.T) {
 			cfg:       cfg,
 		}
 		go writer.runGC(context.Background())
-		time.Sleep(time.Duration(defaultGCIntervalInMs+1) * time.Millisecond)
+		time.Sleep(time.Duration(defaultGCIntervalInMs+10) * time.Millisecond)
 
 		writer.Close()
 		mockWriter.AssertNumberOfCalls(t, "Close", 2)
