@@ -24,6 +24,9 @@ import (
 	"github.com/pingcap/tidb/br/pkg/lightning"
 	"github.com/pingcap/tidb/br/pkg/lightning/checkpoints"
 	lcfg "github.com/pingcap/tidb/br/pkg/lightning/config"
+	promutil2 "github.com/pingcap/tidb/util/promutil"
+	"github.com/pingcap/tiflow/engine/pkg/promutil"
+	"github.com/prometheus/client_golang/prometheus"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
@@ -202,11 +205,27 @@ func (l *LightningLoader) runLightning(ctx context.Context, cfg *lcfg.Config) er
 	}
 
 	var opts []lightning.Option
+	if l.cfg.MetricsFactory != nil {
+		opts = append(opts,
+			lightning.WithPromFactory(l.cfg.MetricsFactory),
+			lightning.WithPromRegistry(promutil2.NewNoopRegistry()))
+	} else {
+		opts = append(opts,
+			lightning.WithPromFactory(
+				promutil.NewWrappingFactory(
+					promutil2.NewDefaultFactory(),
+					"",
+					prometheus.Labels{"task": l.cfg.Name, "source_id": l.cfg.SourceID},
+				),
+			),
+			lightning.WithPromRegistry(prometheus.DefaultGatherer.(prometheus.Registerer)))
+	}
 	if l.cfg.ExtStorage != nil {
 		opts = append(opts,
 			lightning.WithDumpFileStorage(l.cfg.ExtStorage),
 			lightning.WithCheckpointStorage(l.cfg.ExtStorage, lightningCheckpointFileName))
 	}
+
 	err = l.core.RunOnceWithOptions(taskCtx, cfg, opts...)
 	failpoint.Inject("LoadDataSlowDown", nil)
 	failpoint.Inject("LoadDataSlowDownByTask", func(val failpoint.Value) {
