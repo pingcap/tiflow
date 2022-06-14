@@ -85,7 +85,7 @@ func (h *OpenAPIV2) CreateChangefeed(c *gin.Context) {
 	log.Info("Create changefeed successfully!",
 		zap.String("id", info.ID),
 		zap.String("changefeed", infoStr))
-	c.JSON(http.StatusOK, info)
+	c.JSON(http.StatusCreated, info)
 }
 
 // VerifyTable verify table, return ineligibleTables and EligibleTables.
