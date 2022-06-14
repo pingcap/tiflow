@@ -362,7 +362,7 @@ def create_changefeed_v2():
     url = BASE_URL1_V2+"/changefeeds"
     # create changefeed 1
     data = {
-        "changefeed_id": "changefeed-test-v2-black-hole",
+        "changefeed_id": "changefeed-test-v2-black-hole-1",
         "sink_uri": "blackhole://",
         "replica_config":{
             "ignore_ineligible_table": True
@@ -380,7 +380,7 @@ def create_changefeed_v2():
 
     # create changefeed 2
     data = {
-        "changefeed_id": "changefeed-test-v2-black-hole",
+        "changefeed_id": "changefeed-test-v2-black-hole-2",
         "sink_uri": SINK_URI,
         "replica_config":{
             "ignore_ineligible_table": True,
