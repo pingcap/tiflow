@@ -34,20 +34,190 @@ func newBaseAgent4Test() *agent {
 			captureID: "owner-1",
 			revision:  schedulepb.OwnerRevision{Revision: 1},
 		},
-		version:      "agent-version-1",
-		epoch:        schedulepb.ProcessorEpoch{Epoch: "agent-epoch-1"},
-		captureID:    "agent-1",
-		runningTasks: make(map[model.TableID]*dispatchTableTask),
+		version:   "agent-version-1",
+		epoch:     schedulepb.ProcessorEpoch{Epoch: "agent-epoch-1"},
+		captureID: "agent-1",
 	}
 }
 
-func TestAgentCollectTableStatus(t *testing.T) {
+func TestAgentHandleMessageDispatchTable(t *testing.T) {
 	t.Parallel()
 
 	a := newBaseAgent4Test()
-
 	mockTableExecutor := newMockTableExecutor()
-	a.tableExec = mockTableExecutor
+	a.tableM = newTableManager(mockTableExecutor)
+
+	removeTableRequest := &schedulepb.DispatchTableRequest{
+		Request: &schedulepb.DispatchTableRequest_RemoveTable{
+			RemoveTable: &schedulepb.RemoveTableRequest{
+				TableID: 1,
+			},
+		},
+	}
+	processorEpoch := schedulepb.ProcessorEpoch{Epoch: "agent-epoch-1"}
+
+	// remove table not exist
+	ctx := context.Background()
+	a.handleMessageDispatchTableRequest(removeTableRequest, processorEpoch)
+	responses, err := a.tableM.poll(ctx, a.stopping)
+	require.NoError(t, err)
+	require.Len(t, responses, 0)
+
+	addTableRequest := &schedulepb.DispatchTableRequest{
+		Request: &schedulepb.DispatchTableRequest_AddTable{
+			AddTable: &schedulepb.AddTableRequest{
+				TableID:     1,
+				IsSecondary: true,
+			},
+		},
+	}
+
+	// stopping, addTableRequest should be ignored.
+	a.stopping = true
+	a.handleMessageDispatchTableRequest(addTableRequest, processorEpoch)
+	responses, err = a.tableM.poll(ctx, a.stopping)
+	require.NoError(t, err)
+	require.Len(t, responses, 0)
+
+	a.stopping = false
+
+	mockTableExecutor.On("AddTable", mock.Anything, mock.Anything,
+		mock.Anything, mock.Anything).Return(false, nil)
+	a.handleMessageDispatchTableRequest(addTableRequest, processorEpoch)
+	responses, err = a.tableM.poll(ctx, a.stopping)
+	require.NoError(t, err)
+	require.Len(t, responses, 1)
+
+	addTableResponse, ok := responses[0].DispatchTableResponse.
+		Response.(*schedulepb.DispatchTableResponse_AddTable)
+	require.True(t, ok)
+	require.Equal(t, model.TableID(1), addTableResponse.AddTable.Status.TableID)
+	require.Equal(t, schedulepb.TableStateAbsent, addTableResponse.AddTable.Status.State)
+	require.NotContains(t, a.tableM.tables, model.TableID(1))
+
+	mockTableExecutor.ExpectedCalls = nil
+	mockTableExecutor.On("AddTable", mock.Anything, mock.Anything,
+		mock.Anything, mock.Anything).Return(true, nil)
+	mockTableExecutor.On("IsAddTableFinished", mock.Anything,
+		mock.Anything, mock.Anything).Return(false, nil)
+	a.handleMessageDispatchTableRequest(addTableRequest, processorEpoch)
+	_, err = a.tableM.poll(ctx, a.stopping)
+	require.NoError(t, err)
+
+	mockTableExecutor.ExpectedCalls = mockTableExecutor.ExpectedCalls[:1]
+	mockTableExecutor.On("IsAddTableFinished", mock.Anything,
+		mock.Anything, mock.Anything).Return(true, nil)
+	a.handleMessageDispatchTableRequest(addTableRequest, processorEpoch)
+	responses, err = a.tableM.poll(ctx, a.stopping)
+	require.NoError(t, err)
+	require.Len(t, responses, 1)
+
+	addTableResponse, ok = responses[0].DispatchTableResponse.
+		Response.(*schedulepb.DispatchTableResponse_AddTable)
+	require.True(t, ok)
+	require.Equal(t, model.TableID(1), addTableResponse.AddTable.Status.TableID)
+	require.Equal(t, schedulepb.TableStatePrepared, addTableResponse.AddTable.Status.State)
+	require.Contains(t, a.tableM.tables, model.TableID(1))
+
+	// let the prepared table become replicating, by set `IsSecondary` to false.
+	addTableRequest.Request.(*schedulepb.DispatchTableRequest_AddTable).
+		AddTable.IsSecondary = false
+
+	// only mock `IsAddTableFinished`, since `AddTable` by start a prepared table always success.
+	mockTableExecutor.ExpectedCalls = nil
+	mockTableExecutor.On("IsAddTableFinished", mock.Anything,
+		mock.Anything, mock.Anything).Return(false, nil)
+
+	a.handleMessageDispatchTableRequest(addTableRequest, processorEpoch)
+	responses, err = a.tableM.poll(ctx, a.stopping)
+	require.NoError(t, err)
+	require.Len(t, responses, 1)
+
+	addTableResponse, ok = responses[0].DispatchTableResponse.
+		Response.(*schedulepb.DispatchTableResponse_AddTable)
+	require.True(t, ok)
+	require.Equal(t, model.TableID(1), addTableResponse.AddTable.Status.TableID)
+	require.Equal(t, schedulepb.TableStatePrepared, addTableResponse.AddTable.Status.State)
+	require.Contains(t, a.tableM.tables, model.TableID(1))
+
+	mockTableExecutor.ExpectedCalls = nil
+	mockTableExecutor.On("IsAddTableFinished", mock.Anything,
+		mock.Anything, mock.Anything).Return(true, nil)
+	a.handleMessageDispatchTableRequest(addTableRequest, processorEpoch)
+	responses, err = a.tableM.poll(ctx, a.stopping)
+	require.NoError(t, err)
+	require.Len(t, responses, 1)
+
+	addTableResponse, ok = responses[0].DispatchTableResponse.
+		Response.(*schedulepb.DispatchTableResponse_AddTable)
+	require.True(t, ok)
+	require.Equal(t, model.TableID(1), addTableResponse.AddTable.Status.TableID)
+	require.Equal(t, schedulepb.TableStateReplicating, addTableResponse.AddTable.Status.State)
+	require.Contains(t, a.tableM.tables, model.TableID(1))
+
+	mockTableExecutor.On("RemoveTable", mock.Anything, mock.Anything).
+		Return(false)
+	// remove table in the replicating state failed, should still in replicating.
+	a.handleMessageDispatchTableRequest(removeTableRequest, processorEpoch)
+	responses, err = a.tableM.poll(ctx, a.stopping)
+	require.NoError(t, err)
+	require.Len(t, responses, 1)
+	removeTableResponse, ok := responses[0].DispatchTableResponse.
+		Response.(*schedulepb.DispatchTableResponse_RemoveTable)
+	require.True(t, ok)
+	require.Equal(t, model.TableID(1), removeTableResponse.RemoveTable.Status.TableID)
+	require.Equal(t, schedulepb.TableStateStopping, removeTableResponse.RemoveTable.Status.State)
+	require.Contains(t, a.tableM.tables, model.TableID(1))
+
+	mockTableExecutor.ExpectedCalls = nil
+	mockTableExecutor.On("RemoveTable", mock.Anything, mock.Anything).
+		Return(true)
+	mockTableExecutor.On("IsRemoveTableFinished", mock.Anything, mock.Anything).
+		Return(3, false)
+	// remove table in the replicating state failed, should still in replicating.
+	a.handleMessageDispatchTableRequest(removeTableRequest, processorEpoch)
+	responses, err = a.tableM.poll(ctx, a.stopping)
+	require.NoError(t, err)
+	require.Len(t, responses, 1)
+	removeTableResponse, ok = responses[0].DispatchTableResponse.
+		Response.(*schedulepb.DispatchTableResponse_RemoveTable)
+	require.True(t, ok)
+	require.Equal(t, model.TableID(1), removeTableResponse.RemoveTable.Status.TableID)
+	require.Equal(t, schedulepb.TableStateStopping, removeTableResponse.RemoveTable.Status.State)
+
+	mockTableExecutor.ExpectedCalls = mockTableExecutor.ExpectedCalls[:1]
+	mockTableExecutor.On("IsRemoveTableFinished", mock.Anything, mock.Anything).
+		Return(3, true)
+	// remove table in the replicating state success, should in stopped
+	a.handleMessageDispatchTableRequest(removeTableRequest, processorEpoch)
+	responses, err = a.tableM.poll(ctx, a.stopping)
+	require.NoError(t, err)
+	require.Len(t, responses, 1)
+	removeTableResponse, ok = responses[0].DispatchTableResponse.
+		Response.(*schedulepb.DispatchTableResponse_RemoveTable)
+	require.True(t, ok)
+	require.Equal(t, model.TableID(1), removeTableResponse.RemoveTable.Status.TableID)
+	require.Equal(t, schedulepb.TableStateStopped, removeTableResponse.RemoveTable.Status.State)
+	require.Equal(t, model.Ts(3), removeTableResponse.RemoveTable.Checkpoint.CheckpointTs)
+	require.NotContains(t, a.tableM.tables, model.TableID(1))
+}
+
+func TestAgentHandleMessageHeartbeat(t *testing.T) {
+	t.Parallel()
+
+	a := newBaseAgent4Test()
+	mockTableExecutor := newMockTableExecutor()
+	a.tableM = newTableManager(mockTableExecutor)
+
+	for i := 0; i < 5; i++ {
+		a.tableM.addTable(model.TableID(i))
+	}
+
+	a.tableM.tables[model.TableID(0)].state = schedulepb.TableStatePreparing
+	a.tableM.tables[model.TableID(1)].state = schedulepb.TableStatePrepared
+	a.tableM.tables[model.TableID(2)].state = schedulepb.TableStateReplicating
+	a.tableM.tables[model.TableID(3)].state = schedulepb.TableStateStopping
+	a.tableM.tables[model.TableID(4)].state = schedulepb.TableStateStopped
 
 	mockTableExecutor.tables[model.TableID(0)] = pipeline.TableStatePreparing
 	mockTableExecutor.tables[model.TableID(1)] = pipeline.TableStatePrepared
@@ -55,16 +225,28 @@ func TestAgentCollectTableStatus(t *testing.T) {
 	mockTableExecutor.tables[model.TableID(3)] = pipeline.TableStateStopping
 	mockTableExecutor.tables[model.TableID(4)] = pipeline.TableStateStopped
 
-	expected := make([]model.TableID, 0, 10)
-	for i := 0; i < 10; i++ {
-		expected = append(expected, model.TableID(i))
+	heartbeat := &schedulepb.Message{
+		Header: &schedulepb.Message_Header{
+			Version:       "version-1",
+			OwnerRevision: schedulepb.OwnerRevision{Revision: 1},
+		},
+		MsgType: schedulepb.MsgHeartbeat,
+		From:    "owner-1",
+		Heartbeat: &schedulepb.Heartbeat{
+			TableIDs: []model.TableID{0, 1, 2, 3, 4, 5, 6, 7, 8, 9},
+		},
 	}
 
-	result := a.collectTableStatus(expected)
+	response := a.handleMessage([]*schedulepb.Message{heartbeat})
+	require.Len(t, response, 1)
+	require.False(t, response[0].GetHeartbeatResponse().IsStopping)
+
+	result := response[0].GetHeartbeatResponse().Tables
 	require.Len(t, result, 10)
 	sort.Slice(result, func(i, j int) bool {
 		return result[i].TableID < result[j].TableID
 	})
+
 	require.Equal(t, schedulepb.TableStatePreparing, result[0].State)
 	require.Equal(t, schedulepb.TableStatePrepared, result[1].State)
 	require.Equal(t, schedulepb.TableStateReplicating, result[2].State)
@@ -74,43 +256,82 @@ func TestAgentCollectTableStatus(t *testing.T) {
 		require.Equal(t, schedulepb.TableStateAbsent, result[i].State)
 	}
 
-	a.runningTasks[model.TableID(0)] = &dispatchTableTask{IsRemove: true}
-	status := a.newTableStatus(model.TableID(0))
-	require.Equal(t, schedulepb.TableStateStopping, status.State)
+	a.tableM.tables[model.TableID(1)].task = &dispatchTableTask{IsRemove: true}
+	response = a.handleMessage([]*schedulepb.Message{heartbeat})
+	result = response[0].GetHeartbeatResponse().Tables
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].TableID < result[j].TableID
+	})
+	require.Equal(t, schedulepb.TableStateStopping, result[1].State)
 
-	a.runningTasks[model.TableID(10)] = &dispatchTableTask{IsRemove: true}
-	status = a.newTableStatus(model.TableID(10))
-	require.Equal(t, schedulepb.TableStateAbsent, status.State)
+	a.stopping = true
+	response = a.handleMessage([]*schedulepb.Message{heartbeat})
+	require.Len(t, response, 1)
+	require.True(t, response[0].GetHeartbeatResponse().IsStopping)
 }
 
-func TestAgentHandleDispatchTableTask(t *testing.T) {
+func TestAgentPermuteMessages(t *testing.T) {
 	t.Parallel()
 
 	a := newBaseAgent4Test()
-
 	mockTableExecutor := newMockTableExecutor()
-	a.tableExec = mockTableExecutor
+	a.tableM = newTableManager(mockTableExecutor)
 
-	tableID := model.TableID(1)
-	epoch := schedulepb.ProcessorEpoch{}
-	// all possible tasks can be received, and should be correctly handled no matter table's status
-	var tasks []*dispatchTableTask
-	for _, isRemove := range []bool{true, false} {
-		for _, isPrepare := range []bool{true, false} {
-			if isPrepare && isRemove {
-				continue
-			}
-			task := &dispatchTableTask{
-				TableID:   tableID,
-				StartTs:   0,
-				IsRemove:  isRemove,
-				IsPrepare: isPrepare,
-				Epoch:     epoch,
-				status:    dispatchTableTaskReceived,
-			}
-			tasks = append(tasks, task)
-		}
+	trans := newMockTrans()
+	a.trans = trans
+
+	// all possible inbound Messages can be received
+	var inboundMessages []*schedulepb.Message
+	inboundMessages = append(inboundMessages, &schedulepb.Message{
+		Header: &schedulepb.Message_Header{
+			Version:        a.ownerInfo.version,
+			OwnerRevision:  a.ownerInfo.revision,
+			ProcessorEpoch: a.epoch,
+		},
+		MsgType: schedulepb.MsgDispatchTableRequest,
+		From:    a.ownerInfo.captureID,
+		To:      a.captureID,
+		DispatchTableRequest: &schedulepb.DispatchTableRequest{
+			Request: &schedulepb.DispatchTableRequest_RemoveTable{
+				RemoveTable: &schedulepb.RemoveTableRequest{
+					TableID: 1,
+				},
+			},
+		},
+	})
+	for _, isSecondary := range []bool{true, false} {
+		inboundMessages = append(inboundMessages, &schedulepb.Message{
+			Header: &schedulepb.Message_Header{
+				Version:        a.ownerInfo.version,
+				OwnerRevision:  a.ownerInfo.revision,
+				ProcessorEpoch: a.epoch,
+			},
+			MsgType: schedulepb.MsgDispatchTableRequest,
+			From:    a.ownerInfo.captureID,
+			To:      a.captureID,
+			DispatchTableRequest: &schedulepb.DispatchTableRequest{
+				Request: &schedulepb.DispatchTableRequest_AddTable{
+					AddTable: &schedulepb.AddTableRequest{
+						TableID:     1,
+						IsSecondary: isSecondary,
+					},
+				},
+			},
+		})
 	}
+
+	inboundMessages = append(inboundMessages, &schedulepb.Message{
+		Header: &schedulepb.Message_Header{
+			Version:        "version-1",
+			OwnerRevision:  schedulepb.OwnerRevision{Revision: 1},
+			ProcessorEpoch: a.epoch,
+		},
+		MsgType: schedulepb.MsgHeartbeat,
+		From:    "owner-1",
+		Heartbeat: &schedulepb.Heartbeat{
+			TableIDs: []model.TableID{1},
+		},
+	})
 
 	states := []schedulepb.TableState{
 		schedulepb.TableStateAbsent,
@@ -121,8 +342,9 @@ func TestAgentHandleDispatchTableTask(t *testing.T) {
 		schedulepb.TableStateStopped,
 	}
 	ctx := context.Background()
+	tableID := model.TableID(1)
 	for _, state := range states {
-		iterPermutation([]int{0, 1, 2}, func(sequence []int) {
+		iterPermutation([]int{0, 1, 2, 3}, func(sequence []int) {
 			t.Logf("test %v, %v", state, sequence)
 			switch state {
 			case schedulepb.TableStatePreparing:
@@ -138,146 +360,81 @@ func TestAgentHandleDispatchTableTask(t *testing.T) {
 			case schedulepb.TableStateAbsent:
 			default:
 			}
+
 			for _, idx := range sequence {
-				task := tasks[idx]
-				task.status = dispatchTableTaskReceived
-				a.runningTasks[task.TableID] = task
+				message := inboundMessages[idx]
+				if message.MsgType == schedulepb.MsgHeartbeat {
+					trans.recvBuffer = append(trans.recvBuffer, message)
+					err := a.Tick(ctx)
+					require.NoError(t, err)
+					require.Len(t, trans.sendBuffer, 1)
+					heartbeatResponse := trans.sendBuffer[0].HeartbeatResponse
+					trans.sendBuffer = trans.sendBuffer[:0]
+					require.Equal(t, a.stopping, heartbeatResponse.IsStopping)
 
-				if task.IsRemove {
+					continue
+				}
+
+				switch message.DispatchTableRequest.Request.(type) {
+				case *schedulepb.DispatchTableRequest_AddTable:
 					for _, ok := range []bool{false, true} {
-						mockTableExecutor.On("RemoveTable", mock.Anything, mock.Anything).Return(ok)
+						mockTableExecutor.On("AddTable", mock.Anything, mock.Anything,
+							mock.Anything, mock.Anything).Return(ok, nil)
 						for _, ok1 := range []bool{false, true} {
-							mockTableExecutor.On("IsRemoveTableFinished", mock.Anything, mock.Anything).Return(0, ok1)
+							mockTableExecutor.On("IsAddTableFinished", mock.Anything,
+								mock.Anything, mock.Anything).Return(ok1, nil)
 
-							response, err := a.handleDispatchTableTasks(ctx)
+							trans.recvBuffer = append(trans.recvBuffer, message)
+							err := a.Tick(ctx)
 							require.NoError(t, err)
-							require.NotNil(t, response)
-							if ok && ok1 && len(response) != 0 {
-								resp, ok := response[0].DispatchTableResponse.Response.(*schedulepb.DispatchTableResponse_RemoveTable)
-								require.True(t, ok)
-								require.Equal(t, schedulepb.TableStateStopped, resp.RemoveTable.Status.State)
-							}
+							trans.sendBuffer = trans.sendBuffer[:0]
+
 							mockTableExecutor.ExpectedCalls = mockTableExecutor.ExpectedCalls[:1]
 						}
 						mockTableExecutor.ExpectedCalls = nil
 					}
-				} else {
+				case *schedulepb.DispatchTableRequest_RemoveTable:
 					for _, ok := range []bool{false, true} {
-						mockTableExecutor.On("AddTable", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(ok, nil)
+						mockTableExecutor.On("RemoveTable", mock.Anything,
+							mock.Anything).Return(ok)
 						for _, ok1 := range []bool{false, true} {
-							mockTableExecutor.On("IsAddTableFinished", mock.Anything, mock.Anything, mock.Anything).Return(ok1, nil)
-
-							response, err := a.handleDispatchTableTasks(ctx)
+							trans.recvBuffer = append(trans.recvBuffer, message)
+							mockTableExecutor.On("IsRemoveTableFinished",
+								mock.Anything, mock.Anything).Return(0, ok1)
+							err := a.Tick(ctx)
 							require.NoError(t, err)
-							require.NotNil(t, response)
-							if ok && ok1 && len(response) != 0 {
-								resp, ok := response[0].DispatchTableResponse.Response.(*schedulepb.DispatchTableResponse_AddTable)
-								require.True(t, ok)
-								if task.IsPrepare {
-									require.Equal(t, schedulepb.TableStatePrepared, resp.AddTable.Status.State)
-								} else {
-									require.Equal(t, schedulepb.TableStateReplicating, resp.AddTable.Status.State)
+							if len(trans.sendBuffer) != 0 {
+								require.Len(t, trans.sendBuffer, 1)
+								response, yes := trans.sendBuffer[0].DispatchTableResponse.
+									Response.(*schedulepb.DispatchTableResponse_RemoveTable)
+								trans.sendBuffer = trans.sendBuffer[:0]
+								require.True(t, yes)
+								expected := schedulepb.TableStateStopping
+								if ok && ok1 {
+									expected = schedulepb.TableStateStopped
 								}
+								require.Equal(t, expected, response.RemoveTable.Status.State)
+								mockTableExecutor.ExpectedCalls = mockTableExecutor.
+									ExpectedCalls[:1]
 							}
-							mockTableExecutor.ExpectedCalls = mockTableExecutor.ExpectedCalls[:1]
 						}
 						mockTableExecutor.ExpectedCalls = nil
 					}
+				default:
+					panic("unknown request")
 				}
 			}
 		})
 	}
 }
 
-func TestAgentHandleMessageStopping(t *testing.T) {
-	t.Parallel()
-
-	a := newBaseAgent4Test()
-	a.tableExec = newMockTableExecutor()
-	a.stopping = true
-
-	heartbeat := &schedulepb.Message{
-		Header: &schedulepb.Message_Header{
-			Version:       "version-1",
-			OwnerRevision: schedulepb.OwnerRevision{Revision: 1},
-		},
-		MsgType:   schedulepb.MsgHeartbeat,
-		From:      "owner-1",
-		Heartbeat: &schedulepb.Heartbeat{},
-	}
-	response := a.handleMessage([]*schedulepb.Message{heartbeat})
-	require.Len(t, response, 1)
-	require.NotNil(t, response[0].HeartbeatResponse)
-	// agent is stopping, let coordinator know this.
-	require.True(t, response[0].HeartbeatResponse.IsStopping)
-
-	addTableRequest := &schedulepb.Message{
-		Header: &schedulepb.Message_Header{
-			Version:        "version-1",
-			OwnerRevision:  schedulepb.OwnerRevision{Revision: 1},
-			ProcessorEpoch: schedulepb.ProcessorEpoch{Epoch: "agent-epoch-1"},
-		},
-		MsgType: schedulepb.MsgDispatchTableRequest,
-		From:    "owner-1",
-		DispatchTableRequest: &schedulepb.DispatchTableRequest{
-			Request: &schedulepb.DispatchTableRequest_AddTable{
-				AddTable: &schedulepb.AddTableRequest{
-					TableID:     1,
-					IsSecondary: true,
-				},
-			},
-		},
-	}
-	// add table request should not be handled, so the running task count is 0.
-	response = a.handleMessage([]*schedulepb.Message{addTableRequest})
-	require.Len(t, response, 0)
-	require.Len(t, a.runningTasks, 0)
-
-	// mock agent have running task before stopping but processed yet.
-	a.runningTasks[model.TableID(1)] = &dispatchTableTask{
-		TableID:   model.TableID(1),
-		StartTs:   0,
-		IsRemove:  false,
-		IsPrepare: false,
-		Epoch:     schedulepb.ProcessorEpoch{},
-		status:    dispatchTableTaskReceived,
-	}
-
-	result, err := a.handleDispatchTableTasks(context.Background())
-	require.NoError(t, err)
-	require.Len(t, a.runningTasks, 0)
-	require.Len(t, result, 1)
-
-	addTableResponse, ok := result[0].DispatchTableResponse.
-		Response.(*schedulepb.DispatchTableResponse_AddTable)
-	require.True(t, ok)
-	require.True(t, addTableResponse.AddTable.Reject)
-}
-
-func TestAgentHandleRemoveTableRequest(t *testing.T) {
-	t.Parallel()
-
-	a := newBaseAgent4Test()
-	a.tableExec = newMockTableExecutor()
-
-	// remove a table not exist, should not generate the task.
-	removeTableRequest := &schedulepb.DispatchTableRequest{
-		Request: &schedulepb.DispatchTableRequest_RemoveTable{
-			RemoveTable: &schedulepb.RemoveTableRequest{
-				TableID: 2,
-			},
-		},
-	}
-
-	a.handleMessageDispatchTableRequest(removeTableRequest, a.epoch)
-	require.Len(t, a.runningTasks, 0)
-}
-
 func TestAgentHandleMessage(t *testing.T) {
 	t.Parallel()
 
+	mockTableExecutor := newMockTableExecutor()
+	tableM := newTableManager(mockTableExecutor)
 	a := newBaseAgent4Test()
-	a.tableExec = newMockTableExecutor()
+	a.tableM = tableM
 
 	heartbeat := &schedulepb.Message{
 		Header: &schedulepb.Message_Header{
@@ -288,13 +445,10 @@ func TestAgentHandleMessage(t *testing.T) {
 		From:      a.ownerInfo.captureID,
 		Heartbeat: &schedulepb.Heartbeat{},
 	}
+
 	// handle the first heartbeat, from the known owner.
 	response := a.handleMessage([]*schedulepb.Message{heartbeat})
 	require.Len(t, response, 1)
-	require.NotNil(t, response[0].HeartbeatResponse)
-	require.Equal(t, response[0].Header.Version, a.version)
-	require.Equal(t, response[0].Header.OwnerRevision, a.ownerInfo.revision)
-	require.Equal(t, response[0].Header.ProcessorEpoch, a.epoch)
 
 	addTableRequest := &schedulepb.Message{
 		Header: &schedulepb.Message_Header{
@@ -316,19 +470,17 @@ func TestAgentHandleMessage(t *testing.T) {
 		},
 	}
 	// wrong epoch, ignored
-	response = a.handleMessage([]*schedulepb.Message{addTableRequest})
-	require.Len(t, a.runningTasks, 0)
-	require.Len(t, response, 0)
+	responses := a.handleMessage([]*schedulepb.Message{addTableRequest})
+	require.NotContains(t, tableM.tables, model.TableID(1))
+	require.Len(t, responses, 0)
 
 	// correct epoch, processing.
 	addTableRequest.Header.ProcessorEpoch = a.epoch
-	response = a.handleMessage([]*schedulepb.Message{addTableRequest})
-	require.Len(t, a.runningTasks, 1)
-	require.Len(t, response, 0)
+	_ = a.handleMessage([]*schedulepb.Message{addTableRequest})
+	require.Contains(t, tableM.tables, model.TableID(1))
 
 	heartbeat.Header.OwnerRevision.Revision = 2
 	response = a.handleMessage([]*schedulepb.Message{heartbeat})
-	require.Equal(t, len(a.runningTasks), 1)
 	require.Len(t, response, 1)
 
 	// this should never happen in real world
@@ -374,7 +526,7 @@ func TestAgentTick(t *testing.T) {
 	trans := newMockTrans()
 	mockTableExecutor := newMockTableExecutor()
 	a.trans = trans
-	a.tableExec = mockTableExecutor
+	a.tableM = newTableManager(mockTableExecutor)
 
 	heartbeat := &schedulepb.Message{
 		Header: &schedulepb.Message_Header{
@@ -389,10 +541,10 @@ func TestAgentTick(t *testing.T) {
 	}
 
 	// receive first heartbeat from the owner
-	messages := []*schedulepb.Message{heartbeat}
-	trans.recvBuffer = append(trans.recvBuffer, messages...)
+	trans.recvBuffer = append(trans.recvBuffer, heartbeat)
 
-	require.NoError(t, a.Tick(context.Background()))
+	ctx := context.Background()
+	require.NoError(t, a.Tick(ctx))
 	require.Len(t, trans.sendBuffer, 1)
 	heartbeatResponse := trans.sendBuffer[0]
 	trans.sendBuffer = trans.sendBuffer[:0]
@@ -436,6 +588,7 @@ func TestAgentTick(t *testing.T) {
 			},
 		},
 	}
+	var messages []*schedulepb.Message
 	messages = append(messages, addTableRequest)
 	messages = append(messages, removeTableRequest)
 	trans.recvBuffer = append(trans.recvBuffer, messages...)
@@ -444,21 +597,16 @@ func TestAgentTick(t *testing.T) {
 		mock.Anything, mock.Anything, mock.Anything).Return(true, nil)
 	mockTableExecutor.On("IsAddTableFinished", mock.Anything,
 		mock.Anything, mock.Anything).Return(false, nil)
-	require.NoError(t, a.Tick(context.Background()))
-	responses := trans.sendBuffer[:len(trans.sendBuffer)]
+	require.NoError(t, a.Tick(ctx))
 	trans.sendBuffer = trans.sendBuffer[:0]
-	require.Equal(t, schedulepb.MsgHeartbeatResponse, responses[0].MsgType)
 
-	messages = messages[:0]
-	// this one should be ignored, since the previous one with the same tableID is not finished yet.
-	messages = append(messages, addTableRequest)
-	trans.recvBuffer = append(trans.recvBuffer, messages...)
+	trans.recvBuffer = append(trans.recvBuffer, addTableRequest)
 
 	mockTableExecutor.ExpectedCalls = mockTableExecutor.ExpectedCalls[:1]
 	mockTableExecutor.On("IsAddTableFinished", mock.Anything,
 		mock.Anything, mock.Anything).Return(true, nil)
-	require.NoError(t, a.Tick(context.Background()))
-	responses = trans.sendBuffer[:len(trans.sendBuffer)]
+	require.NoError(t, a.Tick(ctx))
+	responses := trans.sendBuffer[:len(trans.sendBuffer)]
 	trans.sendBuffer = trans.sendBuffer[:0]
 	require.Len(t, responses, 1)
 	require.Equal(t, schedulepb.MsgDispatchTableResponse, responses[0].MsgType)
@@ -511,13 +659,39 @@ func (e *MockTableExecutor) AddTable(
 			delete(e.tables, tableID)
 		}
 	}
-
 	args := e.Called(ctx, tableID, startTs, isPrepare)
 	if args.Bool(0) {
 		e.tables[tableID] = pipeline.TableStatePreparing
 	}
-
 	return args.Bool(0), args.Error(1)
+}
+
+// IsAddTableFinished determines if the table has been added.
+func (e *MockTableExecutor) IsAddTableFinished(ctx context.Context,
+	tableID model.TableID, isPrepare bool,
+) bool {
+	_, ok := e.tables[tableID]
+	if !ok {
+		log.Panic("table which was added is not found",
+			zap.Int64("tableID", tableID),
+			zap.Bool("isPrepare", isPrepare))
+	}
+
+	args := e.Called(ctx, tableID, isPrepare)
+	if args.Bool(0) {
+		e.tables[tableID] = pipeline.TableStatePrepared
+		if !isPrepare {
+			e.tables[tableID] = pipeline.TableStateReplicating
+		}
+		return true
+	}
+
+	e.tables[tableID] = pipeline.TableStatePreparing
+	if !isPrepare {
+		e.tables[tableID] = pipeline.TableStatePrepared
+	}
+
+	return false
 }
 
 // RemoveTable removes a table from the executor.
@@ -533,38 +707,20 @@ func (e *MockTableExecutor) RemoveTable(ctx context.Context, tableID model.Table
 	case pipeline.TableStatePreparing, pipeline.TableStatePrepared, pipeline.TableStateReplicating:
 	default:
 	}
-	// todo: how to handle table is already in `stopping` ? should return true directly ?
 	// the current `processor implementation, does not consider table's state
 	log.Info("RemoveTable", zap.Int64("tableID", tableID), zap.Any("state", state))
 
 	args := e.Called(ctx, tableID)
 	if args.Bool(0) {
-		e.tables[tableID] = pipeline.TableStateStopping
-	}
-	return args.Bool(0)
-}
-
-// IsAddTableFinished determines if the table has been added.
-func (e *MockTableExecutor) IsAddTableFinished(ctx context.Context, tableID model.TableID, isPrepare bool) bool {
-	_, ok := e.tables[tableID]
-	if !ok {
-		log.Panic("table which was added is not found",
-			zap.Int64("tableID", tableID),
-			zap.Bool("isPrepare", isPrepare))
-	}
-
-	args := e.Called(ctx, tableID, isPrepare)
-	if args.Bool(0) {
-		e.tables[tableID] = pipeline.TableStatePrepared
-		if !isPrepare {
-			e.tables[tableID] = pipeline.TableStateReplicating
-		}
+		e.tables[tableID] = pipeline.TableStateStopped
 	}
 	return args.Bool(0)
 }
 
 // IsRemoveTableFinished determines if the table has been removed.
-func (e *MockTableExecutor) IsRemoveTableFinished(ctx context.Context, tableID model.TableID) (model.Ts, bool) {
+func (e *MockTableExecutor) IsRemoveTableFinished(ctx context.Context,
+	tableID model.TableID,
+) (model.Ts, bool) {
 	state, ok := e.tables[tableID]
 	if !ok {
 		// the real `table executor` processor, would panic in such case.
@@ -577,7 +733,12 @@ func (e *MockTableExecutor) IsRemoveTableFinished(ctx context.Context, tableID m
 		log.Info("remove table finished, remove it from the executor",
 			zap.Int64("tableID", tableID), zap.Any("state", state))
 		delete(e.tables, tableID)
+	} else {
+		// revert the state back to old state, assume it's `replicating`,
+		// but `preparing` / `prepared` can also be removed.
+		e.tables[tableID] = pipeline.TableStateReplicating
 	}
+
 	return model.Ts(args.Int(0)), args.Bool(1)
 }
 

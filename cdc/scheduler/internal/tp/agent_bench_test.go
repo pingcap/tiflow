@@ -18,18 +18,18 @@ import (
 	"testing"
 
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/processor/pipeline"
 )
 
-func benchmarkCollectTableStatus(b *testing.B, bench func(b *testing.B, a *agent)) {
+func benchmarkHeartbeatResponse(b *testing.B, bench func(b *testing.B, a *agent)) {
 	upperBound := 16384
 	for size := 1; size <= upperBound; size *= 2 {
 		tableExec := newMockTableExecutor()
 		a := &agent{
-			tableExec: tableExec,
+			tableM: newTableManager(tableExec),
 		}
+
 		for j := 0; j < size; j++ {
-			tableExec.tables[model.TableID(10000+j)] = pipeline.TableStateReplicating
+			_ = a.tableM.addTable(model.TableID(10000 + j))
 		}
 
 		b.ResetTimer()
@@ -38,12 +38,12 @@ func benchmarkCollectTableStatus(b *testing.B, bench func(b *testing.B, a *agent
 	}
 }
 
-func BenchmarkCollectTableStatus(b *testing.B) {
-	benchmarkCollectTableStatus(b, func(b *testing.B, a *agent) {
-		total := len(a.tableExec.GetAllCurrentTables())
+func BenchmarkRefreshAllTables(b *testing.B) {
+	benchmarkHeartbeatResponse(b, func(b *testing.B, a *agent) {
+		total := len(a.tableM.tables)
 		b.Run(fmt.Sprintf("%d tables", total), func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
-				a.collectTableStatus([]model.TableID{})
+				a.handleMessageHeartbeat([]model.TableID{})
 			}
 		})
 	})
