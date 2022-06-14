@@ -202,9 +202,8 @@ func (m *mockTablePipeline) Wait() {
 	// do nothing
 }
 
-func (m *mockTablePipeline) Start(ts model.Ts) bool {
+func (m *mockTablePipeline) Start(ts model.Ts) {
 	m.sinkStartTs = ts
-	return true
 }
 
 // MemoryConsumption return the memory consumption in bytes

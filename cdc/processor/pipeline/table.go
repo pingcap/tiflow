@@ -31,27 +31,31 @@ type TableState int32
 
 // TableState for table pipeline
 const (
-	// TableStatePreparing indicate that the table is preparing connecting to regions
-	TableStatePreparing TableState = iota
-	// TableStatePrepared means the first `Resolved Ts` is received.
-	TableStatePrepared
-	// TableStateReplicating means that sink is consuming data from the sorter, and replicating it to downstream
-	TableStateReplicating
-	// TableStateStopping means the table is stopping, but not guaranteed yet.
-	TableStateStopping
-	// TableStateStopped means sink stop all works.
-	TableStateStopped
+	TableStateUnknown TableState = iota
 	// TableStateAbsent means the table not found
 	TableStateAbsent
+	// TableStatePreparing indicate that the table is preparing connecting to regions
+	TableStatePreparing
+	// TableStatePrepared means the first `Resolved Ts` is received.
+	TableStatePrepared
+	// TableStateReplicating means that sink is consuming data from the sorter,
+	// and replicating it to downstream
+	TableStateReplicating
+	// TableStateStopping means the table is stopping, but not guaranteed yet.
+	// at the moment, this state is not used, only keep aligned with `schedulepb.TableStateStopping`
+	TableStateStopping
+	// TableStateStopped means sink stop all works, but the table resource not released yet.
+	TableStateStopped
 )
 
 var tableStatusStringMap = map[TableState]string{
+	TableStateUnknown:     "Unknown",
+	TableStateAbsent:      "Absent",
 	TableStatePreparing:   "Preparing",
 	TableStatePrepared:    "Prepared",
 	TableStateReplicating: "Replicating",
 	TableStateStopping:    "Stopping",
 	TableStateStopped:     "Stopped",
-	TableStateAbsent:      "Absent",
 }
 
 func (s TableState) String() string {
@@ -92,7 +96,7 @@ type TablePipeline interface {
 	AsyncStop(targetTs model.Ts) bool
 
 	// Start the sink consume data from the given `ts`
-	Start(ts model.Ts) bool
+	Start(ts model.Ts)
 
 	// Workload returns the workload of this table
 	Workload() model.WorkloadInfo
