@@ -194,14 +194,13 @@ func (m *mockTablePipeline) Wait() {
 	// do nothing
 }
 
+func (m *mockTablePipeline) Start(ts model.Ts) {
+	m.sinkStartTs = ts
+}
+
 // MemoryConsumption return the memory consumption in bytes
 func (m *mockTablePipeline) MemoryConsumption() uint64 {
 	return 0
-}
-
-func (m *mockTablePipeline) Start(ts model.Ts) bool {
-	m.sinkStartTs = ts
-	return true
 }
 
 type mockSchemaStorage struct {

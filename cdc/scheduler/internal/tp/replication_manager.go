@@ -111,7 +111,7 @@ func (r *replicationManager) HandleCaptureChanges(
 			for i := range tables {
 				table := tables[i]
 				if _, ok := tableStatus[table.TableID]; !ok {
-					tableStatus[table.TableID] = map[string]*schedulepb.TableStatus{}
+					tableStatus[table.TableID] = map[model.CaptureID]*schedulepb.TableStatus{}
 				}
 				tableStatus[table.TableID][captureID] = &table
 			}

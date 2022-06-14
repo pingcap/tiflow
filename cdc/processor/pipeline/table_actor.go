@@ -484,13 +484,11 @@ func (t *tableActor) MemoryConsumption() uint64 {
 	return t.sortNode.flowController.GetConsumption()
 }
 
-func (t *tableActor) Start(ts model.Ts) bool {
+func (t *tableActor) Start(ts model.Ts) {
 	if atomic.CompareAndSwapInt32(&t.sortNode.started, 0, 1) {
 		t.sortNode.startTsCh <- ts
 		close(t.sortNode.startTsCh)
-		return true
 	}
-	return false
 }
 
 // for ut
