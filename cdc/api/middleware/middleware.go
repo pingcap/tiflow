@@ -99,6 +99,7 @@ func ForwardToOwnerMiddleware(c *capture.Capture) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		if !c.IsOwner() {
 			api.ForwardToOwner(ctx, c)
+			ctx.Abort()
 			return
 		}
 		ctx.Next()
