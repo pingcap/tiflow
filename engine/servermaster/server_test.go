@@ -307,6 +307,10 @@ func (m *mockExecutorManager) Start(ctx context.Context) {
 	panic("not implemented")
 }
 
+func (m *mockExecutorManager) Stop() {
+	panic("not implemented")
+}
+
 func (m *mockExecutorManager) HasExecutor(executorID string) bool {
 	panic("not implemented")
 }
