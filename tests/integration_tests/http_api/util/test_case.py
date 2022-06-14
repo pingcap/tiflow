@@ -397,7 +397,7 @@ def create_changefeed_v2():
     data = json.dumps(data)
     headers = {"Content-Type": "application/json"}
     resp = rq.post(url, data=data, headers=headers, cert=CERT, verify=VERIFY)
-    assert resp.status_code == rq.codes.ok
+    assert resp.status_code == rq.codes.created
 
     # create changefeed fail because sink_uri is invalid
     data = json.dumps({
