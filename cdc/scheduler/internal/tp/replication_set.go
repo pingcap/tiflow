@@ -45,15 +45,22 @@ const (
 	// ReplicationSetStateUnknown means the replication state is unknown,
 	// it should not happen.
 	ReplicationSetStateUnknown ReplicationSetState = 0
+
 	// ReplicationSetStateAbsent means there is no one replicates or prepares it.
 	ReplicationSetStateAbsent ReplicationSetState = 1
-	// ReplicationSetStatePrepare means one capture is preparing it
+
+	// ReplicationSetStatePrepare means one capture is preparing it,
+	// there might have another capture is replicating the table.
 	ReplicationSetStatePrepare ReplicationSetState = 2
-	// ReplicationSetStateCommit means it needs to promote secondary to primary.
+
+	// ReplicationSetStateCommit means one capture is prepared,
+	// it needs to promote secondary to primary.
 	ReplicationSetStateCommit ReplicationSetState = 3
+
 	// ReplicationSetStateReplicating means there is exactly one capture
 	// that is replicating the table.
 	ReplicationSetStateReplicating ReplicationSetState = 4
+	
 	// ReplicationSetStateRemoving means all captures need to
 	// stop replication eventually.
 	ReplicationSetStateRemoving ReplicationSetState = 5

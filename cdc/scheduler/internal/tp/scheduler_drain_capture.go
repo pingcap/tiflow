@@ -87,6 +87,7 @@ func (d *drainCaptureScheduler) Schedule(
 	}
 
 	captureWorkload := make(map[model.CaptureID]int)
+	// victims record all table instance should be dropped from the target capture
 	victims := make([]model.TableID, 0)
 	for tableID, rep := range replications {
 		// find all tables replicating on the target capture
@@ -135,6 +136,8 @@ func (d *drainCaptureScheduler) Schedule(
 		captureWorkload[target] = randomizeWorkload(d.random, minWorkload+1)
 	}
 
+	// todo: accept should be called, after all tables moved to other captures,
+	// make sure this is guaranteed by the scheduler.
 	accept := func() {
 		d.mu.Lock()
 		defer d.mu.Unlock()

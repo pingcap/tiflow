@@ -198,9 +198,21 @@ func (c *coordinator) DrainCapture(target model.CaptureID) (int, bool) {
 		return count, false
 	}
 
+	// the caller should guarantee the target capture exist
 	if _, ok := c.captureM.Captures[target]; !ok {
 		log.Warn("tpscheduler: manual drain capture ignored, "+
 			"since cannot found the target capture",
+			zap.String("target", target),
+			zap.Int("tableCount", count))
+		return count, false
+	}
+
+	// the owner is the drain target, it's not allowed, just ignore the request.
+	// todo: this should be revised, owner can be drained if it's the last one.
+	// this should be guaranteed by the caller, since it knows the draining order.
+	if target == c.captureID {
+		log.Warn("tpscheduler: manual drain capture task ignored, "+
+			"since the target is the owner",
 			zap.String("target", target),
 			zap.Int("tableCount", count))
 		return count, false
@@ -213,15 +225,6 @@ func (c *coordinator) DrainCapture(target model.CaptureID) (int, bool) {
 	drainCaptureScheduler, ok := scheduler.(*drainCaptureScheduler)
 	if !ok {
 		log.Panic("tpscheduler: invalid drain capture scheduler found")
-	}
-
-	// the owner is the drain target, it's not allowed, just ignore the request.
-	if target == c.captureID {
-		log.Warn("tpscheduler: manual drain capture task ignored, "+
-			"since the target is the owner",
-			zap.String("target", target),
-			zap.Int("tableCount", count))
-		return count, false
 	}
 
 	if !drainCaptureScheduler.setTarget(target) {

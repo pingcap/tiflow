@@ -771,12 +771,6 @@ func (h *OpenAPI) DrainCapture(c *gin.Context) {
 		return
 	}
 
-	target := req.CaptureID
-	if err := model.ValidateChangefeedID(target); err != nil {
-		_ = c.Error(cerror.ErrAPIInvalidParam.GenWithStack("invalid capture_id: %s", target))
-		return
-	}
-
 	ctx := c.Request.Context()
 	captures, err := h.statusProvider().GetCaptures(ctx)
 	if err != nil {
@@ -784,6 +778,7 @@ func (h *OpenAPI) DrainCapture(c *gin.Context) {
 		return
 	}
 
+	target := req.CaptureID
 	checkCaptureFound := func() bool {
 		// make sure the target capture exist
 		for _, capture := range captures {
@@ -795,7 +790,7 @@ func (h *OpenAPI) DrainCapture(c *gin.Context) {
 	}
 
 	if !checkCaptureFound() {
-		_ = c.Error(cerror.ErrAPIInvalidParam.GenWithStack("capture not found: %s", target))
+		_ = c.Error(cerror.ErrCaptureNotExist.GenWithStackByArgs(target))
 		return
 	}
 
@@ -805,12 +800,7 @@ func (h *OpenAPI) DrainCapture(c *gin.Context) {
 		return
 	}
 
-	// todo: what the client should do, if 202 received.
-	status := http.StatusAccepted
-	if resp.TotalTableCount == 0 {
-		status = http.StatusOK
-	}
-	c.JSON(status, resp)
+	c.JSON(http.StatusAccepted, resp)
 }
 
 // ServerStatus gets the status of server(capture)

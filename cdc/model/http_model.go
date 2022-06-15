@@ -186,5 +186,6 @@ type DrainCaptureRequest struct {
 
 // DrainCaptureResp is response for manual `DrainCapture`
 type DrainCaptureResp struct {
-	TotalTableCount int `json:"total_table_count"`
+	TotalTableCount int  `json:"total_table_count"`
+	Valid           bool `json:"valid"`
 }
