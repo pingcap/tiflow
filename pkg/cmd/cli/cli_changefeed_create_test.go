@@ -72,10 +72,10 @@ func TestInvalidSortEngine(t *testing.T) {
 		expect: model.SortUnified,
 	}, {
 		input:  "memory",
-		expect: model.SortUnified,
+		expect: model.SortInMemory,
 	}, {
 		input:  "file",
-		expect: model.SortUnified,
+		expect: model.SortInFile,
 	}, {
 		input:  "unified",
 		expect: model.SortUnified,

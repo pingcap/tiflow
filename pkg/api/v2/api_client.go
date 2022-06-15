@@ -14,6 +14,7 @@
 package v2
 
 import (
+	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/pkg/api/internal/rest"
 	"github.com/pingcap/tiflow/pkg/security"
 )
@@ -72,7 +73,7 @@ func NewAPIClient(serverAddr string, credential *security.Credential) (*APIV2Cli
 	c.Credential = credential
 	client, err := rest.CDCRESTClientFromConfig(c)
 	if err != nil {
-		return nil, err
+		return nil, errors.Trace(err)
 	}
 
 	return &APIV2Client{client}, nil

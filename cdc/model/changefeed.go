@@ -157,6 +157,20 @@ func ValidateChangefeedID(changefeedID string) error {
 	return nil
 }
 
+const namespaceMaxLen = 128
+
+var namespaceRe = regexp.MustCompile(`^[a-zA-Z0-9]+(-[a-zA-Z0-9]+)*$`)
+
+// ValidateNamespace returns true if the namespace matches
+// the pattern "^[a-zA-Z0-9]+(\-[a-zA-Z0-9]+)*$",
+// length no more than "changeFeedIDMaxLen", eg, "simple-changefeed-task".
+func ValidateNamespace(namespace string) error {
+	if !namespaceRe.MatchString(namespace) || len(namespace) > namespaceMaxLen {
+		return cerror.ErrInvalidNamespace.GenWithStackByArgs(namespaceRe)
+	}
+	return nil
+}
+
 // String implements fmt.Stringer interface, but hide some sensitive information
 func (info *ChangeFeedInfo) String() (str string) {
 	var err error

@@ -376,6 +376,11 @@ error = '''
 host must be a URL or a host:port pair: %q
 '''
 
+["CDC:ErrInvalidNamespace"]
+error = '''
+bad namespace, please match the pattern "^[a-zA-Z0-9]+(\-[a-zA-Z0-9]+)*$", the length should no more than %d, eg, "simple-namespace-test",
+'''
+
 ["CDC:ErrInvalidRecordKey"]
 error = '''
 invalid record key - %q

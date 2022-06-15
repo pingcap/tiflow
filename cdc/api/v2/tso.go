@@ -27,7 +27,9 @@ func (h *OpenAPIV2) GetTso(c *gin.Context) {
 		c.Status(http.StatusServiceUnavailable)
 		return
 	}
-	pdClient := h.capture.UpstreamManager.GetDefaultUpstream().PDClient
+	up := h.capture.UpstreamManager.GetDefaultUpstream()
+	defer up.Release()
+	pdClient := up.PDClient
 	if pdClient == nil {
 		c.Status(http.StatusServiceUnavailable)
 		return

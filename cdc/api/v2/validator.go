@@ -81,6 +81,11 @@ func verifyCreateChangefeedConfig(
 		cfg.Namespace = model.DefaultNamespace
 	}
 
+	if err := model.ValidateNamespace(cfg.Namespace); err != nil {
+		return nil, cerror.ErrAPIInvalidParam.GenWithStack(
+			"invalid namespace: %s", cfg.Namespace)
+	}
+
 	cfStatus, err := capture.StatusProvider().GetChangeFeedStatus(ctx,
 		model.DefaultChangeFeedID(cfg.ID))
 	if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
@@ -190,7 +195,7 @@ func verifyCreateChangefeedConfig(
 		CreateTime:        time.Now(),
 		StartTs:           cfg.StartTs,
 		TargetTs:          cfg.TargetTs,
-		Engine:            model.SortUnified,
+		Engine:            cfg.Engine,
 		Config:            replicaCfg,
 		State:             model.StateNormal,
 		SyncPointEnabled:  cfg.SyncPointEnabled,

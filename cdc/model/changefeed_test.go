@@ -750,6 +750,89 @@ func TestValidateChangefeedID(t *testing.T) {
 	}
 }
 
+func TestValidateNamespace(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		id      string
+		wantErr bool
+	}{
+		{
+			name:    "alphabet",
+			id:      "testTtTT",
+			wantErr: false,
+		},
+		{
+			name:    "number",
+			id:      "01131323",
+			wantErr: false,
+		},
+		{
+			name:    "mixed",
+			id:      "9ff52acaA-aea6-4022-8eVc4-fbee3fD2c7890",
+			wantErr: false,
+		},
+		{
+			name: "len==128",
+			id: "1234567890-1234567890-1234567890-1234567890-" +
+				"1234567890-1234567890-1234567890-1234567890-" +
+				"1234567890123456789012345678901234567890",
+			wantErr: false,
+		},
+		{
+			name:    "empty string 1",
+			id:      "",
+			wantErr: true,
+		},
+		{
+			name:    "empty string 2",
+			id:      "   ",
+			wantErr: true,
+		},
+		{
+			name:    "test_task",
+			id:      "test_task ",
+			wantErr: true,
+		},
+		{
+			name:    "job$",
+			id:      "job$ ",
+			wantErr: true,
+		},
+		{
+			name:    "test-",
+			id:      "test-",
+			wantErr: true,
+		},
+		{
+			name:    "-",
+			id:      "-",
+			wantErr: true,
+		},
+		{
+			name:    "-sfsdfdf1",
+			id:      "-sfsdfdf1",
+			wantErr: true,
+		},
+		{
+			name: "len==129",
+			id: "1234567890-1234567890-1234567890-1234567890-1234567890-1234567890-" +
+				"1234567890-1234567890-1234567890-123456789012345678901234567890",
+			wantErr: true,
+		},
+	}
+	for _, tt := range tests {
+		err := ValidateNamespace(tt.id)
+		if !tt.wantErr {
+			require.Nil(t, err, fmt.Sprintf("case:%s", tt.name))
+		} else {
+			require.True(t, cerror.ErrInvalidNamespace.Equal(err),
+				fmt.Sprintf("case:%s", tt.name))
+		}
+	}
+}
+
 func TestGetTs(t *testing.T) {
 	t.Parallel()
 
