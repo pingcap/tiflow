@@ -30,6 +30,10 @@ import (
 	"github.com/pingcap/tidb/parser/charset"
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
+	"github.com/prometheus/client_golang/prometheus"
+	"go.uber.org/atomic"
+	"go.uber.org/zap"
+
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/metrics"
 	dmutils "github.com/pingcap/tiflow/dm/pkg/utils"
@@ -42,9 +46,12 @@ import (
 	"github.com/pingcap/tiflow/pkg/notify"
 	"github.com/pingcap/tiflow/pkg/quotes"
 	"github.com/pingcap/tiflow/pkg/retry"
+<<<<<<< HEAD
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
+=======
+>>>>>>> ec8576567 (mysqlSink(cdc): Fix RemoveTable blocking infinitely (#5734))
 )
 
 const (
@@ -79,6 +86,11 @@ type mysqlSink struct {
 	forceReplicate bool
 	cancel         func()
 
+<<<<<<< HEAD
+=======
+	// error is set when the sink has encountered an
+	// error and cannot work anymore.
+>>>>>>> ec8576567 (mysqlSink(cdc): Fix RemoveTable blocking infinitely (#5734))
 	error atomic.Error
 }
 
@@ -230,9 +242,15 @@ func (s *mysqlSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.Row
 // Concurrency Note: FlushRowChangedEvents is thread-safe.
 func (s *mysqlSink) FlushRowChangedEvents(
 	ctx context.Context, tableID model.TableID, resolved model.ResolvedTs,
+<<<<<<< HEAD
 ) (uint64, error) {
 	if err := s.error.Load(); err != nil {
 		return 0, err
+=======
+) (model.ResolvedTs, error) {
+	if err := s.error.Load(); err != nil {
+		return model.NewResolvedTs(0), err
+>>>>>>> ec8576567 (mysqlSink(cdc): Fix RemoveTable blocking infinitely (#5734))
 	}
 
 	v, ok := s.getTableResolvedTs(tableID)
@@ -243,7 +261,11 @@ func (s *mysqlSink) FlushRowChangedEvents(
 	// check and throw error
 	select {
 	case <-ctx.Done():
+<<<<<<< HEAD
 		return 0, ctx.Err()
+=======
+		return model.NewResolvedTs(0), ctx.Err()
+>>>>>>> ec8576567 (mysqlSink(cdc): Fix RemoveTable blocking infinitely (#5734))
 	case s.resolvedCh <- struct{}{}:
 		// Notify `flushRowChangedEvents` to asynchronously write data.
 	default:
@@ -286,6 +308,7 @@ outer:
 		if len(resolvedTxnsMap) != 0 {
 			s.dispatchAndExecTxns(ctx, resolvedTxnsMap)
 		}
+<<<<<<< HEAD
 		for _, worker := range s.workers {
 			if !worker.isNormal() {
 				continue outer
@@ -293,6 +316,20 @@ outer:
 		}
 		for tableID, resolvedTs := range checkpointTsMap {
 			s.tableCheckpointTs.Store(tableID, resolvedTs)
+=======
+
+		// This is an ad-hoc fix to prevent the checkpoint
+		// from being updated after a DML has failed to execute.
+		for _, worker := range s.workers {
+			if !worker.isNormal() {
+				// We still need to loop to the next iteration
+				// because we would like to read from `s.errCh`.
+				continue outer
+			}
+		}
+		for tableID, resolved := range checkpointTsMap {
+			s.tableCheckpointTs.Store(tableID, resolved)
+>>>>>>> ec8576567 (mysqlSink(cdc): Fix RemoveTable blocking infinitely (#5734))
 		}
 	}
 }
@@ -471,7 +508,9 @@ func (s *mysqlSink) notifyAndWaitExec(ctx context.Context) {
 	// scenario happens, the blocked goroutine will be leak.
 	select {
 	case <-ctx.Done():
+		return
 	case <-done:
+		return
 	}
 }
 

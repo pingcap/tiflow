@@ -20,12 +20,19 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/cdc/model"
-	cerror "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/notify"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
+
+	"github.com/pingcap/tiflow/cdc/model"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/notify"
+<<<<<<< HEAD
+	"github.com/prometheus/client_golang/prometheus"
+	"go.uber.org/atomic"
+	"go.uber.org/zap"
+=======
+>>>>>>> ec8576567 (mysqlSink(cdc): Fix RemoveTable blocking infinitely (#5734))
 )
 
 type mysqlSinkWorker struct {
@@ -147,6 +154,7 @@ func (w *mysqlSinkWorker) run(ctx context.Context) (err error) {
 				if err := flushRows(); err != nil {
 					w.hasError.Store(true)
 					txnNum++
+					w.hasError.Store(true)
 					return errors.Trace(err)
 				}
 			}

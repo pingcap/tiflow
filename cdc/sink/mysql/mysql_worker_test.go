@@ -373,6 +373,8 @@ func TestMySQLSinkWorkerExitCleanup(t *testing.T) {
 	wg.Wait()
 	w.close()
 
+	// simulate sink shutdown and send closed singal to sink worker
+	close(w.closedCh)
 	cancel()
 	require.Equal(t, errExecFailed, errg.Wait())
 }
