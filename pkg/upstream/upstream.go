@@ -112,8 +112,6 @@ func NewUpstream4Test(pdClient pd.Client) *Upstream {
 
 func (up *Upstream) init(ctx context.Context, gcServiceID string) error {
 	log.Info("upstream is initializing", zap.Uint64("upstreamID", up.ID))
-	var err error
-
 	grpcTLSOption, err := up.SecurityConfig.ToGRPCDialOption()
 	if err != nil {
 		up.err.Store(err)
