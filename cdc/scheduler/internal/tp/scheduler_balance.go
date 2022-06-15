@@ -23,7 +23,7 @@ import (
 
 var _ scheduler = &balanceScheduler{}
 
-// The scheduler for balancing tables of each captures.
+// The scheduler for balancing tables among all captures.
 type balanceScheduler struct {
 	random               *rand.Rand
 	lastRebalanceTime    time.Time

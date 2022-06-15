@@ -222,6 +222,11 @@ func (s *tableSet) keys() []model.TableID {
 	return result
 }
 
+func (s *tableSet) contain(tableID model.TableID) bool {
+	_, ok := s.memo[tableID]
+	return ok
+}
+
 func (s *tableSet) size() int {
 	return len(s.memo)
 }

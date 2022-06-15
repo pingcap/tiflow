@@ -14,7 +14,9 @@
 package tp
 
 import (
+	"math/rand"
 	"sync"
+	"time"
 
 	"github.com/pingcap/tiflow/cdc/model"
 )
@@ -26,11 +28,13 @@ var _ scheduler = &drainCaptureScheduler{}
 type drainCaptureScheduler struct {
 	mu     sync.Mutex
 	target model.CaptureID
+	random *rand.Rand
 }
 
 func newDrainCaptureScheduler() *drainCaptureScheduler {
 	return &drainCaptureScheduler{
 		target: captureIDNotDraining,
+		random: rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
 }
 
@@ -58,102 +62,26 @@ func (d *drainCaptureScheduler) Schedule(
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
-	result := make([]*scheduleTask, 0)
+	if d.target == captureIDNotDraining {
+		return nil
+	}
 
-	return result
+	accept := func() {
+		d.mu.Lock()
+		defer d.mu.Unlock()
+		d.target = captureIDNotDraining
+	}
+
+	otherCaptures := make(map[model.CaptureID]*model.CaptureInfo)
+	for id, info := range captures {
+		if id != d.target {
+			otherCaptures[id] = info
+		}
+	}
+
+	task := newBurstBalanceMoveTables(accept, d.random, captures, replications)
+	if task == nil {
+		return nil
+	}
+	return []*scheduleTask{task}
 }
-
-// type moveTableScheduler struct {
-// 	mu    sync.Mutex
-// 	tasks map[model.TableID]*scheduleTask
-// }
-
-// func (m *moveTableScheduler) addTask(tableID model.TableID, target model.CaptureID) bool {
-// 	// previous triggered task not accepted yet, decline the new manual move table request.
-// 	m.mu.Lock()
-// 	defer m.mu.Unlock()
-// 	if _, ok := m.tasks[tableID]; ok {
-// 		return false
-// 	}
-// 	m.tasks[tableID] = &scheduleTask{
-// 		moveTable: &moveTable{
-// 			TableID:     tableID,
-// 			DestCapture: target,
-// 		},
-// 		accept: func() {
-// 			m.mu.Lock()
-// 			defer m.mu.Unlock()
-// 			delete(m.tasks, tableID)
-// 		},
-// 	}
-// 	return true
-// }
-
-// func (m *moveTableScheduler) Schedule(
-// 	checkpointTs model.Ts,
-// 	currentTables []model.TableID,
-// 	captures map[model.CaptureID]*model.CaptureInfo,
-// 	replications map[model.TableID]*ReplicationSet,
-// ) []*scheduleTask {
-// 	m.mu.Lock()
-// 	defer m.mu.Unlock()
-
-// 	result := make([]*scheduleTask, 0)
-
-// 	if len(m.tasks) == 0 {
-// 		return result
-// 	}
-
-// 	if len(captures) == 0 {
-// 		return result
-// 	}
-
-// 	allTables := make(map[model.TableID]struct{})
-// 	for _, tableID := range currentTables {
-// 		allTables[tableID] = struct{}{}
-// 	}
-
-// 	for tableID, task := range m.tasks {
-// 		// table may not in the all current tables
-// 		// if it was removed after manual move table triggered.
-// 		if _, ok := allTables[tableID]; !ok {
-// 			log.Warn("tpscheduler: move table ignored, since the table cannot found",
-// 				zap.Int64("tableID", tableID),
-// 				zap.String("captureID", task.moveTable.DestCapture))
-// 			delete(m.tasks, tableID)
-// 			continue
-// 		}
-// 		// the target capture may offline after manual move table triggered.
-// 		_, ok := captures[task.moveTable.DestCapture]
-// 		if !ok {
-// 			log.Info("tpscheduler: move table ignored, since the target capture cannot found",
-// 				zap.Int64("tableID", tableID),
-// 				zap.String("captureID", task.moveTable.DestCapture))
-// 			delete(m.tasks, tableID)
-// 			continue
-// 		}
-// 		rep, ok := replications[tableID]
-// 		if !ok {
-// 			log.Warn("tpscheduler: move table ignored, "+
-// 				"since the table cannot found in the replication set",
-// 				zap.Int64("tableID", tableID),
-// 				zap.String("captureID", task.moveTable.DestCapture))
-// 			delete(m.tasks, tableID)
-// 			continue
-// 		}
-// 		// only move replicating table.
-// 		if rep.State != ReplicationSetStateReplicating {
-// 			log.Info("tpscheduler: move table ignored, since the table is not replicating now",
-// 				zap.Int64("tableID", tableID),
-// 				zap.String("captureID", task.moveTable.DestCapture),
-// 				zap.Any("replicationState", rep.State))
-// 			delete(m.tasks, tableID)
-// 		}
-// 	}
-
-// 	for _, task := range m.tasks {
-// 		result = append(result, task)
-// 	}
-
-// 	return result
-// }

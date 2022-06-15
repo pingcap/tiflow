@@ -78,15 +78,15 @@ func (m *moveTableScheduler) Schedule(
 		return result
 	}
 
-	allTables := make(map[model.TableID]struct{})
+	allTables := newTableSet()
 	for _, tableID := range currentTables {
-		allTables[tableID] = struct{}{}
+		allTables.add(tableID)
 	}
 
 	for tableID, task := range m.tasks {
 		// table may not in the all current tables
 		// if it was removed after manual move table triggered.
-		if _, ok := allTables[tableID]; !ok {
+		if !allTables.contain(tableID) {
 			log.Warn("tpscheduler: move table ignored, since the table cannot found",
 				zap.Int64("tableID", tableID),
 				zap.String("captureID", task.moveTable.DestCapture))

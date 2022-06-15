@@ -106,11 +106,11 @@ func newCoordinator(
 
 func (c *coordinator) Tick(
 	ctx context.Context,
-// Latest global checkpoint of the changefeed
+	// Latest global checkpoint of the changefeed
 	checkpointTs model.Ts,
-// All tables that SHOULD be replicated (or started) at the current checkpoint.
+	// All tables that SHOULD be replicated (or started) at the current checkpoint.
 	currentTables []model.TableID,
-// All captures that are alive according to the latest Etcd states.
+	// All captures that are alive according to the latest Etcd states.
 	aliveCaptures map[model.CaptureID]*model.CaptureInfo,
 ) (newCheckpointTs, newResolvedTs model.Ts, err error) {
 	c.mu.Lock()
@@ -219,7 +219,6 @@ func (c *coordinator) DrainCapture(target model.CaptureID) (int, bool) {
 	if !drainCaptureScheduler.setTarget(target) {
 		log.Info("tpscheduler: manual drain capture task ignored,"+
 			"since there is capture draining",
-			zap.String("drainingCapture", drainCaptureScheduler.target),
 			zap.String("target", target),
 			zap.Int("tableCount", count))
 		return count, false
