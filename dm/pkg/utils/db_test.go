@@ -16,6 +16,7 @@ package utils
 import (
 	"context"
 	"strconv"
+	"testing"
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
@@ -25,6 +26,7 @@ import (
 	. "github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	tmysql "github.com/pingcap/tidb/parser/mysql"
+	"github.com/stretchr/testify/require"
 
 	"github.com/pingcap/tiflow/dm/pkg/gtid"
 )
@@ -457,4 +459,10 @@ func (t *testDBSuite) TestAddGSetWithPurged(c *C) {
 		// make sure origin gSet hasn't changed
 		c.Assert(originSet, DeepEquals, tc.originGSet)
 	}
+}
+
+func TestCreateTableSQLToOneRow(t *testing.T) {
+	input := "CREATE TABLE `t1` (\n  `id` bigint(20) NOT NULL,\n  `c1` varchar(20) DEFAULT NULL,\n  `c2` varchar(20) DEFAULT NULL,\n  PRIMARY KEY (`id`) /*T![clustered_index] NONCLUSTERED */\n) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_bin"
+	expected := "CREATE TABLE `t1` ( `id` bigint(20) NOT NULL, `c1` varchar(20) DEFAULT NULL, `c2` varchar(20) DEFAULT NULL, PRIMARY KEY (`id`) /*T![clustered_index] NONCLUSTERED */) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_bin"
+	require.Equal(t, expected, CreateTableSQLToOneRow(input))
 }
