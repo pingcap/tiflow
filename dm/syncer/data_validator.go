@@ -807,7 +807,7 @@ func (v *DataValidator) genValidateTableInfo(sourceTable *filter.Table, columnCo
 	// 	for non-needed tables, we will not validate them.
 	// in case 2, validator should be paused
 	res := &validateTableInfo{targetTable: targetTable}
-	isTrackerStopped := v.syncer.IsRunning()
+	isTrackerStopped := !v.syncer.IsRunning()
 	var (
 		tableInfo *model.TableInfo
 		err       error
