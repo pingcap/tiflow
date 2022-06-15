@@ -28,7 +28,8 @@ import (
 
 	"github.com/pingcap/tiflow/engine/client"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
-	"github.com/pingcap/tiflow/engine/lib/fake"
+	"github.com/pingcap/tiflow/engine/framework/fake"
+	engineModel "github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/meta/kvclient"
 	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
@@ -45,6 +46,8 @@ type ChaosCli struct {
 	// reuses the endpoints of user meta KV.
 	fakeJobCli *clientv3.Client
 	fakeJobCfg *FakeJobConfig
+	// used to save project info
+	project tenant.ProjectInfo
 }
 
 // FakeJobConfig is used to construct a fake job configuration
@@ -56,7 +59,7 @@ type FakeJobConfig struct {
 
 // NewUTCli creates a new ChaosCli instance
 func NewUTCli(
-	ctx context.Context, masterAddrs, userMetaAddrs []string, cfg *FakeJobConfig,
+	ctx context.Context, masterAddrs, userMetaAddrs []string, project tenant.ProjectInfo, cfg *FakeJobConfig,
 ) (*ChaosCli, error) {
 	masterCli, err := client.NewMasterClient(ctx, masterAddrs)
 	if err != nil {
@@ -68,7 +71,7 @@ func NewUTCli(
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	metaCli := kvclient.NewPrefixKVClient(userRawKVClient, tenant.DefaultUserTenantID)
+	metaCli := kvclient.NewPrefixKVClient(userRawKVClient, project.UniqueID())
 
 	fakeJobCli, err := clientv3.New(clientv3.Config{
 		Endpoints:   userMetaAddrs,
@@ -85,12 +88,20 @@ func NewUTCli(
 		metaCli:    metaCli,
 		fakeJobCli: fakeJobCli,
 		fakeJobCfg: cfg,
+		project:    project,
 	}, nil
 }
 
 // CreateJob sends SubmitJob command to servermaster
-func (cli *ChaosCli) CreateJob(ctx context.Context, tp pb.JobType, config []byte) (string, error) {
-	req := &pb.SubmitJobRequest{Tp: tp, Config: config}
+func (cli *ChaosCli) CreateJob(ctx context.Context, tp engineModel.JobType, config []byte) (string, error) {
+	req := &pb.SubmitJobRequest{
+		Tp:     int32(tp),
+		Config: config,
+		ProjectInfo: &pb.ProjectInfo{
+			TenantId:  cli.project.TenantID(),
+			ProjectId: cli.project.ProjectID(),
+		},
+	}
 	resp, err := cli.masterCli.SubmitJob(ctx, req)
 	if err != nil {
 		return "", err
@@ -98,12 +109,18 @@ func (cli *ChaosCli) CreateJob(ctx context.Context, tp pb.JobType, config []byte
 	if resp.Err != nil {
 		return "", errors.New(resp.Err.String())
 	}
-	return resp.JobIdStr, nil
+	return resp.JobId, nil
 }
 
 // PauseJob sends PauseJob command to servermaster
 func (cli *ChaosCli) PauseJob(ctx context.Context, jobID string) error {
-	req := &pb.PauseJobRequest{JobIdStr: jobID}
+	req := &pb.PauseJobRequest{
+		JobId: jobID,
+		ProjectInfo: &pb.ProjectInfo{
+			TenantId:  cli.project.TenantID(),
+			ProjectId: cli.project.ProjectID(),
+		},
+	}
 	resp, err := cli.masterCli.PauseJob(ctx, req)
 	if err != nil {
 		return err
@@ -118,7 +135,13 @@ func (cli *ChaosCli) PauseJob(ctx context.Context, jobID string) error {
 func (cli *ChaosCli) CheckJobStatus(
 	ctx context.Context, jobID string, expectedStatus pb.QueryJobResponse_JobStatus,
 ) (bool, error) {
-	req := &pb.QueryJobRequest{JobId: jobID}
+	req := &pb.QueryJobRequest{
+		JobId: jobID,
+		ProjectInfo: &pb.ProjectInfo{
+			TenantId:  cli.project.TenantID(),
+			ProjectId: cli.project.ProjectID(),
+		},
+	}
 	resp, err := cli.masterCli.QueryJob(ctx, req)
 	if err != nil {
 		return false, err
@@ -199,6 +222,15 @@ func (cli *ChaosCli) CheckFakeJobKey(
 	}
 
 	return nil
+}
+
+// GetRevision puts a key gets the latest revision of etcd cluster
+func (cli *ChaosCli) GetRevision(ctx context.Context) (int64, error) {
+	resp, err := cli.fakeJobCli.Put(ctx, "/chaos/gen_epoch/key", "/chaos/gen_epoch/value")
+	if err != nil {
+		return 0, errors.Trace(err)
+	}
+	return resp.Header.Revision, nil
 }
 
 func runCmdHandleError(cmd *exec.Cmd) []byte {

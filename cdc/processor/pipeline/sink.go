@@ -29,10 +29,6 @@ import (
 	"go.uber.org/zap"
 )
 
-const (
-	defaultSyncResolvedBatch = 64
-)
-
 // TableStatus is status of the table pipeline
 type TableStatus int32
 
@@ -72,7 +68,7 @@ type sinkNode struct {
 
 	// atomic oprations for model.ResolvedTs
 	resolvedTs   atomic.Value
-	checkpointTs model.Ts
+	checkpointTs atomic.Value
 	targetTs     model.Ts
 	barrierTs    model.Ts
 
@@ -83,23 +79,31 @@ type sinkNode struct {
 
 func newSinkNode(tableID model.TableID, sink sink.Sink, startTs model.Ts, targetTs model.Ts, flowController tableFlowController) *sinkNode {
 	sn := &sinkNode{
-		tableID:      tableID,
-		sink:         sink,
-		status:       TableStatusInitializing,
-		targetTs:     targetTs,
-		checkpointTs: startTs,
-		barrierTs:    startTs,
+		tableID:   tableID,
+		sink:      sink,
+		status:    TableStatusInitializing,
+		targetTs:  targetTs,
+		barrierTs: startTs,
 
 		flowController: flowController,
 	}
 	sn.resolvedTs.Store(model.NewResolvedTs(startTs))
+	sn.checkpointTs.Store(model.NewResolvedTs(startTs))
 	return sn
 }
 
-func (n *sinkNode) ResolvedTs() model.ResolvedTs { return n.resolvedTs.Load().(model.ResolvedTs) }
-func (n *sinkNode) CheckpointTs() model.Ts       { return atomic.LoadUint64(&n.checkpointTs) }
-func (n *sinkNode) BarrierTs() model.Ts          { return atomic.LoadUint64(&n.barrierTs) }
-func (n *sinkNode) Status() TableStatus          { return n.status.Load() }
+func (n *sinkNode) ResolvedTs() model.Ts   { return n.getResolvedTs().ResolvedMark() }
+func (n *sinkNode) CheckpointTs() model.Ts { return n.getCheckpointTs().ResolvedMark() }
+func (n *sinkNode) BarrierTs() model.Ts    { return atomic.LoadUint64(&n.barrierTs) }
+func (n *sinkNode) Status() TableStatus    { return n.status.Load() }
+
+func (n *sinkNode) getResolvedTs() model.ResolvedTs {
+	return n.resolvedTs.Load().(model.ResolvedTs)
+}
+
+func (n *sinkNode) getCheckpointTs() model.ResolvedTs {
+	return n.checkpointTs.Load().(model.ResolvedTs)
+}
 
 func (n *sinkNode) initWithReplicaConfig(replicaConfig *config.ReplicaConfig) {
 	n.replicaConfig = replicaConfig
@@ -128,22 +132,22 @@ func (n *sinkNode) flushSink(ctx context.Context, resolved model.ResolvedTs) (er
 			n.status.Store(TableStatusStopped)
 			return
 		}
-		if atomic.LoadUint64(&n.checkpointTs) >= n.targetTs {
+		if n.CheckpointTs() >= n.targetTs {
 			err = n.stop(ctx)
 		}
 	}()
 	currentBarrierTs := atomic.LoadUint64(&n.barrierTs)
-	currentCheckpointTs := atomic.LoadUint64(&n.checkpointTs)
+	currentCheckpointTs := n.getCheckpointTs()
 	if resolved.Ts > currentBarrierTs {
-		resolved.Ts = currentBarrierTs
+		resolved = model.NewResolvedTs(currentBarrierTs)
 	}
 	if resolved.Ts > n.targetTs {
-		resolved.Ts = n.targetTs
+		resolved = model.NewResolvedTs(n.targetTs)
 	}
-	if resolved.Ts <= currentCheckpointTs {
+	if currentCheckpointTs.EqualOrGreater(resolved) {
 		return nil
 	}
-	checkpointTs, err := n.sink.FlushRowChangedEvents(ctx, n.tableID, resolved)
+	checkpoint, err := n.sink.FlushRowChangedEvents(ctx, n.tableID, resolved)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -151,16 +155,16 @@ func (n *sinkNode) flushSink(ctx context.Context, resolved model.ResolvedTs) (er
 	// we must call flowController.Release immediately after we call
 	// FlushRowChangedEvents to prevent deadlock cause by checkpointTs
 	// fall back
-	n.flowController.Release(checkpointTs)
+	n.flowController.Release(checkpoint)
 
 	// the checkpointTs may fall back in some situation such as:
 	//   1. This table is newly added to the processor
 	//   2. There is one table in the processor that has a smaller
 	//   checkpointTs than this one
-	if checkpointTs <= currentCheckpointTs {
+	if currentCheckpointTs.EqualOrGreater(checkpoint) {
 		return nil
 	}
-	atomic.StoreUint64(&n.checkpointTs, checkpointTs)
+	n.checkpointTs.Store(checkpoint)
 
 	return nil
 }
@@ -286,7 +290,13 @@ func (n *sinkNode) HandleMessage(ctx context.Context, msg pmessage.Message) (boo
 				failpoint.Return(false, errors.New("processor sync resolved injected error"))
 			})
 
-			resolved := model.NewResolvedTsWithMode(event.CRTs, event.Mode)
+			var resolved model.ResolvedTs
+			if event.Resolved != nil {
+				resolved = *(event.Resolved)
+			} else {
+				resolved = model.NewResolvedTs(event.CRTs)
+			}
+
 			if err := n.flushSink(ctx, resolved); err != nil {
 				return false, errors.Trace(err)
 			}
@@ -297,7 +307,7 @@ func (n *sinkNode) HandleMessage(ctx context.Context, msg pmessage.Message) (boo
 			return false, errors.Trace(err)
 		}
 	case pmessage.MessageTypeTick:
-		if err := n.flushSink(ctx, n.ResolvedTs()); err != nil {
+		if err := n.flushSink(ctx, n.getResolvedTs()); err != nil {
 			return false, errors.Trace(err)
 		}
 	case pmessage.MessageTypeCommand:
@@ -316,7 +326,7 @@ func (n *sinkNode) HandleMessage(ctx context.Context, msg pmessage.Message) (boo
 
 func (n *sinkNode) updateBarrierTs(ctx context.Context, ts model.Ts) error {
 	atomic.StoreUint64(&n.barrierTs, ts)
-	if err := n.flushSink(ctx, n.ResolvedTs()); err != nil {
+	if err := n.flushSink(ctx, n.getResolvedTs()); err != nil {
 		return errors.Trace(err)
 	}
 	return nil

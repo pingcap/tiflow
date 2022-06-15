@@ -23,7 +23,10 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/dumpling/export"
+	promutil2 "github.com/pingcap/tidb/util/promutil"
 	filter "github.com/pingcap/tidb/util/table-filter"
+	"github.com/pingcap/tiflow/dm/pkg/metricsproxy"
+	"github.com/pingcap/tiflow/engine/pkg/promutil"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
@@ -42,7 +45,8 @@ import (
 
 // Dumpling dumps full data from a MySQL-compatible database.
 type Dumpling struct {
-	cfg *config.SubTaskConfig
+	cfg           *config.SubTaskConfig
+	metricProxies *metricProxies
 
 	logger log.Logger
 
@@ -67,13 +71,44 @@ func (m *Dumpling) Init(ctx context.Context) error {
 	if m.dumpConfig, err = m.constructArgs(ctx); err != nil {
 		return err
 	}
+	if m.cfg.MetricsFactory != nil {
+		m.metricProxies = &metricProxies{}
+		m.metricProxies.dumplingExitWithErrorCounter = metricsproxy.NewCounterVec(
+			m.cfg.MetricsFactory,
+			prometheus.CounterOpts{
+				Namespace: "dm",
+				Subsystem: "dumpling",
+				Name:      "exit_with_error_count",
+				Help:      "counter for dumpling exit with error",
+			}, []string{"task", "source_id"},
+		)
+		m.dumpConfig.PromFactory = promutil.NewWrappingFactory(
+			m.cfg.MetricsFactory,
+			"",
+			prometheus.Labels{
+				"task": m.cfg.Name, "source_id": m.cfg.SourceID,
+			},
+		)
+		m.dumpConfig.PromRegistry = promutil2.NewNoopRegistry()
+	} else {
+		m.metricProxies = defaultMetricProxies
+		m.dumpConfig.PromFactory = promutil.NewWrappingFactory(
+			promutil.NewPromFactory(),
+			"",
+			prometheus.Labels{
+				"task": m.cfg.Name, "source_id": m.cfg.SourceID,
+			},
+		)
+		m.dumpConfig.PromRegistry = prometheus.DefaultGatherer.(prometheus.Registerer)
+	}
+
 	m.logger.Info("create dumpling", zap.Stringer("config", m.dumpConfig))
 	return nil
 }
 
 // Process implements Unit.Process.
 func (m *Dumpling) Process(ctx context.Context, pr chan pb.ProcessResult) {
-	dumplingExitWithErrorCounter.WithLabelValues(m.cfg.Name, m.cfg.SourceID).Add(0)
+	m.metricProxies.dumplingExitWithErrorCounter.WithLabelValues(m.cfg.Name, m.cfg.SourceID).Add(0)
 
 	failpoint.Inject("dumpUnitProcessWithError", func(val failpoint.Value) {
 		m.logger.Info("dump unit runs with injected error", zap.String("failpoint", "dumpUnitProcessWithError"), zap.Reflect("error", val))
@@ -127,6 +162,11 @@ func (m *Dumpling) Process(ctx context.Context, pr chan pb.ProcessResult) {
 		m.core = dumpling
 		m.mu.Unlock()
 		err = dumpling.Dump()
+		failpoint.Inject("SleepBeforeDumplingClose", func(val failpoint.Value) {
+			t := val.(int)
+			time.Sleep(time.Second * time.Duration(t))
+			m.logger.Info("", zap.String("failpoint", "SleepBeforeDumplingClose"))
+		})
 		dumpling.Close()
 	}
 	cancel()
@@ -135,7 +175,7 @@ func (m *Dumpling) Process(ctx context.Context, pr chan pb.ProcessResult) {
 		if utils.IsContextCanceledError(err) {
 			m.logger.Info("filter out error caused by user cancel")
 		} else {
-			dumplingExitWithErrorCounter.WithLabelValues(m.cfg.Name, m.cfg.SourceID).Inc()
+			m.metricProxies.dumplingExitWithErrorCounter.WithLabelValues(m.cfg.Name, m.cfg.SourceID).Inc()
 			errs = append(errs, unit.NewProcessError(terror.ErrDumpUnitRuntime.Delegate(err, "")))
 		}
 	}
@@ -344,7 +384,6 @@ func (m *Dumpling) constructArgs(ctx context.Context) (*export.Config, error) {
 		dumpConfig.TableFilter = filter.CaseInsensitive(dumpConfig.TableFilter)
 	}
 
-	dumpConfig.Labels = prometheus.Labels{"task": m.cfg.Name, "source_id": m.cfg.SourceID}
 	// update sql_mode if needed
 	m.detectSQLMode(ctx, dumpConfig)
 	dumpConfig.ExtStorage = cfg.ExtStorage

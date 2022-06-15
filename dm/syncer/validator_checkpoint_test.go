@@ -51,7 +51,7 @@ func TestValidatorCheckpointPersist(t *testing.T) {
 		conn.DefaultDBProvider = &conn.DefaultDBProviderImpl{}
 	}()
 	dbMock.ExpectQuery("select .* from .*_validator_checkpoint.*").WillReturnRows(
-		dbMock.NewRows([]string{"", "", "", ""}).AddRow("mysql-bin.000001", 100, "", 1))
+		dbMock.NewRows([]string{"", "", "", "", "", "", ""}).AddRow("mysql-bin.000001", 100, "", 0, 0, 0, 1))
 	dbMock.ExpectQuery("select .* from .*_validator_pending_change.*").WillReturnRows(
 		dbMock.NewRows([]string{"", "", "", "", ""}).
 			// insert with pk=11

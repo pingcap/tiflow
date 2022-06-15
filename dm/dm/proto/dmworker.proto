@@ -202,6 +202,7 @@ message SubTaskStatus {
         LoadStatus load = 9;
         SyncStatus sync = 10;
     }
+    ValidationStatus validation = 11;
 }
 
 // SubTaskStatusList used for internal jsonpb marshal
@@ -426,7 +427,7 @@ message ValidationStatus {
     ProcessResult result = 7;
     string processedRowsStatus = 8;
     string pendingRowsStatus = 9;
-    string allErrorRowsStatus = 10;
+    string errorRowsStatus = 10;
 }
 
 message ValidationTableStatus {

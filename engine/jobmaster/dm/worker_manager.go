@@ -20,15 +20,17 @@ import (
 
 	dmconfig "github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/engine/model"
 	resourcemeta "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	"go.uber.org/zap"
 
+	"github.com/pingcap/tiflow/engine/framework"
+	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/runtime"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/ticker"
-	"github.com/pingcap/tiflow/engine/lib"
-	libModel "github.com/pingcap/tiflow/engine/lib/model"
+	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
 )
 
 var (
@@ -38,15 +40,20 @@ var (
 	WorkerErrorInterval = time.Second * 10
 )
 
-// WorkerAgent manages worker
+// WorkerAgent defines an interface for create worker.
 type WorkerAgent interface {
-	CreateWorker(ctx context.Context, taskID string, workerType libModel.WorkerType, taskCfg *config.TaskCfg, resources ...resourcemeta.ResourceID) (libModel.WorkerID, error)
-	StopWorker(ctx context.Context, taskID string, workerID libModel.WorkerID) error
+	// for create worker
+	CreateWorker(
+		workerType framework.WorkerType,
+		config framework.WorkerConfig,
+		cost model.RescUnit,
+		resources ...resourcemeta.ResourceID,
+	) (frameModel.WorkerID, error)
 }
 
-// CheckpointAgent manages checkpoint
+// CheckpointAgent defines an interface for checkpoint.
 type CheckpointAgent interface {
-	IsFresh(ctx context.Context, workerType libModel.WorkerType, taskCfg *metadata.Task) (bool, error)
+	IsFresh(ctx context.Context, workerType frameModel.WorkerType, taskCfg *metadata.Task) (bool, error)
 }
 
 // WorkerManager checks and schedules workers.
@@ -55,6 +62,7 @@ type WorkerManager struct {
 
 	jobStore        *metadata.JobStore
 	workerAgent     WorkerAgent
+	messageAgent    dmpkg.MessageAgent
 	checkpointAgent CheckpointAgent
 
 	// workerStatusMap record the runtime worker status
@@ -63,11 +71,12 @@ type WorkerManager struct {
 }
 
 // NewWorkerManager creates a new WorkerManager instance
-func NewWorkerManager(initWorkerStatus []runtime.WorkerStatus, jobStore *metadata.JobStore, workerAgent WorkerAgent, checkpointAgent CheckpointAgent) *WorkerManager {
+func NewWorkerManager(initWorkerStatus []runtime.WorkerStatus, jobStore *metadata.JobStore, workerAgent WorkerAgent, messageAgent dmpkg.MessageAgent, checkpointAgent CheckpointAgent) *WorkerManager {
 	workerManager := &WorkerManager{
 		DefaultTicker:   ticker.NewDefaultTicker(WorkerNormalInterval, WorkerErrorInterval),
 		jobStore:        jobStore,
 		workerAgent:     workerAgent,
+		messageAgent:    messageAgent,
 		checkpointAgent: checkpointAgent,
 	}
 	workerManager.DefaultTicker.Ticker = workerManager
@@ -173,7 +182,7 @@ func (wm *WorkerManager) stopUnneededWorkers(ctx context.Context, job *metadata.
 func (wm *WorkerManager) checkAndScheduleWorkers(ctx context.Context, job *metadata.Job) error {
 	var (
 		runningWorker runtime.WorkerStatus
-		nextUnit      libModel.WorkerType
+		nextUnit      frameModel.WorkerType
 		err           error
 		recordError   error
 	)
@@ -216,22 +225,22 @@ func (wm *WorkerManager) checkAndScheduleWorkers(ctx context.Context, job *metad
 	return recordError
 }
 
-var workerSeqMap = map[string][]libModel.WorkerType{
+var workerSeqMap = map[string][]frameModel.WorkerType{
 	dmconfig.ModeAll: {
-		lib.WorkerDMDump,
-		lib.WorkerDMLoad,
-		lib.WorkerDMSync,
+		framework.WorkerDMDump,
+		framework.WorkerDMLoad,
+		framework.WorkerDMSync,
 	},
 	dmconfig.ModeFull: {
-		lib.WorkerDMDump,
-		lib.WorkerDMLoad,
+		framework.WorkerDMDump,
+		framework.WorkerDMLoad,
 	},
 	dmconfig.ModeIncrement: {
-		lib.WorkerDMSync,
+		framework.WorkerDMSync,
 	},
 }
 
-func (wm *WorkerManager) getCurrentUnit(ctx context.Context, task *metadata.Task) (libModel.WorkerType, error) {
+func (wm *WorkerManager) getCurrentUnit(ctx context.Context, task *metadata.Task) (frameModel.WorkerType, error) {
 	workerSeq, ok := workerSeqMap[task.Cfg.TaskMode]
 	if !ok {
 		log.L().Panic("Unexpected TaskMode", zap.String("TaskMode", task.Cfg.TaskMode))
@@ -250,7 +259,7 @@ func (wm *WorkerManager) getCurrentUnit(ctx context.Context, task *metadata.Task
 	return workerSeq[0], nil
 }
 
-func workerIdxInSeq(taskMode string, worker libModel.WorkerType) int {
+func workerIdxInSeq(taskMode string, worker frameModel.WorkerType) int {
 	workerSeq, ok := workerSeqMap[taskMode]
 	if !ok {
 		log.L().Panic("Unexpected TaskMode", zap.String("TaskMode", taskMode))
@@ -266,7 +275,7 @@ func workerIdxInSeq(taskMode string, worker libModel.WorkerType) int {
 	return -1
 }
 
-func nextWorkerIdxAndType(taskMode string, currWorker libModel.WorkerType) (int, libModel.WorkerType) {
+func nextWorkerIdxAndType(taskMode string, currWorker frameModel.WorkerType) (int, frameModel.WorkerType) {
 	workerSeq, ok := workerSeqMap[taskMode]
 	if !ok {
 		log.L().Panic("Unexpected TaskMode", zap.String("TaskMode", taskMode))
@@ -282,7 +291,7 @@ func nextWorkerIdxAndType(taskMode string, currWorker libModel.WorkerType) (int,
 	return idx + 1, workerSeq[idx+1]
 }
 
-func getNextUnit(task *metadata.Task, worker runtime.WorkerStatus) libModel.WorkerType {
+func getNextUnit(task *metadata.Task, worker runtime.WorkerStatus) frameModel.WorkerType {
 	if worker.Stage != runtime.WorkerFinished {
 		return worker.Unit
 	}
@@ -294,12 +303,12 @@ func getNextUnit(task *metadata.Task, worker runtime.WorkerStatus) libModel.Work
 func (wm *WorkerManager) createWorker(
 	ctx context.Context,
 	taskID string,
-	unit libModel.WorkerType,
+	unit frameModel.WorkerType,
 	taskCfg *config.TaskCfg,
 	resources ...resourcemeta.ResourceID,
 ) error {
 	log.L().Info("start to create worker", zap.String("task_id", taskID), zap.Int64("unit", int64(unit)))
-	workerID, err := wm.workerAgent.CreateWorker(ctx, taskID, unit, taskCfg, resources...)
+	workerID, err := wm.workerAgent.CreateWorker(unit, taskCfg.ToDMSubTaskCfg(), 1, resources...)
 	if err != nil {
 		log.L().Error("failed to create workers", zap.String("task_id", taskID), zap.Int64("unit", int64(unit)), zap.Error(err))
 	}
@@ -317,9 +326,13 @@ func (wm *WorkerManager) createWorker(
 	return err
 }
 
-func (wm *WorkerManager) stopWorker(ctx context.Context, taskID string, workerID libModel.WorkerID) error {
+func (wm *WorkerManager) stopWorker(ctx context.Context, taskID string, workerID frameModel.WorkerID) error {
 	log.L().Info("start to stop worker", zap.String("task_id", taskID), zap.String("worker_id", workerID))
-	if err := wm.workerAgent.StopWorker(ctx, taskID, workerID); err != nil {
+
+	msg := &dmpkg.StopWorkerMessage{
+		Task: taskID,
+	}
+	if err := wm.messageAgent.SendMessage(ctx, taskID, dmpkg.StopWorker, msg); err != nil {
 		log.L().Error("failed to stop worker", zap.String("task_id", taskID), zap.String("worker_id", workerID), zap.Error(err))
 		return err
 	}
@@ -333,7 +346,7 @@ func (wm *WorkerManager) stopWorker(ctx context.Context, taskID string, workerID
 	return nil
 }
 
-func (wm *WorkerManager) removeWorkerStatusByWorkerID(workerID libModel.WorkerID) {
+func (wm *WorkerManager) removeWorkerStatusByWorkerID(workerID frameModel.WorkerID) {
 	wm.workerStatusMap.Range(func(key, value interface{}) bool {
 		if value.(runtime.WorkerStatus).ID == workerID {
 			wm.workerStatusMap.Delete(key)

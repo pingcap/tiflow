@@ -44,8 +44,8 @@ func newProcessor4Test(
 	t *testing.T,
 	createTablePipeline func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error),
 ) *processor {
-	upStream := upstream.NewUpstream4Test(nil)
-	p := newProcessor(ctx, upStream)
+	up := upstream.NewUpstream4Test(nil)
+	p := newProcessor(ctx, up)
 	p.lazyInit = func(ctx cdcContext.Context) error {
 		p.agent = &mockAgent{executor: p}
 		return nil
@@ -85,13 +85,6 @@ func initProcessor4Test(ctx cdcContext.Context, t *testing.T) (*processor, *orch
         "sink": {
             "dispatchers": null,
             "protocol": "open-protocol"
-        },
-        "cyclic-replication": {
-            "enable": false,
-            "replica-id": 0,
-            "filter-replica-ids": null,
-            "id-buckets": 0,
-            "sync-ddl": false
         }
     },
     "state": "normal",

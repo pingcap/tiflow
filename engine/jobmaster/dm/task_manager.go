@@ -20,6 +20,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
@@ -28,48 +29,28 @@ import (
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/ticker"
 )
 
-// OperateType represents internal operate type in DM
-// TODO: use OperateType in lib or move OperateType to lib.
-type OperateType int
-
-// These op may updated in later pr.
-// NOTICE: consider to only use Update cmd to add/remove task.
-// e.g. start-task/stop-task -s source in origin DM will be replaced by update-job now.
-const (
-	Create OperateType = iota
-	Pause
-	Resume
-	Update
-	Delete
-)
-
 var (
 	taskNormalInterval = time.Second * 30
 	taskErrorInterval  = time.Second * 10
 )
 
-// TaskAgent defines an interface to operate task
-type TaskAgent interface {
-	OperateTask(ctx context.Context, taskID string, stage metadata.TaskStage) error
-}
-
 // TaskManager checks and operates task.
 type TaskManager struct {
 	*ticker.DefaultTicker
 
-	jobStore  *metadata.JobStore
-	taskAgent TaskAgent
+	jobStore     *metadata.JobStore
+	messageAgent dmpkg.MessageAgent
 	// tasks record the runtime task status
 	// taskID -> TaskStatus
 	tasks sync.Map
 }
 
 // NewTaskManager creates a new TaskManager instance
-func NewTaskManager(initTaskStatus []runtime.TaskStatus, jobStore *metadata.JobStore, agent TaskAgent) *TaskManager {
+func NewTaskManager(initTaskStatus []runtime.TaskStatus, jobStore *metadata.JobStore, messageAgent dmpkg.MessageAgent) *TaskManager {
 	taskManager := &TaskManager{
 		DefaultTicker: ticker.NewDefaultTicker(taskNormalInterval, taskErrorInterval),
 		jobStore:      jobStore,
-		taskAgent:     agent,
+		messageAgent:  messageAgent,
 	}
 	taskManager.DefaultTicker.Ticker = taskManager
 
@@ -81,7 +62,7 @@ func NewTaskManager(initTaskStatus []runtime.TaskStatus, jobStore *metadata.JobS
 
 // OperateTask updates the task status in metadata and triggers the task manager to check and operate task.
 // called by user request.
-func (tm *TaskManager) OperateTask(ctx context.Context, op OperateType, jobCfg *config.JobCfg, tasks []string) (err error) {
+func (tm *TaskManager) OperateTask(ctx context.Context, op dmpkg.OperateType, jobCfg *config.JobCfg, tasks []string) (err error) {
 	log.L().Info("operate task", zap.Int("op", int(op)), zap.Strings("tasks", tasks))
 	defer func() {
 		if err == nil {
@@ -91,13 +72,13 @@ func (tm *TaskManager) OperateTask(ctx context.Context, op OperateType, jobCfg *
 
 	var stage metadata.TaskStage
 	switch op {
-	case Create, Update:
+	case dmpkg.Create, dmpkg.Update:
 		return tm.jobStore.Put(ctx, metadata.NewJob(jobCfg))
-	case Delete:
+	case dmpkg.Delete:
 		return tm.jobStore.Delete(ctx)
-	case Resume:
+	case dmpkg.Resume:
 		stage = metadata.StageRunning
-	case Pause:
+	case dmpkg.Pause:
 		stage = metadata.StagePaused
 	default:
 		return errors.New("unknown operate type")
@@ -108,8 +89,8 @@ func (tm *TaskManager) OperateTask(ctx context.Context, op OperateType, jobCfg *
 
 // UpdateTaskStatus is called when receive task status from worker.
 func (tm *TaskManager) UpdateTaskStatus(taskStatus runtime.TaskStatus) {
-	log.L().Debug("update task status", zap.String("task_id", taskStatus.GetTask()), zap.Int("stage", int(taskStatus.GetStage())), zap.Int("unit", int(taskStatus.GetUnit())))
-	tm.tasks.Store(taskStatus.GetTask(), taskStatus)
+	log.L().Debug("update task status", zap.String("task_id", taskStatus.Task), zap.Int("stage", int(taskStatus.Stage)), zap.Int("unit", int(taskStatus.Unit)))
+	tm.tasks.Store(taskStatus.Task, taskStatus)
 }
 
 // TaskStatus return the task status.
@@ -152,20 +133,22 @@ func (tm *TaskManager) checkAndOperateTasks(ctx context.Context, job *metadata.J
 		}
 
 		// task unbounded or worker offline
-		if !ok || runningTask.GetStage() == metadata.StageUnscheduled {
+		if !ok || runningTask.Stage == metadata.StageUnscheduled {
 			recordError = errors.New("get task running status failed")
 			log.L().Error("failed to schedule task", zap.String("task_id", taskID), zap.Error(recordError))
 			continue
 		}
 
-		if taskAsExpected(persistentTask, runningTask) {
-			log.L().Debug("task status as expected", zap.String("task_id", taskID), zap.Int("stage", int(runningTask.GetStage())))
+		op := genOp(runningTask.Stage, persistentTask.Stage)
+		if op == dmpkg.None {
+			log.L().Debug("task status will not be changed", zap.String("task_id", taskID), zap.Int("stage", int(runningTask.Stage)))
 			continue
 		}
 
-		log.L().Info("unexpected task status", zap.String("task_id", taskID), zap.Int("expected_stage", int(persistentTask.Stage)), zap.Int("stage", int(runningTask.GetStage())))
-		// OperateTask should be a asynchronous request
-		if err := tm.taskAgent.OperateTask(ctx, taskID, persistentTask.Stage); err != nil {
+		log.L().Info("unexpected task status", zap.String("task_id", taskID), zap.Int("op", int(op)),
+			zap.Int("expected_stage", int(persistentTask.Stage)), zap.Int("stage", int(runningTask.Stage)))
+		// operateTaskMessage should be a asynchronous request
+		if err := tm.operateTaskMessage(ctx, taskID, op); err != nil {
 			recordError = err
 			log.L().Error("operate task failed", zap.Error(recordError))
 			continue
@@ -195,9 +178,31 @@ func (tm *TaskManager) removeTaskStatus(job *metadata.Job) {
 	})
 }
 
-// check a task runs as expected.
-func taskAsExpected(persistentTask *metadata.Task, taskStatus runtime.TaskStatus) bool {
-	// TODO: when running is expected but task is paused, we may still need return true,
-	// because worker will resume it automatically.
-	return persistentTask.Stage == taskStatus.GetStage()
+// GetTaskStatus gets task status by taskID
+func (tm *TaskManager) GetTaskStatus(taskID string) (runtime.TaskStatus, bool) {
+	value, ok := tm.tasks.Load(taskID)
+	if !ok {
+		return runtime.NewOfflineStatus(taskID), false
+	}
+	return value.(runtime.TaskStatus), true
+}
+
+func genOp(runtimeStage, expectedStage metadata.TaskStage) dmpkg.OperateType {
+	switch {
+	case expectedStage == metadata.StagePaused && (runtimeStage == metadata.StageRunning || runtimeStage == metadata.StageError):
+		return dmpkg.Pause
+	case expectedStage == metadata.StageRunning && runtimeStage == metadata.StagePaused:
+		return dmpkg.Resume
+	// TODO: support update
+	default:
+		return dmpkg.None
+	}
+}
+
+func (tm *TaskManager) operateTaskMessage(ctx context.Context, taskID string, op dmpkg.OperateType) error {
+	msg := &dmpkg.OperateTaskMessage{
+		Task: taskID,
+		Op:   op,
+	}
+	return tm.messageAgent.SendMessage(ctx, taskID, dmpkg.OperateTask, msg)
 }

@@ -56,7 +56,7 @@ func waitCheckpointTs(t *testing.T, s *mqSink, tableID int64, target uint64) uin
 	var checkpointTs uint64
 	err := retry.Do(context.Background(), func() error {
 		if v, ok := s.tableCheckpointTsMap.Load(tableID); ok {
-			checkpointTs = v.(uint64)
+			checkpointTs = v.(model.ResolvedTs).Ts
 		}
 		if checkpointTs >= target {
 			return nil
@@ -119,9 +119,9 @@ func TestKafkaSink(t *testing.T) {
 	checkpointTs := waitCheckpointTs(t, sink, tableID, uint64(120))
 	require.Equal(t, uint64(120), checkpointTs)
 	// flush older resolved ts
-	checkpointTs, err = sink.FlushRowChangedEvents(ctx, tableID, model.NewResolvedTs(uint64(110)))
+	checkpoint, err := sink.FlushRowChangedEvents(ctx, tableID, model.NewResolvedTs(uint64(110)))
 	require.Nil(t, err)
-	require.Equal(t, uint64(120), checkpointTs)
+	require.Equal(t, uint64(120), checkpoint.Ts)
 
 	// mock kafka broker processes 1 checkpoint ts event
 	err = sink.EmitCheckpointTs(ctx, uint64(120), []model.TableName{{
@@ -129,6 +129,12 @@ func TestKafkaSink(t *testing.T) {
 		Table:  "t1",
 	}})
 	require.Nil(t, err)
+	defer func() {
+		err = sink.Close(ctx)
+		if err != nil {
+			require.Equal(t, context.Canceled, errors.Cause(err))
+		}
+	}()
 
 	// mock kafka broker processes 1 ddl event
 	ddl := &model.DDLEvent{
@@ -156,17 +162,10 @@ func TestKafkaSink(t *testing.T) {
 	if err != nil {
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}
-
-	err = sink.Close(ctx)
-	if err != nil {
-		require.Equal(t, context.Canceled, errors.Cause(err))
-	}
 }
 
 func TestKafkaSinkFilter(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
 	leader, topic := initBroker(t, kafka.DefaultMockPartitionNum)
 	defer leader.Close()
 
@@ -215,6 +214,7 @@ func TestKafkaSinkFilter(t *testing.T) {
 	err = sink.EmitDDLEvent(ctx, ddl)
 	require.True(t, cerror.ErrDDLEventIgnored.Equal(err))
 
+	cancel()
 	err = sink.Close(ctx)
 	if err != nil {
 		require.Equal(t, context.Canceled, errors.Cause(err))
@@ -223,7 +223,6 @@ func TestKafkaSinkFilter(t *testing.T) {
 
 func TestPulsarSinkEncoderConfig(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	err := failpoint.Enable("github.com/pingcap/tiflow/cdc/sink/mq/producer/pulsar/MockPulsar",
 		"return(true)")
@@ -247,11 +246,17 @@ func TestPulsarSinkEncoderConfig(t *testing.T) {
 	require.IsType(t, &codec.JSONEventBatchEncoder{}, encoder)
 	require.Equal(t, 1, encoder.(*codec.JSONEventBatchEncoder).GetMaxBatchSize())
 	require.Equal(t, 4194304, encoder.(*codec.JSONEventBatchEncoder).GetMaxMessageBytes())
+
+	// FIXME: mock pulsar client doesn't support close,
+	// so we can't call sink.Close() to close it.
+	// We will leak goroutine if we don't close it.
+	cancel()
+	sink.flushWorker.close()
+	sink.resolvedBuffer.Close()
 }
 
 func TestFlushRowChangedEvents(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	leader, topic := initBroker(t, kafka.DefaultMockPartitionNum)
 	defer leader.Close()
@@ -342,6 +347,7 @@ func TestFlushRowChangedEvents(t *testing.T) {
 	checkpointTsOld := waitCheckpointTs(t, sink, tableID1, row1.CommitTs)
 	require.Equal(t, row1.CommitTs, checkpointTsOld)
 
+	cancel()
 	err = sink.Close(ctx)
 	if err != nil {
 		require.Equal(t, context.Canceled, errors.Cause(err))

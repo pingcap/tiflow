@@ -16,10 +16,11 @@ package promutil
 import (
 	"sync"
 
-	libModel "github.com/pingcap/tiflow/engine/lib/model"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
 	dto "github.com/prometheus/client_model/go"
+
+	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 )
 
 var _ prometheus.Gatherer = globalMetricGatherer
@@ -39,30 +40,30 @@ func init() {
 
 // Registry is used for registering metric
 type Registry struct {
-	sync.Mutex
-	*prometheus.Registry
+	mu       sync.Mutex
+	registry *prometheus.Registry
 
 	// collectorByWorker is for cleaning all collectors for specific worker(jobmaster/worker)
-	collectorByWorker map[libModel.WorkerID][]prometheus.Collector
+	collectorByWorker map[frameModel.WorkerID][]prometheus.Collector
 }
 
 // NewRegistry return a new Registry
 func NewRegistry() *Registry {
 	return &Registry{
-		Registry:          prometheus.NewRegistry(),
-		collectorByWorker: make(map[libModel.WorkerID][]prometheus.Collector),
+		registry:          prometheus.NewRegistry(),
+		collectorByWorker: make(map[frameModel.WorkerID][]prometheus.Collector),
 	}
 }
 
 // MustRegister registers the provided Collector of the specified worker
-func (r *Registry) MustRegister(workerID libModel.WorkerID, c prometheus.Collector) {
+func (r *Registry) MustRegister(workerID frameModel.WorkerID, c prometheus.Collector) {
 	if c == nil {
 		return
 	}
-	r.Lock()
-	defer r.Unlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
 
-	r.Registry.MustRegister(c)
+	r.registry.MustRegister(c)
 
 	var (
 		cls    []prometheus.Collector
@@ -77,14 +78,14 @@ func (r *Registry) MustRegister(workerID libModel.WorkerID, c prometheus.Collect
 }
 
 // Unregister unregisters all Collectors of the specified worker
-func (r *Registry) Unregister(workerID libModel.WorkerID) {
-	r.Lock()
-	defer r.Unlock()
+func (r *Registry) Unregister(workerID frameModel.WorkerID) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 
 	cls, exists := r.collectorByWorker[workerID]
 	if exists {
 		for _, collector := range cls {
-			r.Registry.Unregister(collector)
+			r.registry.Unregister(collector)
 		}
 		delete(r.collectorByWorker, workerID)
 	}
@@ -93,7 +94,7 @@ func (r *Registry) Unregister(workerID libModel.WorkerID) {
 // Gather implements Gatherer interface
 func (r *Registry) Gather() ([]*dto.MetricFamily, error) {
 	// NOT NEED lock here. prometheus.Registry has thread-safe methods
-	return r.Registry.Gather()
+	return r.registry.Gather()
 }
 
 // AutoRegisterFactory uses inner Factory to create metrics and register metrics
@@ -103,11 +104,11 @@ type AutoRegisterFactory struct {
 	r     *Registry
 	// ID identify the worker(jobmaster/worker) the factory owns
 	// It's used to unregister all collectors when worker exits normally or commits suicide
-	id libModel.WorkerID
+	id frameModel.WorkerID
 }
 
 // NewAutoRegisterFactory creates an AutoRegisterFactory.
-func NewAutoRegisterFactory(f Factory, r *Registry, id libModel.WorkerID) Factory {
+func NewAutoRegisterFactory(f Factory, r *Registry, id frameModel.WorkerID) Factory {
 	return &AutoRegisterFactory{
 		inner: f,
 		r:     r,

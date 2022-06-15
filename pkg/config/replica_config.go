@@ -37,9 +37,6 @@ var defaultReplicaConfig = &ReplicaConfig{
 		WorkerNum: 16,
 	},
 	Sink: &SinkConfig{},
-	Cyclic: &CyclicConfig{
-		Enable: false,
-	},
 	Consistent: &ConsistentConfig{
 		Level:             "none",
 		MaxLogSize:        64,
@@ -59,7 +56,6 @@ type replicaConfig struct {
 	Filter           *FilterConfig     `toml:"filter" json:"filter"`
 	Mounter          *MounterConfig    `toml:"mounter" json:"mounter"`
 	Sink             *SinkConfig       `toml:"sink" json:"sink"`
-	Cyclic           *CyclicConfig     `toml:"cyclic-replication" json:"cyclic-replication"`
 	Consistent       *ConsistentConfig `toml:"consistent" json:"consistent"`
 }
 
@@ -70,11 +66,6 @@ func (c *ReplicaConfig) Marshal() (string, error) {
 		return "", cerror.WrapError(cerror.ErrEncodeFailed, errors.Annotatef(err, "Unmarshal data: %v", c))
 	}
 	return string(cfg), nil
-}
-
-// Unmarshal unmarshals into *ReplicationConfig from json marshal byte slice
-func (c *ReplicaConfig) Unmarshal(data []byte) error {
-	return c.UnmarshalJSON(data)
 }
 
 // UnmarshalJSON unmarshals into *ReplicationConfig from json marshal byte slice
@@ -103,7 +94,7 @@ func (c *ReplicaConfig) Clone() *ReplicaConfig {
 			zap.Error(cerror.WrapError(cerror.ErrDecodeFailed, err)))
 	}
 	clone := new(ReplicaConfig)
-	err = clone.Unmarshal([]byte(str))
+	err = clone.UnmarshalJSON([]byte(str))
 	if err != nil {
 		log.Panic("failed to unmarshal replica config",
 			zap.Error(cerror.WrapError(cerror.ErrDecodeFailed, err)))

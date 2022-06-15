@@ -64,7 +64,7 @@ type changefeed struct {
 	id    model.ChangeFeedID
 	state *orchestrator.ChangefeedReactorState
 
-	upStream         *upstream.Upstream
+	upstream         *upstream.Upstream
 	scheduler        scheduler.Scheduler
 	barriers         *barriers
 	feedStateManager *feedStateManager
@@ -104,19 +104,19 @@ type changefeed struct {
 	metricsChangefeedResolvedTsLagGauge   prometheus.Gauge
 	metricsChangefeedTickDuration         prometheus.Observer
 
-	newDDLPuller func(ctx cdcContext.Context, upStream *upstream.Upstream, startTs uint64) (DDLPuller, error)
+	newDDLPuller func(ctx cdcContext.Context, up *upstream.Upstream, startTs uint64) (DDLPuller, error)
 	newSink      func() DDLSink
 	newScheduler func(ctx cdcContext.Context, startTs uint64) (scheduler.Scheduler, error)
 }
 
-func newChangefeed(id model.ChangeFeedID, upStream *upstream.Upstream) *changefeed {
+func newChangefeed(id model.ChangeFeedID, up *upstream.Upstream) *changefeed {
 	c := &changefeed{
 		id: id,
 		// The scheduler will be created lazily.
 		scheduler:        nil,
 		barriers:         newBarriers(),
 		feedStateManager: newFeedStateManager(),
-		upStream:         upStream,
+		upstream:         up,
 
 		errCh:  make(chan error, defaultErrChSize),
 		cancel: func() {},
@@ -129,11 +129,11 @@ func newChangefeed(id model.ChangeFeedID, upStream *upstream.Upstream) *changefe
 }
 
 func newChangefeed4Test(
-	id model.ChangeFeedID, upStream *upstream.Upstream,
-	newDDLPuller func(ctx cdcContext.Context, upStream *upstream.Upstream, startTs uint64) (DDLPuller, error),
+	id model.ChangeFeedID, up *upstream.Upstream,
+	newDDLPuller func(ctx cdcContext.Context, up *upstream.Upstream, startTs uint64) (DDLPuller, error),
 	newSink func() DDLSink,
 ) *changefeed {
-	c := newChangefeed(id, upStream)
+	c := newChangefeed(id, up)
 	c.newDDLPuller = newDDLPuller
 	c.newSink = newSink
 	return c
@@ -142,7 +142,7 @@ func newChangefeed4Test(
 func (c *changefeed) Tick(ctx cdcContext.Context, state *orchestrator.ChangefeedReactorState, captures map[model.CaptureID]*model.CaptureInfo) {
 	startTime := time.Now()
 	// skip this tick
-	if !c.upStream.IsNormal() {
+	if !c.upstream.IsNormal() {
 		return
 	}
 	ctx = cdcContext.WithErrorHandler(ctx, func(err error) error {
@@ -189,7 +189,7 @@ func (c *changefeed) checkStaleCheckpointTs(ctx cdcContext.Context, checkpointTs
 		failpoint.Inject("InjectChangefeedFastFailError", func() error {
 			return cerror.ErrGCTTLExceeded.FastGen("InjectChangefeedFastFailError")
 		})
-		if err := c.upStream.GCManager.CheckStaleCheckpointTs(ctx, c.id, checkpointTs); err != nil {
+		if err := c.upstream.GCManager.CheckStaleCheckpointTs(ctx, c.id, checkpointTs); err != nil {
 			return errors.Trace(err)
 		}
 	}
@@ -266,7 +266,7 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 		return errors.Trace(err)
 	}
 
-	pdTime, _ := c.upStream.PDClock.CurrentTime()
+	pdTime, _ := c.upstream.PDClock.CurrentTime()
 	currentTs := oracle.GetPhysical(pdTime)
 
 	// CheckpointCannotProceed implies that not all tables are being replicated normally,
@@ -328,7 +328,7 @@ LOOP:
 		// See more gc doc.
 		ensureTTL := int64(10 * 60)
 		err := gc.EnsureChangefeedStartTsSafety(
-			ctx, c.upStream.PDClient, c.state.ID, ensureTTL, checkpointTs)
+			ctx, c.upstream.PDClient, c.state.ID, ensureTTL, checkpointTs)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -346,7 +346,7 @@ LOOP:
 	// So we need to process all DDLs from the range [checkpointTs, ...), but since the semantics of start-ts requires
 	// the lower bound of an open interval, i.e. (startTs, ...), we pass checkpointTs-1 as the start-ts to initialize
 	// the schema cache.
-	c.schema, err = newSchemaWrap4Owner(c.upStream.KVStorage,
+	c.schema, err = newSchemaWrap4Owner(c.upstream.KVStorage,
 		checkpointTs-1, c.state.Info.Config, ctx.ChangefeedVars().ID)
 	if err != nil {
 		return errors.Trace(err)
@@ -358,7 +358,7 @@ LOOP:
 	c.sink.run(cancelCtx, cancelCtx.ChangefeedVars().ID, cancelCtx.ChangefeedVars().Info)
 
 	// Refer to the previous comment on why we use (checkpointTs-1).
-	c.ddlPuller, err = c.newDDLPuller(cancelCtx, c.upStream, checkpointTs-1)
+	c.ddlPuller, err = c.newDDLPuller(cancelCtx, c.upstream, checkpointTs-1)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -566,13 +566,6 @@ func (c *changefeed) asyncExecDDLJob(ctx cdcContext.Context,
 		return true, nil
 	}
 
-	cyclicConfig := c.state.Info.Config.Cyclic
-	if cyclicConfig.IsEnabled() && !cyclicConfig.SyncDDL {
-		log.Info("ignore the DDL job because cyclic config is enabled and syncDDL is false",
-			zap.String("changefeed", c.id.ID), zap.Reflect("job", job))
-		return true, nil
-	}
-
 	if c.ddlEventCache == nil {
 		ddlEvents, err := c.schema.BuildDDLEvents(job)
 		if err != nil {
@@ -669,7 +662,7 @@ func (c *changefeed) updateStatus(checkpointTs, resolvedTs model.Ts) {
 
 func (c *changefeed) Close(ctx cdcContext.Context) {
 	startTime := time.Now()
-	c.upStream.Release()
+	c.upstream.Release()
 	c.releaseResources(ctx)
 
 	costTime := time.Since(startTime)
