@@ -18,7 +18,6 @@ import (
 	filterV1 "github.com/pingcap/tidb/util/filter"
 	filterV2 "github.com/pingcap/tidb/util/table-filter"
 	"github.com/pingcap/tiflow/pkg/config"
-	"github.com/pingcap/tiflow/pkg/cyclic/mark"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 )
 
@@ -27,7 +26,6 @@ type Filter struct {
 	filter           filterV2.Filter
 	ignoreTxnStartTs []uint64
 	ddlAllowlist     []model.ActionType
-	isCyclicEnabled  bool
 }
 
 // VerifyRules checks the filter rules in the configuration
@@ -65,7 +63,6 @@ func NewFilter(cfg *config.ReplicaConfig) (*Filter, error) {
 		filter:           f,
 		ignoreTxnStartTs: cfg.Filter.IgnoreTxnStartTs,
 		ddlAllowlist:     cfg.Filter.DDLAllowlist,
-		isCyclicEnabled:  cfg.Cyclic.IsEnabled(),
 	}, nil
 }
 
@@ -83,10 +80,6 @@ func (f *Filter) shouldIgnoreStartTs(ts uint64) bool {
 func (f *Filter) ShouldIgnoreTable(db, tbl string) bool {
 	if isSysSchema(db) {
 		return true
-	}
-	if f.isCyclicEnabled && mark.IsMarkTable(db, tbl) {
-		// Always replicate mark tables.
-		return false
 	}
 	return !f.filter.MatchTable(db, tbl)
 }

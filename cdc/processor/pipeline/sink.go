@@ -29,10 +29,6 @@ import (
 	"go.uber.org/zap"
 )
 
-const (
-	defaultSyncResolvedBatch = 64
-)
-
 // TableStatus is status of the table pipeline
 type TableStatus int32
 
