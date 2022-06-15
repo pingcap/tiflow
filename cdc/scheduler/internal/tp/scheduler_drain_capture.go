@@ -14,11 +14,14 @@
 package tp
 
 import (
+	"math"
 	"math/rand"
 	"sync"
 	"time"
 
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"go.uber.org/zap"
 )
 
 const captureIDNotDraining = ""
@@ -66,12 +69,6 @@ func (d *drainCaptureScheduler) Schedule(
 		return nil
 	}
 
-	accept := func() {
-		d.mu.Lock()
-		defer d.mu.Unlock()
-		d.target = captureIDNotDraining
-	}
-
 	otherCaptures := make(map[model.CaptureID]*model.CaptureInfo)
 	for id, info := range captures {
 		if id != d.target {
@@ -79,9 +76,75 @@ func (d *drainCaptureScheduler) Schedule(
 		}
 	}
 
-	task := newBurstBalanceMoveTables(accept, d.random, captures, replications)
-	if task == nil {
+	// this may happen when inject the target, there is at least 2 alive captures
+	// but when schedule the task, only owner alive.
+	if len(otherCaptures) == 0 {
+		log.Warn("tpscheduler: drain capture scheduler ignore drain target capture, "+
+			"since cannot found destination captures",
+			zap.String("target", d.target), zap.Any("captures", captures))
+		d.target = captureIDNotDraining
 		return nil
 	}
+
+	victims := make([]model.TableID, 0)
+	for tableID, rep := range replications {
+		if rep.State != ReplicationSetStateRemoving {
+			victims = append(victims, tableID)
+		}
+	}
+
+	if len(victims) == 0 {
+		d.target = captureIDNotDraining
+		return nil
+	}
+
+	captureWorkload := make(map[model.CaptureID]int)
+	for _, rep := range replications {
+		if rep.State != ReplicationSetStateReplicating {
+			continue
+		}
+		captureWorkload[rep.Primary] += 1
+	}
+	for captureID, w := range captureWorkload {
+		captureWorkload[captureID] = randomizeWorkload(d.random, w)
+	}
+
+	// for each victim table, find the target for it
+	moveTables := make([]moveTable, 0, len(victims))
+	for _, tableID := range victims {
+		target := ""
+		minWorkload := math.MaxInt64
+
+		for captureID, workload := range captureWorkload {
+			if workload < minWorkload {
+				minWorkload = workload
+				target = captureID
+			}
+		}
+
+		if minWorkload == math.MaxInt64 {
+			log.Panic("tpscheduler: rebalance meet unexpected min workload " +
+				"when try to the the target capture")
+		}
+
+		moveTables = append(moveTables, moveTable{
+			TableID:     tableID,
+			DestCapture: target,
+		})
+
+		captureWorkload[target] += 1
+	}
+
+	accept := func() {
+		d.mu.Lock()
+		defer d.mu.Unlock()
+		d.target = captureIDNotDraining
+	}
+
+	task := &scheduleTask{
+		burstBalance: &burstBalance{MoveTables: moveTables},
+		accept:       accept,
+	}
+
 	return []*scheduleTask{task}
 }
