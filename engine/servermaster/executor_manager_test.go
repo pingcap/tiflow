@@ -132,8 +132,8 @@ func TestExecutorManagerWatch(t *testing.T) {
 	bgExecutorHeartbeat := func(
 		ctx context.Context, wg *sync.WaitGroup, executorID model.DeployNodeID,
 	) context.CancelFunc {
-		// send a blocking heartbeat first in order to check online count takes
-		// effect immediately.
+		// send a synchronous heartbeat first in order to ensure the online
+		// count of this executor takes effect immediately.
 		resp, err := mgr.HandleHeartbeat(newHeartbeatReq(executorID))
 		require.NoError(t, err)
 		require.Nil(t, resp.Err)
