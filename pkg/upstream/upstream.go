@@ -179,7 +179,7 @@ func (up *Upstream) init(ctx context.Context) error {
 		up.GrpcPool.RecycleConn(ctx)
 	}()
 
-	log.Info("upStream initialize successfully", zap.Uint64("upstreamID", up.ID))
+	log.Info("upstream initialize successfully", zap.Uint64("upstreamID", up.ID))
 	atomic.StoreInt32(&up.status, normal)
 	return nil
 }
@@ -213,7 +213,7 @@ func (up *Upstream) close() {
 
 	up.wg.Wait()
 	atomic.StoreInt32(&up.status, closed)
-	log.Info("upStream closed", zap.Uint64("upstreamID", up.ID))
+	log.Info("upstream closed", zap.Uint64("upstreamID", up.ID))
 }
 
 // IsNormal returns true if the upstream is normal.
