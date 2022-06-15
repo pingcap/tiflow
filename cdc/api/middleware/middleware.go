@@ -73,3 +73,16 @@ func ErrorHandleMiddleware() gin.HandlerFunc {
 		}
 	}
 }
+
+// ForwardToOwnerMiddleware forward an request to owner if current server
+// is not owner, or handle it locally.
+func ForwardToOwnerMiddleware(p api.CaptureInfoProvider) gin.HandlerFunc {
+	return func(ctx *gin.Context) {
+		if !p.IsOwner() {
+			api.ForwardToOwner(ctx, p)
+			ctx.Abort()
+			return
+		}
+		ctx.Next()
+	}
+}
