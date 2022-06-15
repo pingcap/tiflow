@@ -403,22 +403,20 @@ func (o *ownerImpl) clusterVersionConsistent(captures map[model.CaptureID]*model
 }
 
 func (o *ownerImpl) handleDrainCaptures(query *scheduler.Query, done chan<- error) {
-	var (
-		totalTableCount int
-		err             error
-	)
-
-	// todo: think about how to handle errors
+	// todo: shall we really report all changefeed ok or not ?
+	// how to let the api caller know that not all changefeed works, or at least some works.
+	allChangefeedOK := true
+	totalTableCount := 0
 	target := query.CaptureID
 	for _, changefeed := range o.changefeeds {
-		count, e := changefeed.scheduler.DrainCapture(target)
-		if e != nil && err == nil {
-			err = e
-		}
+		count, ok := changefeed.scheduler.DrainCapture(target)
 		totalTableCount += count
+		if allChangefeedOK {
+			allChangefeedOK = ok
+		}
+
 	}
 	query.Resp = &model.DrainCaptureResp{TotalTableCount: totalTableCount}
-	done <- err
 	close(done)
 }
 
