@@ -146,9 +146,9 @@ func HandleOwnerScheduleTable(
 
 // forWardFromCapture is a header to be set when
 // a request is forwarded from another capture
-const forWardFromCapture = "TiCDC-ForwardFromCapture"
+const forwardFromCapture = "TiCDC-ForwardFromCapture"
 
-// ForwardToOwner forward an request to owner
+// ForwardToOwner forwards an request to the owner
 func ForwardToOwner(c *gin.Context, p CaptureInfoProvider) {
 	ctx := c.Request.Context()
 	// every request can only forward to owner one time
