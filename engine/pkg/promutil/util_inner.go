@@ -20,6 +20,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
+	engineModel "github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 )
 
@@ -35,11 +36,11 @@ func HTTPHandlerForMetricImpl(gather prometheus.Gatherer) http.Handler {
 }
 
 // NewFactory4MasterImpl return a Factory for jobmaster
-func NewFactory4MasterImpl(reg *Registry, info tenant.ProjectInfo, jobType frameModel.JobType, jobID frameModel.JobID) Factory {
+func NewFactory4MasterImpl(reg *Registry, info tenant.ProjectInfo, jobType engineModel.JobType, jobID engineModel.JobID) Factory {
 	return NewAutoRegisterFactory(
 		NewWrappingFactory(
 			NewPromFactory(),
-			jobType,
+			jobType.String(),
 			prometheus.Labels{
 				constLabelTenantKey:  info.TenantID(),
 				constLabelProjectKey: info.ProjectID(),
@@ -52,13 +53,13 @@ func NewFactory4MasterImpl(reg *Registry, info tenant.ProjectInfo, jobType frame
 }
 
 // NewFactory4WorkerImpl return a Factory for worker
-func NewFactory4WorkerImpl(reg *Registry, info tenant.ProjectInfo, jobType frameModel.JobType, jobID frameModel.JobID,
+func NewFactory4WorkerImpl(reg *Registry, info tenant.ProjectInfo, jobType engineModel.JobType, jobID engineModel.JobID,
 	workerID frameModel.WorkerID,
 ) Factory {
 	return NewAutoRegisterFactory(
 		NewWrappingFactory(
 			NewPromFactory(),
-			jobType,
+			jobType.String(),
 			prometheus.Labels{
 				constLabelTenantKey:  info.TenantID(),
 				constLabelProjectKey: info.ProjectID(),

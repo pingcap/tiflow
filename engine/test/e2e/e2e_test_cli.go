@@ -29,6 +29,7 @@ import (
 	"github.com/pingcap/tiflow/engine/client"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/framework/fake"
+	engineModel "github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/meta/kvclient"
 	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
@@ -92,9 +93,9 @@ func NewUTCli(
 }
 
 // CreateJob sends SubmitJob command to servermaster
-func (cli *ChaosCli) CreateJob(ctx context.Context, tp pb.JobType, config []byte) (string, error) {
+func (cli *ChaosCli) CreateJob(ctx context.Context, tp engineModel.JobType, config []byte) (string, error) {
 	req := &pb.SubmitJobRequest{
-		Tp:     tp,
+		Tp:     int32(tp),
 		Config: config,
 		ProjectInfo: &pb.ProjectInfo{
 			TenantId:  cli.project.TenantID(),

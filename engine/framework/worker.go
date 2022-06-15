@@ -187,7 +187,7 @@ func NewBaseWorker(
 			ProjectID: ctx.ProjectInfo.UniqueID(),
 			JobID:     masterID,
 			ID:        workerID,
-			Type:      int(tp),
+			Type:      tp,
 		},
 		timeoutConfig: config.DefaultTimeoutConfig(),
 
@@ -196,8 +196,8 @@ func NewBaseWorker(
 		errCenter:        errctx.NewErrCenter(),
 		clock:            clock.New(),
 		userMetaKVClient: kvclient.NewPrefixKVClient(params.UserRawKVClient, ctx.ProjectInfo.UniqueID()),
-		metricFactory:    promutil.NewFactory4Worker(ctx.ProjectInfo, WorkerTypeForMetric(tp), masterID, workerID),
 		logger:           logutil.NewLogger4Worker(ctx.ProjectInfo, masterID, workerID),
+		metricFactory:    promutil.NewFactory4Worker(ctx.ProjectInfo, MustConvertWorkerType2JobType(tp), masterID, workerID),
 	}
 }
 
