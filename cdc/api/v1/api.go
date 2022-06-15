@@ -151,8 +151,9 @@ func (h *OpenAPI) ListChangefeed(c *gin.Context) {
 		}
 
 		resp := &model.ChangefeedCommonInfo{
-			Namespace: cfID.Namespace,
-			ID:        cfID.ID,
+			UpstreamID: cfInfo.UpstreamID,
+			Namespace:  cfID.Namespace,
+			ID:         cfID.ID,
 		}
 
 		if cfInfo != nil {
@@ -223,6 +224,7 @@ func (h *OpenAPI) GetChangefeed(c *gin.Context) {
 	}
 
 	changefeedDetail := &model.ChangefeedDetail{
+		UpstreamID:     info.UpstreamID,
 		Namespace:      changefeedID.Namespace,
 		ID:             changefeedID.ID,
 		SinkURI:        info.SinkURI,

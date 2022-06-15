@@ -34,8 +34,6 @@ const (
 	// DefaultNamespace is the default namespace value,
 	// all the old changefeed will be put into default namespace
 	DefaultNamespace = "default"
-	// DefaultUpstreamID is the default upstream id
-	DefaultUpstreamID = 0
 )
 
 // ChangeFeedID is the type for change feed ID

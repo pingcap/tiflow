@@ -211,7 +211,7 @@ func getPDClient(ctx context.Context,
 ) (pd.Client, error) {
 	// If there are no pdAddrs, we use default upstream's pdClient
 	if len(pdAddrs) == 0 {
-		return capture.UpstreamManager.Get(model.DefaultUpstreamID).PDClient, nil
+		return capture.UpstreamManager.GetDefaultUpstream().PDClient, nil
 	}
 
 	grpcTLSOption, err := credential.ToGRPCDialOption()

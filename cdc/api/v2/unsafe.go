@@ -15,14 +15,19 @@ package v2
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
+	tidbkv "github.com/pingcap/tidb/kv"
+	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/txnutil"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/tikv/client-go/v2/tikv"
+	pd "github.com/tikv/pd/client"
 )
 
 // CDCMetaData returns all etcd key values used by cdc
@@ -49,13 +54,36 @@ func (h *OpenAPIV2) ResolveLock(c *gin.Context) {
 		_ = c.Error(cerror.ErrAPIInvalidParam.Wrap(err))
 		return
 	}
-	up := h.capture.UpstreamManager.GetDefaultUpstream()
-	defer up.Release()
+	var (
+		err       error
+		kvStorage tidbkv.Storage
+	)
+	if len(resolveLockReq.PDAddrs) > 0 {
+		kvStorage, err = kv.CreateTiStore(strings.Join(resolveLockReq.PDAddrs, ","),
+			&security.Credential{
+				CAPath:   resolveLockReq.CAPath,
+				CertPath: resolveLockReq.CertPath,
+				KeyPath:  resolveLockReq.KeyPath,
+			})
+		if err != nil {
+			_ = c.Error(err)
+			return
+		}
+	} else {
+		up := h.capture.UpstreamManager.GetDefaultUpstream()
+		defer up.Release()
+		kvStorage = up.KVStorage
+	}
 
-	txnResolver := txnutil.NewLockerResolver(up.KVStorage.(tikv.Storage),
+	if kvStorage == nil {
+		c.Status(http.StatusServiceUnavailable)
+		return
+	}
+
+	txnResolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage),
 		model.DefaultChangeFeedID("changefeed-client"),
 		util.RoleClient)
-	err := txnResolver.Resolve(c, resolveLockReq.RegionID, resolveLockReq.Ts)
+	err = txnResolver.Resolve(c, resolveLockReq.RegionID, resolveLockReq.Ts)
 	if err != nil {
 		_ = c.Error(err)
 		return
@@ -65,9 +93,42 @@ func (h *OpenAPIV2) ResolveLock(c *gin.Context) {
 
 // DeleteServiceGcSafePoint Delete CDC service GC safepoint in PD
 func (h *OpenAPIV2) DeleteServiceGcSafePoint(c *gin.Context) {
-	up := h.capture.UpstreamManager.GetDefaultUpstream()
-	defer up.Release()
-	err := gc.RemoveServiceGCSafepoint(c, up.PDClient, h.capture.EtcdClient.GetGCServiceID())
+	ctx := c.Request.Context()
+	upstreamConfig := UpstreamConfig{}
+	if err := c.BindJSON(&upstreamConfig); err != nil {
+		_ = c.Error(cerror.WrapError(cerror.ErrAPIInvalidParam, err))
+		return
+	}
+	var (
+		err      error
+		pdClient pd.Client
+	)
+	if upstreamConfig.ID > 0 {
+		up := h.capture.UpstreamManager.Get(upstreamConfig.ID)
+		defer up.Release()
+		pdClient = up.PDClient
+	} else if len(upstreamConfig.PDAddrs) > 0 {
+		pdClient, err = getPDClient(ctx, upstreamConfig.PDAddrs, &security.Credential{
+			CAPath:        upstreamConfig.CAPath,
+			CertPath:      upstreamConfig.CertPath,
+			KeyPath:       upstreamConfig.KeyPath,
+			CertAllowedCN: nil,
+		}, h.capture)
+		if err != nil {
+			_ = c.Error(cerror.WrapError(cerror.ErrAPIInvalidParam, err))
+			return
+		}
+	} else {
+		up := h.capture.UpstreamManager.GetDefaultUpstream()
+		defer up.Release()
+		pdClient = up.PDClient
+	}
+
+	if pdClient == nil {
+		c.Status(http.StatusServiceUnavailable)
+		return
+	}
+	err = gc.RemoveServiceGCSafepoint(c, pdClient, h.capture.EtcdClient.GetGCServiceID())
 	if err != nil {
 		_ = c.Error(err)
 		return

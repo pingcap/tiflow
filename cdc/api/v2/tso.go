@@ -18,18 +18,48 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/tiflow/cdc/model"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/security"
+	pd "github.com/tikv/pd/client"
 )
 
-// GetTso request and returns a TSO from PD
-func (h *OpenAPIV2) GetTso(c *gin.Context) {
+// QueryTso request and returns a TSO from PD
+func (h *OpenAPIV2) QueryTso(c *gin.Context) {
 	ctx := c.Request.Context()
 	if h.capture.UpstreamManager == nil {
 		c.Status(http.StatusServiceUnavailable)
 		return
 	}
-	up := h.capture.UpstreamManager.GetDefaultUpstream()
-	defer up.Release()
-	pdClient := up.PDClient
+	upstreamConfig := UpstreamConfig{}
+	if err := c.BindJSON(&upstreamConfig); err != nil {
+		_ = c.Error(cerror.WrapError(cerror.ErrAPIInvalidParam, err))
+		return
+	}
+	var (
+		err      error
+		pdClient pd.Client
+	)
+	if upstreamConfig.ID > 0 {
+		up := h.capture.UpstreamManager.Get(upstreamConfig.ID)
+		defer up.Release()
+		pdClient = up.PDClient
+	} else if len(upstreamConfig.PDAddrs) > 0 {
+		pdClient, err = getPDClient(ctx, upstreamConfig.PDAddrs, &security.Credential{
+			CAPath:        upstreamConfig.CAPath,
+			CertPath:      upstreamConfig.CertPath,
+			KeyPath:       upstreamConfig.KeyPath,
+			CertAllowedCN: nil,
+		}, h.capture)
+		if err != nil {
+			_ = c.Error(cerror.WrapError(cerror.ErrAPIInvalidParam, err))
+			return
+		}
+	} else {
+		up := h.capture.UpstreamManager.GetDefaultUpstream()
+		defer up.Release()
+		pdClient = up.PDClient
+	}
+
 	if pdClient == nil {
 		c.Status(http.StatusServiceUnavailable)
 		return

@@ -262,10 +262,7 @@ func (o *createChangefeedOptions) validate(cmd *cobra.Command) error {
 
 func (o *createChangefeedOptions) getChangefeedConfig(cmd *cobra.Command) *v2.ChangefeedConfig {
 	replicaConfig := v2.ToAPIReplicaConfig(o.cfg)
-	var pdAddrs []string
-	if o.pdAddr != "" {
-		pdAddrs = strings.Split(o.pdAddr, ",")
-	}
+	upstreamConfig := o.getUpstreamConfig()
 	return &v2.ChangefeedConfig{
 		ID:                o.changefeedID,
 		StartTs:           o.startTs,
@@ -275,16 +272,38 @@ func (o *createChangefeedOptions) getChangefeedConfig(cmd *cobra.Command) *v2.Ch
 		ReplicaConfig:     replicaConfig,
 		SyncPointEnabled:  o.commonChangefeedOptions.syncPointEnabled,
 		SyncPointInterval: o.commonChangefeedOptions.syncPointInterval,
-		PDAddrs:           pdAddrs,
-		CAPath:            o.commonChangefeedOptions.upstreamCaPath,
-		CertPath:          o.commonChangefeedOptions.upstreamCertPath,
-		KeyPath:           o.commonChangefeedOptions.upstreamKeyPath,
+		PDAddrs:           upstreamConfig.PDAddrs,
+		CAPath:            upstreamConfig.CAPath,
+		CertPath:          upstreamConfig.CertPath,
+		KeyPath:           upstreamConfig.KeyPath,
+	}
+}
+
+func (o *createChangefeedOptions) getUpstreamConfig() *v2.UpstreamConfig {
+	var (
+		pdAddrs  []string
+		caPath   string
+		keyPath  string
+		certPath string
+	)
+	if o.commonChangefeedOptions.upstreamPDAddrs != "" {
+		pdAddrs = strings.Split(o.commonChangefeedOptions.upstreamPDAddrs, ",")
+		caPath = o.commonChangefeedOptions.upstreamCaPath
+		certPath = o.commonChangefeedOptions.upstreamCertPath
+		keyPath = o.commonChangefeedOptions.upstreamKeyPath
+	}
+	return &v2.UpstreamConfig{
+		PDAddrs:       pdAddrs,
+		CAPath:        caPath,
+		CertPath:      certPath,
+		KeyPath:       keyPath,
+		CertAllowedCN: nil,
 	}
 }
 
 // run the `cli changefeed create` command.
 func (o *createChangefeedOptions) run(ctx context.Context, cmd *cobra.Command) error {
-	tso, err := o.apiClient.Tso().Get(ctx)
+	tso, err := o.apiClient.Tso().Query(ctx, o.getUpstreamConfig())
 	if err != nil {
 		return err
 	}

@@ -28,8 +28,8 @@ type UnsafeGetter interface {
 // UnsafeInterface has methods to work with unsafe api
 type UnsafeInterface interface {
 	Metadata(ctx context.Context) (*[]v2.EtcdData, error)
-	ResolveLock(ctx context.Context, regionID uint64, ts uint64) error
-	DeleteServiceGcSafePoint(ctx context.Context) error
+	ResolveLock(ctx context.Context, req *v2.ResolveLockReq) error
+	DeleteServiceGcSafePoint(ctx context.Context, config *v2.UpstreamConfig) error
 }
 
 // unsafe implements UnsafeInterface
@@ -56,21 +56,20 @@ func (c *unsafe) Metadata(ctx context.Context) (*[]v2.EtcdData, error) {
 
 // ResolveLock resolves lock in region
 func (c *unsafe) ResolveLock(ctx context.Context,
-	regionID uint64,
-	ts uint64,
+	req *v2.ResolveLockReq,
 ) error {
 	return c.client.Post().
 		WithURI("unsafe/resolve_lock").
-		WithBody(&v2.ResolveLockReq{
-			RegionID: regionID,
-			Ts:       ts,
-		}).
+		WithBody(req).
 		Do(ctx).Error()
 }
 
 // DeleteServiceGcSafePoint delete service gc safe point in pd
-func (c *unsafe) DeleteServiceGcSafePoint(ctx context.Context) error {
+func (c *unsafe) DeleteServiceGcSafePoint(ctx context.Context,
+	config *v2.UpstreamConfig,
+) error {
 	return c.client.Delete().
 		WithURI("unsafe/service_gc_safepoint").
+		WithBody(config).
 		Do(ctx).Error()
 }

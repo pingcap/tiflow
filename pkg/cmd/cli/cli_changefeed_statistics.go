@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"time"
 
+	v2 "github.com/pingcap/tiflow/cdc/api/v2"
 	apiv1client "github.com/pingcap/tiflow/pkg/api/v1"
 	apiv2client "github.com/pingcap/tiflow/pkg/api/v2"
 	cmdcontext "github.com/pingcap/tiflow/pkg/cmd/context"
@@ -88,11 +89,12 @@ func (o *statisticsChangefeedOptions) runCliWithAPIClient(ctx context.Context, c
 		count += processor.Count
 	}
 
-	ts, err := o.apiV2Client.Tso().Get(ctx)
+	changefeed, err := o.apiV1Client.Changefeeds().Get(ctx, o.changefeedID)
 	if err != nil {
 		return err
 	}
-	changefeed, err := o.apiV1Client.Changefeeds().Get(ctx, o.changefeedID)
+	ts, err := o.apiV2Client.Tso().Query(ctx,
+		&v2.UpstreamConfig{ID: changefeed.UpstreamID})
 	if err != nil {
 		return err
 	}
