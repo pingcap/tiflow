@@ -123,7 +123,7 @@ func (m *Manager) add(upstreamID uint64,
 	up := newUpstream(pdEndpoints, securityConf)
 	m.ups.Store(upstreamID, up)
 	go func() {
-		up.err = up.init(m.ctx, m.gcServiceID)
+		_ = up.init(m.ctx, m.gcServiceID)
 	}()
 	up.hold()
 	return up

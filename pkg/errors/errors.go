@@ -491,6 +491,14 @@ var (
 			`eg, "simple-changefeed-task"`),
 		errors.RFCCodeText("CDC:ErrInvalidChangefeedID"),
 	)
+	ErrInvalidNamespace = errors.Normalize(
+		fmt.Sprintf("%s, %s, %s, %s,",
+			"bad namespace",
+			`please match the pattern "^[a-zA-Z0-9]+(\-[a-zA-Z0-9]+)*$"`,
+			"the length should no more than %d",
+			`eg, "simple-namespace-test"`),
+		errors.RFCCodeText("CDC:ErrInvalidNamespace"),
+	)
 	ErrInvalidEtcdKey = errors.Normalize(
 		"invalid key: %s",
 		errors.RFCCodeText("CDC:ErrInvalidEtcdKey"),

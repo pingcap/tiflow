@@ -91,9 +91,6 @@ func (o *changefeedCommonOptions) addFlags(cmd *cobra.Command) {
 	// we don't support specify these flags below when cdc version >= 6.2.0
 	_ = cmd.PersistentFlags().MarkHidden("sort-engine")
 	_ = cmd.PersistentFlags().MarkHidden("opts")
-	_ = cmd.PersistentFlags().MarkHidden("cyclic-replica-id")
-	_ = cmd.PersistentFlags().MarkHidden("cyclic-filter-replica-ids")
-	_ = cmd.PersistentFlags().MarkHidden("cyclic-sync-ddl")
 	// we don't support specify there flags below when cdc version <= 6.3.0
 	_ = cmd.PersistentFlags().MarkHidden("upstream-pd")
 	_ = cmd.PersistentFlags().MarkHidden("upstream-ca")
@@ -213,6 +210,16 @@ func (o *createChangefeedOptions) completeReplicaCfg(
 		cfg.Sink.SchemaRegistry = o.commonChangefeedOptions.schemaRegistry
 	}
 
+	switch o.commonChangefeedOptions.sortEngine {
+	case model.SortInMemory:
+	case model.SortInFile:
+	case model.SortUnified:
+	default:
+		log.Warn("invalid sort-engine, use Unified Sorter by default",
+			zap.String("invalidSortEngine", o.commonChangefeedOptions.sortEngine))
+		o.commonChangefeedOptions.sortEngine = model.SortUnified
+	}
+
 	if o.disableGCSafePointCheck {
 		cfg.CheckGCSafePoint = false
 	}
@@ -241,6 +248,8 @@ func (o *createChangefeedOptions) validate(cmd *cobra.Command) error {
 	}
 
 	switch o.commonChangefeedOptions.sortEngine {
+	case model.SortInMemory:
+	case model.SortInFile:
 	case model.SortUnified:
 	default:
 		log.Warn("invalid sort-engine, use Unified Sorter by default",
@@ -262,6 +271,7 @@ func (o *createChangefeedOptions) getChangefeedConfig(cmd *cobra.Command) *v2.Ch
 		StartTs:           o.startTs,
 		TargetTs:          o.commonChangefeedOptions.targetTs,
 		SinkURI:           o.commonChangefeedOptions.sinkURI,
+		Engine:            o.commonChangefeedOptions.sortEngine,
 		ReplicaConfig:     replicaConfig,
 		SyncPointEnabled:  o.commonChangefeedOptions.syncPointEnabled,
 		SyncPointInterval: o.commonChangefeedOptions.syncPointInterval,

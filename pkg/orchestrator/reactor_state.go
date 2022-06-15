@@ -39,8 +39,8 @@ type GlobalReactorState struct {
 	// to be called when captures are added and removed.
 	onCaptureAdded   func(captureID model.CaptureID, addr string)
 	onCaptureRemoved func(captureID model.CaptureID)
-	// onCaptureAdded and onCaptureRemoved are hook functions
-	// to be called when captures are added and removed.
+	// onUpstreamAdded and onUpstreamRemoved are hook functions
+	// to be called when upstream are added and removed.
 	onUpstreamAdded   func(captureID model.UpstreamID, info *model.UpstreamInfo)
 	onUpstreamRemoved func(captureID model.UpstreamID)
 }

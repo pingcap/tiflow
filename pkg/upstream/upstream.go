@@ -32,25 +32,26 @@ import (
 	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/tikv/client-go/v2/tikv"
 	pd "github.com/tikv/pd/client"
+	uatomic "github.com/uber-go/atomic"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
 )
 
 const (
-	// indicate a upstream is crerated but not initialized.
+	// indicate an upstream is created but not initialized.
 	uninit int32 = iota
-	// indicate a upstream is initialized and can works normally.
+	// indicate an upstream is initialized and can work normally.
 	normal
-	// indicate a upstream is closed.
+	// indicate an upstream is closed.
 	closed
 
 	maxIdleDuration = time.Minute * 30
 )
 
 // Upstream holds resources of a TiDB cluster, it can be shared by many changefeeds
-// and processors. All public fileds and method of a upstream should be thread-safe.
-// Please be careful that never change any exported field of a Upstream.
+// and processors. All public fields and method of an upstream should be thread-safe.
+// Please be careful that never change any exported field of an Upstream.
 type Upstream struct {
 	ID             uint64
 	PdEndpoints    []string
@@ -76,7 +77,7 @@ type Upstream struct {
 	wg     *sync.WaitGroup
 	status int32
 
-	err               error
+	err               uatomic.Error
 	isDefaultUpstream bool
 }
 
@@ -115,6 +116,7 @@ func (up *Upstream) init(ctx context.Context, gcServiceID string) error {
 
 	grpcTLSOption, err := up.SecurityConfig.ToGRPCDialOption()
 	if err != nil {
+		up.err.Store(err)
 		return errors.Trace(err)
 	}
 
@@ -134,6 +136,7 @@ func (up *Upstream) init(ctx context.Context, gcServiceID string) error {
 			}),
 		))
 	if err != nil {
+		up.err.Store(err)
 		return errors.Trace(err)
 	}
 	log.Info("upstream's PDClient created", zap.Uint64("upstreamID", up.ID))
@@ -144,11 +147,13 @@ func (up *Upstream) init(ctx context.Context, gcServiceID string) error {
 	err = version.CheckClusterVersion(ctx, up.PDClient,
 		up.PdEndpoints, up.SecurityConfig, errorTiKVIncompatible)
 	if err != nil {
+		up.err.Store(err)
 		log.Error("init upstream error", zap.Error(err))
 	}
 
 	up.KVStorage, err = kv.CreateTiStore(strings.Join(up.PdEndpoints, ","), up.SecurityConfig)
 	if err != nil {
+		up.err.Store(err)
 		return errors.Trace(err)
 	}
 	log.Info("upstream's KVStorage created", zap.Uint64("upstreamID", up.ID))
@@ -161,6 +166,7 @@ func (up *Upstream) init(ctx context.Context, gcServiceID string) error {
 
 	up.PDClock, err = pdutil.NewClock(ctx, up.PDClient)
 	if err != nil {
+		up.err.Store(err)
 		return errors.Trace(err)
 	}
 	log.Info("upstream's PDClock created", zap.Uint64("upstreamID", up.ID))
@@ -227,12 +233,12 @@ func (up *Upstream) close() {
 
 // Error returns the error during init this stream
 func (up *Upstream) Error() error {
-	return up.err
+	return up.err.Load()
 }
 
 // IsNormal returns true if the upstream is normal.
 func (up *Upstream) IsNormal() bool {
-	return atomic.LoadInt32(&up.status) == normal && up.err == nil
+	return atomic.LoadInt32(&up.status) == normal && up.err.Load() == nil
 }
 
 // IsClosed returns true if the upstream is closed.

@@ -76,8 +76,6 @@ func (o *queryChangefeedOptions) run(cmd *cobra.Command) error {
 	if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
 		return err
 	}
-	detail.TaskStatus = nil
-	detail.Engine = ""
 	return util.JSONPrint(cmd, detail)
 }
 
