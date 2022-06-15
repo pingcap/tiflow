@@ -34,6 +34,7 @@ import (
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/executor/server"
 	"github.com/pingcap/tiflow/engine/executor/worker"
+	"github.com/pingcap/tiflow/engine/executor/worker/utils"
 	"github.com/pingcap/tiflow/engine/framework"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/framework/registry"
@@ -196,7 +197,8 @@ func (s *Server) makeTask(
 		jobID := newWorker.ID()
 		s.jobAPISrv.initialize(jobID, jm.TriggerOpenAPIInitialize)
 	}
-	return newWorker, nil
+
+	return utils.WrapWorker(newWorker), nil
 }
 
 // PreDispatchTask implements Executor.PreDispatchTask

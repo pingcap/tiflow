@@ -23,6 +23,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/atomic"
 
+	"github.com/pingcap/tiflow/engine/executor/worker/utils"
 	"github.com/pingcap/tiflow/engine/pkg/clock"
 )
 
@@ -53,13 +54,13 @@ func TestTaskRunnerBasics(t *testing.T) {
 			id: fmt.Sprintf("worker-%d", i),
 		}
 		workers = append(workers, worker)
-		err := tr.AddTask(worker)
+		err := tr.AddTask(utils.WrapWorker(worker))
 		require.NoError(t, err)
 	}
 
 	require.Eventually(t, func() bool {
 		t.Logf("taskNum %d", tr.Workload())
-		return tr.Workload() == workerNum
+		return tr.WorkerCount() == workerNum
 	}, 1*time.Second, 10*time.Millisecond)
 
 	for _, worker := range workers {
@@ -67,7 +68,7 @@ func TestTaskRunnerBasics(t *testing.T) {
 	}
 
 	require.Eventually(t, func() bool {
-		return tr.Workload() == 0
+		return tr.WorkerCount() == 0
 	}, 1*time.Second, 100*time.Millisecond)
 
 	cancel()
@@ -88,7 +89,7 @@ func TestTaskRunnerSubmitTime(t *testing.T) {
 	// We call AddTask before calling Run to make sure that the submitTime
 	// is recorded during the execution of the AddTask call.
 	worker := newDummyWorker("my-worker")
-	err := tr.AddTask(worker)
+	err := tr.AddTask(utils.WrapWorker(worker))
 	require.NoError(t, err)
 
 	// Advance the internal clock
@@ -135,7 +136,7 @@ func TestTaskStopReceiver(t *testing.T) {
 		}
 		running.Store(worker.id, struct{}{})
 		workers = append(workers, worker)
-		err := tr.AddTask(worker)
+		err := tr.AddTask(utils.WrapWorker(worker))
 		require.NoError(t, err)
 	}
 

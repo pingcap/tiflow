@@ -24,10 +24,10 @@ type task interface {
 	// Poll should be called periodically until an error is returned.
 	Poll(ctx context.Context) error
 
-	// Exit does necessary bookkeeping job for exiting,
+	// NotifyExit does necessary bookkeeping job for exiting,
 	// such as notifying a master.
 	// errIn describes the reason for exiting.
-	Exit(ctx context.Context, errIn error) error
+	NotifyExit(ctx context.Context, errIn error) error
 
 	// Close does necessary clean up.
 	// TODO `ctx` is for compatibility, remove it.

@@ -98,7 +98,7 @@ func (r *Runner[R]) doGracefulExit(ctx context.Context, errIn error) {
 	timeoutCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	err := r.task.Exit(timeoutCtx, errIn)
+	err := r.task.NotifyExit(timeoutCtx, errIn)
 	if !gerrors.Is(err, context.Canceled) {
 		log.L().Error("an error is encountered when a task is already exiting",
 			zap.Error(err), zap.NamedError("original-err", errIn))

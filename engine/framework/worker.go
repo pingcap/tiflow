@@ -54,8 +54,8 @@ type Worker interface {
 	Poll(ctx context.Context) error
 	ID() runtime.RunnableID
 	Workload() model.RescUnit
-
-	runtime.Closer
+	Close(ctx context.Context) error
+	NotifyExit(ctx context.Context, errIn error) error
 }
 
 // WorkerImpl is the implementation of a worker of dataflow engine.
@@ -94,6 +94,7 @@ type BaseWorker interface {
 	// When `err` is not nil, the status code is assigned WorkerStatusError.
 	// Otherwise worker should set its status code to a meaningful value.
 	Exit(ctx context.Context, status frameModel.WorkerStatus, err error) error
+	NotifyExit(ctx context.Context, errIn error) error
 }
 
 // DefaultBaseWorker implements BaseWorker interface, it also embeds an Impl
@@ -204,6 +205,12 @@ func NewBaseWorker(
 // Workload implements BaseWorker.Workload
 func (w *DefaultBaseWorker) Workload() model.RescUnit {
 	return w.Impl.Workload()
+}
+
+// NotifyExit implements BaseWorker.NotifyExit
+func (w *DefaultBaseWorker) NotifyExit(ctx context.Context, errIn error) error {
+	// No-op for now.
+	return nil
 }
 
 // Init implements BaseWorker.Init

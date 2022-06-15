@@ -91,6 +91,11 @@ type DefaultBaseJobMaster struct {
 	errCenter *errctx.ErrCenter
 }
 
+// NotifyExit implements BaseJobMaster interface
+func (d *DefaultBaseJobMaster) NotifyExit(ctx context.Context, errIn error) error {
+	return d.worker.NotifyExit(ctx, errIn)
+}
+
 // JobMasterImpl is the implementation of a job master of dataflow engine.
 // the implementation struct must embed the framework.BaseJobMaster interface, this
 // interface will be initialized by the framework.

@@ -16,7 +16,6 @@ package worker
 import (
 	"context"
 	"sync"
-	"time"
 
 	"github.com/pingcap/errors"
 	"go.uber.org/atomic"
@@ -38,8 +37,6 @@ type (
 	RunnableID = internal.RunnableID
 	// Workloader alias internal.Workloader
 	Workloader = internal.Workloader
-	// Closer alias internal.Closer
-	Closer = internal.Closer
 )
 
 // TaskRunner receives RunnableContainer in a FIFO way, and runs them in
@@ -59,29 +56,9 @@ type TaskRunner struct {
 	taskStopNotifier *notifier.Notifier[RunnableID]
 }
 
-const (
-	defaultPollInterval = 50 * time.Millisecond
-)
-
 type taskEntry struct {
 	*internal.RunnableContainer
 	cancel context.CancelFunc
-}
-
-func (e *taskEntry) EventLoop(ctx context.Context) error {
-	ticker := time.NewTicker(defaultPollInterval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return errors.Trace(ctx.Err())
-		case <-ticker.C:
-			if err := e.Poll(ctx); err != nil {
-				return errors.Trace(err)
-			}
-		}
-	}
 }
 
 // NewTaskRunner creates a new TaskRunner instance
@@ -159,6 +136,11 @@ func (r *TaskRunner) Workload() (ret model.RescUnit) {
 	return
 }
 
+// WorkerCount returns the number of currently running workers.
+func (r *TaskRunner) WorkerCount() int64 {
+	return r.taskCount.Load()
+}
+
 func (r *TaskRunner) cancelAll() {
 	r.cancelMu.Lock()
 	if r.canceled {
@@ -220,8 +202,8 @@ func (r *TaskRunner) launchTask(rctx *RuntimeContext, entry *taskEntry) {
 		defer r.wg.Done()
 		defer r.taskCount.Dec()
 
+		var err error
 		defer func() {
-			err := entry.Close(rctx)
 			log.L().Info("Task Closed",
 				zap.String("id", entry.ID()),
 				zap.Error(err),
@@ -234,16 +216,11 @@ func (r *TaskRunner) launchTask(rctx *RuntimeContext, entry *taskEntry) {
 		}()
 
 		entry.OnLaunched()
-		if err := entry.Init(rctx); err != nil {
-			log.L().Warn("Task init returned error", zap.String("id", entry.ID()), zap.Error(err))
-			return
-		}
-
-		log.L().Info("Task initialized",
+		log.L().Info("Launching task",
 			zap.String("id", entry.ID()),
 			zap.Int64("runtime-task-count", r.taskCount.Load()))
 
-		err := entry.EventLoop(rctx)
+		err = entry.Run(rctx)
 		log.L().Info("Task stopped", zap.String("id", entry.ID()), zap.Error(err))
 	}()
 }
