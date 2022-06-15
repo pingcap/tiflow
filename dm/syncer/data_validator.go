@@ -1365,14 +1365,11 @@ func (v *DataValidator) GetValidatorStatus() *pb.ValidationStatus {
 
 	flushedLoc := v.getFlushedLoc()
 	var validatorBinlog, validatorBinlogGtid string
-	reachSyncer := false
 	if flushedLoc != nil {
 		validatorBinlog = flushedLoc.Position.String()
 		if flushedLoc.GetGTID() != nil {
 			validatorBinlogGtid = flushedLoc.GetGTID().String()
 		}
-		syncerLoc := v.syncer.getFlushedGlobalPoint()
-		reachSyncer = binlog.CompareLocation(*flushedLoc, syncerLoc, v.cfg.EnableGTID) >= 0
 	}
 	return &pb.ValidationStatus{
 		Task:                v.cfg.Name,
@@ -1385,6 +1382,5 @@ func (v *DataValidator) GetValidatorStatus() *pb.ValidationStatus {
 		ProcessedRowsStatus: processedRows,
 		PendingRowsStatus:   pendingRows,
 		ErrorRowsStatus:     errorRows,
-		ReachSyncer:         reachSyncer,
 	}
 }

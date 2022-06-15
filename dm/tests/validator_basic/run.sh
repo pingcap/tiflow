@@ -645,11 +645,38 @@ function test_data_filter() {
 		"\"stage\": \"Running\"" 3
 }
 
+function test_validation_syncer_stopped() {
+	echo "--> validate when syncer is stopped"
+	prepare_for_standalone_test
+	run_sql_source1 "create table validator_basic.test(a int primary key, b int)"
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation stop test" \
+		"\"result\": true" 1
+	for ((k = 0; k < 30; k++)); do
+		run_sql_source1 "insert into validator_basic.test values($k, $k)"
+	done
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		"\"synced\": true" 1
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation start test" \
+		"\"result\": true" 1
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"pause-task test" \
+		"\"result\": true" 2
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation status test" \
+		"\"processedRowsStatus\": \"insert\/update\/delete: 30\/0\/0\"" 1 \
+		"pendingRowsStatus\": \"insert\/update\/delete: 0\/0\/0" 1 \
+		"new\/ignored\/resolved: 0\/0\/0" 1
+}
+
 run_standalone $*
 validate_table_with_different_pk
 test_unsupported_table_status
 stopped_validator_fail_over
 test_data_filter
+test_validation_syncer_stopped
 cleanup_process $*
 cleanup_data $db_name
 cleanup_data_upstream $db_name

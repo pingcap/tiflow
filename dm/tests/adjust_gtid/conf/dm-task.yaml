@@ -28,7 +28,6 @@ mysql-instances:
     mydumper-config-name: "global"
     loader-config-name: "global"
     syncer-config-name: "global"
-    continuous-validator-config-name: global
 
   - source-id: "mysql-replica-02"
     meta:
@@ -39,7 +38,6 @@ mysql-instances:
     mydumper-config-name: "global"
     loader-config-name: "global"
     syncer-config-name: "global"
-    continuous-validator-config-name: global
 
 black-white-list: # compatible with deprecated config
   instance:
@@ -62,14 +60,3 @@ syncers:
     worker-count: 16
     batch: 100
     enable-ansi-quotes: false  # compatible with deprecated config
-
-validators:
-  global:
-    mode: full
-    worker-count: 4
-    validate-interval: 1s
-    check-interval: 1s
-    row-error-delay: 1s
-    meta-flush-interval: 1s
-    max-pending-row-size: 500m
-    max-pending-row-count: 1000
