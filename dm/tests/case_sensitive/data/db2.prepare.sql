@@ -8,6 +8,7 @@ create table Upper_Table (
     PRIMARY KEY (id));
 insert into Upper_Table (name, ts) values ('Arya', now()), ('Bran', '2021-05-11 10:01:05'), ('Sansa', NULL);
 
+-- if case-insensitive, this should report conflict with Upper_Table
 create table upper_table(id int NOT NULL PRIMARY KEY);
 
 -- test block-allow-list
