@@ -213,7 +213,7 @@ type Executor struct {
 	model.NodeInfo
 	Status model.ExecutorStatus
 
-	mu sync.Mutex
+	mu sync.RWMutex
 	// Last heartbeat
 	lastUpdateTime time.Time
 	heartbeatTTL   time.Duration
@@ -285,9 +285,11 @@ func (e *ExecutorManagerImpl) ExecutorCount(status model.ExecutorStatus) (count 
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	for _, executor := range e.executors {
+		executor.mu.RLock()
 		if executor.Status == status {
 			count++
 		}
+		executor.mu.RUnlock()
 	}
 	return
 }
