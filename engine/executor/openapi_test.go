@@ -24,7 +24,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 
-	frameModel "github.com/pingcap/tiflow/engine/framework/model"
+	engineModel "github.com/pingcap/tiflow/engine/model"
 )
 
 func TestJobAPIServer(t *testing.T) {
@@ -66,7 +66,7 @@ func TestJobAPIServer(t *testing.T) {
 	}
 
 	wg := sync.WaitGroup{}
-	stoppedJobs := make(chan frameModel.JobID, 16)
+	stoppedJobs := make(chan engineModel.JobID, 16)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()

@@ -25,9 +25,11 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/framework"
+	frame "github.com/pingcap/tiflow/engine/framework"
 	"github.com/pingcap/tiflow/engine/framework/metadata"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	cvs "github.com/pingcap/tiflow/engine/jobmaster/cvsjob"
+	engineModel "github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/clock"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/ctxmu"
@@ -268,7 +270,7 @@ func (jm *JobManagerImplV2) QueryJob(ctx context.Context, req *pb.QueryJobReques
 	} else {
 		if masterMeta != nil {
 			resp := &pb.QueryJobResponse{
-				Tp:     int64(masterMeta.Tp),
+				Tp:     int32(frame.MustConvertWorkerType2JobType(masterMeta.Tp)),
 				Config: masterMeta.Config,
 			}
 			switch masterMeta.StatusCode {
@@ -312,8 +314,8 @@ func (jm *JobManagerImplV2) SubmitJob(ctx context.Context, req *pb.SubmitJobRequ
 		Config:     req.GetConfig(),
 		StatusCode: frameModel.MasterStatusUninit,
 	}
-	switch req.Tp {
-	case pb.JobType_CVSDemo:
+	switch engineModel.JobType(req.Tp) {
+	case engineModel.JobTypeCVSDemo:
 		// TODO: check config is valid, refine it later
 		extConfig := &cvs.Config{}
 		err = json.Unmarshal(req.Config, extConfig)
@@ -322,11 +324,11 @@ func (jm *JobManagerImplV2) SubmitJob(ctx context.Context, req *pb.SubmitJobRequ
 			resp.Err = derrors.ToPBError(err)
 			return resp
 		}
-		meta.Tp = framework.CvsJobMaster
-	case pb.JobType_DM:
-		meta.Tp = framework.DMJobMaster
-	case pb.JobType_FakeJob:
-		meta.Tp = framework.FakeJobMaster
+		meta.Tp = frame.CvsJobMaster
+	case engineModel.JobTypeDM:
+		meta.Tp = frame.DMJobMaster
+	case engineModel.JobTypeFakeJob:
+		meta.Tp = frame.FakeJobMaster
 	default:
 		err := derrors.ErrBuildJobFailed.GenWithStack("unknown job type: %s", req.Tp)
 		resp.Err = derrors.ToPBError(err)
@@ -448,12 +450,12 @@ func NewJobManagerImplV2(
 	return impl, err
 }
 
-// InitImpl implements lib.MasterImpl.InitImpl
+// InitImpl implements frame.MasterImpl.InitImpl
 func (jm *JobManagerImplV2) InitImpl(ctx context.Context) error {
 	return nil
 }
 
-// Tick implements lib.MasterImpl.Tick
+// Tick implements frame.MasterImpl.Tick
 func (jm *JobManagerImplV2) Tick(ctx context.Context) error {
 	filterQuotaError := func(err error) (exceedQuota bool, retErr error) {
 		if err == nil {
@@ -512,7 +514,7 @@ func (jm *JobManagerImplV2) Tick(ctx context.Context) error {
 	return nil
 }
 
-// OnMasterRecovered implements lib.MasterImpl.OnMasterRecovered
+// OnMasterRecovered implements frame.MasterImpl.OnMasterRecovered
 func (jm *JobManagerImplV2) OnMasterRecovered(ctx context.Context) error {
 	jobs, err := jm.masterMetaClient.LoadAllMasters(ctx)
 	if err != nil {
@@ -544,7 +546,7 @@ func (jm *JobManagerImplV2) OnMasterRecovered(ctx context.Context) error {
 	return nil
 }
 
-// OnWorkerDispatched implements lib.MasterImpl.OnWorkerDispatched
+// OnWorkerDispatched implements frame.MasterImpl.OnWorkerDispatched
 func (jm *JobManagerImplV2) OnWorkerDispatched(worker framework.WorkerHandle, result error) error {
 	if result != nil {
 		log.L().Warn("dispatch worker met error", zap.Error(result))
@@ -553,13 +555,13 @@ func (jm *JobManagerImplV2) OnWorkerDispatched(worker framework.WorkerHandle, re
 	return nil
 }
 
-// OnWorkerOnline implements lib.MasterImpl.OnWorkerOnline
+// OnWorkerOnline implements frame.MasterImpl.OnWorkerOnline
 func (jm *JobManagerImplV2) OnWorkerOnline(worker framework.WorkerHandle) error {
 	log.L().Info("on worker online", zap.Any("id", worker.ID()))
 	return jm.JobFsm.JobOnline(worker)
 }
 
-// OnWorkerOffline implements lib.MasterImpl.OnWorkerOffline
+// OnWorkerOffline implements frame.MasterImpl.OnWorkerOffline
 func (jm *JobManagerImplV2) OnWorkerOffline(worker framework.WorkerHandle, reason error) error {
 	needFailover := true
 	if derrors.ErrWorkerFinish.Equal(reason) {
@@ -580,19 +582,19 @@ func (jm *JobManagerImplV2) OnWorkerOffline(worker framework.WorkerHandle, reaso
 	return nil
 }
 
-// OnWorkerMessage implements lib.MasterImpl.OnWorkerMessage
+// OnWorkerMessage implements frame.MasterImpl.OnWorkerMessage
 func (jm *JobManagerImplV2) OnWorkerMessage(worker framework.WorkerHandle, topic p2p.Topic, message interface{}) error {
 	log.L().Info("on worker message", zap.Any("id", worker.ID()), zap.Any("topic", topic), zap.Any("message", message))
 	return nil
 }
 
-// OnWorkerStatusUpdated implements lib.MasterImpl.OnWorkerStatusUpdated
+// OnWorkerStatusUpdated implements frame.MasterImpl.OnWorkerStatusUpdated
 func (jm *JobManagerImplV2) OnWorkerStatusUpdated(worker framework.WorkerHandle, newStatus *frameModel.WorkerStatus) error {
 	log.L().Info("on worker status updated", zap.String("worker-id", worker.ID()), zap.Any("status", newStatus))
 	return nil
 }
 
-// CloseImpl implements lib.MasterImpl.CloseImpl
+// CloseImpl implements frame.MasterImpl.CloseImpl
 func (jm *JobManagerImplV2) CloseImpl(ctx context.Context) error {
 	jm.notifier.Close()
 	return nil

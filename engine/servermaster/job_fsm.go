@@ -18,6 +18,7 @@ import (
 
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/framework"
+	frame "github.com/pingcap/tiflow/engine/framework"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/pkg/errors"
 
@@ -107,6 +108,7 @@ func (fsm *JobFsm) QueryOnlineJob(jobID frameModel.MasterID) *jobHolder {
 }
 
 // QueryJob queries job with given jobID and returns QueryJobResponse
+// TODO: Refine me. remove the pb from JobFsm to alleviate coupling
 func (fsm *JobFsm) QueryJob(jobID frameModel.MasterID) *pb.QueryJobResponse {
 	checkPendingJob := func() *pb.QueryJobResponse {
 		fsm.jobsMu.Lock()
@@ -117,7 +119,7 @@ func (fsm *JobFsm) QueryJob(jobID frameModel.MasterID) *pb.QueryJobResponse {
 			return nil
 		}
 		resp := &pb.QueryJobResponse{
-			Tp:     int64(meta.Tp),
+			Tp:     int32(frame.MustConvertWorkerType2JobType(meta.Tp)),
 			Config: meta.Config,
 			Status: pb.QueryJobResponse_pending,
 		}
@@ -134,7 +136,7 @@ func (fsm *JobFsm) QueryJob(jobID frameModel.MasterID) *pb.QueryJobResponse {
 		}
 		meta := job.MasterMetaKVData
 		resp := &pb.QueryJobResponse{
-			Tp:     int64(meta.Tp),
+			Tp:     int32(frame.MustConvertWorkerType2JobType(meta.Tp)),
 			Config: meta.Config,
 			Status: pb.QueryJobResponse_dispatched,
 		}
@@ -150,7 +152,7 @@ func (fsm *JobFsm) QueryJob(jobID frameModel.MasterID) *pb.QueryJobResponse {
 			return nil
 		}
 		resp := &pb.QueryJobResponse{
-			Tp:     int64(job.Tp),
+			Tp:     int32(frame.MustConvertWorkerType2JobType(job.Tp)),
 			Config: job.Config,
 			Status: pb.QueryJobResponse_online,
 		}
