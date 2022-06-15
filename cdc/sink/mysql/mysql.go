@@ -294,6 +294,8 @@ outer:
 		// from being updated after a DML has failed to execute.
 		for _, worker := range s.workers {
 			if !worker.isNormal() {
+				// We still need to loop to the next iteration
+				// because we would like to read from `s.errCh`.
 				continue outer
 			}
 		}
