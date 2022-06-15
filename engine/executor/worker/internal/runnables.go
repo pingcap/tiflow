@@ -17,9 +17,10 @@ import (
 	"context"
 	"time"
 
-	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
+
+	"github.com/pingcap/tiflow/dm/pkg/log"
 
 	"github.com/pingcap/tiflow/engine/model"
 )
@@ -82,8 +83,8 @@ func (c *RunnableContainer) Info() RuntimeInfo {
 	return c.info
 }
 
-// OnInitialized is the callback when the runnable instance is initialized
-func (c *RunnableContainer) OnInitialized() {
+// OnLaunched is the callback when the runnable instance is launched.
+func (c *RunnableContainer) OnLaunched() {
 	oldStatus := c.status.Swap(TaskRunning)
 	if oldStatus != TaskSubmitted {
 		log.L().Panic("unexpected status", zap.Int32("status", oldStatus))
