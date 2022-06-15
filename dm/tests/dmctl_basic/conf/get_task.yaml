@@ -123,6 +123,8 @@ block-allow-list:
     do-tables:
     - db-name: dmctl
       tbl-name: ~^t_[\d]+
+    - db-name: dmctl
+      tbl-name: flush_trigger
     do-dbs:
     - dmctl
     ignore-tables: []
