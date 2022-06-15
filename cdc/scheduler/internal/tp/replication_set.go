@@ -60,7 +60,7 @@ const (
 	// ReplicationSetStateReplicating means there is exactly one capture
 	// that is replicating the table.
 	ReplicationSetStateReplicating ReplicationSetState = 4
-	
+
 	// ReplicationSetStateRemoving means all captures need to
 	// stop replication eventually.
 	ReplicationSetStateRemoving ReplicationSetState = 5
@@ -91,9 +91,11 @@ func (r ReplicationSetState) MarshalJSON() ([]byte, error) {
 
 // ReplicationSet is a state machine that manages replication states.
 type ReplicationSet struct {
-	TableID    model.TableID
-	State      ReplicationSetState
-	Primary    model.CaptureID
+	TableID model.TableID
+	State   ReplicationSetState
+	// Primary set indicate that the table is replicating on this capture
+	Primary model.CaptureID
+	// Secondary set indicate that the table is preparing on this capture
 	Secondary  model.CaptureID
 	Captures   map[model.CaptureID]struct{}
 	Checkpoint schedulepb.Checkpoint

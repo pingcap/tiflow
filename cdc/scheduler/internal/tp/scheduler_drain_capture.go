@@ -85,17 +85,28 @@ func (d *drainCaptureScheduler) Schedule(
 		d.target = captureIDNotDraining
 		return nil
 	}
-
-	captureWorkload := make(map[model.CaptureID]int)
+	
 	// victims record all table instance should be dropped from the target capture
 	victims := make([]model.TableID, 0)
+	captureWorkload := make(map[model.CaptureID]int)
 	for tableID, rep := range replications {
-		// find all tables replicating on the target capture
-		// todo: how to handle tables that target is the secondary ?
+		if rep.Secondary == d.target {
+			// only drain the target capture if all tables on it is replicating,
+			// or no table is preparing / commit on it.
+			log.Warn("tpscheduler: drain capture scheduler skip this tick,"+
+				"since it's secondary to some table",
+				zap.String("target", d.target),
+				zap.Any("replication", rep))
+			return nil
+		}
+
+		// target is the `Primary`, indicate the target capture is replicating the table,
+		// should be moved to other capture.
 		if rep.Primary == d.target {
 			victims = append(victims, tableID)
 		}
 
+		// only calculate workload of other captures not the drain target.
 		if rep.Primary != d.target && rep.State == ReplicationSetStateReplicating {
 			captureWorkload[rep.Primary] += 1
 		}
