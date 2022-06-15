@@ -971,10 +971,8 @@ function DM_155_CASE {
 	random_restart 3
 
 	# make sure source1 has received conflict ddl and handled
-	source1worker=$($PWD/bin/dmctl.test DEVEL --master-addr "127.0.0.1:$MASTER_PORT" query-status test -s mysql-replica-01 |
-		grep 'worker' | awk -F: '{print $2}' | cut -d'"' -f 2)
 	check_log_contain_with_retry "skip conflict ddls in optimistic shard mode.*ALTER TABLE \`${shardddl1}\`.\`${tb1}\` CHANGE COLUMN \`c\` \`b\` INT" \
-		$WORK_DIR/$source1worker/log/dm-worker.log
+		$WORK_DIR/worker1/log/dm-worker.log
 	run_sql_source2 "alter table ${shardddl1}.${tb2} change c b int;"
 
 	# make sure source2 has handled tb2 ddl and trigger redirection
@@ -995,10 +993,8 @@ function DM_155_CASE {
 
 	random_restart 3
 	# make sure source1 has received conflict ddl and handled
-	source1worker=$($PWD/bin/dmctl.test DEVEL --master-addr "127.0.0.1:$MASTER_PORT" query-status test -s mysql-replica-01 |
-		grep 'worker' | awk -F: '{print $2}' | cut -d'"' -f 2)
 	check_log_contain_with_retry "skip conflict ddls in optimistic shard mode.*ALTER TABLE \`${shardddl1}\`.\`${tb1}\` CHANGE COLUMN \`d\` \`f\` INT" \
-		$WORK_DIR/$source1worker/log/dm-worker.log
+		$WORK_DIR/worker1/log/dm-worker.log
 
 	# make sure source2 has handled tb2 ddl and trigger redirection
 	run_sql_source2 "alter table ${shardddl1}.${tb2} change d f int;"
@@ -1020,10 +1016,8 @@ function DM_155_CASE {
 	random_restart 3
 
 	# make sure source1 has received conflict ddl and handled
-	source1worker=$($PWD/bin/dmctl.test DEVEL --master-addr "127.0.0.1:$MASTER_PORT" query-status test -s mysql-replica-01 |
-		grep 'worker' | awk -F: '{print $2}' | cut -d'"' -f 2)
 	check_log_contain_with_retry "skip conflict ddls in optimistic shard mode.*ALTER TABLE \`${shardddl1}\`.\`${tb1}\` ADD COLUMN \`e\` INT" \
-		$WORK_DIR/$source1worker/log/dm-worker.log
+		$WORK_DIR/worker1/log/dm-worker.log
 
 	# make sure source2 has handled tb2 ddl and trigger redirection
 	run_sql_source2 "alter table ${shardddl1}.${tb2} add column e int not null after f;"
