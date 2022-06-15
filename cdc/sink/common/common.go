@@ -63,6 +63,13 @@ func NewUnresolvedTxnCache() *UnresolvedTxnCache {
 	}
 }
 
+// RemoveTableTxn removes  unresolved rows from cache
+func (c *UnresolvedTxnCache) RemoveTableTxn(tableID model.TableID) {
+	c.unresolvedTxnsMu.Lock()
+	defer c.unresolvedTxnsMu.Unlock()
+	delete(c.unresolvedTxns, tableID)
+}
+
 // Append adds unresolved rows to cache
 // the rows inputed into this function will go through the following handling logic
 // 1. group by tableID from one input stream

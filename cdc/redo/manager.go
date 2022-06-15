@@ -322,8 +322,11 @@ func (m *ManagerImpl) updateTableResolvedTs(ctx context.Context) error {
 		return err
 	}
 	minResolvedTs := uint64(math.MaxUint64)
-	for tableID, rts := range rtsMap {
-		m.rtsMap[tableID] = rts
+	for tableID := range m.rtsMap {
+		if rts, ok := rtsMap[tableID]; ok {
+			m.rtsMap[tableID] = rts
+		}
+		rts := m.rtsMap[tableID]
 		if rts < minResolvedTs {
 			minResolvedTs = rts
 		}
