@@ -15,9 +15,12 @@ package framework
 
 import (
 	"github.com/pingcap/errors"
+	"go.uber.org/zap"
 
+	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/engine/framework/master"
 	"github.com/pingcap/tiflow/engine/framework/model"
+	engineModel "github.com/pingcap/tiflow/engine/model"
 )
 
 type (
@@ -28,8 +31,11 @@ type (
 )
 
 // Defines all task type
+// TODO: Refine me.Currently, when adding a new worker type or job type, we need to modify many code places,
+// NOTICE: DO NOT CHANGE the previous worker type
+// Modify the comment in model IF you add some new worker type
 const (
-	JobManager = model.WorkerType(iota + 1)
+	JobManager = WorkerType(iota + 1)
 	// job master
 	CvsJobMaster
 	FakeJobMaster
@@ -44,6 +50,7 @@ const (
 	WorkerDMDump
 	WorkerDMLoad
 	WorkerDMSync
+	// extend the worker type here
 )
 
 // MasterFailoverReasonCode is used as reason code
@@ -67,22 +74,23 @@ type WorkerHandle = master.WorkerHandle
 // nolint:revive
 var StopAfterTick = errors.New("stop after tick")
 
-// WorkerTypeForMetric return a prefix for metric
+// MustConvertWorkerType2JobType return the job type of worker type. Panic if it fail.
 // TODO: let user register a unique identifier for the metric prefix
-func WorkerTypeForMetric(t WorkerType) string {
-	switch t {
+func MustConvertWorkerType2JobType(tp WorkerType) engineModel.JobType {
+	switch tp {
 	case JobManager:
 		// jobmanager is the framework level job
-		return ""
+		return engineModel.JobTypeJobManager
 	case CvsJobMaster, CvsTask:
-		return "cvs"
+		return engineModel.JobTypeCVSDemo
 	case FakeJobMaster, FakeTask:
-		return "fake"
+		return engineModel.JobTypeFakeJob
 	case DMJobMaster, DmTask, WorkerDMDump, WorkerDMLoad, WorkerDMSync:
-		return "dm"
+		return engineModel.JobTypeDM
 	case CdcJobMaster, CdcTask:
-		return "cdc"
+		return engineModel.JobTypeCDC
 	}
 
-	return "unknown_job"
+	log.L().Panic("unexpected fail when convert worker type to job type", zap.Int32("worker_type", int32(tp)))
+	return engineModel.JobTypeInvalid
 }

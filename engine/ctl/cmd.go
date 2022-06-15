@@ -26,8 +26,8 @@ import (
 
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
-	"github.com/pingcap/tiflow/engine/framework"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
+	engineModel "github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/errors"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 )
@@ -92,8 +92,8 @@ func runQueryJob(cmd *cobra.Command, _ []string) error {
 		log.L().Error("failed to query job", zap.Error(err))
 		os.Exit(1)
 	}
-	switch resp.Tp {
-	case int64(framework.CvsJobMaster):
+	switch engineModel.JobType(resp.Tp) {
+	case engineModel.JobTypeCVSDemo:
 		if resp.Status == pb.QueryJobResponse_online && resp.JobMasterInfo != nil {
 			statusBytes := resp.JobMasterInfo.Status
 			status := &frameModel.WorkerStatus{}
@@ -139,24 +139,15 @@ func openFileAndReadString(path string) (content []byte, err error) {
 	return ioutil.ReadAll(fp)
 }
 
-func validJobType(job string) (pb.JobType, error) {
-	tp, ok := pb.JobType_value[job]
-	if !ok {
-		// TODO: print valid job types
-		return 0, errors.ErrInvalidJobType.GenWithStackByArgs(job)
-	}
-	return pb.JobType(tp), nil
-}
-
 func runSubmitJob(cmd *cobra.Command, _ []string) error {
-	tp, err := cmd.Flags().GetString("job-type")
+	tpStr, err := cmd.Flags().GetString("job-type")
 	if err != nil {
 		fmt.Print("error in parse `--job-type`")
 		return err
 	}
-	jobType, err := validJobType(tp)
-	if err != nil {
-		return err
+	jobType, ok := engineModel.GetJobTypeByName(tpStr)
+	if !ok {
+		return errors.ErrInvalidJobType.GenWithStackByArgs(tpStr)
 	}
 	path, err := cmd.Flags().GetString("job-config")
 	if err != nil {
@@ -175,7 +166,7 @@ func runSubmitJob(cmd *cobra.Command, _ []string) error {
 	defer cancel()
 
 	resp, err := cltManager.MasterClient().SubmitJob(ctx, &pb.SubmitJobRequest{
-		Tp:     jobType,
+		Tp:     int32(jobType),
 		Config: jobConfig,
 		ProjectInfo: &pb.ProjectInfo{
 			TenantId:  project.TenantID(),

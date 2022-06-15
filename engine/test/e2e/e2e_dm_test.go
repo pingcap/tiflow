@@ -31,6 +31,7 @@ import (
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
+	engineModel "github.com/pingcap/tiflow/engine/model"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
 )
 
@@ -107,7 +108,7 @@ func testSimpleAllModeTask(
 	var resp *pb.SubmitJobResponse
 	require.Eventually(t, func() bool {
 		resp, err = client.SubmitJob(ctx, &pb.SubmitJobRequest{
-			Tp:     pb.JobType_DM,
+			Tp:     int32(engineModel.JobTypeDM),
 			Config: dmJobCfg,
 		})
 		return err == nil && resp.Err == nil

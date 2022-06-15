@@ -52,8 +52,8 @@ func TestResolvedTs(t *testing.T) {
 	invalidResolvedTs := ResolvedTs{Mode: -1, Ts: 1}
 	require.Equal(t, uint64(0), invalidResolvedTs.ResolvedMark())
 
-	ts := rand.Uint64()
-	batchID := rand.Uint64()
+	ts := rand.Uint64()%10 + 1
+	batchID := rand.Uint64()%10 + 1
 	normalResolvedTs := NewResolvedTs(ts)
 	batchResolvedTs1 := ResolvedTs{Mode: BatchResolvedMode, Ts: ts, BatchID: batchID}
 	require.True(t, normalResolvedTs.EqualOrGreater(batchResolvedTs1))
@@ -67,14 +67,16 @@ func TestResolvedTs(t *testing.T) {
 	require.True(t, batchResolvedTs2.Less(normalResolvedTs))
 	require.True(t, batchResolvedTs1.Less(batchResolvedTs2))
 
-	largerResolvedTs := NewResolvedTs(ts + rand.Uint64()%10)
+	largerTs := ts + rand.Uint64()%10 + 1
+	largerResolvedTs := NewResolvedTs(largerTs)
 	require.True(t, largerResolvedTs.EqualOrGreater(normalResolvedTs))
 	largerBatchResolvedTs := ResolvedTs{
 		Mode:    BatchResolvedMode,
-		Ts:      ts + rand.Uint64()%10,
+		Ts:      largerTs,
 		BatchID: batchID,
 	}
-	require.True(t, largerBatchResolvedTs.EqualOrGreater(normalResolvedTs))
+	require.True(t, largerBatchResolvedTs.EqualOrGreater(normalResolvedTs),
+		"largerBatchResolvedTs:%+v\nnormalResolvedTs:%+v", largerBatchResolvedTs, normalResolvedTs)
 
 	smallerResolvedTs := NewResolvedTs(0)
 	require.True(t, normalResolvedTs.EqualOrGreater(smallerResolvedTs))

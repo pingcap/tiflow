@@ -82,7 +82,7 @@ function escape_schema() {
 	run_sql_file $cur/data/db2.prepare.user.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
 	check_count 'Query OK, 0 rows affected' 7
 
-	export GO_FAILPOINTS='github.com/pingcap/tiflow/dm/dumpling/SkipRemovingDumplingMetrics=return("")'
+	export GO_FAILPOINTS='github.com/pingcap/tiflow/dm/dumpling/SleepBeforeDumplingClose=return(3)'
 
 	run_dm_master $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master.toml
 	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT
@@ -100,6 +100,7 @@ function escape_schema() {
 
 	# start DM task only
 	dmctl_start_task "$WORK_DIR/dm-task.yaml" "--remove-meta"
+	check_metric $WORKER1_PORT 'dumpling_dump_finished_tables' 3 0 3
 	check_sync_diff $WORK_DIR $WORK_DIR/diff_config.toml
 
 	check_log_contain_with_retry 'clean dump files' $WORK_DIR/worker1/log/dm-worker.log
@@ -109,9 +110,6 @@ function escape_schema() {
 	ls $WORK_DIR/worker1/dumped_data.test && exit 1 || echo "worker1 auto removed dump files"
 	ls $WORK_DIR/worker2/dumped_data.test && exit 1 || echo "worker2 auto removed dump files"
 	export GO_FAILPOINTS=''
-
-	check_metric $WORKER1_PORT 'dumpling_dump_finished_tables' 3 0 3
-	check_metric $WORKER2_PORT 'dumpling_dump_finished_tables' 3 0 3
 
 	cleanup_process $*
 	cleanup_data full/mode

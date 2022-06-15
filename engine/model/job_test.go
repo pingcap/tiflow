@@ -1,4 +1,4 @@
-// Copyright 2021 PingCAP, Inc.
+// Copyright 2022 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -11,14 +11,31 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package cyclic
+package model
 
 import (
 	"testing"
 
-	"github.com/pingcap/tiflow/pkg/leakutil"
+	"github.com/stretchr/testify/require"
 )
 
-func TestMain(m *testing.M) {
-	leakutil.SetUpLeakTest(m)
+func TestGetJobTypeByName(t *testing.T) {
+	t.Parallel()
+
+	tp, ok := GetJobTypeByName("FakeJob")
+	require.True(t, ok)
+	require.Equal(t, JobTypeFakeJob, tp)
+
+	_, ok = GetJobTypeByName("FakeJobxx")
+	require.False(t, ok)
+}
+
+func TestJobTypeStringer(t *testing.T) {
+	t.Parallel()
+
+	tp := JobTypeDM
+	require.Equal(t, JobTypeNameDM, tp.String())
+
+	tp = JobType(100)
+	require.Equal(t, JobTypeNameInvalid, tp.String())
 }

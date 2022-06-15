@@ -38,8 +38,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/metrics"
 	dmutils "github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/pkg/config"
-	"github.com/pingcap/tiflow/pkg/cyclic"
-	"github.com/pingcap/tiflow/pkg/cyclic/mark"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/errorutil"
 	tifilter "github.com/pingcap/tiflow/pkg/filter"
@@ -59,7 +57,6 @@ type mysqlSink struct {
 	params *sinkParams
 
 	filter *tifilter.Filter
-	cyclic *cyclic.Cyclic
 
 	txnCache           *unresolvedTxnCache
 	workers            []*mysqlSinkWorker
@@ -147,17 +144,6 @@ func NewMySQLSink(
 		return nil, errors.Trace(err)
 	}
 
-	// Adjust sql_mode for cyclic replication.
-	var sinkCyclic *cyclic.Cyclic = nil
-	if val, ok := opts[mark.OptCyclicConfig]; ok {
-		cfg := new(config.CyclicConfig)
-		err := cfg.Unmarshal([]byte(val))
-		if err != nil {
-			return nil, cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
-		}
-		sinkCyclic = cyclic.NewCyclic(cfg)
-		dsn.Params["sql_mode"] = cyclic.RelaxSQLMode(dsn.Params["sql_mode"])
-	}
 	// NOTE: quote the string is necessary to avoid ambiguities.
 	dsn.Params["sql_mode"] = strconv.Quote(dsn.Params["sql_mode"])
 
@@ -198,7 +184,6 @@ func NewMySQLSink(
 		db:                              db,
 		params:                          params,
 		filter:                          filter,
-		cyclic:                          sinkCyclic,
 		txnCache:                        newUnresolvedTxnCache(),
 		statistics:                      metrics.NewStatistics(ctx, metrics.SinkTypeDB),
 		metricConflictDetectDurationHis: metricConflictDetectDurationHis,
@@ -278,13 +263,6 @@ outer:
 		case <-s.resolvedCh:
 		}
 		checkpointTsMap, resolvedTxnsMap := s.txnCache.Resolved(&s.tableMaxResolvedTs)
-
-		if s.cyclic != nil {
-			// Filter rows if it is origin from downstream.
-			skippedRowCount := cyclic.FilterAndReduceTxns(
-				resolvedTxnsMap, s.cyclic.FilterReplicaID(), s.cyclic.ReplicaID())
-			s.statistics.SubRowsCount(skippedRowCount)
-		}
 
 		if len(resolvedTxnsMap) != 0 {
 			s.dispatchAndExecTxns(ctx, resolvedTxnsMap)
@@ -796,15 +774,6 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, replicaID uint64,
 	dmls := &preparedDMLs{
 		sqls:   sqls,
 		values: values,
-	}
-	if s.cyclic != nil && len(rows) > 0 {
-		// Write mark table with the current replica ID.
-		row := rows[0]
-		updateMark := s.cyclic.UdpateSourceTableCyclicMark(
-			row.Table.Schema, row.Table.Table, uint64(bucket), replicaID, row.StartTs)
-		dmls.markSQL = updateMark
-		// rowCount is used in statistics, and for simplicity,
-		// we do not count mark table rows in rowCount.
 	}
 	dmls.rowCount = rowCount
 	return dmls

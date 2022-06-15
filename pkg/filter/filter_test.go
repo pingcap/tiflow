@@ -42,7 +42,6 @@ func TestShouldUseCustomRules(t *testing.T) {
 		Filter: &config.FilterConfig{
 			Rules: []string{"sns.*", "ecom.*", "!sns.log", "!ecom.test"},
 		},
-		Cyclic: &config.CyclicConfig{Enable: true},
 	})
 	require.Nil(t, err)
 	require.True(t, filter.ShouldIgnoreTable("other", ""))
@@ -53,7 +52,6 @@ func TestShouldUseCustomRules(t *testing.T) {
 	require.True(t, filter.ShouldIgnoreTable("ecom", "test"))
 	require.True(t, filter.ShouldIgnoreTable("sns", "log"))
 	require.True(t, filter.ShouldIgnoreTable("information_schema", ""))
-	require.False(t, filter.ShouldIgnoreTable("tidb_cdc", "repl_mark_a_a"))
 }
 
 func TestShouldIgnoreTxn(t *testing.T) {
