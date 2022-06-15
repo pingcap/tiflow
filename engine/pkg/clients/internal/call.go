@@ -42,8 +42,8 @@ func WithForceNoRetry() CallOption {
 }
 
 func NewCall[F func(context.Context, ReqT, ...grpc.CallOption) (RespT, error), ReqT any, RespT any](f F,
-	req ReqT, ops ...CallOption) *Call[ReqT, RespT, F] {
-
+	req ReqT, ops ...CallOption,
+) *Call[ReqT, RespT, F] {
 	opts := &callerOpts{}
 
 	for _, op := range ops {
@@ -55,7 +55,6 @@ func NewCall[F func(context.Context, ReqT, ...grpc.CallOption) (RespT, error), R
 		request: req,
 		opts:    opts,
 	}
-
 }
 
 // Do calls a grpc client function.
