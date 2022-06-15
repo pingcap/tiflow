@@ -491,3 +491,45 @@ func (r *replicationManager) CollectMetrics() {
 			Set(float64(counter))
 	}
 }
+
+func (r *replicationManager) CleanMetrics() {
+	cf := r.changefeedID
+	tableGauge.
+		DeleteLabelValues(cf.Namespace, cf.ID)
+	slowestTableIDGauge.
+		DeleteLabelValues(cf.Namespace, cf.ID)
+	slowestTableStateGauge.
+		DeleteLabelValues(cf.Namespace, cf.ID)
+	slowestTableCheckpointTsGauge.
+		DeleteLabelValues(cf.Namespace, cf.ID)
+	slowestTableResolvedTsGauge.
+		DeleteLabelValues(cf.Namespace, cf.ID)
+	metricAcceptScheduleTask := acceptScheduleTaskCounter.MustCurryWith(map[string]string{
+		"namespace": cf.Namespace, "changefeed": cf.ID,
+	})
+	metricAcceptScheduleTask.DeleteLabelValues("addTable")
+	metricAcceptScheduleTask.DeleteLabelValues("removeTable")
+	metricAcceptScheduleTask.DeleteLabelValues("moveTable")
+	metricAcceptScheduleTask.DeleteLabelValues("burstBalance")
+	var stateCounters [6]int
+	for _, table := range r.tables {
+		switch table.State {
+		case ReplicationSetStateUnknown:
+			stateCounters[ReplicationSetStateUnknown]++
+		case ReplicationSetStateAbsent:
+			stateCounters[ReplicationSetStateAbsent]++
+		case ReplicationSetStatePrepare:
+			stateCounters[ReplicationSetStatePrepare]++
+		case ReplicationSetStateCommit:
+			stateCounters[ReplicationSetStateCommit]++
+		case ReplicationSetStateReplicating:
+			stateCounters[ReplicationSetStateReplicating]++
+		case ReplicationSetStateRemoving:
+			stateCounters[ReplicationSetStateRemoving]++
+		}
+	}
+	for s := range stateCounters {
+		tableStateGauge.
+			DeleteLabelValues(cf.Namespace, cf.ID, ReplicationSetState(s).String())
+	}
+}
