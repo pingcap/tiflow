@@ -39,6 +39,11 @@ var httpBadRequestError = []*errors.Error{
 	cerror.ErrMySQLInvalidConfig, cerror.ErrCaptureNotExist,
 }
 
+const (
+	// forwardFromCapture is a header to be set when forwarding requests to owner
+	forwardFromCapture = "TiCDC-ForwardFromCapture"
+)
+
 // IsHTTPBadRequestError check if a error is a http bad request error
 func IsHTTPBadRequestError(err error) bool {
 	if err == nil {
@@ -144,15 +149,11 @@ func HandleOwnerScheduleTable(
 	}
 }
 
-// forWardFromCapture is a header to be set when
-// a request is forwarded from another capture
-const forwardFromCapture = "TiCDC-ForwardFromCapture"
-
 // ForwardToOwner forwards an request to the owner
 func ForwardToOwner(c *gin.Context, p CaptureInfoProvider) {
 	ctx := c.Request.Context()
 	// every request can only forward to owner one time
-	if len(c.GetHeader(forWardFromCapture)) != 0 {
+	if len(c.GetHeader(forwardFromCapture)) != 0 {
 		_ = c.Error(cerror.ErrRequestForwardErr.FastGenByArgs())
 		return
 	}
@@ -163,7 +164,7 @@ func ForwardToOwner(c *gin.Context, p CaptureInfoProvider) {
 		return
 	}
 
-	c.Header(forWardFromCapture, info.ID)
+	c.Header(forwardFromCapture, info.ID)
 
 	var owner *model.CaptureInfo
 	// get owner

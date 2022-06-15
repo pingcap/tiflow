@@ -19,6 +19,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 )
 
+// CaptureInfoProvider provides capture and its onwnership information
 type CaptureInfoProvider interface {
 	Info() (model.CaptureInfo, error)
 	IsOwner() bool
