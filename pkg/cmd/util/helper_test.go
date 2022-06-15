@@ -193,12 +193,6 @@ func TestAndWriteExampleReplicaTOML(t *testing.T) {
 		},
 		Protocol: "open-protocol",
 	}, cfg.Sink)
-	require.Equal(t, &config.CyclicConfig{
-		Enable:          false,
-		ReplicaID:       1,
-		FilterReplicaID: []uint64{2, 3},
-		SyncDDL:         true,
-	}, cfg.Cyclic)
 }
 
 func TestAndWriteExampleServerTOML(t *testing.T) {
