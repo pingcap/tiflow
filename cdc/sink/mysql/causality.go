@@ -33,6 +33,7 @@ const (
 // causality groups sqls that maybe contain causal relationships, and syncer executes them linearly.
 // if some conflicts exist in more than one groups, then syncer waits all SQLs that are grouped be executed and reset causality.
 // this mechanism meets quiescent consistency to ensure correctness.
+// See: https://pingcap.com/zh/blog/tidb-binlog-source-code-reading-8
 type causality struct {
 	relations map[string]int
 }
@@ -57,7 +58,12 @@ func (c *causality) reset() {
 	c.relations = make(map[string]int)
 }
 
-// detectConflict detects whether there is a conflict
+// detectConflict detects if there is a conflict between
+// the keys of this txn and the worker's other txn.
+// It will have several scenarios:
+// 1) no conflict, return (false, noConflicting)
+// 2) conflict with the same worker, return (true, workerIndex)
+// 3) conflict with multiple workers, return (true, multipleConflicting)
 func (c *causality) detectConflict(keys [][]byte) (bool, int) {
 	if len(keys) == 0 {
 		return false, noConflicting
