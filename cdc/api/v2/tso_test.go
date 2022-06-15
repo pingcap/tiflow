@@ -14,6 +14,7 @@
 package v2
 
 import (
+	"bytes"
 	"context"
 	"net/http"
 	"net/http/httptest"
@@ -38,8 +39,11 @@ func TestGetTso(t *testing.T) {
 	router := newRouter(cp)
 	w := httptest.NewRecorder()
 
-	tc := testCase{url: "/api/v2/tso", method: "GET"}
-	req, err := http.NewRequestWithContext(context.Background(), tc.method, tc.url, nil)
+	tc := testCase{url: "/api/v2/tso", method: "POST"}
+	buf := &bytes.Buffer{}
+	buf.WriteString("{}")
+	req, err := http.NewRequestWithContext(context.Background(),
+		tc.method, tc.url, buf)
 	require.Nil(t, err)
 	router.ServeHTTP(w, req)
 	require.Equal(t, 200, w.Code)
