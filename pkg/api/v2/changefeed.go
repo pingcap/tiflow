@@ -18,7 +18,6 @@ import (
 	"fmt"
 
 	v2 "github.com/pingcap/tiflow/cdc/api/v2"
-	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/api/internal/rest"
 )
 
@@ -31,14 +30,14 @@ type ChangefeedsGetter interface {
 // We can also mock the changefeed operations by implement this interface.
 type ChangefeedInterface interface {
 	// Create creates a changefeed
-	Create(ctx context.Context, cfg *v2.ChangefeedConfig) (*model.ChangeFeedInfo, error)
+	Create(ctx context.Context, cfg *v2.ChangefeedConfig) (*v2.ChangeFeedInfo, error)
 	// GetInfo gets a changefeed's info
-	GetInfo(ctx context.Context, name string) (*model.ChangeFeedInfo, error)
+	GetInfo(ctx context.Context, name string) (*v2.ChangeFeedInfo, error)
 	// VerifyTable verifies table for a changefeed
 	VerifyTable(ctx context.Context, cfg *v2.VerifyTableConfig) (*v2.Tables, error)
 	// Update updates a changefeed
 	Update(ctx context.Context, cfg *v2.ChangefeedConfig,
-		name string) (*model.ChangeFeedInfo, error)
+		name string) (*v2.ChangeFeedInfo, error)
 }
 
 // changefeeds implements ChangefeedInterface
@@ -55,8 +54,8 @@ func newChangefeeds(c *APIV2Client) *changefeeds {
 
 func (c *changefeeds) Create(ctx context.Context,
 	cfg *v2.ChangefeedConfig,
-) (*model.ChangeFeedInfo, error) {
-	result := &model.ChangeFeedInfo{}
+) (*v2.ChangeFeedInfo, error) {
+	result := &v2.ChangeFeedInfo{}
 	err := c.client.Post().
 		WithURI("changefeeds").
 		WithBody(cfg).
@@ -76,8 +75,10 @@ func (c *changefeeds) VerifyTable(ctx context.Context,
 	return result, err
 }
 
-func (c *changefeeds) GetInfo(ctx context.Context, name string) (*model.ChangeFeedInfo, error) {
-	result := &model.ChangeFeedInfo{}
+func (c *changefeeds) GetInfo(ctx context.Context,
+	name string,
+) (*v2.ChangeFeedInfo, error) {
+	result := &v2.ChangeFeedInfo{}
 	u := fmt.Sprintf("changefeeds/%s/meta_info", name)
 	err := c.client.Get().
 		WithURI(u).
@@ -88,8 +89,8 @@ func (c *changefeeds) GetInfo(ctx context.Context, name string) (*model.ChangeFe
 
 func (c *changefeeds) Update(ctx context.Context,
 	cfg *v2.ChangefeedConfig, name string,
-) (*model.ChangeFeedInfo, error) {
-	result := &model.ChangeFeedInfo{}
+) (*v2.ChangeFeedInfo, error) {
+	result := &v2.ChangeFeedInfo{}
 	u := fmt.Sprintf("changefeeds/%s", name)
 	err := c.client.Put().
 		WithURI(u).

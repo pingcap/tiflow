@@ -14,11 +14,15 @@
 package v2
 
 import (
+	"encoding/json"
 	"time"
 
+	"github.com/pingcap/errors"
 	tidbModel "github.com/pingcap/tidb/parser/model"
 	filter "github.com/pingcap/tidb/util/table-filter"
+	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 )
 
 // Tso contains timestamp get from PD
@@ -37,7 +41,7 @@ type Tables struct {
 type TableName struct {
 	Schema      string `json:"database_name"`
 	Table       string `json:"table_name"`
-	TableID     int64  `json:"table_idid" `
+	TableID     int64  `json:"table_id" `
 	IsPartition bool   `json:"is_partition"`
 }
 
@@ -268,4 +272,61 @@ type EtcdData struct {
 type ResolveLockReq struct {
 	RegionID uint64 `json:"region_id,omitempty"`
 	Ts       uint64 `json:"ts,omitempty"`
+}
+
+// ChangeFeedInfo describes the detail of a ChangeFeed
+type ChangeFeedInfo struct {
+	UpstreamID uint64            `json:"upstream_id,omitempty"`
+	Namespace  string            `json:"namespace,omitempty"`
+	ID         string            `json:"id,omitempty"`
+	SinkURI    string            `json:"sink_uri,omitempty"`
+	Opts       map[string]string `json:"opts,omitempty"`
+	CreateTime time.Time         `json:"create_time"`
+	// Start sync at this commit ts if `StartTs` is specify or using the CreateTime of changefeed.
+	StartTs uint64 `json:"start_ts,omitempty"`
+	// The ChangeFeed will exits until sync to timestamp TargetTs
+	TargetTs uint64 `json:"target_ts,omitempty"`
+	// used for admin job notification, trigger watch event in capture
+	AdminJobType      model.AdminJobType `json:"admin_job_type,omitempty"`
+	Engine            string             `json:"engine,omitempty"`
+	Config            *ReplicaConfig     `json:"config,omitempty"`
+	State             model.FeedState    `json:"state,omitempty"`
+	Error             *RunningError      `json:"error,omitempty"`
+	SyncPointEnabled  bool               `json:"sync_point_enabled,omitempty"`
+	SyncPointInterval time.Duration      `json:"sync_point_interval,omitempty"`
+	CreatorVersion    string             `json:"creator_version,omitempty"`
+}
+
+// RunningError represents some running error from cdc components, such as processor.
+type RunningError struct {
+	Addr    string `json:"addr"`
+	Code    string `json:"code"`
+	Message string `json:"message"`
+}
+
+// Marshal returns the json marshal format of a ChangeFeedInfo
+func (info *ChangeFeedInfo) Marshal() (string, error) {
+	data, err := json.Marshal(info)
+	return string(data), cerror.WrapError(cerror.ErrMarshalFailed, err)
+}
+
+// Clone returns a cloned ChangeFeedInfo
+func (info *ChangeFeedInfo) Clone() (*ChangeFeedInfo, error) {
+	s, err := info.Marshal()
+	if err != nil {
+		return nil, err
+	}
+	cloned := new(ChangeFeedInfo)
+	err = cloned.Unmarshal([]byte(s))
+	return cloned, err
+}
+
+// Unmarshal unmarshals into *ChangeFeedInfo from json marshal byte slice
+func (info *ChangeFeedInfo) Unmarshal(data []byte) error {
+	err := json.Unmarshal(data, &info)
+	if err != nil {
+		return errors.Annotatef(
+			cerror.WrapError(cerror.ErrUnmarshalFailed, err), "Unmarshal data: %v", data)
+	}
+	return nil
 }

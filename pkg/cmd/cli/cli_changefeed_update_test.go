@@ -20,7 +20,7 @@ import (
 	"testing"
 
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/cdc/model"
+	v2 "github.com/pingcap/tiflow/cdc/api/v2"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/stretchr/testify/require"
 )
@@ -34,19 +34,19 @@ func TestApplyChanges(t *testing.T) {
 	o.addFlags(cmd)
 
 	// Test normal update.
-	oldInfo := &model.ChangeFeedInfo{SinkURI: "blackhole://"}
+	oldInfo := &v2.ChangeFeedInfo{SinkURI: "blackhole://"}
 	require.Nil(t, cmd.ParseFlags([]string{"--sink-uri=mysql://root@downstream-tidb:4000"}))
 	newInfo, err := o.applyChanges(oldInfo, cmd)
 	require.Nil(t, err)
 	require.Equal(t, "mysql://root@downstream-tidb:4000", newInfo.SinkURI)
 
 	// Test for cli command flags that should be ignored.
-	oldInfo = &model.ChangeFeedInfo{SortDir: "."}
+	oldInfo = &v2.ChangeFeedInfo{SinkURI: "blackhole://"}
 	require.Nil(t, cmd.ParseFlags([]string{"--interact"}))
 	_, err = o.applyChanges(oldInfo, cmd)
 	require.Nil(t, err)
 
-	oldInfo = &model.ChangeFeedInfo{SortDir: "."}
+	oldInfo = &v2.ChangeFeedInfo{SinkURI: "blackhole://"}
 	require.Nil(t, cmd.ParseFlags([]string{"--pd=http://127.0.0.1:2379"}))
 	_, err = o.applyChanges(oldInfo, cmd)
 	require.Nil(t, err)
@@ -58,17 +58,16 @@ func TestApplyChanges(t *testing.T) {
 	require.Nil(t, err)
 
 	// Test for flag that cannot be updated.
-	oldInfo = &model.ChangeFeedInfo{SortDir: "."}
+	oldInfo = &v2.ChangeFeedInfo{SinkURI: "blackhole://"}
 	require.Nil(t, cmd.ParseFlags([]string{"--sort-dir=/home"}))
 	newInfo, err = o.applyChanges(oldInfo, cmd)
 	require.Nil(t, err)
-	require.Equal(t, ".", newInfo.SortDir)
 	file, err := os.ReadFile(filename)
 	require.Nil(t, err)
 	require.True(t, strings.Contains(string(file), "this flag cannot be updated and will be ignored"))
 
 	// Test schema registry update
-	oldInfo = &model.ChangeFeedInfo{Config: config.GetDefaultReplicaConfig()}
+	oldInfo = &v2.ChangeFeedInfo{Config: v2.ToAPIReplicaConfig(config.GetDefaultReplicaConfig())}
 	require.Equal(t, "", oldInfo.Config.Sink.SchemaRegistry)
 	require.Nil(t, cmd.ParseFlags([]string{"--schema-registry=https://username:password@localhost:8081"}))
 	newInfo, err = o.applyChanges(oldInfo, cmd)

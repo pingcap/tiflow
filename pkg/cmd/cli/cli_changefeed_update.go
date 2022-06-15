@@ -14,12 +14,12 @@
 package cli
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 
 	"github.com/pingcap/log"
 	v2 "github.com/pingcap/tiflow/cdc/api/v2"
-	"github.com/pingcap/tiflow/cdc/model"
 	apiv2client "github.com/pingcap/tiflow/pkg/api/v2"
 	cmdcontext "github.com/pingcap/tiflow/pkg/cmd/context"
 	"github.com/pingcap/tiflow/pkg/cmd/factory"
@@ -60,9 +60,9 @@ func (o *updateChangefeedOptions) addFlags(cmd *cobra.Command) {
 }
 
 func (o *updateChangefeedOptions) getChangefeedConfig(cmd *cobra.Command,
-	info *model.ChangeFeedInfo,
+	info *v2.ChangeFeedInfo,
 ) *v2.ChangefeedConfig {
-	replicaConfig := v2.ToAPIReplicaConfig(info.Config)
+	replicaConfig := info.Config
 	res := &v2.ChangefeedConfig{
 		TargetTs:          info.TargetTs,
 		SinkURI:           info.SinkURI,
@@ -141,7 +141,7 @@ func (o *updateChangefeedOptions) run(cmd *cobra.Command) error {
 	if err != nil {
 		return err
 	}
-	infoStr, err := info.Marshal()
+	infoStr, err := json.Marshal(info)
 	if err != nil {
 		return err
 	}
@@ -152,7 +152,9 @@ func (o *updateChangefeedOptions) run(cmd *cobra.Command) error {
 }
 
 // applyChanges applies the new changes to the old changefeed.
-func (o *updateChangefeedOptions) applyChanges(oldInfo *model.ChangeFeedInfo, cmd *cobra.Command) (*model.ChangeFeedInfo, error) {
+func (o *updateChangefeedOptions) applyChanges(oldInfo *v2.ChangeFeedInfo,
+	cmd *cobra.Command,
+) (*v2.ChangeFeedInfo, error) {
 	newInfo, err := oldInfo.Clone()
 	if err != nil {
 		return nil, err
@@ -165,10 +167,11 @@ func (o *updateChangefeedOptions) applyChanges(oldInfo *model.ChangeFeedInfo, cm
 		case "sink-uri":
 			newInfo.SinkURI = o.commonChangefeedOptions.sinkURI
 		case "config":
-			cfg := newInfo.Config
+			cfg := newInfo.Config.ToInternalReplicaConfig()
 			if err = o.commonChangefeedOptions.strictDecodeConfig("TiCDC changefeed", cfg); err != nil {
 				log.Error("decode config file error", zap.Error(err))
 			}
+			newInfo.Config = v2.ToAPIReplicaConfig(cfg)
 		case "schema-registry":
 			newInfo.Config.Sink.SchemaRegistry = o.commonChangefeedOptions.schemaRegistry
 		case "opts":
