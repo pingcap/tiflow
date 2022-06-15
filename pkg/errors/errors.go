@@ -248,6 +248,9 @@ var (
 		"kafka broker config item not found",
 		errors.RFCCodeText("CDC:ErrKafkaBrokerConfigNotFound"),
 	)
+	ErrKafkaTopicNotExists = errors.Normalize("kafka topic not exists after creation",
+		errors.RFCCodeText("CDC:ErrKafkaTopicNotExists"),
+	)
 	ErrPulsarNewProducer = errors.Normalize(
 		"new pulsar producer",
 		errors.RFCCodeText("CDC:ErrPulsarNewProducer"),
@@ -986,9 +989,9 @@ var (
 		errors.RFCCodeText("CDC:ErrInvalidHost"),
 	)
 
-	// UpStream error
-	ErrUpStreamNotFound = errors.Normalize(
-		"upStram not found, cluster-id: %d",
-		errors.RFCCodeText("CDC:ErrUpStreamNotFound"),
+	// Upstream error
+	ErrUpstreamNotFound = errors.Normalize(
+		"upstream not found, cluster-id: %d",
+		errors.RFCCodeText("CDC:ErrUpstreamNotFound"),
 	)
 )

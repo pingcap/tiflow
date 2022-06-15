@@ -179,6 +179,11 @@ func (vw *validateWorker) validateTableChange() {
 	// clear accumulated row counter
 	vw.accuRowCount.Store(0)
 
+	if vw.getAllPendingRowCount() == 0 {
+		vw.L.Debug("pending row count = 0, skip validation")
+		return
+	}
+
 	failedChanges := make(map[string]map[string]*validateFailedRow)
 	for k, tblChange := range vw.pendingChangesMap {
 		var insertUpdateChanges, deleteChanges []*rowValidationJob
@@ -460,6 +465,10 @@ func (vw *validateWorker) setPendingRowCountsAndSize(newCounts []int64, newSize 
 	diff := newSize - vw.pendingRowSize
 	vw.pendingRowSize = newSize
 	vw.validator.addPendingRowSize(diff)
+}
+
+func (vw *validateWorker) getAllPendingRowCount() int64 {
+	return vw.pendingRowCounts[rowInsert] + vw.pendingRowCounts[rowUpdated] + vw.pendingRowCounts[rowDeleted]
 }
 
 type validateCompareContext struct {

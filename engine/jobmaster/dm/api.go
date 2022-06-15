@@ -19,24 +19,26 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/pingcap/errors"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
+	frameModel "github.com/pingcap/tiflow/engine/framework/model"
+	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/runtime"
-	libModel "github.com/pingcap/tiflow/engine/lib/model"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
 )
 
 // TaskStatus represents status of a task
 type TaskStatus struct {
 	ExpectedStage metadata.TaskStage
-	WorkerID      libModel.WorkerID
+	WorkerID      frameModel.WorkerID
 	Status        *dmpkg.QueryStatusResponse
 }
 
 // JobStatus represents status of a job
 type JobStatus struct {
-	JobMasterID libModel.MasterID
-	WorkerID    libModel.WorkerID
+	JobMasterID frameModel.MasterID
+	WorkerID    frameModel.WorkerID
 	// taskID -> Status
 	TaskStatus map[string]TaskStatus
 }
@@ -122,6 +124,16 @@ func (jm *JobMaster) QueryStatus(ctx context.Context, taskID string) *dmpkg.Quer
 	return resp.(*dmpkg.QueryStatusResponse)
 }
 
+// OperateTask operate task.
+func (jm *JobMaster) OperateTask(ctx context.Context, op dmpkg.OperateType, cfg *config.JobCfg, tasks []string) error {
+	switch op {
+	case dmpkg.Resume, dmpkg.Pause:
+		return jm.taskManager.OperateTask(ctx, op, cfg, tasks)
+	default:
+		return errors.Errorf("unsupport op type %d for operate task", op)
+	}
+}
+
 // DebugJob debugs job.
 func (jm *JobMaster) DebugJob(ctx context.Context, req *pb.DebugJobRequest) *pb.DebugJobResponse {
 	var (
@@ -140,6 +152,18 @@ func (jm *JobMaster) DebugJob(ctx context.Context, req *pb.DebugJobRequest) *pb.
 			}}
 		}
 		resp, err = jm.QueryJobStatus(ctx, jsonArg.Tasks)
+	case dmpkg.OperateTask:
+		var jsonArg struct {
+			Tasks []string
+			Op    dmpkg.OperateType
+		}
+		if err := json.Unmarshal([]byte(req.JsonArg), &jsonArg); err != nil {
+			return &pb.DebugJobResponse{Err: &pb.Error{
+				Code:    pb.ErrorCode_UnknownError,
+				Message: err.Error(),
+			}}
+		}
+		err = jm.OperateTask(ctx, jsonArg.Op, nil, jsonArg.Tasks)
 	default:
 	}
 

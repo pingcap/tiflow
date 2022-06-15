@@ -52,7 +52,7 @@ func createOwner4Test(ctx cdcContext.Context, t *testing.T) (*ownerImpl, *orches
 		},
 	}
 
-	owner := NewOwner4Test(func(ctx cdcContext.Context, upStream *upstream.Upstream, startTs uint64) (DDLPuller, error) {
+	owner := NewOwner4Test(func(ctx cdcContext.Context, up *upstream.Upstream, startTs uint64) (DDLPuller, error) {
 		return &mockDDLPuller{resolvedTs: startTs - 1}, nil
 	}, func() DDLSink {
 		return &mockDDLSink{}
@@ -389,7 +389,7 @@ func TestUpdateGCSafePoint(t *testing.T) {
 	changefeedID1 := model.DefaultChangeFeedID("test-changefeed1")
 	tester.MustUpdate(
 		fmt.Sprintf("/tidb/cdc/changefeed/info/%s", changefeedID1.ID),
-		[]byte(`{"config":{"cyclic-replication":{}},"state":"failed"}`))
+		[]byte(`{"config":{},"state":"failed"}`))
 	tester.MustApplyPatches()
 	state.Changefeeds[changefeedID1].PatchStatus(
 		func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
@@ -430,7 +430,7 @@ func TestUpdateGCSafePoint(t *testing.T) {
 	changefeedID2 := model.DefaultChangeFeedID("test-changefeed2")
 	tester.MustUpdate(
 		fmt.Sprintf("/tidb/cdc/changefeed/info/%s", changefeedID2.ID),
-		[]byte(`{"config":{"cyclic-replication":{}},"state":"normal"}`))
+		[]byte(`{"config":{},"state":"normal"}`))
 	tester.MustApplyPatches()
 	state.Changefeeds[changefeedID1].PatchStatus(
 		func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {

@@ -22,11 +22,12 @@ import (
 	"github.com/stretchr/testify/require"
 
 	pb "github.com/pingcap/tiflow/engine/enginepb"
-	"github.com/pingcap/tiflow/engine/lib"
-	"github.com/pingcap/tiflow/engine/lib/master"
-	"github.com/pingcap/tiflow/engine/lib/metadata"
-	libModel "github.com/pingcap/tiflow/engine/lib/model"
+	"github.com/pingcap/tiflow/engine/framework"
+	"github.com/pingcap/tiflow/engine/framework/master"
+	"github.com/pingcap/tiflow/engine/framework/metadata"
+	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/model"
+	engineModel "github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/clock"
 	"github.com/pingcap/tiflow/engine/pkg/ctxmu"
 	"github.com/pingcap/tiflow/engine/pkg/dm"
@@ -44,7 +45,7 @@ func TestJobManagerSubmitJob(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	mockMaster := lib.NewMockMasterImpl("", "submit-job-test")
+	mockMaster := framework.NewMockMasterImpl("", "submit-job-test")
 	mockMaster.On("InitImpl", mock.Anything).Return(nil)
 	mockMaster.MasterClient().On(
 		"ScheduleTask", mock.Anything, mock.Anything, mock.Anything).Return(
@@ -65,7 +66,7 @@ func TestJobManagerSubmitJob(t *testing.T) {
 	err := mockMaster.Init(ctx)
 	require.Nil(t, err)
 	req := &pb.SubmitJobRequest{
-		Tp:     pb.JobType_CVSDemo,
+		Tp:     int32(engineModel.JobTypeCVSDemo),
 		Config: []byte("{\"srcHost\":\"0.0.0.0:1234\", \"dstHost\":\"0.0.0.0:1234\", \"srcDir\":\"data\", \"dstDir\":\"data1\"}"),
 	}
 	resp := mgr.SubmitJob(ctx, req)
@@ -84,15 +85,15 @@ func TestJobManagerSubmitJob(t *testing.T) {
 }
 
 type mockBaseMasterCreateWorkerFailed struct {
-	*lib.MockMasterImpl
+	*framework.MockMasterImpl
 }
 
 func (m *mockBaseMasterCreateWorkerFailed) CreateWorker(
-	workerType lib.WorkerType,
-	config lib.WorkerConfig,
+	workerType framework.WorkerType,
+	config framework.WorkerConfig,
 	cost model.RescUnit,
 	resources ...resourcemeta.ResourceID,
-) (libModel.WorkerID, error) {
+) (frameModel.WorkerID, error) {
 	return "", errors.ErrMasterConcurrencyExceeded.FastGenByArgs()
 }
 
@@ -102,7 +103,7 @@ func TestCreateWorkerReturnError(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	masterImpl := lib.NewMockMasterImpl("", "create-worker-with-error")
+	masterImpl := framework.NewMockMasterImpl("", "create-worker-with-error")
 	mockMaster := &mockBaseMasterCreateWorkerFailed{
 		MockMasterImpl: masterImpl,
 	}
@@ -116,7 +117,7 @@ func TestCreateWorkerReturnError(t *testing.T) {
 	err := mockMaster.Init(ctx)
 	require.Nil(t, err)
 	req := &pb.SubmitJobRequest{
-		Tp:     pb.JobType_CVSDemo,
+		Tp:     int32(engineModel.JobTypeCVSDemo),
 		Config: []byte("{\"srcHost\":\"0.0.0.0:1234\", \"dstHost\":\"0.0.0.0:1234\", \"srcDir\":\"data\", \"dstDir\":\"data1\"}"),
 	}
 	resp := mgr.SubmitJob(ctx, req)
@@ -130,7 +131,7 @@ func TestJobManagerPauseJob(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	mockMaster := lib.NewMockMasterImpl("", "pause-job-test")
+	mockMaster := framework.NewMockMasterImpl("", "pause-job-test")
 	mockMaster.On("InitImpl", mock.Anything).Return(nil)
 	mgr := &JobManagerImplV2{
 		BaseMaster:        mockMaster.DefaultBaseMaster,
@@ -141,7 +142,7 @@ func TestJobManagerPauseJob(t *testing.T) {
 	}
 
 	pauseWorkerID := "pause-worker-id"
-	meta := &libModel.MasterMetaKVData{ID: pauseWorkerID}
+	meta := &frameModel.MasterMetaKVData{ID: pauseWorkerID}
 	mgr.JobFsm.JobDispatched(meta, false)
 
 	mockWorkerHandle := &master.MockHandle{WorkerID: pauseWorkerID, ExecutorID: "executor-1"}
@@ -168,7 +169,7 @@ func TestJobManagerCancelJob(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	mockMaster := lib.NewMockMasterImpl("", "cancel-job-test")
+	mockMaster := framework.NewMockMasterImpl("", "cancel-job-test")
 	mockMaster.On("InitImpl", mock.Anything).Return(nil)
 	mgr := &JobManagerImplV2{
 		BaseMaster:        mockMaster.DefaultBaseMaster,
@@ -180,10 +181,10 @@ func TestJobManagerCancelJob(t *testing.T) {
 		notifier:          notifier.NewNotifier[resManager.JobStatusChangeEvent](),
 	}
 
-	err := mgr.frameMetaClient.UpsertJob(ctx, &libModel.MasterMetaKVData{
+	err := mgr.frameMetaClient.UpsertJob(ctx, &frameModel.MasterMetaKVData{
 		ID:         "job-to-be-canceled",
-		Tp:         lib.FakeJobMaster,
-		StatusCode: libModel.MasterStatusStopped,
+		Tp:         framework.FakeJobMaster,
+		StatusCode: frameModel.MasterStatusStopped,
 	})
 	require.NoError(t, err)
 
@@ -203,7 +204,7 @@ func TestJobManagerDebug(t *testing.T) {
 	defer cancel()
 
 	jobmanagerID := "debug-job-test"
-	mockMaster := lib.NewMockMasterImpl("", jobmanagerID)
+	mockMaster := framework.NewMockMasterImpl("", jobmanagerID)
 	mockMaster.On("InitImpl", mock.Anything).Return(nil)
 	manager := p2p.NewMockMessageHandlerManager()
 	mgr := &JobManagerImplV2{
@@ -216,7 +217,7 @@ func TestJobManagerDebug(t *testing.T) {
 	}
 
 	debugJobID := "Debug-Job-id"
-	meta := &libModel.MasterMetaKVData{ID: debugJobID}
+	meta := &frameModel.MasterMetaKVData{ID: debugJobID}
 	mgr.JobFsm.JobDispatched(meta, false)
 
 	mockWorkerHandle := &master.MockHandle{WorkerID: debugJobID, ExecutorID: "executor-1"}
@@ -250,28 +251,28 @@ func TestJobManagerQueryJob(t *testing.T) {
 	defer cancel()
 
 	testCases := []struct {
-		meta             *libModel.MasterMetaKVData
+		meta             *frameModel.MasterMetaKVData
 		expectedPBStatus pb.QueryJobResponse_JobStatus
 	}{
 		{
-			&libModel.MasterMetaKVData{
+			&frameModel.MasterMetaKVData{
 				ID:         "master-1",
-				Tp:         lib.FakeJobMaster,
-				StatusCode: libModel.MasterStatusFinished,
+				Tp:         framework.FakeJobMaster,
+				StatusCode: frameModel.MasterStatusFinished,
 			},
 			pb.QueryJobResponse_finished,
 		},
 		{
-			&libModel.MasterMetaKVData{
+			&frameModel.MasterMetaKVData{
 				ID:         "master-2",
-				Tp:         lib.FakeJobMaster,
-				StatusCode: libModel.MasterStatusStopped,
+				Tp:         framework.FakeJobMaster,
+				StatusCode: frameModel.MasterStatusStopped,
 			},
 			pb.QueryJobResponse_stopped,
 		},
 	}
 
-	mockMaster := lib.NewMockMasterImpl("", "job-manager-query-job-test")
+	mockMaster := framework.NewMockMasterImpl("", "job-manager-query-job-test")
 	for _, tc := range testCases {
 		cli := metadata.NewMasterMetadataClient(tc.meta.ID, mockMaster.GetFrameMetaClient())
 		err := cli.Store(ctx, tc.meta)
@@ -309,7 +310,7 @@ func TestJobManagerOnlineJob(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	mockMaster := lib.NewMockMasterImpl("", "submit-job-test")
+	mockMaster := framework.NewMockMasterImpl("", "submit-job-test")
 	mockMaster.On("InitImpl", mock.Anything).Return(nil)
 	mockMaster.MasterClient().On(
 		"ScheduleTask", mock.Anything, mock.Anything, mock.Anything).Return(
@@ -327,7 +328,7 @@ func TestJobManagerOnlineJob(t *testing.T) {
 	err := mockMaster.Init(ctx)
 	require.Nil(t, err)
 	req := &pb.SubmitJobRequest{
-		Tp:     pb.JobType_CVSDemo,
+		Tp:     int32(engineModel.JobTypeCVSDemo),
 		Config: []byte("{\"srcHost\":\"0.0.0.0:1234\", \"dstHost\":\"0.0.0.0:1234\", \"srcDir\":\"data\", \"dstDir\":\"data1\"}"),
 	}
 	resp := mgr.SubmitJob(ctx, req)
@@ -350,16 +351,16 @@ func TestJobManagerRecover(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	mockMaster := lib.NewMockMasterImpl("", "job-manager-recover-test")
+	mockMaster := framework.NewMockMasterImpl("", "job-manager-recover-test")
 	// prepare mockvk with two job masters
-	meta := []*libModel.MasterMetaKVData{
+	meta := []*frameModel.MasterMetaKVData{
 		{
 			ID: "master-1",
-			Tp: lib.FakeJobMaster,
+			Tp: framework.FakeJobMaster,
 		},
 		{
 			ID: "master-2",
-			Tp: lib.FakeJobMaster,
+			Tp: framework.FakeJobMaster,
 		},
 	}
 	for _, data := range meta {
@@ -389,7 +390,7 @@ func TestJobManagerTickExceedQuota(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	masterImpl := lib.NewMockMasterImpl("", "create-worker-with-error")
+	masterImpl := framework.NewMockMasterImpl("", "create-worker-with-error")
 	mockMaster := &mockBaseMasterCreateWorkerFailed{
 		MockMasterImpl: masterImpl,
 	}
@@ -403,7 +404,7 @@ func TestJobManagerTickExceedQuota(t *testing.T) {
 	err := mockMaster.Init(ctx)
 	require.NoError(t, err)
 
-	mgr.JobFsm.JobDispatched(&libModel.MasterMetaKVData{ID: "failover-job-master"}, true)
+	mgr.JobFsm.JobDispatched(&frameModel.MasterMetaKVData{ID: "failover-job-master"}, true)
 	// try to recreate failover job master, will meet quota error
 	err = mgr.Tick(ctx)
 	require.NoError(t, err)
@@ -421,7 +422,7 @@ func TestJobManagerWatchJobStatuses(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	mockMaster := lib.NewMockMasterImpl("", "cancel-job-test")
+	mockMaster := framework.NewMockMasterImpl("", "cancel-job-test")
 	mockMaster.On("InitImpl", mock.Anything).Return(nil)
 	mgr := &JobManagerImplV2{
 		BaseMaster:        mockMaster.DefaultBaseMaster,
@@ -433,10 +434,10 @@ func TestJobManagerWatchJobStatuses(t *testing.T) {
 		notifier:          notifier.NewNotifier[resManager.JobStatusChangeEvent](),
 	}
 
-	err := mgr.frameMetaClient.UpsertJob(ctx, &libModel.MasterMetaKVData{
+	err := mgr.frameMetaClient.UpsertJob(ctx, &frameModel.MasterMetaKVData{
 		ID:         "job-to-be-canceled",
-		Tp:         lib.FakeJobMaster,
-		StatusCode: libModel.MasterStatusStopped,
+		Tp:         framework.FakeJobMaster,
+		StatusCode: frameModel.MasterStatusStopped,
 	})
 	require.NoError(t, err)
 
@@ -445,8 +446,8 @@ func TestJobManagerWatchJobStatuses(t *testing.T) {
 
 	snap, stream, err := mgr.WatchJobStatuses(ctx)
 	require.NoError(t, err)
-	require.Equal(t, map[libModel.MasterID]libModel.MasterStatusCode{
-		"job-to-be-canceled": libModel.MasterStatusStopped,
+	require.Equal(t, map[frameModel.MasterID]frameModel.MasterStatusCode{
+		"job-to-be-canceled": frameModel.MasterStatusStopped,
 	}, snap)
 
 	resp := mgr.CancelJob(ctx, &pb.CancelJobRequest{

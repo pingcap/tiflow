@@ -23,6 +23,7 @@ import (
 	"sort"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	dmysql "github.com/go-sql-driver/mysql"
@@ -35,7 +36,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/metrics"
 	"github.com/pingcap/tiflow/pkg/config"
-	"github.com/pingcap/tiflow/pkg/cyclic/mark"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/retry"
@@ -1011,18 +1011,10 @@ func TestAdjustSQLMode(t *testing.T) {
 	require.Nil(t, err)
 	require.Nil(t, err)
 	rc := config.GetDefaultReplicaConfig()
-	rc.Cyclic = &config.CyclicConfig{
-		Enable:          true,
-		ReplicaID:       1,
-		FilterReplicaID: []uint64{2},
-	}
 	f, err := filter.NewFilter(rc)
 	require.Nil(t, err)
-	cyclicConfig, err := rc.Cyclic.Marshal()
 	require.Nil(t, err)
-	opts := map[string]string{
-		mark.OptCyclicConfig: cyclicConfig,
-	}
+	opts := map[string]string{}
 	sink, err := NewMySQLSink(ctx,
 		model.DefaultChangeFeedID(changefeed),
 		sinkURI, f, rc, opts)
@@ -1250,8 +1242,8 @@ func TestNewMySQLSinkExecDML(t *testing.T) {
 	err = retry.Do(context.Background(), func() error {
 		ts, err := sink.FlushRowChangedEvents(ctx, 1, model.NewResolvedTs(uint64(2)))
 		require.Nil(t, err)
-		if ts < uint64(2) {
-			return errors.Errorf("checkpoint ts %d less than resolved ts %d", ts, 2)
+		if ts.Ts < uint64(2) {
+			return errors.Errorf("checkpoint ts %d less than resolved ts %d", ts.Ts, 2)
 		}
 		return nil
 	}, retry.WithBackoffBaseDelay(20), retry.WithMaxTries(10), retry.WithIsRetryableErr(cerror.IsRetryableError))
@@ -1261,8 +1253,8 @@ func TestNewMySQLSinkExecDML(t *testing.T) {
 	err = retry.Do(context.Background(), func() error {
 		ts, err := sink.FlushRowChangedEvents(ctx, 2, model.NewResolvedTs(uint64(4)))
 		require.Nil(t, err)
-		if ts < uint64(4) {
-			return errors.Errorf("checkpoint ts %d less than resolved ts %d", ts, 4)
+		if ts.Ts < uint64(4) {
+			return errors.Errorf("checkpoint ts %d less than resolved ts %d", ts.Ts, 4)
 		}
 		return nil
 	}, retry.WithBackoffBaseDelay(20), retry.WithMaxTries(10), retry.WithIsRetryableErr(cerror.IsRetryableError))
@@ -1789,7 +1781,7 @@ func TestMySQLSinkFlushResolvedTs(t *testing.T) {
 	require.Nil(t, err)
 	checkpoint, err := sink.FlushRowChangedEvents(ctx, model.TableID(1), model.NewResolvedTs(1))
 	require.Nil(t, err)
-	require.True(t, checkpoint <= 1)
+	require.True(t, checkpoint.Ts <= 1)
 	rows := []*model.RowChangedEvent{
 		{
 			Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
@@ -1807,9 +1799,9 @@ func TestMySQLSinkFlushResolvedTs(t *testing.T) {
 	err = sink.EmitRowChangedEvents(ctx, rows...)
 	require.Nil(t, err)
 	checkpoint, err = sink.FlushRowChangedEvents(ctx, model.TableID(1), model.NewResolvedTs(6))
-	require.True(t, checkpoint <= 6)
+	require.True(t, checkpoint.Ts <= 6)
 	require.Nil(t, err)
-	require.True(t, sink.getTableCheckpointTs(model.TableID(1)) <= 6)
+	require.True(t, sink.getTableCheckpointTs(model.TableID(1)).Ts <= 6)
 	rows = []*model.RowChangedEvent{
 		{
 			Table:    &model.TableName{Schema: "s1", Table: "t2", TableID: 2},
@@ -1827,9 +1819,9 @@ func TestMySQLSinkFlushResolvedTs(t *testing.T) {
 	err = sink.EmitRowChangedEvents(ctx, rows...)
 	require.Nil(t, err)
 	checkpoint, err = sink.FlushRowChangedEvents(ctx, model.TableID(2), model.NewResolvedTs(5))
-	require.True(t, checkpoint <= 5)
+	require.True(t, checkpoint.Ts <= 5)
 	require.Nil(t, err)
-	require.True(t, sink.getTableCheckpointTs(model.TableID(2)) <= 5)
+	require.True(t, sink.getTableCheckpointTs(model.TableID(2)).Ts <= 5)
 	_ = sink.Close(ctx)
 	_, err = sink.FlushRowChangedEvents(ctx, model.TableID(2), model.NewResolvedTs(6))
 	require.Nil(t, err)
@@ -1905,7 +1897,7 @@ func TestCleanTableResource(t *testing.T) {
 	require.Nil(t, s.EmitRowChangedEvents(ctx, &model.RowChangedEvent{
 		Table: &model.TableName{TableID: tblID, Schema: "test", Table: "t1"},
 	}))
-	s.tableCheckpointTs.Store(tblID, uint64(1))
+	s.tableCheckpointTs.Store(tblID, model.NewResolvedTs(uint64(1)))
 	s.tableMaxResolvedTs.Store(tblID, model.NewResolvedTs(uint64(2)))
 	_, ok := s.txnCache.unresolvedTxns[tblID]
 	require.True(t, ok)
@@ -1936,4 +1928,164 @@ func TestHolderString(t *testing.T) {
 	// test invalid input
 	require.Panics(t, func() { placeHolder(0) }, "strings.Builder.Grow: negative count")
 	require.Panics(t, func() { placeHolder(-1) }, "strings.Builder.Grow: negative count")
+}
+
+func TestMySQLSinkExecDMLError(t *testing.T) {
+	dbIndex := 0
+	mockGetDBConn := func(ctx context.Context, dsnStr string) (*sql.DB, error) {
+		defer func() {
+			dbIndex++
+		}()
+		if dbIndex == 0 {
+			// test db
+			db, err := mockTestDB(true)
+			require.Nil(t, err)
+			return db, nil
+		}
+		// normal db
+		db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
+		require.Nil(t, err)
+		mock.ExpectBegin()
+		mock.ExpectExec("REPLACE INTO `s1`.`t1`(`a`,`b`) VALUES (?,?)").WillDelayFor(1 * time.Second).
+			WillReturnError(&dmysql.MySQLError{Number: mysql.ErrNoSuchTable})
+		return db, nil
+	}
+	backupGetDBConn := GetDBConnImpl
+	GetDBConnImpl = mockGetDBConn
+	defer func() {
+		GetDBConnImpl = backupGetDBConn
+	}()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	changefeed := "test-changefeed"
+	sinkURI, err := url.Parse("mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=1&batch-replace-size=1")
+	require.Nil(t, err)
+	rc := config.GetDefaultReplicaConfig()
+	f, err := filter.NewFilter(rc)
+	require.Nil(t, err)
+	sink, err := NewMySQLSink(ctx,
+		model.DefaultChangeFeedID(changefeed),
+		sinkURI, f, rc, map[string]string{})
+	require.Nil(t, err)
+
+	rows := []*model.RowChangedEvent{
+		{
+			StartTs:  1,
+			CommitTs: 2,
+			Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
+			Columns: []*model.Column{
+				{
+					Name:  "a",
+					Type:  mysql.TypeLong,
+					Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
+					Value: 1,
+				},
+				{
+					Name:  "b",
+					Type:  mysql.TypeVarchar,
+					Flag:  0,
+					Value: "test",
+				},
+			},
+		},
+		{
+			StartTs:  2,
+			CommitTs: 3,
+			Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
+			Columns: []*model.Column{
+				{
+					Name:  "a",
+					Type:  mysql.TypeLong,
+					Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
+					Value: 2,
+				},
+				{
+					Name:  "b",
+					Type:  mysql.TypeVarchar,
+					Flag:  0,
+					Value: "test",
+				},
+			},
+		},
+		{
+			StartTs:  3,
+			CommitTs: 4,
+			Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
+			Columns: []*model.Column{
+				{
+					Name:  "a",
+					Type:  mysql.TypeLong,
+					Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
+					Value: 3,
+				},
+				{
+					Name:  "b",
+					Type:  mysql.TypeVarchar,
+					Flag:  0,
+					Value: "test",
+				},
+			},
+		},
+		{
+			StartTs:  4,
+			CommitTs: 5,
+			Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
+			Columns: []*model.Column{
+				{
+					Name:  "a",
+					Type:  mysql.TypeLong,
+					Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
+					Value: 1,
+				},
+				{
+					Name:  "b",
+					Type:  mysql.TypeVarchar,
+					Flag:  0,
+					Value: "test",
+				},
+			},
+		},
+		{
+			StartTs:  5,
+			CommitTs: 6,
+			Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
+			Columns: []*model.Column{
+				{
+					Name:  "a",
+					Type:  mysql.TypeLong,
+					Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
+					Value: 2,
+				},
+				{
+					Name:  "b",
+					Type:  mysql.TypeVarchar,
+					Flag:  0,
+					Value: "test",
+				},
+			},
+		},
+	}
+
+	for _, row := range rows {
+		err = sink.EmitRowChangedEvents(ctx, row)
+		require.NoError(t, err)
+	}
+
+	i := 0
+	for {
+		// Keep flushing so that appendFinishTxn is called enough times.
+		ts, err := sink.FlushRowChangedEvents(ctx, 1, model.NewResolvedTs(uint64(i)))
+		if err != nil {
+			break
+		}
+		require.Less(t, ts.Ts, uint64(2))
+		i++
+	}
+
+	err = sink.RemoveTable(ctx, 1)
+	require.Error(t, err)
+	require.Regexp(t, ".*ErrMySQLTxnError.*", err)
+
+	_ = sink.Close(ctx)
 }

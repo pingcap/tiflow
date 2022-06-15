@@ -32,6 +32,8 @@ import (
 	"github.com/pingcap/tiflow/engine/client"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm"
+	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
+	engineModel "github.com/pingcap/tiflow/engine/model"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
 )
 
@@ -129,7 +131,7 @@ func testSimpleAllModeTask(
 	var resp *pb.SubmitJobResponse
 	require.Eventually(t, func() bool {
 		resp, err = client.SubmitJob(ctx, &pb.SubmitJobRequest{
-			Tp:     pb.JobType_DM,
+			Tp:     int32(engineModel.JobTypeDM),
 			Config: dmJobCfg,
 		})
 		return err == nil && resp.Err == nil
@@ -171,17 +173,9 @@ func testSimpleAllModeTask(
 	waitRow("c = 3")
 
 	// check query status
-	var args struct {
-		Tasks []string
-	}
 	source1 := "mysql-replica-01"
 	source2 := "mysql-replica-02"
-	args.Tasks = []string{source1, source2}
-	jsonArg, err := json.Marshal(args)
-	require.NoError(t, err)
-	ctx2, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
-	resp2, err := client.DebugJob(ctx2, &pb.DebugJobRequest{JobId: resp.JobId, Command: dmpkg.QueryStatus, JsonArg: string(jsonArg)})
+	resp2, err := queryStatus(ctx, client, resp.JobId, []string{source1, source2}, t)
 	require.NoError(t, err)
 	require.Nil(t, resp2.Err)
 	var jobStatus dm.JobStatus
@@ -189,4 +183,60 @@ func testSimpleAllModeTask(
 	require.Equal(t, resp.JobId, jobStatus.JobMasterID)
 	require.Contains(t, string(jobStatus.TaskStatus[source1].Status.Status), "totalEvents")
 	require.Contains(t, jobStatus.TaskStatus[source2].Status.ErrorMsg, fmt.Sprintf("task %s for job not found", source2))
+
+	// pause task
+	resp2, err = operateTask(ctx, client, resp.JobId, nil, dmpkg.Pause, t)
+	require.NoError(t, err)
+	require.Nil(t, resp2.Err)
+	require.Equal(t, "null", resp2.JsonRet)
+
+	// eventually paused
+	require.Eventually(t, func() bool {
+		resp2, err = queryStatus(ctx, client, resp.JobId, []string{source1}, t)
+		require.NoError(t, err)
+		require.Nil(t, resp2.Err)
+		require.NoError(t, json.Unmarshal([]byte(resp2.JsonRet), &jobStatus))
+		return jobStatus.TaskStatus[source1].Status.Stage == metadata.StagePaused
+	}, time.Second*10, time.Second)
+
+	// resume task
+	resp2, err = operateTask(ctx, client, resp.JobId, nil, dmpkg.Resume, t)
+	require.NoError(t, err)
+	require.Nil(t, resp2.Err)
+	require.Equal(t, "null", resp2.JsonRet)
+
+	// eventually resumed
+	require.Eventually(t, func() bool {
+		resp2, err = queryStatus(ctx, client, resp.JobId, []string{source1}, t)
+		require.NoError(t, err)
+		require.Nil(t, resp2.Err)
+		require.NoError(t, json.Unmarshal([]byte(resp2.JsonRet), &jobStatus))
+		return jobStatus.TaskStatus[source1].Status.Stage == metadata.StageRunning
+	}, time.Second*10, time.Second)
+}
+
+func queryStatus(ctx context.Context, client client.MasterClient, jobID string, tasks []string, t *testing.T) (*pb.DebugJobResponse, error) {
+	var args struct {
+		Tasks []string
+	}
+	args.Tasks = tasks
+	jsonArg, err := json.Marshal(args)
+	require.NoError(t, err)
+	ctx2, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	return client.DebugJob(ctx2, &pb.DebugJobRequest{JobId: jobID, Command: dmpkg.QueryStatus, JsonArg: string(jsonArg)})
+}
+
+func operateTask(ctx context.Context, client client.MasterClient, jobID string, tasks []string, op dmpkg.OperateType, t *testing.T) (*pb.DebugJobResponse, error) {
+	var args struct {
+		Tasks []string
+		Op    dmpkg.OperateType
+	}
+	args.Tasks = tasks
+	args.Op = op
+	jsonArg, err := json.Marshal(args)
+	require.NoError(t, err)
+	ctx2, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	return client.DebugJob(ctx2, &pb.DebugJobRequest{JobId: jobID, Command: dmpkg.OperateTask, JsonArg: string(jsonArg)})
 }

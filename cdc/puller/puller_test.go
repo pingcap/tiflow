@@ -58,7 +58,6 @@ type mockInjectedPuller struct {
 func newMockCDCKVClient(
 	ctx context.Context,
 	pd pd.Client,
-	kvStorage tikv.Storage,
 	grpcPool kv.GrpcPool,
 	regionCache *tikv.RegionCache,
 	pdClock pdutil.Clock,

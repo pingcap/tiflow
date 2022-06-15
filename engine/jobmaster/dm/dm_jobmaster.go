@@ -27,14 +27,14 @@ import (
 	ctlcommon "github.com/pingcap/tiflow/dm/dm/ctl/common"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/engine/executor/worker"
+	"github.com/pingcap/tiflow/engine/framework"
+	libMetadata "github.com/pingcap/tiflow/engine/framework/metadata"
+	frameModel "github.com/pingcap/tiflow/engine/framework/model"
+	"github.com/pingcap/tiflow/engine/framework/registry"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/checkpoint"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/runtime"
-	"github.com/pingcap/tiflow/engine/lib"
-	libMetadata "github.com/pingcap/tiflow/engine/lib/metadata"
-	libModel "github.com/pingcap/tiflow/engine/lib/model"
-	"github.com/pingcap/tiflow/engine/lib/registry"
 	"github.com/pingcap/tiflow/engine/model"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
@@ -43,9 +43,9 @@ import (
 
 // JobMaster defines job master of dm job
 type JobMaster struct {
-	lib.BaseJobMaster
+	framework.BaseJobMaster
 
-	workerID libModel.WorkerID
+	workerID frameModel.WorkerID
 	jobCfg   *config.JobCfg
 
 	metadata        *metadata.MetaData
@@ -55,13 +55,13 @@ type JobMaster struct {
 	checkpointAgent checkpoint.Agent
 }
 
-var _ lib.JobMasterImpl = (*JobMaster)(nil)
+var _ framework.JobMasterImpl = (*JobMaster)(nil)
 
 type dmJobMasterFactory struct{}
 
 // RegisterWorker is used to register dm job master to global registry
 func RegisterWorker() {
-	registry.GlobalWorkerRegistry().MustRegisterWorkerType(lib.DMJobMaster, dmJobMasterFactory{})
+	registry.GlobalWorkerRegistry().MustRegisterWorkerType(framework.DMJobMaster, dmJobMasterFactory{})
 }
 
 // DeserializeConfig implements WorkerFactory.DeserializeConfig
@@ -72,7 +72,7 @@ func (j dmJobMasterFactory) DeserializeConfig(configBytes []byte) (registry.Work
 }
 
 // NewWorkerImpl implements WorkerFactory.NewWorkerImpl
-func (j dmJobMasterFactory) NewWorkerImpl(dCtx *dcontext.Context, workerID libModel.WorkerID, masterID libModel.MasterID, conf lib.WorkerConfig) (lib.WorkerImpl, error) {
+func (j dmJobMasterFactory) NewWorkerImpl(dCtx *dcontext.Context, workerID frameModel.WorkerID, masterID frameModel.MasterID, conf framework.WorkerConfig) (framework.WorkerImpl, error) {
 	log.L().Info("new dm jobmaster", zap.String("id", workerID))
 	jm := &JobMaster{
 		workerID:        workerID,
@@ -115,7 +115,7 @@ func (jm *JobMaster) InitImpl(ctx context.Context) error {
 	if err := jm.checkpointAgent.Init(ctx); err != nil {
 		return err
 	}
-	return jm.taskManager.OperateTask(ctx, Create, jm.jobCfg, nil)
+	return jm.taskManager.OperateTask(ctx, dmpkg.Create, jm.jobCfg, nil)
 }
 
 // Tick implements JobMasterImpl.Tick
@@ -132,7 +132,7 @@ func (jm *JobMaster) OnMasterRecovered(ctx context.Context) error {
 }
 
 // OnWorkerDispatched implements JobMasterImpl.OnWorkerDispatched
-func (jm *JobMaster) OnWorkerDispatched(worker lib.WorkerHandle, result error) error {
+func (jm *JobMaster) OnWorkerDispatched(worker framework.WorkerHandle, result error) error {
 	log.L().Info("on worker dispatched", zap.String("id", jm.workerID), zap.String("worker_id", worker.ID()))
 	if result != nil {
 		log.L().Error("failed to create worker", zap.String("worker_id", worker.ID()), zap.Error(result))
@@ -143,8 +143,12 @@ func (jm *JobMaster) OnWorkerDispatched(worker lib.WorkerHandle, result error) e
 }
 
 // OnWorkerOnline implements JobMasterImpl.OnWorkerOnline
-func (jm *JobMaster) OnWorkerOnline(worker lib.WorkerHandle) error {
+func (jm *JobMaster) OnWorkerOnline(worker framework.WorkerHandle) error {
 	log.L().Debug("on worker online", zap.String("id", jm.workerID), zap.String("worker_id", worker.ID()))
+	return jm.handleOnlineStatus(worker)
+}
+
+func (jm *JobMaster) handleOnlineStatus(worker framework.WorkerHandle) error {
 	var taskStatus runtime.TaskStatus
 	if err := json.Unmarshal(worker.Status().ExtBytes, &taskStatus); err != nil {
 		return err
@@ -156,7 +160,7 @@ func (jm *JobMaster) OnWorkerOnline(worker lib.WorkerHandle) error {
 }
 
 // OnWorkerOffline implements JobMasterImpl.OnWorkerOffline
-func (jm *JobMaster) OnWorkerOffline(worker lib.WorkerHandle, reason error) error {
+func (jm *JobMaster) OnWorkerOffline(worker framework.WorkerHandle, reason error) error {
 	log.L().Info("on worker offline", zap.String("id", jm.workerID), zap.String("worker_id", worker.ID()))
 	var taskStatus runtime.TaskStatus
 	if err := json.Unmarshal(worker.Status().ExtBytes, &taskStatus); err != nil {
@@ -175,7 +179,7 @@ func (jm *JobMaster) OnWorkerOffline(worker lib.WorkerHandle, reason error) erro
 	return nil
 }
 
-func (jm *JobMaster) onWorkerFinished(taskStatus runtime.TaskStatus, worker lib.WorkerHandle) error {
+func (jm *JobMaster) onWorkerFinished(taskStatus runtime.TaskStatus, worker framework.WorkerHandle) error {
 	log.L().Info("on worker finished", zap.String("id", jm.workerID), zap.String("worker_id", worker.ID()))
 	jm.taskManager.UpdateTaskStatus(taskStatus)
 	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus(taskStatus.Task, taskStatus.Unit, worker.ID(), runtime.WorkerFinished))
@@ -187,9 +191,13 @@ func (jm *JobMaster) onWorkerFinished(taskStatus runtime.TaskStatus, worker lib.
 }
 
 // OnWorkerStatusUpdated implements JobMasterImpl.OnWorkerStatusUpdated
-func (jm *JobMaster) OnWorkerStatusUpdated(worker lib.WorkerHandle, newStatus *libModel.WorkerStatus) error {
-	// No need to do anything here, because we update it in OnWorkerOnline
-	return nil
+func (jm *JobMaster) OnWorkerStatusUpdated(worker framework.WorkerHandle, newStatus *frameModel.WorkerStatus) error {
+	// we alreay update finished status in OnWorkerOffline
+	if newStatus.Code == frameModel.WorkerStatusFinished || len(newStatus.ExtBytes) == 0 {
+		return nil
+	}
+	log.L().Debug("on worker status updated", zap.String("extra bytes", string(newStatus.ExtBytes)), zap.String("id", jm.workerID), zap.String("worker_id", worker.ID()))
+	return jm.handleOnlineStatus(worker)
 }
 
 // OnJobManagerMessage implements JobMasterImpl.OnJobManagerMessage
@@ -204,7 +212,7 @@ func (jm *JobMaster) OnOpenAPIInitialized(apiGroup *gin.RouterGroup) {
 }
 
 // OnWorkerMessage implements JobMasterImpl.OnWorkerMessage
-func (jm *JobMaster) OnWorkerMessage(worker lib.WorkerHandle, topic p2p.Topic, message interface{}) error {
+func (jm *JobMaster) OnWorkerMessage(worker framework.WorkerHandle, topic p2p.Topic, message interface{}) error {
 	log.L().Debug("on worker message", zap.String("id", jm.workerID), zap.String("worker_id", worker.ID()))
 	return nil
 }
@@ -217,7 +225,7 @@ func (jm *JobMaster) OnMasterMessage(topic p2p.Topic, message interface{}) error
 // CloseImpl implements JobMasterImpl.CloseImpl
 func (jm *JobMaster) CloseImpl(ctx context.Context) error {
 	log.L().Info("close the dm jobmaster", zap.String("id", jm.workerID))
-	if err := jm.taskManager.OperateTask(ctx, Delete, nil, nil); err != nil {
+	if err := jm.taskManager.OperateTask(ctx, dmpkg.Delete, nil, nil); err != nil {
 		return err
 	}
 

@@ -18,16 +18,19 @@ import (
 	"database/sql"
 	gerrors "errors"
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
 	dmysql "github.com/go-sql-driver/mysql"
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"go.uber.org/zap"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
-	libModel "github.com/pingcap/tiflow/engine/lib/model"
+	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	cerrors "github.com/pingcap/tiflow/engine/pkg/errors"
 	resourcemeta "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
@@ -38,14 +41,13 @@ import (
 var globalModels = []interface{}{
 	&model.ProjectInfo{},
 	&model.ProjectOperation{},
-	&libModel.MasterMetaKVData{},
-	&libModel.WorkerStatus{},
+	&frameModel.MasterMetaKVData{},
+	&frameModel.WorkerStatus{},
 	&resourcemeta.ResourceMeta{},
 	&model.LogicEpoch{},
 }
 
 // TODO: retry and idempotent??
-// TODO: context control??
 
 // TimeRange defines a time range with [start, end] time
 type TimeRange struct {
@@ -92,24 +94,24 @@ type ProjectOperationClient interface {
 
 // JobClient defines interface that manages job in metastore
 type JobClient interface {
-	UpsertJob(ctx context.Context, job *libModel.MasterMetaKVData) error
-	UpdateJob(ctx context.Context, job *libModel.MasterMetaKVData) error
+	UpsertJob(ctx context.Context, job *frameModel.MasterMetaKVData) error
+	UpdateJob(ctx context.Context, job *frameModel.MasterMetaKVData) error
 	DeleteJob(ctx context.Context, jobID string) (Result, error)
 
-	GetJobByID(ctx context.Context, jobID string) (*libModel.MasterMetaKVData, error)
-	QueryJobs(ctx context.Context) ([]*libModel.MasterMetaKVData, error)
-	QueryJobsByProjectID(ctx context.Context, projectID string) ([]*libModel.MasterMetaKVData, error)
-	QueryJobsByStatus(ctx context.Context, jobID string, status int) ([]*libModel.MasterMetaKVData, error)
+	GetJobByID(ctx context.Context, jobID string) (*frameModel.MasterMetaKVData, error)
+	QueryJobs(ctx context.Context) ([]*frameModel.MasterMetaKVData, error)
+	QueryJobsByProjectID(ctx context.Context, projectID string) ([]*frameModel.MasterMetaKVData, error)
+	QueryJobsByStatus(ctx context.Context, jobID string, status int) ([]*frameModel.MasterMetaKVData, error)
 }
 
 // WorkerClient defines interface that manages worker in metastore
 type WorkerClient interface {
-	UpsertWorker(ctx context.Context, worker *libModel.WorkerStatus) error
-	UpdateWorker(ctx context.Context, worker *libModel.WorkerStatus) error
+	UpsertWorker(ctx context.Context, worker *frameModel.WorkerStatus) error
+	UpdateWorker(ctx context.Context, worker *frameModel.WorkerStatus) error
 	DeleteWorker(ctx context.Context, masterID string, workerID string) (Result, error)
-	GetWorkerByID(ctx context.Context, masterID string, workerID string) (*libModel.WorkerStatus, error)
-	QueryWorkersByMasterID(ctx context.Context, masterID string) ([]*libModel.WorkerStatus, error)
-	QueryWorkersByStatus(ctx context.Context, masterID string, status int) ([]*libModel.WorkerStatus, error)
+	GetWorkerByID(ctx context.Context, masterID string, workerID string) (*frameModel.WorkerStatus, error)
+	QueryWorkersByMasterID(ctx context.Context, masterID string) ([]*frameModel.WorkerStatus, error)
+	QueryWorkersByStatus(ctx context.Context, masterID string, status int) ([]*frameModel.WorkerStatus, error)
 }
 
 // ResourceClient defines interface that manages resource in metastore
@@ -196,9 +198,21 @@ func generateDSNByParams(mc metaclient.StoreConfigParams, projectID tenant.Proje
 	dsnCfg.Params["parseTime"] = "true"
 	// TODO: check for timezone
 	dsnCfg.Params["loc"] = "Local"
+	dsnCfg.Params["sql_mode"] = strconv.Quote(getSQLStrictMode())
 
 	// dsn format: [username[:password]@][protocol[(address)]]/
 	return dsnCfg.FormatDSN()
+}
+
+// getSQLStrictMode return SQL strict mode for metastore
+func getSQLStrictMode() string {
+	needEnable := []string{
+		"STRICT_TRANS_TABLES",
+		"STRICT_ALL_TABLES",
+		"ERROR_FOR_DIVISION_BY_ZERO",
+	}
+
+	return strings.Join(needEnable, ",")
 }
 
 // newSqlDB return sql.DB for specified driver and dsn
@@ -257,7 +271,9 @@ func (c *metaOpsClient) Close() error {
 // TODO: What happen if we upgrade the definition of model when rolling update?
 // TODO: need test: change column definition/add column/drop column?
 func (c *metaOpsClient) Initialize(ctx context.Context) error {
-	if err := c.db.AutoMigrate(globalModels...); err != nil {
+	failpoint.InjectContext(ctx, "initializedDelay", nil)
+	if err := c.db.WithContext(ctx).
+		AutoMigrate(globalModels...); err != nil {
 		return cerrors.ErrMetaOpFail.Wrap(err)
 	}
 
@@ -266,7 +282,8 @@ func (c *metaOpsClient) Initialize(ctx context.Context) error {
 }
 
 /////////////////////////////// Logic Epoch
-func (c *metaOpsClient) GenEpoch(ctx context.Context) (libModel.Epoch, error) {
+func (c *metaOpsClient) GenEpoch(ctx context.Context) (frameModel.Epoch, error) {
+	failpoint.InjectContext(ctx, "genEpochDelay", nil)
 	return model.GenEpoch(ctx, c.db)
 }
 
@@ -276,8 +293,9 @@ func (c *metaOpsClient) CreateProject(ctx context.Context, project *model.Projec
 	if project == nil {
 		return cerrors.ErrMetaParamsInvalid.GenWithStackByArgs("input project info is nil")
 	}
-	if result := c.db.Create(project); result.Error != nil {
-		return cerrors.ErrMetaOpFail.Wrap(result.Error)
+	if err := c.db.WithContext(ctx).
+		Create(project).Error; err != nil {
+		return cerrors.ErrMetaOpFail.Wrap(err)
 	}
 
 	return nil
@@ -285,8 +303,10 @@ func (c *metaOpsClient) CreateProject(ctx context.Context, project *model.Projec
 
 // DeleteProject delete the model.ProjectInfo
 func (c *metaOpsClient) DeleteProject(ctx context.Context, projectID string) error {
-	if result := c.db.Where("id=?", projectID).Delete(&model.ProjectInfo{}); result.Error != nil {
-		return cerrors.ErrMetaOpFail.Wrap(result.Error)
+	if err := c.db.WithContext(ctx).
+		Where("id=?", projectID).
+		Delete(&model.ProjectInfo{}).Error; err != nil {
+		return cerrors.ErrMetaOpFail.Wrap(err)
 	}
 
 	return nil
@@ -295,8 +315,9 @@ func (c *metaOpsClient) DeleteProject(ctx context.Context, projectID string) err
 // QueryProject query all projects
 func (c *metaOpsClient) QueryProjects(ctx context.Context) ([]*model.ProjectInfo, error) {
 	var projects []*model.ProjectInfo
-	if result := c.db.Find(&projects); result.Error != nil {
-		return nil, cerrors.ErrMetaOpFail.Wrap(result.Error)
+	if err := c.db.WithContext(ctx).
+		Find(&projects).Error; err != nil {
+		return nil, cerrors.ErrMetaOpFail.Wrap(err)
 	}
 
 	return projects, nil
@@ -305,12 +326,14 @@ func (c *metaOpsClient) QueryProjects(ctx context.Context) ([]*model.ProjectInfo
 // GetProjectByID query project by projectID
 func (c *metaOpsClient) GetProjectByID(ctx context.Context, projectID string) (*model.ProjectInfo, error) {
 	var project model.ProjectInfo
-	if result := c.db.Where("id = ?", projectID).First(&project); result.Error != nil {
-		if result.Error == gorm.ErrRecordNotFound {
-			return nil, cerrors.ErrMetaEntryNotFound.Wrap(result.Error)
+	if err := c.db.WithContext(ctx).
+		Where("id = ?", projectID).
+		First(&project).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, cerrors.ErrMetaEntryNotFound.Wrap(err)
 		}
 
-		return nil, cerrors.ErrMetaOpFail.Wrap(result.Error)
+		return nil, cerrors.ErrMetaOpFail.Wrap(err)
 	}
 
 	return &project, nil
@@ -322,8 +345,9 @@ func (c *metaOpsClient) CreateProjectOperation(ctx context.Context, op *model.Pr
 		return cerrors.ErrMetaParamsInvalid.GenWithStackByArgs("input project operation is nil")
 	}
 
-	if result := c.db.Create(op); result.Error != nil {
-		return cerrors.ErrMetaOpFail.Wrap(result.Error)
+	if err := c.db.WithContext(ctx).
+		Create(op).Error; err != nil {
+		return cerrors.ErrMetaOpFail.Wrap(err)
 	}
 
 	return nil
@@ -332,8 +356,10 @@ func (c *metaOpsClient) CreateProjectOperation(ctx context.Context, op *model.Pr
 // QueryProjectOperations query all operations of the projectID
 func (c *metaOpsClient) QueryProjectOperations(ctx context.Context, projectID string) ([]*model.ProjectOperation, error) {
 	var projectOps []*model.ProjectOperation
-	if result := c.db.Where("project_id = ?", projectID).Find(&projectOps); result.Error != nil {
-		return nil, cerrors.ErrMetaOpFail.Wrap(result.Error)
+	if err := c.db.WithContext(ctx).
+		Where("project_id = ?", projectID).
+		Find(&projectOps).Error; err != nil {
+		return nil, cerrors.ErrMetaOpFail.Wrap(err)
 	}
 
 	return projectOps, nil
@@ -344,9 +370,10 @@ func (c *metaOpsClient) QueryProjectOperationsByTimeRange(ctx context.Context,
 	projectID string, tr TimeRange,
 ) ([]*model.ProjectOperation, error) {
 	var projectOps []*model.ProjectOperation
-	if result := c.db.Where("project_id = ? AND created_at >= ? AND created_at <= ?", projectID, tr.start,
-		tr.end).Find(&projectOps); result.Error != nil {
-		return nil, cerrors.ErrMetaOpFail.Wrap(result.Error)
+	if err := c.db.WithContext(ctx).
+		Where("project_id = ? AND created_at >= ? AND created_at <= ?", projectID, tr.start, tr.end).
+		Find(&projectOps).Error; err != nil {
+		return nil, cerrors.ErrMetaOpFail.Wrap(err)
 	}
 
 	return projectOps, nil
@@ -354,15 +381,16 @@ func (c *metaOpsClient) QueryProjectOperationsByTimeRange(ctx context.Context,
 
 /////////////////////////////// Job Operation
 // UpsertJob upsert the jobInfo
-func (c *metaOpsClient) UpsertJob(ctx context.Context, job *libModel.MasterMetaKVData) error {
+func (c *metaOpsClient) UpsertJob(ctx context.Context, job *frameModel.MasterMetaKVData) error {
 	if job == nil {
 		return cerrors.ErrMetaParamsInvalid.GenWithStackByArgs("input master meta is nil")
 	}
 
-	if err := c.db.Clauses(clause.OnConflict{
-		Columns:   []clause.Column{{Name: "id"}},
-		DoUpdates: clause.AssignmentColumns(libModel.MasterUpdateColumns),
-	}).Create(job).Error; err != nil {
+	if err := c.db.WithContext(ctx).
+		Clauses(clause.OnConflict{
+			Columns:   []clause.Column{{Name: "id"}},
+			DoUpdates: clause.AssignmentColumns(frameModel.MasterUpdateColumns),
+		}).Create(job).Error; err != nil {
 		return cerrors.ErrMetaOpFail.Wrap(err)
 	}
 
@@ -370,13 +398,16 @@ func (c *metaOpsClient) UpsertJob(ctx context.Context, job *libModel.MasterMetaK
 }
 
 // UpdateJob update the jobInfo
-func (c *metaOpsClient) UpdateJob(ctx context.Context, job *libModel.MasterMetaKVData) error {
+func (c *metaOpsClient) UpdateJob(ctx context.Context, job *frameModel.MasterMetaKVData) error {
 	if job == nil {
 		return cerrors.ErrMetaParamsInvalid.GenWithStackByArgs("input master meta is nil")
 	}
 	// we don't use `Save` here to avoid user dealing with the basic model
 	// expected SQL: UPDATE xxx SET xxx='xxx', updated_at='2013-11-17 21:34:10' WHERE id=xxx;
-	if err := c.db.Model(&libModel.MasterMetaKVData{}).Where("id = ?", job.ID).Updates(job.Map()).Error; err != nil {
+	if err := c.db.WithContext(ctx).
+		Model(&frameModel.MasterMetaKVData{}).
+		Where("id = ?", job.ID).
+		Updates(job.Map()).Error; err != nil {
 		return cerrors.ErrMetaOpFail.Wrap(err)
 	}
 
@@ -385,7 +416,9 @@ func (c *metaOpsClient) UpdateJob(ctx context.Context, job *libModel.MasterMetaK
 
 // DeleteJob delete the specified jobInfo
 func (c *metaOpsClient) DeleteJob(ctx context.Context, jobID string) (Result, error) {
-	result := c.db.Where("id = ?", jobID).Delete(&libModel.MasterMetaKVData{})
+	result := c.db.WithContext(ctx).
+		Where("id = ?", jobID).
+		Delete(&frameModel.MasterMetaKVData{})
 	if result.Error != nil {
 		return nil, cerrors.ErrMetaOpFail.Wrap(result.Error)
 	}
@@ -394,34 +427,39 @@ func (c *metaOpsClient) DeleteJob(ctx context.Context, jobID string) (Result, er
 }
 
 // GetJobByID query job by `jobID`
-func (c *metaOpsClient) GetJobByID(ctx context.Context, jobID string) (*libModel.MasterMetaKVData, error) {
-	var job libModel.MasterMetaKVData
-	if result := c.db.Where("id = ?", jobID).First(&job); result.Error != nil {
-		if result.Error == gorm.ErrRecordNotFound {
-			return nil, cerrors.ErrMetaEntryNotFound.Wrap(result.Error)
+func (c *metaOpsClient) GetJobByID(ctx context.Context, jobID string) (*frameModel.MasterMetaKVData, error) {
+	var job frameModel.MasterMetaKVData
+	if err := c.db.WithContext(ctx).
+		Where("id = ?", jobID).
+		First(&job).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, cerrors.ErrMetaEntryNotFound.Wrap(err)
 		}
 
-		return nil, cerrors.ErrMetaOpFail.Wrap(result.Error)
+		return nil, cerrors.ErrMetaOpFail.Wrap(err)
 	}
 
 	return &job, nil
 }
 
 // QueryJobsByProjectID query all jobs of projectID
-func (c *metaOpsClient) QueryJobs(ctx context.Context) ([]*libModel.MasterMetaKVData, error) {
-	var jobs []*libModel.MasterMetaKVData
-	if result := c.db.Find(&jobs); result.Error != nil {
-		return nil, cerrors.ErrMetaOpFail.Wrap(result.Error)
+func (c *metaOpsClient) QueryJobs(ctx context.Context) ([]*frameModel.MasterMetaKVData, error) {
+	var jobs []*frameModel.MasterMetaKVData
+	if err := c.db.WithContext(ctx).
+		Find(&jobs).Error; err != nil {
+		return nil, cerrors.ErrMetaOpFail.Wrap(err)
 	}
 
 	return jobs, nil
 }
 
 // QueryJobsByProjectID query all jobs of projectID
-func (c *metaOpsClient) QueryJobsByProjectID(ctx context.Context, projectID string) ([]*libModel.MasterMetaKVData, error) {
-	var jobs []*libModel.MasterMetaKVData
-	if result := c.db.Where("project_id = ?", projectID).Find(&jobs); result.Error != nil {
-		return nil, cerrors.ErrMetaOpFail.Wrap(result.Error)
+func (c *metaOpsClient) QueryJobsByProjectID(ctx context.Context, projectID string) ([]*frameModel.MasterMetaKVData, error) {
+	var jobs []*frameModel.MasterMetaKVData
+	if err := c.db.WithContext(ctx).
+		Where("project_id = ?", projectID).
+		Find(&jobs).Error; err != nil {
+		return nil, cerrors.ErrMetaOpFail.Wrap(err)
 	}
 
 	return jobs, nil
@@ -430,10 +468,12 @@ func (c *metaOpsClient) QueryJobsByProjectID(ctx context.Context, projectID stri
 // QueryJobsByStatus query all jobs with `status` of the projectID
 func (c *metaOpsClient) QueryJobsByStatus(ctx context.Context,
 	jobID string, status int,
-) ([]*libModel.MasterMetaKVData, error) {
-	var jobs []*libModel.MasterMetaKVData
-	if result := c.db.Where("id = ? AND status = ?", jobID, status).Find(&jobs); result.Error != nil {
-		return nil, cerrors.ErrMetaOpFail.Wrap(result.Error)
+) ([]*frameModel.MasterMetaKVData, error) {
+	var jobs []*frameModel.MasterMetaKVData
+	if err := c.db.WithContext(ctx).
+		Where("id = ? AND status = ?", jobID, status).
+		Find(&jobs).Error; err != nil {
+		return nil, cerrors.ErrMetaOpFail.Wrap(err)
 	}
 
 	return jobs, nil
@@ -441,27 +481,31 @@ func (c *metaOpsClient) QueryJobsByStatus(ctx context.Context,
 
 /////////////////////////////// Worker Operation
 // UpsertWorker insert the workerInfo
-func (c *metaOpsClient) UpsertWorker(ctx context.Context, worker *libModel.WorkerStatus) error {
+func (c *metaOpsClient) UpsertWorker(ctx context.Context, worker *frameModel.WorkerStatus) error {
 	if worker == nil {
 		return cerrors.ErrMetaParamsInvalid.GenWithStackByArgs("input worker meta is nil")
 	}
 
-	if err := c.db.Clauses(clause.OnConflict{
-		Columns:   []clause.Column{{Name: "id"}, {Name: "job_id"}},
-		DoUpdates: clause.AssignmentColumns(libModel.WorkerUpdateColumns),
-	}).Create(worker).Error; err != nil {
+	if err := c.db.WithContext(ctx).
+		Clauses(clause.OnConflict{
+			Columns:   []clause.Column{{Name: "id"}, {Name: "job_id"}},
+			DoUpdates: clause.AssignmentColumns(frameModel.WorkerUpdateColumns),
+		}).Create(worker).Error; err != nil {
 		return cerrors.ErrMetaOpFail.Wrap(err)
 	}
 
 	return nil
 }
 
-func (c *metaOpsClient) UpdateWorker(ctx context.Context, worker *libModel.WorkerStatus) error {
+func (c *metaOpsClient) UpdateWorker(ctx context.Context, worker *frameModel.WorkerStatus) error {
 	if worker == nil {
 		return cerrors.ErrMetaParamsInvalid.GenWithStackByArgs("input worker meta is nil")
 	}
 	// we don't use `Save` here to avoid user dealing with the basic model
-	if err := c.db.Model(&libModel.WorkerStatus{}).Where("job_id = ? AND id = ?", worker.JobID, worker.ID).Updates(worker.Map()).Error; err != nil {
+	if err := c.db.WithContext(ctx).
+		Model(&frameModel.WorkerStatus{}).
+		Where("job_id = ? AND id = ?", worker.JobID, worker.ID).
+		Updates(worker.Map()).Error; err != nil {
 		return cerrors.ErrMetaOpFail.Wrap(err)
 	}
 
@@ -470,7 +514,9 @@ func (c *metaOpsClient) UpdateWorker(ctx context.Context, worker *libModel.Worke
 
 // DeleteWorker delete the specified workInfo
 func (c *metaOpsClient) DeleteWorker(ctx context.Context, masterID string, workerID string) (Result, error) {
-	result := c.db.Where("job_id = ? AND id = ?", masterID, workerID).Delete(&libModel.WorkerStatus{})
+	result := c.db.WithContext(ctx).
+		Where("job_id = ? AND id = ?", masterID, workerID).
+		Delete(&frameModel.WorkerStatus{})
 	if result.Error != nil {
 		return nil, cerrors.ErrMetaOpFail.Wrap(result.Error)
 	}
@@ -479,36 +525,40 @@ func (c *metaOpsClient) DeleteWorker(ctx context.Context, masterID string, worke
 }
 
 // GetWorkerByID query worker info by workerID
-func (c *metaOpsClient) GetWorkerByID(ctx context.Context, masterID string, workerID string) (*libModel.WorkerStatus, error) {
-	var worker libModel.WorkerStatus
-	if result := c.db.Where("job_id = ? AND id = ?", masterID,
-		workerID).First(&worker); result.Error != nil {
-		if result.Error == gorm.ErrRecordNotFound {
-			return nil, cerrors.ErrMetaEntryNotFound.Wrap(result.Error)
+func (c *metaOpsClient) GetWorkerByID(ctx context.Context, masterID string, workerID string) (*frameModel.WorkerStatus, error) {
+	var worker frameModel.WorkerStatus
+	if err := c.db.WithContext(ctx).
+		Where("job_id = ? AND id = ?", masterID, workerID).
+		First(&worker).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, cerrors.ErrMetaEntryNotFound.Wrap(err)
 		}
 
-		return nil, cerrors.ErrMetaOpFail.Wrap(result.Error)
+		return nil, cerrors.ErrMetaOpFail.Wrap(err)
 	}
 
 	return &worker, nil
 }
 
 // QueryWorkersByMasterID query all workers of masterID
-func (c *metaOpsClient) QueryWorkersByMasterID(ctx context.Context, masterID string) ([]*libModel.WorkerStatus, error) {
-	var workers []*libModel.WorkerStatus
-	if result := c.db.Where("job_id = ?", masterID).Find(&workers); result.Error != nil {
-		return nil, cerrors.ErrMetaOpFail.Wrap(result.Error)
+func (c *metaOpsClient) QueryWorkersByMasterID(ctx context.Context, masterID string) ([]*frameModel.WorkerStatus, error) {
+	var workers []*frameModel.WorkerStatus
+	if err := c.db.WithContext(ctx).
+		Where("job_id = ?", masterID).
+		Find(&workers).Error; err != nil {
+		return nil, cerrors.ErrMetaOpFail.Wrap(err)
 	}
 
 	return workers, nil
 }
 
 // QueryWorkersByStatus query all workers with specified status of masterID
-func (c *metaOpsClient) QueryWorkersByStatus(ctx context.Context, masterID string, status int) ([]*libModel.WorkerStatus, error) {
-	var workers []*libModel.WorkerStatus
-	if result := c.db.Where("job_id = ? AND status = ?", masterID,
-		status).Find(&workers); result.Error != nil {
-		return nil, cerrors.ErrMetaOpFail.Wrap(result.Error)
+func (c *metaOpsClient) QueryWorkersByStatus(ctx context.Context, masterID string, status int) ([]*frameModel.WorkerStatus, error) {
+	var workers []*frameModel.WorkerStatus
+	if err := c.db.WithContext(ctx).
+		Where("job_id = ? AND status = ?", masterID, status).
+		Find(&workers).Error; err != nil {
+		return nil, cerrors.ErrMetaOpFail.Wrap(err)
 	}
 
 	return workers, nil
@@ -521,10 +571,11 @@ func (c *metaOpsClient) UpsertResource(ctx context.Context, resource *resourceme
 		return cerrors.ErrMetaParamsInvalid.GenWithStackByArgs("input resource meta is nil")
 	}
 
-	if err := c.db.Clauses(clause.OnConflict{
-		Columns:   []clause.Column{{Name: "id"}},
-		DoUpdates: clause.AssignmentColumns(resourcemeta.ResourceUpdateColumns),
-	}).Create(resource).Error; err != nil {
+	if err := c.db.WithContext(ctx).
+		Clauses(clause.OnConflict{
+			Columns:   []clause.Column{{Name: "id"}},
+			DoUpdates: clause.AssignmentColumns(resourcemeta.ResourceUpdateColumns),
+		}).Create(resource).Error; err != nil {
 		return cerrors.ErrMetaOpFail.Wrap(err)
 	}
 
@@ -536,7 +587,7 @@ func (c *metaOpsClient) CreateResource(ctx context.Context, resource *resourceme
 		return cerrors.ErrMetaParamsInvalid.GenWithStackByArgs("input resource meta is nil")
 	}
 
-	err := c.db.Transaction(func(tx *gorm.DB) error {
+	err := c.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var count int64
 		err := tx.Model(&resourcemeta.ResourceMeta{}).
 			Where("id = ?", resource.ID).
@@ -566,16 +617,21 @@ func (c *metaOpsClient) UpdateResource(ctx context.Context, resource *resourceme
 		return cerrors.ErrMetaParamsInvalid.GenWithStackByArgs("input resource meta is nil")
 	}
 	// we don't use `Save` here to avoid user dealing with the basic model
-	if err := c.db.Model(&resourcemeta.ResourceMeta{}).Where("id = ?", resource.ID).Updates(resource.Map()).Error; err != nil {
+	if err := c.db.WithContext(ctx).
+		Model(&resourcemeta.ResourceMeta{}).
+		Where("id = ?", resource.ID).
+		Updates(resource.Map()).Error; err != nil {
 		return cerrors.ErrMetaOpFail.Wrap(err)
 	}
 
 	return nil
 }
 
-// DeleteResource delete the specified model.libModel.resourcemeta.ResourceMeta
+// DeleteResource delete the specified model.frameModel.resourcemeta.ResourceMeta
 func (c *metaOpsClient) DeleteResource(ctx context.Context, resourceID string) (Result, error) {
-	result := c.db.Where("id = ?", resourceID).Delete(&resourcemeta.ResourceMeta{})
+	result := c.db.WithContext(ctx).
+		Where("id = ?", resourceID).
+		Delete(&resourcemeta.ResourceMeta{})
 	if result.Error != nil {
 		return nil, cerrors.ErrMetaOpFail.Wrap(result.Error)
 	}
@@ -585,7 +641,9 @@ func (c *metaOpsClient) DeleteResource(ctx context.Context, resourceID string) (
 
 // DeleteResources delete the specified resources
 func (c *metaOpsClient) DeleteResources(ctx context.Context, resourceIDs []string) (Result, error) {
-	result := c.db.Where("id in ?", resourceIDs).Delete(&resourcemeta.ResourceMeta{})
+	result := c.db.WithContext(ctx).
+		Where("id in ?", resourceIDs).
+		Delete(&resourcemeta.ResourceMeta{})
 	if result.Error != nil {
 		return nil, cerrors.ErrMetaOpFail.Wrap(result.Error)
 	}
@@ -596,12 +654,14 @@ func (c *metaOpsClient) DeleteResources(ctx context.Context, resourceIDs []strin
 // GetResourceByID query resource of the resource_id
 func (c *metaOpsClient) GetResourceByID(ctx context.Context, resourceID string) (*resourcemeta.ResourceMeta, error) {
 	var resource resourcemeta.ResourceMeta
-	if result := c.db.Where("id = ?", resourceID).First(&resource); result.Error != nil {
-		if result.Error == gorm.ErrRecordNotFound {
-			return nil, cerrors.ErrMetaEntryNotFound.Wrap(result.Error)
+	if err := c.db.WithContext(ctx).
+		Where("id = ?", resourceID).
+		First(&resource).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, cerrors.ErrMetaEntryNotFound.Wrap(err)
 		}
 
-		return nil, cerrors.ErrMetaOpFail.Wrap(result.Error)
+		return nil, cerrors.ErrMetaOpFail.Wrap(err)
 	}
 
 	return &resource, nil
@@ -609,8 +669,9 @@ func (c *metaOpsClient) GetResourceByID(ctx context.Context, resourceID string) 
 
 func (c *metaOpsClient) QueryResources(ctx context.Context) ([]*resourcemeta.ResourceMeta, error) {
 	var resources []*resourcemeta.ResourceMeta
-	if result := c.db.Find(&resources); result.Error != nil {
-		return nil, cerrors.ErrMetaOpFail.Wrap(result.Error)
+	if err := c.db.WithContext(ctx).
+		Find(&resources).Error; err != nil {
+		return nil, cerrors.ErrMetaOpFail.Wrap(err)
 	}
 
 	return resources, nil
@@ -619,8 +680,10 @@ func (c *metaOpsClient) QueryResources(ctx context.Context) ([]*resourcemeta.Res
 // QueryResourcesByJobID query all resources of the jobID
 func (c *metaOpsClient) QueryResourcesByJobID(ctx context.Context, jobID string) ([]*resourcemeta.ResourceMeta, error) {
 	var resources []*resourcemeta.ResourceMeta
-	if result := c.db.Where("job_id = ?", jobID).Find(&resources); result.Error != nil {
-		return nil, cerrors.ErrMetaOpFail.Wrap(result.Error)
+	if err := c.db.WithContext(ctx).
+		Where("job_id = ?", jobID).
+		Find(&resources).Error; err != nil {
+		return nil, cerrors.ErrMetaOpFail.Wrap(err)
 	}
 
 	return resources, nil
@@ -629,44 +692,50 @@ func (c *metaOpsClient) QueryResourcesByJobID(ctx context.Context, jobID string)
 // QueryResourcesByExecutorID query all resources of the executor_id
 func (c *metaOpsClient) QueryResourcesByExecutorID(ctx context.Context, executorID string) ([]*resourcemeta.ResourceMeta, error) {
 	var resources []*resourcemeta.ResourceMeta
-	if result := c.db.Where("executor_id = ?", executorID).Find(&resources); result.Error != nil {
-		return nil, cerrors.ErrMetaOpFail.Wrap(result.Error)
+	if err := c.db.WithContext(ctx).
+		Where("executor_id = ?", executorID).
+		Find(&resources).Error; err != nil {
+		return nil, cerrors.ErrMetaOpFail.Wrap(err)
 	}
 
 	return resources, nil
 }
 
+// DeleteResourcesByExecutorID delete all the resources of executorID
 func (c *metaOpsClient) DeleteResourcesByExecutorID(ctx context.Context, executorID string) error {
-	tx := c.db.WithContext(ctx).Where("executor_id = ?", executorID).
-		Delete(&resourcemeta.ResourceMeta{})
-	if tx.Error != nil {
-		return cerrors.ErrMetaOpFail.Wrap(tx.Error)
+	err := c.db.WithContext(ctx).
+		Where("executor_id = ?", executorID).
+		Delete(&resourcemeta.ResourceMeta{}).Error
+	if err != nil {
+		return cerrors.ErrMetaOpFail.Wrap(err)
 	}
 	return nil
 }
 
+// SetGCPending set the resourceIDs to the state `waiting to gc`
 func (c *metaOpsClient) SetGCPending(ctx context.Context, ids []resourcemeta.ResourceID) error {
-	result := c.db.WithContext(ctx).
+	err := c.db.WithContext(ctx).
 		Model(&resourcemeta.ResourceMeta{}).
 		Where("id in ?", ids).
-		Update("gc_pending", true)
-	if result.Error == nil {
+		Update("gc_pending", true).Error
+	if err == nil {
 		return nil
 	}
-	return cerrors.ErrMetaOpFail.Wrap(result.Error)
+	return cerrors.ErrMetaOpFail.Wrap(err)
 }
 
+// GetOneResourceForGC get one resource ready for gc
 func (c *metaOpsClient) GetOneResourceForGC(ctx context.Context) (*resourcemeta.ResourceMeta, error) {
 	var ret resourcemeta.ResourceMeta
-	result := c.db.WithContext(ctx).
+	err := c.db.WithContext(ctx).
 		Order("updated_at asc").
 		Where("gc_pending = true").
-		First(&ret)
-	if result.Error != nil {
-		if gerrors.Is(result.Error, gorm.ErrRecordNotFound) {
-			return nil, cerrors.ErrMetaEntryNotFound.Wrap(result.Error)
+		First(&ret).Error
+	if err != nil {
+		if gerrors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, cerrors.ErrMetaEntryNotFound.Wrap(err)
 		}
-		return nil, cerrors.ErrMetaOpFail.Wrap(result.Error)
+		return nil, cerrors.ErrMetaOpFail.Wrap(err)
 	}
 	return &ret, nil
 }
@@ -680,6 +749,7 @@ type ormResult struct {
 	rowsAffected int64
 }
 
+// RowsAffected return the affected rows of an execution
 func (r ormResult) RowsAffected() int64 {
 	return r.rowsAffected
 }

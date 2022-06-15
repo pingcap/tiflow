@@ -62,7 +62,7 @@ type Sink interface {
 	// FlushRowChangedEvents is thread-safe.
 	FlushRowChangedEvents(
 		ctx context.Context, tableID model.TableID, resolved model.ResolvedTs,
-	) (uint64, error)
+	) (model.ResolvedTs, error)
 
 	// EmitCheckpointTs sends CheckpointTs to Sink.
 	// TiCDC guarantees that all Events **in the cluster** which of commitTs

@@ -39,7 +39,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/sorter/memory"
 	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
-	"github.com/pingcap/tiflow/pkg/cyclic/mark"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
@@ -62,7 +61,7 @@ type processor struct {
 	captureInfo  *model.CaptureInfo
 	changefeed   *orchestrator.ChangefeedReactorState
 
-	upStream *upstream.Upstream
+	upstream *upstream.Upstream
 
 	tables map[model.TableID]tablepipeline.TablePipeline
 
@@ -245,10 +244,10 @@ func (p *processor) GetCheckpoint() (checkpointTs, resolvedTs model.Ts) {
 }
 
 // newProcessor creates a new processor
-func newProcessor(ctx cdcContext.Context, upStream *upstream.Upstream) *processor {
+func newProcessor(ctx cdcContext.Context, up *upstream.Upstream) *processor {
 	changefeedID := ctx.ChangefeedVars().ID
 	p := &processor{
-		upStream:      upStream,
+		upstream:      up,
 		tables:        make(map[model.TableID]tablepipeline.TablePipeline),
 		errCh:         make(chan error, 1),
 		changefeedID:  changefeedID,
@@ -317,7 +316,7 @@ func isProcessorIgnorableError(err error) bool {
 // The main logic of processor is in this function, including the calculation of many kinds of ts, maintain table pipeline, error handling, etc.
 func (p *processor) Tick(ctx cdcContext.Context, state *orchestrator.ChangefeedReactorState) (orchestrator.ReactorState, error) {
 	// skip this tick
-	if !p.upStream.IsNormal() {
+	if !p.upstream.IsNormal() {
 		return state, nil
 	}
 	startTime := time.Now()
@@ -391,7 +390,7 @@ func (p *processor) tick(ctx cdcContext.Context, state *orchestrator.ChangefeedR
 	}
 	// it is no need to check the error here, because we will use
 	// local time when an error return, which is acceptable
-	pdTime, _ := p.upStream.PDClock.CurrentTime()
+	pdTime, _ := p.upstream.PDClock.CurrentTime()
 
 	p.handlePosition(oracle.GetPhysical(pdTime))
 	p.pushResolvedTs2Table()
@@ -488,14 +487,6 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 		opts[k] = v
 	}
 
-	// TODO(neil) find a better way to let sink know cyclic is enabled.
-	if p.changefeed.Info.Config.Cyclic.IsEnabled() {
-		cyclicCfg, err := p.changefeed.Info.Config.Cyclic.Marshal()
-		if err != nil {
-			return errors.Trace(err)
-		}
-		opts[mark.OptCyclicConfig] = cyclicCfg
-	}
 	opts[metrics.OptCaptureAddr] = ctx.GlobalVars().CaptureInfo.AdvertiseAddr
 	log.Info("processor try new sink",
 		zap.String("namespace", p.changefeedID.Namespace),
@@ -560,7 +551,7 @@ func (p *processor) handleErrorCh(ctx cdcContext.Context) error {
 }
 
 func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.SchemaStorage, error) {
-	kvStorage := p.upStream.KVStorage
+	kvStorage := p.upstream.KVStorage
 	ddlspans := []regionspan.Span{regionspan.GetDDLSpan(), regionspan.GetAddIndexDDLSpan()}
 	checkpointTs := p.changefeed.Info.GetCheckpointTs(p.changefeed.Status)
 	kvCfg := config.GetGlobalServerConfig().KVClient
@@ -569,11 +560,11 @@ func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.S
 	stdCtx = contextutil.PutRoleInCtx(stdCtx, util.RoleProcessor)
 	ddlPuller := puller.NewPuller(
 		stdCtx,
-		p.upStream.PDClient,
-		p.upStream.GrpcPool,
-		p.upStream.RegionCache,
-		p.upStream.KVStorage,
-		p.upStream.PDClock,
+		p.upstream.PDClient,
+		p.upstream.GrpcPool,
+		p.upstream.RegionCache,
+		p.upstream.KVStorage,
+		p.upstream.PDClock,
 		ctx.ChangefeedVars().ID,
 		checkpointTs,
 		ddlspans,
@@ -749,36 +740,6 @@ func (p *processor) getTableName(ctx cdcContext.Context,
 	}, retry.WithBackoffBaseDelay(backoffBaseDelayInMs),
 		retry.WithMaxTries(maxTries),
 		retry.WithIsRetryableErr(cerror.IsRetryableError))
-	// TODO: remove this feature flag after table actor is GA
-	if p.changefeed.Info.Config.Cyclic.IsEnabled() {
-		// Retry to find mark table ID
-		var markTableID model.TableID
-		err := retry.Do(context.Background(), func() error {
-			if tableName == nil {
-				x, exist := p.schemaStorage.GetLastSnapshot().PhysicalTableByID(tableID)
-				if !exist {
-					return cerror.ErrProcessorTableNotFound.
-						GenWithStack("normal table(%s)", tableID)
-				}
-				tableName = &x.TableName
-			}
-			markTableSchemaName, markTableTableName := mark.GetMarkTableName(tableName.Schema, tableName.Table)
-			tableInfo, exist := p.schemaStorage.GetLastSnapshot().TableByName(markTableSchemaName, markTableTableName)
-			if !exist {
-				return cerror.ErrProcessorTableNotFound.
-					GenWithStack("normal table(%s) and mark table not match",
-						tableName.String())
-			}
-			markTableID = tableInfo.ID
-			return nil
-		}, retry.WithBackoffBaseDelay(50),
-			retry.WithBackoffMaxDelay(60*1000),
-			retry.WithMaxTries(20))
-		if err != nil {
-			return "", errors.Trace(err)
-		}
-		replicaInfo.MarkTableID = markTableID
-	}
 
 	if tableName == nil {
 		log.Warn("failed to get table name for metric")
@@ -813,12 +774,13 @@ func (p *processor) createTablePipelineImpl(
 	}
 	table, err := tablepipeline.NewTableActor(
 		ctx,
-		p.upStream,
+		p.upstream,
 		p.mounter,
 		tableID,
 		tableName,
 		replicaInfo,
 		s,
+		p.redoManager.Enabled(),
 		p.changefeed.Info.GetTargetTs())
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -910,7 +872,7 @@ func (p *processor) Close() error {
 	}
 	p.cancel()
 	p.wg.Wait()
-	p.upStream.Release()
+	p.upstream.Release()
 
 	if p.agent == nil {
 		return nil

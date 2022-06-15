@@ -16,7 +16,8 @@ package promutil
 import (
 	"testing"
 
-	libModel "github.com/pingcap/tiflow/engine/lib/model"
+	frameModel "github.com/pingcap/tiflow/engine/framework/model"
+	engineModel "github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
@@ -30,8 +31,8 @@ func TestNewFactory4JobMaster(t *testing.T) {
 
 	cases := []struct {
 		info    tenant.ProjectInfo
-		jobType libModel.JobType
-		jobID   libModel.MasterID
+		jobType engineModel.JobType
+		jobID   engineModel.JobID
 		output  Factory
 	}{
 		{
@@ -39,7 +40,7 @@ func TestNewFactory4JobMaster(t *testing.T) {
 				"user0",
 				"project0",
 			),
-			jobType: "DM",
+			jobType: engineModel.JobTypeDM,
 			jobID:   "job0",
 			output: &AutoRegisterFactory{
 				inner: &WrappingFactory{
@@ -70,9 +71,9 @@ func TestNewFactory4Worker(t *testing.T) {
 	require.NotNil(t, reg)
 	cases := []struct {
 		info     tenant.ProjectInfo
-		jobType  libModel.JobType
-		jobID    libModel.MasterID
-		workerID libModel.WorkerID
+		jobType  engineModel.JobType
+		jobID    frameModel.MasterID
+		workerID frameModel.WorkerID
 		output   Factory
 	}{
 		{
@@ -80,7 +81,7 @@ func TestNewFactory4Worker(t *testing.T) {
 				"user0",
 				"project0",
 			),
-			jobType:  "DM",
+			jobType:  engineModel.JobTypeDM,
 			jobID:    "job0",
 			workerID: "worker0",
 			output: &AutoRegisterFactory{

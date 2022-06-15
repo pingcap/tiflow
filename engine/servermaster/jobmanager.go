@@ -24,10 +24,12 @@ import (
 
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
+	"github.com/pingcap/tiflow/engine/framework"
+	frame "github.com/pingcap/tiflow/engine/framework"
+	"github.com/pingcap/tiflow/engine/framework/metadata"
+	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	cvs "github.com/pingcap/tiflow/engine/jobmaster/cvsjob"
-	"github.com/pingcap/tiflow/engine/lib"
-	"github.com/pingcap/tiflow/engine/lib/metadata"
-	libModel "github.com/pingcap/tiflow/engine/lib/model"
+	engineModel "github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/clock"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/ctxmu"
@@ -43,7 +45,7 @@ import (
 
 // JobManager defines manager of job master
 type JobManager interface {
-	lib.Master
+	framework.Master
 	JobStats
 
 	SubmitJob(ctx context.Context, req *pb.SubmitJobRequest) *pb.SubmitJobResponse
@@ -52,7 +54,7 @@ type JobManager interface {
 	PauseJob(ctx context.Context, req *pb.PauseJobRequest) *pb.PauseJobResponse
 	DebugJob(ctx context.Context, req *pb.DebugJobRequest) *pb.DebugJobResponse
 
-	GetJobStatuses(ctx context.Context) (map[libModel.MasterID]libModel.MasterStatusCode, error)
+	GetJobStatuses(ctx context.Context) (map[frameModel.MasterID]frameModel.MasterStatusCode, error)
 	WatchJobStatuses(
 		ctx context.Context,
 	) (resManager.JobStatusesSnapshot, *notifier.Receiver[resManager.JobStatusChangeEvent], error)
@@ -67,7 +69,7 @@ const defaultJobMasterCost = 1
 // - receive worker offline, move job from `onlineJobs` to `pendingJobs`.
 // - Tick checks `pendingJobs` periodically	and reschedules the jobs.
 type JobManagerImplV2 struct {
-	lib.BaseMaster
+	framework.BaseMaster
 	*JobFsm
 
 	masterMetaClient *metadata.MasterMetadataClient
@@ -96,12 +98,12 @@ func (jm *JobManagerImplV2) PauseJob(ctx context.Context, req *pb.PauseJobReques
 			Code: pb.ErrorCode_UnKnownJob,
 		}}
 	}
-	topic := libModel.WorkerStatusChangeRequestTopic(jm.BaseMaster.MasterID(), job.WorkerHandle.ID())
-	msg := &libModel.StatusChangeRequest{
+	topic := frameModel.WorkerStatusChangeRequestTopic(jm.BaseMaster.MasterID(), job.WorkerHandle.ID())
+	msg := &frameModel.StatusChangeRequest{
 		SendTime:     jm.clocker.Mono(),
 		FromMasterID: jm.BaseMaster.MasterID(),
 		Epoch:        jm.BaseMaster.MasterMeta().Epoch,
-		ExpectState:  libModel.WorkerStatusStopped,
+		ExpectState:  frameModel.WorkerStatusStopped,
 	}
 	if handle := job.WorkerHandle.Unwrap(); handle != nil {
 		err := handle.SendMessage(ctx, topic, msg, true /*nonblocking*/)
@@ -212,7 +214,7 @@ func (jm *JobManagerImplV2) CancelJob(ctx context.Context, req *pb.CancelJobRequ
 	}
 
 	// Only stopped (paused) jobs can be canceled.
-	if job.StatusCode != libModel.MasterStatusStopped {
+	if job.StatusCode != frameModel.MasterStatusStopped {
 		return &pb.CancelJobResponse{Err: &pb.Error{
 			Code: pb.ErrorCode_UnexpectedJobStatus,
 		}}
@@ -268,14 +270,14 @@ func (jm *JobManagerImplV2) QueryJob(ctx context.Context, req *pb.QueryJobReques
 	} else {
 		if masterMeta != nil {
 			resp := &pb.QueryJobResponse{
-				Tp:     int64(masterMeta.Tp),
+				Tp:     int32(frame.MustConvertWorkerType2JobType(masterMeta.Tp)),
 				Config: masterMeta.Config,
 			}
 			switch masterMeta.StatusCode {
-			case libModel.MasterStatusFinished:
+			case frameModel.MasterStatusFinished:
 				resp.Status = pb.QueryJobResponse_finished
 				return resp
-			case libModel.MasterStatusStopped:
+			case frameModel.MasterStatusStopped:
 				resp.Status = pb.QueryJobResponse_stopped
 				return resp
 			default:
@@ -297,11 +299,11 @@ func (jm *JobManagerImplV2) SubmitJob(ctx context.Context, req *pb.SubmitJobRequ
 	log.L().Logger.Info("submit job", zap.String("config", string(req.Config)))
 	resp := &pb.SubmitJobResponse{}
 	var (
-		id  libModel.WorkerID
+		id  frameModel.WorkerID
 		err error
 	)
 
-	meta := &libModel.MasterMetaKVData{
+	meta := &frameModel.MasterMetaKVData{
 		ProjectID: tenant.NewProjectInfo(
 			req.GetProjectInfo().GetTenantId(),
 			req.GetProjectInfo().GetProjectId(),
@@ -310,10 +312,10 @@ func (jm *JobManagerImplV2) SubmitJob(ctx context.Context, req *pb.SubmitJobRequ
 		// job name is unique before using it.
 		ID:         jm.uuidGen.NewString(),
 		Config:     req.GetConfig(),
-		StatusCode: libModel.MasterStatusUninit,
+		StatusCode: frameModel.MasterStatusUninit,
 	}
-	switch req.Tp {
-	case pb.JobType_CVSDemo:
+	switch engineModel.JobType(req.Tp) {
+	case engineModel.JobTypeCVSDemo:
 		// TODO: check config is valid, refine it later
 		extConfig := &cvs.Config{}
 		err = json.Unmarshal(req.Config, extConfig)
@@ -322,11 +324,11 @@ func (jm *JobManagerImplV2) SubmitJob(ctx context.Context, req *pb.SubmitJobRequ
 			resp.Err = derrors.ToPBError(err)
 			return resp
 		}
-		meta.Tp = lib.CvsJobMaster
-	case pb.JobType_DM:
-		meta.Tp = lib.DMJobMaster
-	case pb.JobType_FakeJob:
-		meta.Tp = lib.FakeJobMaster
+		meta.Tp = frame.CvsJobMaster
+	case engineModel.JobTypeDM:
+		meta.Tp = frame.DMJobMaster
+	case engineModel.JobTypeFakeJob:
+		meta.Tp = frame.FakeJobMaster
 	default:
 		err := derrors.ErrBuildJobFailed.GenWithStack("unknown job type: %s", req.Tp)
 		resp.Err = derrors.ToPBError(err)
@@ -342,7 +344,7 @@ func (jm *JobManagerImplV2) SubmitJob(ctx context.Context, req *pb.SubmitJobRequ
 
 	// TODO: Refine me. split the BaseMaster
 	defaultMaster, ok := jm.BaseMaster.(interface {
-		SetProjectInfo(libModel.MasterID, tenant.ProjectInfo)
+		SetProjectInfo(frameModel.MasterID, tenant.ProjectInfo)
 	})
 	if ok {
 		defaultMaster.SetProjectInfo(meta.ID, tenant.NewProjectInfo(
@@ -382,13 +384,13 @@ func (jm *JobManagerImplV2) SubmitJob(ctx context.Context, req *pb.SubmitJobRequ
 // GetJobStatuses returns the status code of all jobs that are not deleted.
 func (jm *JobManagerImplV2) GetJobStatuses(
 	ctx context.Context,
-) (map[libModel.MasterID]libModel.MasterStatusCode, error) {
+) (map[frameModel.MasterID]frameModel.MasterStatusCode, error) {
 	jobs, err := jm.frameMetaClient.QueryJobs(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	ret := make(map[libModel.MasterID]libModel.MasterStatusCode, len(jobs))
+	ret := make(map[frameModel.MasterID]frameModel.MasterStatusCode, len(jobs))
 	for _, jobMeta := range jobs {
 		ret[jobMeta.ID] = jobMeta.StatusCode
 	}
@@ -398,7 +400,7 @@ func (jm *JobManagerImplV2) GetJobStatuses(
 // NewJobManagerImplV2 creates a new JobManagerImplV2 instance
 func NewJobManagerImplV2(
 	dctx *dcontext.Context,
-	id libModel.MasterID,
+	id frameModel.MasterID,
 ) (*JobManagerImplV2, error) {
 	metaCli, err := dctx.Deps().Construct(func(cli pkgOrm.Client) (pkgOrm.Client, error) {
 		return cli, nil
@@ -418,18 +420,18 @@ func NewJobManagerImplV2(
 		jobStatusChangeMu: ctxmu.New(),
 		notifier:          notifier.NewNotifier[resManager.JobStatusChangeEvent](),
 	}
-	impl.BaseMaster = lib.NewBaseMaster(
+	impl.BaseMaster = framework.NewBaseMaster(
 		dctx,
 		impl,
 		id,
-		lib.JobManager,
+		framework.JobManager,
 	)
 
 	// Note the meta data of job manager is not used, it is safe to overwrite it
 	// every time a new server master leader is elected. And we always mark the
 	// Initialized to true in order to trigger OnMasterRecovered of job manager.
 	meta := impl.MasterMeta()
-	meta.StatusCode = libModel.MasterStatusInit
+	meta.StatusCode = frameModel.MasterStatusInit
 	err = metadata.StoreMasterMeta(dctx, impl.frameMetaClient, meta)
 	if err != nil {
 		return nil, err
@@ -448,12 +450,12 @@ func NewJobManagerImplV2(
 	return impl, err
 }
 
-// InitImpl implements lib.MasterImpl.InitImpl
+// InitImpl implements frame.MasterImpl.InitImpl
 func (jm *JobManagerImplV2) InitImpl(ctx context.Context) error {
 	return nil
 }
 
-// Tick implements lib.MasterImpl.Tick
+// Tick implements frame.MasterImpl.Tick
 func (jm *JobManagerImplV2) Tick(ctx context.Context) error {
 	filterQuotaError := func(err error) (exceedQuota bool, retErr error) {
 		if err == nil {
@@ -467,7 +469,7 @@ func (jm *JobManagerImplV2) Tick(ctx context.Context) error {
 	}
 
 	err := jm.JobFsm.IterPendingJobs(
-		func(job *libModel.MasterMetaKVData) (string, error) {
+		func(job *frameModel.MasterMetaKVData) (string, error) {
 			return jm.BaseMaster.CreateWorker(
 				job.Tp, job, defaultJobMasterCost)
 		})
@@ -494,7 +496,7 @@ func (jm *JobManagerImplV2) Tick(ctx context.Context) error {
 			}
 		}
 		err = jm.JobFsm.IterWaitAckJobs(
-			func(job *libModel.MasterMetaKVData) (string, error) {
+			func(job *frameModel.MasterMetaKVData) (string, error) {
 				return jm.BaseMaster.CreateWorker(
 					job.Tp, job, defaultJobMasterCost)
 			})
@@ -512,7 +514,7 @@ func (jm *JobManagerImplV2) Tick(ctx context.Context) error {
 	return nil
 }
 
-// OnMasterRecovered implements lib.MasterImpl.OnMasterRecovered
+// OnMasterRecovered implements frame.MasterImpl.OnMasterRecovered
 func (jm *JobManagerImplV2) OnMasterRecovered(ctx context.Context) error {
 	jobs, err := jm.masterMetaClient.LoadAllMasters(ctx)
 	if err != nil {
@@ -521,7 +523,7 @@ func (jm *JobManagerImplV2) OnMasterRecovered(ctx context.Context) error {
 
 	// TODO: refine me, split the BaseMaster interface
 	impl, ok := jm.BaseMaster.(interface {
-		InitProjectInfosAfterRecover([]*libModel.MasterMetaKVData)
+		InitProjectInfosAfterRecover([]*frameModel.MasterMetaKVData)
 	})
 	if !ok {
 		log.L().Panic("unfound interface for BaseMaster", zap.String("interface", "InitProjectInfosAfterRecover"))
@@ -530,11 +532,11 @@ func (jm *JobManagerImplV2) OnMasterRecovered(ctx context.Context) error {
 	impl.InitProjectInfosAfterRecover(jobs)
 
 	for _, job := range jobs {
-		if job.Tp == lib.JobManager {
+		if job.Tp == framework.JobManager {
 			continue
 		}
 		// TODO: filter the job in backend
-		if job.StatusCode == libModel.MasterStatusFinished || job.StatusCode == libModel.MasterStatusStopped {
+		if job.StatusCode == frameModel.MasterStatusFinished || job.StatusCode == frameModel.MasterStatusStopped {
 			log.L().Info("skip finished or stopped job", zap.Any("job", job))
 			continue
 		}
@@ -544,8 +546,8 @@ func (jm *JobManagerImplV2) OnMasterRecovered(ctx context.Context) error {
 	return nil
 }
 
-// OnWorkerDispatched implements lib.MasterImpl.OnWorkerDispatched
-func (jm *JobManagerImplV2) OnWorkerDispatched(worker lib.WorkerHandle, result error) error {
+// OnWorkerDispatched implements frame.MasterImpl.OnWorkerDispatched
+func (jm *JobManagerImplV2) OnWorkerDispatched(worker framework.WorkerHandle, result error) error {
 	if result != nil {
 		log.L().Warn("dispatch worker met error", zap.Error(result))
 		return jm.JobFsm.JobDispatchFailed(worker)
@@ -553,14 +555,14 @@ func (jm *JobManagerImplV2) OnWorkerDispatched(worker lib.WorkerHandle, result e
 	return nil
 }
 
-// OnWorkerOnline implements lib.MasterImpl.OnWorkerOnline
-func (jm *JobManagerImplV2) OnWorkerOnline(worker lib.WorkerHandle) error {
+// OnWorkerOnline implements frame.MasterImpl.OnWorkerOnline
+func (jm *JobManagerImplV2) OnWorkerOnline(worker framework.WorkerHandle) error {
 	log.L().Info("on worker online", zap.Any("id", worker.ID()))
 	return jm.JobFsm.JobOnline(worker)
 }
 
-// OnWorkerOffline implements lib.MasterImpl.OnWorkerOffline
-func (jm *JobManagerImplV2) OnWorkerOffline(worker lib.WorkerHandle, reason error) error {
+// OnWorkerOffline implements frame.MasterImpl.OnWorkerOffline
+func (jm *JobManagerImplV2) OnWorkerOffline(worker framework.WorkerHandle, reason error) error {
 	needFailover := true
 	if derrors.ErrWorkerFinish.Equal(reason) {
 		log.L().Info("job master finished", zap.String("id", worker.ID()))
@@ -580,19 +582,19 @@ func (jm *JobManagerImplV2) OnWorkerOffline(worker lib.WorkerHandle, reason erro
 	return nil
 }
 
-// OnWorkerMessage implements lib.MasterImpl.OnWorkerMessage
-func (jm *JobManagerImplV2) OnWorkerMessage(worker lib.WorkerHandle, topic p2p.Topic, message interface{}) error {
+// OnWorkerMessage implements frame.MasterImpl.OnWorkerMessage
+func (jm *JobManagerImplV2) OnWorkerMessage(worker framework.WorkerHandle, topic p2p.Topic, message interface{}) error {
 	log.L().Info("on worker message", zap.Any("id", worker.ID()), zap.Any("topic", topic), zap.Any("message", message))
 	return nil
 }
 
-// OnWorkerStatusUpdated implements lib.MasterImpl.OnWorkerStatusUpdated
-func (jm *JobManagerImplV2) OnWorkerStatusUpdated(worker lib.WorkerHandle, newStatus *libModel.WorkerStatus) error {
+// OnWorkerStatusUpdated implements frame.MasterImpl.OnWorkerStatusUpdated
+func (jm *JobManagerImplV2) OnWorkerStatusUpdated(worker framework.WorkerHandle, newStatus *frameModel.WorkerStatus) error {
 	log.L().Info("on worker status updated", zap.String("worker-id", worker.ID()), zap.Any("status", newStatus))
 	return nil
 }
 
-// CloseImpl implements lib.MasterImpl.CloseImpl
+// CloseImpl implements frame.MasterImpl.CloseImpl
 func (jm *JobManagerImplV2) CloseImpl(ctx context.Context) error {
 	jm.notifier.Close()
 	return nil

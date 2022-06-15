@@ -15,17 +15,20 @@ package dm
 
 import (
 	"context"
+	"errors"
 	"testing"
+	"time"
 
 	"github.com/go-mysql-org/go-mysql/mysql"
 	dmconfig "github.com/pingcap/tiflow/dm/dm/config"
+	"github.com/pingcap/tiflow/dm/dm/pb"
+	"github.com/pingcap/tiflow/engine/framework"
+	"github.com/pingcap/tiflow/engine/framework/registry"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
-	"github.com/pingcap/tiflow/engine/lib"
-	"github.com/pingcap/tiflow/engine/lib/registry"
 	"github.com/pingcap/tiflow/engine/model"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/deps"
-	"github.com/pingcap/tiflow/engine/pkg/errors"
+	engineErr "github.com/pingcap/tiflow/engine/pkg/errors"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/broker"
 	extkv "github.com/pingcap/tiflow/engine/pkg/meta/extension"
 	kvmock "github.com/pingcap/tiflow/engine/pkg/meta/kvclient/mock"
@@ -69,11 +72,11 @@ func TestFactory(t *testing.T) {
 	content, err := subtaskCfg.Toml()
 	require.NoError(t, err)
 	RegisterWorker()
-	_, err = registry.GlobalWorkerRegistry().CreateWorker(dctx, lib.WorkerDMDump, "worker-id", "dm-jobmaster-id", []byte(content))
+	_, err = registry.GlobalWorkerRegistry().CreateWorker(dctx, framework.WorkerDMDump, "worker-id", "dm-jobmaster-id", []byte(content))
 	require.NoError(t, err)
-	_, err = registry.GlobalWorkerRegistry().CreateWorker(dctx, lib.WorkerDMLoad, "worker-id", "dm-jobmaster-id", []byte(content))
+	_, err = registry.GlobalWorkerRegistry().CreateWorker(dctx, framework.WorkerDMLoad, "worker-id", "dm-jobmaster-id", []byte(content))
 	require.NoError(t, err)
-	_, err = registry.GlobalWorkerRegistry().CreateWorker(dctx, lib.WorkerDMSync, "worker-id", "dm-jobmaster-id", []byte(content))
+	_, err = registry.GlobalWorkerRegistry().CreateWorker(dctx, framework.WorkerDMSync, "worker-id", "dm-jobmaster-id", []byte(content))
 	require.NoError(t, err)
 }
 
@@ -84,24 +87,39 @@ func TestWorker(t *testing.T) {
 	require.NoError(t, dp.Provide(func() p2p.MessageHandlerManager {
 		return p2p.NewMockMessageHandlerManager()
 	}))
-	dmWorker := newDMWorker(dctx, "master-id", lib.WorkerDMDump, &dmconfig.SubTaskConfig{})
+	dmWorker := newDMWorker(dctx, "master-id", framework.WorkerDMDump, &dmconfig.SubTaskConfig{})
 	require.NotNil(t, dmWorker.messageAgent)
 	unitHolder := &mockUnitHolder{}
 	dmWorker.unitHolder = unitHolder
-	dmWorker.BaseWorker = lib.MockBaseWorker("worker-id", "master-id", dmWorker)
+	dmWorker.BaseWorker = framework.MockBaseWorker("worker-id", "master-id", dmWorker)
 	require.NoError(t, dmWorker.Init(context.Background()))
 	// tick
-	unitHolder.On("Stage").Return(metadata.StageRunning).Once()
+	unitHolder.On("Stage").Return(metadata.StageRunning, nil).Twice()
 	require.NoError(t, dmWorker.Tick(context.Background()))
-	unitHolder.On("Stage").Return(metadata.StageRunning).Once()
+	unitHolder.On("Stage").Return(metadata.StageRunning, nil).Twice()
+	require.NoError(t, dmWorker.Tick(context.Background()))
+
+	// auto resume error
+	unitHolder.On("Stage").Return(metadata.StageError, &pb.ProcessResult{Errors: []*pb.ProcessError{{ErrCode: 0}}}).Twice()
+	require.NoError(t, dmWorker.Tick(context.Background()))
+	time.Sleep(time.Second)
+	unitHolder.On("Stage").Return(metadata.StageError, &pb.ProcessResult{Errors: []*pb.ProcessError{{ErrCode: 0}}}).Once()
+	unitHolder.On("Resume").Return(errors.New("resume error")).Once()
+	require.EqualError(t, dmWorker.Tick(context.Background()), "resume error")
+	// auto resume normal
+	unitHolder.On("Stage").Return(metadata.StageError, &pb.ProcessResult{Errors: []*pb.ProcessError{{ErrCode: 0}}}).Once()
+	unitHolder.On("Stage").Return(metadata.StageRunning, nil).Once()
+	unitHolder.On("Resume").Return(nil).Once()
 	require.NoError(t, dmWorker.Tick(context.Background()))
 
 	// placeholder
 	require.Equal(t, model.RescUnit(0), dmWorker.Workload())
-	require.NoError(t, dmWorker.OnMasterFailover(lib.MasterFailoverReason{}))
+	require.NoError(t, dmWorker.OnMasterFailover(framework.MasterFailoverReason{}))
 	require.NoError(t, dmWorker.OnMasterMessage("", nil))
 
 	// Finished
-	unitHolder.On("Stage").Return(metadata.StageFinished).Once()
-	require.True(t, errors.ErrWorkerFinish.Equal(dmWorker.Tick(context.Background())))
+	unitHolder.On("Stage").Return(metadata.StageFinished, nil).Twice()
+	require.True(t, engineErr.ErrWorkerFinish.Equal(dmWorker.Tick(context.Background())))
+
+	unitHolder.AssertExpectations(t)
 }
