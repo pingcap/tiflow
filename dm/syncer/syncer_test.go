@@ -1057,7 +1057,15 @@ func (s *testSyncerSuite) TestRun(c *C) {
 
 	sourceSchemaFromDownstream, err := syncer.OperateSchema(ctx, &pb.OperateWorkerSchemaRequest{Op: pb.SchemaOp_GetSchema, Database: "test_1", Table: "t_1"})
 	c.Assert(err, IsNil)
-	c.Assert(sourceSchemaFromCheckPoint, Equals, sourceSchemaFromDownstream)
+
+	sourceSchemaExpected := "CREATE TABLE `t_1` (" +
+		" `id` int(11) NOT NULL," +
+		" `name` varchar(24) DEFAULT NULL," +
+		" PRIMARY KEY (`id`) /*T![clustered_index] NONCLUSTERED */," +
+		" KEY `index1` (`name`)" +
+		") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin"
+	c.Assert(sourceSchemaFromCheckPoint, Equals, sourceSchemaExpected)
+	c.Assert(sourceSchemaFromDownstream, Equals, sourceSchemaExpected)
 
 	cancel()
 	// test OperateSchema ends
