@@ -783,6 +783,7 @@ func (h *OpenAPI) DrainCapture(c *gin.Context) {
 		_ = c.Error(err)
 		return
 	}
+
 	checkCaptureFound := func() bool {
 		// make sure the target capture exist
 		for _, capture := range captures {
@@ -804,6 +805,7 @@ func (h *OpenAPI) DrainCapture(c *gin.Context) {
 		return
 	}
 
+	// todo: what the client should do, if 202 received.
 	status := http.StatusAccepted
 	if resp.TotalTableCount == 0 {
 		status = http.StatusOK

@@ -19,6 +19,8 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 )
 
+const captureIDNotDraining = ""
+
 var _ scheduler = &drainCaptureScheduler{}
 
 type drainCaptureScheduler struct {
@@ -27,14 +29,23 @@ type drainCaptureScheduler struct {
 }
 
 func newDrainCaptureScheduler() *drainCaptureScheduler {
-	return &drainCaptureScheduler{}
+	return &drainCaptureScheduler{
+		target: captureIDNotDraining,
+	}
 }
 
 func (d *drainCaptureScheduler) Name() string {
 	return string(schedulerTypeDrainCapture)
 }
 
-func (d *drainCaptureScheduler) registerTarget(target model.CaptureID) bool {
+func (d *drainCaptureScheduler) setTarget(target model.CaptureID) bool {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.target != captureIDNotDraining {
+		return false
+	}
+
+	d.target = target
 	return true
 }
 

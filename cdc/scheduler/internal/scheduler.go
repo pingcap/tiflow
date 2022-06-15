@@ -53,18 +53,21 @@ type Scheduler interface {
 	Rebalance()
 
 	// DrainCapture is used to drop all tables situated at the target capture
-	DrainCapture(target model.CaptureID) (int, error)
+	// shall we return error or bool?
+	DrainCapture(target model.CaptureID) (int, bool)
 
-	// Close scheduler and release it's resource.
+	// Close scheduler and release resource.
 	// It is not thread-safe.
 	Close(ctx context.Context)
 }
 
 // Query is for scheduler related owner job.
+// at the moment, only for `DrainCapture`, we can use this to handle all manual schedule task.
 type Query struct {
-	CaptureID    model.CaptureID
-	changefeedID model.ChangeFeedID
-	tableID      model.TableID
+	CaptureID model.CaptureID
+
+	//changefeedID model.ChangeFeedID
+	//tableID      model.TableID
 
 	Resp interface{}
 }

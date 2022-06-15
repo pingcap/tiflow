@@ -163,8 +163,8 @@ func (m *mockScheduler) MoveTable(tableID model.TableID, target model.CaptureID)
 func (m *mockScheduler) Rebalance() {}
 
 // DrainCapture implement scheduler interface
-func (m *mockScheduler) DrainCapture(target model.CaptureID) (int, error) {
-	return 0, nil
+func (m *mockScheduler) DrainCapture(target model.CaptureID) (int, bool) {
+	return 0, true
 }
 
 // Close closes the scheduler and releases resources.

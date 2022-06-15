@@ -270,11 +270,11 @@ func (o *ownerImpl) ScheduleTable(
 
 // DrainCapture removes all tables at the target capture
 // `done` must be buffered to prevent blocking owner.
-func (o *ownerImpl) DrainCapture(query *SchedulerQuery, done chan<- error) {
+func (o *ownerImpl) DrainCapture(query *scheduler.Query, done chan<- error) {
 	o.pushOwnerJob(&ownerJob{
-		Tp:             ownerJobTypeDrainCapture,
-		schedulerQuery: query,
-		done:           done,
+		Tp:            ownerJobTypeDrainCapture,
+		scheduleQuery: query,
+		done:          done,
 	})
 }
 
@@ -402,13 +402,13 @@ func (o *ownerImpl) clusterVersionConsistent(captures map[model.CaptureID]*model
 	return true
 }
 
-func (o *ownerImpl) handleDrainCaptures(query *SchedulerQuery, done chan<- error) {
+func (o *ownerImpl) handleDrainCaptures(query *scheduler.Query, done chan<- error) {
 	var (
 		totalTableCount int
 		err             error
 	)
 
-	// todo: think about how to handle errors.
+	// todo: think about how to handle errors
 	target := query.CaptureID
 	for _, changefeed := range o.changefeeds {
 		count, e := changefeed.scheduler.DrainCapture(target)
@@ -438,6 +438,9 @@ func (o *ownerImpl) handleJobs() {
 			cfReactor.feedStateManager.PushAdminJob(job.AdminJob)
 		case ownerJobTypeScheduleTable:
 			cfReactor.scheduler.MoveTable(job.TableID, job.TargetCaptureID)
+		case ownerJobTypeDrainCapture:
+			o.handleDrainCaptures(job.scheduleQuery, job.done)
+			continue
 		case ownerJobTypeRebalance:
 			cfReactor.scheduler.Rebalance()
 		case ownerJobTypeQuery:

@@ -87,6 +87,7 @@ func newCoordinator(
 	schedulers[schedulerTypeBalance] = newBalanceScheduler(cfg)
 	schedulers[schedulerTypeMoveTable] = newMoveTableScheduler()
 	schedulers[schedulerTypeRebalance] = newRebalanceScheduler()
+	schedulers[schedulerTypeDrainCapture] = newDrainCaptureScheduler()
 
 	return &coordinator{
 		version:      version.ReleaseSemver(),
@@ -105,11 +106,11 @@ func newCoordinator(
 
 func (c *coordinator) Tick(
 	ctx context.Context,
-	// Latest global checkpoint of the changefeed
+// Latest global checkpoint of the changefeed
 	checkpointTs model.Ts,
-	// All tables that SHOULD be replicated (or started) at the current checkpoint.
+// All tables that SHOULD be replicated (or started) at the current checkpoint.
 	currentTables []model.TableID,
-	// All captures that are alive according to the latest Etcd states.
+// All captures that are alive according to the latest Etcd states.
 	aliveCaptures map[model.CaptureID]*model.CaptureInfo,
 ) (newCheckpointTs, newResolvedTs model.Ts, err error) {
 	c.mu.Lock()
@@ -162,12 +163,69 @@ func (c *coordinator) Rebalance() {
 	if !ok {
 		log.Panic("tpscheduler: invalid rebalance scheduler found")
 	}
+
 	atomic.StoreInt32(&rebalanceScheduler.rebalance, 1)
 }
 
 // DrainCapture implement the scheduler interface
-func (c *coordinator) DrainCapture(target model.CaptureID) (int, error) {
-	return 0, nil
+func (c *coordinator) DrainCapture(target model.CaptureID) (int, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	count := len(c.replicationM.ReplicationSets())
+	if !c.captureM.checkAllCaptureInitialized() {
+		log.Info("tpscheduler: manual drain capture task ignored, "+
+			"since not all captures initialized",
+			zap.String("target", target),
+			zap.Int("tableCount", count))
+		return count, false
+	}
+
+	if count == 0 {
+		log.Info("tpscheduler: manual drain capture finished, "+
+			"since the target has no tables",
+			zap.String("target", target))
+		return count, true
+	}
+
+	// when draining the capture, tables need to be dispatched to other
+	// capture except the draining one, so at least should have 2 captures alive.
+	if len(c.captureM.Captures) < 2 {
+		log.Warn("tpscheduler: manual drain capture ignored, "+
+			"since less than 2 captures alive",
+			zap.String("target", target),
+			zap.Int("tableCount", count))
+		return count, false
+	}
+
+	scheduler, ok := c.schedulers[schedulerTypeDrainCapture]
+	if !ok {
+		log.Panic("tpscheduler: drain capture scheduler not found")
+	}
+	drainCaptureScheduler, ok := scheduler.(*drainCaptureScheduler)
+	if !ok {
+		log.Panic("tpscheduler: invalid drain capture scheduler found")
+	}
+
+	// the owner is the drain target, it's not allowed, just ignore the request.
+	if target == c.captureID {
+		log.Warn("tpscheduler: manual drain capture task ignored, "+
+			"since the target is the owner",
+			zap.String("target", target),
+			zap.Int("tableCount", count))
+		return count, false
+	}
+
+	if !drainCaptureScheduler.setTarget(target) {
+		log.Info("tpscheduler: manual drain capture task ignored,"+
+			"since there is capture draining",
+			zap.String("drainingCapture", drainCaptureScheduler.target),
+			zap.String("target", target),
+			zap.Int("tableCount", count))
+		return count, false
+	}
+
+	return count, true
 }
 
 func (c *coordinator) Close(ctx context.Context) {
