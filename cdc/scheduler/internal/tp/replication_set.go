@@ -47,7 +47,7 @@ const (
 	ReplicationSetStateUnknown ReplicationSetState = 0
 	// ReplicationSetStateAbsent means there is no one replicates or prepares it.
 	ReplicationSetStateAbsent ReplicationSetState = 1
-	// ReplicationSetStatePrepare means it needs to add a secondary.
+	// ReplicationSetStatePrepare means one capture is preparing it
 	ReplicationSetStatePrepare ReplicationSetState = 2
 	// ReplicationSetStateCommit means it needs to promote secondary to primary.
 	ReplicationSetStateCommit ReplicationSetState = 3

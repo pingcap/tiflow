@@ -86,10 +86,17 @@ func (d *drainCaptureScheduler) Schedule(
 		return nil
 	}
 
+	captureWorkload := make(map[model.CaptureID]int)
 	victims := make([]model.TableID, 0)
 	for tableID, rep := range replications {
-		if rep.State != ReplicationSetStateRemoving {
+		// find all tables replicating on the target capture
+		// todo: how to handle tables that target is the secondary ?
+		if rep.Primary == d.target {
 			victims = append(victims, tableID)
+		}
+
+		if rep.Primary != d.target && rep.State == ReplicationSetStateReplicating {
+			captureWorkload[rep.Primary] += 1
 		}
 	}
 
@@ -98,13 +105,6 @@ func (d *drainCaptureScheduler) Schedule(
 		return nil
 	}
 
-	captureWorkload := make(map[model.CaptureID]int)
-	for _, rep := range replications {
-		if rep.State != ReplicationSetStateReplicating {
-			continue
-		}
-		captureWorkload[rep.Primary] += 1
-	}
 	for captureID, w := range captureWorkload {
 		captureWorkload[captureID] = randomizeWorkload(d.random, w)
 	}
@@ -132,7 +132,7 @@ func (d *drainCaptureScheduler) Schedule(
 			DestCapture: target,
 		})
 
-		captureWorkload[target] += 1
+		captureWorkload[target] = randomizeWorkload(d.random, minWorkload+1)
 	}
 
 	accept := func() {
@@ -141,6 +141,7 @@ func (d *drainCaptureScheduler) Schedule(
 		d.target = captureIDNotDraining
 	}
 
+	// todo: return a burst balance at the moment, adjust this if concurrency control necessary.
 	task := &scheduleTask{
 		burstBalance: &burstBalance{MoveTables: moveTables},
 		accept:       accept,

@@ -198,6 +198,14 @@ func (c *coordinator) DrainCapture(target model.CaptureID) (int, bool) {
 		return count, false
 	}
 
+	if _, ok := c.captureM.Captures[target]; !ok {
+		log.Warn("tpscheduler: manual drain capture ignored, "+
+			"since cannot found the target capture",
+			zap.String("target", target),
+			zap.Int("tableCount", count))
+		return count, false
+	}
+
 	scheduler, ok := c.schedulers[schedulerTypeDrainCapture]
 	if !ok {
 		log.Panic("tpscheduler: drain capture scheduler not found")
