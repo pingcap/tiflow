@@ -122,7 +122,7 @@ func init() {
 		filter *filter.Filter, config *config.ReplicaConfig, opts map[string]string,
 		errCh chan error,
 	) (Sink, error) {
-		return mq.NewKafkaSaramaSink(ctx, sinkURI, filter, config, opts, errCh)
+		return mq.NewKafkaSaramaSink(ctx, sinkURI, filter, config, errCh)
 	}
 	sinkIniterMap["kafka+ssl"] = sinkIniterMap["kafka"]
 
@@ -132,7 +132,7 @@ func init() {
 		filter *filter.Filter, config *config.ReplicaConfig, opts map[string]string,
 		errCh chan error,
 	) (Sink, error) {
-		return mq.NewPulsarSink(ctx, sinkURI, filter, config, opts, errCh)
+		return mq.NewPulsarSink(ctx, sinkURI, filter, config, errCh)
 	}
 	sinkIniterMap["pulsar+ssl"] = sinkIniterMap["pulsar"]
 
