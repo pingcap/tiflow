@@ -203,6 +203,7 @@ func TestSet(t *testing.T) {
 	err = m.Set(req, []*replication.BinlogEvent{
 		{RawData: []byte("event4")},
 	})
+	require.NoError(t, err)
 	require.Equal(t, 3, len(m.ops))
 	// check the order of the ops
 	require.Equal(t, pb.ErrorOp_Replace, m.ops[0].op)
@@ -217,6 +218,20 @@ func TestSet(t *testing.T) {
 	// after reset, front will see the op we just Set
 	op = m.front()
 	require.Equal(t, pb.ErrorOp_Replace, op.op)
+
+	// test Set can overwrite
+	req = &pb.HandleWorkerErrorRequest{
+		Op:        pb.ErrorOp_Replace,
+		BinlogPos: "mysql.000001:3000",
+	}
+	err = m.Set(req, []*replication.BinlogEvent{
+		{RawData: []byte("event5")},
+	})
+	require.NoError(t, err)
+	require.Equal(t, 3, len(m.ops))
+	require.Equal(t, pb.ErrorOp_Replace, m.ops[0].op)
+	require.Equal(t, pb.ErrorOp_Inject, m.ops[1].op)
+	require.Equal(t, pb.ErrorOp_Replace, m.ops[2].op)
 }
 
 func TestDelete(t *testing.T) {
