@@ -25,9 +25,7 @@ import (
 func TestSchedulerBalanceCaptureOnline(t *testing.T) {
 	t.Parallel()
 
-	sched := newBalanceScheduler(&config.SchedulerConfig{
-		CheckBalanceInterval: config.TomlDuration(time.Duration(0)),
-	})
+	sched := newBalanceScheduler(config.TomlDuration(time.Duration(0)))
 	sched.random = nil
 
 	// New capture "b" online

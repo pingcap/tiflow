@@ -63,7 +63,25 @@ func TestDrainCapture(t *testing.T) {
 
 	ok = scheduler.setTarget("a")
 	require.True(t, ok)
+	// not all table is replicating, skip this tick.
+	tasks = scheduler.Schedule(checkpointTs, currentTables, captures, replications)
+	require.Equal(t, "a", scheduler.target)
+	require.Len(t, tasks, 0)
+
+	replications = map[model.TableID]*ReplicationSet{
+		1: {State: ReplicationSetStateReplicating, Primary: "a"},
+		2: {State: ReplicationSetStateReplicating, Primary: "a"},
+		3: {State: ReplicationSetStateReplicating, Primary: "a"},
+		4: {State: ReplicationSetStateReplicating, Primary: "b"},
+		6: {State: ReplicationSetStateReplicating, Primary: "b"},
+		7: {State: ReplicationSetStateReplicating, Primary: "b"},
+	}
+
 	tasks = scheduler.Schedule(checkpointTs, currentTables, captures, replications)
 	require.Equal(t, "a", scheduler.target)
 	require.Len(t, tasks, 1)
+
+	moveTables := tasks[0].burstBalance.MoveTables
+	require.Len(t, moveTables, 3)
+
 }

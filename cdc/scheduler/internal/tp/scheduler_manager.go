@@ -29,7 +29,9 @@ type schedulerManager struct {
 	tasksCounter map[struct{ scheduler, task string }]int
 }
 
-func newSchedulerManager(changefeedID model.ChangeFeedID, balanceInterval config.TomlDuration) *schedulerManager {
+func newSchedulerManager(changefeedID model.ChangeFeedID,
+	balanceInterval config.TomlDuration,
+) *schedulerManager {
 	sm := &schedulerManager{
 		changefeedID: changefeedID,
 		schedulers:   make(map[schedulerType]scheduler),

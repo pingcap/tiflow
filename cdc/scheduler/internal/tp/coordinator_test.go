@@ -337,19 +337,12 @@ func BenchmarkCoordinatorInit(b *testing.B) {
 		for i := 0; i < total; i++ {
 			currentTables = append(currentTables, int64(10000+i))
 		}
-		schedulers := make(map[schedulerType]scheduler)
-		schedulers[schedulerTypeBasic] = newBasicScheduler()
 		coord = &coordinator{
 			trans:        &mockTrans{},
-			schedulers:   schedulers,
 			replicationM: newReplicationManager(10, model.ChangeFeedID{}),
 			// Disable heartbeat.
 			captureM: newCaptureManager(
 				model.ChangeFeedID{}, schedulepb.OwnerRevision{}, math.MaxInt),
-			tasksCounter: make(map[struct {
-				scheduler string
-				task      string
-			}]int),
 		}
 		name = fmt.Sprintf("InitTable %d", total)
 		return name, coord, currentTables, captures
@@ -377,17 +370,10 @@ func BenchmarkCoordinatorHeartbeat(b *testing.B) {
 		for i := 0; i < total; i++ {
 			currentTables = append(currentTables, int64(10000+i))
 		}
-		schedulers := make(map[schedulerType]scheduler)
-		schedulers[schedulerTypeBasic] = newBasicScheduler()
 		coord = &coordinator{
 			trans:        &mockTrans{},
-			schedulers:   schedulers,
 			replicationM: newReplicationManager(10, model.ChangeFeedID{}),
 			captureM:     captureM,
-			tasksCounter: make(map[struct {
-				scheduler string
-				task      string
-			}]int),
 		}
 		name = fmt.Sprintf("Heartbeat %d", total)
 		return name, coord, currentTables, captures
@@ -452,17 +438,10 @@ func BenchmarkCoordinatorHeartbeatResponse(b *testing.B) {
 			recvBuffer:     recvMsgs,
 			keepRecvBuffer: true,
 		}
-		schedulers := make(map[schedulerType]scheduler)
-		schedulers[schedulerTypeBasic] = newBasicScheduler()
 		coord = &coordinator{
 			trans:        trans,
-			schedulers:   schedulers,
 			replicationM: replicationM,
 			captureM:     captureM,
-			tasksCounter: make(map[struct {
-				scheduler string
-				task      string
-			}]int),
 		}
 		name = fmt.Sprintf("HeartbeatResponse %d", total)
 		return name, coord, currentTables, captures
