@@ -26,22 +26,27 @@ func TestUpstream(t *testing.T) {
 	pdClient := &gc.MockPDClient{}
 	manager := NewManager4Test(pdClient)
 
-	up1 := manager.Get(DefaultUpstreamID)
+	up1, ok1 := manager.Get(testUpstreamID)
+	require.True(t, ok1)
 	require.NotNil(t, up1)
 
 	// test Add
-	manager.add(DefaultUpstreamID, []string{}, nil)
+	manager.add(testUpstreamID, []string{}, nil)
 
 	// test Get
-	testID := uint64(1)
-	require.Panics(t, func() { manager.Get(testID) })
+	testID := uint64(21)
+	up, ok := manager.Get(testID)
+	require.Nil(t, up)
+	require.False(t, ok)
 	up2 := NewUpstream4Test(pdClient)
 	up2.ID = testID
 	mockClock := clock.NewMock()
 	up2.clock = mockClock
 
 	manager.ups.Store(testID, up2)
-	require.NotNil(t, manager.Get(testID))
+	up, ok = manager.Get(testID)
+	require.True(t, ok)
+	require.NotNil(t, up)
 
 	// test Tick
 	up2.Release()
@@ -53,6 +58,10 @@ func TestUpstream(t *testing.T) {
 	for !up2.IsClosed() {
 	}
 	manager.Tick(context.Background())
-	require.Panics(t, func() { manager.Get(testID) })
-	require.NotNil(t, manager.Get(DefaultUpstreamID))
+	up, ok = manager.Get(testID)
+	require.False(t, ok)
+	require.Nil(t, up)
+	up, ok = manager.Get(testUpstreamID)
+	require.True(t, ok)
+	require.NotNil(t, up)
 }

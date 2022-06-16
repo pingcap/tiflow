@@ -18,17 +18,15 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/security"
 	pd "github.com/tikv/pd/client"
-	"go.uber.org/zap"
 )
 
-// DefaultUpstreamID is a pseudo upstreamID for now. It will be removed in the future.
-const DefaultUpstreamID uint64 = 0
+// testUpstreamID is a pseudo upstreamID for now. It will be removed in the future.
+const testUpstreamID uint64 = 1
 
 // Manager manages all upstream.
 type Manager struct {
@@ -68,7 +66,7 @@ func NewManager4Test(pdClient pd.Client) *Manager {
 	}
 	up.isDefaultUpstream = true
 	up.hold()
-	res.ups.Store(DefaultUpstreamID, up)
+	res.ups.Store(testUpstreamID, up)
 	return res
 }
 
@@ -153,14 +151,14 @@ func (m *Manager) RemoveUpstream(upstreamID model.UpstreamID) {
 }
 
 // Get gets a upstream by upstreamID.
-func (m *Manager) Get(upstreamID uint64) *Upstream {
+func (m *Manager) Get(upstreamID uint64) (*Upstream, bool) {
 	v, ok := m.ups.Load(upstreamID)
 	if !ok {
-		log.Panic("upstream not exists", zap.Uint64("upstreamID", upstreamID))
+		return nil, false
 	}
 	up := v.(*Upstream)
 	up.hold()
-	return up
+	return up, true
 }
 
 // Close closes all upstreams.

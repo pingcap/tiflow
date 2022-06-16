@@ -95,7 +95,11 @@ func (m *Manager) Tick(stdCtx context.Context, state orchestrator.ReactorState) 
 		})
 		processor, exist := m.processors[changefeedID]
 		if !exist {
-			up := m.upstreamManager.Get(changefeedState.Info.UpstreamID)
+			up, ok := m.upstreamManager.Get(changefeedState.Info.UpstreamID)
+			if !ok {
+				upstreamInfo := globalState.Upstreams[changefeedState.Info.UpstreamID]
+				up = m.upstreamManager.AddUpstream(upstreamInfo.ID, upstreamInfo)
+			}
 			failpoint.Inject("processorManagerHandleNewChangefeedDelay", nil)
 			processor = m.newProcessor(ctx, up)
 			m.processors[changefeedID] = processor

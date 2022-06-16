@@ -97,7 +97,7 @@ func NewUpstream4Test(pdClient pd.Client) *Upstream {
 		etcd.GcServiceIDForTest(),
 		pdClient, pdClock)
 	res := &Upstream{
-		ID:       DefaultUpstreamID,
+		ID:       testUpstreamID,
 		PDClient: pdClient, PDClock: pdClock, GCManager: gcManager,
 		status: normal, wg: new(sync.WaitGroup), clock: clock.New(),
 		hcMu: struct {
@@ -252,7 +252,7 @@ func (up *Upstream) unhold() {
 	if up.hcMu.hc < 0 {
 		log.Panic("upstream's hc should never less than 0", zap.Uint64("upstreamID", up.ID))
 	}
-	if up.hcMu.hc == 0 {
+	if up.hcMu.hc <= 0 {
 		up.hcMu.idleTime = up.clock.Now()
 	}
 }
@@ -260,9 +260,6 @@ func (up *Upstream) unhold() {
 func (up *Upstream) hold() {
 	up.hcMu.mu.Lock()
 	defer up.hcMu.mu.Unlock()
-	if up.hcMu.hc < 0 {
-		log.Panic("upstream's hc should never less than 0", zap.Uint64("upstreamID", up.ID))
-	}
 	up.hcMu.hc++
 	// reset idleTime
 	if !up.hcMu.idleTime.IsZero() {
@@ -270,12 +267,12 @@ func (up *Upstream) hold() {
 	}
 }
 
-// Release release upstream from a holder
+// Release releases upstream from a holder
 func (up *Upstream) Release() {
 	up.unhold()
 }
 
-// return true if this upstream idleTime reachs maxIdleDuration.
+// return true if this upstream idleTime reaches maxIdleDuration.
 func (up *Upstream) shouldClose() bool {
 	// default upstream should never be closed.
 	if up.isDefaultUpstream {
@@ -284,7 +281,7 @@ func (up *Upstream) shouldClose() bool {
 
 	up.hcMu.mu.Lock()
 	defer up.hcMu.mu.Unlock()
-	if up.hcMu.hc == 0 && !up.hcMu.idleTime.IsZero() &&
+	if up.hcMu.hc <= 0 && !up.hcMu.idleTime.IsZero() &&
 		up.clock.Since(up.hcMu.idleTime) >= maxIdleDuration {
 		return true
 	}

@@ -310,12 +310,6 @@ func (c *Capture) run(stdCtx context.Context) error {
 		globalState.SetOnCaptureRemoved(func(captureID model.CaptureID) {
 			c.MessageRouter.RemovePeer(captureID)
 		})
-		globalState.SetOnUpstreamAdded(func(upstreamID model.UpstreamID, info *model.UpstreamInfo) {
-			c.UpstreamManager.AddUpstream(upstreamID, info)
-		})
-		globalState.SetOnUpstreamRemoved(func(upstreamID model.UpstreamID) {
-			c.UpstreamManager.RemoveUpstream(upstreamID)
-		})
 
 		// when the etcd worker of processor returns an error, it means that the processor throws an unrecoverable serious errors
 		// (recoverable errors are intercepted in the processor tick)
@@ -420,12 +414,6 @@ func (c *Capture) campaignOwner(ctx cdcContext.Context) error {
 		})
 		globalState.SetOnCaptureRemoved(func(captureID model.CaptureID) {
 			c.MessageRouter.RemovePeer(captureID)
-		})
-		globalState.SetOnUpstreamAdded(func(upstreamID model.UpstreamID, info *model.UpstreamInfo) {
-			c.UpstreamManager.AddUpstream(upstreamID, info)
-		})
-		globalState.SetOnUpstreamRemoved(func(upstreamID model.UpstreamID) {
-			c.UpstreamManager.RemoveUpstream(upstreamID)
 		})
 
 		err = c.runEtcdWorker(ownerCtx, owner,
