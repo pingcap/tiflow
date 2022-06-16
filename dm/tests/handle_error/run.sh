@@ -300,6 +300,201 @@ function DM_REPLACE_ERROR_SHARDING() {
 		"clean_table" "optimistic"
 }
 
+# two source, 4 tables
+# source1: tb1 first ddl -> tb1 second ddl -> tb2 first ddl -> tb2 second ddl
+# source2: tb1 first ddl -> tb1 second ddl -> tb2 first ddl -> tb2 second ddl
+function DM_CROSS_DDL_SHARDING_CASE() {
+	# 11/21 first ddl
+	run_sql_source1 "alter table ${db}.${tb1} add column c int;"
+	run_sql_source2 "alter table ${db}.${tb1} add column c int;"
+	run_sql_source1 "insert into ${db}.${tb1} values(1,1,1);"
+	run_sql_source1 "insert into ${db}.${tb1} values(11,11,11);"
+	run_sql_source2 "insert into ${db}.${tb1} values(2,2,2);"
+	run_sql_source2 "insert into ${db}.${tb1} values(22,22,22);"
+
+	# 11/21 second ddl
+	run_sql_source1 "alter table ${db}.${tb1} add column d int;"
+	run_sql_source1 "insert into ${db}.${tb1} values(3,3,3,3);"
+	run_sql_source2 "alter table ${db}.${tb1} add column d int;"
+	run_sql_source2 "insert into ${db}.${tb1} values(6,6,6,6);"
+
+	# 12/22 first ddl
+	run_sql_source1 "alter table ${db}.${tb2} add column c int;"
+	run_sql_source2 "alter table ${db}.${tb2} add column c int;"
+	run_sql_source1 "insert into ${db}.${tb2} values(4,4,4);"
+	run_sql_source2 "insert into ${db}.${tb2} values(5,5,5);"
+
+	# 12/22 second ddl
+	run_sql_source1 "alter table ${db}.${tb2} add column d int;"
+	run_sql_source2 "alter table ${db}.${tb2} add column d int;"
+	run_sql_source1 "insert into ${db}.${tb2} values(7,7,7,7);"
+	run_sql_source2 "insert into ${db}.${tb2} values(8,8,8,8);"
+
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		"\"stage\": \"Running\"" 2
+
+	run_sql_tidb_with_retry "select count(1) from ${db}.${tb}" "count(1): 10"
+}
+
+function DM_CROSS_DDL_SHARDING() {
+	run_case CROSS_DDL_SHARDING "double-source-pessimistic" \
+		"run_sql_source1 \"create table ${db}.${tb1} (a int primary key, b int);\"; \
+     run_sql_source1 \"create table ${db}.${tb2} (a int primary key, b int);\"; \
+     run_sql_source2 \"create table ${db}.${tb1} (a int primary key, b int);\"; \
+     run_sql_source2 \"create table ${db}.${tb2} (a int primary key, b int);\"" \
+		"clean_table" "pessimistic"
+
+	run_case CROSS_DDL_SHARDING "double-source-optimistic" \
+		"run_sql_source1 \"create table ${db}.${tb1} (a int primary key, b int);\"; \
+     run_sql_source1 \"create table ${db}.${tb2} (a int primary key, b int);\"; \
+     run_sql_source2 \"create table ${db}.${tb1} (a int primary key, b int);\"; \
+     run_sql_source2 \"create table ${db}.${tb2} (a int primary key, b int);\"" \
+		"clean_table" "optimistic"
+}
+
+# replace add column unique twice
+# two source, 4 tables
+# source1: tb1 first ddl -> tb1 second ddl -> tb2 first ddl -> tb2 second ddl
+# source2: tb1 first ddl -> tb1 second ddl -> tb2 first ddl -> tb2 second ddl
+function DM_CROSS_DDL_SHARDING_WITH_REPLACE_ERROR_CASE() {
+	# 11/21 first ddl
+	run_sql_source1 "alter table ${db}.${tb1} add column c int unique;"
+	run_sql_source2 "alter table ${db}.${tb1} add column c int unique;"
+	run_sql_source1 "insert into ${db}.${tb1} values(1,1,1);"
+	run_sql_source1 "insert into ${db}.${tb1} values(11,11,11);"
+	run_sql_source2 "insert into ${db}.${tb1} values(2,2,2);"
+	run_sql_source2 "insert into ${db}.${tb1} values(22,22,22);"
+
+	# 11/21 second ddl
+	run_sql_source1 "alter table ${db}.${tb1} add column d int unique;"
+	run_sql_source1 "insert into ${db}.${tb1} values(3,3,3,3);"
+	run_sql_source2 "alter table ${db}.${tb1} add column d int unique;"
+	run_sql_source2 "insert into ${db}.${tb1} values(6,6,6,6);"
+
+	# 12/22 first ddl
+	run_sql_source1 "alter table ${db}.${tb2} add column c int unique;"
+	run_sql_source2 "alter table ${db}.${tb2} add column c int unique;"
+	run_sql_source1 "insert into ${db}.${tb2} values(4,4,4);"
+	run_sql_source2 "insert into ${db}.${tb2} values(5,5,5);"
+
+	# 12/22 second ddl
+	run_sql_source1 "alter table ${db}.${tb2} add column d int unique;"
+	run_sql_source2 "alter table ${db}.${tb2} add column d int unique;"
+	run_sql_source1 "insert into ${db}.${tb2} values(7,7,7,7);"
+	run_sql_source2 "insert into ${db}.${tb2} values(8,8,8,8);"
+
+	# 11/21 first ddl: unsupport error
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		"unsupported add column .* constraint UNIQUE KEY" 2
+
+	# begin to handle error
+	# split 11/21 first ddl into two ddls
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"binlog replace test alter table ${db}.${tb1} add column c int;alter table ${db}.${tb1} add unique(c)" \
+		"\"result\": true" 3
+
+	if [[ "$1" = "pessimistic" ]]; then
+		# 11 second ddl bypass, 12 first ddl detect conflict
+		# 22 first ddl: detect conflict
+		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+			"query-status test" \
+			"detect inconsistent DDL sequence from source" 2
+
+		# split 12,22 first ddl into two ddls
+		run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+			"binlog replace test -s mysql-replica-01,mysql-replica-02 alter table ${db}.${tb2} add column c int;alter table ${db}.${tb2} add unique(c);" \
+			"\"result\": true" 3
+
+		# 11/21 second ddl: unsupport error
+		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+			"query-status test" \
+			"unsupported add column .* constraint UNIQUE KEY" 2
+
+		# split 11/21 second ddl into two ddls
+		run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+			"binlog replace test alter table ${db}.${tb1} add column d int;alter table ${db}.${tb1} add unique(d);" \
+			"\"result\": true" 3
+
+		# 12/22 second ddl: detect conflict
+		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+			"query-status test" \
+			"detect inconsistent DDL sequence from source" 2
+
+		# split 11/21 second ddl into two ddls one by one
+		run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+			"binlog replace test -s mysql-replica-01 alter table ${db}.${tb2} add column d int;alter table ${db}.${tb2} add unique(d);" \
+			"\"result\": true" 2
+		run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+			"binlog replace test -s mysql-replica-02 alter table ${db}.${tb2} add column d int;alter table ${db}.${tb2} add unique(d);" \
+			"\"result\": true" 2
+	else
+		# 11 second ddl, 22 first ddl: unsupport error
+		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+			"query-status test" \
+			"unsupported add column .* constraint UNIQUE KEY" 2
+
+		# replace 11 second ddl
+		run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+			"binlog replace test -s mysql-replica-01 alter table ${db}.${tb1} add column d int;alter table ${db}.${tb1} add unique(d);" \
+			"\"result\": true" 2
+
+		# replace 21 second ddl
+		run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+			"binlog replace test -s mysql-replica-02 alter table ${db}.${tb1} add column d int;alter table ${db}.${tb1} add unique(d);" \
+			"\"result\": true" 2
+
+		# 12 first ddl, 21 second ddl: unsupport error
+		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+			"query-status test" \
+			"unsupported add column .* constraint UNIQUE KEY" 2
+
+		# replace 12 first ddl
+		run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+			"binlog replace test -s mysql-replica-01 alter table ${db}.${tb2} add column c int;alter table ${db}.${tb2} add unique(c);" \
+			"\"result\": true" 2
+
+		# replace 22 first ddl
+		run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+			"binlog replace test -s mysql-replica-02 alter table ${db}.${tb2} add column c int;alter table ${db}.${tb2} add unique(c);" \
+			"\"result\": true" 2
+
+		# 12 first ddl, 22 second ddl: unspport error
+		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+			"query-status test" \
+			"unsupported add column .* constraint UNIQUE KEY" 2
+
+		# replace 12/22 second ddl
+		run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+			"binlog replace test alter table ${db}.${tb2} add column d int;alter table ${db}.${tb1} add unique(d);" \
+			"\"result\": true" 3
+
+	fi
+
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		"\"stage\": \"Running\"" 2
+
+	run_sql_tidb_with_retry "select count(1) from ${db}.${tb}" "count(1): 10"
+}
+
+function DM_CROSS_DDL_SHARDING_WITH_REPLACE_ERROR() {
+	run_case CROSS_DDL_SHARDING_WITH_REPLACE_ERROR "double-source-pessimistic" \
+		"run_sql_source1 \"create table ${db}.${tb1} (a int primary key, b int);\"; \
+     run_sql_source1 \"create table ${db}.${tb2} (a int primary key, b int);\"; \
+     run_sql_source2 \"create table ${db}.${tb1} (a int primary key, b int);\"; \
+     run_sql_source2 \"create table ${db}.${tb2} (a int primary key, b int);\"" \
+		"clean_table" "pessimistic"
+
+	run_case CROSS_DDL_SHARDING_WITH_REPLACE_ERROR "double-source-optimistic" \
+		"run_sql_source1 \"create table ${db}.${tb1} (a int primary key, b int);\"; \
+     run_sql_source1 \"create table ${db}.${tb2} (a int primary key, b int);\"; \
+     run_sql_source2 \"create table ${db}.${tb1} (a int primary key, b int);\"; \
+     run_sql_source2 \"create table ${db}.${tb2} (a int primary key, b int);\"" \
+		"clean_table" "optimistic"
+}
+
 # test handle_error fail on second replace ddl
 # two sources, two tables
 function DM_REPLACE_ERROR_MULTIPLE_CASE() {
@@ -823,6 +1018,8 @@ function run() {
 	DM_SKIP_ERROR
 	DM_SKIP_ERROR_SHARDING
 	DM_REPLACE_ERROR
+	DM_CROSS_DDL_SHARDING
+	DM_CROSS_DDL_SHARDING_WITH_REPLACE_ERROR
 	DM_REPLACE_ERROR_SHARDING
 	DM_REPLACE_ERROR_MULTIPLE
 	DM_EXEC_ERROR_SKIP

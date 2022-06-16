@@ -124,8 +124,8 @@
   "editable": true,
   "gnetId": null,
   "graphTooltip": 1,
-  "id": 25,
-  "iteration": 1644826138916,
+  "id": null,
+  "iteration": 1640447119260,
   "links": [],
   "panels": [
     {
@@ -942,7 +942,7 @@
             "h": 5,
             "w": 7,
             "x": 0,
-            "y": 3
+            "y": 2
           },
           "id": 4,
           "links": [],
@@ -1005,7 +1005,7 @@
             "h": 10,
             "w": 7,
             "x": 7,
-            "y": 3
+            "y": 2
           },
           "id": 90,
           "links": [],
@@ -1285,7 +1285,7 @@
             "h": 5,
             "w": 7,
             "x": 0,
-            "y": 8
+            "y": 7
           },
           "id": 138,
           "links": [],
@@ -1357,7 +1357,7 @@
             "h": 7,
             "w": 9,
             "x": 0,
-            "y": 13
+            "y": 12
           },
           "id": 86,
           "legend": {
@@ -1472,7 +1472,7 @@
             "h": 7,
             "w": 8,
             "x": 9,
-            "y": 13
+            "y": 12
           },
           "hiddenSeries": false,
           "id": 102,
@@ -1568,7 +1568,7 @@
             "h": 7,
             "w": 7,
             "x": 17,
-            "y": 13
+            "y": 12
           },
           "id": 82,
           "legend": {
@@ -1657,7 +1657,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 20
+            "y": 19
           },
           "hiddenSeries": false,
           "id": 3,
@@ -1776,7 +1776,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 20
+            "y": 19
           },
           "hiddenSeries": false,
           "id": 2,
@@ -1872,7 +1872,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 27
+            "y": 26
           },
           "id": 163,
           "legend": {
@@ -1967,7 +1967,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 27
+            "y": 26
           },
           "hiddenSeries": false,
           "id": 253,
@@ -2073,7 +2073,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 34
+            "y": 33
           },
           "heatmap": {},
           "hideZeroBuckets": true,
@@ -2144,7 +2144,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 34
+            "y": 33
           },
           "hiddenSeries": false,
           "id": 35,
@@ -2252,7 +2252,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 41
+            "y": 40
           },
           "hiddenSeries": false,
           "id": 34,
@@ -2355,7 +2355,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 41
+            "y": 40
           },
           "hiddenSeries": false,
           "id": 36,
@@ -2472,7 +2472,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 48
+            "y": 47
           },
           "heatmap": {},
           "hideZeroBuckets": true,
@@ -2541,7 +2541,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 48
+            "y": 47
           },
           "hiddenSeries": false,
           "id": 98,
@@ -2657,7 +2657,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 55
+            "y": 54
           },
           "heatmap": {},
           "hideZeroBuckets": true,
@@ -2727,7 +2727,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 55
+            "y": 54
           },
           "hiddenSeries": false,
           "id": 95,
@@ -2783,7 +2783,7 @@
               "format": "time_series",
               "interval": "",
               "intervalFactor": 1,
-              "legendFormat": "0-2 row/s worker",
+              "legendFormat": "0-2 txn/m worker",
               "refId": "C"
             },
             {
@@ -2792,7 +2792,7 @@
               "hide": false,
               "interval": "",
               "intervalFactor": 1,
-              "legendFormat": "2-10 row/s worker",
+              "legendFormat": "2-10 txn/m worker",
               "refId": "D"
             },
             {
@@ -2801,7 +2801,7 @@
               "hide": false,
               "interval": "",
               "intervalFactor": 1,
-              "legendFormat": "10-100 row/s worker",
+              "legendFormat": "10-100 txn/m worker",
               "refId": "E"
             },
             {
@@ -2810,7 +2810,7 @@
               "hide": false,
               "interval": "",
               "intervalFactor": 1,
-              "legendFormat": ">100 row/s worker",
+              "legendFormat": ">100 txn/m worker",
               "refId": "F"
             }
           ],
@@ -2876,7 +2876,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 62
+            "y": 61
           },
           "heatmap": {},
           "hideZeroBuckets": true,
@@ -2946,7 +2946,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 62
+            "y": 61
           },
           "hiddenSeries": false,
           "id": 83,
@@ -3054,7 +3054,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 69
+            "y": 68
           },
           "id": 149,
           "legend": {
@@ -3141,7 +3141,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 69
+            "y": 68
           },
           "hiddenSeries": false,
           "id": 166,
@@ -3239,91 +3239,6 @@
           }
         },
         {
-          "aliasColors": {},
-          "bars": false,
-          "dashLength": 10,
-          "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
-          "fill": 1,
-          "gridPos": {
-            "h": 8,
-            "w": 12,
-            "x": 12,
-            "y": 76
-          },
-          "id": 164,
-          "legend": {
-            "avg": false,
-            "current": false,
-            "max": false,
-            "min": false,
-            "show": true,
-            "total": false,
-            "values": false
-          },
-          "lines": true,
-          "linewidth": 1,
-          "links": [],
-          "nullPointMode": "null",
-          "percentage": false,
-          "pointradius": 2,
-          "points": false,
-          "renderer": "flot",
-          "seriesOverrides": [],
-          "spaceLength": 10,
-          "stack": false,
-          "steppedLine": false,
-          "targets": [
-            {
-              "expr": "sum(rate(ticdc_processor_table_memory_consumption_sum{tidb_cluster=\"$tidb_cluster\", capture=~\"$capture\"}[30s]) / rate(ticdc_processor_table_memory_consumption_count{tidb_cluster=\"$tidb_cluster\", capture=~\"$capture\"}[30s])) by (capture, changefeed)",
-              "format": "time_series",
-              "intervalFactor": 1,
-              "legendFormat": "{{ capture }}-{{ changefeed }}",
-              "refId": "A"
-            }
-          ],
-          "thresholds": [],
-          "timeFrom": null,
-          "timeRegions": [],
-          "timeShift": null,
-          "title": "Processor Memory Consumption Per Changefeed",
-          "tooltip": {
-            "shared": true,
-            "sort": 0,
-            "value_type": "individual"
-          },
-          "type": "graph",
-          "xaxis": {
-            "buckets": null,
-            "mode": "time",
-            "name": null,
-            "show": true,
-            "values": []
-          },
-          "yaxes": [
-            {
-              "format": "bytes",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": null,
-              "show": true
-            },
-            {
-              "format": "short",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": null,
-              "show": true
-            }
-          ],
-          "yaxis": {
-            "align": false,
-            "alignLevel": null
-          }
-        },
-        {
           "columns": [],
           "datasource": "${DS_TEST-CLUSTER}",
           "fieldConfig": {
@@ -3383,7 +3298,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 77
+            "y": 75
           },
           "id": 200,
           "options": {
@@ -3475,6 +3390,91 @@
             }
           ],
           "type": "table"
+        },
+        {
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "${DS_TEST-CLUSTER}",
+          "fill": 1,
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 75
+          },
+          "id": 164,
+          "legend": {
+            "avg": false,
+            "current": false,
+            "max": false,
+            "min": false,
+            "show": true,
+            "total": false,
+            "values": false
+          },
+          "lines": true,
+          "linewidth": 1,
+          "links": [],
+          "nullPointMode": "null",
+          "percentage": false,
+          "pointradius": 2,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": false,
+          "steppedLine": false,
+          "targets": [
+            {
+              "expr": "sum(rate(ticdc_processor_table_memory_consumption_sum{tidb_cluster=\"$tidb_cluster\", capture=~\"$capture\"}[30s]) / rate(ticdc_processor_table_memory_consumption_count{tidb_cluster=\"$tidb_cluster\", capture=~\"$capture\"}[30s])) by (capture, changefeed)",
+              "format": "time_series",
+              "intervalFactor": 1,
+              "legendFormat": "{{ capture }}-{{ changefeed }}",
+              "refId": "A"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeRegions": [],
+          "timeShift": null,
+          "title": "Processor Memory Consumption Per Changefeed",
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "format": "bytes",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
         }
       ],
       "title": "Changefeed",
@@ -9482,20 +9482,6 @@
           "pointradius": 1,
           "points": true,
           "renderer": "flot",
-          "repeat": null,
-          "repeatDirection": "h",
-          "scopedVars": {
-            "instance": {
-              "selected": false,
-              "text": "172.16.5.33:47912",
-              "value": "172.16.5.33:47912"
-            },
-            "runtime_instance": {
-              "selected": false,
-              "text": "172.16.6.111:8300",
-              "value": "172.16.6.111:8300"
-            }
-          },
           "seriesOverrides": [
             {
               "alias": "/(access|miss).*/",
@@ -9744,21 +9730,7 @@
           "pointradius": 5,
           "points": false,
           "renderer": "flot",
-          "scopedVars": {
-            "instance": {
-              "selected": false,
-              "text": "172.16.5.33:47912",
-              "value": "172.16.5.33:47912"
-            },
-            "runtime_instance": {
-              "selected": false,
-              "text": "172.16.6.111:8300",
-              "value": "172.16.6.111:8300"
-            }
-          },
-          "seriesOverrides": [
-            {}
-          ],
+          "seriesOverrides": [],
           "spaceLength": 10,
           "stack": false,
           "steppedLine": false,
@@ -9934,33 +9906,7 @@
           "pointradius": 5,
           "points": false,
           "renderer": "flot",
-          "scopedVars": {
-            "instance": {
-              "selected": false,
-              "text": "172.16.5.33:47912",
-              "value": "172.16.5.33:47912"
-            },
-            "runtime_instance": {
-              "selected": false,
-              "text": "172.16.6.111:8300",
-              "value": "172.16.6.111:8300"
-            }
-          },
-          "seriesOverrides": [
-            {
-              "alias": "sweep",
-              "transform": "negative-Y"
-            },
-            {
-              "alias": "alloc-ops",
-              "yaxis": 2
-            },
-            {
-              "alias": "swepp-ops",
-              "transform": "negative-Y",
-              "yaxis": 2
-            }
-          ],
+          "seriesOverrides": [],
           "spaceLength": 10,
           "stack": false,
           "steppedLine": false,
@@ -10029,15 +9975,7 @@
           }
         }
       ],
-      "repeat": "runtime_instance",
-      "scopedVars": {
-        "runtime_instance": {
-          "selected": false,
-          "text": "172.16.6.111:8300",
-          "value": "172.16.6.111:8300"
-        }
-      },
-      "title": "Runtime $runtime_instance",
+      "title": "TiKV",
       "type": "row"
     },
     {
@@ -10046,7 +9984,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 7
+        "y": 8
       },
       "id": 426,
       "panels": [
@@ -10643,7 +10581,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 8
+        "y": 11
       },
       "id": 187,
       "panels": [
@@ -11007,11 +10945,12 @@
     },
     {
       "collapsed": true,
+      "datasource": null,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 261
+        "y": 12
       },
       "id": 402,
       "panels": [
@@ -12168,7 +12107,11 @@
     "list": [
       {
         "allValue": null,
-        "current": {},
+        "current": {
+          "isNone": true,
+          "text": "None",
+          "value": ""
+        },
         "datasource": "${DS_TEST-CLUSTER}",
         "definition": "",
         "hide": 0,
@@ -12190,7 +12133,10 @@
       },
       {
         "allValue": ".*",
-        "current": {},
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
         "datasource": "${DS_TEST-CLUSTER}",
         "definition": "label_values(ticdc_processor_resolved_ts{tidb_cluster=\"$tidb_cluster\"}, changefeed)",
         "hide": 0,
@@ -12212,7 +12158,10 @@
       },
       {
         "allValue": ".*",
-        "current": {},
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
         "datasource": "${DS_TEST-CLUSTER}",
         "definition": "label_values(process_start_time_seconds{tidb_cluster=\"$tidb_cluster\", job=\"ticdc\"}, instance)",
         "hide": 0,
@@ -12234,7 +12183,10 @@
       },
       {
         "allValue": ".*",
-        "current": {},
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
         "datasource": "${DS_TEST-CLUSTER}",
         "definition": "label_values(tikv_engine_size_bytes{tidb_cluster=\"$tidb_cluster\"}, instance)",
         "hide": 0,
@@ -12309,7 +12261,10 @@
       },
       {
         "allValue": "",
-        "current": {},
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
         "datasource": "${DS_TEST-CLUSTER}",
         "definition": "label_values(process_start_time_seconds{tidb_cluster=\"$tidb_cluster\", job=\"ticdc\"}, instance)",
         "hide": 0,

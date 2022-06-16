@@ -69,7 +69,7 @@ func (t *testEtcdSuite) TestPrepareJoinEtcd(c *check.C) {
 	cfgCluster.Name = "dm-master-1"
 	cfgCluster.DataDir = c.MkDir()
 	cfgCluster.MasterAddr = tempurl.Alloc()[len("http://"):]
-	cfgCluster.AdvertiseAddr = tempurl.Alloc()[len("http://"):]
+	cfgCluster.AdvertiseAddr = cfgCluster.MasterAddr
 	cfgCluster.PeerUrls = tempurl.Alloc()
 	c.Assert(cfgCluster.adjust(), check.IsNil)
 	cfgClusterEtcd := genEmbedEtcdConfigWithLogger("info")
@@ -79,6 +79,7 @@ func (t *testEtcdSuite) TestPrepareJoinEtcd(c *check.C) {
 	cfgBefore := t.cloneConfig(cfgCluster) // before `prepareJoinEtcd` applied
 	cfgBefore.DataDir = c.MkDir()          // overwrite some config items
 	cfgBefore.MasterAddr = tempurl.Alloc()[len("http://"):]
+	cfgBefore.AdvertiseAddr = cfgBefore.MasterAddr
 	cfgBefore.PeerUrls = tempurl.Alloc()
 	cfgBefore.AdvertisePeerUrls = cfgBefore.PeerUrls
 	c.Assert(cfgBefore.adjust(), check.IsNil)
@@ -172,6 +173,7 @@ func (t *testEtcdSuite) TestPrepareJoinEtcd(c *check.C) {
 	cfgAfter2.Name = "dm-master-3" // overwrite some items
 	cfgAfter2.DataDir = c.MkDir()
 	cfgAfter2.MasterAddr = tempurl.Alloc()[len("http://"):]
+	cfgAfter2.AdvertiseAddr = cfgAfter2.MasterAddr
 	cfgAfter2.PeerUrls = tempurl.Alloc()
 	cfgAfter2.AdvertisePeerUrls = cfgAfter2.PeerUrls
 	err = prepareJoinEtcd(cfgAfter2)
@@ -229,6 +231,7 @@ func (t *testEtcdSuite) TestEtcdAutoCompaction(c *check.C) {
 
 	cfg.DataDir = c.MkDir()
 	cfg.MasterAddr = tempurl.Alloc()[len("http://"):]
+	cfg.AdvertiseAddr = cfg.MasterAddr
 	cfg.AutoCompactionRetention = "1s"
 
 	ctx, cancel := context.WithCancel(context.Background())
