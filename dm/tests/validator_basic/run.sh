@@ -656,20 +656,39 @@ function test_validation_syncer_stopped() {
 	for ((k = 0; k < $insertCnt; k++)); do
 		run_sql_source1 "insert into validator_basic.test values($k, $k)"
 	done
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"query-status test" \
-		"\"synced\": true" 1
+	# wait syncer. We cannot wait `"synced": true` because
+	# the velocity of the syncer is unpredictable in the CI environment.
+	# It would be easy to fail the test if we try to wait for it
+	sleep 5
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation start test" \
 		"\"result\": true" 1
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"pause-task test" \
 		"\"result\": true" 2
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"validation status test" \
-		"\"processedRowsStatus\": \"insert\/update\/delete: $insertCnt\/0\/0\"" 1 \
-		"pendingRowsStatus\": \"insert\/update\/delete: 0\/0\/0" 1 \
-		"new\/ignored\/resolved: 0\/0\/0" 1
+	check_validate_at_least $WORK_DIR "127.0.0.1:$MASTER_PORT" "test" 2
+}
+
+function check_validate_at_least() {
+	workdir=$1
+	master_addr=$2
+	cmd="validation status $3"
+	PWD=$(pwd)
+	ts=$(date +"%s")
+	dmctl_log=$workdir/dmctl.$ts.log
+	binary=$PWD/bin/dmctl.test
+	expect=$4
+	pid=$$
+	for ((k = 0; k < 10; k++)); do
+		echo "$cmd" | $binary -test.coverprofile="$TEST_DIR/cov.$TEST_NAME.dmctl.$ts.$pid.out" DEVEL --master-addr=$master_addr >$dmctl_log 2>&1
+		count=$(grep "\"processedRowsStatus\": \"insert\/update\/delete: .*\/0\/0\"" $dmctl_log | cut -d":" -f3 | cut -d"/" -f1)
+		if [[ $count -ge $expect ]]; then
+			return
+		fi
+	done
+	echo "validator is expected to validate at least $expect!"
+	cat $dmctl_log | echo
+	exit 1
 }
 
 run_standalone $*
