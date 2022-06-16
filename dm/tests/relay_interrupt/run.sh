@@ -94,8 +94,8 @@ function run() {
 			"start-task $task_conf" \
 			"\"result\": false" 1 \
 			"subtasks with name test for sources \[mysql-replica-01\] already exist" 1
-
-		run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		# wait relay unit up
+		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 			"query-status test" \
 			"\"binlogType\": \"local\"" 1
 

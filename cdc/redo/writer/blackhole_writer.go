@@ -83,7 +83,9 @@ func (bs *blackHoleWriter) GetCurrentResolvedTs(_ context.Context, tableIDs []in
 	defer bs.tableRtsMu.RUnlock()
 	rtsMap := make(map[int64]uint64, len(bs.tableRtsMap))
 	for _, tableID := range tableIDs {
-		rtsMap[tableID] = bs.tableRtsMap[tableID]
+		if rts, ok := bs.tableRtsMap[tableID]; ok {
+			rtsMap[tableID] = rts
+		}
 	}
 	return rtsMap, nil
 }
