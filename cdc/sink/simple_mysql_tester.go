@@ -106,6 +106,11 @@ func newSimpleMySQLSink(ctx context.Context, sinkURI *url.URL, config *config.Re
 	return sink, nil
 }
 
+// Init table sink resources
+func (s *simpleMySQLSink) Init(tableID model.TableID) error {
+	return nil
+}
+
 // EmitRowChangedEvents sends Row Changed Event to Sink
 // EmitRowChangedEvents may write rows to downstream directly;
 func (s *simpleMySQLSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {

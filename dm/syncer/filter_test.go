@@ -18,13 +18,14 @@ import (
 	"database/sql"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/go-mysql-org/go-mysql/replication"
 	. "github.com/pingcap/check"
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
 	"github.com/pingcap/tidb-tools/pkg/filter"
 	"github.com/pingcap/tidb/parser"
-
 	"github.com/pingcap/tiflow/dm/dm/config"
+	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/schema"
@@ -69,6 +70,7 @@ func (s *testFilterSuite) TestSkipQueryEvent(c *C) {
 	syncer.ddlDBConn = &dbconn.DBConn{Cfg: syncer.cfg, BaseConn: s.baseConn}
 	syncer.schemaTracker, err = schema.NewTracker(context.Background(), syncer.cfg.Name, defaultTestSessionCfg, syncer.ddlDBConn)
 	c.Assert(err, IsNil)
+	defer syncer.schemaTracker.Close()
 	syncer.exprFilterGroup = NewExprFilterGroup(utils.NewSessionCtx(nil), nil)
 
 	// test binlog filter
@@ -125,9 +127,13 @@ func (s *testFilterSuite) TestSkipQueryEvent(c *C) {
 		},
 	}
 	p := parser.New()
+	loc := binlog.NewLocation(mysql.MySQLFlavor)
 	qec := &queryEventContext{
-		eventContext: &eventContext{tctx: tcontext.Background()},
-		p:            p,
+		eventContext: &eventContext{
+			tctx:         tcontext.Background(),
+			lastLocation: &loc,
+		},
+		p: p,
 	}
 	for _, ca := range cases {
 		ddlInfo, err := syncer.genDDLInfo(p, ca.schema, ca.sql)

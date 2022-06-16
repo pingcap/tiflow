@@ -191,12 +191,12 @@ func (t *testMaster) SetUpSuite(c *check.C) {
 	t.workerClients = make(map[string]workerrpc.Client)
 	t.saveMaxRetryNum = maxRetryNum
 	maxRetryNum = 2
-	checkAndAdjustSourceConfigFunc = checkAndNoAdjustSourceConfigMock
+	checkAndAdjustSourceConfigForDMCtlFunc = checkAndNoAdjustSourceConfigMock
 }
 
 func (t *testMaster) TearDownSuite(c *check.C) {
 	maxRetryNum = t.saveMaxRetryNum
-	checkAndAdjustSourceConfigFunc = checkAndAdjustSourceConfig
+	checkAndAdjustSourceConfigForDMCtlFunc = checkAndAdjustSourceConfig
 }
 
 func (t *testMaster) SetUpTest(c *check.C) {
