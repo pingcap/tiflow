@@ -98,6 +98,8 @@ services:
                     condition: service_healthy
         server-executor-0:
                 image: dataflow:test
+                ports:
+                        - "11241:10241"
                 volumes:
                         - ./config/executor.toml:/config.toml
                         - /tmp/dataflow:/tmp/dataflow
@@ -120,6 +122,8 @@ services:
                         - "host.docker.internal:host-gateway"
         server-executor-1:
                 image: dataflow:test
+                ports:
+                        - "11242:10241"
                 volumes:
                         - ./config/executor.toml:/config.toml
                         - /tmp/dataflow:/tmp/dataflow
@@ -142,6 +146,8 @@ services:
                         - "host.docker.internal:host-gateway"
         server-executor-2:
                 image: dataflow:test
+                ports:
+                        - "11243:10241"
                 volumes:
                         - ./config/executor.toml:/config.toml
                         - /tmp/dataflow:/tmp/dataflow

@@ -75,7 +75,6 @@ type tableActor struct {
 	// TODO: try to reduce these config fields below in the future
 	tableID        int64
 	markTableID    int64
-	cyclicEnabled  bool
 	targetTs       model.Ts
 	memoryQuota    uint64
 	replicaInfo    *model.TableReplicaInfo
@@ -108,7 +107,6 @@ func NewTableActor(cdcCtx cdcContext.Context,
 	targetTs model.Ts,
 ) (TablePipeline, error) {
 	config := cdcCtx.ChangefeedVars().Info.Config
-	cyclicEnabled := config.Cyclic != nil && config.Cyclic.IsEnabled()
 	changefeedVars := cdcCtx.ChangefeedVars()
 	globalVars := cdcCtx.GlobalVars()
 
@@ -129,7 +127,6 @@ func NewTableActor(cdcCtx cdcContext.Context,
 		tableID:        tableID,
 		markTableID:    replicaInfo.MarkTableID,
 		tableName:      tableName,
-		cyclicEnabled:  cyclicEnabled,
 		memoryQuota:    serverConfig.GetGlobalServerConfig().PerTableMemoryQuota,
 		upstream:       up,
 		mounter:        mounter,
@@ -312,10 +309,8 @@ func (t *tableActor) start(sdtTableContext context.Context) error {
 			zap.Error(err))
 		return err
 	}
-
-	messageFetchFunc, err := t.getSinkAsyncMessageHolder(sdtTableContext, sortActorNodeContext)
-	if err != nil {
-		return errors.Trace(err)
+	var messageFetchFunc asyncMessageHolderFunc = func() *pmessage.Message {
+		return sortActorNodeContext.tryGetProcessedMessage()
 	}
 
 	actorSinkNode := newSinkNode(t.tableID, t.tableSink,
@@ -324,7 +319,7 @@ func (t *tableActor) start(sdtTableContext context.Context) error {
 	actorSinkNode.initWithReplicaConfig(t.replicaConfig)
 	t.sinkNode = actorSinkNode
 
-	// construct sink actor node, it gets message from sortNode or cyclicNode
+	// construct sink actor node, it gets message from sortNode
 	var messageProcessFunc asyncMessageProcessorFunc = func(
 		ctx context.Context, msg pmessage.Message,
 	) (bool, error) {
@@ -337,44 +332,6 @@ func (t *tableActor) start(sdtTableContext context.Context) error {
 		zap.String("tableName", t.tableName),
 		zap.Int64("tableID", t.tableID))
 	return nil
-}
-
-func (t *tableActor) getSinkAsyncMessageHolder(
-	sdtTableContext context.Context,
-	sortActorNodeContext *actorNodeContext) (AsyncMessageHolder, error,
-) {
-	var messageFetchFunc asyncMessageHolderFunc = func() *pmessage.Message {
-		return sortActorNodeContext.tryGetProcessedMessage()
-	}
-	// check if cyclic feature is enabled
-	if t.cyclicEnabled {
-		cyclicNode := newCyclicMarkNode(t.markTableID)
-		cyclicActorNodeContext := newCyclicNodeContext(
-			newContext(sdtTableContext, t.tableName,
-				t.globalVars.TableActorSystem.Router(),
-				t.actorID, t.changefeedVars,
-				t.globalVars, t.reportErr))
-		if err := cyclicNode.InitTableActor(t.changefeedVars.Info.Config.Cyclic.ReplicaID,
-			t.changefeedVars.Info.Config.Cyclic.FilterReplicaID); err != nil {
-			log.Error("failed to start cyclic node",
-				zap.String("tableName", t.tableName),
-				zap.Int64("tableID", t.tableID),
-				zap.Error(err))
-			return nil, err
-		}
-
-		// construct cyclic actor node if it's enabled, it gets message from sortNode
-		var messageProcessFunc asyncMessageProcessorFunc = func(
-			ctx context.Context, msg pmessage.Message,
-		) (bool, error) {
-			return cyclicNode.TryHandleDataMessage(cyclicActorNodeContext, msg)
-		}
-		t.nodes = append(t.nodes, NewActorNode(messageFetchFunc, messageProcessFunc))
-		messageFetchFunc = func() *pmessage.Message {
-			return cyclicActorNodeContext.tryGetProcessedMessage()
-		}
-	}
-	return messageFetchFunc, nil
 }
 
 // stop will set this table actor state to stopped and releases all goroutines spawned

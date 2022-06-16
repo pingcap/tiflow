@@ -254,8 +254,8 @@ func NewBaseMaster(
 
 		createWorkerQuota: quota.NewConcurrencyQuota(maxCreateWorkerConcurrency),
 		userMetaKVClient:  kvclient.NewPrefixKVClient(params.UserRawKVClient, ctx.ProjectInfo.UniqueID()),
-		metricFactory:     promutil.NewFactory4Master(ctx.ProjectInfo, WorkerTypeForMetric(tp), id),
 		logger:            logutil.NewLogger4Master(ctx.ProjectInfo, id),
+		metricFactory:     promutil.NewFactory4Master(ctx.ProjectInfo, MustConvertWorkerType2JobType(tp), id),
 
 		deps: ctx.Deps(),
 	}
