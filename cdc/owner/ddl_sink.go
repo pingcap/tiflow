@@ -101,7 +101,7 @@ func ddlSinkInitializer(ctx cdcContext.Context, a *ddlSinkImpl, id model.ChangeF
 
 	stdCtx := contextutil.PutChangefeedIDInCtx(ctx, id)
 	stdCtx = contextutil.PutRoleInCtx(stdCtx, util.RoleOwner)
-	s, err := sink.New(stdCtx, id, info.SinkURI, filter, info.Config, info.Opts, a.errCh)
+	s, err := sink.New(stdCtx, id, info.SinkURI, filter, info.Config, a.errCh)
 	if err != nil {
 		return errors.Trace(err)
 	}

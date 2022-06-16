@@ -26,9 +26,6 @@ import (
 )
 
 const (
-	// OptCaptureAddr is the key for capture address.
-	OptCaptureAddr = "_capture_addr"
-
 	printStatusInterval  = 10 * time.Minute
 	flushMetricsInterval = 5 * time.Second
 )
